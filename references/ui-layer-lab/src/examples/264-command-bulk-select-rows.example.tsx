@@ -12,15 +12,15 @@ export default function CommandBulkSelectRowsExample() {
 
   return (
     <div className="command-filter-demo">
-      <strong>{selected.length} rows selected</strong>
+      <strong>{selected.length}개 행 선택됨</strong>
       <Command className="command-dialog inline-command">
-        <Command.Input placeholder="Select rows..." />
+        <Command.Input placeholder="행 선택..." />
         <Command.List>
-          <Command.Group heading="Rows">
+          <Command.Group heading="실행 행">
             {rows.map((row) => (
               <Command.Item key={row} onSelect={() => toggle(row)}>
                 <span>{row}</span>
-                <kbd>{selected.includes(row) ? "on" : "off"}</kbd>
+                <kbd>{selected.includes(row) ? "선택" : "해제"}</kbd>
               </Command.Item>
             ))}
           </Command.Group>

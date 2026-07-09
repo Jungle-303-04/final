@@ -809,6 +809,46 @@ async function inspectSourceEnglishGuard() {
     {
       file: "src/examples/259-heatmap-outlier-detail.example.tsx",
       fragments: ['"Outlier"', '"Normal"']
+    },
+    {
+      file: "src/examples/260-react-flow-selection-group.example.tsx",
+      fragments: ['label: "Plan"', 'label: "Patch"', '{grouped ? "Ungroup" : "Group"} Selection']
+    },
+    {
+      file: "src/examples/261-command-environment-switcher.example.tsx",
+      fragments: ["Switch environment", "Environments", "Active context", ">on<", ">go<"]
+    },
+    {
+      file: "src/examples/262-command-ai-draft-launcher.example.tsx",
+      fragments: ["Fix failing test", "Explain flaky run", "Write release note", "No draft launched", "Draft opened", ">Draft<"]
+    },
+    {
+      file: "src/examples/263-command-log-jump-to-line.example.tsx",
+      fragments: ["Jump to log line", "Log lines", "Selected"]
+    },
+    {
+      file: "src/examples/264-command-bulk-select-rows.example.tsx",
+      fragments: ["rows selected", "Select rows", 'heading="Rows"', ">on<", ">off<"]
+    },
+    {
+      file: "src/examples/265-command-search-synonyms.example.tsx",
+      fragments: ["Search synonym groups", "Terms", "failed", "error", "broken", "release", "ship", "promote", "assistant", "copilot", "agent"]
+    },
+    {
+      file: "src/examples/266-sonner-retry-action.example.tsx",
+      fragments: ["Deploy failed", 'label: "Retry"', "Retry queued", "Show Retry Toast"]
+    },
+    {
+      file: "src/examples/267-sonner-maintenance-window.example.tsx",
+      fragments: ["Maintenance starts", "Deploy actions", "Announce Maintenance"]
+    },
+    {
+      file: "src/examples/268-sonner-session-expiring.example.tsx",
+      fragments: ["Session active", "Session expires soon", "Extend", "Session extended", ">Warn<"]
+    },
+    {
+      file: "src/examples/269-sonner-webhook-status.example.tsx",
+      fragments: ["Webhook delivered", "webhooks sent", "Send Webhook"]
     }
   ];
   const matches = [];
@@ -1120,9 +1160,19 @@ async function inspectEnglishSamples(page, url) {
     ["드릴다운 탐색", "example-drilldown-schema-fields"],
     ["드릴다운 탐색", "example-drilldown-breadcrumb-history"],
     ["데이터 시각화", "example-heatmap-window-brush"],
-    ["데이터 시각화", "example-heatmap-outlier-detail"]
+    ["데이터 시각화", "example-heatmap-outlier-detail"],
+    ["플로우 빌더", "example-react-flow-selection-group"],
+    ["오버레이/명령", "example-command-environment-switcher"],
+    ["오버레이/명령", "example-command-ai-draft-launcher"],
+    ["오버레이/명령", "example-command-log-jump-to-line"],
+    ["오버레이/명령", "example-command-bulk-select-rows"],
+    ["오버레이/명령", "example-command-search-synonyms"],
+    ["작업 진행/로그", "example-sonner-retry-action"],
+    ["작업 진행/로그", "example-sonner-maintenance-window"],
+    ["작업 진행/로그", "example-sonner-session-expiring"],
+    ["작업 진행/로그", "example-sonner-webhook-status"]
   ];
-  const forbidden = /\b(Open|Close|Show|Hide|Search|Loading|Current|Selected|Dashboard|Create|Cancel|Retry|Next|Previous|Expand|Collapse|Focus|Input|Logs|Answer|Status|Resources|Jobs|Steps|Command|Filter|Recent|Approval|Approved|Matrix|Launch|Health|Edge|Done|Running|Failed|Pending|Allowed|Blocked|Owner|Online|Offline|Reconnect|Confirm|Delete|Danger|Safe|Ready|Exportable|Draft|Save|Move|Undo|Viewer|Maintainer|Admin|Snippets|Routes|Access|Good|Degraded|Archive|Import|Silent|Visible|Notify|Hover|Lifted|Resting|Plan|Patch|Verify|Ship|Comfortable|Dense|Alert|Alternative|Advance|Generating|Helpful|Needs|Work|Rated|Cache|Refresh|Recalculate|Terminal|Schema|Fields|Window|Brush|Outlier)\b/i;
+  const forbidden = /\b(Open|Close|Show|Hide|Search|Loading|Current|Selected|Dashboard|Create|Cancel|Retry|Next|Previous|Expand|Collapse|Focus|Input|Logs|Answer|Status|Resources|Jobs|Steps|Command|Filter|Recent|Approval|Approved|Matrix|Launch|Health|Edge|Done|Running|Failed|Pending|Allowed|Blocked|Owner|Online|Offline|Reconnect|Confirm|Delete|Danger|Safe|Ready|Exportable|Draft|Save|Move|Undo|Viewer|Maintainer|Admin|Snippets|Routes|Access|Good|Degraded|Archive|Import|Silent|Visible|Notify|Hover|Lifted|Resting|Plan|Patch|Verify|Ship|Comfortable|Dense|Alert|Alternative|Advance|Generating|Helpful|Needs|Work|Rated|Cache|Refresh|Recalculate|Terminal|Schema|Fields|Window|Brush|Outlier|Group|Ungroup|Environment|Environments|Context|Rows|Terms|Retry|Maintenance|Session|Webhook|Webhooks|Warn|Extend)\b/i;
   const violations = [];
 
   for (const [category, testId] of samples) {

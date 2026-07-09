@@ -64,6 +64,11 @@
   background: var(--panel) !important;
 }
 
+.react-flow__node-group {
+  border-color: var(--border-strong) !important;
+  background: color-mix(in srgb, var(--panel-soft) 84%, transparent) !important;
+}
+
 .flow-card span {
   color: var(--muted);
 }
@@ -171,6 +176,10 @@
   color: var(--text);
   background: var(--panel);
   border-color: var(--border);
+}
+
+.react-flow__controls button:hover {
+  background: var(--surface-raised);
 }
 
 .react-flow__minimap {
