@@ -48,6 +48,8 @@ def test_gateway_settings_env_defaults_remain_unchanged() -> None:
     assert config.AUTH_ABUSE_SECOND_LOCK_SECONDS == 60 * 60
     assert config.AUTH_ABUSE_THIRD_LOCK_SECONDS == 24 * 60 * 60
     assert config.AUTH_ABUSE_STRIKE_TTL_SECONDS == 24 * 60 * 60
+    assert config.DEV_AUTH_BYPASS_ENV == "DEV_AUTH_BYPASS"
+    assert config.DEV_AUTH_BYPASS_TOKEN == "dev-auth-bypass"
 
 
 def test_outbox_relay_env_defaults_remain_unchanged() -> None:

@@ -86,6 +86,11 @@ class Settings:
     AUTHORIZATION_HEADER = "authorization"
     BEARER_PREFIX = "bearer "
     SESSION_TOKEN_HEADER = "x-session-token"
+    DEV_AUTH_BYPASS_ENV = "DEV_AUTH_BYPASS"
+    DEV_AUTH_BYPASS_USER_ID_ENV = "DEV_AUTH_BYPASS_USER_ID"
+    DEV_AUTH_BYPASS_WORKSPACE_ID_ENV = "DEV_AUTH_BYPASS_WORKSPACE_ID"
+    DEV_AUTH_BYPASS_TOKEN = "dev-auth-bypass"
+    DEV_AUTH_BYPASS_USER_ID = "dev-auth-bypass"
     METRICS_TOKEN_ENV = (
         "METRICS_TOKEN"  # 설정 시 /metrics 에 Bearer 강제(미설정=내부 스크레이핑 허용)
     )
