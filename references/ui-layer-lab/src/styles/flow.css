@@ -1,0 +1,191 @@
+.flow-example {
+  position: relative;
+  width: min(900px, 100%);
+  height: 440px;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-xl);
+  border-color: var(--border);
+  background: var(--panel-soft);
+}
+
+.flow-workbench,
+.flow-shell {
+  display: grid;
+  width: min(1040px, 100%);
+  gap: 14px;
+}
+
+.flow-toolbar {
+  display: flex;
+  min-height: 54px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--panel-soft);
+}
+
+.flow-toolbar > span {
+  min-width: 220px;
+  color: var(--muted);
+  font-size: var(--text-sm);
+  line-height: var(--line-base);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.flow-example.interactive {
+  height: 460px;
+}
+
+.flow-workflow-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(220px, 270px);
+  gap: 14px;
+  align-items: stretch;
+  width: min(1040px, 100%);
+}
+
+.flow-workflow-layout .flow-example {
+  width: 100%;
+  height: 460px;
+}
+
+.flow-card,
+.react-flow__node-default,
+.react-flow__node-input,
+.react-flow__node-output {
+  border-color: var(--border) !important;
+  color: var(--text) !important;
+  background: var(--panel) !important;
+}
+
+.flow-card span {
+  color: var(--muted);
+}
+
+.flow-card {
+  display: grid;
+  gap: 7px;
+  width: 206px;
+  padding: 13px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-panel);
+}
+
+.flow-card.selected {
+  border-color: var(--focus) !important;
+  box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--focus) 50%, transparent), var(--shadow-panel);
+}
+
+.flow-card em {
+  color: var(--blue);
+  font-size: var(--text-xs);
+  font-style: normal;
+  font-weight: 800;
+}
+
+.flow-card-status,
+.flow-panel-badge {
+  width: fit-content;
+  padding: 4px 8px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--muted);
+  font-size: var(--text-xs);
+  font-weight: 800;
+}
+
+.flow-inspector {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 2fr) auto;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  min-height: 68px;
+  padding: 16px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  color: var(--muted);
+  background: var(--panel-soft);
+}
+
+.flow-inspector strong,
+.flow-inspector span,
+.flow-inspector em {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.flow-inspector strong {
+  color: var(--text);
+  font-size: var(--text-lg);
+}
+
+.flow-inspector em {
+  color: var(--blue);
+  font-size: var(--text-xs);
+  font-style: normal;
+  font-weight: 800;
+}
+
+.flow-panel {
+  display: inline-flex;
+  align-items: center;
+  min-height: 32px;
+  padding: 0 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  color: var(--muted);
+  background: var(--panel);
+  font-size: var(--text-xs);
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.react-flow__handle {
+  border-color: var(--panel) !important;
+  background: var(--accent) !important;
+}
+
+.react-flow__controls button {
+  color: var(--text);
+  background: var(--panel);
+  border-color: var(--border);
+}
+
+.react-flow__minimap {
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--panel) !important;
+}
+
+@media (max-width: 760px) {
+  .flow-workflow-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .flow-toolbar > span {
+    min-width: 0;
+    flex-basis: 100%;
+  }
+
+  .flow-toolbar,
+  .flow-inspector {
+    grid-template-columns: 1fr;
+    align-items: stretch;
+  }
+
+  .flow-example.interactive {
+    height: 420px;
+  }
+}
