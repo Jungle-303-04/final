@@ -1165,7 +1165,7 @@ function RunPanel({
             size="sm"
             loading={busy}
             disabled={busy || !canRetry}
-            onClick={() => withOperatorReason('Retry release wave', 'operator retried failed release wave', reason => onRetry(run.run_id, reason))}
+            onClick={() => withOperatorReason('Retry release wave', operatorActionReason('retry', run, status, attentionReasons), reason => onRetry(run.run_id, reason))}
           >
             Retry
           </Button>
@@ -1174,7 +1174,7 @@ function RunPanel({
               <Button
                 size="sm"
                 loading={busy}
-                onClick={() => withOperatorReason('Resume release run', 'operator resumed release run', reason => onResume(run.run_id, reason))}
+                onClick={() => withOperatorReason('Resume release run', operatorActionReason('resume', run, status, attentionReasons), reason => onResume(run.run_id, reason))}
               >
                 Resume
               </Button>
@@ -1184,7 +1184,7 @@ function RunPanel({
                 size="sm"
                 loading={busy}
                 disabled={busy || isTerminal}
-                onClick={() => withOperatorReason('Pause release run', 'operator paused release run', reason => onPause(run.run_id, reason))}
+                onClick={() => withOperatorReason('Pause release run', operatorActionReason('pause', run, status, attentionReasons), reason => onPause(run.run_id, reason))}
               >
                 Pause
               </Button>
@@ -1194,7 +1194,7 @@ function RunPanel({
             variant="ghost"
             loading={busy}
             disabled={busy || isTerminal || getString(run.rollback.policy, getString(run.settings.rollback_policy)) === 'disabled'}
-            onClick={() => withOperatorReason('Request rollback', 'operator requested rollback from release flow', reason => onRollback(run.run_id, reason))}
+            onClick={() => withOperatorReason('Request rollback', operatorActionReason('rollback', run, status, attentionReasons), reason => onRollback(run.run_id, reason))}
           >
             Rollback
           </Button>
@@ -1203,7 +1203,7 @@ function RunPanel({
             variant="ghost"
             loading={busy}
             disabled={busy || isTerminal}
-            onClick={() => withOperatorReason('Cancel release run', 'operator canceled release run', reason => onCancel(run.run_id, reason))}
+            onClick={() => withOperatorReason('Cancel release run', operatorActionReason('cancel', run, status, attentionReasons), reason => onCancel(run.run_id, reason))}
           >
             Cancel
           </Button>
@@ -1213,7 +1213,7 @@ function RunPanel({
             loading={busy}
             disabled={busy || !alertable || Boolean(notifyBlockedReason)}
             title={notifyBlockedReason || undefined}
-            onClick={() => withOperatorReason('Notify release owner', 'operator requested release run notification', reason => onNotify(run.run_id, reason))}
+            onClick={() => withOperatorReason('Notify release owner', operatorActionReason('notify', run, status, attentionReasons), reason => onNotify(run.run_id, reason))}
           >
             Notify
           </Button>
@@ -1912,6 +1912,30 @@ function readinessStatusLabel(status: string): string {
 
 function shortId(value: string): string {
   return value.replace(/^workflow-/, '').slice(0, 8);
+}
+
+type ReleaseOperatorAction = 'retry' | 'resume' | 'pause' | 'rollback' | 'cancel' | 'notify';
+
+function operatorActionReason(action: ReleaseOperatorAction, run: ReleaseRun, status: string, attentionReasons: string[]): string {
+  const runLabel = `run ${shortId(run.run_id)}`;
+  const health = getString(run.health.status, 'unknown');
+  const signal = attentionReasons[0] || `${status} / health ${health}`;
+  switch (action) {
+    case 'retry':
+      return `${runLabel}: retry current wave after reviewing ${signal}`;
+    case 'resume':
+      return `${runLabel}: resume after operator confirmed blockers are cleared`;
+    case 'pause':
+      return `${runLabel}: pause before next release action to investigate ${signal}`;
+    case 'rollback':
+      return `${runLabel}: request rollback because user impact or rollback criteria were confirmed`;
+    case 'cancel':
+      return `${runLabel}: cancel release run to stop further automated progress`;
+    case 'notify':
+      return `${runLabel}: notify release owner about ${signal}`;
+    default:
+      return `${runLabel}: operator action requested`;
+  }
 }
 
 function withOperatorReason(title: string, fallback: string, submit: (reason: string) => void) {
