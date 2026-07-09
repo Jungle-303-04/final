@@ -10,7 +10,6 @@ from kubernetes_api import (
     kubernetes_headers,
     service_account_token,
 )
-
 from queries import MetadataSnapshotQuery
 from telemetry_registry import telemetry
 
@@ -167,10 +166,7 @@ def current_workload_snapshots(
     replicasets: list[JsonObject],
 ) -> list[JsonObject]:
     """Build small snapshots for all Deployments."""
-    return [
-        current_workload_snapshot(deployment, replicasets)
-        for deployment in deployments
-    ]
+    return [current_workload_snapshot(deployment, replicasets) for deployment in deployments]
 
 
 def current_workload_snapshot(

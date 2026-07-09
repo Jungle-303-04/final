@@ -313,9 +313,7 @@ def sanitize_change_context(value: dict) -> dict:
     recent_changes = sanitized.get("recent_changes")
     if isinstance(recent_changes, list):
         sanitized["recent_changes"] = [
-            sanitize_recent_change(change)
-            for change in recent_changes
-            if isinstance(change, dict)
+            sanitize_recent_change(change) for change in recent_changes if isinstance(change, dict)
         ]
     return sanitized
 
@@ -331,8 +329,7 @@ def sanitize_recent_change(change: dict) -> dict:
 
 def is_sensitive_change(change: dict) -> bool:
     text = " ".join(
-        str(change.get(key) or "")
-        for key in ("change_type", "target_resource", "field", "source")
+        str(change.get(key) or "") for key in ("change_type", "target_resource", "field", "source")
     ).casefold()
     return any(token in text for token in SENSITIVE_CHANGE_TOKENS)
 
