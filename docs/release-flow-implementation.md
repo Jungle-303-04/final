@@ -77,6 +77,7 @@
 - release alerts panel: `/release-flows`에서 alert channel 개수/활성 채널/severity 요약을 확인하고 `/settings/alerts`로 이동
 - release approval card: waiting approval step에 기존 approval grant/reject UI를 노출하고 승인 후 release run/audit query 갱신
 - active run lock: 같은 저장된 release plan에 active run이 있으면 start/dispatch를 409 blocker로 차단
+- readiness active run lock: 저장된 plan의 active run blocker를 실행 전 readiness에도 표시
 
 ## 검증
 - `py -3 -m pytest -q tests/test_release_flow_diagnostics.py tests/test_release_flow_projection.py`

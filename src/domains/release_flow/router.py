@@ -824,6 +824,7 @@ def release_readiness_from_plan(
         db,
         workspace_id,
     )
+    active_run_blockers = active_release_run_blockers(db, workspace_id, plan)
     execution_blockers = release_execution_blockers(
         plan,
         preview,
@@ -860,6 +861,15 @@ def release_readiness_from_plan(
             if context_blockers
             else "All release steps resolve to registered application deployment context.",
             context_blockers,
+        ),
+        readiness_check(
+            "plan.active_run_lock",
+            "Active run lock",
+            "blocked" if active_run_blockers else "passed",
+            "This saved release plan already has an active run."
+            if active_run_blockers
+            else "No active run is blocking this release plan.",
+            active_run_blockers,
         ),
         readiness_check(
             "live.dispatch_gate",
@@ -1052,18 +1062,25 @@ def require_plan_application_manage_access(
 
 
 def require_no_active_release_run(db: Any, workspace_id: str, plan: dict[str, Any]) -> None:
-    plan_id = str(plan.get("plan_id") or "").strip()
-    has_active = getattr(db, "has_active_release_runs", None)
-    if not plan_id or not callable(has_active):
-        return
-    if has_active(workspace_id, plan_id):
+    blockers = active_release_run_blockers(db, workspace_id, plan)
+    if blockers:
         raise HTTPException(
             status_code=HTTP_CONFLICT,
             detail={
                 "message": RELEASE_PLAN_BLOCKED,
-                "blockers": [f"Release plan {plan_id} already has an active run."],
+                "blockers": blockers,
             },
         )
+
+
+def active_release_run_blockers(db: Any, workspace_id: str, plan: dict[str, Any]) -> list[str]:
+    plan_id = str(plan.get("plan_id") or "").strip()
+    has_active = getattr(db, "has_active_release_runs", None)
+    if not plan_id or not callable(has_active):
+        return []
+    if has_active(workspace_id, plan_id):
+        return [f"Release plan {plan_id} already has an active run."]
+    return []
 
 
 def release_plan_from_run(run: dict[str, Any], steps: list[dict[str, Any]]) -> dict[str, Any]:
