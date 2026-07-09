@@ -38,6 +38,7 @@ def crashloop_payload(
     traces: dict[str, Any] | None = None,
     source_id: str | None = None,
     window_start: str | None = None,
+    metadata: dict[str, Any] | None = None,
 ) -> ClusterEvidenceReceivedBody:
     return ClusterEvidenceReceivedBody(
         cluster_id="target-cluster-01",
@@ -57,6 +58,7 @@ def crashloop_payload(
         traces=traces if traces is not None else {"slow_span": "GET /checkout"},
         source_id=source_id,
         window_start=window_start,
+        metadata=metadata if metadata is not None else {},
     )
 
 
@@ -595,6 +597,109 @@ def test_target_namespace_only_logs_do_not_count_as_workload_evidence() -> None:
     assert all(item.source != "logs" for item in bundle.items)
     assert rca_events[-1].__subject__ == "rca.analysis_blocked"
     assert not db.called("save_rca_report")
+
+
+def test_evidence_bundle_adds_change_context_metadata_item() -> None:
+    db = SpyDb()
+    payload = crashloop_payload(
+        metadata={
+            "change_context": {
+                "recent_changes": [
+                    {
+                        "change_type": "secret_ref",
+                        "changed_at": "2026-07-07T10:13:00Z",
+                        "target_resource": "Secret/checkout-api",
+                        "field": "DATABASE_URL",
+                        "before": "postgres://real-user:real-password@db",
+                        "after": "postgres://new-user:new-password@db",
+                        "source": "gitops",
+                    }
+                ],
+                "gitops": {
+                    "repository_id": "repo-1",
+                    "branch": "main",
+                    "manifest_path": "deploy/checkout-api.yaml",
+                    "commit_sha": "abc1234",
+                },
+                "rollout": {"revision": "42", "rollback_available": True},
+            }
+        },
+    )
+
+    rca_events = run_to_rca(payload, db=db, correlation_id="corr-change-context")
+
+    bundle = event_by_subject(rca_events, "evidence.bundle.built").evidence_bundle
+    metadata_item = next(item for item in bundle.items if item.source == "metadata")
+    assert metadata_item.name == "change_context"
+    assert metadata_item.value["resource"] == {
+        "namespace": "sandbox",
+        "workload_kind": "deployment",
+        "workload_name": "checkout-api",
+    }
+    assert metadata_item.value["gitops"]["commit_sha"] == "abc1234"
+    assert metadata_item.value["rollout"]["rollback_available"] is True
+    change = metadata_item.value["recent_changes"][0]
+    assert change["before"] == "redacted"
+    assert change["after"] == "redacted"
+    assert "real-password" not in str(metadata_item.value)
+
+
+def test_evidence_bundle_adds_workload_snapshot_metadata_items() -> None:
+    db = SpyDb()
+    payload = crashloop_payload(
+        metadata={
+            "current_workload_snapshots": [
+                {
+                    "namespace": "sandbox",
+                    "kind": "Deployment",
+                    "name": "checkout-api",
+                    "image": "repo/checkout:v2",
+                    "ready_replicas": 0,
+                }
+            ],
+            "current_workload_snapshot": {
+                "namespace": "sandbox",
+                "kind": "Deployment",
+                "name": "checkout-api",
+                "image": "repo/checkout:v2",
+                "conditions": [{"type": "Progressing", "reason": "ProgressDeadlineExceeded"}],
+            },
+        },
+    )
+
+    rca_events = run_to_rca(payload, db=db, correlation_id="corr-workload-snapshot")
+
+    bundle = event_by_subject(rca_events, "evidence.bundle.built").evidence_bundle
+    metadata_items = {
+        item.name: item for item in bundle.items if item.source == "metadata"
+    }
+    snapshots = metadata_items["current_workload_snapshots"]
+    snapshot = metadata_items["current_workload_snapshot"]
+    assert snapshots.value["items"][0]["name"] == "checkout-api"
+    assert snapshots.value["items"][0]["ready_replicas"] == 0
+    assert snapshot.value["conditions"][0]["reason"] == "ProgressDeadlineExceeded"
+    assert "change_context" not in metadata_items
+
+
+def test_evidence_bundle_skips_empty_change_context_metadata_item() -> None:
+    db = SpyDb()
+    payload = crashloop_payload(
+        metadata={
+            "change_context": {
+                "recent_changes": [],
+                "rollback_available": None,
+                "risk_level": "unknown",
+            }
+        },
+    )
+
+    rca_events = run_to_rca(payload, db=db, correlation_id="corr-empty-change-context")
+
+    bundle = event_by_subject(rca_events, "evidence.bundle.built").evidence_bundle
+    assert all(
+        not (item.source == "metadata" and item.name == "change_context")
+        for item in bundle.items
+    )
 
 
 def test_duplicate_rca_report_in_window_is_not_saved_again() -> None:

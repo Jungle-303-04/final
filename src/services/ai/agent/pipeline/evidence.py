@@ -35,6 +35,7 @@ class EvidenceBuilder:
                 if isinstance(entry, dict)
             ],
             traces=with_lineage(evt.traces, lineage_for(evt, "traces")),
+            metadata=with_lineage(evt.metadata, lineage_for(evt, "metadata")),
             object_ref=evidence_ref,
             workspace_id=evt.workspace_id,
         )
