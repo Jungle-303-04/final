@@ -327,6 +327,7 @@ def test_get_release_run_handoff_summarizes_operator_next_actions(monkeypatch) -
             }
         ],
         "job_count": 1,
+        "timed_out_jobs": [],
         "override_reason": None,
         "production_targets": ["checkout"],
     }
@@ -1813,6 +1814,7 @@ def test_release_run_serialization_marks_stale_active_run() -> None:
 
 
 def test_release_run_summary_counts_derived_statuses() -> None:
+    old_verification = (datetime.now(timezone.utc) - timedelta(minutes=20)).isoformat()
     summary = release_router.release_run_summary_from_runs(
         [
             {"run_id": "run-1", "plan_id": "plan-a", "status": "running", "health": {"status": "progressing"}},
@@ -1856,26 +1858,52 @@ def test_release_run_summary_counts_derived_statuses() -> None:
                 "status": "running",
                 "attention": {"required": True, "stale": True, "reasons": ["No progress."]},
             },
+            {
+                "run_id": "run-7",
+                "plan_id": "plan-e",
+                "status": "running",
+                "steps": [
+                    {
+                        "name": "Payments",
+                        "details": {
+                            "release_guard": {
+                                "verification_jobs": {
+                                    "jobs": [
+                                        {
+                                            "job_id": "release-verification-timeout",
+                                            "kind": "http_probe",
+                                            "status": "pending",
+                                            "queued_at": old_verification,
+                                            "timeout_minutes": 5,
+                                        }
+                                    ]
+                                }
+                            }
+                        },
+                    }
+                ],
+            },
         ]
     )
 
-    assert summary["total_runs"] == 6
+    assert summary["total_runs"] == 7
     assert summary["status_breakdown"] == {
-        "running": 2,
+        "running": 3,
         "failed": 1,
         "succeeded": 1,
         "rollback_requested": 1,
         "waiting_for_approval": 1,
     }
-    assert summary["plan_breakdown"] == {"plan-a": 2, "plan-b": 1, "plan-c": 2, "plan-d": 1}
-    assert summary["active_runs"] == 3
-    assert summary["attention_required_runs"] == 4
+    assert summary["plan_breakdown"] == {"plan-a": 2, "plan-b": 1, "plan-c": 2, "plan-d": 1, "plan-e": 1}
+    assert summary["active_runs"] == 4
+    assert summary["attention_required_runs"] == 5
     assert summary["failed_runs"] == 1
     assert summary["rollback_requested_runs"] == 1
     assert summary["waiting_for_approval_runs"] == 1
     assert summary["live_runs"] == 2
     assert summary["unhealthy_runs"] == 1
     assert summary["verification_failed_runs"] == 1
+    assert summary["verification_pending_timeout_runs"] == 1
     assert summary["stale_runs"] == 1
     assert summary["last_run_status"] == "running"
     assert summary["recent_runs"][1] == {
@@ -1886,7 +1914,57 @@ def test_release_run_summary_counts_derived_statuses() -> None:
     }
 
 
+def test_release_run_handoff_blocks_timed_out_verification_job() -> None:
+    old_verification = (datetime.now(timezone.utc) - timedelta(minutes=20)).isoformat()
+    handoff = release_router.release_run_handoff(
+        {
+            "run_id": "run-timeout",
+            "plan_id": "plan-a",
+            "plan_name": "Checkout",
+            "status": "running",
+            "current_wave": 1,
+            "total_waves": 1,
+            "steps": [
+                {
+                    "name": "Checkout",
+                    "status": "succeeded",
+                    "details": {
+                        "release_guard": {
+                            "verification": {
+                                "evidence_present": True,
+                                "health_check_paths": ["/readyz"],
+                                "verification_urls": [],
+                                "production_targets": ["checkout"],
+                            },
+                            "verification_jobs": {
+                                "jobs": [
+                                    {
+                                        "job_id": "release-verification-timeout",
+                                        "application_id": "checkout",
+                                        "name": "Checkout",
+                                        "kind": "kubernetes_health_check",
+                                        "status": "pending",
+                                        "queued_at": old_verification,
+                                        "timeout_minutes": 5,
+                                        "target": {"path": "/readyz"},
+                                    }
+                                ]
+                            },
+                        }
+                    },
+                }
+            ],
+        }
+    )
+
+    assert handoff["verification"]["status"] == "blocked"
+    assert handoff["verification"]["timed_out_jobs"][0]["job_id"] == "release-verification-timeout"
+    verification_check = next(check for check in handoff["checks"] if check["name"] == "verification")
+    assert verification_check["status"] == "blocked"
+
+
 def test_release_run_filter_supports_attention_stale_live_and_status() -> None:
+    old_verification = (datetime.now(timezone.utc) - timedelta(minutes=20)).isoformat()
     runs = [
         {
             "run_id": "run-live",
@@ -1929,6 +2007,28 @@ def test_release_run_filter_supports_attention_stale_live_and_status() -> None:
                 }
             ],
         },
+        {
+            "run_id": "run-verification-timeout",
+            "status": "running",
+            "steps": [
+                {
+                    "details": {
+                        "release_guard": {
+                            "verification_jobs": {
+                                "jobs": [
+                                    {
+                                        "job_id": "release-verification-timeout",
+                                        "status": "pending",
+                                        "queued_at": old_verification,
+                                        "timeout_minutes": 5,
+                                    }
+                                ]
+                            }
+                        }
+                    }
+                }
+            ],
+        },
     ]
 
     assert [
@@ -1951,6 +2051,10 @@ def test_release_run_filter_supports_attention_stale_live_and_status() -> None:
         run["run_id"]
         for run in release_router.filter_release_runs(runs, verification_failed_only=True)
     ] == ["run-verification-failed"]
+    assert [
+        run["run_id"]
+        for run in release_router.filter_release_runs(runs, verification_pending_timeout_only=True)
+    ] == ["run-verification-timeout"]
 
 
 class ReleaseDispatchDb:
@@ -3945,6 +4049,9 @@ def test_dispatch_wave_steps_records_active_production_release_window(monkeypatc
     assert guard["verification_jobs"]["scheduled"] is True
     assert guard["verification_jobs"]["job_count"] == 1
     assert guard["verification_jobs"]["jobs"][0]["kind"] == "kubernetes_health_check"
+    assert guard["verification_jobs"]["jobs"][0]["status"] == "pending"
+    assert guard["verification_jobs"]["jobs"][0]["timeout_minutes"] == 15
+    assert release_router.parse_release_window_time(guard["verification_jobs"]["jobs"][0]["queued_at"]) is not None
     assert guard["verification_jobs"]["jobs"][0]["target"] == {
         "cluster_id": "",
         "namespace": "",

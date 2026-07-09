@@ -1345,6 +1345,7 @@ function RunFilterField({
         <option value="live">Live</option>
         <option value="failed">Failed</option>
         <option value="verification_failed">Verification failed</option>
+        <option value="verification_pending_timeout">Verification timeout</option>
         <option value="waiting_for_approval">Waiting approval</option>
       </select>
     </Field>
@@ -1361,6 +1362,7 @@ function RunSummary({ summary }: { summary?: ReleaseRunSummary }) {
     ['Rollback', summary.rollback_requested_runs ?? 0],
     ['Unhealthy', summary.unhealthy_runs ?? 0],
     ['Verification failed', summary.verification_failed_runs ?? 0],
+    ['Verification timeout', summary.verification_pending_timeout_runs ?? 0],
     ['Stale', summary.stale_runs ?? 0],
   ];
   return (
