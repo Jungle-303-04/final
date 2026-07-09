@@ -11,15 +11,18 @@ import json
 from domains.target.management_guard import MANAGEMENT_BOOTSTRAP_MODE, MANAGEMENT_CLUSTER_ROLE
 from packages.config.settings import env
 from packages.contracts.gateway.requests import DEFAULT_OTEL_SERVICE_NAME, TargetRegisterRequest
-from packages.contracts.target import SANDBOX_NAMESPACE, TARGET_NAMESPACE
+from packages.contracts.target import (
+    CONTROL_PRIORITY_CLASS_NAME,
+    FAST_LANE_NODE_LABEL_KEY,
+    FAST_LANE_NODE_LABEL_VALUE,
+    FAST_LANE_PRIORITY_CLASS_NAME,
+    SANDBOX_NAMESPACE,
+    TARGET_NAMESPACE,
+)
 
 TARGET_INSTALL_RENDERER_ENV = "TARGET_INSTALL_RENDERER"
 TARGET_INSTALL_RENDERER_NATIVE = "native"
 TARGET_INSTALL_RENDERER_KUSTOMIZE = "kustomize"
-CONTROL_PRIORITY_CLASS_NAME = "gitops-control-critical"
-FAST_LANE_PRIORITY_CLASS_NAME = "gitops-fast-lane"
-FAST_LANE_NODE_LABEL_KEY = "workload-tier"
-FAST_LANE_NODE_LABEL_VALUE = "fast-lane"
 SUPPORTED_TARGET_INSTALL_RENDERERS = {
     TARGET_INSTALL_RENDERER_NATIVE,
     TARGET_INSTALL_RENDERER_KUSTOMIZE,
