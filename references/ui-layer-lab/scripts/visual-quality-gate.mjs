@@ -929,6 +929,46 @@ async function inspectSourceEnglishGuard() {
     {
       file: "src/examples/289-heatmap-severity-stacking.example.tsx",
       fragments: ["Severity {severity}+"]
+    },
+    {
+      file: "src/examples/290-react-flow-contextual-zoom.example.tsx",
+      fragments: ["Overview</button>", "Detail</button>", " zoom</span>"]
+    },
+    {
+      file: "src/examples/291-command-ranked-actions.example.tsx",
+      fragments: ["Open failed run", "Explain selected diff", "Retry flaky shard", "Ranked actions", "Best matches", "match score"]
+    },
+    {
+      file: "src/examples/292-command-inline-form-submit.example.tsx",
+      fragments: ["Create branch", "Open pull request", "Draft release note", "Ready", "Choose action", "Actions", ">Submit<"]
+    },
+    {
+      file: "src/examples/293-command-hotkey-conflicts.example.tsx",
+      fragments: ["Open command", "Run AI edit", "Toggle job tray", "browser downloads", "devtools", "Search shortcuts", "Shortcuts", "Conflict:"]
+    },
+    {
+      file: "src/examples/294-command-query-suggestions.example.tsx",
+      fragments: ["Add query token", 'heading="Suggestions"', ">on<", ">add<"]
+    },
+    {
+      file: "src/examples/295-command-nested-resource-picker.example.tsx",
+      fragments: ["Pick project or step", "Projects", "Selected step"]
+    },
+    {
+      file: "src/examples/296-sonner-progress-with-action.example.tsx",
+      fragments: ["Upload progress updated", "Artifact bundle", "Artifact upload", "Advance Upload"]
+    },
+    {
+      file: "src/examples/297-sonner-toast-history.example.tsx",
+      fragments: ["Pull completed", "Typecheck started", "Preview deployed", "Push Event"]
+    },
+    {
+      file: "src/examples/298-sonner-promise-error-recovery.example.tsx",
+      fragments: ["Idle", "Failed", "Preview deploy failed", "Recovery action", 'label: "Recover"', "Recovery queued", "Simulate Failure"]
+    },
+    {
+      file: "src/examples/299-sonner-muted-channel.example.tsx",
+      fragments: ["No silent events", "Stored in activity log", "Visible toast channel", "Toast shown", "Unmute Toasts", "Mute Toasts", ">Notify<"]
     }
   ];
   const matches = [];
@@ -1270,9 +1310,19 @@ async function inspectEnglishSamples(page, url) {
     ["드릴다운 탐색", "example-drilldown-related-entities"],
     ["드릴다운 탐색", "example-drilldown-empty-branch"],
     ["데이터 시각화", "example-heatmap-sparkline-detail"],
-    ["데이터 시각화", "example-heatmap-severity-stacking"]
+    ["데이터 시각화", "example-heatmap-severity-stacking"],
+    ["플로우 빌더", "example-react-flow-contextual-zoom"],
+    ["오버레이/명령", "example-command-ranked-actions"],
+    ["오버레이/명령", "example-command-inline-form-submit"],
+    ["오버레이/명령", "example-command-hotkey-conflicts"],
+    ["오버레이/명령", "example-command-query-suggestions"],
+    ["오버레이/명령", "example-command-nested-resource-picker"],
+    ["작업 진행/로그", "example-sonner-progress-with-action"],
+    ["작업 진행/로그", "example-sonner-toast-history"],
+    ["작업 진행/로그", "example-sonner-promise-error-recovery"],
+    ["작업 진행/로그", "example-sonner-muted-channel"]
   ];
-  const forbidden = /\b(Open|Close|Show|Hide|Search|Loading|Current|Selected|Dashboard|Create|Cancel|Retry|Next|Previous|Expand|Collapse|Focus|Input|Logs|Answer|Status|Resources|Jobs|Steps|Command|Filter|Recent|Approval|Approved|Matrix|Launch|Health|Edge|Done|Running|Failed|Pending|Allowed|Blocked|Owner|Online|Offline|Reconnect|Confirm|Delete|Danger|Safe|Ready|Exportable|Draft|Save|Move|Undo|Viewer|Maintainer|Admin|Snippets|Routes|Access|Good|Degraded|Archive|Import|Silent|Visible|Notify|Hover|Lifted|Resting|Plan|Patch|Verify|Ship|Comfortable|Dense|Alert|Alternative|Advance|Generating|Helpful|Needs|Work|Rated|Cache|Refresh|Recalculate|Terminal|Schema|Fields|Window|Brush|Outlier|Group|Ungroup|Environment|Environments|Context|Rows|Terms|Retry|Maintenance|Session|Webhook|Webhooks|Warn|Extend|Executiond|Palette|Token|Budget|Fallback|Accuracy|Grounding|Actionability|Citation|Ribbon|Resize|Trace|Idle|Live|Rename|Empty|Toast|Resolved|Queued|Checkout|Build|Upload|Runners|Schedule|Rollback|Detect|Freeze|Restore|Shard|Severity|Related|Failures|Warnings|Skipped)\b/i;
+  const forbidden = /\b(Open|Close|Show|Hide|Search|Loading|Current|Selected|Dashboard|Create|Cancel|Retry|Next|Previous|Expand|Collapse|Focus|Input|Logs|Answer|Status|Resources|Jobs|Steps|Command|Filter|Recent|Approval|Approved|Matrix|Launch|Health|Edge|Done|Running|Failed|Pending|Allowed|Blocked|Owner|Online|Offline|Reconnect|Confirm|Delete|Danger|Safe|Ready|Exportable|Draft|Save|Move|Undo|Viewer|Maintainer|Admin|Snippets|Routes|Access|Good|Degraded|Archive|Import|Silent|Visible|Notify|Hover|Lifted|Resting|Plan|Patch|Verify|Ship|Comfortable|Dense|Alert|Alternative|Advance|Generating|Helpful|Needs|Work|Rated|Cache|Refresh|Recalculate|Terminal|Schema|Fields|Window|Brush|Outlier|Group|Ungroup|Environment|Environments|Context|Rows|Terms|Retry|Maintenance|Session|Webhook|Webhooks|Warn|Extend|Executiond|Palette|Token|Budget|Fallback|Accuracy|Grounding|Actionability|Citation|Ribbon|Resize|Trace|Idle|Live|Rename|Empty|Toast|Resolved|Queued|Checkout|Build|Upload|Runners|Schedule|Rollback|Detect|Freeze|Restore|Shard|Severity|Related|Failures|Warnings|Skipped|Overview|Detail|Zoom|Ranked|Best|Matches|Shortcuts|Conflict|Push|Simulate|Failure|Recover|Recovery|Unmute|Mute)\b/i;
   const violations = [];
 
   for (const [category, testId] of samples) {
