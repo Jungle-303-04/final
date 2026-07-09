@@ -95,6 +95,7 @@ async def list_release_runs(
     attention_only: bool = Query(default=False),
     stale_only: bool = Query(default=False),
     live_only: bool = Query(default=False),
+    verification_failed_only: bool = Query(default=False),
     limit: int = Query(default=50, ge=1, le=200),
     current: Any = Depends(require_session),
     db: Any = Depends(get_db),
@@ -109,6 +110,7 @@ async def list_release_runs(
         attention_only=attention_only,
         stale_only=stale_only,
         live_only=live_only,
+        verification_failed_only=verification_failed_only,
     )
     return ReleaseRunListResponse(runs=runs)
 
@@ -2699,6 +2701,7 @@ def filter_release_runs(
     attention_only: bool = False,
     stale_only: bool = False,
     live_only: bool = False,
+    verification_failed_only: bool = False,
 ) -> list[dict[str, Any]]:
     expected_status = str(status or "").strip().lower()
     filtered: list[dict[str, Any]] = []
@@ -2712,6 +2715,8 @@ def filter_release_runs(
         if stale_only and attention.get("stale") is not True:
             continue
         if live_only and not release_run_has_live_side_effects(run):
+            continue
+        if verification_failed_only and not release_run_has_failed_verification(run):
             continue
         filtered.append(run)
     return filtered

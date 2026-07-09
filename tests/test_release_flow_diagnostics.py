@@ -1908,6 +1908,27 @@ def test_release_run_filter_supports_attention_stale_live_and_status() -> None:
             "attention": {"required": True},
             "steps": [{"details": {"side_effects": True}}],
         },
+        {
+            "run_id": "run-verification-failed",
+            "status": "running",
+            "attention": {"required": True},
+            "steps": [
+                {
+                    "details": {
+                        "release_guard": {
+                            "verification_jobs": {
+                                "jobs": [
+                                    {
+                                        "job_id": "release-verification-a",
+                                        "status": "failed",
+                                    }
+                                ]
+                            }
+                        }
+                    }
+                }
+            ],
+        },
     ]
 
     assert [
@@ -1917,7 +1938,7 @@ def test_release_run_filter_supports_attention_stale_live_and_status() -> None:
     assert [
         run["run_id"]
         for run in release_router.filter_release_runs(runs, attention_only=True)
-    ] == ["run-stale", "run-failed"]
+    ] == ["run-stale", "run-failed", "run-verification-failed"]
     assert [
         run["run_id"]
         for run in release_router.filter_release_runs(runs, stale_only=True)
@@ -1926,6 +1947,10 @@ def test_release_run_filter_supports_attention_stale_live_and_status() -> None:
         run["run_id"]
         for run in release_router.filter_release_runs(runs, live_only=True)
     ] == ["run-live", "run-failed"]
+    assert [
+        run["run_id"]
+        for run in release_router.filter_release_runs(runs, verification_failed_only=True)
+    ] == ["run-verification-failed"]
 
 
 class ReleaseDispatchDb:
