@@ -18,7 +18,7 @@ export const releaseKeys = {
   plans: () => ['release-plans'] as const,
   plan: (id: string) => ['release-plans', id] as const,
   runs: (planId?: string, filter: ReleaseRunFilter = 'all') => ['release-runs', planId ?? 'all', filter] as const,
-  audit: (planId?: string) => ['release-audit', planId ?? 'all'] as const,
+  audit: (planId?: string, runId?: string) => ['release-audit', planId ?? 'all', runId ?? 'all'] as const,
 };
 
 export const diagnosticsKeys = {
@@ -66,26 +66,32 @@ export const useReleaseRunSummary = (planId?: string) =>
     refetchInterval: 15_000,
   });
 
-export const useReleaseAudit = (planId?: string) =>
+export const useReleaseAudit = (planId?: string, runId?: string) =>
   useQuery({
-    queryKey: releaseKeys.audit(planId),
-    queryFn: () => get<{ events: ReleaseAuditEvent[] }>(
-      `/release-audit?limit=50${planId ? `&plan_id=${encodeURIComponent(planId)}` : ''}`,
-    ),
+    queryKey: releaseKeys.audit(planId, runId),
+    queryFn: () => get<{ events: ReleaseAuditEvent[] }>(releaseAuditPath(planId, runId, 50)),
     select: d => d.events,
     refetchInterval: 30_000,
   });
 
-export function useReleaseAuditExport(planId?: string) {
+export function useReleaseAuditExport(planId?: string, runId?: string) {
   const { push } = useToast();
   return useMutation({
-    mutationFn: () => getBlob(`/release-audit/export?limit=500${planId ? `&plan_id=${encodeURIComponent(planId)}` : ''}`),
+    mutationFn: () => getBlob(releaseAuditPath(planId, runId, 500, true)),
     onSuccess: blob => {
-      downloadBlob(blob, `release-audit${planId ? `-${planId}` : ''}.csv`);
+      downloadBlob(blob, `release-audit${runId ? `-${runId}` : planId ? `-${planId}` : ''}.csv`);
       push({ tone: 'success', title: 'Audit export ready', description: 'Release audit CSV has been downloaded.' });
     },
     onError: err => push({ tone: 'danger', title: 'Audit export failed', description: (err as Error).message || 'Please try again.' }),
   });
+}
+
+function releaseAuditPath(planId?: string, runId?: string, limit = 50, exportCsv = false) {
+  const params = new URLSearchParams();
+  params.set('limit', String(limit));
+  if (planId) params.set('plan_id', planId);
+  if (runId) params.set('run_id', runId);
+  return `/release-audit${exportCsv ? '/export' : ''}?${params.toString()}`;
 }
 
 export function useSaveReleasePlan(planId?: string) {

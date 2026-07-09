@@ -295,14 +295,15 @@ export default function ReleaseFlowView() {
   const [yaml, setYaml] = useState(SAMPLE_YAML);
   const [tab, setTab] = useState('plan');
   const [runFilter, setRunFilter] = useState<ReleaseRunFilter>('all');
+  const [selectedRunId, setSelectedRunId] = useState('');
   const { data: planDiagnosticsData, mutate: diagnosePlan } = useDiagnostics();
   const { data: yamlDiagnosticsData, mutate: diagnoseYaml } = useDiagnostics();
   const { data: releasePreviewData, isPending: releasePreviewPending, mutate: previewRelease } = useReleasePreview();
   const { data: releaseReadinessData, isPending: releaseReadinessPending, mutate: checkReadiness } = useReleaseReadiness();
   const runsQ = useReleaseRuns(plan?.plan_id, runFilter);
   const summaryQ = useReleaseRunSummary(plan?.plan_id);
-  const auditQ = useReleaseAudit(plan?.plan_id);
-  const exportAudit = useReleaseAuditExport(plan?.plan_id);
+  const auditQ = useReleaseAudit(plan?.plan_id, selectedRunId);
+  const exportAudit = useReleaseAuditExport(plan?.plan_id, selectedRunId);
   const dispatchRelease = useDispatchReleasePlan();
   const startRelease = useStartReleasePlan();
   const advanceRun = useAdvanceReleaseRun();
@@ -535,6 +536,8 @@ export default function ReleaseFlowView() {
                 summary={summaryQ.data}
                 runFilter={runFilter}
                 onRunFilterChange={setRunFilter}
+                selectedRunId={selectedRunId}
+                onSelectedRunIdChange={setSelectedRunId}
                 loading={runsQ.isPending}
                 busy={advanceRun.isPending || pauseRun.isPending || resumeRun.isPending || retryRun.isPending || rollbackRun.isPending || cancelRun.isPending || deleteRun.isPending}
                 onAdvance={runId => advanceRun.mutate({ runId })}
@@ -549,6 +552,7 @@ export default function ReleaseFlowView() {
                 events={auditQ.data ?? []}
                 loading={auditQ.isPending}
                 exporting={exportAudit.isPending}
+                scopedRunId={selectedRunId}
                 onExport={() => exportAudit.mutate()}
               />
               <DiagnosticsPanel diagnostics={planDiagnosticsData?.diagnostics ?? []} />
@@ -876,6 +880,8 @@ function RunPanel({
   summary,
   runFilter,
   onRunFilterChange,
+  selectedRunId,
+  onSelectedRunIdChange,
   loading,
   busy,
   onAdvance,
@@ -890,6 +896,8 @@ function RunPanel({
   summary?: ReleaseRunSummary;
   runFilter: ReleaseRunFilter;
   onRunFilterChange: (filter: ReleaseRunFilter) => void;
+  selectedRunId: string;
+  onSelectedRunIdChange: (runId: string) => void;
   loading: boolean;
   busy: boolean;
   onAdvance: (runId: string) => void;
@@ -900,16 +908,15 @@ function RunPanel({
   onCancel: (runId: string, reason: string) => void;
   onDelete: (runId: string, force?: boolean) => void;
 }) {
-  const [selectedRunId, setSelectedRunId] = useState('');
   useEffect(() => {
     if (runs.length === 0) {
-      if (selectedRunId) setSelectedRunId('');
+      if (selectedRunId) onSelectedRunIdChange('');
       return;
     }
     if (!selectedRunId || !runs.some(run => run.run_id === selectedRunId)) {
-      setSelectedRunId(runs[0].run_id);
+      onSelectedRunIdChange(runs[0].run_id);
     }
-  }, [runs, selectedRunId]);
+  }, [onSelectedRunIdChange, runs, selectedRunId]);
   const selectedRun = selectedRunId ? runs.find(run => run.run_id === selectedRunId) : undefined;
   const run = selectedRun ?? runs[0];
   if (loading && !run) return <Card title="Release runs"><p className="release-flow__hint">Loading release runs...</p></Card>;
@@ -951,7 +958,7 @@ function RunPanel({
       <RunFilterField runFilter={runFilter} onRunFilterChange={onRunFilterChange} />
       {runs.length > 1 && (
         <Field label="Inspect run">
-          <select className="input" value={run.run_id} onChange={e => setSelectedRunId(e.target.value)}>
+          <select className="input" value={run.run_id} onChange={e => onSelectedRunIdChange(e.target.value)}>
             {runs.map(item => (
               <option key={item.run_id} value={item.run_id}>
                 {shortId(item.run_id)} / {item.derived_status ?? item.status} / wave {item.current_wave}{recordValue(item.attention).required ? ' / attention' : ''}
@@ -1175,18 +1182,21 @@ function AuditPanel({
   events,
   loading,
   exporting,
+  scopedRunId,
   onExport,
 }: {
   events: ReleaseAuditEvent[];
   loading: boolean;
   exporting: boolean;
+  scopedRunId: string;
   onExport: () => void;
 }) {
+  const scopeLabel = scopedRunId ? `Run ${shortId(scopedRunId)}` : 'Current plan';
   if (loading && events.length === 0) {
     return (
       <Card
         title="Audit"
-        actions={<Button size="sm" loading={exporting} disabled={exporting} onClick={onExport}>Export CSV</Button>}
+        actions={<><Badge tone="info">{scopeLabel}</Badge><Button size="sm" loading={exporting} disabled={exporting} onClick={onExport}>Export CSV</Button></>}
       >
         <p className="release-flow__hint">Loading audit events...</p>
       </Card>
@@ -1196,16 +1206,16 @@ function AuditPanel({
     return (
       <Card
         title="Audit"
-        actions={<Button size="sm" loading={exporting} disabled={exporting} onClick={onExport}>Export CSV</Button>}
+        actions={<><Badge tone="info">{scopeLabel}</Badge><Button size="sm" loading={exporting} disabled={exporting} onClick={onExport}>Export CSV</Button></>}
       >
-        <p className="release-flow__hint">No audit events yet.</p>
+        <p className="release-flow__hint">No audit events yet for {scopeLabel.toLowerCase()}.</p>
       </Card>
     );
   }
   return (
     <Card
       title="Audit"
-      actions={<Button size="sm" loading={exporting} disabled={exporting} onClick={onExport}>Export CSV</Button>}
+      actions={<><Badge tone="info">{scopeLabel}</Badge><Button size="sm" loading={exporting} disabled={exporting} onClick={onExport}>Export CSV</Button></>}
     >
       <div className="release-flow__timeline">
         {events.slice(0, 8).map(event => (
