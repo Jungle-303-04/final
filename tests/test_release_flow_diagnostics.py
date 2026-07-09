@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 
 import pytest
@@ -564,7 +565,38 @@ def test_release_run_serialization_includes_attention_reasons() -> None:
             "Checkout failed.",
             "Checkout health is unhealthy.",
         ],
+        "stale": False,
+        "age_minutes": 0,
+        "timeout_minutes": 0,
     }
+
+
+def test_release_run_serialization_marks_stale_active_run() -> None:
+    run = serialize_release_run(
+        {
+            "run_id": "run-stale",
+            "status": "running",
+            "settings": {"health_timeout_seconds": 60},
+            "github": {},
+            "rollback": {},
+            "health": {},
+            "updated_at": datetime.now(timezone.utc) - timedelta(minutes=5),
+        },
+        steps=[
+            {
+                "run_step_id": "step-1",
+                "application_id": "checkout",
+                "name": "Checkout",
+                "status": "running",
+                "health": {"status": "progressing", "timeout_seconds": 60},
+            }
+        ],
+    )
+
+    assert run["attention"]["stale"] is True
+    assert run["attention"]["age_minutes"] >= 5
+    assert run["attention"]["timeout_minutes"] == 1
+    assert "No release progress recorded" in run["attention"]["reasons"][0]
 
 
 def test_release_run_summary_counts_derived_statuses() -> None:
@@ -588,25 +620,32 @@ def test_release_run_summary_counts_derived_statuses() -> None:
             },
             {"run_id": "run-4", "plan_id": "plan-c", "status": "rollback_requested"},
             {"run_id": "run-5", "plan_id": "plan-c", "status": "waiting_for_approval"},
+            {
+                "run_id": "run-6",
+                "plan_id": "plan-d",
+                "status": "running",
+                "attention": {"required": True, "stale": True, "reasons": ["No progress."]},
+            },
         ]
     )
 
-    assert summary["total_runs"] == 5
+    assert summary["total_runs"] == 6
     assert summary["status_breakdown"] == {
-        "running": 1,
+        "running": 2,
         "failed": 1,
         "succeeded": 1,
         "rollback_requested": 1,
         "waiting_for_approval": 1,
     }
-    assert summary["plan_breakdown"] == {"plan-a": 2, "plan-b": 1, "plan-c": 2}
-    assert summary["active_runs"] == 2
-    assert summary["attention_required_runs"] == 3
+    assert summary["plan_breakdown"] == {"plan-a": 2, "plan-b": 1, "plan-c": 2, "plan-d": 1}
+    assert summary["active_runs"] == 3
+    assert summary["attention_required_runs"] == 4
     assert summary["failed_runs"] == 1
     assert summary["rollback_requested_runs"] == 1
     assert summary["waiting_for_approval_runs"] == 1
     assert summary["live_runs"] == 2
     assert summary["unhealthy_runs"] == 1
+    assert summary["stale_runs"] == 1
     assert summary["last_run_status"] == "running"
     assert summary["recent_runs"][1] == {
         "run_id": "run-2",

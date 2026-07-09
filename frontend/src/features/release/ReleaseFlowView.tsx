@@ -920,13 +920,16 @@ function RunPanel({
   const sideEffects = runtimeMode === 'live';
   const canForceDelete = ['running', 'paused', 'rollback_requested', 'waiting_for_approval'].includes(status);
   const canRetry = status === 'failed' || run.steps.some(step => step.health.status === 'unhealthy' || step.status === 'failed');
-  const attentionReasons = getStringArray(recordValue(run.attention).reasons);
-  const attentionRequired = Boolean(recordValue(run.attention).required) || attentionReasons.length > 0;
+  const attention = recordValue(run.attention);
+  const attentionReasons = getStringArray(attention.reasons);
+  const attentionRequired = Boolean(attention.required) || attentionReasons.length > 0;
+  const stale = Boolean(attention.stale);
   return (
     <Card
       title="Release run"
       actions={
         <>
+          {stale && <Badge tone="danger">Stale</Badge>}
           {attentionRequired && <Badge tone="warning">Needs attention</Badge>}
           <Badge tone={sideEffects ? 'danger' : 'info'}>{sideEffects ? 'Live mode' : 'Demo mode'}</Badge>
           <Badge tone={toneForStatus(status)}>{status}</Badge>
@@ -1079,6 +1082,7 @@ function RunSummary({ summary }: { summary?: ReleaseRunSummary }) {
     ['Live', summary.live_runs ?? 0],
     ['Rollback', summary.rollback_requested_runs ?? 0],
     ['Unhealthy', summary.unhealthy_runs ?? 0],
+    ['Stale', summary.stale_runs ?? 0],
   ];
   return (
     <div className="release-flow__summary">
