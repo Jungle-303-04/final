@@ -22,6 +22,7 @@ import {
   useReleaseAuditExport,
   useReleaseRunHandoff,
   useReleaseRunReport,
+  useReleaseRunReportExport,
   useReleaseRunSummary,
   useDeleteReleasePlan,
   useArchiveReleasePlan,
@@ -1114,6 +1115,7 @@ function RunPanel({
   const run = selectedRun ?? runs[0];
   const handoffQ = useReleaseRunHandoff(run?.run_id);
   const reportM = useReleaseRunReport();
+  const reportExportM = useReleaseRunReportExport();
   if (loading && !run) return <Card title="Release runs"><p className="release-flow__hint">Loading release runs...</p></Card>;
   if (!run) {
     return (
@@ -1218,6 +1220,15 @@ function RunPanel({
             }}
           >
             Copy report
+          </Button>
+          <Button
+            size="sm"
+            variant="ghost"
+            loading={reportExportM.isPending}
+            disabled={reportExportM.isPending}
+            onClick={() => reportExportM.mutate(run.run_id)}
+          >
+            Download report
           </Button>
           <Button
             size="sm"

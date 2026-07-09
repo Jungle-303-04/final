@@ -491,6 +491,29 @@ def test_get_release_run_report_includes_redacted_audit_and_markdown(monkeypatch
     assert "super-secret" not in report["markdown"]
 
 
+def test_export_release_run_report_returns_markdown_attachment(monkeypatch) -> None:
+    db = ReleaseRunReportDb()
+    monkeypatch.setattr(release_router, "require_plan_application_read_access", lambda *_args: None)
+    monkeypatch.setattr(release_router, "require_plan_application_audit_access", lambda *_args: None)
+
+    current = SimpleNamespace(workspace_id="workspace-a", user_id="operator", roles=("release_operator",))
+    response = asyncio.run(
+        release_router.export_release_run_report(
+            "release-run-1",
+            current=current,
+            db=db,
+        )
+    )
+
+    body = response.body.decode("utf-8")
+    assert response.media_type == "text/markdown; charset=utf-8"
+    assert response.headers["content-disposition"] == 'attachment; filename="release-run-release-run-1.md"'
+    assert "## Release run report: Checkout release" in body
+    assert "Recent audit:" in body
+    assert "raw-token" not in body
+    assert "super-secret" not in body
+
+
 def test_retry_release_run_dispatches_failed_wave_step(monkeypatch) -> None:
     db = ReleaseRetryDb()
     monkeypatch.setattr(release_router, "require_plan_application_manage_access", lambda *_args: None)
