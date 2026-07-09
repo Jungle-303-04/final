@@ -722,12 +722,47 @@ def release_run_summary_from_runs(runs: list[dict[str, Any]]) -> dict[str, Any]:
     status_breakdown: dict[str, int] = {}
     plan_breakdown: dict[str, int] = {}
     recent_runs: list[dict[str, str]] = []
+    active_runs = 0
+    failed_runs = 0
+    rollback_requested_runs = 0
+    waiting_for_approval_runs = 0
+    live_runs = 0
+    unhealthy_runs = 0
+    attention_required_runs = 0
+    last_run_status = ""
     for run in runs:
         status = str(run.get("derived_status") or run.get("status") or "unknown")
         plan_id = str(run.get("plan_id") or "")
+        if not last_run_status:
+            last_run_status = status
         status_breakdown[status] = status_breakdown.get(status, 0) + 1
         if plan_id:
             plan_breakdown[plan_id] = plan_breakdown.get(plan_id, 0) + 1
+        if status not in TERMINAL_RELEASE_RUN_STATUSES:
+            active_runs += 1
+        if status == "failed":
+            failed_runs += 1
+        if status == "rollback_requested":
+            rollback_requested_runs += 1
+        if status == "waiting_for_approval":
+            waiting_for_approval_runs += 1
+        if status in {"failed", "waiting_for_approval", "rollback_requested"}:
+            attention_required_runs += 1
+        health = run.get("health") if isinstance(run.get("health"), dict) else {}
+        if health.get("status") == "unhealthy":
+            unhealthy_runs += 1
+            if status not in {"failed", "waiting_for_approval", "rollback_requested"}:
+                attention_required_runs += 1
+        settings = run.get("settings") if isinstance(run.get("settings"), dict) else {}
+        steps = run.get("steps") if isinstance(run.get("steps"), list) else []
+        step_has_side_effects = any(
+            isinstance(step, dict)
+            and isinstance(step.get("details"), dict)
+            and step["details"].get("side_effects") is True
+            for step in steps
+        )
+        if settings.get("runtime_mode") == "live" or settings.get("provider_mode") == "live" or step_has_side_effects:
+            live_runs += 1
         if len(recent_runs) < 10:
             recent_runs.append(
                 {
@@ -740,6 +775,14 @@ def release_run_summary_from_runs(runs: list[dict[str, Any]]) -> dict[str, Any]:
         "total_runs": len(runs),
         "status_breakdown": status_breakdown,
         "plan_breakdown": plan_breakdown,
+        "active_runs": active_runs,
+        "attention_required_runs": attention_required_runs,
+        "failed_runs": failed_runs,
+        "rollback_requested_runs": rollback_requested_runs,
+        "waiting_for_approval_runs": waiting_for_approval_runs,
+        "live_runs": live_runs,
+        "unhealthy_runs": unhealthy_runs,
+        "last_run_status": last_run_status or None,
         "recent_runs": recent_runs,
     }
 

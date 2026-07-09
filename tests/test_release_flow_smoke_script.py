@@ -62,7 +62,20 @@ class FakeClient:
         if path == "/release-plans":
             return {"plans": []}
         if path == "/release-runs/summary":
-            return {"total_runs": 0, "status_breakdown": {}, "plan_breakdown": {}, "recent_runs": []}
+            return {
+                "total_runs": 0,
+                "status_breakdown": {},
+                "plan_breakdown": {},
+                "active_runs": 0,
+                "attention_required_runs": 0,
+                "failed_runs": 0,
+                "rollback_requested_runs": 0,
+                "waiting_for_approval_runs": 0,
+                "live_runs": 0,
+                "unhealthy_runs": 0,
+                "last_run_status": None,
+                "recent_runs": [],
+            }
         if path == "/release-plans/preview":
             return {"preview": {"executable": True, "summary": "2 steps can run"}}
         if path == "/release-plans/start":

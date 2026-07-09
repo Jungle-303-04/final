@@ -90,3 +90,12 @@ python scripts/release_flow_smoke.py --demo-run
 - 실패 run/DLQ/retry 지표를 대시보드나 알림 채널에 연결
 - 운영 전환 SOP: demo에서 live로 바꾸는 조건, 승인 책임자, rollback 기준
 - 운영 smoke test 스크립트: 샘플 앱 2~3개로 wave/승인/실패/rollback을 자동 점검
+
+## 운영 요약 신호
+`GET /release-runs/summary`는 단순 status breakdown 외에 운영자가 바로 볼 수 있는 파생 카운터를 내려준다.
+
+- `attention_required_runs`: 실패, 롤백 요청, 승인 대기, unhealthy run처럼 먼저 확인해야 하는 run 수
+- `active_runs`: 아직 종료되지 않고 진행 중이거나 대기 중인 run 수
+- `live_runs`: live 모드이거나 step에 실제 side effect가 기록된 run 수
+- `rollback_requested_runs`, `waiting_for_approval_runs`, `unhealthy_runs`, `failed_runs`: 대시보드 배지와 알림 라우팅에 바로 쓰는 세부 카운터
+- `last_run_status`: 접근 권한이 확인된 최신 run의 상태
