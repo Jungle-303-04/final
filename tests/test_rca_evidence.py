@@ -6,9 +6,11 @@ from conftest import SpyDb, load_service, run_handler, subjects_of
 
 from domains.command.events import CommandCompletedBody
 from domains.rca.events import (
+    CauseCandidate,
     ClusterEvidenceReceivedBody,
     Evidence,
     EvidenceBundle,
+    EvidenceItem,
     IncidentRecord,
     RcaAnalysisBlockedBody,
     RcaCompletedBody,
@@ -787,6 +789,54 @@ def test_plan_worker_resolves_backlog_when_rule_exists() -> None:
         "CrashLoopBackOff",
         "matching RCA rule is now available",
     )
+
+
+def test_cause_evaluator_matches_source_and_named_evidence_keys() -> None:
+    from services.ai.agent.causes.engine import evaluate_causes
+
+    candidate = CauseCandidate(
+        candidate_id="probe_path_wrong",
+        title="Probe path mismatch",
+        description="Probe 설정과 실제 응답 경로가 맞지 않는 후보입니다.",
+        expected_evidence=[
+            "kubernetes:cluster_resource_state",
+            "logs",
+            "metadata:change_context",
+        ],
+        checks=["probe path와 event message를 비교"],
+    )
+    bundle = EvidenceBundle(
+        incident_id="inc-probe",
+        items=[
+            EvidenceItem(
+                source="kubernetes",
+                name="cluster_resource_state",
+                value={"pods": [{"waiting_reasons": ["CrashLoopBackOff"]}]},
+                summary="Kubernetes state",
+            ),
+            EvidenceItem(
+                source="logs",
+                name="related_logs",
+                value={"entries": [{"line": "readiness probe returned 404"}]},
+                summary="Application logs",
+            ),
+        ],
+        missing_evidence=[],
+        complete=True,
+    )
+
+    evaluation = evaluate_causes([candidate], bundle)[0]
+
+    assert evaluation.supporting_evidence == [
+        "kubernetes:cluster_resource_state",
+        "logs",
+    ]
+    assert evaluation.missing_evidence == ["metadata:change_context"]
+    assert evaluation.score == 2 / 3
+    assert [(ref.source, ref.name) for ref in evaluation.supporting_evidence_refs] == [
+        ("kubernetes", "cluster_resource_state"),
+        ("logs", "related_logs"),
+    ]
 
 
 def test_user_selected_safe_pr_flow_emits_reviewable_patch(monkeypatch) -> None:
