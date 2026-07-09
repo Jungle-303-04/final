@@ -1282,7 +1282,7 @@ function RunHandoffPanel({ handoff, loading }: { handoff?: ReleaseRunHandoff; lo
               {handoff.verification.evidence.slice(0, 2).map(item => <span key={item}>{item}</span>)}
               {Number(handoff.verification.job_count ?? 0) > 0 && <span>{handoff.verification.job_count} verification job(s) pending</span>}
               {handoff.verification.jobs?.slice(0, 2).map(job => (
-                <span key={job.job_id}>{job.kind}: {verificationJobTarget(job.target)}</span>
+                <span key={job.job_id}>{verificationJobSummary(job)}</span>
               ))}
               {handoff.verification.override_reason && <span>{handoff.verification.override_reason}</span>}
             </div>
@@ -1318,6 +1318,15 @@ function handoffTone(value?: string) {
 
 function verificationJobTarget(target: Record<string, unknown>) {
   return getString(target.url) || getString(target.path) || getString(target.service_name) || 'verification target';
+}
+
+function verificationJobSummary(job: { kind: string; status: string; target: Record<string, unknown>; result?: Record<string, unknown>; error?: string }) {
+  const target = verificationJobTarget(job.target);
+  const error = getString(job.error);
+  const result = job.result || {};
+  const statusCode = getString(result.status_code);
+  const resultSuffix = error || (statusCode ? `HTTP ${statusCode}` : '');
+  return `${job.kind} ${job.status}: ${target}${resultSuffix ? ` - ${resultSuffix}` : ''}`;
 }
 
 function RunFilterField({
