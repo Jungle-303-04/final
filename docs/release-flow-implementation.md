@@ -30,6 +30,7 @@
 - `GET /release-plans`
 - `GET /release-plans/{plan_id}`
 - `POST /release-plans/preview`
+- `POST /release-readiness`
 - `POST /release-plans/dispatch?wave=1`
 - `POST /release-plans/start`
 - `POST /release-plans/{plan_id}/archive`
@@ -68,6 +69,8 @@
 - 최신 run 상태, step 상태, GitHub/commit 링크, timeline 이벤트
 - 실패/승인대기/승인거절 운영 알림은 alert-worker가 설정된 채널로 전달
 - release audit 조회와 CSV export
+
+- release readiness 조회: preview blocker, dispatch 필수 입력값, live gate, alert channel, retry policy, audit/redaction 상태
 
 ## 검증
 - `py -3 -m pytest -q tests/test_release_flow_diagnostics.py tests/test_release_flow_projection.py`

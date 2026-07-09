@@ -37,6 +37,7 @@ from packages.contracts.gateway.responses import (
     ReleasePlanDispatchResponse,
     ReleasePlanListResponse,
     ReleasePlanPreviewResponse,
+    ReleaseReadinessResponse,
     ReleasePlanResponse,
     ReleaseRunListResponse,
     ReleaseRunSummaryResponse,
@@ -185,6 +186,21 @@ async def preview_release_plan(
     body = {**payload.model_dump(), "workspace_id": workspace_id}
     require_plan_application_read_access(db, current, workspace_id, body["steps"])
     return ReleasePlanPreviewResponse(preview=build_release_plan_preview(body))
+
+
+@router.post(gateway_routes.RELEASE_READINESS_PATH, response_model=ReleaseReadinessResponse)
+async def check_release_readiness(
+    payload: ReleasePlanUpsertRequest,
+    current: Any = Depends(require_session),
+    db: Any = Depends(get_db),
+) -> ReleaseReadinessResponse:
+    workspace_id = getattr(current, "workspace_id", DEFAULT_WORKSPACE_ID)
+    body = {**payload.model_dump(), "workspace_id": workspace_id}
+    require_plan_application_read_access(db, current, workspace_id, body["steps"])
+    preview = build_release_plan_preview(body)
+    return ReleaseReadinessResponse(
+        **release_readiness_from_plan(body, preview, workspace_id=workspace_id, db=db)
+    )
 
 
 @router.post(
@@ -770,6 +786,140 @@ def first_preview_wave(preview: dict[str, Any]) -> int:
     if isinstance(waves, list) and waves and isinstance(waves[0], dict):
         return int_field(waves[0], "wave", 1)
     return 1
+
+
+def release_readiness_from_plan(
+    plan: dict[str, Any],
+    preview: dict[str, Any],
+    *,
+    workspace_id: str,
+    db: Any,
+) -> dict[str, Any]:
+    first_wave = first_preview_wave(preview)
+    profile = execution_profile(plan)
+    preview_blockers = [str(item) for item in preview.get("blockers", [])]
+    required_blockers = required_release_input_blockers(plan)
+    execution_blockers = release_execution_blockers(
+        plan,
+        preview,
+        first_wave,
+        workspace_id=workspace_id,
+    )
+    alert_channels = enabled_alert_channels(db, workspace_id)
+    retry_attempts = max(0, int_field(plan_settings_value(plan), "retry_attempts", 1))
+
+    checks = [
+        readiness_check(
+            "plan.preview",
+            "Plan graph",
+            "blocked" if preview_blockers else "passed",
+            "Resolve dependency graph blockers before execution."
+            if preview_blockers
+            else str(preview.get("summary") or "Plan graph can be executed."),
+            preview_blockers,
+        ),
+        readiness_check(
+            "plan.required_inputs",
+            "Dispatch inputs",
+            "blocked" if required_blockers else "passed",
+            "Commit SHA and image are required before dispatch."
+            if required_blockers
+            else "All release steps have the required dispatch inputs.",
+            required_blockers,
+        ),
+        readiness_check(
+            "live.dispatch_gate",
+            "Live dispatch gate",
+            "blocked" if execution_blockers else "passed",
+            "Backend live-mode guard or release policy gate is blocking dispatch."
+            if execution_blockers
+            else f"{profile.label} is allowed for the first executable wave.",
+            execution_blockers,
+        ),
+        readiness_check(
+            "alerts.enabled_channels",
+            "Alert channels",
+            "passed" if alert_channels else "warning",
+            f"{len(alert_channels)} enabled alert channel(s) can receive release events."
+            if alert_channels
+            else "No enabled alert channel is configured for release failure or approval events.",
+        ),
+        readiness_check(
+            "retry.policy",
+            "Retry policy",
+            "passed" if retry_attempts > 0 else "warning",
+            f"Failed waves can be retried {retry_attempts} time(s)."
+            if retry_attempts > 0
+            else "Failed waves cannot be retried automatically from this plan.",
+        ),
+        readiness_check(
+            "audit.redaction",
+            "Audit and redaction",
+            "passed",
+            "Run events are audit-exportable and sensitive event details are redacted.",
+        ),
+    ]
+    blockers = [item for check in checks for item in check.get("blockers", []) if check["status"] == "blocked"]
+    warnings = [str(check["message"]) for check in checks if check["status"] == "warning"]
+    if blockers:
+        summary = f"{len(blockers)} blocker(s) must be resolved before release dispatch."
+    elif warnings:
+        summary = f"Runnable with {len(warnings)} operational warning(s)."
+    else:
+        summary = f"Ready for {profile.label.lower()}."
+    return {
+        "ready": not blockers,
+        "mode": profile.runtime_mode,
+        "summary": summary,
+        "checks": checks,
+        "blockers": blockers,
+        "warnings": warnings,
+    }
+
+
+def readiness_check(
+    check_id: str,
+    name: str,
+    status: str,
+    message: str,
+    blockers: list[str] | None = None,
+) -> dict[str, Any]:
+    return {
+        "check_id": check_id,
+        "name": name,
+        "status": status,
+        "message": message,
+        "blockers": blockers or [],
+    }
+
+
+def required_release_input_blockers(plan: dict[str, Any]) -> list[str]:
+    settings = plan_settings_value(plan)
+    blockers: list[str] = []
+    for index, step in enumerate(plan.get("steps", []), start=1):
+        if not isinstance(step, dict):
+            continue
+        config = step_config(step)
+        label = str(step.get("name") or step.get("application_id") or f"step {index}")
+        for field in ("commit_sha", "image"):
+            if not str(config.get(field) or settings.get(field) or "").strip():
+                blockers.append(f"{label} is missing {field}.")
+    return blockers
+
+
+def enabled_alert_channels(db: Any, workspace_id: str) -> list[dict[str, Any]]:
+    list_channels = getattr(db, "list_alert_channels", None)
+    if not callable(list_channels):
+        return []
+    try:
+        channels = list_channels(workspace_id, only_enabled=True)
+    except TypeError:
+        channels = [
+            channel
+            for channel in list_channels(workspace_id)
+            if isinstance(channel, dict) and channel.get("enabled", True)
+        ]
+    return [channel for channel in channels if isinstance(channel, dict)]
 
 
 def release_run_status_action(

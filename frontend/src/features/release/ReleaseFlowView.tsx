@@ -19,6 +19,7 @@ import {
   useDeleteReleaseRun,
   useReleaseRuns,
   useResumeReleaseRun,
+  useReleaseReadiness,
   useRetryReleaseRun,
   useRollbackReleaseRun,
   useSaveReleasePlan,
@@ -32,6 +33,7 @@ import type {
   ReleaseAuditEvent,
   ReleasePlan,
   ReleasePlanPreview,
+  ReleaseReadiness,
   ReleasePlanStep,
   ReleaseRun,
   ReleaseRunSummary,
@@ -287,6 +289,7 @@ export default function ReleaseFlowView() {
   const { data: planDiagnosticsData, mutate: diagnosePlan } = useDiagnostics();
   const { data: yamlDiagnosticsData, mutate: diagnoseYaml } = useDiagnostics();
   const { data: releasePreviewData, isPending: releasePreviewPending, mutate: previewRelease } = useReleasePreview();
+  const { data: releaseReadinessData, isPending: releaseReadinessPending, mutate: checkReadiness } = useReleaseReadiness();
   const runsQ = useReleaseRuns(plan?.plan_id);
   const summaryQ = useReleaseRunSummary(plan?.plan_id);
   const auditQ = useReleaseAudit(plan?.plan_id);
@@ -327,9 +330,10 @@ export default function ReleaseFlowView() {
         context: { previous_settings_by_application: settingsBaselines },
       });
       previewRelease(diagnosticPlan);
+      checkReadiness(diagnosticPlan);
     }, 250);
     return () => window.clearTimeout(timer);
-  }, [diagnosePlan, diagnosticPlan, previewRelease, settingsBaselines]);
+  }, [checkReadiness, diagnosePlan, diagnosticPlan, previewRelease, settingsBaselines]);
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
@@ -509,6 +513,7 @@ export default function ReleaseFlowView() {
                 onDispatch={wave => dispatchRelease.mutate({ plan: normalizePlan(plan), wave })}
                 onStart={() => startRelease.mutate(normalizePlan(plan))}
               />
+              <ReadinessPanel readiness={releaseReadinessData} loading={releaseReadinessPending} />
               <RunPanel
                 runs={runsQ.data ?? []}
                 summary={summaryQ.data}
@@ -708,6 +713,45 @@ function PreviewPanel({
             <span>{step.environment}</span>
             <span>{step.strategy}</span>
             <span>{step.gate}</span>
+          </div>
+        ))}
+      </div>
+    </Card>
+  );
+}
+
+function ReadinessPanel({ readiness, loading }: { readiness?: ReleaseReadiness; loading: boolean }) {
+  if (loading && !readiness) {
+    return <Card title="Readiness"><p className="release-flow__hint">Checking release readiness...</p></Card>;
+  }
+  if (!readiness) {
+    return <Card title="Readiness"><p className="release-flow__hint">No readiness check yet.</p></Card>;
+  }
+  const badgeTone = readiness.ready ? (readiness.warnings.length ? 'warning' : 'success') : 'danger';
+  return (
+    <Card
+      title="Readiness"
+      actions={
+        <>
+          <Badge tone={readiness.mode === 'live' ? 'danger' : 'info'}>{readiness.mode}</Badge>
+          <Badge tone={badgeTone}>{readiness.ready ? 'ready' : 'blocked'}</Badge>
+        </>
+      }
+    >
+      <p className="release-flow__hint">{readiness.summary}</p>
+      <div className="release-flow__readiness">
+        {readiness.checks.map(check => (
+          <div key={check.check_id} className={`release-flow__readiness-row release-flow__readiness-row--${readinessStatusClass(check.status)}`}>
+            <div>
+              <strong>{check.name}</strong>
+              <p>{check.message}</p>
+            </div>
+            <Badge tone={readinessStatusTone(check.status)}>{readinessStatusLabel(check.status)}</Badge>
+            {check.blockers.length > 0 && (
+              <ul>
+                {check.blockers.map(blocker => <li key={blocker}>{blocker}</li>)}
+              </ul>
+            )}
           </div>
         ))}
       </div>
@@ -1100,6 +1144,30 @@ function toneForStatus(status: string): ReleaseUiTone {
   if (['paused', 'pending', 'waiting_for_approval'].includes(normalized)) return 'warning';
   if (['running', 'dispatched', 'progressing'].includes(normalized)) return 'info';
   return 'neutral';
+}
+
+function readinessStatusTone(status: string): ReleaseUiTone {
+  const normalized = status.toLowerCase();
+  if (normalized === 'passed') return 'success';
+  if (normalized === 'blocked') return 'danger';
+  if (normalized === 'warning') return 'warning';
+  return 'info';
+}
+
+function readinessStatusClass(status: string): string {
+  const normalized = status.toLowerCase();
+  if (normalized === 'blocked') return 'blocked';
+  if (normalized === 'warning') return 'warning';
+  if (normalized === 'passed') return 'passed';
+  return 'info';
+}
+
+function readinessStatusLabel(status: string): string {
+  const normalized = status.toLowerCase();
+  if (normalized === 'passed') return 'passed';
+  if (normalized === 'blocked') return 'blocked';
+  if (normalized === 'warning') return 'warning';
+  return status || 'info';
 }
 
 function shortId(value: string): string {

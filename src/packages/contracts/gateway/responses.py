@@ -801,6 +801,15 @@ class ReleasePlanPreviewResponse(StrictModel):
     preview: JsonMap
 
 
+class ReleaseReadinessResponse(StrictModel):
+    ready: bool
+    mode: str
+    summary: str
+    checks: list[JsonMap] = Field(default_factory=list)
+    blockers: list[str] = Field(default_factory=list)
+    warnings: list[str] = Field(default_factory=list)
+
+
 class ReleaseRunResponse(StrictModel):
     run: JsonMap
 
