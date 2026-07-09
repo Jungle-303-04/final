@@ -1,4 +1,4 @@
-const weekdays = ["Mon", "Tue", "Wed", "Thu", "Fri"];
+const weekdays = ["월", "화", "수", "목", "금"];
 
 export default function HeatmapWeekdayLabelsExample() {
   return (
@@ -9,7 +9,7 @@ export default function HeatmapWeekdayLabelsExample() {
           {Array.from({ length: 5 }, (_, index) => {
             const value = (dayIndex * 23 + index * 17 + 9) % 100;
             return (
-              <button className={`heat-cell ${value > 70 ? "hot" : value > 40 ? "warm" : "cool"}`} key={index}>
+              <button aria-label={`${day}요일 ${index + 1}번째 값 ${value}`} className={`heat-cell ${value > 70 ? "hot" : value > 40 ? "warm" : "cool"}`} key={index} type="button">
                 {value}
               </button>
             );
