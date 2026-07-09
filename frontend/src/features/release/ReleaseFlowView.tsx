@@ -14,6 +14,7 @@ import {
   useDiagnostics,
   useDispatchReleasePlan,
   useCancelReleaseRun,
+  useNotifyReleaseRun,
   usePauseReleaseRun,
   useReleasePlans,
   useReleasePreview,
@@ -323,6 +324,7 @@ export default function ReleaseFlowView() {
   const retryRun = useRetryReleaseRun();
   const rollbackRun = useRollbackReleaseRun();
   const cancelRun = useCancelReleaseRun();
+  const notifyRun = useNotifyReleaseRun();
   const save = useSaveReleasePlan(plan?.plan_id);
   const archivePlan = useArchiveReleasePlan(plan?.plan_id ?? '');
   const deletePlan = useDeleteReleasePlan(plan?.plan_id ?? '');
@@ -550,13 +552,14 @@ export default function ReleaseFlowView() {
                 selectedRunId={selectedRunId}
                 onSelectedRunIdChange={setSelectedRunId}
                 loading={runsQ.isPending}
-                busy={advanceRun.isPending || pauseRun.isPending || resumeRun.isPending || retryRun.isPending || rollbackRun.isPending || cancelRun.isPending || deleteRun.isPending}
+                busy={advanceRun.isPending || pauseRun.isPending || resumeRun.isPending || retryRun.isPending || rollbackRun.isPending || cancelRun.isPending || notifyRun.isPending || deleteRun.isPending}
                 onAdvance={runId => advanceRun.mutate({ runId })}
                 onPause={(runId, reason) => pauseRun.mutate({ runId, reason })}
                 onResume={(runId, reason) => resumeRun.mutate({ runId, reason })}
                 onRetry={(runId, reason) => retryRun.mutate({ runId, reason })}
                 onRollback={(runId, reason) => rollbackRun.mutate({ runId, reason })}
                 onCancel={(runId, reason) => cancelRun.mutate({ runId, reason })}
+                onNotify={(runId, reason) => notifyRun.mutate({ runId, reason })}
                 onDelete={(runId, force) => deleteRun.mutate({ runId, force })}
               />
               <AuditPanel
@@ -903,6 +906,7 @@ function RunPanel({
   onRetry,
   onRollback,
   onCancel,
+  onNotify,
   onDelete,
 }: {
   runs: ReleaseRun[];
@@ -919,6 +923,7 @@ function RunPanel({
   onRetry: (runId: string, reason: string) => void;
   onRollback: (runId: string, reason: string) => void;
   onCancel: (runId: string, reason: string) => void;
+  onNotify: (runId: string, reason: string) => void;
   onDelete: (runId: string, force?: boolean) => void;
 }) {
   useEffect(() => {
@@ -955,6 +960,7 @@ function RunPanel({
   const attentionReasons = getStringArray(attention.reasons);
   const attentionRequired = Boolean(attention.required) || attentionReasons.length > 0;
   const stale = Boolean(attention.stale);
+  const alertable = attentionRequired || stale;
   return (
     <Card
       title="Release run"
@@ -1044,6 +1050,15 @@ function RunPanel({
             onClick={() => withOperatorReason('Cancel release run', 'operator canceled release run', reason => onCancel(run.run_id, reason))}
           >
             Cancel
+          </Button>
+          <Button
+            size="sm"
+            variant="ghost"
+            loading={busy}
+            disabled={busy || !alertable}
+            onClick={() => withOperatorReason('Notify release owner', 'operator requested release run notification', reason => onNotify(run.run_id, reason))}
+          >
+            Notify
           </Button>
           <Button
             size="sm"

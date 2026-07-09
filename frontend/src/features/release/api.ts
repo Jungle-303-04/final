@@ -238,7 +238,11 @@ export function useCancelReleaseRun() {
   return useRunAction('cancel', 'Release run cancelled');
 }
 
-function useRunAction(action: 'advance' | 'pause' | 'resume' | 'retry' | 'rollback' | 'cancel', message: string) {
+export function useNotifyReleaseRun() {
+  return useRunAction('notify', 'Release notification requested');
+}
+
+function useRunAction(action: 'advance' | 'pause' | 'resume' | 'retry' | 'rollback' | 'cancel' | 'notify', message: string) {
   const qc = useQueryClient();
   const { push } = useToast();
   return useMutation({
@@ -246,7 +250,7 @@ function useRunAction(action: 'advance' | 'pause' | 'resume' | 'retry' | 'rollba
       post<{ run: ReleaseRun }>(`/release-runs/${runId}/${action}`, { reason }),
     onSuccess: () => {
       push({
-        tone: action === 'rollback' || action === 'cancel' ? 'warning' : 'success',
+        tone: action === 'rollback' || action === 'cancel' || action === 'notify' ? 'warning' : 'success',
         title: message,
         description: `Release run ${action} action completed.`,
       });
