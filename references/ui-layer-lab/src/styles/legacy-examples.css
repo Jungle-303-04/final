@@ -2385,7 +2385,7 @@ kbd,
   border: 1px solid var(--border);
   border-radius: 18px;
   padding: 24px;
-  background: #0d0d10;
+  background: var(--panel);
 }
 
 .fake-page > .command-trigger {
@@ -2891,8 +2891,8 @@ kbd,
   height: 54px;
   border: 1px solid var(--border-strong);
   border-radius: 999px;
-  color: #09090b;
-  background: #fafafa;
+  color: var(--accent-contrast);
+  background: var(--accent);
   font-weight: 900;
 }
 
@@ -2906,8 +2906,8 @@ kbd,
   padding: 16px;
   border: 1px solid var(--border);
   border-radius: 16px;
-  background: #111113;
-  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.42);
+  background: var(--surface-raised);
+  box-shadow: var(--shadow-floating);
   animation: panel-in 200ms ease both;
 }
 
@@ -2921,8 +2921,8 @@ kbd,
   padding: 18px;
   border: 1px solid var(--border);
   border-radius: 16px;
-  color: #d4d4d8;
-  background: #09090b;
+  color: var(--text);
+  background: var(--panel);
   white-space: pre-wrap;
 }
 
@@ -2936,7 +2936,7 @@ kbd,
   padding: 10px;
   border: 1px solid var(--border);
   border-radius: 14px;
-  background: #111113;
+  background: var(--surface-raised);
 }
 
 .top-job-tray button,
@@ -2945,8 +2945,10 @@ kbd,
   border: 1px solid var(--border);
   border-radius: 10px;
   color: var(--text);
-  background: #18181b;
+  background: var(--panel-soft);
   font-weight: 800;
+  line-height: var(--line-button);
+  white-space: nowrap;
 }
 
 .top-job-tray span {
@@ -2959,7 +2961,7 @@ kbd,
 }
 
 .stage-accordion code {
-  color: #d4d4d8;
+  color: var(--text);
   font-family: "SFMono-Regular", Consolas, monospace;
 }
 
