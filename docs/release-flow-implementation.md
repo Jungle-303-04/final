@@ -93,6 +93,7 @@
 - release readiness impact: `/release-readiness`가 영향받는 application, environment, wave, production target, first wave step을 `impact`로 요약
 - release readiness next actions: `/release-readiness`가 blocked/warning 체크를 `next_actions`로 요약해서 운영자가 dispatch 전에 고칠 항목이나 검토할 항목을 바로 확인
 - release readiness app context: 등록 application, repo, branch, manifest path, cluster context 누락을 dispatch 전에 차단
+- release readiness copy: readiness summary, impact, next actions, checks를 Markdown으로 복사해 승인/온콜/교대 채널에 공유
 - live gate 입력: plan/step 단위 approval granted, change ticket, Safe PR URL/ready 값을 UI에서 설정
 - diagnostics override 입력: diagnostics gate를 끄는 경우 운영 사유를 UI에서 입력
 - rollback override 입력: rollback policy를 disabled로 두는 경우 운영 사유를 UI에서 입력
