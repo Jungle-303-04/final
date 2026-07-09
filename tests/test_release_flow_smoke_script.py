@@ -25,6 +25,12 @@ class FakeClient:
         self.release_run_status = "running"
         self.verification_failed_runs = 0
         self.verification_pending_timeout_runs = 0
+        self.attention_required_runs = 0
+        self.stale_runs = 0
+        self.failed_runs = 0
+        self.rollback_requested_runs = 0
+        self.waiting_for_approval_runs = 0
+        self.unhealthy_runs = 0
 
     def request(
         self,
@@ -70,12 +76,13 @@ class FakeClient:
                 "status_breakdown": {},
                 "plan_breakdown": {},
                 "active_runs": 0,
-                "attention_required_runs": 0,
-                "failed_runs": 0,
-                "rollback_requested_runs": 0,
-                "waiting_for_approval_runs": 0,
+                "attention_required_runs": self.attention_required_runs,
+                "failed_runs": self.failed_runs,
+                "rollback_requested_runs": self.rollback_requested_runs,
+                "waiting_for_approval_runs": self.waiting_for_approval_runs,
                 "live_runs": 0,
-                "unhealthy_runs": 0,
+                "unhealthy_runs": self.unhealthy_runs,
+                "stale_runs": self.stale_runs,
                 "verification_failed_runs": self.verification_failed_runs,
                 "verification_pending_timeout_runs": self.verification_pending_timeout_runs,
                 "last_run_status": None,
@@ -86,6 +93,10 @@ class FakeClient:
                 return {"runs": [{"run_id": "run-verification-failed", "status": "running"}]}
             if "verification_pending_timeout_only=true" in path:
                 return {"runs": [{"run_id": "run-verification-timeout", "status": "running"}]}
+            if "attention_only=true" in path:
+                return {"runs": [{"run_id": "run-needs-attention", "status": "failed"}]}
+            if "stale_only=true" in path:
+                return {"runs": [{"run_id": "run-stale", "status": "running"}]}
             return {"runs": []}
         if path == "/release-plans/preview":
             return {"preview": {"executable": True, "summary": "2 steps can run"}}
@@ -313,3 +324,51 @@ def test_smoke_verification_preflight_flags_failed_and_timed_out_runs() -> None:
     timed_out = next(result for result in results if result.name == "release-runs.verification-timeout")
     assert "run-verification-failed" in failed.detail
     assert "run-verification-timeout" in timed_out.detail
+
+
+def test_smoke_run_health_preflight_passes_when_summary_is_clean() -> None:
+    smoke = load_smoke_module()
+    client = FakeClient()
+    args = smoke.parse_args(["--run-health-preflight"])
+
+    results = smoke.run_smoke(
+        client,
+        "ops@example.com",
+        "password",
+        demo_run=False,
+        run_health_preflight=True,
+        args=args,
+    )
+
+    assert all(result.ok for result in results)
+    paths = [path for _method, path, _payload in client.calls]
+    assert "/release-runs/summary" in paths
+    assert not any(path.startswith("/release-runs?") for path in paths)
+
+
+def test_smoke_run_health_preflight_flags_attention_and_stale_runs() -> None:
+    smoke = load_smoke_module()
+    client = FakeClient()
+    client.attention_required_runs = 1
+    client.stale_runs = 1
+    client.failed_runs = 1
+    args = smoke.parse_args(["--run-health-preflight", "--run-health-plan-id", "plan-1"])
+
+    results = smoke.run_smoke(
+        client,
+        "ops@example.com",
+        "password",
+        demo_run=False,
+        run_health_preflight=True,
+        args=args,
+    )
+
+    assert not all(result.ok for result in results)
+    paths = [path for _method, path, _payload in client.calls]
+    assert "/release-runs?plan_id=plan-1&limit=20&attention_only=true" in paths
+    assert "/release-runs?plan_id=plan-1&limit=20&stale_only=true" in paths
+    health = next(result for result in results if result.name == "release-runs.run-health-preflight")
+    assert "attention_required_runs=1" in health.detail
+    assert "failed_runs=1" in health.detail
+    assert "run-needs-attention" in health.detail
+    assert "run-stale" in health.detail
