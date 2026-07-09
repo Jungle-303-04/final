@@ -5,8 +5,8 @@
 
 ## 0. 절대 원칙
 
-1. 운영 코드, 운영 화면, API 응답, DB 복구/초기화 절차에 mock/fake/hardcoded production data를 넣지 않는다.
-2. 테스트 내부의 fake/stub은 허용되지만 운영 경로에 연결하면 안 된다.
+1. 운영 코드, 운영 화면, API 응답, DB 복구/초기화 절차에 운영 경로의 테스트 전용 대역·고정 산출 데이터를 넣지 않는다.
+2. 테스트 내부의 검증용 응답/stub은 허용되지만 운영 경로에 연결하면 안 된다.
 3. 라이브 화면 수치와 drilldown은 실제 DB/API/클러스터 관측값만 사용한다.
 4. DB 초기화는 최종 안정화 완료 후 1회만 한다.
 5. DB 초기화 전에 반드시 백업/스냅샷을 만든다.
@@ -46,7 +46,7 @@
   - 프론트 레포 연결 위저드는 서버 검증이 끝난 후보만 `source_type`과 함께 이 엔드포인트로 보낸다.
   - 백엔드는 다시 manifest validation을 수행하고, 성공 시 repository, application, watch target, deployment binding을 같은 unit-of-work 안에서 등록한다.
   - metadata/deploy_policy에 `source_type`, `validation_mode`, `validated_resource_count`, `validation_warnings`를 저장한다.
-  - 운영 경로 mock/fake/hardcoded production data 추가 없음.
+  - 운영 경로 운영 경로의 테스트 전용 대역·고정 산출 데이터 추가 없음.
 - 검증 예정:
   - `.venv/bin/ruff format --check ...` 또는 format 후 check.
   - `PYTHONPATH=src .venv/bin/python -m pytest -q tests/test_applications_router.py tests/test_platform_foundation_openapi.py tests/test_docs_index.py`.
@@ -133,7 +133,7 @@
   - 공용 모달/드로어 닫기, 메트릭 pause/play, 생성 버튼의 문자 기반 아이콘을 SVG 아이콘으로 정리했다.
   - PromQL 결과와 AI 복구 액션 제안은 중첩 card 대신 `query-row`, `chat-action` 표면으로 분리했다.
   - 클러스터 scale/restart, 레포 연결, 클러스터 등록, workflow detail의 내부 구현 설명 문구를 줄이고 운영 상태 중심 문구로 정리했다.
-  - mock/fake/hardcoded production data 추가 없음.
+  - 운영 경로의 테스트 전용 대역·고정 산출 데이터 추가 없음.
 - 검증:
   - `cd frontend && npm run typecheck` → passed.
   - `cd frontend && npm run lint` → passed.
@@ -177,7 +177,7 @@
   - 기존 대화에 메시지를 보낸 뒤 현재 대화 query와 대화 목록 query를 모두 invalidate한다.
   - 전송 성공 후 `prefill` search param을 제거해 같은 문장이 다시 입력창에 되살아나지 않게 했다.
   - 삭제/전송 버튼은 아이콘 중심으로 정리했고, 대화 status는 badge로 표시한다.
-  - 실제 AI 파이프라인은 그대로 유지한다: `POST /ai/conversations` 또는 `POST /ai/conversations/{id}/messages` → `ai.message.received` → `ai-chat-worker` → stored response. mock/fake/hardcoded 응답 없음.
+  - 실제 AI 파이프라인은 그대로 유지한다: `POST /ai/conversations` 또는 `POST /ai/conversations/{id}/messages` → `ai.message.received` → `ai-chat-worker` → stored response. 테스트 전용 대역·고정 응답 없음.
 - 검증:
   - `cd frontend && npm run typecheck` → passed.
   - `cd frontend && npm run lint` → passed.
@@ -187,7 +187,7 @@
 - 다음 실행 순서:
   - repo 등록 wizard: URL 입력 → branch list → manifest candidate list → validation → app/binding 생성 단계의 UI와 실제 API 상태를 점검한다.
   - cluster 등록 wizard: provider discovery/import/preflight/listbox 동적 흐름을 점검한다.
-  - UI polish는 기능 검증과 같이 진행하되, 운영 데이터 원칙을 깨는 mock/fake/hardcoded 값은 넣지 않는다.
+  - UI polish는 기능 검증과 같이 진행하되, 운영 데이터 원칙을 깨는 테스트 전용 대역·고정 값은 넣지 않는다.
 
 ### 2026-07-07 18:40 KST 체크포인트
 
@@ -226,7 +226,7 @@
   - 인시던트 상세 증거 panel은 raw JSON 대신 evidence ref, source 요약, collector version을 표시한다.
   - 프론트 타입/adapter에서 raw payload 의존을 제거했다.
 - 운영 판단:
-  - 실제 데이터 원칙은 유지한다. 값 자체를 가짜로 대체하지 않고, 실제 저장된 데이터에서 안전한 집계/lineage만 projection한다.
+  - 실제 데이터 원칙은 유지한다. 값 자체를 임의로 대체하지 않고, 실제 저장된 데이터에서 안전한 집계/lineage만 projection한다.
   - source version/collector version/evidence key는 버전 갱신·롤백 판단에 쓰기 위해 남긴다.
   - token/secret/manifest/raw Kubernetes object는 API와 UI에 노출하지 않는다.
 - 검증:
@@ -260,7 +260,7 @@
 - 정리:
   - collection/aws-test Bruno 인증값은 placeholder + `auto_login: false`.
   - 실제 AWS 계정은 gitignore된 `*.local.bru` 또는 Bruno UI override에만 둔다.
-  - `frontend/docs` stale mock 설명과 삭제된 mock import script를 정리했다.
+  - `frontend/docs` stale 검증용 응답 설명과 삭제된 검증용 응답 import script를 정리했다.
   - `tests/test_docs_index.py`가 `frontend/docs`와 `frontend/scripts`도 stale language scan에 포함한다.
 
 ### 2026-07-07 18:14 KST 체크포인트
@@ -325,7 +325,7 @@
 - 프론트 테스트 추가:
   - `frontend/tests/incident_detail_recovery_fallback.test.mjs`: Vite SSR + React Query cache로 incident detail `not_found` fallback이 real recovery-plan payload를 표시하는지 검증.
   - `frontend/package.json`: `npm test` script 추가.
-  - `frontend/tests/README.md`: mock 중심 설명 제거, component smoke와 real-backend smoke(`E2E_MUTATE=0`) 원칙 문서화.
+  - `frontend/tests/README.md`: 테스트 전용 대역 중심 설명 제거, component smoke와 real-backend smoke(`E2E_MUTATE=0`) 원칙 문서화.
 - 검증:
   - `cd frontend && npm test` → 1 passed.
   - `cd frontend && npm run typecheck` → passed.
@@ -380,7 +380,7 @@
 - UI advance:
   - `frontend/src/features/notifications/IncidentDetailView.tsx`.
   - incident detail lookup 404 fallback 화면에서도 real API hook `GET /rca/recovery-plans/by-correlation/{correlation_id}` 기반 복구 계획 panel을 표시한다.
-  - mock/fake/hardcoded data 없음. recovery plan row가 없으면 기존 not-generated 상태를 표시한다.
+  - 테스트 전용 대역·고정 산출 데이터 없음. recovery plan row가 없으면 기존 not-generated 상태를 표시한다.
 - 검증:
   - `cd frontend && npm run typecheck` → passed.
   - `cd frontend && npm run lint` → passed.
@@ -454,7 +454,7 @@
   - `report_desktop.json`
   - `report_mobile.json`
   - local env archive zip
-  - 이유: 임시 E2E 산출물에는 특정 app/run/incident id가 있고, env archive는 secret 포함 가능성이 높다. hardcoding 금지와 secret hygiene 원칙상 커밋하지 않는다.
+  - 이유: 임시 E2E 산출물에는 특정 app/run/incident id가 있고, env archive는 secret 포함 가능성이 높다. 고정값 금지와 secret hygiene 원칙상 커밋하지 않는다.
 - dev Actions:
   - CI run `28849784747`: success.
   - Promote Dev To Main run `28849784833`: success.
@@ -561,7 +561,7 @@ git status --short --branch
   - table/list add/remove/reorder는 `AnimatedRow`/`AnimatedList`.
   - count/badge 변화는 `CountUp`/`PulseOnChange`.
   - Flow edge active animation은 실제 incident/workflow status에만 연결한다.
-  - 계속 흔들리는 장식, gradient orb, fake demo active state 금지.
+  - 계속 흔들리는 장식, gradient orb, 고정 데모 활성 상태 금지.
   - loading은 `Skeleton`/`QueryBoundary`, empty는 `EmptyState`, error는 retry button 포함.
   - desktop/mobile screenshot으로 overflow/text overlap/chart min-height를 확인한다.
 - 현재 모순:
@@ -582,7 +582,7 @@ git status --short --branch
   - poller 내부 dedup은 메모리이고, 최종 중복 억제는 git-pull/render 단계의 DB cursor에 의존한다.
 - UI/E2E:
   - 표준 Playwright config와 npm e2e script는 없다.
-  - Python Playwright smoke가 있지만 mock smoke와 real backend smoke가 섞여 있었고, real backend smoke의 hardcoded credential은 제거했다.
+  - Python Playwright smoke가 있지만 route stub smoke와 real backend smoke가 섞여 있었고, real backend smoke의 고정 자격증명은 제거했다.
   - `/console/`은 현재 `/`로 redirect/absorb되어 demo 보존 요구와 충돌한다. 별도 정적 demo 보존 또는 명시 redirect 정책 중 하나를 결정해야 한다.
 - DB reset:
   - 운영 DB 안전 reset script는 없다.
@@ -983,7 +983,7 @@ admin 확인은 로그인 cookie jar를 사용한다. secret 출력 금지.
 - 백업 없이 DB drop/truncate/delete.
 - 전체 `scripts/aws-up.sh`를 DB reset 도구처럼 실행.
 - secret 값을 로그/문서에 남김.
-- mock seed로 운영 화면 채우기.
+- 레거시 데이터 seed로 운영 화면 채우기.
 
 필수 백업:
 

@@ -18,7 +18,7 @@ def load_controller():
     )
 
 
-class FakeGitopsDb:
+class StubGitopsDb:
     """승격/글로벌 훅이 쓰는 저장소 표면만 구현한 대역."""
 
     def __init__(self) -> None:
@@ -109,7 +109,7 @@ def collect(handler_iter):
 
 def test_run_completion_promotes_to_target_binding() -> None:
     module = load_controller()
-    db = FakeGitopsDb()
+    db = StubGitopsDb()
     db.bindings["bind-staging"] = binding(
         "bind-staging", "cluster-staging", deploy_policy={"promotes_to_binding_id": "bind-prod"}
     )
@@ -152,7 +152,7 @@ def test_run_completion_promotes_to_target_binding() -> None:
 
 def test_promotion_skips_when_target_run_already_exists() -> None:
     module = load_controller()
-    db = FakeGitopsDb()
+    db = StubGitopsDb()
     db.bindings["bind-staging"] = binding(
         "bind-staging", "cluster-staging", deploy_policy={"promotes_to_binding_id": "bind-prod"}
     )
@@ -186,7 +186,7 @@ def test_promotion_skips_when_target_run_already_exists() -> None:
 
 def test_webhook_fans_out_to_global_bindings_once() -> None:
     module = load_controller()
-    db = FakeGitopsDb()
+    db = StubGitopsDb()
     db.bindings["bind-main"] = binding("bind-main", "cluster-a")
     db.bindings["bind-g1"] = binding(
         "bind-g1", "cluster-b", deploy_policy={"global": True, "manifest_source": "helm"}
@@ -226,7 +226,7 @@ def test_webhook_fans_out_to_global_bindings_once() -> None:
 
 def test_new_cluster_attaches_global_bindings_and_triggers_initial_deploy() -> None:
     module = load_controller()
-    db = FakeGitopsDb()
+    db = StubGitopsDb()
     db.bindings["bind-g1"] = binding("bind-g1", "cluster-a", deploy_policy={"global": True})
     db.runs["run-old"] = {
         "workflow_run_id": "run-old",
@@ -263,7 +263,7 @@ def test_new_cluster_attaches_global_bindings_and_triggers_initial_deploy() -> N
 
 def test_cluster_event_with_other_reason_is_ignored() -> None:
     module = load_controller()
-    db = FakeGitopsDb()
+    db = StubGitopsDb()
     evt = ClusterDesiredStateChangedBody(
         cluster_id="cluster-new",
         desired_state_version="v1",

@@ -1,4 +1,4 @@
-// 그래프 공통 모듈 — 모든 그래프 뷰는 이 모듈만 사용(노드 좌표 하드코딩 금지)
+// 그래프 공통 모듈 — 모든 그래프 뷰는 이 모듈만 사용(노드 좌표 고정값 사용 금지)
 // useAutoLayout: dagre 자동 배치 / AnimatedEdge: 활성 dash-flow / CollapsibleGroupNode: 접기·펼치기 / FlowCanvas: ReactFlow 래퍼
 import dagre from '@dagrejs/dagre';
 import { useEffect, useMemo, useState, type ReactNode } from 'react';

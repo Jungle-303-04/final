@@ -56,7 +56,7 @@ def test_node_collector_snapshot_uses_downward_api_identity() -> None:
 def test_node_collector_exposes_prometheus_metrics() -> None:
     module = load_node_collector_module()
 
-    class FakeKubernetesApi:
+    class StubKubernetesApi:
         async def list_pods(self) -> dict[str, object]:
             return {
                 "items": [
@@ -80,7 +80,7 @@ def test_node_collector_exposes_prometheus_metrics() -> None:
         pod_name="optional-node-collector-abc",
         namespace="target",
         interval_seconds=15,
-        kubernetes=FakeKubernetesApi(),
+        kubernetes=StubKubernetesApi(),
     )
 
     metrics = asyncio.run(collector.prometheus_metrics())

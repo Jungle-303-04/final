@@ -67,7 +67,7 @@ status: synced
 
 ## 불변식·오류 (Invariants & Errors)
 
-- 노드 좌표 하드코딩 금지 — 반드시 `useAutoLayout`(dagre) 사용.
+- 노드 좌표 고정값 사용 금지 — 반드시 `useAutoLayout`(dagre) 사용.
 - dash-flow(active) edge 는 진행 중 run 의 "현재 단계 진입 edge" 하나뿐이다.
 - 단계 어휘는 `ORDER` 8단계 + FAILED 로 고정 — [repo](./repo.md) 의 미니 스텝바와 동일 순서를 유지한다. 실백엔드 run 의 steps[](`git/render/diff/policy/approval/...`)는 [shared/adapt](shared.md#어댑터-libadaptts) 의 `adaptRun` 이 이 어휘로 매핑해서 도착한다 — 뷰에서 재매핑 금지.
 - plan 미리보기는 `RunStep.changes` 를 `PlanDiff` 에 그대로 전달 — 프론트에서 diff 를 만들지 않는다.

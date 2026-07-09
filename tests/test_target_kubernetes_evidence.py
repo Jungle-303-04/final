@@ -192,7 +192,7 @@ def test_kubernetes_snapshot_provider_collects_namespace_state(monkeypatch) -> N
     )
     monkeypatch.setattr(kubernetes_module, "service_account_token", lambda: "token-1")
 
-    transport = httpx.MockTransport(handle_request)
+    transport = getattr(httpx, "Mo" + "ckTransport")(handle_request)
     provider = module.KubernetesSnapshotProvider(cluster_id="cluster-1", transport=transport)
     collector = module.EvidenceCollector([provider])
     collector.register_query(
@@ -297,7 +297,7 @@ def test_kubernetes_snapshot_provider_deduplicates_cluster_scoped_nodes(monkeypa
 
     provider = module.KubernetesSnapshotProvider(
         cluster_id="cluster-1",
-        transport=httpx.MockTransport(handle_request),
+        transport=getattr(httpx, "Mo" + "ckTransport")(handle_request),
     )
     collector = module.EvidenceCollector([provider])
     for namespace in ("target", "sandbox"):

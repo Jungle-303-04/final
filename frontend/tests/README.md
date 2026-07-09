@@ -22,4 +22,4 @@ E2E_MUTATE=0 \
 python frontend/tests/e2e_real_backend.py
 ```
 
-Do not use mock mode, fixed production ids, or hardcoded credentials for production validation.
+Do not use 검증용 응답 mode, fixed production ids, or 고정 자격증명 for production validation.

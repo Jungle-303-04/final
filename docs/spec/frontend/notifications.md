@@ -120,4 +120,4 @@ status: synced
 - 알림은 서버 저장이 아니라 파생 — 서버 상태 변화(승인 완료, DLQ replay)로 자연 소멸한다.
 - 읽음 상태는 localStorage 워터마크 비교(ISO 문자열 사전순) — 계정 간 공유되지 않는다.
 - DLQ 조회는 admin 일 때만 `enabled`(비 admin 은 approval/incident 만 합성).
-- 그래프 좌표 하드코딩 금지 — `useAutoLayout` 경유. subject→stage 매핑은 정규식 방어 로직을 유지한다.
+- 그래프 좌표 고정값 사용 금지 — `useAutoLayout` 경유. subject→stage 매핑은 정규식 방어 로직을 유지한다.

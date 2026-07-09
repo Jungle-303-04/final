@@ -6,7 +6,7 @@ from typing import Any
 from conftest import load_service
 
 
-class FakeDb:
+class StubDb:
     def __init__(self) -> None:
         self.swept = 0
 
@@ -25,7 +25,7 @@ class FakeDb:
         ]
 
 
-class FakeEvents:
+class StubEvents:
     def __init__(self) -> None:
         self.emitted: list[tuple[str, str, dict[str, Any], str | None]] = []
 
@@ -47,8 +47,8 @@ class FailingRetentionDb:
 
 def test_command_janitor_emits_completion_for_expired_commands() -> None:
     janitor = load_service("command/command-janitor")
-    db = FakeDb()
-    events = FakeEvents()
+    db = StubDb()
+    events = StubEvents()
 
     count = asyncio.run(janitor.emit_expired_command_completions(db, events))
 

@@ -1,4 +1,4 @@
-"""OutboxRelay 단위 테스트 — fake outbox + fake publisher.
+"""OutboxRelay 단위 테스트 — stub outbox + stub publisher.
 
 (DB 트랜잭션/실발행은 실DB 스모크 영역. 여기선 relay 로직만.)
 """
@@ -23,7 +23,7 @@ def _evt(event_id: str) -> EventEnvelope:
     )
 
 
-class FakeOutboxStore:
+class StubOutboxStore:
     def __init__(self, events: list[EventEnvelope]) -> None:
         self.pending = list(events)
         self.sent: list[str] = []
@@ -46,7 +46,7 @@ class FakeOutboxStore:
         self.pending = [e for e in self.pending if e.event_id not in ids]
 
 
-class FakePublisher:
+class StubPublisher:
     def __init__(self) -> None:
         self.published: list[str] = []
 
@@ -56,8 +56,8 @@ class FakePublisher:
 
 
 def test_relay_publishes_then_marks_sent() -> None:
-    store = FakeOutboxStore([_evt("a"), _evt("b")])
-    publisher = FakePublisher()
+    store = StubOutboxStore([_evt("a"), _evt("b")])
+    publisher = StubPublisher()
     relay = OutboxRelay(store, publisher, "api-gateway")
 
     sent = asyncio.run(relay.run_once())
@@ -69,7 +69,7 @@ def test_relay_publishes_then_marks_sent() -> None:
 
 def test_relay_marks_only_published_on_midbatch_failure() -> None:
     # 두 번째 발행에서 실패 → 첫 번째만 sent 표시(전체 배치 재발행 방지).
-    store = FakeOutboxStore([_evt("a"), _evt("b"), _evt("c")])
+    store = StubOutboxStore([_evt("a"), _evt("b"), _evt("c")])
 
     class _FailingPublisher:
         def __init__(self) -> None:
@@ -92,7 +92,7 @@ def test_relay_marks_only_published_on_midbatch_failure() -> None:
 
 def test_relay_dead_letters_non_retryable_publish_error_and_continues() -> None:
     # NATS max payload 같은 정책 오류는 같은 payload 로 재시도해도 성공하지 않는다.
-    store = FakeOutboxStore([_evt("a"), _evt("b"), _evt("c")])
+    store = StubOutboxStore([_evt("a"), _evt("b"), _evt("c")])
 
     class MaxPayloadError(RuntimeError):
         pass
@@ -127,8 +127,8 @@ def test_relay_publishes_only_own_source() -> None:
         created_at="t",
         payload={},
     )
-    store = FakeOutboxStore([_evt("a"), other])
-    publisher = FakePublisher()
+    store = StubOutboxStore([_evt("a"), other])
+    publisher = StubPublisher()
     relay = OutboxRelay(store, publisher, "api-gateway")
 
     assert asyncio.run(relay.run_once()) == 1
@@ -145,8 +145,8 @@ def test_relay_without_source_publishes_all_sources() -> None:
         created_at="t",
         payload={},
     )
-    store = FakeOutboxStore([_evt("a"), other])
-    publisher = FakePublisher()
+    store = StubOutboxStore([_evt("a"), other])
+    publisher = StubPublisher()
     relay = OutboxRelay(store, publisher, None)
 
     assert asyncio.run(relay.run_once()) == 2
@@ -154,8 +154,8 @@ def test_relay_without_source_publishes_all_sources() -> None:
 
 
 def test_relay_idempotent_when_drained() -> None:
-    store = FakeOutboxStore([_evt("a")])
-    relay = OutboxRelay(store, FakePublisher(), "api-gateway")
+    store = StubOutboxStore([_evt("a")])
+    relay = OutboxRelay(store, StubPublisher(), "api-gateway")
 
     assert asyncio.run(relay.run_once()) == 1
     assert asyncio.run(relay.run_once()) == 0  # 비면 아무 것도 안 함

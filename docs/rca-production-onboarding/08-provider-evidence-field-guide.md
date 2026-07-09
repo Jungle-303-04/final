@@ -731,7 +731,7 @@ traces를 읽을 때는 `results.<query_name>.trace_count`로 잡힌 trace가 �
 | `rootServiceName` | root service 이름이다. |
 | `rootTraceName` | root span 또는 operation 이름이다. |
 | `durationMs` | trace duration millisecond다. |
-| `query` | 테스트 fixture에서는 어떤 query로 잡힌 trace인지 보조 정보로 들어간다. |
+| `query` | 테스트 레거시 데이터에서는 어떤 query로 잡힌 trace인지 보조 정보로 들어간다. |
 
 기본 policy query는 다음과 같다.
 

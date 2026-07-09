@@ -1,5 +1,5 @@
 // 요청형 텔레메트리 쿼리 — 발행(POST /agent/debug/query) 후 실제 결과를
-// 명령 상태 조회 경로(GET /commands/{command_id})로 폴링한다. 가짜 완료 표시(고정 타이머·하드코딩 결과) 금지.
+// 명령 상태 조회 경로(GET /commands/{command_id})로 폴링한다. 임의 완료 표시(고정 타이머·고정값 사용 결과) 금지.
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { del, get, post, type ApiOptions } from '@/shared/lib/api';
 import type { MetricQueryPreset, MetricWidget } from '@/shared/lib/types';

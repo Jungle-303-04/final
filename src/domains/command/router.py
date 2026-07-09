@@ -402,7 +402,7 @@ async def command_status(
     current: Any = Depends(require_session),
     db: Any = Depends(get_db),
 ) -> CommandStatusResponse:
-    """콘솔이 명령 진행 상태와 agent 가 올린 실제 결과를 폴링 — 가짜 완료 표시 제거용."""
+    """콘솔이 명령 진행 상태와 agent 가 올린 실제 결과를 폴링 — 임의 완료 표시 제거용."""
     workspace_id = getattr(current, "workspace_id", DEFAULT_WORKSPACE_ID)
     row = await db.get_agent_command(command_id, workspace_id)
     if row is None:

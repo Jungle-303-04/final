@@ -19,7 +19,7 @@ from packages.runtime.worker import EventProcessor, EventRetryPolicy
 _DONE = (EventProcessingStatus.PROCESSED, EventProcessingStatus.DEAD_LETTERED)
 
 
-class _FakeStore:
+class _StubStore:
     """인메모리 처리대장 + 트랜잭션 롤백 흉내(예외 시 변경 폐기)."""
 
     def __init__(self) -> None:
@@ -95,7 +95,7 @@ class _Message:
 
 
 def test_handler_failure_accumulates_attempts_to_dlq() -> None:
-    store = _FakeStore()
+    store = _StubStore()
     dead = _DeadLetters()
 
     async def failing_handler(evt: Any) -> Any:

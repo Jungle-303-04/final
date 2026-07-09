@@ -166,24 +166,24 @@ def test_service_admin_can_access_every_resource_action() -> None:
 
 
 def test_accessible_resource_ids_reuses_organization_scoped_role_policy() -> None:
-    class FakeResult:
+    class StubResult:
         def mappings(self) -> list[dict[str, str]]:
             return [
                 {"resource_id": "cluster-1", "role": ResourceRole.OBSERVER.value},
                 {"resource_id": "cluster-2", "role": ResourceRole.RELEASE_OPERATOR.value},
             ]
 
-    class FakeConnection:
-        def execute(self, _statement: Any) -> FakeResult:
-            return FakeResult()
+    class StubConnection:
+        def execute(self, _statement: Any) -> StubResult:
+            return StubResult()
 
     @contextmanager
-    def fake_connection():
-        yield FakeConnection()
+    def stub_connection():
+        yield StubConnection()
 
     repository = object.__new__(WorkspaceAccessRepository)
     repository.is_service_admin = lambda _user_id: False  # type: ignore[method-assign]
-    repository.connection = fake_connection  # type: ignore[method-assign]
+    repository.connection = stub_connection  # type: ignore[method-assign]
     calls: list[tuple[str, str, str, str]] = []
 
     def role_has_permission(

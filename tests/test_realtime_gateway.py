@@ -22,13 +22,13 @@ def load_gateway_module() -> Any:
     )
 
 
-def fake_authenticator(token: str) -> dict[str, str] | None:
+def stub_authenticator(token: str) -> dict[str, str] | None:
     if token == GOOD_TOKEN:
         return {"workspace_id": WORKSPACE, "cluster_id": CLUSTER}
     return None
 
 
-async def fake_browser_session(token: str | None) -> dict[str, str] | None:
+async def stub_browser_session(token: str | None) -> dict[str, str] | None:
     if token == GOOD_SESSION:
         return {"workspace_id": WORKSPACE, "user_id": "user-1"}
     return None
@@ -41,8 +41,8 @@ def browser_headers() -> dict[str, str]:
 def make_client() -> tuple[Any, TestClient]:
     module = load_gateway_module()
     app = module.create_app(
-        authenticate_agent=fake_authenticator,
-        authenticate_browser=fake_browser_session,
+        authenticate_agent=stub_authenticator,
+        authenticate_browser=stub_browser_session,
     )
     return module, TestClient(app)
 

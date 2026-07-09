@@ -42,7 +42,7 @@ def pod(
     }
 
 
-class FakeConnection:
+class StubConnection:
     def __init__(self) -> None:
         self.sent: list[str] = []
 
@@ -50,20 +50,20 @@ class FakeConnection:
         self.sent.append(message)
 
 
-class FakeConnector:
+class StubConnector:
     """websockets.connect 대역 — (url, headers) 기록 + 고정 연결 반환."""
 
     def __init__(self) -> None:
-        self.connection = FakeConnection()
+        self.connection = StubConnection()
         self.urls: list[str] = []
         self.headers: list[dict[str, str]] = []
 
-    def __call__(self, url: str, headers: dict[str, str]) -> FakeConnector:
+    def __call__(self, url: str, headers: dict[str, str]) -> StubConnector:
         self.urls.append(url)
         self.headers.append(headers)
         return self
 
-    async def __aenter__(self) -> FakeConnection:
+    async def __aenter__(self) -> StubConnection:
         return self.connection
 
     async def __aexit__(self, *_exc: object) -> bool:
@@ -109,7 +109,7 @@ def test_summarize_hot_pods_stay_bounded() -> None:
 
 def test_publisher_streams_bounded_live_summary_payloads() -> None:
     module = load_live_summary_module()
-    connector = FakeConnector()
+    connector = StubConnector()
 
     async def collector() -> LiveSummary:
         return LiveSummary(
@@ -154,7 +154,7 @@ def test_publisher_streams_bounded_live_summary_payloads() -> None:
 
 def test_publisher_disabled_returns_immediately() -> None:
     module = load_live_summary_module()
-    connector = FakeConnector()
+    connector = StubConnector()
 
     async def collector() -> LiveSummary | None:
         raise AssertionError("비활성 시 수집 자체가 없어야 함")
@@ -174,7 +174,7 @@ def test_publisher_disabled_returns_immediately() -> None:
 
 def test_publisher_without_gateway_url_is_noop() -> None:
     module = load_live_summary_module()
-    connector = FakeConnector()
+    connector = StubConnector()
 
     async def collector() -> LiveSummary | None:
         return None

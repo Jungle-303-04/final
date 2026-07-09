@@ -12,14 +12,14 @@ from packages.events.envelope import event
 from packages.runtime.worker import EventProcessor, EventRetryPolicy
 
 
-class FakeMessage:
+class StubMessage:
     def __init__(self, payload: dict[str, Any]) -> None:
         self.data = json.dumps(payload).encode()
         self.acked = False
         self.nak_delay: int | None = None
 
     @classmethod
-    def raw(cls, data: bytes) -> FakeMessage:
+    def raw(cls, data: bytes) -> StubMessage:
         message = cls({})
         message.data = data
         return message
@@ -31,7 +31,7 @@ class FakeMessage:
         self.nak_delay = delay
 
 
-class FakeProcessingStore:
+class StubProcessingStore:
     def __init__(self, attempts: int = 1, status: str = EventProcessingStatus.PROCESSING) -> None:
         self.attempts = attempts
         self.status = status
@@ -62,7 +62,7 @@ class FakeProcessingStore:
         self.failed.append((evt.event_id, consumer, status))
 
 
-class FakeDeadLetters:
+class StubDeadLetters:
     def __init__(self) -> None:
         self.captured: list[tuple[EventEnvelope, str, str, int]] = []
         self.raw: list[tuple[bytes, str, str]] = []
@@ -102,9 +102,9 @@ def test_retry_policy_env_defaults_remain_unchanged() -> None:
 def test_event_processor_acks_successful_handler() -> None:
     async def run() -> None:
         evt = event("command.requested", "test", {"ok": True}, "corr-1")
-        message = FakeMessage(evt.to_dict())
-        store = FakeProcessingStore()
-        dead_letters = FakeDeadLetters()
+        message = StubMessage(evt.to_dict())
+        store = StubProcessingStore()
+        dead_letters = StubDeadLetters()
         handled: list[str] = []
 
         async def handler(received: EventEnvelope) -> list[EventEnvelope]:
@@ -133,9 +133,9 @@ def test_event_processor_acks_successful_handler() -> None:
 def test_event_processor_naks_retryable_failure() -> None:
     async def run() -> None:
         evt = event("command.requested", "test", {"ok": False}, "corr-2")
-        message = FakeMessage(evt.to_dict())
-        store = FakeProcessingStore(attempts=1)
-        dead_letters = FakeDeadLetters()
+        message = StubMessage(evt.to_dict())
+        store = StubProcessingStore(attempts=1)
+        dead_letters = StubDeadLetters()
 
         async def handler(_received: EventEnvelope) -> list[EventEnvelope]:
             raise RuntimeError("temporary failure")
@@ -161,9 +161,9 @@ def test_event_processor_naks_retryable_failure() -> None:
 def test_event_processor_dead_letters_after_max_attempts() -> None:
     async def run() -> None:
         evt = event("command.requested", "test", {"ok": False}, "corr-3")
-        message = FakeMessage(evt.to_dict())
-        store = FakeProcessingStore(attempts=2)
-        dead_letters = FakeDeadLetters()
+        message = StubMessage(evt.to_dict())
+        store = StubProcessingStore(attempts=2)
+        dead_letters = StubDeadLetters()
 
         async def handler(_received: EventEnvelope) -> list[EventEnvelope]:
             raise RuntimeError("permanent failure")
@@ -191,9 +191,9 @@ def test_event_processor_dead_letters_after_max_attempts() -> None:
 def test_event_processor_skips_terminal_duplicate_with_ack() -> None:
     async def run() -> None:
         evt = event("command.requested", "test", {"ok": True}, "corr-4")
-        message = FakeMessage(evt.to_dict())
-        store = FakeProcessingStore(status=EventProcessingStatus.PROCESSED)
-        dead_letters = FakeDeadLetters()
+        message = StubMessage(evt.to_dict())
+        store = StubProcessingStore(status=EventProcessingStatus.PROCESSED)
+        dead_letters = StubDeadLetters()
 
         async def handler(_received: EventEnvelope) -> list[EventEnvelope]:
             raise AssertionError("이미 종결된 이벤트는 핸들러 실행 금지")
@@ -220,9 +220,9 @@ def test_event_processor_naks_when_claim_blocked_by_fresh_processing() -> None:
     # 소거하지 않고 nak 로 재확인을 예약함(원 처리자 사망 시 유실 방지).
     async def run() -> None:
         evt = event("command.requested", "test", {"ok": True}, "corr-5")
-        message = FakeMessage(evt.to_dict())
-        store = FakeProcessingStore(status=CLAIM_BLOCKED)
-        dead_letters = FakeDeadLetters()
+        message = StubMessage(evt.to_dict())
+        store = StubProcessingStore(status=CLAIM_BLOCKED)
+        dead_letters = StubDeadLetters()
 
         async def handler(_received: EventEnvelope) -> list[EventEnvelope]:
             raise AssertionError("claim 미획득 이벤트는 핸들러 실행 금지")
@@ -247,9 +247,9 @@ def test_event_processor_naks_when_claim_blocked_by_fresh_processing() -> None:
 
 def test_event_processor_acks_and_raw_dead_letters_decode_failure() -> None:
     async def run() -> None:
-        message = FakeMessage.raw(b"{not-json")
-        store = FakeProcessingStore()
-        dead_letters = FakeDeadLetters()
+        message = StubMessage.raw(b"{not-json")
+        store = StubProcessingStore()
+        dead_letters = StubDeadLetters()
 
         async def handler(_received: EventEnvelope) -> list[EventEnvelope]:
             raise AssertionError("handler must not run for malformed payload")

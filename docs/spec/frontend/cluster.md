@@ -63,7 +63,7 @@ status: synced
 - 데이터: `useClusters`(이름/뱃지/role), `useClusterSummary`, `useNodeSummaries`, `useNodePodSummaries`, `usePods`, `useWorkloads`, `useServices`, `useInventoryResourceDetail`, `useApplications`, `useDeploymentsAll`, `useIsAdmin`, `useScale`, `useRestart`, `useUnregisterCluster`, `liveStore(s => s.snapshot)`.
 - `hotPods`: 스냅샷의 hot 팟 이름 Set — **selector 에서 새 객체 생성 금지 규칙에 따라 `useMemo` 로 파생**.
 - `podRows`: `usePods` 결과에 `hot: hotPods.has(name) || w.hot` 병합 후 `q` 필터. `openPod` 는 URL 의 `:pod`+`:namespace` 매칭.
-- 네임스페이스 색상은 `namespaceColor(namespace)`의 문자열 해시 기반 색상으로 워크로드/팟/서비스/리소스/노드 네임스페이스 칩에 일관 적용한다. 데이터는 실제 inventory namespace 문자열만 사용하며 색상용 가짜 namespace를 만들지 않는다.
+- 네임스페이스 색상은 `namespaceColor(namespace)`의 문자열 해시 기반 색상으로 워크로드/팟/서비스/리소스/노드 네임스페이스 칩에 일관 적용한다. 데이터는 실제 inventory namespace 문자열만 사용하며 색상용 임의 namespace를 만들지 않는다.
 - Service는 팟/노드에 "설치된" 대상으로 표현하지 않는다. 행 클릭 시 `useInventoryResourceDetail`의 `related.pods`를 정본으로 보고, selector와 pod labels가 매칭된 팟 및 그 팟의 `summary.node_name` 기반 호스팅 노드만 강조한다. selector 또는 관계 데이터가 없으면 매칭 없음/selector 없음 상태로 표시하고 추측하지 않는다.
 - 트리:
   ```
@@ -91,7 +91,7 @@ status: synced
 
 - `WorkloadsTab { clusterId; admin; filter; onInspect; onDrillPods; onScale; onRestart }` — `/inventory/workloads`의 실제 workload read model을 그대로 표시하고 `filter`가 있으면 name/namespace/kind/status/health/image를 검색한다. 행 클릭은 workload `ResourceDetailDrawer`. 열: 워크로드 / Kind / 네임스페이스(`NamespaceChip`) / Ready(status 또는 ready/desired) / health Badge / 액션(Deployment만 스케일·재시작 가능, 팟 sm 버튼은 관련 팟 필터).
 - `ServicesTab { clusterId; filter; onInspect }` — 이름/네임스페이스/타입/ClusterIP(code)/포트/Selector. 행 클릭은 service Drawer.
-- `ResourceDetailDrawer` — `resource-detail` 응답을 정본으로 사용한다. KeyValue는 resource_type별 summary를 보여주고, 이벤트는 `detail.events`만 렌더한다. `related.pods`가 있으면 관련/선택된 팟 테이블을 보여준다. Service Drawer는 selector 매칭 결과와 호스팅 노드를 표시하며, selector/related data가 없을 때 가짜 관계를 만들지 않는다.
+- `ResourceDetailDrawer` — `resource-detail` 응답을 정본으로 사용한다. KeyValue는 resource_type별 summary를 보여주고, 이벤트는 `detail.events`만 렌더한다. `related.pods`가 있으면 관련/선택된 팟 테이블을 보여준다. Service Drawer는 selector 매칭 결과와 호스팅 노드를 표시하며, selector/related data가 없을 때 임의 관계를 만들지 않는다.
 - `ContextActions` — `Link(pathFor('/events...'))` "이벤트" + `Link(pathFor('/metrics?cluster=<id>&subject=<subject>&name=<name>[&namespace=<ns>]'))` "메트릭" + `Link(pathFor('/ai?prefill=<cluster namespace/name subject 상태 분석>&context=<json>'))` "AI 분석". `context`는 [chat](./chat.md)의 `encodeChatContext`로 만든 `{cluster_id, resource_type, kind?, namespace?, name, uid?}` JSON이며, cluster 상단은 `kind="Cluster"`, Drawer 리소스는 실제 `resource.kind`/`resource.uid`를 사용한다.
 - `ContextEvents` — 클러스터 상단 compact 이벤트와 events 탭용 보조 필터만 담당한다. 단일 리소스 Drawer 이벤트는 문자열 필터가 아니라 `ResourceDetailDrawer`의 `detail.events`를 사용한다.
 - `ResourcesTab { clusterId; filter }` — `q`가 있으면 kind/namespace/name/status includes 로 필터. 열: Kind/네임스페이스(null '—')/이름/상태 Badge/Age.

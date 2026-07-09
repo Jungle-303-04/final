@@ -37,7 +37,7 @@ def load_metric_collectors_module():
                 sys.modules[name] = previous_modules[name]
 
 
-class FakeKubernetesApi:
+class StubKubernetesApi:
     async def list_pods(self) -> dict[str, object]:
         return {
             "items": [
@@ -59,7 +59,7 @@ class FakeKubernetesApi:
 
 def test_pod_metric_collector_builds_node_scoped_pod_evidence() -> None:
     module = load_metric_collectors_module()
-    collector = module.PodMetricCollector(FakeKubernetesApi(), "target-control-plane")
+    collector = module.PodMetricCollector(StubKubernetesApi(), "target-control-plane")
 
     samples = asyncio.run(
         collector.collect({"node": "target-control-plane", "runtime": "containerd"})

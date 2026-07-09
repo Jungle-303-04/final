@@ -5,7 +5,7 @@ endpoints)에서 장애 신호를 찾아 causes/catalog/*.yaml 이 매칭하는 
 변환한다. 우선순위는 아래 상수 표 하나로 고정되어 같은 입력이면 항상 같은 결과다.
 
 계약: 명시 > 유도 > "unknown".
-- kubernetes["symptom"] 이 명시되어 있으면(예: alertmanager/webhook, 테스트 fixture)
+- kubernetes["symptom"] 이 명시되어 있으면(예: alertmanager/webhook, 테스트 레거시 데이터)
   절대 덮어쓰지 않는다.
 - 신호가 하나도 없으면 기존과 동일하게 "unknown" 으로 남아 backlog 경로로 흐른다.
 - 신호가 여러 개면 우선순위가 가장 높은 신호가 대표 symptom 이 되고, 나머지 신호

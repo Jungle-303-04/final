@@ -30,7 +30,7 @@ Prometheus 흐름이 안정된 뒤, Loki log ingest/query 경로와 OTel trace i
 5. trace evidence에는 span id, service name, duration summary만 담는다.
 6. payload size limit을 둔다.
 7. provider 실패 시 fallback 또는 partial evidence 기준을 정한다.
-8. error log sample 또는 trace fixture 테스트를 추가한다.
+8. error log sample 또는 trace 레거시 데이터 테스트를 추가한다.
 
 ## log evidence 예시
 

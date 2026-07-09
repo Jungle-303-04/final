@@ -58,7 +58,7 @@ def test_prometheus_metrics_are_normalized_into_agent_evidence_shape() -> None:
         )
     )
 
-    async def fake_query_prometheus(_client, metric_query) -> dict[str, object]:
+    async def stub_query_prometheus(_client, metric_query) -> dict[str, object]:
         return {
             "status": "success",
             "data": {
@@ -75,7 +75,7 @@ def test_prometheus_metrics_are_normalized_into_agent_evidence_shape() -> None:
             },
         }
 
-    collector.providers["metrics"].query = fake_query_prometheus
+    collector.providers["metrics"].query = stub_query_prometheus
 
     metrics = asyncio.run(collector.collect("metrics"))["metrics"]
     payload = {
@@ -101,7 +101,7 @@ def test_collector_runs_one_off_query_definition() -> None:
     metrics_provider = module.PrometheusMetricsProvider.from_config(lambda _name, default: default)
     collector = module.EvidenceCollector([metrics_provider])
 
-    async def fake_query_prometheus(_client, metric_query) -> dict[str, object]:
+    async def stub_query_prometheus(_client, metric_query) -> dict[str, object]:
         return {
             "status": "success",
             "data": {
@@ -115,7 +115,7 @@ def test_collector_runs_one_off_query_definition() -> None:
             },
         }
 
-    collector.providers["metrics"].query = fake_query_prometheus
+    collector.providers["metrics"].query = stub_query_prometheus
     definition = module.TelemetryQueryDefinition.from_mapping(
         {
             "source": "prometheus",
@@ -136,7 +136,7 @@ def test_prometheus_range_query_is_normalized_into_series() -> None:
     metrics_provider = module.PrometheusMetricsProvider.from_config(lambda _name, default: default)
     collector = module.EvidenceCollector([metrics_provider])
 
-    async def fake_query_prometheus(_client, metric_query) -> dict[str, object]:
+    async def stub_query_prometheus(_client, metric_query) -> dict[str, object]:
         assert type(metric_query).__name__ == "PrometheusRangeQuery"
         assert metric_query.range_seconds == 900
         assert metric_query.step_seconds == 30
@@ -153,7 +153,7 @@ def test_prometheus_range_query_is_normalized_into_series() -> None:
             },
         }
 
-    collector.providers["metrics"].query = fake_query_prometheus
+    collector.providers["metrics"].query = stub_query_prometheus
     definition = module.TelemetryQueryDefinition.from_mapping(
         {
             "source": "prometheus",

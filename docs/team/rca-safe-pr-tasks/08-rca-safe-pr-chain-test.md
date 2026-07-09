@@ -20,7 +20,7 @@ evidence 입력에서 RCA 결과, Safe PR 제안, GitHub provider 결과, audit 
 - `tests/test_rca_evidence.py`
 - `tests/test_event_golden_path.py`
 - `tests/test_projection.py`
-- 필요한 경우 worker fixture
+- 필요한 경우 worker 레거시 데이터
 
 ## 선형 절차
 

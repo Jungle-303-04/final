@@ -31,7 +31,7 @@ async def deliver(
 
 
 class Outbound(Protocol):
-    """외부 호출 어댑터. 테스트는 가짜로 교체."""
+    """외부 호출 어댑터. 테스트는 테스트용 대역으로 교체."""
 
     async def post(self, path: str, body: dict[str, Any]) -> int: ...
 

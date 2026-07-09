@@ -22,7 +22,7 @@
 | S4 플릿·클러스터 | HomePage(플릿 현황), ClusterList/Detail(6탭), PodDrawer, 위저드(클러스터) | [views/fleet-heatmap](views/fleet-heatmap.md), [views/cluster-detail](views/cluster-detail.md), [views/resources](views/resources.md) | 탭·드릴다운 딥링크 e2e, 5000행 렌더 성능 확인 |
 | S5 레포·워크플로우 | RepoList/Detail(4탭), WorkflowList/Graph, ApprovalCard(공유 1개) | [views/repo](views/repo.md), [views/workflow](views/workflow.md) | 승인 카드 공유 검증(임포트 경로 1개), 활성 run 10s/비활성 30s 폴링 전환 테스트 |
 | S6 AI·메트릭 | ChatList/ChatView(카드 3종), MetricsView(실시간+쿼리 카드) | [views/ai-chat](views/ai-chat.md), [views/metrics](views/metrics.md) | 폴링 간격 파생 테스트, ActionSelectCard 잠금 테스트 |
-| S7 조직·알림·설정 | org-admin 3화면(mock), AccessPanel, Notifications+벨, OpsView | [views/org-admin](views/org-admin.md), [views/notifications](views/notifications.md) | mock↔real 어댑터 경계 테스트, 벨 배지=미읽음 일치 테스트 |
+| S7 조직·알림·설정 | org-admin 3화면(테스트 전용 대역), AccessPanel, Notifications+벨, OpsView | [views/org-admin](views/org-admin.md), [views/notifications](views/notifications.md) | 테스트 전용 대역↔실서비스 어댑터 경계 테스트, 벨 배지=미읽음 일치 테스트 |
 | S8 마감 | 커맨드 팔레트 액션 연결, 빈상태/에러 전수 점검, e2e smoke 풀런 | [05](05-routes-ia.md) | 아래 최종 게이트 전부 |
 
 ## 최종 게이트 (Definition of Done)
@@ -33,7 +33,7 @@ npm run typecheck     # tsc --noEmit 0 오류
 npm run lint          # eslint 0 오류
 npm run test          # vitest 전부 통과
 npm run build         # 프로덕션 번들 성공, 초기 청크 < 350KB gzip(코드 스플릿: 뷰 lazy)
-npm run e2e:smoke     # Playwright: 로그인→홈→클러스터→AI 1왕복 (mock)
+npm run e2e:smoke     # Playwright: 로그인→홈→클러스터→AI 1왕복 (테스트 전용 대역)
 ```
 
 추가 수동 점검표:

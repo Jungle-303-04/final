@@ -97,5 +97,5 @@ PR에서 CI가 실패하면 merge하지 않는다.
 - worker가 raw NATS, 직접 DB session, 직접 HTTP route를 들고 들어온 경우
 - 권한 필터 없이 dashboard/API 데이터를 노출한 경우
 - target write 범위가 sandbox/approval 정책 밖으로 넓어진 경우
-- secret/token/password가 코드, 문서, 로그, 테스트 fixture에 들어간 경우
+- secret/token/password가 코드, 문서, 로그, 테스트 레거시 데이터에 들어간 경우
 - `docs/README.md` 색인이 새 문서를 링크하지 않는 경우

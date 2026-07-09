@@ -6,7 +6,7 @@ import json
 from packages.storage.sessions import RedisSessionStore, RedisSessionStoreConfig
 
 
-class FakeRedisClient:
+class StubRedisClient:
     def __init__(self) -> None:
         self.values: dict[str, str] = {}
         self.get_calls = 0
@@ -48,7 +48,7 @@ def session_config() -> RedisSessionStoreConfig:
 
 def test_email_verification_token_is_consumed_once() -> None:
     store = RedisSessionStore(session_config())
-    redis = FakeRedisClient()
+    redis = StubRedisClient()
     redis.values["email_verify:token-1"] = json.dumps(
         {"user_id": "user-1", "email": "user@example.com"}
     )
@@ -65,7 +65,7 @@ def test_email_verification_token_is_consumed_once() -> None:
 
 def test_touch_session_extends_session_ttl_without_reading_payload() -> None:
     store = RedisSessionStore(session_config())
-    redis = FakeRedisClient()
+    redis = StubRedisClient()
     redis.values["session:token-1"] = json.dumps(
         {"user_id": "user-1", "roles": ["user"], "workspace_id": "default"}
     )
@@ -80,7 +80,7 @@ def test_touch_session_extends_session_ttl_without_reading_payload() -> None:
 
 def test_touch_session_returns_false_for_missing_token() -> None:
     store = RedisSessionStore(session_config())
-    redis = FakeRedisClient()
+    redis = StubRedisClient()
     store.client = redis  # type: ignore[assignment]
 
     touched = asyncio.run(store.touch_session("missing-token"))

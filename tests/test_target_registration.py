@@ -47,7 +47,7 @@ from packages.contracts.gateway.requests import (
 )
 
 
-class FakeDb:
+class StubDb:
     def __init__(self) -> None:
         self.registered: list[dict[str, object]] = []
         self.desired_states: list[dict[str, object]] = []
@@ -88,7 +88,7 @@ class FakeDb:
         return policy
 
 
-class FakeEvents:
+class StubEvents:
     def __init__(self) -> None:
         self.accepted: list[object] = []
 
@@ -97,7 +97,7 @@ class FakeEvents:
         return object()
 
 
-class FakeEvidenceJobDb:
+class StubEvidenceJobDb:
     def get_cluster_policy(self, _workspace_id: str, _cluster_id: str) -> None:
         return None
 
@@ -113,7 +113,7 @@ class FakeEvidenceJobDb:
         }
 
 
-class FakePolicyDb:
+class StubPolicyDb:
     def __init__(self, existing: AgentPolicy) -> None:
         self.current = existing.model_dump()
         self.saved: list[dict[str, object]] = []
@@ -136,7 +136,7 @@ class FakePolicyDb:
         return policy
 
 
-class FakeManagementPolicyDb(FakePolicyDb):
+class StubManagementPolicyDb(StubPolicyDb):
     def __init__(self) -> None:
         super().__init__(AgentPolicy(cluster_id="cluster-1", cluster_role="management"))
 
@@ -150,7 +150,7 @@ class FakeManagementPolicyDb(FakePolicyDb):
         }
 
 
-class FakeUnregisterDb:
+class StubUnregisterDb:
     def __init__(self, *, cluster_role: str = "target") -> None:
         self.cluster_role = cluster_role
         self.unregistered: list[tuple[str, str]] = []
@@ -167,7 +167,7 @@ class FakeUnregisterDb:
         return True
 
 
-class FakeClusterDb:
+class StubClusterDb:
     def __init__(self) -> None:
         self.access_filter: set[str] | None = None
         self.agent = {
@@ -279,7 +279,7 @@ class FakeClusterDb:
         return [self.agent]
 
 
-class FakePreflightDb(FakeClusterDb):
+class StubPreflightDb(StubClusterDb):
     def get_cluster_registration(
         self,
         workspace_id: str,
@@ -304,7 +304,7 @@ class FakePreflightDb(FakeClusterDb):
         return [self.agent] if cluster_id == "cluster-1" else []
 
 
-class FakePendingClusterDb(FakeClusterDb):
+class StubPendingClusterDb(StubClusterDb):
     def __init__(self, expires_at: str) -> None:
         super().__init__()
         self.expires_at = expires_at
@@ -438,8 +438,8 @@ def test_target_install_manifest_can_include_explicit_sample_workload() -> None:
 
 
 def test_target_registration_records_cluster_and_returns_install_manifest() -> None:
-    db = FakeDb()
-    events = FakeEvents()
+    db = StubDb()
+    events = StubEvents()
 
     async def run():
         return await register_target(
@@ -491,8 +491,8 @@ def test_target_registration_records_cluster_and_returns_install_manifest() -> N
 
 
 def test_management_registration_defaults_to_kubernetes_evidence_only() -> None:
-    db = FakeDb()
-    events = FakeEvents()
+    db = StubDb()
+    events = StubEvents()
     request = target_request().model_copy(
         update={
             "cluster_id": "management-cluster",
@@ -534,8 +534,8 @@ def test_management_registration_defaults_to_kubernetes_evidence_only() -> None:
 
 def test_target_registration_generates_cluster_id_when_missing(monkeypatch) -> None:
     monkeypatch.setattr("domains.target.router.secrets.randbelow", lambda _max: 42)
-    db = FakeDb()
-    events = FakeEvents()
+    db = StubDb()
+    events = StubEvents()
     request = target_request().model_copy(update={"cluster_id": None, "name": "Customer Prod"})
 
     async def run():
@@ -553,8 +553,8 @@ def test_target_registration_generates_cluster_id_when_missing(monkeypatch) -> N
 
 
 def test_target_registration_returns_provider_bootstrap_command() -> None:
-    db = FakeDb()
-    events = FakeEvents()
+    db = StubDb()
+    events = StubEvents()
     request = target_request().model_copy(
         update={
             "cloud_provider": "eks",
@@ -584,8 +584,8 @@ def test_target_registration_returns_provider_bootstrap_command() -> None:
 
 
 def test_target_registration_rejects_missing_provider_config_before_write() -> None:
-    db = FakeDb()
-    events = FakeEvents()
+    db = StubDb()
+    events = StubEvents()
     request = target_request().model_copy(
         update={"cloud_provider": "eks", "provider_config": {"region": "ap-northeast-2"}}
     )
@@ -628,8 +628,8 @@ def test_target_bootstrap_config_rejects_invalid_gke_location_type() -> None:
 
 
 def test_target_registration_apply_failure_does_not_record_state(monkeypatch) -> None:
-    db = FakeDb()
-    events = FakeEvents()
+    db = StubDb()
+    events = StubEvents()
     request = target_request().model_copy(update={"apply": True})
 
     def fail_apply(_manifest: str, _kube_context: str | None) -> str:
@@ -654,14 +654,14 @@ def test_target_registration_apply_failure_does_not_record_state(monkeypatch) ->
 
 
 def test_target_registration_apply_defaults_to_kube_context_provider(monkeypatch) -> None:
-    db = FakeDb()
-    events = FakeEvents()
+    db = StubDb()
+    events = StubEvents()
     request = target_request().model_copy(update={"apply": True})
 
-    def fake_apply(_manifest: str, _kube_context: str | None) -> str:
+    def stub_apply(_manifest: str, _kube_context: str | None) -> str:
         return "applied"
 
-    monkeypatch.setattr("domains.target.router.apply_manifest_with_kubectl", fake_apply)
+    monkeypatch.setattr("domains.target.router.apply_manifest_with_kubectl", stub_apply)
 
     async def run():
         return await register_target(
@@ -721,7 +721,7 @@ def test_evidence_job_schedule_route_delegates_to_management_store() -> None:
                 workspace_id="trusted-workspace",
                 cluster_id="trusted-cluster",
             ),
-            db=FakeEvidenceJobDb(),
+            db=StubEvidenceJobDb(),
         )
 
     response = asyncio.run(run())
@@ -745,7 +745,7 @@ def test_cluster_connection_status_uses_last_seen_window(monkeypatch) -> None:
 
 
 def test_cluster_list_uses_access_filter_and_agent_status() -> None:
-    db = FakeClusterDb()
+    db = StubClusterDb()
 
     async def run():
         return await list_clusters(
@@ -771,7 +771,7 @@ def test_cluster_connection_status_route_returns_agent_details() -> None:
         return await get_cluster_connection_status(
             "cluster-1",
             current=SimpleNamespace(user_id="user-1", workspace_id="default"),
-            db=FakeClusterDb(),
+            db=StubClusterDb(),
         )
 
     response = asyncio.run(run())
@@ -789,7 +789,7 @@ def test_cluster_connection_status_reports_pending_install_before_ttl() -> None:
         return await get_cluster_connection_status(
             "cluster-1",
             current=SimpleNamespace(user_id="user-1", workspace_id="default"),
-            db=FakePendingClusterDb(expires_at),
+            db=StubPendingClusterDb(expires_at),
         )
 
     response = asyncio.run(run())
@@ -806,7 +806,7 @@ def test_cluster_connection_status_reports_install_expired_after_ttl() -> None:
         return await get_cluster_connection_status(
             "cluster-1",
             current=SimpleNamespace(user_id="user-1", workspace_id="default"),
-            db=FakePendingClusterDb(expires_at),
+            db=StubPendingClusterDb(expires_at),
         )
 
     response = asyncio.run(run())
@@ -826,7 +826,7 @@ def test_target_registration_preflight_reports_duplicate_and_agent_status(monkey
                 deploy_provider="manual-manifest",
             ),
             current=SimpleNamespace(user_id="user-1", workspace_id="default"),
-            db=FakePreflightDb(),
+            db=StubPreflightDb(),
         )
 
     response = asyncio.run(run())
@@ -851,7 +851,7 @@ def test_target_registration_preflight_accepts_new_ready_provider(monkeypatch) -
                 deploy_provider="manual-manifest",
             ),
             current=SimpleNamespace(user_id="user-1", workspace_id="default"),
-            db=FakePreflightDb(),
+            db=StubPreflightDb(),
         )
 
     response = asyncio.run(run())
@@ -878,7 +878,7 @@ def test_target_registration_preflight_tolerates_display_fields(monkeypatch) -> 
                 provider_config={"local_provider": "kind", "kind_cluster_name": "new-cluster"},
             ),
             current=SimpleNamespace(user_id="user-1", workspace_id="default"),
-            db=FakePreflightDb(),
+            db=StubPreflightDb(),
         )
 
     response = asyncio.run(run())
@@ -901,7 +901,7 @@ def test_target_registration_preflight_requires_management_base_url(monkeypatch)
                 deploy_provider="manual-manifest",
             ),
             current=SimpleNamespace(user_id="user-1", workspace_id="default"),
-            db=FakePreflightDb(),
+            db=StubPreflightDb(),
         )
 
     response = asyncio.run(run())
@@ -917,11 +917,11 @@ def test_target_registration_preflight_checks_direct_apply_connectivity(monkeypa
     monkeypatch.setattr("domains.target.router.shutil.which", lambda _name: "/usr/bin/kubectl")
     calls: list[list[str]] = []
 
-    def fake_run(command, **_kwargs):
+    def stub_run(command, **_kwargs):
         calls.append(command)
         return subprocess.CompletedProcess(command, 0, stdout='{"gitVersion":"v1"}', stderr="")
 
-    monkeypatch.setattr("domains.target.router.subprocess.run", fake_run)
+    monkeypatch.setattr("domains.target.router.subprocess.run", stub_run)
 
     async def run():
         return await target_registration_preflight(
@@ -933,7 +933,7 @@ def test_target_registration_preflight_checks_direct_apply_connectivity(monkeypa
                 kube_context="cluster-1",
             ),
             current=SimpleNamespace(user_id="user-1", workspace_id="default"),
-            db=FakePreflightDb(),
+            db=StubPreflightDb(),
         )
 
     response = asyncio.run(run())
@@ -954,10 +954,10 @@ def test_target_registration_preflight_rejects_unreachable_direct_apply_context(
     monkeypatch.setenv("KUBE_CONTEXT_ALLOWLIST", "cluster-1")
     monkeypatch.setattr("domains.target.router.shutil.which", lambda _name: "/usr/bin/kubectl")
 
-    def fake_run(command, **_kwargs):
+    def stub_run(command, **_kwargs):
         return subprocess.CompletedProcess(command, 1, stdout="", stderr="cluster unreachable")
 
-    monkeypatch.setattr("domains.target.router.subprocess.run", fake_run)
+    monkeypatch.setattr("domains.target.router.subprocess.run", stub_run)
 
     async def run():
         return await target_registration_preflight(
@@ -969,7 +969,7 @@ def test_target_registration_preflight_rejects_unreachable_direct_apply_context(
                 kube_context="cluster-1",
             ),
             current=SimpleNamespace(user_id="user-1", workspace_id="default"),
-            db=FakePreflightDb(),
+            db=StubPreflightDb(),
         )
 
     response = asyncio.run(run())
@@ -1001,7 +1001,7 @@ def test_cluster_policy_update_preserves_existing_unset_fields() -> None:
             ]
         ),
     )
-    db = FakePolicyDb(existing_policy)
+    db = StubPolicyDb(existing_policy)
     partial_update = AgentPolicy(
         cluster_id="cluster-1",
         generation=2,
@@ -1028,7 +1028,7 @@ def test_cluster_policy_update_preserves_existing_unset_fields() -> None:
 
 
 def test_cluster_scheduling_profiles_update_is_selector_based() -> None:
-    db = FakePolicyDb(AgentPolicy(cluster_id="cluster-1", generation=3))
+    db = StubPolicyDb(AgentPolicy(cluster_id="cluster-1", generation=3))
     scheduling = SchedulingPolicy(
         profiles=[
             SchedulingProfile(
@@ -1069,7 +1069,7 @@ def test_cluster_scheduling_profile_requires_selector() -> None:
 
 
 def test_cluster_scheduling_profiles_read_returns_policy_section() -> None:
-    db = FakePolicyDb(
+    db = StubPolicyDb(
         AgentPolicy(
             cluster_id="cluster-1",
             scheduling=SchedulingPolicy(
@@ -1110,7 +1110,7 @@ def test_management_scheduling_profile_update_is_rejected() -> None:
                     ]
                 ),
                 current=SimpleNamespace(workspace_id="default"),
-                db=FakeManagementPolicyDb(),
+                db=StubManagementPolicyDb(),
             )
         )
 
@@ -1143,7 +1143,7 @@ def test_management_policy_update_rejects_write_policy() -> None:
                 "cluster-1",
                 write_update,
                 current=SimpleNamespace(workspace_id="default"),
-                db=FakeManagementPolicyDb(),
+                db=StubManagementPolicyDb(),
             )
         )
 
@@ -1172,7 +1172,7 @@ def test_management_policy_update_rejects_scheduling_policy() -> None:
                 "cluster-1",
                 scheduling_update,
                 current=SimpleNamespace(workspace_id="default"),
-                db=FakeManagementPolicyDb(),
+                db=StubManagementPolicyDb(),
             )
         )
 
@@ -1181,7 +1181,7 @@ def test_management_policy_update_rejects_scheduling_policy() -> None:
 
 
 def test_management_policy_update_allows_read_only_evidence_change() -> None:
-    db = FakeManagementPolicyDb()
+    db = StubManagementPolicyDb()
     read_only_update = AgentPolicy(
         cluster_id="cluster-1",
         generation=2,
@@ -1208,7 +1208,7 @@ def test_management_policy_update_allows_read_only_evidence_change() -> None:
 
 
 def test_management_cluster_unregister_is_rejected() -> None:
-    db = FakeUnregisterDb(cluster_role="management")
+    db = StubUnregisterDb(cluster_role="management")
 
     with pytest.raises(HTTPException) as exc:
         asyncio.run(
@@ -1225,7 +1225,7 @@ def test_management_cluster_unregister_is_rejected() -> None:
 
 
 def test_target_cluster_unregister_updates_registration() -> None:
-    db = FakeUnregisterDb(cluster_role="target")
+    db = StubUnregisterDb(cluster_role="target")
 
     asyncio.run(
         unregister_cluster(
@@ -1238,7 +1238,7 @@ def test_target_cluster_unregister_updates_registration() -> None:
     assert db.unregistered == [("default", "cluster-1")]
 
 
-class TransactionalFakeDb(FakeDb):
+class TransactionalStubDb(StubDb):
     """unit_of_work 를 제공해 등록·정책·desired-state 쓰기가 한 트랜잭션인지 기록함."""
 
     def __init__(self) -> None:
@@ -1280,8 +1280,8 @@ class TransactionalFakeDb(FakeDb):
         )
 
 
-class UowTrackingEvents(FakeEvents):
-    def __init__(self, db: TransactionalFakeDb) -> None:
+class UowTrackingEvents(StubEvents):
+    def __init__(self, db: TransactionalStubDb) -> None:
         super().__init__()
         self.db = db
         self.accepted_in_uow: list[bool] = []
@@ -1294,7 +1294,7 @@ class UowTrackingEvents(FakeEvents):
 def test_target_registration_wraps_writes_and_event_in_single_transaction() -> None:
     # 등록·정책·desired-state·이벤트 스테이징이 하나의 unit_of_work 안에서 실행돼야 함
     # (부분 실패 시 정책/desired-state 없는 반쪽 등록 고아 방지).
-    db = TransactionalFakeDb()
+    db = TransactionalStubDb()
     events = UowTrackingEvents(db)
 
     async def run():
@@ -1309,7 +1309,7 @@ def test_target_registration_wraps_writes_and_event_in_single_transaction() -> N
     assert db.uow_active is False
 
 
-class FakeInstallLinkDb:
+class StubInstallLinkDb:
     """원라인 인스톨러용 — 토큰 해시 대조 + 등록 설정 재조회만 제공."""
 
     def __init__(self, token: str, settings: dict[str, object]) -> None:
@@ -1334,7 +1334,7 @@ class FakeInstallLinkDb:
 def test_install_manifest_by_token_serves_same_manifest_as_registration() -> None:
     token = "install-token-1"
     settings = target_request().model_dump(exclude={"apply", "kube_context"})
-    db = FakeInstallLinkDb(token, settings)
+    db = StubInstallLinkDb(token, settings)
 
     response = asyncio.run(install_manifest_by_token(token, db=db))
 
@@ -1346,7 +1346,7 @@ def test_install_manifest_by_token_serves_same_manifest_as_registration() -> Non
 
 
 def test_install_manifest_by_token_rejects_unknown_token() -> None:
-    db = FakeInstallLinkDb(
+    db = StubInstallLinkDb(
         "real-token", target_request().model_dump(exclude={"apply", "kube_context"})
     )
     try:
@@ -1358,8 +1358,8 @@ def test_install_manifest_by_token_rejects_unknown_token() -> None:
 
 
 def test_target_registration_returns_one_line_install_command() -> None:
-    db = FakeDb()
-    events = FakeEvents()
+    db = StubDb()
+    events = StubEvents()
 
     async def run():
         return await register_target(
@@ -1382,8 +1382,8 @@ def test_target_registration_uses_public_base_url_when_request_omits_management_
     monkeypatch,
 ) -> None:
     monkeypatch.setenv("PUBLIC_BASE_URL", "https://k8s.woonyong.org")
-    db = FakeDb()
-    events = FakeEvents()
+    db = StubDb()
+    events = StubEvents()
     request = target_request().model_copy(update={"management_base_url": ""})
 
     async def run():
@@ -1404,8 +1404,8 @@ def test_target_registration_rejects_missing_management_url(monkeypatch) -> None
     monkeypatch.delenv("PUBLIC_MANAGEMENT_BASE_URL", raising=False)
     monkeypatch.delenv("PUBLIC_API_BASE_URL", raising=False)
     monkeypatch.delenv("PUBLIC_BASE_URL", raising=False)
-    db = FakeDb()
-    events = FakeEvents()
+    db = StubDb()
+    events = StubEvents()
     request = target_request().model_copy(update={"management_base_url": ""})
 
     async def run():

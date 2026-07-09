@@ -161,7 +161,7 @@ def test_metric_query_presets_list_requires_dashboard_access() -> None:
 def test_metrics_validate_route_returns_prometheus_dry_run_result(monkeypatch) -> None:
     calls: list[tuple[str, str | None, int | None, int | None]] = []
 
-    async def fake_validate(query: str, *, base_url=None, range_seconds=None, step_seconds=None):
+    async def stub_validate(query: str, *, base_url=None, range_seconds=None, step_seconds=None):
         calls.append((query, base_url, range_seconds, step_seconds))
         return MetricsValidationResult(
             valid=True,
@@ -169,7 +169,7 @@ def test_metrics_validate_route_returns_prometheus_dry_run_result(monkeypatch) -
             result_type="matrix",
         )
 
-    monkeypatch.setattr(dashboard_router, "validate_promql_query", fake_validate)
+    monkeypatch.setattr(dashboard_router, "validate_promql_query", stub_validate)
 
     async def run() -> None:
         response = await validate_metrics_query(
@@ -191,14 +191,14 @@ def test_metrics_validate_route_returns_prometheus_dry_run_result(monkeypatch) -
 
 
 def test_metrics_validate_route_returns_validation_error(monkeypatch) -> None:
-    async def fake_validate(*_args, **_kwargs):
+    async def stub_validate(*_args, **_kwargs):
         return MetricsValidationResult(
             valid=False,
             code="promql_invalid",
             detail="PromQL 문법 오류입니다.",
         )
 
-    monkeypatch.setattr(dashboard_router, "validate_promql_query", fake_validate)
+    monkeypatch.setattr(dashboard_router, "validate_promql_query", stub_validate)
 
     async def run() -> None:
         response = await validate_metrics_query(

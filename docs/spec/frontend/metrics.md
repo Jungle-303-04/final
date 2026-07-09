@@ -11,7 +11,7 @@ status: synced
 
 - WS 스냅샷 히스토리 기반 실시간 시계열(재시작 추이·실행 팟)과 phase 스탯, 인벤토리 usage 롤업 시계열(사용량 추이) 카드, agent 경유 비동기 PromQL 쿼리 실행 UI.
 - 저장형 metric query preset과 widget 정의를 조회·저장·삭제하고, 저장 쿼리 실행은 agent command 경로로 위임한다. 결과값은 프론트나 저장 API가 만들지 않는다.
-- `api.ts` 는 PromQL dry-run 검증(`POST /metrics/validate`), 명령 상태 폴링(`GET /commands/{command_id}`), 저장형 metric query/widget API 훅, 텔레메트리 결과 요약을 담당한다 — 가짜 완료 표시(고정 타이머·하드코딩 결과) 금지.
+- `api.ts` 는 PromQL dry-run 검증(`POST /metrics/validate`), 명령 상태 폴링(`GET /commands/{command_id}`), 저장형 metric query/widget API 훅, 텔레메트리 결과 요약을 담당한다 — 임의 완료 표시(고정 타이머·고정값 사용 결과) 금지.
 
 ## 의존성 (Dependencies)
 
@@ -129,7 +129,7 @@ status: synced
 ## 불변식·오류 (Invariants & Errors)
 
 - 일시정지는 렌더 고정일 뿐 history 수집(liveStore)은 멈추지 않는다(재개 시 최신으로 복귀).
-- PromQL 결과는 **실측만** 표시 — `GET /commands/:id` 폴링(2s, 터미널이면 중단)으로 agent 가 올린 result 를 요약한다. 고정 타이머·하드코딩 결과 금지.
+- PromQL 결과는 **실측만** 표시 — `GET /commands/:id` 폴링(2s, 터미널이면 중단)으로 agent 가 올린 result 를 요약한다. 고정 타이머·고정값 사용 결과 금지.
 - 저장형 query/widget API는 정의만 저장한다. 실행 결과는 저장하지 않고 command result 폴링으로만 표시한다.
 - `restart_total`은 누적 카운터이므로 사용량 추이 카드에서는 누적값이 아니라 샘플 간 증가분으로 표시한다. 카운터 리셋처럼 현재값이 이전값보다 작아지면 증가분은 0으로 클램프한다.
 - 스트림이 끊겨도 화면은 비지 않는다 — phase 스탯은 인벤토리(summary/workloads)로 폴백한다. 스트림 시계열은 history 가 없으면 합성 포인트 없이 차트 empty state 를 표시한다.

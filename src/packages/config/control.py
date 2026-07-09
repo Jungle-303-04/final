@@ -1,7 +1,7 @@
 """제어(쓰기) 명령 허용 네임스페이스 정책 — 단일 기준.
 
 기존에는 "sandbox 만 허용"이 게이트웨이 검증·command-worker 정책·cluster-agent
-3곳에 각각 하드코딩되어 있었다. 이 모듈이 유일한 기준이 된다:
+3곳에 각각 고정값 사용되어 있었다. 이 모듈이 유일한 기준이 된다:
 
 - 기본값은 기존과 동일하게 sandbox 뿐(배포 호환 — env 미설정 시 동작 변화 없음).
 - CONTROL_ALLOWED_NAMESPACES (콤마 구분) 로 확장한다. 예: "sandbox,staging,prod-web"

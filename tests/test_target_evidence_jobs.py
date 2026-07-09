@@ -94,7 +94,7 @@ class InMemoryEvidenceCollector:
         return await self.collect(evidence_key)
 
 
-class FakeEvidenceJobClient:
+class StubEvidenceJobClient:
     def __init__(self) -> None:
         self.scheduled: list[dict[str, Any]] = []
         self.completed: list[dict[str, Any]] = []
@@ -165,7 +165,7 @@ def make_scheduler(module: Any, collector: InMemoryEvidenceCollector | None = No
 
 def test_central_scheduler_registers_due_provider_jobs_without_local_queue() -> None:
     module = load_evidence_module()
-    client = FakeEvidenceJobClient()
+    client = StubEvidenceJobClient()
     scheduler = make_scheduler(module)
 
     evidence_key = asyncio.run(scheduler.schedule_once(client, now=100.0))
@@ -176,7 +176,7 @@ def test_central_scheduler_registers_due_provider_jobs_without_local_queue() -> 
 
 def test_central_worker_polls_job_and_reports_provider_result() -> None:
     module = load_evidence_module()
-    client = FakeEvidenceJobClient()
+    client = StubEvidenceJobClient()
     client.jobs.append(
         {
             "job_id": "job-metrics",
@@ -198,7 +198,7 @@ def test_central_worker_polls_job_and_reports_provider_result() -> None:
 def test_success_result_report_error_does_not_mark_job_failed() -> None:
     module = load_evidence_module()
 
-    class FailingCompleteClient(FakeEvidenceJobClient):
+    class FailingCompleteClient(StubEvidenceJobClient):
         async def complete_evidence_job(
             self,
             job_id: str,
@@ -239,7 +239,7 @@ def test_success_result_report_error_does_not_mark_job_failed() -> None:
 
 def test_central_worker_reports_provider_failure_for_retry_budget() -> None:
     module = load_evidence_module()
-    client = FakeEvidenceJobClient()
+    client = StubEvidenceJobClient()
     client.jobs.append(
         {
             "job_id": "job-traces",
@@ -260,7 +260,7 @@ def test_scheduler_loop_survives_management_schedule_errors() -> None:
     module = load_evidence_module()
     scheduler = make_scheduler(module)
 
-    class FailingScheduleClient(FakeEvidenceJobClient):
+    class FailingScheduleClient(StubEvidenceJobClient):
         async def schedule_evidence_jobs(
             self,
             source_id: str,
@@ -283,7 +283,7 @@ def test_worker_loop_survives_result_report_errors() -> None:
     module = load_evidence_module()
     scheduler = make_scheduler(module)
 
-    class FailingCompleteClient(FakeEvidenceJobClient):
+    class FailingCompleteClient(StubEvidenceJobClient):
         async def complete_evidence_job(
             self,
             job_id: str,
@@ -315,7 +315,7 @@ def test_worker_loop_survives_result_report_errors() -> None:
     asyncio.run(run_once())
 
 
-class FakeEvidenceJobDb:
+class StubEvidenceJobDb:
     def __init__(self) -> None:
         self.completed: list[dict[str, Any]] = []
         self.claimed: list[str] = []
@@ -408,7 +408,7 @@ class FakeEvidenceJobDb:
         return False
 
 
-class FakeEvents:
+class StubEvents:
     def __init__(self) -> None:
         self.body: object | None = None
         self.source = "api-gateway"
@@ -543,7 +543,7 @@ async def drain_bulk_jobs(
 
 
 def test_schedule_evidence_jobs_uses_identity_scoped_central_ticket_queue() -> None:
-    db = FakeEvidenceJobDb()
+    db = StubEvidenceJobDb()
     response = asyncio.run(
         schedule_evidence_jobs(
             EvidenceJobScheduleRequest(
@@ -567,7 +567,7 @@ def test_poll_evidence_job_leases_central_ticket() -> None:
             "agent-1",
             1,
             IDENTITY,
-            FakeEvidenceJobDb(),
+            StubEvidenceJobDb(),
         )
     )
 
@@ -576,8 +576,8 @@ def test_poll_evidence_job_leases_central_ticket() -> None:
 
 
 def test_evidence_job_result_emits_window_once_when_all_jobs_ready() -> None:
-    db = FakeEvidenceJobDb()
-    events = FakeEvents()
+    db = StubEvidenceJobDb()
+    events = StubEvents()
 
     response = asyncio.run(
         evidence_job_result(
@@ -653,7 +653,7 @@ def test_evidence_job_result_rejects_oversized_provider_result() -> None:
 
 
 def test_pending_evidence_window_is_not_reported_as_final_event() -> None:
-    class PendingWindowDb(FakeEvidenceJobDb):
+    class PendingWindowDb(StubEvidenceJobDb):
         def get_evidence_window(self, _evidence_key: str) -> dict[str, str]:
             return {
                 "event_id": f"{PENDING_EVIDENCE_EVENT_ID_PREFIX}existing",
@@ -664,7 +664,7 @@ def test_pending_evidence_window_is_not_reported_as_final_event() -> None:
             raise AssertionError("pending window should stop duplicate emission")
 
     db = PendingWindowDb()
-    events = FakeEvents()
+    events = StubEvents()
 
     response = asyncio.run(
         evidence_job_result(
@@ -688,7 +688,7 @@ def test_pending_evidence_window_is_not_reported_as_final_event() -> None:
 
 
 def test_stale_pending_evidence_window_is_reclaimed_and_emitted() -> None:
-    class StaleWindowDb(FakeEvidenceJobDb):
+    class StaleWindowDb(StubEvidenceJobDb):
         def __init__(self) -> None:
             super().__init__()
             self.released_stale = False
@@ -711,7 +711,7 @@ def test_stale_pending_evidence_window_is_reclaimed_and_emitted() -> None:
             return True
 
     db = StaleWindowDb()
-    events = FakeEvents()
+    events = StubEvents()
 
     response = asyncio.run(
         evidence_job_result(

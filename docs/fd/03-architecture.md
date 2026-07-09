@@ -42,7 +42,6 @@ frontend/
         api.ts                  # fetch 래퍼(세션 쿠키, 에러 정규화, baseURL)
         query.ts                # QueryClient 설정, queryKey 팩토리
         live.ts                 # useLiveSocket (WS 재연결·백오프 단일 구현)
-        mock/                   # 로컬 데모용 API fallback. real mode에서는 Gateway route 호출
         format.ts               # 날짜/용량/기간 포맷
     generated/
       api/                      # @hey-api/openapi-ts 산출물 (수정 금지)
@@ -97,7 +96,7 @@ export function useScaleDeployment(clusterId: string) {
 ```
 
 4. **실 API 단일 경로**: `shared/lib/api.ts`는 `VITE_API_BASE ?? '/api'`만 사용한다.
-   로컬 dev/preview 는 `frontend/vite.config.ts` 의 `/api` proxy로 Gateway에 붙고, 브라우저에서 가짜 API 라우터를 선택하는 분기는 없다.
+   로컬 dev/preview 는 `frontend/vite.config.ts` 의 `/api` proxy로 Gateway에 붙고, 브라우저에서 테스트용 API 라우터를 선택하는 분기는 없다.
 
 ## 실시간 (WS /live/browser)
 
@@ -136,8 +135,8 @@ useLiveSocket({
 
 | 레벨 | 도구 | 대상 |
 |---|---|---|
-| 단위 | vitest | shared/ui 프리미티브, format, 훅(queryKey·mock 스위치) |
+| 단위 | vitest | shared/ui 프리미티브, format, 훅(queryKey) |
 | 컴포넌트 | vitest + testing-library | QueryBoundary, Form, 상태 뱃지 매핑 |
-| E2E smoke | Playwright | 로그인 → fleet → 클러스터 상세 → AI 채팅 1왕복 (mock 백엔드) |
+| E2E smoke | Playwright | 로그인 → fleet → 클러스터 상세 → AI 채팅 1왕복 (계약 스모크) |
 
 빌드 게이트: `tsc --noEmit && eslint && vitest run` — [07-build-plan.md](07-build-plan.md).

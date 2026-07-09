@@ -17,7 +17,7 @@ from packages.contracts.gateway.requests import (
 )
 
 
-class FakeEvents:
+class StubEvents:
     def __init__(self) -> None:
         self.bodies: list[Any] = []
 
@@ -25,7 +25,7 @@ class FakeEvents:
         self.bodies.append(body)
 
 
-class FakePasswordAuth:
+class StubPasswordAuth:
     def __init__(self) -> None:
         self.deleted: str | None = None
         self.calls: list[tuple[str, tuple[Any, ...]]] = []
@@ -101,8 +101,8 @@ class FakePasswordAuth:
 
 def test_signup_requests_email_verification_without_session_cookie(monkeypatch) -> None:
     monkeypatch.setenv("PUBLIC_BASE_URL", "https://app.example.test")
-    password_auth = FakePasswordAuth()
-    events = FakeEvents()
+    password_auth = StubPasswordAuth()
+    events = StubEvents()
     request = Request({"type": "http", "headers": []})
 
     async def run() -> Any:
@@ -131,8 +131,8 @@ def test_signup_requests_email_verification_without_session_cookie(monkeypatch) 
 
 def test_resend_verification_requests_email_without_session_cookie(monkeypatch) -> None:
     monkeypatch.setenv("PUBLIC_BASE_URL", "https://app.example.test")
-    password_auth = FakePasswordAuth()
-    events = FakeEvents()
+    password_auth = StubPasswordAuth()
+    events = StubEvents()
     request = Request({"type": "http", "headers": []})
 
     async def run() -> Any:
@@ -156,7 +156,7 @@ def test_resend_verification_requests_email_without_session_cookie(monkeypatch) 
 
 
 def test_check_email_reports_availability_without_session() -> None:
-    password_auth = FakePasswordAuth()
+    password_auth = StubPasswordAuth()
     request = Request({"type": "http", "headers": [], "client": ("127.0.0.1", 12345)})
 
     async def run() -> Any:
@@ -173,7 +173,7 @@ def test_check_email_reports_availability_without_session() -> None:
 
 
 def test_check_email_reports_existing_account() -> None:
-    password_auth = FakePasswordAuth()
+    password_auth = StubPasswordAuth()
     password_auth.email_available = False
     request = Request({"type": "http", "headers": [], "client": ("127.0.0.1", 12345)})
 
@@ -195,7 +195,7 @@ def test_login_sets_httponly_session_cookie(monkeypatch) -> None:
     monkeypatch.setenv("COOKIE_SECURE", "0")
     monkeypatch.delenv("SESSION_TTL_SECONDS", raising=False)
     response = Response()
-    password_auth = FakePasswordAuth()
+    password_auth = StubPasswordAuth()
     request = Request({"type": "http", "headers": [], "client": ("127.0.0.1", 12345)})
 
     async def run() -> Any:
@@ -233,7 +233,7 @@ def test_session_refresh_touches_store_and_resets_httponly_cookie(monkeypatch) -
     monkeypatch.setenv("COOKIE_SECURE", "0")
     monkeypatch.delenv("SESSION_TTL_SECONDS", raising=False)
     response = Response()
-    password_auth = FakePasswordAuth()
+    password_auth = StubPasswordAuth()
     current = SimpleNamespace(
         token="login-token",
         user_id="user-1",
@@ -261,7 +261,7 @@ def test_session_refresh_touches_store_and_resets_httponly_cookie(monkeypatch) -
 
 def test_verify_email_redirects_and_sets_httponly_session_cookie(monkeypatch) -> None:
     monkeypatch.setenv("COOKIE_SECURE", "0")
-    password_auth = FakePasswordAuth()
+    password_auth = StubPasswordAuth()
 
     async def run() -> Any:
         return await identity_router.verify_email(
@@ -281,7 +281,7 @@ def test_verify_email_redirects_and_sets_httponly_session_cookie(monkeypatch) ->
 
 def test_verify_email_rejects_external_redirect(monkeypatch) -> None:
     monkeypatch.setenv("COOKIE_SECURE", "0")
-    password_auth = FakePasswordAuth()
+    password_auth = StubPasswordAuth()
 
     async def run() -> Any:
         return await identity_router.verify_email(
@@ -298,7 +298,7 @@ def test_verify_email_rejects_external_redirect(monkeypatch) -> None:
 
 def test_verify_email_pending_approval_redirects_without_cookie(monkeypatch) -> None:
     monkeypatch.setenv("COOKIE_SECURE", "0")
-    password_auth = FakePasswordAuth()
+    password_auth = StubPasswordAuth()
 
     async def pending_verify(_token: str) -> Any:
         return SimpleNamespace(
@@ -326,7 +326,7 @@ def test_verify_email_pending_approval_redirects_without_cookie(monkeypatch) -> 
 
 
 def test_admin_can_approve_pending_user() -> None:
-    password_auth = FakePasswordAuth()
+    password_auth = StubPasswordAuth()
 
     async def run() -> Any:
         return await identity_router.approve_user(
@@ -351,7 +351,7 @@ def test_admin_can_approve_pending_user() -> None:
 def test_logout_deletes_session_and_cookie(monkeypatch) -> None:
     monkeypatch.setenv("COOKIE_SECURE", "0")
     response = Response()
-    password_auth = FakePasswordAuth()
+    password_auth = StubPasswordAuth()
 
     async def run() -> Any:
         return await identity_router.logout(

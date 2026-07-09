@@ -9,6 +9,18 @@ const proxy = { '/api': { target: backend, changeOrigin: true, ws: true, rewrite
 export default defineConfig({
   plugins: [tailwindcss(), react()],
   resolve: { alias: { '@': fileURLToPath(new URL('./src', import.meta.url)) } },
+  build: {
+    // vendor chunk는 gzip 기준 약 280KB다. 경고 기준은 minified 크기보다 실제 전송 크기를 우선한다.
+    chunkSizeWarningLimit: 900,
+    rollupOptions: {
+      output: {
+        manualChunks(id) {
+          if (!id.includes('/node_modules/')) return undefined;
+          return 'vendor';
+        },
+      },
+    },
+  },
   server: { proxy },
   preview: { proxy },
 });

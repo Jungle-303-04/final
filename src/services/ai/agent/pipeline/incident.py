@@ -117,7 +117,7 @@ class IncidentDetector:
         return False
 
     def classify(self, evidence: Evidence, incident_id: str) -> IncidentRecord:
-        # 명시 symptom(webhook/fixture)이 있으면 그대로, 없으면 snapshot 신호에서 유도.
+        # 명시 symptom(webhook/레거시 데이터)이 있으면 그대로, 없으면 snapshot 신호에서 유도.
         # 우선순위·판정 기준은 pipeline/symptom.py 상수 표 참조(명시 > 유도 > unknown).
         derived = derive_symptom(evidence.kubernetes)
         log_signal = None

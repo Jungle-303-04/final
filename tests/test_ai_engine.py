@@ -13,7 +13,7 @@ from packages.ai.tools import ToolContext, ToolRegistry
 
 
 class ScriptedLlm:
-    """응답 대본을 순서대로 재생하는 가짜 LLM(대본 초과 시 마지막 응답 반복)."""
+    """응답 대본을 순서대로 재생하는 테스트용 LLM(대본 초과 시 마지막 응답 반복)."""
 
     def __init__(self, *replies: str) -> None:
         self.replies = list(replies)
