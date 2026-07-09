@@ -1,4 +1,5 @@
 import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+import { chartGridStroke, chartMutedStroke, chartTextStroke, chartTooltipStyle } from "./shared/chartTheme";
 
 const data = [
   { day: "월", latency: 420 },
@@ -18,11 +19,11 @@ export default function ChartAreaLinearExample() {
       </header>
       <ResponsiveContainer height={280} width="100%">
         <AreaChart data={data}>
-          <CartesianGrid stroke="#27272a" vertical={false} />
-          <XAxis dataKey="day" stroke="#a1a1aa" />
-          <YAxis stroke="#a1a1aa" />
-          <Tooltip contentStyle={{ background: "#111113", border: "1px solid #27272a", borderRadius: 12, color: "#fafafa" }} />
-          <Area dataKey="latency" name="응답 시간(ms)" stroke="#fafafa" fill="#fafafa24" type="linear" isAnimationActive={false} />
+          <CartesianGrid stroke={chartGridStroke} vertical={false} />
+          <XAxis dataKey="day" stroke={chartMutedStroke} />
+          <YAxis stroke={chartMutedStroke} />
+          <Tooltip contentStyle={chartTooltipStyle} />
+          <Area dataKey="latency" name="응답 시간(ms)" stroke={chartTextStroke} fill={chartTextStroke} fillOpacity={0.14} type="linear" isAnimationActive={false} />
         </AreaChart>
       </ResponsiveContainer>
     </section>

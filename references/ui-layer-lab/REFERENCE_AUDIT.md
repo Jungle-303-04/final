@@ -13,6 +13,26 @@
 - Radix, React Aria, Ark UI, Ariakit, Headless UI처럼 keyboard/focus/aria 동작을 프리미티브 수준에서 다룸.
 - Recharts, visx, D3처럼 차트는 시각 장식이 아니라 data, scale, tooltip, legend, responsive behavior를 한 묶음으로 설계.
 
+## 런타임 의존성 정책
+
+React가 기본 제공하는 것은 `react`, `react-dom`뿐이다. 이 랩의 큰 외부 런타임 의존성은 의도적으로 `@xyflow/react`, `recharts`, `cmdk`, `sonner`로 제한한다. 나머지 UI 라이브러리는 모두 설치하는 방식이 아니라 구조, 접근성, 테마, 컴포넌트 API 원칙을 비교 기준으로 흡수한다.
+
+| 구분 | 라이브러리 | 적용 상태 | 이유 |
+| --- | --- | --- | --- |
+| React 기본 | React, React DOM | 런타임 사용 | 앱 실행 최소 기반 |
+| 핵심 런타임 | React Flow | 런타임 사용 | 노드 드래그, 엣지 생성, 미니맵, viewport 검증이 필요한 실제 플로우 데모 |
+| 핵심 런타임 | Recharts | 런타임 사용 | 차트 카드, tooltip, axis, legend, responsive container 검증 |
+| 핵심 런타임 | cmdk | 런타임 사용 | 명령 팔레트의 검색/선택 동작 |
+| 핵심 런타임 | sonner | 런타임 사용 | 토스트, undo, 진행 상태, action feedback |
+| 패턴 채택 | shadcn/ui, Radix | 토큰/preview/code/접근성 원칙 채택 | shadcn/ui 자체는 복사 설치 대상이 아니라 코드 공개형 reference |
+| 패턴 채택 | MUI, Mantine, Chakra UI, Hero UI, Park UI, PrimeReact | 테마/타이포그래피/상태/접근성 기준 채택 | 같은 역할의 컴포넌트를 여러 UI kit로 중복 구현하지 않음 |
+| 패턴 채택 | React Aria, Ark UI, Ariakit, Headless UI | keyboard/focus/aria 동작 기준 채택 | headless 라이브러리를 모두 설치하면 랩의 API 일관성이 깨짐 |
+| 패턴 채택 | Motion, react-spring | 모션 토큰/전환 계약 채택 | 별도 런타임 없이 CSS motion token으로 통일 |
+| 패턴 채택 | D3, visx | scale/shape/tooltip 설계 관점 채택 | 현재 차트 런타임은 Recharts로 통일 |
+| 비교 기준 | Daisy UI, Tailwind UI | 토큰/컴포넌트 구성 비교 기준 | Tailwind 런타임을 추가하지 않는 설계 |
+| 비교 기준 | Victory, nivo, react-chartjs | 차트 라이브러리 비교 기준 | 차트 런타임 중복 방지 |
+| 비추천/레거시 비교 | Ant Design, Semantic UI, React Bootstrap, Reactstrap | 현재 코드에는 미설치 | 사용 빈도 감소군은 API/스타일 중복을 늘리지 않도록 제외 |
+
 ## 레퍼런스 벤치마크 매트릭스
 
 | 레퍼런스 | 관찰한 강점 | 우리 앱에 적용할 원칙 | 구현 금지선 |
@@ -30,8 +50,11 @@
 | [React Aria](https://react-aria.adobe.com/) | accessible drag/drop, keyboard multi-selection, form validation, table resizing | 드릴다운/테이블/선택 UI에 키보드 선택과 focus 상태를 포함 | 클릭 전용 row/button |
 | [Ark UI](https://ark-ui.com/), [Ark Accordion](https://ark-ui.com/docs/components/accordion), [Ark Collapsible](https://ark-ui.com/docs/components/collapsible) | headless accessible components, keyboard table, CSS animation variables, inert hidden content | accordion/collapsible는 숨긴 영역 interactive element inert 처리까지 설계 | height만 0으로 줄이고 focus 가능한 상태 방치 |
 | [Ariakit](https://ariakit.com/) | accessible low-level primitives and copyable styled examples | wrapper primitive보다 behavior contract를 먼저 명시 | 디자인만 있고 keyboard behavior 없는 custom widget |
+| [Daisy UI](https://daisyui.com/), [Tailwind UI](https://www.tailwindui.com/) | utility-first 조합과 prebuilt block 구성 | 토큰과 preview/card 구조의 비교 기준으로만 사용 | Tailwind dependency를 추가해 기존 CSS token 체계를 이중화 |
 | [Headless UI Dialog](https://headlessui.com/react/dialog) | renderless dialog, focus/keyboard behavior, transition API | overlay/drawer/dialog 대표 예제는 focus trap, Escape, backdrop, restore 검증 포함 | 단순 absolute panel |
 | [Recharts](https://recharts.org/), [visx](https://visx.airbnb.tech/), [D3](https://d3js.org/what-is-d3) | Recharts는 reusable chart component, visx는 low-level React visualization primitives, D3는 scale/axis/shape 같은 low-level toolbox | 제품용 통합 차트 패턴: chart card, tooltip, legend, metric toggle, responsive container, theme colors | chart-area-variant 파일을 계속 늘리는 방식 |
+| [Victory](https://formidable.com/open-source/victory/), [nivo](https://nivo.rocks/), [react-chartjs](https://github.com/reactchartjs/react-chartjs-2) | 다른 차트 API와 interaction model 비교 | chart runtime은 Recharts 하나로 유지하고 API 비교만 반영 | 동일 차트를 여러 라이브러리로 중복 구현 |
+| Ant Design, Semantic UI, React Bootstrap, Reactstrap | 레거시/사용 빈도 감소 UI kit의 prebuilt component 관성 | 제외 기준으로 기록 | 낡은 스타일/의존성 중복을 판매용 랩에 포함 |
 
 ## 우리 앱 목표 재정의
 

@@ -1,4 +1,5 @@
 import { Area, AreaChart, CartesianGrid, Legend, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+import { chartBlue, chartGreen, chartGridStroke, chartMutedStroke, chartTooltipStyle } from "./shared/chartTheme";
 
 const data = [
   { day: "월", chat: 24, tool: 10 },
@@ -17,13 +18,13 @@ export default function ChartAreaLegendExample() {
       </header>
       <ResponsiveContainer height={280} width="100%">
         <AreaChart data={data}>
-          <CartesianGrid stroke="#27272a" vertical={false} />
-          <XAxis dataKey="day" stroke="#a1a1aa" />
-          <YAxis stroke="#a1a1aa" />
-          <Tooltip contentStyle={{ background: "#111113", border: "1px solid #27272a", borderRadius: 12, color: "#fafafa" }} />
+          <CartesianGrid stroke={chartGridStroke} vertical={false} />
+          <XAxis dataKey="day" stroke={chartMutedStroke} />
+          <YAxis stroke={chartMutedStroke} />
+          <Tooltip contentStyle={chartTooltipStyle} />
           <Legend />
-          <Area dataKey="chat" name="대화" stroke="#93c5fd" fill="#93c5fd30" isAnimationActive={false} />
-          <Area dataKey="tool" name="도구 실행" stroke="#86efac" fill="#86efac2b" isAnimationActive={false} />
+          <Area dataKey="chat" name="대화" stroke={chartBlue} fill={chartBlue} fillOpacity={0.18} isAnimationActive={false} />
+          <Area dataKey="tool" name="도구 실행" stroke={chartGreen} fill={chartGreen} fillOpacity={0.16} isAnimationActive={false} />
         </AreaChart>
       </ResponsiveContainer>
     </section>

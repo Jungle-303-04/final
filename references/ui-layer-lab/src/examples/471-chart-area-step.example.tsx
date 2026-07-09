@@ -1,4 +1,5 @@
 import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+import { chartGridStroke, chartMutedStroke, chartOrange, chartTooltipStyle } from "./shared/chartTheme";
 
 const data = [
   { stage: "대기", count: 8 },
@@ -18,11 +19,11 @@ export default function ChartAreaStepExample() {
       </header>
       <ResponsiveContainer height={280} width="100%">
         <AreaChart data={data}>
-          <CartesianGrid stroke="#27272a" vertical={false} />
-          <XAxis dataKey="stage" stroke="#a1a1aa" />
-          <YAxis stroke="#a1a1aa" />
-          <Tooltip contentStyle={{ background: "#111113", border: "1px solid #27272a", borderRadius: 12, color: "#fafafa" }} />
-          <Area dataKey="count" name="남은 작업" stroke="#fdba74" fill="#fdba7430" type="step" isAnimationActive={false} />
+          <CartesianGrid stroke={chartGridStroke} vertical={false} />
+          <XAxis dataKey="stage" stroke={chartMutedStroke} />
+          <YAxis stroke={chartMutedStroke} />
+          <Tooltip contentStyle={chartTooltipStyle} />
+          <Area dataKey="count" name="남은 작업" stroke={chartOrange} fill={chartOrange} fillOpacity={0.18} type="step" isAnimationActive={false} />
         </AreaChart>
       </ResponsiveContainer>
     </section>

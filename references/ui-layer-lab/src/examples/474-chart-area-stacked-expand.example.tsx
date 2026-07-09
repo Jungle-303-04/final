@@ -1,4 +1,5 @@
 import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+import { chartBlue, chartGreen, chartGridStroke, chartMutedStroke, chartRed, chartTooltipStyle } from "./shared/chartTheme";
 
 const data = [
   { day: "월", ui: 20, api: 10, infra: 5 },
@@ -17,13 +18,13 @@ export default function ChartAreaStackedExpandExample() {
       </header>
       <ResponsiveContainer height={280} width="100%">
         <AreaChart data={data} stackOffset="expand">
-          <CartesianGrid stroke="#27272a" vertical={false} />
-          <XAxis dataKey="day" stroke="#a1a1aa" />
-          <YAxis stroke="#a1a1aa" tickFormatter={(value) => `${Math.round(Number(value) * 100)}%`} />
-          <Tooltip contentStyle={{ background: "#111113", border: "1px solid #27272a", borderRadius: 12, color: "#fafafa" }} />
-          <Area dataKey="ui" name="UI" stackId="1" stroke="#93c5fd" fill="#93c5fd40" isAnimationActive={false} />
-          <Area dataKey="api" name="API" stackId="1" stroke="#86efac" fill="#86efac38" isAnimationActive={false} />
-          <Area dataKey="infra" name="인프라" stackId="1" stroke="#f87171" fill="#f8717138" isAnimationActive={false} />
+          <CartesianGrid stroke={chartGridStroke} vertical={false} />
+          <XAxis dataKey="day" stroke={chartMutedStroke} />
+          <YAxis stroke={chartMutedStroke} tickFormatter={(value) => `${Math.round(Number(value) * 100)}%`} />
+          <Tooltip contentStyle={chartTooltipStyle} />
+          <Area dataKey="ui" name="UI" stackId="1" stroke={chartBlue} fill={chartBlue} fillOpacity={0.24} isAnimationActive={false} />
+          <Area dataKey="api" name="API" stackId="1" stroke={chartGreen} fill={chartGreen} fillOpacity={0.22} isAnimationActive={false} />
+          <Area dataKey="infra" name="인프라" stackId="1" stroke={chartRed} fill={chartRed} fillOpacity={0.22} isAnimationActive={false} />
         </AreaChart>
       </ResponsiveContainer>
     </section>

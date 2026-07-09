@@ -9,7 +9,7 @@ export const chartOrange = "var(--orange)";
 export const chartTooltipStyle = {
   background: "var(--panel)",
   border: "1px solid var(--border)",
-  borderRadius: 12,
+  borderRadius: "var(--radius-lg)",
   boxShadow: "var(--shadow-panel)",
   color: "var(--text)"
 };

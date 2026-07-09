@@ -1,4 +1,5 @@
 import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+import { chartBlue, chartGridStroke, chartMutedStroke, chartTooltipStyle } from "./shared/chartTheme";
 
 const data = [
   { minute: "0분", tokens: 1200 },
@@ -18,11 +19,11 @@ export default function ChartAreaAxesExample() {
       </header>
       <ResponsiveContainer height={280} width="100%">
         <AreaChart data={data} margin={{ left: 8, right: 18 }}>
-          <CartesianGrid stroke="#27272a" vertical={false} />
-          <XAxis dataKey="minute" stroke="#a1a1aa" />
-          <YAxis stroke="#a1a1aa" tickFormatter={(value) => `${Number(value) / 1000}k`} />
-          <Tooltip contentStyle={{ background: "#111113", border: "1px solid #27272a", borderRadius: 12, color: "#fafafa" }} />
-          <Area dataKey="tokens" name="토큰" stroke="#93c5fd" fill="#93c5fd33" isAnimationActive={false} />
+          <CartesianGrid stroke={chartGridStroke} vertical={false} />
+          <XAxis dataKey="minute" stroke={chartMutedStroke} />
+          <YAxis stroke={chartMutedStroke} tickFormatter={(value) => `${Number(value) / 1000}k`} />
+          <Tooltip contentStyle={chartTooltipStyle} />
+          <Area dataKey="tokens" name="토큰" stroke={chartBlue} fill={chartBlue} fillOpacity={0.2} isAnimationActive={false} />
         </AreaChart>
       </ResponsiveContainer>
     </section>

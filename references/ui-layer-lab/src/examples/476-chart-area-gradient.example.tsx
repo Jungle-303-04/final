@@ -1,4 +1,5 @@
 import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+import { chartGreen, chartGridStroke, chartMutedStroke, chartTooltipStyle } from "./shared/chartTheme";
 
 const data = [
   { day: "월", success: 68 },
@@ -20,15 +21,15 @@ export default function ChartAreaGradientExample() {
         <AreaChart data={data}>
           <defs>
             <linearGradient id="success-rate-gradient" x1="0" x2="0" y1="0" y2="1">
-              <stop offset="0%" stopColor="#86efac" stopOpacity={0.55} />
-              <stop offset="100%" stopColor="#86efac" stopOpacity={0.04} />
+              <stop offset="0%" stopColor={chartGreen} stopOpacity={0.55} />
+              <stop offset="100%" stopColor={chartGreen} stopOpacity={0.04} />
             </linearGradient>
           </defs>
-          <CartesianGrid stroke="#27272a" vertical={false} />
-          <XAxis dataKey="day" stroke="#a1a1aa" />
-          <YAxis stroke="#a1a1aa" domain={[60, 100]} tickFormatter={(value) => `${value}%`} />
-          <Tooltip contentStyle={{ background: "#111113", border: "1px solid #27272a", borderRadius: 12, color: "#fafafa" }} />
-          <Area dataKey="success" name="성공률" stroke="#86efac" fill="url(#success-rate-gradient)" isAnimationActive={false} />
+          <CartesianGrid stroke={chartGridStroke} vertical={false} />
+          <XAxis dataKey="day" stroke={chartMutedStroke} />
+          <YAxis stroke={chartMutedStroke} domain={[60, 100]} tickFormatter={(value) => `${value}%`} />
+          <Tooltip contentStyle={chartTooltipStyle} />
+          <Area dataKey="success" name="성공률" stroke={chartGreen} fill="url(#success-rate-gradient)" isAnimationActive={false} />
         </AreaChart>
       </ResponsiveContainer>
     </section>
