@@ -277,6 +277,7 @@ async def dispatch_release_plan(
     blockers.extend(release_production_runbook_blockers(body, preview, wave))
     blockers.extend(release_production_owner_blockers(body, preview, wave))
     blockers.extend(release_production_verification_blockers(body, preview, wave))
+    blockers.extend(release_production_abort_criteria_blockers(body, preview, wave))
     blockers.extend(release_diagnostics_blockers(body))
     blockers.extend(release_rollback_policy_blockers(body))
     blockers.extend(release_live_alert_channel_blockers(body, db, workspace_id))
@@ -333,6 +334,7 @@ async def start_release_plan(
     blockers.extend(release_production_runbook_blockers(body, preview, first_wave))
     blockers.extend(release_production_owner_blockers(body, preview, first_wave))
     blockers.extend(release_production_verification_blockers(body, preview, first_wave))
+    blockers.extend(release_production_abort_criteria_blockers(body, preview, first_wave))
     blockers.extend(release_diagnostics_blockers(body))
     blockers.extend(release_rollback_policy_blockers(body))
     blockers.extend(release_live_alert_channel_blockers(body, db, workspace_id))
@@ -533,6 +535,7 @@ async def advance_release_run(
     blockers.extend(release_production_runbook_blockers(plan, preview, next_wave))
     blockers.extend(release_production_owner_blockers(plan, preview, next_wave))
     blockers.extend(release_production_verification_blockers(plan, preview, next_wave))
+    blockers.extend(release_production_abort_criteria_blockers(plan, preview, next_wave))
     blockers.extend(release_diagnostics_blockers(plan))
     blockers.extend(release_rollback_policy_blockers(plan))
     blockers.extend(release_live_alert_channel_blockers(plan, db, workspace_id))
@@ -652,6 +655,7 @@ async def retry_release_run(
     blockers.extend(release_production_runbook_blockers(plan, preview, retry_wave))
     blockers.extend(release_production_owner_blockers(plan, preview, retry_wave))
     blockers.extend(release_production_verification_blockers(plan, preview, retry_wave))
+    blockers.extend(release_production_abort_criteria_blockers(plan, preview, retry_wave))
     blockers.extend(release_diagnostics_blockers(plan))
     blockers.extend(release_rollback_policy_blockers(plan))
     blockers.extend(release_live_alert_channel_blockers(plan, db, workspace_id))
@@ -842,6 +846,7 @@ async def dispatch_wave_steps(
     blockers.extend(release_production_runbook_blockers(plan, preview, wave))
     blockers.extend(release_production_owner_blockers(plan, preview, wave))
     blockers.extend(release_production_verification_blockers(plan, preview, wave))
+    blockers.extend(release_production_abort_criteria_blockers(plan, preview, wave))
     blockers.extend(release_diagnostics_blockers(plan))
     blockers.extend(release_rollback_policy_blockers(plan))
     blockers.extend(release_live_alert_channel_blockers(plan, db, workspace_id))
@@ -967,6 +972,8 @@ def release_readiness_from_plan(
     owner_blockers = release_production_owner_blockers(plan, preview, first_wave)
     verification_blockers = release_production_verification_blockers(plan, preview, first_wave)
     verification_bypassed = release_production_verification_bypassed(plan, preview, first_wave)
+    abort_criteria_blockers = release_production_abort_criteria_blockers(plan, preview, first_wave)
+    abort_criteria_bypassed = release_production_abort_criteria_bypassed(plan, preview, first_wave)
     diagnostic_blockers = release_diagnostics_blockers(plan)
     diagnostic_bypassed = release_diagnostics_bypassed(plan)
     rollback_blockers = release_rollback_policy_blockers(plan)
@@ -1120,6 +1127,21 @@ def release_readiness_from_plan(
             if verification_bypassed
             else "Post-deploy verification evidence is present for the first executable wave.",
             verification_blockers,
+        ),
+        readiness_check(
+            "rollback.abort_criteria",
+            "Rollback criteria",
+            "blocked"
+            if abort_criteria_blockers
+            else "warning"
+            if abort_criteria_bypassed
+            else "passed",
+            "Production live release requires rollback_trigger or abort_criteria."
+            if abort_criteria_blockers
+            else "Rollback criteria gate is bypassed with an operator reason."
+            if abort_criteria_bypassed
+            else "Rollback/abort criteria are present for the first executable wave.",
+            abort_criteria_blockers,
         ),
         readiness_check(
             "plan.diagnostics",
@@ -1739,6 +1761,63 @@ def release_verification_override_reason(plan: dict[str, Any]) -> str:
     ).strip()
 
 
+def release_production_abort_criteria_blockers(
+    plan: dict[str, Any],
+    preview: dict[str, Any],
+    wave: int,
+) -> list[str]:
+    if not execution_profile(plan).side_effects:
+        return []
+    settings = plan_settings_value(plan)
+    override_reason = release_abort_criteria_override_reason(plan)
+    blockers: list[str] = []
+    for step in release_production_steps_for_wave(plan, preview, wave):
+        config = step_config(step)
+        if release_abort_criteria(settings, config) or override_reason:
+            continue
+        label = str(step.get("name") or step.get("application_id") or "release step")
+        blockers.append(
+            f"{label} targets production and requires rollback_trigger, abort_criteria, "
+            "or abort criteria override reason before live dispatch."
+        )
+    return blockers
+
+
+def release_production_abort_criteria_bypassed(
+    plan: dict[str, Any],
+    preview: dict[str, Any],
+    wave: int,
+) -> bool:
+    if not execution_profile(plan).side_effects:
+        return False
+    if not release_abort_criteria_override_reason(plan):
+        return False
+    settings = plan_settings_value(plan)
+    return any(
+        not release_abort_criteria(settings, step_config(step))
+        for step in release_production_steps_for_wave(plan, preview, wave)
+    )
+
+
+def release_abort_criteria(settings: dict[str, Any], config: dict[str, Any]) -> str:
+    return str(
+        config.get("rollback_trigger")
+        or config.get("abort_criteria")
+        or settings.get("rollback_trigger")
+        or settings.get("abort_criteria")
+        or ""
+    ).strip()
+
+
+def release_abort_criteria_override_reason(plan: dict[str, Any]) -> str:
+    settings = plan_settings_value(plan)
+    return str(
+        settings.get("abort_criteria_override_reason")
+        or settings.get("rollback_trigger_override_reason")
+        or ""
+    ).strip()
+
+
 def release_window_bounds(plan: dict[str, Any]) -> tuple[datetime | None, datetime | None]:
     settings = plan_settings_value(plan)
     start = parse_release_window_time(settings.get("release_window_start"))
@@ -1890,6 +1969,18 @@ def release_dispatch_guard_snapshot(
                 if release_verification_url(settings, step_config(step))
             ],
         },
+        "abort_criteria": {
+            "criteria": [
+                release_abort_criteria(settings, step_config(step))
+                for step in production_steps
+                if release_abort_criteria(settings, step_config(step))
+            ],
+            "override_reason": release_abort_criteria_override_reason(plan) or None,
+            "production_targets": [
+                str(step.get("application_id") or "")
+                for step in production_steps
+            ],
+        },
         "diagnostics": {
             "required": settings.get("require_diagnostics_pass") is not False,
             "bypassed": release_diagnostics_bypassed(plan),
@@ -1983,6 +2074,15 @@ def release_dispatch_readiness_warning_checks(
                 "Post-deploy verification",
                 "warning",
                 "Post-deploy verification gate is bypassed with an operator reason.",
+            )
+        )
+    if release_production_abort_criteria_bypassed(plan, preview, wave):
+        checks.append(
+            readiness_check(
+                "rollback.abort_criteria",
+                "Rollback criteria",
+                "warning",
+                "Rollback criteria gate is bypassed with an operator reason.",
             )
         )
     if release_diagnostics_bypassed(plan):

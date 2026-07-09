@@ -657,6 +657,14 @@ function PolicyEditor({ plan, setPolicy }: { plan: ReleasePlan; setPolicy: (patc
             <Field label="Verification override reason">
               <input className="input" value={getString(settings.verification_override_reason)} onChange={e => setPolicy({ verification_override_reason: e.target.value })} />
             </Field>
+            <Field label="Abort criteria">
+              <input className="input" placeholder="rollback if error rate > 5% for 5m" value={getString(settings.abort_criteria)} onChange={e => setPolicy({ abort_criteria: e.target.value })} />
+            </Field>
+            {!getString(settings.abort_criteria).trim() && (
+              <Field label="Abort criteria override reason">
+                <input className="input" value={getString(settings.abort_criteria_override_reason)} onChange={e => setPolicy({ abort_criteria_override_reason: e.target.value })} />
+              </Field>
+            )}
           </>
         )}
         <Field label="Safe PR URL"><input className="input" value={getString(settings.safe_pr_url)} onChange={e => setPolicy({ safe_pr_url: e.target.value, safe_pr_ready: Boolean(e.target.value.trim()) })} /></Field>
@@ -749,6 +757,7 @@ function StepEditor({
         <Field label="Service name"><input className="input" value={getString(config.service_name)} onChange={e => setStepConfig(selectedIndex, { service_name: e.target.value }, setPlan)} /></Field>
         <Field label="Health check path"><input className="input" value={getString(config.health_check_path, '/readyz')} onChange={e => setStepConfig(selectedIndex, { health_check_path: e.target.value }, setPlan)} /></Field>
         <Field label="Verification URL"><input className="input" placeholder="https://status.example.com/checkout" value={getString(config.post_deploy_verification_url)} onChange={e => setStepConfig(selectedIndex, { post_deploy_verification_url: e.target.value }, setPlan)} /></Field>
+        <Field label="Rollback trigger"><input className="input" placeholder="rollback if p95 latency doubles for 10m" value={getString(config.rollback_trigger)} onChange={e => setStepConfig(selectedIndex, { rollback_trigger: e.target.value }, setPlan)} /></Field>
         <Field label="Timeout seconds"><input className="input" type="number" min={30} max={3600} value={getNumber(config.timeout_seconds, 600)} onChange={e => setStepConfig(selectedIndex, { timeout_seconds: Number(e.target.value) }, setPlan)} /></Field>
         <Field label="Retry attempts"><input className="input" type="number" min={0} max={10} value={getNumber(config.retry_attempts, getNumber(plan.settings.retry_attempts, 1))} onChange={e => setStepConfig(selectedIndex, { retry_attempts: Number(e.target.value) }, setPlan)} /></Field>
       </div>
