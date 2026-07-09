@@ -648,6 +648,12 @@ function PolicyEditor({ plan, setPolicy }: { plan: ReleasePlan; setPolicy: (patc
                 <input className="input" value={getString(settings.runbook_override_reason)} onChange={e => setPolicy({ runbook_override_reason: e.target.value })} />
               </Field>
             )}
+            <Field label="Release owner">
+              <input className="input" placeholder="release lead or team" value={getString(settings.release_owner)} onChange={e => setPolicy({ release_owner: e.target.value })} />
+            </Field>
+            <Field label="On-call contact">
+              <input className="input" placeholder="oncall@example.com or #release-oncall" value={getString(settings.oncall_contact)} onChange={e => setPolicy({ oncall_contact: e.target.value })} />
+            </Field>
           </>
         )}
         <Field label="Safe PR URL"><input className="input" value={getString(settings.safe_pr_url)} onChange={e => setPolicy({ safe_pr_url: e.target.value, safe_pr_ready: Boolean(e.target.value.trim()) })} /></Field>

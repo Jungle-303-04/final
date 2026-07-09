@@ -275,6 +275,7 @@ async def dispatch_release_plan(
     blockers.extend(release_production_change_ticket_blockers(body, preview, wave))
     blockers.extend(release_production_window_blockers(body, preview, wave))
     blockers.extend(release_production_runbook_blockers(body, preview, wave))
+    blockers.extend(release_production_owner_blockers(body, preview, wave))
     blockers.extend(release_diagnostics_blockers(body))
     blockers.extend(release_rollback_policy_blockers(body))
     blockers.extend(release_live_alert_channel_blockers(body, db, workspace_id))
@@ -329,6 +330,7 @@ async def start_release_plan(
     blockers.extend(release_production_change_ticket_blockers(body, preview, first_wave))
     blockers.extend(release_production_window_blockers(body, preview, first_wave))
     blockers.extend(release_production_runbook_blockers(body, preview, first_wave))
+    blockers.extend(release_production_owner_blockers(body, preview, first_wave))
     blockers.extend(release_diagnostics_blockers(body))
     blockers.extend(release_rollback_policy_blockers(body))
     blockers.extend(release_live_alert_channel_blockers(body, db, workspace_id))
@@ -527,6 +529,7 @@ async def advance_release_run(
     blockers.extend(release_production_change_ticket_blockers(plan, preview, next_wave))
     blockers.extend(release_production_window_blockers(plan, preview, next_wave))
     blockers.extend(release_production_runbook_blockers(plan, preview, next_wave))
+    blockers.extend(release_production_owner_blockers(plan, preview, next_wave))
     blockers.extend(release_diagnostics_blockers(plan))
     blockers.extend(release_rollback_policy_blockers(plan))
     blockers.extend(release_live_alert_channel_blockers(plan, db, workspace_id))
@@ -644,6 +647,7 @@ async def retry_release_run(
     blockers.extend(release_production_change_ticket_blockers(plan, preview, retry_wave))
     blockers.extend(release_production_window_blockers(plan, preview, retry_wave))
     blockers.extend(release_production_runbook_blockers(plan, preview, retry_wave))
+    blockers.extend(release_production_owner_blockers(plan, preview, retry_wave))
     blockers.extend(release_diagnostics_blockers(plan))
     blockers.extend(release_rollback_policy_blockers(plan))
     blockers.extend(release_live_alert_channel_blockers(plan, db, workspace_id))
@@ -832,6 +836,7 @@ async def dispatch_wave_steps(
     blockers.extend(release_production_change_ticket_blockers(plan, preview, wave))
     blockers.extend(release_production_window_blockers(plan, preview, wave))
     blockers.extend(release_production_runbook_blockers(plan, preview, wave))
+    blockers.extend(release_production_owner_blockers(plan, preview, wave))
     blockers.extend(release_diagnostics_blockers(plan))
     blockers.extend(release_rollback_policy_blockers(plan))
     blockers.extend(release_live_alert_channel_blockers(plan, db, workspace_id))
@@ -954,6 +959,7 @@ def release_readiness_from_plan(
     window_bypassed = release_production_window_bypassed(plan, preview, first_wave)
     runbook_blockers = release_production_runbook_blockers(plan, preview, first_wave)
     runbook_bypassed = release_production_runbook_bypassed(plan, preview, first_wave)
+    owner_blockers = release_production_owner_blockers(plan, preview, first_wave)
     diagnostic_blockers = release_diagnostics_blockers(plan)
     diagnostic_bypassed = release_diagnostics_bypassed(plan)
     rollback_blockers = release_rollback_policy_blockers(plan)
@@ -1083,6 +1089,15 @@ def release_readiness_from_plan(
             if runbook_bypassed
             else "Runbook/SOP evidence is present for the first executable wave.",
             runbook_blockers,
+        ),
+        readiness_check(
+            "owner.contact",
+            "Owner contact",
+            "blocked" if owner_blockers else "passed",
+            "Production live release requires a release owner or on-call contact."
+            if owner_blockers
+            else "Release owner/on-call contact is present for the first executable wave.",
+            owner_blockers,
         ),
         readiness_check(
             "plan.diagnostics",
@@ -1494,6 +1509,36 @@ def release_runbook_override_reason(plan: dict[str, Any]) -> str:
     ).strip()
 
 
+def release_production_owner_blockers(
+    plan: dict[str, Any],
+    preview: dict[str, Any],
+    wave: int,
+) -> list[str]:
+    if not execution_profile(plan).side_effects:
+        return []
+    settings = plan_settings_value(plan)
+    blockers: list[str] = []
+    for step in release_production_steps_for_wave(plan, preview, wave):
+        config = step_config(step)
+        if release_owner_contact(settings, config):
+            continue
+        label = str(step.get("name") or step.get("application_id") or "release step")
+        blockers.append(
+            f"{label} targets production and requires release_owner or oncall_contact before live dispatch."
+        )
+    return blockers
+
+
+def release_owner_contact(settings: dict[str, Any], config: dict[str, Any]) -> str:
+    return str(
+        config.get("release_owner")
+        or config.get("oncall_contact")
+        or settings.get("release_owner")
+        or settings.get("oncall_contact")
+        or ""
+    ).strip()
+
+
 def release_window_bounds(plan: dict[str, Any]) -> tuple[datetime | None, datetime | None]:
     settings = plan_settings_value(plan)
     start = parse_release_window_time(settings.get("release_window_start"))
@@ -1606,6 +1651,18 @@ def release_dispatch_guard_snapshot(
                 for step in production_steps
             ),
             "override_reason": release_runbook_override_reason(plan) or None,
+            "production_targets": [
+                str(step.get("application_id") or "")
+                for step in production_steps
+            ],
+        },
+        "owner": {
+            "release_owner": str(settings.get("release_owner") or "").strip() or None,
+            "oncall_contact": str(settings.get("oncall_contact") or "").strip() or None,
+            "contact_present": any(
+                bool(release_owner_contact(settings, step_config(step)))
+                for step in production_steps
+            ),
             "production_targets": [
                 str(step.get("application_id") or "")
                 for step in production_steps
