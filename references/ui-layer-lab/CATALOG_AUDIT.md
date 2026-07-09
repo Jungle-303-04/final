@@ -5,21 +5,21 @@ Last updated: 2026-07-09
 ## Current Coverage
 
 - Example files: 500
-- Exposed representative examples: 64
+- Runtime exposed examples: 500
+- Manually curated representative metadata: 64
 - Categories: 8
-- Exposed per category: 8 each
+- Exposed per category: 71, 63, 129, 42, 53, 55, 65, 22
 - Variant groups: 8
 - Archived variant ids: 63
-- Unique files covered by representative or archived ids: 104
-- Files not yet represented or archived: 396
+- Duplicate runtime ids: 0
 
 ## Status
 
 This is a recovery checkpoint, not a completion report.
 
-The previous catalog exposed only 16 examples, with every category showing exactly 2 examples. That was too aggressive for "deduplicate similar examples" and removed useful browsing diversity. The catalog now exposes 64 representative examples across the same 8 topics so the sidebar no longer looks artificially reduced.
+The previous catalog exposed only 16 examples, with every category showing exactly 2 examples. A later pass capped the page at 64 examples, 8 per category, which still misunderstood the goal. The current registry now exposes every available example file and uses the curated catalog only to provide better metadata for hand-picked representatives.
 
-The remaining 396 files still need additional catalog passes:
+The remaining catalog work is quality curation, not hiding examples:
 
 - merge truly duplicate patterns into existing representatives;
 - promote unique patterns to representative examples when they teach a different UI or interaction;
@@ -28,8 +28,16 @@ The remaining 396 files still need additional catalog passes:
 
 ## Minimum Gate For Completion
 
-- No category may expose fewer than 6 representative examples. Current catalog exposes 8 per category.
+- Runtime exposed count must equal the number of `.example.tsx` files.
+- Duplicate runtime ids must stay at 0.
 - React Flow representatives must support real node dragging and edge creation.
 - Code panels must be compact when closed and show source only when opened.
 - Light and dark mode must apply inside the preview content, not only the outer shell.
-- Unclassified files must trend down on every catalog pass.
+- Mobile and desktop layouts must have no page-level horizontal overflow.
+
+## Latest Gate
+
+- `npm run typecheck`: passed
+- `npm run build`: passed
+- `npm run visual-quality`: passed
+- Visual gate evidence: 500 exposed / 500 files, duplicate ids 0, code panel closed height 65px, React Flow drag 105px, edge count 2 -> 3, mobile overflow 0

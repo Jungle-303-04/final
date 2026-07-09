@@ -29,6 +29,7 @@ async function runGate(url) {
   const desktop = await browser.newPage({ viewport: { width: 1440, height: 1000 } });
   const mobile = await browser.newPage({ viewport: { width: 390, height: 844 } });
 
+  const catalog = await inspectCatalog();
   const light = await inspectTheme(desktop, url, "light");
   const dark = await inspectTheme(desktop, url, "dark");
   const codePanel = await inspectCodePanel(desktop);
@@ -38,10 +39,13 @@ async function runGate(url) {
   await browser.close();
 
   const counts = light.categoryCounts;
+  const exposedTotal = counts.reduce((sum, count) => sum + count, 0);
   const failures = [
     counts.length !== 8 ? `카테고리 수 ${counts.length}` : "",
     counts.some((count) => count < 6) ? `카테고리 count 부족: ${counts.join(",")}` : "",
     counts.every((count) => count === 2) ? "카테고리 count가 2로 고정됨" : "",
+    catalog.duplicateIds.length ? `중복 example id: ${catalog.duplicateIds.join(",")}` : "",
+    exposedTotal !== catalog.exampleFiles ? `노출 수 ${exposedTotal}개가 파일 수 ${catalog.exampleFiles}개와 다름` : "",
     codePanel.closedPreExists ? "닫힌 코드 패널에 pre가 남음" : "",
     !codePanel.sourceVisible ? "코드 보기 후 source line 미표시" : "",
     codePanel.closedHeight > 72 ? `닫힌 코드 패널 높이 과대: ${codePanel.closedHeight}` : "",
@@ -58,7 +62,8 @@ async function runGate(url) {
 
   return {
     categoryCounts: counts,
-    exposedTotal: counts.reduce((sum, count) => sum + count, 0),
+    exposedTotal,
+    catalog,
     codePanel,
     light,
     dark,
@@ -70,6 +75,18 @@ async function runGate(url) {
       flow: path.relative(root, path.join(outputDir, "visual-flow.png")),
       mobile: path.relative(root, path.join(outputDir, "visual-mobile.png"))
     }
+  };
+}
+
+async function inspectCatalog() {
+  const exampleDir = path.join(root, "src/examples");
+  const files = (await fs.readdir(exampleDir)).filter((file) => file.endsWith(".example.tsx"));
+  const ids = files.map((file) => file.replace(/^\d+-/, "").replace(/\.example\.tsx$/, ""));
+  const duplicateIds = [...new Set(ids.filter((id, index) => ids.indexOf(id) !== index))];
+
+  return {
+    exampleFiles: files.length,
+    duplicateIds
   };
 }
 

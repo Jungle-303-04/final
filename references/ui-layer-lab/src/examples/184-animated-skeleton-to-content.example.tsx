@@ -5,13 +5,13 @@ export default function AnimatedSkeletonToContentExample() {
 
   return (
     <div className="skeleton-swap">
-      <button className="command-trigger" onClick={() => setLoaded((value) => !value)}>
-        {loaded ? "Show Loading" : "Resolve"}
+      <button className="command-trigger stable-wide" onClick={() => setLoaded((value) => !value)} type="button">
+        {loaded ? "로딩 표시" : "결과 표시"}
       </button>
       {loaded ? (
         <article className="loaded-card">
-          <strong>Run summary ready</strong>
-          <span>3 jobs passed, 1 warning needs review.</span>
+          <strong>실행 요약 준비됨</strong>
+          <span>작업 3개 통과, 경고 1개 검토 필요.</span>
         </article>
       ) : (
         <div className="skeleton-card">
