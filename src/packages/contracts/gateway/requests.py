@@ -124,6 +124,7 @@ class AgentEvidenceRequest(StrictModel):
     metrics: dict[str, Any] = Field(default_factory=dict)
     logs: list[dict[str, Any]] = Field(default_factory=list, max_length=MAX_EVIDENCE_LOG_ENTRIES)
     traces: dict[str, Any] = Field(default_factory=dict)
+    metadata: dict[str, Any] = Field(default_factory=dict)
 
     @model_validator(mode="after")
     def _bound_payload_size(self) -> AgentEvidenceRequest:
@@ -136,6 +137,7 @@ class AgentEvidenceRequest(StrictModel):
                     "metrics": self.metrics,
                     "logs": self.logs,
                     "traces": self.traces,
+                    "metadata": self.metadata,
                 },
                 default=str,
             ).encode()
