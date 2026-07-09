@@ -670,9 +670,7 @@ def test_evidence_bundle_adds_workload_snapshot_metadata_items() -> None:
     rca_events = run_to_rca(payload, db=db, correlation_id="corr-workload-snapshot")
 
     bundle = event_by_subject(rca_events, "evidence.bundle.built").evidence_bundle
-    metadata_items = {
-        item.name: item for item in bundle.items if item.source == "metadata"
-    }
+    metadata_items = {item.name: item for item in bundle.items if item.source == "metadata"}
     snapshots = metadata_items["current_workload_snapshots"]
     snapshot = metadata_items["current_workload_snapshot"]
     assert snapshots.value["items"][0]["name"] == "checkout-api"
@@ -697,8 +695,7 @@ def test_evidence_bundle_skips_empty_change_context_metadata_item() -> None:
 
     bundle = event_by_subject(rca_events, "evidence.bundle.built").evidence_bundle
     assert all(
-        not (item.source == "metadata" and item.name == "change_context")
-        for item in bundle.items
+        not (item.source == "metadata" and item.name == "change_context") for item in bundle.items
     )
 
 
