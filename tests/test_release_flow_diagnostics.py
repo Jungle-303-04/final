@@ -2548,6 +2548,10 @@ def test_release_run_filter_supports_attention_stale_live_and_status() -> None:
     ] == ["run-verification-timeout"]
     assert [
         run["run_id"]
+        for run in release_router.filter_release_runs(runs, active_change_freeze_only=True)
+    ] == ["run-live"]
+    assert [
+        run["run_id"]
         for run in release_router.filter_release_runs(runs, change_freeze_override_only=True)
     ] == ["run-live"]
 

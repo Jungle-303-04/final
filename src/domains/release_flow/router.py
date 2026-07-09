@@ -105,6 +105,7 @@ async def list_release_runs(
     unhealthy_only: bool = Query(default=False),
     verification_failed_only: bool = Query(default=False),
     verification_pending_timeout_only: bool = Query(default=False),
+    active_change_freeze_only: bool = Query(default=False),
     change_freeze_override_only: bool = Query(default=False),
     limit: int = Query(default=50, ge=1, le=200),
     current: Any = Depends(require_session),
@@ -124,6 +125,7 @@ async def list_release_runs(
         unhealthy_only=unhealthy_only,
         verification_failed_only=verification_failed_only,
         verification_pending_timeout_only=verification_pending_timeout_only,
+        active_change_freeze_only=active_change_freeze_only,
         change_freeze_override_only=change_freeze_override_only,
     )
     return ReleaseRunListResponse(runs=runs)
@@ -3012,6 +3014,7 @@ def filter_release_runs(
     unhealthy_only: bool = False,
     verification_failed_only: bool = False,
     verification_pending_timeout_only: bool = False,
+    active_change_freeze_only: bool = False,
     change_freeze_override_only: bool = False,
 ) -> list[dict[str, Any]]:
     expected_status = str(status or "").strip().lower()
@@ -3034,6 +3037,8 @@ def filter_release_runs(
         if verification_failed_only and not release_run_has_failed_verification(run):
             continue
         if verification_pending_timeout_only and not release_run_has_timed_out_verification(run):
+            continue
+        if active_change_freeze_only and not release_run_has_active_change_freeze(run):
             continue
         if change_freeze_override_only and not release_run_has_change_freeze_override(run):
             continue
