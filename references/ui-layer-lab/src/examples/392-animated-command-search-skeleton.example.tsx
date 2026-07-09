@@ -6,19 +6,19 @@ export default function AnimatedCommandSearchSkeletonExample() {
 
   return (
     <Command className="command-dialog inline-command">
-      <Command.Input placeholder="Search remote actions..." />
+      <Command.Input placeholder="원격 액션을 검색하세요" />
       <Command.List>
         {loading ? (
-          <div className="command-loading">Loading remote actions...</div>
+          <div className="command-loading">원격 액션을 불러오는 중...</div>
         ) : (
-          <Command.Group heading="Remote">
-            <Command.Item>Open deploy log</Command.Item>
-            <Command.Item>Retry visual smoke</Command.Item>
+          <Command.Group heading="원격 액션">
+            <Command.Item>배포 로그 열기</Command.Item>
+            <Command.Item>시각 검사 재시도</Command.Item>
           </Command.Group>
         )}
       </Command.List>
-      <button className="command-trigger" onClick={() => setLoading((value) => !value)}>
-        {loading ? "Show Results" : "Show Loading"}
+      <button className="command-trigger stable-wide" onClick={() => setLoading((value) => !value)} type="button">
+        {loading ? "결과 표시" : "로딩 표시"}
       </button>
     </Command>
   );
