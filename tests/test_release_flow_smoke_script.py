@@ -79,6 +79,12 @@ class FakeClient:
             }
         if path == "/release-plans/preview":
             return {"preview": {"executable": True, "summary": "2 steps can run"}}
+        if path == "/release-readiness":
+            return {
+                "ready": True,
+                "blockers": [],
+                "checks": [{"check_id": "live.dispatch_gate", "status": "passed"}],
+            }
         if path == "/release-plans/start":
             self.release_run_status = "running"
             return {
@@ -160,3 +166,37 @@ def test_smoke_ops_rehearsal_exercises_safe_operator_actions() -> None:
     assert "/release-runs/release-run-smoke/notify" in paths
     assert paths[-1] == "/release-runs/release-run-smoke"
     assert client.release_run_status == "cancelled"
+
+
+def test_smoke_live_preflight_checks_readiness_without_starting_run() -> None:
+    smoke = load_smoke_module()
+    client = FakeClient()
+    args = smoke.parse_args(["--live-preflight"])
+
+    results = smoke.run_smoke(
+        client,
+        "ops@example.com",
+        "password",
+        demo_run=False,
+        live_preflight=True,
+        args=args,
+    )
+
+    assert all(result.ok for result in results)
+    paths = [path for _method, path, _payload in client.calls]
+    assert "/release-readiness" in paths
+    assert "/release-plans/start" not in paths
+    readiness_payload = next(
+        payload for _method, path, payload in client.calls if path == "/release-readiness"
+    )
+    assert readiness_payload is not None
+    assert readiness_payload["settings"]["runtime_mode"] == "live"
+    assert readiness_payload["settings"]["provider_mode"] == "live"
+    assert readiness_payload["settings"]["approval_granted_by"] == "release-operator"
+    assert readiness_payload["settings"]["approval_reason"] == "live preflight approval evidence"
+    assert readiness_payload["settings"]["change_ticket"] == "CHG-PREFLIGHT"
+    assert readiness_payload["settings"]["release_window_start"].endswith("Z")
+    assert readiness_payload["settings"]["release_window_end"].endswith("Z")
+    assert readiness_payload["steps"][0]["config"]["environment"] == "production"
+    assert readiness_payload["steps"][0]["config"]["namespace"] == "production"
+    assert readiness_payload["steps"][0]["config"]["approval_gate"] == "manual"

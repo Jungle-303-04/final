@@ -139,11 +139,20 @@ AUTH_PASSWORD="<admin password>" \
 python scripts/release_flow_smoke.py --ops-rehearsal
 ```
 
+live release gate를 실제 설정값으로 사전 점검하려면 `--live-preflight`를 붙인다. 이 모드는 live plan payload를 만들어 `/release-readiness`까지만 호출하고, `/release-plans/start`나 GitOps dispatch는 호출하지 않는다.
+
+```bash
+API_BASE_URL="https://k8s.woonyong.org/api" \
+AUTH_EMAIL="<admin email>" \
+AUTH_PASSWORD="<admin password>" \
+python scripts/release_flow_smoke.py --live-preflight
+```
+
 ## 아직 운영에서 추가하면 좋은 것
 - 실제 target cluster와 연결한 `live` end-to-end smoke test
 - 실패 run/DLQ/retry 지표를 대시보드나 알림 채널에 연결
 - 운영 전환 SOP: demo에서 live로 바꾸는 조건, 승인 책임자, rollback 기준
-- 운영 smoke test 확장: 실제 target 환경에서 샘플 앱 2~3개로 wave/승인/실패/rollback을 자동 점검
+- 운영 smoke test 확장: 실제 target 환경에서 샘플 앱 2~3개로 wave/승인/실패/rollback까지 자동 점검
 
 ## 운영 요약 신호
 `GET /release-runs/summary`는 단순 status breakdown 외에 운영자가 바로 볼 수 있는 파생 카운터를 내려준다.
