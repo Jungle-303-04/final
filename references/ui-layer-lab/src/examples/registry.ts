@@ -63,6 +63,7 @@ const titleWords: Record<string, string> = {
   node: "노드",
   overlay: "오버레이",
   panel: "패널",
+  palette: "팔레트",
   pills: "칩",
   progress: "진행률",
   react: "React",

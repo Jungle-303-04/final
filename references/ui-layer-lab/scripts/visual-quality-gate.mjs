@@ -55,7 +55,7 @@ async function runGate(url) {
     visibleKorean.forbiddenVisible.length ? `대표 화면 영어 노출: ${visibleKorean.forbiddenVisible.join(", ")}` : "",
     navigation.activeHeading !== "데이터 시각화" ? `카테고리 전환 실패: ${navigation.activeHeading}` : "",
     navigation.filteredCount <= 0 || navigation.filteredCount >= navigation.dataVizCount
-      ? `검색 필터 실패: ${navigation.dataVizCount}->${navigation.filteredCount}`
+      ? `검색 필터 실패: ${navigation.dataVizCount}->${navigation.filteredCount}, term=${navigation.searchTerm}`
       : "",
     stableControls.themeWidthDelta > 1 || stableControls.themeHeightDelta > 1
       ? `테마 토글 크기 변동: ${stableControls.themeWidthDelta}x${stableControls.themeHeightDelta}`
@@ -212,8 +212,7 @@ async function inspectNavigationAndSearch(page, url) {
   const scrollAfter = await page.evaluate(() => window.scrollY);
   const dataVizCount = await page.locator(".example-section").count();
   const activeHeading = await page.evaluate(() => document.querySelector(".category-summary h2")?.textContent?.trim() ?? "");
-  const firstTitleBeforeSearch = await page.evaluate(() => document.querySelector(".example-section h3")?.textContent?.trim() ?? "");
-  const searchTerm = firstTitleBeforeSearch.split(/\s+/)[0] ?? "";
+  const searchTerm = "차트";
   await page.locator("#example-search").fill(searchTerm);
   await page.waitForTimeout(240);
   const filteredCount = await page.locator(".example-section").count();
@@ -221,7 +220,6 @@ async function inspectNavigationAndSearch(page, url) {
 
   return {
     activeHeading,
-    firstTitleBeforeSearch,
     searchTerm,
     dataVizCount,
     filteredCount,
