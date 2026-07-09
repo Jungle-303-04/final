@@ -63,6 +63,7 @@
 - live release dispatch/start/advance/retry는 `require_diagnostics_pass`가 켜져 있으면 deterministic release diagnostics의 error/warning이 없어야 실제 GitOps 이벤트 발행을 허용한다.
 - live release에서 `require_diagnostics_pass=false`로 diagnostics gate를 우회하려면 `diagnostics_override_reason`을 남겨야 한다.
 - live release에서 `rollback_policy=disabled`로 rollback을 끄려면 `rollback_override_reason`을 남겨야 한다.
+- live production release는 change ticket이 필요하며, ticket 없이 진행하려면 `production_change_override_reason`을 남겨야 한다.
 - live dispatch step/audit details에는 diagnostics gate, override reason, alert validation window, validated alert channel snapshot을 `release_guard`로 남긴다.
 - saved alert channel test results keep `last_tested_at`, status, detail, and HTTP status code so operators can see whether a channel was recently validated.
 - active run/plan 삭제는 기본 차단하고 `force=true`를 명시해야 한다.
@@ -85,6 +86,7 @@
 - live gate 입력: plan/step 단위 approval granted, change ticket, Safe PR URL/ready 값을 UI에서 설정
 - diagnostics override 입력: diagnostics gate를 끄는 경우 운영 사유를 UI에서 입력
 - rollback override 입력: rollback policy를 disabled로 두는 경우 운영 사유를 UI에서 입력
+- production change override 입력: live production release에서 change ticket 없이 진행하는 경우 운영 사유를 UI에서 입력
 - release alerts panel: `/release-flows`에서 alert channel 개수/활성 채널/severity 요약을 확인하고 `/settings/alerts`로 이동
 - alert channel validation: 저장된 alert channel의 마지막 테스트 통과/실패와 검증 시각을 `/settings/alerts` 목록에서 확인
 - release approval card: waiting approval step에 기존 approval grant/reject UI를 노출하고 승인 후 release run/audit query 갱신

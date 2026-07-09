@@ -624,6 +624,11 @@ function PolicyEditor({ plan, setPolicy }: { plan: ReleasePlan; setPolicy: (patc
           <input className="input" value={getStringArray(settings.environment_order).join(', ')} onChange={e => setPolicy({ environment_order: splitList(e.target.value) })} />
         </Field>
         <Field label="Change ticket"><input className="input" value={getString(settings.change_ticket)} onChange={e => setPolicy({ change_ticket: e.target.value })} /></Field>
+        {getString(settings.runtime_mode, 'demo') === 'live' && !getString(settings.change_ticket).trim() && (
+          <Field label="Production change override reason">
+            <input className="input" value={getString(settings.production_change_override_reason)} onChange={e => setPolicy({ production_change_override_reason: e.target.value })} />
+          </Field>
+        )}
         <Field label="Safe PR URL"><input className="input" value={getString(settings.safe_pr_url)} onChange={e => setPolicy({ safe_pr_url: e.target.value, safe_pr_ready: Boolean(e.target.value.trim()) })} /></Field>
         <label className="release-flow__check">
           <input type="checkbox" checked={Boolean(settings.require_diagnostics_pass)} onChange={e => setPolicy({ require_diagnostics_pass: e.target.checked })} />
