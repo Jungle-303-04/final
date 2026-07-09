@@ -14,7 +14,7 @@ from domains.release_flow.projection import (
     release_failure_evidence_request,
     release_workflow_update_from_event,
 )
-from domains.release_flow.repository import ReleaseFlowRepository
+from domains.release_flow.repository import ReleaseFlowRepository, merge_projection_details
 from packages.contracts.event_bus.interfaces import EventEnvelope
 
 
@@ -209,6 +209,84 @@ def test_release_workflow_failed_builds_operational_alert() -> None:
     assert alert.workflow_run_id == "workflow-1"
     assert alert.reason == "release workflow failed"
     assert alert.message == "app-a: rollout health failed"
+
+
+def test_release_verification_job_update_projects_guard_result() -> None:
+    update = release_workflow_update_from_event(
+        _evt(
+            "evidence.job.updated",
+            {
+                "workspace_id": "workspace-a",
+                "workflow_run_id": "workflow-1",
+                "job_id": "release-verification-a",
+                "provider_key": "http_probe",
+                "status": "failed",
+                "source_id": "post-deploy-verification",
+                "evidence_key": "plan-a:wave-1:checkout:post-deploy-verification",
+                "error": "HTTP 503",
+                "result": {"status_code": 503, "latency_ms": 1200},
+            },
+        )
+    )
+
+    assert update is not None
+    assert update["health_status"] == "unhealthy"
+    assert update["event_type"] == "evidence.job.updated"
+    jobs = update["details"]["release_guard"]["verification_jobs"]["jobs"]
+    assert jobs == [
+        {
+            "job_id": "release-verification-a",
+            "kind": "http_probe",
+            "status": "failed",
+            "evidence_key": "plan-a:wave-1:checkout:post-deploy-verification",
+            "workflow_run_id": "workflow-1",
+            "result": {"status_code": 503, "latency_ms": 1200},
+            "error": "HTTP 503",
+        }
+    ]
+
+
+def test_merge_projection_details_updates_existing_verification_job() -> None:
+    current = {
+        "release_guard": {
+            "verification_jobs": {
+                "scheduled": True,
+                "job_count": 1,
+                "jobs": [
+                    {
+                        "job_id": "release-verification-a",
+                        "application_id": "checkout",
+                        "kind": "http_probe",
+                        "status": "pending",
+                        "target": {"url": "https://status.example.com/checkout"},
+                    }
+                ],
+            }
+        }
+    }
+    incoming = {
+        "release_guard": {
+            "verification_jobs": {
+                "jobs": [
+                    {
+                        "job_id": "release-verification-a",
+                        "status": "failed",
+                        "result": {"status_code": 503},
+                        "error": "HTTP 503",
+                    }
+                ]
+            }
+        }
+    }
+
+    merged = merge_projection_details(current, incoming)
+
+    job = merged["release_guard"]["verification_jobs"]["jobs"][0]
+    assert job["application_id"] == "checkout"
+    assert job["target"] == {"url": "https://status.example.com/checkout"}
+    assert job["status"] == "failed"
+    assert job["result"] == {"status_code": 503}
+    assert job["error"] == "HTTP 503"
 
 
 def test_release_approval_requested_builds_warning_alert() -> None:
