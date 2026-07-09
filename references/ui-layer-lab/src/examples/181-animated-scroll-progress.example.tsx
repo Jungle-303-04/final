@@ -1,6 +1,6 @@
 import { useState } from "react";
 
-const rows = Array.from({ length: 18 }, (_, index) => `event ${String(index + 1).padStart(2, "0")} · workflow log line`);
+const rows = Array.from({ length: 18 }, (_, index) => `이벤트 ${String(index + 1).padStart(2, "0")} · 워크플로 로그 줄`);
 
 export default function AnimatedScrollProgressExample() {
   const [progress, setProgress] = useState(0);

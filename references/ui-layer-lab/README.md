@@ -22,8 +22,8 @@ src/
   components/             # viewer, code panel, sidebar, theme toggle
   styles/                 # token, layout, viewer, motion, example style
   examples/
-    catalog.ts            # 노출 대표 예제 metadata
-    registry.ts           # catalog 기반 lazy 등록
+    catalog.ts            # 수동 품질 metadata와 통합 후보
+    registry.ts           # 모든 example 파일을 lazy 등록
     types.ts
     01-command-basic.example.tsx
     ...
@@ -31,7 +31,7 @@ src/
 
 ## 예제 추가 방법
 
-`src/examples/12-my-example.example.tsx` 파일을 추가한 뒤 `catalog.ts`에 대표 예제로 등록하거나 기존 대표 예제의 `variantIds`로 묶습니다.
+`src/examples/12-my-example.example.tsx` 파일을 추가하면 registry가 자동으로 화면에 노출합니다. `catalog.ts`는 수동 카테고리/검색어/통합 후보 metadata가 필요할 때만 보강합니다.
 
 ```tsx
 export default function MyExample() {
@@ -39,11 +39,11 @@ export default function MyExample() {
 }
 ```
 
-파일명 앞 숫자는 참조용 순서가 되고, 화면 노출 여부는 `catalog.ts`가 결정합니다. 예제 파일 안에는 실제 예제 코드만 둡니다.
+파일명 앞 숫자는 참조용 순서가 됩니다. 예제 파일 안에는 실제 예제 코드만 두고, 같은 패턴은 새 파일을 숨기는 대신 가장 가까운 예제에 통합하거나 `variantGroups`에 기록합니다.
 
 ## 포함된 예제
 
-현재 500개 예제 파일 중 64개 대표 예제를 노출합니다. 나머지는 archive/variant 후보로 유지합니다.
+현재 500개 예제 파일을 모두 노출합니다. 64개 수동 catalog 항목은 검색/설명 품질을 높이는 metadata일 뿐 노출 제한이 아닙니다.
 
 - 명령 팔레트와 오버레이
 - AI 입력, 스트리밍, 근거, 도구 승인

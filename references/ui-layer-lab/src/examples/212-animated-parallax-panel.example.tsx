@@ -9,7 +9,7 @@ export default function AnimatedParallaxPanelExample() {
       <div className="parallax-stage">
         <span style={{ transform: `translateY(${offset * 0.2}px)` }} />
         <span style={{ transform: `translateY(${offset * 0.45}px)` }} />
-        <strong style={{ transform: `translateY(${-offset * 0.35}px)` }}>Scroll-linked layer</strong>
+        <strong style={{ transform: `translateY(${-offset * 0.35}px)` }}>스크롤 연동 레이어</strong>
       </div>
     </div>
   );

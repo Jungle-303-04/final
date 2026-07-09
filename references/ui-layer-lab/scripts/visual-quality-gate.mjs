@@ -527,6 +527,42 @@ async function inspectSourceEnglishGuard() {
       fragments: ["Project name is required", "Fill the highlighted field", "Project created", "Project name", ">Create<"]
     },
     {
+      file: "src/examples/180-sonner-deep-link-toast.example.tsx",
+      fragments: ["Run finished", 'label: "Open"', "Toast action updates", "Show Toast"]
+    },
+    {
+      file: "src/examples/181-animated-scroll-progress.example.tsx",
+      fragments: ["event ${String", "workflow log line"]
+    },
+    {
+      file: "src/examples/182-animated-shared-indicator.example.tsx",
+      fragments: ['"Summary"', '"Logs"', '"Artifacts"', "selected"]
+    },
+    {
+      file: "src/examples/183-animated-drag-card.example.tsx",
+      fragments: ["Drag me"]
+    },
+    {
+      file: "src/examples/185-animated-view-transition-tabs.example.tsx",
+      fragments: ["Timeline", "Queued", "Pulled", "Built", "Review", "comments", "suggestion", "blockers"]
+    },
+    {
+      file: "src/examples/186-ai-model-picker-chat.example.tsx",
+      fragments: ["Explain failure", "Suggest patch", "Summarize run", "Choose a model and prompt", ">Fast<", ">Reasoning<", ">Code<"]
+    },
+    {
+      file: "src/examples/187-ai-attachment-preview.example.tsx",
+      fragments: ["Prompt attachments", "Explain the failure using", "no files"]
+    },
+    {
+      file: "src/examples/188-ai-reasoning-collapse.example.tsx",
+      fragments: ["Read workflow logs", "Compare failing step", "Draft smallest patch", ">Hide<", ">Show<", "Reasoning collapsed"]
+    },
+    {
+      file: "src/examples/189-ai-tool-result-card.example.tsx",
+      fragments: ["Tool has not run", "Tool call", "Tool returned 2 changed hunks", "Result attached to chat", ">Run<", ">Attach<"]
+    },
+    {
       file: "src/examples/198-react-flow-helper-lines.example.tsx",
       fragments: ['label: "Source"', 'label: "Target"', ">Hide<", ">Show<", "Helper Lines"]
     },
@@ -573,6 +609,86 @@ async function inspectSourceEnglishGuard() {
     {
       file: "src/examples/209-sonner-autosave-status.example.tsx",
       fragments: ["Draft note", "Saving...", "Saved just now", "Autosaved"]
+    },
+    {
+      file: "src/examples/210-sonner-rate-limit.example.tsx",
+      fragments: ["Rate limit reached", "attempts remaining", "Run Action"]
+    },
+    {
+      file: "src/examples/211-animated-exit-list.example.tsx",
+      fragments: ["Complete First", ">running<", '"lint"', '"typecheck"', '"build"', '"smoke"']
+    },
+    {
+      file: "src/examples/212-animated-parallax-panel.example.tsx",
+      fragments: ["Scroll-linked layer"]
+    },
+    {
+      file: "src/examples/213-animated-step-morph.example.tsx",
+      fragments: ['"Idle"', '"Running"', '"Done"', "Next State"]
+    },
+    {
+      file: "src/examples/214-animated-countdown-ring.example.tsx",
+      fragments: ["#fafafa", "#27272a", ">Tick<"]
+    },
+    {
+      file: "src/examples/215-animated-reorder-grid.example.tsx",
+      fragments: [">Rotate<", "layout slot"]
+    },
+    {
+      file: "src/examples/216-ai-stream-controls.example.tsx",
+      fragments: ["Assistant stream", "Streaming paused", "Generating explanation", ">Resume<", ">Pause<"]
+    },
+    {
+      file: "src/examples/217-ai-memory-toggle.example.tsx",
+      fragments: ["repo conventions", "preferred branch", "test command", "Memory context", "memories attached"]
+    },
+    {
+      file: "src/examples/218-ai-suggestion-cards.example.tsx",
+      fragments: ["Explain logs", "Create patch", "Open failing file", "selected</span>"]
+    },
+    {
+      file: "src/examples/219-ai-agent-handoff-map.example.tsx",
+      fragments: ["Planner", "Coder", "Reviewer", ">active<", ">waiting<"]
+    },
+    {
+      file: "src/examples/220-ai-error-recovery-panel.example.tsx",
+      fragments: ["Tool call failed", "AI recovery", "Recovery prompt queued", "Retry With Context"]
+    },
+    {
+      file: "src/examples/221-job-concurrency-limit.example.tsx",
+      fragments: ['"build"', '"test"', '"deploy"', '"smoke"', ">running<", ">queued<", "Toggle Limit"]
+    },
+    {
+      file: "src/examples/222-job-secret-mask.example.tsx",
+      fragments: [">Mask<", ">Reveal<", "Safe Value"]
+    },
+    {
+      file: "src/examples/223-job-deployment-gates.example.tsx",
+      fragments: ['"review"', '"staging"', '"production"', ">approved<", ">waiting<", ">Approve<"]
+    },
+    {
+      file: "src/examples/224-job-log-bookmarks.example.tsx",
+      fragments: ["install dependencies", "run build", "visual smoke failed", "upload artifacts", "bookmarks</span>"]
+    },
+    {
+      file: "src/examples/225-job-result-summary-tabs.example.tsx",
+      fragments: ["Passed", "Failed", "Skipped", "checks passed", "jobs skipped"]
+    },
+    {
+      file: "src/examples/226-drilldown-query-builder.example.tsx",
+      fragments: ['"status"', '"owner"', '"branch"', ">Query<", "Click a field"]
+    },
+    {
+      file: "src/examples/227-drilldown-permission-scope.example.tsx",
+      fragments: ["Admin", "Member", "Guest", "secrets", "billing"]
+    },
+    {
+      file: "src/examples/228-heatmap-threshold-editor.example.tsx",
+      fragments: ["Hot threshold"]
+    },
+    {
+      file: "src/examples/229-heatmap-selection-summary.example.tsx",
+      fragments: ["selected</strong>", "Total {selected"]
     }
   ];
   const matches = [];
@@ -813,6 +929,16 @@ async function inspectEnglishSamples(page, url) {
     ["작업 진행/로그", "example-sonner-bulk-result"],
     ["작업 진행/로그", "example-sonner-network-reconnect"],
     ["작업 진행/로그", "example-sonner-validation-stack"],
+    ["작업 진행/로그", "example-sonner-deep-link-toast"],
+    ["모션/상태 전환", "example-animated-scroll-progress"],
+    ["모션/상태 전환", "example-animated-shared-indicator"],
+    ["모션/상태 전환", "example-animated-drag-card"],
+    ["모션/상태 전환", "example-animated-skeleton-to-content"],
+    ["모션/상태 전환", "example-animated-view-transition-tabs"],
+    ["AI 작업 레이어", "example-ai-model-picker-chat"],
+    ["AI 작업 레이어", "example-ai-attachment-preview"],
+    ["AI 작업 레이어", "example-ai-reasoning-collapse"],
+    ["AI 작업 레이어", "example-ai-tool-result-card"],
     ["플로우 빌더", "example-react-flow-helper-lines"],
     ["플로우 빌더", "example-react-flow-copy-paste"],
     ["플로우 빌더", "example-react-flow-dark-mode-toggle"],
@@ -824,7 +950,27 @@ async function inspectEnglishSamples(page, url) {
     ["작업 진행/로그", "example-sonner-upload-progress"],
     ["작업 진행/로그", "example-sonner-destructive-confirm"],
     ["작업 진행/로그", "example-sonner-snooze-reminder"],
-    ["작업 진행/로그", "example-sonner-autosave-status"]
+    ["작업 진행/로그", "example-sonner-autosave-status"],
+    ["작업 진행/로그", "example-sonner-rate-limit"],
+    ["모션/상태 전환", "example-animated-exit-list"],
+    ["모션/상태 전환", "example-animated-parallax-panel"],
+    ["모션/상태 전환", "example-animated-step-morph"],
+    ["모션/상태 전환", "example-animated-countdown-ring"],
+    ["모션/상태 전환", "example-animated-reorder-grid"],
+    ["AI 작업 레이어", "example-ai-stream-controls"],
+    ["AI 작업 레이어", "example-ai-memory-toggle"],
+    ["AI 작업 레이어", "example-ai-suggestion-cards"],
+    ["AI 작업 레이어", "example-ai-agent-handoff-map"],
+    ["AI 작업 레이어", "example-ai-error-recovery-panel"],
+    ["작업 진행/로그", "example-job-concurrency-limit"],
+    ["작업 진행/로그", "example-job-secret-mask"],
+    ["작업 진행/로그", "example-job-deployment-gates"],
+    ["작업 진행/로그", "example-job-log-bookmarks"],
+    ["작업 진행/로그", "example-job-result-summary-tabs"],
+    ["드릴다운 탐색", "example-drilldown-query-builder"],
+    ["드릴다운 탐색", "example-drilldown-permission-scope"],
+    ["데이터 시각화", "example-heatmap-threshold-editor"],
+    ["데이터 시각화", "example-heatmap-selection-summary"]
   ];
   const forbidden = /\b(Open|Close|Show|Hide|Search|Loading|Current|Selected|Dashboard|Create|Cancel|Retry|Next|Previous|Expand|Collapse|Focus|Input|Logs|Answer|Status|Resources|Jobs|Steps|Command|Filter|Recent|Approval|Matrix|Launch|Health|Edge|Done|Running|Failed|Pending|Allowed|Blocked|Owner|Online|Offline|Reconnect|Confirm|Delete|Danger|Safe|Ready|Exportable|Draft|Save)\b/i;
   const violations = [];

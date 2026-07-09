@@ -5,10 +5,10 @@ export default function AnimatedCountdownRingExample() {
 
   return (
     <div className="phase-ring-card">
-      <div className="phase-ring" style={{ background: `conic-gradient(#fafafa ${value}%, #27272a 0)` }}>
+      <div className="phase-ring" style={{ background: `conic-gradient(var(--accent) ${value}%, var(--border) 0)` }}>
         <span>{value}%</span>
       </div>
-      <button className="command-trigger" onClick={() => setValue((item) => (item <= 12 ? 100 : item - 12))}>Tick</button>
+      <button className="command-trigger stable-wide" onClick={() => setValue((item) => (item <= 12 ? 100 : item - 12))} type="button">시간 진행</button>
     </div>
   );
 }

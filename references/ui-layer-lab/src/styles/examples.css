@@ -667,6 +667,143 @@
   border-color: color-mix(in srgb, var(--orange) 55%, var(--border));
 }
 
+.scroll-progress-card,
+.shared-indicator-card,
+.ai-prompt-card,
+.reasoning-card,
+.tool-call-card {
+  border-color: var(--border);
+  background: var(--panel);
+}
+
+.ai-prompt-card select {
+  background: var(--panel-soft);
+}
+
+.shared-tabs {
+  background: var(--panel-soft);
+}
+
+.shared-tabs > span {
+  background: var(--surface-raised);
+}
+
+.shared-tabs button {
+  min-height: var(--control-height-md);
+  line-height: var(--line-button);
+  white-space: nowrap;
+}
+
+.shared-tabs button[aria-pressed="true"] {
+  color: var(--text);
+}
+
+.drag-stage {
+  background: var(--panel-soft);
+}
+
+.drag-card {
+  border-color: var(--border-strong);
+  background: var(--panel);
+  line-height: var(--line-button);
+}
+
+.drag-card.dragging {
+  border-color: var(--focus);
+}
+
+.skeleton-swap {
+  width: min(620px, 100%);
+}
+
+.skeleton-swap-frame {
+  display: grid;
+  width: 100%;
+  min-height: 214px;
+}
+
+.skeleton-layer {
+  grid-area: 1 / 1;
+  opacity: 0;
+  pointer-events: none;
+  transition:
+    opacity var(--motion-duration-base) var(--motion-ease-standard),
+    transform var(--motion-duration-base) var(--motion-ease-emphasized);
+  transform: translateY(var(--motion-distance-sm));
+}
+
+.skeleton-layer.is-visible {
+  opacity: 1;
+  pointer-events: auto;
+  transform: translateY(0);
+}
+
+.skeleton-swap-frame .skeleton-card,
+.skeleton-swap-frame .loaded-card {
+  width: 100%;
+  min-height: 214px;
+}
+
+.tool-call-actions button {
+  min-width: var(--control-min-width);
+  min-height: var(--control-height-sm);
+  line-height: var(--line-button);
+  white-space: nowrap;
+}
+
+.parallax-card,
+.morph-card,
+.suggestion-card-grid,
+.handoff-map,
+.retry-card,
+.context-chip-card,
+.stage-accordion section {
+  border-color: var(--border);
+  background: var(--panel);
+}
+
+.parallax-card input[type="range"],
+.threshold-heatmap input[type="range"] {
+  accent-color: var(--accent);
+}
+
+.parallax-stage,
+.morph-box,
+.secret-log button,
+.terminal-log button,
+.suggestion-card-grid button,
+.handoff-map button {
+  color: var(--text);
+  background: var(--panel-soft);
+}
+
+.parallax-stage span {
+  background: var(--border);
+}
+
+.parallax-stage span:nth-child(2),
+.morph-box.state-1 {
+  background: var(--surface-raised);
+}
+
+.morph-box.state-2 {
+  border-color: color-mix(in srgb, var(--green) 52%, var(--border));
+}
+
+.suggestion-card-grid button.active,
+.handoff-map button.active,
+.parallel-lanes section.active,
+.focus-ring-grid button.active,
+.heat-cell.selected {
+  border-color: var(--border-strong);
+  background: var(--surface-raised);
+}
+
+.small-heatmap-grid .heat-cell {
+  min-height: var(--control-height-md);
+  line-height: var(--line-button);
+}
+
 @media (max-width: 720px) {
   .snap-drawer-toolbar,
   .treemap-header,
