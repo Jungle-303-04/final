@@ -10,6 +10,7 @@ from sqlalchemy.dialects import postgresql
 
 from domains.release_flow.projection import (
     evidence_queued_update,
+    release_alert_request,
     release_failure_evidence_request,
     release_workflow_update_from_event,
 )
@@ -180,6 +181,57 @@ def test_release_workflow_failed_requests_agent_evidence_jobs() -> None:
     queued = evidence_queued_update(update, {"accepted": True, "queued": 4})
     assert queued["event_type"] == "evidence.queued"
     assert queued["details"] == {"evidence": {"accepted": True, "queued": 4}}
+
+
+def test_release_workflow_failed_builds_operational_alert() -> None:
+    update = release_workflow_update_from_event(
+        _evt(
+            "workflow.run.failed",
+            {
+                "workspace_id": "workspace-a",
+                "workflow_run_id": "workflow-1",
+                "application_id": "app-a",
+                "cluster_id": "target",
+                "reason": "rollout health failed",
+            },
+        )
+    )
+
+    assert update is not None
+    alert = release_alert_request(update)
+
+    assert alert is not None
+    assert alert.workspace_id == "workspace-a"
+    assert alert.cluster_id == "target"
+    assert alert.namespace == "target"
+    assert alert.severity == "critical"
+    assert alert.application_id == "app-a"
+    assert alert.workflow_run_id == "workflow-1"
+    assert alert.reason == "release workflow failed"
+    assert alert.message == "app-a: rollout health failed"
+
+
+def test_release_approval_requested_builds_warning_alert() -> None:
+    update = release_workflow_update_from_event(
+        _evt(
+            "approval.requested",
+            {
+                "workspace_id": "workspace-a",
+                "workflow_run_id": "workflow-1",
+                "application_id": "app-a",
+                "approval_id": "approval-1",
+                "reason": "production requires approval",
+            },
+        )
+    )
+
+    assert update is not None
+    alert = release_alert_request(update)
+
+    assert alert is not None
+    assert alert.severity == "warning"
+    assert alert.reason == "release approval requested"
+    assert alert.message == "app-a: production requires approval"
 
 
 def test_release_workflow_failed_uses_projected_step_for_evidence_target() -> None:
@@ -684,8 +736,13 @@ def test_release_flow_worker_projects_failure_and_queues_evidence() -> None:
         db=db,
     )
 
-    assert subjects_of(outs) == ["evidence.jobs.queued"]
-    queued = outs[0]
+    assert subjects_of(outs) == ["alert.requested", "evidence.jobs.queued"]
+    alert = outs[0]
+    assert alert.workspace_id == "workspace-a"
+    assert alert.cluster_id == "target"
+    assert alert.severity == "critical"
+    assert alert.message == "app-a: rollout health failed"
+    queued = outs[1]
     assert queued.workspace_id == "workspace-a"
     assert queued.cluster_id == "target"
     assert queued.source_id == "release-workflow-failure"

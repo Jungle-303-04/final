@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from collections.abc import AsyncIterator
+
 from domains.command.events import (
     CommandCompletedBody,
     CommandDispatchedBody,
@@ -35,6 +37,7 @@ from domains.rca.events import (
 )
 from domains.release_flow.projection import (
     evidence_queued_update,
+    release_alert_request,
     release_failure_evidence_request,
     release_workflow_update_from_event,
 )
@@ -87,9 +90,10 @@ app = App("release-flow-worker")
 async def on_event(
     evt: EventBody | EventEnvelope,
     ctx: EventContext[ReleaseFlowStore],
-) -> EventBody | None:
+) -> AsyncIterator[EventBody]:
     envelope = evt if isinstance(evt, EventEnvelope) else envelope_from_body(evt, ctx)
-    return await project_event(envelope, ctx)
+    async for body in project_event(envelope, ctx):
+        yield body
 
 
 def envelope_from_body(evt: EventBody, ctx: EventContext[ReleaseFlowStore]) -> EventEnvelope:
@@ -107,19 +111,22 @@ def envelope_from_body(evt: EventBody, ctx: EventContext[ReleaseFlowStore]) -> E
 async def project_event(
     evt: EventEnvelope,
     ctx: EventContext[ReleaseFlowStore],
-) -> EventBody | None:
+) -> AsyncIterator[EventBody]:
     update = release_workflow_update_from_event(evt)
     if update is None:
-        return None
+        return
     projected = await ctx.db.project_release_workflow_event(update)
+    alert_request = release_alert_request(update, projected)
+    if alert_request is not None:
+        yield alert_request
     evidence_request = release_failure_evidence_request(update, projected)
     if projected is None or evidence_request is None:
-        return None
+        return
     queued = await ctx.db.queue_evidence_jobs(**evidence_request)
     if queued:
         await ctx.db.project_release_workflow_event(evidence_queued_update(update, queued))
-        return evidence_jobs_queued_body(evidence_request, queued)
-    return None
+        yield evidence_jobs_queued_body(evidence_request, queued)
+    return
 
 
 def evidence_jobs_queued_body(
