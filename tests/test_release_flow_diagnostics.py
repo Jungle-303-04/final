@@ -406,7 +406,7 @@ def test_release_readiness_reports_blockers_and_operational_warnings(monkeypatch
     assert response.mode == "live"
     assert any("Live release dispatch is disabled" in item for item in response.blockers)
     assert any("Checkout is missing image" in item for item in response.blockers)
-    assert any("No enabled alert channel" in item for item in response.warnings)
+    assert any("requires at least one enabled alert channel" in item for item in response.blockers)
     assert any("cannot be retried" in item for item in response.warnings)
 
 
@@ -752,9 +752,10 @@ def test_release_run_filter_supports_attention_stale_live_and_status() -> None:
 
 
 class ReleaseDispatchDb:
-    def __init__(self) -> None:
+    def __init__(self, *, channels: list[dict[str, object]] | None = None) -> None:
         self.dispatched: list[dict[str, object]] = []
         self.active_plan_ids: set[str] = set()
+        self.channels = channels or []
 
     def get_application(self, _workspace_id: str, _application_id: str) -> dict[str, object]:
         return {
@@ -769,6 +770,11 @@ class ReleaseDispatchDb:
 
     def has_active_release_runs(self, _workspace_id: str, plan_id: str) -> bool:
         return plan_id in self.active_plan_ids
+
+    def list_alert_channels(self, _workspace_id: str, *, only_enabled: bool = False) -> list[dict[str, object]]:
+        if only_enabled:
+            return [channel for channel in self.channels if channel.get("enabled", True)]
+        return self.channels
 
 
 class MissingApplicationDispatchDb(ReleaseDispatchDb):
@@ -1595,7 +1601,7 @@ def test_dispatch_wave_steps_blocks_live_without_backend_gate(monkeypatch) -> No
     assert db.dispatched == []
 
 
-def test_dispatch_wave_steps_publishes_live_when_backend_gate_allows(monkeypatch) -> None:
+def test_dispatch_wave_steps_blocks_live_without_alert_channel(monkeypatch) -> None:
     monkeypatch.setenv("RELEASE_FLOW_LIVE_ENABLED", "1")
     monkeypatch.setenv("RELEASE_FLOW_LIVE_WORKSPACES", "workspace-a")
     plan = {
@@ -1619,6 +1625,56 @@ def test_dispatch_wave_steps_publishes_live_when_backend_gate_allows(monkeypatch
     }
     preview = build_release_plan_preview(plan)
     db = ReleaseDispatchDb()
+    events = AcceptingEventGateway()
+    current = SimpleNamespace(user_id="user-a", roles=("operator",))
+
+    with pytest.raises(HTTPException) as raised:
+        asyncio.run(
+            release_router.dispatch_wave_steps(
+                plan,
+                preview,
+                1,
+                "workspace-a",
+                current,
+                db,
+                events,
+                run_id="run-a",
+            )
+        )
+
+    assert raised.value.status_code == 409
+    assert any(
+        "requires at least one enabled alert channel" in blocker
+        for blocker in raised.value.detail["blockers"]
+    )
+    assert events.calls == []
+    assert db.dispatched == []
+
+
+def test_dispatch_wave_steps_publishes_live_when_backend_gate_allows(monkeypatch) -> None:
+    monkeypatch.setenv("RELEASE_FLOW_LIVE_ENABLED", "1")
+    monkeypatch.setenv("RELEASE_FLOW_LIVE_WORKSPACES", "workspace-a")
+    plan = {
+        "plan_id": "plan-a",
+        "name": "storefront",
+        "settings": {"runtime_mode": "live", "approval_policy": "auto_safe"},
+        "steps": [
+            {
+                "step_id": "step-a",
+                "application_id": "app-a",
+                "name": "checkout",
+                "config": {
+                    "repo_ref": "org/app-a",
+                    "branch": "main",
+                    "commit_sha": "abc123",
+                    "image": "ghcr.io/example/app-a:v2",
+                    "manifest_path": "deploy/app.yaml",
+                },
+            }
+        ],
+    }
+    preview = build_release_plan_preview(plan)
+    db = ReleaseDispatchDb(channels=[{"channel_id": "chan-a", "enabled": True}])
     events = AcceptingEventGateway()
     current = SimpleNamespace(user_id="user-a", roles=("operator",))
     monkeypatch.setattr(release_router, "require_cluster_access", lambda *_args, **_kwargs: None)
