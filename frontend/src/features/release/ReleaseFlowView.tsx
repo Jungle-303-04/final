@@ -1105,6 +1105,7 @@ function RunPanel({
   const githubUrl = getString(run.github.release_url);
   const runtimeMode = getString(run.settings.runtime_mode, getString(run.settings.provider_mode, 'demo'));
   const sideEffects = runtimeMode === 'live';
+  const rollbackPolicy = getString(run.rollback.policy, getString(run.settings.rollback_policy));
   const canForceDelete = ['running', 'paused', 'rollback_requested', 'waiting_for_approval'].includes(status);
   const canRetry = status === 'failed' || run.steps.some(step => step.health.status === 'unhealthy' || step.status === 'failed');
   const attention = recordValue(run.attention);
@@ -1114,6 +1115,23 @@ function RunPanel({
   const alertable = attentionRequired || stale;
   const notifyAction = handoffQ.data?.next_actions.find(action => action.action === 'notify');
   const notifyBlockedReason = notifyAction?.enabled === false ? getString(notifyAction.reason) : '';
+  const busyReason = busy ? 'Another release action is already running.' : '';
+  const terminalReason = isTerminal ? `Run is already ${status}.` : '';
+  const advanceBlockedReason = firstReason(busyReason, status === 'paused' ? 'Resume the paused run before advancing.' : '', terminalReason);
+  const retryBlockedReason = firstReason(busyReason, !canRetry ? 'Retry is available only when the run or a step failed or is unhealthy.' : '');
+  const pauseBlockedReason = firstReason(busyReason, terminalReason);
+  const rollbackBlockedReason = firstReason(
+    busyReason,
+    terminalReason,
+    rollbackPolicy === 'disabled' ? 'Rollback policy is disabled for this release run.' : '',
+  );
+  const cancelBlockedReason = firstReason(busyReason, terminalReason);
+  const notifyDisabledReason = firstReason(
+    busyReason,
+    notifyBlockedReason,
+    !alertable ? 'Notify is available only when the run needs attention or is stale.' : '',
+  );
+  const deleteBlockedReason = firstReason(busyReason);
   return (
     <Card
       title="Release run"
@@ -1160,11 +1178,12 @@ function RunPanel({
         <div className="release-flow__toolbar release-flow__toolbar--preview">
           {githubUrl && <a href={githubUrl} target="_blank" rel="noreferrer"><Button size="sm">GitHub release</Button></a>}
           <Button size="sm" variant="ghost" onClick={() => copyReleaseRunLink(run.run_id)}>Copy link</Button>
-          <Button size="sm" loading={busy} disabled={busy || status === 'paused' || isTerminal} onClick={() => onAdvance(run.run_id)}>Advance</Button>
+          <Button size="sm" loading={busy} disabled={busy || status === 'paused' || isTerminal} title={advanceBlockedReason} onClick={() => onAdvance(run.run_id)}>Advance</Button>
           <Button
             size="sm"
             loading={busy}
             disabled={busy || !canRetry}
+            title={retryBlockedReason}
             onClick={() => withOperatorReason('Retry release wave', operatorActionReason('retry', run, status, attentionReasons), reason => onRetry(run.run_id, reason))}
           >
             Retry
@@ -1174,6 +1193,7 @@ function RunPanel({
               <Button
                 size="sm"
                 loading={busy}
+                title={busyReason || undefined}
                 onClick={() => withOperatorReason('Resume release run', operatorActionReason('resume', run, status, attentionReasons), reason => onResume(run.run_id, reason))}
               >
                 Resume
@@ -1184,6 +1204,7 @@ function RunPanel({
                 size="sm"
                 loading={busy}
                 disabled={busy || isTerminal}
+                title={pauseBlockedReason}
                 onClick={() => withOperatorReason('Pause release run', operatorActionReason('pause', run, status, attentionReasons), reason => onPause(run.run_id, reason))}
               >
                 Pause
@@ -1193,7 +1214,8 @@ function RunPanel({
             size="sm"
             variant="ghost"
             loading={busy}
-            disabled={busy || isTerminal || getString(run.rollback.policy, getString(run.settings.rollback_policy)) === 'disabled'}
+            disabled={busy || isTerminal || rollbackPolicy === 'disabled'}
+            title={rollbackBlockedReason}
             onClick={() => withOperatorReason('Request rollback', operatorActionReason('rollback', run, status, attentionReasons), reason => onRollback(run.run_id, reason))}
           >
             Rollback
@@ -1203,6 +1225,7 @@ function RunPanel({
             variant="ghost"
             loading={busy}
             disabled={busy || isTerminal}
+            title={cancelBlockedReason}
             onClick={() => withOperatorReason('Cancel release run', operatorActionReason('cancel', run, status, attentionReasons), reason => onCancel(run.run_id, reason))}
           >
             Cancel
@@ -1212,7 +1235,7 @@ function RunPanel({
             variant="ghost"
             loading={busy}
             disabled={busy || !alertable || Boolean(notifyBlockedReason)}
-            title={notifyBlockedReason || undefined}
+            title={notifyDisabledReason}
             onClick={() => withOperatorReason('Notify release owner', operatorActionReason('notify', run, status, attentionReasons), reason => onNotify(run.run_id, reason))}
           >
             Notify
@@ -1222,6 +1245,7 @@ function RunPanel({
             variant="ghost"
             loading={busy}
             disabled={busy}
+            title={deleteBlockedReason}
             onClick={() => {
               if (!window.confirm(`Delete run ${shortId(run.run_id)}?`)) return;
               onDelete(run.run_id, canForceDelete ? window.confirm('Run is active. Force delete?') : false);
@@ -1912,6 +1936,10 @@ function readinessStatusLabel(status: string): string {
 
 function shortId(value: string): string {
   return value.replace(/^workflow-/, '').slice(0, 8);
+}
+
+function firstReason(...reasons: string[]): string | undefined {
+  return reasons.find(reason => reason.trim().length > 0);
 }
 
 type ReleaseOperatorAction = 'retry' | 'resume' | 'pause' | 'rollback' | 'cancel' | 'notify';
