@@ -13,6 +13,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Response
 
 from domains.alert.events import AlertRequestedBody
 from domains.alert.repository import severity_matches
+from domains.diagnostics.router import release_plan_diagnostics
 from domains.gitops.events import GitWebhookReceivedBody
 from domains.gitops.repository import derive_workflow_run_id
 from domains.identity.dependencies import (
@@ -264,6 +265,7 @@ async def dispatch_release_plan(
     blockers.extend(
         release_execution_blockers(body, preview, wave, workspace_id=workspace_id)
     )
+    blockers.extend(release_diagnostics_blockers(body))
     blockers.extend(release_live_alert_channel_blockers(body, db, workspace_id))
     if blockers:
         raise HTTPException(
@@ -312,6 +314,7 @@ async def start_release_plan(
     blockers.extend(
         release_execution_blockers(body, preview, first_wave, workspace_id=workspace_id)
     )
+    blockers.extend(release_diagnostics_blockers(body))
     blockers.extend(release_live_alert_channel_blockers(body, db, workspace_id))
     if blockers:
         raise HTTPException(
@@ -504,6 +507,7 @@ async def advance_release_run(
     plan = release_plan_from_run(run, pending_steps)
     preview = {"steps": [{"application_id": step["application_id"], "wave": next_wave} for step in pending_steps]}
     blockers = release_execution_blockers(plan, preview, next_wave, workspace_id=workspace_id)
+    blockers.extend(release_diagnostics_blockers(plan))
     blockers.extend(release_live_alert_channel_blockers(plan, db, workspace_id))
     if blockers:
         raise HTTPException(
@@ -615,6 +619,7 @@ async def retry_release_run(
         ]
     }
     blockers = release_execution_blockers(plan, preview, retry_wave, workspace_id=workspace_id)
+    blockers.extend(release_diagnostics_blockers(plan))
     blockers.extend(release_live_alert_channel_blockers(plan, db, workspace_id))
     if blockers:
         raise HTTPException(
@@ -796,6 +801,7 @@ async def dispatch_wave_steps(
 
     blockers = release_dispatch_context_blockers(plan, selected_steps, db, workspace_id)
     blockers.extend(release_execution_blockers(plan, preview, wave, workspace_id=workspace_id))
+    blockers.extend(release_diagnostics_blockers(plan))
     blockers.extend(release_live_alert_channel_blockers(plan, db, workspace_id))
     if blockers:
         raise HTTPException(
@@ -907,6 +913,7 @@ def release_readiness_from_plan(
         first_wave,
         workspace_id=workspace_id,
     )
+    diagnostic_blockers = release_diagnostics_blockers(plan)
     alert_channels = enabled_alert_channels(db, workspace_id)
     live_alert_channels = release_live_alert_channels(db, workspace_id)
     validated_live_alert_channels = release_validated_live_alert_channels(db, workspace_id)
@@ -980,6 +987,15 @@ def release_readiness_from_plan(
             execution_blockers,
         ),
         readiness_check(
+            "plan.diagnostics",
+            "Diagnostics gate",
+            "blocked" if diagnostic_blockers else "passed",
+            "Deterministic release diagnostics must be resolved before live dispatch."
+            if diagnostic_blockers
+            else "Release diagnostics do not block live dispatch.",
+            diagnostic_blockers,
+        ),
+        readiness_check(
             "alerts.enabled_channels",
             "Alert channels",
             "blocked" if alert_blockers else "passed" if alert_channels else "warning",
@@ -1046,6 +1062,25 @@ def required_release_input_blockers(plan: dict[str, Any]) -> list[str]:
         for field in ("commit_sha", "image"):
             if not str(config.get(field) or settings.get(field) or "").strip():
                 blockers.append(f"{label} is missing {field}.")
+    return blockers
+
+
+def release_diagnostics_blockers(plan: dict[str, Any]) -> list[str]:
+    if not execution_profile(plan).side_effects:
+        return []
+    settings = plan_settings_value(plan)
+    if settings.get("require_diagnostics_pass") is False:
+        return []
+    diagnostics = release_plan_diagnostics(plan)
+    blockers: list[str] = []
+    for diagnostic in diagnostics:
+        if diagnostic.severity not in {"error", "warning"}:
+            continue
+        location = f" at {diagnostic.path}" if diagnostic.path else ""
+        blockers.append(
+            f"Release diagnostics must pass before live dispatch: "
+            f"{diagnostic.code}{location} - {diagnostic.message}"
+        )
     return blockers
 
 
