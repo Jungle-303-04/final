@@ -1,0 +1,21 @@
+.chart-card {
+  border-color: var(--border);
+  background: var(--panel-soft);
+}
+
+.chart-card header strong,
+.chart-kpi-row strong {
+  color: var(--text);
+}
+
+.chart-card header span,
+.chart-legend span,
+.chart-kpi-row span {
+  color: var(--muted);
+}
+
+.chart-kpi-row,
+.chart-legend span {
+  border-color: var(--border);
+  background: var(--panel);
+}
