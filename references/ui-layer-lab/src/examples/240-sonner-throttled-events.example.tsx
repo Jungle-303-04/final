@@ -7,15 +7,15 @@ export default function SonnerThrottledEventsExample() {
   function pushEvent() {
     setCount((value) => {
       const next = value + 1;
-      toast.info(`${next} events batched`, { id: "event-batch" });
+      toast.info(`이벤트 ${next}개를 묶어 표시합니다`, { id: "event-batch" });
       return next;
     });
   }
 
   return (
     <div className="toast-state-card">
-      <strong>{count} incoming events</strong>
-      <button className="command-trigger" onClick={pushEvent}>Push Event</button>
+      <strong>수신 이벤트 {count}개</strong>
+      <button className="command-trigger stable-wide" onClick={pushEvent} type="button">이벤트 추가</button>
     </div>
   );
 }

@@ -729,6 +729,46 @@ async function inspectSourceEnglishGuard() {
     {
       file: "src/examples/239-sonner-silent-mode.example.tsx",
       fragments: ["Toast channel is active", "Notification captured silently", "Visible notification", "Silent mode", "Visible mode", "Toggle Silent", ">Notify<"]
+    },
+    {
+      file: "src/examples/240-sonner-throttled-events.example.tsx",
+      fragments: ["events batched", "incoming events", "Push Event"]
+    },
+    {
+      file: "src/examples/241-animated-hover-lift.example.tsx",
+      fragments: ["Hover preview", "Lifted", "Resting"]
+    },
+    {
+      file: "src/examples/242-animated-stepper-connector.example.tsx",
+      fragments: ['"Plan"', '"Patch"', '"Verify"', '"Ship"']
+    },
+    {
+      file: "src/examples/243-animated-density-panel.example.tsx",
+      fragments: ['"build"', '"test"', '"deploy"', '"smoke"', '"Comfortable"', '"Dense"']
+    },
+    {
+      file: "src/examples/244-animated-attention-pulse.example.tsx",
+      fragments: ["Needs attention", "All clear", "Use pulse only", "Toggle Alert"]
+    },
+    {
+      file: "src/examples/245-animated-loading-dots.example.tsx",
+      fragments: ["Generating answer"]
+    },
+    {
+      file: "src/examples/246-ai-context-diff-picker.example.tsx",
+      fragments: ["Diff context", "hunks attached"]
+    },
+    {
+      file: "src/examples/247-ai-command-suggestions.example.tsx",
+      fragments: ["Run typecheck", "Open failed logs", "Ask AI to patch", "No suggestion selected"]
+    },
+    {
+      file: "src/examples/248-ai-safety-interruption.example.tsx",
+      fragments: ["Approval required", "Approved", "AI wants to run a destructive command", "Approve Safe Alternative"]
+    },
+    {
+      file: "src/examples/249-ai-agent-queue.example.tsx",
+      fragments: ["Read logs", "Draft fix", "Run tests", ">Advance<"]
     }
   ];
   const matches = [];
@@ -1020,9 +1060,19 @@ async function inspectEnglishSamples(page, url) {
     ["작업 진행/로그", "example-sonner-connection-quality"],
     ["작업 진행/로그", "example-sonner-undo-stack"],
     ["작업 진행/로그", "example-sonner-import-summary"],
-    ["작업 진행/로그", "example-sonner-silent-mode"]
+    ["작업 진행/로그", "example-sonner-silent-mode"],
+    ["작업 진행/로그", "example-sonner-throttled-events"],
+    ["모션/상태 전환", "example-animated-hover-lift"],
+    ["모션/상태 전환", "example-animated-stepper-connector"],
+    ["모션/상태 전환", "example-animated-density-panel"],
+    ["모션/상태 전환", "example-animated-attention-pulse"],
+    ["모션/상태 전환", "example-animated-loading-dots"],
+    ["AI 작업 레이어", "example-ai-context-diff-picker"],
+    ["AI 작업 레이어", "example-ai-command-suggestions"],
+    ["AI 작업 레이어", "example-ai-safety-interruption"],
+    ["AI 작업 레이어", "example-ai-agent-queue"]
   ];
-  const forbidden = /\b(Open|Close|Show|Hide|Search|Loading|Current|Selected|Dashboard|Create|Cancel|Retry|Next|Previous|Expand|Collapse|Focus|Input|Logs|Answer|Status|Resources|Jobs|Steps|Command|Filter|Recent|Approval|Matrix|Launch|Health|Edge|Done|Running|Failed|Pending|Allowed|Blocked|Owner|Online|Offline|Reconnect|Confirm|Delete|Danger|Safe|Ready|Exportable|Draft|Save|Move|Undo|Viewer|Maintainer|Admin|Snippets|Routes|Access|Good|Degraded|Archive|Import|Silent|Visible|Notify)\b/i;
+  const forbidden = /\b(Open|Close|Show|Hide|Search|Loading|Current|Selected|Dashboard|Create|Cancel|Retry|Next|Previous|Expand|Collapse|Focus|Input|Logs|Answer|Status|Resources|Jobs|Steps|Command|Filter|Recent|Approval|Approved|Matrix|Launch|Health|Edge|Done|Running|Failed|Pending|Allowed|Blocked|Owner|Online|Offline|Reconnect|Confirm|Delete|Danger|Safe|Ready|Exportable|Draft|Save|Move|Undo|Viewer|Maintainer|Admin|Snippets|Routes|Access|Good|Degraded|Archive|Import|Silent|Visible|Notify|Hover|Lifted|Resting|Plan|Patch|Verify|Ship|Comfortable|Dense|Alert|Alternative|Advance|Generating)\b/i;
   const violations = [];
 
   for (const [category, testId] of samples) {

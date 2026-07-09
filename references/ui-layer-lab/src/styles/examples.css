@@ -804,6 +804,56 @@
   line-height: var(--line-button);
 }
 
+.hover-lift-card,
+.connector-stepper,
+.density-panel,
+.attention-card,
+.loading-dots-card,
+.safety-card {
+  border-color: var(--border);
+  color: var(--text);
+  background: var(--panel);
+}
+
+.hover-lift-card.active,
+.connector-stepper button.active {
+  border-color: var(--border-strong);
+  background: var(--surface-raised);
+}
+
+.connector-stepper button {
+  min-height: 96px;
+  color: var(--muted);
+  background: var(--panel-soft);
+  line-height: var(--line-button);
+}
+
+.connector-stepper button[aria-pressed="true"] {
+  color: var(--text);
+}
+
+.connector-stepper span {
+  color: var(--panel);
+  background: var(--text);
+}
+
+.density-panel span {
+  color: var(--text);
+  background: var(--panel-soft);
+}
+
+.loading-dots-card i {
+  background: var(--text);
+}
+
+.attention-card.alert {
+  border-color: color-mix(in srgb, var(--orange) 55%, var(--border));
+}
+
+.safety-card.blocked {
+  border-color: color-mix(in srgb, var(--red) 52%, var(--border));
+}
+
 @media (max-width: 720px) {
   .snap-drawer-toolbar,
   .treemap-header,
