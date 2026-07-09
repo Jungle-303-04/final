@@ -69,7 +69,8 @@
 - live production release는 `runbook_url`이 필요하며, URL 없이 진행하려면 `runbook_override_reason`을 남겨야 한다.
 - live production release는 `release_owner` 또는 `oncall_contact`가 필요하다.
 - live production release는 post-deploy 검증 근거가 필요하며, step/plan의 `health_check_path` 또는 `post_deploy_verification_url`이 없으면 `verification_override_reason`을 남겨야 한다.
-- live dispatch step/audit details에는 readiness impact, dispatch warning actions, diagnostics gate, override reason, alert validation window, validated alert channel snapshot을 `release_guard`로 남긴다.
+- live production release는 rollback/abort 기준이 필요하며, step/plan의 `rollback_trigger` 또는 `abort_criteria`가 없으면 `abort_criteria_override_reason`을 남겨야 한다.
+- live dispatch step/audit details에는 readiness impact, dispatch warning actions, diagnostics gate, override reason, alert validation window, validated alert channel snapshot, post-deploy verification evidence, rollback/abort criteria를 `release_guard`로 남긴다.
 - saved alert channel test results keep `last_tested_at`, status, detail, and HTTP status code so operators can see whether a channel was recently validated.
 - active run/plan 삭제는 기본 차단하고 `force=true`를 명시해야 한다.
 - release run timeline과 audit/export details는 password/token/secret/credential류 key를 `<redacted>`로 마스킹한다.
@@ -99,6 +100,7 @@
 - runbook 입력: production live release의 운영 runbook URL 또는 runbook override 사유를 UI에서 입력
 - owner/contact 입력: production live release의 책임자 또는 온콜 연락처를 UI에서 입력
 - verification 입력: production live release의 health check path, post-deploy verification URL, 또는 verification override 사유를 UI에서 입력
+- abort criteria 입력: production live release의 rollback trigger, abort criteria, 또는 abort criteria override 사유를 UI에서 입력
 - release alerts panel: `/release-flows`에서 alert channel 개수/활성 채널/severity 요약을 확인하고 `/settings/alerts`로 이동
 - alert channel validation: 저장된 alert channel의 마지막 테스트 통과/실패와 검증 시각을 `/settings/alerts` 목록에서 확인
 - release approval card: waiting approval step에 기존 approval grant/reject UI를 노출하고 승인 후 release run/audit query 갱신
