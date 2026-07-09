@@ -22,6 +22,7 @@ def load_smoke_module() -> Any:
 class FakeClient:
     def __init__(self) -> None:
         self.calls: list[tuple[str, str, dict[str, object] | None]] = []
+        self.release_run_status = "running"
 
     def request(
         self,
@@ -79,15 +80,31 @@ class FakeClient:
         if path == "/release-plans/preview":
             return {"preview": {"executable": True, "summary": "2 steps can run"}}
         if path == "/release-plans/start":
+            self.release_run_status = "running"
             return {
                 "run": {
                     "run_id": "release-run-smoke",
-                    "status": "running",
+                    "status": self.release_run_status,
                     "steps": [{"details": {"side_effects": False}}],
                 }
             }
+        if path == "/release-runs/release-run-smoke/pause":
+            self.release_run_status = "paused"
+            return {"run": {"run_id": "release-run-smoke", "status": self.release_run_status}}
+        if path == "/release-runs/release-run-smoke/notify":
+            return {
+                "accepted": True,
+                "event": {"event_id": "alert-1", "subject": "alert.requested"},
+                "run": {"run_id": "release-run-smoke", "status": self.release_run_status},
+            }
+        if path == "/release-runs/release-run-smoke/resume":
+            self.release_run_status = "running"
+            return {"run": {"run_id": "release-run-smoke", "status": self.release_run_status}}
+        if path == "/release-runs/release-run-smoke/cancel":
+            self.release_run_status = "cancelled"
+            return {"run": {"run_id": "release-run-smoke", "status": self.release_run_status}}
         if path == "/release-runs/release-run-smoke":
-            return {"run": {"run_id": "release-run-smoke", "status": "running"}}
+            return {"run": {"run_id": "release-run-smoke", "status": self.release_run_status}}
         return {}
 
 
@@ -128,3 +145,18 @@ def test_smoke_demo_run_starts_and_fetches_tracked_run() -> None:
     paths = [path for _method, path, _payload in client.calls]
     assert "/release-plans/start" in paths
     assert "/release-runs/release-run-smoke" in paths
+
+
+def test_smoke_ops_rehearsal_exercises_safe_operator_actions() -> None:
+    smoke = load_smoke_module()
+    client = FakeClient()
+
+    results = smoke.run_smoke(client, "ops@example.com", "password", demo_run=False, ops_rehearsal=True)
+
+    assert all(result.ok for result in results)
+    paths = [path for _method, path, _payload in client.calls]
+    assert "/release-plans/start" in paths
+    assert paths.index("/release-runs/release-run-smoke/pause") < paths.index("/release-runs/release-run-smoke/resume")
+    assert "/release-runs/release-run-smoke/notify" in paths
+    assert paths[-1] == "/release-runs/release-run-smoke"
+    assert client.release_run_status == "cancelled"
