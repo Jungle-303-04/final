@@ -923,6 +923,53 @@
   border-color: color-mix(in srgb, var(--red) 52%, var(--border));
 }
 
+.ribbon-card,
+.optimistic-row,
+.path-trace-card,
+.command-pop-stage,
+.split-resize section,
+.command-pop-card,
+.agent-step,
+.sidecar-tabs .detail-panel {
+  border-color: var(--border);
+  color: var(--text);
+  background: var(--panel);
+}
+
+.ribbon-card.live,
+.optimistic-row.saved,
+.agent-step.active,
+.agent-step[aria-current="step"] {
+  border-color: color-mix(in srgb, var(--green) 52%, var(--border));
+  background: var(--surface-raised);
+}
+
+.ribbon-card::before {
+  background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--text) 12%, transparent), transparent);
+}
+
+.split-resize section:last-child,
+.command-pop-card,
+.row-button {
+  color: var(--text);
+  background: var(--panel-soft);
+}
+
+.path-trace-card path {
+  stroke: var(--text);
+}
+
+.agent-step span {
+  color: var(--panel);
+  background: var(--text);
+}
+
+.row-button.selected,
+.row-button[aria-pressed="true"] {
+  border-color: var(--border-strong);
+  background: var(--surface-raised);
+}
+
 @media (max-width: 720px) {
   .snap-drawer-toolbar,
   .treemap-header,

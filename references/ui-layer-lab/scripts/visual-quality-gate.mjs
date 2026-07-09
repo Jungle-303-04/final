@@ -849,6 +849,46 @@ async function inspectSourceEnglishGuard() {
     {
       file: "src/examples/269-sonner-webhook-status.example.tsx",
       fragments: ["Webhook delivered", "webhooks sent", "Send Webhook"]
+    },
+    {
+      file: "src/examples/270-sonner-command-feedback.example.tsx",
+      fragments: ["Executiond", "Run Command", "Open logs from the activity center"]
+    },
+    {
+      file: "src/examples/271-animated-status-ribbon.example.tsx",
+      fragments: ['"LIVE"', '"IDLE"', "Preview environment", ">Toggle<"]
+    },
+    {
+      file: "src/examples/272-animated-optimistic-row.example.tsx",
+      fragments: ['? "saved" : "dirty"', ">Save<"]
+    },
+    {
+      file: "src/examples/273-animated-resizable-split-view.example.tsx",
+      fragments: ["Editor</section>", "Preview</section>", ">Resize<"]
+    },
+    {
+      file: "src/examples/274-animated-path-trace.example.tsx",
+      fragments: ['? "Pause" : "Trace"']
+    },
+    {
+      file: "src/examples/275-animated-command-menu-enter-exit.example.tsx",
+      fragments: ['? "Close" : "Open"', "Command Palette", "Search or run an action"]
+    },
+    {
+      file: "src/examples/276-ai-token-budget-meter.example.tsx",
+      fragments: ["Token budget", "Add Context"]
+    },
+    {
+      file: "src/examples/277-ai-model-fallback-route.example.tsx",
+      fragments: ["fast model", "reasoning model", "fallback model", ">Fallback<"]
+    },
+    {
+      file: "src/examples/278-ai-eval-scorecard.example.tsx",
+      fragments: ["Accuracy", "Grounding", "Actionability"]
+    },
+    {
+      file: "src/examples/279-ai-citation-filter.example.tsx",
+      fragments: [">Answer<", "Answer linked to"]
     }
   ];
   const matches = [];
@@ -1170,9 +1210,19 @@ async function inspectEnglishSamples(page, url) {
     ["작업 진행/로그", "example-sonner-retry-action"],
     ["작업 진행/로그", "example-sonner-maintenance-window"],
     ["작업 진행/로그", "example-sonner-session-expiring"],
-    ["작업 진행/로그", "example-sonner-webhook-status"]
+    ["작업 진행/로그", "example-sonner-webhook-status"],
+    ["작업 진행/로그", "example-sonner-command-feedback"],
+    ["모션/상태 전환", "example-animated-status-ribbon"],
+    ["모션/상태 전환", "example-animated-optimistic-row"],
+    ["모션/상태 전환", "example-animated-resizable-split-view"],
+    ["모션/상태 전환", "example-animated-path-trace"],
+    ["모션/상태 전환", "example-animated-command-menu-enter-exit"],
+    ["AI 작업 레이어", "example-ai-token-budget-meter"],
+    ["AI 작업 레이어", "example-ai-model-fallback-route"],
+    ["AI 작업 레이어", "example-ai-eval-scorecard"],
+    ["AI 작업 레이어", "example-ai-citation-filter"]
   ];
-  const forbidden = /\b(Open|Close|Show|Hide|Search|Loading|Current|Selected|Dashboard|Create|Cancel|Retry|Next|Previous|Expand|Collapse|Focus|Input|Logs|Answer|Status|Resources|Jobs|Steps|Command|Filter|Recent|Approval|Approved|Matrix|Launch|Health|Edge|Done|Running|Failed|Pending|Allowed|Blocked|Owner|Online|Offline|Reconnect|Confirm|Delete|Danger|Safe|Ready|Exportable|Draft|Save|Move|Undo|Viewer|Maintainer|Admin|Snippets|Routes|Access|Good|Degraded|Archive|Import|Silent|Visible|Notify|Hover|Lifted|Resting|Plan|Patch|Verify|Ship|Comfortable|Dense|Alert|Alternative|Advance|Generating|Helpful|Needs|Work|Rated|Cache|Refresh|Recalculate|Terminal|Schema|Fields|Window|Brush|Outlier|Group|Ungroup|Environment|Environments|Context|Rows|Terms|Retry|Maintenance|Session|Webhook|Webhooks|Warn|Extend)\b/i;
+  const forbidden = /\b(Open|Close|Show|Hide|Search|Loading|Current|Selected|Dashboard|Create|Cancel|Retry|Next|Previous|Expand|Collapse|Focus|Input|Logs|Answer|Status|Resources|Jobs|Steps|Command|Filter|Recent|Approval|Approved|Matrix|Launch|Health|Edge|Done|Running|Failed|Pending|Allowed|Blocked|Owner|Online|Offline|Reconnect|Confirm|Delete|Danger|Safe|Ready|Exportable|Draft|Save|Move|Undo|Viewer|Maintainer|Admin|Snippets|Routes|Access|Good|Degraded|Archive|Import|Silent|Visible|Notify|Hover|Lifted|Resting|Plan|Patch|Verify|Ship|Comfortable|Dense|Alert|Alternative|Advance|Generating|Helpful|Needs|Work|Rated|Cache|Refresh|Recalculate|Terminal|Schema|Fields|Window|Brush|Outlier|Group|Ungroup|Environment|Environments|Context|Rows|Terms|Retry|Maintenance|Session|Webhook|Webhooks|Warn|Extend|Executiond|Palette|Token|Budget|Fallback|Accuracy|Grounding|Actionability|Citation|Ribbon|Resize|Trace|Idle|Live)\b/i;
   const violations = [];
 
   for (const [category, testId] of samples) {

@@ -5,9 +5,11 @@ export default function AnimatedStatusRibbonExample() {
 
   return (
     <div className={live ? "ribbon-card live" : "ribbon-card"}>
-      <span>{live ? "LIVE" : "IDLE"}</span>
-      <strong>Preview environment</strong>
-      <button className="command-trigger" onClick={() => setLive((value) => !value)}>Toggle</button>
+      <span aria-live="polite" className="stable-text-slot">{live ? "실시간" : "대기"}</span>
+      <strong>미리보기 환경</strong>
+      <button aria-pressed={live} className="command-trigger stable-wide" onClick={() => setLive((value) => !value)} type="button">
+        상태 전환
+      </button>
     </div>
   );
 }
