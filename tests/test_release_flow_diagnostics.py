@@ -602,6 +602,7 @@ def test_release_audit_export_returns_csv_without_internal_steps(monkeypatch) ->
 
 def test_release_audit_event_type_filter_supports_prefix() -> None:
     assert release_audit_event_type_filter("workflow.run.failed") == ("workflow.run.failed", None)
+    assert release_audit_event_type_filter("release.*") == (None, "release.")
     assert release_audit_event_type_filter("release.notify.*") == (None, "release.notify.")
     assert release_audit_event_type_filter("  release.retry.*  ") == (None, "release.retry.")
     assert release_audit_event_type_filter("") == (None, None)
