@@ -914,6 +914,7 @@ def release_readiness_from_plan(
         workspace_id=workspace_id,
     )
     diagnostic_blockers = release_diagnostics_blockers(plan)
+    diagnostic_bypassed = release_diagnostics_bypassed(plan)
     alert_channels = enabled_alert_channels(db, workspace_id)
     live_alert_channels = release_live_alert_channels(db, workspace_id)
     validated_live_alert_channels = release_validated_live_alert_channels(db, workspace_id)
@@ -989,9 +990,15 @@ def release_readiness_from_plan(
         readiness_check(
             "plan.diagnostics",
             "Diagnostics gate",
-            "blocked" if diagnostic_blockers else "passed",
+            "blocked"
+            if diagnostic_blockers
+            else "warning"
+            if diagnostic_bypassed
+            else "passed",
             "Deterministic release diagnostics must be resolved before live dispatch."
             if diagnostic_blockers
+            else "Diagnostics gate is bypassed with an operator reason."
+            if diagnostic_bypassed
             else "Release diagnostics do not block live dispatch.",
             diagnostic_blockers,
         ),
@@ -1070,6 +1077,10 @@ def release_diagnostics_blockers(plan: dict[str, Any]) -> list[str]:
         return []
     settings = plan_settings_value(plan)
     if settings.get("require_diagnostics_pass") is False:
+        if not release_diagnostics_override_reason(plan):
+            return [
+                "Live release dispatch cannot bypass diagnostics without a diagnostics override reason."
+            ]
         return []
     diagnostics = release_plan_diagnostics(plan)
     blockers: list[str] = []
@@ -1082,6 +1093,24 @@ def release_diagnostics_blockers(plan: dict[str, Any]) -> list[str]:
             f"{diagnostic.code}{location} - {diagnostic.message}"
         )
     return blockers
+
+
+def release_diagnostics_override_reason(plan: dict[str, Any]) -> str:
+    settings = plan_settings_value(plan)
+    return str(
+        settings.get("diagnostics_override_reason")
+        or settings.get("diagnostics_bypass_reason")
+        or ""
+    ).strip()
+
+
+def release_diagnostics_bypassed(plan: dict[str, Any]) -> bool:
+    if not execution_profile(plan).side_effects:
+        return False
+    settings = plan_settings_value(plan)
+    return settings.get("require_diagnostics_pass") is False and bool(
+        release_diagnostics_override_reason(plan)
+    )
 
 
 def release_dispatch_context_blockers(
