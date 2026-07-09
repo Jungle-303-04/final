@@ -460,6 +460,37 @@ def test_release_run_handoff_explains_disabled_rollback_action(monkeypatch) -> N
     assert rollback["reason"] == "Rollback policy is disabled for this release run."
 
 
+def test_get_release_run_report_includes_redacted_audit_and_markdown(monkeypatch) -> None:
+    db = ReleaseRunReportDb()
+    monkeypatch.setattr(release_router, "require_plan_application_read_access", lambda *_args: None)
+    monkeypatch.setattr(release_router, "require_plan_application_audit_access", lambda *_args: None)
+
+    current = SimpleNamespace(workspace_id="workspace-a", user_id="operator", roles=("release_operator",))
+    response = asyncio.run(
+        release_router.get_release_run_report(
+            "release-run-1",
+            current=current,
+            db=db,
+        )
+    )
+
+    report = response.report
+    assert db.filters == {
+        "plan_id": None,
+        "run_id": "release-run-1",
+        "event_type": None,
+        "limit": 50,
+    }
+    assert report["run_id"] == "release-run-1"
+    assert "Release run report: Checkout release" in report["markdown"]
+    assert "Recent audit:" in report["markdown"]
+    assert "workflow.run.failed" in report["markdown"]
+    assert report["audit_events"][0]["details"]["token"] == "<redacted>"
+    assert report["audit_events"][0]["details"]["nested"]["client_secret"] == "<redacted>"
+    assert "raw-token" not in report["markdown"]
+    assert "super-secret" not in report["markdown"]
+
+
 def test_retry_release_run_dispatches_failed_wave_step(monkeypatch) -> None:
     db = ReleaseRetryDb()
     monkeypatch.setattr(release_router, "require_plan_application_manage_access", lambda *_args: None)
@@ -2501,6 +2532,49 @@ class ReleaseRunActionDb:
         run = self.get_release_run("workspace-a", "release-run-1")
         run["status"] = "rollback_requested"
         return run
+
+
+class ReleaseRunReportDb(ReleaseRunActionDb):
+    def __init__(self) -> None:
+        super().__init__()
+        self.filters: dict[str, object] = {}
+
+    def list_release_audit_events(
+        self,
+        _workspace_id: str,
+        *,
+        plan_id: str | None,
+        run_id: str | None,
+        event_type: str | None,
+        limit: int,
+    ) -> list[dict[str, object]]:
+        self.filters = {
+            "plan_id": plan_id,
+            "run_id": run_id,
+            "event_type": event_type,
+            "limit": limit,
+        }
+        return [
+            {
+                "audit_id": "audit-report-1",
+                "workspace_id": "workspace-a",
+                "run_id": "release-run-1",
+                "plan_id": "release-plan-1",
+                "plan_name": "Checkout release",
+                "run_status": "failed",
+                "event_type": "workflow.run.failed",
+                "message": "checkout rollout failed",
+                "actor": "operator",
+                "details": {
+                    "reason": "rollout health failed",
+                    "token": "raw-token",
+                    "nested": {"client_secret": "super-secret", "safe": "visible"},
+                },
+                "application_ids": ["checkout"],
+                "created_at": "2026-07-09T10:00:00Z",
+                "_steps": [{"application_id": "checkout"}],
+            }
+        ]
 
 
 class ReleaseRetryDb:

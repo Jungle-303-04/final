@@ -10,6 +10,7 @@ import type {
   ReleaseReadiness,
   ReleaseRun,
   ReleaseRunHandoff,
+  ReleaseRunReport,
   ReleaseRunSummary,
 } from '@/shared/lib/types';
 
@@ -104,6 +105,12 @@ export const useReleaseRunHandoff = (runId?: string) =>
     enabled: Boolean(runId),
     refetchInterval: 15_000,
   });
+
+export function useReleaseRunReport() {
+  return useMutation({
+    mutationFn: (runId: string) => get<{ report: ReleaseRunReport }>(`/release-runs/${encodeURIComponent(runId)}/report`),
+  });
+}
 
 export const useReleaseAudit = (planId?: string, runId?: string, eventType?: string) =>
   useQuery({

@@ -51,6 +51,7 @@ from packages.contracts.gateway.responses import (
     ReleaseRunAlertResponse,
     ReleaseRunHandoffResponse,
     ReleaseRunListResponse,
+    ReleaseRunReportResponse,
     ReleaseRunSummaryResponse,
     ReleaseRunResponse,
 )
@@ -214,6 +215,30 @@ async def get_release_run_handoff(
         raise HTTPException(status_code=HTTP_NOT_FOUND, detail=RELEASE_RUN_NOT_FOUND)
     require_plan_application_read_access(db, current, workspace_id, run.get("steps", []))
     return ReleaseRunHandoffResponse(handoff=release_run_handoff(run))
+
+
+@router.get(gateway_routes.RELEASE_RUN_REPORT_PATH, response_model=ReleaseRunReportResponse)
+async def get_release_run_report(
+    run_id: str,
+    current: Any = Depends(require_session),
+    db: Any = Depends(get_db),
+) -> ReleaseRunReportResponse:
+    workspace_id = getattr(current, "workspace_id", DEFAULT_WORKSPACE_ID)
+    run = db.get_release_run(workspace_id, run_id)
+    if run is None:
+        raise HTTPException(status_code=HTTP_NOT_FOUND, detail=RELEASE_RUN_NOT_FOUND)
+    require_plan_application_read_access(db, current, workspace_id, run.get("steps", []))
+    audit_events = release_audit_events_for_current(
+        db,
+        current,
+        workspace_id,
+        plan_id=None,
+        run_id=run_id,
+        event_type=None,
+        limit=50,
+    )
+    public_events = [public_release_audit_event(event) for event in audit_events]
+    return ReleaseRunReportResponse(report=release_run_report(run, public_events))
 
 
 @router.get(gateway_routes.RELEASE_PLAN_PATH, response_model=ReleasePlanResponse)
@@ -3141,6 +3166,86 @@ def release_run_handoff(run: dict[str, Any]) -> dict[str, Any]:
         ],
         "last_event": release_run_last_event(run),
     }
+
+
+def release_run_report(run: dict[str, Any], audit_events: list[dict[str, Any]]) -> dict[str, Any]:
+    handoff = release_run_handoff(run)
+    generated_at = datetime.now(timezone.utc).isoformat()
+    public_audit_events = audit_events[:20]
+    return {
+        "run_id": str(run.get("run_id") or ""),
+        "plan_id": str(run.get("plan_id") or ""),
+        "plan_name": str(run.get("plan_name") or "Release run"),
+        "status": str(run.get("derived_status") or run.get("status") or "unknown"),
+        "current_wave": int_field(run, "current_wave", 0),
+        "total_waves": int_field(run, "total_waves", 0),
+        "generated_at": generated_at,
+        "handoff": handoff,
+        "audit_events": public_audit_events,
+        "markdown": release_run_report_markdown(run, handoff, public_audit_events, generated_at),
+    }
+
+
+def release_run_report_markdown(
+    run: dict[str, Any],
+    handoff: dict[str, Any],
+    audit_events: list[dict[str, Any]],
+    generated_at: str,
+) -> str:
+    status = str(run.get("derived_status") or run.get("status") or "unknown")
+    health = run.get("health") if isinstance(run.get("health"), dict) else {}
+    lines = [
+        f"## Release run report: {run.get('plan_name') or run.get('run_id') or 'release run'}",
+        "",
+        f"- Run: {run.get('run_id') or ''}",
+        f"- Status: {status}",
+        f"- Wave: {int_field(run, 'current_wave', 0)} of {int_field(run, 'total_waves', 0)}",
+        f"- Mode: {'live side effects' if release_run_has_live_side_effects(run) else 'demo/dry-run'}",
+        f"- Health: {health.get('status') or 'pending'}",
+        f"- Generated at: {generated_at}",
+        "",
+        f"Headline: {handoff.get('headline') or ''}",
+        f"Severity: {handoff.get('severity') or 'info'}",
+    ]
+    attention_reasons = release_attention_reasons(run)
+    if attention_reasons:
+        lines.extend(["", "Attention:", *[f"- {reason}" for reason in attention_reasons]])
+    next_actions = handoff.get("next_actions") if isinstance(handoff.get("next_actions"), list) else []
+    if next_actions:
+        lines.extend(["", "Next actions:"])
+        for action in next_actions[:6]:
+            if not isinstance(action, dict):
+                continue
+            marker = "[ ]" if action.get("enabled") is not False else "[blocked]"
+            reason = f": {action.get('reason')}" if action.get("reason") else ""
+            lines.append(f"- {marker} {action.get('label') or action.get('action') or 'action'}{reason}")
+    steps = run.get("steps") if isinstance(run.get("steps"), list) else []
+    if steps:
+        lines.extend(["", "Steps:"])
+        for step in steps[:12]:
+            if not isinstance(step, dict):
+                continue
+            step_health = step.get("health") if isinstance(step.get("health"), dict) else {}
+            details = step.get("details") if isinstance(step.get("details"), dict) else {}
+            context = " / ".join(
+                str(value)
+                for value in [details.get("environment"), details.get("strategy"), details.get("gate")]
+                if value
+            )
+            health_label = f", health {step_health.get('status')}" if step_health.get("status") else ""
+            suffix = f" ({context})" if context else ""
+            lines.append(
+                f"- Wave {step.get('wave') or '?'} {step.get('name') or step.get('application_id') or 'step'}: "
+                f"{step.get('status') or 'unknown'}{health_label}{suffix}"
+            )
+    if audit_events:
+        lines.extend(["", "Recent audit:"])
+        for event in audit_events[:12]:
+            created_suffix = f" ({event.get('created_at')})" if event.get("created_at") else ""
+            lines.append(
+                f"- {event.get('event_type') or 'event'}: {event.get('message') or 'recorded'}{created_suffix}"
+            )
+    return "\n".join(lines)
 
 
 def release_run_handoff_verification(run: dict[str, Any]) -> dict[str, Any]:

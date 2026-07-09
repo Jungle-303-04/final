@@ -39,6 +39,7 @@
 - `GET /release-runs/summary`
 - `GET /release-runs/{run_id}`
 - `GET /release-runs/{run_id}/handoff`
+- `GET /release-runs/{run_id}/report`
 - `GET /release-audit`
 - `GET /release-audit/export`
 - `POST /release-runs/{run_id}/advance`
@@ -145,6 +146,7 @@
 - operator handoff: 선택한 release run의 headline, severity, 다음 조치, mode/health/attention/rollback/verification/verification job result/rollback criteria 체크를 한 번에 표시해 교대/온콜 인계를 빠르게 수행
 - operator handoff copy: handoff panel 내용을 Markdown으로 복사해 같은 run 링크와 함께 채팅/이슈/교대 노트에 공유
 - run report copy: 선택한 release run의 상태, attention reason, handoff next action, step 상태, 최근 timeline을 Markdown으로 복사해 교대/사후 리뷰 노트에 공유
+- run report API: `GET /release-runs/{run_id}/report`가 권한 확인된 run/handoff/redacted audit을 서버에서 Markdown report로 묶어 UI copy와 운영 증적에 사용
 
 ## 검증
 - `py -3 -m pytest -q tests/test_release_flow_diagnostics.py tests/test_release_flow_projection.py`
