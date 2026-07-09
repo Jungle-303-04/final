@@ -2680,6 +2680,7 @@ def release_run_handoff(run: dict[str, Any]) -> dict[str, Any]:
     terminal = status in TERMINAL_RELEASE_RUN_STATUSES
     alertable = stale or attention.get("required") is True or bool(attention_reasons)
     verification = release_run_handoff_verification(run)
+    abort_criteria = release_run_handoff_abort_criteria(run)
     return {
         "run_id": str(run.get("run_id") or ""),
         "plan_id": str(run.get("plan_id") or ""),
@@ -2692,6 +2693,7 @@ def release_run_handoff(run: dict[str, Any]) -> dict[str, Any]:
         "live_side_effects": live_side_effects,
         "attention_reasons": attention_reasons,
         "verification": verification,
+        "abort_criteria": abort_criteria,
         "next_actions": release_run_handoff_actions(
             status,
             terminal=terminal,
@@ -2724,6 +2726,11 @@ def release_run_handoff(run: dict[str, Any]) -> dict[str, Any]:
                 "verification",
                 str(verification.get("status") or "info"),
                 str(verification.get("message") or "No verification snapshot recorded."),
+            ),
+            release_handoff_check(
+                "abort_criteria",
+                str(abort_criteria.get("status") or "info"),
+                str(abort_criteria.get("message") or "No rollback criteria snapshot recorded."),
             ),
         ],
         "last_event": release_run_last_event(run),
@@ -2768,6 +2775,51 @@ def release_run_handoff_verification(run: dict[str, Any]) -> dict[str, Any]:
         "status": "blocked",
         "message": "Post-deploy verification evidence is missing.",
         "evidence": [],
+        "override_reason": None,
+        "production_targets": production_targets,
+    }
+
+
+def release_run_handoff_abort_criteria(run: dict[str, Any]) -> dict[str, Any]:
+    guard = release_run_latest_guard(run)
+    criteria_snapshot = guard.get("abort_criteria") if isinstance(guard.get("abort_criteria"), dict) else {}
+    readiness = guard.get("readiness") if isinstance(guard.get("readiness"), dict) else {}
+    impact = readiness.get("impact") if isinstance(readiness.get("impact"), dict) else {}
+    criteria = [str(item) for item in criteria_snapshot.get("criteria", []) if str(item).strip()]
+    production_targets = [
+        str(item)
+        for item in criteria_snapshot.get("production_targets", [])
+        if str(item).strip()
+    ]
+    if not criteria_snapshot:
+        return {
+            "status": "info",
+            "message": "No rollback criteria snapshot recorded.",
+            "criteria": [],
+            "override_reason": None,
+            "production_targets": impact.get("production_targets") if isinstance(impact.get("production_targets"), list) else [],
+        }
+    override_reason = str(criteria_snapshot.get("override_reason") or "").strip() or None
+    if criteria:
+        return {
+            "status": "passed",
+            "message": f"Rollback criteria are present ({', '.join(criteria[:2])}).",
+            "criteria": criteria,
+            "override_reason": override_reason,
+            "production_targets": production_targets,
+        }
+    if override_reason:
+        return {
+            "status": "warning",
+            "message": "Rollback criteria were bypassed with an operator reason.",
+            "criteria": [],
+            "override_reason": override_reason,
+            "production_targets": production_targets,
+        }
+    return {
+        "status": "blocked",
+        "message": "Rollback criteria are missing.",
+        "criteria": [],
         "override_reason": None,
         "production_targets": production_targets,
     }

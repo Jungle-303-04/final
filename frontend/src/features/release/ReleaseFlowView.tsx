@@ -1267,7 +1267,7 @@ function RunHandoffPanel({ handoff, loading }: { handoff?: ReleaseRunHandoff; lo
         <div>
           <span className="release-flow__handoff-label">Checks</span>
           <div className="release-flow__handoff-list">
-            {handoff.checks.slice(0, 5).map(check => (
+            {handoff.checks.slice(0, 6).map(check => (
               <span key={check.name}>
                 {check.name}: {check.status}
               </span>
@@ -1281,6 +1281,16 @@ function RunHandoffPanel({ handoff, loading }: { handoff?: ReleaseRunHandoff; lo
               <span>{handoff.verification.status}: {handoff.verification.message}</span>
               {handoff.verification.evidence.slice(0, 2).map(item => <span key={item}>{item}</span>)}
               {handoff.verification.override_reason && <span>{handoff.verification.override_reason}</span>}
+            </div>
+          </div>
+        )}
+        {handoff.abort_criteria && (
+          <div>
+            <span className="release-flow__handoff-label">Rollback criteria</span>
+            <div className="release-flow__handoff-list">
+              <span>{handoff.abort_criteria.status}: {handoff.abort_criteria.message}</span>
+              {handoff.abort_criteria.criteria.slice(0, 2).map(item => <span key={item}>{item}</span>)}
+              {handoff.abort_criteria.override_reason && <span>{handoff.abort_criteria.override_reason}</span>}
             </div>
           </div>
         )}
