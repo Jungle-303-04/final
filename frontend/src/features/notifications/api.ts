@@ -21,6 +21,10 @@ export type AlertChannel = {
   url: string;
   min_severity: AlertSeverity | string;
   enabled: boolean;
+  last_tested_at?: string | null;
+  last_test_status?: string | null;
+  last_test_detail?: string | null;
+  last_test_status_code?: number | null;
   created_at?: string | null;
   updated_at?: string | null;
 };
@@ -45,6 +49,7 @@ export type AlertChannelTestResult = {
   code?: string | null;
   detail: string;
   status_code?: number | null;
+  channel?: AlertChannel | null;
 };
 
 export const useTimeline = () =>
@@ -142,10 +147,15 @@ export const useAlertChannels = () =>
     select: d => d.channels,
   });
 
-export const useTestAlertChannel = () =>
-  useMutation({
+export const useTestAlertChannel = () => {
+  const qc = useQueryClient();
+  return useMutation({
     mutationFn: (payload: AlertChannelTestPayload) => post<AlertChannelTestResult>('/alert-channels/test', payload),
+    onSuccess: result => {
+      if (result.channel) qc.invalidateQueries({ queryKey: ['alert-channels'] });
+    },
   });
+};
 
 export const useSaveAlertChannel = () => {
   const qc = useQueryClient();

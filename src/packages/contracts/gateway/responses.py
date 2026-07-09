@@ -625,6 +625,10 @@ class AlertChannelResponse(StrictModel):
     url: str
     min_severity: str
     enabled: bool
+    last_tested_at: str | None = None
+    last_test_status: str | None = None
+    last_test_detail: str | None = None
+    last_test_status_code: int | None = None
     created_at: str | None = None
     updated_at: str | None = None
 
@@ -645,6 +649,7 @@ class AlertChannelTestResponse(StrictModel):
     code: str | None = None
     detail: str = ""
     status_code: int | None = None
+    channel: AlertChannelResponse | None = None
 
 
 class RcaRuleValidateResponse(StrictModel):

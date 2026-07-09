@@ -181,10 +181,36 @@ class StubChannelDb:
             "url": payload["url"],
             "min_severity": payload.get("min_severity", "warning"),
             "enabled": payload.get("enabled", True),
+            "last_tested_at": None,
+            "last_test_status": None,
+            "last_test_detail": None,
+            "last_test_status_code": None,
             "created_at": None,
             "updated_at": None,
         }
         self.rows[channel_id] = row
+        return dict(row)
+
+    def record_alert_channel_test(
+        self,
+        workspace_id: str,
+        channel_id: str,
+        *,
+        status: str,
+        detail: str,
+        status_code: int | None = None,
+    ) -> dict:
+        row = self.rows.get(channel_id)
+        if row is None or row["workspace_id"] != workspace_id:
+            raise LookupError("alert channel not found")
+        row.update(
+            {
+                "last_tested_at": "2026-07-10T09:00:00Z",
+                "last_test_status": status,
+                "last_test_detail": detail,
+                "last_test_status_code": status_code,
+            }
+        )
         return dict(row)
 
     def delete_alert_channel(self, workspace_id: str, channel_id: str) -> bool:
@@ -245,6 +271,7 @@ def test_alert_channel_test_sends_real_validation_payload(monkeypatch) -> None:
                 message="검증 알림",
             ),
             ADMIN,
+            StubChannelDb(),
         )
         assert response.valid is True
         assert response.delivered is True
@@ -267,11 +294,42 @@ def test_alert_channel_test_returns_human_readable_failure(monkeypatch) -> None:
         response = await send_alert_channel_test(
             AlertChannelTestRequest(url="https://hooks.example/test"),
             ADMIN,
+            StubChannelDb(),
         )
         assert response.valid is False
         assert response.delivered is False
         assert response.code == "timeout"
         assert response.detail == "테스트 알림 전송에 실패했습니다."
+
+    asyncio.run(run())
+
+
+def test_alert_channel_test_records_saved_channel_status(monkeypatch) -> None:
+    async def stub_post(_url: str, _body: AlertRequestedBody) -> AlertDeliveryResult:
+        return AlertDeliveryResult(delivered=True, status_code=204)
+
+    monkeypatch.setattr(alert_router, "post_alert_webhook", stub_post)
+
+    async def run() -> None:
+        db = StubChannelDb()
+        created = await upsert_alert_channel(
+            AlertChannelUpsertRequest(name="ops", url="https://hooks.example/x"), ADMIN, db
+        )
+        response = await send_alert_channel_test(
+            AlertChannelTestRequest(
+                channel_id=created.channel_id,
+                name=created.name,
+                url=created.url,
+                severity="warning",
+            ),
+            ADMIN,
+            db,
+        )
+        assert response.valid is True
+        assert response.channel is not None
+        assert response.channel.last_test_status == "passed"
+        assert response.channel.last_test_status_code == 204
+        assert response.channel.last_tested_at == "2026-07-10T09:00:00Z"
 
     asyncio.run(run())
 

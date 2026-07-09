@@ -140,6 +140,16 @@ def test_event_schema_preserves_causation_id() -> None:
     assert "causation_id" in set(metadata.tables["events"].c.keys())
 
 
+def test_alert_channel_schema_tracks_validation_status() -> None:
+    columns = set(metadata.tables["alert_channels"].c.keys())
+    assert {
+        "last_tested_at",
+        "last_test_status",
+        "last_test_detail",
+        "last_test_status_code",
+    } <= columns
+
+
 def test_outbox_schema_supports_relay_leases() -> None:
     columns = set(metadata.tables["outbox"].c.keys())
     assert {"lease_id", "leased_until", "sent_at"} <= columns
