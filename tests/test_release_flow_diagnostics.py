@@ -274,6 +274,33 @@ def test_notify_release_run_attention_emits_alert(monkeypatch) -> None:
     assert "page release owner" in alert.message
 
 
+def test_notify_release_run_attention_marks_verification_timeout_critical(monkeypatch) -> None:
+    db = ReleaseRunActionDb(
+        verification_job_status="pending",
+        verification_queued_at=(datetime.now(timezone.utc) - timedelta(minutes=20)).isoformat(),
+        verification_timeout_minutes=5,
+    )
+    events = AcceptingEventGateway()
+    monkeypatch.setattr(release_router, "require_plan_application_manage_access", lambda *_args: None)
+
+    current = SimpleNamespace(workspace_id="workspace-a", user_id="operator", roles=("release_operator",))
+    asyncio.run(
+        release_router.notify_release_run_attention(
+            "release-run-1",
+            release_router.ReleaseRunActionRequest(reason="verification worker may be stuck"),
+            current=current,
+            db=db,
+            events=events,
+        )
+    )
+
+    alert = events.calls[0]["body"]
+    assert alert.severity == "critical"
+    assert "release-verification-fixture timed out after" in alert.message
+    assert "limit 5m" in alert.message
+    assert "verification worker may be stuck" in alert.message
+
+
 def test_get_release_run_handoff_summarizes_operator_next_actions(monkeypatch) -> None:
     db = ReleaseRunActionDb()
     monkeypatch.setattr(release_router, "require_plan_application_read_access", lambda *_args: None)
@@ -2121,12 +2148,16 @@ class ReleaseRunActionDb:
         *,
         rollback_policy: str = "manual",
         verification_job_status: str = "passed",
+        verification_queued_at: str | None = None,
+        verification_timeout_minutes: int | None = None,
         step_health_status: str = "healthy",
     ) -> None:
         self.requested_rollback = False
         self.updated: list[dict[str, object]] = []
         self.rollback_policy = rollback_policy
         self.verification_job_status = verification_job_status
+        self.verification_queued_at = verification_queued_at
+        self.verification_timeout_minutes = verification_timeout_minutes
         self.step_health_status = step_health_status
 
     def get_release_run(self, _workspace_id: str, _run_id: str) -> dict[str, object]:
@@ -2168,6 +2199,16 @@ class ReleaseRunActionDb:
                                         "name": "Checkout",
                                         "kind": "kubernetes_health_check",
                                         "status": self.verification_job_status,
+                                        **(
+                                            {"queued_at": self.verification_queued_at}
+                                            if self.verification_queued_at
+                                            else {}
+                                        ),
+                                        **(
+                                            {"timeout_minutes": self.verification_timeout_minutes}
+                                            if self.verification_timeout_minutes is not None
+                                            else {}
+                                        ),
                                         "evidence_key": "release-run-1:wave-1:checkout:post-deploy-verification",
                                         "target": {
                                             "cluster_id": "target",

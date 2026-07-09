@@ -2448,11 +2448,24 @@ def release_run_attention_alert_body(
     first_step = first_release_run_step(run)
     step_details = first_step.get("details") if isinstance(first_step.get("details"), dict) else {}
     step_config = step_details.get("config") if isinstance(step_details.get("config"), dict) else {}
-    severity = "critical" if status in {"failed", "rollback_requested"} or attention.get("stale") is True else "warning"
+    timed_out_jobs = release_verification_job_pending_timeouts(run)
+    failed_verification = release_run_has_failed_verification(run)
+    severity = (
+        "critical"
+        if status in {"failed", "rollback_requested"}
+        or attention.get("stale") is True
+        or failed_verification
+        or bool(timed_out_jobs)
+        else "warning"
+    )
     application_id = str(first_step.get("application_id") or "release")
     message_parts = [f"{str(run.get('plan_name') or 'Release run')} is {status}"]
     if reasons:
         message_parts.append("; ".join(reasons[:3]))
+    if failed_verification:
+        message_parts.append("post-deploy verification failed")
+    if timed_out_jobs:
+        message_parts.append(release_verification_timeout_alert_summary(timed_out_jobs))
     message_parts.append(reason)
     return AlertRequestedBody(
         workspace_id=workspace_id,
@@ -2465,6 +2478,19 @@ def release_run_attention_alert_body(
         message=f"{application_id}: {' | '.join(message_parts)}",
         reason="release run needs attention",
     )
+
+
+def release_verification_timeout_alert_summary(jobs: list[dict[str, Any]]) -> str:
+    parts: list[str] = []
+    for job in jobs[:3]:
+        kind = str(job.get("kind") or "verification")
+        job_id = str(job.get("job_id") or "unknown-job")
+        age = int_field(job, "age_minutes", 0)
+        timeout = int_field(job, "timeout_minutes", DEFAULT_RELEASE_VERIFICATION_TIMEOUT_MINUTES)
+        parts.append(f"{kind} {job_id} timed out after {age}m (limit {timeout}m)")
+    if len(jobs) > 3:
+        parts.append(f"+{len(jobs) - 3} more timed out verification jobs")
+    return "; ".join(parts)
 
 
 def first_release_run_step(run: dict[str, Any]) -> dict[str, Any]:
