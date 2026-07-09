@@ -246,6 +246,40 @@ def test_release_verification_job_update_projects_guard_result() -> None:
     ]
 
 
+def test_release_verification_job_failure_builds_operational_alert() -> None:
+    update = release_workflow_update_from_event(
+        _evt(
+            "evidence.job.updated",
+            {
+                "workspace_id": "workspace-a",
+                "workflow_run_id": "workflow-1",
+                "application_id": "checkout",
+                "cluster_id": "target",
+                "job_id": "release-verification-a",
+                "provider_key": "http_probe",
+                "status": "failed",
+                "source_id": "post-deploy-verification",
+                "evidence_key": "plan-a:wave-1:checkout:post-deploy-verification",
+                "error": "HTTP 503",
+                "result": {"status_code": 503, "latency_ms": 1200},
+            },
+        )
+    )
+
+    assert update is not None
+    alert = release_alert_request(update)
+
+    assert alert is not None
+    assert alert.workspace_id == "workspace-a"
+    assert alert.cluster_id == "target"
+    assert alert.namespace == "target"
+    assert alert.severity == "critical"
+    assert alert.application_id == "checkout"
+    assert alert.workflow_run_id == "workflow-1"
+    assert alert.reason == "release verification failed"
+    assert alert.message == "checkout: post-deploy verification http_probe failed"
+
+
 def test_merge_projection_details_updates_existing_verification_job() -> None:
     current = {
         "release_guard": {
@@ -841,6 +875,40 @@ def test_release_flow_worker_projects_failure_and_queues_evidence() -> None:
     assert first_update["step_status"] == "failed"
     assert evidence_request["provider_keys"] == ["kubernetes", "metrics", "logs", "traces"]
     assert evidence_update["event_type"] == "evidence.queued"
+
+
+def test_release_flow_worker_alerts_on_verification_failure() -> None:
+    worker = load_service("projection/release-flow-worker")
+    db = ReleaseProjectionDb()
+
+    outs = run_handler(
+        worker.on_event,
+        _evt(
+            "evidence.job.updated",
+            {
+                "workspace_id": "workspace-a",
+                "workflow_run_id": "workflow-1",
+                "application_id": "checkout",
+                "cluster_id": "target",
+                "job_id": "release-verification-a",
+                "provider_key": "http_probe",
+                "status": "failed",
+                "source_id": "post-deploy-verification",
+                "evidence_key": "plan-a:wave-1:checkout:post-deploy-verification",
+                "error": "HTTP 503",
+            },
+        ),
+        db=db,
+    )
+
+    assert subjects_of(outs) == ["alert.requested"]
+    alert = outs[0]
+    assert alert.severity == "critical"
+    assert alert.reason == "release verification failed"
+    assert alert.application_id == "checkout"
+    assert alert.workflow_run_id == "workflow-1"
+    assert alert.message == "checkout: post-deploy verification http_probe failed"
+    assert [name for name, _payload in db.calls] == ["project_release_workflow_event"]
 
 
 def test_release_flow_worker_ignores_unrelated_events() -> None:

@@ -156,6 +156,9 @@ def release_alert_request(
     update: Mapping[str, Any],
     projected: Mapping[str, Any] | None = None,
 ) -> AlertRequestedBody | None:
+    verification_alert = release_verification_alert_request(update, projected)
+    if verification_alert is not None:
+        return verification_alert
     event_type = str(update.get("event_type") or "")
     if event_type not in RELEASE_ALERT_EVENT_TYPES:
         return None
@@ -186,6 +189,67 @@ def release_alert_request(
         message=f"{application_id}: {message}",
         reason=reason,
     )
+
+
+def release_verification_alert_request(
+    update: Mapping[str, Any],
+    projected: Mapping[str, Any] | None = None,
+) -> AlertRequestedBody | None:
+    if str(update.get("event_type") or "") != EventSubject.EVIDENCE_JOB_UPDATED.value:
+        return None
+    details = mapping_value(update.get("details"))
+    release_guard = mapping_value(details.get("release_guard"))
+    verification_jobs = mapping_value(release_guard.get("verification_jobs"))
+    jobs = [
+        item
+        for item in list_value(verification_jobs.get("jobs"))
+        if isinstance(item, Mapping)
+    ]
+    failed_jobs = [
+        job
+        for job in jobs
+        if str(job.get("status") or "").lower() in {"failed", "error", "unhealthy"}
+    ]
+    if not failed_jobs:
+        return None
+    workflow_run_id = str(update.get("workflow_run_id") or "")
+    workspace_id = str(update.get("workspace_id") or DEFAULT_WORKSPACE_ID)
+    cluster_id = release_failure_cluster_id(update, projected, workflow_run_id) or Target.DEFAULT_CLUSTER_ID
+    namespace = release_failure_namespace(update, projected, workflow_run_id)
+    context = release_failure_context(
+        update,
+        projected,
+        workflow_run_id,
+        cluster_id=cluster_id,
+        namespace=namespace,
+        workspace_id=workspace_id,
+    )
+    first_job = failed_jobs[0]
+    application_id = str(
+        first_job.get("application_id")
+        or context.get("application_id")
+        or update.get("application_id")
+        or "release"
+    )
+    kind = str(first_job.get("kind") or "verification")
+    target = release_verification_alert_target(first_job)
+    target_suffix = f" ({target})" if target else ""
+    return AlertRequestedBody(
+        workspace_id=workspace_id,
+        cluster_id=cluster_id,
+        namespace=namespace,
+        severity="critical",
+        application_id=application_id,
+        workflow_run_id=workflow_run_id,
+        environment=str(context.get("environment") or DEFAULT_ENVIRONMENT),
+        message=f"{application_id}: post-deploy verification {kind} failed{target_suffix}",
+        reason="release verification failed",
+    )
+
+
+def release_verification_alert_target(job: Mapping[str, Any]) -> str:
+    target = mapping_value(job.get("target"))
+    return _first_string(target, ("url",), ("path",), ("service_name",))
 
 
 def release_failure_cluster_id(

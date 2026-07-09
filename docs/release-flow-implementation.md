@@ -59,6 +59,7 @@
 - advance/rollback 같은 상태 변경 action은 권한 확인 후에만 상태를 바꾼다.
 - retry는 현재 wave의 failed/unhealthy step만 다시 dispatch하고, plan/step의 `retry_attempts` 예산을 넘으면 차단한다.
 - workflow 실패, 승인 요청, 승인 거절은 `alert.requested`로 이어져 기존 alert-worker/log/webhook/channel 라우팅을 재사용한다.
+- post-deploy verification job 실패도 `alert.requested`로 이어져 배포 후 검증 실패를 운영 채널에 critical로 전달한다.
 - live release dispatch/start/advance/retry는 warning 이상 release event를 받을 수 있고 최근 검증 테스트가 통과한 enabled alert channel이 있어야 실제 GitOps 이벤트 발행을 허용한다. 최근 기준은 기본 24시간이며 `RELEASE_FLOW_ALERT_TEST_MAX_AGE_HOURS`로 조정할 수 있다.
 - live release dispatch/start/advance/retry는 `require_diagnostics_pass`가 켜져 있으면 deterministic release diagnostics의 error/warning이 없어야 실제 GitOps 이벤트 발행을 허용한다.
 - live release에서 `require_diagnostics_pass=false`로 diagnostics gate를 우회하려면 `diagnostics_override_reason`을 남겨야 한다.
@@ -82,7 +83,7 @@
 - deterministic diagnostics와 YAML marker
 - release run 운영 요약: 전체 run 수, 상태별 run 수
 - 최신 run 상태, step 상태, GitHub/commit 링크, timeline 이벤트
-- 실패/승인대기/승인거절 운영 알림은 alert-worker가 설정된 채널로 전달
+- 실패/승인대기/승인거절/배포 후 검증 실패 운영 알림은 alert-worker가 설정된 채널로 전달
 - release audit 조회와 CSV export
 - release dispatch guard snapshot: live 실행 시 readiness impact, warning action, diagnostics/alert gate 통과 근거와 post-deploy verification job snapshot/result를 run step details와 audit event details에 기록
 - release audit UI CSV export
