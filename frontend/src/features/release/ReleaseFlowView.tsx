@@ -1178,13 +1178,31 @@ function RunPanel({
         <div className="release-flow__toolbar release-flow__toolbar--preview">
           {githubUrl && <a href={githubUrl} target="_blank" rel="noreferrer"><Button size="sm">GitHub release</Button></a>}
           <Button size="sm" variant="ghost" onClick={() => copyReleaseRunLink(run.run_id)}>Copy link</Button>
-          <Button size="sm" loading={busy} disabled={busy || status === 'paused' || isTerminal} title={advanceBlockedReason} onClick={() => onAdvance(run.run_id)}>Advance</Button>
+          <Button
+            size="sm"
+            loading={busy}
+            disabled={busy || status === 'paused' || isTerminal}
+            title={advanceBlockedReason}
+            onClick={() => {
+              if (sideEffects && !window.confirm(`Advance live release run ${shortId(run.run_id)}? This can dispatch the next GitOps wave.`)) return;
+              onAdvance(run.run_id);
+            }}
+          >
+            Advance
+          </Button>
           <Button
             size="sm"
             loading={busy}
             disabled={busy || !canRetry}
             title={retryBlockedReason}
-            onClick={() => withOperatorReason('Retry release wave', operatorActionReason('retry', run, status, attentionReasons), reason => onRetry(run.run_id, reason))}
+            onClick={() => {
+              const confirmation = sideEffects
+                ? `Retry live release run ${shortId(run.run_id)}? This can re-dispatch failed or unhealthy GitOps steps.`
+                : '';
+              const submit = (reason: string) => onRetry(run.run_id, reason);
+              if (confirmation) withConfirmedOperatorReason('Retry release wave', operatorActionReason('retry', run, status, attentionReasons), confirmation, submit);
+              else withOperatorReason('Retry release wave', operatorActionReason('retry', run, status, attentionReasons), submit);
+            }}
           >
             Retry
           </Button>
