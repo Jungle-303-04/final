@@ -142,6 +142,8 @@ def build_live_preflight_plan(applications: list[JsonMap], args: argparse.Namesp
             "release_window_start": window_start,
             "release_window_end": window_end,
             "runbook_url": args.live_runbook_url,
+            "release_owner": args.live_release_owner,
+            "oncall_contact": args.live_oncall_contact,
             "rollback_policy": args.live_rollback_policy,
             "require_diagnostics_pass": True,
         }
@@ -439,6 +441,14 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     parser.add_argument(
         "--live-runbook-url",
         default=os.getenv("LIVE_PREFLIGHT_RUNBOOK_URL", "https://example.com/runbooks/release-flow"),
+    )
+    parser.add_argument(
+        "--live-release-owner",
+        default=os.getenv("LIVE_PREFLIGHT_RELEASE_OWNER", "release-operator"),
+    )
+    parser.add_argument(
+        "--live-oncall-contact",
+        default=os.getenv("LIVE_PREFLIGHT_ONCALL_CONTACT", "release-oncall@example.com"),
     )
     parser.add_argument("--live-commit-sha", default=os.getenv("LIVE_PREFLIGHT_COMMIT_SHA", ""))
     parser.add_argument("--live-image", default=os.getenv("LIVE_PREFLIGHT_IMAGE", ""))
