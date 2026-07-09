@@ -12,11 +12,11 @@ import "@xyflow/react/dist/style.css";
 type ToolbarEdge = Edge<{ action: string }, "toolbar">;
 
 const nodes = [
-  { id: "1", position: { x: 0, y: 120 }, data: { label: "Failing Step" } },
-  { id: "2", position: { x: 300, y: 120 }, data: { label: "Open Logs" } }
+  { id: "1", position: { x: 0, y: 120 }, data: { label: "실패 단계" } },
+  { id: "2", position: { x: 300, y: 120 }, data: { label: "로그 열기" } }
 ];
 
-const edges: ToolbarEdge[] = [{ id: "1-2", source: "1", target: "2", type: "toolbar", data: { action: "View" } }];
+const edges: ToolbarEdge[] = [{ id: "1-2", source: "1", target: "2", type: "toolbar", data: { action: "보기" } }];
 
 const edgeTypes = { toolbar: ToolbarEdgeComponent };
 
@@ -38,7 +38,7 @@ function ToolbarEdgeComponent(props: EdgeProps<ToolbarEdge>) {
       <BaseEdge id={props.id} path={edgePath} />
       <EdgeLabelRenderer>
         <div className="edge-toolbar" style={{ transform: `translate(-50%, -50%) translate(${labelX}px, ${labelY}px)` }}>
-          <button>{props.data?.action}</button>
+          <button type="button">{props.data?.action}</button>
         </div>
       </EdgeLabelRenderer>
     </>

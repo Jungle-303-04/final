@@ -36,7 +36,7 @@ export default function App() {
   const filteredExamples = activeGroup.examples.filter((example) => {
     const normalized = query.trim().toLowerCase();
     if (!normalized) return true;
-    return [example.title, example.description, example.motionIntent, ...example.variantIds]
+    return [example.title, example.description, example.motionIntent, ...(example.variantIds ?? [])]
       .join(" ")
       .toLowerCase()
       .includes(normalized);

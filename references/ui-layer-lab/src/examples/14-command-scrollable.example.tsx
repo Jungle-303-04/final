@@ -10,10 +10,10 @@ export default function CommandScrollableExample() {
     <div className="command-demo">
       <div className="inline-command-layout">
         <Command className="command-dialog inline-command">
-          <Command.Input placeholder="Search repositories..." />
+          <Command.Input placeholder="저장소를 검색하세요" />
           <Command.List className="command-scroll-list">
-            <Command.Empty>No repositories found.</Command.Empty>
-            <Command.Group heading="Repositories">
+            <Command.Empty>저장소가 없습니다.</Command.Empty>
+            <Command.Group heading="저장소">
               {repositories.map((repo) => (
                 <Command.Item key={repo} onSelect={() => setSelected(repo)}>
                   <span className="command-icon">R</span>
@@ -24,9 +24,9 @@ export default function CommandScrollableExample() {
           </Command.List>
         </Command>
         <div className="result-panel">
-          <strong>Repository</strong>
+          <strong>저장소</strong>
           <span>{selected}</span>
-          <span className="status-dot">healthy</span>
+          <span className="status-dot">정상</span>
         </div>
       </div>
     </div>
