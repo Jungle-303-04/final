@@ -2,22 +2,22 @@ import { useState } from "react";
 import { toast } from "sonner";
 
 export default function SonnerOptimisticSaveExample() {
-  const [status, setStatus] = useState("Draft has local edits.");
+  const [status, setStatus] = useState("초안에 로컬 변경이 있습니다.");
 
   function save() {
-    setStatus("Saved locally. Syncing remote...");
-    const id = toast.loading("Saving draft...");
+    setStatus("로컬 저장 완료. 원격 동기화 중...");
+    const id = toast.loading("초안을 저장하는 중...");
     window.setTimeout(() => {
-      toast.success("Draft saved", { id });
-      setStatus("Remote save completed.");
+      toast.success("초안 저장됨", { id });
+      setStatus("원격 저장 완료.");
     }, 900);
   }
 
   return (
     <div className="toast-state-card">
-      <strong>Optimistic save</strong>
+      <strong>낙관적 저장</strong>
       <span>{status}</span>
-      <button className="command-trigger" onClick={save}>Save Draft</button>
+      <button className="command-trigger stable-wide" onClick={save} type="button">초안 저장</button>
     </div>
   );
 }

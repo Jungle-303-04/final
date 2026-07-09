@@ -485,6 +485,94 @@ async function inspectSourceEnglishGuard() {
     {
       file: "src/examples/169-react-flow-freehand-draw.example.tsx",
       fragments: ["Sketch note", ">Hide<", ">Show<"]
+    },
+    {
+      file: "src/examples/170-react-flow-download-panel.example.tsx",
+      fragments: ["Exportable flow", "Ready to export", "PNG export queued", "JSON export queued"]
+    },
+    {
+      file: "src/examples/171-command-federated-search.example.tsx",
+      fragments: ["Files", "Issues", "Docs", "All", "Search files, issues, and docs", "Preview route returns 404", "Build cache is stale", "Command composition", "Sonner position API"]
+    },
+    {
+      file: "src/examples/172-command-confirm-danger.example.tsx",
+      fragments: ["No destructive action selected", "Run an action", "Open logs", "Start dry run", "Danger zone", "Delete preview environment", "Confirm delete", "This action removes the preview environment", "Preview environment deleted", ">Confirm<"]
+    },
+    {
+      file: "src/examples/173-command-tokenized-query.example.tsx",
+      fragments: ["repo:web status:failed", "repo:api owner:me", "tag:ai file:diff.tsx", "Parsed results"]
+    },
+    {
+      file: "src/examples/174-command-object-search.example.tsx",
+      fragments: ["Deploy preview", "Unit tests", "Visual smoke", "Search structured records", 'heading="Runs"', "Owner:", "Status:"]
+    },
+    {
+      file: "src/examples/175-command-inline-progress.example.tsx",
+      fragments: ["Choose a job command", 'heading="Jobs"', "Pull latest changes", '"Ready"', "Open workflow logs"]
+    },
+    {
+      file: "src/examples/176-sonner-optimistic-save.example.tsx",
+      fragments: ["Draft has local edits", "Saved locally. Syncing remote", "Saving draft", "Draft saved", "Remote save completed", "Optimistic save", "Save Draft"]
+    },
+    {
+      file: "src/examples/177-sonner-bulk-result.example.tsx",
+      fragments: ["3 files formatted", "Show Bulk Result"]
+    },
+    {
+      file: "src/examples/178-sonner-network-reconnect.example.tsx",
+      fragments: ["You are offline", "Connection restored", "Background jobs will pause", "Queued jobs are resuming", '"Online"', '"Offline"', "Realtime updates are active", "Waiting for reconnect", "Go Offline", '"Reconnect"']
+    },
+    {
+      file: "src/examples/179-sonner-validation-stack.example.tsx",
+      fragments: ["Project name is required", "Fill the highlighted field", "Project created", "Project name", ">Create<"]
+    },
+    {
+      file: "src/examples/198-react-flow-helper-lines.example.tsx",
+      fragments: ['label: "Source"', 'label: "Target"', ">Hide<", ">Show<", "Helper Lines"]
+    },
+    {
+      file: "src/examples/199-react-flow-copy-paste.example.tsx",
+      fragments: ["Selected nodes", "Duplicate Node", "Copy ${items.length}"]
+    },
+    {
+      file: "src/examples/200-react-flow-dark-mode-toggle.example.tsx",
+      fragments: ["Color mode", ">Dark<", ">Light<", "{mode} mode"]
+    },
+    {
+      file: "src/examples/201-command-filter-builder.example.tsx",
+      fragments: ["status:failed", "owner:me", "type:deploy", "Add filter", 'heading="Filters"', ">on<", ">off<"]
+    },
+    {
+      file: "src/examples/202-command-progressive-disclosure.example.tsx",
+      fragments: ["Search actions", "Open logs", "Explain failure", "advanced commands", "Reset cache", "Force rebuild"]
+    },
+    {
+      file: "src/examples/203-command-audit-log-action.example.tsx",
+      fragments: ["Deploy approved", "Cache purged", "Secret rotated", "No audit event selected", "Search audit actions", "Audit trail"]
+    },
+    {
+      file: "src/examples/204-command-variable-insert.example.tsx",
+      fragments: ["Explain {{failed.step}} in", "Insert variable", 'heading="Variables"']
+    },
+    {
+      file: "src/examples/205-command-shortcut-cheatsheet.example.tsx",
+      fragments: ["Open command", "Open logs", "Toggle AI", "Focus jobs", "Search shortcuts", 'heading="Keyboard"']
+    },
+    {
+      file: "src/examples/206-sonner-upload-progress.example.tsx",
+      fragments: ["Uploading artifact", "Upload complete", "Artifact upload", ">Upload<"]
+    },
+    {
+      file: "src/examples/207-sonner-destructive-confirm.example.tsx",
+      fragments: ["Preview environment is running", "Delete preview", "Delete", "low-risk confirmation"]
+    },
+    {
+      file: "src/examples/208-sonner-snooze-reminder.example.tsx",
+      fragments: ["No reminder scheduled", "Review failed run", 'label: "Snooze"', "Run reminder", "Show Reminder"]
+    },
+    {
+      file: "src/examples/209-sonner-autosave-status.example.tsx",
+      fragments: ["Draft note", "Saving...", "Saved just now", "Autosaved"]
     }
   ];
   const matches = [];
@@ -714,9 +802,31 @@ async function inspectEnglishSamples(page, url) {
     ["플로우 빌더", "example-react-flow-floating-edge"],
     ["플로우 빌더", "example-react-flow-intersections"],
     ["플로우 빌더", "example-react-flow-lasso-selection"],
-    ["플로우 빌더", "example-react-flow-freehand-draw"]
+    ["플로우 빌더", "example-react-flow-freehand-draw"],
+    ["플로우 빌더", "example-react-flow-download-panel"],
+    ["오버레이/명령", "example-command-federated-search"],
+    ["오버레이/명령", "example-command-confirm-danger"],
+    ["오버레이/명령", "example-command-tokenized-query"],
+    ["오버레이/명령", "example-command-object-search"],
+    ["오버레이/명령", "example-command-inline-progress"],
+    ["작업 진행/로그", "example-sonner-optimistic-save"],
+    ["작업 진행/로그", "example-sonner-bulk-result"],
+    ["작업 진행/로그", "example-sonner-network-reconnect"],
+    ["작업 진행/로그", "example-sonner-validation-stack"],
+    ["플로우 빌더", "example-react-flow-helper-lines"],
+    ["플로우 빌더", "example-react-flow-copy-paste"],
+    ["플로우 빌더", "example-react-flow-dark-mode-toggle"],
+    ["오버레이/명령", "example-command-filter-builder"],
+    ["오버레이/명령", "example-command-progressive-disclosure"],
+    ["오버레이/명령", "example-command-audit-log-action"],
+    ["오버레이/명령", "example-command-variable-insert"],
+    ["오버레이/명령", "example-command-shortcut-cheatsheet"],
+    ["작업 진행/로그", "example-sonner-upload-progress"],
+    ["작업 진행/로그", "example-sonner-destructive-confirm"],
+    ["작업 진행/로그", "example-sonner-snooze-reminder"],
+    ["작업 진행/로그", "example-sonner-autosave-status"]
   ];
-  const forbidden = /\b(Open|Close|Show|Hide|Search|Loading|Current|Selected|Dashboard|Create|Cancel|Retry|Next|Previous|Expand|Collapse|Focus|Input|Logs|Answer|Status|Resources|Jobs|Steps|Command|Filter|Recent|Approval|Matrix|Launch|Health|Edge|Done|Running|Failed|Pending|Allowed|Blocked)\b/i;
+  const forbidden = /\b(Open|Close|Show|Hide|Search|Loading|Current|Selected|Dashboard|Create|Cancel|Retry|Next|Previous|Expand|Collapse|Focus|Input|Logs|Answer|Status|Resources|Jobs|Steps|Command|Filter|Recent|Approval|Matrix|Launch|Health|Edge|Done|Running|Failed|Pending|Allowed|Blocked|Owner|Online|Offline|Reconnect|Confirm|Delete|Danger|Safe|Ready|Exportable|Draft|Save)\b/i;
   const violations = [];
 
   for (const [category, testId] of samples) {

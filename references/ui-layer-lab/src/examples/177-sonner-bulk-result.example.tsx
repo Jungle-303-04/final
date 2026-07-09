@@ -6,7 +6,7 @@ export default function SonnerBulkResultExample() {
   function run() {
     toast.custom(() => (
       <div className="custom-toast">
-        <strong>3 files formatted</strong>
+        <strong>파일 3개 포맷 완료</strong>
         {files.map((file) => (
           <span key={file}>{file}</span>
         ))}
@@ -15,8 +15,8 @@ export default function SonnerBulkResultExample() {
   }
 
   return (
-    <button className="command-trigger" onClick={run}>
-      Show Bulk Result
+    <button className="command-trigger stable-wide" onClick={run} type="button">
+      일괄 결과 보기
     </button>
   );
 }

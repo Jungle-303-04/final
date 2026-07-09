@@ -11,15 +11,15 @@ export default function CommandInlineProgressExample() {
 
   return (
     <Command className="command-dialog inline-command">
-      <Command.Input placeholder="Choose a job command..." />
+      <Command.Input placeholder="작업 명령을 선택하세요..." />
       <Command.List>
-        <Command.Group heading="Jobs">
+        <Command.Group heading="작업">
           <Command.Item onSelect={start}>
-            <span>Pull latest changes</span>
-            <span className={running ? "inline-loader active" : "inline-loader"}>{running ? "Running" : "Ready"}</span>
+            <span>최신 변경 가져오기</span>
+            <span aria-live="polite" className={running ? "inline-loader stable-text-slot active" : "inline-loader stable-text-slot"}>{running ? "실행 중" : "대기"}</span>
           </Command.Item>
           <Command.Item>
-            <span>Open workflow logs</span>
+            <span>워크플로 로그 열기</span>
             <kbd>⌘L</kbd>
           </Command.Item>
         </Command.Group>

@@ -624,6 +624,49 @@
   background: color-mix(in srgb, var(--red) 42%, var(--panel));
 }
 
+.flow-panel button,
+.chip-row button {
+  min-height: var(--control-height-sm);
+  border: 1px solid var(--border);
+  color: var(--text);
+  background: var(--panel-soft);
+  line-height: var(--line-button);
+  white-space: nowrap;
+}
+
+.flow-panel button {
+  min-width: 72px;
+  border-radius: var(--radius-md);
+}
+
+.segmented-row button[aria-pressed="true"],
+.chip-row button.active {
+  border-color: var(--border-strong);
+  background: var(--surface-raised);
+}
+
+.inline-loader.stable-text-slot {
+  min-width: 72px;
+}
+
+.flow-status,
+.custom-toast,
+.toast-state-card,
+.validation-card,
+.attachment-card {
+  border-color: var(--border);
+  background: var(--panel);
+}
+
+.validation-card input,
+.attachment-card textarea {
+  background: var(--panel-soft);
+}
+
+.pause-card.paused {
+  border-color: color-mix(in srgb, var(--orange) 55%, var(--border));
+}
+
 @media (max-width: 720px) {
   .snap-drawer-toolbar,
   .treemap-header,

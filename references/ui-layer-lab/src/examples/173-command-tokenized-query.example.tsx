@@ -1,23 +1,23 @@
 import { Command } from "cmdk";
 import { useMemo, useState } from "react";
 
-const results = ["repo:web status:failed", "repo:api owner:me", "tag:ai file:diff.tsx"];
+const results = ["저장소:web 상태:실패", "저장소:api 담당:나", "태그:AI 파일:diff.tsx"];
 
 export default function CommandTokenizedQueryExample() {
-  const [query, setQuery] = useState("repo:web status:failed");
+  const [query, setQuery] = useState("저장소:web 상태:실패");
   const tokens = useMemo(() => query.split(" ").filter(Boolean), [query]);
 
   return (
     <div className="command-filter-demo">
       <div className="chip-row">
         {tokens.map((token) => (
-          <button className="active" key={token}>{token}</button>
+          <button className="active" key={token} type="button">{token}</button>
         ))}
       </div>
       <Command className="command-dialog inline-command">
-        <Command.Input value={query} onValueChange={setQuery} placeholder="repo:web status:failed" />
+        <Command.Input value={query} onValueChange={setQuery} placeholder="저장소:web 상태:실패" />
         <Command.List>
-          <Command.Group heading="Parsed results">
+          <Command.Group heading="분석 결과">
             {results.map((item) => (
               <Command.Item key={item}>{item}</Command.Item>
             ))}
