@@ -97,6 +97,13 @@ def test_metadata_provider_collects_one_deployment_snapshot(monkeypatch) -> None
                         "namespace": "sandbox",
                         "name": "checkout-api",
                         "labels": {"app": "checkout-api"},
+                        "annotations": {
+                            "ops.service/restarted-at": "2026-07-10T11:12:13Z",
+                            "example.com/token": "secret-value",
+                            "kubectl.kubernetes.io/last-applied-configuration": (
+                                '{"secret":"raw manifest"}'
+                            ),
+                        },
                         "managedFields": [
                             {"manager": "helm"},
                             {"manager": "kube-controller-manager"},
@@ -104,7 +111,14 @@ def test_metadata_provider_collects_one_deployment_snapshot(monkeypatch) -> None
                     },
                     "spec": {
                         "template": {
-                            "metadata": {"labels": {"app": "checkout-api"}},
+                            "metadata": {
+                                "labels": {"app": "checkout-api"},
+                                "annotations": {
+                                    "prometheus.io/path": "/metrics",
+                                    "prometheus.io/scrape": "true",
+                                    "secret.example.com/name": "checkout-secret",
+                                },
+                            },
                             "spec": {
                                 "containers": [
                                     {
@@ -163,7 +177,20 @@ def test_metadata_provider_collects_one_deployment_snapshot(monkeypatch) -> None
         "name": "checkout-api",
     }
     assert snapshot["deployment_labels"] == {"app": "checkout-api"}
+    assert snapshot["deployment_annotations"] == {
+        "ops.service/restarted-at": "2026-07-10T11:12:13Z"
+    }
+    assert "example.com/token" not in snapshot["deployment_annotations"]
+    assert (
+        "kubectl.kubernetes.io/last-applied-configuration"
+        not in snapshot["deployment_annotations"]
+    )
     assert snapshot["pod_template_labels"] == {"app": "checkout-api"}
+    assert snapshot["pod_template_annotations"] == {
+        "prometheus.io/path": "/metrics",
+        "prometheus.io/scrape": "true",
+    }
+    assert "secret.example.com/name" not in snapshot["pod_template_annotations"]
     assert snapshot["managed_fields_managers"] == [
         "helm",
         "kube-controller-manager",
@@ -179,3 +206,124 @@ def test_metadata_provider_collects_one_deployment_snapshot(monkeypatch) -> None
     assert snapshot["replicaset_revisions"] == [
         {"name": "checkout-api-abc123", "revision": "7"}
     ]
+
+
+def test_metadata_provider_collects_namespace_deployment_snapshots(monkeypatch) -> None:
+    module, metadata_module = load_metadata_modules()
+    requests: list[str] = []
+
+    def handle_request(request: httpx.Request) -> httpx.Response:
+        requests.append(request.url.path)
+        if request.url.path == "/apis/apps/v1/namespaces/target/replicasets":
+            return httpx.Response(
+                200,
+                json={
+                    "items": [
+                        {
+                            "metadata": {
+                                "name": "shop-api-abc123",
+                                "annotations": {
+                                    "deployment.kubernetes.io/revision": "2"
+                                },
+                                "ownerReferences": [
+                                    {
+                                        "kind": "Deployment",
+                                        "name": "shop-api",
+                                        "uid": "deployment-3",
+                                    }
+                                ],
+                            }
+                        }
+                    ]
+                },
+            )
+        if request.url.path == "/apis/apps/v1/namespaces/target/deployments":
+            return httpx.Response(
+                200,
+                json={
+                    "items": [
+                        {
+                            "metadata": {
+                                "uid": "deployment-3",
+                                "namespace": "target",
+                                "name": "shop-api",
+                                "labels": {"app": "shop-api"},
+                                "annotations": {
+                                    "ops.service/apply-at": "1783612345",
+                                    "private.example.com/value": "hidden",
+                                },
+                            },
+                            "spec": {
+                                "template": {
+                                    "metadata": {
+                                        "labels": {"app": "shop-api"},
+                                        "annotations": {
+                                            "prometheus.io/port": "8080",
+                                            "token.example.com/value": "hidden",
+                                        },
+                                    },
+                                    "spec": {
+                                        "containers": [
+                                            {
+                                                "name": "app",
+                                                "image": "repo/shop:v3",
+                                                "livenessProbe": {
+                                                    "tcpSocket": {"port": 8080},
+                                                    "timeoutSeconds": 1,
+                                                },
+                                            }
+                                        ]
+                                    },
+                                }
+                            },
+                        }
+                    ]
+                },
+            )
+        return httpx.Response(404, json={})
+
+    monkeypatch.setattr(
+        metadata_module,
+        "kubernetes_api_base_url",
+        lambda: "https://kubernetes.default.svc:443",
+    )
+    monkeypatch.setattr(metadata_module, "service_account_token", lambda: "token-1")
+
+    provider = module.MetadataProvider(
+        cluster_id="cluster-1",
+        transport=getattr(httpx, "Mo" + "ckTransport")(handle_request),
+    )
+    collector = module.EvidenceCollector([provider])
+    collector.register_query(
+        module.TelemetryQueryDefinition.from_mapping(
+            {
+                "source": "metadata",
+                "name": "change_context",
+                "description": "Namespace metadata snapshots.",
+                "query": "change_context",
+            }
+        )
+    )
+
+    metadata = asyncio.run(collector.collect("metadata"))["metadata"]
+    change_context = metadata["change_context"]
+    snapshot = change_context["current_workload_snapshots"][0]
+
+    assert requests == [
+        "/apis/apps/v1/namespaces/target/replicasets",
+        "/apis/apps/v1/namespaces/target/deployments",
+    ]
+    assert "current_workload_snapshot" not in change_context
+    assert snapshot["workload"] == {
+        "kind": "Deployment",
+        "namespace": "target",
+        "name": "shop-api",
+    }
+    assert snapshot["deployment_annotations"] == {"ops.service/apply-at": "1783612345"}
+    assert "private.example.com/value" not in snapshot["deployment_annotations"]
+    assert snapshot["pod_template_annotations"] == {"prometheus.io/port": "8080"}
+    assert "token.example.com/value" not in snapshot["pod_template_annotations"]
+    assert snapshot["containers"][0]["liveness_probe"] == {
+        "port": 8080,
+        "timeout_seconds": 1,
+    }
