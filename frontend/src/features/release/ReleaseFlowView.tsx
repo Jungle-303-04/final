@@ -911,6 +911,7 @@ function ReadinessPanel({ readiness, loading }: { readiness?: ReleaseReadiness; 
       title="Readiness"
       actions={
         <>
+          <Button size="sm" variant="ghost" onClick={() => copyReadinessMarkdown(readiness)}>Copy readiness</Button>
           <Badge tone={readiness.mode === 'live' ? 'danger' : 'info'}>{readiness.mode}</Badge>
           <Badge tone={badgeTone}>{readiness.ready ? 'ready' : 'blocked'}</Badge>
         </>
@@ -1447,6 +1448,39 @@ function verificationJobSummary(job: { kind: string; status: string; target: Rec
   const statusCode = getString(result.status_code);
   const resultSuffix = error || (statusCode ? `HTTP ${statusCode}` : '');
   return `${job.kind} ${job.status}: ${target}${resultSuffix ? ` - ${resultSuffix}` : ''}`;
+}
+
+function copyReadinessMarkdown(readiness: ReleaseReadiness) {
+  copyText(formatReadinessMarkdown(readiness), 'Release readiness copied.', 'Copy release readiness');
+}
+
+function formatReadinessMarkdown(readiness: ReleaseReadiness): string {
+  const impact = readiness.impact;
+  const lines = [
+    `## Release readiness: ${readiness.ready ? 'ready' : 'blocked'}`,
+    '',
+    `- Mode: ${readiness.mode}`,
+    `- Summary: ${readiness.summary}`,
+  ];
+  if (impact) {
+    lines.push(
+      `- Applications: ${impact.applications.join(', ') || impact.total_steps}`,
+      `- Environments: ${impact.environments.join(', ') || '-'}`,
+      `- Waves: ${impact.total_waves}`,
+      `- Production targets: ${impact.production_target_count}`,
+      `- Impact: ${impact.summary}`,
+    );
+    if (impact.first_wave_steps.length > 0) {
+      lines.push('', 'First wave:', ...impact.first_wave_steps.slice(0, 6).map(step => `- ${step.name || step.application_id} (${step.environment}, ${step.strategy})`));
+    }
+  }
+  if (readiness.next_actions.length > 0) {
+    lines.push('', 'Next actions:');
+    lines.push(...readiness.next_actions.slice(0, 8).map(action => `- ${readinessStatusLabel(action.severity)}: ${action.label} - ${action.blockers[0] ?? action.message}`));
+  }
+  lines.push('', 'Checks:');
+  lines.push(...readiness.checks.slice(0, 12).map(check => `- ${check.name}: ${readinessStatusLabel(check.status)} - ${check.blockers[0] ?? check.message}`));
+  return lines.join('\n');
 }
 
 function copyHandoffMarkdown(handoff: ReleaseRunHandoff) {
