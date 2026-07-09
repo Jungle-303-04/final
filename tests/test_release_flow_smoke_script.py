@@ -442,6 +442,39 @@ def test_smoke_change_freeze_preflight_flags_active_and_override_runs() -> None:
     assert "run-freeze-override" in preflight.detail
 
 
+def test_smoke_production_preflight_enables_all_release_guards() -> None:
+    smoke = load_smoke_module()
+    client = FakeClient()
+    args = smoke.parse_args(["--production-preflight"])
+    smoke.apply_production_preflight_flags(args)
+
+    assert args.run_health_preflight is True
+    assert args.verification_preflight is True
+    assert args.policy_override_preflight is True
+    assert args.change_freeze_preflight is True
+
+    results = smoke.run_smoke(
+        client,
+        "ops@example.com",
+        "password",
+        demo_run=False,
+        run_health_preflight=args.run_health_preflight,
+        verification_preflight=args.verification_preflight,
+        policy_override_preflight=args.policy_override_preflight,
+        change_freeze_preflight=args.change_freeze_preflight,
+        args=args,
+    )
+
+    assert all(result.ok for result in results)
+    result_names = {result.name for result in results}
+    assert {
+        "release-runs.run-health-preflight",
+        "release-runs.verification-preflight",
+        "release-runs.policy-override-preflight",
+        "release-runs.change-freeze-preflight",
+    } <= result_names
+
+
 def test_smoke_run_health_preflight_passes_when_summary_is_clean() -> None:
     smoke = load_smoke_module()
     client = FakeClient()
