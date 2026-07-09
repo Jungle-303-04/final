@@ -69,6 +69,7 @@
 - live release에서 `rollback_policy=disabled`로 rollback을 끄려면 `rollback_override_reason`을 남겨야 한다.
 - live production release는 change ticket이 필요하며, ticket 없이 진행하려면 `production_change_override_reason`을 남겨야 한다.
 - live production release는 `release_window_start`와 `release_window_end` 사이에서만 진행되며, window 밖에서 진행하려면 `release_window_override_reason`을 남겨야 한다.
+- live production release is blocked during `change_freeze_start` to `change_freeze_end`; emergency dispatch during a freeze requires `change_freeze_override_reason`.
 - live production release는 승인된 상태라도 `approval_granted_by`, `approval_reason`, `approval_granted_at`을 남겨야 하며, 승인 시각이 `RELEASE_FLOW_APPROVAL_MAX_AGE_HOURS` 기준보다 오래되면 실제 GitOps 이벤트 발행을 차단한다.
 - live production release는 `runbook_url`이 필요하며, URL 없이 진행하려면 `runbook_override_reason`을 남겨야 한다.
 - live production release는 `release_owner` 또는 `oncall_contact`가 필요하다.
@@ -102,6 +103,7 @@
 - rollback override 입력: rollback policy를 disabled로 두는 경우 운영 사유를 UI에서 입력
 - production change override 입력: live production release에서 change ticket 없이 진행하는 경우 운영 사유를 UI에서 입력
 - release window 입력: live production release의 승인된 시작/종료 시각과 window override 사유를 UI에서 입력
+- change freeze input: live production release freeze start/end and emergency override reason are editable from the policy UI.
 - approval evidence 입력: production live approval의 승인자, 승인 사유, 승인 시각을 UI에서 입력
 - runbook 입력: production live release의 운영 runbook URL 또는 runbook override 사유를 UI에서 입력
 - owner/contact 입력: production live release의 책임자 또는 온콜 연락처를 UI에서 입력

@@ -1485,6 +1485,135 @@ def test_release_readiness_warns_when_production_release_window_is_bypassed(monk
     assert window_check["status"] == "warning"
 
 
+def test_release_readiness_blocks_production_live_during_change_freeze(monkeypatch) -> None:
+    monkeypatch.setenv("RELEASE_FLOW_LIVE_ENABLED", "1")
+    monkeypatch.setenv("RELEASE_FLOW_LIVE_WORKSPACES", "workspace-a")
+    now = datetime.now(timezone.utc)
+    db = ReleaseReadinessDb(
+        channels=[
+            {
+                "channel_id": "chan-warning",
+                "enabled": True,
+                "min_severity": "warning",
+                "last_test_status": "passed",
+                "last_tested_at": now.isoformat(),
+            }
+        ]
+    )
+    monkeypatch.setattr(release_router, "require_plan_application_read_access", lambda *_args: None)
+
+    response = asyncio.run(
+        release_router.check_release_readiness(
+            release_router.ReleasePlanUpsertRequest(
+                name="Checkout production release",
+                settings={
+                    "runtime_mode": "live",
+                    "approval_policy": "auto_safe",
+                    "approval_granted": True,
+                    "approval_granted_by": "lead@example.com",
+                    "approval_reason": "approved production release",
+                    "approval_granted_at": now.isoformat(),
+                    "change_ticket": "CHG-123",
+                    "release_window_start": (now - timedelta(hours=1)).isoformat(),
+                    "release_window_end": (now + timedelta(hours=1)).isoformat(),
+                    "change_freeze_start": (now - timedelta(minutes=5)).isoformat(),
+                    "change_freeze_end": (now + timedelta(minutes=5)).isoformat(),
+                    "runbook_url": "https://wiki.example.com/runbooks/checkout-release",
+                    "release_owner": "checkout-release-team",
+                    "abort_criteria": "rollback if checkout error rate exceeds 5% for 5 minutes",
+                },
+                steps=[
+                    {
+                        "application_id": "checkout",
+                        "name": "Checkout",
+                        "position": 0,
+                        "config": {
+                            "environment": "production",
+                            "approval_gate": "manual",
+                            "commit_sha": "abc1234",
+                            "image": "ghcr.io/example/checkout:v2",
+                            "health_check_path": "/readyz",
+                        },
+                    }
+                ],
+            ),
+            current=SimpleNamespace(workspace_id="workspace-a", user_id="operator", roles=()),
+            db=db,
+        )
+    )
+
+    assert response.ready is False
+    assert any("change freeze window" in item for item in response.blockers)
+    freeze_check = next(check for check in response.checks if check["check_id"] == "change.freeze")
+    assert freeze_check["status"] == "blocked"
+
+
+def test_release_readiness_warns_when_change_freeze_is_bypassed(monkeypatch) -> None:
+    monkeypatch.setenv("RELEASE_FLOW_LIVE_ENABLED", "1")
+    monkeypatch.setenv("RELEASE_FLOW_LIVE_WORKSPACES", "workspace-a")
+    now = datetime.now(timezone.utc)
+    db = ReleaseReadinessDb(
+        channels=[
+            {
+                "channel_id": "chan-warning",
+                "enabled": True,
+                "min_severity": "warning",
+                "last_test_status": "passed",
+                "last_tested_at": now.isoformat(),
+            }
+        ]
+    )
+    monkeypatch.setattr(release_router, "require_plan_application_read_access", lambda *_args: None)
+
+    response = asyncio.run(
+        release_router.check_release_readiness(
+            release_router.ReleasePlanUpsertRequest(
+                name="Checkout production release",
+                settings={
+                    "runtime_mode": "live",
+                    "approval_policy": "auto_safe",
+                    "approval_granted": True,
+                    "approval_granted_by": "lead@example.com",
+                    "approval_reason": "approved production release",
+                    "approval_granted_at": now.isoformat(),
+                    "change_ticket": "CHG-123",
+                    "release_window_start": (now - timedelta(hours=1)).isoformat(),
+                    "release_window_end": (now + timedelta(hours=1)).isoformat(),
+                    "change_freeze_start": (now - timedelta(minutes=5)).isoformat(),
+                    "change_freeze_end": (now + timedelta(minutes=5)).isoformat(),
+                    "change_freeze_override_reason": "incident commander approved emergency hotfix",
+                    "runbook_url": "https://wiki.example.com/runbooks/checkout-release",
+                    "release_owner": "checkout-release-team",
+                    "abort_criteria": "rollback if checkout error rate exceeds 5% for 5 minutes",
+                },
+                steps=[
+                    {
+                        "application_id": "checkout",
+                        "name": "Checkout",
+                        "position": 0,
+                        "config": {
+                            "environment": "production",
+                            "approval_gate": "manual",
+                            "commit_sha": "abc1234",
+                            "image": "ghcr.io/example/checkout:v2",
+                            "health_check_path": "/readyz",
+                        },
+                    }
+                ],
+            ),
+            current=SimpleNamespace(workspace_id="workspace-a", user_id="operator", roles=()),
+            db=db,
+        )
+    )
+
+    assert response.ready is True
+    freeze_check = next(check for check in response.checks if check["check_id"] == "change.freeze")
+    assert freeze_check["status"] == "warning"
+    freeze_action = next(action for action in response.next_actions if action["check_id"] == "change.freeze")
+    assert freeze_action["severity"] == "warning"
+    assert freeze_action["label"] == "Review Change freeze"
+
+
 def test_release_readiness_blocks_production_live_without_runbook(monkeypatch) -> None:
     monkeypatch.setenv("RELEASE_FLOW_LIVE_ENABLED", "1")
     monkeypatch.setenv("RELEASE_FLOW_LIVE_WORKSPACES", "workspace-a")
@@ -3932,6 +4061,82 @@ def test_dispatch_wave_steps_blocks_production_live_without_release_window(monke
     assert db.dispatched == []
 
 
+def test_dispatch_wave_steps_blocks_production_live_during_change_freeze(monkeypatch) -> None:
+    monkeypatch.setenv("RELEASE_FLOW_LIVE_ENABLED", "1")
+    monkeypatch.setenv("RELEASE_FLOW_LIVE_WORKSPACES", "workspace-a")
+    now = datetime.now(timezone.utc)
+    plan = {
+        "plan_id": "plan-a",
+        "name": "storefront",
+        "settings": {
+            "runtime_mode": "live",
+            "approval_policy": "auto_safe",
+            "approval_granted": True,
+            "approval_granted_by": "lead@example.com",
+            "approval_reason": "approved production release",
+            "approval_granted_at": now.isoformat(),
+            "change_ticket": "CHG-123",
+            "release_window_start": (now - timedelta(hours=1)).isoformat(),
+            "release_window_end": (now + timedelta(hours=1)).isoformat(),
+            "change_freeze_start": (now - timedelta(minutes=5)).isoformat(),
+            "change_freeze_end": (now + timedelta(minutes=5)).isoformat(),
+            "runbook_url": "https://wiki.example.com/runbooks/storefront-release",
+            "release_owner": "storefront-release-team",
+            "abort_criteria": "rollback if checkout error rate exceeds 5% for 5 minutes",
+        },
+        "steps": [
+            {
+                "step_id": "step-a",
+                "application_id": "app-a",
+                "name": "checkout",
+                "config": {
+                    "repo_ref": "org/app-a",
+                    "branch": "main",
+                    "environment": "production",
+                    "approval_gate": "manual",
+                    "commit_sha": "abc123",
+                    "image": "ghcr.io/example/app-a:v2",
+                    "manifest_path": "deploy/app.yaml",
+                    "health_check_path": "/readyz",
+                },
+            }
+        ],
+    }
+    preview = build_release_plan_preview(plan)
+    db = ReleaseDispatchDb(
+        channels=[
+            {
+                "channel_id": "chan-a",
+                "enabled": True,
+                "min_severity": "warning",
+                "last_test_status": "passed",
+                "last_tested_at": now.isoformat(),
+            }
+        ]
+    )
+    events = AcceptingEventGateway()
+    current = SimpleNamespace(user_id="user-a", roles=("operator",))
+
+    with pytest.raises(HTTPException) as raised:
+        asyncio.run(
+            release_router.dispatch_wave_steps(
+                plan,
+                preview,
+                1,
+                "workspace-a",
+                current,
+                db,
+                events,
+                run_id="run-a",
+            )
+        )
+
+    assert raised.value.status_code == 409
+    assert any("change freeze window" in blocker for blocker in raised.value.detail["blockers"])
+    assert events.calls == []
+    assert db.dispatched == []
+
+
 def test_dispatch_wave_steps_blocks_production_live_without_approval_evidence(monkeypatch) -> None:
     monkeypatch.setenv("RELEASE_FLOW_LIVE_ENABLED", "1")
     monkeypatch.setenv("RELEASE_FLOW_LIVE_WORKSPACES", "workspace-a")
@@ -4309,6 +4514,9 @@ def test_dispatch_wave_steps_records_production_change_override(monkeypatch) -> 
             "approval_granted_at": datetime.now(timezone.utc).isoformat(),
             "production_change_override_reason": "emergency production fix approved",
             "release_window_override_reason": "incident commander approved immediate release",
+            "change_freeze_start": (datetime.now(timezone.utc) - timedelta(minutes=5)).isoformat(),
+            "change_freeze_end": (datetime.now(timezone.utc) + timedelta(minutes=5)).isoformat(),
+            "change_freeze_override_reason": "incident commander approved emergency hotfix",
             "runbook_url": "https://wiki.example.com/runbooks/storefront-release",
             "release_owner": "storefront-release-team",
             "verification_override_reason": "synthetic monitor is temporarily owned by incident command",
@@ -4369,14 +4577,19 @@ def test_dispatch_wave_steps_records_production_change_override(monkeypatch) -> 
     }
     assert guard["release_window"]["production_targets"] == ["app-a"]
     assert guard["release_window"]["override_reason"] == "incident commander approved immediate release"
+    assert guard["change_freeze"]["production_targets"] == ["app-a"]
+    assert guard["change_freeze"]["active"] is True
+    assert guard["change_freeze"]["override_reason"] == "incident commander approved emergency hotfix"
     assert guard["readiness"]["warnings"] == [
         "Production change ticket gate is bypassed with an operator reason.",
         "Production release window is bypassed with an operator reason.",
+        "Production change freeze is bypassed with an operator reason.",
         "Post-deploy verification gate is bypassed with an operator reason.",
     ]
     assert [action["check_id"] for action in guard["readiness"]["next_actions"]] == [
         "change.ticket",
         "release.window",
+        "change.freeze",
         "verification.plan",
     ]
     assert guard["runbook"] == {
