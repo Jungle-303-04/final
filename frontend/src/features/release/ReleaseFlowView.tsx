@@ -182,6 +182,7 @@ const AUDIT_EVENT_FILTERS = [
   ['approval.requested', 'Approval requested'],
   ['approval.rejected', 'Approval rejected'],
   ['rollback.requested', 'Rollback requested'],
+  ['release.notify.*', 'Release notifications'],
   ['release.cancelled', 'Cancelled'],
   ['wave.dispatched', 'Wave dispatched'],
   ['evidence.queued', 'Evidence queued'],
