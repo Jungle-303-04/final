@@ -3105,26 +3105,40 @@ def release_run_has_active_change_freeze(run: dict[str, Any]) -> bool:
 
 
 RELEASE_GUARD_POLICY_OVERRIDE_PATHS = (
-    ("change_management", "production_override_reason"),
-    ("release_window", "override_reason"),
-    ("change_freeze", "override_reason"),
-    ("runbook", "override_reason"),
-    ("verification", "override_reason"),
-    ("abort_criteria", "override_reason"),
-    ("diagnostics", "override_reason"),
-    ("rollback", "override_reason"),
+    ("change_management", "production_override_reason", "Production change"),
+    ("release_window", "override_reason", "Release window"),
+    ("change_freeze", "override_reason", "Change freeze"),
+    ("runbook", "override_reason", "Runbook"),
+    ("verification", "override_reason", "Post-deploy verification"),
+    ("abort_criteria", "override_reason", "Rollback criteria"),
+    ("diagnostics", "override_reason", "Diagnostics"),
+    ("rollback", "override_reason", "Rollback policy"),
 )
 
 
 def release_run_has_policy_override(run: dict[str, Any]) -> bool:
+    return bool(release_run_policy_overrides(run))
+
+
+def release_run_policy_overrides(run: dict[str, Any]) -> list[dict[str, Any]]:
     guard = release_run_latest_guard(run)
-    for section_key, reason_key in RELEASE_GUARD_POLICY_OVERRIDE_PATHS:
+    overrides: list[dict[str, Any]] = []
+    for section_key, reason_key, label in RELEASE_GUARD_POLICY_OVERRIDE_PATHS:
         section = guard.get(section_key)
         if not isinstance(section, dict):
             continue
-        if str(section.get(reason_key) or "").strip():
-            return True
-    return False
+        reason = str(section.get(reason_key) or "").strip()
+        if not reason:
+            continue
+        targets = section.get("production_targets") if isinstance(section.get("production_targets"), list) else []
+        overrides.append(
+            {
+                "source": label,
+                "reason": reason,
+                "production_targets": [str(item) for item in targets if str(item).strip()],
+            }
+        )
+    return overrides
 
 
 def release_run_verification_jobs(run: dict[str, Any]) -> list[tuple[dict[str, Any], dict[str, Any], str]]:
@@ -3314,6 +3328,7 @@ def release_run_handoff(run: dict[str, Any]) -> dict[str, Any]:
     verification = release_run_handoff_verification(run)
     abort_criteria = release_run_handoff_abort_criteria(run)
     change_freeze = release_run_handoff_change_freeze(run)
+    policy_overrides = release_run_policy_overrides(run)
     return {
         "run_id": str(run.get("run_id") or ""),
         "plan_id": str(run.get("plan_id") or ""),
@@ -3328,6 +3343,7 @@ def release_run_handoff(run: dict[str, Any]) -> dict[str, Any]:
         "verification": verification,
         "abort_criteria": abort_criteria,
         "change_freeze": change_freeze,
+        "policy_overrides": policy_overrides,
         "next_actions": release_run_handoff_actions(
             status,
             terminal=terminal,
@@ -3375,6 +3391,13 @@ def release_run_handoff(run: dict[str, Any]) -> dict[str, Any]:
                 "change_freeze",
                 str(change_freeze.get("status") or "info"),
                 str(change_freeze.get("message") or "No change freeze snapshot recorded."),
+            ),
+            release_handoff_check(
+                "policy_overrides",
+                "warning" if policy_overrides else "passed",
+                f"{len(policy_overrides)} policy override reason(s) recorded."
+                if policy_overrides
+                else "No policy override reasons are recorded.",
             ),
         ],
         "last_event": release_run_last_event(run),
@@ -3448,6 +3471,16 @@ def release_run_report_markdown(
                 f"- {check.get('name') or 'check'}: {check.get('status') or 'info'} "
                 f"({check.get('message') or 'No message.'})"
             )
+    policy_overrides = handoff.get("policy_overrides") if isinstance(handoff.get("policy_overrides"), list) else []
+    if policy_overrides:
+        lines.extend(["", "Policy overrides:"])
+        for override in policy_overrides[:8]:
+            if not isinstance(override, dict):
+                continue
+            reason = str(override.get("reason") or "").strip()
+            targets = override.get("production_targets") if isinstance(override.get("production_targets"), list) else []
+            target_label = f" / targets: {', '.join(str(item) for item in targets[:5])}" if targets else ""
+            lines.append(f"- {override.get('source') or 'Policy override'}: {reason or 'No reason recorded.'}{target_label}")
     verification = handoff.get("verification") if isinstance(handoff.get("verification"), dict) else {}
     if verification:
         lines.extend(["", "Verification:", f"- {verification.get('status') or 'info'}: {verification.get('message') or 'No verification message.'}"])

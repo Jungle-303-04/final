@@ -384,6 +384,7 @@ def test_get_release_run_handoff_summarizes_operator_next_actions(monkeypatch) -
         "verification",
         "abort_criteria",
         "change_freeze",
+        "policy_overrides",
     }
     assert handoff["verification"] == {
         "status": "passed",
@@ -429,6 +430,13 @@ def test_get_release_run_handoff_summarizes_operator_next_actions(monkeypatch) -
         "override_reason": "incident commander approved emergency hotfix",
         "production_targets": ["checkout"],
     }
+    assert handoff["policy_overrides"] == [
+        {
+            "source": "Change freeze",
+            "reason": "incident commander approved emergency hotfix",
+            "production_targets": ["checkout"],
+        }
+    ]
 
 
 def test_release_run_handoff_disables_notify_during_cooldown(monkeypatch) -> None:
@@ -508,6 +516,8 @@ def test_get_release_run_report_includes_redacted_audit_and_markdown(monkeypatch
     assert "Change freeze:" in report["markdown"]
     assert "Active change freeze was bypassed with an operator reason." in report["markdown"]
     assert "2026-07-09T09:00:00Z to 2026-07-09T11:00:00Z" in report["markdown"]
+    assert "Policy overrides:" in report["markdown"]
+    assert "Change freeze: incident commander approved emergency hotfix / targets: checkout" in report["markdown"]
     assert "incident commander approved emergency hotfix" in report["markdown"]
     assert "Audit summary:" in report["markdown"]
     assert "Events in report: 1" in report["markdown"]
