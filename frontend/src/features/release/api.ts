@@ -7,6 +7,7 @@ import type {
   ReleasePlan,
   ReleasePlanDispatch,
   ReleasePlanPreview,
+  ReleaseReadiness,
   ReleaseRun,
   ReleaseRunSummary,
 } from '@/shared/lib/types';
@@ -86,6 +87,12 @@ export function useDiagnostics() {
 export function useReleasePreview() {
   return useMutation({
     mutationFn: (plan: ReleasePlan) => post<{ preview: ReleasePlanPreview }>('/release-plans/preview', plan),
+  });
+}
+
+export function useReleaseReadiness() {
+  return useMutation({
+    mutationFn: (plan: ReleasePlan) => post<ReleaseReadiness>('/release-readiness', plan),
   });
 }
 

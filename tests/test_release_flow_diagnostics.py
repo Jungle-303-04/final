@@ -209,6 +209,81 @@ def test_release_audit_export_returns_csv_without_internal_steps(monkeypatch) ->
     }
 
 
+def test_release_readiness_reports_blockers_and_operational_warnings(monkeypatch) -> None:
+    monkeypatch.delenv("RELEASE_FLOW_LIVE_ENABLED", raising=False)
+    db = ReleaseReadinessDb(channels=[])
+    monkeypatch.setattr(release_router, "require_plan_application_read_access", lambda *_args: None)
+
+    current = SimpleNamespace(workspace_id="workspace-a", user_id="operator", roles=())
+    response = asyncio.run(
+        release_router.check_release_readiness(
+            release_router.ReleasePlanUpsertRequest(
+                name="Checkout release",
+                settings={
+                    "runtime_mode": "live",
+                    "approval_policy": "manual_each_step",
+                    "retry_attempts": 0,
+                },
+                steps=[
+                    {
+                        "application_id": "checkout",
+                        "name": "Checkout",
+                        "position": 0,
+                        "config": {"environment": "production", "commit_sha": "abc1234"},
+                    }
+                ],
+            ),
+            current=current,
+            db=db,
+        )
+    )
+
+    assert response.ready is False
+    assert response.mode == "live"
+    assert any("Live release dispatch is disabled" in item for item in response.blockers)
+    assert any("Checkout is missing image" in item for item in response.blockers)
+    assert any("No enabled alert channel" in item for item in response.warnings)
+    assert any("cannot be retried" in item for item in response.warnings)
+
+
+def test_release_readiness_passes_demo_with_alert_channel(monkeypatch) -> None:
+    db = ReleaseReadinessDb(channels=[{"channel_id": "chan-a", "enabled": True}])
+    monkeypatch.setattr(release_router, "require_plan_application_read_access", lambda *_args: None)
+
+    current = SimpleNamespace(workspace_id="workspace-a", user_id="operator", roles=())
+    response = asyncio.run(
+        release_router.check_release_readiness(
+            release_router.ReleasePlanUpsertRequest(
+                name="Checkout release",
+                settings={"runtime_mode": "demo", "approval_policy": "auto_safe"},
+                steps=[
+                    {
+                        "application_id": "checkout",
+                        "name": "Checkout",
+                        "position": 0,
+                        "config": {
+                            "environment": "sandbox",
+                            "commit_sha": "abc1234",
+                            "image": "ghcr.io/example/checkout:v2",
+                        },
+                    }
+                ],
+            ),
+            current=current,
+            db=db,
+        )
+    )
+
+    assert response.ready is True
+    assert response.blockers == []
+    assert response.warnings == []
+    assert {check["check_id"] for check in response.checks} >= {
+        "plan.preview",
+        "alerts.enabled_channels",
+        "audit.redaction",
+    }
+
+
 def test_release_run_event_serialization_redacts_sensitive_details() -> None:
     event = serialize_release_run_event(
         {
@@ -480,6 +555,21 @@ class ReleaseAuditDb:
                 "_steps": [{"application_id": "checkout"}],
             }
         ]
+
+
+class ReleaseReadinessDb:
+    def __init__(self, *, channels: list[dict[str, object]]) -> None:
+        self.channels = channels
+
+    def list_alert_channels(
+        self,
+        _workspace_id: str,
+        *,
+        only_enabled: bool = False,
+    ) -> list[dict[str, object]]:
+        if only_enabled:
+            return [channel for channel in self.channels if channel.get("enabled", True)]
+        return self.channels
 
 
 def test_yaml_diagnostics_reports_parser_location() -> None:
