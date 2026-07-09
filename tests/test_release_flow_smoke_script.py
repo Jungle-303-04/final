@@ -1,0 +1,117 @@
+from __future__ import annotations
+
+import importlib.util
+import sys
+from pathlib import Path
+from typing import Any
+
+
+ROOT = Path(__file__).resolve().parents[1]
+SCRIPT = ROOT / "scripts" / "release_flow_smoke.py"
+
+
+def load_smoke_module() -> Any:
+    spec = importlib.util.spec_from_file_location("release_flow_smoke", SCRIPT)
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    sys.modules["release_flow_smoke"] = module
+    spec.loader.exec_module(module)
+    return module
+
+
+class FakeClient:
+    def __init__(self) -> None:
+        self.calls: list[tuple[str, str, dict[str, object] | None]] = []
+
+    def request(
+        self,
+        method: str,
+        path: str,
+        payload: dict[str, object] | None = None,
+        *,
+        expected: tuple[int, ...] = (200,),
+    ) -> dict[str, object]:
+        self.calls.append((method, path, payload))
+        if path == "/healthz":
+            return {"status": "ok"}
+        if path == "/readyz":
+            return {"status": "ready"}
+        if path == "/auth/session":
+            return {"authenticated": True}
+        if path == "/applications":
+            return {
+                "applications": [
+                    {
+                        "application_id": "checkout",
+                        "name": "Checkout",
+                        "repo_ref": "org/checkout",
+                        "branch": "main",
+                        "manifest_path": "deploy/app.yaml",
+                        "cluster_id": "target",
+                    },
+                    {
+                        "application_id": "cart",
+                        "name": "Cart",
+                        "repo_ref": "org/cart",
+                        "branch": "main",
+                        "manifest_path": "deploy/cart.yaml",
+                        "cluster_id": "target",
+                    },
+                ]
+            }
+        if path == "/release-plans":
+            return {"plans": []}
+        if path == "/release-runs/summary":
+            return {"total_runs": 0, "status_breakdown": {}, "plan_breakdown": {}, "recent_runs": []}
+        if path == "/release-plans/preview":
+            return {"preview": {"executable": True, "summary": "2 steps can run"}}
+        if path == "/release-plans/start":
+            return {
+                "run": {
+                    "run_id": "release-run-smoke",
+                    "status": "running",
+                    "steps": [{"details": {"side_effects": False}}],
+                }
+            }
+        if path == "/release-runs/release-run-smoke":
+            return {"run": {"run_id": "release-run-smoke", "status": "running"}}
+        return {}
+
+
+def test_build_demo_plan_is_demo_only() -> None:
+    smoke = load_smoke_module()
+
+    plan = smoke.build_demo_plan(
+        [
+            {"application_id": "checkout", "name": "Checkout", "branch": "main"},
+            {"application_id": "cart", "name": "Cart", "branch": "main"},
+        ]
+    )
+
+    assert plan["settings"]["runtime_mode"] == "demo"
+    assert plan["settings"]["provider_mode"] == "dry_run"
+    assert plan["steps"][1]["depends_on"] == ["checkout"]
+    assert plan["steps"][0]["config"]["commit_sha"] == "release-flow-smoke"
+
+
+def test_smoke_default_does_not_start_release_run() -> None:
+    smoke = load_smoke_module()
+    client = FakeClient()
+
+    results = smoke.run_smoke(client, "ops@example.com", "password", demo_run=False)
+
+    assert all(result.ok for result in results)
+    assert ("POST", "/release-plans/start", None) not in client.calls
+    assert [path for _method, path, _payload in client.calls].count("/release-plans/preview") == 1
+
+
+def test_smoke_demo_run_starts_and_fetches_tracked_run() -> None:
+    smoke = load_smoke_module()
+    client = FakeClient()
+
+    results = smoke.run_smoke(client, "ops@example.com", "password", demo_run=True)
+
+    assert all(result.ok for result in results)
+    paths = [path for _method, path, _payload in client.calls]
+    assert "/release-plans/start" in paths
+    assert "/release-runs/release-run-smoke" in paths
