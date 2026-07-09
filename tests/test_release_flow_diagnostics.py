@@ -1843,6 +1843,63 @@ def test_dispatch_wave_steps_blocks_live_with_unvalidated_warning_alert_channel(
     assert db.dispatched == []
 
 
+def test_dispatch_wave_steps_blocks_live_with_stale_alert_validation(monkeypatch) -> None:
+    monkeypatch.setenv("RELEASE_FLOW_LIVE_ENABLED", "1")
+    monkeypatch.setenv("RELEASE_FLOW_LIVE_WORKSPACES", "workspace-a")
+    plan = {
+        "plan_id": "plan-a",
+        "name": "storefront",
+        "settings": {"runtime_mode": "live", "approval_policy": "auto_safe"},
+        "steps": [
+            {
+                "step_id": "step-a",
+                "application_id": "app-a",
+                "name": "checkout",
+                "config": {
+                    "repo_ref": "org/app-a",
+                    "branch": "main",
+                    "commit_sha": "abc123",
+                    "image": "ghcr.io/example/app-a:v2",
+                    "manifest_path": "deploy/app.yaml",
+                },
+            }
+        ],
+    }
+    preview = build_release_plan_preview(plan)
+    db = ReleaseDispatchDb(
+        channels=[
+            {
+                "channel_id": "chan-warning",
+                "enabled": True,
+                "min_severity": "warning",
+                "last_test_status": "passed",
+                "last_tested_at": (datetime.now(timezone.utc) - timedelta(hours=25)).isoformat(),
+            }
+        ]
+    )
+    events = AcceptingEventGateway()
+    current = SimpleNamespace(user_id="user-a", roles=("operator",))
+
+    with pytest.raises(HTTPException) as raised:
+        asyncio.run(
+            release_router.dispatch_wave_steps(
+                plan,
+                preview,
+                1,
+                "workspace-a",
+                current,
+                db,
+                events,
+                run_id="run-a",
+            )
+        )
+
+    assert raised.value.status_code == 409
+    assert any("within 24 hour(s)" in blocker for blocker in raised.value.detail["blockers"])
+    assert events.calls == []
+    assert db.dispatched == []
+
+
 def test_dispatch_wave_steps_publishes_live_when_backend_gate_allows(monkeypatch) -> None:
     monkeypatch.setenv("RELEASE_FLOW_LIVE_ENABLED", "1")
     monkeypatch.setenv("RELEASE_FLOW_LIVE_WORKSPACES", "workspace-a")
@@ -1867,7 +1924,14 @@ def test_dispatch_wave_steps_publishes_live_when_backend_gate_allows(monkeypatch
     }
     preview = build_release_plan_preview(plan)
     db = ReleaseDispatchDb(
-        channels=[{"channel_id": "chan-a", "enabled": True, "last_test_status": "passed"}]
+        channels=[
+            {
+                "channel_id": "chan-a",
+                "enabled": True,
+                "last_test_status": "passed",
+                "last_tested_at": datetime.now(timezone.utc).isoformat(),
+            }
+        ]
     )
     events = AcceptingEventGateway()
     current = SimpleNamespace(user_id="user-a", roles=("operator",))

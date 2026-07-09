@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 import csv
+from datetime import datetime, timedelta, timezone
 import io
 import json
+import os
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Response
@@ -64,6 +66,8 @@ RELEASE_PLAN_BLOCKED = "release plan has blockers"
 RELEASE_RUN_BLOCKED = "release run cannot advance"
 TERMINAL_RELEASE_RUN_STATUSES = {"succeeded", "failed", "cancelled", "rollback_requested"}
 BLOCKING_RUN_STATUSES = {"running", "paused", "rollback_requested", "waiting_for_approval"}
+ALERT_CHANNEL_VALIDATION_MAX_AGE_HOURS_ENV = "RELEASE_FLOW_ALERT_TEST_MAX_AGE_HOURS"
+DEFAULT_ALERT_CHANNEL_VALIDATION_MAX_AGE_HOURS = 24
 
 
 @router.get(gateway_routes.RELEASE_PLANS_PATH, response_model=ReleasePlanListResponse)
@@ -908,13 +912,17 @@ def release_readiness_from_plan(
     validated_live_alert_channels = release_validated_live_alert_channels(db, workspace_id)
     alert_blockers = release_live_alert_channel_blockers(plan, db, workspace_id)
     retry_attempts = max(0, int_field(plan_settings_value(plan), "retry_attempts", 1))
+    alert_validation_window = alert_channel_validation_window_label()
     if profile.side_effects and validated_live_alert_channels:
         alert_message = (
             f"{len(validated_live_alert_channels)} validated alert channel(s) can receive "
-            "warning-or-higher release events."
+            f"warning-or-higher release events within {alert_validation_window}."
         )
     elif profile.side_effects and live_alert_channels:
-        alert_message = "Warning-capable alert channels exist, but none has a passing validation test."
+        alert_message = (
+            "Warning-capable alert channels exist, but none has a passing validation test "
+            f"within {alert_validation_window}."
+        )
     elif live_alert_channels:
         alert_message = (
             f"{len(live_alert_channels)} enabled alert channel(s) can receive "
@@ -1112,7 +1120,8 @@ def release_live_alert_channel_blockers(
         return []
     if release_live_alert_channels(db, workspace_id):
         return [
-            "Live release dispatch requires at least one warning-capable alert channel with a passing validation test."
+            "Live release dispatch requires at least one warning-capable alert channel "
+            f"with a passing validation test within {alert_channel_validation_window_label()}."
         ]
     return [
         "Live release dispatch requires at least one enabled alert channel that receives warning-or-higher release events."
@@ -1128,11 +1137,64 @@ def release_live_alert_channels(db: Any, workspace_id: str) -> list[dict[str, An
 
 
 def release_validated_live_alert_channels(db: Any, workspace_id: str) -> list[dict[str, Any]]:
+    now = datetime.now(timezone.utc)
+    max_age = alert_channel_validation_max_age()
     return [
         channel
         for channel in release_live_alert_channels(db, workspace_id)
-        if str(channel.get("last_test_status") or "").lower() == "passed"
+        if alert_channel_validation_is_current(channel, now=now, max_age=max_age)
     ]
+
+
+def alert_channel_validation_is_current(
+    channel: dict[str, Any],
+    *,
+    now: datetime,
+    max_age: timedelta,
+) -> bool:
+    if str(channel.get("last_test_status") or "").lower() != "passed":
+        return False
+    tested_at = alert_channel_tested_at(channel)
+    if tested_at is None:
+        return False
+    return now - tested_at <= max_age
+
+
+def alert_channel_tested_at(channel: dict[str, Any]) -> datetime | None:
+    value = channel.get("last_tested_at")
+    if isinstance(value, datetime):
+        return value if value.tzinfo else value.replace(tzinfo=timezone.utc)
+    if isinstance(value, str):
+        raw = value.strip()
+        if not raw:
+            return None
+        if raw.endswith("Z"):
+            raw = f"{raw[:-1]}+00:00"
+        try:
+            parsed = datetime.fromisoformat(raw)
+        except ValueError:
+            return None
+        return parsed if parsed.tzinfo else parsed.replace(tzinfo=timezone.utc)
+    return None
+
+
+def alert_channel_validation_max_age() -> timedelta:
+    raw = os.getenv(
+        ALERT_CHANNEL_VALIDATION_MAX_AGE_HOURS_ENV,
+        str(DEFAULT_ALERT_CHANNEL_VALIDATION_MAX_AGE_HOURS),
+    ).strip()
+    try:
+        hours = float(raw)
+    except ValueError:
+        hours = float(DEFAULT_ALERT_CHANNEL_VALIDATION_MAX_AGE_HOURS)
+    return timedelta(hours=max(1.0, hours))
+
+
+def alert_channel_validation_window_label() -> str:
+    hours = alert_channel_validation_max_age().total_seconds() / 3600
+    if hours.is_integer():
+        return f"{int(hours)} hour(s)"
+    return f"{hours:.1f} hour(s)"
 
 
 def release_run_status_action(
