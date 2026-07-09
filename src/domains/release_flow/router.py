@@ -105,6 +105,7 @@ async def list_release_runs(
     unhealthy_only: bool = Query(default=False),
     verification_failed_only: bool = Query(default=False),
     verification_pending_timeout_only: bool = Query(default=False),
+    change_freeze_override_only: bool = Query(default=False),
     limit: int = Query(default=50, ge=1, le=200),
     current: Any = Depends(require_session),
     db: Any = Depends(get_db),
@@ -123,6 +124,7 @@ async def list_release_runs(
         unhealthy_only=unhealthy_only,
         verification_failed_only=verification_failed_only,
         verification_pending_timeout_only=verification_pending_timeout_only,
+        change_freeze_override_only=change_freeze_override_only,
     )
     return ReleaseRunListResponse(runs=runs)
 
@@ -3010,6 +3012,7 @@ def filter_release_runs(
     unhealthy_only: bool = False,
     verification_failed_only: bool = False,
     verification_pending_timeout_only: bool = False,
+    change_freeze_override_only: bool = False,
 ) -> list[dict[str, Any]]:
     expected_status = str(status or "").strip().lower()
     filtered: list[dict[str, Any]] = []
@@ -3031,6 +3034,8 @@ def filter_release_runs(
         if verification_failed_only and not release_run_has_failed_verification(run):
             continue
         if verification_pending_timeout_only and not release_run_has_timed_out_verification(run):
+            continue
+        if change_freeze_override_only and not release_run_has_change_freeze_override(run):
             continue
         filtered.append(run)
     return filtered
@@ -3071,6 +3076,22 @@ def release_run_has_unhealthy_health(run: dict[str, Any]) -> bool:
 
 def release_run_has_timed_out_verification(run: dict[str, Any]) -> bool:
     return bool(release_verification_job_pending_timeouts(run))
+
+
+def release_run_change_freeze_snapshot(run: dict[str, Any]) -> dict[str, Any]:
+    guard = release_run_latest_guard(run)
+    freeze = guard.get("change_freeze") if isinstance(guard.get("change_freeze"), dict) else {}
+    return freeze
+
+
+def release_run_has_change_freeze_override(run: dict[str, Any]) -> bool:
+    freeze = release_run_change_freeze_snapshot(run)
+    return bool(str(freeze.get("override_reason") or "").strip())
+
+
+def release_run_has_active_change_freeze(run: dict[str, Any]) -> bool:
+    freeze = release_run_change_freeze_snapshot(run)
+    return freeze.get("active") is True
 
 
 def release_run_verification_jobs(run: dict[str, Any]) -> list[tuple[dict[str, Any], dict[str, Any], str]]:
@@ -3152,6 +3173,8 @@ def release_run_summary_from_runs(runs: list[dict[str, Any]]) -> dict[str, Any]:
     unhealthy_runs = 0
     verification_failed_runs = 0
     verification_pending_timeout_runs = 0
+    active_change_freeze_runs = 0
+    change_freeze_override_runs = 0
     stale_runs = 0
     attention_required_runs = 0
     last_run_status = ""
@@ -3195,6 +3218,10 @@ def release_run_summary_from_runs(runs: list[dict[str, Any]]) -> dict[str, Any]:
         verification_pending_timed_out = release_run_has_timed_out_verification(run)
         if verification_pending_timed_out:
             verification_pending_timeout_runs += 1
+        if release_run_has_active_change_freeze(run):
+            active_change_freeze_runs += 1
+        if release_run_has_change_freeze_override(run):
+            change_freeze_override_runs += 1
         if (
             attention.get("required") is True
             or verification_pending_timed_out
@@ -3227,6 +3254,8 @@ def release_run_summary_from_runs(runs: list[dict[str, Any]]) -> dict[str, Any]:
         "unhealthy_runs": unhealthy_runs,
         "verification_failed_runs": verification_failed_runs,
         "verification_pending_timeout_runs": verification_pending_timeout_runs,
+        "active_change_freeze_runs": active_change_freeze_runs,
+        "change_freeze_override_runs": change_freeze_override_runs,
         "stale_runs": stale_runs,
         "last_run_status": last_run_status or None,
         "recent_runs": recent_runs,
