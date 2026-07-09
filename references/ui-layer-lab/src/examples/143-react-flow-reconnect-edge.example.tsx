@@ -2,9 +2,9 @@ import { Background, ReactFlow, useEdgesState, type Edge } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 
 const nodes = [
-  { id: "source", position: { x: 0, y: 120 }, data: { label: "Source" } },
-  { id: "a", position: { x: 320, y: 60 }, data: { label: "Target A" } },
-  { id: "b", position: { x: 320, y: 190 }, data: { label: "Target B" } }
+  { id: "source", position: { x: 0, y: 120 }, data: { label: "시작 노드" } },
+  { id: "a", position: { x: 320, y: 60 }, data: { label: "대상 A" } },
+  { id: "b", position: { x: 320, y: 190 }, data: { label: "대상 B" } }
 ];
 
 const initialEdges: Edge[] = [{ id: "source-a", source: "source", target: "a" }];
@@ -19,7 +19,12 @@ export default function ReactFlowReconnectEdgeExample() {
 
   return (
     <div className="flow-shell">
-      <button className="command-trigger" onClick={reconnect}>Reconnect to {target === "a" ? "B" : "A"}</button>
+      <div className="flow-toolbar">
+        <span>현재 연결: {target === "a" ? "대상 A" : "대상 B"}</span>
+        <button className="command-trigger stable-wide" onClick={reconnect} type="button">
+          연결 대상 전환
+        </button>
+      </div>
       <div className="flow-example">
         <ReactFlow nodes={nodes} edges={edges} onEdgesChange={onEdgesChange} fitView>
           <Background />

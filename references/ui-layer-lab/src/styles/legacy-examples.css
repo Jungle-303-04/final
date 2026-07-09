@@ -3074,14 +3074,14 @@ kbd,
   padding: 18px;
   border: 1px solid var(--border);
   border-radius: 16px;
-  background: #111113;
+  background: var(--panel-soft);
 }
 
 .history-stack span {
   display: block;
   padding: 10px 12px;
   border-radius: 11px;
-  background: #18181b;
+  background: var(--surface);
   animation: panel-in 160ms ease both;
 }
 
@@ -3201,8 +3201,8 @@ kbd,
 .parallel-lanes span {
   padding: 10px 12px;
   border-radius: 11px;
-  color: #e4e4e7;
-  background: #18181b;
+  color: var(--text);
+  background: var(--surface);
 }
 
 .pause-card.paused {
@@ -3222,9 +3222,9 @@ kbd,
   padding: 6px 10px;
   border: 1px solid rgba(253, 186, 116, 0.6);
   border-radius: 999px;
-  color: #fed7aa;
-  background: rgba(124, 45, 18, 0.45);
-  content: "intersecting";
+  color: var(--orange);
+  background: color-mix(in srgb, var(--orange) 18%, transparent);
+  content: "교차";
 }
 
 .lasso-rect {
@@ -3250,7 +3250,7 @@ kbd,
 
 .freehand-path path {
   fill: none;
-  stroke: #fafafa;
+  stroke: var(--accent);
   stroke-linecap: round;
   stroke-width: 4;
   stroke-dasharray: 12 10;

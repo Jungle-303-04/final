@@ -567,6 +567,63 @@
   color: var(--text);
 }
 
+.column-browser button,
+.stack-list button,
+.pivot-matrix button,
+.weekday-heatmap .heat-cell,
+.cluster-bands .heat-cell {
+  min-height: var(--control-height-md);
+  border: 1px solid var(--border);
+  color: var(--text);
+  background: var(--panel-soft);
+  line-height: var(--line-button);
+  white-space: nowrap;
+}
+
+.column-browser button,
+.stack-list button {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.column-browser button.active,
+.stack-list button.active,
+.column-browser button[aria-pressed="true"],
+.stack-list button[aria-pressed="true"] {
+  border-color: var(--border-strong);
+  background: var(--surface-raised);
+}
+
+.column-browser button:disabled {
+  color: var(--muted);
+  opacity: 0.82;
+}
+
+.pivot-matrix button {
+  min-height: 48px;
+}
+
+.table-drill .detail-panel,
+.heatmap-demo .detail-panel {
+  border-color: var(--border);
+  background: var(--panel);
+}
+
+.heat-cell.cool {
+  color: var(--text);
+  background: color-mix(in srgb, var(--blue) 20%, var(--panel));
+}
+
+.heat-cell.warm {
+  color: var(--text);
+  background: color-mix(in srgb, var(--orange) 35%, var(--panel));
+}
+
+.heat-cell.hot {
+  color: var(--text);
+  background: color-mix(in srgb, var(--red) 42%, var(--panel));
+}
+
 @media (max-width: 720px) {
   .snap-drawer-toolbar,
   .treemap-header,

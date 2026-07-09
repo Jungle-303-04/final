@@ -421,6 +421,70 @@ async function inspectSourceEnglishGuard() {
     {
       file: "src/examples/154-animated-collapsible-log.example.tsx",
       fragments: ["install complete", "typecheck complete", "visual smoke failed", ">Hide<", ">Show<"]
+    },
+    {
+      file: "src/examples/137-drilldown-column-browser.example.tsx",
+      fragments: ["workflows", '"deploy"', '"test"', '"build"', '"smoke"', '"unit"', '"e2e"', '"install"', '"bundle"', '"route"', '"screenshot"']
+    },
+    {
+      file: "src/examples/138-drilldown-error-stack.example.tsx",
+      fragments: ["Expected /preview to load", "Route no longer registered", "Routes rendered from config", "line {frame.line}"]
+    },
+    {
+      file: "src/examples/139-drilldown-pivot-matrix.example.tsx",
+      fragments: ['"api"', '"web"', '"worker"', '"failed"', '"running"', '"success"', "Pivot cell selected"]
+    },
+    {
+      file: "src/examples/140-heatmap-weekday-labels.example.tsx",
+      fragments: ['"Mon"', '"Tue"', '"Wed"', '"Thu"', '"Fri"']
+    },
+    {
+      file: "src/examples/141-heatmap-cluster-bands.example.tsx",
+      fragments: ['name: "frontend"', 'name: "agent"', 'name: "gateway"']
+    },
+    {
+      file: "src/examples/142-react-flow-edge-types.example.tsx",
+      fragments: ['label: "A"', 'label: "B"', 'label: "C"', 'label: "D"', 'label: "straight"', 'label: "smoothstep"']
+    },
+    {
+      file: "src/examples/143-react-flow-reconnect-edge.example.tsx",
+      fragments: ["Source", "Target A", "Target B", "Reconnect to"]
+    },
+    {
+      file: "src/examples/160-job-parallel-lanes.example.tsx",
+      fragments: ["frontend", "backend", "agent", "install", "build", "smoke", "package"]
+    },
+    {
+      file: "src/examples/161-job-paused-state.example.tsx",
+      fragments: ["Waiting for approval", "Job resumed", ">Resume<", ">Pause<"]
+    },
+    {
+      file: "src/examples/162-drilldown-saved-view.example.tsx",
+      fragments: ["Failures", "Running", "Mine", "visual-smoke", "deploy-preview", "api-build", "saved items"]
+    },
+    {
+      file: "src/examples/163-drilldown-tag-cloud.example.tsx",
+      fragments: ["route", "smoke", "deploy", "docs", "Filtering by"]
+    },
+    {
+      file: "src/examples/165-heatmap-delta-mode.example.tsx",
+      fragments: ["Show Delta", "Show Absolute"]
+    },
+    {
+      file: "src/examples/166-react-flow-floating-edge.example.tsx",
+      fragments: ["Floating source", "Floating target"]
+    },
+    {
+      file: "src/examples/167-react-flow-intersections.example.tsx",
+      fragments: ['label: "A"', 'label: "B"', ">Clear<", ">Mark<"]
+    },
+    {
+      file: "src/examples/168-react-flow-lasso-selection.example.tsx",
+      fragments: ['label: "One"', 'label: "Two"', ">Hide<", ">Show<"]
+    },
+    {
+      file: "src/examples/169-react-flow-freehand-draw.example.tsx",
+      fragments: ["Sketch note", ">Hide<", ">Show<"]
     }
   ];
   const matches = [];
@@ -634,7 +698,23 @@ async function inspectEnglishSamples(page, url) {
     ["작업 진행/로그", "example-sonner-queued-toasts"],
     ["작업 진행/로그", "example-sonner-inline-link"],
     ["작업 진행/로그", "example-sonner-countdown"],
-    ["모션/상태 전환", "example-animated-collapsible-log"]
+    ["모션/상태 전환", "example-animated-collapsible-log"],
+    ["드릴다운 탐색", "example-drilldown-column-browser"],
+    ["드릴다운 탐색", "example-drilldown-error-stack"],
+    ["드릴다운 탐색", "example-drilldown-pivot-matrix"],
+    ["데이터 시각화", "example-heatmap-weekday-labels"],
+    ["데이터 시각화", "example-heatmap-cluster-bands"],
+    ["플로우 빌더", "example-react-flow-edge-types"],
+    ["플로우 빌더", "example-react-flow-reconnect-edge"],
+    ["작업 진행/로그", "example-job-parallel-lanes"],
+    ["작업 진행/로그", "example-job-paused-state"],
+    ["드릴다운 탐색", "example-drilldown-saved-view"],
+    ["드릴다운 탐색", "example-drilldown-tag-cloud"],
+    ["데이터 시각화", "example-heatmap-delta-mode"],
+    ["플로우 빌더", "example-react-flow-floating-edge"],
+    ["플로우 빌더", "example-react-flow-intersections"],
+    ["플로우 빌더", "example-react-flow-lasso-selection"],
+    ["플로우 빌더", "example-react-flow-freehand-draw"]
   ];
   const forbidden = /\b(Open|Close|Show|Hide|Search|Loading|Current|Selected|Dashboard|Create|Cancel|Retry|Next|Previous|Expand|Collapse|Focus|Input|Logs|Answer|Status|Resources|Jobs|Steps|Command|Filter|Recent|Approval|Matrix|Launch|Health|Edge|Done|Running|Failed|Pending|Allowed|Blocked)\b/i;
   const violations = [];
