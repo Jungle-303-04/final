@@ -51,7 +51,7 @@ export default function App() {
           <header className="page-header">
             <h1>UI 레이어 레퍼런스 랩</h1>
             <p>
-              현재 확보한 {registeredExamples.length}개 예제를 주제별로 최대한 노출하고, 같은 패턴은 archive 후보로 묶어 정리합니다.
+              현재 확보한 {registeredExamples.length}개 예제를 주제별로 최대한 노출하고, 같은 패턴만 archive 후보로 묶어 정리합니다.
               각 예제는 동작, 코드, 라이트/다크 품질을 계속 감사합니다.
             </p>
           </header>
@@ -69,12 +69,12 @@ export default function App() {
                 <p className="category-when">사용 시점: {activeGroup.whenToUse}</p>
               </div>
               <span className="example-count">
-                대표 {activeGroup.examples.length}개 · archive {activeGroup.archivedCount}개
+                노출 {activeGroup.examples.length}개 · 정리 후보 {activeGroup.archivedCount}개
               </span>
             </header>
 
             <div className="example-list">
-              <section className="example-group" aria-label={`${activeGroup.label} 대표 예제`}>
+              <section className="example-group" aria-label={`${activeGroup.label} 노출 예제`}>
                 {filteredExamples.map((example) => (
                   <ExampleSection example={example} key={example.id} />
                 ))}

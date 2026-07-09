@@ -57,7 +57,7 @@ const primaryExamples: ExampleCatalogEntry[] = [
     file: "01-command-basic.example.tsx",
     category: "overlay-command",
     title: "명령 팔레트",
-    description: "검색, 페이지 이동, 선택 미리보기를 한 화면에 통합한 대표 명령 메뉴입니다.",
+    description: "검색, 페이지 이동, 선택 미리보기를 한 화면에 통합한 명령 메뉴입니다.",
     motionIntent: "열림/닫힘은 overlay enter, 검색 결과 교체는 list reveal, 선택 미리보기는 panel swap으로 의도를 드러냅니다.",
     variantIds: ["command-shortcuts", "command-groups", "command-async-results", "command-recent-actions", "command-quick-create"]
   },

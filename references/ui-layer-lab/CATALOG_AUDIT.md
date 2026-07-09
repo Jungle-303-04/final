@@ -6,7 +6,7 @@ Last updated: 2026-07-09
 
 - Example files: 500
 - Runtime exposed examples: 500
-- Manually curated representative metadata: 64
+- Curated metadata overrides: 64 (not an exposure cap)
 - Categories: 8
 - Exposed per category: 71, 63, 129, 42, 53, 55, 65, 22
 - Variant groups: 8
@@ -17,7 +17,7 @@ Last updated: 2026-07-09
 
 This is a recovery checkpoint, not a completion report.
 
-The previous catalog exposed only 16 examples, with every category showing exactly 2 examples. A later pass capped the page at 64 examples, 8 per category, which still misunderstood the goal. The current registry now exposes every available example file and uses the curated catalog only to provide better metadata for hand-picked representatives.
+The previous catalog exposed only 16 examples, with every category showing exactly 2 examples. A later pass capped the page at 64 examples, 8 per category, which still misunderstood the goal. The current registry now exposes every available example file. The curated catalog is metadata only; it must never reduce the visible example count.
 
 The remaining catalog work is quality curation, not hiding examples:
 

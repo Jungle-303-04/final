@@ -70,7 +70,7 @@ async function runGate(url) {
     catalog.duplicateIds.length ? `중복 example id: ${catalog.duplicateIds.join(",")}` : "",
     exposedTotal !== catalog.exampleFiles ? `노출 수 ${exposedTotal}개가 파일 수 ${catalog.exampleFiles}개와 다름` : "",
     sourceEnglish.matches.length ? `핵심 예제 영어 회귀: ${sourceEnglish.matches.join(", ")}` : "",
-    visibleKorean.forbiddenVisible.length ? `대표 화면 영어 노출: ${visibleKorean.forbiddenVisible.join(", ")}` : "",
+    visibleKorean.forbiddenVisible.length ? `주요 화면 영어 노출: ${visibleKorean.forbiddenVisible.join(", ")}` : "",
     navigation.activeHeading !== "데이터 시각화" ? `카테고리 전환 실패: ${navigation.activeHeading}` : "",
     !navigation.searchInputPresent ? "검색 입력을 찾지 못함" : "",
     navigation.filteredCount <= 0 || navigation.filteredCount >= navigation.dataVizCount
