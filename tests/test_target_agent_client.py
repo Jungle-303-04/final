@@ -52,7 +52,9 @@ def make_client(agent_module: Any, status_code: int) -> Any:
 
     client = agent_module.HttpManagementPlaneClient("http://management.local")
     asyncio.run(client.client.aclose())
-    client.client = httpx.AsyncClient(transport=getattr(httpx, "Mo" + "ckTransport")(handler), timeout=1)
+    client.client = httpx.AsyncClient(
+        transport=getattr(httpx, "Mo" + "ckTransport")(handler), timeout=1
+    )
     return client
 
 
@@ -152,7 +154,9 @@ def test_management_client_polls_evidence_job() -> None:
 
     client = agent_module.HttpManagementPlaneClient("http://management.local")
     asyncio.run(client.client.aclose())
-    client.client = httpx.AsyncClient(transport=getattr(httpx, "Mo" + "ckTransport")(handler), timeout=1)
+    client.client = httpx.AsyncClient(
+        transport=getattr(httpx, "Mo" + "ckTransport")(handler), timeout=1
+    )
 
     async def run() -> dict[str, object] | None:
         try:
@@ -200,7 +204,9 @@ def test_target_agent_rollout_restart_normalizes_pod_resource(monkeypatch) -> No
         requests.append((request.method, request.url.path))
         return httpx.Response(200, json=ready_deployment("orders-api"), request=request)
 
-    agent = agent_module.TargetClusterAgent(kubernetes_transport=getattr(httpx, "Mo" + "ckTransport")(handler))
+    agent = agent_module.TargetClusterAgent(
+        kubernetes_transport=getattr(httpx, "Mo" + "ckTransport")(handler)
+    )
 
     result = asyncio.run(
         agent.execute_command(
@@ -298,7 +304,9 @@ def test_target_agent_reports_kubernetes_apply_failure(monkeypatch) -> None:
             return httpx.Response(200, json={"kind": "ConfigMap"}, request=request)
         return httpx.Response(403, text="forbidden", request=request)
 
-    agent = agent_module.TargetClusterAgent(kubernetes_transport=getattr(httpx, "Mo" + "ckTransport")(handler))
+    agent = agent_module.TargetClusterAgent(
+        kubernetes_transport=getattr(httpx, "Mo" + "ckTransport")(handler)
+    )
 
     result = asyncio.run(
         agent.execute_command(
@@ -343,7 +351,9 @@ def test_target_agent_creates_configmap_from_rendered_manifest(monkeypatch) -> N
             return httpx.Response(404, request=request)
         return httpx.Response(201, json={"ok": True}, request=request)
 
-    agent = agent_module.TargetClusterAgent(kubernetes_transport=getattr(httpx, "Mo" + "ckTransport")(handler))
+    agent = agent_module.TargetClusterAgent(
+        kubernetes_transport=getattr(httpx, "Mo" + "ckTransport")(handler)
+    )
 
     result = asyncio.run(
         agent.execute_command(
@@ -397,7 +407,9 @@ def test_target_agent_patches_deployment_replicas_and_image(monkeypatch) -> None
             return httpx.Response(200, json=ready_deployment(replicas=5), request=request)
         return httpx.Response(200, json={"ok": True}, request=request)
 
-    agent = agent_module.TargetClusterAgent(kubernetes_transport=getattr(httpx, "Mo" + "ckTransport")(handler))
+    agent = agent_module.TargetClusterAgent(
+        kubernetes_transport=getattr(httpx, "Mo" + "ckTransport")(handler)
+    )
 
     result = asyncio.run(
         agent.execute_command(
@@ -464,7 +476,9 @@ def test_target_agent_rejects_manifest_outside_sandbox(monkeypatch) -> None:
         calls.append(request.method)
         return httpx.Response(200, json={"ok": True}, request=request)
 
-    agent = agent_module.TargetClusterAgent(kubernetes_transport=getattr(httpx, "Mo" + "ckTransport")(handler))
+    agent = agent_module.TargetClusterAgent(
+        kubernetes_transport=getattr(httpx, "Mo" + "ckTransport")(handler)
+    )
 
     result = asyncio.run(
         agent.execute_command(
@@ -504,7 +518,9 @@ def test_target_agent_rejects_unsupported_manifest_contract(monkeypatch) -> None
         calls.append(request.method)
         return httpx.Response(200, json={"ok": True}, request=request)
 
-    agent = agent_module.TargetClusterAgent(kubernetes_transport=getattr(httpx, "Mo" + "ckTransport")(handler))
+    agent = agent_module.TargetClusterAgent(
+        kubernetes_transport=getattr(httpx, "Mo" + "ckTransport")(handler)
+    )
 
     result = asyncio.run(
         agent.execute_command(
