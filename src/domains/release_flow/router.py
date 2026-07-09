@@ -71,6 +71,9 @@ RELEASE_PLAN_BLOCKED = "release plan has blockers"
 RELEASE_RUN_BLOCKED = "release run cannot advance"
 TERMINAL_RELEASE_RUN_STATUSES = {"succeeded", "failed", "cancelled", "rollback_requested"}
 BLOCKING_RUN_STATUSES = {"running", "paused", "rollback_requested", "waiting_for_approval"}
+DEFAULT_RELEASE_VERIFICATION_TIMEOUT_MINUTES = 15
+VERIFICATION_JOB_FAILED_STATUSES = {"failed", "error", "unhealthy"}
+VERIFICATION_JOB_PENDING_STATUSES = {"", "pending", "queued", "running"}
 ALERT_CHANNEL_VALIDATION_MAX_AGE_HOURS_ENV = "RELEASE_FLOW_ALERT_TEST_MAX_AGE_HOURS"
 DEFAULT_ALERT_CHANNEL_VALIDATION_MAX_AGE_HOURS = 24
 APPROVAL_MAX_AGE_HOURS_ENV = "RELEASE_FLOW_APPROVAL_MAX_AGE_HOURS"
@@ -96,6 +99,7 @@ async def list_release_runs(
     stale_only: bool = Query(default=False),
     live_only: bool = Query(default=False),
     verification_failed_only: bool = Query(default=False),
+    verification_pending_timeout_only: bool = Query(default=False),
     limit: int = Query(default=50, ge=1, le=200),
     current: Any = Depends(require_session),
     db: Any = Depends(get_db),
@@ -111,6 +115,7 @@ async def list_release_runs(
         stale_only=stale_only,
         live_only=live_only,
         verification_failed_only=verification_failed_only,
+        verification_pending_timeout_only=verification_pending_timeout_only,
     )
     return ReleaseRunListResponse(runs=runs)
 
@@ -1770,6 +1775,7 @@ def release_verification_job_specs(
     wave: int,
 ) -> list[dict[str, Any]]:
     settings = plan_settings_value(plan)
+    queued_at = release_window_bound_label(datetime.now(timezone.utc))
     jobs: list[dict[str, Any]] = []
     for step in production_steps:
         config = step_config(step)
@@ -1777,6 +1783,7 @@ def release_verification_job_specs(
         name = str(step.get("name") or application_id or "release step")
         health_path = release_health_check_path(settings, config)
         verification_url = release_verification_url(settings, config)
+        timeout_minutes = release_verification_timeout_minutes(settings, config)
         if health_path:
             jobs.append(
                 {
@@ -1785,6 +1792,8 @@ def release_verification_job_specs(
                     "name": name,
                     "kind": "kubernetes_health_check",
                     "status": "pending",
+                    "queued_at": queued_at,
+                    "timeout_minutes": timeout_minutes,
                     "evidence_key": release_verification_evidence_key(plan, wave, application_id),
                     "target": {
                         "cluster_id": str(config.get("cluster_id") or settings.get("cluster_id") or ""),
@@ -1802,11 +1811,23 @@ def release_verification_job_specs(
                     "name": name,
                     "kind": "http_probe",
                     "status": "pending",
+                    "queued_at": queued_at,
+                    "timeout_minutes": timeout_minutes,
                     "evidence_key": release_verification_evidence_key(plan, wave, application_id),
                     "target": {"url": verification_url},
                 }
             )
     return jobs
+
+
+def release_verification_timeout_minutes(settings: dict[str, Any], config: dict[str, Any]) -> int:
+    default_timeout = int_field(
+        settings,
+        "post_deploy_verification_timeout_minutes",
+        int_field(settings, "verification_timeout_minutes", DEFAULT_RELEASE_VERIFICATION_TIMEOUT_MINUTES),
+    )
+    step_timeout = int_field(config, "verification_timeout_minutes", default_timeout)
+    return max(1, int_field(config, "post_deploy_verification_timeout_minutes", step_timeout))
 
 
 def release_health_check_path(settings: dict[str, Any], config: dict[str, Any]) -> str:
@@ -2702,6 +2723,7 @@ def filter_release_runs(
     stale_only: bool = False,
     live_only: bool = False,
     verification_failed_only: bool = False,
+    verification_pending_timeout_only: bool = False,
 ) -> list[dict[str, Any]]:
     expected_status = str(status or "").strip().lower()
     filtered: list[dict[str, Any]] = []
@@ -2717,6 +2739,8 @@ def filter_release_runs(
         if live_only and not release_run_has_live_side_effects(run):
             continue
         if verification_failed_only and not release_run_has_failed_verification(run):
+            continue
+        if verification_pending_timeout_only and not release_run_has_timed_out_verification(run):
             continue
         filtered.append(run)
     return filtered
@@ -2736,10 +2760,23 @@ def release_run_has_live_side_effects(run: dict[str, Any]) -> bool:
 
 
 def release_run_has_failed_verification(run: dict[str, Any]) -> bool:
+    for job, _step, _name in release_run_verification_jobs(run):
+        if release_verification_job_status(job) in VERIFICATION_JOB_FAILED_STATUSES:
+            return True
+    return False
+
+
+def release_run_has_timed_out_verification(run: dict[str, Any]) -> bool:
+    return bool(release_verification_job_pending_timeouts(run))
+
+
+def release_run_verification_jobs(run: dict[str, Any]) -> list[tuple[dict[str, Any], dict[str, Any], str]]:
     steps = run.get("steps") if isinstance(run.get("steps"), list) else []
+    records: list[tuple[dict[str, Any], dict[str, Any], str]] = []
     for step in steps:
         if not isinstance(step, dict):
             continue
+        name = str(step.get("name") or step.get("application_id") or "release step")
         details = step.get("details") if isinstance(step.get("details"), dict) else {}
         guard = details.get("release_guard") if isinstance(details.get("release_guard"), dict) else {}
         verification_jobs = (
@@ -2748,13 +2785,53 @@ def release_run_has_failed_verification(run: dict[str, Any]) -> bool:
             else {}
         )
         jobs = verification_jobs.get("jobs") if isinstance(verification_jobs.get("jobs"), list) else []
-        if any(
-            isinstance(job, dict)
-            and str(job.get("status") or "").lower() in {"failed", "error", "unhealthy"}
-            for job in jobs
-        ):
-            return True
-    return False
+        for job in jobs:
+            if isinstance(job, dict):
+                records.append((job, step, name))
+    return records
+
+
+def release_verification_job_status(job: dict[str, Any]) -> str:
+    return str(job.get("status") or "").strip().lower()
+
+
+def release_verification_job_pending_timeouts(
+    run: dict[str, Any],
+    *,
+    now: datetime | None = None,
+) -> list[dict[str, Any]]:
+    current_time = now or datetime.now(timezone.utc)
+    settings = run.get("settings") if isinstance(run.get("settings"), dict) else {}
+    default_timeout = int_field(
+        settings,
+        "post_deploy_verification_timeout_minutes",
+        int_field(settings, "verification_timeout_minutes", DEFAULT_RELEASE_VERIFICATION_TIMEOUT_MINUTES),
+    )
+    timed_out: list[dict[str, Any]] = []
+    for job, step, step_name in release_run_verification_jobs(run):
+        if release_verification_job_status(job) not in VERIFICATION_JOB_PENDING_STATUSES:
+            continue
+        timeout_minutes = max(1, int_field(job, "timeout_minutes", default_timeout))
+        queued_at = parse_release_window_time(
+            job.get("queued_at")
+            or job.get("created_at")
+            or job.get("started_at")
+            or step.get("updated_at")
+            or run.get("updated_at")
+            or run.get("created_at")
+        )
+        if queued_at is None:
+            continue
+        age_seconds = max(0, int((current_time - queued_at.astimezone(timezone.utc)).total_seconds()))
+        if age_seconds < timeout_minutes * 60:
+            continue
+        record = dict(job)
+        record["step_name"] = step_name
+        record["age_minutes"] = age_seconds // 60
+        record["timeout_minutes"] = timeout_minutes
+        record["queued_at"] = release_window_bound_label(queued_at)
+        timed_out.append(record)
+    return timed_out
 
 
 def release_run_summary_from_runs(runs: list[dict[str, Any]]) -> dict[str, Any]:
@@ -2768,6 +2845,7 @@ def release_run_summary_from_runs(runs: list[dict[str, Any]]) -> dict[str, Any]:
     live_runs = 0
     unhealthy_runs = 0
     verification_failed_runs = 0
+    verification_pending_timeout_runs = 0
     stale_runs = 0
     attention_required_runs = 0
     last_run_status = ""
@@ -2802,7 +2880,13 @@ def release_run_summary_from_runs(runs: list[dict[str, Any]]) -> dict[str, Any]:
                 attention_required_runs += 1
         if release_run_has_failed_verification(run):
             verification_failed_runs += 1
-        if attention.get("required") is True and not status_needs_attention and not health_needs_attention:
+        verification_pending_timed_out = release_run_has_timed_out_verification(run)
+        if verification_pending_timed_out:
+            verification_pending_timeout_runs += 1
+        if (
+            attention.get("required") is True
+            or verification_pending_timed_out
+        ) and not status_needs_attention and not health_needs_attention:
             attention_required_runs += 1
         if release_run_has_live_side_effects(run):
             live_runs += 1
@@ -2827,6 +2911,7 @@ def release_run_summary_from_runs(runs: list[dict[str, Any]]) -> dict[str, Any]:
         "live_runs": live_runs,
         "unhealthy_runs": unhealthy_runs,
         "verification_failed_runs": verification_failed_runs,
+        "verification_pending_timeout_runs": verification_pending_timeout_runs,
         "stale_runs": stale_runs,
         "last_run_status": last_run_status or None,
         "recent_runs": recent_runs,
@@ -2916,6 +3001,56 @@ def release_run_handoff_verification(run: dict[str, Any]) -> dict[str, Any]:
         for item in verification_jobs.get("jobs", [])
         if isinstance(item, dict)
     ]
+    failed_jobs = [
+        item
+        for item in jobs
+        if release_verification_job_status(item) in VERIFICATION_JOB_FAILED_STATUSES
+    ]
+    timed_out_jobs = release_verification_job_pending_timeouts(run)
+    pending_jobs = [
+        item
+        for item in jobs
+        if release_verification_job_status(item) in VERIFICATION_JOB_PENDING_STATUSES
+    ]
+    if failed_jobs:
+        return {
+            "status": "blocked",
+            "message": f"{len(failed_jobs)} post-deploy verification job failed.",
+            "evidence": [],
+            "jobs": jobs,
+            "job_count": len(jobs),
+            "timed_out_jobs": timed_out_jobs,
+            "override_reason": None,
+            "production_targets": production_targets or (
+                impact.get("production_targets") if isinstance(impact.get("production_targets"), list) else []
+            ),
+        }
+    if timed_out_jobs:
+        return {
+            "status": "blocked",
+            "message": f"{len(timed_out_jobs)} post-deploy verification job timed out.",
+            "evidence": [],
+            "jobs": jobs,
+            "job_count": len(jobs),
+            "timed_out_jobs": timed_out_jobs,
+            "override_reason": None,
+            "production_targets": production_targets or (
+                impact.get("production_targets") if isinstance(impact.get("production_targets"), list) else []
+            ),
+        }
+    if pending_jobs:
+        return {
+            "status": "warning",
+            "message": f"{len(pending_jobs)} post-deploy verification job is still pending.",
+            "evidence": [],
+            "jobs": jobs,
+            "job_count": len(jobs),
+            "timed_out_jobs": [],
+            "override_reason": None,
+            "production_targets": production_targets or (
+                impact.get("production_targets") if isinstance(impact.get("production_targets"), list) else []
+            ),
+        }
     if not verification:
         return {
             "status": "info",
@@ -2923,6 +3058,7 @@ def release_run_handoff_verification(run: dict[str, Any]) -> dict[str, Any]:
             "evidence": [],
             "jobs": jobs,
             "job_count": len(jobs),
+            "timed_out_jobs": [],
             "override_reason": None,
             "production_targets": impact.get("production_targets") if isinstance(impact.get("production_targets"), list) else [],
         }
@@ -2935,6 +3071,7 @@ def release_run_handoff_verification(run: dict[str, Any]) -> dict[str, Any]:
             "evidence": evidence,
             "jobs": jobs,
             "job_count": len(jobs),
+            "timed_out_jobs": [],
             "override_reason": override_reason,
             "production_targets": production_targets,
         }
@@ -2945,6 +3082,7 @@ def release_run_handoff_verification(run: dict[str, Any]) -> dict[str, Any]:
             "evidence": [],
             "jobs": jobs,
             "job_count": len(jobs),
+            "timed_out_jobs": [],
             "override_reason": override_reason,
             "production_targets": production_targets,
         }
@@ -2954,6 +3092,7 @@ def release_run_handoff_verification(run: dict[str, Any]) -> dict[str, Any]:
         "evidence": [],
         "jobs": jobs,
         "job_count": len(jobs),
+        "timed_out_jobs": [],
         "override_reason": None,
         "production_targets": production_targets,
     }
