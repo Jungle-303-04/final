@@ -56,7 +56,9 @@ RCA는 provider가 보내준 evidence만 보고 symptom, root cause candidate, c
   - startupProbe
   - path / port / timeoutSeconds / periodSeconds / failureThreshold
 - Deployment labels
+- safe Deployment annotations
 - Pod template labels
+- safe Pod template annotations
 - managedFields manager 목록
 - owned ReplicaSet revision annotation
 
@@ -193,7 +195,9 @@ policy상 traces query는 존재한다.
 - change_context.current_workload_snapshot
 - change_context.current_workload_snapshots[].workload.kind/namespace/name
 - change_context.current_workload_snapshots[].deployment_labels
+- change_context.current_workload_snapshots[].deployment_annotations
 - change_context.current_workload_snapshots[].pod_template_labels
+- change_context.current_workload_snapshots[].pod_template_annotations
 - change_context.current_workload_snapshots[].managed_fields_managers[]
 - change_context.current_workload_snapshots[].containers[].name/image
 - change_context.current_workload_snapshots[].containers[].readiness_probe
@@ -213,7 +217,7 @@ Kubernetes object에서도 일부 metadata를 참고할 수 있다.
 - metadata.namespace
 - metadata.uid
 - labels
-- annotations 일부(`kubernetes` bucket 중심; 현재 `metadata` bucket에는 annotations를 남기지 않음)
+- annotations 일부(`metadata` bucket은 안전한 Deployment/Pod template annotation만 남김)
 - ownerReferences
 - image
 - deployment revision annotation 일부
@@ -234,7 +238,8 @@ Kubernetes object에서도 일부 metadata를 참고할 수 있다.
 주의:
 
 - GitOps/CI/CD/SCM/배포 시스템과 연결이 필요할 수 있음
-- annotation, managedFields, env, Secret reference는 저장 범위와 마스킹 기준 필요
+- annotation은 allowlist와 민감 key 제외 기준이 필요함
+- managedFields, env, Secret reference는 저장 범위와 마스킹 기준 필요
 
 ## 요약
 
