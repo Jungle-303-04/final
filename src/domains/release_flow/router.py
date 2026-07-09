@@ -1164,6 +1164,7 @@ def release_readiness_from_plan(
         "mode": profile.runtime_mode,
         "summary": summary,
         "checks": checks,
+        "next_actions": release_readiness_next_actions(checks),
         "blockers": blockers,
         "warnings": warnings,
     }
@@ -1183,6 +1184,29 @@ def readiness_check(
         "message": message,
         "blockers": blockers or [],
     }
+
+
+def release_readiness_next_actions(checks: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    actions: list[dict[str, Any]] = []
+    for check in checks:
+        status = str(check.get("status") or "")
+        if status not in {"blocked", "warning"}:
+            continue
+        check_id = str(check.get("check_id") or "")
+        name = str(check.get("name") or check_id or "Readiness check")
+        blockers = [str(item) for item in check.get("blockers", [])]
+        verb = "Resolve" if status == "blocked" else "Review"
+        actions.append(
+            {
+                "action_id": f"{status}.{check_id}" if check_id else status,
+                "check_id": check_id,
+                "label": f"{verb} {name}",
+                "severity": status,
+                "message": str(check.get("message") or ""),
+                "blockers": blockers,
+            }
+        )
+    return actions
 
 
 def required_release_input_blockers(plan: dict[str, Any]) -> list[str]:

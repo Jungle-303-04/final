@@ -452,6 +452,9 @@ def test_release_readiness_reports_blockers_and_operational_warnings(monkeypatch
     assert any("Checkout is missing image" in item for item in response.blockers)
     assert any("requires at least one enabled alert channel" in item for item in response.blockers)
     assert any("cannot be retried" in item for item in response.warnings)
+    action_ids = {action["check_id"] for action in response.next_actions}
+    assert {"plan.required_inputs", "live.dispatch_gate", "alerts.enabled_channels", "retry.policy"} <= action_ids
+    assert all(action["severity"] in {"blocked", "warning"} for action in response.next_actions)
 
 
 def test_release_readiness_passes_demo_with_alert_channel(monkeypatch) -> None:
@@ -933,6 +936,9 @@ def test_release_readiness_warns_when_production_change_ticket_gate_is_bypassed(
     assert response.ready is True
     change_check = next(check for check in response.checks if check["check_id"] == "change.ticket")
     assert change_check["status"] == "warning"
+    change_action = next(action for action in response.next_actions if action["check_id"] == "change.ticket")
+    assert change_action["severity"] == "warning"
+    assert change_action["label"] == "Review Change ticket"
 
 
 def test_release_readiness_blocks_production_live_without_release_window(monkeypatch) -> None:
@@ -1262,6 +1268,9 @@ def test_release_readiness_blocks_production_live_without_owner_contact(monkeypa
     assert any("release_owner or oncall_contact" in item for item in response.blockers)
     owner_check = next(check for check in response.checks if check["check_id"] == "owner.contact")
     assert owner_check["status"] == "blocked"
+    owner_action = next(action for action in response.next_actions if action["check_id"] == "owner.contact")
+    assert owner_action["severity"] == "blocked"
+    assert owner_action["label"] == "Resolve Owner contact"
 
 
 def test_release_readiness_blocks_unregistered_application(monkeypatch) -> None:

@@ -848,6 +848,7 @@ function ReadinessPanel({ readiness, loading }: { readiness?: ReleaseReadiness; 
     return <Card title="Readiness"><p className="release-flow__hint">No readiness check yet.</p></Card>;
   }
   const badgeTone = readiness.ready ? (readiness.warnings.length ? 'warning' : 'success') : 'danger';
+  const nextActions = readiness.next_actions ?? [];
   return (
     <Card
       title="Readiness"
@@ -859,6 +860,19 @@ function ReadinessPanel({ readiness, loading }: { readiness?: ReleaseReadiness; 
       }
     >
       <p className="release-flow__hint">{readiness.summary}</p>
+      {nextActions.length > 0 && (
+        <div className="release-flow__next-actions">
+          {nextActions.map(action => (
+            <div key={action.action_id} className={`release-flow__next-action release-flow__next-action--${readinessStatusClass(action.severity)}`}>
+              <div>
+                <strong>{action.label}</strong>
+                <p>{action.blockers[0] ?? action.message}</p>
+              </div>
+              <Badge tone={readinessStatusTone(action.severity)}>{readinessStatusLabel(action.severity)}</Badge>
+            </div>
+          ))}
+        </div>
+      )}
       <div className="release-flow__readiness">
         {readiness.checks.map(check => (
           <div key={check.check_id} className={`release-flow__readiness-row release-flow__readiness-row--${readinessStatusClass(check.status)}`}>
