@@ -1798,6 +1798,14 @@ function approvalDecisionForStep(step: ReleaseRun['steps'][number]): 'granted' |
 function releaseEventMeta(event: ReleaseRun['events'][number]): string {
   const details = recordValue(event.details);
   const actionReason = getString(details.reason);
+  const alert = recordValue(details.alert);
+  if (event.event_type.startsWith('release.notify')) {
+    const severity = getString(alert.severity);
+    const applicationId = getString(alert.application_id);
+    const alertReason = getString(alert.reason);
+    const pieces = [severity, 'notify', applicationId].filter(Boolean);
+    return pieces.length ? pieces.join(' ') : alertReason || actionReason || 'release notification';
+  }
   if (actionReason) return actionReason;
   const evidence = recordValue(details.evidence);
   const incident = recordValue(details.incident);

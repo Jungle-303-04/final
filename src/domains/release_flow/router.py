@@ -2495,7 +2495,10 @@ def record_release_notify_event(
             "operator_action": "notify",
             "alert": {
                 "severity": alert.severity,
+                "cluster_id": alert.cluster_id,
+                "namespace": alert.namespace,
                 "application_id": alert.application_id,
+                "workflow_run_id": alert.workflow_run_id,
                 "message": alert.message,
                 "reason": alert.reason,
             },
