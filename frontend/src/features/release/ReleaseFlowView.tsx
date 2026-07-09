@@ -1473,6 +1473,19 @@ function RunHandoffPanel({ handoff, loading }: { handoff?: ReleaseRunHandoff; lo
             </div>
           </div>
         )}
+        {handoff.policy_overrides.length > 0 && (
+          <div>
+            <span className="release-flow__handoff-label">Policy overrides</span>
+            <div className="release-flow__handoff-list">
+              {handoff.policy_overrides.slice(0, 4).map(override => (
+                <span key={`${override.source}-${override.reason}`}>
+                  {override.source}: {override.reason}
+                  {override.production_targets.length > 0 ? ` (${override.production_targets.slice(0, 2).join(', ')})` : ''}
+                </span>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
       {handoff.last_event && (
         <p className="release-flow__hint">
@@ -1627,6 +1640,7 @@ function formatReleaseRunReport(run: ReleaseRun, handoff?: ReleaseRunHandoff): s
     lines.push(...handoff.next_actions.slice(0, 5).map(action => `- ${action.enabled ? '[ ]' : '[blocked]'} ${action.label}${action.reason ? `: ${action.reason}` : ''}`));
     lines.push('', 'Checks:');
     lines.push(...handoff.checks.slice(0, 8).map(check => `- ${check.name}: ${check.status} (${check.message})`));
+    lines.push(...policyOverrideMarkdownLines(handoff));
     if (handoff.verification) {
       lines.push('', 'Verification:', `- ${handoff.verification.status}: ${handoff.verification.message}`);
       lines.push(...handoff.verification.evidence.slice(0, 3).map(item => `- evidence: ${item}`));
@@ -1700,6 +1714,18 @@ function releaseRunTimelineSummaryLines(events: ReleaseRun['events']): string[] 
   return lines;
 }
 
+function policyOverrideMarkdownLines(handoff: ReleaseRunHandoff): string[] {
+  if (handoff.policy_overrides.length === 0) return [];
+  return [
+    '',
+    'Policy overrides:',
+    ...handoff.policy_overrides.slice(0, 8).map(override => {
+      const targets = override.production_targets.length > 0 ? ` / targets: ${override.production_targets.slice(0, 5).join(', ')}` : '';
+      return `- ${override.source}: ${override.reason}${targets}`;
+    }),
+  ];
+}
+
 function releaseRunTargetLines(run: ReleaseRun): string[] {
   return run.steps.slice(0, 12).map(step => {
     const details = recordValue(step.details);
@@ -1740,6 +1766,7 @@ function formatHandoffMarkdown(handoff: ReleaseRunHandoff): string {
   lines.push(...handoff.next_actions.slice(0, 6).map(action => `- ${action.enabled ? '[ ]' : '[blocked]'} ${action.label}${action.reason ? `: ${action.reason}` : ''}`));
   lines.push('', 'Checks:');
   lines.push(...handoff.checks.slice(0, 8).map(check => `- ${check.name}: ${check.status} (${check.message})`));
+  lines.push(...policyOverrideMarkdownLines(handoff));
   if (handoff.verification) {
     lines.push('', 'Verification:', `- ${handoff.verification.status}: ${handoff.verification.message}`);
     lines.push(...handoff.verification.evidence.slice(0, 3).map(item => `- evidence: ${item}`));
