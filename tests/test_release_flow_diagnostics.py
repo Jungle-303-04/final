@@ -98,15 +98,43 @@ def test_rollback_release_run_checks_access_before_mutating(monkeypatch) -> None
 def test_release_run_summary_counts_derived_statuses() -> None:
     summary = release_router.release_run_summary_from_runs(
         [
-            {"run_id": "run-1", "plan_id": "plan-a", "status": "running"},
-            {"run_id": "run-2", "plan_id": "plan-a", "status": "running", "derived_status": "failed"},
-            {"run_id": "run-3", "plan_id": "plan-b", "status": "succeeded"},
+            {"run_id": "run-1", "plan_id": "plan-a", "status": "running", "health": {"status": "progressing"}},
+            {
+                "run_id": "run-2",
+                "plan_id": "plan-a",
+                "status": "running",
+                "derived_status": "failed",
+                "settings": {"runtime_mode": "live"},
+                "health": {"status": "unhealthy"},
+            },
+            {
+                "run_id": "run-3",
+                "plan_id": "plan-b",
+                "status": "succeeded",
+                "steps": [{"details": {"side_effects": True}}],
+            },
+            {"run_id": "run-4", "plan_id": "plan-c", "status": "rollback_requested"},
+            {"run_id": "run-5", "plan_id": "plan-c", "status": "waiting_for_approval"},
         ]
     )
 
-    assert summary["total_runs"] == 3
-    assert summary["status_breakdown"] == {"running": 1, "failed": 1, "succeeded": 1}
-    assert summary["plan_breakdown"] == {"plan-a": 2, "plan-b": 1}
+    assert summary["total_runs"] == 5
+    assert summary["status_breakdown"] == {
+        "running": 1,
+        "failed": 1,
+        "succeeded": 1,
+        "rollback_requested": 1,
+        "waiting_for_approval": 1,
+    }
+    assert summary["plan_breakdown"] == {"plan-a": 2, "plan-b": 1, "plan-c": 2}
+    assert summary["active_runs"] == 2
+    assert summary["attention_required_runs"] == 3
+    assert summary["failed_runs"] == 1
+    assert summary["rollback_requested_runs"] == 1
+    assert summary["waiting_for_approval_runs"] == 1
+    assert summary["live_runs"] == 2
+    assert summary["unhealthy_runs"] == 1
+    assert summary["last_run_status"] == "running"
     assert summary["recent_runs"][1] == {
         "run_id": "run-2",
         "plan_id": "plan-a",

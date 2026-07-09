@@ -826,12 +826,31 @@ function RunPanel({
 function RunSummary({ summary }: { summary?: ReleaseRunSummary }) {
   if (!summary) return null;
   const statuses = Object.entries(summary.status_breakdown).sort(([left], [right]) => left.localeCompare(right));
+  const opsSignals = [
+    ['Needs attention', summary.attention_required_runs ?? 0],
+    ['Active', summary.active_runs ?? 0],
+    ['Live', summary.live_runs ?? 0],
+    ['Rollback', summary.rollback_requested_runs ?? 0],
+    ['Unhealthy', summary.unhealthy_runs ?? 0],
+  ];
   return (
     <div className="release-flow__summary">
       <div>
         <span>Total runs</span>
         <strong>{summary.total_runs}</strong>
       </div>
+      {opsSignals.map(([label, count]) => (
+        <div key={label}>
+          <span>{label}</span>
+          <strong>{count}</strong>
+        </div>
+      ))}
+      {summary.last_run_status && (
+        <div>
+          <span>Latest</span>
+          <strong>{summary.last_run_status}</strong>
+        </div>
+      )}
       {statuses.length > 0 ? statuses.map(([status, count]) => (
         <div key={status}>
           <span>{status}</span>

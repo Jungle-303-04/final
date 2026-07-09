@@ -813,6 +813,14 @@ class ReleaseRunSummaryResponse(StrictModel):
     total_runs: int
     status_breakdown: dict[str, int] = Field(default_factory=dict)
     plan_breakdown: dict[str, int] = Field(default_factory=dict)
+    active_runs: int = 0
+    attention_required_runs: int = 0
+    failed_runs: int = 0
+    rollback_requested_runs: int = 0
+    waiting_for_approval_runs: int = 0
+    live_runs: int = 0
+    unhealthy_runs: int = 0
+    last_run_status: str | None = None
     recent_runs: list[JsonMap] = Field(default_factory=list)
 
 
