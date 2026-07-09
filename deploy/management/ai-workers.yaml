@@ -235,6 +235,7 @@ spec:
       labels:
         app: recovery-worker
     spec:
+      priorityClassName: gitops-control-critical
       containers:
         - name: worker
           image: kubeheal-service:latest
@@ -323,6 +324,7 @@ spec:
       labels:
         app: dispatch-worker
     spec:
+      priorityClassName: gitops-control-critical
       containers:
         - name: worker
           image: kubeheal-service:latest

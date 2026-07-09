@@ -2574,3 +2574,54 @@ Prometheus base URL이 env/request 어디에도 없으면 `code="prometheus_base
   - `.venv/bin/python -m pytest tests/test_gitops_webhook_router.py tests/test_applications_router.py tests/test_github_poller.py tests/test_git_pull_worker.py -q` → 29 passed.
   - `.venv/bin/python -m ruff check src/domains/gitops/router.py src/domains/applications/router.py src/packages/contracts/gateway/requests.py tests/test_gitops_webhook_router.py tests/test_applications_router.py` → passed.
   - `npm --prefix frontend run build` → passed.
+
+## Fast-lane scheduling profile API + 스케줄링 최적화 (2026-07-09)
+
+- 사용자 요구:
+  - `demo-fast`를 특정 namespace/name 하드코딩으로 두지 않는다.
+  - 프론트/운영자가 API로 어떤 workload를 빠른 lane에 넣을지 선택할 수 있어야 한다.
+  - PriorityClass, fast node pool, image pre-pull, termination tuning, 별도 scheduler/plugin까지 구조적으로 설명 가능해야 한다.
+- 적용:
+  - 계약에 `SchedulingPolicy`, `SchedulingProfile`, `SchedulingSelector`, `SchedulingToleration`을 추가했다.
+  - `AgentPolicy`에 `scheduling` 섹션을 추가하고 `merge_agent_policy`가 이 섹션을 머지한다.
+  - API 추가:
+    - `GET /clusters/{cluster_id}/scheduling-profiles`
+    - `PUT /clusters/{cluster_id}/scheduling-profiles`
+  - profile은 `selector.namespaces`, `selector.labels`, `selector.workload_names`로 대상을 고른다.
+    enabled profile은 selector 셋 중 하나 이상을 요구한다. 빈 selector로 전체 클러스터 workload를 빠른 lane에 넣는 실수를 막는다.
+  - management cluster는 별도 scheduling endpoint와 기존 policy PUT 경로 모두에서 scheduling profile 저장을 거부한다.
+    `freeze_management_policy`도 scheduling을 빈 값으로 강제한다.
+  - management kustomize에 `gitops-control-critical`, `gitops-demo-fast` PriorityClass를 추가했다.
+    api-gateway, outbox-relay, command-worker, workflow-controller, git-pull-worker, manifest-render-worker, scm-worker, realtime-gateway, github-poll-worker, management cluster-agent, recovery-worker, dispatch-worker에 `gitops-control-critical`을 적용했다.
+  - target 설치 manifest 생성기에도 같은 PriorityClass를 넣고, target cluster-agent에 `gitops-control-critical`과 `workload-tier=demo-fast` preferred node affinity를 넣었다.
+    sample workload는 `gitops-demo-fast`, `terminationGracePeriodSeconds: 1`, 같은 preferred affinity를 받는다.
+  - realtime frontend store에 `realtimeStats`를 추가했다.
+    WebSocket message 수신 수, delta 수신 수, RAF flush 횟수, pending delta 수, 마지막 flush delay, 마지막 batch size를 UI 변경 없이 계측한다.
+- scheduler 상세 판단:
+  - EKS managed control plane에서 기본 scheduler 자체를 교체하는 방식은 현실적이지 않다.
+    Kubernetes 공통 방식으로 별도 scheduler Deployment를 띄우고, 선택된 workload에 `schedulerName`을 지정하는 모델이 맞다.
+  - 기본 fast path는 `PriorityClass + warm node pool + image cache + realtime delta`다.
+    이 조합은 모든 Kubernetes에서 동작하고 장애 시 기본 scheduler fallback을 유지한다.
+  - `scheduler_name`은 profile 필드에 있지만 기본값은 `null`이다.
+    별도 scheduler가 내려가면 그 schedulerName을 가진 pod는 Pending에 머물 수 있으므로 명시 선택할 때만 켠다.
+  - 고급 단계는 kube-scheduler framework plugin 또는 별도 scheduler image다.
+    plugin은 Score 단계에서 `workload-tier=demo-fast`, image locality, 여유 CPU/MEM, selector 일치도를 점수화한다.
+    Filter 단계에서 required placement/taint/toleration을 강제할 수 있다.
+    발표 관점에서는 기술적으로 강하지만, 운영 관점에서는 scheduler image 배포·RBAC·leader election·fallback runbook이 필요하다.
+  - image pre-pull은 Kubernetes 네이티브 API가 아니다.
+    범용적으로 안전하게 처리하려면 node pool warm capacity와 `IfNotPresent`를 기본으로 두고, privileged image-puller DaemonSet 또는 custom scheduler의 image locality 점수화를 명시 선택 기능으로 둔다.
+    임의 이미지에 command를 강제로 넣는 DaemonSet pre-pull은 distroless/scratch 이미지에서 깨질 수 있어 기본 자동 적용으로 두지 않는다.
+- 프론트 계약:
+  - 프론트는 `GET /clusters/{id}/scheduling-profiles`로 현재 profile을 읽고,
+    `PUT /clusters/{id}/scheduling-profiles`로 selector/priority/placement/pre-pull 후보를 저장한다.
+  - `demo-fast`는 예시 profile/label 이름일 뿐이다. 실제 적용 대상은 selector가 결정한다.
+  - 드릴다운 UI에서는 namespace/service/workload 선택 후 profile selector를 구성하면 된다.
+- 검증:
+  - `PYTHONPATH=src .venv/bin/python -m pytest tests/test_target_registration.py tests/test_docs_index.py tests/test_bruno_collection.py -q` → 62 passed.
+  - `PYTHONPATH=src .venv/bin/python -m ruff check src/domains/target src/packages/contracts/gateway tests/test_target_registration.py` → passed.
+  - `npm --prefix frontend run typecheck` → passed.
+  - `kubectl kustomize deploy/management` → 렌더 성공.
+  - `/tmp/management-render.yaml` 오프라인 YAML parse 결과 PriorityClass 2개, critical priority workload 12개 확인.
+- 배포 주의:
+  - 현재 로컬 AWS exec 세션이 만료되어 `kubectl apply --dry-run=client`의 live discovery 검증은 실패했다.
+    코드/렌더 산출물은 통과했으므로, AWS 재인증 후 CD 또는 수동 rollout에서 동일 산출물로 확인한다.

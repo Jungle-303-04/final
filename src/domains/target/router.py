@@ -58,6 +58,7 @@ from packages.contracts.gateway.requests import (
     AgentReconcileStatusRequest,
     EvidenceJobResultRequest,
     EvidenceJobScheduleRequest,
+    SchedulingPolicy,
     TargetPreflightRequest,
     TargetRegisterRequest,
 )
@@ -70,6 +71,7 @@ from packages.contracts.gateway.responses import (
     EvidenceJobPollResponse,
     EvidenceJobResultResponse,
     EvidenceJobScheduleResponse,
+    SchedulingPolicyResponse,
     TargetInstallResponse,
     TargetPreflightResponse,
 )
@@ -1063,6 +1065,90 @@ async def update_cluster_policy(
     except ValueError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
     return {"accepted": True, "policy": stored}
+
+
+def cluster_policy_base(
+    db: Any,
+    workspace_id: str,
+    cluster_id: str,
+) -> tuple[AgentPolicy, dict[str, Any] | None, bool]:
+    existing = db.get_cluster_policy(workspace_id, cluster_id)
+    base_policy = (
+        AgentPolicy.model_validate(existing)
+        if existing
+        else default_agent_policy(cluster_id=cluster_id)
+    )
+    registration_getter = getattr(db, "get_cluster_registration", None)
+    registration = (
+        registration_getter(workspace_id, cluster_id) if callable(registration_getter) else None
+    )
+    management_cluster = is_management_registration(registration) or is_management_role(
+        base_policy.cluster_role
+    )
+    return base_policy, registration, management_cluster
+
+
+@router.get(
+    gateway_routes.CLUSTER_SCHEDULING_PROFILES_PATH,
+    response_model=SchedulingPolicyResponse,
+)
+async def get_cluster_scheduling_profiles(
+    cluster_id: str,
+    current: Any = Depends(require_session),
+    db: Any = Depends(get_db),
+) -> SchedulingPolicyResponse:
+    workspace_id = getattr(current, "workspace_id", DEFAULT_WORKSPACE_ID)
+    require_cluster_access(
+        db,
+        current,
+        workspace_id,
+        cluster_id,
+        Permission.CLUSTER_READ.value,
+    )
+    base_policy, _registration, _management_cluster = cluster_policy_base(
+        db,
+        workspace_id,
+        cluster_id,
+    )
+    return SchedulingPolicyResponse(
+        cluster_id=cluster_id,
+        scheduling=base_policy.scheduling.model_dump(),
+    )
+
+
+@router.put(
+    gateway_routes.CLUSTER_SCHEDULING_PROFILES_PATH,
+    response_model=SchedulingPolicyResponse,
+)
+async def update_cluster_scheduling_profiles(
+    cluster_id: str,
+    payload: SchedulingPolicy,
+    current: Any = Depends(require_admin_session),
+    db: Any = Depends(get_db),
+) -> SchedulingPolicyResponse:
+    workspace_id = getattr(current, "workspace_id", DEFAULT_WORKSPACE_ID)
+    base_policy, _registration, management_cluster = cluster_policy_base(
+        db,
+        workspace_id,
+        cluster_id,
+    )
+    if management_cluster:
+        raise HTTPException(status_code=400, detail=management_readonly_detail())
+    merged_policy = base_policy.model_copy(
+        update={
+            "generation": base_policy.generation + 1,
+            "scheduling": payload,
+        }
+    )
+    try:
+        stored = db.upsert_cluster_policy(workspace_id, cluster_id, merged_policy.model_dump())
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    stored_policy = AgentPolicy.model_validate(stored)
+    return SchedulingPolicyResponse(
+        cluster_id=cluster_id,
+        scheduling=stored_policy.scheduling.model_dump(),
+    )
 
 
 @router.delete(gateway_routes.CLUSTER_PATH, status_code=204)

@@ -52,6 +52,7 @@ spec:
       labels:
         app: cluster-agent
     spec:
+      priorityClassName: gitops-control-critical
       serviceAccountName: cluster-agent
       containers:
         - name: agent

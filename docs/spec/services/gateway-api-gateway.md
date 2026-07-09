@@ -195,6 +195,8 @@ status: synced
 | GET | `/clusters/{cluster_id}` | 세션 | `require_cluster_access` |
 | GET | `/clusters/{cluster_id}/connection-status` | 세션 | `require_cluster_access` |
 | PUT | `/clusters/{cluster_id}/policy` | 세션 | admin |
+| GET | `/clusters/{cluster_id}/scheduling-profiles` | 세션 | `require_cluster_access` |
+| PUT | `/clusters/{cluster_id}/scheduling-profiles` | 세션 | admin |
 | GET | `/agent/policy` | agent | 쿼리 `cluster_id` = 토큰 cluster (아니면 403) |
 | POST | `/agent/policy/status` | agent | — |
 | POST | `/agent/reconcile/status` | agent | — |

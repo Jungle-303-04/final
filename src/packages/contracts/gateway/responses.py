@@ -93,6 +93,12 @@ class CommandStatusResponse(StrictModel):
     completed_at: str | None = None
 
 
+class SchedulingPolicyResponse(StrictModel):
+    accepted: bool = True
+    cluster_id: str
+    scheduling: JsonMap = Field(default_factory=dict)
+
+
 class MetricQueryPresetItem(StrictModel):
     preset_id: str
     workspace_id: str

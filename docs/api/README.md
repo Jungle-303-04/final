@@ -197,6 +197,13 @@ provider job 주기, evidence provider 사용 여부, 실패 정책 같은 targe
 `01-register-target-dry-run` 응답의 `install_command`가 내부적으로 호출하는 경로와 같다.
 토큰이 맞으면 `apiVersion`과 `kind`가 들어 있는 Kubernetes YAML이 오고, 토큰이 틀리면 404가 온다.
 
+`04-update-scheduling-profiles`는 cluster별 fast-lane scheduling profile을 바꾸는 API다.
+profile은 특정 네임스페이스 전용 하드코딩이 아니라 `namespaces`/`labels`/`workload_names` selector로 선택한다.
+선택된 workload는 PriorityClass, warm node label 선호/필수, optional schedulerName, pre-pull 후보 이미지, 짧은 termination grace 값을 받을 수 있다.
+
+`05-get-scheduling-profiles`는 현재 저장된 scheduling profile만 읽는다.
+프론트는 이 응답으로 fast-lane 토글, 노드 배치 표시, pre-pull 후보 이미지 표시를 구성한다.
+
 Target 등록 요청의 `prometheus_base_url`, `loki_base_url`, `tempo_base_url`은 target cluster 안에서 agent가 실제로 호출할 관측 스택 주소다.
 이 세 값은 설치 manifest의 `PROMETHEUS_BASE_URL`, `LOKI_BASE_URL`, `TEMPO_BASE_URL`로 그대로 들어가고, metrics/logs/traces provider의 기본 접속 주소가 된다.
 `otel_traces_endpoint`는 provider 조회 주소가 아니라 cluster-agent 자신의 span을 OpenTelemetry collector로 내보낼 endpoint다.

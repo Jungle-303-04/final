@@ -32,6 +32,7 @@ def test_platform_foundation_routes_are_present_in_openapi() -> None:
         routes.CLUSTER_INVENTORY_SUMMARY_PATH,
         routes.CLUSTER_DEPLOYMENT_SCALE_PATH,
         routes.CLUSTER_DEPLOYMENT_RESTART_PATH,
+        routes.CLUSTER_SCHEDULING_PROFILES_PATH,
         routes.APPLICATIONS_PATH,
         routes.APPLICATION_CONNECT_PATH,
         routes.APPLICATION_DEPLOYMENTS_PATH,

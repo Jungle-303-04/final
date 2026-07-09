@@ -19,6 +19,7 @@ spec:
       labels:
         app: api-gateway
     spec:
+      priorityClassName: gitops-control-critical
       serviceAccountName: api-gateway
       securityContext:
         runAsNonRoot: true
@@ -107,6 +108,7 @@ spec:
       labels:
         app: outbox-relay
     spec:
+      priorityClassName: gitops-control-critical
       securityContext:
         runAsNonRoot: true
         runAsUser: 10001
@@ -288,6 +290,7 @@ spec:
       labels:
         app: command-worker
     spec:
+      priorityClassName: gitops-control-critical
       securityContext:
         runAsNonRoot: true
         runAsUser: 10001
@@ -456,6 +459,7 @@ spec:
       labels:
         app: workflow-controller
     spec:
+      priorityClassName: gitops-control-critical
       securityContext:
         runAsNonRoot: true
         runAsUser: 10001
@@ -736,6 +740,7 @@ spec:
       labels:
         app: git-pull-worker
     spec:
+      priorityClassName: gitops-control-critical
       securityContext:
         runAsNonRoot: true
         runAsUser: 10001
@@ -792,6 +797,7 @@ spec:
       labels:
         app: manifest-render-worker
     spec:
+      priorityClassName: gitops-control-critical
       securityContext:
         runAsNonRoot: true
         runAsUser: 10001
@@ -1016,6 +1022,7 @@ spec:
       labels:
         app: scm-worker
     spec:
+      priorityClassName: gitops-control-critical
       securityContext:
         runAsNonRoot: true
         runAsUser: 10001
@@ -1134,6 +1141,7 @@ spec:
       labels:
         app: realtime-gateway
     spec:
+      priorityClassName: gitops-control-critical
       securityContext:
         runAsNonRoot: true
         runAsUser: 10001

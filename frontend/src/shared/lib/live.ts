@@ -7,12 +7,36 @@ interface LiveState {
   status: 'connecting' | 'open' | 'closed';
   snapshot: LiveSnapshot | null;
   history: { at: number; clusterId: string | null; restarts: number; running: number }[];
+  realtimeStats: {
+    received: number;
+    deltaReceived: number;
+    flushes: number;
+    pending: number;
+    lastReceivedAt: number | null;
+    lastFlushAt: number | null;
+    lastFlushDelayMs: number | null;
+    lastBatchSize: number;
+  };
   apply: (s: LiveSnapshot) => void;
   applyCounts: (clusterId: string | null, restarts: number, running: number) => void;
+  recordRealtimeReceived: (kind: 'snapshot' | 'summary' | 'delta' | 'other') => void;
+  recordRealtimeFlush: (batchSize: number, oldestQueuedAt: number | null) => void;
   setStatus: (s: LiveState['status']) => void;
 }
 export const liveStore = create<LiveState>((set, get) => ({
-  status: 'connecting', snapshot: null, history: [],
+  status: 'connecting',
+  snapshot: null,
+  history: [],
+  realtimeStats: {
+    received: 0,
+    deltaReceived: 0,
+    flushes: 0,
+    pending: 0,
+    lastReceivedAt: null,
+    lastFlushAt: null,
+    lastFlushDelayMs: null,
+    lastBatchSize: 0,
+  },
   apply: (snapshot) => {
     const pods = snapshot.namespaces.flatMap(n => n.pods);
     const point = { at: Date.now(), clusterId: snapshot.cluster_id ?? null, restarts: pods.reduce((a, p) => a + p.restarts, 0), running: pods.filter(p => p.phase === 'Running').length };
@@ -21,6 +45,32 @@ export const liveStore = create<LiveState>((set, get) => ({
   applyCounts: (clusterId, restarts, running) => {
     const point = { at: Date.now(), clusterId, restarts, running };
     set({ history: [...get().history.slice(-899), point] });
+  },
+  recordRealtimeReceived: (kind) => {
+    const current = get().realtimeStats;
+    set({
+      realtimeStats: {
+        ...current,
+        received: current.received + 1,
+        deltaReceived: current.deltaReceived + (kind === 'delta' ? 1 : 0),
+        pending: pendingDeltas.size,
+        lastReceivedAt: Date.now(),
+      },
+    });
+  },
+  recordRealtimeFlush: (batchSize, oldestQueuedAt) => {
+    const now = Date.now();
+    const current = get().realtimeStats;
+    set({
+      realtimeStats: {
+        ...current,
+        flushes: current.flushes + 1,
+        pending: pendingDeltas.size,
+        lastFlushAt: now,
+        lastFlushDelayMs: oldestQueuedAt === null ? null : Math.max(0, now - oldestQueuedAt),
+        lastBatchSize: batchSize,
+      },
+    });
   },
   setStatus: (status) => set({ status }),
 }));
@@ -32,6 +82,7 @@ let connectionSeq = 0;
 let queryClient: QueryClient | null = null;
 let frameHandle = 0;
 const pendingDeltas = new Map<string, ResourceDeltaMessage>();
+const pendingDeltaQueuedAt = new Map<string, number>();
 
 interface ResourceDeltaMessage {
   type: 'resource.delta';
@@ -96,19 +147,25 @@ export function applyRealtimeMessage(rawMessage: unknown) {
   const message = asRecord(rawMessage);
   if (!message) return;
   if (message.type === 'snapshot') {
+    liveStore.getState().recordRealtimeReceived('snapshot');
     applyRealtimeSnapshot(message);
     return;
   }
   if (message.type === 'live.summary') {
+    liveStore.getState().recordRealtimeReceived('summary');
     const summary = asRecord(message.summary) ?? message;
     applyLiveSummary(summary, stringOrNull(message.cluster_id));
     return;
   }
   if (message.type === 'resource.delta') {
     const delta = asResourceDelta(message);
-    if (delta) enqueueResourceDelta(delta);
+    if (delta) {
+      liveStore.getState().recordRealtimeReceived('delta');
+      enqueueResourceDelta(delta);
+    }
     return;
   }
+  liveStore.getState().recordRealtimeReceived('other');
   if (Array.isArray(message.namespaces)) liveStore.getState().apply(message as unknown as LiveSnapshot);
 }
 
@@ -165,6 +222,10 @@ function asResourceDelta(message: Record<string, unknown>): ResourceDeltaMessage
 
 function enqueueResourceDelta(delta: ResourceDeltaMessage) {
   pendingDeltas.set(delta.key, delta);
+  pendingDeltaQueuedAt.set(delta.key, pendingDeltaQueuedAt.get(delta.key) ?? Date.now());
+  liveStore.setState((state) => ({
+    realtimeStats: { ...state.realtimeStats, pending: pendingDeltas.size },
+  }));
   if (frameHandle) return;
   frameHandle = window.requestAnimationFrame(flushResourceDeltas);
 }
@@ -174,7 +235,11 @@ function flushResourceDeltas() {
   const client = queryClient;
   if (!client || pendingDeltas.size === 0) return;
   const deltas = [...pendingDeltas.values()];
+  const oldestQueuedAt = Math.min(
+    ...deltas.map(delta => pendingDeltaQueuedAt.get(delta.key) ?? Date.now()),
+  );
   pendingDeltas.clear();
+  pendingDeltaQueuedAt.clear();
   const touchedClusters = new Set<string>();
   for (const delta of deltas) {
     const [clusterId, namespace, kind, name] = delta.key.split('/', 4);
@@ -187,6 +252,7 @@ function flushResourceDeltas() {
     client.invalidateQueries({ queryKey: ['clusters', clusterId, 'summary'], exact: true });
     client.invalidateQueries({ queryKey: ['clusters', clusterId, 'inv', 'workloads'], exact: true });
   }
+  liveStore.getState().recordRealtimeFlush(deltas.length, Number.isFinite(oldestQueuedAt) ? oldestQueuedAt : null);
 }
 
 function patchPodInventory(
