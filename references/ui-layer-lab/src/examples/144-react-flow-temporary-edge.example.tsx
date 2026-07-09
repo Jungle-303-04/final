@@ -3,8 +3,8 @@ import "@xyflow/react/dist/style.css";
 import { useState } from "react";
 
 const nodes = [
-  { id: "draft", position: { x: 0, y: 100 }, data: { label: "Draft" } },
-  { id: "ghost", position: { x: 280, y: 100 }, data: { label: "Ghost target" } }
+  { id: "draft", position: { x: 0, y: 100 }, data: { label: "초안" } },
+  { id: "ghost", position: { x: 280, y: 100 }, data: { label: "임시 대상" } }
 ];
 
 export default function ReactFlowTemporaryEdgeExample() {
@@ -13,8 +13,8 @@ export default function ReactFlowTemporaryEdgeExample() {
 
   return (
     <div className="flow-shell">
-      <button className="command-trigger" onClick={() => setShow((value) => !value)}>
-        {show ? "Hide" : "Show"} Temporary Edge
+      <button className="command-trigger stable-wide" onClick={() => setShow((value) => !value)} type="button">
+        {show ? "임시 엣지 숨기기" : "임시 엣지 보기"}
       </button>
       <div className="flow-example">
         <ReactFlow nodes={nodes} edges={edges} fitView>

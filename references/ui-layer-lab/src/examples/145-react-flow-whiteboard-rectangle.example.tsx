@@ -3,8 +3,8 @@ import "@xyflow/react/dist/style.css";
 import { useState } from "react";
 
 const nodes = [
-  { id: "1", position: { x: 80, y: 80 }, data: { label: "Node A" } },
-  { id: "2", position: { x: 340, y: 180 }, data: { label: "Node B" } }
+  { id: "1", position: { x: 80, y: 80 }, data: { label: "노드 가" } },
+  { id: "2", position: { x: 340, y: 180 }, data: { label: "노드 나" } }
 ];
 
 export default function ReactFlowWhiteboardRectangleExample() {
@@ -12,8 +12,8 @@ export default function ReactFlowWhiteboardRectangleExample() {
 
   return (
     <div className="flow-shell">
-      <button className="command-trigger" onClick={() => setRect((value) => !value)}>
-        {rect ? "Hide" : "Show"} Rectangle
+      <button className="command-trigger stable-wide" onClick={() => setRect((value) => !value)} type="button">
+        {rect ? "선택 영역 숨기기" : "선택 영역 보기"}
       </button>
       <div className="flow-example">
         <ReactFlow nodes={nodes} edges={[]} fitView>

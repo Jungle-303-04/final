@@ -1,28 +1,41 @@
 import { Command } from "cmdk";
 import { useState } from "react";
 
-const pages = {
-  root: ["Jobs", "Files", "AI"],
-  Jobs: ["Failed runs", "Running jobs", "Queue"],
-  Files: ["Changed files", "Config files"],
-  AI: ["Explain", "Fix", "Summarize"]
+type PageKey = "root" | "jobs" | "files" | "ai";
+
+const pages: Record<PageKey, Array<{ label: string; next?: PageKey }>> = {
+  root: [
+    { label: "작업", next: "jobs" },
+    { label: "파일", next: "files" },
+    { label: "AI", next: "ai" }
+  ],
+  jobs: [{ label: "실패한 실행" }, { label: "실행 중인 작업" }, { label: "대기열" }],
+  files: [{ label: "변경 파일" }, { label: "설정 파일" }],
+  ai: [{ label: "설명" }, { label: "수정" }, { label: "요약" }]
+};
+
+const pageLabels: Record<PageKey, string> = {
+  root: "홈",
+  jobs: "작업",
+  files: "파일",
+  ai: "AI"
 };
 
 export default function CommandPageBreadcrumbExample() {
-  const [page, setPage] = useState<keyof typeof pages>("root");
+  const [page, setPage] = useState<PageKey>("root");
 
   return (
     <Command className="command-dialog inline-command">
       <div className="command-breadcrumb">
-        <button onClick={() => setPage("root")}>root</button>
-        {page !== "root" ? <span>/ {page}</span> : null}
+        <button onClick={() => setPage("root")} type="button">홈</button>
+        {page !== "root" ? <span>/ {pageLabels[page]}</span> : null}
       </div>
-      <Command.Input placeholder="Search page..." />
+      <Command.Input placeholder="페이지 검색..." />
       <Command.List>
-        <Command.Group heading={page}>
+        <Command.Group heading={pageLabels[page]}>
           {pages[page].map((item) => (
-            <Command.Item key={item} onSelect={() => item in pages && setPage(item as keyof typeof pages)}>
-              {item}
+            <Command.Item key={item.label} onSelect={() => item.next && setPage(item.next)}>
+              {item.label}
             </Command.Item>
           ))}
         </Command.Group>
