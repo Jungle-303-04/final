@@ -493,6 +493,9 @@ def test_get_release_run_report_includes_redacted_audit_and_markdown(monkeypatch
     assert "job: release-verification-fixture passed" in report["markdown"]
     assert "Rollback criteria:" in report["markdown"]
     assert "rollback if checkout error rate exceeds 5% for 5 minutes" in report["markdown"]
+    assert "Audit summary:" in report["markdown"]
+    assert "Events in report: 1" in report["markdown"]
+    assert "workflow.run.failed: 1" in report["markdown"]
     assert "Recent audit:" in report["markdown"]
     assert "workflow.run.failed" in report["markdown"]
     assert report["audit_events"][0]["details"]["token"] == "<redacted>"
@@ -526,6 +529,8 @@ def test_export_release_run_report_returns_markdown_attachment(monkeypatch) -> N
     assert "Verification:" in body
     assert "evidence: /readyz" in body
     assert "Rollback criteria:" in body
+    assert "Audit summary:" in body
+    assert "workflow.run.failed: 1" in body
     assert "Recent audit:" in body
     assert "raw-token" not in body
     assert "super-secret" not in body
