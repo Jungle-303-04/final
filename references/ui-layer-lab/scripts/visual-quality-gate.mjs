@@ -385,6 +385,42 @@ async function inspectSourceEnglishGuard() {
     {
       file: "src/examples/136-job-log-level-filter.example.tsx",
       fragments: ['"info"', '"warn"', '"error"', '"all"', "build started", "slow dependency install", "route smoke failed", "artifact uploaded"]
+    },
+    {
+      file: "src/examples/144-react-flow-temporary-edge.example.tsx",
+      fragments: ['label: "Draft"', 'label: "Ghost target"', "Temporary Edge", ">Hide<", ">Show<"]
+    },
+    {
+      file: "src/examples/145-react-flow-whiteboard-rectangle.example.tsx",
+      fragments: ['label: "Node A"', 'label: "Node B"', ">Hide<", ">Show<"]
+    },
+    {
+      file: "src/examples/146-command-history-stack.example.tsx",
+      fragments: ["Open logs", "Explain failure", "Create patch", "Rerun job", "Run an action", 'heading="Actions"']
+    },
+    {
+      file: "src/examples/147-command-error-state.example.tsx",
+      fragments: ["Search remote actions", "Remote search failed", "Try again", 'heading="Local"', "Open logs", "Run build"]
+    },
+    {
+      file: "src/examples/148-command-page-breadcrumb.example.tsx",
+      fragments: ['root: ["Jobs"', "Failed runs", "Running jobs", "Changed files", "Config files", "Search page", ">root<", "Summarize"]
+    },
+    {
+      file: "src/examples/150-sonner-queued-toasts.example.tsx",
+      fragments: ['"Queued"', '"Running"', '"Completed"', "Queue Toasts"]
+    },
+    {
+      file: "src/examples/151-sonner-inline-link.example.tsx",
+      fragments: ["Workflow failed", "Open the run detail", 'label: "Open"', "Run detail opened", "Show Linked Toast"]
+    },
+    {
+      file: "src/examples/152-sonner-countdown.example.tsx",
+      fragments: ["Retrying in 3", "Retrying in 2", "Retrying in 1", "Retry started", "Start Countdown"]
+    },
+    {
+      file: "src/examples/154-animated-collapsible-log.example.tsx",
+      fragments: ["install complete", "typecheck complete", "visual smoke failed", ">Hide<", ">Show<"]
     }
   ];
   const matches = [];
@@ -589,7 +625,16 @@ async function inspectEnglishSamples(page, url) {
     ["AI 작업 레이어", "example-ai-reasoning-progress"],
     ["작업 진행/로그", "example-job-top-layer-tray"],
     ["작업 진행/로그", "example-job-stage-accordion"],
-    ["작업 진행/로그", "example-job-log-level-filter"]
+    ["작업 진행/로그", "example-job-log-level-filter"],
+    ["플로우 빌더", "example-react-flow-temporary-edge"],
+    ["플로우 빌더", "example-react-flow-whiteboard-rectangle"],
+    ["오버레이/명령", "example-command-history-stack"],
+    ["오버레이/명령", "example-command-error-state"],
+    ["오버레이/명령", "example-command-page-breadcrumb"],
+    ["작업 진행/로그", "example-sonner-queued-toasts"],
+    ["작업 진행/로그", "example-sonner-inline-link"],
+    ["작업 진행/로그", "example-sonner-countdown"],
+    ["모션/상태 전환", "example-animated-collapsible-log"]
   ];
   const forbidden = /\b(Open|Close|Show|Hide|Search|Loading|Current|Selected|Dashboard|Create|Cancel|Retry|Next|Previous|Expand|Collapse|Focus|Input|Logs|Answer|Status|Resources|Jobs|Steps|Command|Filter|Recent|Approval|Matrix|Launch|Health|Edge|Done|Running|Failed|Pending|Allowed|Blocked)\b/i;
   const violations = [];

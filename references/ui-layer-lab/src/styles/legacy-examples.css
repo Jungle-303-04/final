@@ -3033,9 +3033,9 @@ kbd,
   z-index: 4;
   width: 340px;
   height: 150px;
-  border: 2px dashed #fafafa;
+  border: 2px dashed var(--accent);
   border-radius: 14px;
-  background: rgba(250, 250, 250, 0.06);
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
   pointer-events: none;
 }
 

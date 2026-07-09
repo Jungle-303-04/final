@@ -1,10 +1,10 @@
 import { Command } from "cmdk";
 import { useState } from "react";
 
-const actions = ["Open logs", "Explain failure", "Create patch", "Rerun job"];
+const actions = ["로그 열기", "실패 설명", "패치 생성", "작업 재실행"];
 
 export default function CommandHistoryStackExample() {
-  const [history, setHistory] = useState(["Open logs"]);
+  const [history, setHistory] = useState(["로그 열기"]);
 
   function run(action: string) {
     setHistory((items) => [action, ...items].slice(0, 5));
@@ -13,9 +13,9 @@ export default function CommandHistoryStackExample() {
   return (
     <div className="command-filter-demo">
       <Command className="command-dialog inline-command">
-        <Command.Input placeholder="Run an action..." />
+        <Command.Input placeholder="실행할 작업 검색..." />
         <Command.List>
-          <Command.Group heading="Actions">
+          <Command.Group heading="작업">
             {actions.map((action) => (
               <Command.Item key={action} onSelect={() => run(action)}>
                 {action}

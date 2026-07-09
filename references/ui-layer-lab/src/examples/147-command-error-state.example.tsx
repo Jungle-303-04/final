@@ -6,14 +6,14 @@ export default function CommandErrorStateExample() {
 
   return (
     <Command className="command-dialog inline-command">
-      <Command.Input placeholder="Search remote actions..." onValueChange={(value) => setError(value.length > 4)} />
+      <Command.Input placeholder="원격 작업 검색..." onValueChange={(value) => setError(value.length > 4)} />
       <Command.List>
         {error ? (
-          <div className="command-error">Remote search failed. Try again.</div>
+          <div className="command-error">원격 검색에 실패했습니다. 다시 시도하세요.</div>
         ) : (
-          <Command.Group heading="Local">
-            <Command.Item>Open logs</Command.Item>
-            <Command.Item>Run build</Command.Item>
+          <Command.Group heading="로컬">
+            <Command.Item>로그 열기</Command.Item>
+            <Command.Item>빌드 실행</Command.Item>
           </Command.Group>
         )}
       </Command.List>
