@@ -23,6 +23,7 @@ from domains.release_flow.execution import (
     release_execution_blockers,
 )
 from domains.release_flow.preview import build_release_plan_preview
+from domains.release_flow.redaction import redact_release_value
 from packages.config.constants import Sandbox, Target
 from packages.contracts.auth import Actor
 from packages.contracts.gateway import routes as gateway_routes
@@ -993,7 +994,9 @@ def release_audit_events_for_current(
 
 
 def public_release_audit_event(event: dict[str, Any]) -> dict[str, Any]:
-    return {key: value for key, value in event.items() if key != "_steps"}
+    public = {key: value for key, value in event.items() if key != "_steps"}
+    public["details"] = redact_release_value(public.get("details") or {})
+    return public
 
 
 def release_audit_csv(events: Any) -> str:

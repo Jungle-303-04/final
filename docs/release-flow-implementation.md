@@ -57,6 +57,7 @@
 - retry는 현재 wave의 failed/unhealthy step만 다시 dispatch하고, plan/step의 `retry_attempts` 예산을 넘으면 차단한다.
 - workflow 실패, 승인 요청, 승인 거절은 `alert.requested`로 이어져 기존 alert-worker/log/webhook/channel 라우팅을 재사용한다.
 - active run/plan 삭제는 기본 차단하고 `force=true`를 명시해야 한다.
+- release run timeline과 audit/export details는 password/token/secret/credential류 key를 `<redacted>`로 마스킹한다.
 
 ## 프론트에서 보이는 것
 - 플랜 목록, 새 플랜, 저장, 아카이브, 삭제, 강제 삭제
