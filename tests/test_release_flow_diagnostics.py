@@ -257,7 +257,14 @@ def test_get_release_run_handoff_summarizes_operator_next_actions(monkeypatch) -
         "rollback",
         "cancel",
     ]
-    assert {check["name"] for check in handoff["checks"]} == {"mode", "health", "attention", "rollback"}
+    assert {check["name"] for check in handoff["checks"]} == {"mode", "health", "attention", "rollback", "verification"}
+    assert handoff["verification"] == {
+        "status": "passed",
+        "message": "Post-deploy verification evidence is present (/readyz).",
+        "evidence": ["/readyz"],
+        "override_reason": None,
+        "production_targets": ["checkout"],
+    }
 
 
 def test_retry_release_run_dispatches_failed_wave_step(monkeypatch) -> None:
@@ -1790,6 +1797,21 @@ class ReleaseRunActionDb:
                         "cluster_id": "target",
                         "namespace": "sandbox",
                         "environment": "staging",
+                        "side_effects": True,
+                        "release_guard": {
+                            "verification": {
+                                "evidence_present": True,
+                                "override_reason": None,
+                                "production_targets": ["checkout"],
+                                "health_check_paths": ["/readyz"],
+                                "verification_urls": [],
+                            },
+                            "readiness": {
+                                "impact": {
+                                    "production_targets": ["checkout"],
+                                }
+                            },
+                        },
                     },
                 }
             ],

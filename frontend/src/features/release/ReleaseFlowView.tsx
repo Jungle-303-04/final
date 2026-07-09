@@ -1258,13 +1258,23 @@ function RunHandoffPanel({ handoff, loading }: { handoff?: ReleaseRunHandoff; lo
         <div>
           <span className="release-flow__handoff-label">Checks</span>
           <div className="release-flow__handoff-list">
-            {handoff.checks.slice(0, 4).map(check => (
+            {handoff.checks.slice(0, 5).map(check => (
               <span key={check.name}>
                 {check.name}: {check.status}
               </span>
             ))}
           </div>
         </div>
+        {handoff.verification && (
+          <div>
+            <span className="release-flow__handoff-label">Verification</span>
+            <div className="release-flow__handoff-list">
+              <span>{handoff.verification.status}: {handoff.verification.message}</span>
+              {handoff.verification.evidence.slice(0, 2).map(item => <span key={item}>{item}</span>)}
+              {handoff.verification.override_reason && <span>{handoff.verification.override_reason}</span>}
+            </div>
+          </div>
+        )}
       </div>
       {handoff.last_event && (
         <p className="release-flow__hint">

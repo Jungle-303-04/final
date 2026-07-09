@@ -2579,6 +2579,7 @@ def release_run_handoff(run: dict[str, Any]) -> dict[str, Any]:
     retryable = release_run_is_retryable(run)
     terminal = status in TERMINAL_RELEASE_RUN_STATUSES
     alertable = stale or attention.get("required") is True or bool(attention_reasons)
+    verification = release_run_handoff_verification(run)
     return {
         "run_id": str(run.get("run_id") or ""),
         "plan_id": str(run.get("plan_id") or ""),
@@ -2590,6 +2591,7 @@ def release_run_handoff(run: dict[str, Any]) -> dict[str, Any]:
         "total_waves": int(run.get("total_waves") or 0),
         "live_side_effects": live_side_effects,
         "attention_reasons": attention_reasons,
+        "verification": verification,
         "next_actions": release_run_handoff_actions(
             status,
             terminal=terminal,
@@ -2618,9 +2620,69 @@ def release_run_handoff(run: dict[str, Any]) -> dict[str, Any]:
                 "blocked" if rollback_policy == "disabled" else "passed",
                 f"Rollback policy is {rollback_policy}.",
             ),
+            release_handoff_check(
+                "verification",
+                str(verification.get("status") or "info"),
+                str(verification.get("message") or "No verification snapshot recorded."),
+            ),
         ],
         "last_event": release_run_last_event(run),
     }
+
+
+def release_run_handoff_verification(run: dict[str, Any]) -> dict[str, Any]:
+    guard = release_run_latest_guard(run)
+    verification = guard.get("verification") if isinstance(guard.get("verification"), dict) else {}
+    readiness = guard.get("readiness") if isinstance(guard.get("readiness"), dict) else {}
+    impact = readiness.get("impact") if isinstance(readiness.get("impact"), dict) else {}
+    health_paths = [str(item) for item in verification.get("health_check_paths", []) if str(item).strip()]
+    verification_urls = [str(item) for item in verification.get("verification_urls", []) if str(item).strip()]
+    production_targets = [str(item) for item in verification.get("production_targets", []) if str(item).strip()]
+    if not verification:
+        return {
+            "status": "info",
+            "message": "No verification snapshot recorded.",
+            "evidence": [],
+            "override_reason": None,
+            "production_targets": impact.get("production_targets") if isinstance(impact.get("production_targets"), list) else [],
+        }
+    evidence = health_paths + verification_urls
+    override_reason = str(verification.get("override_reason") or "").strip() or None
+    if evidence:
+        return {
+            "status": "passed",
+            "message": f"Post-deploy verification evidence is present ({', '.join(evidence[:2])}).",
+            "evidence": evidence,
+            "override_reason": override_reason,
+            "production_targets": production_targets,
+        }
+    if override_reason:
+        return {
+            "status": "warning",
+            "message": "Post-deploy verification was bypassed with an operator reason.",
+            "evidence": [],
+            "override_reason": override_reason,
+            "production_targets": production_targets,
+        }
+    return {
+        "status": "blocked",
+        "message": "Post-deploy verification evidence is missing.",
+        "evidence": [],
+        "override_reason": None,
+        "production_targets": production_targets,
+    }
+
+
+def release_run_latest_guard(run: dict[str, Any]) -> dict[str, Any]:
+    steps = run.get("steps") if isinstance(run.get("steps"), list) else []
+    for step in reversed(steps):
+        if not isinstance(step, dict):
+            continue
+        details = step.get("details") if isinstance(step.get("details"), dict) else {}
+        guard = details.get("release_guard")
+        if isinstance(guard, dict):
+            return guard
+    return {}
 
 
 def release_run_handoff_actions(
