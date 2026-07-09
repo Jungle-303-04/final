@@ -448,6 +448,43 @@ def test_release_readiness_passes_demo_with_alert_channel(monkeypatch) -> None:
     }
 
 
+def test_release_readiness_blocks_live_when_channels_do_not_cover_warning(monkeypatch) -> None:
+    monkeypatch.setenv("RELEASE_FLOW_LIVE_ENABLED", "1")
+    monkeypatch.setenv("RELEASE_FLOW_LIVE_WORKSPACES", "workspace-a")
+    db = ReleaseReadinessDb(channels=[{"channel_id": "chan-critical", "enabled": True, "min_severity": "critical"}])
+    monkeypatch.setattr(release_router, "require_plan_application_read_access", lambda *_args: None)
+
+    current = SimpleNamespace(workspace_id="workspace-a", user_id="operator", roles=())
+    response = asyncio.run(
+        release_router.check_release_readiness(
+            release_router.ReleasePlanUpsertRequest(
+                name="Checkout release",
+                settings={"runtime_mode": "live", "approval_policy": "auto_safe"},
+                steps=[
+                    {
+                        "application_id": "checkout",
+                        "name": "Checkout",
+                        "position": 0,
+                        "config": {
+                            "environment": "sandbox",
+                            "commit_sha": "abc1234",
+                            "image": "ghcr.io/example/checkout:v2",
+                        },
+                    }
+                ],
+            ),
+            current=current,
+            db=db,
+        )
+    )
+
+    assert response.ready is False
+    assert any("warning-or-higher release events" in item for item in response.blockers)
+    alert_check = next(check for check in response.checks if check["check_id"] == "alerts.enabled_channels")
+    assert alert_check["status"] == "blocked"
+    assert "none receive warning release events" in alert_check["message"]
+
+
 def test_release_readiness_blocks_unregistered_application(monkeypatch) -> None:
     db = ReleaseReadinessApplicationDb(
         channels=[{"channel_id": "chan-a", "enabled": True}],
@@ -1645,6 +1682,56 @@ def test_dispatch_wave_steps_blocks_live_without_alert_channel(monkeypatch) -> N
     assert raised.value.status_code == 409
     assert any(
         "requires at least one enabled alert channel" in blocker
+        for blocker in raised.value.detail["blockers"]
+    )
+    assert events.calls == []
+    assert db.dispatched == []
+
+
+def test_dispatch_wave_steps_blocks_live_with_critical_only_alert_channel(monkeypatch) -> None:
+    monkeypatch.setenv("RELEASE_FLOW_LIVE_ENABLED", "1")
+    monkeypatch.setenv("RELEASE_FLOW_LIVE_WORKSPACES", "workspace-a")
+    plan = {
+        "plan_id": "plan-a",
+        "name": "storefront",
+        "settings": {"runtime_mode": "live", "approval_policy": "auto_safe"},
+        "steps": [
+            {
+                "step_id": "step-a",
+                "application_id": "app-a",
+                "name": "checkout",
+                "config": {
+                    "repo_ref": "org/app-a",
+                    "branch": "main",
+                    "commit_sha": "abc123",
+                    "image": "ghcr.io/example/app-a:v2",
+                    "manifest_path": "deploy/app.yaml",
+                },
+            }
+        ],
+    }
+    preview = build_release_plan_preview(plan)
+    db = ReleaseDispatchDb(channels=[{"channel_id": "chan-critical", "enabled": True, "min_severity": "critical"}])
+    events = AcceptingEventGateway()
+    current = SimpleNamespace(user_id="user-a", roles=("operator",))
+
+    with pytest.raises(HTTPException) as raised:
+        asyncio.run(
+            release_router.dispatch_wave_steps(
+                plan,
+                preview,
+                1,
+                "workspace-a",
+                current,
+                db,
+                events,
+                run_id="run-a",
+            )
+        )
+
+    assert raised.value.status_code == 409
+    assert any(
+        "warning-or-higher release events" in blocker
         for blocker in raised.value.detail["blockers"]
     )
     assert events.calls == []

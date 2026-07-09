@@ -10,6 +10,7 @@ from typing import Any
 from fastapi import APIRouter, Depends, HTTPException, Query, Response
 
 from domains.alert.events import AlertRequestedBody
+from domains.alert.repository import severity_matches
 from domains.gitops.events import GitWebhookReceivedBody
 from domains.gitops.repository import derive_workflow_run_id
 from domains.identity.dependencies import (
@@ -903,6 +904,7 @@ def release_readiness_from_plan(
         workspace_id=workspace_id,
     )
     alert_channels = enabled_alert_channels(db, workspace_id)
+    live_alert_channels = release_live_alert_channels(db, workspace_id)
     alert_blockers = release_live_alert_channel_blockers(plan, db, workspace_id)
     retry_attempts = max(0, int_field(plan_settings_value(plan), "retry_attempts", 1))
 
@@ -956,7 +958,9 @@ def release_readiness_from_plan(
             "alerts.enabled_channels",
             "Alert channels",
             "blocked" if alert_blockers else "passed" if alert_channels else "warning",
-            f"{len(alert_channels)} enabled alert channel(s) can receive release events."
+            f"{len(live_alert_channels)} enabled alert channel(s) can receive warning-or-higher release events."
+            if live_alert_channels
+            else "Enabled alert channels exist, but none receive warning release events."
             if alert_channels
             else "No enabled alert channel is configured for release failure or approval events.",
             alert_blockers,
@@ -1091,10 +1095,18 @@ def release_live_alert_channel_blockers(
 ) -> list[str]:
     if not execution_profile(plan).side_effects:
         return []
-    if enabled_alert_channels(db, workspace_id):
+    if release_live_alert_channels(db, workspace_id):
         return []
     return [
-        "Live release dispatch requires at least one enabled alert channel before real GitOps events can be published."
+        "Live release dispatch requires at least one enabled alert channel that receives warning-or-higher release events."
+    ]
+
+
+def release_live_alert_channels(db: Any, workspace_id: str) -> list[dict[str, Any]]:
+    return [
+        channel
+        for channel in enabled_alert_channels(db, workspace_id)
+        if severity_matches(str(channel.get("min_severity") or "warning"), "warning")
     ]
 
 

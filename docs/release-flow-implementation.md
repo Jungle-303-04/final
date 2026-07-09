@@ -59,7 +59,7 @@
 - advance/rollback 같은 상태 변경 action은 권한 확인 후에만 상태를 바꾼다.
 - retry는 현재 wave의 failed/unhealthy step만 다시 dispatch하고, plan/step의 `retry_attempts` 예산을 넘으면 차단한다.
 - workflow 실패, 승인 요청, 승인 거절은 `alert.requested`로 이어져 기존 alert-worker/log/webhook/channel 라우팅을 재사용한다.
-- live release dispatch/start/advance/retry는 enabled alert channel이 하나 이상 있어야 실제 GitOps 이벤트 발행을 허용한다.
+- live release dispatch/start/advance/retry는 warning 이상 release event를 받을 수 있는 enabled alert channel이 하나 이상 있어야 실제 GitOps 이벤트 발행을 허용한다.
 - active run/plan 삭제는 기본 차단하고 `force=true`를 명시해야 한다.
 - release run timeline과 audit/export details는 password/token/secret/credential류 key를 `<redacted>`로 마스킹한다.
 
