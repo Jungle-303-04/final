@@ -393,6 +393,13 @@
   align-items: start;
 }
 
+.release-flow__handoff-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
 .release-flow__handoff-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));

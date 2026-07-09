@@ -1292,7 +1292,10 @@ function RunHandoffPanel({ handoff, loading }: { handoff?: ReleaseRunHandoff; lo
             Wave {handoff.current_wave} of {handoff.total_waves} | {handoff.live_side_effects ? 'live side effects' : 'demo/dry-run'}
           </p>
         </div>
-        <Badge tone={handoffTone(handoff.severity)}>{handoff.severity}</Badge>
+        <div className="release-flow__handoff-actions">
+          <Badge tone={handoffTone(handoff.severity)}>{handoff.severity}</Badge>
+          <Button size="sm" variant="ghost" onClick={() => copyHandoffMarkdown(handoff)}>Copy handoff</Button>
+        </div>
       </div>
       <div className="release-flow__handoff-grid">
         <div>
@@ -1375,19 +1378,66 @@ function verificationJobSummary(job: { kind: string; status: string; target: Rec
   return `${job.kind} ${job.status}: ${target}${resultSuffix ? ` - ${resultSuffix}` : ''}`;
 }
 
+function copyHandoffMarkdown(handoff: ReleaseRunHandoff) {
+  copyText(formatHandoffMarkdown(handoff), 'Operator handoff copied.', 'Copy operator handoff');
+}
+
+function formatHandoffMarkdown(handoff: ReleaseRunHandoff): string {
+  const url = new URL(window.location.href);
+  url.searchParams.set('run_id', handoff.run_id);
+  const lines = [
+    `## Release handoff: ${handoff.plan_name}`,
+    '',
+    `- Run: ${handoff.run_id}`,
+    `- Status: ${handoff.status} / severity ${handoff.severity}`,
+    `- Wave: ${handoff.current_wave} of ${handoff.total_waves}`,
+    `- Mode: ${handoff.live_side_effects ? 'live side effects' : 'demo/dry-run'}`,
+    `- Link: ${url.toString()}`,
+    '',
+    `Headline: ${handoff.headline}`,
+  ];
+  if (handoff.attention_reasons.length > 0) {
+    lines.push('', 'Attention:', ...handoff.attention_reasons.map(reason => `- ${reason}`));
+  }
+  lines.push('', 'Next actions:');
+  lines.push(...handoff.next_actions.slice(0, 6).map(action => `- ${action.enabled ? '[ ]' : '[blocked]'} ${action.label}${action.reason ? `: ${action.reason}` : ''}`));
+  lines.push('', 'Checks:');
+  lines.push(...handoff.checks.slice(0, 8).map(check => `- ${check.name}: ${check.status} (${check.message})`));
+  if (handoff.verification) {
+    lines.push('', 'Verification:', `- ${handoff.verification.status}: ${handoff.verification.message}`);
+    lines.push(...handoff.verification.evidence.slice(0, 3).map(item => `- evidence: ${item}`));
+    lines.push(...(handoff.verification.jobs ?? []).slice(0, 3).map(job => `- job: ${verificationJobSummary(job)}`));
+    if (handoff.verification.override_reason) lines.push(`- override: ${handoff.verification.override_reason}`);
+  }
+  if (handoff.abort_criteria) {
+    lines.push('', 'Rollback criteria:', `- ${handoff.abort_criteria.status}: ${handoff.abort_criteria.message}`);
+    lines.push(...handoff.abort_criteria.criteria.slice(0, 3).map(item => `- ${item}`));
+    if (handoff.abort_criteria.override_reason) lines.push(`- override: ${handoff.abort_criteria.override_reason}`);
+  }
+  if (handoff.last_event) {
+    const eventType = getString(handoff.last_event.event_type, 'event');
+    const message = getString(handoff.last_event.message);
+    lines.push('', `Last event: ${eventType}${message ? ` - ${message}` : ''}`);
+  }
+  return lines.join('\n');
+}
+
 function copyReleaseRunLink(runId: string) {
   const url = new URL(window.location.href);
   url.searchParams.set('run_id', runId);
-  const link = url.toString();
+  copyText(url.toString(), 'Release run link copied.', 'Copy release run link');
+}
+
+function copyText(value: string, successMessage: string, fallbackTitle: string) {
   const clipboard = window.navigator.clipboard;
   if (clipboard?.writeText) {
-    void clipboard.writeText(link).then(
-      () => window.alert('Release run link copied.'),
-      () => window.prompt('Copy release run link', link),
+    void clipboard.writeText(value).then(
+      () => window.alert(successMessage),
+      () => window.prompt(fallbackTitle, value),
     );
     return;
   }
-  window.prompt('Copy release run link', link);
+  window.prompt(fallbackTitle, value);
 }
 
 function RecentRunShortcuts({
