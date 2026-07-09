@@ -1060,7 +1060,7 @@ function RunPanel({
   if (!run) {
     return (
       <Card title="Release runs">
-        <RunSummary summary={summary} />
+        <RunSummary summary={summary} runFilter={runFilter} onRunFilterChange={onRunFilterChange} />
         <RunFilterField runFilter={runFilter} onRunFilterChange={onRunFilterChange} />
         <p className="release-flow__hint">
           {runFilter === 'all' ? 'No tracked release runs yet.' : 'No release runs match this filter.'}
@@ -1094,7 +1094,7 @@ function RunPanel({
         </>
       }
     >
-      <RunSummary summary={summary} />
+      <RunSummary summary={summary} runFilter={runFilter} onRunFilterChange={onRunFilterChange} />
       <RunFilterField runFilter={runFilter} onRunFilterChange={onRunFilterChange} />
       {runs.length > 1 && (
         <Field label="Inspect run">
@@ -1366,44 +1366,80 @@ function RunFilterField({
   );
 }
 
-function RunSummary({ summary }: { summary?: ReleaseRunSummary }) {
+type RunSummarySignal = {
+  label: string;
+  count: number;
+  filter?: ReleaseRunFilter;
+};
+
+function RunSummary({
+  summary,
+  runFilter,
+  onRunFilterChange,
+}: {
+  summary?: ReleaseRunSummary;
+  runFilter: ReleaseRunFilter;
+  onRunFilterChange: (filter: ReleaseRunFilter) => void;
+}) {
   if (!summary) return null;
   const statuses = Object.entries(summary.status_breakdown).sort(([left], [right]) => left.localeCompare(right));
-  const opsSignals = [
-    ['Needs attention', summary.attention_required_runs ?? 0],
-    ['Active', summary.active_runs ?? 0],
-    ['Live', summary.live_runs ?? 0],
-    ['Rollback', summary.rollback_requested_runs ?? 0],
-    ['Unhealthy', summary.unhealthy_runs ?? 0],
-    ['Verification failed', summary.verification_failed_runs ?? 0],
-    ['Verification timeout', summary.verification_pending_timeout_runs ?? 0],
-    ['Stale', summary.stale_runs ?? 0],
+  const opsSignals: RunSummarySignal[] = [
+    { label: 'Needs attention', count: summary.attention_required_runs ?? 0, filter: 'attention' },
+    { label: 'Active', count: summary.active_runs ?? 0 },
+    { label: 'Live', count: summary.live_runs ?? 0, filter: 'live' },
+    { label: 'Rollback', count: summary.rollback_requested_runs ?? 0, filter: 'rollback_requested' },
+    { label: 'Unhealthy', count: summary.unhealthy_runs ?? 0, filter: 'unhealthy' },
+    { label: 'Verification failed', count: summary.verification_failed_runs ?? 0, filter: 'verification_failed' },
+    { label: 'Verification timeout', count: summary.verification_pending_timeout_runs ?? 0, filter: 'verification_pending_timeout' },
+    { label: 'Stale', count: summary.stale_runs ?? 0, filter: 'stale' },
   ];
   return (
     <div className="release-flow__summary">
-      <div>
+      <button
+        type="button"
+        className="release-flow__summary-card"
+        aria-pressed={runFilter === 'all'}
+        onClick={() => onRunFilterChange('all')}
+      >
         <span>Total runs</span>
         <strong>{summary.total_runs}</strong>
-      </div>
-      {opsSignals.map(([label, count]) => (
-        <div key={label}>
-          <span>{label}</span>
-          <strong>{count}</strong>
-        </div>
-      ))}
+      </button>
+      {opsSignals.map(signal => {
+        const filter = signal.filter;
+        if (!filter) {
+          return (
+            <div key={signal.label} className="release-flow__summary-card">
+              <span>{signal.label}</span>
+              <strong>{signal.count}</strong>
+            </div>
+          );
+        }
+        return (
+          <button
+            key={signal.label}
+            type="button"
+            className="release-flow__summary-card"
+            aria-pressed={runFilter === filter}
+            onClick={() => onRunFilterChange(filter)}
+          >
+            <span>{signal.label}</span>
+            <strong>{signal.count}</strong>
+          </button>
+        );
+      })}
       {summary.last_run_status && (
-        <div>
+        <div className="release-flow__summary-card">
           <span>Latest</span>
           <strong>{summary.last_run_status}</strong>
         </div>
       )}
       {statuses.length > 0 ? statuses.map(([status, count]) => (
-        <div key={status}>
+        <div key={status} className="release-flow__summary-card">
           <span>{status}</span>
           <strong>{count}</strong>
         </div>
       )) : (
-        <div>
+        <div className="release-flow__summary-card">
           <span>Status</span>
           <strong>none</strong>
         </div>
