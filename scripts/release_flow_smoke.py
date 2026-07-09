@@ -10,6 +10,8 @@ Pass --verification-preflight to fail fast when existing release runs already
 have failed or timed-out post-deploy verification jobs.
 Pass --run-health-preflight to fail fast when existing release runs still need
 operator attention before a new release starts.
+Pass --policy-override-preflight to fail fast when existing release runs already
+used operator policy overrides that should be reviewed before another release.
 """
 
 from __future__ import annotations
@@ -233,6 +235,7 @@ def run_smoke(
     alert_preflight: bool = False,
     verification_preflight: bool = False,
     run_health_preflight: bool = False,
+    policy_override_preflight: bool = False,
     args: argparse.Namespace | None = None,
 ) -> list[SmokeResult]:
     results: list[SmokeResult] = []
@@ -259,6 +262,10 @@ def run_smoke(
         if args is None:
             raise ValueError("verification preflight arguments are required")
         results.extend(run_verification_preflight(client, summary, args))
+    if policy_override_preflight:
+        if args is None:
+            raise ValueError("policy override preflight arguments are required")
+        results.extend(run_policy_override_preflight(client, summary, args))
     plan = build_demo_plan(applications)
     preview = client.request("POST", "/release-plans/preview", plan).get("preview", {})
     results.append(
@@ -398,6 +405,43 @@ def run_verification_preflight(
             )
         )
     return results
+
+
+def run_policy_override_preflight(
+    client: ApiClient,
+    summary: JsonMap,
+    args: argparse.Namespace,
+) -> list[SmokeResult]:
+    override_count = int_count(summary.get("policy_override_runs"))
+    if override_count <= 0:
+        return [
+            SmokeResult(
+                "release-runs.policy-override-preflight",
+                True,
+                "no existing release runs used policy overrides",
+            )
+        ]
+
+    params = {
+        "plan_id": args.policy_override_plan_id,
+        "limit": args.policy_override_run_limit,
+        "policy_override_source": args.policy_override_source,
+    }
+    override_runs = release_runs_for_filter(client, params, "policy_override_only")
+    breakdown = summary.get("policy_override_breakdown")
+    detail_parts = [run_list_detail(override_count, override_runs, "policy override review")]
+    if isinstance(breakdown, dict) and breakdown:
+        detail_parts.append(
+            "sources: "
+            + format_counts({str(source): int_count(count) for source, count in breakdown.items()})
+        )
+    return [
+        SmokeResult(
+            "release-runs.policy-override-preflight",
+            False,
+            "; ".join(detail_parts),
+        )
+    ]
 
 
 def release_runs_for_filter(client: ApiClient, params: dict[str, Any], filter_name: str) -> list[JsonMap]:
@@ -581,6 +625,18 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
         default=int(os.getenv("RUN_HEALTH_PREFLIGHT_RUN_LIMIT", "20")),
     )
     parser.add_argument(
+        "--policy-override-preflight",
+        action="store_true",
+        help="fail when existing release runs used operator policy overrides",
+    )
+    parser.add_argument("--policy-override-plan-id", default=os.getenv("POLICY_OVERRIDE_PREFLIGHT_PLAN_ID", ""))
+    parser.add_argument("--policy-override-source", default=os.getenv("POLICY_OVERRIDE_PREFLIGHT_SOURCE", ""))
+    parser.add_argument(
+        "--policy-override-run-limit",
+        type=int,
+        default=int(os.getenv("POLICY_OVERRIDE_PREFLIGHT_RUN_LIMIT", "20")),
+    )
+    parser.add_argument(
         "--live-preflight",
         action="store_true",
         help="check live release readiness gates without starting or dispatching a run",
@@ -638,6 +694,7 @@ def main(argv: list[str]) -> int:
             alert_preflight=args.alert_preflight,
             verification_preflight=args.verification_preflight,
             run_health_preflight=args.run_health_preflight,
+            policy_override_preflight=args.policy_override_preflight,
             args=args,
         )
     except Exception as exc:

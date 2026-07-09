@@ -232,6 +232,15 @@ AUTH_PASSWORD="<admin password>" \
 python scripts/release_flow_smoke.py --run-health-preflight
 ```
 
+기존 release run에 operator policy override가 남아 있는지 운영 전에 확인하려면 `--policy-override-preflight`를 붙인다. 이 모드는 `/release-runs/summary`의 `policy_override_runs`를 확인하고, 문제가 있으면 `GET /release-runs?policy_override_only=true`로 대상 run을 조회한 뒤 smoke를 실패시킨다. 특정 예외 유형만 좁히려면 `--policy-override-source "Change freeze"`를 함께 쓴다.
+
+```bash
+API_BASE_URL="https://k8s.woonyong.org/api" \
+AUTH_EMAIL="<admin email>" \
+AUTH_PASSWORD="<admin password>" \
+python scripts/release_flow_smoke.py --policy-override-preflight
+```
+
 ## 아직 운영에서 추가하면 좋은 것
 - 실제 target cluster와 연결한 `live` end-to-end smoke test
 - 실패 run/DLQ/retry 지표를 대시보드나 알림 채널에 연결
