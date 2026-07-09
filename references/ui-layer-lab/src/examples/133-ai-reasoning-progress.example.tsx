@@ -1,6 +1,6 @@
 import { useState } from "react";
 
-const steps = ["Reading diff", "Checking logs", "Mapping failure", "Drafting answer"];
+const steps = ["변경사항 읽기", "로그 확인", "실패 원인 매핑", "답변 초안 작성"];
 
 export default function AiReasoningProgressExample() {
   const [step, setStep] = useState(1);
@@ -13,8 +13,8 @@ export default function AiReasoningProgressExample() {
           <strong>{item}</strong>
         </div>
       ))}
-      <button className="command-trigger" onClick={() => setStep((value) => Math.min(value + 1, steps.length - 1))}>
-        Continue
+      <button className="command-trigger stable-wide" onClick={() => setStep((value) => Math.min(value + 1, steps.length - 1))} type="button">
+        계속
       </button>
     </div>
   );

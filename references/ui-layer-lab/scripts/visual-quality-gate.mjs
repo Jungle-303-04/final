@@ -361,6 +361,30 @@ async function inspectSourceEnglishGuard() {
     {
       file: "src/examples/130-animated-swipe-list.example.tsx",
       fragments: ["Review logs", "Fix route", "Rerun smoke", "Done</button>", "All clear"]
+    },
+    {
+      file: "src/examples/131-ai-floating-copilot.example.tsx",
+      fragments: ["Current app screen", "The copilot floats above", "How can I help", "Ask about this page"]
+    },
+    {
+      file: "src/examples/132-ai-artifact-preview.example.tsx",
+      fragments: ["The deploy failed", "restore preview route", "Restore route", "Rerun smoke", "Push branch", "I generated three artifacts", ">summary<", ">patch<", ">checklist<"]
+    },
+    {
+      file: "src/examples/133-ai-reasoning-progress.example.tsx",
+      fragments: ["Reading diff", "Checking logs", "Mapping failure", "Drafting answer", ">Continue<"]
+    },
+    {
+      file: "src/examples/134-job-top-layer-tray.example.tsx",
+      fragments: ["git pull", "typecheck", "preview build", "App workspace", "Top-level tray", "3 running jobs"]
+    },
+    {
+      file: "src/examples/135-job-stage-accordion.example.tsx",
+      fragments: ["Prepare", "Validate", "Publish", "fetch origin", "install dependencies", "unit test", "upload artifact"]
+    },
+    {
+      file: "src/examples/136-job-log-level-filter.example.tsx",
+      fragments: ['"info"', '"warn"', '"error"', '"all"', "build started", "slow dependency install", "route smoke failed", "artifact uploaded"]
     }
   ];
   const matches = [];
@@ -559,7 +583,13 @@ async function inspectEnglishSamples(page, url) {
     ["오버레이/명령", "example-command-disabled-items"],
     ["모션/상태 전환", "example-animated-filter-list"],
     ["모션/상태 전환", "example-animated-command-bar"],
-    ["모션/상태 전환", "example-animated-swipe-list"]
+    ["모션/상태 전환", "example-animated-swipe-list"],
+    ["AI 작업 레이어", "example-ai-floating-copilot"],
+    ["AI 작업 레이어", "example-ai-artifact-preview"],
+    ["AI 작업 레이어", "example-ai-reasoning-progress"],
+    ["작업 진행/로그", "example-job-top-layer-tray"],
+    ["작업 진행/로그", "example-job-stage-accordion"],
+    ["작업 진행/로그", "example-job-log-level-filter"]
   ];
   const forbidden = /\b(Open|Close|Show|Hide|Search|Loading|Current|Selected|Dashboard|Create|Cancel|Retry|Next|Previous|Expand|Collapse|Focus|Input|Logs|Answer|Status|Resources|Jobs|Steps|Command|Filter|Recent|Approval|Matrix|Launch|Health|Edge|Done|Running|Failed|Pending|Allowed|Blocked)\b/i;
   const violations = [];
