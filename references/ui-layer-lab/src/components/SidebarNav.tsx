@@ -17,7 +17,7 @@ export function SidebarNav({
   return (
     <aside className="example-nav" aria-label="주제 선택">
       <strong>주제</strong>
-      <nav aria-label="대표 카테고리">
+      <nav aria-label="예제 카테고리">
         {groups.map((group) => (
           <button
             aria-current={group.id === activeCategory ? "page" : undefined}
@@ -33,7 +33,7 @@ export function SidebarNav({
         ))}
       </nav>
       <div className="sidebar-footer">
-        <small>가능한 많이 노출하되, 같은 패턴은 archive 후보로 계속 정리합니다.</small>
+        <small>가능한 많이 노출하되, 같은 패턴만 정리 후보로 계속 묶습니다.</small>
       </div>
     </aside>
   );
