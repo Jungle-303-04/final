@@ -58,6 +58,33 @@ export const post = <T>(p: string, b?: unknown, options?: ApiOptions) => api<T>(
 export const put = <T>(p: string, b?: unknown, options?: ApiOptions) => api<T>('PUT', p, b, options);
 export const del = <T>(p: string, options?: ApiOptions) => api<T>('DELETE', p, undefined, options);
 
+export async function getBlob(path: string, options: ApiOptions = {}): Promise<Blob> {
+  let res: Response;
+  const requestSignal = createRequestSignal(options);
+  try {
+    const request = fetch(`${BASE}${path}`, {
+      method: 'GET',
+      credentials: 'include',
+      signal: requestSignal.signal,
+    });
+    res = await (requestSignal.timeout ? Promise.race([request, requestSignal.timeout]) : request);
+  } catch (err) {
+    if (err instanceof ApiError) throw err;
+    throw new ApiError(0, requestSignal.timedOut() ? '?붿껌 ?쒓컙??珥덇낵?섏뿀?듬땲??' : '?ㅽ듃?뚰겕 ?ㅻ쪟');
+  } finally {
+    requestSignal.cancel();
+  }
+  if (!res.ok) {
+    if (res.status === 401) onUnauthorized?.();
+    const rawDetail = await res.json()
+      .then(j => detailPayload(j, res.statusText))
+      .catch(() => res.statusText);
+    const detail = apiDetailToString(rawDetail);
+    throw new ApiError(res.status, normalizeApiDetail(res.status, detail), rawDetail);
+  }
+  return res.blob();
+}
+
 function createRequestSignal(options: ApiOptions): { signal?: AbortSignal; timeout: Promise<never> | null; cancel: () => void; timedOut: () => boolean } {
   if (!options.timeoutMs) return { signal: options.signal, timeout: null, cancel: () => undefined, timedOut: () => false };
 

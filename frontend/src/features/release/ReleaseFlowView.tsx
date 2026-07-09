@@ -16,6 +16,7 @@ import {
   useReleasePlans,
   useReleasePreview,
   useReleaseAudit,
+  useReleaseAuditExport,
   useReleaseRunSummary,
   useDeleteReleasePlan,
   useArchiveReleasePlan,
@@ -298,6 +299,7 @@ export default function ReleaseFlowView() {
   const runsQ = useReleaseRuns(plan?.plan_id);
   const summaryQ = useReleaseRunSummary(plan?.plan_id);
   const auditQ = useReleaseAudit(plan?.plan_id);
+  const exportAudit = useReleaseAuditExport(plan?.plan_id);
   const dispatchRelease = useDispatchReleasePlan();
   const startRelease = useStartReleasePlan();
   const advanceRun = useAdvanceReleaseRun();
@@ -538,7 +540,12 @@ export default function ReleaseFlowView() {
                 onCancel={runId => cancelRun.mutate({ runId, reason: 'operator canceled release run' })}
                 onDelete={(runId, force) => deleteRun.mutate({ runId, force })}
               />
-              <AuditPanel events={auditQ.data ?? []} loading={auditQ.isPending} />
+              <AuditPanel
+                events={auditQ.data ?? []}
+                loading={auditQ.isPending}
+                exporting={exportAudit.isPending}
+                onExport={() => exportAudit.mutate()}
+              />
               <DiagnosticsPanel diagnostics={planDiagnosticsData?.diagnostics ?? []} />
             </div>
           )}
@@ -1042,15 +1049,42 @@ function DiagnosticsPanel({ diagnostics }: { diagnostics: Diagnostic[] }) {
   );
 }
 
-function AuditPanel({ events, loading }: { events: ReleaseAuditEvent[]; loading: boolean }) {
+function AuditPanel({
+  events,
+  loading,
+  exporting,
+  onExport,
+}: {
+  events: ReleaseAuditEvent[];
+  loading: boolean;
+  exporting: boolean;
+  onExport: () => void;
+}) {
   if (loading && events.length === 0) {
-    return <Card title="Audit"><p className="release-flow__hint">Loading audit events...</p></Card>;
+    return (
+      <Card
+        title="Audit"
+        actions={<Button size="sm" loading={exporting} disabled={exporting} onClick={onExport}>Export CSV</Button>}
+      >
+        <p className="release-flow__hint">Loading audit events...</p>
+      </Card>
+    );
   }
   if (events.length === 0) {
-    return <Card title="Audit"><p className="release-flow__hint">No audit events yet.</p></Card>;
+    return (
+      <Card
+        title="Audit"
+        actions={<Button size="sm" loading={exporting} disabled={exporting} onClick={onExport}>Export CSV</Button>}
+      >
+        <p className="release-flow__hint">No audit events yet.</p>
+      </Card>
+    );
   }
   return (
-    <Card title="Audit">
+    <Card
+      title="Audit"
+      actions={<Button size="sm" loading={exporting} disabled={exporting} onClick={onExport}>Export CSV</Button>}
+    >
       <div className="release-flow__timeline">
         {events.slice(0, 8).map(event => (
           <div key={event.audit_id} className="release-flow__timeline-row">
