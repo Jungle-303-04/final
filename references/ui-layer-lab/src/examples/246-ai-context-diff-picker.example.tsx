@@ -7,15 +7,21 @@ export default function AiContextDiffPickerExample() {
 
   return (
     <div className="context-chip-card">
-      <strong>Diff context</strong>
+      <strong>변경 맥락</strong>
       <div className="chip-row">
         {hunks.map((hunk) => (
-          <button className={selected.includes(hunk) ? "active" : ""} key={hunk} onClick={() => setSelected((items) => (items.includes(hunk) ? items.filter((item) => item !== hunk) : [...items, hunk]))}>
+          <button
+            aria-pressed={selected.includes(hunk)}
+            className={selected.includes(hunk) ? "active" : ""}
+            key={hunk}
+            onClick={() => setSelected((items) => (items.includes(hunk) ? items.filter((item) => item !== hunk) : [...items, hunk]))}
+            type="button"
+          >
             {hunk}
           </button>
         ))}
       </div>
-      <span>{selected.length} hunks attached</span>
+      <span>첨부된 변경 묶음 {selected.length}개</span>
     </div>
   );
 }

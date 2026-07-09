@@ -1,6 +1,6 @@
 import { useState } from "react";
 
-const steps = ["Plan", "Patch", "Verify", "Ship"];
+const steps = ["계획", "패치", "검증", "배포"];
 
 export default function AnimatedStepperConnectorExample() {
   const [active, setActive] = useState(1);
@@ -8,7 +8,7 @@ export default function AnimatedStepperConnectorExample() {
   return (
     <div className="connector-stepper">
       {steps.map((step, index) => (
-        <button className={index <= active ? "active" : ""} key={step} onClick={() => setActive(index)}>
+        <button aria-pressed={index <= active} className={index <= active ? "active" : ""} key={step} onClick={() => setActive(index)} type="button">
           <span>{index + 1}</span>
           {step}
         </button>
