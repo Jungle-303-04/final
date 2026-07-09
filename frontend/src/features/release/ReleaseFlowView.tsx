@@ -839,7 +839,12 @@ function PreviewPanel({
   return (
     <Card
       title="Execution preview"
-      actions={<Badge tone={preview.executable ? 'success' : 'warning'}>{preview.executable ? 'ready' : 'blocked'}</Badge>}
+      actions={
+        <>
+          <Button size="sm" variant="ghost" onClick={() => copyPreviewMarkdown(preview, liveSideEffects)}>Copy preview</Button>
+          <Badge tone={preview.executable ? 'success' : 'warning'}>{preview.executable ? 'ready' : 'blocked'}</Badge>
+        </>
+      }
     >
       <p className="release-flow__hint">{preview.summary}</p>
       <div className="release-flow__toolbar release-flow__toolbar--preview">
@@ -1448,6 +1453,33 @@ function verificationJobSummary(job: { kind: string; status: string; target: Rec
   const statusCode = getString(result.status_code);
   const resultSuffix = error || (statusCode ? `HTTP ${statusCode}` : '');
   return `${job.kind} ${job.status}: ${target}${resultSuffix ? ` - ${resultSuffix}` : ''}`;
+}
+
+function copyPreviewMarkdown(preview: ReleasePlanPreview, liveSideEffects: boolean) {
+  copyText(formatPreviewMarkdown(preview, liveSideEffects), 'Release preview copied.', 'Copy release preview');
+}
+
+function formatPreviewMarkdown(preview: ReleasePlanPreview, liveSideEffects: boolean): string {
+  const lines = [
+    `## Release execution preview: ${preview.executable ? 'ready' : 'blocked'}`,
+    '',
+    `- Mode: ${liveSideEffects ? 'live side effects' : 'demo/dry-run'}`,
+    `- Summary: ${preview.summary}`,
+    `- Waves: ${preview.waves.length}`,
+    `- Steps: ${preview.steps.length}`,
+  ];
+  if (preview.blockers.length > 0) {
+    lines.push('', 'Blockers:', ...preview.blockers.slice(0, 8).map(blocker => `- ${blocker}`));
+  }
+  if (preview.waves.length > 0) {
+    lines.push('', 'Waves:');
+    lines.push(...preview.waves.map(wave => `- Wave ${wave.wave}: ${wave.applications.join(' -> ') || '-'}`));
+  }
+  if (preview.steps.length > 0) {
+    lines.push('', 'Steps:');
+    lines.push(...preview.steps.slice(0, 12).map(step => `- ${step.name || step.application_id}: ${step.environment}, ${step.strategy}, gate ${step.gate}`));
+  }
+  return lines.join('\n');
 }
 
 function copyReadinessMarkdown(readiness: ReleaseReadiness) {
