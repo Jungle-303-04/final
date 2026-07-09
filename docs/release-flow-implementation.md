@@ -81,6 +81,7 @@
 - 플랜 목록, 새 플랜, 저장, 아카이브, 삭제, 강제 삭제
 - step 편집: application, branch, manifest path, commit SHA, image, namespace, replicas, strategy, gate, dependency
 - dependency graph와 wave preview
+- execution preview copy: executable 상태, blockers, wave 순서, step 목록을 Markdown으로 복사해 배포 리뷰에 공유
 - deterministic diagnostics와 YAML marker
 - release run 운영 요약: 전체 run 수, 상태별 run 수
 - 최신 run 상태, step 상태, GitHub/commit 링크, timeline 이벤트
