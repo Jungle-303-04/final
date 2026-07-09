@@ -624,6 +624,11 @@ function PolicyEditor({ plan, setPolicy }: { plan: ReleasePlan; setPolicy: (patc
           <input type="checkbox" checked={Boolean(settings.require_diagnostics_pass)} onChange={e => setPolicy({ require_diagnostics_pass: e.target.checked })} />
           Require diagnostics pass before dispatch
         </label>
+        {!settings.require_diagnostics_pass && (
+          <Field label="Diagnostics override reason">
+            <input className="input" value={getString(settings.diagnostics_override_reason)} onChange={e => setPolicy({ diagnostics_override_reason: e.target.value })} />
+          </Field>
+        )}
         <label className="release-flow__check">
           <input type="checkbox" checked={Boolean(settings.approval_granted)} onChange={e => setPolicy({ approval_granted: e.target.checked })} />
           Approval granted for this plan
