@@ -2015,20 +2015,32 @@ def test_release_run_summary_counts_derived_statuses() -> None:
                 ],
             },
             {"run_id": "run-8", "plan_id": "plan-f", "status": "paused"},
+            {"run_id": "run-9", "plan_id": "plan-g", "status": "cancelled"},
         ]
     )
 
-    assert summary["total_runs"] == 8
+    assert summary["total_runs"] == 9
     assert summary["status_breakdown"] == {
         "running": 3,
         "failed": 1,
         "paused": 1,
+        "cancelled": 1,
         "succeeded": 1,
         "rollback_requested": 1,
         "waiting_for_approval": 1,
     }
-    assert summary["plan_breakdown"] == {"plan-a": 2, "plan-b": 1, "plan-c": 2, "plan-d": 1, "plan-e": 1, "plan-f": 1}
+    assert summary["plan_breakdown"] == {
+        "plan-a": 2,
+        "plan-b": 1,
+        "plan-c": 2,
+        "plan-d": 1,
+        "plan-e": 1,
+        "plan-f": 1,
+        "plan-g": 1,
+    }
     assert summary["active_runs"] == 5
+    assert summary["succeeded_runs"] == 1
+    assert summary["cancelled_runs"] == 1
     assert summary["attention_required_runs"] == 5
     assert summary["failed_runs"] == 1
     assert summary["paused_runs"] == 1
@@ -2220,6 +2232,14 @@ def test_release_run_filter_supports_attention_stale_live_and_status() -> None:
         run["run_id"]
         for run in release_router.filter_release_runs(runs, status="failed")
     ] == ["run-failed"]
+    assert [
+        run["run_id"]
+        for run in release_router.filter_release_runs(runs, status="succeeded")
+    ] == ["run-succeeded"]
+    assert [
+        run["run_id"]
+        for run in release_router.filter_release_runs(runs, status="cancelled")
+    ] == ["run-cancelled"]
     assert [
         run["run_id"]
         for run in release_router.filter_release_runs(runs, attention_only=True)
