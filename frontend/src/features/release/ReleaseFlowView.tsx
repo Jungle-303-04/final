@@ -829,6 +829,13 @@ function PreviewPanel({
   if (loading && !preview) return <Card title="Execution preview"><p className="release-flow__hint">Calculating preview...</p></Card>;
   if (!preview) return <Card title="Execution preview"><p className="release-flow__hint">No preview yet.</p></Card>;
   const firstWave = preview.waves[0]?.wave ?? 1;
+  const previewBlockedReason = firstReason(
+    dispatching ? 'Release dispatch or start is already running.' : '',
+    preview.waves.length === 0 ? 'Preview has no executable waves.' : '',
+    !preview.executable ? `Resolve blocker before execution: ${preview.blockers[0] ?? 'preview is blocked'}` : '',
+  );
+  const liveActionHint = liveSideEffects ? 'A confirmation dialog will appear because this plan can publish real GitOps events.' : undefined;
+  const previewActionHint = previewBlockedReason ?? liveActionHint;
   return (
     <Card
       title="Execution preview"
@@ -841,6 +848,7 @@ function PreviewPanel({
           variant="primary"
           loading={dispatching}
           disabled={!preview.executable || preview.waves.length === 0}
+          title={previewActionHint}
           onClick={() => {
             if (liveSideEffects && !window.confirm(`Dispatch live release wave ${firstWave}? This can publish real GitOps events.`)) return;
             onDispatch(firstWave);
@@ -852,6 +860,7 @@ function PreviewPanel({
           size="sm"
           loading={dispatching}
           disabled={!preview.executable || preview.waves.length === 0}
+          title={previewActionHint}
           onClick={() => {
             if (liveSideEffects && !window.confirm('Start tracked live release run? This can begin real GitOps dispatch for the plan.')) return;
             onStart();
