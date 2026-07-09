@@ -21,6 +21,7 @@ import {
   useReleaseAudit,
   useReleaseAuditExport,
   useReleaseRunHandoff,
+  useReleaseRunReport,
   useReleaseRunSummary,
   useDeleteReleasePlan,
   useArchiveReleasePlan,
@@ -1112,6 +1113,7 @@ function RunPanel({
   const selectedRun = selectedRunId ? runs.find(run => run.run_id === selectedRunId) : undefined;
   const run = selectedRun ?? runs[0];
   const handoffQ = useReleaseRunHandoff(run?.run_id);
+  const reportM = useReleaseRunReport();
   if (loading && !run) return <Card title="Release runs"><p className="release-flow__hint">Loading release runs...</p></Card>;
   if (!run) {
     return (
@@ -1203,7 +1205,20 @@ function RunPanel({
         <div className="release-flow__toolbar release-flow__toolbar--preview">
           {githubUrl && <a href={githubUrl} target="_blank" rel="noreferrer"><Button size="sm">GitHub release</Button></a>}
           <Button size="sm" variant="ghost" onClick={() => copyReleaseRunLink(run.run_id)}>Copy link</Button>
-          <Button size="sm" variant="ghost" onClick={() => copyReleaseRunReport(run, handoffQ.data)}>Copy report</Button>
+          <Button
+            size="sm"
+            variant="ghost"
+            loading={reportM.isPending}
+            disabled={reportM.isPending}
+            onClick={() => {
+              reportM.mutate(run.run_id, {
+                onSuccess: data => copyReleaseRunReport(run, handoffQ.data, data.report.markdown),
+                onError: () => copyReleaseRunReport(run, handoffQ.data),
+              });
+            }}
+          >
+            Copy report
+          </Button>
           <Button
             size="sm"
             loading={busy}
@@ -1543,8 +1558,8 @@ function copyHandoffMarkdown(handoff: ReleaseRunHandoff) {
   copyText(formatHandoffMarkdown(handoff), 'Operator handoff copied.', 'Copy operator handoff');
 }
 
-function copyReleaseRunReport(run: ReleaseRun, handoff?: ReleaseRunHandoff) {
-  copyText(formatReleaseRunReport(run, handoff), 'Release run report copied.', 'Copy release run report');
+function copyReleaseRunReport(run: ReleaseRun, handoff?: ReleaseRunHandoff, serverMarkdown?: string) {
+  copyText(serverMarkdown || formatReleaseRunReport(run, handoff), 'Release run report copied.', 'Copy release run report');
 }
 
 function formatReleaseRunReport(run: ReleaseRun, handoff?: ReleaseRunHandoff): string {
