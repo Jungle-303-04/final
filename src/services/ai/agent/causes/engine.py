@@ -141,13 +141,13 @@ def evaluate_causes(
             )
         ]
 
-    actual_sources = {item.source for item in evidence_bundle.items}
+    actual_evidence = evidence_keys(evidence_bundle)
     bundle_signals = extract_bundle_signals(evidence_bundle)
     evaluations: list[CauseEvaluation] = []
     for candidate in candidates:
         expected = set(candidate.expected_evidence)
-        supporting = sorted(expected & actual_sources)
-        missing_sources = sorted(expected - actual_sources)
+        supporting = sorted(expected & actual_evidence)
+        missing_sources = sorted(expected - actual_evidence)
         # 판별 신호(내용 매칭) — 소스 존재만으로 점수가 1.0 이 되는 오판을 막는다.
         # 선언된 그룹이 하나라도 미충족이면 missing_evidence 에 signal 토큰이 남아
         # 해당 후보가 선택되더라도 완결(rca.completed)이 아니라 blocked 로 흐른다.
@@ -168,7 +168,7 @@ def evaluate_causes(
                     signal_count=len(candidate.signals),
                     matched_signal_count=len(matched_groups),
                 ),
-                supporting_evidence_refs=evidence_refs_for_sources(evidence_bundle, supporting),
+                supporting_evidence_refs=evidence_refs_for_keys(evidence_bundle, supporting),
                 missing_evidence_checks=[
                     *missing_evidence_checks(missing_sources, candidate.checks),
                     *missing_signal_checks(unmatched_groups),
@@ -203,11 +203,27 @@ def missing_signal_checks(unmatched_groups: list) -> list[MissingEvidenceCheck]:
     ]
 
 
-def evidence_refs_for_sources(
-    evidence_bundle: EvidenceBundle, sources: list[str]
+def evidence_key(source: str, name: str) -> str:
+    return f"{source}:{name}"
+
+
+def evidence_keys(evidence_bundle: EvidenceBundle) -> set[str]:
+    keys: set[str] = set()
+    for item in evidence_bundle.items:
+        keys.add(item.source)
+        keys.add(evidence_key(item.source, item.name))
+    return keys
+
+
+def evidence_refs_for_keys(
+    evidence_bundle: EvidenceBundle, keys: list[str]
 ) -> list[EvidenceReference]:
-    source_set = set(sources)
-    return [item.reference() for item in evidence_bundle.items if item.source in source_set]
+    key_set = set(keys)
+    return [
+        item.reference()
+        for item in evidence_bundle.items
+        if item.source in key_set or evidence_key(item.source, item.name) in key_set
+    ]
 
 
 def missing_evidence_checks(
