@@ -115,7 +115,7 @@
 - verification failure summary: post-deploy verification job 실패가 있는 run 수를 `verification_failed_runs` summary 카운터와 UI card로 표시
 - run filters: `GET /release-runs`와 UI에서 all/attention/stale/active/live/failed/rollback requested/unhealthy/waiting approval/verification failed/verification timeout 기준으로 run 목록을 빠르게 필터링
 - active run filter: 아직 terminal 상태가 아닌 run만 `active_only` API query와 UI 필터로 바로 조회
-- run summary shortcuts: summary 카드의 attention/active/live/rollback/unhealthy/verification/stale 숫자를 누르면 대응하는 run filter로 바로 전환
+- run summary shortcuts: summary 카드의 attention/active/live/failed/rollback/waiting approval/unhealthy/verification/stale 숫자를 누르면 대응하는 run filter로 바로 전환
 - unhealthy run filter: run health나 step health가 unhealthy인 run만 `unhealthy_only` API query와 UI 필터로 바로 조회
 - verification failed filter: post-deploy verification job이 failed/error/unhealthy인 run만 `verification_failed_only` API query와 UI 필터로 바로 조회
 - verification pending timeout: post-deploy verification job의 `queued_at`/`timeout_minutes`를 기록하고, 오래 pending/queued/running인 job을 summary, UI filter, handoff blocked check로 표시
