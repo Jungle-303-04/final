@@ -95,6 +95,50 @@ def test_rollback_release_run_checks_access_before_mutating(monkeypatch) -> None
     assert db.requested_rollback is False
 
 
+def test_retry_release_run_dispatches_failed_wave_step(monkeypatch) -> None:
+    db = ReleaseRetryDb()
+    monkeypatch.setattr(release_router, "require_plan_application_manage_access", lambda *_args: None)
+    monkeypatch.setattr(release_router, "require_cluster_access", lambda *_args: None)
+
+    current = SimpleNamespace(workspace_id="workspace-a", user_id="operator", roles=("release_operator",))
+    response = asyncio.run(
+        release_router.retry_release_run(
+            "release-run-retry",
+            release_router.ReleaseRunActionRequest(reason="retry failed pod"),
+            current=current,
+            db=db,
+            events=FailingEventGateway(),
+        )
+    )
+
+    assert response.run["status"] == "running"
+    assert db.retry_marks[0]["wave"] == 1
+    assert db.retry_marks[0]["attempt"] == 1
+    assert db.dispatched == ["checkout"]
+
+
+def test_retry_release_run_blocks_when_retry_budget_is_exhausted(monkeypatch) -> None:
+    db = ReleaseRetryDb(previous_retry=True)
+    monkeypatch.setattr(release_router, "require_plan_application_manage_access", lambda *_args: None)
+
+    current = SimpleNamespace(workspace_id="workspace-a", user_id="operator", roles=("release_operator",))
+    with pytest.raises(HTTPException) as exc:
+        asyncio.run(
+            release_router.retry_release_run(
+                "release-run-retry",
+                release_router.ReleaseRunActionRequest(reason="retry failed pod"),
+                current=current,
+                db=db,
+                events=FailingEventGateway(),
+            )
+        )
+
+    assert exc.value.status_code == 409
+    assert "retry budget exhausted" in exc.value.detail["blockers"][0]
+    assert db.retry_marks == []
+    assert db.dispatched == []
+
+
 def test_release_run_summary_counts_derived_statuses() -> None:
     summary = release_router.release_run_summary_from_runs(
         [
@@ -216,6 +260,93 @@ class ReleaseRunActionDb:
         run = self.get_release_run("workspace-a", "release-run-1")
         run["status"] = "rollback_requested"
         return run
+
+
+class ReleaseRetryDb:
+    def __init__(self, *, previous_retry: bool = False) -> None:
+        self.retry_marks: list[dict[str, object]] = []
+        self.dispatched: list[str] = []
+        self.previous_retry = previous_retry
+        self.status = "failed"
+
+    def get_release_run(self, _workspace_id: str, _run_id: str) -> dict[str, object]:
+        events: list[dict[str, object]] = []
+        if self.previous_retry:
+            events.append({"event_type": "release.retry.wave.1.attempt.1.running"})
+        return {
+            "run_id": "release-run-retry",
+            "plan_id": "release-plan-a",
+            "plan_name": "Checkout release",
+            "status": self.status,
+            "derived_status": self.status,
+            "current_wave": 1,
+            "total_waves": 1,
+            "settings": {"runtime_mode": "demo", "retry_attempts": 1},
+            "events": events,
+            "steps": [
+                {
+                    "application_id": "checkout",
+                    "name": "Checkout",
+                    "wave": 1,
+                    "status": "failed",
+                    "health": {"status": "unhealthy"},
+                    "details": {
+                        "config": {
+                            "branch": "main",
+                            "commit_sha": "abc123",
+                            "image": "ghcr.io/example/checkout:v2",
+                            "manifest_path": "deploy/app.yaml",
+                            "cluster_id": "target",
+                            "environment": "sandbox",
+                        }
+                    },
+                },
+                {
+                    "application_id": "billing",
+                    "name": "Billing",
+                    "wave": 1,
+                    "status": "succeeded",
+                    "health": {"status": "healthy"},
+                    "details": {
+                        "config": {
+                            "branch": "main",
+                            "commit_sha": "abc123",
+                            "image": "ghcr.io/example/billing:v2",
+                        }
+                    },
+                },
+            ],
+        }
+
+    def get_application(self, _workspace_id: str, application_id: str) -> dict[str, object]:
+        return {
+            "repo_ref": f"org/{application_id}",
+            "branch": "main",
+            "cluster_id": "target",
+            "manifest_path": "deploy/app.yaml",
+        }
+
+    def mark_release_run_retry(
+        self,
+        _workspace_id: str,
+        _run_id: str,
+        wave: int,
+        attempt: int,
+        status: str,
+        **kwargs: object,
+    ) -> dict[str, object]:
+        self.status = status
+        self.retry_marks.append({"wave": wave, "attempt": attempt, "status": status, **kwargs})
+        return self.get_release_run("workspace-a", "release-run-retry")
+
+    def mark_release_run_step_dispatched(
+        self,
+        _workspace_id: str,
+        _run_id: str,
+        application_id: str,
+        **_kwargs: object,
+    ) -> None:
+        self.dispatched.append(application_id)
 
 
 def test_yaml_diagnostics_reports_parser_location() -> None:
