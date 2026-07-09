@@ -6,13 +6,13 @@ export default function SonnerWebhookStatusExample() {
 
   function ping() {
     setSent((value) => value + 1);
-    toast.success("Webhook delivered");
+    toast.success("웹훅 전달됨");
   }
 
   return (
     <div className="toast-state-card">
-      <strong>{sent} webhooks sent</strong>
-      <button className="command-trigger" onClick={ping}>Send Webhook</button>
+      <strong>{sent}개 웹훅 전송됨</strong>
+      <button className="command-trigger stable-wide" onClick={ping} type="button">웹훅 보내기</button>
     </div>
   );
 }
