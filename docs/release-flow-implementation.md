@@ -156,6 +156,7 @@
 - run report context: report Markdown에 application, cluster, namespace, workflow, repo, commit, manifest path를 포함해 어떤 대상의 배포였는지 파일만 보고 확인
 - run report audit summary: report Markdown에 audit/timeline 이벤트 수, 최신 이벤트, event type별 count를 포함해 사후 리뷰에서 이벤트 흐름을 빠르게 파악
 - run report approvals: report Markdown에 step approval id, decision/status, gate, reason을 포함해 승인 흐름을 사후 리뷰와 교대 문서에서 확인
+- change freeze handoff/report: active freeze, window, production targets, override reason을 operator handoff와 run report Markdown에 포함해 freeze override 근거를 교대/사후 리뷰에서 확인
 
 ## 검증
 - `py -3 -m pytest -q tests/test_release_flow_diagnostics.py tests/test_release_flow_projection.py`

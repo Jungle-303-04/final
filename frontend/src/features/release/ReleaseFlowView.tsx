@@ -1462,6 +1462,17 @@ function RunHandoffPanel({ handoff, loading }: { handoff?: ReleaseRunHandoff; lo
             </div>
           </div>
         )}
+        {handoff.change_freeze && (
+          <div>
+            <span className="release-flow__handoff-label">Change freeze</span>
+            <div className="release-flow__handoff-list">
+              <span>{handoff.change_freeze.status}: {handoff.change_freeze.message}</span>
+              {(handoff.change_freeze.start || handoff.change_freeze.end) && <span>{handoff.change_freeze.start || '?'} to {handoff.change_freeze.end || '?'}</span>}
+              {handoff.change_freeze.production_targets.slice(0, 2).map(item => <span key={item}>{item}</span>)}
+              {handoff.change_freeze.override_reason && <span>{handoff.change_freeze.override_reason}</span>}
+            </div>
+          </div>
+        )}
       </div>
       {handoff.last_event && (
         <p className="release-flow__hint">
@@ -1627,6 +1638,12 @@ function formatReleaseRunReport(run: ReleaseRun, handoff?: ReleaseRunHandoff): s
       lines.push(...handoff.abort_criteria.criteria.slice(0, 3).map(item => `- ${item}`));
       if (handoff.abort_criteria.override_reason) lines.push(`- override: ${handoff.abort_criteria.override_reason}`);
     }
+    if (handoff.change_freeze) {
+      lines.push('', 'Change freeze:', `- ${handoff.change_freeze.status}: ${handoff.change_freeze.message}`);
+      if (handoff.change_freeze.start || handoff.change_freeze.end) lines.push(`- window: ${handoff.change_freeze.start || '?'} to ${handoff.change_freeze.end || '?'}`);
+      if (handoff.change_freeze.production_targets.length > 0) lines.push(`- targets: ${handoff.change_freeze.production_targets.slice(0, 5).join(', ')}`);
+      if (handoff.change_freeze.override_reason) lines.push(`- override: ${handoff.change_freeze.override_reason}`);
+    }
   }
   const timelineSummary = releaseRunTimelineSummaryLines(run.events);
   if (timelineSummary.length > 0) {
@@ -1733,6 +1750,12 @@ function formatHandoffMarkdown(handoff: ReleaseRunHandoff): string {
     lines.push('', 'Rollback criteria:', `- ${handoff.abort_criteria.status}: ${handoff.abort_criteria.message}`);
     lines.push(...handoff.abort_criteria.criteria.slice(0, 3).map(item => `- ${item}`));
     if (handoff.abort_criteria.override_reason) lines.push(`- override: ${handoff.abort_criteria.override_reason}`);
+  }
+  if (handoff.change_freeze) {
+    lines.push('', 'Change freeze:', `- ${handoff.change_freeze.status}: ${handoff.change_freeze.message}`);
+    if (handoff.change_freeze.start || handoff.change_freeze.end) lines.push(`- window: ${handoff.change_freeze.start || '?'} to ${handoff.change_freeze.end || '?'}`);
+    if (handoff.change_freeze.production_targets.length > 0) lines.push(`- targets: ${handoff.change_freeze.production_targets.slice(0, 5).join(', ')}`);
+    if (handoff.change_freeze.override_reason) lines.push(`- override: ${handoff.change_freeze.override_reason}`);
   }
   if (handoff.last_event) {
     const eventType = getString(handoff.last_event.event_type, 'event');
