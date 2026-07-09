@@ -12,10 +12,12 @@ import type {
   ReleaseRunSummary,
 } from '@/shared/lib/types';
 
+export type ReleaseRunFilter = 'all' | 'attention' | 'stale' | 'live' | 'failed' | 'waiting_for_approval';
+
 export const releaseKeys = {
   plans: () => ['release-plans'] as const,
   plan: (id: string) => ['release-plans', id] as const,
-  runs: (planId?: string) => ['release-runs', planId ?? 'all'] as const,
+  runs: (planId?: string, filter: ReleaseRunFilter = 'all') => ['release-runs', planId ?? 'all', filter] as const,
   audit: (planId?: string) => ['release-audit', planId ?? 'all'] as const,
 };
 
@@ -38,13 +40,24 @@ export const useReleasePlan = (id: string) =>
     enabled: Boolean(id),
   });
 
-export const useReleaseRuns = (planId?: string) =>
+export const useReleaseRuns = (planId?: string, filter: ReleaseRunFilter = 'all') =>
   useQuery({
-    queryKey: releaseKeys.runs(planId),
-    queryFn: () => get<{ runs: ReleaseRun[] }>(`/release-runs${planId ? `?plan_id=${encodeURIComponent(planId)}` : ''}`),
+    queryKey: releaseKeys.runs(planId, filter),
+    queryFn: () => get<{ runs: ReleaseRun[] }>(releaseRunsPath(planId, filter)),
     select: d => d.runs,
     refetchInterval: 15_000,
   });
+
+function releaseRunsPath(planId?: string, filter: ReleaseRunFilter = 'all') {
+  const params = new URLSearchParams();
+  if (planId) params.set('plan_id', planId);
+  if (filter === 'attention') params.set('attention_only', 'true');
+  if (filter === 'stale') params.set('stale_only', 'true');
+  if (filter === 'live') params.set('live_only', 'true');
+  if (filter === 'failed' || filter === 'waiting_for_approval') params.set('status', filter);
+  const query = params.toString();
+  return `/release-runs${query ? `?${query}` : ''}`;
+}
 
 export const useReleaseRunSummary = (planId?: string) =>
   useQuery({

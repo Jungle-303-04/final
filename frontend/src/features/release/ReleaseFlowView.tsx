@@ -9,6 +9,7 @@ import { useApplications } from '@/features/repo/api';
 import { ApprovalCard } from '@/features/repo/ApprovalCard';
 import { type AlertChannel, useAlertChannels } from '@/features/notifications/api';
 import {
+  type ReleaseRunFilter,
   useAdvanceReleaseRun,
   useDiagnostics,
   useDispatchReleasePlan,
@@ -293,11 +294,12 @@ export default function ReleaseFlowView() {
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [yaml, setYaml] = useState(SAMPLE_YAML);
   const [tab, setTab] = useState('plan');
+  const [runFilter, setRunFilter] = useState<ReleaseRunFilter>('all');
   const { data: planDiagnosticsData, mutate: diagnosePlan } = useDiagnostics();
   const { data: yamlDiagnosticsData, mutate: diagnoseYaml } = useDiagnostics();
   const { data: releasePreviewData, isPending: releasePreviewPending, mutate: previewRelease } = useReleasePreview();
   const { data: releaseReadinessData, isPending: releaseReadinessPending, mutate: checkReadiness } = useReleaseReadiness();
-  const runsQ = useReleaseRuns(plan?.plan_id);
+  const runsQ = useReleaseRuns(plan?.plan_id, runFilter);
   const summaryQ = useReleaseRunSummary(plan?.plan_id);
   const auditQ = useReleaseAudit(plan?.plan_id);
   const exportAudit = useReleaseAuditExport(plan?.plan_id);
@@ -531,6 +533,8 @@ export default function ReleaseFlowView() {
               <RunPanel
                 runs={runsQ.data ?? []}
                 summary={summaryQ.data}
+                runFilter={runFilter}
+                onRunFilterChange={setRunFilter}
                 loading={runsQ.isPending}
                 busy={advanceRun.isPending || pauseRun.isPending || resumeRun.isPending || retryRun.isPending || rollbackRun.isPending || cancelRun.isPending || deleteRun.isPending}
                 onAdvance={runId => advanceRun.mutate({ runId })}
@@ -870,6 +874,8 @@ function AlertChannelsPanel({
 function RunPanel({
   runs,
   summary,
+  runFilter,
+  onRunFilterChange,
   loading,
   busy,
   onAdvance,
@@ -882,6 +888,8 @@ function RunPanel({
 }: {
   runs: ReleaseRun[];
   summary?: ReleaseRunSummary;
+  runFilter: ReleaseRunFilter;
+  onRunFilterChange: (filter: ReleaseRunFilter) => void;
   loading: boolean;
   busy: boolean;
   onAdvance: (runId: string) => void;
@@ -909,7 +917,10 @@ function RunPanel({
     return (
       <Card title="Release runs">
         <RunSummary summary={summary} />
-        <p className="release-flow__hint">No tracked release runs yet.</p>
+        <RunFilterField runFilter={runFilter} onRunFilterChange={onRunFilterChange} />
+        <p className="release-flow__hint">
+          {runFilter === 'all' ? 'No tracked release runs yet.' : 'No release runs match this filter.'}
+        </p>
       </Card>
     );
   }
@@ -937,6 +948,7 @@ function RunPanel({
       }
     >
       <RunSummary summary={summary} />
+      <RunFilterField runFilter={runFilter} onRunFilterChange={onRunFilterChange} />
       {runs.length > 1 && (
         <Field label="Inspect run">
           <select className="input" value={run.run_id} onChange={e => setSelectedRunId(e.target.value)}>
@@ -1070,6 +1082,27 @@ function RunPanel({
         })}
       </div>
     </Card>
+  );
+}
+
+function RunFilterField({
+  runFilter,
+  onRunFilterChange,
+}: {
+  runFilter: ReleaseRunFilter;
+  onRunFilterChange: (filter: ReleaseRunFilter) => void;
+}) {
+  return (
+    <Field label="Run filter">
+      <select className="input" value={runFilter} onChange={e => onRunFilterChange(e.target.value as ReleaseRunFilter)}>
+        <option value="all">All runs</option>
+        <option value="attention">Needs attention</option>
+        <option value="stale">Stale</option>
+        <option value="live">Live</option>
+        <option value="failed">Failed</option>
+        <option value="waiting_for_approval">Waiting approval</option>
+      </select>
+    </Field>
   );
 }
 
