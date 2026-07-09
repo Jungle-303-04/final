@@ -1,0 +1,26 @@
+{
+  "name": "ui-layer-lab",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host 0.0.0.0",
+    "build": "tsc -b && vite build",
+    "typecheck": "tsc -b",
+    "preview": "vite preview --host 0.0.0.0"
+  },
+  "dependencies": {
+    "@xyflow/react": "^12.8.4",
+    "cmdk": "^1.1.1",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "sonner": "^1.7.4"
+  },
+  "devDependencies": {
+    "@types/react": "^18.3.18",
+    "@types/react-dom": "^18.3.5",
+    "@vitejs/plugin-react": "^4.3.4",
+    "typescript": "^5.7.3",
+    "vite": "^6.0.7"
+  }
+}
