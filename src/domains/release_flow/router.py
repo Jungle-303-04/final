@@ -508,12 +508,13 @@ async def advance_release_run(
         )
     current_wave = int_field(run, "current_wave", 1)
     current_steps = [step for step in run.get("steps", []) if step.get("wave") == current_wave]
-    if current_steps and any(str(step.get("status")) != "succeeded" for step in current_steps):
+    current_wave_blockers = release_current_wave_health_blockers(current_steps, current_wave)
+    if current_wave_blockers:
         raise HTTPException(
             status_code=HTTP_CONFLICT,
             detail={
                 "message": RELEASE_RUN_BLOCKED,
-                "blockers": [f"wave {current_wave} is not healthy yet"],
+                "blockers": current_wave_blockers,
             },
         )
     next_wave = current_wave + 1
@@ -2600,6 +2601,53 @@ def retryable_steps_for_wave(run: dict[str, Any], wave: int) -> list[dict[str, A
             or (isinstance(step.get("health"), dict) and step["health"].get("status") == "unhealthy")
         )
     ]
+
+
+def release_current_wave_health_blockers(steps: list[dict[str, Any]], wave: int) -> list[str]:
+    blockers: list[str] = []
+    for step in steps:
+        name = str(step.get("name") or step.get("application_id") or "release step")
+        if str(step.get("status") or "") != "succeeded":
+            blockers.append(f"{name} in wave {wave} has not succeeded yet.")
+            continue
+        health = step.get("health") if isinstance(step.get("health"), dict) else {}
+        if str(health.get("status") or "") == "unhealthy":
+            blockers.append(f"{name} health is unhealthy; resolve it before advancing wave {wave}.")
+        blockers.extend(release_verification_job_advance_blockers(step, name, wave))
+    return blockers
+
+
+def release_verification_job_advance_blockers(
+    step: dict[str, Any],
+    name: str,
+    wave: int,
+) -> list[str]:
+    details = step.get("details") if isinstance(step.get("details"), dict) else {}
+    guard = details.get("release_guard") if isinstance(details.get("release_guard"), dict) else {}
+    verification_jobs = (
+        guard.get("verification_jobs")
+        if isinstance(guard.get("verification_jobs"), dict)
+        else {}
+    )
+    jobs = [
+        job
+        for job in list(verification_jobs.get("jobs") or [])
+        if isinstance(job, dict)
+    ]
+    blockers: list[str] = []
+    for job in jobs:
+        status = str(job.get("status") or "").lower()
+        if status in {"failed", "error", "unhealthy"}:
+            kind = str(job.get("kind") or "verification")
+            blockers.append(
+                f"{name} post-deploy verification {kind} failed; resolve it before advancing wave {wave}."
+            )
+        elif status in {"", "pending", "queued", "running"}:
+            kind = str(job.get("kind") or "verification")
+            blockers.append(
+                f"{name} post-deploy verification {kind} is {status or 'pending'}; wait before advancing wave {wave}."
+            )
+    return blockers
 
 
 def retry_limit_for_steps(run: dict[str, Any], steps: list[dict[str, Any]]) -> int:
