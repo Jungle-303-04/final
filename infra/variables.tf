@@ -59,9 +59,3 @@ variable "ecr_repositories" {
   type        = list(string)
   default     = ["service", "console"]
 }
-
-variable "github_repository" {
-  description = "GitHub Actions OIDC 를 신뢰할 저장소 (owner/name)"
-  type        = string
-  default     = "Jungle-303-04/final"
-}

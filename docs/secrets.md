@@ -57,14 +57,11 @@ database_url = required_env("DATABASE_URL")
 make env
 ```
 
-## GitHub Actions
+## 배포 자동화
 
-CI/CD에서 필요한 값은 GitHub Actions Secrets를 씁니다.
-
-- Repository secrets: 프로젝트 공통 자동화 값
-- Environment secrets: `dev`, `staging`, `prod`처럼 환경별로 다른 값
-
-처음에는 Repository secrets로 충분합니다. 배포 환경이 생기면 Environment secrets로 나눕니다.
+현재 AWS 배포는 운영자 환경의 AWS credential chain과 gitignore된 로컬 환경 파일을 쓴다.
+제품 내부 workflow가 사용하는 token은 Kubernetes Secret 또는 외부 Secret Manager에서
+주입하며, 저장소 파일과 event payload에는 원문을 넣지 않는다.
 
 ## 운영/클라우드
 

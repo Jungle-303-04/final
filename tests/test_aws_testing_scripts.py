@@ -9,49 +9,37 @@ def read(path: str) -> str:
     return (ROOT_DIR / path).read_text(encoding="utf-8")
 
 
-def test_ci_manifest_checks_do_not_require_docker() -> None:
-    workflow = read(".github/workflows/ci.yml")
+def test_manifest_checks_do_not_require_docker() -> None:
     script = read("scripts/manifest-check.sh")
 
-    assert "bash scripts/manifest-check.sh" in workflow
-    assert "docker run" not in workflow
-    assert "docker build" not in workflow
-    assert "kubeconform" not in workflow
-    assert "service:ci" not in workflow
     assert "kubectl create" not in script
     assert "kubectl kustomize" in script
 
 
-def test_integration_smoke_dispatches_aws_cd_smoke() -> None:
-    workflow = read(".github/workflows/integration-smoke.yml")
-
-    assert "gh workflow run aws-cd.yml" in workflow
-    assert "-f run_smoke=true" in workflow
-    assert "gh run watch" in workflow
-    assert "kind" not in workflow.lower()
-    assert "make up" not in workflow
-    assert "make smoke" not in workflow
-
-
-def test_dev_promotion_uses_repository_checks_and_aws_smoke() -> None:
-    workflow = read(".github/workflows/promote-dev.yml")
-
-    assert "bash scripts/test.sh" in workflow
-    assert "bash scripts/build-image.sh" not in workflow
-    assert "-f run_smoke=true" in workflow
-
-
-def test_make_check_and_docs_point_to_aws_smoke() -> None:
+def test_removed_github_actions_have_no_active_repository_entrypoints() -> None:
     makefile = read("Makefile")
-    docs = read("docs/aws-cicd.md")
+    catalog = read("src/domains/providers/catalog.py")
+    docs_index = read("docs/README.md")
 
+    assert list((ROOT_DIR / ".github" / "workflows").glob("*.yml")) == []
     assert "check: test manifest-check" in makefile
-    assert "aws-smoke:" in makefile
+    assert "aws-smoke:" not in makefile
+    assert "gh workflow run" not in makefile
+    assert 'key="github-actions"' not in catalog
+    assert "(aws-cicd.md)" not in docs_index
     assert "MGMT_CLUSTER ?=" in makefile
     assert "TARGET_CLUSTER ?=" in makefile
-    assert "AWS CD" in docs
-    assert "run_smoke=true" in docs
-    assert "CLOUDFLARE_PROXIED" in docs
+    assert "smoke: ## 현재 환경변수로 배포된 서비스 smoke 실행" in makefile
+
+
+def test_internal_gitops_workflow_remains_deployed() -> None:
+    controller = read("src/services/gitops/workflow-controller/app.py")
+    services = read("deploy/management/services.yaml")
+
+    assert 'app = App("workflow-controller")' in controller
+    assert "@app.on(" in controller
+    assert "name: workflow-controller" in services
+    assert "src/services/gitops/workflow-controller/app.py" in services
 
 
 def test_local_test_profile_wires_bootstrap_smoke_and_bruno() -> None:
@@ -97,14 +85,9 @@ def test_operator_scripts_require_explicit_runtime_context() -> None:
 
 
 def test_cloudflare_custom_domain_defaults_to_proxied_https() -> None:
-    workflow = read(".github/workflows/aws-cd.yml")
     script = read("scripts/aws-up.sh")
     runbook = read("docs/aws-testing-runbook.md")
 
-    assert "CLOUDFLARE_PROXIED: ${{ vars.CLOUDFLARE_PROXIED || '1' }}" in workflow
-    assert "concurrency:" in workflow
-    assert "group: aws-cd-${{ github.ref_name }}" in workflow
-    assert "cancel-in-progress: true" in workflow
     assert 'CLOUDFLARE_PROXIED="${CLOUDFLARE_PROXIED:-1}"' in script
     assert '"proxied": ${proxied}' in script
     assert '"ttl": ${ttl}' in script
@@ -159,14 +142,10 @@ def test_aws_management_rollout_status_retries_transient_eks_api_errors() -> Non
     assert "3번 재시도" in runbook
 
 
-def test_aws_smoke_uses_first_target_cluster_id_by_default() -> None:
-    workflow = read(".github/workflows/aws-cd.yml")
+def test_aws_deploy_uses_first_target_cluster_id_by_default() -> None:
     script = read("scripts/aws-up.sh")
     runbook = read("docs/aws-testing-runbook.md")
 
-    assert "TARGET_CLUSTER_ID_1:" in workflow
-    assert "TARGET_CLUSTER_ID_2:" in workflow
-    assert "SMOKE_CLUSTER_ID:" in workflow
     assert 'SMOKE_CLUSTER_ID="${SMOKE_CLUSTER_ID:-${TARGET_CLUSTER_ID_1}}"' in script
     assert "`SMOKE_CLUSTER_ID`" in runbook
 
@@ -193,10 +172,8 @@ def test_smoke_retries_gateway_health_before_api_flow() -> None:
     assert '"force": True' in script
 
 
-def test_aws_image_and_workflow_support_remote_git_manifest_reads() -> None:
+def test_aws_image_supports_remote_git_manifest_reads() -> None:
     dockerfile = read("src/services/Dockerfile")
-    workflow = read(".github/workflows/aws-cd.yml")
-    runbook = read("docs/aws-testing-runbook.md")
 
     assert "KUBECTL_VERSION=v1.36.2" in dockerfile
     assert "HELM_VERSION=v3.21.2" in dockerfile
@@ -204,19 +181,15 @@ def test_aws_image_and_workflow_support_remote_git_manifest_reads() -> None:
     assert "COPY --from=tools /usr/local/bin/helm" in dockerfile
     assert "kubectl version --client=true" in dockerfile
     assert "helm version --short" in dockerfile
-    assert "GITHUB_TOKEN: ${{ secrets.GH_APP_TOKEN || github.token }}" in workflow
-    assert "`GH_APP_TOKEN`" in runbook
 
 
-def test_aws_cd_builds_and_patches_console_frontend_image() -> None:
-    workflow = read(".github/workflows/aws-cd.yml")
+def test_aws_deploy_builds_and_patches_console_frontend_image() -> None:
     script = read("scripts/aws-up.sh")
     down_script = read("scripts/aws-down.sh")
     console_manifest = read("deploy/management/console.yaml")
     frontend_dockerfile = read("frontend/Dockerfile")
     runbook = read("docs/aws-testing-runbook.md")
 
-    assert "CONSOLE_ECR_REPO: ${{ vars.CONSOLE_ECR_REPO || 'kubeheal-console' }}" in workflow
     assert 'CONSOLE_ECR_REPO="${CONSOLE_ECR_REPO:-${PROJECT_SLUG}-console}"' in script
     assert 'CONSOLE_IMAGE_NAME="${CONSOLE_IMAGE_NAME:-}"' in script
     assert "ensure_ecr_images()" in script
@@ -244,12 +217,9 @@ def test_aws_admin_bootstrap_uses_current_identity_repository() -> None:
 
 
 def test_aws_smoke_uses_runnable_application_manifest() -> None:
-    workflow = read(".github/workflows/aws-cd.yml")
     script = read("scripts/aws-up.sh")
     runbook = read("docs/aws-testing-runbook.md")
 
-    assert "MANIFEST_PATH: ${{ vars.MANIFEST_PATH }}" in workflow
-    assert "SMOKE_MANIFEST_PATH:" in workflow
     assert 'MANIFEST_PATH="${MANIFEST_PATH:-}"' in script
     assert 'SMOKE_MANIFEST_PATH="${SMOKE_MANIFEST_PATH:-src/samples/smoke/deploy.yaml}"' in script
     assert "MANIFEST_PATH is required for AWS deployment" in script

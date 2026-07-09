@@ -383,5 +383,5 @@ Bruno는 `docs/api`를 collection root로 연다.
 AWS smoke는 Docker 없이 아래 명령으로 확인한다.
 
 ```bash
-make aws-smoke
+make smoke
 ```

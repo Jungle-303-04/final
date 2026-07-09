@@ -2625,3 +2625,31 @@ Prometheus base URL이 env/request 어디에도 없으면 `code="prometheus_base
 - 배포 주의:
   - 현재 로컬 AWS exec 세션이 만료되어 `kubectl apply --dry-run=client`의 live discovery 검증은 실패했다.
     코드/렌더 산출물은 통과했으므로, AWS 재인증 후 CD 또는 수동 rollout에서 동일 산출물로 확인한다.
+
+## 외부 GitHub Actions 잔재 정리 + 내부 workflow 보존 (2026-07-10)
+
+- 배경:
+  - `bcf95e0e`에서 GitHub Actions workflow 4개를 삭제했지만 테스트 8건, `make aws-smoke`,
+    provider catalog와 운영 문서가 삭제된 파일을 계속 실행 계약으로 요구했다.
+  - 제품 내부 `workflow-controller`와 GitOps 이벤트 자동화는 외부 CI와 별개이며 반드시 유지한다.
+- 적용:
+  - 삭제된 workflow를 읽던 테스트를 제거하고 AWS 배포/smoke 스크립트 계약 테스트로 재구성했다.
+  - 내부 `src/services/gitops/workflow-controller/app.py`와 management Deployment가 계속 존재하는지
+    회귀 테스트로 고정했다.
+  - `make smoke`는 현재 환경변수로 `scripts/smoke.sh`를 직접 실행한다. `aws-smoke`와 `gh workflow run`
+    진입점은 제거했다.
+  - provider catalog에서 실체 없는 `github-actions` deploy provider를 제거했다. AWS provider는
+    `scripts/aws-up.sh + AWS credential chain` 수동 배포 계약으로 정정했다.
+  - GHA cache 전용 buildx 분기와 외부 Actions OIDC Terraform role/provider/output/variable을 제거했다.
+  - 활성 문서는 수동 AWS 배포 뒤 내부 workflow smoke를 검증하는 기준으로 통일했다.
+- 검증:
+  - `bash scripts/test.sh` -> 840 passed, 3 skipped.
+  - `bash scripts/manifest-check.sh` -> management 57개, target 18개 객체 렌더 성공.
+  - `terraform fmt -check -recursive infra` -> 통과.
+  - `terraform -chdir=infra validate` -> 통과.
+  - `bash -n scripts/aws-up.sh scripts/smoke.sh` -> 통과.
+- 운영 주의:
+  - 기존 Terraform state가 GitHub OIDC provider/role을 관리한다면 다음 `terraform plan`에 삭제가 잡힌다.
+    같은 AWS 계정에서 OIDC provider를 다른 저장소 role도 공유하는지 확인한 뒤 apply한다.
+  - 외부 CI를 다시 도입할 때는 삭제된 파일명을 테스트로 먼저 고정하지 말고, 실행 가능한 runner와
+    credential 경계부터 별도 adapter로 추가한다. 내부 workflow-controller를 대체하지 않는다.
