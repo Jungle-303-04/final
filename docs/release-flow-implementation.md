@@ -60,6 +60,7 @@
 - retry는 현재 wave의 failed/unhealthy step만 다시 dispatch하고, plan/step의 `retry_attempts` 예산을 넘으면 차단한다.
 - workflow 실패, 승인 요청, 승인 거절은 `alert.requested`로 이어져 기존 alert-worker/log/webhook/channel 라우팅을 재사용한다.
 - live release dispatch/start/advance/retry는 warning 이상 release event를 받을 수 있는 enabled alert channel이 하나 이상 있어야 실제 GitOps 이벤트 발행을 허용한다.
+- saved alert channel test results keep `last_tested_at`, status, detail, and HTTP status code so operators can see whether a channel was recently validated.
 - active run/plan 삭제는 기본 차단하고 `force=true`를 명시해야 한다.
 - release run timeline과 audit/export details는 password/token/secret/credential류 key를 `<redacted>`로 마스킹한다.
 
@@ -78,6 +79,7 @@
 - release readiness app context: 등록 application, repo, branch, manifest path, cluster context 누락을 dispatch 전에 차단
 - live gate 입력: plan/step 단위 approval granted, change ticket, Safe PR URL/ready 값을 UI에서 설정
 - release alerts panel: `/release-flows`에서 alert channel 개수/활성 채널/severity 요약을 확인하고 `/settings/alerts`로 이동
+- alert channel validation: 저장된 alert channel의 마지막 테스트 통과/실패와 검증 시각을 `/settings/alerts` 목록에서 확인
 - release approval card: waiting approval step에 기존 approval grant/reject UI를 노출하고 승인 후 release run/audit query 갱신
 - active run lock: 같은 저장된 release plan에 active run이 있으면 start/dispatch를 409 blocker로 차단
 - readiness active run lock: 저장된 plan의 active run blocker를 실행 전 readiness에도 표시

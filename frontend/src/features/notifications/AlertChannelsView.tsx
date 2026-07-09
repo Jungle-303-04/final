@@ -72,6 +72,17 @@ export default function AlertChannelsView() {
       cell: item => <Badge tone={item.enabled ? 'success' : 'neutral'}>{item.enabled ? '활성' : '비활성'}</Badge>,
     },
     {
+      id: 'validation',
+      header: '검증',
+      sortValue: item => item.last_tested_at ?? '',
+      cell: item => (
+        <div className="grid gap-1">
+          <Badge tone={testStatusTone(item.last_test_status)}>{testStatusLabel(item.last_test_status)}</Badge>
+          <span className="text-caption text-muted">{timeAgo(item.last_tested_at ?? '') || '기록 없음'}</span>
+        </div>
+      ),
+    },
+    {
       id: 'updated',
       header: '수정',
       sortValue: item => item.updated_at ?? item.created_at ?? '',
@@ -120,6 +131,7 @@ export default function AlertChannelsView() {
     if (!validation.valid) return;
     testChannel.mutate(
       {
+        channel_id: form.channel_id,
         name: form.name.trim(),
         kind: 'webhook',
         url: form.url.trim(),
@@ -311,6 +323,18 @@ function severityLabel(value: string): string {
 function severityTone(value: string): 'info' | 'warning' | 'danger' {
   if (value === 'info') return 'info';
   if (value === 'critical') return 'danger';
+  return 'warning';
+}
+
+function testStatusLabel(value?: string | null): string {
+  if (value === 'passed') return '검증 통과';
+  if (value === 'failed') return '검증 실패';
+  return '미검증';
+}
+
+function testStatusTone(value?: string | null): 'success' | 'danger' | 'warning' {
+  if (value === 'passed') return 'success';
+  if (value === 'failed') return 'danger';
   return 'warning';
 }
 

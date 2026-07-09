@@ -60,6 +60,7 @@ async def upsert_alert_channel(
 async def test_alert_channel(
     payload: AlertChannelTestRequest,
     current: Any = Depends(require_admin_session),
+    db: Any = Depends(get_db),
 ) -> AlertChannelTestResponse:
     workspace_id = getattr(current, "workspace_id", DEFAULT_WORKSPACE_ID)
     alert = AlertRequestedBody(
@@ -72,20 +73,65 @@ async def test_alert_channel(
     )
     result = await post_alert_webhook(payload.url, alert)
     if result.delivered:
+        channel = record_channel_test_result(
+            db,
+            workspace_id,
+            payload.channel_id,
+            status="passed",
+            detail="테스트 알림을 전송했습니다.",
+            status_code=result.status_code,
+        )
         return AlertChannelTestResponse(
             valid=True,
             delivered=True,
             detail="테스트 알림을 전송했습니다.",
             status_code=result.status_code,
+            channel=channel,
         )
     code = "timeout" if result.error == "timeout" else "delivery_failed"
+    channel = record_channel_test_result(
+        db,
+        workspace_id,
+        payload.channel_id,
+        status="failed",
+        detail="테스트 알림 전송에 실패했습니다.",
+        status_code=result.status_code,
+    )
     return AlertChannelTestResponse(
         valid=False,
         delivered=False,
         code=code,
         detail="테스트 알림 전송에 실패했습니다.",
         status_code=result.status_code,
+        channel=channel,
     )
+
+
+def record_channel_test_result(
+    db: Any,
+    workspace_id: str,
+    channel_id: str,
+    *,
+    status: str,
+    detail: str,
+    status_code: int | None,
+) -> AlertChannelResponse | None:
+    if not channel_id:
+        return None
+    recorder = getattr(db, "record_alert_channel_test", None)
+    if not callable(recorder):
+        return None
+    try:
+        row = recorder(
+            workspace_id,
+            channel_id,
+            status=status,
+            detail=detail,
+            status_code=status_code,
+        )
+    except LookupError as exc:
+        raise HTTPException(status_code=NOT_FOUND_CODE, detail=CHANNEL_NOT_FOUND) from exc
+    return AlertChannelResponse(**row)
 
 
 @router.delete(gateway_routes.ALERT_CHANNEL_PATH, status_code=204, response_model=None)

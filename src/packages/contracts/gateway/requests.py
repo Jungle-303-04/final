@@ -457,6 +457,7 @@ class AlertChannelUpsertRequest(StrictModel):
 
 
 class AlertChannelTestRequest(StrictModel):
+    channel_id: str = ""
     name: str = Field(default="test", min_length=1, max_length=120)
     kind: Literal["webhook"] = "webhook"
     url: str = Field(min_length=1, max_length=2000)
