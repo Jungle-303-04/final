@@ -689,6 +689,46 @@ async function inspectSourceEnglishGuard() {
     {
       file: "src/examples/229-heatmap-selection-summary.example.tsx",
       fragments: ["selected</strong>", "Total {selected"]
+    },
+    {
+      file: "src/examples/230-react-flow-undo-redo.example.tsx",
+      fragments: ["Undoable nodes", ">Move<", ">Undo<"]
+    },
+    {
+      file: "src/examples/231-command-role-switcher.example.tsx",
+      fragments: ["Viewer", "Maintainer", "Admin", "Open logs", "Copy run link", "Rerun job", "Approve deploy", "Rotate secret", "Delete preview", " actions..."]
+    },
+    {
+      file: "src/examples/232-command-snippet-insert.example.tsx",
+      fragments: ["Explain the root cause", "Create the smallest safe patch", "Summarize this run", "Ask AI to:", "Insert snippet", 'heading="Snippets"']
+    },
+    {
+      file: "src/examples/233-command-query-history.example.tsx",
+      fragments: ["status:failed owner:me", "branch:main visual", "deploy preview", "Search or reuse a query", "Recent queries"]
+    },
+    {
+      file: "src/examples/234-command-route-preview.example.tsx",
+      fragments: ['"/runs"', '"/runs/failed"', "Go to route", 'heading="Routes"', "Route preview"]
+    },
+    {
+      file: "src/examples/235-command-access-request.example.tsx",
+      fragments: ["Production deploy is restricted", "Search restricted actions", 'heading="Restricted"', "Access request sent to admins", "Request production deploy access", ">locked<", ">Access<"]
+    },
+    {
+      file: "src/examples/236-sonner-connection-quality.example.tsx",
+      fragments: ['"Good"', '"Degraded"', "Realtime updates degraded", "Polling fallback is active", "Connection:", "Realtime job events are monitored", "Simulate Degrade"]
+    },
+    {
+      file: "src/examples/237-sonner-undo-stack.example.tsx",
+      fragments: [" archived", 'label: "Undo"', "Archive Run"]
+    },
+    {
+      file: "src/examples/238-sonner-import-summary.example.tsx",
+      fragments: ["Import finished", "rows imported", "rows skipped", "Show Import Summary"]
+    },
+    {
+      file: "src/examples/239-sonner-silent-mode.example.tsx",
+      fragments: ["Toast channel is active", "Notification captured silently", "Visible notification", "Silent mode", "Visible mode", "Toggle Silent", ">Notify<"]
     }
   ];
   const matches = [];
@@ -970,9 +1010,19 @@ async function inspectEnglishSamples(page, url) {
     ["드릴다운 탐색", "example-drilldown-query-builder"],
     ["드릴다운 탐색", "example-drilldown-permission-scope"],
     ["데이터 시각화", "example-heatmap-threshold-editor"],
-    ["데이터 시각화", "example-heatmap-selection-summary"]
+    ["데이터 시각화", "example-heatmap-selection-summary"],
+    ["플로우 빌더", "example-react-flow-undo-redo"],
+    ["오버레이/명령", "example-command-role-switcher"],
+    ["오버레이/명령", "example-command-snippet-insert"],
+    ["오버레이/명령", "example-command-query-history"],
+    ["오버레이/명령", "example-command-route-preview"],
+    ["오버레이/명령", "example-command-access-request"],
+    ["작업 진행/로그", "example-sonner-connection-quality"],
+    ["작업 진행/로그", "example-sonner-undo-stack"],
+    ["작업 진행/로그", "example-sonner-import-summary"],
+    ["작업 진행/로그", "example-sonner-silent-mode"]
   ];
-  const forbidden = /\b(Open|Close|Show|Hide|Search|Loading|Current|Selected|Dashboard|Create|Cancel|Retry|Next|Previous|Expand|Collapse|Focus|Input|Logs|Answer|Status|Resources|Jobs|Steps|Command|Filter|Recent|Approval|Matrix|Launch|Health|Edge|Done|Running|Failed|Pending|Allowed|Blocked|Owner|Online|Offline|Reconnect|Confirm|Delete|Danger|Safe|Ready|Exportable|Draft|Save)\b/i;
+  const forbidden = /\b(Open|Close|Show|Hide|Search|Loading|Current|Selected|Dashboard|Create|Cancel|Retry|Next|Previous|Expand|Collapse|Focus|Input|Logs|Answer|Status|Resources|Jobs|Steps|Command|Filter|Recent|Approval|Matrix|Launch|Health|Edge|Done|Running|Failed|Pending|Allowed|Blocked|Owner|Online|Offline|Reconnect|Confirm|Delete|Danger|Safe|Ready|Exportable|Draft|Save|Move|Undo|Viewer|Maintainer|Admin|Snippets|Routes|Access|Good|Degraded|Archive|Import|Silent|Visible|Notify)\b/i;
   const violations = [];
 
   for (const [category, testId] of samples) {
