@@ -1597,6 +1597,17 @@ function formatReleaseRunReport(run: ReleaseRun, handoff?: ReleaseRunHandoff): s
     lines.push(...handoff.next_actions.slice(0, 5).map(action => `- ${action.enabled ? '[ ]' : '[blocked]'} ${action.label}${action.reason ? `: ${action.reason}` : ''}`));
     lines.push('', 'Checks:');
     lines.push(...handoff.checks.slice(0, 8).map(check => `- ${check.name}: ${check.status} (${check.message})`));
+    if (handoff.verification) {
+      lines.push('', 'Verification:', `- ${handoff.verification.status}: ${handoff.verification.message}`);
+      lines.push(...handoff.verification.evidence.slice(0, 3).map(item => `- evidence: ${item}`));
+      lines.push(...(handoff.verification.jobs ?? []).slice(0, 3).map(job => `- job: ${verificationJobSummary(job)}`));
+      if (handoff.verification.override_reason) lines.push(`- override: ${handoff.verification.override_reason}`);
+    }
+    if (handoff.abort_criteria) {
+      lines.push('', 'Rollback criteria:', `- ${handoff.abort_criteria.status}: ${handoff.abort_criteria.message}`);
+      lines.push(...handoff.abort_criteria.criteria.slice(0, 3).map(item => `- ${item}`));
+      if (handoff.abort_criteria.override_reason) lines.push(`- override: ${handoff.abort_criteria.override_reason}`);
+    }
   }
   lines.push('', 'Steps:');
   lines.push(...run.steps.slice(0, 12).map(step => {
