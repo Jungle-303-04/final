@@ -220,6 +220,14 @@ async def dispatch_release_plan(
     preview = build_release_plan_preview(body)
     blockers = list(preview.get("blockers", []))
     blockers.extend(
+        release_dispatch_context_blockers(
+            body,
+            steps_for_wave(body, preview, wave),
+            db,
+            workspace_id,
+        )
+    )
+    blockers.extend(
         release_execution_blockers(body, preview, wave, workspace_id=workspace_id)
     )
     if blockers:
@@ -257,6 +265,14 @@ async def start_release_plan(
     preview = build_release_plan_preview(body)
     first_wave = first_preview_wave(preview)
     blockers = list(preview.get("blockers", []))
+    blockers.extend(
+        release_dispatch_context_blockers(
+            body,
+            steps_for_wave(body, preview, first_wave),
+            db,
+            workspace_id,
+        )
+    )
     blockers.extend(
         release_execution_blockers(body, preview, first_wave, workspace_id=workspace_id)
     )
@@ -701,7 +717,8 @@ async def dispatch_wave_steps(
             detail={"message": RELEASE_PLAN_BLOCKED, "blockers": [f"wave {wave} has no steps"]},
         )
 
-    blockers = release_execution_blockers(plan, preview, wave, workspace_id=workspace_id)
+    blockers = release_dispatch_context_blockers(plan, selected_steps, db, workspace_id)
+    blockers.extend(release_execution_blockers(plan, preview, wave, workspace_id=workspace_id))
     if blockers:
         raise HTTPException(
             status_code=HTTP_CONFLICT,
@@ -799,6 +816,12 @@ def release_readiness_from_plan(
     profile = execution_profile(plan)
     preview_blockers = [str(item) for item in preview.get("blockers", [])]
     required_blockers = required_release_input_blockers(plan)
+    context_blockers = release_dispatch_context_blockers(
+        plan,
+        [step for step in plan.get("steps", []) if isinstance(step, dict)],
+        db,
+        workspace_id,
+    )
     execution_blockers = release_execution_blockers(
         plan,
         preview,
@@ -826,6 +849,15 @@ def release_readiness_from_plan(
             if required_blockers
             else "All release steps have the required dispatch inputs.",
             required_blockers,
+        ),
+        readiness_check(
+            "plan.application_context",
+            "Application context",
+            "blocked" if context_blockers else "passed",
+            "Registered application, repository, manifest, and cluster context are required."
+            if context_blockers
+            else "All release steps resolve to registered application deployment context.",
+            context_blockers,
         ),
         readiness_check(
             "live.dispatch_gate",
@@ -905,6 +937,51 @@ def required_release_input_blockers(plan: dict[str, Any]) -> list[str]:
             if not str(config.get(field) or settings.get(field) or "").strip():
                 blockers.append(f"{label} is missing {field}.")
     return blockers
+
+
+def release_dispatch_context_blockers(
+    plan: dict[str, Any],
+    steps: list[dict[str, Any]],
+    db: Any,
+    workspace_id: str,
+) -> list[str]:
+    if not callable(getattr(db, "get_application", None)):
+        return []
+    blockers: list[str] = []
+    for index, step in enumerate(steps, start=1):
+        application_id = str(step.get("application_id") or "").strip()
+        label = str(step.get("name") or application_id or f"step {index}")
+        if not application_id:
+            blockers.append(f"{label} is missing application_id.")
+            continue
+        application = db.get_application(workspace_id, application_id)
+        if not application:
+            blockers.append(f"Application {application_id} is not registered in this workspace.")
+            continue
+        config = step_config(step)
+        for field, display in (
+            ("repo_ref", "repository"),
+            ("branch", "branch"),
+            ("manifest_path", "manifest path"),
+            ("cluster_id", "cluster"),
+        ):
+            if not dispatch_context_value(config, application, field):
+                blockers.append(f"{label} is missing {display} context.")
+    return blockers
+
+
+def dispatch_context_value(
+    config: dict[str, Any],
+    application: dict[str, Any],
+    field: str,
+) -> str:
+    if field == "branch":
+        value = config.get("branch") or application.get("branch") or application.get("default_branch")
+    elif field == "manifest_path":
+        value = config.get("manifest_path") or application.get("manifest_path")
+    else:
+        value = config.get(field) or application.get(field)
+    return str(value or "").strip()
 
 
 def enabled_alert_channels(db: Any, workspace_id: str) -> list[dict[str, Any]]:

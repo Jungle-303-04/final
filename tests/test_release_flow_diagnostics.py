@@ -284,6 +284,82 @@ def test_release_readiness_passes_demo_with_alert_channel(monkeypatch) -> None:
     }
 
 
+def test_release_readiness_blocks_unregistered_application(monkeypatch) -> None:
+    db = ReleaseReadinessApplicationDb(
+        channels=[{"channel_id": "chan-a", "enabled": True}],
+        applications={},
+    )
+    monkeypatch.setattr(release_router, "require_plan_application_read_access", lambda *_args: None)
+
+    current = SimpleNamespace(workspace_id="workspace-a", user_id="operator", roles=())
+    response = asyncio.run(
+        release_router.check_release_readiness(
+            release_router.ReleasePlanUpsertRequest(
+                name="Checkout release",
+                settings={"runtime_mode": "demo", "approval_policy": "auto_safe"},
+                steps=[
+                    {
+                        "application_id": "checkout",
+                        "name": "Checkout",
+                        "position": 0,
+                        "config": {
+                            "commit_sha": "abc1234",
+                            "image": "ghcr.io/example/checkout:v2",
+                        },
+                    }
+                ],
+            ),
+            current=current,
+            db=db,
+        )
+    )
+
+    assert response.ready is False
+    assert any("Application checkout is not registered" in item for item in response.blockers)
+    assert any(check["check_id"] == "plan.application_context" for check in response.checks)
+
+
+def test_release_readiness_uses_registered_application_context(monkeypatch) -> None:
+    db = ReleaseReadinessApplicationDb(
+        channels=[{"channel_id": "chan-a", "enabled": True}],
+        applications={
+            "checkout": {
+                "repo_ref": "org/checkout",
+                "branch": "main",
+                "manifest_path": "deploy/app.yaml",
+                "cluster_id": "target",
+            }
+        },
+    )
+    monkeypatch.setattr(release_router, "require_plan_application_read_access", lambda *_args: None)
+
+    current = SimpleNamespace(workspace_id="workspace-a", user_id="operator", roles=())
+    response = asyncio.run(
+        release_router.check_release_readiness(
+            release_router.ReleasePlanUpsertRequest(
+                name="Checkout release",
+                settings={"runtime_mode": "demo", "approval_policy": "auto_safe"},
+                steps=[
+                    {
+                        "application_id": "checkout",
+                        "name": "Checkout",
+                        "position": 0,
+                        "config": {
+                            "commit_sha": "abc1234",
+                            "image": "ghcr.io/example/checkout:v2",
+                        },
+                    }
+                ],
+            ),
+            current=current,
+            db=db,
+        )
+    )
+
+    assert response.ready is True
+    assert response.blockers == []
+
+
 def test_release_run_event_serialization_redacts_sensitive_details() -> None:
     event = serialize_release_run_event(
         {
@@ -366,6 +442,11 @@ class ReleaseDispatchDb:
 
     def mark_release_run_step_dispatched(self, *args: object, **kwargs: object) -> None:
         self.dispatched.append({"args": args, **kwargs})
+
+
+class MissingApplicationDispatchDb(ReleaseDispatchDb):
+    def get_application(self, _workspace_id: str, _application_id: str) -> None:
+        return None
 
 
 class FailingEventGateway:
@@ -570,6 +651,24 @@ class ReleaseReadinessDb:
         if only_enabled:
             return [channel for channel in self.channels if channel.get("enabled", True)]
         return self.channels
+
+
+class ReleaseReadinessApplicationDb(ReleaseReadinessDb):
+    def __init__(
+        self,
+        *,
+        channels: list[dict[str, object]],
+        applications: dict[str, dict[str, object]],
+    ) -> None:
+        super().__init__(channels=channels)
+        self.applications = applications
+
+    def get_application(
+        self,
+        _workspace_id: str,
+        application_id: str,
+    ) -> dict[str, object] | None:
+        return self.applications.get(application_id)
 
 
 def test_yaml_diagnostics_reports_parser_location() -> None:
@@ -1057,6 +1156,54 @@ def test_dispatch_wave_steps_defaults_to_dry_run_without_publishing(monkeypatch)
     assert accepted[0]["event"]["execution_profile"]["side_effects"] is False
     assert db.dispatched[0]["details"]["runtime_mode"] == "demo"
     assert db.dispatched[0]["details"]["side_effects"] is False
+
+
+def test_dispatch_wave_steps_blocks_unregistered_application(monkeypatch) -> None:
+    plan = {
+        "plan_id": "plan-a",
+        "name": "storefront",
+        "settings": {},
+        "steps": [
+            {
+                "step_id": "step-a",
+                "application_id": "missing-app",
+                "name": "checkout",
+                "config": {
+                    "branch": "main",
+                    "commit_sha": "abc123",
+                    "image": "ghcr.io/example/app-a:v2",
+                    "manifest_path": "deploy/app.yaml",
+                },
+            }
+        ],
+    }
+    preview = build_release_plan_preview(plan)
+    db = MissingApplicationDispatchDb()
+    events = FailingEventGateway()
+    current = SimpleNamespace(user_id="user-a", roles=("operator",))
+    monkeypatch.setattr(release_router, "require_cluster_access", lambda *_args, **_kwargs: None)
+
+    with pytest.raises(HTTPException) as raised:
+        asyncio.run(
+            release_router.dispatch_wave_steps(
+                plan,
+                preview,
+                1,
+                "workspace-a",
+                current,
+                db,
+                events,
+                run_id="run-a",
+            )
+        )
+
+    assert raised.value.status_code == 409
+    assert any(
+        "Application missing-app is not registered" in blocker
+        for blocker in raised.value.detail["blockers"]
+    )
+    assert events.calls == 0
+    assert db.dispatched == []
 
 
 def test_dispatch_wave_steps_blocks_live_without_backend_gate(monkeypatch) -> None:

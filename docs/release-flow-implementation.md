@@ -72,6 +72,7 @@
 - release audit UI CSV export
 
 - release readiness 조회: preview blocker, dispatch 필수 입력값, live gate, alert channel, retry policy, audit/redaction 상태
+- release readiness app context: 등록 application, repo, branch, manifest path, cluster context 누락을 dispatch 전에 차단
 - live gate 입력: plan/step 단위 approval granted, change ticket, Safe PR URL/ready 값을 UI에서 설정
 - release alerts panel: `/release-flows`에서 alert channel 개수/활성 채널/severity 요약을 확인하고 `/settings/alerts`로 이동
 
