@@ -23,6 +23,7 @@ from domains.release_flow.preview import build_release_plan_preview
 from domains.release_flow.repository import (
     derive_release_plan_id,
     github_release_metadata,
+    serialize_release_run,
     release_run_steps_from_plan,
     serialize_release_run_event,
     release_step_values,
@@ -533,6 +534,39 @@ def test_release_run_event_serialization_redacts_sensitive_details() -> None:
     }
 
 
+def test_release_run_serialization_includes_attention_reasons() -> None:
+    run = serialize_release_run(
+        {
+            "run_id": "run-attention",
+            "status": "running",
+            "settings": {},
+            "github": {},
+            "rollback": {},
+            "health": {},
+        },
+        steps=[
+            {
+                "run_step_id": "step-1",
+                "application_id": "checkout",
+                "name": "Checkout",
+                "status": "failed",
+                "health": {"status": "unhealthy"},
+            }
+        ],
+    )
+
+    assert run["derived_status"] == "failed"
+    assert run["attention"] == {
+        "required": True,
+        "reasons": [
+            "Release run has failed steps.",
+            "Release health is unhealthy.",
+            "Checkout failed.",
+            "Checkout health is unhealthy.",
+        ],
+    }
+
+
 def test_release_run_summary_counts_derived_statuses() -> None:
     summary = release_router.release_run_summary_from_runs(
         [
@@ -544,6 +578,7 @@ def test_release_run_summary_counts_derived_statuses() -> None:
                 "derived_status": "failed",
                 "settings": {"runtime_mode": "live"},
                 "health": {"status": "unhealthy"},
+                "attention": {"required": True, "reasons": ["Checkout failed."]},
             },
             {
                 "run_id": "run-3",
@@ -577,6 +612,7 @@ def test_release_run_summary_counts_derived_statuses() -> None:
         "run_id": "run-2",
         "plan_id": "plan-a",
         "status": "failed",
+        "attention_reasons": ["Checkout failed."],
     }
 
 
