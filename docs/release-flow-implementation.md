@@ -149,6 +149,7 @@
 - run report copy: 선택한 release run의 상태, attention reason, handoff next action, step 상태, 최근 timeline을 Markdown으로 복사해 교대/사후 리뷰 노트에 공유
 - run report API: `GET /release-runs/{run_id}/report`가 권한 확인된 run/handoff/redacted audit을 서버에서 Markdown report로 묶어 UI copy와 운영 증적에 사용
 - run report export: `GET /release-runs/{run_id}/report/export`와 UI Download report 버튼으로 같은 Markdown report를 파일로 내려받아 이슈/교대 문서에 첨부
+- run report checks: report Markdown에 handoff checks(mode/health/attention/rollback/verification/abort criteria)를 포함해 교대자가 passed/warning/blocked 상태를 파일만 보고 확인
 
 ## 검증
 - `py -3 -m pytest -q tests/test_release_flow_diagnostics.py tests/test_release_flow_projection.py`

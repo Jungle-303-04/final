@@ -483,6 +483,8 @@ def test_get_release_run_report_includes_redacted_audit_and_markdown(monkeypatch
     }
     assert report["run_id"] == "release-run-1"
     assert "Release run report: Checkout release" in report["markdown"]
+    assert "Checks:" in report["markdown"]
+    assert "verification: passed" in report["markdown"]
     assert "Recent audit:" in report["markdown"]
     assert "workflow.run.failed" in report["markdown"]
     assert report["audit_events"][0]["details"]["token"] == "<redacted>"
@@ -509,6 +511,8 @@ def test_export_release_run_report_returns_markdown_attachment(monkeypatch) -> N
     assert response.media_type == "text/markdown; charset=utf-8"
     assert response.headers["content-disposition"] == 'attachment; filename="release-run-release-run-1.md"'
     assert "## Release run report: Checkout release" in body
+    assert "Checks:" in body
+    assert "verification: passed" in body
     assert "Recent audit:" in body
     assert "raw-token" not in body
     assert "super-secret" not in body

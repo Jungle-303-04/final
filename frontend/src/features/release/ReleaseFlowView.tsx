@@ -1595,6 +1595,8 @@ function formatReleaseRunReport(run: ReleaseRun, handoff?: ReleaseRunHandoff): s
   if (handoff) {
     lines.push('', 'Operator handoff:', `- ${handoff.headline}`, `- Severity: ${handoff.severity}`);
     lines.push(...handoff.next_actions.slice(0, 5).map(action => `- ${action.enabled ? '[ ]' : '[blocked]'} ${action.label}${action.reason ? `: ${action.reason}` : ''}`));
+    lines.push('', 'Checks:');
+    lines.push(...handoff.checks.slice(0, 8).map(check => `- ${check.name}: ${check.status} (${check.message})`));
   }
   lines.push('', 'Steps:');
   lines.push(...run.steps.slice(0, 12).map(step => {
