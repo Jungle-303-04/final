@@ -856,6 +856,7 @@ class ReleaseRunSummaryResponse(StrictModel):
     verification_failed_runs: int = 0
     verification_pending_timeout_runs: int = 0
     policy_override_runs: int = 0
+    policy_override_breakdown: dict[str, int] = Field(default_factory=dict)
     active_change_freeze_runs: int = 0
     change_freeze_override_runs: int = 0
     stale_runs: int = 0

@@ -2312,6 +2312,10 @@ def test_release_run_summary_counts_derived_statuses() -> None:
     assert summary["verification_failed_runs"] == 1
     assert summary["verification_pending_timeout_runs"] == 1
     assert summary["policy_override_runs"] == 1
+    assert summary["policy_override_breakdown"] == {
+        "Change freeze": 1,
+        "Runbook": 1,
+    }
     assert summary["active_change_freeze_runs"] == 1
     assert summary["change_freeze_override_runs"] == 1
     assert summary["stale_runs"] == 1
@@ -2571,6 +2575,18 @@ def test_release_run_filter_supports_attention_stale_live_and_status() -> None:
         run["run_id"]
         for run in release_router.filter_release_runs(runs, policy_override_only=True)
     ] == ["run-live"]
+    assert [
+        run["run_id"]
+        for run in release_router.filter_release_runs(runs, policy_override_source="Diagnostics")
+    ] == ["run-live"]
+    assert [
+        run["run_id"]
+        for run in release_router.filter_release_runs(runs, policy_override_source="change-freeze")
+    ] == ["run-live"]
+    assert [
+        run["run_id"]
+        for run in release_router.filter_release_runs(runs, policy_override_source="Runbook")
+    ] == []
     assert [
         run["run_id"]
         for run in release_router.filter_release_runs(runs, change_freeze_override_only=True)
