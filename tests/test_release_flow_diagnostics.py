@@ -426,6 +426,50 @@ def test_release_readiness_uses_registered_application_context(monkeypatch) -> N
     assert response.blockers == []
 
 
+def test_release_readiness_blocks_saved_plan_with_active_run(monkeypatch) -> None:
+    db = ReleaseReadinessApplicationDb(
+        channels=[{"channel_id": "chan-a", "enabled": True}],
+        applications={
+            "checkout": {
+                "repo_ref": "org/checkout",
+                "branch": "main",
+                "manifest_path": "deploy/app.yaml",
+                "cluster_id": "target",
+            }
+        },
+    )
+    db.active_plan_ids.add("plan-a")
+    monkeypatch.setattr(release_router, "require_plan_application_read_access", lambda *_args: None)
+
+    current = SimpleNamespace(workspace_id="workspace-a", user_id="operator", roles=())
+    response = asyncio.run(
+        release_router.check_release_readiness(
+            release_router.ReleasePlanUpsertRequest(
+                plan_id="plan-a",
+                name="Checkout release",
+                settings={"runtime_mode": "demo", "approval_policy": "auto_safe"},
+                steps=[
+                    {
+                        "application_id": "checkout",
+                        "name": "Checkout",
+                        "position": 0,
+                        "config": {
+                            "commit_sha": "abc1234",
+                            "image": "ghcr.io/example/checkout:v2",
+                        },
+                    }
+                ],
+            ),
+            current=current,
+            db=db,
+        )
+    )
+
+    assert response.ready is False
+    assert any("already has an active run" in item for item in response.blockers)
+    assert any(check["check_id"] == "plan.active_run_lock" for check in response.checks)
+
+
 def test_release_run_event_serialization_redacts_sensitive_details() -> None:
     event = serialize_release_run_event(
         {
@@ -732,6 +776,7 @@ class ReleaseReadinessApplicationDb(ReleaseReadinessDb):
     ) -> None:
         super().__init__(channels=channels)
         self.applications = applications
+        self.active_plan_ids: set[str] = set()
 
     def get_application(
         self,
@@ -739,6 +784,9 @@ class ReleaseReadinessApplicationDb(ReleaseReadinessDb):
         application_id: str,
     ) -> dict[str, object] | None:
         return self.applications.get(application_id)
+
+    def has_active_release_runs(self, _workspace_id: str, plan_id: str) -> bool:
+        return plan_id in self.active_plan_ids
 
 
 def test_yaml_diagnostics_reports_parser_location() -> None:
