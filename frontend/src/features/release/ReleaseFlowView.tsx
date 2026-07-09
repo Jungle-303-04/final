@@ -173,6 +173,16 @@ const STEP_GATES = [
   ['manual', 'Manual approval'],
   ['safe_pr', 'Safe PR'],
 ];
+const AUDIT_EVENT_FILTERS = [
+  ['', 'All audit events'],
+  ['workflow.run.failed', 'Workflow failed'],
+  ['approval.requested', 'Approval requested'],
+  ['approval.rejected', 'Approval rejected'],
+  ['rollback.requested', 'Rollback requested'],
+  ['release.cancelled', 'Cancelled'],
+  ['wave.dispatched', 'Wave dispatched'],
+  ['evidence.queued', 'Evidence queued'],
+];
 
 type ReleaseNodeData = {
   step: ReleasePlanStep;
@@ -296,14 +306,15 @@ export default function ReleaseFlowView() {
   const [tab, setTab] = useState('plan');
   const [runFilter, setRunFilter] = useState<ReleaseRunFilter>('all');
   const [selectedRunId, setSelectedRunId] = useState('');
+  const [auditEventType, setAuditEventType] = useState('');
   const { data: planDiagnosticsData, mutate: diagnosePlan } = useDiagnostics();
   const { data: yamlDiagnosticsData, mutate: diagnoseYaml } = useDiagnostics();
   const { data: releasePreviewData, isPending: releasePreviewPending, mutate: previewRelease } = useReleasePreview();
   const { data: releaseReadinessData, isPending: releaseReadinessPending, mutate: checkReadiness } = useReleaseReadiness();
   const runsQ = useReleaseRuns(plan?.plan_id, runFilter);
   const summaryQ = useReleaseRunSummary(plan?.plan_id);
-  const auditQ = useReleaseAudit(plan?.plan_id, selectedRunId);
-  const exportAudit = useReleaseAuditExport(plan?.plan_id, selectedRunId);
+  const auditQ = useReleaseAudit(plan?.plan_id, selectedRunId, auditEventType);
+  const exportAudit = useReleaseAuditExport(plan?.plan_id, selectedRunId, auditEventType);
   const dispatchRelease = useDispatchReleasePlan();
   const startRelease = useStartReleasePlan();
   const advanceRun = useAdvanceReleaseRun();
@@ -553,6 +564,8 @@ export default function ReleaseFlowView() {
                 loading={auditQ.isPending}
                 exporting={exportAudit.isPending}
                 scopedRunId={selectedRunId}
+                eventType={auditEventType}
+                onEventTypeChange={setAuditEventType}
                 onExport={() => exportAudit.mutate()}
               />
               <DiagnosticsPanel diagnostics={planDiagnosticsData?.diagnostics ?? []} />
@@ -1183,21 +1196,33 @@ function AuditPanel({
   loading,
   exporting,
   scopedRunId,
+  eventType,
+  onEventTypeChange,
   onExport,
 }: {
   events: ReleaseAuditEvent[];
   loading: boolean;
   exporting: boolean;
   scopedRunId: string;
+  eventType: string;
+  onEventTypeChange: (eventType: string) => void;
   onExport: () => void;
 }) {
   const scopeLabel = scopedRunId ? `Run ${shortId(scopedRunId)}` : 'Current plan';
+  const actions = (
+    <>
+      <Badge tone="info">{scopeLabel}</Badge>
+      {eventType && <Badge tone="warning">{eventType}</Badge>}
+      <Button size="sm" loading={exporting} disabled={exporting} onClick={onExport}>Export CSV</Button>
+    </>
+  );
   if (loading && events.length === 0) {
     return (
       <Card
         title="Audit"
-        actions={<><Badge tone="info">{scopeLabel}</Badge><Button size="sm" loading={exporting} disabled={exporting} onClick={onExport}>Export CSV</Button></>}
+        actions={actions}
       >
+        <AuditEventFilter value={eventType} onChange={onEventTypeChange} />
         <p className="release-flow__hint">Loading audit events...</p>
       </Card>
     );
@@ -1206,17 +1231,19 @@ function AuditPanel({
     return (
       <Card
         title="Audit"
-        actions={<><Badge tone="info">{scopeLabel}</Badge><Button size="sm" loading={exporting} disabled={exporting} onClick={onExport}>Export CSV</Button></>}
+        actions={actions}
       >
-        <p className="release-flow__hint">No audit events yet for {scopeLabel.toLowerCase()}.</p>
+        <AuditEventFilter value={eventType} onChange={onEventTypeChange} />
+        <p className="release-flow__hint">No audit events yet for {auditScopeText(scopeLabel, eventType)}.</p>
       </Card>
     );
   }
   return (
     <Card
       title="Audit"
-      actions={<><Badge tone="info">{scopeLabel}</Badge><Button size="sm" loading={exporting} disabled={exporting} onClick={onExport}>Export CSV</Button></>}
+      actions={actions}
     >
+      <AuditEventFilter value={eventType} onChange={onEventTypeChange} />
       <div className="release-flow__timeline">
         {events.slice(0, 8).map(event => (
           <div key={event.audit_id} className="release-flow__timeline-row">
@@ -1231,6 +1258,28 @@ function AuditPanel({
       </div>
     </Card>
   );
+}
+
+function AuditEventFilter({
+  value,
+  onChange,
+}: {
+  value: string;
+  onChange: (eventType: string) => void;
+}) {
+  return (
+    <Field label="Audit event">
+      <select className="input" value={value} onChange={event => onChange(event.target.value)}>
+        {AUDIT_EVENT_FILTERS.map(([key, label]) => (
+          <option key={key || 'all'} value={key}>{label}</option>
+        ))}
+      </select>
+    </Field>
+  );
+}
+
+function auditScopeText(scopeLabel: string, eventType: string): string {
+  return eventType ? `${scopeLabel.toLowerCase()} and ${eventType}` : scopeLabel.toLowerCase();
 }
 
 function draftPlan(apps: Application[]): ReleasePlan {

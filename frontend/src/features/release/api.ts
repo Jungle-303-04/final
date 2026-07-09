@@ -18,7 +18,8 @@ export const releaseKeys = {
   plans: () => ['release-plans'] as const,
   plan: (id: string) => ['release-plans', id] as const,
   runs: (planId?: string, filter: ReleaseRunFilter = 'all') => ['release-runs', planId ?? 'all', filter] as const,
-  audit: (planId?: string, runId?: string) => ['release-audit', planId ?? 'all', runId ?? 'all'] as const,
+  audit: (planId?: string, runId?: string, eventType?: string) =>
+    ['release-audit', planId ?? 'all', runId ?? 'all', eventType ?? 'all'] as const,
 };
 
 export const diagnosticsKeys = {
@@ -66,31 +67,40 @@ export const useReleaseRunSummary = (planId?: string) =>
     refetchInterval: 15_000,
   });
 
-export const useReleaseAudit = (planId?: string, runId?: string) =>
+export const useReleaseAudit = (planId?: string, runId?: string, eventType?: string) =>
   useQuery({
-    queryKey: releaseKeys.audit(planId, runId),
-    queryFn: () => get<{ events: ReleaseAuditEvent[] }>(releaseAuditPath(planId, runId, 50)),
+    queryKey: releaseKeys.audit(planId, runId, eventType),
+    queryFn: () => get<{ events: ReleaseAuditEvent[] }>(releaseAuditPath(planId, runId, eventType, 50)),
     select: d => d.events,
     refetchInterval: 30_000,
   });
 
-export function useReleaseAuditExport(planId?: string, runId?: string) {
+export function useReleaseAuditExport(planId?: string, runId?: string, eventType?: string) {
   const { push } = useToast();
   return useMutation({
-    mutationFn: () => getBlob(releaseAuditPath(planId, runId, 500, true)),
+    mutationFn: () => getBlob(releaseAuditPath(planId, runId, eventType, 500, true)),
     onSuccess: blob => {
-      downloadBlob(blob, `release-audit${runId ? `-${runId}` : planId ? `-${planId}` : ''}.csv`);
+      const scope = runId ? `-${runId}` : planId ? `-${planId}` : '';
+      const eventSuffix = eventType ? `-${eventType.replaceAll('.', '-')}` : '';
+      downloadBlob(blob, `release-audit${scope}${eventSuffix}.csv`);
       push({ tone: 'success', title: 'Audit export ready', description: 'Release audit CSV has been downloaded.' });
     },
     onError: err => push({ tone: 'danger', title: 'Audit export failed', description: (err as Error).message || 'Please try again.' }),
   });
 }
 
-function releaseAuditPath(planId?: string, runId?: string, limit = 50, exportCsv = false) {
+function releaseAuditPath(
+  planId?: string,
+  runId?: string,
+  eventType?: string,
+  limit = 50,
+  exportCsv = false,
+) {
   const params = new URLSearchParams();
   params.set('limit', String(limit));
   if (planId) params.set('plan_id', planId);
   if (runId) params.set('run_id', runId);
+  if (eventType) params.set('event_type', eventType);
   return `/release-audit${exportCsv ? '/export' : ''}?${params.toString()}`;
 }
 
