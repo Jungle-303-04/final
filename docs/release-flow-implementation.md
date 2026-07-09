@@ -205,6 +205,15 @@ AUTH_PASSWORD="<admin password>" \
 python scripts/release_flow_smoke.py --live-preflight
 ```
 
+운영/CI에서 새 production release 전에 가장 흔한 run 상태 위험을 한 번에 막으려면 `--production-preflight`를 붙인다. 이 모드는 run health, post-deploy verification, policy override, change freeze preflight를 모두 실행한다.
+
+```bash
+API_BASE_URL="https://k8s.woonyong.org/api" \
+AUTH_EMAIL="<admin email>" \
+AUTH_PASSWORD="<admin password>" \
+python scripts/release_flow_smoke.py --production-preflight
+```
+
 알림 채널이 실제로 validation alert를 받을 수 있는지 확인하려면 `--alert-preflight`를 붙인다. 이 모드는 enabled alert channel 중 요청 severity를 받을 수 있는 채널을 골라 `/alert-channels/test`를 호출하므로, 실제 Slack/webhook/온콜 테스트 메시지가 발송될 수 있다.
 
 ```bash

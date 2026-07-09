@@ -6,6 +6,8 @@ The default mode is read-only except for authenticated session creation. Pass
 --ops-rehearsal to also exercise safe operator actions against that demo run.
 The script never attempts live release dispatch. Pass --live-preflight only to
 check live readiness gates without starting or dispatching a release run.
+Pass --production-preflight to run the common production-readiness checks before
+starting another release.
 Pass --verification-preflight to fail fast when existing release runs already
 have failed or timed-out post-deploy verification jobs.
 Pass --run-health-preflight to fail fast when existing release runs still need
@@ -630,6 +632,14 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     parser.add_argument("--timeout", type=float, default=float(os.getenv("SMOKE_TIMEOUT_SECONDS", "15")))
     parser.add_argument("--demo-run", action="store_true", help="create a tracked demo release run")
     parser.add_argument(
+        "--production-preflight",
+        action="store_true",
+        help=(
+            "run run-health, verification, policy override, and change-freeze "
+            "preflight checks before release smoke"
+        ),
+    )
+    parser.add_argument(
         "--alert-preflight",
         action="store_true",
         help="send a validation alert through enabled alert channels",
@@ -734,8 +744,18 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     return parser.parse_args(argv)
 
 
+def apply_production_preflight_flags(args: argparse.Namespace) -> None:
+    if not args.production_preflight:
+        return
+    args.run_health_preflight = True
+    args.verification_preflight = True
+    args.policy_override_preflight = True
+    args.change_freeze_preflight = True
+
+
 def main(argv: list[str]) -> int:
     args = parse_args(argv)
+    apply_production_preflight_flags(args)
     api_base_url = derive_api_base_url(args)
     if not api_base_url or not args.email or not args.password:
         print("API_BASE_URL or BASE_URL, AUTH_EMAIL, and AUTH_PASSWORD are required", file=sys.stderr)
