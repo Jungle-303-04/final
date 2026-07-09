@@ -3248,6 +3248,16 @@ def release_run_report_markdown(
             marker = "[ ]" if action.get("enabled") is not False else "[blocked]"
             reason = f": {action.get('reason')}" if action.get("reason") else ""
             lines.append(f"- {marker} {action.get('label') or action.get('action') or 'action'}{reason}")
+    checks = handoff.get("checks") if isinstance(handoff.get("checks"), list) else []
+    if checks:
+        lines.extend(["", "Checks:"])
+        for check in checks[:8]:
+            if not isinstance(check, dict):
+                continue
+            lines.append(
+                f"- {check.get('name') or 'check'}: {check.get('status') or 'info'} "
+                f"({check.get('message') or 'No message.'})"
+            )
     steps = run.get("steps") if isinstance(run.get("steps"), list) else []
     if steps:
         lines.extend(["", "Steps:"])
