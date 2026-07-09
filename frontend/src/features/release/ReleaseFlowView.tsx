@@ -1354,6 +1354,7 @@ function RunFilterField({
         <option value="all">All runs</option>
         <option value="attention">Needs attention</option>
         <option value="stale">Stale</option>
+        <option value="active">Active</option>
         <option value="live">Live</option>
         <option value="failed">Failed</option>
         <option value="rollback_requested">Rollback requested</option>
@@ -1385,7 +1386,7 @@ function RunSummary({
   const statuses = Object.entries(summary.status_breakdown).sort(([left], [right]) => left.localeCompare(right));
   const opsSignals: RunSummarySignal[] = [
     { label: 'Needs attention', count: summary.attention_required_runs ?? 0, filter: 'attention' },
-    { label: 'Active', count: summary.active_runs ?? 0 },
+    { label: 'Active', count: summary.active_runs ?? 0, filter: 'active' },
     { label: 'Live', count: summary.live_runs ?? 0, filter: 'live' },
     { label: 'Rollback', count: summary.rollback_requested_runs ?? 0, filter: 'rollback_requested' },
     { label: 'Unhealthy', count: summary.unhealthy_runs ?? 0, filter: 'unhealthy' },

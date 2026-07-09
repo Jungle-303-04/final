@@ -2196,6 +2196,16 @@ def test_release_run_filter_supports_attention_stale_live_and_status() -> None:
             "status": "running",
             "steps": [{"health": {"status": "unhealthy"}}],
         },
+        {
+            "run_id": "run-succeeded",
+            "status": "succeeded",
+            "steps": [],
+        },
+        {
+            "run_id": "run-cancelled",
+            "status": "cancelled",
+            "steps": [],
+        },
     ]
 
     assert [
@@ -2210,6 +2220,18 @@ def test_release_run_filter_supports_attention_stale_live_and_status() -> None:
         run["run_id"]
         for run in release_router.filter_release_runs(runs, stale_only=True)
     ] == ["run-stale"]
+    assert [
+        run["run_id"]
+        for run in release_router.filter_release_runs(runs, active_only=True)
+    ] == [
+        "run-live",
+        "run-stale",
+        "run-verification-failed",
+        "run-verification-status-timeout",
+        "run-verification-timeout",
+        "run-unhealthy",
+        "run-step-unhealthy",
+    ]
     assert [
         run["run_id"]
         for run in release_router.filter_release_runs(runs, live_only=True)

@@ -99,6 +99,7 @@ async def list_release_runs(
     status: str | None = Query(default=None, max_length=80),
     attention_only: bool = Query(default=False),
     stale_only: bool = Query(default=False),
+    active_only: bool = Query(default=False),
     live_only: bool = Query(default=False),
     unhealthy_only: bool = Query(default=False),
     verification_failed_only: bool = Query(default=False),
@@ -116,6 +117,7 @@ async def list_release_runs(
         status=status,
         attention_only=attention_only,
         stale_only=stale_only,
+        active_only=active_only,
         live_only=live_only,
         unhealthy_only=unhealthy_only,
         verification_failed_only=verification_failed_only,
@@ -2838,6 +2840,7 @@ def filter_release_runs(
     status: str | None = None,
     attention_only: bool = False,
     stale_only: bool = False,
+    active_only: bool = False,
     live_only: bool = False,
     unhealthy_only: bool = False,
     verification_failed_only: bool = False,
@@ -2853,6 +2856,8 @@ def filter_release_runs(
         if attention_only and attention.get("required") is not True:
             continue
         if stale_only and attention.get("stale") is not True:
+            continue
+        if active_only and run_status in TERMINAL_RELEASE_RUN_STATUSES:
             continue
         if live_only and not release_run_has_live_side_effects(run):
             continue

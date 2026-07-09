@@ -17,6 +17,7 @@ export type ReleaseRunFilter =
   | 'all'
   | 'attention'
   | 'stale'
+  | 'active'
   | 'live'
   | 'failed'
   | 'rollback_requested'
@@ -66,6 +67,7 @@ function releaseRunsPath(planId?: string, filter: ReleaseRunFilter = 'all') {
   if (planId) params.set('plan_id', planId);
   if (filter === 'attention') params.set('attention_only', 'true');
   if (filter === 'stale') params.set('stale_only', 'true');
+  if (filter === 'active') params.set('active_only', 'true');
   if (filter === 'live') params.set('live_only', 'true');
   if (filter === 'unhealthy') params.set('unhealthy_only', 'true');
   if (filter === 'verification_failed') params.set('verification_failed_only', 'true');
