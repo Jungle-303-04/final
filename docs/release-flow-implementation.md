@@ -111,6 +111,7 @@
 - operator action controls: pause/resume/retry/rollback/cancel 액션은 운영자 사유를 입력받아 audit details에 남기고, `rollback_policy=disabled` run은 rollback 요청을 409 blocker로 차단
 - operator action reason presets: pause/resume/retry/rollback/cancel/notify prompt 기본 사유에 run id, status/health, attention reason을 반영해 audit 문맥을 개선
 - operator action disabled hints: advance/retry/pause/rollback/cancel/notify/delete 버튼이 비활성화된 이유를 tooltip으로 표시
+- destructive action confirmation: rollback/cancel은 운영 사유 입력 후 확인 dialog를 한 번 더 통과해야 API를 호출
 - run history selector: release run이 여러 개 쌓이면 최신 run뿐 아니라 이전 run의 상태, wave, timeline을 선택해서 확인하고 필요한 운영 액션을 수행
 - run deep link: 선택한 release run을 `run_id` query parameter로 보존하고 Copy link로 handoff/audit/timeline 컨텍스트를 공유
 - attention reasons: failed, waiting approval, rollback requested, paused, unhealthy run/step에서 `attention.required/reasons`를 파생해 API와 UI에서 왜 조치가 필요한지 바로 표시
