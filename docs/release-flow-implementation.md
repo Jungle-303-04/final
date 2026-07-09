@@ -69,6 +69,7 @@
 - 최신 run 상태, step 상태, GitHub/commit 링크, timeline 이벤트
 - 실패/승인대기/승인거절 운영 알림은 alert-worker가 설정된 채널로 전달
 - release audit 조회와 CSV export
+- release audit UI CSV export
 
 - release readiness 조회: preview blocker, dispatch 필수 입력값, live gate, alert channel, retry policy, audit/redaction 상태
 - live gate 입력: plan/step 단위 approval granted, change ticket, Safe PR URL/ready 값을 UI에서 설정

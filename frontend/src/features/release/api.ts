@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { get, del, post, put } from '@/shared/lib/api';
+import { get, getBlob, del, post, put } from '@/shared/lib/api';
 import { useToast } from '@/ui';
 import type {
   Diagnostic,
@@ -63,6 +63,18 @@ export const useReleaseAudit = (planId?: string) =>
     refetchInterval: 30_000,
   });
 
+export function useReleaseAuditExport(planId?: string) {
+  const { push } = useToast();
+  return useMutation({
+    mutationFn: () => getBlob(`/release-audit/export?limit=500${planId ? `&plan_id=${encodeURIComponent(planId)}` : ''}`),
+    onSuccess: blob => {
+      downloadBlob(blob, `release-audit${planId ? `-${planId}` : ''}.csv`);
+      push({ tone: 'success', title: 'Audit export ready', description: 'Release audit CSV has been downloaded.' });
+    },
+    onError: err => push({ tone: 'danger', title: 'Audit export failed', description: (err as Error).message || 'Please try again.' }),
+  });
+}
+
 export function useSaveReleasePlan(planId?: string) {
   const qc = useQueryClient();
   return useMutation({
@@ -88,6 +100,17 @@ export function useReleasePreview() {
   return useMutation({
     mutationFn: (plan: ReleasePlan) => post<{ preview: ReleasePlanPreview }>('/release-plans/preview', plan),
   });
+}
+
+function downloadBlob(blob: Blob, filename: string) {
+  const url = window.URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  window.URL.revokeObjectURL(url);
 }
 
 export function useReleaseReadiness() {
