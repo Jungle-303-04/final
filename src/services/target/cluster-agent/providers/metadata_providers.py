@@ -21,6 +21,26 @@ from packages.contracts.event_bus.interfaces import JsonObject
 from packages.contracts.target import TARGET_NAMESPACE
 from providers.base import ConfigReader
 
+SAFE_ANNOTATION_PREFIXES = (
+    "deployment.kubernetes.io/",
+    "kubectl.kubernetes.io/",
+    "ops.service/",
+    "prometheus.io/",
+)
+BLOCKED_ANNOTATION_NAMES = {
+    "kubectl.kubernetes.io/last-applied-configuration",
+}
+SENSITIVE_ANNOTATION_TOKENS = (
+    "authorization",
+    "credential",
+    "password",
+    "private",
+    "secret",
+    "token",
+)
+MAX_SAFE_ANNOTATIONS = 12
+MAX_ANNOTATION_VALUE_LENGTH = 200
+
 
 @dataclass(frozen=True)
 class MetadataQueryTarget:
@@ -291,6 +311,8 @@ def current_workload_snapshot(
             "name": meta.get("name"),
         },
         "deployment_labels": object_or_empty(meta.get("labels")),
+        "deployment_annotations": safe_annotations(meta),
+        "pod_template_annotations": safe_annotations(template_meta),
         "pod_template_labels": object_or_empty(template_meta.get("labels")),
         "managed_fields_managers": managed_field_managers(deployment),
         "containers": [
@@ -333,6 +355,40 @@ def probe_snapshot(value: Any) -> JsonObject:
         "failure_threshold": probe.get("failureThreshold"),
     }
     return {key: value for key, value in snapshot.items() if value is not None}
+
+
+def safe_annotations(item_metadata: JsonObject) -> JsonObject:
+    """Return safe annotation values for RCA context."""
+    annotations = object_or_empty(item_metadata.get("annotations"))
+    safe: JsonObject = {}
+
+    entries = sorted((str(key), value) for key, value in annotations.items())
+    for name, value in entries:
+        if len(safe) >= MAX_SAFE_ANNOTATIONS:
+            break
+        if not is_safe_annotation_name(name):
+            continue
+        safe[name] = annotation_value(value)
+
+    return safe
+
+
+def is_safe_annotation_name(name: str) -> bool:
+    """Check if an annotation name is safe to send."""
+    lowered = name.casefold()
+    if lowered in BLOCKED_ANNOTATION_NAMES:
+        return False
+    if any(token in lowered for token in SENSITIVE_ANNOTATION_TOKENS):
+        return False
+    return any(lowered.startswith(prefix) for prefix in SAFE_ANNOTATION_PREFIXES)
+
+
+def annotation_value(value: Any) -> str:
+    """Return one small annotation value."""
+    text = str(value)
+    if len(text) <= MAX_ANNOTATION_VALUE_LENGTH:
+        return text
+    return f"{text[:MAX_ANNOTATION_VALUE_LENGTH]}..."
 
 
 def managed_field_managers(deployment: JsonObject) -> list[str]:
