@@ -1280,6 +1280,10 @@ function RunHandoffPanel({ handoff, loading }: { handoff?: ReleaseRunHandoff; lo
             <div className="release-flow__handoff-list">
               <span>{handoff.verification.status}: {handoff.verification.message}</span>
               {handoff.verification.evidence.slice(0, 2).map(item => <span key={item}>{item}</span>)}
+              {Number(handoff.verification.job_count ?? 0) > 0 && <span>{handoff.verification.job_count} verification job(s) pending</span>}
+              {handoff.verification.jobs?.slice(0, 2).map(job => (
+                <span key={job.job_id}>{job.kind}: {verificationJobTarget(job.target)}</span>
+              ))}
               {handoff.verification.override_reason && <span>{handoff.verification.override_reason}</span>}
             </div>
           </div>
@@ -1310,6 +1314,10 @@ function handoffTone(value?: string) {
   if (value === 'success') return 'success' as const;
   if (value === 'neutral') return 'neutral' as const;
   return 'info' as const;
+}
+
+function verificationJobTarget(target: Record<string, unknown>) {
+  return getString(target.url) || getString(target.path) || getString(target.service_name) || 'verification target';
 }
 
 function RunFilterField({

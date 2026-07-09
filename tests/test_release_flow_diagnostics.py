@@ -269,6 +269,23 @@ def test_get_release_run_handoff_summarizes_operator_next_actions(monkeypatch) -
         "status": "passed",
         "message": "Post-deploy verification evidence is present (/readyz).",
         "evidence": ["/readyz"],
+        "jobs": [
+            {
+                "job_id": "release-verification-fixture",
+                "application_id": "checkout",
+                "name": "Checkout",
+                "kind": "kubernetes_health_check",
+                "status": "pending",
+                "evidence_key": "release-run-1:wave-1:checkout:post-deploy-verification",
+                "target": {
+                    "cluster_id": "target",
+                    "namespace": "sandbox",
+                    "service_name": "checkout",
+                    "path": "/readyz",
+                },
+            }
+        ],
+        "job_count": 1,
         "override_reason": None,
         "production_targets": ["checkout"],
     }
@@ -1943,6 +1960,26 @@ class ReleaseRunActionDb:
                                 "production_targets": ["checkout"],
                                 "health_check_paths": ["/readyz"],
                                 "verification_urls": [],
+                            },
+                            "verification_jobs": {
+                                "scheduled": True,
+                                "job_count": 1,
+                                "jobs": [
+                                    {
+                                        "job_id": "release-verification-fixture",
+                                        "application_id": "checkout",
+                                        "name": "Checkout",
+                                        "kind": "kubernetes_health_check",
+                                        "status": "pending",
+                                        "evidence_key": "release-run-1:wave-1:checkout:post-deploy-verification",
+                                        "target": {
+                                            "cluster_id": "target",
+                                            "namespace": "sandbox",
+                                            "service_name": "checkout",
+                                            "path": "/readyz",
+                                        },
+                                    }
+                                ],
                             },
                             "abort_criteria": {
                                 "criteria": ["rollback if checkout error rate exceeds 5% for 5 minutes"],
@@ -3723,6 +3760,11 @@ def test_dispatch_wave_steps_records_production_change_override(monkeypatch) -> 
         "health_check_paths": [],
         "verification_urls": [],
     }
+    assert guard["verification_jobs"] == {
+        "scheduled": False,
+        "job_count": 0,
+        "jobs": [],
+    }
     assert guard["abort_criteria"] == {
         "criteria": ["rollback if checkout error rate exceeds 5% for 5 minutes"],
         "override_reason": None,
@@ -3807,6 +3849,15 @@ def test_dispatch_wave_steps_records_active_production_release_window(monkeypatc
     assert guard["change_management"]["change_ticket_present"] is True
     assert guard["verification"]["health_check_paths"] == ["/readyz"]
     assert guard["verification"]["evidence_present"] is True
+    assert guard["verification_jobs"]["scheduled"] is True
+    assert guard["verification_jobs"]["job_count"] == 1
+    assert guard["verification_jobs"]["jobs"][0]["kind"] == "kubernetes_health_check"
+    assert guard["verification_jobs"]["jobs"][0]["target"] == {
+        "cluster_id": "",
+        "namespace": "",
+        "service_name": "app-a",
+        "path": "/readyz",
+    }
     assert guard["abort_criteria"] == {
         "criteria": ["rollback if checkout error rate exceeds 5% for 5 minutes"],
         "override_reason": None,
