@@ -9,7 +9,7 @@
 3. preview가 의존성 그래프를 계산해서 wave 순서와 blocker를 보여준다.
 4. `Start tracked run` 또는 `Dispatch wave`를 누르면 release run이 생성되고 step 상태가 기록된다.
 5. workflow/approval/RCA/Safe PR/command 이벤트가 들어오면 `release-flow-worker`가 release run 상태와 timeline에 반영한다.
-6. 실패하면 RCA 증거 수집 job을 자동으로 queue하고, 운영자는 pause/resume/advance/rollback/cancel로 런을 제어한다.
+6. 실패하면 RCA 증거 수집 job을 자동으로 queue하고, 운영자는 pause/resume/advance/retry/rollback/cancel로 런을 제어한다.
 
 ## 구현된 파일
 - Backend API: `src/domains/release_flow/router.py`
@@ -40,6 +40,7 @@
 - `POST /release-runs/{run_id}/advance`
 - `POST /release-runs/{run_id}/pause`
 - `POST /release-runs/{run_id}/resume`
+- `POST /release-runs/{run_id}/retry`
 - `POST /release-runs/{run_id}/rollback`
 - `POST /release-runs/{run_id}/cancel`
 - `DELETE /release-runs/{run_id}?force=false`
@@ -51,6 +52,7 @@
 - plan/run 조회와 summary는 애플리케이션 read 권한을 확인한다.
 - `GET /release-runs/summary`가 `/release-runs/{run_id}`에 가려지지 않도록 route 순서 테스트를 추가했다.
 - advance/rollback 같은 상태 변경 action은 권한 확인 후에만 상태를 바꾼다.
+- retry는 현재 wave의 failed/unhealthy step만 다시 dispatch하고, plan/step의 `retry_attempts` 예산을 넘으면 차단한다.
 - active run/plan 삭제는 기본 차단하고 `force=true`를 명시해야 한다.
 
 ## 프론트에서 보이는 것

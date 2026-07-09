@@ -639,6 +639,44 @@ class ReleaseFlowRepository(DatabaseConnection):
             )
         return self.get_release_run(workspace_id, run_id)
 
+    def mark_release_run_retry(
+        self,
+        workspace_id: str,
+        run_id: str,
+        wave: int,
+        attempt: int,
+        status: str,
+        *,
+        actor: str | None,
+        reason: str,
+    ) -> JsonObject | None:
+        table = ReleaseRun.__table__
+        event_type = f"release.retry.wave.{wave}.attempt.{attempt}.{status}"
+        with self.connection() as conn:
+            conn.execute(
+                table.update()
+                .where(table.c.workspace_id == workspace_id, table.c.run_id == run_id)
+                .values(status=status, current_wave=wave, updated_at=func.now())
+            )
+            conn.execute(
+                pg_insert(ReleaseRunEvent.__table__).values(
+                    **release_run_event_values(
+                        workspace_id,
+                        run_id,
+                        event_type,
+                        f"Retry attempt {attempt} for release wave {wave} {status}.",
+                        actor,
+                        {
+                            "wave": wave,
+                            "attempt": attempt,
+                            "status": status,
+                            "reason": reason,
+                        },
+                    )
+                )
+            )
+        return self.get_release_run(workspace_id, run_id)
+
 
 def derive_release_plan_id(payload: JsonObject) -> str:
     explicit = payload.get("plan_id")

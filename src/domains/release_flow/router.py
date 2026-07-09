@@ -443,6 +443,94 @@ async def resume_release_run(
     )
 
 
+@router.post(gateway_routes.RELEASE_RUN_RETRY_PATH, response_model=ReleaseRunResponse)
+async def retry_release_run(
+    run_id: str,
+    payload: ReleaseRunActionRequest,
+    current: Any = Depends(require_session),
+    db: Any = Depends(get_db),
+    events: Any = Depends(get_events),
+) -> ReleaseRunResponse:
+    workspace_id = getattr(current, "workspace_id", DEFAULT_WORKSPACE_ID)
+    existing = db.get_release_run(workspace_id, run_id)
+    if existing is None:
+        raise HTTPException(status_code=HTTP_NOT_FOUND, detail=RELEASE_RUN_NOT_FOUND)
+    require_plan_application_manage_access(db, current, workspace_id, existing.get("steps", []))
+    run_status = str(existing.get("derived_status") or existing.get("status") or "")
+    if run_status in {"succeeded", "cancelled", "rollback_requested"}:
+        raise HTTPException(
+            status_code=HTTP_CONFLICT,
+            detail={"message": RELEASE_RUN_BLOCKED, "blockers": ["release run cannot be retried"]},
+        )
+    retry_wave = int_field(existing, "current_wave", 1)
+    retry_steps = retryable_steps_for_wave(existing, retry_wave)
+    if not retry_steps:
+        raise HTTPException(
+            status_code=HTTP_CONFLICT,
+            detail={
+                "message": RELEASE_RUN_BLOCKED,
+                "blockers": [f"wave {retry_wave} has no failed or unhealthy steps to retry"],
+            },
+        )
+    retry_limit = retry_limit_for_steps(existing, retry_steps)
+    previous_attempts = retry_attempts_for_wave(existing, retry_wave)
+    if previous_attempts >= retry_limit:
+        raise HTTPException(
+            status_code=HTTP_CONFLICT,
+            detail={
+                "message": RELEASE_RUN_BLOCKED,
+                "blockers": [f"wave {retry_wave} retry budget exhausted ({retry_limit})"],
+            },
+        )
+    attempt = previous_attempts + 1
+    plan = release_plan_from_run(existing, retry_steps)
+    preview = {
+        "steps": [
+            {"application_id": step["application_id"], "wave": retry_wave}
+            for step in retry_steps
+        ]
+    }
+    blockers = release_execution_blockers(plan, preview, retry_wave, workspace_id=workspace_id)
+    if blockers:
+        raise HTTPException(
+            status_code=HTTP_CONFLICT,
+            detail={"message": RELEASE_RUN_BLOCKED, "blockers": blockers},
+        )
+    db.mark_release_run_retry(
+        workspace_id,
+        run_id,
+        retry_wave,
+        attempt,
+        "running",
+        actor=current.user_id,
+        reason=payload.reason or "operator requested retry",
+    )
+    try:
+        await dispatch_wave_steps(
+            plan,
+            preview,
+            retry_wave,
+            workspace_id,
+            current,
+            db,
+            events,
+            run_id=run_id,
+        )
+    except Exception:
+        db.mark_release_run_retry(
+            workspace_id,
+            run_id,
+            retry_wave,
+            attempt,
+            "failed",
+            actor=current.user_id,
+            reason="retry dispatch failed",
+        )
+        raise
+    run = db.get_release_run(workspace_id, run_id) or existing
+    return ReleaseRunResponse(run=run)
+
+
 @router.post(gateway_routes.RELEASE_RUN_ROLLBACK_PATH, response_model=ReleaseRunResponse)
 async def rollback_release_run(
     run_id: str,
@@ -696,6 +784,48 @@ def release_plan_from_run(run: dict[str, Any], steps: list[dict[str, Any]]) -> d
             for index, step in enumerate(steps)
         ],
     }
+
+
+def retryable_steps_for_wave(run: dict[str, Any], wave: int) -> list[dict[str, Any]]:
+    retryable_statuses = {"failed", "cancelled", "timeout"}
+    steps = run.get("steps") if isinstance(run.get("steps"), list) else []
+    return [
+        step
+        for step in steps
+        if isinstance(step, dict)
+        and int_field(step, "wave", 0) == wave
+        and (
+            str(step.get("status") or "") in retryable_statuses
+            or (isinstance(step.get("health"), dict) and step["health"].get("status") == "unhealthy")
+        )
+    ]
+
+
+def retry_limit_for_steps(run: dict[str, Any], steps: list[dict[str, Any]]) -> int:
+    settings = dict(run.get("settings") or {})
+    default_limit = max(0, int_field(settings, "retry_attempts", 1))
+    limits: list[int] = []
+    for step in steps:
+        details = step.get("details") if isinstance(step.get("details"), dict) else {}
+        config = details.get("config") if isinstance(details.get("config"), dict) else {}
+        limits.append(max(0, int_field(config, "retry_attempts", default_limit)))
+    return min(limits) if limits else default_limit
+
+
+def retry_attempts_for_wave(run: dict[str, Any], wave: int) -> int:
+    events = run.get("events") if isinstance(run.get("events"), list) else []
+    prefix = f"release.retry.wave.{wave}.attempt."
+    attempts: set[int] = set()
+    for event in events:
+        if not isinstance(event, dict):
+            continue
+        event_type = str(event.get("event_type") or "")
+        if not event_type.startswith(prefix):
+            continue
+        suffix = event_type.removeprefix(prefix).split(".", 1)[0]
+        if suffix.isdigit():
+            attempts.add(int(suffix))
+    return len(attempts)
 
 
 def require_plan_application_read_access(

@@ -18,6 +18,7 @@ import {
   useDeleteReleaseRun,
   useReleaseRuns,
   useResumeReleaseRun,
+  useRetryReleaseRun,
   useRollbackReleaseRun,
   useSaveReleasePlan,
   useStartReleasePlan,
@@ -291,6 +292,7 @@ export default function ReleaseFlowView() {
   const advanceRun = useAdvanceReleaseRun();
   const pauseRun = usePauseReleaseRun();
   const resumeRun = useResumeReleaseRun();
+  const retryRun = useRetryReleaseRun();
   const rollbackRun = useRollbackReleaseRun();
   const cancelRun = useCancelReleaseRun();
   const save = useSaveReleasePlan(plan?.plan_id);
@@ -508,13 +510,14 @@ export default function ReleaseFlowView() {
                 runs={runsQ.data ?? []}
                 summary={summaryQ.data}
                 loading={runsQ.isPending}
-                busy={advanceRun.isPending || pauseRun.isPending || resumeRun.isPending || rollbackRun.isPending || cancelRun.isPending}
+                busy={advanceRun.isPending || pauseRun.isPending || resumeRun.isPending || retryRun.isPending || rollbackRun.isPending || cancelRun.isPending || deleteRun.isPending}
                 onAdvance={runId => advanceRun.mutate({ runId })}
                 onPause={runId => pauseRun.mutate({ runId, reason: 'operator paused release run' })}
                 onResume={runId => resumeRun.mutate({ runId, reason: 'operator resumed release run' })}
+                onRetry={runId => retryRun.mutate({ runId, reason: 'operator retried failed release wave' })}
                 onRollback={runId => rollbackRun.mutate({ runId, reason: 'operator requested rollback from release flow' })}
                 onCancel={runId => cancelRun.mutate({ runId, reason: 'operator canceled release run' })}
-                onDelete={runId => deleteRun.mutate({ runId, force: false })}
+                onDelete={(runId, force) => deleteRun.mutate({ runId, force })}
               />
               <DiagnosticsPanel diagnostics={planDiagnosticsData?.diagnostics ?? []} />
             </div>
@@ -716,6 +719,7 @@ function RunPanel({
   onAdvance,
   onPause,
   onResume,
+  onRetry,
   onRollback,
   onCancel,
   onDelete,
@@ -727,6 +731,7 @@ function RunPanel({
   onAdvance: (runId: string) => void;
   onPause: (runId: string) => void;
   onResume: (runId: string) => void;
+  onRetry: (runId: string) => void;
   onRollback: (runId: string) => void;
   onCancel: (runId: string) => void;
   onDelete: (runId: string, force?: boolean) => void;
@@ -747,6 +752,7 @@ function RunPanel({
   const runtimeMode = getString(latest.settings.runtime_mode, getString(latest.settings.provider_mode, 'demo'));
   const sideEffects = runtimeMode === 'live';
   const canForceDelete = ['running', 'paused', 'rollback_requested', 'waiting_for_approval'].includes(status);
+  const canRetry = status === 'failed' || latest.steps.some(step => step.health.status === 'unhealthy' || step.status === 'failed');
   return (
     <Card
       title="Release run"
@@ -768,6 +774,7 @@ function RunPanel({
         <div className="release-flow__toolbar release-flow__toolbar--preview">
           {githubUrl && <a href={githubUrl} target="_blank" rel="noreferrer"><Button size="sm">GitHub release</Button></a>}
           <Button size="sm" loading={busy} disabled={busy || status === 'paused'} onClick={() => onAdvance(latest.run_id)}>Advance</Button>
+          <Button size="sm" loading={busy} disabled={busy || !canRetry} onClick={() => onRetry(latest.run_id)}>Retry</Button>
           {status === 'paused'
             ? <Button size="sm" loading={busy} onClick={() => onResume(latest.run_id)}>Resume</Button>
             : <Button size="sm" loading={busy} onClick={() => onPause(latest.run_id)}>Pause</Button>}
@@ -1116,6 +1123,11 @@ function releaseEventMeta(event: ReleaseRun['events'][number]): string {
   const safePr = recordValue(details.safe_pr);
   const command = recordValue(details.command);
   const workflow = recordValue(details.workflow_projection);
+  const retryAttempt = getNumber(details.attempt, -1);
+  const retryWave = getNumber(details.wave, -1);
+  if (event.event_type.startsWith('release.retry') && retryAttempt > 0) {
+    return retryWave > 0 ? `retry ${retryAttempt} wave ${retryWave}` : `retry ${retryAttempt}`;
+  }
   const rootCause = getString(rca.root_cause);
   if (rootCause) return `RCA ${rootCause}`;
   const reasonCode = getString(rca.reason_code);

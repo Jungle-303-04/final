@@ -148,6 +148,10 @@ export function useResumeReleaseRun() {
   return useRunAction('resume', 'Resumed release run');
 }
 
+export function useRetryReleaseRun() {
+  return useRunAction('retry', 'Retry dispatched');
+}
+
 export function useRollbackReleaseRun() {
   return useRunAction('rollback', 'Rollback requested');
 }
@@ -156,7 +160,7 @@ export function useCancelReleaseRun() {
   return useRunAction('cancel', 'Release run cancelled');
 }
 
-function useRunAction(action: 'advance' | 'pause' | 'resume' | 'rollback' | 'cancel', message: string) {
+function useRunAction(action: 'advance' | 'pause' | 'resume' | 'retry' | 'rollback' | 'cancel', message: string) {
   const qc = useQueryClient();
   const { push } = useToast();
   return useMutation({
