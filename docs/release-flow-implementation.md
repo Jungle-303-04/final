@@ -112,6 +112,7 @@
 - run history selector: release run이 여러 개 쌓이면 최신 run뿐 아니라 이전 run의 상태, wave, timeline을 선택해서 확인하고 필요한 운영 액션을 수행
 - attention reasons: failed, waiting approval, rollback requested, paused, unhealthy run/step에서 `attention.required/reasons`를 파생해 API와 UI에서 왜 조치가 필요한지 바로 표시
 - stale run detection: active run의 `updated_at`이 `health_timeout_seconds` 또는 step timeout을 넘으면 stale attention reason과 `stale_runs` summary 카운터를 표시
+- verification failure summary: post-deploy verification job 실패가 있는 run 수를 `verification_failed_runs` summary 카운터와 UI card로 표시
 - run filters: `GET /release-runs`와 UI에서 all/attention/stale/live/failed/waiting approval 기준으로 run 목록을 빠르게 필터링
 - run-scoped audit/export: 선택한 release run의 `run_id`로 audit 조회와 CSV export를 좁혀 사고 리뷰와 배포 증적 제출에 바로 사용
 - audit event filter/export: 선택한 run audit에서 workflow failure, approval, rollback, cancel, wave dispatch, evidence queued 같은 event type별 조회와 CSV export를 지원
@@ -182,5 +183,5 @@ python scripts/release_flow_smoke.py --alert-preflight
 - `attention_required_runs`: 실패, 롤백 요청, 승인 대기, unhealthy run처럼 먼저 확인해야 하는 run 수
 - `active_runs`: 아직 종료되지 않고 진행 중이거나 대기 중인 run 수
 - `live_runs`: live 모드이거나 step에 실제 side effect가 기록된 run 수
-- `rollback_requested_runs`, `waiting_for_approval_runs`, `unhealthy_runs`, `failed_runs`: 대시보드 배지와 알림 라우팅에 바로 쓰는 세부 카운터
+- `rollback_requested_runs`, `waiting_for_approval_runs`, `unhealthy_runs`, `verification_failed_runs`, `failed_runs`: 대시보드 배지와 알림 라우팅에 바로 쓰는 세부 카운터
 - `last_run_status`: 접근 권한이 확인된 최신 run의 상태

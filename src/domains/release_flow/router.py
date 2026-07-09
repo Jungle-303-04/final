@@ -2730,6 +2730,28 @@ def release_run_has_live_side_effects(run: dict[str, Any]) -> bool:
     )
 
 
+def release_run_has_failed_verification(run: dict[str, Any]) -> bool:
+    steps = run.get("steps") if isinstance(run.get("steps"), list) else []
+    for step in steps:
+        if not isinstance(step, dict):
+            continue
+        details = step.get("details") if isinstance(step.get("details"), dict) else {}
+        guard = details.get("release_guard") if isinstance(details.get("release_guard"), dict) else {}
+        verification_jobs = (
+            guard.get("verification_jobs")
+            if isinstance(guard.get("verification_jobs"), dict)
+            else {}
+        )
+        jobs = verification_jobs.get("jobs") if isinstance(verification_jobs.get("jobs"), list) else []
+        if any(
+            isinstance(job, dict)
+            and str(job.get("status") or "").lower() in {"failed", "error", "unhealthy"}
+            for job in jobs
+        ):
+            return True
+    return False
+
+
 def release_run_summary_from_runs(runs: list[dict[str, Any]]) -> dict[str, Any]:
     status_breakdown: dict[str, int] = {}
     plan_breakdown: dict[str, int] = {}
@@ -2740,6 +2762,7 @@ def release_run_summary_from_runs(runs: list[dict[str, Any]]) -> dict[str, Any]:
     waiting_for_approval_runs = 0
     live_runs = 0
     unhealthy_runs = 0
+    verification_failed_runs = 0
     stale_runs = 0
     attention_required_runs = 0
     last_run_status = ""
@@ -2772,6 +2795,8 @@ def release_run_summary_from_runs(runs: list[dict[str, Any]]) -> dict[str, Any]:
             unhealthy_runs += 1
             if health_needs_attention:
                 attention_required_runs += 1
+        if release_run_has_failed_verification(run):
+            verification_failed_runs += 1
         if attention.get("required") is True and not status_needs_attention and not health_needs_attention:
             attention_required_runs += 1
         if release_run_has_live_side_effects(run):
@@ -2796,6 +2821,7 @@ def release_run_summary_from_runs(runs: list[dict[str, Any]]) -> dict[str, Any]:
         "waiting_for_approval_runs": waiting_for_approval_runs,
         "live_runs": live_runs,
         "unhealthy_runs": unhealthy_runs,
+        "verification_failed_runs": verification_failed_runs,
         "stale_runs": stale_runs,
         "last_run_status": last_run_status or None,
         "recent_runs": recent_runs,
