@@ -611,6 +611,11 @@ function PolicyEditor({ plan, setPolicy }: { plan: ReleasePlan; setPolicy: (patc
         <SelectField label="Approval policy" value={getString(settings.approval_policy)} options={APPROVAL_POLICIES} onChange={value => setPolicy({ approval_policy: value })} />
         <SelectField label="Failure policy" value={getString(settings.failure_policy)} options={FAILURE_POLICIES} onChange={value => setPolicy({ failure_policy: value })} />
         <SelectField label="Rollback policy" value={getString(settings.rollback_policy)} options={ROLLBACK_POLICIES} onChange={value => setPolicy({ rollback_policy: value })} />
+        {getString(settings.rollback_policy) === 'disabled' && (
+          <Field label="Rollback override reason">
+            <input className="input" value={getString(settings.rollback_override_reason)} onChange={e => setPolicy({ rollback_override_reason: e.target.value })} />
+          </Field>
+        )}
         <SelectField label="Default strategy" value={getString(settings.default_strategy)} options={STRATEGIES} onChange={value => setPolicy({ default_strategy: value })} />
         <Field label="Concurrency"><input className="input" type="number" min={1} max={20} value={getNumber(settings.concurrency, 1)} onChange={e => setPolicy({ concurrency: Number(e.target.value) })} /></Field>
         <Field label="Health timeout seconds"><input className="input" type="number" min={30} max={3600} value={getNumber(settings.health_timeout_seconds, 600)} onChange={e => setPolicy({ health_timeout_seconds: Number(e.target.value) })} /></Field>

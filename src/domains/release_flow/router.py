@@ -266,6 +266,7 @@ async def dispatch_release_plan(
         release_execution_blockers(body, preview, wave, workspace_id=workspace_id)
     )
     blockers.extend(release_diagnostics_blockers(body))
+    blockers.extend(release_rollback_policy_blockers(body))
     blockers.extend(release_live_alert_channel_blockers(body, db, workspace_id))
     if blockers:
         raise HTTPException(
@@ -315,6 +316,7 @@ async def start_release_plan(
         release_execution_blockers(body, preview, first_wave, workspace_id=workspace_id)
     )
     blockers.extend(release_diagnostics_blockers(body))
+    blockers.extend(release_rollback_policy_blockers(body))
     blockers.extend(release_live_alert_channel_blockers(body, db, workspace_id))
     if blockers:
         raise HTTPException(
@@ -508,6 +510,7 @@ async def advance_release_run(
     preview = {"steps": [{"application_id": step["application_id"], "wave": next_wave} for step in pending_steps]}
     blockers = release_execution_blockers(plan, preview, next_wave, workspace_id=workspace_id)
     blockers.extend(release_diagnostics_blockers(plan))
+    blockers.extend(release_rollback_policy_blockers(plan))
     blockers.extend(release_live_alert_channel_blockers(plan, db, workspace_id))
     if blockers:
         raise HTTPException(
@@ -620,6 +623,7 @@ async def retry_release_run(
     }
     blockers = release_execution_blockers(plan, preview, retry_wave, workspace_id=workspace_id)
     blockers.extend(release_diagnostics_blockers(plan))
+    blockers.extend(release_rollback_policy_blockers(plan))
     blockers.extend(release_live_alert_channel_blockers(plan, db, workspace_id))
     if blockers:
         raise HTTPException(
@@ -802,6 +806,7 @@ async def dispatch_wave_steps(
     blockers = release_dispatch_context_blockers(plan, selected_steps, db, workspace_id)
     blockers.extend(release_execution_blockers(plan, preview, wave, workspace_id=workspace_id))
     blockers.extend(release_diagnostics_blockers(plan))
+    blockers.extend(release_rollback_policy_blockers(plan))
     blockers.extend(release_live_alert_channel_blockers(plan, db, workspace_id))
     if blockers:
         raise HTTPException(
@@ -917,6 +922,8 @@ def release_readiness_from_plan(
     )
     diagnostic_blockers = release_diagnostics_blockers(plan)
     diagnostic_bypassed = release_diagnostics_bypassed(plan)
+    rollback_blockers = release_rollback_policy_blockers(plan)
+    rollback_bypassed = release_rollback_policy_bypassed(plan)
     alert_channels = enabled_alert_channels(db, workspace_id)
     live_alert_channels = release_live_alert_channels(db, workspace_id)
     validated_live_alert_channels = release_validated_live_alert_channels(db, workspace_id)
@@ -1003,6 +1010,21 @@ def release_readiness_from_plan(
             if diagnostic_bypassed
             else "Release diagnostics do not block live dispatch.",
             diagnostic_blockers,
+        ),
+        readiness_check(
+            "rollback.policy",
+            "Rollback policy",
+            "blocked"
+            if rollback_blockers
+            else "warning"
+            if rollback_bypassed
+            else "passed",
+            "Live release cannot disable rollback without an operator reason."
+            if rollback_blockers
+            else "Rollback policy is disabled with an operator reason."
+            if rollback_bypassed
+            else "Rollback policy is available for this release.",
+            rollback_blockers,
         ),
         readiness_check(
             "alerts.enabled_channels",
@@ -1115,6 +1137,35 @@ def release_diagnostics_bypassed(plan: dict[str, Any]) -> bool:
     )
 
 
+def release_rollback_policy_blockers(plan: dict[str, Any]) -> list[str]:
+    if not execution_profile(plan).side_effects:
+        return []
+    settings = plan_settings_value(plan)
+    if str(settings.get("rollback_policy") or "manual") != "disabled":
+        return []
+    if release_rollback_override_reason(plan):
+        return []
+    return ["Live release dispatch cannot disable rollback without a rollback override reason."]
+
+
+def release_rollback_override_reason(plan: dict[str, Any]) -> str:
+    settings = plan_settings_value(plan)
+    return str(
+        settings.get("rollback_override_reason")
+        or settings.get("rollback_disabled_reason")
+        or ""
+    ).strip()
+
+
+def release_rollback_policy_bypassed(plan: dict[str, Any]) -> bool:
+    if not execution_profile(plan).side_effects:
+        return False
+    settings = plan_settings_value(plan)
+    return str(settings.get("rollback_policy") or "manual") == "disabled" and bool(
+        release_rollback_override_reason(plan)
+    )
+
+
 def release_dispatch_guard_snapshot(
     plan: dict[str, Any],
     db: Any,
@@ -1139,6 +1190,11 @@ def release_dispatch_guard_snapshot(
             "override_reason": release_diagnostics_override_reason(plan) or None,
             "blocking_count": len(blocking_diagnostics),
             "blocking_codes": [str(diagnostic.code) for diagnostic in blocking_diagnostics],
+        },
+        "rollback": {
+            "policy": str(settings.get("rollback_policy") or "manual"),
+            "disabled": str(settings.get("rollback_policy") or "manual") == "disabled",
+            "override_reason": release_rollback_override_reason(plan) or None,
         },
         "alerts": {
             "validation_window": alert_channel_validation_window_label(),
