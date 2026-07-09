@@ -22,6 +22,7 @@ const consoleChildren = (basePath = '') => [
   { path: 'workflows/:runId', element: L(() => import('@/features/workflow/WorkflowGraphView')) },
   { path: 'incidents', element: L(() => import('@/features/notifications/NotificationsView')) },
   { path: 'incidents/:incidentId', element: L(() => import('@/features/notifications/IncidentDetailView')) },
+  { path: 'release-flows', element: L(() => import('@/features/release/ReleaseFlowView')) },
   { path: 'metrics', element: L(() => import('@/features/metrics/MetricsView')) },
   { path: 'ai', element: L(() => import('@/features/chat/ChatView')) },
   { path: 'ai/:conversationId', element: L(() => import('@/features/chat/ChatView')) },
@@ -63,11 +64,7 @@ export const router = createBrowserRouter([
   {
     element: <RequireSession />,
     children: [
-      {
-        path: '/',
-        element: <ConsoleLayout />,
-        children: consoleChildren(),
-      },
+      { path: '/', element: <ConsoleLayout />, children: consoleChildren() },
     ],
   },
   // 구 경로 호환 — 실제 서비스는 /

@@ -23,8 +23,21 @@ export interface PlanChange {
 }
 export interface SafePr { status: string; pr_url?: string; explanation?: string; diff_before?: string; diff_after?: string; error?: string }
 export interface Deployment { cluster_id: string; namespace: string; name: string; image: string; replicas: number; status: string; application_id?: string; manifest_path?: string; branch?: string; repo_ref?: string }
+
+// release flow
+export interface ReleasePlanStep { step_id?: string; application_id: string; name: string; position: number; depends_on: string[]; config: Record<string, unknown> }
+export interface ReleasePlan { plan_id?: string; name: string; description: string; status: 'draft'|'active'|'paused'|'archived'; settings: Record<string, unknown>; steps: ReleasePlanStep[]; updated_at?: string }
+export interface ReleasePreviewStep { step_id: string; application_id: string; name: string; position: number; wave: number | null; blocked_by: string[]; gate: string; strategy: string; environment: string; action: string }
+export interface ReleasePreviewWave { wave: number; step_ids: string[]; applications: string[] }
+export interface ReleasePlanPreview { plan_id?: string; executable: boolean; summary: string; waves: ReleasePreviewWave[]; steps: ReleasePreviewStep[]; blockers: string[] }
+export interface ReleaseRunStep { run_step_id: string; application_id: string; name: string; wave: number; status: string; workflow_run_id?: string; event_id?: string; correlation_id?: string; health: Record<string, unknown>; rollback: Record<string, unknown>; details: Record<string, unknown>; workflow?: Record<string, unknown> }
+export interface ReleaseRunEvent { audit_id: string; event_type: string; message: string; actor?: string; details: Record<string, unknown>; created_at?: string }
+export interface ReleaseRun { run_id: string; plan_id: string; plan_name: string; status: string; derived_status?: string; current_wave: number; total_waves: number; started_by?: string; settings: Record<string, unknown>; github: Record<string, unknown>; rollback: Record<string, unknown>; health: Record<string, unknown>; steps: ReleaseRunStep[]; events: ReleaseRunEvent[]; created_at?: string; updated_at?: string }
+export interface ReleaseRunSummary { total_runs: number; status_breakdown: Record<string, number>; plan_breakdown: Record<string, number>; recent_runs: { run_id: string; plan_id: string; status: string }[] }
+export interface ReleasePlanDispatch { accepted: boolean; wave: number; events: { event_id: string; correlation_id: string; event: Record<string, unknown> }[]; blockers?: string[]; run?: ReleaseRun | null }
+export interface Diagnostic { source: string; severity: 'error'|'warning'|'info'; message: string; code: string; line: number; column: number; end_line: number; end_column: number; path?: string; action?: string | null }
+
 export interface ConversationSummary { conversation_id: string; title: string; status: 'idle'|'waiting'; updated_at: string }
-export interface Conversation extends ConversationSummary { messages: ChatMessage[] }
 export interface ChatToolCall { name: string; args: string; status: Tone }
 export interface ChatActionOption { action_id: string; label: string; risk: Tone; impact: string }
 export interface ChatActions { plan_id: string; options: ChatActionOption[]; selected?: string }
@@ -37,6 +50,7 @@ export interface ChatMessageMetadata {
   approval_ref?: ChatApprovalRef;
   [key: string]: unknown;
 }
+export interface Conversation extends ConversationSummary { messages: ChatMessage[] }
 export interface ChatMessage { message_id: string; role: 'user'|'assistant'; status?: string; content: string; created_at: string;
   metadata?: ChatMessageMetadata;
   tool_calls?: ChatToolCall[];

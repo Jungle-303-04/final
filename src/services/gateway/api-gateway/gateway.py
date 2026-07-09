@@ -25,6 +25,7 @@ from domains.dashboard.router import router as dashboard_router
 from domains.gitops.repository_discovery_router import router as repository_discovery_router
 from domains.gitops.router import approval_router
 from domains.gitops.router import router as gitops_router
+from domains.diagnostics.router import router as diagnostics_router
 from domains.identity.admin_router import router as identity_admin_router
 from domains.identity.dependencies import (
     ClusterAgentIdentity,
@@ -34,6 +35,7 @@ from domains.identity.dependencies import (
 from domains.identity.router import router as identity_router
 from domains.inventory.router import router as inventory_router
 from domains.providers.router import router as providers_router
+from domains.release_flow.router import router as release_flow_router
 from domains.rca.query_router import router as rca_query_router
 from domains.rca.router import router as rca_router
 from domains.target.events import AgentConnectedBody
@@ -225,6 +227,8 @@ class ApiGateway:
         app.include_router(command_router)  # command 도메인 라우터(+agent 가드 필터)
         app.include_router(dashboard_router)  # dashboard read model 조회(+cluster read 필터)
         app.include_router(fleet_router)  # fleet 롤업 + 클러스터 드릴다운(콘솔 루트 화면)
+        app.include_router(diagnostics_router)  # release flow preflight + YAML/설정 진단
+        app.include_router(release_flow_router)  # release plan/flow run 관리
         self._register_live_proxy_routes(app)
         self._register_dead_letter_routes(app)
         self._register_metrics_routes(app)

@@ -42,6 +42,8 @@ class EventSubject(StrEnum):
     CLUSTER_DRIFT_DETECTED = "cluster.drift.detected"  # 목표/실제 상태 차이
     CLUSTER_RECONCILE_COMPLETED = "cluster.reconcile.completed"  # 상태 동기화 판정 완료
     CLUSTER_RECONCILE_FAILED = "cluster.reconcile.failed"  # 상태 동기화 실패
+    EVIDENCE_JOB_UPDATED = "evidence.job.updated"  # evidence job update event
+    EVIDENCE_JOBS_QUEUED = "evidence.jobs.queued"  # evidence jobs queued event
 
     # --- 명령 처리(command-worker): 정책→디스패치→에이전트 큐 ---
     COMMAND_REQUESTED = "command.requested"  # 명령 요청
