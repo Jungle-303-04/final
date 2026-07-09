@@ -79,6 +79,7 @@
 - active run lock: 같은 저장된 release plan에 active run이 있으면 start/dispatch를 409 blocker로 차단
 - readiness active run lock: 저장된 plan의 active run blocker를 실행 전 readiness에도 표시
 - operator action controls: pause/resume/retry/rollback/cancel 액션은 운영자 사유를 입력받아 audit details에 남기고, `rollback_policy=disabled` run은 rollback 요청을 409 blocker로 차단
+- run history selector: release run이 여러 개 쌓이면 최신 run뿐 아니라 이전 run의 상태, wave, timeline을 선택해서 확인하고 필요한 운영 액션을 수행
 
 ## 검증
 - `py -3 -m pytest -q tests/test_release_flow_diagnostics.py tests/test_release_flow_projection.py`

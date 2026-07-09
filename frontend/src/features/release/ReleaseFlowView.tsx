@@ -892,9 +892,20 @@ function RunPanel({
   onCancel: (runId: string, reason: string) => void;
   onDelete: (runId: string, force?: boolean) => void;
 }) {
-  const latest = runs[0];
-  if (loading && !latest) return <Card title="Release runs"><p className="release-flow__hint">Loading release runs...</p></Card>;
-  if (!latest) {
+  const [selectedRunId, setSelectedRunId] = useState('');
+  useEffect(() => {
+    if (runs.length === 0) {
+      if (selectedRunId) setSelectedRunId('');
+      return;
+    }
+    if (!selectedRunId || !runs.some(run => run.run_id === selectedRunId)) {
+      setSelectedRunId(runs[0].run_id);
+    }
+  }, [runs, selectedRunId]);
+  const selectedRun = selectedRunId ? runs.find(run => run.run_id === selectedRunId) : undefined;
+  const run = selectedRun ?? runs[0];
+  if (loading && !run) return <Card title="Release runs"><p className="release-flow__hint">Loading release runs...</p></Card>;
+  if (!run) {
     return (
       <Card title="Release runs">
         <RunSummary summary={summary} />
@@ -902,13 +913,13 @@ function RunPanel({
       </Card>
     );
   }
-  const status = latest.derived_status ?? latest.status;
+  const status = run.derived_status ?? run.status;
   const isTerminal = ['succeeded', 'failed', 'cancelled', 'rollback_requested'].includes(status);
-  const githubUrl = getString(latest.github.release_url);
-  const runtimeMode = getString(latest.settings.runtime_mode, getString(latest.settings.provider_mode, 'demo'));
+  const githubUrl = getString(run.github.release_url);
+  const runtimeMode = getString(run.settings.runtime_mode, getString(run.settings.provider_mode, 'demo'));
   const sideEffects = runtimeMode === 'live';
   const canForceDelete = ['running', 'paused', 'rollback_requested', 'waiting_for_approval'].includes(status);
-  const canRetry = status === 'failed' || latest.steps.some(step => step.health.status === 'unhealthy' || step.status === 'failed');
+  const canRetry = status === 'failed' || run.steps.some(step => step.health.status === 'unhealthy' || step.status === 'failed');
   return (
     <Card
       title="Release run"
@@ -920,21 +931,32 @@ function RunPanel({
       }
     >
       <RunSummary summary={summary} />
+      {runs.length > 1 && (
+        <Field label="Inspect run">
+          <select className="input" value={run.run_id} onChange={e => setSelectedRunId(e.target.value)}>
+            {runs.map(item => (
+              <option key={item.run_id} value={item.run_id}>
+                {shortId(item.run_id)} / {item.derived_status ?? item.status} / wave {item.current_wave}
+              </option>
+            ))}
+          </select>
+        </Field>
+      )}
       <div className="release-flow__run-head">
         <div>
-          <strong>{latest.plan_name}</strong>
+          <strong>{run.plan_name}</strong>
           <p className="release-flow__hint">
-            Wave {latest.current_wave} of {latest.total_waves} | health {getString(latest.health.status, 'pending')} | {sideEffects ? 'real GitOps dispatch' : 'dry-run events only'}
+            Wave {run.current_wave} of {run.total_waves} | health {getString(run.health.status, 'pending')} | {sideEffects ? 'real GitOps dispatch' : 'dry-run events only'}
           </p>
         </div>
         <div className="release-flow__toolbar release-flow__toolbar--preview">
           {githubUrl && <a href={githubUrl} target="_blank" rel="noreferrer"><Button size="sm">GitHub release</Button></a>}
-          <Button size="sm" loading={busy} disabled={busy || status === 'paused'} onClick={() => onAdvance(latest.run_id)}>Advance</Button>
+          <Button size="sm" loading={busy} disabled={busy || status === 'paused' || isTerminal} onClick={() => onAdvance(run.run_id)}>Advance</Button>
           <Button
             size="sm"
             loading={busy}
             disabled={busy || !canRetry}
-            onClick={() => withOperatorReason('Retry release wave', 'operator retried failed release wave', reason => onRetry(latest.run_id, reason))}
+            onClick={() => withOperatorReason('Retry release wave', 'operator retried failed release wave', reason => onRetry(run.run_id, reason))}
           >
             Retry
           </Button>
@@ -943,7 +965,7 @@ function RunPanel({
               <Button
                 size="sm"
                 loading={busy}
-                onClick={() => withOperatorReason('Resume release run', 'operator resumed release run', reason => onResume(latest.run_id, reason))}
+                onClick={() => withOperatorReason('Resume release run', 'operator resumed release run', reason => onResume(run.run_id, reason))}
               >
                 Resume
               </Button>
@@ -952,7 +974,8 @@ function RunPanel({
               <Button
                 size="sm"
                 loading={busy}
-                onClick={() => withOperatorReason('Pause release run', 'operator paused release run', reason => onPause(latest.run_id, reason))}
+                disabled={busy || isTerminal}
+                onClick={() => withOperatorReason('Pause release run', 'operator paused release run', reason => onPause(run.run_id, reason))}
               >
                 Pause
               </Button>
@@ -961,8 +984,8 @@ function RunPanel({
             size="sm"
             variant="ghost"
             loading={busy}
-            disabled={busy || isTerminal || getString(latest.rollback.policy, getString(latest.settings.rollback_policy)) === 'disabled'}
-            onClick={() => withOperatorReason('Request rollback', 'operator requested rollback from release flow', reason => onRollback(latest.run_id, reason))}
+            disabled={busy || isTerminal || getString(run.rollback.policy, getString(run.settings.rollback_policy)) === 'disabled'}
+            onClick={() => withOperatorReason('Request rollback', 'operator requested rollback from release flow', reason => onRollback(run.run_id, reason))}
           >
             Rollback
           </Button>
@@ -971,7 +994,7 @@ function RunPanel({
             variant="ghost"
             loading={busy}
             disabled={busy || isTerminal}
-            onClick={() => withOperatorReason('Cancel release run', 'operator canceled release run', reason => onCancel(latest.run_id, reason))}
+            onClick={() => withOperatorReason('Cancel release run', 'operator canceled release run', reason => onCancel(run.run_id, reason))}
           >
             Cancel
           </Button>
@@ -981,8 +1004,8 @@ function RunPanel({
             loading={busy}
             disabled={busy}
             onClick={() => {
-              if (!window.confirm(`Delete run ${shortId(latest.run_id)}?`)) return;
-              onDelete(latest.run_id, canForceDelete ? window.confirm('Run is active. Force delete?') : false);
+              if (!window.confirm(`Delete run ${shortId(run.run_id)}?`)) return;
+              onDelete(run.run_id, canForceDelete ? window.confirm('Run is active. Force delete?') : false);
             }}
           >
             Delete
@@ -991,7 +1014,7 @@ function RunPanel({
       </div>
 
       <div className="release-flow__run-grid">
-        {latest.steps.map(step => (
+        {run.steps.map(step => (
           <div key={step.run_step_id} className="release-flow__run-step">
             <div>
               <strong>Wave {step.wave} - {step.name}</strong>
@@ -1020,7 +1043,7 @@ function RunPanel({
       </div>
 
       <div className="release-flow__timeline">
-        {latest.events.slice(-6).map(event => {
+        {run.events.slice(-6).map(event => {
           const meta = releaseEventMeta(event);
           return (
             <div key={event.audit_id} className="release-flow__timeline-row">
