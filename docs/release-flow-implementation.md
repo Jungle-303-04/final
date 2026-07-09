@@ -71,6 +71,7 @@
 - release audit 조회와 CSV export
 
 - release readiness 조회: preview blocker, dispatch 필수 입력값, live gate, alert channel, retry policy, audit/redaction 상태
+- live gate 입력: plan/step 단위 approval granted, change ticket, Safe PR URL/ready 값을 UI에서 설정
 
 ## 검증
 - `py -3 -m pytest -q tests/test_release_flow_diagnostics.py tests/test_release_flow_projection.py`
