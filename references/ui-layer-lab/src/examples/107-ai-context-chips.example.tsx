@@ -1,9 +1,9 @@
 import { useState } from "react";
 
-const chips = ["current page", "git diff", "workflow log", "screenshot"];
+const chips = ["현재 페이지", "Git 차이", "워크플로 로그", "스크린샷"];
 
 export default function AiContextChipsExample() {
-  const [selected, setSelected] = useState(["current page"]);
+  const [selected, setSelected] = useState(["현재 페이지"]);
 
   function toggle(chip: string) {
     setSelected((items) => (items.includes(chip) ? items.filter((item) => item !== chip) : [...items, chip]));
@@ -11,10 +11,10 @@ export default function AiContextChipsExample() {
 
   return (
     <div className="context-chip-card">
-      <strong>AI context</strong>
+      <strong>AI 컨텍스트</strong>
       <div className="chip-row">
         {chips.map((chip) => (
-          <button className={selected.includes(chip) ? "active" : ""} key={chip} onClick={() => toggle(chip)}>
+          <button className={selected.includes(chip) ? "active" : ""} key={chip} onClick={() => toggle(chip)} type="button">
             {chip}
           </button>
         ))}

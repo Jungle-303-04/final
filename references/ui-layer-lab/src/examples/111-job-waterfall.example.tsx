@@ -1,8 +1,8 @@
 const rows = [
-  { name: "install", start: 0, width: 30 },
-  { name: "typecheck", start: 28, width: 24 },
-  { name: "build", start: 48, width: 34 },
-  { name: "smoke", start: 78, width: 18 }
+  { name: "설치", start: 0, width: 30 },
+  { name: "타입 검사", start: 28, width: 24 },
+  { name: "빌드", start: 48, width: 34 },
+  { name: "스모크", start: 78, width: 18 }
 ];
 
 export default function JobWaterfallExample() {

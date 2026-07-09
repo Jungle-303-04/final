@@ -1,4 +1,4 @@
-const events = ["Pull started", "Objects received", "Deltas resolved", "Workspace checked", "Ready"];
+const events = ["가져오기 시작", "객체 수신", "델타 해석", "작업공간 검사", "준비 완료"];
 
 export default function AnimatedTimelineExample() {
   return (

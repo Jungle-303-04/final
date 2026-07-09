@@ -10,8 +10,8 @@ export default function JobSlaAlertExample() {
 
   return (
     <div className={`sla-card ${seconds === 0 ? "expired" : ""}`}>
-      <strong>{seconds === 0 ? "SLA breached" : `${seconds}s remaining`}</strong>
-      <span>Escalate if deploy does not finish.</span>
+      <strong>{seconds === 0 ? "SLA 위반" : `${seconds}초 남음`}</strong>
+      <span>배포가 끝나지 않으면 담당자에게 에스컬레이션합니다.</span>
     </div>
   );
 }
