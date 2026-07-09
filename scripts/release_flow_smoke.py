@@ -2,8 +2,9 @@
 """Release-flow operational smoke check.
 
 The default mode is read-only except for authenticated session creation. Pass
---demo-run only when you want to create a tracked demo release run. The script
-never attempts live release dispatch.
+--demo-run only when you want to create a tracked demo release run. Pass
+--ops-rehearsal to also exercise safe operator actions against that demo run.
+The script never attempts live release dispatch.
 """
 
 from __future__ import annotations
@@ -148,7 +149,14 @@ def demo_step(app: JsonMap, index: int, selected: list[JsonMap]) -> JsonMap:
     }
 
 
-def run_smoke(client: ApiClient, email: str, password: str, *, demo_run: bool) -> list[SmokeResult]:
+def run_smoke(
+    client: ApiClient,
+    email: str,
+    password: str,
+    *,
+    demo_run: bool,
+    ops_rehearsal: bool = False,
+) -> list[SmokeResult]:
     results: list[SmokeResult] = []
     health = client.request("GET", "/healthz")
     results.append(SmokeResult("healthz", health.get("status") == "ok", str(health)))
@@ -174,7 +182,7 @@ def run_smoke(client: ApiClient, email: str, password: str, *, demo_run: bool) -
             str(preview.get("summary") or preview),
         )
     )
-    if demo_run:
+    if demo_run or ops_rehearsal:
         run = client.request("POST", "/release-plans/start", plan).get("run", {})
         run_id = str(run.get("run_id") or "")
         side_effects = [
@@ -198,6 +206,40 @@ def run_smoke(client: ApiClient, email: str, password: str, *, demo_run: bool) -
                     str(fetched.get("status") or fetched),
                 )
             )
+            if ops_rehearsal:
+                results.extend(run_operator_rehearsal(client, run_id))
+    return results
+
+
+def run_operator_rehearsal(client: ApiClient, run_id: str) -> list[SmokeResult]:
+    actions = [
+        ("pause", "release-flow smoke rehearsal pause", {"paused"}),
+        ("notify", "release-flow smoke rehearsal notify", set()),
+        ("resume", "release-flow smoke rehearsal resume", {"running", "waiting_for_approval"}),
+        ("cancel", "release-flow smoke rehearsal cleanup", {"cancelled"}),
+    ]
+    results: list[SmokeResult] = []
+    for action, reason, expected_statuses in actions:
+        response = client.request("POST", f"/release-runs/{run_id}/{action}", {"reason": reason})
+        run = response.get("run", {}) if isinstance(response, dict) else {}
+        status = str(run.get("derived_status") or run.get("status") or "")
+        accepted = response.get("accepted")
+        ok = bool(accepted) if action == "notify" else status in expected_statuses
+        results.append(
+            SmokeResult(
+                f"release-runs.{action}",
+                ok,
+                f"accepted={accepted}" if action == "notify" else status or str(response),
+            )
+        )
+    fetched = client.request("GET", f"/release-runs/{run_id}").get("run", {})
+    results.append(
+        SmokeResult(
+            "release-runs.cleanup",
+            fetched.get("run_id") == run_id and str(fetched.get("status") or "") == "cancelled",
+            str(fetched.get("status") or fetched),
+        )
+    )
     return results
 
 
@@ -209,6 +251,11 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     parser.add_argument("--password", default=os.getenv("AUTH_PASSWORD", ""))
     parser.add_argument("--timeout", type=float, default=float(os.getenv("SMOKE_TIMEOUT_SECONDS", "15")))
     parser.add_argument("--demo-run", action="store_true", help="create a tracked demo release run")
+    parser.add_argument(
+        "--ops-rehearsal",
+        action="store_true",
+        help="create a tracked demo release run and exercise pause/notify/resume/cancel",
+    )
     return parser.parse_args(argv)
 
 
@@ -220,7 +267,13 @@ def main(argv: list[str]) -> int:
         return 2
     client = ApiClient(api_base_url, timeout=args.timeout)
     try:
-        results = run_smoke(client, args.email, args.password, demo_run=args.demo_run)
+        results = run_smoke(
+            client,
+            args.email,
+            args.password,
+            demo_run=args.demo_run,
+            ops_rehearsal=args.ops_rehearsal,
+        )
     except Exception as exc:
         print(json.dumps({"ok": False, "error": str(exc)}, ensure_ascii=False, indent=2), file=sys.stderr)
         return 1
