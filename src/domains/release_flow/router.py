@@ -3258,6 +3258,27 @@ def release_run_report_markdown(
                 f"- {check.get('name') or 'check'}: {check.get('status') or 'info'} "
                 f"({check.get('message') or 'No message.'})"
             )
+    verification = handoff.get("verification") if isinstance(handoff.get("verification"), dict) else {}
+    if verification:
+        lines.extend(["", "Verification:", f"- {verification.get('status') or 'info'}: {verification.get('message') or 'No verification message.'}"])
+        evidence = verification.get("evidence") if isinstance(verification.get("evidence"), list) else []
+        lines.extend(f"- evidence: {item}" for item in evidence[:3])
+        jobs = verification.get("jobs") if isinstance(verification.get("jobs"), list) else []
+        for job in jobs[:3]:
+            if isinstance(job, dict):
+                lines.append(
+                    f"- job: {job.get('job_id') or job.get('kind') or 'verification'} "
+                    f"{job.get('status') or 'unknown'}"
+                )
+        if verification.get("override_reason"):
+            lines.append(f"- override: {verification.get('override_reason')}")
+    abort_criteria = handoff.get("abort_criteria") if isinstance(handoff.get("abort_criteria"), dict) else {}
+    if abort_criteria:
+        lines.extend(["", "Rollback criteria:", f"- {abort_criteria.get('status') or 'info'}: {abort_criteria.get('message') or 'No rollback criteria message.'}"])
+        criteria = abort_criteria.get("criteria") if isinstance(abort_criteria.get("criteria"), list) else []
+        lines.extend(f"- {item}" for item in criteria[:3])
+        if abort_criteria.get("override_reason"):
+            lines.append(f"- override: {abort_criteria.get('override_reason')}")
     steps = run.get("steps") if isinstance(run.get("steps"), list) else []
     if steps:
         lines.extend(["", "Steps:"])
