@@ -1899,6 +1899,9 @@ function RunSummary({
 }) {
   if (!summary) return null;
   const statuses = Object.entries(summary.status_breakdown).sort(([left], [right]) => left.localeCompare(right));
+  const policyOverrideSources = Object.entries(summary.policy_override_breakdown ?? {})
+    .sort(([leftSource, leftCount], [rightSource, rightCount]) => rightCount - leftCount || leftSource.localeCompare(rightSource))
+    .slice(0, 6);
   const opsSignals: RunSummarySignal[] = [
     { label: 'Needs attention', count: summary.attention_required_runs ?? 0, filter: 'attention' },
     { label: 'Active', count: summary.active_runs ?? 0, filter: 'active' },
@@ -1948,6 +1951,21 @@ function RunSummary({
           >
             <span>{signal.label}</span>
             <strong>{signal.count}</strong>
+          </button>
+        );
+      })}
+      {policyOverrideSources.map(([source, count]) => {
+        const filter = `policy_override_source:${source}` as ReleaseRunFilter;
+        return (
+          <button
+            key={`policy-override-${source}`}
+            type="button"
+            className="release-flow__summary-card"
+            aria-pressed={runFilter === filter}
+            onClick={() => onRunFilterChange(filter)}
+          >
+            <span>{source}</span>
+            <strong>{count}</strong>
           </button>
         );
       })}

@@ -31,7 +31,8 @@ export type ReleaseRunFilter =
   | 'verification_pending_timeout'
   | 'policy_override'
   | 'active_change_freeze'
-  | 'change_freeze_override';
+  | 'change_freeze_override'
+  | `policy_override_source:${string}`;
 
 export const releaseKeys = {
   plans: () => ['release-plans'] as const,
@@ -80,6 +81,9 @@ function releaseRunsPath(planId?: string, filter: ReleaseRunFilter = 'all') {
   if (filter === 'verification_failed') params.set('verification_failed_only', 'true');
   if (filter === 'verification_pending_timeout') params.set('verification_pending_timeout_only', 'true');
   if (filter === 'policy_override') params.set('policy_override_only', 'true');
+  if (filter.startsWith('policy_override_source:')) {
+    params.set('policy_override_source', filter.slice('policy_override_source:'.length));
+  }
   if (filter === 'active_change_freeze') params.set('active_change_freeze_only', 'true');
   if (filter === 'change_freeze_override') params.set('change_freeze_override_only', 'true');
   if (

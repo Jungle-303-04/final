@@ -160,6 +160,7 @@
 - change freeze run filter: summary에 active freeze/override run 수를 표시하고 `active_change_freeze_only`, `change_freeze_override_only` API/UI filter로 freeze 영향/override run을 빠르게 조회
 - policy override run filter: summary에 정책 override run 수를 표시하고 `policy_override_only` API/UI filter로 diagnostics, rollback, change ticket, release window, freeze, runbook, verification, abort criteria override run을 빠르게 조회
 - policy override handoff/report: operator handoff와 report Markdown에 policy override source/reason/production targets를 모아 표시해 예외 승인 근거를 바로 리뷰
+- policy override source breakdown: summary에 policy override source별 count를 제공하고 `policy_override_source` API/UI shortcut으로 특정 예외 유형 run만 조회
 
 ## 검증
 - `py -3 -m pytest -q tests/test_release_flow_diagnostics.py tests/test_release_flow_projection.py`

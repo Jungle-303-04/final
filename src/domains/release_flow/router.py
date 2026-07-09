@@ -106,6 +106,7 @@ async def list_release_runs(
     verification_failed_only: bool = Query(default=False),
     verification_pending_timeout_only: bool = Query(default=False),
     policy_override_only: bool = Query(default=False),
+    policy_override_source: str | None = Query(default=None, max_length=120),
     active_change_freeze_only: bool = Query(default=False),
     change_freeze_override_only: bool = Query(default=False),
     limit: int = Query(default=50, ge=1, le=200),
@@ -127,6 +128,7 @@ async def list_release_runs(
         verification_failed_only=verification_failed_only,
         verification_pending_timeout_only=verification_pending_timeout_only,
         policy_override_only=policy_override_only,
+        policy_override_source=policy_override_source,
         active_change_freeze_only=active_change_freeze_only,
         change_freeze_override_only=change_freeze_override_only,
     )
@@ -3017,10 +3019,12 @@ def filter_release_runs(
     verification_failed_only: bool = False,
     verification_pending_timeout_only: bool = False,
     policy_override_only: bool = False,
+    policy_override_source: str | None = None,
     active_change_freeze_only: bool = False,
     change_freeze_override_only: bool = False,
 ) -> list[dict[str, Any]]:
     expected_status = str(status or "").strip().lower()
+    expected_policy_override_source = release_policy_override_source_key(policy_override_source)
     filtered: list[dict[str, Any]] = []
     for run in runs:
         run_status = str(run.get("derived_status") or run.get("status") or "").lower()
@@ -3042,6 +3046,11 @@ def filter_release_runs(
         if verification_pending_timeout_only and not release_run_has_timed_out_verification(run):
             continue
         if policy_override_only and not release_run_has_policy_override(run):
+            continue
+        if expected_policy_override_source and not release_run_has_policy_override_source(
+            run,
+            expected_policy_override_source,
+        ):
             continue
         if active_change_freeze_only and not release_run_has_active_change_freeze(run):
             continue
@@ -3118,6 +3127,18 @@ RELEASE_GUARD_POLICY_OVERRIDE_PATHS = (
 
 def release_run_has_policy_override(run: dict[str, Any]) -> bool:
     return bool(release_run_policy_overrides(run))
+
+
+def release_policy_override_source_key(value: Any) -> str:
+    return str(value or "").strip().lower().replace("_", " ").replace("-", " ")
+
+
+def release_run_has_policy_override_source(run: dict[str, Any], source: str) -> bool:
+    expected_source = release_policy_override_source_key(source)
+    return any(
+        release_policy_override_source_key(override.get("source")) == expected_source
+        for override in release_run_policy_overrides(run)
+    )
 
 
 def release_run_policy_overrides(run: dict[str, Any]) -> list[dict[str, Any]]:
@@ -3221,6 +3242,7 @@ def release_run_summary_from_runs(runs: list[dict[str, Any]]) -> dict[str, Any]:
     verification_failed_runs = 0
     verification_pending_timeout_runs = 0
     policy_override_runs = 0
+    policy_override_breakdown: dict[str, int] = {}
     active_change_freeze_runs = 0
     change_freeze_override_runs = 0
     stale_runs = 0
@@ -3266,8 +3288,12 @@ def release_run_summary_from_runs(runs: list[dict[str, Any]]) -> dict[str, Any]:
         verification_pending_timed_out = release_run_has_timed_out_verification(run)
         if verification_pending_timed_out:
             verification_pending_timeout_runs += 1
-        if release_run_has_policy_override(run):
+        policy_overrides = release_run_policy_overrides(run)
+        if policy_overrides:
             policy_override_runs += 1
+            for override in policy_overrides:
+                source = str(override.get("source") or "Policy override")
+                policy_override_breakdown[source] = policy_override_breakdown.get(source, 0) + 1
         if release_run_has_active_change_freeze(run):
             active_change_freeze_runs += 1
         if release_run_has_change_freeze_override(run):
@@ -3305,6 +3331,7 @@ def release_run_summary_from_runs(runs: list[dict[str, Any]]) -> dict[str, Any]:
         "verification_failed_runs": verification_failed_runs,
         "verification_pending_timeout_runs": verification_pending_timeout_runs,
         "policy_override_runs": policy_override_runs,
+        "policy_override_breakdown": policy_override_breakdown,
         "active_change_freeze_runs": active_change_freeze_runs,
         "change_freeze_override_runs": change_freeze_override_runs,
         "stale_runs": stale_runs,
