@@ -136,6 +136,7 @@
 - audit prefix filter: `release.notify.*`처럼 동적 timestamp suffix가 붙는 audit event를 prefix 기준으로 조회/CSV export
 - audit operator filters: Audit 카드에서 `release.*`, `release.retry.*`, `release.notify.*` prefix filter를 바로 선택
 - audit row metadata: Audit 카드의 event row에도 notify severity/application, retry attempt, RCA/evidence meta를 같이 표시
+- audit copy: 현재 scope/filter의 release audit 이벤트 요약을 Markdown으로 복사해 사후 리뷰나 증적 코멘트에 공유
 - attention alert: 선택한 attention/stale release run을 기존 `alert.requested` 파이프라인으로 수동 알림 요청
 - notify cooldown/audit: release notify는 `release.notify.<timestamp>` audit event를 남기고 최근 알림이 있으면 cooldown blocker로 반복 알림 폭주를 차단
 - notify cooldown handoff: notify cooldown 중에는 operator handoff의 notify next action과 UI Notify 버튼을 비활성화하고 남은 대기 사유를 표시

@@ -1482,6 +1482,29 @@ function formatPreviewMarkdown(preview: ReleasePlanPreview, liveSideEffects: boo
   return lines.join('\n');
 }
 
+function copyAuditMarkdown(events: ReleaseAuditEvent[], scopeLabel: string, eventType: string) {
+  copyText(formatAuditMarkdown(events, scopeLabel, eventType), 'Release audit copied.', 'Copy release audit');
+}
+
+function formatAuditMarkdown(events: ReleaseAuditEvent[], scopeLabel: string, eventType: string): string {
+  const lines = [
+    `## Release audit: ${auditScopeText(scopeLabel, eventType)}`,
+    '',
+    `- Events: ${events.length}`,
+    `- Filter: ${eventType || 'all'}`,
+  ];
+  const first = events[0];
+  if (first) {
+    lines.push(`- Plan: ${first.plan_name}`, `- Latest run: ${shortId(first.run_id)} / ${first.run_status || 'unknown'}`);
+  }
+  lines.push('', 'Recent events:');
+  lines.push(...events.slice(0, 12).map(event => {
+    const meta = releaseEventMeta(event);
+    return `- ${event.event_type}: ${event.message} (${shortId(event.run_id)} / ${event.run_status || 'unknown'}${meta ? ` / ${meta}` : ''})`;
+  }));
+  return lines.join('\n');
+}
+
 function copyReadinessMarkdown(readiness: ReleaseReadiness) {
   copyText(formatReadinessMarkdown(readiness), 'Release readiness copied.', 'Copy release readiness');
 }
@@ -1771,6 +1794,7 @@ function AuditPanel({
     <>
       <Badge tone="info">{scopeLabel}</Badge>
       {eventType && <Badge tone="warning">{eventType}</Badge>}
+      <Button size="sm" variant="ghost" disabled={events.length === 0} onClick={() => copyAuditMarkdown(events, scopeLabel, eventType)}>Copy audit</Button>
       <Button size="sm" loading={exporting} disabled={exporting} onClick={onExport}>Export CSV</Button>
     </>
   );
