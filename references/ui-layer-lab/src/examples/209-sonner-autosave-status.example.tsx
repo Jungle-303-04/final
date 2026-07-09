@@ -2,15 +2,15 @@ import { useState } from "react";
 import { toast } from "sonner";
 
 export default function SonnerAutosaveStatusExample() {
-  const [text, setText] = useState("Draft note");
-  const [saved, setSaved] = useState("Saved");
+  const [text, setText] = useState("초안 메모");
+  const [saved, setSaved] = useState("저장됨");
 
   function change(value: string) {
     setText(value);
-    setSaved("Saving...");
+    setSaved("저장 중...");
     window.setTimeout(() => {
-      setSaved("Saved just now");
-      toast.success("Autosaved");
+      setSaved("방금 저장됨");
+      toast.success("자동 저장됨");
     }, 600);
   }
 
