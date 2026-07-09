@@ -63,7 +63,27 @@
 
 ## 검증
 - `py -3 -m pytest -q tests/test_release_flow_diagnostics.py tests/test_release_flow_projection.py`
+- `py -3 -m pytest -q tests/test_release_flow_smoke_script.py`
 - `npm --prefix frontend run typecheck`
+
+## 운영 smoke
+기본 모드는 release run을 만들지 않고 health/auth/applications/release API/preview만 확인한다.
+
+```bash
+API_BASE_URL="https://k8s.woonyong.org/api" \
+AUTH_EMAIL="<admin email>" \
+AUTH_PASSWORD="<admin password>" \
+python scripts/release_flow_smoke.py
+```
+
+demo release run까지 생성해서 projection 전 단계의 tracked run 생성 경로를 확인하려면 명시적으로 `--demo-run`을 붙인다. 이 모드는 `runtime_mode=demo`, `provider_mode=dry_run` 플랜만 사용하므로 live GitOps dispatch를 호출하지 않는다.
+
+```bash
+API_BASE_URL="https://k8s.woonyong.org/api" \
+AUTH_EMAIL="<admin email>" \
+AUTH_PASSWORD="<admin password>" \
+python scripts/release_flow_smoke.py --demo-run
+```
 
 ## 아직 운영에서 추가하면 좋은 것
 - 실제 target cluster와 연결한 `live` end-to-end smoke test
