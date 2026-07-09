@@ -488,6 +488,12 @@ def test_release_readiness_passes_demo_with_alert_channel(monkeypatch) -> None:
     assert response.ready is True
     assert response.blockers == []
     assert response.warnings == []
+    assert response.impact["live_side_effects"] is False
+    assert response.impact["total_steps"] == 1
+    assert response.impact["applications"] == ["checkout"]
+    assert response.impact["environments"] == ["sandbox"]
+    assert response.impact["production_target_count"] == 0
+    assert response.impact["first_wave_steps"][0]["name"] == "Checkout"
     assert {check["check_id"] for check in response.checks} >= {
         "plan.preview",
         "alerts.enabled_channels",
@@ -1266,6 +1272,9 @@ def test_release_readiness_blocks_production_live_without_owner_contact(monkeypa
 
     assert response.ready is False
     assert any("release_owner or oncall_contact" in item for item in response.blockers)
+    assert response.impact["live_side_effects"] is True
+    assert response.impact["production_target_count"] == 1
+    assert response.impact["production_targets"] == ["Checkout"]
     owner_check = next(check for check in response.checks if check["check_id"] == "owner.contact")
     assert owner_check["status"] == "blocked"
     owner_action = next(action for action in response.next_actions if action["check_id"] == "owner.contact")
