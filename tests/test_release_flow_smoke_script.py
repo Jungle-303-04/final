@@ -23,6 +23,8 @@ class FakeClient:
     def __init__(self) -> None:
         self.calls: list[tuple[str, str, dict[str, object] | None]] = []
         self.release_run_status = "running"
+        self.verification_failed_runs = 0
+        self.verification_pending_timeout_runs = 0
 
     def request(
         self,
@@ -74,9 +76,17 @@ class FakeClient:
                 "waiting_for_approval_runs": 0,
                 "live_runs": 0,
                 "unhealthy_runs": 0,
+                "verification_failed_runs": self.verification_failed_runs,
+                "verification_pending_timeout_runs": self.verification_pending_timeout_runs,
                 "last_run_status": None,
                 "recent_runs": [],
             }
+        if path.startswith("/release-runs?"):
+            if "verification_failed_only=true" in path:
+                return {"runs": [{"run_id": "run-verification-failed", "status": "running"}]}
+            if "verification_pending_timeout_only=true" in path:
+                return {"runs": [{"run_id": "run-verification-timeout", "status": "running"}]}
+            return {"runs": []}
         if path == "/release-plans/preview":
             return {"preview": {"executable": True, "summary": "2 steps can run"}}
         if path == "/release-readiness":
@@ -257,3 +267,49 @@ def test_smoke_alert_preflight_tests_warning_capable_channel() -> None:
     assert payload["channel_id"] == "chan-release-warning"
     assert payload["severity"] == "warning"
     assert payload["message"] == "release-flow alert channel preflight"
+
+
+def test_smoke_verification_preflight_passes_when_summary_is_clean() -> None:
+    smoke = load_smoke_module()
+    client = FakeClient()
+    args = smoke.parse_args(["--verification-preflight"])
+
+    results = smoke.run_smoke(
+        client,
+        "ops@example.com",
+        "password",
+        demo_run=False,
+        verification_preflight=True,
+        args=args,
+    )
+
+    assert all(result.ok for result in results)
+    paths = [path for _method, path, _payload in client.calls]
+    assert "/release-runs/summary" in paths
+    assert not any(path.startswith("/release-runs?") for path in paths)
+
+
+def test_smoke_verification_preflight_flags_failed_and_timed_out_runs() -> None:
+    smoke = load_smoke_module()
+    client = FakeClient()
+    client.verification_failed_runs = 1
+    client.verification_pending_timeout_runs = 1
+    args = smoke.parse_args(["--verification-preflight", "--verification-plan-id", "plan-1"])
+
+    results = smoke.run_smoke(
+        client,
+        "ops@example.com",
+        "password",
+        demo_run=False,
+        verification_preflight=True,
+        args=args,
+    )
+
+    assert not all(result.ok for result in results)
+    paths = [path for _method, path, _payload in client.calls]
+    assert "/release-runs?plan_id=plan-1&limit=20&verification_failed_only=true" in paths
+    assert "/release-runs?plan_id=plan-1&limit=20&verification_pending_timeout_only=true" in paths
+    failed = next(result for result in results if result.name == "release-runs.verification-failed")
+    timed_out = next(result for result in results if result.name == "release-runs.verification-timeout")
+    assert "run-verification-failed" in failed.detail
+    assert "run-verification-timeout" in timed_out.detail
