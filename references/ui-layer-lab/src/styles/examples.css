@@ -801,7 +801,76 @@
 
 .small-heatmap-grid .heat-cell {
   min-height: var(--control-height-md);
+  border: 1px solid transparent;
   line-height: var(--line-button);
+}
+
+.ai-chat-card,
+.matrix-dashboard,
+.phase-ring-card,
+.resource-meter section,
+.metric-bars button,
+.column-browser > div,
+.breadcrumb-drill .detail-panel,
+.threshold-heatmap,
+.heatmap-demo .detail-panel {
+  border-color: var(--border);
+  color: var(--text);
+  background: var(--panel);
+}
+
+.matrix-dashboard button,
+.segmented-row button,
+.breadcrumb-drill nav button,
+.metric-bars button {
+  color: var(--text);
+  background: var(--panel-soft);
+}
+
+.matrix-dashboard button.active,
+.segmented-row button[aria-pressed="true"],
+.breadcrumb-drill nav button[aria-current="page"],
+.metric-bars button.active {
+  border-color: var(--border-strong);
+  background: var(--surface-raised);
+}
+
+.small-heatmap-grid .heat-cell[aria-pressed="true"] {
+  border-color: var(--border-strong);
+  box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--text) 62%, transparent);
+}
+
+.small-heatmap-grid .heat-cell.selected.cool {
+  background: color-mix(in srgb, var(--blue) 20%, var(--panel));
+}
+
+.small-heatmap-grid .heat-cell.selected.warm {
+  background: color-mix(in srgb, var(--orange) 35%, var(--panel));
+}
+
+.small-heatmap-grid .heat-cell.selected.hot {
+  background: color-mix(in srgb, var(--red) 42%, var(--panel));
+}
+
+.progress-track {
+  background: var(--border);
+}
+
+.progress-track div {
+  background: linear-gradient(90deg, var(--accent), color-mix(in srgb, var(--accent) 42%, var(--text)));
+}
+
+.terminal-log {
+  border-color: var(--border);
+  background: var(--panel);
+}
+
+.terminal-log code {
+  color: var(--text);
+}
+
+.phase-ring span {
+  background: var(--panel);
 }
 
 .hover-lift-card,
