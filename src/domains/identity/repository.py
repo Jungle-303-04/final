@@ -4,7 +4,7 @@ import hashlib
 import uuid
 from typing import Any
 
-from sqlalchemy import case, func, select, update
+from sqlalchemy import case, delete, func, select, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from domains.identity.models import (
@@ -19,6 +19,13 @@ from domains.identity.models import (
     UserAccount,
     Workspace,
 )
+from domains.target.management_guard import MANAGEMENT_CLUSTER_ROLE, TARGET_CLUSTER_ROLE
+from packages.config.security import (
+    APP_ENV_ENV,
+    TEST_APP_ENV,
+    development_security_bypass_enabled,
+)
+from packages.config.settings import env
 from packages.contracts.event_bus.interfaces import JsonObject
 from packages.contracts.identity import (
     DEFAULT_GROUP_ID,
@@ -239,6 +246,44 @@ class IdentityAccessRepository(DatabaseConnection):
         )
         with self.connection() as conn:
             return conn.execute(statement).first() is not None
+
+    def purge_test_target_cluster_registration(self, workspace_id: str, cluster_id: str) -> bool:
+        """테스트 fixture registration과 전용 접근 할당을 물리 삭제한다."""
+        if env(APP_ENV_ENV, "").strip().lower() != TEST_APP_ENV:
+            return False
+
+        cluster = self.cluster_table
+        assignment = self.resource_assignment_table
+        member_role = self.member_resource_role_table
+        cluster_role = func.coalesce(
+            cluster.c.settings["cluster_role"].astext,
+            TARGET_CLUSTER_ROLE,
+        )
+        delete_registration = (
+            delete(cluster)
+            .where(
+                cluster.c.workspace_id == workspace_id,
+                cluster.c.cluster_id == cluster_id,
+                cluster.c.environment == TEST_APP_ENV,
+                cluster_role != MANAGEMENT_CLUSTER_ROLE,
+            )
+            .returning(cluster.c.cluster_id)
+        )
+        assignment_filter = (
+            assignment.c.organization_id == workspace_id,
+            assignment.c.resource_type == AccessResourceType.CLUSTER.value,
+            assignment.c.resource_id == cluster_id,
+        )
+        assignment_ids = select(assignment.c.resource_assignment_id).where(*assignment_filter)
+
+        with self.connection() as conn:
+            if conn.execute(delete_registration).first() is None:
+                return False
+            conn.execute(
+                delete(member_role).where(member_role.c.resource_assignment_id.in_(assignment_ids))
+            )
+            conn.execute(delete(assignment).where(*assignment_filter))
+        return True
 
     def get_user_by_email(self, email: str) -> JsonObject | None:
         table = UserAccount.__table__
@@ -707,6 +752,10 @@ class IdentityAccessRepository(DatabaseConnection):
         resource_type: str,
         action: str,
     ) -> set[str] | None:
+        # 상세 인가와 목록 필터가 서로 다른 결과를 내지 않도록 개발 우회를 한곳에서 맞춘다.
+        if development_security_bypass_enabled():
+            return None
+
         def lookup() -> set[str] | None:
             if self.is_service_admin(user_id):
                 return None

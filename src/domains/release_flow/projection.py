@@ -46,10 +46,6 @@ RELEASE_WORKFLOW_SUBJECTS = {
     EventSubject.COMMAND_REJECTED.value,
     EventSubject.COMMAND_COMPLETED.value,
 }
-FAILED_WORKFLOW_SUBJECTS = {
-    EventSubject.WORKFLOW_RUN_FAILED.value,
-    EventSubject.APPROVAL_REJECTED.value,
-}
 DEFAULT_RELEASE_FAILURE_EVIDENCE_PROVIDERS = ["kubernetes", "metrics", "logs", "traces"]
 RELEASE_WORKFLOW_FAILURE_SOURCE_ID = "release-workflow-failure"
 RELEASE_VERIFICATION_SOURCE_ID = "post-deploy-verification"

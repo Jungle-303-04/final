@@ -54,7 +54,7 @@ def test_spec_carries_query_type_and_empty_payload(telemetry_module) -> None:
     assert telemetry.spec("prometheus").empty_payload() == {}
     assert telemetry.query_type_for("prometheus").__name__ == "PrometheusInstantQuery"
     assert telemetry.range_query_type_for("prometheus").__name__ == "PrometheusRangeQuery"
-    assert telemetry.range_query_type_for("loki") is None
+    assert telemetry.range_query_type_for("loki").__name__ == "LokiLogQuery"
 
 
 def test_reverse_lookup_by_provider_key(telemetry_module) -> None:
@@ -118,6 +118,18 @@ def test_query_definition_uses_registry(telemetry_module) -> None:
             {"source": "loki", "name": "err", "query": '{app="x"} |= "error"'}
         )
         assert type(definition.to_provider_query()).__name__ == "LokiLogQuery"
+
+        loki_range_definition = module.TelemetryQueryDefinition.from_mapping(
+            {
+                "source": "loki",
+                "name": "recent_err",
+                "query": '{app="x"} |= "error"',
+                "range_seconds": 120,
+            }
+        )
+        loki_range_query = loki_range_definition.to_provider_query()
+        assert type(loki_range_query).__name__ == "LokiLogQuery"
+        assert loki_range_query.range_seconds == 120
 
         range_definition = module.TelemetryQueryDefinition.from_mapping(
             {

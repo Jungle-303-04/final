@@ -90,10 +90,62 @@ def aggregate_evidence_payload(rows: list[JsonObject]) -> JsonObject | None:
         "agent_id": first["agent_id"],
         "kubernetes": {},
     }
+    release_context = common_release_context(rows)
+    if release_context:
+        payload["release_context"] = release_context
+        correlation_id = release_context.get("correlation_id")
+        if isinstance(correlation_id, str) and correlation_id:
+            payload["correlation_id"] = correlation_id
+        run_id = release_context.get("rca_test_run_id")
+        scenario_id = release_context.get("scenario_id")
+        if isinstance(run_id, str) and run_id and isinstance(scenario_id, str) and scenario_id:
+            rca_test_metadata: JsonObject = {"run_id": run_id, "scenario_id": scenario_id}
+            pod_names = release_context.get("pod_names")
+            if isinstance(pod_names, list):
+                normalized_names = [str(name).strip() for name in pod_names if str(name).strip()]
+                if normalized_names:
+                    rca_test_metadata["pod_names"] = list(dict.fromkeys(normalized_names))[:32]
+            payload["metadata"] = {"rca_test": rca_test_metadata}
     for row in rows:
         provider_key = str(row["provider_key"])
         if row["status"] == EVIDENCE_JOB_STATUS_COMPLETED and isinstance(row["result"], dict):
             payload.update(normalize_evidence_provider_result(provider_key, row["result"]))
         elif row["status"] == EVIDENCE_JOB_STATUS_FAILED:
             payload.setdefault(provider_key, empty_provider_payload(provider_key))
+    promote_release_target(payload, release_context)
     return payload
+
+
+def common_release_context(rows: list[JsonObject]) -> JsonObject:
+    """provider job snapshot에 보존된 공통 수집 문맥을 evidence body로 승격한다."""
+    contexts: list[JsonObject] = []
+    for row in rows:
+        provider_policy = row.get("provider_policy")
+        if not isinstance(provider_policy, dict):
+            continue
+        context = provider_policy.get("release_context")
+        if isinstance(context, dict) and context:
+            contexts.append(context)
+    if not contexts:
+        return {}
+    first = contexts[0]
+    return first if all(context == first for context in contexts[1:]) else {}
+
+
+def promote_release_target(payload: JsonObject, release_context: JsonObject) -> None:
+    """Keep the server-owned Deployment target instead of the Pod's ReplicaSet owner."""
+    if release_context.get("evidence_scope") != "rca_test_run":
+        return
+    kind = release_context.get("resource_kind")
+    name = release_context.get("resource_name")
+    namespace = release_context.get("namespace")
+    kubernetes = payload.get("kubernetes")
+    if not isinstance(kubernetes, dict) or not isinstance(kind, str) or not isinstance(name, str):
+        return
+    if not kind or not name:
+        return
+    kubernetes["resource"] = {
+        "kind": kind,
+        "name": name,
+        "namespace": namespace if isinstance(namespace, str) and namespace else None,
+    }

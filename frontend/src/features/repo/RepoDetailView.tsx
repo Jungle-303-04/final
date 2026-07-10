@@ -2,6 +2,7 @@ import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { motion } from 'motion/react';
 import { useApplication, useDeployments, useRuns } from '@/features/repo/api';
 import { ApprovalCard } from '@/features/repo/ApprovalCard';
+import { encodeChatContext, type AiChatContext } from '@/features/chat/context';
 import { useConsolePath } from '@/features/console/ui';
 import { shortSha, timeAgo } from '@/shared/lib/format';
 import type { Deployment, PlanChange, WorkflowRun } from '@/shared/lib/types';
@@ -115,7 +116,11 @@ export default function RepoDetailView() {
           loading={runsQ.isPending}
           error={runsQ.isError ? runsQ.error : null}
           onRetry={() => runsQ.refetch()}
-          onAiAnalyze={(error) => navigate(pathFor(`/ai?prefill=${encodeURIComponent(`Safe PR 실패 원인 분석: ${error}`)}`))}
+          onAiAnalyze={(run, error) => navigate(aiPath(pathFor, {
+            diff_source: 'safe_pr',
+            workflow_run_id: run.run_id,
+            application_id: run.application_id,
+          }, `Safe PR 실패 원인 분석: ${error}`))}
         />
       )}
 
@@ -184,9 +189,20 @@ function RunHistory({
 
 function ApprovalPreview({ run }: { run: WorkflowRun }) {
   const diffStep = run.steps.find((step) => step.name === 'DIFFING');
+  const pathFor = useConsolePath();
   return (
     <div className="grid gap-3 rounded-panel border border-border bg-surface p-3">
-      <ApprovalCard approvalId={run.approval_id ?? ''} summary={`${shortSha(run.commit_sha)} 배포 승인`} compact />
+      <div className="flex min-w-0 flex-wrap items-center justify-between gap-2">
+        <ApprovalCard approvalId={run.approval_id ?? ''} summary={`${shortSha(run.commit_sha)} 배포 승인`} compact />
+        <Link to={aiPath(pathFor, {
+          diff_source: 'gitops',
+          workflow_run_id: run.run_id,
+          approval_id: run.approval_id,
+          application_id: run.application_id,
+        }, '이 GitOps diff 위험도를 설명해줘')}>
+          <Button size="sm" variant="secondary">AI 설명</Button>
+        </Link>
+      </div>
       {diffStep?.changes && diffStep.changes.length > 0 ? (
         <PlanDiffPanel changes={diffStep.changes} resource={diffStep.resource} />
       ) : (
@@ -272,9 +288,17 @@ function SafePrCard({
   loading: boolean;
   error: Error | null;
   onRetry: () => void;
-  onAiAnalyze: (error: string) => void;
+  onAiAnalyze: (run: WorkflowRun, error: string) => void;
 }) {
   const safePr = run?.safe_pr;
+  const pathFor = useConsolePath();
+  const aiHref = run
+    ? aiPath(pathFor, {
+      diff_source: 'safe_pr',
+      workflow_run_id: run.run_id,
+      application_id: run.application_id,
+    }, '이 Safe PR patch diff 위험도를 설명해줘')
+    : '';
   return (
     <Card
       title="Safe PR"
@@ -291,6 +315,11 @@ function SafePrCard({
             {run?.commit_sha && <CodeText>{shortSha(run.commit_sha)}</CodeText>}
             {safePr.pr_url && (
               <a className="font-semibold text-accent hover:text-accent-hover" href={safePr.pr_url} target="_blank" rel="noreferrer">PR 열기</a>
+            )}
+            {run && (
+              <Link className="ml-auto" to={aiHref}>
+                <Button size="sm" variant="secondary">AI 설명</Button>
+              </Link>
             )}
           </div>
           {safePr.explanation && <p className="text-body text-secondary">{safePr.explanation}</p>}
@@ -309,13 +338,20 @@ function SafePrCard({
           {safePr.error && (
             <div className="flex flex-wrap items-center justify-between gap-3 rounded-panel border border-danger/40 bg-bg p-3">
               <p className="min-w-0 text-body text-secondary">Safe PR 실패 사유: <span className="font-semibold text-danger">{safePr.error}</span></p>
-              <Button size="sm" variant="primary" leadingIcon={<SendIcon />} onClick={() => onAiAnalyze(safePr.error ?? '')}>AI 분석</Button>
+              <Button size="sm" variant="primary" leadingIcon={<SendIcon />} onClick={() => run && onAiAnalyze(run, safePr.error ?? '')}>AI 분석</Button>
             </div>
           )}
         </div>
       )}
     </Card>
   );
+}
+
+function aiPath(pathFor: (to: string) => string, context: AiChatContext, prefill: string) {
+  const params = new URLSearchParams({ prefill });
+  const encoded = encodeChatContext(context);
+  if (encoded) params.set('context', encoded);
+  return pathFor(`/ai?${params.toString()}`);
 }
 
 function PlanDiffPanel({ changes, resource }: { changes: PlanChange[]; resource?: string }) {

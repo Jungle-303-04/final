@@ -70,9 +70,7 @@ def test_metadata_provider_collects_one_deployment_snapshot(monkeypatch) -> None
                                 "name": "checkout-api-abc123",
                                 "uid": "replicaset-1",
                                 "creationTimestamp": "2026-07-10T09:00:00Z",
-                                "annotations": {
-                                    "deployment.kubernetes.io/revision": "7"
-                                },
+                                "annotations": {"deployment.kubernetes.io/revision": "7"},
                                 "ownerReferences": [
                                     {
                                         "kind": "Deployment",
@@ -95,15 +93,13 @@ def test_metadata_provider_collects_one_deployment_snapshot(monkeypatch) -> None
                                         "status": "False",
                                     }
                                 ],
-                            }
+                            },
                         },
                         {
                             "metadata": {
                                 "name": "other-api-def456",
                                 "uid": "replicaset-2",
-                                "annotations": {
-                                    "deployment.kubernetes.io/revision": "3"
-                                },
+                                "annotations": {"deployment.kubernetes.io/revision": "3"},
                                 "ownerReferences": [
                                     {
                                         "kind": "Deployment",
@@ -334,9 +330,9 @@ def test_metadata_provider_collects_one_deployment_snapshot(monkeypatch) -> None
                                             "failureThreshold": 4,
                                         },
                                     }
-                                ]
+                                ],
                             },
-                        }
+                        },
                     },
                     "status": {
                         "observedGeneration": 12,
@@ -497,9 +493,7 @@ def test_metadata_provider_collects_one_deployment_snapshot(monkeypatch) -> None
                             "metadata": {
                                 "namespace": "sandbox",
                                 "name": "billing-api-abcde",
-                                "labels": {
-                                    "kubernetes.io/service-name": "billing-api"
-                                },
+                                "labels": {"kubernetes.io/service-name": "billing-api"},
                             },
                             "addressType": "IPv4",
                             "ports": [
@@ -525,9 +519,7 @@ def test_metadata_provider_collects_one_deployment_snapshot(monkeypatch) -> None
                             "metadata": {
                                 "namespace": "sandbox",
                                 "name": "checkout-api-abcde",
-                                "labels": {
-                                    "kubernetes.io/service-name": "checkout-api"
-                                },
+                                "labels": {"kubernetes.io/service-name": "checkout-api"},
                             },
                             "addressType": "IPv4",
                             "ports": [
@@ -570,9 +562,7 @@ def test_metadata_provider_collects_one_deployment_snapshot(monkeypatch) -> None
                             "metadata": {
                                 "namespace": "sandbox",
                                 "name": "checkout-live-bcdef",
-                                "labels": {
-                                    "kubernetes.io/service-name": "checkout-live"
-                                },
+                                "labels": {"kubernetes.io/service-name": "checkout-live"},
                             },
                             "addressType": "IPv4",
                             "endpoints": [
@@ -590,9 +580,7 @@ def test_metadata_provider_collects_one_deployment_snapshot(monkeypatch) -> None
                             "metadata": {
                                 "namespace": "sandbox",
                                 "name": "stale-api-cdefg",
-                                "labels": {
-                                    "kubernetes.io/service-name": "stale-api"
-                                },
+                                "labels": {"kubernetes.io/service-name": "stale-api"},
                             },
                             "addressType": "IPv4",
                             "endpoints": [],
@@ -697,9 +685,7 @@ def test_metadata_provider_collects_one_deployment_snapshot(monkeypatch) -> None
             "match_status": "matched",
             "target_relation": "exact_selector_match",
             "matched_pod_count": 1,
-            "matched_pods": [
-                {"namespace": "sandbox", "name": "checkout-api-pod-1"}
-            ],
+            "matched_pods": [{"namespace": "sandbox", "name": "checkout-api-pod-1"}],
         },
         {
             "service": {"namespace": "sandbox", "name": "checkout-live"},
@@ -707,9 +693,7 @@ def test_metadata_provider_collects_one_deployment_snapshot(monkeypatch) -> None
             "match_status": "matched",
             "target_relation": "live_pod_match",
             "matched_pod_count": 1,
-            "matched_pods": [
-                {"namespace": "sandbox", "name": "checkout-api-pod-1"}
-            ],
+            "matched_pods": [{"namespace": "sandbox", "name": "checkout-api-pod-1"}],
         },
         {
             "service": {"namespace": "sandbox", "name": "stale-api"},
@@ -925,8 +909,7 @@ def test_metadata_provider_collects_one_deployment_snapshot(monkeypatch) -> None
     }
     assert "example.com/token" not in snapshot["deployment_annotations"]
     assert (
-        "kubectl.kubernetes.io/last-applied-configuration"
-        not in snapshot["deployment_annotations"]
+        "kubectl.kubernetes.io/last-applied-configuration" not in snapshot["deployment_annotations"]
     )
     assert snapshot["pod_template_labels"] == {"app": "checkout-api"}
     assert snapshot["pod_template_auth"] == {
@@ -1201,9 +1184,7 @@ def test_metadata_provider_collects_service_matches_without_deployments(
                             "metadata": {
                                 "namespace": "target",
                                 "name": "worker-abcde",
-                                "labels": {
-                                    "kubernetes.io/service-name": "worker"
-                                },
+                                "labels": {"kubernetes.io/service-name": "worker"},
                             },
                             "addressType": "IPv4",
                             "endpoints": [
@@ -1262,9 +1243,7 @@ def test_metadata_provider_collects_service_matches_without_deployments(
                 "selector": {"app": "worker"},
                 "match_status": "matched",
                 "matched_pod_count": 1,
-                "matched_pods": [
-                    {"namespace": "target", "name": "worker-pod-1"}
-                ],
+                "matched_pods": [{"namespace": "target", "name": "worker-pod-1"}],
             }
         ],
         "endpoint_slice_ready_endpoints": [
@@ -1307,9 +1286,7 @@ def test_metadata_provider_collects_namespace_deployment_snapshots(monkeypatch) 
                                 "name": "shop-api-abc123",
                                 "uid": "replicaset-3",
                                 "creationTimestamp": "2026-07-10T08:00:00Z",
-                                "annotations": {
-                                    "deployment.kubernetes.io/revision": "2"
-                                },
+                                "annotations": {"deployment.kubernetes.io/revision": "2"},
                                 "ownerReferences": [
                                     {
                                         "kind": "Deployment",
@@ -1418,9 +1395,9 @@ def test_metadata_provider_collects_namespace_deployment_snapshots(monkeypatch) 
                                                     "timeoutSeconds": 1,
                                                 },
                                             }
-                                        ]
+                                        ],
                                     },
-                                }
+                                },
                             },
                             "status": {
                                 "observedGeneration": 4,
@@ -1520,9 +1497,7 @@ def test_metadata_provider_collects_namespace_deployment_snapshots(monkeypatch) 
                             "metadata": {
                                 "namespace": "target",
                                 "name": "shop-api-abcde",
-                                "labels": {
-                                    "kubernetes.io/service-name": "shop-api"
-                                },
+                                "labels": {"kubernetes.io/service-name": "shop-api"},
                             },
                             "addressType": "IPv4",
                             "ports": [
@@ -1594,9 +1569,7 @@ def test_metadata_provider_collects_namespace_deployment_snapshots(monkeypatch) 
             "selector": {"app": "shop-api"},
             "match_status": "matched",
             "matched_pod_count": 1,
-            "matched_pods": [
-                {"namespace": "target", "name": "shop-api-pod-1"}
-            ],
+            "matched_pods": [{"namespace": "target", "name": "shop-api-pod-1"}],
         }
     ]
     assert change_context["endpoint_slice_ready_endpoints"] == [
@@ -1695,9 +1668,7 @@ def test_metadata_provider_collects_namespace_deployment_snapshots(monkeypatch) 
         "port": 8080,
         "timeout_seconds": 1,
     }
-    assert snapshot["containers"][0]["resources"] == {
-        "requests": {"cpu": "50m", "memory": "128Mi"}
-    }
+    assert snapshot["containers"][0]["resources"] == {"requests": {"cpu": "50m", "memory": "128Mi"}}
     assert "env_refs" not in snapshot["containers"][0]
     assert "env_from_refs" not in snapshot["containers"][0]
     assert "volume_mount_refs" not in snapshot["containers"][0]

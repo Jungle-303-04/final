@@ -9,9 +9,13 @@ from conftest import load_service
 class StubDb:
     def __init__(self) -> None:
         self.swept = 0
+        self.queue_ttl_seconds: int | None = None
 
-    async def fail_expired_agent_commands(self) -> list[dict[str, object]]:
+    async def fail_expired_agent_commands(
+        self, *, queue_ttl_seconds: int
+    ) -> list[dict[str, object]]:
         self.swept += 1
+        self.queue_ttl_seconds = queue_ttl_seconds
         return [
             {
                 "command_id": "cmd-1",
@@ -45,8 +49,14 @@ class FailingRetentionDb:
         raise RuntimeError("db busy")
 
 
-def test_command_janitor_emits_completion_for_expired_commands() -> None:
+class FailingExpiredCommandDb:
+    async def fail_expired_agent_commands(self, **_kwargs: object) -> list[dict[str, object]]:
+        raise RuntimeError("command table locked")
+
+
+def test_command_janitor_emits_completion_for_expired_commands(monkeypatch) -> None:
     janitor = load_service("command/command-janitor")
+    monkeypatch.setenv("COMMAND_QUEUE_TTL_SECONDS", "900")
     db = StubDb()
     events = StubEvents()
 
@@ -54,6 +64,7 @@ def test_command_janitor_emits_completion_for_expired_commands() -> None:
 
     assert count == 1
     assert db.swept == 1
+    assert db.queue_ttl_seconds == 900
     assert events.emitted == [
         (
             "command.completed",
@@ -75,3 +86,17 @@ def test_command_janitor_retention_failure_does_not_stop_loop() -> None:
     janitor = load_service("command/command-janitor")
 
     assert asyncio.run(janitor.sweep_database_retention(FailingRetentionDb())) == 0
+
+
+def test_command_janitor_command_lock_failure_does_not_stop_loop() -> None:
+    janitor = load_service("command/command-janitor")
+
+    assert (
+        asyncio.run(
+            janitor.emit_expired_command_completions(
+                FailingExpiredCommandDb(),
+                StubEvents(),
+            )
+        )
+        == 0
+    )

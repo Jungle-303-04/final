@@ -38,10 +38,12 @@ from domains.inventory.router import router as inventory_router
 from domains.providers.router import router as providers_router
 from domains.rca.query_router import router as rca_query_router
 from domains.rca.router import router as rca_router
+from domains.rca.test_scenario_contract import validate_test_scenario_catalog
 from domains.release_flow.router import router as release_flow_router
 from domains.target.events import AgentConnectedBody
 from domains.target.evidence_jobs import EVIDENCE_JOB_STATUS_LEASED, EVIDENCE_JOB_STATUS_QUEUED
 from domains.target.router import router as target_router
+from packages.config import bypass_guard
 from packages.config.constants import Auth, CommandStatus
 from packages.config.constants import Redis as RedisConfig
 from packages.config.logs import CONTEXT_KEY, get_logger
@@ -99,7 +101,10 @@ class ApiGateway:
         self.auth = SessionAuthService(self.sessions)
         self.password_auth = PasswordAuthService(self.db, self.sessions)
         self.app = FastAPI(
-            title=Settings.APP_TITLE, version=Settings.APP_VERSION, lifespan=self.lifespan
+            title=Settings.APP_TITLE,
+            version=Settings.APP_VERSION,
+            root_path=env(Settings.ROOT_PATH_ENV, Settings.DEFAULT_ROOT_PATH).strip(),
+            lifespan=self.lifespan,
         )
         self._configure_cors(self.app)
         self._configure_session_origin_guard(self.app)
@@ -232,6 +237,8 @@ class ApiGateway:
 
     @asynccontextmanager
     async def lifespan(self, _app: FastAPI) -> AsyncIterator[None]:
+        bypass_guard.assert_bypass_safe_at_startup()
+        validate_test_scenario_catalog()
         await wait_for_database(self.db)
         await self.sessions.connect()
         await self.bus.connect()
@@ -529,10 +536,14 @@ class ApiGateway:
     def _register_metrics_routes(self, app: FastAPI) -> None:
         @app.get("/metrics")
         async def metrics(request: Request) -> PlainTextResponse:
-            # METRICS_TOKEN 설정 시에만 Bearer 강제(설정 안 하면 클러스터 내부 스크레이핑 허용 —
-            # 외부 노출은 NetworkPolicy/별도 포트로 막아야 함). 토큰 불일치는 거부.
-            # 비교는 timing-safe(compare_digest)로 수행.
+            # 개발 환경은 내부 스크레이프 편의를 유지한다. 보호 환경은 설정 실수로
+            # 운영 지표가 공개되지 않도록 토큰 미설정도 실패로 처리한다.
             metrics_token = env(Settings.METRICS_TOKEN_ENV, "")
+            if not metrics_token and bypass_guard.is_protected_env():
+                raise HTTPException(
+                    status_code=503,
+                    detail=Settings.METRICS_TOKEN_NOT_CONFIGURED_MESSAGE,
+                )
             if metrics_token:
                 header = request.headers.get(Settings.AUTHORIZATION_HEADER, "")
                 if not secrets.compare_digest(header, f"Bearer {metrics_token}"):

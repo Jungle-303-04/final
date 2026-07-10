@@ -5,11 +5,12 @@ from __future__ import annotations
 import asyncio
 from types import SimpleNamespace
 
+import httpx
 from conftest import ROOT, load_file
 from fastapi import HTTPException
 
 import domains.alert.router as alert_router
-from domains.alert.delivery import AlertDeliveryResult
+from domains.alert.delivery import AlertDeliveryResult, post_alert_webhook
 from domains.alert.events import AlertRequestedBody
 from domains.alert.repository import severity_matches
 from domains.alert.router import (
@@ -242,6 +243,28 @@ def test_alert_channel_admin_crud_roundtrip() -> None:
     asyncio.run(run())
 
 
+def test_alert_channel_upsert_rejects_unsafe_url_before_storage() -> None:
+    async def run() -> None:
+        db = StubChannelDb()
+        try:
+            await upsert_alert_channel(
+                AlertChannelUpsertRequest(name="ops", url="http://127.0.0.1/hook"),
+                ADMIN,
+                db,
+            )
+        except HTTPException as exc:
+            assert exc.status_code == 422
+            assert exc.detail == {
+                "code": "unsafe_webhook_url",
+                "detail": "안전하지 않은 웹훅 URL입니다.",
+            }
+        else:
+            raise AssertionError("expected HTTPException")
+        assert db.rows == {}
+
+    asyncio.run(run())
+
+
 def test_alert_channel_delete_missing_is_404() -> None:
     async def run() -> None:
         try:
@@ -302,6 +325,91 @@ def test_alert_channel_test_returns_human_readable_failure(monkeypatch) -> None:
         assert response.detail == "테스트 알림 전송에 실패했습니다."
 
     asyncio.run(run())
+
+
+def test_alert_channel_test_returns_unsafe_url_code(monkeypatch) -> None:
+    async def stub_post(_url: str, _body: AlertRequestedBody) -> AlertDeliveryResult:
+        return AlertDeliveryResult(delivered=False, error="unsafe_webhook_url")
+
+    monkeypatch.setattr(alert_router, "post_alert_webhook", stub_post)
+
+    async def run() -> None:
+        response = await send_alert_channel_test(
+            AlertChannelTestRequest(url="https://hooks.example/test"),
+            ADMIN,
+            StubChannelDb(),
+        )
+        assert response.valid is False
+        assert response.delivered is False
+        assert response.code == "unsafe_webhook_url"
+        assert response.detail == "안전하지 않은 웹훅 URL입니다."
+
+    asyncio.run(run())
+
+
+def test_alert_delivery_rechecks_dns_before_every_send() -> None:
+    events: list[str] = []
+    resolutions = iter(
+        [
+            ("93.184.216.34",),
+            ("10.0.0.8",),
+        ]
+    )
+
+    async def resolver(_hostname: str) -> tuple[str, ...]:
+        events.append("resolve")
+        return next(resolutions)
+
+    async def handler(_request: httpx.Request) -> httpx.Response:
+        events.append("send")
+        return httpx.Response(204)
+
+    transport = httpx.MockTransport(handler)
+
+    async def run() -> tuple[AlertDeliveryResult, AlertDeliveryResult]:
+        first = await post_alert_webhook(
+            "https://hooks.example/secret",
+            alert(),
+            transport=transport,
+            resolver=resolver,
+        )
+        second = await post_alert_webhook(
+            "https://hooks.example/secret",
+            alert(),
+            transport=transport,
+            resolver=resolver,
+        )
+        return first, second
+
+    first, second = asyncio.run(run())
+
+    assert first.delivered is True
+    assert second.delivered is False
+    assert second.error == "unsafe_webhook_url"
+    assert events == ["resolve", "send", "resolve"]
+
+
+def test_alert_delivery_does_not_follow_redirects() -> None:
+    requested_paths: list[str] = []
+
+    async def resolver(_hostname: str) -> tuple[str, ...]:
+        return ("93.184.216.34",)
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        requested_paths.append(request.url.path)
+        return httpx.Response(302, headers={"location": "https://redirect.example/private"})
+
+    result = asyncio.run(
+        post_alert_webhook(
+            "https://hooks.example/start",
+            alert(),
+            transport=httpx.MockTransport(handler),
+            resolver=resolver,
+        )
+    )
+
+    assert result.status_code == 302
+    assert requested_paths == ["/start"]
 
 
 def test_alert_channel_test_records_saved_channel_status(monkeypatch) -> None:

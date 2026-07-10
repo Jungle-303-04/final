@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+import asyncio
 import logging
 from typing import Any
 
+import pytest
 from conftest import ROOT, load_file
 from fastapi.testclient import TestClient
 
@@ -45,6 +47,44 @@ def test_gateway_healthz_returns_service_status_without_db(monkeypatch) -> None:
 
     assert response.status_code == 200
     assert response.json() == {"status": "ok", "service": "api-gateway"}
+
+
+def test_gateway_docs_use_configured_external_api_root_path(monkeypatch) -> None:
+    monkeypatch.setenv("DATABASE_URL", "postgresql://user:pass@postgresql:5432/service")
+    monkeypatch.setenv("API_ROOT_PATH", "/api")
+    gateway = load_gateway_module()
+    app = gateway.create_app()
+
+    response = TestClient(app).get("/docs")
+
+    assert response.status_code == 200
+    assert "url: '/api/openapi.json'" in response.text
+
+
+def test_gateway_lifespan_validates_rca_scenario_adapters_before_external_connections(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("DATABASE_URL", "postgresql://user:pass@postgresql:5432/service")
+    gateway = load_gateway_module()
+    service = gateway.ApiGateway()
+    external_calls: list[str] = []
+
+    def invalid_catalog() -> None:
+        raise RuntimeError("RCA scenario adapter contract invalid")
+
+    async def must_not_wait(_db: Any) -> None:
+        external_calls.append("database")
+
+    monkeypatch.setattr(gateway, "validate_test_scenario_catalog", invalid_catalog)
+    monkeypatch.setattr(gateway, "wait_for_database", must_not_wait)
+
+    async def start() -> None:
+        async with service.lifespan(service.app):
+            raise AssertionError("invalid RCA scenario catalog must fail startup")
+
+    with pytest.raises(RuntimeError, match="adapter contract invalid"):
+        asyncio.run(start())
+    assert external_calls == []
 
 
 def test_gateway_request_logging_records_status_and_path(monkeypatch, caplog) -> None:
@@ -211,6 +251,26 @@ def test_gateway_metrics_uses_bearer_token_guard(monkeypatch) -> None:
     assert "gitops_approvals_open_total 1" in response.text
     assert 'gitops_workflow_status_total{status="applying"} 1' in response.text
     assert 'gitops_workflow_current_step_total{step="approval"} 1' in response.text
+
+
+def test_gateway_metrics_requires_token_configuration_in_protected_environment(
+    monkeypatch,
+) -> None:
+    monkeypatch.setenv("DATABASE_URL", "postgresql://user:pass@postgresql:5432/service")
+    monkeypatch.setenv("APP_ENV", "production")
+    monkeypatch.delenv("METRICS_TOKEN", raising=False)
+    gateway = load_gateway_module()
+
+    class MetricsDb:
+        pass
+
+    monkeypatch.setattr(gateway, "Database", MetricsDb)
+    client = TestClient(gateway.create_app())
+
+    response = client.get("/metrics")
+
+    assert response.status_code == 503
+    assert response.json() == {"detail": "metrics token is not configured"}
 
 
 def test_dead_letter_replay_rejects_archived_status(monkeypatch) -> None:

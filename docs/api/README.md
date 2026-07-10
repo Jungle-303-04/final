@@ -14,12 +14,42 @@ Bruno에서 import할 때는 repository root나 `docs`가 아니라 반드시 `d
 docs/api
 ```
 
-4. 왼쪽에 `00 상태와 인증`부터 `15 Wizard Validation`까지 폴더가 보이면 정상이다.
+4. 왼쪽에 `00 상태와 인증`부터 `16 RCA 실제 E2E 워크플로우`까지 폴더가 보이면 정상이다.
 5. 오른쪽 위 Environment에서 `aws-test`를 고른다.
 6. Environment 목록에는 `aws-test` 하나만 보여야 한다.
 
 깨졌다면 거의 항상 다른 폴더를 연 것이다. `docs/api` 바로 아래에 `bruno.json`과 `environments` 폴더가 있어야 한다.
 파일 경로는 `00-health-auth`처럼 영어 slug를 유지하고, Bruno 화면 표시명은 한글로 맞춘다.
+
+## RCA 실제 E2E 워크플로우를 별도로 실행하기
+
+`16 RCA 실제 E2E 워크플로우`는 일반 API 회귀 runner와 분리되어 있다. 이 폴더는
+실제 target cluster의 `sandbox`에 장애 Deployment를 만들기 때문에 Bruno UI에서만
+명시적으로 실행한다.
+
+1. `01`에서 catalog가 제공하는 시나리오와 현재 실행 가능 상태를 조회한다. 항목 수는 YAML에서 동적으로 결정된다.
+2. `02`에서 `cluster_id + scenario_id`만 보내 실제 장애와 agent 관측을 시작한다.
+3. `03`에서 같은 run의 장애 생성, 관측, evidence, RCA, plan, 선택, cleanup 상태를 반복 확인한다.
+4. `04`~`06`에서 실제 evidence, RCA 결과, recovery 후보를 차례로 확인한다.
+5. PR/실행까지 확인할 때만 `rca_select_confirmation`을
+   `SELECT:<rca_correlation_id>`로 설정하고 `07`을 보낸다.
+6. `08`에서 선택 상태를 확인하고 `09` cleanup을 보낸 뒤, `10`에서 실제 완료를 확인한다.
+
+최초 실행 전 오른쪽 위 Environment에서 `aws-test` 편집을 열고 `rca_test_token`의
+Secret 칸에 로컬 값을 한 번 저장한다. Secret 값은 Bruno 로컬 보안 저장소에만 두며
+tracked `.bru` 파일에는 입력하지 않는다.
+
+파이프라인은 비동기다. `03`~`06`이 아직 처리 중이면 새 run을 만들지 말고 같은
+요청을 잠시 뒤 다시 보낸다. 상세 사용법과 안전 경계는
+`16-rca-debug/README.md`가 단일 가이드다.
+
+`ready`는 실제 target에서 evidence → expected root cause → recovery plan → cleanup 잔여 0까지
+완주한 시나리오만 뜻한다. 현재 live 완주가 확인된 항목은 `image.wrong-tag`다. 새 시나리오는
+`scripts/rca_scenario.py scaffold`로 `verification_pending` 상태에서 시작하고, `validate`와 fixture
+test를 통과한 뒤 전용 token + service admin + `x-rca-test-verification: true` 경계에서 live
+검증한다. evidence, expected root cause, recovery plan, cleanup 잔여 0을 모두 확인한 뒤에만
+승격한다. raw manifest/shell/synthetic evidence 입력과 management
+cluster 실행은 허용하지 않는다.
 
 ## 전체 Runner 실행
 
@@ -51,13 +81,14 @@ bash scripts/run-bruno-aws.sh
 
 1. `base_url`은 Gateway API 주소다. 팀 공용 `aws-test`는 `https://k8s.woonyong.org/api/`로 고정한다. Bruno 요청 파일은 `{{base_url}}providers/validate`처럼 붙기 때문에 값이 반드시 `/`로 끝나야 한다.
 2. `dev_security_bypass`는 `APP_ENV=test` 배포에서만 `true`로 쓴다. 이때 세션·agent token을 전송하지 않으며 운영 배포에서는 반드시 `false`다.
-3. `dev_cluster_id`는 test agent identity로 사용할 등록 cluster다. CLI Runner는 실행마다 고유 ID로 덮어쓴다.
+3. `dev_cluster_id`는 test agent identity로 사용할 등록 cluster다. Bruno 앱의 단계별 RCA 기본값은 현재 등록된 `cluster-1`이고, CLI Runner는 실행마다 고유 ID로 덮어쓴다.
 4. `auto_login`은 우회가 꺼진 환경에서 보호 API 호출 전에 Bruno가 자동 로그인할지 정한다.
 5. `auth_email`/`auth_password`는 인증 자체를 검증할 때만 사용한다. collection과 `aws-test`에는 placeholder만 커밋한다.
 6. `github_webhook_secret`은 배포에 설정된 `GITHUB_WEBHOOK_SECRET` 값이다. 이 값을 채우면 webhook signature를 Bruno가 요청 직전에 자동 계산한다.
 7. `metrics_token`과 `alertmanager_token`은 해당 외부 입구 인증을 별도로 검증할 때만 넣는다.
 8. `service_image`는 target manifest 발급 시 쓸 agent 이미지다.
 9. `cluster_id`/`cluster_id_2`의 저장 기본값은 `api-verification-target`이고 CLI Runner는 고유 ID로 덮어쓴다. 실제 `cluster-1`/`cluster-2` 드릴다운이 필요하면 같은 `aws-test`에서 실행 변수만 명시적으로 덮어쓴다.
+10. `rca_test_token`은 오른쪽 위 `aws-test` 환경 편집 화면의 Secret 칸에만 저장한다. collection과 환경 파일에는 실제 값이나 placeholder를 기록하지 않는다.
 
 요청 순서대로 실행하면 아래 값은 자동으로 채워진다.
 

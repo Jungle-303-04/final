@@ -78,8 +78,7 @@ def current_workload_base_snapshot(
         "persistent_volume_claim_refs": persistent_volume_claim_refs(template_spec),
         "deployment_status": deployment_status_snapshot(deployment),
         "pod_statuses": [
-            pod_status_snapshot(pod)
-            for pod in pods_for_deployment(deployment, replicasets, pods)
+            pod_status_snapshot(pod) for pod in pods_for_deployment(deployment, replicasets, pods)
         ],
     }
     auth = pod_template_auth(template_spec)

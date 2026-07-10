@@ -1,0 +1,20 @@
+meta {
+  name: 08 사용자 선택 저장 확인
+  type: http
+  seq: 8
+  tags: [rca, recovery, read]
+}
+
+get {
+  url: {{base_url}}rca/recovery-plans/by-correlation/{{rca_correlation_id}}
+}
+
+tests {
+  test("선택한 action과 선택 사용자가 저장됐다", function () {
+    expect(res.status).to.equal(200);
+    const body = res.getBody();
+    expect(body.status).to.equal("selected");
+    expect(body.selected_action_id).to.equal(bru.getVar("rca_action_id"));
+    expect(body.selected_by).to.be.a("string").that.is.not.empty;
+  });
+}

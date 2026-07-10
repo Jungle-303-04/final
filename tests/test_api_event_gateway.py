@@ -182,9 +182,9 @@ def test_nats_publish_uses_event_id_as_message_id_header() -> None:
     asyncio.run(run())
 
 
-def test_consumer_config_defaults_bound_redelivery(monkeypatch) -> None:
+def test_consumer_config_delegates_redelivery_limit_to_application_ledger(monkeypatch) -> None:
     # ack_wait > 핸들러 타임아웃(30s) → 처리 중 재배달 중복 방지,
-    # max_deliver = 재시도 상한 + 1, max_ack_pending 은 in-flight 폭주 억제.
+    # JetStream 전달 횟수는 무제한이고 application ledger가 재시도/DLQ를 종결한다.
     monkeypatch.delenv("NATS_ACK_WAIT_SECONDS", raising=False)
     monkeypatch.delenv("NATS_MAX_DELIVER", raising=False)
     monkeypatch.delenv("NATS_MAX_ACK_PENDING", raising=False)
@@ -193,7 +193,7 @@ def test_consumer_config_defaults_bound_redelivery(monkeypatch) -> None:
     config = consumer_config()
 
     assert config.ack_wait == 60
-    assert config.max_deliver == 4
+    assert config.max_deliver == -1
     assert config.max_ack_pending == 100
     assert config.deliver_policy.value == "all"
 
@@ -242,7 +242,7 @@ def test_subscribe_applies_consumer_config_to_pull_consumer() -> None:
         config = call["config"]
         assert config is not None
         assert config.ack_wait == 60
-        assert config.max_deliver == 4
+        assert config.max_deliver == -1
         assert config.max_ack_pending == 100
 
     asyncio.run(run())

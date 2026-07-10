@@ -58,6 +58,25 @@ def test_bruno_collection_has_only_aws_test_profile() -> None:
     assert "alert_channel_id:" in aws
     assert "alertmanager_token:" in aws
     assert "github_webhook_signature:" in aws
+    assert "rca_test_token:" not in aws
+    assert "vars:secret [\n  rca_test_token\n]" in aws
+    assert "rca_test_token:" not in collection
+
+
+def test_rca_test_token_is_local_bruno_secret_without_tracked_placeholder() -> None:
+    environment = (API_DIR / "environments" / "aws-test.bru").read_text(encoding="utf-8")
+    collection = (API_DIR / "collection.bru").read_text(encoding="utf-8")
+    workflow = "\n".join(
+        path.read_text(encoding="utf-8")
+        for path in sorted((API_DIR / "16-rca-debug").glob("*.bru"))
+    )
+
+    assert "vars:secret [\n  rca_test_token\n]" in environment
+    assert "replace-with-RCA_TEST_RUNS_TOKEN" not in environment
+    assert "replace-with-RCA_TEST_RUNS_TOKEN" not in collection
+    assert "x-rca-test-token: {{rca_test_token}}" in workflow
+    assert "x-rca-test-verification: {{rca_test_verification}}" in workflow
+    assert "rca_test_verification: false" in environment
 
 
 def test_every_gateway_route_has_a_bruno_request() -> None:
@@ -129,6 +148,9 @@ def test_every_gateway_route_has_a_bruno_request() -> None:
         routes.PROVIDERS_CLUSTER_DISCOVERY_PATH,
         routes.PROVIDERS_VALIDATE_PATH,
         routes.RCA_RULES_VALIDATE_PATH,
+        routes.RCA_TEST_SCENARIOS_PATH,
+        routes.RCA_TEST_RUNS_PATH,
+        "/rca/test-runs/{{rca_test_run_id}}",
         routes.METRICS_VALIDATE_PATH,
         routes.DASHBOARD_RCA_TIMELINE_PATH,
         "/dashboard/rca/incidents/{{incident_id}}",
@@ -152,6 +174,17 @@ def test_every_bruno_request_has_expected_output_assertions() -> None:
     ]
 
     assert without_tests == []
+
+
+def test_catalog_install_bruno_uses_idempotent_real_command_contract() -> None:
+    request = (API_DIR / "12-catalog" / "03-install-item.bru").read_text(encoding="utf-8")
+
+    assert "Idempotency-Key:" in request
+    assert '"auth.database": "demo"' in request
+    assert "res.status === 202 && body && body.command_id" in request
+    assert 'bru.setVar("command_id", body.command_id)' in request
+    assert "[202, 400, 401, 403, 404, 409, 422]" in request
+    assert "501" not in request
 
 
 def test_bruno_files_use_importable_v3_syntax() -> None:
@@ -203,6 +236,12 @@ def test_bruno_test_profile_removes_session_and_agent_tokens() -> None:
 
 def test_bruno_cli_runner_uses_isolated_profile_and_cleans_up_last() -> None:
     runner = (ROOT_DIR / "scripts" / "run-bruno-aws.sh").read_text(encoding="utf-8")
+    register_request = (API_DIR / "02-target-admin" / "01-register-target-dry-run.bru").read_text(
+        encoding="utf-8"
+    )
+    cleanup_request = (API_DIR / "11-clusters" / "12-unregister-cluster.bru").read_text(
+        encoding="utf-8"
+    )
 
     assert "environments/aws-test.bru" in runner
     assert "BRUNO_ENV_FILE" not in runner
@@ -218,6 +257,40 @@ def test_bruno_cli_runner_uses_isolated_profile_and_cleans_up_last() -> None:
     assert runner.count("11-clusters/12-unregister-cluster.bru") == 1
     assert "trap cleanup EXIT" in runner
     assert runner.rstrip().endswith("cleanup")
+    assert "16-rca-debug" not in runner
+    assert '"environment": "test"' in register_request
+    assert "purge=true" in cleanup_request
+
+
+def test_rca_e2e_workflow_is_thin_separate_and_explicitly_selected() -> None:
+    workflow_dir = API_DIR / "16-rca-debug"
+    requests = sorted(workflow_dir.glob("*.bru"))
+    names = [path.name for path in requests if path.name != "folder.bru"]
+    assert names == [
+        "01-list-scenarios.bru",
+        "02-start-test-run.bru",
+        "03-check-test-run.bru",
+        "04-check-built-evidence.bru",
+        "05-check-rca-report.bru",
+        "06-check-recovery-plan.bru",
+        "07-select-recovery-action.bru",
+        "08-check-selected-plan.bru",
+        "09-cleanup-test-run.bru",
+        "10-check-cleanup.bru",
+    ]
+
+    start = (workflow_dir / "02-start-test-run.bru").read_text(encoding="utf-8")
+    assert '"cluster_id": "{{dev_cluster_id}}"' in start
+    assert '"scenario_id": "{{rca_scenario_id}}"' in start
+    assert '"kubernetes"' not in start
+    assert '"evidence"' not in start
+    assert '"manifest"' not in start
+
+    selection = (workflow_dir / "07-select-recovery-action.bru").read_text(encoding="utf-8")
+    assert 'SELECT:${bru.getVar("rca_correlation_id")}' in selection
+    assert '"expected_plan_id": "{{rca_plan_id}}"' in selection
+    assert '"action_id": "{{rca_action_id}}"' in selection
+    assert (workflow_dir / "README.md").is_file()
 
 
 def test_bruno_readme_explains_each_work_type() -> None:

@@ -13,7 +13,6 @@ import asyncio
 from collections.abc import Awaitable, Callable
 from contextlib import AbstractAsyncContextManager
 from typing import Any, Protocol
-from urllib.parse import urlsplit
 
 import httpx
 from kubernetes_api import (
@@ -25,6 +24,7 @@ from kubernetes_api import (
 
 import config as agent_config
 from packages.config.logs import CONTEXT_KEY, get_logger
+from packages.config.realtime import derive_realtime_gateway_url
 from packages.config.settings import env
 from packages.contracts.gateway.fields import Gateway
 from packages.contracts.realtime import (
@@ -58,12 +58,8 @@ def _websockets_connector(url: str, headers: dict[str, str]) -> AbstractAsyncCon
 
 
 def derive_gateway_url(management_base_url: str) -> str:
-    """REALTIME_GATEWAY_URL 미설정 시 MANAGEMENT_BASE_URL 호스트 + NodePort 로 유도."""
-    parts = urlsplit(management_base_url)
-    if not parts.hostname:
-        return ""
-    scheme = "wss" if parts.scheme == "https" else "ws"
-    return f"{scheme}://{parts.hostname}:{agent_config.DEFAULT_REALTIME_GATEWAY_NODEPORT}"
+    """REALTIME_GATEWAY_URL 미설정 시 관리 API 주소에서 안전한 WS 주소를 유도한다."""
+    return derive_realtime_gateway_url(management_base_url)
 
 
 def _clamp_interval(raw: str) -> float:

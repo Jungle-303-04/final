@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import Field
 
@@ -326,6 +326,87 @@ class RecoveryPlanStatusResponse(StrictModel):
     selected_by: str | None = None
     selected_action: RecoveryActionCandidateItem | None = None
     candidates: list[RecoveryActionCandidateItem] = Field(default_factory=list)
+
+
+class RcaTestScenarioExpectedItem(StrictModel):
+    root_cause: str
+    symptom: str
+
+
+class RcaTestScenarioSafetyItem(StrictModel):
+    namespace: Literal["sandbox"]
+    cleanup_required: Literal[True]
+    ttl_seconds: int
+    management_cluster_allowed: Literal[False]
+    resource_name_prefix: Literal["rca-test-"]
+    max_concurrent_runs: int
+
+
+class RcaTestScenarioAdapterItem(StrictModel):
+    adapter: Literal[
+        "kubernetes.deployment",
+        "gitops.fixture",
+        "external.fixture",
+        "kubernetes.manifest_delete",
+        "fixture.reset",
+    ]
+    params: JsonMap = Field(default_factory=dict)
+
+
+class RcaTestScenarioObservationItem(StrictModel):
+    timeout_seconds: int
+    poll_seconds: int
+    pod_waiting_reasons: list[str] = Field(default_factory=list)
+    pod_terminated_reasons: list[str] = Field(default_factory=list)
+    event_reasons: list[str] = Field(default_factory=list)
+    event_message_any: list[str] = Field(default_factory=list)
+    log_message_any: list[str] = Field(default_factory=list)
+    deployment_condition_reasons: list[str] = Field(default_factory=list)
+    external_status_any: list[str] = Field(default_factory=list)
+
+
+class RcaTestScenarioItem(StrictModel):
+    scenario_id: str
+    version: int
+    title: str
+    description: str
+    execution: Literal["real", "hybrid", "external"]
+    availability: Literal[
+        "ready",
+        "verification_pending",
+        "fixture_required",
+        "detector_gap",
+    ]
+    availability_reason: str | None = None
+    verification_work_needed: list[str] = Field(default_factory=list)
+    fixture_requirements: list[str] = Field(default_factory=list)
+    detector_work_needed: list[str] = Field(default_factory=list)
+    expected: RcaTestScenarioExpectedItem
+    evidence_sources: list[Literal["kubernetes", "metrics", "logs", "traces", "metadata"]]
+    safety: RcaTestScenarioSafetyItem
+    trigger: RcaTestScenarioAdapterItem
+    observe: RcaTestScenarioObservationItem
+    cleanup: RcaTestScenarioAdapterItem
+
+
+class RcaTestScenarioListResponse(StrictModel):
+    items: list[RcaTestScenarioItem] = Field(default_factory=list)
+
+
+class RcaTestRunResponse(StrictModel):
+    accepted: bool = True
+    run_id: str
+    scenario_id: str
+    scenario_version: int
+    cluster_id: str
+    correlation_id: str
+    command_id: str
+    evidence_key: str
+    status: str
+    cleanup_at: str
+    verification_mode: bool = False
+    failure: JsonMap | None = None
+    steps: list[JsonMap] = Field(default_factory=list)
 
 
 class EvidenceJobScheduleResponse(StrictModel):
@@ -938,8 +1019,11 @@ class CatalogItemResponse(StrictModel):
     item: JsonMap
 
 
-class CatalogInstallRunResponse(StrictModel):
-    install: JsonMap
+class CatalogInstallAcceptedResponse(StrictModel):
+    accepted: bool
+    command_id: str
+    correlation_id: str
+    status: str
 
 
 class ProviderCatalogResponse(StrictModel):

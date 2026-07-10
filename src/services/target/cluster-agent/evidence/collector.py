@@ -25,6 +25,7 @@ from packages.contracts.event_bus.interfaces import JsonObject
 
 TRACER = get_tracer("target-cluster-agent.evidence")
 LOGGER = get_logger(__name__)
+STRICT_FAILURE_POLICY = "strict"
 
 __all__ = [
     "EvidenceCollector",
@@ -86,10 +87,18 @@ class EvidenceCollector:
         self,
         evidence_key: str,
         definitions: tuple[TelemetryQueryDefinition, ...],
+        *,
+        failure_policy: str = "allow_partial",
     ) -> JsonObject:
         provider = self.providers[evidence_key]
         queries = tuple(definition.to_provider_query() for definition in definitions)
-        return {evidence_key: await self._collect_with_queries(provider, queries)}
+        return {
+            evidence_key: await self._collect_with_queries(
+                provider,
+                queries,
+                propagate_errors=failure_policy == STRICT_FAILURE_POLICY,
+            )
+        }
 
     def _select_provider_keys(self, requested_keys: tuple[str, ...]) -> tuple[str, ...]:
         selected_keys = requested_keys or tuple(self.providers)
@@ -118,6 +127,8 @@ class EvidenceCollector:
         self,
         provider: TelemetryProvider,
         queries: tuple[object, ...],
+        *,
+        propagate_errors: bool = False,
     ) -> ProviderResult:
         with TRACER.start_as_current_span(provider.span_name) as span:
             span.count(provider.query_count_attribute, queries)
@@ -135,10 +146,12 @@ class EvidenceCollector:
 
             except Exception as exc:
                 span.error(exc)
-                span.flag(f"{provider.source}.fallback_used", True)
+                span.flag(f"{provider.source}.fallback_used", not propagate_errors)
                 LOGGER.warning(
                     provider.failure_message,
                     extra={CONTEXT_KEY: {"source": provider.source}},
                     exc_info=exc,
                 )
+                if propagate_errors:
+                    raise
                 return provider.build_response(provider.empty_results())

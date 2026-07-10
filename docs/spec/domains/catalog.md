@@ -1,18 +1,19 @@
 ---
-source_commit: 1616d295
+source_commit: 30465d0c4
 status: synced
 ---
 
-# catalog — 서비스 카탈로그 (아이템/버전/설치 런, 부트스트랩 카탈로그 포함)
+# catalog — 서비스 카탈로그 (아이템/버전, 부트스트랩 카탈로그 포함)
 
 > 소스: `src/domains/catalog/` · 테스트: `tests/test_catalog_domain.py`
 
 ## 책임 (Responsibility)
 
-- 서비스 카탈로그 아이템(`catalog_items`)·버전(`catalog_item_versions`)·설치 런(`catalog_install_runs`) 테이블과 리포지토리를 소유한다.
+- 서비스 카탈로그 아이템(`catalog_items`)·버전(`catalog_item_versions`) 테이블과 리포지토리를 소유한다.
 - 코드에 내장된 부트스트랩 카탈로그(`BOOTSTRAP_CATALOG_ITEMS` 4종)를 DB 미적재 시 폴백으로 노출한다.
-- 카탈로그 목록/상세 조회, 설치 요청(설치 계획 기록) HTTP API를 제공한다.
-- 하지 않는 것: 실제 설치 실행(설치 런은 `planned` 상태로 기록만 — 후속 러너가 처리), 이벤트 발행.
+- 카탈로그 목록/상세 조회 API를 제공한다.
+- 서버 소유 PostgreSQL/Redis Helm recipe만 online target Agent의 실제 command queue로 전달한다.
+- 설치 요청의 이름/values/idempotency를 검증하고 실제 `command_id`를 202로 반환한다. 실행 결과는 기존 `/commands/{command_id}`에서 조회한다.
 
 ## 의존성 (Dependencies)
 
@@ -22,6 +23,8 @@ status: synced
 | import | `packages.contracts` | [../packages/contracts.md](../packages/contracts.md) | `JsonObject`, `DEFAULT_WORKSPACE_ID`, gateway routes/요청·응답 모델, `Permission` |
 | import | `packages.runtime` | [../packages/runtime.md](../packages/runtime.md) | `get_db` |
 | import | `domains.identity` | [./identity.md](./identity.md) | `require_session`, `require_cluster_access` |
+| import | `domains.command` | [./command.md](./command.md) | command lease/retry 상수와 기존 `agent_commands` queue |
+| import | `domains.target` | [./target.md](./target.md) | online Agent 판정과 management readonly guard |
 
 ## 공개 인터페이스 (Public API)
 
@@ -30,21 +33,19 @@ status: synced
 | 심볼 | 값/시그니처 | 앵커 |
 |---|---|---|
 | `CATALOG_STATUS_ACTIVE` | `"active"` | `src/domains/catalog/repository.py :: CATALOG_STATUS_ACTIVE` |
-| `CATALOG_INSTALL_STATUS_PLANNED` | `"planned"` | `src/domains/catalog/repository.py :: CATALOG_INSTALL_STATUS_PLANNED` |
 | `DEFAULT_CATALOG_VERSION` | `"1.0.0"` | `src/domains/catalog/repository.py :: DEFAULT_CATALOG_VERSION` |
 | `BOOTSTRAP_CATALOG_ITEMS` | `tuple[JsonObject, ...]` — 아래 부트스트랩 표 | `src/domains/catalog/repository.py :: BOOTSTRAP_CATALOG_ITEMS` |
 | `catalog_item_version_id` | `def catalog_item_version_id(item_id: str, version: str) -> str` — `f"catalog-version-{sha256(f'{item_id}\|{version}').hexdigest()[:32]}"` | `src/domains/catalog/repository.py :: catalog_item_version_id` |
 | `item_without_versions` | `def item_without_versions(item: JsonObject) -> JsonObject` — `versions` 키 제거 사본 | `src/domains/catalog/repository.py :: item_without_versions` |
 | `serialize_catalog_item` | `def serialize_catalog_item(row: Any) -> JsonObject` — metadata dict화, created_at/updated_at `iso_or_none` | `src/domains/catalog/repository.py :: serialize_catalog_item` |
 | `serialize_catalog_version` | `def serialize_catalog_version(row: Any) -> JsonObject` — values_schema/template dict화 + 시각 ISO | `src/domains/catalog/repository.py :: serialize_catalog_version` |
-| `serialize_install_run` | `def serialize_install_run(row: Any) -> JsonObject` — values/plan dict화 + 시각 ISO | `src/domains/catalog/repository.py :: serialize_install_run` |
 
 #### 부트스트랩 카탈로그 (`BOOTSTRAP_CATALOG_ITEMS`, 4종 — 모두 status `active`, default_version `1.0.0`, 버전 1개씩)
 
 | item_id | slug | name | category | package_type | package_ref | template | values_schema properties |
 |---|---|---|---|---|---|---|---|
-| `catalog-postgresql` | `postgresql` | PostgreSQL | database | helm | `oci://registry-1.docker.io/bitnamicharts/postgresql` | `{"runner": "helm", "release": "postgresql"}` | `auth.database`(string), `primary.persistence.size`(string, default `"8Gi"`) |
-| `catalog-redis` | `redis` | Redis | database | helm | `oci://registry-1.docker.io/bitnamicharts/redis` | `{"runner": "helm", "release": "redis"}` | (없음) |
+| `catalog-postgresql` | `postgresql` | PostgreSQL | database | helm | `oci://registry-1.docker.io/bitnamicharts/postgresql` | chart `18.7.13`, chart/image digest 고정 | `auth.database`, `primary.persistence.storageClass`(required string), `primary.persistence.size`(string, default `"8Gi"`) |
+| `catalog-redis` | `redis` | Redis | database | helm | `oci://registry-1.docker.io/bitnamicharts/redis` | chart `23.1.1`, chart/image digest 고정, standalone 강제 | `master.persistence.storageClass`(required string), `master.persistence.size`(string, default `"8Gi"`) |
 | `catalog-fastapi-template` | `fastapi-template` | FastAPI Service | application | template | `builtin://templates/fastapi` | `{"runner": "manifest-renderer", "kind": "Deployment"}` | `image`(string), `replicas`(integer) |
 | `catalog-nextjs-template` | `nextjs-template` | Next.js Web App | application | template | `builtin://templates/nextjs` | `{"runner": "manifest-renderer", "kind": "Deployment"}` | `image`(string), `replicas`(integer) |
 
@@ -57,9 +58,17 @@ metadata.tags: postgresql `["database","sql","stateful"]`, redis `["cache","key-
 | `list_catalog_items` | `(self) -> list[JsonObject]` | `status='active'`인 저장 아이템 전체 SELECT(`ORDER BY category, name`) + DB에 없는 부트스트랩 아이템(`versions` 제외)을 합쳐 `(category, name)` 정렬로 반환 |
 | `get_catalog_item` | `(self, item_id_or_slug: str) -> JsonObject \| None` | 저장 아이템(`item_id` 또는 `slug` 일치, active) 우선, 없으면 부트스트랩 폴백. `versions` = `list_catalog_item_versions(item_id)`가 비면 부트스트랩 버전(`version_id`는 `catalog_item_version_id`로 합성) 사용. `{**item, "versions": versions}` 반환 |
 | `list_catalog_item_versions` | `(self, item_id: str) -> list[JsonObject]` | `catalog_item_versions WHERE item_id=? AND status='active' ORDER BY version` |
-| `record_catalog_install_run` | `(self, *, workspace_id: str, item_id: str, version: str, cluster_id: str, namespace: str, application_name: str, requested_by: str, values: JsonObject, plan: JsonObject) -> JsonObject` | `install_id=str(uuid4())`, `workspace_id or DEFAULT_WORKSPACE_ID`, `status='planned'`, `updated_at=now()`로 INSERT ... RETURNING 후 `serialize_install_run` |
 
 내부 헬퍼(비공개): `_stored_catalog_item`, `_bootstrap_catalog_item`, `_bootstrap_catalog_versions`.
+
+### 설치 계약 — `src/domains/catalog/install.py`
+
+- `server_helm_recipe(item_id, version)`은 코드에 동봉된 bootstrap Helm recipe만 반환한다. DB 저장 recipe나 요청 URL을 실행 대상으로 승격하지 않는다.
+- `CatalogHelmInstallPayload`에는 item/version, namespace, application/release 이름, 선언된 values만 있다. chart ref/digest는 Agent가 같은 서버 recipe에서 다시 해석한다.
+- application/namespace는 DNS label(최대 63), Helm release는 최대 53자로 검증한다.
+- `validate_catalog_values`는 schema `properties` 밖 필드, `required` 누락, 타입/enum/StorageClass DNS 이름 불일치를 거부한다.
+- server recipe의 `fixed_values`는 사용자 values 병합 뒤에 적용된다. PostgreSQL/Redis 컨테이너 이미지는 서버 소유 digest로 고정되며 사용자가 `latest`나 다른 repository로 덮어쓸 수 없다.
+- StorageClass는 클러스터마다 다르므로 코드에 특정 provider 값을 하드코딩하지 않는다. API 호출자가 카탈로그 schema에 선언된 필드로 명시해야 하며 누락 시 실행 전에 422로 거부한다.
 
 ### 라우터 — `src/domains/catalog/router.py`
 
@@ -70,9 +79,8 @@ metadata.tags: postgresql `["database","sql","stateful"]`, redis `["cache","key-
 | `CATALOG_ITEM_NOT_FOUND` | `"catalog item not found"` | `src/domains/catalog/router.py :: CATALOG_ITEM_NOT_FOUND` |
 | `catalog_item_or_404` | `def catalog_item_or_404(db: Any, item_id: str) -> dict[str, Any]` | `src/domains/catalog/router.py :: catalog_item_or_404` |
 | `catalog_version_or_default` | `def catalog_version_or_default(item: dict[str, Any], version: str \| None) -> dict[str, Any]` — `version or item["default_version"]`과 일치하는 버전 dict, 없으면 404 `"catalog item version not found"` | `src/domains/catalog/router.py :: catalog_version_or_default` |
-| `catalog_install_plan` | `def catalog_install_plan(item: dict[str, Any], version: dict[str, Any], payload: CatalogInstallRequest) -> dict[str, Any]` | `src/domains/catalog/router.py :: catalog_install_plan` |
-
-`catalog_install_plan` 반환 스키마: `{"item_id", "slug", "version", "package_type", "package_ref", "cluster_id", "namespace", "application_name", "values_schema", "template", "steps": ["validate values", "render package", "await approval", "dispatch runner job"]}`.
+| `CLUSTER_NOT_CONNECTED` | HTTP 400 `code="cluster_not_connected"` | `src/domains/catalog/router.py :: CLUSTER_NOT_CONNECTED` |
+| `CATALOG_INSTALL_COMMAND_PRIORITY` | `100` (기존 high-priority Agent queue와 동일) | `src/domains/catalog/router.py :: CATALOG_INSTALL_COMMAND_PRIORITY` |
 
 #### 엔드포인트
 
@@ -80,7 +88,7 @@ metadata.tags: postgresql `["database","sql","stateful"]`, redis `["cache","key-
 |---|---|---|---|---|
 | `GET /catalog/items` (`gateway_routes.CATALOG_ITEMS_PATH`) | `src/domains/catalog/router.py :: list_catalog_items` | — | `CatalogItemListResponse` | `require_session` (추가 권한 없음) |
 | `GET /catalog/items/{item_id}` (`CATALOG_ITEM_PATH`) | `src/domains/catalog/router.py :: get_catalog_item` | — | `CatalogItemResponse` | `require_session` |
-| `POST /catalog/items/{item_id}/installs` (`CATALOG_ITEM_INSTALLS_PATH`) | `src/domains/catalog/router.py :: install_catalog_item` | `CatalogInstallRequest` | `CatalogInstallRunResponse` | `require_session` + 대상 cluster `Permission.DEPLOY_RUN` (`require_cluster_access`) |
+| `POST /catalog/items/{item_id}/installs` (`CATALOG_ITEM_INSTALLS_PATH`) | `src/domains/catalog/router.py :: install_catalog_item` | `CatalogInstallRequest` + 필수 `Idempotency-Key` header | HTTP 202 `CatalogInstallAcceptedResponse(command_id, correlation_id, status)` | `require_session` + 대상 cluster `Permission.DEPLOY_RUN` (`require_cluster_access`) |
 
 ## 데이터 모델 (Data Model)
 
@@ -116,38 +124,22 @@ metadata.tags: postgresql `["database","sql","stateful"]`, redis `["cache","key-
 | status | Text | NOT NULL | `active`만 조회 대상 |
 | created_at / updated_at | TIMESTAMP(timezone=True) | NOT NULL, server_default now() | 시각 |
 
-### `catalog_install_runs` — `src/domains/catalog/models.py :: CatalogInstallRunRecord`
-
-`__table_args__ = (Index("ix_catalog_install_runs_scope", "workspace_id", "cluster_id", "created_at"),)`
-
-| 필드 | 타입 | 제약 | 설명 |
-|---|---|---|---|
-| install_id | Text | PK | uuid4 |
-| workspace_id | Text | NOT NULL, 인덱스(scope) | 워크스페이스 |
-| item_id | Text | NOT NULL | 설치 대상 아이템 |
-| version | Text | NOT NULL | 설치 버전 |
-| cluster_id | Text | NOT NULL, 인덱스(scope) | 대상 클러스터 |
-| namespace | Text | NOT NULL | 대상 네임스페이스 |
-| application_name | Text | NOT NULL | 생성될 애플리케이션 이름 |
-| status | Text | NOT NULL | 생성 시 `planned` |
-| requested_by | Text | NOT NULL | 요청 사용자 |
-| values | JSONB | NOT NULL | 사용자가 넘긴 values |
-| plan | JSONB | NOT NULL | `catalog_install_plan` 산출물 |
-| created_at / updated_at | TIMESTAMP(timezone=True) | NOT NULL, server_default now(); created_at은 scope 인덱스 포함 | 시각 |
-
 ## 이벤트 (Events)
 
-없음 (발행·구독 모두 없음 — 설치 요청은 DB 기록으로만 남는다).
+없음.
 
 ## 동작 (Behavior)
 
-### 설치 요청 (`POST /catalog/items/{item_id}/installs`)
+### 실제 설치 요청 (`POST /catalog/items/{item_id}/installs`)
 
 1. `catalog_item_or_404(db, item_id)` — item_id 또는 slug 매칭(저장 → 부트스트랩 순).
 2. `catalog_version_or_default(item, payload.version)` — 지정 버전 또는 default_version.
-3. `require_cluster_access(db, current, workspace_id, payload.cluster_id, Permission.DEPLOY_RUN.value)`.
-4. `plan = catalog_install_plan(item, version, payload)` → `db.record_catalog_install_run(...requested_by=current.user_id, values=payload.values, plan=plan)`.
-5. `CatalogInstallRunResponse(install=install)` 반환 — status는 `planned`(실행은 후속 러너 몫).
+3. `DEPLOY_RUN` 권한 확인 후 registration/policy 어느 쪽이든 management role이면 HTTP 400 `management_readonly`.
+4. 최근 heartbeat가 online이고 `command_receiver` + `catalog_helm_install` capability를 광고하는 Agent가 없으면 HTTP 400 `cluster_not_connected` 또는 `catalog_install_runner_unavailable`.
+5. 설치 범위는 sandbox와 코드 동봉 Helm recipe 2종뿐이다. 사용자 shell/manifest/chart URL 및 template recipe는 거부한다.
+6. 이름과 values를 검증하고 `workspace_id + requested_by + Idempotency-Key`로 결정적 command/correlation ID를 만든다.
+7. 기존 `queue_agent_command`의 PK conflict 멱등성을 사용한다. 같은 key+payload는 같은 command를 반환하고, 다른 payload 재사용은 HTTP 409 `idempotency_key_reused`.
+8. HTTP 202는 queue 수락만 뜻한다. Agent의 Helm 성공/실패는 기존 `GET /commands/{command_id}`의 status/result로 조회한다.
 
 ### 부트스트랩 병합 규칙
 
@@ -160,7 +152,9 @@ metadata.tags: postgresql `["database","sql","stateful"]`, redis `["cache","key-
 - `(item_id, version)` 유일, `slug` 유일.
 - 부트스트랩 버전의 `version_id`는 결정적 해시(`catalog_item_version_id`) — 재계산해도 동일.
 - 미존재 아이템 → 404 `"catalog item not found"`, 미존재 버전 → 404 `"catalog item version not found"`.
-- `record_catalog_install_run`은 빈 `workspace_id`를 `DEFAULT_WORKSPACE_ID`로 대체.
+- HTTP 202를 설치 완료로 해석하지 않는다. `completed`는 Agent subprocess return code 0일 때만 기록한다.
+- Agent는 digest-qualified chart, 명시 argv, `shell=False`, Helm 300초/프로세스 330초 timeout, private values 파일을 사용하며 stdout/stderr와 credential env를 결과에 싣지 않는다.
+- generic queued TTL/janitor 계약은 이 구현에서 변경하지 않았다. 카탈로그는 기존 command repository/상태 수명주기를 그대로 사용한다.
 
 ## 설정 (Settings)
 
