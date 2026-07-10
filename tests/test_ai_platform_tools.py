@@ -88,6 +88,7 @@ def make_context(db: Any = None) -> ToolContext:
     return ToolContext(
         db=db or StubDb(),
         workspace_id="ws-1",
+        user_id="user-1",
         cluster_id="cluster-1",
         resource_type="pod",
         kind="Pod",
