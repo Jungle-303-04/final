@@ -233,6 +233,24 @@ def test_release_flow_production_readiness_github_access_preflight_rejects_read_
     assert "do not indicate write access" in access.detail
 
 
+def test_release_flow_production_readiness_github_access_preflight_requires_resolvable_non_env_ref(
+    monkeypatch,
+) -> None:
+    monkeypatch.setenv("API_BASE_URL", "https://release-flow.internal.test/api")
+    monkeypatch.setenv("AUTH_EMAIL", "ops@company.test")
+    monkeypatch.setenv("AUTH_PASSWORD", "correct-horse-battery")
+    monkeypatch.setenv("GITHUB_TOKEN_REF", "aws-sm:/myjob/prod/github-token#token")
+    monkeypatch.delenv("GITHUB_TOKEN", raising=False)
+    monkeypatch.setenv("SCM_REPO", "org/checkout")
+
+    checks = validate_readiness(require_runtime_config=True, check_github_access=True)
+
+    access = next(check for check in checks if check.name == "runtime.github_access_preflight")
+    assert access.ok is False
+    assert "RELEASE_FLOW_GITHUB_TOKEN" in access.detail
+    assert "non-env token refs" in access.detail
+
+
 def test_release_flow_production_readiness_github_access_preflight_reports_http_failure(monkeypatch) -> None:
     monkeypatch.setenv("API_BASE_URL", "https://release-flow.internal.test/api")
     monkeypatch.setenv("AUTH_EMAIL", "ops@company.test")
