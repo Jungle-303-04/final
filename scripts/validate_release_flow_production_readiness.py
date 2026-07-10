@@ -158,6 +158,8 @@ def check_smoke_workflow_contract() -> list[ReadinessCheck]:
         ReadinessCheck(
             "workflow.smoke.runtime_config_preflight",
             "Missing release-flow API URL" in run
+            and "release-flow production smoke requires an https API base URL" in run
+            and "release-flow production smoke must not target localhost or example hosts" in run
             and "Missing release-flow auth email" in run
             and "Missing release-flow auth password" in run,
             "runtime config fails before API calls",
