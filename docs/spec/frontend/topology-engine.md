@@ -3,8 +3,6 @@ title: Universal Kubernetes Topology Engine Implementation Contract
 status: planned-design-contract
 owner: frontend-platform
 local_source_commit: 7d77e0279e5f90cbd18d59ac9ec8e1cc3c18cec1
-external_reference_source: 외부 기준 저장소
-external_reference_commit: f4c0ee4e5993c1a99237c1e4a5fa0f44d543bfa6
 last_verified: 2026-07-11
 ---
 
@@ -139,12 +137,18 @@ last_verified: 2026-07-11
 ### 4.1 Entity class
 
 ```ts
-type EntityClass = "platform" | "resource" | "projection" | "external" | "placeholder"
+type EntityClass = "platform" | "resource" | "embedded" | "projection" | "external" | "placeholder"
 
 type CanonicalGvk = {
   group: string
   version: string
   kind: string
+}
+
+type CanonicalGvkPattern = {
+  group: string
+  kind: string
+  versions: "any-served" | readonly string[]
 }
 
 type CanonicalGroupKind = {
@@ -168,9 +172,16 @@ type PlatformIdentity = {
   uid: string
 }
 
+type EmbeddedIdentity = {
+  parentEntityKey: string
+  embeddedKind: "container" | "endpoint" | "port" | "condition"
+  stableKey: string
+}
+
 type EntityRef =
   | { entityKey: string; entityClass: "platform"; identity: PlatformIdentity }
   | { entityKey: string; entityClass: "resource"; identity: KubernetesResourceIdentity }
+  | { entityKey: string; entityClass: "embedded"; identity: EmbeddedIdentity }
   | { entityKey: string; entityClass: "projection"; projectionKey: string }
   | { entityKey: string; entityClass: "external"; externalKey: string }
   | {
@@ -182,6 +193,8 @@ type EntityRef =
 ```
 
 동일 Kubernetes object가 `extensions/v1beta1`, `apps/v1`처럼 다른 served version으로 관측되어도 metadata.uid가 같으면 entity는 하나다. `servedGvk`는 현재 표현/decoder 선택용이고 key material이 아니다. UID uniqueness scope는 cluster이므로 workspace와 cluster를 함께 key에 넣는다. Cluster는 Kubernetes resource가 아니라 `platform` entity다.
+
+Container는 `embeddedKind=container`, `parentEntityKey=Pod entityKey`, `stableKey=containerType + containerName`을 사용한다. EndpointSlice endpoint도 `embeddedKind=endpoint`를 사용한다. Embedded entity는 독립 Kubernetes UID나 CRUD route가 없고 parent revision/evidence에서 생명주기를 얻는다.
 
 - `PlatformIdentity.uid`는 Scope와 모든 entity의 `clusterUid`에 사용하는 동일한 플랫폼 cluster UID다.
 - placeholder가 resource로 확인되면 `entity.resolutionCommitted {placeholderKey, resourceKey, evidenceId}`를 dispatch한다.
@@ -295,6 +308,13 @@ UI가 오른쪽 rail에서 `Pod ← ReplicaSet ← Deployment`로 보이게 하�
 type JsonPrimitive = string | number | boolean | null
 type JsonValue = JsonPrimitive | JsonValue[] | { readonly [key: string]: JsonValue }
 
+type CursorPage<T> = {
+  items: readonly T[]
+  nextCursor: string | null
+  hasMore: boolean
+  snapshotRevision: string
+}
+
 type TimeWindow = {
   asOf: string
   start: string
@@ -373,6 +393,8 @@ type Entity = {
   ref: EntityRef
   displayName: string
   kindLabel: string
+  membershipRole: "primary" | "ancestor-context" | "relation-context" | "filtered-remainder" | "structural-shelf"
+  lifecycle: "live" | "deleting" | "tombstone-exit" | "historical"
   parentEntityKey?: string
   ownHealth?: HealthVerdict
   aggregateHealth?: AggregateHealth
@@ -383,8 +405,8 @@ type Entity = {
 type Rollup = {
   parentEntityKey: string
   metricId: string
-  value: number | null
-  unit: string
+  valueDecimal: DecimalString | null
+  unitId: UnitId
   childCount: number
   observedLeafCount: number
   expectedAuthorizedLeafCount: number
@@ -396,7 +418,7 @@ ISO timestamp는 timezone offset을 포함하고 server에서 UTC로 canonicaliz
 
 ## 5. 패키지 경계
 
-최종 구현은 제품 페이지 안에 거대한 component로 만들지 않는다. 아래 package graph를 유지한다.
+최종 구현은 제품 페이지 안에 거대한 component로 만들지 않는다. 아래 이름은 추출 가능한 논리 모듈 경계이며 현재 Vite repo에 즉시 별도 workspace package/monorepo를 만든다는 뜻이 아니다.
 
 ```text
 @product/topology-contracts
@@ -435,9 +457,29 @@ references/ui-layer-lab/src/product/features/topology
   └─ product composition only; no domain rules
 ```
 
+현재 repo mapping은 다음으로 고정한다.
+
+| 논리 모듈 | 현재 경로 | 허용 import |
+|---|---|---|
+| contracts | `src/product/features/topology/contracts/` | 없음, generated schema primitive만 |
+| core | `src/product/features/topology/core/` | contracts |
+| query | `src/product/features/topology/query/` | contracts |
+| kubernetes registry | `src/product/features/topology/kubernetes/` | contracts |
+| metrics | `src/product/features/topology/metrics/` | contracts, query numeric policy |
+| layout worker | `src/product/features/topology/layout/` | contracts, core scene input types |
+| renderer | `src/product/features/topology/renderer/` | contracts, layout output, injected theme contract |
+| React/application | `src/product/features/topology/react/` | feature modules, `product/api` public gateway, `product/shared` |
+| live API adapter | `src/product/api/topology/` | `product/api` schemas/transport, `product/shared` only |
+| product theme values | `src/product/styles/tokens.css` | raw colors의 유일한 product source |
+| testkit/adapters | `tests/topology/` | public contracts/modules; production import 금지 |
+
+이 mapping은 `AGENTS.md`의 `app → pages → features → shared`, `feature → product/api`, `product/api → shared` 방향을 유지한다. `@product/topology-*` physical package 추출은 별도 ADR에서 workspace tool, public API, versioning, license, build를 승인한 뒤에만 수행한다. Headless engine은 product import가 없도록 작성해 추출 가능성을 유지한다.
+
+기존 backend route/Pydantic contract는 현재 구현 사실의 authority다. 이 문서의 신규 topology v2 route는 아직 존재한다고 주장하지 않는다. 구현 순서는 backend schema 추가 → generated frontend schema → live adapter이며, 그때 `AGENTS.md`의 source-of-truth 절을 generated cross-language contract까지 포함하도록 같은 변경에서 갱신한다.
+
 ### 5.1 Dependency rules
 
-- packages는 위에서 아래로 역참조하지 않는다.
+- 위 allowed-import 표 밖 역참조를 금지한다. 세로 그림의 배치 순서를 실제 import chain으로 해석하지 않는다.
 - `contracts`는 runtime validation schema의 유일한 source다.
 - `core`와 `query`는 browser 없이 Node test에서 실행되어야 한다.
 - fetch는 product `api` 또는 engine effect adapter에만 존재한다.
@@ -445,6 +487,92 @@ references/ui-layer-lab/src/product/features/topology
 - renderer가 API response를 직접 읽지 않고 `RenderScene`만 받는다.
 - geometry는 worker가 계산하고 typed CSS custom property 또는 typed scene buffer로 전달한다.
 - product style은 모든 색·spacing·type·radius·shadow·z-index·motion을 named token으로만 사용한다.
+
+### 5.2 제품 전체 API port와 synthetic adapter 격리
+
+이 절은 topology feature만의 규칙이 아니라 전체 frontend service architecture의 최상위 정책이다. Auth, organization, Fleet, inventory, topology, metrics, RCA, incident, notification, GitOps, repository, workflow, cost, command/action 등 모든 API feature에 적용한다.
+
+- feature의 application/core package가 port interface를 소유한다.
+- `product/api` 또는 infrastructure package가 live adapter를 구현한다.
+- synthetic/mock/replay adapter와 dataset은 product tree 밖 testkit이 구현한다.
+- composition root가 validated config로 adapter를 한 번 주입한다.
+- view, hook, selector, reducer는 concrete adapter, base URL, fetch, WebSocket, environment variable을 알지 못한다.
+- API JSON은 live/synthetic 모두 동일 generated runtime schema로 validate한 뒤에만 domain message가 된다.
+- live 실패를 fake success, sample count, fixture object, 임의 empty array로 바꾸지 않는다.
+- loading skeleton, blank placeholder, empty-state illustration은 허용하지만 실제 resource/metric처럼 보이는 가짜 이름·숫자·상태는 product code에 둘 수 없다.
+- Storybook/visual-test sample은 test-only entry와 bundle에만 존재한다.
+- production dependency graph, ESLint boundary, bundle scan이 testkit/mock/MSW/fixture import를 차단한다.
+- 모든 feature response에는 가능한 범위에서 live/synthetic/replay provenance를 보존하고 synthetic/replay 화면과 export에 명확히 표시한다.
+- write/command adapter는 read adapter와 분리하고 idempotency/audit/confirmation 규칙을 동일하게 지킨다.
+
+Feature별 port 예시는 다음과 같고 이름은 generated architecture registry에서 관리한다.
+
+```text
+SessionGateway          → HttpSessionAdapter          | SyntheticSessionAdapter
+FleetGateway            → HttpFleetAdapter            | SyntheticFleetAdapter
+TopologyGateway         → HttpTopologyGateway         | SyntheticTopologyGateway
+MetricsGateway          → HttpMetricsAdapter          | SyntheticMetricsAdapter
+IncidentGateway         → HttpIncidentAdapter         | SyntheticIncidentAdapter
+GitOpsGateway           → HttpGitOpsAdapter           | SyntheticGitOpsAdapter
+NotificationGateway     → HttpNotificationAdapter     | SyntheticNotificationAdapter
+CommandGateway          → HttpCommandAdapter          | SyntheticCommandAdapter(test only)
+```
+
+Synthetic command adapter는 외부 부작용을 절대 실행하지 않고 receipt에 synthetic임을 표시한다. production에서 synthetic write adapter 등록은 build failure다.
+
+### 5.3 Topology port의 구체 계약
+
+제품 component, selector, reducer, renderer에는 fixture, mock, demo object, fallback count를 넣지 않는다. 데이터 요청은 engine effect runner가 다음 port만 호출한다.
+
+```ts
+type DataOrigin =
+  | { kind: "live"; adapterId: string; endpointId: string }
+  | { kind: "synthetic"; adapterId: string; datasetId: string; seed: string }
+  | { kind: "replay"; adapterId: string; recordingId: string }
+
+interface TopologyGateway {
+  readonly origin: DataOrigin
+  getCatalog(signal: AbortSignal): Promise<TopologyCatalogResponse>
+  plan(query: TopologyQuery, signal: AbortSignal): Promise<QueryPlanResponse>
+  getSnapshot(planId: string, signal: AbortSignal): Promise<ProjectionFrame>
+  openStream(request: StreamSubscription, signal: AbortSignal): AsyncIterable<StreamEnvelope>
+  getEntityDetail(request: EntityDetailRequest, signal: AbortSignal): Promise<EntityDetail>
+}
+
+interface TopologyCommandGateway {
+  execute(request: CommandRequest, signal: AbortSignal): Promise<CommandReceipt>
+}
+```
+
+Adapter는 다음으로 분리한다.
+
+```text
+product composition root
+  └─ injects exactly one TopologyGateway
+       ├─ HttpTopologyGateway        production/live
+       ├─ SyntheticTopologyGateway   explicit dev/test only
+       └─ ReplayTopologyGateway      explicit QA/repro only
+```
+
+강제 규칙:
+
+- 실제 adapter와 synthetic adapter는 동일 generated runtime schema를 통과한다.
+- synthetic/replay 구현과 dataset은 `@product/topology-testkit/adapters` 아래에만 둔다.
+- `references/ui-layer-lab/src/product`의 component, core, query, renderer는 testkit을 import할 수 없다.
+- composition root의 validated runtime config만 adapter를 선택한다. component/environment conditional branch로 선택하지 않는다.
+- production build graph는 synthetic/replay package import가 있으면 실패한다.
+- live request 실패 시 synthetic data로 자동 fallback하지 않는다. error/stale state를 표시한다.
+- synthetic mode는 frame, stream, telemetry에 `DataOrigin.kind=synthetic`을 유지하고 화면에 제거할 수 없는 localized `DEMO DATA` banner/watermark를 표시한다.
+- replay mode도 `REPLAY DATA`와 recording 시각을 표시한다.
+- screenshot, export, support bundle에도 data origin을 포함한다.
+- generated API contract와 `HttpTopologyGateway` boundary를 먼저 만든 뒤 synthetic adapter가 그 contract를 구현한다. synthetic dataset이 contract나 UI 의미를 정의하면 안 된다.
+- development composition에서 명시적으로 synthetic binding을 사용할 수 있고 이후 live binding으로 교체해도 engine/view 코드는 바뀌지 않는다. 그러나 synthetic-only 상태를 feature complete로 표시하지 않는다.
+- product의 기본 binding은 항상 Http adapter다. synthetic은 explicit dev/test profile과 visible origin 표시가 있을 때만 선택된다.
+- Definition of Done은 live contract test와 실제 API E2E를 요구하며 synthetic visual test만으로 통과할 수 없다.
+- 두 adapter 모두 같은 contract/property/click-path test suite를 실행한다.
+- synthetic adapter는 success뿐 아니라 empty, partial, stale, forbidden, reconnect, gap, malformed payload test scenario를 deterministic seed/fake clock으로 제공한다.
+
+`ProjectionFrame`과 `StreamEnvelope`에는 `dataOrigin`을 포함하며 reducer는 한 query session 안에서 origin이 바뀌는 message를 거부하고 명시적 new session을 요구한다. 이 규칙으로 live와 fake가 한 화면에서 섞이는 것을 막는다.
 
 ## 6. Backend projection architecture
 
@@ -480,6 +608,19 @@ Kubernetes API / Metrics / Cost / Traffic / GitOps / Cloud adapters
 - deletion tombstone, duplicate event, query sequence gap을 처리한다. resourceVersion은 opaque resume/equality token으로만 쓴다.
 - Kubernetes `Event` object와 watch lifecycle event를 별개 타입으로 보존한다.
 
+Per-GVR LIST→WATCH continuity:
+
+1. discovery 결과와 entitlement로 수집 GVR을 확정한다.
+2. paginated LIST는 하나의 opaque list resourceVersion과 continue chain을 사용해 shadow cache를 만든다.
+3. page 사이 변경이 있어도 API server의 consistent-list semantics를 따르고 page 결과를 live cache에 부분 노출하지 않는다.
+4. complete LIST의 opaque resourceVersion부터 WATCH를 시작해 LIST 완료와 WATCH 연결 사이 event를 회수한다.
+5. watch가 ready되고 buffered event가 연속 적용된 뒤 shadow cache를 해당 GVR의 active cache로 atomic swap한다.
+6. continue token 만료, `410 Gone`, compaction이면 불완전 shadow cache를 폐기하고 새 LIST/WATCH epoch를 시작한다.
+7. relist 동안 이전 active cache는 stale/partial로 유지하고 새 incomplete cache와 섞지 않는다.
+8. BOOKMARK은 cursor만 전진시키며 object mutation을 만들지 않는다.
+9. reflector/informer가 이 절차를 구현하더라도 source watermark에 list RV, watch start, sync 완료, relist reason을 노출한다.
+10. collector continuity와 query gateway snapshot-stream continuity는 서로 다른 경계이며 둘 다 통과해야 live-complete다.
+
 ### 6.2 Inventory projection
 
 - raw object는 UID, GVK, GVR, RV, generation, owners 전체, labels 전체 또는 selector index에 필요한 lossless form을 가진다.
@@ -488,6 +629,19 @@ Kubernetes API / Metrics / Cost / Traffic / GitOps / Cloud adapters
 - EndpointSlice는 service-name label, address, targetRef UID, nodeName, zone, ready/serving/terminating, hints, ports를 보존한다.
 - generic CRD는 metadata, status conditions, owner refs, catalog-safe summary를 보존한다.
 - RBAC forbidden과 empty를 구분한다.
+
+Data minimization policy:
+
+- arbitrary discovered GVR의 기본 수집은 Kubernetes metadata content negotiation을 사용한 `PartialObjectMetadata` LIST/WATCH다.
+- metadata negotiation을 지원하지 않는 generic GVR은 full object로 자동 fallback하지 않고 metadata capability를 partial/unsupported로 표시한다.
+- semantic plugin이 필요한 표준/allowlisted GVK만 최소 권한으로 full typed object를 target-side memory에서 처리한다.
+- full object는 target agent 밖으로 raw 전송하지 않고, logging, trace body, cache dump, database, support bundle에 기록하지 않는다.
+- projection 전에 field allowlist와 redaction을 적용하고 payload depth/size budget을 검증한다.
+- Secret은 항상 metadata-only다. data/stringData/key name/count도 topology API에 수집하지 않는다.
+- ConfigMap은 기본 metadata-only다. key count capability는 명시적으로 허용된 target-side summarizer가 값과 key name을 버리고 count만 방출할 때만 available이며, live object/raw payload는 저장하지 않는다.
+- Pod의 literal env value, projected token, imagePullSecret 내용, annotation allowlist 밖 값은 projection에서 제거한다.
+- arbitrary CRD의 spec/status는 generic renderer가 자동 수집하지 않는다. signed semantic plugin과 admin-granted field policy가 있을 때만 declared path를 projection한다.
+- raw object가 validation/redaction 전에 error logging으로 유출되지 않도록 error는 coordinate/UID/hash만 기록한다.
 
 ### 6.3 Relation projection
 
@@ -526,7 +680,7 @@ type RelationClaimInput = {
 - 동일 window/asOf를 공유하는 frame에 조인한다.
 - spec request, live usage, cost allocation, flow는 source time이 다름을 보존한다.
 - 최신값만 남기더라도 `observedAt`, `window`, `status`, `maxAge`를 잃지 않는다.
-- cost rollup은 하나의 Pod allocation fact table에서 Cluster/Node/Namespace/Workload로 계산한다.
+- cost rollup은 하나의 canonical CostFact ledger에서 계산한다. Pod allocation뿐 아니라 shared/idle/asset/unallocated fact를 보존한다.
 
 ### 6.5 Coherent ProjectionFrame
 
@@ -536,6 +690,7 @@ Kubernetes inventory, Prometheus window, OpenCost window, flow stream은 원자�
 type ProjectionFrame = {
   schemaVersion: string
   frameId: string
+  dataOrigin: DataOrigin
   hashes: QueryHashes
   cursor: SnapshotCursor
   clusterCuts: readonly ClusterCut[]
@@ -547,6 +702,7 @@ type ProjectionFrame = {
   relations: readonly CanonicalRelation[]
   restrictedBoundaries: readonly RestrictedBoundaryMarker[]
   metricValues: readonly MetricValue[]
+  sizeValues: readonly ComputedSizeValue[]
   rollups: readonly Rollup[]
   warnings: readonly StructuredWarning[]
 }
@@ -555,6 +711,14 @@ type SnapshotCursor = {
   streamId: string
   streamEpoch: string
   sequence: number
+  resumeToken: string
+}
+
+type StreamSubscription = {
+  queryId: string
+  resumeCursor: SnapshotCursor
+  expectedDataQueryHash: string
+  expectedProjectionHash: string
 }
 
 type ClusterCut = {
@@ -603,6 +767,34 @@ type ProviderCapability = {
 - managed control plane resource를 모든 cluster에 표시하지 않는다.
 - Prometheus, Metrics Server, CNI observability가 설치되어 있다고 가정하지 않는다.
 
+### 7.3 Plugin SDK 안전성
+
+```ts
+type PluginManifest = {
+  pluginId: string
+  pluginVersion: string
+  engineVersionRange: string
+  schemaVersion: string
+  signatureRef: string
+  capabilities: readonly string[]
+  inputGvkPatterns: readonly CanonicalGvkPattern[]
+  outputNamespaces: readonly string[]
+  deterministic: true
+}
+```
+
+- pluginId/output ID는 reverse-domain namespace를 사용한다. core ID collision은 catalog load failure다.
+- major schema/engine incompatibility는 plugin만 disabled하고 source watermark에 unsupported를 표시한다. unknown major를 실행하지 않는다.
+- cluster의 CRD, annotation, URL이 client/server code를 제공할 수 없다.
+- browser catalog는 signed declarative data만 받는다. remote JS, `eval`, dynamic URL import, arbitrary React renderer를 금지한다.
+- client renderer/detail/action plugin은 product build에 compile된 allowlist module만 manifest ID로 선택한다.
+- server extractor는 signed/admin-approved module이며 clock, network, filesystem을 직접 쓰지 않고 bounded context capability만 받는다.
+- extractor는 동일 canonical input에서 byte-equivalent canonical claims를 출력해야 한다.
+- `PluginExecutionPolicy/v1` 기본 budget은 batch 1,000 objects당 CPU 200ms, plugin working memory 64 MiB, object당 relation claim 32개다. 초과 시 plugin output batch를 폐기하고 해당 capability만 partial/error로 격리한다.
+- plugin crash/timeout이 core inventory와 다른 plugin을 중단시키지 않는다.
+- manifest signature, schema compatibility, collision, determinism, timeout, output budget, malicious payload contract test를 배포 전에 통과한다.
+- catalog revision이 plugin 추가/제거/major 변경으로 바뀌면 current query를 replan한다.
+
 ## 8. Scope와 Lens
 
 Scope와 Lens는 하나의 enum으로 합치지 않는다.
@@ -632,7 +824,7 @@ type Grouping =
   | { kind: "label"; key: string }
 ```
 
-Scope, Lens, Grouping은 서로 독립이다. Namespace는 API scope이자 논리 partition이지만 실행 위치 parent가 아니다. zone, node pool, application도 projection grouping이며 placement edge를 바꾸지 않는다. 외부 기준 저장소처럼 namespace frame으로 관계 graph를 정리할 수는 있지만 중앙 containment truth를 `Cluster → Namespace → Workload`로 교체하지 않는다.
+Scope, Lens, Grouping은 서로 독립이다. Namespace는 API scope이자 논리 partition이지만 실행 위치 parent가 아니다. zone, node pool, application도 projection grouping이며 placement edge를 바꾸지 않는다. Namespace frame으로 관계 graph를 정리할 수는 있지만 중앙 containment truth를 `Cluster → Namespace → Workload`로 교체하지 않는다.
 
 ### 8.1 Scope별 화면 계약
 
@@ -653,14 +845,36 @@ Service와 Deployment는 여러 Node의 Pod를 가로지른다. Node를 먼저 �
 
 - gesture progress `p`는 `[-1, 1]`이다.
 - `p = 0`은 placement Treemap이다.
-- 한쪽 방향은 network rail을 펼치고 Treemap을 반대편으로 압축한다.
-- 반대쪽 방향은 ownership/GitOps rail을 펼친다.
+- `p = +1`은 network lens, `p = -1`은 ownership/GitOps lens다.
+- LTR에서 canvas를 오른쪽으로 끌면 inline-start의 network rail이 나타나고 `p`가 증가한다. 왼쪽으로 끌면 ownership rail과 함께 `p`가 감소한다. RTL에서는 inline-start/end와 drag 방향을 mirror하지만 semantic p 부호는 유지한다.
 - 넓은 viewport의 butterfly lens는 양쪽 rail을 동시에 표시한다.
 - drag 중 새 view를 교체하지 않고 하나의 scene graph에서 geometry를 연속 보간한다.
 - snap point, direction, resistance, velocity threshold는 injected motion policy에서 온다.
 - 가려지는 tile은 옆면을 렌더링하지 않는다. 모든 entity가 다른 2D layout으로 재투영된다.
 - relation entity가 나타날 때 연결된 Pod tile은 같은 entityKey와 현재 interpolated rect를 유지한다.
 - keyboard 사용자는 lens tab/shortcut으로 동일 전환을 수행한다.
+
+### 8.4 Gesture와 async layout의 일관성
+
+```ts
+type GestureLayoutSet = {
+  revision: LayoutRevision
+  placement: RenderGeometry
+  network: RenderGeometry
+  ownership: RenderGeometry
+}
+```
+
+1. scope/query가 settle되면 worker가 같은 LayoutRevision에 대한 세 endpoint layout을 precompute한다.
+2. pointer drag는 GestureLayoutSet이 ready인 경우만 시작한다. 준비 전에는 explicit control이 loading state를 표시하고 완료 후 전환한다.
+3. pointerdown에서 `gestureRevision`과 endpoint geometry를 capture한다.
+4. drag frame은 worker를 호출하지 않고 placement↔network 또는 placement↔ownership geometry를 pure interpolation한다.
+5. canonical reducer는 stream delta를 계속 적용하지만 presentation selector는 capture된 membership/geometry를 gesture 종료까지 유지한다. 삭제 entity는 interaction-disabled ghost가 된다.
+6. entitlement/schema epoch 변경은 gesture를 즉시 cancel하고 resync한다. 일반 add/update/delete는 손실 없이 `postGestureRetarget` queue에 남는다.
+7. pointerup/cancel에서 captured endpoint 또는 center로 snap한 뒤 latest canonical revision의 layout을 요청하고 현재 interpolated geometry에서 새 geometry로 interruptible retarget한다.
+8. stale worker 결과는 gestureRevision과 current revision 양쪽을 검증해 폐기한다.
+9. relation line path도 양 끝 layout과 같은 revision에서 계산한다. drag preview 중에는 line을 정량 animation하지 않고, snap 후 tile/rail node settle이 끝난 다음 line unfold, 그 다음 observed particle 순서로 시작한다.
+10. interpolation, z-order, timing, pointer threshold의 실제 수치는 `topology-visual-motion-tokens.md`가 규정한다.
 
 ## 9. Query Bar와 typed AST
 
@@ -673,10 +887,17 @@ type Comparison = "lt" | "lte" | "eq" | "gte" | "gt"
 
 type QueryTime =
   | { mode: "live"; lookbackMs: number; stepMs: number; asOf?: never }
-  | { mode: "fixed"; asOf: string; start: string; end: string; stepMs: number }
+  | { mode: "frozen-frame"; frameId: string; asOf: string }
+  | { mode: "historical"; asOf: string; start: string; end: string; stepMs: number; historyPolicyId: string }
 ```
 
 Field는 free-form JSON path가 아니라 server field catalog ID다. live query도 planner가 실행할 때 고정 effective asOf/start/end를 응답해 한 frame 안의 모든 source가 같은 anchor를 공유하게 한다.
+
+- `frozen-frame`은 이미 생성된 ProjectionFrame을 움직이지 않고 보는 mode다. frame retention/entitlement가 만료되면 explicit expired error다.
+- `historical`은 inventory/relations/metrics/cost의 versioned history store가 해당 범위와 시각을 지원할 때만 가능하다.
+- metric history만 있고 resource history가 없으면 과거 topology를 현재 inventory와 합쳐 historical이라고 부르지 않는다.
+- Kubernetes Event/timeline 보존은 resource snapshot history capability를 자동으로 의미하지 않는다.
+- planner는 cluster/source별 history coverage를 검증하고 unsupported/partial이면 정확한 source와 기간을 반환한다.
 
 ### 9.1 Token type
 
@@ -689,6 +910,10 @@ type QueryToken =
   | FlowMetricToken
   | TimeToken
   | LensToken
+
+type OmnibarSuggestion =
+  | { kind: "query-token"; token: QueryToken }
+  | { kind: "action"; actionId: string; labelKey: string; availability: "enabled" | "disabled" }
 
 type ResourceIdentityToken = {
   type: "resource-identity"
@@ -715,6 +940,7 @@ Resource token은 display name이 아니라 entityKey를 저장한다. 동명이
 
 ```ts
 type Predicate =
+  | { op: "true" }
   | { op: "and"; args: Predicate[] }
   | { op: "or"; args: Predicate[] }
   | { op: "not"; arg: Predicate }
@@ -730,7 +956,9 @@ type TopologyDataQuery = {
   size: SizeExpression
   flow?: FlowExpression
   time: QueryTime
-  aggregateUniverse: "filtered-descendants" | "all-authorized-descendants"
+  areaPolicy:
+    | { kind: "filtered-only" }
+    | { kind: "all-authorized-with-filtered-remainder"; projectionPolicyId: string }
 }
 
 type TopologyProjection = {
@@ -766,15 +994,46 @@ type QueryHashes = {
 - free text는 suggestion 선택 전까지 applied predicate가 아니다.
 - exact resource 선택은 focus와 identity filter를 동시에 명시한다.
 - Kind sidebar 클릭도 같은 Query AST에 Kind filter를 dispatch한다.
-- filter 결과의 ancestor는 `contextOnly: true`로 유지할 수 있다.
+- filter 결과의 ancestor는 `membershipRole="ancestor-context"`로 유지할 수 있다.
 - query canonicalizer는 field/order/weight/window를 정규화하고 네 hash를 만든다.
-- `dataQueryHash`는 scope/filter/metric/flow/time/universe만 포함한다.
+- `dataQueryHash`는 scope/filter/metric/flow/time/areaPolicy만 포함한다.
 - `projectionHash`는 data hash와 grouping/LOD policy를 포함한다.
 - `presentationHash`는 projection hash와 lens를 포함한다.
 - `shareHash`는 URL에 직렬화되는 전체 canonical document의 hash다.
 - canonical query는 URL에 serialize되어 새로고침, 공유, back/forward가 재현 가능해야 한다.
 - server planner가 반환한 canonical query가 최종 authority다.
-- exact identity token은 해당 entity와 필요한 ancestor/context relation만 남긴다. `contextOnly`는 검색 결과 count에 포함하지 않는다.
+- exact identity token은 해당 entity와 필요한 ancestor/context relation만 남긴다. context membership role은 검색 결과 count에 포함하지 않는다.
+- filter가 없으면 predicate는 명시적 `{op:"true"}`다. empty `and/or` node는 canonical schema가 거부한다.
+- action suggestion은 QueryToken/AST가 아니다. 선택하면 `action.invoked` EngineMessage를 dispatch하고 command effect 정책을 따른다.
+
+Area leaf set 규칙:
+
+- `filtered-only`: area leaf set은 authorized resource 중 filter에 match한 metric leaf다.
+- `all-authorized-with-filtered-remainder`: match leaf는 개별 tile이고, authorized하지만 숨겨진 leaf의 합은 실제로 보이는 `Filtered remainder` projection tile 하나 이상으로 렌더링한다.
+- hidden leaf를 parent area에만 넣고 visible child 없이 두는 것은 금지한다.
+- `ancestor-context`와 `relation-context` entity는 frame/rail context이며 sibling area leaf set에 들어가지 않는다.
+- `filtered-remainder`는 area에는 들어가지만 query match count에는 들어가지 않는 projection이다.
+- parent area는 항상 현재 scene에 보이는 primary + filtered-remainder descendant의 합이다.
+
+Exact identity focus plan:
+
+```ts
+type FocusExpansionPlan = {
+  rootEntityKey: string
+  includePlacementAncestors: true
+  relationPlanes: readonly RelationPlane[]
+  maxDepthByPlane: Readonly<Partial<Record<RelationPlane, number>>>
+  maxNeighborsPerHop: number
+  truncated: boolean
+  continuationCursor?: string
+}
+```
+
+- exact resource는 primary match다.
+- Cluster/Node/Pod placement ancestor는 ancestor-context로 복원한다.
+- current lens가 요구하는 Service/controller/config/storage neighbor는 relation-context로 확장한다.
+- relation-context는 filter match/area/count에 들어가지 않는다.
+- expansion budget을 넘으면 임의 절단하지 않고 aggregate + continuation cursor를 반환한다.
 
 ### 9.4 Planner 검증
 
@@ -783,7 +1042,7 @@ planner는 실행 전에 다음을 검증한다.
 - schema version과 AST depth/clause budget
 - field 존재와 scalar type
 - regex/text query budget
-- metric dimension/unit/additivity/rollup/window compatibility
+- metric dimension/unit/additivity/spatial aggregation/temporal reducer/window compatibility
 - 현재 scope에서 metric 지원 여부
 - source capability와 RBAC
 - query cost, 예상 entity/edge 수, LOD plan
@@ -799,6 +1058,24 @@ planner는 실행 전에 다음을 검증한다.
 ```ts
 type MetricDimensionId = string & { readonly __brand: "MetricDimensionId" }
 type MetricMeasureId = string & { readonly __brand: "MetricMeasureId" }
+type DecimalString = string & { readonly __brand: "DecimalString" }
+type UnitId = string & { readonly __brand: "UnitId" }
+
+type MetricUnitDescriptor = {
+  unitId: UnitId
+  dimension: MetricDimensionId
+  symbolKey: string
+  scaleToCanonicalDecimal: DecimalString
+  currencyCode?: string
+  perDurationMs?: number
+}
+
+type EntityMetricTarget =
+  | { entityClass: "resource"; gvkPattern: CanonicalGvkPattern }
+  | { entityClass: "platform"; platformKind: "cluster" }
+  | { entityClass: "embedded"; embeddedKind: EmbeddedIdentity["embeddedKind"] }
+  | { entityClass: "projection"; projectionFamilyId: string }
+  | { entityClass: "external"; externalFamilyId: string }
 
 type MetricPresence = "present" | "zero" | "missing"
 type MetricFreshness = "fresh" | "stale" | "unknown"
@@ -820,27 +1097,29 @@ type MetricDescriptor = {
   label: string
   dimension: MetricDimensionId
   measure: MetricMeasureId
-  canonicalUnit: string
-  valueType: "gauge" | "counter" | "delta" | "allocation"
+  canonicalUnitId: UnitId
+  sampleKind: "gauge" | "cumulative-counter" | "delta" | "allocation"
   additive: boolean
-  rollup: "sum" | "last" | "avg" | "max" | "p95" | "none"
-  supportedEntityKinds: readonly string[]
+  spatialAggregation: "sum" | "unique-sum" | "none"
+  allowedTemporalReducers: readonly ("last" | "avg" | "max" | "p95" | "sum" | "rate")[]
+  counterToRatePolicyId?: string
+  supportedEntityPatterns: readonly EntityMetricTarget[]
   supportedScopes: readonly Scope["level"][]
+  decompositionPolicyIds: readonly string[]
   aggregationUniverseId: string
   compatibleCompositeGroup: string
   defaultCompositeCoefficient?: string
   sources: readonly string[]
   temporalModes: readonly ("instant" | "range")[]
-  reducers: readonly string[]
   maxAgePolicyId: string
-  availability: ProviderCapability
+  capabilitiesByCluster: readonly { clusterUid: string; capability: ProviderCapability }[]
 }
 
 type MetricValue = {
   metricId: string
   entityKey: string
-  value: number | null
-  canonicalUnit: string
+  valueDecimal: DecimalString | null
+  unitId: UnitId
   status: MetricStatus
   source: string
   observedAt: string
@@ -851,33 +1130,91 @@ type MetricValue = {
   reason?: string
 }
 
+type MetricWindowSpec = {
+  lookbackMs: number
+  stepMs?: number
+}
+
 type SizeMetricTerm = {
   metricId: string
-  reducer: "last" | "avg" | "max" | "p95" | "sum"
-  window?: TimeWindow
-  coefficient: string
+  temporalReducer: "last" | "avg" | "max" | "p95" | "sum" | "rate"
+  window?: MetricWindowSpec
+  coefficient: DecimalString
 }
 
 type WeightedMetricTerm = SizeMetricTerm
+
+type ComputedSizeContribution = {
+  metricId: string
+  normalizedShareDecimal: DecimalString
+  effectiveWeightDecimal: DecimalString
+  contributionDecimal: DecimalString
+  status: MetricStatus
+}
+
+type ComputedSizeValue = {
+  entityKey: string
+  mode: "physical" | "composite-score"
+  valueDecimal: DecimalString | null
+  unitId: UnitId
+  status: MetricStatus
+  formulaRevision: string
+  cohortId: string
+  partial: boolean
+  weightCoverageDecimal: DecimalString
+  contributions: readonly ComputedSizeContribution[]
+  missingMetricIds: readonly string[]
+}
+
+type SizeDecompositionPlan =
+  | {
+      status: "supported"
+      metricId: string
+      scopeLevel: Scope["level"]
+      leafUniverseId: string
+      leafTarget: EntityMetricTarget
+      parentMappingPolicyId: string
+      residualProjectionPolicyIds: readonly string[]
+      nextScopeSupport: "supported" | "not-decomposable"
+      suggestedNextScopeMetricIds: readonly string[]
+    }
+  | {
+      status: "unsupported"
+      metricId: string
+      scopeLevel: Scope["level"]
+      reasonCode: string
+      suggestedMetricIds: readonly string[]
+    }
 ```
 
-Kind 목록은 catalog에서 오며 descriptor의 `supportedEntityKinds`를 view에서 literal 비교하지 않는다.
+`EntityMetricTarget`은 entity class와 GVK pattern/catalog family를 discriminated union으로 표현한다. Kind 목록은 catalog에서 오며 view가 문자열 비교하지 않는다.
 
 예를 들어 값 0이 오래됐으면 `zero + stale + complete + allowed + supported`이며, 권한이 없으면 `missing + unknown + unknown + forbidden + supported`다. UI용 단일 badge는 selector가 이 축에서 파생할 수 있지만 source data를 단일 quality 문자열로 축약하지 않는다.
 
-- `presence = zero`이면 value는 정확히 0이다.
-- `presence = present`이면 value는 finite이며 0이 아니다.
-- `presence = missing`이면 value는 null이다.
-- `access = forbidden` 또는 `support = unsupported`이면 presence는 missing이고 value는 null이다.
-- source error 뒤 마지막 값이 남아 있으면 value/presence는 유지할 수 있지만 freshness는 stale이고 errorCode를 가진다. area eligibility에는 사용하지 않는다.
+- `presence = zero`이면 valueDecimal은 canonical `"0"`이다.
+- `presence = present`이면 valueDecimal은 finite canonical decimal이며 0이 아니다.
+- `presence = missing`이면 valueDecimal은 null이다.
+- `access = forbidden` 또는 `support = unsupported`이면 presence는 missing이고 valueDecimal은 null이다.
+- source error 뒤 마지막 값이 남아 있으면 valueDecimal/presence는 유지할 수 있지만 freshness는 stale이고 errorCode를 가진다. area eligibility에는 사용하지 않는다.
+- generated runtime schema의 cross-field refinement가 위 조합을 강제하고 invalid combination을 quarantine한다.
+- size metric의 physical valueDecimal은 0 이상이어야 한다. negative cost credit 등은 area descriptor로 등록할 수 없고 별도 breakdown에서만 처리한다.
 
 `aggregationUniverseId`는 합산 leaf의 정체성을 고정한다. 예를 들어 CPU와 memory의 Pod allocation 값은 `pod-allocation/v1`일 수 있다. PVC 자체 값은 `persistent-volume/v1`이므로 Pod allocation policy 없이 CPU와 composite할 수 없다. Cost도 동일 Pod allocation fact로 내려온 경우만 같은 composite group에 들어간다.
+
+Wire precision 규칙:
+
+- metric, byte, cost, coefficient, score wire 값은 canonical decimal string이다. JS `number`로 API 원값을 운반하지 않는다.
+- decimal schema는 sign, 최대 integer/fraction digit, exponent 금지/허용 정책을 descriptor별로 검증한다.
+- unit 변환은 `MetricUnitDescriptor.scaleToCanonicalDecimal`과 arbitrary-precision decimal로 수행한다.
+- geometry worker에 넘길 때만 normalized finite float로 변환하고 원 decimal을 inspector/export에 보존한다.
+- cost unit은 단순 문자열이 아니라 dimension + ISO currencyCode + perDurationMs로 식별한다.
+- 서로 다른 currency, pricing source, amortization, allocation policy, window는 같은 additive cohort에 들어갈 수 없다.
 
 ### 10.2 기본 metric 목록
 
 서버는 최소 다음 semantic metric을 capability가 있을 때 등록한다.
 
-| ID | 단위 | 의미 | 기본 rollup |
+| ID | 단위 | 의미 | 공간 집계 |
 |---|---|---|---|
 | `cpu.request_cores` | core | scheduler 기준 effective Pod request | sum |
 | `cpu.limit_cores` | core | effective limit policy에 따른 합 | sum |
@@ -889,10 +1226,30 @@ Kind 목록은 catalog에서 오며 descriptor의 `supportedEntityKinds`를 view
 | `storage.ephemeral_usage_bytes` | byte | local ephemeral usage | sum |
 | `storage.pvc_request_bytes` | byte | unique PVC requested capacity | sum by PVC universe |
 | `storage.pvc_usage_bytes` | byte | unique PVC used capacity | sum by PVC universe |
-| `cost.allocation_per_window` | currency/window | 하나의 allocation table 비용 | sum |
+| `cost.total_per_window` | currency/window | 호환되는 canonical CostFact ledger 비용 | unique-sum |
 | `resource.pod_count` | count | generic engine primitive | sum |
 
-`resource.pod_count`는 physical capacity가 아니라 count임을 formula summary에 명시한다. 서버 capability가 기본 metric을 제공하지 않으면 이 primitive를 explicit fallback suggestion으로 제시할 수 있지만 조용히 자동 전환하지 않는다.
+`resource.pod_count`는 physical capacity가 아니라 count임을 formula summary에 명시한다. 서버 capability가 physical metric을 제공하지 않으면 catalog default policy가 이 primitive를 visible generated chip으로 적용한다. view가 조용히 임의 fallback하지 않는다.
+
+Initial/default size policy:
+
+```ts
+type DefaultSizePolicy = {
+  policyId: string
+  scopeLevel: Scope["level"]
+  lensKind: Lens["kind"]
+  preferredMetricIds: readonly string[]
+  fallbackCountMetricId: string
+  effectiveExpression: SizeExpression
+  reasonKey: string
+}
+```
+
+- server catalog가 scope/lens/capability별 effective default expression을 결정한다. frontend에 metric 우선순위를 hardcode하지 않는다.
+- engine은 첫 query 생성 전에 catalog default를 명시적 generated metric chip으로 넣는다.
+- physical source가 하나도 없으면 server-registered count primitive를 사용하고 chip/formula에 `Resource count`임을 표시한다. count는 fake metric이 아니다.
+- default가 source capability 변화로 바뀌면 current user expression을 덮어쓰지 않는다. 새 session 또는 사용자의 reset action에서만 적용한다.
+- 마지막 user metric chip 제거 시 default chip 적용을 확인 가능한 `query.defaultSizeApplied` message로 dispatch한다. 화면 내부에서 보이지 않게 이전 metric을 복원하지 않는다.
 
 ### 10.3 Physical mode
 
@@ -904,13 +1261,26 @@ type PhysicalSizeExpression = {
 ```
 
 - additive descriptor 하나만 선택한다.
-- value는 canonical unit의 절대값이다.
+- valueDecimal은 catalog canonical unit의 절대값이다.
 - 음수, NaN, Infinity는 `error`다.
 - parent value는 visible/authorized leaf의 합이다.
-- filter 적용 시 기본 universe는 `filtered-descendants`다.
+- filter 적용 시 기본 areaPolicy는 catalog가 선언한 `filtered-only`이며, 숨겨진 합을 비교하려면 explicit filtered-remainder policy를 사용한다.
 - exact value, unit, reducer, window를 query formula summary와 inspector에 표시한다.
 
 현재 scope의 outer frame은 비교 대상 tile이 아니라 viewport/context이므로 화면을 채운다. 면적 규칙은 그 frame 안의 sibling child에 적용한다. 따라서 Pod가 0개인 Node를 직접 열면 Node frame은 유지되고 내부가 empty다. Cluster overview에서 metric 0인 Node는 양의 metric Node와 같은 Treemap 면적을 가장하지 않고 `Zero value` shelf에 남는다.
+
+### 10.3.1 Scope별 decomposition
+
+planner는 `SizeDecompositionPlan`을 반환하고 renderer는 metric ID를 보고 leaf를 추정하지 않는다.
+
+- CPU/memory request·limit: Container fact를 합산하고 Pod overhead/restartable-init semantics를 Pod residual projection으로 보존한다. Pod → Node → Cluster rollup이 가능하다.
+- CPU/memory usage: container series가 있으면 Container → Pod로 분해한다. Pod series만 있으면 Pod가 최소 leaf이며 Pod scope에서 가짜 Container 균등 배분을 하지 않는다.
+- Node usage와 Pod attributable usage의 차이는 `System / unattributed` projection이다.
+- Node capacity/allocatable: Fleet/Cluster에서 Node가 leaf다. 같은 metric으로 Pod까지 분해할 수 없으므로 Node drilldown에서 `not-decomposable`을 반환하고 compatible request/usage metric을 suggestion한다. 자동 metric 교체는 금지한다.
+- Pod overhead, system residual, idle/shared cost는 실제 Kubernetes resource가 아닌 projection이며 entity count에 합산하지 않는다.
+- persistent storage: unique PVC/PV fact가 leaf다. 명시적 Pod allocation policy가 없으면 placement Node/Pod decomposition을 지원하지 않는다.
+- resource count: catalog가 scope별 count target을 명시한다. Pod count를 Container scope까지 같은 metric인 것처럼 확장하지 않는다.
+- current scope의 metric이 next scope를 지원하지 않아도 outer resource frame과 relation inspector는 열 수 있다. 내부 area map은 `not-decomposable` 상태와 metric suggestion을 표시한다.
 
 ### 10.4 Composite mode
 
@@ -983,9 +1353,9 @@ Metric chip 추가/제거 규칙은 다음으로 고정한다.
 - 새 term의 기본 coefficient는 catalog default이며 정의되지 않으면 engine primitive `"1"`이다.
 - canonical weight는 모든 coefficient를 합이 1이 되도록 정규화한다.
 - term 제거 시 남은 coefficient는 보존하고 canonical weight만 다시 정규화한다.
-- 같은 metric/reducer/window term을 재추가하면 duplicate를 만들지 않고 기존 chip을 focus한다.
+- 같은 metric/temporalReducer/window term을 재추가하면 duplicate를 만들지 않고 기존 chip을 focus한다.
 - 사용자는 coefficient를 수정할 수 있으며 0 이하, NaN, Infinity, exponent abuse, precision policy 초과는 commit하지 않는다.
-- 마지막 term을 제거하면 planner가 catalog 기본 metric suggestion 상태가 되며 이전 metric을 조용히 복원하지 않는다.
+- 마지막 term을 제거하면 catalog effective default를 visible generated chip으로 적용하는 `query.defaultSizeApplied`를 dispatch한다. 적용할 default조차 없는 catalog는 invalid이며 catalog load가 실패한다.
 
 ### 10.5 Zero, missing, residual rail
 
@@ -1025,16 +1395,36 @@ Aggregate coverage 규칙:
 - unique PVC를 aggregation leaf로 사용한다.
 - 여러 Pod가 같은 PVC를 참조해도 용량을 Pod마다 복제하지 않는다.
 - PVC를 Pod/Workload/Node에 배분하려면 versioned allocation policy와 contribution을 응답해야 한다.
-- allocation policy가 없으면 PVC metric은 storage lens 또는 PVC scope에서만 area metric으로 허용한다.
+- allocation policy가 없으면 PVC metric은 Cluster/Node scope 안의 storage lens가 제공하는 PVC aggregation surface에서만 area metric으로 허용한다. Scope union에 존재하지 않는 가상 `PVC scope`를 만들지 않는다.
 - CSI가 usage를 제공하지 않으면 `unsupported` 또는 `missing`이며 request를 usage로 대체하지 않는다.
 
 ### 10.8 Cost
 
-- 비용은 `amount + currency + window + pricingSource + allocationPolicy + estimated`를 가진다.
+```ts
+type CostFact = {
+  factId: string
+  factKind: "allocated" | "shared" | "idle" | "asset" | "unallocated"
+  subject?: EntityRef
+  clusterUid: string
+  amountDecimal: DecimalString
+  unitId: UnitId
+  window: TimeWindow
+  pricingSourceId: string
+  allocationPolicyId: string
+  amortizationPolicyId: string
+  estimated: boolean
+  evidence: readonly EvidenceRef[]
+}
+```
+
+- 비용은 amount, currency/unit, window, pricingSource, allocationPolicy, amortizationPolicy, estimated를 가진다.
 - 한 frame에서 currency와 window가 일치해야 합산한다.
 - 서로 다른 currency는 FX source와 FX observedAt 없이 합산하지 않는다.
 - Node와 Workload cost를 서로 다른 query에서 가져와 같은 total인 것처럼 보이지 않는다.
-- Pod allocation fact table에서 idle, shared, overhead를 보존한 뒤 모든 상위 rollup을 계산한다.
+- allocated Pod fact만으로 전체 cluster cost를 만들지 않는다. control plane, Node/PV/LB asset, idle, shared, unallocated fact를 synthetic cost leaf로 보존한다.
+- factId는 ledger 내 unique하며 여러 Node/Workload rollup에서 같은 fact를 중복 합산하지 않는다.
+- placement lens에서는 Pod에 귀속 가능한 allocated fact와 명시적 Node/Cluster residual만 사용한다. asset/storage cost는 적합한 lens에 둔다.
+- FX 변환이 허용되면 원 amount/currency와 FX rate/source/observedAt을 보존하고 converted fact를 별도 derived claim으로 만든다.
 - cloud pricing adapter가 없는 local/on-prem cluster는 OpenCost 등 source가 없다면 `unsupported`다.
 
 ## 11. Resource catalog, sidebar와 메인 정보 우선순위
@@ -1044,25 +1434,34 @@ Aggregate coverage 규칙:
 Sidebar의 Networking, Workloads, Configuration, Scaling 같은 group은 view literal이 아니다. server catalog가 다음 정보를 제공한다.
 
 ```ts
-type ResourceCatalogEntry = {
-  gvkPattern: CanonicalGvkPattern
+type ResourceCatalogBase = {
   familyId: string
   groupId: string
-  label: string
+  labelKey: string
   iconToken: string
   sortWeight: number
-  entityClass: EntityClass
   renderCapabilities: readonly string[]
   relationCapabilities: readonly string[]
   countCompleteness: "exact" | "partial" | "unknown"
   countAccess: "allowed" | "forbidden"
 }
+
+type ResourceCatalogEntry = ResourceCatalogBase &
+  (
+    | { entityClass: "resource"; gvkPattern: CanonicalGvkPattern }
+    | { entityClass: "platform"; platformKind: "cluster" }
+    | { entityClass: "embedded"; embeddedKind: EmbeddedIdentity["embeddedKind"] }
+    | { entityClass: "projection"; projectionFamilyId: string }
+    | { entityClass: "external"; externalFamilyId: string }
+  )
 ```
 
 - CRD는 generic group 또는 plugin group에 자동 등장한다.
 - unknown GVK도 Resources 목록과 search에 나타난다.
 - category click은 `FilterToken`을 만들어 같은 Query AST에 추가한다.
 - view는 Ingress, Service, Deployment 등을 switch statement로 열거하지 않는다.
+- labelKey는 locale catalog에서 resolve하고 missing locale은 stable technical fallback을 사용한다.
+- iconToken은 client build allowlist에서 resolve하며 unknown token은 generic resource icon으로 fallback한다. URL/SVG markup을 catalog가 직접 주입하지 않는다.
 
 ### 11.2 Count semantics
 
@@ -1086,7 +1485,7 @@ type CatalogCount = {
 
 ### 11.3 Fleet-first 메인 화면
 
-외부 기준 저장소의 single-cluster dashboard에서 확인된 정보 우선순위를 범용 Fleet 제품에 다음처럼 재배치한다.
+일반적인 single-cluster operations dashboard의 정보 우선순위를 범용 Fleet 제품에 다음처럼 재배치한다.
 
 1. 전역 Query Bar: cluster/resource/metric/filter/action 검색.
 2. Fleet Treemap: Cluster 면적과 상태, 내부 Node micro-block.
@@ -1151,11 +1550,17 @@ type HealthVerdict = {
   message?: string
   source: string
   observedAt: string
+  freshness: "fresh" | "stale" | "unknown"
+  completeness: "complete" | "partial" | "unknown"
+  access: "allowed" | "forbidden"
+  evidenceIds: readonly string[]
 }
 
 type AggregateHealth = {
   effectiveLevel: HealthVerdict["level"]
   counts: Record<HealthVerdict["level"], number>
+  observedChildCount: number
+  expectedAuthorizedChildCount: number
   policyId: string
 }
 ```
@@ -1165,6 +1570,9 @@ type AggregateHealth = {
 - Cluster/PodGroup 같은 projection은 versioned aggregation policy가 만든 effective level과 counts를 가진다.
 - 기본 aggregation은 `unhealthy > degraded > unknown > neutral > healthy` severity와 child count를 사용하지만, 단 하나의 child 상태를 전체 fill로 과장하지 않도록 header marker와 counts를 함께 표시한다.
 - own health와 descendant aggregate를 하나의 필드로 덮어쓰지 않는다.
+- health level은 마지막 semantic 판정이고 evidence freshness/completeness/access와 별개다. stale healthy는 green-only로 보이지 않고 stale pattern/desaturation과 age를 반드시 표시한다.
+- forbidden이면 level은 unknown이며 hidden descendant를 aggregate denominator/count에 포함하지 않는다.
+- parent aggregate counts는 authorized child만 사용하고 expected/observed count를 함께 가진다.
 
 - Service health를 항상 healthy로 두지 않는다. Endpoint readiness, type/status, LB condition을 사용한다.
 - Ingress/Gateway는 accepted/resolved/backend/LB condition을 사용한다.
@@ -1190,7 +1598,7 @@ type FlowMetricDescriptor = {
   id: string
   dimension: MetricDimensionId
   measure: MetricMeasureId
-  unit: string
+  unitId: UnitId
   source: string
   window: TimeWindow
   visualRoles: {
@@ -1224,26 +1632,60 @@ type FlowExpression = {
 
 Service port가 여러 개일 수 있으므로 edge key는 source/target뿐 아니라 port name/number, protocol, truth type을 포함한다. 여러 Service가 같은 Pod를 선택하거나 한 Service가 여러 Node의 Pod를 선택해도 entity를 복제하지 않는다.
 
-EndpointSlice endpoint는 독립 Kubernetes object가 아니므로 `EndpointSlice UID + address index/address + targetRef UID + port key`로 deterministic projection key를 만든다. targetRef가 없으면 external endpoint projection이며 IP/address만으로 cluster 전역 resource identity를 만들지 않는다. renderer는 endpoint projection을 접을 수 있지만 effective relation evidence에서 제거하지 않는다.
+EndpointSlice endpoint는 독립 Kubernetes object가 아니므로 EndpointSlice resource entity 아래 `embedded` entity로 만든다. stableKey는 `addressType + normalized addresses + targetRef UID/coordinate + port key`의 canonical hash이며 배열 index만 사용하지 않는다. targetRef가 없으면 embedded endpoint가 external EntityRef를 가리키며 IP/address만으로 cluster 전역 resource identity를 만들지 않는다. renderer는 endpoint embedded entity를 접을 수 있지만 effective relation evidence에서 제거하지 않는다.
+
+- ready/serving/terminating은 nullable tri-state로 각각 보존한다. nil을 false로 바꾸지 않는다. traffic eligibility는 Kubernetes version과 Service `publishNotReadyAddresses`를 반영한 versioned EndpointReadinessPolicy가 계산한다.
+- targetRef가 Pod가 아니면 해당 GVK/UID resource로 resolve하고, targetRef가 없으면 address endpoint로 유지한다.
+- IPv4/IPv6/FQDN addressType과 여러 address를 보존한다. 같은 targetRef의 dual-stack endpoint는 UI에서 묶을 수 있지만 evidence/port/address family를 합쳐 삭제하지 않는다.
+- 여러 slice의 duplicate Service→target/port relation은 canonical relation claim으로 merge하고 endpoint entity 수와 backend resource 수를 구분한다.
+- named Service targetPort와 EndpointSlice resolved port의 mapping evidence를 보존하며 불일치/미해결은 unknown/conflict다.
 
 ### 13.4 Gateway와 cross-namespace
 
 - Ingress `defaultBackend`를 처리한다.
-- Gateway → Route → backendRef chain을 보존한다.
+- Ingress host/path/pathType/TLS Secret/default backend와 Service port를 edge attributes/evidence로 보존한다.
+- Gateway → HTTPRoute/GRPCRoute/TCPRoute/TLSRoute/UDPRoute → backendRef chain을 semantic plugin으로 보존한다.
+- BackendTLSPolicy와 설치된 Gateway API policy attachment를 policy-security/configured claim으로 연결한다.
 - ReferenceGrant와 parent/backend conditions를 검증한다.
 - cross-namespace ref가 허용되지 않으면 rejected/unresolved relation이다.
 - ExternalName, selectorless, headless Service는 별도 semantics plugin으로 처리한다.
+
+### 13.5 NetworkPolicy와 flow source fusion
+
+- NetworkPolicy spec selector/namespaceSelector/ipBlock/port/ingress/egress/default-deny는 `policy-security` configured evidence다.
+- ingress와 egress 양쪽 policy, namespace labels, CNI semantics를 모두 평가한 verified policy engine이 있을 때만 `effective-allow/effective-deny` claim을 만든다.
+- configured policy edge를 실제 허용 트래픽 edge처럼 그리지 않는다.
+- Hubble, Istio, Prometheus, Caretta가 같은 flow를 관측할 수 있으므로 raw 값을 합산하지 않는다.
+- FlowObservation은 source, reporter, sampling rate, direction, identity resolution, window, unit, confidence를 가진다.
+- source selector가 하나를 authoritative로 선택하거나 versioned FusionPolicy가 reporter/request-response dedupe를 증명한 경우만 fused value를 만든다.
+- Hubble은 event/flow evidence, Istio는 workload/service rate, Caretta는 관계 존재 fallback이라는 capability를 catalog에 명시한다. capability가 없는 bytes/rate/latency를 0으로 채우지 않는다.
+- bidirectional flow는 두 canonical directed edge로 저장하고 UI bundling만 양방향 표식을 만들 수 있다.
+- width domain, log mapping, clipping, legend, particle cap의 실제 수치는 visual/motion token spec에 고정한다.
+
+Adapter normalization minimum:
+
+| Source capability | 허용 의미 | 금지 |
+|---|---|---|
+| event-level flow observer | event rate, verdict/drop, resolved identities, 실제 제공된 latency/bytes | event count를 connection rate나 bytes로 추정 |
+| service-mesh metric source | decimal workload/service request/byte/error rate와 declared window | workload identity를 Pod UID로 위장, rate 정수 반올림 |
+| connection relationship source | configured/observed relationship evidence | HTTP RPS, byte rate, latency로 승격 |
+| generic Prometheus adapter | catalog에 등록된 recording rule의 unit/dimension | raw label만으로 source/target을 임의 추론 |
+
+어떤 adapter도 capability가 false인 field를 0으로 채우지 않는다.
 
 ## 14. Ownership, dependency, GitOps
 
 ### 14.1 Ownership chain
 
-- ownerReference UID와 `controller=true`가 authoritative source다.
+- UID가 일치하고 Kubernetes scope legality를 통과한 ownerReference 자체가 authoritative ownership evidence다. `controller=true`는 그 owner가 managing controller임을 분류한다.
 - Deployment → ReplicaSet → Pod를 생략하지 않는다.
 - renderer가 편의를 위해 Deployment → Pod shortcut을 표시할 수 있으나 `derived-path`임을 보존한다.
-- old ReplicaSet은 삭제하지 않고 `historical` flag와 revision으로 보존한다.
+- 이전 rollout의 ReplicaSet이 API에 live object로 남아 있으면 inactive live entity와 revision으로 보존한다. API에서 삭제되면 exit tombstone 후 live graph에서 제거한다. 장기 historical entity는 history store와 historical query에서만 제공한다.
 - StatefulSet, DaemonSet, Job, CronJob, Rollout 등은 plugin이 같은 canonical ownership plane을 출력한다.
 - owner cycle은 graph corruption warning으로 격리하고 traversal budget을 초과하지 않는다.
+- namespaced owner/dependent의 cross-namespace ref, cluster-scoped dependent의 namespaced owner, UID/name mismatch를 invalid claim으로 격리한다.
+- 여러 `controller=true` ref 같은 malformed object는 임의 하나를 고르지 않고 conflict claim과 warning을 만든다.
+- UID owner가 아직 수집되지 않았으면 unresolved placeholder를 만들되 permission redaction 규칙을 먼저 적용한다.
 
 ### 14.2 Dependency
 
@@ -1269,7 +1711,7 @@ Pod
 ```
 
 - GitHub는 Pod의 owner가 아니다.
-- 외부 기준 저장소에서 재사용 가능한 것은 Argo `status.resources`, Flux inventory, tracking annotation, revision, source URL/path/chart parser다.
+- provider adapter는 Argo inventory, Flux inventory, tracking annotation, revision, source URL/path/chart 등 서로 다른 evidence를 canonical provenance claim으로 변환한다.
 - GitHub API, PR, Actions 정보는 별도 connector capability가 있을 때만 추가한다.
 - desired revision과 observed live revision을 구분한다.
 - evidence가 heuristic이면 UI에 heuristic이라고 표시한다.
@@ -1351,6 +1793,7 @@ type EngineMessage<P extends EnginePayload = EnginePayload> = {
 
 ```text
 engine.initialized
+catalog.changed
 url.hydrated
 query.textChanged
 query.tokenCommitted
@@ -1387,34 +1830,79 @@ effect.failed
 
 ### 15.3 Reducer rules
 
-- 동일 eventId는 한 번만 적용한다.
-- dedupe set은 무한 보존하지 않는다. stream event는 current epoch의 committed cursor 이하를 compact하고, non-stream effect/UI event는 bounded diagnostic retention policy를 사용한다.
+- 동일 eventId는 dedupe retention 안에서 한 번만 적용한다.
+- stream event는 `(streamId, epoch, sequence)`가 primary idempotency key다. committed sequence 이하 eventId는 anti-entropy cut이 확정되면 compact한다.
+- effect result는 active/cancelled effectId registry로 dedupe하고 effect 종료 후 session-scoped bounded LRU로 이동한다.
+- UI/URL message는 session-scoped bounded LRU와 causation-specific guard를 사용한다.
+- LRU size/TTL은 `EventRetentionPolicy`의 중앙 수치이며 eviction은 correctness에 필요한 stream cursor를 제거하지 않는다.
+- epoch/sequence continuity 규칙은 `source="stream"` message에만 적용한다. UI/URL/worker/effect message에는 query/layout revision과 effect correlation을 적용한다.
 - streamEpoch가 현재와 다르면 이전 delta를 적용하지 않는다.
-- sequence가 current+1이 아니면 gap state와 snapshot effect를 생성한다.
+- stream sequence가 current+1이 아니면 gap state와 snapshot effect를 생성한다.
 - resourceVersion은 opaque token이므로 대소 비교하지 않는다. exact duplicate는 eventId/stream sequence/RV equality로 no-op하고 ordering은 query stream sequence와 epoch으로 판단한다.
 - generation은 desired spec generation 판정에만 사용하고 event ordering에 사용하지 않는다.
 - metric/flow result는 `dataQueryHash`, projection entity/result는 `projectionHash`, layout result는 `presentationHash`가 current와 다르면 stale result로 폐기한다.
 - layout transaction ID가 current가 아니면 적용하지 않는다.
 - 삭제 중인 focus entity는 exit가 끝날 때까지 presentation state에 남기고 logical state에서는 tombstone이다.
 - 모든 reducer branch는 invariant checker를 통과해야 commit된다.
+- compatible catalog revision change는 current query를 replan하고 unsupported token/plugin을 명시한다.
+- catalog/schema major mismatch는 stream resync loop로 처리하지 않고 fatal compatibility state와 upgrade CTA를 표시한다.
 
 ### 15.4 Effect runner
 
 ```ts
-type EngineEffect =
+type RetryPolicy =
+  | { kind: "none" }
+  | { kind: "idempotent-read"; maxAttempts: number; backoffPolicyId: string }
+
+type EffectEnvelope<P extends EffectPayload = EffectPayload> = {
+  effectId: string
+  causationEventId: string
+  abortKey: string
+  createdAt: string
+  hashes: Partial<QueryHashes>
+  retryPolicy: RetryPolicy
+  payload: P
+}
+
+type EffectPayload =
   | { type: "catalog.fetch" }
   | { type: "query.plan"; query: TopologyQuery }
   | { type: "snapshot.fetch"; planId: string }
-  | { type: "stream.subscribe"; queryId: string; afterSequence?: number }
+  | { type: "stream.subscribe"; request: StreamSubscription }
   | { type: "layout.compute"; request: LayoutRequest }
   | { type: "url.replace"; serialized: string }
   | { type: "navigation.internal"; route: RouteRef }
   | { type: "navigation.external"; verifiedUrl: string }
   | { type: "command.execute"; command: CommandRequest }
   | { type: "telemetry.record"; record: EngineTelemetry }
+
+type CommandRequest = {
+  commandId: string
+  targetEntityKeys: readonly string[]
+  parameters: Readonly<Record<string, JsonValue>>
+  idempotencyKey: string
+  confirmationToken: string
+  expectedStateToken?: string
+}
+
+type CommandReceipt = {
+  commandId: string
+  idempotencyKey: string
+  origin: DataOrigin
+  status: "accepted" | "running" | "succeeded" | "failed" | "unknown"
+  auditRef: string
+}
 ```
 
 Effect 결과와 실패는 다시 EngineMessage로 dispatch한다. component callback에 직접 promise/fetch/navigation 로직을 넣지 않는다.
+
+- 새 query session은 이전 plan/snapshot/stream/layout의 abortKey를 취소한다.
+- cancelled effect 결과와 current hash가 다른 결과는 state에 적용하지 않고 diagnostic만 남긴다.
+- effect result message는 effectId와 causationEventId를 포함한다.
+- automatic retry는 idempotent read에만 허용한다.
+- command effect는 자동 retry하지 않는다. 사용자가 재시도해도 같은 logical command는 같은 idempotencyKey를 사용하고 server receipt를 조회한다.
+- confirmationToken은 action catalog/authorization에서 발급되고 target, parameters hash, expiry에 bind한다.
+- reducer idempotence는 외부 부작용 exactly-once를 보장하지 않는다. command gateway가 idempotency ledger와 audit receipt를 보장해야 한다.
 
 ## 16. Snapshot과 단일 stream
 
@@ -1424,7 +1912,7 @@ Effect 결과와 실패는 다시 EngineMessage로 dispatch한다. component cal
 GET  /api/v2/topology/catalog
 POST /api/v2/topology/query/plan
 POST /api/v2/topology/snapshot
-GET  /api/v2/topology/stream?queryId=...&afterSequence=...
+GET  /api/v2/topology/stream?queryId=...&resumeToken=...
 GET  /api/v2/topology/entities/{entityKey}
 ```
 
@@ -1439,6 +1927,7 @@ type StreamEnvelope = {
   schemaVersion: string
   eventId: string
   workspaceId: string
+  dataOrigin: DataOrigin
   origin:
     | { kind: "query" }
     | { kind: "cluster"; clusterUid: string; inventoryEpoch: string }
@@ -1454,16 +1943,20 @@ type StreamEnvelope = {
 ```
 
 - initial versioned snapshot 뒤 delta를 적용한다.
-- reconnect는 `afterSequence`로 resume한다.
+- reconnect는 server-signed resumeToken으로 `(streamId, streamEpoch, sequence, query hashes)`를 resume한다. sequence 하나만 보내지 않는다.
 - server가 resume할 수 없으면 explicit resync-required를 보낸다.
 - periodic anti-entropy snapshot으로 drift를 복구한다.
 - structural add/delete는 조용히 drop하지 않는다.
 - metric은 series별 latest value로 coalesce할 수 있다.
 - flow는 고정 window aggregate로 coalesce한다.
 - backpressure가 correctness를 위협하면 drop이 아니라 resync-required를 보낸다.
-- durable timeline에는 original event를 보존하고 live scene에는 frame batch를 적용한다.
+- durable timeline에는 retention policy가 허용한 structural/domain/operation event의 canonical record를 보존하고 live scene에는 frame batch를 적용한다. raw metric sample/flow event를 무제한 보존하지 않는다.
+
+`EventRetentionPolicy/v1`은 tenant별 event class, raw retention, aggregation/downsampling, deletion, legal hold, RBAC를 정의한다. 기본적으로 operation/audit/structural event는 canonical record, metrics는 series storage, traffic은 window aggregate로 분리하며 browser stream coalescing 전 raw payload를 UI timeline 저장소로 복사하지 않는다.
 
 Fleet query도 stream sequence는 query stream 하나에서 전역 단조 증가한다. 각 cluster의 독립 continuity는 `origin.inventoryEpoch`와 frame의 `clusterCuts`로 추적한다. cluster resourceVersion을 fleet 전역 revision처럼 비교하지 않는다.
+
+Stream handshake의 첫 envelope는 streamId/epoch/current sequence/dataQueryHash/projectionHash를 확인한다. token queryId 재사용, server restart epoch 변경, hash mismatch, retention expiry는 delta 전송 전에 `resync-required`로 종료한다.
 
 ### 16.3 Snapshot-stream cutover와 anti-entropy
 
@@ -1471,7 +1964,7 @@ Snapshot과 stream 사이에 변화가 사라지는 구간을 허용하지 않�
 
 1. query gateway는 query session과 retained event log를 만든다.
 2. snapshot은 논리 cut `S`에서 계산되고 `cursor = {streamId, streamEpoch, sequence:S}`를 포함한다.
-3. client는 `afterSequence=S`로 subscribe한다. stream이 먼저 열리면 `S`보다 큰 event를 buffer한다.
+3. client는 snapshot의 signed resumeToken으로 subscribe한다. stream이 먼저 열리면 `S`보다 큰 event를 buffer한다.
 4. current data/projection hash와 일치하는 snapshot을 reducer에 설치한다.
 5. buffer의 `S+1`부터 연속 sequence만 순서대로 replay한다.
 6. gap, epoch mismatch, retention expiry가 있으면 snapshot을 적용한 채 임의 delta를 이어 붙이지 않고 resync한다.
@@ -1501,7 +1994,8 @@ stream events
 ```ts
 type LayoutRevision = {
   structureRevision: string
-  metricValueRevision: string
+  logicalMetricRevision: string
+  geometryMetricRevision: string
   dataQueryHash: string
   projectionHash: string
   presentationHash: string
@@ -1512,7 +2006,12 @@ type LayoutRevision = {
 
 - health/status만 바뀌면 layout하지 않는다.
 - structure add/delete는 worker layout을 요청한다.
-- metric 값 변화는 projected pixel displacement가 policy threshold를 넘을 때 요청한다.
+- metric value는 logical state에 즉시 적용한다. geometry는 별도 revision으로 추적한다.
+- projected cumulative boundary displacement가 0.5 CSS px 이상이면 layout을 요청한다.
+- 0.5px 미만 변화도 최대 250ms 또는 다음 interaction idle 중 먼저 도달한 시점에 coalesced layout으로 동기화한다.
+- logical/geometry revision이 다르면 inspector는 최신 값을 보여주되 `layout updating` 상태를 표시하고, tile 내부 absolute value line은 geometry sync 전 이전 geometry revision 값 또는 숨김을 사용한다.
+- gesture 중에는 §8.4의 captured geometry를 사용하고 pointer release 직후 latest logical revision으로 retarget한다.
+- geometry lag가 250ms를 넘으면 performance invariant failure이며 silent stale geometry를 허용하지 않는다.
 - lens 변화는 같은 entity set의 목표 geometry를 계산한다.
 - 늦은 worker 응답은 전체 revision이 맞지 않으면 폐기한다.
 - background update 때문에 자동 fitView하지 않는다.
@@ -1529,7 +2028,7 @@ type LayoutRevision = {
 - worker 사용 불가 시 low-volume safe fallback만 허용하고 명시적으로 degraded capability를 표시한다.
 - 임의 fixed grid fallback으로 오류를 숨기지 않는다. 마지막 valid layout을 유지하고 retry/error state를 표시한다.
 
-### 17.3 외부 기준 저장소에서 이식할 pattern
+### 17.3 Layout stability pattern
 
 - order-independent structure hash.
 - 구조가 같으면 layout skip.
@@ -1538,7 +2037,7 @@ type LayoutRevision = {
 - 그룹 내부/그룹 간 2단계 ELK Worker pattern.
 - p50/p95/p99 layout telemetry ring buffer.
 
-Treemap/Sankey/Motion은 외부 기준 저장소에 없으므로 새 engine으로 구현한다. 외부 기준 저장소의 TrafficGraph 전체 재-layout과 fixed-grid fallback은 이식하지 않는다.
+Treemap, relation rail, flow scene, Motion은 이 계약의 revision/object-constancy 규칙으로 구현한다. flow update마다 전체 graph를 재-layout하거나 fixed-grid fallback으로 오류를 숨기지 않는다.
 
 ## 18. Motion과 object constancy
 
@@ -1582,18 +2081,56 @@ duration, easing, stagger, gesture resistance, snap threshold, particle density,
 
 renderer choice는 count 하나가 아니라 projected pixel area, visible edge density, rolling frame time, DPR, device capability, motion preference로 결정한다.
 
+- Motion `layoutId`는 DOM tile adapter에만 사용한다. core object constancy는 renderer-neutral SceneEntity ID와 from/to geometry buffer가 담당한다.
+- Canvas/WebGL은 같은 interpolation clock과 geometry revision으로 직접 보간한다.
+- DOM↔Canvas↔WebGL tier 전환은 한 handoff frame 동안 old/new renderer를 같은 geometry로 dual-render한 뒤 token duration crossfade한다. 서로 다른 위치에서 재등장하지 않는다.
+- pointer hit index와 accessibility mirror는 renderer tier가 아니라 SceneEntity ID를 기준으로 유지한다.
+- focused entity는 DOM accessibility mirror와 camera target을 계속 가진다.
+- WebGL context loss는 particle을 중지하고 Canvas static edge로 fallback한 뒤 2초 안에 복구를 시도한다. data/reducer state는 손실하지 않는다.
+
 ### 19.2 LOD 불변조건
 
-- LOD는 정보를 삭제하지 않는다.
+- LOD는 member를 client scene에서 생략할 수 있지만 조용히 폐기하지 않는다. aggregate provenance/count/metric/completeness/expansion cursor를 제공한다.
 - aggregate entity는 memberCount, health counts, metric totals, completeness, expansion token을 가진다.
 - expansion은 server-side query/LOD plan으로 exact members를 가져온다.
-- group boundary가 바뀌어도 underlying entity identity를 보존한다.
+- client에 loaded된 member는 group boundary가 바뀌어도 identity를 보존한다. 아직 fetch하지 않은 aggregate member의 client identity 보존을 주장하지 않는다.
 - visible count와 total authorized count를 구분한다.
-- 외부 기준 저장소의 1000/2000 resource, 200 animation 같은 고정 threshold를 그대로 사용하지 않는다.
+- view component에 resource count/animation threshold를 하드코딩하지 않고 versioned LOD/PerformancePolicy를 사용한다.
 
 ### 19.3 Performance budgets
 
-구체 수치는 benchmark profile과 `PerformancePolicy` config로 version한다. release gate는 최소 다음을 측정한다.
+`PerformancePolicy/topology-v1`의 기준 환경은 4 vCPU, 8 GiB RAM, Playwright가 pin한 Chromium, 1440×900 viewport, DPR 1, animation enabled, production build다. 브라우저 major 또는 policy 변경은 benchmark baseline revision을 올린다.
+
+Reference data profiles:
+
+| Profile | Source topology | 최대 client scene |
+|---|---|---|
+| S | 5 clusters, 50 Nodes, 2,000 Pods, 5,000 relations, 100 delta/s | 3,000 entities, 5,000 visible relations |
+| M | 20 clusters, 500 Nodes, 20,000 Pods, 50,000 relations, 500 delta/s | 6,000 entities, 8,000 visible relations via LOD |
+| F | focused Node with 2,000 Pods and 5,000 exact relations | 2,500 entities, 5,000 relations |
+| X | 100 clusters, 5,000 Nodes, 200,000 Pods | 8,000 aggregate/visible entities; members server-side |
+
+Required budgets:
+
+| Measure | Budget |
+|---|---|
+| gesture/zoom frame | p95 ≤ 16.7ms, p99 ≤ 33.4ms |
+| input-to-presentation latency | p95 ≤ 50ms |
+| main-thread long task during 5s gesture | 0 tasks > 50ms |
+| worker layout S/M/F | p95 ≤ 80ms / 250ms / 500ms |
+| validated snapshot → first meaningful scene | p95 ≤ 1,000ms |
+| committed lens/scope → settled morph | p95 ≤ 700ms |
+| Canvas/WebGL draw | p95 ≤ 8ms |
+| stream staged backlog | p95 ≤ 2 animation-frame batches; structural drop = 0 |
+| stable 1h run | unexpected resync = 0; detached DOM growth = 0 |
+| heap M/X after settle | ≤ 350 MiB / 500 MiB |
+| heap growth during 1h M soak | ≤ 25 MiB after GC checkpoints |
+| DOM nodes | ≤ 2,500 in M/X; accessibility mirror included |
+| geometry lag | ≤ 250ms and cumulative boundary error < 0.5 CSS px before sync |
+
+Network/backend latency는 별도 API SLO로 측정하고 frontend render budget에서 숨기지 않는다. 낮은 성능 device에서는 adaptive LOD/motion policy가 scene을 줄이되 data completeness를 aggregate로 보존한다.
+
+Release gate는 다음 telemetry를 함께 기록한다.
 
 - interaction frame p50/p95/p99와 long task.
 - worker layout p50/p95/p99.
@@ -1605,7 +2142,7 @@ renderer choice는 count 하나가 아니라 projected pixel area, visible edge 
 - stale worker result와 dropped presentation frame.
 - 1시간 이상 실시간 실행의 bounded memory.
 
-목표 reference device/profile에서 interaction p95가 60fps frame budget을 만족해야 하며, profile을 명시하지 않은 `완전 부드럽다` 주장은 acceptance가 아니다.
+위 profile/budget을 통과하지 않은 `완전 부드럽다` 주장은 acceptance가 아니다. 수치는 view literal이 아니라 versioned PerformancePolicy와 benchmark fixture의 중앙 계약이다.
 
 ## 20. Theme, visual system, responsive behavior
 
@@ -1674,6 +2211,22 @@ type TopologyThemeTokens = {
 - scope: containment context.
 - relation focus: scope를 바꾸지 않고 connected subgraph를 강조.
 
+```ts
+type SelectionState = {
+  entityKeys: readonly string[]
+  anchorEntityKey?: string
+  mode: "replace" | "toggle" | "range" | "lasso"
+  revision: string
+}
+```
+
+- plain activation은 focus/activate이고 selection을 암묵적으로 query filter로 바꾸지 않는다.
+- checkbox/Space는 replace, platform modifier는 toggle, ordered list Shift는 range, explicit canvas selection tool만 lasso를 사용한다.
+- multi-selection은 aggregate inspector와 bulk action eligibility를 계산한다. relation focus는 별도 presentation state다.
+- selection limit은 `InteractionPolicy/v1`의 500 entities다. 초과 lasso는 aggregate selection suggestion을 제공하고 일부만 조용히 선택하지 않는다.
+- query/scope change 후 보이지 않는 selection은 제거하고 announcement한다.
+- URL은 기본적으로 selection을 저장하지 않는다. 명시적 SavedView만 entitlement 재검증 가능한 entityKey selection을 저장한다.
+
 ### 21.2 Activation routing
 
 | Entity | 기본 activation |
@@ -1706,6 +2259,12 @@ Activation handler는 Kind switch가 아니라 catalog의 `ActivationDescriptor`
 - high-frequency drag progress는 URL에 기록하지 않고 committed snap만 기록한다.
 - browser back/forward는 URL adapter가 `url.hydrated` message로 dispatch한다.
 - engine state를 component history와 별도로 유지하지 않는다.
+- URL에는 raw Secret/annotation, bearer token, provider credential, metric sample을 절대 넣지 않는다.
+- 기본 공유 방식은 server-side SavedView의 opaque ID와 schema version이다. recipient는 자신의 entitlement/catalog로 query를 다시 plan한다.
+- 아직 저장하지 않은 local view는 referrer로 전송되지 않는 URL fragment에 canonical query를 넣을 수 있지만 4,096 byte를 넘으면 SavedView 생성을 요구한다.
+- fragment에도 resource display label 대신 entityKey/catalog field ID를 우선한다. namespace/label filter가 포함되면 공유 전 민감 가능성을 알린다.
+- URL codec은 schema migration table을 가지며 unsupported major는 기존 state를 추정하지 않고 migration error를 표시한다.
+- 권한이 다른 사용자가 link를 열면 원 사용자의 count/result를 캐시에서 보여주지 않고 새 session으로 replan한다.
 
 ## 22. Accessibility
 
@@ -1720,6 +2279,13 @@ Activation handler는 Kind switch가 아니라 catalog의 `ActivationDescriptor`
 - user-triggered query/scope/lens 결과, disconnect, stale, action result만 polite announcement한다.
 - 200% zoom, keyboard only, screen reader, reduced motion, high contrast를 release gate에 넣는다.
 - tiny Canvas tile도 search/keyboard relation list에서 접근 가능하다.
+- pointer로 직접 조작하는 control/tile target은 최소 44×44 CSS px다. 그보다 작은 data mark는 직접 클릭 대상이 아니며 zoom/search/list를 통해 접근한다.
+- zoom in/out/reset/fit-selection에 visible button과 keyboard shortcut을 제공한다. wheel/pinch만으로 zoom하지 않는다.
+- keyboard focus가 viewport 밖 entity로 이동하면 reduced-motion policy에 맞춰 camera가 해당 entity를 보이게 이동한다.
+- hierarchy mirror는 `aria-level`, `aria-posinset`, `aria-setsize`, expanded state를 제공한다.
+- RTL에서는 inline-start/end gesture와 spatial left/right를 mirror하고 graph edge direction의 source/target 의미는 유지한다.
+- browser 400% zoom 또는 320 CSS px reflow에서 horizontal page overflow 없이 map 대체 list와 inspector를 사용할 수 있어야 한다.
+- labelKey, number, unit, currency, relative/absolute time은 locale formatter registry를 사용하고 raw provider string을 UI 문구로 사용하지 않는다.
 
 ## 23. 상태와 오류의 완전한 행렬
 
@@ -1730,7 +2296,7 @@ Page state를 하나의 mutually-exclusive enum으로 만들지 않는다. parti
 ```ts
 type EngineStatus = {
   bootstrap: "uninitialized" | "loading-session" | "loading-catalog" | "ready" | "failed"
-  mode: "live" | "fixed-snapshot"
+  mode: "live" | "frozen-frame" | "historical"
   query: "idle" | "planning" | "loading-initial" | "ready" | "rejected" | "failed"
   frame: "absent" | "nonempty" | "empty-authoritative"
   connection: "not-applicable" | "connecting" | "connected" | "disconnected" | "resyncing"
@@ -1765,6 +2331,7 @@ Composition 규칙은 다음과 같다.
 ### 23.3 Layout failure
 
 - last valid layout을 유지한다.
+- 첫 layout이라 last valid geometry가 없으면 blank/fake grid 대신 cursor-paginated accessible structure list, error reason, retry를 표시한다.
 - scene을 arbitrary grid로 바꾸지 않는다.
 - layout error와 retry action을 표시한다.
 - 같은 revision의 무한 retry를 막는 bounded policy를 사용한다.
@@ -1811,111 +2378,17 @@ Restricted reference 규칙:
 - external URL은 scheme/host/provider parser로 검증한다.
 - query language에 raw PromQL, CEL, regex denial-of-service, arbitrary code를 허용하지 않는다.
 - action은 기존 command gateway, authorization, audit, confirmation을 거친다.
-
-## 25. 외부 기준 저장소 심층 분석에 따른 이식 정책
-
-분석 기준은 frontmatter의 `external_reference_commit`이다. 외부 기준 저장소는 Treemap/Sankey/Motion 기반의 이 제품 화면을 제공하지 않는다. 일반 Topology, Live Traffic, GitOps Tree가 서로 다른 state/layout 흐름이다. 따라서 UI 전체를 복사하지 않고 source 단위로 판정한다.
-
-### 25.1 직접 또는 얇게 감싸 재사용
-
-| 기준 자산 | 위치 | 이식 규칙 |
-|---|---|---|
-| typed informer resource set/lifecycle | `pkg/k8score/types.go`, `internal/k8s/cache.go` | cluster별 adapter, completeness 추가 |
-| large LIST paging | `pkg/k8score/cache.go` | continue token/취소/telemetry 보존 |
-| dynamic GVR discovery | `pkg/k8score/dynamic_cache.go` | sync state 오류 수정, provider registry 출력 |
-| canonical health vocabulary | `pkg/health` | Service/Ingress/CRD evaluator 보강 |
-| Prometheus discovery/client | `pkg/prom` | fixed frame time/window, catalog query만 허용 |
-| Hubble connector | `internal/traffic/hubble.go` | reconnect/backpressure/byte capability 보강 |
-| Argo/Flux inventory parser | `pkg/gitops/tree` | evidence/confidence/all sources 보존 |
-| structure hash concept | `packages/k8s-ui/src/utils/structure-hash.ts` | layout revision의 한 부분으로 사용 |
-| ELK worker request/version pattern | `packages/k8s-ui/.../topology/layout.ts` | ownership detail adapter로 사용 |
-| Git provider safe URL parser | `packages/k8s-ui/src/utils/git-provider-urls.ts` | allow policy와 external effect로 이식 |
-| p50/p95/p99 perf ring | `packages/k8s-ui/src/perf/store.ts` | engine telemetry로 일반화 |
-
-### 25.2 수정 후 재사용
-
-| 기준 자산 | 필요한 수정 |
-|---|---|
-| topology relationship builder | Node 포함 model, UID edge, relation plane/provider registry로 분해 |
-| Service selector matching | `network-configured` evidence로만 사용 |
-| topology neighborhood traversal | UID, plane별 bounded traversal, shared resource leaf policy |
-| metrics history | timestamp/window/maxAge/status 축과 실패 시 stale 전환 |
-| OpenCost | user RBAC, Pod allocation fact, requested window |
-| traffic source manager | global one-source 선택을 cluster/edge capability fusion으로 변경 |
-| GitOps tree | desired/live revision, multi-source, explicit heuristic |
-| Search pill UI | typed AST suggestion/commit shell로 변경 |
-| freshness/snapshot control | ProjectionFrame watermarks와 연결 |
-| saved positions | layout policy/revision compatibility 검증 |
-| theme variables | 제품 semantic token과 light/dark/high-contrast로 재작성 |
-
-### 25.3 거부
-
-| 기준 구현 | 거부 이유 |
-|---|---|
-| 현재 `/api/topology` payload | multi-cluster/Node/UID/frame/metric projection 부족 |
-| kind/namespace/name Node ID | 재생성, multi-cluster, CRD 충돌 |
-| Karpenter/CAPI Node만 topology 포함 | 실행 계층 불완전 |
-| fixed resource/category list | discovery/no-hardcode 위반 |
-| Service selector를 effective endpoint로 표현 | 실제 EndpointSlice와 불일치 |
-| Service/Ingress always healthy | health 증거 부재 |
-| PodGroup client edge 복제/재작성 | relation type 왜곡과 double count |
-| app label BFS를 authoritative grouping으로 사용 | shared label/resource 오염 |
-| 전체 topology SSE replacement | object constancy, bandwidth, gap 복구 부족 |
-| TrafficGraph flow마다 ELK 재실행 | 실시간 frame과 viewport 불안정 |
-| React Flow `animated: true`를 유속처럼 사용 | rate/latency 의미 모호 |
-| fixed node/namespace/animation thresholds | 환경·viewport·device 비범용 |
-| layout error fixed grid | 오류 은폐와 의미 손상 |
-| raw PromQL Query Bar | 보안/비용/타입 안정성 위반 |
-| global active traffic source | source별 상호 보완과 cluster 격리 불가 |
-| 현재 OpenCost public handler authorization | tenancy/RBAC 위험 |
-
-### 25.4 실제 AWS 화면에서 검증된 외부 기준 저장소의 정보 구조
-
-2026-07-11 AWS 설치 스크린샷으로 다음을 확인했다.
-
-- namespace frame 안에 Service/ConfigMap → Deployment/DaemonSet/StatefulSet → Pod chain을 배치한다.
-- relation color/type과 resource card 상태를 분리한다.
-- single-cluster home은 identity, Kubernetes version, namespace count, freshness, Pods/Deployments/Nodes readiness, CPU/memory used/requested/allocatable, resource family count, topology preview, timeline, issues, traffic, Helm release를 우선한다.
-- target namespace처럼 많은 resource에서도 grouped layered graph가 읽힌다.
-
-우리 engine은 이 정보 우선순위와 세부 UX를 참고하되, Node placement, EndpointSlice truth, multi-cluster Fleet, unified Query AST, single reducer, Treemap/morph를 새 계약으로 제공한다.
-
-### 25.5 세부 UI 기능 흡수 순서
-
-핵심 map engine을 먼저 완성한 뒤 외부 기준 저장소에서 검증된 운영 UX를 같은 event/catalog 계약 위에 흡수한다.
-
-| 기준 기능 | 우리 제품 적용 | 선행 조건 |
-|---|---|---|
-| resource/command omnibar | Unified Query Bar suggestion source와 action catalog | Query AST, command permission |
-| resource browser | discovery-driven sidebar/list/table 대체 보기 | ResourceCatalog, cursor API |
-| resource detail drawer | Entity inspector section plugin | EntityDetail, focus restoration |
-| freshness auto/snapshot control | frame time/freshness control | ProjectionFrame watermarks |
-| topology neighborhood focus | Service/controller/dependency focus | canonical relation planes |
-| issues/checks | map overlay, filter token, issue inspector | health/evidence provider |
-| timeline/events | selected scope/entity timeline | durable events and UID links |
-| live traffic | network observed lens | flow capability and truth split |
-| GitOps tree | ownership/GitOps right rail와 detail | GitOps provenance provider |
-| Helm releases | packaging provenance/detail | Helm evidence adapter |
-| cost views | size metric, inspector, dedicated breakdown | allocation fact and currency/window |
-| saved position/view | shareable saved query/view | URL codec, layout revision |
-| keyboard menus/search | 공통 accessibility interaction | engine intent/focus model |
-
-기준 저장소의 Home card layout을 Fleet home에 그대로 중복하지 않는다. 각 기능은 map, Query Bar, context strip, inspector, dedicated detail 중 의미가 가장 자연스러운 surface에 배치한다.
-
-## 26. 외부 기준 저장소와 라이선스
-
-외부 기준 저장소 root license는 Apache-2.0이다. 실제 code를 이식하면 다음을 수행한다.
-
-- 배포물에 Apache-2.0 license를 포함한다.
-- 원 copyright/attribution을 보존한다.
-- 수정 파일에 prominent modification notice를 남긴다.
-- `THIRD_PARTY_NOTICES`에 repository URL, pinned commit, file mapping, 변경 요약을 기록한다.
-- 외부 기준 저장소 이름, 로고, 고유 icon/brand는 사용하지 않는다. Apache-2.0은 trademark 권리를 주지 않는다.
-- root에 NOTICE가 없더라도 dependency별 NOTICE/license를 별도 조사한다.
-- React Flow, ELKjs, DOMPurify, font 등 direct/transitive dependency의 재배포 license를 SBOM과 함께 검증한다.
-- 아이디어만 clean-room 재구현한 항목과 source code를 이식한 항목을 구분한다.
+- resource name, label, annotation, status message, event message는 untrusted text다. React text node로만 렌더링하고 `dangerouslySetInnerHTML`/raw SVG/HTML을 금지한다.
+- rich content가 필요한 first-party Markdown도 allowlisted parser와 sanitized AST만 사용한다.
+- icon/marker는 build allowlist token으로만 선택하고 server-provided SVG markup/URL을 실행하지 않는다.
+- runtime parser는 `__proto__`, `constructor`, `prototype` key를 거부하고 untrusted object를 plain-object merge하지 않는다.
+- catalog/snapshot/detail/event payload에 최대 byte, array count, depth, string length budget을 적용한다.
+- CSP와 Trusted Types를 production gate로 사용하고 external navigation은 `noopener,noreferrer`와 verified scheme/host policy를 적용한다.
+- telemetry, error, support bundle은 secret/label/annotation/redacted field policy를 다시 적용하고 raw payload를 기록하지 않는다.
 
 ## 27. 현재 프로젝트의 mandatory backend gap
+
+이 절은 기존 endpoint의 소규모 확장이 아니다. Inventory Projection, Relation Projection, Metric/Cost facts, Query Session, retained delta log, resumable stream을 추가하는 topology backend v2 프로그램이다. frontend 구현 착수 조건과 backend workstream을 별도 milestone/owner로 추적한다.
 
 ### 27.1 Collector gap
 
@@ -1939,11 +2412,20 @@ Restricted reference 규칙:
 - DaemonSet/Job 등 kind-specific summary는 plugin으로 계산한다.
 - Service health default healthy를 제거한다.
 - name-based SHA identity를 UID identity로 migration한다.
+- identity migration은 old coordinate SHA와 새 UID key의 dual-read mapping, saved URL/bookmark/focus/timeline/action reference rewrite, recreation 분리, rollback/expiry policy를 포함한다.
 - list limit 1000/no cursor를 server-side LOD/cursor query로 바꾼다.
 - relationship repository의 one-hop heuristic을 Relation Projection으로 교체한다.
 
 ### 27.3 Realtime gap
 
+- workspace-scoped Query Session service를 새로 만든다.
+- query session은 canonical query/hash, entitlement epoch, snapshot cut, streamId/epoch, retained event log cursor, expiry를 durable 또는 replicated state로 관리한다.
+- NATS/outbox의 원 event를 query별 entity/relation/metric/flow delta로 projection하고 query stream global sequence를 부여한다.
+- retained delta log는 resume TTL/size, tenant quota, compaction, server restart continuity를 보장한다.
+- snapshot builder와 delta log 사이에 §16.3 cutover cursor를 원자적으로 발급한다.
+- resumeToken 서명/검증, retention expiry, hash/epoch mismatch handshake를 구현한다.
+- periodic anti-entropy snapshot과 UID diff/replay를 구현한다.
+- horizontally scaled gateway의 session ownership/failover와 workspace 격리를 구현한다.
 - delta key를 `cluster/ns/kind/name`에서 workspace/cluster/GVK/UID로 변경한다.
 - resourceVersion, generation, eventId, epoch, query-stream seq, timestamps, data/projection hash를 포함한다.
 - Pod만이 아니라 entity/relation/metric/flow delta를 지원한다.
@@ -1951,6 +2433,7 @@ Restricted reference 규칙:
 - hub cache/fanout key에 workspace를 포함한다.
 - queue overflow는 silent latest replacement가 아니라 resync contract를 사용한다.
 - agent/gateway restart와 reconnect resume를 테스트한다.
+- 현재 in-memory realtime hub를 그대로 확장해 이 요구를 만족한다고 간주하지 않는다.
 
 ### 27.4 Metrics/traffic/cost gap
 
@@ -1960,7 +2443,7 @@ Restricted reference 규칙:
 - standard flow edge schema.
 - Hubble/Istio/Caretta/Prometheus capability adapters.
 - unique PVC storage facts.
-- Pod cost allocation facts와 currency/window.
+- allocated/shared/idle/asset/unallocated CostFact ledger와 currency/window/pricing/allocation/amortization policy.
 - Node actual usage와 Pod attributable usage residual.
 
 ### 27.5 Current product frontend gap
@@ -2020,16 +2503,32 @@ Entity detail은 raw object dump 하나가 아니다.
 type EntityDetail = {
   entity: Entity
   summarySections: DetailSection[]
-  relationsByPlane: Record<RelationPlane, CanonicalRelation[]>
-  metricSeries: MetricSeriesRef[]
-  events: KubernetesEventSummary[]
-  provenance: EvidenceRef[]
+  relationsByPlane: Partial<Record<RelationPlane, CursorPage<CanonicalRelation>>>
+  metricSeries: CursorPage<MetricSeriesRef>
+  events: CursorPage<KubernetesEventSummary>
+  provenance: CursorPage<EvidenceRef>
   actions: AvailableAction[]
   completeness: CompletenessSummary
+}
+
+type EntityDetailRequest = {
+  entityKey: string
+  relationPlanes: readonly RelationPlane[]
+  relationCursorByPlane?: Partial<Record<RelationPlane, string>>
+  metricCursor?: string
+  eventCursor?: string
+  provenanceCursor?: string
+  pageSize: number
+  metricWindow?: TimeWindow
 }
 ```
 
 action availability는 permission/capability/status를 반영하고 disabled 이유를 제공한다.
+
+- pageSize는 server catalog limit 안에서 planner가 canonicalize한다.
+- page fetch는 entity focus/query change에서 abort한다.
+- nextCursor는 opaque하고 snapshotRevision에 bind한다. revision mismatch는 first-page refetch다.
+- route path의 entityKey는 opaque base64url-safe ID 또는 URL-safe encoding만 허용한다.
 
 ## 29. Test architecture와 release gates
 
@@ -2191,7 +2690,7 @@ reference profiles는 server-generated realistic topology로 고정하고 small/
 - Hubble/Istio/Caretta flow fusion.
 - Argo/Flux/Helm/Git provider provenance.
 - AWS/GCP/Azure/on-prem/local adapters without core coupling.
-- timeline/issues/checks/cost detail patterns informed by 외부 기준 저장소.
+- timeline/issues/checks/cost detail을 canonical capability와 frontend consumer contract로 통합.
 
 ### Phase 8 — Hardening and commercialization
 
@@ -2221,7 +2720,7 @@ reference profiles는 server-generated realistic topology로 고정하고 small/
 13. light/dark/high-contrast/reduced-motion과 keyboard/screen reader가 통과한다.
 14. reference performance profiles의 p95 budgets와 soak memory bound를 통과한다.
 15. tenancy/redaction/action authorization을 통과한다.
-16. 외부 기준 저장소 이식 항목의 license/notice/SBOM이 완성된다.
+16. 실제로 채택한 모든 third-party dependency의 license/notice/SBOM이 완성된다.
 17. 모든 visible click path에 handler, permission, loading, error, focus test가 있다.
 18. 이 문서의 필수 경우의 수가 traceability matrix에서 test ID와 연결된다.
 
