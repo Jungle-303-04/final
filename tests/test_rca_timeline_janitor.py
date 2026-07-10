@@ -25,6 +25,14 @@ class StubDb:
         self.calls.append({"retention_hours": retention_hours, "limit": limit})
         return 3
 
+    async def resolve_recovered_ephemeral_incidents(
+        self,
+        grace_minutes: int,
+        limit: int,
+    ) -> list[dict[str, object]]:
+        self.calls.append({"grace_minutes": grace_minutes, "limit": limit})
+        return [{"incident_id": "incident-3"}]
+
 
 def test_rca_timeline_janitor_expires_stale_open_incidents(monkeypatch) -> None:
     janitor = load_service("projection/rca-timeline-janitor")
@@ -48,6 +56,18 @@ def test_rca_timeline_janitor_deletes_only_old_pre_incident_projection(monkeypat
 
     assert count == 3
     assert db.calls == [{"retention_hours": 12, "limit": 250}]
+
+
+def test_rca_timeline_janitor_resolves_recovered_ephemeral_incidents(monkeypatch) -> None:
+    janitor = load_service("projection/rca-timeline-janitor")
+    db = StubDb()
+    monkeypatch.setenv("RCA_EPHEMERAL_INCIDENT_RESOLVE_MINUTES", "7")
+    monkeypatch.setenv("RCA_EPHEMERAL_INCIDENT_RESOLVE_LIMIT", "75")
+
+    count = asyncio.run(janitor.resolve_recovered_ephemeral_incidents(db))
+
+    assert count == 1
+    assert db.calls == [{"grace_minutes": 7, "limit": 75}]
 
 
 def test_rca_timeline_janitor_refreshes_heartbeat_during_long_wait() -> None:
