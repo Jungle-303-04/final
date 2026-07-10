@@ -86,6 +86,12 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
         help="Write the final sign-off summary JSON. Defaults under --github-output-dir.",
     )
     parser.add_argument(
+        "--preflight-report-path",
+        type=Path,
+        default=None,
+        help="Write the preflight-only summary JSON. Defaults under --github-output-dir.",
+    )
+    parser.add_argument(
         "--preflight-only",
         action="store_true",
         help="Validate sign-off inputs, branch SHA, Safe PR run, and workflow access without dispatching workflows.",
@@ -186,9 +192,9 @@ def github_branch_head_sha(args: argparse.Namespace, token: str) -> str:
     return sha
 
 
-def verify_github_branch_sha(args: argparse.Namespace, token: str) -> None:
+def verify_github_branch_sha(args: argparse.Namespace, token: str) -> str:
     if args.skip_github_branch_sha_check:
-        return
+        return ""
     expected_sha = str(args.github_sha or "").strip()
     actual_sha = github_branch_head_sha(args, token)
     if actual_sha != expected_sha:
@@ -196,9 +202,11 @@ def verify_github_branch_sha(args: argparse.Namespace, token: str) -> None:
             f"GitHub branch {args.github_branch} head {actual_sha} must match --github-sha {expected_sha}"
         )
     print(f"ok signoff.branch: {args.github_branch} matches {expected_sha}")
+    return actual_sha
 
 
-def verify_workflow_access(args: argparse.Namespace, token: str) -> None:
+def verify_workflow_access(args: argparse.Namespace, token: str) -> list[dict[str, str]]:
+    workflows: list[dict[str, str]] = []
     for workflow in (READINESS_WORKFLOW, DEPLOY_WORKFLOW):
         workflow_ref = urllib.parse.quote(workflow, safe="")
         payload = github_json(
@@ -217,7 +225,16 @@ def verify_workflow_access(args: argparse.Namespace, token: str) -> None:
             raise GitHubEvidenceError(
                 f"{workflow} was not readable through GitHub Actions API"
             )
+        workflows.append(
+            {
+                "workflow": workflow,
+                "id": workflow_id,
+                "state": state or "active",
+                "path": str(payload.get("path") or ""),
+            }
+        )
         print(f"ok signoff.workflow: {workflow} is readable")
+    return workflows
 
 
 def validate_safe_pr_url(args: argparse.Namespace) -> str | None:
@@ -235,7 +252,7 @@ def validate_safe_pr_url(args: argparse.Namespace) -> str | None:
     return None
 
 
-def verify_safe_pr_run(args: argparse.Namespace, token: str) -> None:
+def verify_safe_pr_run(args: argparse.Namespace, token: str) -> dict:
     run_id = str(args.live_safe_pr_workflow_run_id or "").strip()
     run = github_json(
         github_api_url(args.github_api_base, args.github_repo, f"actions/runs/{run_id}"),
@@ -253,6 +270,7 @@ def verify_safe_pr_run(args: argparse.Namespace, token: str) -> None:
             f"Safe PR run {run_id} head {head_sha or '<missing>'} must match --github-sha {expected_sha}"
         )
     print(f"ok signoff.safe_pr: run {run_id} succeeded for {expected_sha}")
+    return run
 
 
 def validate_signoff_inputs(args: argparse.Namespace) -> list[str]:
@@ -419,6 +437,47 @@ def signoff_report_path(args: argparse.Namespace) -> Path:
     return Path(args.github_output_dir) / "release-flow-production-signoff.json"
 
 
+def preflight_report_path(args: argparse.Namespace) -> Path:
+    if args.preflight_report_path:
+        return Path(args.preflight_report_path)
+    return Path(args.github_output_dir) / "release-flow-production-preflight.json"
+
+
+def write_preflight_report(
+    args: argparse.Namespace,
+    *,
+    github_branch_head_sha: str,
+    safe_pr_run: dict,
+    workflows: list[dict[str, str]],
+) -> Path:
+    path = preflight_report_path(args)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    payload = {
+        "status": "passed",
+        "generated_at": datetime.now(UTC).isoformat(),
+        "github_repo": args.github_repo,
+        "github_branch": args.github_branch,
+        "github_branch_head_sha": github_branch_head_sha,
+        "github_sha": args.github_sha,
+        "github_environment": args.environment,
+        "release_plan_id": args.release_plan_id,
+        "live_change_ticket": args.live_change_ticket,
+        "live_runbook_url": args.live_runbook_url,
+        "live_release_owner": str(args.live_release_owner or ""),
+        "live_oncall_contact": str(args.live_oncall_contact or ""),
+        "live_image": args.live_image,
+        "live_verification_url": args.live_verification_url,
+        "live_safe_pr_workflow_run_id": args.live_safe_pr_workflow_run_id,
+        "live_safe_pr_url": args.live_safe_pr_url,
+        "safe_pr_run": run_summary(safe_pr_run),
+        "workflows": workflows,
+        "dispatch_performed": False,
+    }
+    path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    print(f"ok signoff.preflight_report: {path}")
+    return path
+
+
 def write_signoff_report(
     args: argparse.Namespace,
     *,
@@ -469,10 +528,16 @@ def main(argv: list[str]) -> int:
         return 2
 
     try:
-        verify_github_branch_sha(args, token)
-        verify_safe_pr_run(args, token)
+        branch_head_sha = verify_github_branch_sha(args, token)
+        safe_pr_run = verify_safe_pr_run(args, token)
         if args.preflight_only:
-            verify_workflow_access(args, token)
+            workflows = verify_workflow_access(args, token)
+            write_preflight_report(
+                args,
+                github_branch_head_sha=branch_head_sha,
+                safe_pr_run=safe_pr_run,
+                workflows=workflows,
+            )
             print("ok signoff.preflight: inputs, branch SHA, Safe PR run, and workflow access passed")
             return 0
         started_after = datetime.now(UTC) - timedelta(seconds=10)

@@ -534,6 +534,8 @@ def check_production_signoff_runner_contract() -> list[ReadinessCheck]:
             and "Safe PR run" in source
             and "verify_workflow_access" in source
             and "--preflight-only" in source
+            and "release-flow-production-preflight.json" in source
+            and "write_preflight_report" in source
             and "--github-sha" in source
             and "--github-output-dir" in source,
             "operator signoff runner verifies the exact readiness and deploy run artifacts",
@@ -555,6 +557,7 @@ def check_production_signoff_runner_contract() -> list[ReadinessCheck]:
             and "release-flow-production-signoff.json" in docs
             and "full production sign-off" in docs
             and "--preflight-only" in docs
+            and "release-flow-production-preflight.json" in docs
             and "Safe PR GitHub Actions run" in docs,
             "operator guide documents one-command production sign-off",
         ),

@@ -203,7 +203,7 @@ def test_run_release_flow_production_signoff_dispatches_and_verifies(monkeypatch
 
 
 def test_run_release_flow_production_signoff_preflight_only_checks_workflows(
-    monkeypatch, capsys
+    monkeypatch, capsys, tmp_path
 ) -> None:
     workflow_urls: list[str] = []
 
@@ -213,9 +213,15 @@ def test_run_release_flow_production_signoff_preflight_only_checks_workflows(
     def fake_github_json(url: str, token: str) -> dict:
         assert token == "token-a"
         if url.endswith("/actions/runs/456"):
-            return {"id": 456, "conclusion": "success", "head_sha": "sha-production"}
+            return {
+                "id": 456,
+                "status": "completed",
+                "conclusion": "success",
+                "head_sha": "sha-production",
+                "html_url": "https://github.com/org/repo/actions/runs/456",
+            }
         workflow_urls.append(url)
-        return {"id": len(workflow_urls), "state": "active"}
+        return {"id": len(workflow_urls), "state": "active", "path": ".github/workflows/test.yml"}
 
     monkeypatch.setattr(signoff, "dispatch_workflow", fail_dispatch_workflow)
     monkeypatch.setattr(signoff, "github_branch_head_sha", lambda _args, _token: "sha-production")
@@ -234,6 +240,8 @@ def test_run_release_flow_production_signoff_preflight_only_checks_workflows(
                 "sha-production",
                 "--skip-local-sha-check",
                 "--preflight-only",
+                "--github-output-dir",
+                str(tmp_path),
                 "--release-plan-id",
                 "plan-1",
                 "--api-base-url",
@@ -261,6 +269,18 @@ def test_run_release_flow_production_signoff_preflight_only_checks_workflows(
     assert "release-flow-production-readiness.yml" in workflow_urls[0]
     assert "release-flow-production-deploy.yml" in workflow_urls[1]
     assert "ok signoff.preflight" in capsys.readouterr().out
+    report = json.loads(
+        (tmp_path / "release-flow-production-preflight.json").read_text(encoding="utf-8")
+    )
+    assert report["status"] == "passed"
+    assert report["dispatch_performed"] is False
+    assert report["github_branch_head_sha"] == "sha-production"
+    assert report["safe_pr_run"]["id"] == "456"
+    assert report["safe_pr_run"]["conclusion"] == "success"
+    assert [item["workflow"] for item in report["workflows"]] == [
+        signoff.READINESS_WORKFLOW,
+        signoff.DEPLOY_WORKFLOW,
+    ]
 
 
 def test_run_release_flow_production_signoff_preflight_rejects_inactive_workflow(
