@@ -794,7 +794,39 @@ target namespace의 모든 Deployment를 목록으로 보낸다.
               "failure_threshold": 3
             },
             "liveness_probe": {},
-            "startup_probe": {}
+            "startup_probe": {},
+            "env_refs": [
+              {
+                "env_name": "DATABASE_URL",
+                "source": "secret_key_ref",
+                "secret_name": "checkout-secret",
+                "key": "database-url",
+                "optional": true
+              }
+            ],
+            "env_from_refs": [
+              {
+                "source": "config_map_ref",
+                "config_map_name": "checkout-env",
+                "prefix": "APP_",
+                "optional": false
+              }
+            ],
+            "volume_mount_refs": [
+              {
+                "volume_name": "app-config",
+                "source": "config_map",
+                "config_map_name": "checkout-config",
+                "items": [
+                  {
+                    "key": "application.yaml",
+                    "path": "application.yaml"
+                  }
+                ],
+                "mount_path": "/etc/app",
+                "read_only": true
+              }
+            ]
           }
         ],
         "replicaset_revisions": [
@@ -822,6 +854,9 @@ target namespace의 모든 Deployment를 목록으로 보낸다.
 | `change_context.current_workload_snapshots[].managed_fields_managers` | list<string> | Deployment managedFields의 manager 이름 목록이다. |
 | `change_context.current_workload_snapshots[].containers[]` | list<object> | container name, image, readiness/liveness/startup probe 요약이다. |
 | `change_context.current_workload_snapshots[].containers[].*_probe` | object | probe의 path, port, timeout_seconds, period_seconds, failure_threshold 중 존재하는 값만 담는다. |
+| `change_context.current_workload_snapshots[].containers[].env_refs` | list<object> | env의 ConfigMap/Secret key reference 요약이다. 값 자체는 담지 않는다. |
+| `change_context.current_workload_snapshots[].containers[].env_from_refs` | list<object> | envFrom의 ConfigMap/Secret reference 요약이다. |
+| `change_context.current_workload_snapshots[].containers[].volume_mount_refs` | list<object> | container가 mount한 ConfigMap/Secret volume reference 요약이다. volume 값 자체는 담지 않는다. |
 | `change_context.current_workload_snapshots[].replicaset_revisions[]` | list<object> | 이 Deployment가 소유한 ReplicaSet name과 `deployment.kubernetes.io/revision` 값이다. |
 
 주의: `MetadataProvider.query()`의 내부 raw payload에는 `cluster_id`, `collected_at`도 있지만,
@@ -829,7 +864,8 @@ target namespace의 모든 Deployment를 목록으로 보낸다.
 현재 provider는 안전한 Deployment/Pod template annotations만 남긴다.
 `kubectl.kubernetes.io/last-applied-configuration` 같은 원문 manifest annotation과
 secret/token/password/credential/private/authorization 이름이 들어간 annotation은 제외한다.
-raw spec, env/config/secret refs는 남기지 않는다.
+env/envFrom/volume의 ConfigMap/Secret reference는 name/key/path만 남기고 값 자체는 남기지 않는다.
+raw spec과 literal env value는 남기지 않는다.
 
 ## Evidence job 집계 규칙
 
@@ -880,7 +916,7 @@ Provider가 이미 보내는 값은 다음과 같다.
 | log line | `logs[].streams[].values[].line` |
 | trace search 결과 | `traces.results.*.traces` |
 | 현재 workload snapshot 목록 | `metadata.change_context.current_workload_snapshots[]` |
-| 현재 image/probe/labels/annotations/manager/revision 요약 | `metadata.change_context.current_workload_snapshots[].containers[]`, `deployment_labels`, `deployment_annotations`, `pod_template_labels`, `pod_template_annotations`, `managed_fields_managers`, `replicaset_revisions` |
+| 현재 image/probe/config/secret refs/labels/annotations/manager/revision 요약 | `metadata.change_context.current_workload_snapshots[].containers[]`, `deployment_labels`, `deployment_annotations`, `pod_template_labels`, `pod_template_annotations`, `managed_fields_managers`, `replicaset_revisions` |
 
 RCA가 판단하려면 다음 값은 파생해야 한다.
 
@@ -930,13 +966,13 @@ RCA/evidence-worker 쪽 담당 영역이다. 이 문서는 provider가 보내는
 
 | 필요한 metadata | 현재 provider로 가능한지 | 보강 방향 |
 | --- | --- | --- |
-| target namespace Deployment별 현재 image/probe/labels/annotations/manager/ReplicaSet revision | 가능 | `change_context.current_workload_snapshots[]`를 쓴다. annotations는 안전한 key만 남긴다. |
+| target namespace Deployment별 현재 image/probe/config refs/secret refs/labels/annotations/manager/ReplicaSet revision | 가능 | `change_context.current_workload_snapshots[]`를 쓴다. Secret 값은 제외하고 reference만 남긴다. annotations는 안전한 key만 남긴다. |
 | 특정 Deployment 1개 snapshot | 가능 | `deployment/<name>` 또는 `deployment/<namespace>/<name>` query를 쓴다. |
 | recent git commit / deploy revision | 없음 | GitOps event, manifest render, SCM metadata 연결 |
 | rollback 가능 여부 / risk_level | 없음 | 배포 이력, policy, GitOps/CI/CD 상태 연결 |
 | previous/current image digest | 일부만 가능 | `containers[].image`는 현재 image tag만 제공한다. digest, rollout history, previous image가 필요하다. |
 | Deployment/Pod template annotations | 일부 가능 | `ops.service/*`, `prometheus.io/*`, `deployment.kubernetes.io/*`, `kubectl.kubernetes.io/*` 중 안전한 key만 남긴다. |
-| ConfigMap/Secret key reference | 불충분 | Pod spec env/envFrom/volumes, Secret/ConfigMap metadata summary 추가 |
+| ConfigMap/Secret key reference | 일부 가능 | env/envFrom/volume reference name/key/path를 제공한다. Secret/ConfigMap 객체 metadata는 아직 조회하지 않는다. |
 | resource requests/limits | 불충분 | Pod spec containers.resources summary 추가 |
 | imagePullSecrets | 불충분 | Pod spec imagePullSecrets summary 추가 |
 | NetworkPolicy/Ingress/PVC | 없음 | Kubernetes provider 조회 resource 확장 |
