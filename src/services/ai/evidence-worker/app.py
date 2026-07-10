@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections.abc import AsyncIterator
 
+from domains.gitops.events import GitOpsChangeContextDetectedBody
 from domains.rca.events import (
     ClusterEvidenceReceivedBody,
     compact_evidence_built_body,
@@ -15,6 +16,7 @@ from services.ai.agent.pipeline import EvidencePipeline
 
 app = App("evidence-worker")
 pipeline = EvidencePipeline()
+GITOPS_CHANGE_CONTEXT_EVIDENCE_KIND = "gitops_change_context"
 
 
 @app.on(ClusterEvidenceReceivedBody)
@@ -31,6 +33,19 @@ async def on_cluster_evidence(
         evidence.to_body(),
     )
     yield compact_evidence_built_body(evidence, ctx.correlation_id, pipeline.kind)
+
+
+@app.on(GitOpsChangeContextDetectedBody)
+async def on_gitops_change_context(
+    evt: GitOpsChangeContextDetectedBody,
+    ctx: EventContext[RcaStore],
+) -> None:
+    await ctx.db.save_evidence(
+        ctx.correlation_id,
+        evt.workspace_id,
+        GITOPS_CHANGE_CONTEXT_EVIDENCE_KIND,
+        evt.to_body(),
+    )
 
 
 async def hydrate_evidence(

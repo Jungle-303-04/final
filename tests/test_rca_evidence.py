@@ -5,6 +5,7 @@ from typing import Any
 from conftest import SpyDb, load_service, run_handler, subjects_of
 
 from domains.command.events import CommandCompletedBody
+from domains.gitops.events import GitOpsChangeContextDetectedBody
 from domains.rca.events import (
     CauseCandidate,
     ClusterEvidenceReceivedBody,
@@ -176,6 +177,39 @@ def test_evidence_worker_accepts_legacy_full_payload_event() -> None:
     assert outs[0].summary["resource"]["name"] == "checkout-api"
     assert db.called("save_evidence")
     assert not db.called("get_evidence_window_payload")
+
+
+def test_evidence_worker_persists_gitops_change_context_event() -> None:
+    evidence_worker = load_service("ai/evidence-worker")
+    payload = GitOpsChangeContextDetectedBody(
+        workspace_id="workspace-1",
+        cluster_id="cluster-1",
+        repository_id="repo-1",
+        commit_sha="abc123",
+        manifest_path="deploy/checkout-api.yaml",
+        resource="deployment/checkout-api",
+        metadata={
+            "change_context": {
+                "gitops": {"repository_id": "repo-1", "commit_sha": "abc123"},
+                "recent_changes": [{"change_type": "image", "field": "image"}],
+            }
+        },
+    )
+    db = SpyDb()
+
+    outs = run_handler(
+        evidence_worker.on_gitops_change_context,
+        payload,
+        db=db,
+        correlation_id="corr-gitops-context",
+    )
+
+    assert outs == []
+    assert db.calls[0][0] == "save_evidence"
+    assert db.calls[0][1][0] == "corr-gitops-context"
+    assert db.calls[0][1][1] == "workspace-1"
+    assert db.calls[0][1][2] == "gitops_change_context"
+    assert db.calls[0][1][3]["metadata"]["change_context"]["gitops"]["commit_sha"] == "abc123"
 
 
 def test_incident_worker_hydrates_reference_evidence_built_event() -> None:

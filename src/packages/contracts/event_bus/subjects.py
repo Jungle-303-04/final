@@ -27,6 +27,7 @@ class EventSubject(StrEnum):
     MANIFEST_RENDERED = "manifest.rendered"  # k8s manifest 렌더
     MANIFEST_INVALID = "manifest.invalid"  # 배포 가능한 manifest 부재/파싱 실패
     DESIRED_DIFF_DETECTED = "desired.diff.detected"  # 원하는 상태와 차이 감지
+    GITOPS_CHANGE_CONTEXT_DETECTED = "gitops.change_context.detected"  # RCA change context
     DIFF_ANALYZED = "diff.analyzed"  # diff 위험도 분석 결과
 
     # --- 대상 클러스터/에이전트(cluster-agent) ---
