@@ -2498,7 +2498,7 @@ Backend/OpenAPI는 다음을 모두 보장해야 한다.
 6. provider 이름을 canonical DTO top-level 분기 필드로 요구하지 않는다. provider metadata/extension은 allowlisted auxiliary object에 격리한다.
 7. management read-only write는 approval 생성 전과 operation receipt 생성 전에 capability/read-only error로 일관되게 차단한다. `승인 성공 후 apply 거부` 전이를 허용하지 않는다.
 8. 모든 mutation에 idempotency와 202 `GitOpsOperationReceipt`, idempotency-key receipt lookup, atomic OperationStatusCut, resume 가능한 progress stream 또는 polling start를 제공한다.
-9. refresh, diff, reconcile plan/apply, suspend, resume, terminate, rollback plan, history, capabilities를 canonical 의미로 제공한다. prune/selective sync는 지원할 때만 capability로 노출한다.
+9. refresh, diff, reconcile plan/apply, suspend, resume, terminate, rollback plan, approval decide, history, capabilities를 canonical 의미로 제공한다. prune/selective sync는 지원할 때만 capability로 노출한다.
 10. apply는 immutable planId+digest를 요구하고 server가 revision, approval, capability, permission, target access를 다시 검증한다.
 11. rollback은 history point → immutable rollback plan → approval/confirmation → apply 순서를 지원한다.
 12. desired/live resource correspondence와 edge evidence를 backend가 판정한다. frontend가 selector/owner/name으로 authoritative edge를 재구성하게 하지 않는다.
@@ -2632,11 +2632,11 @@ Fixture 축은 provider가 아니라 다음 canonical 값이다.
 3. applicationId-instanceId-bindingId-destinationId가 직접 연결되고 mutation target이 exact binding이다.
 4. list/filter/sort/cursor/totalState가 모든 collection에 일관된다.
 5. provider-specific top-level field와 provider-name operation 분기가 없다.
-6. capability에 applicability/support/permission/enabled/visibility/effects/approval/confirmation/constraints/reason/revision이 있다.
+6. capability에 exact subject, applicability/support/permission/enabled/visibility/effects/approval/confirmation/constraints/reason/revision이 있다.
 7. management read-only write가 approval/receipt 전에 차단된다.
-8. operation 202 receipt, status, progress/resume, idempotency, terminal states, poll fallback이 있다.
-9. planId/digest/expiry/approval과 rollback plan flow가 있다.
-10. graph node/edge identity/evidence/completeness/redaction/expansion과 snapshot-stream cut이 있다.
+8. operation 202 receipt, idempotency receipt lookup, atomic status cut, operationSequence, progress/resume, terminal states, poll fallback이 있다.
+9. planId/digest/expiry와 exact approvalId/version/subject binding, rollback-plan→apply flow가 있다.
+10. graph GraphQueryRef/streamStart/ResumeCursor와 node/edge identity/evidence/completeness/redaction/expansion이 있다.
 11. Timeline cursor/order/dedupe/late/correction/resume가 있다.
 12. Metrics decimal/unit/scope/window/step/source/freshness/coverage/missing state가 있다.
 13. HTTP error가 canonical ApiError로 손실 없이 mapping된다.
