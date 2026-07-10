@@ -28,6 +28,7 @@ import sys
 import urllib.error
 import urllib.parse
 import urllib.request
+import xml.etree.ElementTree as ET
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from typing import Any
@@ -637,6 +638,11 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
         help="write the smoke JSON result to this path for CI artifacts",
     )
     parser.add_argument(
+        "--junit-path",
+        default=os.getenv("RELEASE_FLOW_SMOKE_JUNIT_PATH", ""),
+        help="write the smoke result as JUnit XML for CI test reports",
+    )
+    parser.add_argument(
         "--production-preflight",
         action="store_true",
         help=(
@@ -797,6 +803,50 @@ def write_json_report(path: str, payload: JsonMap) -> None:
         report.write("\n")
 
 
+def write_junit_report(path: str, results: list[SmokeResult], *, error: str | None = None) -> None:
+    if not str(path or "").strip():
+        return
+    target = os.path.abspath(path)
+    os.makedirs(os.path.dirname(target), exist_ok=True)
+    failures = sum(1 for item in results if not item.ok) + (1 if error else 0)
+    tests = len(results) + (1 if error else 0)
+    suite = ET.Element(
+        "testsuite",
+        {
+            "name": "release-flow-smoke",
+            "tests": str(tests),
+            "failures": str(failures),
+        },
+    )
+    for item in results:
+        case = ET.SubElement(
+            suite,
+            "testcase",
+            {
+                "classname": "release_flow_smoke",
+                "name": item.name,
+            },
+        )
+        output = ET.SubElement(case, "system-out")
+        output.text = item.detail
+        if not item.ok:
+            failure = ET.SubElement(case, "failure", {"message": item.detail})
+            failure.text = item.detail
+    if error:
+        case = ET.SubElement(
+            suite,
+            "testcase",
+            {
+                "classname": "release_flow_smoke",
+                "name": "release-flow-smoke.error",
+            },
+        )
+        failure = ET.SubElement(case, "failure", {"message": error})
+        failure.text = error
+    tree = ET.ElementTree(suite)
+    tree.write(target, encoding="utf-8", xml_declaration=True)
+
+
 def main(argv: list[str]) -> int:
     args = parse_args(argv)
     apply_production_preflight_flags(args)
@@ -808,6 +858,7 @@ def main(argv: list[str]) -> int:
             "error": "API_BASE_URL or BASE_URL, AUTH_EMAIL, and AUTH_PASSWORD are required",
         }
         write_json_report(args.report_path, payload)
+        write_junit_report(args.junit_path, [], error=str(payload["error"]))
         print(payload["error"], file=sys.stderr)
         return 2
     client = ApiClient(api_base_url, timeout=args.timeout)
@@ -829,11 +880,13 @@ def main(argv: list[str]) -> int:
     except Exception as exc:
         payload = {"ok": False, "api_base_url": client.api_base_url, "error": str(exc)}
         write_json_report(args.report_path, payload)
+        write_junit_report(args.junit_path, [], error=str(exc))
         print(json.dumps(payload, ensure_ascii=False, indent=2), file=sys.stderr)
         return 1
     ok = all(item.ok for item in results)
     payload = smoke_report_payload(ok, client.api_base_url, results)
     write_json_report(args.report_path, payload)
+    write_junit_report(args.junit_path, results)
     print(json.dumps(payload, ensure_ascii=False, indent=2))
     return 0 if ok else 1
 
