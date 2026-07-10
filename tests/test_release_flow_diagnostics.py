@@ -1227,6 +1227,66 @@ def test_release_readiness_blocks_production_live_without_change_ticket(monkeypa
     assert change_check["status"] == "blocked"
 
 
+def test_release_readiness_blocks_production_placeholder_change_ticket(monkeypatch) -> None:
+    monkeypatch.setenv("RELEASE_FLOW_LIVE_ENABLED", "1")
+    monkeypatch.setenv("RELEASE_FLOW_LIVE_WORKSPACES", "workspace-a")
+    db = ReleaseReadinessDb(
+        channels=[
+            {
+                "channel_id": "chan-warning",
+                "enabled": True,
+                "min_severity": "warning",
+                "last_test_status": "passed",
+                "last_tested_at": datetime.now(timezone.utc).isoformat(),
+            }
+        ]
+    )
+    monkeypatch.setattr(release_router, "require_plan_application_read_access", lambda *_args: None)
+
+    current = SimpleNamespace(workspace_id="workspace-a", user_id="operator", roles=())
+    response = asyncio.run(
+        release_router.check_release_readiness(
+            release_router.ReleasePlanUpsertRequest(
+                name="Checkout production release",
+                settings={
+                    "runtime_mode": "live",
+                    "approval_policy": "auto_safe",
+                    "approval_granted": True,
+                    "approval_granted_by": "lead@example.com",
+                    "approval_reason": "approved production release",
+                    "approval_granted_at": datetime.now(timezone.utc).isoformat(),
+                    "change_ticket": "CHG-PREFLIGHT",
+                    "release_window_override_reason": "incident commander approved immediate release",
+                    "runbook_url": "https://wiki.example.com/runbooks/checkout-release",
+                    "release_owner": "checkout-release-team",
+                    "abort_criteria": "rollback if checkout error rate exceeds 5% for 5 minutes",
+                },
+                steps=[
+                    {
+                        "application_id": "checkout",
+                        "name": "Checkout",
+                        "position": 0,
+                        "config": {
+                            "environment": "production",
+                            "approval_gate": "manual",
+                            "commit_sha": "abc1234",
+                            "image": "ghcr.io/example/checkout:v2",
+                            "health_check_path": "/readyz",
+                        },
+                    }
+                ],
+            ),
+            current=current,
+            db=db,
+        )
+    )
+
+    assert response.ready is False
+    assert any("must not use placeholder change ticket CHG-PREFLIGHT" in item for item in response.blockers)
+    change_check = next(check for check in response.checks if check["check_id"] == "change.ticket")
+    assert change_check["status"] == "blocked"
+
+
 def test_release_readiness_warns_when_production_change_ticket_gate_is_bypassed(monkeypatch) -> None:
     monkeypatch.setenv("RELEASE_FLOW_LIVE_ENABLED", "1")
     monkeypatch.setenv("RELEASE_FLOW_LIVE_WORKSPACES", "workspace-a")
@@ -5188,6 +5248,81 @@ def test_dispatch_wave_steps_blocks_production_live_without_change_ticket(monkey
 
     assert raised.value.status_code == 409
     assert any("change ticket" in blocker for blocker in raised.value.detail["blockers"])
+    assert events.calls == []
+    assert db.dispatched == []
+
+
+def test_dispatch_wave_steps_blocks_production_placeholder_change_ticket(monkeypatch) -> None:
+    monkeypatch.setenv("RELEASE_FLOW_LIVE_ENABLED", "1")
+    monkeypatch.setenv("RELEASE_FLOW_LIVE_WORKSPACES", "workspace-a")
+    plan = {
+        "plan_id": "plan-a",
+        "name": "storefront",
+        "settings": {
+            "runtime_mode": "live",
+            "approval_policy": "auto_safe",
+            "approval_granted": True,
+            "approval_granted_by": "lead@example.com",
+            "approval_reason": "approved production release",
+            "approval_granted_at": datetime.now(timezone.utc).isoformat(),
+            "change_ticket": "CHG-PREFLIGHT",
+            "release_window_override_reason": "incident commander approved immediate release",
+            "runbook_url": "https://wiki.example.com/runbooks/storefront-release",
+            "release_owner": "storefront-release-team",
+            "abort_criteria": "rollback if checkout error rate exceeds 5% for 5 minutes",
+        },
+        "steps": [
+            {
+                "step_id": "step-a",
+                "application_id": "app-a",
+                "name": "checkout",
+                "config": {
+                    "repo_ref": "org/app-a",
+                    "branch": "main",
+                    "environment": "production",
+                    "approval_gate": "manual",
+                    "commit_sha": "abc123",
+                    "image": "ghcr.io/example/app-a:v2",
+                    "manifest_path": "deploy/app.yaml",
+                    "health_check_path": "/readyz",
+                },
+            }
+        ],
+    }
+    preview = build_release_plan_preview(plan)
+    db = ReleaseDispatchDb(
+        channels=[
+            {
+                "channel_id": "chan-a",
+                "enabled": True,
+                "min_severity": "warning",
+                "last_test_status": "passed",
+                "last_tested_at": datetime.now(timezone.utc).isoformat(),
+            }
+        ]
+    )
+    events = AcceptingEventGateway()
+    current = SimpleNamespace(user_id="user-a", roles=("operator",))
+
+    with pytest.raises(HTTPException) as raised:
+        asyncio.run(
+            release_router.dispatch_wave_steps(
+                plan,
+                preview,
+                1,
+                "workspace-a",
+                current,
+                db,
+                events,
+                run_id="run-a",
+            )
+        )
+
+    assert raised.value.status_code == 409
+    assert any(
+        "must not use placeholder change ticket CHG-PREFLIGHT" in blocker
+        for blocker in raised.value.detail["blockers"]
+    )
     assert events.calls == []
     assert db.dispatched == []
 

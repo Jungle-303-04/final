@@ -35,6 +35,7 @@ from domains.release_flow.execution import (
     dry_run_event_id,
     execution_profile,
     has_change_ticket,
+    placeholder_change_ticket,
 )
 from domains.release_flow.execution import (
     release_execution_blockers as base_release_execution_blockers,
@@ -2291,9 +2292,15 @@ def release_production_change_ticket_blockers(
     blockers: list[str] = []
     for step in release_production_steps_for_wave(plan, preview, wave):
         config = step_config(step)
+        label = str(step.get("name") or step.get("application_id") or "release step")
+        placeholder = placeholder_change_ticket(settings, config)
+        if placeholder:
+            blockers.append(
+                f"{label} targets production and must not use placeholder change ticket {placeholder}."
+            )
+            continue
         if has_change_ticket(settings, config) or release_production_change_override_reason(plan):
             continue
-        label = str(step.get("name") or step.get("application_id") or "release step")
         blockers.append(
             f"{label} targets production and requires a change ticket before live dispatch."
         )

@@ -35,6 +35,9 @@ def test_production_deploy_workflow_calls_gate_before_starting_release() -> None
     assert gate["with"]["github_environment"] == "production"
     assert deploy["environment"] == "production"
 
+    setup_python_step = next(step for step in deploy["steps"] if step.get("uses") == "actions/setup-python@v5")
+    assert setup_python_step["with"]["python-version"] == "3.13"
+
     deploy_step = next(step for step in deploy["steps"] if step["name"] == "Start release-flow production run")
     assert "python scripts/release_flow_deploy.py" in deploy_step["run"]
     assert 'RELEASE_FLOW_DEPLOY_PLAN_ID" \\' in deploy_step["run"]

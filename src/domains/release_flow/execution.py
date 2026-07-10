@@ -17,6 +17,7 @@ RELEASE_FLOW_LIVE_ENABLED_ENV = "RELEASE_FLOW_LIVE_ENABLED"
 RELEASE_FLOW_LIVE_WORKSPACES_ENV = "RELEASE_FLOW_LIVE_WORKSPACES"
 PRODUCTION_ENVIRONMENTS = {"prod", "production"}
 TRUE_VALUES = {"1", "true", "yes", "on", "enabled"}
+PLACEHOLDER_CHANGE_TICKETS = {"CHG-PREFLIGHT"}
 
 
 @dataclass(frozen=True)
@@ -155,12 +156,23 @@ def approval_granted(settings: Mapping[str, Any], config: Mapping[str, Any]) -> 
     return bool(config.get("approval_granted") or settings.get("approval_granted"))
 
 
+def change_ticket_value(settings: Mapping[str, Any], config: Mapping[str, Any]) -> str:
+    for source in (config, settings):
+        for field in ("change_ticket", "change_ticket_url", "external_change_ticket"):
+            value = str(source.get(field) or "").strip()
+            if value:
+                return value
+    return ""
+
+
+def placeholder_change_ticket(settings: Mapping[str, Any], config: Mapping[str, Any]) -> str:
+    value = change_ticket_value(settings, config)
+    return value if value in PLACEHOLDER_CHANGE_TICKETS else ""
+
+
 def has_change_ticket(settings: Mapping[str, Any], config: Mapping[str, Any]) -> bool:
-    return any(
-        str(source.get(field) or "").strip()
-        for source in (config, settings)
-        for field in ("change_ticket", "change_ticket_url", "external_change_ticket")
-    )
+    value = change_ticket_value(settings, config)
+    return bool(value and value not in PLACEHOLDER_CHANGE_TICKETS)
 
 
 def has_safe_pr_ready(settings: Mapping[str, Any], config: Mapping[str, Any]) -> bool:
