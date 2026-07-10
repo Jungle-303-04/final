@@ -21,6 +21,11 @@ name: Release Flow Smoke
         required: false
         default: production
         type: string
+      artifact_retention_days:
+        description: Number of days to keep release-flow smoke artifacts.
+        required: false
+        default: "30"
+        type: string
   workflow_call:
     inputs:
       api_base_url:
@@ -40,6 +45,11 @@ name: Release Flow Smoke
         description: GitHub Environment that protects this smoke gate.
         required: false
         default: production
+        type: string
+      artifact_retention_days:
+        description: Number of days to keep release-flow smoke artifacts.
+        required: false
+        default: "30"
         type: string
     secrets:
       release_flow_api_base_url:
@@ -113,6 +123,7 @@ jobs:
           name: release-flow-smoke
           path: artifacts/release-flow
           if-no-files-found: warn
+          retention-days: ${{ inputs.artifact_retention_days || '30' }}
 
       - name: Fail when release-flow smoke failed
         if: steps.release_flow_smoke.outputs.release_smoke_ok != 'true'
