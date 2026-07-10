@@ -57,6 +57,7 @@ MINIO_ROOT_PASSWORD="${MINIO_ROOT_PASSWORD:-}"
 GITHUB_WEBHOOK_SECRET="${GITHUB_WEBHOOK_SECRET:-}"
 RCA_TEST_RUNS_ENABLED="${RCA_TEST_RUNS_ENABLED:-1}"
 RCA_TEST_RUNS_TOKEN="${RCA_TEST_RUNS_TOKEN:-}"
+API_ROOT_PATH="${API_ROOT_PATH:-/api}"
 GITHUB_REPO="${GITHUB_REPO:-$(default_github_repo)}"
 GITHUB_BRANCH="${GITHUB_BRANCH:-dev}"
 SMOKE_MANIFEST_PATH="${SMOKE_MANIFEST_PATH:-src/samples/smoke/deploy.yaml}"
@@ -588,6 +589,7 @@ EOF
     --from-literal=REDIS_URL="${REDIS_URL}" \
     --from-literal=DATABASE_STARTUP_MODE="${DATABASE_STARTUP_MODE}" \
     --from-literal=RCA_TEST_RUNS_ENABLED="${RCA_TEST_RUNS_ENABLED}" \
+    --from-literal=API_ROOT_PATH="${API_ROOT_PATH}" \
     --from-literal=OUTBOX_RELAY_BATCH="${OUTBOX_RELAY_BATCH:-10}" \
     --from-literal=MANAGEMENT_BASE_URL="http://api-gateway:8000" \
     --from-literal=PUBLIC_BASE_URL="${effective_public_base_url}" \

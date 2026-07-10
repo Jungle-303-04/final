@@ -30,6 +30,7 @@ REDIS_URL="${REDIS_URL:-redis://redis:6379/0}"
 GITHUB_WEBHOOK_SECRET="${GITHUB_WEBHOOK_SECRET:-}"
 RCA_TEST_RUNS_ENABLED="${RCA_TEST_RUNS_ENABLED:-1}"
 RCA_TEST_RUNS_TOKEN="${RCA_TEST_RUNS_TOKEN:-}"
+API_ROOT_PATH="${API_ROOT_PATH:-/api}"
 GITHUB_REPO="${GITHUB_REPO:-$(default_github_repo)}"
 GITHUB_BRANCH="${GITHUB_BRANCH:-dev}"
 MANIFEST_PATH="${MANIFEST_PATH:-src/samples/smoke/deploy.yaml}"
@@ -424,6 +425,7 @@ kubectl --context "kind-${MGMT_CLUSTER}" -n management create configmap manageme
   --from-literal=REDIS_URL="${REDIS_URL}" \
   --from-literal=DATABASE_STARTUP_MODE="${DATABASE_STARTUP_MODE}" \
   --from-literal=RCA_TEST_RUNS_ENABLED="${RCA_TEST_RUNS_ENABLED}" \
+  --from-literal=API_ROOT_PATH="${API_ROOT_PATH}" \
   --from-literal=MANAGEMENT_BASE_URL="http://api-gateway:8000" \
   --from-literal=GITHUB_REPO="${GITHUB_REPO}" \
   --from-literal=GITHUB_BRANCH="${GITHUB_BRANCH}" \

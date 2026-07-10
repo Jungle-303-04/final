@@ -99,7 +99,10 @@ class ApiGateway:
         self.auth = SessionAuthService(self.sessions)
         self.password_auth = PasswordAuthService(self.db, self.sessions)
         self.app = FastAPI(
-            title=Settings.APP_TITLE, version=Settings.APP_VERSION, lifespan=self.lifespan
+            title=Settings.APP_TITLE,
+            version=Settings.APP_VERSION,
+            root_path=env(Settings.ROOT_PATH_ENV, Settings.DEFAULT_ROOT_PATH).strip(),
+            lifespan=self.lifespan,
         )
         self._configure_cors(self.app)
         self._configure_session_origin_guard(self.app)

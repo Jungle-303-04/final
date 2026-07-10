@@ -49,6 +49,19 @@ def test_management_deploy_removes_legacy_minio_deployment() -> None:
     assert "rollout status deploy/minio" not in local_up
 
 
+def test_management_bootstrap_propagates_rca_test_and_api_prefix_config() -> None:
+    aws_up = read("scripts/aws-up.sh")
+    local_up = read("scripts/up.sh")
+
+    for script in (aws_up, local_up):
+        assert 'RCA_TEST_RUNS_ENABLED="${RCA_TEST_RUNS_ENABLED:-1}"' in script
+        assert 'RCA_TEST_RUNS_TOKEN="${RCA_TEST_RUNS_TOKEN:-}"' in script
+        assert 'API_ROOT_PATH="${API_ROOT_PATH:-/api}"' in script
+        assert '--from-literal=RCA_TEST_RUNS_ENABLED="${RCA_TEST_RUNS_ENABLED}"' in script
+        assert '--from-literal=RCA_TEST_RUNS_TOKEN="${RCA_TEST_RUNS_TOKEN}"' in script
+        assert '--from-literal=API_ROOT_PATH="${API_ROOT_PATH}"' in script
+
+
 def test_internal_gitops_workflow_remains_deployed() -> None:
     controller = read("src/services/gitops/workflow-controller/app.py")
     services = read("deploy/management/services.yaml")
