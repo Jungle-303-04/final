@@ -299,11 +299,11 @@ GitHub Actions에서 바로 실행하려면 `.github/workflows/release-flow-smok
 - `RELEASE_FLOW_AUTH_EMAIL`: 운영 smoke용 계정 email
 - `RELEASE_FLOW_AUTH_PASSWORD`: 운영 smoke용 계정 password
 
-수동 실행 input으로 `api_base_url`을 넣으면 `RELEASE_FLOW_API_BASE_URL` secret보다 우선한다. `production_preflight_plan_id`를 넣으면 특정 release plan만 검사하고, `production_preflight_run_limit`은 각 guardrail에서 확인할 release run 개수를 제한한다. `github_environment`는 기본 `production`이며, GitHub Environments의 required reviewers와 environment-scoped secrets를 smoke gate 앞에 붙이는 데 쓴다. `artifact_retention_days`는 기본 30일이며, release review나 감사 보관 정책에 맞춰 smoke artifact 보관 기간을 조정한다. `artifact_name`은 기본 `release-flow-smoke`이며, 여러 환경이나 릴리즈 plan의 smoke 증거를 구분해야 할 때 `release-flow-smoke-production`처럼 바꿀 수 있다.
+수동 실행 input으로 `api_base_url`을 넣으면 `RELEASE_FLOW_API_BASE_URL` secret보다 우선한다. `production_preflight_plan_id`를 넣으면 특정 release plan만 검사하고, `production_preflight_run_limit`은 각 guardrail에서 확인할 release run 개수를 제한한다. `request_timeout_seconds`는 API 요청 1회당 timeout이며 기본 15초다. `github_environment`는 기본 `production`이며, GitHub Environments의 required reviewers와 environment-scoped secrets를 smoke gate 앞에 붙이는 데 쓴다. `artifact_retention_days`는 기본 30일이며, release review나 감사 보관 정책에 맞춰 smoke artifact 보관 기간을 조정한다. `artifact_name`은 기본 `release-flow-smoke`이며, 여러 환경이나 릴리즈 plan의 smoke 증거를 구분해야 할 때 `release-flow-smoke-production`처럼 바꿀 수 있다.
 
 workflow는 Actions 목록에서 `Release Flow Smoke / <environment> / <plan>` 형태의 run name을 사용하고, `scripts/release_flow_smoke.py --production-preflight --ci --ci-artifacts-dir artifacts/release-flow`를 실행한다. smoke step은 먼저 GitHub step summary, output, annotation, JSON/JUnit/Markdown artifact를 남기고, artifact upload가 끝난 뒤 `release_smoke_ok` output이 `true`가 아니면 job을 실패시킨다. 같은 `github_environment` 값으로 실행된 smoke job은 `release-flow-smoke-<environment>` concurrency group에 묶이며, 이미 진행 중인 smoke를 취소하지 않고 다음 job을 대기시킨다.
 
-workflow는 smoke를 실행하기 전에 input을 검증한다. `production_preflight_run_limit`은 1~500, `artifact_retention_days`는 GitHub artifact 제한에 맞춰 1~90 사이의 정수여야 한다. `artifact_name`은 비어 있으면 안 되고 GitHub artifact 이름에서 금지된 문자(`\`, `/`, `:`, `*`, `?`, `"`, `<`, `>`, `|`)를 포함하면 안 된다. 범위를 벗어나면 smoke를 시작하지 않고 GitHub annotation으로 잘못된 입력을 표시한다. `alert_preflight`를 켜면 smoke가 enabled alert channel을 찾아 validation alert를 보내며, `alert_severity`는 `info`, `warning`, `critical` 중 하나여야 한다. 이 옵션은 실제 Slack/webhook/온콜 테스트 메시지를 보낼 수 있으므로 기본값은 `false`다.
+workflow는 smoke를 실행하기 전에 input을 검증한다. `production_preflight_run_limit`은 1~500, `request_timeout_seconds`는 1~120초 숫자, `artifact_retention_days`는 GitHub artifact 제한에 맞춰 1~90 사이의 정수여야 한다. `artifact_name`은 비어 있으면 안 되고 GitHub artifact 이름에서 금지된 문자(`\`, `/`, `:`, `*`, `?`, `"`, `<`, `>`, `|`)를 포함하면 안 된다. 범위를 벗어나면 smoke를 시작하지 않고 GitHub annotation으로 잘못된 입력을 표시한다. `alert_preflight`를 켜면 smoke가 enabled alert channel을 찾아 validation alert를 보내며, `alert_severity`는 `info`, `warning`, `critical` 중 하나여야 한다. 이 옵션은 실제 Slack/webhook/온콜 테스트 메시지를 보낼 수 있으므로 기본값은 `false`다.
 
 `live_preflight`를 켜면 workflow가 `--live-preflight`를 함께 실행해 live release readiness gate를 확인한다. 이 경로는 `/release-readiness`까지만 호출하고 `/release-plans/start`나 GitOps dispatch는 호출하지 않는다. `live_environment`와 `live_namespace`는 Kubernetes DNS label 형식이어야 하며, `live_change_ticket`은 비어 있으면 안 된다.
 
@@ -327,6 +327,7 @@ jobs:
       live_change_ticket: CHG-PREFLIGHT
       production_preflight_plan_id: ${{ inputs.release_plan_id }}
       production_preflight_run_limit: "20"
+      request_timeout_seconds: "15"
     secrets:
       release_flow_api_base_url: ${{ secrets.RELEASE_FLOW_API_BASE_URL }}
       release_flow_auth_email: ${{ secrets.RELEASE_FLOW_AUTH_EMAIL }}
