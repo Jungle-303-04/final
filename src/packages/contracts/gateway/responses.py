@@ -957,10 +957,6 @@ class CatalogItemResponse(StrictModel):
     item: JsonMap
 
 
-class CatalogInstallRunResponse(StrictModel):
-    install: JsonMap
-
-
 class ProviderCatalogResponse(StrictModel):
     providers: dict[str, list[JsonMap]]
 

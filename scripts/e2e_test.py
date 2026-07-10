@@ -207,13 +207,9 @@ def test_nats_events():
 
     # 4-1. NATS pod alive
     rc, _ = kubectl(
-        KUBECTL_CTX, "-n", "management", "exec", "nats-0", "--", "nats-server", "--version"
-    )
-    # nats container might not have nats-server in PATH, try different approach
-    rc2, nats_info = kubectl(
         KUBECTL_CTX, "-n", "management", "exec", "nats-0", "--", "sh", "-c", "echo healthy"
     )
-    check("NATS", "NATS 파드 접근 가능", rc2 == 0)
+    check("NATS", "NATS 파드 접근 가능", rc == 0)
 
     # 4-2. JetStream stream info via nats CLI (may not be available inside container)
     # Try using the nats tool that comes with nats image
@@ -241,18 +237,6 @@ def test_nats_events():
         except json.JSONDecodeError:
             check("NATS", "JetStream 스트림 존재", False, f"parse error: {stream_info[:100]}")
     else:
-        # Try monitoring port
-        rc, stream_info2 = kubectl(
-            KUBECTL_CTX,
-            "-n",
-            "management",
-            "exec",
-            "nats-0",
-            "--",
-            "sh",
-            "-c",
-            "cat /etc/nats/nats-server.conf 2>/dev/null || echo 'no_conf'",
-        )
         check("NATS", "JetStream 모니터링", False, "monitoring port not available")
 
     # 4-3. outbox relay: gateway 로그에서 relay 활동 확인
@@ -489,8 +473,11 @@ def test_gitops_flow():
     ]
     for w in workers:
         deploy = kubectl_json(KUBECTL_CTX, "-n", "management", "get", f"deploy/{w}")
-        ready = (deploy or {}).get("status", {}).get("readyReplicas", 0) or 0
-        replicas = (deploy or {}).get("spec", {}).get("replicas", 0) or 0
+        if deploy is None:
+            check("GitOps", f"{w} Deployment 존재", False, "not found")
+            continue
+        ready = deploy.get("status", {}).get("readyReplicas", 0) or 0
+        replicas = deploy.get("spec", {}).get("replicas", 0) or 0
         # Workers with 0 replicas are fine if they're intentionally not needed for smoke
         if replicas == 0:
             check("GitOps", f"{w} 배포됨 (replicas=0, 스케일다운)", True, "의도적 0 replicas")
