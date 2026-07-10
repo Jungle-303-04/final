@@ -24,12 +24,14 @@ def request_files() -> list[Path]:
     ]
 
 
-def test_bruno_collection_has_expected_root_and_profiles() -> None:
+def test_bruno_collection_has_only_aws_test_profile() -> None:
     assert (API_DIR / "bruno.json").is_file()
     assert (API_DIR / "README.md").is_file()
     collection = (API_DIR / "collection.bru").read_text(encoding="utf-8")
 
-    local = (API_DIR / "environments" / "local.bru").read_text(encoding="utf-8")
+    environment_files = sorted(
+        path.name for path in (API_DIR / "environments").iterdir() if path.is_file()
+    )
     aws = (API_DIR / "environments" / "aws-test.bru").read_text(encoding="utf-8")
 
     assert "base_url: https://k8s.woonyong.org/api/" in collection
@@ -38,11 +40,7 @@ def test_bruno_collection_has_expected_root_and_profiles() -> None:
     assert "auth_password: replace-with-auth-password" in collection
     assert "\n  cluster_id: api-verification-target\n" in collection
 
-    assert "base_url: http://localhost:18080/" in local
-    assert "auto_login: true" in local
-    assert "auth_email: admin.local@example.com" in local
-    assert "auth_password: local-test-password-1234" in local
-    assert "cluster_id: target" in local
+    assert environment_files == ["aws-test.bru"]
     assert "base_url: https://k8s.woonyong.org/api/" in aws
     assert "management_base_url: https://k8s.woonyong.org/api/" in aws
     assert "auto_login: false" in aws
@@ -50,17 +48,16 @@ def test_bruno_collection_has_expected_root_and_profiles() -> None:
     assert "auth_password: replace-with-auth-password" in aws
     assert "\n  cluster_id: api-verification-target\n" in aws
 
-    for env_text in (local, aws):
-        assert "base_url:" in env_text
-        assert "auto_login:" in env_text
-        assert "dev_security_bypass: true" in env_text
-        assert "dev_cluster_id:" in env_text
-        assert "auth_email:" in env_text
-        assert "agent_token:" in env_text
-        assert "cluster_id:" in env_text
-        assert "alert_channel_id:" in env_text
-        assert "alertmanager_token:" in env_text
-        assert "github_webhook_signature:" in env_text
+    assert "base_url:" in aws
+    assert "auto_login:" in aws
+    assert "dev_security_bypass: true" in aws
+    assert "dev_cluster_id:" in aws
+    assert "auth_email:" in aws
+    assert "agent_token:" in aws
+    assert "cluster_id:" in aws
+    assert "alert_channel_id:" in aws
+    assert "alertmanager_token:" in aws
+    assert "github_webhook_signature:" in aws
 
 
 def test_every_gateway_route_has_a_bruno_request() -> None:
@@ -208,7 +205,8 @@ def test_bruno_cli_runner_uses_isolated_profile_and_cleans_up_last() -> None:
     runner = (ROOT_DIR / "scripts" / "run-bruno-aws.sh").read_text(encoding="utf-8")
 
     assert "environments/aws-test.bru" in runner
-    assert "aws-live.local.bru" not in runner
+    assert "BRUNO_ENV_FILE" not in runner
+    assert "--env-file" in runner
     assert "@usebruno/cli@3.5.1" in runner
     assert '--env-var "cluster_id=${RUN_ID}"' in runner
     assert runner.index("02-target-admin/01-register-target-dry-run.bru") < runner.index(

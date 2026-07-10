@@ -3,14 +3,13 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 API_DIR="${ROOT_DIR}/docs/api"
-ENV_FILE="${BRUNO_ENV_FILE:-${API_DIR}/environments/aws-test.bru}"
+ENV_FILE="${API_DIR}/environments/aws-test.bru"
 OUTPUT_FILE="${BRUNO_OUTPUT_FILE:-/tmp/bruno-aws-ordered-run.json}"
 DELAY_MS="${BRUNO_DELAY_MS:-250}"
 RUN_ID="bruno-$(date +%Y%m%d%H%M%S)-$$"
 
 if [[ ! -f "${ENV_FILE}" ]]; then
   echo "missing Bruno env file: ${ENV_FILE}" >&2
-  echo "Select an existing Bruno environment file with BRUNO_ENV_FILE." >&2
   exit 1
 fi
 

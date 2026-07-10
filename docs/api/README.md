@@ -49,7 +49,7 @@ bash scripts/run-bruno-aws.sh
 
 직접 채워야 하는 값은 처음 한 번만 본다.
 
-1. `base_url`은 Gateway API 주소다. `local`은 `http://localhost:18080/`, `aws-test`는 `https://k8s.woonyong.org/api/`로 이미 채워져 있다. Bruno 요청 파일은 `{{base_url}}providers/validate`처럼 붙기 때문에 값이 반드시 `/`로 끝나야 한다.
+1. `base_url`은 Gateway API 주소다. 팀 공용 `aws-test`는 `https://k8s.woonyong.org/api/`로 고정한다. Bruno 요청 파일은 `{{base_url}}providers/validate`처럼 붙기 때문에 값이 반드시 `/`로 끝나야 한다.
 2. `dev_security_bypass`는 `APP_ENV=test` 배포에서만 `true`로 쓴다. 이때 세션·agent token을 전송하지 않으며 운영 배포에서는 반드시 `false`다.
 3. `dev_cluster_id`는 test agent identity로 사용할 등록 cluster다. CLI Runner는 실행마다 고유 ID로 덮어쓴다.
 4. `auto_login`은 우회가 꺼진 환경에서 보호 API 호출 전에 Bruno가 자동 로그인할지 정한다.
@@ -80,7 +80,7 @@ bash scripts/run-bruno-aws.sh
 프론트 콘솔을 직접 여는 주소는 `https://k8s.woonyong.org/`지만, Bruno collection의 AWS `base_url`에는 `/api/`까지 포함한다.
 
 Bruno 화면에서 Environment를 아직 고르지 않았더라도 `docs/api/collection.bru`의 기본 변수 때문에 `{{base_url}}`이 `https://k8s.woonyong.org/api/`로 풀린다.
-그래도 실제 AWS 테스트를 할 때는 오른쪽 위 Environment에서 `aws-test` 또는 gitignore된 `aws-live.local`을 선택한다.
+실제 API 테스트는 오른쪽 위 Environment에서 유일한 공용 환경인 `aws-test`를 선택한다.
 
 `auth_email`과 `auth_password`는 로그인할 운영자 계정이다.
 collection과 `aws-test` 기본값은 placeholder다.
@@ -109,7 +109,7 @@ CLI Runner에서는 충돌을 피하려고 실행별 고유 ID를 사용한다.
 팀 통합 테스트는 `aws-test` Environment가 기준이다.
 로컬에서는 [로컬 검증 실행 기준](../local-testing.md)을 따라 코드 정합성과 Bruno 문법만 확인하고, 실제 API 흐름은 AWS에서 확인한다.
 `local` Environment는 개인이 Gateway를 별도로 띄워 빠르게 확인할 때만 쓰는 보조 profile이다.
-로컬 bootstrap 값은 `docs/api/environments/local.bru`에만 둔다.
+Bruno 환경은 `docs/api/environments/aws-test.bru` 하나만 관리한다. 로컬 스택은 별도 smoke 스크립트로 검증하고 Bruno 계약은 팀 공용 AWS 배포를 기준으로 한다.
 
 `agent_token`은 우회를 끈 인증 회귀에서만 `02-target-admin/01-register-target-dry-run.bru` 응답값을 사용한다.
 `APP_ENV=test` + `dev_security_bypass: true`에서는 collection이 이 헤더를 삭제하고
@@ -721,7 +721,7 @@ CLI가 설치되어 있으면 collection root에서 실행한다.
 
 ```bash
 cd docs/api
-npx --yes @usebruno/cli run --env local --bail
+bash scripts/run-bruno-aws.sh
 ```
 
 서버가 떠 있지 않으면 첫 요청 실패가 날 수 있다.

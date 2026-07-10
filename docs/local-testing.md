@@ -100,7 +100,7 @@ auth_password: replace-with-auth-password
 cluster_id: cluster-1
 ```
 
-AWS bootstrap 계정은 Bruno UI override 또는 gitignore된 `*.local.bru` 파일에만 넣는다.
+Bruno는 자격증명을 저장하지 않는 공용 `aws-test` 환경만 사용한다. 인증 자체를 검증할 때 필요한 계정은 팀 Secret 동기화 절차로 로컬 `.env.local-test`에만 받고 Bruno 파일에는 기록하지 않는다.
 문서나 collection 파일에는 실제 이메일/비밀번호를 쓰지 않는다.
 
 먼저 보낼 요청:
@@ -161,5 +161,5 @@ bash scripts/sync-github-actions-secrets.sh
 ```
 
 장기 AWS access key는 팀 secret과 GitHub Secret에 넣지 않는다. 각 팀원은 AWS
-로그인 또는 개인 profile을 사용한다. `.env*`와 `*.local.bru`는 Git뿐 아니라 Docker
+로그인 검증은 로컬 `.env.local-test` 값을 요청 시점에만 주입한다. `.env*`와 개인 Bruno 파일은 Git뿐 아니라 Docker
 build context에서도 제외한다.
