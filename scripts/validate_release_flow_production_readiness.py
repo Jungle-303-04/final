@@ -32,6 +32,7 @@ REQUIRED_WORKFLOW_FILES = [
 REQUIRED_SCRIPT_FILES = [
     Path("scripts/release_flow_smoke.py"),
     Path("scripts/release_flow_deploy.py"),
+    Path("scripts/verify_release_flow_production_evidence.py"),
     Path("scripts/validate_release_flow_production_gate.py"),
     Path("scripts/up.sh"),
 ]
@@ -92,6 +93,7 @@ def validate_readiness(
     checks.extend(check_production_gate_contract())
     checks.extend(check_production_deploy_workflow_contract())
     checks.extend(check_deploy_script_contract())
+    checks.extend(check_evidence_verifier_contract())
     checks.extend(check_gate_contract_script_contract())
     checks.extend(check_gate_contract_workflow(require_production_deploy=require_production_deploy))
     checks.extend(check_runtime_config(require_runtime_config=require_runtime_config))
@@ -317,6 +319,7 @@ def check_operator_documentation_contract() -> list[ReadinessCheck]:
         "live_verification_url",
         "live_safe_pr_workflow_run_id",
         "live_safe_pr_url",
+        "verify_release_flow_production_evidence.py",
     }
     missing = sorted(term for term in required_terms if term not in source)
     return [
@@ -327,6 +330,33 @@ def check_operator_documentation_contract() -> list[ReadinessCheck]:
             if not missing
             else f"operator guide missing: {', '.join(missing)}",
         )
+    ]
+
+
+def check_evidence_verifier_contract() -> list[ReadinessCheck]:
+    path = Path("scripts/verify_release_flow_production_evidence.py")
+    docs_path = Path("docs/release-flow-production-readiness.md")
+    if not path.is_file():
+        return [ReadinessCheck("script.evidence_verifier", False, "production evidence verifier is missing")]
+    source = path.read_text(encoding="utf-8")
+    docs = docs_path.read_text(encoding="utf-8") if docs_path.is_file() else ""
+    return [
+        ReadinessCheck(
+            "script.evidence_verifier.required_artifacts",
+            "release-flow-readiness.json" in source
+            and "release-flow-smoke.json" in source
+            and "release-flow-deploy.json" in source
+            and "runtime.github_access_preflight" in source
+            and "release-plans.start.production" in source,
+            "downloaded readiness, smoke, and deploy artifacts are verified before completion",
+        ),
+        ReadinessCheck(
+            "docs.production_readiness.evidence_verifier",
+            "verify_release_flow_production_evidence.py" in docs
+            and "release-flow-production-readiness" in docs
+            and "release-flow-production-deploy" in docs,
+            "operator guide documents final evidence artifact verification",
+        ),
     ]
 
 

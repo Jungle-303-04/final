@@ -96,6 +96,8 @@ def test_current_release_flow_production_readiness_static_checks_pass() -> None:
         "script.deploy.matches_gate_evidence",
         "script.deploy.requires_live_production_plan",
         "script.deploy.starts_release",
+        "script.evidence_verifier.required_artifacts",
+        "docs.production_readiness.evidence_verifier",
         "script.gate_contract.required_live_inputs",
         "script.gate_contract.literal_url_guard",
         "workflow.gate_contract.static_scan",
