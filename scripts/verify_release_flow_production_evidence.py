@@ -719,8 +719,7 @@ def validate_signoff_preflight_summary(
         ),
         EvidenceCheck(
             "signoff.preflight_report.release_plan_id",
-            str(summary.get("release_plan_id") or "")
-            == str(payload.get("release_plan_id") or ""),
+            str(summary.get("release_plan_id") or "") == str(payload.get("release_plan_id") or ""),
             "preflight report matches signoff plan id"
             if str(summary.get("release_plan_id") or "")
             == str(payload.get("release_plan_id") or "")
@@ -737,7 +736,9 @@ def validate_signoff_preflight_summary(
         ),
     ]
     if preflight is not None:
-        checks.extend(validate_preflight_artifact_matches_summary(summary, preflight, preflight_source))
+        checks.extend(
+            validate_preflight_artifact_matches_summary(summary, preflight, preflight_source)
+        )
     expected_checks = {
         "input_validation",
         "local_sha",
@@ -745,11 +746,7 @@ def validate_signoff_preflight_summary(
         "safe_pr_run",
         "production_workflow_access",
     }
-    actual_checks = {
-        str(item)
-        for item in summary.get("checks", [])
-        if isinstance(item, str)
-    }
+    actual_checks = {str(item) for item in summary.get("checks", []) if isinstance(item, str)}
     checks.append(
         EvidenceCheck(
             "signoff.preflight_report.checks",

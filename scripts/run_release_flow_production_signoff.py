@@ -236,9 +236,7 @@ def verify_workflow_access(args: argparse.Namespace, token: str) -> list[dict[st
         if state and state != "active":
             raise GitHubEvidenceError(f"{workflow} is {state}, not active")
         if not workflow_id:
-            raise GitHubEvidenceError(
-                f"{workflow} was not readable through GitHub Actions API"
-            )
+            raise GitHubEvidenceError(f"{workflow} was not readable through GitHub Actions API")
         workflows.append(
             {
                 "workflow": workflow,
@@ -565,7 +563,9 @@ def verify_preflight_report(args: argparse.Namespace) -> None:
         or payload.get("mode") != "preflight_only"
         or payload.get("dispatch_performed") is not False
     ):
-        raise GitHubEvidenceError("preflight report did not pass in preflight_only mode without dispatch")
+        raise GitHubEvidenceError(
+            "preflight report did not pass in preflight_only mode without dispatch"
+        )
 
     now = datetime.now(UTC)
     generated_at = parse_report_timestamp(payload.get("generated_at"), "generated_at")
@@ -585,11 +585,7 @@ def verify_preflight_report(args: argparse.Namespace) -> None:
         "safe_pr_run",
         "production_workflow_access",
     }
-    actual_checks = {
-        str(item)
-        for item in payload.get("checks", [])
-        if isinstance(item, str)
-    }
+    actual_checks = {str(item) for item in payload.get("checks", []) if isinstance(item, str)}
     if not expected_checks <= actual_checks:
         missing = ", ".join(sorted(expected_checks - actual_checks))
         raise GitHubEvidenceError(f"preflight report is missing checks: {missing}")
@@ -704,7 +700,9 @@ def main(argv: list[str]) -> int:
                 safe_pr_run=safe_pr_run,
                 workflows=workflows,
             )
-            print("ok signoff.preflight: inputs, branch SHA, Safe PR run, and workflow access passed")
+            print(
+                "ok signoff.preflight: inputs, branch SHA, Safe PR run, and workflow access passed"
+            )
             return 0
         verify_preflight_report(args)
         started_after = datetime.now(UTC) - timedelta(seconds=10)

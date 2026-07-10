@@ -18,9 +18,7 @@ class AgentAuthDb:
             return {"workspace_id": "workspace-1", "cluster_id": "cluster-1"}
         return None
 
-    def get_cluster_registration(
-        self, workspace_id: str, cluster_id: str
-    ) -> dict[str, str] | None:
+    def get_cluster_registration(self, workspace_id: str, cluster_id: str) -> dict[str, str] | None:
         if (workspace_id, cluster_id) == ("workspace-dev", "cluster-dev"):
             return {"workspace_id": workspace_id, "cluster_id": cluster_id}
         return None
