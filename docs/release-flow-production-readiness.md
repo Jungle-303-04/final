@@ -95,3 +95,5 @@ The gate must pass with:
 The gate rejects placeholder values such as `CHG-PREFLIGHT`, `localhost`, `example.com`, `release-operator`, and `release-oncall@example.com`.
 
 After the gate passes, `release-flow-production-deploy.yml` runs `scripts/release_flow_deploy.py`. The script fetches the saved `release_plan_id`, refuses demo or non-production plans, and starts the release through `POST /release-plans/start` so the backend live blockers still run at dispatch time.
+
+The production deploy workflow pins Python with `actions/setup-python@v5` before running the deploy script. Treat a failed setup step as an environment problem, not as release approval.

@@ -9,6 +9,7 @@ import pytest
 from domains.applications.router import (
     connect_application,
     list_applications,
+    list_application_deployments,
     upsert_application,
     upsert_application_deployment,
 )
@@ -132,6 +133,38 @@ class StubApplicationsDb:
     def list_cluster_registrations(self, workspace_id: str) -> list[dict[str, object]]:
         assert workspace_id == "ws-1"
         return self.clusters
+
+    def list_application_deployment_bindings(
+        self,
+        workspace_id: str,
+        application_id: str,
+        *,
+        limit: int,
+    ) -> list[dict[str, object]]:
+        assert workspace_id == "ws-1"
+        assert application_id == "app-1"
+        assert limit == 25
+        return [
+            {
+                "binding_id": "binding-1",
+                "workspace_id": "ws-1",
+                "repository_id": "repo-1",
+                "watch_target_id": "watch-1",
+                "cluster_id": "cluster-1",
+                "namespace": "prod",
+                "app_name": "checkout-api",
+                "manifest_path": "deploy.yaml",
+                "environment": "prod",
+                "gitops_poll": {
+                    "status": "failed",
+                    "status_code": 403,
+                    "error_kind": "access_denied",
+                    "error": "GitHub token cannot read repository",
+                    "last_seen_commit_sha": "sha-1",
+                    "last_polled_at": "2026-07-10T10:00:00+00:00",
+                },
+            }
+        ]
 
     def register_watch_target(self, payload: dict[str, object]) -> dict[str, object]:
         self.registration_calls.append("watch")
@@ -345,6 +378,33 @@ def test_upsert_application_deployment_requires_app_and_cluster_access() -> None
     assert db.access_checks == [
         ("user-1", "ws-1", "application", "app-1", "application.manage"),
         ("user-1", "ws-1", "cluster", "cluster-1", "deploy.run"),
+    ]
+
+
+def test_list_application_deployments_includes_gitops_poll_status() -> None:
+    db = StubApplicationsDb()
+
+    async def run():
+        return await list_application_deployments(
+            "app-1",
+            limit=25,
+            current=current_session(),
+            db=db,
+        )
+
+    response = asyncio.run(run())
+
+    assert response.deployments[0]["binding_id"] == "binding-1"
+    assert response.deployments[0]["gitops_poll"] == {
+        "status": "failed",
+        "status_code": 403,
+        "error_kind": "access_denied",
+        "error": "GitHub token cannot read repository",
+        "last_seen_commit_sha": "sha-1",
+        "last_polled_at": "2026-07-10T10:00:00+00:00",
+    }
+    assert db.access_checks == [
+        ("user-1", "ws-1", "application", "app-1", "deployment.read"),
     ]
 
 

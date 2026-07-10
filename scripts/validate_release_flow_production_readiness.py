@@ -401,6 +401,13 @@ def check_gitops_poll_observability_contract() -> list[ReadinessCheck]:
             and "github_poll_target_unavailable" in poller
             and "target_errors" in poller,
             "GitHub poll success/failure is recorded per watch target",
+        ),
+        ReadinessCheck(
+            "gitops.poll_status_api",
+            "gitops_poll" in repository
+            and "watch_last_polled_at" in repository
+            and "watch_settings" in repository,
+            "GitHub poll status is included in deployment binding API rows",
         )
     ]
 
@@ -865,9 +872,18 @@ def check_production_deploy_workflow_contract() -> list[ReadinessCheck]:
     jobs = workflow.get("jobs", {})
     gate_job = jobs.get("release_flow_production_gate", {}) if isinstance(jobs, dict) else {}
     deploy_job = jobs.get("deploy-production", {}) if isinstance(jobs, dict) else {}
+    deploy_steps = deploy_job.get("steps", []) if isinstance(deploy_job.get("steps"), list) else []
     deploy_run = "\n".join(str(step.get("run", "")) for step in deploy_job.get("steps", []) if isinstance(step, dict))
     deploy_env = {}
-    for step in deploy_job.get("steps", []) if isinstance(deploy_job.get("steps"), list) else []:
+    setup_python_step = next(
+        (
+            step
+            for step in deploy_steps
+            if isinstance(step, dict) and step.get("uses") == "actions/setup-python@v5"
+        ),
+        {},
+    )
+    for step in deploy_steps:
         if isinstance(step, dict) and step.get("id") == "release_flow_deploy":
             deploy_env = step.get("env", {}) if isinstance(step.get("env"), dict) else {}
     return [
@@ -911,6 +927,11 @@ def check_production_deploy_workflow_contract() -> list[ReadinessCheck]:
             concurrency.get("group") == "release-flow-production-deploy"
             and concurrency.get("cancel-in-progress") is False,
             "production deploy workflow serializes production release starts",
+        ),
+        ReadinessCheck(
+            "workflow.production_deploy.python_runtime",
+            setup_python_step.get("with", {}).get("python-version") == "3.13",
+            "production deploy pins the Python runtime before running deploy scripts",
         ),
         ReadinessCheck(
             "workflow.production_deploy.starts_release_flow",

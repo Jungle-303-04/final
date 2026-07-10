@@ -1294,7 +1294,78 @@ def test_application_deployment_bindings_match_manifest_when_app_name_drifted() 
     sql = str(recorded[0].compile(dialect=postgresql.dialect()))
     assert "deployment_bindings.app_name" in sql
     assert "deployment_bindings.manifest_path" in sql
+    assert "LEFT OUTER JOIN git_watch_targets" in sql
+    assert "last_polled_at" in sql
     assert " OR " in sql
+
+
+def test_application_deployment_bindings_include_gitops_poll_status() -> None:
+    recorded: list[Any] = []
+    now = datetime.now(UTC)
+
+    class StubResult:
+        def mappings(self) -> StubResult:
+            return self
+
+        def all(self) -> list[dict[str, object]]:
+            return [
+                {
+                    "binding_id": "binding-1",
+                    "workspace_id": "ws-1",
+                    "repository_id": "repo-1",
+                    "watch_target_id": "watch-1",
+                    "cluster_id": "cluster-1",
+                    "namespace": "prod",
+                    "app_name": "checkout-api",
+                    "manifest_path": "deploy.yaml",
+                    "environment": "prod",
+                    "resource_class": "application",
+                    "status": "active",
+                    "deploy_policy": {},
+                    "access_policy": {},
+                    "created_at": now,
+                    "updated_at": now,
+                    "watch_last_seen_commit_sha": "sha-1",
+                    "watch_last_polled_at": now,
+                    "watch_settings": {
+                        "poll_status": "failed",
+                        "poll_status_code": 403,
+                        "poll_error_kind": "access_denied",
+                        "poll_error": "GitHub token cannot read repository",
+                    },
+                }
+            ]
+
+    class StubConnection:
+        def execute(self, statement: Any) -> StubResult:
+            recorded.append(statement)
+            return StubResult()
+
+    @contextmanager
+    def stub_connection():
+        yield StubConnection()
+
+    repository = object.__new__(RepoChangeRepository)
+    repository.connection = stub_connection  # type: ignore[method-assign]
+    repository.get_application = lambda workspace_id, application_id: {  # type: ignore[method-assign]
+        "workspace_id": workspace_id,
+        "application_id": application_id,
+        "repository_id": "repo-1",
+        "name": "checkout-api",
+        "manifest_path": "deploy.yaml",
+    }
+
+    deployments = repository.list_application_deployment_bindings("ws-1", "app-1")
+
+    assert deployments[0]["gitops_poll"] == {
+        "status": "failed",
+        "status_code": 403,
+        "error_kind": "access_denied",
+        "error": "GitHub token cannot read repository",
+        "last_seen_commit_sha": "sha-1",
+        "last_polled_at": now.isoformat(),
+    }
+    assert "watch_settings" not in deployments[0]
 
 
 def test_gitops_poll_targets_join_active_repository_application_binding() -> None:

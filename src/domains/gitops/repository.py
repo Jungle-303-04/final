@@ -462,6 +462,7 @@ class RepoChangeRepository(DatabaseConnection):
         manifest_path = str(application.get("manifest_path") or "").strip()
         if manifest_path:
             binding_identity.append(table.c.manifest_path == manifest_path)
+        watch_table = GitWatchTarget.__table__
         statement = (
             select(
                 table.c.binding_id,
@@ -479,6 +480,17 @@ class RepoChangeRepository(DatabaseConnection):
                 table.c.access_policy,
                 table.c.created_at,
                 table.c.updated_at,
+                watch_table.c.last_seen_commit_sha.label("watch_last_seen_commit_sha"),
+                watch_table.c.last_polled_at.label("watch_last_polled_at"),
+                watch_table.c.settings.label("watch_settings"),
+            )
+            .outerjoin(
+                watch_table,
+                and_(
+                    watch_table.c.workspace_id == table.c.workspace_id,
+                    watch_table.c.repository_id == table.c.repository_id,
+                    watch_table.c.watch_target_id == table.c.watch_target_id,
+                ),
             )
             .where(
                 table.c.workspace_id == workspace_id,
@@ -1478,6 +1490,19 @@ def serialize_deployment_binding(row: Any) -> JsonObject:
     item = dict(row)
     item["deploy_policy"] = dict(item.get("deploy_policy") or {})
     item["access_policy"] = dict(item.get("access_policy") or {})
+    watch_settings = item.pop("watch_settings", None)
+    watch_last_seen_commit_sha = item.pop("watch_last_seen_commit_sha", None)
+    watch_last_polled_at = item.pop("watch_last_polled_at", None)
+    if watch_settings is not None or watch_last_seen_commit_sha is not None or watch_last_polled_at is not None:
+        settings = dict(watch_settings or {})
+        item["gitops_poll"] = {
+            "status": str(settings.get("poll_status") or "unknown"),
+            "status_code": settings.get("poll_status_code"),
+            "error_kind": str(settings.get("poll_error_kind") or ""),
+            "error": str(settings.get("poll_error") or ""),
+            "last_seen_commit_sha": str(watch_last_seen_commit_sha or ""),
+            "last_polled_at": iso_or_none(watch_last_polled_at),
+        }
     item["created_at"] = iso_or_none(item.get("created_at"))
     item["updated_at"] = iso_or_none(item.get("updated_at"))
     return item
