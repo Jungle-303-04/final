@@ -1089,19 +1089,22 @@ detail snapshot인 `current_workload_snapshot` 단수 값으로 보낸다.
 | `change_context.service_selector_matches[].match_status` | string | `matched`, `no_matching_pods`, `selector_missing` 중 하나다. |
 | `change_context.service_selector_matches[].target_relation` | string | 단건 detail에서만 있는 값이다. 이 Service가 target Deployment와 관련 있다고 본 이유이며, `exact_selector_match`, `live_pod_match`, `selector_key_overlap` 중 하나다. |
 | `change_context.service_selector_matches[].matched_pod_count` | number | selector와 labels가 맞는 Pod 수다. |
-| `change_context.service_selector_matches[].matched_pods` | list<object> | selector와 labels가 맞는 Pod namespace/name 목록이다. matched Pod가 없으면 생략될 수 있다. |
+| `change_context.service_selector_matches[].matched_pods` | list<object> | selector와 labels가 맞는 Pod namespace/name 샘플 목록이다. matched Pod가 없으면 생략될 수 있다. 목록이 잘려도 `matched_pod_count`는 전체 수를 유지한다. |
+| `change_context.service_selector_matches[].matched_pods_truncated` | boolean | `matched_pods` 샘플이 잘렸을 때만 true다. |
 | `change_context.endpoint_slice_ready_endpoints` | list<object> | EndpointSlice별 ready endpoint 요약이다. summary query는 namespace 전체를 담고, detail query는 관련 Service의 EndpointSlice만 담는다. |
 | `change_context.endpoint_slice_ready_endpoints[].service` | object | EndpointSlice가 연결된 Service namespace/name이다. `kubernetes.io/service-name` label에서 읽는다. |
 | `change_context.endpoint_slice_ready_endpoints[].endpoint_slice` | object | EndpointSlice namespace/name이다. |
 | `change_context.endpoint_slice_ready_endpoints[].address_type` | string | EndpointSlice address type이다. 예: `IPv4`, `IPv6`, `FQDN`. |
-| `change_context.endpoint_slice_ready_endpoints[].ports` | list<object> | EndpointSlice port name/port/protocol/app_protocol 요약이다. |
+| `change_context.endpoint_slice_ready_endpoints[].ports` | list<object> | EndpointSlice port name/port/protocol/app_protocol 샘플 요약이다. |
+| `change_context.endpoint_slice_ready_endpoints[].ports_truncated` | boolean | EndpointSlice port 샘플이 잘렸을 때만 true다. |
 | `change_context.endpoint_slice_ready_endpoints[].endpoint_count` | number | EndpointSlice 안의 전체 endpoint 수다. |
 | `change_context.endpoint_slice_ready_endpoints[].ready_endpoint_count` | number | condition `ready=true`인 endpoint 수다. Kubernetes EndpointSlice API 기준으로 `ready`가 생략되거나 null이면 ready로 해석한다. |
 | `change_context.endpoint_slice_ready_endpoints[].not_ready_endpoint_count` | number | condition `ready=false`인 endpoint 수다. |
 | `change_context.endpoint_slice_ready_endpoints[].unknown_ready_endpoint_count` | number | ready condition이 boolean 값이 아닌 endpoint 수다. `ready` 생략 또는 null은 unknown이 아니라 ready로 본다. |
 | `change_context.endpoint_slice_ready_endpoints[].serving_endpoint_count` | number | condition `serving=true`인 endpoint 수다. Kubernetes EndpointSlice API 기준으로 `serving`이 생략되거나 null이면 serving으로 해석한다. |
 | `change_context.endpoint_slice_ready_endpoints[].terminating_endpoint_count` | number | condition `terminating=true`인 endpoint 수다. |
-| `change_context.endpoint_slice_ready_endpoints[].ready_targets` | list<object> | ready endpoint가 가리키는 target object kind/namespace/name이다. 보통 Pod다. endpoint IP address는 담지 않는다. |
+| `change_context.endpoint_slice_ready_endpoints[].ready_targets` | list<object> | ready endpoint가 가리키는 target object kind/namespace/name 샘플이다. 보통 Pod다. endpoint IP address는 담지 않는다. |
+| `change_context.endpoint_slice_ready_endpoints[].ready_targets_truncated` | boolean | `ready_targets` 샘플이 잘렸을 때만 true다. |
 | `change_context.resource_quotas` | list<object> | namespace ResourceQuota hard/used 요약이다. summary query와 detail query 모두 같은 namespace 맥락으로 담는다. |
 | `change_context.resource_quotas[].name` | string | ResourceQuota 이름이다. |
 | `change_context.resource_quotas[].namespace` | string | ResourceQuota namespace다. |
@@ -1120,6 +1123,10 @@ detail snapshot인 `current_workload_snapshot` 단수 값으로 보낸다.
 | `change_context.referenced_config_objects[].referenced_key_checks[].key` | string | Deployment가 env keyRef 또는 volume items에서 직접 참조한 key 이름이다. |
 | `change_context.referenced_config_objects[].referenced_key_checks[].exists` | boolean | 해당 key가 ConfigMap/Secret data 또는 binaryData key로 존재하는지 여부다. 값은 담지 않는다. |
 | `change_context.referenced_config_objects[].referenced_key_checks[].sources` | list<string> | 이 key를 참조한 위치 종류다. 현재 `env`, `volume`만 쓴다. `envFrom`은 key를 명시하지 않으므로 제외한다. |
+| `change_context.collection_limits` | object | metadata 목록이 전송 크기 보호를 위해 잘렸을 때만 있는 제한 요약이다. |
+| `change_context.collection_limits.truncated` | boolean | 하나 이상의 목록이 잘렸으면 true다. |
+| `change_context.collection_limits.lists.<field>.original_count` | number | 제한 전 전체 항목 수다. |
+| `change_context.collection_limits.lists.<field>.returned_count` | number | 실제 payload에 담긴 항목 수다. |
 | `change_context.current_workload_snapshots[].workload` | object | workload kind, namespace, name이다. 현재 kind는 `Deployment`다. |
 | `change_context.current_workload_snapshots[].deployment_labels` | object | Deployment metadata labels다. |
 | `change_context.current_workload_snapshots[].pod_template_labels` | object | Pod template metadata labels다. |
@@ -1130,12 +1137,16 @@ detail snapshot인 `current_workload_snapshot` 단수 값으로 보낸다.
 | `change_context.current_workload_snapshots[].persistent_volume_claim_refs` | list<object> | Pod template volume이 참조하는 PVC volume name과 claim name 목록이다. PVC object 자체는 담지 않는다. |
 | `change_context.current_workload_snapshots[].deployment_status` | object | Deployment status의 replica count와 condition 요약이다. |
 | `change_context.current_workload_snapshots[].deployment_status.conditions` | list<object> | Deployment condition의 type/status/reason/message/time 요약이다. |
-| `change_context.current_workload_snapshots[].pod_statuses` | list<object> | 이 Deployment가 소유한 Pod의 phase, ready 여부, condition 요약이다. |
+| `change_context.current_workload_snapshots[].pod_statuses` | list<object> | 이 Deployment가 소유한 Pod의 phase, ready 여부, condition 샘플 요약이다. |
+| `change_context.current_workload_snapshots[].pod_status_count` | number | `pod_statuses`가 잘렸을 때만 있는 전체 owned Pod 수다. |
+| `change_context.current_workload_snapshots[].pod_statuses_truncated` | boolean | `pod_statuses` 샘플이 잘렸을 때만 true다. |
 | `change_context.current_workload_snapshots[].pod_statuses[].conditions` | list<object> | Pod condition의 type/status/reason/message/time 요약이다. |
 | `change_context.current_workload_snapshots[].containers[]` | list<object> | container name, image, readiness/liveness/startup probe 요약이다. |
 | `change_context.current_workload_snapshots[].containers[].*_probe` | object | probe의 path, port, timeout_seconds, period_seconds, failure_threshold 중 존재하는 값만 담는다. |
 | `change_context.current_workload_snapshots[].containers[].resources` | object | container resources requests/limits 요약이다. CPU/memory quantity 값은 문자열 그대로 담는다. |
 | `change_context.current_workload_snapshots[].replicaset_revisions[]` | list<object> | 이 Deployment가 소유한 ReplicaSet name, revision, replica count 요약이다. |
+| `change_context.current_workload_snapshots[].replicaset_revision_count` | number | `replicaset_revisions`가 잘렸을 때만 있는 전체 owned ReplicaSet 수다. |
+| `change_context.current_workload_snapshots[].replicaset_revisions_truncated` | boolean | `replicaset_revisions` 샘플이 잘렸을 때만 true다. |
 | `change_context.current_workload_snapshot.deployment_annotations` | object | 단건 detail에만 있는 안전한 Deployment metadata annotations다. |
 | `change_context.current_workload_snapshot.pod_template_annotations` | object | 단건 detail에만 있는 안전한 Pod template metadata annotations다. |
 | `change_context.current_workload_snapshot.managed_fields_managers` | list<string> | 단건 detail에만 있는 Deployment managedFields의 manager 이름 목록이다. |
@@ -1186,6 +1197,13 @@ secret/token/password/credential/private/authorization 이름이 들어간 annot
 raw spec과 literal env value는 남기지 않는다.
 Deployment, ReplicaSet, Pod status는 작은 요약만 남기고 raw object와 containerStatuses는 남기지 않는다.
 Service selector 비교 결과는 selector와 matched Pod namespace/name만 남기고 raw Service/Pod object는 남기지 않는다.
+metadata provider는 evidence job result의 1MiB JSON 제한을 넘지 않도록 큰 list를 제한한다.
+top-level list가 잘리면 `change_context.collection_limits`에 원래 개수와 반환 개수를 남긴다.
+RCA evidence bundle에서는 `metadata:current_workload_snapshots`,
+`metadata:service_selector_matches`, `metadata:endpoint_slice_ready_endpoints` item의
+`value.collection_limit`에도 같은 제한 정보가 붙는다.
+항목 내부의 `matched_pods`, `ready_targets`, `pod_statuses`, `replicaset_revisions`도 샘플로 제한하고,
+각 항목에 count와 `*_truncated` flag를 남긴다.
 
 ## Evidence job 집계 규칙
 

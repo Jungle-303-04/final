@@ -16,6 +16,7 @@ SERVICE_SELECTOR_STATUS_SELECTOR_MISSING = "selector_missing"
 SERVICE_TARGET_RELATION_EXACT_SELECTOR_MATCH = "exact_selector_match"
 SERVICE_TARGET_RELATION_LIVE_POD_MATCH = "live_pod_match"
 SERVICE_TARGET_RELATION_SELECTOR_KEY_OVERLAP = "selector_key_overlap"
+MAX_MATCHED_POD_REFS = 25
 
 
 def service_selector_match_snapshots(
@@ -59,7 +60,8 @@ def service_selector_match_snapshot(
             object_or_empty(metadata(pod).get("labels")),
         )
     ]
-    return compact_dict(
+    matched_pod_refs = [resource_identity_snapshot(pod) for pod in matched_pods]
+    snapshot = compact_dict(
         {
             "service": resource_identity_snapshot(service),
             "selector": selector,
@@ -70,9 +72,12 @@ def service_selector_match_snapshot(
                 target_pods,
             ),
             "matched_pod_count": len(matched_pods),
-            "matched_pods": [resource_identity_snapshot(pod) for pod in matched_pods],
+            "matched_pods": matched_pod_refs[:MAX_MATCHED_POD_REFS],
         }
     )
+    if len(matched_pod_refs) > MAX_MATCHED_POD_REFS:
+        snapshot["matched_pods_truncated"] = True
+    return snapshot
 
 
 def service_selector_match_status(

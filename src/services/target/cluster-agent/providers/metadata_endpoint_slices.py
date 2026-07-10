@@ -22,6 +22,8 @@ ENDPOINT_CONDITION_DEFAULTS = {
     ENDPOINT_CONDITION_SERVING: True,
     ENDPOINT_CONDITION_TERMINATING: False,
 }
+MAX_ENDPOINT_PORTS = 10
+MAX_READY_TARGET_REFS = 25
 
 
 def endpoint_slice_ready_endpoint_snapshots(
@@ -54,12 +56,14 @@ def endpoint_slice_ready_endpoint_snapshot(
     ready_states = [
         endpoint_condition(endpoint, ENDPOINT_CONDITION_READY) for endpoint in endpoints
     ]
-    return compact_dict(
+    ready_targets = ready_target_snapshots(ready_endpoints, endpoint_slice)
+    ports = list_items(endpoint_slice.get("ports"))
+    snapshot = compact_dict(
         {
             "service": service,
             "endpoint_slice": resource_identity_snapshot(endpoint_slice),
             "address_type": endpoint_slice.get("addressType"),
-            "ports": endpoint_ports_snapshot(endpoint_slice.get("ports")),
+            "ports": endpoint_ports_snapshot(ports),
             "endpoint_count": len(endpoints),
             "ready_endpoint_count": ready_states.count(True),
             "not_ready_endpoint_count": ready_states.count(False),
@@ -72,9 +76,14 @@ def endpoint_slice_ready_endpoint_snapshot(
                 endpoints,
                 ENDPOINT_CONDITION_TERMINATING,
             ),
-            "ready_targets": ready_target_snapshots(ready_endpoints, endpoint_slice),
+            "ready_targets": ready_targets[:MAX_READY_TARGET_REFS],
         }
     )
+    if len(ports) > MAX_ENDPOINT_PORTS:
+        snapshot["ports_truncated"] = True
+    if len(ready_targets) > MAX_READY_TARGET_REFS:
+        snapshot["ready_targets_truncated"] = True
+    return snapshot
 
 
 def endpoint_slice_service_identity(endpoint_slice: JsonObject) -> JsonObject:
@@ -104,7 +113,7 @@ def endpoint_slice_in_service_filter(
 def endpoint_ports_snapshot(value: Any) -> list[JsonObject]:
     """Return small EndpointSlice port summaries."""
     ports: list[JsonObject] = []
-    for port in list_items(value):
+    for port in list_items(value)[:MAX_ENDPOINT_PORTS]:
         snapshot = compact_dict(
             {
                 "name": port.get("name"),

@@ -50,6 +50,7 @@ from providers.metadata_workload_snapshots import (
 )
 
 CHANGE_CONTEXT_KEY = "change_context"
+COLLECTION_LIMITS_KEY = "collection_limits"
 CURRENT_WORKLOAD_SNAPSHOT_KEY = "current_workload_snapshot"
 CURRENT_WORKLOAD_SNAPSHOTS_KEY = "current_workload_snapshots"
 ENDPOINT_SLICE_READY_ENDPOINTS_KEY = "endpoint_slice_ready_endpoints"
@@ -64,6 +65,18 @@ DEFAULT_METADATA_QUERIES = {
 DEPLOYMENT_QUERY_PREFIXES = {
     K8S_KIND_DEPLOYMENT.lower(),
     K8S_RESOURCE_DEPLOYMENTS,
+}
+MAX_CURRENT_WORKLOAD_SNAPSHOTS = 200
+MAX_SERVICE_SELECTOR_MATCHES = 200
+MAX_ENDPOINT_SLICE_READY_ENDPOINTS = 200
+MAX_REFERENCED_CONFIG_OBJECTS = 100
+MAX_RESOURCE_QUOTAS = 50
+CHANGE_CONTEXT_LIST_LIMITS = {
+    CURRENT_WORKLOAD_SNAPSHOTS_KEY: MAX_CURRENT_WORKLOAD_SNAPSHOTS,
+    SERVICE_SELECTOR_MATCHES_KEY: MAX_SERVICE_SELECTOR_MATCHES,
+    ENDPOINT_SLICE_READY_ENDPOINTS_KEY: MAX_ENDPOINT_SLICE_READY_ENDPOINTS,
+    REFERENCED_CONFIG_OBJECTS_KEY: MAX_REFERENCED_CONFIG_OBJECTS,
+    RESOURCE_QUOTAS_KEY: MAX_RESOURCE_QUOTAS,
 }
 
 
@@ -414,7 +427,7 @@ class MetadataProvider:
                 item for item in resource_quotas if isinstance(item, dict)
             ]
 
-        return normalized or empty_change_context()
+        return limit_change_context(normalized) or empty_change_context()
 
 
 def metadata_query_target(telemetry_query: MetadataSnapshotQuery) -> MetadataQueryTarget:
@@ -541,9 +554,34 @@ def merge_change_context(target: JsonObject, source: JsonObject) -> None:
     if isinstance(resource_quotas, list):
         target[RESOURCE_QUOTAS_KEY] = resource_quotas
 
+    collection_limits = source.get(COLLECTION_LIMITS_KEY)
+    if isinstance(collection_limits, dict) and collection_limits:
+        target[COLLECTION_LIMITS_KEY] = collection_limits
+
 
 def empty_change_context() -> JsonObject:
     """Build the default change context shape."""
     return {
         CURRENT_WORKLOAD_SNAPSHOTS_KEY: [],
     }
+
+
+def limit_change_context(change_context: JsonObject) -> JsonObject:
+    """Limit large metadata lists and record what was truncated."""
+    limits: JsonObject = {}
+    for key, max_items in CHANGE_CONTEXT_LIST_LIMITS.items():
+        value = change_context.get(key)
+        if not isinstance(value, list) or len(value) <= max_items:
+            continue
+        change_context[key] = value[:max_items]
+        limits[key] = {
+            "truncated": True,
+            "original_count": len(value),
+            "returned_count": max_items,
+        }
+    if limits:
+        change_context[COLLECTION_LIMITS_KEY] = {
+            "truncated": True,
+            "lists": limits,
+        }
+    return change_context
