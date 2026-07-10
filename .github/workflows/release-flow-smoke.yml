@@ -40,6 +40,34 @@ name: Release Flow Smoke
           - info
           - warning
           - critical
+      live_preflight:
+        description: Check live release readiness gates without starting or dispatching a run.
+        required: false
+        default: false
+        type: boolean
+      live_environment:
+        description: Release step environment to use when live_preflight is enabled.
+        required: false
+        default: production
+        type: string
+      live_namespace:
+        description: Kubernetes namespace to use when live_preflight is enabled.
+        required: false
+        default: production
+        type: string
+      live_change_ticket:
+        description: Change ticket recorded in live_preflight readiness payload.
+        required: false
+        default: CHG-PREFLIGHT
+        type: string
+      live_image:
+        description: Optional image used in the live_preflight readiness payload.
+        required: false
+        type: string
+      live_verification_url:
+        description: Optional post-deploy verification URL used by live_preflight.
+        required: false
+        type: string
   workflow_call:
     inputs:
       api_base_url:
@@ -74,6 +102,34 @@ name: Release Flow Smoke
         description: Severity to use when alert_preflight is enabled.
         required: false
         default: warning
+        type: string
+      live_preflight:
+        description: Check live release readiness gates without starting or dispatching a run.
+        required: false
+        default: false
+        type: boolean
+      live_environment:
+        description: Release step environment to use when live_preflight is enabled.
+        required: false
+        default: production
+        type: string
+      live_namespace:
+        description: Kubernetes namespace to use when live_preflight is enabled.
+        required: false
+        default: production
+        type: string
+      live_change_ticket:
+        description: Change ticket recorded in live_preflight readiness payload.
+        required: false
+        default: CHG-PREFLIGHT
+        type: string
+      live_image:
+        description: Optional image used in the live_preflight readiness payload.
+        required: false
+        type: string
+      live_verification_url:
+        description: Optional post-deploy verification URL used by live_preflight.
+        required: false
         type: string
     secrets:
       release_flow_api_base_url:
@@ -121,6 +177,12 @@ jobs:
       ARTIFACT_RETENTION_DAYS: ${{ inputs.artifact_retention_days || '30' }}
       ALERT_PREFLIGHT: ${{ inputs.alert_preflight || false }}
       ALERT_PREFLIGHT_SEVERITY: ${{ inputs.alert_severity || 'warning' }}
+      LIVE_PREFLIGHT: ${{ inputs.live_preflight || false }}
+      LIVE_PREFLIGHT_ENVIRONMENT: ${{ inputs.live_environment || 'production' }}
+      LIVE_PREFLIGHT_NAMESPACE: ${{ inputs.live_namespace || 'production' }}
+      LIVE_PREFLIGHT_CHANGE_TICKET: ${{ inputs.live_change_ticket || 'CHG-PREFLIGHT' }}
+      LIVE_PREFLIGHT_IMAGE: ${{ inputs.live_image }}
+      LIVE_PREFLIGHT_VERIFICATION_URL: ${{ inputs.live_verification_url }}
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
@@ -157,6 +219,21 @@ jobs:
                 ;;
             esac
           fi
+          if [ "$LIVE_PREFLIGHT" = "true" ]; then
+            dns_label='^[a-z0-9]([-a-z0-9]*[a-z0-9])?$'
+            if ! [[ "$LIVE_PREFLIGHT_ENVIRONMENT" =~ $dns_label ]]; then
+              echo "::error title=Invalid live_environment::live_environment must be a Kubernetes-style DNS label."
+              exit 1
+            fi
+            if ! [[ "$LIVE_PREFLIGHT_NAMESPACE" =~ $dns_label ]]; then
+              echo "::error title=Invalid live_namespace::live_namespace must be a Kubernetes-style DNS label."
+              exit 1
+            fi
+            if [ -z "$LIVE_PREFLIGHT_CHANGE_TICKET" ]; then
+              echo "::error title=Invalid live_change_ticket::live_change_ticket is required when live_preflight is enabled."
+              exit 1
+            fi
+          fi
 
       - name: Run release-flow production smoke
         id: release_flow_smoke
@@ -171,6 +248,16 @@ jobs:
             --ci
             --ci-artifacts-dir artifacts/release-flow
           )
+          if [ "$LIVE_PREFLIGHT" = "true" ]; then
+            smoke_args+=(
+              --live-preflight
+              --live-environment "${LIVE_PREFLIGHT_ENVIRONMENT}"
+              --live-namespace "${LIVE_PREFLIGHT_NAMESPACE}"
+              --live-change-ticket "${LIVE_PREFLIGHT_CHANGE_TICKET}"
+              --live-image "${LIVE_PREFLIGHT_IMAGE}"
+              --live-verification-url "${LIVE_PREFLIGHT_VERIFICATION_URL}"
+            )
+          fi
           if [ "$ALERT_PREFLIGHT" = "true" ]; then
             smoke_args+=(--alert-preflight --alert-severity "${ALERT_PREFLIGHT_SEVERITY}")
           fi

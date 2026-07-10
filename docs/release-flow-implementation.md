@@ -305,6 +305,8 @@ workflow는 `scripts/release_flow_smoke.py --production-preflight --ci --ci-arti
 
 workflow는 smoke를 실행하기 전에 numeric input을 검증한다. `production_preflight_run_limit`은 1~500, `artifact_retention_days`는 GitHub artifact 제한에 맞춰 1~90 사이의 정수여야 한다. 범위를 벗어나면 smoke를 시작하지 않고 GitHub annotation으로 잘못된 입력을 표시한다. `alert_preflight`를 켜면 smoke가 enabled alert channel을 찾아 validation alert를 보내며, `alert_severity`는 `info`, `warning`, `critical` 중 하나여야 한다. 이 옵션은 실제 Slack/webhook/온콜 테스트 메시지를 보낼 수 있으므로 기본값은 `false`다.
 
+`live_preflight`를 켜면 workflow가 `--live-preflight`를 함께 실행해 live release readiness gate를 확인한다. 이 경로는 `/release-readiness`까지만 호출하고 `/release-plans/start`나 GitOps dispatch는 호출하지 않는다. `live_environment`와 `live_namespace`는 Kubernetes DNS label 형식이어야 하며, `live_change_ticket`은 비어 있으면 안 된다.
+
 다른 배포 workflow에서 release-flow smoke를 gate로 재사용하려면 같은 파일을 `workflow_call`로 호출한다. 호출자는 `release_flow_api_base_url`, `release_flow_auth_email`, `release_flow_auth_password` secret을 넘기거나 `secrets: inherit`로 repository secret을 그대로 넘길 수 있다.
 
 ```yaml
@@ -316,6 +318,10 @@ jobs:
       artifact_retention_days: "30"
       alert_preflight: false
       alert_severity: warning
+      live_preflight: false
+      live_environment: production
+      live_namespace: production
+      live_change_ticket: CHG-PREFLIGHT
       production_preflight_plan_id: ${{ inputs.release_plan_id }}
       production_preflight_run_limit: "20"
     secrets:
