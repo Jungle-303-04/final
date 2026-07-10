@@ -52,26 +52,25 @@ push 전에는 반드시 `git fetch origin dev` 후 원격 선행 커밋 유무�
 - 등록 ID:
   - `kubernetes-ops`: role=`management`, environment=`management`
   - `cluster-1`: role=`target`, environment=`test`
-- 마지막 배포 전 실측: management Deployment 43개, 46/46 replicas Ready, StatefulSet 3/3 Ready.
+- 최종 실측: management Deployment 43개, 46/46 replicas Ready, StatefulSet 3/3 Ready.
 - api-gateway는 2 replicas, agent-api-proxy는 2 replicas와 PDB를 사용한다.
 - agent-api-proxy는 서로 다른 노드에 hard topology spread한다.
 
 ### 이미지
 
-- 배포 전 live digest:
-  `sha256:5e6724ffdbc1adc7716d66979169ba3963764b9a6b300dd23cde673adcf3d936`
-- 최종 digest는 이번 변경을 build/rollout한 뒤 `docs/current-service-state.md`와 이 절에 기록한다.
+- 최종 live digest:
+  `sha256:5f02d9694e812c594b28aebb3b5c8989afecb94a7b48109b9a8c5e0088a472b8`
+- 배포 소스 commit: `8ef141a53182e4d08266a70841ff548f583ee77a`
 
 ## 4. 현재 라이브 상태
 
-배포 전 마지막 확인 상태는 `docs/current-service-state.md`가 권위값이다. 2026-07-11 재측정:
+최종 확인 상태는 `docs/current-service-state.md`가 권위값이다. 2026-07-11 재측정:
 
 - DLQ 0
 - outbox 미발행 0
 - evidence job 비종결 0
 - 등록은 `kubernetes-ops`, `cluster-1` 두 개
-- 고아 `api-verification-target` queued 명령 4건 발견. 새 queued TTL 배포 후 종결하고 최종
-  데이터 정리에서 삭제한다.
+- active command와 open incident/RCA projection 0
 - 5회 연속 30초 evidence 주기에서 인시던트/DLQ 증가 0
 - fleet 집계 `EXPLAIN ANALYZE` 실행 시간 0.133ms(목표 10ms 이하)
 - management 정책 generation 3 적용:
@@ -86,9 +85,10 @@ push 전에는 반드시 `git fetch origin dev` 후 원격 선행 커밋 유무�
 - 95초 관찰에서 management 비활성 provider job 증가 `120 -> 120`, 양쪽 agent 신규 warning 0,
   cluster-1 realtime disconnect 0
 
-DB 초기화는 로그인/워크스페이스/권한 이력과 두 cluster registration, token hash, 정책,
-현재 inventory를 보존했다. 과거 incident/RCA/command/approval/DLQ/evidence job과 Bruno fixture는
-정리했다. 남아 있던 `bruno-*` resource assignment 2건도 제거해 현재 0이다.
+DB 초기화는 로그인/워크스페이스/권한 이력, 두 cluster registration, token hash, 정책,
+repo/application/binding을 보존했다. 과거 incident/RCA/command/approval/evidence/event/audit와
+Bruno fixture 종속 행은 transaction으로 정리했다. 초기화 45초 뒤 두 Agent가 status 2,
+inventory resource 1,364, snapshot/usage 각 3개의 새 실데이터를 다시 적재했다.
 
 ## 5. 완료된 백엔드 변경
 
@@ -148,12 +148,15 @@ DB 초기화는 로그인/워크스페이스/권한 이력과 두 cluster regist
 ### Catalog 실제 설치 runner
 
 - `POST /catalog/items/{item_id}/installs`는 필수 `Idempotency-Key`와 `DEPLOY_RUN` 권한을 검사하고, online target Agent가 `command_receiver`와 `catalog_helm_install` capability를 모두 광고할 때만 실제 high-priority `agent_commands` 행을 만든 뒤 HTTP 202와 `command_id`를 반환한다.
-- 지원 범위는 코드에 동봉된 PostgreSQL `18.7.13`/Redis `23.1.1` OCI digest recipe와 sandbox namespace뿐이다. DB recipe, 사용자 chart URL/shell/manifest, template 항목은 실행하지 않는다.
+- 지원 범위는 코드에 동봉된 PostgreSQL `18.7.13`/Redis `23.1.1` OCI digest recipe와 sandbox namespace뿐이다. chart와 container image를 모두 digest로 고정하고 Redis는 standalone을 강제한다. StorageClass는 특정 cloud 값을 코드에 박지 않고 schema 필수 입력으로 받는다. DB recipe, 사용자 chart URL/shell/manifest, template 항목은 실행하지 않는다.
 - Agent 이미지는 checksum 검증된 Helm `v3.21.2`를 포함한다. runner는 private values 파일, 명시 argv, `shell=False`, timeout, credential env allowlist를 사용하며 subprocess 출력/values를 로그나 command result에 남기지 않는다.
 - management role은 gateway registration/policy guard와 Agent executor/handler에서 차단되고 management manifest에는 catalog write Role이 없다. target에는 현재 두 chart가 렌더하는 namespaced 종류만 별도 Role로 추가했다.
 - 202는 설치 성공이 아니다. `GET /commands/{command_id}`의
   `queued/leased/running/completed/failed`와 실제 result를 조회한다. 수신되지 않은 queued 명령은
   `COMMAND_QUEUE_TTL_SECONDS` 기본 1800초 뒤 janitor가 원자 종결하고 `command.completed`를 발행한다.
+- cluster-1은 EBS CSI addon `v1.62.0-eksbuild.1`과 전용 IRSA 역할을 사용한다. Redis live 설치는
+  digest image, `gp2` PVC Bound, StatefulSet 1/1, command completed를 확인했고 release/PVC/PV를
+  삭제해 잔여 0으로 닫았다.
 
 ### 위저드/검증 API
 
@@ -229,11 +232,11 @@ bash scripts/run-bruno-aws.sh
 
 마지막 결과:
 
-- pytest: `1451 passed, 3 skipped`
+- pytest: `1456 passed, 3 skipped`
 - Ruff: 451 backend files clean
 - import-linter: 2 contracts kept, 0 broken
 - manifest: management 62 objects, target 20 objects
-- Bruno 정적 계약: 통과. 라이브 collection은 최종 rollout 뒤 다시 측정한다.
+- Bruno live: 67/67 requests, 120/120 tests PASS
 
 `ruff check .`은 backend CI 명령이 아니다. `frontend/tests/smoke.py`의 기존 축약 문법을 잡지만
 해당 파일은 UI 작업열 소유다. 백엔드 작업자가 충돌을 만들지 말고 UI 작업열에서 정리한다.

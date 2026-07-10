@@ -1,62 +1,67 @@
 # 현재 서비스 상태
 
-마지막 실측: 2026-07-11 01:19:06 KST (신규 코드 배포 전)
+마지막 실측: 2026-07-11 02:10:56 KST
 
-이 문서는 작업 중 기준선과 최종 배포 상태가 섞이지 않도록 현재 라이브 상태를 보존한다.
-비밀값 원문은 기록하지 않는다. 변경을 배포한 뒤에는 같은 항목을 다시 측정해 이 문서를
-갱신한다.
+이 문서는 `dev` 최종 소스와 같은 이미지로 배포한 뒤 측정한 라이브 기준선이다. 비밀값 원문과
+사용자 개인정보는 기록하지 않는다.
 
 ## 소스와 배포
 
 - 권위 브랜치/worktree: `dev` / `SW_AI_W17-21-final-dev`
-- 라이브 기준 소스: 기존 digest 배포 상태. 신규 로컬 커밋은 아직 미배포
+- 배포 소스 commit: `8ef141a53182e4d08266a70841ff548f583ee77a`
 - backend image:
-  `kubernetes-ops-service@sha256:5e6724ffdbc1adc7716d66979169ba3963764b9a6b300dd23cde673adcf3d936`
-- management: Deployment 43개, replica 46/46 Ready, StatefulSet 3/3 Ready
-- cluster-1 target agent: replica 1/1 Ready, management와 동일 digest
-- console health: `{"status":"ok","service":"api-gateway"}`
-- agent API health: `{"status":"ok","service":"api-gateway"}`
+  `kubernetes-ops-service@sha256:5f02d9694e812c594b28aebb3b5c8989afecb94a7b48109b9a8c5e0088a472b8`
+- management: Deployment 43개, replica 46/46 Ready, StatefulSet 3개, replica 3/3 Ready
+- backend service image Deployment: 38개 전부 위 digest와 일치
+- cluster-1 target Agent: 1/1 Ready, 같은 digest, restart 0
+- console/agent API health: 모두 HTTP 200 `status=ok`
+- 안정화 45초 로그: Agent/gateway warning·error 0
 
-## 적체와 운영 데이터
+## 운영 데이터
 
-- dead letter: 0
-- outbox 미발행: 0
-- consumer pending/ack/redelivered: 0/0/0
-- evidence job: completed 1,079, 비종결 0
-- agent command queued/leased/running: 4/0/0
-- RCA timeline: `approval_recommended` 2
-- recovery plan: `selection_requested` 1
+- 등록: `kubernetes-ops`(management), `cluster-1`(target) 2개, 모두 online
+- 사용자 계정 9개와 workspace/RBAC 보존
+- repo 2개, application 4개, deployment binding 3개 보존
+- 과거 command/RCA/evidence/event/audit/outbox와 고아 test registration 종속 행 삭제
+- 초기화 45초 뒤 새 실데이터: Agent status 2, inventory resource 1,364, snapshot 3,
+  usage sample 3, event 12
+- dead letter 0, outbox 미발행 0, active command 0
+- RCA report/timeline/recovery plan/open incident 0
+- fleet:
+  - `kubernetes-ops`: healthy, node 2/2, pod 49/49, CPU 12.0%, memory 12.7%
+  - `cluster-1`: healthy, node 2/2, pod 20/20, CPU 5.1%, memory 21.1%
 
-RCA timeline과 recovery plan의 남은 행은 아래 골든 run의 감사 이력이다. queued 4건은 등록에도
-없는 `api-verification-target`을 가리키는 과거 검증 잔재다. 신규 queued TTL 배포 후 종결하고,
-최종 검증 증거를 보존한 다음 테스트 행을 삭제한다.
+## Catalog 라이브 검증
+
+- 명령: `cmd-catalog-8052f4aec8e4cf5e115e5b30`
+- Redis chart: OCI chart digest 고정, standalone 1 replica
+- 실제 container image:
+  `registry-1.docker.io/bitnamilegacy/redis@sha256:25bf63f3caf75af4628c0dfcf39859ad1ac8abe135be85e99699f9637b16dc28`
+- cluster-1 EBS CSI addon: `v1.62.0-eksbuild.1`, ACTIVE, 전용 IRSA 역할 사용
+- `gp2` PVC 1Gi Bound, StatefulSet 1/1 Ready, command `completed`
+- 검증 후 Helm release/PVC/PV 삭제, label 기준 잔여 리소스 0
 
 ## RCA 골든 run
 
-- run id: `1f1b2192-a15f-4346-931b-ff96355403c9`
-- scenario: `image.wrong-tag`
-- cluster: `cluster-1`
-- 실제 root cause: `wrong_image_tag`
-- evidence, RCA report, recovery plan: 완료
-- action selection: 실행하지 않음
-- 명시 cleanup: 완료
-- sandbox Deployment/Service/Pod 잔여: 0
+- run id: `0be7fe5b-e87e-4855-a02e-cb46d08f0daf`
+- scenario: `image.wrong-tag`, cluster: `cluster-1`
+- 실제 Agent Kubernetes evidence: 1 bundle, 같은 correlation 유지
+- 결과: `wrong_image_tag` / `ImagePullBackOff` / `plan_recovery`
+- recovery: `selection_requested`, 후보 2개, 사용자 action 선택은 실행하지 않음
+- 명시 cleanup: `completed`
+- Deployment/StatefulSet/DaemonSet/ReplicaSet/Pod/Service/Endpoints/EndpointSlice/ConfigMap/
+  Secret/PVC 잔여: 0
+- 현재 `ready` 시나리오는 이 라이브 완주가 증명된 `image.wrong-tag` 한 개다.
 
-현재 catalog 상태는 다음과 같다.
+## 최종 검증
 
-- `image.wrong-tag`: 라이브 생성부터 plan, cleanup 잔여 0까지 검증
-- `image.registry-down`: `verification_pending`, 라이브 전체 완주 미검증
-- `schedule.affinity`: `verification_pending`, 라이브 전체 완주 미검증
+- pytest: `1456 passed, 3 skipped`
+- Ruff check/format: 통과
+- import-linter: 2 contracts kept, 0 broken
+- manifest: management 62 objects, target 20 objects
+- RCA scenario catalog: 25개 schema/adapter/cause/evidence/recovery 계약 유효
+- Bruno live: 67/67 requests, 120/120 tests PASS
+- NATS consumer pending: 전 consumer 0
 
-따라서 `ready`는 실제 완주가 증명된 `image.wrong-tag` 한 개뿐이다. 관리자가 명시적 검증 헤더로
-`verification_pending`을 실행해 완주한 경우에만 후속 커밋에서 승격한다.
-
-## 다음 갱신 게이트
-
-1. 전체 backend 테스트, Ruff, import-linter, manifest 렌더 통과
-2. 최종 image digest로 management와 target rollout 완료
-3. 같은 scenario를 연속 두 번 실행해 dedup 고착이 없음
-4. expected root cause와 실제 report 불일치가 terminal failure로 노출됨
-5. provider 실패가 strict evidence job의 재시도/실패로 노출됨
-6. 생성, 관측, evidence, RCA, plan, cleanup과 잔여 0을 다시 확인
-7. DLQ, outbox, consumer lag, 활성 command가 모두 0
+다음 변경은 이 기준선에서 같은 검증을 다시 수행하고, 결과가 나빠지면 배포를 완료로 취급하지
+않는다.
