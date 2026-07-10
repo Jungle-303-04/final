@@ -16,12 +16,21 @@ def test_manifest_checks_do_not_require_docker() -> None:
     assert "kubectl kustomize" in script
 
 
-def test_removed_github_actions_have_no_active_repository_entrypoints() -> None:
+def test_removed_legacy_github_actions_have_no_active_repository_entrypoints() -> None:
     makefile = read("Makefile")
     catalog = read("src/domains/providers/catalog.py")
     docs_index = read("docs/README.md")
+    active_workflows = {
+        path.name for path in (ROOT_DIR / ".github" / "workflows").glob("*.yml")
+    }
+    removed_workflows = {
+        "aws-cd.yml",
+        "ci.yml",
+        "integration-smoke.yml",
+        "promote-dev.yml",
+    }
 
-    assert list((ROOT_DIR / ".github" / "workflows").glob("*.yml")) == []
+    assert active_workflows.isdisjoint(removed_workflows)
     assert "check: test manifest-check" in makefile
     assert "aws-smoke:" not in makefile
     assert "gh workflow run" not in makefile
