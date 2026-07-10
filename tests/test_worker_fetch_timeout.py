@@ -77,7 +77,7 @@ def test_only_workflow_controller_overrides_fetch_timeout() -> None:
     assert configured_deployments == [("workflow-controller", "0.05")]
 
 
-def test_worker_runtime_fetches_subjects_in_declared_order(
+def test_worker_runtime_fetches_subjects_independently(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
@@ -85,6 +85,8 @@ def test_worker_runtime_fetches_subjects_in_declared_order(
         signal_handlers: dict[signal.Signals, Any] = {}
         subscribed_subjects: list[str] = []
         fetch_calls: list[tuple[str, int, float]] = []
+        first_fetch_started = asyncio.Event()
+        release_first_fetch = asyncio.Event()
 
         class Subscription:
             def __init__(self, subject: str) -> None:
@@ -92,7 +94,12 @@ def test_worker_runtime_fetches_subjects_in_declared_order(
 
             async def fetch(self, batch: int, timeout: float) -> list[Any]:
                 fetch_calls.append((self.subject, batch, timeout))
+                if self.subject == "subject.first":
+                    first_fetch_started.set()
+                    await release_first_fetch.wait()
                 if self.subject == "subject.second":
+                    await first_fetch_started.wait()
+                    release_first_fetch.set()
                     signal_handlers[signal.SIGTERM]()
                 return []
 
@@ -143,10 +150,10 @@ def test_worker_runtime_fetches_subjects_in_declared_order(
         )
         runtime = WorkerRuntime(spec, bus=Bus(), db=Db())  # type: ignore[arg-type]
 
-        await runtime.run()
+        await asyncio.wait_for(runtime.run(), timeout=1)
 
         assert subscribed_subjects == ["subject.first", "subject.second"]
-        assert fetch_calls == [
+        assert sorted(fetch_calls) == [
             ("subject.first", 1, 0.05),
             ("subject.second", 1, 0.05),
         ]
