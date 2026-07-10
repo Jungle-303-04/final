@@ -43,6 +43,7 @@ from domains.release_flow.router import router as release_flow_router
 from domains.target.events import AgentConnectedBody
 from domains.target.evidence_jobs import EVIDENCE_JOB_STATUS_LEASED, EVIDENCE_JOB_STATUS_QUEUED
 from domains.target.router import router as target_router
+from packages.config import bypass_guard
 from packages.config.constants import Auth, CommandStatus
 from packages.config.constants import Redis as RedisConfig
 from packages.config.logs import CONTEXT_KEY, get_logger
@@ -236,6 +237,7 @@ class ApiGateway:
 
     @asynccontextmanager
     async def lifespan(self, _app: FastAPI) -> AsyncIterator[None]:
+        bypass_guard.assert_bypass_safe_at_startup()
         validate_test_scenario_catalog()
         await wait_for_database(self.db)
         await self.sessions.connect()

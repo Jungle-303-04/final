@@ -22,6 +22,7 @@ from domains.identity.dependencies import (
     development_cluster_agent_identity,
     hash_agent_token,
 )
+from packages.config import bypass_guard
 from packages.config.constants import Auth
 from packages.config.constants import Redis as RedisConfig
 from packages.config.logs import CONTEXT_KEY, get_logger
@@ -149,6 +150,7 @@ def create_app(
 
     @asynccontextmanager
     async def lifespan(_app: FastAPI):
+        bypass_guard.assert_bypass_safe_at_startup()
         if db is not None:
             await wait_for_database(db)
         if browser_session_store is not None:
