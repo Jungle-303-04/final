@@ -85,6 +85,6 @@ Production deployment workflows must call `.github/workflows/release-flow-produc
 - `live_release_owner` or `live_oncall_contact`
 - `live_approval_gate: safe_pr`
 - concrete `live_safe_pr_workflow_run_id`
-- concrete `live_safe_pr_url`
+- concrete HTTPS `live_safe_pr_url` pointing at the real Safe PR
 
-The gate rejects placeholder values such as `CHG-PREFLIGHT`, `example.com`, `release-operator`, and `release-oncall@example.com`.
+The gate rejects placeholder values such as `CHG-PREFLIGHT`, `localhost`, `example.com`, `release-operator`, and `release-oncall@example.com`.

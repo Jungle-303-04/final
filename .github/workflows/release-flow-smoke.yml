@@ -407,8 +407,12 @@ jobs:
                 echo "::error title=Missing Safe PR URL::live_safe_pr_url is required when live_approval_gate is safe_pr."
                 exit 1
               fi
-              if [[ "$LIVE_PREFLIGHT_SAFE_PR_URL" == *"example.com"* ]]; then
-                echo "::error title=Placeholder Safe PR URL::live_safe_pr_url must not use example.com when live_approval_gate is safe_pr."
+              if [[ "$LIVE_PREFLIGHT_SAFE_PR_URL" != https://* ]]; then
+                echo "::error title=Invalid Safe PR URL::live_safe_pr_url must use https when live_approval_gate is safe_pr."
+                exit 1
+              fi
+              if [[ "$LIVE_PREFLIGHT_SAFE_PR_URL" == *"localhost"* || "$LIVE_PREFLIGHT_SAFE_PR_URL" == *"127.0.0.1"* || "$LIVE_PREFLIGHT_SAFE_PR_URL" == *"example.com"* ]]; then
+                echo "::error title=Placeholder Safe PR URL::live_safe_pr_url must not use localhost or example.com when live_approval_gate is safe_pr."
                 exit 1
               fi
             fi
