@@ -41,7 +41,12 @@ scenarios:
     title: "백엔드 readiness 실패"
     description: "실패하는 readiness probe로 Ready endpoint가 없는 백엔드를 재현합니다."
     execution: "real"
-    availability: "ready"
+    availability: "detector_gap"
+    availability_reason: "Kubernetes readiness 이벤트가 먼저 관측돼도 run-scoped Loki 로그와 Prometheus metric 인입이 늦으면 required evidence가 비어 RCA가 blocked됩니다. provider ingestion race 검증 전에는 READY가 아닙니다."
+    detector_work_needed:
+      - "readiness run-scoped logs/metrics empty-result bounded retry/backoff"
+      - "빈 provider 결과를 evidence로 세지 않는 완료 조건"
+      - "backend_readiness_failure까지 evidence → RCA completed E2E 검증"
     expected:
       root_cause: "backend_readiness_failure"
       symptom: "Ingress 502/503"

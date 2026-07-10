@@ -243,10 +243,32 @@ def test_wrong_image_tag_is_a_ready_real_scenario() -> None:
 
     assert scenario["execution"] == "real"
     assert scenario["availability"] == "ready"
+    assert scenario["evidence_sources"] == ["kubernetes"]
     assert scenario["expected"] == {
         "root_cause": "wrong_image_tag",
         "symptom": "ImagePullBackOff",
     }
+
+
+def test_unverified_provider_ingestion_scenarios_are_not_ready() -> None:
+    detector_gaps = {
+        "crash.config-env",
+        "crash.app-startup",
+        "ingress.readiness",
+        "schedule.cpu",
+        "schedule.memory",
+    }
+    scenarios = {str(item["scenario_id"]): item for item in _catalog_items()}
+    ready_ids = {
+        scenario_id for scenario_id, item in scenarios.items() if item["availability"] == "ready"
+    }
+
+    assert detector_gaps.isdisjoint(ready_ids)
+    for scenario_id in detector_gaps:
+        item = scenarios[scenario_id]
+        assert item["availability"] == "detector_gap"
+        assert item["availability_reason"]
+        assert item["detector_work_needed"]
 
 
 @pytest.mark.parametrize(
