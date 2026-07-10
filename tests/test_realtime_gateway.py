@@ -148,30 +148,33 @@ def test_agent_rejected_with_bad_token() -> None:
     assert excinfo.value.code == 4401
 
 
-def test_test_environment_bypasses_realtime_agent_and_browser_tokens(
+def test_mtls_proxy_authenticates_browser_but_never_agent(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     async def deny_browser(_token: str | None) -> None:
         return None
 
-    monkeypatch.setenv("APP_ENV", "test")
-    monkeypatch.setenv("DEV_SECURITY_BYPASS_WORKSPACE_ID", WORKSPACE)
+    proxy_secret = "a" * 64
+    monkeypatch.setenv("TRUSTED_PROXY_AUTH_SECRET", proxy_secret)
+    monkeypatch.setenv("TRUSTED_PROXY_AUTH_USER_ID", "operator-dev")
+    monkeypatch.setenv("TRUSTED_PROXY_AUTH_WORKSPACE_ID", WORKSPACE)
     module = load_gateway_module()
     app = module.create_app(
         authenticate_agent=lambda _token: None,
         authenticate_browser=deny_browser,
-        authenticate_development_agent=lambda cluster_id: {
-            "workspace_id": WORKSPACE,
-            "cluster_id": cluster_id,
-        },
     )
     client = TestClient(app)
 
-    with client.websocket_connect(f"/live/browser?workspace_id={WORKSPACE}") as browser:
+    with client.websocket_connect(
+        f"/live/browser?workspace_id={WORKSPACE}",
+        headers={"x-kubeheal-internal-auth": proxy_secret},
+    ) as browser:
         assert browser.receive_json()["type"] == "hello"
         browser.receive_json()
         with client.websocket_connect(f"/live/agent?cluster_id={CLUSTER}") as agent:
-            assert agent.receive_json()["type"] == "hello"
+            with pytest.raises(WebSocketDisconnect) as excinfo:
+                agent.receive_json()
+            assert excinfo.value.code == 4401
 
 
 def test_agent_rejected_for_foreign_cluster_query() -> None:

@@ -5,9 +5,8 @@
 
 실행 전 management와 target-agent가 같은 최신 `dev` 이미지여야 한다. Target은
 `environment=test` 또는 `environment=aws-test`로 등록한 뒤 최신 설치 manifest를
-다시 적용해야 한다. 그때만 target의 `APP_ENV=test`와
-`RCA_TEST_RUNS_ENABLED=1`이 함께 켜진다. 다른 환경에서는 API와 Agent가 모두
-fail-closed로 거절한다.
+다시 적용해야 한다. `RCA_TEST_RUNS_ENABLED=1`은 독립 capability이며, API는 전용 token과
+등록 environment(`test`/`aws-test`)를 추가로 확인한다. Agent token 검증은 항상 유지된다.
 
 Bruno에서 `aws-test` 환경을 선택하고 01부터 순서대로 보낸다. 최초 한 번은 오른쪽 위
 Environment에서 `aws-test` 편집을 열고 `rca_test_token`의 Secret 칸에 팀에서 전달받은

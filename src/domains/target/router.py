@@ -53,7 +53,10 @@ from domains.target.management_guard import (
     management_readonly_detail,
 )
 from domains.target.reconciler import desired_state_version
-from packages.config.security import APP_ENV_ENV, TEST_APP_ENV
+from packages.config.security import (
+    TEST_FIXTURE_ENVIRONMENT,
+    test_fixture_purge_enabled,
+)
 from packages.config.settings import env
 from packages.contracts.gateway import routes as gateway_routes
 from packages.contracts.gateway.policy_merge import merge_agent_policy
@@ -710,15 +713,17 @@ def registration_connection_status(
 
 
 def require_test_fixture_purge_environment(registration: dict[str, Any]) -> None:
-    app_environment = env(APP_ENV_ENV, "").strip().lower()
     registration_environment = str(registration.get("environment") or "")
-    if app_environment == TEST_APP_ENV and registration_environment == TEST_APP_ENV:
+    if test_fixture_purge_enabled() and registration_environment == TEST_FIXTURE_ENVIRONMENT:
         return
     raise HTTPException(
         status_code=403,
         detail={
             "code": TEST_FIXTURE_PURGE_FORBIDDEN_CODE,
-            "detail": "테스트 fixture purge는 APP_ENV=test 및 environment=test에서만 허용됩니다",
+            "detail": (
+                "테스트 fixture purge는 TEST_FIXTURE_PURGE_ENABLED=1 및 "
+                "environment=test에서만 허용됩니다"
+            ),
         },
     )
 

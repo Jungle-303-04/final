@@ -508,32 +508,28 @@ def test_target_install_manifest_enables_rca_test_actions_only_for_test_registra
     monkeypatch: pytest.MonkeyPatch,
     registration_environment: str,
 ) -> None:
-    monkeypatch.setenv("APP_ENV", "test")
     monkeypatch.setenv("RCA_TEST_RUNS_ENABLED", "1")
     request = target_request().model_copy(update={"environment": registration_environment})
 
     manifest = target_install_manifest(request, "agent-secret")
 
-    assert 'APP_ENV: "test"' in manifest
+    assert "APP_ENV:" not in manifest
     assert 'RCA_TEST_RUNS_ENABLED: "1"' in manifest
 
 
 @pytest.mark.parametrize(
-    ("app_env", "enabled", "registration_environment"),
+    ("enabled", "registration_environment"),
     [
-        ("production", "1", "test"),
-        ("test", "0", "test"),
-        ("test", "1", "sandbox"),
-        ("test", "1", "production"),
+        ("0", "test"),
+        ("1", "sandbox"),
+        ("1", "production"),
     ],
 )
 def test_target_install_manifest_does_not_enable_rca_test_actions_without_both_guards(
     monkeypatch: pytest.MonkeyPatch,
-    app_env: str,
     enabled: str,
     registration_environment: str,
 ) -> None:
-    monkeypatch.setenv("APP_ENV", app_env)
     monkeypatch.setenv("RCA_TEST_RUNS_ENABLED", enabled)
     request = target_request().model_copy(update={"environment": registration_environment})
 
@@ -1485,7 +1481,7 @@ def test_management_cluster_unregister_is_rejected() -> None:
 
 
 def test_management_cluster_purge_is_rejected_even_in_test_environment(monkeypatch) -> None:
-    monkeypatch.setenv("APP_ENV", "test")
+    monkeypatch.setenv("TEST_FIXTURE_PURGE_ENABLED", "1")
     db = TransactionalStubPurgeDb(cluster_role="management")
 
     with pytest.raises(HTTPException) as exc:
@@ -1520,7 +1516,7 @@ def test_target_cluster_unregister_updates_registration() -> None:
 
 
 def test_explicit_purge_false_keeps_soft_delete_compatibility(monkeypatch) -> None:
-    monkeypatch.setenv("APP_ENV", "test")
+    monkeypatch.setenv("TEST_FIXTURE_PURGE_ENABLED", "1")
     db = TransactionalStubPurgeDb(environment="test")
 
     asyncio.run(
@@ -1538,19 +1534,19 @@ def test_explicit_purge_false_keeps_soft_delete_compatibility(monkeypatch) -> No
 
 
 @pytest.mark.parametrize(
-    ("app_environment", "registration_environment"),
+    ("purge_enabled", "registration_environment"),
     [
-        ("production", "test"),
-        ("test", "production"),
-        ("test", "TEST"),
+        ("0", "test"),
+        ("1", "production"),
+        ("1", "TEST"),
     ],
 )
 def test_purge_rejects_non_test_environment_boundary(
     monkeypatch,
-    app_environment: str,
+    purge_enabled: str,
     registration_environment: str,
 ) -> None:
-    monkeypatch.setenv("APP_ENV", app_environment)
+    monkeypatch.setenv("TEST_FIXTURE_PURGE_ENABLED", purge_enabled)
     db = TransactionalStubPurgeDb(environment=registration_environment)
 
     with pytest.raises(HTTPException) as exc:
@@ -1570,7 +1566,7 @@ def test_purge_rejects_non_test_environment_boundary(
 
 
 def test_test_fixture_purge_is_explicit_transactional_and_prefix_independent(monkeypatch) -> None:
-    monkeypatch.setenv("APP_ENV", "test")
+    monkeypatch.setenv("TEST_FIXTURE_PURGE_ENABLED", "1")
     db = TransactionalStubPurgeDb(environment="test")
 
     asyncio.run(

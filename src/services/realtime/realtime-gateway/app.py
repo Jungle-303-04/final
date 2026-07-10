@@ -19,18 +19,11 @@ from hub import BrowserClient, RealtimeHub
 
 from domains.identity.dependencies import (
     AGENT_TOKEN_HEADER,
-    development_cluster_agent_identity,
     hash_agent_token,
 )
-from packages.config import bypass_guard
 from packages.config.constants import Auth
 from packages.config.constants import Redis as RedisConfig
 from packages.config.logs import CONTEXT_KEY, get_logger
-from packages.config.security import (
-    development_bypass_workspace_id,
-    development_security_bypass_enabled,
-    development_session_bypass_enabled,
-)
 from packages.config.settings import env
 from packages.contracts.gateway.fields import Gateway
 from packages.contracts.identity import DEFAULT_WORKSPACE_ID, ServiceRole
@@ -46,6 +39,10 @@ from packages.contracts.realtime import (
     parse_realtime_message,
 )
 from packages.runtime.service import FastApiService
+from packages.security.trusted_proxy import (
+    assert_trusted_proxy_config_safe,
+    trusted_proxy_identity,
+)
 from packages.storage.database import Database, wait_for_database
 from packages.storage.sessions import RedisSessionStore, RedisSessionStoreConfig
 
@@ -63,7 +60,6 @@ CLOSE_PROTOCOL_VIOLATION = 1008
 
 # authenticate: 원문 토큰 → {"workspace_id", "cluster_id"} | None (fail-closed)
 AgentAuthenticator = Callable[[str], Any]
-DevelopmentAgentAuthenticator = Callable[[str], Any]
 BrowserSessionAuthenticator = Callable[[str | None], Awaitable[Any]]
 
 REDIS_URL_ENV = "REDIS_URL"
@@ -87,21 +83,6 @@ def database_authenticator(db: Database) -> AgentAuthenticator:
         if not token:
             return None
         return db.authenticate_cluster_agent(hash_agent_token(token))
-
-    return authenticate
-
-
-def database_development_authenticator(db: Database) -> DevelopmentAgentAuthenticator:
-    """등록 레지스트리만 신뢰하는 test 환경 agent identity 조회기."""
-
-    def authenticate(cluster_id: str) -> Any:
-        identity = development_cluster_agent_identity(db, cluster_id)
-        if identity is None:
-            return None
-        return {
-            Gateway.WORKSPACE_ID: identity.workspace_id,
-            Gateway.CLUSTER_ID: identity.cluster_id,
-        }
 
     return authenticate
 
@@ -134,13 +115,10 @@ def create_app(
     db: Database | None = None,
     authenticate_agent: AgentAuthenticator | None = None,
     authenticate_browser: BrowserSessionAuthenticator | None = None,
-    authenticate_development_agent: DevelopmentAgentAuthenticator | None = None,
 ) -> FastAPI:
     if authenticate_agent is None:
         db = db or Database()
         authenticate_agent = database_authenticator(db)
-    if authenticate_development_agent is None and db is not None:
-        authenticate_development_agent = database_development_authenticator(db)
     browser_session_store: RedisSessionStore | None = None
     if authenticate_browser is None:
         browser_session_store = RedisSessionStore(session_store_config())
@@ -150,7 +128,7 @@ def create_app(
 
     @asynccontextmanager
     async def lifespan(_app: FastAPI):
-        bypass_guard.assert_bypass_safe_at_startup()
+        assert_trusted_proxy_config_safe()
         if db is not None:
             await wait_for_database(db)
         if browser_session_store is not None:
@@ -178,12 +156,6 @@ def create_app(
         token = websocket.headers.get(AGENT_TOKEN_HEADER, "")
         identity = authenticate_agent(token)
         requested_cluster = websocket.query_params.get(Gateway.CLUSTER_ID, "")
-        if (
-            identity is None
-            and development_security_bypass_enabled()
-            and authenticate_development_agent is not None
-        ):
-            identity = authenticate_development_agent(requested_cluster)
         if identity is None:
             await websocket.close(code=CLOSE_UNAUTHORIZED)
             return
@@ -215,9 +187,15 @@ def create_app(
         if not params[Gateway.WORKSPACE_ID]:
             await websocket.close(code=CLOSE_BAD_REQUEST)
             return
-        session = await authenticate_browser(browser_session_token(websocket))
-        if session is None and development_session_bypass_enabled():
-            session = {Gateway.WORKSPACE_ID: development_bypass_workspace_id(DEFAULT_WORKSPACE_ID)}
+        proxy_identity = trusted_proxy_identity(websocket.headers)
+        session = (
+            {
+                Gateway.WORKSPACE_ID: proxy_identity.workspace_id,
+                "user_id": proxy_identity.user_id,
+            }
+            if proxy_identity is not None
+            else await authenticate_browser(browser_session_token(websocket))
+        )
         session_workspace = session_workspace_id(session)
         if not session_workspace or params[Gateway.WORKSPACE_ID] != session_workspace:
             await websocket.close(code=CLOSE_UNAUTHORIZED)

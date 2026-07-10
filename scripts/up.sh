@@ -30,6 +30,7 @@ REDIS_URL="${REDIS_URL:-redis://redis:6379/0}"
 GITHUB_WEBHOOK_SECRET="${GITHUB_WEBHOOK_SECRET:-}"
 RCA_TEST_RUNS_ENABLED="${RCA_TEST_RUNS_ENABLED:-1}"
 RCA_TEST_RUNS_TOKEN="${RCA_TEST_RUNS_TOKEN:-}"
+TEST_FIXTURE_PURGE_ENABLED="${TEST_FIXTURE_PURGE_ENABLED:-1}"
 API_ROOT_PATH="${API_ROOT_PATH:-/api}"
 GITHUB_REPO="${GITHUB_REPO:-$(default_github_repo)}"
 GITHUB_BRANCH="${GITHUB_BRANCH:-dev}"
@@ -425,6 +426,7 @@ kubectl --context "kind-${MGMT_CLUSTER}" -n management create configmap manageme
   --from-literal=REDIS_URL="${REDIS_URL}" \
   --from-literal=DATABASE_STARTUP_MODE="${DATABASE_STARTUP_MODE}" \
   --from-literal=RCA_TEST_RUNS_ENABLED="${RCA_TEST_RUNS_ENABLED}" \
+  --from-literal=TEST_FIXTURE_PURGE_ENABLED="${TEST_FIXTURE_PURGE_ENABLED}" \
   --from-literal=API_ROOT_PATH="${API_ROOT_PATH}" \
   --from-literal=MANAGEMENT_BASE_URL="http://api-gateway:8000" \
   --from-literal=GITHUB_REPO="${GITHUB_REPO}" \
@@ -666,6 +668,12 @@ kubectl --context "kind-${MGMT_CLUSTER}" -n management patch configmap managemen
   --type merge -p '{"data":{"COOKIE_SECURE":"0","MAIL_DELIVERY_MODE":"log"}}'
 
 kubectl --context "kind-${MGMT_CLUSTER}" apply -k "${MANAGEMENT_APP_OVERLAY}"
+# 기본 매니페스트는 외부 비노출 ClusterIP다. kind에서만 target agent 실습용
+# NodePort를 명시적으로 열어 운영 배포와 개발 노출 경계를 분리한다.
+kubectl --context "kind-${MGMT_CLUSTER}" -n management patch svc api-gateway --type merge \
+  -p '{"spec":{"type":"NodePort","ports":[{"name":"http","port":8000,"targetPort":"http","nodePort":30080}]}}'
+kubectl --context "kind-${MGMT_CLUSTER}" -n management patch svc realtime-gateway --type merge \
+  -p '{"spec":{"type":"NodePort","ports":[{"name":"http","port":8000,"targetPort":"http","nodePort":30090}]}}'
 kubectl_retry --context "kind-${MGMT_CLUSTER}" -n management rollout status deploy/redis --timeout=120s
 kubectl_retry --context "kind-${MGMT_CLUSTER}" -n management rollout status statefulset/minio --timeout=120s
 kubectl_retry --context "kind-${MGMT_CLUSTER}" -n management get deploy/github-poll-worker >/dev/null

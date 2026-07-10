@@ -1,29 +1,14 @@
-"""개발·테스트 인증 우회 설정의 단일 기준.
-
-운영 기본값은 항상 비활성화다. ``APP_ENV=test`` 또는 명시적인
-``DEV_SECURITY_BYPASS=1``에서만 사용자 세션, 리소스 권한, agent 토큰 검증을
-우회한다. 실제 cluster identity는 등록 레지스트리에서 다시 읽어 요청 입력을
-권위값으로 사용하지 않는다.
-"""
+"""위험한 테스트 기능의 명시적 capability 설정."""
 
 from __future__ import annotations
 
-from packages.config import bypass_guard
 from packages.config.settings import env
 
-APP_ENV_ENV = "APP_ENV"
-TEST_APP_ENV = "test"
-DEV_SECURITY_BYPASS_ENV = "DEV_SECURITY_BYPASS"
-DEV_SECURITY_BYPASS_USER_ID_ENV = "DEV_SECURITY_BYPASS_USER_ID"
-DEV_SECURITY_BYPASS_WORKSPACE_ID_ENV = "DEV_SECURITY_BYPASS_WORKSPACE_ID"
-DEV_SECURITY_BYPASS_CLUSTER_ID_ENV = "DEV_SECURITY_BYPASS_CLUSTER_ID"
-DEV_SECURITY_BYPASS_CLUSTER_HEADER = "x-dev-cluster-id"
-LEGACY_DEV_AUTH_BYPASS_ENV = "DEV_AUTH_BYPASS"
 RCA_TEST_RUNS_ENABLED_ENV = "RCA_TEST_RUNS_ENABLED"
-RCA_TEST_RUNS_DISABLED_MESSAGE = (
-    "RCA test commands require APP_ENV=test and RCA_TEST_RUNS_ENABLED=1"
-)
+RCA_TEST_RUNS_DISABLED_MESSAGE = "RCA test commands require RCA_TEST_RUNS_ENABLED=1"
 RCA_TEST_TARGET_ENVIRONMENTS = frozenset({"test", "aws-test"})
+TEST_FIXTURE_PURGE_ENABLED_ENV = "TEST_FIXTURE_PURGE_ENABLED"
+TEST_FIXTURE_ENVIRONMENT = "test"
 TRUE_ENV_VALUES = frozenset({"1", "true", "yes", "on"})
 
 
@@ -33,42 +18,9 @@ def env_enabled(name: str) -> bool:
 
 def rca_test_runs_enabled() -> bool:
     """장애 주입 명령의 관리 plane·target agent 공통 fail-closed 조건."""
-    return env(APP_ENV_ENV, "").strip().lower() == TEST_APP_ENV and env_enabled(
-        RCA_TEST_RUNS_ENABLED_ENV
-    )
+    return env_enabled(RCA_TEST_RUNS_ENABLED_ENV)
 
 
-def development_security_bypass_enabled() -> bool:
-    """통합 개발 우회가 켜졌는지 매 요청 시 평가한다."""
-    raw = env(APP_ENV_ENV, "").strip().lower() == TEST_APP_ENV or env_enabled(
-        DEV_SECURITY_BYPASS_ENV
-    )
-    return bypass_guard.enforce_fail_closed(raw)
-
-
-def development_session_bypass_enabled() -> bool:
-    """통합 플래그와 기존 세션 전용 플래그를 하위 호환한다."""
-    raw = development_security_bypass_enabled() or env_enabled(LEGACY_DEV_AUTH_BYPASS_ENV)
-    return bypass_guard.enforce_fail_closed(raw)
-
-
-def development_bypass_user_id(default: str, legacy_env: str = "") -> str:
-    return _first_configured(DEV_SECURITY_BYPASS_USER_ID_ENV, legacy_env, default=default)
-
-
-def development_bypass_workspace_id(default: str, legacy_env: str = "") -> str:
-    return _first_configured(DEV_SECURITY_BYPASS_WORKSPACE_ID_ENV, legacy_env, default=default)
-
-
-def development_bypass_cluster_id(requested_cluster_id: str = "") -> str:
-    return requested_cluster_id.strip() or env(DEV_SECURITY_BYPASS_CLUSTER_ID_ENV, "").strip()
-
-
-def _first_configured(*names: str, default: str) -> str:
-    for name in names:
-        if not name:
-            continue
-        value = env(name, "").strip()
-        if value:
-            return value
-    return default
+def test_fixture_purge_enabled() -> bool:
+    """물리 삭제가 필요한 테스트 fixture 정리 capability."""
+    return env_enabled(TEST_FIXTURE_PURGE_ENABLED_ENV)

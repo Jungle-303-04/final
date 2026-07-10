@@ -63,12 +63,6 @@ spec:
               value: "16"
             - name: DB_POOL_TIMEOUT_SECONDS
               value: "20"
-            # test 배포는 세션·리소스 권한·agent 토큰을 함께 우회한다.
-            # 운영 전환 시 APP_ENV를 production으로 바꾸면 기본 fail-closed로 복귀한다.
-            - name: APP_ENV
-              value: test
-            - name: DEV_SECURITY_BYPASS_CLUSTER_ID
-              value: cluster-1
             # 반복 JSON/DB 처리 후 RSS 를 덜 붙잡게 해 OOM 여유를 확보한다.
             - name: MALLOC_ARENA_MAX
               value: "2"
@@ -92,14 +86,13 @@ metadata:
   name: api-gateway
   namespace: management
 spec:
-  type: NodePort
+  type: ClusterIP
   selector:
     app: api-gateway
   ports:
     - name: http
       port: 8000
       targetPort: http
-      nodePort: 30080
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -1183,11 +1176,6 @@ spec:
                 name: management-runtime-config
             - secretRef:
                 name: management-runtime-secret
-          env:
-            - name: APP_ENV
-              value: test
-            - name: DEV_SECURITY_BYPASS_CLUSTER_ID
-              value: cluster-1
           ports:
             - name: http
               containerPort: 8000
@@ -1206,14 +1194,13 @@ metadata:
   name: realtime-gateway
   namespace: management
 spec:
-  type: NodePort
+  type: ClusterIP
   selector:
     app: realtime-gateway
   ports:
     - name: http
       port: 8000
       targetPort: http
-      nodePort: 30090
 ---
 apiVersion: apps/v1
 kind: Deployment

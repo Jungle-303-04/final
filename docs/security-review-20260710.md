@@ -3,9 +3,8 @@
 작성일: 2026-07-10 (Asia/Seoul) · 범위: 백엔드(`src/`), 인프라/배포(`deploy/`, `infra/`, `config/`, `.github/`, `secrets/`), 프론트엔드(`frontend/`)
 방식: **읽기 전용 감사. 코드는 일절 수정하지 않았다.** 아래 항목은 모두 실제 파일을 읽고 교차 검증한 결과다.
 
-> 이 문서는 2026-07-10 시점의 감사 스냅샷이다. 의도적으로 `APP_ENV=test`를 사용하는 현재
-> 개발 배포와 production 전환 기준을 구분해서 읽으며, 완료 사실은 `current-service-state.md`를
-> 우선한다.
+> 이 문서는 2026-07-10 시점의 감사 스냅샷이다. 아래 발견 당시 근거는 보존하되,
+> 현재 완료 사실은 `HANDOVER.md`와 `current-service-state.md`를 우선한다.
 
 ## 후속 조치 상태 (2026-07-11)
 
@@ -13,14 +12,14 @@
 
 | 항목 | 현재 상태 | 구현 |
 | --- | --- | --- |
-| C1/H1 개발 인증 우회 | 해결 | production/staging 요청 우회 차단 + 우회 플래그가 남으면 gateway 기동 실패 |
+| C1/H1 개발 인증 우회 | 해결 | 환경 기반 우회 코드 삭제 + Cloudflare mTLS 전용 개발 프록시 분리 |
 | H2/L3 PromQL SSRF·오류 본문 | 해결 | 클라이언트 `base_url` 무시, 서버 `PROMETHEUS_VALIDATE_BASE_URL`만 사용, 오류 일반화 |
 | M2 alert webhook SSRF | 해결 | HTTPS·공인 IP·DNS 전체 결과·allowlist 검증, 전송 직전 재검증, redirect 차단 |
-| M3 `/metrics` 무인증 | 해결 | production/staging에서 token 미설정 시 503, 설정 시 timing-safe Bearer 검증 |
+| M3 `/metrics` 무인증 | 해결 | 환경과 무관하게 token 미설정 시 503, 설정 시 timing-safe Bearer 검증 |
 
-현재 개발 배포는 사용자 요구에 따라 `APP_ENV=test`를 유지한다. 이 모드는 인증 우회와 token 없는
-내부 metrics scrape를 의도적으로 허용하므로 공개 production 보안 완료를 의미하지 않는다.
-H3, M1, M4~M6, L1/L2/L4~L6는 환경·프론트·인프라 작업 범위로 남아 있다.
+사용자 세션과 Agent token은 현재 환경과 무관하게 검증한다. 사람용 무세션 개발 접근은
+`dev.k8s.woonyong.org`의 client certificate + Tunnel + 내부 비밀 헤더 조합으로만 허용한다.
+H3, M1, M4~M6, L1/L2/L4~L6는 별도 환경·프론트·인프라 작업 범위다.
 
 ## 요약
 

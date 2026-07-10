@@ -24,14 +24,10 @@ class AgentAuthDb:
         return None
 
 
-def request_with_agent_token(
-    token: str | None, db: object, *, dev_cluster_id: str | None = None
-) -> Request:
+def request_with_agent_token(token: str | None, db: object) -> Request:
     headers: list[tuple[bytes, bytes]] = []
     if token is not None:
         headers.append((b"x-agent-token", token.encode()))
-    if dev_cluster_id is not None:
-        headers.append((b"x-dev-cluster-id", dev_cluster_id.encode()))
     app = SimpleNamespace(state=SimpleNamespace(db=db))
     return Request({"type": "http", "headers": headers, "app": app})
 
@@ -57,46 +53,7 @@ def test_require_cluster_agent_fail_closed_without_registered_token() -> None:
     assert missing.value.status_code == 401
 
 
-def test_require_cluster_agent_global_dev_bypass_uses_registered_cluster(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    monkeypatch.setenv("APP_ENV", "test")
-    monkeypatch.delenv("DEV_SECURITY_BYPASS", raising=False)
-    monkeypatch.setenv("DEV_SECURITY_BYPASS_WORKSPACE_ID", "workspace-dev")
-    deps = load_file(ROOT / "src" / "domains" / "identity" / "dependencies.py", "id_deps")
-
-    identity = deps.require_cluster_agent(
-        request_with_agent_token(
-            None,
-            AgentAuthDb(deps),
-            dev_cluster_id="cluster-dev",
-        )
-    )
-
-    assert identity.workspace_id == "workspace-dev"
-    assert identity.cluster_id == "cluster-dev"
-
-
-def test_require_cluster_agent_global_dev_bypass_rejects_unregistered_cluster(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    monkeypatch.setenv("DEV_SECURITY_BYPASS", "1")
-    monkeypatch.setenv("DEV_SECURITY_BYPASS_WORKSPACE_ID", "workspace-dev")
-    deps = load_file(ROOT / "src" / "domains" / "identity" / "dependencies.py", "id_deps")
-
-    with pytest.raises(HTTPException) as exc:
-        deps.require_cluster_agent(
-            request_with_agent_token(
-                None,
-                AgentAuthDb(deps),
-                dev_cluster_id="unknown-cluster",
-            )
-        )
-
-    assert exc.value.status_code == 401
-
-
-def test_resource_access_is_bypassed_only_in_test_environment(
+def test_resource_access_is_not_bypassed_by_app_environment(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     class DenyAllFilter:
@@ -112,17 +69,19 @@ def test_resource_access_is_bypassed_only_in_test_environment(
     chain = deps.ResourceAccessFilterChain(filters=(deny,))
     monkeypatch.setenv("APP_ENV", "test")
 
-    deps.require_resource_access(
-        object(),
-        SimpleNamespace(user_id="dev-user"),
-        "workspace-dev",
-        "cluster",
-        "cluster-dev",
-        "read",
-        filter_chain=chain,
-    )
+    with pytest.raises(HTTPException) as exc:
+        deps.require_resource_access(
+            object(),
+            SimpleNamespace(user_id="dev-user"),
+            "workspace-dev",
+            "cluster",
+            "cluster-dev",
+            "read",
+            filter_chain=chain,
+        )
 
-    assert deny.calls == 0
+    assert exc.value.status_code == 403
+    assert deny.calls == 1
 
 
 def test_session_cookie_is_httponly(monkeypatch: pytest.MonkeyPatch) -> None:

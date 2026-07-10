@@ -121,7 +121,7 @@ v1과 동일하되 두 항목을 추가한다.
 
 ### 0단계 — 기준선 고정 (0.5일)
 
-`npm run typecheck && npm run build && npm test` 통과 확인. `APP_ENV=test` 백엔드로 주요 화면
+`npm run typecheck && npm run build && npm test` 통과 확인. 실제 세션/Agent 인증 백엔드로 주요 화면
 8종 1440/1024/390 순회, 스크린샷 기준선 갱신. 게이트: 빌드 0 오류, 콘솔 오류 0, overflow 0.
 
 ### 1단계 — 계약 자동화 (1~2일)

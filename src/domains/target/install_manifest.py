@@ -13,7 +13,6 @@ from packages.config.realtime import derive_realtime_gateway_url
 from packages.config.security import (
     RCA_TEST_RUNS_ENABLED_ENV,
     RCA_TEST_TARGET_ENVIRONMENTS,
-    TEST_APP_ENV,
     rca_test_runs_enabled,
 )
 from packages.contracts.gateway.requests import DEFAULT_OTEL_SERVICE_NAME, TargetRegisterRequest
@@ -276,10 +275,7 @@ def rca_test_runtime_config_lines(payload: TargetRegisterRequest) -> str:
         or not rca_test_runs_enabled()
     ):
         return ""
-    return (
-        f"\n  APP_ENV: {yaml_string(TEST_APP_ENV)}"
-        f"\n  {RCA_TEST_RUNS_ENABLED_ENV}: {yaml_string('1')}"
-    )
+    return f"\n  {RCA_TEST_RUNS_ENABLED_ENV}: {yaml_string('1')}"
 
 
 def runtime_config_manifest(payload: TargetRegisterRequest) -> str:

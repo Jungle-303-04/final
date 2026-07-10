@@ -343,7 +343,6 @@ def test_management_agent_blocks_catalog_runner_before_subprocess(monkeypatch) -
 def test_rca_test_inject_command_returns_real_fault_observation(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setenv("APP_ENV", "test")
     monkeypatch.setenv("RCA_TEST_RUNS_ENABLED", "1")
     module = load_agent_module()
     agent = object.__new__(module.TargetClusterAgent)
@@ -486,7 +485,6 @@ def test_target_agent_requires_verification_mode_for_pending_scenario() -> None:
 def test_expired_rca_test_inject_fails_before_manifest_apply(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setenv("APP_ENV", "test")
     monkeypatch.setenv("RCA_TEST_RUNS_ENABLED", "1")
     module = load_agent_module()
     agent = object.__new__(module.TargetClusterAgent)
@@ -535,7 +533,6 @@ def test_expired_rca_test_inject_fails_before_manifest_apply(
 def test_rca_test_cleanup_uses_immutable_target_without_loading_current_catalog(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setenv("APP_ENV", "test")
     monkeypatch.setenv("RCA_TEST_RUNS_ENABLED", "1")
     module = load_agent_module()
     agent = object.__new__(module.TargetClusterAgent)
@@ -592,7 +589,6 @@ def test_rca_test_cleanup_uses_immutable_target_without_loading_current_catalog(
 def test_rca_test_cleanup_rejects_unregistered_payload_adapter(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setenv("APP_ENV", "test")
     monkeypatch.setenv("RCA_TEST_RUNS_ENABLED", "1")
     module = load_agent_module()
     agent = object.__new__(module.TargetClusterAgent)
@@ -964,7 +960,6 @@ def test_stale_rca_test_cleanup_cannot_delete_new_run_deployment(
 def test_expired_rca_test_janitor_deletes_owned_manifest_and_verifies_residuals(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setenv("APP_ENV", "test")
     monkeypatch.setenv("RCA_TEST_RUNS_ENABLED", "1")
     module = load_agent_module()
     requests: list[httpx.Request] = []
@@ -1138,11 +1133,10 @@ def test_rca_test_observation_queries_only_the_current_run(
 
 
 @pytest.mark.parametrize(
-    ("app_env", "enabled"),
+    "enabled",
     [
-        ("production", "1"),
-        ("test", "0"),
-        ("test", ""),
+        "0",
+        "",
     ],
 )
 @pytest.mark.parametrize(
@@ -1154,11 +1148,9 @@ def test_rca_test_observation_queries_only_the_current_run(
 )
 def test_rca_test_commands_fail_closed_on_target_agent(
     monkeypatch: pytest.MonkeyPatch,
-    app_env: str,
     enabled: str,
     action: str,
 ) -> None:
-    monkeypatch.setenv("APP_ENV", app_env)
     monkeypatch.setenv("RCA_TEST_RUNS_ENABLED", enabled)
     module = load_agent_module()
     agent = object.__new__(module.TargetClusterAgent)
@@ -1182,16 +1174,14 @@ def test_rca_test_commands_fail_closed_on_target_agent(
 
     assert result["status"] == "failed"
     assert result["applied"] is False
-    assert "APP_ENV=test" in result["message"]
     assert "RCA_TEST_RUNS_ENABLED=1" in result["message"]
     assert agent.kubernetes.patches == []
 
 
-def test_expired_rca_test_fixture_cleanup_is_disabled_outside_test_mode(
+def test_expired_rca_test_fixture_cleanup_is_disabled_without_capability(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setenv("APP_ENV", "production")
-    monkeypatch.setenv("RCA_TEST_RUNS_ENABLED", "1")
+    monkeypatch.setenv("RCA_TEST_RUNS_ENABLED", "0")
     module = load_agent_module()
     agent = object.__new__(module.TargetClusterAgent)
     agent.cluster_id = "cluster-1"
