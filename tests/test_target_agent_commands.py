@@ -325,6 +325,33 @@ def test_rca_test_injection_uses_registered_adapter_trigger(
     assert result["pod_names"] == ["spy-pod"]
 
 
+def test_target_agent_requires_verification_mode_for_pending_scenario() -> None:
+    module = load_agent_module()
+    agent = object.__new__(module.TargetClusterAgent)
+    payload = {
+        "run_id": "run-pending",
+        "scenario_id": "image.registry-down",
+        "scenario_version": 1,
+        "namespace": "sandbox",
+        "resource_name": "rca-test-image-registry-down",
+        "expected_root_cause": "registry_unavailable",
+        "expected_symptom": "ImagePullBackOff",
+        "cleanup_adapter": "kubernetes.manifest_delete",
+        "expires_at": "2099-01-01T00:00:00+00:00",
+        "verification_mode": False,
+    }
+
+    with pytest.raises(ValueError, match="verification mode"):
+        agent.rca_test_command_scenario(payload)
+
+    payload["verification_mode"] = True
+    run_id, scenario, expires_at = agent.rca_test_command_scenario(payload)
+
+    assert run_id == "run-pending"
+    assert scenario.scenario_id == "image.registry-down"
+    assert expires_at == "2099-01-01T00:00:00+00:00"
+
+
 def test_expired_rca_test_inject_fails_before_manifest_apply(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

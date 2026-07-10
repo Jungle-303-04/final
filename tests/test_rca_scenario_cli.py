@@ -62,7 +62,8 @@ def test_scaffold_creates_detector_gap_yaml_and_fixture_test_without_overwrite(
 
     document = yaml.safe_load(yaml_path.read_text(encoding="utf-8"))
     scenario = document["scenarios"][0]
-    assert scenario["availability"] == "detector_gap"
+    assert scenario["availability"] == "verification_pending"
+    assert scenario["verification_work_needed"]
     assert scenario["cleanup"]["adapter"] == "kubernetes.manifest_delete"
     serialized = yaml_path.read_text(encoding="utf-8").casefold()
     assert "availability: ready" not in serialized
