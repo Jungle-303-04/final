@@ -79,7 +79,9 @@ When `github_access_preflight` is enabled, the verifier must have an actual GitH
 
 ## Live Gate Requirement
 
-Production deployment workflows must call `.github/workflows/release-flow-production-gate.yml` before any write. The provided `.github/workflows/release-flow-production-deploy.yml` workflow does this before starting a saved release plan through `scripts/release_flow_deploy.py`. The gate must pass with:
+Production deployment workflows must call `.github/workflows/release-flow-production-gate.yml` before any write. The provided `.github/workflows/release-flow-production-deploy.yml` workflow does this before starting a saved release plan through `scripts/release_flow_deploy.py`. The deploy script rechecks the saved plan before calling `/release-plans/start`; it rejects demo runtime mode, non-production steps, placeholder tickets, non-HTTPS or example-host runbook/verification URLs, mutable `:latest` images, and plan id mismatches.
+
+The gate must pass with:
 
 - a real `live_change_ticket`
 - a real HTTPS `live_runbook_url`
@@ -88,5 +90,8 @@ Production deployment workflows must call `.github/workflows/release-flow-produc
 - `live_approval_gate: safe_pr`
 - concrete `live_safe_pr_workflow_run_id`
 - concrete HTTPS `live_safe_pr_url` pointing at the real Safe PR
+- a non-placeholder `live_image`
 
 The gate rejects placeholder values such as `CHG-PREFLIGHT`, `localhost`, `example.com`, `release-operator`, and `release-oncall@example.com`.
+
+After the gate passes, `release-flow-production-deploy.yml` runs `scripts/release_flow_deploy.py`. The script fetches the saved `release_plan_id`, refuses demo or non-production plans, and starts the release through `POST /release-plans/start` so the backend live blockers still run at dispatch time.
