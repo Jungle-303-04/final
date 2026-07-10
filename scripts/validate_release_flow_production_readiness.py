@@ -152,7 +152,8 @@ def check_smoke_workflow_contract() -> list[ReadinessCheck]:
             "workflow.smoke.safe_pr_evidence_required",
             "live_safe_pr_workflow_run_id is required when live_approval_gate is safe_pr" in run
             and "live_safe_pr_url is required when live_approval_gate is safe_pr" in run
-            and "live_safe_pr_url must not use example.com when live_approval_gate is safe_pr" in run,
+            and "live_safe_pr_url must use https when live_approval_gate is safe_pr" in run
+            and "live_safe_pr_url must not use localhost or example.com when live_approval_gate is safe_pr" in run,
             "live safe_pr preflight fails before API calls without concrete Safe PR evidence",
         ),
         ReadinessCheck(
@@ -242,7 +243,8 @@ def check_smoke_script_contract() -> list[ReadinessCheck]:
             "script.smoke.safe_pr_evidence_required",
             "live_safe_pr_workflow_run_id is required when live_approval_gate is safe_pr" in source
             and "live_safe_pr_url is required when live_approval_gate is safe_pr" in source
-            and "live_safe_pr_url must not use example.com placeholder value" in source,
+            and "live_safe_pr_url must use https when live_approval_gate is safe_pr" in source
+            and "live_safe_pr_url must not use localhost or example.com placeholder value" in source,
             "direct live safe_pr preflight requires concrete Safe PR evidence before readiness calls",
         ),
         ReadinessCheck(
@@ -736,7 +738,8 @@ def check_production_gate_contract() -> list[ReadinessCheck]:
             and "LIVE_PREFLIGHT_SAFE_PR_URL" in validate_job.get("env", {})
             and "live_safe_pr_workflow_run_id is required when live_approval_gate is safe_pr" in validate_run
             and "live_safe_pr_url is required when live_approval_gate is safe_pr" in validate_run
-            and "live_safe_pr_url must not use example.com when live_approval_gate is safe_pr" in validate_run,
+            and "live_safe_pr_url must use https when live_approval_gate is safe_pr" in validate_run
+            and "live_safe_pr_url must not use localhost or example.com when live_approval_gate is safe_pr" in validate_run,
             "production gate rejects safe_pr mode without existing Safe PR evidence before smoke calls",
         ),
         ReadinessCheck(

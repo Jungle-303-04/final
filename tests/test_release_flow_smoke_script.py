@@ -738,16 +738,22 @@ def test_smoke_live_preflight_rejects_production_placeholders_before_payload() -
 
 def test_smoke_live_preflight_rejects_invalid_safe_pr_evidence_inputs() -> None:
     smoke = load_smoke_module()
-    args = smoke.parse_args(["--live-preflight", "--live-approval-gate", "safe_pr", "--live-safe-pr-url", "https://example.com/pull/1"])
+    cases = [
+        ("http://github.internal/org/repo/pull/1", "live_safe_pr_url must use https"),
+        ("https://localhost/pull/1", "live_safe_pr_url must not use localhost or example.com placeholder value"),
+        ("https://example.com/pull/1", "live_safe_pr_url must not use localhost or example.com placeholder value"),
+    ]
+    for url, expected_message in cases:
+        args = smoke.parse_args(["--live-preflight", "--live-approval-gate", "safe_pr", "--live-safe-pr-url", url])
 
-    try:
-        smoke.validate_live_preflight_inputs(args)
-    except ValueError as exc:
-        message = str(exc)
-    else:
-        raise AssertionError("expected placeholder Safe PR URL rejection")
+        try:
+            smoke.validate_live_preflight_inputs(args)
+        except ValueError as exc:
+            message = str(exc)
+        else:
+            raise AssertionError("expected invalid Safe PR URL rejection")
 
-    assert "live_safe_pr_url must not use example.com placeholder value" in message
+        assert expected_message in message
 
 
 def test_smoke_live_preflight_requires_safe_pr_evidence_before_readiness_call() -> None:

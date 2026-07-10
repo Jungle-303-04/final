@@ -264,8 +264,15 @@ def validate_live_preflight_inputs(args: argparse.Namespace) -> None:
         raise ValueError("live_approval_gate must be manual or safe_pr")
     safe_pr_workflow_run_id = str(getattr(args, "live_safe_pr_workflow_run_id", "") or "").strip()
     safe_pr_url = str(getattr(args, "live_safe_pr_url", "") or "").strip()
-    if "example.com" in safe_pr_url:
-        raise ValueError("live_safe_pr_url must not use example.com placeholder value")
+    normalized_safe_pr_url = safe_pr_url.lower()
+    if safe_pr_url and not normalized_safe_pr_url.startswith("https://"):
+        raise ValueError("live_safe_pr_url must use https when live_approval_gate is safe_pr")
+    if (
+        "localhost" in normalized_safe_pr_url
+        or "127.0.0.1" in normalized_safe_pr_url
+        or "example.com" in normalized_safe_pr_url
+    ):
+        raise ValueError("live_safe_pr_url must not use localhost or example.com placeholder value")
     if approval_gate == "safe_pr":
         if not safe_pr_workflow_run_id:
             raise ValueError("live_safe_pr_workflow_run_id is required when live_approval_gate is safe_pr")
