@@ -18,6 +18,19 @@ from packages.config.constants import Target
 from packages.contracts.event_bus.interfaces import JsonObject
 from packages.contracts.target import TARGET_NAMESPACE
 from providers.base import ConfigReader
+from providers.kubernetes_utils import (
+    K8S_ENDPOINT_SLICE_SERVICE_NAME_LABEL,
+    K8S_KIND_DEPLOYMENT,
+    K8S_KIND_REPLICA_SET,
+    K8S_RESOURCE_DEPLOYMENTS,
+    K8S_RESOURCE_PODS,
+    K8S_RESOURCE_REPLICASETS,
+    K8S_RESOURCE_SERVICES,
+    items,
+    metadata,
+    spec,
+    status,
+)
 
 
 @telemetry.source(
@@ -78,11 +91,11 @@ class KubernetesSnapshotProvider:
                 "namespace": namespace,
                 "cluster_id": self.cluster_id,
                 "collected_at": datetime.now(UTC).isoformat(),
-                "pods": await self.get_json(
+                K8S_RESOURCE_PODS: await self.get_json(
                     client,
                     base_url,
                     headers,
-                    f"/api/v1/namespaces/{namespace}/pods",
+                    f"/api/v1/namespaces/{namespace}/{K8S_RESOURCE_PODS}",
                     label_selector=telemetry_query.label_selector,
                 ),
                 "events": await self.get_json(
@@ -96,7 +109,7 @@ class KubernetesSnapshotProvider:
                     client,
                     base_url,
                     headers,
-                    f"/apis/metrics.k8s.io/v1beta1/namespaces/{namespace}/pods",
+                    f"/apis/metrics.k8s.io/v1beta1/namespaces/{namespace}/{K8S_RESOURCE_PODS}",
                     allow_not_found=True,
                 ),
                 "node_metrics": await self.get_json(
@@ -106,11 +119,11 @@ class KubernetesSnapshotProvider:
                     "/apis/metrics.k8s.io/v1beta1/nodes",
                     allow_not_found=True,
                 ),
-                "deployments": await self.get_json(
+                K8S_RESOURCE_DEPLOYMENTS: await self.get_json(
                     client,
                     base_url,
                     headers,
-                    f"/apis/apps/v1/namespaces/{namespace}/deployments",
+                    f"/apis/apps/v1/namespaces/{namespace}/{K8S_RESOURCE_DEPLOYMENTS}",
                     label_selector=telemetry_query.label_selector,
                 ),
                 "statefulsets": await self.get_json(
@@ -127,18 +140,18 @@ class KubernetesSnapshotProvider:
                     f"/apis/apps/v1/namespaces/{namespace}/daemonsets",
                     label_selector=telemetry_query.label_selector,
                 ),
-                "replicasets": await self.get_json(
+                K8S_RESOURCE_REPLICASETS: await self.get_json(
                     client,
                     base_url,
                     headers,
-                    f"/apis/apps/v1/namespaces/{namespace}/replicasets",
+                    f"/apis/apps/v1/namespaces/{namespace}/{K8S_RESOURCE_REPLICASETS}",
                     label_selector=telemetry_query.label_selector,
                 ),
-                "services": await self.get_json(
+                K8S_RESOURCE_SERVICES: await self.get_json(
                     client,
                     base_url,
                     headers,
-                    f"/api/v1/namespaces/{namespace}/services",
+                    f"/api/v1/namespaces/{namespace}/{K8S_RESOURCE_SERVICES}",
                     label_selector=telemetry_query.label_selector,
                 ),
                 "endpointslices": await self.get_json(
@@ -206,16 +219,22 @@ class KubernetesSnapshotProvider:
         }
         pod_metrics = pod_metrics_by_key(items(payload.get("pod_metrics")))
         node_metrics = node_metrics_by_name(items(payload.get("node_metrics")))
-        raw_pods = scoped_items(payload.get("pods"), telemetry_query.label_selector)
+        raw_pods = scoped_items(payload.get(K8S_RESOURCE_PODS), telemetry_query.label_selector)
         raw_workloads = {
-            "Deployment": scoped_items(payload.get("deployments"), telemetry_query.label_selector),
+            K8S_KIND_DEPLOYMENT: scoped_items(
+                payload.get(K8S_RESOURCE_DEPLOYMENTS), telemetry_query.label_selector
+            ),
             "StatefulSet": scoped_items(
                 payload.get("statefulsets"), telemetry_query.label_selector
             ),
             "DaemonSet": scoped_items(payload.get("daemonsets"), telemetry_query.label_selector),
-            "ReplicaSet": scoped_items(payload.get("replicasets"), telemetry_query.label_selector),
+            K8S_KIND_REPLICA_SET: scoped_items(
+                payload.get(K8S_RESOURCE_REPLICASETS), telemetry_query.label_selector
+            ),
         }
-        raw_services = scoped_items(payload.get("services"), telemetry_query.label_selector)
+        raw_services = scoped_items(
+            payload.get(K8S_RESOURCE_SERVICES), telemetry_query.label_selector
+        )
         selected_names = {
             str(metadata(item).get("name") or "")
             for item in [*raw_pods, *(row for rows in raw_workloads.values() for row in rows)]
@@ -224,7 +243,7 @@ class KubernetesSnapshotProvider:
             str(metadata(item).get("uid") or "")
             for item in [*raw_pods, *(row for rows in raw_workloads.values() for row in rows)]
         }
-        snapshot["pods"] = [
+        snapshot[K8S_RESOURCE_PODS] = [
             pod_summary(
                 item,
                 pod_metrics.get(
@@ -256,7 +275,7 @@ class KubernetesSnapshotProvider:
                 for summary in workload_summaries(kind, rows)
             ),
         ]
-        snapshot["services"] = [service_summary(item) for item in raw_services]
+        snapshot[K8S_RESOURCE_SERVICES] = [service_summary(item) for item in raw_services]
         service_names = {str(metadata(item).get("name") or "") for item in raw_services}
         snapshot["endpoints"] = [
             endpoint_slice_summary(item)
@@ -272,13 +291,13 @@ class KubernetesSnapshotProvider:
                 "namespace": namespace,
                 "reason": payload.get("reason", ""),
                 "counts": {
-                    "pods": len(snapshot["pods"]),
+                    K8S_RESOURCE_PODS: len(snapshot[K8S_RESOURCE_PODS]),
                     "events": len(snapshot["events"]),
                     "nodes": len(snapshot["nodes"]),
                     "pod_metrics": len(pod_metrics),
                     "node_metrics": len(node_metrics),
                     "workloads": len(snapshot["workloads"]),
-                    "services": len(snapshot["services"]),
+                    K8S_RESOURCE_SERVICES: len(snapshot[K8S_RESOURCE_SERVICES]),
                     "endpoints": len(snapshot["endpoints"]),
                 },
             }
@@ -291,10 +310,10 @@ def empty_snapshot(cluster_id: str) -> JsonObject:
     return {
         "cluster": {"cluster_id": cluster_id},
         "workloads": [],
-        "pods": [],
+        K8S_RESOURCE_PODS: [],
         "events": [],
         "nodes": [],
-        "services": [],
+        K8S_RESOURCE_SERVICES: [],
         "endpoints": [],
         "provider_status": {},
     }
@@ -303,7 +322,7 @@ def empty_snapshot(cluster_id: str) -> JsonObject:
 def merge_snapshot(target: JsonObject, source: JsonObject) -> None:
     """Add one normalized snapshot into another snapshot."""
     target["cluster"] = {**dict(target.get("cluster", {})), **dict(source.get("cluster", {}))}
-    for key in ("workloads", "pods", "events", "services", "endpoints"):
+    for key in ("workloads", K8S_RESOURCE_PODS, "events", K8S_RESOURCE_SERVICES, "endpoints"):
         target.setdefault(key, [])
         target[key].extend(source.get(key, []))
     merge_cluster_scoped_nodes(target, source)
@@ -324,16 +343,6 @@ def merge_cluster_scoped_nodes(target: JsonObject, source: JsonObject) -> None:
     target["nodes"] = list(by_key.values())
 
 
-def items(payload: Any) -> list[JsonObject]:
-    """Return list items from a Kubernetes list response."""
-    if not isinstance(payload, dict):
-        return []
-    raw_items = payload.get("items", [])
-    if not isinstance(raw_items, list):
-        return []
-    return [item for item in raw_items if isinstance(item, dict)]
-
-
 RCA_TEST_LABEL = "kubeheal.io/rca-test"
 RCA_TEST_RUN_LABEL = "kubeheal.io/rca-test-run"
 RCA_TEST_RESOURCE_PREFIX = "rca-test-"
@@ -345,12 +354,12 @@ def scoped_items(payload: Any, label_selector: str | None) -> list[JsonObject]:
         key, separator, value = label_selector.partition("=")
         if not separator:
             return []
-        return [row for row in rows if safe_labels(row).get(key) == value]
+        return [row for row in rows if resource_labels(row).get(key) == value]
     return [
         row
         for row in rows
-        if safe_labels(row).get(RCA_TEST_LABEL) != "true"
-        and RCA_TEST_RUN_LABEL not in safe_labels(row)
+        if resource_labels(row).get(RCA_TEST_LABEL) != "true"
+        and RCA_TEST_RUN_LABEL not in resource_labels(row)
     ]
 
 
@@ -383,7 +392,9 @@ def scoped_endpoint_slices(
         return [
             row
             for row in rows
-            if any(
+            if str(resource_labels(row).get(K8S_ENDPOINT_SLICE_SERVICE_NAME_LABEL) or "")
+            in service_names
+            or any(
                 str(metadata(row).get("name") or "").startswith(f"{service_name}-")
                 for service_name in service_names
             )
@@ -395,22 +406,10 @@ def scoped_endpoint_slices(
     ]
 
 
-def metadata(item: JsonObject) -> JsonObject:
-    """Return object metadata, or an empty dict when it is missing."""
-    value = item.get("metadata", {})
-    return value if isinstance(value, dict) else {}
-
-
-def status(item: JsonObject) -> JsonObject:
-    """Return object status, or an empty dict when it is missing."""
-    value = item.get("status", {})
-    return value if isinstance(value, dict) else {}
-
-
-def spec(item: JsonObject) -> JsonObject:
-    """Return object spec, or an empty dict when it is missing."""
-    value = item.get("spec", {})
-    return value if isinstance(value, dict) else {}
+def resource_labels(item: JsonObject) -> JsonObject:
+    """Return all labels for filtering; output compaction belongs to safe_labels()."""
+    labels = metadata(item).get("labels", {})
+    return labels if isinstance(labels, dict) else {}
 
 
 def safe_labels(item: JsonObject, limit: int = 12) -> JsonObject:
@@ -534,6 +533,7 @@ def event_summary(item: JsonObject) -> JsonObject:
         source = {}
     return {
         "uid": meta.get("uid"),
+        "name": meta.get("name"),
         "namespace": meta.get("namespace"),
         "type": item.get("type"),
         "reason": item.get("reason"),

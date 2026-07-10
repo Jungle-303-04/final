@@ -752,15 +752,17 @@ RCA 파생 예시는 다음과 같다.
 
 ## Metadata bucket
 
+구현 메모: `MetadataProvider`가 Kubernetes API 호출과 metadata evidence 조립을 담당한다. helper 모듈은 snapshot 생성, ConfigMap/Secret reference 요약, EndpointSlice ready endpoint 요약, Service selector 매칭, Deployment/ReplicaSet/Pod 소유 관계 계산만 나누어 맡는다. 이 helper 모듈들은 event를 발행하지 않고 payload 계약도 바꾸지 않는다.
+
 Metadata bucket은 `MetadataProvider`가 만든다.
 현재 구현은 외부 배포 시스템을 직접 조회하지 않는다.
-대신 target namespace의 Deployment 목록과 ReplicaSet 목록을 Kubernetes API에서 읽어
+대신 target namespace의 Deployment, ReplicaSet, Pod, Service, EndpointSlice 목록을 Kubernetes API에서 읽어
 현재 workload snapshot 목록을 만든다.
 
 `MetadataSnapshotQuery.query` 값이 `change_context`, `current_workload_snapshots`, `deployments`이면
-target namespace의 모든 Deployment를 목록으로 보낸다.
+target namespace의 모든 Deployment를 summary snapshot 목록으로 보낸다.
 `deployment/<name>`, `deployment/<namespace>/<name>`, `<namespace>/<name>`이면 특정 Deployment 1개를
-`current_workload_snapshot` 단수 값으로 보낸다.
+detail snapshot인 `current_workload_snapshot` 단수 값으로 보낸다.
 
 ```json
 {
@@ -773,15 +775,42 @@ target namespace의 모든 Deployment를 목록으로 보낸다.
           "name": "checkout-api"
         },
         "deployment_labels": {},
-        "deployment_annotations": {
-          "ops.service/restarted-at": "2026-07-10T11:12:13Z"
-        },
-        "pod_template_annotations": {
-          "prometheus.io/path": "/metrics",
-          "prometheus.io/scrape": "true"
-        },
         "pod_template_labels": {},
-        "managed_fields_managers": ["kubectl-client-side-apply"],
+        "deployment_status": {
+          "observed_generation": 12,
+          "desired_replicas": 3,
+          "replicas": 3,
+          "updated_replicas": 2,
+          "ready_replicas": 1,
+          "available_replicas": 1,
+          "unavailable_replicas": 2,
+          "conditions": [
+            {
+              "type": "Progressing",
+              "status": "False",
+              "reason": "ProgressDeadlineExceeded",
+              "message": "ReplicaSet timed out.",
+              "last_transition_time": "2026-07-10T10:00:00Z"
+            }
+          ]
+        },
+        "pod_statuses": [
+          {
+            "name": "checkout-api-pod-1",
+            "phase": "Running",
+            "ready": false,
+            "start_time": "2026-07-10T09:01:00Z",
+            "conditions": [
+              {
+                "type": "Ready",
+                "status": "False",
+                "reason": "ContainersNotReady",
+                "message": "containers with unready status",
+                "last_transition_time": "2026-07-10T10:01:00Z"
+              }
+            ]
+          }
+        ],
         "containers": [
           {
             "name": "app",
@@ -794,13 +823,80 @@ target namespace의 모든 Deployment를 목록으로 보낸다.
               "failure_threshold": 3
             },
             "liveness_probe": {},
-            "startup_probe": {}
+            "startup_probe": {},
+            "resources": {
+              "requests": {
+                "cpu": "100m",
+                "memory": "256Mi"
+              },
+              "limits": {
+                "cpu": "500m",
+                "memory": "512Mi"
+              }
+            }
           }
         ],
         "replicaset_revisions": [
           {
             "name": "checkout-api-abc123",
-            "revision": "3"
+            "revision": "3",
+            "desired_replicas": 2,
+            "replicas": 2,
+            "ready_replicas": 1,
+            "available_replicas": 1,
+            "fully_labeled_replicas": 2
+          }
+        ]
+      }
+    ],
+    "service_selector_matches": [
+      {
+        "service": {
+          "namespace": "target",
+          "name": "checkout-api"
+        },
+        "selector": {
+          "app": "checkout-api"
+        },
+        "match_status": "matched",
+        "matched_pod_count": 1,
+        "matched_pods": [
+          {
+            "namespace": "target",
+            "name": "checkout-api-pod-1"
+          }
+        ]
+      }
+    ],
+    "endpoint_slice_ready_endpoints": [
+      {
+        "service": {
+          "namespace": "target",
+          "name": "checkout-api"
+        },
+        "endpoint_slice": {
+          "namespace": "target",
+          "name": "checkout-api-abcde"
+        },
+        "address_type": "IPv4",
+        "ports": [
+          {
+            "name": "http",
+            "port": 8080,
+            "protocol": "TCP"
+          }
+        ],
+        "endpoint_count": 2,
+        "ready_endpoint_count": 1,
+        "not_ready_endpoint_count": 1,
+        "unknown_ready_endpoint_count": 0,
+        "serving_endpoint_count": 1,
+        "terminating_endpoint_count": 0,
+        "ready_targets": [
+          {
+            "kind": "Pod",
+            "namespace": "target",
+            "name": "checkout-api-pod-1"
           }
         ]
       }
@@ -809,27 +905,73 @@ target namespace의 모든 Deployment를 목록으로 보낸다.
 }
 ```
 
+단건 detail snapshot은 summary 필드에 더해 `deployment_annotations`,
+`pod_template_annotations`, `managed_fields_managers`,
+`containers[].env_refs`, `containers[].env_from_refs`,
+`containers[].volume_mount_refs`, `replicaset_revisions[].created_at`,
+`replicaset_revisions[].conditions`를 추가로 담는다.
+
 | 필드 | 타입 | 의미 |
 | --- | --- | --- |
 | `change_context` | object | 변경 맥락을 담는 묶음이다. |
 | `change_context.current_workload_snapshots` | list<object> | target namespace의 Deployment별 현재 상태 요약이다. |
-| `change_context.current_workload_snapshot` | object | 특정 Deployment 1개의 현재 상태 요약이다. |
+| `change_context.current_workload_snapshot` | object | 특정 Deployment 1개의 상세 상태 요약이다. |
+| `change_context.service_selector_matches` | list<object> | namespace Service selector와 Pod labels 비교 결과다. |
+| `change_context.service_selector_matches[].service` | object | Service namespace와 name이다. |
+| `change_context.service_selector_matches[].selector` | object | Service spec.selector 요약이다. selector가 없으면 생략된다. |
+| `change_context.service_selector_matches[].match_status` | string | `matched`, `no_matching_pods`, `selector_missing` 중 하나다. |
+| `change_context.service_selector_matches[].target_relation` | string | 단건 detail에서만 있는 값이다. 이 Service가 target Deployment와 관련 있다고 본 이유이며, `exact_selector_match`, `live_pod_match`, `selector_key_overlap` 중 하나다. |
+| `change_context.service_selector_matches[].matched_pod_count` | number | selector와 labels가 맞는 Pod 수다. |
+| `change_context.service_selector_matches[].matched_pods` | list<object> | selector와 labels가 맞는 Pod namespace/name 목록이다. matched Pod가 없으면 생략될 수 있다. |
+| `change_context.endpoint_slice_ready_endpoints` | list<object> | EndpointSlice별 ready endpoint 요약이다. summary query는 namespace 전체를 담고, detail query는 관련 Service의 EndpointSlice만 담는다. |
+| `change_context.endpoint_slice_ready_endpoints[].service` | object | EndpointSlice가 연결된 Service namespace/name이다. `kubernetes.io/service-name` label에서 읽는다. |
+| `change_context.endpoint_slice_ready_endpoints[].endpoint_slice` | object | EndpointSlice namespace/name이다. |
+| `change_context.endpoint_slice_ready_endpoints[].address_type` | string | EndpointSlice address type이다. 예: `IPv4`, `IPv6`, `FQDN`. |
+| `change_context.endpoint_slice_ready_endpoints[].ports` | list<object> | EndpointSlice port name/port/protocol/app_protocol 요약이다. |
+| `change_context.endpoint_slice_ready_endpoints[].endpoint_count` | number | EndpointSlice 안의 전체 endpoint 수다. |
+| `change_context.endpoint_slice_ready_endpoints[].ready_endpoint_count` | number | condition `ready=true`인 endpoint 수다. |
+| `change_context.endpoint_slice_ready_endpoints[].not_ready_endpoint_count` | number | condition `ready=false`인 endpoint 수다. |
+| `change_context.endpoint_slice_ready_endpoints[].unknown_ready_endpoint_count` | number | ready condition이 boolean 값이 아닌 endpoint 수다. |
+| `change_context.endpoint_slice_ready_endpoints[].serving_endpoint_count` | number | condition `serving=true`인 endpoint 수다. |
+| `change_context.endpoint_slice_ready_endpoints[].terminating_endpoint_count` | number | condition `terminating=true`인 endpoint 수다. |
+| `change_context.endpoint_slice_ready_endpoints[].ready_targets` | list<object> | ready endpoint가 가리키는 target object kind/namespace/name이다. 보통 Pod다. endpoint IP address는 담지 않는다. |
 | `change_context.current_workload_snapshots[].workload` | object | workload kind, namespace, name이다. 현재 kind는 `Deployment`다. |
 | `change_context.current_workload_snapshots[].deployment_labels` | object | Deployment metadata labels다. |
-| `change_context.current_workload_snapshots[].deployment_annotations` | object | 안전한 Deployment metadata annotations다. `last-applied-configuration`처럼 원문 manifest나 민감 key는 제외한다. |
-| `change_context.current_workload_snapshots[].pod_template_annotations` | object | 안전한 Pod template metadata annotations다. allowlist에 맞는 작은 값만 남긴다. |
 | `change_context.current_workload_snapshots[].pod_template_labels` | object | Pod template metadata labels다. |
-| `change_context.current_workload_snapshots[].managed_fields_managers` | list<string> | Deployment managedFields의 manager 이름 목록이다. |
+| `change_context.current_workload_snapshots[].deployment_status` | object | Deployment status의 replica count와 condition 요약이다. |
+| `change_context.current_workload_snapshots[].deployment_status.conditions` | list<object> | Deployment condition의 type/status/reason/message/time 요약이다. |
+| `change_context.current_workload_snapshots[].pod_statuses` | list<object> | 이 Deployment가 소유한 Pod의 phase, ready 여부, condition 요약이다. |
+| `change_context.current_workload_snapshots[].pod_statuses[].conditions` | list<object> | Pod condition의 type/status/reason/message/time 요약이다. |
 | `change_context.current_workload_snapshots[].containers[]` | list<object> | container name, image, readiness/liveness/startup probe 요약이다. |
 | `change_context.current_workload_snapshots[].containers[].*_probe` | object | probe의 path, port, timeout_seconds, period_seconds, failure_threshold 중 존재하는 값만 담는다. |
-| `change_context.current_workload_snapshots[].replicaset_revisions[]` | list<object> | 이 Deployment가 소유한 ReplicaSet name과 `deployment.kubernetes.io/revision` 값이다. |
+| `change_context.current_workload_snapshots[].containers[].resources` | object | container resources requests/limits 요약이다. CPU/memory quantity 값은 문자열 그대로 담는다. |
+| `change_context.current_workload_snapshots[].replicaset_revisions[]` | list<object> | 이 Deployment가 소유한 ReplicaSet name, revision, replica count 요약이다. |
+| `change_context.current_workload_snapshot.deployment_annotations` | object | 단건 detail에만 있는 안전한 Deployment metadata annotations다. |
+| `change_context.current_workload_snapshot.pod_template_annotations` | object | 단건 detail에만 있는 안전한 Pod template metadata annotations다. |
+| `change_context.current_workload_snapshot.managed_fields_managers` | list<string> | 단건 detail에만 있는 Deployment managedFields의 manager 이름 목록이다. |
+| `change_context.current_workload_snapshot.containers[].env_refs` | list<object> | 단건 detail에만 있는 env ConfigMap/Secret key reference 요약이다. 값 자체는 담지 않는다. |
+| `change_context.current_workload_snapshot.containers[].env_from_refs` | list<object> | 단건 detail에만 있는 envFrom ConfigMap/Secret reference 요약이다. |
+| `change_context.current_workload_snapshot.containers[].volume_mount_refs` | list<object> | 단건 detail에만 있는 ConfigMap/Secret volume reference 요약이다. |
+| `change_context.current_workload_snapshot.replicaset_revisions[].created_at` | string | 단건 detail에만 있는 ReplicaSet 생성 시각이다. |
+| `change_context.current_workload_snapshot.replicaset_revisions[].conditions` | list<object> | 단건 detail에만 있는 ReplicaSet condition의 type/status/reason/message/time 요약이다. |
 
 주의: `MetadataProvider.query()`의 내부 raw payload에는 `cluster_id`, `collected_at`도 있지만,
 `normalize_payload()` 결과 bucket에는 `change_context`만 남긴다.
-현재 provider는 안전한 Deployment/Pod template annotations만 남긴다.
+전체 조회 summary는 annotations, managedFields, config reference, ReplicaSet condition을 담지 않는다.
+단건 detail은 안전한 Deployment/Pod template annotations만 남긴다.
+전체 summary query의 Service selector 비교 결과는 namespace의 모든 Service를 담는다.
+단건 detail query의 Service selector 비교 결과는 target Deployment와 관련 있는 Service만 담는다.
+관련 기준은 selector가 target pod template labels와 맞는 경우, selector가 실제 target Pod labels와 맞는 경우,
+또는 selector key가 target labels key와 겹치는 경우다.
+EndpointSlice ready endpoint 요약도 같은 범위 규칙을 쓴다.
+전체 summary query는 namespace의 모든 EndpointSlice를 담고, 단건 detail query는 관련 Service의 EndpointSlice만 담는다.
+EndpointSlice endpoint의 IP address는 남기지 않는다.
 `kubectl.kubernetes.io/last-applied-configuration` 같은 원문 manifest annotation과
 secret/token/password/credential/private/authorization 이름이 들어간 annotation은 제외한다.
-raw spec, env/config/secret refs는 남기지 않는다.
+단건 detail의 env/envFrom/volume ConfigMap/Secret reference는 name/key/path만 남기고 값 자체는 남기지 않는다.
+raw spec과 literal env value는 남기지 않는다.
+Deployment, ReplicaSet, Pod status는 작은 요약만 남기고 raw object와 containerStatuses는 남기지 않는다.
+Service selector 비교 결과는 selector와 matched Pod namespace/name만 남기고 raw Service/Pod object는 남기지 않는다.
 
 ## Evidence job 집계 규칙
 
@@ -880,7 +1022,10 @@ Provider가 이미 보내는 값은 다음과 같다.
 | log line | `logs[].streams[].values[].line` |
 | trace search 결과 | `traces.results.*.traces` |
 | 현재 workload snapshot 목록 | `metadata.change_context.current_workload_snapshots[]` |
-| 현재 image/probe/labels/annotations/manager/revision 요약 | `metadata.change_context.current_workload_snapshots[].containers[]`, `deployment_labels`, `deployment_annotations`, `pod_template_labels`, `pod_template_annotations`, `managed_fields_managers`, `replicaset_revisions` |
+| 현재 image/probe/resources/labels/status/revision summary | `metadata.change_context.current_workload_snapshots[].containers[]`, `deployment_labels`, `pod_template_labels`, `deployment_status`, `pod_statuses`, `replicaset_revisions` |
+| Service selector와 Pod labels 매칭 결과 | `metadata.change_context.service_selector_matches[]` |
+| EndpointSlice ready endpoint 요약 | `metadata.change_context.endpoint_slice_ready_endpoints[]` |
+| 특정 Deployment detail의 annotations/manager/config refs/ReplicaSet conditions | `metadata.change_context.current_workload_snapshot.deployment_annotations`, `pod_template_annotations`, `managed_fields_managers`, `containers[].env_refs`, `containers[].env_from_refs`, `containers[].volume_mount_refs`, `replicaset_revisions[].conditions` |
 
 RCA가 판단하려면 다음 값은 파생해야 한다.
 
@@ -930,14 +1075,17 @@ RCA/evidence-worker 쪽 담당 영역이다. 이 문서는 provider가 보내는
 
 | 필요한 metadata | 현재 provider로 가능한지 | 보강 방향 |
 | --- | --- | --- |
-| target namespace Deployment별 현재 image/probe/labels/annotations/manager/ReplicaSet revision | 가능 | `change_context.current_workload_snapshots[]`를 쓴다. annotations는 안전한 key만 남긴다. |
-| 특정 Deployment 1개 snapshot | 가능 | `deployment/<name>` 또는 `deployment/<namespace>/<name>` query를 쓴다. |
+| target namespace Deployment별 현재 image/probe/resources/labels/status/Pod status/ReplicaSet revision summary | 가능 | `change_context.current_workload_snapshots[]`를 쓴다. 전체 조회에는 annotations, config refs, manager, ReplicaSet conditions를 넣지 않는다. |
+| 특정 Deployment 1개 detail snapshot | 가능 | `deployment/<name>` 또는 `deployment/<namespace>/<name>` query를 쓴다. 안전한 annotations, manager, ConfigMap/Secret references, ReplicaSet conditions를 추가로 제공한다. |
 | recent git commit / deploy revision | 없음 | GitOps event, manifest render, SCM metadata 연결 |
 | rollback 가능 여부 / risk_level | 없음 | 배포 이력, policy, GitOps/CI/CD 상태 연결 |
 | previous/current image digest | 일부만 가능 | `containers[].image`는 현재 image tag만 제공한다. digest, rollout history, previous image가 필요하다. |
-| Deployment/Pod template annotations | 일부 가능 | `ops.service/*`, `prometheus.io/*`, `deployment.kubernetes.io/*`, `kubectl.kubernetes.io/*` 중 안전한 key만 남긴다. |
-| ConfigMap/Secret key reference | 불충분 | Pod spec env/envFrom/volumes, Secret/ConfigMap metadata summary 추가 |
-| resource requests/limits | 불충분 | Pod spec containers.resources summary 추가 |
+| Deployment/Pod template annotations | 일부 가능 | 단건 detail에서 `ops.service/*`, `prometheus.io/*`, `deployment.kubernetes.io/*`, `kubectl.kubernetes.io/*` 중 안전한 key만 남긴다. |
+| ConfigMap/Secret key reference | 일부 가능 | 단건 detail에서 env/envFrom/volume reference name/key/path를 제공한다. Secret/ConfigMap 객체 metadata는 아직 조회하지 않는다. |
+| resource requests/limits | 가능 | `containers[].resources.requests/limits`를 제공한다. |
+| Deployment/ReplicaSet/Pod status conditions | 가능 | `deployment_status.conditions`와 `pod_statuses[].conditions`는 summary에도 있고, `replicaset_revisions[].conditions`는 단건 detail에만 있다. |
+| Service selector와 Pod labels 매칭 결과 | 가능 | `service_selector_matches[]`에서 Service별 `match_status`, `matched_pod_count`, `matched_pods`를 제공한다. |
+| EndpointSlice ready endpoint 요약 | 가능 | `endpoint_slice_ready_endpoints[]`에서 Service별 EndpointSlice ready/not ready count와 ready target Pod를 제공한다. endpoint IP address는 제공하지 않는다. |
 | imagePullSecrets | 불충분 | Pod spec imagePullSecrets summary 추가 |
 | NetworkPolicy/Ingress/PVC | 없음 | Kubernetes provider 조회 resource 확장 |
 
@@ -953,7 +1101,7 @@ Kubernetes provider는 raw object를 그대로 넘기지 않고 summary만 보�
 | Pod spec `imagePullSecrets`, serviceAccount | private registry/auth 문제를 확인한다. |
 | container `lastState` | 이전 종료 이유가 현재 state에 없을 때 OOMKilled, Error를 확인한다. |
 | Deployment template image/env/resources | rollout과 현재 Pod spec의 관계를 확인한다. |
-| ReplicaSet revision annotation | 특정 rollout revision에서만 문제가 났는지 확인한다. |
+| ReplicaSet revision annotation/status | 특정 rollout revision에서만 문제가 났는지, 해당 ReplicaSet이 준비 상태인지 확인한다. |
 | Endpoint readiness conditions | endpoint 개수만으로 ready endpoint 여부를 확정하기 어렵다. |
 | Ingress, NetworkPolicy, PVC, ConfigMap, Secret summary | network, storage, config/security 계열 RCA에 필요하다. |
 | Kubernetes raw object | summary 밖 필드를 임시로 확인하기 어렵다. |
