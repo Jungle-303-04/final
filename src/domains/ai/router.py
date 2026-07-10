@@ -30,6 +30,10 @@ DEFAULT_AGENT = "operations-chat"
 NOT_FOUND = "conversation not found"
 CONTEXT_STRING_FIELDS = (
     "cluster_id",
+    "application_id",
+    "diff_source",
+    "workflow_run_id",
+    "approval_id",
     "resource_type",
     "kind",
     "namespace",
