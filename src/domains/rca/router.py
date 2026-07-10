@@ -31,6 +31,7 @@ from packages.contracts.gateway.requests import (
     AgentEvidenceRequest,
     AlertmanagerWebhookRequest,
     RcaRuleValidateRequest,
+    RecoveryActionSelectByCorrelationRequest,
     RecoveryActionSelectRequest,
 )
 from packages.contracts.gateway.responses import (
@@ -59,6 +60,7 @@ DEFAULT_EVIDENCE_SOURCE_ID = "cluster-snapshot"
 RECOVERY_PLAN_NOT_FOUND = "recovery plan not found"
 RECOVERY_ACTION_NOT_FOUND = "recovery action not found"
 RECOVERY_PLAN_ALREADY_RESOLVED = "recovery plan already resolved"
+RECOVERY_PLAN_CHANGED = "recovery plan changed"
 RECOVERY_SELECTION_ACCESS_DENIED = "recovery selection access denied"
 HTTP_NOT_FOUND = 404
 HTTP_CONFLICT = 409
@@ -362,19 +364,17 @@ def recovery_approval_payload(
     }
 
 
-@router.post(gateway_routes.RCA_RECOVERY_ACTION_SELECT_PATH, response_model=AcceptedResponse)
-async def select_recovery_action(
-    plan_id: str,
-    action_id: str,
-    payload: RecoveryActionSelectRequest,
-    current: Any = Depends(require_session),
-    db: Any = Depends(get_db),
-    events: Any = Depends(get_events),
+async def _select_recovery_action_from_record(
+    record: dict[str, Any],
+    action_id: str | None,
+    reason: str | None,
+    *,
+    expected_plan_id: str | None,
+    current: Any,
+    db: Any,
+    events: Any,
 ) -> AcceptedResponse:
     workspace_id = current.workspace_id
-    record = db.get_recovery_plan(plan_id, workspace_id)
-    if record is None:
-        raise HTTPException(status_code=HTTP_NOT_FOUND, detail=RECOVERY_PLAN_NOT_FOUND)
     plan = RecoveryPlan.from_body(record["payload"])
     cluster_id = str(plan.target.get("cluster_id", ""))
     require_cluster_access(
@@ -385,7 +385,9 @@ async def select_recovery_action(
         Permission.DEPLOY_RUN.value,
         detail=RECOVERY_SELECTION_ACCESS_DENIED,
     )
-    selected = candidate_by_action_id(plan, action_id)
+    if expected_plan_id is not None and plan.plan_id != expected_plan_id:
+        raise HTTPException(status_code=HTTP_CONFLICT, detail=RECOVERY_PLAN_CHANGED)
+    selected = candidate_by_action_id(plan, action_id or plan.recommended_action_id)
     approval_ref = recovery_approval_id(plan.plan_id, selected.action_id)
     policy_decision_ref = recovery_policy_decision_ref(approval_ref)
     selected = candidate_with_approval(
@@ -393,7 +395,7 @@ async def select_recovery_action(
         approval_ref=approval_ref,
         policy_decision_ref=policy_decision_ref,
     )
-    reason = payload.reason or f"operator selected recovery action: {selected.title}"
+    reason = reason or f"operator selected recovery action: {selected.title}"
     with unit_of_work_or_null(db):
         selected_record = db.select_recovery_plan_action_if_open(
             plan.plan_id,
@@ -430,6 +432,58 @@ async def select_recovery_action(
         accepted=True,
         event_id=accepted.event.event_id,
         correlation_id=accepted.event.correlation_id,
+    )
+
+
+@router.post(gateway_routes.RCA_RECOVERY_ACTION_SELECT_PATH, response_model=AcceptedResponse)
+async def select_recovery_action(
+    plan_id: str,
+    action_id: str,
+    payload: RecoveryActionSelectRequest,
+    current: Any = Depends(require_session),
+    db: Any = Depends(get_db),
+    events: Any = Depends(get_events),
+) -> AcceptedResponse:
+    record = await db_call(db.get_recovery_plan, plan_id, current.workspace_id)
+    if record is None:
+        raise HTTPException(status_code=HTTP_NOT_FOUND, detail=RECOVERY_PLAN_NOT_FOUND)
+    return await _select_recovery_action_from_record(
+        record,
+        action_id,
+        payload.reason,
+        expected_plan_id=None,
+        current=current,
+        db=db,
+        events=events,
+    )
+
+
+@router.post(
+    gateway_routes.RCA_RECOVERY_ACTION_SELECT_BY_CORRELATION_PATH,
+    response_model=AcceptedResponse,
+)
+async def select_recovery_action_by_correlation(
+    correlation_id: str,
+    payload: RecoveryActionSelectByCorrelationRequest,
+    current: Any = Depends(require_session),
+    db: Any = Depends(get_db),
+    events: Any = Depends(get_events),
+) -> AcceptedResponse:
+    record = await db_call(
+        db.get_recovery_plan_by_correlation,
+        correlation_id,
+        current.workspace_id,
+    )
+    if record is None:
+        raise HTTPException(status_code=HTTP_NOT_FOUND, detail=RECOVERY_PLAN_NOT_FOUND)
+    return await _select_recovery_action_from_record(
+        record,
+        payload.action_id,
+        payload.reason,
+        expected_plan_id=payload.expected_plan_id,
+        current=current,
+        db=db,
+        events=events,
     )
 
 
