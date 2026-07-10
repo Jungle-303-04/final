@@ -151,14 +151,22 @@ Container는 v0에서 entity가 아니다. Pod drawer의 "컨테이너" 섹션�
 
 ## 2. 화면과 상태 기계
 
-### 2.1 라우트와 뷰
+### 2.1 라우트와 모드 (2026-07-11 데모 v5로 확정)
 
 - 라우트: `/product/clusters/:clusterId/topology` (product 라우터 내 신규 feature).
-- 뷰 상태(URL `?view=`): `overview | traffic | delivery | both`. 기본 `overview`.
-- 드릴 상태(URL): `?node={name}` `?pod={ns}/{name}`. 대상 소멸 시 drawer는 닫히지 않고
+- 모드는 두 개뿐이다(URL `?focus={entityKey}` 유무로 결정):
+  - **map**: placement treemap이 캔버스 전폭을 채운다(§3.1).
+  - **focus**: 큐브 클릭으로 진입. 클릭한 큐브가 왼쪽 소스 큐브가 되고, **맵의 나머지
+    전체 항목**이 오른쪽 세로 1열로 재배치되며, 연관 항목은 상태(색)별 연결체로 뭉쳐
+    소스와 리본으로 연결된다(§3.2). `← 전체 맵` 버튼과 Esc로 복귀.
+- 드릴 상태(URL): `?pod={ns}/{name}` (drawer). 대상 소멸 시 drawer는 닫히지 않고
   `리소스 없음 — 마지막 관측 {timeAgo}` 상태를 렌더한다(이전 U5의 반대 계약).
-- 뷰 전환 UI: 상단 세그먼트 컨트롤 4버튼(항상 표시) + 키보드 `[`/`]`(이전/다음 뷰),
-  `1..4`(직접 선택). 드래그 제스처 없음(§0.1 M3).
+- 초기 설계의 세그먼트 뷰(traffic/delivery/butterfly)는 focus 모드로 **대체·삭제**한다.
+  드래그 제스처 없음(§0.1 M3).
+
+**완전성 불변조건(누락 금지)**: focus 모드에서 `오른쪽 열 항목 수 + 1(소스) = map 항목 수`
+가 항상 성립한다. 연관 없는 항목도 열 하단에 반드시 나타난다(dim 처리, 화면에서 소멸
+금지). 이 등식은 focus 레이아웃 함수 반환값에 assert로 박고 단위 테스트로 강제한다(§8).
 
 ### 2.2 엔진 상태 (직교 축, 헌법 §23의 v0 축소)
 
@@ -202,22 +210,39 @@ empty-authoritative / stale(배지) / populated. 각 상태는 시각 회귀 대
 - 정렬 tie-break: namespace asc → name asc (결정적).
 - `Unscheduled` shelf: 캔버스 하단 전폭, 높이 56px, node_name null인 pod만.
 
-### 3.2 traffic (왼쪽 rail) / delivery (오른쪽 rail)
+### 3.2 focus 모드 (좌 소스 큐브 / 우 전체 세로 열 / 연결체당 리본 1개) — 데모 v5 확정
 
-- rail 폭: 캔버스의 32%(min 260px, max 420px). 반대편에서 treemap이 세로 pod 레일로 재정렬:
-  node별 괄호 묶음, 레일 타일 높이 20px, 폭 = 남은 영역 폭 − 24px, 행 gap 2px.
-- rail 항목(서비스/워크로드) 카드: 높이 44px, 정렬 namespace asc → name asc.
-- 연결선: 소스 카드 우변 중앙 → 타일 좌변 중앙, cubic bezier(제어점 x offset = 구간 폭의
-  40%). 한 소스의 연결이 12개를 넘으면 개별 선 대신 묶음 리본 1개 + `{n}` 배지, 소스 선택
-  시 개별 선으로 전개. ⚠︎초안값[12 | 시각 회귀에서 가독성 판정 | P2 게이트]
-- 선 스타일: configured=점선(4 2), ownership=실선 1.5px, gitops=점선(2 3) + repo 카드.
-  **모든 비트래픽 선의 굵기는 1.5px 고정**(수량 인코딩 금지 — 헌법 상속). 수량은 배지 숫자.
+focus 대상은 map의 모든 큐브다(pod 타일, node frame 헤더 포함). 소스가 무엇이든 연관
+집합의 원천은 서버 계산 관계(§1.2)뿐이다. 모든 수치는 px.
 
-### 3.3 both (butterfly)
+- **오른쪽 열 (전체 항목 — §2.1 완전성 불변조건 적용)**:
+  - 열 x = W − 300, 큐브 폭 118, radius 5. 라벨은 열 우측 160 영역(이름 13px/700,
+    값 11px, 좌측 정렬).
+  - 상단 = 연관 항목: **health(색)별로 뭉친 연결체**. 멤버 높이 46, 연결체 내부 간격 3
+    (한 덩어리로 읽히는 간격), 연결체 사이 20.
+  - 뭉침 기준 = health level. 근거: 색이 곧 상태 채널이므로 "같은 색끼리 뭉침"이 시각과
+    의미를 일치시킨다. 연결체 정렬은 심각도 내림차순(unhealthy → degraded → unknown →
+    healthy), 연결체 내부는 name asc — 문제가 항상 위에 온다. kind 구분은 라벨 앞
+    kind 아이콘 토큰으로 보조한다.
+  - 하단 = 비연관 항목 전부: 높이 22, 간격 5, opacity 0.30, 라벨 11px/불투명도 45%,
+    리본 없음. 연관 영역과의 구분 여백 28.
+- **왼쪽 소스 큐브**: x = 176, 폭 86, 높이 = min(연관 영역 총높이, H−90), radius 8,
+  세로 중앙 = 연관 영역 세로 중앙. 라벨은 소스 왼쪽 158 영역 우측 정렬
+  (이름 15px/750 + `관련 {n}개` 11px).
+- **리본 — 연결체당 정확히 1개, 세 갈래 금지**: 양끝이 **세로면 전체**와 결합한다.
+  소스 오른면은 연결체 face 높이 비례로 빈틈없이 분할하고, 연결체 왼면은 첫 멤버
+  위끝부터 마지막 멤버 아래끝까지 전체를 덮는다. **중앙점 결합 금지**. 경로는 상·하
+  두 변의 cubic bezier 밴드, 제어점 x offset = 구간 폭의 42%.
+- 항목이 열 높이를 넘치면(> 18개) 열은 세로 스크롤하되 소스 큐브는 고정하고 리본
+  끝점이 스크롤 위치를 따라간다. 스크롤 중에도 완전성 불변조건은 DOM 기준으로 유지된다.
+  ⚠︎초안값[18 | 실 클러스터 항목 수로 검증 | P2 게이트]
 
-좌 32% / 중 36% / 우 32%. 중앙은 traffic/delivery와 같은 pod 레일. 좌우 rail 동시 표시,
-연결선 묶음 규칙 동일. viewport < 1280px에서는 both를 제공하지 않고 세그먼트에서 숨긴다
-(§5.4 breakpoint).
+### 3.3 리본 두께의 의미 (헌법 §1.2 적용)
+
+리본 두께는 연결체 face 높이(멤버 수 × 46 비례)의 기하적 결과다. 트래픽량이 아니라
+**집합 크기(cardinality)**이며, 라벨에 멤버 수를 병기해 트래픽으로 오인하지 않게 한다.
+헌법 §1.2("비트래픽 edge 두께는 수량 금지")에 예외 1줄을 제안한다: "face-결합 리본의
+두께는 결합 면 높이의 기하적 결과로서 허용한다".
 
 ## 4. 모션 계약
 
@@ -225,30 +250,50 @@ empty-authoritative / stale(배지) / populated. 각 상태는 시각 회귀 대
 
 | 토큰 | 값 | 용도 |
 |---|---|---|
-| `topo-duration-tile` | 420ms | 타일 위치/크기 morph |
-| `topo-duration-line` | 180ms | 연결선 페이드/드로우 |
-| `topo-duration-ui` | 160ms | drawer, 배지, 세그먼트 |
-| `topo-ease-morph` | cubic-bezier(0.32, 0.72, 0, 1) | 타일 morph |
-| `topo-ease-standard` | cubic-bezier(0.2, 0, 0, 1) | 그 외 |
-| `topo-stagger-line` | 12ms/선, 총합 max 480ms | 선 전개 |
-| `topo-max-concurrent` | 타일 300개 초과 시 morph 없이 crossfade 200ms | 성능 하한 |
+| `topo-duration-morph` | 720ms | 큐브 위치/크기 morph (map↔focus) |
+| `topo-duration-ribbon` | 560ms | 리본 좌→우 성장 드로우 (연결체당) |
+| `topo-duration-ui` | 160ms | drawer, 배지, 라벨 페이드 |
+| `topo-ease-morph` | cubic-bezier(0.3, 0.7, 0, 1) | 큐브 morph (감속 지배) |
+| `topo-ease-draw` | cubic-bezier(0.33, 1, 0.68, 1) | 리본 성장 (easeOutCubic) |
+| `topo-stagger-cube` | 24ms/큐브 (맵 x좌표 오름차순), 총합 max 300ms | 캐스케이드 |
+| `topo-stagger-ribbon` | 110ms/연결체 | 리본 순차 드로우 |
+| `topo-max-concurrent` | 큐브 300개 초과 시 morph 없이 crossfade 200ms | 성능 하한 |
 
-⚠︎초안값[420/180/12ms와 bezier 값 | 동작 프로토타입에서 3인 이상 육안 판정 + 60fps 측정 |
+⚠︎초안값[720/560/24/110ms와 bezier 값 | 동작 프로토타입 육안 3인 + 60fps 측정 |
 P1 종료 게이트에서 확정, 이후 변경은 문서 개정]
 
-### 4.2 뷰 전환 시퀀스 (확정 규칙)
+### 4.2 전환 시퀀스 (focus 진입/복귀 — 확정 규칙)
 
-1. **Phase A — 타일 이동(0→420ms)**: 모든 기존 연결선을 60ms 내 페이드아웃 → 타일이
-   `layoutId=entityKey`로 새 좌표로 morph. 이동 중 타일 내용(이름/막대)은 유지.
-2. **Phase B — 구조 등장(420ms→)**: rail 카드가 20px 슬라이드+페이드로 등장(120ms),
-   완료 후 연결선이 stagger 드로우(§4.1). **선은 반드시 타일 정지 후에 그린다.**
-3. 전환 중 새 폴링/delta 데이터 도착 시: 적용을 버퍼하고 Phase B 완료 직후 일괄 적용.
-   전환은 데이터에 의해 중단되지 않는다.
-4. 전환 중 사용자가 다른 뷰를 선택하면: 현재 보간 위치에서 새 목표로 retarget(Motion 기본
-   동작), Phase B는 새 뷰 기준으로 재시작.
-5. enter(새 pod): 최종 위치에서 scale 0.8→1 + fade 160ms. exit(삭제): fade+scale 0.9,
-   160ms 후 제거. **동명 재생성은 §1.1 한계로 enter가 생략될 수 있음을 문서화된 결함으로
+**진입(map → focus)**
+1. 0ms: 기존 리본·라벨 150ms 페이드아웃, 비연관 큐브 opacity 0.30으로 감쇠 시작.
+2. 0→720ms: 소스·연관 큐브가 목표 좌표로 morph(`layoutId=entityKey`). stagger는
+   **맵에서의 x좌표 오름차순**(물결이 왼→오로 읽히는 방향) — 랜덤 지연 금지.
+3. 580ms(=morph 80%)부터: 소스/열 라벨이 페이드+16px 슬라이드로 등장 — 완전 순차보다
+   약간의 오버랩이 자연스럽다.
+4. 780ms(=morph 완료+60ms 정지 여유)부터: 리본이 연결체 순서대로 **소스면에서
+   자라나며** 드로우(560ms, easeOutCubic, 110ms stagger). 페이드인 금지 — 흐름의
+   방향이 읽혀야 한다.
+
+**복귀(focus → map)**: 리본 150ms 페이드아웃 → 전체 큐브 720ms morph(비연관 opacity
+복원 동시) → 맵 라벨 등장. 리본 드로우의 역재생은 하지 않는다.
+
+5. 전환 중 새 폴링/delta 도착: 적용을 버퍼하고 시퀀스 완료 직후 일괄 적용. 전환은
+   데이터에 의해 중단되지 않는다.
+6. 전환 중 다른 큐브 클릭/Esc: 현재 보간 위치에서 새 목표로 retarget(위치 점프 금지),
+   리본은 즉시 소거 후 새 기준으로 재드로우.
+7. enter(새 항목): 최종 위치에서 scale 0.9→1 + fade 160ms. exit(삭제): fade 160ms 후
+   제거. **동명 재생성은 §1.1 한계로 enter가 생략될 수 있음을 문서화된 결함으로
    유지**(BE-2로 해소).
+
+### 4.2b 자연스러움 원칙 (모든 모션 공통 — 게이트 대상)
+
+1. easing은 §4.1의 두 곡선만 사용한다. 한 화면에 다른 가감속 성격이 섞이면 부자연스럽다.
+2. 이동하는 요소는 위치·크기를 **한 트랜지션에서 동시에** 보간한다(순차 보간 금지).
+3. stagger는 항상 공간 좌표 순서 기반 — 인덱스·랜덤 기반 금지. 물결에는 방향이 있어야 한다.
+4. 요소별 모션 문법 고정: 큐브=morph, 리본=성장 드로우, 라벨=페이드+슬라이드. 같은 요소가
+   상황마다 다른 방식으로 움직이지 않는다.
+5. 어떤 인터럽트에서도 요소는 순간이동하지 않는다(retarget만 허용).
+6. 검증: P1·P2 게이트에서 60fps(프레임 드랍 p95 0) + 3인 육안 "부자연스러운 지점 0건".
 
 ### 4.3 reduced motion
 
@@ -270,6 +315,13 @@ enter/exit는 opacity 100ms만. 파티클·펄스류는 v0에 존재하지 않�
 | `--topo-rel-gitops` | oklch(0.68 0.10 200) | oklch(0.50 0.10 200) | 점선 |
 | `--topo-frame-border` | 기존 `border` 토큰 재사용 | 〃 | node frame |
 | `--topo-stale-pattern` | 대각 45° 해치, 선폭 1px, 간격 4px, 불투명도 0.25 | 〃 | stale 타일 오버레이 |
+| `--topo-ribbon-glow` | drop-shadow(0 0 12px 소스색@20%) | 강도 절반 | focus 리본 발광 |
+| `--topo-cube-radius-src` | 8px | 〃 | focus 소스 큐브 |
+| `--topo-cube-radius-col` | 5px | 〃 | focus 열 큐브 |
+
+리본 그라디언트(확정): 3-stop `0%: 소스 health색 α0.95 → 55%: 소스색 α0.38 → 100%:
+연결체 health색 α0.95`. `gradientUnits=userSpaceOnUse`로 좌표를 고정해 성장 드로우 중
+그라디언트가 흐르지 않게 한다. 드로우는 clip 폭 애니메이션으로 구현한다(경로 재계산 금지).
 
 - health 어휘는 백엔드 inventory `health` 리터럴(`healthy|degraded`) + phase 파생 없이
   `unknown`(값 부재)만 사용한다. `unhealthy`는 BE가 해당 리터럴을 방출하기 전까지 미사용
@@ -307,8 +359,8 @@ usage 막대: 타일 하단 1.5px×2(CPU 위, MEM 아래), 배경 대비 3:1.
 
 ```ts
 type TopoMsg =
-  | { type: "view.changed"; view: "overview" | "traffic" | "delivery" | "both"; via: "segment" | "keyboard" | "url" }
-  | { type: "node.focused"; nodeKey: string | null }
+  | { type: "focus.entered"; entityKey: string; via: "click" | "keyboard" | "url" }
+  | { type: "focus.exited"; via: "back" | "escape" | "url" }
   | { type: "entity.activated"; entityKey: string }        // pod→drawer, service/workload→relation focus
   | { type: "relationFocus.cleared" }
   | { type: "drawer.closed" }
@@ -326,8 +378,8 @@ type TopoMsg =
   dispatch한다. 컴포넌트가 상태를 직접 쓰거나 fetch하는 경로는 금지(헌법 §1.5 상속).
 - `TopoFrame = { entities: TopoEntity[]; relations: TopoRelation[]; usage: ...; fetchedAt }` —
   D1~D4 응답을 어댑터가 병합한 형태. WS 패치도 이 형태의 부분집합만 쓴다.
-- URL 동기화: `view.changed`·`node.focused`·`entity.activated`(pod)만 URL에 기록. focus/hover는
-  기록하지 않는다(헌법 §21.4 상속).
+- URL 동기화: `focus.entered/exited`(`?focus=`)와 `entity.activated`(pod drawer, `?pod=`)만
+  URL에 기록. keyboard focus/hover는 기록하지 않는다(헌법 §21.4 상속).
 
 ### 6.2 액션
 
@@ -340,13 +392,12 @@ v0 토폴로지는 **조회 전용**이다. scale/restart 등 명령은 기존 �
 
 | 입력 | 결과 |
 |---|---|
-| 타일 hover | tooltip(이름, ns, 상태 텍스트, CPU/MEM 값 or `측정 없음`, 재시작 수) 300ms 지연 |
-| pod 클릭/Enter | drawer 열기 + URL `?pod=` |
-| node 헤더 클릭/Enter | node focus(해당 frame 확대: 캔버스 전폭 사용) + URL `?node=` |
-| service/workload 카드 클릭/Enter | relation focus — 연결 선·타일만 100% 불투명, 나머지 30% |
-| Esc | relation focus → drawer → node focus 순으로 단계 해제 |
-| `[` `]` `1..4` | 뷰 전환 |
-| 화살표 | 공간 이웃으로 focus 이동(§7) |
+| 큐브 hover | tooltip(이름, ns, 상태 텍스트, CPU/MEM 값 or `측정 없음`, 재시작 수) 300ms 지연 |
+| 큐브 클릭/Enter (map) | focus 진입 — 클릭한 큐브가 소스 |
+| 열 큐브 클릭/Enter (focus) | 그 큐브를 소스로 focus 재진입(§4.2-6 retarget) |
+| 소스 큐브 클릭/Enter (focus) | 상세 drawer 열기(pod면 URL `?pod=`) |
+| `← 전체 맵` 버튼 / Esc | drawer → focus → map 순 단계 해제 |
+| 화살표 | 공간 이웃으로 keyboard focus 이동(§7) |
 
 ## 7. 접근성 (구체)
 
@@ -362,10 +413,14 @@ v0 토폴로지는 **조회 전용**이다. scale/restart 등 명령은 기존 �
 
 - **레이아웃 단위 테스트**(node `--test`): pods 0/1/13/200/401, node 0/1/5, 미스케줄 pod,
   frame 강등 히스테리시스, 밀도 판정 경계(55/56/95/96px), 화살표 이웃 결정성.
+  **focus 완전성**: 임의 입력에서 `열 항목 수 + 1 = map 항목 수` property 테스트,
+  뭉침 결정성(동일 입력 → 동일 연결체 분할), 연결체 심각도 정렬, 소스면 분할 합 = 소스면
+  전체(빈틈 0), 연결체당 리본 수 = 1.
 - **reducer 테스트**: seq 역전 폐기, 미발견 delta 미삽입+재조회 예약, visibility 중단/복귀,
-  전환 중 데이터 버퍼.
-- **시각 회귀**: 4뷰 × light/dark × 1440/1024/390 × {populated, empty, error, stale} +
-  reduced-motion 1세트. 기존 `visual-product` 게이트에 추가.
+  전환 중 데이터 버퍼, focus 중 소스 소멸 시 `리소스 없음` 상태 유지.
+- **시각 회귀**: map/focus × light/dark × 1440/1024/390 × {populated, empty, error, stale} +
+  reduced-motion 1세트 + focus 전환 중간 프레임(morph 50%·리본 드로우 50%) 2컷.
+  기존 `visual-product` 게이트에 추가.
 - **대비 자동 검사**: 토큰 조합 전수(텍스트 4.5:1, 그래픽 3:1) 스크립트를 `check:design`에 추가.
 - **실측 게이트**: 라이브 `cluster-1`에서 4뷰 순회, WS 5분 관찰(유령 pod 0, 콘솔 오류 0),
   pod 강제 재시작 시 enter/exit 모션 확인.
@@ -376,21 +431,22 @@ v0 토폴로지는 **조회 전용**이다. scale/restart 등 명령은 기존 �
 
 | # | 항목 | 초안값 | 검증 방법 | 확정 게이트 |
 |---|---|---|---|---|
-| U1 | morph duration/easing | 420ms / cubic-bezier(0.32,0.72,0,1) | 프로토타입 육안 3인 + 60fps 측정 | P1 종료 |
-| U2 | 선 stagger | 12ms, max 480ms | 〃 | P2 종료 |
+| U1 | morph duration/easing | 720ms / cubic-bezier(0.3,0.7,0,1) | 프로토타입 육안 3인 + 60fps 측정 | P1 종료 |
+| U2 | 리본 드로우/stagger | 560ms / 110ms·연결체 | 〃 + §4.2b "부자연 0건" | P2 종료 |
 | U3 | frame 강등 임계 | 200 pods/frame, 히스테리시스 ±10% | 401-pod 단위 테스트 + 실측 | P1 종료 |
-| U4 | 묶음 리본 임계 | 소스당 12선 | 시각 회귀 가독성 | P2 종료 |
+| U4 | focus 열 스크롤 임계 | 18항목 | 실 클러스터 항목 수 검증 | P2 종료 |
 | U5 | 색 토큰 oklch 수치 | §5.1 표 | 대비 검사 + 병치 스크린샷 | P1 종료 |
-| U6 | crossfade 강등 임계 | 동시 300 타일 | 성능 측정(p95 프레임) | P2 종료 |
+| U6 | crossfade 강등 임계 | 동시 300 큐브 | 성능 측정(p95 프레임) | P2 종료 |
 
 ## 10. 구현 순서
 
 - **P0 (0.5일)**: 이 문서 리뷰 승인, tokens.css 토큰 추가 + 대비 검사 스크립트.
-- **P1 (2일)**: D1~D4 zod 스키마·어댑터, reducer, overview 레이아웃+모션, 7상태, 단위 테스트.
-  게이트: U1·U3·U5 확정.
-- **P2 (2일)**: traffic/delivery rail + 연결선 + relation focus, D5·D6 연동. 게이트: U2·U4·U6 확정.
-- **P3 (1일)**: both 뷰, WS 실시간 규칙(§1.5), drawer.
-- **P4 (1일)**: 접근성 마감, 시각 회귀 4뷰 세트, 라이브 실측 게이트, ⚠︎마커 제거 커밋.
+- **P1 (2일)**: D1~D4 zod 스키마·어댑터, reducer, map 레이아웃+캐스케이드 morph, 7상태,
+  단위 테스트. 게이트: U1·U3·U5 확정.
+- **P2 (2일)**: focus 모드 — 전체 열·health 뭉침·연결체당 리본 1개·완전성 assert·성장
+  드로우, D5·D6 연동. 게이트: U2·U4·U6 확정 + §4.2b 자연스러움 판정.
+- **P3 (1일)**: drawer, WS 실시간 규칙(§1.5), 전환 중 데이터 버퍼.
+- **P4 (1일)**: 접근성 마감, 시각 회귀 map/focus 세트, 라이브 실측 게이트, ⚠︎마커 제거 커밋.
 
 총 6.5일. 각 단계는 독립 커밋이며 `npm run check` 통과가 커밋 조건이다. BE-1~4는 병행
 요청하되 v0 완성의 전제가 아니다 — 이 문서의 모든 기능은 오늘의 백엔드로 동작한다.

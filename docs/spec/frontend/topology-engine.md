@@ -540,16 +540,19 @@ type DataOrigin =
   | { kind: "replay"; adapterId: string; recordingId: string }
 
 interface TopologyGateway {
-  readonly origin: DataOrigin
-  getCatalog(signal: AbortSignal): Promise<TopologyCatalogResponse>
-  plan(query: TopologyQuery, signal: AbortSignal): Promise<QueryPlanResponse>
-  getSnapshot(planId: string, signal: AbortSignal): Promise<ProjectionFrame>
+  readonly configuredOrigin: DataOrigin
+  getCatalog(signal: AbortSignal): Promise<ConsumerEnvelope<TopologyCatalogResponse>>
+  plan(query: TopologyQuery, signal: AbortSignal): Promise<ConsumerEnvelope<QueryPlanResponse>>
+  getSnapshot(planId: string, signal: AbortSignal): Promise<SnapshotEnvelope>
   openStream(request: StreamSubscription, signal: AbortSignal): AsyncIterable<StreamEnvelope>
-  getEntityDetail(request: EntityDetailRequest, signal: AbortSignal): Promise<EntityDetail>
+  getEntityDetail(request: EntityDetailRequest, signal: AbortSignal): Promise<ConsumerEnvelope<EntityDetail>>
 }
 
 interface TopologyCommandGateway {
   execute(request: CommandRequest, signal: AbortSignal): Promise<CommandReceipt>
+  lookupReceipt(idempotencyKey: string, signal: AbortSignal): Promise<ConsumerEnvelope<OperationReceiptLookupResult>>
+  getStatusCut(operationId: string, signal: AbortSignal): Promise<ConsumerEnvelope<OperationStatusCut>>
+  watch(operationId: string, cursor: ResumeCursor, signal: AbortSignal): AsyncIterable<GitOpsOperationEvent>
 }
 ```
 
@@ -566,6 +569,7 @@ product composition root
 강제 규칙:
 
 - 실제 adapter와 synthetic adapter는 동일 generated runtime schema를 통과한다.
+- configuredOrigin은 composition expectation일 뿐 wire authority가 아니다. 모든 root/stream/receipt의 DataOrigin을 검증하며 mismatch를 merge하지 않는다.
 - synthetic/replay 구현과 dataset은 `@product/topology-testkit/adapters` 아래에만 둔다.
 - `references/ui-layer-lab/src/product`의 component, core, query, renderer는 testkit을 import할 수 없다.
 - composition root의 validated runtime config만 adapter를 선택한다. component/environment conditional branch로 선택하지 않는다.
@@ -725,11 +729,16 @@ type StreamSubscription = {
 
 type ClusterCut = {
   clusterUid: string
-  inventoryEpoch: string
+  access: "full" | "partial" | "restricted" | "unavailable"
+  inventoryEpoch: string | null
+  projectionRevision: string | null
   resourceCursors: Readonly<Record<string, string>>
   sourceWatermarks: readonly SourceWatermark[]
+  reason: StatusReason | null
 }
 ```
+
+ClusterCut full은 inventoryEpoch/projectionRevision이 non-null이고 reason=null이다. partial은 관측 revision과 non-null reason을 가진다. restricted/unavailable은 두 revision이 null, resourceCursors/sourceWatermarks가 빈 collection, reason이 non-null이며 숨은 source 이름/count를 노출하지 않는다.
 
 `resourceCursors`의 key는 canonical GVR이고 value는 opaque resourceVersion/resume token이다. 서로 다른 GVR 또는 cluster의 resourceVersion을 비교하지 않는다. `SourceWatermark`는 observedAt, window, lastSuccess, age, maxAge, lifecycle/implementation/installation/access/availability/freshness/completeness/coverage 축을 포함한다. UI는 frame freshness를 표시하며 source skew가 정책 한계를 넘으면 completeness와 freshness 축을 각각 `partial`, `stale`로 둔다.
 
@@ -1871,7 +1880,7 @@ Effect 결과와 실패는 다시 EngineMessage로 dispatch한다. component cal
 - cancelled effect 결과와 current hash가 다른 결과는 state에 적용하지 않고 diagnostic만 남긴다.
 - effect result message는 effectId와 causationEventId를 포함한다.
 - automatic retry는 idempotent read에만 허용한다.
-- command effect는 자동 retry하지 않는다. 같은 logical invocation은 같은 idempotencyKey를 사용하고, 응답 유실 가능성이 있으면 operation/receipt status를 조회한다.
+- command effect는 자동 retry하지 않는다. 같은 logical invocation은 같은 idempotencyKey를 사용하고, 응답 유실 가능성이 있으면 idempotency key receipt lookup을 먼저 실행한다. receipt에서 operationId를 얻은 뒤에만 status cut을 조회한다.
 - confirmation은 `not-required | confirmed` union이다. confirmed token은 action catalog/authorization에서 발급되고 target, parameters hash, capability revision, expiry에 bind한다.
 - reducer idempotence는 외부 부작용 exactly-once를 보장하지 않는다. command gateway가 idempotency ledger와 audit receipt를 보장해야 한다.
 
