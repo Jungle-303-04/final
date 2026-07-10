@@ -86,6 +86,7 @@ def validate_readiness(
     checks.extend(check_trace_correlation_contract())
     checks.extend(check_safe_pr_patch_contract())
     checks.extend(check_production_gate_contract())
+    checks.extend(check_gate_contract_script_contract())
     checks.extend(check_gate_contract_workflow())
     checks.extend(check_runtime_config(require_runtime_config=require_runtime_config))
     checks.extend(check_github_runtime_config(require_runtime_config=require_runtime_config))
@@ -813,6 +814,37 @@ def check_gate_contract_workflow() -> list[ReadinessCheck]:
             result.ok,
             "contract passed" if result.ok else "; ".join(item.message for item in result.violations),
         )
+    ]
+
+
+def check_gate_contract_script_contract() -> list[ReadinessCheck]:
+    path = Path("scripts/validate_release_flow_production_gate.py")
+    if not path.is_file():
+        return [ReadinessCheck("script.gate_contract", False, "release-flow production gate validator is missing")]
+    source = path.read_text(encoding="utf-8")
+    return [
+        ReadinessCheck(
+            "script.gate_contract.required_live_inputs",
+            "REQUIRED_GATE_INPUTS" in source
+            and '"live_change_ticket"' in source
+            and '"live_runbook_url"' in source
+            and '"live_image"' in source
+            and '"live_verification_url"' in source
+            and '"live_safe_pr_workflow_run_id"' in source
+            and '"live_safe_pr_url"' in source
+            and '"live_release_owner"' in source
+            and '"live_oncall_contact"' in source,
+            "production deploy workflows must pass live evidence inputs to the gate",
+        ),
+        ReadinessCheck(
+            "script.gate_contract.literal_url_guard",
+            "HTTPS_GATE_INPUTS" in source
+            and "PLACEHOLDER_URL_HOSTS" in source
+            and "validate_literal_url_input" in source
+            and "parsed.scheme != \"https\"" in source
+            and "host.endswith(\".localhost\")" in source,
+            "production deploy workflows cannot hard-code non-https or placeholder live URLs",
+        ),
     ]
 
 
