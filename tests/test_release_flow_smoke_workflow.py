@@ -27,6 +27,8 @@ def test_release_flow_smoke_workflow_declares_operator_inputs_and_secrets_for_di
 
     assert set(inputs) == {
         "api_base_url",
+        "alert_preflight",
+        "alert_severity",
         "artifact_retention_days",
         "github_environment",
         "production_preflight_plan_id",
@@ -35,6 +37,9 @@ def test_release_flow_smoke_workflow_declares_operator_inputs_and_secrets_for_di
     assert inputs["production_preflight_run_limit"]["default"] == "20"
     assert inputs["github_environment"]["default"] == "production"
     assert inputs["artifact_retention_days"]["default"] == "30"
+    assert inputs["alert_preflight"]["default"] is False
+    assert inputs["alert_severity"]["default"] == "warning"
+    assert inputs["alert_severity"]["options"] == ["info", "warning", "critical"]
     assert (
         job["env"]["API_BASE_URL"]
         == "${{ inputs.api_base_url || secrets.release_flow_api_base_url || secrets.RELEASE_FLOW_API_BASE_URL }}"
@@ -46,6 +51,8 @@ def test_release_flow_smoke_workflow_declares_operator_inputs_and_secrets_for_di
     )
     assert job["env"]["PRODUCTION_PREFLIGHT_RUN_LIMIT"] == "${{ inputs.production_preflight_run_limit || '20' }}"
     assert job["env"]["ARTIFACT_RETENTION_DAYS"] == "${{ inputs.artifact_retention_days || '30' }}"
+    assert job["env"]["ALERT_PREFLIGHT"] == "${{ inputs.alert_preflight || false }}"
+    assert job["env"]["ALERT_PREFLIGHT_SEVERITY"] == "${{ inputs.alert_severity || 'warning' }}"
 
 
 def test_release_flow_smoke_workflow_can_be_called_by_deploy_workflows() -> None:
@@ -54,6 +61,8 @@ def test_release_flow_smoke_workflow_can_be_called_by_deploy_workflows() -> None
 
     assert set(workflow_call["inputs"]) == {
         "api_base_url",
+        "alert_preflight",
+        "alert_severity",
         "artifact_retention_days",
         "github_environment",
         "production_preflight_plan_id",
@@ -67,6 +76,8 @@ def test_release_flow_smoke_workflow_can_be_called_by_deploy_workflows() -> None
     assert workflow_call["inputs"]["production_preflight_run_limit"]["default"] == "20"
     assert workflow_call["inputs"]["github_environment"]["default"] == "production"
     assert workflow_call["inputs"]["artifact_retention_days"]["default"] == "30"
+    assert workflow_call["inputs"]["alert_preflight"]["default"] is False
+    assert workflow_call["inputs"]["alert_severity"]["default"] == "warning"
     assert workflow_call["outputs"]["release_smoke_ok"]["value"] == (
         "${{ jobs.release_flow_smoke.outputs.release_smoke_ok }}"
     )
@@ -94,6 +105,8 @@ def test_release_flow_smoke_workflow_uploads_artifacts_before_failing_gate() -> 
     }
     assert smoke_step["continue-on-error"] is True
     assert "--production-preflight" in smoke_step["run"]
+    assert "smoke_args=(" in smoke_step["run"]
+    assert 'smoke_args+=(--alert-preflight --alert-severity "${ALERT_PREFLIGHT_SEVERITY}")' in smoke_step["run"]
     assert "--retry-attempts 5" in smoke_step["run"]
     assert "--ci" in smoke_step["run"]
     assert "--ci-artifacts-dir artifacts/release-flow" in smoke_step["run"]
@@ -102,6 +115,7 @@ def test_release_flow_smoke_workflow_uploads_artifacts_before_failing_gate() -> 
     assert "production_preflight_run_limit must be between 1 and 500" in validate_step["run"]
     assert "artifact_retention_days must be an integer between 1 and 90" in validate_step["run"]
     assert "artifact_retention_days must be between 1 and 90" in validate_step["run"]
+    assert "alert_severity must be one of info, warning, or critical" in validate_step["run"]
 
     assert upload_step["if"] == "always()"
     assert upload_step["uses"] == "actions/upload-artifact@v4"

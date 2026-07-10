@@ -303,7 +303,7 @@ GitHub Actions에서 바로 실행하려면 `.github/workflows/release-flow-smok
 
 workflow는 `scripts/release_flow_smoke.py --production-preflight --ci --ci-artifacts-dir artifacts/release-flow`를 실행한다. smoke step은 먼저 GitHub step summary, output, annotation, JSON/JUnit/Markdown artifact를 남기고, artifact upload가 끝난 뒤 `release_smoke_ok` output이 `true`가 아니면 job을 실패시킨다. 같은 `github_environment` 값으로 실행된 smoke job은 `release-flow-smoke-<environment>` concurrency group에 묶이며, 이미 진행 중인 smoke를 취소하지 않고 다음 job을 대기시킨다.
 
-workflow는 smoke를 실행하기 전에 numeric input을 검증한다. `production_preflight_run_limit`은 1~500, `artifact_retention_days`는 GitHub artifact 제한에 맞춰 1~90 사이의 정수여야 한다. 범위를 벗어나면 smoke를 시작하지 않고 GitHub annotation으로 잘못된 입력을 표시한다.
+workflow는 smoke를 실행하기 전에 numeric input을 검증한다. `production_preflight_run_limit`은 1~500, `artifact_retention_days`는 GitHub artifact 제한에 맞춰 1~90 사이의 정수여야 한다. 범위를 벗어나면 smoke를 시작하지 않고 GitHub annotation으로 잘못된 입력을 표시한다. `alert_preflight`를 켜면 smoke가 enabled alert channel을 찾아 validation alert를 보내며, `alert_severity`는 `info`, `warning`, `critical` 중 하나여야 한다. 이 옵션은 실제 Slack/webhook/온콜 테스트 메시지를 보낼 수 있으므로 기본값은 `false`다.
 
 다른 배포 workflow에서 release-flow smoke를 gate로 재사용하려면 같은 파일을 `workflow_call`로 호출한다. 호출자는 `release_flow_api_base_url`, `release_flow_auth_email`, `release_flow_auth_password` secret을 넘기거나 `secrets: inherit`로 repository secret을 그대로 넘길 수 있다.
 
@@ -314,6 +314,8 @@ jobs:
     with:
       github_environment: production
       artifact_retention_days: "30"
+      alert_preflight: false
+      alert_severity: warning
       production_preflight_plan_id: ${{ inputs.release_plan_id }}
       production_preflight_run_limit: "20"
     secrets:
