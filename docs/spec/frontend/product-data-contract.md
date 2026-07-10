@@ -117,6 +117,11 @@ type StatusReason = {
   detail: string | null
 }
 
+type RevisionValue =
+  | { state: "known"; value: string; reason: null }
+  | { state: "unknown" | "redacted"; value: null; reason: StatusReason }
+  | { state: "not_applicable"; value: null; reason: null }
+
 type AccessMode =
   | { mode: "read_write"; reason: null; redaction: "none" | "partial" }
   | { mode: "read_only"; reason: StatusReason; redaction: "none" | "partial" }
@@ -137,8 +142,8 @@ type SyncStatus = {
     | "synchronized"
     | "out_of_sync"
     | "unknown"
-  desiredRevision: string | null
-  liveRevision: string | null
+  desiredRevision: RevisionValue
+  liveRevision: RevisionValue
   comparedAt: Timestamp | null
   reason: StatusReason | null
 }
@@ -1696,7 +1701,7 @@ type ConsumerEnvelope<T> = {
   generatedAt: Timestamp
   freshness: Freshness
   completeness: DataCompleteness
-  access: AccessMode
+  access: SuccessfulAccessMode
   dataOrigin: DataOrigin
   warnings: readonly StatusReason[]
 }
