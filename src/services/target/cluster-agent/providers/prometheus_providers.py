@@ -228,6 +228,8 @@ def limit_prometheus_payload(payload: JsonObject) -> JsonObject:
         ),
         limits=limits,
     )
+    if result_type == "matrix":
+        sync_matrix_series_value_limit(payload, limits)
     attach_collection_limits(payload, limits)
     return payload
 
@@ -257,6 +259,38 @@ def limit_matrix_series_values(payload: JsonObject, limits: JsonObject) -> None:
         limit = collection_limit(original_count, returned_count)
         limit["series_count"] = truncated_series_count
         limits[PROMETHEUS_SERIES_VALUES_KEY] = limit
+
+
+def sync_matrix_series_value_limit(payload: JsonObject, limits: JsonObject) -> None:
+    """Keep nested matrix value counts aligned with the final series payload."""
+    if PROMETHEUS_SERIES_VALUES_KEY not in limits:
+        return
+    series = payload.get(PROMETHEUS_SERIES_KEY)
+    if not isinstance(series, list):
+        limits.pop(PROMETHEUS_SERIES_VALUES_KEY, None)
+        return
+    original_count = 0
+    returned_count = 0
+    series_count = 0
+    for item in series:
+        if not isinstance(item, dict):
+            continue
+        values = item.get("values")
+        if not isinstance(values, list):
+            continue
+        series_count += 1
+        returned_count += len(values)
+        value_count = item.get("value_count")
+        if isinstance(value_count, int) and value_count >= len(values):
+            original_count += value_count
+        else:
+            original_count += len(values)
+    if original_count <= returned_count:
+        limits.pop(PROMETHEUS_SERIES_VALUES_KEY, None)
+        return
+    limit = collection_limit(original_count, returned_count)
+    limit["series_count"] = series_count
+    limits[PROMETHEUS_SERIES_VALUES_KEY] = limit
 
 
 def edge_sample(values: list[object], max_items: int) -> list[object]:

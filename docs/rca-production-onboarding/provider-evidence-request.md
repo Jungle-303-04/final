@@ -34,11 +34,12 @@ RCA는 provider가 보내준 evidence만 보고 symptom, root cause candidate, c
 - services
 - endpointslices
 
-큰 namespace에서 evidence job result가 1MiB 제한을 넘지 않도록 Kubernetes provider는
+큰 namespace에서 evidence job result가 1MiB 제한을 넘길 위험을 줄이기 위해 Kubernetes provider는
 `pods`, `events`, `nodes`, `workloads`, `services`, `endpoints` 목록을 전송 직전에 제한한다.
-잘린 목록이 있으면 `kubernetes.collection_limits`에 전체 개수와 반환 개수를 남긴다.
+잘린 목록이 있으면 `kubernetes.collection_limits`에 전체 개수와 최종 반환 개수를 남긴다.
 기존 필드 이름은 유지되므로 RCA는 같은 경로를 읽되, `collection_limits`가 있으면 일부 샘플임을 고려한다.
-개수 제한 뒤에도 JSON byte 크기가 크면 가장 큰 목록부터 추가로 줄인다.
+개수 제한 뒤에도 JSON byte 크기가 크면 JSON byte 크기가 가장 큰 목록부터 추가로 줄인다.
+단일 항목이 너무 크면 해당 목록은 0개까지 줄어들 수 있다.
 
 현재 payload에서 기대 가능한 정보:
 
@@ -158,7 +159,7 @@ RCA는 provider가 보내준 evidence만 보고 symptom, root cause candidate, c
 - `threshold`는 보수적인 기본 기준만 쓴다. ratio 계열은 `0.8` 이상 warning, `0.9` 이상 critical이다. `up`은 `1` 미만이면 critical이다. restart/not ready/scrape error/throttling 계열은 `0`보다 크면 warning 신호로 본다. known metric이 아니거나 숫자 point가 없으면 생략될 수 있다.
 - `signals`는 threshold를 넘은 경우에만 `memory_pressure`, `cpu_pressure`, `cpu_throttling`, `scrape_target_down`, `collector_scrape_error`, `not_ready_pods`, `restart_increase` 같은 작은 label을 담는다.
 - `baseline_comparison`은 range query에서 비교 가능한 series가 있을 때만 만든다. 외부 기준선이나 이전 배포 기준선이 아니라, 같은 query window 안의 첫 point를 기준으로 증가/감소/유지 series 개수를 계산한다.
-- high cardinality metric 때문에 `samples`, `series`, `series[].values`, `result`가 너무 커질 수 있으므로 전송 전 제한한다. 제한되면 해당 query result의 `collection_limits`에 전체 개수와 반환 개수를 남긴다. `analysis`는 제한 전 숫자 기준으로 계산한다. 개수 제한 뒤에도 JSON byte 크기가 크면 가장 큰 목록부터 추가로 줄인다.
+- high cardinality metric 때문에 `samples`, `series`, `series[].values`, `result`가 너무 커질 수 있으므로 전송 전 제한한다. 제한되면 해당 query result의 `collection_limits`에 전체 개수와 최종 반환 개수를 남긴다. `analysis`는 제한 전 숫자 기준으로 계산한다. 개수 제한 뒤에도 JSON byte 크기가 크면 JSON byte 크기가 가장 큰 목록부터 추가로 줄인다. 단일 항목이 너무 크면 해당 목록은 0개까지 줄어들 수 있다. matrix의 `series.values` 제한 정보는 최종 `series` 목록이 정해진 뒤 다시 계산한다.
 
 주의:
 
@@ -345,10 +346,12 @@ EndpointSlice condition은 Kubernetes API의 기본 해석을 따른다.
 - change_context.endpoint_slice_ready_endpoints[].ready_targets[].kind/namespace/name
 - change_context.endpoint_slice_ready_endpoints[].ready_targets_truncated(잘렸을 때만 존재)
 
-큰 namespace에서 evidence job result가 1MiB 제한을 넘지 않도록 metadata provider는 큰 목록을 제한한다.
-잘린 목록이 있으면 `change_context.collection_limits`에 전체 개수와 반환 개수를 남긴다.
+큰 namespace에서 evidence job result가 1MiB 제한을 넘길 위험을 줄이기 위해 metadata provider는 큰 목록을 제한한다.
+잘린 목록이 있으면 `change_context.collection_limits`에 전체 개수와 최종 반환 개수를 남긴다.
 전체 summary query는 `current_workload_snapshots`, `service_selector_matches`,
 `endpoint_slice_ready_endpoints`, `resource_quotas` 같은 top-level 목록에 상한을 둔다.
+개수 제한 뒤에도 JSON byte 크기가 크면 JSON byte 크기가 가장 큰 top-level 목록부터 추가로 줄인다.
+단일 항목이 너무 크면 해당 top-level 목록은 0개까지 줄어들 수 있다.
 항목 내부에서도 `matched_pods`, `ready_targets`, `pod_statuses`, `replicaset_revisions`는
 샘플 목록만 보내고 full count와 `*_truncated` flag로 잘림 여부를 표시한다.
 

@@ -496,6 +496,54 @@ def test_prometheus_vector_samples_are_limited_by_payload_bytes() -> None:
     )
 
 
+def test_prometheus_vector_can_drop_single_oversized_sample() -> None:
+    module = load_evidence_module()
+    metrics_provider = module.PrometheusMetricsProvider.from_config(lambda _name, default: default)
+    result: dict[str, object] = {}
+    definition = module.TelemetryQueryDefinition.from_mapping(
+        {
+            "source": "prometheus",
+            "name": "oversized_sample",
+            "description": "Vector query with one oversized sample.",
+            "query": "up",
+        }
+    )
+
+    metrics_provider.append_result(
+        result,
+        definition.to_provider_query(),
+        {
+            "status": "success",
+            "data": {
+                "resultType": "vector",
+                "result": [
+                    {
+                        "metric": {"namespace": "target", "pod": "pod-1", "blob": "x" * 1_100_000},
+                        "value": [1782822500.0, "1"],
+                    }
+                ],
+            },
+        },
+    )
+
+    metrics = metrics_provider.build_response(result)
+    oversized_sample = metrics["results"]["oversized_sample"]
+
+    assert oversized_sample["samples"] == []
+    assert oversized_sample["analysis"]["sample_count"] == 1
+    assert oversized_sample["collection_limits"]["lists"]["samples"] == {
+        "truncated": True,
+        "original_count": 1,
+        "returned_count": 0,
+    }
+    EvidenceJobResultRequest(
+        agent_id="agent-1",
+        lease_id="lease-1",
+        status="completed",
+        result={"metrics": metrics},
+    )
+
+
 def test_prometheus_matrix_series_and_values_are_limited_before_job_result() -> None:
     module = load_evidence_module()
     metrics_provider = module.PrometheusMetricsProvider.from_config(lambda _name, default: default)
@@ -549,6 +597,67 @@ def test_prometheus_matrix_series_and_values_are_limited_before_job_result() -> 
         "original_count": 8000,
         "returned_count": 4000,
         "series_count": 100,
+    }
+    EvidenceJobResultRequest(
+        agent_id="agent-1",
+        lease_id="lease-1",
+        status="completed",
+        result={"metrics": metrics},
+    )
+
+
+def test_prometheus_matrix_value_limits_match_final_series_payload() -> None:
+    module = load_evidence_module()
+    metrics_provider = module.PrometheusMetricsProvider.from_config(lambda _name, default: default)
+    result: dict[str, object] = {}
+    definition = module.TelemetryQueryDefinition.from_mapping(
+        {
+            "source": "prometheus",
+            "name": "wide_matrix",
+            "description": "Range query with wide labels.",
+            "query": "container_cpu_usage_seconds_total",
+            "range_seconds": 900,
+            "step_seconds": 1,
+        }
+    )
+
+    metrics_provider.append_result(
+        result,
+        definition.to_provider_query(),
+        {
+            "status": "success",
+            "data": {
+                "resultType": "matrix",
+                "result": [
+                    {
+                        "metric": {"pod": f"pod-{series_index}", "blob": "x" * 25_000},
+                        "values": [
+                            [1782822500.0 + point_index, str(point_index)]
+                            for point_index in range(80)
+                        ],
+                    }
+                    for series_index in range(120)
+                ],
+            },
+        },
+    )
+
+    metrics = metrics_provider.build_response(result)
+    wide_matrix = metrics["results"]["wide_matrix"]
+    actual_original_points = sum(
+        item.get("value_count", len(item["values"])) for item in wide_matrix["series"]
+    )
+    actual_returned_points = sum(len(item["values"]) for item in wide_matrix["series"])
+
+    assert len(wide_matrix["series"]) < 100
+    assert wide_matrix["collection_limits"]["lists"]["series"]["returned_count"] == len(
+        wide_matrix["series"]
+    )
+    assert wide_matrix["collection_limits"]["lists"]["series.values"] == {
+        "truncated": True,
+        "original_count": actual_original_points,
+        "returned_count": actual_returned_points,
+        "series_count": len(wide_matrix["series"]),
     }
     EvidenceJobResultRequest(
         agent_id="agent-1",

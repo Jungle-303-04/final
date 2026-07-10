@@ -10,7 +10,7 @@ from packages.contracts.gateway.requests import MAX_EVIDENCE_PAYLOAD_BYTES
 COLLECTION_LIMITS_KEY = "collection_limits"
 PROVIDER_PAYLOAD_BYTE_MARGIN = 65_536
 MAX_PROVIDER_PAYLOAD_BYTES = MAX_EVIDENCE_PAYLOAD_BYTES - PROVIDER_PAYLOAD_BYTE_MARGIN
-MIN_LIMITED_LIST_ITEMS = 1
+MIN_LIMITED_LIST_ITEMS = 0
 
 
 def limit_payload_list(
@@ -130,12 +130,12 @@ def largest_shrinkable_list(
     payload: JsonObject,
     keys: Iterable[str],
 ) -> tuple[str, list[object]] | None:
-    """Find the longest list that can still be reduced."""
+    """Find the largest list by JSON byte size that can still be reduced."""
     candidates: list[tuple[int, str, list[object]]] = []
     for key in keys:
         value = payload.get(key)
         if isinstance(value, list) and len(value) > MIN_LIMITED_LIST_ITEMS:
-            candidates.append((len(value), key, value))
+            candidates.append((payload_size_bytes(value), key, value))
     if not candidates:
         return None
     _length, key, value = max(candidates, key=lambda item: item[0])
