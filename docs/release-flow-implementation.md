@@ -248,6 +248,14 @@ python scripts/release_flow_smoke.py \
   --markdown-path artifacts/release-flow-smoke.md
 ```
 
+GitHub Actions에서 job summary 화면에 smoke 결과를 바로 노출하려면 `--github-step-summary`를 함께 쓴다. 이 옵션은 `GITHUB_STEP_SUMMARY`가 있는 환경에서 Markdown report를 append한다.
+
+```bash
+python scripts/release_flow_smoke.py \
+  --production-preflight \
+  --github-step-summary
+```
+
 알림 채널이 실제로 validation alert를 받을 수 있는지 확인하려면 `--alert-preflight`를 붙인다. 이 모드는 enabled alert channel 중 요청 severity를 받을 수 있는 채널을 골라 `/alert-channels/test`를 호출하므로, 실제 Slack/webhook/온콜 테스트 메시지가 발송될 수 있다.
 
 ```bash
