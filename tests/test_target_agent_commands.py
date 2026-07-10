@@ -221,8 +221,12 @@ def test_rca_test_inject_command_returns_real_fault_observation(
     agent.kubernetes = StubKubernetesClient()
     calls: list[tuple[str, str]] = []
 
-    async def stub_inject(scenario: object, run_id: str) -> dict[str, object]:
-        calls.append((scenario.scenario_id, run_id))
+    expires_at = "2099-01-01T00:00:00+00:00"
+
+    async def stub_inject(
+        scenario: object, run_id: str, authoritative_expires_at: str
+    ) -> dict[str, object]:
+        calls.append((scenario.scenario_id, f"{run_id}:{authoritative_expires_at}"))
         return {
             "fault_observed": True,
             "namespace": "sandbox",
@@ -245,18 +249,70 @@ def test_rca_test_inject_command_returns_real_fault_observation(
                     "scenario_version": 1,
                     "namespace": "sandbox",
                     "resource_name": "rca-test-image-wrong-tag",
+                    "expected_root_cause": "wrong_image_tag",
+                    "expected_symptom": "ImagePullBackOff",
+                    "expires_at": expires_at,
                 },
             }
         )
     )
 
-    assert calls == [("image.wrong-tag", "run-1")]
+    assert calls == [("image.wrong-tag", f"run-1:{expires_at}")]
     assert result["status"] == "completed"
     assert result["applied"] is True
     assert result["rca_test"]["fault_observed"] is True
     assert result["rca_test"]["scenario_id"] == "image.wrong-tag"
     assert result["rca_test"]["evidence_sources"] == ["kubernetes"]
     assert result["rca_test"]["pod_names"] == ["rca-test-image-wrong-tag-7f8d9c6b5-x2k4m"]
+
+
+def test_expired_rca_test_inject_fails_before_manifest_apply(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("APP_ENV", "test")
+    monkeypatch.setenv("RCA_TEST_RUNS_ENABLED", "1")
+    module = load_agent_module()
+    agent = object.__new__(module.TargetClusterAgent)
+    agent.cluster_id = "cluster-1"
+    agent.cluster_role = "target"
+    agent.kubernetes = StubKubernetesClient()
+    apply_calls: list[object] = []
+
+    async def must_not_apply(
+        *args: object, **kwargs: object
+    ) -> tuple[bool, str, dict[str, object]]:
+        apply_calls.append((args, kwargs))
+        return True, "applied", {}
+
+    async def fixture_available(*_args: object) -> None:
+        return None
+
+    agent.apply_kubernetes_manifest = must_not_apply
+    agent.ensure_rca_test_fixture_available = fixture_available
+    register_agent_commands(module, agent)
+
+    result = asyncio.run(
+        agent.execute_command(
+            {
+                "action": module.Command.RCA_TEST_SCENARIO_INJECT_ACTION,
+                "payload": {
+                    "run_id": "run-1",
+                    "scenario_id": "image.wrong-tag",
+                    "scenario_version": 1,
+                    "namespace": "sandbox",
+                    "resource_name": "rca-test-image-wrong-tag",
+                    "expected_root_cause": "wrong_image_tag",
+                    "expected_symptom": "ImagePullBackOff",
+                    "expires_at": "2000-01-01T00:00:00+00:00",
+                },
+            }
+        )
+    )
+
+    assert result["status"] == "failed"
+    assert result["applied"] is False
+    assert result["message"] == "RCA test inject command is expired"
+    assert apply_calls == []
 
 
 def test_rca_test_cleanup_uses_immutable_target_without_loading_current_catalog(

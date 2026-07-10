@@ -115,11 +115,14 @@ class _TestRunDb:
             return dict(args[-1])
         return dict(kwargs)
 
-    def queue_agent_command(self, *args: Any, **kwargs: Any) -> None:
+    def queue_agent_command(self, *args: Any, **kwargs: Any) -> bool:
         self.calls.append(("queue_agent_command", args, kwargs))
         correlation_id, plan, status = args
-        self.commands[str(plan["command_id"])] = {
-            "command_id": str(plan["command_id"]),
+        command_id = str(plan["command_id"])
+        if command_id in self.commands:
+            return False
+        self.commands[command_id] = {
+            "command_id": command_id,
             "cluster_id": str(plan["cluster_id"]),
             "correlation_id": str(correlation_id),
             "action": str(plan["action"]),
@@ -128,6 +131,7 @@ class _TestRunDb:
             "result": {},
             "completed_at": None,
         }
+        return True
 
     def queue_rca_test_command_if_available(
         self,
@@ -175,6 +179,9 @@ class _TestRunDb:
         return []
 
     def get_recovery_plan_by_correlation(self, *_args: Any) -> None:
+        return None
+
+    def get_rca_test_analysis_outcome(self, *_args: Any) -> None:
         return None
 
 
@@ -422,7 +429,7 @@ def test_test_run_request_rejects_client_owned_fault_payloads(
 
 
 def test_post_test_run_accepts_minimal_ready_scenario(monkeypatch: pytest.MonkeyPatch) -> None:
-    client, _db, _events = _client(monkeypatch)
+    client, db, _events = _client(monkeypatch)
 
     response = client.post(
         TEST_RUNS_PATH,
@@ -438,6 +445,11 @@ def test_post_test_run_accepts_minimal_ready_scenario(monkeypatch: pytest.Monkey
     assert body["run_id"]
     assert body["correlation_id"]
     assert body["status"] in {"queued", "injecting"}
+    command = db.commands[body["command_id"]]
+    nested = command["payload"]["payload"]
+    assert nested["expected_root_cause"] == "wrong_image_tag"
+    assert nested["expected_symptom"] == "ImagePullBackOff"
+    assert nested["expires_at"] == command["payload"]["expires_at"] == body["cleanup_at"]
 
 
 def test_concurrent_test_run_requests_reserve_one_target_atomically(
@@ -558,6 +570,12 @@ def test_test_run_can_be_polled_and_cleanup_is_a_separate_safe_command(
         "resource_name": "rca-test-image-wrong-tag",
     }
 
+    repeated = client.delete(f"{TEST_RUNS_PATH}/{run_id}", headers=_test_headers())
+    assert repeated.status_code == 202
+    assert repeated.json()["status"] == "cleanup_queued"
+    cleanup_calls = [call for call in db.calls if call[0] == "queue_agent_command"]
+    assert len(cleanup_calls) == 2
+
 
 def test_repository_guard_uses_expiry_and_finished_cleanup_before_atomic_enqueue() -> None:
     from domains.command.repository import AgentCommandRepository, rca_test_guard_lock_key
@@ -639,7 +657,9 @@ def test_repository_guard_uses_expiry_and_finished_cleanup_before_atomic_enqueue
     assert "EXISTS" in active_query
     assert "cleanup_completed" not in active_query
     assert "completed" in active_sql.params.values()
-    assert "expires_at" in active_sql.params.values()
+    expires_at_indexes = [value for value in active_sql.params.values() if value == "expires_at"]
+    assert len(expires_at_indexes) == 1
+    assert "payload" in active_sql.params.values()
     assert "INSERT INTO agent_commands" in str(statements[2].compile(dialect=postgresql.dialect()))
     assert "pg_notify" in str(statements[3])
 

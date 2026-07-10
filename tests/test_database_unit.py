@@ -2158,6 +2158,9 @@ class _SqlRecordingResult:
     def mappings(self) -> _SqlRecordingResult:
         return self
 
+    def first(self) -> Any | None:
+        return self._rows[0] if self._rows else None
+
 
 def _repository_with_recorded_sql(
     repository_type: type, recorded: list[Any], rows: list[Any] | None = None
@@ -2219,6 +2222,73 @@ def test_rca_report_query_omits_payload_from_select_list() -> None:
     assert "rca_reports.payload" not in select_list
     assert "rca_reports.candidates" in select_list
     assert "rca_reports.supporting_evidence_refs" in select_list
+
+
+def test_rca_test_analysis_outcome_reads_terminal_events_with_tenant_scope() -> None:
+    recorded: list[Any] = []
+    repository = _repository_with_recorded_sql(
+        RcaRepository,
+        recorded,
+        rows=[
+            {
+                "subject": "rca.analysis_blocked",
+                "payload": {"workspace_id": "workspace-1", "reason": "logs missing"},
+            }
+        ],
+    )
+
+    outcome = repository.get_rca_test_analysis_outcome("corr-1", "workspace-1")
+
+    assert outcome == {
+        "subject": "rca.analysis_blocked",
+        "payload": {"workspace_id": "workspace-1", "reason": "logs missing"},
+    }
+    compiled = recorded[0].compile(dialect=postgresql.dialect())
+    sql = str(compiled)
+    assert "FROM events" in sql
+    assert "events.correlation_id =" in sql
+    assert "events.payload" in sql
+    assert "ORDER BY events.created_at DESC" in sql
+    assert "rca.analysis_blocked" in compiled.params.values()
+    assert "incident.detected" in compiled.params.values()
+    assert "workspace-1" in compiled.params.values()
+
+
+def test_queue_agent_command_reports_insert_and_notifies_only_new_commands() -> None:
+    from domains.command.repository import AgentCommandRepository
+
+    recorded: list[Any] = []
+    scalar_values = ["cmd-1", None]
+
+    class StubResult:
+        def scalar_one_or_none(self) -> str | None:
+            return scalar_values.pop(0)
+
+    class StubConnection:
+        def execute(self, statement: Any, *_args: Any, **_kwargs: Any) -> StubResult:
+            recorded.append(statement)
+            return StubResult()
+
+    @contextmanager
+    def stub_connection():
+        yield StubConnection()
+
+    repository = object.__new__(AgentCommandRepository)
+    repository.connection = stub_connection  # type: ignore[method-assign]
+    plan = {
+        "command_id": "cmd-1",
+        "workspace_id": "workspace-1",
+        "cluster_id": "cluster-1",
+        "action": "rollout_restart",
+    }
+
+    assert repository.queue_agent_command("corr-1", plan, "queued") is True
+    assert repository.queue_agent_command("corr-1", plan, "queued") is False
+    assert len(recorded) == 3
+    assert "RETURNING agent_commands.command_id" in str(
+        recorded[0].compile(dialect=postgresql.dialect())
+    )
+    assert "pg_notify" in str(recorded[1])
 
 
 def test_rca_report_save_writes_projection_columns() -> None:

@@ -33,6 +33,7 @@ CLUSTER_ID = "cluster-1"
 RESOURCE_NAME = "rca-test-image-wrong-tag"
 RUN_LABEL = f"kubeheal.io/rca-test-run={RUN_ID}"
 POD_NAMES = ["rca-test-crash-app-startup-7f8d9c6b5-x2k4m"]
+EXPIRES_AT = "2026-07-10T23:59:59+00:00"
 
 
 def _runtime() -> Any:
@@ -89,6 +90,9 @@ def test_inject_plan_is_allowlisted_and_contains_no_raw_manifest_or_shell() -> N
         cluster_id=CLUSTER_ID,
         workspace_id=WORKSPACE_ID,
         requested_by="developer-1",
+        expected_root_cause="wrong_image_tag",
+        expected_symptom="ImagePullBackOff",
+        expires_at=EXPIRES_AT,
     )
 
     assert plan["command_id"] == INJECT_COMMAND_ID
@@ -103,7 +107,11 @@ def test_inject_plan_is_allowlisted_and_contains_no_raw_manifest_or_shell() -> N
         "resource_kind": "Deployment",
         "namespace": "sandbox",
         "resource_name": RESOURCE_NAME,
+        "expected_root_cause": "wrong_image_tag",
+        "expected_symptom": "ImagePullBackOff",
+        "expires_at": EXPIRES_AT,
     }
+    assert plan["expires_at"] == EXPIRES_AT
     serialized = json.dumps(plan, sort_keys=True).casefold()
     assert "manifest" not in serialized
     assert "kubectl" not in serialized
@@ -115,12 +123,13 @@ def test_wrong_tag_fixture_is_server_owned_bounded_and_run_scoped() -> None:
     scenario = scenario_by_id(SCENARIO_ID)
     assert scenario is not None
 
-    manifests = runtime.build_rca_test_manifests(scenario, RUN_ID)
+    manifests = runtime.build_rca_test_manifests(scenario, RUN_ID, EXPIRES_AT)
     deployment = next(item for item in manifests if item["kind"] == "Deployment")
 
     assert deployment["metadata"]["name"] == RESOURCE_NAME
     assert deployment["metadata"]["namespace"] == "sandbox"
     assert deployment["metadata"]["annotations"]["kubeheal.io/rca-test-run"] == RUN_ID
+    assert deployment["metadata"]["annotations"]["kubeheal.io/rca-test-expires-at"] == EXPIRES_AT
     assert deployment["metadata"]["labels"]["kubeheal.io/rca-test-run"] == RUN_ID
     template = deployment["spec"]["template"]
     assert template["metadata"]["labels"]["kubeheal.io/rca-test-run"] == RUN_ID
@@ -439,8 +448,139 @@ def test_status_projection_does_not_claim_a_stale_cleanup_was_applied() -> None:
         )
     )
 
-    assert status["status"] == "selected"
+    assert status["status"] == "cleanup_skipped"
     assert _step_statuses(status)["cleanup"] == "skipped"
+
+
+def test_status_projection_marks_completed_cleanup_as_terminal() -> None:
+    runtime = _runtime()
+
+    status = _body(
+        runtime.synthesize_rca_test_run_status(
+            run_id=RUN_ID,
+            inject_command={
+                "command_id": INJECT_COMMAND_ID,
+                "status": CommandStatus.COMPLETED,
+                "result": _fault_observed_result(),
+            },
+            evidence_jobs=[{"provider_key": "kubernetes", "status": "completed"}],
+            evidence_window={"event_id": "evt-evidence-1"},
+            rca_report={"root_cause": "wrong_image_tag"},
+            recovery_plan={"status": "selected"},
+            cleanup_command={
+                "status": CommandStatus.COMPLETED,
+                "result": {
+                    "status": CommandStatus.COMPLETED,
+                    "rca_test": {"cleanup_completed": True},
+                },
+            },
+        )
+    )
+
+    assert status["status"] == "cleanup_completed"
+    assert _step_statuses(status)["cleanup"] == "completed"
+
+
+def test_status_projection_fails_when_actual_root_cause_misses_expected_snapshot() -> None:
+    runtime = _runtime()
+
+    status = _body(
+        runtime.synthesize_rca_test_run_status(
+            run_id=RUN_ID,
+            inject_command={
+                "command_id": INJECT_COMMAND_ID,
+                "status": CommandStatus.COMPLETED,
+                "payload": {
+                    "payload": {
+                        "expected_root_cause": "wrong_image_tag",
+                        "expected_symptom": "ImagePullBackOff",
+                    }
+                },
+                "result": _fault_observed_result(),
+            },
+            evidence_jobs=[{"provider_key": "kubernetes", "status": "completed"}],
+            evidence_window={"event_id": "evt-evidence-1"},
+            rca_report={"root_cause": "registry_unavailable"},
+            recovery_plan={"status": "selected"},
+            cleanup_command=None,
+        )
+    )
+
+    assert status["status"] == "failed"
+    assert status["failure"] == {
+        "stage": "root_cause_analysis",
+        "message": "RCA root cause did not match the test expectation",
+        "expected_root_cause": "wrong_image_tag",
+        "actual_root_cause": "registry_unavailable",
+    }
+    assert _step_statuses(status)["root_cause_analysis"] == "failed"
+    assert _step_statuses(status)["recovery_plan"] != "completed"
+    assert _step_statuses(status)["action_selection"] != "completed"
+
+
+def test_status_projection_surfaces_analysis_blocked_as_terminal() -> None:
+    runtime = _runtime()
+
+    status = _body(
+        runtime.synthesize_rca_test_run_status(
+            run_id=RUN_ID,
+            inject_command={
+                "command_id": INJECT_COMMAND_ID,
+                "status": CommandStatus.COMPLETED,
+                "result": _fault_observed_result(),
+            },
+            evidence_jobs=[{"provider_key": "kubernetes", "status": "completed"}],
+            evidence_window={"event_id": "evt-evidence-1"},
+            rca_report=None,
+            recovery_plan=None,
+            cleanup_command=None,
+            analysis_outcome={
+                "subject": "rca.analysis_blocked",
+                "payload": {"reason_code": "missing_required_evidence", "reason": "logs missing"},
+            },
+        )
+    )
+
+    assert status["status"] == "blocked"
+    assert status["failure"] == {
+        "stage": "root_cause_analysis",
+        "message": "logs missing",
+        "reason_code": "missing_required_evidence",
+    }
+    assert _step_statuses(status)["root_cause_analysis"] == "blocked"
+    assert _step_statuses(status)["recovery_plan"] == "blocked"
+
+
+def test_status_projection_surfaces_non_incident_as_terminal_failure() -> None:
+    runtime = _runtime()
+
+    status = _body(
+        runtime.synthesize_rca_test_run_status(
+            run_id=RUN_ID,
+            inject_command={
+                "command_id": INJECT_COMMAND_ID,
+                "status": CommandStatus.COMPLETED,
+                "result": _fault_observed_result(),
+            },
+            evidence_jobs=[{"provider_key": "kubernetes", "status": "completed"}],
+            evidence_window={"event_id": "evt-evidence-1"},
+            rca_report=None,
+            recovery_plan=None,
+            cleanup_command=None,
+            analysis_outcome={
+                "subject": "incident.detected",
+                "payload": {"detected": False, "reason": "no incident signals"},
+            },
+        )
+    )
+
+    assert status["status"] == "failed"
+    assert status["failure"] == {
+        "stage": "incident_detection",
+        "message": "no incident signals",
+    }
+    assert _step_statuses(status)["root_cause_analysis"] == "failed"
+    assert _step_statuses(status)["recovery_plan"] == "blocked"
 
 
 def _fixture_deployment(owner_run_id: str) -> dict[str, Any]:
