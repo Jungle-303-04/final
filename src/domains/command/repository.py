@@ -96,16 +96,24 @@ def notify_agent_command(conn: Any, workspace_id: str, cluster_id: str) -> None:
 
 
 class AgentCommandRepository(DatabaseConnection):
-    def queue_agent_command(self, correlation_id: str, plan: JsonObject, status: str) -> None:
+    def queue_agent_command(self, correlation_id: str, plan: JsonObject, status: str) -> bool:
         if plan.get("action") == Command.RCA_TEST_SCENARIO_INJECT_ACTION:
             raise ValueError("RCA test inject commands require the atomic reservation guard")
         workspace_id = str(plan.get("workspace_id", DEFAULT_WORKSPACE_ID))
         cluster_id = str(plan["cluster_id"])
+        table = AgentCommand.__table__
         with self.connection() as conn:
-            conn.execute(
-                agent_command_insert(correlation_id=correlation_id, plan=plan, status=status)
-            )
+            inserted = conn.execute(
+                agent_command_insert(
+                    correlation_id=correlation_id,
+                    plan=plan,
+                    status=status,
+                ).returning(table.c.command_id)
+            ).scalar_one_or_none()
+            if inserted is None:
+                return False
             notify_agent_command(conn, workspace_id, cluster_id)
+            return True
 
     def queue_rca_test_command_if_available(
         self,
@@ -156,7 +164,7 @@ class AgentCommandRepository(DatabaseConnection):
                 == normalized_resource_kind,
                 inject_payload["namespace"].astext == namespace,
                 inject_payload["resource_name"].astext == resource_name,
-                cast(table.c.payload["expires_at"].astext, DateTime(timezone=True)) > func.now(),
+                cast(inject_payload["expires_at"].astext, DateTime(timezone=True)) > func.now(),
                 ~cleanup_finished,
             )
         )

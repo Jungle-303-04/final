@@ -1222,8 +1222,8 @@ class TargetClusterAgent:
         self,
         ctx: CommandContext[JsonObject],
     ) -> JsonObject:
-        run_id, scenario = self.rca_test_command_scenario(ctx.payload)
-        observed = await self.inject_rca_test_scenario(scenario, run_id)
+        run_id, scenario, expires_at = self.rca_test_command_scenario(ctx.payload)
+        observed = await self.inject_rca_test_scenario(scenario, run_id, expires_at)
         return {
             **self.command_result(
                 True,
@@ -1291,7 +1291,10 @@ class TargetClusterAgent:
         validate_rca_test_fixture_target(namespace, resource_name)
         return run_id, scenario_id, scenario_version, namespace, resource_name
 
-    def rca_test_command_scenario(self, payload: JsonObject) -> tuple[str, RcaTestScenario]:
+    def rca_test_command_scenario(
+        self,
+        payload: JsonObject,
+    ) -> tuple[str, RcaTestScenario, str]:
         run_id = str(payload.get("run_id") or "")
         scenario_id = str(payload.get("scenario_id") or "")
         try:
@@ -1314,15 +1317,26 @@ class TargetClusterAgent:
             or requested_resource_name != expected_target.resource_name
         ):
             raise ValueError("RCA test scenario target changed; create a new run")
-        return run_id, scenario
+        expected_root_cause = str(payload.get("expected_root_cause") or "")
+        expected_symptom = str(payload.get("expected_symptom") or "")
+        if not expected_root_cause or not expected_symptom:
+            raise ValueError("RCA test command requires immutable expectations")
+        expires_at = str(payload.get("expires_at") or "")
+        parsed_expires_at = parse_approval_expires_at(expires_at)
+        if parsed_expires_at is None:
+            raise ValueError("RCA test inject expires_at is invalid")
+        if parsed_expires_at <= datetime.now(UTC):
+            raise ValueError("RCA test inject command is expired")
+        return run_id, scenario, expires_at
 
     async def inject_rca_test_scenario(
         self,
         scenario: RcaTestScenario,
         run_id: str,
+        expires_at: str,
     ) -> JsonObject:
         await self.ensure_rca_test_fixture_available(scenario, run_id)
-        manifests = build_rca_test_manifests(scenario, run_id)
+        manifests = build_rca_test_manifests(scenario, run_id, expires_at)
         for manifest in manifests:
             applied, message, _rollout = await self.apply_kubernetes_manifest(
                 manifest,

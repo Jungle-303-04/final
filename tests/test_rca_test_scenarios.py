@@ -623,6 +623,7 @@ def test_repository_guard_uses_expiry_and_finished_cleanup_before_atomic_enqueue
             "resource_kind": "Deployment",
             "namespace": "sandbox",
             "resource_name": "rca-test-image-wrong-tag",
+            "expires_at": "2026-07-10T23:59:59+00:00",
         },
     }
 
@@ -703,6 +704,7 @@ def test_repository_rejects_active_reservation_before_command_insert() -> None:
             "resource_kind": "Deployment",
             "namespace": "sandbox",
             "resource_name": "rca-test-image-wrong-tag",
+            "expires_at": "2026-07-10T23:59:59+00:00",
         },
     }
 
