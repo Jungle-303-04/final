@@ -449,6 +449,7 @@ class CatalogInstallRequest(StrictModel):
     cluster_id: str = Target.DEFAULT_CLUSTER_ID
     namespace: str = Sandbox.NAMESPACE
     application_name: str = Field(min_length=1, max_length=120)
+    release_name: str | None = Field(default=None, min_length=1, max_length=120)
     version: str | None = Field(default=None, max_length=80)
     values: dict[str, Any] = Field(default_factory=dict)
 

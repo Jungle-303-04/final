@@ -31,12 +31,20 @@ BOOTSTRAP_CATALOG_ITEMS: tuple[JsonObject, ...] = (
                 "package_ref": "oci://registry-1.docker.io/bitnamicharts/postgresql",
                 "values_schema": {
                     "type": "object",
+                    "required": ["auth.database"],
                     "properties": {
                         "auth.database": {"type": "string"},
                         "primary.persistence.size": {"type": "string", "default": "8Gi"},
                     },
                 },
-                "template": {"runner": "helm", "release": "postgresql"},
+                "template": {
+                    "runner": "helm",
+                    "release": "postgresql",
+                    "chart_version": "18.7.13",
+                    "chart_digest": (
+                        "sha256:7da9adcf5a0e0ae2cfbe784d789705e737eb97d226026e9ad366bfc927436640"
+                    ),
+                },
                 "status": CATALOG_STATUS_ACTIVE,
             }
         ],
@@ -56,7 +64,14 @@ BOOTSTRAP_CATALOG_ITEMS: tuple[JsonObject, ...] = (
                 "package_type": "helm",
                 "package_ref": "oci://registry-1.docker.io/bitnamicharts/redis",
                 "values_schema": {"type": "object", "properties": {}},
-                "template": {"runner": "helm", "release": "redis"},
+                "template": {
+                    "runner": "helm",
+                    "release": "redis",
+                    "chart_version": "23.1.1",
+                    "chart_digest": (
+                        "sha256:f4a368f7a67f4f2bedee2426bfb063b960565ee38a91fdf07185a014c9e63406"
+                    ),
+                },
                 "status": CATALOG_STATUS_ACTIVE,
             }
         ],
