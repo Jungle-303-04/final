@@ -118,11 +118,11 @@ def _scaffold_document(args: argparse.Namespace) -> dict[str, object]:
                 "scenario_id": args.scenario_id,
                 "version": 1,
                 "title": args.scenario_id,
-                "description": "TODO: describe the bounded, repository-owned fault fixture.",
+                "description": "검증 전 시나리오 골격입니다. 실제 장애 설명으로 교체해야 합니다.",
                 "execution": "real",
-                "availability": "detector_gap",
+                "availability": "verification_pending",
                 "availability_reason": "Live end-to-end completion has not been verified.",
-                "detector_work_needed": [
+                "verification_work_needed": [
                     "Add deterministic fixture assertions.",
                     "Verify real evidence, RCA, recovery, and cleanup end to end.",
                 ],
@@ -146,7 +146,7 @@ def _scaffold_document(args: argparse.Namespace) -> dict[str, object]:
                 "observe": {
                     "timeout_seconds": 90,
                     "poll_seconds": 2,
-                    "event_message_any": ["TODO: deterministic observed event text"],
+                    "event_message_any": ["실제 관측 이벤트 문자열로 교체해야 합니다"],
                 },
                 "cleanup": {
                     "adapter": "kubernetes.manifest_delete",
@@ -169,11 +169,12 @@ from domains.rca.test_scenarios import parse_test_scenario_file
 SCENARIO_FILE = Path(__file__).resolve().parent / "{relative_yaml}"
 
 
-def test_{_scenario_slug(scenario_id)}_stays_unverified_until_live_completion() -> None:
+def test_{_scenario_slug(scenario_id)}_stays_pending_until_live_completion() -> None:
     scenario = parse_test_scenario_file(SCENARIO_FILE)[0]
 
     assert scenario.scenario_id == "{scenario_id}"
-    assert scenario.availability == "detector_gap"
+    assert scenario.availability == "verification_pending"
+    assert scenario.verification_work_needed
     assert scenario.cleanup.adapter == "kubernetes.manifest_delete"
 '''
 

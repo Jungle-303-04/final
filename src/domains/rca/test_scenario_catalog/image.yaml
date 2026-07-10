@@ -39,9 +39,9 @@ scenarios:
     title: "이미지 registry 연결 실패"
     description: "도달 불가능한 테스트 registry endpoint로 실제 pull 연결 실패를 만듭니다."
     execution: "real"
-    availability: "detector_gap"
+    availability: "verification_pending"
     availability_reason: "실제 evidence 수집부터 RCA, recovery plan, cleanup까지 live 완주가 아직 검증되지 않았습니다."
-    detector_work_needed:
+    verification_work_needed:
       - "격리 target cluster에서 registry 연결 실패의 실제 이벤트 변형 검증"
       - "registry_unavailable RCA 및 recovery plan live 완주 증적"
     expected:

@@ -371,8 +371,14 @@ class RcaTestScenarioItem(StrictModel):
     title: str
     description: str
     execution: Literal["real", "hybrid", "external"]
-    availability: Literal["ready", "fixture_required", "detector_gap"]
+    availability: Literal[
+        "ready",
+        "verification_pending",
+        "fixture_required",
+        "detector_gap",
+    ]
     availability_reason: str | None = None
+    verification_work_needed: list[str] = Field(default_factory=list)
     fixture_requirements: list[str] = Field(default_factory=list)
     detector_work_needed: list[str] = Field(default_factory=list)
     expected: RcaTestScenarioExpectedItem
@@ -398,6 +404,7 @@ class RcaTestRunResponse(StrictModel):
     evidence_key: str
     status: str
     cleanup_at: str
+    verification_mode: bool = False
     failure: JsonMap | None = None
     steps: list[JsonMap] = Field(default_factory=list)
 

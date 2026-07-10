@@ -160,7 +160,7 @@ def build_kubernetes_manifests(
     run_id: str,
     expires_at: str,
 ) -> list[JsonObject]:
-    if scenario.availability != "ready" or not isinstance(
+    if scenario.availability not in {"ready", "verification_pending"} or not isinstance(
         scenario.trigger, KubernetesDeploymentTrigger
     ):
         raise ValueError(

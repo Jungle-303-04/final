@@ -45,8 +45,10 @@ tracked `.bru` 파일에는 입력하지 않는다.
 
 `ready`는 실제 target에서 evidence → expected root cause → recovery plan → cleanup 잔여 0까지
 완주한 시나리오만 뜻한다. 현재 live 완주가 확인된 항목은 `image.wrong-tag`다. 새 시나리오는
-`scripts/rca_scenario.py scaffold`로 `detector_gap` 상태에서 시작하고, `validate`와 fixture test,
-live 검증을 모두 마친 뒤에만 승격한다. raw manifest/shell/synthetic evidence 입력과 management
+`scripts/rca_scenario.py scaffold`로 `verification_pending` 상태에서 시작하고, `validate`와 fixture
+test를 통과한 뒤 전용 token + service admin + `x-rca-test-verification: true` 경계에서 live
+검증한다. evidence, expected root cause, recovery plan, cleanup 잔여 0을 모두 확인한 뒤에만
+승격한다. raw manifest/shell/synthetic evidence 입력과 management
 cluster 실행은 허용하지 않는다.
 
 ## 전체 Runner 실행

@@ -14,7 +14,7 @@ Environment에서 `aws-test` 편집을 열고 `rca_test_token`의 Secret 칸에 
 로컬 값을 붙여넣어 저장한다. `vars:secret`으로 선언된 값은 OS 보안 저장소에 암호화되고
 환경 파일에는 기록되지 않는다. 실제 토큰을 collection·환경 파일·실행 로그에 쓰지 않는다.
 
-1. 현재 catalog의 시나리오와 `ready / fixture_required / detector_gap`을 조회한다. 개수는 YAML catalog에서 동적으로 결정된다.
+1. 현재 catalog의 시나리오와 `ready / verification_pending / fixture_required / detector_gap`을 조회한다. 개수는 YAML catalog에서 동적으로 결정된다.
 2. `cluster_id + scenario_id`만 보내 sandbox에 실제 장애를 만든다.
    같은 cluster의 동일 fixture(kind/namespace/name)에 활성 run이 있으면 서버가 원자 예약으로 `409`를
    반환한다. 기존 run을 cleanup하거나 TTL 만료를 기다린 뒤 다시 실행한다.
@@ -40,14 +40,16 @@ expected root cause 선택, recovery plan, cleanup 잔여 0까지 완주한 시�
 
 - `image.wrong-tag`
 
-나머지는 01 응답의 `availability_reason`, `fixture_requirements`,
-`detector_work_needed`를 기준으로 이어서 개발한다. 시나리오를 추가하거나 수정해도
+`verification_pending`은 실행 adapter와 원인 계약은 완성됐지만 live 완주 전인 상태다.
+이 상태는 `x-rca-test-verification: true`, 전용 test token, service admin 세 조건이 모두
+있어야 실행할 수 있다. 나머지는 01 응답의 `availability_reason`,
+`verification_work_needed`, `fixture_requirements`, `detector_work_needed`를 기준으로 이어서 개발한다. 시나리오를 추가하거나 수정해도
 Bruno 요청 body는 바꾸지 않는다. API에는 raw manifest, shell, namespace, synthetic
 evidence 입력을 추가하지 않는다.
 
-담당자는 `scripts/rca_scenario.py scaffold`로 `detector_gap` 골격을 만든 뒤 YAML과 fixture
+담당자는 `scripts/rca_scenario.py scaffold`로 `verification_pending` 골격을 만든 뒤 YAML과 fixture
 test를 완성하고 `uv run python scripts/rca_scenario.py validate`를 실행한다. validate는
 schema/중복/canonical coverage, adapter capability, symptom별 expected root candidate,
 candidate expected evidence 포함 관계, recovery coverage를 함께 검사한다. 관련 테스트와
-실제 target live 완주를 확인한 후에만 `ready`로 승격한다. DB/GitOps 등 외부 실행 fixture가
+관리자 전용 검증 헤더로 실제 target live 완주를 확인한 후에만 `ready`로 승격한다. DB/GitOps 등 외부 실행 fixture가
 없으면 `fixture_required`를 유지한다. management cluster와 `sandbox` 밖 실행은 금지된다.

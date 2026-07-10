@@ -66,7 +66,7 @@ from packages.contracts.gitops import (
     DEFAULT_WORKFLOW_RUN_ID,
     ApprovalStatus,
 )
-from packages.contracts.identity import DEFAULT_WORKSPACE_ID, Permission, ResourceRole
+from packages.contracts.identity import DEFAULT_WORKSPACE_ID, Permission, ResourceRole, ServiceRole
 from packages.events.envelope import event
 from packages.runtime.dependencies import get_db, get_events
 from packages.storage.engine import unit_of_work_or_null
@@ -85,6 +85,7 @@ HTTP_CONFLICT = 409
 HTTP_UNAUTHORIZED = 401
 RCA_TEST_RUNS_TOKEN_ENV = "RCA_TEST_RUNS_TOKEN"
 RCA_TEST_RUNS_TOKEN_HEADER = "x-rca-test-token"
+RCA_TEST_VERIFICATION_HEADER = "x-rca-test-verification"
 RCA_TEST_API_NOT_FOUND = "RCA test API is disabled"
 RCA_TEST_TOKEN_INVALID = "invalid RCA test token"
 RCA_TEST_SCENARIO_NOT_FOUND = "RCA test scenario not found"
@@ -129,6 +130,11 @@ async def list_test_scenarios(
 )
 async def create_test_run(
     payload: RcaTestRunCreateRequest,
+    verification_header: str = Header(
+        default="",
+        alias=RCA_TEST_VERIFICATION_HEADER,
+        description="미검증 RCA 시나리오의 관리자 전용 live 검증 실행",
+    ),
     current: Any = Depends(require_session),
     db: Any = Depends(get_db),
     _test_api: None = Depends(require_rca_test_api),
@@ -136,7 +142,20 @@ async def create_test_run(
     scenario = test_scenario_by_id(payload.scenario_id)
     if scenario is None:
         raise HTTPException(status_code=HTTP_NOT_FOUND, detail=RCA_TEST_SCENARIO_NOT_FOUND)
-    if scenario.availability != "ready":
+    verification_requested = verification_header.strip().casefold() in {"1", "true"}
+    verification_mode = scenario.availability == "verification_pending"
+    if verification_mode and not verification_requested:
+        raise HTTPException(
+            status_code=HTTP_CONFLICT,
+            detail={
+                "message": RCA_TEST_SCENARIO_UNAVAILABLE,
+                "availability": scenario.availability,
+                "reason": scenario.availability_reason,
+            },
+        )
+    if verification_mode and ServiceRole.SERVICE_ADMIN.value not in current.roles:
+        raise HTTPException(status_code=403, detail="service admin role required")
+    if scenario.availability not in {"ready", "verification_pending"}:
         raise HTTPException(
             status_code=HTTP_CONFLICT,
             detail={
@@ -185,6 +204,8 @@ async def create_test_run(
         expected_root_cause=scenario.expected.root_cause,
         expected_symptom=scenario.expected.symptom,
         expires_at=cleanup_at,
+        cleanup_adapter=scenario.cleanup.adapter,
+        verification_mode=verification_mode,
     )
     reserved = await db_call(
         db.queue_rca_test_command_if_available,
@@ -221,6 +242,7 @@ async def create_test_run(
         ),
         status="queued",
         cleanup_at=cleanup_at,
+        verification_mode=verification_mode,
         steps=[
             {"step": "fault_injection", "status": "queued"},
             {"step": "fault_observation", "status": "waiting"},
@@ -353,6 +375,7 @@ async def get_test_run(
         evidence_key=evidence_key,
         status=str(status["status"]),
         cleanup_at=str(command_payload.get("expires_at") or plan.get("expires_at") or ""),
+        verification_mode=command_payload.get("verification_mode") is True,
         failure=status.get("failure"),
         steps=list(status["steps"]),
     )
@@ -381,6 +404,12 @@ async def cleanup_test_run(
     inject_command = await db.get_agent_command(response.command_id, current.workspace_id)
     if inject_command is None:
         raise HTTPException(status_code=HTTP_NOT_FOUND, detail="RCA test run not found")
+    inject_plan = (
+        inject_command.get("payload") if isinstance(inject_command.get("payload"), dict) else {}
+    )
+    command_payload = (
+        inject_plan.get("payload") if isinstance(inject_plan.get("payload"), dict) else {}
+    )
     identity = rca_test_run_identity(response.run_id)
     existing_cleanup = await db.get_agent_command(
         identity.cleanup_command_id,
@@ -404,6 +433,9 @@ async def cleanup_test_run(
         cluster_id=response.cluster_id,
         workspace_id=current.workspace_id,
         requested_by=current.user_id,
+        cleanup_adapter=str(
+            command_payload.get("cleanup_adapter") or "kubernetes.manifest_delete"
+        ),
     )
     cleanup_correlation_id = f"corr-rca-test-cleanup-{response.run_id}"
     cleanup_plan["correlation_id"] = cleanup_correlation_id
