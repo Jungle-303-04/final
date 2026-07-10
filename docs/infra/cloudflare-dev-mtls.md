@@ -1,10 +1,10 @@
 # Cloudflare dev Tunnel 및 mTLS 자동화
 
 `.github/workflows/cloudflare-dev-mtls.yml`은 기존 원격 관리 cloudflared Tunnel에
-`dev.k8s.woonyong.org` ingress를 보존 추가하고 다음 리소스를 멱등 구성한다.
+`dev-k8s.woonyong.org` ingress를 보존 추가하고 다음 리소스를 멱등 구성한다.
 
 - Tunnel ingress: 기본 origin은 `http://console-dev.management.svc.cluster.local:80`
-- DNS: proxied CNAME `dev.k8s.woonyong.org -> <tunnel-id>.cfargotunnel.com`
+- DNS: proxied CNAME `dev-k8s.woonyong.org -> <tunnel-id>.cfargotunnel.com`
 - Client Certificates: Cloudflare-managed CA와 hostname association
 - WAF: 해당 hostname에서 `cf.tls_client_auth.cert_verified`가 false인 요청 차단
 - 인증서 발급: 외부에서 만든 CSR 다섯 개를 서명하고 공개 인증서만 artifact로 반환
@@ -22,7 +22,7 @@ Environment는 권한 상승 선택을 막기 위해 `development`로 고정되�
 | `CLOUDFLARE_TUNNEL_ID` | 기존 원격 관리 Tunnel UUID | Cloudflare Tunnel Read/Write |
 
 토큰은 `woonyong.org` zone과 해당 account에만 scope를 제한한다. 스크립트는 먼저
-`/user/tokens/verify`, zone, Tunnel, Tunnel configuration, DNS, hostname association,
+`/accounts/{account_id}/tokens/verify`, zone, Tunnel, Tunnel configuration, DNS, hostname association,
 Rulesets, client certificate 읽기를 수행한다. Cloudflare는 token verify 응답에 permission
 목록을 반환하지 않으므로 dry-run은 읽기 scope와 리소스 일치를 검증하고, 실제 write
 capability는 apply 중 각 제한된 endpoint가 fail-closed 방식으로 검증한다.
@@ -86,9 +86,13 @@ openssl pkcs12 -export \
 각 인증서는 서로 다른 암호를 사용한다. `.key`, `.password`, `.p12`는 Git과 GitHub artifact에
 올리지 않는다. macOS는 `.p12`를 더블클릭해 Keychain에 설치하고 Chrome을 재시작한다.
 Windows는 `.p12`를 더블클릭해 **현재 사용자 → 개인용** 인증서 저장소에 가져온 뒤 Chrome을
-재시작한다. 두 운영체제 모두 `https://dev.k8s.woonyong.org` 최초 접속에서 사용할 인증서를
+재시작한다. 두 운영체제 모두 `https://dev-k8s.woonyong.org` 최초 접속에서 사용할 인증서를
 선택하면 로그인 세션 없이 콘솔이 열린다. 인증서를 분실한 사용자는 해당 Cloudflare client
 certificate만 revoke하고 새 키/CSR로 다시 발급한다.
+
+`dev.k8s.woonyong.org`처럼 두 단계인 하위 도메인은 Cloudflare Universal SSL의
+`*.woonyong.org` 범위 밖이다. 별도 유료 edge 인증서에 의존하지 않도록 개발 콘솔의 canonical
+hostname은 `dev-k8s.woonyong.org`로 고정한다.
 
 ## 공식 API 근거
 

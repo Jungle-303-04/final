@@ -183,7 +183,7 @@ inventory resource 1,364, snapshot/usage 각 3개의 새 실데이터를 다시 
 
 - 환경은 `docs/api/environments/aws-test.bru` 하나만 유지한다.
 - 사용자 API는 실제 세션, Agent API는 실제 cluster token을 환경과 무관하게 검증한다.
-- Chrome 개발 콘솔은 `dev.k8s.woonyong.org`에서 설치된 mTLS 인증서로만 접근한다.
+- Chrome 개발 콘솔은 `dev-k8s.woonyong.org`에서 설치된 mTLS 인증서로만 접근한다.
 - test registration의 명시적 `purge=true`만 물리 삭제한다. 조건은 admin session,
   `TEST_FIXTURE_PURGE_ENABLED=1`, registration environment=`test`, non-management다.
 - 마지막 라이브 결과: 67/67 requests, 120/120 tests PASS.
@@ -333,3 +333,18 @@ DB 자격증명은 `postgresql-secret`에서 프로세스 변수로만 읽고 �
 
 완료를 “버그 0” 선언으로 대신하지 않는다. 위 자동 테스트, API 계약, 라이브 상태, 로그,
 실브라우저 E2E 증거가 모두 같은 commit/digest를 가리킬 때만 반복을 닫는다.
+
+## 12. 2026-07-11 mTLS 개발 콘솔 라이브 상태
+
+- canonical URL: `https://dev-k8s.woonyong.org`
+- Cloudflare Tunnel origin: `http://console-dev.management.svc.cluster.local:80`
+- 인증서 없음: 403, 유효한 client certificate: index/session/refresh/fleet 200
+- 공개 `k8s.woonyong.org`의 session/fleet 및 Agent 무토큰 요청: 401
+- 배포 이미지: service/console `bf68cbeb8-mtls-20260711`
+- Ready: api-gateway 2/2, realtime-gateway 1/1, console 1/1, console-dev 2/2,
+  cloudflared 2/2
+- 로컬 보안 산출물: `~/.kubeheal/dev-console-certs/2026-07-11/dev-console-01..05.p12`
+- `dev-console-01.p12`는 이 Mac의 login Keychain에 Chrome 허용으로 설치했다. 나머지 네 개는
+  팀원별 전달용이며 각 `.password`는 별도 채널로 전달한다.
+- bootstrap Cloudflare API token은 설정 완료 후 대시보드에서 삭제했고 로컬 임시 파일도
+  제거했다. private key/password/token은 저장소나 GitHub artifact에 올리지 않았다.

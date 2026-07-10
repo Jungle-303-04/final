@@ -33,6 +33,7 @@ merge_hostname_associations = cloudflare.merge_hostname_associations
 merge_tunnel_ingress = cloudflare.merge_tunnel_ingress
 plan_dns_record = cloudflare.plan_dns_record
 plan_waf_rule = cloudflare.plan_waf_rule
+preflight = cloudflare.preflight
 write_certificate_artifact = cloudflare.write_certificate_artifact
 PreflightState = cloudflare.PreflightState
 apply_configuration = cloudflare.apply_configuration
@@ -134,13 +135,13 @@ def test_merge_tunnel_ingress_preserves_rules_and_inserts_before_fallback() -> N
     }
 
     merged, action = merge_tunnel_ingress(
-        current, "dev.k8s.woonyong.org", "http://console.management.svc.cluster.local:80"
+        current, "dev-k8s.woonyong.org", "http://console.management.svc.cluster.local:80"
     )
 
     assert action == "create"
     assert merged["originRequest"] == current["originRequest"]
     assert merged["ingress"][0] == current["ingress"][0]
-    assert merged["ingress"][1]["hostname"] == "dev.k8s.woonyong.org"
+    assert merged["ingress"][1]["hostname"] == "dev-k8s.woonyong.org"
     assert merged["ingress"][2] == {"service": "http_status:404"}
     assert current["ingress"][-1] == {"service": "http_status:404"}
 
@@ -149,12 +150,12 @@ def test_merge_tunnel_ingress_updates_only_managed_full_host_rule() -> None:
     current = {
         "ingress": [
             {
-                "hostname": "dev.k8s.woonyong.org",
+                "hostname": "dev-k8s.woonyong.org",
                 "path": "/health",
                 "service": "http://health:80",
             },
             {
-                "hostname": "dev.k8s.woonyong.org",
+                "hostname": "dev-k8s.woonyong.org",
                 "service": "http://old:80",
                 "originRequest": {"httpHostHeader": "console"},
             },
@@ -162,8 +163,8 @@ def test_merge_tunnel_ingress_updates_only_managed_full_host_rule() -> None:
         ]
     }
 
-    merged, action = merge_tunnel_ingress(current, "dev.k8s.woonyong.org", "http://new:80")
-    unchanged, second_action = merge_tunnel_ingress(merged, "dev.k8s.woonyong.org", "http://new:80")
+    merged, action = merge_tunnel_ingress(current, "dev-k8s.woonyong.org", "http://new:80")
+    unchanged, second_action = merge_tunnel_ingress(merged, "dev-k8s.woonyong.org", "http://new:80")
 
     assert action == "update"
     assert merged["ingress"][0] == current["ingress"][0]
@@ -190,7 +191,7 @@ def test_dns_plan_is_create_update_or_unchanged_and_rejects_conflicts() -> None:
 def test_hostname_association_preserves_existing_hosts() -> None:
     merged, action = merge_hostname_associations(["api.example.com"])
     assert action == "update"
-    assert merged == ["api.example.com", "dev.k8s.woonyong.org"]
+    assert merged == ["api.example.com", "dev-k8s.woonyong.org"]
     assert merge_hostname_associations(merged) == (merged, "unchanged")
 
 
@@ -214,7 +215,7 @@ def test_waf_plan_uses_stable_ref_for_idempotent_create_update() -> None:
     )
     assert (reordered.action, reordered.rule_id) == ("update_rule", "rule")
     assert desired["expression"] == (
-        '(http.host eq "dev.k8s.woonyong.org" and not cf.tls_client_auth.cert_verified)'
+        '(http.host eq "dev-k8s.woonyong.org" and not cf.tls_client_auth.cert_verified)'
     )
 
 
@@ -321,14 +322,14 @@ def test_apply_is_noop_when_cloudflare_state_already_matches() -> None:
         tunnel_config={
             "ingress": [
                 {
-                    "hostname": "dev.k8s.woonyong.org",
+                    "hostname": "dev-k8s.woonyong.org",
                     "service": "http://console.management.svc.cluster.local:80",
                 },
                 {"service": "http_status:404"},
             ]
         },
         dns_records=[{**desired_dns_record(tunnel_id), "id": "record-id"}],
-        hostname_associations=["dev.k8s.woonyong.org"],
+        hostname_associations=["dev-k8s.woonyong.org"],
         waf_ruleset={"id": "ruleset-id", "rules": [{**rule, "id": "rule-id"}]},
         client_certificates=[],
     )
@@ -358,7 +359,7 @@ def test_apply_validates_every_plan_before_first_write() -> None:
     api = RecordingAPI()
     state = PreflightState(
         tunnel_config={"ingress": [{"service": "http_status:404"}]},
-        dns_records=[{"name": "dev.k8s.woonyong.org", "type": "A", "id": "conflict"}],
+        dns_records=[{"name": "dev-k8s.woonyong.org", "type": "A", "id": "conflict"}],
         hostname_associations=[],
         waf_ruleset=None,
         client_certificates=[],
@@ -376,3 +377,89 @@ def test_apply_validates_every_plan_before_first_write() -> None:
         )
 
     assert api.calls == []
+
+
+def test_preflight_accepts_empty_hostname_association_from_account_token() -> None:
+    class PreflightAPI:
+        def __init__(self) -> None:
+            self.paths: list[str] = []
+
+        def request(self, _method: str, path: str, **_kwargs: object) -> object:
+            self.paths.append(path)
+            responses: dict[str, object] = {
+                f"/accounts/{'a' * 32}/tokens/verify": {"status": "active"},
+                f"/zones/{'b' * 32}": {
+                    "name": "woonyong.org",
+                    "account": {"id": "a" * 32},
+                    "status": "active",
+                },
+                f"/accounts/{'a' * 32}/cfd_tunnel/123e4567-e89b-12d3-a456-426614174000": {
+                    "account_tag": "a" * 32,
+                    "config_src": "cloudflare",
+                },
+                f"/accounts/{'a' * 32}/cfd_tunnel/123e4567-e89b-12d3-a456-426614174000/configurations": {
+                    "config": {"ingress": [{"service": "http_status:404"}]}
+                },
+                f"/zones/{'b' * 32}/certificate_authorities/hostname_associations": {
+                    "hostnames": None
+                },
+            }
+            return responses[path]
+
+        def list_all(self, _path: str, **_kwargs: object) -> list[dict[str, object]]:
+            return []
+
+    api = PreflightAPI()
+
+    state = preflight(
+        api,
+        "a" * 32,
+        "b" * 32,
+        "123e4567-e89b-12d3-a456-426614174000",
+    )
+
+    assert state.hostname_associations == []
+    assert api.paths[0] == f"/accounts/{'a' * 32}/tokens/verify"
+
+
+def test_waf_content_update_keeps_existing_first_position() -> None:
+    class RecordingAPI:
+        def __init__(self) -> None:
+            self.calls: list[tuple[tuple[object, ...], dict[str, object]]] = []
+
+        def request(self, *args: object, **kwargs: object) -> object:
+            self.calls.append((args, kwargs))
+            return {}
+
+    tunnel_id = "123e4567-e89b-12d3-a456-426614174000"
+    stale_rule = {**desired_waf_rule(), "id": "rule-id", "expression": "false"}
+    state = PreflightState(
+        tunnel_config={
+            "ingress": [
+                {
+                    "hostname": "dev-k8s.woonyong.org",
+                    "service": "http://console.management.svc.cluster.local:80",
+                },
+                {"service": "http_status:404"},
+            ]
+        },
+        dns_records=[{**desired_dns_record(tunnel_id), "id": "record-id"}],
+        hostname_associations=["dev-k8s.woonyong.org"],
+        waf_ruleset={"id": "ruleset-id", "rules": [stale_rule]},
+        client_certificates=[],
+    )
+    api = RecordingAPI()
+
+    apply_configuration(
+        api,
+        state,
+        account_id="a" * 32,
+        zone_id="b" * 32,
+        tunnel_id=tunnel_id,
+        origin_service="http://console.management.svc.cluster.local:80",
+        dry_run=False,
+    )
+
+    assert len(api.calls) == 1
+    assert api.calls[0][0][0] == "PATCH"
+    assert "position" not in api.calls[0][1]["body"]

@@ -18,7 +18,7 @@
 | M3 `/metrics` 무인증 | 해결 | 환경과 무관하게 token 미설정 시 503, 설정 시 timing-safe Bearer 검증 |
 
 사용자 세션과 Agent token은 현재 환경과 무관하게 검증한다. 사람용 무세션 개발 접근은
-`dev.k8s.woonyong.org`의 client certificate + Tunnel + 내부 비밀 헤더 조합으로만 허용한다.
+`dev-k8s.woonyong.org`의 client certificate + Tunnel + 내부 비밀 헤더 조합으로만 허용한다.
 H3, M1, M4~M6, L1/L2/L4~L6는 별도 환경·프론트·인프라 작업 범위다.
 
 ## 요약
