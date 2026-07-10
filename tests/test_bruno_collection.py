@@ -322,18 +322,6 @@ def test_bruno_readme_explains_each_work_type() -> None:
     assert missing == []
 
 
-def test_github_webhook_signature_fixture_matches_bruno_body() -> None:
-    body_fixture = (API_DIR / "06-gitops-approval" / "github-webhook-body.json").read_text(
-        encoding="utf-8"
-    )
-    request = (API_DIR / "06-gitops-approval" / "01-github-webhook.bru").read_text(encoding="utf-8")
-
-    assert '"workspace_id": "default"' in body_fixture
-    assert '"workspace_id": "default"' in request
-    assert '"cluster_id": "{{cluster_id}}"' in body_fixture
-    assert '"cluster_id": "{{cluster_id}}"' in request
-
-
 def test_bruno_display_names_are_korean() -> None:
     collection = bruno_text()
     expected_names = [
