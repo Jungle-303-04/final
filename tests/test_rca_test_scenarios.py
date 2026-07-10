@@ -389,6 +389,30 @@ def test_rca_test_api_exposes_dedicated_header_in_every_openapi_operation(
         assert header["schema"]["type"] == "string"
 
 
+def test_scenario_list_openapi_uses_a_typed_item_model(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    client, _db, _events = _client(monkeypatch)
+
+    schema = client.get("/openapi.json").json()
+    response_ref = schema["paths"][TEST_SCENARIOS_PATH]["get"]["responses"]["200"]["content"][
+        "application/json"
+    ]["schema"]["$ref"]
+    response_name = response_ref.rsplit("/", 1)[-1]
+    item_schema = schema["components"]["schemas"][response_name]["properties"]["items"]["items"]
+
+    assert item_schema["$ref"].endswith("/RcaTestScenarioItem")
+    scenario_schema = schema["components"]["schemas"]["RcaTestScenarioItem"]
+    assert scenario_schema["properties"]["expected"]["$ref"].endswith(
+        "/RcaTestScenarioExpectedItem"
+    )
+    assert set(scenario_schema["properties"]["availability"]["enum"]) == {
+        "ready",
+        "fixture_required",
+        "detector_gap",
+    }
+
+
 def test_test_run_request_needs_only_cluster_and_scenario() -> None:
     requests = importlib.import_module("packages.contracts.gateway.requests")
     request_type = requests.RcaTestRunCreateRequest
@@ -568,6 +592,7 @@ def test_test_run_can_be_polled_and_cleanup_is_a_separate_safe_command(
         "resource_kind": "Deployment",
         "namespace": "sandbox",
         "resource_name": "rca-test-image-wrong-tag",
+        "cleanup_adapter": "kubernetes.manifest_delete",
     }
 
     repeated = client.delete(f"{TEST_RUNS_PATH}/{run_id}", headers=_test_headers())

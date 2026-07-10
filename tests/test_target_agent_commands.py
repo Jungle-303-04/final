@@ -348,6 +348,7 @@ def test_rca_test_cleanup_uses_immutable_target_without_loading_current_catalog(
                     "scenario_version": 99,
                     "namespace": "sandbox",
                     "resource_name": "rca-test-image-wrong-tag",
+                    "cleanup_adapter": "kubernetes.manifest_delete",
                 },
             }
         )
