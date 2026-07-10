@@ -127,6 +127,50 @@ def test_cloudflare_custom_domain_defaults_to_proxied_https() -> None:
     assert "`CLOUDFLARE_PROXIED`" in runbook
 
 
+def test_agent_api_endpoint_uses_dns_only_tls_and_path_allowlist() -> None:
+    script = read("scripts/configure-agent-api-endpoint.sh")
+    manifest = read("deploy/management/agent-api-proxy.yaml")
+    kustomization = read("deploy/management/kustomization.yaml")
+    aws_up = read("scripts/aws-up.sh")
+    runbook = read("docs/aws-testing-runbook.md")
+
+    assert "AGENT_API_DOMAIN is required" in script
+    assert "AGENT_API_ACM_CERT_ARN is required" in script
+    assert "CLOUDFLARE_API_TOKEN is required" in script
+    assert "CLOUDFLARE_ZONE_ID is required" in script
+    assert "aws-load-balancer-ssl-cert" in script
+    assert "aws-load-balancer-ssl-ports: https" in script
+    assert "proxied:false" in script
+    assert "PUBLIC_MANAGEMENT_BASE_URL" in script
+    assert "rollout restart deployment/api-gateway" in script
+    assert "cloudflare-dns.com/dns-query" in script
+    assert '--resolve "${AGENT_API_DOMAIN}:443:${resolved_ip}"' in script
+    assert "agent-api.woonyong.org" not in script
+    assert "arn:aws:acm:ap-northeast-2" not in script
+    assert "location ^~ /api/agent/" in manifest
+    assert "location ^~ /api/install/" in manifest
+    assert "location = /api/healthz" in manifest
+    assert "location /" in manifest
+    assert "return 404" in manifest
+    assert "location /api/auth" not in manifest
+    assert "replicas: 2" in manifest
+    assert "nginxinc/nginx-unprivileged:1.29-alpine@sha256:" in manifest
+    assert "automountServiceAccountToken: false" in manifest
+    assert "topologySpreadConstraints:" in manifest
+    assert "whenUnsatisfiable: DoNotSchedule" in manifest
+    assert "matchLabelKeys:" in manifest
+    assert "pod-template-hash" in manifest
+    assert "kind: PodDisruptionBudget" in manifest
+    assert "minAvailable: 1" in manifest
+    assert "agent-api-proxy.yaml" in kustomization
+    assert (
+        'PUBLIC_MANAGEMENT_BASE_URL="${PUBLIC_MANAGEMENT_BASE_URL:-${PUBLIC_API_BASE_URL}}"'
+        in aws_up
+    )
+    assert '--from-literal=PUBLIC_MANAGEMENT_BASE_URL="${PUBLIC_MANAGEMENT_BASE_URL}"' in aws_up
+    assert "configure-agent-api-endpoint.sh" in runbook
+
+
 def test_aws_management_rollout_status_retries_transient_eks_api_errors() -> None:
     script = read("scripts/aws-up.sh")
     runbook = read("docs/aws-testing-runbook.md")
