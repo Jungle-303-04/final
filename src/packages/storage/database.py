@@ -6,8 +6,11 @@
 
 from __future__ import annotations
 
+import asyncio
+
 from domains.registry import Database as Database
 from packages.config.retry import retry_dependency
+from packages.config.settings import env
 from packages.contracts.interfaces import InitializableStore
 from packages.storage.engine import (
     ERROR_MESSAGE_LIMIT,
@@ -19,6 +22,7 @@ from packages.storage.engine import (
 )
 
 __all__ = [
+    "DATABASE_STARTUP_MODE_ENV",
     "ERROR_MESSAGE_LIMIT",
     "Database",
     "compact_error",
@@ -29,9 +33,34 @@ __all__ = [
     "wait_for_database",
 ]
 
+DATABASE_STARTUP_MODE_ENV = "DATABASE_STARTUP_MODE"
+DATABASE_STARTUP_INITIALIZE = "initialize"
+DATABASE_STARTUP_VERIFY = "verify"
+PROTECTED_APP_ENVS = frozenset({"production", "staging"})
+
+
+def database_startup_mode() -> str:
+    """DB 시작 모드 — 운영 계열은 읽기 전용 schema 검증이 기본이다."""
+    app_env = env("APP_ENV", "").strip().lower()
+    default = (
+        DATABASE_STARTUP_VERIFY if app_env in PROTECTED_APP_ENVS else DATABASE_STARTUP_INITIALIZE
+    )
+    mode = env(DATABASE_STARTUP_MODE_ENV, default).strip().lower()
+    if mode not in {DATABASE_STARTUP_INITIALIZE, DATABASE_STARTUP_VERIFY}:
+        raise ValueError(
+            f"{DATABASE_STARTUP_MODE_ENV} must be "
+            f"{DATABASE_STARTUP_INITIALIZE!r} or {DATABASE_STARTUP_VERIFY!r}"
+        )
+    return mode
+
 
 async def wait_for_database(db: InitializableStore) -> None:
+    mode = database_startup_mode()
+
     async def attempt() -> None:
-        db.init()
+        if mode == DATABASE_STARTUP_VERIFY:
+            await asyncio.to_thread(db.verify_schema)
+            return
+        await asyncio.to_thread(db.init)
 
     await retry_dependency(attempt, label="postgres")

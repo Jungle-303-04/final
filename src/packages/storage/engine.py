@@ -454,6 +454,21 @@ def acquire_schema_init_lock(conn: Connection) -> None:
     )
 
 
+def schema_compatibility_issues(
+    expected: dict[str, set[str]],
+    actual: dict[str, set[str]],
+) -> list[str]:
+    """읽기 전용 schema 검증 결과 — 누락 table/column을 결정적으로 정렬한다."""
+    issues: list[str] = []
+    for table_name in sorted(expected):
+        if table_name not in actual:
+            issues.append(f"table:{table_name}")
+            continue
+        for column_name in sorted(expected[table_name] - actual[table_name]):
+            issues.append(f"column:{table_name}.{column_name}")
+    return issues
+
+
 async def configure_async_transaction(conn: Any) -> None:
     await conn.execute(text(f"set local lock_timeout = '{DB_LOCK_TIMEOUT}'"))
     await conn.execute(text(f"set local statement_timeout = '{DB_STATEMENT_TIMEOUT}'"))
@@ -516,6 +531,33 @@ class DatabaseConnection:
         """가벼운 연결 확인(SELECT 1) — readiness 프로브용. DDL/마이그레이션 안 함."""
         with self.connection() as conn:
             conn.execute(text("SELECT 1"))
+
+    def verify_schema(self) -> None:
+        """현재 metadata의 table/column이 모두 있는지 읽기 전용으로 검증한다."""
+        from domains.registry import load_domain_tables
+
+        load_domain_tables()
+        expected = {
+            table.name: {column.name for column in table.columns}
+            for table in metadata.sorted_tables
+        }
+        with self.connection() as conn:
+            rows = conn.execute(
+                text(
+                    "select table_name, column_name "
+                    "from information_schema.columns "
+                    "where table_schema = current_schema()"
+                )
+            ).mappings()
+            actual: dict[str, set[str]] = {}
+            for row in rows:
+                actual.setdefault(str(row["table_name"]), set()).add(str(row["column_name"]))
+        issues = schema_compatibility_issues(expected, actual)
+        if not issues:
+            return
+        preview = ", ".join(issues[:20])
+        suffix = f" (+{len(issues) - 20} more)" if len(issues) > 20 else ""
+        raise RuntimeError(f"database schema verification failed: {preview}{suffix}")
 
     def init(self) -> None:
         from domains.registry import load_domain_tables
