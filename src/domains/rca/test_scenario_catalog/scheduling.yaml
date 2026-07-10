@@ -33,9 +33,9 @@ scenarios:
       poll_seconds: 2
       event_reasons: ["FailedScheduling"]
       event_message_any: ["Insufficient cpu"]
-    cleanup: &scale_cleanup
-      adapter: "kubernetes.deployment_scale"
-      params: {replicas: 0}
+    cleanup: &manifest_delete_cleanup
+      adapter: "kubernetes.manifest_delete"
+      params: {propagation_policy: "Foreground"}
 
   - scenario_id: "schedule.memory"
     version: 1
@@ -65,14 +65,18 @@ scenarios:
       poll_seconds: 2
       event_reasons: ["FailedScheduling"]
       event_message_any: ["Insufficient memory"]
-    cleanup: *scale_cleanup
+    cleanup: *manifest_delete_cleanup
 
   - scenario_id: "schedule.affinity"
     version: 1
     title: "Node affinity 불일치"
     description: "존재하지 않는 node label affinity를 요구해 실제 FailedScheduling을 만듭니다."
     execution: "real"
-    availability: "ready"
+    availability: "detector_gap"
+    availability_reason: "실제 evidence 수집부터 RCA, recovery plan, cleanup까지 live 완주가 아직 검증되지 않았습니다."
+    detector_work_needed:
+      - "격리 target cluster에서 affinity FailedScheduling 실제 이벤트 변형 검증"
+      - "node_affinity_or_taint_mismatch RCA 및 recovery plan live 완주 증적"
     expected:
       root_cause: "node_affinity_or_taint_mismatch"
       symptom: "FailedScheduling"
@@ -90,7 +94,7 @@ scenarios:
       poll_seconds: 2
       event_reasons: ["FailedScheduling"]
       event_message_any: ["affinity", "didn't match"]
-    cleanup: *scale_cleanup
+    cleanup: *manifest_delete_cleanup
 
   - scenario_id: "schedule.pvc"
     version: 1
@@ -119,4 +123,4 @@ scenarios:
       poll_seconds: 2
       event_reasons: ["FailedScheduling"]
       event_message_any: ["persistentvolumeclaim", "unbound"]
-    cleanup: *scale_cleanup
+    cleanup: *manifest_delete_cleanup

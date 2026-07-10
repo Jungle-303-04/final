@@ -32,9 +32,9 @@ scenarios:
       poll_seconds: 2
       event_message_any: ["no endpoints", "upstream", "connection refused"]
       external_status_any: ["502", "503"]
-    cleanup: &scale_cleanup
-      adapter: "kubernetes.deployment_scale"
-      params: {replicas: 0}
+    cleanup: &manifest_delete_cleanup
+      adapter: "kubernetes.manifest_delete"
+      params: {propagation_policy: "Foreground"}
 
   - scenario_id: "ingress.readiness"
     version: 1
@@ -64,7 +64,7 @@ scenarios:
       poll_seconds: 2
       event_reasons: ["Unhealthy"]
       event_message_any: ["Readiness probe failed"]
-    cleanup: *scale_cleanup
+    cleanup: *manifest_delete_cleanup
 
   - scenario_id: "app.http-5xx"
     version: 1
@@ -93,7 +93,7 @@ scenarios:
       poll_seconds: 2
       log_message_any: ["upstream_status\":500", "intentional_error_endpoint"]
       external_status_any: ["500", "502", "503", "504"]
-    cleanup: *scale_cleanup
+    cleanup: *manifest_delete_cleanup
 
   - scenario_id: "network.dns"
     version: 1
@@ -121,7 +121,7 @@ scenarios:
       timeout_seconds: 60
       poll_seconds: 2
       log_message_any: ["no such host", "name resolution", "DNS lookup failed"]
-    cleanup: *scale_cleanup
+    cleanup: *manifest_delete_cleanup
 
   - scenario_id: "network.timeout"
     version: 1
@@ -150,4 +150,4 @@ scenarios:
       poll_seconds: 2
       event_message_any: ["timeout", "deadline exceeded"]
       log_message_any: ["timeout", "deadline exceeded"]
-    cleanup: *scale_cleanup
+    cleanup: *manifest_delete_cleanup

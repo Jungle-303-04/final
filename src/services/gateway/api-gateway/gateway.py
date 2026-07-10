@@ -38,6 +38,7 @@ from domains.inventory.router import router as inventory_router
 from domains.providers.router import router as providers_router
 from domains.rca.query_router import router as rca_query_router
 from domains.rca.router import router as rca_router
+from domains.rca.test_scenario_contract import validate_test_scenario_catalog
 from domains.release_flow.router import router as release_flow_router
 from domains.target.events import AgentConnectedBody
 from domains.target.evidence_jobs import EVIDENCE_JOB_STATUS_LEASED, EVIDENCE_JOB_STATUS_QUEUED
@@ -235,6 +236,7 @@ class ApiGateway:
 
     @asynccontextmanager
     async def lifespan(self, _app: FastAPI) -> AsyncIterator[None]:
+        validate_test_scenario_catalog()
         await wait_for_database(self.db)
         await self.sessions.connect()
         await self.bus.connect()

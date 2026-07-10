@@ -135,6 +135,8 @@ def _command_plan(
                 "expires_at": expires_at,
             }
         )
+    else:
+        command_payload["cleanup_adapter"] = "kubernetes.manifest_delete"
     plan: JsonObject = {
         "command_id": command_id,
         "idempotency_key": command_id,
