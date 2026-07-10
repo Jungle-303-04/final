@@ -431,7 +431,7 @@ def test_status_projection_does_not_claim_a_stale_cleanup_was_applied() -> None:
             run_id=RUN_ID,
             inject_command={
                 "command_id": INJECT_COMMAND_ID,
-                "status": CommandStatus.COMPLETED,
+                "status": CommandStatus.FAILED,
                 "result": _fault_observed_result(),
             },
             evidence_jobs=[{"provider_key": "kubernetes", "status": "completed"}],
@@ -460,7 +460,7 @@ def test_status_projection_marks_completed_cleanup_as_terminal() -> None:
             run_id=RUN_ID,
             inject_command={
                 "command_id": INJECT_COMMAND_ID,
-                "status": CommandStatus.COMPLETED,
+                "status": CommandStatus.FAILED,
                 "result": _fault_observed_result(),
             },
             evidence_jobs=[{"provider_key": "kubernetes", "status": "completed"}],
