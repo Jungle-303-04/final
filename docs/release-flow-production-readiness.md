@@ -118,7 +118,8 @@ python scripts/verify_release_flow_production_evidence.py \
   --github-repo owner/repo \
   --github-branch dev \
   --github-sha <production-commit-sha> \
-  --github-token-env GITHUB_TOKEN
+  --github-token-env GITHUB_TOKEN \
+  --github-output-dir ./release-flow-production-evidence
 ```
 
 This path requires successful `release-flow-production-readiness.yml` and `release-flow-production-deploy.yml` runs for the selected branch/SHA, downloads the required artifacts, and then applies the same JSON checks. The smoke and deploy reports must point at the same concrete HTTPS API base URL.

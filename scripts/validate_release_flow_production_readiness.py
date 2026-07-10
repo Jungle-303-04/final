@@ -357,8 +357,9 @@ def check_evidence_verifier_contract() -> list[ReadinessCheck]:
             and "actions/runs" in source
             and "archive_download_url" in source
             and "release-flow-smoke-production" in source
-            and "release-flow-production-deploy" in source,
-            "production evidence verifier can download GitHub Actions artifacts by workflow run",
+            and "release-flow-production-deploy" in source
+            and "evidence.api_base_url_consistent" in source,
+            "production evidence verifier can download GitHub Actions artifacts and require API consistency",
         ),
         ReadinessCheck(
             "docs.production_readiness.evidence_verifier",
@@ -369,10 +370,11 @@ def check_evidence_verifier_contract() -> list[ReadinessCheck]:
         ),
         ReadinessCheck(
             "docs.production_readiness.github_evidence_verifier",
-            "--github-repo Jungle-303-04/final" in docs
+            "--github-repo owner/repo" in docs
             and "--github-sha" in docs
-            and "--github-output-dir" in docs,
-            "operator guide documents GitHub artifact download verification",
+            and "--github-output-dir" in docs
+            and "same concrete HTTPS API base URL" in docs,
+            "operator guide documents GitHub artifact download verification and API consistency",
         ),
     ]
 
