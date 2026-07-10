@@ -236,6 +236,176 @@ DB table schema가 아니라 `EvidenceItem.value`에 들어가는 JSON 계약이
 | `metadata:current_workload_snapshots` | `metadata.current_workload_snapshots` 또는 `metadata.change_context.current_workload_snapshots` | target namespace의 Deployment metadata snapshot 목록 |
 | `metadata:current_workload_snapshot` | `metadata.current_workload_snapshot` 또는 `metadata.change_context.current_workload_snapshot` | 특정 Deployment 1개의 metadata snapshot |
 
+#### `kubernetes:cluster_resource_state`
+
+producer:
+
+- `KubernetesSnapshotProvider`
+- `collect_evidence_items()` -> `compact_kubernetes_value()`
+
+입력 위치:
+
+```text
+ClusterEvidenceReceivedBody.kubernetes
+```
+
+RCA evidence item:
+
+```json
+{
+  "source": "kubernetes",
+  "name": "cluster_resource_state",
+  "value": {}
+}
+```
+
+`value`는 전체 Kubernetes payload를 그대로 복사하지 않는다.
+incident resource 주변 항목만 고르고, 개수 제한을 적용한다.
+
+| 필드 | 타입 | 코드 기준 생성 규칙 |
+| --- | --- | --- |
+| `cluster` | object | 입력 payload에 있으면 유지한다. |
+| `resource` | object | 입력 payload에 있으면 유지한다. |
+| `symptom` | string | 입력 payload에 있으면 유지한다. |
+| `severity` | string | 입력 payload에 있으면 유지한다. |
+| `pods` | list<object> | incident namespace/resource와 관련된 pod를 최대 16개 남긴다. |
+| `events` | list<object> | incident namespace/resource 또는 선택된 pod와 관련된 event를 최대 24개 남긴다. |
+| `nodes` | list<object> | `ready == false` 또는 `"False"`인 node를 최대 12개 남긴다. |
+| `workloads` | list<object> | incident resource kind/name과 일치하는 workload를 최대 4개 남긴다. |
+| `services` | list<object> | 같은 namespace에서 이름이 incident resource명으로 시작하는 service를 최대 8개 남긴다. |
+| `endpoints` | list<object> | 같은 namespace에서 이름이 incident resource명으로 시작하는 endpoint를 최대 8개 남긴다. |
+| `_lineage` | object | 원본 evidence lineage가 있으면 유지한다. |
+
+선택 기준:
+
+- pod는 `name == resource_name`, `owner_name == resource_name`, 또는 `workload_key`가 `/<resource_name>`으로 끝나면 우선 선택한다.
+- event는 `involved_name`이 선택된 pod 이름이거나 resource 이름이면 우선 선택한다.
+- 관련 항목이 없으면 같은 namespace의 앞쪽 항목을 제한 개수만큼 사용한다.
+
+#### `metrics:telemetry_metrics`
+
+producer:
+
+- `PrometheusMetricsProvider`
+- `collect_evidence_items()` -> `compact_metrics_value()`
+
+입력 위치:
+
+```text
+ClusterEvidenceReceivedBody.metrics
+```
+
+RCA evidence item:
+
+```json
+{
+  "source": "metrics",
+  "name": "telemetry_metrics",
+  "value": {}
+}
+```
+
+`value`는 metric provider result를 compact한 형태다.
+
+| 필드 | 타입 | 코드 기준 생성 규칙 |
+| --- | --- | --- |
+| `_lineage` | object | 원본 evidence lineage가 있으면 유지한다. |
+| `source` | string | 입력 payload에 있으면 유지한다. |
+| `status` | string | 입력 payload에 있으면 유지한다. |
+| `query_count` | number | 입력 payload에 있으면 유지한다. |
+| `result_count` | number | 입력 payload에 있으면 유지한다. |
+| `results` | object | query name별 결과를 최대 12개 남긴다. |
+| `summary` | object | `results`가 없으면 payload 요약으로 대체한다. |
+
+`results.<query_name>`은 다음 규칙으로 줄인다.
+
+| 입력 값 | compact 규칙 |
+| --- | --- |
+| dict | key별로 compact한다. |
+| list | 최대 8개까지만 남긴다. |
+| string | 최대 1600자로 자른다. |
+| nested dict/list | 값 전체 대신 요약을 남긴다. |
+| `data`, `result`, `values`, `streams` list | list 내부를 최대 8개까지 재귀 compact한다. |
+
+#### `logs:related_logs`
+
+producer:
+
+- `LokiLogsProvider`
+- `collect_evidence_items()` -> `select_incident_log_entries()` -> `compact_log_entries()`
+
+입력 위치:
+
+```text
+ClusterEvidenceReceivedBody.logs
+```
+
+RCA evidence item:
+
+```json
+{
+  "source": "logs",
+  "name": "related_logs",
+  "value": {
+    "entries": []
+  }
+}
+```
+
+`value.entries[]`는 incident namespace 로그만 최대 8개 남긴다.
+
+| 필드 | 타입 | 코드 기준 생성 규칙 |
+| --- | --- | --- |
+| `entries` | list<object> | incident namespace와 맞는 log entry를 최대 8개 남긴다. |
+| `entries[].streams` | list<object> | entry 안의 stream을 최대 4개 남긴다. |
+| `entries[].streams[].values` | list<object> | stream 안의 sample을 최대 20개 남긴다. |
+| `entries[].streams[].values[].line` | string | log line을 최대 1600자로 자른다. |
+| `entries[].line_count` | number | namespace 필터 후 남은 stream value 개수를 계산한다. |
+
+namespace 필터:
+
+- stream label의 `k8s_namespace_name` 또는 `namespace`가 incident namespace와 같으면 유지한다.
+- namespace label이 없으면 귀속 불가라 보수적으로 유지한다.
+- `streams`가 없는 legacy entry는 그대로 유지한다.
+
+#### `traces:related_traces`
+
+producer:
+
+- `TempoTracesProvider`
+- `collect_evidence_items()` -> `compact_traces_value()`
+
+입력 위치:
+
+```text
+ClusterEvidenceReceivedBody.traces
+```
+
+RCA evidence item:
+
+```json
+{
+  "source": "traces",
+  "name": "related_traces",
+  "value": {}
+}
+```
+
+`value`는 metrics와 같은 compact mapping 규칙을 쓴다.
+차이는 결과 개수 제한이다.
+
+| 필드 | 타입 | 코드 기준 생성 규칙 |
+| --- | --- | --- |
+| `_lineage` | object | 원본 evidence lineage가 있으면 유지한다. |
+| `source` | string | 입력 payload에 있으면 유지한다. |
+| `status` | string | 입력 payload에 있으면 유지한다. |
+| `query_count` | number | 입력 payload에 있으면 유지한다. |
+| `result_count` | number | 입력 payload에 있으면 유지한다. |
+| `results` | object | query name별 trace 결과를 최대 12개 남긴다. |
+| `summary` | object | `results`가 없으면 payload 요약으로 대체한다. |
+
+`results.<query_name>`은 list를 최대 8개까지 남기고, 긴 문자열은 최대 1600자로 자른다.
+
 #### `metadata:current_workload_snapshots`
 
 producer:
