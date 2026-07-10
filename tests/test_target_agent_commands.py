@@ -251,6 +251,12 @@ def test_catalog_helm_install_command_reports_only_real_runner_success(monkeypat
     assert calls[0].namespace == "sandbox"
 
 
+def test_target_agent_advertises_catalog_helm_runner_capability() -> None:
+    module = load_agent_module()
+
+    assert "catalog_helm_install" in module.AgentConfig.AGENT_CAPABILITIES
+
+
 def test_catalog_helm_install_command_preserves_runner_failure(monkeypatch) -> None:
     module = load_agent_module()
     agent = object.__new__(module.TargetClusterAgent)
