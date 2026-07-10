@@ -135,9 +135,9 @@ def test_release_flow_deploy_refuses_placeholder_production_values_before_start(
     args = module.parse_args(
         [
             "--api-base-url",
-            "https://release-flow.example.test/api",
+            "https://release-flow.company.internal/api",
             "--email",
-            "release@company.test",
+            "release@company.internal",
             "--password",
             "secret",
             "--plan-id",
@@ -163,9 +163,9 @@ def test_release_flow_deploy_refuses_plan_id_mismatch_before_start() -> None:
     args = module.parse_args(
         [
             "--api-base-url",
-            "https://release-flow.example.test/api",
+            "https://release-flow.company.internal/api",
             "--email",
-            "release@company.test",
+            "release@company.internal",
             "--password",
             "secret",
             "--plan-id",
