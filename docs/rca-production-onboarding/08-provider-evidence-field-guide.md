@@ -32,8 +32,8 @@ provider가 수집한 사실
   별도 정규화 단계에서 파생해야 한다.
 - Kubernetes bucket에는 `raw` 원본 object가 없다. provider가 선택한 summary 필드만 남긴다.
   반대로 `metrics`, `logs`, `traces`는 query 결과별 `raw`를 보존한다.
-- `metadata` bucket은 현재 `change_context` 최소 구조를 만든다. 다만 RCA evidence bundle builder는
-  아직 metadata bucket을 `metadata` evidence item으로 승격하지 않는다.
+- `metadata` bucket은 현재 `change_context.current_workload_snapshots` 또는
+  `change_context.current_workload_snapshot`에 Deployment snapshot을 담는다.
 
 ## 이 문서 읽는 순서
 
@@ -211,7 +211,7 @@ provider가 수집한 사실
 | `metrics` | object | Prometheus query 결과를 정규화한 bucket이다. |
 | `logs` | list<object> | Loki query 결과 목록이다. 로그 라인 목록 자체가 아니라 query별 결과 목록이다. |
 | `traces` | object | Tempo trace search 결과를 정규화한 bucket이다. |
-| `metadata` | object | `MetadataProvider`가 만든 변경 맥락 bucket이다. 현재는 `change_context` 최소 구조다. |
+| `metadata` | object | `MetadataProvider`가 만든 변경 맥락 bucket이다. 현재 provider는 전체 조회 시 `change_context.current_workload_snapshots`, 단건 조회 시 `change_context.current_workload_snapshot`을 담는다. |
 
 HTTP `AgentEvidenceRequest`에는 `correlation_id`가 있지만, event body로는 들어가지 않는다.
 Gateway가 event envelope correlation으로 연결한다.
@@ -252,15 +252,15 @@ agent는 이 query definition을 provider별 query object로 바꿔 실행한다
 | query definition 필드 | 의미 |
 | --- | --- |
 | `source` | telemetry source다. policy에 없으면 provider key로 역조회해 채운다. 예: `metrics` provider는 `prometheus`. |
-| `name` | query 결과 key다. metrics/traces에서는 `results.<name>`, logs에서는 `logs[].query_name`, Kubernetes에서는 `provider_status.<name>`으로 쓰인다. metadata는 현재 고정 `change_context` bucket으로 합쳐진다. |
+| `name` | query 결과 key다. metrics/traces에서는 `results.<name>`, logs에서는 `logs[].query_name`, Kubernetes에서는 `provider_status.<name>`으로 쓰인다. metadata는 query별 key를 만들지 않고 현재 고정 `change_context` bucket으로 합쳐진다. |
 | `description` | 사람이 읽는 query 설명이다. provider payload에는 대부분 직접 들어가지 않는다. |
-| `query` | 실제 query 문자열이다. Prometheus는 PromQL, Loki는 LogQL, Tempo는 TraceQL/search query, Kubernetes는 namespace 문자열로 사용한다. |
+| `query` | 실제 query 문자열이다. Prometheus는 PromQL, Loki는 LogQL, Tempo는 TraceQL/search query, Kubernetes는 namespace 문자열로 사용한다. Metadata는 `change_context`이면 target namespace 전체 Deployment 목록, `deployment/<name>` 또는 `deployment/<namespace>/<name>`이면 특정 Deployment 1개를 조회한다. |
 | `range_seconds` | Prometheus range query일 때만 쓴다. 있으면 `PrometheusRangeQuery`가 된다. |
 | `step_seconds` | Prometheus range query step이다. 없으면 provider가 range 기준으로 계산한다. |
 
 query가 비어 있으면 provider는 빈 bucket을 반환한다.
 예를 들어 Prometheus query가 없으면 `{"source": "prometheus", "results": {}}`가 된다.
-metadata query가 비어 있으면 `{"change_context": {"recent_changes": [], "rollback_available": null, "risk_level": "unknown"}}`가 된다.
+metadata query가 없거나 수집 중 fallback이 발생하면 `{"change_context": {"current_workload_snapshots": []}}`가 된다.
 
 ## Kubernetes bucket
 
@@ -753,15 +753,58 @@ RCA 파생 예시는 다음과 같다.
 ## Metadata bucket
 
 Metadata bucket은 `MetadataProvider`가 만든다.
-현재 구현은 외부 배포 시스템을 직접 조회하지 않고, target cluster id와 수집 시각,
-빈 change context 기본값을 RCA 입력에 붙인다.
+현재 구현은 외부 배포 시스템을 직접 조회하지 않는다.
+대신 target namespace의 Deployment 목록과 ReplicaSet 목록을 Kubernetes API에서 읽어
+현재 workload snapshot 목록을 만든다.
+
+`MetadataSnapshotQuery.query` 값이 `change_context`, `current_workload_snapshots`, `deployments`이면
+target namespace의 모든 Deployment를 목록으로 보낸다.
+`deployment/<name>`, `deployment/<namespace>/<name>`, `<namespace>/<name>`이면 특정 Deployment 1개를
+`current_workload_snapshot` 단수 값으로 보낸다.
 
 ```json
 {
   "change_context": {
-    "recent_changes": [],
-    "rollback_available": null,
-    "risk_level": "unknown"
+    "current_workload_snapshots": [
+      {
+        "workload": {
+          "kind": "Deployment",
+          "namespace": "target",
+          "name": "checkout-api"
+        },
+        "deployment_labels": {},
+        "deployment_annotations": {
+          "ops.service/restarted-at": "2026-07-10T11:12:13Z"
+        },
+        "pod_template_annotations": {
+          "prometheus.io/path": "/metrics",
+          "prometheus.io/scrape": "true"
+        },
+        "pod_template_labels": {},
+        "managed_fields_managers": ["kubectl-client-side-apply"],
+        "containers": [
+          {
+            "name": "app",
+            "image": "repo/checkout:v2",
+            "readiness_probe": {
+              "path": "/ready",
+              "port": 8080,
+              "timeout_seconds": 1,
+              "period_seconds": 10,
+              "failure_threshold": 3
+            },
+            "liveness_probe": {},
+            "startup_probe": {}
+          }
+        ],
+        "replicaset_revisions": [
+          {
+            "name": "checkout-api-abc123",
+            "revision": "3"
+          }
+        ]
+      }
+    ]
   }
 }
 ```
@@ -769,12 +812,24 @@ Metadata bucket은 `MetadataProvider`가 만든다.
 | 필드 | 타입 | 의미 |
 | --- | --- | --- |
 | `change_context` | object | 변경 맥락을 담는 묶음이다. |
-| `change_context.recent_changes` | list<object> | 최근 변경 목록이다. 현재 provider 기본값은 빈 목록이다. |
-| `change_context.rollback_available` | boolean 또는 null | 즉시 rollback 가능한지 나타낸다. 현재 provider 기본값은 null이다. |
-| `change_context.risk_level` | string | 변경 위험도다. 현재 provider 기본값은 `"unknown"`이다. |
+| `change_context.current_workload_snapshots` | list<object> | target namespace의 Deployment별 현재 상태 요약이다. |
+| `change_context.current_workload_snapshot` | object | 특정 Deployment 1개의 현재 상태 요약이다. |
+| `change_context.current_workload_snapshots[].workload` | object | workload kind, namespace, name이다. 현재 kind는 `Deployment`다. |
+| `change_context.current_workload_snapshots[].deployment_labels` | object | Deployment metadata labels다. |
+| `change_context.current_workload_snapshots[].deployment_annotations` | object | 안전한 Deployment metadata annotations다. `last-applied-configuration`처럼 원문 manifest나 민감 key는 제외한다. |
+| `change_context.current_workload_snapshots[].pod_template_annotations` | object | 안전한 Pod template metadata annotations다. allowlist에 맞는 작은 값만 남긴다. |
+| `change_context.current_workload_snapshots[].pod_template_labels` | object | Pod template metadata labels다. |
+| `change_context.current_workload_snapshots[].managed_fields_managers` | list<string> | Deployment managedFields의 manager 이름 목록이다. |
+| `change_context.current_workload_snapshots[].containers[]` | list<object> | container name, image, readiness/liveness/startup probe 요약이다. |
+| `change_context.current_workload_snapshots[].containers[].*_probe` | object | probe의 path, port, timeout_seconds, period_seconds, failure_threshold 중 존재하는 값만 담는다. |
+| `change_context.current_workload_snapshots[].replicaset_revisions[]` | list<object> | 이 Deployment가 소유한 ReplicaSet name과 `deployment.kubernetes.io/revision` 값이다. |
 
 주의: `MetadataProvider.query()`의 내부 raw payload에는 `cluster_id`, `collected_at`도 있지만,
 `normalize_payload()` 결과 bucket에는 `change_context`만 남긴다.
+현재 provider는 안전한 Deployment/Pod template annotations만 남긴다.
+`kubectl.kubernetes.io/last-applied-configuration` 같은 원문 manifest annotation과
+secret/token/password/credential/private/authorization 이름이 들어간 annotation은 제외한다.
+raw spec, env/config/secret refs는 남기지 않는다.
 
 ## Evidence job 집계 규칙
 
@@ -804,7 +859,7 @@ agent collector 내부에서 provider query 중 exception이 발생하면 provid
 | `metrics` | `{"source": "prometheus", "results": {}}` |
 | `logs` | `[]` |
 | `traces` | `{"source": "tempo", "results": {}}` |
-| `metadata` | `{"change_context": {"recent_changes": [], "rollback_available": null, "risk_level": "unknown"}}` |
+| `metadata` | `{"change_context": {"current_workload_snapshots": []}}` |
 
 ## RCA에서 바로 쓸 수 있는 값과 파생해야 하는 값
 
@@ -824,7 +879,8 @@ Provider가 이미 보내는 값은 다음과 같다.
 | metric sample/range | `metrics.results.*.samples`, `metrics.results.*.series` |
 | log line | `logs[].streams[].values[].line` |
 | trace search 결과 | `traces.results.*.traces` |
-| 변경 맥락 기본값 | `metadata.change_context` |
+| 현재 workload snapshot 목록 | `metadata.change_context.current_workload_snapshots[]` |
+| 현재 image/probe/labels/annotations/manager/revision 요약 | `metadata.change_context.current_workload_snapshots[].containers[]`, `deployment_labels`, `deployment_annotations`, `pod_template_labels`, `pod_template_annotations`, `managed_fields_managers`, `replicaset_revisions` |
 
 RCA가 판단하려면 다음 값은 파생해야 한다.
 
@@ -867,17 +923,19 @@ RCA cause rules의 여러 candidate는 `metadata` source를 expected evidence로
 최근 배포 변경, git SHA, manifest diff, image digest, Secret/ConfigMap 참조 같은 metadata가 필요하다.
 
 현재 provider job path에는 `metadata` bucket이 있고 기본 policy에도 `metadata.change_context` query가 있다.
-하지만 `collect_evidence_items`는 아직 source를 `kubernetes`, `metrics`, `logs`, `traces` 네 가지만
-evidence item으로 만든다. 따라서 RCA cause evaluation 단계에서는 `metadata`가 required 또는
-expected evidence에 들어간 후보가 여전히 `missing_evidence`에 `metadata`를 남길 수 있다.
+`ClusterEvidenceReceivedBody.metadata`는 `Evidence.metadata`로 복사된다.
 
-metadata를 confidence 계산에 쓰려면 metadata bucket을 evidence item으로 승격하고,
-아래 세부 값을 실제로 채우는 provider 확장이 필요하다.
+RCA evidence bundle builder가 어떤 metadata 위치를 evidence item으로 바꾸는지는
+RCA/evidence-worker 쪽 담당 영역이다. 이 문서는 provider가 보내는 bucket 구조만 기록한다.
 
 | 필요한 metadata | 현재 provider로 가능한지 | 보강 방향 |
 | --- | --- | --- |
-| recent git commit / deploy revision | 기본 bucket은 있으나 값 없음 | GitOps event, manifest render, SCM metadata 연결 |
-| previous/current image digest | 일부만 가능 | `containers[].image`는 현재 image만 제공한다. rollout history나 previous image가 필요하다. |
+| target namespace Deployment별 현재 image/probe/labels/annotations/manager/ReplicaSet revision | 가능 | `change_context.current_workload_snapshots[]`를 쓴다. annotations는 안전한 key만 남긴다. |
+| 특정 Deployment 1개 snapshot | 가능 | `deployment/<name>` 또는 `deployment/<namespace>/<name>` query를 쓴다. |
+| recent git commit / deploy revision | 없음 | GitOps event, manifest render, SCM metadata 연결 |
+| rollback 가능 여부 / risk_level | 없음 | 배포 이력, policy, GitOps/CI/CD 상태 연결 |
+| previous/current image digest | 일부만 가능 | `containers[].image`는 현재 image tag만 제공한다. digest, rollout history, previous image가 필요하다. |
+| Deployment/Pod template annotations | 일부 가능 | `ops.service/*`, `prometheus.io/*`, `deployment.kubernetes.io/*`, `kubectl.kubernetes.io/*` 중 안전한 key만 남긴다. |
 | ConfigMap/Secret key reference | 불충분 | Pod spec env/envFrom/volumes, Secret/ConfigMap metadata summary 추가 |
 | resource requests/limits | 불충분 | Pod spec containers.resources summary 추가 |
 | imagePullSecrets | 불충분 | Pod spec imagePullSecrets summary 추가 |
