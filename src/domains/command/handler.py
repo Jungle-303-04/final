@@ -90,6 +90,9 @@ MISSING_APPROVAL_REF_REASON = "write command requires approval_ref"
 MISSING_POLICY_DECISION_REF_REASON = "write command requires policy_decision_ref"
 APPROVAL_RECORD_MISSING_REASON = "write command approval_ref is not recorded"
 APPROVAL_NOT_GRANTED_REASON = "write command approval_ref is not granted"
+APPROVAL_NOT_REQUIRED_SCOPE_REASON = (
+    "write command not-required approval is limited to sandbox safe_pr policy"
+)
 APPROVAL_POLICY_DECISION_MISMATCH_REASON = "write command policy_decision_ref mismatch"
 APPROVAL_WORKFLOW_MISMATCH_REASON = "write command approval workflow mismatch"
 APPROVAL_DECIDED_BY_MISSING_REASON = "write command approval_decided_by is missing"
@@ -228,6 +231,20 @@ def approval_expires_at_from_record(record: JsonObject) -> tuple[PolicyResult, s
     return PolicyResult.allow(), approval_timestamp_body(parsed)
 
 
+def approval_status_result(command: CommandRequestedBody, record: JsonObject) -> PolicyResult:
+    status = str(record.get("status", ""))
+    if status == ApprovalStatus.GRANTED.value:
+        return PolicyResult.allow()
+    if status != ApprovalStatus.NOT_REQUIRED.value:
+        return PolicyResult.reject(APPROVAL_NOT_GRANTED_REASON)
+
+    details = record.get("details")
+    policy_route = str(details.get("policy_route", "")) if isinstance(details, dict) else ""
+    if command.environment.strip().lower() == "sandbox" and policy_route == "safe_pr":
+        return PolicyResult.allow()
+    return PolicyResult.reject(APPROVAL_NOT_REQUIRED_SCOPE_REASON)
+
+
 async def evaluate_recorded_approval(
     command: CommandRequestedBody, db: AgentCommandStore
 ) -> tuple[PolicyResult, ApprovalEvidence | None]:
@@ -247,11 +264,9 @@ async def evaluate_recorded_approval(
 
     if str(record.get("workflow_run_id", "")) != command.workflow_run_id:
         return PolicyResult.reject(APPROVAL_WORKFLOW_MISMATCH_REASON), None
-    if str(record.get("status", "")) not in {
-        ApprovalStatus.GRANTED.value,
-        ApprovalStatus.NOT_REQUIRED.value,
-    }:
-        return PolicyResult.reject(APPROVAL_NOT_GRANTED_REASON), None
+    status_result = approval_status_result(command, record)
+    if not status_result.allowed:
+        return status_result, None
 
     details = record.get("details")
     if isinstance(details, dict):

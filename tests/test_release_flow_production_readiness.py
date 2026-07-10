@@ -62,6 +62,7 @@ def test_current_release_flow_production_readiness_static_checks_pass() -> None:
         "workflow.production_readiness.api_smoke_preflight",
         "workflow.production_readiness.github_secret_names",
         "workflow.production_gate.fail_closed",
+        "workflow.production_gate.production_live_preflight_required",
         "workflow.production_gate.safe_pr_gate_default",
         "workflow.production_gate.safe_pr_evidence_inputs",
         "workflow.production_gate.safe_pr_evidence_required",
