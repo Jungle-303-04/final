@@ -1696,13 +1696,13 @@ def test_evidence_job_completion_locks_one_job_before_update() -> None:
             self.calls += 1
             if self.calls == 1:
                 return StubResult(
-                        {
-                            "job_id": "job-1",
-                            "evidence_key": "workspace-1:cluster-1:cluster-snapshot:window-1",
-                            "provider_key": "metrics",
-                            "attempt_count": 1,
-                            "max_attempts": 3,
-                        }
+                    {
+                        "job_id": "job-1",
+                        "evidence_key": "workspace-1:cluster-1:cluster-snapshot:window-1",
+                        "provider_key": "metrics",
+                        "attempt_count": 1,
+                        "max_attempts": 3,
+                    }
                 )
             return StubResult()
 

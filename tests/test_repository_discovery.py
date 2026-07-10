@@ -180,9 +180,7 @@ def test_attachable_manifest_scan_uses_bounded_concurrency(
             }
             super().__init__(
                 contents=contents,
-                tree_items=[
-                    {"type": "blob", "path": path} for path in sorted(contents)
-                ],
+                tree_items=[{"type": "blob", "path": path} for path in sorted(contents)],
             )
             self.active = 0
             self.max_active = 0
@@ -198,9 +196,7 @@ def test_attachable_manifest_scan_uses_bounded_concurrency(
 
     client = ConcurrentClient()
     response = asyncio.run(
-        RepositoryDiscoveryService(client).list_attachable_manifest_files(
-            "owner/service", "trunk"
-        )
+        RepositoryDiscoveryService(client).list_attachable_manifest_files("owner/service", "trunk")
     )
 
     assert client.max_active == 2
