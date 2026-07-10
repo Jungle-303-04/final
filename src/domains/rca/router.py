@@ -433,9 +433,7 @@ async def cleanup_test_run(
         cluster_id=response.cluster_id,
         workspace_id=current.workspace_id,
         requested_by=current.user_id,
-        cleanup_adapter=str(
-            command_payload.get("cleanup_adapter") or "kubernetes.manifest_delete"
-        ),
+        cleanup_adapter=str(command_payload.get("cleanup_adapter") or "kubernetes.manifest_delete"),
     )
     cleanup_correlation_id = f"corr-rca-test-cleanup-{response.run_id}"
     cleanup_plan["correlation_id"] = cleanup_correlation_id

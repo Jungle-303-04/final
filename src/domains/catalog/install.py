@@ -98,9 +98,10 @@ def validate_install_names(
         "application_name", application_name, max_length=MAX_KUBERNETES_NAME_LENGTH
     )
     validate_install_name("namespace", namespace, max_length=MAX_KUBERNETES_NAME_LENGTH)
-    if len(release_name) > MAX_HELM_RELEASE_LENGTH or HELM_RELEASE_PATTERN.fullmatch(
-        release_name
-    ) is None:
+    if (
+        len(release_name) > MAX_HELM_RELEASE_LENGTH
+        or HELM_RELEASE_PATTERN.fullmatch(release_name) is None
+    ):
         raise CatalogInstallValidationError("release_name must be a safe Helm release name")
 
 

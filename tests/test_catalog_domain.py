@@ -326,12 +326,8 @@ def test_catalog_install_is_idempotent_and_rejects_key_reuse_with_new_payload() 
     client = catalog_client(db)
     headers = install_headers("catalog-idempotency-key-001")
 
-    first = client.post(
-        "/catalog/items/postgresql/installs", json=install_body(), headers=headers
-    )
-    replay = client.post(
-        "/catalog/items/postgresql/installs", json=install_body(), headers=headers
-    )
+    first = client.post("/catalog/items/postgresql/installs", json=install_body(), headers=headers)
+    replay = client.post("/catalog/items/postgresql/installs", json=install_body(), headers=headers)
     conflict = client.post(
         "/catalog/items/postgresql/installs",
         json=install_body(values={"auth.database": "billing"}),

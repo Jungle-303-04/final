@@ -181,7 +181,7 @@ def test_catalog_install_bruno_uses_idempotent_real_command_contract() -> None:
 
     assert "Idempotency-Key:" in request
     assert '"auth.database": "demo"' in request
-    assert 'res.status === 202 && body && body.command_id' in request
+    assert "res.status === 202 && body && body.command_id" in request
     assert 'bru.setVar("command_id", body.command_id)' in request
     assert "[202, 400, 401, 403, 404, 409, 422]" in request
     assert "501" not in request

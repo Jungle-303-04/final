@@ -493,9 +493,7 @@ def test_target_catalog_install_rbac_is_namespaced_to_rendered_helm_resources(
     )
 
     assert role["metadata"]["namespace"] == "sandbox"
-    assert {
-        (tuple(rule["apiGroups"]), tuple(rule["resources"])) for rule in role["rules"]
-    } == {
+    assert {(tuple(rule["apiGroups"]), tuple(rule["resources"])) for rule in role["rules"]} == {
         (("",), ("configmaps", "secrets", "serviceaccounts", "services")),
         (("apps",), ("statefulsets",)),
         (("networking.k8s.io",), ("networkpolicies",)),
