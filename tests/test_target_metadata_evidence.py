@@ -58,6 +58,7 @@ def test_metadata_provider_collects_one_deployment_snapshot(monkeypatch) -> None
                         {
                             "metadata": {
                                 "name": "checkout-api-abc123",
+                                "uid": "replicaset-1",
                                 "creationTimestamp": "2026-07-10T09:00:00Z",
                                 "annotations": {
                                     "deployment.kubernetes.io/revision": "7"
@@ -89,6 +90,7 @@ def test_metadata_provider_collects_one_deployment_snapshot(monkeypatch) -> None
                         {
                             "metadata": {
                                 "name": "other-api-def456",
+                                "uid": "replicaset-2",
                                 "annotations": {
                                     "deployment.kubernetes.io/revision": "3"
                                 },
@@ -267,6 +269,111 @@ def test_metadata_provider_collects_one_deployment_snapshot(monkeypatch) -> None
                     },
                 },
             )
+        if request.url.path == "/api/v1/namespaces/sandbox/pods":
+            return httpx.Response(
+                200,
+                json={
+                    "items": [
+                        {
+                            "metadata": {
+                                "namespace": "sandbox",
+                                "name": "checkout-api-pod-1",
+                                "labels": {"app": "checkout-api", "release": "stable"},
+                                "ownerReferences": [
+                                    {
+                                        "kind": "ReplicaSet",
+                                        "name": "checkout-api-abc123",
+                                        "uid": "replicaset-1",
+                                    }
+                                ],
+                            },
+                            "status": {
+                                "phase": "Running",
+                                "startTime": "2026-07-10T09:01:00Z",
+                                "conditions": [
+                                    {
+                                        "type": "Ready",
+                                        "status": "False",
+                                        "reason": "ContainersNotReady",
+                                        "message": "containers with unready status",
+                                        "lastTransitionTime": "2026-07-10T10:01:00Z",
+                                    },
+                                    {
+                                        "type": "PodScheduled",
+                                        "status": "True",
+                                    },
+                                ],
+                            },
+                        },
+                        {
+                            "metadata": {
+                                "namespace": "sandbox",
+                                "name": "other-api-pod-1",
+                                "labels": {"app": "other-api"},
+                                "ownerReferences": [
+                                    {
+                                        "kind": "ReplicaSet",
+                                        "name": "other-api-def456",
+                                        "uid": "replicaset-2",
+                                    }
+                                ],
+                            },
+                            "status": {
+                                "phase": "Running",
+                                "conditions": [
+                                    {
+                                        "type": "Ready",
+                                        "status": "True",
+                                    }
+                                ],
+                            },
+                        },
+                    ]
+                },
+            )
+        if request.url.path == "/api/v1/namespaces/sandbox/services":
+            return httpx.Response(
+                200,
+                json={
+                    "items": [
+                        {
+                            "metadata": {
+                                "namespace": "sandbox",
+                                "name": "checkout-api",
+                            },
+                            "spec": {"selector": {"app": "checkout-api"}},
+                        },
+                        {
+                            "metadata": {
+                                "namespace": "sandbox",
+                                "name": "stale-api",
+                            },
+                            "spec": {"selector": {"app": "missing-api"}},
+                        },
+                        {
+                            "metadata": {
+                                "namespace": "sandbox",
+                                "name": "checkout-live",
+                            },
+                            "spec": {"selector": {"release": "stable"}},
+                        },
+                        {
+                            "metadata": {
+                                "namespace": "sandbox",
+                                "name": "manual-endpoints",
+                            },
+                            "spec": {},
+                        },
+                        {
+                            "metadata": {
+                                "namespace": "sandbox",
+                                "name": "billing-api",
+                            },
+                            "spec": {"selector": {"component": "billing"}},
+                        },
+                    ]
+                },
+            )
         return httpx.Response(404, json={})
 
     monkeypatch.setattr(
@@ -297,10 +404,41 @@ def test_metadata_provider_collects_one_deployment_snapshot(monkeypatch) -> None
     snapshot = change_context["current_workload_snapshot"]
 
     assert requests == [
-        "/apis/apps/v1/namespaces/sandbox/replicasets",
         "/apis/apps/v1/namespaces/sandbox/deployments/checkout-api",
+        "/apis/apps/v1/namespaces/sandbox/replicasets",
+        "/api/v1/namespaces/sandbox/pods",
+        "/api/v1/namespaces/sandbox/services",
     ]
     assert "current_workload_snapshots" not in change_context
+    assert change_context["service_selector_matches"] == [
+        {
+            "service": {"namespace": "sandbox", "name": "checkout-api"},
+            "selector": {"app": "checkout-api"},
+            "match_status": "matched",
+            "target_relation": "exact_selector_match",
+            "matched_pod_count": 1,
+            "matched_pods": [
+                {"namespace": "sandbox", "name": "checkout-api-pod-1"}
+            ],
+        },
+        {
+            "service": {"namespace": "sandbox", "name": "checkout-live"},
+            "selector": {"release": "stable"},
+            "match_status": "matched",
+            "target_relation": "live_pod_match",
+            "matched_pod_count": 1,
+            "matched_pods": [
+                {"namespace": "sandbox", "name": "checkout-api-pod-1"}
+            ],
+        },
+        {
+            "service": {"namespace": "sandbox", "name": "stale-api"},
+            "selector": {"app": "missing-api"},
+            "match_status": "no_matching_pods",
+            "target_relation": "selector_key_overlap",
+            "matched_pod_count": 0,
+        },
+    ]
     assert snapshot["workload"] == {
         "kind": "Deployment",
         "namespace": "sandbox",
@@ -343,6 +481,27 @@ def test_metadata_provider_collects_one_deployment_snapshot(monkeypatch) -> None
             }
         ],
     }
+    assert snapshot["pod_statuses"] == [
+        {
+            "name": "checkout-api-pod-1",
+            "phase": "Running",
+            "ready": False,
+            "start_time": "2026-07-10T09:01:00Z",
+            "conditions": [
+                {
+                    "type": "Ready",
+                    "status": "False",
+                    "reason": "ContainersNotReady",
+                    "message": "containers with unready status",
+                    "last_transition_time": "2026-07-10T10:01:00Z",
+                },
+                {
+                    "type": "PodScheduled",
+                    "status": "True",
+                },
+            ],
+        }
+    ]
     assert snapshot["containers"][0]["image"] == "repo/checkout:v2"
     assert snapshot["containers"][0]["readiness_probe"] == {
         "path": "/ready",
@@ -426,6 +585,143 @@ def test_metadata_provider_collects_one_deployment_snapshot(monkeypatch) -> None
     ]
 
 
+def test_metadata_provider_skips_pods_when_deployment_is_missing(
+    monkeypatch,
+) -> None:
+    module, metadata_module = load_metadata_modules()
+    requests: list[str] = []
+
+    def handle_request(request: httpx.Request) -> httpx.Response:
+        requests.append(request.url.path)
+        if request.url.path == "/apis/apps/v1/namespaces/sandbox/replicasets":
+            return httpx.Response(200, json={"items": []})
+        if request.url.path == "/apis/apps/v1/namespaces/sandbox/deployments/missing-api":
+            return httpx.Response(404, json={})
+        if request.url.path == "/api/v1/namespaces/sandbox/pods":
+            return httpx.Response(500, json={"error": "pods should not be queried"})
+        if request.url.path == "/api/v1/namespaces/sandbox/services":
+            return httpx.Response(500, json={"error": "services should not be queried"})
+        return httpx.Response(404, json={})
+
+    monkeypatch.setattr(
+        metadata_module,
+        "kubernetes_api_base_url",
+        lambda: "https://kubernetes.default.svc:443",
+    )
+    monkeypatch.setattr(metadata_module, "service_account_token", lambda: "token-1")
+
+    provider = module.MetadataProvider(
+        cluster_id="cluster-1",
+        transport=getattr(httpx, "Mo" + "ckTransport")(handle_request),
+    )
+    collector = module.EvidenceCollector([provider])
+    collector.register_query(
+        module.TelemetryQueryDefinition.from_mapping(
+            {
+                "source": "metadata",
+                "name": "missing_snapshot",
+                "description": "Missing Deployment metadata snapshot.",
+                "query": "deployment/sandbox/missing-api",
+            }
+        )
+    )
+
+    metadata = asyncio.run(collector.collect("metadata"))["metadata"]
+
+    assert requests == [
+        "/apis/apps/v1/namespaces/sandbox/deployments/missing-api",
+    ]
+    assert metadata["change_context"] == {"current_workload_snapshots": []}
+
+
+def test_metadata_provider_collects_service_matches_without_deployments(
+    monkeypatch,
+) -> None:
+    module, metadata_module = load_metadata_modules()
+    requests: list[str] = []
+
+    def handle_request(request: httpx.Request) -> httpx.Response:
+        requests.append(request.url.path)
+        if request.url.path == "/apis/apps/v1/namespaces/target/deployments":
+            return httpx.Response(200, json={"items": []})
+        if request.url.path == "/api/v1/namespaces/target/pods":
+            return httpx.Response(
+                200,
+                json={
+                    "items": [
+                        {
+                            "metadata": {
+                                "namespace": "target",
+                                "name": "worker-pod-1",
+                                "labels": {"app": "worker"},
+                            }
+                        }
+                    ]
+                },
+            )
+        if request.url.path == "/api/v1/namespaces/target/services":
+            return httpx.Response(
+                200,
+                json={
+                    "items": [
+                        {
+                            "metadata": {
+                                "namespace": "target",
+                                "name": "worker",
+                            },
+                            "spec": {"selector": {"app": "worker"}},
+                        }
+                    ]
+                },
+            )
+        return httpx.Response(404, json={})
+
+    monkeypatch.setattr(
+        metadata_module,
+        "kubernetes_api_base_url",
+        lambda: "https://kubernetes.default.svc:443",
+    )
+    monkeypatch.setattr(metadata_module, "service_account_token", lambda: "token-1")
+
+    provider = module.MetadataProvider(
+        cluster_id="cluster-1",
+        transport=getattr(httpx, "Mo" + "ckTransport")(handle_request),
+    )
+    collector = module.EvidenceCollector([provider])
+    collector.register_query(
+        module.TelemetryQueryDefinition.from_mapping(
+            {
+                "source": "metadata",
+                "name": "change_context",
+                "description": "Namespace metadata snapshots.",
+                "query": "change_context",
+            }
+        )
+    )
+
+    metadata = asyncio.run(collector.collect("metadata"))["metadata"]
+
+    assert requests == [
+        "/apis/apps/v1/namespaces/target/deployments",
+        "/api/v1/namespaces/target/pods",
+        "/api/v1/namespaces/target/services",
+    ]
+    assert metadata["change_context"] == {
+        "current_workload_snapshots": [],
+        "service_selector_matches": [
+            {
+                "service": {"namespace": "target", "name": "worker"},
+                "selector": {"app": "worker"},
+                "match_status": "matched",
+                "matched_pod_count": 1,
+                "matched_pods": [
+                    {"namespace": "target", "name": "worker-pod-1"}
+                ],
+            }
+        ],
+    }
+
+
 def test_metadata_provider_collects_namespace_deployment_snapshots(monkeypatch) -> None:
     module, metadata_module = load_metadata_modules()
     requests: list[str] = []
@@ -440,6 +736,7 @@ def test_metadata_provider_collects_namespace_deployment_snapshots(monkeypatch) 
                         {
                             "metadata": {
                                 "name": "shop-api-abc123",
+                                "uid": "replicaset-3",
                                 "creationTimestamp": "2026-07-10T08:00:00Z",
                                 "annotations": {
                                     "deployment.kubernetes.io/revision": "2"
@@ -562,6 +859,54 @@ def test_metadata_provider_collects_namespace_deployment_snapshots(monkeypatch) 
                     ]
                 },
             )
+        if request.url.path == "/api/v1/namespaces/target/pods":
+            return httpx.Response(
+                200,
+                json={
+                    "items": [
+                        {
+                            "metadata": {
+                                "namespace": "target",
+                                "name": "shop-api-pod-1",
+                                "labels": {"app": "shop-api"},
+                                "ownerReferences": [
+                                    {
+                                        "kind": "ReplicaSet",
+                                        "name": "shop-api-abc123",
+                                        "uid": "replicaset-3",
+                                    }
+                                ],
+                            },
+                            "status": {
+                                "phase": "Running",
+                                "startTime": "2026-07-10T08:01:00Z",
+                                "conditions": [
+                                    {
+                                        "type": "Ready",
+                                        "status": "True",
+                                        "lastTransitionTime": "2026-07-10T08:02:00Z",
+                                    }
+                                ],
+                            },
+                        }
+                    ]
+                },
+            )
+        if request.url.path == "/api/v1/namespaces/target/services":
+            return httpx.Response(
+                200,
+                json={
+                    "items": [
+                        {
+                            "metadata": {
+                                "namespace": "target",
+                                "name": "shop-api",
+                            },
+                            "spec": {"selector": {"app": "shop-api"}},
+                        }
+                    ]
+                },
+            )
         return httpx.Response(404, json={})
 
     monkeypatch.setattr(
@@ -592,10 +937,23 @@ def test_metadata_provider_collects_namespace_deployment_snapshots(monkeypatch) 
     snapshot = change_context["current_workload_snapshots"][0]
 
     assert requests == [
-        "/apis/apps/v1/namespaces/target/replicasets",
         "/apis/apps/v1/namespaces/target/deployments",
+        "/apis/apps/v1/namespaces/target/replicasets",
+        "/api/v1/namespaces/target/pods",
+        "/api/v1/namespaces/target/services",
     ]
     assert "current_workload_snapshot" not in change_context
+    assert change_context["service_selector_matches"] == [
+        {
+            "service": {"namespace": "target", "name": "shop-api"},
+            "selector": {"app": "shop-api"},
+            "match_status": "matched",
+            "matched_pod_count": 1,
+            "matched_pods": [
+                {"namespace": "target", "name": "shop-api-pod-1"}
+            ],
+        }
+    ]
     assert snapshot["workload"] == {
         "kind": "Deployment",
         "namespace": "target",
@@ -620,6 +978,21 @@ def test_metadata_provider_collects_namespace_deployment_snapshots(monkeypatch) 
             }
         ],
     }
+    assert snapshot["pod_statuses"] == [
+        {
+            "name": "shop-api-pod-1",
+            "phase": "Running",
+            "ready": True,
+            "start_time": "2026-07-10T08:01:00Z",
+            "conditions": [
+                {
+                    "type": "Ready",
+                    "status": "True",
+                    "last_transition_time": "2026-07-10T08:02:00Z",
+                }
+            ],
+        }
+    ]
     assert snapshot["containers"][0]["liveness_probe"] == {
         "port": 8080,
         "timeout_seconds": 1,
