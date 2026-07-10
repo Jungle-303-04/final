@@ -14,39 +14,30 @@ Bruno에서 import할 때는 repository root나 `docs`가 아니라 반드시 `d
 docs/api
 ```
 
-4. 왼쪽에 `00 상태와 인증`부터 `16 RCA 단계별 디버그`까지 폴더가 보이면 정상이다.
+4. 왼쪽에 `00 상태와 인증`부터 `16 RCA 실제 E2E 워크플로우`까지 폴더가 보이면 정상이다.
 5. 오른쪽 위 Environment에서 `aws-test`를 고른다.
 6. Environment 목록에는 `aws-test` 하나만 보여야 한다.
 
 깨졌다면 거의 항상 다른 폴더를 연 것이다. `docs/api` 바로 아래에 `bruno.json`과 `environments` 폴더가 있어야 한다.
 파일 경로는 `00-health-auth`처럼 영어 slug를 유지하고, Bruno 화면 표시명은 한글로 맞춘다.
 
-## RCA를 1번부터 끝까지 직접 확인하기
+## RCA 실제 E2E 워크플로우를 별도로 실행하기
 
-AWS 테스트에서는 Environment를 `aws-test`로 선택한 뒤 `16 RCA 단계별 디버그` 폴더만 연다.
-아래 요청을 숫자 순서대로 하나씩 보낸다.
+`16 RCA 실제 E2E 워크플로우`는 일반 API 회귀 runner와 분리되어 있다. 이 폴더는
+실제 target cluster의 `sandbox`에 장애 Deployment를 만들기 때문에 Bruno UI에서만
+명시적으로 실행한다.
 
-1. `01 ImagePull 장애 Evidence 제출`은 실제 클러스터를 고장 내지 않고, 존재하지 않는 이미지 태그로 `ImagePullBackOff`가 발생한 관측값을 Gateway에 제출한다. 매번 새로운 `correlation_id`, `evidence_key`, 리소스 이름을 만들며, 성공 응답의 `correlation_id`를 다음 요청들이 자동으로 이어받는다.
-2. `02 현재 RCA 파이프라인 단계 조회`는 같은 correlation의 최신 `current_subject`와 `status`를 보여준다. 전체 이벤트 이력이 아니라 현재 단계 스냅샷이다.
-3. `03 Evidence Worker 저장 결과 조회`는 evidence-worker가 DB 원문을 읽어 정규화한 `kind=rca_bundle` 결과를 확인한다.
-4. `04 RCA 원인 분석 결과 조회`는 `symptom=ImagePullBackOff`, `root_cause=wrong_image_tag`, 근거와 confidence가 완성됐는지 확인한다.
-5. `05 PR 직전 Recovery Plan 조회`는 추천 후보, `execution_route=draft_pr`, `selection_required=true`를 확인한다. 여기까지가 실제 PR 생성 직전이다.
+1. `01`에서 25개 시나리오와 현재 실행 가능 상태를 조회한다.
+2. `02`에서 `cluster_id + scenario_id`만 보내 실제 장애와 agent 관측을 시작한다.
+3. `03`에서 같은 run의 장애 생성, 관측, evidence, RCA, plan, 선택, cleanup 상태를 반복 확인한다.
+4. `04`~`06`에서 실제 evidence, RCA 결과, recovery 후보를 차례로 확인한다.
+5. PR/실행까지 확인할 때만 `rca_select_confirmation`을
+   `SELECT:<rca_correlation_id>`로 설정하고 `07`을 보낸다.
+6. `08`에서 선택 상태를 확인하고 `09` cleanup을 보낸 뒤, `10`에서 실제 완료를 확인한다.
 
-파이프라인은 비동기이므로 02~05가 처음에 빈 배열이나 404를 보일 수 있다. 이 경우 요청을 새로 만들지 말고 같은 번호의 `Send`를 잠시 뒤 다시 누른다. 각 테스트가 아직 어느 단계 전인지 메시지로 알려준다.
-
-`POST /agent/evidence`의 200 응답은 RCA 완료가 아니다. 원본 `evidence_windows`와 시작 event/outbox가 한 트랜잭션으로 저장됐다는 뜻이다. 응답 예시는 다음과 같다.
-
-```json
-{
-  "accepted": true,
-  "event_id": "evt-...",
-  "correlation_id": "corr-bruno-imagepull-..."
-}
-```
-
-`event_id`는 최초 접수 이벤트를 가리키고, `correlation_id`는 evidence 생성부터 RCA와 recovery plan까지 전체 흐름을 묶는다. `evidence_key`를 재사용하면 서버가 기존 요청으로 멱등 처리하므로 01 요청이 매번 세 값을 새로 만든다.
-
-실제 실행을 시작하는 `POST /rca/recovery-plans/{plan_id}/actions/{action_id}/select`는 이 디버그 폴더에 넣지 않았다. 이 API부터 승인 기록과 `recovery.action_selected` 이벤트가 생성되고 Safe PR 경로가 열릴 수 있다.
+파이프라인은 비동기다. `03`~`06`이 아직 처리 중이면 새 run을 만들지 말고 같은
+요청을 잠시 뒤 다시 보낸다. 상세 사용법과 안전 경계는
+`16-rca-debug/README.md`가 단일 가이드다.
 
 ## 전체 Runner 실행
 
