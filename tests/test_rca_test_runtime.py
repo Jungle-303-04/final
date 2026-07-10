@@ -12,8 +12,10 @@ from __future__ import annotations
 import importlib
 import json
 from collections.abc import Mapping
+from types import SimpleNamespace
 from typing import Any
 
+import pytest
 from conftest import load_service, run_handler
 
 from domains.command.events import CommandCompletedBody
@@ -171,6 +173,83 @@ def test_fault_observation_requires_the_registered_signal_groups() -> None:
         }
     ]
     assert runtime.rca_test_observation_matches(scenario, snapshot, RUN_ID) is True
+
+
+def test_runtime_kubernetes_facade_dispatches_through_the_registered_adapter(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    runtime = _runtime()
+    scenario = scenario_by_id(SCENARIO_ID)
+    assert scenario is not None
+    calls: list[tuple[str, object]] = []
+
+    class SpyAdapter:
+        def fixture_target(self, selected: object) -> object:
+            calls.append(("target", selected))
+            return SimpleNamespace(namespace="sandbox", resource_name=RESOURCE_NAME)
+
+        def build_trigger(
+            self,
+            selected: object,
+            run_id: str,
+            expires_at: str,
+        ) -> list[dict[str, object]]:
+            calls.append(("trigger", (selected, run_id, expires_at)))
+            return [{"kind": "SpyManifest"}]
+
+        def matches_observation(
+            self,
+            selected: object,
+            snapshot: object,
+            run_id: str,
+        ) -> bool:
+            calls.append(("observe", (selected, snapshot, run_id)))
+            return True
+
+        def build_cleanup(self, namespace: str, resource_name: str) -> object:
+            calls.append(("cleanup", (namespace, resource_name)))
+            return SimpleNamespace(adapter="kubernetes.manifest_delete", resources=())
+
+    adapter = SpyAdapter()
+
+    class SpyRegistry:
+        def adapter_for(self, selected: object) -> SpyAdapter:
+            calls.append(("adapter_for", selected))
+            return adapter
+
+        def cleanup_adapter(self, adapter_name: str) -> SpyAdapter:
+            calls.append(("cleanup_adapter", adapter_name))
+            return adapter
+
+    monkeypatch.setattr(
+        runtime,
+        "default_test_scenario_adapter_registry",
+        lambda: SpyRegistry(),
+    )
+
+    target = runtime.rca_test_scenario_fixture_target(scenario)
+    manifests = runtime.build_rca_test_manifests(scenario, RUN_ID, EXPIRES_AT)
+    matched = runtime.rca_test_observation_matches(scenario, {"pods": []}, RUN_ID)
+    cleanup = runtime.rca_test_resource_cleanup_plan(
+        "kubernetes.manifest_delete",
+        "sandbox",
+        RESOURCE_NAME,
+    )
+
+    assert target.resource_name == RESOURCE_NAME
+    assert manifests == [{"kind": "SpyManifest"}]
+    assert matched is True
+    assert cleanup.adapter == "kubernetes.manifest_delete"
+    assert [name for name, _value in calls] == [
+        "adapter_for",
+        "target",
+        "adapter_for",
+        "trigger",
+        "adapter_for",
+        "observe",
+        "cleanup_adapter",
+        "cleanup",
+    ]
 
 
 class _ReleaseFlowDb:
