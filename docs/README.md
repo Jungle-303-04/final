@@ -114,6 +114,7 @@ AWS와 운영 명령을 확인할 때는 [운영/배포](operations-deployment.m
 실서비스 형태의 sandbox 장애 데이터는 [실서비스 데이터 시나리오](scenarios.md)를 본다.
 
 production 전 위험과 점검 항목은 [운영 준비도](production-readiness.md)를 본다.
+2026-07-11 감사 결함의 해결 순서와 완료 조건은 [권한·Evidence·AI·명령·메트릭 개선 계획](remediation-plan-2026-07-11.md)을 본다.
 
 secret 이름과 주입 경계는 [Secrets](secrets.md)를 본다.
 
@@ -176,6 +177,7 @@ secret 이름과 주입 경계는 [Secrets](secrets.md)를 본다.
 - [platform-foundation-plan](platform-foundation-plan.md)
 - [production-readiness](production-readiness.md)
 - [release-flow-production-readiness](release-flow-production-readiness.md)
+- [remediation-plan-2026-07-11](remediation-plan-2026-07-11.md)
 - [production-push-2026-07-07](production-push-2026-07-07.md)
 - [release-flow-implementation](release-flow-implementation.md)
 - [scenarios](scenarios.md)
