@@ -8,7 +8,7 @@ import secrets
 import uuid
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
-from typing import Annotated, Any
+from typing import Any
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Request
 
@@ -96,13 +96,11 @@ RCA_TEST_RUN_CONFLICT = "RCA test target already has an active run"
 
 
 def require_rca_test_api(
-    supplied: Annotated[
-        str | None,
-        Header(
-            alias=RCA_TEST_RUNS_TOKEN_HEADER,
-            description="RCA 테스트 실행 전용 토큰",
-        ),
-    ] = None,
+    supplied: str | None = Header(
+        default=None,
+        alias=RCA_TEST_RUNS_TOKEN_HEADER,
+        description="RCA 테스트 실행 전용 토큰",
+    ),
 ) -> None:
     """Fail closed: test 환경, 명시 플래그, 별도 secret이 모두 있어야 노출한다."""
     if not rca_test_runs_enabled():
