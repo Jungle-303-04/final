@@ -36,6 +36,7 @@ def load_agent_module():
         "span.otel",
         "commands",
         "commands.context",
+        "commands.helm",
         "commands.kubernetes",
         "commands.outbox",
         "commands.registry",
@@ -207,6 +208,126 @@ def test_apply_manifest_keeps_plan_diff_payload() -> None:
     assert result["applied"] is True
     assert applied["namespace"] == "sandbox"
     assert applied["manifest"]["kind"] == "ConfigMap"
+
+
+def test_catalog_helm_install_command_reports_only_real_runner_success(monkeypatch) -> None:
+    module = load_agent_module()
+    agent = object.__new__(module.TargetClusterAgent)
+    agent.cluster_id = "cluster-1"
+    agent.cluster_role = "target"
+    agent.kubernetes = StubKubernetesClient()
+    calls: list[object] = []
+
+    def fake_runner(payload: object) -> SimpleNamespace:
+        calls.append(payload)
+        return SimpleNamespace(succeeded=True, error_code="", returncode=0)
+
+    monkeypatch.setattr(module, "run_catalog_helm_install", fake_runner, raising=False)
+    register_agent_commands(module, agent)
+
+    result = asyncio.run(
+        agent.execute_command(
+            {
+                "action": module.Command.CATALOG_HELM_INSTALL_ACTION,
+                "payload": {
+                    "catalog_item_id": "catalog-postgresql",
+                    "catalog_version": "1.0.0",
+                    "namespace": "sandbox",
+                    "application_name": "orders-db",
+                    "release_name": "orders-db",
+                    "values": {"auth.database": "orders"},
+                },
+            }
+        )
+    )
+
+    assert result["status"] == "completed"
+    assert result["applied"] is True
+    assert result["message"] == "catalog Helm install completed"
+    assert result["catalog_item_id"] == "catalog-postgresql"
+    assert result["catalog_version"] == "1.0.0"
+    assert result["release_name"] == "orders-db"
+    assert len(calls) == 1
+    assert calls[0].namespace == "sandbox"
+
+
+def test_catalog_helm_install_command_preserves_runner_failure(monkeypatch) -> None:
+    module = load_agent_module()
+    agent = object.__new__(module.TargetClusterAgent)
+    agent.cluster_id = "cluster-1"
+    agent.cluster_role = "target"
+    agent.kubernetes = StubKubernetesClient()
+
+    monkeypatch.setattr(
+        module,
+        "run_catalog_helm_install",
+        lambda _payload: SimpleNamespace(
+            succeeded=False,
+            error_code="helm_timeout",
+            returncode=None,
+        ),
+        raising=False,
+    )
+    register_agent_commands(module, agent)
+
+    result = asyncio.run(
+        agent.execute_command(
+            {
+                "action": module.Command.CATALOG_HELM_INSTALL_ACTION,
+                "payload": {
+                    "catalog_item_id": "catalog-postgresql",
+                    "catalog_version": "1.0.0",
+                    "namespace": "sandbox",
+                    "application_name": "orders-db",
+                    "release_name": "orders-db",
+                    "values": {"auth.database": "orders"},
+                },
+            }
+        )
+    )
+
+    assert result["status"] == "failed"
+    assert result["applied"] is False
+    assert result["message"] == "catalog Helm install failed: helm_timeout"
+    assert "orders" not in result["stdout"]
+    assert "orders" not in result["stderr"]
+
+
+def test_management_agent_blocks_catalog_runner_before_subprocess(monkeypatch) -> None:
+    module = load_agent_module()
+    agent = object.__new__(module.TargetClusterAgent)
+    agent.cluster_id = "management-1"
+    agent.agent_id = "agent-1"
+    agent.cluster_role = "management"
+    agent.kubernetes = StubKubernetesClient()
+    calls: list[object] = []
+    monkeypatch.setattr(
+        module,
+        "run_catalog_helm_install",
+        lambda payload: calls.append(payload),
+        raising=False,
+    )
+    register_agent_commands(module, agent)
+
+    result = asyncio.run(
+        agent.execute_command(
+            {
+                "action": module.Command.CATALOG_HELM_INSTALL_ACTION,
+                "payload": {
+                    "catalog_item_id": "catalog-postgresql",
+                    "catalog_version": "1.0.0",
+                    "namespace": "sandbox",
+                    "application_name": "orders-db",
+                    "release_name": "orders-db",
+                    "values": {"auth.database": "orders"},
+                },
+            }
+        )
+    )
+
+    assert result["status"] == "failed"
+    assert result["message"] == "management_readonly"
+    assert calls == []
 
 
 def test_rca_test_inject_command_returns_real_fault_observation(
