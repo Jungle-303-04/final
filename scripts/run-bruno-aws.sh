@@ -33,6 +33,7 @@ COMMON_ARGS=(
   --env-var "cluster_id=${RUN_ID}"
   --env-var "cluster_id_2=${RUN_ID}"
   --env-var "agent_cluster_id=${RUN_ID}"
+  --env-var "cluster_purge=true"
   --env-var "target_name=API Verification ${RUN_ID}"
   --env-var "agent_target_name=API Verification ${RUN_ID}"
   --env-var "agent_id=agent-${RUN_ID}"

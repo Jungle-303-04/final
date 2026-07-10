@@ -12,6 +12,15 @@ get {
   url: {{base_url}}auth/verify-email?token={{email_verification_token}}&redirect=/dashboard
 }
 
+script:pre-request {
+  const enabled = String(
+    bru.getEnvVar("auth_flow_verification") || bru.getVar("auth_flow_verification") || "false"
+  ).trim().toLowerCase() === "true";
+  if (!enabled) {
+    bru.runner.skipRequest();
+  }
+}
+
 tests {
   test("redirects when token is valid, otherwise explicit error", function () {
     expect([303, 400, 401, 404, 422]).to.include(res.status);

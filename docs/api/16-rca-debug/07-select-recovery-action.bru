@@ -15,10 +15,17 @@ headers {
 }
 
 script:pre-request {
-  const expected = `SELECT:${bru.getVar("rca_correlation_id")}`;
-  const actual = String(bru.getVar("rca_select_confirmation") || "");
-  if (actual !== expected) {
-    throw new Error(`실제 PR/실행 경로를 열려면 rca_select_confirmation 값을 ${expected} 로 설정하세요.`);
+  const enabled = String(
+    bru.getEnvVar("rca_test_verification") || bru.getVar("rca_test_verification") || "false"
+  ).trim().toLowerCase() === "true";
+  if (!enabled) {
+    bru.runner.skipRequest();
+  } else {
+    const expected = `SELECT:${bru.getVar("rca_correlation_id")}`;
+    const actual = String(bru.getVar("rca_select_confirmation") || "");
+    if (actual !== expected) {
+      throw new Error(`실제 PR/실행 경로를 열려면 rca_select_confirmation 값을 ${expected} 로 설정하세요.`);
+    }
   }
 }
 

@@ -5,5 +5,17 @@
   "ignore": [
     "node_modules",
     ".git"
-  ]
+  ],
+  "clientCertificates": {
+    "enabled": true,
+    "certs": [
+      {
+        "domain": "dev-k8s.woonyong.org",
+        "type": "cert",
+        "certFilePath": ".certs/dev-console.pem",
+        "keyFilePath": ".certs/dev-console.key",
+        "passphrase": ""
+      }
+    ]
+  }
 }
