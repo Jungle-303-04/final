@@ -27,6 +27,7 @@ class ToolContext:
 
     db: Any
     workspace_id: str
+    user_id: str
     cluster_id: str | None = None
     resource_type: str | None = None
     kind: str | None = None

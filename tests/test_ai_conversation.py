@@ -144,6 +144,10 @@ def test_chat_worker_promotes_resource_context_to_tool_context() -> None:
                 "namespace": "prod",
                 "name": "checkout-abc",
                 "uid": "pod-uid-1",
+                "application_id": "app-1",
+                "diff_source": "gitops",
+                "workflow_run_id": "workflow-1",
+                "approval_id": "approval-1",
             },
         ),
         db=store,
@@ -156,6 +160,10 @@ def test_chat_worker_promotes_resource_context_to_tool_context() -> None:
     assert capture.context.namespace == "prod"
     assert capture.context.name == "checkout-abc"
     assert capture.context.uid == "pod-uid-1"
+    assert capture.context.resource_context["application_id"] == "app-1"
+    assert capture.context.resource_context["diff_source"] == "gitops"
+    assert capture.context.resource_context["workflow_run_id"] == "workflow-1"
+    assert capture.context.resource_context["approval_id"] == "approval-1"
 
 
 def test_chat_worker_drops_late_response_for_deleted_conversation() -> None:
