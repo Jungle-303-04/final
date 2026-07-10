@@ -520,3 +520,226 @@ Operation phase 전이:
 - cancel intent나 terminate receipt만으로 target operation을 cancelled로 바꾸지 않는다. authoritative cancelled event가 필요하다.
 - operationSequence gap은 topology 전체 resync가 아니라 해당 operation status fetch를 만든다.
 - terminal 뒤 다른 terminal 또는 non-terminal event는 protocol corruption이다.
+
+## 7. Reducer state와 transition
+
+```ts
+type QueryActivity =
+  | { kind: "idle" }
+  | { kind: "planning"; queryRevision: string; effectId: string }
+  | { kind: "loading-snapshot"; queryId: string; planId: string; effectId: string }
+  | { kind: "rejected"; queryRevision: string; error: StructuredError }
+  | { kind: "failed"; queryRevision: string; error: StructuredError }
+
+type VisibleFrameState =
+  | { kind: "absent" }
+  | {
+      kind: "installed"
+      frameId: string
+      hashes: DataProjectionHashes
+      cursor: ResumeCursor
+      visibility: "current-query" | "previous-while-planning" | "stale-while-disconnected"
+      content: "nonempty" | "empty-authoritative"
+    }
+
+type StreamState =
+  | { kind: "not-applicable" }
+  | { kind: "connecting"; expectedCursor: ResumeCursor; effectId: string }
+  | { kind: "connected"; committedCursor: ResumeCursor; headSequence: number }
+  | { kind: "disconnected"; committedCursor: ResumeCursor; retryAttempt: number }
+  | { kind: "resyncing"; retainedFrameId: string | null; reasonCode: string }
+  | { kind: "compatibility-fatal"; error: StructuredError }
+
+type ReducerTransition =
+  | { kind: "committed"; nextState: EngineState; directives: readonly EffectDirective[] }
+  | {
+      kind: "no-op"
+      state: EngineState
+      reason: "duplicate" | "stale-result" | "cancelled-effect" | "old-stream-sequence"
+    }
+  | { kind: "rejected"; state: EngineState; error: StructuredError }
+  | {
+      kind: "resync-required"
+      nextState: EngineState
+      reasonCode: string
+      directives: readonly EffectDirective[]
+    }
+  | { kind: "compatibility-fatal"; nextState: EngineState; error: StructuredError }
+```
+
+Reducer pipeline은 고정한다.
+
+```text
+runtime schema
+→ workspace/session/data-origin
+→ dedupe
+→ effect correlation 또는 stream continuity
+→ query hash/catalog/entitlement
+→ payload cross-field refinement
+→ scratch state 적용
+→ global invariant 검사
+→ atomic commit
+```
+
+새 query를 planning/loading하는 동안 이전 valid frame과 그 frame hash를 유지한다. pending query hash와 visible frame hash를 같은 필드로 덮어쓰지 않는다. authoritative empty는 complete+allowed snapshot의 명시적 결과에서만 설치한다.
+
+## 8. Decimal 계산과 표시
+
+```ts
+type DecimalRoundingMode = "half-even"
+
+type DecimalPolicy = {
+  policyId: string
+  maxIntegerDigits: number
+  maxFractionDigits: number
+  derivedFractionDigits: number
+  guardDigits: number
+  allowNegative: boolean
+  roundingMode: DecimalRoundingMode
+  overflow: "reject"
+}
+
+type DecimalDisplayPolicy = {
+  policyId: string
+  notation: "plain" | "compact"
+  unitScale: "none" | "si" | "iec" | "currency-major"
+  minimumFractionDigits: number
+  maximumFractionDigits: number
+  maximumSignificantDigits: number
+  roundingMode: DecimalRoundingMode
+  trailingZero: "trim" | "preserve"
+}
+```
+
+Canonical plain decimal grammar:
+
+```text
+^-?(?:0|[1-9][0-9]*)(?:\.[0-9]*[1-9])?$
+```
+
+- `-0`, leading plus, exponent, whitespace, grouping separator, leading zero, trailing fractional zero를 거부한다. zero는 정확히 `"0"`다.
+- source value는 arbitrary-precision base-10으로 파싱하고 unit 변환/sum 중간에 반올림하지 않는다.
+- division이 필요한 normalized share/weight/contribution 경계에서만 `derivedFractionDigits`로 half-even quantize한다.
+- quantized share 합을 정확히 1로 닫아야 하면 residual을 discarded remainder가 가장 큰 항에 배정하고 tie는 canonical term/entity key로 깬다.
+- composite parent는 canonical child score 합이며 parent에서 다시 normalize하지 않는다.
+- display rounding은 계산, URL, action parameter, export에 재사용하지 않는다.
+- geometry worker는 decimal ratio를 normalize한 뒤 finite float로 변환한다.
+- unit prefix는 반올림 전 절대값으로 선택하고 scale 후 한 번만 반올림한다.
+- non-zero가 최소 표시 quantum보다 작으면 `0`이 아니라 `< quantum`; null은 reason-aware missing이다.
+- denominator 0 percentage는 not-applicable이며 Infinity/NaN을 표시하지 않는다.
+- currency는 ISO currency + window + source cohort가 같을 때만 합산한다.
+- exact canonical value는 inspector/export에 보존하고 formatter는 `Number(decimalString)`을 거치지 않는다.
+
+## 9. Idempotency, cancellation, reconnect
+
+### 9.1 Message와 stream
+
+- UI/URL/system message는 `(sessionId,eventId)`로 dedupe한다.
+- stream primary key는 `(streamId,streamEpoch,sequence)`다.
+- 같은 tuple에 다른 eventId 또는 payload digest가 오면 protocol corruption이다.
+- `sequence <= committed`: 적용하지 않는다. retention 안이면 digest 일치 확인, compact 이후 old replay diagnostic.
+- `sequence === committed + 1`: atomic apply 후보.
+- `sequence > committed + 1`: 적용하지 않고 resync.
+- streamId/epoch 변경은 새 snapshot/session 없이 수용하지 않는다.
+- emittedAt/observedAt/resourceVersion/generation으로 순서를 추정하지 않는다.
+
+### 9.2 Effect cancellation
+
+- 동일 abortKey의 새 effect 전에 이전 effect를 cancelled registry에 기록한다.
+- cancelled/inactive effectId 결과는 hash가 같아도 적용하지 않는다.
+- 한 effectId의 첫 terminal result만 유효하며 다음 terminal result는 protocol error다.
+- query 변경은 이전 plan/snapshot/stream/detail/layout effect를 취소한다.
+- 이미 전송됐을 수 있는 command는 query 변경으로 취소 완료 처리하지 않고 unresolved command ledger에 둔다.
+- registry/LRU는 bounded지만 active cursor와 unresolved command ledger는 임의 TTL/LRU eviction 대상이 아니다.
+
+### 9.3 Command idempotency
+
+- key scope는 workspace + actor + action + target + parametersHash다.
+- 동일 key/fingerprint는 동일 receipt, 같은 key/다른 fingerprint는 conflict다.
+- transport failure가 `possibly-sent`이면 자동 재실행하지 않고 receipt/status를 조회한다.
+- 같은 logical invocation retry는 key를 유지하고, 새 parameter/target/명시적 invocation만 새 key다.
+
+### 9.4 Reconnect
+
+1. 마지막 reducer-committed signed cursor로 reconnect한다.
+2. handshake의 workspace/query/entitlement/origin/hashes/stream/epoch/accepted sequence를 모두 검증한다.
+3. accepted+1부터 연속 replay한다.
+4. disconnect 중 마지막 valid scene을 유지하고 connection/freshness만 갱신한다.
+5. resume rejection, retention expiry, epoch/hash mismatch는 새 snapshot을 요구한다.
+6. resync 중 old/new delta를 이어 붙이지 않는다.
+7. buffer overflow는 silent drop이 아니라 resync다.
+8. schema major mismatch는 resync loop가 아니라 compatibility fatal이다.
+9. reconnect/resync/forbidden을 authoritative empty로 바꾸지 않는다.
+
+## 10. Message validation matrix
+
+| Message / delta | 허용 source | 필수 검증 | commit / 실패 처리 |
+|---|---|---|---|
+| `engine.initialized` | system | uninitialized, config/schema/runtime policy | session 생성, catalog fetch |
+| `catalog.changed` | effect | active effect, schema, ID collision | compatible replan; major fatal |
+| `url.hydrated` | url | codec version/migration/size/depth/entitlement | pending query; invalid면 이전 scene 유지 |
+| `query.textChanged` | ui | base revision, length/control char | draft만 변경 |
+| `query.tokenCommitted` | ui | token schema/catalog/revision/duplicate | canonical query + plan |
+| `query.tokenRemoved` | ui | token 존재/revision/default size | canonical query + plan |
+| `query.planRequested` | ui/system | AST, field/unit/window/action 혼입 | 이전 query effect cancel, plan |
+| `query.planResolved` | effect | active effect/expiry/hash/catalog | loading snapshot |
+| `query.planRejected` | effect | active effect/typed error | 이전 scene 유지, rejected |
+| `scope.entered/exited` | ui | identity/entitlement/containment | query 변경; graph 직접 mutation 금지 |
+| `lens.progressChanged` | ui | finite p, gesture/layout revision | presentation only |
+| `lens.committed` | ui | lens capability/data hash 불변 | URL/layout; data refetch 금지 |
+| `entity.focused` | ui | visible/restorable target | presentation only |
+| `entity.activated` | ui | current entity/activation descriptor | declared query/navigation/action |
+| `selection.changed` | ui | revision/entity existence/limit | atomic selection |
+| `viewport.changed` | ui | finite coordinate/zoom/policy | presentation only |
+| `action.invoked` | ui | descriptor/capability/target/parameters | confirmation 대기 또는 command effect |
+| `action.confirmed` | ui | pending invocation/token target/hash/expiry | 같은 invocation/key command |
+| `action.dismissed` | ui | pending invocation | local pending 제거 |
+| `operation.cancelRequested` | ui | non-terminal/cancel capability | command 제출; phase 유지 |
+| `snapshot.received` | snapshot | correlation/workspace/query/origin/epoch/catalog/hash/cursor/frame invariant | frame atomic install 후 subscribe |
+| `stream.ready` | stream | accepted=requested, head>=accepted | accepted+1 replay |
+| `stream.disconnected` | effect | active subscribe | frame 유지/reconnect |
+| `stream.resyncRequired` | stream/system | active tuple/reason | frame 유지, stream/layout cancel, snapshot |
+| `entity.upserted` | stream batch | UID identity/workspace/cluster/budget | full replace |
+| `entity.deleted` | stream batch | key/time/reason | tombstone; 이름 lookup 금지 |
+| `entity.resolutionCommitted` | stream batch | authoritative evidence/both entities | relation/focus/selection alias 이전 |
+| `relation.upserted` | stream batch | key/endpoints/evidence/claims | full replace |
+| `relation.deleted` | stream batch | relation key | absent no-op |
+| `restrictedBoundary.*` | stream batch | stable key/no cardinality leak | keyed replace/delete |
+| `metric.batchReceived` | stream batch | decimal/status/unit/hash/entity | keyed replace/delete |
+| `flow.batchReceived` | stream batch | observed truth/window/unit/relation | keyed replace/delete |
+| `size.batchReceived` | stream batch | formula/cohort/hash/nonnegative | current formula only |
+| `rollup.batchReceived` | stream batch | leaf universe/sum/coverage | keyed replace/delete |
+| `source.watermarkReplaced` | stream batch | catalog/orthogonal axes | full source replace |
+| `frame.completenessReplaced` | stream batch | count/access/source consistency | completeness only |
+| `warning.*` | stream batch | stable key/redaction | keyed replace/delete |
+| `layout.resolved` | worker | active effect/full revision/transaction | geometry commit |
+| `layout.rejectedAsStale` | worker/system | revision mismatch | geometry 불변 |
+| `layout.failed` | worker | active effect/recoverability | last layout 유지 |
+| `command.receiptReceived` | effect | effect/key/origin/fingerprint | accepted op install; rejected/unknown graph 불변 |
+| `operation.eventReceived` | stream/effect | ID/sequence/receipt/key/legal phase | operation slice; gap은 status fetch |
+| `operation.snapshotReceived` | effect | active lookup/authoritative sequence | unknown/gap reconcile |
+| `theme.changed` | ui | registered complete token set | query/layout identity 불변 |
+| `motion.changed` | ui | registered policy | geometry identity 불변 |
+| `effect.failed` | effect | active effect/scoped error/delivery | 이전 scene 유지, scope error |
+
+## 11. Product DTO ↔ engine mapping
+
+- product `ResourceRef.entityId`와 engine `EntityRef.entityKey`는 같은 canonical identity string을 사용한다.
+- product `entityClass="restricted"`는 engine에서 `entityClass="placeholder", placeholderReason="restricted"`로만 표현한다. UI adapter는 좌표/이름/count를 추가 추론하지 않는다.
+- product `HealthStatus`는 Application Instance의 GitOps/aggregate health다. engine `TopologyHealthVerdict`는 개별 runtime entity의 판정이다. product health는 topology child health의 단순 worst-value 복사가 아니며 backend가 별도 reason/evidence로 제공한다.
+- product `ResourceEdgeKind`는 UI consumer taxonomy, engine `RelationPlane/relationType`은 projection taxonomy다. mapping catalog가 versioned many-to-one/one-to-many 규칙과 evidence 보존을 소유한다.
+- product `GitOpsOperationStatus`와 engine `OperationSnapshot`은 operationId/receiptId/idempotency/phase/approval를 동일 의미로 유지한다. engine은 topology action presentation에 필요한 slice이고 product port DTO가 최종 사용자 계약이다.
+- common `DecimalString`, `DataOrigin`, `StatusReason`, `OperationPhase`, `ApprovalStatus`는 한 generated core module에서 import하며 다시 선언하지 않는다.
+
+## 12. Protocol release gates
+
+1. 모든 union은 runtime discriminant schema와 exhaustive reducer test를 가진다.
+2. snapshot과 delta state-space parity test가 있다.
+3. duplicate/old/next/gap/epoch change/resume expiry/property test가 있다.
+4. batch 중간 failure에서 state가 byte-for-byte 이전 값임을 검증한다.
+5. cancelled effect와 stale worker 결과가 current hash가 같아도 적용되지 않음을 검증한다.
+6. command possibly-sent에서 자동 재실행이 0건인지 검증한다.
+7. operation legal/illegal transition과 terminal corruption을 검증한다.
+8. decimal grammar/overflow/half-even/residual tie/display separation property test가 있다.
+9. restricted mapping이 name/count/total/edge cardinality를 누출하지 않음을 검증한다.
+10. schema major incompatibility가 infinite resync loop가 아니라 fatal state로 끝남을 검증한다.
