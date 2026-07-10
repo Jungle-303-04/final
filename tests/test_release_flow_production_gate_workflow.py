@@ -79,6 +79,14 @@ def test_release_flow_production_gate_declares_operational_inputs() -> None:
     }
 
 
+def test_release_flow_production_gate_call_secrets_have_no_case_insensitive_duplicates() -> None:
+    secrets = load_workflow()["on"]["workflow_call"]["secrets"]
+
+    normalized = [name.casefold() for name in secrets]
+
+    assert len(normalized) == len(set(normalized))
+
+
 def test_release_flow_production_gate_calls_smoke_workflow_with_real_guardrails() -> None:
     workflow = load_workflow()
     validate_job = workflow["jobs"]["validate_production_gate_inputs"]
