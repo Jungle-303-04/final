@@ -371,6 +371,7 @@ RCA 파생 예시는 다음과 같다.
 | --- | --- | --- |
 | `name` | string 또는 null | container 이름이다. |
 | `image` | string 또는 null | container image name/tag/digest다. image rollout 문제 판단의 기본 재료다. |
+| `image_id` | string 또는 null | Kubernetes `imageID` 값이다. 현재 실행 중인 image digest 확인에 쓴다. |
 | `ready` | boolean 또는 null | container ready 여부다. |
 | `restart_count` | number | Kubernetes `restartCount` 값이다. |
 | `state` | string 또는 null | 현재 state 이름이다. provider는 `state` object의 첫 key를 사용한다. 예: `running`, `waiting`, `terminated`. |
@@ -938,6 +939,7 @@ detail snapshot인 `current_workload_snapshot` 단수 값으로 보낸다.
 | `change_context.current_workload_snapshots[].workload` | object | workload kind, namespace, name이다. 현재 kind는 `Deployment`다. |
 | `change_context.current_workload_snapshots[].deployment_labels` | object | Deployment metadata labels다. |
 | `change_context.current_workload_snapshots[].pod_template_labels` | object | Pod template metadata labels다. |
+| `change_context.current_workload_snapshots[].persistent_volume_claim_refs` | list<object> | Pod template volume이 참조하는 PVC volume name과 claim name 목록이다. PVC object 자체는 담지 않는다. |
 | `change_context.current_workload_snapshots[].deployment_status` | object | Deployment status의 replica count와 condition 요약이다. |
 | `change_context.current_workload_snapshots[].deployment_status.conditions` | list<object> | Deployment condition의 type/status/reason/message/time 요약이다. |
 | `change_context.current_workload_snapshots[].pod_statuses` | list<object> | 이 Deployment가 소유한 Pod의 phase, ready 여부, condition 요약이다. |
@@ -1075,11 +1077,11 @@ RCA/evidence-worker 쪽 담당 영역이다. 이 문서는 provider가 보내는
 
 | 필요한 metadata | 현재 provider로 가능한지 | 보강 방향 |
 | --- | --- | --- |
-| target namespace Deployment별 현재 image/probe/resources/labels/status/Pod status/ReplicaSet revision summary | 가능 | `change_context.current_workload_snapshots[]`를 쓴다. 전체 조회에는 annotations, config refs, manager, ReplicaSet conditions를 넣지 않는다. |
+| target namespace Deployment별 현재 image/probe/resources/labels/status/Pod status/PVC refs/ReplicaSet revision summary | 가능 | `change_context.current_workload_snapshots[]`를 쓴다. 전체 조회에는 annotations, config refs, manager, ReplicaSet conditions를 넣지 않는다. |
 | 특정 Deployment 1개 detail snapshot | 가능 | `deployment/<name>` 또는 `deployment/<namespace>/<name>` query를 쓴다. 안전한 annotations, manager, ConfigMap/Secret references, ReplicaSet conditions를 추가로 제공한다. |
 | recent git commit / deploy revision | 없음 | GitOps event, manifest render, SCM metadata 연결 |
 | rollback 가능 여부 / risk_level | 없음 | 배포 이력, policy, GitOps/CI/CD 상태 연결 |
-| previous/current image digest | 일부만 가능 | `containers[].image`는 현재 image tag만 제공한다. digest, rollout history, previous image가 필요하다. |
+| previous/current image digest | 일부 가능 | Kubernetes `pods[].containers[].image_id`로 현재 image digest를 볼 수 있다. rollout history와 previous image는 아직 없다. |
 | Deployment/Pod template annotations | 일부 가능 | 단건 detail에서 `ops.service/*`, `prometheus.io/*`, `deployment.kubernetes.io/*`, `kubectl.kubernetes.io/*` 중 안전한 key만 남긴다. |
 | ConfigMap/Secret key reference | 일부 가능 | 단건 detail에서 env/envFrom/volume reference name/key/path를 제공한다. Secret/ConfigMap 객체 metadata는 아직 조회하지 않는다. |
 | resource requests/limits | 가능 | `containers[].resources.requests/limits`를 제공한다. |
@@ -1087,7 +1089,8 @@ RCA/evidence-worker 쪽 담당 영역이다. 이 문서는 provider가 보내는
 | Service selector와 Pod labels 매칭 결과 | 가능 | `service_selector_matches[]`에서 Service별 `match_status`, `matched_pod_count`, `matched_pods`를 제공한다. |
 | EndpointSlice ready endpoint 요약 | 가능 | `endpoint_slice_ready_endpoints[]`에서 Service별 EndpointSlice ready/not ready count와 ready target Pod를 제공한다. endpoint IP address는 제공하지 않는다. |
 | imagePullSecrets | 불충분 | Pod spec imagePullSecrets summary 추가 |
-| NetworkPolicy/Ingress/PVC | 없음 | Kubernetes provider 조회 resource 확장 |
+| NetworkPolicy/Ingress | 없음 | Kubernetes provider 조회 resource 확장 |
+| PVC refs | 가능 | `metadata.change_context.current_workload_snapshots[].persistent_volume_claim_refs[]`를 제공한다. PVC object 자체는 조회하지 않는다. |
 
 ### 현재 Kubernetes summary에 없는 값
 
@@ -1103,7 +1106,7 @@ Kubernetes provider는 raw object를 그대로 넘기지 않고 summary만 보�
 | Deployment template image/env/resources | rollout과 현재 Pod spec의 관계를 확인한다. |
 | ReplicaSet revision annotation/status | 특정 rollout revision에서만 문제가 났는지, 해당 ReplicaSet이 준비 상태인지 확인한다. |
 | Endpoint readiness conditions | endpoint 개수만으로 ready endpoint 여부를 확정하기 어렵다. |
-| Ingress, NetworkPolicy, PVC, ConfigMap, Secret summary | network, storage, config/security 계열 RCA에 필요하다. |
+| Ingress, NetworkPolicy, PVC object, ConfigMap, Secret summary | network, storage, config/security 계열 RCA에 필요하다. PVC refs는 metadata bucket에 있지만 PVC object summary는 아직 없다. |
 | Kubernetes raw object | summary 밖 필드를 임시로 확인하기 어렵다. |
 
 ## 자주 헷갈리는 필드

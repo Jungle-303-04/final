@@ -64,7 +64,9 @@ def current_workload_base_snapshot(
 ) -> JsonObject:
     """Build fields shared by summary and detail snapshots."""
     meta = metadata(deployment)
-    template_meta = metadata(pod_template(deployment))
+    template = pod_template(deployment)
+    template_meta = metadata(template)
+    template_spec = spec(template)
     return {
         "workload": {
             "kind": K8S_KIND_DEPLOYMENT,
@@ -73,6 +75,7 @@ def current_workload_base_snapshot(
         },
         "deployment_labels": object_or_empty(meta.get("labels")),
         "pod_template_labels": object_or_empty(template_meta.get("labels")),
+        "persistent_volume_claim_refs": persistent_volume_claim_refs(template_spec),
         "deployment_status": deployment_status_snapshot(deployment),
         "pod_statuses": [
             pod_status_snapshot(pod)
@@ -167,6 +170,22 @@ def resource_snapshot(container: JsonObject) -> JsonObject:
             "limits": compact_dict(limits),
         }
     )
+
+
+def persistent_volume_claim_refs(template_spec: JsonObject) -> list[JsonObject]:
+    """Return PVC names used by Pod template volumes."""
+    refs: list[JsonObject] = []
+    for volume in list_items(template_spec.get("volumes")):
+        pvc = object_or_empty(volume.get("persistentVolumeClaim"))
+        claim_name = pvc.get("claimName")
+        if claim_name:
+            refs.append(
+                {
+                    "volume_name": volume.get("name"),
+                    "claim_name": claim_name,
+                }
+            )
+    return refs
 
 
 def deployment_status_snapshot(deployment: JsonObject) -> JsonObject:
@@ -331,4 +350,3 @@ def replicaset_revision_detail_snapshot(replicaset: JsonObject) -> JsonObject:
 def pod_template(deployment: JsonObject) -> JsonObject:
     """Return the Deployment pod template."""
     return object_or_empty(spec(deployment).get("template"))
-
