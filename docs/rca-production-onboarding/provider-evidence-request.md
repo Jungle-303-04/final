@@ -59,6 +59,8 @@ RCA는 provider가 보내준 evidence만 보고 symptom, root cause candidate, c
 - Pod template labels
 - resources requests/limits
 - Deployment status and conditions
+- Pod status phase, ready flag, and conditions
+- Service selector and Pod labels match result
 - owned ReplicaSet revision annotation and replica counts
 - single Deployment detail query의 safe Deployment/Pod template annotations
 - single Deployment detail query의 managedFields manager 목록
@@ -71,7 +73,6 @@ RCA는 provider가 보내준 evidence만 보고 symptom, root cause candidate, c
 - ConfigMap/Secret object metadata summary
 - pvc refs
 - resource quota
-- service selector와 pod labels 비교 결과
 - 상세 containerStatuses 원본 또는 더 풍부한 요약
 - node pressure / scheduling 관련 detail
 
@@ -201,6 +202,13 @@ summary snapshot에는 아래 필드만 남긴다.
 - change_context.current_workload_snapshots[].pod_template_labels
 - change_context.current_workload_snapshots[].deployment_status
 - change_context.current_workload_snapshots[].deployment_status.conditions[]
+- change_context.current_workload_snapshots[].pod_statuses[].name
+- change_context.current_workload_snapshots[].pod_statuses[].phase
+- change_context.current_workload_snapshots[].pod_statuses[].ready
+- change_context.current_workload_snapshots[].pod_statuses[].reason
+- change_context.current_workload_snapshots[].pod_statuses[].message
+- change_context.current_workload_snapshots[].pod_statuses[].start_time
+- change_context.current_workload_snapshots[].pod_statuses[].conditions[]
 - change_context.current_workload_snapshots[].containers[].name/image
 - change_context.current_workload_snapshots[].containers[].readiness_probe
 - change_context.current_workload_snapshots[].containers[].liveness_probe
@@ -213,6 +221,21 @@ summary snapshot에는 아래 필드만 남긴다.
 - change_context.current_workload_snapshots[].replicaset_revisions[].ready_replicas
 - change_context.current_workload_snapshots[].replicaset_revisions[].available_replicas
 - change_context.current_workload_snapshots[].replicaset_revisions[].fully_labeled_replicas
+
+`service_selector_matches[]`는 namespace Service selector와 Pod labels 비교 결과다.
+summary query와 detail query 모두 같은 기본 shape로 보낸다.
+detail query에는 target Deployment와의 관련 이유인 `target_relation`이 추가될 수 있다.
+
+- change_context.service_selector_matches[].service.namespace/name
+- change_context.service_selector_matches[].selector
+- change_context.service_selector_matches[].match_status
+- change_context.service_selector_matches[].target_relation
+- change_context.service_selector_matches[].matched_pod_count
+- change_context.service_selector_matches[].matched_pods[].namespace/name
+
+전체 summary query는 namespace의 모든 Service 비교 결과를 보낸다.
+특정 Deployment detail query는 target Deployment와 관련 있는 Service만 보낸다.
+관련 기준은 `exact_selector_match`, `live_pod_match`, `selector_key_overlap`이다.
 
 `current_workload_snapshot`은 특정 Deployment 1개를 위한 detail snapshot이다.
 detail snapshot은 summary 필드에 아래 필드를 추가로 담는다.

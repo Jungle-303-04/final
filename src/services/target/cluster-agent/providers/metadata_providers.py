@@ -103,13 +103,6 @@ class MetadataProvider:
         headers = kubernetes_headers(token)
 
         async with kubernetes_client(self.transport) as client:
-            replicasets = await self.get_json(
-                client,
-                base_url,
-                headers,
-                namespaced_apps_path(target.namespace, "replicasets"),
-            )
-
             if target.deployment_name:
                 deployment = await self.get_json(
                     client,
@@ -122,10 +115,33 @@ class MetadataProvider:
                     ),
                     allow_not_found=True,
                 )
-                change_context = specific_workload_change_context(
-                    deployment,
-                    items(replicasets),
-                )
+                if deployment:
+                    replicasets = await self.get_json(
+                        client,
+                        base_url,
+                        headers,
+                        namespaced_apps_path(target.namespace, "replicasets"),
+                    )
+                    pod_list = await self.get_json(
+                        client,
+                        base_url,
+                        headers,
+                        namespaced_core_path(target.namespace, "pods"),
+                    )
+                    service_list = await self.get_json(
+                        client,
+                        base_url,
+                        headers,
+                        namespaced_core_path(target.namespace, "services"),
+                    )
+                    change_context = specific_workload_change_context(
+                        deployment,
+                        items(replicasets),
+                        items(pod_list),
+                        items(service_list),
+                    )
+                else:
+                    change_context = empty_change_context()
             else:
                 deployments = await self.get_json(
                     client,
@@ -133,11 +149,40 @@ class MetadataProvider:
                     headers,
                     namespaced_apps_path(target.namespace, "deployments"),
                 )
-                change_context = {
-                    "current_workload_snapshots": current_workload_snapshots(
-                        items(deployments),
-                        items(replicasets),
+                deployment_items = items(deployments)
+                replicasets: JsonObject = {"items": []}
+                snapshots: list[JsonObject] = []
+                if deployment_items:
+                    replicasets = await self.get_json(
+                        client,
+                        base_url,
+                        headers,
+                        namespaced_apps_path(target.namespace, "replicasets"),
                     )
+                pods = await self.get_json(
+                    client,
+                    base_url,
+                    headers,
+                    namespaced_core_path(target.namespace, "pods"),
+                )
+                services = await self.get_json(
+                    client,
+                    base_url,
+                    headers,
+                    namespaced_core_path(target.namespace, "services"),
+                )
+                if deployment_items:
+                    snapshots = current_workload_snapshots(
+                        deployment_items,
+                        items(replicasets),
+                        items(pods),
+                    )
+                change_context = {
+                    "current_workload_snapshots": snapshots,
+                    "service_selector_matches": service_selector_match_snapshots(
+                        items(services),
+                        items(pods),
+                    ),
                 }
 
         return {
@@ -201,6 +246,7 @@ class MetadataProvider:
 
         snapshots = change_context.get("current_workload_snapshots")
         snapshot = change_context.get("current_workload_snapshot")
+        service_matches = change_context.get("service_selector_matches")
         normalized: JsonObject = {}
 
         if isinstance(snapshots, list):
@@ -210,6 +256,11 @@ class MetadataProvider:
 
         if isinstance(snapshot, dict) and snapshot:
             normalized["current_workload_snapshot"] = snapshot
+
+        if isinstance(service_matches, list):
+            normalized["service_selector_matches"] = [
+                item for item in service_matches if isinstance(item, dict)
+            ]
 
         return normalized or empty_change_context()
 
@@ -243,6 +294,18 @@ def namespaced_apps_path(
     return path
 
 
+def namespaced_core_path(
+    namespace: str,
+    resource: str,
+    name: str | None = None,
+) -> str:
+    """Build a Kubernetes core/v1 namespaced API path."""
+    path = f"/api/v1/namespaces/{path_part(namespace)}/{path_part(resource)}"
+    if name:
+        path = f"{path}/{path_part(name)}"
+    return path
+
+
 def path_part(value: str) -> str:
     """Escape one value for a Kubernetes API path."""
     return quote(value, safe="")
@@ -251,14 +314,25 @@ def path_part(value: str) -> str:
 def specific_workload_change_context(
     deployment: JsonObject,
     replicasets: list[JsonObject],
+    pods: list[JsonObject],
+    services: list[JsonObject],
 ) -> JsonObject:
     """Build a change context for one Deployment."""
     if not deployment:
         return empty_change_context()
+    target_pods = pods_for_deployment(deployment, replicasets, pods)
+    target_labels = object_or_empty(metadata(pod_template(deployment)).get("labels"))
     return {
         "current_workload_snapshot": current_workload_detail_snapshot(
             deployment,
             replicasets,
+            pods,
+        ),
+        "service_selector_matches": service_selector_match_snapshots(
+            services,
+            pods,
+            target_labels=target_labels,
+            target_pods=target_pods,
         ),
     }
 
@@ -275,6 +349,10 @@ def merge_change_context(target: JsonObject, source: JsonObject) -> None:
             target.pop("current_workload_snapshots", None)
         target["current_workload_snapshot"] = snapshot
 
+    service_matches = source.get("service_selector_matches")
+    if isinstance(service_matches, list):
+        target["service_selector_matches"] = service_matches
+
 
 def empty_change_context() -> JsonObject:
     """Build the default change context shape."""
@@ -286,15 +364,20 @@ def empty_change_context() -> JsonObject:
 def current_workload_snapshots(
     deployments: list[JsonObject],
     replicasets: list[JsonObject],
+    pods: list[JsonObject],
 ) -> list[JsonObject]:
     """Build small snapshots for all Deployments."""
     return [
-        current_workload_summary_snapshot(deployment, replicasets)
+        current_workload_summary_snapshot(deployment, replicasets, pods)
         for deployment in deployments
     ]
 
 
-def current_workload_base_snapshot(deployment: JsonObject) -> JsonObject:
+def current_workload_base_snapshot(
+    deployment: JsonObject,
+    replicasets: list[JsonObject],
+    pods: list[JsonObject],
+) -> JsonObject:
     """Build fields shared by summary and detail snapshots."""
     meta = metadata(deployment)
     template_meta = metadata(pod_template(deployment))
@@ -307,19 +390,24 @@ def current_workload_base_snapshot(deployment: JsonObject) -> JsonObject:
         "deployment_labels": object_or_empty(meta.get("labels")),
         "pod_template_labels": object_or_empty(template_meta.get("labels")),
         "deployment_status": deployment_status_snapshot(deployment),
+        "pod_statuses": [
+            pod_status_snapshot(pod)
+            for pod in pods_for_deployment(deployment, replicasets, pods)
+        ],
     }
 
 
 def current_workload_summary_snapshot(
     deployment: JsonObject,
     replicasets: list[JsonObject],
+    pods: list[JsonObject],
 ) -> JsonObject:
     """Build a summary snapshot for namespace-wide queries."""
     template = pod_template(deployment)
     template_spec = spec(template)
 
     return {
-        **current_workload_base_snapshot(deployment),
+        **current_workload_base_snapshot(deployment, replicasets, pods),
         "containers": [
             container_summary_snapshot(container)
             for container in list_items(template_spec.get("containers"))
@@ -334,6 +422,7 @@ def current_workload_summary_snapshot(
 def current_workload_detail_snapshot(
     deployment: JsonObject,
     replicasets: list[JsonObject],
+    pods: list[JsonObject],
 ) -> JsonObject:
     """Build a detail snapshot for one Deployment query."""
     meta = metadata(deployment)
@@ -343,7 +432,7 @@ def current_workload_detail_snapshot(
     volume_refs = volume_reference_map(template_spec)
 
     return {
-        **current_workload_base_snapshot(deployment),
+        **current_workload_base_snapshot(deployment, replicasets, pods),
         "deployment_annotations": safe_annotations(meta),
         "pod_template_annotations": safe_annotations(template_meta),
         "managed_fields_managers": managed_field_managers(deployment),
@@ -558,6 +647,157 @@ def deployment_status_snapshot(deployment: JsonObject) -> JsonObject:
     )
 
 
+def pod_status_snapshot(pod: JsonObject) -> JsonObject:
+    """Return Pod status phase and conditions."""
+    meta = metadata(pod)
+    pod_status = status(pod)
+    pod_conditions = pod_status.get("conditions")
+    return compact_dict(
+        {
+            "name": meta.get("name"),
+            "phase": pod_status.get("phase"),
+            "ready": pod_ready(pod_conditions),
+            "reason": pod_status.get("reason"),
+            "message": pod_status.get("message"),
+            "start_time": pod_status.get("startTime"),
+            "conditions": conditions_snapshot(pod_conditions),
+        }
+    )
+
+
+def pod_ready(value: Any) -> bool | None:
+    """Return whether the Pod Ready condition is true."""
+    for condition in list_items(value):
+        if condition.get("type") == "Ready":
+            condition_status = condition.get("status")
+            if isinstance(condition_status, str):
+                return condition_status == "True"
+            return None
+    return None
+
+
+def service_selector_match_snapshots(
+    services: list[JsonObject],
+    pods: list[JsonObject],
+    *,
+    target_labels: JsonObject | None = None,
+    target_pods: list[JsonObject] | None = None,
+) -> list[JsonObject]:
+    """Build Service selector to Pod label match summaries."""
+    snapshots: list[JsonObject] = []
+    for service in sorted(services, key=resource_sort_key):
+        snapshot = service_selector_match_snapshot(
+            service,
+            pods,
+            target_labels=target_labels,
+            target_pods=target_pods,
+        )
+        if target_labels is None and target_pods is None:
+            snapshots.append(snapshot)
+        elif snapshot.get("target_relation"):
+            snapshots.append(snapshot)
+    return snapshots
+
+
+def service_selector_match_snapshot(
+    service: JsonObject,
+    pods: list[JsonObject],
+    *,
+    target_labels: JsonObject | None = None,
+    target_pods: list[JsonObject] | None = None,
+) -> JsonObject:
+    """Build one Service selector match summary."""
+    selector = object_or_empty(spec(service).get("selector"))
+    matched_pods = [
+        pod
+        for pod in sorted(pods, key=resource_sort_key)
+        if selector
+        and selector_matches_labels(
+            selector,
+            object_or_empty(metadata(pod).get("labels")),
+        )
+    ]
+    return compact_dict(
+        {
+            "service": resource_identity_snapshot(service),
+            "selector": selector,
+            "match_status": service_selector_match_status(selector, matched_pods),
+            "target_relation": service_target_relation(
+                selector,
+                target_labels,
+                target_pods,
+            ),
+            "matched_pod_count": len(matched_pods),
+            "matched_pods": [resource_identity_snapshot(pod) for pod in matched_pods],
+        }
+    )
+
+
+def service_selector_match_status(
+    selector: JsonObject,
+    matched_pods: list[JsonObject],
+) -> str:
+    """Return a small status for one Service selector match."""
+    if not selector:
+        return "selector_missing"
+    if matched_pods:
+        return "matched"
+    return "no_matching_pods"
+
+
+def selector_matches_labels(selector: JsonObject, labels: JsonObject) -> bool:
+    """Check whether all selector labels exist on a Pod."""
+    return all(labels.get(key) == value for key, value in selector.items())
+
+
+def service_target_relation(
+    selector: JsonObject,
+    target_labels: JsonObject | None,
+    target_pods: list[JsonObject] | None,
+) -> str | None:
+    """Return why a Service is related to the target Deployment."""
+    if not selector:
+        return None
+
+    if target_labels and selector_matches_labels(selector, target_labels):
+        return "exact_selector_match"
+
+    pod_labels = [
+        object_or_empty(metadata(pod).get("labels"))
+        for pod in target_pods or []
+    ]
+    if any(selector_matches_labels(selector, labels) for labels in pod_labels):
+        return "live_pod_match"
+
+    target_label_keys = set(target_labels or {})
+    for labels in pod_labels:
+        target_label_keys.update(labels)
+    if target_label_keys.intersection(selector):
+        return "selector_key_overlap"
+
+    return None
+
+
+def resource_identity_snapshot(resource: JsonObject) -> JsonObject:
+    """Return a small resource identity."""
+    meta = metadata(resource)
+    return compact_dict(
+        {
+            "namespace": meta.get("namespace"),
+            "name": meta.get("name"),
+        }
+    )
+
+
+def resource_sort_key(resource: JsonObject) -> tuple[str, str]:
+    """Return a stable sort key for Kubernetes resources."""
+    meta = metadata(resource)
+    return (
+        str(meta.get("namespace") or ""),
+        str(meta.get("name") or ""),
+    )
+
+
 def conditions_snapshot(value: Any) -> list[JsonObject]:
     """Return small condition summaries."""
     conditions: list[JsonObject] = []
@@ -568,6 +808,7 @@ def conditions_snapshot(value: Any) -> list[JsonObject]:
                 "status": condition.get("status"),
                 "reason": condition.get("reason"),
                 "message": condition.get("message"),
+                "last_probe_time": condition.get("lastProbeTime"),
                 "last_transition_time": condition.get("lastTransitionTime"),
                 "last_update_time": condition.get("lastUpdateTime"),
             }
@@ -663,6 +904,54 @@ def sorted_replicasets_for_deployment(
         replicasets_for_deployment(deployment, replicasets),
         key=replicaset_revision_number,
     )
+
+
+def pods_for_deployment(
+    deployment: JsonObject,
+    replicasets: list[JsonObject],
+    pods: list[JsonObject],
+) -> list[JsonObject]:
+    """Return Pods owned by this Deployment."""
+    owned_replicasets = replicasets_for_deployment(deployment, replicasets)
+    if not owned_replicasets:
+        return []
+
+    replicaset_uids = {
+        str(metadata(replicaset).get("uid"))
+        for replicaset in owned_replicasets
+        if metadata(replicaset).get("uid")
+    }
+    replicaset_names = {
+        str(metadata(replicaset).get("name"))
+        for replicaset in owned_replicasets
+        if metadata(replicaset).get("name")
+    }
+    return sorted(
+        [
+            pod
+            for pod in pods
+            if is_owned_by_replicaset(pod, replicaset_uids, replicaset_names)
+        ],
+        key=lambda pod: str(metadata(pod).get("name") or ""),
+    )
+
+
+def is_owned_by_replicaset(
+    pod: JsonObject,
+    replicaset_uids: set[str],
+    replicaset_names: set[str],
+) -> bool:
+    """Check whether a Pod belongs to one ReplicaSet."""
+    for owner in list_items(metadata(pod).get("ownerReferences")):
+        if owner.get("kind") != "ReplicaSet":
+            continue
+        owner_uid = str(owner.get("uid") or "")
+        owner_name = str(owner.get("name") or "")
+        if owner_uid and owner_uid in replicaset_uids:
+            return True
+        if owner_name and owner_name in replicaset_names:
+            return True
+    return False
 
 
 def is_owned_by_deployment(
