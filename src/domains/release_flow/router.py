@@ -29,7 +29,7 @@ from domains.release_flow.execution import (
     dry_run_event_id,
     execution_profile,
     has_change_ticket,
-    release_execution_blockers,
+    release_execution_blockers as base_release_execution_blockers,
 )
 from domains.release_flow.preview import build_release_plan_preview
 from domains.release_flow.redaction import redact_release_value
@@ -345,7 +345,7 @@ async def dispatch_release_plan(
         )
     )
     blockers.extend(
-        release_execution_blockers(body, preview, wave, workspace_id=workspace_id)
+        release_execution_blockers(body, preview, wave, workspace_id=workspace_id, db=db)
     )
     blockers.extend(release_production_approval_evidence_blockers(body, preview, wave))
     blockers.extend(release_production_change_ticket_blockers(body, preview, wave))
@@ -403,7 +403,7 @@ async def start_release_plan(
         )
     )
     blockers.extend(
-        release_execution_blockers(body, preview, first_wave, workspace_id=workspace_id)
+        release_execution_blockers(body, preview, first_wave, workspace_id=workspace_id, db=db)
     )
     blockers.extend(release_production_approval_evidence_blockers(body, preview, first_wave))
     blockers.extend(release_production_change_ticket_blockers(body, preview, first_wave))
@@ -607,7 +607,7 @@ async def advance_release_run(
         return ReleaseRunResponse(run=completed or run)
     plan = release_plan_from_run(run, pending_steps)
     preview = {"steps": [{"application_id": step["application_id"], "wave": next_wave} for step in pending_steps]}
-    blockers = release_execution_blockers(plan, preview, next_wave, workspace_id=workspace_id)
+    blockers = release_execution_blockers(plan, preview, next_wave, workspace_id=workspace_id, db=db)
     blockers.extend(release_production_approval_evidence_blockers(plan, preview, next_wave))
     blockers.extend(release_production_change_ticket_blockers(plan, preview, next_wave))
     blockers.extend(release_production_window_blockers(plan, preview, next_wave))
@@ -728,7 +728,7 @@ async def retry_release_run(
             for step in retry_steps
         ]
     }
-    blockers = release_execution_blockers(plan, preview, retry_wave, workspace_id=workspace_id)
+    blockers = release_execution_blockers(plan, preview, retry_wave, workspace_id=workspace_id, db=db)
     blockers.extend(release_production_approval_evidence_blockers(plan, preview, retry_wave))
     blockers.extend(release_production_change_ticket_blockers(plan, preview, retry_wave))
     blockers.extend(release_production_window_blockers(plan, preview, retry_wave))
@@ -938,7 +938,7 @@ async def dispatch_wave_steps(
         )
 
     blockers = release_dispatch_context_blockers(plan, selected_steps, db, workspace_id)
-    blockers.extend(release_execution_blockers(plan, preview, wave, workspace_id=workspace_id))
+    blockers.extend(release_execution_blockers(plan, preview, wave, workspace_id=workspace_id, db=db))
     blockers.extend(release_production_approval_evidence_blockers(plan, preview, wave))
     blockers.extend(release_production_change_ticket_blockers(plan, preview, wave))
     blockers.extend(release_production_window_blockers(plan, preview, wave))
@@ -1038,6 +1038,196 @@ def first_preview_wave(preview: dict[str, Any]) -> int:
     return 1
 
 
+def release_execution_blockers(
+    plan: dict[str, Any],
+    preview: dict[str, Any],
+    wave: int,
+    *,
+    workspace_id: str,
+    db: Any = None,
+) -> list[str]:
+    evidenced_plan = plan_with_safe_pr_evidence(plan, preview, wave, workspace_id=workspace_id, db=db)
+    return base_release_execution_blockers(evidenced_plan, preview, wave, workspace_id=workspace_id)
+
+
+def plan_with_safe_pr_evidence(
+    plan: dict[str, Any],
+    preview: dict[str, Any],
+    wave: int,
+    *,
+    workspace_id: str,
+    db: Any = None,
+) -> dict[str, Any]:
+    if db is None:
+        return plan
+    settings = plan_settings_value(plan)
+    preview_steps = {
+        str(step.get("application_id") or ""): step
+        for step in preview.get("steps", [])
+        if isinstance(step, dict)
+    }
+    changed = False
+    sanitized_settings = dict(settings)
+    safe_pr_ready_fields = {"safe_pr_ready", "safe_pr_url", "safe_pr_evidence"}
+    wave_requires_safe_pr = any(
+        isinstance(raw_step, dict)
+        and int_field(preview_steps.get(str(raw_step.get("application_id") or ""), {}), "wave", -1) == wave
+        and safe_pr_gate_required(settings, raw_step)
+        for raw_step in plan.get("steps", [])
+    )
+    if wave_requires_safe_pr:
+        for field in safe_pr_ready_fields:
+            if field in sanitized_settings:
+                sanitized_settings.pop(field, None)
+                changed = True
+    steps: list[dict[str, Any]] = []
+    for raw_step in plan.get("steps", []):
+        if not isinstance(raw_step, dict):
+            continue
+        step = raw_step
+        application_id = str(step.get("application_id") or "")
+        preview_step = preview_steps.get(application_id, {})
+        if int_field(preview_step, "wave", -1) == wave and safe_pr_gate_required(settings, step):
+            config = {key: value for key, value in step_config(step).items() if key not in safe_pr_ready_fields}
+            evidence = safe_pr_created_evidence_for_step(db, workspace_id, plan, step)
+            pr_url = str(evidence.get("pr_url") or "") if evidence else ""
+            if pr_url:
+                config = {
+                    **config,
+                    "safe_pr_ready": True,
+                    "safe_pr_url": pr_url,
+                    "safe_pr_evidence": evidence,
+                }
+            if config != step_config(step):
+                step = {**step, "config": config}
+                changed = True
+        steps.append(step)
+    if changed:
+        return {**plan, "settings": sanitized_settings, "steps": steps}
+    return plan
+
+
+def safe_pr_gate_required(settings: dict[str, Any], step: dict[str, Any]) -> bool:
+    config = step_config(step)
+    gate = str(config.get("approval_gate") or "inherit")
+    policy = str(settings.get("approval_policy") or "auto_safe")
+    return (gate if gate != "inherit" else policy) == "safe_pr"
+
+
+def safe_pr_created_evidence_for_step(
+    db: Any,
+    workspace_id: str,
+    plan: dict[str, Any],
+    step: dict[str, Any],
+) -> dict[str, Any] | None:
+    finder = getattr(db, "find_release_safe_pr_evidence", None)
+    if not callable(finder):
+        return None
+    application_id = str(step.get("application_id") or "") or None
+    expected = safe_pr_expected_evidence(plan, step, workspace_id, db)
+    for workflow_run_id in safe_pr_workflow_run_ids(plan, step, workspace_id, db):
+        evidence = finder(workspace_id, workflow_run_id, application_id=application_id)
+        if isinstance(evidence, dict) and safe_pr_evidence_matches(evidence, expected):
+            return dict(evidence)
+    return None
+
+
+def safe_pr_workflow_run_ids(
+    plan: dict[str, Any],
+    step: dict[str, Any],
+    workspace_id: str,
+    db: Any,
+) -> list[str]:
+    config = step_config(step)
+    settings = plan_settings_value(plan)
+    explicit = str(
+        config.get("safe_pr_workflow_run_id")
+        or config.get("workflow_run_id")
+        or settings.get("safe_pr_workflow_run_id")
+        or ""
+    ).strip()
+    if explicit:
+        return [explicit]
+    application_id = str(step.get("application_id") or "")
+    application = release_application_context(db, workspace_id, application_id)
+    manifest_path = str(config.get("manifest_path") or application.get("manifest_path") or "").strip()
+    if not manifest_path:
+        return []
+    return [
+        derive_workflow_run_id(
+            safe_pr_workflow_basis(plan, step, application, workspace_id, manifest_path=manifest_path)
+        )
+    ]
+
+
+def safe_pr_expected_evidence(
+    plan: dict[str, Any],
+    step: dict[str, Any],
+    workspace_id: str,
+    db: Any,
+) -> dict[str, Any]:
+    config = step_config(step)
+    settings = plan_settings_value(plan)
+    application_id = str(step.get("application_id") or "")
+    application = release_application_context(db, workspace_id, application_id)
+    manifest_path = str(config.get("manifest_path") or application.get("manifest_path") or "").strip()
+    return {
+        "pr_url": str(config.get("safe_pr_url") or settings.get("safe_pr_url") or "").strip(),
+        "repo_ref": str(config.get("repo_ref") or application.get("repo_ref") or "").strip(),
+        "base_branch": str(config.get("branch") or application.get("branch") or "main").strip(),
+        "manifest_path": manifest_path,
+        "environment": str(config.get("environment") or first_environment(settings) or "sandbox").strip(),
+    }
+
+
+def safe_pr_evidence_matches(evidence: dict[str, Any], expected: dict[str, Any]) -> bool:
+    if not str(evidence.get("pr_url") or "").strip():
+        return False
+    for field in ("pr_url", "repo_ref", "base_branch", "manifest_path", "environment"):
+        if not safe_pr_evidence_field_matches(evidence, expected, field):
+            return False
+    return True
+
+
+def safe_pr_evidence_field_matches(evidence: dict[str, Any], expected: dict[str, Any], field: str) -> bool:
+    expected_value = str(expected.get(field) or "").strip()
+    evidence_value = str(evidence.get(field) or "").strip()
+    return not expected_value or evidence_value == expected_value
+
+
+def safe_pr_workflow_basis(
+    plan: dict[str, Any],
+    step: dict[str, Any],
+    application: dict[str, Any],
+    workspace_id: str,
+    *,
+    manifest_path: str,
+) -> dict[str, Any]:
+    config = step_config(step)
+    settings = plan_settings_value(plan)
+    application_id = str(step.get("application_id") or "")
+    return {
+        "workspace_id": workspace_id,
+        "repo_ref": str(config.get("repo_ref") or application.get("repo_ref") or ""),
+        "branch": str(config.get("branch") or application.get("branch") or "main"),
+        "manifest_path": manifest_path,
+        "cluster_id": str(config.get("cluster_id") or application.get("cluster_id") or Target.DEFAULT_CLUSTER_ID),
+        "namespace": str(config.get("namespace") or application.get("namespace") or Sandbox.NAMESPACE),
+        "app_name": str(application.get("name") or step.get("name") or application_id),
+        "application_id": application_id,
+        "environment": str(config.get("environment") or first_environment(settings) or "sandbox"),
+        "commit_sha": str(config.get("commit_sha") or settings.get("commit_sha") or ""),
+    }
+
+
+def release_application_context(db: Any, workspace_id: str, application_id: str) -> dict[str, Any]:
+    getter = getattr(db, "get_application", None)
+    if not callable(getter) or not application_id:
+        return {}
+    application = getter(workspace_id, application_id)
+    return dict(application) if isinstance(application, dict) else {}
+
+
 def release_readiness_from_plan(
     plan: dict[str, Any],
     preview: dict[str, Any],
@@ -1061,6 +1251,7 @@ def release_readiness_from_plan(
         preview,
         first_wave,
         workspace_id=workspace_id,
+        db=db,
     )
     approval_evidence_blockers = release_production_approval_evidence_blockers(plan, preview, first_wave)
     change_ticket_blockers = release_production_change_ticket_blockers(plan, preview, first_wave)

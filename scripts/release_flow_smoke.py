@@ -222,11 +222,15 @@ def build_live_preflight_plan(applications: list[JsonMap], args: argparse.Namesp
             "namespace": args.live_namespace,
             "commit_sha": args.live_commit_sha or now_label,
             "image": args.live_image,
-            "approval_gate": "manual",
+            "approval_gate": args.live_approval_gate,
         }
     )
     if args.live_verification_url:
         config["post_deploy_verification_url"] = args.live_verification_url
+    if args.live_safe_pr_workflow_run_id:
+        config["safe_pr_workflow_run_id"] = args.live_safe_pr_workflow_run_id
+    if args.live_safe_pr_url:
+        config["safe_pr_url"] = args.live_safe_pr_url
     step["config"] = config
     plan.update(
         {
@@ -255,6 +259,12 @@ def live_preflight_timestamp() -> str:
 def validate_live_preflight_inputs(args: argparse.Namespace) -> None:
     if not getattr(args, "live_preflight", False):
         return
+    approval_gate = str(getattr(args, "live_approval_gate", "") or "").strip()
+    if approval_gate not in {"manual", "safe_pr"}:
+        raise ValueError("live_approval_gate must be manual or safe_pr")
+    safe_pr_url = str(getattr(args, "live_safe_pr_url", "") or "").strip()
+    if "example.com" in safe_pr_url:
+        raise ValueError("live_safe_pr_url must not use example.com placeholder value")
     environment = str(getattr(args, "live_environment", "") or "").strip().lower()
     if environment != "production":
         return
@@ -877,6 +887,9 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     parser.add_argument("--live-verification-url", default=os.getenv("LIVE_PREFLIGHT_VERIFICATION_URL", ""))
     parser.add_argument("--live-commit-sha", default=os.getenv("LIVE_PREFLIGHT_COMMIT_SHA", ""))
     parser.add_argument("--live-image", default=os.getenv("LIVE_PREFLIGHT_IMAGE", ""))
+    parser.add_argument("--live-approval-gate", default=os.getenv("LIVE_PREFLIGHT_APPROVAL_GATE", "manual"))
+    parser.add_argument("--live-safe-pr-workflow-run-id", default=os.getenv("LIVE_PREFLIGHT_SAFE_PR_WORKFLOW_RUN_ID", ""))
+    parser.add_argument("--live-safe-pr-url", default=os.getenv("LIVE_PREFLIGHT_SAFE_PR_URL", ""))
     parser.add_argument("--live-rollback-policy", default=os.getenv("LIVE_PREFLIGHT_ROLLBACK_POLICY", "safe_pr"))
     parser.add_argument(
         "--ops-rehearsal",

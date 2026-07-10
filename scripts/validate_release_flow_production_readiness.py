@@ -100,6 +100,19 @@ def check_smoke_workflow_contract() -> list[ReadinessCheck]:
             "production preflight is wired",
         ),
         ReadinessCheck(
+            "workflow.smoke.live_approval_gate",
+            "live_approval_gate" in inputs and "--live-approval-gate" in run,
+            "live preflight approval gate is configurable",
+        ),
+        ReadinessCheck(
+            "workflow.smoke.safe_pr_evidence_inputs",
+            "live_safe_pr_workflow_run_id" in inputs
+            and "live_safe_pr_url" in inputs
+            and "--live-safe-pr-workflow-run-id" in run
+            and "--live-safe-pr-url" in run,
+            "live preflight can target existing Safe PR evidence",
+        ),
+        ReadinessCheck(
             "workflow.smoke.runtime_config_preflight",
             "Missing release-flow API URL" in run
             and "Missing release-flow auth email" in run
@@ -130,6 +143,27 @@ def check_smoke_script_contract() -> list[ReadinessCheck]:
             and '"image": args.live_image' in source
             and "ghcr.io/example/release-flow-smoke:live-preflight" in source,
             "direct production live preflight requires an explicit non-demo image",
+        ),
+        ReadinessCheck(
+            "script.smoke.live_approval_gate",
+            "--live-approval-gate" in source
+            and "LIVE_PREFLIGHT_APPROVAL_GATE" in source
+            and '"approval_gate": args.live_approval_gate' in source,
+            "direct live preflight can exercise safe_pr approval gates",
+        ),
+        ReadinessCheck(
+            "script.smoke.safe_pr_evidence_inputs",
+            "--live-safe-pr-workflow-run-id" in source
+            and "LIVE_PREFLIGHT_SAFE_PR_WORKFLOW_RUN_ID" in source
+            and '"safe_pr_workflow_run_id"] = args.live_safe_pr_workflow_run_id' in source
+            and "--live-safe-pr-url" in source
+            and "LIVE_PREFLIGHT_SAFE_PR_URL" in source,
+            "direct live preflight can pass existing Safe PR evidence",
+        ),
+        ReadinessCheck(
+            "script.smoke.safe_pr_ready_server_verified",
+            '"safe_pr_ready"] = True' not in source,
+            "direct live preflight does not mark Safe PR ready without server-side evidence",
         )
     ]
 
@@ -158,6 +192,20 @@ def check_production_gate_contract() -> list[ReadinessCheck]:
             "workflow.production_gate.live_preflight_default",
             call.get("inputs", {}).get("live_preflight", {}).get("default") is True,
             "live readiness preflight defaults on",
+        ),
+        ReadinessCheck(
+            "workflow.production_gate.safe_pr_gate_default",
+            call.get("inputs", {}).get("live_approval_gate", {}).get("default") == "safe_pr"
+            and smoke_job.get("with", {}).get("live_approval_gate") == "${{ inputs.live_approval_gate || 'safe_pr' }}",
+            "production live preflight defaults to Safe PR approval gate",
+        ),
+        ReadinessCheck(
+            "workflow.production_gate.safe_pr_evidence_inputs",
+            "live_safe_pr_workflow_run_id" in inputs
+            and "live_safe_pr_url" in inputs
+            and smoke_job.get("with", {}).get("live_safe_pr_workflow_run_id") == "${{ inputs.live_safe_pr_workflow_run_id }}"
+            and smoke_job.get("with", {}).get("live_safe_pr_url") == "${{ inputs.live_safe_pr_url }}",
+            "production live preflight can receive existing Safe PR evidence",
         ),
         ReadinessCheck(
             "workflow.production_gate.change_ticket_required",

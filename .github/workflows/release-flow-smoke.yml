@@ -66,6 +66,14 @@ run-name: Release Flow Smoke / ${{ inputs.github_environment || 'production' }} 
         required: false
         default: false
         type: boolean
+      live_approval_gate:
+        description: Approval gate used by the live_preflight readiness payload.
+        required: false
+        default: manual
+        type: choice
+        options:
+          - manual
+          - safe_pr
       live_environment:
         description: Release step environment to use when live_preflight is enabled.
         required: false
@@ -98,6 +106,14 @@ run-name: Release Flow Smoke / ${{ inputs.github_environment || 'production' }} 
         type: string
       live_verification_url:
         description: Optional post-deploy verification URL used by live_preflight.
+        required: false
+        type: string
+      live_safe_pr_workflow_run_id:
+        description: Existing Safe PR workflow_run_id evidence used by live_preflight.
+        required: false
+        type: string
+      live_safe_pr_url:
+        description: Existing Safe PR URL evidence used by live_preflight.
         required: false
         type: string
   workflow_call:
@@ -160,6 +176,11 @@ run-name: Release Flow Smoke / ${{ inputs.github_environment || 'production' }} 
         required: false
         default: false
         type: boolean
+      live_approval_gate:
+        description: Approval gate used by the live_preflight readiness payload.
+        required: false
+        default: manual
+        type: string
       live_environment:
         description: Release step environment to use when live_preflight is enabled.
         required: false
@@ -192,6 +213,14 @@ run-name: Release Flow Smoke / ${{ inputs.github_environment || 'production' }} 
         type: string
       live_verification_url:
         description: Optional post-deploy verification URL used by live_preflight.
+        required: false
+        type: string
+      live_safe_pr_workflow_run_id:
+        description: Existing Safe PR workflow_run_id evidence used by live_preflight.
+        required: false
+        type: string
+      live_safe_pr_url:
+        description: Existing Safe PR URL evidence used by live_preflight.
         required: false
         type: string
     secrets:
@@ -262,6 +291,7 @@ jobs:
       ALERT_PREFLIGHT: ${{ inputs.alert_preflight || false }}
       ALERT_PREFLIGHT_SEVERITY: ${{ inputs.alert_severity || 'warning' }}
       LIVE_PREFLIGHT: ${{ inputs.live_preflight || false }}
+      LIVE_PREFLIGHT_APPROVAL_GATE: ${{ inputs.live_approval_gate || 'manual' }}
       LIVE_PREFLIGHT_ENVIRONMENT: ${{ inputs.live_environment || 'production' }}
       LIVE_PREFLIGHT_NAMESPACE: ${{ inputs.live_namespace || 'production' }}
       LIVE_PREFLIGHT_CHANGE_TICKET: ${{ inputs.live_change_ticket }}
@@ -270,6 +300,8 @@ jobs:
       LIVE_PREFLIGHT_ONCALL_CONTACT: ${{ inputs.live_oncall_contact }}
       LIVE_PREFLIGHT_IMAGE: ${{ inputs.live_image }}
       LIVE_PREFLIGHT_VERIFICATION_URL: ${{ inputs.live_verification_url }}
+      LIVE_PREFLIGHT_SAFE_PR_WORKFLOW_RUN_ID: ${{ inputs.live_safe_pr_workflow_run_id }}
+      LIVE_PREFLIGHT_SAFE_PR_URL: ${{ inputs.live_safe_pr_url }}
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
@@ -351,6 +383,13 @@ jobs:
             esac
           fi
           if [ "$LIVE_PREFLIGHT" = "true" ]; then
+            case "$LIVE_PREFLIGHT_APPROVAL_GATE" in
+              manual|safe_pr) ;;
+              *)
+                echo "::error title=Invalid live_approval_gate::live_approval_gate must be manual or safe_pr."
+                exit 1
+                ;;
+            esac
             dns_label='^[a-z0-9]([-a-z0-9]*[a-z0-9])?$'
             if ! [[ "$LIVE_PREFLIGHT_ENVIRONMENT" =~ $dns_label ]]; then
               echo "::error title=Invalid live_environment::live_environment must be a Kubernetes-style DNS label."
@@ -424,7 +463,10 @@ jobs:
               --live-release-owner "${LIVE_PREFLIGHT_RELEASE_OWNER}"
               --live-oncall-contact "${LIVE_PREFLIGHT_ONCALL_CONTACT}"
               --live-image "${LIVE_PREFLIGHT_IMAGE}"
+              --live-approval-gate "${LIVE_PREFLIGHT_APPROVAL_GATE}"
               --live-verification-url "${LIVE_PREFLIGHT_VERIFICATION_URL}"
+              --live-safe-pr-workflow-run-id "${LIVE_PREFLIGHT_SAFE_PR_WORKFLOW_RUN_ID}"
+              --live-safe-pr-url "${LIVE_PREFLIGHT_SAFE_PR_URL}"
             )
           fi
           if [ "$ALERT_PREFLIGHT" = "true" ]; then

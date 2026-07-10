@@ -36,6 +36,7 @@ def test_release_flow_smoke_workflow_declares_operator_inputs_and_secrets_for_di
         "artifact_name",
         "artifact_retention_days",
         "github_environment",
+        "live_approval_gate",
         "live_change_ticket",
         "live_environment",
         "live_image",
@@ -44,6 +45,8 @@ def test_release_flow_smoke_workflow_declares_operator_inputs_and_secrets_for_di
         "live_preflight",
         "live_release_owner",
         "live_runbook_url",
+        "live_safe_pr_url",
+        "live_safe_pr_workflow_run_id",
         "live_verification_url",
         "production_preflight_plan_id",
         "production_preflight_run_limit",
@@ -62,6 +65,8 @@ def test_release_flow_smoke_workflow_declares_operator_inputs_and_secrets_for_di
     assert inputs["alert_severity"]["default"] == "warning"
     assert inputs["alert_severity"]["options"] == ["info", "warning", "critical"]
     assert inputs["live_preflight"]["default"] is False
+    assert inputs["live_approval_gate"]["default"] == "manual"
+    assert inputs["live_approval_gate"]["options"] == ["manual", "safe_pr"]
     assert inputs["live_environment"]["default"] == "production"
     assert inputs["live_namespace"]["default"] == "production"
     assert "default" not in inputs["live_change_ticket"]
@@ -83,6 +88,7 @@ def test_release_flow_smoke_workflow_declares_operator_inputs_and_secrets_for_di
     assert job["env"]["ALERT_PREFLIGHT"] == "${{ inputs.alert_preflight || false }}"
     assert job["env"]["ALERT_PREFLIGHT_SEVERITY"] == "${{ inputs.alert_severity || 'warning' }}"
     assert job["env"]["LIVE_PREFLIGHT"] == "${{ inputs.live_preflight || false }}"
+    assert job["env"]["LIVE_PREFLIGHT_APPROVAL_GATE"] == "${{ inputs.live_approval_gate || 'manual' }}"
     assert job["env"]["LIVE_PREFLIGHT_ENVIRONMENT"] == "${{ inputs.live_environment || 'production' }}"
     assert job["env"]["LIVE_PREFLIGHT_NAMESPACE"] == "${{ inputs.live_namespace || 'production' }}"
     assert job["env"]["LIVE_PREFLIGHT_CHANGE_TICKET"] == "${{ inputs.live_change_ticket }}"
@@ -91,6 +97,10 @@ def test_release_flow_smoke_workflow_declares_operator_inputs_and_secrets_for_di
     assert job["env"]["LIVE_PREFLIGHT_ONCALL_CONTACT"] == "${{ inputs.live_oncall_contact }}"
     assert job["env"]["LIVE_PREFLIGHT_IMAGE"] == "${{ inputs.live_image }}"
     assert job["env"]["LIVE_PREFLIGHT_VERIFICATION_URL"] == "${{ inputs.live_verification_url }}"
+    assert job["env"]["LIVE_PREFLIGHT_SAFE_PR_WORKFLOW_RUN_ID"] == (
+        "${{ inputs.live_safe_pr_workflow_run_id }}"
+    )
+    assert job["env"]["LIVE_PREFLIGHT_SAFE_PR_URL"] == "${{ inputs.live_safe_pr_url }}"
 
 
 def test_release_flow_smoke_workflow_can_be_called_by_deploy_workflows() -> None:
@@ -104,6 +114,7 @@ def test_release_flow_smoke_workflow_can_be_called_by_deploy_workflows() -> None
         "artifact_name",
         "artifact_retention_days",
         "github_environment",
+        "live_approval_gate",
         "live_change_ticket",
         "live_environment",
         "live_image",
@@ -112,6 +123,8 @@ def test_release_flow_smoke_workflow_can_be_called_by_deploy_workflows() -> None
         "live_preflight",
         "live_release_owner",
         "live_runbook_url",
+        "live_safe_pr_url",
+        "live_safe_pr_workflow_run_id",
         "live_verification_url",
         "production_preflight_plan_id",
         "production_preflight_run_limit",
@@ -137,6 +150,7 @@ def test_release_flow_smoke_workflow_can_be_called_by_deploy_workflows() -> None
     assert workflow_call["inputs"]["alert_preflight"]["default"] is False
     assert workflow_call["inputs"]["alert_severity"]["default"] == "warning"
     assert workflow_call["inputs"]["live_preflight"]["default"] is False
+    assert workflow_call["inputs"]["live_approval_gate"]["default"] == "manual"
     assert workflow_call["inputs"]["live_environment"]["default"] == "production"
     assert workflow_call["inputs"]["live_namespace"]["default"] == "production"
     assert "default" not in workflow_call["inputs"]["live_change_ticket"]
