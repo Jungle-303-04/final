@@ -240,6 +240,24 @@ summary query는 `target_relation`을 넣지 않고, detail query는 target Depl
 특정 Deployment detail query는 target Deployment와 관련 있는 Service만 보낸다.
 관련 기준은 `exact_selector_match`, `live_pod_match`, `selector_key_overlap`이다.
 
+`endpoint_slice_ready_endpoints[]`는 Service 뒤에 실제 ready endpoint가 붙었는지 보는 요약이다.
+EndpointSlice(엔드포인트슬라이스)는 Kubernetes가 Service 뒤 endpoint 목록을 나누어 저장하는 객체다.
+summary query는 namespace의 모든 EndpointSlice 요약을 보낸다.
+detail query는 target Deployment와 관련 있는 Service의 EndpointSlice만 보낸다.
+endpoint IP address는 보내지 않고, ready target Pod의 kind/namespace/name만 보낸다.
+
+- change_context.endpoint_slice_ready_endpoints[].service.namespace/name
+- change_context.endpoint_slice_ready_endpoints[].endpoint_slice.namespace/name
+- change_context.endpoint_slice_ready_endpoints[].address_type
+- change_context.endpoint_slice_ready_endpoints[].ports[].name/port/protocol/app_protocol
+- change_context.endpoint_slice_ready_endpoints[].endpoint_count
+- change_context.endpoint_slice_ready_endpoints[].ready_endpoint_count
+- change_context.endpoint_slice_ready_endpoints[].not_ready_endpoint_count
+- change_context.endpoint_slice_ready_endpoints[].unknown_ready_endpoint_count
+- change_context.endpoint_slice_ready_endpoints[].serving_endpoint_count
+- change_context.endpoint_slice_ready_endpoints[].terminating_endpoint_count
+- change_context.endpoint_slice_ready_endpoints[].ready_targets[].kind/namespace/name
+
 `current_workload_snapshot`은 특정 Deployment 1개를 위한 detail snapshot이다.
 detail snapshot은 summary 필드에 아래 필드를 추가로 담는다.
 

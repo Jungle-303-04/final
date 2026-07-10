@@ -25,6 +25,7 @@ def load_metadata_modules():
         "providers.kubernetes_providers",
         "providers.loki_providers",
         "providers.metadata_config_refs",
+        "providers.metadata_endpoint_slices",
         "providers.metadata_ownership",
         "providers.metadata_service_selectors",
         "providers.metadata_workload_snapshots",
@@ -379,6 +380,118 @@ def test_metadata_provider_collects_one_deployment_snapshot(monkeypatch) -> None
                     ]
                 },
             )
+        if request.url.path == "/apis/discovery.k8s.io/v1/namespaces/sandbox/endpointslices":
+            return httpx.Response(
+                200,
+                json={
+                    "items": [
+                        {
+                            "metadata": {
+                                "namespace": "sandbox",
+                                "name": "billing-api-abcde",
+                                "labels": {
+                                    "kubernetes.io/service-name": "billing-api"
+                                },
+                            },
+                            "addressType": "IPv4",
+                            "ports": [
+                                {
+                                    "name": "http",
+                                    "port": 8080,
+                                    "protocol": "TCP",
+                                }
+                            ],
+                            "endpoints": [
+                                {
+                                    "conditions": {"ready": True},
+                                    "targetRef": {
+                                        "kind": "Pod",
+                                        "namespace": "sandbox",
+                                        "name": "billing-api-pod-1",
+                                    },
+                                    "addresses": ["10.0.0.10"],
+                                }
+                            ],
+                        },
+                        {
+                            "metadata": {
+                                "namespace": "sandbox",
+                                "name": "checkout-api-abcde",
+                                "labels": {
+                                    "kubernetes.io/service-name": "checkout-api"
+                                },
+                            },
+                            "addressType": "IPv4",
+                            "ports": [
+                                {
+                                    "name": "http",
+                                    "port": 8080,
+                                    "protocol": "TCP",
+                                }
+                            ],
+                            "endpoints": [
+                                {
+                                    "conditions": {
+                                        "ready": True,
+                                        "serving": True,
+                                        "terminating": False,
+                                    },
+                                    "targetRef": {
+                                        "kind": "Pod",
+                                        "namespace": "sandbox",
+                                        "name": "checkout-api-pod-1",
+                                    },
+                                    "addresses": ["10.0.0.1"],
+                                },
+                                {
+                                    "conditions": {
+                                        "ready": False,
+                                        "serving": False,
+                                        "terminating": False,
+                                    },
+                                    "targetRef": {
+                                        "kind": "Pod",
+                                        "namespace": "sandbox",
+                                        "name": "checkout-api-pod-2",
+                                    },
+                                    "addresses": ["10.0.0.2"],
+                                },
+                            ],
+                        },
+                        {
+                            "metadata": {
+                                "namespace": "sandbox",
+                                "name": "checkout-live-bcdef",
+                                "labels": {
+                                    "kubernetes.io/service-name": "checkout-live"
+                                },
+                            },
+                            "addressType": "IPv4",
+                            "endpoints": [
+                                {
+                                    "conditions": {"ready": True},
+                                    "targetRef": {
+                                        "kind": "Pod",
+                                        "namespace": "sandbox",
+                                        "name": "checkout-api-pod-1",
+                                    },
+                                }
+                            ],
+                        },
+                        {
+                            "metadata": {
+                                "namespace": "sandbox",
+                                "name": "stale-api-cdefg",
+                                "labels": {
+                                    "kubernetes.io/service-name": "stale-api"
+                                },
+                            },
+                            "addressType": "IPv4",
+                            "endpoints": [],
+                        },
+                    ]
+                },
+            )
         return httpx.Response(404, json={})
 
     monkeypatch.setattr(
@@ -413,6 +526,7 @@ def test_metadata_provider_collects_one_deployment_snapshot(monkeypatch) -> None
         "/apis/apps/v1/namespaces/sandbox/replicasets",
         "/api/v1/namespaces/sandbox/pods",
         "/api/v1/namespaces/sandbox/services",
+        "/apis/discovery.k8s.io/v1/namespaces/sandbox/endpointslices",
     ]
     assert "current_workload_snapshots" not in change_context
     assert change_context["service_selector_matches"] == [
@@ -444,6 +558,58 @@ def test_metadata_provider_collects_one_deployment_snapshot(monkeypatch) -> None
             "matched_pod_count": 0,
         },
     ]
+    assert change_context["endpoint_slice_ready_endpoints"] == [
+        {
+            "service": {"namespace": "sandbox", "name": "checkout-api"},
+            "endpoint_slice": {"namespace": "sandbox", "name": "checkout-api-abcde"},
+            "address_type": "IPv4",
+            "ports": [{"name": "http", "port": 8080, "protocol": "TCP"}],
+            "endpoint_count": 2,
+            "ready_endpoint_count": 1,
+            "not_ready_endpoint_count": 1,
+            "unknown_ready_endpoint_count": 0,
+            "serving_endpoint_count": 1,
+            "terminating_endpoint_count": 0,
+            "ready_targets": [
+                {
+                    "kind": "Pod",
+                    "namespace": "sandbox",
+                    "name": "checkout-api-pod-1",
+                }
+            ],
+        },
+        {
+            "service": {"namespace": "sandbox", "name": "checkout-live"},
+            "endpoint_slice": {"namespace": "sandbox", "name": "checkout-live-bcdef"},
+            "address_type": "IPv4",
+            "endpoint_count": 1,
+            "ready_endpoint_count": 1,
+            "not_ready_endpoint_count": 0,
+            "unknown_ready_endpoint_count": 0,
+            "serving_endpoint_count": 0,
+            "terminating_endpoint_count": 0,
+            "ready_targets": [
+                {
+                    "kind": "Pod",
+                    "namespace": "sandbox",
+                    "name": "checkout-api-pod-1",
+                }
+            ],
+        },
+        {
+            "service": {"namespace": "sandbox", "name": "stale-api"},
+            "endpoint_slice": {"namespace": "sandbox", "name": "stale-api-cdefg"},
+            "address_type": "IPv4",
+            "endpoint_count": 0,
+            "ready_endpoint_count": 0,
+            "not_ready_endpoint_count": 0,
+            "unknown_ready_endpoint_count": 0,
+            "serving_endpoint_count": 0,
+            "terminating_endpoint_count": 0,
+        },
+    ]
+    assert "10.0.0.1" not in str(change_context["endpoint_slice_ready_endpoints"])
+    assert "billing-api-pod-1" not in str(change_context["endpoint_slice_ready_endpoints"])
     assert snapshot["workload"] == {
         "kind": "Deployment",
         "namespace": "sandbox",
@@ -679,6 +845,34 @@ def test_metadata_provider_collects_service_matches_without_deployments(
                     ]
                 },
             )
+        if request.url.path == "/apis/discovery.k8s.io/v1/namespaces/target/endpointslices":
+            return httpx.Response(
+                200,
+                json={
+                    "items": [
+                        {
+                            "metadata": {
+                                "namespace": "target",
+                                "name": "worker-abcde",
+                                "labels": {
+                                    "kubernetes.io/service-name": "worker"
+                                },
+                            },
+                            "addressType": "IPv4",
+                            "endpoints": [
+                                {
+                                    "conditions": {"ready": True},
+                                    "targetRef": {
+                                        "kind": "Pod",
+                                        "namespace": "target",
+                                        "name": "worker-pod-1",
+                                    },
+                                }
+                            ],
+                        }
+                    ]
+                },
+            )
         return httpx.Response(404, json={})
 
     monkeypatch.setattr(
@@ -710,6 +904,7 @@ def test_metadata_provider_collects_service_matches_without_deployments(
         "/apis/apps/v1/namespaces/target/deployments",
         "/api/v1/namespaces/target/pods",
         "/api/v1/namespaces/target/services",
+        "/apis/discovery.k8s.io/v1/namespaces/target/endpointslices",
     ]
     assert metadata["change_context"] == {
         "current_workload_snapshots": [],
@@ -721,6 +916,26 @@ def test_metadata_provider_collects_service_matches_without_deployments(
                 "matched_pod_count": 1,
                 "matched_pods": [
                     {"namespace": "target", "name": "worker-pod-1"}
+                ],
+            }
+        ],
+        "endpoint_slice_ready_endpoints": [
+            {
+                "service": {"namespace": "target", "name": "worker"},
+                "endpoint_slice": {"namespace": "target", "name": "worker-abcde"},
+                "address_type": "IPv4",
+                "endpoint_count": 1,
+                "ready_endpoint_count": 1,
+                "not_ready_endpoint_count": 0,
+                "unknown_ready_endpoint_count": 0,
+                "serving_endpoint_count": 0,
+                "terminating_endpoint_count": 0,
+                "ready_targets": [
+                    {
+                        "kind": "Pod",
+                        "namespace": "target",
+                        "name": "worker-pod-1",
+                    }
                 ],
             }
         ],
@@ -912,6 +1127,45 @@ def test_metadata_provider_collects_namespace_deployment_snapshots(monkeypatch) 
                     ]
                 },
             )
+        if request.url.path == "/apis/discovery.k8s.io/v1/namespaces/target/endpointslices":
+            return httpx.Response(
+                200,
+                json={
+                    "items": [
+                        {
+                            "metadata": {
+                                "namespace": "target",
+                                "name": "shop-api-abcde",
+                                "labels": {
+                                    "kubernetes.io/service-name": "shop-api"
+                                },
+                            },
+                            "addressType": "IPv4",
+                            "ports": [
+                                {
+                                    "name": "http",
+                                    "port": 8080,
+                                    "protocol": "TCP",
+                                    "appProtocol": "http",
+                                }
+                            ],
+                            "endpoints": [
+                                {
+                                    "conditions": {
+                                        "ready": True,
+                                        "serving": True,
+                                    },
+                                    "targetRef": {
+                                        "kind": "Pod",
+                                        "namespace": "target",
+                                        "name": "shop-api-pod-1",
+                                    },
+                                }
+                            ],
+                        }
+                    ]
+                },
+            )
         return httpx.Response(404, json={})
 
     monkeypatch.setattr(
@@ -946,6 +1200,7 @@ def test_metadata_provider_collects_namespace_deployment_snapshots(monkeypatch) 
         "/apis/apps/v1/namespaces/target/replicasets",
         "/api/v1/namespaces/target/pods",
         "/api/v1/namespaces/target/services",
+        "/apis/discovery.k8s.io/v1/namespaces/target/endpointslices",
     ]
     assert "current_workload_snapshot" not in change_context
     assert change_context["service_selector_matches"] == [
@@ -956,6 +1211,34 @@ def test_metadata_provider_collects_namespace_deployment_snapshots(monkeypatch) 
             "matched_pod_count": 1,
             "matched_pods": [
                 {"namespace": "target", "name": "shop-api-pod-1"}
+            ],
+        }
+    ]
+    assert change_context["endpoint_slice_ready_endpoints"] == [
+        {
+            "service": {"namespace": "target", "name": "shop-api"},
+            "endpoint_slice": {"namespace": "target", "name": "shop-api-abcde"},
+            "address_type": "IPv4",
+            "ports": [
+                {
+                    "name": "http",
+                    "port": 8080,
+                    "protocol": "TCP",
+                    "app_protocol": "http",
+                }
+            ],
+            "endpoint_count": 1,
+            "ready_endpoint_count": 1,
+            "not_ready_endpoint_count": 0,
+            "unknown_ready_endpoint_count": 0,
+            "serving_endpoint_count": 1,
+            "terminating_endpoint_count": 0,
+            "ready_targets": [
+                {
+                    "kind": "Pod",
+                    "namespace": "target",
+                    "name": "shop-api-pod-1",
+                }
             ],
         }
     ]

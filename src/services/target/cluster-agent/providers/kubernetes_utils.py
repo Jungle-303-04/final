@@ -7,7 +7,9 @@ from packages.contracts.event_bus.interfaces import JsonObject
 K8S_KIND_DEPLOYMENT = "Deployment"
 K8S_KIND_REPLICA_SET = "ReplicaSet"
 K8S_DEPLOYMENT_REVISION_ANNOTATION = "deployment.kubernetes.io/revision"
+K8S_ENDPOINT_SLICE_SERVICE_NAME_LABEL = "kubernetes.io/service-name"
 K8S_RESOURCE_DEPLOYMENTS = "deployments"
+K8S_RESOURCE_ENDPOINT_SLICES = "endpointslices"
 K8S_RESOURCE_PODS = "pods"
 K8S_RESOURCE_REPLICASETS = "replicasets"
 K8S_RESOURCE_SERVICES = "services"
@@ -56,3 +58,32 @@ def object_or_empty(value: Any) -> JsonObject:
 def compact_dict(value: JsonObject) -> JsonObject:
     """Drop empty values while keeping false boolean values."""
     return {key: item for key, item in value.items() if item not in (None, "", [], {})}
+
+
+def resource_identity_snapshot(resource: JsonObject) -> JsonObject:
+    """Return a small namespace/name identity."""
+    meta = metadata(resource)
+    return compact_dict(
+        {
+            "namespace": meta.get("namespace"),
+            "name": meta.get("name"),
+        }
+    )
+
+
+def resource_identity_key(identity: JsonObject) -> tuple[str, str] | None:
+    """Return a tuple key for a namespace/name identity."""
+    namespace = identity.get("namespace")
+    name = identity.get("name")
+    if not namespace or not name:
+        return None
+    return (str(namespace), str(name))
+
+
+def resource_sort_key(resource: JsonObject) -> tuple[str, str]:
+    """Return a stable sort key for Kubernetes resources."""
+    meta = metadata(resource)
+    return (
+        str(meta.get("namespace") or ""),
+        str(meta.get("name") or ""),
+    )

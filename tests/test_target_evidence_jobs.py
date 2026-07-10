@@ -49,6 +49,7 @@ def load_evidence_module():
         "providers.kubernetes_providers",
         "providers.loki_providers",
         "providers.metadata_config_refs",
+        "providers.metadata_endpoint_slices",
         "providers.metadata_ownership",
         "providers.metadata_providers",
         "providers.metadata_service_selectors",

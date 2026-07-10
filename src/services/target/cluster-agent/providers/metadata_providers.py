@@ -22,6 +22,7 @@ from providers.base import ConfigReader
 from providers.kubernetes_utils import (
     K8S_KIND_DEPLOYMENT,
     K8S_RESOURCE_DEPLOYMENTS,
+    K8S_RESOURCE_ENDPOINT_SLICES,
     K8S_RESOURCE_PODS,
     K8S_RESOURCE_REPLICASETS,
     K8S_RESOURCE_SERVICES,
@@ -29,6 +30,7 @@ from providers.kubernetes_utils import (
     metadata,
     object_or_empty,
 )
+from providers.metadata_endpoint_slices import endpoint_slice_ready_endpoint_snapshots
 from providers.metadata_ownership import pods_for_deployment
 from providers.metadata_service_selectors import service_selector_match_snapshots
 from providers.metadata_workload_snapshots import (
@@ -40,6 +42,7 @@ from providers.metadata_workload_snapshots import (
 CHANGE_CONTEXT_KEY = "change_context"
 CURRENT_WORKLOAD_SNAPSHOT_KEY = "current_workload_snapshot"
 CURRENT_WORKLOAD_SNAPSHOTS_KEY = "current_workload_snapshots"
+ENDPOINT_SLICE_READY_ENDPOINTS_KEY = "endpoint_slice_ready_endpoints"
 SERVICE_SELECTOR_MATCHES_KEY = "service_selector_matches"
 DEFAULT_METADATA_QUERIES = {
     CHANGE_CONTEXT_KEY,
@@ -144,11 +147,22 @@ class MetadataProvider:
                         headers,
                         namespaced_core_path(target.namespace, K8S_RESOURCE_SERVICES),
                     )
+                    endpoint_slice_list = await self.get_json(
+                        client,
+                        base_url,
+                        headers,
+                        namespaced_discovery_path(
+                            target.namespace,
+                            K8S_RESOURCE_ENDPOINT_SLICES,
+                        ),
+                        allow_empty_list=True,
+                    )
                     change_context = specific_workload_change_context(
                         deployment,
                         items(replicasets),
                         items(pod_list),
                         items(service_list),
+                        items(endpoint_slice_list),
                     )
                 else:
                     change_context = empty_change_context()
@@ -181,6 +195,16 @@ class MetadataProvider:
                     headers,
                     namespaced_core_path(target.namespace, K8S_RESOURCE_SERVICES),
                 )
+                endpoint_slices = await self.get_json(
+                    client,
+                    base_url,
+                    headers,
+                    namespaced_discovery_path(
+                        target.namespace,
+                        K8S_RESOURCE_ENDPOINT_SLICES,
+                    ),
+                    allow_empty_list=True,
+                )
                 if deployment_items:
                     snapshots = current_workload_snapshots(
                         deployment_items,
@@ -192,6 +216,11 @@ class MetadataProvider:
                     SERVICE_SELECTOR_MATCHES_KEY: service_selector_match_snapshots(
                         items(services),
                         items(pods),
+                    ),
+                    ENDPOINT_SLICE_READY_ENDPOINTS_KEY: (
+                        endpoint_slice_ready_endpoint_snapshots(
+                            items(endpoint_slices),
+                        )
                     ),
                 }
 
@@ -209,11 +238,17 @@ class MetadataProvider:
         path: str,
         *,
         allow_not_found: bool = False,
+        allow_empty_list: bool = False,
     ) -> JsonObject:
         """Call one Kubernetes API path and return a JSON object."""
         response = await client.get(f"{base_url}{path}", headers=headers)
         if allow_not_found and response.status_code == httpx.codes.NOT_FOUND:
             return {}
+        if allow_empty_list and response.status_code in {
+            httpx.codes.FORBIDDEN,
+            httpx.codes.NOT_FOUND,
+        }:
+            return {"items": []}
         response.raise_for_status()
         payload = response.json()
 
@@ -256,6 +291,7 @@ class MetadataProvider:
 
         snapshots = change_context.get(CURRENT_WORKLOAD_SNAPSHOTS_KEY)
         snapshot = change_context.get(CURRENT_WORKLOAD_SNAPSHOT_KEY)
+        endpoint_slices = change_context.get(ENDPOINT_SLICE_READY_ENDPOINTS_KEY)
         service_matches = change_context.get(SERVICE_SELECTOR_MATCHES_KEY)
         normalized: JsonObject = {}
 
@@ -270,6 +306,11 @@ class MetadataProvider:
         if isinstance(service_matches, list):
             normalized[SERVICE_SELECTOR_MATCHES_KEY] = [
                 item for item in service_matches if isinstance(item, dict)
+            ]
+
+        if isinstance(endpoint_slices, list):
+            normalized[ENDPOINT_SLICE_READY_ENDPOINTS_KEY] = [
+                item for item in endpoint_slices if isinstance(item, dict)
             ]
 
         return normalized or empty_change_context()
@@ -316,6 +357,18 @@ def namespaced_core_path(
     return path
 
 
+def namespaced_discovery_path(
+    namespace: str,
+    resource: str,
+    name: str | None = None,
+) -> str:
+    """Build a Kubernetes discovery.k8s.io/v1 namespaced API path."""
+    path = f"/apis/discovery.k8s.io/v1/namespaces/{path_part(namespace)}/{path_part(resource)}"
+    if name:
+        path = f"{path}/{path_part(name)}"
+    return path
+
+
 def path_part(value: str) -> str:
     """Escape one value for a Kubernetes API path."""
     return quote(value, safe="")
@@ -326,23 +379,29 @@ def specific_workload_change_context(
     replicasets: list[JsonObject],
     pods: list[JsonObject],
     services: list[JsonObject],
+    endpoint_slices: list[JsonObject],
 ) -> JsonObject:
     """Build a change context for one Deployment."""
     if not deployment:
         return empty_change_context()
     target_pods = pods_for_deployment(deployment, replicasets, pods)
     target_labels = object_or_empty(metadata(pod_template(deployment)).get("labels"))
+    service_matches = service_selector_match_snapshots(
+        services,
+        pods,
+        target_labels=target_labels,
+        target_pods=target_pods,
+    )
     return {
         CURRENT_WORKLOAD_SNAPSHOT_KEY: current_workload_detail_snapshot(
             deployment,
             replicasets,
             pods,
         ),
-        SERVICE_SELECTOR_MATCHES_KEY: service_selector_match_snapshots(
-            services,
-            pods,
-            target_labels=target_labels,
-            target_pods=target_pods,
+        SERVICE_SELECTOR_MATCHES_KEY: service_matches,
+        ENDPOINT_SLICE_READY_ENDPOINTS_KEY: endpoint_slice_ready_endpoint_snapshots(
+            endpoint_slices,
+            service_matches=service_matches,
         ),
     }
 
@@ -362,6 +421,10 @@ def merge_change_context(target: JsonObject, source: JsonObject) -> None:
     service_matches = source.get(SERVICE_SELECTOR_MATCHES_KEY)
     if isinstance(service_matches, list):
         target[SERVICE_SELECTOR_MATCHES_KEY] = service_matches
+
+    endpoint_slices = source.get(ENDPOINT_SLICE_READY_ENDPOINTS_KEY)
+    if isinstance(endpoint_slices, list):
+        target[ENDPOINT_SLICE_READY_ENDPOINTS_KEY] = endpoint_slices
 
 
 def empty_change_context() -> JsonObject:
