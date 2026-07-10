@@ -32,7 +32,8 @@ metadata:
   name: ${AGENT_API_SERVICE_NAME}
   namespace: ${NAMESPACE}
   annotations:
-    service.beta.kubernetes.io/aws-load-balancer-backend-protocol: http
+    # TLS 종료 뒤에는 HTTP 재프록시가 아닌 TCP 전달로 WebSocket Upgrade를 보존한다.
+    service.beta.kubernetes.io/aws-load-balancer-backend-protocol: tcp
     service.beta.kubernetes.io/aws-load-balancer-ssl-cert: ${AGENT_API_ACM_CERT_ARN}
     service.beta.kubernetes.io/aws-load-balancer-ssl-ports: https
     service.beta.kubernetes.io/aws-load-balancer-connection-idle-timeout: "60"

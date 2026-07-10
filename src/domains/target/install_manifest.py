@@ -9,6 +9,7 @@ from __future__ import annotations
 import json
 
 from domains.target.management_guard import MANAGEMENT_BOOTSTRAP_MODE, MANAGEMENT_CLUSTER_ROLE
+from packages.config.realtime import derive_realtime_gateway_url
 from packages.config.settings import env
 from packages.contracts.gateway.requests import DEFAULT_OTEL_SERVICE_NAME, TargetRegisterRequest
 from packages.contracts.target import SANDBOX_NAMESPACE, TARGET_NAMESPACE
@@ -260,6 +261,7 @@ data:
   BOOTSTRAP_MODE: {yaml_string(bootstrap_mode)}
   WORKSPACE_ID: {yaml_string(payload.workspace_id)}
   EVIDENCE_INTERVAL_SECONDS: {yaml_string(str(payload.evidence_interval_seconds))}
+  REALTIME_GATEWAY_URL: {yaml_string(derive_realtime_gateway_url(payload.management_base_url, management_cluster=payload.cluster_role == MANAGEMENT_CLUSTER_ROLE))}
   PROMETHEUS_BASE_URL: {yaml_string(payload.prometheus_base_url)}
   LOKI_BASE_URL: {yaml_string(payload.loki_base_url)}
   TEMPO_BASE_URL: {yaml_string(payload.tempo_base_url)}
