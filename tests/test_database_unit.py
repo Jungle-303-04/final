@@ -1866,7 +1866,44 @@ def test_expire_stale_open_rca_incidents_closes_old_rows_atomically() -> None:
     assert "stale_open_incidents" in sql
     assert "FOR UPDATE SKIP LOCKED" in sql
     assert "incident_expired" in compiled.params.values()
+    status_values = next(value for value in compiled.params.values() if isinstance(value, list))
+    assert "incident_detected" in status_values
+    assert "evidence_received" not in status_values
     assert "RETURNING rca_timeline.id" in sql
+
+
+def test_delete_stale_pre_incident_timeline_is_bounded_and_scoped() -> None:
+    from domains.dashboard.repository import DashboardRepository
+
+    recorded: list[Any] = []
+
+    class StubResult:
+        def all(self) -> list[object]:
+            return [(1,), (2,)]
+
+    class StubConnection:
+        def execute(self, statement: Any) -> StubResult:
+            recorded.append(statement)
+            return StubResult()
+
+    @contextmanager
+    def stub_connection():
+        yield StubConnection()
+
+    repository = object.__new__(DashboardRepository)
+    repository.connection = stub_connection  # type: ignore[method-assign]
+
+    assert repository.delete_stale_pre_incident_timeline(retention_hours=12, limit=50) == 2
+
+    compiled = recorded[0].compile(dialect=postgresql.dialect())
+    sql = str(compiled)
+    assert "DELETE FROM rca_timeline" in sql
+    assert "stale_pre_incident_timeline" in sql
+    assert "FOR UPDATE SKIP LOCKED" in sql
+    status_values = next(value for value in compiled.params.values() if isinstance(value, list))
+    assert "evidence_received" in status_values
+    assert "evidence_built" in status_values
+    assert "incident_detected" not in status_values
 
 
 def test_user_account_schema_supports_password_login() -> None:

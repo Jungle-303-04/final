@@ -9,7 +9,7 @@ from __future__ import annotations
 from datetime import timedelta
 from typing import Any
 
-from sqlalchemy import Select, and_, case, delete, func, or_, select
+from sqlalchemy import Select, Text, and_, case, cast, delete, func, or_, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from domains.dashboard.models import MetricQueryPreset, MetricWidget, RcaTimeline
@@ -59,8 +59,39 @@ CLOSED_INCIDENT_STATUSES: tuple[str, ...] = (
     "pr_created",
     "pr_failed",
 )
+PRE_INCIDENT_STATUSES: tuple[str, ...] = (
+    "evidence_received",
+    "evidence_built",
+)
+# 장애가 실제로 탐지된 뒤 조치가 끝나기 전까지만 open으로 계산한다. 새 전처리 상태가
+# 추가돼도 자동으로 인시던트가 되지 않도록 양수 allowlist를 유지한다.
+OPEN_INCIDENT_STATUSES: tuple[str, ...] = (
+    "incident_detected",
+    "evidence_bundled",
+    "rule_missing",
+    "backlog_created",
+    "ai_fallback_requested",
+    "rca_planned",
+    "rca_evaluated",
+    "rca_completed",
+    "followup_required",
+    "action_required",
+    "recovery_planned",
+    "selection_required",
+    "recovery_selected",
+    "approval_recommended",
+    "command_requested",
+    "command_dispatched",
+    "command_queued",
+    "pr_requested",
+    "pr_patch_prepared",
+    "pr_diff_explained",
+    "pr_ready_for_creation",
+)
 DEFAULT_OPEN_INCIDENT_EXPIRE_DAYS = 3
 DEFAULT_OPEN_INCIDENT_EXPIRE_LIMIT = 500
+DEFAULT_PRE_INCIDENT_RETENTION_HOURS = 24
+DEFAULT_PRE_INCIDENT_RETENTION_LIMIT = 1000
 
 
 def _rca_timeline_response_columns() -> tuple[Any, ...]:
@@ -366,7 +397,7 @@ class DashboardRepository(DatabaseConnection):
             table.c.incident_id.is_not(None),
             table.c.cluster_id.is_not(None),
             table.c.incident_logical_key.is_not(None),
-            table.c.status.not_in(CLOSED_INCIDENT_STATUSES),
+            table.c.status.in_(OPEN_INCIDENT_STATUSES),
         )
         statement = _exclude_non_incident_detection(statement)
         statement = _apply_cluster_filter(statement, allowed_cluster_ids)
@@ -391,7 +422,7 @@ class DashboardRepository(DatabaseConnection):
                 RcaTimeline.workspace_id == workspace_id,
                 RcaTimeline.cluster_id == cluster_id,
                 RcaTimeline.incident_id.is_not(None),
-                RcaTimeline.status.not_in(CLOSED_INCIDENT_STATUSES),
+                RcaTimeline.status.in_(OPEN_INCIDENT_STATUSES),
             )
             .order_by(RcaTimeline.updated_at.desc())
             .limit(scan_limit)
@@ -442,7 +473,7 @@ class DashboardRepository(DatabaseConnection):
                 RcaTimeline.cluster_id == cluster_id,
                 func.lower(RcaTimeline.incident_resource_kind) == resource_kind.lower(),
                 RcaTimeline.incident_id.is_not(None),
-                RcaTimeline.status.not_in(CLOSED_INCIDENT_STATUSES),
+                RcaTimeline.status.in_(OPEN_INCIDENT_STATUSES),
                 or_(*filters),
             )
             .order_by(
@@ -474,7 +505,7 @@ class DashboardRepository(DatabaseConnection):
             .where(
                 table.c.incident_id.is_not(None),
                 table.c.cluster_id.is_not(None),
-                table.c.status.not_in(CLOSED_INCIDENT_STATUSES),
+                table.c.status.in_(OPEN_INCIDENT_STATUSES),
                 table.c.updated_at < func.now() - timedelta(days=bounded_days),
             )
             .order_by(table.c.updated_at.asc())
@@ -505,6 +536,33 @@ class DashboardRepository(DatabaseConnection):
         with self.connection() as conn:
             rows = conn.execute(statement).mappings().all()
         return [dict(row) for row in rows]
+
+    def delete_stale_pre_incident_timeline(
+        self,
+        retention_hours: int = DEFAULT_PRE_INCIDENT_RETENTION_HOURS,
+        limit: int = DEFAULT_PRE_INCIDENT_RETENTION_LIMIT,
+    ) -> int:
+        """원본 evidence를 보존하면서 오래된 전처리 projection만 배치 삭제한다."""
+        bounded_hours = max(1, int(retention_hours))
+        bounded_limit = max(1, min(int(limit), 5000))
+        table = RcaTimeline.__table__
+        candidates = (
+            select(table.c.id)
+            .where(
+                table.c.status.in_(PRE_INCIDENT_STATUSES),
+                table.c.updated_at < func.now() - timedelta(hours=bounded_hours),
+            )
+            .order_by(table.c.updated_at.asc())
+            .limit(bounded_limit)
+            .with_for_update(skip_locked=True)
+            .cte("stale_pre_incident_timeline")
+        )
+        statement = (
+            delete(table).where(table.c.id.in_(select(candidates.c.id))).returning(table.c.id)
+        )
+        with self.connection() as conn:
+            rows = conn.execute(statement).all()
+        return len(rows)
 
 
 def open_incident_summary(row: JsonObject) -> JsonObject:
@@ -543,9 +601,6 @@ def serialize_metric_widget(row: Any) -> JsonObject:
 
 def incident_logical_key(row: JsonObject) -> str:
     """같은 실제 장애를 묶는 key — evidence correlation 폭증을 fleet 수치에서 제거."""
-    projected_key = row.get("incident_logical_key")
-    if projected_key not in (None, ""):
-        return str(projected_key)
     payload = row.get("payload") if isinstance(row.get("payload"), dict) else {}
     incident = payload.get("incident") if isinstance(payload, dict) else None
     if isinstance(incident, dict):
@@ -558,14 +613,14 @@ def incident_logical_key(row: JsonObject) -> str:
         )
         if any(part not in (None, "") for part in parts[1:]):
             return "|".join(str(part or "unknown") for part in parts)
+    projected_key = row.get("incident_logical_key")
+    if projected_key not in (None, ""):
+        return str(projected_key)
     return str(row.get("incident_id") or row.get("correlation_id") or row.get("id"))
 
 
 def incident_logical_key_from_projection(row: JsonObject) -> str:
     """count 쿼리용 logical key — payload 전체를 읽지 않고 같은 묶음 규칙을 적용."""
-    projected_key = row.get("incident_logical_key")
-    if projected_key not in (None, ""):
-        return str(projected_key)
     parts = (
         row.get("cluster_id"),
         row.get("incident_namespace"),
@@ -575,13 +630,36 @@ def incident_logical_key_from_projection(row: JsonObject) -> str:
     )
     if any(part not in (None, "") for part in parts[1:]):
         return "|".join(str(part or "unknown") for part in parts)
+    projected_key = row.get("incident_logical_key")
+    if projected_key not in (None, ""):
+        return str(projected_key)
     return str(row.get("incident_id") or row.get("correlation_id") or row.get("id"))
 
 
 def rca_timeline_logical_incident_key_expression() -> Any:
-    """SQL 집계용 logical incident key — payload JSON을 읽지 않는 projection 컬럼 사용."""
+    """SQL 집계용 logical key — 구버전 correlation key보다 정규화 projection을 우선한다."""
     table = RcaTimeline.__table__
-    return func.nullif(table.c.incident_logical_key, "")
+    dimensions = (
+        table.c.incident_namespace,
+        table.c.incident_resource_kind,
+        table.c.incident_resource_name,
+        table.c.incident_symptom,
+    )
+    has_dimensions = or_(*(func.nullif(column, "").is_not(None) for column in dimensions))
+    normalized = func.concat_ws(
+        "|",
+        func.coalesce(func.nullif(table.c.cluster_id, ""), "unknown"),
+        *(func.coalesce(func.nullif(column, ""), "unknown") for column in dimensions),
+    )
+    return case(
+        (has_dimensions, normalized),
+        else_=func.coalesce(
+            func.nullif(table.c.incident_logical_key, ""),
+            table.c.incident_id,
+            table.c.correlation_id,
+            cast(table.c.id, Text),
+        ),
+    )
 
 
 def timeline_update_from_event(evt: EventEnvelope) -> JsonObject | None:

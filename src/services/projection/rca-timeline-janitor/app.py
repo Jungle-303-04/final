@@ -17,9 +17,13 @@ RCA_TIMELINE_JANITOR = "rca-timeline-janitor"
 SWEEP_INTERVAL_SECONDS_ENV = "RCA_TIMELINE_JANITOR_INTERVAL_SECONDS"
 EXPIRE_DAYS_ENV = "RCA_OPEN_INCIDENT_EXPIRE_DAYS"
 EXPIRE_LIMIT_ENV = "RCA_OPEN_INCIDENT_EXPIRE_LIMIT"
+PRE_INCIDENT_RETENTION_HOURS_ENV = "RCA_PRE_INCIDENT_RETENTION_HOURS"
+PRE_INCIDENT_RETENTION_LIMIT_ENV = "RCA_PRE_INCIDENT_RETENTION_LIMIT"
 DEFAULT_SWEEP_INTERVAL_SECONDS = "900"
 DEFAULT_EXPIRE_DAYS = "3"
 DEFAULT_EXPIRE_LIMIT = "500"
+DEFAULT_PRE_INCIDENT_RETENTION_HOURS = "24"
+DEFAULT_PRE_INCIDENT_RETENTION_LIMIT = "1000"
 HEARTBEAT_REFRESH_SECONDS = 30.0
 LOGGER = get_logger(__name__)
 
@@ -30,6 +34,17 @@ async def expire_stale_open_incidents(db: Any) -> int:
         limit=int(env(EXPIRE_LIMIT_ENV, DEFAULT_EXPIRE_LIMIT)),
     )
     return len(expired or [])
+
+
+async def delete_stale_pre_incident_timeline(db: Any) -> int:
+    return int(
+        await db.delete_stale_pre_incident_timeline(
+            retention_hours=int(
+                env(PRE_INCIDENT_RETENTION_HOURS_ENV, DEFAULT_PRE_INCIDENT_RETENTION_HOURS)
+            ),
+            limit=int(env(PRE_INCIDENT_RETENTION_LIMIT_ENV, DEFAULT_PRE_INCIDENT_RETENTION_LIMIT)),
+        )
+    )
 
 
 def touch_heartbeat() -> None:
@@ -74,6 +89,12 @@ async def run() -> None:
             count = await expire_stale_open_incidents(async_db)
             if count:
                 LOGGER.warning("stale_open_incidents_expired", extra={"context": {"count": count}})
+            deleted = await delete_stale_pre_incident_timeline(async_db)
+            if deleted:
+                LOGGER.info(
+                    "stale_pre_incident_timeline_deleted",
+                    extra={"context": {"count": deleted}},
+                )
             await wait_for_next_sweep(stopping, interval)
     finally:
         dispose = getattr(db, "dispose", None)
