@@ -1,5 +1,5 @@
 ---
-source_commit: d4b003525
+source_commit: 30465d0c4
 status: synced
 ---
 
@@ -225,6 +225,8 @@ manifest 고정 내용: `apiVersion: apps/v1`, `kind: DaemonSet`, labels `{app: 
 `commands/__init__.py`가 재노출: `AgentCommandRegistry`, `CommandContext`, `CommandResult`, `CommandResultOutbox`, `CommandResultRecord`, `KubernetesApiClient`, `KubernetesGetPayload`, `KubernetesPatchPayload`, `KubernetesScalePayload`, `command`, `command_handler`, `kubernetes_command`.
 
 `commands/helm.py`는 catalog 전용 leaf runner다. `run_catalog_helm_install`은 서버 동봉 item/version을 digest-qualified OCI ref로 다시 해석하고 sandbox 이름/values를 재검증한다. values는 dotted key를 중첩 YAML로 바꿔 `0600` 임시 파일에 기록한다. 실행은 `helm upgrade --install ... --wait --atomic --timeout 300s`, 명시 argv, `shell=False`, subprocess timeout 330초다. 자식 환경은 Kubernetes/CA/proxy allowlist와 임시 `HELM_*_HOME`만 전달하며 stdout/stderr는 결과에 보존하지 않는다. 결과는 `HelmRunResult(succeeded, error_code, returncode)`로만 반환한다.
+
+Agent heartbeat capability는 `collector`, `command_receiver`, `catalog_helm_install`이다. gateway는 마지막 capability까지 확인하므로 runner가 없는 구버전 Agent에는 install command를 queue하지 않는다.
 
 #### `commands/context.py`
 
