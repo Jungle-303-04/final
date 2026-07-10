@@ -164,6 +164,15 @@ def check_smoke_workflow_contract() -> list[ReadinessCheck]:
             and "Missing release-flow auth password" in run,
             "runtime config fails before API calls",
         ),
+        ReadinessCheck(
+            "workflow.smoke.live_verification_url_required",
+            "live_verification_url" in inputs
+            and "LIVE_PREFLIGHT_VERIFICATION_URL" in run
+            and "live_verification_url is required for production live_preflight" in run
+            and "live_verification_url must use https for production live_preflight" in run
+            and "live_verification_url must not use localhost or example.com" in run,
+            "production live preflight requires a concrete https verification URL",
+        ),
     ]
 
 
@@ -179,6 +188,7 @@ def check_smoke_script_contract() -> list[ReadinessCheck]:
             and "LIVE_PREFLIGHT_PLACEHOLDERS" in source
             and "CHG-PREFLIGHT" in source
             and "https://example.com/runbooks/release-flow" in source
+            and "https://example.com/verify/release-flow" in source
             and "release-oncall@example.com" in source,
             "direct live preflight placeholder values are rejected",
         ),
@@ -188,6 +198,14 @@ def check_smoke_script_contract() -> list[ReadinessCheck]:
             and '"image": args.live_image' in source
             and "ghcr.io/example/release-flow-smoke:live-preflight" in source,
             "direct production live preflight requires an explicit non-demo image",
+        ),
+        ReadinessCheck(
+            "script.smoke.live_verification_url_required",
+            '"live_verification_url": getattr(args, "live_verification_url", "")' in source
+            and "is required for production live preflight" in source
+            and "live_verification_url must use https for production live preflight" in source
+            and "live_verification_url must not use localhost or example.com placeholder value" in source,
+            "direct production live preflight requires a concrete https verification URL",
         ),
         ReadinessCheck(
             "script.smoke.generated_manifest_render",
@@ -202,6 +220,14 @@ def check_smoke_script_contract() -> list[ReadinessCheck]:
             and "LIVE_PREFLIGHT_APPROVAL_GATE" in source
             and '"approval_gate": args.live_approval_gate' in source,
             "direct live preflight can exercise safe_pr approval gates",
+        ),
+        ReadinessCheck(
+            "script.smoke.production_verification_url_required",
+            '"live_verification_url": getattr(args, "live_verification_url", "")' in source
+            and "is required for production live preflight" in source
+            and "live_verification_url must use https for production live preflight" in source
+            and "live_verification_url must not use localhost or example.com placeholder value" in source,
+            "direct production live preflight requires concrete post-deploy verification URL evidence",
         ),
         ReadinessCheck(
             "script.smoke.safe_pr_evidence_inputs",
@@ -740,6 +766,14 @@ def check_production_gate_contract() -> list[ReadinessCheck]:
             and "live_image is required for production live_preflight" in validate_run
             and "real production image" in validate_run,
             "production image is required",
+        ),
+        ReadinessCheck(
+            "workflow.production_gate.verification_url_required",
+            "LIVE_PREFLIGHT_VERIFICATION_URL" in validate_job.get("env", {})
+            and "live_verification_url is required for production live_preflight" in validate_run
+            and "live_verification_url must use https for production live_preflight" in validate_run
+            and "live_verification_url must not use localhost or example.com" in validate_run,
+            "production gate requires concrete post-deploy verification URL evidence",
         ),
         ReadinessCheck(
             "workflow.production_gate.validates_before_smoke",

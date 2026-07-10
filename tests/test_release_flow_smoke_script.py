@@ -610,6 +610,8 @@ def test_smoke_live_preflight_checks_readiness_without_starting_run() -> None:
             "CHG-12345",
             "--live-runbook-url",
             "https://wiki.example.test/runbooks/release-flow",
+            "--live-verification-url",
+            "https://ops.example.test/verify/release-flow",
             "--live-release-owner",
             "release-team",
             "--live-oncall-contact",
@@ -647,6 +649,10 @@ def test_smoke_live_preflight_checks_readiness_without_starting_run() -> None:
     assert readiness_payload["settings"]["runbook_url"].startswith("https://")
     assert readiness_payload["settings"]["release_owner"] == "release-team"
     assert readiness_payload["settings"]["oncall_contact"] == "release-oncall@example.test"
+    assert (
+        readiness_payload["steps"][0]["config"]["post_deploy_verification_url"]
+        == "https://ops.example.test/verify/release-flow"
+    )
     assert readiness_payload["steps"][0]["config"]["environment"] == "production"
     assert readiness_payload["steps"][0]["config"]["namespace"] == "production"
     assert readiness_payload["steps"][0]["config"]["image"] == "ghcr.io/acme/checkout-api:2026.07.10"
@@ -669,6 +675,8 @@ def test_smoke_live_preflight_can_exercise_safe_pr_gate() -> None:
             "CHG-12345",
             "--live-runbook-url",
             "https://wiki.example.test/runbooks/release-flow",
+            "--live-verification-url",
+            "https://ops.example.test/verify/release-flow",
             "--live-release-owner",
             "release-team",
             "--live-image",
@@ -706,6 +714,8 @@ def test_smoke_live_preflight_rejects_production_placeholders_before_payload() -
             "CHG-12345",
             "--live-runbook-url",
             "https://wiki.example.test/runbooks/release-flow",
+            "--live-verification-url",
+            "https://ops.example.test/verify/release-flow",
             "--live-release-owner",
             "release-team",
             "--live-image",
@@ -785,6 +795,57 @@ def test_smoke_live_preflight_requires_explicit_production_inputs() -> None:
         raise AssertionError("expected missing production live preflight input rejection")
 
     assert "live_change_ticket is required for production live preflight" in message
+
+    args = smoke.parse_args(
+        [
+            "--live-preflight",
+            "--live-change-ticket",
+            "CHG-12345",
+            "--live-runbook-url",
+            "https://wiki.example.test/runbooks/release-flow",
+            "--live-release-owner",
+            "release-team",
+            "--live-image",
+            "ghcr.io/acme/checkout-api:2026.07.10",
+        ]
+    )
+
+    try:
+        smoke.validate_live_preflight_inputs(args)
+    except ValueError as exc:
+        message = str(exc)
+    else:
+        raise AssertionError("expected missing production verification URL rejection")
+
+    assert "live_verification_url is required for production live preflight" in message
+
+
+def test_smoke_live_preflight_rejects_invalid_production_verification_url() -> None:
+    smoke = load_smoke_module()
+    args = smoke.parse_args(
+        [
+            "--live-preflight",
+            "--live-change-ticket",
+            "CHG-12345",
+            "--live-runbook-url",
+            "https://wiki.example.test/runbooks/release-flow",
+            "--live-verification-url",
+            "http://localhost/verify",
+            "--live-release-owner",
+            "release-team",
+            "--live-image",
+            "ghcr.io/acme/checkout-api:2026.07.10",
+        ]
+    )
+
+    try:
+        smoke.validate_live_preflight_inputs(args)
+    except ValueError as exc:
+        message = str(exc)
+    else:
+        raise AssertionError("expected invalid production verification URL rejection")
+
+    assert "live_verification_url must use https" in message
 
 
 def test_smoke_alert_preflight_tests_warning_capable_channel() -> None:

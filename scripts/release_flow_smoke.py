@@ -46,6 +46,7 @@ LIVE_PREFLIGHT_PLACEHOLDERS = {
     "live_release_owner": {"release-operator"},
     "live_oncall_contact": {"release-oncall@example.com"},
     "live_image": {"ghcr.io/example/release-flow-smoke:live-preflight"},
+    "live_verification_url": {"https://example.com/verify/release-flow"},
 }
 SENSITIVE_ASSIGNMENT_PATTERN = re.compile(
     r"(?P<prefix>(?:\"|')?(?:authorization|bearer|credential|password|passwd|private[_ -]?key|secret|token|api[_ -]?key|apikey|cookie|set[_ -]?cookie)(?:\"|')?\s*[:=]\s*)(?P<quote>\"|')?(?P<value>[^,}\]\s\"']+)(?P=quote)?",
@@ -276,11 +277,17 @@ def validate_live_preflight_inputs(args: argparse.Namespace) -> None:
     required_values = {
         "live_change_ticket": getattr(args, "live_change_ticket", ""),
         "live_runbook_url": getattr(args, "live_runbook_url", ""),
+        "live_verification_url": getattr(args, "live_verification_url", ""),
         "live_image": getattr(args, "live_image", ""),
     }
     for name, value in required_values.items():
         if not str(value or "").strip():
             raise ValueError(f"{name} is required for production live preflight")
+    verification_url = str(getattr(args, "live_verification_url", "") or "").strip().lower()
+    if not verification_url.startswith("https://"):
+        raise ValueError("live_verification_url must use https for production live preflight")
+    if "localhost" in verification_url or "127.0.0.1" in verification_url or "example.com" in verification_url:
+        raise ValueError("live_verification_url must not use localhost or example.com placeholder value")
     if not str(getattr(args, "live_release_owner", "") or "").strip() and not str(
         getattr(args, "live_oncall_contact", "") or ""
     ).strip():
