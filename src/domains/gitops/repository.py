@@ -463,6 +463,9 @@ class RepoChangeRepository(DatabaseConnection):
         if manifest_path:
             binding_identity.append(table.c.manifest_path == manifest_path)
         watch_table = GitWatchTarget.__table__
+        watch_by_id = watch_table.alias("binding_watch_by_id")
+        watch_by_source = watch_table.alias("binding_watch_by_source")
+        default_branch = str(application.get("default_branch") or DEFAULT_REPO_BRANCH)
         statement = (
             select(
                 table.c.binding_id,
@@ -480,16 +483,34 @@ class RepoChangeRepository(DatabaseConnection):
                 table.c.access_policy,
                 table.c.created_at,
                 table.c.updated_at,
-                watch_table.c.last_seen_commit_sha.label("watch_last_seen_commit_sha"),
-                watch_table.c.last_polled_at.label("watch_last_polled_at"),
-                watch_table.c.settings.label("watch_settings"),
+                func.coalesce(
+                    watch_by_id.c.last_seen_commit_sha,
+                    watch_by_source.c.last_seen_commit_sha,
+                ).label("watch_last_seen_commit_sha"),
+                func.coalesce(
+                    watch_by_id.c.last_polled_at,
+                    watch_by_source.c.last_polled_at,
+                ).label("watch_last_polled_at"),
+                func.coalesce(watch_by_id.c.settings, watch_by_source.c.settings).label(
+                    "watch_settings"
+                ),
             )
             .outerjoin(
-                watch_table,
+                watch_by_id,
                 and_(
-                    watch_table.c.workspace_id == table.c.workspace_id,
-                    watch_table.c.repository_id == table.c.repository_id,
-                    watch_table.c.watch_target_id == table.c.watch_target_id,
+                    watch_by_id.c.workspace_id == table.c.workspace_id,
+                    watch_by_id.c.repository_id == table.c.repository_id,
+                    watch_by_id.c.watch_target_id == table.c.watch_target_id,
+                ),
+            )
+            .outerjoin(
+                watch_by_source,
+                and_(
+                    watch_by_id.c.watch_target_id.is_(None),
+                    watch_by_source.c.workspace_id == table.c.workspace_id,
+                    watch_by_source.c.repository_id == table.c.repository_id,
+                    watch_by_source.c.branch == default_branch,
+                    watch_by_source.c.manifest_path == table.c.manifest_path,
                 ),
             )
             .where(
