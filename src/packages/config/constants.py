@@ -42,6 +42,7 @@ class Command:
     DEFAULT_ACTION: Final[str] = "rollout_restart"
     APPLY_MANIFEST_ACTION: Final[str] = "apply_manifest"
     CATALOG_HELM_INSTALL_ACTION: Final[str] = "catalog.helm.install"
+    CATALOG_HELM_INSTALL_CAPABILITY: Final[str] = "catalog_helm_install"
     DELETE_WORKLOAD_ACTION: Final[str] = "delete_workload"
     RCA_TEST_SCENARIO_INJECT_ACTION: Final[str] = "rca.test.inject"
     RCA_TEST_SCENARIO_CLEANUP_ACTION: Final[str] = "rca.test.cleanup"

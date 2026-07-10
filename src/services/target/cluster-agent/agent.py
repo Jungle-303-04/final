@@ -210,7 +210,11 @@ class AgentConfig:
 
     HOSTNAME_ENV = "HOSTNAME"
     DEFAULT_AGENT_ID = "target-agent"
-    AGENT_CAPABILITIES = ["collector", "command_receiver"]
+    AGENT_CAPABILITIES = [
+        "collector",
+        "command_receiver",
+        Command.CATALOG_HELM_INSTALL_CAPABILITY,
+    ]
     EVIDENCE_SOURCE_ID = "cluster-snapshot"
     NODE_COLLECTOR_RECONCILE_INTERVAL_SECONDS = (
         agent_config.NODE_COLLECTOR_RECONCILE_INTERVAL_SECONDS
