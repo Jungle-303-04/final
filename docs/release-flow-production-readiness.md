@@ -81,7 +81,7 @@ When `github_access_preflight` is enabled, the verifier must have an actual GitH
 Production deployment workflows must call `.github/workflows/release-flow-production-gate.yml` before any write. The gate must pass with:
 
 - a real `live_change_ticket`
-- a real `live_runbook_url`
+- a real HTTPS `live_runbook_url`
 - `live_release_owner` or `live_oncall_contact`
 - `live_approval_gate: safe_pr`
 - concrete `live_safe_pr_workflow_run_id`

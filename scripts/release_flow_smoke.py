@@ -290,6 +290,11 @@ def validate_live_preflight_inputs(args: argparse.Namespace) -> None:
     for name, value in required_values.items():
         if not str(value or "").strip():
             raise ValueError(f"{name} is required for production live preflight")
+    runbook_url = str(getattr(args, "live_runbook_url", "") or "").strip().lower()
+    if not runbook_url.startswith("https://"):
+        raise ValueError("live_runbook_url must use https for production live preflight")
+    if "localhost" in runbook_url or "127.0.0.1" in runbook_url or "example.com" in runbook_url:
+        raise ValueError("live_runbook_url must not use localhost or example.com placeholder value")
     verification_url = str(getattr(args, "live_verification_url", "") or "").strip().lower()
     if not verification_url.startswith("https://"):
         raise ValueError("live_verification_url must use https for production live preflight")

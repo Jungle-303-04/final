@@ -854,6 +854,36 @@ def test_smoke_live_preflight_rejects_invalid_production_verification_url() -> N
     assert "live_verification_url must use https" in message
 
 
+def test_smoke_live_preflight_rejects_invalid_production_runbook_url() -> None:
+    smoke = load_smoke_module()
+    args = smoke.parse_args(
+        [
+            "--live-preflight",
+            "--live-change-ticket",
+            "CHG-12345",
+            "--live-runbook-url",
+            "http://ops.internal/runbooks/release-flow",
+            "--live-release-owner",
+            "release-team",
+            "--live-oncall-contact",
+            "release-oncall@example.test",
+            "--live-image",
+            "ghcr.io/acme/checkout-api:2026.07.10",
+            "--live-verification-url",
+            "https://ops.example.test/verify/release-flow",
+        ]
+    )
+
+    try:
+        smoke.validate_live_preflight_inputs(args)
+    except ValueError as exc:
+        message = str(exc)
+    else:
+        raise AssertionError("expected invalid production runbook URL rejection")
+
+    assert "live_runbook_url must use https" in message
+
+
 def test_smoke_alert_preflight_tests_warning_capable_channel() -> None:
     smoke = load_smoke_module()
     client = FakeClient()

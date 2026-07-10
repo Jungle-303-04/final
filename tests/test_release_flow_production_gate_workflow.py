@@ -93,7 +93,8 @@ def test_release_flow_production_gate_calls_smoke_workflow_with_real_guardrails(
     assert "live_change_ticket is required for production live_preflight" in validate_step["run"]
     assert "Replace CHG-PREFLIGHT with the real production change ticket" in validate_step["run"]
     assert "live_runbook_url is required for production live_preflight" in validate_step["run"]
-    assert "Replace example.com runbook URL with the real production runbook" in validate_step["run"]
+    assert "live_runbook_url must use https for production live_preflight" in validate_step["run"]
+    assert "live_runbook_url must not use localhost or example.com" in validate_step["run"]
     assert validate_job["env"]["LIVE_PREFLIGHT_IMAGE"] == "${{ inputs.live_image }}"
     assert "live_image is required for production live_preflight" in validate_step["run"]
     assert "Replace ghcr.io/example/release-flow-smoke:live-preflight with the real production image" in validate_step[
