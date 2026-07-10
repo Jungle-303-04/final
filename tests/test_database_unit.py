@@ -1906,6 +1906,42 @@ def test_delete_stale_pre_incident_timeline_is_bounded_and_scoped() -> None:
     assert "incident_detected" not in status_values
 
 
+def test_resolve_recovered_ephemeral_incidents_is_bounded_and_inventory_aware() -> None:
+    from domains.dashboard.repository import DashboardRepository
+
+    recorded: list[Any] = []
+
+    class StubResult:
+        def mappings(self) -> StubResult:
+            return self
+
+        def all(self) -> list[dict[str, object]]:
+            return []
+
+    class StubConnection:
+        def execute(self, statement: Any) -> StubResult:
+            recorded.append(statement)
+            return StubResult()
+
+    @contextmanager
+    def stub_connection():
+        yield StubConnection()
+
+    repository = object.__new__(DashboardRepository)
+    repository.connection = stub_connection  # type: ignore[method-assign]
+
+    assert repository.resolve_recovered_ephemeral_incidents(grace_minutes=5, limit=25) == []
+
+    compiled = recorded[0].compile(dialect=postgresql.dialect())
+    sql = str(compiled)
+    assert "UPDATE rca_timeline" in sql
+    assert "cluster_inventory_resources" in sql
+    assert "recovered_ephemeral_incidents" in sql
+    assert "FOR UPDATE SKIP LOCKED" in sql
+    assert "incident_resolved" in compiled.params.values()
+    assert ["Pod", "ReplicaSet"] in compiled.params.values()
+
+
 def test_user_account_schema_supports_password_login() -> None:
     columns = set(metadata.tables["user_accounts"].c.keys())
     assert {"email", "password_hash", "role"} <= columns

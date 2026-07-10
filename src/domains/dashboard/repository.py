@@ -13,6 +13,7 @@ from sqlalchemy import Select, Text, and_, case, cast, delete, func, or_, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from domains.dashboard.models import MetricQueryPreset, MetricWidget, RcaTimeline
+from domains.inventory.models import ClusterInventoryResourceRecord
 from packages.contracts.event_bus.interfaces import EventEnvelope, JsonObject
 from packages.contracts.event_bus.subjects import EventSubject
 from packages.contracts.identity import DEFAULT_WORKSPACE_ID
@@ -56,6 +57,7 @@ CLOSED_INCIDENT_STATUSES: tuple[str, ...] = (
     "command_completed",
     "command_rejected",
     "incident_expired",
+    "incident_resolved",
     "pr_created",
     "pr_failed",
 )
@@ -92,6 +94,9 @@ DEFAULT_OPEN_INCIDENT_EXPIRE_DAYS = 3
 DEFAULT_OPEN_INCIDENT_EXPIRE_LIMIT = 500
 DEFAULT_PRE_INCIDENT_RETENTION_HOURS = 24
 DEFAULT_PRE_INCIDENT_RETENTION_LIMIT = 1000
+DEFAULT_EPHEMERAL_INCIDENT_RESOLVE_MINUTES = 5
+DEFAULT_EPHEMERAL_INCIDENT_RESOLVE_LIMIT = 500
+EPHEMERAL_INCIDENT_RESOURCE_KINDS: tuple[str, ...] = ("Pod", "ReplicaSet")
 
 
 def _rca_timeline_response_columns() -> tuple[Any, ...]:
@@ -563,6 +568,68 @@ class DashboardRepository(DatabaseConnection):
         with self.connection() as conn:
             rows = conn.execute(statement).all()
         return len(rows)
+
+    def resolve_recovered_ephemeral_incidents(
+        self,
+        grace_minutes: int = DEFAULT_EPHEMERAL_INCIDENT_RESOLVE_MINUTES,
+        limit: int = DEFAULT_EPHEMERAL_INCIDENT_RESOLVE_LIMIT,
+    ) -> list[JsonObject]:
+        """사라졌거나 정상화된 Pod/ReplicaSet 인시던트를 이력을 보존하며 종결한다."""
+        bounded_minutes = max(1, int(grace_minutes))
+        bounded_limit = max(1, min(int(limit), 5000))
+        timeline = RcaTimeline.__table__
+        inventory = ClusterInventoryResourceRecord.__table__
+        unhealthy_resource_exists = (
+            select(inventory.c.inventory_key)
+            .where(
+                inventory.c.workspace_id == timeline.c.workspace_id,
+                inventory.c.cluster_id == timeline.c.cluster_id,
+                inventory.c.kind == timeline.c.incident_resource_kind,
+                func.coalesce(inventory.c.namespace, "")
+                == func.coalesce(timeline.c.incident_namespace, ""),
+                inventory.c.name == timeline.c.incident_resource_name,
+                inventory.c.deleted_at.is_(None),
+                func.lower(inventory.c.health) != "healthy",
+            )
+            .exists()
+        )
+        candidates = (
+            select(timeline.c.id)
+            .where(
+                timeline.c.incident_id.is_not(None),
+                timeline.c.status.in_(OPEN_INCIDENT_STATUSES),
+                timeline.c.incident_resource_kind.in_(EPHEMERAL_INCIDENT_RESOURCE_KINDS),
+                timeline.c.updated_at < func.now() - timedelta(minutes=bounded_minutes),
+                ~unhealthy_resource_exists,
+            )
+            .order_by(timeline.c.updated_at.asc())
+            .limit(bounded_limit)
+            .with_for_update(skip_locked=True)
+            .cte("recovered_ephemeral_incidents")
+        )
+        statement = (
+            timeline.update()
+            .where(timeline.c.id.in_(select(candidates.c.id)))
+            .values(
+                status="incident_resolved",
+                error_reason=func.coalesce(
+                    timeline.c.error_reason,
+                    "ephemeral resource is absent or healthy in current inventory",
+                ),
+                updated_at=func.now(),
+            )
+            .returning(
+                timeline.c.id,
+                timeline.c.workspace_id,
+                timeline.c.cluster_id,
+                timeline.c.incident_id,
+                timeline.c.correlation_id,
+                timeline.c.status,
+            )
+        )
+        with self.connection() as conn:
+            rows = conn.execute(statement).mappings().all()
+        return [dict(row) for row in rows]
 
 
 def open_incident_summary(row: JsonObject) -> JsonObject:
