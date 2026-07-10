@@ -27,6 +27,10 @@ def test_valid_production_deploy_requires_release_flow_gate(tmp_path: Path) -> N
         jobs:
           release_flow_production_gate:
             uses: ./.github/workflows/release-flow-production-gate.yml
+            with:
+              live_change_ticket: ${{ inputs.change_ticket }}
+              live_runbook_url: ${{ inputs.runbook_url }}
+              live_release_owner: ${{ inputs.release_owner }}
             secrets: inherit
           deploy-production:
             name: Deploy production
@@ -79,6 +83,10 @@ def test_production_deploy_without_gate_success_condition_is_rejected(tmp_path: 
         jobs:
           release_flow_production_gate:
             uses: ./.github/workflows/release-flow-production-gate.yml
+            with:
+              live_change_ticket: ${{ inputs.change_ticket }}
+              live_runbook_url: ${{ inputs.runbook_url }}
+              live_oncall_contact: ${{ inputs.oncall_contact }}
             secrets: inherit
           deploy-production:
             name: Deploy production
@@ -106,6 +114,10 @@ def test_production_deploy_needing_wrong_job_is_rejected(tmp_path: Path) -> None
         jobs:
           release_flow_production_gate:
             uses: ./.github/workflows/release-flow-production-gate.yml
+            with:
+              live_change_ticket: ${{ inputs.change_ticket }}
+              live_runbook_url: ${{ inputs.runbook_url }}
+              live_release_owner: ${{ inputs.release_owner }}
             secrets: inherit
           build:
             runs-on: ubuntu-latest
@@ -171,3 +183,69 @@ def test_product_deploy_name_is_not_treated_as_production(tmp_path: Path) -> Non
 
     assert result.ok
     assert result.candidates == []
+
+
+def test_gate_job_missing_required_live_inputs_is_rejected(tmp_path: Path) -> None:
+    workflow = write_workflow(
+        tmp_path / "deploy-production.yml",
+        """
+        name: Production Deploy
+        "on":
+          workflow_dispatch:
+        jobs:
+          release_flow_production_gate:
+            uses: ./.github/workflows/release-flow-production-gate.yml
+            secrets: inherit
+          deploy-production:
+            name: Deploy production
+            runs-on: ubuntu-latest
+            needs: release_flow_production_gate
+            if: needs.release_flow_production_gate.outputs.release_gate_ok == 'true'
+            steps:
+              - run: ./scripts/deploy-production.sh
+        """,
+    )
+
+    result = validate_workflows([workflow])
+
+    assert not result.ok
+    messages = "\n".join(violation.message for violation in result.violations)
+    assert "must pass live_change_ticket" in messages
+    assert "must pass live_runbook_url" in messages
+    assert "must pass live_release_owner or live_oncall_contact" in messages
+
+
+def test_gate_job_placeholder_live_inputs_are_rejected(tmp_path: Path) -> None:
+    workflow = write_workflow(
+        tmp_path / "deploy-production.yml",
+        """
+        name: Production Deploy
+        "on":
+          workflow_dispatch:
+        jobs:
+          release_flow_production_gate:
+            uses: ./.github/workflows/release-flow-production-gate.yml
+            with:
+              live_change_ticket: CHG-PREFLIGHT
+              live_runbook_url: https://example.com/runbooks/release-flow
+              live_release_owner: release-operator
+              live_oncall_contact: release-oncall@example.com
+            secrets: inherit
+          deploy-production:
+            name: Deploy production
+            runs-on: ubuntu-latest
+            needs: release_flow_production_gate
+            if: needs.release_flow_production_gate.outputs.release_gate_ok == 'true'
+            steps:
+              - run: ./scripts/deploy-production.sh
+        """,
+    )
+
+    result = validate_workflows([workflow])
+
+    assert not result.ok
+    messages = "\n".join(violation.message for violation in result.violations)
+    assert "placeholder live_change_ticket" in messages
+    assert "placeholder live_runbook_url" in messages
+    assert "placeholder live_release_owner" in messages
+    assert "placeholder live_oncall_contact" in messages
