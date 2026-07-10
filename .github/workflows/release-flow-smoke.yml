@@ -446,6 +446,18 @@ jobs:
                 echo "::error title=Invalid live_image::live_image must not use the demo live preflight image for production live_preflight."
                 exit 1
               fi
+              if [ -z "$LIVE_PREFLIGHT_VERIFICATION_URL" ]; then
+                echo "::error title=Invalid live_verification_url::live_verification_url is required for production live_preflight."
+                exit 1
+              fi
+              if [[ "$LIVE_PREFLIGHT_VERIFICATION_URL" != https://* ]]; then
+                echo "::error title=Invalid live_verification_url::live_verification_url must use https for production live_preflight."
+                exit 1
+              fi
+              if [[ "$LIVE_PREFLIGHT_VERIFICATION_URL" == *"localhost"* || "$LIVE_PREFLIGHT_VERIFICATION_URL" == *"127.0.0.1"* || "$LIVE_PREFLIGHT_VERIFICATION_URL" == *"example.com"* ]]; then
+                echo "::error title=Invalid live_verification_url::live_verification_url must not use localhost or example.com for production live_preflight."
+                exit 1
+              fi
               if [ -z "$LIVE_PREFLIGHT_RELEASE_OWNER" ] && [ -z "$LIVE_PREFLIGHT_ONCALL_CONTACT" ]; then
                 echo "::error title=Invalid live owner::live_release_owner or live_oncall_contact is required for production live_preflight."
                 exit 1

@@ -99,6 +99,10 @@ def test_release_flow_production_gate_calls_smoke_workflow_with_real_guardrails(
     assert "Replace ghcr.io/example/release-flow-smoke:live-preflight with the real production image" in validate_step[
         "run"
     ]
+    assert validate_job["env"]["LIVE_PREFLIGHT_VERIFICATION_URL"] == "${{ inputs.live_verification_url }}"
+    assert "live_verification_url is required for production live_preflight" in validate_step["run"]
+    assert "live_verification_url must use https for production live_preflight" in validate_step["run"]
+    assert "live_verification_url must not use localhost or example.com" in validate_step["run"]
     assert "live_release_owner or live_oncall_contact is required" in validate_step["run"]
     assert "Replace release-operator with the real production owner" in validate_step["run"]
     assert "Replace release-oncall@example.com with the real on-call contact" in validate_step["run"]
