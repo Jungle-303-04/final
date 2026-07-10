@@ -42,6 +42,7 @@ def target_install_manifest(payload: TargetRegisterRequest, agent_token: str) ->
             cluster_read_rbac_manifest(namespace),
             target_write_rbac_manifest(namespace) if role != MANAGEMENT_CLUSTER_ROLE else "",
             sandbox_rbac_manifest(namespace) if role != MANAGEMENT_CLUSTER_ROLE else "",
+            catalog_install_rbac_manifest(namespace) if role != MANAGEMENT_CLUSTER_ROLE else "",
             runtime_config_manifest(payload),
             runtime_secret_manifest(agent_token, namespace),
             sample_workload_manifest(payload) if role != MANAGEMENT_CLUSTER_ROLE else "",
@@ -215,6 +216,43 @@ roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: Role
   name: cluster-agent-sandbox-write
+subjects:
+  - kind: ServiceAccount
+    name: cluster-agent
+    namespace: {namespace}
+"""
+
+
+def catalog_install_rbac_manifest(namespace: str) -> str:
+    return f"""
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: cluster-agent-catalog-install
+  namespace: {SANDBOX_NAMESPACE}
+rules:
+  - apiGroups: [""]
+    resources: ["configmaps", "secrets", "serviceaccounts", "services"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  - apiGroups: ["apps"]
+    resources: ["statefulsets"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  - apiGroups: ["networking.k8s.io"]
+    resources: ["networkpolicies"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  - apiGroups: ["policy"]
+    resources: ["poddisruptionbudgets"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: cluster-agent-catalog-install
+  namespace: {SANDBOX_NAMESPACE}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: cluster-agent-catalog-install
 subjects:
   - kind: ServiceAccount
     name: cluster-agent
