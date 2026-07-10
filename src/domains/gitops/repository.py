@@ -80,6 +80,20 @@ TERMINAL_WORKFLOW_STATUSES = (
     WorkflowRunStatus.FAILED.value,
 )
 
+# 단계 상태도 같은 원칙으로 단조 증가한다. 종결 상태는 늦은 재배달로 덮지 않는다.
+WORKFLOW_STEP_STATUS_RANKS: dict[str, int] = {
+    WorkflowStepStatus.PENDING.value: 1,
+    WorkflowStepStatus.RUNNING.value: 2,
+    WorkflowStepStatus.SUCCEEDED.value: 3,
+    WorkflowStepStatus.FAILED.value: 3,
+    WorkflowStepStatus.SKIPPED.value: 3,
+}
+TERMINAL_WORKFLOW_STEP_STATUSES = (
+    WorkflowStepStatus.SUCCEEDED.value,
+    WorkflowStepStatus.FAILED.value,
+    WorkflowStepStatus.SKIPPED.value,
+)
+
 
 def workflow_status_rank(column: Any) -> Any:
     """상태 컬럼을 전이 순위로 바꾸는 CASE 식 — guarded UPDATE 의 비교 기준."""
@@ -102,6 +116,27 @@ def workflow_transition_guard(table: Any, new_status: Any) -> Any:
     return and_(
         table.c.status.not_in(TERMINAL_WORKFLOW_STATUSES),
         workflow_status_rank(table.c.status) <= new_rank,
+    )
+
+
+def workflow_step_status_rank(column: Any) -> Any:
+    """단계 상태 컬럼을 전이 순위로 바꾸는 CASE 식."""
+    return case(
+        *[(column == status, rank) for status, rank in WORKFLOW_STEP_STATUS_RANKS.items()],
+        else_=0,
+    )
+
+
+def workflow_step_transition_guard(table: Any, new_status: Any) -> Any:
+    """종결 단계 고정과 pending/running 역행 방지를 한 SQL 조건으로 보장한다."""
+    new_rank = (
+        WORKFLOW_STEP_STATUS_RANKS.get(str(new_status), 0)
+        if isinstance(new_status, str)
+        else workflow_step_status_rank(new_status)
+    )
+    return and_(
+        table.c.status.not_in(TERMINAL_WORKFLOW_STEP_STATUSES),
+        workflow_step_status_rank(table.c.status) <= new_rank,
     )
 
 
@@ -930,6 +965,7 @@ class RepoChangeRepository(DatabaseConnection):
                 "details": insert.excluded.details,
                 "updated_at": func.now(),
             },
+            where=workflow_step_transition_guard(table, insert.excluded.status),
         )
         with self.connection() as conn:
             conn.execute(statement)
@@ -1550,7 +1586,11 @@ def serialize_deployment_binding(row: Any) -> JsonObject:
     watch_settings = item.pop("watch_settings", None)
     watch_last_seen_commit_sha = item.pop("watch_last_seen_commit_sha", None)
     watch_last_polled_at = item.pop("watch_last_polled_at", None)
-    if watch_settings is not None or watch_last_seen_commit_sha is not None or watch_last_polled_at is not None:
+    if (
+        watch_settings is not None
+        or watch_last_seen_commit_sha is not None
+        or watch_last_polled_at is not None
+    ):
         settings = dict(watch_settings or {})
         item["gitops_poll"] = {
             "status": str(settings.get("poll_status") or "unknown"),

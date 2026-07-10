@@ -30,6 +30,7 @@ from domains.gitops.repository import (
 )
 from domains.rca.repository import RcaRepository
 from domains.target.repository import TargetAgentRepository
+from packages.ai.metrics import LlmInvocationMetric
 from packages.contracts.event_bus.interfaces import EventConsumerMetrics
 from packages.contracts.event_bus.processing import CLAIM_BLOCKED
 from packages.contracts.gitops import (
@@ -39,7 +40,6 @@ from packages.contracts.gitops import (
 )
 from packages.contracts.identity import Permission, ResourceRole
 from packages.events.envelope import event
-from packages.ai.metrics import LlmInvocationMetric
 from packages.storage import database as db
 from packages.storage import engine as storage_engine
 from packages.storage.repositories import event as event_repository
@@ -502,9 +502,7 @@ def test_event_processing_duration_metrics_group_by_consumer() -> None:
     repository = object.__new__(EventRepository)
     repository.connection = stub_connection  # type: ignore[method-assign]
 
-    assert repository.event_processing_duration_avg_ms_by_consumer() == {
-        "command-worker": 12.5
-    }
+    assert repository.event_processing_duration_avg_ms_by_consumer() == {"command-worker": 12.5}
 
     compiled = recorded[0].compile(dialect=postgresql.dialect())
     sql = str(compiled)
