@@ -44,6 +44,8 @@ def test_release_flow_smoke_workflow_declares_operator_inputs_and_secrets_for_di
         job["env"]["AUTH_PASSWORD"]
         == "${{ secrets.release_flow_auth_password || secrets.RELEASE_FLOW_AUTH_PASSWORD }}"
     )
+    assert job["env"]["PRODUCTION_PREFLIGHT_RUN_LIMIT"] == "${{ inputs.production_preflight_run_limit || '20' }}"
+    assert job["env"]["ARTIFACT_RETENTION_DAYS"] == "${{ inputs.artifact_retention_days || '30' }}"
 
 
 def test_release_flow_smoke_workflow_can_be_called_by_deploy_workflows() -> None:
@@ -83,6 +85,7 @@ def test_release_flow_smoke_workflow_uploads_artifacts_before_failing_gate() -> 
     smoke_step = next(step for step in steps if step.get("id") == "release_flow_smoke")
     upload_step = next(step for step in steps if step["name"] == "Upload release-flow smoke artifacts")
     fail_step = next(step for step in steps if step["name"] == "Fail when release-flow smoke failed")
+    validate_step = next(step for step in steps if step["name"] == "Validate workflow inputs")
 
     assert job["environment"] == "${{ inputs.github_environment || 'production' }}"
     assert job["concurrency"] == {
@@ -95,10 +98,15 @@ def test_release_flow_smoke_workflow_uploads_artifacts_before_failing_gate() -> 
     assert "--ci" in smoke_step["run"]
     assert "--ci-artifacts-dir artifacts/release-flow" in smoke_step["run"]
 
+    assert "production_preflight_run_limit must be an integer between 1 and 500" in validate_step["run"]
+    assert "production_preflight_run_limit must be between 1 and 500" in validate_step["run"]
+    assert "artifact_retention_days must be an integer between 1 and 90" in validate_step["run"]
+    assert "artifact_retention_days must be between 1 and 90" in validate_step["run"]
+
     assert upload_step["if"] == "always()"
     assert upload_step["uses"] == "actions/upload-artifact@v4"
     assert upload_step["with"]["path"] == "artifacts/release-flow"
-    assert upload_step["with"]["retention-days"] == "${{ inputs.artifact_retention_days || '30' }}"
+    assert upload_step["with"]["retention-days"] == "${{ env.ARTIFACT_RETENTION_DAYS }}"
 
     assert fail_step["if"] == "steps.release_flow_smoke.outputs.release_smoke_ok != 'true'"
     assert "exit 1" in fail_step["run"]
