@@ -349,7 +349,7 @@ def test_scale_deployment_rejects_management_cluster_at_gateway() -> None:
         events = SpyEvents()
         try:
             await scale_deployment(
-                "management-1",
+                "kubernetes-ops",
                 "sandbox",
                 "api",
                 DeploymentScaleRequest(replicas=2),

@@ -581,6 +581,15 @@ def test_static_management_agent_manifest_is_read_only() -> None:
     discovery_rule = next(
         rule for rule in read_role["rules"] if "discovery.k8s.io" in rule.get("apiGroups", [])
     )
+    deployment = next(doc for doc in docs if doc.get("kind") == "Deployment")
+    env = {
+        item["name"]: item
+        for item in deployment["spec"]["template"]["spec"]["containers"][0]["env"]
+    }
+    assert env["TARGET_CLUSTER_ID"]["valueFrom"]["configMapKeyRef"] == {
+        "name": "management-runtime-config",
+        "key": "MANAGEMENT_CLUSTER_ID",
+    }
     assert set(apps_rule["resources"]) == {
         "deployments",
         "replicasets",
@@ -690,7 +699,7 @@ def test_management_registration_defaults_to_kubernetes_evidence_only() -> None:
     events = StubEvents()
     request = target_request().model_copy(
         update={
-            "cluster_id": "management-cluster",
+            "cluster_id": "kubernetes-ops",
             "cluster_role": "management",
             "environment": "management",
         }

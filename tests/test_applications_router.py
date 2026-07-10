@@ -134,6 +134,15 @@ class StubApplicationsDb:
         assert workspace_id == "ws-1"
         return self.clusters
 
+    def get_cluster_registration(
+        self, workspace_id: str, cluster_id: str
+    ) -> dict[str, object] | None:
+        assert workspace_id == "ws-1"
+        return next(
+            (cluster for cluster in self.clusters if cluster["cluster_id"] == cluster_id),
+            None,
+        )
+
     def list_application_deployment_bindings(
         self,
         workspace_id: str,
@@ -453,5 +462,86 @@ def test_global_application_deployment_reports_mixed_disconnected_targets() -> N
         "code": "cluster_not_connected",
         "detail": "에이전트가 연결되지 않은 클러스터입니다",
         "clusters": ["cluster-2"],
+    }
+    assert db.registration_calls == []
+
+
+def test_global_application_deployment_excludes_management_cluster() -> None:
+    db = StubApplicationsDb(
+        connected_cluster_ids={"cluster-1"},
+        clusters=[
+            {
+                "workspace_id": "ws-1",
+                "cluster_id": "cluster-1",
+                "name": "cluster-1",
+                "settings": {"cluster_role": "target"},
+            },
+            {
+                "workspace_id": "ws-1",
+                "cluster_id": "kubernetes-ops",
+                "name": "kubernetes-ops",
+                "settings": {"cluster_role": "management"},
+            },
+        ],
+    )
+
+    async def run():
+        return await upsert_application_deployment(
+            "app-1",
+            DeploymentBindingUpsertRequest(cluster_id="*", namespace="sandbox"),
+            current=current_session(),
+            db=db,
+        )
+
+    response = asyncio.run(run())
+
+    assert response.deployment["cluster_id"] == "cluster-1"
+    assert [binding["cluster_id"] for binding in db.registered_bindings] == ["cluster-1"]
+    assert all(check[3] != "kubernetes-ops" for check in db.access_checks)
+
+
+@pytest.mark.parametrize("connect_route", [False, True])
+def test_explicit_management_binding_is_rejected(connect_route: bool) -> None:
+    db = StubApplicationsDb(
+        connected_cluster_ids={"kubernetes-ops"},
+        clusters=[
+            {
+                "workspace_id": "ws-1",
+                "cluster_id": "kubernetes-ops",
+                "name": "kubernetes-ops",
+                "settings": {"cluster_role": "management"},
+            }
+        ],
+    )
+
+    async def run():
+        if connect_route:
+            return await connect_application(
+                ApplicationConnectRequest(
+                    name="checkout-api",
+                    repo_ref="org/checkout",
+                    branch="release",
+                    manifest_path="deploy/kustomization.yaml",
+                    source_type="kustomize",
+                    cluster_id="kubernetes-ops",
+                ),
+                current=current_session(),
+                db=db,
+                discovery=StubRepositoryDiscovery(),
+            )
+        return await upsert_application_deployment(
+            "app-1",
+            DeploymentBindingUpsertRequest(cluster_id="kubernetes-ops", namespace="management"),
+            current=current_session(),
+            db=db,
+        )
+
+    with pytest.raises(Exception) as exc:
+        asyncio.run(run())
+
+    assert getattr(exc.value, "status_code", None) == 400
+    assert exc.value.detail == {
+        "code": "management_readonly",
+        "detail": "management 클러스터는 읽기 전용입니다",
     }
     assert db.registration_calls == []

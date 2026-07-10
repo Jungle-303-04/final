@@ -182,11 +182,14 @@ inventory resource 1,364, snapshot/usage 각 3개의 새 실데이터를 다시 
 ### Bruno
 
 - 환경은 `docs/api/environments/aws-test.bru` 하나만 유지한다.
-- 사용자 API는 실제 세션, Agent API는 실제 cluster token을 환경과 무관하게 검증한다.
-- Chrome 개발 콘솔은 `dev-k8s.woonyong.org`에서 설치된 mTLS 인증서로만 접근한다.
+- `aws-test`는 `https://dev-k8s.woonyong.org/api/`, `auto_login=false`로 고정한다.
+- 사용자 API는 mTLS 개발 프록시의 고정 `service_admin` 주체, Agent API는 실제 cluster token을
+  각각 검증한다. RCA 전용 token과 webhook 서명도 별도 경계를 유지한다.
+- Chrome 개발 콘솔은 `.p12`, Bruno는 같은 인증서의 `.pem`+`.key`를 사용한다.
 - test registration의 명시적 `purge=true`만 물리 삭제한다. 조건은 admin session,
   `TEST_FIXTURE_PURGE_ENABLED=1`, registration environment=`test`, non-management다.
-- 마지막 라이브 결과: 67/67 requests, 120/120 tests PASS.
+- Bruno CLI 3.5.1의 `00-health-auth/07-session` mTLS 실측: HTTP 200,
+  workspace=`default`, role=`service_admin`.
 
 ## 6. 프론트 제품 목표
 
@@ -232,11 +235,11 @@ bash scripts/run-bruno-aws.sh
 
 마지막 결과:
 
-- pytest: `1456 passed, 3 skipped`
-- Ruff: 451 backend files clean
+- pytest: `1480 passed, 3 skipped`
+- Ruff: 458 backend files clean
 - import-linter: 2 contracts kept, 0 broken
-- manifest: management 62 objects, target 20 objects
-- Bruno live: 67/67 requests, 120/120 tests PASS
+- manifest: management 68 objects, target 20 objects
+- Bruno mTLS session: 1/1 request, 2/2 tests PASS
 
 `ruff check .`은 backend CI 명령이 아니다. `frontend/tests/smoke.py`의 기존 축약 문법을 잡지만
 해당 파일은 UI 작업열 소유다. 백엔드 작업자가 충돌을 만들지 말고 UI 작업열에서 정리한다.
@@ -348,3 +351,20 @@ DB 자격증명은 `postgresql-secret`에서 프로세스 변수로만 읽고 �
   팀원별 전달용이며 각 `.password`는 별도 채널로 전달한다.
 - bootstrap Cloudflare API token은 설정 완료 후 대시보드에서 삭제했고 로컬 임시 파일도
   제거했다. private key/password/token은 저장소나 GitHub artifact에 올리지 않았다.
+
+## 13. 2026-07-11 management canonical ID / binding 보호
+
+- management 논리 ID는 라이브 등록과 target runtime 모두 `kubernetes-ops`다. DB에는
+  `kubernetes-ops` management와 `cluster-1` target 두 등록만 있으며 중복/orphan 등록은 없다.
+- 정적 management agent manifest의 `TARGET_CLUSTER_ID`는 literal을 제거하고
+  `management-runtime-config.MANAGEMENT_CLUSTER_ID` 단일 설정을 읽는다. `aws-up.sh`와 `up.sh`가
+  실제 management cluster ID로 이 값을 생성하므로 재배포 시 별도 레코드를 만들지 않는다.
+- application connect와 명시 deployment binding은 management role을 400
+  `management_readonly`로 거부한다. global `*` 확장과 webhook/신규 cluster fan-out에서도
+  management를 제외한다.
+- inventory 조회와 기존 command-worker/agent의 management write fail-closed 경계는 유지한다.
+- 라이브 deployment binding 3개는 모두 `cluster-1`이며 정리할 management binding 잔재는 0건이다.
+- DB schema/migration 변경은 없다. 기존 registration의 `cluster_id`나 agent token hash도 변경하지
+  않는다.
+- 검증: 집중 회귀 167 passed, 전체 1480 passed/3 skipped, Ruff 전체 통과,
+  import-linter 2 kept/0 broken, manifest 68/20.
