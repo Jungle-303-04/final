@@ -604,11 +604,6 @@ def manifest_render_source(evt: GitChangedBody) -> Any:
     yield None
 
 
-def parse_rendered_manifest_source(source: str) -> list[RenderedManifest]:
-    payloads = load_manifest_documents(source)
-    return parse_rendered_manifest_payloads(payloads)
-
-
 def load_manifest_documents(source: str) -> list[Any]:
     try:
         payload = json.loads(source)
@@ -837,10 +832,6 @@ def deployment_image(spec: dict[str, Any]) -> str:
     if not isinstance(first, dict):
         return ""
     return str(first.get("image", ""))
-
-
-def build_rendered_manifests_from_git_change(evt: GitChangedBody) -> list[RenderedManifest]:
-    return build_rendered_manifest_result(evt).rendered_manifests
 
 
 def build_rendered_manifest_result(evt: GitChangedBody) -> RenderResult:

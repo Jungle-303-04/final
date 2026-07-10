@@ -51,16 +51,6 @@ RCA_TIMELINE_STATUS_BY_SUBJECT: dict[str, str] = {
     EventSubject.SAFE_PR_FAILED.value: "pr_failed",
 }
 
-# 열린 인시던트 판정 — 아래 종결 status 에 도달하지 않았고 incident_id 가 있는 row 는 open.
-# (command 완료/거부, PR 생성/실패가 복구 흐름의 종착점. 그 외 상태는 아직 조치 진행 중)
-CLOSED_INCIDENT_STATUSES: tuple[str, ...] = (
-    "command_completed",
-    "command_rejected",
-    "incident_expired",
-    "incident_resolved",
-    "pr_created",
-    "pr_failed",
-)
 PRE_INCIDENT_STATUSES: tuple[str, ...] = (
     "evidence_received",
     "evidence_built",
