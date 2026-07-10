@@ -39,6 +39,16 @@ def test_removed_legacy_github_actions_have_no_active_repository_entrypoints() -
     assert "smoke: ## 현재 환경변수로 배포된 서비스 smoke 실행" in makefile
 
 
+def test_management_deploy_removes_legacy_minio_deployment() -> None:
+    aws_up = read("scripts/aws-up.sh")
+    local_up = read("scripts/up.sh")
+
+    assert "safe-pr-service rca-fallback-worker minio; do" in aws_up
+    assert "safe-pr-service rca-fallback-worker minio; do" in local_up
+    assert "rollout status statefulset/minio" in local_up
+    assert "rollout status deploy/minio" not in local_up
+
+
 def test_internal_gitops_workflow_remains_deployed() -> None:
     controller = read("src/services/gitops/workflow-controller/app.py")
     services = read("deploy/management/services.yaml")
