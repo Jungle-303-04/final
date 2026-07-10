@@ -19,11 +19,11 @@ from pathlib import Path
 from typing import Any
 
 API_BASE = "https://api.cloudflare.com/client/v4"
-HOSTNAME = "dev.k8s.woonyong.org"
+HOSTNAME = "dev-k8s.woonyong.org"
 ZONE_NAME = "woonyong.org"
 WAF_PHASE = "http_request_firewall_custom"
 WAF_RULE_REF = "require_mtls_dev_k8s_woonyong_org"
-WAF_RULE_DESCRIPTION = "Require a valid mTLS client certificate for dev.k8s.woonyong.org"
+WAF_RULE_DESCRIPTION = "Require a valid mTLS client certificate for dev-k8s.woonyong.org"
 IDENTIFIER_RE = re.compile(r"^[0-9a-f]{32}$")
 TUNNEL_ID_RE = re.compile(
     r"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
@@ -460,7 +460,8 @@ def resolve_zone_id(api: CloudflareAPI, account_id: str, configured_zone_id: str
 
 
 def preflight(api: CloudflareAPI, account_id: str, zone_id: str, tunnel_id: str) -> PreflightState:
-    token = api.request("GET", "/user/tokens/verify")
+    # 계정 API 토큰은 사용자 토큰과 검증 경로가 다르다.
+    token = api.request("GET", f"/accounts/{account_id}/tokens/verify")
     if not isinstance(token, dict) or token.get("status") != "active":
         raise ConfigurationError("Cloudflare API token is not active")
 
@@ -491,9 +492,12 @@ def preflight(api: CloudflareAPI, account_id: str, zone_id: str, tunnel_id: str)
     associations = api.request(
         "GET", f"/zones/{zone_id}/certificate_authorities/hostname_associations"
     )
-    if not isinstance(associations, dict) or not isinstance(
-        associations.get("hostnames", []), list
-    ):
+    if not isinstance(associations, dict):
+        raise ConfigurationError("mTLS hostname association preflight returned an invalid result")
+    raw_hostnames = associations.get("hostnames")
+    if raw_hostnames is None:
+        raw_hostnames = []
+    if not isinstance(raw_hostnames, list):
         raise ConfigurationError("mTLS hostname association preflight returned an invalid result")
 
     rulesets = api.list_all(f"/zones/{zone_id}/rulesets", pagination="cursor")
@@ -513,7 +517,7 @@ def preflight(api: CloudflareAPI, account_id: str, zone_id: str, tunnel_id: str)
     return PreflightState(
         tunnel_config=configuration["config"],
         dns_records=dns_records,
-        hostname_associations=list(associations.get("hostnames", [])),
+        hostname_associations=list(raw_hostnames),
         waf_ruleset=waf_ruleset,
         client_certificates=certificates,
     )
@@ -582,10 +586,24 @@ def apply_configuration(
                 body=positioned_rule,
             )
         elif waf_plan.action == "update_rule":
+            update_rule = rule
+            current_rules = (
+                state.waf_ruleset.get("rules", []) if state.waf_ruleset is not None else []
+            )
+            current_index = next(
+                (
+                    index
+                    for index, current_rule in enumerate(current_rules)
+                    if current_rule.get("id") == waf_plan.rule_id
+                ),
+                -1,
+            )
+            if current_index > 0:
+                update_rule = positioned_rule
             api.request(
                 "PATCH",
                 f"/zones/{zone_id}/rulesets/{waf_plan.ruleset_id}/rules/{waf_plan.rule_id}",
-                body=positioned_rule,
+                body=update_rule,
             )
     return actions
 
