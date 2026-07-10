@@ -8,6 +8,8 @@ class Settings:
     SERVICE_NAME = "api-gateway"
     APP_TITLE = "API Gateway"
     APP_VERSION = "0.1.0"
+    ROOT_PATH_ENV = "API_ROOT_PATH"
+    DEFAULT_ROOT_PATH = ""
     CONSOLE_ORIGIN_ENV = "CONSOLE_ORIGIN"
     DEFAULT_CONSOLE_ORIGIN = "http://console.management.svc.cluster.local:80"
     FRONTEND_PROXY_TIMEOUT_SECONDS = 10.0

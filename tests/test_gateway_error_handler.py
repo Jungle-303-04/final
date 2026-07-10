@@ -47,6 +47,18 @@ def test_gateway_healthz_returns_service_status_without_db(monkeypatch) -> None:
     assert response.json() == {"status": "ok", "service": "api-gateway"}
 
 
+def test_gateway_docs_use_configured_external_api_root_path(monkeypatch) -> None:
+    monkeypatch.setenv("DATABASE_URL", "postgresql://user:pass@postgresql:5432/service")
+    monkeypatch.setenv("API_ROOT_PATH", "/api")
+    gateway = load_gateway_module()
+    app = gateway.create_app()
+
+    response = TestClient(app).get("/docs")
+
+    assert response.status_code == 200
+    assert "url: '/api/openapi.json'" in response.text
+
+
 def test_gateway_request_logging_records_status_and_path(monkeypatch, caplog) -> None:
     monkeypatch.setenv("DATABASE_URL", "postgresql://user:pass@postgresql:5432/service")
     gateway = load_gateway_module()
