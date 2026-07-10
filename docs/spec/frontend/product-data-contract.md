@@ -10,7 +10,7 @@ last_verified: 2026-07-11
 
 ## 0. 권한, 범위, 비목표
 
-이 문서는 Applications, GitOps, Tree/Insights, Timeline, Metrics, Topology, GitOps Operations 화면이 소비할 canonical 데이터와 사용자 경험의 authoritative frontend contract다. 현재 구현이 이 계약을 충족하지 않으면 구현 gap이며, 기존 backend DTO나 미완성 frontend 코드가 이 의미를 축소하거나 덮어쓸 수 없다. 백엔드는 이 소비 의미를 OpenAPI와 runtime schema로 구현하고, 프론트는 `[OPENAPI_ACCEPTED]` 이후 live adapter를 확정한다.
+이 문서는 Applications, GitOps, Tree/Insights, Timeline, Metrics, Topology, GitOps Operations 화면이 소비할 canonical 데이터와 사용자 경험의 구현 예정 계약이다. 현재 repo의 실제 코드와 통과한 테스트가 source of truth이며, 아래 DTO와 schema가 현 코드에 없으면 구현 완료가 아니라 후속 작업 기준으로만 읽는다. 백엔드는 이 소비 의미를 OpenAPI와 runtime schema로 구현하고, 프론트는 `[OPENAPI_ACCEPTED]` 이후 live adapter를 확정한다.
 
 구현 우선순위:
 
@@ -18,7 +18,7 @@ last_verified: 2026-07-11
 2. `topology-engine.md`의 identity, relation, metric, stream 불변조건.
 3. 승인된 OpenAPI와 생성된 TypeScript/runtime schema.
 4. 동일 계약 suite를 통과한 live/synthetic adapter와 executable test.
-5. 제품 UI 구현. 상위 계약과 충돌하는 기존 코드는 수정 대상이다.
+5. 동일 계약 suite를 통과한 live/synthetic adapter와 제품 UI 구현.
 
 비목표:
 

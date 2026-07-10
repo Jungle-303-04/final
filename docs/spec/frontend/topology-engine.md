@@ -9,7 +9,7 @@ last_verified: 2026-07-11
 
 ## 0. 문서의 권한과 목적
 
-이 문서는 Kubernetes 시각화 제품의 frontend 의미·상태·상호작용·데이터 소비를 고정하는 normative design contract다. 제품 기획 소개가 아니며 backend DTO를 복제하는 문서도 아니다. 현재 코드에 package, route, schema, renderer, plugin이 없으면 구현 gap이지만 그 부재가 이 사용자 의미를 축소하지 않는다. 계약 변경은 frontend ADR, schema major/minor 판정, migration, test traceability 갱신 없이 허용하지 않는다. 실제 배포 완료는 승인된 OpenAPI, generated runtime schema, 구현 코드, executable test가 모두 통과한 경우에만 주장한다.
+이 문서는 Kubernetes 시각화 제품의 frontend 의미·상태·상호작용·데이터 소비를 정리한 설계 계약 초안이다. 제품 기획 소개가 아니며 backend DTO를 복제하는 문서도 아니다. 현재 repo의 실제 코드와 통과한 테스트가 source of truth이고, 현재 코드에 package, route, schema, renderer, plugin이 없으면 구현 완료가 아니라 후속 작업 기준으로만 읽는다. 계약 변경은 frontend ADR, schema major/minor 판정, migration, test traceability 갱신 없이 허용하지 않는다. 실제 배포 완료는 승인된 OpenAPI, generated runtime schema, 구현 코드, executable test가 모두 통과한 경우에만 주장한다.
 
 동일 권한의 부속 계약:
 
