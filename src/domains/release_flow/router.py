@@ -1894,7 +1894,7 @@ def release_readiness_from_plan(
             else "warning"
             if verification_bypassed
             else "passed",
-            "Production live release requires a health check path or verification URL."
+            "Production live release requires a live https post_deploy_verification_url."
             if verification_blockers
             else "Post-deploy verification gate is bypassed with an operator reason."
             if verification_bypassed
@@ -2444,21 +2444,20 @@ def release_production_runbook_blockers(
     if not execution_profile(plan).side_effects:
         return []
     settings = plan_settings_value(plan)
-    override_reason = release_runbook_override_reason(plan)
     blockers: list[str] = []
     for step in release_production_steps_for_wave(plan, preview, wave):
         config = step_config(step)
         url = release_runbook_url(settings, config)
-        if release_runbook_url_is_valid(url) or override_reason:
+        if release_runbook_url_is_valid(url):
             continue
         label = str(step.get("name") or step.get("application_id") or "release step")
         if url:
             blockers.append(
-                f"{label} targets production and requires a live https runbook_url or runbook override reason."
+                f"{label} targets production and requires a live https runbook_url before live dispatch."
             )
         else:
             blockers.append(
-                f"{label} targets production and requires runbook_url or runbook override reason before live dispatch."
+                f"{label} targets production and requires live https runbook_url before live dispatch."
             )
     return blockers
 
@@ -2468,15 +2467,7 @@ def release_production_runbook_bypassed(
     preview: dict[str, Any],
     wave: int,
 ) -> bool:
-    if not execution_profile(plan).side_effects:
-        return False
-    if not release_runbook_override_reason(plan):
-        return False
-    settings = plan_settings_value(plan)
-    return any(
-        not release_runbook_url_is_valid(release_runbook_url(settings, step_config(step)))
-        for step in release_production_steps_for_wave(plan, preview, wave)
-    )
+    return False
 
 
 def release_runbook_url(settings: dict[str, Any], config: dict[str, Any]) -> str:
@@ -2534,16 +2525,15 @@ def release_production_verification_blockers(
     if not execution_profile(plan).side_effects:
         return []
     settings = plan_settings_value(plan)
-    override_reason = release_verification_override_reason(plan)
     blockers: list[str] = []
     for step in release_production_steps_for_wave(plan, preview, wave):
         config = step_config(step)
-        if release_verification_evidence_present(settings, config) or override_reason:
+        if release_verification_evidence_present(settings, config):
             continue
         label = str(step.get("name") or step.get("application_id") or "release step")
         blockers.append(
             f"{label} targets production and requires live https post_deploy_verification_url "
-            "or verification override reason before live dispatch."
+            "before live dispatch."
         )
     return blockers
 
@@ -2553,15 +2543,7 @@ def release_production_verification_bypassed(
     preview: dict[str, Any],
     wave: int,
 ) -> bool:
-    if not execution_profile(plan).side_effects:
-        return False
-    if not release_verification_override_reason(plan):
-        return False
-    settings = plan_settings_value(plan)
-    return any(
-        not release_verification_evidence_present(settings, step_config(step))
-        for step in release_production_steps_for_wave(plan, preview, wave)
-    )
+    return False
 
 
 def release_verification_evidence_present(settings: dict[str, Any], config: dict[str, Any]) -> bool:
