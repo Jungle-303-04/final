@@ -17,6 +17,7 @@ status: synced
 | 방향 | 대상 | 스펙 링크 | 용도 |
 |---|---|---|---|
 | import | `@/features/repo/api`(`useApplications`, `useRunsAll`), `@/features/repo/ApprovalCard` | [repo](./repo.md) | 데이터·승인 카드 |
+| import | `@/features/chat/context`(`encodeChatContext`) | [chat](./chat.md) | 승인 diff AI 설명 링크 context 직렬화 |
 | import | `@/shared/flow`(`FlowCanvas`, `useAutoLayout`, `FlowEdgeData`), `@/shared/ui`, `@/shared/ui/plan-diff`, `@/shared/ui/status`, `@/shared/ui/icons`, `@/shared/lib/format`, `@/shared/motion`, `@/shared/lib/types` | [shared](shared.md) | 그래프·UI |
 | import | `@/features/console/ui`(`useConsolePath`) | [app](./app.md) | `/console` base path 보존 링크 |
 | 외부 | `@xyflow/react`(`Handle`, `Position`, 타입) | — | 커스텀 노드 |
@@ -48,8 +49,11 @@ status: synced
   FadeSlideIn
   ├─ Breadcrumbs [`pathFor('/workflows')` 워크플로우 → '<appId> · <sha>']
   ├─ 헤더: h1(appId) + code(sha) + Badge(status)
-  ├─ WAITING_FOR_APPROVAL && approval_id → ApprovalCard(summary '<sha> 배포 승인' — DIFFING step 에 detail 이 있을 때만 ' — diff: <detail>' 접미)
-  │   + DIFFING step 의 changes 가 있으면 '적용될 변경 (plan)' 카드 안에 PlanDiff(changes, resource)
+  ├─ WAITING_FOR_APPROVAL && approval_id → ApprovalPanel
+  │   ├─ ApprovalCard 성격의 승인/거절 버튼
+  │   ├─ "AI 설명" → `/ai?prefill=이 GitOps diff 위험도를 설명해줘&context=<json>`
+  │   │   context: `{diff_source:"gitops", workflow_run_id: run.run_id, approval_id, application_id: run.application_id}`
+  │   └─ DIFFING step 의 changes 가 있으면 '실행 내용 미리보기' 안에 PlanDiff(changes, resource)
   └─ 그리드(1fr 300px):
      ├─ Card(h 340, p 0) > FlowCanvas(nodes, edges, nodeTypes, onNodeClick=setSelected)
      └─ Card(title = selected ?? '단계 상세')
@@ -71,4 +75,5 @@ status: synced
 - dash-flow(active) edge 는 진행 중 run 의 "현재 단계 진입 edge" 하나뿐이다.
 - 단계 어휘는 `ORDER` 8단계 + FAILED 로 고정 — [repo](./repo.md) 의 미니 스텝바와 동일 순서를 유지한다. 실백엔드 run 의 steps[](`git/render/diff/policy/approval/...`)는 [shared/adapt](shared.md#어댑터-libadaptts) 의 `adaptRun` 이 이 어휘로 매핑해서 도착한다 — 뷰에서 재매핑 금지.
 - plan 미리보기는 `RunStep.changes` 를 `PlanDiff` 에 그대로 전달 — 프론트에서 diff 를 만들지 않는다.
+- AI 설명 링크도 diff 본문을 만들거나 전달하지 않는다. 화면이 가진 `workflow_run_id`, `approval_id`, `application_id`, `diff_source="gitops"`만 넘기고, 실제 diff 조회와 권한 확인은 백엔드 `explain_diff_risk` tool이 수행한다.
 - 앱/run 조회 실패는 빈 워크플로우나 미발견 run 으로 표시하지 않는다. `useRunsAll`의 `failed/error` combine 값을 보고 재시도 UI를 먼저 렌더한다.

@@ -4,6 +4,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { Handle, Position, type Edge, type Node, type NodeProps } from '@xyflow/react';
 import { useApplications, useRunsAll, repoKeys } from '@/features/repo/api';
 import { useIsAdmin } from '@/features/auth/api';
+import { encodeChatContext } from '@/features/chat/context';
 import { FlowCanvas, useAutoLayout, type FlowEdgeData } from '@/shared/flow';
 import { post } from '@/shared/lib/api';
 import { shortSha } from '@/shared/lib/format';
@@ -194,9 +195,18 @@ function ApprovalPanel({ run, approvalId, diffStep }: { run: WorkflowWithApp; ap
   const [previewOpen, setPreviewOpen] = useState(true);
   const canApprove = useIsAdmin();
   const approval = useWorkflowApproval();
+  const pathFor = useConsolePath();
   const pendingAction = approval.variables?.action;
   const approveDisabled = !canApprove || approval.isPending;
   const summary = `${shortSha(run.commit_sha)} 배포 승인`;
+  const aiParams = new URLSearchParams({ prefill: '이 GitOps diff 위험도를 설명해줘' });
+  const aiContext = encodeChatContext({
+    diff_source: 'gitops',
+    workflow_run_id: run.run_id,
+    approval_id: approvalId,
+    application_id: run.application_id,
+  });
+  if (aiContext) aiParams.set('context', aiContext);
 
   return (
     <Card
@@ -232,6 +242,9 @@ function ApprovalPanel({ run, approvalId, diffStep }: { run: WorkflowWithApp; ap
         </Collapsible>
 
         <div className="flex flex-wrap justify-end gap-2">
+          <Link to={pathFor(`/ai?${aiParams.toString()}`)}>
+            <Button variant="secondary">AI 설명</Button>
+          </Link>
           <ActionButtonTooltip enabled={canApprove}>
             <Button
               variant="secondary"
