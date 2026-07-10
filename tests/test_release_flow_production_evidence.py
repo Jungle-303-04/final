@@ -16,6 +16,16 @@ def readiness_payload(*, github_access: bool = True) -> dict:
     }
 
 
+def environment_payload(*, ok: bool = True) -> dict:
+    return {
+        "ok": ok,
+        "checks": [
+            {"name": name, "ok": ok, "detail": "ok" if ok else "failed"}
+            for name in sorted(evidence.REQUIRED_ENVIRONMENT_CHECKS)
+        ],
+    }
+
+
 def smoke_payload() -> dict:
     return {
         "ok": True,
@@ -57,8 +67,17 @@ def report_zip(filename: str, payload: dict) -> bytes:
     return buffer.getvalue()
 
 
+def reports_zip(reports: dict[str, dict]) -> bytes:
+    buffer = BytesIO()
+    with zipfile.ZipFile(buffer, "w") as zipped:
+        for filename, payload in reports.items():
+            zipped.writestr(filename, json.dumps(payload))
+    return buffer.getvalue()
+
+
 def test_verify_release_flow_production_evidence_accepts_complete_artifacts(tmp_path: Path) -> None:
     write_json(tmp_path / evidence.READINESS_REPORT, readiness_payload())
+    write_json(tmp_path / evidence.ENVIRONMENT_REPORT, environment_payload())
     write_json(tmp_path / evidence.SMOKE_REPORT, smoke_payload())
     write_json(tmp_path / evidence.DEPLOY_REPORT, deploy_payload())
 
@@ -67,6 +86,7 @@ def test_verify_release_flow_production_evidence_accepts_complete_artifacts(tmp_
 
 def test_verify_release_flow_production_evidence_requires_github_access_preflight(tmp_path: Path) -> None:
     write_json(tmp_path / evidence.READINESS_REPORT, readiness_payload(github_access=False))
+    write_json(tmp_path / evidence.ENVIRONMENT_REPORT, environment_payload())
     write_json(tmp_path / evidence.SMOKE_REPORT, smoke_payload())
     write_json(tmp_path / evidence.DEPLOY_REPORT, deploy_payload())
 
@@ -75,14 +95,33 @@ def test_verify_release_flow_production_evidence_requires_github_access_prefligh
 
 def test_verify_release_flow_production_evidence_requires_deploy_run_id(tmp_path: Path) -> None:
     write_json(tmp_path / evidence.READINESS_REPORT, readiness_payload())
+    write_json(tmp_path / evidence.ENVIRONMENT_REPORT, environment_payload())
     write_json(tmp_path / evidence.SMOKE_REPORT, smoke_payload())
     write_json(tmp_path / evidence.DEPLOY_REPORT, deploy_payload(run_id=""))
 
     assert evidence.main([str(tmp_path)]) == 1
 
 
+def test_verify_release_flow_production_evidence_requires_environment_report(tmp_path: Path) -> None:
+    write_json(tmp_path / evidence.READINESS_REPORT, readiness_payload())
+    write_json(tmp_path / evidence.SMOKE_REPORT, smoke_payload())
+    write_json(tmp_path / evidence.DEPLOY_REPORT, deploy_payload())
+
+    assert evidence.main([str(tmp_path)]) == 1
+
+
+def test_verify_release_flow_production_evidence_requires_environment_success(tmp_path: Path) -> None:
+    write_json(tmp_path / evidence.READINESS_REPORT, readiness_payload())
+    write_json(tmp_path / evidence.ENVIRONMENT_REPORT, environment_payload(ok=False))
+    write_json(tmp_path / evidence.SMOKE_REPORT, smoke_payload())
+    write_json(tmp_path / evidence.DEPLOY_REPORT, deploy_payload())
+
+    assert evidence.main([str(tmp_path)]) == 1
+
+
 def test_verify_release_flow_production_evidence_requires_matching_api_base_urls(tmp_path: Path) -> None:
     write_json(tmp_path / evidence.READINESS_REPORT, readiness_payload())
+    write_json(tmp_path / evidence.ENVIRONMENT_REPORT, environment_payload())
     write_json(tmp_path / evidence.SMOKE_REPORT, smoke_payload())
     write_json(
         tmp_path / evidence.DEPLOY_REPORT,
@@ -96,6 +135,7 @@ def test_verify_release_flow_production_evidence_reads_artifact_zip(tmp_path: Pa
     archive = tmp_path / "release-flow-production-readiness.zip"
     with zipfile.ZipFile(archive, "w") as zipped:
         zipped.writestr(f"nested/{evidence.READINESS_REPORT}", json.dumps(readiness_payload()))
+        zipped.writestr(f"nested/{evidence.ENVIRONMENT_REPORT}", json.dumps(environment_payload()))
         zipped.writestr(f"nested/{evidence.SMOKE_REPORT}", json.dumps(smoke_payload()))
         zipped.writestr(f"nested/{evidence.DEPLOY_REPORT}", json.dumps(deploy_payload()))
 
@@ -106,6 +146,7 @@ def test_verify_release_flow_production_evidence_rejects_placeholder_urls(tmp_pa
     smoke = smoke_payload()
     smoke["api_base_url"] = "https://api.example.com/api"
     write_json(tmp_path / evidence.READINESS_REPORT, readiness_payload())
+    write_json(tmp_path / evidence.ENVIRONMENT_REPORT, environment_payload())
     write_json(tmp_path / evidence.SMOKE_REPORT, smoke)
     write_json(tmp_path / evidence.DEPLOY_REPORT, deploy_payload())
 
@@ -152,7 +193,12 @@ def test_verify_release_flow_production_evidence_downloads_github_artifacts(
     def fake_download(url: str, token: str) -> bytes:
         assert token == "token-a"
         if url.endswith("readiness.zip"):
-            return report_zip(evidence.READINESS_REPORT, readiness_payload())
+            return reports_zip(
+                {
+                    evidence.READINESS_REPORT: readiness_payload(),
+                    evidence.ENVIRONMENT_REPORT: environment_payload(),
+                }
+            )
         if url.endswith("smoke.zip"):
             return report_zip(evidence.SMOKE_REPORT, smoke_payload())
         if url.endswith("deploy.zip"):
@@ -235,7 +281,12 @@ def test_verify_release_flow_production_evidence_can_allow_latest_github_run(
 
     def fake_download(url: str, _token: str) -> bytes:
         if url.endswith("readiness.zip"):
-            return report_zip(evidence.READINESS_REPORT, readiness_payload())
+            return reports_zip(
+                {
+                    evidence.READINESS_REPORT: readiness_payload(),
+                    evidence.ENVIRONMENT_REPORT: environment_payload(),
+                }
+            )
         if url.endswith("smoke.zip"):
             return report_zip(evidence.SMOKE_REPORT, smoke_payload())
         if url.endswith("deploy.zip"):

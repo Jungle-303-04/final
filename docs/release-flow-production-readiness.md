@@ -133,7 +133,7 @@ python scripts/verify_release_flow_production_evidence.py \
   ./release-flow-production-deploy
 ```
 
-The verifier accepts extracted artifact directories, individual JSON reports, or artifact ZIP files. It fails unless the readiness report passed with runtime config, GitHub access, API smoke, and deploy-gate checks; the smoke report passed the production preflight checks; and the deploy report recorded a successful `release-plans.start.production` run id against a concrete HTTPS API URL.
+The verifier accepts extracted artifact directories, individual JSON reports, or artifact ZIP files. It fails unless the readiness report passed with runtime config, GitHub access, API smoke, and deploy-gate checks; the GitHub Environment report passed with the required release-flow secret and variable checks; the smoke report passed the production preflight checks; and the deploy report recorded a successful `release-plans.start.production` run id against a concrete HTTPS API URL.
 
 If the verifier has a GitHub token with Actions read access, it can fetch the successful workflow artifacts directly:
 

@@ -17,6 +17,7 @@ from urllib.parse import quote, urlencode, urlparse
 
 
 READINESS_REPORT = "release-flow-readiness.json"
+ENVIRONMENT_REPORT = "release-flow-github-environment.json"
 SMOKE_REPORT = "release-flow-smoke.json"
 DEPLOY_REPORT = "release-flow-deploy.json"
 PLACEHOLDER_HOSTS = {"example.com", "example.test", "localhost", "127.0.0.1", "::1"}
@@ -44,6 +45,16 @@ REQUIRED_READINESS_CHECKS = {
     "runtime.live_enabled",
     "runtime.live_workspaces",
     "runtime.github_access_preflight",
+}
+
+REQUIRED_ENVIRONMENT_CHECKS = {
+    "secret.RELEASE_FLOW_API_BASE_URL",
+    "secret.RELEASE_FLOW_AUTH_EMAIL",
+    "secret.RELEASE_FLOW_AUTH_PASSWORD",
+    "secret.github_token",
+    "value.RELEASE_FLOW_SCM_REPO",
+    "value.RELEASE_FLOW_LIVE_ENABLED",
+    "value.RELEASE_FLOW_LIVE_WORKSPACES",
 }
 
 REQUIRED_SMOKE_CHECKS = {
@@ -119,6 +130,11 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
         "--allow-missing-smoke",
         action="store_true",
         help="Do not require the production readiness smoke report.",
+    )
+    parser.add_argument(
+        "--allow-missing-environment",
+        action="store_true",
+        help="Do not require the GitHub Environment verification report.",
     )
     parser.add_argument(
         "--allow-missing-deploy",
@@ -332,6 +348,28 @@ def validate_readiness(payload: dict[str, Any] | None, source: str) -> list[Evid
     return checks
 
 
+def validate_environment(payload: dict[str, Any] | None, source: str, *, required: bool) -> list[EvidenceCheck]:
+    if payload is None:
+        return [
+            EvidenceCheck(
+                "environment.artifact_present",
+                not required,
+                f"{source} not found" if required else "environment report not required",
+            )
+        ]
+    checks = [
+        EvidenceCheck(
+            "environment.ok",
+            payload.get("ok") is True,
+            "GitHub Environment verification passed"
+            if payload.get("ok") is True
+            else "GitHub Environment verification did not pass",
+        )
+    ]
+    checks.extend(validate_named_checks("environment", payload, REQUIRED_ENVIRONMENT_CHECKS))
+    return checks
+
+
 def validate_smoke(payload: dict[str, Any] | None, source: str, *, required: bool) -> list[EvidenceCheck]:
     if payload is None:
         return [
@@ -474,10 +512,18 @@ def main(argv: list[str]) -> int:
             github_paths = fetch_github_artifacts(args, output_dir)
         paths = [*args.artifacts, *github_paths]
         readiness, readiness_source = load_named_report(paths, READINESS_REPORT)
+        environment, environment_source = load_named_report(paths, ENVIRONMENT_REPORT)
         smoke, smoke_source = load_named_report(paths, SMOKE_REPORT)
         deploy, deploy_source = load_named_report(paths, DEPLOY_REPORT)
         checks: list[EvidenceCheck] = []
         checks.extend(validate_readiness(readiness, readiness_source))
+        checks.extend(
+            validate_environment(
+                environment,
+                environment_source,
+                required=not args.allow_missing_environment,
+            )
+        )
         checks.extend(validate_smoke(smoke, smoke_source, required=not args.allow_missing_smoke))
         checks.extend(validate_deploy(deploy, deploy_source, required=not args.allow_missing_deploy))
         checks.extend(validate_artifact_consistency(smoke, deploy))
