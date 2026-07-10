@@ -76,6 +76,8 @@ def test_current_release_flow_production_readiness_static_checks_pass() -> None:
         "workflow.production_gate.image_required",
         "workflow.production_gate.verification_url_required",
         "workflow.production_gate.validates_before_smoke",
+        "script.gate_contract.required_live_inputs",
+        "script.gate_contract.literal_url_guard",
         "workflow.gate_contract.static_scan",
         "runtime.github_token",
         "runtime.scm_repo",
