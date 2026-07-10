@@ -83,6 +83,82 @@ class StubDb:
             {"role": "assistant", "content": "answer", "created_at": "2026-07-04T00:00:01"},
         ]
 
+    async def get_recovery_plan(
+        self, plan_id: str, workspace_id: str
+    ) -> dict[str, Any] | None:
+        self.recovery_plan_query = ("plan", plan_id, workspace_id)
+        return self._recovery_plan_record()
+
+    async def get_recovery_plan_by_correlation(
+        self, correlation_id: str, workspace_id: str
+    ) -> dict[str, Any] | None:
+        self.recovery_plan_query = ("correlation", correlation_id, workspace_id)
+        return self._recovery_plan_record()
+
+    @staticmethod
+    def _recovery_plan_record() -> dict[str, Any]:
+        return {
+            "plan_id": "plan-1",
+            "workspace_id": "ws-1",
+            "correlation_id": "corr-1",
+            "status": "selection_requested",
+            "payload": {
+                "plan_id": "plan-1",
+                "recommended_action_id": "restart-api",
+                "target": {
+                    "workspace_id": "ws-1",
+                    "cluster_id": "cluster-1",
+                    "namespace": "sandbox",
+                    "resource_kind": "Deployment",
+                    "resource_name": "checkout-api",
+                },
+                "candidates": [
+                    {
+                        "action_id": "restart-api",
+                        "title": "Restart checkout-api",
+                        "description": "Restart pods without changing manifests.",
+                        "route": "auto",
+                        "rank": 1,
+                        "score": 0.95,
+                        "risk_level": "low",
+                        "blast_radius": "Deployment/checkout-api pods",
+                        "approval_required": False,
+                        "prerequisites": ["deployment exists"],
+                        "validation_checks": ["rollout status is healthy"],
+                        "rollback_plan": "stop retry and escalate to manual review",
+                        "evidence_refs": ["evidence://corr-1"],
+                        "draft": {
+                            "action_type": "rollout_restart",
+                            "namespace": "sandbox",
+                            "resource_kind": "Deployment",
+                            "resource_name": "checkout-api",
+                        },
+                    },
+                    {
+                        "action_id": "safe-pr-probe",
+                        "title": "Open Safe PR for probe tuning",
+                        "description": "Tune readiness probe through reviewable manifest change.",
+                        "route": "draft_pr",
+                        "rank": 2,
+                        "score": 0.7,
+                        "risk_level": "medium",
+                        "blast_radius": "Deployment/checkout-api manifest",
+                        "approval_required": True,
+                        "prerequisites": ["probe failure confirmed"],
+                        "validation_checks": ["review diff"],
+                        "rollback_plan": "revert PR",
+                        "evidence_refs": ["evidence://corr-1"],
+                        "draft": {
+                            "action_type": "apply_manifest",
+                            "namespace": "sandbox",
+                            "resource_kind": "Deployment",
+                            "resource_name": "checkout-api",
+                        },
+                    },
+                ],
+            },
+        }
+
 
 def make_context(db: Any = None) -> ToolContext:
     return ToolContext(
@@ -110,6 +186,7 @@ def test_platform_tools_are_discovered_and_registered() -> None:
         "list_recent_incidents",
         "list_resource_rca_reports",
         "list_recovery_playbooks",
+        "recommend_recovery_action",
     } <= set(ai.tool_names())
 
 
@@ -195,6 +272,39 @@ def test_list_command_actions_exposes_policy_metadata() -> None:
         "allowed_namespaces",
         "requires_approval",
     }
+    json.dumps(result)
+
+
+def test_recommend_recovery_action_returns_safe_recommendation_metadata() -> None:
+    db = StubDb()
+    result = execute("recommend_recovery_action", {"correlation_id": "corr-1"}, db=db)
+
+    assert db.recovery_plan_query == ("correlation", "corr-1", "ws-1")
+    assert result["found"] is True
+    assert result["summary"] == "추천 조치는 Restart checkout-api입니다. 자동 실행 후보입니다."
+    assert result["possible_actions"]["recommended"]["action_id"] == "restart-api"
+    assert result["caution"]["automatic_candidate"] is True
+    assert result["caution"]["automation"]["eligible"] is True
+    assert result["caution"]["automation"]["handoff"] == {
+        "next_step": "create_command_request",
+        "requires_user_confirmation": True,
+    }
+    assert result["possible_actions"]["alternatives"][0]["action_id"] == "safe-pr-probe"
+    json.dumps(result)
+
+
+def test_recommend_recovery_action_respects_excluded_actions() -> None:
+    db = StubDb()
+    result = execute(
+        "recommend_recovery_action",
+        {"plan_id": "plan-1", "exclude_action_ids": ["restart-api"]},
+        db=db,
+    )
+
+    assert db.recovery_plan_query == ("plan", "plan-1", "ws-1")
+    assert result["possible_actions"]["recommended"]["action_id"] == "safe-pr-probe"
+    assert result["caution"]["automation"]["eligible"] is False
+    assert result["possible_actions"]["not_recommended"][0]["action_id"] == "restart-api"
     json.dumps(result)
 
 
