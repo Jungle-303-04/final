@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 import subprocess
@@ -470,6 +471,7 @@ def write_preflight_report(
     generated_at = datetime.now(UTC)
     payload = {
         "status": "passed",
+        "mode": "preflight_only",
         "generated_at": generated_at.isoformat(),
         "expires_at": (
             generated_at + timedelta(minutes=int(args.preflight_report_max_age_minutes))
@@ -491,10 +493,47 @@ def write_preflight_report(
         "safe_pr_run": run_summary(safe_pr_run),
         "workflows": workflows,
         "dispatch_performed": False,
+        "checks": [
+            "input_validation",
+            "local_sha",
+            "github_branch_sha",
+            "safe_pr_run",
+            "production_workflow_access",
+        ],
     }
     path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     print(f"ok signoff.preflight_report: {path}")
     return path
+
+
+def report_payload_sha256(payload: dict) -> str:
+    encoded = json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    return hashlib.sha256(encoded).hexdigest()
+
+
+def preflight_report_summary(args: argparse.Namespace) -> dict[str, object]:
+    if args.skip_preflight_report_check:
+        return {"skipped": True}
+    path = preflight_report_path(args)
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    if not isinstance(payload, dict):
+        return {"path": str(path), "sha256": ""}
+    return {
+        "path": str(path),
+        "sha256": report_payload_sha256(payload),
+        "status": payload.get("status"),
+        "mode": payload.get("mode"),
+        "dispatch_performed": payload.get("dispatch_performed"),
+        "generated_at": payload.get("generated_at"),
+        "expires_at": payload.get("expires_at"),
+        "github_repo": payload.get("github_repo"),
+        "github_branch": payload.get("github_branch"),
+        "github_branch_head_sha": payload.get("github_branch_head_sha"),
+        "github_sha": payload.get("github_sha"),
+        "release_plan_id": payload.get("release_plan_id"),
+        "live_safe_pr_workflow_run_id": payload.get("live_safe_pr_workflow_run_id"),
+        "checks": payload.get("checks", []),
+    }
 
 
 def parse_report_timestamp(value: object, field_name: str) -> datetime:
@@ -521,8 +560,12 @@ def verify_preflight_report(args: argparse.Namespace) -> None:
         raise GitHubEvidenceError(f"preflight report is not valid JSON: {path}") from exc
     if not isinstance(payload, dict):
         raise GitHubEvidenceError(f"preflight report must be a JSON object: {path}")
-    if payload.get("status") != "passed" or payload.get("dispatch_performed") is not False:
-        raise GitHubEvidenceError("preflight report did not pass without dispatch")
+    if (
+        payload.get("status") != "passed"
+        or payload.get("mode") != "preflight_only"
+        or payload.get("dispatch_performed") is not False
+    ):
+        raise GitHubEvidenceError("preflight report did not pass in preflight_only mode without dispatch")
 
     now = datetime.now(UTC)
     generated_at = parse_report_timestamp(payload.get("generated_at"), "generated_at")
@@ -535,6 +578,21 @@ def verify_preflight_report(args: argparse.Namespace) -> None:
         expires_at = parse_report_timestamp(payload.get("expires_at"), "expires_at")
         if expires_at < now:
             raise GitHubEvidenceError("preflight report has expired")
+    expected_checks = {
+        "input_validation",
+        "local_sha",
+        "github_branch_sha",
+        "safe_pr_run",
+        "production_workflow_access",
+    }
+    actual_checks = {
+        str(item)
+        for item in payload.get("checks", [])
+        if isinstance(item, str)
+    }
+    if not expected_checks <= actual_checks:
+        missing = ", ".join(sorted(expected_checks - actual_checks))
+        raise GitHubEvidenceError(f"preflight report is missing checks: {missing}")
 
     expected_inputs = {
         "github_repo": args.github_repo,
@@ -612,6 +670,7 @@ def write_signoff_report(
         "live_safe_pr_url": args.live_safe_pr_url,
         "readiness_run": run_summary(readiness_run),
         "deploy_run": run_summary(deploy_run),
+        "preflight_report": preflight_report_summary(args),
         "evidence_verification_status": evidence_status,
         "evidence_output_dir": str(args.github_output_dir),
     }

@@ -55,6 +55,33 @@ def deploy_payload(
     }
 
 
+def preflight_payload(
+    *,
+    github_sha: str = "sha-a",
+    github_branch: str = "dev",
+    plan_id: str = "plan-production",
+    safe_pr_run_id: str = "456",
+) -> dict:
+    return {
+        "status": "passed",
+        "mode": "preflight_only",
+        "dispatch_performed": False,
+        "github_repo": "owner/repo",
+        "github_branch": github_branch,
+        "github_branch_head_sha": github_sha,
+        "github_sha": github_sha,
+        "release_plan_id": plan_id,
+        "live_safe_pr_workflow_run_id": safe_pr_run_id,
+        "checks": [
+            "input_validation",
+            "local_sha",
+            "github_branch_sha",
+            "safe_pr_run",
+            "production_workflow_access",
+        ],
+    }
+
+
 def signoff_payload(
     *,
     readiness_run_id: str = "101",
@@ -68,12 +95,38 @@ def signoff_payload(
     readiness_conclusion: str = "success",
     deploy_status: str = "completed",
     deploy_conclusion: str = "success",
+    preflight: dict | None = None,
+    preflight_sha256: str | None = None,
 ) -> dict:
+    if preflight is None:
+        preflight = preflight_payload(
+            github_sha=github_sha,
+            github_branch=github_branch,
+            plan_id=plan_id,
+        )
+    if preflight_sha256 is None:
+        preflight_sha256 = evidence.report_payload_sha256(preflight)
     return {
         "status": status,
+        "github_repo": "owner/repo",
         "github_branch": github_branch,
         "github_sha": github_sha,
         "release_plan_id": plan_id,
+        "live_safe_pr_workflow_run_id": preflight.get("live_safe_pr_workflow_run_id", "456"),
+        "preflight_report": {
+            "path": "release-flow-production-evidence/release-flow-production-preflight.json",
+            "sha256": preflight_sha256,
+            "status": preflight.get("status"),
+            "mode": preflight.get("mode"),
+            "dispatch_performed": preflight.get("dispatch_performed"),
+            "github_repo": preflight.get("github_repo"),
+            "github_branch": preflight.get("github_branch"),
+            "github_branch_head_sha": preflight.get("github_branch_head_sha"),
+            "github_sha": preflight.get("github_sha"),
+            "release_plan_id": preflight.get("release_plan_id"),
+            "live_safe_pr_workflow_run_id": preflight.get("live_safe_pr_workflow_run_id"),
+            "checks": preflight.get("checks", []),
+        },
         "readiness_run": {
             "id": readiness_run_id,
             "status": readiness_status,
@@ -129,23 +182,43 @@ def test_verify_release_flow_production_evidence_requires_signoff_report(tmp_pat
 
 
 def test_verify_release_flow_production_evidence_validates_signoff_report(tmp_path: Path) -> None:
+    preflight = preflight_payload()
     write_json(tmp_path / "101-readiness" / evidence.READINESS_REPORT, readiness_payload())
     write_json(tmp_path / "101-readiness" / evidence.ENVIRONMENT_REPORT, environment_payload())
     write_json(tmp_path / "202-smoke" / evidence.SMOKE_REPORT, smoke_payload())
     write_json(tmp_path / "202-deploy" / evidence.DEPLOY_REPORT, deploy_payload())
-    write_json(tmp_path / evidence.SIGNOFF_REPORT, signoff_payload())
+    write_json(tmp_path / evidence.PREFLIGHT_REPORT, preflight)
+    write_json(tmp_path / evidence.SIGNOFF_REPORT, signoff_payload(preflight=preflight))
 
     assert evidence.main([str(tmp_path), "--github-sha", "sha-a", "--require-signoff-report"]) == 0
+
+
+def test_verify_release_flow_production_evidence_requires_preflight_report(
+    tmp_path: Path,
+) -> None:
+    preflight = preflight_payload()
+    write_json(tmp_path / "101-readiness" / evidence.READINESS_REPORT, readiness_payload())
+    write_json(tmp_path / "101-readiness" / evidence.ENVIRONMENT_REPORT, environment_payload())
+    write_json(tmp_path / "202-smoke" / evidence.SMOKE_REPORT, smoke_payload())
+    write_json(tmp_path / "202-deploy" / evidence.DEPLOY_REPORT, deploy_payload())
+    write_json(tmp_path / evidence.SIGNOFF_REPORT, signoff_payload(preflight=preflight))
+
+    assert evidence.main([str(tmp_path), "--github-sha", "sha-a", "--require-signoff-report"]) == 1
 
 
 def test_verify_release_flow_production_evidence_rejects_signoff_report_mismatch(
     tmp_path: Path,
 ) -> None:
+    preflight = preflight_payload()
     write_json(tmp_path / "101-readiness" / evidence.READINESS_REPORT, readiness_payload())
     write_json(tmp_path / "101-readiness" / evidence.ENVIRONMENT_REPORT, environment_payload())
     write_json(tmp_path / "202-smoke" / evidence.SMOKE_REPORT, smoke_payload())
     write_json(tmp_path / "202-deploy" / evidence.DEPLOY_REPORT, deploy_payload())
-    write_json(tmp_path / evidence.SIGNOFF_REPORT, signoff_payload(deploy_run_id="999"))
+    write_json(tmp_path / evidence.PREFLIGHT_REPORT, preflight)
+    write_json(
+        tmp_path / evidence.SIGNOFF_REPORT,
+        signoff_payload(deploy_run_id="999", preflight=preflight),
+    )
 
     assert evidence.main([str(tmp_path), "--github-sha", "sha-a", "--require-signoff-report"]) == 1
 
@@ -153,11 +226,16 @@ def test_verify_release_flow_production_evidence_rejects_signoff_report_mismatch
 def test_verify_release_flow_production_evidence_rejects_ambiguous_run_id_source(
     tmp_path: Path,
 ) -> None:
+    preflight = preflight_payload()
     write_json(tmp_path / "1101-readiness" / evidence.READINESS_REPORT, readiness_payload())
     write_json(tmp_path / "1101-readiness" / evidence.ENVIRONMENT_REPORT, environment_payload())
     write_json(tmp_path / "202-smoke" / evidence.SMOKE_REPORT, smoke_payload())
     write_json(tmp_path / "202-deploy" / evidence.DEPLOY_REPORT, deploy_payload())
-    write_json(tmp_path / evidence.SIGNOFF_REPORT, signoff_payload(readiness_run_id="101"))
+    write_json(tmp_path / evidence.PREFLIGHT_REPORT, preflight)
+    write_json(
+        tmp_path / evidence.SIGNOFF_REPORT,
+        signoff_payload(readiness_run_id="101", preflight=preflight),
+    )
 
     assert evidence.main([str(tmp_path), "--github-sha", "sha-a", "--require-signoff-report"]) == 1
 
@@ -165,13 +243,53 @@ def test_verify_release_flow_production_evidence_rejects_ambiguous_run_id_source
 def test_verify_release_flow_production_evidence_rejects_incomplete_signoff_run(
     tmp_path: Path,
 ) -> None:
+    preflight = preflight_payload()
     write_json(tmp_path / "101-readiness" / evidence.READINESS_REPORT, readiness_payload())
     write_json(tmp_path / "101-readiness" / evidence.ENVIRONMENT_REPORT, environment_payload())
     write_json(tmp_path / "202-smoke" / evidence.SMOKE_REPORT, smoke_payload())
     write_json(tmp_path / "202-deploy" / evidence.DEPLOY_REPORT, deploy_payload())
+    write_json(tmp_path / evidence.PREFLIGHT_REPORT, preflight)
     write_json(
         tmp_path / evidence.SIGNOFF_REPORT,
-        signoff_payload(readiness_status="in_progress", readiness_conclusion=""),
+        signoff_payload(
+            readiness_status="in_progress",
+            readiness_conclusion="",
+            preflight=preflight,
+        ),
+    )
+
+    assert evidence.main([str(tmp_path), "--github-sha", "sha-a", "--require-signoff-report"]) == 1
+
+
+def test_verify_release_flow_production_evidence_rejects_signoff_without_preflight_summary(
+    tmp_path: Path,
+) -> None:
+    preflight = preflight_payload()
+    payload = signoff_payload(preflight=preflight)
+    payload.pop("preflight_report")
+    write_json(tmp_path / "101-readiness" / evidence.READINESS_REPORT, readiness_payload())
+    write_json(tmp_path / "101-readiness" / evidence.ENVIRONMENT_REPORT, environment_payload())
+    write_json(tmp_path / "202-smoke" / evidence.SMOKE_REPORT, smoke_payload())
+    write_json(tmp_path / "202-deploy" / evidence.DEPLOY_REPORT, deploy_payload())
+    write_json(tmp_path / evidence.PREFLIGHT_REPORT, preflight)
+    write_json(tmp_path / evidence.SIGNOFF_REPORT, payload)
+
+    assert evidence.main([str(tmp_path), "--github-sha", "sha-a", "--require-signoff-report"]) == 1
+
+
+def test_verify_release_flow_production_evidence_rejects_signoff_preflight_mismatch(
+    tmp_path: Path,
+) -> None:
+    preflight = preflight_payload()
+    summary_preflight = preflight_payload(github_sha="other-sha")
+    write_json(tmp_path / "101-readiness" / evidence.READINESS_REPORT, readiness_payload())
+    write_json(tmp_path / "101-readiness" / evidence.ENVIRONMENT_REPORT, environment_payload())
+    write_json(tmp_path / "202-smoke" / evidence.SMOKE_REPORT, smoke_payload())
+    write_json(tmp_path / "202-deploy" / evidence.DEPLOY_REPORT, deploy_payload())
+    write_json(tmp_path / evidence.PREFLIGHT_REPORT, preflight)
+    write_json(
+        tmp_path / evidence.SIGNOFF_REPORT,
+        signoff_payload(preflight=summary_preflight),
     )
 
     assert evidence.main([str(tmp_path), "--github-sha", "sha-a", "--require-signoff-report"]) == 1

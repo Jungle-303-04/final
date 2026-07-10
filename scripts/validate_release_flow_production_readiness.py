@@ -413,6 +413,7 @@ def check_evidence_verifier_contract() -> list[ReadinessCheck]:
             and "release-flow-github-environment.json" in source
             and "release-flow-smoke.json" in source
             and "release-flow-deploy.json" in source
+            and "release-flow-production-preflight.json" in source
             and "release-flow-production-signoff.json" in source
             and "runtime.github_access_preflight" in source
             and "secret.RELEASE_FLOW_API_BASE_URL" in source
@@ -430,6 +431,15 @@ def check_evidence_verifier_contract() -> list[ReadinessCheck]:
             and "--github-sha is required when downloading GitHub artifacts" in source
             and "evidence.api_base_url_consistent" in source,
             "production evidence verifier can download GitHub Actions artifacts and require API consistency",
+        ),
+        ReadinessCheck(
+            "script.evidence_verifier.signoff_preflight_summary",
+            "validate_signoff_preflight_summary" in source
+            and "signoff.preflight_report.sha256" in source
+            and "signoff.preflight_report.artifact_present" in source
+            and "report_payload_sha256" in source
+            and "preflight report matches requested commit SHA" in source,
+            "production evidence verifier validates the final signoff preflight report artifact",
         ),
         ReadinessCheck(
             "docs.production_readiness.evidence_verifier",
@@ -557,6 +567,8 @@ def check_production_signoff_runner_contract() -> list[ReadinessCheck]:
             and "write_signoff_report" in source
             and "readiness_run" in source
             and "deploy_run" in source
+            and "preflight_report" in source
+            and "report_payload_sha256" in source
             and "evidence_verification_status" in source,
             "operator signoff runner writes a final auditable sign-off report",
         ),

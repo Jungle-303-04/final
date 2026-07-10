@@ -17,6 +17,7 @@ def write_preflight_report(
         json.dumps(
             {
                 "status": "passed",
+                "mode": "preflight_only",
                 "generated_at": generated_at.isoformat(),
                 "expires_at": (generated_at + timedelta(minutes=60)).isoformat(),
                 "github_repo": "org/repo",
@@ -45,6 +46,13 @@ def write_preflight_report(
                     {"workflow": signoff.DEPLOY_WORKFLOW, "id": "2", "state": "active"},
                 ],
                 "dispatch_performed": False,
+                "checks": [
+                    "input_validation",
+                    "local_sha",
+                    "github_branch_sha",
+                    "safe_pr_run",
+                    "production_workflow_access",
+                ],
             }
         )
         + "\n",
@@ -247,6 +255,13 @@ def test_run_release_flow_production_signoff_dispatches_and_verifies(monkeypatch
     assert report["release_plan_id"] == "plan-1"
     assert report["readiness_run"]["id"] == "101"
     assert report["deploy_run"]["id"] == "202"
+    assert report["preflight_report"]["status"] == "passed"
+    assert report["preflight_report"]["mode"] == "preflight_only"
+    assert report["preflight_report"]["dispatch_performed"] is False
+    assert len(report["preflight_report"]["sha256"]) == 64
+    assert report["preflight_report"]["github_sha"] == "sha-production"
+    assert report["preflight_report"]["github_branch_head_sha"] == "sha-production"
+    assert report["preflight_report"]["live_safe_pr_workflow_run_id"] == "456"
     assert report["evidence_verification_status"] == 0
 
 
@@ -321,7 +336,9 @@ def test_run_release_flow_production_signoff_preflight_only_checks_workflows(
         (tmp_path / "release-flow-production-preflight.json").read_text(encoding="utf-8")
     )
     assert report["status"] == "passed"
+    assert report["mode"] == "preflight_only"
     assert report["dispatch_performed"] is False
+    assert "production_workflow_access" in report["checks"]
     assert "expires_at" in report
     assert report["github_branch_head_sha"] == "sha-production"
     assert report["safe_pr_run"]["id"] == "456"
