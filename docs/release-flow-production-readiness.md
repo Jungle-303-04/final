@@ -132,7 +132,7 @@ python scripts/run_release_flow_production_signoff.py \
   --github-output-dir ./release-flow-production-evidence
 ```
 
-This full production sign-off runner dispatches `release-flow-production-readiness.yml` with every final gate enabled, verifies the readiness artifact while deploy evidence is still absent, dispatches `release-flow-production-deploy.yml`, waits for the deploy run to complete, and then runs `verify_release_flow_production_evidence.py` without any missing-artifact escape hatch.
+This full production sign-off runner dispatches `release-flow-production-readiness.yml` with every final gate enabled, verifies the readiness artifact while deploy evidence is still absent, dispatches `release-flow-production-deploy.yml`, waits for the deploy run to complete, and then runs `verify_release_flow_production_evidence.py` without any missing-artifact escape hatch. The verifier is pinned to the exact readiness and deploy workflow run ids returned by the runner, so final evidence cannot accidentally come from an older successful run for the same commit.
 
 When `github_access_preflight` is enabled, the verifier must have an actual GitHub token value. If `RELEASE_FLOW_GITHUB_TOKEN_REF` points to a non-env vault ref such as `aws-sm:` or `k8s-secret:`, also set the `RELEASE_FLOW_GITHUB_TOKEN` secret for this readiness workflow so the read-only GitHub API check can run.
 
@@ -185,3 +185,4 @@ python scripts/verify_release_flow_production_evidence.py \
 
 This path requires successful `release-flow-production-readiness.yml` and `release-flow-production-deploy.yml` runs for the selected branch/SHA, downloads the required artifacts, and then applies the same JSON checks. The smoke and deploy reports must point at the same concrete HTTPS API base URL.
 Keep `--github-sha` set for final production evidence so the downloaded artifacts prove the exact deployed commit. `--allow-latest-github-run` exists only for exploratory checks before final sign-off.
+When verifying a known Actions execution directly, pass `--github-readiness-run-id <run-id>` and `--github-deploy-run-id <run-id>` so artifact download is bound to those exact workflow runs.

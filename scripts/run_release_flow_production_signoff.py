@@ -178,7 +178,14 @@ def deploy_inputs(args: argparse.Namespace) -> dict[str, str]:
     }
 
 
-def verify_artifacts(args: argparse.Namespace, token: str, *, allow_missing_deploy: bool) -> int:
+def verify_artifacts(
+    args: argparse.Namespace,
+    token: str,
+    *,
+    allow_missing_deploy: bool,
+    readiness_run_id: str,
+    deploy_run_id: str = "",
+) -> int:
     argv = [
         "--github-repo",
         args.github_repo,
@@ -192,7 +199,11 @@ def verify_artifacts(args: argparse.Namespace, token: str, *, allow_missing_depl
         args.github_sha,
         "--github-output-dir",
         str(args.github_output_dir),
+        "--github-readiness-run-id",
+        readiness_run_id,
     ]
+    if deploy_run_id:
+        argv.extend(["--github-deploy-run-id", deploy_run_id])
     if allow_missing_deploy:
         argv.append("--allow-missing-deploy")
     return verify_evidence_main(argv)
@@ -229,6 +240,8 @@ def dispatch_and_wait(
     run_id = str(run.get("id") or "")
     conclusion = str(run.get("conclusion") or "")
     url = str(run.get("html_url") or "")
+    if not run_id.isdigit():
+        raise GitHubEvidenceError(f"{workflow} completed run did not report a numeric run id")
     if conclusion != "success":
         raise GitHubEvidenceError(f"{workflow} run {run_id} concluded {conclusion or '<missing>'} {url}".rstrip())
     print(f"ok signoff.run: {workflow} run {run_id} succeeded {url}".rstrip())
@@ -248,25 +261,38 @@ def main(argv: list[str]) -> int:
 
     try:
         started_after = datetime.now(timezone.utc) - timedelta(seconds=10)
-        dispatch_and_wait(
+        readiness_run = dispatch_and_wait(
             args=args,
             token=token,
             workflow=READINESS_WORKFLOW,
             inputs=readiness_inputs(args),
             started_after=started_after,
         )
-        readiness_status = verify_artifacts(args, token, allow_missing_deploy=True)
+        readiness_run_id = str(readiness_run.get("id") or "")
+        readiness_status = verify_artifacts(
+            args,
+            token,
+            allow_missing_deploy=True,
+            readiness_run_id=readiness_run_id,
+        )
         if readiness_status != 0:
             return readiness_status
         started_after = datetime.now(timezone.utc) - timedelta(seconds=10)
-        dispatch_and_wait(
+        deploy_run = dispatch_and_wait(
             args=args,
             token=token,
             workflow=DEPLOY_WORKFLOW,
             inputs=deploy_inputs(args),
             started_after=started_after,
         )
-        return verify_artifacts(args, token, allow_missing_deploy=False)
+        deploy_run_id = str(deploy_run.get("id") or "")
+        return verify_artifacts(
+            args,
+            token,
+            allow_missing_deploy=False,
+            readiness_run_id=readiness_run_id,
+            deploy_run_id=deploy_run_id,
+        )
     except GitHubEvidenceError as exc:
         print(f"fail signoff.github: {exc}", file=sys.stderr)
         return 1

@@ -116,6 +116,16 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     parser.add_argument("--github-branch", default="dev")
     parser.add_argument("--github-sha", default="", help="Require successful workflow runs for this head SHA.")
     parser.add_argument(
+        "--github-readiness-run-id",
+        default="",
+        help="Download readiness evidence from this exact GitHub Actions run id.",
+    )
+    parser.add_argument(
+        "--github-deploy-run-id",
+        default="",
+        help="Download deploy evidence from this exact GitHub Actions run id.",
+    )
+    parser.add_argument(
         "--allow-latest-github-run",
         action="store_true",
         help="Allow GitHub artifact lookup without --github-sha. Use only for exploratory checks.",
@@ -215,6 +225,34 @@ def find_successful_workflow_run(
     raise GitHubEvidenceError(f"no successful {workflow} run found on {branch}{qualifier}")
 
 
+def find_workflow_run_by_id(
+    *,
+    api_base: str,
+    repo: str,
+    workflow: str,
+    branch: str,
+    head_sha: str,
+    run_id: str,
+    token: str,
+) -> dict[str, Any]:
+    normalized_run_id = str(run_id or "").strip()
+    if not normalized_run_id.isdigit():
+        raise GitHubEvidenceError(f"{workflow} run id must be numeric")
+    run = github_json(github_api_url(api_base, repo, f"actions/runs/{normalized_run_id}"), token)
+    if str(run.get("id") or "") != normalized_run_id:
+        raise GitHubEvidenceError(f"GitHub run {normalized_run_id} response did not match requested id")
+    if run.get("conclusion") != "success":
+        raise GitHubEvidenceError(f"GitHub run {normalized_run_id} did not conclude success")
+    if head_sha and str(run.get("head_sha") or "") != head_sha:
+        raise GitHubEvidenceError(f"GitHub run {normalized_run_id} does not match required sha {head_sha}")
+    if branch and str(run.get("head_branch") or branch) != branch:
+        raise GitHubEvidenceError(f"GitHub run {normalized_run_id} does not match branch {branch}")
+    path = str(run.get("path") or "")
+    if path and not path.endswith(f"/{workflow}") and path != workflow:
+        raise GitHubEvidenceError(f"GitHub run {normalized_run_id} is not {workflow}")
+    return run
+
+
 def download_run_artifacts(
     *,
     api_base: str,
@@ -265,14 +303,27 @@ def fetch_github_artifacts(args: argparse.Namespace, output_dir: Path) -> list[P
     head_sha = str(args.github_sha or "").strip()
     if not head_sha and not args.allow_latest_github_run:
         raise GitHubEvidenceError("--github-sha is required when downloading GitHub artifacts")
-    readiness_run = find_successful_workflow_run(
-        api_base=api_base,
-        repo=repo,
-        workflow=READINESS_WORKFLOW,
-        branch=branch,
-        head_sha=head_sha,
-        token=token,
-    )
+    readiness_run_id = str(args.github_readiness_run_id or "").strip()
+    deploy_run_id = str(args.github_deploy_run_id or "").strip()
+    if readiness_run_id:
+        readiness_run = find_workflow_run_by_id(
+            api_base=api_base,
+            repo=repo,
+            workflow=READINESS_WORKFLOW,
+            branch=branch,
+            head_sha=head_sha,
+            run_id=readiness_run_id,
+            token=token,
+        )
+    else:
+        readiness_run = find_successful_workflow_run(
+            api_base=api_base,
+            repo=repo,
+            workflow=READINESS_WORKFLOW,
+            branch=branch,
+            head_sha=head_sha,
+            token=token,
+        )
     paths = download_run_artifacts(
         api_base=api_base,
         repo=repo,
@@ -282,14 +333,25 @@ def fetch_github_artifacts(args: argparse.Namespace, output_dir: Path) -> list[P
         token=token,
     )
     if not args.allow_missing_deploy:
-        deploy_run = find_successful_workflow_run(
-            api_base=api_base,
-            repo=repo,
-            workflow=DEPLOY_WORKFLOW,
-            branch=branch,
-            head_sha=head_sha,
-            token=token,
-        )
+        if deploy_run_id:
+            deploy_run = find_workflow_run_by_id(
+                api_base=api_base,
+                repo=repo,
+                workflow=DEPLOY_WORKFLOW,
+                branch=branch,
+                head_sha=head_sha,
+                run_id=deploy_run_id,
+                token=token,
+            )
+        else:
+            deploy_run = find_successful_workflow_run(
+                api_base=api_base,
+                repo=repo,
+                workflow=DEPLOY_WORKFLOW,
+                branch=branch,
+                head_sha=head_sha,
+                token=token,
+            )
         paths.extend(
             download_run_artifacts(
                 api_base=api_base,

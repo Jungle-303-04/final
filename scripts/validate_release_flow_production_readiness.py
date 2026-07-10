@@ -453,9 +453,12 @@ def check_production_signoff_runner_contract() -> list[ReadinessCheck]:
             "script.production_signoff_runner.verifies_final_evidence",
             "--allow-missing-deploy" in source
             and "allow_missing_deploy=False" in source
+            and "--github-readiness-run-id" in source
+            and "--github-deploy-run-id" in source
+            and "completed run did not report a numeric run id" in source
             and "--github-sha" in source
             and "--github-output-dir" in source,
-            "operator signoff runner verifies readiness evidence and then full deploy evidence",
+            "operator signoff runner verifies the exact readiness and deploy run artifacts",
         ),
         ReadinessCheck(
             "docs.production_readiness.signoff_runner",
