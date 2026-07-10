@@ -59,17 +59,14 @@ RCA는 provider가 보내준 evidence만 보고 symptom, root cause candidate, c
 - safe Deployment annotations
 - Pod template labels
 - safe Pod template annotations
+- env/envFrom ConfigMap and Secret reference summary
+- mounted ConfigMap and Secret volume reference summary
 - managedFields manager 목록
 - owned ReplicaSet revision annotation
 
 ### 추가로 요청해야 할 것
 
-- env/config refs
-  - env
-  - envFrom
-  - ConfigMap reference
-- secret refs
-  - Secret 값이 아니라 name/key reference만
+- ConfigMap/Secret object metadata summary
 - pvc refs
 - resource quota
 - service selector와 pod labels 비교 결과
@@ -203,6 +200,9 @@ policy상 traces query는 존재한다.
 - change_context.current_workload_snapshots[].containers[].readiness_probe
 - change_context.current_workload_snapshots[].containers[].liveness_probe
 - change_context.current_workload_snapshots[].containers[].startup_probe
+- change_context.current_workload_snapshots[].containers[].env_refs
+- change_context.current_workload_snapshots[].containers[].env_from_refs
+- change_context.current_workload_snapshots[].containers[].volume_mount_refs
 - change_context.current_workload_snapshots[].replicaset_revisions[].name/revision
 
 기본 fallback 값은 `{"change_context": {"current_workload_snapshots": []}}`이다.
