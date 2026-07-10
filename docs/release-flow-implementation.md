@@ -353,6 +353,33 @@ jobs:
           echo "failed count: ${{ needs.release_flow_smoke.outputs.release_smoke_failed_count }}"
 ```
 
+실제 production deploy workflow 앞에는 `.github/workflows/release-flow-production-gate.yml`의 `Release Flow Production Gate`를 표준 gate로 붙인다. 이 workflow는 `release-flow-smoke.yml`을 호출한 뒤 `release_gate_ok` output을 노출하고, smoke 결과가 `true`가 아니면 별도 `production_gate` job에서 실패를 확정한다. 따라서 실제 deploy job은 다음처럼 `needs.release_flow_production_gate.outputs.release_gate_ok == 'true'` 조건을 걸 수 있다.
+
+```yaml
+jobs:
+  release_flow_production_gate:
+    uses: ./.github/workflows/release-flow-production-gate.yml
+    with:
+      github_environment: production
+      release_plan_id: ${{ inputs.release_plan_id }}
+      live_preflight: true
+      live_change_ticket: ${{ inputs.change_ticket }}
+      live_verification_url: ${{ inputs.verification_url }}
+    secrets:
+      release_flow_api_base_url: ${{ secrets.RELEASE_FLOW_API_BASE_URL }}
+      release_flow_auth_email: ${{ secrets.RELEASE_FLOW_AUTH_EMAIL }}
+      release_flow_auth_password: ${{ secrets.RELEASE_FLOW_AUTH_PASSWORD }}
+
+  deploy-production:
+    needs: release_flow_production_gate
+    if: needs.release_flow_production_gate.outputs.release_gate_ok == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - run: ./scripts/deploy-production.sh
+```
+
+`Release Flow Smoke` 자체도 smoke 실행 전에 `api_base_url` 또는 `RELEASE_FLOW_API_BASE_URL`, `RELEASE_FLOW_AUTH_EMAIL`, `RELEASE_FLOW_AUTH_PASSWORD`가 비어 있는지 먼저 확인한다. 운영 secret이 빠져 있으면 API 호출을 시작하기 전에 GitHub annotation으로 실패하므로, 실제 배포 실패와 설정 실패를 구분하기 쉽다.
+
 알림 채널이 실제로 validation alert를 받을 수 있는지 확인하려면 `--alert-preflight`를 붙인다. 이 모드는 enabled alert channel 중 요청 severity를 받을 수 있는 채널을 골라 `/alert-channels/test`를 호출하므로, 실제 Slack/webhook/온콜 테스트 메시지가 발송될 수 있다.
 
 ```bash
