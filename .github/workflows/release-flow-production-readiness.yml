@@ -11,12 +11,12 @@ name: Release Flow Production Readiness
       github_access_preflight:
         description: Also verify the GitHub token can read SCM_REPO and SCM_BASE_BRANCH.
         required: false
-        default: false
+        default: true
         type: boolean
       api_smoke_preflight:
         description: Also run the live release-flow API smoke without dispatching a release.
         required: false
-        default: false
+        default: true
         type: boolean
       production_deploy_required:
         description: Fail readiness when no production deploy workflow is gated by release-flow-production-gate.
@@ -56,9 +56,9 @@ jobs:
           SCM_REPO: ${{ vars.RELEASE_FLOW_SCM_REPO || secrets.RELEASE_FLOW_SCM_REPO }}
           SCM_BASE_BRANCH: ${{ vars.RELEASE_FLOW_SCM_BASE_BRANCH || secrets.RELEASE_FLOW_SCM_BASE_BRANCH }}
           GITHUB_API_BASE: ${{ vars.RELEASE_FLOW_GITHUB_API_BASE || secrets.RELEASE_FLOW_GITHUB_API_BASE }}
-          GITHUB_ACCESS_PREFLIGHT: ${{ inputs.github_access_preflight || false }}
-          API_SMOKE_PREFLIGHT: ${{ inputs.api_smoke_preflight || false }}
-          PRODUCTION_DEPLOY_REQUIRED: ${{ inputs.production_deploy_required || true }}
+          GITHUB_ACCESS_PREFLIGHT: ${{ inputs.github_access_preflight }}
+          API_SMOKE_PREFLIGHT: ${{ inputs.api_smoke_preflight }}
+          PRODUCTION_DEPLOY_REQUIRED: ${{ inputs.production_deploy_required }}
         run: |
           set +e
           github_access_args=""

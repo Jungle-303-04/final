@@ -408,7 +408,16 @@ def check_gitops_poll_observability_contract() -> list[ReadinessCheck]:
             and "watch_last_polled_at" in repository
             and "watch_settings" in repository,
             "GitHub poll status is included in deployment binding API rows",
-        )
+        ),
+        ReadinessCheck(
+            "gitops.watch_source_identity_upsert",
+            "table.c.workspace_id" in repository
+            and "table.c.repository_id" in repository
+            and "table.c.branch" in repository
+            and "table.c.manifest_path" in repository
+            and repository.count("index_elements=[\n                table.c.workspace_id,") >= 2,
+            "watch observe and poll status upserts use source identity, not only watch_target_id",
+        ),
     ]
 
 
@@ -700,14 +709,18 @@ def check_production_readiness_workflow_contract() -> list[ReadinessCheck]:
         ReadinessCheck(
             "workflow.production_readiness.github_access_preflight",
             "github_access_preflight" in inputs
+            and inputs.get("github_access_preflight", {}).get("default") is True
             and "GITHUB_ACCESS_PREFLIGHT" in env
+            and str(env.get("GITHUB_ACCESS_PREFLIGHT") or "") == "${{ inputs.github_access_preflight }}"
             and "--check-github-access" in run,
-            "production readiness can optionally verify read-only GitHub repo access",
+            "production readiness verifies GitHub repo access by default",
         ),
         ReadinessCheck(
             "workflow.production_readiness.api_smoke_preflight",
             "api_smoke_preflight" in inputs
+            and inputs.get("api_smoke_preflight", {}).get("default") is True
             and "API_SMOKE_PREFLIGHT" in env
+            and str(env.get("API_SMOKE_PREFLIGHT") or "") == "${{ inputs.api_smoke_preflight }}"
             and "scripts/release_flow_smoke.py" in run
             and "--ci" in run
             and "--production-preflight" in run
@@ -716,7 +729,7 @@ def check_production_readiness_workflow_contract() -> list[ReadinessCheck]:
             and "AUTH_EMAIL=\"$RELEASE_FLOW_AUTH_EMAIL\"" in run
             and "AUTH_PASSWORD=\"$RELEASE_FLOW_AUTH_PASSWORD\"" in run
             and "artifacts/release-flow-*.*" in workflow_source,
-            "production readiness can optionally run live API smoke without release dispatch",
+            "production readiness runs live API smoke by default without release dispatch",
         ),
         ReadinessCheck(
             "workflow.production_readiness.production_deploy_required",

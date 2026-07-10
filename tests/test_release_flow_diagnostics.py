@@ -40,6 +40,14 @@ def codes(items: list[DiagnosticItem]) -> set[str]:
     return {item.code for item in items}
 
 
+def test_release_production_evidence_urls_require_live_https_hosts() -> None:
+    assert release_router.release_runbook_url_is_valid("https://wiki.company.internal/runbooks/checkout")
+    assert release_router.release_verification_url_is_valid("https://checkout.company.internal/readyz")
+    assert not release_router.release_runbook_url_is_valid("http://wiki.company.internal/runbooks/checkout")
+    assert not release_router.release_verification_url_is_valid("https://example.com/readyz")
+    assert not release_router.release_verification_url_is_valid("https://api.localhost/readyz")
+
+
 def release_plan_request(plan_id: str | None = None) -> release_router.ReleasePlanUpsertRequest:
     return release_router.ReleasePlanUpsertRequest(
         plan_id=plan_id,
@@ -1257,7 +1265,8 @@ def test_release_readiness_blocks_production_placeholder_change_ticket(monkeypat
                     "approval_granted_at": datetime.now(timezone.utc).isoformat(),
                     "change_ticket": "CHG-PREFLIGHT",
                     "release_window_override_reason": "incident commander approved immediate release",
-                    "runbook_url": "https://wiki.example.com/runbooks/checkout-release",
+                    "runbook_url": "https://wiki.company.internal/runbooks/checkout-release",
+                    "post_deploy_verification_url": "https://checkout.company.internal/readyz",
                     "release_owner": "checkout-release-team",
                     "abort_criteria": "rollback if checkout error rate exceeds 5% for 5 minutes",
                 },
@@ -1317,7 +1326,8 @@ def test_release_readiness_warns_when_production_change_ticket_gate_is_bypassed(
                     "approval_granted_at": datetime.now(timezone.utc).isoformat(),
                     "production_change_override_reason": "emergency production fix approved",
                     "release_window_override_reason": "incident commander approved immediate release",
-                    "runbook_url": "https://wiki.example.com/runbooks/checkout-release",
+                    "runbook_url": "https://wiki.company.internal/runbooks/checkout-release",
+                    "post_deploy_verification_url": "https://checkout.company.internal/readyz",
                     "release_owner": "checkout-release-team",
                     "abort_criteria": "rollback if checkout error rate exceeds 5% for 5 minutes",
                 },
@@ -1542,7 +1552,8 @@ def test_release_readiness_warns_when_production_release_window_is_bypassed(monk
                     "approval_granted_at": datetime.now(timezone.utc).isoformat(),
                     "change_ticket": "CHG-123",
                     "release_window_override_reason": "incident commander approved immediate release",
-                    "runbook_url": "https://wiki.example.com/runbooks/checkout-release",
+                    "runbook_url": "https://wiki.company.internal/runbooks/checkout-release",
+                    "post_deploy_verification_url": "https://checkout.company.internal/readyz",
                     "release_owner": "checkout-release-team",
                     "abort_criteria": "rollback if checkout error rate exceeds 5% for 5 minutes",
                 },
@@ -1604,7 +1615,7 @@ def test_release_readiness_blocks_production_live_during_change_freeze(monkeypat
                     "release_window_end": (now + timedelta(hours=1)).isoformat(),
                     "change_freeze_start": (now - timedelta(minutes=5)).isoformat(),
                     "change_freeze_end": (now + timedelta(minutes=5)).isoformat(),
-                    "runbook_url": "https://wiki.example.com/runbooks/checkout-release",
+                    "runbook_url": "https://wiki.company.internal/runbooks/checkout-release",
                     "release_owner": "checkout-release-team",
                     "abort_criteria": "rollback if checkout error rate exceeds 5% for 5 minutes",
                 },
@@ -1668,7 +1679,8 @@ def test_release_readiness_warns_when_change_freeze_is_bypassed(monkeypatch) -> 
                     "change_freeze_start": (now - timedelta(minutes=5)).isoformat(),
                     "change_freeze_end": (now + timedelta(minutes=5)).isoformat(),
                     "change_freeze_override_reason": "incident commander approved emergency hotfix",
-                    "runbook_url": "https://wiki.example.com/runbooks/checkout-release",
+                    "runbook_url": "https://wiki.company.internal/runbooks/checkout-release",
+                    "post_deploy_verification_url": "https://checkout.company.internal/readyz",
                     "release_owner": "checkout-release-team",
                     "abort_criteria": "rollback if checkout error rate exceeds 5% for 5 minutes",
                 },
@@ -1755,7 +1767,7 @@ def test_release_readiness_blocks_production_live_without_runbook(monkeypatch) -
     assert runbook_check["status"] == "blocked"
 
 
-def test_release_readiness_blocks_production_live_without_owner_contact(monkeypatch) -> None:
+def test_release_readiness_blocks_production_placeholder_runbook_url(monkeypatch) -> None:
     monkeypatch.setenv("RELEASE_FLOW_LIVE_ENABLED", "1")
     monkeypatch.setenv("RELEASE_FLOW_LIVE_WORKSPACES", "workspace-a")
     db = ReleaseReadinessDb(
@@ -1785,6 +1797,65 @@ def test_release_readiness_blocks_production_live_without_owner_contact(monkeypa
                     "change_ticket": "CHG-123",
                     "release_window_override_reason": "incident commander approved immediate release",
                     "runbook_url": "https://wiki.example.com/runbooks/checkout-release",
+                    "release_owner": "checkout-release-team",
+                    "abort_criteria": "rollback if checkout error rate exceeds 5% for 5 minutes",
+                },
+                steps=[
+                    {
+                        "application_id": "checkout",
+                        "name": "Checkout",
+                        "position": 0,
+                        "config": {
+                            "environment": "production",
+                            "approval_gate": "manual",
+                            "commit_sha": "abc1234",
+                            "image": "ghcr.io/example/checkout:v2",
+                            "health_check_path": "/readyz",
+                        },
+                    }
+                ],
+            ),
+            current=SimpleNamespace(workspace_id="workspace-a", user_id="operator", roles=()),
+            db=db,
+        )
+    )
+
+    assert response.ready is False
+    assert any("live https runbook_url" in item for item in response.blockers)
+    runbook_check = next(check for check in response.checks if check["check_id"] == "runbook.sop")
+    assert runbook_check["status"] == "blocked"
+
+
+def test_release_readiness_blocks_production_live_without_owner_contact(monkeypatch) -> None:
+    monkeypatch.setenv("RELEASE_FLOW_LIVE_ENABLED", "1")
+    monkeypatch.setenv("RELEASE_FLOW_LIVE_WORKSPACES", "workspace-a")
+    db = ReleaseReadinessDb(
+        channels=[
+            {
+                "channel_id": "chan-warning",
+                "enabled": True,
+                "min_severity": "warning",
+                "last_test_status": "passed",
+                "last_tested_at": datetime.now(timezone.utc).isoformat(),
+            }
+        ]
+    )
+    monkeypatch.setattr(release_router, "require_plan_application_read_access", lambda *_args: None)
+
+    response = asyncio.run(
+        release_router.check_release_readiness(
+            release_router.ReleasePlanUpsertRequest(
+                name="Checkout production release",
+                settings={
+                    "runtime_mode": "live",
+                    "approval_policy": "auto_safe",
+                    "approval_granted": True,
+                    "approval_granted_by": "lead@example.com",
+                    "approval_reason": "approved production release",
+                    "approval_granted_at": datetime.now(timezone.utc).isoformat(),
+                    "change_ticket": "CHG-123",
+                    "release_window_override_reason": "incident commander approved immediate release",
+                    "runbook_url": "https://wiki.company.internal/runbooks/checkout-release",
                 },
                 steps=[
                     {
@@ -1846,7 +1917,7 @@ def test_release_readiness_blocks_production_live_without_verification_evidence(
                     "approval_granted_at": datetime.now(timezone.utc).isoformat(),
                     "change_ticket": "CHG-123",
                     "release_window_override_reason": "incident commander approved immediate release",
-                    "runbook_url": "https://wiki.example.com/runbooks/checkout-release",
+                    "runbook_url": "https://wiki.company.internal/runbooks/checkout-release",
                     "release_owner": "checkout-release-team",
                 },
                 steps=[
@@ -1869,7 +1940,66 @@ def test_release_readiness_blocks_production_live_without_verification_evidence(
     )
 
     assert response.ready is False
-    assert any("health_check_path" in item for item in response.blockers)
+    assert any("post_deploy_verification_url" in item for item in response.blockers)
+    verification_check = next(check for check in response.checks if check["check_id"] == "verification.plan")
+    assert verification_check["status"] == "blocked"
+
+
+def test_release_readiness_blocks_production_http_verification_url(monkeypatch) -> None:
+    monkeypatch.setenv("RELEASE_FLOW_LIVE_ENABLED", "1")
+    monkeypatch.setenv("RELEASE_FLOW_LIVE_WORKSPACES", "workspace-a")
+    db = ReleaseReadinessDb(
+        channels=[
+            {
+                "channel_id": "chan-warning",
+                "enabled": True,
+                "min_severity": "warning",
+                "last_test_status": "passed",
+                "last_tested_at": datetime.now(timezone.utc).isoformat(),
+            }
+        ]
+    )
+    monkeypatch.setattr(release_router, "require_plan_application_read_access", lambda *_args: None)
+
+    response = asyncio.run(
+        release_router.check_release_readiness(
+            release_router.ReleasePlanUpsertRequest(
+                name="Checkout production release",
+                settings={
+                    "runtime_mode": "live",
+                    "approval_policy": "auto_safe",
+                    "approval_granted": True,
+                    "approval_granted_by": "lead@example.com",
+                    "approval_reason": "approved production release",
+                    "approval_granted_at": datetime.now(timezone.utc).isoformat(),
+                    "change_ticket": "CHG-123",
+                    "release_window_override_reason": "incident commander approved immediate release",
+                    "runbook_url": "https://wiki.company.internal/runbooks/checkout-release",
+                    "release_owner": "checkout-release-team",
+                    "post_deploy_verification_url": "http://checkout.company.internal/readyz",
+                    "abort_criteria": "rollback if checkout error rate exceeds 5% for 5 minutes",
+                },
+                steps=[
+                    {
+                        "application_id": "checkout",
+                        "name": "Checkout",
+                        "position": 0,
+                        "config": {
+                            "environment": "production",
+                            "approval_gate": "manual",
+                            "commit_sha": "abc1234",
+                            "image": "ghcr.io/example/checkout:v2",
+                        },
+                    }
+                ],
+            ),
+            current=SimpleNamespace(workspace_id="workspace-a", user_id="operator", roles=()),
+            db=db,
+        )
+    )
+
+    assert response.ready is False
+    assert any("live https post_deploy_verification_url" in item for item in response.blockers)
     verification_check = next(check for check in response.checks if check["check_id"] == "verification.plan")
     assert verification_check["status"] == "blocked"
 
@@ -1903,7 +2033,7 @@ def test_release_readiness_warns_when_production_verification_is_bypassed(monkey
                     "approval_granted_at": datetime.now(timezone.utc).isoformat(),
                     "change_ticket": "CHG-123",
                     "release_window_override_reason": "incident commander approved immediate release",
-                    "runbook_url": "https://wiki.example.com/runbooks/checkout-release",
+                    "runbook_url": "https://wiki.company.internal/runbooks/checkout-release",
                     "release_owner": "checkout-release-team",
                     "verification_override_reason": "synthetic monitor is temporarily owned by incident command",
                     "abort_criteria": "rollback if checkout error rate exceeds 5% for 5 minutes",
@@ -1963,7 +2093,7 @@ def test_release_readiness_blocks_production_live_without_abort_criteria(monkeyp
                     "approval_granted_at": datetime.now(timezone.utc).isoformat(),
                     "change_ticket": "CHG-123",
                     "release_window_override_reason": "incident commander approved immediate release",
-                    "runbook_url": "https://wiki.example.com/runbooks/checkout-release",
+                    "runbook_url": "https://wiki.company.internal/runbooks/checkout-release",
                     "release_owner": "checkout-release-team",
                 },
                 steps=[
@@ -2021,7 +2151,8 @@ def test_release_readiness_warns_when_abort_criteria_is_bypassed(monkeypatch) ->
                     "approval_granted_at": datetime.now(timezone.utc).isoformat(),
                     "change_ticket": "CHG-123",
                     "release_window_override_reason": "incident commander approved immediate release",
-                    "runbook_url": "https://wiki.example.com/runbooks/checkout-release",
+                    "runbook_url": "https://wiki.company.internal/runbooks/checkout-release",
+                    "post_deploy_verification_url": "https://checkout.company.internal/readyz",
                     "release_owner": "checkout-release-team",
                     "abort_criteria_override_reason": "incident commander will decide rollback criteria manually",
                 },
@@ -2444,7 +2575,7 @@ def test_release_readiness_rejects_production_safe_pr_without_rollback_source(
             "change_ticket": "CHG-123",
             "release_window_start": (now - timedelta(hours=1)).isoformat(),
             "release_window_end": (now + timedelta(hours=1)).isoformat(),
-            "runbook_url": "https://wiki.example.com/runbooks/checkout-release",
+            "runbook_url": "https://wiki.company.internal/runbooks/checkout-release",
             "release_owner": "checkout-release-team",
             "abort_criteria": "rollback if checkout error rate exceeds 5% for 5 minutes",
         },
@@ -2461,7 +2592,7 @@ def test_release_readiness_rejects_production_safe_pr_without_rollback_source(
                     "commit_sha": "abc1234",
                     "image": "ghcr.io/example/checkout:v2",
                     "health_check_path": "/readyz",
-                    "post_deploy_verification_url": "https://checkout.example.com/readyz",
+                    "post_deploy_verification_url": "https://checkout.company.internal/readyz",
                 },
             }
         ],
@@ -5267,7 +5398,8 @@ def test_dispatch_wave_steps_blocks_production_placeholder_change_ticket(monkeyp
             "approval_granted_at": datetime.now(timezone.utc).isoformat(),
             "change_ticket": "CHG-PREFLIGHT",
             "release_window_override_reason": "incident commander approved immediate release",
-            "runbook_url": "https://wiki.example.com/runbooks/storefront-release",
+            "runbook_url": "https://wiki.company.internal/runbooks/storefront-release",
+            "post_deploy_verification_url": "https://storefront.company.internal/readyz",
             "release_owner": "storefront-release-team",
             "abort_criteria": "rollback if checkout error rate exceeds 5% for 5 minutes",
         },
@@ -5411,7 +5543,7 @@ def test_dispatch_wave_steps_blocks_production_live_during_change_freeze(monkeyp
             "release_window_end": (now + timedelta(hours=1)).isoformat(),
             "change_freeze_start": (now - timedelta(minutes=5)).isoformat(),
             "change_freeze_end": (now + timedelta(minutes=5)).isoformat(),
-            "runbook_url": "https://wiki.example.com/runbooks/storefront-release",
+            "runbook_url": "https://wiki.company.internal/runbooks/storefront-release",
             "release_owner": "storefront-release-team",
             "abort_criteria": "rollback if checkout error rate exceeds 5% for 5 minutes",
         },
@@ -5548,7 +5680,7 @@ def test_dispatch_wave_steps_blocks_production_live_without_verification_evidenc
             "approval_granted_at": datetime.now(timezone.utc).isoformat(),
             "change_ticket": "CHG-123",
             "release_window_override_reason": "incident commander approved immediate release",
-            "runbook_url": "https://wiki.example.com/runbooks/storefront-release",
+            "runbook_url": "https://wiki.company.internal/runbooks/storefront-release",
             "release_owner": "storefront-release-team",
             "abort_criteria": "rollback if checkout error rate exceeds 5% for 5 minutes",
         },
@@ -5619,7 +5751,7 @@ def test_dispatch_wave_steps_blocks_production_live_without_abort_criteria(monke
             "approval_granted_at": datetime.now(timezone.utc).isoformat(),
             "change_ticket": "CHG-123",
             "release_window_override_reason": "incident commander approved immediate release",
-            "runbook_url": "https://wiki.example.com/runbooks/storefront-release",
+            "runbook_url": "https://wiki.company.internal/runbooks/storefront-release",
             "release_owner": "storefront-release-team",
         },
         "steps": [
@@ -5848,7 +5980,7 @@ def test_dispatch_wave_steps_records_production_change_override(monkeypatch) -> 
             "change_freeze_start": (datetime.now(timezone.utc) - timedelta(minutes=5)).isoformat(),
             "change_freeze_end": (datetime.now(timezone.utc) + timedelta(minutes=5)).isoformat(),
             "change_freeze_override_reason": "incident commander approved emergency hotfix",
-            "runbook_url": "https://wiki.example.com/runbooks/storefront-release",
+            "runbook_url": "https://wiki.company.internal/runbooks/storefront-release",
             "release_owner": "storefront-release-team",
             "verification_override_reason": "synthetic monitor is temporarily owned by incident command",
             "abort_criteria": "rollback if checkout error rate exceeds 5% for 5 minutes",
@@ -5924,7 +6056,7 @@ def test_dispatch_wave_steps_records_production_change_override(monkeypatch) -> 
         "verification.plan",
     ]
     assert guard["runbook"] == {
-        "url": "https://wiki.example.com/runbooks/storefront-release",
+        "url": "https://wiki.company.internal/runbooks/storefront-release",
         "url_present": True,
         "override_reason": None,
         "production_targets": ["app-a"],
@@ -5972,7 +6104,8 @@ def test_dispatch_wave_steps_records_active_production_release_window(monkeypatc
             "change_ticket": "CHG-123",
             "release_window_start": start.isoformat(),
             "release_window_end": end.isoformat(),
-            "runbook_url": "https://wiki.example.com/runbooks/storefront-release",
+            "runbook_url": "https://wiki.company.internal/runbooks/storefront-release",
+            "post_deploy_verification_url": "https://storefront.company.internal/readyz",
             "release_owner": "storefront-release-team",
             "abort_criteria": "rollback if checkout error rate exceeds 5% for 5 minutes",
         },
@@ -6032,7 +6165,7 @@ def test_dispatch_wave_steps_records_active_production_release_window(monkeypatc
     assert guard["verification"]["health_check_paths"] == ["/readyz"]
     assert guard["verification"]["evidence_present"] is True
     assert guard["verification_jobs"]["scheduled"] is True
-    assert guard["verification_jobs"]["job_count"] == 1
+    assert guard["verification_jobs"]["job_count"] == 2
     assert guard["verification_jobs"]["jobs"][0]["kind"] == "kubernetes_health_check"
     assert guard["verification_jobs"]["jobs"][0]["status"] == "pending"
     assert guard["verification_jobs"]["jobs"][0]["timeout_minutes"] == 15
@@ -6042,6 +6175,10 @@ def test_dispatch_wave_steps_records_active_production_release_window(monkeypatc
         "namespace": "",
         "service_name": "app-a",
         "path": "/readyz",
+    }
+    assert guard["verification_jobs"]["jobs"][1]["kind"] == "http_probe"
+    assert guard["verification_jobs"]["jobs"][1]["target"] == {
+        "url": "https://storefront.company.internal/readyz",
     }
     assert guard["abort_criteria"] == {
         "criteria": ["rollback if checkout error rate exceeds 5% for 5 minutes"],
