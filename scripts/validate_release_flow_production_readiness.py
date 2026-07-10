@@ -916,6 +916,12 @@ def check_deploy_script_contract() -> list[ReadinessCheck]:
             "deploy script fetches and validates the saved release plan before start",
         ),
         ReadinessCheck(
+            "script.deploy.api_base_url_guard",
+            'validate_live_https_url("api_base_url"' in source
+            and "for production deploy" in source,
+            "deploy script rejects non-production API URLs before API calls",
+        ),
+        ReadinessCheck(
             "script.deploy.plan_id_guard",
             "RELEASE_PLAN_ID_PATTERN" in source
             and "validate_release_plan_id" in source

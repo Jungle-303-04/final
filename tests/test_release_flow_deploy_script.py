@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import importlib.util
+import json
 import sys
 from pathlib import Path
 from typing import Any
@@ -288,3 +289,30 @@ def test_release_flow_deploy_refuses_unsafe_plan_id_before_api_calls() -> None:
         )
     ]
     assert client.calls == []
+
+
+def test_release_flow_deploy_refuses_non_production_api_url_before_api_calls(tmp_path: Path, capsys) -> None:
+    module = load_deploy_module()
+    report_path = tmp_path / "deploy.json"
+
+    exit_code = module.main(
+        [
+            "--api-base-url",
+            "http://localhost:8000/api",
+            "--email",
+            "release@company.internal",
+            "--password",
+            "secret",
+            "--plan-id",
+            "plan-prod",
+            "--report-path",
+            str(report_path),
+        ]
+    )
+
+    captured = capsys.readouterr()
+    payload = json.loads(report_path.read_text(encoding="utf-8"))
+    assert exit_code == 2
+    assert "api_base_url must use https" in captured.err
+    assert payload["ok"] is False
+    assert payload["error"] == "api_base_url must use https for production deploy"
