@@ -414,6 +414,31 @@ def test_smoke_github_step_summary_appends_markdown(tmp_path: Path, monkeypatch:
     assert "| `healthz` | pass | ok |" in body
 
 
+def test_smoke_github_output_appends_machine_readable_values(tmp_path: Path, monkeypatch: Any) -> None:
+    smoke = load_smoke_module()
+    output_path = tmp_path / "github-output.txt"
+    monkeypatch.setenv("GITHUB_OUTPUT", str(output_path))
+
+    smoke.append_github_output(
+        True,
+        ok=False,
+        api_base_url="https://example.com/api",
+        results=[
+            smoke.SmokeResult("healthz", True, "ok"),
+            smoke.SmokeResult("release-runs.policy-override-preflight", False, "token=raw-token"),
+        ],
+        error="password=raw-password",
+    )
+
+    body = output_path.read_text(encoding="utf-8")
+    assert "release_smoke_ok=false" in body
+    assert "release_smoke_failed_count=2" in body
+    assert "release_smoke_failed_checks=release-runs.policy-override-preflight" in body
+    assert "release_smoke_error=password=<redacted>" in body
+    assert "raw-token" not in body
+    assert "raw-password" not in body
+
+
 def test_smoke_main_writes_report_when_credentials_are_missing(tmp_path: Path, monkeypatch: Any) -> None:
     smoke = load_smoke_module()
     for name in ("API_BASE_URL", "BASE_URL", "AUTH_EMAIL", "AUTH_PASSWORD"):
@@ -422,7 +447,9 @@ def test_smoke_main_writes_report_when_credentials_are_missing(tmp_path: Path, m
     junit_path = tmp_path / "missing-credentials.xml"
     markdown_path = tmp_path / "missing-credentials.md"
     step_summary_path = tmp_path / "github-step-summary.md"
+    github_output_path = tmp_path / "github-output.txt"
     monkeypatch.setenv("GITHUB_STEP_SUMMARY", str(step_summary_path))
+    monkeypatch.setenv("GITHUB_OUTPUT", str(github_output_path))
 
     exit_code = smoke.main(
         [
@@ -433,6 +460,7 @@ def test_smoke_main_writes_report_when_credentials_are_missing(tmp_path: Path, m
             "--markdown-path",
             str(markdown_path),
             "--github-step-summary",
+            "--github-output",
         ]
     )
 
@@ -445,6 +473,10 @@ def test_smoke_main_writes_report_when_credentials_are_missing(tmp_path: Path, m
     assert "AUTH_EMAIL" in suite.find(".//failure").attrib["message"]
     assert "AUTH_EMAIL" in markdown_path.read_text(encoding="utf-8")
     assert "AUTH_EMAIL" in step_summary_path.read_text(encoding="utf-8")
+    github_output = github_output_path.read_text(encoding="utf-8")
+    assert "release_smoke_ok=false" in github_output
+    assert "release_smoke_failed_count=1" in github_output
+    assert "AUTH_EMAIL" in github_output
 
 
 def test_smoke_default_does_not_start_release_run() -> None:

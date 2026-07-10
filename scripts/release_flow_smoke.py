@@ -707,6 +707,12 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
         help="append the smoke result Markdown to GITHUB_STEP_SUMMARY when running in GitHub Actions",
     )
     parser.add_argument(
+        "--github-output",
+        action="store_true",
+        default=os.getenv("RELEASE_FLOW_SMOKE_GITHUB_OUTPUT", "").strip().lower() in {"1", "true", "yes"},
+        help="append machine-readable smoke outputs to GITHUB_OUTPUT for downstream GitHub Actions steps",
+    )
+    parser.add_argument(
         "--production-preflight",
         action="store_true",
         help=(
@@ -967,6 +973,38 @@ def append_github_step_summary(
         summary.write("\n\n")
 
 
+def append_github_output(
+    enabled: bool,
+    *,
+    ok: bool,
+    api_base_url: str,
+    results: list[SmokeResult],
+    error: str | None = None,
+) -> None:
+    if not enabled:
+        return
+    path = os.getenv("GITHUB_OUTPUT", "")
+    if not str(path or "").strip():
+        return
+    failed_checks = [item.name for item in results if not item.ok]
+    outputs = {
+        "release_smoke_ok": "true" if ok else "false",
+        "release_smoke_api_base_url": api_base_url or "",
+        "release_smoke_failed_count": str(len(failed_checks) + (1 if error else 0)),
+        "release_smoke_failed_checks": ",".join(failed_checks),
+        "release_smoke_error": redact_sensitive_text(error or ""),
+    }
+    target = os.path.abspath(path)
+    os.makedirs(os.path.dirname(target), exist_ok=True)
+    with open(target, "a", encoding="utf-8") as github_output:
+        for key, value in outputs.items():
+            github_output.write(f"{key}={github_output_value(value)}\n")
+
+
+def github_output_value(value: Any) -> str:
+    return str(value).replace("\r", " ").replace("\n", " ")
+
+
 def build_markdown_report(
     *,
     ok: bool,
@@ -1022,6 +1060,13 @@ def main(argv: list[str]) -> int:
             results=[],
             error=str(payload["error"]),
         )
+        append_github_output(
+            args.github_output,
+            ok=False,
+            api_base_url=api_base_url,
+            results=[],
+            error=str(payload["error"]),
+        )
         print(payload["error"], file=sys.stderr)
         return 2
     client = ApiClient(
@@ -1063,6 +1108,13 @@ def main(argv: list[str]) -> int:
             results=[],
             error=str(payload["error"]),
         )
+        append_github_output(
+            args.github_output,
+            ok=False,
+            api_base_url=client.api_base_url,
+            results=[],
+            error=str(payload["error"]),
+        )
         print(json.dumps(payload, ensure_ascii=False, indent=2), file=sys.stderr)
         return 1
     ok = all(item.ok for item in results)
@@ -1071,6 +1123,7 @@ def main(argv: list[str]) -> int:
     write_junit_report(args.junit_path, results)
     write_markdown_report(args.markdown_path, ok=ok, api_base_url=client.api_base_url, results=results)
     append_github_step_summary(args.github_step_summary, ok=ok, api_base_url=client.api_base_url, results=results)
+    append_github_output(args.github_output, ok=ok, api_base_url=client.api_base_url, results=results)
     print(json.dumps(payload, ensure_ascii=False, indent=2))
     return 0 if ok else 1
 

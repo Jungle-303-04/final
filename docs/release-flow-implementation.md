@@ -266,6 +266,14 @@ python scripts/release_flow_smoke.py \
   --github-step-summary
 ```
 
+다음 GitHub Actions step이나 notify job에서 smoke 결과를 조건으로 쓰려면 `--github-output`을 함께 쓴다. 이 옵션은 `GITHUB_OUTPUT`에 `release_smoke_ok`, `release_smoke_failed_count`, `release_smoke_failed_checks`, `release_smoke_error`, `release_smoke_api_base_url`을 append한다.
+
+```bash
+python scripts/release_flow_smoke.py \
+  --production-preflight \
+  --github-output
+```
+
 알림 채널이 실제로 validation alert를 받을 수 있는지 확인하려면 `--alert-preflight`를 붙인다. 이 모드는 enabled alert channel 중 요청 severity를 받을 수 있는 채널을 골라 `/alert-channels/test`를 호출하므로, 실제 Slack/webhook/온콜 테스트 메시지가 발송될 수 있다.
 
 ```bash
