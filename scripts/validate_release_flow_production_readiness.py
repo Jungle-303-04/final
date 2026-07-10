@@ -7,9 +7,12 @@ import argparse
 import json
 import os
 import sys
+import urllib.error
+import urllib.request
 from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any
+from urllib.parse import quote, urlparse
 
 import yaml
 
@@ -30,11 +33,24 @@ REQUIRED_SCRIPT_FILES = [
     Path("scripts/validate_release_flow_production_gate.py"),
     Path("scripts/up.sh"),
 ]
+REQUIRED_DOC_FILES = [
+    Path("docs/release-flow-production-readiness.md"),
+]
 REQUIRED_RUNTIME_CONFIG = {
     "api_base_url": ("RELEASE_FLOW_API_BASE_URL", "API_BASE_URL"),
     "auth_email": ("RELEASE_FLOW_AUTH_EMAIL", "AUTH_EMAIL"),
     "auth_password": ("RELEASE_FLOW_AUTH_PASSWORD", "AUTH_PASSWORD"),
 }
+GITHUB_RUNTIME_CONFIG = {
+    "github_token": ("GITHUB_TOKEN_REF", "GITHUB_TOKEN"),
+    "scm_repo": ("SCM_REPO",),
+    "github_api_base": ("GITHUB_API_BASE",),
+}
+DEFAULT_GITHUB_API_BASE = "https://api.github.com"
+DEFAULT_SCM_BASE_BRANCH = "main"
+RUNTIME_PLACEHOLDER_HOSTS = {"example.com", "example.test", "localhost", "127.0.0.1", "::1"}
+RUNTIME_PLACEHOLDER_PASSWORDS = {"secret", "password", "changeme", "change-me", "replace-me"}
+GITHUB_PLACEHOLDER_TOKENS = {"secret", "token", "github-token", "changeme", "replace-me"}
 
 
 @dataclass
@@ -49,11 +65,17 @@ def load_yaml(path: Path) -> dict[str, Any]:
     return loaded if isinstance(loaded, dict) else {}
 
 
-def validate_readiness(*, require_runtime_config: bool = False) -> list[ReadinessCheck]:
+def validate_readiness(
+    *,
+    require_runtime_config: bool = False,
+    check_github_access: bool = False,
+) -> list[ReadinessCheck]:
     checks: list[ReadinessCheck] = []
     checks.extend(check_required_files())
+    checks.extend(check_production_readiness_workflow_contract())
     checks.extend(check_smoke_workflow_contract())
     checks.extend(check_smoke_script_contract())
+    checks.extend(check_operator_documentation_contract())
     checks.extend(check_worker_topology_contract())
     checks.extend(check_metrics_scrape_contract())
     checks.extend(check_trace_correlation_contract())
@@ -61,12 +83,15 @@ def validate_readiness(*, require_runtime_config: bool = False) -> list[Readines
     checks.extend(check_production_gate_contract())
     checks.extend(check_gate_contract_workflow())
     checks.extend(check_runtime_config(require_runtime_config=require_runtime_config))
+    checks.extend(check_github_runtime_config(require_runtime_config=require_runtime_config))
+    if check_github_access:
+        checks.extend(check_github_access_preflight())
     return checks
 
 
 def check_required_files() -> list[ReadinessCheck]:
     checks: list[ReadinessCheck] = []
-    for path in [*REQUIRED_WORKFLOW_FILES, *REQUIRED_SCRIPT_FILES]:
+    for path in [*REQUIRED_WORKFLOW_FILES, *REQUIRED_SCRIPT_FILES, *REQUIRED_DOC_FILES]:
         checks.append(ReadinessCheck(f"file.{path.as_posix()}", path.is_file(), "present" if path.is_file() else "missing"))
     return checks
 
@@ -191,6 +216,43 @@ def check_smoke_script_contract() -> list[ReadinessCheck]:
             '"safe_pr_ready"] = True' not in source,
             "direct live preflight does not mark Safe PR ready without server-side evidence",
         ),
+    ]
+
+
+def check_operator_documentation_contract() -> list[ReadinessCheck]:
+    path = Path("docs/release-flow-production-readiness.md")
+    if not path.is_file():
+        return [ReadinessCheck("docs.production_readiness", False, "release-flow production readiness operator guide is missing")]
+    source = path.read_text(encoding="utf-8")
+    required_terms = {
+        "RELEASE_FLOW_API_BASE_URL",
+        "RELEASE_FLOW_AUTH_EMAIL",
+        "RELEASE_FLOW_AUTH_PASSWORD",
+        "RELEASE_FLOW_GITHUB_TOKEN_REF",
+        "RELEASE_FLOW_GITHUB_TOKEN",
+        "RELEASE_FLOW_SCM_REPO",
+        "RELEASE_FLOW_SCM_BASE_BRANCH",
+        "RELEASE_FLOW_GITHUB_API_BASE",
+        "--check-github-access",
+        "github_access_preflight",
+        "validate_release_flow_production_readiness.py --require-runtime-config",
+        "Release Flow Production Readiness",
+        "release-flow-production-readiness",
+        "release-flow-production-gate.yml",
+        "api_smoke_preflight",
+        "release_flow_smoke.py --production-preflight --ci",
+        "live_safe_pr_workflow_run_id",
+        "live_safe_pr_url",
+    }
+    missing = sorted(term for term in required_terms if term not in source)
+    return [
+        ReadinessCheck(
+            "docs.production_readiness.operator_guide",
+            not missing,
+            "operator guide lists runtime config, readiness workflow, artifact, and Safe PR gate evidence"
+            if not missing
+            else f"operator guide missing: {', '.join(missing)}",
+        )
     ]
 
 
@@ -433,6 +495,99 @@ def check_safe_pr_patch_contract() -> list[ReadinessCheck]:
     ]
 
 
+def check_production_readiness_workflow_contract() -> list[ReadinessCheck]:
+    path = Path(".github/workflows/release-flow-production-readiness.yml")
+    if not path.is_file():
+        return [ReadinessCheck("workflow.production_readiness", False, "release-flow-production-readiness.yml is missing")]
+    workflow = load_yaml(path)
+    workflow_source = path.read_text(encoding="utf-8")
+    dispatch = workflow.get("on", {}).get("workflow_dispatch", {})
+    inputs = dispatch.get("inputs", {}) if isinstance(dispatch, dict) else {}
+    jobs = workflow.get("jobs", {})
+    job = jobs.get("release_flow_production_readiness", {}) if isinstance(jobs, dict) else {}
+    env: dict[str, Any] = {}
+    run = ""
+    for step in job.get("steps", []):
+        if not isinstance(step, dict) or step.get("name") != "Validate production readiness":
+            continue
+        env = step.get("env", {}) if isinstance(step.get("env"), dict) else {}
+        run = str(step.get("run") or "")
+        break
+    return [
+        ReadinessCheck(
+            "workflow.production_readiness.require_runtime_config",
+            "--require-runtime-config" in run,
+            "production readiness requires concrete runtime config",
+        ),
+        ReadinessCheck(
+            "workflow.production_readiness.requires_runtime_config",
+            "--require-runtime-config" in run,
+            "production readiness validates concrete runtime configuration",
+        ),
+        ReadinessCheck(
+            "workflow.production_readiness.runtime_env",
+            "RELEASE_FLOW_API_BASE_URL" in env
+            and "RELEASE_FLOW_AUTH_EMAIL" in env
+            and "RELEASE_FLOW_AUTH_PASSWORD" in env
+            and "GITHUB_TOKEN_REF" in env
+            and "GITHUB_TOKEN" in env
+            and "SCM_REPO" in env,
+            "production readiness receives API and GitHub runtime env",
+        ),
+        ReadinessCheck(
+            "workflow.production_readiness.github_provider_env",
+            "GITHUB_TOKEN_REF" in env
+            and "GITHUB_TOKEN" in env
+            and "SCM_REPO" in env
+            and "SCM_BASE_BRANCH" in env
+            and "GITHUB_API_BASE" in env,
+            "production readiness receives GitHub Safe PR provider env",
+        ),
+        ReadinessCheck(
+            "workflow.production_readiness.github_access_preflight",
+            "github_access_preflight" in inputs
+            and "GITHUB_ACCESS_PREFLIGHT" in env
+            and "--check-github-access" in run,
+            "production readiness can optionally verify read-only GitHub repo access",
+        ),
+        ReadinessCheck(
+            "workflow.production_readiness.api_smoke_preflight",
+            "api_smoke_preflight" in inputs
+            and "API_SMOKE_PREFLIGHT" in env
+            and "scripts/release_flow_smoke.py" in run
+            and "--production-preflight" in run
+            and "--ci-artifacts-dir artifacts" in run
+            and "API_BASE_URL=\"$RELEASE_FLOW_API_BASE_URL\"" in run
+            and "AUTH_EMAIL=\"$RELEASE_FLOW_AUTH_EMAIL\"" in run
+            and "AUTH_PASSWORD=\"$RELEASE_FLOW_AUTH_PASSWORD\"" in run
+            and "artifacts/release-flow-*.*" in workflow_source,
+            "production readiness can optionally run live API smoke without release dispatch",
+        ),
+        ReadinessCheck(
+            "workflow.production_readiness.github_api_base",
+            "GITHUB_API_BASE" in env and "RELEASE_FLOW_GITHUB_API_BASE" in str(env.get("GITHUB_API_BASE") or ""),
+            "production readiness can target GitHub Enterprise API base",
+        ),
+        ReadinessCheck(
+            "workflow.production_readiness.github_secret_names",
+            "RELEASE_FLOW_GITHUB_TOKEN_REF" in str(env.get("GITHUB_TOKEN_REF") or "")
+            and "RELEASE_FLOW_GITHUB_TOKEN" in str(env.get("GITHUB_TOKEN") or "")
+            and "RELEASE_FLOW_SCM_REPO" in str(env.get("SCM_REPO") or ""),
+            "production readiness uses release-flow scoped GitHub secret names",
+        ),
+        ReadinessCheck(
+            "workflow.production_readiness.failure_report",
+            "if: always()" in workflow_source
+            and "release-flow-production-readiness" in workflow_source
+            and "artifacts/release-flow-readiness" in run
+            and "readiness_status=$?" in run
+            and 'cat artifacts/release-flow-readiness.md >> "$GITHUB_STEP_SUMMARY"' in run
+            and 'exit "$readiness_status"' in run,
+            "production readiness publishes and uploads reports even when validation fails",
+        ),
+    ]
+
+
 def check_production_gate_contract() -> list[ReadinessCheck]:
     path = Path(".github/workflows/release-flow-production-gate.yml")
     if not path.is_file():
@@ -542,15 +697,274 @@ def check_gate_contract_workflow() -> list[ReadinessCheck]:
 def check_runtime_config(*, require_runtime_config: bool) -> list[ReadinessCheck]:
     checks: list[ReadinessCheck] = []
     for name, env_names in REQUIRED_RUNTIME_CONFIG.items():
-        configured = any(os.getenv(env_name) for env_name in env_names)
+        value = runtime_config_value(env_names)
+        configured = bool(value)
+        valid, invalid_detail = runtime_config_validity(name, value)
+        ok = (configured and valid) if require_runtime_config else True
         checks.append(
             ReadinessCheck(
                 f"runtime.{name}",
-                configured or not require_runtime_config,
-                "configured" if configured else f"not checked; set one of {', '.join(env_names)}",
+                ok,
+                runtime_config_detail(
+                    configured=configured,
+                    valid=valid,
+                    invalid_detail=invalid_detail,
+                    env_names=env_names,
+                    require_runtime_config=require_runtime_config,
+                ),
             )
         )
     return checks
+
+
+def check_github_runtime_config(*, require_runtime_config: bool) -> list[ReadinessCheck]:
+    checks: list[ReadinessCheck] = []
+    for name, env_names in GITHUB_RUNTIME_CONFIG.items():
+        value = runtime_config_value(env_names)
+        configured, valid, detail = github_runtime_config_state(name, value)
+        if require_runtime_config and name != "github_api_base":
+            ok = configured and valid
+        elif configured:
+            ok = valid
+        else:
+            ok = True
+        checks.append(
+            ReadinessCheck(
+                f"runtime.{name}",
+                ok,
+                runtime_config_detail(
+                    configured=configured,
+                    valid=valid,
+                    invalid_detail=detail,
+                    env_names=env_names,
+                    require_runtime_config=require_runtime_config and name != "github_api_base",
+                ),
+            )
+        )
+    return checks
+
+
+def check_github_access_preflight() -> list[ReadinessCheck]:
+    prerequisite_failures = [
+        check
+        for check in check_github_runtime_config(require_runtime_config=True)
+        if not check.ok and check.name in {"runtime.github_token", "runtime.scm_repo", "runtime.github_api_base"}
+    ]
+    if prerequisite_failures:
+        return [
+            ReadinessCheck(
+                "runtime.github_access_preflight",
+                False,
+                "GitHub access preflight requires valid token, repo, and API base config first: "
+                + ", ".join(check.name for check in prerequisite_failures),
+            )
+        ]
+    token, token_detail = github_access_token()
+    if not token:
+        return [ReadinessCheck("runtime.github_access_preflight", False, token_detail)]
+    repo = os.getenv("SCM_REPO", "").strip()
+    base_branch = os.getenv("SCM_BASE_BRANCH", DEFAULT_SCM_BASE_BRANCH).strip() or DEFAULT_SCM_BASE_BRANCH
+    api_base = os.getenv("GITHUB_API_BASE", DEFAULT_GITHUB_API_BASE).strip().rstrip("/") or DEFAULT_GITHUB_API_BASE
+    headers = github_access_headers(token)
+    try:
+        repo_payload = github_json_get(f"{api_base}/repos/{repo}", headers=headers)
+        if not github_repo_allows_safe_pr_write(repo_payload):
+            return [
+                ReadinessCheck(
+                    "runtime.github_access_preflight",
+                    False,
+                    f"GitHub token can read {repo}, but repo permissions do not indicate write access for Safe PR branches",
+                )
+            ]
+        github_json_get(f"{api_base}/repos/{repo}/git/ref/heads/{quote(base_branch, safe='/')}", headers=headers)
+        return [
+            ReadinessCheck(
+                "runtime.github_access_preflight",
+                True,
+                f"GitHub repo {repo} allows Safe PR writes and base branch {base_branch} is readable",
+            )
+        ]
+    except urllib.error.HTTPError as exc:
+        return [
+            ReadinessCheck(
+                "runtime.github_access_preflight",
+                False,
+                f"GitHub access preflight returned HTTP {exc.code} for {repo}@{base_branch}",
+            )
+        ]
+    except (TimeoutError, urllib.error.URLError, OSError) as exc:
+        return [
+            ReadinessCheck(
+                "runtime.github_access_preflight",
+                False,
+                f"GitHub access preflight failed before PR creation: {type(exc).__name__}",
+            )
+        ]
+
+
+def github_access_headers(token: str) -> dict[str, str]:
+    return {
+        "Authorization": f"Bearer {token}",
+        "Accept": "application/vnd.github+json",
+        "User-Agent": "release-flow-production-readiness",
+    }
+
+
+def github_json_get(url: str, *, headers: dict[str, str]) -> dict[str, Any]:
+    request = urllib.request.Request(url, headers=headers, method="GET")
+    with urllib.request.urlopen(request, timeout=10) as response:
+        status = int(response.getcode())
+        if status != 200:
+            raise urllib.error.HTTPError(url, status, f"unexpected status {status}", hdrs=None, fp=None)
+        payload = json.loads(response.read().decode("utf-8") or "{}")
+        return payload if isinstance(payload, dict) else {}
+
+
+def github_repo_allows_safe_pr_write(payload: dict[str, Any]) -> bool:
+    permissions = payload.get("permissions")
+    if not isinstance(permissions, dict):
+        return False
+    return any(bool(permissions.get(field)) for field in ("push", "maintain", "admin"))
+
+
+def github_access_token() -> tuple[str, str]:
+    token_ref = os.getenv("GITHUB_TOKEN_REF", "").strip()
+    token = os.getenv("GITHUB_TOKEN", "").strip()
+    if token_ref:
+        lowered = token_ref.lower()
+        if lowered.startswith("aws-sm:") or lowered.startswith("k8s-secret:"):
+            if token:
+                return token, "resolved from GITHUB_TOKEN fallback"
+            return (
+                "",
+                "GitHub access preflight needs a resolvable token; provide GITHUB_TOKEN "
+                "(or the RELEASE_FLOW_GITHUB_TOKEN workflow secret) for non-env token refs",
+            )
+        env_name = token_ref.removeprefix("env:").strip()
+        value = os.getenv(env_name, "").strip()
+        if value:
+            return value, f"resolved from {env_name}"
+        if token:
+            return token, "resolved from GITHUB_TOKEN fallback"
+        return "", f"GitHub access preflight token ref {env_name} is not set"
+    if token:
+        return token, "resolved from GITHUB_TOKEN"
+    return "", "GitHub access preflight requires GITHUB_TOKEN or env-resolvable GITHUB_TOKEN_REF"
+
+
+def github_runtime_config_state(name: str, value: str) -> tuple[bool, bool, str]:
+    if name == "github_token":
+        return github_token_config_state()
+    if name == "scm_repo":
+        if not value:
+            return False, False, "missing"
+        if not github_repo_ref_valid(value):
+            return True, False, "must be an owner/repo GitHub repository path"
+        return True, True, ""
+    if name == "github_api_base":
+        if not value:
+            return True, True, "using default https://api.github.com"
+        valid, detail = https_url_validity(value)
+        return True, valid, detail
+    return bool(value), bool(value), "" if value else "missing"
+
+
+def github_token_config_state() -> tuple[bool, bool, str]:
+    token_ref = os.getenv("GITHUB_TOKEN_REF", "").strip()
+    token = os.getenv("GITHUB_TOKEN", "").strip()
+    if token_ref:
+        valid, detail = github_token_ref_validity(token_ref)
+        return True, valid, detail
+    if token:
+        valid, detail = secret_value_validity(token)
+        return True, valid, detail
+    return False, False, "missing"
+
+
+def github_token_ref_validity(ref: str) -> tuple[bool, str]:
+    lowered = ref.lower()
+    if lowered in GITHUB_PLACEHOLDER_TOKENS:
+        return False, "must not use a placeholder token ref"
+    if lowered.startswith("aws-sm:"):
+        return (len(ref.removeprefix("aws-sm:").strip()) > 0, "aws-sm ref is empty")
+    if lowered.startswith("k8s-secret:"):
+        value = ref.removeprefix("k8s-secret:").strip()
+        if "/" not in value or "#" not in value:
+            return False, "k8s-secret ref must be namespace/name#key"
+        return True, ""
+    env_name = ref.removeprefix("env:").strip()
+    if not env_name:
+        return False, "env token ref is empty"
+    if not os.getenv(env_name, "").strip():
+        return False, f"env token ref {env_name} is not set"
+    return secret_value_validity(os.getenv(env_name, "").strip())
+
+
+def secret_value_validity(value: str) -> tuple[bool, str]:
+    if len(value) < 20 or value.lower() in GITHUB_PLACEHOLDER_TOKENS:
+        return False, "must be a non-placeholder token of at least 20 characters"
+    return True, ""
+
+
+def github_repo_ref_valid(value: str) -> bool:
+    parts = value.strip().split("/")
+    if len(parts) != 2:
+        return False
+    allowed = set("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_.-")
+    return all(part and set(part) <= allowed for part in parts)
+
+
+def runtime_config_value(env_names: tuple[str, ...]) -> str:
+    for env_name in env_names:
+        value = os.getenv(env_name, "").strip()
+        if value:
+            return value
+    return ""
+
+
+def runtime_config_validity(name: str, value: str) -> tuple[bool, str]:
+    if not value:
+        return False, "missing"
+    if name == "api_base_url":
+        return https_url_validity(value)
+    if name == "auth_email":
+        lowered = value.lower()
+        if "@" not in value or lowered.endswith("@example.com") or lowered == "release-oncall@example.com":
+            return False, "must be a real operator account email"
+        return True, ""
+    if name == "auth_password":
+        if len(value) < 12 or value.lower() in RUNTIME_PLACEHOLDER_PASSWORDS:
+            return False, "must be a non-placeholder secret of at least 12 characters"
+        return True, ""
+    return True, ""
+
+
+def https_url_validity(value: str) -> tuple[bool, str]:
+    parsed = urlparse(value)
+    host = (parsed.hostname or "").lower()
+    if parsed.scheme != "https":
+        return False, "must use https"
+    if host in RUNTIME_PLACEHOLDER_HOSTS or host.endswith(".localhost"):
+        return False, "must not point at localhost or example hosts"
+    return True, ""
+
+
+def runtime_config_detail(
+    *,
+    configured: bool,
+    valid: bool,
+    invalid_detail: str,
+    env_names: tuple[str, ...],
+    require_runtime_config: bool,
+) -> str:
+    if configured and valid:
+        if invalid_detail:
+            return invalid_detail
+        return "configured"
+    if configured:
+        prefix = "invalid" if require_runtime_config else "not checked"
+        return f"{prefix}; {invalid_detail}"
+    return f"not checked; set one of {', '.join(env_names)}"
 
 
 def write_report(path: Path, checks: list[ReadinessCheck]) -> None:
@@ -577,6 +991,7 @@ def write_markdown(path: Path, checks: list[ReadinessCheck]) -> None:
 def parse_args(argv: list[str]) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--require-runtime-config", action="store_true")
+    parser.add_argument("--check-github-access", action="store_true")
     parser.add_argument("--report-path", type=Path)
     parser.add_argument("--markdown-path", type=Path)
     return parser.parse_args(argv)
@@ -584,7 +999,10 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
 
 def main(argv: list[str]) -> int:
     args = parse_args(argv)
-    checks = validate_readiness(require_runtime_config=args.require_runtime_config)
+    checks = validate_readiness(
+        require_runtime_config=args.require_runtime_config,
+        check_github_access=args.check_github_access,
+    )
     if args.report_path:
         write_report(args.report_path, checks)
     if args.markdown_path:

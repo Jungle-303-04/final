@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type Dispatch, type SetStateAction, type SVGProps } from 'react';
 import Editor, { type Monaco, type OnMount } from '@monaco-editor/react';
 import { Handle, Position, type Edge, type Node, type NodeProps } from '@xyflow/react';
-import type { editor as MonacoEditor } from 'monaco-editor';
+import type { editor as MonacoEditor } from 'monaco-editor/esm/vs/editor/editor.api';
 import { motion } from 'motion/react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { useConsolePath } from '@/features/console/ui';
@@ -18,6 +18,8 @@ import {
   usePauseReleaseRun,
   useReleasePlans,
   useReleasePreview,
+  useReleaseGeneratedManifest,
+  useSubmitReleaseGeneratedManifestSafePr,
   useReleaseAudit,
   useReleaseAuditExport,
   useReleaseRunHandoff,
@@ -41,6 +43,8 @@ import type {
   Application,
   Diagnostic,
   ReleaseAuditEvent,
+  ReleaseGeneratedManifest,
+  ReleaseManifestSafePr,
   ReleasePlan,
   ReleasePlanPreview,
   ReleaseReadiness,
@@ -52,79 +56,6 @@ import type {
 } from '@/shared/lib/types';
 import { fadeInUp } from '@/ui/motion';
 import './ReleaseFlowView.css';
-
-const BASELINE_YAML = `apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: checkout-api
-  namespace: sandbox
-spec:
-  replicas: 2
-  selector:
-    matchLabels:
-      app: checkout-api
-  template:
-    metadata:
-      labels:
-        app: checkout-api
-    spec:
-      containers:
-        - name: checkout-api
-          image: ghcr.io/example/checkout-api:v1.4.2
-          readinessProbe:
-            httpGet:
-              path: /readyz
-              port: 8080
-          resources:
-            limits:
-              memory: 512Mi
----
-apiVersion: v1
-kind: Service
-metadata:
-  name: checkout-api
-  namespace: sandbox
-spec:
-  selector:
-    app: checkout-api
-  ports:
-    - port: 80
-      targetPort: 8080
-`;
-
-const SAMPLE_YAML = `apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: checkout-api
-  namespace: sandbox
-spec:
-  replicas: 0
-  selector:
-    matchLabels:
-      app: checkout-v2
-  template:
-    metadata:
-      labels:
-        app: checkout-v2
-    spec:
-      containers:
-        - name: checkout-api
-          image: ghcr.io/example/checkout-api:latest
-          securityContext:
-            privileged: true
----
-apiVersion: v1
-kind: Service
-metadata:
-  name: checkout-api
-  namespace: sandbox
-spec:
-  selector:
-    app: checkout-v2
-  ports:
-    - port: 80
-      targetPort: 9000
-`;
 
 const DEFAULT_POLICY: Record<string, unknown> = {
   runtime_mode: 'demo',
@@ -312,14 +243,24 @@ export default function ReleaseFlowView() {
   const alertChannelsQ = useAlertChannels();
   const [plan, setPlan] = useState<ReleasePlan | null>(null);
   const [selectedIndex, setSelectedIndex] = useState(0);
-  const [yaml, setYaml] = useState(SAMPLE_YAML);
   const [tab, setTab] = useState(runIdParam ? 'policy' : 'plan');
   const [runFilter, setRunFilter] = useState<ReleaseRunFilter>('all');
   const [selectedRunId, setSelectedRunId] = useState(runIdParam);
   const [auditEventType, setAuditEventType] = useState('');
   const { data: planDiagnosticsData, mutate: diagnosePlan } = useDiagnostics();
-  const { data: yamlDiagnosticsData, mutate: diagnoseYaml } = useDiagnostics();
   const { data: releasePreviewData, isPending: releasePreviewPending, mutate: previewRelease } = useReleasePreview();
+  const {
+    data: generatedManifestData,
+    isPending: generatedManifestPending,
+    mutate: generateManifest,
+    reset: resetGeneratedManifest,
+  } = useReleaseGeneratedManifest();
+  const {
+    data: generatedManifestSafePrData,
+    isPending: generatedManifestSafePrPending,
+    mutate: submitGeneratedManifestSafePr,
+    reset: resetGeneratedManifestSafePr,
+  } = useSubmitReleaseGeneratedManifestSafePr();
   const { data: releaseReadinessData, isPending: releaseReadinessPending, mutate: checkReadiness } = useReleaseReadiness();
   const runsQ = useReleaseRuns(plan?.plan_id, runFilter);
   const summaryQ = useReleaseRunSummary(plan?.plan_id);
@@ -353,7 +294,6 @@ export default function ReleaseFlowView() {
   const apps = useMemo(() => appsQ.data ?? [], [appsQ.data]);
   const appById = useMemo(() => new Map(apps.map(app => [app.application_id, app])), [apps]);
   const selected = selectedStep(plan, selectedIndex);
-  const selectedNamespace = getString(selected?.config.namespace, 'sandbox');
   const diagnosticPlan = useMemo(() => withDiagnosticDefaults(plan, apps), [apps, plan]);
   const settingsBaselines = useMemo(() => settingsBaselinesFor(apps), [apps]);
 
@@ -388,19 +328,22 @@ export default function ReleaseFlowView() {
   }, [checkReadiness, diagnosePlan, diagnosticPlan, previewRelease, settingsBaselines]);
 
   useEffect(() => {
+    resetGeneratedManifestSafePr();
+    resetGeneratedManifest();
+    if (!diagnosticPlan || !selected) return;
     const timer = window.setTimeout(() => {
-      diagnoseYaml({ mode: 'yaml', content: yaml, context: { namespace: selectedNamespace, previous_content: BASELINE_YAML } });
+      generateManifest({ plan: diagnosticPlan, stepIndex: selectedIndex });
     }, 250);
     return () => window.clearTimeout(timer);
-  }, [diagnoseYaml, selectedNamespace, yaml]);
+  }, [diagnosticPlan, generateManifest, resetGeneratedManifest, resetGeneratedManifestSafePr, selected, selectedIndex]);
 
   useEffect(() => {
     const editor = editorRef.current;
     const monaco = monacoRef.current;
     const model = editor?.getModel();
     if (!editor || !monaco || !model) return;
-    monaco.editor.setModelMarkers(model, 'myjob-yaml', markersFor(monaco, yamlDiagnosticsData?.diagnostics ?? []));
-  }, [yamlDiagnosticsData]);
+    monaco.editor.setModelMarkers(model, 'myjob-yaml', markersFor(monaco, generatedManifestData?.diagnostics ?? []));
+  }, [generatedManifestData]);
 
   const preview = releasePreviewData?.preview;
   const planLiveSideEffects = releasePlanHasLiveSideEffects(plan);
@@ -502,7 +445,7 @@ export default function ReleaseFlowView() {
           <Tabs value={tab} onValueChange={setTab} items={[
             { value: 'plan', label: 'Plan', count: planDiagnosticsData?.diagnostics.length },
             { value: 'policy', label: 'Policy', count: preview?.blockers.length },
-            { value: 'yaml', label: 'YAML', count: yamlDiagnosticsData?.diagnostics.length },
+            { value: 'yaml', label: 'YAML', count: generatedManifestData?.diagnostics.length },
           ]} />
 
           {tab === 'plan' && (
@@ -607,25 +550,94 @@ export default function ReleaseFlowView() {
 
           {tab === 'yaml' && (
             <div className="release-flow__yaml">
+              <GeneratedManifestSummary
+                generated={generatedManifestData}
+                safePr={generatedManifestSafePrData}
+                loading={generatedManifestPending}
+                creatingSafePr={generatedManifestSafePrPending}
+                onCreateSafePr={() => diagnosticPlan && submitGeneratedManifestSafePr({ plan: diagnosticPlan, stepIndex: selectedIndex })}
+              />
               <Card title="YAML editor" className="p-0">
                 <div className="release-flow__editor">
                   <Editor
                     height="460px"
                     language="yaml"
                     theme="vs-dark"
-                    value={yaml}
+                    value={generatedManifestData?.manifest ?? '# Generated manifest will appear after a release step is selected.\n'}
                     onMount={onMount}
-                    onChange={value => setYaml(value ?? '')}
-                    options={{ minimap: { enabled: false }, fontSize: 13, lineNumbersMinChars: 3, scrollBeyondLastLine: false, wordWrap: 'on', tabSize: 2 }}
+                    options={{ readOnly: true, minimap: { enabled: false }, fontSize: 13, lineNumbersMinChars: 3, scrollBeyondLastLine: false, wordWrap: 'on', tabSize: 2 }}
                   />
                 </div>
               </Card>
-              <DiagnosticsPanel diagnostics={yamlDiagnosticsData?.diagnostics ?? []} />
+              <DiagnosticsPanel diagnostics={generatedManifestData?.diagnostics ?? []} />
             </div>
           )}
         </>
       ) : <EmptyState title="Preparing release plan" />}
     </motion.div>
+  );
+}
+
+function GeneratedManifestSummary({
+  generated,
+  safePr,
+  loading,
+  creatingSafePr,
+  onCreateSafePr,
+}: {
+  generated?: ReleaseGeneratedManifest;
+  safePr?: ReleaseManifestSafePr;
+  loading: boolean;
+  creatingSafePr: boolean;
+  onCreateSafePr: () => void;
+}) {
+  if (loading && !generated) {
+    return <Card title="Generated manifest" loading><p className="release-flow__hint">Generating from release options...</p></Card>;
+  }
+  if (!generated) {
+    return <Card title="Generated manifest"><p className="release-flow__hint">Select a release step to generate a manifest.</p></Card>;
+  }
+  const file = generated.files[0];
+  const blocking = generated.diagnostics.filter(diag => diag.severity === 'error').length;
+  const canCreateSafePr = blocking === 0 && generated.files.length > 0;
+  return (
+    <Card
+      title="Generated manifest"
+      actions={
+        <>
+          <Badge tone={blocking > 0 ? 'danger' : generated.diagnostics.length > 0 ? 'warning' : 'success'}>{blocking > 0 ? 'blocked' : 'ready'}</Badge>
+          <Button size="sm" variant="primary" loading={creatingSafePr} disabled={!canCreateSafePr} onClick={onCreateSafePr}>Safe PR</Button>
+        </>
+      }
+    >
+      <p className="release-flow__hint">{generated.summary}</p>
+      {file && <p className="release-flow__hint">File: <code>{file.path}</code></p>}
+      {safePr?.workflow_run_id && (
+        <div className="release-flow__preview-list">
+          <div className="release-flow__preview-row">
+            <strong>Safe PR evidence</strong>
+            <span>{safePr.repo_ref || '-'}</span>
+            <span>{safePr.base_branch || '-'}</span>
+            <code>{safePr.workflow_run_id}</code>
+            <code>{safePr.patch_sha256 ? safePr.patch_sha256.slice(0, 12) : '-'}</code>
+          </div>
+        </div>
+      )}
+      {generated.resources.length > 0 && (
+        <div className="release-flow__preview-list">
+          {generated.resources.map(resource => (
+            <div key={`${resource.kind}-${resource.namespace}-${resource.name}`} className="release-flow__preview-row">
+              <strong>{resource.kind}</strong>
+              <span>{resource.namespace || '-'}</span>
+              <span>{resource.name}</span>
+            </div>
+          ))}
+        </div>
+      )}
+      {generated.warnings.map(warning => (
+        <div key={warning} className="release-flow__diag release-flow__diag--warning">{warning}</div>
+      ))}
+    </Card>
   );
 }
 
@@ -2405,8 +2417,11 @@ function releaseStepMeta(step: ReleaseRun['steps'][number]): string[] {
   else if (reasonCode) items.push(`RCA ${reasonCode}`);
   const recoveryRoute = getString(recovery.selected_route, getString(recovery.execution_route));
   if (recoveryRoute) items.push(`recovery ${recoveryRoute}`);
-  if (getString(safePr.pr_url)) items.push('Safe PR created');
-  else if (getString(safePr.title)) items.push('Safe PR');
+  const safePrReason = getString(safePr.reason);
+  const safePrRepo = getString(safePr.repo_ref);
+  if (safePrReason) items.push(`Safe PR failed${safePrRepo ? ` ${safePrRepo}` : ''}`);
+  else if (getString(safePr.pr_url)) items.push(`Safe PR created${safePrRepo ? ` ${safePrRepo}` : ''}`);
+  else if (getString(safePr.title)) items.push(`Safe PR${safePrRepo ? ` ${safePrRepo}` : ''}`);
   const approvalId = approvalIdForStep(step);
   if (approvalId) items.push(`approval ${shortId(approvalId)}`);
   const commandStatus = getString(command.status);
@@ -2482,9 +2497,17 @@ function releaseEventMeta(event: ReleaseRun['events'][number]): string {
   const recoveryRoute = getString(recovery.selected_route, getString(recovery.execution_route));
   if (recoveryRoute) return `recovery ${recoveryRoute}`;
   const prUrl = getString(safePr.pr_url);
-  if (prUrl) return 'Safe PR created';
+  const safePrRepo = getString(safePr.repo_ref);
+  const safePrReason = getString(safePr.reason);
+  const safePrReasonCode = getString(safePr.reason_code);
+  const safePrStage = getString(safePr.stage);
+  if (safePrReason) {
+    const code = [safePrReasonCode, safePrStage].filter(Boolean).join('/');
+    return `Safe PR failed${code ? ` ${code}` : ''}${safePrRepo ? ` ${safePrRepo}` : ''}`;
+  }
+  if (prUrl) return `Safe PR created${safePrRepo ? ` ${safePrRepo}` : ''}`;
   const safePrTitle = getString(safePr.title);
-  if (safePrTitle) return 'Safe PR requested';
+  if (safePrTitle) return `Safe PR requested${safePrRepo ? ` ${safePrRepo}` : ''}`;
   const commandStatus = getString(command.status);
   if (commandStatus) return `command ${commandStatus}`;
   const commandId = getString(command.command_id);

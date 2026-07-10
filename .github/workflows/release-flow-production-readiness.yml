@@ -8,6 +8,16 @@ name: Release Flow Production Readiness
         required: false
         default: production
         type: string
+      github_access_preflight:
+        description: Also verify the GitHub token can read SCM_REPO and SCM_BASE_BRANCH.
+        required: false
+        default: false
+        type: boolean
+      api_smoke_preflight:
+        description: Also run the live release-flow API smoke without dispatching a release.
+        required: false
+        default: false
+        type: boolean
 
 permissions:
   contents: read
@@ -34,18 +44,52 @@ jobs:
           RELEASE_FLOW_API_BASE_URL: ${{ secrets.RELEASE_FLOW_API_BASE_URL }}
           RELEASE_FLOW_AUTH_EMAIL: ${{ secrets.RELEASE_FLOW_AUTH_EMAIL }}
           RELEASE_FLOW_AUTH_PASSWORD: ${{ secrets.RELEASE_FLOW_AUTH_PASSWORD }}
+          GITHUB_TOKEN_REF: ${{ secrets.RELEASE_FLOW_GITHUB_TOKEN_REF }}
+          GITHUB_TOKEN: ${{ secrets.RELEASE_FLOW_GITHUB_TOKEN }}
+          SCM_REPO: ${{ vars.RELEASE_FLOW_SCM_REPO || secrets.RELEASE_FLOW_SCM_REPO }}
+          SCM_BASE_BRANCH: ${{ vars.RELEASE_FLOW_SCM_BASE_BRANCH || secrets.RELEASE_FLOW_SCM_BASE_BRANCH }}
+          GITHUB_API_BASE: ${{ vars.RELEASE_FLOW_GITHUB_API_BASE || secrets.RELEASE_FLOW_GITHUB_API_BASE }}
+          GITHUB_ACCESS_PREFLIGHT: ${{ inputs.github_access_preflight || false }}
+          API_SMOKE_PREFLIGHT: ${{ inputs.api_smoke_preflight || false }}
         run: |
+          set +e
+          github_access_args=""
+          if [ "$GITHUB_ACCESS_PREFLIGHT" = "true" ]; then
+            github_access_args="--check-github-access"
+          fi
           python scripts/validate_release_flow_production_readiness.py \
             --require-runtime-config \
+            $github_access_args \
             --report-path artifacts/release-flow-readiness.json \
             --markdown-path artifacts/release-flow-readiness.md
-          cat artifacts/release-flow-readiness.md >> "$GITHUB_STEP_SUMMARY"
+          readiness_status=$?
+          if [ -f artifacts/release-flow-readiness.md ]; then
+            cat artifacts/release-flow-readiness.md >> "$GITHUB_STEP_SUMMARY"
+          fi
+          smoke_status=0
+          if [ "$API_SMOKE_PREFLIGHT" = "true" ] && [ "$readiness_status" -eq 0 ]; then
+            API_BASE_URL="$RELEASE_FLOW_API_BASE_URL" \
+            AUTH_EMAIL="$RELEASE_FLOW_AUTH_EMAIL" \
+            AUTH_PASSWORD="$RELEASE_FLOW_AUTH_PASSWORD" \
+            python scripts/release_flow_smoke.py \
+              --ci \
+              --production-preflight \
+              --ci-artifacts-dir artifacts
+            smoke_status=$?
+          fi
+          if [ "$readiness_status" -ne 0 ]; then
+            exit "$readiness_status"
+          fi
+          if [ "$smoke_status" -ne 0 ]; then
+            exit "$smoke_status"
+          fi
+          exit "$readiness_status"
 
       - name: Upload readiness artifact
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: release-flow-production-readiness
-          path: artifacts/release-flow-readiness.*
+          path: artifacts/release-flow-*.*
           if-no-files-found: warn
           retention-days: 30

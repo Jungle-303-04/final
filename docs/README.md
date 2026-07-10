@@ -172,6 +172,7 @@ secret 이름과 주입 경계는 [Secrets](secrets.md)를 본다.
 - [operations-deployment](operations-deployment.md)
 - [platform-foundation-plan](platform-foundation-plan.md)
 - [production-readiness](production-readiness.md)
+- [release-flow-production-readiness](release-flow-production-readiness.md)
 - [production-push-2026-07-07](production-push-2026-07-07.md)
 - [release-flow-implementation](release-flow-implementation.md)
 - [scenarios](scenarios.md)

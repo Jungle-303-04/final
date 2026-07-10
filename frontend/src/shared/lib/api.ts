@@ -144,6 +144,10 @@ function apiDetailToString(detail: unknown): string {
     if (value.code === 'has_deployments') {
       return `has_deployments: ${String(value.detail ?? '연결된 배포 정의가 있어 등록을 해제할 수 없습니다')}`;
     }
+    if (Array.isArray(value.blockers) && value.blockers.length > 0) {
+      const message = typeof value.message === 'string' ? value.message : typeof value.detail === 'string' ? value.detail : 'request blocked';
+      return `${message}: ${value.blockers.map(String).slice(0, 4).join('; ')}`;
+    }
     const message = value.detail ?? value.message;
     if (typeof message === 'string') return message;
     try {
