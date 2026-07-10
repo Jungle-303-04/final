@@ -69,6 +69,135 @@ def test_metadata_query_target_accepts_namespace_query() -> None:
     assert target.deployment_name is None
 
 
+def test_endpoint_slice_omitted_ready_condition_defaults_to_ready() -> None:
+    _module, metadata_module = load_metadata_modules()
+
+    snapshots = metadata_module.endpoint_slice_ready_endpoint_snapshots(
+        [
+            {
+                "metadata": {
+                    "namespace": "sandbox",
+                    "name": "checkout-api-abc",
+                    "labels": {"kubernetes.io/service-name": "checkout-api"},
+                },
+                "addressType": "IPv4",
+                "endpoints": [
+                    {
+                        "conditions": {},
+                        "targetRef": {
+                            "kind": "Pod",
+                            "namespace": "sandbox",
+                            "name": "checkout-api-pod-1",
+                        },
+                    }
+                ],
+            }
+        ]
+    )
+
+    assert snapshots == [
+        {
+            "service": {"namespace": "sandbox", "name": "checkout-api"},
+            "endpoint_slice": {"namespace": "sandbox", "name": "checkout-api-abc"},
+            "address_type": "IPv4",
+            "endpoint_count": 1,
+            "ready_endpoint_count": 1,
+            "not_ready_endpoint_count": 0,
+            "unknown_ready_endpoint_count": 0,
+            "serving_endpoint_count": 1,
+            "terminating_endpoint_count": 0,
+            "ready_targets": [
+                {
+                    "kind": "Pod",
+                    "namespace": "sandbox",
+                    "name": "checkout-api-pod-1",
+                }
+            ],
+        }
+    ]
+
+
+def test_metadata_ownership_requires_uid_when_owner_uid_is_available() -> None:
+    _module, metadata_module = load_metadata_modules()
+    deployment = {
+        "metadata": {
+            "namespace": "sandbox",
+            "name": "checkout-api",
+            "uid": "deployment-current",
+        }
+    }
+    current_replicaset = {
+        "metadata": {
+            "namespace": "sandbox",
+            "name": "checkout-api-abc",
+            "uid": "replicaset-current",
+            "ownerReferences": [
+                {
+                    "kind": "Deployment",
+                    "name": "checkout-api",
+                    "uid": "deployment-current",
+                }
+            ],
+        }
+    }
+    stale_replicaset = {
+        "metadata": {
+            "namespace": "sandbox",
+            "name": "checkout-api-old",
+            "uid": "replicaset-old",
+            "ownerReferences": [
+                {
+                    "kind": "Deployment",
+                    "name": "checkout-api",
+                    "uid": "deployment-old",
+                }
+            ],
+        }
+    }
+    current_pod = {
+        "metadata": {
+            "namespace": "sandbox",
+            "name": "checkout-api-pod-1",
+            "ownerReferences": [
+                {
+                    "kind": "ReplicaSet",
+                    "name": "checkout-api-abc",
+                    "uid": "replicaset-current",
+                }
+            ],
+        }
+    }
+    stale_pod = {
+        "metadata": {
+            "namespace": "sandbox",
+            "name": "checkout-api-pod-old",
+            "ownerReferences": [
+                {
+                    "kind": "ReplicaSet",
+                    "name": "checkout-api-abc",
+                    "uid": "replicaset-old",
+                }
+            ],
+        }
+    }
+
+    owned_pods = metadata_module.pods_for_deployment(
+        deployment,
+        [current_replicaset, stale_replicaset],
+        [current_pod, stale_pod],
+    )
+    assert [pod["metadata"]["name"] for pod in owned_pods] == ["checkout-api-pod-1"]
+
+    assert (
+        metadata_module.pods_for_deployment(
+            deployment,
+            [current_replicaset],
+            [stale_pod],
+        )
+        == []
+    )
+
+
 def test_metadata_provider_collects_one_deployment_snapshot(monkeypatch) -> None:
     module, metadata_module = load_metadata_modules()
     requests: list[str] = []
@@ -746,7 +875,7 @@ def test_metadata_provider_collects_one_deployment_snapshot(monkeypatch) -> None
             "ready_endpoint_count": 1,
             "not_ready_endpoint_count": 0,
             "unknown_ready_endpoint_count": 0,
-            "serving_endpoint_count": 0,
+            "serving_endpoint_count": 1,
             "terminating_endpoint_count": 0,
             "ready_targets": [
                 {
@@ -1270,7 +1399,7 @@ def test_metadata_provider_collects_service_matches_without_deployments(
                 "ready_endpoint_count": 1,
                 "not_ready_endpoint_count": 0,
                 "unknown_ready_endpoint_count": 0,
-                "serving_endpoint_count": 0,
+                "serving_endpoint_count": 1,
                 "terminating_endpoint_count": 0,
                 "ready_targets": [
                     {

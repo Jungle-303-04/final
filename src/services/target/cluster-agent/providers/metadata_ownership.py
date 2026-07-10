@@ -75,8 +75,10 @@ def is_owned_by_replicaset(
             continue
         owner_uid = str(owner.get("uid") or "")
         owner_name = str(owner.get("name") or "")
-        if owner_uid and owner_uid in replicaset_uids:
-            return True
+        if replicaset_uids:
+            if owner_uid and owner_uid in replicaset_uids:
+                return True
+            continue
         if owner_name and owner_name in replicaset_names:
             return True
     return False
@@ -91,9 +93,13 @@ def is_owned_by_deployment(
     for owner in list_items(metadata(replicaset).get("ownerReferences")):
         if owner.get("kind") != K8S_KIND_DEPLOYMENT:
             continue
-        if deployment_uid and owner.get("uid") == deployment_uid:
-            return True
-        if deployment_name and owner.get("name") == deployment_name:
+        owner_uid = str(owner.get("uid") or "")
+        owner_name = str(owner.get("name") or "")
+        if deployment_uid:
+            if owner_uid and owner_uid == deployment_uid:
+                return True
+            continue
+        if deployment_name and owner_name == deployment_name:
             return True
     return False
 

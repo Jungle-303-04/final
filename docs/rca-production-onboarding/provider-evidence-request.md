@@ -315,6 +315,8 @@ EndpointSlice(엔드포인트슬라이스)는 Kubernetes가 Service 뒤 endpoint
 summary query는 namespace의 모든 EndpointSlice 요약을 보낸다.
 detail query는 target Deployment와 관련 있는 Service의 EndpointSlice만 보낸다.
 endpoint IP address는 보내지 않고, ready target Pod의 kind/namespace/name만 보낸다.
+EndpointSlice condition은 Kubernetes API의 기본 해석을 따른다.
+`ready`와 `serving`이 생략되거나 null이면 true로 보고, `terminating`이 생략되거나 null이면 false로 본다.
 
 - change_context.endpoint_slice_ready_endpoints[].service.namespace/name
 - change_context.endpoint_slice_ready_endpoints[].endpoint_slice.namespace/name
