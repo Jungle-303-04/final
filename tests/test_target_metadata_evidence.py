@@ -24,13 +24,17 @@ def load_metadata_modules():
         "providers.kubernetes_utils",
         "providers.kubernetes_providers",
         "providers.loki_providers",
+        "providers.metadata_config_objects",
         "providers.metadata_config_refs",
         "providers.metadata_endpoint_slices",
         "providers.metadata_ownership",
+        "providers.metadata_resource_quotas",
         "providers.metadata_service_selectors",
         "providers.metadata_workload_snapshots",
         "providers.metadata_providers",
+        "providers.prometheus_analysis",
         "providers.prometheus_providers",
+        "providers.tempo_analysis",
         "providers.tempo_providers",
         "kubernetes_api",
         "evidence",
@@ -141,6 +145,11 @@ def test_metadata_provider_collects_one_deployment_snapshot(monkeypatch) -> None
                                 },
                             },
                             "spec": {
+                                "serviceAccountName": "checkout-api-sa",
+                                "automountServiceAccountToken": False,
+                                "imagePullSecrets": [
+                                    {"name": "registry-credentials"}
+                                ],
                                 "volumes": [
                                     {
                                         "name": "app-config",
@@ -168,7 +177,70 @@ def test_metadata_provider_collects_one_deployment_snapshot(monkeypatch) -> None
                                             "optional": True,
                                         },
                                     },
+                                    {
+                                        "name": "checkout-data",
+                                        "persistentVolumeClaim": {
+                                            "claimName": "checkout-data-pvc"
+                                        },
+                                    },
                                 ],
+                                "nodeSelector": {
+                                    "disk": "ssd",
+                                    "workload": "checkout",
+                                },
+                                "tolerations": [
+                                    {
+                                        "key": "dedicated",
+                                        "operator": "Equal",
+                                        "value": "checkout",
+                                        "effect": "NoSchedule",
+                                        "tolerationSeconds": 300,
+                                        "ignoredField": "do-not-include",
+                                    }
+                                ],
+                                "affinity": {
+                                    "nodeAffinity": {
+                                        "requiredDuringSchedulingIgnoredDuringExecution": {
+                                            "nodeSelectorTerms": [
+                                                {
+                                                    "matchExpressions": [
+                                                        {
+                                                            "key": "disk",
+                                                            "operator": "In",
+                                                            "values": ["ssd"],
+                                                        }
+                                                    ]
+                                                }
+                                            ]
+                                        },
+                                        "preferredDuringSchedulingIgnoredDuringExecution": [
+                                            {
+                                                "weight": 50,
+                                                "preference": {
+                                                    "matchExpressions": [
+                                                        {
+                                                            "key": "zone",
+                                                            "operator": "In",
+                                                            "values": ["a"],
+                                                        }
+                                                    ]
+                                                },
+                                            }
+                                        ],
+                                    },
+                                    "podAntiAffinity": {
+                                        "requiredDuringSchedulingIgnoredDuringExecution": [
+                                            {
+                                                "labelSelector": {
+                                                    "matchLabels": {
+                                                        "app": "checkout-api"
+                                                    }
+                                                },
+                                                "topologyKey": "kubernetes.io/hostname",
+                                            }
+                                        ]
+                                    },
+                                },
                                 "containers": [
                                     {
                                         "name": "app",
@@ -201,6 +273,16 @@ def test_metadata_provider_collects_one_deployment_snapshot(monkeypatch) -> None
                                                         "name": "checkout-secret",
                                                         "key": "database-url",
                                                         "optional": True,
+                                                    }
+                                                },
+                                            },
+                                            {
+                                                "name": "MISSING_MODE",
+                                                "valueFrom": {
+                                                    "configMapKeyRef": {
+                                                        "name": "checkout-config",
+                                                        "key": "missing-mode",
+                                                        "optional": False,
                                                     }
                                                 },
                                             },
@@ -376,6 +458,32 @@ def test_metadata_provider_collects_one_deployment_snapshot(monkeypatch) -> None
                     ]
                 },
             )
+        if request.url.path == "/api/v1/namespaces/sandbox/resourcequotas":
+            return httpx.Response(
+                200,
+                json={
+                    "items": [
+                        {
+                            "metadata": {
+                                "namespace": "sandbox",
+                                "name": "compute-quota",
+                            },
+                            "status": {
+                                "hard": {
+                                    "requests.cpu": "4",
+                                    "requests.memory": "8Gi",
+                                    "pods": "20",
+                                },
+                                "used": {
+                                    "requests.cpu": "1200m",
+                                    "requests.memory": "1Gi",
+                                    "pods": "5",
+                                },
+                            },
+                        }
+                    ]
+                },
+            )
         if request.url.path == "/apis/discovery.k8s.io/v1/namespaces/sandbox/endpointslices":
             return httpx.Response(
                 200,
@@ -480,6 +588,54 @@ def test_metadata_provider_collects_one_deployment_snapshot(monkeypatch) -> None
                     ]
                 },
             )
+        if request.url.path == "/api/v1/namespaces/sandbox/configmaps/checkout-config":
+            return httpx.Response(
+                200,
+                json={
+                    "metadata": {
+                        "namespace": "sandbox",
+                        "name": "checkout-config",
+                        "creationTimestamp": "2026-07-10T08:30:00Z",
+                        "labels": {
+                            "app": "checkout-api",
+                            "password": "do-not-include",
+                        },
+                        "annotations": {
+                            "ops.service/restarted-at": "do-not-include"
+                        },
+                    },
+                    "data": {
+                        "mode": "do-not-include",
+                        "application.yaml": "do-not-include",
+                    },
+                },
+            )
+        if request.url.path == "/api/v1/namespaces/sandbox/configmaps/checkout-env":
+            return httpx.Response(404, json={"message": "not found"})
+        if request.url.path == "/api/v1/namespaces/sandbox/secrets/checkout-env-secret":
+            return httpx.Response(403, json={"message": "forbidden"})
+        if request.url.path == "/api/v1/namespaces/sandbox/secrets/checkout-secret":
+            return httpx.Response(
+                200,
+                json={
+                    "metadata": {
+                        "namespace": "sandbox",
+                        "name": "checkout-secret",
+                        "creationTimestamp": "2026-07-10T08:31:00Z",
+                        "labels": {
+                            "app": "checkout-api",
+                            "token-owner": "do-not-include",
+                        },
+                    },
+                    "type": "Opaque",
+                    "data": {
+                        "database-url": "do-not-include",
+                    },
+                    "stringData": {
+                        "raw": "do-not-include",
+                    },
+                },
+            )
         return httpx.Response(404, json={})
 
     monkeypatch.setattr(
@@ -514,7 +670,12 @@ def test_metadata_provider_collects_one_deployment_snapshot(monkeypatch) -> None
         "/apis/apps/v1/namespaces/sandbox/replicasets",
         "/api/v1/namespaces/sandbox/pods",
         "/api/v1/namespaces/sandbox/services",
+        "/api/v1/namespaces/sandbox/resourcequotas",
         "/apis/discovery.k8s.io/v1/namespaces/sandbox/endpointslices",
+        "/api/v1/namespaces/sandbox/configmaps/checkout-config",
+        "/api/v1/namespaces/sandbox/configmaps/checkout-env",
+        "/api/v1/namespaces/sandbox/secrets/checkout-env-secret",
+        "/api/v1/namespaces/sandbox/secrets/checkout-secret",
     ]
     assert "current_workload_snapshots" not in change_context
     assert change_context["service_selector_matches"] == [
@@ -594,6 +755,149 @@ def test_metadata_provider_collects_one_deployment_snapshot(monkeypatch) -> None
     ]
     assert "10.0.0.1" not in str(change_context["endpoint_slice_ready_endpoints"])
     assert "billing-api-pod-1" not in str(change_context["endpoint_slice_ready_endpoints"])
+    assert change_context["resource_quotas"] == [
+        {
+            "name": "compute-quota",
+            "namespace": "sandbox",
+            "hard": {
+                "requests.cpu": "4",
+                "requests.memory": "8Gi",
+                "pods": "20",
+            },
+            "used": {
+                "requests.cpu": "1200m",
+                "requests.memory": "1Gi",
+                "pods": "5",
+            },
+        }
+    ]
+    assert change_context["referenced_config_objects"] == [
+        {
+            "kind": "ConfigMap",
+            "namespace": "sandbox",
+            "name": "checkout-config",
+            "exists": True,
+            "access": "ok",
+            "referenced_by": [
+                {
+                    "container_name": "app",
+                    "source": "env",
+                    "env_name": "APP_MODE",
+                    "key": "mode",
+                    "optional": False,
+                },
+                {
+                    "container_name": "app",
+                    "source": "env",
+                    "env_name": "MISSING_MODE",
+                    "key": "missing-mode",
+                    "optional": False,
+                },
+                {
+                    "source": "volume",
+                    "volume_name": "app-config",
+                    "optional": False,
+                },
+                {
+                    "container_name": "app",
+                    "source": "volume_mount",
+                    "volume_name": "app-config",
+                    "mount_path": "/etc/app",
+                    "read_only": True,
+                    "optional": False,
+                },
+            ],
+            "created_at": "2026-07-10T08:30:00Z",
+            "labels": {"app": "checkout-api"},
+            "referenced_key_checks": [
+                {
+                    "key": "application.yaml",
+                    "exists": True,
+                    "sources": ["volume"],
+                },
+                {
+                    "key": "missing-mode",
+                    "exists": False,
+                    "sources": ["env"],
+                },
+                {
+                    "key": "mode",
+                    "exists": True,
+                    "sources": ["env"],
+                },
+            ],
+        },
+        {
+            "kind": "ConfigMap",
+            "namespace": "sandbox",
+            "name": "checkout-env",
+            "exists": False,
+            "access": "not_found",
+            "referenced_by": [
+                {
+                    "container_name": "app",
+                    "source": "env_from",
+                    "prefix": "APP_",
+                    "optional": False,
+                }
+            ],
+        },
+        {
+            "kind": "Secret",
+            "namespace": "sandbox",
+            "name": "checkout-env-secret",
+            "exists": None,
+            "access": "forbidden",
+            "referenced_by": [
+                {
+                    "container_name": "app",
+                    "source": "env_from",
+                    "optional": True,
+                }
+            ],
+        },
+        {
+            "kind": "Secret",
+            "namespace": "sandbox",
+            "name": "checkout-secret",
+            "exists": True,
+            "access": "ok",
+            "referenced_by": [
+                {
+                    "container_name": "app",
+                    "source": "env",
+                    "env_name": "DATABASE_URL",
+                    "key": "database-url",
+                    "optional": True,
+                },
+                {
+                    "source": "volume",
+                    "volume_name": "app-secret",
+                    "optional": True,
+                },
+                {
+                    "container_name": "app",
+                    "source": "volume_mount",
+                    "volume_name": "app-secret",
+                    "mount_path": "/etc/secret",
+                    "read_only": True,
+                    "optional": True,
+                },
+            ],
+            "created_at": "2026-07-10T08:31:00Z",
+            "labels": {"app": "checkout-api"},
+            "referenced_key_checks": [
+                {
+                    "key": "database-url",
+                    "exists": True,
+                    "sources": ["env", "volume"],
+                }
+            ],
+        },
+    ]
+    assert "do-not-include" not in str(change_context["referenced_config_objects"])
+    assert "annotations" not in str(change_context["referenced_config_objects"])
+    assert "stringData" not in str(change_context["referenced_config_objects"])
     assert snapshot["workload"] == {
         "kind": "Deployment",
         "namespace": "sandbox",
@@ -608,15 +912,49 @@ def test_metadata_provider_collects_one_deployment_snapshot(monkeypatch) -> None
         "kubectl.kubernetes.io/last-applied-configuration" not in snapshot["deployment_annotations"]
     )
     assert snapshot["pod_template_labels"] == {"app": "checkout-api"}
+    assert snapshot["pod_template_auth"] == {
+        "service_account_name": "checkout-api-sa",
+        "automount_service_account_token": False,
+        "image_pull_secret_refs": [{"name": "registry-credentials"}],
+    }
     assert snapshot["pod_template_annotations"] == {
         "prometheus.io/path": "/metrics",
         "prometheus.io/scrape": "true",
     }
+    assert snapshot["persistent_volume_claim_refs"] == [
+        {
+            "volume_name": "checkout-data",
+            "claim_name": "checkout-data-pvc",
+        }
+    ]
     assert "secret.example.com/name" not in snapshot["pod_template_annotations"]
     assert snapshot["managed_fields_managers"] == [
         "helm",
         "kube-controller-manager",
     ]
+    assert snapshot["scheduling_constraints"] == {
+        "node_selector": {
+            "disk": "ssd",
+            "workload": "checkout",
+        },
+        "tolerations": [
+            {
+                "key": "dedicated",
+                "operator": "Equal",
+                "value": "checkout",
+                "effect": "NoSchedule",
+                "toleration_seconds": 300,
+            }
+        ],
+        "affinity_summary": {
+            "has_node_affinity": True,
+            "has_required_node_affinity": True,
+            "has_preferred_node_affinity": True,
+            "has_pod_affinity": False,
+            "has_pod_anti_affinity": True,
+        },
+    }
+    assert "do-not-include" not in str(snapshot["scheduling_constraints"])
     assert snapshot["deployment_status"] == {
         "observed_generation": 12,
         "desired_replicas": 3,
@@ -682,6 +1020,13 @@ def test_metadata_provider_collects_one_deployment_snapshot(monkeypatch) -> None
             "secret_name": "checkout-secret",
             "key": "database-url",
             "optional": True,
+        },
+        {
+            "env_name": "MISSING_MODE",
+            "source": "config_map_key_ref",
+            "config_map_name": "checkout-config",
+            "key": "missing-mode",
+            "optional": False,
         },
     ]
     assert snapshot["containers"][0]["env_from_refs"] == [
@@ -828,6 +1173,8 @@ def test_metadata_provider_collects_service_matches_without_deployments(
                     ]
                 },
             )
+        if request.url.path == "/api/v1/namespaces/target/resourcequotas":
+            return httpx.Response(403, json={"message": "forbidden"})
         if request.url.path == "/apis/discovery.k8s.io/v1/namespaces/target/endpointslices":
             return httpx.Response(
                 200,
@@ -885,6 +1232,7 @@ def test_metadata_provider_collects_service_matches_without_deployments(
         "/apis/apps/v1/namespaces/target/deployments",
         "/api/v1/namespaces/target/pods",
         "/api/v1/namespaces/target/services",
+        "/api/v1/namespaces/target/resourcequotas",
         "/apis/discovery.k8s.io/v1/namespaces/target/endpointslices",
     ]
     assert metadata["change_context"] == {
@@ -918,6 +1266,7 @@ def test_metadata_provider_collects_service_matches_without_deployments(
                 ],
             }
         ],
+        "resource_quotas": [],
     }
 
 
@@ -995,11 +1344,22 @@ def test_metadata_provider_collects_namespace_deployment_snapshots(monkeypatch) 
                                         },
                                     },
                                     "spec": {
+                                        "serviceAccountName": "shop-api-sa",
+                                        "automountServiceAccountToken": True,
+                                        "imagePullSecrets": [
+                                            {"name": "shop-registry"}
+                                        ],
                                         "volumes": [
                                             {
                                                 "name": "shop-config",
                                                 "configMap": {
                                                     "name": "shop-config",
+                                                },
+                                            },
+                                            {
+                                                "name": "shop-data",
+                                                "persistentVolumeClaim": {
+                                                    "claimName": "shop-data-pvc"
                                                 },
                                             }
                                         ],
@@ -1104,6 +1464,30 @@ def test_metadata_provider_collects_namespace_deployment_snapshots(monkeypatch) 
                     ]
                 },
             )
+        if request.url.path == "/api/v1/namespaces/target/resourcequotas":
+            return httpx.Response(
+                200,
+                json={
+                    "items": [
+                        {
+                            "metadata": {
+                                "namespace": "target",
+                                "name": "target-quota",
+                            },
+                            "status": {
+                                "hard": {
+                                    "requests.cpu": "8",
+                                    "requests.memory": "16Gi",
+                                },
+                                "used": {
+                                    "requests.cpu": "50m",
+                                    "requests.memory": "128Mi",
+                                },
+                            },
+                        }
+                    ]
+                },
+            )
         if request.url.path == "/apis/discovery.k8s.io/v1/namespaces/target/endpointslices":
             return httpx.Response(
                 200,
@@ -1175,6 +1559,7 @@ def test_metadata_provider_collects_namespace_deployment_snapshots(monkeypatch) 
         "/apis/apps/v1/namespaces/target/replicasets",
         "/api/v1/namespaces/target/pods",
         "/api/v1/namespaces/target/services",
+        "/api/v1/namespaces/target/resourcequotas",
         "/apis/discovery.k8s.io/v1/namespaces/target/endpointslices",
     ]
     assert "current_workload_snapshot" not in change_context
@@ -1215,6 +1600,20 @@ def test_metadata_provider_collects_namespace_deployment_snapshots(monkeypatch) 
             ],
         }
     ]
+    assert change_context["resource_quotas"] == [
+        {
+            "name": "target-quota",
+            "namespace": "target",
+            "hard": {
+                "requests.cpu": "8",
+                "requests.memory": "16Gi",
+            },
+            "used": {
+                "requests.cpu": "50m",
+                "requests.memory": "128Mi",
+            },
+        }
+    ]
     assert snapshot["workload"] == {
         "kind": "Deployment",
         "namespace": "target",
@@ -1222,6 +1621,17 @@ def test_metadata_provider_collects_namespace_deployment_snapshots(monkeypatch) 
     }
     assert snapshot["deployment_labels"] == {"app": "shop-api"}
     assert snapshot["pod_template_labels"] == {"app": "shop-api"}
+    assert snapshot["pod_template_auth"] == {
+        "service_account_name": "shop-api-sa",
+        "automount_service_account_token": True,
+        "image_pull_secret_refs": [{"name": "shop-registry"}],
+    }
+    assert snapshot["persistent_volume_claim_refs"] == [
+        {
+            "volume_name": "shop-data",
+            "claim_name": "shop-data-pvc",
+        }
+    ]
     assert "deployment_annotations" not in snapshot
     assert "pod_template_annotations" not in snapshot
     assert "managed_fields_managers" not in snapshot
@@ -1262,6 +1672,7 @@ def test_metadata_provider_collects_namespace_deployment_snapshots(monkeypatch) 
     assert "env_refs" not in snapshot["containers"][0]
     assert "env_from_refs" not in snapshot["containers"][0]
     assert "volume_mount_refs" not in snapshot["containers"][0]
+    assert "scheduling_constraints" not in snapshot
     assert snapshot["replicaset_revisions"] == [
         {
             "name": "shop-api-abc123",

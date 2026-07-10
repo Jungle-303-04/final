@@ -27,13 +27,17 @@ def load_evidence_module():
         "providers.kubernetes_utils",
         "providers.kubernetes_providers",
         "providers.loki_providers",
+        "providers.metadata_config_objects",
         "providers.metadata_config_refs",
         "providers.metadata_endpoint_slices",
         "providers.metadata_ownership",
+        "providers.metadata_resource_quotas",
         "providers.metadata_providers",
         "providers.metadata_service_selectors",
         "providers.metadata_workload_snapshots",
+        "providers.prometheus_analysis",
         "providers.prometheus_providers",
+        "providers.tempo_analysis",
         "providers.tempo_providers",
         "kubernetes_api",
         "evidence",
@@ -104,6 +108,76 @@ def test_loki_logs_are_normalized_into_agent_evidence_shape() -> None:
     assert validated.logs[0]["line_count"] == 1
     assert validated.logs[0]["streams"][0]["stream"]["namespace"] == "target"
     assert validated.logs[0]["streams"][0]["values"][0]["line"] == "node_runtime_sample"
+    assert validated.logs[0]["pattern_counts"]["probe_failed"] == 0
+    assert validated.logs[0]["severity_counts"]["unknown"] == 1
+    assert validated.logs[0]["trace_ids"] == []
+    assert validated.logs[0]["redaction_summary"] == {
+        "applied": True,
+        "redacted_line_count": 0,
+    }
+
+
+def test_loki_logs_redact_sensitive_values_and_add_rca_summaries() -> None:
+    module = load_evidence_module()
+    logs_provider = module.LokiLogsProvider.from_config(lambda _name, default: default)
+    trace_id = "4bf92f3577b34da6a3ce929d0e0e4736"
+
+    normalized = logs_provider.normalize_payload(
+        {
+            "data": {
+                "resultType": "streams",
+                "result": [
+                    {
+                        "stream": {"namespace": "target", "pod": "checkout-api-7f5c"},
+                        "values": [
+                            [
+                                "1782822589742000000",
+                                f"ERROR readiness probe failed token=secret-value trace_id={trace_id}",
+                            ],
+                            [
+                                "1782822589743000000",
+                                "WARN upstream dependency timed out Authorization: Bearer raw-token",
+                            ],
+                            [
+                                "1782822589744000000",
+                                "ErrImagePull secret=registry-token",
+                            ],
+                            [
+                                "1782822589745000000",
+                                'INFO login password="hello world"',
+                            ],
+                        ],
+                    }
+                ],
+            },
+        }
+    )
+
+    lines = [
+        value["line"]
+        for stream in normalized["streams"]
+        for value in stream["values"]
+    ]
+
+    assert lines == [
+        f"ERROR readiness probe failed token=[REDACTED] trace_id={trace_id}",
+        "WARN upstream dependency timed out Authorization: Bearer [REDACTED]",
+        "ErrImagePull secret=[REDACTED]",
+        "INFO login password=[REDACTED]",
+    ]
+    assert normalized["line_count"] == 4
+    assert normalized["pattern_counts"]["probe_failed"] == 1
+    assert normalized["pattern_counts"]["dependency_timeout"] == 1
+    assert normalized["pattern_counts"]["image_pull_error"] == 1
+    assert normalized["severity_counts"]["error"] == 1
+    assert normalized["severity_counts"]["warn"] == 1
+    assert normalized["severity_counts"]["info"] == 1
+    assert normalized["severity_counts"]["unknown"] == 1
+    assert normalized["trace_ids"] == [trace_id]
+    assert normalized["redaction_summary"] == {
+        "applied": True,
+        "redacted_line_count": 4,
+    }
 
 
 def test_loki_range_query_sends_exact_start_and_end_bounds() -> None:
@@ -164,8 +238,22 @@ def test_tempo_traces_are_normalized_into_agent_evidence_shape() -> None:
                     "traceID": "trace-123",
                     "rootServiceName": "checkout-api",
                     "rootTraceName": "GET /checkout",
+                    "status": "error",
                     "durationMs": 842,
                     "query": span_query.traceql,
+                    "spanSet": {
+                        "spans": [
+                            {
+                                "traceID": "trace-123",
+                                "spanID": "span-abc",
+                                "serviceName": "payment-api",
+                                "name": "POST /charge",
+                                "status": "STATUS_CODE_ERROR",
+                                "durationMs": 321,
+                                "kind": "SPAN_KIND_CLIENT",
+                            }
+                        ]
+                    },
                 }
             ]
         }
@@ -186,3 +274,27 @@ def test_tempo_traces_are_normalized_into_agent_evidence_shape() -> None:
     assert "checkout_slow_spans" in results
     assert results["checkout_slow_spans"]["trace_count"] == 1
     assert results["checkout_slow_spans"]["traces"][0]["traceID"] == "trace-123"
+    assert results["checkout_slow_spans"]["analysis"]["trace_ids"] == ["trace-123"]
+    assert results["checkout_slow_spans"]["analysis"]["services"] == ["checkout-api"]
+    assert results["checkout_slow_spans"]["analysis"]["operations"] == ["GET /checkout"]
+    assert results["checkout_slow_spans"]["analysis"]["status_counts"]["error"] == 1
+    assert results["checkout_slow_spans"]["analysis"]["error_count"] == 1
+    assert results["checkout_slow_spans"]["analysis"]["dependency_count"] == 1
+    assert results["checkout_slow_spans"]["analysis"]["duration_ms"]["max"] == 842.0
+    trace_summary = results["checkout_slow_spans"]["analysis"]["trace_summaries"][0]
+    assert trace_summary["trace_id"] == "trace-123"
+    assert trace_summary["service"] == "checkout-api"
+    assert trace_summary["operation"] == "GET /checkout"
+    assert trace_summary["status"] == "error"
+    assert trace_summary["error"] is True
+    assert trace_summary["is_dependency"] is True
+    assert trace_summary["span_summaries"][0] == {
+        "trace_id": "trace-123",
+        "span_id": "span-abc",
+        "service": "payment-api",
+        "operation": "POST /charge",
+        "status": "error",
+        "duration_ms": 321.0,
+        "error": True,
+        "is_dependency": True,
+    }

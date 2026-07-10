@@ -12,6 +12,7 @@ from config import (
 )
 from packages.contracts.event_bus.interfaces import JsonObject
 from providers.base import TRACER, ConfigReader
+from providers.tempo_analysis import build_trace_analysis
 
 
 @telemetry.source(
@@ -67,9 +68,11 @@ class TempoTracesProvider:
         payload: JsonObject,
     ) -> None:
         """Normalize one Tempo result and save it by query name."""
+        normalized = self.normalize_payload(payload)
         results[telemetry_query.query_name] = {
             "query": telemetry_query.traceql,
-            **self.normalize_payload(payload),
+            **normalized,
+            **build_trace_analysis(normalized),
         }
 
     def build_response(self, results: JsonObject) -> JsonObject:
