@@ -32,6 +32,9 @@ def test_valid_production_deploy_requires_release_flow_gate(tmp_path: Path) -> N
               live_runbook_url: ${{ inputs.runbook_url }}
               live_release_owner: ${{ inputs.release_owner }}
               live_image: ${{ inputs.image }}
+              live_verification_url: ${{ inputs.verification_url }}
+              live_safe_pr_workflow_run_id: ${{ inputs.safe_pr_workflow_run_id }}
+              live_safe_pr_url: ${{ inputs.safe_pr_url }}
             secrets: inherit
           deploy-production:
             name: Deploy production
@@ -89,6 +92,9 @@ def test_production_deploy_without_gate_success_condition_is_rejected(tmp_path: 
               live_runbook_url: ${{ inputs.runbook_url }}
               live_oncall_contact: ${{ inputs.oncall_contact }}
               live_image: ${{ inputs.image }}
+              live_verification_url: ${{ inputs.verification_url }}
+              live_safe_pr_workflow_run_id: ${{ inputs.safe_pr_workflow_run_id }}
+              live_safe_pr_url: ${{ inputs.safe_pr_url }}
             secrets: inherit
           deploy-production:
             name: Deploy production
@@ -121,6 +127,9 @@ def test_production_deploy_needing_wrong_job_is_rejected(tmp_path: Path) -> None
               live_runbook_url: ${{ inputs.runbook_url }}
               live_release_owner: ${{ inputs.release_owner }}
               live_image: ${{ inputs.image }}
+              live_verification_url: ${{ inputs.verification_url }}
+              live_safe_pr_workflow_run_id: ${{ inputs.safe_pr_workflow_run_id }}
+              live_safe_pr_url: ${{ inputs.safe_pr_url }}
             secrets: inherit
           build:
             runs-on: ubuntu-latest
@@ -216,6 +225,9 @@ def test_gate_job_missing_required_live_inputs_is_rejected(tmp_path: Path) -> No
     assert "must pass live_change_ticket" in messages
     assert "must pass live_runbook_url" in messages
     assert "must pass live_image" in messages
+    assert "must pass live_verification_url" in messages
+    assert "must pass live_safe_pr_workflow_run_id" in messages
+    assert "must pass live_safe_pr_url" in messages
     assert "must pass live_release_owner or live_oncall_contact" in messages
 
 
@@ -235,6 +247,9 @@ def test_gate_job_placeholder_live_inputs_are_rejected(tmp_path: Path) -> None:
               live_release_owner: release-operator
               live_oncall_contact: release-oncall@example.com
               live_image: ghcr.io/example/release-flow-smoke:live-preflight
+              live_verification_url: https://example.com/verify/release-flow
+              live_safe_pr_workflow_run_id: run-123
+              live_safe_pr_url: https://example.com/org/repo/pull/7
             secrets: inherit
           deploy-production:
             name: Deploy production
@@ -255,3 +270,43 @@ def test_gate_job_placeholder_live_inputs_are_rejected(tmp_path: Path) -> None:
     assert "placeholder live_release_owner" in messages
     assert "placeholder live_oncall_contact" in messages
     assert "placeholder live_image" in messages
+    assert "placeholder live_verification_url" in messages
+    assert "placeholder live_safe_pr_url" in messages
+
+
+def test_gate_job_literal_live_urls_must_be_real_https_targets(tmp_path: Path) -> None:
+    workflow = write_workflow(
+        tmp_path / "deploy-production.yml",
+        """
+        name: Production Deploy
+        "on":
+          workflow_dispatch:
+        jobs:
+          release_flow_production_gate:
+            uses: ./.github/workflows/release-flow-production-gate.yml
+            with:
+              live_change_ticket: CHG-12345
+              live_runbook_url: http://wiki.company.internal/runbooks/release-flow
+              live_release_owner: platform-release
+              live_image: ghcr.io/company/checkout-api:2.0.0
+              live_verification_url: https://localhost/verify/release-flow
+              live_safe_pr_workflow_run_id: run-123
+              live_safe_pr_url: http://github.company.internal/org/repo/pull/7
+            secrets: inherit
+          deploy-production:
+            name: Deploy production
+            runs-on: ubuntu-latest
+            needs: release_flow_production_gate
+            if: needs.release_flow_production_gate.outputs.release_gate_ok == 'true'
+            steps:
+              - run: ./scripts/deploy-production.sh
+        """,
+    )
+
+    result = validate_workflows([workflow])
+
+    assert not result.ok
+    messages = "\n".join(violation.message for violation in result.violations)
+    assert "must pass https live_runbook_url" in messages
+    assert "placeholder live_verification_url" in messages
+    assert "must pass https live_safe_pr_url" in messages
