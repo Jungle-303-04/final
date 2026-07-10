@@ -19,6 +19,11 @@ from packages.config.constants import Target
 from packages.contracts.event_bus.interfaces import JsonObject
 from packages.contracts.target import TARGET_NAMESPACE
 from providers.base import ConfigReader
+from providers.collection_limits import (
+    COLLECTION_LIMITS_KEY,
+    attach_collection_limits,
+    limit_payload_list,
+)
 from providers.kubernetes_utils import (
     K8S_KIND_DEPLOYMENT,
     K8S_RESOURCE_DEPLOYMENTS,
@@ -50,7 +55,6 @@ from providers.metadata_workload_snapshots import (
 )
 
 CHANGE_CONTEXT_KEY = "change_context"
-COLLECTION_LIMITS_KEY = "collection_limits"
 CURRENT_WORKLOAD_SNAPSHOT_KEY = "current_workload_snapshot"
 CURRENT_WORKLOAD_SNAPSHOTS_KEY = "current_workload_snapshots"
 ENDPOINT_SLICE_READY_ENDPOINTS_KEY = "endpoint_slice_ready_endpoints"
@@ -570,18 +574,6 @@ def limit_change_context(change_context: JsonObject) -> JsonObject:
     """Limit large metadata lists and record what was truncated."""
     limits: JsonObject = {}
     for key, max_items in CHANGE_CONTEXT_LIST_LIMITS.items():
-        value = change_context.get(key)
-        if not isinstance(value, list) or len(value) <= max_items:
-            continue
-        change_context[key] = value[:max_items]
-        limits[key] = {
-            "truncated": True,
-            "original_count": len(value),
-            "returned_count": max_items,
-        }
-    if limits:
-        change_context[COLLECTION_LIMITS_KEY] = {
-            "truncated": True,
-            "lists": limits,
-        }
+        limit_payload_list(change_context, key, max_items, limits)
+    attach_collection_limits(change_context, limits)
     return change_context

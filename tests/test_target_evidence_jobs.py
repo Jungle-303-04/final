@@ -71,6 +71,7 @@ def load_evidence_module():
         "span.otel",
         "providers",
         "providers.base",
+        "providers.collection_limits",
         "providers.kubernetes_utils",
         "providers.kubernetes_providers",
         "providers.loki_providers",

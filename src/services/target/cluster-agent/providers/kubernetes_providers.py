@@ -18,11 +18,17 @@ from packages.config.constants import Target
 from packages.contracts.event_bus.interfaces import JsonObject
 from packages.contracts.target import TARGET_NAMESPACE
 from providers.base import ConfigReader
+from providers.collection_limits import (
+    attach_collection_limits,
+    limit_payload_list,
+    limit_payload_size,
+)
 from providers.kubernetes_utils import (
     K8S_ENDPOINT_SLICE_SERVICE_NAME_LABEL,
     K8S_KIND_DEPLOYMENT,
     K8S_KIND_REPLICA_SET,
     K8S_RESOURCE_DEPLOYMENTS,
+    K8S_RESOURCE_ENDPOINT_SLICES,
     K8S_RESOURCE_PODS,
     K8S_RESOURCE_REPLICASETS,
     K8S_RESOURCE_SERVICES,
@@ -32,6 +38,35 @@ from providers.kubernetes_utils import (
     spec,
     status,
 )
+
+K8S_SNAPSHOT_ENDPOINTS_KEY = "endpoints"
+K8S_SNAPSHOT_EVENTS_KEY = "events"
+K8S_SNAPSHOT_NODES_KEY = "nodes"
+K8S_SNAPSHOT_WORKLOADS_KEY = "workloads"
+K8S_STATEFULSETS_KEY = "statefulsets"
+K8S_DAEMONSETS_KEY = "daemonsets"
+
+MAX_KUBERNETES_PODS = 500
+MAX_KUBERNETES_EVENTS = 200
+MAX_KUBERNETES_NODES = 100
+MAX_KUBERNETES_WORKLOADS = 500
+MAX_KUBERNETES_SERVICES = 300
+MAX_KUBERNETES_ENDPOINTS = 300
+KUBERNETES_LIST_LIMITS = {
+    K8S_RESOURCE_PODS: MAX_KUBERNETES_PODS,
+    K8S_SNAPSHOT_EVENTS_KEY: MAX_KUBERNETES_EVENTS,
+    K8S_SNAPSHOT_NODES_KEY: MAX_KUBERNETES_NODES,
+    K8S_SNAPSHOT_WORKLOADS_KEY: MAX_KUBERNETES_WORKLOADS,
+    K8S_RESOURCE_SERVICES: MAX_KUBERNETES_SERVICES,
+    K8S_SNAPSHOT_ENDPOINTS_KEY: MAX_KUBERNETES_ENDPOINTS,
+}
+KUBERNETES_NAMESPACED_LIST_KEYS = {
+    K8S_RESOURCE_PODS,
+    K8S_SNAPSHOT_EVENTS_KEY,
+    K8S_SNAPSHOT_WORKLOADS_KEY,
+    K8S_RESOURCE_SERVICES,
+    K8S_SNAPSHOT_ENDPOINTS_KEY,
+}
 
 EVENT_REASON_BACK_OFF = "BackOff"
 EVENT_REASON_FAILED = "Failed"
@@ -139,13 +174,15 @@ class KubernetesSnapshotProvider:
                     f"/api/v1/namespaces/{namespace}/{K8S_RESOURCE_PODS}",
                     label_selector=telemetry_query.label_selector,
                 ),
-                "events": await self.get_json(
+                K8S_SNAPSHOT_EVENTS_KEY: await self.get_json(
                     client,
                     base_url,
                     headers,
                     f"/api/v1/namespaces/{namespace}/events",
                 ),
-                "nodes": await self.get_json(client, base_url, headers, "/api/v1/nodes"),
+                K8S_SNAPSHOT_NODES_KEY: await self.get_json(
+                    client, base_url, headers, "/api/v1/nodes"
+                ),
                 "pod_metrics": await self.get_json(
                     client,
                     base_url,
@@ -167,18 +204,18 @@ class KubernetesSnapshotProvider:
                     f"/apis/apps/v1/namespaces/{namespace}/{K8S_RESOURCE_DEPLOYMENTS}",
                     label_selector=telemetry_query.label_selector,
                 ),
-                "statefulsets": await self.get_json(
+                K8S_STATEFULSETS_KEY: await self.get_json(
                     client,
                     base_url,
                     headers,
-                    f"/apis/apps/v1/namespaces/{namespace}/statefulsets",
+                    f"/apis/apps/v1/namespaces/{namespace}/{K8S_STATEFULSETS_KEY}",
                     label_selector=telemetry_query.label_selector,
                 ),
-                "daemonsets": await self.get_json(
+                K8S_DAEMONSETS_KEY: await self.get_json(
                     client,
                     base_url,
                     headers,
-                    f"/apis/apps/v1/namespaces/{namespace}/daemonsets",
+                    f"/apis/apps/v1/namespaces/{namespace}/{K8S_DAEMONSETS_KEY}",
                     label_selector=telemetry_query.label_selector,
                 ),
                 K8S_RESOURCE_REPLICASETS: await self.get_json(
@@ -195,11 +232,11 @@ class KubernetesSnapshotProvider:
                     f"/api/v1/namespaces/{namespace}/{K8S_RESOURCE_SERVICES}",
                     label_selector=telemetry_query.label_selector,
                 ),
-                "endpointslices": await self.get_json(
+                K8S_RESOURCE_ENDPOINT_SLICES: await self.get_json(
                     client,
                     base_url,
                     headers,
-                    f"/apis/discovery.k8s.io/v1/namespaces/{namespace}/endpointslices",
+                    f"/apis/discovery.k8s.io/v1/namespaces/{namespace}/{K8S_RESOURCE_ENDPOINT_SLICES}",
                     allow_not_found=True,
                 ),
             }
@@ -242,7 +279,7 @@ class KubernetesSnapshotProvider:
 
     def build_response(self, results: JsonObject) -> JsonObject:
         """Return the finished Kubernetes evidence bucket."""
-        return results
+        return limit_kubernetes_snapshot(results)
 
     def normalize_payload(
         self,
@@ -266,9 +303,11 @@ class KubernetesSnapshotProvider:
                 payload.get(K8S_RESOURCE_DEPLOYMENTS), telemetry_query.label_selector
             ),
             "StatefulSet": scoped_items(
-                payload.get("statefulsets"), telemetry_query.label_selector
+                payload.get(K8S_STATEFULSETS_KEY), telemetry_query.label_selector
             ),
-            "DaemonSet": scoped_items(payload.get("daemonsets"), telemetry_query.label_selector),
+            "DaemonSet": scoped_items(
+                payload.get(K8S_DAEMONSETS_KEY), telemetry_query.label_selector
+            ),
             K8S_KIND_REPLICA_SET: active_replicasets(
                 scoped_items(payload.get(K8S_RESOURCE_REPLICASETS), telemetry_query.label_selector)
             ),
@@ -296,20 +335,20 @@ class KubernetesSnapshotProvider:
             )
             for item in raw_pods
         ]
-        snapshot["events"] = [
+        snapshot[K8S_SNAPSHOT_EVENTS_KEY] = [
             event_summary(item)
             for item in scoped_events(
-                items(payload.get("events")),
+                items(payload.get(K8S_SNAPSHOT_EVENTS_KEY)),
                 selected_names,
                 selected_uids,
                 telemetry_query.label_selector,
             )
         ]
-        snapshot["nodes"] = [
+        snapshot[K8S_SNAPSHOT_NODES_KEY] = [
             node_summary(item, node_metrics.get(str(metadata(item).get("name") or "")))
-            for item in items(payload.get("nodes"))
+            for item in items(payload.get(K8S_SNAPSHOT_NODES_KEY))
         ]
-        snapshot["workloads"] = [
+        snapshot[K8S_SNAPSHOT_WORKLOADS_KEY] = [
             *(
                 summary
                 for kind, rows in raw_workloads.items()
@@ -318,10 +357,10 @@ class KubernetesSnapshotProvider:
         ]
         snapshot[K8S_RESOURCE_SERVICES] = [service_summary(item) for item in raw_services]
         service_names = {str(metadata(item).get("name") or "") for item in raw_services}
-        snapshot["endpoints"] = [
+        snapshot[K8S_SNAPSHOT_ENDPOINTS_KEY] = [
             endpoint_slice_summary(item)
             for item in scoped_endpoint_slices(
-                items(payload.get("endpointslices")),
+                items(payload.get(K8S_RESOURCE_ENDPOINT_SLICES)),
                 service_names,
                 telemetry_query.label_selector,
             )
@@ -333,13 +372,13 @@ class KubernetesSnapshotProvider:
                 "reason": payload.get("reason", ""),
                 "counts": {
                     K8S_RESOURCE_PODS: len(snapshot[K8S_RESOURCE_PODS]),
-                    "events": len(snapshot["events"]),
-                    "nodes": len(snapshot["nodes"]),
+                    K8S_SNAPSHOT_EVENTS_KEY: len(snapshot[K8S_SNAPSHOT_EVENTS_KEY]),
+                    K8S_SNAPSHOT_NODES_KEY: len(snapshot[K8S_SNAPSHOT_NODES_KEY]),
                     "pod_metrics": len(pod_metrics),
                     "node_metrics": len(node_metrics),
-                    "workloads": len(snapshot["workloads"]),
+                    K8S_SNAPSHOT_WORKLOADS_KEY: len(snapshot[K8S_SNAPSHOT_WORKLOADS_KEY]),
                     K8S_RESOURCE_SERVICES: len(snapshot[K8S_RESOURCE_SERVICES]),
-                    "endpoints": len(snapshot["endpoints"]),
+                    K8S_SNAPSHOT_ENDPOINTS_KEY: len(snapshot[K8S_SNAPSHOT_ENDPOINTS_KEY]),
                 },
             }
         }
@@ -350,12 +389,12 @@ def empty_snapshot(cluster_id: str) -> JsonObject:
     """Build the empty shape used by Kubernetes evidence."""
     return {
         "cluster": {"cluster_id": cluster_id},
-        "workloads": [],
+        K8S_SNAPSHOT_WORKLOADS_KEY: [],
         K8S_RESOURCE_PODS: [],
-        "events": [],
-        "nodes": [],
+        K8S_SNAPSHOT_EVENTS_KEY: [],
+        K8S_SNAPSHOT_NODES_KEY: [],
         K8S_RESOURCE_SERVICES: [],
-        "endpoints": [],
+        K8S_SNAPSHOT_ENDPOINTS_KEY: [],
         "provider_status": {},
     }
 
@@ -363,7 +402,13 @@ def empty_snapshot(cluster_id: str) -> JsonObject:
 def merge_snapshot(target: JsonObject, source: JsonObject) -> None:
     """Add one normalized snapshot into another snapshot."""
     target["cluster"] = {**dict(target.get("cluster", {})), **dict(source.get("cluster", {}))}
-    for key in ("workloads", K8S_RESOURCE_PODS, "events", K8S_RESOURCE_SERVICES, "endpoints"):
+    for key in (
+        K8S_SNAPSHOT_WORKLOADS_KEY,
+        K8S_RESOURCE_PODS,
+        K8S_SNAPSHOT_EVENTS_KEY,
+        K8S_RESOURCE_SERVICES,
+        K8S_SNAPSHOT_ENDPOINTS_KEY,
+    ):
         target.setdefault(key, [])
         target[key].extend(source.get(key, []))
     merge_cluster_scoped_nodes(target, source)
@@ -374,14 +419,42 @@ def merge_snapshot(target: JsonObject, source: JsonObject) -> None:
 def merge_cluster_scoped_nodes(target: JsonObject, source: JsonObject) -> None:
     # namespace별 snapshot이 같은 /api/v1/nodes 결과를 반복 수집하므로 node는 cluster scope로 병합한다.
     by_key: dict[str, JsonObject] = {}
-    for node in [*target.get("nodes", []), *source.get("nodes", [])]:
+    for node in [
+        *target.get(K8S_SNAPSHOT_NODES_KEY, []),
+        *source.get(K8S_SNAPSHOT_NODES_KEY, []),
+    ]:
         if not isinstance(node, dict):
             continue
         key = str(node.get("uid") or node.get("name") or "")
         if not key:
             continue
         by_key[key] = node
-    target["nodes"] = list(by_key.values())
+    target[K8S_SNAPSHOT_NODES_KEY] = list(by_key.values())
+
+
+def limit_kubernetes_snapshot(snapshot: JsonObject) -> JsonObject:
+    """Limit large Kubernetes lists before the result is sent."""
+    limits: JsonObject = {}
+    for key, max_items in KUBERNETES_LIST_LIMITS.items():
+        group_key = namespace_group_key if key in KUBERNETES_NAMESPACED_LIST_KEYS else None
+        limit_payload_list(snapshot, key, max_items, limits, group_key=group_key)
+    limit_payload_size(
+        snapshot,
+        list_keys=KUBERNETES_LIST_LIMITS,
+        limits=limits,
+        group_keys={key: namespace_group_key for key in KUBERNETES_NAMESPACED_LIST_KEYS},
+    )
+    attach_collection_limits(snapshot, limits)
+    return snapshot
+
+
+def namespace_group_key(item: object) -> str:
+    """Return a namespace key so truncation keeps groups represented."""
+    if isinstance(item, dict):
+        namespace = item.get("namespace")
+        if namespace not in (None, ""):
+            return str(namespace)
+    return "<cluster>"
 
 
 RCA_TEST_LABEL = "kubeheal.io/rca-test"

@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from packages.contracts.gateway.requests import AgentEvidenceRequest
+from packages.contracts.gateway.requests import AgentEvidenceRequest, EvidenceJobResultRequest
 
 ROOT_DIR = Path(__file__).resolve().parents[1]
 TARGET_AGENT_DIR = ROOT_DIR / "src" / "services" / "target" / "cluster-agent"
@@ -23,6 +23,7 @@ def load_evidence_module():
         "span.otel",
         "providers",
         "providers.base",
+        "providers.collection_limits",
         "providers.kubernetes_utils",
         "providers.kubernetes_providers",
         "providers.loki_providers",
@@ -342,6 +343,219 @@ def test_prometheus_range_query_is_normalized_into_series() -> None:
     assert restart_rate["series"][0]["values"][1]["value"] == 3.0
     assert restart_rate["analysis"]["metric_kind"] == "restart_count_or_rate"
     assert restart_rate["analysis"]["baseline_comparison"]["increased_series_count"] == 1
+
+
+def test_allow_partial_metric_collection_keeps_successful_query_results() -> None:
+    module = load_evidence_module()
+    metrics_provider = module.PrometheusMetricsProvider.from_config(lambda _name, default: default)
+    collector = module.EvidenceCollector([metrics_provider])
+    definitions = (
+        module.TelemetryQueryDefinition.from_mapping(
+            {
+                "source": "prometheus",
+                "name": "scrape_targets_up",
+                "description": "Successful scrape target query.",
+                "query": "up",
+            }
+        ),
+        module.TelemetryQueryDefinition.from_mapping(
+            {
+                "source": "prometheus",
+                "name": "broken_query",
+                "description": "Failing query.",
+                "query": "broken_promql",
+            }
+        ),
+    )
+
+    async def stub_query_prometheus(_client, metric_query) -> dict[str, object]:
+        if metric_query.metric_name == "broken_query":
+            raise RuntimeError("prometheus query failed")
+        return {
+            "status": "success",
+            "data": {
+                "resultType": "vector",
+                "result": [{"metric": {"job": "prometheus"}, "value": [1782822500.0, "1"]}],
+            },
+        }
+
+    collector.providers["metrics"].query = stub_query_prometheus
+
+    result = asyncio.run(
+        collector.collect_query_policy(
+            "metrics",
+            definitions,
+            failure_policy="allow_partial",
+        )
+    )
+    metrics = result["metrics"]
+
+    assert sorted(metrics["results"]) == ["scrape_targets_up"]
+    assert metrics["results"]["scrape_targets_up"]["samples"][0]["value"] == 1.0
+
+
+def test_prometheus_vector_samples_are_limited_before_job_result() -> None:
+    module = load_evidence_module()
+    metrics_provider = module.PrometheusMetricsProvider.from_config(lambda _name, default: default)
+    result: dict[str, object] = {}
+    definition = module.TelemetryQueryDefinition.from_mapping(
+        {
+            "source": "prometheus",
+            "name": "large_vector",
+            "description": "Large vector query.",
+            "query": "up",
+        }
+    )
+
+    metrics_provider.append_result(
+        result,
+        definition.to_provider_query(),
+        {
+            "status": "success",
+            "data": {
+                "resultType": "vector",
+                "result": [
+                    {
+                        "metric": {
+                            "namespace": "target",
+                            "pod": f"pod-{index}",
+                            "label": f"value-{index}",
+                        },
+                        "value": [1782822500.0 + index, str(index)],
+                    }
+                    for index in range(5000)
+                ],
+            },
+        },
+    )
+
+    metrics = metrics_provider.build_response(result)
+    large_vector = metrics["results"]["large_vector"]
+
+    assert len(large_vector["samples"]) < 5000
+    assert large_vector["analysis"]["sample_count"] == 5000
+    assert large_vector["collection_limits"]["truncated"] is True
+    assert large_vector["collection_limits"]["lists"]["samples"] == {
+        "truncated": True,
+        "original_count": 5000,
+        "returned_count": len(large_vector["samples"]),
+    }
+    EvidenceJobResultRequest(
+        agent_id="agent-1",
+        lease_id="lease-1",
+        status="completed",
+        result={"metrics": metrics},
+    )
+
+
+def test_prometheus_vector_samples_are_limited_by_payload_bytes() -> None:
+    module = load_evidence_module()
+    metrics_provider = module.PrometheusMetricsProvider.from_config(lambda _name, default: default)
+    result: dict[str, object] = {}
+    definition = module.TelemetryQueryDefinition.from_mapping(
+        {
+            "source": "prometheus",
+            "name": "wide_labels",
+            "description": "Vector query with large labels.",
+            "query": "up",
+        }
+    )
+
+    metrics_provider.append_result(
+        result,
+        definition.to_provider_query(),
+        {
+            "status": "success",
+            "data": {
+                "resultType": "vector",
+                "result": [
+                    {
+                        "metric": {"namespace": "target", "pod": f"pod-{index}", "blob": "x" * 4000},
+                        "value": [1782822500.0 + index, "1"],
+                    }
+                    for index in range(500)
+                ],
+            },
+        },
+    )
+
+    metrics = metrics_provider.build_response(result)
+    wide_labels = metrics["results"]["wide_labels"]
+
+    assert len(wide_labels["samples"]) < 250
+    assert wide_labels["analysis"]["sample_count"] == 500
+    assert wide_labels["collection_limits"]["lists"]["samples"]["original_count"] == 500
+    assert wide_labels["collection_limits"]["lists"]["samples"]["returned_count"] == len(
+        wide_labels["samples"]
+    )
+    EvidenceJobResultRequest(
+        agent_id="agent-1",
+        lease_id="lease-1",
+        status="completed",
+        result={"metrics": metrics},
+    )
+
+
+def test_prometheus_matrix_series_and_values_are_limited_before_job_result() -> None:
+    module = load_evidence_module()
+    metrics_provider = module.PrometheusMetricsProvider.from_config(lambda _name, default: default)
+    result: dict[str, object] = {}
+    definition = module.TelemetryQueryDefinition.from_mapping(
+        {
+            "source": "prometheus",
+            "name": "large_range",
+            "description": "Large range query.",
+            "query": "container_cpu_usage_seconds_total",
+            "range_seconds": 900,
+            "step_seconds": 1,
+        }
+    )
+
+    metrics_provider.append_result(
+        result,
+        definition.to_provider_query(),
+        {
+            "status": "success",
+            "data": {
+                "resultType": "matrix",
+                "result": [
+                    {
+                        "metric": {"namespace": "target", "pod": f"pod-{series_index}"},
+                        "values": [
+                            [1782822500.0 + point_index, str(point_index)]
+                            for point_index in range(80)
+                        ],
+                    }
+                    for series_index in range(120)
+                ],
+            },
+        },
+    )
+
+    metrics = metrics_provider.build_response(result)
+    large_range = metrics["results"]["large_range"]
+
+    assert len(large_range["series"]) < 120
+    assert all(len(item["values"]) <= 40 for item in large_range["series"])
+    assert large_range["analysis"]["series_count"] == 120
+    assert large_range["analysis"]["point_count"] == 9600
+    assert large_range["collection_limits"]["lists"]["series"] == {
+        "truncated": True,
+        "original_count": 120,
+        "returned_count": len(large_range["series"]),
+    }
+    assert large_range["collection_limits"]["lists"]["series.values"] == {
+        "truncated": True,
+        "original_count": 8000,
+        "returned_count": 4000,
+        "series_count": 100,
+    }
+    EvidenceJobResultRequest(
+        agent_id="agent-1",
+        lease_id="lease-1",
+        status="completed",
+        result={"metrics": metrics},
+    )
 
 
 def test_collector_rejects_unknown_provider_keys() -> None:

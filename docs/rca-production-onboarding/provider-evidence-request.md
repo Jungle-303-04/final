@@ -34,6 +34,12 @@ RCA는 provider가 보내준 evidence만 보고 symptom, root cause candidate, c
 - services
 - endpointslices
 
+큰 namespace에서 evidence job result가 1MiB 제한을 넘지 않도록 Kubernetes provider는
+`pods`, `events`, `nodes`, `workloads`, `services`, `endpoints` 목록을 전송 직전에 제한한다.
+잘린 목록이 있으면 `kubernetes.collection_limits`에 전체 개수와 반환 개수를 남긴다.
+기존 필드 이름은 유지되므로 RCA는 같은 경로를 읽되, `collection_limits`가 있으면 일부 샘플임을 고려한다.
+개수 제한 뒤에도 JSON byte 크기가 크면 가장 큰 목록부터 추가로 줄인다.
+
 현재 payload에서 기대 가능한 정보:
 
 - resource
@@ -152,12 +158,14 @@ RCA는 provider가 보내준 evidence만 보고 symptom, root cause candidate, c
 - `threshold`는 보수적인 기본 기준만 쓴다. ratio 계열은 `0.8` 이상 warning, `0.9` 이상 critical이다. `up`은 `1` 미만이면 critical이다. restart/not ready/scrape error/throttling 계열은 `0`보다 크면 warning 신호로 본다. known metric이 아니거나 숫자 point가 없으면 생략될 수 있다.
 - `signals`는 threshold를 넘은 경우에만 `memory_pressure`, `cpu_pressure`, `cpu_throttling`, `scrape_target_down`, `collector_scrape_error`, `not_ready_pods`, `restart_increase` 같은 작은 label을 담는다.
 - `baseline_comparison`은 range query에서 비교 가능한 series가 있을 때만 만든다. 외부 기준선이나 이전 배포 기준선이 아니라, 같은 query window 안의 첫 point를 기준으로 증가/감소/유지 series 개수를 계산한다.
+- high cardinality metric 때문에 `samples`, `series`, `series[].values`, `result`가 너무 커질 수 있으므로 전송 전 제한한다. 제한되면 해당 query result의 `collection_limits`에 전체 개수와 반환 개수를 남긴다. `analysis`는 제한 전 숫자 기준으로 계산한다. 개수 제한 뒤에도 JSON byte 크기가 크면 가장 큰 목록부터 추가로 줄인다.
 
 주의:
 
 - 이번 변경은 provider가 새 PromQL query를 자동으로 추가하는 변경이 아니다. 이미 policy가 요청한 Prometheus 결과를 구조화한다.
 - CPU throttling, memory usage/limit ratio, restart trend 같은 값은 해당 query가 policy에 들어온 경우에만 `analysis`로 해석된다.
 - 외부 baseline, 배포 전 baseline, ingress 5xx, request latency는 별도 query나 외부 시스템 연결이 필요하므로 여기서 확정하지 않는다.
+- 제한은 기존 `samples`/`series` 필드를 없애는 변경이 아니다. 기존 필드는 유지하고, 일부만 담긴 경우 `collection_limits`로 표시한다.
 
 ## Logs Provider
 

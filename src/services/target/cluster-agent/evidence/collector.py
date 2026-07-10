@@ -132,16 +132,33 @@ class EvidenceCollector:
     ) -> ProviderResult:
         with TRACER.start_as_current_span(provider.span_name) as span:
             span.count(provider.query_count_attribute, queries)
+            partial_failure = False
             try:
                 async with httpx.AsyncClient(timeout=provider.timeout_seconds) as client:
                     results = provider.empty_results()
 
                     for telemetry_query in queries:
-                        payload = await provider.query(client, telemetry_query)
-                        provider.append_result(results, telemetry_query, payload)
+                        try:
+                            payload = await provider.query(client, telemetry_query)
+                            provider.append_result(results, telemetry_query, payload)
+                        except Exception as exc:
+                            if propagate_errors:
+                                raise
+                            partial_failure = True
+                            span.error(exc)
+                            LOGGER.warning(
+                                provider.failure_message,
+                                extra={
+                                    CONTEXT_KEY: {
+                                        "source": provider.source,
+                                        "query_name": telemetry_query_name(telemetry_query),
+                                    }
+                                },
+                                exc_info=exc,
+                            )
 
                 span.count(provider.result_count_attribute, results)
-                span.flag(f"{provider.source}.fallback_used", False)
+                span.flag(f"{provider.source}.fallback_used", partial_failure)
                 return provider.build_response(results)
 
             except Exception as exc:
@@ -155,3 +172,12 @@ class EvidenceCollector:
                 if propagate_errors:
                     raise
                 return provider.build_response(provider.empty_results())
+
+
+def telemetry_query_name(telemetry_query: object) -> str:
+    """Return the stable name of one provider query for logs."""
+    for attribute in ("query_name", "metric_name"):
+        value = getattr(telemetry_query, attribute, None)
+        if isinstance(value, str) and value:
+            return value
+    return type(telemetry_query).__name__
