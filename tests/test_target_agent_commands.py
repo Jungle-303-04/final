@@ -446,6 +446,36 @@ def test_kubernetes_scale_exempts_approval_in_sandbox_environment() -> None:
     assert len(agent.kubernetes.patches) == 1
 
 
+def test_kubernetes_scale_does_not_auto_approve_cross_namespace_environment(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("CONTROL_ALLOWED_NAMESPACES", "sandbox,staging")
+    module = load_agent_module()
+    agent = object.__new__(module.TargetClusterAgent)
+    agent.cluster_id = "cluster-1"
+    agent.cluster_role = "target"
+    agent.kubernetes = StubKubernetesClient()
+    register_agent_commands(module, agent)
+
+    result = asyncio.run(
+        agent.execute_command(
+            {
+                "action": module.KUBERNETES_DEPLOYMENT_SCALE_ACTION,
+                "environment": "sandbox",
+                "payload": {
+                    "namespace": "staging",
+                    "name": "checkout-api",
+                    "replicas": 3,
+                },
+            }
+        )
+    )
+
+    assert result["status"] == "failed"
+    assert "requires approval_ref" in result["message"]
+    assert agent.kubernetes.patches == []
+
+
 def test_kubernetes_scale_rejects_namespace_outside_control_policy() -> None:
     module = load_agent_module()
     agent = object.__new__(module.TargetClusterAgent)
