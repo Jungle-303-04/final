@@ -9,6 +9,11 @@ import scripts.validate_release_flow_production_readiness as readiness
 from scripts.validate_release_flow_production_readiness import main, validate_readiness
 
 
+def set_live_runtime_env(monkeypatch) -> None:
+    monkeypatch.setenv("RELEASE_FLOW_LIVE_ENABLED", "1")
+    monkeypatch.setenv("RELEASE_FLOW_LIVE_WORKSPACES", "workspace-production")
+
+
 def test_current_release_flow_production_readiness_static_checks_pass() -> None:
     checks = validate_readiness()
 
@@ -52,6 +57,7 @@ def test_current_release_flow_production_readiness_static_checks_pass() -> None:
         "safe_pr.github_branch_ref_validation",
         "workflow.production_readiness.requires_runtime_config",
         "workflow.production_readiness.github_provider_env",
+        "workflow.production_readiness.live_runtime_env",
         "workflow.production_readiness.github_access_preflight",
         "workflow.production_readiness.api_smoke_preflight",
         "workflow.production_readiness.github_secret_names",
@@ -68,6 +74,8 @@ def test_current_release_flow_production_readiness_static_checks_pass() -> None:
         "runtime.github_token",
         "runtime.scm_repo",
         "runtime.github_api_base",
+        "runtime.live_enabled",
+        "runtime.live_workspaces",
     }
 
 
@@ -83,6 +91,8 @@ def test_release_flow_production_readiness_requires_runtime_config(monkeypatch) 
         "GITHUB_TOKEN",
         "SCM_REPO",
         "GITHUB_API_BASE",
+        "RELEASE_FLOW_LIVE_ENABLED",
+        "RELEASE_FLOW_LIVE_WORKSPACES",
     ):
         monkeypatch.delenv(name, raising=False)
 
@@ -95,6 +105,8 @@ def test_release_flow_production_readiness_requires_runtime_config(monkeypatch) 
         "runtime.auth_password",
         "runtime.github_token",
         "runtime.scm_repo",
+        "runtime.live_enabled",
+        "runtime.live_workspaces",
     }
 
 
@@ -124,6 +136,7 @@ def test_release_flow_production_readiness_accepts_runtime_config_aliases(monkey
     monkeypatch.setenv("API_BASE_URL", "https://release-flow.internal.test/api")
     monkeypatch.setenv("AUTH_EMAIL", "ops@company.test")
     monkeypatch.setenv("AUTH_PASSWORD", "correct-horse-battery")
+    set_live_runtime_env(monkeypatch)
     monkeypatch.setenv("GITHUB_TOKEN_REF", "aws-sm:/myjob/prod/github-token#token")
     monkeypatch.setenv("SCM_REPO", "org/checkout")
 
@@ -136,6 +149,8 @@ def test_release_flow_production_readiness_rejects_placeholder_runtime_config(mo
     monkeypatch.setenv("RELEASE_FLOW_API_BASE_URL", "http://localhost:8000")
     monkeypatch.setenv("RELEASE_FLOW_AUTH_EMAIL", "release-oncall@example.com")
     monkeypatch.setenv("RELEASE_FLOW_AUTH_PASSWORD", "secret")
+    monkeypatch.setenv("RELEASE_FLOW_LIVE_ENABLED", "false")
+    monkeypatch.setenv("RELEASE_FLOW_LIVE_WORKSPACES", "*")
     monkeypatch.setenv("GITHUB_TOKEN_REF", "github-token")
     monkeypatch.setenv("SCM_REPO", "not-a-repo")
     monkeypatch.setenv("GITHUB_API_BASE", "http://example.com/api")
@@ -150,6 +165,8 @@ def test_release_flow_production_readiness_rejects_placeholder_runtime_config(mo
         "runtime.github_token",
         "runtime.scm_repo",
         "runtime.github_api_base",
+        "runtime.live_enabled",
+        "runtime.live_workspaces",
     } <= failed
     details = {check.name: check.detail for check in checks}
     assert "must use https" in details["runtime.api_base_url"]
@@ -158,12 +175,15 @@ def test_release_flow_production_readiness_rejects_placeholder_runtime_config(mo
     assert "placeholder token ref" in details["runtime.github_token"]
     assert "owner/repo" in details["runtime.scm_repo"]
     assert "must use https" in details["runtime.github_api_base"]
+    assert "must be enabled" in details["runtime.live_enabled"]
+    assert "wildcard" in details["runtime.live_workspaces"]
 
 
 def test_release_flow_production_readiness_github_access_preflight_success(monkeypatch) -> None:
     monkeypatch.setenv("API_BASE_URL", "https://release-flow.internal.test/api")
     monkeypatch.setenv("AUTH_EMAIL", "ops@company.test")
     monkeypatch.setenv("AUTH_PASSWORD", "correct-horse-battery")
+    set_live_runtime_env(monkeypatch)
     monkeypatch.setenv("GITHUB_TOKEN", "ghp_" + "a" * 32)
     monkeypatch.setenv("SCM_REPO", "org/checkout")
     monkeypatch.setenv("SCM_BASE_BRANCH", "release/main")
@@ -212,6 +232,7 @@ def test_release_flow_production_readiness_github_access_preflight_rejects_read_
     monkeypatch.setenv("API_BASE_URL", "https://release-flow.internal.test/api")
     monkeypatch.setenv("AUTH_EMAIL", "ops@company.test")
     monkeypatch.setenv("AUTH_PASSWORD", "correct-horse-battery")
+    set_live_runtime_env(monkeypatch)
     monkeypatch.setenv("GITHUB_TOKEN", "ghp_" + "a" * 32)
     monkeypatch.setenv("SCM_REPO", "org/checkout")
 
@@ -243,6 +264,7 @@ def test_release_flow_production_readiness_github_access_preflight_requires_reso
     monkeypatch.setenv("API_BASE_URL", "https://release-flow.internal.test/api")
     monkeypatch.setenv("AUTH_EMAIL", "ops@company.test")
     monkeypatch.setenv("AUTH_PASSWORD", "correct-horse-battery")
+    set_live_runtime_env(monkeypatch)
     monkeypatch.setenv("GITHUB_TOKEN_REF", "aws-sm:/myjob/prod/github-token#token")
     monkeypatch.delenv("GITHUB_TOKEN", raising=False)
     monkeypatch.setenv("SCM_REPO", "org/checkout")
@@ -259,6 +281,7 @@ def test_release_flow_production_readiness_github_access_preflight_reports_http_
     monkeypatch.setenv("API_BASE_URL", "https://release-flow.internal.test/api")
     monkeypatch.setenv("AUTH_EMAIL", "ops@company.test")
     monkeypatch.setenv("AUTH_PASSWORD", "correct-horse-battery")
+    set_live_runtime_env(monkeypatch)
     monkeypatch.setenv("GITHUB_TOKEN", "ghp_" + "a" * 32)
     monkeypatch.setenv("SCM_REPO", "org/missing")
 
