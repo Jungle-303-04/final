@@ -16,29 +16,13 @@ from packages.config.security import (
     TEST_APP_ENV,
     rca_test_runs_enabled,
 )
-from packages.config.settings import env
 from packages.contracts.gateway.requests import DEFAULT_OTEL_SERVICE_NAME, TargetRegisterRequest
 from packages.contracts.target import SANDBOX_NAMESPACE, TARGET_NAMESPACE
 
-TARGET_INSTALL_RENDERER_ENV = "TARGET_INSTALL_RENDERER"
-TARGET_INSTALL_RENDERER_NATIVE = "native"
-TARGET_INSTALL_RENDERER_KUSTOMIZE = "kustomize"
 CONTROL_PRIORITY_CLASS_NAME = "gitops-control-critical"
 FAST_LANE_PRIORITY_CLASS_NAME = "gitops-demo-fast"
 FAST_LANE_NODE_LABEL_KEY = "workload-tier"
 FAST_LANE_NODE_LABEL_VALUE = "demo-fast"
-SUPPORTED_TARGET_INSTALL_RENDERERS = {
-    TARGET_INSTALL_RENDERER_NATIVE,
-    TARGET_INSTALL_RENDERER_KUSTOMIZE,
-}
-
-
-def target_install_renderer() -> str:
-    renderer = env(TARGET_INSTALL_RENDERER_ENV, TARGET_INSTALL_RENDERER_NATIVE).strip().lower()
-    if renderer not in SUPPORTED_TARGET_INSTALL_RENDERERS:
-        supported = ", ".join(sorted(SUPPORTED_TARGET_INSTALL_RENDERERS))
-        raise ValueError(f"{TARGET_INSTALL_RENDERER_ENV} must be one of: {supported}")
-    return renderer
 
 
 def yaml_string(value: str) -> str:
@@ -46,10 +30,6 @@ def yaml_string(value: str) -> str:
 
 
 def target_install_manifest(payload: TargetRegisterRequest, agent_token: str) -> str:
-    # native와 kustomize는 지금 같은 manifest contract를 반환함. 차이는 호출 경계:
-    # native는 API가 즉시 apply 가능한 YAML을 생성, kustomize는 같은 산출물을 향후
-    # renderer adapter/웹앱 preview/install 단계에서 교체할 수 있게 선택값으로 노출.
-    target_install_renderer()
     namespace = agent_namespace(payload)
     role = payload.cluster_role
     return "\n---\n".join(

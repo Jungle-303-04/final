@@ -256,13 +256,8 @@ HTTP 엔드포인트(핸들러 함수도 public 심볼):
 
 | 앵커 | 시그니처/값 | 의미 |
 |---|---|---|
-| `src/domains/target/install_manifest.py :: TARGET_INSTALL_RENDERER_ENV` | `"TARGET_INSTALL_RENDERER"` | renderer 선택 env 키 |
-| `src/domains/target/install_manifest.py :: TARGET_INSTALL_RENDERER_NATIVE` | `"native"` | 기본 renderer |
-| `src/domains/target/install_manifest.py :: TARGET_INSTALL_RENDERER_KUSTOMIZE` | `"kustomize"` | 대체 renderer(현재 native와 동일 산출물) |
-| `src/domains/target/install_manifest.py :: SUPPORTED_TARGET_INSTALL_RENDERERS` | `{"native", "kustomize"}` | 허용 renderer 집합 |
-| `src/domains/target/install_manifest.py :: target_install_renderer` | `() -> str` | env 값을 strip·lower 후 검증. 미지원 값이면 `ValueError("TARGET_INSTALL_RENDERER must be one of: ...")` |
 | `src/domains/target/install_manifest.py :: yaml_string` | `(value: str) -> str` | `json.dumps(value)` — YAML 안전 인용 |
-| `src/domains/target/install_manifest.py :: target_install_manifest` | `(payload: TargetRegisterRequest, agent_token: str) -> str` | role=`target`이면 namespace(`target`) → namespace(`sandbox`) → ServiceAccount → read RBAC → target write RBAC → sandbox RBAC → runtime ConfigMap → runtime Secret → (선택) sample workload → cluster-agent Deployment. role=`management`이면 namespace(`management`) → ServiceAccount → read RBAC(get/list/watch) → runtime ConfigMap/Secret → cluster-agent Deployment만 렌더한다. renderer 검증만 수행(현재 두 renderer는 같은 contract 반환) |
+| `src/domains/target/install_manifest.py :: target_install_manifest` | `(payload: TargetRegisterRequest, agent_token: str) -> str` | role=`target`이면 namespace(`target`) → namespace(`sandbox`) → ServiceAccount → read RBAC → target write RBAC → sandbox RBAC → runtime ConfigMap → runtime Secret → (선택) sample workload → cluster-agent Deployment. role=`management`이면 namespace(`management`) → ServiceAccount → read RBAC(get/list/watch) → runtime ConfigMap/Secret → cluster-agent Deployment만 렌더한다. |
 | `src/domains/target/install_manifest.py :: namespace_manifest` | `(name: str) -> str` | `v1/Namespace` |
 | `src/domains/target/install_manifest.py :: agent_namespace` | `(payload: TargetRegisterRequest) -> str` | role=`management`이면 `management`, 그 외 `target` |
 | `src/domains/target/install_manifest.py :: service_account_manifest` | `(namespace: str) -> str` | `cluster-agent` ServiceAccount |
@@ -612,7 +607,6 @@ role=`management` 등록은 셀프 모니터링 전용이다. 서버가 `install
 | policy generation 역행 | `ValueError` → HTTP 409 |
 | agent 토큰 identity와 cluster_id 불일치(`GET /agent/policy`) | HTTP 403 (`"cluster_id does not match agent identity"`) |
 | evidence job 결과 보고 대상 없음/리스 불일치 | HTTP 404 (`EVIDENCE_JOB_NOT_FOUND`) |
-| `TARGET_INSTALL_RENDERER` 미지원 값 | `ValueError` |
 | sample workload 설치 시 name/image 누락 | `ValueError("sample workload install requires name and image")` |
 
 ## 설정 (Settings)
@@ -634,4 +628,3 @@ role=`management` 등록은 셀프 모니터링 전용이다. 서버가 `install
 | `PUBLIC_BASE_URL` | str | `""` | 공개 API 주소 미지정 시 fallback 서비스 루트(`/api` 접미 정규화) | `normalize_target_provider_defaults` (호출 시) |
 | `EVIDENCE_JOB_LEASE_SECONDS` | int | `60` | evidence job 리스 유지 초 ※ | `evidence_jobs.py` |
 | `PENDING_EVIDENCE_EVENT_TTL_SECONDS` | int | `120` | pending evidence 윈도우 회수 TTL 초 ※ | `evidence_jobs.py` |
-| `TARGET_INSTALL_RENDERER` | str | `"native"` | 설치 manifest renderer(`native`/`kustomize`) | `target_install_renderer` (호출 시) |
