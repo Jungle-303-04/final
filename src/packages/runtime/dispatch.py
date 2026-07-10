@@ -29,6 +29,8 @@ class EventContext[DbT]:
     correlation_id: str
     causation_id: str | None
     db: DbT
+    source: str = ""
+    created_at: str = ""
 
     @classmethod
     def of(cls, evt: EventEnvelope, db: DbT) -> EventContext[DbT]:
@@ -38,6 +40,8 @@ class EventContext[DbT]:
             correlation_id=evt.correlation_id,
             causation_id=evt.causation_id,
             db=db,
+            source=evt.source,
+            created_at=evt.created_at,
         )
 
 
@@ -71,7 +75,7 @@ def make_event_handler(sub: Subscription, db: Any, source: str) -> Callable[[Eve
     """타입 구독: 봉투 → body 디코드 → 콜백 → yield된 body 수집."""
 
     async def handle(evt: EventEnvelope) -> list[EventEnvelope]:
-        body = sub.body_type.from_body(evt.payload)
+        body = sub.body_type.from_body(evt.payload, strict=False)
         ctx = EventContext.of(evt, AsyncDb(db))
         result = sub.fn(body, ctx) if sub.wants_ctx else sub.fn(body)
         return await _collect(source, evt, result)

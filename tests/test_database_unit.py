@@ -30,6 +30,7 @@ from domains.gitops.repository import (
 )
 from domains.rca.repository import RcaRepository
 from domains.target.repository import TargetAgentRepository
+from packages.ai.metrics import LlmInvocationMetric
 from packages.contracts.event_bus.interfaces import EventConsumerMetrics
 from packages.contracts.event_bus.processing import CLAIM_BLOCKED
 from packages.contracts.gitops import (
@@ -39,7 +40,6 @@ from packages.contracts.gitops import (
 )
 from packages.contracts.identity import Permission, ResourceRole
 from packages.events.envelope import event
-from packages.ai.metrics import LlmInvocationMetric
 from packages.storage import database as db
 from packages.storage import engine as storage_engine
 from packages.storage.repositories import event as event_repository
@@ -217,6 +217,19 @@ def test_alert_channel_schema_tracks_validation_status() -> None:
         "last_test_detail",
         "last_test_status_code",
     } <= columns
+
+
+def test_alert_channel_compat_migration_adds_validation_status() -> None:
+    assert set(storage_engine.ALERT_CHANNEL_COMPAT_COLUMNS) == {
+        "last_tested_at",
+        "last_test_status",
+        "last_test_detail",
+        "last_test_status_code",
+    }
+    assert all(
+        "add column if not exists" in statement
+        for statement in storage_engine.ALERT_CHANNEL_COMPAT_COLUMNS.values()
+    )
 
 
 def test_outbox_schema_supports_relay_leases() -> None:
@@ -502,9 +515,7 @@ def test_event_processing_duration_metrics_group_by_consumer() -> None:
     repository = object.__new__(EventRepository)
     repository.connection = stub_connection  # type: ignore[method-assign]
 
-    assert repository.event_processing_duration_avg_ms_by_consumer() == {
-        "command-worker": 12.5
-    }
+    assert repository.event_processing_duration_avg_ms_by_consumer() == {"command-worker": 12.5}
 
     compiled = recorded[0].compile(dialect=postgresql.dialect())
     sql = str(compiled)
@@ -961,6 +972,22 @@ def test_workflow_status_ranks_never_allow_terminal_regression() -> None:
     )
 
 
+def test_workflow_step_status_ranks_never_allow_terminal_regression() -> None:
+    from domains.gitops.repository import (
+        TERMINAL_WORKFLOW_STEP_STATUSES,
+        WORKFLOW_STEP_STATUS_RANKS,
+    )
+
+    terminal_rank = max(WORKFLOW_STEP_STATUS_RANKS.values())
+    for status in TERMINAL_WORKFLOW_STEP_STATUSES:
+        assert WORKFLOW_STEP_STATUS_RANKS[status] == terminal_rank
+    assert (
+        WORKFLOW_STEP_STATUS_RANKS["pending"]
+        < WORKFLOW_STEP_STATUS_RANKS["running"]
+        < WORKFLOW_STEP_STATUS_RANKS["succeeded"]
+    )
+
+
 def _capture_workflow_statements() -> tuple[Any, list[Any]]:
     recorded: list[Any] = []
 
@@ -1153,6 +1180,28 @@ def test_update_workflow_run_for_command_guards_status_transition() -> None:
 
     # 재배달 완료/큐잉 이벤트가 SUCCEEDED 를 APPLYING 으로 되돌릴 수 없음
     assert "UPDATE workflow_runs" in sql
+    assert "CASE" in sql
+    assert "NOT IN" in sql
+
+
+def test_record_workflow_step_guards_status_transition() -> None:
+    repository, recorded = _capture_workflow_statements()
+
+    repository.record_workflow_step(
+        {
+            "workspace_id": "workspace-1",
+            "workflow_run_id": "workflow-1",
+            "application_id": "app-1",
+            "binding_id": "binding-1",
+            "name": "apply",
+            "status": "running",
+        }
+    )
+
+    sql = str(recorded[0].compile(dialect=postgresql.dialect()))
+
+    # 늦게 재전달된 queued 이벤트가 이미 완료된 apply 단계를 RUNNING 으로 되돌릴 수 없음
+    assert "ON CONFLICT (workflow_run_id, name) DO UPDATE" in sql
     assert "CASE" in sql
     assert "NOT IN" in sql
 
@@ -1650,6 +1699,7 @@ def test_evidence_job_completion_locks_one_job_before_update() -> None:
                     {
                         "job_id": "job-1",
                         "evidence_key": "workspace-1:cluster-1:cluster-snapshot:window-1",
+                        "provider_key": "metrics",
                         "attempt_count": 1,
                         "max_attempts": 3,
                     }

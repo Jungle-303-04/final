@@ -4,7 +4,6 @@
 from __future__ import annotations
 
 import argparse
-import json
 import os
 import re
 import sys
@@ -24,7 +23,6 @@ from release_flow_smoke import (
     write_junit_report,
     write_markdown_report,
 )
-
 
 PRODUCTION_ENVIRONMENTS = {"prod", "production"}
 PLACEHOLDER_CHANGE_TICKETS = {"CHG-PREFLIGHT"}
@@ -47,13 +45,19 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--api-base-url", default=os.getenv("RELEASE_FLOW_API_BASE_URL", ""))
     parser.add_argument("--base-url", default=os.getenv("BASE_URL", ""))
-    parser.add_argument("--email", default=os.getenv("RELEASE_FLOW_AUTH_EMAIL") or os.getenv("AUTH_EMAIL", ""))
+    parser.add_argument(
+        "--email", default=os.getenv("RELEASE_FLOW_AUTH_EMAIL") or os.getenv("AUTH_EMAIL", "")
+    )
     parser.add_argument(
         "--password",
         default=os.getenv("RELEASE_FLOW_AUTH_PASSWORD") or os.getenv("AUTH_PASSWORD", ""),
     )
     parser.add_argument("--plan-id", default=os.getenv("RELEASE_FLOW_DEPLOY_PLAN_ID", ""))
-    parser.add_argument("--timeout", type=float, default=float(os.getenv("RELEASE_FLOW_DEPLOY_TIMEOUT_SECONDS", "30")))
+    parser.add_argument(
+        "--timeout",
+        type=float,
+        default=float(os.getenv("RELEASE_FLOW_DEPLOY_TIMEOUT_SECONDS", "30")),
+    )
     parser.add_argument(
         "--retry-attempts",
         type=int,
@@ -71,14 +75,32 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     )
     parser.add_argument("--report-path", default=os.getenv("RELEASE_FLOW_DEPLOY_REPORT_PATH", ""))
     parser.add_argument("--junit-path", default=os.getenv("RELEASE_FLOW_DEPLOY_JUNIT_PATH", ""))
-    parser.add_argument("--markdown-path", default=os.getenv("RELEASE_FLOW_DEPLOY_MARKDOWN_PATH", ""))
-    parser.add_argument("--github-step-summary", action="store_true", default=env_flag("RELEASE_FLOW_DEPLOY_GITHUB_STEP_SUMMARY"))
-    parser.add_argument("--github-output", action="store_true", default=env_flag("RELEASE_FLOW_DEPLOY_GITHUB_OUTPUT"))
-    parser.add_argument("--github-annotations", action="store_true", default=env_flag("RELEASE_FLOW_DEPLOY_GITHUB_ANNOTATIONS"))
-    parser.add_argument("--change-ticket", default=os.getenv("RELEASE_FLOW_DEPLOY_CHANGE_TICKET", ""))
+    parser.add_argument(
+        "--markdown-path", default=os.getenv("RELEASE_FLOW_DEPLOY_MARKDOWN_PATH", "")
+    )
+    parser.add_argument(
+        "--github-step-summary",
+        action="store_true",
+        default=env_flag("RELEASE_FLOW_DEPLOY_GITHUB_STEP_SUMMARY"),
+    )
+    parser.add_argument(
+        "--github-output",
+        action="store_true",
+        default=env_flag("RELEASE_FLOW_DEPLOY_GITHUB_OUTPUT"),
+    )
+    parser.add_argument(
+        "--github-annotations",
+        action="store_true",
+        default=env_flag("RELEASE_FLOW_DEPLOY_GITHUB_ANNOTATIONS"),
+    )
+    parser.add_argument(
+        "--change-ticket", default=os.getenv("RELEASE_FLOW_DEPLOY_CHANGE_TICKET", "")
+    )
     parser.add_argument("--runbook-url", default=os.getenv("RELEASE_FLOW_DEPLOY_RUNBOOK_URL", ""))
     parser.add_argument("--image", default=os.getenv("RELEASE_FLOW_DEPLOY_IMAGE", ""))
-    parser.add_argument("--verification-url", default=os.getenv("RELEASE_FLOW_DEPLOY_VERIFICATION_URL", ""))
+    parser.add_argument(
+        "--verification-url", default=os.getenv("RELEASE_FLOW_DEPLOY_VERIFICATION_URL", "")
+    )
     parser.add_argument(
         "--safe-pr-workflow-run-id",
         default=os.getenv("RELEASE_FLOW_DEPLOY_SAFE_PR_WORKFLOW_RUN_ID", ""),
@@ -143,7 +165,11 @@ def validate_deploy_auth(args: argparse.Namespace) -> str | None:
     email = str(args.email or "").strip()
     password = str(args.password or "")
     lowered_email = email.lower()
-    if "@" not in email or lowered_email.endswith("@example.com") or lowered_email in PLACEHOLDER_AUTH_EMAILS:
+    if (
+        "@" not in email
+        or lowered_email.endswith("@example.com")
+        or lowered_email in PLACEHOLDER_AUTH_EMAILS
+    ):
         return "release-flow deploy auth email must be a real operator account"
     if len(password) < 12 or password.lower() in PLACEHOLDER_AUTH_PASSWORDS:
         return "release-flow deploy auth password must be a non-placeholder secret of at least 12 characters"
@@ -152,7 +178,9 @@ def validate_deploy_auth(args: argparse.Namespace) -> str | None:
 
 def validate_deploy_gate_inputs(args: argparse.Namespace) -> str | None:
     values = expected_plan_values(args)
-    missing = [label for field, label in REQUIRED_GATE_EVIDENCE_FIELDS.items() if not values.get(field)]
+    missing = [
+        label for field, label in REQUIRED_GATE_EVIDENCE_FIELDS.items() if not values.get(field)
+    ]
     if missing:
         return "release-flow deploy requires gated evidence inputs: " + ", ".join(missing)
     change_ticket = values["change_ticket"]
@@ -185,7 +213,9 @@ def validate_production_plan(
     if settings.get("runtime_mode") != "live":
         blockers.append("release plan settings.runtime_mode must be live")
     if settings.get("rollback_policy") != "safe_pr":
-        blockers.append("release plan settings.rollback_policy must be safe_pr for gated production deploy")
+        blockers.append(
+            "release plan settings.rollback_policy must be safe_pr for gated production deploy"
+        )
     if not steps:
         blockers.append("release plan must contain at least one step")
     for index, step in enumerate(steps, start=1):
@@ -213,7 +243,9 @@ def validate_production_plan(
                 blockers.append(f"{application_id} {field} must match gated deploy input")
         change_ticket = plan_value(settings, config, "change_ticket")
         if change_ticket in PLACEHOLDER_CHANGE_TICKETS:
-            blockers.append(f"{application_id} change_ticket must not use placeholder {change_ticket}")
+            blockers.append(
+                f"{application_id} change_ticket must not use placeholder {change_ticket}"
+            )
         for field in ("runbook_url", "post_deploy_verification_url"):
             value = plan_value(settings, config, field)
             if value:
@@ -224,13 +256,17 @@ def validate_production_plan(
         safe_pr_url = plan_value(settings, config, "safe_pr_url")
         if safe_pr_url:
             try:
-                validate_live_https_url("safe_pr_url", safe_pr_url, context="for production release plan")
+                validate_live_https_url(
+                    "safe_pr_url", safe_pr_url, context="for production release plan"
+                )
             except ValueError as exc:
                 blockers.append(f"{application_id} {exc}")
         image = plan_value(settings, config, "image")
         if image:
             if image in PLACEHOLDER_IMAGES:
-                blockers.append(f"{application_id} image must not use production placeholder value {image}")
+                blockers.append(
+                    f"{application_id} image must not use production placeholder value {image}"
+                )
             if image.endswith(":latest"):
                 blockers.append(f"{application_id} image must not use mutable latest tag")
             if ":" not in image.rsplit("/", 1)[-1] and "@" not in image:
@@ -292,7 +328,9 @@ def run_deploy(client: ApiClient, args: argparse.Namespace) -> list[SmokeResult]
     )
     if blockers:
         return results
-    run = client.request("POST", "/release-plans/start", release_plan_start_payload(plan)).get("run", {})
+    run = client.request("POST", "/release-plans/start", release_plan_start_payload(plan)).get(
+        "run", {}
+    )
     if not isinstance(run, dict):
         run = {}
     expected_step_count = len(plan.get("steps") if isinstance(plan.get("steps"), list) else [])
@@ -307,7 +345,14 @@ def run_deploy(client: ApiClient, args: argparse.Namespace) -> list[SmokeResult]
     return results
 
 
-def write_reports(args: argparse.Namespace, *, ok: bool, api_base_url: str, results: list[SmokeResult], error: str | None = None) -> None:
+def write_reports(
+    args: argparse.Namespace,
+    *,
+    ok: bool,
+    api_base_url: str,
+    results: list[SmokeResult],
+    error: str | None = None,
+) -> None:
     payload = {
         "ok": ok,
         "api_base_url": api_base_url,
@@ -318,9 +363,15 @@ def write_reports(args: argparse.Namespace, *, ok: bool, api_base_url: str, resu
         payload["error"] = redact_sensitive_text(error)
     write_json_report(args.report_path, payload)
     write_junit_report(args.junit_path, results, error=error)
-    write_markdown_report(args.markdown_path, ok=ok, api_base_url=api_base_url, results=results, error=error)
-    append_github_step_summary(args.github_step_summary, ok=ok, api_base_url=api_base_url, results=results, error=error)
-    append_github_output(args.github_output, ok=ok, api_base_url=api_base_url, results=results, error=error)
+    write_markdown_report(
+        args.markdown_path, ok=ok, api_base_url=api_base_url, results=results, error=error
+    )
+    append_github_step_summary(
+        args.github_step_summary, ok=ok, api_base_url=api_base_url, results=results, error=error
+    )
+    append_github_output(
+        args.github_output, ok=ok, api_base_url=api_base_url, results=results, error=error
+    )
     emit_github_annotations(args.github_annotations, results=results, error=error)
 
 
@@ -348,7 +399,9 @@ def main(argv: list[str]) -> int:
         return 2
     gate_input_error = validate_deploy_gate_inputs(args)
     if gate_input_error:
-        write_reports(args, ok=False, api_base_url=api_base_url, results=results, error=gate_input_error)
+        write_reports(
+            args, ok=False, api_base_url=api_base_url, results=results, error=gate_input_error
+        )
         print(gate_input_error, file=sys.stderr)
         return 2
     client = ApiClient(
@@ -364,7 +417,9 @@ def main(argv: list[str]) -> int:
         return 0 if ok else 1
     except Exception as exc:
         error = redact_sensitive_text(str(exc))
-        write_reports(args, ok=False, api_base_url=client.api_base_url, results=results, error=error)
+        write_reports(
+            args, ok=False, api_base_url=client.api_base_url, results=results, error=error
+        )
         print(error, file=sys.stderr)
         return 1
 

@@ -24,41 +24,40 @@ def request_files() -> list[Path]:
     ]
 
 
-def test_bruno_collection_has_expected_root_and_profiles() -> None:
+def test_bruno_collection_has_only_aws_test_profile() -> None:
     assert (API_DIR / "bruno.json").is_file()
     assert (API_DIR / "README.md").is_file()
     collection = (API_DIR / "collection.bru").read_text(encoding="utf-8")
 
-    local = (API_DIR / "environments" / "local.bru").read_text(encoding="utf-8")
+    environment_files = sorted(
+        path.name for path in (API_DIR / "environments").iterdir() if path.is_file()
+    )
     aws = (API_DIR / "environments" / "aws-test.bru").read_text(encoding="utf-8")
 
     assert "base_url: https://k8s.woonyong.org/api/" in collection
     assert "auto_login: false" in collection
     assert "auth_email: replace-with-auth-email" in collection
     assert "auth_password: replace-with-auth-password" in collection
-    assert "cluster_id: cluster-1" in collection
+    assert "\n  cluster_id: api-verification-target\n" in collection
 
-    assert "base_url: http://localhost:18080/" in local
-    assert "auto_login: true" in local
-    assert "auth_email: admin.local@example.com" in local
-    assert "auth_password: local-test-password-1234" in local
-    assert "cluster_id: target" in local
+    assert environment_files == ["aws-test.bru"]
     assert "base_url: https://k8s.woonyong.org/api/" in aws
     assert "management_base_url: https://k8s.woonyong.org/api/" in aws
     assert "auto_login: false" in aws
     assert "auth_email: replace-with-auth-email" in aws
     assert "auth_password: replace-with-auth-password" in aws
-    assert "cluster_id: cluster-1" in aws
+    assert "\n  cluster_id: api-verification-target\n" in aws
 
-    for env_text in (local, aws):
-        assert "base_url:" in env_text
-        assert "auto_login:" in env_text
-        assert "auth_email:" in env_text
-        assert "agent_token:" in env_text
-        assert "cluster_id:" in env_text
-        assert "alert_channel_id:" in env_text
-        assert "alertmanager_token:" in env_text
-        assert "github_webhook_signature:" in env_text
+    assert "base_url:" in aws
+    assert "auto_login:" in aws
+    assert "dev_security_bypass: true" in aws
+    assert "dev_cluster_id:" in aws
+    assert "auth_email:" in aws
+    assert "agent_token:" in aws
+    assert "cluster_id:" in aws
+    assert "alert_channel_id:" in aws
+    assert "alertmanager_token:" in aws
+    assert "github_webhook_signature:" in aws
 
 
 def test_every_gateway_route_has_a_bruno_request() -> None:
@@ -189,6 +188,36 @@ def test_bruno_collection_auto_login_is_request_scoped() -> None:
     assert '"/webhooks/alertmanager"' in collection
     assert '"/metrics"' in collection
     assert '"/auth/logout"' in collection
+
+
+def test_bruno_test_profile_removes_session_and_agent_tokens() -> None:
+    collection = (API_DIR / "collection.bru").read_text(encoding="utf-8")
+
+    assert 'readVar("dev_security_bypass", "false")' in collection
+    assert 'req.deleteHeader("authorization")' in collection
+    assert 'req.deleteHeader("x-session-token")' in collection
+    assert 'req.deleteHeader("x-agent-token")' in collection
+    assert 'req.setHeader("x-dev-cluster-id", devClusterId)' in collection
+    assert "securityBypass ||" in collection
+
+
+def test_bruno_cli_runner_uses_isolated_profile_and_cleans_up_last() -> None:
+    runner = (ROOT_DIR / "scripts" / "run-bruno-aws.sh").read_text(encoding="utf-8")
+
+    assert "environments/aws-test.bru" in runner
+    assert "BRUNO_ENV_FILE" not in runner
+    assert "--env-file" in runner
+    assert "@usebruno/cli@3.5.1" in runner
+    assert "--dns-result-order=ipv4first" in runner
+    assert "--cache-ssl-session" in runner
+    assert '--env-var "cluster_id=${RUN_ID}"' in runner
+    assert '--env-var "signup_email=${RUN_ID}@example.com"' in runner
+    assert runner.index("02-target-admin/01-register-target-dry-run.bru") < runner.index(
+        "03-agent-runtime"
+    )
+    assert runner.count("11-clusters/12-unregister-cluster.bru") == 1
+    assert "trap cleanup EXIT" in runner
+    assert runner.rstrip().endswith("cleanup")
 
 
 def test_bruno_readme_explains_each_work_type() -> None:

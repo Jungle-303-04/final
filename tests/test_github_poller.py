@@ -280,9 +280,7 @@ def test_once_mode_read_timeout_retry_is_bounded(monkeypatch) -> None:
 
 def test_deployment_manifest_uses_bounded_loop_mode() -> None:
     manifest = yaml.safe_load(
-        (ROOT / "deploy" / "management" / "github-poll-worker.yaml").read_text(
-            encoding="utf-8"
-        )
+        (ROOT / "deploy" / "management" / "github-poll-worker.yaml").read_text(encoding="utf-8")
     )
 
     assert manifest["kind"] == "Deployment"

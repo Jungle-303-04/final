@@ -26,7 +26,9 @@ def safe_pr_patch_sha256(patches: list[Any]) -> str:
         }
         for patch in patches
     ]
-    encoded = json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode()
+    encoded = json.dumps(
+        payload, ensure_ascii=False, sort_keys=True, separators=(",", ":")
+    ).encode()
     return hashlib.sha256(encoded).hexdigest()
 
 

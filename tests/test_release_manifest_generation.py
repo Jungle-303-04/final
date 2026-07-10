@@ -214,9 +214,13 @@ def test_release_manifest_safe_pr_route_submits_generated_file_patch(monkeypatch
                 event=SimpleNamespace(event_id="evt-safe-pr", correlation_id="corr-safe-pr")
             )
 
-    monkeypatch.setattr(release_router, "require_plan_application_manage_access", lambda *_args: None)
+    monkeypatch.setattr(
+        release_router, "require_plan_application_manage_access", lambda *_args: None
+    )
     events = Events()
-    payload = ReleaseManifestSafePrRequest(plan=release_router.ReleasePlanUpsertRequest(**full_plan()))
+    payload = ReleaseManifestSafePrRequest(
+        plan=release_router.ReleasePlanUpsertRequest(**full_plan())
+    )
 
     response = asyncio.run(
         release_router.submit_release_manifest_safe_pr(
@@ -247,7 +251,10 @@ def test_release_manifest_safe_pr_route_submits_generated_file_patch(monkeypatch
     assert "kind: Deployment" in events.body.patches[0].content
     assert len(events.body.patches) == 2
     assert events.body.patches[1].path.startswith(".gitops/rollback/")
-    assert events.body.patches[1].description == "Generated rollback manifest from current application state"
+    assert (
+        events.body.patches[1].description
+        == "Generated rollback manifest from current application state"
+    )
     assert "ghcr.io/example/checkout-api:v1.2.2" in events.body.patches[1].content
     assert "ghcr.io/example/checkout-api:v1.2.3" not in events.body.patches[1].content
     assert "postgres://" not in events.body.patches[0].content
@@ -257,7 +264,9 @@ def test_release_manifest_safe_pr_route_submits_generated_file_patch(monkeypatch
 
 
 def test_release_manifest_safe_pr_route_blocks_error_diagnostics(monkeypatch) -> None:
-    monkeypatch.setattr(release_router, "require_plan_application_manage_access", lambda *_args: None)
+    monkeypatch.setattr(
+        release_router, "require_plan_application_manage_access", lambda *_args: None
+    )
     plan = full_plan()
     step = plan["steps"][0]
     assert isinstance(step, dict)
@@ -282,7 +291,9 @@ def test_release_manifest_safe_pr_route_blocks_error_diagnostics(monkeypatch) ->
         raise AssertionError("Safe PR submission should be blocked when manifest has errors")
 
 
-def test_release_manifest_safe_pr_route_blocks_production_without_rollback_source(monkeypatch) -> None:
+def test_release_manifest_safe_pr_route_blocks_production_without_rollback_source(
+    monkeypatch,
+) -> None:
     class Db:
         def get_application(self, workspace_id: str, application_id: str) -> dict[str, object]:
             assert workspace_id == "workspace-a"
@@ -306,7 +317,9 @@ def test_release_manifest_safe_pr_route_blocks_production_without_rollback_sourc
                 event=SimpleNamespace(event_id="evt-safe-pr", correlation_id="corr-safe-pr")
             )
 
-    monkeypatch.setattr(release_router, "require_plan_application_manage_access", lambda *_args: None)
+    monkeypatch.setattr(
+        release_router, "require_plan_application_manage_access", lambda *_args: None
+    )
     plan = full_plan()
     step = plan["steps"][0]
     assert isinstance(step, dict)
@@ -346,8 +359,12 @@ def test_release_manifest_safe_pr_route_requires_repository_context(monkeypatch)
                 "cluster_id": "cluster-1",
             }
 
-    monkeypatch.setattr(release_router, "require_plan_application_manage_access", lambda *_args: None)
-    payload = ReleaseManifestSafePrRequest(plan=release_router.ReleasePlanUpsertRequest(**full_plan()))
+    monkeypatch.setattr(
+        release_router, "require_plan_application_manage_access", lambda *_args: None
+    )
+    payload = ReleaseManifestSafePrRequest(
+        plan=release_router.ReleasePlanUpsertRequest(**full_plan())
+    )
 
     try:
         asyncio.run(

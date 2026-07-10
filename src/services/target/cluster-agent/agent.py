@@ -5,7 +5,7 @@ import re
 import time
 from contextlib import suppress
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import httpx
 from commands import (
@@ -951,7 +951,7 @@ class TargetClusterAgent:
         )
         if expires_at is None:
             return AgentConfig.INVALID_APPROVAL_EVIDENCE_MESSAGE
-        if expires_at <= datetime.now(timezone.utc):
+        if expires_at <= datetime.now(UTC):
             return AgentConfig.EXPIRED_APPROVAL_EVIDENCE_MESSAGE
         return ""
 
@@ -1432,8 +1432,8 @@ def parse_approval_expires_at(value: object) -> datetime | None:
     except ValueError:
         return None
     if parsed.tzinfo is None:
-        return parsed.replace(tzinfo=timezone.utc)
-    return parsed.astimezone(timezone.utc)
+        return parsed.replace(tzinfo=UTC)
+    return parsed.astimezone(UTC)
 
 
 def kubernetes_manifest_resource(

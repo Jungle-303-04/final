@@ -12,7 +12,10 @@ import pytest
 from sqlalchemy.exc import OperationalError
 
 from domains.identity.dependencies import ClusterAgentIdentity
-from domains.target.evidence_jobs import PENDING_EVIDENCE_EVENT_ID_PREFIX
+from domains.target.evidence_jobs import (
+    PENDING_EVIDENCE_EVENT_ID_PREFIX,
+    aggregate_evidence_payload,
+)
 from domains.target.router import (
     complete_evidence_payload,
     db_call,
@@ -647,6 +650,53 @@ def test_complete_evidence_payload_defaults_missing_provider_bodies() -> None:
     assert payload["metrics"] == {}
     assert payload["logs"] == []
     assert payload["traces"] == {}
+
+
+def test_complete_evidence_payload_drops_provider_transport_metadata() -> None:
+    payload = complete_evidence_payload(
+        {
+            "workspace_id": "workspace-1",
+            "cluster_id": "cluster-1",
+            "source_id": "cluster-snapshot",
+            "source": "kubernetes",
+            "provider_status": "ok",
+            "kubernetes": {"pods": []},
+        }
+    )
+
+    assert payload["kubernetes"] == {"pods": []}
+    assert "source" not in payload
+    assert "provider_status" not in payload
+
+
+def test_evidence_aggregation_keeps_only_the_leased_provider_bucket() -> None:
+    payload = aggregate_evidence_payload(
+        [
+            {
+                "workspace_id": "workspace-1",
+                "cluster_id": "cluster-1",
+                "source_id": "cluster-snapshot",
+                "window_start": "window-1",
+                "evidence_key": "workspace-1:cluster-1:cluster-snapshot:window-1",
+                "agent_id": "agent-1",
+                "provider_key": "kubernetes",
+                "status": "completed",
+                "failure_policy": "allow_partial",
+                "result": {
+                    "source": "kubernetes",
+                    "provider_status": "ok",
+                    "kubernetes": {"pods": []},
+                    "metrics": {"unexpected": True},
+                },
+            }
+        ]
+    )
+
+    assert payload is not None
+    assert payload["kubernetes"] == {"pods": []}
+    assert "metrics" not in payload
+    assert "source" not in payload
+    assert "provider_status" not in payload
 
 
 def test_evidence_job_result_rejects_oversized_provider_result() -> None:

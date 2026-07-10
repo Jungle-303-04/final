@@ -162,9 +162,7 @@ def test_change_context_summarizes_probe_and_secret_config_refs() -> None:
                                             },
                                         }
                                     ],
-                                    "envFrom": [
-                                        {"configMapRef": {"name": "checkout-settings-v2"}}
-                                    ],
+                                    "envFrom": [{"configMapRef": {"name": "checkout-settings-v2"}}],
                                     "readinessProbe": {
                                         "httpGet": {"path": "/readyz", "port": 8080}
                                     },
@@ -201,7 +199,9 @@ def test_change_context_summarizes_probe_and_secret_config_refs() -> None:
         branch="main",
     )
 
-    outs = run_handler(diff.on_manifest_rendered, payload, db=SpyDb(get_actual_resource_image="checkout:v1"))
+    outs = run_handler(
+        diff.on_manifest_rendered, payload, db=SpyDb(get_actual_resource_image="checkout:v1")
+    )
 
     change_context = outs[1].metadata["change_context"]
     assert change_context["image"] == {
@@ -213,9 +213,7 @@ def test_change_context_summarizes_probe_and_secret_config_refs() -> None:
     assert change_context["rollout"]["rollback_available"] is True
     assert change_context["config"]["secret_ref_changed"] is True
     assert change_context["config"]["config_map_ref_changed"] is True
-    assert {"name": "checkout-db-v2", "key": "DATABASE_URL"} in change_context["config"][
-        "secrets"
-    ]
+    assert {"name": "checkout-db-v2", "key": "DATABASE_URL"} in change_context["config"]["secrets"]
     assert {"name": "checkout-settings-v2"} in change_context["config"]["config_maps"]
     change_types = {change["change_type"] for change in change_context["recent_changes"]}
     assert {"image", "probe", "secret_ref", "config_ref"} <= change_types

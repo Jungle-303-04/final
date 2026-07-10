@@ -6,7 +6,6 @@ import sys
 from pathlib import Path
 from typing import Any
 
-
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPT = ROOT / "scripts" / "release_flow_deploy.py"
 SCRIPTS_DIR = ROOT / "scripts"
@@ -24,7 +23,9 @@ def load_deploy_module() -> Any:
 
 
 class FakeClient:
-    def __init__(self, plan: dict[str, object], *, start_run: dict[str, object] | None = None) -> None:
+    def __init__(
+        self, plan: dict[str, object], *, start_run: dict[str, object] | None = None
+    ) -> None:
         self.plan = plan
         self.start_run = start_run or {
             "run_id": "run-prod-1",
@@ -316,7 +317,9 @@ def test_release_flow_deploy_refuses_unsafe_plan_id_before_api_calls() -> None:
     assert client.calls == []
 
 
-def test_release_flow_deploy_refuses_non_production_api_url_before_api_calls(tmp_path: Path, capsys) -> None:
+def test_release_flow_deploy_refuses_non_production_api_url_before_api_calls(
+    tmp_path: Path, capsys
+) -> None:
     module = load_deploy_module()
     report_path = tmp_path / "deploy.json"
 
@@ -379,7 +382,9 @@ def test_release_flow_deploy_refuses_placeholder_operator_email_before_api_calls
     assert payload["error"] == "release-flow deploy auth email must be a real operator account"
 
 
-def test_release_flow_deploy_refuses_placeholder_auth_before_api_calls(tmp_path: Path, capsys, monkeypatch) -> None:
+def test_release_flow_deploy_refuses_placeholder_auth_before_api_calls(
+    tmp_path: Path, capsys, monkeypatch
+) -> None:
     module = load_deploy_module()
     report_path = tmp_path / "deploy.json"
 
@@ -408,7 +413,10 @@ def test_release_flow_deploy_refuses_placeholder_auth_before_api_calls(tmp_path:
     assert exit_code == 2
     assert "auth password must be a non-placeholder secret" in captured.err
     assert payload["ok"] is False
-    assert payload["error"] == "release-flow deploy auth password must be a non-placeholder secret of at least 12 characters"
+    assert (
+        payload["error"]
+        == "release-flow deploy auth password must be a non-placeholder secret of at least 12 characters"
+    )
 
 
 def test_release_flow_deploy_refuses_missing_gate_evidence_before_api_calls(
@@ -493,4 +501,7 @@ def test_release_flow_deploy_refuses_placeholder_gate_evidence_before_api_calls(
     assert exit_code == 2
     assert "change ticket must not use placeholder CHG-PREFLIGHT" in captured.err
     assert payload["ok"] is False
-    assert payload["error"] == "release-flow deploy change ticket must not use placeholder CHG-PREFLIGHT"
+    assert (
+        payload["error"]
+        == "release-flow deploy change ticket must not use placeholder CHG-PREFLIGHT"
+    )

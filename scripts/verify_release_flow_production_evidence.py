@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 import sys
@@ -15,11 +16,12 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import quote, urlencode, urlparse
 
-
 READINESS_REPORT = "release-flow-readiness.json"
 ENVIRONMENT_REPORT = "release-flow-github-environment.json"
 SMOKE_REPORT = "release-flow-smoke.json"
 DEPLOY_REPORT = "release-flow-deploy.json"
+PREFLIGHT_REPORT = "release-flow-production-preflight.json"
+SIGNOFF_REPORT = "release-flow-production-signoff.json"
 PLACEHOLDER_HOSTS = {"example.com", "example.test", "localhost", "127.0.0.1", "::1"}
 DEFAULT_GITHUB_API_BASE = "https://api.github.com"
 READINESS_WORKFLOW = "release-flow-production-readiness.yml"
@@ -114,7 +116,19 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     )
     parser.add_argument("--github-api-base", default=DEFAULT_GITHUB_API_BASE)
     parser.add_argument("--github-branch", default="dev")
-    parser.add_argument("--github-sha", default="", help="Require successful workflow runs for this head SHA.")
+    parser.add_argument(
+        "--github-sha", default="", help="Require successful workflow runs for this head SHA."
+    )
+    parser.add_argument(
+        "--github-readiness-run-id",
+        default="",
+        help="Download readiness evidence from this exact GitHub Actions run id.",
+    )
+    parser.add_argument(
+        "--github-deploy-run-id",
+        default="",
+        help="Download deploy evidence from this exact GitHub Actions run id.",
+    )
     parser.add_argument(
         "--allow-latest-github-run",
         action="store_true",
@@ -140,6 +154,11 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
         "--allow-missing-deploy",
         action="store_true",
         help="Do not require the production deploy report.",
+    )
+    parser.add_argument(
+        "--require-signoff-report",
+        action="store_true",
+        help="Require and validate release-flow-production-signoff.json.",
     )
     return parser.parse_args(argv)
 
@@ -175,7 +194,9 @@ def github_download(url: str, token: str) -> bytes:
             return response.read()
     except urllib.error.HTTPError as exc:
         detail = exc.read().decode("utf-8", errors="replace")
-        raise GitHubEvidenceError(f"GitHub artifact download failed: HTTP {exc.code} {detail}") from exc
+        raise GitHubEvidenceError(
+            f"GitHub artifact download failed: HTTP {exc.code} {detail}"
+        ) from exc
     except urllib.error.URLError as exc:
         raise GitHubEvidenceError(f"GitHub artifact download failed: {exc.reason}") from exc
 
@@ -215,6 +236,38 @@ def find_successful_workflow_run(
     raise GitHubEvidenceError(f"no successful {workflow} run found on {branch}{qualifier}")
 
 
+def find_workflow_run_by_id(
+    *,
+    api_base: str,
+    repo: str,
+    workflow: str,
+    branch: str,
+    head_sha: str,
+    run_id: str,
+    token: str,
+) -> dict[str, Any]:
+    normalized_run_id = str(run_id or "").strip()
+    if not normalized_run_id.isdigit():
+        raise GitHubEvidenceError(f"{workflow} run id must be numeric")
+    run = github_json(github_api_url(api_base, repo, f"actions/runs/{normalized_run_id}"), token)
+    if str(run.get("id") or "") != normalized_run_id:
+        raise GitHubEvidenceError(
+            f"GitHub run {normalized_run_id} response did not match requested id"
+        )
+    if run.get("conclusion") != "success":
+        raise GitHubEvidenceError(f"GitHub run {normalized_run_id} did not conclude success")
+    if head_sha and str(run.get("head_sha") or "") != head_sha:
+        raise GitHubEvidenceError(
+            f"GitHub run {normalized_run_id} does not match required sha {head_sha}"
+        )
+    if branch and str(run.get("head_branch") or branch) != branch:
+        raise GitHubEvidenceError(f"GitHub run {normalized_run_id} does not match branch {branch}")
+    path = str(run.get("path") or "")
+    if path and not path.endswith(f"/{workflow}") and path != workflow:
+        raise GitHubEvidenceError(f"GitHub run {normalized_run_id} is not {workflow}")
+    return run
+
+
 def download_run_artifacts(
     *,
     api_base: str,
@@ -235,7 +288,9 @@ def download_run_artifacts(
     by_name = {str(item.get("name") or ""): item for item in artifacts}
     missing = sorted(name for name in artifact_names if name not in by_name)
     if missing:
-        raise GitHubEvidenceError(f"workflow run {run_id} is missing artifacts: {', '.join(missing)}")
+        raise GitHubEvidenceError(
+            f"workflow run {run_id} is missing artifacts: {', '.join(missing)}"
+        )
     output_dir.mkdir(parents=True, exist_ok=True)
     paths: list[Path] = []
     for name in sorted(artifact_names):
@@ -244,7 +299,9 @@ def download_run_artifacts(
             raise GitHubEvidenceError(f"artifact {name} from workflow run {run_id} is expired")
         download_url = str(artifact.get("archive_download_url") or "")
         if not download_url:
-            raise GitHubEvidenceError(f"artifact {name} from workflow run {run_id} is missing download URL")
+            raise GitHubEvidenceError(
+                f"artifact {name} from workflow run {run_id} is missing download URL"
+            )
         destination = output_dir / f"{run_id}-{name}.zip"
         destination.write_bytes(github_download(download_url, token))
         paths.append(destination)
@@ -265,14 +322,27 @@ def fetch_github_artifacts(args: argparse.Namespace, output_dir: Path) -> list[P
     head_sha = str(args.github_sha or "").strip()
     if not head_sha and not args.allow_latest_github_run:
         raise GitHubEvidenceError("--github-sha is required when downloading GitHub artifacts")
-    readiness_run = find_successful_workflow_run(
-        api_base=api_base,
-        repo=repo,
-        workflow=READINESS_WORKFLOW,
-        branch=branch,
-        head_sha=head_sha,
-        token=token,
-    )
+    readiness_run_id = str(args.github_readiness_run_id or "").strip()
+    deploy_run_id = str(args.github_deploy_run_id or "").strip()
+    if readiness_run_id:
+        readiness_run = find_workflow_run_by_id(
+            api_base=api_base,
+            repo=repo,
+            workflow=READINESS_WORKFLOW,
+            branch=branch,
+            head_sha=head_sha,
+            run_id=readiness_run_id,
+            token=token,
+        )
+    else:
+        readiness_run = find_successful_workflow_run(
+            api_base=api_base,
+            repo=repo,
+            workflow=READINESS_WORKFLOW,
+            branch=branch,
+            head_sha=head_sha,
+            token=token,
+        )
     paths = download_run_artifacts(
         api_base=api_base,
         repo=repo,
@@ -282,14 +352,25 @@ def fetch_github_artifacts(args: argparse.Namespace, output_dir: Path) -> list[P
         token=token,
     )
     if not args.allow_missing_deploy:
-        deploy_run = find_successful_workflow_run(
-            api_base=api_base,
-            repo=repo,
-            workflow=DEPLOY_WORKFLOW,
-            branch=branch,
-            head_sha=head_sha,
-            token=token,
-        )
+        if deploy_run_id:
+            deploy_run = find_workflow_run_by_id(
+                api_base=api_base,
+                repo=repo,
+                workflow=DEPLOY_WORKFLOW,
+                branch=branch,
+                head_sha=head_sha,
+                run_id=deploy_run_id,
+                token=token,
+            )
+        else:
+            deploy_run = find_successful_workflow_run(
+                api_base=api_base,
+                repo=repo,
+                workflow=DEPLOY_WORKFLOW,
+                branch=branch,
+                head_sha=head_sha,
+                token=token,
+            )
         paths.extend(
             download_run_artifacts(
                 api_base=api_base,
@@ -341,14 +422,18 @@ def validate_readiness(payload: dict[str, Any] | None, source: str) -> list[Evid
         EvidenceCheck(
             "readiness.ok",
             payload.get("ok") is True,
-            "readiness report passed" if payload.get("ok") is True else "readiness report did not pass",
+            "readiness report passed"
+            if payload.get("ok") is True
+            else "readiness report did not pass",
         )
     ]
     checks.extend(validate_named_checks("readiness", payload, REQUIRED_READINESS_CHECKS))
     return checks
 
 
-def validate_environment(payload: dict[str, Any] | None, source: str, *, required: bool) -> list[EvidenceCheck]:
+def validate_environment(
+    payload: dict[str, Any] | None, source: str, *, required: bool
+) -> list[EvidenceCheck]:
     if payload is None:
         return [
             EvidenceCheck(
@@ -370,7 +455,9 @@ def validate_environment(payload: dict[str, Any] | None, source: str, *, require
     return checks
 
 
-def validate_smoke(payload: dict[str, Any] | None, source: str, *, required: bool) -> list[EvidenceCheck]:
+def validate_smoke(
+    payload: dict[str, Any] | None, source: str, *, required: bool
+) -> list[EvidenceCheck]:
     if payload is None:
         return [
             EvidenceCheck(
@@ -383,7 +470,9 @@ def validate_smoke(payload: dict[str, Any] | None, source: str, *, required: boo
         EvidenceCheck(
             "smoke.ok",
             payload.get("ok") is True,
-            "production smoke passed" if payload.get("ok") is True else "production smoke did not pass",
+            "production smoke passed"
+            if payload.get("ok") is True
+            else "production smoke did not pass",
         ),
         validate_https_url("smoke.api_base_url", str(payload.get("api_base_url") or "")),
     ]
@@ -391,7 +480,9 @@ def validate_smoke(payload: dict[str, Any] | None, source: str, *, required: boo
     return checks
 
 
-def validate_deploy(payload: dict[str, Any] | None, source: str, *, required: bool) -> list[EvidenceCheck]:
+def validate_deploy(
+    payload: dict[str, Any] | None, source: str, *, required: bool
+) -> list[EvidenceCheck]:
     if payload is None:
         return [
             EvidenceCheck(
@@ -405,13 +496,17 @@ def validate_deploy(payload: dict[str, Any] | None, source: str, *, required: bo
         EvidenceCheck(
             "deploy.ok",
             payload.get("ok") is True,
-            "production deploy passed" if payload.get("ok") is True else "production deploy did not pass",
+            "production deploy passed"
+            if payload.get("ok") is True
+            else "production deploy did not pass",
         ),
         validate_https_url("deploy.api_base_url", str(payload.get("api_base_url") or "")),
         EvidenceCheck(
             "deploy.plan_id",
             bool(plan_id),
-            "production deploy recorded a plan id" if plan_id else "production deploy report is missing plan_id",
+            "production deploy recorded a plan id"
+            if plan_id
+            else "production deploy report is missing plan_id",
         ),
     ]
     checks.extend(validate_named_checks("deploy", payload, REQUIRED_DEPLOY_CHECKS))
@@ -421,7 +516,9 @@ def validate_deploy(payload: dict[str, Any] | None, source: str, *, required: bo
         EvidenceCheck(
             "deploy.run_id",
             bool(start and start.get("ok") is True and run_id),
-            f"production run started: {run_id}" if run_id else "deploy report is missing production run id",
+            f"production run started: {run_id}"
+            if run_id
+            else "deploy report is missing production run id",
         )
     )
     return checks
@@ -446,15 +543,331 @@ def validate_artifact_consistency(
     ]
 
 
-def validate_named_checks(prefix: str, payload: dict[str, Any], required_names: set[str]) -> list[EvidenceCheck]:
+def validate_signoff(
+    payload: dict[str, Any] | None,
+    source: str,
+    *,
+    required: bool,
+    github_branch: str,
+    github_sha: str,
+    readiness_source: str,
+    deploy_source: str,
+    deploy: dict[str, Any] | None,
+    preflight: dict[str, Any] | None,
+    preflight_source: str,
+) -> list[EvidenceCheck]:
+    if payload is None:
+        return [
+            EvidenceCheck(
+                "signoff.artifact_present",
+                not required,
+                f"{source} not found" if required else "signoff report not required",
+            )
+        ]
+    readiness_run = payload.get("readiness_run")
+    deploy_run = payload.get("deploy_run")
+    readiness_run_id = (
+        str((readiness_run or {}).get("id") or "").strip()
+        if isinstance(readiness_run, dict)
+        else ""
+    )
+    deploy_run_id = (
+        str((deploy_run or {}).get("id") or "").strip() if isinstance(deploy_run, dict) else ""
+    )
+    checks = [
+        EvidenceCheck(
+            "signoff.status",
+            payload.get("status") == "passed" and payload.get("evidence_verification_status") == 0,
+            "signoff report recorded passed evidence verification"
+            if payload.get("status") == "passed"
+            and payload.get("evidence_verification_status") == 0
+            else "signoff report did not record passed evidence verification",
+        ),
+        EvidenceCheck(
+            "signoff.github_sha",
+            not github_sha or str(payload.get("github_sha") or "") == github_sha,
+            "signoff report matches requested commit SHA"
+            if not github_sha or str(payload.get("github_sha") or "") == github_sha
+            else "signoff report commit SHA differs from requested commit SHA",
+        ),
+        EvidenceCheck(
+            "signoff.github_branch",
+            not github_branch or str(payload.get("github_branch") or "") == github_branch,
+            "signoff report matches requested GitHub branch"
+            if not github_branch or str(payload.get("github_branch") or "") == github_branch
+            else "signoff report GitHub branch differs from requested branch",
+        ),
+        EvidenceCheck(
+            "signoff.readiness_run_id",
+            source_matches_run_id(readiness_source, readiness_run_id),
+            "signoff report references the verified readiness artifact run"
+            if source_matches_run_id(readiness_source, readiness_run_id)
+            else "signoff report readiness run id does not match verified artifact",
+        ),
+        EvidenceCheck(
+            "signoff.deploy_run_id",
+            (deploy is None and not required)
+            or source_matches_run_id(deploy_source, deploy_run_id),
+            "signoff report references the verified deploy artifact run"
+            if source_matches_run_id(deploy_source, deploy_run_id)
+            else "signoff report deploy run id does not match verified artifact",
+        ),
+    ]
+    checks.extend(validate_signoff_run_summary("signoff.readiness_run", readiness_run, github_sha))
+    checks.extend(validate_signoff_run_summary("signoff.deploy_run", deploy_run, github_sha))
+    checks.extend(
+        validate_signoff_preflight_summary(
+            payload,
+            github_branch,
+            github_sha,
+            preflight,
+            preflight_source,
+        )
+    )
+    if deploy is not None:
+        plan_id = str(deploy.get("plan_id") or "")
+        checks.append(
+            EvidenceCheck(
+                "signoff.release_plan_id",
+                bool(payload.get("release_plan_id"))
+                and str(payload.get("release_plan_id")) == plan_id,
+                "signoff report plan id matches deploy evidence"
+                if str(payload.get("release_plan_id") or "") == plan_id
+                else "signoff report plan id differs from deploy evidence",
+            )
+        )
+    return checks
+
+
+def validate_signoff_preflight_summary(
+    payload: dict[str, Any],
+    github_branch: str,
+    github_sha: str,
+    preflight: dict[str, Any] | None,
+    preflight_source: str,
+) -> list[EvidenceCheck]:
+    summary = payload.get("preflight_report")
+    if not isinstance(summary, dict):
+        return [
+            EvidenceCheck(
+                "signoff.preflight_report",
+                False,
+                "signoff report is missing preflight report summary",
+            )
+        ]
+    if summary.get("skipped") is True:
+        return [
+            EvidenceCheck(
+                "signoff.preflight_report.not_skipped",
+                False,
+                "preflight report check was skipped",
+            )
+        ]
+
+    sha256 = str(summary.get("sha256") or "")
+    checks = [
+        EvidenceCheck(
+            "signoff.preflight_report.not_skipped",
+            True,
+            "preflight report was required before signoff",
+        ),
+        EvidenceCheck(
+            "signoff.preflight_report.sha256",
+            len(sha256) == 64,
+            "preflight report has a sha256 digest"
+            if len(sha256) == 64
+            else "preflight report sha256 digest is missing or invalid",
+        ),
+        EvidenceCheck(
+            "signoff.preflight_report.artifact_present",
+            preflight is not None,
+            "preflight report artifact was included in final evidence"
+            if preflight is not None
+            else f"{PREFLIGHT_REPORT} not found",
+        ),
+        EvidenceCheck(
+            "signoff.preflight_report.artifact_sha256",
+            preflight is not None and sha256 == report_payload_sha256(preflight),
+            "preflight report digest matches included artifact"
+            if preflight is not None and sha256 == report_payload_sha256(preflight)
+            else "preflight report digest does not match included artifact",
+        ),
+        EvidenceCheck(
+            "signoff.preflight_report.status",
+            summary.get("status") == "passed"
+            and summary.get("mode") == "preflight_only"
+            and summary.get("dispatch_performed") is False,
+            "preflight report passed in preflight_only mode without dispatch"
+            if summary.get("status") == "passed"
+            and summary.get("mode") == "preflight_only"
+            and summary.get("dispatch_performed") is False
+            else "preflight report did not pass in preflight_only mode without dispatch",
+        ),
+        EvidenceCheck(
+            "signoff.preflight_report.github_sha",
+            not github_sha or str(summary.get("github_sha") or "") == github_sha,
+            "preflight report matches requested commit SHA"
+            if not github_sha or str(summary.get("github_sha") or "") == github_sha
+            else "preflight report commit SHA differs from requested commit SHA",
+        ),
+        EvidenceCheck(
+            "signoff.preflight_report.github_branch",
+            not github_branch or str(summary.get("github_branch") or "") == github_branch,
+            "preflight report matches requested GitHub branch"
+            if not github_branch or str(summary.get("github_branch") or "") == github_branch
+            else "preflight report GitHub branch differs from requested branch",
+        ),
+        EvidenceCheck(
+            "signoff.preflight_report.release_plan_id",
+            str(summary.get("release_plan_id") or "") == str(payload.get("release_plan_id") or ""),
+            "preflight report matches signoff plan id"
+            if str(summary.get("release_plan_id") or "")
+            == str(payload.get("release_plan_id") or "")
+            else "preflight report plan id differs from signoff report",
+        ),
+        EvidenceCheck(
+            "signoff.preflight_report.safe_pr_run_id",
+            str(summary.get("live_safe_pr_workflow_run_id") or "")
+            == str(payload.get("live_safe_pr_workflow_run_id") or ""),
+            "preflight report matches signoff Safe PR run id"
+            if str(summary.get("live_safe_pr_workflow_run_id") or "")
+            == str(payload.get("live_safe_pr_workflow_run_id") or "")
+            else "preflight report Safe PR run id differs from signoff report",
+        ),
+    ]
+    if preflight is not None:
+        checks.extend(
+            validate_preflight_artifact_matches_summary(summary, preflight, preflight_source)
+        )
+    expected_checks = {
+        "input_validation",
+        "local_sha",
+        "github_branch_sha",
+        "safe_pr_run",
+        "production_workflow_access",
+    }
+    actual_checks = {str(item) for item in summary.get("checks", []) if isinstance(item, str)}
+    checks.append(
+        EvidenceCheck(
+            "signoff.preflight_report.checks",
+            expected_checks <= actual_checks,
+            "preflight report includes all required no-dispatch checks"
+            if expected_checks <= actual_checks
+            else "preflight report is missing required no-dispatch checks",
+        )
+    )
+    return checks
+
+
+def report_payload_sha256(payload: dict[str, Any]) -> str:
+    encoded = json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    return hashlib.sha256(encoded).hexdigest()
+
+
+def validate_preflight_artifact_matches_summary(
+    summary: dict[str, Any],
+    preflight: dict[str, Any],
+    source: str,
+) -> list[EvidenceCheck]:
+    checks = []
+    for field in (
+        "status",
+        "mode",
+        "github_repo",
+        "github_branch",
+        "github_branch_head_sha",
+        "github_sha",
+        "release_plan_id",
+        "live_safe_pr_workflow_run_id",
+        "dispatch_performed",
+    ):
+        checks.append(
+            EvidenceCheck(
+                f"signoff.preflight_report.artifact.{field}",
+                str(summary.get(field) or "") == str(preflight.get(field) or ""),
+                f"preflight artifact {field} matches summary"
+                if str(summary.get(field) or "") == str(preflight.get(field) or "")
+                else f"preflight artifact {field} differs from summary in {source}",
+            )
+        )
+    return checks
+
+
+def source_matches_run_id(source: str, run_id: str) -> bool:
+    run_id = str(run_id or "").strip()
+    if not run_id:
+        return False
+    normalized = source.replace("\\", "/")
+    parts: list[str] = []
+    for segment in normalized.split("!"):
+        parts.extend(part for part in segment.split("/") if part)
+    return any(part == run_id or part.startswith(f"{run_id}-") for part in parts)
+
+
+def validate_signoff_run_summary(
+    prefix: str,
+    run: Any,
+    github_sha: str,
+) -> list[EvidenceCheck]:
+    if not isinstance(run, dict):
+        return [
+            EvidenceCheck(
+                prefix,
+                False,
+                "signoff report is missing run summary",
+            )
+        ]
+    run_id = str(run.get("id") or "").strip()
+    status = str(run.get("status") or "").strip()
+    conclusion = str(run.get("conclusion") or "").strip()
+    head_sha = str(run.get("head_sha") or "").strip()
+    return [
+        EvidenceCheck(
+            f"{prefix}.id",
+            run_id.isdigit(),
+            "signoff run summary has a numeric GitHub Actions run id"
+            if run_id.isdigit()
+            else "signoff run summary is missing a numeric GitHub Actions run id",
+        ),
+        EvidenceCheck(
+            f"{prefix}.status",
+            status == "completed",
+            "signoff run summary completed"
+            if status == "completed"
+            else "signoff run summary did not complete",
+        ),
+        EvidenceCheck(
+            f"{prefix}.conclusion",
+            conclusion == "success",
+            "signoff run summary succeeded"
+            if conclusion == "success"
+            else "signoff run summary did not succeed",
+        ),
+        EvidenceCheck(
+            f"{prefix}.head_sha",
+            not github_sha or head_sha == github_sha,
+            "signoff run summary matches requested commit SHA"
+            if not github_sha or head_sha == github_sha
+            else "signoff run summary commit SHA differs from requested commit SHA",
+        ),
+    ]
+
+
+def validate_named_checks(
+    prefix: str, payload: dict[str, Any], required_names: set[str]
+) -> list[EvidenceCheck]:
     actual = {str(item.get("name") or ""): item for item in payload_checks(payload)}
     missing = sorted(name for name in required_names if name not in actual)
-    failed = sorted(name for name in required_names if name in actual and actual[name].get("ok") is not True)
+    failed = sorted(
+        name for name in required_names if name in actual and actual[name].get("ok") is not True
+    )
     return [
         EvidenceCheck(
             f"{prefix}.required_checks_present",
             not missing,
-            "required checks are present" if not missing else "missing checks: " + ", ".join(missing),
+            "required checks are present"
+            if not missing
+            else "missing checks: " + ", ".join(missing),
         ),
         EvidenceCheck(
             f"{prefix}.required_checks_passed",
@@ -510,11 +923,19 @@ def main(argv: list[str]) -> int:
                 temp_dir = tempfile.TemporaryDirectory()
                 output_dir = Path(temp_dir.name)
             github_paths = fetch_github_artifacts(args, output_dir)
+            signoff_path = output_dir / SIGNOFF_REPORT
+            if args.require_signoff_report and signoff_path.is_file():
+                github_paths.append(signoff_path)
+            preflight_path = output_dir / PREFLIGHT_REPORT
+            if args.require_signoff_report and preflight_path.is_file():
+                github_paths.append(preflight_path)
         paths = [*args.artifacts, *github_paths]
         readiness, readiness_source = load_named_report(paths, READINESS_REPORT)
         environment, environment_source = load_named_report(paths, ENVIRONMENT_REPORT)
         smoke, smoke_source = load_named_report(paths, SMOKE_REPORT)
         deploy, deploy_source = load_named_report(paths, DEPLOY_REPORT)
+        preflight, preflight_source = load_named_report(paths, PREFLIGHT_REPORT)
+        signoff, signoff_source = load_named_report(paths, SIGNOFF_REPORT)
         checks: list[EvidenceCheck] = []
         checks.extend(validate_readiness(readiness, readiness_source))
         checks.extend(
@@ -525,8 +946,24 @@ def main(argv: list[str]) -> int:
             )
         )
         checks.extend(validate_smoke(smoke, smoke_source, required=not args.allow_missing_smoke))
-        checks.extend(validate_deploy(deploy, deploy_source, required=not args.allow_missing_deploy))
+        checks.extend(
+            validate_deploy(deploy, deploy_source, required=not args.allow_missing_deploy)
+        )
         checks.extend(validate_artifact_consistency(smoke, deploy))
+        checks.extend(
+            validate_signoff(
+                signoff,
+                signoff_source,
+                required=args.require_signoff_report,
+                github_branch=str(args.github_branch or ""),
+                github_sha=str(args.github_sha or ""),
+                readiness_source=readiness_source,
+                deploy_source=deploy_source,
+                deploy=deploy,
+                preflight=preflight,
+                preflight_source=preflight_source,
+            )
+        )
         for check in checks:
             print(f"{'ok' if check.ok else 'fail'} {check.name}: {check.detail}")
         return 0 if all(check.ok for check in checks) else 1

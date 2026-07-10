@@ -80,6 +80,20 @@ TERMINAL_WORKFLOW_STATUSES = (
     WorkflowRunStatus.FAILED.value,
 )
 
+# 단계 상태도 같은 원칙으로 단조 증가한다. 종결 상태는 늦은 재배달로 덮지 않는다.
+WORKFLOW_STEP_STATUS_RANKS: dict[str, int] = {
+    WorkflowStepStatus.PENDING.value: 1,
+    WorkflowStepStatus.RUNNING.value: 2,
+    WorkflowStepStatus.SUCCEEDED.value: 3,
+    WorkflowStepStatus.FAILED.value: 3,
+    WorkflowStepStatus.SKIPPED.value: 3,
+}
+TERMINAL_WORKFLOW_STEP_STATUSES = (
+    WorkflowStepStatus.SUCCEEDED.value,
+    WorkflowStepStatus.FAILED.value,
+    WorkflowStepStatus.SKIPPED.value,
+)
+
 
 def workflow_status_rank(column: Any) -> Any:
     """상태 컬럼을 전이 순위로 바꾸는 CASE 식 — guarded UPDATE 의 비교 기준."""
@@ -102,6 +116,27 @@ def workflow_transition_guard(table: Any, new_status: Any) -> Any:
     return and_(
         table.c.status.not_in(TERMINAL_WORKFLOW_STATUSES),
         workflow_status_rank(table.c.status) <= new_rank,
+    )
+
+
+def workflow_step_status_rank(column: Any) -> Any:
+    """단계 상태 컬럼을 전이 순위로 바꾸는 CASE 식."""
+    return case(
+        *[(column == status, rank) for status, rank in WORKFLOW_STEP_STATUS_RANKS.items()],
+        else_=0,
+    )
+
+
+def workflow_step_transition_guard(table: Any, new_status: Any) -> Any:
+    """종결 단계 고정과 pending/running 역행 방지를 한 SQL 조건으로 보장한다."""
+    new_rank = (
+        WORKFLOW_STEP_STATUS_RANKS.get(str(new_status), 0)
+        if isinstance(new_status, str)
+        else workflow_step_status_rank(new_status)
+    )
+    return and_(
+        table.c.status.not_in(TERMINAL_WORKFLOW_STEP_STATUSES),
+        workflow_step_status_rank(table.c.status) <= new_rank,
     )
 
 
@@ -701,25 +736,38 @@ class RepoChangeRepository(DatabaseConnection):
         """
         repo_table = GitRepository.__table__
         watch_table = GitWatchTarget.__table__
+        watch_by_id = watch_table.alias("watch_by_id")
+        watch_by_source = watch_table.alias("watch_by_source")
         binding_table = DeploymentBinding.__table__
         app_table = Application.__table__
-        branch = func.coalesce(watch_table.c.branch, repo_table.c.default_branch).label("branch")
-        manifest_path = func.coalesce(
-            watch_table.c.manifest_path,
+        binding_manifest_path = func.coalesce(
             binding_table.c.manifest_path,
             app_table.c.manifest_path,
+        )
+        branch = func.coalesce(
+            watch_by_id.c.branch,
+            watch_by_source.c.branch,
+            repo_table.c.default_branch,
+        ).label("branch")
+        manifest_path = func.coalesce(
+            watch_by_id.c.manifest_path,
+            watch_by_source.c.manifest_path,
+            binding_manifest_path,
         ).label("manifest_path")
         source_type = func.coalesce(
-            watch_table.c.settings["source_type"].astext,
+            watch_by_id.c.settings["source_type"].astext,
+            watch_by_source.c.settings["source_type"].astext,
             binding_table.c.deploy_policy["manifest_source"].astext,
             binding_table.c.deploy_policy["source_type"].astext,
             app_table.c.metadata["source_type"].astext,
             "",
         ).label("source_type")
         watch_target_id = func.coalesce(
-            watch_table.c.watch_target_id,
+            watch_by_id.c.watch_target_id,
+            watch_by_source.c.watch_target_id,
             binding_table.c.watch_target_id,
         ).label("watch_target_id")
+        watch_status = func.coalesce(watch_by_id.c.status, watch_by_source.c.status)
         statement = (
             select(
                 binding_table.c.workspace_id,
@@ -734,7 +782,10 @@ class RepoChangeRepository(DatabaseConnection):
                 binding_table.c.cluster_id,
                 manifest_path,
                 source_type,
-                watch_table.c.last_seen_commit_sha,
+                func.coalesce(
+                    watch_by_id.c.last_seen_commit_sha,
+                    watch_by_source.c.last_seen_commit_sha,
+                ).label("last_seen_commit_sha"),
             )
             .select_from(binding_table)
             .join(
@@ -753,11 +804,21 @@ class RepoChangeRepository(DatabaseConnection):
                 ),
             )
             .outerjoin(
-                watch_table,
+                watch_by_id,
                 and_(
-                    watch_table.c.workspace_id == binding_table.c.workspace_id,
-                    watch_table.c.repository_id == binding_table.c.repository_id,
-                    watch_table.c.watch_target_id == binding_table.c.watch_target_id,
+                    watch_by_id.c.workspace_id == binding_table.c.workspace_id,
+                    watch_by_id.c.repository_id == binding_table.c.repository_id,
+                    watch_by_id.c.watch_target_id == binding_table.c.watch_target_id,
+                ),
+            )
+            .outerjoin(
+                watch_by_source,
+                and_(
+                    watch_by_id.c.watch_target_id.is_(None),
+                    watch_by_source.c.workspace_id == binding_table.c.workspace_id,
+                    watch_by_source.c.repository_id == binding_table.c.repository_id,
+                    watch_by_source.c.branch == repo_table.c.default_branch,
+                    watch_by_source.c.manifest_path == binding_manifest_path,
                 ),
             )
             .where(
@@ -766,8 +827,8 @@ class RepoChangeRepository(DatabaseConnection):
                 app_table.c.status == ApplicationStatus.ACTIVE.value,
                 binding_table.c.status == DeploymentBindingStatus.ACTIVE.value,
                 or_(
-                    watch_table.c.watch_target_id.is_(None),
-                    watch_table.c.status == WatchTargetStatus.ACTIVE.value,
+                    watch_status.is_(None),
+                    watch_status == WatchTargetStatus.ACTIVE.value,
                 ),
             )
             .order_by(repo_table.c.repo_ref, branch, binding_table.c.cluster_id)
@@ -904,6 +965,7 @@ class RepoChangeRepository(DatabaseConnection):
                 "details": insert.excluded.details,
                 "updated_at": func.now(),
             },
+            where=workflow_step_transition_guard(table, insert.excluded.status),
         )
         with self.connection() as conn:
             conn.execute(statement)
@@ -1524,7 +1586,11 @@ def serialize_deployment_binding(row: Any) -> JsonObject:
     watch_settings = item.pop("watch_settings", None)
     watch_last_seen_commit_sha = item.pop("watch_last_seen_commit_sha", None)
     watch_last_polled_at = item.pop("watch_last_polled_at", None)
-    if watch_settings is not None or watch_last_seen_commit_sha is not None or watch_last_polled_at is not None:
+    if (
+        watch_settings is not None
+        or watch_last_seen_commit_sha is not None
+        or watch_last_polled_at is not None
+    ):
         settings = dict(watch_settings or {})
         item["gitops_poll"] = {
             "status": str(settings.get("poll_status") or "unknown"),

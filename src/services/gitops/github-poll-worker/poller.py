@@ -44,7 +44,7 @@ def env_truthy(name: str) -> bool:
     return env(name, "").strip().lower() in TRUTHY_VALUES
 
 
-def gitops_correlation_id(target: "GitHubPollTarget", commit_sha: str) -> str:
+def gitops_correlation_id(target: GitHubPollTarget, commit_sha: str) -> str:
     raw = "|".join(
         [
             target.workspace_id,
@@ -283,9 +283,7 @@ class GitHubPoller:
         if self.once and target_errors:
             raise target_errors[0]
 
-    def log_target_status_error(
-        self, target: GitHubPollTarget, exc: httpx.HTTPStatusError
-    ) -> None:
+    def log_target_status_error(self, target: GitHubPollTarget, exc: httpx.HTTPStatusError) -> None:
         status_code = exc.response.status_code
         LOGGER.warning(
             "github_poll_target_unavailable",
@@ -322,7 +320,9 @@ class GitHubPoller:
                 manifest_path=target.manifest_path,
                 ok=ok,
                 status_code=exc.response.status_code if exc is not None else None,
-                error_kind=self.github_error_kind(exc.response.status_code) if exc is not None else "",
+                error_kind=self.github_error_kind(exc.response.status_code)
+                if exc is not None
+                else "",
                 error=str(exc) if exc is not None else "",
             )
         except Exception as record_exc:

@@ -129,10 +129,15 @@ python scripts/run_release_flow_production_signoff.py \
   --live-verification-url https://ops.company.internal/verify/release-flow \
   --live-safe-pr-workflow-run-id <safe-pr-workflow-run-id> \
   --live-safe-pr-url https://github.com/owner/repo/actions/runs/<safe-pr-workflow-run-id> \
-  --github-output-dir ./release-flow-production-evidence
+  --github-output-dir ./release-flow-production-evidence \
+  --signoff-report-path ./release-flow-production-evidence/release-flow-production-signoff.json
 ```
 
-This full production sign-off runner dispatches `release-flow-production-readiness.yml` with every final gate enabled, verifies the readiness artifact while deploy evidence is still absent, dispatches `release-flow-production-deploy.yml`, waits for the deploy run to complete, and then runs `verify_release_flow_production_evidence.py` without any missing-artifact escape hatch.
+This full production sign-off runner dispatches `release-flow-production-readiness.yml` with every final gate enabled, verifies the readiness artifact while deploy evidence is still absent, dispatches `release-flow-production-deploy.yml`, waits for the deploy run to complete, and then runs `verify_release_flow_production_evidence.py` without any missing-artifact escape hatch. The verifier is pinned to the exact readiness and deploy workflow run ids returned by the runner, so final evidence cannot accidentally come from an older successful run for the same commit. On completion it writes `release-flow-production-signoff.json` with the exact commit, plan id, readiness run id, deploy run id, Safe PR evidence, and final evidence verification status.
+
+By default the sign-off runner also checks that the local git `HEAD` matches `--github-sha` and that the selected GitHub branch currently points at the same SHA before dispatching any production workflow. Use `--skip-local-sha-check` only when running from a trusted tooling checkout that intentionally signs off a different production commit, and use `--skip-github-branch-sha-check` only when the dispatch ref is not a branch head but the exact SHA is otherwise independently pinned.
+
+The runner also verifies the provided Safe PR GitHub Actions run before dispatching production workflows: `--live-safe-pr-url` must point at the same repo/run id as `--live-safe-pr-workflow-run-id`, the run must have concluded `success`, and its `head_sha` must match `--github-sha`. Add `--preflight-only` to perform these input, branch, Safe PR, and workflow-access checks without dispatching readiness or deploy workflows. A successful preflight writes `release-flow-production-preflight.json` under `--github-output-dir`, or to `--preflight-report-path` when set. Full sign-off requires a matching preflight report before dispatching production workflows and rejects it after `--preflight-report-max-age-minutes` (default 60) unless `--skip-preflight-report-check` is explicitly set for an emergency operator override.
 
 When `github_access_preflight` is enabled, the verifier must have an actual GitHub token value. If `RELEASE_FLOW_GITHUB_TOKEN_REF` points to a non-env vault ref such as `aws-sm:` or `k8s-secret:`, also set the `RELEASE_FLOW_GITHUB_TOKEN` secret for this readiness workflow so the read-only GitHub API check can run.
 
@@ -170,7 +175,7 @@ python scripts/verify_release_flow_production_evidence.py \
   ./release-flow-production-deploy
 ```
 
-The verifier accepts extracted artifact directories, individual JSON reports, or artifact ZIP files. It fails unless the readiness report passed with runtime config, GitHub access, API smoke, and deploy-gate checks; the GitHub Environment report passed with the required release-flow secret and variable checks; the smoke report passed the production preflight checks; and the deploy report recorded a successful `release-plans.start.production` run id against a concrete HTTPS API URL.
+The verifier accepts extracted artifact directories, individual JSON reports, or artifact ZIP files. It fails unless the readiness report passed with runtime config, GitHub access, API smoke, and deploy-gate checks; the GitHub Environment report passed with the required release-flow secret and variable checks; the smoke report passed the production preflight checks; and the deploy report recorded a successful `release-plans.start.production` run id against a concrete HTTPS API URL. When `--require-signoff-report` is used for final sign-off, keep both `release-flow-production-signoff.json` and `release-flow-production-preflight.json` in the evidence directory; the verifier checks that the sign-off report's preflight digest, branch, commit SHA, release plan id, and Safe PR run id match the included no-dispatch preflight artifact.
 
 If the verifier has a GitHub token with Actions read access, it can fetch the successful workflow artifacts directly:
 
@@ -185,3 +190,4 @@ python scripts/verify_release_flow_production_evidence.py \
 
 This path requires successful `release-flow-production-readiness.yml` and `release-flow-production-deploy.yml` runs for the selected branch/SHA, downloads the required artifacts, and then applies the same JSON checks. The smoke and deploy reports must point at the same concrete HTTPS API base URL.
 Keep `--github-sha` set for final production evidence so the downloaded artifacts prove the exact deployed commit. `--allow-latest-github-run` exists only for exploratory checks before final sign-off.
+When verifying a known Actions execution directly, pass `--github-readiness-run-id <run-id>` and `--github-deploy-run-id <run-id>` so artifact download is bound to those exact workflow runs.

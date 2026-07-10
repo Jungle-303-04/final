@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import math
 import signal
 import time
 from collections.abc import Callable
@@ -50,17 +51,25 @@ WORKER_DEAD_LETTER_TIMEOUT_ENV = (
 )
 WORKER_HEARTBEAT_PATH_ENV = "WORKER_HEARTBEAT_PATH"  # liveness 하트비트 파일 경로
 WORKER_CONSUMER_METRICS_INTERVAL_ENV = "WORKER_CONSUMER_METRICS_INTERVAL_SECONDS"
+
+
+def _positive_float_env(name: str, fallback: float) -> float:
+    try:
+        value = float(env(name, str(fallback)))
+    except (TypeError, ValueError):
+        return fallback
+    return value if math.isfinite(value) and value > 0 else fallback
+
+
 DEFAULT_MAX_ATTEMPTS = int(env(WORKER_MAX_ATTEMPTS_ENV, "3"))
 DEFAULT_RETRY_DELAY_SECONDS = int(env(WORKER_RETRY_DELAY_ENV, "2"))
 DEFAULT_FETCH_BATCH_SIZE = int(env(WORKER_FETCH_BATCH_SIZE_ENV, "1"))
-DEFAULT_FETCH_TIMEOUT_SECONDS = int(env(WORKER_FETCH_TIMEOUT_ENV, "1"))
+DEFAULT_FETCH_TIMEOUT_SECONDS = _positive_float_env(WORKER_FETCH_TIMEOUT_ENV, 1.0)
 DEFAULT_IDLE_SLEEP_SECONDS = float(env(WORKER_IDLE_SLEEP_ENV, "0.25"))
 # 핸들러 hang 상한(안전망). 정상 최악 처리시간보다 넉넉히
 DEFAULT_HANDLER_TIMEOUT_SECONDS = int(env(WORKER_HANDLER_TIMEOUT_ENV, "30"))
 DEFAULT_DEAD_LETTER_TIMEOUT_SECONDS = int(env(WORKER_DEAD_LETTER_TIMEOUT_ENV, "10"))
-DEFAULT_CONSUMER_METRICS_INTERVAL_SECONDS = float(
-    env(WORKER_CONSUMER_METRICS_INTERVAL_ENV, "15")
-)
+DEFAULT_CONSUMER_METRICS_INTERVAL_SECONDS = float(env(WORKER_CONSUMER_METRICS_INTERVAL_ENV, "15"))
 # liveness exec probe 가 mtime 신선도 검사 — 컨테이너 파일시스템 정책에 따라 경로 오버라이드 가능
 HEARTBEAT_PATH = env(WORKER_HEARTBEAT_PATH_ENV, "/tmp/heartbeat")
 
@@ -74,7 +83,7 @@ class EventRetryPolicy:
     max_attempts: int = DEFAULT_MAX_ATTEMPTS
     retry_delay_seconds: int = DEFAULT_RETRY_DELAY_SECONDS
     fetch_batch_size: int = DEFAULT_FETCH_BATCH_SIZE
-    fetch_timeout_seconds: int = DEFAULT_FETCH_TIMEOUT_SECONDS
+    fetch_timeout_seconds: float = DEFAULT_FETCH_TIMEOUT_SECONDS
     idle_sleep_seconds: float = DEFAULT_IDLE_SLEEP_SECONDS
     handler_timeout_seconds: int = DEFAULT_HANDLER_TIMEOUT_SECONDS
     dead_letter_timeout_seconds: int = DEFAULT_DEAD_LETTER_TIMEOUT_SECONDS
@@ -208,10 +217,14 @@ class EventProcessor:
                 self.store.stage_events(conn, outbox_events)  # 다음 이벤트들을 outbox 에 적재
                 self.ledger.finish(evt, elapsed_ms(started_at))  # 처리대장에 "완료" 기록
             # with 끝 = 트랜잭션 커밋(업무 + outbox 함께 저장)
-            await message.ack()  # NATS 에 "처리 완료" 통보 → 재배달 안 함
         except Exception as exc:
             # claim 이 이미 커밋되어 attempt 가 누적된 상태 → fail 이 그 row 를 갱신(재시도/DLQ).
             await self.fail(message, evt, exc, attempts, elapsed_ms(started_at))
+            return
+
+        # commit 이후 ack 실패는 WorkerRuntime 으로 전파해 nak/redelivery 하되,
+        # PROCESSED ledger 는 유지하여 중복 업무 실행을 막는다.
+        await message.ack()
 
     async def fail(
         self,

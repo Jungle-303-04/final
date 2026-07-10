@@ -212,74 +212,53 @@ class AiConversationRepository(DatabaseConnection):
         self,
     ) -> dict[tuple[str, str, str, str], float]:
         table = self.llm_metric_table
-        statement = (
-            select(
-                table.c.provider,
-                table.c.model,
-                table.c.operation,
-                table.c.status,
-                func.avg(table.c.latency_ms).label("value"),
-            )
-            .group_by(table.c.provider, table.c.model, table.c.operation, table.c.status)
-        )
+        statement = select(
+            table.c.provider,
+            table.c.model,
+            table.c.operation,
+            table.c.status,
+            func.avg(table.c.latency_ms).label("value"),
+        ).group_by(table.c.provider, table.c.model, table.c.operation, table.c.status)
         return self._llm_metric_float_values(statement)
 
     def llm_invocation_latency_max_ms_by_provider_model_operation_status(
         self,
     ) -> dict[tuple[str, str, str, str], int]:
         table = self.llm_metric_table
-        statement = (
-            select(
-                table.c.provider,
-                table.c.model,
-                table.c.operation,
-                table.c.status,
-                func.max(table.c.latency_ms).label("value"),
-            )
-            .group_by(table.c.provider, table.c.model, table.c.operation, table.c.status)
-        )
-        return {
-            key: int(value)
-            for key, value in self._llm_metric_float_values(statement).items()
-        }
+        statement = select(
+            table.c.provider,
+            table.c.model,
+            table.c.operation,
+            table.c.status,
+            func.max(table.c.latency_ms).label("value"),
+        ).group_by(table.c.provider, table.c.model, table.c.operation, table.c.status)
+        return {key: int(value) for key, value in self._llm_metric_float_values(statement).items()}
 
     def llm_invocation_total_tokens_by_provider_model_operation_status(
         self,
     ) -> dict[tuple[str, str, str, str], int]:
         table = self.llm_metric_table
-        statement = (
-            select(
-                table.c.provider,
-                table.c.model,
-                table.c.operation,
-                table.c.status,
-                func.sum(table.c.total_tokens).label("value"),
-            )
-            .group_by(table.c.provider, table.c.model, table.c.operation, table.c.status)
-        )
-        return {
-            key: int(value)
-            for key, value in self._llm_metric_float_values(statement).items()
-        }
+        statement = select(
+            table.c.provider,
+            table.c.model,
+            table.c.operation,
+            table.c.status,
+            func.sum(table.c.total_tokens).label("value"),
+        ).group_by(table.c.provider, table.c.model, table.c.operation, table.c.status)
+        return {key: int(value) for key, value in self._llm_metric_float_values(statement).items()}
 
     def llm_invocation_estimated_cost_micros_by_provider_model_operation_status(
         self,
     ) -> dict[tuple[str, str, str, str], int]:
         table = self.llm_metric_table
-        statement = (
-            select(
-                table.c.provider,
-                table.c.model,
-                table.c.operation,
-                table.c.status,
-                func.sum(table.c.estimated_cost_micros).label("value"),
-            )
-            .group_by(table.c.provider, table.c.model, table.c.operation, table.c.status)
-        )
-        return {
-            key: int(value)
-            for key, value in self._llm_metric_float_values(statement).items()
-        }
+        statement = select(
+            table.c.provider,
+            table.c.model,
+            table.c.operation,
+            table.c.status,
+            func.sum(table.c.estimated_cost_micros).label("value"),
+        ).group_by(table.c.provider, table.c.model, table.c.operation, table.c.status)
+        return {key: int(value) for key, value in self._llm_metric_float_values(statement).items()}
 
     def _llm_metric_float_values(self, statement: object) -> dict[tuple[str, str, str, str], float]:
         with self.connection() as conn:

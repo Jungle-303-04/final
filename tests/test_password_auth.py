@@ -182,6 +182,7 @@ def test_hash_password_does_not_store_plain_password() -> None:
 def test_session_auth_requires_real_session_by_default(monkeypatch) -> None:
     async def run() -> None:
         monkeypatch.delenv("DEV_AUTH_BYPASS", raising=False)
+        monkeypatch.delenv("DEV_SECURITY_BYPASS", raising=False)
         auth = load_auth_module()
         sessions = StubSessionStore(auth)
         service = auth.SessionAuthService(sessions)
@@ -211,6 +212,28 @@ def test_session_auth_dev_bypass_returns_admin_session(monkeypatch) -> None:
         assert session.token == auth.Settings.DEV_AUTH_BYPASS_TOKEN
         assert session.user_id == "operator-dev"
         assert session.workspace_id == "workspace-dev"
+        assert session.roles == [auth.ServiceRole.SERVICE_ADMIN.value]
+        assert sessions.rate_checks == []
+
+    asyncio.run(run())
+
+
+def test_session_auth_global_dev_bypass_returns_admin_session(monkeypatch) -> None:
+    async def run() -> None:
+        monkeypatch.delenv("DEV_AUTH_BYPASS", raising=False)
+        monkeypatch.delenv("DEV_SECURITY_BYPASS", raising=False)
+        monkeypatch.setenv("APP_ENV", "test")
+        monkeypatch.setenv("DEV_SECURITY_BYPASS_USER_ID", "global-dev")
+        monkeypatch.setenv("DEV_SECURITY_BYPASS_WORKSPACE_ID", "workspace-global")
+        auth = load_auth_module()
+        sessions = StubSessionStore(auth)
+        service = auth.SessionAuthService(sessions)
+        request = Request({"type": "http", "headers": []})
+
+        session = await service.require_session(request)
+
+        assert session.user_id == "global-dev"
+        assert session.workspace_id == "workspace-global"
         assert session.roles == [auth.ServiceRole.SERVICE_ADMIN.value]
         assert sessions.rate_checks == []
 

@@ -214,23 +214,14 @@ run-name: Release Flow Gate / ${{ inputs.github_environment || 'production' }} /
         required: false
         type: string
     secrets:
-      release_flow_api_base_url:
+      RELEASE_FLOW_API_BASE_URL:
         description: API base URL when the caller does not pass api_base_url.
         required: false
-      release_flow_auth_email:
+      RELEASE_FLOW_AUTH_EMAIL:
         description: Release-flow smoke account email.
         required: false
-      release_flow_auth_password:
-        description: Release-flow smoke account password.
-        required: false
-      RELEASE_FLOW_API_BASE_URL:
-        description: API base URL uppercase alias for repository secret inheritance.
-        required: false
-      RELEASE_FLOW_AUTH_EMAIL:
-        description: Release-flow smoke account email uppercase alias for repository secret inheritance.
-        required: false
       RELEASE_FLOW_AUTH_PASSWORD:
-        description: Release-flow smoke account password uppercase alias for repository secret inheritance.
+        description: Release-flow smoke account password.
         required: false
     outputs:
       release_gate_ok:
@@ -386,9 +377,9 @@ jobs:
       live_safe_pr_workflow_run_id: ${{ inputs.live_safe_pr_workflow_run_id }}
       live_safe_pr_url: ${{ inputs.live_safe_pr_url }}
     secrets:
-      release_flow_api_base_url: ${{ secrets.release_flow_api_base_url || secrets.RELEASE_FLOW_API_BASE_URL }}
-      release_flow_auth_email: ${{ secrets.release_flow_auth_email || secrets.RELEASE_FLOW_AUTH_EMAIL }}
-      release_flow_auth_password: ${{ secrets.release_flow_auth_password || secrets.RELEASE_FLOW_AUTH_PASSWORD }}
+      RELEASE_FLOW_API_BASE_URL: ${{ secrets.RELEASE_FLOW_API_BASE_URL }}
+      RELEASE_FLOW_AUTH_EMAIL: ${{ secrets.RELEASE_FLOW_AUTH_EMAIL }}
+      RELEASE_FLOW_AUTH_PASSWORD: ${{ secrets.RELEASE_FLOW_AUTH_PASSWORD }}
 
   production_gate:
     name: Require successful release-flow smoke

@@ -8,8 +8,8 @@ import pytest
 
 from domains.applications.router import (
     connect_application,
-    list_applications,
     list_application_deployments,
+    list_applications,
     upsert_application,
     upsert_application_deployment,
 )
