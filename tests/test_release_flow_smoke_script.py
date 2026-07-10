@@ -475,6 +475,44 @@ def test_smoke_production_preflight_enables_all_release_guards() -> None:
     } <= result_names
 
 
+def test_smoke_production_preflight_applies_shared_scope_to_release_guards() -> None:
+    smoke = load_smoke_module()
+    client = FakeClient()
+    client.attention_required_runs = 1
+    client.verification_failed_runs = 1
+    client.policy_override_runs = 1
+    client.active_change_freeze_runs = 1
+    args = smoke.parse_args(
+        [
+            "--production-preflight",
+            "--production-preflight-plan-id",
+            "plan-prod",
+            "--production-preflight-run-limit",
+            "7",
+        ]
+    )
+    smoke.apply_production_preflight_flags(args)
+
+    results = smoke.run_smoke(
+        client,
+        "ops@example.com",
+        "password",
+        demo_run=False,
+        run_health_preflight=args.run_health_preflight,
+        verification_preflight=args.verification_preflight,
+        policy_override_preflight=args.policy_override_preflight,
+        change_freeze_preflight=args.change_freeze_preflight,
+        args=args,
+    )
+
+    assert not all(result.ok for result in results)
+    paths = [path for _method, path, _payload in client.calls]
+    assert "/release-runs?plan_id=plan-prod&limit=7&attention_only=true" in paths
+    assert "/release-runs?plan_id=plan-prod&limit=7&verification_failed_only=true" in paths
+    assert "/release-runs?plan_id=plan-prod&limit=7&policy_override_only=true" in paths
+    assert "/release-runs?plan_id=plan-prod&limit=7&active_change_freeze_only=true" in paths
+
+
 def test_smoke_run_health_preflight_passes_when_summary_is_clean() -> None:
     smoke = load_smoke_module()
     client = FakeClient()

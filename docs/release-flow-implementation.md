@@ -214,6 +214,15 @@ AUTH_PASSWORD="<admin password>" \
 python scripts/release_flow_smoke.py --production-preflight
 ```
 
+특정 release plan만 production preflight 대상으로 좁히려면 공통 scope 옵션을 쓴다. 이 값은 run health, verification, policy override, change freeze 조회에 모두 적용된다.
+
+```bash
+python scripts/release_flow_smoke.py \
+  --production-preflight \
+  --production-preflight-plan-id "<plan id>" \
+  --production-preflight-run-limit 10
+```
+
 알림 채널이 실제로 validation alert를 받을 수 있는지 확인하려면 `--alert-preflight`를 붙인다. 이 모드는 enabled alert channel 중 요청 severity를 받을 수 있는 채널을 골라 `/alert-channels/test`를 호출하므로, 실제 Slack/webhook/온콜 테스트 메시지가 발송될 수 있다.
 
 ```bash
