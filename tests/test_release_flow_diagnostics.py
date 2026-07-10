@@ -15,7 +15,6 @@ from domains.diagnostics.router import (
     yaml_diagnostics,
 )
 from domains.release_flow import router as release_router
-from domains.release_flow.repository import release_audit_event_type_filter
 from domains.release_flow.execution import (
     dry_run_event_id,
     execution_profile,
@@ -25,10 +24,11 @@ from domains.release_flow.preview import build_release_plan_preview
 from domains.release_flow.repository import (
     derive_release_plan_id,
     github_release_metadata,
-    serialize_release_run,
+    release_audit_event_type_filter,
     release_run_steps_from_plan,
-    serialize_release_run_event,
     release_step_values,
+    serialize_release_run,
+    serialize_release_run_event,
 )
 from domains.release_flow.router import dispatch_request_for_step, steps_for_wave
 from packages.contracts.gateway import routes as gateway_routes
@@ -2068,7 +2068,6 @@ def test_release_readiness_uses_registered_application_context(monkeypatch) -> N
     assert response.blockers == []
 
 
-
 def test_release_readiness_accepts_created_safe_pr_evidence(monkeypatch) -> None:
     monkeypatch.setenv("RELEASE_FLOW_LIVE_ENABLED", "1")
     monkeypatch.setenv("RELEASE_FLOW_LIVE_WORKSPACES", "workspace-a")
@@ -2096,7 +2095,9 @@ def test_release_readiness_accepts_created_safe_pr_evidence(monkeypatch) -> None
             "repo_ref": "org/checkout",
             "base_branch": "main",
             "manifest_path": "deploy/app.yaml",
-            "environment": "sandbox",
+            "commit_sha": "abc1234",
+            "patch_sha256": "patch-good",
+            "created_at": datetime.now(timezone.utc).isoformat(),
         },
     )
     monkeypatch.setattr(release_router, "require_plan_application_read_access", lambda *_args: None)
@@ -2116,6 +2117,7 @@ def test_release_readiness_accepts_created_safe_pr_evidence(monkeypatch) -> None
                             "environment": "sandbox",
                             "approval_gate": "safe_pr",
                             "safe_pr_workflow_run_id": "workflow-safe-pr-1",
+                            "safe_pr_patch_sha256": "patch-good",
                             "commit_sha": "abc1234",
                             "image": "ghcr.io/example/checkout:v2",
                         },
@@ -2132,11 +2134,99 @@ def test_release_readiness_accepts_created_safe_pr_evidence(monkeypatch) -> None
     assert db.safe_pr_lookups == [("workspace-a", "workflow-safe-pr-1", "checkout")]
 
 
+def test_release_readiness_matches_generated_manifest_safe_pr_evidence(monkeypatch) -> None:
+    monkeypatch.setenv("RELEASE_FLOW_LIVE_ENABLED", "1")
+    monkeypatch.setenv("RELEASE_FLOW_LIVE_WORKSPACES", "workspace-a")
+    application = {
+        "application_id": "checkout",
+        "name": "checkout-api",
+        "repo_ref": "org/checkout",
+        "branch": "main",
+        "manifest_path": "deploy/k8s/kustomization.yaml",
+        "cluster_id": "target",
+        "metadata": {"source_type": "kustomize"},
+    }
+    plan = {
+        "name": "Checkout release",
+        "settings": {"runtime_mode": "live", "approval_policy": "auto_safe"},
+        "steps": [
+            {
+                "application_id": "checkout",
+                "name": "Checkout",
+                "position": 0,
+                "config": {
+                    "environment": "sandbox",
+                    "approval_gate": "safe_pr",
+                    "commit_sha": "abc1234",
+                    "image": "ghcr.io/example/checkout:v2",
+                },
+            }
+        ],
+    }
+    step = plan["steps"][0]
+    assert isinstance(step, dict)
+    rendered = release_router.render_release_step_manifest(plan, 0, application)
+    safe_pr = release_router.generated_manifest_safe_pr_body(
+        plan,
+        step,
+        application,
+        rendered,
+        None,
+        None,
+        "workspace-a",
+    )
+    db = ReleaseReadinessSafePrDb(
+        channels=[
+            {
+                "channel_id": "chan-warning",
+                "enabled": True,
+                "min_severity": "warning",
+                "last_test_status": "passed",
+                "last_tested_at": datetime.now(timezone.utc).isoformat(),
+            }
+        ],
+        applications={"checkout": application},
+        safe_pr={
+            "workflow_run_id": safe_pr.workflow_run_id,
+            "pr_url": "https://github.example/org/checkout/pull/8",
+            "repo_ref": "org/checkout",
+            "base_branch": "main",
+            "manifest_path": safe_pr.manifest_path,
+            "commit_sha": safe_pr.commit_sha,
+            "patch_sha256": safe_pr.patch_sha256,
+            "created_at": datetime.now(timezone.utc).isoformat(),
+        },
+    )
+    monkeypatch.setattr(release_router, "require_plan_application_read_access", lambda *_args: None)
+
+    current = SimpleNamespace(workspace_id="workspace-a", user_id="operator", roles=())
+    response = asyncio.run(
+        release_router.check_release_readiness(
+            release_router.ReleasePlanUpsertRequest(**plan),
+            current=current,
+            db=db,
+        )
+    )
+
+    assert response.ready is True
+    assert response.blockers == []
+    assert safe_pr.manifest_path == "deploy/k8s/generated/checkout-api.generated.yaml"
+    assert db.safe_pr_lookups[-1] == ("workspace-a", safe_pr.workflow_run_id, "checkout")
+
+
 def test_release_readiness_blocks_safe_pr_gate_without_created_evidence(monkeypatch) -> None:
     monkeypatch.setenv("RELEASE_FLOW_LIVE_ENABLED", "1")
     monkeypatch.setenv("RELEASE_FLOW_LIVE_WORKSPACES", "workspace-a")
     db = ReleaseReadinessSafePrDb(
-        channels=[{"channel_id": "chan-warning", "enabled": True, "min_severity": "warning"}],
+        channels=[
+            {
+                "channel_id": "chan-warning",
+                "enabled": True,
+                "min_severity": "warning",
+                "last_test_status": "passed",
+                "last_tested_at": datetime.now(timezone.utc).isoformat(),
+            }
+        ],
         applications={
             "checkout": {
                 "repo_ref": "org/checkout",
@@ -2183,7 +2273,15 @@ def test_release_readiness_does_not_trust_user_supplied_safe_pr_ready(monkeypatc
     monkeypatch.setenv("RELEASE_FLOW_LIVE_ENABLED", "1")
     monkeypatch.setenv("RELEASE_FLOW_LIVE_WORKSPACES", "workspace-a")
     db = ReleaseReadinessSafePrDb(
-        channels=[{"channel_id": "chan-warning", "enabled": True, "min_severity": "warning"}],
+        channels=[
+            {
+                "channel_id": "chan-warning",
+                "enabled": True,
+                "min_severity": "warning",
+                "last_test_status": "passed",
+                "last_tested_at": datetime.now(timezone.utc).isoformat(),
+            }
+        ],
         applications={
             "checkout": {
                 "repo_ref": "org/checkout",
@@ -2234,11 +2332,101 @@ def test_release_readiness_does_not_trust_user_supplied_safe_pr_ready(monkeypatc
     assert any("requires a ready Safe PR" in blocker for blocker in response.blockers)
 
 
+@pytest.mark.parametrize(
+    ("field", "bad_value"),
+    [
+        ("repo_ref", "org/other-repo"),
+        ("base_branch", "stale-release"),
+        ("environment", "production"),
+        ("manifest_path", "deploy/other.yaml"),
+        ("commit_sha", "def5678"),
+        ("patch_sha256", "patch-stale"),
+    ],
+)
+def test_release_readiness_rejects_mismatched_safe_pr_evidence(
+    monkeypatch,
+    field: str,
+    bad_value: str,
+) -> None:
+    monkeypatch.setenv("RELEASE_FLOW_LIVE_ENABLED", "1")
+    monkeypatch.setenv("RELEASE_FLOW_LIVE_WORKSPACES", "workspace-a")
+    safe_pr = {
+        "workflow_run_id": "workflow-safe-pr-1",
+        "pr_url": "https://github.example/org/checkout/pull/7",
+        "repo_ref": "org/checkout",
+        "base_branch": "main",
+        "manifest_path": "deploy/app.yaml",
+        "commit_sha": "abc1234",
+        "patch_sha256": "patch-good",
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    }
+    safe_pr[field] = bad_value
+    db = ReleaseReadinessSafePrDb(
+        channels=[
+            {
+                "channel_id": "chan-warning",
+                "enabled": True,
+                "min_severity": "warning",
+                "last_test_status": "passed",
+                "last_tested_at": datetime.now(timezone.utc).isoformat(),
+            }
+        ],
+        applications={
+            "checkout": {
+                "repo_ref": "org/checkout",
+                "branch": "main",
+                "manifest_path": "deploy/app.yaml",
+                "cluster_id": "target",
+            }
+        },
+        safe_pr=safe_pr,
+    )
+    monkeypatch.setattr(release_router, "require_plan_application_read_access", lambda *_args: None)
+
+    current = SimpleNamespace(workspace_id="workspace-a", user_id="operator", roles=())
+    response = asyncio.run(
+        release_router.check_release_readiness(
+            release_router.ReleasePlanUpsertRequest(
+                name="Checkout release",
+                settings={"runtime_mode": "live", "approval_policy": "auto_safe"},
+                steps=[
+                    {
+                        "application_id": "checkout",
+                        "name": "Checkout",
+                        "position": 0,
+                        "config": {
+                            "environment": "sandbox",
+                            "approval_gate": "safe_pr",
+                            "safe_pr_workflow_run_id": "workflow-safe-pr-1",
+                            "safe_pr_patch_sha256": "patch-good",
+                            "commit_sha": "abc1234",
+                            "image": "ghcr.io/example/checkout:v2",
+                        },
+                    }
+                ],
+            ),
+            current=current,
+            db=db,
+        )
+    )
+
+    assert response.ready is False
+    assert any("requires a ready Safe PR" in blocker for blocker in response.blockers)
+
+
 def test_release_readiness_rejects_safe_pr_evidence_with_unexpected_pr_url(monkeypatch) -> None:
     monkeypatch.setenv("RELEASE_FLOW_LIVE_ENABLED", "1")
     monkeypatch.setenv("RELEASE_FLOW_LIVE_WORKSPACES", "workspace-a")
     db = ReleaseReadinessSafePrDb(
-        channels=[{"channel_id": "chan-warning", "enabled": True, "min_severity": "warning"}],
+        channels=[
+            {
+                "channel_id": "chan-warning",
+                "enabled": True,
+                "min_severity": "warning",
+                "last_test_status": "passed",
+                "last_tested_at": datetime.now(timezone.utc).isoformat(),
+            }
+        ],
         applications={
             "checkout": {
                 "repo_ref": "org/checkout",
@@ -2254,6 +2442,9 @@ def test_release_readiness_rejects_safe_pr_evidence_with_unexpected_pr_url(monke
             "base_branch": "main",
             "environment": "sandbox",
             "manifest_path": "deploy/app.yaml",
+            "commit_sha": "abc1234",
+            "patch_sha256": "patch-good",
+            "created_at": datetime.now(timezone.utc).isoformat(),
         },
     )
     monkeypatch.setattr(release_router, "require_plan_application_read_access", lambda *_args: None)
@@ -2274,6 +2465,74 @@ def test_release_readiness_rejects_safe_pr_evidence_with_unexpected_pr_url(monke
                             "approval_gate": "safe_pr",
                             "safe_pr_workflow_run_id": "workflow-safe-pr-1",
                             "safe_pr_url": "https://github.example/org/checkout/pull/7",
+                            "safe_pr_patch_sha256": "patch-good",
+                            "commit_sha": "abc1234",
+                            "image": "ghcr.io/example/checkout:v2",
+                        },
+                    }
+                ],
+            ),
+            current=current,
+            db=db,
+        )
+    )
+
+    assert response.ready is False
+    assert any("requires a ready Safe PR" in blocker for blocker in response.blockers)
+
+
+def test_release_readiness_rejects_stale_safe_pr_evidence(monkeypatch) -> None:
+    monkeypatch.setenv("RELEASE_FLOW_LIVE_ENABLED", "1")
+    monkeypatch.setenv("RELEASE_FLOW_LIVE_WORKSPACES", "workspace-a")
+    stale_created_at = (datetime.now(timezone.utc) - timedelta(hours=49)).isoformat()
+    db = ReleaseReadinessSafePrDb(
+        channels=[
+            {
+                "channel_id": "chan-warning",
+                "enabled": True,
+                "min_severity": "warning",
+                "last_test_status": "passed",
+                "last_tested_at": datetime.now(timezone.utc).isoformat(),
+            }
+        ],
+        applications={
+            "checkout": {
+                "repo_ref": "org/checkout",
+                "branch": "main",
+                "manifest_path": "deploy/app.yaml",
+                "cluster_id": "target",
+            }
+        },
+        safe_pr={
+            "workflow_run_id": "workflow-safe-pr-1",
+            "pr_url": "https://github.example/org/checkout/pull/7",
+            "repo_ref": "org/checkout",
+            "base_branch": "main",
+            "environment": "sandbox",
+            "manifest_path": "deploy/app.yaml",
+            "commit_sha": "abc1234",
+            "patch_sha256": "patch-good",
+            "created_at": stale_created_at,
+        },
+    )
+    monkeypatch.setattr(release_router, "require_plan_application_read_access", lambda *_args: None)
+
+    current = SimpleNamespace(workspace_id="workspace-a", user_id="operator", roles=())
+    response = asyncio.run(
+        release_router.check_release_readiness(
+            release_router.ReleasePlanUpsertRequest(
+                name="Checkout release",
+                settings={"runtime_mode": "live", "approval_policy": "auto_safe"},
+                steps=[
+                    {
+                        "application_id": "checkout",
+                        "name": "Checkout",
+                        "position": 0,
+                        "config": {
+                            "environment": "sandbox",
+                            "approval_gate": "safe_pr",
+                            "safe_pr_workflow_run_id": "workflow-safe-pr-1",
+                            "safe_pr_patch_sha256": "patch-good",
                             "commit_sha": "abc1234",
                             "image": "ghcr.io/example/checkout:v2",
                         },
@@ -3248,7 +3507,6 @@ class ReleaseReadinessApplicationDb(ReleaseReadinessDb):
         return plan_id in self.active_plan_ids
 
 
-
 class ReleaseReadinessSafePrDb(ReleaseReadinessApplicationDb):
     def __init__(
         self,
@@ -3273,9 +3531,7 @@ class ReleaseReadinessSafePrDb(ReleaseReadinessApplicationDb):
             return None
         if self.safe_pr.get("workflow_run_id") != workflow_run_id:
             return None
-        if application_id and self.safe_pr.get("application_id") not in (None, application_id):
-            return None
-        return dict(self.safe_pr)
+        return self.safe_pr
 
 
 def test_yaml_diagnostics_reports_parser_location() -> None:

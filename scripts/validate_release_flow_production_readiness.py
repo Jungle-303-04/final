@@ -145,6 +145,13 @@ def check_smoke_script_contract() -> list[ReadinessCheck]:
             "direct production live preflight requires an explicit non-demo image",
         ),
         ReadinessCheck(
+            "script.smoke.generated_manifest_render",
+            "run_generated_manifest_check" in source
+            and '"/release-plans/render-manifest"' in source
+            and "release-plans.generated-manifest.live-preflight" in source,
+            "generated manifest render API is exercised before release start or live readiness",
+        ),
+        ReadinessCheck(
             "script.smoke.live_approval_gate",
             "--live-approval-gate" in source
             and "LIVE_PREFLIGHT_APPROVAL_GATE" in source

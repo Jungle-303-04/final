@@ -806,6 +806,20 @@ class ReleasePlanPreviewResponse(StrictModel):
     preview: JsonMap
 
 
+class GeneratedManifestFile(StrictModel):
+    path: str
+    content: str
+    action: str = "upsert"
+    description: str = ""
+
+
+class GeneratedManifestResource(StrictModel):
+    api_version: str = ""
+    kind: str
+    namespace: str = ""
+    name: str
+
+
 class ReleaseReadinessResponse(StrictModel):
     ready: bool
     mode: str
@@ -891,6 +905,29 @@ class DiagnosticItem(StrictModel):
 
 class DiagnosticsResponse(StrictModel):
     diagnostics: list[DiagnosticItem]
+
+
+class ReleaseManifestRenderResponse(StrictModel):
+    manifest: str
+    files: list[GeneratedManifestFile] = Field(default_factory=list)
+    resources: list[GeneratedManifestResource] = Field(default_factory=list)
+    resource_count: int = 0
+    diagnostics: list[DiagnosticItem] = Field(default_factory=list)
+    warnings: list[str] = Field(default_factory=list)
+    summary: str = ""
+
+
+class ReleaseManifestSafePrResponse(ReleaseManifestRenderResponse):
+    accepted: bool
+    event_id: str
+    correlation_id: str
+    workflow_run_id: str = ""
+    application_id: str = ""
+    repo_ref: str = ""
+    base_branch: str = ""
+    manifest_path: str = ""
+    commit_sha: str = ""
+    patch_sha256: str = ""
 
 
 class CatalogItemListResponse(StrictModel):

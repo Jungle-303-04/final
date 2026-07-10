@@ -7,7 +7,6 @@ import xml.etree.ElementTree as ET
 from pathlib import Path
 from typing import Any
 
-
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPT = ROOT / "scripts" / "release_flow_smoke.py"
 
@@ -116,6 +115,26 @@ class FakeClient:
             return {"runs": []}
         if path == "/release-plans/preview":
             return {"preview": {"executable": True, "summary": "2 steps can run"}}
+        if path == "/release-plans/render-manifest":
+            assert payload
+            assert isinstance(payload.get("plan"), dict)
+            assert payload.get("step_index") == 0
+            return {
+                "manifest": "apiVersion: apps/v1\nkind: Deployment\n",
+                "files": [
+                    {
+                        "path": "deploy/app.yaml",
+                        "content": "apiVersion: apps/v1\nkind: Deployment\n",
+                        "action": "upsert",
+                        "description": "Generated manifest",
+                    }
+                ],
+                "resources": [{"api_version": "apps/v1", "kind": "Deployment", "namespace": "sandbox", "name": "checkout"}],
+                "resource_count": 1,
+                "diagnostics": [],
+                "warnings": [],
+                "summary": "Generated 1 Kubernetes resource(s).",
+            }
         if path == "/release-readiness":
             return {
                 "ready": True,
@@ -549,6 +568,8 @@ def test_smoke_default_does_not_start_release_run() -> None:
     assert all(result.ok for result in results)
     assert ("POST", "/release-plans/start", None) not in client.calls
     assert [path for _method, path, _payload in client.calls].count("/release-plans/preview") == 1
+    assert [path for _method, path, _payload in client.calls].count("/release-plans/render-manifest") == 1
+    assert any(result.name == "release-plans.generated-manifest" for result in results)
     assert "/alert-channels/test" not in [path for _method, path, _payload in client.calls]
 
 
@@ -632,7 +653,6 @@ def test_smoke_live_preflight_checks_readiness_without_starting_run() -> None:
     assert readiness_payload["steps"][0]["config"]["approval_gate"] == "manual"
 
 
-
 def test_smoke_live_preflight_can_exercise_safe_pr_gate() -> None:
     smoke = load_smoke_module()
     client = FakeClient()
@@ -666,35 +686,15 @@ def test_smoke_live_preflight_can_exercise_safe_pr_gate() -> None:
     )
 
     assert all(result.ok for result in results)
-    readiness_payload = next(payload for _method, path, payload in client.calls if path == "/release-readiness")
+    readiness_payload = next(
+        payload for _method, path, payload in client.calls if path == "/release-readiness"
+    )
     assert readiness_payload is not None
     config = readiness_payload["steps"][0]["config"]
     assert config["approval_gate"] == "safe_pr"
     assert config["safe_pr_workflow_run_id"] == "workflow-safe-pr-1"
     assert config["safe_pr_url"] == "https://github.example/org/checkout/pull/7"
     assert "safe_pr_ready" not in config
-
-
-def test_smoke_live_preflight_rejects_invalid_safe_pr_evidence_inputs() -> None:
-    smoke = load_smoke_module()
-    args = smoke.parse_args(
-        [
-            "--live-preflight",
-            "--live-approval-gate",
-            "safe_pr",
-            "--live-safe-pr-url",
-            "https://example.com/pull/1",
-        ]
-    )
-
-    try:
-        smoke.validate_live_preflight_inputs(args)
-    except ValueError as exc:
-        message = str(exc)
-    else:
-        raise AssertionError("expected placeholder Safe PR URL rejection")
-
-    assert "live_safe_pr_url must not use example.com placeholder value" in message
 
 
 def test_smoke_live_preflight_rejects_production_placeholders_before_payload() -> None:
@@ -724,6 +724,20 @@ def test_smoke_live_preflight_rejects_production_placeholders_before_payload() -
         "live_image must not use production placeholder value "
         "ghcr.io/example/release-flow-smoke:live-preflight"
     ) in message
+
+
+def test_smoke_live_preflight_rejects_invalid_safe_pr_evidence_inputs() -> None:
+    smoke = load_smoke_module()
+    args = smoke.parse_args(["--live-preflight", "--live-approval-gate", "safe_pr", "--live-safe-pr-url", "https://example.com/pull/1"])
+
+    try:
+        smoke.validate_live_preflight_inputs(args)
+    except ValueError as exc:
+        message = str(exc)
+    else:
+        raise AssertionError("expected placeholder Safe PR URL rejection")
+
+    assert "live_safe_pr_url must not use example.com placeholder value" in message
 
 
 def test_smoke_live_preflight_requires_explicit_production_inputs() -> None:
