@@ -68,6 +68,9 @@ def test_scaffold_creates_detector_gap_yaml_and_fixture_test_without_overwrite(
     assert "availability: ready" not in serialized
     assert "raw_manifest" not in serialized
     assert "shell" not in serialized
+    assert 'SCENARIO_FILE = Path(__file__).resolve().parent / "../catalog/' in test_path.read_text(
+        encoding="utf-8"
+    )
 
     original_yaml = yaml_path.read_text(encoding="utf-8")
     original_test = test_path.read_text(encoding="utf-8")

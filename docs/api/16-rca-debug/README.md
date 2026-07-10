@@ -14,7 +14,7 @@ Environment에서 `aws-test` 편집을 열고 `rca_test_token`의 Secret 칸에 
 로컬 값을 붙여넣어 저장한다. `vars:secret`으로 선언된 값은 OS 보안 저장소에 암호화되고
 환경 파일에는 기록되지 않는다. 실제 토큰을 collection·환경 파일·실행 로그에 쓰지 않는다.
 
-1. 등록된 25개 시나리오와 `ready / fixture_required / detector_gap`을 조회한다.
+1. 현재 catalog의 시나리오와 `ready / fixture_required / detector_gap`을 조회한다. 개수는 YAML catalog에서 동적으로 결정된다.
 2. `cluster_id + scenario_id`만 보내 sandbox에 실제 장애를 만든다.
    같은 cluster의 동일 fixture(kind/namespace/name)에 활성 run이 있으면 서버가 원자 예약으로 `409`를
    반환한다. 기존 run을 cleanup하거나 TTL 만료를 기다린 뒤 다시 실행한다.
@@ -34,14 +34,20 @@ Environment에서 `aws-test` 편집을 열고 `rca_test_token`의 Secret 칸에 
 자동 runner에 포함하지 않는다. 03~06은 비동기 파이프라인이 아직 진행 중이면 같은
 요청을 잠시 뒤 다시 보낸다. 새 run을 만들 필요가 없다.
 
-현재 실제 실행 가능한 `ready` 시나리오는 다음 8개다. 나머지 17개도 목록에는
-등록되어 있으며, 01 응답의 사유와 필요한 fixture/detector 작업을 보고 이어서 개발한다.
+`ready`는 adapter 등록만 뜻하지 않는다. 실제 target에서 장애 주입, 관측, evidence 수집,
+expected root cause 선택, recovery plan, cleanup 잔여 0까지 완주한 시나리오만 `ready`다.
+현재 live 완주가 확인된 시나리오는 다음 하나다.
 
-- `image.wrong-tag`, `image.registry-down`
-- `crash.config-env`, `crash.app-startup`
-- `ingress.readiness`
-- `schedule.cpu`, `schedule.memory`, `schedule.affinity`
+- `image.wrong-tag`
 
-시나리오를 추가하거나 수정할 때 Bruno 요청 body는 바꾸지 않는다. 서버의
-`src/domains/rca/test_scenario_catalog/*.yaml`을 수정하고 catalog contract test를
-통과시키면 01 목록과 02 실행이 같은 schema를 사용한다.
+나머지는 01 응답의 `availability_reason`, `fixture_requirements`,
+`detector_work_needed`를 기준으로 이어서 개발한다. 시나리오를 추가하거나 수정해도
+Bruno 요청 body는 바꾸지 않는다. API에는 raw manifest, shell, namespace, synthetic
+evidence 입력을 추가하지 않는다.
+
+담당자는 `scripts/rca_scenario.py scaffold`로 `detector_gap` 골격을 만든 뒤 YAML과 fixture
+test를 완성하고 `uv run python scripts/rca_scenario.py validate`를 실행한다. validate는
+schema/중복/canonical coverage, adapter capability, symptom별 expected root candidate,
+candidate expected evidence 포함 관계, recovery coverage를 함께 검사한다. 관련 테스트와
+실제 target live 완주를 확인한 후에만 `ready`로 승격한다. DB/GitOps 등 외부 실행 fixture가
+없으면 `fixture_required`를 유지한다. management cluster와 `sandbox` 밖 실행은 금지된다.

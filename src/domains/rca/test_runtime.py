@@ -7,11 +7,21 @@ into a developer-readable status response.
 
 from __future__ import annotations
 
-import re
 from dataclasses import asdict, dataclass
 from typing import Any
 
-from domains.rca.test_scenarios import KubernetesDeploymentTrigger, RcaTestScenario
+from domains.rca.test_scenario_adapters import (
+    RcaTestCleanupPlan,
+    RcaTestFixtureTarget,
+    default_test_scenario_adapter_registry,
+)
+from domains.rca.test_scenario_kubernetes import (
+    rca_test_fixture_owned_by_run as rca_test_fixture_owned_by_run,
+)
+from domains.rca.test_scenario_kubernetes import (
+    validate_rca_test_fixture_target as validate_rca_test_fixture_target,
+)
+from domains.rca.test_scenarios import RcaTestScenario
 from packages.config.constants import (
     RCA_TEST_COMMAND_ACTIONS,
     Command,
@@ -24,11 +34,6 @@ RCA_TEST_EVIDENCE_SOURCE_ID = "rca-test"
 RCA_TEST_FIXTURE_RESOURCE_KIND = "Deployment"
 RCA_TEST_AGENT_ACTIONS = RCA_TEST_COMMAND_ACTIONS
 RCA_TEST_COMMAND_PRIORITY = 200
-RCA_TEST_RUN_ANNOTATION = "kubeheal.io/rca-test-run"
-RCA_TEST_EXPIRES_AT_ANNOTATION = "kubeheal.io/rca-test-expires-at"
-RCA_TEST_RESOURCE_LABEL = "kubeheal.io/rca-test"
-RCA_TEST_RUN_LABEL = "kubeheal.io/rca-test-run"
-RCA_TEST_RESOURCE_NAME_PATTERN = re.compile(r"^rca-test-[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$")
 
 
 @dataclass(frozen=True)
@@ -44,29 +49,9 @@ class RcaTestRunIdentity:
         return asdict(self)
 
 
-@dataclass(frozen=True)
-class RcaTestFixtureTarget:
-    namespace: str
-    resource_name: str
-
-
-def validate_rca_test_fixture_target(namespace: str, resource_name: str) -> None:
-    """Accept only the server-owned sandbox fixture namespace/name shape."""
-    if namespace != Sandbox.NAMESPACE:
-        raise ValueError("RCA test fixture namespace must be sandbox")
-    if len(resource_name) > 63 or RCA_TEST_RESOURCE_NAME_PATTERN.fullmatch(resource_name) is None:
-        raise ValueError("invalid RCA test fixture resource name")
-
-
 def rca_test_scenario_fixture_target(scenario: RcaTestScenario) -> RcaTestFixtureTarget:
-    if not isinstance(scenario.trigger, KubernetesDeploymentTrigger):
-        raise ValueError("RCA test scenario does not have a Kubernetes fixture target")
-    target = RcaTestFixtureTarget(
-        namespace=scenario.safety.namespace,
-        resource_name=scenario.trigger.params.resource_name,
-    )
-    validate_rca_test_fixture_target(target.namespace, target.resource_name)
-    return target
+    adapter = default_test_scenario_adapter_registry().adapter_for(scenario)
+    return adapter.fixture_target(scenario)
 
 
 def rca_test_command_fixture_target(command: JsonObject) -> RcaTestFixtureTarget:
@@ -107,6 +92,7 @@ def _command_plan(
     expected_root_cause: str | None = None,
     expected_symptom: str | None = None,
     expires_at: str | None = None,
+    cleanup_adapter: str = "kubernetes.manifest_delete",
 ) -> JsonObject:
     validate_rca_test_fixture_target(namespace, resource_name)
     identity = rca_test_run_identity(run_id)
@@ -136,7 +122,8 @@ def _command_plan(
             }
         )
     else:
-        command_payload["cleanup_adapter"] = "kubernetes.manifest_delete"
+        default_test_scenario_adapter_registry().cleanup_adapter(cleanup_adapter)
+        command_payload["cleanup_adapter"] = cleanup_adapter
     plan: JsonObject = {
         "command_id": command_id,
         "idempotency_key": command_id,
@@ -184,165 +171,13 @@ def build_rca_test_cleanup_plan(**kwargs: Any) -> JsonObject:
     return _command_plan(cleanup=True, **kwargs)
 
 
-def rca_test_fixture_owned_by_run(resource: JsonObject, run_id: str) -> bool:
-    metadata = resource.get("metadata")
-    if not isinstance(metadata, dict):
-        return False
-    annotations = metadata.get("annotations")
-    return isinstance(annotations, dict) and annotations.get(RCA_TEST_RUN_ANNOTATION) == run_id
-
-
 def build_rca_test_manifests(
     scenario: RcaTestScenario,
     run_id: str,
     expires_at: str,
 ) -> list[JsonObject]:
-    """Materialize only a typed, repository-owned sandbox recipe."""
-    if scenario.availability != "ready" or not isinstance(
-        scenario.trigger, KubernetesDeploymentTrigger
-    ):
-        raise ValueError(
-            f"RCA test scenario cannot create a Kubernetes fixture: {scenario.scenario_id}"
-        )
-    params = scenario.trigger.params
-    name = params.resource_name
-    labels = {
-        "app": name,
-        RCA_TEST_RESOURCE_LABEL: "true",
-        RCA_TEST_RUN_LABEL: run_id,
-    }
-    annotations = {
-        RCA_TEST_RUN_ANNOTATION: run_id,
-        RCA_TEST_EXPIRES_AT_ANNOTATION: expires_at,
-    }
-    template_labels = dict(labels)
-    container: JsonObject = {
-        "name": "fault",
-        "image": "busybox:1.36.1",
-        "command": ["/bin/sh", "-c", "sleep 3600"],
-        "resources": {
-            "requests": {"cpu": "10m", "memory": "8Mi"},
-            "limits": {"cpu": "50m", "memory": "32Mi"},
-        },
-        "securityContext": {
-            "allowPrivilegeEscalation": False,
-            "capabilities": {"drop": ["ALL"]},
-        },
-    }
-    pod_spec: JsonObject = {
-        "automountServiceAccountToken": False,
-        "containers": [container],
-    }
-    mode = params.fault_mode
-    short_run = run_id.replace("-", "")[:12]
-    if mode == "wrong_image_tag":
-        container["image"] = f"{params.image_repository}:rca-test-missing-{short_run}"
-        container.pop("command", None)
-    elif mode == "registry_unavailable":
-        container["image"] = f"127.0.0.1:65534/rca-test/unavailable:{short_run}"
-        container.pop("command", None)
-    elif mode == "oom_killed":
-        container["command"] = [
-            "/bin/sh",
-            "-c",
-            "echo RCA_TEST_OOM; sleep 2; tail /dev/zero",
-        ]
-    elif mode == "config_env_error":
-        container["command"] = [
-            "/bin/sh",
-            "-c",
-            "echo 'FATAL: required environment variable DATABASE_URL is not set'; exit 1",
-        ]
-    elif mode in {"app_startup_failure", "bad_image_rollout"}:
-        container["command"] = [
-            "/bin/sh",
-            "-c",
-            "echo 'FATAL: startup failed'; exit 1",
-        ]
-    elif mode == "dependency_connection_failure":
-        container["command"] = [
-            "/bin/sh",
-            "-c",
-            "echo 'dependency connection refused'; exit 1",
-        ]
-    elif mode == "insufficient_cpu":
-        container["resources"] = {"requests": {"cpu": "100000", "memory": "8Mi"}}
-    elif mode == "insufficient_memory":
-        container["resources"] = {"requests": {"cpu": "10m", "memory": "100Ti"}}
-    elif mode == "affinity_mismatch":
-        pod_spec["nodeSelector"] = {"kubeheal.io/rca-test-node": "absent"}
-    elif mode in {"readiness_probe_failure", "upstream_empty"}:
-        container["command"] = ["/bin/sh", "-c", "httpd -f -p 8080"]
-        container["ports"] = [{"name": "http", "containerPort": 8080}]
-        if mode == "readiness_probe_failure":
-            # kubelet의 probe 이벤트는 Kubernetes evidence가 되고, 아래 run-scoped
-            # 애플리케이션 로그는 ingress RCA rule의 logs 근거가 된다.
-            container["command"] = [
-                "/bin/sh",
-                "-c",
-                (
-                    "httpd -p 8080; "
-                    "while true; do echo 'ERROR readiness probe failed'; sleep 5; done"
-                ),
-            ]
-            container["readinessProbe"] = {
-                "httpGet": {"path": "/", "port": 9090},
-                "initialDelaySeconds": 2,
-                "periodSeconds": 3,
-            }
-    elif mode == "http_5xx":
-        container["image"] = "python:3.13-alpine"
-        container["command"] = [
-            "python",
-            "-c",
-            (
-                "from http.server import BaseHTTPRequestHandler,HTTPServer;"
-                "H=type('H',(BaseHTTPRequestHandler,),{"
-                "'do_GET':lambda s:(s.send_response(500),s.end_headers(),"
-                "s.wfile.write(b'intentional_error_endpoint'))});"
-                "HTTPServer(('0.0.0.0',8080),H).serve_forever()"
-            ),
-        ]
-        container["ports"] = [{"name": "http", "containerPort": 8080}]
-
-    deployment: JsonObject = {
-        "apiVersion": "apps/v1",
-        "kind": "Deployment",
-        "metadata": {
-            "name": name,
-            "namespace": scenario.safety.namespace,
-            "labels": labels,
-            "annotations": annotations,
-        },
-        "spec": {
-            "replicas": params.replicas,
-            "selector": {"matchLabels": {"app": name}},
-            "template": {
-                "metadata": {"labels": template_labels},
-                "spec": pod_spec,
-            },
-        },
-    }
-    manifests = [deployment]
-    if mode in {"readiness_probe_failure", "upstream_empty", "http_5xx"}:
-        selector = {"app": f"{name}-missing"} if mode == "upstream_empty" else {"app": name}
-        manifests.append(
-            {
-                "apiVersion": "v1",
-                "kind": "Service",
-                "metadata": {
-                    "name": name,
-                    "namespace": scenario.safety.namespace,
-                    "labels": labels,
-                    "annotations": annotations,
-                },
-                "spec": {
-                    "selector": selector,
-                    "ports": [{"name": "http", "port": 80, "targetPort": "http"}],
-                },
-            }
-        )
-    return manifests
+    adapter = default_test_scenario_adapter_registry().adapter_for(scenario)
+    return adapter.build_trigger(scenario, run_id, expires_at)
 
 
 def rca_test_observation_matches(
@@ -350,50 +185,17 @@ def rca_test_observation_matches(
     snapshot: JsonObject,
     run_id: str,
 ) -> bool:
-    """Require every configured Kubernetes signal group for the current run."""
-    pods = [
-        pod
-        for pod in snapshot.get("pods", [])
-        if isinstance(pod, dict)
-        and isinstance(pod.get("labels"), dict)
-        and pod["labels"].get(RCA_TEST_RUN_LABEL) == run_id
-    ]
-    pod_names = {str(pod.get("name") or "") for pod in pods}
-    events = [
-        item
-        for item in snapshot.get("events", [])
-        if isinstance(item, dict) and str(item.get("involved_name") or "") in pod_names
-    ]
-    observe = scenario.observe
-    checks: list[bool] = []
-    if observe.pod_waiting_reasons:
-        expected = set(observe.pod_waiting_reasons)
-        checks.append(
-            any(
-                expected.intersection(str(value) for value in pod.get("waiting_reasons", []))
-                for pod in pods
-            )
-        )
-    if observe.pod_terminated_reasons:
-        expected = set(observe.pod_terminated_reasons)
-        checks.append(
-            any(
-                expected.intersection(str(value) for value in pod.get("terminated_reasons", []))
-                for pod in pods
-            )
-        )
-    if observe.event_reasons:
-        expected = {value.casefold() for value in observe.event_reasons}
-        checks.append(any(str(item.get("reason") or "").casefold() in expected for item in events))
-    if observe.event_message_any:
-        patterns = [value.casefold() for value in observe.event_message_any]
-        checks.append(
-            any(
-                any(pattern in str(item.get("message") or "").casefold() for pattern in patterns)
-                for item in events
-            )
-        )
-    return bool(checks) and all(checks)
+    adapter = default_test_scenario_adapter_registry().adapter_for(scenario)
+    return adapter.matches_observation(scenario, snapshot, run_id)
+
+
+def rca_test_resource_cleanup_plan(
+    cleanup_adapter: str,
+    namespace: str,
+    resource_name: str,
+) -> RcaTestCleanupPlan:
+    adapter = default_test_scenario_adapter_registry().cleanup_adapter(cleanup_adapter)
+    return adapter.build_cleanup(namespace, resource_name)
 
 
 def _step(step: str, status: str) -> JsonObject:

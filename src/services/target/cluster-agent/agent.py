@@ -81,18 +81,22 @@ from config import (
 from config import (
     KUBERNETES_ROLLOUT_TIMEOUT_SECONDS as CONFIG_KUBERNETES_ROLLOUT_TIMEOUT_SECONDS,
 )
-from domains.rca.test_runtime import (
+from domains.rca.test_scenario_adapters import (
+    RcaTestCleanupPlan,
+    default_test_scenario_adapter_registry,
+)
+from domains.rca.test_scenario_contract import (
+    TestScenarioContractError,
+    validate_scenario_adapter_contracts,
+)
+from domains.rca.test_scenario_kubernetes import (
     RCA_TEST_EXPIRES_AT_ANNOTATION,
     RCA_TEST_RUN_ANNOTATION,
     RCA_TEST_RUN_LABEL,
-    build_rca_test_manifests,
     rca_test_fixture_owned_by_run,
-    rca_test_observation_matches,
-    rca_test_scenario_fixture_target,
     validate_rca_test_fixture_target,
 )
 from domains.rca.test_scenarios import (
-    KubernetesDeploymentTrigger,
     RcaTestScenario,
     test_scenario_by_id,
 )
@@ -1244,10 +1248,15 @@ class TargetClusterAgent:
         self,
         ctx: CommandContext[JsonObject],
     ) -> JsonObject:
-        run_id, scenario_id, scenario_version, namespace, resource_name = (
+        run_id, scenario_id, scenario_version, namespace, resource_name, cleanup_adapter = (
             self.rca_test_cleanup_command_target(ctx.payload)
         )
-        cleaned = await self.cleanup_rca_test_fixture_if_owned(namespace, resource_name, run_id)
+        cleaned = await self.cleanup_rca_test_fixture_if_owned(
+            namespace,
+            resource_name,
+            run_id,
+            cleanup_adapter=cleanup_adapter,
+        )
         message = (
             "RCA test fixture resources deleted and residuals cleared"
             if cleaned
@@ -1277,11 +1286,12 @@ class TargetClusterAgent:
     def rca_test_cleanup_command_target(
         self,
         payload: JsonObject,
-    ) -> tuple[str, str, int, str, str]:
+    ) -> tuple[str, str, int, str, str, str]:
         run_id = str(payload.get("run_id") or "")
         scenario_id = str(payload.get("scenario_id") or "")
         namespace = str(payload.get("namespace") or "")
         resource_name = str(payload.get("resource_name") or "")
+        cleanup_adapter = str(payload.get("cleanup_adapter") or "kubernetes.manifest_delete")
         try:
             scenario_version = int(payload.get("scenario_version"))
         except (TypeError, ValueError) as exc:
@@ -1289,7 +1299,15 @@ class TargetClusterAgent:
         if not run_id or not scenario_id:
             raise ValueError("RCA test cleanup requires run_id and scenario_id")
         validate_rca_test_fixture_target(namespace, resource_name)
-        return run_id, scenario_id, scenario_version, namespace, resource_name
+        default_test_scenario_adapter_registry().cleanup_adapter(cleanup_adapter)
+        return (
+            run_id,
+            scenario_id,
+            scenario_version,
+            namespace,
+            resource_name,
+            cleanup_adapter,
+        )
 
     def rca_test_command_scenario(
         self,
@@ -1306,9 +1324,12 @@ class TargetClusterAgent:
             raise ValueError("unknown or unavailable RCA test scenario")
         if scenario.version != requested_version:
             raise ValueError("RCA test scenario version changed; create a new run")
-        if not isinstance(scenario.trigger, KubernetesDeploymentTrigger):
-            raise ValueError("RCA test scenario adapter is not available on target agent")
-        expected_target = rca_test_scenario_fixture_target(scenario)
+        try:
+            validate_scenario_adapter_contracts((scenario,))
+            adapter = default_test_scenario_adapter_registry().adapter_for(scenario)
+            expected_target = adapter.fixture_target(scenario)
+        except TestScenarioContractError as exc:
+            raise ValueError("RCA test scenario adapter is not available on target agent") from exc
         requested_namespace = str(payload.get("namespace") or "")
         requested_resource_name = str(payload.get("resource_name") or "")
         validate_rca_test_fixture_target(requested_namespace, requested_resource_name)
@@ -1336,7 +1357,8 @@ class TargetClusterAgent:
         expires_at: str,
     ) -> JsonObject:
         await self.ensure_rca_test_fixture_available(scenario, run_id)
-        manifests = build_rca_test_manifests(scenario, run_id, expires_at)
+        adapter = default_test_scenario_adapter_registry().adapter_for(scenario)
+        manifests = adapter.build_trigger(scenario, run_id, expires_at)
         for manifest in manifests:
             applied, message, _rollout = await self.apply_kubernetes_manifest(
                 manifest,
@@ -1364,7 +1386,8 @@ class TargetClusterAgent:
         token = service_account_token()
         if not base_url or not token:
             raise RuntimeError("kubernetes api not configured; RCA test run unavailable")
-        name = scenario.trigger.params.resource_name
+        adapter = default_test_scenario_adapter_registry().adapter_for(scenario)
+        name = adapter.fixture_target(scenario).resource_name
         url = f"{base_url}/apis/apps/v1/namespaces/{scenario.safety.namespace}/deployments/{name}"
         async with kubernetes_client(self.kubernetes_transport) as client:
             response = await client.get(url, headers=kubernetes_headers(token))
@@ -1396,12 +1419,13 @@ class TargetClusterAgent:
             scenario.safety.namespace,
             f"{RCA_TEST_RUN_LABEL}={run_id}",
         )
+        adapter = default_test_scenario_adapter_registry().adapter_for(scenario)
         deadline = time.monotonic() + scenario.observe.timeout_seconds
         while True:
             async with httpx.AsyncClient(timeout=provider.timeout_seconds) as client:
                 raw = await provider.query(client, query)
             snapshot = provider.normalize_payload(raw, query)
-            if rca_test_observation_matches(scenario, snapshot, run_id):
+            if adapter.matches_observation(scenario, snapshot, run_id):
                 pod_names = rca_test_run_pod_names(snapshot, run_id)
                 if pod_names:
                     return pod_names
@@ -1416,6 +1440,8 @@ class TargetClusterAgent:
         namespace: str,
         resource_name: str,
         run_id: str,
+        *,
+        cleanup_adapter: str = "kubernetes.manifest_delete",
     ) -> bool:
         validate_rca_test_fixture_target(namespace, resource_name)
         if not run_id:
@@ -1424,15 +1450,11 @@ class TargetClusterAgent:
         token = service_account_token()
         if not base_url or not token:
             raise RuntimeError("kubernetes api not configured; RCA test cleanup unavailable")
-        resource_urls = (
-            (
-                "Service",
-                f"{base_url}/api/v1/namespaces/{namespace}/services/{resource_name}",
-            ),
-            (
-                "Deployment",
-                f"{base_url}/apis/apps/v1/namespaces/{namespace}/deployments/{resource_name}",
-            ),
+        adapter = default_test_scenario_adapter_registry().cleanup_adapter(cleanup_adapter)
+        cleanup_plan = adapter.build_cleanup(namespace, resource_name)
+        resource_urls = tuple(
+            (resource.kind, resource.url(base_url, namespace, resource_name))
+            for resource in cleanup_plan.resources
         )
         async with kubernetes_client(self.kubernetes_transport) as client:
             try:
@@ -1454,7 +1476,7 @@ class TargetClusterAgent:
                         json={
                             "apiVersion": "v1",
                             "kind": "DeleteOptions",
-                            "propagationPolicy": "Foreground",
+                            "propagationPolicy": cleanup_plan.propagation_policy,
                             "preconditions": {
                                 "uid": resource.uid,
                                 "resourceVersion": resource.resource_version,
@@ -1477,6 +1499,7 @@ class TargetClusterAgent:
                     resource_name=resource_name,
                     run_id=run_id,
                     resources=resources,
+                    cleanup_plan=cleanup_plan,
                 )
             except RcaTestFixtureOwnershipChanged:
                 return False
@@ -1523,6 +1546,7 @@ class TargetClusterAgent:
         resource_name: str,
         run_id: str,
         resources: list[RcaTestOwnedResource],
+        cleanup_plan: RcaTestCleanupPlan,
     ) -> None:
         deadline = time.monotonic() + RCA_TEST_CLEANUP_TIMEOUT_SECONDS
         expected_uids = {resource.kind: resource.uid for resource in resources}
@@ -1535,6 +1559,7 @@ class TargetClusterAgent:
                 resource_name=resource_name,
                 run_id=run_id,
                 expected_uids=expected_uids,
+                cleanup_plan=cleanup_plan,
             )
             if not residuals:
                 return
@@ -1553,13 +1578,12 @@ class TargetClusterAgent:
         resource_name: str,
         run_id: str,
         expected_uids: dict[str, str],
+        cleanup_plan: RcaTestCleanupPlan,
     ) -> set[str]:
         headers = kubernetes_headers(token)
         urls = {
-            "Deployment": (
-                f"{base_url}/apis/apps/v1/namespaces/{namespace}/deployments/{resource_name}"
-            ),
-            "Service": f"{base_url}/api/v1/namespaces/{namespace}/services/{resource_name}",
+            resource.kind: resource.url(base_url, namespace, resource_name)
+            for resource in cleanup_plan.resources
         }
         residuals: set[str] = set()
         current_service_uid = ""

@@ -6,13 +6,13 @@ from pathlib import Path
 
 import pytest
 import yaml
+
 from domains.rca.test_scenario_adapters import default_test_scenario_adapter_registry
 from domains.rca.test_scenario_contract import (
     TestScenarioContractError,
     validate_scenario_adapter_contracts,
     validate_scenario_cross_contracts,
 )
-
 from domains.rca.test_scenarios import (
     CANONICAL_ROOT_CAUSES,
     TestScenarioCatalogError,
@@ -78,8 +78,12 @@ def test_ready_scenarios_have_executable_trigger_fault_observe_and_cleanup() -> 
             continue
         adapter = registry.adapter_for(scenario)
         assert adapter.capabilities.trigger is True
+        assert adapter.fixture_target_builder is not None
+        assert adapter.trigger_builder is not None
         assert adapter.capabilities.observation is True
+        assert adapter.observation_matcher is not None
         assert adapter.capabilities.cleanup is True
+        assert adapter.cleanup_builder is not None
         assert scenario.trigger.params.fault_mode in adapter.capabilities.fault_modes
         assert set(scenario.observe.configured_predicates).issubset(
             adapter.capabilities.observation_predicates

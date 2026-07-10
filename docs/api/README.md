@@ -27,7 +27,7 @@ docs/api
 실제 target cluster의 `sandbox`에 장애 Deployment를 만들기 때문에 Bruno UI에서만
 명시적으로 실행한다.
 
-1. `01`에서 25개 시나리오와 현재 실행 가능 상태를 조회한다.
+1. `01`에서 catalog가 제공하는 시나리오와 현재 실행 가능 상태를 조회한다. 항목 수는 YAML에서 동적으로 결정된다.
 2. `02`에서 `cluster_id + scenario_id`만 보내 실제 장애와 agent 관측을 시작한다.
 3. `03`에서 같은 run의 장애 생성, 관측, evidence, RCA, plan, 선택, cleanup 상태를 반복 확인한다.
 4. `04`~`06`에서 실제 evidence, RCA 결과, recovery 후보를 차례로 확인한다.
@@ -42,6 +42,12 @@ tracked `.bru` 파일에는 입력하지 않는다.
 파이프라인은 비동기다. `03`~`06`이 아직 처리 중이면 새 run을 만들지 말고 같은
 요청을 잠시 뒤 다시 보낸다. 상세 사용법과 안전 경계는
 `16-rca-debug/README.md`가 단일 가이드다.
+
+`ready`는 실제 target에서 evidence → expected root cause → recovery plan → cleanup 잔여 0까지
+완주한 시나리오만 뜻한다. 현재 live 완주가 확인된 항목은 `image.wrong-tag`다. 새 시나리오는
+`scripts/rca_scenario.py scaffold`로 `detector_gap` 상태에서 시작하고, `validate`와 fixture test,
+live 검증을 모두 마친 뒤에만 승격한다. raw manifest/shell/synthetic evidence 입력과 management
+cluster 실행은 허용하지 않는다.
 
 ## 전체 Runner 실행
 

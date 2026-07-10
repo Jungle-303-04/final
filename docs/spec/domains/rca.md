@@ -47,6 +47,32 @@ status: synced
 - `src/domains/rca/report_projection.py` — RCA report 목록 응답용 projection/summary 규칙.
 - `src/domains/rca/router.py` — FastAPI 라우터(agent evidence 수신, 복구 후보 선택).
 - `src/domains/rca/query_router.py` — FastAPI 라우터(세션 워크스페이스 범위 evidence/RCA report 조회).
+- `src/domains/rca/test_scenarios.py` — RCA test scenario Pydantic schema와 YAML loader. `scenario_id` 중복을 거부하고 모든 canonical root cause가 최소 한 시나리오로 표현되는지 검사한다. 한 root cause에 여러 시나리오를 둘 수 있다.
+- `src/domains/rca/test_scenario_adapters.py` — trigger/fault/observation/cleanup capability와 실행 함수를 묶는 adapter registry.
+- `src/domains/rca/test_scenario_kubernetes.py` — Kubernetes manifest 생성, run-scoped observation matcher, `kubernetes.manifest_delete` cleanup resource plan의 단일 구현.
+- `src/domains/rca/test_scenario_contract.py` — schema/adapter 및 cause candidate/evidence/recovery cross-contract validator. cause catalog 위치는 domain에 하드코딩하지 않고 합성 루트가 spec을 주입한다.
+- `src/domains/rca/test_runtime.py` — run identity, agent command, 상태 projection. 기존 Kubernetes helper 이름은 registry dispatch facade로만 유지하며 Kubernetes 구현을 소유하지 않는다.
+
+### RCA test scenario SDK 운영 계약
+
+`availability: ready`는 API에서 곧바로 실행할 수 있다는 하나의 의미만 가진다. registry에 해당 trigger와 fault mode, 모든 observation predicate, cleanup adapter가 실제 함수로 등록되어 있어야 하고, 격리된 target cluster에서 실제 evidence 수집 → 기대 root cause 선택 → recovery plan 생성 → cleanup 잔여 0까지 완주한 증적이 있어야 한다. 코드나 YAML에 `live_verified` 같은 값을 하드코딩해 이 과정을 대신하지 않는다. 현재 이 계약을 충족해 `ready`인 시나리오는 `image.wrong-tag` 하나다.
+
+RCA 담당자의 추가 절차:
+
+1. `uv run python scripts/rca_scenario.py scaffold <scenario_id> --root-cause <candidate_id> --symptom <symptom> --fault-mode <mode>`로 `detector_gap` YAML과 fixture test 골격을 만든다. 기존 파일은 덮어쓰지 않는다.
+2. `src/domains/rca/test_scenario_catalog/*.yaml`의 repository-owned typed params와 observation predicate를 구체화하고 생성된 fixture test에 결정적 manifest/matcher 기대값을 작성한다.
+3. `uv run python scripts/rca_scenario.py validate`를 실행한다. 이 명령은 scenario schema·중복·canonical coverage, adapter capability, symptom별 cause candidate, candidate `expected_evidence` 포함 관계, 명시적 recovery coverage를 함께 검사하며 오류 시 nonzero로 끝난다.
+4. 관련 unit/Agent/API 계약 테스트를 통과시킨 뒤 test target의 `sandbox`에서 live run을 수행한다. 실제 provider 결과, RCA root, recovery plan, UID/resourceVersion CAS cleanup과 Pod/Endpoint 잔여 0을 확인한다.
+5. live 완주 증적을 확인한 후에만 `availability`를 `ready`로 승격한다. 외부 DB/GitOps처럼 실행 adapter가 없으면 `fixture_required`, 감지·근거·RCA 연결이 미완성이면 `detector_gap`을 유지한다.
+
+`expected.root_cause`는 `expected.symptom`을 처리하는 cause catalog rule의 candidate로 존재해야 한다. 시나리오 `evidence_sources`는 그 candidate의 `expected_evidence`를 모두 포함해야 하며, 해당 root cause에 명시적 recovery rule이 있어야 한다. 실제 수집되지 않은 synthetic evidence로 이 계약을 충족시켜서는 안 된다.
+
+금지사항:
+
+- API/YAML/CLI에 raw Kubernetes manifest나 shell command 입력 surface를 추가하지 않는다.
+- management cluster 실행을 허용하거나 `sandbox` 밖 namespace를 선택하게 하지 않는다.
+- matcher가 지원하지 않는 predicate를 무시하거나 `ready`로 등록하지 않는다.
+- 외부 fixture가 없는데 `ready`로 표시하거나 live 완주 전 상태를 `ready`로 승격하지 않는다.
 
 ### repository 상수 — `src/domains/rca/repository.py`
 
