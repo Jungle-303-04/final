@@ -472,6 +472,39 @@ def test_static_target_manifest_keeps_the_same_minimal_rca_cleanup_permissions()
     }
 
 
+@pytest.mark.parametrize(
+    "manifest",
+    [
+        target_install_manifest(target_request(), "agent-secret"),
+        (Path(__file__).resolve().parents[1] / "deploy/target/target.yaml").read_text(
+            encoding="utf-8"
+        ),
+    ],
+)
+def test_target_catalog_install_rbac_is_namespaced_to_rendered_helm_resources(
+    manifest: str,
+) -> None:
+    docs = [doc for doc in yaml.safe_load_all(manifest) if doc]
+    role = next(
+        doc
+        for doc in docs
+        if doc.get("kind") == "Role"
+        and doc.get("metadata", {}).get("name") == "cluster-agent-catalog-install"
+    )
+
+    assert role["metadata"]["namespace"] == "sandbox"
+    assert {
+        (tuple(rule["apiGroups"]), tuple(rule["resources"])) for rule in role["rules"]
+    } == {
+        (("",), ("configmaps", "secrets", "serviceaccounts", "services")),
+        (("apps",), ("statefulsets",)),
+        (("networking.k8s.io",), ("networkpolicies",)),
+        (("policy",), ("poddisruptionbudgets",)),
+    }
+    for rule in role["rules"]:
+        assert rule["verbs"] == ["get", "list", "watch", "create", "update", "patch", "delete"]
+
+
 @pytest.mark.parametrize("registration_environment", ["test", "aws-test"])
 def test_target_install_manifest_enables_rca_test_actions_only_for_test_registrations(
     monkeypatch: pytest.MonkeyPatch,
@@ -526,6 +559,7 @@ def test_management_install_manifest_is_read_only() -> None:
         in manifest
     )
     assert "cluster-agent-sandbox-write" not in manifest
+    assert "cluster-agent-catalog-install" not in manifest
     assert "cluster-agent-target-manage" not in manifest
     assert 'verbs: ["get", "update", "patch"]' not in manifest
     assert 'verbs: ["get", "list", "create", "update", "patch"]' not in manifest
