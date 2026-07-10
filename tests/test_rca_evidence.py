@@ -732,9 +732,7 @@ def test_evidence_bundle_adds_nested_workload_snapshot_metadata_items() -> None:
                     "kind": "Deployment",
                     "name": "checkout-api",
                     "image": "repo/checkout:v2",
-                    "conditions": [
-                        {"type": "Progressing", "reason": "ProgressDeadlineExceeded"}
-                    ],
+                    "conditions": [{"type": "Progressing", "reason": "ProgressDeadlineExceeded"}],
                 },
             },
         },

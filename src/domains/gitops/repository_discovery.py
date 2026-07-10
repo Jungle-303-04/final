@@ -324,9 +324,7 @@ class RepositoryDiscoveryService:
                 manifest = RepoManifestFile(path=path, kinds=kinds) if kinds else None
                 return index, manifest
 
-        tasks = [
-            asyncio.create_task(inspect(index, path)) for index, path in enumerate(paths)
-        ]
+        tasks = [asyncio.create_task(inspect(index, path)) for index, path in enumerate(paths)]
         done, pending = await asyncio.wait(tasks, timeout=MANIFEST_SCAN_TIMEOUT_SECONDS)
         for task in pending:
             task.cancel()
