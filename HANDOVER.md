@@ -2653,3 +2653,39 @@ Prometheus base URL이 env/request 어디에도 없으면 `code="prometheus_base
     같은 AWS 계정에서 OIDC provider를 다른 저장소 role도 공유하는지 확인한 뒤 apply한다.
   - 외부 CI를 다시 도입할 때는 삭제된 파일명을 테스트로 먼저 고정하지 말고, 실행 가능한 runner와
     credential 경계부터 별도 adapter로 추가한다. 내부 workflow-controller를 대체하지 않는다.
+
+## 워커 지연·원자성·이벤트 호환성 강화 (2026-07-10)
+
+- 적용 범위:
+  - `workflow-controller`에만 `WORKER_FETCH_TIMEOUT_SECONDS=0.05`를 적용했다. 다른 워커의 기본값은
+    `1.0`으로 유지해 전체 NATS idle pull 부하를 늘리지 않았다. subject 처리 순서와 processor 동시성은
+    기존 직렬 구조를 유지한다.
+  - `workflow_run_steps` upsert에 단조 상태 전이 조건을 추가했다. `succeeded/failed/skipped` 종결 상태를
+    늦게 재전달된 `pending/running` 이벤트가 되돌릴 수 없다.
+  - 업무쓰기 + outbox + ledger 완료 UoW 커밋 뒤 NATS ACK만 실패할 때 ledger를 `retrying`으로 되돌리던
+    경계를 수정했다. ACK 실패는 WorkerRuntime으로 전파해 재전달시키고, 재전달 이벤트는 이미
+    `processed`인 ledger를 확인해 업무 핸들러를 다시 실행하지 않는다.
+  - 이벤트 body의 기본 직접 디코드는 strict를 유지한다. 실제 wire consumer인 runtime dispatch만
+    미래 additive 필드를 무시한다. 필수 필드 누락과 기존 필드 타입 오류는 계속 거부한다.
+  - 삭제한 과거 `ci.yml/aws-cd.yml/integration-smoke.yml/promote-dev.yml`만 재등장 금지 대상으로 두고,
+    현재 별도 계약 테스트가 있는 release-flow GitHub Actions는 허용하도록 낡은 테스트를 정정했다.
+  - production readiness의 Python 소스 검사는 포맷 문자열 일치 대신 AST 함수 호출 검증을 사용한다.
+    Ruff 줄바꿈이 보안 검증 호출 누락으로 오인되는 문제를 제거했다.
+- 원자성 불변식:
+  - event claim은 시도 횟수 보존을 위해 별도 짧은 transaction으로 먼저 commit한다.
+  - handler 업무쓰기, outbox 적재, ledger `processed` 기록은 기존처럼 하나의 UoW에서 함께 commit/rollback한다.
+  - ACK는 DB commit 이후 전송한다. ACK 실패는 DB 완료 상태를 수정하지 않는다.
+  - 긴 handler transaction을 effect-intent로 분리하는 구조 변경은 이번 패스에서 하지 않았다. 외부 I/O
+    idempotency와 crash fault-injection이 준비되기 전에 UoW를 나누면 부분 commit 위험이 더 크기 때문이다.
+- 개발 인증:
+  - 사용자 요청에 따라 management dev manifest의 `DEV_AUTH_BYPASS=1`을 유지했다. 현재 우회 세션은
+    `service_admin` 권한이므로 외부 운영 전환 전에 반드시 `0`으로 바꾸고 익명 보호 API `401`을 확인한다.
+  - 이번 패스에서는 인증 경로와 세션 로직을 변경하지 않았다.
+- 보류한 구조 변경:
+  - effect-intent 기반 외부 I/O 분리, Alembic 전용 migration gate, realtime shared backplane,
+    PostgreSQL/Redis/NATS Stateful HA, image digest 고정은 데이터·배포·비용 영향이 커 별도 단계로 남겼다.
+  - 특히 HA는 replica 수만 늘리지 말고 NATS R3, DB failover, realtime 공유 상태가 함께 준비된 뒤 적용한다.
+- 검증:
+  - `bash scripts/test.sh` -> Ruff/format/import-linter/compileall 통과, `1191 passed, 3 skipped`.
+  - `bash scripts/manifest-check.sh` -> management 58개, target 18개 객체 렌더 성공.
+  - 원자성 회귀 테스트는 commit 후 ACK 실패, NATS 재전달, terminal ledger 중복 실행 방지를 포함한다.
