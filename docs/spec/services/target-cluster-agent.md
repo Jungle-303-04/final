@@ -408,7 +408,7 @@ def query_metadata(self, telemetry_query) -> JsonObject                # instant
 
 #### `providers/tempo_providers.py`
 
-`TempoTracesProvider`: `span_name="tempo.collect"`, `timeout_seconds=TEMPO_TIMEOUT_SECONDS`, `failure_message="tempo trace collection failed"`. `__init__(self, base_url: str)`, `from_config`은 `read_config("TEMPO_BASE_URL", DEFAULT_TEMPO_BASE_URL)`. `append_result`: `results[query_name] = {"query": traceql, "traces": [...], "trace_count": n}`. `build_response`: `{"source": "tempo", "results": results}`.
+`TempoTracesProvider`: `span_name="tempo.collect"`, `timeout_seconds=TEMPO_TIMEOUT_SECONDS`, `failure_message="tempo trace collection failed"`. `__init__(self, base_url: str)`, `from_config`은 `read_config("TEMPO_BASE_URL", DEFAULT_TEMPO_BASE_URL)`. `append_result`: `results[query_name] = {"query": traceql, "traces": [...], "trace_count": n, "analysis": {...}}`. `analysis`는 `providers/tempo_analysis.py`가 Tempo search 결과에서 `trace_summaries`, `trace_ids`, `services`, `operations`, `status_counts`, `error_count`, `dependency_count`, `duration_ms`를 만든다. span summary가 있으면 `span_count`, `error_span_count`, `dependency_span_count`도 추가한다. trace summary는 최대 20개, trace당 span summary는 최대 8개만 만든다. `build_response`: `{"source": "tempo", "results": results}`.
 
 #### `providers/metadata_providers.py`
 

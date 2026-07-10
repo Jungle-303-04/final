@@ -790,6 +790,7 @@ upstream latency, management gateway 호출 실패 같은 흐름형 문제를 �
 
 traces를 읽을 때는 `results.<query_name>.trace_count`로 잡힌 trace가 있는지 보고,
 각 trace의 `rootServiceName`, `rootTraceName`, `durationMs`, `traceID` 같은 값을 확인한다.
+RCA가 표준 필드를 먼저 보고 싶을 때는 `results.<query_name>.analysis`를 읽는다.
 
 ```json
 {
@@ -798,7 +799,21 @@ traces를 읽을 때는 `results.<query_name>.trace_count`로 잡힌 trace가 �
     "<query_name>": {
       "query": "{ status = error }",
       "traces": [],
-      "trace_count": 0
+      "trace_count": 0,
+      "analysis": {
+        "trace_summaries": [],
+        "trace_ids": [],
+        "services": [],
+        "operations": [],
+        "status_counts": {
+          "error": 0,
+          "ok": 0,
+          "unset": 0,
+          "unknown": 0
+        },
+        "error_count": 0,
+        "dependency_count": 0
+      }
     }
   }
 }
@@ -817,9 +832,10 @@ traces를 읽을 때는 `results.<query_name>.trace_count`로 잡힌 trace가 �
 | `query` | string | 실행한 TraceQL 또는 Tempo search query다. |
 | `traces` | list<object> | Tempo `/api/search`가 반환한 trace 목록이다. provider는 내부 trace object를 세부 정규화하지 않고 보존한다. |
 | `trace_count` | number | `traces` 목록 길이다. |
+| `analysis` | object | RCA가 바로 읽기 쉬운 trace/span 요약이다. |
 
 현재 Tempo provider는 전체 API response raw field를 담지 않는다.
-RCA는 `traces[]`와 `trace_count`를 기준으로 판단한다.
+RCA는 `analysis`를 먼저 보고, 필요하면 `traces[]`와 `trace_count`를 함께 본다.
 
 `traces[]` 내부 object는 Tempo 응답에 따라 달라질 수 있다.
 테스트와 일반 search response 기준으로 다음 값이 들어올 수 있다.
@@ -831,6 +847,48 @@ RCA는 `traces[]`와 `trace_count`를 기준으로 판단한다.
 | `rootTraceName` | root span 또는 operation 이름이다. |
 | `durationMs` | trace duration millisecond다. |
 | `query` | 테스트 레거시 데이터에서는 어떤 query로 잡힌 trace인지 보조 정보로 들어간다. |
+
+### `traces.results.<query_name>.analysis`
+
+`analysis`는 기존 trace 목록을 없애지 않고 옆에 추가되는 구조화 요약이다.
+목적은 Tempo 응답 모양이 조금 달라도 RCA가 같은 필드명으로 trace를 읽게 하는 것이다.
+민감정보 노출을 늘리지 않기 위해 span attribute 전체는 복사하지 않는다.
+각 trace 안의 span summary도 최대 8개까지만 남긴다.
+
+| 필드 | 타입 | 의미 |
+| --- | --- | --- |
+| `trace_summaries` | list<object> | trace별 표준 요약이다. 최대 20개를 만든다. |
+| `trace_ids` | list<string> | trace summary에서 뽑은 trace id 목록이다. |
+| `services` | list<string> | root service 이름 목록이다. |
+| `operations` | list<string> | root operation 이름 목록이다. |
+| `status_counts` | object | `error`, `ok`, `unset`, `unknown` trace 개수다. |
+| `error_count` | number | error trace 개수다. |
+| `dependency_count` | number | dependency 관련 trace 개수다. |
+| `span_count` | number | span summary가 있을 때만 들어가는 span summary 개수다. |
+| `error_span_count` | number | error span summary 개수다. |
+| `dependency_span_count` | number | dependency span summary 개수다. |
+| `duration_ms` | object | trace duration millisecond의 `count`, `min`, `max`, `avg` 요약이다. |
+
+dependency span 실패 여부를 바로 나타내는 단일 필드는 없다.
+필요하면 `error_span_count`, `dependency_span_count`, `span_summaries[].error`,
+`span_summaries[].is_dependency`를 함께 봐야 한다.
+
+`trace_summaries[]`의 주요 필드는 다음과 같다.
+
+| 필드 | 타입 | 의미 |
+| --- | --- | --- |
+| `trace_id` | string | trace 식별자다. |
+| `service` | string | root service 이름이다. |
+| `operation` | string | root span 또는 operation 이름이다. |
+| `status` | string | `error`, `ok`, `unset`, `unknown` 중 하나다. |
+| `duration_ms` | number | trace duration millisecond다. |
+| `error` | boolean | trace 또는 하위 span이 error로 보이는지 여부다. |
+| `is_dependency` | boolean | client/producer/consumer span 또는 dependency attribute가 있는지 여부다. |
+| `span_summaries` | list<object> | span별 표준 요약이다. trace마다 최대 8개만 담는다. |
+
+`span_summaries[]`는 `trace_id`, `span_id`, `service`, `operation`, `status`,
+`duration_ms`, `error`, `is_dependency`만 담는다.
+span attribute 원문 전체, parent/child 관계 전체, request/response payload는 담지 않는다.
 
 기본 policy query는 다음과 같다.
 
@@ -845,9 +903,9 @@ RCA 파생 예시는 다음과 같다.
 
 | 파생 정보 | 볼 필드 |
 | --- | --- |
-| dependency timeout | `traces[].rootServiceName`, `rootTraceName`, `durationMs`, Tempo search result의 span/status 관련 필드 |
+| dependency timeout | `analysis.dependency_count`, `analysis.duration_ms.max`, `analysis.trace_summaries[].span_summaries[]` |
 | management plane 문제 | `target_agent_error_spans`, `management_gateway_spans` |
-| application error path | `application_error_spans.trace_count`, trace root service/operation |
+| application error path | `application_error_spans.trace_count`, `analysis.error_count`, `analysis.services`, `analysis.operations` |
 
 ## Metadata bucket
 

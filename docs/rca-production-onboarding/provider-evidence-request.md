@@ -228,7 +228,12 @@ policy상 traces query는 존재한다.
 
 단, 실제 수집 가능 여부는 Tempo/OTel 설정과 application instrumentation 상태에 따라 달라진다.
 
-### 추가로 요청해야 할 것
+현재 `TempoTracesProvider`는 Tempo `/api/search` 결과를 query별로 정규화하고,
+기존 `traces[]`와 `trace_count`를 유지한 채 `analysis`를 추가한다.
+`analysis`는 Tempo가 이미 응답한 값에서 RCA가 바로 쓰기 쉬운 작은 필드만 뽑는다.
+span attribute 전체나 payload 전체를 새로 복사하지 않는다.
+
+현재 제공하는 값은 다음과 같다.
 
 - trace_id
 - span_id
@@ -238,8 +243,13 @@ policy상 traces query는 존재한다.
 - duration_ms
 - dependency
 - error
-- parent/child span 관계
-- dependency span 실패 여부
+- dependency span 개수와 error span 개수 요약
+
+아직 제공하지 않는 값은 다음과 같다.
+
+- parent/child span 관계 전체
+- span attribute 원문 전체
+- dependency span 실패 여부 단일 판단 필드
 
 ## Metadata / Change Provider
 
