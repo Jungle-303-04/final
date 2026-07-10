@@ -218,6 +218,8 @@ def test_release_flow_smoke_workflow_uploads_artifacts_before_failing_gate() -> 
     assert "live_change_ticket must not use CHG-PREFLIGHT" in validate_step["run"]
     assert "live_runbook_url is required for production live_preflight" in validate_step["run"]
     assert "live_runbook_url must not use example.com" in validate_step["run"]
+    assert "live_image is required for production live_preflight" in validate_step["run"]
+    assert "live_image must not use the demo live preflight image" in validate_step["run"]
     assert "live_release_owner or live_oncall_contact is required" in validate_step["run"]
     assert "live_release_owner must identify the real production owner" in validate_step["run"]
     assert "live_oncall_contact must identify the real on-call contact" in validate_step["run"]

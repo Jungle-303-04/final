@@ -31,6 +31,7 @@ def test_valid_production_deploy_requires_release_flow_gate(tmp_path: Path) -> N
               live_change_ticket: ${{ inputs.change_ticket }}
               live_runbook_url: ${{ inputs.runbook_url }}
               live_release_owner: ${{ inputs.release_owner }}
+              live_image: ${{ inputs.image }}
             secrets: inherit
           deploy-production:
             name: Deploy production
@@ -87,6 +88,7 @@ def test_production_deploy_without_gate_success_condition_is_rejected(tmp_path: 
               live_change_ticket: ${{ inputs.change_ticket }}
               live_runbook_url: ${{ inputs.runbook_url }}
               live_oncall_contact: ${{ inputs.oncall_contact }}
+              live_image: ${{ inputs.image }}
             secrets: inherit
           deploy-production:
             name: Deploy production
@@ -118,6 +120,7 @@ def test_production_deploy_needing_wrong_job_is_rejected(tmp_path: Path) -> None
               live_change_ticket: ${{ inputs.change_ticket }}
               live_runbook_url: ${{ inputs.runbook_url }}
               live_release_owner: ${{ inputs.release_owner }}
+              live_image: ${{ inputs.image }}
             secrets: inherit
           build:
             runs-on: ubuntu-latest
@@ -212,6 +215,7 @@ def test_gate_job_missing_required_live_inputs_is_rejected(tmp_path: Path) -> No
     messages = "\n".join(violation.message for violation in result.violations)
     assert "must pass live_change_ticket" in messages
     assert "must pass live_runbook_url" in messages
+    assert "must pass live_image" in messages
     assert "must pass live_release_owner or live_oncall_contact" in messages
 
 
@@ -230,6 +234,7 @@ def test_gate_job_placeholder_live_inputs_are_rejected(tmp_path: Path) -> None:
               live_runbook_url: https://example.com/runbooks/release-flow
               live_release_owner: release-operator
               live_oncall_contact: release-oncall@example.com
+              live_image: ghcr.io/example/release-flow-smoke:live-preflight
             secrets: inherit
           deploy-production:
             name: Deploy production
@@ -249,3 +254,4 @@ def test_gate_job_placeholder_live_inputs_are_rejected(tmp_path: Path) -> None:
     assert "placeholder live_runbook_url" in messages
     assert "placeholder live_release_owner" in messages
     assert "placeholder live_oncall_contact" in messages
+    assert "placeholder live_image" in messages

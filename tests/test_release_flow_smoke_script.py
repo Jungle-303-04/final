@@ -593,6 +593,8 @@ def test_smoke_live_preflight_checks_readiness_without_starting_run() -> None:
             "release-team",
             "--live-oncall-contact",
             "release-oncall@example.test",
+            "--live-image",
+            "ghcr.io/acme/checkout-api:2026.07.10",
         ]
     )
 
@@ -626,6 +628,7 @@ def test_smoke_live_preflight_checks_readiness_without_starting_run() -> None:
     assert readiness_payload["settings"]["oncall_contact"] == "release-oncall@example.test"
     assert readiness_payload["steps"][0]["config"]["environment"] == "production"
     assert readiness_payload["steps"][0]["config"]["namespace"] == "production"
+    assert readiness_payload["steps"][0]["config"]["image"] == "ghcr.io/acme/checkout-api:2026.07.10"
     assert readiness_payload["steps"][0]["config"]["approval_gate"] == "manual"
 
 
@@ -635,11 +638,13 @@ def test_smoke_live_preflight_rejects_production_placeholders_before_payload() -
         [
             "--live-preflight",
             "--live-change-ticket",
-            "CHG-PREFLIGHT",
+            "CHG-12345",
             "--live-runbook-url",
             "https://wiki.example.test/runbooks/release-flow",
             "--live-release-owner",
             "release-team",
+            "--live-image",
+            "ghcr.io/example/release-flow-smoke:live-preflight",
         ]
     )
 
@@ -650,7 +655,10 @@ def test_smoke_live_preflight_rejects_production_placeholders_before_payload() -
     else:
         raise AssertionError("expected production live preflight placeholder rejection")
 
-    assert "live_change_ticket must not use production placeholder value CHG-PREFLIGHT" in message
+    assert (
+        "live_image must not use production placeholder value "
+        "ghcr.io/example/release-flow-smoke:live-preflight"
+    ) in message
 
 
 def test_smoke_live_preflight_requires_explicit_production_inputs() -> None:
