@@ -79,7 +79,7 @@ When `github_access_preflight` is enabled, the verifier must have an actual GitH
 
 ## Live Gate Requirement
 
-Production deployment workflows must call `.github/workflows/release-flow-production-gate.yml` before any write. The provided `.github/workflows/release-flow-production-deploy.yml` workflow does this before starting a saved release plan through `scripts/release_flow_deploy.py`. The deploy script rechecks the saved plan before calling `/release-plans/start`; it rejects demo runtime mode, non-production steps, placeholder tickets, non-HTTPS or example-host runbook/verification URLs, mutable `:latest` images, and plan id mismatches.
+Production deployment workflows must call `.github/workflows/release-flow-production-gate.yml` before any write. The provided `.github/workflows/release-flow-production-deploy.yml` workflow does this before starting a saved release plan through `scripts/release_flow_deploy.py`. The deploy script rechecks the saved plan before calling `/release-plans/start`; it rejects demo runtime mode, non-production steps, placeholder tickets, non-HTTPS or example-host runbook/verification URLs, mutable `:latest` images, plan id mismatches, and saved plan evidence that differs from the gated workflow inputs.
 
 The gate must pass with:
 

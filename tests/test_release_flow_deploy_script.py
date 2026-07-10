@@ -69,6 +69,8 @@ def production_plan() -> dict[str, object]:
                     "post_deploy_verification_url": "https://checkout.company.internal/readyz",
                     "abort_criteria": "rollback when checkout error rate exceeds 5%",
                     "image": "ghcr.io/company/checkout:2.0.0",
+                    "safe_pr_workflow_run_id": "workflow-safe-pr-1",
+                    "safe_pr_url": "https://github.company.internal/org/checkout/pull/7",
                 },
             }
         ],
@@ -87,6 +89,18 @@ def test_release_flow_deploy_starts_valid_production_plan() -> None:
             "secret",
             "--plan-id",
             "plan-prod",
+            "--change-ticket",
+            "CHG-12345",
+            "--runbook-url",
+            "https://wiki.company.internal/runbooks/checkout",
+            "--verification-url",
+            "https://checkout.company.internal/readyz",
+            "--image",
+            "ghcr.io/company/checkout:2.0.0",
+            "--safe-pr-workflow-run-id",
+            "workflow-safe-pr-1",
+            "--safe-pr-url",
+            "https://github.company.internal/org/checkout/pull/7",
         ]
     )
     client = FakeClient(production_plan())
@@ -120,6 +134,42 @@ def test_release_flow_deploy_refuses_demo_plan_before_start() -> None:
 
     assert results[-1].ok is False
     assert "runtime_mode must be live" in results[-1].detail
+    assert all(path != "/release-plans/start" for _method, path, _payload in client.calls)
+
+
+def test_release_flow_deploy_refuses_plan_that_does_not_match_gate_inputs() -> None:
+    module = load_deploy_module()
+    args = module.parse_args(
+        [
+            "--api-base-url",
+            "https://release-flow.company.internal/api",
+            "--email",
+            "release@company.internal",
+            "--password",
+            "secret",
+            "--plan-id",
+            "plan-prod",
+            "--change-ticket",
+            "CHG-12345",
+            "--runbook-url",
+            "https://wiki.company.internal/runbooks/checkout",
+            "--verification-url",
+            "https://checkout.company.internal/readyz",
+            "--image",
+            "ghcr.io/company/checkout:2.0.0",
+            "--safe-pr-workflow-run-id",
+            "workflow-safe-pr-expected",
+            "--safe-pr-url",
+            "https://github.company.internal/org/checkout/pull/99",
+        ]
+    )
+    client = FakeClient(production_plan())
+
+    results = module.run_deploy(client, args)
+
+    assert results[-1].ok is False
+    assert "safe_pr_workflow_run_id must match gated deploy input" in results[-1].detail
+    assert "safe_pr_url must match gated deploy input" in results[-1].detail
     assert all(path != "/release-plans/start" for _method, path, _payload in client.calls)
 
 
@@ -210,3 +260,31 @@ def test_release_flow_deploy_treats_incomplete_start_response_as_failed() -> Non
     assert "status must not be failed" in results[-1].detail
     assert "step 1 status must not be failed" in results[-1].detail
     assert "step 1 must confirm side_effects" in results[-1].detail
+
+
+def test_release_flow_deploy_refuses_unsafe_plan_id_before_api_calls() -> None:
+    module = load_deploy_module()
+    args = module.parse_args(
+        [
+            "--api-base-url",
+            "https://release-flow.company.internal/api",
+            "--email",
+            "release@company.internal",
+            "--password",
+            "secret",
+            "--plan-id",
+            "../plan-prod",
+        ]
+    )
+    client = FakeClient(production_plan())
+
+    results = module.run_deploy(client, args)
+
+    assert results == [
+        module.SmokeResult(
+            "release-plan.id",
+            False,
+            "release_plan_id must be path-safe: letters, numbers, dot, underscore, colon, or hyphen only",
+        )
+    ]
+    assert client.calls == []
