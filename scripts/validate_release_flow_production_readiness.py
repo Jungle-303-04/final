@@ -410,6 +410,14 @@ def check_gitops_poll_observability_contract() -> list[ReadinessCheck]:
             "GitHub poll status is included in deployment binding API rows",
         ),
         ReadinessCheck(
+            "gitops.poll_status_api_source_lookup",
+            "binding_watch_by_id" in repository
+            and "binding_watch_by_source" in repository
+            and "watch_by_id.c.watch_target_id.is_(None)" in repository
+            and "watch_by_source.c.manifest_path == table.c.manifest_path" in repository,
+            "deployment binding API poll status falls back to source identity when watch ids differ",
+        ),
+        ReadinessCheck(
             "gitops.watch_source_identity_upsert",
             "table.c.workspace_id" in repository
             and "table.c.repository_id" in repository
