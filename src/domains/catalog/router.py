@@ -100,9 +100,13 @@ def ensure_target_cluster_ready(db: Any, workspace_id: str, cluster_id: str) -> 
     ]
     if not online_agents:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=CLUSTER_NOT_CONNECTED)
+    required_capabilities = {
+        "command_receiver",
+        Command.CATALOG_HELM_INSTALL_CAPABILITY,
+    }
     if not any(
         isinstance(agent.get("capabilities"), list)
-        and "command_receiver" in agent["capabilities"]
+        and required_capabilities <= set(agent["capabilities"])
         for agent in online_agents
     ):
         raise HTTPException(
@@ -165,7 +169,7 @@ def catalog_install_plan(
             "channel": "agent",
             "cluster_id": cluster_id,
             "workspace_id": workspace_id,
-            "required_capability": "command_receiver",
+            "required_capability": Command.CATALOG_HELM_INSTALL_CAPABILITY,
         },
         "workspace_id": workspace_id,
         "priority": CATALOG_INSTALL_COMMAND_PRIORITY,

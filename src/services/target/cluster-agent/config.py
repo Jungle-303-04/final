@@ -109,7 +109,11 @@ HOSTNAME_ENV = "HOSTNAME"
 AGENT_TOKEN_ENV = "AGENT_TOKEN"
 AGENT_TOKEN_HEADER = "x-agent-token"
 DEFAULT_AGENT_ID = "target-agent"
-AGENT_CAPABILITIES = ["collector", "command_receiver"]
+AGENT_CAPABILITIES = [
+    "collector",
+    "command_receiver",
+    Command.CATALOG_HELM_INSTALL_CAPABILITY,
+]
 
 COMMAND_COMPLETED_STATUS = "completed"
 COMMAND_FAILED_STATUS = "failed"
