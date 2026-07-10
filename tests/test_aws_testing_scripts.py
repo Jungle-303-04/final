@@ -140,6 +140,7 @@ def test_agent_api_endpoint_uses_dns_only_tls_and_path_allowlist() -> None:
     assert "CLOUDFLARE_ZONE_ID is required" in script
     assert "aws-load-balancer-ssl-cert" in script
     assert "aws-load-balancer-ssl-ports: https" in script
+    assert "aws-load-balancer-backend-protocol: tcp" in script
     assert "proxied:false" in script
     assert "PUBLIC_MANAGEMENT_BASE_URL" in script
     assert "rollout restart deployment/api-gateway" in script
@@ -150,6 +151,10 @@ def test_agent_api_endpoint_uses_dns_only_tls_and_path_allowlist() -> None:
     assert "location ^~ /api/agent/" in manifest
     assert "location ^~ /api/install/" in manifest
     assert "location = /api/healthz" in manifest
+    assert "location = /live/agent" in manifest
+    assert "proxy_set_header Upgrade $http_upgrade" in manifest
+    assert 'proxy_set_header Connection "upgrade"' in manifest
+    assert "location = /live/browser" not in manifest
     assert "location /" in manifest
     assert "return 404" in manifest
     assert "location /api/auth" not in manifest

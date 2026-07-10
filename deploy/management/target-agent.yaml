@@ -68,6 +68,8 @@ spec:
           env:
             - name: MANAGEMENT_BASE_URL
               value: "http://api-gateway:8000"
+            - name: REALTIME_GATEWAY_URL
+              value: "ws://realtime-gateway.management.svc.cluster.local:8000"
             - name: AGENT_TOKEN
               valueFrom:
                 secretKeyRef:

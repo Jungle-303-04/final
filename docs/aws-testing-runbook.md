@@ -93,9 +93,11 @@ Cloudflare를 사용할 때 `CUSTOM_DOMAIN`, `CLOUDFLARE_ZONE_NAME`,
 브라우저 콘솔과 cluster-agent는 진입점을 분리한다. 무료 Cloudflare Bot Fight는 기계 요청에
 관리형 챌린지를 줄 수 있으므로 agent가 proxied console 주소를 사용하면 안 된다.
 `scripts/configure-agent-api-endpoint.sh`는 ACM 인증서를 붙인 AWS LoadBalancer와 DNS-only
-CNAME을 만들고, `/api/agent/*`, `/api/install/*`, `/api/healthz`만 허용하는 전용 proxy를
-배포한다. ACM ARN과 도메인, Cloudflare 자격증명은 모두 환경에서 주입하며 소스에 저장하지
-않는다.
+CNAME을 만들고, `/api/agent/*`, `/api/install/*`, `/api/healthz`와 agent WebSocket
+`/live/agent`만 허용하는 전용 proxy를 배포한다. ELB는 TLS를 종료한 뒤 backend TCP 전달을
+사용해 WebSocket Upgrade를 보존한다. 브라우저 경로 `/live/browser`와 일반 관리 API는
+404로 닫는다. ACM ARN과 도메인, Cloudflare 자격증명은 모두 환경에서 주입하며 소스에
+저장하지 않는다.
 
 ```bash
 export KUBE_CONTEXT="<management context>"

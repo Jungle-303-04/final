@@ -421,6 +421,7 @@ def test_target_install_manifest_sets_agent_and_telemetry_config() -> None:
         '"http://opentelemetry-collector.target.svc:4318/v1/traces"'
     ) in manifest
     assert 'NODE_COLLECTOR_ENABLED: "true"' in manifest
+    assert 'REALTIME_GATEWAY_URL: "ws://management.local:30090"' in manifest
     assert 'NODE_COLLECTOR_IMAGE: "ghcr.io/acme/kubeheal-agent:test"' in manifest
     assert 'AGENT_TOKEN: "agent-secret"' in manifest
     assert 'apiGroups: ["metrics.k8s.io"]' in manifest
@@ -438,6 +439,10 @@ def test_management_install_manifest_is_read_only() -> None:
     assert 'CLUSTER_ROLE: "management"' in manifest
     assert 'BOOTSTRAP_MODE: "management"' in manifest
     assert 'NODE_COLLECTOR_ENABLED: "false"' in manifest
+    assert (
+        'REALTIME_GATEWAY_URL: "ws://realtime-gateway.management.svc.cluster.local:8000"'
+        in manifest
+    )
     assert "cluster-agent-sandbox-write" not in manifest
     assert "cluster-agent-target-manage" not in manifest
     assert 'verbs: ["get", "update", "patch"]' not in manifest
@@ -486,6 +491,9 @@ def test_static_management_agent_manifest_is_read_only() -> None:
         for item in deployment["spec"]["template"]["spec"]["containers"][0]["env"]
     }
     assert env["CLUSTER_ROLE"] == "management"
+    assert env["REALTIME_GATEWAY_URL"] == (
+        "ws://realtime-gateway.management.svc.cluster.local:8000"
+    )
     assert env["NODE_COLLECTOR_ENABLED"] == "false"
     assert env["PROMETHEUS_BASE_URL"] == ""
     assert env["LOKI_BASE_URL"] == ""

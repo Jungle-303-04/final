@@ -37,6 +37,19 @@ data:
             proxy_read_timeout 30s;
         }
 
+        # target agent의 bounded live summary WebSocket만 외부에 공개한다.
+        location = /live/agent {
+            proxy_pass http://realtime-gateway.management.svc.cluster.local:8000/live/agent;
+            proxy_http_version 1.1;
+            proxy_set_header Upgrade $http_upgrade;
+            proxy_set_header Connection "upgrade";
+            proxy_set_header Host $host;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto https;
+            proxy_read_timeout 75s;
+            proxy_send_timeout 75s;
+        }
+
         location / {
             return 404;
         }

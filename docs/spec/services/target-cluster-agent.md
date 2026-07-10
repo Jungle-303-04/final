@@ -649,8 +649,9 @@ Kubernetes 스냅샷 정규화(`normalize_payload`): raw 응답을 `{cluster{clu
 
 ### live summary
 
-- `LiveSummaryPublisher.run`: `enabled=false`거나 gateway_url이 비면 `live_summary_disabled` info 후 즉시 반환(no-op). gateway_url은 `REALTIME_GATEWAY_URL` env, 미설정 시 `derive_gateway_url(MANAGEMENT_BASE_URL)`(같은 호스트 + NodePort 30090, http→ws/https→wss).
+- `LiveSummaryPublisher.run`: `enabled=false`거나 gateway_url이 비면 `live_summary_disabled` info 후 즉시 반환(no-op). gateway_url은 설치 ConfigMap의 `REALTIME_GATEWAY_URL`이 우선이다. management role은 내부 `realtime-gateway` Service를 사용하고, target role은 공개 관리 주소에서 계산한다. fallback은 HTTPS면 같은 호스트의 표준 WSS 포트(443), HTTP 로컬 환경이면 NodePort 30090을 사용한다.
 - 연결: `websockets.connect(endpoint, additional_headers={"x-agent-token": token})` (지연 import). endpoint = `{gateway_url}/live/agent?cluster_id={cluster_id}`.
+- 공개 agent endpoint는 nginx에서 `/live/agent`만 realtime-gateway로 WebSocket proxy한다. `/live/browser`와 일반 관리 API는 이 endpoint에서 404로 닫혀 있다.
 - `_stream`: interval(기본 1.0s, 0.25~60 clamp)마다 `collector()` 호출 → `LiveSummary`가 나오면 `LiveSummaryMessage` JSON send. collector가 `drain_deltas()`를 제공하면 직전 호출 대비 pod `ResourceDelta`를 이어 보낸다. 연결/전송 예외 시 `live_summary_stream_retry` 경고 후 `LIVE_SUMMARY_RETRY_DELAY_SECONDS`(3s) 백오프 재접속. `CancelledError`는 그대로 전파.
 - `KubernetesPodSummaryCollector.__call__`: k8s API 미구성이면 `None`. `target`·`sandbox` 두 네임스페이스에서 `GET /api/v1/namespaces/{ns}/pods?limit=200`(`LIVE_SUMMARY_POD_LIST_LIMIT`) 후 `summarize`:
   - pod마다 containerStatuses로 ready(전 컨테이너 ready)·restart 합·CrashLoopBackOff 여부 계산.
@@ -725,7 +726,7 @@ Kubernetes 스냅샷 정규화(`normalize_payload`): raw 응답을 `{cluster{clu
 | `LIVE_SUMMARY_ENABLED` | str(bool) | `true` | live summary on/off (`"true"` 비교, 소문자화) | `config.py` |
 | `LIVE_SUMMARY_INTERVAL_SECONDS` | float | `1.0` (clamp 0.25~60) | 요약 송신 주기 | `config.py` |
 | `LIVE_SUMMARY_RETRY_DELAY_SECONDS` | float | `3` | WS 재접속 백오프 | `config.py` |
-| `REALTIME_GATEWAY_URL` | str | (미설정 시 `MANAGEMENT_BASE_URL` 호스트 + `ws(s)://…:30090` 유도) | realtime-gateway WS base URL | `config.py` |
+| `REALTIME_GATEWAY_URL` | str | 설치 manifest가 role/관리 주소에 맞게 주입. 미설정 fallback: HTTPS 동일 호스트 443, HTTP NodePort 30090 | realtime-gateway WS base URL | `config.py`, `packages.config.realtime` |
 | `NODE_COLLECTOR_ENABLED` | str(bool) | `true` | node-collector reconcile on/off (`truthy`) | `node_collector_manager.py` |
 | `NODE_COLLECTOR_IMAGE` | str | `""` (비면 reconcile 스킵) | node-collector 이미지 | `node_collector_manager.py` |
 | `NODE_COLLECTOR_NAMESPACE` | str | `target` | DaemonSet 네임스페이스 | `node_collector_manager.py` |
