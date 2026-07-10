@@ -110,6 +110,7 @@ def test_current_release_flow_production_readiness_static_checks_pass() -> None:
         "script.production_signoff_runner.dispatches_readiness_and_deploy",
         "script.production_signoff_runner.validates_live_inputs",
         "script.production_signoff_runner.verifies_final_evidence",
+        "script.production_signoff_runner.writes_signoff_report",
         "docs.production_readiness.signoff_runner",
         "script.gate_contract.required_live_inputs",
         "script.gate_contract.literal_url_guard",
