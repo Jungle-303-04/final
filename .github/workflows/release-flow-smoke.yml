@@ -71,6 +71,9 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     environment: ${{ inputs.github_environment || 'production' }}
+    concurrency:
+      group: release-flow-smoke-${{ inputs.github_environment || 'production' }}
+      cancel-in-progress: false
     outputs:
       release_smoke_ok: ${{ steps.release_flow_smoke.outputs.release_smoke_ok }}
       release_smoke_failed_checks: ${{ steps.release_flow_smoke.outputs.release_smoke_failed_checks }}

@@ -81,6 +81,10 @@ def test_release_flow_smoke_workflow_uploads_artifacts_before_failing_gate() -> 
     fail_step = next(step for step in steps if step["name"] == "Fail when release-flow smoke failed")
 
     assert job["environment"] == "${{ inputs.github_environment || 'production' }}"
+    assert job["concurrency"] == {
+        "group": "release-flow-smoke-${{ inputs.github_environment || 'production' }}",
+        "cancel-in-progress": False,
+    }
     assert smoke_step["continue-on-error"] is True
     assert "--production-preflight" in smoke_step["run"]
     assert "--retry-attempts 5" in smoke_step["run"]
