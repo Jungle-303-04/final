@@ -278,6 +278,10 @@ jobs:
         run: |
           normalized_environment="$(printf '%s' "$LIVE_PREFLIGHT_ENVIRONMENT" | tr '[:upper:]' '[:lower:]')"
           normalized_ticket="$(printf '%s' "$LIVE_PREFLIGHT_CHANGE_TICKET" | tr '[:lower:]' '[:upper:]')"
+          if [ "$normalized_environment" = "production" ] && [ "$LIVE_PREFLIGHT" != "true" ]; then
+            echo "::error title=Missing production live preflight::live_preflight must be true for production release gates."
+            exit 1
+          fi
           if [ "$LIVE_PREFLIGHT" = "true" ] && [ "$LIVE_PREFLIGHT_APPROVAL_GATE" = "safe_pr" ]; then
             if [ -z "$LIVE_PREFLIGHT_SAFE_PR_WORKFLOW_RUN_ID" ]; then
               echo "::error title=Missing Safe PR workflow id::live_safe_pr_workflow_run_id is required when live_approval_gate is safe_pr."

@@ -684,6 +684,12 @@ def check_production_gate_contract() -> list[ReadinessCheck]:
             "live readiness preflight defaults on",
         ),
         ReadinessCheck(
+            "workflow.production_gate.production_live_preflight_required",
+            'LIVE_PREFLIGHT" != "true"' in validate_run
+            and "live_preflight must be true for production release gates" in validate_run,
+            "production gate cannot bypass live preflight for production environments",
+        ),
+        ReadinessCheck(
             "workflow.production_gate.safe_pr_gate_default",
             call.get("inputs", {}).get("live_approval_gate", {}).get("default") == "safe_pr"
             and smoke_job.get("with", {}).get("live_approval_gate") == "${{ inputs.live_approval_gate || 'safe_pr' }}",

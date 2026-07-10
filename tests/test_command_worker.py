@@ -20,6 +20,7 @@ from domains.command.handler import (
     APPROVAL_DECIDED_BY_MISMATCH_REASON,
     APPROVAL_DECIDED_BY_MISSING_REASON,
     APPROVAL_EXPIRED_REASON,
+    APPROVAL_NOT_REQUIRED_SCOPE_REASON,
     COMMAND_CONFIG,
     MANAGEMENT_READONLY_REASON,
     MANIFEST_NAMESPACE_MISMATCH_REASON,
@@ -74,6 +75,7 @@ def approval_record(
     *,
     approval_id: str = "approval-1",
     policy_decision_ref: str = "policy-decision-1",
+    policy_route: str = "approval_required",
     decided_by: str | None = "approver-1",
     expires_at: str | None = "2099-01-01T00:00:00Z",
     status: str = ApprovalStatus.GRANTED.value,
@@ -88,6 +90,7 @@ def approval_record(
         "details": {
             "approval_ref": approval_id,
             "policy_decision_ref": policy_decision_ref,
+            "policy_route": policy_route,
         },
     }
 
@@ -278,6 +281,49 @@ def test_command_handler_fills_approval_evidence_from_record() -> None:
     assert store.calls[0][1]["approval_decided_by"] == "release-operator-1"
     assert store.calls[0][1]["approval_expires_at"] == "2099-02-01T00:00:00Z"
     assert events[-1].approval_decided_by == "release-operator-1"
+
+
+def test_command_handler_rejects_not_required_approval_for_production_write() -> None:
+    async def run() -> tuple[list[EventBody], SpyAgentCommandStore]:
+        store = SpyAgentCommandStore(
+            approval=approval_record(
+                status=ApprovalStatus.NOT_REQUIRED.value,
+                policy_route="safe_pr",
+            )
+        )
+        ctx = SimpleNamespace(correlation_id="corr-prod-not-required", db=store)
+        request = command_request(Command.APPLY_MANIFEST_ACTION, environment="production")
+        events = await collect_events(handle_command_requested(request, ctx))
+        return events, store
+
+    events, store = asyncio.run(run())
+
+    assert len(events) == 1
+    assert isinstance(events[0], CommandRejectedBody)
+    assert events[0].reason == APPROVAL_NOT_REQUIRED_SCOPE_REASON
+    assert store.calls == []
+
+
+def test_command_handler_allows_not_required_safe_pr_approval_for_sandbox_write() -> None:
+    async def run() -> tuple[list[EventBody], SpyAgentCommandStore]:
+        store = SpyAgentCommandStore(
+            approval=approval_record(
+                status=ApprovalStatus.NOT_REQUIRED.value,
+                policy_route="safe_pr",
+            )
+        )
+        ctx = SimpleNamespace(correlation_id="corr-sandbox-not-required", db=store)
+        request = command_request(Command.APPLY_MANIFEST_ACTION, environment="sandbox")
+        events = await collect_events(handle_command_requested(request, ctx))
+        return events, store
+
+    events, store = asyncio.run(run())
+
+    assert [type(event) for event in events] == [
+        CommandDispatchedBody,
+        CommandQueuedForAgentBody,
+    ]
+    assert len(store.calls) == 1
 
 
 def test_command_handler_rejects_management_cluster_before_queue() -> None:
