@@ -30,16 +30,20 @@ scenarios:
       poll_seconds: 2
       pod_waiting_reasons: ["ErrImagePull", "ImagePullBackOff"]
       event_message_any: ["manifest unknown", "not found"]
-    cleanup: &scale_cleanup
-      adapter: "kubernetes.deployment_scale"
-      params: {replicas: 0}
+    cleanup: &manifest_delete_cleanup
+      adapter: "kubernetes.manifest_delete"
+      params: {propagation_policy: "Foreground"}
 
   - scenario_id: "image.registry-down"
     version: 1
     title: "이미지 registry 연결 실패"
     description: "도달 불가능한 테스트 registry endpoint로 실제 pull 연결 실패를 만듭니다."
     execution: "real"
-    availability: "ready"
+    availability: "detector_gap"
+    availability_reason: "실제 evidence 수집부터 RCA, recovery plan, cleanup까지 live 완주가 아직 검증되지 않았습니다."
+    detector_work_needed:
+      - "격리 target cluster에서 registry 연결 실패의 실제 이벤트 변형 검증"
+      - "registry_unavailable RCA 및 recovery plan live 완주 증적"
     expected:
       root_cause: "registry_unavailable"
       symptom: "ImagePullBackOff"
@@ -57,7 +61,7 @@ scenarios:
       poll_seconds: 2
       pod_waiting_reasons: ["ErrImagePull", "ImagePullBackOff"]
       event_message_any: ["connection refused", "no route to host", "timeout"]
-    cleanup: *scale_cleanup
+    cleanup: *manifest_delete_cleanup
 
   - scenario_id: "image.auth"
     version: 1
@@ -86,4 +90,4 @@ scenarios:
       poll_seconds: 2
       pod_waiting_reasons: ["ErrImagePull", "ImagePullBackOff"]
       event_message_any: ["unauthorized", "authentication required", "pull access denied"]
-    cleanup: *scale_cleanup
+    cleanup: *manifest_delete_cleanup

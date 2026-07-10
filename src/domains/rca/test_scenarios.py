@@ -81,6 +81,8 @@ CANONICAL_ROOT_CAUSES = frozenset(
 class TestScenarioCatalogError(RuntimeError):
     """Fail-fast catalog load error shown during gateway startup/tests."""
 
+    __test__ = False
+
 
 class ScenarioExpected(StrictModel):
     root_cause: str = Field(min_length=1, max_length=120, pattern=r"^[a-z][a-z0-9_]*$")
@@ -169,29 +171,36 @@ class ScenarioObservation(StrictModel):
     deployment_condition_reasons: list[str] = Field(default_factory=list, max_length=10)
     external_status_any: list[str] = Field(default_factory=list, max_length=10)
 
+    @property
+    def configured_predicates(self) -> tuple[str, ...]:
+        return tuple(
+            field
+            for field in (
+                "pod_waiting_reasons",
+                "pod_terminated_reasons",
+                "event_reasons",
+                "event_message_any",
+                "log_message_any",
+                "deployment_condition_reasons",
+                "external_status_any",
+            )
+            if getattr(self, field)
+        )
+
     @model_validator(mode="after")
     def _require_typed_predicate(self) -> ScenarioObservation:
-        predicates = (
-            self.pod_waiting_reasons,
-            self.pod_terminated_reasons,
-            self.event_reasons,
-            self.event_message_any,
-            self.log_message_any,
-            self.deployment_condition_reasons,
-            self.external_status_any,
-        )
-        if not any(predicates):
+        if not self.configured_predicates:
             raise ValueError("observe must contain at least one typed predicate")
         return self
 
 
-class DeploymentScaleCleanupParams(StrictModel):
-    replicas: Literal[0]
+class KubernetesManifestDeleteCleanupParams(StrictModel):
+    propagation_policy: Literal["Foreground"] = "Foreground"
 
 
-class DeploymentScaleCleanup(StrictModel):
-    adapter: Literal["kubernetes.deployment_scale"]
-    params: DeploymentScaleCleanupParams
+class KubernetesManifestDeleteCleanup(StrictModel):
+    adapter: Literal["kubernetes.manifest_delete"]
+    params: KubernetesManifestDeleteCleanupParams
 
 
 class FixtureResetCleanupParams(StrictModel):
@@ -204,7 +213,7 @@ class FixtureResetCleanup(StrictModel):
 
 
 ScenarioCleanup = Annotated[
-    DeploymentScaleCleanup | FixtureResetCleanup,
+    KubernetesManifestDeleteCleanup | FixtureResetCleanup,
     Field(discriminator="adapter"),
 ]
 
@@ -246,8 +255,8 @@ class RcaTestScenario(StrictModel):
             raise ValueError("ready scenario cannot declare unavailable-work metadata")
 
         if isinstance(self.trigger, KubernetesDeploymentTrigger):
-            if not isinstance(self.cleanup, DeploymentScaleCleanup):
-                raise ValueError("kubernetes.deployment requires deployment_scale cleanup")
+            if not isinstance(self.cleanup, KubernetesManifestDeleteCleanup):
+                raise ValueError("kubernetes.deployment requires manifest_delete cleanup")
             if not self.trigger.params.resource_name.startswith(self.safety.resource_name_prefix):
                 raise ValueError("test resource name must use the safety prefix")
         else:
@@ -285,14 +294,18 @@ def _catalog_paths(directory: Path) -> list[Path]:
     return sorted(path for pattern in CATALOG_PATTERNS for path in directory.glob(pattern))
 
 
-def _validate_complete_default_catalog(scenarios: list[RcaTestScenario]) -> None:
+def validate_root_cause_coverage(
+    scenarios: tuple[RcaTestScenario, ...] | list[RcaTestScenario],
+    required_root_causes: frozenset[str],
+) -> None:
+    """Require every canonical cause at least once without imposing catalog cardinality."""
     actual = {scenario.expected.root_cause for scenario in scenarios}
-    if actual != CANONICAL_ROOT_CAUSES or len(scenarios) != len(CANONICAL_ROOT_CAUSES):
-        missing = sorted(CANONICAL_ROOT_CAUSES - actual)
-        unexpected = sorted(actual - CANONICAL_ROOT_CAUSES)
+    missing = sorted(required_root_causes - actual)
+    unexpected = sorted(actual - required_root_causes)
+    if missing or unexpected:
         raise TestScenarioCatalogError(
             "RCA test scenario root-cause coverage mismatch: "
-            f"missing={missing}, unexpected={unexpected}, items={len(scenarios)}"
+            f"missing={missing}, unexpected={unexpected}"
         )
 
 
@@ -319,7 +332,7 @@ def load_test_scenario_catalog(
             scenarios.append(scenario)
 
     if catalog_dir is None or directory.resolve() == CATALOG_DIR.resolve():
-        _validate_complete_default_catalog(scenarios)
+        validate_root_cause_coverage(scenarios, CANONICAL_ROOT_CAUSES)
     return tuple(scenarios)
 
 

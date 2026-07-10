@@ -33,9 +33,9 @@ scenarios:
       pod_waiting_reasons: ["CrashLoopBackOff"]
       pod_terminated_reasons: ["OOMKilled"]
       event_reasons: ["OOMKilling"]
-    cleanup: &scale_cleanup
-      adapter: "kubernetes.deployment_scale"
-      params: {replicas: 0}
+    cleanup: &manifest_delete_cleanup
+      adapter: "kubernetes.manifest_delete"
+      params: {propagation_policy: "Foreground"}
 
   - scenario_id: "crash.config-env"
     version: 1
@@ -65,7 +65,7 @@ scenarios:
       poll_seconds: 2
       pod_waiting_reasons: ["CrashLoopBackOff"]
       log_message_any: ["environment variable", "not set", "invalid configuration"]
-    cleanup: *scale_cleanup
+    cleanup: *manifest_delete_cleanup
 
   - scenario_id: "crash.app-startup"
     version: 1
@@ -95,7 +95,7 @@ scenarios:
       poll_seconds: 2
       pod_waiting_reasons: ["CrashLoopBackOff"]
       log_message_any: ["FATAL", "startup failed"]
-    cleanup: *scale_cleanup
+    cleanup: *manifest_delete_cleanup
 
   - scenario_id: "crash.bad-image-rollout"
     version: 1
@@ -124,7 +124,7 @@ scenarios:
       poll_seconds: 2
       pod_waiting_reasons: ["CrashLoopBackOff"]
       log_message_any: ["ModuleNotFoundError", "exec format error"]
-    cleanup: *scale_cleanup
+    cleanup: *manifest_delete_cleanup
 
   - scenario_id: "crash.dependency-connect"
     version: 1
@@ -153,4 +153,4 @@ scenarios:
       poll_seconds: 2
       pod_waiting_reasons: ["CrashLoopBackOff"]
       log_message_any: ["connection refused", "timeout", "unreachable"]
-    cleanup: *scale_cleanup
+    cleanup: *manifest_delete_cleanup

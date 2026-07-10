@@ -31,9 +31,9 @@ scenarios:
       timeout_seconds: 180
       poll_seconds: 3
       deployment_condition_reasons: ["ProgressDeadlineExceeded"]
-    cleanup: &scale_cleanup
-      adapter: "kubernetes.deployment_scale"
-      params: {replicas: 0}
+    cleanup: &manifest_delete_cleanup
+      adapter: "kubernetes.manifest_delete"
+      params: {propagation_policy: "Foreground"}
 
   - scenario_id: "rollout.replica-unavailable"
     version: 1
@@ -62,7 +62,7 @@ scenarios:
       poll_seconds: 3
       deployment_condition_reasons: ["MinimumReplicasUnavailable", "ProgressDeadlineExceeded"]
       event_message_any: ["unavailable"]
-    cleanup: *scale_cleanup
+    cleanup: *manifest_delete_cleanup
 
   - scenario_id: "gitops.sync"
     version: 1
