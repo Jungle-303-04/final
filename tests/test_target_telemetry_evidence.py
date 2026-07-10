@@ -4,6 +4,9 @@ import asyncio
 import importlib
 import sys
 from pathlib import Path
+from urllib.parse import parse_qs
+
+import httpx
 
 from packages.contracts.gateway.requests import AgentEvidenceRequest
 
@@ -101,6 +104,39 @@ def test_loki_logs_are_normalized_into_agent_evidence_shape() -> None:
     assert validated.logs[0]["line_count"] == 1
     assert validated.logs[0]["streams"][0]["stream"]["namespace"] == "target"
     assert validated.logs[0]["streams"][0]["values"][0]["line"] == "node_runtime_sample"
+
+
+def test_loki_range_query_sends_exact_start_and_end_bounds() -> None:
+    module = load_evidence_module()
+    provider = module.LokiLogsProvider("https://loki.test")
+    query = module.TelemetryQueryDefinition.from_mapping(
+        {
+            "source": "loki",
+            "name": "recent_pod_errors",
+            "description": "현재 RCA test Pod 로그",
+            "query": '{k8s_pod_name="pod-1"} |~ "ERROR|FATAL"',
+            "range_seconds": 120,
+        }
+    ).to_provider_query()
+    requests: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        requests.append(request)
+        return httpx.Response(
+            200,
+            json={"status": "success", "data": {"resultType": "streams", "result": []}},
+        )
+
+    async def collect() -> None:
+        async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+            await provider.query(client, query)
+
+    asyncio.run(collect())
+
+    params = parse_qs(requests[0].url.query.decode())
+    start = int(params["start"][0])
+    end = int(params["end"][0])
+    assert end - start == 120 * 1_000_000_000
 
 
 # ── Tempo 트레이스 증거 ─────────────────────────────────────

@@ -1310,7 +1310,7 @@ class TargetClusterAgent:
             )
             if not applied:
                 raise RuntimeError(message)
-        await self.wait_for_rca_test_observation(scenario, run_id)
+        pod_names = await self.wait_for_rca_test_observation(scenario, run_id)
         resource_name = scenario.trigger.params.resource_name
         return {
             "fault_observed": True,
@@ -1318,6 +1318,7 @@ class TargetClusterAgent:
             "resource_kind": "Deployment",
             "resource_name": resource_name,
             "label_selector": f"kubeheal.io/rca-test-run={run_id}",
+            "pod_names": pod_names,
         }
 
     async def ensure_rca_test_fixture_available(
@@ -1351,7 +1352,7 @@ class TargetClusterAgent:
         self,
         scenario: RcaTestScenario,
         run_id: str,
-    ) -> None:
+    ) -> list[str]:
         provider = self.evidence_collector.providers.get("kubernetes")
         if not isinstance(provider, KubernetesSnapshotProvider):
             raise RuntimeError("Kubernetes evidence provider is unavailable")
@@ -1367,7 +1368,9 @@ class TargetClusterAgent:
                 raw = await provider.query(client, query)
             snapshot = provider.normalize_payload(raw, query)
             if rca_test_observation_matches(scenario, snapshot, run_id):
-                return
+                pod_names = rca_test_run_pod_names(snapshot, run_id)
+                if pod_names:
+                    return pod_names
             if time.monotonic() >= deadline:
                 raise TimeoutError(
                     f"RCA test fault was not observed before timeout: {scenario.scenario_id}"
@@ -1727,6 +1730,22 @@ def parse_approval_expires_at(value: object) -> datetime | None:
     if parsed.tzinfo is None:
         return parsed.replace(tzinfo=UTC)
     return parsed.astimezone(UTC)
+
+
+def rca_test_run_pod_names(snapshot: JsonObject, run_id: str) -> list[str]:
+    """현재 run label이 보존된 실제 Pod 이름만 안정된 순서로 반환한다."""
+    pods = snapshot.get("pods")
+    if not isinstance(pods, list):
+        return []
+    names = {
+        str(pod.get("name") or "")
+        for pod in pods
+        if isinstance(pod, dict)
+        and isinstance(pod.get("labels"), dict)
+        and pod["labels"].get(RCA_TEST_RUN_LABEL) == run_id
+        and str(pod.get("name") or "")
+    }
+    return sorted(names)
 
 
 def rca_test_fixture_expired(resource: JsonObject, now: datetime | None = None) -> bool:

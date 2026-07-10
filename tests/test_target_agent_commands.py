@@ -228,6 +228,7 @@ def test_rca_test_inject_command_returns_real_fault_observation(
             "resource_kind": "Deployment",
             "resource_name": "rca-test-image-wrong-tag",
             "label_selector": f"kubeheal.io/rca-test-run={run_id}",
+            "pod_names": ["rca-test-image-wrong-tag-7f8d9c6b5-x2k4m"],
         }
 
     agent.inject_rca_test_scenario = stub_inject
@@ -254,6 +255,7 @@ def test_rca_test_inject_command_returns_real_fault_observation(
     assert result["rca_test"]["fault_observed"] is True
     assert result["rca_test"]["scenario_id"] == "image.wrong-tag"
     assert result["rca_test"]["evidence_sources"] == ["kubernetes"]
+    assert result["rca_test"]["pod_names"] == ["rca-test-image-wrong-tag-7f8d9c6b5-x2k4m"]
 
 
 def test_rca_test_cleanup_uses_immutable_target_without_loading_current_catalog(
@@ -400,9 +402,10 @@ def test_rca_test_observation_queries_only_the_current_run(
     agent = object.__new__(module.TargetClusterAgent)
     agent.evidence_collector = SimpleNamespace(providers={"kubernetes": provider})
 
-    asyncio.run(agent.wait_for_rca_test_observation(scenario, run_id))
+    pod_names = asyncio.run(agent.wait_for_rca_test_observation(scenario, run_id))
 
     assert selectors == [f"kubeheal.io/rca-test-run={run_id}"]
+    assert pod_names == ["rca-test-image-wrong-tag-pod"]
 
 
 @pytest.mark.parametrize(

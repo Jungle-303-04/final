@@ -99,7 +99,13 @@ def aggregate_evidence_payload(rows: list[JsonObject]) -> JsonObject | None:
         run_id = release_context.get("rca_test_run_id")
         scenario_id = release_context.get("scenario_id")
         if isinstance(run_id, str) and run_id and isinstance(scenario_id, str) and scenario_id:
-            payload["metadata"] = {"rca_test": {"run_id": run_id, "scenario_id": scenario_id}}
+            rca_test_metadata: JsonObject = {"run_id": run_id, "scenario_id": scenario_id}
+            pod_names = release_context.get("pod_names")
+            if isinstance(pod_names, list):
+                normalized_names = [str(name).strip() for name in pod_names if str(name).strip()]
+                if normalized_names:
+                    rca_test_metadata["pod_names"] = list(dict.fromkeys(normalized_names))[:32]
+            payload["metadata"] = {"rca_test": rca_test_metadata}
     for row in rows:
         provider_key = str(row["provider_key"])
         if row["status"] == EVIDENCE_JOB_STATUS_COMPLETED and isinstance(row["result"], dict):
