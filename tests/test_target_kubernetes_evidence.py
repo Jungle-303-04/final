@@ -36,6 +36,7 @@ def load_evidence_modules():
         "providers.metadata_workload_snapshots",
         "providers.prometheus_analysis",
         "providers.prometheus_providers",
+        "providers.tempo_analysis",
         "providers.tempo_providers",
         "kubernetes_api",
         "evidence",
