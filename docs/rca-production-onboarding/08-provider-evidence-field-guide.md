@@ -1096,10 +1096,10 @@ detail snapshot인 `current_workload_snapshot` 단수 값으로 보낸다.
 | `change_context.endpoint_slice_ready_endpoints[].address_type` | string | EndpointSlice address type이다. 예: `IPv4`, `IPv6`, `FQDN`. |
 | `change_context.endpoint_slice_ready_endpoints[].ports` | list<object> | EndpointSlice port name/port/protocol/app_protocol 요약이다. |
 | `change_context.endpoint_slice_ready_endpoints[].endpoint_count` | number | EndpointSlice 안의 전체 endpoint 수다. |
-| `change_context.endpoint_slice_ready_endpoints[].ready_endpoint_count` | number | condition `ready=true`인 endpoint 수다. |
+| `change_context.endpoint_slice_ready_endpoints[].ready_endpoint_count` | number | condition `ready=true`인 endpoint 수다. Kubernetes EndpointSlice API 기준으로 `ready`가 생략되거나 null이면 ready로 해석한다. |
 | `change_context.endpoint_slice_ready_endpoints[].not_ready_endpoint_count` | number | condition `ready=false`인 endpoint 수다. |
-| `change_context.endpoint_slice_ready_endpoints[].unknown_ready_endpoint_count` | number | ready condition이 boolean 값이 아닌 endpoint 수다. |
-| `change_context.endpoint_slice_ready_endpoints[].serving_endpoint_count` | number | condition `serving=true`인 endpoint 수다. |
+| `change_context.endpoint_slice_ready_endpoints[].unknown_ready_endpoint_count` | number | ready condition이 boolean 값이 아닌 endpoint 수다. `ready` 생략 또는 null은 unknown이 아니라 ready로 본다. |
+| `change_context.endpoint_slice_ready_endpoints[].serving_endpoint_count` | number | condition `serving=true`인 endpoint 수다. Kubernetes EndpointSlice API 기준으로 `serving`이 생략되거나 null이면 serving으로 해석한다. |
 | `change_context.endpoint_slice_ready_endpoints[].terminating_endpoint_count` | number | condition `terminating=true`인 endpoint 수다. |
 | `change_context.endpoint_slice_ready_endpoints[].ready_targets` | list<object> | ready endpoint가 가리키는 target object kind/namespace/name이다. 보통 Pod다. endpoint IP address는 담지 않는다. |
 | `change_context.resource_quotas` | list<object> | namespace ResourceQuota hard/used 요약이다. summary query와 detail query 모두 같은 namespace 맥락으로 담는다. |
@@ -1165,6 +1165,8 @@ Deployment의 affinity 조건을 넣으면 payload가 커지고 원인 후보와
 EndpointSlice ready endpoint 요약도 같은 범위 규칙을 쓴다.
 전체 summary query는 namespace의 모든 EndpointSlice를 담고, 단건 detail query는 관련 Service의 EndpointSlice만 담는다.
 EndpointSlice endpoint의 IP address는 남기지 않는다.
+EndpointSlice condition은 Kubernetes API의 기본 해석을 따른다. `ready`와 `serving`이 생략되거나 null이면 true로 보고, `terminating`이 생략되거나 null이면 false로 본다.
+Deployment, ReplicaSet, Pod 소유 관계는 기준 리소스의 UID를 알고 있으면 UID match만 인정한다. 기준 Deployment/ReplicaSet UID를 알고 있는데 ownerReference UID가 없거나 다르면 이름이 같아도 현재 Deployment 소유로 보지 않는다. 기준 UID 자체를 알 수 없는 오래된 형태의 데이터에서만 이름을 fallback으로 쓴다.
 ResourceQuota 요약은 workload 하나의 속성이 아니라 namespace 수준 제한 정보다.
 그래서 summary query와 detail query 모두 `change_context.resource_quotas[]`에 담고,
 `current_workload_snapshot` 안에는 넣지 않는다.

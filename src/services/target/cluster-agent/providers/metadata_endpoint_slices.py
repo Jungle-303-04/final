@@ -17,6 +17,11 @@ from providers.kubernetes_utils import (
 ENDPOINT_CONDITION_READY = "ready"
 ENDPOINT_CONDITION_SERVING = "serving"
 ENDPOINT_CONDITION_TERMINATING = "terminating"
+ENDPOINT_CONDITION_DEFAULTS = {
+    ENDPOINT_CONDITION_READY: True,
+    ENDPOINT_CONDITION_SERVING: True,
+    ENDPOINT_CONDITION_TERMINATING: False,
+}
 
 
 def endpoint_slice_ready_endpoint_snapshots(
@@ -119,8 +124,11 @@ def endpoint_condition_count(endpoints: list[JsonObject], condition_name: str) -
 
 
 def endpoint_condition(endpoint: JsonObject, condition_name: str) -> bool | None:
-    """Return one EndpointSlice endpoint condition when it is boolean."""
-    value = object_or_empty(endpoint.get("conditions")).get(condition_name)
+    """Return one EndpointSlice condition or its Kubernetes default."""
+    conditions = object_or_empty(endpoint.get("conditions"))
+    value = conditions.get(condition_name)
+    if condition_name not in conditions or value is None:
+        return ENDPOINT_CONDITION_DEFAULTS.get(condition_name)
     return value if isinstance(value, bool) else None
 
 
