@@ -28,6 +28,7 @@ ResourceTable: 앱 이름, repo_ref(owner/name + 브랜치), 대상 클러스터
 - run 클릭 → [workflow 그래프 뷰](workflow.md#그래프--workflowgraphview-workflowsrunid) 딥링크
 - WAITING_FOR_APPROVAL run: 인라인 승인 카드 — [승인](../06-api-map.md) `POST /approvals/{id}/grant` / [거절] reject (deploy 권한 가드)
 - 승인 대기 run 의 DIFFING step 에 `changes[]`가 있으면 승인 카드 아래에 필드 단위 변경 미리보기를 보여준다. 이 값은 `GET /applications/{id}/runs` 응답의 `steps[].details.changes`에서 온다.
+- 승인 대기 run 의 [AI 설명]은 `/ai?prefill=...&context=...`로 이동한다. context에는 `diff_source=gitops`, `workflow_run_id`, `approval_id`, `application_id`만 넣고, 전체 diff/YAML은 넣지 않는다.
 
 ### deployments 탭
 
@@ -40,7 +41,7 @@ run payload 중 safe_pr.* 이벤트 산출물 표시(runs 응답에 포함되는
 
 - Safe PR 카드: 상태(requested/patch_prepared/ready/created/failed), PR 링크 ↗(created 시), diff 설명(ai-diff-worker 의 diff.explained 텍스트)
 - DiffView: desired vs actual (diff payload)
-- 실패 시: 사유 CodeBlock + [AI에게 원인 묻기] → [ai-chat](ai-chat.md) 프리필
+- [AI 설명] 또는 실패 시 [AI에게 원인 묻기] → [ai-chat](ai-chat.md) 프리필. context에는 `diff_source=safe_pr`, `workflow_run_id`, `application_id`만 넣고, Chat AI는 `safe_pr.patch_prepared`/`diff.explained` 이벤트가 있을 때만 설명한다.
 
 ### settings 탭
 
