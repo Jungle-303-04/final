@@ -165,6 +165,53 @@ metadata:
     ]
 
 
+def test_attachable_manifest_scan_uses_bounded_concurrency(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(repository_discovery, "MANIFEST_SCAN_CONCURRENCY", 2)
+
+    class ConcurrentClient(StubGitHubClient):
+        def __init__(self) -> None:
+            contents = {
+                f"deploy-{index}.yaml": (
+                    f"apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: config-{index}\n"
+                ).encode()
+                for index in range(4)
+            }
+            super().__init__(
+                contents=contents,
+                tree_items=[
+                    {"type": "blob", "path": path} for path in sorted(contents)
+                ],
+            )
+            self.active = 0
+            self.max_active = 0
+
+        async def content(self, repo_ref: str, branch: str, path: str) -> bytes:
+            self.active += 1
+            self.max_active = max(self.max_active, self.active)
+            try:
+                await asyncio.sleep(0.01)
+                return await super().content(repo_ref, branch, path)
+            finally:
+                self.active -= 1
+
+    client = ConcurrentClient()
+    response = asyncio.run(
+        RepositoryDiscoveryService(client).list_attachable_manifest_files(
+            "owner/service", "trunk"
+        )
+    )
+
+    assert client.max_active == 2
+    assert [item.path for item in response.manifests] == [
+        "deploy-0.yaml",
+        "deploy-1.yaml",
+        "deploy-2.yaml",
+        "deploy-3.yaml",
+    ]
+
+
 def test_repo_validate_stores_token_as_encrypted_workspace_credential(monkeypatch) -> None:
     monkeypatch.setenv("CREDENTIAL_ENCRYPTION_KEY", "local-test-key")
 
