@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import asyncio
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
 
 import pytest
@@ -41,9 +41,15 @@ def codes(items: list[DiagnosticItem]) -> set[str]:
 
 
 def test_release_production_evidence_urls_require_live_https_hosts() -> None:
-    assert release_router.release_runbook_url_is_valid("https://wiki.company.internal/runbooks/checkout")
-    assert release_router.release_verification_url_is_valid("https://checkout.company.internal/readyz")
-    assert not release_router.release_runbook_url_is_valid("http://wiki.company.internal/runbooks/checkout")
+    assert release_router.release_runbook_url_is_valid(
+        "https://wiki.company.internal/runbooks/checkout"
+    )
+    assert release_router.release_verification_url_is_valid(
+        "https://checkout.company.internal/readyz"
+    )
+    assert not release_router.release_runbook_url_is_valid(
+        "http://wiki.company.internal/runbooks/checkout"
+    )
     assert not release_router.release_verification_url_is_valid("https://example.com/readyz")
     assert not release_router.release_verification_url_is_valid("https://api.localhost/readyz")
 
@@ -99,7 +105,9 @@ def test_release_plan_permission_helpers_use_separate_permissions(monkeypatch) -
     current = SimpleNamespace(user_id="operator")
     steps = [{"application_id": "checkout"}]
 
-    release_router.require_plan_application_plan_manage_access(object(), current, "workspace-a", steps)
+    release_router.require_plan_application_plan_manage_access(
+        object(), current, "workspace-a", steps
+    )
     release_router.require_plan_application_manage_access(object(), current, "workspace-a", steps)
     release_router.require_plan_application_rollback_access(object(), current, "workspace-a", steps)
     release_router.require_plan_application_cancel_access(object(), current, "workspace-a", steps)
@@ -128,7 +136,9 @@ def test_advance_release_run_requires_manage_access(monkeypatch) -> None:
 
     monkeypatch.setattr(release_router, "require_plan_application_manage_access", require_manage)
 
-    current = SimpleNamespace(workspace_id="workspace-a", user_id="operator", roles=("release_operator",))
+    current = SimpleNamespace(
+        workspace_id="workspace-a", user_id="operator", roles=("release_operator",)
+    )
     response = asyncio.run(
         release_router.advance_release_run("release-run-1", current=current, db=db, events=object())
     )
@@ -140,9 +150,13 @@ def test_advance_release_run_requires_manage_access(monkeypatch) -> None:
 
 def test_advance_release_run_blocks_when_verification_job_is_pending(monkeypatch) -> None:
     db = ReleaseRunActionDb(verification_job_status="pending")
-    monkeypatch.setattr(release_router, "require_plan_application_manage_access", lambda *_args: None)
+    monkeypatch.setattr(
+        release_router, "require_plan_application_manage_access", lambda *_args: None
+    )
 
-    current = SimpleNamespace(workspace_id="workspace-a", user_id="operator", roles=("release_operator",))
+    current = SimpleNamespace(
+        workspace_id="workspace-a", user_id="operator", roles=("release_operator",)
+    )
     with pytest.raises(HTTPException) as exc:
         asyncio.run(
             release_router.advance_release_run(
@@ -154,15 +168,22 @@ def test_advance_release_run_blocks_when_verification_job_is_pending(monkeypatch
         )
 
     assert exc.value.status_code == 409
-    assert "post-deploy verification kubernetes_health_check is pending" in exc.value.detail["blockers"][0]
+    assert (
+        "post-deploy verification kubernetes_health_check is pending"
+        in exc.value.detail["blockers"][0]
+    )
     assert db.updated == []
 
 
 def test_advance_release_run_blocks_when_verification_job_failed(monkeypatch) -> None:
     db = ReleaseRunActionDb(verification_job_status="failed", step_health_status="unhealthy")
-    monkeypatch.setattr(release_router, "require_plan_application_manage_access", lambda *_args: None)
+    monkeypatch.setattr(
+        release_router, "require_plan_application_manage_access", lambda *_args: None
+    )
 
-    current = SimpleNamespace(workspace_id="workspace-a", user_id="operator", roles=("release_operator",))
+    current = SimpleNamespace(
+        workspace_id="workspace-a", user_id="operator", roles=("release_operator",)
+    )
     with pytest.raises(HTTPException) as exc:
         asyncio.run(
             release_router.advance_release_run(
@@ -175,15 +196,22 @@ def test_advance_release_run_blocks_when_verification_job_failed(monkeypatch) ->
 
     assert exc.value.status_code == 409
     assert any("health is unhealthy" in blocker for blocker in exc.value.detail["blockers"])
-    assert any("post-deploy verification kubernetes_health_check failed" in blocker for blocker in exc.value.detail["blockers"])
+    assert any(
+        "post-deploy verification kubernetes_health_check failed" in blocker
+        for blocker in exc.value.detail["blockers"]
+    )
     assert db.updated == []
 
 
 def test_advance_release_run_blocks_when_verification_job_timed_out(monkeypatch) -> None:
     db = ReleaseRunActionDb(verification_job_status="timeout")
-    monkeypatch.setattr(release_router, "require_plan_application_manage_access", lambda *_args: None)
+    monkeypatch.setattr(
+        release_router, "require_plan_application_manage_access", lambda *_args: None
+    )
 
-    current = SimpleNamespace(workspace_id="workspace-a", user_id="operator", roles=("release_operator",))
+    current = SimpleNamespace(
+        workspace_id="workspace-a", user_id="operator", roles=("release_operator",)
+    )
     with pytest.raises(HTTPException) as exc:
         asyncio.run(
             release_router.advance_release_run(
@@ -195,7 +223,10 @@ def test_advance_release_run_blocks_when_verification_job_timed_out(monkeypatch)
         )
 
     assert exc.value.status_code == 409
-    assert any("post-deploy verification kubernetes_health_check failed" in blocker for blocker in exc.value.detail["blockers"])
+    assert any(
+        "post-deploy verification kubernetes_health_check failed" in blocker
+        for blocker in exc.value.detail["blockers"]
+    )
     assert db.updated == []
 
 
@@ -224,9 +255,13 @@ def test_rollback_release_run_checks_rollback_access_before_mutating(monkeypatch
 
 def test_rollback_release_run_blocks_when_policy_disabled(monkeypatch) -> None:
     db = ReleaseRunActionDb(rollback_policy="disabled")
-    monkeypatch.setattr(release_router, "require_plan_application_rollback_access", lambda *_args: None)
+    monkeypatch.setattr(
+        release_router, "require_plan_application_rollback_access", lambda *_args: None
+    )
 
-    current = SimpleNamespace(workspace_id="workspace-a", user_id="operator", roles=("release_operator",))
+    current = SimpleNamespace(
+        workspace_id="workspace-a", user_id="operator", roles=("release_operator",)
+    )
     with pytest.raises(HTTPException) as exc:
         asyncio.run(
             release_router.rollback_release_run(
@@ -255,9 +290,13 @@ def test_cancel_release_run_records_operator_reason(monkeypatch) -> None:
     ) -> None:
         seen_permissions.append(permission)
 
-    monkeypatch.setattr(release_router, "require_plan_application_permission_access", allow_permission)
+    monkeypatch.setattr(
+        release_router, "require_plan_application_permission_access", allow_permission
+    )
 
-    current = SimpleNamespace(workspace_id="workspace-a", user_id="operator", roles=("release_operator",))
+    current = SimpleNamespace(
+        workspace_id="workspace-a", user_id="operator", roles=("release_operator",)
+    )
     response = asyncio.run(
         release_router.cancel_release_run(
             "release-run-1",
@@ -279,9 +318,13 @@ def test_cancel_release_run_records_operator_reason(monkeypatch) -> None:
 def test_notify_release_run_attention_emits_alert(monkeypatch) -> None:
     db = ReleaseRunActionDb()
     events = AcceptingEventGateway()
-    monkeypatch.setattr(release_router, "require_plan_application_manage_access", lambda *_args: None)
+    monkeypatch.setattr(
+        release_router, "require_plan_application_manage_access", lambda *_args: None
+    )
 
-    current = SimpleNamespace(workspace_id="workspace-a", user_id="operator", roles=("release_operator",))
+    current = SimpleNamespace(
+        workspace_id="workspace-a", user_id="operator", roles=("release_operator",)
+    )
     response = asyncio.run(
         release_router.notify_release_run_attention(
             "release-run-1",
@@ -313,9 +356,13 @@ def test_notify_release_run_attention_emits_alert(monkeypatch) -> None:
 def test_notify_release_run_attention_blocks_recent_duplicate(monkeypatch) -> None:
     db = ReleaseRunActionDb(recent_notify_minutes=3)
     events = AcceptingEventGateway()
-    monkeypatch.setattr(release_router, "require_plan_application_manage_access", lambda *_args: None)
+    monkeypatch.setattr(
+        release_router, "require_plan_application_manage_access", lambda *_args: None
+    )
 
-    current = SimpleNamespace(workspace_id="workspace-a", user_id="operator", roles=("release_operator",))
+    current = SimpleNamespace(
+        workspace_id="workspace-a", user_id="operator", roles=("release_operator",)
+    )
     with pytest.raises(HTTPException) as exc:
         asyncio.run(
             release_router.notify_release_run_attention(
@@ -336,13 +383,17 @@ def test_notify_release_run_attention_blocks_recent_duplicate(monkeypatch) -> No
 def test_notify_release_run_attention_marks_verification_timeout_critical(monkeypatch) -> None:
     db = ReleaseRunActionDb(
         verification_job_status="pending",
-        verification_queued_at=(datetime.now(timezone.utc) - timedelta(minutes=20)).isoformat(),
+        verification_queued_at=(datetime.now(UTC) - timedelta(minutes=20)).isoformat(),
         verification_timeout_minutes=5,
     )
     events = AcceptingEventGateway()
-    monkeypatch.setattr(release_router, "require_plan_application_manage_access", lambda *_args: None)
+    monkeypatch.setattr(
+        release_router, "require_plan_application_manage_access", lambda *_args: None
+    )
 
-    current = SimpleNamespace(workspace_id="workspace-a", user_id="operator", roles=("release_operator",))
+    current = SimpleNamespace(
+        workspace_id="workspace-a", user_id="operator", roles=("release_operator",)
+    )
     asyncio.run(
         release_router.notify_release_run_attention(
             "release-run-1",
@@ -364,7 +415,9 @@ def test_get_release_run_handoff_summarizes_operator_next_actions(monkeypatch) -
     db = ReleaseRunActionDb()
     monkeypatch.setattr(release_router, "require_plan_application_read_access", lambda *_args: None)
 
-    current = SimpleNamespace(workspace_id="workspace-a", user_id="operator", roles=("release_operator",))
+    current = SimpleNamespace(
+        workspace_id="workspace-a", user_id="operator", roles=("release_operator",)
+    )
     response = asyncio.run(
         release_router.get_release_run_handoff(
             "release-run-1",
@@ -451,7 +504,9 @@ def test_release_run_handoff_disables_notify_during_cooldown(monkeypatch) -> Non
     db = ReleaseRunActionDb(recent_notify_minutes=3)
     monkeypatch.setattr(release_router, "require_plan_application_read_access", lambda *_args: None)
 
-    current = SimpleNamespace(workspace_id="workspace-a", user_id="operator", roles=("release_operator",))
+    current = SimpleNamespace(
+        workspace_id="workspace-a", user_id="operator", roles=("release_operator",)
+    )
     response = asyncio.run(
         release_router.get_release_run_handoff(
             "release-run-1",
@@ -460,10 +515,14 @@ def test_release_run_handoff_disables_notify_during_cooldown(monkeypatch) -> Non
         )
     )
 
-    notify = next(action for action in response.handoff["next_actions"] if action["action"] == "notify")
+    notify = next(
+        action for action in response.handoff["next_actions"] if action["action"] == "notify"
+    )
     assert notify["enabled"] is False
     assert "already sent recently" in notify["reason"]
-    attention_check = next(check for check in response.handoff["checks"] if check["name"] == "attention")
+    attention_check = next(
+        check for check in response.handoff["checks"] if check["name"] == "attention"
+    )
     assert attention_check["status"] == "blocked"
     assert "already sent recently" in attention_check["message"]
 
@@ -472,7 +531,9 @@ def test_release_run_handoff_explains_disabled_rollback_action(monkeypatch) -> N
     db = ReleaseRunActionDb(rollback_policy="disabled")
     monkeypatch.setattr(release_router, "require_plan_application_read_access", lambda *_args: None)
 
-    current = SimpleNamespace(workspace_id="workspace-a", user_id="operator", roles=("release_operator",))
+    current = SimpleNamespace(
+        workspace_id="workspace-a", user_id="operator", roles=("release_operator",)
+    )
     response = asyncio.run(
         release_router.get_release_run_handoff(
             "release-run-1",
@@ -481,7 +542,9 @@ def test_release_run_handoff_explains_disabled_rollback_action(monkeypatch) -> N
         )
     )
 
-    rollback = next(action for action in response.handoff["next_actions"] if action["action"] == "rollback")
+    rollback = next(
+        action for action in response.handoff["next_actions"] if action["action"] == "rollback"
+    )
     assert rollback["enabled"] is False
     assert rollback["reason"] == "Rollback policy is disabled for this release run."
 
@@ -489,9 +552,13 @@ def test_release_run_handoff_explains_disabled_rollback_action(monkeypatch) -> N
 def test_get_release_run_report_includes_redacted_audit_and_markdown(monkeypatch) -> None:
     db = ReleaseRunReportDb()
     monkeypatch.setattr(release_router, "require_plan_application_read_access", lambda *_args: None)
-    monkeypatch.setattr(release_router, "require_plan_application_audit_access", lambda *_args: None)
+    monkeypatch.setattr(
+        release_router, "require_plan_application_audit_access", lambda *_args: None
+    )
 
-    current = SimpleNamespace(workspace_id="workspace-a", user_id="operator", roles=("release_operator",))
+    current = SimpleNamespace(
+        workspace_id="workspace-a", user_id="operator", roles=("release_operator",)
+    )
     response = asyncio.run(
         release_router.get_release_run_report(
             "release-run-1",
@@ -510,7 +577,10 @@ def test_get_release_run_report_includes_redacted_audit_and_markdown(monkeypatch
     assert report["run_id"] == "release-run-1"
     assert "Release run report: Checkout release" in report["markdown"]
     assert "Targets:" in report["markdown"]
-    assert "checkout / cluster target / namespace sandbox / workflow workflow-checkout-1" in report["markdown"]
+    assert (
+        "checkout / cluster target / namespace sandbox / workflow workflow-checkout-1"
+        in report["markdown"]
+    )
     assert "repo org/checkout / commit abc123 / manifest deploy/app.yaml" in report["markdown"]
     assert "Approvals:" in report["markdown"]
     assert "Checkout: approval-checkout-1 / granted / gate manual" in report["markdown"]
@@ -525,7 +595,10 @@ def test_get_release_run_report_includes_redacted_audit_and_markdown(monkeypatch
     assert "Active change freeze was bypassed with an operator reason." in report["markdown"]
     assert "2026-07-09T09:00:00Z to 2026-07-09T11:00:00Z" in report["markdown"]
     assert "Policy overrides:" in report["markdown"]
-    assert "Change freeze: incident commander approved emergency hotfix / targets: checkout" in report["markdown"]
+    assert (
+        "Change freeze: incident commander approved emergency hotfix / targets: checkout"
+        in report["markdown"]
+    )
     assert "incident commander approved emergency hotfix" in report["markdown"]
     assert "Audit summary:" in report["markdown"]
     assert "Events in report: 1" in report["markdown"]
@@ -541,9 +614,13 @@ def test_get_release_run_report_includes_redacted_audit_and_markdown(monkeypatch
 def test_export_release_run_report_returns_markdown_attachment(monkeypatch) -> None:
     db = ReleaseRunReportDb()
     monkeypatch.setattr(release_router, "require_plan_application_read_access", lambda *_args: None)
-    monkeypatch.setattr(release_router, "require_plan_application_audit_access", lambda *_args: None)
+    monkeypatch.setattr(
+        release_router, "require_plan_application_audit_access", lambda *_args: None
+    )
 
-    current = SimpleNamespace(workspace_id="workspace-a", user_id="operator", roles=("release_operator",))
+    current = SimpleNamespace(
+        workspace_id="workspace-a", user_id="operator", roles=("release_operator",)
+    )
     response = asyncio.run(
         release_router.export_release_run_report(
             "release-run-1",
@@ -554,7 +631,10 @@ def test_export_release_run_report_returns_markdown_attachment(monkeypatch) -> N
 
     body = response.body.decode("utf-8")
     assert response.media_type == "text/markdown; charset=utf-8"
-    assert response.headers["content-disposition"] == 'attachment; filename="release-run-release-run-1.md"'
+    assert (
+        response.headers["content-disposition"]
+        == 'attachment; filename="release-run-release-run-1.md"'
+    )
     assert "## Release run report: Checkout release" in body
     assert "Targets:" in body
     assert "checkout / cluster target / namespace sandbox" in body
@@ -576,10 +656,14 @@ def test_export_release_run_report_returns_markdown_attachment(monkeypatch) -> N
 
 def test_retry_release_run_dispatches_failed_wave_step(monkeypatch) -> None:
     db = ReleaseRetryDb()
-    monkeypatch.setattr(release_router, "require_plan_application_manage_access", lambda *_args: None)
+    monkeypatch.setattr(
+        release_router, "require_plan_application_manage_access", lambda *_args: None
+    )
     monkeypatch.setattr(release_router, "require_cluster_access", lambda *_args: None)
 
-    current = SimpleNamespace(workspace_id="workspace-a", user_id="operator", roles=("release_operator",))
+    current = SimpleNamespace(
+        workspace_id="workspace-a", user_id="operator", roles=("release_operator",)
+    )
     response = asyncio.run(
         release_router.retry_release_run(
             "release-run-retry",
@@ -598,9 +682,13 @@ def test_retry_release_run_dispatches_failed_wave_step(monkeypatch) -> None:
 
 def test_retry_release_run_blocks_when_retry_budget_is_exhausted(monkeypatch) -> None:
     db = ReleaseRetryDb(previous_retry=True)
-    monkeypatch.setattr(release_router, "require_plan_application_manage_access", lambda *_args: None)
+    monkeypatch.setattr(
+        release_router, "require_plan_application_manage_access", lambda *_args: None
+    )
 
-    current = SimpleNamespace(workspace_id="workspace-a", user_id="operator", roles=("release_operator",))
+    current = SimpleNamespace(
+        workspace_id="workspace-a", user_id="operator", roles=("release_operator",)
+    )
     with pytest.raises(HTTPException) as exc:
         asyncio.run(
             release_router.retry_release_run(
@@ -621,9 +709,13 @@ def test_retry_release_run_blocks_when_retry_budget_is_exhausted(monkeypatch) ->
 def test_start_release_plan_blocks_when_plan_has_active_run(monkeypatch) -> None:
     db = ReleaseDispatchDb()
     db.active_plan_ids.add("plan-a")
-    monkeypatch.setattr(release_router, "require_plan_application_manage_access", lambda *_args: None)
+    monkeypatch.setattr(
+        release_router, "require_plan_application_manage_access", lambda *_args: None
+    )
 
-    current = SimpleNamespace(workspace_id="workspace-a", user_id="operator", roles=("release_operator",))
+    current = SimpleNamespace(
+        workspace_id="workspace-a", user_id="operator", roles=("release_operator",)
+    )
     payload = release_plan_request(plan_id="plan-a")
     with pytest.raises(HTTPException) as exc:
         asyncio.run(
@@ -643,9 +735,13 @@ def test_start_release_plan_blocks_when_plan_has_active_run(monkeypatch) -> None
 def test_dispatch_release_plan_blocks_when_plan_has_active_run(monkeypatch) -> None:
     db = ReleaseDispatchDb()
     db.active_plan_ids.add("plan-a")
-    monkeypatch.setattr(release_router, "require_plan_application_manage_access", lambda *_args: None)
+    monkeypatch.setattr(
+        release_router, "require_plan_application_manage_access", lambda *_args: None
+    )
 
-    current = SimpleNamespace(workspace_id="workspace-a", user_id="operator", roles=("release_operator",))
+    current = SimpleNamespace(
+        workspace_id="workspace-a", user_id="operator", roles=("release_operator",)
+    )
     payload = release_plan_request(plan_id="plan-a")
     with pytest.raises(HTTPException) as exc:
         asyncio.run(
@@ -701,7 +797,9 @@ def test_release_audit_list_checks_read_access_and_hides_internal_steps(monkeypa
 
 def test_release_audit_export_returns_csv_without_internal_steps(monkeypatch) -> None:
     db = ReleaseAuditDb()
-    monkeypatch.setattr(release_router, "require_plan_application_audit_access", lambda *_args: None)
+    monkeypatch.setattr(
+        release_router, "require_plan_application_audit_access", lambda *_args: None
+    )
 
     current = SimpleNamespace(workspace_id="workspace-a", user_id="operator", roles=())
     response = asyncio.run(
@@ -742,7 +840,9 @@ def test_release_audit_event_type_filter_supports_prefix() -> None:
 
 def test_release_audit_accepts_notify_prefix_filter(monkeypatch) -> None:
     db = ReleaseAuditDb()
-    monkeypatch.setattr(release_router, "require_plan_application_audit_access", lambda *_args: None)
+    monkeypatch.setattr(
+        release_router, "require_plan_application_audit_access", lambda *_args: None
+    )
 
     current = SimpleNamespace(workspace_id="workspace-a", user_id="operator", roles=())
     asyncio.run(
@@ -800,7 +900,12 @@ def test_release_readiness_reports_blockers_and_operational_warnings(monkeypatch
     assert any("requires at least one enabled alert channel" in item for item in response.blockers)
     assert any("cannot be retried" in item for item in response.warnings)
     action_ids = {action["check_id"] for action in response.next_actions}
-    assert {"plan.required_inputs", "live.dispatch_gate", "alerts.enabled_channels", "retry.policy"} <= action_ids
+    assert {
+        "plan.required_inputs",
+        "live.dispatch_gate",
+        "alerts.enabled_channels",
+        "retry.policy",
+    } <= action_ids
     assert all(action["severity"] in {"blocked", "warning"} for action in response.next_actions)
 
 
@@ -851,7 +956,9 @@ def test_release_readiness_passes_demo_with_alert_channel(monkeypatch) -> None:
 def test_release_readiness_blocks_live_when_channels_do_not_cover_warning(monkeypatch) -> None:
     monkeypatch.setenv("RELEASE_FLOW_LIVE_ENABLED", "1")
     monkeypatch.setenv("RELEASE_FLOW_LIVE_WORKSPACES", "workspace-a")
-    db = ReleaseReadinessDb(channels=[{"channel_id": "chan-critical", "enabled": True, "min_severity": "critical"}])
+    db = ReleaseReadinessDb(
+        channels=[{"channel_id": "chan-critical", "enabled": True, "min_severity": "critical"}]
+    )
     monkeypatch.setattr(release_router, "require_plan_application_read_access", lambda *_args: None)
 
     current = SimpleNamespace(workspace_id="workspace-a", user_id="operator", roles=())
@@ -880,7 +987,9 @@ def test_release_readiness_blocks_live_when_channels_do_not_cover_warning(monkey
 
     assert response.ready is False
     assert any("warning-or-higher release events" in item for item in response.blockers)
-    alert_check = next(check for check in response.checks if check["check_id"] == "alerts.enabled_channels")
+    alert_check = next(
+        check for check in response.checks if check["check_id"] == "alerts.enabled_channels"
+    )
     assert alert_check["status"] == "blocked"
     assert "none receive warning release events" in alert_check["message"]
 
@@ -926,7 +1035,9 @@ def test_release_readiness_blocks_live_when_warning_channel_is_not_validated(mon
 
     assert response.ready is False
     assert any("passing validation test" in item for item in response.blockers)
-    alert_check = next(check for check in response.checks if check["check_id"] == "alerts.enabled_channels")
+    alert_check = next(
+        check for check in response.checks if check["check_id"] == "alerts.enabled_channels"
+    )
     assert alert_check["status"] == "blocked"
     assert "none has a passing validation test" in alert_check["message"]
 
@@ -941,7 +1052,7 @@ def test_release_readiness_blocks_live_when_diagnostics_do_not_pass(monkeypatch)
                 "enabled": True,
                 "min_severity": "warning",
                 "last_test_status": "passed",
-                "last_tested_at": datetime.now(timezone.utc).isoformat(),
+                "last_tested_at": datetime.now(UTC).isoformat(),
             }
         ]
     )
@@ -978,7 +1089,9 @@ def test_release_readiness_blocks_live_when_diagnostics_do_not_pass(monkeypatch)
 
     assert response.ready is False
     assert any("risk.release_step_auto_gate_production" in item for item in response.blockers)
-    diagnostics_check = next(check for check in response.checks if check["check_id"] == "plan.diagnostics")
+    diagnostics_check = next(
+        check for check in response.checks if check["check_id"] == "plan.diagnostics"
+    )
     assert diagnostics_check["status"] == "blocked"
 
 
@@ -992,7 +1105,7 @@ def test_release_readiness_blocks_live_diagnostics_bypass_without_reason(monkeyp
                 "enabled": True,
                 "min_severity": "warning",
                 "last_test_status": "passed",
-                "last_tested_at": datetime.now(timezone.utc).isoformat(),
+                "last_tested_at": datetime.now(UTC).isoformat(),
             }
         ]
     )
@@ -1028,7 +1141,9 @@ def test_release_readiness_blocks_live_diagnostics_bypass_without_reason(monkeyp
 
     assert response.ready is False
     assert any("diagnostics override reason" in item for item in response.blockers)
-    diagnostics_check = next(check for check in response.checks if check["check_id"] == "plan.diagnostics")
+    diagnostics_check = next(
+        check for check in response.checks if check["check_id"] == "plan.diagnostics"
+    )
     assert diagnostics_check["status"] == "blocked"
 
 
@@ -1042,7 +1157,7 @@ def test_release_readiness_warns_when_live_diagnostics_bypass_has_reason(monkeyp
                 "enabled": True,
                 "min_severity": "warning",
                 "last_test_status": "passed",
-                "last_tested_at": datetime.now(timezone.utc).isoformat(),
+                "last_tested_at": datetime.now(UTC).isoformat(),
             }
         ]
     )
@@ -1078,7 +1193,9 @@ def test_release_readiness_warns_when_live_diagnostics_bypass_has_reason(monkeyp
     )
 
     assert response.ready is True
-    diagnostics_check = next(check for check in response.checks if check["check_id"] == "plan.diagnostics")
+    diagnostics_check = next(
+        check for check in response.checks if check["check_id"] == "plan.diagnostics"
+    )
     assert diagnostics_check["status"] == "warning"
     assert "bypassed" in diagnostics_check["message"]
 
@@ -1093,7 +1210,7 @@ def test_release_readiness_blocks_live_when_rollback_disabled_without_reason(mon
                 "enabled": True,
                 "min_severity": "warning",
                 "last_test_status": "passed",
-                "last_tested_at": datetime.now(timezone.utc).isoformat(),
+                "last_tested_at": datetime.now(UTC).isoformat(),
             }
         ]
     )
@@ -1129,7 +1246,9 @@ def test_release_readiness_blocks_live_when_rollback_disabled_without_reason(mon
 
     assert response.ready is False
     assert any("rollback override reason" in item for item in response.blockers)
-    rollback_check = next(check for check in response.checks if check["check_id"] == "rollback.policy")
+    rollback_check = next(
+        check for check in response.checks if check["check_id"] == "rollback.policy"
+    )
     assert rollback_check["status"] == "blocked"
 
 
@@ -1143,7 +1262,7 @@ def test_release_readiness_warns_when_rollback_disabled_has_reason(monkeypatch) 
                 "enabled": True,
                 "min_severity": "warning",
                 "last_test_status": "passed",
-                "last_tested_at": datetime.now(timezone.utc).isoformat(),
+                "last_tested_at": datetime.now(UTC).isoformat(),
             }
         ]
     )
@@ -1179,7 +1298,9 @@ def test_release_readiness_warns_when_rollback_disabled_has_reason(monkeypatch) 
     )
 
     assert response.ready is True
-    rollback_check = next(check for check in response.checks if check["check_id"] == "rollback.policy")
+    rollback_check = next(
+        check for check in response.checks if check["check_id"] == "rollback.policy"
+    )
     assert rollback_check["status"] == "warning"
 
 
@@ -1193,7 +1314,7 @@ def test_release_readiness_blocks_production_live_without_change_ticket(monkeypa
                 "enabled": True,
                 "min_severity": "warning",
                 "last_test_status": "passed",
-                "last_tested_at": datetime.now(timezone.utc).isoformat(),
+                "last_tested_at": datetime.now(UTC).isoformat(),
             }
         ]
     )
@@ -1245,7 +1366,7 @@ def test_release_readiness_blocks_production_placeholder_change_ticket(monkeypat
                 "enabled": True,
                 "min_severity": "warning",
                 "last_test_status": "passed",
-                "last_tested_at": datetime.now(timezone.utc).isoformat(),
+                "last_tested_at": datetime.now(UTC).isoformat(),
             }
         ]
     )
@@ -1262,7 +1383,7 @@ def test_release_readiness_blocks_production_placeholder_change_ticket(monkeypat
                     "approval_granted": True,
                     "approval_granted_by": "lead@example.com",
                     "approval_reason": "approved production release",
-                    "approval_granted_at": datetime.now(timezone.utc).isoformat(),
+                    "approval_granted_at": datetime.now(UTC).isoformat(),
                     "change_ticket": "CHG-PREFLIGHT",
                     "release_window_override_reason": "incident commander approved immediate release",
                     "runbook_url": "https://wiki.company.internal/runbooks/checkout-release",
@@ -1291,12 +1412,16 @@ def test_release_readiness_blocks_production_placeholder_change_ticket(monkeypat
     )
 
     assert response.ready is False
-    assert any("must not use placeholder change ticket CHG-PREFLIGHT" in item for item in response.blockers)
+    assert any(
+        "must not use placeholder change ticket CHG-PREFLIGHT" in item for item in response.blockers
+    )
     change_check = next(check for check in response.checks if check["check_id"] == "change.ticket")
     assert change_check["status"] == "blocked"
 
 
-def test_release_readiness_warns_when_production_change_ticket_gate_is_bypassed(monkeypatch) -> None:
+def test_release_readiness_warns_when_production_change_ticket_gate_is_bypassed(
+    monkeypatch,
+) -> None:
     monkeypatch.setenv("RELEASE_FLOW_LIVE_ENABLED", "1")
     monkeypatch.setenv("RELEASE_FLOW_LIVE_WORKSPACES", "workspace-a")
     db = ReleaseReadinessDb(
@@ -1306,7 +1431,7 @@ def test_release_readiness_warns_when_production_change_ticket_gate_is_bypassed(
                 "enabled": True,
                 "min_severity": "warning",
                 "last_test_status": "passed",
-                "last_tested_at": datetime.now(timezone.utc).isoformat(),
+                "last_tested_at": datetime.now(UTC).isoformat(),
             }
         ]
     )
@@ -1323,7 +1448,7 @@ def test_release_readiness_warns_when_production_change_ticket_gate_is_bypassed(
                     "approval_granted": True,
                     "approval_granted_by": "lead@example.com",
                     "approval_reason": "approved production release",
-                    "approval_granted_at": datetime.now(timezone.utc).isoformat(),
+                    "approval_granted_at": datetime.now(UTC).isoformat(),
                     "production_change_override_reason": "emergency production fix approved",
                     "release_window_override_reason": "incident commander approved immediate release",
                     "runbook_url": "https://wiki.company.internal/runbooks/checkout-release",
@@ -1354,7 +1479,9 @@ def test_release_readiness_warns_when_production_change_ticket_gate_is_bypassed(
     assert response.ready is True
     change_check = next(check for check in response.checks if check["check_id"] == "change.ticket")
     assert change_check["status"] == "warning"
-    change_action = next(action for action in response.next_actions if action["check_id"] == "change.ticket")
+    change_action = next(
+        action for action in response.next_actions if action["check_id"] == "change.ticket"
+    )
     assert change_action["severity"] == "warning"
     assert change_action["label"] == "Review Change ticket"
 
@@ -1369,7 +1496,7 @@ def test_release_readiness_blocks_production_live_without_release_window(monkeyp
                 "enabled": True,
                 "min_severity": "warning",
                 "last_test_status": "passed",
-                "last_tested_at": datetime.now(timezone.utc).isoformat(),
+                "last_tested_at": datetime.now(UTC).isoformat(),
             }
         ]
     )
@@ -1422,7 +1549,7 @@ def test_release_readiness_blocks_production_live_without_approval_evidence(monk
                 "enabled": True,
                 "min_severity": "warning",
                 "last_test_status": "passed",
-                "last_tested_at": datetime.now(timezone.utc).isoformat(),
+                "last_tested_at": datetime.now(UTC).isoformat(),
             }
         ]
     )
@@ -1446,13 +1573,13 @@ def test_release_readiness_blocks_production_live_without_approval_evidence(monk
                         "name": "Checkout",
                         "position": 0,
                         "config": {
-                        "environment": "production",
-                        "approval_gate": "manual",
-                        "commit_sha": "abc1234",
-                        "image": "ghcr.io/example/checkout:v2",
-                        "health_check_path": "/readyz",
-                    },
-                }
+                            "environment": "production",
+                            "approval_gate": "manual",
+                            "commit_sha": "abc1234",
+                            "image": "ghcr.io/example/checkout:v2",
+                            "health_check_path": "/readyz",
+                        },
+                    }
                 ],
             ),
             current=current,
@@ -1461,8 +1588,12 @@ def test_release_readiness_blocks_production_live_without_approval_evidence(monk
     )
 
     assert response.ready is False
-    assert any("approval_granted_by" in item and "approval_reason" in item for item in response.blockers)
-    approval_check = next(check for check in response.checks if check["check_id"] == "approval.evidence")
+    assert any(
+        "approval_granted_by" in item and "approval_reason" in item for item in response.blockers
+    )
+    approval_check = next(
+        check for check in response.checks if check["check_id"] == "approval.evidence"
+    )
     assert approval_check["status"] == "blocked"
 
 
@@ -1477,7 +1608,7 @@ def test_release_readiness_blocks_stale_production_approval(monkeypatch) -> None
                 "enabled": True,
                 "min_severity": "warning",
                 "last_test_status": "passed",
-                "last_tested_at": datetime.now(timezone.utc).isoformat(),
+                "last_tested_at": datetime.now(UTC).isoformat(),
             }
         ]
     )
@@ -1493,7 +1624,7 @@ def test_release_readiness_blocks_stale_production_approval(monkeypatch) -> None
                     "approval_granted": True,
                     "approval_granted_by": "lead@example.com",
                     "approval_reason": "approved production release",
-                    "approval_granted_at": (datetime.now(timezone.utc) - timedelta(hours=2)).isoformat(),
+                    "approval_granted_at": (datetime.now(UTC) - timedelta(hours=2)).isoformat(),
                     "change_ticket": "CHG-123",
                     "release_window_override_reason": "incident commander approved immediate release",
                 },
@@ -1518,7 +1649,9 @@ def test_release_readiness_blocks_stale_production_approval(monkeypatch) -> None
 
     assert response.ready is False
     assert any("approval evidence is older than 1 hour(s)" in item for item in response.blockers)
-    approval_check = next(check for check in response.checks if check["check_id"] == "approval.evidence")
+    approval_check = next(
+        check for check in response.checks if check["check_id"] == "approval.evidence"
+    )
     assert approval_check["status"] == "blocked"
 
 
@@ -1532,7 +1665,7 @@ def test_release_readiness_warns_when_production_release_window_is_bypassed(monk
                 "enabled": True,
                 "min_severity": "warning",
                 "last_test_status": "passed",
-                "last_tested_at": datetime.now(timezone.utc).isoformat(),
+                "last_tested_at": datetime.now(UTC).isoformat(),
             }
         ]
     )
@@ -1549,7 +1682,7 @@ def test_release_readiness_warns_when_production_release_window_is_bypassed(monk
                     "approval_granted": True,
                     "approval_granted_by": "lead@example.com",
                     "approval_reason": "approved production release",
-                    "approval_granted_at": datetime.now(timezone.utc).isoformat(),
+                    "approval_granted_at": datetime.now(UTC).isoformat(),
                     "change_ticket": "CHG-123",
                     "release_window_override_reason": "incident commander approved immediate release",
                     "runbook_url": "https://wiki.company.internal/runbooks/checkout-release",
@@ -1564,12 +1697,12 @@ def test_release_readiness_warns_when_production_release_window_is_bypassed(monk
                         "position": 0,
                         "config": {
                             "environment": "production",
-                        "approval_gate": "manual",
-                        "commit_sha": "abc1234",
-                        "image": "ghcr.io/example/checkout:v2",
-                        "health_check_path": "/readyz",
-                    },
-                }
+                            "approval_gate": "manual",
+                            "commit_sha": "abc1234",
+                            "image": "ghcr.io/example/checkout:v2",
+                            "health_check_path": "/readyz",
+                        },
+                    }
                 ],
             ),
             current=current,
@@ -1585,7 +1718,7 @@ def test_release_readiness_warns_when_production_release_window_is_bypassed(monk
 def test_release_readiness_blocks_production_live_during_change_freeze(monkeypatch) -> None:
     monkeypatch.setenv("RELEASE_FLOW_LIVE_ENABLED", "1")
     monkeypatch.setenv("RELEASE_FLOW_LIVE_WORKSPACES", "workspace-a")
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     db = ReleaseReadinessDb(
         channels=[
             {
@@ -1648,7 +1781,7 @@ def test_release_readiness_blocks_production_live_during_change_freeze(monkeypat
 def test_release_readiness_warns_when_change_freeze_is_bypassed(monkeypatch) -> None:
     monkeypatch.setenv("RELEASE_FLOW_LIVE_ENABLED", "1")
     monkeypatch.setenv("RELEASE_FLOW_LIVE_WORKSPACES", "workspace-a")
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     db = ReleaseReadinessDb(
         channels=[
             {
@@ -1707,7 +1840,9 @@ def test_release_readiness_warns_when_change_freeze_is_bypassed(monkeypatch) -> 
     assert response.ready is True
     freeze_check = next(check for check in response.checks if check["check_id"] == "change.freeze")
     assert freeze_check["status"] == "warning"
-    freeze_action = next(action for action in response.next_actions if action["check_id"] == "change.freeze")
+    freeze_action = next(
+        action for action in response.next_actions if action["check_id"] == "change.freeze"
+    )
     assert freeze_action["severity"] == "warning"
     assert freeze_action["label"] == "Review Change freeze"
 
@@ -1722,7 +1857,7 @@ def test_release_readiness_blocks_production_live_without_runbook(monkeypatch) -
                 "enabled": True,
                 "min_severity": "warning",
                 "last_test_status": "passed",
-                "last_tested_at": datetime.now(timezone.utc).isoformat(),
+                "last_tested_at": datetime.now(UTC).isoformat(),
             }
         ]
     )
@@ -1738,7 +1873,7 @@ def test_release_readiness_blocks_production_live_without_runbook(monkeypatch) -
                     "approval_granted": True,
                     "approval_granted_by": "lead@example.com",
                     "approval_reason": "approved production release",
-                    "approval_granted_at": datetime.now(timezone.utc).isoformat(),
+                    "approval_granted_at": datetime.now(UTC).isoformat(),
                     "change_ticket": "CHG-123",
                     "release_window_override_reason": "incident commander approved immediate release",
                 },
@@ -1777,7 +1912,7 @@ def test_release_readiness_blocks_production_placeholder_runbook_url(monkeypatch
                 "enabled": True,
                 "min_severity": "warning",
                 "last_test_status": "passed",
-                "last_tested_at": datetime.now(timezone.utc).isoformat(),
+                "last_tested_at": datetime.now(UTC).isoformat(),
             }
         ]
     )
@@ -1793,7 +1928,7 @@ def test_release_readiness_blocks_production_placeholder_runbook_url(monkeypatch
                     "approval_granted": True,
                     "approval_granted_by": "lead@example.com",
                     "approval_reason": "approved production release",
-                    "approval_granted_at": datetime.now(timezone.utc).isoformat(),
+                    "approval_granted_at": datetime.now(UTC).isoformat(),
                     "change_ticket": "CHG-123",
                     "release_window_override_reason": "incident commander approved immediate release",
                     "runbook_url": "https://wiki.example.com/runbooks/checkout-release",
@@ -1836,7 +1971,7 @@ def test_release_readiness_blocks_production_live_without_owner_contact(monkeypa
                 "enabled": True,
                 "min_severity": "warning",
                 "last_test_status": "passed",
-                "last_tested_at": datetime.now(timezone.utc).isoformat(),
+                "last_tested_at": datetime.now(UTC).isoformat(),
             }
         ]
     )
@@ -1852,7 +1987,7 @@ def test_release_readiness_blocks_production_live_without_owner_contact(monkeypa
                     "approval_granted": True,
                     "approval_granted_by": "lead@example.com",
                     "approval_reason": "approved production release",
-                    "approval_granted_at": datetime.now(timezone.utc).isoformat(),
+                    "approval_granted_at": datetime.now(UTC).isoformat(),
                     "change_ticket": "CHG-123",
                     "release_window_override_reason": "incident commander approved immediate release",
                     "runbook_url": "https://wiki.company.internal/runbooks/checkout-release",
@@ -1883,12 +2018,16 @@ def test_release_readiness_blocks_production_live_without_owner_contact(monkeypa
     assert response.impact["production_targets"] == ["Checkout"]
     owner_check = next(check for check in response.checks if check["check_id"] == "owner.contact")
     assert owner_check["status"] == "blocked"
-    owner_action = next(action for action in response.next_actions if action["check_id"] == "owner.contact")
+    owner_action = next(
+        action for action in response.next_actions if action["check_id"] == "owner.contact"
+    )
     assert owner_action["severity"] == "blocked"
     assert owner_action["label"] == "Resolve Owner contact"
 
 
-def test_release_readiness_blocks_production_live_without_verification_evidence(monkeypatch) -> None:
+def test_release_readiness_blocks_production_live_without_verification_evidence(
+    monkeypatch,
+) -> None:
     monkeypatch.setenv("RELEASE_FLOW_LIVE_ENABLED", "1")
     monkeypatch.setenv("RELEASE_FLOW_LIVE_WORKSPACES", "workspace-a")
     db = ReleaseReadinessDb(
@@ -1898,7 +2037,7 @@ def test_release_readiness_blocks_production_live_without_verification_evidence(
                 "enabled": True,
                 "min_severity": "warning",
                 "last_test_status": "passed",
-                "last_tested_at": datetime.now(timezone.utc).isoformat(),
+                "last_tested_at": datetime.now(UTC).isoformat(),
             }
         ]
     )
@@ -1914,7 +2053,7 @@ def test_release_readiness_blocks_production_live_without_verification_evidence(
                     "approval_granted": True,
                     "approval_granted_by": "lead@example.com",
                     "approval_reason": "approved production release",
-                    "approval_granted_at": datetime.now(timezone.utc).isoformat(),
+                    "approval_granted_at": datetime.now(UTC).isoformat(),
                     "change_ticket": "CHG-123",
                     "release_window_override_reason": "incident commander approved immediate release",
                     "runbook_url": "https://wiki.company.internal/runbooks/checkout-release",
@@ -1941,7 +2080,9 @@ def test_release_readiness_blocks_production_live_without_verification_evidence(
 
     assert response.ready is False
     assert any("post_deploy_verification_url" in item for item in response.blockers)
-    verification_check = next(check for check in response.checks if check["check_id"] == "verification.plan")
+    verification_check = next(
+        check for check in response.checks if check["check_id"] == "verification.plan"
+    )
     assert verification_check["status"] == "blocked"
 
 
@@ -1955,7 +2096,7 @@ def test_release_readiness_blocks_production_http_verification_url(monkeypatch) 
                 "enabled": True,
                 "min_severity": "warning",
                 "last_test_status": "passed",
-                "last_tested_at": datetime.now(timezone.utc).isoformat(),
+                "last_tested_at": datetime.now(UTC).isoformat(),
             }
         ]
     )
@@ -1971,7 +2112,7 @@ def test_release_readiness_blocks_production_http_verification_url(monkeypatch) 
                     "approval_granted": True,
                     "approval_granted_by": "lead@example.com",
                     "approval_reason": "approved production release",
-                    "approval_granted_at": datetime.now(timezone.utc).isoformat(),
+                    "approval_granted_at": datetime.now(UTC).isoformat(),
                     "change_ticket": "CHG-123",
                     "release_window_override_reason": "incident commander approved immediate release",
                     "runbook_url": "https://wiki.company.internal/runbooks/checkout-release",
@@ -2000,7 +2141,9 @@ def test_release_readiness_blocks_production_http_verification_url(monkeypatch) 
 
     assert response.ready is False
     assert any("live https post_deploy_verification_url" in item for item in response.blockers)
-    verification_check = next(check for check in response.checks if check["check_id"] == "verification.plan")
+    verification_check = next(
+        check for check in response.checks if check["check_id"] == "verification.plan"
+    )
     assert verification_check["status"] == "blocked"
 
 
@@ -2014,7 +2157,7 @@ def test_release_readiness_blocks_when_production_verification_is_bypassed(monke
                 "enabled": True,
                 "min_severity": "warning",
                 "last_test_status": "passed",
-                "last_tested_at": datetime.now(timezone.utc).isoformat(),
+                "last_tested_at": datetime.now(UTC).isoformat(),
             }
         ]
     )
@@ -2030,7 +2173,7 @@ def test_release_readiness_blocks_when_production_verification_is_bypassed(monke
                     "approval_granted": True,
                     "approval_granted_by": "lead@example.com",
                     "approval_reason": "approved production release",
-                    "approval_granted_at": datetime.now(timezone.utc).isoformat(),
+                    "approval_granted_at": datetime.now(UTC).isoformat(),
                     "change_ticket": "CHG-123",
                     "release_window_override_reason": "incident commander approved immediate release",
                     "runbook_url": "https://wiki.company.internal/runbooks/checkout-release",
@@ -2059,7 +2202,9 @@ def test_release_readiness_blocks_when_production_verification_is_bypassed(monke
 
     assert response.ready is False
     assert any("post_deploy_verification_url" in item for item in response.blockers)
-    verification_check = next(check for check in response.checks if check["check_id"] == "verification.plan")
+    verification_check = next(
+        check for check in response.checks if check["check_id"] == "verification.plan"
+    )
     assert verification_check["status"] == "blocked"
 
 
@@ -2073,7 +2218,7 @@ def test_release_readiness_blocks_production_live_without_abort_criteria(monkeyp
                 "enabled": True,
                 "min_severity": "warning",
                 "last_test_status": "passed",
-                "last_tested_at": datetime.now(timezone.utc).isoformat(),
+                "last_tested_at": datetime.now(UTC).isoformat(),
             }
         ]
     )
@@ -2089,7 +2234,7 @@ def test_release_readiness_blocks_production_live_without_abort_criteria(monkeyp
                     "approval_granted": True,
                     "approval_granted_by": "lead@example.com",
                     "approval_reason": "approved production release",
-                    "approval_granted_at": datetime.now(timezone.utc).isoformat(),
+                    "approval_granted_at": datetime.now(UTC).isoformat(),
                     "change_ticket": "CHG-123",
                     "release_window_override_reason": "incident commander approved immediate release",
                     "runbook_url": "https://wiki.company.internal/runbooks/checkout-release",
@@ -2117,7 +2262,9 @@ def test_release_readiness_blocks_production_live_without_abort_criteria(monkeyp
 
     assert response.ready is False
     assert any("rollback_trigger" in item for item in response.blockers)
-    criteria_check = next(check for check in response.checks if check["check_id"] == "rollback.abort_criteria")
+    criteria_check = next(
+        check for check in response.checks if check["check_id"] == "rollback.abort_criteria"
+    )
     assert criteria_check["status"] == "blocked"
 
 
@@ -2131,7 +2278,7 @@ def test_release_readiness_warns_when_abort_criteria_is_bypassed(monkeypatch) ->
                 "enabled": True,
                 "min_severity": "warning",
                 "last_test_status": "passed",
-                "last_tested_at": datetime.now(timezone.utc).isoformat(),
+                "last_tested_at": datetime.now(UTC).isoformat(),
             }
         ]
     )
@@ -2147,7 +2294,7 @@ def test_release_readiness_warns_when_abort_criteria_is_bypassed(monkeypatch) ->
                     "approval_granted": True,
                     "approval_granted_by": "lead@example.com",
                     "approval_reason": "approved production release",
-                    "approval_granted_at": datetime.now(timezone.utc).isoformat(),
+                    "approval_granted_at": datetime.now(UTC).isoformat(),
                     "change_ticket": "CHG-123",
                     "release_window_override_reason": "incident commander approved immediate release",
                     "runbook_url": "https://wiki.company.internal/runbooks/checkout-release",
@@ -2176,9 +2323,15 @@ def test_release_readiness_warns_when_abort_criteria_is_bypassed(monkeypatch) ->
     )
 
     assert response.ready is True
-    criteria_check = next(check for check in response.checks if check["check_id"] == "rollback.abort_criteria")
+    criteria_check = next(
+        check for check in response.checks if check["check_id"] == "rollback.abort_criteria"
+    )
     assert criteria_check["status"] == "warning"
-    criteria_action = next(action for action in response.next_actions if action["check_id"] == "rollback.abort_criteria")
+    criteria_action = next(
+        action
+        for action in response.next_actions
+        if action["check_id"] == "rollback.abort_criteria"
+    )
     assert criteria_action["severity"] == "warning"
 
 
@@ -2298,7 +2451,7 @@ def test_release_readiness_accepts_created_safe_pr_evidence(monkeypatch) -> None
                 "enabled": True,
                 "min_severity": "warning",
                 "last_test_status": "passed",
-                "last_tested_at": datetime.now(timezone.utc).isoformat(),
+                "last_tested_at": datetime.now(UTC).isoformat(),
             }
         ],
         applications={"checkout": application},
@@ -2312,7 +2465,7 @@ def test_release_readiness_accepts_created_safe_pr_evidence(monkeypatch) -> None
             "manifest_path": expected_manifest_path,
             "commit_sha": "abc1234",
             "patch_sha256": expected_patch_sha,
-            "created_at": datetime.now(timezone.utc).isoformat(),
+            "created_at": datetime.now(UTC).isoformat(),
         },
     )
     monkeypatch.setattr(release_router, "require_plan_application_read_access", lambda *_args: None)
@@ -2374,7 +2527,7 @@ def test_release_readiness_selects_matching_safe_pr_candidate(monkeypatch) -> No
         "manifest_path": expected_manifest_path,
         "commit_sha": "abc1234",
         "patch_sha256": expected_patch_sha,
-        "created_at": datetime.now(timezone.utc).isoformat(),
+        "created_at": datetime.now(UTC).isoformat(),
     }
     db = ReleaseReadinessSafePrDb(
         channels=[
@@ -2383,7 +2536,7 @@ def test_release_readiness_selects_matching_safe_pr_candidate(monkeypatch) -> No
                 "enabled": True,
                 "min_severity": "warning",
                 "last_test_status": "passed",
-                "last_tested_at": datetime.now(timezone.utc).isoformat(),
+                "last_tested_at": datetime.now(UTC).isoformat(),
             }
         ],
         applications={"checkout": application},
@@ -2460,7 +2613,7 @@ def test_release_readiness_matches_generated_manifest_safe_pr_evidence(monkeypat
                 "enabled": True,
                 "min_severity": "warning",
                 "last_test_status": "passed",
-                "last_tested_at": datetime.now(timezone.utc).isoformat(),
+                "last_tested_at": datetime.now(UTC).isoformat(),
             }
         ],
         applications={"checkout": application},
@@ -2474,7 +2627,7 @@ def test_release_readiness_matches_generated_manifest_safe_pr_evidence(monkeypat
             "manifest_path": safe_pr.manifest_path,
             "commit_sha": safe_pr.commit_sha,
             "patch_sha256": safe_pr.patch_sha256,
-            "created_at": datetime.now(timezone.utc).isoformat(),
+            "created_at": datetime.now(UTC).isoformat(),
         },
     )
     monkeypatch.setattr(release_router, "require_plan_application_read_access", lambda *_args: None)
@@ -2504,7 +2657,7 @@ def test_release_readiness_blocks_safe_pr_gate_without_created_evidence(monkeypa
                 "enabled": True,
                 "min_severity": "warning",
                 "last_test_status": "passed",
-                "last_tested_at": datetime.now(timezone.utc).isoformat(),
+                "last_tested_at": datetime.now(UTC).isoformat(),
             }
         ],
         applications={
@@ -2555,7 +2708,7 @@ def test_release_readiness_rejects_production_safe_pr_without_rollback_source(
 ) -> None:
     monkeypatch.setenv("RELEASE_FLOW_LIVE_ENABLED", "1")
     monkeypatch.setenv("RELEASE_FLOW_LIVE_WORKSPACES", "workspace-a")
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     application = {
         "repo_ref": "org/checkout",
         "branch": "main",
@@ -2622,7 +2775,9 @@ def test_release_readiness_rejects_production_safe_pr_without_rollback_source(
             "repo_ref": "org/checkout",
             "base_branch": "main",
             "environment": "production",
-            "manifest_path": release_router.generated_safe_pr_manifest_path(plan, step, application),
+            "manifest_path": release_router.generated_safe_pr_manifest_path(
+                plan, step, application
+            ),
             "commit_sha": "abc1234",
             "patch_sha256": expected_patch_sha,
             "created_at": now.isoformat(),
@@ -2652,7 +2807,7 @@ def test_release_readiness_does_not_trust_user_supplied_safe_pr_ready(monkeypatc
                 "enabled": True,
                 "min_severity": "warning",
                 "last_test_status": "passed",
-                "last_tested_at": datetime.now(timezone.utc).isoformat(),
+                "last_tested_at": datetime.now(UTC).isoformat(),
             }
         ],
         applications={
@@ -2762,7 +2917,7 @@ def test_release_readiness_rejects_mismatched_safe_pr_evidence(
         "patch_sha256": release_router.generated_safe_pr_patch_sha256(
             plan, step, application, workspace_id="workspace-a"
         ),
-        "created_at": datetime.now(timezone.utc).isoformat(),
+        "created_at": datetime.now(UTC).isoformat(),
     }
     safe_pr[field] = bad_value
     db = ReleaseReadinessSafePrDb(
@@ -2772,7 +2927,7 @@ def test_release_readiness_rejects_mismatched_safe_pr_evidence(
                 "enabled": True,
                 "min_severity": "warning",
                 "last_test_status": "passed",
-                "last_tested_at": datetime.now(timezone.utc).isoformat(),
+                "last_tested_at": datetime.now(UTC).isoformat(),
             }
         ],
         applications={"checkout": application},
@@ -2829,7 +2984,7 @@ def test_release_readiness_explains_safe_pr_evidence_mismatch(monkeypatch) -> No
                 "enabled": True,
                 "min_severity": "warning",
                 "last_test_status": "passed",
-                "last_tested_at": datetime.now(timezone.utc).isoformat(),
+                "last_tested_at": datetime.now(UTC).isoformat(),
             }
         ],
         applications={"checkout": application},
@@ -2840,10 +2995,12 @@ def test_release_readiness_explains_safe_pr_evidence_mismatch(monkeypatch) -> No
             "repo_ref": "org/checkout",
             "base_branch": "main",
             "environment": "sandbox",
-            "manifest_path": release_router.generated_safe_pr_manifest_path(plan, step, application),
+            "manifest_path": release_router.generated_safe_pr_manifest_path(
+                plan, step, application
+            ),
             "commit_sha": "abc1234",
             "patch_sha256": "bad-digest",
-            "created_at": datetime.now(timezone.utc).isoformat(),
+            "created_at": datetime.now(UTC).isoformat(),
         },
     )
     monkeypatch.setattr(release_router, "require_plan_application_read_access", lambda *_args: None)
@@ -2862,7 +3019,10 @@ def test_release_readiness_explains_safe_pr_evidence_mismatch(monkeypatch) -> No
     assert any("patch_sha256 expected" in blocker for blocker in response.blockers)
 
 
-@pytest.mark.parametrize("missing_field", ["provider", "repo_ref", "base_branch", "environment", "commit_sha", "patch_sha256"])
+@pytest.mark.parametrize(
+    "missing_field",
+    ["provider", "repo_ref", "base_branch", "environment", "commit_sha", "patch_sha256"],
+)
 def test_release_readiness_rejects_safe_pr_evidence_missing_required_identity(
     monkeypatch,
     missing_field: str,
@@ -2907,7 +3067,7 @@ def test_release_readiness_rejects_safe_pr_evidence_missing_required_identity(
         "patch_sha256": release_router.generated_safe_pr_patch_sha256(
             plan, step, application, workspace_id="workspace-a"
         ),
-        "created_at": datetime.now(timezone.utc).isoformat(),
+        "created_at": datetime.now(UTC).isoformat(),
     }
     safe_pr.pop(missing_field)
     db = ReleaseReadinessSafePrDb(
@@ -2917,7 +3077,7 @@ def test_release_readiness_rejects_safe_pr_evidence_missing_required_identity(
                 "enabled": True,
                 "min_severity": "warning",
                 "last_test_status": "passed",
-                "last_tested_at": datetime.now(timezone.utc).isoformat(),
+                "last_tested_at": datetime.now(UTC).isoformat(),
             }
         ],
         applications={"checkout": application},
@@ -2982,7 +3142,7 @@ def test_release_readiness_ignores_user_supplied_safe_pr_patch_digest(monkeypatc
                 "enabled": True,
                 "min_severity": "warning",
                 "last_test_status": "passed",
-                "last_tested_at": datetime.now(timezone.utc).isoformat(),
+                "last_tested_at": datetime.now(UTC).isoformat(),
             }
         ],
         applications={"checkout": application},
@@ -2993,10 +3153,12 @@ def test_release_readiness_ignores_user_supplied_safe_pr_patch_digest(monkeypatc
             "repo_ref": "org/checkout",
             "base_branch": "main",
             "environment": "sandbox",
-            "manifest_path": release_router.generated_safe_pr_manifest_path(plan, step, application),
+            "manifest_path": release_router.generated_safe_pr_manifest_path(
+                plan, step, application
+            ),
             "commit_sha": "abc1234",
             "patch_sha256": "attacker-digest",
-            "created_at": datetime.now(timezone.utc).isoformat(),
+            "created_at": datetime.now(UTC).isoformat(),
         },
     )
     monkeypatch.setattr(release_router, "require_plan_application_read_access", lambda *_args: None)
@@ -3051,7 +3213,7 @@ def test_release_readiness_rejects_safe_pr_evidence_with_unexpected_pr_url(monke
                 "enabled": True,
                 "min_severity": "warning",
                 "last_test_status": "passed",
-                "last_tested_at": datetime.now(timezone.utc).isoformat(),
+                "last_tested_at": datetime.now(UTC).isoformat(),
             }
         ],
         applications={"checkout": application},
@@ -3062,12 +3224,14 @@ def test_release_readiness_rejects_safe_pr_evidence_with_unexpected_pr_url(monke
             "repo_ref": "org/checkout",
             "base_branch": "main",
             "environment": "sandbox",
-            "manifest_path": release_router.generated_safe_pr_manifest_path(plan, step, application),
+            "manifest_path": release_router.generated_safe_pr_manifest_path(
+                plan, step, application
+            ),
             "commit_sha": "abc1234",
             "patch_sha256": release_router.generated_safe_pr_patch_sha256(
                 plan, step, application, workspace_id="workspace-a"
             ),
-            "created_at": datetime.now(timezone.utc).isoformat(),
+            "created_at": datetime.now(UTC).isoformat(),
         },
     )
     monkeypatch.setattr(release_router, "require_plan_application_read_access", lambda *_args: None)
@@ -3121,7 +3285,7 @@ def test_release_readiness_rejects_safe_pr_evidence_pr_url_for_other_repo(monkey
                 "enabled": True,
                 "min_severity": "warning",
                 "last_test_status": "passed",
-                "last_tested_at": datetime.now(timezone.utc).isoformat(),
+                "last_tested_at": datetime.now(UTC).isoformat(),
             }
         ],
         applications={"checkout": application},
@@ -3132,12 +3296,14 @@ def test_release_readiness_rejects_safe_pr_evidence_pr_url_for_other_repo(monkey
             "repo_ref": "org/checkout",
             "base_branch": "main",
             "environment": "sandbox",
-            "manifest_path": release_router.generated_safe_pr_manifest_path(plan, step, application),
+            "manifest_path": release_router.generated_safe_pr_manifest_path(
+                plan, step, application
+            ),
             "commit_sha": "abc1234",
             "patch_sha256": release_router.generated_safe_pr_patch_sha256(
                 plan, step, application, workspace_id="workspace-a"
             ),
-            "created_at": datetime.now(timezone.utc).isoformat(),
+            "created_at": datetime.now(UTC).isoformat(),
         },
     )
     monkeypatch.setattr(release_router, "require_plan_application_read_access", lambda *_args: None)
@@ -3158,7 +3324,7 @@ def test_release_readiness_rejects_safe_pr_evidence_pr_url_for_other_repo(monkey
 def test_release_readiness_rejects_stale_safe_pr_evidence(monkeypatch) -> None:
     monkeypatch.setenv("RELEASE_FLOW_LIVE_ENABLED", "1")
     monkeypatch.setenv("RELEASE_FLOW_LIVE_WORKSPACES", "workspace-a")
-    stale_created_at = (datetime.now(timezone.utc) - timedelta(hours=49)).isoformat()
+    stale_created_at = (datetime.now(UTC) - timedelta(hours=49)).isoformat()
     application = {
         "repo_ref": "org/checkout",
         "branch": "main",
@@ -3192,7 +3358,7 @@ def test_release_readiness_rejects_stale_safe_pr_evidence(monkeypatch) -> None:
                 "enabled": True,
                 "min_severity": "warning",
                 "last_test_status": "passed",
-                "last_tested_at": datetime.now(timezone.utc).isoformat(),
+                "last_tested_at": datetime.now(UTC).isoformat(),
             }
         ],
         applications={"checkout": application},
@@ -3203,7 +3369,9 @@ def test_release_readiness_rejects_stale_safe_pr_evidence(monkeypatch) -> None:
             "repo_ref": "org/checkout",
             "base_branch": "main",
             "environment": "sandbox",
-            "manifest_path": release_router.generated_safe_pr_manifest_path(plan, step, application),
+            "manifest_path": release_router.generated_safe_pr_manifest_path(
+                plan, step, application
+            ),
             "commit_sha": "abc1234",
             "patch_sha256": release_router.generated_safe_pr_patch_sha256(
                 plan, step, application, workspace_id="workspace-a"
@@ -3336,7 +3504,7 @@ def test_release_run_serialization_marks_stale_active_run() -> None:
             "github": {},
             "rollback": {},
             "health": {},
-            "updated_at": datetime.now(timezone.utc) - timedelta(minutes=5),
+            "updated_at": datetime.now(UTC) - timedelta(minutes=5),
         },
         steps=[
             {
@@ -3356,10 +3524,15 @@ def test_release_run_serialization_marks_stale_active_run() -> None:
 
 
 def test_release_run_summary_counts_derived_statuses() -> None:
-    old_verification = (datetime.now(timezone.utc) - timedelta(minutes=20)).isoformat()
+    old_verification = (datetime.now(UTC) - timedelta(minutes=20)).isoformat()
     summary = release_router.release_run_summary_from_runs(
         [
-            {"run_id": "run-1", "plan_id": "plan-a", "status": "running", "health": {"status": "progressing"}},
+            {
+                "run_id": "run-1",
+                "plan_id": "plan-a",
+                "status": "running",
+                "health": {"status": "progressing"},
+            },
             {
                 "run_id": "run-2",
                 "plan_id": "plan-a",
@@ -3388,7 +3561,7 @@ def test_release_run_summary_counts_derived_statuses() -> None:
                                             "status": "failed",
                                         }
                                     ]
-                                }
+                                },
                             }
                         }
                     }
@@ -3487,7 +3660,7 @@ def test_release_run_summary_counts_derived_statuses() -> None:
 
 
 def test_release_run_handoff_blocks_timed_out_verification_job() -> None:
-    old_verification = (datetime.now(timezone.utc) - timedelta(minutes=20)).isoformat()
+    old_verification = (datetime.now(UTC) - timedelta(minutes=20)).isoformat()
     handoff = release_router.release_run_handoff(
         {
             "run_id": "run-timeout",
@@ -3531,12 +3704,14 @@ def test_release_run_handoff_blocks_timed_out_verification_job() -> None:
 
     assert handoff["verification"]["status"] == "blocked"
     assert handoff["verification"]["timed_out_jobs"][0]["job_id"] == "release-verification-timeout"
-    verification_check = next(check for check in handoff["checks"] if check["name"] == "verification")
+    verification_check = next(
+        check for check in handoff["checks"] if check["name"] == "verification"
+    )
     assert verification_check["status"] == "blocked"
 
 
 def test_release_run_filter_supports_attention_stale_live_and_status() -> None:
-    old_verification = (datetime.now(timezone.utc) - timedelta(minutes=20)).isoformat()
+    old_verification = (datetime.now(UTC) - timedelta(minutes=20)).isoformat()
     runs = [
         {
             "run_id": "run-live",
@@ -3553,7 +3728,7 @@ def test_release_run_filter_supports_attention_stale_live_and_status() -> None:
                             },
                             "diagnostics": {
                                 "override_reason": "diagnostics temporarily waived by incident command",
-                            }
+                            },
                         }
                     }
                 }
@@ -3668,29 +3843,23 @@ def test_release_run_filter_supports_attention_stale_live_and_status() -> None:
         },
     ]
 
+    assert [run["run_id"] for run in release_router.filter_release_runs(runs, status="failed")] == [
+        "run-failed"
+    ]
     assert [
-        run["run_id"]
-        for run in release_router.filter_release_runs(runs, status="failed")
-    ] == ["run-failed"]
-    assert [
-        run["run_id"]
-        for run in release_router.filter_release_runs(runs, status="succeeded")
+        run["run_id"] for run in release_router.filter_release_runs(runs, status="succeeded")
     ] == ["run-succeeded"]
     assert [
-        run["run_id"]
-        for run in release_router.filter_release_runs(runs, status="cancelled")
+        run["run_id"] for run in release_router.filter_release_runs(runs, status="cancelled")
     ] == ["run-cancelled"]
     assert [
-        run["run_id"]
-        for run in release_router.filter_release_runs(runs, attention_only=True)
+        run["run_id"] for run in release_router.filter_release_runs(runs, attention_only=True)
     ] == ["run-stale", "run-failed", "run-verification-failed"]
+    assert [run["run_id"] for run in release_router.filter_release_runs(runs, stale_only=True)] == [
+        "run-stale"
+    ]
     assert [
-        run["run_id"]
-        for run in release_router.filter_release_runs(runs, stale_only=True)
-    ] == ["run-stale"]
-    assert [
-        run["run_id"]
-        for run in release_router.filter_release_runs(runs, active_only=True)
+        run["run_id"] for run in release_router.filter_release_runs(runs, active_only=True)
     ] == [
         "run-live",
         "run-stale",
@@ -3701,21 +3870,19 @@ def test_release_run_filter_supports_attention_stale_live_and_status() -> None:
         "run-unhealthy",
         "run-step-unhealthy",
     ]
-    assert [
-        run["run_id"]
-        for run in release_router.filter_release_runs(runs, live_only=True)
-    ] == ["run-live", "run-failed"]
+    assert [run["run_id"] for run in release_router.filter_release_runs(runs, live_only=True)] == [
+        "run-live",
+        "run-failed",
+    ]
     assert [
         run["run_id"]
         for run in release_router.filter_release_runs(runs, status="rollback_requested")
     ] == ["run-rollback-requested"]
+    assert [run["run_id"] for run in release_router.filter_release_runs(runs, status="paused")] == [
+        "run-paused"
+    ]
     assert [
-        run["run_id"]
-        for run in release_router.filter_release_runs(runs, status="paused")
-    ] == ["run-paused"]
-    assert [
-        run["run_id"]
-        for run in release_router.filter_release_runs(runs, unhealthy_only=True)
+        run["run_id"] for run in release_router.filter_release_runs(runs, unhealthy_only=True)
     ] == ["run-unhealthy", "run-step-unhealthy"]
     assert [
         run["run_id"]
@@ -3730,8 +3897,7 @@ def test_release_run_filter_supports_attention_stale_live_and_status() -> None:
         for run in release_router.filter_release_runs(runs, active_change_freeze_only=True)
     ] == ["run-live"]
     assert [
-        run["run_id"]
-        for run in release_router.filter_release_runs(runs, policy_override_only=True)
+        run["run_id"] for run in release_router.filter_release_runs(runs, policy_override_only=True)
     ] == ["run-live"]
     assert [
         run["run_id"]
@@ -3771,7 +3937,9 @@ class ReleaseDispatchDb:
     def has_active_release_runs(self, _workspace_id: str, plan_id: str) -> bool:
         return plan_id in self.active_plan_ids
 
-    def list_alert_channels(self, _workspace_id: str, *, only_enabled: bool = False) -> list[dict[str, object]]:
+    def list_alert_channels(
+        self, _workspace_id: str, *, only_enabled: bool = False
+    ) -> list[dict[str, object]]:
         if only_enabled:
             return [channel for channel in self.channels if channel.get("enabled", True)]
         return self.channels
@@ -3837,7 +4005,7 @@ class ReleaseRunActionDb:
                 {
                     "event_type": "release.notify.previous",
                     "created_at": (
-                        datetime.now(timezone.utc) - timedelta(minutes=self.recent_notify_minutes)
+                        datetime.now(UTC) - timedelta(minutes=self.recent_notify_minutes)
                     ).isoformat(),
                 }
             )
@@ -3915,7 +4083,9 @@ class ReleaseRunActionDb:
                                 ],
                             },
                             "abort_criteria": {
-                                "criteria": ["rollback if checkout error rate exceeds 5% for 5 minutes"],
+                                "criteria": [
+                                    "rollback if checkout error rate exceeds 5% for 5 minutes"
+                                ],
                                 "override_reason": None,
                                 "production_targets": ["checkout"],
                             },
@@ -3957,7 +4127,7 @@ class ReleaseRunActionDb:
                 "message": message,
                 "actor": actor,
                 "details": details or {},
-                "created_at": datetime.now(timezone.utc).isoformat(),
+                "created_at": datetime.now(UTC).isoformat(),
             }
         )
         return self.get_release_run("workspace-a", "release-run-1")
@@ -4421,7 +4591,12 @@ def test_live_release_blockers_require_backend_allowlist_and_approval(monkeypatc
         },
     }
 
-    assert release_execution_blockers(approved, build_release_plan_preview(approved), 1, workspace_id="workspace-a") == []
+    assert (
+        release_execution_blockers(
+            approved, build_release_plan_preview(approved), 1, workspace_id="workspace-a"
+        )
+        == []
+    )
 
 
 def test_live_release_blockers_require_external_ticket_and_safe_pr(monkeypatch) -> None:
@@ -4454,7 +4629,9 @@ def test_live_release_blockers_require_external_ticket_and_safe_pr(monkeypatch) 
             "safe_pr_url": "https://github.example/pull/1",
         },
     }
-    blockers = release_execution_blockers(ready, build_release_plan_preview(ready), 1, workspace_id="workspace-a")
+    blockers = release_execution_blockers(
+        ready, build_release_plan_preview(ready), 1, workspace_id="workspace-a"
+    )
     assert any("ready Safe PR" in item for item in blockers)
 
     ready_with_evidence = {
@@ -4475,7 +4652,7 @@ def test_live_release_blockers_require_external_ticket_and_safe_pr(monkeypatch) 
                         "event_id": "event-safe-pr-created",
                         "workflow_run_id": "workflow-safe-pr-1",
                         "pr_url": "https://github.example/pull/1",
-                        "created_at": datetime.now(timezone.utc).isoformat(),
+                        "created_at": datetime.now(UTC).isoformat(),
                     },
                 },
             }
@@ -4572,7 +4749,9 @@ def test_release_plan_diagnostics_uses_step_baselines() -> None:
     )
 
     assert "risk.settings_replicas_scaled_to_zero" in codes(diagnostics)
-    assert diagnostics[0].path is None or "steps[0]" in "".join(item.path or "" for item in diagnostics)
+    assert diagnostics[0].path is None or "steps[0]" in "".join(
+        item.path or "" for item in diagnostics
+    )
 
 
 def test_release_plan_diagnostics_catches_advanced_policy_risks() -> None:
@@ -4632,7 +4811,11 @@ def test_release_plan_preview_groups_dependency_waves() -> None:
     assert preview["executable"] is True
     assert preview["waves"] == [
         {"wave": 1, "step_ids": ["preview-step-0"], "applications": ["app-a"]},
-        {"wave": 2, "step_ids": ["preview-step-1", "preview-step-2"], "applications": ["app-b", "app-c"]},
+        {
+            "wave": 2,
+            "step_ids": ["preview-step-1", "preview-step-2"],
+            "applications": ["app-b", "app-c"],
+        },
     ]
     assert preview["steps"][0]["gate"] == "manual_each_step"
 
@@ -4922,7 +5105,9 @@ def test_dispatch_wave_steps_blocks_live_with_critical_only_alert_channel(monkey
         ],
     }
     preview = build_release_plan_preview(plan)
-    db = ReleaseDispatchDb(channels=[{"channel_id": "chan-critical", "enabled": True, "min_severity": "critical"}])
+    db = ReleaseDispatchDb(
+        channels=[{"channel_id": "chan-critical", "enabled": True, "min_severity": "critical"}]
+    )
     events = AcceptingEventGateway()
     current = SimpleNamespace(user_id="user-a", roles=("operator",))
 
@@ -4942,14 +5127,15 @@ def test_dispatch_wave_steps_blocks_live_with_critical_only_alert_channel(monkey
 
     assert raised.value.status_code == 409
     assert any(
-        "warning-or-higher release events" in blocker
-        for blocker in raised.value.detail["blockers"]
+        "warning-or-higher release events" in blocker for blocker in raised.value.detail["blockers"]
     )
     assert events.calls == []
     assert db.dispatched == []
 
 
-def test_dispatch_wave_steps_blocks_live_with_unvalidated_warning_alert_channel(monkeypatch) -> None:
+def test_dispatch_wave_steps_blocks_live_with_unvalidated_warning_alert_channel(
+    monkeypatch,
+) -> None:
     monkeypatch.setenv("RELEASE_FLOW_LIVE_ENABLED", "1")
     monkeypatch.setenv("RELEASE_FLOW_LIVE_WORKSPACES", "workspace-a")
     plan = {
@@ -5000,10 +5186,7 @@ def test_dispatch_wave_steps_blocks_live_with_unvalidated_warning_alert_channel(
         )
 
     assert raised.value.status_code == 409
-    assert any(
-        "passing validation test" in blocker
-        for blocker in raised.value.detail["blockers"]
-    )
+    assert any("passing validation test" in blocker for blocker in raised.value.detail["blockers"])
     assert events.calls == []
     assert db.dispatched == []
 
@@ -5038,7 +5221,7 @@ def test_dispatch_wave_steps_blocks_live_with_stale_alert_validation(monkeypatch
                 "enabled": True,
                 "min_severity": "warning",
                 "last_test_status": "passed",
-                "last_tested_at": (datetime.now(timezone.utc) - timedelta(hours=25)).isoformat(),
+                "last_tested_at": (datetime.now(UTC) - timedelta(hours=25)).isoformat(),
             }
         ]
     )
@@ -5102,7 +5285,7 @@ def test_dispatch_wave_steps_does_not_trust_user_supplied_safe_pr_ready(monkeypa
                 "enabled": True,
                 "min_severity": "warning",
                 "last_test_status": "passed",
-                "last_tested_at": datetime.now(timezone.utc).isoformat(),
+                "last_tested_at": datetime.now(UTC).isoformat(),
             }
         ]
     )
@@ -5165,7 +5348,7 @@ def test_dispatch_wave_steps_blocks_live_when_diagnostics_do_not_pass(monkeypatc
                 "enabled": True,
                 "min_severity": "warning",
                 "last_test_status": "passed",
-                "last_tested_at": datetime.now(timezone.utc).isoformat(),
+                "last_tested_at": datetime.now(UTC).isoformat(),
             }
         ]
     )
@@ -5229,7 +5412,7 @@ def test_dispatch_wave_steps_blocks_live_diagnostics_bypass_without_reason(monke
                 "enabled": True,
                 "min_severity": "warning",
                 "last_test_status": "passed",
-                "last_tested_at": datetime.now(timezone.utc).isoformat(),
+                "last_tested_at": datetime.now(UTC).isoformat(),
             }
         ]
     )
@@ -5251,7 +5434,9 @@ def test_dispatch_wave_steps_blocks_live_diagnostics_bypass_without_reason(monke
         )
 
     assert raised.value.status_code == 409
-    assert any("diagnostics override reason" in blocker for blocker in raised.value.detail["blockers"])
+    assert any(
+        "diagnostics override reason" in blocker for blocker in raised.value.detail["blockers"]
+    )
     assert events.calls == []
     assert db.dispatched == []
 
@@ -5290,7 +5475,7 @@ def test_dispatch_wave_steps_blocks_live_when_rollback_disabled_without_reason(m
                 "enabled": True,
                 "min_severity": "warning",
                 "last_test_status": "passed",
-                "last_tested_at": datetime.now(timezone.utc).isoformat(),
+                "last_tested_at": datetime.now(UTC).isoformat(),
             }
         ]
     )
@@ -5355,7 +5540,7 @@ def test_dispatch_wave_steps_blocks_production_live_without_change_ticket(monkey
                 "enabled": True,
                 "min_severity": "warning",
                 "last_test_status": "passed",
-                "last_tested_at": datetime.now(timezone.utc).isoformat(),
+                "last_tested_at": datetime.now(UTC).isoformat(),
             }
         ]
     )
@@ -5394,7 +5579,7 @@ def test_dispatch_wave_steps_blocks_production_placeholder_change_ticket(monkeyp
             "approval_granted": True,
             "approval_granted_by": "lead@example.com",
             "approval_reason": "approved production release",
-            "approval_granted_at": datetime.now(timezone.utc).isoformat(),
+            "approval_granted_at": datetime.now(UTC).isoformat(),
             "change_ticket": "CHG-PREFLIGHT",
             "release_window_override_reason": "incident commander approved immediate release",
             "runbook_url": "https://wiki.company.internal/runbooks/storefront-release",
@@ -5428,7 +5613,7 @@ def test_dispatch_wave_steps_blocks_production_placeholder_change_ticket(monkeyp
                 "enabled": True,
                 "min_severity": "warning",
                 "last_test_status": "passed",
-                "last_tested_at": datetime.now(timezone.utc).isoformat(),
+                "last_tested_at": datetime.now(UTC).isoformat(),
             }
         ]
     )
@@ -5496,7 +5681,7 @@ def test_dispatch_wave_steps_blocks_production_live_without_release_window(monke
                 "enabled": True,
                 "min_severity": "warning",
                 "last_test_status": "passed",
-                "last_tested_at": datetime.now(timezone.utc).isoformat(),
+                "last_tested_at": datetime.now(UTC).isoformat(),
             }
         ]
     )
@@ -5526,7 +5711,7 @@ def test_dispatch_wave_steps_blocks_production_live_without_release_window(monke
 def test_dispatch_wave_steps_blocks_production_live_during_change_freeze(monkeypatch) -> None:
     monkeypatch.setenv("RELEASE_FLOW_LIVE_ENABLED", "1")
     monkeypatch.setenv("RELEASE_FLOW_LIVE_WORKSPACES", "workspace-a")
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     plan = {
         "plan_id": "plan-a",
         "name": "storefront",
@@ -5637,7 +5822,7 @@ def test_dispatch_wave_steps_blocks_production_live_without_approval_evidence(mo
                 "enabled": True,
                 "min_severity": "warning",
                 "last_test_status": "passed",
-                "last_tested_at": datetime.now(timezone.utc).isoformat(),
+                "last_tested_at": datetime.now(UTC).isoformat(),
             }
         ]
     )
@@ -5664,7 +5849,9 @@ def test_dispatch_wave_steps_blocks_production_live_without_approval_evidence(mo
     assert db.dispatched == []
 
 
-def test_dispatch_wave_steps_blocks_production_live_without_verification_evidence(monkeypatch) -> None:
+def test_dispatch_wave_steps_blocks_production_live_without_verification_evidence(
+    monkeypatch,
+) -> None:
     monkeypatch.setenv("RELEASE_FLOW_LIVE_ENABLED", "1")
     monkeypatch.setenv("RELEASE_FLOW_LIVE_WORKSPACES", "workspace-a")
     plan = {
@@ -5676,7 +5863,7 @@ def test_dispatch_wave_steps_blocks_production_live_without_verification_evidenc
             "approval_granted": True,
             "approval_granted_by": "lead@example.com",
             "approval_reason": "approved production release",
-            "approval_granted_at": datetime.now(timezone.utc).isoformat(),
+            "approval_granted_at": datetime.now(UTC).isoformat(),
             "change_ticket": "CHG-123",
             "release_window_override_reason": "incident commander approved immediate release",
             "runbook_url": "https://wiki.company.internal/runbooks/storefront-release",
@@ -5708,7 +5895,7 @@ def test_dispatch_wave_steps_blocks_production_live_without_verification_evidenc
                 "enabled": True,
                 "min_severity": "warning",
                 "last_test_status": "passed",
-                "last_tested_at": datetime.now(timezone.utc).isoformat(),
+                "last_tested_at": datetime.now(UTC).isoformat(),
             }
         ]
     )
@@ -5730,7 +5917,9 @@ def test_dispatch_wave_steps_blocks_production_live_without_verification_evidenc
         )
 
     assert raised.value.status_code == 409
-    assert any("post_deploy_verification_url" in blocker for blocker in raised.value.detail["blockers"])
+    assert any(
+        "post_deploy_verification_url" in blocker for blocker in raised.value.detail["blockers"]
+    )
     assert events.calls == []
     assert db.dispatched == []
 
@@ -5747,7 +5936,7 @@ def test_dispatch_wave_steps_blocks_production_live_without_abort_criteria(monke
             "approval_granted": True,
             "approval_granted_by": "lead@example.com",
             "approval_reason": "approved production release",
-            "approval_granted_at": datetime.now(timezone.utc).isoformat(),
+            "approval_granted_at": datetime.now(UTC).isoformat(),
             "change_ticket": "CHG-123",
             "release_window_override_reason": "incident commander approved immediate release",
             "runbook_url": "https://wiki.company.internal/runbooks/storefront-release",
@@ -5779,7 +5968,7 @@ def test_dispatch_wave_steps_blocks_production_live_without_abort_criteria(monke
                 "enabled": True,
                 "min_severity": "warning",
                 "last_test_status": "passed",
-                "last_tested_at": datetime.now(timezone.utc).isoformat(),
+                "last_tested_at": datetime.now(UTC).isoformat(),
             }
         ]
     )
@@ -5835,7 +6024,7 @@ def test_dispatch_wave_steps_publishes_live_when_backend_gate_allows(monkeypatch
                 "channel_id": "chan-a",
                 "enabled": True,
                 "last_test_status": "passed",
-                "last_tested_at": datetime.now(timezone.utc).isoformat(),
+                "last_tested_at": datetime.now(UTC).isoformat(),
             }
         ]
     )
@@ -5928,7 +6117,7 @@ def test_dispatch_wave_steps_records_diagnostics_override_reason(monkeypatch) ->
                 "enabled": True,
                 "min_severity": "warning",
                 "last_test_status": "passed",
-                "last_tested_at": datetime.now(timezone.utc).isoformat(),
+                "last_tested_at": datetime.now(UTC).isoformat(),
             }
         ]
     )
@@ -5973,11 +6162,11 @@ def test_dispatch_wave_steps_records_production_change_override(monkeypatch) -> 
             "approval_granted": True,
             "approval_granted_by": "lead@example.com",
             "approval_reason": "approved production release",
-            "approval_granted_at": datetime.now(timezone.utc).isoformat(),
+            "approval_granted_at": datetime.now(UTC).isoformat(),
             "production_change_override_reason": "emergency production fix approved",
             "release_window_override_reason": "incident commander approved immediate release",
-            "change_freeze_start": (datetime.now(timezone.utc) - timedelta(minutes=5)).isoformat(),
-            "change_freeze_end": (datetime.now(timezone.utc) + timedelta(minutes=5)).isoformat(),
+            "change_freeze_start": (datetime.now(UTC) - timedelta(minutes=5)).isoformat(),
+            "change_freeze_end": (datetime.now(UTC) + timedelta(minutes=5)).isoformat(),
             "change_freeze_override_reason": "incident commander approved emergency hotfix",
             "runbook_url": "https://wiki.company.internal/runbooks/storefront-release",
             "runbook_override_reason": "legacy operator note should not bypass production",
@@ -6011,7 +6200,7 @@ def test_dispatch_wave_steps_records_production_change_override(monkeypatch) -> 
                 "enabled": True,
                 "min_severity": "warning",
                 "last_test_status": "passed",
-                "last_tested_at": datetime.now(timezone.utc).isoformat(),
+                "last_tested_at": datetime.now(UTC).isoformat(),
             }
         ]
     )
@@ -6040,10 +6229,15 @@ def test_dispatch_wave_steps_records_production_change_override(monkeypatch) -> 
         "production_override_reason": "emergency production fix approved",
     }
     assert guard["release_window"]["production_targets"] == ["app-a"]
-    assert guard["release_window"]["override_reason"] == "incident commander approved immediate release"
+    assert (
+        guard["release_window"]["override_reason"]
+        == "incident commander approved immediate release"
+    )
     assert guard["change_freeze"]["production_targets"] == ["app-a"]
     assert guard["change_freeze"]["active"] is True
-    assert guard["change_freeze"]["override_reason"] == "incident commander approved emergency hotfix"
+    assert (
+        guard["change_freeze"]["override_reason"] == "incident commander approved emergency hotfix"
+    )
     assert guard["readiness"]["warnings"] == [
         "Production change ticket gate is bypassed with an operator reason.",
         "Production release window is bypassed with an operator reason.",
@@ -6100,8 +6294,8 @@ def test_dispatch_wave_steps_records_production_change_override(monkeypatch) -> 
 def test_dispatch_wave_steps_records_active_production_release_window(monkeypatch) -> None:
     monkeypatch.setenv("RELEASE_FLOW_LIVE_ENABLED", "1")
     monkeypatch.setenv("RELEASE_FLOW_LIVE_WORKSPACES", "workspace-a")
-    start = datetime.now(timezone.utc) - timedelta(hours=1)
-    end = datetime.now(timezone.utc) + timedelta(hours=1)
+    start = datetime.now(UTC) - timedelta(hours=1)
+    end = datetime.now(UTC) + timedelta(hours=1)
     plan = {
         "plan_id": "plan-a",
         "name": "storefront",
@@ -6111,7 +6305,7 @@ def test_dispatch_wave_steps_records_active_production_release_window(monkeypatc
             "approval_granted": True,
             "approval_granted_by": "lead@example.com",
             "approval_reason": "approved production release",
-            "approval_granted_at": datetime.now(timezone.utc).isoformat(),
+            "approval_granted_at": datetime.now(UTC).isoformat(),
             "change_ticket": "CHG-123",
             "release_window_start": start.isoformat(),
             "release_window_end": end.isoformat(),
@@ -6146,7 +6340,7 @@ def test_dispatch_wave_steps_records_active_production_release_window(monkeypatc
                 "enabled": True,
                 "min_severity": "warning",
                 "last_test_status": "passed",
-                "last_tested_at": datetime.now(timezone.utc).isoformat(),
+                "last_tested_at": datetime.now(UTC).isoformat(),
             }
         ]
     )
@@ -6180,7 +6374,10 @@ def test_dispatch_wave_steps_records_active_production_release_window(monkeypatc
     assert guard["verification_jobs"]["jobs"][0]["kind"] == "kubernetes_health_check"
     assert guard["verification_jobs"]["jobs"][0]["status"] == "pending"
     assert guard["verification_jobs"]["jobs"][0]["timeout_minutes"] == 15
-    assert release_router.parse_release_window_time(guard["verification_jobs"]["jobs"][0]["queued_at"]) is not None
+    assert (
+        release_router.parse_release_window_time(guard["verification_jobs"]["jobs"][0]["queued_at"])
+        is not None
+    )
     assert guard["verification_jobs"]["jobs"][0]["target"] == {
         "cluster_id": "",
         "namespace": "",
@@ -6234,7 +6431,10 @@ def test_release_run_steps_capture_wave_health_and_github_metadata() -> None:
     assert steps[0]["details"]["runtime_mode"] == "demo"
     assert steps[0]["details"]["provider_mode"] == "dry_run"
     assert steps[0]["details"]["side_effects"] is False
-    assert steps[0]["details"]["github"]["commit_url"] == "https://github.com/org/checkout/commit/abc123"
+    assert (
+        steps[0]["details"]["github"]["commit_url"]
+        == "https://github.com/org/checkout/commit/abc123"
+    )
     assert github["release_url"] == "https://github.com/org/checkout/releases/tag/v2.0.0"
 
 

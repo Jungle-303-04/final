@@ -2653,3 +2653,99 @@ Prometheus base URL이 env/request 어디에도 없으면 `code="prometheus_base
     같은 AWS 계정에서 OIDC provider를 다른 저장소 role도 공유하는지 확인한 뒤 apply한다.
   - 외부 CI를 다시 도입할 때는 삭제된 파일명을 테스트로 먼저 고정하지 말고, 실행 가능한 runner와
     credential 경계부터 별도 adapter로 추가한다. 내부 workflow-controller를 대체하지 않는다.
+
+## 워커 지연·원자성·이벤트 호환성 강화 (2026-07-10)
+
+- 적용 범위:
+  - `workflow-controller`에만 `WORKER_FETCH_TIMEOUT_SECONDS=0.05`를 적용했다. 다른 워커의 기본값은
+    `1.0`으로 유지해 전체 NATS idle pull 부하를 늘리지 않았다. subject 처리 순서와 processor 동시성은
+    기존 직렬 구조를 유지한다.
+  - `workflow_run_steps` upsert에 단조 상태 전이 조건을 추가했다. `succeeded/failed/skipped` 종결 상태를
+    늦게 재전달된 `pending/running` 이벤트가 되돌릴 수 없다.
+  - 업무쓰기 + outbox + ledger 완료 UoW 커밋 뒤 NATS ACK만 실패할 때 ledger를 `retrying`으로 되돌리던
+    경계를 수정했다. ACK 실패는 WorkerRuntime으로 전파해 재전달시키고, 재전달 이벤트는 이미
+    `processed`인 ledger를 확인해 업무 핸들러를 다시 실행하지 않는다.
+  - 이벤트 body의 기본 직접 디코드는 strict를 유지한다. 실제 wire consumer인 runtime dispatch만
+    미래 additive 필드를 무시한다. 필수 필드 누락과 기존 필드 타입 오류는 계속 거부한다.
+  - 삭제한 과거 `ci.yml/aws-cd.yml/integration-smoke.yml/promote-dev.yml`만 재등장 금지 대상으로 두고,
+    현재 별도 계약 테스트가 있는 release-flow GitHub Actions는 허용하도록 낡은 테스트를 정정했다.
+  - production readiness의 Python 소스 검사는 포맷 문자열 일치 대신 AST 함수 호출 검증을 사용한다.
+    Ruff 줄바꿈이 보안 검증 호출 누락으로 오인되는 문제를 제거했다.
+- 원자성 불변식:
+  - event claim은 시도 횟수 보존을 위해 별도 짧은 transaction으로 먼저 commit한다.
+  - handler 업무쓰기, outbox 적재, ledger `processed` 기록은 기존처럼 하나의 UoW에서 함께 commit/rollback한다.
+  - ACK는 DB commit 이후 전송한다. ACK 실패는 DB 완료 상태를 수정하지 않는다.
+  - 긴 handler transaction을 effect-intent로 분리하는 구조 변경은 이번 패스에서 하지 않았다. 외부 I/O
+    idempotency와 crash fault-injection이 준비되기 전에 UoW를 나누면 부분 commit 위험이 더 크기 때문이다.
+- 개발 인증:
+  - 사용자 요청에 따라 management dev manifest의 `DEV_AUTH_BYPASS=1`을 유지했다. 현재 우회 세션은
+    `service_admin` 권한이므로 외부 운영 전환 전에 반드시 `0`으로 바꾸고 익명 보호 API `401`을 확인한다.
+  - 이번 패스에서는 인증 경로와 세션 로직을 변경하지 않았다.
+- 보류한 구조 변경:
+  - effect-intent 기반 외부 I/O 분리, Alembic 전용 migration gate, realtime shared backplane,
+    PostgreSQL/Redis/NATS Stateful HA, image digest 고정은 데이터·배포·비용 영향이 커 별도 단계로 남겼다.
+  - 특히 HA는 replica 수만 늘리지 말고 NATS R3, DB failover, realtime 공유 상태가 함께 준비된 뒤 적용한다.
+- 검증:
+  - `bash scripts/test.sh` -> Ruff/format/import-linter/compileall 통과, `1191 passed, 3 skipped`.
+  - `bash scripts/manifest-check.sh` -> management 58개, target 18개 객체 렌더 성공.
+  - 원자성 회귀 테스트는 commit 후 ACK 실패, NATS 재전달, terminal ledger 중복 실행 방지를 포함한다.
+
+## test 통합 인증 우회 + Bruno/CI 팀 환경 정비 (2026-07-10)
+
+- 사용자·agent 인증 계약:
+  - 공용 기준은 `src/packages/config/security.py`다. `APP_ENV=test` 또는
+    `DEV_SECURITY_BYPASS=1`일 때만 세션, admin/resource access, agent token을 함께 우회한다.
+  - 기존 `DEV_AUTH_BYPASS`는 사용자 세션에만 하위 호환된다. 신규 개발 환경은 통합 기준을 쓴다.
+  - agent 요청은 먼저 정상 `x-agent-token`을 검증한다. 유효한 실제 token은 test 배포에서도 우선한다.
+    token이 없거나 틀리고 우회가 켜졌을 때만 `x-dev-cluster-id` 또는
+    `DEV_SECURITY_BYPASS_CLUSTER_ID`를 사용한다.
+  - 우회 cluster는 `cluster_registrations`에 실제 등록된 `(workspace_id, cluster_id)`만 허용한다.
+    요청 body의 tenant/cluster 값을 권위값으로 사용하지 않는다. 미등록 cluster는 계속 401이다.
+  - realtime agent/browser WebSocket도 같은 기준을 사용한다. management read-only, namespace control,
+    command worker/agent management 차단 등 운영 보호 정책은 인증 우회와 무관하게 유지한다.
+  - 현재 management manifest의 api-gateway와 realtime-gateway는 팀 개발 요청에 따라
+    `APP_ENV=test`, `DEV_SECURITY_BYPASS_CLUSTER_ID=cluster-1`이다. 운영 전환 시 `APP_ENV=production`으로
+    변경하고 무토큰 HTTP/WS가 401/4401인지 확인해야 한다.
+
+- Bruno 안전 실행:
+  - `docs/api/environments/aws-test.bru`는 `dev_security_bypass: true`이며 session/authorization/
+    `x-agent-token`을 제거하고 등록된 `x-dev-cluster-id`만 보낸다.
+  - `scripts/run-bruno-aws.sh`는 Bruno CLI `3.5.1`을 고정하고 실행마다
+    `bruno-<시각>-<pid>` cluster를 등록한다. 종료 trap에서 해당 등록만 해제한다.
+  - 기본 runner에서 실제 cluster scale/restart/unregister, 첫 DLQ replay, 목록 첫 항목 삭제,
+    GitHub/Alertmanager 외부 webhook, approval grant/reject를 제외했다. destructive/외부 인증 요청은
+    해당 `.bru` 파일을 운영자가 명시적으로 선택할 때만 실행한다.
+  - collection 전체 102개 중 다수의 과거 assertion이 4xx도 허용하므로, 기본 runner는 기능 성공
+    경로만 선별한다. 후속 개선은 positive/negative collection 분리와 모든 positive 응답의 정확한
+    2xx 계약 강화다.
+
+- 팀 환경과 Secret:
+  - AWS Secrets Manager `kubeheal/test/team`을 팀 test 비밀값 정본으로 생성했다. 장기
+    `AWS_ACCESS_KEY_ID`/`AWS_SECRET_ACCESS_KEY`는 포함하지 않았다.
+  - `scripts/bootstrap-team-env.sh`는 AWS identity로 Secret을 읽어 `.env.local-test`를 0600으로 만든다.
+    허용 키만 렌더하고 값은 stdout에 출력하지 않는다.
+  - GitHub Actions Secret은 팀원 PC로 다시 내려받을 수 없으므로 로컬 정본으로 쓰지 않는다.
+    `scripts/sync-github-actions-secrets.sh`가 AWS 정본에서 CI용 값만 stdin으로 전달한다.
+  - 저장소 Secret 이름 기준 `RELEASE_FLOW_API_BASE_URL`, `RELEASE_FLOW_AUTH_EMAIL`,
+    `RELEASE_FLOW_AUTH_PASSWORD`, `RELEASE_FLOW_GITHUB_TOKEN`, `CLOUDFLARE_API_TOKEN`을 실제 동기화했다.
+  - `.env*`, `*.local.bru`는 Git ignore와 Docker build context에서 모두 제외한다.
+
+- GitHub Actions 전수 감사:
+  - 팀원 actor 실패 이력: `woonyong-kr` 705건, `JEONWOOHYUN-hydromel` 113건,
+    `minmings111` 2건, `JCBBBBBB` 15건, `ummfieg` 1건을 직접 조회했다.
+  - 최근 24시간 142건은 모두 두 원인이다. Production Gate/Smoke 124건은
+    `workflow_call.secrets`에 대소문자만 다른 3개 이름을 중복 선언해 job 생성 전 실패했다.
+    두 workflow는 대문자 `RELEASE_FLOW_*` 3개만 선언하도록 수정했고 case-insensitive 회귀 테스트를 추가했다.
+  - 나머지 기존 workflow 18건의 failed job 32개는 모두 조직 Actions 예산
+    `budget_amount=0`, `prevent_further_usage=true` 때문에 runner가 시작되지 않았다. step/log가 없으므로
+    코드·권한·Secret 실패가 아니다. 비용 설정은 임의 변경하지 않았다.
+  - 과거 실제 step 실패 중 별도 잔재는 Integration Smoke가 호출한 AWS CD의 api-gateway
+    `ProgressDeadlineExceeded`다. 이번 parser/예산 실패와 다른 사건이며 새 이미지 rollout에서 재확인한다.
+
+- 검증:
+  - `uv run python -m pytest -q` -> `1222 passed, 3 skipped`.
+  - `uv run ruff check src tests scripts` -> 통과.
+  - `uv run ruff format --check src tests scripts` -> 427 files formatted.
+  - `PYTHONPATH=src uv run lint-imports --config .importlinter` -> 2 contracts kept.
+  - `bash scripts/manifest-check.sh` -> management 58개, target 18개 객체 렌더 성공.
+  - AWS Secret 기반 env 생성 실실행 -> mode 0600, allowlist key만 생성 확인.

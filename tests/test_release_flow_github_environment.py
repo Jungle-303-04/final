@@ -75,7 +75,9 @@ def test_validate_github_environment_rejects_placeholder_optional_api_base() -> 
         allow_token_ref_only=False,
     )
 
-    github_api = next(check for check in checks if check.name == "value.RELEASE_FLOW_GITHUB_API_BASE")
+    github_api = next(
+        check for check in checks if check.name == "value.RELEASE_FLOW_GITHUB_API_BASE"
+    )
     assert github_api.ok is False
     assert "example hosts" in github_api.detail
 
@@ -99,7 +101,9 @@ def test_verify_github_environment_fetches_environment_configuration(monkeypatch
         assert request.headers["Authorization"] == "Bearer token-a"  # type: ignore[attr-defined,index]
         url = request.full_url  # type: ignore[attr-defined]
         if url.endswith("/environments/production/secrets"):
-            return Response({"secrets": [{"name": name} for name in sorted(complete_secret_names())]})
+            return Response(
+                {"secrets": [{"name": name} for name in sorted(complete_secret_names())]}
+            )
         if url.endswith("/environments/production/variables"):
             return Response(
                 {
@@ -135,7 +139,9 @@ def test_verify_github_environment_writes_nested_report_path(monkeypatch, tmp_pa
     def fake_urlopen(request: object, *, timeout: int) -> Response:
         url = request.full_url  # type: ignore[attr-defined]
         if url.endswith("/environments/production/secrets"):
-            return Response({"secrets": [{"name": name} for name in sorted(complete_secret_names())]})
+            return Response(
+                {"secrets": [{"name": name} for name in sorted(complete_secret_names())]}
+            )
         if url.endswith("/environments/production/variables"):
             return Response(
                 {

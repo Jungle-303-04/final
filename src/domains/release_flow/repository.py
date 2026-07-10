@@ -6,7 +6,7 @@ import hashlib
 import uuid
 from collections import defaultdict
 from collections.abc import Mapping
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 from sqlalchemy import and_, delete, func, select
@@ -66,9 +66,7 @@ class ReleaseFlowRepository(DatabaseConnection):
                     .all()
                 )
                 for step_row in step_rows:
-                    steps_by_plan[str(step_row["plan_id"])].append(
-                        serialize_release_step(step_row)
-                    )
+                    steps_by_plan[str(step_row["plan_id"])].append(serialize_release_step(step_row))
         return [
             serialize_release_plan(row, steps=steps_by_plan[str(row["plan_id"])]) for row in rows
         ]
@@ -151,7 +149,10 @@ class ReleaseFlowRepository(DatabaseConnection):
             statement = statement.where(table.c.plan_id == plan_id)
         with self.connection() as conn:
             rows = conn.execute(statement).mappings().all()
-        return [self.get_release_run(workspace_id, str(row["run_id"])) or serialize_release_run(row) for row in rows]
+        return [
+            self.get_release_run(workspace_id, str(row["run_id"])) or serialize_release_run(row)
+            for row in rows
+        ]
 
     def summarize_release_runs(
         self,
@@ -353,9 +354,7 @@ class ReleaseFlowRepository(DatabaseConnection):
                 return None
             step_rows = conn.execute(step_statement).mappings().all()
             workflow_ids = [
-                str(row["workflow_run_id"])
-                for row in step_rows
-                if row.get("workflow_run_id")
+                str(row["workflow_run_id"]) for row in step_rows if row.get("workflow_run_id")
             ]
             workflows: dict[str, Mapping[str, Any]] = {}
             if workflow_ids:
@@ -389,7 +388,9 @@ class ReleaseFlowRepository(DatabaseConnection):
         profile = execution_profile(plan)
         settings.setdefault("runtime_mode", profile.runtime_mode)
         settings.setdefault("provider_mode", profile.provider_mode)
-        plan_id = str(plan.get("plan_id") or derive_release_plan_id({**plan, "workspace_id": workspace_id}))
+        plan_id = str(
+            plan.get("plan_id") or derive_release_plan_id({**plan, "workspace_id": workspace_id})
+        )
         table = ReleaseRun.__table__
         insert = pg_insert(table).values(
             run_id=run_id,
@@ -440,7 +441,7 @@ class ReleaseFlowRepository(DatabaseConnection):
                             "execution_profile": profile.to_body(),
                         },
                     )
-                    )
+                )
             )
         return self.get_release_run(workspace_id, run_id) or {
             "run_id": run_id,
@@ -931,7 +932,9 @@ def release_run_steps_from_plan(
                 "run_step_id": derive_release_run_step_id(run_id, application_id),
                 "workspace_id": workspace_id,
                 "run_id": run_id,
-                "step_id": str(raw_step.get("step_id") or preview_step.get("step_id") or f"step-{index}"),
+                "step_id": str(
+                    raw_step.get("step_id") or preview_step.get("step_id") or f"step-{index}"
+                ),
                 "application_id": application_id,
                 "name": str(raw_step.get("name") or preview_step.get("name") or application_id),
                 "wave": wave,
@@ -946,16 +949,27 @@ def release_run_steps_from_plan(
                     "timeout_seconds": int_like(config.get("timeout_seconds"), 600),
                 },
                 "rollback": {
-                    "policy": str(mapping_value(plan.get("settings")).get("rollback_policy") or "manual"),
-                    "safe_pr_ready": str(mapping_value(plan.get("settings")).get("rollback_policy") or "") == "safe_pr",
+                    "policy": str(
+                        mapping_value(plan.get("settings")).get("rollback_policy") or "manual"
+                    ),
+                    "safe_pr_ready": str(
+                        mapping_value(plan.get("settings")).get("rollback_policy") or ""
+                    )
+                    == "safe_pr",
                 },
                 "details": {
                     "runtime_mode": profile.runtime_mode,
                     "provider_mode": profile.provider_mode,
                     "side_effects": profile.side_effects,
-                    "gate": str(preview_step.get("gate") or config.get("approval_gate") or "inherit"),
-                    "strategy": str(preview_step.get("strategy") or config.get("strategy") or "rolling"),
-                    "environment": str(preview_step.get("environment") or config.get("environment") or ""),
+                    "gate": str(
+                        preview_step.get("gate") or config.get("approval_gate") or "inherit"
+                    ),
+                    "strategy": str(
+                        preview_step.get("strategy") or config.get("strategy") or "rolling"
+                    ),
+                    "environment": str(
+                        preview_step.get("environment") or config.get("environment") or ""
+                    ),
                     "config": dict(config),
                     "github": github_step_metadata(config),
                 },
@@ -1041,11 +1055,17 @@ def rollback_metadata(plan: Mapping[str, Any]) -> JsonObject:
     }
 
 
-def release_health_summary(steps: list[JsonObject], _preview: Mapping[str, Any] | None = None) -> JsonObject:
+def release_health_summary(
+    steps: list[JsonObject], _preview: Mapping[str, Any] | None = None
+) -> JsonObject:
     if not steps:
         return {"status": "pending", "healthy": 0, "unhealthy": 0, "pending": 0}
-    healthy = sum(1 for step in steps if mapping_value(step.get("health")).get("status") == "healthy")
-    unhealthy = sum(1 for step in steps if mapping_value(step.get("health")).get("status") == "unhealthy")
+    healthy = sum(
+        1 for step in steps if mapping_value(step.get("health")).get("status") == "healthy"
+    )
+    unhealthy = sum(
+        1 for step in steps if mapping_value(step.get("health")).get("status") == "unhealthy"
+    )
     pending = len(steps) - healthy - unhealthy
     status = "unhealthy" if unhealthy else "healthy" if pending == 0 else "progressing"
     return {"status": status, "healthy": healthy, "unhealthy": unhealthy, "pending": pending}
@@ -1209,7 +1229,7 @@ def release_stale_summary(
     if updated_at is None:
         return {"stale": False, "age_minutes": 0, "timeout_minutes": 0}
     timeout_seconds = release_timeout_seconds(run, steps)
-    age_seconds = max(0, int((datetime.now(timezone.utc) - updated_at).total_seconds()))
+    age_seconds = max(0, int((datetime.now(UTC) - updated_at).total_seconds()))
     timeout_minutes = max(1, (timeout_seconds + 59) // 60)
     age_minutes = (age_seconds + 59) // 60
     return {
@@ -1233,7 +1253,7 @@ def release_timeout_seconds(run: Mapping[str, Any], steps: list[JsonObject]) -> 
 
 def datetime_value(value: Any) -> datetime | None:
     if isinstance(value, datetime):
-        return value if value.tzinfo else value.replace(tzinfo=timezone.utc)
+        return value if value.tzinfo else value.replace(tzinfo=UTC)
     if isinstance(value, str) and value.strip():
         raw = value.strip()
         if raw.endswith("Z"):
@@ -1242,7 +1262,7 @@ def datetime_value(value: Any) -> datetime | None:
             parsed = datetime.fromisoformat(raw)
         except ValueError:
             return None
-        return parsed if parsed.tzinfo else parsed.replace(tzinfo=timezone.utc)
+        return parsed if parsed.tzinfo else parsed.replace(tzinfo=UTC)
     return None
 
 
@@ -1271,7 +1291,11 @@ def merge_projection_details(
 ) -> JsonObject:
     merged = dict(current)
     for key, value in incoming.items():
-        if key == "release_guard" and isinstance(value, Mapping) and isinstance(merged.get(key), Mapping):
+        if (
+            key == "release_guard"
+            and isinstance(value, Mapping)
+            and isinstance(merged.get(key), Mapping)
+        ):
             merged[key] = merge_release_guard_projection(
                 mapping_value(merged.get(key)),
                 value,
@@ -1310,17 +1334,11 @@ def merge_verification_jobs_projection(
     incoming: Mapping[str, Any],
 ) -> JsonObject:
     merged = dict(current)
-    updates = [
-        dict(item)
-        for item in list_value(incoming.get("jobs"))
-        if isinstance(item, Mapping)
-    ]
+    updates = [dict(item) for item in list_value(incoming.get("jobs")) if isinstance(item, Mapping)]
     if not updates:
         return {**merged, **dict(incoming)}
     current_jobs = [
-        dict(item)
-        for item in list_value(current.get("jobs"))
-        if isinstance(item, Mapping)
+        dict(item) for item in list_value(current.get("jobs")) if isinstance(item, Mapping)
     ]
     next_jobs = [merge_verification_job_update(job, updates) for job in current_jobs]
     known_keys = {verification_job_match_key(job) for job in current_jobs}

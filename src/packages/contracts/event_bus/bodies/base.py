@@ -1,7 +1,8 @@
 """body 베이스 + 직렬화.
 
 to_body(): 객체 → wire dict(발행할 때).
-from_body(): wire dict → 객체(구독해서 받을 때, FROM dict 복사 패턴).
+from_body(): wire dict → 객체(기본 strict, 미지 필드 거부).
+strict=False: wire consumer에서 미래 additive 필드를 무시.
 필드 이름이 곧 wire 키. 카멜케이스는 field(metadata={"payload_name": ...}) 별칭.
 """
 
@@ -29,18 +30,19 @@ class EventBody:
         return data
 
     @classmethod
-    def from_body(cls, raw: Mapping[str, Any]) -> EventBody:
+    def from_body(cls, raw: Mapping[str, Any], *, strict: bool = True) -> EventBody:
         # 중첩 body(예: rendered_manifest: RenderedManifest)는 dict 가
         # 아니라 그 타입 객체로 복원 → 워커가 evt.x.y 로 접근.
         if not isinstance(raw, Mapping):
             raise EventBodyDecodeError(f"{cls.__name__}: payload must be an object")
         hints = get_type_hints(cls)
         values: JsonObject = {}
-        expected_keys = {item.metadata.get("payload_name", item.name) for item in fields(cls)}
-        extra_keys = set(raw) - expected_keys
-        if extra_keys:
-            names = ", ".join(sorted(str(key) for key in extra_keys))
-            raise EventBodyDecodeError(f"{cls.__name__}: unexpected field(s): {names}")
+        if strict:
+            expected_keys = {item.metadata.get("payload_name", item.name) for item in fields(cls)}
+            extra_keys = set(raw) - expected_keys
+            if extra_keys:
+                names = ", ".join(sorted(str(key) for key in extra_keys))
+                raise EventBodyDecodeError(f"{cls.__name__}: unexpected field(s): {names}")
         for item in fields(cls):
             key = item.metadata.get("payload_name", item.name)
             if key not in raw:
@@ -53,7 +55,7 @@ class EventBody:
                 raise EventBodyDecodeError(f"{cls.__name__}: missing required field: {key}")
             value = raw[key]
             field_type = hints.get(item.name)
-            values[item.name] = _decode_value(cls.__name__, key, value, field_type)
+            values[item.name] = _decode_value(cls.__name__, key, value, field_type, strict=strict)
         return cls(**values)
 
 
@@ -67,7 +69,7 @@ def _to_body_value(value: Any) -> Any:
     return value
 
 
-def _decode_value(owner: str, key: str, value: Any, field_type: Any) -> Any:
+def _decode_value(owner: str, key: str, value: Any, field_type: Any, *, strict: bool) -> Any:
     if field_type is None or field_type is Any:
         return value
 
@@ -80,7 +82,7 @@ def _decode_value(owner: str, key: str, value: Any, field_type: Any) -> Any:
             if option is type(None):
                 continue
             try:
-                return _decode_value(owner, key, value, option)
+                return _decode_value(owner, key, value, option, strict=strict)
             except EventBodyDecodeError:
                 continue
         raise EventBodyDecodeError(f"{owner}: invalid type for field: {key}")
@@ -88,13 +90,13 @@ def _decode_value(owner: str, key: str, value: Any, field_type: Any) -> Any:
     if isinstance(field_type, type) and issubclass(field_type, EventBody):
         if not isinstance(value, Mapping):
             raise EventBodyDecodeError(f"{owner}: field {key} must be an object")
-        return field_type.from_body(value)
+        return field_type.from_body(value, strict=strict)
 
     if origin in (list, Sequence):
         if not isinstance(value, Sequence) or isinstance(value, str | bytes):
             raise EventBodyDecodeError(f"{owner}: field {key} must be a list")
         item_type = args[0] if args else Any
-        return [_decode_value(owner, f"{key}[]", item, item_type) for item in value]
+        return [_decode_value(owner, f"{key}[]", item, item_type, strict=strict) for item in value]
 
     if origin in (dict, Mapping):
         if not isinstance(value, Mapping):

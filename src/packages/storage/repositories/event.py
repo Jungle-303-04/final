@@ -278,8 +278,7 @@ class EventRepository(DatabaseConnection):
         with self.connection() as conn:
             rows = conn.execute(statement).mappings().all()
         return {
-            (str(row["consumer"]), str(row["subject"])): int(row[column_name] or 0)
-            for row in rows
+            (str(row["consumer"]), str(row["subject"])): int(row[column_name] or 0) for row in rows
         }
 
     def delete_events_older_than(self, cutoff: datetime, *, limit: int = 1000) -> int:

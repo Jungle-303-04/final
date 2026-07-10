@@ -8,7 +8,18 @@ from typing import Any, Protocol
 
 from fastapi import HTTPException, Request
 
-from packages.contracts.identity import AccessResourceType, ResourceAccessRequest, ServiceRole
+from packages.config.security import (
+    DEV_SECURITY_BYPASS_CLUSTER_HEADER,
+    development_bypass_cluster_id,
+    development_bypass_workspace_id,
+    development_security_bypass_enabled,
+)
+from packages.contracts.identity import (
+    DEFAULT_WORKSPACE_ID,
+    AccessResourceType,
+    ResourceAccessRequest,
+    ServiceRole,
+)
 
 AGENT_TOKEN_HEADER = "x-agent-token"
 AGENT_AUTH_REQUIRED_MESSAGE = "agent authentication required"
@@ -113,6 +124,8 @@ def require_resource_access(
     filter_chain: ResourceAccessFilterChain = DEFAULT_RESOURCE_ACCESS_FILTER_CHAIN,
 ) -> None:
     """사용자 세션이 특정 워크스페이스 리소스에 permission 권한을 가지는지 검사."""
+    if development_security_bypass_enabled():
+        return
     access_request = ResourceAccessRequest(
         user_id=current.user_id,
         organization_id=workspace_id,
@@ -154,13 +167,44 @@ def require_cluster_agent(request: Request) -> ClusterAgentIdentity:
     요청 body 의 workspace_id/cluster_id 는 신뢰하지 않음(크로스 테넌트 차단).
     토큰 없음/미등록/미인증(해시 불일치)은 모두 401.
     """
+    db = request.app.state.db
     token = request.headers.get(AGENT_TOKEN_HEADER, "")
-    if not token:
-        raise HTTPException(status_code=401, detail=AGENT_AUTH_REQUIRED_MESSAGE)
-    identity = request.app.state.db.authenticate_cluster_agent(hash_agent_token(token))
-    if identity is None:
-        raise HTTPException(status_code=401, detail=AGENT_AUTH_REQUIRED_MESSAGE)
+    if token:
+        identity = db.authenticate_cluster_agent(hash_agent_token(token))
+        if identity is not None:
+            return ClusterAgentIdentity(
+                workspace_id=identity["workspace_id"],
+                cluster_id=identity["cluster_id"],
+            )
+    if development_security_bypass_enabled():
+        identity = development_cluster_agent_identity(
+            db,
+            request.headers.get(DEV_SECURITY_BYPASS_CLUSTER_HEADER, ""),
+        )
+        if identity is not None:
+            return identity
+    raise HTTPException(status_code=401, detail=AGENT_AUTH_REQUIRED_MESSAGE)
+
+
+def development_cluster_agent_identity(
+    db: Any, requested_cluster_id: str = ""
+) -> ClusterAgentIdentity | None:
+    """개발 우회용 등록 cluster identity를 레지스트리에서 권위 있게 조회한다."""
+    workspace_id = development_bypass_workspace_id(DEFAULT_WORKSPACE_ID)
+    cluster_id = development_bypass_cluster_id(requested_cluster_id)
+    if not cluster_id:
+        return None
+    get_registration = getattr(db, "get_cluster_registration", None)
+    if not callable(get_registration):
+        return None
+    registration = get_registration(workspace_id, cluster_id)
+    if registration is None:
+        return None
+    registered_workspace_id = str(registration.get("workspace_id") or "").strip()
+    registered_cluster_id = str(registration.get("cluster_id") or "").strip()
+    if not registered_workspace_id or not registered_cluster_id:
+        return None
     return ClusterAgentIdentity(
-        workspace_id=identity["workspace_id"],
-        cluster_id=identity["cluster_id"],
+        workspace_id=registered_workspace_id,
+        cluster_id=registered_cluster_id,
     )

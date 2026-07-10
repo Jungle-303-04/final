@@ -16,20 +16,23 @@ docs/api
 
 4. 왼쪽에 `00 상태와 인증`부터 `15 Wizard Validation`까지 폴더가 보이면 정상이다.
 5. 오른쪽 위 Environment에서 `aws-test`를 고른다.
-6. 로컬 Gateway를 직접 띄워 보는 경우에만 `local`을 고른다.
+6. Environment 목록에는 `aws-test` 하나만 보여야 한다.
 
 깨졌다면 거의 항상 다른 폴더를 연 것이다. `docs/api` 바로 아래에 `bruno.json`과 `environments` 폴더가 있어야 한다.
 파일 경로는 `00-health-auth`처럼 영어 slug를 유지하고, Bruno 화면 표시명은 한글로 맞춘다.
 
 ## 전체 Runner 실행
 
-보호 API는 로그인 쿠키가 필요하다.
-운영 URL을 가리키는 collection 기본값과 `aws-test` Environment는 실제 계정을 커밋하지 않기 위해 `auto_login: false`와 placeholder 인증값을 쓴다.
-실제 AWS 확인은 로컬 전용 `*.local.bru` 환경에 운영자 계정을 넣거나 Bruno UI에서 `auth_email`/`auth_password`를 채운 뒤 `auto_login`을 켠다.
-전체 확인은 기존처럼 `06 로그인`을 포함한 Runner 순서로 돌려도 되고, `10 로그아웃`은 맨 마지막에 실행한다.
+현재 팀 개발 배포는 `APP_ENV=test`이므로 `aws-test` Environment의
+`dev_security_bypass: true`가 로그인 cookie와 `x-agent-token`을 보내지 않는다.
+서버는 사용자·리소스 권한을 test identity로 처리하고, agent 요청은
+`x-dev-cluster-id`로 지정한 등록 cluster를 레지스트리에서 확인한다.
 
-로컬에 실제 AWS 값이 들어간 `docs/api/environments/aws-live.local.bru`가 있으면 아래 명령으로 전체 과정을 한 번에 실행한다.
-이 파일은 `*.local.bru`로 ignore되어 Git에 올라가지 않는다.
+기본 Runner는 실제 `cluster-1` 대신 실행마다 `bruno-<시각>-<pid>` 형식의 격리
+cluster를 등록해 성공 경로를 검증하고 종료 trap에서 해제한다. 따라서 팀원은 별도
+토큰 파일 없이 실행할 수 있다. 기존 DLQ replay, 임의 목록 항목 삭제, 실제 cluster
+scale/restart, 외부 webhook 전송은 기본 Runner에서 제외하고 해당 요청을 명시적으로
+선택했을 때만 실행한다.
 
 ```bash
 bash scripts/run-bruno-aws.sh
@@ -46,14 +49,15 @@ bash scripts/run-bruno-aws.sh
 
 직접 채워야 하는 값은 처음 한 번만 본다.
 
-1. `base_url`은 Gateway API 주소다. `local`은 `http://localhost:18080/`, `aws-test`는 `https://k8s.woonyong.org/api/`로 이미 채워져 있다. Bruno 요청 파일은 `{{base_url}}providers/validate`처럼 붙기 때문에 값이 반드시 `/`로 끝나야 한다.
-2. `auto_login`은 보호 API 호출 전에 Bruno가 자동 로그인할지 정한다. 운영 기본값은 `false`다. 로컬 환경만 bootstrap smoke 편의를 위해 `true`다.
-3. `auth_email`/`auth_password`는 자동 로그인과 `06-login` 요청에 쓸 계정이다. collection과 `aws-test`에는 placeholder만 커밋한다. 실제 AWS 계정은 `docs/api/environments/aws-live.local.bru` 같은 gitignore된 local env 또는 Bruno UI override에만 둔다.
-4. `github_webhook_secret`은 배포에 설정된 `GITHUB_WEBHOOK_SECRET` 값이다. 이 값을 채우면 webhook signature를 Bruno가 요청 직전에 자동 계산한다.
-5. `metrics_token`은 `METRICS_TOKEN`이 켜진 배포에서만 넣는다.
-6. `alertmanager_token`은 외부 Alertmanager webhook 입구가 켜진 배포에서만 넣는다. 배포의 `ALERTMANAGER_WEBHOOK_TOKEN`과 같아야 한다.
-7. `service_image`는 target manifest 발급 시 쓸 agent 이미지다. 라이브 기본값은 `183548421506.dkr.ecr.ap-northeast-2.amazonaws.com/kubernetes-ops-service:latest`(dry-run은 pull 불필요, 실제 apply 시 태그 확인).
-8. `cluster_id`/`cluster_id_2`는 실제 AWS EKS 클러스터 `cluster-1`/`cluster-2`로 매핑돼 있다. `node_name`은 노드→팟 드릴다운용 실제 노드명이다. `repo_ref`는 데모 레포 `Jungle-303-04/gitops-demo`, `manifest_path`는 `deploy.yaml`이다.
+1. `base_url`은 Gateway API 주소다. 팀 공용 `aws-test`는 `https://k8s.woonyong.org/api/`로 고정한다. Bruno 요청 파일은 `{{base_url}}providers/validate`처럼 붙기 때문에 값이 반드시 `/`로 끝나야 한다.
+2. `dev_security_bypass`는 `APP_ENV=test` 배포에서만 `true`로 쓴다. 이때 세션·agent token을 전송하지 않으며 운영 배포에서는 반드시 `false`다.
+3. `dev_cluster_id`는 test agent identity로 사용할 등록 cluster다. CLI Runner는 실행마다 고유 ID로 덮어쓴다.
+4. `auto_login`은 우회가 꺼진 환경에서 보호 API 호출 전에 Bruno가 자동 로그인할지 정한다.
+5. `auth_email`/`auth_password`는 인증 자체를 검증할 때만 사용한다. collection과 `aws-test`에는 placeholder만 커밋한다.
+6. `github_webhook_secret`은 배포에 설정된 `GITHUB_WEBHOOK_SECRET` 값이다. 이 값을 채우면 webhook signature를 Bruno가 요청 직전에 자동 계산한다.
+7. `metrics_token`과 `alertmanager_token`은 해당 외부 입구 인증을 별도로 검증할 때만 넣는다.
+8. `service_image`는 target manifest 발급 시 쓸 agent 이미지다.
+9. `cluster_id`/`cluster_id_2`의 저장 기본값은 `api-verification-target`이고 CLI Runner는 고유 ID로 덮어쓴다. 실제 `cluster-1`/`cluster-2` 드릴다운이 필요하면 같은 `aws-test`에서 실행 변수만 명시적으로 덮어쓴다.
 
 요청 순서대로 실행하면 아래 값은 자동으로 채워진다.
 
@@ -76,7 +80,7 @@ bash scripts/run-bruno-aws.sh
 프론트 콘솔을 직접 여는 주소는 `https://k8s.woonyong.org/`지만, Bruno collection의 AWS `base_url`에는 `/api/`까지 포함한다.
 
 Bruno 화면에서 Environment를 아직 고르지 않았더라도 `docs/api/collection.bru`의 기본 변수 때문에 `{{base_url}}`이 `https://k8s.woonyong.org/api/`로 풀린다.
-그래도 실제 AWS 테스트를 할 때는 오른쪽 위 Environment에서 `aws-test` 또는 gitignore된 `aws-live.local`을 선택한다.
+실제 API 테스트는 오른쪽 위 Environment에서 유일한 공용 환경인 `aws-test`를 선택한다.
 
 `auth_email`과 `auth_password`는 로그인할 운영자 계정이다.
 collection과 `aws-test` 기본값은 placeholder다.
@@ -86,15 +90,16 @@ auth_email: replace-with-auth-email
 auth_password: replace-with-auth-password
 ```
 
-로컬 bootstrap smoke 값은 `local` Environment에만 둔다.
-AWS 라이브 계정은 문서/collection 파일에 쓰지 않는다.
+AWS 라이브 계정은 문서/collection 파일에 쓰지 않는다. Bruno 인증 회귀가 필요하면 팀 Secret으로 받은 로컬 값을 실행 시점에만 주입한다.
 
-`auto_login`은 Bruno에서 보호 API를 바로 눌렀을 때 collection pre-request script가 자동으로 `/auth/login`을 호출할지 정한다.
-운영 기본값은 `false`다. 로컬 smoke 또는 개인 local env에서만 `true`로 켠다.
+`auto_login`은 test 우회가 꺼졌을 때만 collection pre-request script가 `/auth/login`을 호출할지 정한다.
+`dev_security_bypass: true`이면 기존 cookie와 authorization, `x-session-token`,
+`x-agent-token`을 제거하므로 토큰 없는 경로를 그대로 검증한다.
 자동 로그인은 `service_session` cookie가 없을 때만 동작하며, `x-agent-token` API, install 링크, GitHub/Alertmanager webhook, `/metrics`, health/openapi/auth 흐름에는 붙지 않는다.
 인증 실패 응답을 직접 보고 싶으면 Environment에서 `auto_login`을 `false`로 바꾼다.
 
-`cluster_id`/`cluster_id_2`는 실제 AWS EKS 클러스터 id다. 기본값은 `cluster-1`/`cluster-2`다.
+`aws-test`의 `cluster_id`/`cluster_id_2`는 격리된 `api-verification-target`이며,
+CLI Runner에서는 충돌을 피하려고 실행별 고유 ID를 사용한다.
 단, 두 클러스터에 cluster-agent가 아직 배포되지 않았다면 `clusters` 목록/인벤토리는 비어 있을 수 있다 —
 먼저 `02-target-admin/01`로 매니페스트를 받아 각 대상 클러스터에 apply해야 데이터가 흐른다.
 `node_name`은 `05-rca-dashboard/09-node-summary.bru` 응답의 `nodes[].name` 중 하나로 바꿔 넣는다.
@@ -102,10 +107,11 @@ AWS 라이브 계정은 문서/collection 파일에 쓰지 않는다.
 
 팀 통합 테스트는 `aws-test` Environment가 기준이다.
 로컬에서는 [로컬 검증 실행 기준](../local-testing.md)을 따라 코드 정합성과 Bruno 문법만 확인하고, 실제 API 흐름은 AWS에서 확인한다.
-`local` Environment는 개인이 Gateway를 별도로 띄워 빠르게 확인할 때만 쓰는 보조 profile이다.
-로컬 bootstrap 값은 `docs/api/environments/local.bru`에만 둔다.
+Bruno 환경은 `docs/api/environments/aws-test.bru` 하나만 관리한다. 로컬 스택은 별도 smoke 스크립트로 검증하고 Bruno 계약은 팀 공용 AWS 배포를 기준으로 한다.
 
-`agent_token`은 `02-target-admin/01-register-target-dry-run.bru` 응답에서 받거나, 이미 등록된 target agent token reference를 운영자가 넣는다.
+`agent_token`은 우회를 끈 인증 회귀에서만 `02-target-admin/01-register-target-dry-run.bru` 응답값을 사용한다.
+`APP_ENV=test` + `dev_security_bypass: true`에서는 collection이 이 헤더를 삭제하고
+등록된 `dev_cluster_id`만 보낸다.
 이 값이 있으면 `02-target-admin/03-install-manifest-by-token.bru`로 원라인 설치 링크가 실제 YAML을 반환하는지도 확인할 수 있다.
 
 `alert_webhook_url`은 알림 채널이 실제로 POST할 대상이다.
@@ -125,6 +131,7 @@ collection 기본 생성 요청은 `enabled: false`로 보내므로 기본값 `h
 
 권한 기준은 세 가지로 보면 된다.
 인증 없이 보는 상태 확인 API, 로그인 세션이 필요한 운영자/사용자 API, `x-agent-token`이 필요한 target agent API다.
+단, 팀 개발 배포의 `APP_ENV=test`에서는 이 세 인증 경계를 Bruno가 무토큰으로 검증하며 management read-only 같은 운영 보호 정책은 우회하지 않는다.
 로그인 세션 API는 `auto_login`이 켜져 있으면 Bruno가 먼저 세션을 만들고, 이후 `service_session` cookie를 자동으로 들고 간다.
 target agent API는 Environment의 `agent_token`이 맞아야 한다.
 
@@ -712,7 +719,7 @@ CLI가 설치되어 있으면 collection root에서 실행한다.
 
 ```bash
 cd docs/api
-npx --yes @usebruno/cli run --env local --bail
+bash scripts/run-bruno-aws.sh
 ```
 
 서버가 떠 있지 않으면 첫 요청 실패가 날 수 있다.

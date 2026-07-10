@@ -7,8 +7,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from types import TracebackType
 
-from packages.contracts.event_bus.interfaces import JsonObject
 from packages.config.logs import CONTEXT_KEY, get_logger
+from packages.contracts.event_bus.interfaces import JsonObject
 
 COMMAND_RESULT_STATUS_ABANDONED = "abandoned"
 COMMAND_RESULT_STATUS_PENDING = "pending"

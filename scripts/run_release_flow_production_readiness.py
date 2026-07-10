@@ -10,10 +10,10 @@ import sys
 import time
 import urllib.error
 import urllib.request
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
-from urllib.parse import quote, urlencode
+from urllib.parse import quote
 
 try:
     from verify_release_flow_production_evidence import (
@@ -23,6 +23,8 @@ try:
         github_api_url,
         github_headers,
         github_json,
+    )
+    from verify_release_flow_production_evidence import (
         main as verify_evidence_main,
     )
 except ImportError:  # pragma: no cover - used when imported as scripts.*
@@ -33,6 +35,8 @@ except ImportError:  # pragma: no cover - used when imported as scripts.*
         github_api_url,
         github_headers,
         github_json,
+    )
+    from scripts.verify_release_flow_production_evidence import (
         main as verify_evidence_main,
     )
 
@@ -42,8 +46,12 @@ FINAL_CONCLUSIONS = {"success", "failure", "cancelled", "skipped", "timed_out", 
 
 def parse_args(argv: list[str]) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--github-repo", required=True, help="GitHub repository in owner/repo form.")
-    parser.add_argument("--github-token", default="", help="GitHub token with Actions workflow access.")
+    parser.add_argument(
+        "--github-repo", required=True, help="GitHub repository in owner/repo form."
+    )
+    parser.add_argument(
+        "--github-token", default="", help="GitHub token with Actions workflow access."
+    )
     parser.add_argument(
         "--github-token-env",
         default="GITHUB_TOKEN",
@@ -51,7 +59,9 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     )
     parser.add_argument("--github-api-base", default=DEFAULT_GITHUB_API_BASE)
     parser.add_argument("--github-branch", default="dev", help="Branch/ref to dispatch and poll.")
-    parser.add_argument("--github-sha", default="", help="Require the completed run to use this head SHA.")
+    parser.add_argument(
+        "--github-sha", default="", help="Require the completed run to use this head SHA."
+    )
     parser.add_argument("--environment", default="production", help="GitHub Environment input.")
     parser.add_argument("--timeout-seconds", type=int, default=900)
     parser.add_argument("--poll-seconds", type=int, default=15)
@@ -71,7 +81,9 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
         action="store_true",
         help="After the readiness run succeeds, download and verify its readiness artifact.",
     )
-    parser.add_argument("--github-output-dir", type=Path, default=Path("release-flow-production-evidence"))
+    parser.add_argument(
+        "--github-output-dir", type=Path, default=Path("release-flow-production-evidence")
+    )
     parser.add_argument("--github-access-preflight", choices=("true", "false"), default="true")
     parser.add_argument("--github-environment-preflight", choices=("true", "false"), default="true")
     parser.add_argument("--api-smoke-preflight", choices=("true", "false"), default="true")
@@ -79,7 +91,9 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     return parser.parse_args(argv)
 
 
-def dispatch_workflow(*, api_base: str, repo: str, workflow: str, branch: str, token: str, inputs: dict[str, str]) -> None:
+def dispatch_workflow(
+    *, api_base: str, repo: str, workflow: str, branch: str, token: str, inputs: dict[str, str]
+) -> None:
     workflow_ref = quote(workflow, safe="")
     url = github_api_url(api_base, repo, f"actions/workflows/{workflow_ref}/dispatches")
     payload = json.dumps({"ref": branch, "inputs": inputs}).encode("utf-8")
@@ -96,10 +110,14 @@ def dispatch_workflow(*, api_base: str, repo: str, workflow: str, branch: str, t
         raise GitHubEvidenceError(f"workflow dispatch failed: {exc.reason}") from exc
 
 
-def list_workflow_runs(*, api_base: str, repo: str, workflow: str, branch: str, token: str) -> list[dict[str, Any]]:
+def list_workflow_runs(
+    *, api_base: str, repo: str, workflow: str, branch: str, token: str
+) -> list[dict[str, Any]]:
     workflow_ref = quote(workflow, safe="")
     query = {"branch": branch, "event": "workflow_dispatch", "per_page": "20"}
-    payload = github_json(github_api_url(api_base, repo, f"actions/workflows/{workflow_ref}/runs", query), token)
+    payload = github_json(
+        github_api_url(api_base, repo, f"actions/workflows/{workflow_ref}/runs", query), token
+    )
     return [item for item in payload.get("workflow_runs", []) if isinstance(item, dict)]
 
 
@@ -138,15 +156,23 @@ def wait_for_run(
     interval = max(poll_seconds, 1)
     last_seen = "no matching run yet"
     while True:
-        runs = list_workflow_runs(api_base=api_base, repo=repo, workflow=workflow, branch=branch, token=token)
-        candidates = [run for run in runs if matching_run(run, started_after=started_after, head_sha=head_sha)]
+        runs = list_workflow_runs(
+            api_base=api_base, repo=repo, workflow=workflow, branch=branch, token=token
+        )
+        candidates = [
+            run for run in runs if matching_run(run, started_after=started_after, head_sha=head_sha)
+        ]
         if candidates:
-            run = sorted(candidates, key=lambda item: str(item.get("created_at") or ""), reverse=True)[0]
+            run = sorted(
+                candidates, key=lambda item: str(item.get("created_at") or ""), reverse=True
+            )[0]
             status = str(run.get("status") or "")
             conclusion = str(run.get("conclusion") or "")
             run_id = str(run.get("id") or "")
             last_seen = f"run {run_id} status={status} conclusion={conclusion or '<pending>'}"
-            print(f"poll readiness.{run_id}: status={status} conclusion={conclusion or '<pending>'}")
+            print(
+                f"poll readiness.{run_id}: status={status} conclusion={conclusion or '<pending>'}"
+            )
             if status == "completed" or conclusion in FINAL_CONCLUSIONS:
                 return run
         if time.monotonic() >= deadline:
@@ -157,7 +183,9 @@ def wait_for_run(
 def verify_readiness_artifact(args: argparse.Namespace, run: dict[str, Any], token: str) -> int:
     head_sha = str(run.get("head_sha") or "").strip()
     if not head_sha:
-        print("fail readiness.artifact_verify: completed run did not report head_sha", file=sys.stderr)
+        print(
+            "fail readiness.artifact_verify: completed run did not report head_sha", file=sys.stderr
+        )
         return 1
     return verify_evidence_main(
         [
@@ -182,7 +210,10 @@ def main(argv: list[str]) -> int:
     args = parse_args(argv)
     token = str(args.github_token or os.getenv(str(args.github_token_env or "")) or "").strip()
     if not token:
-        print("fail readiness.inputs: --github-token or configured --github-token-env is required", file=sys.stderr)
+        print(
+            "fail readiness.inputs: --github-token or configured --github-token-env is required",
+            file=sys.stderr,
+        )
         return 2
     if "/" not in args.github_repo:
         print("fail readiness.inputs: --github-repo must be in owner/repo form", file=sys.stderr)
@@ -194,7 +225,7 @@ def main(argv: list[str]) -> int:
         "api_smoke_preflight": args.api_smoke_preflight,
         "production_deploy_required": args.production_deploy_required,
     }
-    started_after = datetime.now(timezone.utc) - timedelta(
+    started_after = datetime.now(UTC) - timedelta(
         minutes=max(args.started_after_minutes, 1) if args.skip_dispatch else 0,
         seconds=10 if not args.skip_dispatch else 0,
     )
@@ -224,7 +255,9 @@ def main(argv: list[str]) -> int:
         conclusion = str(run.get("conclusion") or "")
         url = str(run.get("html_url") or "")
         if conclusion != "success":
-            print(f"fail readiness.run: run {run_id} concluded {conclusion or '<missing>'} {url}".rstrip())
+            print(
+                f"fail readiness.run: run {run_id} concluded {conclusion or '<missing>'} {url}".rstrip()
+            )
             return 1
         print(f"ok readiness.run: run {run_id} succeeded {url}".rstrip())
         if args.verify_artifact:

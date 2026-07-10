@@ -78,7 +78,9 @@ def item(
     )
 
 
-def yaml_diagnostics(content: str, context: Mapping[str, Any] | None = None) -> list[DiagnosticItem]:
+def yaml_diagnostics(
+    content: str, context: Mapping[str, Any] | None = None
+) -> list[DiagnosticItem]:
     context = context or {}
     if not content.strip():
         return [
@@ -127,9 +129,7 @@ def yaml_diagnostics(content: str, context: Mapping[str, Any] | None = None) -> 
             continue
         typed_docs.append(doc)
         diagnostics.extend(kubernetes_object_diagnostics(content, doc, index, expected_namespace))
-    previous_content = str(
-        context.get("previous_content") or context.get("baseline_content") or ""
-    )
+    previous_content = str(context.get("previous_content") or context.get("baseline_content") or "")
     if previous_content.strip():
         previous_docs = parse_yaml_objects(previous_content)
         diagnostics.extend(risk_diff_diagnostics(content, previous_docs, typed_docs))
@@ -155,7 +155,9 @@ def kubernetes_object_diagnostics(
     if not isinstance(metadata, Mapping):
         diagnostics.append(missing_key(content, "metadata", "k8s.metadata", index))
     elif not metadata_name:
-        diagnostics.append(missing_key(content, "name", "k8s.metadata.name", index, "metadata.name"))
+        diagnostics.append(
+            missing_key(content, "name", "k8s.metadata.name", index, "metadata.name")
+        )
 
     if api_version and kind:
         try:
@@ -262,7 +264,9 @@ def deployment_diagnostics(content: str, doc: Mapping[str, Any]) -> list[Diagnos
                 action="approval_required",
             )
         )
-    for idx, volume in enumerate(list_value(pod_spec.get("volumes")) if isinstance(pod_spec, Mapping) else []):
+    for idx, volume in enumerate(
+        list_value(pod_spec.get("volumes")) if isinstance(pod_spec, Mapping) else []
+    ):
         if isinstance(volume, Mapping) and isinstance(volume.get("hostPath"), Mapping):
             diagnostics.append(
                 item(
@@ -411,7 +415,11 @@ def settings_diagnostics(
         )
 
     manifest_path = str(settings.get("manifest_path") or "")
-    if manifest_path and not manifest_path.endswith(MANIFEST_EXTENSIONS) and not manifest_path.endswith("/"):
+    if (
+        manifest_path
+        and not manifest_path.endswith(MANIFEST_EXTENSIONS)
+        and not manifest_path.endswith("/")
+    ):
         diagnostics.append(
             item(
                 "warning",
@@ -446,7 +454,9 @@ def settings_diagnostics(
         )
 
     replicas = settings.get("replicas")
-    if replicas is not None and (isinstance(replicas, bool) or not isinstance(replicas, int) or replicas < 0):
+    if replicas is not None and (
+        isinstance(replicas, bool) or not isinstance(replicas, int) or replicas < 0
+    ):
         diagnostics.append(
             item(
                 "error",
@@ -482,14 +492,22 @@ def release_policy_diagnostics(
     diagnostics.extend(choice_diagnostic(settings, "execution_mode", EXECUTION_MODES, path_prefix))
     diagnostics.extend(choice_diagnostic(settings, "runtime_mode", RUNTIME_MODES, path_prefix))
     diagnostics.extend(choice_diagnostic(settings, "provider_mode", PROVIDER_MODES, path_prefix))
-    diagnostics.extend(choice_diagnostic(settings, "approval_policy", APPROVAL_POLICIES, path_prefix))
+    diagnostics.extend(
+        choice_diagnostic(settings, "approval_policy", APPROVAL_POLICIES, path_prefix)
+    )
     diagnostics.extend(choice_diagnostic(settings, "failure_policy", FAILURE_POLICIES, path_prefix))
-    diagnostics.extend(choice_diagnostic(settings, "rollback_policy", ROLLBACK_POLICIES, path_prefix))
-    diagnostics.extend(choice_diagnostic(settings, "default_strategy", DEPLOY_STRATEGIES, path_prefix))
+    diagnostics.extend(
+        choice_diagnostic(settings, "rollback_policy", ROLLBACK_POLICIES, path_prefix)
+    )
+    diagnostics.extend(
+        choice_diagnostic(settings, "default_strategy", DEPLOY_STRATEGIES, path_prefix)
+    )
     diagnostics.extend(choice_diagnostic(settings, "strategy", DEPLOY_STRATEGIES, path_prefix))
     diagnostics.extend(choice_diagnostic(settings, "approval_gate", APPROVAL_GATES, path_prefix))
     diagnostics.extend(int_range_diagnostic(settings, "concurrency", 1, 20, path_prefix))
-    diagnostics.extend(int_range_diagnostic(settings, "health_timeout_seconds", 30, 3600, path_prefix))
+    diagnostics.extend(
+        int_range_diagnostic(settings, "health_timeout_seconds", 30, 3600, path_prefix)
+    )
     diagnostics.extend(int_range_diagnostic(settings, "timeout_seconds", 30, 3600, path_prefix))
     diagnostics.extend(int_range_diagnostic(settings, "retry_attempts", 0, 10, path_prefix))
 
@@ -956,7 +974,9 @@ def deployment_risk_diff(
             )
 
         for probe in ("readinessProbe", "livenessProbe"):
-            if isinstance(old_container.get(probe), Mapping) and not isinstance(new_container.get(probe), Mapping):
+            if isinstance(old_container.get(probe), Mapping) and not isinstance(
+                new_container.get(probe), Mapping
+            ):
                 diagnostics.append(
                     item(
                         "warning",
@@ -1057,10 +1077,30 @@ def settings_risk_diff(
         )
 
     comparisons = [
-        ("repo_ref", "risk.settings_repo_changed", "Repository target changed; confirm this release still points to the intended source.", "approval_required"),
-        ("branch", "risk.settings_branch_changed", "Branch changed; confirm the release source.", "confirm"),
-        ("manifest_path", "risk.settings_manifest_path_changed", "Manifest path changed; this can deploy a different Kubernetes object set.", "confirm"),
-        ("namespace", "risk.settings_namespace_changed", "Namespace changed; confirm the target environment before applying.", "approval_required"),
+        (
+            "repo_ref",
+            "risk.settings_repo_changed",
+            "Repository target changed; confirm this release still points to the intended source.",
+            "approval_required",
+        ),
+        (
+            "branch",
+            "risk.settings_branch_changed",
+            "Branch changed; confirm the release source.",
+            "confirm",
+        ),
+        (
+            "manifest_path",
+            "risk.settings_manifest_path_changed",
+            "Manifest path changed; this can deploy a different Kubernetes object set.",
+            "confirm",
+        ),
+        (
+            "namespace",
+            "risk.settings_namespace_changed",
+            "Namespace changed; confirm the target environment before applying.",
+            "approval_required",
+        ),
     ]
     for field, code, message, action in comparisons:
         old_value = str(previous.get(field) or "")
@@ -1098,9 +1138,15 @@ def matched_containers(
     previous: Mapping[str, Any],
     current: Mapping[str, Any],
 ) -> list[tuple[int, Mapping[str, Any], Mapping[str, Any]]]:
-    old = [container for container in deployment_containers(previous) if isinstance(container, Mapping)]
-    new = [container for container in deployment_containers(current) if isinstance(container, Mapping)]
-    old_by_name = {str(container.get("name") or index): container for index, container in enumerate(old)}
+    old = [
+        container for container in deployment_containers(previous) if isinstance(container, Mapping)
+    ]
+    new = [
+        container for container in deployment_containers(current) if isinstance(container, Mapping)
+    ]
+    old_by_name = {
+        str(container.get("name") or index): container for index, container in enumerate(old)
+    }
     matched: list[tuple[int, Mapping[str, Any], Mapping[str, Any]]] = []
     for index, container in enumerate(new):
         old_container = old_by_name.get(str(container.get("name") or index))

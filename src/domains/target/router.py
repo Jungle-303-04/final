@@ -9,6 +9,7 @@ import shlex
 import shutil
 import subprocess
 import time
+from dataclasses import fields
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
@@ -1362,8 +1363,9 @@ async def emit_evidence_if_ready(
 
 
 def complete_evidence_payload(payload: dict[str, Any]) -> dict[str, Any]:
+    allowed_fields = {item.name for item in fields(ClusterEvidenceReceivedBody)}
     return {
-        **payload,
+        **{key: value for key, value in payload.items() if key in allowed_fields},
         "kubernetes": payload.get("kubernetes")
         if isinstance(payload.get("kubernetes"), dict)
         else {},

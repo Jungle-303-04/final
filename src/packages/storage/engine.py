@@ -93,6 +93,20 @@ OUTBOX_COMPAT_COLUMNS = {
         "alter table outbox add column if not exists schema_version integer not null default 1"
     ),
 }
+ALERT_CHANNEL_COMPAT_COLUMNS = {
+    "last_tested_at": (
+        "alter table alert_channels add column if not exists last_tested_at timestamptz"
+    ),
+    "last_test_status": (
+        "alter table alert_channels add column if not exists last_test_status text"
+    ),
+    "last_test_detail": (
+        "alter table alert_channels add column if not exists last_test_detail text"
+    ),
+    "last_test_status_code": (
+        "alter table alert_channels add column if not exists last_test_status_code integer"
+    ),
+}
 OUTBOX_CLAIM_INDEX = (
     "create index if not exists ix_outbox_claim on outbox (source, sent_at, leased_until, id)"
 )
@@ -550,6 +564,7 @@ class DatabaseConnection:
             AI_LLM_INVOCATION_METRIC_COMPAT_COLUMNS,
         )
         self._add_missing_columns(conn, "outbox", OUTBOX_COMPAT_COLUMNS)
+        self._add_missing_columns(conn, "alert_channels", ALERT_CHANNEL_COMPAT_COLUMNS)
         conn.execute(text(OUTBOX_CLAIM_INDEX))
         conn.execute(text(OUTBOX_CLAIM_ALL_SOURCES_INDEX))
 

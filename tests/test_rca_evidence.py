@@ -713,6 +713,42 @@ def test_evidence_bundle_adds_workload_snapshot_metadata_items() -> None:
     assert "change_context" not in metadata_items
 
 
+def test_evidence_bundle_adds_nested_workload_snapshot_metadata_items() -> None:
+    db = SpyDb()
+    payload = crashloop_payload(
+        metadata={
+            "change_context": {
+                "current_workload_snapshots": [
+                    {
+                        "namespace": "sandbox",
+                        "kind": "Deployment",
+                        "name": "checkout-api",
+                        "image": "repo/checkout:v2",
+                        "ready_replicas": 0,
+                    }
+                ],
+                "current_workload_snapshot": {
+                    "namespace": "sandbox",
+                    "kind": "Deployment",
+                    "name": "checkout-api",
+                    "image": "repo/checkout:v2",
+                    "conditions": [{"type": "Progressing", "reason": "ProgressDeadlineExceeded"}],
+                },
+            },
+        },
+    )
+
+    rca_events = run_to_rca(payload, db=db, correlation_id="corr-nested-workload-snapshot")
+
+    bundle = event_by_subject(rca_events, "evidence.bundle.built").evidence_bundle
+    metadata_items = {item.name: item for item in bundle.items if item.source == "metadata"}
+    snapshots = metadata_items["current_workload_snapshots"]
+    snapshot = metadata_items["current_workload_snapshot"]
+    assert snapshots.value["items"][0]["name"] == "checkout-api"
+    assert snapshot.value["conditions"][0]["reason"] == "ProgressDeadlineExceeded"
+    assert "change_context" not in metadata_items
+
+
 def test_evidence_bundle_skips_empty_change_context_metadata_item() -> None:
     db = SpyDb()
     payload = crashloop_payload(

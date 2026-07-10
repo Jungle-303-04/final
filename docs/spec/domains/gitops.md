@@ -90,6 +90,7 @@ status: synced
 
 `discovery_http_error`는 `RepositoryDiscoveryError`를 원래 status/detail로, `ValueError`를 422로, 그 외 예외를 502 `"repository discovery failed"`로 변환한다.
 위저드용 `/repos/*` 경로는 GitHub URL을 `owner/repo`로 정규화하고, `.yaml/.yml` 중 Kubernetes `kind`가 파싱되는 파일만 프론트 listbox 후보로 반환한다. token이 제공되면 workspace credential로 암호화 저장하고 원문은 응답하지 않는다.
+후보 파일 본문 조회는 `GITHUB_MANIFEST_SCAN_CONCURRENCY`(기본 8, 최대 32)로 제한된 병렬 처리이며, `GITHUB_MANIFEST_SCAN_TIMEOUT_SECONDS`(기본 20초, 최대 60초)를 넘으면 완료된 실제 결과만 반환하고 warning에 부분 스캔임을 표시한다. 합성 후보를 만들거나 파일 내용을 추정하지 않는다.
 
 ### 인가 가드 — `src/domains/gitops/dependencies.py`
 

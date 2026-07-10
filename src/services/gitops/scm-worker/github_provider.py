@@ -355,9 +355,7 @@ class GithubScmProvider:
                 if sha:
                     response = await client.put(url, json={**payload, "sha": sha})
                     if context is not None:
-                        log_provider_response(
-                            "github.update_content", response, context, path=path
-                        )
+                        log_provider_response("github.update_content", response, context, path=path)
         response.raise_for_status()
 
     async def create_or_reuse_pr(

@@ -348,11 +348,20 @@ def current_workload_snapshot_payload(metadata: dict) -> dict:
     raw = metadata.get("current_workload_snapshot")
     if isinstance(raw, dict) and raw:
         return dict(raw)
+    change_context = metadata.get("change_context")
+    if isinstance(change_context, dict):
+        raw = change_context.get("current_workload_snapshot")
+        if isinstance(raw, dict) and raw:
+            return dict(raw)
     return {}
 
 
 def current_workload_snapshots_payload(metadata: dict) -> dict:
     raw = metadata.get("current_workload_snapshots")
+    if not isinstance(raw, list):
+        change_context = metadata.get("change_context")
+        if isinstance(change_context, dict):
+            raw = change_context.get("current_workload_snapshots")
     if not isinstance(raw, list):
         return {}
     snapshots = [dict(item) for item in raw if isinstance(item, dict) and item]

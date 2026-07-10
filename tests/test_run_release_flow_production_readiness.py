@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import json
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from scripts import run_release_flow_production_readiness as runner
 
@@ -85,7 +85,7 @@ def test_dispatch_workflow_posts_expected_payload(monkeypatch) -> None:
     captured: dict[str, object] = {}
 
     class Response:
-        def __enter__(self) -> "Response":
+        def __enter__(self) -> Response:
             return self
 
         def __exit__(self, *_args: object) -> None:
@@ -121,7 +121,7 @@ def test_dispatch_workflow_posts_expected_payload(monkeypatch) -> None:
 
 
 def test_wait_for_run_returns_matching_completed_run(monkeypatch) -> None:
-    created_at = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+    created_at = datetime.now(UTC).isoformat().replace("+00:00", "Z")
 
     def fake_list_workflow_runs(**_kwargs: object) -> list[dict]:
         return [
@@ -143,7 +143,7 @@ def test_wait_for_run_returns_matching_completed_run(monkeypatch) -> None:
         branch="release/prod",
         head_sha="sha-production",
         token="token-a",
-        started_after=datetime(2026, 1, 1, tzinfo=timezone.utc),
+        started_after=datetime(2026, 1, 1, tzinfo=UTC),
         timeout_seconds=1,
         poll_seconds=1,
     )
