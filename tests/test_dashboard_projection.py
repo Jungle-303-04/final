@@ -180,6 +180,23 @@ def test_incident_projection_logical_key_falls_back_to_incident_id() -> None:
     )
 
 
+def test_incident_projection_rebuilds_legacy_correlation_key_from_dimensions() -> None:
+    assert (
+        incident_logical_key_from_projection(
+            {
+                "incident_id": "incident-1",
+                "incident_logical_key": "legacy-correlation-uuid",
+                "cluster_id": "cluster-1",
+                "incident_namespace": "sandbox",
+                "incident_resource_kind": "Deployment",
+                "incident_resource_name": "orders-api",
+                "incident_symptom": "Ingress 502/503",
+            }
+        )
+        == "cluster-1|sandbox|Deployment|orders-api|Ingress 502/503"
+    )
+
+
 def test_timeline_update_preserves_command_and_pr_status_inputs() -> None:
     command = timeline_update_from_event(
         _evt(
@@ -284,7 +301,12 @@ def test_open_incident_query_excludes_non_incident_detection_rows() -> None:
     assert "GROUP BY" in sql
     assert "count(distinct" in sql.lower()
     assert "incident_logical_key" in sql
+    assert "concat_ws" in sql.lower()
     assert "#>>" not in sql
+    assert "status IN" in sql
+    assert "evidence_received" not in sql
+    assert "evidence_built" not in sql
+    assert "incident_detected" in sql
 
 
 def test_open_incident_query_returns_sql_aggregate_rows() -> None:

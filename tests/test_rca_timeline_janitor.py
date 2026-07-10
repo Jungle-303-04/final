@@ -17,6 +17,14 @@ class StubDb:
         self.calls.append({"max_age_days": max_age_days, "limit": limit})
         return [{"incident_id": "incident-1"}, {"incident_id": "incident-2"}]
 
+    async def delete_stale_pre_incident_timeline(
+        self,
+        retention_hours: int,
+        limit: int,
+    ) -> int:
+        self.calls.append({"retention_hours": retention_hours, "limit": limit})
+        return 3
+
 
 def test_rca_timeline_janitor_expires_stale_open_incidents(monkeypatch) -> None:
     janitor = load_service("projection/rca-timeline-janitor")
@@ -28,6 +36,18 @@ def test_rca_timeline_janitor_expires_stale_open_incidents(monkeypatch) -> None:
 
     assert count == 2
     assert db.calls == [{"max_age_days": 5, "limit": 50}]
+
+
+def test_rca_timeline_janitor_deletes_only_old_pre_incident_projection(monkeypatch) -> None:
+    janitor = load_service("projection/rca-timeline-janitor")
+    db = StubDb()
+    monkeypatch.setenv("RCA_PRE_INCIDENT_RETENTION_HOURS", "12")
+    monkeypatch.setenv("RCA_PRE_INCIDENT_RETENTION_LIMIT", "250")
+
+    count = asyncio.run(janitor.delete_stale_pre_incident_timeline(db))
+
+    assert count == 3
+    assert db.calls == [{"retention_hours": 12, "limit": 250}]
 
 
 def test_rca_timeline_janitor_refreshes_heartbeat_during_long_wait() -> None:
