@@ -47,6 +47,7 @@ def load_agent_module():
         "providers.metadata_config_refs",
         "providers.metadata_endpoint_slices",
         "providers.metadata_ownership",
+        "providers.metadata_resource_quotas",
         "providers.metadata_providers",
         "providers.metadata_service_selectors",
         "providers.metadata_workload_snapshots",
