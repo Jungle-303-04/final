@@ -8,7 +8,7 @@
 ## 소스와 배포
 
 - 권위 브랜치/worktree: `dev` / `SW_AI_W17-21-final-dev`
-- 배포 소스 commit: `d168cc39c9ace72d1b5e584e3f5b55fe87c08c01`
+- 배포 소스 commit: `4d7da88ecfaff75cf75549f14d0f412567c019af`
 - backend image:
   `kubernetes-ops-service@sha256:4618d644df3f82e2eaf9d79548ac0ccc05bb6e189ac92a186248148cf667cbc2`
 - management: Deployment 43개, replica 46/46 Ready, StatefulSet 3개, replica 3/3 Ready

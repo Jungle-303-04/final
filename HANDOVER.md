@@ -60,7 +60,7 @@ push 전에는 반드시 `git fetch origin dev` 후 원격 선행 커밋 유무�
 
 - 최종 live digest:
   `sha256:4618d644df3f82e2eaf9d79548ac0ccc05bb6e189ac92a186248148cf667cbc2`
-- 배포 소스 commit: `d168cc39c9ace72d1b5e584e3f5b55fe87c08c01`
+- 배포 소스 commit: `4d7da88ecfaff75cf75549f14d0f412567c019af`
 
 ## 4. 현재 라이브 상태
 
@@ -345,6 +345,8 @@ DB 자격증명은 `postgresql-secret`에서 프로세스 변수로만 읽고 �
 - 공개 `k8s.woonyong.org`의 session/fleet 및 Agent 무토큰 요청: 401
 - 배포 이미지: backend `d168cc39c9`/`sha256:4618...cbc2`, console
   `bf68cbeb8-mtls-20260711`
+- backend 태그의 `d168cc39c9`는 메시지 정규화 전 commit 이름이며, 동일 tree의 현재 commit은
+  `4d7da88ecfaff75cf75549f14d0f412567c019af`다. 배포 digest는 변경되지 않았다.
 - Ready: api-gateway 2/2, realtime-gateway 1/1, console 1/1, console-dev 2/2,
   cloudflared 2/2
 - 로컬 보안 산출물: `~/.kubeheal/dev-console-certs/2026-07-11/dev-console-01..05.p12`
