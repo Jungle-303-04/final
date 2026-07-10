@@ -73,9 +73,6 @@ def test_release_flow_production_gate_declares_operational_inputs() -> None:
         "RELEASE_FLOW_API_BASE_URL",
         "RELEASE_FLOW_AUTH_EMAIL",
         "RELEASE_FLOW_AUTH_PASSWORD",
-        "release_flow_api_base_url",
-        "release_flow_auth_email",
-        "release_flow_auth_password",
     }
 
 
@@ -173,14 +170,14 @@ def test_release_flow_production_gate_calls_smoke_workflow_with_real_guardrails(
         "${{ inputs.live_safe_pr_workflow_run_id }}"
     )
     assert smoke_job["with"]["live_safe_pr_url"] == "${{ inputs.live_safe_pr_url }}"
-    assert smoke_job["secrets"]["release_flow_api_base_url"] == (
-        "${{ secrets.release_flow_api_base_url || secrets.RELEASE_FLOW_API_BASE_URL }}"
+    assert smoke_job["secrets"]["RELEASE_FLOW_API_BASE_URL"] == (
+        "${{ secrets.RELEASE_FLOW_API_BASE_URL }}"
     )
-    assert smoke_job["secrets"]["release_flow_auth_email"] == (
-        "${{ secrets.release_flow_auth_email || secrets.RELEASE_FLOW_AUTH_EMAIL }}"
+    assert smoke_job["secrets"]["RELEASE_FLOW_AUTH_EMAIL"] == (
+        "${{ secrets.RELEASE_FLOW_AUTH_EMAIL }}"
     )
-    assert smoke_job["secrets"]["release_flow_auth_password"] == (
-        "${{ secrets.release_flow_auth_password || secrets.RELEASE_FLOW_AUTH_PASSWORD }}"
+    assert smoke_job["secrets"]["RELEASE_FLOW_AUTH_PASSWORD"] == (
+        "${{ secrets.RELEASE_FLOW_AUTH_PASSWORD }}"
     )
 
 
