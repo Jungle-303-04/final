@@ -1019,6 +1019,13 @@ class CatalogItemResponse(StrictModel):
     item: JsonMap
 
 
+class CatalogInstallAcceptedResponse(StrictModel):
+    accepted: bool
+    command_id: str
+    correlation_id: str
+    status: str
+
+
 class ProviderCatalogResponse(StrictModel):
     providers: dict[str, list[JsonMap]]
 
