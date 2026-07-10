@@ -148,6 +148,32 @@ def test_agent_rejected_with_bad_token() -> None:
     assert excinfo.value.code == 4401
 
 
+def test_test_environment_bypasses_realtime_agent_and_browser_tokens(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    async def deny_browser(_token: str | None) -> None:
+        return None
+
+    monkeypatch.setenv("APP_ENV", "test")
+    monkeypatch.setenv("DEV_SECURITY_BYPASS_WORKSPACE_ID", WORKSPACE)
+    module = load_gateway_module()
+    app = module.create_app(
+        authenticate_agent=lambda _token: None,
+        authenticate_browser=deny_browser,
+        authenticate_development_agent=lambda cluster_id: {
+            "workspace_id": WORKSPACE,
+            "cluster_id": cluster_id,
+        },
+    )
+    client = TestClient(app)
+
+    with client.websocket_connect(f"/live/browser?workspace_id={WORKSPACE}") as browser:
+        assert browser.receive_json()["type"] == "hello"
+        browser.receive_json()
+        with client.websocket_connect(f"/live/agent?cluster_id={CLUSTER}") as agent:
+            assert agent.receive_json()["type"] == "hello"
+
+
 def test_agent_rejected_for_foreign_cluster_query() -> None:
     _, client = make_client()
     with client.websocket_connect(
