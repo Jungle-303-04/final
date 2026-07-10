@@ -20,7 +20,11 @@ from domains.identity.models import (
     Workspace,
 )
 from domains.target.management_guard import MANAGEMENT_CLUSTER_ROLE, TARGET_CLUSTER_ROLE
-from packages.config.security import APP_ENV_ENV, TEST_APP_ENV
+from packages.config.security import (
+    APP_ENV_ENV,
+    TEST_APP_ENV,
+    development_security_bypass_enabled,
+)
 from packages.config.settings import env
 from packages.contracts.event_bus.interfaces import JsonObject
 from packages.contracts.identity import (
@@ -748,6 +752,10 @@ class IdentityAccessRepository(DatabaseConnection):
         resource_type: str,
         action: str,
     ) -> set[str] | None:
+        # 상세 인가와 목록 필터가 서로 다른 결과를 내지 않도록 개발 우회를 한곳에서 맞춘다.
+        if development_security_bypass_enabled():
+            return None
+
         def lookup() -> set[str] | None:
             if self.is_service_admin(user_id):
                 return None
