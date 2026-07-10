@@ -129,6 +129,9 @@ def test_every_gateway_route_has_a_bruno_request() -> None:
         routes.PROVIDERS_CLUSTER_DISCOVERY_PATH,
         routes.PROVIDERS_VALIDATE_PATH,
         routes.RCA_RULES_VALIDATE_PATH,
+        routes.RCA_TEST_SCENARIOS_PATH,
+        routes.RCA_TEST_RUNS_PATH,
+        "/rca/test-runs/{{rca_test_run_id}}",
         routes.METRICS_VALIDATE_PATH,
         routes.DASHBOARD_RCA_TIMELINE_PATH,
         "/dashboard/rca/incidents/{{incident_id}}",
@@ -224,8 +227,40 @@ def test_bruno_cli_runner_uses_isolated_profile_and_cleans_up_last() -> None:
     assert runner.count("11-clusters/12-unregister-cluster.bru") == 1
     assert "trap cleanup EXIT" in runner
     assert runner.rstrip().endswith("cleanup")
+    assert "16-rca-debug" not in runner
     assert '"environment": "test"' in register_request
     assert "purge=true" in cleanup_request
+
+
+def test_rca_e2e_workflow_is_thin_separate_and_explicitly_selected() -> None:
+    workflow_dir = API_DIR / "16-rca-debug"
+    requests = sorted(workflow_dir.glob("*.bru"))
+    names = [path.name for path in requests if path.name != "folder.bru"]
+    assert names == [
+        "01-list-scenarios.bru",
+        "02-start-test-run.bru",
+        "03-check-test-run.bru",
+        "04-check-built-evidence.bru",
+        "05-check-rca-report.bru",
+        "06-check-recovery-plan.bru",
+        "07-select-recovery-action.bru",
+        "08-check-selected-plan.bru",
+        "09-cleanup-test-run.bru",
+        "10-check-cleanup.bru",
+    ]
+
+    start = (workflow_dir / "02-start-test-run.bru").read_text(encoding="utf-8")
+    assert '"cluster_id": "{{dev_cluster_id}}"' in start
+    assert '"scenario_id": "{{rca_scenario_id}}"' in start
+    assert '"kubernetes"' not in start
+    assert '"evidence"' not in start
+    assert '"manifest"' not in start
+
+    selection = (workflow_dir / "07-select-recovery-action.bru").read_text(encoding="utf-8")
+    assert 'SELECT:${bru.getVar("rca_correlation_id")}' in selection
+    assert '"expected_plan_id": "{{rca_plan_id}}"' in selection
+    assert '"action_id": "{{rca_action_id}}"' in selection
+    assert (workflow_dir / "README.md").is_file()
 
 
 def test_bruno_readme_explains_each_work_type() -> None:

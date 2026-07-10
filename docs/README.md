@@ -270,6 +270,7 @@ Target / Telemetry 선형 작업 문서는 아래에 있다.
 새 문서를 만들면 이 목록에도 연결한다.
 
 - [api/README](api/README.md)
+- [api/16-rca-debug/README](api/16-rca-debug/README.md)
 - [architecture-diagram](architecture-diagram.md)
 - [architecture](architecture.md)
 - [architecture/service-consolidation-plan](architecture/service-consolidation-plan.md)
