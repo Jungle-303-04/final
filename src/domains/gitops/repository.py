@@ -1271,6 +1271,49 @@ class RepoChangeRepository(DatabaseConnection):
         with self.connection() as conn:
             conn.execute(statement)
 
+    def record_watch_poll_result(
+        self,
+        watch_target_id: str,
+        *,
+        workspace_id: str = DEFAULT_WORKSPACE_ID,
+        repository_id: str = DEFAULT_REPOSITORY_ID,
+        branch: str = DEFAULT_REPO_BRANCH,
+        manifest_path: str = DEFAULT_MANIFEST_PATH,
+        ok: bool = True,
+        status_code: int | None = None,
+        error_kind: str = "",
+        error: str = "",
+    ) -> None:
+        table = GitWatchTarget.__table__
+        settings = {
+            "poll_status": "ok" if ok else "failed",
+            "poll_status_code": status_code,
+            "poll_error_kind": "" if ok else error_kind,
+            "poll_error": "" if ok else error[:500],
+        }
+        insert = pg_insert(table).values(
+            watch_target_id=watch_target_id,
+            workspace_id=workspace_id,
+            repository_id=repository_id,
+            branch=branch,
+            manifest_path=manifest_path,
+            interval_seconds=30,
+            last_polled_at=func.now(),
+            status=WatchTargetStatus.ACTIVE.value,
+            settings=settings,
+            updated_at=func.now(),
+        )
+        statement = insert.on_conflict_do_update(
+            index_elements=[table.c.watch_target_id],
+            set_={
+                "last_polled_at": func.now(),
+                "settings": table.c.settings.op("||")(insert.excluded.settings),
+                "updated_at": func.now(),
+            },
+        )
+        with self.connection() as conn:
+            conn.execute(statement)
+
     def get_watch_last_seen_commit_sha(
         self, watch_target_id: str, workspace_id: str = DEFAULT_WORKSPACE_ID
     ) -> str | None:

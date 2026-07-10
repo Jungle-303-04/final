@@ -938,6 +938,12 @@ def check_deploy_script_contract() -> list[ReadinessCheck]:
             "deploy script rejects placeholder auth before API calls",
         ),
         ReadinessCheck(
+            "script.deploy.rollback_guard",
+            'settings.get("rollback_policy") != "safe_pr"' in source
+            and "settings.rollback_policy must be safe_pr" in source,
+            "deploy script requires Safe PR rollback policy for gated production starts",
+        ),
+        ReadinessCheck(
             "script.deploy.matches_gate_evidence",
             "expected_plan_values" in source
             and "RELEASE_FLOW_DEPLOY_CHANGE_TICKET" in source
