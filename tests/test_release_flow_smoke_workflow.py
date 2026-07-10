@@ -181,6 +181,14 @@ def test_release_flow_smoke_workflow_can_be_called_by_deploy_workflows() -> None
     )
 
 
+def test_release_flow_smoke_call_secrets_have_no_case_insensitive_duplicates() -> None:
+    secrets = load_workflow()["on"]["workflow_call"]["secrets"]
+
+    normalized = [name.casefold() for name in secrets]
+
+    assert len(normalized) == len(set(normalized))
+
+
 def test_release_flow_smoke_workflow_uploads_artifacts_before_failing_gate() -> None:
     workflow = load_workflow()
     job = workflow["jobs"]["release_flow_smoke"]
