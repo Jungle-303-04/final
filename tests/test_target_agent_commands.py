@@ -266,6 +266,65 @@ def test_rca_test_inject_command_returns_real_fault_observation(
     assert result["rca_test"]["pod_names"] == ["rca-test-image-wrong-tag-7f8d9c6b5-x2k4m"]
 
 
+def test_rca_test_injection_uses_registered_adapter_trigger(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    module = load_agent_module()
+    scenario = module.test_scenario_by_id("image.wrong-tag")
+    assert scenario is not None
+    calls: list[tuple[str, object]] = []
+
+    class SpyAdapter:
+        def build_trigger(
+            self,
+            selected: object,
+            run_id: str,
+            expires_at: str,
+        ) -> list[dict[str, object]]:
+            calls.append(("build_trigger", (selected, run_id, expires_at)))
+            return [{"apiVersion": "v1", "kind": "SpyFixture", "metadata": {}}]
+
+    class SpyRegistry:
+        def adapter_for(self, selected: object) -> SpyAdapter:
+            calls.append(("adapter_for", selected))
+            return SpyAdapter()
+
+    monkeypatch.setattr(
+        module,
+        "default_test_scenario_adapter_registry",
+        lambda: SpyRegistry(),
+    )
+    agent = object.__new__(module.TargetClusterAgent)
+
+    async def fixture_available(_scenario: object, _run_id: str) -> None:
+        return None
+
+    async def apply_manifest(
+        manifest: object,
+        namespace: str,
+    ) -> tuple[bool, str, dict[str, object]]:
+        calls.append(("apply", (manifest, namespace)))
+        return True, "applied", {}
+
+    async def observed(_scenario: object, _run_id: str) -> list[str]:
+        return ["spy-pod"]
+
+    agent.ensure_rca_test_fixture_available = fixture_available
+    agent.apply_kubernetes_manifest = apply_manifest
+    agent.wait_for_rca_test_observation = observed
+
+    result = asyncio.run(
+        agent.inject_rca_test_scenario(
+            scenario,
+            "run-spy",
+            "2099-01-01T00:00:00+00:00",
+        )
+    )
+
+    assert [name for name, _value in calls] == ["adapter_for", "build_trigger", "apply"]
+    assert result["pod_names"] == ["spy-pod"]
+
+
 def test_expired_rca_test_inject_fails_before_manifest_apply(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -357,6 +416,133 @@ def test_rca_test_cleanup_uses_immutable_target_without_loading_current_catalog(
     assert calls == [("sandbox", "rca-test-image-wrong-tag", "run-1")]
     assert result["status"] == "completed"
     assert result["rca_test"]["cleanup_completed"] is True
+
+
+def test_rca_test_cleanup_rejects_unregistered_payload_adapter(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("APP_ENV", "test")
+    monkeypatch.setenv("RCA_TEST_RUNS_ENABLED", "1")
+    module = load_agent_module()
+    agent = object.__new__(module.TargetClusterAgent)
+    agent.cluster_id = "cluster-1"
+    agent.cluster_role = "target"
+    agent.kubernetes = StubKubernetesClient()
+    cleanup_calls: list[object] = []
+
+    async def must_not_cleanup(*args: object, **kwargs: object) -> bool:
+        cleanup_calls.append((args, kwargs))
+        return True
+
+    agent.cleanup_rca_test_fixture_if_owned = must_not_cleanup
+    register_agent_commands(module, agent)
+
+    result = asyncio.run(
+        agent.execute_command(
+            {
+                "action": module.Command.RCA_TEST_SCENARIO_CLEANUP_ACTION,
+                "payload": {
+                    "run_id": "run-1",
+                    "scenario_id": "image.wrong-tag",
+                    "scenario_version": 1,
+                    "namespace": "sandbox",
+                    "resource_name": "rca-test-image-wrong-tag",
+                    "cleanup_adapter": "unregistered.delete",
+                },
+            }
+        )
+    )
+
+    assert result["status"] == "failed"
+    assert "not registered" in result["message"]
+    assert cleanup_calls == []
+
+
+def test_rca_test_cleanup_uses_registered_resource_plan_and_propagation(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from domains.rca.test_scenario_adapters import (
+        RcaTestCleanupPlan,
+        RcaTestCleanupResource,
+    )
+
+    module = load_agent_module()
+    requests: list[httpx.Request] = []
+    deleted = False
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        nonlocal deleted
+        requests.append(request)
+        path = request.url.path
+        if "/services/" in path:
+            raise AssertionError("cleanup must use only resources from the adapter plan")
+        if request.method == "GET" and "/deployments/" in path:
+            if deleted:
+                return httpx.Response(404)
+            return httpx.Response(
+                200,
+                json={
+                    "metadata": {
+                        "uid": "deployment-uid-spy",
+                        "resourceVersion": "31",
+                        "annotations": {"kubeheal.io/rca-test-run": "run-spy"},
+                    }
+                },
+            )
+        if request.method == "DELETE":
+            deleted = True
+            return httpx.Response(200, json={})
+        if request.method == "GET" and path.endswith("/pods"):
+            return httpx.Response(200, json={"items": []})
+        if request.method == "GET" and path.endswith("/endpointslices"):
+            return httpx.Response(200, json={"items": []})
+        if request.method == "GET" and "/endpoints/" in path:
+            return httpx.Response(404)
+        raise AssertionError(f"unexpected request: {request.method} {request.url}")
+
+    cleanup_plan = RcaTestCleanupPlan(
+        adapter="spy.manifest_delete",
+        propagation_policy="Orphan",
+        resources=(RcaTestCleanupResource("Deployment", "apis/apps/v1", "deployments"),),
+    )
+
+    class SpyAdapter:
+        def build_cleanup(self, namespace: str, resource_name: str) -> RcaTestCleanupPlan:
+            assert (namespace, resource_name) == ("sandbox", "rca-test-image-wrong-tag")
+            return cleanup_plan
+
+    class SpyRegistry:
+        def cleanup_adapter(self, adapter_name: str) -> SpyAdapter:
+            assert adapter_name == "spy.manifest_delete"
+            return SpyAdapter()
+
+    monkeypatch.setattr(
+        module,
+        "default_test_scenario_adapter_registry",
+        lambda: SpyRegistry(),
+    )
+    monkeypatch.setattr(module, "kubernetes_api_base_url", lambda: "https://kubernetes.test")
+    monkeypatch.setattr(module, "service_account_token", lambda: "token")
+    agent = object.__new__(module.TargetClusterAgent)
+    agent.kubernetes_transport = httpx.MockTransport(handler)
+
+    cleaned = asyncio.run(
+        agent.cleanup_rca_test_fixture_if_owned(
+            "sandbox",
+            "rca-test-image-wrong-tag",
+            "run-spy",
+            cleanup_adapter="spy.manifest_delete",
+        )
+    )
+
+    assert cleaned is True
+    deletion = next(request for request in requests if request.method == "DELETE")
+    assert json.loads(deletion.content) == {
+        "apiVersion": "v1",
+        "kind": "DeleteOptions",
+        "propagationPolicy": "Orphan",
+        "preconditions": {"uid": "deployment-uid-spy", "resourceVersion": "31"},
+    }
 
 
 @pytest.mark.parametrize("conflict_status", [409, 422])
