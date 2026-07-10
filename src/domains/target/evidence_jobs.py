@@ -65,6 +65,22 @@ def normalize_evidence_provider_result(provider_key: str, result: JsonObject) ->
     return {provider_key: result}
 
 
+def merge_evidence_provider_payload(payload: JsonObject, provider_payload: JsonObject) -> None:
+    """Merge one provider payload without dropping existing metadata keys."""
+    provider_metadata = provider_payload.get("metadata")
+    if isinstance(provider_metadata, dict):
+        current_metadata = payload.get("metadata")
+        merged_metadata = dict(current_metadata) if isinstance(current_metadata, dict) else {}
+        merged_metadata.update(provider_metadata)
+        if isinstance(current_metadata, dict) and "rca_test" in current_metadata:
+            merged_metadata["rca_test"] = current_metadata["rca_test"]
+        payload["metadata"] = merged_metadata
+        provider_payload = {
+            key: value for key, value in provider_payload.items() if key != "metadata"
+        }
+    payload.update(provider_payload)
+
+
 def aggregate_evidence_payload(rows: list[JsonObject]) -> JsonObject | None:
     """Merge provider job results into one evidence payload.
     Return None until the window is ready to emit.
@@ -109,7 +125,10 @@ def aggregate_evidence_payload(rows: list[JsonObject]) -> JsonObject | None:
     for row in rows:
         provider_key = str(row["provider_key"])
         if row["status"] == EVIDENCE_JOB_STATUS_COMPLETED and isinstance(row["result"], dict):
-            payload.update(normalize_evidence_provider_result(provider_key, row["result"]))
+            merge_evidence_provider_payload(
+                payload,
+                normalize_evidence_provider_result(provider_key, row["result"]),
+            )
         elif row["status"] == EVIDENCE_JOB_STATUS_FAILED:
             payload.setdefault(provider_key, empty_provider_payload(provider_key))
     promote_release_target(payload, release_context)

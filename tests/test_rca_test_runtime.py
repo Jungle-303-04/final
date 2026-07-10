@@ -409,7 +409,42 @@ def test_evidence_aggregation_promotes_release_context_and_same_correlation() ->
                         "events": [],
                     }
                 },
-            }
+            },
+            {
+                "workspace_id": WORKSPACE_ID,
+                "cluster_id": CLUSTER_ID,
+                "source_id": "rca-test",
+                "window_start": RUN_ID,
+                "evidence_key": f"{WORKSPACE_ID}:{CLUSTER_ID}:rca-test:{RUN_ID}",
+                "agent_id": "target-agent-1",
+                "provider_key": "metadata",
+                "provider_policy": {
+                    "queries": [{"name": "change_context", "query": "change_context"}],
+                    "release_context": release_context,
+                },
+                "status": "completed",
+                "failure_policy": "strict",
+                "result": {
+                    "metadata": {
+                        "rca_test": {
+                            "run_id": "wrong-run",
+                            "scenario_id": "wrong-scenario",
+                            "pod_names": ["wrong-pod"],
+                        },
+                        "change_context": {
+                            "current_workload_snapshots": [
+                                {
+                                    "workload": {
+                                        "kind": "Deployment",
+                                        "namespace": "sandbox",
+                                        "name": RESOURCE_NAME,
+                                    }
+                                }
+                            ]
+                        }
+                    }
+                },
+            },
         ]
     )
 
@@ -420,6 +455,17 @@ def test_evidence_aggregation_promotes_release_context_and_same_correlation() ->
         "run_id": RUN_ID,
         "scenario_id": SCENARIO_ID,
         "pod_names": POD_NAMES,
+    }
+    assert payload["metadata"]["change_context"] == {
+        "current_workload_snapshots": [
+            {
+                "workload": {
+                    "kind": "Deployment",
+                    "namespace": "sandbox",
+                    "name": RESOURCE_NAME,
+                }
+            }
+        ]
     }
     assert payload["kubernetes"]["resource"] == {
         "kind": "Deployment",
