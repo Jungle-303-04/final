@@ -471,17 +471,23 @@ RCA evidence item:
 | `workload.namespace` | string | workload namespace다. |
 | `workload.name` | string | workload 이름이다. |
 | `deployment_labels` | object | Deployment labels다. |
-| `deployment_annotations` | object | 안전한 Deployment annotations만 남긴다. |
 | `pod_template_labels` | object | Pod template labels다. |
-| `pod_template_annotations` | object | 안전한 Pod template annotations만 남긴다. |
-| `managed_fields_managers` | list<string> | Deployment managedFields manager 이름 목록이다. |
+| `pod_template_auth` | object | serviceAccountName, automountServiceAccountToken, imagePullSecrets name 요약이다. |
+| `persistent_volume_claim_refs` | list<object> | Pod template volume이 참조하는 PVC claim name 요약이다. |
+| `deployment_status` | object | Deployment replica count와 condition 요약이다. |
+| `pod_statuses` | list<object> | owned Pod phase, ready, condition 샘플 요약이다. |
 | `containers[].name` | string | container 이름이다. |
 | `containers[].image` | string | 현재 cluster에서 보이는 container image다. |
 | `containers[].readiness_probe` | object | readiness probe 요약이다. |
 | `containers[].liveness_probe` | object | liveness probe 요약이다. |
 | `containers[].startup_probe` | object | startup probe 요약이다. |
+| `containers[].resources` | object | requests/limits 요약이다. |
 | `replicaset_revisions[].name` | string | Deployment가 소유한 ReplicaSet 이름이다. |
 | `replicaset_revisions[].revision` | string | `deployment.kubernetes.io/revision` 값이다. |
+| `pod_status_count` | number | `pod_statuses`가 샘플로 잘렸을 때만 있는 전체 Pod 수다. |
+| `pod_statuses_truncated` | boolean | `pod_statuses`가 샘플로 잘렸을 때 true다. |
+| `replicaset_revision_count` | number | `replicaset_revisions`가 샘플로 잘렸을 때만 있는 전체 ReplicaSet 수다. |
+| `replicaset_revisions_truncated` | boolean | `replicaset_revisions`가 샘플로 잘렸을 때 true다. |
 
 probe summary:
 
@@ -528,8 +534,11 @@ RCA evidence item:
 }
 ```
 
-`value`는 `current_workload_snapshots.items[]`의 단일 object와 같은 형태다.
+`value`는 `current_workload_snapshots.items[]`의 summary 필드에 detail-only 필드를 더한 형태다.
 특정 Deployment 하나를 자세히 볼 때 사용한다.
+detail-only 필드는 안전한 `deployment_annotations`, `pod_template_annotations`,
+`managed_fields_managers`, `scheduling_constraints`, env/envFrom/volume reference,
+referenced ConfigMap/Secret object summary, ReplicaSet condition 요약이다.
 
 #### `metadata:change_context`와의 관계
 
@@ -551,6 +560,16 @@ metadata:current_workload_snapshot
 metadata:service_selector_matches
 metadata:endpoint_slice_ready_endpoints
 ```
+
+큰 namespace에서는 provider가 evidence job result의 1MiB JSON 제한을 피하기 위해
+metadata 목록을 샘플로 제한할 수 있다.
+이때 provider bucket에는 `metadata.change_context.collection_limits`가 남고,
+각 list별 `original_count`와 `returned_count`로 잘린 범위를 알 수 있다.
+RCA evidence item으로 승격될 때는 해당 목록 item의 `value.collection_limit`에도
+같은 제한 정보가 붙는다.
+Service selector의 `matched_pods`, EndpointSlice의 `ready_targets`, workload의
+`pod_statuses`와 `replicaset_revisions`도 샘플로 제한될 수 있으며, 전체 count와
+`*_truncated` flag가 함께 제공된다.
 
 Git commit, rollback 가능 여부, risk level, 실제 배포 이력은 이 schema의 필수 근거가 아니다.
 그 정보가 필요하면 GitOps/SCM/Safe PR 단계에서 별도 근거로 다룬다.

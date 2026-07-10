@@ -282,6 +282,8 @@ summary snapshot에는 아래 필드만 남긴다.
 - change_context.current_workload_snapshots[].pod_statuses[].message
 - change_context.current_workload_snapshots[].pod_statuses[].start_time
 - change_context.current_workload_snapshots[].pod_statuses[].conditions[]
+- change_context.current_workload_snapshots[].pod_status_count(잘렸을 때만 존재)
+- change_context.current_workload_snapshots[].pod_statuses_truncated(잘렸을 때만 존재)
 - change_context.current_workload_snapshots[].containers[].name/image
 - change_context.current_workload_snapshots[].containers[].readiness_probe
 - change_context.current_workload_snapshots[].containers[].liveness_probe
@@ -294,6 +296,8 @@ summary snapshot에는 아래 필드만 남긴다.
 - change_context.current_workload_snapshots[].replicaset_revisions[].ready_replicas
 - change_context.current_workload_snapshots[].replicaset_revisions[].available_replicas
 - change_context.current_workload_snapshots[].replicaset_revisions[].fully_labeled_replicas
+- change_context.current_workload_snapshots[].replicaset_revision_count(잘렸을 때만 존재)
+- change_context.current_workload_snapshots[].replicaset_revisions_truncated(잘렸을 때만 존재)
 
 `service_selector_matches[]`는 namespace Service selector와 Pod labels 비교 결과다.
 summary query와 detail query 모두 같은 기본 shape로 보내지만, 범위와 `target_relation` 포함 여부가 다르다.
@@ -305,6 +309,7 @@ summary query는 `target_relation`을 넣지 않고, detail query는 target Depl
 - change_context.service_selector_matches[].target_relation(detail query에서만 존재)
 - change_context.service_selector_matches[].matched_pod_count
 - change_context.service_selector_matches[].matched_pods[].namespace/name(matched Pod가 없으면 생략 가능)
+- change_context.service_selector_matches[].matched_pods_truncated(잘렸을 때만 존재)
 
 전체 summary query는 namespace의 모든 Service 비교 결과를 보낸다.
 특정 Deployment detail query는 target Deployment와 관련 있는 Service만 보낸다.
@@ -322,6 +327,7 @@ EndpointSlice condition은 Kubernetes API의 기본 해석을 따른다.
 - change_context.endpoint_slice_ready_endpoints[].endpoint_slice.namespace/name
 - change_context.endpoint_slice_ready_endpoints[].address_type
 - change_context.endpoint_slice_ready_endpoints[].ports[].name/port/protocol/app_protocol
+- change_context.endpoint_slice_ready_endpoints[].ports_truncated(잘렸을 때만 존재)
 - change_context.endpoint_slice_ready_endpoints[].endpoint_count
 - change_context.endpoint_slice_ready_endpoints[].ready_endpoint_count
 - change_context.endpoint_slice_ready_endpoints[].not_ready_endpoint_count
@@ -329,6 +335,14 @@ EndpointSlice condition은 Kubernetes API의 기본 해석을 따른다.
 - change_context.endpoint_slice_ready_endpoints[].serving_endpoint_count
 - change_context.endpoint_slice_ready_endpoints[].terminating_endpoint_count
 - change_context.endpoint_slice_ready_endpoints[].ready_targets[].kind/namespace/name
+- change_context.endpoint_slice_ready_endpoints[].ready_targets_truncated(잘렸을 때만 존재)
+
+큰 namespace에서 evidence job result가 1MiB 제한을 넘지 않도록 metadata provider는 큰 목록을 제한한다.
+잘린 목록이 있으면 `change_context.collection_limits`에 전체 개수와 반환 개수를 남긴다.
+전체 summary query는 `current_workload_snapshots`, `service_selector_matches`,
+`endpoint_slice_ready_endpoints`, `resource_quotas` 같은 top-level 목록에 상한을 둔다.
+항목 내부에서도 `matched_pods`, `ready_targets`, `pod_statuses`, `replicaset_revisions`는
+샘플 목록만 보내고 full count와 `*_truncated` flag로 잘림 여부를 표시한다.
 
 `resource_quotas[]`는 namespace 수준 ResourceQuota(네임스페이스 자원 할당량) 요약이다.
 특정 Deployment 하나의 spec이 아니라 같은 namespace의 생성/스케줄링 제한 맥락을 보기 위해

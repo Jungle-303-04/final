@@ -69,6 +69,81 @@ def test_metadata_query_target_accepts_namespace_query() -> None:
     assert target.deployment_name is None
 
 
+def test_metadata_normalize_limits_large_namespace_lists() -> None:
+    _module, metadata_module = load_metadata_modules()
+    provider = metadata_module.MetadataProvider(cluster_id="cluster-1")
+
+    normalized = provider.normalize_payload(
+        {
+            metadata_module.CHANGE_CONTEXT_KEY: {
+                metadata_module.CURRENT_WORKLOAD_SNAPSHOTS_KEY: [
+                    {"workload": {"name": f"app-{index}"}}
+                    for index in range(metadata_module.MAX_CURRENT_WORKLOAD_SNAPSHOTS + 2)
+                ],
+                metadata_module.SERVICE_SELECTOR_MATCHES_KEY: [
+                    {"service": {"name": f"svc-{index}"}}
+                    for index in range(metadata_module.MAX_SERVICE_SELECTOR_MATCHES + 1)
+                ],
+                metadata_module.ENDPOINT_SLICE_READY_ENDPOINTS_KEY: [
+                    {"endpoint_slice": {"name": f"slice-{index}"}}
+                    for index in range(
+                        metadata_module.MAX_ENDPOINT_SLICE_READY_ENDPOINTS + 1
+                    )
+                ],
+                metadata_module.RESOURCE_QUOTAS_KEY: [
+                    {"name": f"quota-{index}"}
+                    for index in range(metadata_module.MAX_RESOURCE_QUOTAS + 1)
+                ],
+            }
+        },
+        metadata_module.MetadataSnapshotQuery(
+            "change_context",
+            "Namespace metadata snapshots.",
+            "change_context",
+        ),
+    )
+
+    assert len(normalized[metadata_module.CURRENT_WORKLOAD_SNAPSHOTS_KEY]) == (
+        metadata_module.MAX_CURRENT_WORKLOAD_SNAPSHOTS
+    )
+    assert len(normalized[metadata_module.SERVICE_SELECTOR_MATCHES_KEY]) == (
+        metadata_module.MAX_SERVICE_SELECTOR_MATCHES
+    )
+    assert len(normalized[metadata_module.ENDPOINT_SLICE_READY_ENDPOINTS_KEY]) == (
+        metadata_module.MAX_ENDPOINT_SLICE_READY_ENDPOINTS
+    )
+    assert len(normalized[metadata_module.RESOURCE_QUOTAS_KEY]) == (
+        metadata_module.MAX_RESOURCE_QUOTAS
+    )
+    assert normalized[metadata_module.COLLECTION_LIMITS_KEY] == {
+        "truncated": True,
+        "lists": {
+            metadata_module.CURRENT_WORKLOAD_SNAPSHOTS_KEY: {
+                "truncated": True,
+                "original_count": metadata_module.MAX_CURRENT_WORKLOAD_SNAPSHOTS + 2,
+                "returned_count": metadata_module.MAX_CURRENT_WORKLOAD_SNAPSHOTS,
+            },
+            metadata_module.SERVICE_SELECTOR_MATCHES_KEY: {
+                "truncated": True,
+                "original_count": metadata_module.MAX_SERVICE_SELECTOR_MATCHES + 1,
+                "returned_count": metadata_module.MAX_SERVICE_SELECTOR_MATCHES,
+            },
+            metadata_module.ENDPOINT_SLICE_READY_ENDPOINTS_KEY: {
+                "truncated": True,
+                "original_count": (
+                    metadata_module.MAX_ENDPOINT_SLICE_READY_ENDPOINTS + 1
+                ),
+                "returned_count": metadata_module.MAX_ENDPOINT_SLICE_READY_ENDPOINTS,
+            },
+            metadata_module.RESOURCE_QUOTAS_KEY: {
+                "truncated": True,
+                "original_count": metadata_module.MAX_RESOURCE_QUOTAS + 1,
+                "returned_count": metadata_module.MAX_RESOURCE_QUOTAS,
+            },
+        },
+    }
+
+
 def test_endpoint_slice_omitted_ready_condition_defaults_to_ready() -> None:
     _module, metadata_module = load_metadata_modules()
 
