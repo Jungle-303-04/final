@@ -31,9 +31,16 @@ BOOTSTRAP_CATALOG_ITEMS: tuple[JsonObject, ...] = (
                 "package_ref": "oci://registry-1.docker.io/bitnamicharts/postgresql",
                 "values_schema": {
                     "type": "object",
-                    "required": ["auth.database"],
+                    "required": [
+                        "auth.database",
+                        "primary.persistence.storageClass",
+                    ],
                     "properties": {
                         "auth.database": {"type": "string"},
+                        "primary.persistence.storageClass": {
+                            "type": "string",
+                            "format": "kubernetes-dns-subdomain",
+                        },
                         "primary.persistence.size": {"type": "string", "default": "8Gi"},
                     },
                 },
@@ -44,6 +51,13 @@ BOOTSTRAP_CATALOG_ITEMS: tuple[JsonObject, ...] = (
                     "chart_digest": (
                         "sha256:7da9adcf5a0e0ae2cfbe784d789705e737eb97d226026e9ad366bfc927436640"
                     ),
+                    "fixed_values": {
+                        "image.registry": "registry-1.docker.io",
+                        "image.repository": "bitnamilegacy/postgresql",
+                        "image.digest": (
+                            "sha256:926356130b77d5742d8ce605b258d35db9b62f2f8fd1601f9dbaef0c8a710a8d"
+                        ),
+                    },
                 },
                 "status": CATALOG_STATUS_ACTIVE,
             }
@@ -63,7 +77,17 @@ BOOTSTRAP_CATALOG_ITEMS: tuple[JsonObject, ...] = (
                 "version": DEFAULT_CATALOG_VERSION,
                 "package_type": "helm",
                 "package_ref": "oci://registry-1.docker.io/bitnamicharts/redis",
-                "values_schema": {"type": "object", "properties": {}},
+                "values_schema": {
+                    "type": "object",
+                    "required": ["master.persistence.storageClass"],
+                    "properties": {
+                        "master.persistence.storageClass": {
+                            "type": "string",
+                            "format": "kubernetes-dns-subdomain",
+                        },
+                        "master.persistence.size": {"type": "string", "default": "8Gi"},
+                    },
+                },
                 "template": {
                     "runner": "helm",
                     "release": "redis",
@@ -71,6 +95,14 @@ BOOTSTRAP_CATALOG_ITEMS: tuple[JsonObject, ...] = (
                     "chart_digest": (
                         "sha256:f4a368f7a67f4f2bedee2426bfb063b960565ee38a91fdf07185a014c9e63406"
                     ),
+                    "fixed_values": {
+                        "architecture": "standalone",
+                        "image.registry": "registry-1.docker.io",
+                        "image.repository": "bitnamilegacy/redis",
+                        "image.digest": (
+                            "sha256:25bf63f3caf75af4628c0dfcf39859ad1ac8abe135be85e99699f9637b16dc28"
+                        ),
+                    },
                 },
                 "status": CATALOG_STATUS_ACTIVE,
             }

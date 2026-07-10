@@ -263,6 +263,7 @@ async def install_catalog_item(
             "cluster_id": payload.cluster_id,
             "payload": command_payload.model_dump(),
             "recipe_digest": recipe.chart_digest,
+            "recipe_fixed_values": recipe.fixed_values,
         }
     )
     plan = catalog_install_plan(

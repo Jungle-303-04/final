@@ -69,6 +69,17 @@ def nested_helm_values(values: dict[str, Any]) -> dict[str, Any]:
     return nested
 
 
+def merge_helm_values(base: dict[str, Any], enforced: dict[str, Any]) -> dict[str, Any]:
+    merged = dict(base)
+    for name, value in enforced.items():
+        existing = merged.get(name)
+        if isinstance(existing, dict) and isinstance(value, dict):
+            merged[name] = merge_helm_values(existing, value)
+        else:
+            merged[name] = value
+    return merged
+
+
 def helm_subprocess_env(runtime_dir: Path) -> dict[str, str]:
     child_env = {name: os.environ[name] for name in HELM_ENV_ALLOWLIST if name in os.environ}
     child_env.update(
@@ -104,7 +115,11 @@ def run_catalog_helm_install(
             raise CatalogInstallValidationError(
                 "catalog installs are limited to the sandbox control namespace"
             )
-        values = nested_helm_values(validate_catalog_values(recipe.values_schema, payload.values))
+        user_values = nested_helm_values(
+            validate_catalog_values(recipe.values_schema, payload.values)
+        )
+        fixed_values = nested_helm_values(dict(recipe.fixed_values))
+        values = merge_helm_values(user_values, fixed_values)
     except CatalogRecipeUnsupported:
         return HelmRunResult(False, "catalog_recipe_unsupported")
     except CatalogInstallValidationError:

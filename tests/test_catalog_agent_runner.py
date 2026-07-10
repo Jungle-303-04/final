@@ -30,6 +30,7 @@ def load_runner_module() -> ModuleType:
 def install_payload(**updates: object) -> CatalogHelmInstallPayload:
     values: dict[str, object] = {
         "auth.database": "orders",
+        "primary.persistence.storageClass": "gp2",
         "primary.persistence.size": "16Gi",
     }
     fields: dict[str, object] = {
@@ -90,7 +91,12 @@ def test_helm_runner_uses_explicit_args_private_values_file_and_sanitized_env(
     assert "agent-token-must-not-leak" not in args
     assert captured["values"] == {
         "auth": {"database": "orders"},
-        "primary": {"persistence": {"size": "16Gi"}},
+        "image": {
+            "digest": "sha256:926356130b77d5742d8ce605b258d35db9b62f2f8fd1601f9dbaef0c8a710a8d",
+            "registry": "registry-1.docker.io",
+            "repository": "bitnamilegacy/postgresql",
+        },
+        "primary": {"persistence": {"size": "16Gi", "storageClass": "gp2"}},
     }
     assert captured["mode"] == 0o600
     assert not captured["values_path"].exists()
@@ -102,6 +108,39 @@ def test_helm_runner_uses_explicit_args_private_values_file_and_sanitized_env(
     assert kwargs["env"]["KUBERNETES_SERVICE_HOST"] == "kubernetes.default.svc"
     assert "AGENT_TOKEN" not in kwargs["env"]
     assert "CATALOG_PASSWORD" not in kwargs["env"]
+
+
+def test_redis_runner_enforces_immutable_standalone_recipe() -> None:
+    module = load_runner_module()
+    captured: dict[str, object] = {}
+
+    def fake_run(args: list[str], **_kwargs: object) -> subprocess.CompletedProcess[str]:
+        values_path = Path(args[args.index("--values") + 1])
+        captured["values"] = yaml.safe_load(values_path.read_text(encoding="utf-8"))
+        return subprocess.CompletedProcess(args, 0, stdout="", stderr="")
+
+    result = module.run_catalog_helm_install(
+        install_payload(
+            catalog_item_id="catalog-redis",
+            values={
+                "master.persistence.storageClass": "gp2",
+                "master.persistence.size": "1Gi",
+            },
+        ),
+        helm_binary="/usr/local/bin/helm",
+        run=fake_run,
+    )
+
+    assert result.succeeded is True
+    assert captured["values"] == {
+        "architecture": "standalone",
+        "image": {
+            "digest": "sha256:25bf63f3caf75af4628c0dfcf39859ad1ac8abe135be85e99699f9637b16dc28",
+            "registry": "registry-1.docker.io",
+            "repository": "bitnamilegacy/redis",
+        },
+        "master": {"persistence": {"size": "1Gi", "storageClass": "gp2"}},
+    }
 
 
 def test_helm_runner_reports_timeout_without_subprocess_output() -> None:

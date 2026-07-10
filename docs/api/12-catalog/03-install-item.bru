@@ -22,7 +22,8 @@ body:json {
     "application_name": "demo-postgresql",
     "release_name": "demo-postgresql",
     "values": {
-      "auth.database": "demo"
+      "auth.database": "demo",
+      "primary.persistence.storageClass": "{{catalog_storage_class}}"
     }
   }
 }
