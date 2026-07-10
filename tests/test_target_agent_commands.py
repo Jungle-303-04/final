@@ -198,6 +198,48 @@ def test_apply_manifest_keeps_plan_diff_payload() -> None:
     assert applied["manifest"]["kind"] == "ConfigMap"
 
 
+def test_rca_test_inject_command_returns_real_fault_observation() -> None:
+    module = load_agent_module()
+    agent = object.__new__(module.TargetClusterAgent)
+    agent.cluster_id = "cluster-1"
+    agent.cluster_role = "target"
+    agent.kubernetes = StubKubernetesClient()
+    calls: list[tuple[str, str]] = []
+
+    async def stub_inject(scenario: object, run_id: str) -> dict[str, object]:
+        calls.append((scenario.scenario_id, run_id))
+        return {
+            "fault_observed": True,
+            "namespace": "sandbox",
+            "resource_kind": "Deployment",
+            "resource_name": "rca-test-image-wrong-tag",
+            "label_selector": f"kubeheal.io/rca-test-run={run_id}",
+        }
+
+    agent.inject_rca_test_scenario = stub_inject
+    register_agent_commands(module, agent)
+
+    result = asyncio.run(
+        agent.execute_command(
+            {
+                "action": module.Command.RCA_TEST_SCENARIO_INJECT_ACTION,
+                "payload": {
+                    "run_id": "run-1",
+                    "scenario_id": "image.wrong-tag",
+                    "scenario_version": 1,
+                },
+            }
+        )
+    )
+
+    assert calls == [("image.wrong-tag", "run-1")]
+    assert result["status"] == "completed"
+    assert result["applied"] is True
+    assert result["rca_test"]["fault_observed"] is True
+    assert result["rca_test"]["scenario_id"] == "image.wrong-tag"
+    assert result["rca_test"]["evidence_sources"] == ["kubernetes"]
+
+
 def test_command_result_outbox_retries_until_gateway_accepts(tmp_path: Path) -> None:
     module = load_agent_module()
     agent = object.__new__(module.TargetClusterAgent)

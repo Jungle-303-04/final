@@ -17,6 +17,7 @@ from typing import Any
 from conftest import load_service, run_handler
 
 from domains.command.events import CommandCompletedBody
+from domains.rca.test_scenarios import test_scenario_by_id as scenario_by_id
 from domains.target.events import EvidenceJobsQueuedBody
 from domains.target.evidence_jobs import aggregate_evidence_payload
 from packages.config.constants import CommandStatus
@@ -101,6 +102,59 @@ def test_inject_plan_is_allowlisted_and_contains_no_raw_manifest_or_shell() -> N
     assert "manifest" not in serialized
     assert "kubectl" not in serialized
     assert "shell" not in serialized
+
+
+def test_wrong_tag_fixture_is_server_owned_bounded_and_run_scoped() -> None:
+    runtime = _runtime()
+    scenario = scenario_by_id(SCENARIO_ID)
+    assert scenario is not None
+
+    manifests = runtime.build_rca_test_manifests(scenario, RUN_ID)
+    deployment = next(item for item in manifests if item["kind"] == "Deployment")
+
+    assert deployment["metadata"]["name"] == RESOURCE_NAME
+    assert deployment["metadata"]["namespace"] == "sandbox"
+    assert deployment["metadata"]["annotations"]["kubeheal.io/rca-test-run"] == RUN_ID
+    template = deployment["spec"]["template"]
+    assert template["metadata"]["labels"]["kubeheal.io/rca-test-run"] == RUN_ID
+    container = template["spec"]["containers"][0]
+    assert container["image"].startswith("registry.k8s.io/pause:rca-test-missing-")
+    assert RUN_ID.replace("-", "")[:12] in container["image"]
+    assert container["resources"] == {
+        "requests": {"cpu": "10m", "memory": "8Mi"},
+        "limits": {"cpu": "50m", "memory": "32Mi"},
+    }
+    serialized = json.dumps(deployment, sort_keys=True).casefold()
+    assert "privileged" not in serialized
+    assert "hostpath" not in serialized
+    assert "hostnetwork" not in serialized
+
+
+def test_fault_observation_requires_the_registered_signal_groups() -> None:
+    runtime = _runtime()
+    scenario = scenario_by_id(SCENARIO_ID)
+    assert scenario is not None
+    snapshot = {
+        "pods": [
+            {
+                "name": f"{RESOURCE_NAME}-pod",
+                "labels": {"kubeheal.io/rca-test-run": RUN_ID},
+                "waiting_reasons": ["ImagePullBackOff"],
+                "terminated_reasons": [],
+            }
+        ],
+        "events": [],
+    }
+
+    assert runtime.rca_test_observation_matches(scenario, snapshot, RUN_ID) is False
+    snapshot["events"] = [
+        {
+            "involved_name": f"{RESOURCE_NAME}-pod",
+            "reason": "Failed",
+            "message": "manifest for test image not found",
+        }
+    ]
+    assert runtime.rca_test_observation_matches(scenario, snapshot, RUN_ID) is True
 
 
 class _ReleaseFlowDb:
