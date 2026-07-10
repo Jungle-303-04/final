@@ -63,11 +63,22 @@ class TargetAgentRepository(DatabaseConnection):
         workspace_id: str,
         cluster_id: str,
         agent_id: str,
-        capabilities: list[str],
+        capabilities: list[str] | None,
         status: str = "connected",
         details: JsonObject | None = None,
     ) -> JsonObject:
         table = ClusterAgentStatusRecord.__table__
+        normalized_capabilities = (
+            list(dict.fromkeys(capabilities)) if capabilities is not None else None
+        )
+        update_values: dict[str, Any] = {
+            "status": status,
+            "details": details or {},
+            "last_seen_at": func.now(),
+            "updated_at": func.now(),
+        }
+        if normalized_capabilities is not None:
+            update_values["capabilities"] = normalized_capabilities
         statement = (
             pg_insert(table)
             .values(
@@ -75,20 +86,14 @@ class TargetAgentRepository(DatabaseConnection):
                 cluster_id=cluster_id,
                 agent_id=agent_id,
                 status=status,
-                capabilities=list(dict.fromkeys(capabilities)),
+                capabilities=normalized_capabilities or [],
                 details=details or {},
                 last_seen_at=func.now(),
                 updated_at=func.now(),
             )
             .on_conflict_do_update(
                 index_elements=[table.c.workspace_id, table.c.cluster_id, table.c.agent_id],
-                set_={
-                    "status": status,
-                    "capabilities": list(dict.fromkeys(capabilities)),
-                    "details": details or {},
-                    "last_seen_at": func.now(),
-                    "updated_at": func.now(),
-                },
+                set_=update_values,
             )
             .returning(table)
         )
