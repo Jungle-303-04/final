@@ -233,6 +233,7 @@ python scripts/release_flow_smoke.py \
 ```
 
 CI artifact로 smoke 결과를 보관하려면 `--report-path`를 함께 쓴다. 성공/실패 모두 같은 JSON 구조로 저장되며, 실패한 preflight check와 대상 run id를 나중에 다시 볼 수 있다.
+smoke JSON/JUnit/Markdown/GitHub summary에 쓰이는 detail과 error는 password, token, secret, credential, api key, cookie, Authorization bearer 값을 `<redacted>`로 마스킹한다.
 
 ```bash
 python scripts/release_flow_smoke.py \

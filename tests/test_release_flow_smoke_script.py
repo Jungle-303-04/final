@@ -297,6 +297,28 @@ def test_smoke_report_writer_persists_json_artifact(tmp_path: Path) -> None:
     }
 
 
+def test_smoke_report_payload_redacts_sensitive_details() -> None:
+    smoke = load_smoke_module()
+
+    payload = smoke.smoke_report_payload(
+        False,
+        "https://example.com/api",
+        [
+            smoke.SmokeResult(
+                "auth.session",
+                False,
+                'password="raw-password", token=raw-token, Authorization: Bearer raw-bearer',
+            )
+        ],
+    )
+
+    detail = payload["checks"][0]["detail"]
+    assert "raw-password" not in detail
+    assert "raw-token" not in detail
+    assert "raw-bearer" not in detail
+    assert detail.count("<redacted>") == 3
+
+
 def test_smoke_junit_writer_persists_ci_report(tmp_path: Path) -> None:
     smoke = load_smoke_module()
     junit_path = tmp_path / "artifacts" / "release-smoke.xml"
@@ -318,6 +340,22 @@ def test_smoke_junit_writer_persists_ci_report(tmp_path: Path) -> None:
     assert failures[0].attrib["message"] == "run-policy-override"
 
 
+def test_smoke_junit_writer_redacts_sensitive_failure_details(tmp_path: Path) -> None:
+    smoke = load_smoke_module()
+    junit_path = tmp_path / "artifacts" / "release-smoke.xml"
+
+    smoke.write_junit_report(
+        str(junit_path),
+        [smoke.SmokeResult("auth.session", False, "secret=raw-secret")],
+        error='{"api_key":"raw-api-key"}',
+    )
+
+    body = junit_path.read_text(encoding="utf-8")
+    assert "raw-secret" not in body
+    assert "raw-api-key" not in body
+    assert "&lt;redacted&gt;" in body
+
+
 def test_smoke_markdown_writer_persists_handoff_report(tmp_path: Path) -> None:
     smoke = load_smoke_module()
     markdown_path = tmp_path / "artifacts" / "release-smoke.md"
@@ -336,6 +374,24 @@ def test_smoke_markdown_writer_persists_handoff_report(tmp_path: Path) -> None:
     assert "# Release Flow Smoke Report" in body
     assert "- Result: failed" in body
     assert "| `release-runs.policy-override-preflight` | fail | run\\|policy<br>review |" in body
+
+
+def test_smoke_markdown_writer_redacts_sensitive_values(tmp_path: Path) -> None:
+    smoke = load_smoke_module()
+    markdown_path = tmp_path / "artifacts" / "release-smoke.md"
+
+    smoke.write_markdown_report(
+        str(markdown_path),
+        ok=False,
+        api_base_url="https://example.com/api",
+        results=[smoke.SmokeResult("auth.session", False, "set-cookie=session-token")],
+        error="private_key=raw-private-key",
+    )
+
+    body = markdown_path.read_text(encoding="utf-8")
+    assert "session-token" not in body
+    assert "raw-private-key" not in body
+    assert "<redacted>" in body
 
 
 def test_smoke_github_step_summary_appends_markdown(tmp_path: Path, monkeypatch: Any) -> None:
