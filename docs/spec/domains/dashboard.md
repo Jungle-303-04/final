@@ -1,5 +1,5 @@
 ---
-source_commit: e7e4caab
+source_commit: 243e7fc0
 status: synced
 ---
 
@@ -74,15 +74,16 @@ status: synced
 
 | 메서드 | 시그니처 | 쿼리 의미 |
 |---|---|---|
-| `upsert_rca_timeline` | `(self, row: JsonObject) -> None` | `INSERT ... ON CONFLICT (workspace_id, correlation_id) DO UPDATE`. 갱신 규칙: ① `preserve_when_missing` 컬럼(cluster_id, incident_id, evidence_ref, root_cause, confidence, supporting_evidence, missing_evidence, action_route, command_id, pr_url)은 `coalesce(EXCLUDED.<col>, 기존값)` — 새 값이 NULL이면 기존값 보존. ② `newer_or_equal_event = EXCLUDED.last_event_at >= 기존 last_event_at`일 때만 current_subject/status/error_reason/last_event_id/last_event_at/payload 교체(CASE), 아니면 기존값 유지. ③ `updated_at=now()` 항상 갱신 |
+| `upsert_rca_timeline` | `(self, row: JsonObject) -> None` | `INSERT ... ON CONFLICT (workspace_id, correlation_id) DO UPDATE`. 갱신 규칙: ① cluster/incident 차원과 evidence/RCA/action 필드는 `coalesce(EXCLUDED.<col>, 기존값)`으로 보존한다. 차원을 싣지 않는 approval/dispatch 후속 이벤트의 `incident_logical_key`는 NULL이므로 앞서 투영한 정규화 key를 correlation ID로 덮어쓰지 않는다. ② `newer_or_equal_event = EXCLUDED.last_event_at >= 기존 last_event_at`일 때만 current_subject/status/error_reason/last_event_id/last_event_at/payload 교체(CASE), 아니면 기존값 유지. ③ `updated_at=now()` 항상 갱신 |
 | `list_rca_timeline` | `(self, workspace_id: str, allowed_cluster_ids: set[str] \| None, limit: int = 50) -> list[JsonObject]` | `allowed_cluster_ids == set()`이면 빈 리스트 즉시 반환(권한 0). `WHERE workspace_id=? [AND cluster_id IN allowed] ORDER BY updated_at DESC LIMIT ?` 후 `serialize_timeline_row`. `None`은 필터 없음(전체 허용) |
 | `get_rca_timeline_item` | `(self, workspace_id: str, incident_id: str, allowed_cluster_ids: set[str] \| None) -> JsonObject \| None` | `WHERE workspace_id=? AND incident_id=? [AND cluster_id IN allowed] ORDER BY updated_at DESC LIMIT 1` |
 | `count_open_rca_incidents` | `(self, workspace_id: str, allowed_cluster_ids: set[str] \| None = None) -> dict[str, int]` | fleet 롤업용 클러스터별 열린 logical incident 수. `status IN OPEN_INCIDENT_STATUSES` 양수 allowlist로 실제 탐지 이후 상태만 집계해 `evidence_received/evidence_built`가 인시던트로 승격되지 않게 한다. 정규화 projection(namespace/kind/name/symptom)이 있으면 구버전 correlation 기반 key보다 우선해 SQL `COUNT(DISTINCT ...) GROUP BY cluster_id`로 집계한다. 큰 `payload` JSON을 읽거나 Python으로 전체 row를 풀스캔하지 않는다 |
 | `list_open_rca_incidents` | `(self, workspace_id: str, cluster_id: str, *, limit: int = 20) -> list[JsonObject]` | 드릴다운용 — 같은 open 판정으로 `updated_at DESC LIMIT`(1..100 clamp) 후 `open_incident_summary` 적용 |
 | `expire_stale_open_rca_incidents` | `(self, max_age_days: int = 3, limit: int = 500) -> list[JsonObject]` | 오래 열린 incident row를 CTE `stale_open_incidents`로 `FOR UPDATE SKIP LOCKED` 선점 후 `status="incident_expired"`로 원자 UPDATE. `error_reason`이 비어 있으면 retention window 초과 메시지를 채운다. [rca-timeline-janitor](../services/projection-rca-timeline-janitor.md)가 호출한다 |
+| `resolve_recovered_ephemeral_incidents` | `(self, grace_minutes: int = 5, limit: int = 500) -> list[JsonObject]` | grace가 지난 open Pod/ReplicaSet incident 중 최신 inventory에 비정상 리소스가 없는 row를 CTE `recovered_ephemeral_incidents`로 선점해 `incident_resolved`로 원자 UPDATE. 사라졌거나 healthy인 ephemeral 리소스만 대상으로 한다 |
 | `delete_stale_pre_incident_timeline` | `(self, retention_hours: int = 24, limit: int = 1000) -> int` | 원본 evidence/event는 보존하고 `evidence_received/evidence_built` timeline projection만 보존시간 이후 CTE + `FOR UPDATE SKIP LOCKED` 배치로 삭제한다 |
 
-열린 인시던트는 `OPEN_INCIDENT_STATUSES` 양수 allowlist로만 판정한다. `PRE_INCIDENT_STATUSES=("evidence_received", "evidence_built")`는 절대 open count에 들어가지 않으며 24시간 뒤 projection janitor가 삭제한다. `CLOSED_INCIDENT_STATUSES`는 종결 이력 구분에 유지한다. `timeline_update_from_event`는 `incident_namespace`, `incident_resource_kind`, `incident_resource_name`, `incident_symptom`, `incident_logical_key`를 함께 투영하며, 집계는 정규화 필드가 존재하면 구버전 correlation key를 무시하고 동일 리소스·증상을 하나로 묶는다. 원본 payload/evidence/audit는 projection 삭제와 무관하게 보존된다.
+열린 인시던트는 `OPEN_INCIDENT_STATUSES` 양수 allowlist로만 판정한다. `PRE_INCIDENT_STATUSES=("evidence_received", "evidence_built")`는 절대 open count에 들어가지 않으며 24시간 뒤 projection janitor가 삭제한다. `CLOSED_INCIDENT_STATUSES`는 `incident_resolved`를 포함해 종결 이력을 구분한다. `timeline_update_from_event`는 `incident_namespace`, `incident_resource_kind`, `incident_resource_name`, `incident_symptom`, `incident_logical_key`를 함께 투영하며, 집계는 정규화 필드가 존재하면 구버전 correlation key를 무시하고 동일 리소스·증상을 하나로 묶는다. 원본 payload/evidence/audit는 projection 삭제와 무관하게 보존된다.
 
 #### `timeline_update_from_event(evt)` 투영 규칙
 
