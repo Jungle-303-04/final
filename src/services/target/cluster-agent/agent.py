@@ -137,8 +137,9 @@ SENSITIVE_OUTPUT_MARKERS = (
     "token",
 )
 RCA_TEST_CLEANUP_INTERVAL_SECONDS = 30
-RCA_TEST_OWNER_JSON_POINTER = "/metadata/annotations/kubeheal.io~1rca-test-run"
-RCA_TEST_CLEANUP_CONFLICT_STATUSES = frozenset({404, 409, 422})
+RCA_TEST_CLEANUP_TIMEOUT_SECONDS = 30.0
+RCA_TEST_CLEANUP_POLL_SECONDS = 0.25
+RCA_TEST_OWNER_CONFLICT_STATUSES = frozenset({409, 422})
 
 
 def parse_provider_worker_counts(raw_counts: str) -> dict[str, int]:
@@ -169,6 +170,18 @@ class KubernetesManifestResource:
 
     def resource_url(self, base_url: str) -> str:
         return f"{self.collection_url(base_url)}/{self.name}"
+
+
+@dataclass(frozen=True)
+class RcaTestOwnedResource:
+    kind: str
+    url: str
+    uid: str
+    resource_version: str
+
+
+class RcaTestFixtureOwnershipChanged(RuntimeError):
+    """cleanup 대상 이름이 다른 run 소유로 바뀐 안전한 경합."""
 
 
 class AgentConfig:
@@ -657,30 +670,36 @@ class TargetClusterAgent:
         if not base_url or not token or self.cluster_role == MANAGEMENT_CLUSTER_ROLE:
             return 0
         namespace = Sandbox.NAMESPACE
-        collection_url = f"{base_url}/apis/apps/v1/namespaces/{namespace}/deployments"
+        collection_urls = (
+            f"{base_url}/apis/apps/v1/namespaces/{namespace}/deployments",
+            f"{base_url}/api/v1/namespaces/{namespace}/services",
+        )
+        candidates: set[tuple[str, str]] = set()
         cleaned = 0
         async with kubernetes_client(self.kubernetes_transport) as client:
-            response = await client.get(
-                collection_url,
-                params={"labelSelector": "kubeheal.io/rca-test=true"},
-                headers=kubernetes_headers(token),
-            )
-            response.raise_for_status()
-            body = response.json()
-            rows = body.get("items", []) if isinstance(body, dict) else []
-            for row in rows:
-                if not isinstance(row, dict) or not rca_test_fixture_expired(row):
-                    continue
-                metadata = row.get("metadata")
-                meta = metadata if isinstance(metadata, dict) else {}
-                name = str(meta.get("name") or "")
-                annotations = meta.get("annotations")
-                annotation_body = annotations if isinstance(annotations, dict) else {}
-                run_id = str(annotation_body.get(RCA_TEST_RUN_ANNOTATION) or "")
-                if not name or not run_id:
-                    continue
-                if await self.scale_rca_test_fixture_if_owned(namespace, name, run_id):
-                    cleaned += 1
+            for collection_url in collection_urls:
+                response = await client.get(
+                    collection_url,
+                    params={"labelSelector": "kubeheal.io/rca-test=true"},
+                    headers=kubernetes_headers(token),
+                )
+                response.raise_for_status()
+                body = response.json()
+                rows = body.get("items", []) if isinstance(body, dict) else []
+                for row in rows:
+                    if not isinstance(row, dict) or not rca_test_resource_expired(row):
+                        continue
+                    metadata = row.get("metadata")
+                    meta = metadata if isinstance(metadata, dict) else {}
+                    name = str(meta.get("name") or "")
+                    annotations = meta.get("annotations")
+                    annotation_body = annotations if isinstance(annotations, dict) else {}
+                    run_id = str(annotation_body.get(RCA_TEST_RUN_ANNOTATION) or "")
+                    if name and run_id:
+                        candidates.add((name, run_id))
+        for name, run_id in sorted(candidates):
+            if await self.cleanup_rca_test_fixture_if_owned(namespace, name, run_id):
+                cleaned += 1
         return cleaned
 
     async def register(self, client: ManagementPlaneClient) -> None:
@@ -1228,9 +1247,9 @@ class TargetClusterAgent:
         run_id, scenario_id, scenario_version, namespace, resource_name = (
             self.rca_test_cleanup_command_target(ctx.payload)
         )
-        cleaned = await self.scale_rca_test_fixture_if_owned(namespace, resource_name, run_id)
+        cleaned = await self.cleanup_rca_test_fixture_if_owned(namespace, resource_name, run_id)
         message = (
-            "RCA test fixture scaled to zero"
+            "RCA test fixture resources deleted and residuals cleared"
             if cleaned
             else "RCA test fixture owner changed; cleanup safely skipped"
         )
@@ -1251,6 +1270,7 @@ class TargetClusterAgent:
                 "scenario_id": scenario_id,
                 "scenario_version": scenario_version,
                 "cleanup_completed": cleaned,
+                "cleanup_status": "completed" if cleaned else "skipped",
             },
         }
 
@@ -1377,7 +1397,7 @@ class TargetClusterAgent:
                 )
             await asyncio.sleep(scenario.observe.poll_seconds)
 
-    async def scale_rca_test_fixture_if_owned(
+    async def cleanup_rca_test_fixture_if_owned(
         self,
         namespace: str,
         resource_name: str,
@@ -1390,21 +1410,208 @@ class TargetClusterAgent:
         token = service_account_token()
         if not base_url or not token:
             raise RuntimeError("kubernetes api not configured; RCA test cleanup unavailable")
-        patch = [
-            {"op": "test", "path": RCA_TEST_OWNER_JSON_POINTER, "value": run_id},
-            {"op": "replace", "path": "/spec/replicas", "value": 0},
-        ]
-        url = f"{base_url}/apis/apps/v1/namespaces/{namespace}/deployments/{resource_name}"
+        resource_urls = (
+            (
+                "Service",
+                f"{base_url}/api/v1/namespaces/{namespace}/services/{resource_name}",
+            ),
+            (
+                "Deployment",
+                f"{base_url}/apis/apps/v1/namespaces/{namespace}/deployments/{resource_name}",
+            ),
+        )
         async with kubernetes_client(self.kubernetes_transport) as client:
-            response = await client.patch(
-                url,
-                json=patch,
-                headers=kubernetes_headers(token, "application/json-patch+json"),
-            )
-        if response.status_code in RCA_TEST_CLEANUP_CONFLICT_STATUSES:
-            return False
-        response.raise_for_status()
+            try:
+                resources: list[RcaTestOwnedResource] = []
+                for kind, url in resource_urls:
+                    resource = await self.rca_test_owned_resource(
+                        client,
+                        kind=kind,
+                        url=url,
+                        token=token,
+                        run_id=run_id,
+                    )
+                    if resource is not None:
+                        resources.append(resource)
+                for resource in resources:
+                    deleted = await client.request(
+                        "DELETE",
+                        resource.url,
+                        json={
+                            "apiVersion": "v1",
+                            "kind": "DeleteOptions",
+                            "propagationPolicy": "Foreground",
+                            "preconditions": {
+                                "uid": resource.uid,
+                                "resourceVersion": resource.resource_version,
+                            },
+                        },
+                        headers=kubernetes_headers(token, "application/json"),
+                    )
+                    if deleted.status_code in RCA_TEST_OWNER_CONFLICT_STATUSES:
+                        raise RcaTestFixtureOwnershipChanged(
+                            f"RCA test {resource.kind} owner changed during delete"
+                        )
+                    if deleted.status_code != 404:
+                        deleted.raise_for_status()
+
+                await self.wait_for_rca_test_fixture_absent(
+                    client,
+                    base_url=base_url,
+                    token=token,
+                    namespace=namespace,
+                    resource_name=resource_name,
+                    run_id=run_id,
+                    resources=resources,
+                )
+            except RcaTestFixtureOwnershipChanged:
+                return False
         return True
+
+    async def rca_test_owned_resource(
+        self,
+        client: httpx.AsyncClient,
+        *,
+        kind: str,
+        url: str,
+        token: str,
+        run_id: str,
+    ) -> RcaTestOwnedResource | None:
+        response = await client.get(url, headers=kubernetes_headers(token))
+        if response.status_code == 404:
+            return None
+        response.raise_for_status()
+        body = response.json()
+        if not isinstance(body, dict):
+            raise RuntimeError(f"invalid RCA test {kind} response")
+        if not rca_test_fixture_owned_by_run(body, run_id):
+            raise RcaTestFixtureOwnershipChanged(f"RCA test {kind} owner changed")
+        metadata = body.get("metadata")
+        meta = metadata if isinstance(metadata, dict) else {}
+        uid = str(meta.get("uid") or "")
+        resource_version = str(meta.get("resourceVersion") or "")
+        if not uid or not resource_version:
+            raise RuntimeError(f"RCA test {kind} cleanup requires UID and resourceVersion")
+        return RcaTestOwnedResource(
+            kind=kind,
+            url=url,
+            uid=uid,
+            resource_version=resource_version,
+        )
+
+    async def wait_for_rca_test_fixture_absent(
+        self,
+        client: httpx.AsyncClient,
+        *,
+        base_url: str,
+        token: str,
+        namespace: str,
+        resource_name: str,
+        run_id: str,
+        resources: list[RcaTestOwnedResource],
+    ) -> None:
+        deadline = time.monotonic() + RCA_TEST_CLEANUP_TIMEOUT_SECONDS
+        expected_uids = {resource.kind: resource.uid for resource in resources}
+        while True:
+            residuals = await self.rca_test_cleanup_residuals(
+                client,
+                base_url=base_url,
+                token=token,
+                namespace=namespace,
+                resource_name=resource_name,
+                run_id=run_id,
+                expected_uids=expected_uids,
+            )
+            if not residuals:
+                return
+            if time.monotonic() >= deadline:
+                joined = ", ".join(sorted(residuals))
+                raise TimeoutError(f"RCA test cleanup residuals did not disappear: {joined}")
+            await asyncio.sleep(RCA_TEST_CLEANUP_POLL_SECONDS)
+
+    async def rca_test_cleanup_residuals(
+        self,
+        client: httpx.AsyncClient,
+        *,
+        base_url: str,
+        token: str,
+        namespace: str,
+        resource_name: str,
+        run_id: str,
+        expected_uids: dict[str, str],
+    ) -> set[str]:
+        headers = kubernetes_headers(token)
+        urls = {
+            "Deployment": (
+                f"{base_url}/apis/apps/v1/namespaces/{namespace}/deployments/{resource_name}"
+            ),
+            "Service": f"{base_url}/api/v1/namespaces/{namespace}/services/{resource_name}",
+        }
+        residuals: set[str] = set()
+        current_service_uid = ""
+        for kind, url in urls.items():
+            response = await client.get(url, headers=headers)
+            if response.status_code == 404:
+                continue
+            response.raise_for_status()
+            body = response.json()
+            if not isinstance(body, dict):
+                raise RuntimeError(f"invalid RCA test {kind} residual response")
+            metadata = body.get("metadata")
+            meta = metadata if isinstance(metadata, dict) else {}
+            uid = str(meta.get("uid") or "")
+            if kind == "Service":
+                current_service_uid = uid
+            if uid == expected_uids.get(kind) or rca_test_fixture_owned_by_run(body, run_id):
+                residuals.add(kind)
+            else:
+                raise RcaTestFixtureOwnershipChanged(
+                    f"RCA test {kind} owner changed while verifying cleanup"
+                )
+
+        pods = await client.get(
+            f"{base_url}/api/v1/namespaces/{namespace}/pods",
+            params={"labelSelector": f"{RCA_TEST_RUN_LABEL}={run_id}"},
+            headers=headers,
+        )
+        if pods.status_code != 404:
+            pods.raise_for_status()
+            pod_body = pods.json()
+            if isinstance(pod_body, dict) and pod_body.get("items"):
+                residuals.add("Pod")
+
+        endpoint_slices = await client.get(
+            f"{base_url}/apis/discovery.k8s.io/v1/namespaces/{namespace}/endpointslices",
+            params={"labelSelector": f"kubernetes.io/service-name={resource_name}"},
+            headers=headers,
+        )
+        if endpoint_slices.status_code != 404:
+            endpoint_slices.raise_for_status()
+            slice_body = endpoint_slices.json()
+            rows = slice_body.get("items", []) if isinstance(slice_body, dict) else []
+            expected_service_uid = expected_uids.get("Service", "")
+            for row in rows:
+                metadata = row.get("metadata") if isinstance(row, dict) else None
+                meta = metadata if isinstance(metadata, dict) else {}
+                owners = meta.get("ownerReferences")
+                owner_rows = owners if isinstance(owners, list) else []
+                if not expected_service_uid or any(
+                    isinstance(owner, dict) and owner.get("uid") == expected_service_uid
+                    for owner in owner_rows
+                ):
+                    residuals.add("EndpointSlice")
+                    break
+
+        endpoints = await client.get(
+            f"{base_url}/api/v1/namespaces/{namespace}/endpoints/{resource_name}",
+            headers=headers,
+        )
+        if endpoints.status_code != 404:
+            endpoints.raise_for_status()
+            expected_service_uid = expected_uids.get("Service", "")
+            if not current_service_uid or current_service_uid == expected_service_uid:
+                residuals.add("Endpoints")
+        return residuals
 
     @command.handler(AgentConfig.ROLLOUT_RESTART_ACTION)
     async def rollout_restart_command(self, ctx: CommandContext[JsonObject]) -> JsonObject:
@@ -1748,16 +1955,20 @@ def rca_test_run_pod_names(snapshot: JsonObject, run_id: str) -> list[str]:
     return sorted(names)
 
 
-def rca_test_fixture_expired(resource: JsonObject, now: datetime | None = None) -> bool:
+def rca_test_resource_expired(resource: JsonObject, now: datetime | None = None) -> bool:
     metadata = resource.get("metadata")
     meta = metadata if isinstance(metadata, dict) else {}
     annotations = meta.get("annotations")
     annotation_body = annotations if isinstance(annotations, dict) else {}
     expires_at = parse_approval_expires_at(annotation_body.get(RCA_TEST_EXPIRES_AT_ANNOTATION))
+    return expires_at is not None and expires_at <= (now or datetime.now(UTC))
+
+
+def rca_test_fixture_expired(resource: JsonObject, now: datetime | None = None) -> bool:
     spec = resource.get("spec")
     spec_body = spec if isinstance(spec, dict) else {}
     replicas = int(spec_body.get("replicas") or 0)
-    return expires_at is not None and expires_at <= (now or datetime.now(UTC)) and replicas > 0
+    return rca_test_resource_expired(resource, now) and replicas > 0
 
 
 def kubernetes_manifest_resource(

@@ -8,9 +8,9 @@ import secrets
 import uuid
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
-from typing import Any
+from typing import Annotated, Any
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, Header, HTTPException, Request
 
 from domains.identity.dependencies import (
     ClusterAgentIdentity,
@@ -26,6 +26,7 @@ from domains.rca.events import (
     compact_cluster_evidence_payload,
 )
 from domains.rca.test_runtime import (
+    RCA_TEST_FIXTURE_RESOURCE_KIND,
     build_rca_test_cleanup_plan,
     build_rca_test_inject_plan,
     rca_test_command_fixture_target,
@@ -91,15 +92,24 @@ RCA_TEST_SCENARIO_UNAVAILABLE = "RCA test scenario is not ready"
 RCA_TEST_MANAGEMENT_CLUSTER_DENIED = "RCA test runs cannot target a management cluster"
 RCA_TEST_TARGET_NOT_FOUND = "RCA test target cluster is not registered"
 RCA_TEST_TARGET_ENVIRONMENT_DENIED = "RCA test runs require a test or aws-test target"
+RCA_TEST_RUN_CONFLICT = "RCA test target already has an active run"
 
 
-def require_rca_test_api(request: Request) -> None:
+def require_rca_test_api(
+    supplied: Annotated[
+        str | None,
+        Header(
+            alias=RCA_TEST_RUNS_TOKEN_HEADER,
+            description="RCA 테스트 실행 전용 토큰",
+        ),
+    ] = None,
+) -> None:
     """Fail closed: test 환경, 명시 플래그, 별도 secret이 모두 있어야 노출한다."""
     if not rca_test_runs_enabled():
         raise HTTPException(status_code=HTTP_NOT_FOUND, detail=RCA_TEST_API_NOT_FOUND)
     configured = env(RCA_TEST_RUNS_TOKEN_ENV, "").strip()
-    supplied = request.headers.get(RCA_TEST_RUNS_TOKEN_HEADER, "").strip()
-    if not configured or not supplied or not secrets.compare_digest(supplied, configured):
+    normalized = (supplied or "").strip()
+    if not configured or not normalized or not secrets.compare_digest(normalized, configured):
         raise HTTPException(status_code=HTTP_UNAUTHORIZED, detail=RCA_TEST_TOKEN_INVALID)
 
 
@@ -108,10 +118,9 @@ def require_rca_test_api(request: Request) -> None:
     response_model=RcaTestScenarioListResponse,
 )
 async def list_test_scenarios(
-    request: Request,
     _current: Any = Depends(require_session),
+    _test_api: None = Depends(require_rca_test_api),
 ) -> RcaTestScenarioListResponse:
-    require_rca_test_api(request)
     return RcaTestScenarioListResponse(items=test_scenario_catalog_body())
 
 
@@ -122,11 +131,10 @@ async def list_test_scenarios(
 )
 async def create_test_run(
     payload: RcaTestRunCreateRequest,
-    request: Request,
     current: Any = Depends(require_session),
     db: Any = Depends(get_db),
+    _test_api: None = Depends(require_rca_test_api),
 ) -> RcaTestRunResponse:
-    require_rca_test_api(request)
     scenario = test_scenario_by_id(payload.scenario_id)
     if scenario is None:
         raise HTTPException(status_code=HTTP_NOT_FOUND, detail=RCA_TEST_SCENARIO_NOT_FOUND)
@@ -178,12 +186,28 @@ async def create_test_run(
         requested_by=current.user_id,
     )
     plan["expires_at"] = cleanup_at
-    await db_call(
-        db.queue_agent_command,
+    reserved = await db_call(
+        db.queue_rca_test_command_if_available,
         identity.correlation_id,
         plan,
         CommandStatus.QUEUED,
+        resource_kind=RCA_TEST_FIXTURE_RESOURCE_KIND,
+        namespace=fixture_target.namespace,
+        resource_name=fixture_target.resource_name,
+        max_concurrent_runs=scenario.safety.max_concurrent_runs,
+        ttl_seconds=scenario.safety.ttl_seconds,
     )
+    if not reserved:
+        raise HTTPException(
+            status_code=HTTP_CONFLICT,
+            detail={
+                "code": "rca_test_run_conflict",
+                "message": RCA_TEST_RUN_CONFLICT,
+                "cluster_id": payload.cluster_id,
+                "scenario_id": scenario.scenario_id,
+                "resource_name": fixture_target.resource_name,
+            },
+        )
     return RcaTestRunResponse(
         run_id=run_id,
         scenario_id=scenario.scenario_id,
@@ -279,11 +303,10 @@ async def rca_test_run_records(
 )
 async def get_test_run(
     run_id: str,
-    request: Request,
     current: Any = Depends(require_session),
     db: Any = Depends(get_db),
+    _test_api: None = Depends(require_rca_test_api),
 ) -> RcaTestRunResponse:
-    require_rca_test_api(request)
     (
         command,
         identity,
@@ -329,12 +352,11 @@ async def get_test_run(
 )
 async def cleanup_test_run(
     run_id: str,
-    request: Request,
     current: Any = Depends(require_session),
     db: Any = Depends(get_db),
+    _test_api: None = Depends(require_rca_test_api),
 ) -> RcaTestRunResponse:
-    require_rca_test_api(request)
-    response = await get_test_run(run_id, request, current=current, db=db)
+    response = await get_test_run(run_id, current=current, db=db)
     require_cluster_access(
         db,
         current,

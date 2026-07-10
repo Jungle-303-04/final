@@ -5,6 +5,7 @@ import importlib.util
 import json
 import logging
 import sys
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -278,7 +279,7 @@ def test_rca_test_cleanup_uses_immutable_target_without_loading_current_catalog(
         return True
 
     monkeypatch.setattr(module, "test_scenario_by_id", catalog_must_not_be_loaded)
-    agent.scale_rca_test_fixture_if_owned = atomic_cleanup
+    agent.cleanup_rca_test_fixture_if_owned = atomic_cleanup
     register_agent_commands(module, agent)
 
     result = asyncio.run(
@@ -301,7 +302,7 @@ def test_rca_test_cleanup_uses_immutable_target_without_loading_current_catalog(
     assert result["rca_test"]["cleanup_completed"] is True
 
 
-@pytest.mark.parametrize("conflict_status", [404, 409, 422])
+@pytest.mark.parametrize("conflict_status", [409, 422])
 def test_atomic_rca_test_cleanup_conflict_is_a_safe_noop(
     monkeypatch: pytest.MonkeyPatch,
     conflict_status: int,
@@ -311,6 +312,17 @@ def test_atomic_rca_test_cleanup_conflict_is_a_safe_noop(
 
     def handler(request: httpx.Request) -> httpx.Response:
         requests.append(request)
+        if request.method == "GET":
+            return httpx.Response(
+                200,
+                json={
+                    "metadata": {
+                        "uid": f"{request.url.path}-uid",
+                        "resourceVersion": "1",
+                        "annotations": {"kubeheal.io/rca-test-run": "run-1"},
+                    }
+                },
+            )
         return httpx.Response(conflict_status, json={"message": "owner changed"})
 
     monkeypatch.setattr(module, "kubernetes_api_base_url", lambda: "https://kubernetes.test")
@@ -319,7 +331,7 @@ def test_atomic_rca_test_cleanup_conflict_is_a_safe_noop(
     agent.kubernetes_transport = httpx.MockTransport(handler)
 
     cleaned = asyncio.run(
-        agent.scale_rca_test_fixture_if_owned(
+        agent.cleanup_rca_test_fixture_if_owned(
             "sandbox",
             "rca-test-image-wrong-tag",
             "run-1",
@@ -327,25 +339,44 @@ def test_atomic_rca_test_cleanup_conflict_is_a_safe_noop(
     )
 
     assert cleaned is False
-    assert len(requests) == 1
-    assert requests[0].headers["content-type"] == "application/json-patch+json"
-    assert json.loads(requests[0].content) == [
-        {
-            "op": "test",
-            "path": "/metadata/annotations/kubeheal.io~1rca-test-run",
-            "value": "run-1",
-        },
-        {"op": "replace", "path": "/spec/replicas", "value": 0},
-    ]
+    assert [request.method for request in requests] == ["GET", "GET", "DELETE"]
+    assert requests[-1].headers["content-type"] == "application/json"
+    assert json.loads(requests[-1].content)["preconditions"]["resourceVersion"] == "1"
 
 
-def test_atomic_rca_test_cleanup_scales_only_the_matching_owner(
+def test_atomic_rca_test_cleanup_deletes_only_the_matching_owner_and_verifies_zero(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     module = load_agent_module()
+    deleted: set[str] = set()
 
     def handler(request: httpx.Request) -> httpx.Response:
-        return httpx.Response(200, json={"metadata": {"name": "rca-test-image-wrong-tag"}})
+        path = request.url.path
+        if request.method == "GET" and "/services/" in path:
+            return httpx.Response(404)
+        if request.method == "GET" and "/deployments/" in path:
+            if "Deployment" in deleted:
+                return httpx.Response(404)
+            return httpx.Response(
+                200,
+                json={
+                    "metadata": {
+                        "uid": "deployment-uid-1",
+                        "resourceVersion": "7",
+                        "annotations": {"kubeheal.io/rca-test-run": "run-1"},
+                    }
+                },
+            )
+        if request.method == "DELETE":
+            deleted.add("Deployment")
+            return httpx.Response(200, json={})
+        if request.method == "GET" and path.endswith("/pods"):
+            return httpx.Response(200, json={"items": []})
+        if request.method == "GET" and path.endswith("/endpointslices"):
+            return httpx.Response(200, json={"items": []})
+        if request.method == "GET" and "/endpoints/" in path:
+            return httpx.Response(404)
+        raise AssertionError(f"unexpected request: {request.method} {request.url}")
 
     monkeypatch.setattr(module, "kubernetes_api_base_url", lambda: "https://kubernetes.test")
     monkeypatch.setattr(module, "service_account_token", lambda: "token")
@@ -354,7 +385,7 @@ def test_atomic_rca_test_cleanup_scales_only_the_matching_owner(
 
     assert (
         asyncio.run(
-            agent.scale_rca_test_fixture_if_owned(
+            agent.cleanup_rca_test_fixture_if_owned(
                 "sandbox",
                 "rca-test-image-wrong-tag",
                 "run-1",
@@ -362,6 +393,290 @@ def test_atomic_rca_test_cleanup_scales_only_the_matching_owner(
         )
         is True
     )
+    assert deleted == {"Deployment"}
+
+
+def test_rca_test_cleanup_deletes_run_owned_service_with_resource_version_cas(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    module = load_agent_module()
+    requests: list[httpx.Request] = []
+    deleted: set[str] = set()
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        requests.append(request)
+        path = request.url.path
+        if request.method == "GET" and "/services/" in path:
+            if "Service" in deleted:
+                return httpx.Response(404)
+            return httpx.Response(
+                200,
+                json={
+                    "metadata": {
+                        "name": "rca-test-ingress-readiness",
+                        "uid": "service-uid-1",
+                        "resourceVersion": "17",
+                        "annotations": {"kubeheal.io/rca-test-run": "run-1"},
+                    }
+                },
+            )
+        if request.method == "GET" and "/deployments/" in path:
+            if "Deployment" in deleted:
+                return httpx.Response(404)
+            return httpx.Response(
+                200,
+                json={
+                    "metadata": {
+                        "uid": "deployment-uid-1",
+                        "resourceVersion": "18",
+                        "annotations": {"kubeheal.io/rca-test-run": "run-1"},
+                    }
+                },
+            )
+        if request.method == "DELETE":
+            deleted.add("Service" if "/services/" in path else "Deployment")
+            return httpx.Response(200, json={})
+        if request.method == "GET" and path.endswith("/pods"):
+            return httpx.Response(200, json={"items": []})
+        if request.method == "GET" and path.endswith("/endpointslices"):
+            return httpx.Response(200, json={"items": []})
+        if request.method == "GET" and "/endpoints/" in path:
+            return httpx.Response(404)
+        raise AssertionError(f"unexpected request: {request.method} {request.url}")
+
+    monkeypatch.setattr(module, "kubernetes_api_base_url", lambda: "https://kubernetes.test")
+    monkeypatch.setattr(module, "service_account_token", lambda: "token")
+    agent = object.__new__(module.TargetClusterAgent)
+    agent.kubernetes_transport = httpx.MockTransport(handler)
+
+    cleaned = asyncio.run(
+        agent.cleanup_rca_test_fixture_if_owned(
+            "sandbox",
+            "rca-test-ingress-readiness",
+            "run-1",
+        )
+    )
+
+    assert cleaned is True
+    deletion = next(request for request in requests if request.method == "DELETE")
+    assert json.loads(deletion.content) == {
+        "apiVersion": "v1",
+        "kind": "DeleteOptions",
+        "propagationPolicy": "Foreground",
+        "preconditions": {"uid": "service-uid-1", "resourceVersion": "17"},
+    }
+    assert deleted == {"Deployment", "Service"}
+
+
+def test_stale_rca_test_cleanup_cannot_delete_new_run_service(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    module = load_agent_module()
+    requests: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        requests.append(request)
+        if request.method == "GET":
+            return httpx.Response(
+                200,
+                json={
+                    "metadata": {
+                        "name": "rca-test-ingress-readiness",
+                        "uid": "service-uid-new",
+                        "resourceVersion": "22",
+                        "annotations": {"kubeheal.io/rca-test-run": "run-new"},
+                    }
+                },
+            )
+        raise AssertionError("stale cleanup must not issue a Service DELETE")
+
+    monkeypatch.setattr(module, "kubernetes_api_base_url", lambda: "https://kubernetes.test")
+    monkeypatch.setattr(module, "service_account_token", lambda: "token")
+    agent = object.__new__(module.TargetClusterAgent)
+    agent.kubernetes_transport = httpx.MockTransport(handler)
+
+    cleaned = asyncio.run(
+        agent.cleanup_rca_test_fixture_if_owned(
+            "sandbox",
+            "rca-test-ingress-readiness",
+            "run-old",
+        )
+    )
+
+    assert cleaned is False
+    assert [request.method for request in requests] == ["GET"]
+
+
+def test_stale_rca_test_cleanup_cannot_delete_new_run_deployment(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    module = load_agent_module()
+    requests: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        requests.append(request)
+        if "/services/" in request.url.path:
+            return httpx.Response(404)
+        if request.method == "GET":
+            return httpx.Response(
+                200,
+                json={
+                    "metadata": {
+                        "uid": "deployment-uid-new",
+                        "resourceVersion": "23",
+                        "annotations": {"kubeheal.io/rca-test-run": "run-new"},
+                    }
+                },
+            )
+        raise AssertionError("stale cleanup must not issue a Deployment DELETE")
+
+    monkeypatch.setattr(module, "kubernetes_api_base_url", lambda: "https://kubernetes.test")
+    monkeypatch.setattr(module, "service_account_token", lambda: "token")
+    agent = object.__new__(module.TargetClusterAgent)
+    agent.kubernetes_transport = httpx.MockTransport(handler)
+
+    cleaned = asyncio.run(
+        agent.cleanup_rca_test_fixture_if_owned(
+            "sandbox",
+            "rca-test-image-wrong-tag",
+            "run-old",
+        )
+    )
+
+    assert cleaned is False
+    assert [request.method for request in requests] == ["GET", "GET"]
+
+
+def test_expired_rca_test_janitor_deletes_owned_manifest_and_verifies_residuals(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("APP_ENV", "test")
+    monkeypatch.setenv("RCA_TEST_RUNS_ENABLED", "1")
+    module = load_agent_module()
+    requests: list[httpx.Request] = []
+    expired_at = (datetime.now(UTC) - timedelta(minutes=1)).isoformat()
+    deleted: set[str] = set()
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        requests.append(request)
+        path = request.url.path
+        if request.method == "GET" and path.endswith("/deployments"):
+            return httpx.Response(
+                200,
+                json={
+                    "items": [
+                        {
+                            "metadata": {
+                                "name": "rca-test-ingress-readiness",
+                                "annotations": {
+                                    "kubeheal.io/rca-test-run": "run-1",
+                                    "kubeheal.io/rca-test-expires-at": expired_at,
+                                },
+                            },
+                            "spec": {"replicas": 1},
+                        }
+                    ]
+                },
+            )
+        if request.method == "GET" and path.endswith("/services"):
+            return httpx.Response(200, json={"items": []})
+        if request.method == "GET" and "/services/" in path:
+            if "Service" in deleted:
+                return httpx.Response(404)
+            return httpx.Response(
+                200,
+                json={
+                    "metadata": {
+                        "uid": "service-uid-1",
+                        "resourceVersion": "17",
+                        "annotations": {"kubeheal.io/rca-test-run": "run-1"},
+                    }
+                },
+            )
+        if request.method == "GET" and "/deployments/" in path:
+            if "Deployment" in deleted:
+                return httpx.Response(404)
+            return httpx.Response(
+                200,
+                json={
+                    "metadata": {
+                        "uid": "deployment-uid-1",
+                        "resourceVersion": "18",
+                        "annotations": {"kubeheal.io/rca-test-run": "run-1"},
+                    }
+                },
+            )
+        if request.method == "DELETE":
+            deleted.add("Service" if "/services/" in path else "Deployment")
+            return httpx.Response(200, json={})
+        if request.method == "GET" and path.endswith("/pods"):
+            return httpx.Response(200, json={"items": []})
+        if request.method == "GET" and path.endswith("/endpointslices"):
+            return httpx.Response(200, json={"items": []})
+        if request.method == "GET" and "/endpoints/" in path:
+            return httpx.Response(404)
+        raise AssertionError(f"unexpected request: {request.method} {request.url}")
+
+    monkeypatch.setattr(module, "kubernetes_api_base_url", lambda: "https://kubernetes.test")
+    monkeypatch.setattr(module, "service_account_token", lambda: "token")
+    agent = object.__new__(module.TargetClusterAgent)
+    agent.cluster_id = "cluster-1"
+    agent.cluster_role = "target"
+    agent.kubernetes_transport = httpx.MockTransport(handler)
+
+    assert asyncio.run(agent.cleanup_expired_rca_test_fixtures_once()) == 1
+    assert deleted == {"Deployment", "Service"}
+
+
+def test_rca_test_cleanup_fails_when_pods_remain_after_delete(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    module = load_agent_module()
+    monkeypatch.setattr(module, "RCA_TEST_CLEANUP_TIMEOUT_SECONDS", 0)
+    deleted = False
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        nonlocal deleted
+        path = request.url.path
+        if request.method == "GET" and "/services/" in path:
+            return httpx.Response(404)
+        if request.method == "GET" and "/deployments/" in path:
+            if deleted:
+                return httpx.Response(404)
+            return httpx.Response(
+                200,
+                json={
+                    "metadata": {
+                        "uid": "deployment-uid-1",
+                        "resourceVersion": "7",
+                        "annotations": {"kubeheal.io/rca-test-run": "run-1"},
+                    }
+                },
+            )
+        if request.method == "DELETE":
+            deleted = True
+            return httpx.Response(200, json={})
+        if request.method == "GET" and path.endswith("/pods"):
+            return httpx.Response(200, json={"items": [{"metadata": {"name": "pod-1"}}]})
+        if request.method == "GET" and path.endswith("/endpointslices"):
+            return httpx.Response(200, json={"items": []})
+        if request.method == "GET" and "/endpoints/" in path:
+            return httpx.Response(404)
+        raise AssertionError(f"unexpected request: {request.method} {request.url}")
+
+    monkeypatch.setattr(module, "kubernetes_api_base_url", lambda: "https://kubernetes.test")
+    monkeypatch.setattr(module, "service_account_token", lambda: "token")
+    agent = object.__new__(module.TargetClusterAgent)
+    agent.kubernetes_transport = httpx.MockTransport(handler)
+
+    with pytest.raises(TimeoutError, match="Pod"):
+        asyncio.run(
+            agent.cleanup_rca_test_fixture_if_owned(
+                "sandbox",
+                "rca-test-image-wrong-tag",
+                "run-1",
+            )
+        )
 
 
 def test_rca_test_observation_queries_only_the_current_run(

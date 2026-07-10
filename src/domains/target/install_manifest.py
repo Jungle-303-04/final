@@ -197,11 +197,14 @@ metadata:
   namespace: {SANDBOX_NAMESPACE}
 rules:
   - apiGroups: [""]
-    resources: ["services", "configmaps"]
+    resources: ["services"]
+    verbs: ["get", "list", "create", "update", "patch", "delete"]
+  - apiGroups: [""]
+    resources: ["configmaps"]
     verbs: ["get", "list", "create", "update", "patch"]
   - apiGroups: ["apps"]
     resources: ["deployments"]
-    verbs: ["get", "list", "create", "update", "patch"]
+    verbs: ["get", "list", "create", "update", "patch", "delete"]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding

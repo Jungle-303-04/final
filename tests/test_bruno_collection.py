@@ -58,6 +58,23 @@ def test_bruno_collection_has_only_aws_test_profile() -> None:
     assert "alert_channel_id:" in aws
     assert "alertmanager_token:" in aws
     assert "github_webhook_signature:" in aws
+    assert "rca_test_token:" not in aws
+    assert "vars:secret [\n  rca_test_token\n]" in aws
+    assert "rca_test_token:" not in collection
+
+
+def test_rca_test_token_is_local_bruno_secret_without_tracked_placeholder() -> None:
+    environment = (API_DIR / "environments" / "aws-test.bru").read_text(encoding="utf-8")
+    collection = (API_DIR / "collection.bru").read_text(encoding="utf-8")
+    workflow = "\n".join(
+        path.read_text(encoding="utf-8")
+        for path in sorted((API_DIR / "16-rca-debug").glob("*.bru"))
+    )
+
+    assert "vars:secret [\n  rca_test_token\n]" in environment
+    assert "replace-with-RCA_TEST_RUNS_TOKEN" not in environment
+    assert "replace-with-RCA_TEST_RUNS_TOKEN" not in collection
+    assert "x-rca-test-token: {{rca_test_token}}" in workflow
 
 
 def test_every_gateway_route_has_a_bruno_request() -> None:

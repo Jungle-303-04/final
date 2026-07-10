@@ -35,6 +35,10 @@ docs/api
    `SELECT:<rca_correlation_id>`로 설정하고 `07`을 보낸다.
 6. `08`에서 선택 상태를 확인하고 `09` cleanup을 보낸 뒤, `10`에서 실제 완료를 확인한다.
 
+최초 실행 전 오른쪽 위 Environment에서 `aws-test` 편집을 열고 `rca_test_token`의
+Secret 칸에 로컬 값을 한 번 저장한다. Secret 값은 Bruno 로컬 보안 저장소에만 두며
+tracked `.bru` 파일에는 입력하지 않는다.
+
 파이프라인은 비동기다. `03`~`06`이 아직 처리 중이면 새 run을 만들지 말고 같은
 요청을 잠시 뒤 다시 보낸다. 상세 사용법과 안전 경계는
 `16-rca-debug/README.md`가 단일 가이드다.
@@ -76,6 +80,7 @@ bash scripts/run-bruno-aws.sh
 7. `metrics_token`과 `alertmanager_token`은 해당 외부 입구 인증을 별도로 검증할 때만 넣는다.
 8. `service_image`는 target manifest 발급 시 쓸 agent 이미지다.
 9. `cluster_id`/`cluster_id_2`의 저장 기본값은 `api-verification-target`이고 CLI Runner는 고유 ID로 덮어쓴다. 실제 `cluster-1`/`cluster-2` 드릴다운이 필요하면 같은 `aws-test`에서 실행 변수만 명시적으로 덮어쓴다.
+10. `rca_test_token`은 오른쪽 위 `aws-test` 환경 편집 화면의 Secret 칸에만 저장한다. collection과 환경 파일에는 실제 값이나 placeholder를 기록하지 않는다.
 
 요청 순서대로 실행하면 아래 값은 자동으로 채워진다.
 

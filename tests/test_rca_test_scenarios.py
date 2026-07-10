@@ -7,7 +7,10 @@
 from __future__ import annotations
 
 import importlib
+import threading
 from collections.abc import Mapping
+from concurrent.futures import ThreadPoolExecutor
+from contextlib import contextmanager
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
@@ -15,6 +18,7 @@ from typing import Any
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
+from sqlalchemy.dialects import postgresql
 
 from domains.rca.router import router as rca_router
 
@@ -87,6 +91,9 @@ class _TestRunDb:
     def __init__(self) -> None:
         self.calls: list[tuple[str, tuple[Any, ...], dict[str, Any]]] = []
         self.commands: dict[str, dict[str, Any]] = {}
+        self.active_test_targets: set[tuple[str, str, str, str, str]] = set()
+        self.reservation_barrier: threading.Barrier | None = None
+        self._reservation_lock = threading.Lock()
 
     def can_access(self, *_args: Any) -> bool:
         return True
@@ -121,6 +128,37 @@ class _TestRunDb:
             "result": {},
             "completed_at": None,
         }
+
+    def queue_rca_test_command_if_available(
+        self,
+        correlation_id: str,
+        plan: dict[str, Any],
+        status: str,
+        *,
+        resource_kind: str,
+        namespace: str,
+        resource_name: str,
+        max_concurrent_runs: int,
+        ttl_seconds: int,
+    ) -> bool:
+        del ttl_seconds
+        barrier = self.reservation_barrier
+        if barrier is not None:
+            barrier.wait(timeout=2)
+        key = (
+            str(plan["workspace_id"]),
+            str(plan["cluster_id"]),
+            resource_kind.casefold(),
+            namespace,
+            resource_name,
+        )
+        with self._reservation_lock:
+            if sum(item == key for item in self.active_test_targets) >= max_concurrent_runs:
+                return False
+            self.active_test_targets.add(key)
+            self.calls.append(("queue_rca_test_command_if_available", (), {"key": key}))
+            self.queue_agent_command(correlation_id, plan, status)
+            return True
 
     async def get_agent_command(self, command_id: str, _workspace_id: str) -> dict[str, Any] | None:
         return self.commands.get(command_id)
@@ -299,6 +337,29 @@ def test_rca_test_api_rejects_an_invalid_dedicated_token(
     assert response.status_code == 401
 
 
+def test_rca_test_api_exposes_dedicated_header_in_every_openapi_operation(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    client, _db, _events = _client(monkeypatch)
+
+    schema = client.get("/openapi.json").json()
+    operations = [
+        schema["paths"][TEST_SCENARIOS_PATH]["get"],
+        schema["paths"][TEST_RUNS_PATH]["post"],
+        schema["paths"][f"{TEST_RUNS_PATH}/{{run_id}}"]["get"],
+        schema["paths"][f"{TEST_RUNS_PATH}/{{run_id}}"]["delete"],
+    ]
+
+    for operation in operations:
+        header = next(
+            item
+            for item in operation["parameters"]
+            if item["in"] == "header" and item["name"] == "x-rca-test-token"
+        )
+        assert header["required"] is False
+        assert {item["type"] for item in header["schema"]["anyOf"]} == {"string", "null"}
+
+
 def test_test_run_request_needs_only_cluster_and_scenario() -> None:
     requests = importlib.import_module("packages.contracts.gateway.requests")
     request_type = requests.RcaTestRunCreateRequest
@@ -355,6 +416,36 @@ def test_post_test_run_accepts_minimal_ready_scenario(monkeypatch: pytest.Monkey
     assert body["run_id"]
     assert body["correlation_id"]
     assert body["status"] in {"queued", "injecting"}
+
+
+def test_concurrent_test_run_requests_reserve_one_target_atomically(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    client, db, _events = _client(monkeypatch)
+    db.reservation_barrier = threading.Barrier(2)
+    payload = {"cluster_id": "cluster-1", "scenario_id": "image.wrong-tag"}
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        responses = list(
+            executor.map(
+                lambda _index: client.post(TEST_RUNS_PATH, headers=_test_headers(), json=payload),
+                range(2),
+            )
+        )
+
+    assert sorted(response.status_code for response in responses) == [202, 409]
+    conflict = next(response for response in responses if response.status_code == 409)
+    assert conflict.json()["detail"] == {
+        "code": "rca_test_run_conflict",
+        "message": "RCA test target already has an active run",
+        "cluster_id": "cluster-1",
+        "scenario_id": "image.wrong-tag",
+        "resource_name": "rca-test-image-wrong-tag",
+    }
+    inject_commands = [
+        command for command in db.commands.values() if command["action"] == "rca.test.inject"
+    ]
+    assert len(inject_commands) == 1
 
 
 @pytest.mark.parametrize(
@@ -439,6 +530,178 @@ def test_test_run_can_be_polled_and_cleanup_is_a_separate_safe_command(
         "run_id": run_id,
         "scenario_id": "image.wrong-tag",
         "scenario_version": 1,
+        "resource_kind": "Deployment",
         "namespace": "sandbox",
         "resource_name": "rca-test-image-wrong-tag",
     }
+
+
+def test_repository_guard_uses_expiry_and_finished_cleanup_before_atomic_enqueue() -> None:
+    from domains.command.repository import AgentCommandRepository, rca_test_guard_lock_key
+
+    statements: list[Any] = []
+    parameters: list[dict[str, Any] | None] = []
+
+    class StubResult:
+        def __init__(self, scalar: Any = None) -> None:
+            self.scalar = scalar
+
+        def scalar_one(self) -> Any:
+            return self.scalar
+
+        def scalar_one_or_none(self) -> Any:
+            return self.scalar
+
+    class StubConnection:
+        def execute(
+            self,
+            statement: Any,
+            params: dict[str, Any] | None = None,
+        ) -> StubResult:
+            statements.append(statement)
+            parameters.append(params)
+            values = [None, 0, "cmd-rca-test-inject-run-1", None]
+            return StubResult(values[len(statements) - 1])
+
+    @contextmanager
+    def connection():
+        yield StubConnection()
+
+    repository = object.__new__(AgentCommandRepository)
+    repository.connection = connection  # type: ignore[method-assign]
+    plan = {
+        "command_id": "cmd-rca-test-inject-run-1",
+        "workspace_id": "workspace-1",
+        "cluster_id": "cluster-1",
+        "action": "rca.test.inject",
+        "priority": 200,
+        "expires_at": "2026-07-10T23:59:59+00:00",
+        "payload": {
+            "run_id": "run-1",
+            "scenario_id": "image.wrong-tag",
+            "resource_kind": "Deployment",
+            "namespace": "sandbox",
+            "resource_name": "rca-test-image-wrong-tag",
+        },
+    }
+
+    reserved = repository.queue_rca_test_command_if_available(
+        "corr-run-1",
+        plan,
+        "queued",
+        resource_kind="Deployment",
+        namespace="sandbox",
+        resource_name="rca-test-image-wrong-tag",
+        max_concurrent_runs=1,
+        ttl_seconds=300,
+    )
+
+    assert reserved is True
+    assert len(statements) == 4
+    assert "pg_advisory_xact_lock" in str(statements[0])
+    assert parameters[0] == {
+        "lock_key": rca_test_guard_lock_key(
+            "workspace-1",
+            "cluster-1",
+            "Deployment",
+            "sandbox",
+            "rca-test-image-wrong-tag",
+        )
+    }
+    active_sql = statements[1].compile(dialect=postgresql.dialect())
+    active_query = str(active_sql)
+    assert "CAST" in active_query
+    assert "TIMESTAMP WITH TIME ZONE" in active_query
+    assert "finished_rca_test_cleanup" in active_query
+    assert "EXISTS" in active_query
+    assert "cleanup_completed" not in active_query
+    assert "completed" in active_sql.params.values()
+    assert "expires_at" in active_sql.params.values()
+    assert "INSERT INTO agent_commands" in str(statements[2].compile(dialect=postgresql.dialect()))
+    assert "pg_notify" in str(statements[3])
+
+
+def test_repository_rejects_active_reservation_before_command_insert() -> None:
+    from domains.command.repository import AgentCommandRepository
+
+    statements: list[Any] = []
+
+    class StubResult:
+        def __init__(self, scalar: Any = None) -> None:
+            self.scalar = scalar
+
+        def scalar_one(self) -> Any:
+            return self.scalar
+
+    class StubConnection:
+        def execute(
+            self,
+            statement: Any,
+            _params: dict[str, Any] | None = None,
+        ) -> StubResult:
+            statements.append(statement)
+            return StubResult(1 if len(statements) == 2 else None)
+
+    @contextmanager
+    def connection():
+        yield StubConnection()
+
+    repository = object.__new__(AgentCommandRepository)
+    repository.connection = connection  # type: ignore[method-assign]
+    plan = {
+        "command_id": "cmd-rca-test-inject-run-2",
+        "workspace_id": "workspace-1",
+        "cluster_id": "cluster-1",
+        "action": "rca.test.inject",
+        "expires_at": "2026-07-10T23:59:59+00:00",
+        "payload": {
+            "run_id": "run-2",
+            "scenario_id": "image.wrong-tag",
+            "resource_kind": "Deployment",
+            "namespace": "sandbox",
+            "resource_name": "rca-test-image-wrong-tag",
+        },
+    }
+
+    reserved = repository.queue_rca_test_command_if_available(
+        "corr-run-2",
+        plan,
+        "queued",
+        resource_kind="Deployment",
+        namespace="sandbox",
+        resource_name="rca-test-image-wrong-tag",
+        max_concurrent_runs=1,
+        ttl_seconds=300,
+    )
+
+    assert reserved is False
+    assert len(statements) == 2
+
+
+def test_repository_guard_key_is_scoped_to_the_physical_fixture() -> None:
+    from domains.command.repository import rca_test_guard_lock_key
+
+    first = rca_test_guard_lock_key(
+        "workspace-1",
+        "cluster-1",
+        "Deployment",
+        "sandbox",
+        "rca-test-shared",
+    )
+    same_fixture = rca_test_guard_lock_key(
+        "workspace-1",
+        "cluster-1",
+        "deployment",
+        "sandbox",
+        "rca-test-shared",
+    )
+    other_namespace = rca_test_guard_lock_key(
+        "workspace-1",
+        "cluster-1",
+        "Deployment",
+        "other",
+        "rca-test-shared",
+    )
+
+    assert first == same_fixture
+    assert first != other_namespace

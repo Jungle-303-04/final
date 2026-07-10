@@ -100,6 +100,7 @@ def test_inject_plan_is_allowlisted_and_contains_no_raw_manifest_or_shell() -> N
         "run_id": RUN_ID,
         "scenario_id": SCENARIO_ID,
         "scenario_version": 1,
+        "resource_kind": "Deployment",
         "namespace": "sandbox",
         "resource_name": RESOURCE_NAME,
     }
@@ -487,6 +488,7 @@ def test_cleanup_uses_a_separate_command_and_refuses_a_stale_run_owner() -> None
         "run_id": RUN_ID,
         "scenario_id": SCENARIO_ID,
         "scenario_version": 1,
+        "resource_kind": "Deployment",
         "namespace": "sandbox",
         "resource_name": RESOURCE_NAME,
     }
