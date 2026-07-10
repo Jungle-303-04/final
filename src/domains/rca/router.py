@@ -182,8 +182,10 @@ async def create_test_run(
         workspace_id=workspace_id,
         cluster_id=payload.cluster_id,
         requested_by=current.user_id,
+        expected_root_cause=scenario.expected.root_cause,
+        expected_symptom=scenario.expected.symptom,
+        expires_at=cleanup_at,
     )
-    plan["expires_at"] = cleanup_at
     reserved = await db_call(
         db.queue_rca_test_command_if_available,
         identity.correlation_id,
@@ -243,7 +245,7 @@ async def rca_test_run_records(
     run_id: str,
     current: Any,
     db: Any,
-) -> tuple[dict[str, Any], Any, str, list[dict[str, Any]], Any, Any, Any, Any]:
+) -> tuple[dict[str, Any], Any, str, list[dict[str, Any]], Any, Any, Any, Any, Any]:
     normalized_run_id = parse_rca_test_run_id(run_id)
     identity = rca_test_run_identity(normalized_run_id)
     inject_command = await db.get_agent_command(identity.inject_command_id, current.workspace_id)
@@ -282,6 +284,16 @@ async def rca_test_run_records(
         identity.correlation_id,
         current.workspace_id,
     )
+    analysis_outcome_getter = getattr(db, "get_rca_test_analysis_outcome", None)
+    analysis_outcome = (
+        await db_call(
+            analysis_outcome_getter,
+            identity.correlation_id,
+            current.workspace_id,
+        )
+        if callable(analysis_outcome_getter)
+        else None
+    )
     cleanup_command = await db.get_agent_command(identity.cleanup_command_id, current.workspace_id)
     return (
         inject_command,
@@ -291,6 +303,7 @@ async def rca_test_run_records(
         evidence_window,
         reports[0] if reports else None,
         recovery_plan,
+        analysis_outcome,
         cleanup_command,
     )
 
@@ -313,6 +326,7 @@ async def get_test_run(
         evidence_window,
         report,
         recovery_plan,
+        analysis_outcome,
         cleanup_command,
     ) = await rca_test_run_records(run_id=run_id, current=current, db=db)
     plan = command.get("payload") if isinstance(command.get("payload"), dict) else {}
@@ -327,6 +341,7 @@ async def get_test_run(
         rca_report=report,
         recovery_plan=recovery_plan,
         cleanup_command=cleanup_command,
+        analysis_outcome=analysis_outcome,
     )
     return RcaTestRunResponse(
         run_id=identity.run_id,
@@ -337,7 +352,7 @@ async def get_test_run(
         command_id=identity.inject_command_id,
         evidence_key=evidence_key,
         status=str(status["status"]),
-        cleanup_at=str(plan.get("expires_at") or ""),
+        cleanup_at=str(command_payload.get("expires_at") or plan.get("expires_at") or ""),
         failure=status.get("failure"),
         steps=list(status["steps"]),
     )
@@ -366,6 +381,13 @@ async def cleanup_test_run(
     inject_command = await db.get_agent_command(response.command_id, current.workspace_id)
     if inject_command is None:
         raise HTTPException(status_code=HTTP_NOT_FOUND, detail="RCA test run not found")
+    identity = rca_test_run_identity(response.run_id)
+    existing_cleanup = await db.get_agent_command(
+        identity.cleanup_command_id,
+        current.workspace_id,
+    )
+    if existing_cleanup is not None:
+        return response
     try:
         fixture_target = rca_test_command_fixture_target(inject_command)
     except ValueError as exc:
@@ -385,12 +407,14 @@ async def cleanup_test_run(
     )
     cleanup_correlation_id = f"corr-rca-test-cleanup-{response.run_id}"
     cleanup_plan["correlation_id"] = cleanup_correlation_id
-    await db_call(
+    inserted = await db_call(
         db.queue_agent_command,
         cleanup_correlation_id,
         cleanup_plan,
         CommandStatus.QUEUED,
     )
+    if inserted is False:
+        return await get_test_run(run_id, current=current, db=db)
     return response.model_copy(
         update={
             "status": "cleanup_queued",

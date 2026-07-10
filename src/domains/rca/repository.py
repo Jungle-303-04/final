@@ -12,7 +12,9 @@ from sqlalchemy.dialects.postgresql import insert as pg_insert
 from domains.rca.models import Evidence, RcaBacklogItem, RcaReport, RecoveryPlanRecord
 from domains.rca.report_projection import rca_report_projection
 from packages.contracts.event_bus.interfaces import JsonObject
+from packages.contracts.event_bus.subjects import EventSubject
 from packages.storage.engine import DatabaseConnection, iso_or_none
+from packages.storage.schema import EventModel
 
 RECOVERY_PLAN_STATUS_SELECTION_REQUESTED = "selection_requested"
 RECOVERY_PLAN_STATUS_SELECTED = "selected"
@@ -217,6 +219,33 @@ class RcaRepository(DatabaseConnection):
         with self.connection() as conn:
             rows = conn.execute(statement).mappings().all()
         return [_serialize_created_at(row) for row in rows]
+
+    def get_rca_test_analysis_outcome(
+        self,
+        correlation_id: str,
+        workspace_id: str,
+    ) -> JsonObject | None:
+        """Return the latest terminal RCA-test analysis event for one tenant/run."""
+        table = EventModel.__table__
+        statement = (
+            select(table.c.subject, table.c.payload)
+            .where(
+                table.c.correlation_id == correlation_id,
+                table.c.payload["workspace_id"].astext == workspace_id,
+                or_(
+                    table.c.subject == EventSubject.RCA_ANALYSIS_BLOCKED.value,
+                    and_(
+                        table.c.subject == EventSubject.INCIDENT_DETECTED.value,
+                        table.c.payload["detected"].as_boolean().is_(False),
+                    ),
+                ),
+            )
+            .order_by(table.c.created_at.desc())
+            .limit(1)
+        )
+        with self.connection() as conn:
+            row = conn.execute(statement).mappings().first()
+        return dict(row) if row else None
 
     def upsert_recovery_selection_request(
         self,
