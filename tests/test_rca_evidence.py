@@ -862,6 +862,35 @@ def test_duplicate_rca_report_in_window_is_not_saved_again() -> None:
     assert window_seconds > 0
 
 
+def test_rca_test_report_bypasses_incident_dedup_and_saves_correlation() -> None:
+    run_pod = "rca-test-crash-app-startup-7f8d9c6b5-x2k4m"
+    db = SpyDb(
+        find_recent_rca_report={
+            "id": 1,
+            "correlation_id": "corr-earlier",
+            "created_at": "2026-07-07T09:00:00+00:00",
+        }
+    )
+    payload = crashloop_payload(
+        logs=[loki_log_entry("sandbox", "FATAL: startup failed", pod_name=run_pod)],
+        metadata={
+            "rca_test": {
+                "run_id": "run-1",
+                "scenario_id": "crash.app-startup",
+                "pod_names": [run_pod],
+            }
+        },
+    )
+
+    rca_events = run_to_rca(payload, db=db, correlation_id="corr-rca-test")
+
+    assert rca_events[-1].__subject__ == "rca.completed"
+    assert not db.called("find_recent_rca_report")
+    save = next(call for call in db.calls if call[0] == "save_rca_report")
+    assert save[1][0] == "corr-rca-test"
+    assert save[1][4]["evidence"]["metadata"]["rca_test"]["run_id"] == "run-1"
+
+
 def test_no_incident_flow_stops_before_rca_analysis() -> None:
     db = SpyDb()
 
