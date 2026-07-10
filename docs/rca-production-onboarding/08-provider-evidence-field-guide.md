@@ -575,6 +575,7 @@ node memory 사용률 query의 첫 번째 sample 값이다.
 | `query` | string | 실행한 PromQL이다. |
 | `query_mode` | string | `instant` 또는 `range`다. |
 | `result_type` | string 또는 null | Prometheus `data.resultType`이다. 예: `vector`, `matrix`, `scalar`, `string`. |
+| `analysis` | object | provider가 sample/series 숫자만 보고 만든 RCA용 해석 요약이다. |
 
 현재 Prometheus provider는 전체 API response raw field를 담지 않는다.
 RCA는 `result_type`, `samples`, `series`, `result` 중 provider가 정규화한 필드를 읽는다.
@@ -607,6 +608,38 @@ Vector/matrix가 아닌 결과일 때 추가 필드다.
 | --- | --- | --- |
 | `result` | any | Prometheus `data.result` 원본이다. |
 
+### `metrics.results.<metric_name>.analysis`
+
+`analysis`는 provider가 이미 받은 숫자만 보고 만든 보조 해석이다.
+새 Kubernetes API나 외부 baseline을 조회하지 않는다.
+따라서 데이터 전송 계약은 기존 `metrics.results.<metric_name>` object에 필드를 추가하는 방식으로만 넓어진다.
+
+| 필드 | 타입 | 의미 |
+| --- | --- | --- |
+| `metric_kind` | string | query name과 PromQL에서 추정한 metric 종류다. 예: `memory_usage_ratio`, `cpu_usage_ratio`, `cpu_throttling`, `scrape_health`, `pod_not_ready_count`, `restart_count_or_rate`. |
+| `unit` | string | 값 단위의 보수적 추정이다. 예: `ratio`, `count`, `boolean_0_or_1`, `count_or_ratio`, `count_or_rate`, `rate_or_cores`, `bytes_or_unknown`, `unknown`. |
+| `sample_count` | number | instant vector일 때 sample 개수다. |
+| `series_count` | number | range matrix일 때 series 개수다. |
+| `point_count` | number | range matrix일 때 point 개수다. |
+| `value_summary` | object | 숫자 point가 있을 때 `count`, `min`, `max`, `avg`, `latest`, `latest_timestamp`를 담는 요약이다. |
+| `threshold` | object | known metric이고 숫자 point가 있을 때 provider가 적용한 보수적 threshold 판단이다. |
+| `signals` | list<string> | threshold를 넘었거나 range 안에서 증가했을 때 붙는 작은 RCA signal label 목록이다. |
+| `baseline_comparison` | object | range query에서 비교 가능한 series가 있을 때 같은 window의 첫 point와 마지막 point를 비교한 요약이다. |
+
+Threshold 기준:
+
+| metric 종류 | 기준 |
+| --- | --- |
+| ratio 계열 | `0.8` 이상 warning, `0.9` 이상 critical |
+| `scrape_health` | `up < 1`이면 critical |
+| restart/not ready/scrape error/throttling 계열 | `0`보다 크면 warning |
+
+`baseline_comparison`은 외부 baseline이 아니다.
+같은 query window의 첫 point를 기준으로 `increased_series_count`, `decreased_series_count`,
+`flat_series_count`, `max_delta`, `max_percent_change`를 계산한다.
+배포 전후 비교나 장기 baseline 비교는 Management Server 또는 RCA worker가 별도 기준 데이터를 줄 때만 가능하다.
+`threshold`와 `baseline_comparison`은 조건이 맞지 않으면 생략될 수 있다.
+
 기본 policy query는 다음과 같다.
 
 | query name | 의미 |
@@ -629,6 +662,8 @@ RCA 파생 예시는 다음과 같다.
 | restart 증가 추세 | 별도 restart range query의 `series[].values` |
 | Deployment replica 이상 | `target_deployment_replicas.samples`, Kubernetes `workloads` |
 | 관측성 자체 문제 | `scrape_targets_up.samples`, `node_collector_scrape_error.samples` |
+| threshold 초과 여부 | `metrics.results.<metric_name>.analysis.threshold` |
+| window 안 증가 여부 | `metrics.results.<metric_name>.analysis.baseline_comparison` |
 
 ## Logs bucket
 

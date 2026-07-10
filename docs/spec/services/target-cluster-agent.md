@@ -392,13 +392,15 @@ async def query(self, client, telemetry_query: PrometheusInstantQuery | Promethe
 async def query_instant(self, client, telemetry_query: PrometheusInstantQuery) -> JsonObject
 async def query_range(self, client, telemetry_query: PrometheusRangeQuery) -> JsonObject
 def empty_results(self) -> JsonObject
-def append_result(self, results, telemetry_query, payload) -> None     # results[metric_name] = {query, ...metadata, ...normalized}
+def append_result(self, results, telemetry_query, payload) -> None     # results[metric_name] = {query, ...metadata, ...normalized, analysis}
 def build_response(self, results) -> JsonObject                        # {"source": "prometheus", "results": results}
 def normalize_payload(self, payload: JsonObject) -> JsonObject
 def query_metadata(self, telemetry_query) -> JsonObject                # instant: {query_mode}, range: {query_mode, range_seconds, step_seconds}
 ```
 
-`normalize_payload`: `resultType == "vector"` → `{result_type, samples: [{metric, timestamp, value(float)}]}`; `"matrix"` → `{result_type, series: [{metric, values: [{timestamp, value}]}], point_count}`; 그 외 → `{result_type, result}` 원본.
+`normalize_payload`: `resultType == "vector"` → `{result_type, samples: [{metric, timestamp, value(float)}]}`; `"matrix"` → `{result_type, series: [{metric, values: [{timestamp, value}]}], point_count}`; 그 외 → `{result_type, result}` 원본. `append_result`는 여기에 `providers/prometheus_analysis.py::build_metric_analysis()` 결과를 추가해 `analysis`를 담는다. `analysis`는 항상 `{metric_kind, unit, signals}`를 포함하고, 숫자 point가 있으면 `value_summary`, known metric이면 `threshold`, range query에서 비교 가능한 series가 있으면 `baseline_comparison`을 추가한다.
+
+`providers/prometheus_analysis.py`: Prometheus sample/series 숫자만 보고 RCA용 작은 해석 필드를 만든다. 새 query를 추가하거나 외부 baseline을 조회하지 않는다. ratio 계열은 0.8 warning/0.9 critical, `up < 1`은 critical, restart/not ready/scrape error/throttling 계열은 `> 0`이면 warning으로 표시한다. range query의 baseline은 같은 window의 첫 point다.
 
 #### `providers/loki_providers.py`
 
@@ -651,6 +653,8 @@ Metadata helper 모듈(module, 파이썬 코드 파일):
 | `TempoTracesProvider.query` | `GET {TEMPO_BASE_URL}/api/search` | `q=<traceql>`, `limit=TEMPO_QUERY_LIMIT(20)` (span `tempo.search`) |
 
 Kubernetes 스냅샷 정규화(`normalize_payload`): raw 응답을 `{cluster{cluster_id, namespace, collected_at}, pods[], events[], nodes[], workloads[](Deployment/StatefulSet/DaemonSet/ReplicaSet 요약 통합), services[], endpoints[], provider_status{query_name: {status, namespace, reason, counts}}}` 요약으로 변환. pod 요약에는 `workload_key`(`"{ns}/{kind}/{name}"`), 컨테이너별 상태/restart(+ `container_id`, `last_state`/`last_state_reason`/`last_state_message`/`last_exit_code`/`last_started_at`/`last_finished_at` — crashloop 중 waiting 이어도 직전 크래시의 종료 사유/시간 보존), `waiting_reasons`/`terminated_reasons`(현재 terminated 와 lastState terminated 사유를 함께 승격 — OOMKilled/exit 137 판별 근거) 포함. event 요약에는 알려진 reason일 때 `reason_summary`가 포함되며 `FailedScheduling`은 `scheduling_causes`로 `insufficient_cpu`, `insufficient_memory`, `node_selector_mismatch`, `taint_toleration_mismatch`, `pod_count_limit`, `volume_node_affinity_conflict` 같은 작은 label을 제공한다. 복수 쿼리 결과는 `merge_snapshot`으로 목록 concat + provider_status 병합.
+
+Prometheus 메트릭 정규화(`normalize_payload` + `build_metric_analysis`): query별 결과를 `metrics.results.<metric_name>` object로 만들고, 기존 `samples`/`series`/`result`에 `analysis`를 추가한다. `analysis`는 `metric_kind`, `unit`, `signals`를 기본으로 담고, 가능한 경우 `value_summary`, `threshold`, range query의 `baseline_comparison`을 담는다. 새 PromQL query를 자동 추가하지 않고, 이미 policy가 요청한 결과만 해석한다.
 
 Loki 로그 정규화(`normalize_payload`): query별 결과를 `logs[]` object로 만들고, 각 object에 `result_type`, `streams`, `line_count`, `pattern_counts`, `severity_counts`, `trace_ids`, `redaction_summary`를 담는다. `streams[].values[].line` 필드는 유지하지만 Loki 원문 그대로가 아니라 provider가 `password`/`token`/`secret`/`Authorization`/`Cookie`/JWT/URL 계정정보/email 같은 민감값을 `[REDACTED]` 계열 값으로 바꾼 문자열이다. pattern count는 probe 실패, health endpoint 오류, dependency timeout/error, image pull 오류, OOM/memory, config/env/volume 오류를 line 단위로 센다. trace id는 32자리 hex 값만 최대 20개까지 유지한다.
 

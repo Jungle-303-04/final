@@ -111,6 +111,12 @@ RCA는 provider가 보내준 evidence만 보고 symptom, root cause candidate, c
 - result type
 - samples 또는 series
 - range/window 일부
+- analysis
+  - metric_kind
+  - value_summary
+  - threshold
+  - signals
+  - baseline_comparison
 - up
 - kube_pod_info
 - kube_deployment_status_replicas
@@ -121,7 +127,7 @@ RCA는 provider가 보내준 evidence만 보고 symptom, root cause candidate, c
 - node_collector_node_not_ready_pod_count
 - node_collector_scrape_error
 
-### 추가로 요청해야 할 것
+### 추가 요청 항목과 현재 구현 상태
 
 - restart count
 - memory usage / limit
@@ -137,6 +143,21 @@ RCA는 provider가 보내준 evidence만 보고 symptom, root cause candidate, c
   - above_threshold
   - below_threshold
   - increased_from_baseline 등
+
+현재 구현 상태:
+
+- Prometheus provider는 각 query 결과에 `analysis` object를 추가한다.
+- `metric_kind`는 query name과 PromQL을 보고 `memory_usage_ratio`, `cpu_usage_ratio`, `cpu_throttling`, `scrape_health`, `scrape_error`, `pod_not_ready_count`, `restart_count_or_rate` 같은 작은 분류값으로 정리한다.
+- `value_summary`는 이미 받은 sample/series 숫자에서 `count`, `min`, `max`, `avg`, `latest`, `latest_timestamp`만 계산한다. 숫자 point가 없으면 생략될 수 있다.
+- `threshold`는 보수적인 기본 기준만 쓴다. ratio 계열은 `0.8` 이상 warning, `0.9` 이상 critical이다. `up`은 `1` 미만이면 critical이다. restart/not ready/scrape error/throttling 계열은 `0`보다 크면 warning 신호로 본다. known metric이 아니거나 숫자 point가 없으면 생략될 수 있다.
+- `signals`는 threshold를 넘은 경우에만 `memory_pressure`, `cpu_pressure`, `cpu_throttling`, `scrape_target_down`, `collector_scrape_error`, `not_ready_pods`, `restart_increase` 같은 작은 label을 담는다.
+- `baseline_comparison`은 range query에서 비교 가능한 series가 있을 때만 만든다. 외부 기준선이나 이전 배포 기준선이 아니라, 같은 query window 안의 첫 point를 기준으로 증가/감소/유지 series 개수를 계산한다.
+
+주의:
+
+- 이번 변경은 provider가 새 PromQL query를 자동으로 추가하는 변경이 아니다. 이미 policy가 요청한 Prometheus 결과를 구조화한다.
+- CPU throttling, memory usage/limit ratio, restart trend 같은 값은 해당 query가 policy에 들어온 경우에만 `analysis`로 해석된다.
+- 외부 baseline, 배포 전 baseline, ingress 5xx, request latency는 별도 query나 외부 시스템 연결이 필요하므로 여기서 확정하지 않는다.
 
 ## Logs Provider
 
