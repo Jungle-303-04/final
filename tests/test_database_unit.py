@@ -1363,6 +1363,45 @@ def test_gitops_poll_targets_join_active_repository_application_binding() -> Non
     assert compiled.params["workspace_id_1"] == "workspace-b"
 
 
+def test_gitops_watch_poll_result_records_status_in_settings() -> None:
+    recorded: list[Any] = []
+
+    class StubConnection:
+        def execute(self, statement: Any) -> None:
+            recorded.append(statement)
+
+    @contextmanager
+    def stub_connection():
+        yield StubConnection()
+
+    repository = object.__new__(RepoChangeRepository)
+    repository.connection = stub_connection  # type: ignore[method-assign]
+
+    repository.record_watch_poll_result(
+        "watch-1",
+        workspace_id="workspace-b",
+        repository_id="repo-1",
+        branch="release",
+        manifest_path="k8s/deploy.yaml",
+        ok=False,
+        status_code=403,
+        error_kind="access_denied",
+        error="GitHub token cannot read repository",
+    )
+
+    compiled = recorded[0].compile(dialect=postgresql.dialect())
+    sql = str(compiled)
+    assert "INSERT INTO git_watch_targets" in sql
+    assert "ON CONFLICT (watch_target_id) DO UPDATE" in sql
+    assert "last_polled_at" in sql
+    assert "settings = (git_watch_targets.settings || excluded.settings)" in sql
+    assert compiled.params["watch_target_id"] == "watch-1"
+    assert compiled.params["workspace_id"] == "workspace-b"
+    assert compiled.params["settings"]["poll_status"] == "failed"
+    assert compiled.params["settings"]["poll_status_code"] == 403
+    assert compiled.params["settings"]["poll_error_kind"] == "access_denied"
+
+
 def test_gitops_workflow_status_metrics_are_workspace_scoped() -> None:
     recorded: list[Any] = []
 

@@ -409,3 +409,88 @@ def test_release_flow_deploy_refuses_placeholder_auth_before_api_calls(tmp_path:
     assert "auth password must be a non-placeholder secret" in captured.err
     assert payload["ok"] is False
     assert payload["error"] == "release-flow deploy auth password must be a non-placeholder secret of at least 12 characters"
+
+
+def test_release_flow_deploy_refuses_missing_gate_evidence_before_api_calls(
+    tmp_path: Path,
+    capsys,
+    monkeypatch,
+) -> None:
+    module = load_deploy_module()
+    report_path = tmp_path / "deploy.json"
+
+    def fail_client(*args, **kwargs):
+        raise AssertionError("ApiClient should not be constructed without gated deploy evidence")
+
+    monkeypatch.setattr(module, "ApiClient", fail_client)
+
+    exit_code = module.main(
+        [
+            "--api-base-url",
+            "https://release-flow.company.internal/api",
+            "--email",
+            "release@company.internal",
+            "--password",
+            "deploy-secret-12345",
+            "--plan-id",
+            "plan-prod",
+            "--report-path",
+            str(report_path),
+        ]
+    )
+
+    captured = capsys.readouterr()
+    payload = json.loads(report_path.read_text(encoding="utf-8"))
+    assert exit_code == 2
+    assert "requires gated evidence inputs" in captured.err
+    assert payload["ok"] is False
+    assert "change ticket" in payload["error"]
+    assert "Safe PR URL" in payload["error"]
+
+
+def test_release_flow_deploy_refuses_placeholder_gate_evidence_before_api_calls(
+    tmp_path: Path,
+    capsys,
+    monkeypatch,
+) -> None:
+    module = load_deploy_module()
+    report_path = tmp_path / "deploy.json"
+
+    def fail_client(*args, **kwargs):
+        raise AssertionError("ApiClient should not be constructed with placeholder deploy evidence")
+
+    monkeypatch.setattr(module, "ApiClient", fail_client)
+
+    exit_code = module.main(
+        [
+            "--api-base-url",
+            "https://release-flow.company.internal/api",
+            "--email",
+            "release@company.internal",
+            "--password",
+            "deploy-secret-12345",
+            "--plan-id",
+            "plan-prod",
+            "--change-ticket",
+            "CHG-PREFLIGHT",
+            "--runbook-url",
+            "https://wiki.company.internal/runbooks/checkout",
+            "--verification-url",
+            "https://checkout.company.internal/readyz",
+            "--image",
+            "ghcr.io/company/checkout:2.0.0",
+            "--safe-pr-workflow-run-id",
+            "workflow-safe-pr-1",
+            "--safe-pr-url",
+            "https://github.company.internal/org/checkout/pull/7",
+            "--report-path",
+            str(report_path),
+        ]
+    )
+
+    captured = capsys.readouterr()
+    payload = json.loads(report_path.read_text(encoding="utf-8"))
+    assert exit_code == 2
+    assert "change ticket must not use placeholder CHG-PREFLIGHT" in captured.err
+    assert payload["ok"] is False
+    assert payload["error"] == "release-flow deploy change ticket must not use placeholder CHG-PREFLIGHT"
