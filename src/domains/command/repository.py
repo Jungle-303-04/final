@@ -7,7 +7,7 @@ import uuid
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
-from sqlalchemy import DateTime, cast, func, or_, select, text, update
+from sqlalchemy import DateTime, case, cast, func, or_, select, text, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from domains.command.events import CommandCompletedBody
@@ -33,6 +33,8 @@ from packages.storage.schema import EventModel, OutboxModel
 # 건드리지 않고, 이 유예가 지나도록 어떤 에이전트도 집지 않은 명령만 소진으로 간주함.
 EXPIRED_COMMAND_GRACE_SECONDS = 300
 EXPIRED_COMMAND_FAILURE_MESSAGE = "command lease expired; no agent completed the command"
+QUEUED_COMMAND_TTL_SECONDS = 1800
+QUEUED_COMMAND_FAILURE_MESSAGE = "command queue expired; no connected agent accepted the command"
 COMMAND_PRIORITY_HIGH = 100
 
 
@@ -399,30 +401,58 @@ class AgentCommandRepository(DatabaseConnection):
         return completed
 
     def fail_expired_agent_commands(
-        self, grace_seconds: int = EXPIRED_COMMAND_GRACE_SECONDS
+        self,
+        grace_seconds: int = EXPIRED_COMMAND_GRACE_SECONDS,
+        *,
+        queue_ttl_seconds: int = QUEUED_COMMAND_TTL_SECONDS,
     ) -> list[JsonObject]:
-        """만료 방치 명령을 FAILED 로 종결하고 종결된 행을 반환함(완료 이벤트 발행용).
+        """미수신 queue와 만료 lease를 FAILED로 종결해 완료 이벤트 발행 대상으로 반환함.
 
-        LEASED/RUNNING 인데 lease 만료 후 유예(grace)까지 지난 명령은 완료 이벤트가
-        영영 없어 workflow 가 영구 APPLYING 으로 남음(감사 C6). 단일 원자
-        UPDATE ... RETURNING 으로 정리해 호출자가 CommandCompleted(FAILED)를 흘림.
+        등록이 사라지거나 Agent가 연결을 잃으면 QUEUED 행도 lease 없이 영구 잔존할 수
+        있다. 오래된 QUEUED와 lease 유예가 지난 LEASED/RUNNING을 단일 원자
+        UPDATE ... RETURNING으로 닫아 호출자가 CommandCompleted(FAILED)를 흘린다.
         """
+        grace_seconds = int(grace_seconds)
+        queue_ttl_seconds = int(queue_ttl_seconds)
+        if grace_seconds < 1 or queue_ttl_seconds < 1:
+            raise ValueError("command expiry durations must be positive")
         table = AgentCommand.__table__
-        failure = {
-            "status": CommandStatus.FAILED,
-            "applied": False,
-            "message": EXPIRED_COMMAND_FAILURE_MESSAGE,
-        }
         statement = (
             update(table)
             .where(
-                table.c.status.in_([CommandStatus.LEASED, CommandStatus.RUNNING]),
-                table.c.leased_until
-                < func.now() - text(f"interval '{int(grace_seconds)} seconds'"),
+                or_(
+                    (
+                        (table.c.status == CommandStatus.QUEUED)
+                        & (
+                            table.c.created_at
+                            < func.now() - text(f"interval '{queue_ttl_seconds} seconds'")
+                        )
+                    ),
+                    (
+                        table.c.status.in_([CommandStatus.LEASED, CommandStatus.RUNNING])
+                        & (
+                            table.c.leased_until
+                            < func.now() - text(f"interval '{grace_seconds} seconds'")
+                        )
+                    ),
+                )
             )
             .values(
                 status=CommandStatus.FAILED,
-                result=failure,
+                result=func.jsonb_build_object(
+                    "status",
+                    CommandStatus.FAILED,
+                    "applied",
+                    False,
+                    "message",
+                    case(
+                        (
+                            table.c.status == CommandStatus.QUEUED,
+                            QUEUED_COMMAND_FAILURE_MESSAGE,
+                        ),
+                        else_=EXPIRED_COMMAND_FAILURE_MESSAGE,
+                    ),
+                ),
                 completed_at=func.now(),
                 updated_at=func.now(),
             )
