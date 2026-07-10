@@ -73,7 +73,7 @@
 - live production release는 승인된 상태라도 `approval_granted_by`, `approval_reason`, `approval_granted_at`을 남겨야 하며, 승인 시각이 `RELEASE_FLOW_APPROVAL_MAX_AGE_HOURS` 기준보다 오래되면 실제 GitOps 이벤트 발행을 차단한다.
 - live production release는 `runbook_url`이 필요하며, URL 없이 진행하려면 `runbook_override_reason`을 남겨야 한다.
 - live production release는 `release_owner` 또는 `oncall_contact`가 필요하다.
-- live production release는 post-deploy 검증 근거가 필요하며, step/plan의 `health_check_path` 또는 `post_deploy_verification_url`이 없으면 `verification_override_reason`을 남겨야 한다.
+- live production release는 실제 HTTPS `post_deploy_verification_url`이 필요하다. production에서는 `health_check_path`나 verification override 사유만으로 dispatch할 수 없다.
 - live production release는 rollback/abort 기준이 필요하며, step/plan의 `rollback_trigger` 또는 `abort_criteria`가 없으면 `abort_criteria_override_reason`을 남겨야 한다.
 - live dispatch step/audit details에는 readiness impact, dispatch warning actions, diagnostics gate, override reason, alert validation window, validated alert channel snapshot, post-deploy verification evidence, automatic verification job snapshot/result, rollback/abort criteria를 `release_guard`로 남긴다.
 - saved alert channel test results keep `last_tested_at`, status, detail, and HTTP status code so operators can see whether a channel was recently validated.
@@ -107,7 +107,7 @@
 - approval evidence 입력: production live approval의 승인자, 승인 사유, 승인 시각을 UI에서 입력
 - runbook 입력: production live release의 운영 runbook URL 또는 runbook override 사유를 UI에서 입력
 - owner/contact 입력: production live release의 책임자 또는 온콜 연락처를 UI에서 입력
-- verification 입력: production live release의 health check path, post-deploy verification URL, 또는 verification override 사유를 UI에서 입력
+- verification 입력: production live release의 HTTPS post-deploy verification URL을 UI에서 입력
 - abort criteria 입력: production live release의 rollback trigger, abort criteria, 또는 abort criteria override 사유를 UI에서 입력
 - release alerts panel: `/release-flows`에서 alert channel 개수/활성 채널/severity 요약을 확인하고 `/settings/alerts`로 이동
 - alert channel validation: 저장된 alert channel의 마지막 테스트 통과/실패와 검증 시각을 `/settings/alerts` 목록에서 확인
@@ -205,7 +205,7 @@ python scripts/release_flow_smoke.py --ops-rehearsal
 ```
 
 live release gate를 실제 설정값으로 사전 점검하려면 `--live-preflight`를 붙인다. 이 모드는 live plan payload를 만들어 `/release-readiness`까지만 호출하고, `/release-plans/start`나 GitOps dispatch는 호출하지 않는다.
-외부 synthetic monitor나 상태 페이지를 검증 근거로 남기려면 `--live-verification-url`을 함께 넘긴다. 넘기지 않으면 기본 step health check path(`/readyz`)가 post-deploy verification evidence로 쓰인다.
+production live preflight에서는 외부 synthetic monitor나 상태 페이지의 실제 HTTPS URL을 `--live-verification-url`로 반드시 넘긴다. `health_check_path`는 verification job을 추가로 예약할 수 있지만, production dispatch를 통과시키는 근거는 아니다.
 
 ```bash
 API_BASE_URL="https://k8s.woonyong.org/api" \
