@@ -45,6 +45,11 @@ class FailingRetentionDb:
         raise RuntimeError("db busy")
 
 
+class FailingExpiredCommandDb:
+    async def fail_expired_agent_commands(self) -> list[dict[str, object]]:
+        raise RuntimeError("command table locked")
+
+
 def test_command_janitor_emits_completion_for_expired_commands() -> None:
     janitor = load_service("command/command-janitor")
     db = StubDb()
@@ -75,3 +80,17 @@ def test_command_janitor_retention_failure_does_not_stop_loop() -> None:
     janitor = load_service("command/command-janitor")
 
     assert asyncio.run(janitor.sweep_database_retention(FailingRetentionDb())) == 0
+
+
+def test_command_janitor_command_lock_failure_does_not_stop_loop() -> None:
+    janitor = load_service("command/command-janitor")
+
+    assert (
+        asyncio.run(
+            janitor.emit_expired_command_completions(
+                FailingExpiredCommandDb(),
+                StubEvents(),
+            )
+        )
+        == 0
+    )

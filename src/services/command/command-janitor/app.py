@@ -26,7 +26,12 @@ LOGGER = get_logger(__name__)
 async def emit_expired_command_completions(
     db: Any, events: Any, service_name: str = COMMAND_JANITOR
 ) -> int:
-    expired = await db.fail_expired_agent_commands() or []
+    try:
+        expired = await db.fail_expired_agent_commands() or []
+    except Exception:
+        # rollout 시 schema lock 같은 일시 DB 경합은 다음 주기에 재시도한다.
+        LOGGER.exception("expired_command_sweep_failed")
+        return 0
     for row in expired:
         command_id = str(row["command_id"])
         body = CommandCompletedBody(command_id=command_id, result=dict(row["result"]))
