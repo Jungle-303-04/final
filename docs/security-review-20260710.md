@@ -7,6 +7,21 @@
 > 개발 배포와 production 전환 기준을 구분해서 읽으며, 완료 사실은 `current-service-state.md`를
 > 우선한다.
 
+## 후속 조치 상태 (2026-07-11)
+
+이하 본문은 발견 당시 근거를 보존한 감사 스냅샷이다. 현재 `dev`에서는 다음 항목을 조치했다.
+
+| 항목 | 현재 상태 | 구현 |
+| --- | --- | --- |
+| C1/H1 개발 인증 우회 | 해결 | production/staging 요청 우회 차단 + 우회 플래그가 남으면 gateway 기동 실패 |
+| H2/L3 PromQL SSRF·오류 본문 | 해결 | 클라이언트 `base_url` 무시, 서버 `PROMETHEUS_VALIDATE_BASE_URL`만 사용, 오류 일반화 |
+| M2 alert webhook SSRF | 해결 | HTTPS·공인 IP·DNS 전체 결과·allowlist 검증, 전송 직전 재검증, redirect 차단 |
+| M3 `/metrics` 무인증 | 해결 | production/staging에서 token 미설정 시 503, 설정 시 timing-safe Bearer 검증 |
+
+현재 개발 배포는 사용자 요구에 따라 `APP_ENV=test`를 유지한다. 이 모드는 인증 우회와 token 없는
+내부 metrics scrape를 의도적으로 허용하므로 공개 production 보안 완료를 의미하지 않는다.
+H3, M1, M4~M6, L1/L2/L4~L6는 환경·프론트·인프라 작업 범위로 남아 있다.
+
 ## 요약
 
 전반적인 보안 기초는 견고하다. 커밋된 시크릿·개인키 없음, 비밀번호는 PBKDF2(260k) + `compare_digest`, agent 토큰은 `secrets.token_urlsafe` 생성 후 DB에는 SHA-256 해시만 저장(HANDOVER §1.4 준수), SQL 인젝션·`yaml.load`·`pickle`·`verify=False`·`shell=True` 사용 없음, RBAC는 와일드카드 없는 최소 권한, Dockerfile은 non-root(`USER 10001`)로 하드닝돼 있다. 프론트엔드는 쿠키 인증 + 커스텀 CSRF 헤더 + open-redirect 방어가 갖춰져 있고 `dangerouslySetInnerHTML`/`eval` 등 XSS 싱크가 전무하다.
