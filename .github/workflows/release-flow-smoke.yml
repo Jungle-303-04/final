@@ -148,6 +148,12 @@ name: Release Flow Smoke
       release_smoke_failed_checks:
         description: Comma-separated failed release-flow smoke check ids.
         value: ${{ jobs.release_flow_smoke.outputs.release_smoke_failed_checks }}
+      release_smoke_failed_count:
+        description: Number of failed release-flow smoke checks plus runtime errors.
+        value: ${{ jobs.release_flow_smoke.outputs.release_smoke_failed_count }}
+      release_smoke_api_base_url:
+        description: API base URL used by the release-flow smoke run.
+        value: ${{ jobs.release_flow_smoke.outputs.release_smoke_api_base_url }}
       release_smoke_error:
         description: Redacted release-flow smoke runtime error, when present.
         value: ${{ jobs.release_flow_smoke.outputs.release_smoke_error }}
@@ -167,6 +173,8 @@ jobs:
     outputs:
       release_smoke_ok: ${{ steps.release_flow_smoke.outputs.release_smoke_ok }}
       release_smoke_failed_checks: ${{ steps.release_flow_smoke.outputs.release_smoke_failed_checks }}
+      release_smoke_failed_count: ${{ steps.release_flow_smoke.outputs.release_smoke_failed_count }}
+      release_smoke_api_base_url: ${{ steps.release_flow_smoke.outputs.release_smoke_api_base_url }}
       release_smoke_error: ${{ steps.release_flow_smoke.outputs.release_smoke_error }}
     env:
       API_BASE_URL: ${{ inputs.api_base_url || secrets.release_flow_api_base_url || secrets.RELEASE_FLOW_API_BASE_URL }}

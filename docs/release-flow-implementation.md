@@ -307,6 +307,8 @@ workflow는 smoke를 실행하기 전에 numeric input을 검증한다. `product
 
 `live_preflight`를 켜면 workflow가 `--live-preflight`를 함께 실행해 live release readiness gate를 확인한다. 이 경로는 `/release-readiness`까지만 호출하고 `/release-plans/start`나 GitOps dispatch는 호출하지 않는다. `live_environment`와 `live_namespace`는 Kubernetes DNS label 형식이어야 하며, `live_change_ticket`은 비어 있으면 안 된다.
 
+reusable workflow output은 `release_smoke_ok`, `release_smoke_failed_checks`, `release_smoke_failed_count`, `release_smoke_api_base_url`, `release_smoke_error`를 노출한다. 배포 job은 `release_smoke_ok`로 gate를 걸고, notify job은 실패 개수나 API URL을 메시지에 넣을 수 있다.
+
 다른 배포 workflow에서 release-flow smoke를 gate로 재사용하려면 같은 파일을 `workflow_call`로 호출한다. 호출자는 `release_flow_api_base_url`, `release_flow_auth_email`, `release_flow_auth_password` secret을 넘기거나 `secrets: inherit`로 repository secret을 그대로 넘길 수 있다.
 
 ```yaml
@@ -335,6 +337,16 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - run: echo "deploy after release-flow smoke"
+
+  notify-release-smoke-failure:
+    needs: release_flow_smoke
+    if: needs.release_flow_smoke.outputs.release_smoke_ok != 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - run: |
+          echo "release smoke failed against ${{ needs.release_flow_smoke.outputs.release_smoke_api_base_url }}"
+          echo "failed checks: ${{ needs.release_flow_smoke.outputs.release_smoke_failed_checks }}"
+          echo "failed count: ${{ needs.release_flow_smoke.outputs.release_smoke_failed_count }}"
 ```
 
 알림 채널이 실제로 validation alert를 받을 수 있는지 확인하려면 `--alert-preflight`를 붙인다. 이 모드는 enabled alert channel 중 요청 severity를 받을 수 있는 채널을 골라 `/alert-channels/test`를 호출하므로, 실제 Slack/webhook/온콜 테스트 메시지가 발송될 수 있다.
