@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import subprocess
 import sys
 import urllib.parse
 from datetime import UTC, datetime, timedelta
@@ -58,6 +59,11 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     parser.add_argument("--github-api-base", default=DEFAULT_GITHUB_API_BASE)
     parser.add_argument("--github-branch", default="dev", help="Branch/ref to dispatch and poll.")
     parser.add_argument("--github-sha", required=True, help="Exact production commit SHA to prove.")
+    parser.add_argument(
+        "--skip-local-sha-check",
+        action="store_true",
+        help="Skip checking that the local git checkout matches --github-sha.",
+    )
     parser.add_argument("--environment", default="production", help="GitHub Environment input.")
     parser.add_argument("--timeout-seconds", type=int, default=1800)
     parser.add_argument("--poll-seconds", type=int, default=15)
@@ -132,6 +138,22 @@ def validate_image(value: str) -> str | None:
     return None
 
 
+def current_git_sha() -> str:
+    if not Path(".git").exists():
+        return ""
+    try:
+        result = subprocess.run(
+            ["git", "rev-parse", "HEAD"],
+            check=True,
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return ""
+    return result.stdout.strip()
+
+
 def validate_signoff_inputs(args: argparse.Namespace) -> list[str]:
     errors: list[str] = []
     repo = str(args.github_repo or "").strip()
@@ -167,6 +189,9 @@ def validate_signoff_inputs(args: argparse.Namespace) -> list[str]:
         )
     if not str(args.live_safe_pr_workflow_run_id or "").strip().isdigit():
         errors.append("live_safe_pr_workflow_run_id must be a numeric GitHub Actions run id")
+    local_sha = "" if args.skip_local_sha_check else current_git_sha()
+    if local_sha and str(args.github_sha or "").strip() != local_sha:
+        errors.append("local git HEAD must match --github-sha for production sign-off")
     return errors
 
 
