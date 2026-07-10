@@ -1,5 +1,7 @@
 # RCA Provider Evidence 요청 정리
 
+구현 메모: metadata evidence는 workload snapshot, config reference, Service selector matching, ownership lookup helper 모듈로 나누어 구현할 수 있다. 이 helper 모듈들은 event를 발행하지 않는다. 등록된 metadata provider만 metadata bucket을 반환한다.
+
 ## 왜 필요한가
 
 1. RCA는 provider가 보낸 evidence만 보고 판단한다.
@@ -56,23 +58,23 @@ RCA는 provider가 보내준 evidence만 보고 symptom, root cause candidate, c
   - startupProbe
   - path / port / timeoutSeconds / periodSeconds / failureThreshold
 - Deployment labels
-- safe Deployment annotations
 - Pod template labels
-- safe Pod template annotations
-- managedFields manager 목록
-- owned ReplicaSet revision annotation
+- resources requests/limits
+- Deployment status and conditions
+- Pod status phase, ready flag, and conditions
+- Service selector and Pod labels match result
+- owned ReplicaSet revision annotation and replica counts
+- single Deployment detail query의 safe Deployment/Pod template annotations
+- single Deployment detail query의 managedFields manager 목록
+- single Deployment detail query의 env/envFrom ConfigMap and Secret reference summary
+- single Deployment detail query의 mounted ConfigMap and Secret volume reference summary
+- single Deployment detail query의 ReplicaSet created_at and conditions
 
 ### 추가로 요청해야 할 것
 
-- env/config refs
-  - env
-  - envFrom
-  - ConfigMap reference
-- secret refs
-  - Secret 값이 아니라 name/key reference만
+- ConfigMap/Secret object metadata summary
 - pvc refs
 - resource quota
-- service selector와 pod labels 비교 결과
 - 상세 containerStatuses 원본 또는 더 풍부한 요약
 - node pressure / scheduling 관련 detail
 
@@ -190,20 +192,83 @@ policy상 traces query는 존재한다.
 현재 target agent에는 `MetadataProvider`가 있고 `@telemetry.source(source="metadata", evidence_key="metadata", query_type=MetadataSnapshotQuery)`로 등록된다.
 기본 policy는 `metadata` provider에 `change_context` query를 넣는다.
 현재 provider가 최종 bucket에 남기는 필드는 아래 구조다.
+전체 summary query와 단건 detail query는 보통 한 번에 하나의 모양을 쓴다.
 
 - change_context.current_workload_snapshots[]
 - change_context.current_workload_snapshot
+
+`current_workload_snapshots[]`는 target namespace의 모든 Deployment를 위한 summary snapshot이다.
+summary snapshot에는 아래 필드만 남긴다.
+
 - change_context.current_workload_snapshots[].workload.kind/namespace/name
 - change_context.current_workload_snapshots[].deployment_labels
-- change_context.current_workload_snapshots[].deployment_annotations
 - change_context.current_workload_snapshots[].pod_template_labels
-- change_context.current_workload_snapshots[].pod_template_annotations
-- change_context.current_workload_snapshots[].managed_fields_managers[]
+- change_context.current_workload_snapshots[].deployment_status
+- change_context.current_workload_snapshots[].deployment_status.conditions[]
+- change_context.current_workload_snapshots[].pod_statuses[].name
+- change_context.current_workload_snapshots[].pod_statuses[].phase
+- change_context.current_workload_snapshots[].pod_statuses[].ready
+- change_context.current_workload_snapshots[].pod_statuses[].reason
+- change_context.current_workload_snapshots[].pod_statuses[].message
+- change_context.current_workload_snapshots[].pod_statuses[].start_time
+- change_context.current_workload_snapshots[].pod_statuses[].conditions[]
 - change_context.current_workload_snapshots[].containers[].name/image
 - change_context.current_workload_snapshots[].containers[].readiness_probe
 - change_context.current_workload_snapshots[].containers[].liveness_probe
 - change_context.current_workload_snapshots[].containers[].startup_probe
-- change_context.current_workload_snapshots[].replicaset_revisions[].name/revision
+- change_context.current_workload_snapshots[].containers[].resources
+- change_context.current_workload_snapshots[].replicaset_revisions[].name
+- change_context.current_workload_snapshots[].replicaset_revisions[].revision
+- change_context.current_workload_snapshots[].replicaset_revisions[].desired_replicas
+- change_context.current_workload_snapshots[].replicaset_revisions[].replicas
+- change_context.current_workload_snapshots[].replicaset_revisions[].ready_replicas
+- change_context.current_workload_snapshots[].replicaset_revisions[].available_replicas
+- change_context.current_workload_snapshots[].replicaset_revisions[].fully_labeled_replicas
+
+`service_selector_matches[]`는 namespace Service selector와 Pod labels 비교 결과다.
+summary query와 detail query 모두 같은 기본 shape로 보내지만, 범위와 `target_relation` 포함 여부가 다르다.
+summary query는 `target_relation`을 넣지 않고, detail query는 target Deployment와 관련 있다고 판단된 Service만 남기며 그 이유를 `target_relation`으로 넣는다.
+
+- change_context.service_selector_matches[].service.namespace/name
+- change_context.service_selector_matches[].selector(selector가 없는 Service면 생략 가능)
+- change_context.service_selector_matches[].match_status
+- change_context.service_selector_matches[].target_relation(detail query에서만 존재)
+- change_context.service_selector_matches[].matched_pod_count
+- change_context.service_selector_matches[].matched_pods[].namespace/name(matched Pod가 없으면 생략 가능)
+
+전체 summary query는 namespace의 모든 Service 비교 결과를 보낸다.
+특정 Deployment detail query는 target Deployment와 관련 있는 Service만 보낸다.
+관련 기준은 `exact_selector_match`, `live_pod_match`, `selector_key_overlap`이다.
+
+`endpoint_slice_ready_endpoints[]`는 Service 뒤에 실제 ready endpoint가 붙었는지 보는 요약이다.
+EndpointSlice(엔드포인트슬라이스)는 Kubernetes가 Service 뒤 endpoint 목록을 나누어 저장하는 객체다.
+summary query는 namespace의 모든 EndpointSlice 요약을 보낸다.
+detail query는 target Deployment와 관련 있는 Service의 EndpointSlice만 보낸다.
+endpoint IP address는 보내지 않고, ready target Pod의 kind/namespace/name만 보낸다.
+
+- change_context.endpoint_slice_ready_endpoints[].service.namespace/name
+- change_context.endpoint_slice_ready_endpoints[].endpoint_slice.namespace/name
+- change_context.endpoint_slice_ready_endpoints[].address_type
+- change_context.endpoint_slice_ready_endpoints[].ports[].name/port/protocol/app_protocol
+- change_context.endpoint_slice_ready_endpoints[].endpoint_count
+- change_context.endpoint_slice_ready_endpoints[].ready_endpoint_count
+- change_context.endpoint_slice_ready_endpoints[].not_ready_endpoint_count
+- change_context.endpoint_slice_ready_endpoints[].unknown_ready_endpoint_count
+- change_context.endpoint_slice_ready_endpoints[].serving_endpoint_count
+- change_context.endpoint_slice_ready_endpoints[].terminating_endpoint_count
+- change_context.endpoint_slice_ready_endpoints[].ready_targets[].kind/namespace/name
+
+`current_workload_snapshot`은 특정 Deployment 1개를 위한 detail snapshot이다.
+detail snapshot은 summary 필드에 아래 필드를 추가로 담는다.
+
+- change_context.current_workload_snapshot.deployment_annotations
+- change_context.current_workload_snapshot.pod_template_annotations
+- change_context.current_workload_snapshot.managed_fields_managers[]
+- change_context.current_workload_snapshot.containers[].env_refs
+- change_context.current_workload_snapshot.containers[].env_from_refs
+- change_context.current_workload_snapshot.containers[].volume_mount_refs
+- change_context.current_workload_snapshot.replicaset_revisions[].created_at
+- change_context.current_workload_snapshot.replicaset_revisions[].conditions[]
 
 기본 fallback 값은 `{"change_context": {"current_workload_snapshots": []}}`이다.
 기본 `change_context` query는 target namespace의 모든 Deployment를 목록으로 수집한다.
@@ -217,11 +282,11 @@ Kubernetes object에서도 일부 metadata를 참고할 수 있다.
 - metadata.namespace
 - metadata.uid
 - labels
-- annotations 일부(`metadata` bucket은 안전한 Deployment/Pod template annotation만 남김)
+- annotations 일부(`metadata` bucket은 단건 detail에서 안전한 Deployment/Pod template annotation만 남김)
 - ownerReferences
 - image
 - deployment revision annotation 일부
-- managedFields manager 일부
+- managedFields manager 일부(detail query에서만 제공)
 
 ### 추가로 요청해야 할 것
 
