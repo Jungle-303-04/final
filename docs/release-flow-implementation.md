@@ -282,6 +282,15 @@ python scripts/release_flow_smoke.py \
   --github-annotations
 ```
 
+CI에서 표준 산출물과 GitHub Actions 연동을 한 번에 켜려면 `--ci`를 쓴다. 명시하지 않은 경우 JSON, JUnit, Markdown artifact는 `--ci-artifacts-dir` 아래 기본 파일명으로 저장되고, `GITHUB_STEP_SUMMARY`, `GITHUB_OUTPUT`, `GITHUB_ACTIONS` 환경이 있으면 summary/output/annotation도 자동으로 켜진다.
+
+```bash
+python scripts/release_flow_smoke.py \
+  --production-preflight \
+  --ci \
+  --ci-artifacts-dir artifacts/release-flow
+```
+
 알림 채널이 실제로 validation alert를 받을 수 있는지 확인하려면 `--alert-preflight`를 붙인다. 이 모드는 enabled alert channel 중 요청 severity를 받을 수 있는 채널을 골라 `/alert-channels/test`를 호출하므로, 실제 Slack/webhook/온콜 테스트 메시지가 발송될 수 있다.
 
 ```bash
