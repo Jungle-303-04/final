@@ -9,21 +9,32 @@ import sys
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlparse
 
 import yaml
 
 
 WORKFLOW_SUFFIXES = {".yml", ".yaml"}
 GATE_WORKFLOW_PATH = "./.github/workflows/release-flow-production-gate.yml"
-REQUIRED_GATE_INPUTS = ("live_change_ticket", "live_runbook_url", "live_image")
+REQUIRED_GATE_INPUTS = (
+    "live_change_ticket",
+    "live_runbook_url",
+    "live_image",
+    "live_verification_url",
+    "live_safe_pr_workflow_run_id",
+    "live_safe_pr_url",
+)
 ONE_OF_GATE_INPUTS = ("live_release_owner", "live_oncall_contact")
 PLACEHOLDER_INPUT_VALUES = {
     "live_change_ticket": {"CHG-PREFLIGHT"},
     "live_runbook_url": {"https://example.com/runbooks/release-flow"},
+    "live_verification_url": {"https://example.com/verify/release-flow"},
     "live_release_owner": {"release-operator"},
     "live_oncall_contact": {"release-oncall@example.com"},
     "live_image": {"ghcr.io/example/release-flow-smoke:live-preflight"},
 }
+HTTPS_GATE_INPUTS = ("live_runbook_url", "live_verification_url", "live_safe_pr_url")
+PLACEHOLDER_URL_HOSTS = {"example.com", "example.test", "localhost", "127.0.0.1", "::1"}
 IGNORED_WORKFLOW_NAMES = {
     "release-flow-smoke.yml",
     "release-flow-production-gate.yml",
@@ -217,6 +228,8 @@ def validate_gate_job_inputs(workflow: Path, gate_id: str, gate_job: dict[str, A
                     f"release-flow production gate job must not pass placeholder {input_name}",
                 )
             )
+        else:
+            violations.extend(validate_literal_url_input(workflow, gate_id, input_name, value))
 
     owner_values = {input_name: with_values.get(input_name) for input_name in ONE_OF_GATE_INPUTS}
     if not any(meaningful_input(value) for value in owner_values.values()):
@@ -251,6 +264,38 @@ def is_placeholder_input(input_name: str, value: Any) -> bool:
     normalized = str(value).strip()
     placeholders = PLACEHOLDER_INPUT_VALUES.get(input_name, set())
     return normalized in placeholders
+
+
+def validate_literal_url_input(
+    workflow: Path,
+    gate_id: str,
+    input_name: str,
+    value: Any,
+) -> list[GateViolation]:
+    if input_name not in HTTPS_GATE_INPUTS:
+        return []
+    raw = str(value).strip()
+    if not raw or raw.startswith("${{"):
+        return []
+    parsed = urlparse(raw)
+    host = (parsed.hostname or "").lower()
+    if parsed.scheme != "https":
+        return [
+            GateViolation(
+                workflow,
+                gate_id,
+                f"release-flow production gate job must pass https {input_name}",
+            )
+        ]
+    if host in PLACEHOLDER_URL_HOSTS or host.endswith(".localhost"):
+        return [
+            GateViolation(
+                workflow,
+                gate_id,
+                f"release-flow production gate job must not pass placeholder {input_name}",
+            )
+        ]
+    return []
 
 
 def normalize_needs(value: Any) -> set[str]:
