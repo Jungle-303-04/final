@@ -97,3 +97,16 @@ The gate rejects placeholder values such as `CHG-PREFLIGHT`, `localhost`, `examp
 After the gate passes, `release-flow-production-deploy.yml` runs `scripts/release_flow_deploy.py`. The script fetches the saved `release_plan_id`, refuses demo or non-production plans, and starts the release through `POST /release-plans/start` so the backend live blockers still run at dispatch time.
 
 The production deploy workflow pins Python with `actions/setup-python@v5` before running the deploy script. Treat a failed setup step as an environment problem, not as release approval.
+
+## Evidence Verification
+
+After the final readiness and production deploy workflows finish, download the relevant GitHub Actions artifacts and verify them locally:
+
+```bash
+python scripts/verify_release_flow_production_evidence.py \
+  ./release-flow-production-readiness \
+  ./release-flow-smoke-production \
+  ./release-flow-production-deploy
+```
+
+The verifier accepts extracted artifact directories, individual JSON reports, or artifact ZIP files. It fails unless the readiness report passed with runtime config, GitHub access, API smoke, and deploy-gate checks; the smoke report passed the production preflight checks; and the deploy report recorded a successful `release-plans.start.production` run id against a concrete HTTPS API URL.
