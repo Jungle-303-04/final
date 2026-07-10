@@ -8,6 +8,7 @@
 
 from __future__ import annotations
 
+from packages.config import bypass_guard
 from packages.config.settings import env
 
 APP_ENV_ENV = "APP_ENV"
@@ -39,14 +40,16 @@ def rca_test_runs_enabled() -> bool:
 
 def development_security_bypass_enabled() -> bool:
     """통합 개발 우회가 켜졌는지 매 요청 시 평가한다."""
-    return env(APP_ENV_ENV, "").strip().lower() == TEST_APP_ENV or env_enabled(
+    raw = env(APP_ENV_ENV, "").strip().lower() == TEST_APP_ENV or env_enabled(
         DEV_SECURITY_BYPASS_ENV
     )
+    return bypass_guard.enforce_fail_closed(raw)
 
 
 def development_session_bypass_enabled() -> bool:
     """통합 플래그와 기존 세션 전용 플래그를 하위 호환한다."""
-    return development_security_bypass_enabled() or env_enabled(LEGACY_DEV_AUTH_BYPASS_ENV)
+    raw = development_security_bypass_enabled() or env_enabled(LEGACY_DEV_AUTH_BYPASS_ENV)
+    return bypass_guard.enforce_fail_closed(raw)
 
 
 def development_bypass_user_id(default: str, legacy_env: str = "") -> str:
