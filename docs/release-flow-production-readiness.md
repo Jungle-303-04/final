@@ -97,6 +97,21 @@ GitHub Actions production readiness:
 7. Confirm the workflow summary contains `Result: passed`.
 8. Download the `release-flow-production-readiness` artifact and keep it with the release evidence.
 
+If the operator token can dispatch workflows and read Actions artifacts, run the same production readiness path from a terminal and verify the readiness artifact in one command:
+
+```bash
+python scripts/run_release_flow_production_readiness.py \
+  --github-repo owner/repo \
+  --github-branch dev \
+  --github-sha <production-commit-sha> \
+  --github-token-env GITHUB_TOKEN \
+  --environment production \
+  --verify-artifact \
+  --github-output-dir ./release-flow-production-evidence
+```
+
+Keep `--github-sha <production-commit-sha>` set for final sign-off so the workflow run and downloaded artifact prove the exact commit. The runner dispatches `release-flow-production-readiness.yml`, keeps `github_environment_preflight`, `github_access_preflight`, `api_smoke_preflight`, and `production_deploy_required` enabled by default, polls until the run completes, and then calls `verify_release_flow_production_evidence.py --allow-missing-deploy` against the readiness artifact.
+
 When `github_access_preflight` is enabled, the verifier must have an actual GitHub token value. If `RELEASE_FLOW_GITHUB_TOKEN_REF` points to a non-env vault ref such as `aws-sm:` or `k8s-secret:`, also set the `RELEASE_FLOW_GITHUB_TOKEN` secret for this readiness workflow so the read-only GitHub API check can run.
 
 `api_smoke_preflight` runs `scripts/release_flow_smoke.py --production-preflight --ci`. It verifies health, readiness, login, release plan APIs, generated manifest rendering, and existing release-run hygiene without starting a production release. The smoke result is appended to the GitHub Actions job summary when available and uploaded as `release-flow-smoke.md` in the readiness artifact.

@@ -32,6 +32,7 @@ REQUIRED_WORKFLOW_FILES = [
 REQUIRED_SCRIPT_FILES = [
     Path("scripts/release_flow_smoke.py"),
     Path("scripts/release_flow_deploy.py"),
+    Path("scripts/run_release_flow_production_readiness.py"),
     Path("scripts/verify_release_flow_production_evidence.py"),
     Path("scripts/verify_release_flow_github_environment.py"),
     Path("scripts/validate_release_flow_production_gate.py"),
@@ -94,6 +95,7 @@ def validate_readiness(
     checks.extend(check_production_gate_contract())
     checks.extend(check_production_deploy_workflow_contract())
     checks.extend(check_deploy_script_contract())
+    checks.extend(check_readiness_runner_contract())
     checks.extend(check_github_environment_verifier_contract())
     checks.extend(check_evidence_verifier_contract())
     checks.extend(check_gate_contract_script_contract())
@@ -381,6 +383,41 @@ def check_evidence_verifier_contract() -> list[ReadinessCheck]:
             and "--github-output-dir" in docs
             and "same concrete HTTPS API base URL" in docs,
             "operator guide documents GitHub artifact download verification and API consistency",
+        ),
+    ]
+
+
+def check_readiness_runner_contract() -> list[ReadinessCheck]:
+    path = Path("scripts/run_release_flow_production_readiness.py")
+    docs_path = Path("docs/release-flow-production-readiness.md")
+    if not path.is_file():
+        return [ReadinessCheck("script.readiness_runner", False, "production readiness runner is missing")]
+    source = path.read_text(encoding="utf-8")
+    docs = docs_path.read_text(encoding="utf-8") if docs_path.is_file() else ""
+    return [
+        ReadinessCheck(
+            "script.readiness_runner.dispatches_workflow",
+            "actions/workflows" in source
+            and "dispatches" in source
+            and "workflow_dispatch" in source
+            and "github_environment_preflight" in source
+            and "production_deploy_required" in source,
+            "operator runner dispatches the production readiness workflow with final gates enabled",
+        ),
+        ReadinessCheck(
+            "script.readiness_runner.polls_and_verifies",
+            "wait_for_run" in source
+            and "--verify-artifact" in source
+            and "--allow-missing-deploy" in source
+            and "verify_evidence_main" in source,
+            "operator runner polls the workflow and can verify the readiness artifact",
+        ),
+        ReadinessCheck(
+            "docs.production_readiness.runner",
+            "run_release_flow_production_readiness.py" in docs
+            and "--verify-artifact" in docs
+            and "--github-sha <production-commit-sha>" in docs,
+            "operator guide documents dispatch, polling, and artifact verification",
         ),
     ]
 
