@@ -906,7 +906,36 @@ class TargetClusterAgent:
             if item.strip()
         }
         environment = self.command_metadata_value(command, "environment").strip().lower()
-        return action in actions and environment in environments
+        namespace = self.command_namespace_value(command).strip().lower()
+        return (
+            action in actions
+            and environment in environments
+            and bool(namespace)
+            and namespace == environment
+        )
+
+    def command_namespace_value(self, command: CommandRecord) -> str:
+        payload = command.get(Gateway.PAYLOAD)
+        if isinstance(payload, dict):
+            diff = payload.get("diff")
+            if isinstance(diff, dict):
+                desired_manifest = diff.get("desired_manifest")
+                if isinstance(desired_manifest, dict):
+                    metadata = desired_manifest.get("metadata")
+                    if isinstance(metadata, dict):
+                        namespace = metadata.get(Gateway.NAMESPACE)
+                        if isinstance(namespace, str) and namespace:
+                            return namespace
+                namespace = diff.get(Gateway.NAMESPACE)
+                if isinstance(namespace, str) and namespace:
+                    return namespace
+            namespace = payload.get(Gateway.NAMESPACE)
+            if isinstance(namespace, str) and namespace:
+                return namespace
+        namespace = command.get(Gateway.NAMESPACE)
+        if isinstance(namespace, str) and namespace:
+            return namespace
+        return ""
 
     def approval_evidence_error(self, command: CommandRecord) -> str:
         required = (
