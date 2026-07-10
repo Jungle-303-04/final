@@ -240,6 +240,14 @@ python scripts/release_flow_smoke.py \
   --junit-path artifacts/release-flow-smoke.junit.xml
 ```
 
+PR comment나 운영 인계 노트에 붙일 사람이 읽는 report가 필요하면 `--markdown-path`를 함께 쓴다.
+
+```bash
+python scripts/release_flow_smoke.py \
+  --production-preflight \
+  --markdown-path artifacts/release-flow-smoke.md
+```
+
 알림 채널이 실제로 validation alert를 받을 수 있는지 확인하려면 `--alert-preflight`를 붙인다. 이 모드는 enabled alert channel 중 요청 severity를 받을 수 있는 채널을 골라 `/alert-channels/test`를 호출하므로, 실제 Slack/webhook/온콜 테스트 메시지가 발송될 수 있다.
 
 ```bash

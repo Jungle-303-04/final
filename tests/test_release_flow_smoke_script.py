@@ -233,14 +233,44 @@ def test_smoke_junit_writer_persists_ci_report(tmp_path: Path) -> None:
     assert failures[0].attrib["message"] == "run-policy-override"
 
 
+def test_smoke_markdown_writer_persists_handoff_report(tmp_path: Path) -> None:
+    smoke = load_smoke_module()
+    markdown_path = tmp_path / "artifacts" / "release-smoke.md"
+
+    smoke.write_markdown_report(
+        str(markdown_path),
+        ok=False,
+        api_base_url="https://example.com/api",
+        results=[
+            smoke.SmokeResult("healthz", True, "ok"),
+            smoke.SmokeResult("release-runs.policy-override-preflight", False, "run|policy\nreview"),
+        ],
+    )
+
+    body = markdown_path.read_text(encoding="utf-8")
+    assert "# Release Flow Smoke Report" in body
+    assert "- Result: failed" in body
+    assert "| `release-runs.policy-override-preflight` | fail | run\\|policy<br>review |" in body
+
+
 def test_smoke_main_writes_report_when_credentials_are_missing(tmp_path: Path, monkeypatch: Any) -> None:
     smoke = load_smoke_module()
     for name in ("API_BASE_URL", "BASE_URL", "AUTH_EMAIL", "AUTH_PASSWORD"):
         monkeypatch.delenv(name, raising=False)
     report_path = tmp_path / "missing-credentials.json"
     junit_path = tmp_path / "missing-credentials.xml"
+    markdown_path = tmp_path / "missing-credentials.md"
 
-    exit_code = smoke.main(["--report-path", str(report_path), "--junit-path", str(junit_path)])
+    exit_code = smoke.main(
+        [
+            "--report-path",
+            str(report_path),
+            "--junit-path",
+            str(junit_path),
+            "--markdown-path",
+            str(markdown_path),
+        ]
+    )
 
     assert exit_code == 2
     payload = json.loads(report_path.read_text(encoding="utf-8"))
@@ -249,6 +279,7 @@ def test_smoke_main_writes_report_when_credentials_are_missing(tmp_path: Path, m
     suite = ET.parse(junit_path).getroot()
     assert suite.attrib["failures"] == "1"
     assert "AUTH_EMAIL" in suite.find(".//failure").attrib["message"]
+    assert "AUTH_EMAIL" in markdown_path.read_text(encoding="utf-8")
 
 
 def test_smoke_default_does_not_start_release_run() -> None:

@@ -643,6 +643,11 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
         help="write the smoke result as JUnit XML for CI test reports",
     )
     parser.add_argument(
+        "--markdown-path",
+        default=os.getenv("RELEASE_FLOW_SMOKE_MARKDOWN_PATH", ""),
+        help="write the smoke result as Markdown for PR comments or handoff notes",
+    )
+    parser.add_argument(
         "--production-preflight",
         action="store_true",
         help=(
@@ -847,6 +852,41 @@ def write_junit_report(path: str, results: list[SmokeResult], *, error: str | No
     tree.write(target, encoding="utf-8", xml_declaration=True)
 
 
+def write_markdown_report(
+    path: str,
+    *,
+    ok: bool,
+    api_base_url: str,
+    results: list[SmokeResult],
+    error: str | None = None,
+) -> None:
+    if not str(path or "").strip():
+        return
+    target = os.path.abspath(path)
+    os.makedirs(os.path.dirname(target), exist_ok=True)
+    lines = [
+        "# Release Flow Smoke Report",
+        "",
+        f"- Result: {'passed' if ok else 'failed'}",
+        f"- API base URL: `{api_base_url or 'not configured'}`",
+    ]
+    if error:
+        lines.extend(["", "## Error", "", error])
+    if results:
+        lines.extend(["", "## Checks", "", "| Check | Result | Detail |", "| --- | --- | --- |"])
+        for item in results:
+            lines.append(
+                f"| `{markdown_escape(item.name)}` | {'pass' if item.ok else 'fail'} | {markdown_escape(item.detail)} |"
+            )
+    with open(target, "w", encoding="utf-8") as report:
+        report.write("\n".join(lines))
+        report.write("\n")
+
+
+def markdown_escape(value: Any) -> str:
+    return str(value).replace("|", "\\|").replace("\r", " ").replace("\n", "<br>")
+
+
 def main(argv: list[str]) -> int:
     args = parse_args(argv)
     apply_production_preflight_flags(args)
@@ -859,6 +899,13 @@ def main(argv: list[str]) -> int:
         }
         write_json_report(args.report_path, payload)
         write_junit_report(args.junit_path, [], error=str(payload["error"]))
+        write_markdown_report(
+            args.markdown_path,
+            ok=False,
+            api_base_url=api_base_url,
+            results=[],
+            error=str(payload["error"]),
+        )
         print(payload["error"], file=sys.stderr)
         return 2
     client = ApiClient(api_base_url, timeout=args.timeout)
@@ -881,12 +928,20 @@ def main(argv: list[str]) -> int:
         payload = {"ok": False, "api_base_url": client.api_base_url, "error": str(exc)}
         write_json_report(args.report_path, payload)
         write_junit_report(args.junit_path, [], error=str(exc))
+        write_markdown_report(
+            args.markdown_path,
+            ok=False,
+            api_base_url=client.api_base_url,
+            results=[],
+            error=str(exc),
+        )
         print(json.dumps(payload, ensure_ascii=False, indent=2), file=sys.stderr)
         return 1
     ok = all(item.ok for item in results)
     payload = smoke_report_payload(ok, client.api_base_url, results)
     write_json_report(args.report_path, payload)
     write_junit_report(args.junit_path, results)
+    write_markdown_report(args.markdown_path, ok=ok, api_base_url=client.api_base_url, results=results)
     print(json.dumps(payload, ensure_ascii=False, indent=2))
     return 0 if ok else 1
 
