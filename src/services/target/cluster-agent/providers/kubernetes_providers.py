@@ -228,8 +228,8 @@ class KubernetesSnapshotProvider:
                 payload.get("statefulsets"), telemetry_query.label_selector
             ),
             "DaemonSet": scoped_items(payload.get("daemonsets"), telemetry_query.label_selector),
-            K8S_KIND_REPLICA_SET: scoped_items(
-                payload.get(K8S_RESOURCE_REPLICASETS), telemetry_query.label_selector
+            K8S_KIND_REPLICA_SET: active_replicasets(
+                scoped_items(payload.get(K8S_RESOURCE_REPLICASETS), telemetry_query.label_selector)
             ),
         }
         raw_services = scoped_items(
@@ -361,6 +361,30 @@ def scoped_items(payload: Any, label_selector: str | None) -> list[JsonObject]:
         if resource_labels(row).get(RCA_TEST_LABEL) != "true"
         and RCA_TEST_RUN_LABEL not in resource_labels(row)
     ]
+
+
+def active_replicasets(rows: list[JsonObject]) -> list[JsonObject]:
+    """일반 snapshot에서는 현재 replica가 남은 ReplicaSet만 반환한다."""
+    active: list[JsonObject] = []
+    for row in rows:
+        desired = spec(row).get("replicas")
+        replica_status = status(row)
+        observed = (
+            replica_status.get("replicas"),
+            replica_status.get("readyReplicas"),
+            replica_status.get("availableReplicas"),
+        )
+        if desired is None or any(has_positive_replica_count(value) for value in observed):
+            active.append(row)
+            continue
+        if has_positive_replica_count(desired):
+            active.append(row)
+    return active
+
+
+def has_positive_replica_count(value: object) -> bool:
+    count = as_float(value)
+    return count is not None and count > 0
 
 
 def scoped_events(

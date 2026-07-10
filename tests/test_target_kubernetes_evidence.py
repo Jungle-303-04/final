@@ -521,3 +521,45 @@ def test_regular_kubernetes_snapshot_excludes_rca_test_resources() -> None:
     assert [item["name"] for item in snapshot["pods"]] == ["normal-pod"]
     assert [item["name"] for item in snapshot["events"]] == ["normal-event"]
     assert [item["name"] for item in snapshot["endpoints"]] == ["normal-service-abc"]
+
+
+def test_regular_kubernetes_snapshot_excludes_scaled_down_replicaset_history() -> None:
+    _module, kubernetes_module = load_evidence_modules()
+    provider = kubernetes_module.KubernetesSnapshotProvider(cluster_id="cluster-1")
+
+    def replicaset(name: str, desired: int, current: int) -> dict[str, object]:
+        return {
+            "metadata": {"name": name, "namespace": "production"},
+            "spec": {"replicas": desired},
+            "status": {"replicas": current, "readyReplicas": current},
+        }
+
+    snapshot = provider.normalize_payload(
+        {
+            "namespace": "production",
+            "pods": {"items": []},
+            "events": {"items": []},
+            "deployments": {"items": []},
+            "statefulsets": {"items": []},
+            "daemonsets": {"items": []},
+            "replicasets": {
+                "items": [
+                    replicaset("orders-api-old", 0, 0),
+                    replicaset("orders-api-current", 2, 2),
+                    replicaset("orders-api-terminating", 0, 1),
+                ]
+            },
+            "services": {"items": []},
+            "endpointslices": {"items": []},
+        },
+        kubernetes_module.KubernetesSnapshotQuery(
+            "regular_snapshot",
+            "Regular snapshot.",
+            "production",
+        ),
+    )
+
+    assert [item["name"] for item in snapshot["workloads"]] == [
+        "orders-api-current",
+        "orders-api-terminating",
+    ]
