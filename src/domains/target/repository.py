@@ -20,6 +20,7 @@ from domains.target.evidence_jobs import (
     aggregate_evidence_payload,
     evidence_job_id,
     evidence_key,
+    normalize_evidence_provider_result,
 )
 from domains.target.models import (
     AgentPolicyRecord,
@@ -453,6 +454,7 @@ class TargetAgentRepository(DatabaseConnection):
                     select(
                         table.c.job_id,
                         table.c.evidence_key,
+                        table.c.provider_key,
                         table.c.attempt_count,
                         table.c.max_attempts,
                     )
@@ -514,7 +516,11 @@ class TargetAgentRepository(DatabaseConnection):
                     .where(table.c.job_id == job_id)
                     .values(
                         status=next_status,
-                        result=result if next_status == EVIDENCE_JOB_STATUS_COMPLETED else None,
+                        result=(
+                            normalize_evidence_provider_result(str(active["provider_key"]), result)
+                            if next_status == EVIDENCE_JOB_STATUS_COMPLETED
+                            else None
+                        ),
                         error=error or None,
                         updated_at=func.now(),
                     )
