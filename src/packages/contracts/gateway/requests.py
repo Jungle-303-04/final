@@ -474,7 +474,7 @@ class AlertChannelUpsertRequest(StrictModel):
     channel_id: str = ""  # 빈 값이면 서버가 생성(신규)
     name: str = Field(min_length=1)
     kind: Literal["webhook"] = "webhook"
-    url: str = Field(min_length=1)
+    url: str = Field(min_length=1, max_length=2000)
     min_severity: Literal["info", "warning", "critical"] = "warning"
     enabled: bool = True
 
@@ -496,7 +496,7 @@ class RcaRuleValidateRequest(StrictModel):
 class MetricsValidateRequest(StrictModel):
     source: Literal["prometheus"] = "prometheus"
     query: str = Field(min_length=1, max_length=MAX_METRIC_QUERY_LENGTH)
-    base_url: str | None = Field(default=None, max_length=500)
+    base_url: str | None = Field(default=None, max_length=500, deprecated=True)
     range_seconds: int | None = Field(default=300, ge=MIN_METRIC_RANGE_SECONDS, le=3600)
     step_seconds: int | None = Field(default=30, ge=MIN_METRIC_STEP_SECONDS, le=300)
 

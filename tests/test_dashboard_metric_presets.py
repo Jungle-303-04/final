@@ -222,6 +222,30 @@ def test_metrics_validate_ignores_attacker_base_url_and_uses_server_env(monkeypa
     assert requested_urls[0].path == "/api/v1/query_range"
 
 
+def test_metrics_validate_requires_server_env_even_with_client_base_url(monkeypatch) -> None:
+    attempted = False
+
+    async def handler(_request: httpx.Request) -> httpx.Response:
+        nonlocal attempted
+        attempted = True
+        return httpx.Response(200)
+
+    monkeypatch.delenv(PROMETHEUS_VALIDATE_BASE_URL_ENV, raising=False)
+
+    result = asyncio.run(
+        validate_promql_query(
+            "up",
+            base_url="https://attacker.example/steal",
+            transport=httpx.MockTransport(handler),
+        )
+    )
+
+    assert result.valid is False
+    assert result.code == "prometheus_base_url_required"
+    assert result.detail == "Prometheus 검증 URL이 설정되지 않았습니다."
+    assert attempted is False
+
+
 def test_metrics_validate_does_not_reflect_prometheus_error_body(monkeypatch) -> None:
     reflected_secret = "upstream-secret-response-body"
 
