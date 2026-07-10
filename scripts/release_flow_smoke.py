@@ -648,6 +648,12 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
         help="write the smoke result as Markdown for PR comments or handoff notes",
     )
     parser.add_argument(
+        "--github-step-summary",
+        action="store_true",
+        default=os.getenv("RELEASE_FLOW_SMOKE_GITHUB_STEP_SUMMARY", "").strip().lower() in {"1", "true", "yes"},
+        help="append the smoke result Markdown to GITHUB_STEP_SUMMARY when running in GitHub Actions",
+    )
+    parser.add_argument(
         "--production-preflight",
         action="store_true",
         help=(
@@ -864,6 +870,38 @@ def write_markdown_report(
         return
     target = os.path.abspath(path)
     os.makedirs(os.path.dirname(target), exist_ok=True)
+    with open(target, "w", encoding="utf-8") as report:
+        report.write(build_markdown_report(ok=ok, api_base_url=api_base_url, results=results, error=error))
+        report.write("\n")
+
+
+def append_github_step_summary(
+    enabled: bool,
+    *,
+    ok: bool,
+    api_base_url: str,
+    results: list[SmokeResult],
+    error: str | None = None,
+) -> None:
+    if not enabled:
+        return
+    path = os.getenv("GITHUB_STEP_SUMMARY", "")
+    if not str(path or "").strip():
+        return
+    target = os.path.abspath(path)
+    os.makedirs(os.path.dirname(target), exist_ok=True)
+    with open(target, "a", encoding="utf-8") as summary:
+        summary.write(build_markdown_report(ok=ok, api_base_url=api_base_url, results=results, error=error))
+        summary.write("\n\n")
+
+
+def build_markdown_report(
+    *,
+    ok: bool,
+    api_base_url: str,
+    results: list[SmokeResult],
+    error: str | None = None,
+) -> str:
     lines = [
         "# Release Flow Smoke Report",
         "",
@@ -878,9 +916,7 @@ def write_markdown_report(
             lines.append(
                 f"| `{markdown_escape(item.name)}` | {'pass' if item.ok else 'fail'} | {markdown_escape(item.detail)} |"
             )
-    with open(target, "w", encoding="utf-8") as report:
-        report.write("\n".join(lines))
-        report.write("\n")
+    return "\n".join(lines)
 
 
 def markdown_escape(value: Any) -> str:
@@ -901,6 +937,13 @@ def main(argv: list[str]) -> int:
         write_junit_report(args.junit_path, [], error=str(payload["error"]))
         write_markdown_report(
             args.markdown_path,
+            ok=False,
+            api_base_url=api_base_url,
+            results=[],
+            error=str(payload["error"]),
+        )
+        append_github_step_summary(
+            args.github_step_summary,
             ok=False,
             api_base_url=api_base_url,
             results=[],
@@ -935,6 +978,13 @@ def main(argv: list[str]) -> int:
             results=[],
             error=str(exc),
         )
+        append_github_step_summary(
+            args.github_step_summary,
+            ok=False,
+            api_base_url=client.api_base_url,
+            results=[],
+            error=str(exc),
+        )
         print(json.dumps(payload, ensure_ascii=False, indent=2), file=sys.stderr)
         return 1
     ok = all(item.ok for item in results)
@@ -942,6 +992,7 @@ def main(argv: list[str]) -> int:
     write_json_report(args.report_path, payload)
     write_junit_report(args.junit_path, results)
     write_markdown_report(args.markdown_path, ok=ok, api_base_url=client.api_base_url, results=results)
+    append_github_step_summary(args.github_step_summary, ok=ok, api_base_url=client.api_base_url, results=results)
     print(json.dumps(payload, ensure_ascii=False, indent=2))
     return 0 if ok else 1
 

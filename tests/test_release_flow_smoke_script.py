@@ -253,6 +253,26 @@ def test_smoke_markdown_writer_persists_handoff_report(tmp_path: Path) -> None:
     assert "| `release-runs.policy-override-preflight` | fail | run\\|policy<br>review |" in body
 
 
+def test_smoke_github_step_summary_appends_markdown(tmp_path: Path, monkeypatch: Any) -> None:
+    smoke = load_smoke_module()
+    summary_path = tmp_path / "github-step-summary.md"
+    summary_path.write_text("## Existing summary\n\n", encoding="utf-8")
+    monkeypatch.setenv("GITHUB_STEP_SUMMARY", str(summary_path))
+
+    smoke.append_github_step_summary(
+        True,
+        ok=True,
+        api_base_url="https://example.com/api",
+        results=[smoke.SmokeResult("healthz", True, "ok")],
+    )
+
+    body = summary_path.read_text(encoding="utf-8")
+    assert body.startswith("## Existing summary")
+    assert "# Release Flow Smoke Report" in body
+    assert "- Result: passed" in body
+    assert "| `healthz` | pass | ok |" in body
+
+
 def test_smoke_main_writes_report_when_credentials_are_missing(tmp_path: Path, monkeypatch: Any) -> None:
     smoke = load_smoke_module()
     for name in ("API_BASE_URL", "BASE_URL", "AUTH_EMAIL", "AUTH_PASSWORD"):
@@ -260,6 +280,8 @@ def test_smoke_main_writes_report_when_credentials_are_missing(tmp_path: Path, m
     report_path = tmp_path / "missing-credentials.json"
     junit_path = tmp_path / "missing-credentials.xml"
     markdown_path = tmp_path / "missing-credentials.md"
+    step_summary_path = tmp_path / "github-step-summary.md"
+    monkeypatch.setenv("GITHUB_STEP_SUMMARY", str(step_summary_path))
 
     exit_code = smoke.main(
         [
@@ -269,6 +291,7 @@ def test_smoke_main_writes_report_when_credentials_are_missing(tmp_path: Path, m
             str(junit_path),
             "--markdown-path",
             str(markdown_path),
+            "--github-step-summary",
         ]
     )
 
@@ -280,6 +303,7 @@ def test_smoke_main_writes_report_when_credentials_are_missing(tmp_path: Path, m
     assert suite.attrib["failures"] == "1"
     assert "AUTH_EMAIL" in suite.find(".//failure").attrib["message"]
     assert "AUTH_EMAIL" in markdown_path.read_text(encoding="utf-8")
+    assert "AUTH_EMAIL" in step_summary_path.read_text(encoding="utf-8")
 
 
 def test_smoke_default_does_not_start_release_run() -> None:
