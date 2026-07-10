@@ -36,7 +36,7 @@ def test_bruno_collection_has_expected_root_and_profiles() -> None:
     assert "auto_login: false" in collection
     assert "auth_email: replace-with-auth-email" in collection
     assert "auth_password: replace-with-auth-password" in collection
-    assert "cluster_id: cluster-1" in collection
+    assert "\n  cluster_id: bruno-api-test\n" in collection
 
     assert "base_url: http://localhost:18080/" in local
     assert "auto_login: true" in local
@@ -48,11 +48,13 @@ def test_bruno_collection_has_expected_root_and_profiles() -> None:
     assert "auto_login: false" in aws
     assert "auth_email: replace-with-auth-email" in aws
     assert "auth_password: replace-with-auth-password" in aws
-    assert "cluster_id: cluster-1" in aws
+    assert "\n  cluster_id: bruno-api-test\n" in aws
 
     for env_text in (local, aws):
         assert "base_url:" in env_text
         assert "auto_login:" in env_text
+        assert "dev_security_bypass: true" in env_text
+        assert "dev_cluster_id:" in env_text
         assert "auth_email:" in env_text
         assert "agent_token:" in env_text
         assert "cluster_id:" in env_text
@@ -189,6 +191,30 @@ def test_bruno_collection_auto_login_is_request_scoped() -> None:
     assert '"/webhooks/alertmanager"' in collection
     assert '"/metrics"' in collection
     assert '"/auth/logout"' in collection
+
+
+def test_bruno_test_profile_removes_session_and_agent_tokens() -> None:
+    collection = (API_DIR / "collection.bru").read_text(encoding="utf-8")
+
+    assert 'readVar("dev_security_bypass", "false")' in collection
+    assert 'req.deleteHeader("authorization")' in collection
+    assert 'req.deleteHeader("x-session-token")' in collection
+    assert 'req.deleteHeader("x-agent-token")' in collection
+    assert 'req.setHeader("x-dev-cluster-id", devClusterId)' in collection
+    assert "securityBypass ||" in collection
+
+
+def test_bruno_cli_runner_uses_isolated_profile_and_cleans_up_last() -> None:
+    runner = (ROOT_DIR / "scripts" / "run-bruno-aws.sh").read_text(encoding="utf-8")
+
+    assert "environments/aws-test.bru" in runner
+    assert "aws-live.local.bru" not in runner
+    assert runner.index("02-target-admin/01-register-target-dry-run.bru") < runner.index(
+        "03-agent-runtime"
+    )
+    assert runner.index("15-wizard-validation") < runner.index(
+        "11-clusters/12-unregister-cluster.bru"
+    )
 
 
 def test_bruno_readme_explains_each_work_type() -> None:
