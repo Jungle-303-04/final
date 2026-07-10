@@ -303,6 +303,28 @@ GitHub Actions에서 바로 실행하려면 `.github/workflows/release-flow-smok
 
 workflow는 `scripts/release_flow_smoke.py --production-preflight --ci --ci-artifacts-dir artifacts/release-flow`를 실행한다. smoke step은 먼저 GitHub step summary, output, annotation, JSON/JUnit/Markdown artifact를 남기고, artifact upload가 끝난 뒤 `release_smoke_ok` output이 `true`가 아니면 job을 실패시킨다.
 
+다른 배포 workflow에서 release-flow smoke를 gate로 재사용하려면 같은 파일을 `workflow_call`로 호출한다. 호출자는 `release_flow_api_base_url`, `release_flow_auth_email`, `release_flow_auth_password` secret을 넘기거나 `secrets: inherit`로 repository secret을 그대로 넘길 수 있다.
+
+```yaml
+jobs:
+  release_flow_smoke:
+    uses: ./.github/workflows/release-flow-smoke.yml
+    with:
+      production_preflight_plan_id: ${{ inputs.release_plan_id }}
+      production_preflight_run_limit: "20"
+    secrets:
+      release_flow_api_base_url: ${{ secrets.RELEASE_FLOW_API_BASE_URL }}
+      release_flow_auth_email: ${{ secrets.RELEASE_FLOW_AUTH_EMAIL }}
+      release_flow_auth_password: ${{ secrets.RELEASE_FLOW_AUTH_PASSWORD }}
+
+  deploy-production:
+    needs: release_flow_smoke
+    if: needs.release_flow_smoke.outputs.release_smoke_ok == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "deploy after release-flow smoke"
+```
+
 알림 채널이 실제로 validation alert를 받을 수 있는지 확인하려면 `--alert-preflight`를 붙인다. 이 모드는 enabled alert channel 중 요청 severity를 받을 수 있는 채널을 골라 `/alert-channels/test`를 호출하므로, 실제 Slack/webhook/온콜 테스트 메시지가 발송될 수 있다.
 
 ```bash

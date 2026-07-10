@@ -16,14 +16,14 @@ def test_release_flow_smoke_workflow_is_manual_and_read_only() -> None:
     workflow = load_workflow()
 
     assert workflow["name"] == "Release Flow Smoke"
-    assert set(workflow["on"]) == {"workflow_dispatch"}
+    assert set(workflow["on"]) == {"workflow_dispatch", "workflow_call"}
     assert workflow["permissions"] == {"contents": "read"}
 
 
-def test_release_flow_smoke_workflow_declares_operator_inputs_and_secrets() -> None:
+def test_release_flow_smoke_workflow_declares_operator_inputs_and_secrets_for_dispatch() -> None:
     workflow = load_workflow()
     inputs = workflow["on"]["workflow_dispatch"]["inputs"]
-    job = workflow["jobs"]["release-flow-smoke"]
+    job = workflow["jobs"]["release_flow_smoke"]
 
     assert set(inputs) == {
         "api_base_url",
@@ -31,14 +31,46 @@ def test_release_flow_smoke_workflow_declares_operator_inputs_and_secrets() -> N
         "production_preflight_run_limit",
     }
     assert inputs["production_preflight_run_limit"]["default"] == "20"
-    assert job["env"]["API_BASE_URL"] == "${{ inputs.api_base_url || secrets.RELEASE_FLOW_API_BASE_URL }}"
-    assert job["env"]["AUTH_EMAIL"] == "${{ secrets.RELEASE_FLOW_AUTH_EMAIL }}"
-    assert job["env"]["AUTH_PASSWORD"] == "${{ secrets.RELEASE_FLOW_AUTH_PASSWORD }}"
+    assert (
+        job["env"]["API_BASE_URL"]
+        == "${{ inputs.api_base_url || secrets.release_flow_api_base_url || secrets.RELEASE_FLOW_API_BASE_URL }}"
+    )
+    assert job["env"]["AUTH_EMAIL"] == "${{ secrets.release_flow_auth_email || secrets.RELEASE_FLOW_AUTH_EMAIL }}"
+    assert (
+        job["env"]["AUTH_PASSWORD"]
+        == "${{ secrets.release_flow_auth_password || secrets.RELEASE_FLOW_AUTH_PASSWORD }}"
+    )
+
+
+def test_release_flow_smoke_workflow_can_be_called_by_deploy_workflows() -> None:
+    workflow = load_workflow()
+    workflow_call = workflow["on"]["workflow_call"]
+
+    assert set(workflow_call["inputs"]) == {
+        "api_base_url",
+        "production_preflight_plan_id",
+        "production_preflight_run_limit",
+    }
+    assert set(workflow_call["secrets"]) == {
+        "release_flow_api_base_url",
+        "release_flow_auth_email",
+        "release_flow_auth_password",
+    }
+    assert workflow_call["inputs"]["production_preflight_run_limit"]["default"] == "20"
+    assert workflow_call["outputs"]["release_smoke_ok"]["value"] == (
+        "${{ jobs.release_flow_smoke.outputs.release_smoke_ok }}"
+    )
+    assert workflow_call["outputs"]["release_smoke_failed_checks"]["value"] == (
+        "${{ jobs.release_flow_smoke.outputs.release_smoke_failed_checks }}"
+    )
+    assert workflow_call["outputs"]["release_smoke_error"]["value"] == (
+        "${{ jobs.release_flow_smoke.outputs.release_smoke_error }}"
+    )
 
 
 def test_release_flow_smoke_workflow_uploads_artifacts_before_failing_gate() -> None:
     workflow = load_workflow()
-    steps = workflow["jobs"]["release-flow-smoke"]["steps"]
+    steps = workflow["jobs"]["release_flow_smoke"]["steps"]
     smoke_step = next(step for step in steps if step.get("id") == "release_flow_smoke")
     upload_step = next(step for step in steps if step["name"] == "Upload release-flow smoke artifacts")
     fail_step = next(step for step in steps if step["name"] == "Fail when release-flow smoke failed")
