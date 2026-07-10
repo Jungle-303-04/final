@@ -462,6 +462,17 @@ def test_static_management_agent_manifest_is_read_only() -> None:
     metrics_rule = next(
         rule for rule in read_role["rules"] if "metrics.k8s.io" in rule.get("apiGroups", [])
     )
+    apps_rule = next(rule for rule in read_role["rules"] if "apps" in rule.get("apiGroups", []))
+    discovery_rule = next(
+        rule for rule in read_role["rules"] if "discovery.k8s.io" in rule.get("apiGroups", [])
+    )
+    assert set(apps_rule["resources"]) == {
+        "deployments",
+        "replicasets",
+        "daemonsets",
+        "statefulsets",
+    }
+    assert discovery_rule["resources"] == ["endpointslices"]
     assert metrics_rule["resources"] == ["pods", "nodes"]
     assert metrics_rule["verbs"] == ["get", "list"]
 
@@ -588,6 +599,23 @@ def test_management_registration_defaults_to_kubernetes_evidence_only() -> None:
     assert agent_state["spec"]["prometheus_base_url"] == ""
     assert agent_state["spec"]["loki_base_url"] == ""
     assert agent_state["spec"]["tempo_base_url"] == ""
+    assert db.policy is not None
+    providers = db.policy["evidence"]["providers"]
+    assert providers["kubernetes"]["enabled"] is True
+    assert providers["kubernetes"]["queries"] == [
+        {
+            "name": "management_namespace_snapshot",
+            "description": (
+                "Kubernetes pods, events, nodes, workloads, services, and endpoint slices "
+                "in the management namespace."
+            ),
+            "query": "management",
+        }
+    ]
+    assert all(
+        provider_key == "kubernetes" or provider["enabled"] is False
+        for provider_key, provider in providers.items()
+    )
     assert agent_state["spec"]["otel_traces_endpoint"] == ""
     policy = AgentPolicy.model_validate(db.policy)
     enabled = {
