@@ -103,10 +103,17 @@ def provider_failure_body(request: SafePrRequestedBody, exc: Exception) -> SafeP
         SafePrPolicyResult.reject(
             reason_code=REASON_PROVIDER_ERROR,
             message=MESSAGE_PROVIDER_ERROR,
-            details={"exception_type": type(exc).__name__},
+            details=provider_error_details(exc),
         ),
         stage=STAGE_SCM,
     )
+
+
+def provider_error_details(exc: Exception) -> dict[str, object]:
+    details: dict[str, object] = {"exception_type": type(exc).__name__}
+    if isinstance(exc, ValueError | RuntimeError):
+        details["error"] = str(exc)
+    return details
 
 
 def created_repo_ref(request: SafePrRequestedBody) -> str:

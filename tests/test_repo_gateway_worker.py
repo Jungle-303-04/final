@@ -255,6 +255,7 @@ def test_repo_gateway_rejects_unsafe_request_base_branch_before_github_write(mon
     assert subjects_of(outs) == ["safe_pr.failed"]
     assert outs[0].reason_code == "provider_error"
     assert outs[0].details["exception_type"] == "ValueError"
+    assert "safe pr branch" in outs[0].details["error"]
     assert calls == []
     assert not db.called("save_pull_request")
 
@@ -274,6 +275,7 @@ def test_repo_gateway_rejects_unsafe_generated_head_branch_before_github_write(m
     assert subjects_of(outs) == ["safe_pr.failed"]
     assert outs[0].reason_code == "provider_error"
     assert outs[0].details["exception_type"] == "ValueError"
+    assert "safe pr branch" in outs[0].details["error"]
     assert calls == []
     assert not db.called("save_pull_request")
 
@@ -437,6 +439,7 @@ def test_repo_gateway_total_deadline_fails_through_safe_pr_failed(monkeypatch) -
     assert subjects_of(outs) == ["safe_pr.failed"]
     assert outs[0].reason_code == "provider_error"
     assert outs[0].details["exception_type"] == "TimeoutError"
+    assert "error" not in outs[0].details
     assert not db.called("save_pull_request")
 
 
@@ -449,6 +452,7 @@ def test_repo_gateway_emits_failed_event_on_github_error(monkeypatch) -> None:
 
     assert subjects_of(outs) == ["safe_pr.failed"]
     assert outs[0].reason_code == "provider_error"
+    assert "error" not in outs[0].details
     assert not db.called("save_pull_request")
 
 
