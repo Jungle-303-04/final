@@ -127,7 +127,6 @@ DEFAULT_AGENT_ONLINE_WINDOW_SECONDS = 120
 AGENT_STATUS_NEVER_CONNECTED = "never_connected"
 AGENT_STATUS_ONLINE = "online"
 AGENT_STATUS_STALE = "stale"
-AGENT_HEARTBEAT_CAPABILITIES = ["evidence", "commands", "inventory"]
 TARGET_AGENT_IMAGE_ENV = "TARGET_AGENT_IMAGE"
 GITOPS_WEBHOOK_IMAGE_ENV = "GITOPS_WEBHOOK_IMAGE"
 PUBLIC_MANAGEMENT_BASE_URL_ENV = "PUBLIC_MANAGEMENT_BASE_URL"
@@ -772,7 +771,7 @@ def touch_agent_seen(
         workspace_id=identity.workspace_id,
         cluster_id=identity.cluster_id,
         agent_id=agent_id,
-        capabilities=AGENT_HEARTBEAT_CAPABILITIES,
+        capabilities=None,
         status=status,
         details={"heartbeat_source": "agent_api"},
     )
