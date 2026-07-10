@@ -1,8 +1,7 @@
 ---
 title: Universal Kubernetes Topology Engine Implementation Contract
-status: planned-design-contract
+status: normative-design-contract
 owner: frontend-platform
-local_source_commit: 7d77e0279e5f90cbd18d59ac9ec8e1cc3c18cec1
 last_verified: 2026-07-11
 ---
 
@@ -10,7 +9,15 @@ last_verified: 2026-07-11
 
 ## 0. 문서의 권한과 목적
 
-이 문서는 Kubernetes 시각화 제품을 구현하기 위한 설계 계약 초안이다. 제품 기획을 설명하는 소개 문서가 아니며, 현재 repo의 실제 코드와 테스트가 source of truth다. 기존 코드가 이 문서와 충돌하면 이 문서는 구현 gap과 후속 작업 기준으로 읽고, package, route, schema, renderer, plugin이 아직 코드에 없으면 구현 완료를 뜻하지 않는다. 계약 변경은 ADR, schema major/minor 판정, migration, test traceability 갱신 없이 허용하지 않는다. 실제 배포 동작은 현재 코드와 통과한 executable test로만 주장한다.
+이 문서는 Kubernetes 시각화 제품의 frontend 의미·상태·상호작용·데이터 소비를 고정하는 normative design contract다. 제품 기획 소개가 아니며 backend DTO를 복제하는 문서도 아니다. 현재 코드에 package, route, schema, renderer, plugin이 없으면 구현 gap이지만, 그 부재가 이 사용자 의미를 축소하지 않는다. 계약 변경은 frontend ADR, schema major/minor 판정, migration, test traceability 갱신 없이 허용하지 않는다. 실제 배포 완료는 승인된 OpenAPI, generated runtime schema, 구현 코드, executable test가 모두 통과한 경우에만 주장한다.
+
+동일 권한의 부속 계약:
+
+- `product-data-contract.md`: Applications/GitOps/Tree/Timeline/Metrics/Topology/operation의 제품 consumer contract.
+- `topology-message-action-schema.md`: message/reducer/effect/snapshot/delta/action wire protocol.
+- `topology-visual-motion-tokens.md`: light/dark/high-contrast, geometry, gesture, motion, renderer handoff의 수치 계약.
+
+상충 시 제품 사용자 의미는 `product-data-contract.md`, protocol type/ordering은 message adjunct, visual/motion 수치는 visual adjunct가 우선한다.
 
 이 문서가 고정하는 결과는 다음과 같다.
 
@@ -308,7 +315,7 @@ UI가 오른쪽 rail에서 `Pod ← ReplicaSet ← Deployment`로 보이게 하�
 type JsonPrimitive = string | number | boolean | null
 type JsonValue = JsonPrimitive | JsonValue[] | { readonly [key: string]: JsonValue }
 
-type CursorPage<T> = {
+type TopologyCursorPage<T> = {
   items: readonly T[]
   nextCursor: string | null
   hasMore: boolean
@@ -365,6 +372,7 @@ type CompletenessSummary = {
 }
 
 type StructuredWarning = {
+  warningKey: string
   code: string
   severity: "info" | "warning" | "error"
   message: string
@@ -382,6 +390,7 @@ type StructuredError = {
 }
 
 type RestrictedBoundaryMarker = {
+  boundaryKey: string
   sourceEntityKey: string
   plane: RelationPlane
   direction: "incoming" | "outgoing" | "unknown"
@@ -396,7 +405,7 @@ type Entity = {
   membershipRole: "primary" | "ancestor-context" | "relation-context" | "filtered-remainder" | "structural-shelf"
   lifecycle: "live" | "deleting" | "tombstone-exit" | "historical"
   parentEntityKey?: string
-  ownHealth?: HealthVerdict
+  ownHealth?: TopologyHealthVerdict
   aggregateHealth?: AggregateHealth
   attributes: Readonly<Record<string, JsonValue>>
   observedAt: string
@@ -475,7 +484,7 @@ references/ui-layer-lab/src/product/features/topology
 
 이 mapping은 `AGENTS.md`의 `app → pages → features → shared`, `feature → product/api`, `product/api → shared` 방향을 유지한다. `@product/topology-*` physical package 추출은 별도 ADR에서 workspace tool, public API, versioning, license, build를 승인한 뒤에만 수행한다. Headless engine은 product import가 없도록 작성해 추출 가능성을 유지한다.
 
-기존 backend route/Pydantic contract는 현재 구현 사실의 authority다. 이 문서의 신규 topology v2 route는 아직 존재한다고 주장하지 않는다. 구현 순서는 backend schema 추가 → generated frontend schema → live adapter이며, 그때 `AGENTS.md`의 source-of-truth 절을 generated cross-language contract까지 포함하도록 같은 변경에서 갱신한다.
+기존 backend route/Pydantic contract는 현재 구현 gap을 확인하는 근거이지 제품 consumer 의미의 authority가 아니다. 이 문서의 신규 topology contract가 이미 구현됐다고 주장하지 않는다. 구현 순서는 frontend consumer contract 확정 → backend ADR/OpenAPI → frontend acceptance → generated schema → live adapter이며, `AGENTS.md`의 source-of-truth 절도 이 frontend-led gate와 generated cross-language contract를 반영해야 한다.
 
 ### 5.1 Dependency rules
 
@@ -691,8 +700,8 @@ type ProjectionFrame = {
   schemaVersion: string
   frameId: string
   dataOrigin: DataOrigin
-  hashes: QueryHashes
-  cursor: SnapshotCursor
+  hashes: Pick<QueryHashes, "dataQueryHash" | "projectionHash">
+  streamStart: StreamStart
   clusterCuts: readonly ClusterCut[]
   emittedAt: string
   effectiveWindow: TimeWindow
@@ -707,16 +716,9 @@ type ProjectionFrame = {
   warnings: readonly StructuredWarning[]
 }
 
-type SnapshotCursor = {
-  streamId: string
-  streamEpoch: string
-  sequence: number
-  resumeToken: string
-}
-
 type StreamSubscription = {
   queryId: string
-  resumeCursor: SnapshotCursor
+  resumeCursor: ResumeCursor
   expectedDataQueryHash: string
   expectedProjectionHash: string
 }
@@ -1108,7 +1110,7 @@ type MetricDescriptor = {
   decompositionPolicyIds: readonly string[]
   aggregationUniverseId: string
   compatibleCompositeGroup: string
-  defaultCompositeCoefficient?: string
+  defaultCompositeCoefficient?: DecimalString
   sources: readonly string[]
   temporalModes: readonly ("instant" | "range")[]
   maxAgePolicyId: string
@@ -1116,6 +1118,7 @@ type MetricDescriptor = {
 }
 
 type MetricValue = {
+  seriesKey: string
   metricId: string
   entityKey: string
   valueDecimal: DecimalString | null
@@ -1544,7 +1547,7 @@ type TileDensity = "marker" | "name" | "name-value" | "summary"
 Canonical level은 `healthy | neutral | degraded | unhealthy | unknown`을 기본 vocabulary로 쓴다. plugin은 reason/message를 반환하고 level ordering을 바꾸지 않는다.
 
 ```ts
-type HealthVerdict = {
+type TopologyHealthVerdict = {
   level: "healthy" | "neutral" | "degraded" | "unhealthy" | "unknown"
   reason: string
   message?: string
@@ -1557,8 +1560,8 @@ type HealthVerdict = {
 }
 
 type AggregateHealth = {
-  effectiveLevel: HealthVerdict["level"]
-  counts: Record<HealthVerdict["level"], number>
+  effectiveLevel: TopologyHealthVerdict["level"]
+  counts: Record<TopologyHealthVerdict["level"], number>
   observedChildCount: number
   expectedAuthorizedChildCount: number
   policyId: string
@@ -1771,23 +1774,10 @@ Pod
 ### 15.1 단일 envelope
 
 ```ts
-type EngineSource = "ui" | "url" | "snapshot" | "stream" | "worker" | "effect" | "system"
-
-type EngineMessage<P extends EnginePayload = EnginePayload> = {
-  schemaVersion: "topology-engine-message/v1"
-  eventId: string
-  traceId: string
-  source: EngineSource
-  emittedAt: string
-  streamEpoch?: string
-  sequence?: number
-  hashes?: Partial<QueryHashes>
-  baseRevision?: number
-  payload: P
-}
+type EngineMessage = TopologyMessageV1.EngineMessage
 ```
 
-`EnginePayload`는 discriminated union이며 UI intent, URL hydration, snapshot/delta, connection, layout, theme/motion, focus/navigation result를 모두 포함한다. outer envelope와 dispatch 함수는 하나다. payload 종류가 여러 개인 것은 이벤트 경로가 여러 개라는 뜻이 아니다.
+`TopologyMessageV1`은 `topology-message-action-schema.md`에서 생성되는 namespace다. source별 context가 effect correlation과 stream cursor를 required field로 닫는다. UI intent, URL hydration, snapshot/delta, connection, layout, theme/motion, focus/navigation result는 discriminated union이지만 outer envelope와 dispatch 함수는 하나다.
 
 ### 15.2 Required payload families
 
@@ -1807,7 +1797,12 @@ lens.progressChanged
 lens.committed
 entity.focused
 entity.activated
+selection.changed
 viewport.changed
+action.invoked
+action.confirmed
+action.dismissed
+operation.cancelRequested
 snapshot.requested
 snapshot.received
 stream.connected
@@ -1815,18 +1810,32 @@ stream.disconnected
 stream.resyncRequired
 entity.upserted
 entity.deleted
+entity.resolutionCommitted
 relation.upserted
 relation.deleted
+restrictedBoundary.upserted
+restrictedBoundary.deleted
 metric.batchReceived
 flow.batchReceived
+size.batchReceived
+rollup.batchReceived
+source.watermarkReplaced
+frame.completenessReplaced
+warning.upserted
+warning.deleted
 layout.requested
 layout.resolved
 layout.rejectedAsStale
 layout.failed
+command.receiptReceived
+operation.eventReceived
+operation.snapshotReceived
 theme.changed
 motion.changed
 effect.failed
 ```
+
+각 payload의 exact field/refinement와 message별 commit/failure rule은 message adjunct §2–10을 따른다.
 
 ### 15.3 Reducer rules
 
@@ -1837,7 +1846,7 @@ effect.failed
 - LRU size/TTL은 `EventRetentionPolicy`의 중앙 수치이며 eviction은 correctness에 필요한 stream cursor를 제거하지 않는다.
 - epoch/sequence continuity 규칙은 `source="stream"` message에만 적용한다. UI/URL/worker/effect message에는 query/layout revision과 effect correlation을 적용한다.
 - streamEpoch가 현재와 다르면 이전 delta를 적용하지 않는다.
-- stream sequence가 current+1이 아니면 gap state와 snapshot effect를 생성한다.
+- stream sequence가 current 이하이면 duplicate/old replay로 no-op, current+1이면 atomic apply, current+1보다 크면 gap/resync다. 같은 stream tuple의 payload digest가 다르면 protocol corruption이다.
 - resourceVersion은 opaque token이므로 대소 비교하지 않는다. exact duplicate는 eventId/stream sequence/RV equality로 no-op하고 ordering은 query stream sequence와 epoch으로 판단한다.
 - generation은 desired spec generation 판정에만 사용하고 event ordering에 사용하지 않는다.
 - metric/flow result는 `dataQueryHash`, projection entity/result는 `projectionHash`, layout result는 `presentationHash`가 current와 다르면 stale result로 폐기한다.
@@ -1850,48 +1859,10 @@ effect.failed
 ### 15.4 Effect runner
 
 ```ts
-type RetryPolicy =
-  | { kind: "none" }
-  | { kind: "idempotent-read"; maxAttempts: number; backoffPolicyId: string }
-
-type EffectEnvelope<P extends EffectPayload = EffectPayload> = {
-  effectId: string
-  causationEventId: string
-  abortKey: string
-  createdAt: string
-  hashes: Partial<QueryHashes>
-  retryPolicy: RetryPolicy
-  payload: P
-}
-
-type EffectPayload =
-  | { type: "catalog.fetch" }
-  | { type: "query.plan"; query: TopologyQuery }
-  | { type: "snapshot.fetch"; planId: string }
-  | { type: "stream.subscribe"; request: StreamSubscription }
-  | { type: "layout.compute"; request: LayoutRequest }
-  | { type: "url.replace"; serialized: string }
-  | { type: "navigation.internal"; route: RouteRef }
-  | { type: "navigation.external"; verifiedUrl: string }
-  | { type: "command.execute"; command: CommandRequest }
-  | { type: "telemetry.record"; record: EngineTelemetry }
-
-type CommandRequest = {
-  commandId: string
-  targetEntityKeys: readonly string[]
-  parameters: Readonly<Record<string, JsonValue>>
-  idempotencyKey: string
-  confirmationToken: string
-  expectedStateToken?: string
-}
-
-type CommandReceipt = {
-  commandId: string
-  idempotencyKey: string
-  origin: DataOrigin
-  status: "accepted" | "running" | "succeeded" | "failed" | "unknown"
-  auditRef: string
-}
+type EffectEnvelope = TopologyMessageV1.EffectEnvelope
+type EffectDirective = TopologyMessageV1.EffectDirective
+type CommandRequest = TopologyMessageV1.CommandRequest
+type CommandReceipt = TopologyMessageV1.CommandReceipt
 ```
 
 Effect 결과와 실패는 다시 EngineMessage로 dispatch한다. component callback에 직접 promise/fetch/navigation 로직을 넣지 않는다.
@@ -1900,8 +1871,8 @@ Effect 결과와 실패는 다시 EngineMessage로 dispatch한다. component cal
 - cancelled effect 결과와 current hash가 다른 결과는 state에 적용하지 않고 diagnostic만 남긴다.
 - effect result message는 effectId와 causationEventId를 포함한다.
 - automatic retry는 idempotent read에만 허용한다.
-- command effect는 자동 retry하지 않는다. 사용자가 재시도해도 같은 logical command는 같은 idempotencyKey를 사용하고 server receipt를 조회한다.
-- confirmationToken은 action catalog/authorization에서 발급되고 target, parameters hash, expiry에 bind한다.
+- command effect는 자동 retry하지 않는다. 같은 logical invocation은 같은 idempotencyKey를 사용하고, 응답 유실 가능성이 있으면 operation/receipt status를 조회한다.
+- confirmation은 `not-required | confirmed` union이다. confirmed token은 action catalog/authorization에서 발급되고 target, parameters hash, capability revision, expiry에 bind한다.
 - reducer idempotence는 외부 부작용 exactly-once를 보장하지 않는다. command gateway가 idempotency ledger와 audit receipt를 보장해야 한다.
 
 ## 16. Snapshot과 단일 stream
@@ -1923,27 +1894,14 @@ GET  /api/v2/topology/entities/{entityKey}
 ### 16.2 Stream envelope
 
 ```ts
-type StreamEnvelope = {
-  schemaVersion: string
-  eventId: string
-  workspaceId: string
-  dataOrigin: DataOrigin
-  origin:
-    | { kind: "query" }
-    | { kind: "cluster"; clusterUid: string; inventoryEpoch: string }
-  streamId: string
-  streamEpoch: string
-  sequence: number
-  emittedAt: string
-  observedAt: string
-  dataQueryHash: string
-  projectionHash: string
-  payload: StreamPayload
-}
+type SnapshotEnvelope = TopologyMessageV1.SnapshotEnvelope
+type StreamEnvelope = TopologyMessageV1.StreamEnvelope
+type ResumeCursor = TopologyMessageV1.ResumeCursor
+type StreamStart = TopologyMessageV1.StreamStart
 ```
 
 - initial versioned snapshot 뒤 delta를 적용한다.
-- reconnect는 server-signed resumeToken으로 `(streamId, streamEpoch, sequence, query hashes)`를 resume한다. sequence 하나만 보내지 않는다.
+- reconnect는 각 committed envelope의 server-signed resumeToken으로 `(streamId, streamEpoch, sequence, query hashes, entitlement epoch)`를 resume한다. sequence 하나만 보내거나 client가 token을 조립하지 않는다.
 - server가 resume할 수 없으면 explicit resync-required를 보낸다.
 - periodic anti-entropy snapshot으로 drift를 복구한다.
 - structural add/delete는 조용히 drop하지 않는다.
@@ -1962,15 +1920,15 @@ Stream handshake의 첫 envelope는 streamId/epoch/current sequence/dataQueryHas
 
 Snapshot과 stream 사이에 변화가 사라지는 구간을 허용하지 않는다.
 
-1. query gateway는 query session과 retained event log를 만든다.
-2. snapshot은 논리 cut `S`에서 계산되고 `cursor = {streamId, streamEpoch, sequence:S}`를 포함한다.
-3. client는 snapshot의 signed resumeToken으로 subscribe한다. stream이 먼저 열리면 `S`보다 큰 event를 buffer한다.
+1. query gateway는 query session을 만들고 stream capability가 있으면 retained event log도 만든다.
+2. snapshot은 `streamStart`를 포함한다. stream mode는 논리 cut `S`의 signed ResumeCursor, poll mode는 pollAfterMs, static mode는 reason이다.
+3. stream mode에서만 client가 signed resumeToken으로 subscribe한다. stream이 먼저 열리면 `S`보다 큰 event를 buffer한다. poll/static에서 stream을 열지 않는다.
 4. current data/projection hash와 일치하는 snapshot을 reducer에 설치한다.
-5. buffer의 `S+1`부터 연속 sequence만 순서대로 replay한다.
-6. gap, epoch mismatch, retention expiry가 있으면 snapshot을 적용한 채 임의 delta를 이어 붙이지 않고 resync한다.
-7. anti-entropy snapshot `S2`도 같은 방식으로 `>S2` event를 buffer한 뒤 UID diff/reconcile하고 replay한다.
+5. stream mode는 buffer의 `S+1`부터 연속 sequence만 replay한다. poll mode는 다음 snapshot을 graph revision으로 원자 교체한다.
+6. stream gap, epoch mismatch, retention expiry가 있으면 snapshot을 적용한 채 임의 delta를 이어 붙이지 않고 resync한다.
+7. stream anti-entropy snapshot `S2`도 같은 방식으로 `>S2` event를 buffer한 뒤 UID diff/reconcile하고 replay한다.
 8. multi-cluster frame은 `clusterCuts`로 각 cluster cut과 source skew를 공개한다. 전 cluster가 원자적으로 같은 Kubernetes 시각이었다고 주장하지 않는다.
-9. server가 cut과 event retention을 보장할 수 없는 transport에서는 live mode capability를 제공하지 않는다.
+9. server가 cut과 event retention을 보장할 수 없으면 topology.stream capability를 false로 하고 poll/static mode를 명시한다. poll을 realtime stream처럼 표시하지 않는다.
 
 ### 16.4 Frame batching
 
@@ -2061,7 +2019,7 @@ Treemap, relation rail, flow scene, Motion은 이 계약의 revision/object-cons
 
 ### 18.3 Motion token
 
-duration, easing, stagger, gesture resistance, snap threshold, particle density, maximum simultaneous animations는 theme motion policy에서 온다. component literal을 금지한다.
+duration, easing, stagger, gesture resistance, snap threshold, particle density, maximum simultaneous animations는 `topology-visual-motion-tokens.md`의 `TopologyVisualMotionPolicy/v1`에서 온다. component literal을 금지한다. fold와 scope 전환은 해당 문서의 `tile settle → line unfold → particle` 순서와 interruption rule을 따른다.
 
 ### 18.4 Reduced motion
 
@@ -2080,6 +2038,8 @@ duration, easing, stagger, gesture resistance, snap threshold, particle density,
 - WebGL: 매우 높은 particle/ribbon density에서 capability가 있을 때.
 
 renderer choice는 count 하나가 아니라 projected pixel area, visible edge density, rolling frame time, DPR, device capability, motion preference로 결정한다.
+
+DOM/Canvas/SVG/WebGL의 진입·복귀 threshold, hysteresis, particle budget, accessibility mirror bound는 visual/motion adjunct §13의 중앙 정책을 따른다.
 
 - Motion `layoutId`는 DOM tile adapter에만 사용한다. core object constancy는 renderer-neutral SceneEntity ID와 from/to geometry buffer가 담당한다.
 - Canvas/WebGL은 같은 interpolation clock과 geometry revision으로 직접 보간한다.
@@ -2147,6 +2107,8 @@ Release gate는 다음 telemetry를 함께 기록한다.
 ## 20. Theme, visual system, responsive behavior
 
 ### 20.1 Semantic tokens
+
+실제 light/dark/high-contrast 값, pattern descriptor, contrast 목표, dimension, z-order는 `topology-visual-motion-tokens.md`가 authoritative하다. 아래 type은 theme adapter가 제공해야 할 의미 key의 축약 목록이며 색상 literal을 정의하지 않는다.
 
 ```ts
 type TopologyThemeTokens = {
@@ -2386,11 +2348,11 @@ Restricted reference 규칙:
 - CSP와 Trusted Types를 production gate로 사용하고 external navigation은 `noopener,noreferrer`와 verified scheme/host policy를 적용한다.
 - telemetry, error, support bundle은 secret/label/annotation/redacted field policy를 다시 적용하고 raw payload를 기록하지 않는다.
 
-## 27. 현재 프로젝트의 mandatory backend gap
+## 25. 현재 프로젝트의 mandatory backend gap
 
 이 절은 기존 endpoint의 소규모 확장이 아니다. Inventory Projection, Relation Projection, Metric/Cost facts, Query Session, retained delta log, resumable stream을 추가하는 topology backend v2 프로그램이다. frontend 구현 착수 조건과 backend workstream을 별도 milestone/owner로 추적한다.
 
-### 27.1 Collector gap
+### 25.1 Collector gap
 
 현재 `kubernetes_providers.py`는 configured namespace의 Pods, Events, Nodes, Pod/Node metrics, Deployment, StatefulSet, DaemonSet, ReplicaSet, Service, EndpointSlice만 고정 조회한다. 다음을 변경해야 한다.
 
@@ -2405,7 +2367,7 @@ Restricted reference 규칙:
 
 현재 403/404를 `{items: []}`로 합치는 동작은 forbidden, not-installed, empty를 분리하도록 변경한다.
 
-### 27.2 Normalization gap
+### 25.2 Normalization gap
 
 - `safe_labels(limit=12)`를 selector truth source로 쓰지 않는다.
 - first owner kind/name만 보존하지 않고 모든 owner UID/controller ref를 보존한다.
@@ -2416,7 +2378,7 @@ Restricted reference 규칙:
 - list limit 1000/no cursor를 server-side LOD/cursor query로 바꾼다.
 - relationship repository의 one-hop heuristic을 Relation Projection으로 교체한다.
 
-### 27.3 Realtime gap
+### 25.3 Realtime gap
 
 - workspace-scoped Query Session service를 새로 만든다.
 - query session은 canonical query/hash, entitlement epoch, snapshot cut, streamId/epoch, retained event log cursor, expiry를 durable 또는 replicated state로 관리한다.
@@ -2435,7 +2397,7 @@ Restricted reference 규칙:
 - agent/gateway restart와 reconnect resume를 테스트한다.
 - 현재 in-memory realtime hub를 그대로 확장해 이 요구를 만족한다고 간주하지 않는다.
 
-### 27.4 Metrics/traffic/cost gap
+### 25.4 Metrics/traffic/cost gap
 
 - effective request/limit metric 생성.
 - fixed `asOf/start/end/step` batch query.
@@ -2446,7 +2408,7 @@ Restricted reference 규칙:
 - allocated/shared/idle/asset/unallocated CostFact ledger와 currency/window/pricing/allocation/amortization policy.
 - Node actual usage와 Pod attributable usage residual.
 
-### 27.5 Current product frontend gap
+### 25.5 Current product frontend gap
 
 - active product surface는 `references/ui-layer-lab/src/product`다.
 - 삭제된 `frontend/`는 복구하거나 기반으로 삼지 않는다.
@@ -2455,9 +2417,9 @@ Restricted reference 규칙:
 - shadcn lab/vendor/generated component를 product에 import하지 않는다.
 - runtime JSON은 generated schema로 validate한다.
 
-## 28. API contract 상세
+## 26. API contract 상세
 
-### 28.1 Catalog response
+### 26.1 Catalog response
 
 ```ts
 type TopologyCatalogResponse = {
@@ -2474,7 +2436,7 @@ type TopologyCatalogResponse = {
 }
 ```
 
-### 28.2 Plan response
+### 26.2 Plan response
 
 ```ts
 type QueryPlanResponse = {
@@ -2495,7 +2457,7 @@ type QueryPlanResponse = {
 }
 ```
 
-### 28.3 Detail response
+### 26.3 Detail response
 
 Entity detail은 raw object dump 하나가 아니다.
 
@@ -2503,10 +2465,10 @@ Entity detail은 raw object dump 하나가 아니다.
 type EntityDetail = {
   entity: Entity
   summarySections: DetailSection[]
-  relationsByPlane: Partial<Record<RelationPlane, CursorPage<CanonicalRelation>>>
-  metricSeries: CursorPage<MetricSeriesRef>
-  events: CursorPage<KubernetesEventSummary>
-  provenance: CursorPage<EvidenceRef>
+  relationsByPlane: Partial<Record<RelationPlane, TopologyCursorPage<CanonicalRelation>>>
+  metricSeries: TopologyCursorPage<MetricSeriesRef>
+  events: TopologyCursorPage<KubernetesEventSummary>
+  provenance: TopologyCursorPage<EvidenceRef>
   actions: AvailableAction[]
   completeness: CompletenessSummary
 }
@@ -2530,9 +2492,9 @@ action availability는 permission/capability/status를 반영하고 disabled 이
 - nextCursor는 opaque하고 snapshotRevision에 bind한다. revision mismatch는 first-page refetch다.
 - route path의 entityKey는 opaque base64url-safe ID 또는 URL-safe encoding만 허용한다.
 
-## 29. Test architecture와 release gates
+## 27. Test architecture와 release gates
 
-### 29.1 Contract tests
+### 27.1 Contract tests
 
 - backend schema와 generated TypeScript의 compatibility.
 - unknown enum/GVK forward compatibility.
@@ -2540,7 +2502,7 @@ action availability는 permission/capability/status를 반영하고 disabled 이
 - URL codec canonical round trip.
 - old stream schema rejection/resync.
 
-### 29.2 Property tests
+### 27.2 Property tests
 
 - parent area equals descendant leaf sum within numeric tolerance.
 - physical metric은 unit/dimension이 보존된다.
@@ -2558,7 +2520,7 @@ action availability는 permission/capability/status를 반영하고 disabled 이
 - health-only update는 layout revision을 바꾸지 않는다.
 - snapshot cut S와 buffered `S+1...N` replay 결과는 동일 event log를 순차 적용한 결과와 같다.
 
-### 29.3 Generator/fuzz matrix
+### 27.3 Generator/fuzz matrix
 
 다음을 조합 생성한다.
 
@@ -2576,7 +2538,7 @@ action availability는 permission/capability/status를 반영하고 disabled 이
 - sequence duplicate/gap/reorder/epoch reset/reconnect.
 - layout result reorder, timeout, crash, superseded result.
 
-### 29.4 Visual regression
+### 27.4 Visual regression
 
 - Fleet, Cluster, Node, Pod scope.
 - placement/network/ownership/butterfly lens.
@@ -2588,7 +2550,7 @@ action availability는 permission/capability/status를 반영하고 disabled 이
 - long name, CJK, RTL, 200% zoom.
 - relation configured/effective/observed/dropped/stale states.
 
-### 29.5 Interaction/click-path audit
+### 27.5 Interaction/click-path audit
 
 모든 visible control과 clickable entity를 registry에서 enumerate하고 다음을 자동 검증한다.
 
@@ -2599,7 +2561,7 @@ action availability는 permission/capability/status를 반영하고 disabled 이
 - focus가 복원되는가.
 - action이 audit/confirmation contract를 통과하는가.
 
-### 29.6 Performance/soak
+### 27.6 Performance/soak
 
 reference profiles는 server-generated realistic topology로 고정하고 small/medium/large/extreme을 모두 둔다. 각 profile은 cluster/node/pod/relation/metric/flow rate, device/browser를 기록한다.
 
@@ -2612,7 +2574,7 @@ reference profiles는 server-generated realistic topology로 고정하고 small/
 - repeated scope drilldown/back.
 - theme/motion preference change.
 
-### 29.7 Security/tenancy
+### 27.7 Security/tenancy
 
 - two workspaces with same display cluster ID.
 - forbidden kind and cross-namespace peer redaction.
@@ -2621,7 +2583,7 @@ reference profiles는 server-generated realistic topology로 고정하고 small/
 - malicious query/regex/URL.
 - replayed/stale stream token.
 
-### 29.8 License/SBOM
+### 27.8 License/SBOM
 
 - copied file inventory와 source commit.
 - Apache modification notice.
@@ -2629,14 +2591,14 @@ reference profiles는 server-generated realistic topology로 고정하고 small/
 - brand/icon asset contamination scan.
 - generated SBOM과 third-party notices.
 
-## 30. 구현 순서: 완성 제품 vertical slices
+## 28. 구현 순서: 완성 제품 vertical slices
 
 이 순서는 MVP 범위를 줄이는 목록이 아니다. 최종 제품을 오류 없이 조립하기 위한 dependency order다. 각 단계는 다음 단계 전에 contract와 test를 완료한다.
 
 ### Phase 1 — Contracts and engine kernel
 
 - schemas, entity/relation/metric/catalog/message types.
-- generated TS/Python/Go models.
+- generated TypeScript/runtime-schema models와 backend 구현 언어 model. 현재 backend가 Python이면 Python model을 생성하며 존재하지 않는 언어 artifact를 요구하지 않는다.
 - pure reducer, effect descriptions, invariant checker.
 - Query AST, canonicalizer, URL codec, planner contract.
 - testkit generators and fake clock.
@@ -2701,7 +2663,7 @@ reference profiles는 server-generated realistic topology로 고정하고 small/
 - SBOM, notices, license audit.
 - telemetry, diagnostics, support bundle.
 
-## 31. Definition of Done
+## 29. Definition of Done
 
 다음 조건을 모두 만족해야 완료다.
 
@@ -2724,7 +2686,7 @@ reference profiles는 server-generated realistic topology로 고정하고 small/
 17. 모든 visible click path에 handler, permission, loading, error, focus test가 있다.
 18. 이 문서의 필수 경우의 수가 traceability matrix에서 test ID와 연결된다.
 
-## 32. 명시적으로 허용하지 않는 미정의 상태
+## 30. 명시적으로 허용하지 않는 미정의 상태
 
 - metric이 없을 때 무엇으로 area를 만들지 모름 → planner가 unsupported 또는 explicit count suggestion.
 - 관계 evidence가 없음 → unresolved/heuristic, 추정 확정 금지.

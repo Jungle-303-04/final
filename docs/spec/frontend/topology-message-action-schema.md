@@ -54,6 +54,11 @@ type ResumeCursor = {
   resumeTokenExpiresAt: Timestamp
 }
 
+type StreamStart =
+  | { mode: "stream"; cursor: ResumeCursor }
+  | { mode: "poll"; pollAfterMs: DurationMs }
+  | { mode: "static"; reason: StatusReason }
+
 type StreamMessageContext = {
   sessionId: OpaqueId
   workspaceId: OpaqueId
@@ -261,11 +266,11 @@ type SnapshotEnvelope = {
   frameId: OpaqueId
   dataOrigin: DataOrigin
   hashes: DataProjectionHashes
-  cursor: ResumeCursor
+  streamStart: StreamStart
   emittedAt: Timestamp
   frame: Omit<
     ProjectionFrame,
-    "schemaVersion" | "frameId" | "dataOrigin" | "hashes" | "cursor" | "emittedAt"
+    "schemaVersion" | "frameId" | "dataOrigin" | "hashes" | "streamStart" | "emittedAt"
   >
 }
 
@@ -312,7 +317,7 @@ type StreamPayload =
 
 각 ordered envelope은 그 sequence까지 resume 가능한 signed token을 포함한다. token을 매 envelope 갱신할 수 없는 transport는 별도 checkpoint payload와 최대 replay 거리/만료를 contract version에 명시해야 하며, client가 sequence만 조립해 token을 만들지 않는다.
 
-Handshake 규칙:
+Handshake 규칙은 `streamStart.mode="stream"`일 때만 적용한다. poll/static에서는 subscribe하지 않는다.
 
 1. client는 마지막 reducer-committed ResumeCursor를 보낸다.
 2. server의 `acceptedCursor.sequence`는 그 마지막 committed sequence와 같아야 한다.
@@ -354,11 +359,7 @@ type TopologyDelta =
     }
   | { type: "relation.upserted"; relation: CanonicalRelation }
   | { type: "relation.deleted"; relationKey: string; deletedAt: Timestamp }
-  | {
-      type: "restrictedBoundary.upserted"
-      boundaryKey: string
-      marker: RestrictedBoundaryMarker
-    }
+  | { type: "restrictedBoundary.upserted"; marker: RestrictedBoundaryMarker }
   | { type: "restrictedBoundary.deleted"; boundaryKey: string }
   | {
       type: "metric.batchReceived"
@@ -382,7 +383,7 @@ type TopologyDelta =
     }
   | { type: "source.watermarkReplaced"; watermark: SourceWatermark }
   | { type: "frame.completenessReplaced"; completeness: CompletenessSummary }
-  | { type: "warning.upserted"; warningKey: string; warning: StructuredWarning }
+  | { type: "warning.upserted"; warning: StructuredWarning }
   | { type: "warning.deleted"; warningKey: string }
 
 type TopologyDeltaBatch = {
@@ -537,7 +538,7 @@ type VisibleFrameState =
       kind: "installed"
       frameId: string
       hashes: DataProjectionHashes
-      cursor: ResumeCursor
+      streamStart: StreamStart
       visibility: "current-query" | "previous-while-planning" | "stale-while-disconnected"
       content: "nonempty" | "empty-authoritative"
     }
