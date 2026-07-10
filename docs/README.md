@@ -163,6 +163,7 @@ secret 이름과 주입 경계는 [Secrets](secrets.md)를 본다.
 - [aws-testing-runbook](aws-testing-runbook.md)
 - [cloudflare-waf-and-login](cloudflare-waf-and-login.md)
 - [continuation-execution-plan-2026-07-07](continuation-execution-plan-2026-07-07.md)
+- [current-service-state](current-service-state.md)
 - [events](events.md)
 - [external-console-cluster-interactions](external-console-cluster-interactions.md)
 - [external-console-instances](external-console-instances.md)
