@@ -1,6 +1,8 @@
 vars:pre-request {
   base_url: https://k8s.woonyong.org/api/
   auto_login: false
+  dev_security_bypass: false
+  dev_cluster_id: cluster-1
   auth_email: replace-with-auth-email
   auth_password: replace-with-auth-password
   signup_email: replace-with-signup-email
@@ -8,10 +10,10 @@ vars:pre-request {
   email_verification_token: replace-with-token-from-mail-event
   user_id: replace-with-user-id
   workspace_id: default
-  cluster_id: cluster-1
-  cluster_id_2: cluster-2
+  cluster_id: bruno-api-test
+  cluster_id_2: bruno-api-test
   agent_cluster_id: bruno-api-test
-  target_name: cluster-1
+  target_name: Bruno API Test Target
   agent_target_name: Bruno API Test Target
   management_base_url: https://k8s.woonyong.org/api/
   service_image: 183548421506.dkr.ecr.ap-northeast-2.amazonaws.com/kubernetes-ops-service:4cb1f247eebec806e1191e72c9763557b55b027d
@@ -91,12 +93,31 @@ script:pre-request {
     "/metrics"
   ];
   const sessionCookieName = "service_session";
+  const securityBypass = truthy(readVar("dev_security_bypass", "false"));
+  const agentRequest = tags.includes("agent") || Boolean(req.getHeader("x-agent-token"));
+  if (securityBypass) {
+    bru.cookies.delete(sessionCookieName);
+    req.deleteHeader("cookie");
+    req.deleteHeader("Cookie");
+    req.deleteHeader("authorization");
+    req.deleteHeader("Authorization");
+    req.deleteHeader("x-session-token");
+    if (agentRequest) {
+      const devClusterId = readVar("dev_cluster_id", readVar("agent_cluster_id"));
+      if (!devClusterId) {
+        throw new Error("dev_security_bypass requires dev_cluster_id");
+      }
+      req.deleteHeader("x-agent-token");
+      req.setHeader("x-dev-cluster-id", devClusterId);
+    }
+  }
   if (path === "/auth/login") {
     bru.cookies.delete(sessionCookieName);
     req.deleteHeader("cookie");
     req.deleteHeader("Cookie");
   }
   const shouldSkipAutoLogin =
+    securityBypass ||
     !truthy(readVar("auto_login", "true")) ||
     tags.includes("public") ||
     skipPaths.includes(path) ||
