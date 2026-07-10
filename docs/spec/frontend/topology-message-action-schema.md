@@ -27,6 +27,8 @@ last_verified: 2026-07-11
 | `ActionDescriptor`, `AvailableAction` | `topology-engine.md` catalog/action contract | intent 검증에 사용하되 재선언하지 않음 |
 | `LayoutRequest`, layout worker result | 이 문서 §3.1 | effect/worker message 정의 |
 | `EngineTelemetry` | 이 문서 §3.2 | telemetry effect payload 정의 |
+| entity/relation/query/frame/layout/scene types | `topology-engine.md` canonical engine module | generated type import만 허용 |
+| `ConsumerEnvelope`, `StatusReason`, GitOps operation DTO | `product-data-contract.md` canonical consumer core | generated type import만 허용 |
 
 `RenderScene`은 renderer에만 넘기는 immutable derived value이며 effect/wire payload가 아니다. `ActionDescriptor`는 catalog에서 받은 설명자이고, reducer는 current `AvailableAction`과 capability revision을 함께 검증한 후에만 command를 만든다.
 
