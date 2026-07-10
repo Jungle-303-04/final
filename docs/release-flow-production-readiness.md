@@ -135,6 +135,8 @@ python scripts/run_release_flow_production_signoff.py \
 
 This full production sign-off runner dispatches `release-flow-production-readiness.yml` with every final gate enabled, verifies the readiness artifact while deploy evidence is still absent, dispatches `release-flow-production-deploy.yml`, waits for the deploy run to complete, and then runs `verify_release_flow_production_evidence.py` without any missing-artifact escape hatch. The verifier is pinned to the exact readiness and deploy workflow run ids returned by the runner, so final evidence cannot accidentally come from an older successful run for the same commit. On completion it writes `release-flow-production-signoff.json` with the exact commit, plan id, readiness run id, deploy run id, Safe PR evidence, and final evidence verification status.
 
+By default the sign-off runner also checks that the local git `HEAD` matches `--github-sha`. Use `--skip-local-sha-check` only when running from a trusted tooling checkout that intentionally signs off a different production commit.
+
 When `github_access_preflight` is enabled, the verifier must have an actual GitHub token value. If `RELEASE_FLOW_GITHUB_TOKEN_REF` points to a non-env vault ref such as `aws-sm:` or `k8s-secret:`, also set the `RELEASE_FLOW_GITHUB_TOKEN` secret for this readiness workflow so the read-only GitHub API check can run.
 
 `api_smoke_preflight` runs `scripts/release_flow_smoke.py --production-preflight --ci`. It verifies health, readiness, login, release plan APIs, generated manifest rendering, and existing release-run hygiene without starting a production release. The smoke result is appended to the GitHub Actions job summary when available and uploaded as `release-flow-smoke.md` in the readiness artifact.
