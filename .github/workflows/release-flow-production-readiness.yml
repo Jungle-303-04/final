@@ -1,0 +1,51 @@
+name: Release Flow Production Readiness
+
+"on":
+  workflow_dispatch:
+    inputs:
+      github_environment:
+        description: GitHub Environment whose secrets should satisfy production readiness.
+        required: false
+        default: production
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  release_flow_production_readiness:
+    name: Validate release-flow production readiness
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.github_environment || 'production' }}
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Install readiness dependencies
+        run: python -m pip install pyyaml
+
+      - name: Validate production readiness
+        env:
+          RELEASE_FLOW_API_BASE_URL: ${{ secrets.RELEASE_FLOW_API_BASE_URL }}
+          RELEASE_FLOW_AUTH_EMAIL: ${{ secrets.RELEASE_FLOW_AUTH_EMAIL }}
+          RELEASE_FLOW_AUTH_PASSWORD: ${{ secrets.RELEASE_FLOW_AUTH_PASSWORD }}
+        run: |
+          python scripts/validate_release_flow_production_readiness.py \
+            --require-runtime-config \
+            --report-path artifacts/release-flow-readiness.json \
+            --markdown-path artifacts/release-flow-readiness.md
+          cat artifacts/release-flow-readiness.md >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload readiness artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-flow-production-readiness
+          path: artifacts/release-flow-readiness.*
+          if-no-files-found: warn
+          retention-days: 30
