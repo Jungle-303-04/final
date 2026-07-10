@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from sqlalchemy import Index, Text, UniqueConstraint
+from sqlalchemy import Text, UniqueConstraint
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -45,26 +45,5 @@ class CatalogItemVersionRecord(Base):
     values_schema: Mapped[dict[str, Any]] = jsonb_column()
     template: Mapped[dict[str, Any]] = jsonb_column()
     status: Mapped[str] = text_column()
-    created_at: Mapped[Any] = created_at_column()
-    updated_at: Mapped[Any] = updated_at_column()
-
-
-class CatalogInstallRunRecord(Base):
-    __tablename__ = "catalog_install_runs"
-    __table_args__ = (
-        Index("ix_catalog_install_runs_scope", "workspace_id", "cluster_id", "created_at"),
-    )
-
-    install_id: Mapped[str] = mapped_column(Text, primary_key=True)
-    workspace_id: Mapped[str] = text_column()
-    item_id: Mapped[str] = text_column()
-    version: Mapped[str] = text_column()
-    cluster_id: Mapped[str] = text_column()
-    namespace: Mapped[str] = text_column()
-    application_name: Mapped[str] = text_column()
-    status: Mapped[str] = text_column()
-    requested_by: Mapped[str] = text_column()
-    values: Mapped[dict[str, Any]] = jsonb_column()
-    plan: Mapped[dict[str, Any]] = jsonb_column()
     created_at: Mapped[Any] = created_at_column()
     updated_at: Mapped[Any] = updated_at_column()

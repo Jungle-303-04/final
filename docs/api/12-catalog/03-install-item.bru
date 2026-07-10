@@ -1,5 +1,5 @@
 meta {
-  name: 03 카탈로그 설치
+  name: 03 카탈로그 설치 실행기 미연결 확인
   type: http
   seq: 3
   tags: [catalog, write]
@@ -23,7 +23,7 @@ body:json {
 }
 
 tests {
-  test("200 or auth/validation/not-found", function () {
-    expect([200, 401, 403, 404, 422]).to.include(res.status);
+  test("501 or auth/validation/not-found", function () {
+    expect([501, 401, 403, 404, 422]).to.include(res.status);
   });
 }
