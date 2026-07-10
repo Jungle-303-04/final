@@ -1294,7 +1294,10 @@ def test_application_deployment_bindings_match_manifest_when_app_name_drifted() 
     sql = str(recorded[0].compile(dialect=postgresql.dialect()))
     assert "deployment_bindings.app_name" in sql
     assert "deployment_bindings.manifest_path" in sql
-    assert "LEFT OUTER JOIN git_watch_targets" in sql
+    assert "LEFT OUTER JOIN git_watch_targets AS binding_watch_by_id" in sql
+    assert "LEFT OUTER JOIN git_watch_targets AS binding_watch_by_source" in sql
+    assert "binding_watch_by_id.watch_target_id IS NULL" in sql
+    assert "binding_watch_by_source.manifest_path = deployment_bindings.manifest_path" in sql
     assert "last_polled_at" in sql
     assert " OR " in sql
 
@@ -1366,6 +1369,9 @@ def test_application_deployment_bindings_include_gitops_poll_status() -> None:
         "last_polled_at": now.isoformat(),
     }
     assert "watch_settings" not in deployments[0]
+    sql = str(recorded[0].compile(dialect=postgresql.dialect()))
+    assert "binding_watch_by_source" in sql
+    assert "coalesce(binding_watch_by_id.last_seen_commit_sha" in sql
 
 
 def test_gitops_poll_targets_join_active_repository_application_binding() -> None:
