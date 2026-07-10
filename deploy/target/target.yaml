@@ -59,6 +59,10 @@ rules:
   - apiGroups: ["apps"]
     resources: ["deployments", "replicasets", "daemonsets", "statefulsets"]
     verbs: ["get", "list", "watch"]
+  # drilldown 실측 CPU·메모리는 Metrics API가 있을 때만 읽고, 없으면 null을 유지한다.
+  - apiGroups: ["metrics.k8s.io"]
+    resources: ["pods", "nodes"]
+    verbs: ["get", "list"]
 ---
 # 위 읽기 전용 ClusterRole을 cluster-agent ServiceAccount에 바인딩한다.
 apiVersion: rbac.authorization.k8s.io/v1
