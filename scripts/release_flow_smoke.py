@@ -713,6 +713,12 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
         help="append machine-readable smoke outputs to GITHUB_OUTPUT for downstream GitHub Actions steps",
     )
     parser.add_argument(
+        "--github-annotations",
+        action="store_true",
+        default=os.getenv("RELEASE_FLOW_SMOKE_GITHUB_ANNOTATIONS", "").strip().lower() in {"1", "true", "yes"},
+        help="emit GitHub Actions error annotations for failed smoke checks",
+    )
+    parser.add_argument(
         "--production-preflight",
         action="store_true",
         help=(
@@ -1005,6 +1011,43 @@ def github_output_value(value: Any) -> str:
     return str(value).replace("\r", " ").replace("\n", " ")
 
 
+def emit_github_annotations(
+    enabled: bool,
+    *,
+    results: list[SmokeResult],
+    error: str | None = None,
+    stream: Any | None = None,
+) -> None:
+    if not enabled:
+        return
+    output = stream or sys.stderr
+    for item in results:
+        if item.ok:
+            continue
+        item = redacted_smoke_result(item)
+        print(
+            "::error "
+            f"title={github_command_property_escape(f'Release smoke failed: {item.name}')}::"
+            f"{github_command_escape(item.detail)}",
+            file=output,
+        )
+    if error:
+        print(
+            "::error "
+            f"title={github_command_property_escape('Release smoke error')}::"
+            f"{github_command_escape(redact_sensitive_text(error))}",
+            file=output,
+        )
+
+
+def github_command_escape(value: Any) -> str:
+    return str(value).replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
+
+
+def github_command_property_escape(value: Any) -> str:
+    return github_command_escape(value).replace(":", "%3A").replace(",", "%2C")
+
+
 def build_markdown_report(
     *,
     ok: bool,
@@ -1067,6 +1110,7 @@ def main(argv: list[str]) -> int:
             results=[],
             error=str(payload["error"]),
         )
+        emit_github_annotations(args.github_annotations, results=[], error=str(payload["error"]))
         print(payload["error"], file=sys.stderr)
         return 2
     client = ApiClient(
@@ -1115,6 +1159,7 @@ def main(argv: list[str]) -> int:
             results=[],
             error=str(payload["error"]),
         )
+        emit_github_annotations(args.github_annotations, results=[], error=str(payload["error"]))
         print(json.dumps(payload, ensure_ascii=False, indent=2), file=sys.stderr)
         return 1
     ok = all(item.ok for item in results)
@@ -1124,6 +1169,7 @@ def main(argv: list[str]) -> int:
     write_markdown_report(args.markdown_path, ok=ok, api_base_url=client.api_base_url, results=results)
     append_github_step_summary(args.github_step_summary, ok=ok, api_base_url=client.api_base_url, results=results)
     append_github_output(args.github_output, ok=ok, api_base_url=client.api_base_url, results=results)
+    emit_github_annotations(args.github_annotations, results=results)
     print(json.dumps(payload, ensure_ascii=False, indent=2))
     return 0 if ok else 1
 

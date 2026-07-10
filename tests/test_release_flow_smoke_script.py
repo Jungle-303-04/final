@@ -439,6 +439,27 @@ def test_smoke_github_output_appends_machine_readable_values(tmp_path: Path, mon
     assert "raw-password" not in body
 
 
+def test_smoke_github_annotations_emit_redacted_errors(capsys: Any) -> None:
+    smoke = load_smoke_module()
+
+    smoke.emit_github_annotations(
+        True,
+        results=[
+            smoke.SmokeResult("healthz", True, "ok"),
+            smoke.SmokeResult("release-runs.policy-override-preflight", False, "token=raw-token\nreview"),
+        ],
+        error="password=raw-password",
+    )
+
+    captured = capsys.readouterr()
+    assert "::error title=Release smoke failed%3A release-runs.policy-override-preflight::" in captured.err
+    assert "::error title=Release smoke error::" in captured.err
+    assert "token=<redacted>%0Areview" in captured.err
+    assert "password=<redacted>" in captured.err
+    assert "raw-token" not in captured.err
+    assert "raw-password" not in captured.err
+
+
 def test_smoke_main_writes_report_when_credentials_are_missing(tmp_path: Path, monkeypatch: Any) -> None:
     smoke = load_smoke_module()
     for name in ("API_BASE_URL", "BASE_URL", "AUTH_EMAIL", "AUTH_PASSWORD"):
@@ -461,6 +482,7 @@ def test_smoke_main_writes_report_when_credentials_are_missing(tmp_path: Path, m
             str(markdown_path),
             "--github-step-summary",
             "--github-output",
+            "--github-annotations",
         ]
     )
 
