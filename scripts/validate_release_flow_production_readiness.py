@@ -415,6 +415,8 @@ def check_evidence_verifier_contract() -> list[ReadinessCheck]:
             and "release-flow-deploy.json" in source
             and "release-flow-production-preflight.json" in source
             and "release-flow-production-signoff.json" in source
+            and "signoff.distinct_workflow_runs" in source
+            and "readiness and deploy run ids must be distinct" in source
             and "runtime.github_access_preflight" in source
             and "secret.RELEASE_FLOW_API_BASE_URL" in source
             and "release-plans.start.production" in source,
