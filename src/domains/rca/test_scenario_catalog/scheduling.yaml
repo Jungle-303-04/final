@@ -4,7 +4,12 @@ scenarios:
     title: "CPU 부족 스케줄링 실패"
     description: "클러스터보다 큰 CPU request를 가진 테스트 Pod로 FailedScheduling을 만듭니다."
     execution: "real"
-    availability: "ready"
+    availability: "detector_gap"
+    availability_reason: "현재 시나리오는 Kubernetes evidence만 요청하지만 insufficient_cpu 후보는 실제 metrics evidence도 요구하므로 RCA가 blocked됩니다. run-scoped Prometheus 계약 검증 전에는 READY가 아닙니다."
+    detector_work_needed:
+      - "test Pod CPU request와 node allocatable을 조회하는 run-scoped PromQL"
+      - "빈 Prometheus 결과를 근거로 승격하지 않는 수집 완료 조건"
+      - "insufficient_cpu까지 evidence → RCA completed E2E 검증"
     expected:
       root_cause: "insufficient_cpu"
       symptom: "FailedScheduling"
@@ -37,7 +42,12 @@ scenarios:
     title: "Memory 부족 스케줄링 실패"
     description: "클러스터보다 큰 memory request를 가진 테스트 Pod로 FailedScheduling을 만듭니다."
     execution: "real"
-    availability: "ready"
+    availability: "detector_gap"
+    availability_reason: "현재 시나리오는 Kubernetes evidence만 요청하지만 insufficient_memory 후보는 실제 metrics evidence도 요구하므로 RCA가 blocked됩니다. run-scoped Prometheus 계약 검증 전에는 READY가 아닙니다."
+    detector_work_needed:
+      - "test Pod memory request와 node allocatable을 조회하는 run-scoped PromQL"
+      - "빈 Prometheus 결과를 근거로 승격하지 않는 수집 완료 조건"
+      - "insufficient_memory까지 evidence → RCA completed E2E 검증"
     expected:
       root_cause: "insufficient_memory"
       symptom: "FailedScheduling"

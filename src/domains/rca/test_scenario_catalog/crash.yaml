@@ -42,7 +42,12 @@ scenarios:
     title: "설정 또는 환경변수 오류"
     description: "필수 환경변수가 없는 테스트 앱을 실행해 설정 오류 CrashLoop을 만듭니다."
     execution: "real"
-    availability: "ready"
+    availability: "detector_gap"
+    availability_reason: "CrashLoop 관측 직후 run-scoped Loki 로그와 Prometheus metric이 아직 비어 있으면 required evidence가 누락되어 RCA가 blocked될 수 있습니다. 빈 provider 결과 재시도와 실제 metric 계약 검증 전에는 READY가 아닙니다."
+    detector_work_needed:
+      - "run-scoped Loki empty-result bounded retry/backoff"
+      - "실제 Prometheus sample을 포함하는 CrashLoop metric 수집 계약"
+      - "config_env_error까지 evidence → RCA completed E2E 검증"
     expected:
       root_cause: "config_env_error"
       symptom: "CrashLoopBackOff"
@@ -67,7 +72,12 @@ scenarios:
     title: "애플리케이션 시작 실패"
     description: "기동 직후 exit 1로 종료되는 테스트 앱을 실행해 시작 실패를 만듭니다."
     execution: "real"
-    availability: "ready"
+    availability: "detector_gap"
+    availability_reason: "CrashLoop 관측 직후 run-scoped Loki 로그와 Prometheus metric이 아직 비어 있으면 required evidence가 누락되거나 과거 로그 없이 원인을 확정할 수 없습니다. 빈 provider 결과 재시도 검증 전에는 READY가 아닙니다."
+    detector_work_needed:
+      - "run-scoped Loki empty-result bounded retry/backoff"
+      - "실제 Prometheus sample을 포함하는 CrashLoop metric 수집 계약"
+      - "app_startup_failure까지 evidence → RCA completed E2E 검증"
     expected:
       root_cause: "app_startup_failure"
       symptom: "CrashLoopBackOff"
