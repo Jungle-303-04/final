@@ -288,6 +288,13 @@ def main(argv: list[str]) -> int:
         write_reports(args, ok=False, api_base_url=api_base_url, results=results, error=error)
         print(error, file=sys.stderr)
         return 2
+    try:
+        validate_live_https_url("api_base_url", api_base_url, context="for production deploy")
+    except ValueError as exc:
+        error = str(exc)
+        write_reports(args, ok=False, api_base_url=api_base_url, results=results, error=error)
+        print(error, file=sys.stderr)
+        return 2
     client = ApiClient(
         api_base_url,
         timeout=args.timeout,

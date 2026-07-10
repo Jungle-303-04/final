@@ -83,6 +83,7 @@ def test_current_release_flow_production_readiness_static_checks_pass() -> None:
         "workflow.production_deploy.concurrency",
         "workflow.production_deploy.starts_release_flow",
         "script.deploy.fetches_saved_plan",
+        "script.deploy.api_base_url_guard",
         "script.deploy.plan_id_guard",
         "script.deploy.matches_gate_evidence",
         "script.deploy.requires_live_production_plan",
