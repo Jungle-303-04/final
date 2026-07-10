@@ -85,6 +85,11 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
         default=None,
         help="Write the final sign-off summary JSON. Defaults under --github-output-dir.",
     )
+    parser.add_argument(
+        "--preflight-only",
+        action="store_true",
+        help="Validate sign-off inputs, branch SHA, Safe PR run, and workflow access without dispatching workflows.",
+    )
     parser.add_argument("--release-plan-id", required=True)
     parser.add_argument("--api-base-url", default="")
     parser.add_argument("--live-change-ticket", required=True)
@@ -193,6 +198,63 @@ def verify_github_branch_sha(args: argparse.Namespace, token: str) -> None:
     print(f"ok signoff.branch: {args.github_branch} matches {expected_sha}")
 
 
+def verify_workflow_access(args: argparse.Namespace, token: str) -> None:
+    for workflow in (READINESS_WORKFLOW, DEPLOY_WORKFLOW):
+        workflow_ref = urllib.parse.quote(workflow, safe="")
+        payload = github_json(
+            github_api_url(
+                args.github_api_base,
+                args.github_repo,
+                f"actions/workflows/{workflow_ref}",
+            ),
+            token,
+        )
+        state = str(payload.get("state") or "").strip()
+        workflow_id = str(payload.get("id") or "").strip()
+        if state and state != "active":
+            raise GitHubEvidenceError(f"{workflow} is {state}, not active")
+        if not workflow_id:
+            raise GitHubEvidenceError(
+                f"{workflow} was not readable through GitHub Actions API"
+            )
+        print(f"ok signoff.workflow: {workflow} is readable")
+
+
+def validate_safe_pr_url(args: argparse.Namespace) -> str | None:
+    run_id = str(args.live_safe_pr_workflow_run_id or "").strip()
+    if not run_id.isdigit():
+        return None
+    parsed = urllib.parse.urlparse(str(args.live_safe_pr_url or "").strip())
+    parts = [urllib.parse.unquote(part) for part in parsed.path.split("/") if part]
+    repo_parts = str(args.github_repo or "").strip().split("/")
+    expected_prefix = [*repo_parts, "actions", "runs"]
+    if len(repo_parts) != 2 or len(parts) < 5 or parts[:4] != expected_prefix:
+        return "live_safe_pr_url must point to the configured repo actions run"
+    if parts[4] != run_id:
+        return "live_safe_pr_url run id must match live_safe_pr_workflow_run_id"
+    return None
+
+
+def verify_safe_pr_run(args: argparse.Namespace, token: str) -> None:
+    run_id = str(args.live_safe_pr_workflow_run_id or "").strip()
+    run = github_json(
+        github_api_url(args.github_api_base, args.github_repo, f"actions/runs/{run_id}"),
+        token,
+    )
+    if str(run.get("id") or "") != run_id:
+        raise GitHubEvidenceError(f"Safe PR run {run_id} response did not match requested id")
+    conclusion = str(run.get("conclusion") or "").strip()
+    if conclusion != "success":
+        raise GitHubEvidenceError(f"Safe PR run {run_id} did not conclude success")
+    head_sha = str(run.get("head_sha") or "").strip()
+    expected_sha = str(args.github_sha or "").strip()
+    if head_sha != expected_sha:
+        raise GitHubEvidenceError(
+            f"Safe PR run {run_id} head {head_sha or '<missing>'} must match --github-sha {expected_sha}"
+        )
+    print(f"ok signoff.safe_pr: run {run_id} succeeded for {expected_sha}")
+
+
 def validate_signoff_inputs(args: argparse.Namespace) -> list[str]:
     errors: list[str] = []
     repo = str(args.github_repo or "").strip()
@@ -228,6 +290,9 @@ def validate_signoff_inputs(args: argparse.Namespace) -> list[str]:
         )
     if not str(args.live_safe_pr_workflow_run_id or "").strip().isdigit():
         errors.append("live_safe_pr_workflow_run_id must be a numeric GitHub Actions run id")
+    safe_pr_url_error = validate_safe_pr_url(args)
+    if safe_pr_url_error:
+        errors.append(safe_pr_url_error)
     local_sha = "" if args.skip_local_sha_check else current_git_sha()
     if local_sha and str(args.github_sha or "").strip() != local_sha:
         errors.append("local git HEAD must match --github-sha for production sign-off")
@@ -405,6 +470,11 @@ def main(argv: list[str]) -> int:
 
     try:
         verify_github_branch_sha(args, token)
+        verify_safe_pr_run(args, token)
+        if args.preflight_only:
+            verify_workflow_access(args, token)
+            print("ok signoff.preflight: inputs, branch SHA, Safe PR run, and workflow access passed")
+            return 0
         started_after = datetime.now(UTC) - timedelta(seconds=10)
         readiness_run = dispatch_and_wait(
             args=args,
