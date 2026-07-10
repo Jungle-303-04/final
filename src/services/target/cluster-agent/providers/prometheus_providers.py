@@ -13,6 +13,7 @@ from config import (
 )
 from packages.contracts.event_bus.interfaces import JsonObject
 from providers.base import TRACER, ConfigReader
+from providers.prometheus_analysis import build_metric_analysis
 
 
 @telemetry.source(
@@ -104,10 +105,16 @@ class PrometheusMetricsProvider:
         payload: JsonObject,
     ) -> None:
         """Normalize one metric result and save it by metric name."""
+        normalized = self.normalize_payload(payload)
         results[telemetry_query.metric_name] = {
             "query": telemetry_query.promql,
             **self.query_metadata(telemetry_query),
-            **self.normalize_payload(payload),
+            **normalized,
+            **build_metric_analysis(
+                telemetry_query.metric_name,
+                telemetry_query.promql,
+                normalized,
+            ),
         }
 
     def build_response(self, results: JsonObject) -> JsonObject:

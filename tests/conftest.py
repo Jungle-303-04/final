@@ -44,6 +44,7 @@ SERVICE_LOCAL_MODULES = (
     "providers",
     "providers.base",
     "providers.loki_providers",
+    "providers.prometheus_analysis",
     "providers.prometheus_providers",
     "providers.tempo_providers",
     "queries",
