@@ -14,12 +14,39 @@ Bruno에서 import할 때는 repository root나 `docs`가 아니라 반드시 `d
 docs/api
 ```
 
-4. 왼쪽에 `00 상태와 인증`부터 `15 Wizard Validation`까지 폴더가 보이면 정상이다.
+4. 왼쪽에 `00 상태와 인증`부터 `16 RCA 단계별 디버그`까지 폴더가 보이면 정상이다.
 5. 오른쪽 위 Environment에서 `aws-test`를 고른다.
 6. Environment 목록에는 `aws-test` 하나만 보여야 한다.
 
 깨졌다면 거의 항상 다른 폴더를 연 것이다. `docs/api` 바로 아래에 `bruno.json`과 `environments` 폴더가 있어야 한다.
 파일 경로는 `00-health-auth`처럼 영어 slug를 유지하고, Bruno 화면 표시명은 한글로 맞춘다.
+
+## RCA를 1번부터 끝까지 직접 확인하기
+
+AWS 테스트에서는 Environment를 `aws-test`로 선택한 뒤 `16 RCA 단계별 디버그` 폴더만 연다.
+아래 요청을 숫자 순서대로 하나씩 보낸다.
+
+1. `01 ImagePull 장애 Evidence 제출`은 실제 클러스터를 고장 내지 않고, 존재하지 않는 이미지 태그로 `ImagePullBackOff`가 발생한 관측값을 Gateway에 제출한다. 매번 새로운 `correlation_id`, `evidence_key`, 리소스 이름을 만들며, 성공 응답의 `correlation_id`를 다음 요청들이 자동으로 이어받는다.
+2. `02 현재 RCA 파이프라인 단계 조회`는 같은 correlation의 최신 `current_subject`와 `status`를 보여준다. 전체 이벤트 이력이 아니라 현재 단계 스냅샷이다.
+3. `03 Evidence Worker 저장 결과 조회`는 evidence-worker가 DB 원문을 읽어 정규화한 `kind=rca_bundle` 결과를 확인한다.
+4. `04 RCA 원인 분석 결과 조회`는 `symptom=ImagePullBackOff`, `root_cause=wrong_image_tag`, 근거와 confidence가 완성됐는지 확인한다.
+5. `05 PR 직전 Recovery Plan 조회`는 추천 후보, `execution_route=draft_pr`, `selection_required=true`를 확인한다. 여기까지가 실제 PR 생성 직전이다.
+
+파이프라인은 비동기이므로 02~05가 처음에 빈 배열이나 404를 보일 수 있다. 이 경우 요청을 새로 만들지 말고 같은 번호의 `Send`를 잠시 뒤 다시 누른다. 각 테스트가 아직 어느 단계 전인지 메시지로 알려준다.
+
+`POST /agent/evidence`의 200 응답은 RCA 완료가 아니다. 원본 `evidence_windows`와 시작 event/outbox가 한 트랜잭션으로 저장됐다는 뜻이다. 응답 예시는 다음과 같다.
+
+```json
+{
+  "accepted": true,
+  "event_id": "evt-...",
+  "correlation_id": "corr-bruno-imagepull-..."
+}
+```
+
+`event_id`는 최초 접수 이벤트를 가리키고, `correlation_id`는 evidence 생성부터 RCA와 recovery plan까지 전체 흐름을 묶는다. `evidence_key`를 재사용하면 서버가 기존 요청으로 멱등 처리하므로 01 요청이 매번 세 값을 새로 만든다.
+
+실제 실행을 시작하는 `POST /rca/recovery-plans/{plan_id}/actions/{action_id}/select`는 이 디버그 폴더에 넣지 않았다. 이 API부터 승인 기록과 `recovery.action_selected` 이벤트가 생성되고 Safe PR 경로가 열릴 수 있다.
 
 ## 전체 Runner 실행
 
@@ -51,7 +78,7 @@ bash scripts/run-bruno-aws.sh
 
 1. `base_url`은 Gateway API 주소다. 팀 공용 `aws-test`는 `https://k8s.woonyong.org/api/`로 고정한다. Bruno 요청 파일은 `{{base_url}}providers/validate`처럼 붙기 때문에 값이 반드시 `/`로 끝나야 한다.
 2. `dev_security_bypass`는 `APP_ENV=test` 배포에서만 `true`로 쓴다. 이때 세션·agent token을 전송하지 않으며 운영 배포에서는 반드시 `false`다.
-3. `dev_cluster_id`는 test agent identity로 사용할 등록 cluster다. CLI Runner는 실행마다 고유 ID로 덮어쓴다.
+3. `dev_cluster_id`는 test agent identity로 사용할 등록 cluster다. Bruno 앱의 단계별 RCA 기본값은 현재 등록된 `cluster-1`이고, CLI Runner는 실행마다 고유 ID로 덮어쓴다.
 4. `auto_login`은 우회가 꺼진 환경에서 보호 API 호출 전에 Bruno가 자동 로그인할지 정한다.
 5. `auth_email`/`auth_password`는 인증 자체를 검증할 때만 사용한다. collection과 `aws-test`에는 placeholder만 커밋한다.
 6. `github_webhook_secret`은 배포에 설정된 `GITHUB_WEBHOOK_SECRET` 값이다. 이 값을 채우면 webhook signature를 Bruno가 요청 직전에 자동 계산한다.
