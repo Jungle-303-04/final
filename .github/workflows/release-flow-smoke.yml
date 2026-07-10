@@ -22,6 +22,16 @@ run-name: Release Flow Smoke / ${{ inputs.github_environment || 'production' }} 
         required: false
         default: "15"
         type: string
+      retry_attempts:
+        description: Retry attempts for safe read-only smoke requests.
+        required: false
+        default: "5"
+        type: string
+      retry_delay_seconds:
+        description: Delay between retry attempts for safe read-only smoke requests.
+        required: false
+        default: "2"
+        type: string
       github_environment:
         description: GitHub Environment that protects this smoke gate.
         required: false
@@ -98,6 +108,16 @@ run-name: Release Flow Smoke / ${{ inputs.github_environment || 'production' }} 
         description: Per-request API timeout for the release-flow smoke script.
         required: false
         default: "15"
+        type: string
+      retry_attempts:
+        description: Retry attempts for safe read-only smoke requests.
+        required: false
+        default: "5"
+        type: string
+      retry_delay_seconds:
+        description: Delay between retry attempts for safe read-only smoke requests.
+        required: false
+        default: "2"
         type: string
       github_environment:
         description: GitHub Environment that protects this smoke gate.
@@ -204,6 +224,8 @@ jobs:
       PRODUCTION_PREFLIGHT_PLAN_ID: ${{ inputs.production_preflight_plan_id }}
       PRODUCTION_PREFLIGHT_RUN_LIMIT: ${{ inputs.production_preflight_run_limit || '20' }}
       REQUEST_TIMEOUT_SECONDS: ${{ inputs.request_timeout_seconds || '15' }}
+      RETRY_ATTEMPTS: ${{ inputs.retry_attempts || '5' }}
+      RETRY_DELAY_SECONDS: ${{ inputs.retry_delay_seconds || '2' }}
       ARTIFACT_RETENTION_DAYS: ${{ inputs.artifact_retention_days || '30' }}
       ARTIFACT_NAME: ${{ inputs.artifact_name || 'release-flow-smoke' }}
       ALERT_PREFLIGHT: ${{ inputs.alert_preflight || false }}
@@ -239,6 +261,22 @@ jobs:
           fi
           awk "BEGIN { exit !($REQUEST_TIMEOUT_SECONDS >= 1 && $REQUEST_TIMEOUT_SECONDS <= 120) }" || {
             echo "::error title=Invalid request_timeout_seconds::request_timeout_seconds must be between 1 and 120."
+            exit 1
+          }
+          if ! [[ "$RETRY_ATTEMPTS" =~ ^[0-9]+$ ]]; then
+            echo "::error title=Invalid retry_attempts::retry_attempts must be an integer between 1 and 10."
+            exit 1
+          fi
+          if [ "$RETRY_ATTEMPTS" -lt 1 ] || [ "$RETRY_ATTEMPTS" -gt 10 ]; then
+            echo "::error title=Invalid retry_attempts::retry_attempts must be between 1 and 10."
+            exit 1
+          fi
+          if ! [[ "$RETRY_DELAY_SECONDS" =~ ^[0-9]+([.][0-9]+)?$ ]]; then
+            echo "::error title=Invalid retry_delay_seconds::retry_delay_seconds must be a number between 0 and 30."
+            exit 1
+          fi
+          awk "BEGIN { exit !($RETRY_DELAY_SECONDS >= 0 && $RETRY_DELAY_SECONDS <= 30) }" || {
+            echo "::error title=Invalid retry_delay_seconds::retry_delay_seconds must be between 0 and 30."
             exit 1
           }
           if ! [[ "$ARTIFACT_RETENTION_DAYS" =~ ^[0-9]+$ ]]; then
@@ -291,8 +329,8 @@ jobs:
             --production-preflight-plan-id "${PRODUCTION_PREFLIGHT_PLAN_ID}"
             --production-preflight-run-limit "${PRODUCTION_PREFLIGHT_RUN_LIMIT}"
             --timeout "${REQUEST_TIMEOUT_SECONDS}"
-            --retry-attempts 5
-            --retry-delay-seconds 2
+            --retry-attempts "${RETRY_ATTEMPTS}"
+            --retry-delay-seconds "${RETRY_DELAY_SECONDS}"
             --ci
             --ci-artifacts-dir artifacts/release-flow
           )

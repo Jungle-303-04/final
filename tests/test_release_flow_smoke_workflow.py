@@ -45,9 +45,13 @@ def test_release_flow_smoke_workflow_declares_operator_inputs_and_secrets_for_di
         "production_preflight_plan_id",
         "production_preflight_run_limit",
         "request_timeout_seconds",
+        "retry_attempts",
+        "retry_delay_seconds",
     }
     assert inputs["production_preflight_run_limit"]["default"] == "20"
     assert inputs["request_timeout_seconds"]["default"] == "15"
+    assert inputs["retry_attempts"]["default"] == "5"
+    assert inputs["retry_delay_seconds"]["default"] == "2"
     assert inputs["github_environment"]["default"] == "production"
     assert inputs["artifact_retention_days"]["default"] == "30"
     assert inputs["artifact_name"]["default"] == "release-flow-smoke"
@@ -69,6 +73,8 @@ def test_release_flow_smoke_workflow_declares_operator_inputs_and_secrets_for_di
     )
     assert job["env"]["PRODUCTION_PREFLIGHT_RUN_LIMIT"] == "${{ inputs.production_preflight_run_limit || '20' }}"
     assert job["env"]["REQUEST_TIMEOUT_SECONDS"] == "${{ inputs.request_timeout_seconds || '15' }}"
+    assert job["env"]["RETRY_ATTEMPTS"] == "${{ inputs.retry_attempts || '5' }}"
+    assert job["env"]["RETRY_DELAY_SECONDS"] == "${{ inputs.retry_delay_seconds || '2' }}"
     assert job["env"]["ARTIFACT_RETENTION_DAYS"] == "${{ inputs.artifact_retention_days || '30' }}"
     assert job["env"]["ARTIFACT_NAME"] == "${{ inputs.artifact_name || 'release-flow-smoke' }}"
     assert job["env"]["ALERT_PREFLIGHT"] == "${{ inputs.alert_preflight || false }}"
@@ -101,6 +107,8 @@ def test_release_flow_smoke_workflow_can_be_called_by_deploy_workflows() -> None
         "production_preflight_plan_id",
         "production_preflight_run_limit",
         "request_timeout_seconds",
+        "retry_attempts",
+        "retry_delay_seconds",
     }
     assert set(workflow_call["secrets"]) == {
         "release_flow_api_base_url",
@@ -109,6 +117,8 @@ def test_release_flow_smoke_workflow_can_be_called_by_deploy_workflows() -> None
     }
     assert workflow_call["inputs"]["production_preflight_run_limit"]["default"] == "20"
     assert workflow_call["inputs"]["request_timeout_seconds"]["default"] == "15"
+    assert workflow_call["inputs"]["retry_attempts"]["default"] == "5"
+    assert workflow_call["inputs"]["retry_delay_seconds"]["default"] == "2"
     assert workflow_call["inputs"]["github_environment"]["default"] == "production"
     assert workflow_call["inputs"]["artifact_retention_days"]["default"] == "30"
     assert workflow_call["inputs"]["artifact_name"]["default"] == "release-flow-smoke"
@@ -159,6 +169,8 @@ def test_release_flow_smoke_workflow_uploads_artifacts_before_failing_gate() -> 
     assert "--production-preflight" in smoke_step["run"]
     assert "smoke_args=(" in smoke_step["run"]
     assert '--timeout "${REQUEST_TIMEOUT_SECONDS}"' in smoke_step["run"]
+    assert '--retry-attempts "${RETRY_ATTEMPTS}"' in smoke_step["run"]
+    assert '--retry-delay-seconds "${RETRY_DELAY_SECONDS}"' in smoke_step["run"]
     assert "--live-preflight" in smoke_step["run"]
     assert "--live-environment" in smoke_step["run"]
     assert "--live-namespace" in smoke_step["run"]
@@ -166,7 +178,6 @@ def test_release_flow_smoke_workflow_uploads_artifacts_before_failing_gate() -> 
     assert "--live-image" in smoke_step["run"]
     assert "--live-verification-url" in smoke_step["run"]
     assert 'smoke_args+=(--alert-preflight --alert-severity "${ALERT_PREFLIGHT_SEVERITY}")' in smoke_step["run"]
-    assert "--retry-attempts 5" in smoke_step["run"]
     assert "--ci" in smoke_step["run"]
     assert "--ci-artifacts-dir artifacts/release-flow" in smoke_step["run"]
 
@@ -174,6 +185,10 @@ def test_release_flow_smoke_workflow_uploads_artifacts_before_failing_gate() -> 
     assert "production_preflight_run_limit must be between 1 and 500" in validate_step["run"]
     assert "request_timeout_seconds must be a number between 1 and 120" in validate_step["run"]
     assert "request_timeout_seconds must be between 1 and 120" in validate_step["run"]
+    assert "retry_attempts must be an integer between 1 and 10" in validate_step["run"]
+    assert "retry_attempts must be between 1 and 10" in validate_step["run"]
+    assert "retry_delay_seconds must be a number between 0 and 30" in validate_step["run"]
+    assert "retry_delay_seconds must be between 0 and 30" in validate_step["run"]
     assert "artifact_retention_days must be an integer between 1 and 90" in validate_step["run"]
     assert "artifact_retention_days must be between 1 and 90" in validate_step["run"]
     assert "artifact_name is required" in validate_step["run"]
