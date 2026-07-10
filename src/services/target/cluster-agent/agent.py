@@ -17,6 +17,7 @@ from commands import (
     KubernetesScalePayload,
     command,
 )
+from commands.helm import run_catalog_helm_install
 from control import AgentControlStore, AgentPolicySync, DesiredStateReconciler
 from evidence import EvidenceCollector, EvidenceJobScheduler
 from kubernetes_api import (
@@ -81,6 +82,7 @@ from config import (
 from config import (
     KUBERNETES_ROLLOUT_TIMEOUT_SECONDS as CONFIG_KUBERNETES_ROLLOUT_TIMEOUT_SECONDS,
 )
+from domains.catalog.install import CatalogHelmInstallPayload
 from domains.rca.test_scenario_adapters import (
     RcaTestCleanupPlan,
     default_test_scenario_adapter_registry,
@@ -979,6 +981,7 @@ class TargetClusterAgent:
             return False
         return action in {
             AgentConfig.APPLY_MANIFEST_ACTION,
+            Command.CATALOG_HELM_INSTALL_ACTION,
             AgentConfig.ROLLOUT_RESTART_ACTION,
             KUBERNETES_CONFIGMAP_PATCH_ACTION,
             KUBERNETES_DEPLOYMENT_PATCH_ACTION,
@@ -1078,6 +1081,31 @@ class TargetClusterAgent:
             query=definition.__dict__,
             result=result,
         )
+
+    @command.handler(
+        Command.CATALOG_HELM_INSTALL_ACTION,
+        payload_model=CatalogHelmInstallPayload,
+    )
+    async def catalog_helm_install_command(
+        self,
+        ctx: CommandContext[CatalogHelmInstallPayload],
+    ) -> JsonObject:
+        if ctx.cluster_role == MANAGEMENT_CLUSTER_ROLE:
+            return ctx.fail(MANAGEMENT_READONLY_CODE)
+        result = await asyncio.to_thread(run_catalog_helm_install, ctx.payload)
+        fields = {
+            "catalog_item_id": ctx.payload.catalog_item_id,
+            "catalog_version": ctx.payload.catalog_version,
+            "release_name": ctx.payload.release_name,
+            "returncode": result.returncode,
+        }
+        if not result.succeeded:
+            return ctx.fail(
+                f"catalog Helm install failed: {result.error_code}",
+                error_code=result.error_code,
+                **fields,
+            )
+        return ctx.ok("catalog Helm install completed", applied=True, **fields)
 
     @command.k8s(
         KUBERNETES_DEPLOYMENT_PATCH_ACTION,
