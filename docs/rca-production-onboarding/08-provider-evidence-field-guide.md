@@ -301,6 +301,7 @@ RCA를 처음 볼 때는 Kubernetes bucket 안에서 보통 아래 순서로 확
 | `services` | list<object> | Service 요약 목록이다. Service type, cluster IP, port, selector를 본다. |
 | `endpoints` | list<object> | EndpointSlice 요약 목록이다. Service 뒤에 실제 endpoint가 붙었는지 본다. |
 | `provider_status` | object | Kubernetes provider query별 수집 상태와 bucket별 count다. |
+| `collection_limits` | object | 큰 목록이 전송 크기 보호를 위해 잘렸을 때만 있는 제한 요약이다. |
 
 ### Kubernetes provider가 조회하는 API resource
 
@@ -540,6 +541,15 @@ Prometheus, Loki, Tempo의 실패 처리는 `Evidence job 집계 규칙`에서 �
 `provider_status`는 query name별로 추가된다. 따라서 중복 namespace query를 넣으면
 목록에 같은 리소스가 중복될 수 있다.
 
+Kubernetes bucket은 `EvidenceJobResultRequest`의 1MiB 전송 제한을 넘지 않도록
+큰 list를 전송 직전에 제한한다. `pods`, `events`, `nodes`, `workloads`,
+`services`, `endpoints`가 잘리면 `kubernetes.collection_limits`에 원래 개수와
+반환 개수를 남긴다. `provider_status.*.counts`는 normalize 단계에서 본 개수이고,
+실제 payload에 들어간 개수는 `len(...)` 또는 `collection_limits`로 확인한다.
+namespace가 있는 list는 한 namespace가 다른 namespace를 전부 가리지 않도록
+namespace별 round-robin sampling을 쓴다.
+개수 제한 뒤에도 JSON byte 크기가 크면 가장 큰 list부터 추가로 줄인다.
+
 ## Metrics bucket
 
 Metrics bucket은 Prometheus provider가 만든다.
@@ -576,9 +586,16 @@ node memory 사용률 query의 첫 번째 sample 값이다.
 | `query_mode` | string | `instant` 또는 `range`다. |
 | `result_type` | string 또는 null | Prometheus `data.resultType`이다. 예: `vector`, `matrix`, `scalar`, `string`. |
 | `analysis` | object | provider가 sample/series 숫자만 보고 만든 RCA용 해석 요약이다. |
+| `collection_limits` | object | 큰 Prometheus 결과가 전송 크기 보호를 위해 잘렸을 때만 있는 제한 요약이다. |
 
 현재 Prometheus provider는 전체 API response raw field를 담지 않는다.
 RCA는 `result_type`, `samples`, `series`, `result` 중 provider가 정규화한 필드를 읽는다.
+high cardinality metric처럼 결과가 큰 경우에는 `samples`, `series`, `series[].values`,
+또는 `result`가 제한될 수 있다. 잘리면 같은 query result object 안의
+`collection_limits.lists.<field>.original_count/returned_count`로 전체 개수와 반환 개수를
+확인한다. `analysis`는 제한 전 normalized payload를 기준으로 계산되므로
+`sample_count`, `series_count`, `point_count`, `threshold` 판단은 샘플 제한 때문에 줄어들지 않는다.
+개수 제한 뒤에도 JSON byte 크기가 크면 가장 큰 list부터 추가로 줄인다.
 
 Instant vector 결과일 때 추가 필드다.
 
@@ -598,6 +615,8 @@ Range matrix 결과일 때 추가 필드다.
 | `series` | list<object> | time series 목록이다. |
 | `series[].metric` | object | Prometheus label set이다. |
 | `series[].values` | list<object> | timestamp/value point 목록이다. |
+| `series[].value_count` | number | `series[].values`가 잘렸을 때 제한 전 point 개수다. |
+| `series[].values_truncated` | boolean | `series[].values`가 잘렸으면 true다. |
 | `series[].values[].timestamp` | number 또는 null | point timestamp다. |
 | `series[].values[].value` | number 또는 null | point value를 float으로 바꾼 값이다. |
 | `point_count` | number | 모든 series의 point 개수 합계다. |
