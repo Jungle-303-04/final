@@ -300,6 +300,7 @@ def check_operator_documentation_contract() -> list[ReadinessCheck]:
         "api_smoke_preflight",
         "release_flow_smoke.py --production-preflight --ci",
         "release-flow-smoke.md",
+        "live_verification_url",
         "live_safe_pr_workflow_run_id",
         "live_safe_pr_url",
     }
