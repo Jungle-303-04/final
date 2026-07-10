@@ -177,6 +177,15 @@ AUTH_PASSWORD="<admin password>" \
 python scripts/release_flow_smoke.py
 ```
 
+CI나 배포 직후처럼 backend가 잠깐 늦게 뜨는 상황에서는 safe read-only 요청만 재시도할 수 있다. 이 retry는 `GET` 계열 health/readiness/list/summary 요청에만 적용되고, release start나 alert test 같은 side effect 요청은 중복 실행 위험 때문에 재시도하지 않는다.
+
+```bash
+python scripts/release_flow_smoke.py \
+  --production-preflight \
+  --retry-attempts 5 \
+  --retry-delay-seconds 2
+```
+
 demo release run까지 생성해서 projection 전 단계의 tracked run 생성 경로를 확인하려면 명시적으로 `--demo-run`을 붙인다. 이 모드는 `runtime_mode=demo`, `provider_mode=dry_run` 플랜만 사용하므로 live GitOps dispatch를 호출하지 않는다.
 
 ```bash

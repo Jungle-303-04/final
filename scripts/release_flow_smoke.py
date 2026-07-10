@@ -25,6 +25,7 @@ import http.cookiejar
 import json
 import os
 import sys
+import time
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -35,6 +36,8 @@ from typing import Any
 
 
 JsonMap = dict[str, Any]
+RETRYABLE_HTTP_STATUSES = {429, 502, 503, 504}
+RETRYABLE_METHODS = {"GET", "HEAD", "OPTIONS"}
 
 
 @dataclass
@@ -54,9 +57,18 @@ class ApiError(RuntimeError):
 
 
 class ApiClient:
-    def __init__(self, api_base_url: str, timeout: float = 15.0) -> None:
+    def __init__(
+        self,
+        api_base_url: str,
+        timeout: float = 15.0,
+        *,
+        retry_attempts: int = 3,
+        retry_delay_seconds: float = 1.0,
+    ) -> None:
         self.api_base_url = normalize_base_url(api_base_url)
         self.timeout = timeout
+        self.retry_attempts = max(1, retry_attempts)
+        self.retry_delay_seconds = max(0.0, retry_delay_seconds)
         self.cookies = http.cookiejar.CookieJar()
         self.opener = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(self.cookies))
 
@@ -79,16 +91,38 @@ class ApiClient:
                 "x-service-csrf": "same-origin",
             },
         )
-        try:
-            with self.opener.open(request, timeout=self.timeout) as response:
-                raw = response.read().decode()
-                status = int(response.status)
-        except urllib.error.HTTPError as exc:
-            raw = exc.read().decode(errors="replace")
-            status = int(exc.code)
-        if status not in expected:
+        method_upper = method.upper()
+        for attempt in range(1, self.retry_attempts + 1):
+            try:
+                with self.opener.open(request, timeout=self.timeout) as response:
+                    raw = response.read().decode()
+                    status = int(response.status)
+            except urllib.error.HTTPError as exc:
+                raw = exc.read().decode(errors="replace")
+                status = int(exc.code)
+            except (TimeoutError, urllib.error.URLError, OSError):
+                if self.should_retry(method_upper, attempt):
+                    self.sleep_before_retry()
+                    continue
+                raise
+            if status in expected:
+                return json.loads(raw) if raw else {}
+            if self.should_retry(method_upper, attempt, status):
+                self.sleep_before_retry()
+                continue
             raise ApiError(method, path, status, raw)
-        return json.loads(raw) if raw else {}
+        raise ApiError(method, path, 0, "request retry attempts exhausted")
+
+    def should_retry(self, method: str, attempt: int, status: int | None = None) -> bool:
+        if method not in RETRYABLE_METHODS:
+            return False
+        if attempt >= self.retry_attempts:
+            return False
+        return status is None or status in RETRYABLE_HTTP_STATUSES
+
+    def sleep_before_retry(self) -> None:
+        if self.retry_delay_seconds > 0:
+            time.sleep(self.retry_delay_seconds)
 
 
 def normalize_base_url(value: str) -> str:
@@ -631,6 +665,18 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     parser.add_argument("--email", default=os.getenv("AUTH_EMAIL", ""))
     parser.add_argument("--password", default=os.getenv("AUTH_PASSWORD", ""))
     parser.add_argument("--timeout", type=float, default=float(os.getenv("SMOKE_TIMEOUT_SECONDS", "15")))
+    parser.add_argument(
+        "--retry-attempts",
+        type=int,
+        default=int(os.getenv("RELEASE_FLOW_SMOKE_RETRY_ATTEMPTS", "3")),
+        help="retry safe read-only HTTP requests this many times for transient CI/network failures",
+    )
+    parser.add_argument(
+        "--retry-delay-seconds",
+        type=float,
+        default=float(os.getenv("RELEASE_FLOW_SMOKE_RETRY_DELAY_SECONDS", "1")),
+        help="wait this many seconds between safe smoke request retries",
+    )
     parser.add_argument("--demo-run", action="store_true", help="create a tracked demo release run")
     parser.add_argument(
         "--report-path",
@@ -951,7 +997,12 @@ def main(argv: list[str]) -> int:
         )
         print(payload["error"], file=sys.stderr)
         return 2
-    client = ApiClient(api_base_url, timeout=args.timeout)
+    client = ApiClient(
+        api_base_url,
+        timeout=args.timeout,
+        retry_attempts=args.retry_attempts,
+        retry_delay_seconds=args.retry_delay_seconds,
+    )
     try:
         results = run_smoke(
             client,
