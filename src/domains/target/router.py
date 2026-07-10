@@ -53,6 +53,7 @@ from domains.target.management_guard import (
     management_readonly_detail,
 )
 from domains.target.reconciler import desired_state_version
+from packages.config.security import APP_ENV_ENV, TEST_APP_ENV
 from packages.config.settings import env
 from packages.contracts.gateway import routes as gateway_routes
 from packages.contracts.gateway.policy_merge import merge_agent_policy
@@ -145,6 +146,8 @@ TARGET_REGISTRATION_CONNECT_TIMEOUT_SECONDS_ENV = "TARGET_REGISTRATION_CONNECT_T
 TARGET_REGISTRATION_AUTO_DELETE_EXPIRED_ENV = "TARGET_REGISTRATION_AUTO_DELETE_EXPIRED"
 DEFAULT_TARGET_REGISTRATION_CONNECT_TIMEOUT_SECONDS = 1800
 CLUSTER_NOT_FOUND = "cluster not found"
+TEST_FIXTURE_PURGE_FORBIDDEN_CODE = "test_fixture_purge_forbidden"
+TEST_FIXTURE_PURGE_UNSUPPORTED_CODE = "test_fixture_purge_unsupported"
 
 router = APIRouter()
 # per-cluster 토큰 인증 — lease 의 workspace/cluster 는 토큰 identity 에서만 취함.
@@ -664,6 +667,14 @@ def cluster_connection_status(agent: dict[str, Any] | None) -> str:
     )
 
 
+def visible_cluster_agent_statuses(agents: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """활성 agent만 노출하고, 모두 오래됐으면 최근 상태 한 건을 보존한다."""
+    online_agents = [
+        agent for agent in agents if cluster_connection_status(agent) == AGENT_STATUS_ONLINE
+    ]
+    return online_agents or agents[:1]
+
+
 def registration_connect_timeout(registration: dict[str, Any] | None) -> int | None:
     settings = (registration or {}).get("settings") or {}
     value = settings.get("connect_timeout_seconds")
@@ -697,6 +708,29 @@ def registration_connection_status(
     if status == ClusterRegistrationStatus.INSTALL_EXPIRED.value:
         return AGENT_STATUS_INSTALL_EXPIRED
     return agent_status
+
+
+def require_test_fixture_purge_environment(registration: dict[str, Any]) -> None:
+    app_environment = env(APP_ENV_ENV, "").strip().lower()
+    registration_environment = str(registration.get("environment") or "")
+    if app_environment == TEST_APP_ENV and registration_environment == TEST_APP_ENV:
+        return
+    raise HTTPException(
+        status_code=403,
+        detail={
+            "code": TEST_FIXTURE_PURGE_FORBIDDEN_CODE,
+            "detail": "테스트 fixture purge는 APP_ENV=test 및 environment=test에서만 허용됩니다",
+        },
+    )
+
+
+def unregisterable_registration(db: Any, workspace_id: str, cluster_id: str) -> dict[str, Any]:
+    registration = db.get_cluster_registration(workspace_id, cluster_id)
+    if registration is None:
+        raise HTTPException(status_code=NOT_FOUND_CODE, detail=CLUSTER_NOT_FOUND)
+    if is_management_registration(registration):
+        raise HTTPException(status_code=400, detail=management_readonly_detail())
+    return registration
 
 
 def cluster_summary(cluster: dict[str, Any], latest_agent: dict[str, Any] | None) -> ClusterSummary:
@@ -796,7 +830,7 @@ async def target_registration_preflight(
     agents: list[dict[str, Any]] = []
     lister = getattr(db, "list_cluster_agent_statuses", None)
     if cluster_id and callable(lister):
-        agents = lister(workspace_id, cluster_id)
+        agents = visible_cluster_agent_statuses(lister(workspace_id, cluster_id))
     latest_agent = agents[0] if agents else None
     connection_status = (
         cluster_connection_status(latest_agent)
@@ -994,7 +1028,9 @@ async def get_cluster(
     cluster = db.get_cluster_registration(workspace_id, cluster_id)
     if cluster is None:
         raise HTTPException(status_code=404, detail=CLUSTER_NOT_FOUND)
-    agents = db.list_cluster_agent_statuses(workspace_id, cluster_id)
+    agents = visible_cluster_agent_statuses(
+        db.list_cluster_agent_statuses(workspace_id, cluster_id)
+    )
     latest_agent = agents[0] if agents else None
     return ClusterResponse(cluster=cluster_summary(cluster, latest_agent), agents=agents)
 
@@ -1020,7 +1056,9 @@ async def get_cluster_connection_status(
     registration = (
         registration_getter(workspace_id, cluster_id) if callable(registration_getter) else None
     )
-    agents = db.list_cluster_agent_statuses(workspace_id, cluster_id)
+    agents = visible_cluster_agent_statuses(
+        db.list_cluster_agent_statuses(workspace_id, cluster_id)
+    )
     latest_agent = agents[0] if agents else None
     return ClusterConnectionStatusResponse(
         cluster_id=cluster_id,
@@ -1160,15 +1198,30 @@ async def update_cluster_scheduling_profiles(
 @router.delete(gateway_routes.CLUSTER_PATH, status_code=204)
 async def unregister_cluster(
     cluster_id: str,
+    purge: bool = False,
     current: Any = Depends(require_admin_session),
     db: Any = Depends(get_db),
 ) -> None:
     workspace_id = getattr(current, "workspace_id", DEFAULT_WORKSPACE_ID)
-    registration = db.get_cluster_registration(workspace_id, cluster_id)
-    if registration is None:
-        raise HTTPException(status_code=NOT_FOUND_CODE, detail=CLUSTER_NOT_FOUND)
-    if is_management_registration(registration):
-        raise HTTPException(status_code=400, detail=management_readonly_detail())
+    if purge:
+        # 테스트 fixture 물리 삭제만 별도 UoW로 묶고 운영 soft-delete 경로는 그대로 둔다.
+        with unit_of_work_or_null(db):
+            registration = unregisterable_registration(db, workspace_id, cluster_id)
+            require_test_fixture_purge_environment(registration)
+            purge_registration = getattr(db, "purge_test_target_cluster_registration", None)
+            if not callable(purge_registration):
+                raise HTTPException(
+                    status_code=500,
+                    detail={
+                        "code": TEST_FIXTURE_PURGE_UNSUPPORTED_CODE,
+                        "detail": "테스트 fixture purge를 처리할 수 없습니다",
+                    },
+                )
+            if not purge_registration(workspace_id, cluster_id):
+                raise HTTPException(status_code=NOT_FOUND_CODE, detail=CLUSTER_NOT_FOUND)
+        return
+
+    unregisterable_registration(db, workspace_id, cluster_id)
     unregister = getattr(db, "unregister_target_cluster", None)
     if callable(unregister):
         if not unregister(workspace_id, cluster_id):

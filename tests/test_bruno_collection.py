@@ -203,6 +203,12 @@ def test_bruno_test_profile_removes_session_and_agent_tokens() -> None:
 
 def test_bruno_cli_runner_uses_isolated_profile_and_cleans_up_last() -> None:
     runner = (ROOT_DIR / "scripts" / "run-bruno-aws.sh").read_text(encoding="utf-8")
+    register_request = (API_DIR / "02-target-admin" / "01-register-target-dry-run.bru").read_text(
+        encoding="utf-8"
+    )
+    cleanup_request = (API_DIR / "11-clusters" / "12-unregister-cluster.bru").read_text(
+        encoding="utf-8"
+    )
 
     assert "environments/aws-test.bru" in runner
     assert "BRUNO_ENV_FILE" not in runner
@@ -218,6 +224,8 @@ def test_bruno_cli_runner_uses_isolated_profile_and_cleans_up_last() -> None:
     assert runner.count("11-clusters/12-unregister-cluster.bru") == 1
     assert "trap cleanup EXIT" in runner
     assert runner.rstrip().endswith("cleanup")
+    assert '"environment": "test"' in register_request
+    assert "purge=true" in cleanup_request
 
 
 def test_bruno_readme_explains_each_work_type() -> None:

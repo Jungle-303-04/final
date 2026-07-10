@@ -29,7 +29,7 @@ from domains.gitops.repository import (
     derive_watch_target_id,
 )
 from domains.rca.repository import RcaRepository
-from domains.target.repository import TargetAgentRepository
+from domains.target.repository import TargetAgentRepository, agent_status_retention_seconds
 from packages.ai.metrics import LlmInvocationMetric
 from packages.contracts.event_bus.interfaces import EventConsumerMetrics
 from packages.contracts.event_bus.processing import CLAIM_BLOCKED
@@ -851,6 +851,64 @@ def test_evidence_event_record_stages_window_event_and_outbox_atomically() -> No
     assert "INSERT INTO events" in event_sql
     assert "INSERT INTO outbox" in outbox_sql
     assert "lease_id" in outbox_sql
+
+
+def test_agent_status_upsert_prunes_only_superseded_expired_agents(monkeypatch) -> None:
+    recorded: list[Any] = []
+
+    class StubResult:
+        def mappings(self) -> StubResult:
+            return self
+
+        def one(self) -> dict[str, object]:
+            return {
+                "workspace_id": "workspace-1",
+                "cluster_id": "cluster-1",
+                "agent_id": "agent-current",
+                "status": "connected",
+                "capabilities": ["commands"],
+                "details": {},
+                "last_seen_at": datetime.now(UTC),
+                "created_at": datetime.now(UTC),
+                "updated_at": datetime.now(UTC),
+            }
+
+    class StubConnection:
+        def execute(self, statement: Any) -> StubResult:
+            recorded.append(statement)
+            return StubResult()
+
+    @contextmanager
+    def stub_connection():
+        yield StubConnection()
+
+    monkeypatch.setenv("AGENT_STATUS_RETENTION_SECONDS", "600")
+    repository = object.__new__(TargetAgentRepository)
+    repository.connection = stub_connection  # type: ignore[method-assign]
+
+    saved = repository.save_cluster_agent_status(
+        workspace_id="workspace-1",
+        cluster_id="cluster-1",
+        agent_id="agent-current",
+        capabilities=["commands"],
+    )
+
+    assert saved["agent_id"] == "agent-current"
+    assert len(recorded) == 2
+    delete_statement = recorded[1].compile(dialect=postgresql.dialect())
+    delete_sql = str(delete_statement)
+    assert "DELETE FROM cluster_agent_status" in delete_sql
+    assert "cluster_agent_status.agent_id !=" in delete_sql
+    assert "cluster_agent_status.last_seen_at <" in delete_sql
+    assert "agent-current" in delete_statement.params.values()
+
+
+def test_agent_status_retention_uses_safe_default_and_minimum(monkeypatch) -> None:
+    monkeypatch.setenv("AGENT_STATUS_RETENTION_SECONDS", "invalid")
+    assert agent_status_retention_seconds() == 3600
+
+    monkeypatch.setenv("AGENT_STATUS_RETENTION_SECONDS", "1")
+    assert agent_status_retention_seconds() == 300
 
 
 def test_manifest_artifact_upsert_is_scoped_by_workspace() -> None:

@@ -41,6 +41,7 @@ COMMON_ARGS=(
 )
 
 cleanup() {
+  # 서버가 APP_ENV=test와 등록 environment=test를 모두 확인한 뒤에만 물리 삭제한다.
   npx --yes @usebruno/cli@3.5.1 run \
     11-clusters/12-unregister-cluster.bru \
     "${COMMON_ARGS[@]}" >/dev/null 2>&1 || true
