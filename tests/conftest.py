@@ -43,6 +43,7 @@ SERVICE_LOCAL_MODULES = (
     "evidence.jobs",
     "providers",
     "providers.base",
+    "providers.collection_limits",
     "providers.loki_providers",
     "providers.prometheus_analysis",
     "providers.prometheus_providers",

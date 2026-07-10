@@ -46,6 +46,7 @@ def load_agent_module():
         "control.store",
         "providers",
         "providers.base",
+        "providers.collection_limits",
         "providers.kubernetes_utils",
         "providers.kubernetes_providers",
         "providers.loki_providers",
