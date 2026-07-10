@@ -23,8 +23,12 @@ def load_deploy_module() -> Any:
 
 
 class FakeClient:
-    def __init__(self, plan: dict[str, object]) -> None:
+    def __init__(self, plan: dict[str, object], *, start_run: dict[str, object] | None = None) -> None:
         self.plan = plan
+        self.start_run = start_run or {
+            "run_id": "run-prod-1",
+            "steps": [{"details": {"side_effects": True}}],
+        }
         self.api_base_url = "https://release-flow.company.internal/api"
         self.calls: list[tuple[str, str, dict[str, object] | None]] = []
 
@@ -44,12 +48,7 @@ class FakeClient:
         if path == "/release-plans/plan-prod":
             return {"plan": self.plan}
         if path == "/release-plans/start":
-            return {
-                "run": {
-                    "run_id": "run-prod-1",
-                    "steps": [{"details": {"side_effects": True}}],
-                }
-            }
+            return {"run": self.start_run}
         raise AssertionError(f"unexpected request {method} {path}")
 
 
@@ -66,8 +65,8 @@ def production_plan() -> dict[str, object]:
                 "config": {
                     "environment": "production",
                     "change_ticket": "CHG-12345",
-            "runbook_url": "https://wiki.company.internal/runbooks/checkout",
-            "post_deploy_verification_url": "https://checkout.company.internal/readyz",
+                    "runbook_url": "https://wiki.company.internal/runbooks/checkout",
+                    "post_deploy_verification_url": "https://checkout.company.internal/readyz",
                     "abort_criteria": "rollback when checkout error rate exceeds 5%",
                     "image": "ghcr.io/company/checkout:2.0.0",
                 },
@@ -179,3 +178,35 @@ def test_release_flow_deploy_refuses_plan_id_mismatch_before_start() -> None:
     assert results[-1].ok is False
     assert "plan_id must match requested plan_id" in results[-1].detail
     assert all(path != "/release-plans/start" for _method, path, _payload in client.calls)
+
+
+def test_release_flow_deploy_treats_incomplete_start_response_as_failed() -> None:
+    module = load_deploy_module()
+    args = module.parse_args(
+        [
+            "--api-base-url",
+            "https://release-flow.company.internal/api",
+            "--email",
+            "release@company.internal",
+            "--password",
+            "secret",
+            "--plan-id",
+            "plan-prod",
+        ]
+    )
+    client = FakeClient(
+        production_plan(),
+        start_run={
+            "run_id": "",
+            "status": "failed",
+            "steps": [{"status": "failed", "details": {"side_effects": False}}],
+        },
+    )
+
+    results = module.run_deploy(client, args)
+
+    assert results[-1].ok is False
+    assert "must include run_id" in results[-1].detail
+    assert "status must not be failed" in results[-1].detail
+    assert "step 1 status must not be failed" in results[-1].detail
+    assert "step 1 must confirm side_effects" in results[-1].detail
