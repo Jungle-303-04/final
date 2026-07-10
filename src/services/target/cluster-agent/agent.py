@@ -1320,7 +1320,12 @@ class TargetClusterAgent:
         except (TypeError, ValueError) as exc:
             raise ValueError("RCA test command requires scenario_version") from exc
         scenario = test_scenario_by_id(scenario_id)
-        if not run_id or scenario is None or scenario.availability != "ready":
+        if not run_id or scenario is None:
+            raise ValueError("unknown or unavailable RCA test scenario")
+        verification_mode = payload.get("verification_mode") is True
+        if scenario.availability == "verification_pending" and not verification_mode:
+            raise ValueError("RCA test verification mode is required for pending scenario")
+        if scenario.availability not in {"ready", "verification_pending"}:
             raise ValueError("unknown or unavailable RCA test scenario")
         if scenario.version != requested_version:
             raise ValueError("RCA test scenario version changed; create a new run")
@@ -1338,6 +1343,9 @@ class TargetClusterAgent:
             or requested_resource_name != expected_target.resource_name
         ):
             raise ValueError("RCA test scenario target changed; create a new run")
+        cleanup_adapter = str(payload.get("cleanup_adapter") or "kubernetes.manifest_delete")
+        if cleanup_adapter != scenario.cleanup.adapter:
+            raise ValueError("RCA test cleanup adapter changed; create a new run")
         expected_root_cause = str(payload.get("expected_root_cause") or "")
         expected_symptom = str(payload.get("expected_symptom") or "")
         if not expected_root_cause or not expected_symptom:

@@ -93,8 +93,10 @@ def _command_plan(
     expected_symptom: str | None = None,
     expires_at: str | None = None,
     cleanup_adapter: str = "kubernetes.manifest_delete",
+    verification_mode: bool = False,
 ) -> JsonObject:
     validate_rca_test_fixture_target(namespace, resource_name)
+    default_test_scenario_adapter_registry().cleanup_adapter(cleanup_adapter)
     identity = rca_test_run_identity(run_id)
     action = (
         Command.RCA_TEST_SCENARIO_CLEANUP_ACTION
@@ -110,6 +112,7 @@ def _command_plan(
         "resource_kind": RCA_TEST_FIXTURE_RESOURCE_KIND,
         "namespace": namespace,
         "resource_name": resource_name,
+        "cleanup_adapter": cleanup_adapter,
     }
     if not cleanup:
         if not expected_root_cause or not expected_symptom or not expires_at:
@@ -119,11 +122,9 @@ def _command_plan(
                 "expected_root_cause": expected_root_cause,
                 "expected_symptom": expected_symptom,
                 "expires_at": expires_at,
+                "verification_mode": verification_mode,
             }
         )
-    else:
-        default_test_scenario_adapter_registry().cleanup_adapter(cleanup_adapter)
-        command_payload["cleanup_adapter"] = cleanup_adapter
     plan: JsonObject = {
         "command_id": command_id,
         "idempotency_key": command_id,

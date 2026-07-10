@@ -31,7 +31,7 @@ def validate_scenario_adapter_contracts(
         except TestScenarioAdapterError as exc:
             errors.append(f"{scenario.scenario_id}: {exc}")
             continue
-        if scenario.availability != "ready":
+        if scenario.availability not in {"ready", "verification_pending"}:
             continue
         capabilities = adapter.capabilities
         fault_mode = str(getattr(scenario.trigger.params, "fault_mode", ""))
@@ -94,7 +94,7 @@ def validate_scenario_cross_contracts(
 ) -> None:
     errors: list[str] = []
     for scenario in scenarios:
-        if scenario.availability != "ready":
+        if scenario.availability not in {"ready", "verification_pending"}:
             continue
         candidates = [
             candidate

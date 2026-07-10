@@ -112,10 +112,13 @@ def test_inject_plan_is_allowlisted_and_contains_no_raw_manifest_or_shell() -> N
         "expected_root_cause": "wrong_image_tag",
         "expected_symptom": "ImagePullBackOff",
         "expires_at": EXPIRES_AT,
+        "cleanup_adapter": "kubernetes.manifest_delete",
+        "verification_mode": False,
     }
     assert plan["expires_at"] == EXPIRES_AT
     serialized = json.dumps(plan, sort_keys=True).casefold()
-    assert "manifest" not in serialized
+    assert "raw_manifest" not in serialized
+    assert '"manifest":' not in serialized
     assert "kubectl" not in serialized
     assert "shell" not in serialized
 

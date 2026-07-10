@@ -75,6 +75,8 @@ def test_rca_test_token_is_local_bruno_secret_without_tracked_placeholder() -> N
     assert "replace-with-RCA_TEST_RUNS_TOKEN" not in environment
     assert "replace-with-RCA_TEST_RUNS_TOKEN" not in collection
     assert "x-rca-test-token: {{rca_test_token}}" in workflow
+    assert "x-rca-test-verification: {{rca_test_verification}}" in workflow
+    assert "rca_test_verification: false" in environment
 
 
 def test_every_gateway_route_has_a_bruno_request() -> None:

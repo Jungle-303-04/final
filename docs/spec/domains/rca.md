@@ -17,6 +17,8 @@ status: synced
 - test 환경에서만 열리는 실제 장애 시나리오 API를 제공한다. 모든 operation은 OpenAPI에
   `x-rca-test-token` 헤더를 노출하고, 같은 cluster/fixture(kind·namespace·name) 실행은 DB 원자 가드로
   catalog의 `max_concurrent_runs`를 강제한다.
+- `verification_pending` 시나리오는 `x-rca-test-verification: true`, 전용 test token,
+  service admin 세 조건이 모두 있어야 실행된다. 일반 실행 요청과 섞지 않는다.
 - **하지 않는 것**: 실제 RCA 분석/AI 추론(services 계층의 워커 담당), 이벤트 버스 구독 루프 실행, 복구 조치 실행.
 
 ## 의존성 (Dependencies)
@@ -59,10 +61,10 @@ status: synced
 
 RCA 담당자의 추가 절차:
 
-1. `uv run python scripts/rca_scenario.py scaffold <scenario_id> --root-cause <candidate_id> --symptom <symptom> --fault-mode <mode>`로 `detector_gap` YAML과 fixture test 골격을 만든다. 기존 파일은 덮어쓰지 않는다.
+1. `uv run python scripts/rca_scenario.py scaffold <scenario_id> --root-cause <candidate_id> --symptom <symptom> --fault-mode <mode>`로 `verification_pending` YAML과 fixture test 골격을 만든다. 기존 파일은 덮어쓰지 않는다.
 2. `src/domains/rca/test_scenario_catalog/*.yaml`의 repository-owned typed params와 observation predicate를 구체화하고 생성된 fixture test에 결정적 manifest/matcher 기대값을 작성한다.
 3. `uv run python scripts/rca_scenario.py validate`를 실행한다. 이 명령은 scenario schema·중복·canonical coverage, adapter capability, symptom별 cause candidate, candidate `expected_evidence` 포함 관계, 명시적 recovery coverage를 함께 검사하며 오류 시 nonzero로 끝난다.
-4. 관련 unit/Agent/API 계약 테스트를 통과시킨 뒤 test target의 `sandbox`에서 live run을 수행한다. 실제 provider 결과, RCA root, recovery plan, UID/resourceVersion CAS cleanup과 Pod/Endpoint 잔여 0을 확인한다.
+4. 관련 unit/Agent/API 계약 테스트를 통과시킨 뒤 전용 token + service admin + `x-rca-test-verification: true`로 test target의 `sandbox`에서 live run을 수행한다. 실제 provider 결과, RCA root, recovery plan, UID/resourceVersion CAS cleanup과 Pod/Endpoint 잔여 0을 확인한다.
 5. live 완주 증적을 확인한 후에만 `availability`를 `ready`로 승격한다. 외부 DB/GitOps처럼 실행 adapter가 없으면 `fixture_required`, 감지·근거·RCA 연결이 미완성이면 `detector_gap`을 유지한다.
 
 `expected.root_cause`는 `expected.symptom`을 처리하는 cause catalog rule의 candidate로 존재해야 한다. 시나리오 `evidence_sources`는 그 candidate의 `expected_evidence`를 모두 포함해야 하며, 해당 root cause에 명시적 recovery rule이 있어야 한다. 실제 수집되지 않은 synthetic evidence로 이 계약을 충족시켜서는 안 된다.

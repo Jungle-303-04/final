@@ -21,7 +21,12 @@ CATALOG_PATTERNS = ("*.yaml", "*.yml")
 TEST_RESOURCE_LABEL = "kubeheal.io/rca-test"
 
 ExecutionMode = Literal["real", "hybrid", "external"]
-Availability = Literal["ready", "fixture_required", "detector_gap"]
+Availability = Literal[
+    "ready",
+    "verification_pending",
+    "fixture_required",
+    "detector_gap",
+]
 EvidenceSource = Literal["kubernetes", "metrics", "logs", "traces", "metadata"]
 KubernetesFaultMode = Literal[
     "oom_killed",
@@ -230,6 +235,7 @@ class RcaTestScenario(StrictModel):
     execution: ExecutionMode
     availability: Availability
     availability_reason: str | None = Field(default=None, max_length=500)
+    verification_work_needed: list[str] = Field(default_factory=list, max_length=10)
     fixture_requirements: list[str] = Field(default_factory=list, max_length=10)
     detector_work_needed: list[str] = Field(default_factory=list, max_length=10)
     expected: ScenarioExpected
@@ -251,8 +257,24 @@ class RcaTestScenario(StrictModel):
         elif self.availability == "detector_gap":
             if not self.availability_reason or not self.detector_work_needed:
                 raise ValueError("detector_gap needs availability_reason and detector_work_needed")
-        elif self.fixture_requirements or self.detector_work_needed:
+        elif self.availability == "verification_pending":
+            if not self.availability_reason or not self.verification_work_needed:
+                raise ValueError(
+                    "verification_pending needs availability_reason and verification_work_needed"
+                )
+        elif (
+            self.verification_work_needed
+            or self.fixture_requirements
+            or self.detector_work_needed
+        ):
             raise ValueError("ready scenario cannot declare unavailable-work metadata")
+
+        if self.availability != "verification_pending" and self.verification_work_needed:
+            raise ValueError("verification_work_needed is only valid for verification_pending")
+        if self.availability != "fixture_required" and self.fixture_requirements:
+            raise ValueError("fixture_requirements is only valid for fixture_required")
+        if self.availability != "detector_gap" and self.detector_work_needed:
+            raise ValueError("detector_work_needed is only valid for detector_gap")
 
         if isinstance(self.trigger, KubernetesDeploymentTrigger):
             if not isinstance(self.cleanup, KubernetesManifestDeleteCleanup):

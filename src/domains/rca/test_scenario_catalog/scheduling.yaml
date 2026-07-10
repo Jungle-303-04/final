@@ -72,9 +72,9 @@ scenarios:
     title: "Node affinity 불일치"
     description: "존재하지 않는 node label affinity를 요구해 실제 FailedScheduling을 만듭니다."
     execution: "real"
-    availability: "detector_gap"
+    availability: "verification_pending"
     availability_reason: "실제 evidence 수집부터 RCA, recovery plan, cleanup까지 live 완주가 아직 검증되지 않았습니다."
-    detector_work_needed:
+    verification_work_needed:
       - "격리 target cluster에서 affinity FailedScheduling 실제 이벤트 변형 검증"
       - "node_affinity_or_taint_mismatch RCA 및 recovery plan live 완주 증적"
     expected:
