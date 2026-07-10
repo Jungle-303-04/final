@@ -8,7 +8,7 @@ import json
 import os
 import sys
 import urllib.parse
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 try:
@@ -18,6 +18,8 @@ try:
         DEPLOY_WORKFLOW,
         READINESS_WORKFLOW,
         GitHubEvidenceError,
+    )
+    from verify_release_flow_production_evidence import (
         main as verify_evidence_main,
     )
 except ImportError:  # pragma: no cover - used when imported as scripts.*
@@ -27,6 +29,8 @@ except ImportError:  # pragma: no cover - used when imported as scripts.*
         DEPLOY_WORKFLOW,
         READINESS_WORKFLOW,
         GitHubEvidenceError,
+    )
+    from scripts.verify_release_flow_production_evidence import (
         main as verify_evidence_main,
     )
 
@@ -40,8 +44,12 @@ SAFE_PLAN_ID_CHARS = set("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ01
 
 def parse_args(argv: list[str]) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--github-repo", required=True, help="GitHub repository in owner/repo form.")
-    parser.add_argument("--github-token", default="", help="GitHub token with Actions workflow access.")
+    parser.add_argument(
+        "--github-repo", required=True, help="GitHub repository in owner/repo form."
+    )
+    parser.add_argument(
+        "--github-token", default="", help="GitHub token with Actions workflow access."
+    )
     parser.add_argument(
         "--github-token-env",
         default="GITHUB_TOKEN",
@@ -53,7 +61,9 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     parser.add_argument("--environment", default="production", help="GitHub Environment input.")
     parser.add_argument("--timeout-seconds", type=int, default=1800)
     parser.add_argument("--poll-seconds", type=int, default=15)
-    parser.add_argument("--github-output-dir", type=Path, default=Path("release-flow-production-evidence"))
+    parser.add_argument(
+        "--github-output-dir", type=Path, default=Path("release-flow-production-evidence")
+    )
     parser.add_argument(
         "--signoff-report-path",
         type=Path,
@@ -102,7 +112,9 @@ def validate_release_plan_id(plan_id: str) -> str | None:
     plan_id = str(plan_id or "").strip()
     if not plan_id:
         return "release_plan_id is required"
-    if plan_id[0] not in SAFE_PLAN_ID_CHARS or any(char not in SAFE_PLAN_ID_CHARS for char in plan_id):
+    if plan_id[0] not in SAFE_PLAN_ID_CHARS or any(
+        char not in SAFE_PLAN_ID_CHARS for char in plan_id
+    ):
         return "release_plan_id must be path-safe: letters, numbers, dot, underscore, colon, or hyphen only"
     if len(plan_id) > 128:
         return "release_plan_id must be 128 characters or fewer"
@@ -150,7 +162,9 @@ def validate_signoff_inputs(args: argparse.Namespace) -> list[str]:
     if not owner and not oncall:
         errors.append("live_release_owner or live_oncall_contact is required")
     if owner in PLACEHOLDER_OPERATOR_VALUES or oncall in PLACEHOLDER_OPERATOR_VALUES:
-        errors.append("live_release_owner/live_oncall_contact must not use placeholder operator values")
+        errors.append(
+            "live_release_owner/live_oncall_contact must not use placeholder operator values"
+        )
     if not str(args.live_safe_pr_workflow_run_id or "").strip().isdigit():
         errors.append("live_safe_pr_workflow_run_id must be a numeric GitHub Actions run id")
     return errors
@@ -253,7 +267,9 @@ def dispatch_and_wait(
     if not run_id.isdigit():
         raise GitHubEvidenceError(f"{workflow} completed run did not report a numeric run id")
     if conclusion != "success":
-        raise GitHubEvidenceError(f"{workflow} run {run_id} concluded {conclusion or '<missing>'} {url}".rstrip())
+        raise GitHubEvidenceError(
+            f"{workflow} run {run_id} concluded {conclusion or '<missing>'} {url}".rstrip()
+        )
     print(f"ok signoff.run: {workflow} run {run_id} succeeded {url}".rstrip())
     return run
 
@@ -285,7 +301,7 @@ def write_signoff_report(
     path.parent.mkdir(parents=True, exist_ok=True)
     payload = {
         "status": "passed" if evidence_status == 0 else "failed",
-        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "generated_at": datetime.now(UTC).isoformat(),
         "github_repo": args.github_repo,
         "github_branch": args.github_branch,
         "github_sha": args.github_sha,
@@ -313,7 +329,10 @@ def main(argv: list[str]) -> int:
     args = parse_args(argv)
     token = str(args.github_token or os.getenv(str(args.github_token_env or "")) or "").strip()
     if not token:
-        print("fail signoff.inputs: --github-token or configured --github-token-env is required", file=sys.stderr)
+        print(
+            "fail signoff.inputs: --github-token or configured --github-token-env is required",
+            file=sys.stderr,
+        )
         return 2
     input_errors = validate_signoff_inputs(args)
     if input_errors:
@@ -321,7 +340,7 @@ def main(argv: list[str]) -> int:
         return 2
 
     try:
-        started_after = datetime.now(timezone.utc) - timedelta(seconds=10)
+        started_after = datetime.now(UTC) - timedelta(seconds=10)
         readiness_run = dispatch_and_wait(
             args=args,
             token=token,
@@ -338,7 +357,7 @@ def main(argv: list[str]) -> int:
         )
         if readiness_status != 0:
             return readiness_status
-        started_after = datetime.now(timezone.utc) - timedelta(seconds=10)
+        started_after = datetime.now(UTC) - timedelta(seconds=10)
         deploy_run = dispatch_and_wait(
             args=args,
             token=token,
@@ -354,7 +373,9 @@ def main(argv: list[str]) -> int:
             readiness_run_id=readiness_run_id,
             deploy_run_id=deploy_run_id,
         )
-        write_signoff_report(args, readiness_run=readiness_run, deploy_run=deploy_run, evidence_status=final_status)
+        write_signoff_report(
+            args, readiness_run=readiness_run, deploy_run=deploy_run, evidence_status=final_status
+        )
         if final_status != 0:
             return final_status
         return verify_artifacts(

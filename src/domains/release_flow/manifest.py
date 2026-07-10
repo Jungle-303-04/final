@@ -72,7 +72,14 @@ def render_release_step_manifest(
         warnings.append(context.generated_path_warning)
     return manifest_response(
         manifest,
-        [{"path": file_path, "content": manifest, "action": "upsert", "description": context.file_description}],
+        [
+            {
+                "path": file_path,
+                "content": manifest,
+                "action": "upsert",
+                "description": context.file_description,
+            }
+        ],
         resource_summaries(resources),
         diagnostics,
         warnings,
@@ -98,7 +105,9 @@ class ManifestContext:
         self.application = application
         self.diagnostics = diagnostics
         self.warnings = warnings
-        self.application_id = str(step.get("application_id") or application.get("application_id") or "")
+        self.application_id = str(
+            step.get("application_id") or application.get("application_id") or ""
+        )
         self.name = self.slug_field(
             "workload_name",
             config.get("workload_name")
@@ -114,7 +123,9 @@ class ManifestContext:
             config.get("namespace") or application.get("namespace") or Sandbox.NAMESPACE,
         )
         self.image = required_image(config.get("image") or settings.get("image"), diagnostics)
-        self.replicas = self.int_field("replicas", config.get("replicas"), 2, 0, MAX_DEPLOYMENT_REPLICAS)
+        self.replicas = self.int_field(
+            "replicas", config.get("replicas"), 2, 0, MAX_DEPLOYMENT_REPLICAS
+        )
         self.container_port = self.int_field(
             "container_port",
             config.get("container_port") or config.get("target_port"),
@@ -158,7 +169,9 @@ class ManifestContext:
         values = {
             "myjob.io/application-id": self.application_id,
             "myjob.io/release-plan": str(self.plan.get("plan_id") or self.plan.get("name") or ""),
-            "myjob.io/branch": str(self.config.get("branch") or self.application.get("branch") or ""),
+            "myjob.io/branch": str(
+                self.config.get("branch") or self.application.get("branch") or ""
+            ),
             "myjob.io/commit-sha": str(self.config.get("commit_sha") or ""),
             "myjob.io/rollout-strategy": self.strategy,
         }
@@ -254,7 +267,9 @@ def deployment_manifest(ctx: ManifestContext, config_map: dict[str, str]) -> dic
         env_from.append({"configMapRef": {"name": config_map_name(ctx)}})
     if env_from:
         container["envFrom"] = env_from
-    readiness_path = str(ctx.config.get("readiness_path") or ctx.config.get("health_check_path") or "/readyz")
+    readiness_path = str(
+        ctx.config.get("readiness_path") or ctx.config.get("health_check_path") or "/readyz"
+    )
     liveness_path = str(ctx.config.get("liveness_path") or "/healthz")
     if readiness_path:
         container["readinessProbe"] = http_probe(readiness_path, ctx.container_port)
@@ -274,7 +289,10 @@ def deployment_manifest(ctx: ManifestContext, config_map: dict[str, str]) -> dic
                 "metadata": {"labels": ctx.labels, "annotations": pod_annotations(ctx)},
                 "spec": {
                     "securityContext": pod_security_context(ctx),
-                    "terminationGracePeriodSeconds": int_like(ctx.config.get("termination_grace_period_seconds")) or 30,
+                    "terminationGracePeriodSeconds": int_like(
+                        ctx.config.get("termination_grace_period_seconds")
+                    )
+                    or 30,
                     "containers": [container],
                 },
             },
@@ -352,7 +370,8 @@ def horizontal_pod_autoscaler_manifest(ctx: ManifestContext) -> dict[str, Any]:
                         "name": "cpu",
                         "target": {
                             "type": "Utilization",
-                            "averageUtilization": int_like(ctx.config.get("target_cpu_utilization")) or 70,
+                            "averageUtilization": int_like(ctx.config.get("target_cpu_utilization"))
+                            or 70,
                         },
                     },
                 }
@@ -454,7 +473,9 @@ def resources_for(ctx: ManifestContext) -> dict[str, Any]:
         },
         "limits": {
             "cpu": str(limits.get("cpu") or ctx.config.get("cpu_limit") or DEFAULT_CPU_LIMIT),
-            "memory": str(limits.get("memory") or ctx.config.get("memory_limit") or DEFAULT_MEMORY_LIMIT),
+            "memory": str(
+                limits.get("memory") or ctx.config.get("memory_limit") or DEFAULT_MEMORY_LIMIT
+            ),
         },
     }
 
@@ -570,7 +591,9 @@ def config_map_data(ctx: ManifestContext) -> dict[str, str]:
 
 def generated_manifest_path(ctx: ManifestContext) -> str:
     explicit = str(ctx.config.get("generated_manifest_path") or "").strip()
-    raw = explicit or str(ctx.config.get("manifest_path") or ctx.application.get("manifest_path") or "")
+    raw = explicit or str(
+        ctx.config.get("manifest_path") or ctx.application.get("manifest_path") or ""
+    )
     if unsafe_manifest_path(raw):
         ctx.diagnostics.append(
             item(

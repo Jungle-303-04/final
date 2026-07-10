@@ -58,9 +58,7 @@ def test_metadata_provider_collects_one_deployment_snapshot(monkeypatch) -> None
                         {
                             "metadata": {
                                 "name": "checkout-api-abc123",
-                                "annotations": {
-                                    "deployment.kubernetes.io/revision": "7"
-                                },
+                                "annotations": {"deployment.kubernetes.io/revision": "7"},
                                 "ownerReferences": [
                                     {
                                         "kind": "Deployment",
@@ -73,9 +71,7 @@ def test_metadata_provider_collects_one_deployment_snapshot(monkeypatch) -> None
                         {
                             "metadata": {
                                 "name": "other-api-def456",
-                                "annotations": {
-                                    "deployment.kubernetes.io/revision": "3"
-                                },
+                                "annotations": {"deployment.kubernetes.io/revision": "3"},
                                 "ownerReferences": [
                                     {
                                         "kind": "Deployment",
@@ -182,8 +178,7 @@ def test_metadata_provider_collects_one_deployment_snapshot(monkeypatch) -> None
     }
     assert "example.com/token" not in snapshot["deployment_annotations"]
     assert (
-        "kubectl.kubernetes.io/last-applied-configuration"
-        not in snapshot["deployment_annotations"]
+        "kubectl.kubernetes.io/last-applied-configuration" not in snapshot["deployment_annotations"]
     )
     assert snapshot["pod_template_labels"] == {"app": "checkout-api"}
     assert snapshot["pod_template_annotations"] == {
@@ -203,9 +198,7 @@ def test_metadata_provider_collects_one_deployment_snapshot(monkeypatch) -> None
         "period_seconds": 5,
         "failure_threshold": 4,
     }
-    assert snapshot["replicaset_revisions"] == [
-        {"name": "checkout-api-abc123", "revision": "7"}
-    ]
+    assert snapshot["replicaset_revisions"] == [{"name": "checkout-api-abc123", "revision": "7"}]
 
 
 def test_metadata_provider_collects_namespace_deployment_snapshots(monkeypatch) -> None:
@@ -222,9 +215,7 @@ def test_metadata_provider_collects_namespace_deployment_snapshots(monkeypatch) 
                         {
                             "metadata": {
                                 "name": "shop-api-abc123",
-                                "annotations": {
-                                    "deployment.kubernetes.io/revision": "2"
-                                },
+                                "annotations": {"deployment.kubernetes.io/revision": "2"},
                                 "ownerReferences": [
                                     {
                                         "kind": "Deployment",

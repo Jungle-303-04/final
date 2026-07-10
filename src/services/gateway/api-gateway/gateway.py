@@ -23,10 +23,10 @@ from domains.catalog.router import router as catalog_router
 from domains.command.router import router as command_router
 from domains.dashboard.fleet_router import router as fleet_router
 from domains.dashboard.router import router as dashboard_router
+from domains.diagnostics.router import router as diagnostics_router
 from domains.gitops.repository_discovery_router import router as repository_discovery_router
 from domains.gitops.router import approval_router
 from domains.gitops.router import router as gitops_router
-from domains.diagnostics.router import router as diagnostics_router
 from domains.identity.admin_router import router as identity_admin_router
 from domains.identity.dependencies import (
     ClusterAgentIdentity,
@@ -36,9 +36,9 @@ from domains.identity.dependencies import (
 from domains.identity.router import router as identity_router
 from domains.inventory.router import router as inventory_router
 from domains.providers.router import router as providers_router
-from domains.release_flow.router import router as release_flow_router
 from domains.rca.query_router import router as rca_query_router
 from domains.rca.router import router as rca_router
+from domains.release_flow.router import router as release_flow_router
 from domains.target.events import AgentConnectedBody
 from domains.target.evidence_jobs import EVIDENCE_JOB_STATUS_LEASED, EVIDENCE_JOB_STATUS_QUEUED
 from domains.target.router import router as target_router

@@ -74,12 +74,18 @@ def test_release_flow_smoke_workflow_declares_operator_inputs_and_secrets_for_di
         job["env"]["API_BASE_URL"]
         == "${{ inputs.api_base_url || secrets.release_flow_api_base_url || secrets.RELEASE_FLOW_API_BASE_URL }}"
     )
-    assert job["env"]["AUTH_EMAIL"] == "${{ secrets.release_flow_auth_email || secrets.RELEASE_FLOW_AUTH_EMAIL }}"
+    assert (
+        job["env"]["AUTH_EMAIL"]
+        == "${{ secrets.release_flow_auth_email || secrets.RELEASE_FLOW_AUTH_EMAIL }}"
+    )
     assert (
         job["env"]["AUTH_PASSWORD"]
         == "${{ secrets.release_flow_auth_password || secrets.RELEASE_FLOW_AUTH_PASSWORD }}"
     )
-    assert job["env"]["PRODUCTION_PREFLIGHT_RUN_LIMIT"] == "${{ inputs.production_preflight_run_limit || '20' }}"
+    assert (
+        job["env"]["PRODUCTION_PREFLIGHT_RUN_LIMIT"]
+        == "${{ inputs.production_preflight_run_limit || '20' }}"
+    )
     assert job["env"]["REQUEST_TIMEOUT_SECONDS"] == "${{ inputs.request_timeout_seconds || '15' }}"
     assert job["env"]["RETRY_ATTEMPTS"] == "${{ inputs.retry_attempts || '5' }}"
     assert job["env"]["RETRY_DELAY_SECONDS"] == "${{ inputs.retry_delay_seconds || '2' }}"
@@ -88,8 +94,12 @@ def test_release_flow_smoke_workflow_declares_operator_inputs_and_secrets_for_di
     assert job["env"]["ALERT_PREFLIGHT"] == "${{ inputs.alert_preflight || false }}"
     assert job["env"]["ALERT_PREFLIGHT_SEVERITY"] == "${{ inputs.alert_severity || 'warning' }}"
     assert job["env"]["LIVE_PREFLIGHT"] == "${{ inputs.live_preflight || false }}"
-    assert job["env"]["LIVE_PREFLIGHT_APPROVAL_GATE"] == "${{ inputs.live_approval_gate || 'manual' }}"
-    assert job["env"]["LIVE_PREFLIGHT_ENVIRONMENT"] == "${{ inputs.live_environment || 'production' }}"
+    assert (
+        job["env"]["LIVE_PREFLIGHT_APPROVAL_GATE"] == "${{ inputs.live_approval_gate || 'manual' }}"
+    )
+    assert (
+        job["env"]["LIVE_PREFLIGHT_ENVIRONMENT"] == "${{ inputs.live_environment || 'production' }}"
+    )
     assert job["env"]["LIVE_PREFLIGHT_NAMESPACE"] == "${{ inputs.live_namespace || 'production' }}"
     assert job["env"]["LIVE_PREFLIGHT_CHANGE_TICKET"] == "${{ inputs.live_change_ticket }}"
     assert job["env"]["LIVE_PREFLIGHT_RUNBOOK_URL"] == "${{ inputs.live_runbook_url }}"
@@ -176,8 +186,12 @@ def test_release_flow_smoke_workflow_uploads_artifacts_before_failing_gate() -> 
     job = workflow["jobs"]["release_flow_smoke"]
     steps = job["steps"]
     smoke_step = next(step for step in steps if step.get("id") == "release_flow_smoke")
-    upload_step = next(step for step in steps if step["name"] == "Upload release-flow smoke artifacts")
-    fail_step = next(step for step in steps if step["name"] == "Fail when release-flow smoke failed")
+    upload_step = next(
+        step for step in steps if step["name"] == "Upload release-flow smoke artifacts"
+    )
+    fail_step = next(
+        step for step in steps if step["name"] == "Fail when release-flow smoke failed"
+    )
     validate_step = next(step for step in steps if step["name"] == "Validate workflow inputs")
 
     assert job["environment"] == "${{ inputs.github_environment || 'production' }}"
@@ -206,16 +220,25 @@ def test_release_flow_smoke_workflow_uploads_artifacts_before_failing_gate() -> 
     assert "--live-oncall-contact" in smoke_step["run"]
     assert "--live-image" in smoke_step["run"]
     assert "--live-verification-url" in smoke_step["run"]
-    assert 'smoke_args+=(--alert-preflight --alert-severity "${ALERT_PREFLIGHT_SEVERITY}")' in smoke_step["run"]
+    assert (
+        'smoke_args+=(--alert-preflight --alert-severity "${ALERT_PREFLIGHT_SEVERITY}")'
+        in smoke_step["run"]
+    )
     assert "--ci" in smoke_step["run"]
     assert "--ci-artifacts-dir artifacts/release-flow" in smoke_step["run"]
 
     assert "Set api_base_url or RELEASE_FLOW_API_BASE_URL" in validate_step["run"]
     assert "release-flow production smoke requires an https API base URL" in validate_step["run"]
-    assert "release-flow production smoke must not target localhost or example hosts" in validate_step["run"]
+    assert (
+        "release-flow production smoke must not target localhost or example hosts"
+        in validate_step["run"]
+    )
     assert "Set RELEASE_FLOW_AUTH_EMAIL" in validate_step["run"]
     assert "Set RELEASE_FLOW_AUTH_PASSWORD" in validate_step["run"]
-    assert "production_preflight_run_limit must be an integer between 1 and 500" in validate_step["run"]
+    assert (
+        "production_preflight_run_limit must be an integer between 1 and 500"
+        in validate_step["run"]
+    )
     assert "production_preflight_run_limit must be between 1 and 500" in validate_step["run"]
     assert "request_timeout_seconds must be a number between 1 and 120" in validate_step["run"]
     assert "request_timeout_seconds must be between 1 and 120" in validate_step["run"]
@@ -230,10 +253,18 @@ def test_release_flow_smoke_workflow_uploads_artifacts_before_failing_gate() -> 
     assert "alert_severity must be one of info, warning, or critical" in validate_step["run"]
     assert "live_environment must be a Kubernetes-style DNS label" in validate_step["run"]
     assert "live_namespace must be a Kubernetes-style DNS label" in validate_step["run"]
-    assert "live_safe_pr_workflow_run_id is required when live_approval_gate is safe_pr" in validate_step["run"]
+    assert (
+        "live_safe_pr_workflow_run_id is required when live_approval_gate is safe_pr"
+        in validate_step["run"]
+    )
     assert "live_safe_pr_url is required when live_approval_gate is safe_pr" in validate_step["run"]
-    assert "live_safe_pr_url must use https when live_approval_gate is safe_pr" in validate_step["run"]
-    assert "live_safe_pr_url must not use localhost or example hosts when live_approval_gate is safe_pr" in validate_step["run"]
+    assert (
+        "live_safe_pr_url must use https when live_approval_gate is safe_pr" in validate_step["run"]
+    )
+    assert (
+        "live_safe_pr_url must not use localhost or example hosts when live_approval_gate is safe_pr"
+        in validate_step["run"]
+    )
     assert "live_change_ticket is required when live_preflight is enabled" in validate_step["run"]
     assert "live_change_ticket must not use CHG-PREFLIGHT" in validate_step["run"]
     assert "live_runbook_url is required for production live_preflight" in validate_step["run"]
@@ -242,7 +273,9 @@ def test_release_flow_smoke_workflow_uploads_artifacts_before_failing_gate() -> 
     assert "live_image is required for production live_preflight" in validate_step["run"]
     assert "live_image must not use the demo live preflight image" in validate_step["run"]
     assert "live_verification_url is required for production live_preflight" in validate_step["run"]
-    assert "live_verification_url must use https for production live_preflight" in validate_step["run"]
+    assert (
+        "live_verification_url must use https for production live_preflight" in validate_step["run"]
+    )
     assert "live_verification_url must not use localhost or example hosts" in validate_step["run"]
     assert "live_release_owner or live_oncall_contact is required" in validate_step["run"]
     assert "live_release_owner must identify the real production owner" in validate_step["run"]

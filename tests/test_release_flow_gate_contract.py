@@ -148,7 +148,9 @@ def test_production_deploy_needing_wrong_job_is_rejected(tmp_path: Path) -> None
     result = validate_workflows([workflow])
 
     assert not result.ok
-    assert any("must need one of the release-flow gate jobs" in item.message for item in result.violations)
+    assert any(
+        "must need one of the release-flow gate jobs" in item.message for item in result.violations
+    )
 
 
 def test_cli_returns_failure_for_contract_violation(tmp_path: Path, capsys) -> None:

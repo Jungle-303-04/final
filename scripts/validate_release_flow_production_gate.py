@@ -13,7 +13,6 @@ from urllib.parse import urlparse
 
 import yaml
 
-
 WORKFLOW_SUFFIXES = {".yml", ".yaml"}
 GATE_WORKFLOW_PATH = "./.github/workflows/release-flow-production-gate.yml"
 REQUIRED_GATE_INPUTS = (
@@ -96,7 +95,9 @@ def load_yaml(path: Path) -> dict[str, Any]:
     return loaded
 
 
-def validate_workflows(paths: list[Path], *, require_production_deploy: bool = False) -> ValidationResult:
+def validate_workflows(
+    paths: list[Path], *, require_production_deploy: bool = False
+) -> ValidationResult:
     result = ValidationResult()
     files = workflow_files(paths)
     for path in files:
@@ -129,15 +130,23 @@ def validate_workflows(paths: list[Path], *, require_production_deploy: bool = F
 
 
 def gate_job_ids(jobs: dict[str, Any]) -> set[str]:
-    return {str(job_id) for job_id, job in jobs.items() if isinstance(job, dict) and calls_release_flow_gate(job)}
+    return {
+        str(job_id)
+        for job_id, job in jobs.items()
+        if isinstance(job, dict) and calls_release_flow_gate(job)
+    }
 
 
 def calls_release_flow_gate(job: dict[str, Any]) -> bool:
     uses = str(job.get("uses", "")).strip()
-    return uses == GATE_WORKFLOW_PATH or uses.endswith("/.github/workflows/release-flow-production-gate.yml")
+    return uses == GATE_WORKFLOW_PATH or uses.endswith(
+        "/.github/workflows/release-flow-production-gate.yml"
+    )
 
 
-def production_deploy_reason(path: Path, workflow: dict[str, Any], job_id: str, job: dict[str, Any]) -> str | None:
+def production_deploy_reason(
+    path: Path, workflow: dict[str, Any], job_id: str, job: dict[str, Any]
+) -> str | None:
     job_text = " ".join(
         str(value).lower()
         for value in (
@@ -205,7 +214,9 @@ def validate_candidate(
     return violations
 
 
-def validate_gate_job_inputs(workflow: Path, gate_id: str, gate_job: dict[str, Any]) -> list[GateViolation]:
+def validate_gate_job_inputs(
+    workflow: Path, gate_id: str, gate_job: dict[str, Any]
+) -> list[GateViolation]:
     violations: list[GateViolation] = []
     with_values = gate_job.get("with", {})
     if not isinstance(with_values, dict):
@@ -341,7 +352,9 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
 
 def main(argv: list[str]) -> int:
     args = parse_args(argv)
-    result = validate_workflows(args.paths, require_production_deploy=args.require_production_deploy)
+    result = validate_workflows(
+        args.paths, require_production_deploy=args.require_production_deploy
+    )
     if result.candidates:
         print("production deploy candidates:")
         for candidate in result.candidates:

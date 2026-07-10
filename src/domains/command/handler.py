@@ -5,7 +5,7 @@ import inspect
 import json
 from collections.abc import AsyncIterator
 from dataclasses import dataclass
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 from domains.command.actions import allowed_command_actions, command_action_spec
 from domains.command.events import (
@@ -43,6 +43,7 @@ from packages.config.control import CONTROL_NAMESPACE_DENIED_MESSAGE
 from packages.config.logs import CONTEXT_KEY, get_logger
 from packages.config.settings import env
 from packages.contracts.event_bus.bodies import EventBody
+from packages.contracts.event_bus.interfaces import JsonObject
 from packages.contracts.gateway.fields import Gateway
 from packages.contracts.gitops import ApprovalStatus
 from packages.contracts.stores import AgentCommandStore
@@ -183,7 +184,7 @@ def command_requires_recorded_approval(command: CommandRequestedBody) -> bool:
 
 
 def utc_now() -> datetime:
-    return datetime.now(timezone.utc)
+    return datetime.now(UTC)
 
 
 def approval_evidence_ttl_seconds() -> int:
@@ -209,12 +210,12 @@ def parse_approval_timestamp(value: object) -> datetime | None:
     else:
         return None
     if parsed.tzinfo is None:
-        return parsed.replace(tzinfo=timezone.utc)
-    return parsed.astimezone(timezone.utc)
+        return parsed.replace(tzinfo=UTC)
+    return parsed.astimezone(UTC)
 
 
 def approval_timestamp_body(value: datetime) -> str:
-    return value.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
+    return value.astimezone(UTC).isoformat().replace("+00:00", "Z")
 
 
 def approval_expires_at_from_record(record: JsonObject) -> tuple[PolicyResult, str | None]:

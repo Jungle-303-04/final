@@ -165,7 +165,9 @@ def release_alert_request(
     workflow_run_id = str(update.get("workflow_run_id") or "")
     workspace_id = str(update.get("workspace_id") or DEFAULT_WORKSPACE_ID)
     severity, reason = RELEASE_ALERT_EVENT_TYPES[event_type]
-    cluster_id = release_failure_cluster_id(update, projected, workflow_run_id) or Target.DEFAULT_CLUSTER_ID
+    cluster_id = (
+        release_failure_cluster_id(update, projected, workflow_run_id) or Target.DEFAULT_CLUSTER_ID
+    )
     namespace = release_failure_namespace(update, projected, workflow_run_id)
     context = release_failure_context(
         update,
@@ -200,11 +202,7 @@ def release_verification_alert_request(
     details = mapping_value(update.get("details"))
     release_guard = mapping_value(details.get("release_guard"))
     verification_jobs = mapping_value(release_guard.get("verification_jobs"))
-    jobs = [
-        item
-        for item in list_value(verification_jobs.get("jobs"))
-        if isinstance(item, Mapping)
-    ]
+    jobs = [item for item in list_value(verification_jobs.get("jobs")) if isinstance(item, Mapping)]
     failed_jobs = [
         job
         for job in jobs
@@ -214,7 +212,9 @@ def release_verification_alert_request(
         return None
     workflow_run_id = str(update.get("workflow_run_id") or "")
     workspace_id = str(update.get("workspace_id") or DEFAULT_WORKSPACE_ID)
-    cluster_id = release_failure_cluster_id(update, projected, workflow_run_id) or Target.DEFAULT_CLUSTER_ID
+    cluster_id = (
+        release_failure_cluster_id(update, projected, workflow_run_id) or Target.DEFAULT_CLUSTER_ID
+    )
     namespace = release_failure_namespace(update, projected, workflow_run_id)
     context = release_failure_context(
         update,
@@ -684,7 +684,7 @@ def subject_details(subject: str, payload: Mapping[str, Any]) -> JsonObject:
                 "action": _first_string(payload, ("action",)),
                 "evidence_ref": _first_string(payload, ("evidence_ref",)),
                 "confidence": _first_value(payload, ("rca_detail", "confidence")),
-            }
+            },
         }
     if subject in {
         EventSubject.RCA_ANALYSIS_BLOCKED.value,
@@ -699,7 +699,7 @@ def subject_details(subject: str, payload: Mapping[str, Any]) -> JsonObject:
                 "reason": _first_string(payload, ("reason",)),
                 "evidence_ref": _first_string(payload, ("evidence_ref",)),
                 "missing_evidence": _first_value(payload, ("missing_evidence",)) or [],
-            }
+            },
         }
     if subject in {
         EventSubject.RECOVERY_PLANNED.value,
@@ -812,7 +812,9 @@ def is_release_verification_update(payload: Mapping[str, Any]) -> bool:
 
 
 def release_verification_health_status(subject: str, payload: Mapping[str, Any]) -> str | None:
-    if subject != EventSubject.EVIDENCE_JOB_UPDATED.value or not is_release_verification_update(payload):
+    if subject != EventSubject.EVIDENCE_JOB_UPDATED.value or not is_release_verification_update(
+        payload
+    ):
         return None
     status = _first_string(payload, ("status",), ("reported_status",)).lower()
     if status in {"failed", "error", "timeout", "unhealthy"}:
@@ -836,7 +838,11 @@ def incident_details(payload: Mapping[str, Any]) -> JsonObject:
         "resource_name": _first_string(payload, ("incident", "resource_name")),
         "namespace": _first_string(payload, ("incident", "namespace")),
         "affected_count": len(affected) if isinstance(affected, list) else None,
-        **({"workspace_id": str(incident.get("workspace_id"))} if incident.get("workspace_id") else {}),
+        **(
+            {"workspace_id": str(incident.get("workspace_id"))}
+            if incident.get("workspace_id")
+            else {}
+        ),
     }
 
 

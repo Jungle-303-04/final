@@ -35,7 +35,9 @@ def test_run_release_flow_production_signoff_requires_token(monkeypatch) -> None
     )
 
 
-def test_run_release_flow_production_signoff_rejects_placeholder_inputs(monkeypatch, capsys) -> None:
+def test_run_release_flow_production_signoff_rejects_placeholder_inputs(
+    monkeypatch, capsys
+) -> None:
     def fail_dispatch_workflow(**_kwargs: object) -> None:
         raise AssertionError("placeholder signoff inputs must fail before workflow dispatch")
 
@@ -82,7 +84,10 @@ def test_run_release_flow_production_signoff_rejects_placeholder_inputs(monkeypa
     assert "live_image must not use mutable latest tag" in captured.err
     assert "live_verification_url must use https" in captured.err
     assert "live_safe_pr_url must not use localhost or example hosts" in captured.err
-    assert "live_release_owner/live_oncall_contact must not use placeholder operator values" in captured.err
+    assert (
+        "live_release_owner/live_oncall_contact must not use placeholder operator values"
+        in captured.err
+    )
     assert "live_safe_pr_workflow_run_id must be a numeric GitHub Actions run id" in captured.err
 
 
@@ -154,7 +159,10 @@ def test_run_release_flow_production_signoff_dispatches_and_verifies(monkeypatch
 
     dispatches = calls["dispatches"]
     assert isinstance(dispatches, list)
-    assert [item["workflow"] for item in dispatches] == [signoff.READINESS_WORKFLOW, signoff.DEPLOY_WORKFLOW]
+    assert [item["workflow"] for item in dispatches] == [
+        signoff.READINESS_WORKFLOW,
+        signoff.DEPLOY_WORKFLOW,
+    ]
     assert dispatches[0]["inputs"]["production_deploy_required"] == "true"
     assert dispatches[1]["inputs"]["release_plan_id"] == "plan-1"
     assert dispatches[1]["inputs"]["live_safe_pr_workflow_run_id"] == "456"
@@ -177,7 +185,9 @@ def test_run_release_flow_production_signoff_dispatches_and_verifies(monkeypatch
     assert "101" in verifies[2]
     assert "202" in verifies[2]
 
-    report = json.loads((tmp_path / "release-flow-production-signoff.json").read_text(encoding="utf-8"))
+    report = json.loads(
+        (tmp_path / "release-flow-production-signoff.json").read_text(encoding="utf-8")
+    )
     assert report["status"] == "passed"
     assert report["github_repo"] == "org/repo"
     assert report["github_sha"] == "sha-production"

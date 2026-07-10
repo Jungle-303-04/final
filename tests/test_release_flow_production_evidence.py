@@ -122,7 +122,9 @@ def test_verify_release_flow_production_evidence_validates_signoff_report(tmp_pa
     assert evidence.main([str(tmp_path), "--github-sha", "sha-a", "--require-signoff-report"]) == 0
 
 
-def test_verify_release_flow_production_evidence_rejects_signoff_report_mismatch(tmp_path: Path) -> None:
+def test_verify_release_flow_production_evidence_rejects_signoff_report_mismatch(
+    tmp_path: Path,
+) -> None:
     write_json(tmp_path / "101-readiness" / evidence.READINESS_REPORT, readiness_payload())
     write_json(tmp_path / "101-readiness" / evidence.ENVIRONMENT_REPORT, environment_payload())
     write_json(tmp_path / "202-smoke" / evidence.SMOKE_REPORT, smoke_payload())
@@ -132,7 +134,9 @@ def test_verify_release_flow_production_evidence_rejects_signoff_report_mismatch
     assert evidence.main([str(tmp_path), "--github-sha", "sha-a", "--require-signoff-report"]) == 1
 
 
-def test_verify_release_flow_production_evidence_requires_github_access_preflight(tmp_path: Path) -> None:
+def test_verify_release_flow_production_evidence_requires_github_access_preflight(
+    tmp_path: Path,
+) -> None:
     write_json(tmp_path / evidence.READINESS_REPORT, readiness_payload(github_access=False))
     write_json(tmp_path / evidence.ENVIRONMENT_REPORT, environment_payload())
     write_json(tmp_path / evidence.SMOKE_REPORT, smoke_payload())
@@ -150,7 +154,9 @@ def test_verify_release_flow_production_evidence_requires_deploy_run_id(tmp_path
     assert evidence.main([str(tmp_path)]) == 1
 
 
-def test_verify_release_flow_production_evidence_requires_environment_report(tmp_path: Path) -> None:
+def test_verify_release_flow_production_evidence_requires_environment_report(
+    tmp_path: Path,
+) -> None:
     write_json(tmp_path / evidence.READINESS_REPORT, readiness_payload())
     write_json(tmp_path / evidence.SMOKE_REPORT, smoke_payload())
     write_json(tmp_path / evidence.DEPLOY_REPORT, deploy_payload())
@@ -158,7 +164,9 @@ def test_verify_release_flow_production_evidence_requires_environment_report(tmp
     assert evidence.main([str(tmp_path)]) == 1
 
 
-def test_verify_release_flow_production_evidence_requires_environment_success(tmp_path: Path) -> None:
+def test_verify_release_flow_production_evidence_requires_environment_success(
+    tmp_path: Path,
+) -> None:
     write_json(tmp_path / evidence.READINESS_REPORT, readiness_payload())
     write_json(tmp_path / evidence.ENVIRONMENT_REPORT, environment_payload(ok=False))
     write_json(tmp_path / evidence.SMOKE_REPORT, smoke_payload())
@@ -167,7 +175,9 @@ def test_verify_release_flow_production_evidence_requires_environment_success(tm
     assert evidence.main([str(tmp_path)]) == 1
 
 
-def test_verify_release_flow_production_evidence_requires_matching_api_base_urls(tmp_path: Path) -> None:
+def test_verify_release_flow_production_evidence_requires_matching_api_base_urls(
+    tmp_path: Path,
+) -> None:
     write_json(tmp_path / evidence.READINESS_REPORT, readiness_payload())
     write_json(tmp_path / evidence.ENVIRONMENT_REPORT, environment_payload())
     write_json(tmp_path / evidence.SMOKE_REPORT, smoke_payload())
@@ -374,7 +384,9 @@ def test_verify_release_flow_production_evidence_downloads_exact_run_ids(
     assert (tmp_path / "202-release-flow-production-deploy.zip").is_file()
 
 
-def test_verify_release_flow_production_evidence_rejects_exact_run_id_wrong_sha(monkeypatch) -> None:
+def test_verify_release_flow_production_evidence_rejects_exact_run_id_wrong_sha(
+    monkeypatch,
+) -> None:
     def fake_github_json(url: str, _token: str) -> dict:
         if url.endswith("/actions/runs/101"):
             return {

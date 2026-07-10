@@ -20,9 +20,7 @@ def test_removed_legacy_github_actions_have_no_active_repository_entrypoints() -
     makefile = read("Makefile")
     catalog = read("src/domains/providers/catalog.py")
     docs_index = read("docs/README.md")
-    active_workflows = {
-        path.name for path in (ROOT_DIR / ".github" / "workflows").glob("*.yml")
-    }
+    active_workflows = {path.name for path in (ROOT_DIR / ".github" / "workflows").glob("*.yml")}
     removed_workflows = {
         "aws-cd.yml",
         "ci.yml",

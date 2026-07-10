@@ -1008,7 +1008,9 @@ def test_repository_projects_workflow_failure_into_release_run_step() -> None:
         }
     )
 
-    sql = "\n".join(str(statement.compile(dialect=postgresql.dialect())) for statement in connection.statements)
+    sql = "\n".join(
+        str(statement.compile(dialect=postgresql.dialect())) for statement in connection.statements
+    )
     assert result == {"workspace_id": "workspace-a", "run_id": "release-run-1"}
     assert "UPDATE release_run_steps" in sql
     assert "INSERT INTO release_run_events" in sql

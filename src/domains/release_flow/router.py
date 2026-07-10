@@ -8,7 +8,7 @@ import io
 import json
 import os
 from collections.abc import Iterable
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from typing import Any
 from urllib.parse import unquote, urlparse
 
@@ -375,7 +375,10 @@ async def submit_release_manifest_safe_pr(
     if payload.step_index < 0 or payload.step_index >= len(steps):
         raise HTTPException(
             status_code=HTTP_CONFLICT,
-            detail={"message": RELEASE_PLAN_BLOCKED, "blockers": ["selected release step is invalid"]},
+            detail={
+                "message": RELEASE_PLAN_BLOCKED,
+                "blockers": ["selected release step is invalid"],
+            },
         )
     step = steps[payload.step_index]
     context_blockers = release_dispatch_context_blockers(body, [step], db, workspace_id)
@@ -453,7 +456,9 @@ async def dispatch_release_plan(
     require_plan_application_manage_access(db, current, workspace_id, body["steps"])
     require_no_active_release_run(db, workspace_id, body)
     preview = build_release_plan_preview(body)
-    dispatch_plan = plan_with_safe_pr_evidence(body, preview, wave, workspace_id=workspace_id, db=db)
+    dispatch_plan = plan_with_safe_pr_evidence(
+        body, preview, wave, workspace_id=workspace_id, db=db
+    )
     blockers = list(preview.get("blockers", []))
     blockers.extend(
         release_dispatch_context_blockers(
@@ -512,7 +517,9 @@ async def start_release_plan(
     require_no_active_release_run(db, workspace_id, body)
     preview = build_release_plan_preview(body)
     first_wave = first_preview_wave(preview)
-    dispatch_plan = plan_with_safe_pr_evidence(body, preview, first_wave, workspace_id=workspace_id, db=db)
+    dispatch_plan = plan_with_safe_pr_evidence(
+        body, preview, first_wave, workspace_id=workspace_id, db=db
+    )
     blockers = list(preview.get("blockers", []))
     blockers.extend(
         release_dispatch_context_blockers(
@@ -523,9 +530,13 @@ async def start_release_plan(
         )
     )
     blockers.extend(
-        release_execution_blockers(dispatch_plan, preview, first_wave, workspace_id=workspace_id, db=db)
+        release_execution_blockers(
+            dispatch_plan, preview, first_wave, workspace_id=workspace_id, db=db
+        )
     )
-    blockers.extend(release_production_approval_evidence_blockers(dispatch_plan, preview, first_wave))
+    blockers.extend(
+        release_production_approval_evidence_blockers(dispatch_plan, preview, first_wave)
+    )
     blockers.extend(release_production_change_ticket_blockers(dispatch_plan, preview, first_wave))
     blockers.extend(release_production_window_blockers(dispatch_plan, preview, first_wave))
     blockers.extend(release_production_freeze_blockers(dispatch_plan, preview, first_wave))
@@ -614,7 +625,7 @@ async def _create_and_dispatch_release_run(
         raise HTTPException(
             status_code=500,
             detail={"message": f"release run dispatch failed: {str(exc)}"},
-        )
+        ) from exc
     return accepted_events, db.get_release_run(workspace_id, run_id) or run
 
 
@@ -726,8 +737,14 @@ async def advance_release_run(
         )
         return ReleaseRunResponse(run=completed or run)
     plan = release_plan_from_run(run, pending_steps)
-    preview = {"steps": [{"application_id": step["application_id"], "wave": next_wave} for step in pending_steps]}
-    blockers = release_execution_blockers(plan, preview, next_wave, workspace_id=workspace_id, db=db)
+    preview = {
+        "steps": [
+            {"application_id": step["application_id"], "wave": next_wave} for step in pending_steps
+        ]
+    }
+    blockers = release_execution_blockers(
+        plan, preview, next_wave, workspace_id=workspace_id, db=db
+    )
     blockers.extend(release_production_approval_evidence_blockers(plan, preview, next_wave))
     blockers.extend(release_production_change_ticket_blockers(plan, preview, next_wave))
     blockers.extend(release_production_window_blockers(plan, preview, next_wave))
@@ -844,11 +861,12 @@ async def retry_release_run(
     plan = release_plan_from_run(existing, retry_steps)
     preview = {
         "steps": [
-            {"application_id": step["application_id"], "wave": retry_wave}
-            for step in retry_steps
+            {"application_id": step["application_id"], "wave": retry_wave} for step in retry_steps
         ]
     }
-    blockers = release_execution_blockers(plan, preview, retry_wave, workspace_id=workspace_id, db=db)
+    blockers = release_execution_blockers(
+        plan, preview, retry_wave, workspace_id=workspace_id, db=db
+    )
     blockers.extend(release_production_approval_evidence_blockers(plan, preview, retry_wave))
     blockers.extend(release_production_change_ticket_blockers(plan, preview, retry_wave))
     blockers.extend(release_production_window_blockers(plan, preview, retry_wave))
@@ -989,7 +1007,7 @@ async def notify_release_run_attention(
         alert,
         actor=Actor(current.user_id, tuple(current.roles)),
     )
-    event_type = f"release.notify.{release_window_bound_label(datetime.now(timezone.utc))}"
+    event_type = f"release.notify.{release_window_bound_label(datetime.now(UTC))}"
     recorded = record_release_notify_event(
         db,
         workspace_id,
@@ -1014,7 +1032,9 @@ async def create_release_plan(
     db: Any = Depends(get_db),
 ) -> ReleasePlanResponse:
     workspace_id = getattr(current, "workspace_id", DEFAULT_WORKSPACE_ID)
-    require_plan_application_plan_manage_access(db, current, workspace_id, payload.model_dump()["steps"])
+    require_plan_application_plan_manage_access(
+        db, current, workspace_id, payload.model_dump()["steps"]
+    )
     body = {**payload.model_dump(), "workspace_id": workspace_id, "user_id": current.user_id}
     with unit_of_work_or_null(db):
         plan = db.upsert_release_plan(body)
@@ -1050,7 +1070,9 @@ async def dispatch_wave_steps(
     *,
     run_id: str | None = None,
 ) -> list[dict[str, Any]]:
-    dispatch_plan = plan_with_safe_pr_evidence(plan, preview, wave, workspace_id=workspace_id, db=db)
+    dispatch_plan = plan_with_safe_pr_evidence(
+        plan, preview, wave, workspace_id=workspace_id, db=db
+    )
     selected_steps = steps_for_wave(dispatch_plan, preview, wave)
     if not selected_steps:
         raise HTTPException(
@@ -1059,7 +1081,9 @@ async def dispatch_wave_steps(
         )
 
     blockers = release_dispatch_context_blockers(dispatch_plan, selected_steps, db, workspace_id)
-    blockers.extend(release_execution_blockers(dispatch_plan, preview, wave, workspace_id=workspace_id, db=db))
+    blockers.extend(
+        release_execution_blockers(dispatch_plan, preview, wave, workspace_id=workspace_id, db=db)
+    )
     blockers.extend(release_production_approval_evidence_blockers(dispatch_plan, preview, wave))
     blockers.extend(release_production_change_ticket_blockers(dispatch_plan, preview, wave))
     blockers.extend(release_production_window_blockers(dispatch_plan, preview, wave))
@@ -1167,7 +1191,9 @@ def release_execution_blockers(
     workspace_id: str,
     db: Any = None,
 ) -> list[str]:
-    evidenced_plan = plan_with_safe_pr_evidence(plan, preview, wave, workspace_id=workspace_id, db=db)
+    evidenced_plan = plan_with_safe_pr_evidence(
+        plan, preview, wave, workspace_id=workspace_id, db=db
+    )
     return base_release_execution_blockers(evidenced_plan, preview, wave, workspace_id=workspace_id)
 
 
@@ -1192,7 +1218,8 @@ def plan_with_safe_pr_evidence(
     safe_pr_ready_fields = {"safe_pr_ready", "safe_pr_url", "safe_pr_evidence"}
     wave_requires_safe_pr = any(
         isinstance(raw_step, dict)
-        and int_field(preview_steps.get(str(raw_step.get("application_id") or ""), {}), "wave", -1) == wave
+        and int_field(preview_steps.get(str(raw_step.get("application_id") or ""), {}), "wave", -1)
+        == wave
         and safe_pr_gate_required(settings, raw_step)
         for raw_step in plan.get("steps", [])
     )
@@ -1248,7 +1275,9 @@ def safe_pr_created_evidence_for_step(
     application_id = str(step.get("application_id") or "") or None
     expected = safe_pr_expected_evidence(plan, step, workspace_id, db)
     for workflow_run_id in safe_pr_workflow_run_ids(plan, step, workspace_id, db):
-        for evidence in safe_pr_evidence_candidates(db, workspace_id, workflow_run_id, application_id=application_id):
+        for evidence in safe_pr_evidence_candidates(
+            db, workspace_id, workflow_run_id, application_id=application_id
+        ):
             if safe_pr_evidence_matches(evidence, expected):
                 return dict(evidence)
     return None
@@ -1281,12 +1310,16 @@ def release_safe_pr_evidence_blockers(
         expected = safe_pr_expected_evidence(plan, step, workspace_id, db)
         workflow_run_ids = safe_pr_workflow_run_ids(plan, step, workspace_id, db)
         if not workflow_run_ids:
-            blockers.append(f"Application {application_id} requires Safe PR evidence, but no workflow_run_id was derived.")
+            blockers.append(
+                f"Application {application_id} requires Safe PR evidence, but no workflow_run_id was derived."
+            )
             continue
         candidates: list[dict[str, Any]] = []
         for workflow_run_id in workflow_run_ids:
             candidates.extend(
-                safe_pr_evidence_candidates(db, workspace_id, workflow_run_id, application_id=application_id)
+                safe_pr_evidence_candidates(
+                    db, workspace_id, workflow_run_id, application_id=application_id
+                )
             )
         if any(safe_pr_evidence_matches(candidate, expected) for candidate in candidates):
             continue
@@ -1298,7 +1331,11 @@ def release_safe_pr_evidence_blockers(
             )
             continue
         reasons = safe_pr_evidence_mismatch_reasons(candidates[0], expected)
-        reason_text = "; ".join(reasons[:4]) if reasons else "candidate evidence did not match server expectations"
+        reason_text = (
+            "; ".join(reasons[:4])
+            if reasons
+            else "candidate evidence did not match server expectations"
+        )
         blockers.append(
             f"Application {application_id} found {len(candidates)} Safe PR candidate(s) for workflow_run_id "
             f"{workflow_label}, but none matched: {reason_text}."
@@ -1397,17 +1434,25 @@ def safe_pr_expected_evidence(
     ]
     rollback_required = release_step_targets_production(plan, step)
     return {
-        "provider": str(config.get("scm_provider") or settings.get("scm_provider") or GitHub.PROVIDER).lower(),
+        "provider": str(
+            config.get("scm_provider") or settings.get("scm_provider") or GitHub.PROVIDER
+        ).lower(),
         "pr_url": str(config.get("safe_pr_url") or settings.get("safe_pr_url") or "").strip(),
         "repo_ref": str(config.get("repo_ref") or application.get("repo_ref") or "").strip(),
         "base_branch": str(config.get("branch") or application.get("branch") or "main").strip(),
         "manifest_paths": [path for path in manifest_paths if path],
-        "environment": str(config.get("environment") or first_environment(settings) or "sandbox").strip(),
+        "environment": str(
+            config.get("environment") or first_environment(settings) or "sandbox"
+        ).strip(),
         "commit_sha": str(config.get("commit_sha") or settings.get("commit_sha") or "").strip(),
-        "patch_sha256": generated_safe_pr_patch_sha256(plan, step, application, workspace_id=workspace_id),
+        "patch_sha256": generated_safe_pr_patch_sha256(
+            plan, step, application, workspace_id=workspace_id
+        ),
         "rollback_required": rollback_required,
         "rollback_available": (not rollback_required)
-        or generated_safe_pr_rollback_patch_available(plan, step, application, workspace_id=workspace_id),
+        or generated_safe_pr_rollback_patch_available(
+            plan, step, application, workspace_id=workspace_id
+        ),
     }
 
 
@@ -1433,15 +1478,23 @@ def safe_pr_evidence_matches(evidence: dict[str, Any], expected: dict[str, Any])
     if bool(expected.get("rollback_required")) and not bool(expected.get("rollback_available")):
         return False
     evidence_manifest_path = str(evidence.get("manifest_path") or "").strip()
-    expected_manifest_paths = {str(path).strip() for path in expected.get("manifest_paths", []) if str(path).strip()}
+    expected_manifest_paths = {
+        str(path).strip() for path in expected.get("manifest_paths", []) if str(path).strip()
+    }
     if not expected_manifest_paths or evidence_manifest_path not in expected_manifest_paths:
         return False
     evidence_environment = str(evidence.get("environment") or "").strip()
     expected_environment = str(expected.get("environment") or "").strip()
-    return bool(evidence_environment and expected_environment and evidence_environment == expected_environment)
+    return bool(
+        evidence_environment
+        and expected_environment
+        and evidence_environment == expected_environment
+    )
 
 
-def safe_pr_evidence_mismatch_reasons(evidence: dict[str, Any], expected: dict[str, Any]) -> list[str]:
+def safe_pr_evidence_mismatch_reasons(
+    evidence: dict[str, Any], expected: dict[str, Any]
+) -> list[str]:
     reasons: list[str] = []
     if not str(evidence.get("pr_url") or "").strip():
         reasons.append("pr_url is missing")
@@ -1455,7 +1508,9 @@ def safe_pr_evidence_mismatch_reasons(evidence: dict[str, Any], expected: dict[s
     if not safe_pr_evidence_pr_url_matches_provider(evidence, expected):
         reasons.append("pr_url path does not match the expected GitHub repo_ref")
     evidence_manifest_path = str(evidence.get("manifest_path") or "").strip()
-    expected_manifest_paths = {str(path).strip() for path in expected.get("manifest_paths", []) if str(path).strip()}
+    expected_manifest_paths = {
+        str(path).strip() for path in expected.get("manifest_paths", []) if str(path).strip()
+    }
     if not expected_manifest_paths:
         reasons.append("expected manifest_path could not be derived")
     elif evidence_manifest_path not in expected_manifest_paths:
@@ -1465,7 +1520,11 @@ def safe_pr_evidence_mismatch_reasons(evidence: dict[str, Any], expected: dict[s
         )
     evidence_environment = str(evidence.get("environment") or "").strip()
     expected_environment = str(expected.get("environment") or "").strip()
-    if not evidence_environment or not expected_environment or evidence_environment != expected_environment:
+    if (
+        not evidence_environment
+        or not expected_environment
+        or evidence_environment != expected_environment
+    ):
         reasons.append(
             f"environment expected {safe_pr_short_value(expected_environment)} but got "
             f"{safe_pr_short_value(evidence_environment)}"
@@ -1473,7 +1532,9 @@ def safe_pr_evidence_mismatch_reasons(evidence: dict[str, Any], expected: dict[s
     return unique_non_empty(reasons)
 
 
-def safe_pr_evidence_field_reason(evidence: dict[str, Any], expected: dict[str, Any], field: str) -> str:
+def safe_pr_evidence_field_reason(
+    evidence: dict[str, Any], expected: dict[str, Any], field: str
+) -> str:
     return (
         f"{field} expected {safe_pr_short_value(str(expected.get(field) or '').strip())} "
         f"but got {safe_pr_short_value(str(evidence.get(field) or '').strip())}"
@@ -1496,15 +1557,19 @@ def safe_pr_evidence_is_current(evidence: dict[str, Any]) -> bool:
     created_at = parse_release_window_time(evidence.get("created_at"))
     if created_at is None:
         return False
-    now = datetime.now(timezone.utc)
-    if created_at.astimezone(timezone.utc) > now + timedelta(minutes=APPROVAL_CLOCK_SKEW_MINUTES):
+    now = datetime.now(UTC)
+    if created_at.astimezone(UTC) > now + timedelta(minutes=APPROVAL_CLOCK_SKEW_MINUTES):
         return False
-    return now - created_at.astimezone(timezone.utc) <= safe_pr_evidence_max_age()
+    return now - created_at.astimezone(UTC) <= safe_pr_evidence_max_age()
 
 
 def safe_pr_evidence_max_age() -> timedelta:
     try:
-        hours = float(os.getenv(SAFE_PR_EVIDENCE_MAX_AGE_HOURS_ENV, str(DEFAULT_SAFE_PR_EVIDENCE_MAX_AGE_HOURS)))
+        hours = float(
+            os.getenv(
+                SAFE_PR_EVIDENCE_MAX_AGE_HOURS_ENV, str(DEFAULT_SAFE_PR_EVIDENCE_MAX_AGE_HOURS)
+            )
+        )
     except ValueError:
         hours = float(DEFAULT_SAFE_PR_EVIDENCE_MAX_AGE_HOURS)
     return timedelta(hours=max(1.0, hours))
@@ -1589,7 +1654,9 @@ def generated_safe_pr_patch_sha256(
         for file in rendered.get("files", [])
         if isinstance(file, dict) and file.get("content")
     ]
-    manifest_path = str(patches[0].path if patches else generated_safe_pr_manifest_path(plan, step, application))
+    manifest_path = str(
+        patches[0].path if patches else generated_safe_pr_manifest_path(plan, step, application)
+    )
     workflow_run_id = derive_workflow_run_id(
         safe_pr_workflow_basis(
             plan,
@@ -1666,8 +1733,12 @@ def safe_pr_workflow_basis(
         "repo_ref": str(config.get("repo_ref") or application.get("repo_ref") or ""),
         "branch": str(config.get("branch") or application.get("branch") or "main"),
         "manifest_path": manifest_path,
-        "cluster_id": str(config.get("cluster_id") or application.get("cluster_id") or Target.DEFAULT_CLUSTER_ID),
-        "namespace": str(config.get("namespace") or application.get("namespace") or Sandbox.NAMESPACE),
+        "cluster_id": str(
+            config.get("cluster_id") or application.get("cluster_id") or Target.DEFAULT_CLUSTER_ID
+        ),
+        "namespace": str(
+            config.get("namespace") or application.get("namespace") or Sandbox.NAMESPACE
+        ),
         "app_name": str(application.get("name") or step.get("name") or application_id),
         "application_id": application_id,
         "environment": str(config.get("environment") or first_environment(settings) or "sandbox"),
@@ -1718,7 +1789,9 @@ def release_readiness_from_plan(
                 db=db,
             )
         )
-    approval_evidence_blockers = release_production_approval_evidence_blockers(plan, preview, first_wave)
+    approval_evidence_blockers = release_production_approval_evidence_blockers(
+        plan, preview, first_wave
+    )
     change_ticket_blockers = release_production_change_ticket_blockers(plan, preview, first_wave)
     change_ticket_bypassed = release_production_change_ticket_bypassed(plan, preview, first_wave)
     window_blockers = release_production_window_blockers(plan, preview, first_wave)
@@ -1760,7 +1833,9 @@ def release_readiness_from_plan(
     elif alert_channels:
         alert_message = "Enabled alert channels exist, but none receive warning release events."
     else:
-        alert_message = "No enabled alert channel is configured for release failure or approval events."
+        alert_message = (
+            "No enabled alert channel is configured for release failure or approval events."
+        )
 
     checks = [
         readiness_check(
@@ -1835,11 +1910,7 @@ def release_readiness_from_plan(
         readiness_check(
             "release.window",
             "Release window",
-            "blocked"
-            if window_blockers
-            else "warning"
-            if window_bypassed
-            else "passed",
+            "blocked" if window_blockers else "warning" if window_bypassed else "passed",
             "Production live release must run inside an approved release window."
             if window_blockers
             else "Production release window is bypassed with an operator reason."
@@ -1850,11 +1921,7 @@ def release_readiness_from_plan(
         readiness_check(
             "change.freeze",
             "Change freeze",
-            "blocked"
-            if freeze_blockers
-            else "warning"
-            if freeze_bypassed
-            else "passed",
+            "blocked" if freeze_blockers else "warning" if freeze_bypassed else "passed",
             "Production live release is inside a change freeze window."
             if freeze_blockers
             else "Production change freeze is bypassed with an operator reason."
@@ -1865,11 +1932,7 @@ def release_readiness_from_plan(
         readiness_check(
             "runbook.sop",
             "Runbook",
-            "blocked"
-            if runbook_blockers
-            else "warning"
-            if runbook_bypassed
-            else "passed",
+            "blocked" if runbook_blockers else "warning" if runbook_bypassed else "passed",
             "Production live release requires an accessible runbook URL or operator override reason."
             if runbook_blockers
             else "Production runbook gate is bypassed with an operator reason."
@@ -1919,11 +1982,7 @@ def release_readiness_from_plan(
         readiness_check(
             "plan.diagnostics",
             "Diagnostics gate",
-            "blocked"
-            if diagnostic_blockers
-            else "warning"
-            if diagnostic_bypassed
-            else "passed",
+            "blocked" if diagnostic_blockers else "warning" if diagnostic_bypassed else "passed",
             "Deterministic release diagnostics must be resolved before live dispatch."
             if diagnostic_blockers
             else "Diagnostics gate is bypassed with an operator reason."
@@ -1934,11 +1993,7 @@ def release_readiness_from_plan(
         readiness_check(
             "rollback.policy",
             "Rollback policy",
-            "blocked"
-            if rollback_blockers
-            else "warning"
-            if rollback_bypassed
-            else "passed",
+            "blocked" if rollback_blockers else "warning" if rollback_bypassed else "passed",
             "Live release cannot disable rollback without an operator reason."
             if rollback_blockers
             else "Rollback policy is disabled with an operator reason."
@@ -1968,7 +2023,12 @@ def release_readiness_from_plan(
             "Run events are audit-exportable and sensitive event details are redacted.",
         ),
     ]
-    blockers = [item for check in checks for item in check.get("blockers", []) if check["status"] == "blocked"]
+    blockers = [
+        item
+        for check in checks
+        for item in check.get("blockers", [])
+        if check["status"] == "blocked"
+    ]
     warnings = [str(check["message"]) for check in checks if check["status"] == "warning"]
     if blockers:
         summary = f"{len(blockers)} blocker(s) must be resolved before release dispatch."
@@ -2004,9 +2064,13 @@ def readiness_check(
     }
 
 
-def release_readiness_impact(plan: dict[str, Any], preview: dict[str, Any], profile: Any) -> dict[str, Any]:
+def release_readiness_impact(
+    plan: dict[str, Any], preview: dict[str, Any], profile: Any
+) -> dict[str, Any]:
     preview_steps = [step for step in preview.get("steps", []) if isinstance(step, dict)]
-    waves = sorted({int_field(step, "wave", 0) for step in preview_steps if int_field(step, "wave", 0) > 0})
+    waves = sorted(
+        {int_field(step, "wave", 0) for step in preview_steps if int_field(step, "wave", 0) > 0}
+    )
     applications = unique_non_empty(str(step.get("application_id") or "") for step in preview_steps)
     environments = unique_non_empty(str(step.get("environment") or "") for step in preview_steps)
     first_wave = waves[0] if waves else first_preview_wave(preview)
@@ -2019,7 +2083,11 @@ def release_readiness_impact(plan: dict[str, Any], preview: dict[str, Any], prof
         {
             "application_id": str(step.get("application_id") or ""),
             "name": str(step.get("name") or step.get("application_id") or ""),
-            "environment": str(step_config(step).get("environment") or plan_settings_value(plan).get("environment") or ""),
+            "environment": str(
+                step_config(step).get("environment")
+                or plan_settings_value(plan).get("environment")
+                or ""
+            ),
         }
         for step in plan.get("steps", [])
         if isinstance(step, dict) and release_step_targets_production(plan, step)
@@ -2070,7 +2138,9 @@ def release_readiness_impact_summary(
     live_side_effects: bool,
 ) -> str:
     mode_label = "live" if live_side_effects else "dry-run"
-    production_label = f", {production_target_count} production target(s)" if production_target_count else ""
+    production_label = (
+        f", {production_target_count} production target(s)" if production_target_count else ""
+    )
     return (
         f"{mode_label} impact covers {step_count} step(s), {application_count} application(s), "
         f"{environment_count} environment(s), and {wave_count} wave(s){production_label}."
@@ -2181,9 +2251,7 @@ def release_rollback_policy_blockers(plan: dict[str, Any]) -> list[str]:
 def release_rollback_override_reason(plan: dict[str, Any]) -> str:
     settings = plan_settings_value(plan)
     return str(
-        settings.get("rollback_override_reason")
-        or settings.get("rollback_disabled_reason")
-        or ""
+        settings.get("rollback_override_reason") or settings.get("rollback_disabled_reason") or ""
     ).strip()
 
 
@@ -2237,7 +2305,9 @@ def release_production_approval_evidence_blockers(
 
 
 def release_approval_granted_by(settings: dict[str, Any], config: dict[str, Any]) -> str:
-    return str(config.get("approval_granted_by") or settings.get("approval_granted_by") or "").strip()
+    return str(
+        config.get("approval_granted_by") or settings.get("approval_granted_by") or ""
+    ).strip()
 
 
 def release_approval_reason(settings: dict[str, Any], config: dict[str, Any]) -> str:
@@ -2248,7 +2318,9 @@ def release_approval_granted_at(
     settings: dict[str, Any],
     config: dict[str, Any],
 ) -> datetime | None:
-    return parse_release_window_time(config.get("approval_granted_at") or settings.get("approval_granted_at"))
+    return parse_release_window_time(
+        config.get("approval_granted_at") or settings.get("approval_granted_at")
+    )
 
 
 def release_approval_granted_at_label(settings: dict[str, Any]) -> str | None:
@@ -2257,13 +2329,13 @@ def release_approval_granted_at_label(settings: dict[str, Any]) -> str | None:
 
 
 def release_approval_is_expired(granted_at: datetime) -> bool:
-    age = datetime.now(timezone.utc) - granted_at.astimezone(timezone.utc)
+    age = datetime.now(UTC) - granted_at.astimezone(UTC)
     return age > approval_max_age()
 
 
 def release_approval_is_in_future(granted_at: datetime) -> bool:
     skew = timedelta(minutes=APPROVAL_CLOCK_SKEW_MINUTES)
-    return granted_at.astimezone(timezone.utc) > datetime.now(timezone.utc) + skew
+    return granted_at.astimezone(UTC) > datetime.now(UTC) + skew
 
 
 def approval_max_age() -> timedelta:
@@ -2351,7 +2423,7 @@ def release_production_window_blockers(
         ]
     if end <= start:
         return ["Production live release window end must be after the start time."]
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     if not (start <= now <= end):
         return [
             "Production live release is outside the approved release window "
@@ -2393,7 +2465,7 @@ def release_production_freeze_blockers(
         ]
     if end <= start:
         return ["Production change freeze end must be after the start time."]
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     if start <= now <= end:
         return [
             "Production live release is inside a change freeze window "
@@ -2481,9 +2553,7 @@ def release_runbook_url_is_valid(value: str) -> bool:
 def release_runbook_override_reason(plan: dict[str, Any]) -> str:
     settings = plan_settings_value(plan)
     return str(
-        settings.get("runbook_override_reason")
-        or settings.get("sop_override_reason")
-        or ""
+        settings.get("runbook_override_reason") or settings.get("sop_override_reason") or ""
     ).strip()
 
 
@@ -2593,7 +2663,7 @@ def release_verification_job_specs(
     wave: int,
 ) -> list[dict[str, Any]]:
     settings = plan_settings_value(plan)
-    queued_at = release_window_bound_label(datetime.now(timezone.utc))
+    queued_at = release_window_bound_label(datetime.now(UTC))
     jobs: list[dict[str, Any]] = []
     for step in production_steps:
         config = step_config(step)
@@ -2605,7 +2675,9 @@ def release_verification_job_specs(
         if health_path:
             jobs.append(
                 {
-                    "job_id": release_verification_job_id(plan, wave, application_id, "health", health_path),
+                    "job_id": release_verification_job_id(
+                        plan, wave, application_id, "health", health_path
+                    ),
                     "application_id": application_id,
                     "name": name,
                     "kind": "kubernetes_health_check",
@@ -2614,9 +2686,15 @@ def release_verification_job_specs(
                     "timeout_minutes": timeout_minutes,
                     "evidence_key": release_verification_evidence_key(plan, wave, application_id),
                     "target": {
-                        "cluster_id": str(config.get("cluster_id") or settings.get("cluster_id") or ""),
-                        "namespace": str(config.get("namespace") or settings.get("namespace") or ""),
-                        "service_name": str(config.get("service_name") or config.get("service") or application_id),
+                        "cluster_id": str(
+                            config.get("cluster_id") or settings.get("cluster_id") or ""
+                        ),
+                        "namespace": str(
+                            config.get("namespace") or settings.get("namespace") or ""
+                        ),
+                        "service_name": str(
+                            config.get("service_name") or config.get("service") or application_id
+                        ),
                         "path": health_path,
                     },
                 }
@@ -2624,7 +2702,9 @@ def release_verification_job_specs(
         if verification_url:
             jobs.append(
                 {
-                    "job_id": release_verification_job_id(plan, wave, application_id, "http", verification_url),
+                    "job_id": release_verification_job_id(
+                        plan, wave, application_id, "http", verification_url
+                    ),
                     "application_id": application_id,
                     "name": name,
                     "kind": "http_probe",
@@ -2642,7 +2722,9 @@ def release_verification_timeout_minutes(settings: dict[str, Any], config: dict[
     default_timeout = int_field(
         settings,
         "post_deploy_verification_timeout_minutes",
-        int_field(settings, "verification_timeout_minutes", DEFAULT_RELEASE_VERIFICATION_TIMEOUT_MINUTES),
+        int_field(
+            settings, "verification_timeout_minutes", DEFAULT_RELEASE_VERIFICATION_TIMEOUT_MINUTES
+        ),
     )
     step_timeout = int_field(config, "verification_timeout_minutes", default_timeout)
     return max(1, int_field(config, "post_deploy_verification_timeout_minutes", step_timeout))
@@ -2758,12 +2840,12 @@ def release_freeze_window_is_active(plan: dict[str, Any]) -> bool:
     start, end = release_freeze_window_bounds(plan)
     if start is None or end is None or end <= start:
         return False
-    return start <= datetime.now(timezone.utc) <= end
+    return start <= datetime.now(UTC) <= end
 
 
 def parse_release_window_time(value: Any) -> datetime | None:
     if isinstance(value, datetime):
-        return value.astimezone(timezone.utc) if value.tzinfo else value.replace(tzinfo=timezone.utc)
+        return value.astimezone(UTC) if value.tzinfo else value.replace(tzinfo=UTC)
     if not isinstance(value, str):
         return None
     raw = value.strip()
@@ -2775,12 +2857,12 @@ def parse_release_window_time(value: Any) -> datetime | None:
         parsed = datetime.fromisoformat(raw)
     except ValueError:
         return None
-    normalized = parsed if parsed.tzinfo else parsed.replace(tzinfo=timezone.utc)
-    return normalized.astimezone(timezone.utc)
+    normalized = parsed if parsed.tzinfo else parsed.replace(tzinfo=UTC)
+    return normalized.astimezone(UTC)
 
 
 def release_window_bound_label(value: datetime) -> str:
-    return value.astimezone(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+    return value.astimezone(UTC).replace(microsecond=0).isoformat().replace("+00:00", "Z")
 
 
 def release_production_steps_for_wave(
@@ -2798,7 +2880,9 @@ def release_production_steps_for_wave(
 def release_step_targets_production(plan: dict[str, Any], step: dict[str, Any]) -> bool:
     settings = plan_settings_value(plan)
     config = step_config(step)
-    environment = str(config.get("environment") or settings.get("environment") or "").strip().lower()
+    environment = (
+        str(config.get("environment") or settings.get("environment") or "").strip().lower()
+    )
     namespace = str(config.get("namespace") or settings.get("namespace") or "").strip().lower()
     return environment in PRODUCTION_ENVIRONMENTS or namespace in PRODUCTION_ENVIRONMENTS
 
@@ -2814,9 +2898,7 @@ def release_dispatch_guard_snapshot(
     settings = plan_settings_value(plan)
     diagnostics = release_plan_diagnostics(plan) if profile.side_effects else []
     blocking_diagnostics = [
-        diagnostic
-        for diagnostic in diagnostics
-        if diagnostic.severity in {"error", "warning"}
+        diagnostic for diagnostic in diagnostics if diagnostic.severity in {"error", "warning"}
     ]
     validated_channels = release_validated_live_alert_channels(db, workspace_id)
     live_channels = release_live_alert_channels(db, workspace_id)
@@ -2830,23 +2912,19 @@ def release_dispatch_guard_snapshot(
         "readiness": release_dispatch_readiness_snapshot(plan, preview, profile, wave),
         "change_management": {
             "change_ticket_present": any(
-                has_change_ticket(settings, step_config(step))
-                for step in production_steps
+                has_change_ticket(settings, step_config(step)) for step in production_steps
             ),
             "production_targets": [
-                str(step.get("application_id") or "")
-                for step in production_steps
+                str(step.get("application_id") or "") for step in production_steps
             ],
             "production_override_reason": release_production_change_override_reason(plan) or None,
         },
         "approval": {
             "production_targets": [
-                str(step.get("application_id") or "")
-                for step in production_steps
+                str(step.get("application_id") or "") for step in production_steps
             ],
             "granted": any(
-                approval_granted(settings, step_config(step))
-                for step in production_steps
+                approval_granted(settings, step_config(step)) for step in production_steps
             ),
             "granted_by": str(settings.get("approval_granted_by") or "").strip() or None,
             "reason": str(settings.get("approval_reason") or "").strip() or None,
@@ -2858,8 +2936,7 @@ def release_dispatch_guard_snapshot(
             "end": release_window_bound_label(window_end) if window_end else None,
             "override_reason": release_window_override_reason(plan) or None,
             "production_targets": [
-                str(step.get("application_id") or "")
-                for step in production_steps
+                str(step.get("application_id") or "") for step in production_steps
             ],
         },
         "change_freeze": {
@@ -2868,8 +2945,7 @@ def release_dispatch_guard_snapshot(
             "active": release_freeze_window_is_active(plan),
             "override_reason": release_freeze_override_reason(plan) or None,
             "production_targets": [
-                str(step.get("application_id") or "")
-                for step in production_steps
+                str(step.get("application_id") or "") for step in production_steps
             ],
         },
         "runbook": {
@@ -2880,8 +2956,7 @@ def release_dispatch_guard_snapshot(
             ),
             "override_reason": None,
             "production_targets": [
-                str(step.get("application_id") or "")
-                for step in production_steps
+                str(step.get("application_id") or "") for step in production_steps
             ],
         },
         "owner": {
@@ -2892,8 +2967,7 @@ def release_dispatch_guard_snapshot(
                 for step in production_steps
             ),
             "production_targets": [
-                str(step.get("application_id") or "")
-                for step in production_steps
+                str(step.get("application_id") or "") for step in production_steps
             ],
         },
         "verification": {
@@ -2903,13 +2977,20 @@ def release_dispatch_guard_snapshot(
             ),
             "override_reason": None,
             "production_targets": [
-                str(step.get("application_id") or "")
-                for step in production_steps
+                str(step.get("application_id") or "") for step in production_steps
             ],
             "health_check_paths": [
-                str(step_config(step).get("health_check_path") or settings.get("health_check_path") or "")
+                str(
+                    step_config(step).get("health_check_path")
+                    or settings.get("health_check_path")
+                    or ""
+                )
                 for step in production_steps
-                if str(step_config(step).get("health_check_path") or settings.get("health_check_path") or "").strip()
+                if str(
+                    step_config(step).get("health_check_path")
+                    or settings.get("health_check_path")
+                    or ""
+                ).strip()
             ],
             "verification_urls": [
                 release_verification_url(settings, step_config(step))
@@ -2930,8 +3011,7 @@ def release_dispatch_guard_snapshot(
             ],
             "override_reason": release_abort_criteria_override_reason(plan) or None,
             "production_targets": [
-                str(step.get("application_id") or "")
-                for step in production_steps
+                str(step.get("application_id") or "") for step in production_steps
             ],
         },
         "diagnostics": {
@@ -3114,7 +3194,9 @@ def dispatch_context_value(
     field: str,
 ) -> str:
     if field == "branch":
-        value = config.get("branch") or application.get("branch") or application.get("default_branch")
+        value = (
+            config.get("branch") or application.get("branch") or application.get("default_branch")
+        )
     elif field == "manifest_path":
         value = config.get("manifest_path") or application.get("manifest_path")
     else:
@@ -3165,7 +3247,7 @@ def release_live_alert_channels(db: Any, workspace_id: str) -> list[dict[str, An
 
 
 def release_validated_live_alert_channels(db: Any, workspace_id: str) -> list[dict[str, Any]]:
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     max_age = alert_channel_validation_max_age()
     return [
         channel
@@ -3191,7 +3273,7 @@ def alert_channel_validation_is_current(
 def alert_channel_tested_at(channel: dict[str, Any]) -> datetime | None:
     value = channel.get("last_tested_at")
     if isinstance(value, datetime):
-        return value if value.tzinfo else value.replace(tzinfo=timezone.utc)
+        return value if value.tzinfo else value.replace(tzinfo=UTC)
     if isinstance(value, str):
         raw = value.strip()
         if not raw:
@@ -3202,7 +3284,7 @@ def alert_channel_tested_at(channel: dict[str, Any]) -> datetime | None:
             parsed = datetime.fromisoformat(raw)
         except ValueError:
             return None
-        return parsed if parsed.tzinfo else parsed.replace(tzinfo=timezone.utc)
+        return parsed if parsed.tzinfo else parsed.replace(tzinfo=UTC)
     return None
 
 
@@ -3273,7 +3355,7 @@ def operator_action_reason(payload: ReleaseRunActionRequest, fallback: str) -> s
 def release_notify_cooldown_blocker(run: dict[str, Any]) -> str | None:
     cooldown = release_notify_cooldown()
     events = run.get("events") if isinstance(run.get("events"), list) else []
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     for event in reversed(events):
         if not isinstance(event, dict):
             continue
@@ -3283,7 +3365,7 @@ def release_notify_cooldown_blocker(run: dict[str, Any]) -> str | None:
         created_at = parse_release_window_time(event.get("created_at"))
         if created_at is None:
             continue
-        age = now - created_at.astimezone(timezone.utc)
+        age = now - created_at.astimezone(UTC)
         if age < cooldown:
             remaining_seconds = max(0, int((cooldown - age).total_seconds()))
             remaining_minutes = max(1, (remaining_seconds + 59) // 60)
@@ -3361,11 +3443,11 @@ def release_run_attention_alert_body(
 ) -> AlertRequestedBody:
     status = str(run.get("derived_status") or run.get("status") or "unknown")
     attention = run.get("attention") if isinstance(run.get("attention"), dict) else {}
-    reasons = [
-        str(item)
-        for item in attention.get("reasons", [])
-        if str(item).strip()
-    ] if isinstance(attention.get("reasons"), list) else []
+    reasons = (
+        [str(item) for item in attention.get("reasons", []) if str(item).strip()]
+        if isinstance(attention.get("reasons"), list)
+        else []
+    )
     first_step = first_release_run_step(run)
     step_details = first_step.get("details") if isinstance(first_step.get("details"), dict) else {}
     step_config = step_details.get("config") if isinstance(step_details.get("config"), dict) else {}
@@ -3390,12 +3472,20 @@ def release_run_attention_alert_body(
     message_parts.append(reason)
     return AlertRequestedBody(
         workspace_id=workspace_id,
-        cluster_id=str(step_details.get("cluster_id") or step_config.get("cluster_id") or Target.DEFAULT_CLUSTER_ID),
-        namespace=str(step_details.get("namespace") or step_config.get("namespace") or Sandbox.NAMESPACE),
+        cluster_id=str(
+            step_details.get("cluster_id")
+            or step_config.get("cluster_id")
+            or Target.DEFAULT_CLUSTER_ID
+        ),
+        namespace=str(
+            step_details.get("namespace") or step_config.get("namespace") or Sandbox.NAMESPACE
+        ),
         severity=severity,
         application_id=application_id,
         workflow_run_id=str(first_step.get("workflow_run_id") or run.get("run_id") or ""),
-        environment=str(step_details.get("environment") or step_config.get("environment") or "production"),
+        environment=str(
+            step_details.get("environment") or step_config.get("environment") or "production"
+        ),
         message=f"{application_id}: {' | '.join(message_parts)}",
         reason="release run needs attention",
     )
@@ -3568,7 +3658,9 @@ def retryable_steps_for_wave(run: dict[str, Any], wave: int) -> list[dict[str, A
         and int_field(step, "wave", 0) == wave
         and (
             str(step.get("status") or "") in retryable_statuses
-            or (isinstance(step.get("health"), dict) and step["health"].get("status") == "unhealthy")
+            or (
+                isinstance(step.get("health"), dict) and step["health"].get("status") == "unhealthy"
+            )
         )
     ]
 
@@ -3595,15 +3687,9 @@ def release_verification_job_advance_blockers(
     details = step.get("details") if isinstance(step.get("details"), dict) else {}
     guard = details.get("release_guard") if isinstance(details.get("release_guard"), dict) else {}
     verification_jobs = (
-        guard.get("verification_jobs")
-        if isinstance(guard.get("verification_jobs"), dict)
-        else {}
+        guard.get("verification_jobs") if isinstance(guard.get("verification_jobs"), dict) else {}
     )
-    jobs = [
-        job
-        for job in list(verification_jobs.get("jobs") or [])
-        if isinstance(job, dict)
-    ]
+    jobs = [job for job in list(verification_jobs.get("jobs") or []) if isinstance(job, dict)]
     blockers: list[str] = []
     for job in jobs:
         status = str(job.get("status") or "").lower()
@@ -3806,7 +3892,11 @@ def release_run_policy_overrides(run: dict[str, Any]) -> list[dict[str, Any]]:
         reason = str(section.get(reason_key) or "").strip()
         if not reason:
             continue
-        targets = section.get("production_targets") if isinstance(section.get("production_targets"), list) else []
+        targets = (
+            section.get("production_targets")
+            if isinstance(section.get("production_targets"), list)
+            else []
+        )
         overrides.append(
             {
                 "source": label,
@@ -3817,7 +3907,9 @@ def release_run_policy_overrides(run: dict[str, Any]) -> list[dict[str, Any]]:
     return overrides
 
 
-def release_run_verification_jobs(run: dict[str, Any]) -> list[tuple[dict[str, Any], dict[str, Any], str]]:
+def release_run_verification_jobs(
+    run: dict[str, Any],
+) -> list[tuple[dict[str, Any], dict[str, Any], str]]:
     steps = run.get("steps") if isinstance(run.get("steps"), list) else []
     records: list[tuple[dict[str, Any], dict[str, Any], str]] = []
     for step in steps:
@@ -3825,13 +3917,17 @@ def release_run_verification_jobs(run: dict[str, Any]) -> list[tuple[dict[str, A
             continue
         name = str(step.get("name") or step.get("application_id") or "release step")
         details = step.get("details") if isinstance(step.get("details"), dict) else {}
-        guard = details.get("release_guard") if isinstance(details.get("release_guard"), dict) else {}
+        guard = (
+            details.get("release_guard") if isinstance(details.get("release_guard"), dict) else {}
+        )
         verification_jobs = (
             guard.get("verification_jobs")
             if isinstance(guard.get("verification_jobs"), dict)
             else {}
         )
-        jobs = verification_jobs.get("jobs") if isinstance(verification_jobs.get("jobs"), list) else []
+        jobs = (
+            verification_jobs.get("jobs") if isinstance(verification_jobs.get("jobs"), list) else []
+        )
         for job in jobs:
             if isinstance(job, dict):
                 records.append((job, step, name))
@@ -3847,12 +3943,14 @@ def release_verification_job_pending_timeouts(
     *,
     now: datetime | None = None,
 ) -> list[dict[str, Any]]:
-    current_time = now or datetime.now(timezone.utc)
+    current_time = now or datetime.now(UTC)
     settings = run.get("settings") if isinstance(run.get("settings"), dict) else {}
     default_timeout = int_field(
         settings,
         "post_deploy_verification_timeout_minutes",
-        int_field(settings, "verification_timeout_minutes", DEFAULT_RELEASE_VERIFICATION_TIMEOUT_MINUTES),
+        int_field(
+            settings, "verification_timeout_minutes", DEFAULT_RELEASE_VERIFICATION_TIMEOUT_MINUTES
+        ),
     )
     timed_out: list[dict[str, Any]] = []
     for job, step, step_name in release_run_verification_jobs(run):
@@ -3869,7 +3967,7 @@ def release_verification_job_pending_timeouts(
         )
         if queued_at is None:
             continue
-        age_seconds = max(0, int((current_time - queued_at.astimezone(timezone.utc)).total_seconds()))
+        age_seconds = max(0, int((current_time - queued_at.astimezone(UTC)).total_seconds()))
         if age_seconds < timeout_minutes * 60:
             continue
         record = dict(job)
@@ -3954,9 +4052,10 @@ def release_run_summary_from_runs(runs: list[dict[str, Any]]) -> dict[str, Any]:
         if release_run_has_change_freeze_override(run):
             change_freeze_override_runs += 1
         if (
-            attention.get("required") is True
-            or verification_pending_timed_out
-        ) and not status_needs_attention and not health_needs_attention:
+            (attention.get("required") is True or verification_pending_timed_out)
+            and not status_needs_attention
+            and not health_needs_attention
+        ):
             attention_required_runs += 1
         if release_run_has_live_side_effects(run):
             live_runs += 1
@@ -4041,7 +4140,9 @@ def release_run_handoff(run: dict[str, Any]) -> dict[str, Any]:
             release_handoff_check(
                 "mode",
                 "warning" if live_side_effects else "info",
-                "Live side effects are enabled for this run." if live_side_effects else "Demo/dry-run mode is active.",
+                "Live side effects are enabled for this run."
+                if live_side_effects
+                else "Demo/dry-run mode is active.",
             ),
             release_handoff_check(
                 "health",
@@ -4052,7 +4153,11 @@ def release_run_handoff(run: dict[str, Any]) -> dict[str, Any]:
                 "attention",
                 "blocked" if notify_blocker else "warning" if alertable else "passed",
                 notify_blocker
-                or ("; ".join(attention_reasons[:3]) if attention_reasons else "No operator attention reason is recorded."),
+                or (
+                    "; ".join(attention_reasons[:3])
+                    if attention_reasons
+                    else "No operator attention reason is recorded."
+                ),
             ),
             release_handoff_check(
                 "rollback",
@@ -4088,7 +4193,7 @@ def release_run_handoff(run: dict[str, Any]) -> dict[str, Any]:
 
 def release_run_report(run: dict[str, Any], audit_events: list[dict[str, Any]]) -> dict[str, Any]:
     handoff = release_run_handoff(run)
-    generated_at = datetime.now(timezone.utc).isoformat()
+    generated_at = datetime.now(UTC).isoformat()
     public_audit_events = audit_events[:20]
     return {
         "run_id": str(run.get("run_id") or ""),
@@ -4134,7 +4239,9 @@ def release_run_report_markdown(
     approval_lines = release_run_report_approval_lines(run)
     if approval_lines:
         lines.extend(["", "Approvals:", *approval_lines])
-    next_actions = handoff.get("next_actions") if isinstance(handoff.get("next_actions"), list) else []
+    next_actions = (
+        handoff.get("next_actions") if isinstance(handoff.get("next_actions"), list) else []
+    )
     if next_actions:
         lines.extend(["", "Next actions:"])
         for action in next_actions[:6]:
@@ -4142,7 +4249,9 @@ def release_run_report_markdown(
                 continue
             marker = "[ ]" if action.get("enabled") is not False else "[blocked]"
             reason = f": {action.get('reason')}" if action.get("reason") else ""
-            lines.append(f"- {marker} {action.get('label') or action.get('action') or 'action'}{reason}")
+            lines.append(
+                f"- {marker} {action.get('label') or action.get('action') or 'action'}{reason}"
+            )
     checks = handoff.get("checks") if isinstance(handoff.get("checks"), list) else []
     if checks:
         lines.extend(["", "Checks:"])
@@ -4153,20 +4262,40 @@ def release_run_report_markdown(
                 f"- {check.get('name') or 'check'}: {check.get('status') or 'info'} "
                 f"({check.get('message') or 'No message.'})"
             )
-    policy_overrides = handoff.get("policy_overrides") if isinstance(handoff.get("policy_overrides"), list) else []
+    policy_overrides = (
+        handoff.get("policy_overrides") if isinstance(handoff.get("policy_overrides"), list) else []
+    )
     if policy_overrides:
         lines.extend(["", "Policy overrides:"])
         for override in policy_overrides[:8]:
             if not isinstance(override, dict):
                 continue
             reason = str(override.get("reason") or "").strip()
-            targets = override.get("production_targets") if isinstance(override.get("production_targets"), list) else []
-            target_label = f" / targets: {', '.join(str(item) for item in targets[:5])}" if targets else ""
-            lines.append(f"- {override.get('source') or 'Policy override'}: {reason or 'No reason recorded.'}{target_label}")
-    verification = handoff.get("verification") if isinstance(handoff.get("verification"), dict) else {}
+            targets = (
+                override.get("production_targets")
+                if isinstance(override.get("production_targets"), list)
+                else []
+            )
+            target_label = (
+                f" / targets: {', '.join(str(item) for item in targets[:5])}" if targets else ""
+            )
+            lines.append(
+                f"- {override.get('source') or 'Policy override'}: {reason or 'No reason recorded.'}{target_label}"
+            )
+    verification = (
+        handoff.get("verification") if isinstance(handoff.get("verification"), dict) else {}
+    )
     if verification:
-        lines.extend(["", "Verification:", f"- {verification.get('status') or 'info'}: {verification.get('message') or 'No verification message.'}"])
-        evidence = verification.get("evidence") if isinstance(verification.get("evidence"), list) else []
+        lines.extend(
+            [
+                "",
+                "Verification:",
+                f"- {verification.get('status') or 'info'}: {verification.get('message') or 'No verification message.'}",
+            ]
+        )
+        evidence = (
+            verification.get("evidence") if isinstance(verification.get("evidence"), list) else []
+        )
         lines.extend(f"- evidence: {item}" for item in evidence[:3])
         jobs = verification.get("jobs") if isinstance(verification.get("jobs"), list) else []
         for job in jobs[:3]:
@@ -4177,19 +4306,45 @@ def release_run_report_markdown(
                 )
         if verification.get("override_reason"):
             lines.append(f"- override: {verification.get('override_reason')}")
-    abort_criteria = handoff.get("abort_criteria") if isinstance(handoff.get("abort_criteria"), dict) else {}
+    abort_criteria = (
+        handoff.get("abort_criteria") if isinstance(handoff.get("abort_criteria"), dict) else {}
+    )
     if abort_criteria:
-        lines.extend(["", "Rollback criteria:", f"- {abort_criteria.get('status') or 'info'}: {abort_criteria.get('message') or 'No rollback criteria message.'}"])
-        criteria = abort_criteria.get("criteria") if isinstance(abort_criteria.get("criteria"), list) else []
+        lines.extend(
+            [
+                "",
+                "Rollback criteria:",
+                f"- {abort_criteria.get('status') or 'info'}: {abort_criteria.get('message') or 'No rollback criteria message.'}",
+            ]
+        )
+        criteria = (
+            abort_criteria.get("criteria")
+            if isinstance(abort_criteria.get("criteria"), list)
+            else []
+        )
         lines.extend(f"- {item}" for item in criteria[:3])
         if abort_criteria.get("override_reason"):
             lines.append(f"- override: {abort_criteria.get('override_reason')}")
-    change_freeze = handoff.get("change_freeze") if isinstance(handoff.get("change_freeze"), dict) else {}
+    change_freeze = (
+        handoff.get("change_freeze") if isinstance(handoff.get("change_freeze"), dict) else {}
+    )
     if change_freeze:
-        lines.extend(["", "Change freeze:", f"- {change_freeze.get('status') or 'info'}: {change_freeze.get('message') or 'No change freeze message.'}"])
+        lines.extend(
+            [
+                "",
+                "Change freeze:",
+                f"- {change_freeze.get('status') or 'info'}: {change_freeze.get('message') or 'No change freeze message.'}",
+            ]
+        )
         if change_freeze.get("start") or change_freeze.get("end"):
-            lines.append(f"- window: {change_freeze.get('start') or '?'} to {change_freeze.get('end') or '?'}")
-        targets = change_freeze.get("production_targets") if isinstance(change_freeze.get("production_targets"), list) else []
+            lines.append(
+                f"- window: {change_freeze.get('start') or '?'} to {change_freeze.get('end') or '?'}"
+            )
+        targets = (
+            change_freeze.get("production_targets")
+            if isinstance(change_freeze.get("production_targets"), list)
+            else []
+        )
         if targets:
             lines.append(f"- targets: {', '.join(str(item) for item in targets[:5])}")
         if change_freeze.get("override_reason"):
@@ -4207,10 +4362,16 @@ def release_run_report_markdown(
             details = step.get("details") if isinstance(step.get("details"), dict) else {}
             context = " / ".join(
                 str(value)
-                for value in [details.get("environment"), details.get("strategy"), details.get("gate")]
+                for value in [
+                    details.get("environment"),
+                    details.get("strategy"),
+                    details.get("gate"),
+                ]
                 if value
             )
-            health_label = f", health {step_health.get('status')}" if step_health.get("status") else ""
+            health_label = (
+                f", health {step_health.get('status')}" if step_health.get("status") else ""
+            )
             suffix = f" ({context})" if context else ""
             lines.append(
                 f"- Wave {step.get('wave') or '?'} {step.get('name') or step.get('application_id') or 'step'}: "
@@ -4256,11 +4417,18 @@ def release_run_report_approval_lines(run: dict[str, Any]) -> list[str]:
         approval_id = str(step.get("approval_id") or approval.get("approval_id") or "").strip()
         if not approval_id:
             continue
-        decision = str(approval.get("decision") or approval.get("status") or "pending").strip() or "pending"
+        decision = (
+            str(approval.get("decision") or approval.get("status") or "pending").strip()
+            or "pending"
+        )
         reason = str(approval.get("reason") or "").strip()
         gate = str(details.get("gate") or approval.get("gate") or "").strip()
         label = str(step.get("name") or step.get("application_id") or "step")
-        suffix = " / ".join(item for item in [f"gate {gate}" if gate else "", f"reason {reason}" if reason else ""] if item)
+        suffix = " / ".join(
+            item
+            for item in [f"gate {gate}" if gate else "", f"reason {reason}" if reason else ""]
+            if item
+        )
         lines.append(f"- {label}: {approval_id} / {decision}{f' / {suffix}' if suffix else ''}")
     return lines
 
@@ -4284,7 +4452,9 @@ def release_run_report_target_lines(run: dict[str, Any]) -> list[str]:
             if details.get("namespace") or config.get("namespace") or dispatch.get("namespace")
             else "",
             f"workflow {step.get('workflow_run_id') or workflow.get('workflow_run_id') or dispatch.get('workflow_run_id')}"
-            if step.get("workflow_run_id") or workflow.get("workflow_run_id") or dispatch.get("workflow_run_id")
+            if step.get("workflow_run_id")
+            or workflow.get("workflow_run_id")
+            or dispatch.get("workflow_run_id")
             else "",
             f"repo {config.get('repo_ref') or dispatch.get('repo_ref')}"
             if config.get("repo_ref") or dispatch.get("repo_ref")
@@ -4308,17 +4478,21 @@ def safe_release_report_filename(value: str) -> str:
 def release_run_handoff_verification(run: dict[str, Any]) -> dict[str, Any]:
     guard = release_run_latest_guard(run)
     verification = guard.get("verification") if isinstance(guard.get("verification"), dict) else {}
-    verification_jobs = guard.get("verification_jobs") if isinstance(guard.get("verification_jobs"), dict) else {}
+    verification_jobs = (
+        guard.get("verification_jobs") if isinstance(guard.get("verification_jobs"), dict) else {}
+    )
     readiness = guard.get("readiness") if isinstance(guard.get("readiness"), dict) else {}
     impact = readiness.get("impact") if isinstance(readiness.get("impact"), dict) else {}
-    health_paths = [str(item) for item in verification.get("health_check_paths", []) if str(item).strip()]
-    verification_urls = [str(item) for item in verification.get("verification_urls", []) if str(item).strip()]
-    production_targets = [str(item) for item in verification.get("production_targets", []) if str(item).strip()]
-    jobs = [
-        dict(item)
-        for item in verification_jobs.get("jobs", [])
-        if isinstance(item, dict)
+    health_paths = [
+        str(item) for item in verification.get("health_check_paths", []) if str(item).strip()
     ]
+    verification_urls = [
+        str(item) for item in verification.get("verification_urls", []) if str(item).strip()
+    ]
+    production_targets = [
+        str(item) for item in verification.get("production_targets", []) if str(item).strip()
+    ]
+    jobs = [dict(item) for item in verification_jobs.get("jobs", []) if isinstance(item, dict)]
     failed_jobs = [
         item
         for item in jobs
@@ -4339,8 +4513,11 @@ def release_run_handoff_verification(run: dict[str, Any]) -> dict[str, Any]:
             "job_count": len(jobs),
             "timed_out_jobs": timed_out_jobs,
             "override_reason": None,
-            "production_targets": production_targets or (
-                impact.get("production_targets") if isinstance(impact.get("production_targets"), list) else []
+            "production_targets": production_targets
+            or (
+                impact.get("production_targets")
+                if isinstance(impact.get("production_targets"), list)
+                else []
             ),
         }
     if timed_out_jobs:
@@ -4352,8 +4529,11 @@ def release_run_handoff_verification(run: dict[str, Any]) -> dict[str, Any]:
             "job_count": len(jobs),
             "timed_out_jobs": timed_out_jobs,
             "override_reason": None,
-            "production_targets": production_targets or (
-                impact.get("production_targets") if isinstance(impact.get("production_targets"), list) else []
+            "production_targets": production_targets
+            or (
+                impact.get("production_targets")
+                if isinstance(impact.get("production_targets"), list)
+                else []
             ),
         }
     if pending_jobs:
@@ -4365,8 +4545,11 @@ def release_run_handoff_verification(run: dict[str, Any]) -> dict[str, Any]:
             "job_count": len(jobs),
             "timed_out_jobs": [],
             "override_reason": None,
-            "production_targets": production_targets or (
-                impact.get("production_targets") if isinstance(impact.get("production_targets"), list) else []
+            "production_targets": production_targets
+            or (
+                impact.get("production_targets")
+                if isinstance(impact.get("production_targets"), list)
+                else []
             ),
         }
     if not verification:
@@ -4378,7 +4561,9 @@ def release_run_handoff_verification(run: dict[str, Any]) -> dict[str, Any]:
             "job_count": len(jobs),
             "timed_out_jobs": [],
             "override_reason": None,
-            "production_targets": impact.get("production_targets") if isinstance(impact.get("production_targets"), list) else [],
+            "production_targets": impact.get("production_targets")
+            if isinstance(impact.get("production_targets"), list)
+            else [],
         }
     evidence = health_paths + verification_urls
     override_reason = str(verification.get("override_reason") or "").strip() or None
@@ -4418,14 +4603,14 @@ def release_run_handoff_verification(run: dict[str, Any]) -> dict[str, Any]:
 
 def release_run_handoff_abort_criteria(run: dict[str, Any]) -> dict[str, Any]:
     guard = release_run_latest_guard(run)
-    criteria_snapshot = guard.get("abort_criteria") if isinstance(guard.get("abort_criteria"), dict) else {}
+    criteria_snapshot = (
+        guard.get("abort_criteria") if isinstance(guard.get("abort_criteria"), dict) else {}
+    )
     readiness = guard.get("readiness") if isinstance(guard.get("readiness"), dict) else {}
     impact = readiness.get("impact") if isinstance(readiness.get("impact"), dict) else {}
     criteria = [str(item) for item in criteria_snapshot.get("criteria", []) if str(item).strip()]
     production_targets = [
-        str(item)
-        for item in criteria_snapshot.get("production_targets", [])
-        if str(item).strip()
+        str(item) for item in criteria_snapshot.get("production_targets", []) if str(item).strip()
     ]
     if not criteria_snapshot:
         return {
@@ -4433,7 +4618,9 @@ def release_run_handoff_abort_criteria(run: dict[str, Any]) -> dict[str, Any]:
             "message": "No rollback criteria snapshot recorded.",
             "criteria": [],
             "override_reason": None,
-            "production_targets": impact.get("production_targets") if isinstance(impact.get("production_targets"), list) else [],
+            "production_targets": impact.get("production_targets")
+            if isinstance(impact.get("production_targets"), list)
+            else [],
         }
     override_reason = str(criteria_snapshot.get("override_reason") or "").strip() or None
     if criteria:
@@ -4467,11 +4654,13 @@ def release_run_handoff_change_freeze(run: dict[str, Any]) -> dict[str, Any]:
     readiness = guard.get("readiness") if isinstance(guard.get("readiness"), dict) else {}
     impact = readiness.get("impact") if isinstance(readiness.get("impact"), dict) else {}
     production_targets = [
-        str(item)
-        for item in freeze.get("production_targets", [])
-        if str(item).strip()
+        str(item) for item in freeze.get("production_targets", []) if str(item).strip()
     ]
-    fallback_targets = impact.get("production_targets") if isinstance(impact.get("production_targets"), list) else []
+    fallback_targets = (
+        impact.get("production_targets")
+        if isinstance(impact.get("production_targets"), list)
+        else []
+    )
     start = str(freeze.get("start") or "").strip() or None
     end = str(freeze.get("end") or "").strip() or None
     override_reason = str(freeze.get("override_reason") or "").strip() or None
@@ -4535,13 +4724,21 @@ def release_run_handoff_actions(
     if terminal:
         return [{"action": "review_audit", "label": "Review audit trail", "enabled": True}]
     if status == "paused":
-        actions.append({"action": "resume", "label": "Resume when the blocker is cleared", "enabled": True})
+        actions.append(
+            {"action": "resume", "label": "Resume when the blocker is cleared", "enabled": True}
+        )
     elif status == "waiting_for_approval":
-        actions.append({"action": "approval", "label": "Review the pending approval", "enabled": True})
+        actions.append(
+            {"action": "approval", "label": "Review the pending approval", "enabled": True}
+        )
     elif retryable:
-        actions.append({"action": "retry", "label": "Retry the failed or unhealthy wave", "enabled": True})
+        actions.append(
+            {"action": "retry", "label": "Retry the failed or unhealthy wave", "enabled": True}
+        )
     else:
-        actions.append({"action": "monitor", "label": "Monitor current wave health", "enabled": True})
+        actions.append(
+            {"action": "monitor", "label": "Monitor current wave health", "enabled": True}
+        )
     if alertable:
         actions.append(
             {
@@ -4694,7 +4891,9 @@ def steps_for_wave(
     wave: int,
 ) -> list[dict[str, Any]]:
     preview_steps = [
-        item for item in preview.get("steps", []) if isinstance(item, dict) and item.get("wave") == wave
+        item
+        for item in preview.get("steps", [])
+        if isinstance(item, dict) and item.get("wave") == wave
     ]
     application_ids = {str(step.get("application_id")) for step in preview_steps}
     return [
@@ -4723,8 +4922,12 @@ def dispatch_request_for_step(
         "repo_ref": str(config.get("repo_ref") or application.get("repo_ref") or ""),
         "branch": str(config.get("branch") or application.get("branch") or "main"),
         "application_id": application_id,
-        "environment": str(config.get("environment") or first_environment(plan_settings) or "sandbox"),
-        "cluster_id": str(config.get("cluster_id") or application.get("cluster_id") or Target.DEFAULT_CLUSTER_ID),
+        "environment": str(
+            config.get("environment") or first_environment(plan_settings) or "sandbox"
+        ),
+        "cluster_id": str(
+            config.get("cluster_id") or application.get("cluster_id") or Target.DEFAULT_CLUSTER_ID
+        ),
         "manifest_path": str(
             config.get("manifest_path") or application.get("manifest_path") or "deploy.yaml"
         ),
@@ -4763,14 +4966,20 @@ def generated_manifest_safe_pr_body(
     files = list(rendered.get("files", []))
     manifest_path = str(files[0].get("path") or config.get("manifest_path") or "deploy.yaml")
     application_id = str(step.get("application_id") or application.get("application_id") or "")
-    provider = str(config.get("scm_provider") or settings.get("scm_provider") or GitHub.PROVIDER).lower()
+    provider = str(
+        config.get("scm_provider") or settings.get("scm_provider") or GitHub.PROVIDER
+    ).lower()
     request_basis = {
         "workspace_id": workspace_id,
         "repo_ref": str(config.get("repo_ref") or application.get("repo_ref") or ""),
         "branch": str(config.get("branch") or application.get("branch") or "main"),
         "manifest_path": manifest_path,
-        "cluster_id": str(config.get("cluster_id") or application.get("cluster_id") or Target.DEFAULT_CLUSTER_ID),
-        "namespace": str(config.get("namespace") or application.get("namespace") or Sandbox.NAMESPACE),
+        "cluster_id": str(
+            config.get("cluster_id") or application.get("cluster_id") or Target.DEFAULT_CLUSTER_ID
+        ),
+        "namespace": str(
+            config.get("namespace") or application.get("namespace") or Sandbox.NAMESPACE
+        ),
         "app_name": str(application.get("name") or step.get("name") or application_id),
         "application_id": application_id,
         "environment": str(config.get("environment") or first_environment(settings) or "sandbox"),
@@ -4819,7 +5028,9 @@ def generated_manifest_safe_pr_body(
             f"- environment: `{request_basis['environment']}`",
             f"- cluster_id: `{request_basis['cluster_id']}`",
             f"- manifest_path: `{manifest_path}`",
-            f"- rollback_patch: `{rollback_paths[0]}`" if rollback_paths else "- rollback_patch: unavailable",
+            f"- rollback_patch: `{rollback_paths[0]}`"
+            if rollback_paths
+            else "- rollback_patch: unavailable",
             "",
             "## Generated resources",
             *(resource_lines or ["- none"]),
@@ -4842,7 +5053,9 @@ def generated_manifest_safe_pr_body(
         commit_sha=commit_sha,
         patch_sha256=safe_pr_patch_sha256(patches),
         approval_ref=str(config.get("approval_ref") or settings.get("approval_ref") or "") or None,
-        policy_decision_ref=str(config.get("policy_decision_ref") or settings.get("policy_decision_ref") or "")
+        policy_decision_ref=str(
+            config.get("policy_decision_ref") or settings.get("policy_decision_ref") or ""
+        )
         or None,
     )
 
@@ -4891,10 +5104,15 @@ def generated_manifest_rollback_patches(
     rollback_config["image"] = rollback_image
     rollback_config["generated_manifest_path"] = manifest_path
     rollback_rendered = render_release_step_manifest(rollback_plan, step_index, application)
-    if any(getattr(diag, "severity", "") == "error" for diag in rollback_rendered.get("diagnostics", [])):
+    if any(
+        getattr(diag, "severity", "") == "error"
+        for diag in rollback_rendered.get("diagnostics", [])
+    ):
         return []
     rollback_files = [
-        file for file in list(rollback_rendered.get("files", [])) if isinstance(file, dict) and file.get("content")
+        file
+        for file in list(rollback_rendered.get("files", []))
+        if isinstance(file, dict) and file.get("content")
     ]
     if not rollback_files:
         return []
@@ -4917,7 +5135,10 @@ def rollback_manifest_image(
     for source, fields in (
         (config, ("rollback_image", "previous_image", "current_image", "deployed_image")),
         (settings, ("rollback_image", "previous_image", "current_image", "deployed_image")),
-        (application, ("rollback_image", "previous_image", "current_image", "deployed_image", "image")),
+        (
+            application,
+            ("rollback_image", "previous_image", "current_image", "deployed_image", "image"),
+        ),
     ):
         for field in fields:
             value = str(source.get(field) or "").strip()
@@ -4934,7 +5155,10 @@ def release_step_index_in_steps(steps: list[Any], selected: dict[str, Any]) -> i
             continue
         if candidate is selected:
             return index
-        if selected_application_id and str(candidate.get("application_id") or "") == selected_application_id:
+        if (
+            selected_application_id
+            and str(candidate.get("application_id") or "") == selected_application_id
+        ):
             return index
         if selected_position is not None and candidate.get("position") == selected_position:
             return index

@@ -129,7 +129,14 @@ class FakeClient:
                         "description": "Generated manifest",
                     }
                 ],
-                "resources": [{"api_version": "apps/v1", "kind": "Deployment", "namespace": "sandbox", "name": "checkout"}],
+                "resources": [
+                    {
+                        "api_version": "apps/v1",
+                        "kind": "Deployment",
+                        "namespace": "sandbox",
+                        "name": "checkout",
+                    }
+                ],
                 "resource_count": 1,
                 "diagnostics": [],
                 "warnings": [],
@@ -202,7 +209,7 @@ class FakeHttpResponse:
         self.status = status
         self.body = body
 
-    def __enter__(self) -> "FakeHttpResponse":
+    def __enter__(self) -> FakeHttpResponse:
         return self
 
     def __exit__(self, _exc_type: object, _exc: object, _traceback: object) -> None:
@@ -346,7 +353,9 @@ def test_smoke_junit_writer_persists_ci_report(tmp_path: Path) -> None:
         str(junit_path),
         [
             smoke.SmokeResult("healthz", True, "ok"),
-            smoke.SmokeResult("release-runs.policy-override-preflight", False, "run-policy-override"),
+            smoke.SmokeResult(
+                "release-runs.policy-override-preflight", False, "run-policy-override"
+            ),
         ],
     )
 
@@ -385,7 +394,9 @@ def test_smoke_markdown_writer_persists_handoff_report(tmp_path: Path) -> None:
         api_base_url="https://example.com/api",
         results=[
             smoke.SmokeResult("healthz", True, "ok"),
-            smoke.SmokeResult("release-runs.policy-override-preflight", False, "run|policy\nreview"),
+            smoke.SmokeResult(
+                "release-runs.policy-override-preflight", False, "run|policy\nreview"
+            ),
         ],
     )
 
@@ -433,7 +444,9 @@ def test_smoke_github_step_summary_appends_markdown(tmp_path: Path, monkeypatch:
     assert "| `healthz` | pass | ok |" in body
 
 
-def test_smoke_github_output_appends_machine_readable_values(tmp_path: Path, monkeypatch: Any) -> None:
+def test_smoke_github_output_appends_machine_readable_values(
+    tmp_path: Path, monkeypatch: Any
+) -> None:
     smoke = load_smoke_module()
     output_path = tmp_path / "github-output.txt"
     monkeypatch.setenv("GITHUB_OUTPUT", str(output_path))
@@ -465,13 +478,18 @@ def test_smoke_github_annotations_emit_redacted_errors(capsys: Any) -> None:
         True,
         results=[
             smoke.SmokeResult("healthz", True, "ok"),
-            smoke.SmokeResult("release-runs.policy-override-preflight", False, "token=raw-token\nreview"),
+            smoke.SmokeResult(
+                "release-runs.policy-override-preflight", False, "token=raw-token\nreview"
+            ),
         ],
         error="password=raw-password",
     )
 
     captured = capsys.readouterr()
-    assert "::error title=Release smoke failed%3A release-runs.policy-override-preflight::" in captured.err
+    assert (
+        "::error title=Release smoke failed%3A release-runs.policy-override-preflight::"
+        in captured.err
+    )
     assert "::error title=Release smoke error::" in captured.err
     assert "token=<redacted>%0Areview" in captured.err
     assert "password=<redacted>" in captured.err
@@ -518,7 +536,9 @@ def test_smoke_ci_defaults_preserve_explicit_artifact_paths(tmp_path: Path) -> N
     assert args.junit_path == str(tmp_path / "release-artifacts" / "release-flow-smoke.junit.xml")
 
 
-def test_smoke_main_writes_report_when_credentials_are_missing(tmp_path: Path, monkeypatch: Any) -> None:
+def test_smoke_main_writes_report_when_credentials_are_missing(
+    tmp_path: Path, monkeypatch: Any
+) -> None:
     smoke = load_smoke_module()
     for name in ("API_BASE_URL", "BASE_URL", "AUTH_EMAIL", "AUTH_PASSWORD"):
         monkeypatch.delenv(name, raising=False)
@@ -568,7 +588,9 @@ def test_smoke_default_does_not_start_release_run() -> None:
     assert all(result.ok for result in results)
     assert ("POST", "/release-plans/start", None) not in client.calls
     assert [path for _method, path, _payload in client.calls].count("/release-plans/preview") == 1
-    assert [path for _method, path, _payload in client.calls].count("/release-plans/render-manifest") == 1
+    assert [path for _method, path, _payload in client.calls].count(
+        "/release-plans/render-manifest"
+    ) == 1
     assert any(result.name == "release-plans.generated-manifest" for result in results)
     assert "/alert-channels/test" not in [path for _method, path, _payload in client.calls]
 
@@ -589,12 +611,16 @@ def test_smoke_ops_rehearsal_exercises_safe_operator_actions() -> None:
     smoke = load_smoke_module()
     client = FakeClient()
 
-    results = smoke.run_smoke(client, "ops@example.com", "password", demo_run=False, ops_rehearsal=True)
+    results = smoke.run_smoke(
+        client, "ops@example.com", "password", demo_run=False, ops_rehearsal=True
+    )
 
     assert all(result.ok for result in results)
     paths = [path for _method, path, _payload in client.calls]
     assert "/release-plans/start" in paths
-    assert paths.index("/release-runs/release-run-smoke/pause") < paths.index("/release-runs/release-run-smoke/resume")
+    assert paths.index("/release-runs/release-run-smoke/pause") < paths.index(
+        "/release-runs/release-run-smoke/resume"
+    )
     assert "/release-runs/release-run-smoke/notify" in paths
     assert paths[-1] == "/release-runs/release-run-smoke"
     assert client.release_run_status == "cancelled"
@@ -655,7 +681,9 @@ def test_smoke_live_preflight_checks_readiness_without_starting_run() -> None:
     )
     assert readiness_payload["steps"][0]["config"]["environment"] == "production"
     assert readiness_payload["steps"][0]["config"]["namespace"] == "production"
-    assert readiness_payload["steps"][0]["config"]["image"] == "ghcr.io/acme/checkout-api:2026.07.10"
+    assert (
+        readiness_payload["steps"][0]["config"]["image"] == "ghcr.io/acme/checkout-api:2026.07.10"
+    )
     assert readiness_payload["steps"][0]["config"]["approval_gate"] == "manual"
 
 
@@ -740,15 +768,23 @@ def test_smoke_live_preflight_rejects_invalid_safe_pr_evidence_inputs() -> None:
     smoke = load_smoke_module()
     cases = [
         ("http://github.internal/org/repo/pull/1", "live_safe_pr_url must use https"),
-        ("https://localhost/pull/1", "live_safe_pr_url must not use localhost or example hosts placeholder value"),
-        ("https://example.com/pull/1", "live_safe_pr_url must not use localhost or example hosts placeholder value"),
+        (
+            "https://localhost/pull/1",
+            "live_safe_pr_url must not use localhost or example hosts placeholder value",
+        ),
+        (
+            "https://example.com/pull/1",
+            "live_safe_pr_url must not use localhost or example hosts placeholder value",
+        ),
         (
             "https://github.example.test/org/repo/pull/1",
             "live_safe_pr_url must not use localhost or example hosts placeholder value",
         ),
     ]
     for url, expected_message in cases:
-        args = smoke.parse_args(["--live-preflight", "--live-approval-gate", "safe_pr", "--live-safe-pr-url", url])
+        args = smoke.parse_args(
+            ["--live-preflight", "--live-approval-gate", "safe_pr", "--live-safe-pr-url", url]
+        )
 
         try:
             smoke.validate_live_preflight_inputs(args)
@@ -906,7 +942,9 @@ def test_smoke_alert_preflight_tests_warning_capable_channel() -> None:
     paths = [path for _method, path, _payload in client.calls]
     assert "/alert-channels" in paths
     assert paths.count("/alert-channels/test") == 1
-    payload = next(payload for _method, path, payload in client.calls if path == "/alert-channels/test")
+    payload = next(
+        payload for _method, path, payload in client.calls if path == "/alert-channels/test"
+    )
     assert payload is not None
     assert payload["channel_id"] == "chan-release-warning"
     assert payload["severity"] == "warning"
@@ -954,7 +992,9 @@ def test_smoke_verification_preflight_flags_failed_and_timed_out_runs() -> None:
     assert "/release-runs?plan_id=plan-1&limit=20&verification_failed_only=true" in paths
     assert "/release-runs?plan_id=plan-1&limit=20&verification_pending_timeout_only=true" in paths
     failed = next(result for result in results if result.name == "release-runs.verification-failed")
-    timed_out = next(result for result in results if result.name == "release-runs.verification-timeout")
+    timed_out = next(
+        result for result in results if result.name == "release-runs.verification-timeout"
+    )
     assert "run-verification-failed" in failed.detail
     assert "run-verification-timeout" in timed_out.detail
 
@@ -1009,7 +1049,9 @@ def test_smoke_policy_override_preflight_flags_override_runs() -> None:
         "/release-runs?plan_id=plan-1&limit=20&policy_override_source=Change+freeze&policy_override_only=true"
         in paths
     )
-    preflight = next(result for result in results if result.name == "release-runs.policy-override-preflight")
+    preflight = next(
+        result for result in results if result.name == "release-runs.policy-override-preflight"
+    )
     assert "run-policy-override" in preflight.detail
     assert "Change freeze=1" in preflight.detail
 
@@ -1054,7 +1096,9 @@ def test_smoke_change_freeze_preflight_flags_active_and_override_runs() -> None:
     paths = [path for _method, path, _payload in client.calls]
     assert "/release-runs?plan_id=plan-1&limit=20&active_change_freeze_only=true" in paths
     assert "/release-runs?plan_id=plan-1&limit=20&change_freeze_override_only=true" in paths
-    preflight = next(result for result in results if result.name == "release-runs.change-freeze-preflight")
+    preflight = next(
+        result for result in results if result.name == "release-runs.change-freeze-preflight"
+    )
     assert "active_change_freeze_runs=1" in preflight.detail
     assert "change_freeze_override_runs=1" in preflight.detail
     assert "run-active-freeze" in preflight.detail
@@ -1173,7 +1217,9 @@ def test_smoke_run_health_preflight_flags_attention_and_stale_runs() -> None:
     paths = [path for _method, path, _payload in client.calls]
     assert "/release-runs?plan_id=plan-1&limit=20&attention_only=true" in paths
     assert "/release-runs?plan_id=plan-1&limit=20&stale_only=true" in paths
-    health = next(result for result in results if result.name == "release-runs.run-health-preflight")
+    health = next(
+        result for result in results if result.name == "release-runs.run-health-preflight"
+    )
     assert "attention_required_runs=1" in health.detail
     assert "failed_runs=1" in health.detail
     assert "run-needs-attention" in health.detail
