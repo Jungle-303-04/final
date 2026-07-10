@@ -160,6 +160,7 @@ def build_safe_pr_request_body(
         workflow_run_id=diff.workflow_run_id,
         environment=diff.environment,
         manifest_path=diff.manifest_path,
+        commit_sha=str(diff.basis.get("commit_sha") or ""),
         patches=build_manifest_patches(diff),
         approval_ref=decision.approval_ref,
         policy_decision_ref=decision.policy_decision_ref,

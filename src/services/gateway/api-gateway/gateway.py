@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import secrets
+import time
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager, suppress
 from urllib.parse import urlsplit
@@ -58,13 +59,22 @@ from packages.contracts.identity import DEFAULT_WORKSPACE_ID, ClusterRegistratio
 from packages.events.bus import NatsEventBus
 from packages.runtime.command_wakeup import COMMAND_NOTIFY_DATABASE_URL_ENV, WAKEUP
 from packages.runtime.gateway import ApiEventGateway
-from packages.runtime.metrics import render_labeled_counter, render_prometheus_metrics
+from packages.runtime.metrics import (
+    render_labeled_counter,
+    render_labeled_gauge,
+    render_multi_labeled_gauge,
+    render_prometheus_metrics,
+)
 from packages.storage.database import Database, wait_for_database
 from packages.storage.engine import unit_of_work_or_null
 from packages.storage.sessions import RedisSessionStore, RedisSessionStoreConfig
 
 LOGGER = get_logger(__name__)
 STATE_CHANGING_METHODS = {"POST", "PUT", "PATCH", "DELETE"}
+
+
+def elapsed_ms(started_at: float) -> int:
+    return max(0, int((time.perf_counter() - started_at) * 1000))
 
 
 def agent_connected_body_from_request(
@@ -93,6 +103,7 @@ class ApiGateway:
         )
         self._configure_cors(self.app)
         self._configure_session_origin_guard(self.app)
+        self._configure_request_logging(self.app)
         # 도메인 router 가 Depends 로 가져갈 공유 객체(클로저 대신 DI).
         self.app.state.db = self.db
         self.app.state.events = self.events
@@ -127,6 +138,44 @@ class ApiGateway:
                     content={"detail": Settings.CSRF_REJECT_MESSAGE},
                 )
             return await call_next(request)
+
+    @staticmethod
+    def _configure_request_logging(app: FastAPI) -> None:
+        @app.middleware("http")
+        async def request_logging(request: Request, call_next):
+            started_at = time.perf_counter()
+            context = {
+                "method": request.method,
+                "path": request.url.path,
+                "client_host": request.client.host if request.client else None,
+                "request_correlation_id": request.headers.get(Gateway.CORRELATION_ID),
+            }
+            try:
+                response = await call_next(request)
+            except Exception as exc:
+                LOGGER.error(
+                    "gateway_request_failed",
+                    extra={
+                        CONTEXT_KEY: {
+                            **context,
+                            "duration_ms": elapsed_ms(started_at),
+                            "exception_type": type(exc).__name__,
+                        }
+                    },
+                    exc_info=exc,
+                )
+                raise
+            LOGGER.info(
+                "gateway_request_completed",
+                extra={
+                    CONTEXT_KEY: {
+                        **context,
+                        "status_code": response.status_code,
+                        "duration_ms": elapsed_ms(started_at),
+                    }
+                },
+            )
+            return response
 
     @staticmethod
     def _session_origin_guard_rejects(request: Request) -> bool:
@@ -491,6 +540,7 @@ class ApiGateway:
             scalar_metrics = {
                 "event_dead_letters_open_total": self.db.open_dead_letter_count(),
                 "outbox_pending_total": self.db.outbox_pending_count(),
+                "outbox_oldest_age_seconds": self.db.outbox_oldest_age_seconds(),
                 "command_queue_oldest_age_seconds": self.db.oldest_command_age_seconds(
                     CommandStatus.QUEUED
                 ),
@@ -503,12 +553,63 @@ class ApiGateway:
                 "evidence_job_leased_oldest_age_seconds": (
                     self.db.oldest_evidence_job_age_seconds(EVIDENCE_JOB_STATUS_LEASED)
                 ),
+                "gitops_workflow_running_total": self.db.count_running_workflow_runs(
+                    DEFAULT_WORKSPACE_ID
+                ),
+                "gitops_approvals_open_total": self.db.count_open_workflow_approvals(
+                    DEFAULT_WORKSPACE_ID
+                ),
             }
             body = render_prometheus_metrics(scalar_metrics)
             body += render_labeled_counter(
                 "event_processing_status_total",
                 self.db.event_processing_status_counts(),
                 "status",
+            )
+            body += render_labeled_gauge(
+                "event_processing_duration_avg_ms",
+                self.db.event_processing_duration_avg_ms_by_consumer(),
+                "consumer",
+            )
+            body += render_labeled_gauge(
+                "event_processing_duration_max_ms",
+                self.db.event_processing_duration_max_ms_by_consumer(),
+                "consumer",
+            )
+            body += render_multi_labeled_gauge(
+                "nats_consumer_pending_events",
+                self.db.event_consumer_pending_by_consumer_subject(),
+                ("consumer", "subject"),
+            )
+            body += render_multi_labeled_gauge(
+                "nats_consumer_ack_pending_events",
+                self.db.event_consumer_ack_pending_by_consumer_subject(),
+                ("consumer", "subject"),
+            )
+            body += render_multi_labeled_gauge(
+                "nats_consumer_redelivered_events",
+                self.db.event_consumer_redelivered_by_consumer_subject(),
+                ("consumer", "subject"),
+            )
+            body += render_multi_labeled_gauge(
+                "llm_invocation_latency_avg_ms",
+                self.db.llm_invocation_latency_avg_ms_by_provider_model_operation_status(),
+                ("provider", "model", "operation", "status"),
+            )
+            body += render_multi_labeled_gauge(
+                "llm_invocation_latency_max_ms",
+                self.db.llm_invocation_latency_max_ms_by_provider_model_operation_status(),
+                ("provider", "model", "operation", "status"),
+            )
+            body += render_multi_labeled_gauge(
+                "llm_invocation_total_tokens",
+                self.db.llm_invocation_total_tokens_by_provider_model_operation_status(),
+                ("provider", "model", "operation", "status"),
+            )
+            body += render_multi_labeled_gauge(
+                "llm_invocation_estimated_cost_micros",
+                self.db.llm_invocation_estimated_cost_micros_by_provider_model_operation_status(),
+                ("provider", "model", "operation", "status"),
             )
             body += render_labeled_counter(
                 "command_status_total", self.db.command_status_counts(), "status"
@@ -517,6 +618,16 @@ class ApiGateway:
                 "evidence_job_status_total",
                 self.db.evidence_job_status_counts(),
                 "status",
+            )
+            body += render_labeled_counter(
+                "gitops_workflow_status_total",
+                self.db.workflow_run_status_counts(DEFAULT_WORKSPACE_ID),
+                "status",
+            )
+            body += render_labeled_counter(
+                "gitops_workflow_current_step_total",
+                self.db.workflow_run_current_step_counts(DEFAULT_WORKSPACE_ID),
+                "step",
             )
             return PlainTextResponse(body, media_type="text/plain; version=0.0.4")
 

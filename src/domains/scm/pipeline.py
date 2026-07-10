@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import hashlib
 import json
-from dataclasses import replace
 from collections.abc import Mapping
+from dataclasses import replace
 from typing import Any
 
 from domains.gitops.repository import (
@@ -23,7 +23,6 @@ def safe_pr_patch_sha256(patches: list[Any]) -> str:
         {
             "path": safe_pr_patch_field(patch, "path"),
             "content": safe_pr_patch_field(patch, "content"),
-            "description": safe_pr_patch_field(patch, "description"),
         }
         for patch in patches
     ]

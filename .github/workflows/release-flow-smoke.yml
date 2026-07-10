@@ -390,6 +390,20 @@ jobs:
                 exit 1
                 ;;
             esac
+            if [ "$LIVE_PREFLIGHT_APPROVAL_GATE" = "safe_pr" ]; then
+              if [ -z "$LIVE_PREFLIGHT_SAFE_PR_WORKFLOW_RUN_ID" ]; then
+                echo "::error title=Missing Safe PR workflow id::live_safe_pr_workflow_run_id is required when live_approval_gate is safe_pr."
+                exit 1
+              fi
+              if [ -z "$LIVE_PREFLIGHT_SAFE_PR_URL" ]; then
+                echo "::error title=Missing Safe PR URL::live_safe_pr_url is required when live_approval_gate is safe_pr."
+                exit 1
+              fi
+              if [[ "$LIVE_PREFLIGHT_SAFE_PR_URL" == *"example.com"* ]]; then
+                echo "::error title=Placeholder Safe PR URL::live_safe_pr_url must not use example.com when live_approval_gate is safe_pr."
+                exit 1
+              fi
+            fi
             dns_label='^[a-z0-9]([-a-z0-9]*[a-z0-9])?$'
             if ! [[ "$LIVE_PREFLIGHT_ENVIRONMENT" =~ $dns_label ]]; then
               echo "::error title=Invalid live_environment::live_environment must be a Kubernetes-style DNS label."

@@ -4,14 +4,26 @@ from collections.abc import Iterator, Mapping, Sequence, Sized
 from contextlib import contextmanager
 from typing import Any
 
-from opentelemetry import trace
-from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
-from opentelemetry.sdk.resources import SERVICE_NAME, Resource
-from opentelemetry.sdk.trace import TracerProvider
-from opentelemetry.sdk.trace.export import BatchSpanProcessor
-from opentelemetry.trace import Span, Status, StatusCode, Tracer
-
 from span.base import TracePayload, TraceSpan, TraceTracer
+
+try:
+    from opentelemetry import trace
+    from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
+    from opentelemetry.sdk.resources import SERVICE_NAME, Resource
+    from opentelemetry.sdk.trace import TracerProvider
+    from opentelemetry.sdk.trace.export import BatchSpanProcessor
+    from opentelemetry.trace import Span, Status, StatusCode, Tracer
+except ModuleNotFoundError:
+    trace = None  # type: ignore[assignment]
+    OTLPSpanExporter = None  # type: ignore[assignment]
+    SERVICE_NAME = "service.name"  # type: ignore[assignment]
+    Resource = None  # type: ignore[assignment]
+    TracerProvider = None  # type: ignore[assignment]
+    BatchSpanProcessor = None  # type: ignore[assignment]
+    Span = Any  # type: ignore[misc,assignment]
+    Status = None  # type: ignore[assignment]
+    StatusCode = None  # type: ignore[assignment]
+    Tracer = Any  # type: ignore[misc,assignment]
 
 _CONFIGURED = False
 
@@ -71,8 +83,53 @@ class OtelTracer:
                 span.fields_present(namespace, payload, expected_fields)
 
 
+class NoopSpan:
+    def attr(self, key: str, value: Any) -> None:
+        return None
+
+    def count(self, key: str, values: Sized) -> None:
+        return None
+
+    def flag(self, key: str, value: bool) -> None:
+        return None
+
+    def http_status(self, status_code: int) -> None:
+        return None
+
+    def fields_present(
+        self,
+        namespace: str,
+        payload: Mapping[str, Any],
+        fields: Sequence[str],
+    ) -> None:
+        return None
+
+    def error(self, exc: Exception) -> None:
+        return None
+
+
+class NoopTracer:
+    @contextmanager
+    def start_as_current_span(self, name: str) -> Iterator[TraceSpan]:
+        yield NoopSpan()
+
+    @contextmanager
+    def start_payload_span(
+        self,
+        name: str,
+        *,
+        namespace: str,
+        expected_fields: Sequence[str],
+    ) -> Iterator[TracePayload]:
+        payload: TracePayload = {}
+        yield payload
+
+
 def configure_tracing(service_name: str, traces_endpoint: str) -> TraceTracer:
     global _CONFIGURED
+
+    if trace is None:
+        return NoopTracer()
 
     if not _CONFIGURED:
         resource = Resource.create({SERVICE_NAME: service_name})
@@ -88,4 +145,6 @@ def configure_tracing(service_name: str, traces_endpoint: str) -> TraceTracer:
 
 
 def get_tracer(name: str) -> TraceTracer:
+    if trace is None:
+        return NoopTracer()
     return OtelTracer(trace.get_tracer(name))

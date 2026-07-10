@@ -18,6 +18,10 @@ spec:
     metadata:
       labels:
         app: api-gateway
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/path: /metrics
+        prometheus.io/port: "8000"
     spec:
       priorityClassName: gitops-control-critical
       serviceAccountName: api-gateway

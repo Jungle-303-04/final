@@ -10,6 +10,7 @@ import os
 from collections.abc import Iterable
 from datetime import datetime, timedelta, timezone
 from typing import Any
+from urllib.parse import unquote, urlparse
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Response
 
@@ -98,6 +99,7 @@ DEFAULT_APPROVAL_MAX_AGE_HOURS = 24
 SAFE_PR_EVIDENCE_MAX_AGE_HOURS_ENV = "RELEASE_FLOW_SAFE_PR_EVIDENCE_MAX_AGE_HOURS"
 DEFAULT_SAFE_PR_EVIDENCE_MAX_AGE_HOURS = 24
 APPROVAL_CLOCK_SKEW_MINUTES = 5
+SAFE_PR_EVIDENCE_LOOKUP_LIMIT = 20
 
 
 @router.get(gateway_routes.RELEASE_PLANS_PATH, response_model=ReleasePlanListResponse)
@@ -411,6 +413,12 @@ async def submit_release_manifest_safe_pr(
         payload.body,
         workspace_id,
     )
+    safe_pr_blockers = generated_manifest_safe_pr_blockers(body, step, safe_pr)
+    if safe_pr_blockers:
+        raise HTTPException(
+            status_code=HTTP_CONFLICT,
+            detail={"message": RELEASE_PLAN_BLOCKED, "blockers": safe_pr_blockers},
+        )
     accepted = await events.accept_body(safe_pr, actor=Actor(current.user_id, tuple(current.roles)))
     return ReleaseManifestSafePrResponse(
         **rendered,
@@ -1232,20 +1240,90 @@ def safe_pr_created_evidence_for_step(
     plan: dict[str, Any],
     step: dict[str, Any],
 ) -> dict[str, Any] | None:
-    finder = getattr(db, "find_release_safe_pr_evidence", None)
-    if not callable(finder):
-        return None
     application_id = str(step.get("application_id") or "") or None
     expected = safe_pr_expected_evidence(plan, step, workspace_id, db)
     for workflow_run_id in safe_pr_workflow_run_ids(plan, step, workspace_id, db):
-        evidence = finder(
+        for evidence in safe_pr_evidence_candidates(db, workspace_id, workflow_run_id, application_id=application_id):
+            if safe_pr_evidence_matches(evidence, expected):
+                return dict(evidence)
+    return None
+
+
+def release_safe_pr_evidence_blockers(
+    plan: dict[str, Any],
+    preview: dict[str, Any],
+    wave: int,
+    *,
+    workspace_id: str,
+    db: Any,
+) -> list[str]:
+    if db is None or not execution_profile(plan).side_effects:
+        return []
+    settings = plan_settings_value(plan)
+    preview_steps = {
+        str(step.get("application_id") or ""): step
+        for step in preview.get("steps", [])
+        if isinstance(step, dict)
+    }
+    blockers: list[str] = []
+    for step in plan.get("steps", []):
+        if not isinstance(step, dict) or not safe_pr_gate_required(settings, step):
+            continue
+        application_id = str(step.get("application_id") or "")
+        preview_step = preview_steps.get(application_id, {})
+        if int_field(preview_step, "wave", -1) != wave:
+            continue
+        expected = safe_pr_expected_evidence(plan, step, workspace_id, db)
+        workflow_run_ids = safe_pr_workflow_run_ids(plan, step, workspace_id, db)
+        if not workflow_run_ids:
+            blockers.append(f"Application {application_id} requires Safe PR evidence, but no workflow_run_id was derived.")
+            continue
+        candidates: list[dict[str, Any]] = []
+        for workflow_run_id in workflow_run_ids:
+            candidates.extend(
+                safe_pr_evidence_candidates(db, workspace_id, workflow_run_id, application_id=application_id)
+            )
+        if any(safe_pr_evidence_matches(candidate, expected) for candidate in candidates):
+            continue
+        workflow_label = ", ".join(workflow_run_ids)
+        if not candidates:
+            blockers.append(
+                f"Application {application_id} requires Safe PR evidence for workflow_run_id {workflow_label}, "
+                "but no safe_pr.created event was found."
+            )
+            continue
+        reasons = safe_pr_evidence_mismatch_reasons(candidates[0], expected)
+        reason_text = "; ".join(reasons[:4]) if reasons else "candidate evidence did not match server expectations"
+        blockers.append(
+            f"Application {application_id} found {len(candidates)} Safe PR candidate(s) for workflow_run_id "
+            f"{workflow_label}, but none matched: {reason_text}."
+        )
+    return blockers
+
+
+def safe_pr_evidence_candidates(
+    db: Any,
+    workspace_id: str,
+    workflow_run_id: str,
+    *,
+    application_id: str | None,
+) -> list[dict[str, Any]]:
+    lister = getattr(db, "list_release_safe_pr_evidence", None)
+    if callable(lister):
+        candidates = lister(
             workspace_id,
             workflow_run_id,
             application_id=application_id,
+            limit=SAFE_PR_EVIDENCE_LOOKUP_LIMIT,
         )
-        if isinstance(evidence, dict) and safe_pr_evidence_matches(evidence, expected):
-            return dict(evidence)
-    return None
+        if isinstance(candidates, Iterable) and not isinstance(candidates, (bytes, str, dict)):
+            return [dict(candidate) for candidate in candidates if isinstance(candidate, dict)]
+    finder = getattr(db, "find_release_safe_pr_evidence", None)
+    if callable(finder):
+        evidence = finder(workspace_id, workflow_run_id, application_id=application_id)
+        if isinstance(evidence, dict):
+            return [dict(evidence)]
+    return []
 
 
 def safe_pr_workflow_run_id(
@@ -1312,19 +1390,19 @@ def safe_pr_expected_evidence(
         str(config.get("manifest_path") or application.get("manifest_path") or "").strip(),
         generated_safe_pr_manifest_path(plan, step, application),
     ]
+    rollback_required = release_step_targets_production(plan, step)
     return {
+        "provider": str(config.get("scm_provider") or settings.get("scm_provider") or GitHub.PROVIDER).lower(),
         "pr_url": str(config.get("safe_pr_url") or settings.get("safe_pr_url") or "").strip(),
         "repo_ref": str(config.get("repo_ref") or application.get("repo_ref") or "").strip(),
         "base_branch": str(config.get("branch") or application.get("branch") or "main").strip(),
         "manifest_paths": [path for path in manifest_paths if path],
         "environment": str(config.get("environment") or first_environment(settings) or "sandbox").strip(),
         "commit_sha": str(config.get("commit_sha") or settings.get("commit_sha") or "").strip(),
-        "patch_sha256": str(
-            config.get("safe_pr_patch_sha256")
-            or settings.get("safe_pr_patch_sha256")
-            or generated_safe_pr_patch_sha256(plan, step, application)
-            or ""
-        ).strip(),
+        "patch_sha256": generated_safe_pr_patch_sha256(plan, step, application, workspace_id=workspace_id),
+        "rollback_required": rollback_required,
+        "rollback_available": (not rollback_required)
+        or generated_safe_pr_rollback_patch_available(plan, step, application, workspace_id=workspace_id),
     }
 
 
@@ -1333,23 +1411,80 @@ def safe_pr_evidence_matches(evidence: dict[str, Any], expected: dict[str, Any])
         return False
     if not safe_pr_evidence_is_current(evidence):
         return False
+    if not safe_pr_required_evidence_field_matches(evidence, expected, "provider"):
+        return False
     if not safe_pr_evidence_field_matches(evidence, expected, "pr_url"):
         return False
-    if not safe_pr_evidence_field_matches(evidence, expected, "repo_ref"):
+    if not safe_pr_required_evidence_field_matches(evidence, expected, "repo_ref"):
         return False
-    if not safe_pr_evidence_field_matches(evidence, expected, "base_branch"):
+    if not safe_pr_evidence_pr_url_matches_provider(evidence, expected):
         return False
-    if not safe_pr_evidence_field_matches(evidence, expected, "commit_sha"):
+    if not safe_pr_required_evidence_field_matches(evidence, expected, "base_branch"):
         return False
-    if not safe_pr_evidence_field_matches(evidence, expected, "patch_sha256"):
+    if not safe_pr_required_evidence_field_matches(evidence, expected, "commit_sha"):
+        return False
+    if not safe_pr_required_evidence_field_matches(evidence, expected, "patch_sha256"):
+        return False
+    if bool(expected.get("rollback_required")) and not bool(expected.get("rollback_available")):
         return False
     evidence_manifest_path = str(evidence.get("manifest_path") or "").strip()
     expected_manifest_paths = {str(path).strip() for path in expected.get("manifest_paths", []) if str(path).strip()}
-    if expected_manifest_paths and evidence_manifest_path not in expected_manifest_paths:
+    if not expected_manifest_paths or evidence_manifest_path not in expected_manifest_paths:
         return False
     evidence_environment = str(evidence.get("environment") or "").strip()
     expected_environment = str(expected.get("environment") or "").strip()
-    return not (evidence_environment and expected_environment and evidence_environment != expected_environment)
+    return bool(evidence_environment and expected_environment and evidence_environment == expected_environment)
+
+
+def safe_pr_evidence_mismatch_reasons(evidence: dict[str, Any], expected: dict[str, Any]) -> list[str]:
+    reasons: list[str] = []
+    if not str(evidence.get("pr_url") or "").strip():
+        reasons.append("pr_url is missing")
+    if not safe_pr_evidence_is_current(evidence):
+        reasons.append("created_at is missing, stale, or in the future")
+    for field in ("provider", "repo_ref", "base_branch", "commit_sha", "patch_sha256"):
+        if not safe_pr_required_evidence_field_matches(evidence, expected, field):
+            reasons.append(safe_pr_evidence_field_reason(evidence, expected, field))
+    if not safe_pr_evidence_field_matches(evidence, expected, "pr_url"):
+        reasons.append(safe_pr_evidence_field_reason(evidence, expected, "pr_url"))
+    if not safe_pr_evidence_pr_url_matches_provider(evidence, expected):
+        reasons.append("pr_url path does not match the expected GitHub repo_ref")
+    evidence_manifest_path = str(evidence.get("manifest_path") or "").strip()
+    expected_manifest_paths = {str(path).strip() for path in expected.get("manifest_paths", []) if str(path).strip()}
+    if not expected_manifest_paths:
+        reasons.append("expected manifest_path could not be derived")
+    elif evidence_manifest_path not in expected_manifest_paths:
+        reasons.append(
+            "manifest_path expected one of "
+            f"{safe_pr_short_values(sorted(expected_manifest_paths))} but got {safe_pr_short_value(evidence_manifest_path)}"
+        )
+    evidence_environment = str(evidence.get("environment") or "").strip()
+    expected_environment = str(expected.get("environment") or "").strip()
+    if not evidence_environment or not expected_environment or evidence_environment != expected_environment:
+        reasons.append(
+            f"environment expected {safe_pr_short_value(expected_environment)} but got "
+            f"{safe_pr_short_value(evidence_environment)}"
+        )
+    return unique_non_empty(reasons)
+
+
+def safe_pr_evidence_field_reason(evidence: dict[str, Any], expected: dict[str, Any], field: str) -> str:
+    return (
+        f"{field} expected {safe_pr_short_value(str(expected.get(field) or '').strip())} "
+        f"but got {safe_pr_short_value(str(evidence.get(field) or '').strip())}"
+    )
+
+
+def safe_pr_short_values(values: list[str]) -> str:
+    return ", ".join(safe_pr_short_value(value) for value in values[:3])
+
+
+def safe_pr_short_value(value: str) -> str:
+    if not value:
+        return "<missing>"
+    if len(value) <= 32:
+        return value
+    return f"{value[:16]}...{value[-8:]}"
 
 
 def safe_pr_evidence_is_current(evidence: dict[str, Any]) -> bool:
@@ -1380,6 +1515,40 @@ def safe_pr_evidence_field_matches(
     return not expected_value or evidence_value == expected_value
 
 
+def safe_pr_evidence_pr_url_matches_provider(
+    evidence: dict[str, Any],
+    expected: dict[str, Any],
+) -> bool:
+    provider = str(expected.get("provider") or "").strip().lower()
+    if provider != GitHub.PROVIDER:
+        return True
+    repo_ref = str(expected.get("repo_ref") or "").strip()
+    if "/" not in repo_ref:
+        return False
+    parsed = urlparse(str(evidence.get("pr_url") or "").strip())
+    if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+        return False
+    path_parts = [unquote(part).lower() for part in parsed.path.split("/") if part]
+    owner, repo = [part.lower() for part in repo_ref.split("/", 1)]
+    return (
+        len(path_parts) >= 4
+        and path_parts[0] == owner
+        and path_parts[1] == repo
+        and path_parts[2] == "pull"
+        and path_parts[3].isdigit()
+    )
+
+
+def safe_pr_required_evidence_field_matches(
+    evidence: dict[str, Any],
+    expected: dict[str, Any],
+    field: str,
+) -> bool:
+    expected_value = str(expected.get(field) or "").strip()
+    evidence_value = str(evidence.get(field) or "").strip()
+    return bool(expected_value and evidence_value and evidence_value == expected_value)
+
+
 def generated_safe_pr_manifest_path(
     plan: dict[str, Any],
     step: dict[str, Any],
@@ -1399,6 +1568,8 @@ def generated_safe_pr_patch_sha256(
     plan: dict[str, Any],
     step: dict[str, Any],
     application: dict[str, Any],
+    *,
+    workspace_id: str = DEFAULT_WORKSPACE_ID,
 ) -> str:
     step_index = release_step_index(plan, step)
     if step_index < 0:
@@ -1413,7 +1584,56 @@ def generated_safe_pr_patch_sha256(
         for file in rendered.get("files", [])
         if isinstance(file, dict) and file.get("content")
     ]
+    manifest_path = str(patches[0].path if patches else generated_safe_pr_manifest_path(plan, step, application))
+    workflow_run_id = derive_workflow_run_id(
+        safe_pr_workflow_basis(
+            plan,
+            step,
+            application,
+            workspace_id,
+            manifest_path=manifest_path,
+        )
+    )
+    patches.extend(
+        generated_manifest_rollback_patches(
+            plan,
+            step,
+            application,
+            manifest_path=manifest_path,
+            workflow_run_id=workflow_run_id,
+        )
+    )
     return safe_pr_patch_sha256(patches) if patches else ""
+
+
+def generated_safe_pr_rollback_patch_available(
+    plan: dict[str, Any],
+    step: dict[str, Any],
+    application: dict[str, Any],
+    *,
+    workspace_id: str = DEFAULT_WORKSPACE_ID,
+) -> bool:
+    manifest_path = generated_safe_pr_manifest_path(plan, step, application)
+    if not manifest_path:
+        return False
+    workflow_run_id = derive_workflow_run_id(
+        safe_pr_workflow_basis(
+            plan,
+            step,
+            application,
+            workspace_id,
+            manifest_path=manifest_path,
+        )
+    )
+    return bool(
+        generated_manifest_rollback_patches(
+            plan,
+            step,
+            application,
+            manifest_path=manifest_path,
+            workflow_run_id=workflow_run_id,
+        )
+    )
 
 
 def release_step_index(plan: dict[str, Any], step: dict[str, Any]) -> int:
@@ -1483,6 +1703,16 @@ def release_readiness_from_plan(
         workspace_id=workspace_id,
         db=db,
     )
+    if any("requires a ready Safe PR" in blocker for blocker in execution_blockers):
+        execution_blockers.extend(
+            release_safe_pr_evidence_blockers(
+                plan,
+                preview,
+                first_wave,
+                workspace_id=workspace_id,
+                db=db,
+            )
+        )
     approval_evidence_blockers = release_production_approval_evidence_blockers(plan, preview, first_wave)
     change_ticket_blockers = release_production_change_ticket_blockers(plan, preview, first_wave)
     change_ticket_bypassed = release_production_change_ticket_bypassed(plan, preview, first_wave)
@@ -4555,7 +4785,18 @@ def generated_manifest_safe_pr_body(
         if file.get("content")
     ]
     commit_sha = str(request_basis["commit_sha"])
+    workflow_run_id = str(request_basis["workflow_run_id"])
+    patches.extend(
+        generated_manifest_rollback_patches(
+            plan,
+            step,
+            application,
+            manifest_path=manifest_path,
+            workflow_run_id=workflow_run_id,
+        )
+    )
     step_name = str(step.get("name") or application.get("name") or application_id or "release step")
+    rollback_paths = [patch.path for patch in patches if patch.path.startswith(".gitops/rollback/")]
     resource_lines = [
         f"- {resource.get('kind')}/{resource.get('name')} ({resource.get('namespace') or '-'})"
         for resource in rendered.get("resources", [])[:12]
@@ -4574,6 +4815,7 @@ def generated_manifest_safe_pr_body(
             f"- environment: `{request_basis['environment']}`",
             f"- cluster_id: `{request_basis['cluster_id']}`",
             f"- manifest_path: `{manifest_path}`",
+            f"- rollback_patch: `{rollback_paths[0]}`" if rollback_paths else "- rollback_patch: unavailable",
             "",
             "## Generated resources",
             *(resource_lines or ["- none"]),
@@ -4588,7 +4830,7 @@ def generated_manifest_safe_pr_body(
         repository_id=str(request_basis["repository_id"]),
         binding_id=str(request_basis["binding_id"]),
         application_id=application_id,
-        workflow_run_id=str(request_basis["workflow_run_id"]),
+        workflow_run_id=workflow_run_id,
         environment=str(request_basis["environment"]),
         manifest_path=manifest_path,
         repo_ref=str(request_basis["repo_ref"]),
@@ -4599,6 +4841,107 @@ def generated_manifest_safe_pr_body(
         policy_decision_ref=str(config.get("policy_decision_ref") or settings.get("policy_decision_ref") or "")
         or None,
     )
+
+
+def generated_manifest_safe_pr_blockers(
+    plan: dict[str, Any],
+    step: dict[str, Any],
+    safe_pr: SafePrRequestedBody,
+) -> list[str]:
+    if not release_step_targets_production(plan, step):
+        return []
+    if any(patch.path.startswith(".gitops/rollback/") for patch in safe_pr.patches):
+        return []
+    return [
+        (
+            "production generated Safe PR requires rollback_image, previous_image, "
+            "current_image, deployed_image, or registered application image before PR creation"
+        )
+    ]
+
+
+def generated_manifest_rollback_patches(
+    plan: dict[str, Any],
+    step: dict[str, Any],
+    application: dict[str, Any],
+    *,
+    manifest_path: str,
+    workflow_run_id: str,
+) -> list[SafePrFilePatch]:
+    rollback_image = rollback_manifest_image(plan, step, application)
+    if not rollback_image:
+        return []
+    rollback_plan = json.loads(json.dumps(plan))
+    rollback_steps = rollback_plan.get("steps")
+    if not isinstance(rollback_steps, list):
+        return []
+    step_index = release_step_index_in_steps(rollback_steps, step)
+    if step_index < 0:
+        return []
+    rollback_step = rollback_steps[step_index]
+    if not isinstance(rollback_step, dict):
+        return []
+    rollback_config = rollback_step.setdefault("config", {})
+    if not isinstance(rollback_config, dict):
+        return []
+    rollback_config["image"] = rollback_image
+    rollback_config["generated_manifest_path"] = manifest_path
+    rollback_rendered = render_release_step_manifest(rollback_plan, step_index, application)
+    if any(getattr(diag, "severity", "") == "error" for diag in rollback_rendered.get("diagnostics", [])):
+        return []
+    rollback_files = [
+        file for file in list(rollback_rendered.get("files", [])) if isinstance(file, dict) and file.get("content")
+    ]
+    if not rollback_files:
+        return []
+    return [
+        SafePrFilePatch(
+            path=generated_manifest_rollback_path(workflow_run_id, manifest_path),
+            content=str(rollback_files[0].get("content") or ""),
+            description="Generated rollback manifest from current application state",
+        )
+    ]
+
+
+def rollback_manifest_image(
+    plan: dict[str, Any],
+    step: dict[str, Any],
+    application: dict[str, Any],
+) -> str:
+    config = step_config(step)
+    settings = plan_settings_value(plan)
+    for source, fields in (
+        (config, ("rollback_image", "previous_image", "current_image", "deployed_image")),
+        (settings, ("rollback_image", "previous_image", "current_image", "deployed_image")),
+        (application, ("rollback_image", "previous_image", "current_image", "deployed_image", "image")),
+    ):
+        for field in fields:
+            value = str(source.get(field) or "").strip()
+            if value:
+                return value
+    return ""
+
+
+def release_step_index_in_steps(steps: list[Any], selected: dict[str, Any]) -> int:
+    selected_application_id = str(selected.get("application_id") or "")
+    selected_position = selected.get("position")
+    for index, candidate in enumerate(steps):
+        if not isinstance(candidate, dict):
+            continue
+        if candidate is selected:
+            return index
+        if selected_application_id and str(candidate.get("application_id") or "") == selected_application_id:
+            return index
+        if selected_position is not None and candidate.get("position") == selected_position:
+            return index
+    return -1
+
+
+def generated_manifest_rollback_path(workflow_run_id: str, manifest_path: str) -> str:
+    filename = manifest_path.rsplit("/", 1)[-1] or "manifest.yaml"
+    if "." not in filename:
+        filename = f"{filename}.yaml"
+    return f".gitops/rollback/{workflow_run_id}/{filename}"
 
 
 def step_config(step: dict[str, Any]) -> dict[str, Any]:

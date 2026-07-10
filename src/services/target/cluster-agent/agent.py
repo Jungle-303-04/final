@@ -5,6 +5,7 @@ import re
 import time
 from contextlib import suppress
 from dataclasses import dataclass
+from datetime import datetime, timezone
 
 import httpx
 from commands import (
@@ -181,8 +182,11 @@ class AgentConfig:
     # 제어 허용 네임스페이스는 packages.config.control 단일 기준(CONTROL_ALLOWED_NAMESPACES).
     WRITE_NAMESPACE_DENIED_MESSAGE = CONTROL_NAMESPACE_DENIED_MESSAGE
     MISSING_APPROVAL_EVIDENCE_MESSAGE = (
-        "write command requires approval_ref and policy_decision_ref"
+        "write command requires approval_ref, policy_decision_ref, approval_decided_by, "
+        "and approval_expires_at"
     )
+    INVALID_APPROVAL_EVIDENCE_MESSAGE = "write command approval_expires_at is invalid"
+    EXPIRED_APPROVAL_EVIDENCE_MESSAGE = "write command approval_expires_at is expired"
     KUBERNETES_ROLLOUT_TIMEOUT_SECONDS = CONFIG_KUBERNETES_ROLLOUT_TIMEOUT_SECONDS
     KUBERNETES_ROLLOUT_POLL_INTERVAL_SECONDS = CONFIG_KUBERNETES_ROLLOUT_POLL_INTERVAL_SECONDS
 
@@ -695,6 +699,22 @@ class TargetClusterAgent:
                 record.result,
             )
             self.command_outbox.mark_sent(record.command_id)
+            LOGGER.info(
+                "command_result_flushed",
+                extra={
+                    CONTEXT_KEY: {
+                        Gateway.CLUSTER_ID: self.cluster_id,
+                        Gateway.AGENT_ID: self.agent_id,
+                        Gateway.COMMAND_ID: record.command_id,
+                        Gateway.WORKSPACE_ID: record.workspace_id,
+                        Gateway.LEASE_ID: record.lease_id,
+                        Gateway.STATUS: record.result.get(Gateway.STATUS),
+                        Gateway.APPLIED: record.result.get(Gateway.APPLIED),
+                        Gateway.RETRYABLE: record.result.get(Gateway.RETRYABLE),
+                        "attempt_count": record.attempt_count,
+                    }
+                },
+            )
             return True
         except Exception as exc:
             abandoned = self.command_outbox.record_failure(
@@ -807,12 +827,13 @@ class TargetClusterAgent:
                 },
             )
             return self.command_result(False, MANAGEMENT_READONLY_CODE)
+        approval_error = self.approval_evidence_error(command)
         if (
             self.write_action_requires_approval(action)
-            and not self.has_approval_evidence(command)
+            and approval_error
             and not self.approval_exempt_for_environment(action, command)
         ):
-            return self.command_result(False, AgentConfig.MISSING_APPROVAL_EVIDENCE_MESSAGE)
+            return self.command_result(False, approval_error)
         try:
             return await self.command_registry.execute(
                 action,
@@ -824,6 +845,12 @@ class TargetClusterAgent:
                     ),
                     Gateway.POLICY_DECISION_REF: self.command_metadata_value(
                         command, Gateway.POLICY_DECISION_REF
+                    ),
+                    Gateway.APPROVAL_DECIDED_BY: self.command_metadata_value(
+                        command, Gateway.APPROVAL_DECIDED_BY
+                    ),
+                    Gateway.APPROVAL_EXPIRES_AT: self.command_metadata_value(
+                        command, Gateway.APPROVAL_EXPIRES_AT
                     ),
                 },
             )
@@ -881,11 +908,23 @@ class TargetClusterAgent:
         environment = self.command_metadata_value(command, "environment").strip().lower()
         return action in actions and environment in environments
 
-    def has_approval_evidence(self, command: CommandRecord) -> bool:
-        return bool(
-            self.command_metadata_value(command, Gateway.APPROVAL_REF)
-            and self.command_metadata_value(command, Gateway.POLICY_DECISION_REF)
+    def approval_evidence_error(self, command: CommandRecord) -> str:
+        required = (
+            Gateway.APPROVAL_REF,
+            Gateway.POLICY_DECISION_REF,
+            Gateway.APPROVAL_DECIDED_BY,
+            Gateway.APPROVAL_EXPIRES_AT,
         )
+        if not all(self.command_metadata_value(command, field) for field in required):
+            return AgentConfig.MISSING_APPROVAL_EVIDENCE_MESSAGE
+        expires_at = parse_approval_expires_at(
+            self.command_metadata_value(command, Gateway.APPROVAL_EXPIRES_AT)
+        )
+        if expires_at is None:
+            return AgentConfig.INVALID_APPROVAL_EVIDENCE_MESSAGE
+        if expires_at <= datetime.now(timezone.utc):
+            return AgentConfig.EXPIRED_APPROVAL_EVIDENCE_MESSAGE
+        return ""
 
     @command.handler(QUERY_RUN_ACTION, payload_model=TelemetryQueryCommandPayload)
     async def run_query_command(
@@ -1134,6 +1173,8 @@ class TargetClusterAgent:
         status = (
             AgentConfig.COMMAND_COMPLETED_STATUS if applied else AgentConfig.COMMAND_FAILED_STATUS
         )
+        sanitized_stdout = sanitize_command_output(stdout or (message if applied else ""))
+        sanitized_stderr = sanitize_command_output(stderr or ("" if applied else message))
         resource_status = []
         if resource:
             resource_status.append(
@@ -1141,7 +1182,10 @@ class TargetClusterAgent:
                     "resource": resource,
                     "status": status,
                     "applied": applied,
+                    "retryable": retryable,
                     "message": message,
+                    "stdout": sanitized_stdout,
+                    "stderr": sanitized_stderr,
                 }
             )
         return {
@@ -1151,8 +1195,8 @@ class TargetClusterAgent:
             Gateway.MESSAGE: message,
             Gateway.RETRYABLE: retryable,
             Gateway.RESOURCES: resource_status,
-            Gateway.STDOUT: sanitize_command_output(stdout or (message if applied else "")),
-            Gateway.STDERR: sanitize_command_output(stderr or ("" if applied else message)),
+            Gateway.STDOUT: sanitized_stdout,
+            Gateway.STDERR: sanitized_stderr,
             "rollout": rollout or {},
         }
 
@@ -1349,6 +1393,18 @@ def sanitize_command_output(value: object) -> str:
     if len(sanitized) <= COMMAND_OUTPUT_LIMIT:
         return sanitized
     return f"{sanitized[: COMMAND_OUTPUT_LIMIT - 3]}..."
+
+
+def parse_approval_expires_at(value: object) -> datetime | None:
+    if not isinstance(value, str) or not value.strip():
+        return None
+    try:
+        parsed = datetime.fromisoformat(value.strip().replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        return parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc)
 
 
 def kubernetes_manifest_resource(

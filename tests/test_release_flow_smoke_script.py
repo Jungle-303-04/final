@@ -740,6 +740,39 @@ def test_smoke_live_preflight_rejects_invalid_safe_pr_evidence_inputs() -> None:
     assert "live_safe_pr_url must not use example.com placeholder value" in message
 
 
+def test_smoke_live_preflight_requires_safe_pr_evidence_before_readiness_call() -> None:
+    smoke = load_smoke_module()
+    args = smoke.parse_args(["--live-preflight", "--live-approval-gate", "safe_pr"])
+
+    try:
+        smoke.validate_live_preflight_inputs(args)
+    except ValueError as exc:
+        message = str(exc)
+    else:
+        raise AssertionError("expected missing Safe PR workflow id rejection")
+
+    assert "live_safe_pr_workflow_run_id is required when live_approval_gate is safe_pr" in message
+
+    args = smoke.parse_args(
+        [
+            "--live-preflight",
+            "--live-approval-gate",
+            "safe_pr",
+            "--live-safe-pr-workflow-run-id",
+            "workflow-safe-pr-1",
+        ]
+    )
+
+    try:
+        smoke.validate_live_preflight_inputs(args)
+    except ValueError as exc:
+        message = str(exc)
+    else:
+        raise AssertionError("expected missing Safe PR URL rejection")
+
+    assert "live_safe_pr_url is required when live_approval_gate is safe_pr" in message
+
+
 def test_smoke_live_preflight_requires_explicit_production_inputs() -> None:
     smoke = load_smoke_module()
     args = smoke.parse_args(["--live-preflight"])

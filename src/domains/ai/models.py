@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from sqlalchemy import ForeignKey, Text
+from sqlalchemy import BigInteger, ForeignKey, Integer, Text
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -46,4 +46,25 @@ class AiConversationMessage(Base):
     agent: Mapped[str] = text_column()
     correlation_id: Mapped[str | None] = mapped_column(Text, nullable=True)
     message_metadata: Mapped[dict[str, Any]] = mapped_column("metadata", JSONB, nullable=False)
+    created_at: Mapped[Any] = created_at_column()
+
+
+class AiLlmInvocationMetric(Base):
+    __tablename__ = "ai_llm_invocation_metrics"
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    workspace_id: Mapped[str] = text_column()
+    provider: Mapped[str] = text_column()
+    model: Mapped[str] = text_column()
+    operation: Mapped[str] = text_column()
+    status: Mapped[str] = text_column()
+    latency_ms: Mapped[int] = mapped_column(Integer, nullable=False)
+    prompt_tokens: Mapped[int] = mapped_column(Integer, nullable=False)
+    completion_tokens: Mapped[int] = mapped_column(Integer, nullable=False)
+    total_tokens: Mapped[int] = mapped_column(Integer, nullable=False)
+    estimated_cost_micros: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    event_id: Mapped[str | None] = mapped_column(Text, nullable=True)
+    correlation_id: Mapped[str | None] = mapped_column(Text, nullable=True)
+    causation_id: Mapped[str | None] = mapped_column(Text, nullable=True)
+    error_type: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[Any] = created_at_column()

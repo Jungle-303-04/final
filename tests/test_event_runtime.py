@@ -5,11 +5,16 @@ import json
 from contextlib import contextmanager
 from typing import Any
 
-from packages.contracts.event_bus.interfaces import EventEnvelope
+from packages.contracts.event_bus.interfaces import EventConsumerMetrics, EventEnvelope
 from packages.contracts.event_bus.processing import CLAIM_BLOCKED, EventProcessingStatus
 from packages.contracts.interfaces import EventProcessingRecord
 from packages.events.envelope import event
-from packages.runtime.worker import EventProcessor, EventRetryPolicy
+from packages.runtime.worker import (
+    EventHandlerSpec,
+    EventProcessor,
+    EventRetryPolicy,
+    record_consumer_lag_metrics,
+)
 
 
 class StubMessage:
@@ -37,7 +42,9 @@ class StubProcessingStore:
         self.status = status
         self.recorded: list[EventEnvelope] = []
         self.finished: list[tuple[str, str]] = []
+        self.finish_durations: list[int | None] = []
         self.failed: list[tuple[str, str, str]] = []
+        self.failure_durations: list[int | None] = []
         self.staged: list[EventEnvelope] = []
 
     @contextmanager
@@ -53,13 +60,22 @@ class StubProcessingStore:
     def begin_event_processing(self, evt: EventEnvelope, consumer: str) -> dict[str, Any]:
         return EventProcessingRecord(status=self.status, attempts=self.attempts)
 
-    def finish_event_processing(self, evt: EventEnvelope, consumer: str) -> None:
+    def finish_event_processing(
+        self, evt: EventEnvelope, consumer: str, duration_ms: int | None = None
+    ) -> None:
         self.finished.append((evt.event_id, consumer))
+        self.finish_durations.append(duration_ms)
 
     def fail_event_processing(
-        self, evt: EventEnvelope, consumer: str, error: str, status: str
+        self,
+        evt: EventEnvelope,
+        consumer: str,
+        error: str,
+        status: str,
+        duration_ms: int | None = None,
     ) -> None:
         self.failed.append((evt.event_id, consumer, status))
+        self.failure_durations.append(duration_ms)
 
 
 class StubDeadLetters:
@@ -125,6 +141,7 @@ def test_event_processor_acks_successful_handler() -> None:
         assert message.nak_delay is None
         assert handled == [evt.event_id]
         assert store.finished == [(evt.event_id, "command-worker")]
+        assert isinstance(store.finish_durations[0], int)
         assert dead_letters.captured == []
 
     asyncio.run(run())
@@ -153,6 +170,7 @@ def test_event_processor_naks_retryable_failure() -> None:
         assert message.acked is False
         assert message.nak_delay == 7
         assert store.failed == [(evt.event_id, "command-worker", EventProcessingStatus.RETRYING)]
+        assert isinstance(store.failure_durations[0], int)
         assert dead_letters.captured == []
 
     asyncio.run(run())
@@ -183,6 +201,7 @@ def test_event_processor_dead_letters_after_max_attempts() -> None:
         assert store.failed == [
             (evt.event_id, "command-worker", EventProcessingStatus.DEAD_LETTERED)
         ]
+        assert isinstance(store.failure_durations[0], int)
         assert dead_letters.captured[0][1:] == ("command-worker", "permanent failure", 2)
 
     asyncio.run(run())
@@ -268,5 +287,57 @@ def test_event_processor_acks_and_raw_dead_letters_decode_failure() -> None:
         assert message.nak_delay is None
         assert dead_letters.raw[0][0] == b"{not-json"
         assert store.recorded == []
+
+    asyncio.run(run())
+
+
+def test_record_consumer_lag_metrics_records_subject_durable_samples() -> None:
+    async def run() -> None:
+        class MetricsBus:
+            def __init__(self) -> None:
+                self.calls: list[tuple[str, str]] = []
+
+            async def consumer_metrics(self, subject: str, durable: str) -> EventConsumerMetrics:
+                self.calls.append((subject, durable))
+                return EventConsumerMetrics(
+                    stream="SERVICE_EVENTS",
+                    subject=subject,
+                    durable=durable,
+                    pending=5,
+                    ack_pending=1,
+                    redelivered=0,
+                )
+
+        class MetricsStore:
+            def __init__(self) -> None:
+                self.samples: list[EventConsumerMetrics] = []
+
+            def record_event_consumer_metrics(self, sample: EventConsumerMetrics) -> None:
+                self.samples.append(sample)
+
+        async def handler(_evt: EventEnvelope) -> list[EventEnvelope]:
+            return []
+
+        bus = MetricsBus()
+        store = MetricsStore()
+        spec = EventHandlerSpec(
+            service_name="workflow-controller",
+            subjects=("workflow.run.started", "workflow.run.completed"),
+            handler_factory=lambda _events, _db: handler,
+        )
+
+        await record_consumer_lag_metrics(bus, store, spec)  # type: ignore[arg-type]
+
+        assert bus.calls == [
+            (
+                "workflow.run.started",
+                "workflow-controller-workflow-run-started",
+            ),
+            (
+                "workflow.run.completed",
+                "workflow-controller-workflow-run-completed",
+            ),
+        ]
+        assert [sample.pending for sample in store.samples] == [5, 5]
 
     asyncio.run(run())

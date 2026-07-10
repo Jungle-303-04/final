@@ -990,7 +990,11 @@ class RepoChangeRepository(DatabaseConnection):
                 table.c.status,
                 table.c.reason,
                 table.c.requested_role,
+                table.c.requested_by,
+                table.c.decided_by,
+                table.c.decision,
                 table.c.details,
+                table.c.expires_at,
             )
             .where(table.c.approval_id == approval_id, table.c.workspace_id == workspace_id)
             .limit(1)
@@ -1021,6 +1025,35 @@ class RepoChangeRepository(DatabaseConnection):
         )
         with self.connection() as conn:
             return int(conn.execute(statement).scalar() or 0)
+
+    def workflow_run_status_counts(
+        self, workspace_id: str = DEFAULT_WORKSPACE_ID
+    ) -> dict[str, int]:
+        table = WorkflowRun.__table__
+        statement = (
+            select(table.c.status, func.count().label("count"))
+            .where(table.c.workspace_id == workspace_id)
+            .group_by(table.c.status)
+        )
+        with self.connection() as conn:
+            rows = conn.execute(statement).all()
+        return {str(row[0]): int(row[1] or 0) for row in rows}
+
+    def workflow_run_current_step_counts(
+        self, workspace_id: str = DEFAULT_WORKSPACE_ID
+    ) -> dict[str, int]:
+        table = WorkflowRun.__table__
+        statement = (
+            select(table.c.current_step, func.count().label("count"))
+            .where(
+                table.c.workspace_id == workspace_id,
+                table.c.status.not_in(TERMINAL_WORKFLOW_STATUSES),
+            )
+            .group_by(table.c.current_step)
+        )
+        with self.connection() as conn:
+            rows = conn.execute(statement).all()
+        return {str(row[0]): int(row[1] or 0) for row in rows}
 
     def attach_workflow_command(self, workflow_run_id: str, command_id: str) -> None:
         table = WorkflowRun.__table__

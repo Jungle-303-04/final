@@ -101,6 +101,12 @@ def test_release_flow_production_gate_calls_smoke_workflow_with_real_guardrails(
     assert "live_release_owner or live_oncall_contact is required" in validate_step["run"]
     assert "Replace release-operator with the real production owner" in validate_step["run"]
     assert "Replace release-oncall@example.com with the real on-call contact" in validate_step["run"]
+    assert validate_job["env"]["LIVE_PREFLIGHT_APPROVAL_GATE"] == "${{ inputs.live_approval_gate || 'safe_pr' }}"
+    assert validate_job["env"]["LIVE_PREFLIGHT_SAFE_PR_WORKFLOW_RUN_ID"] == "${{ inputs.live_safe_pr_workflow_run_id }}"
+    assert validate_job["env"]["LIVE_PREFLIGHT_SAFE_PR_URL"] == "${{ inputs.live_safe_pr_url }}"
+    assert "live_safe_pr_workflow_run_id is required when live_approval_gate is safe_pr" in validate_step["run"]
+    assert "live_safe_pr_url is required when live_approval_gate is safe_pr" in validate_step["run"]
+    assert "live_safe_pr_url must not use example.com when live_approval_gate is safe_pr" in validate_step["run"]
     assert "production_gate_inputs_ok=true" in validate_step["run"]
     assert smoke_job["needs"] == "validate_production_gate_inputs"
     assert smoke_job["uses"] == "./.github/workflows/release-flow-smoke.yml"

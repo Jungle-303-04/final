@@ -17,6 +17,9 @@ from domains.command.events import (
 from domains.command.handler import (
     APPROVAL_POLICY_DECISION_MISMATCH_REASON,
     APPROVAL_RECORD_MISSING_REASON,
+    APPROVAL_DECIDED_BY_MISMATCH_REASON,
+    APPROVAL_DECIDED_BY_MISSING_REASON,
+    APPROVAL_EXPIRED_REASON,
     COMMAND_CONFIG,
     MANAGEMENT_READONLY_REASON,
     MANIFEST_NAMESPACE_MISMATCH_REASON,
@@ -71,6 +74,8 @@ def approval_record(
     *,
     approval_id: str = "approval-1",
     policy_decision_ref: str = "policy-decision-1",
+    decided_by: str | None = "approver-1",
+    expires_at: str | None = "2099-01-01T00:00:00Z",
     status: str = ApprovalStatus.GRANTED.value,
 ) -> JsonObject:
     return {
@@ -78,6 +83,8 @@ def approval_record(
         "workflow_run_id": "workflow-1",
         "workspace_id": "workspace-1",
         "status": status,
+        "decided_by": decided_by,
+        "expires_at": expires_at,
         "details": {
             "approval_ref": approval_id,
             "policy_decision_ref": policy_decision_ref,
@@ -90,6 +97,8 @@ def command_request(
     *,
     approval_ref: str | None = "approval-1",
     policy_decision_ref: str | None = "policy-decision-1",
+    approval_decided_by: str | None = "approver-1",
+    approval_expires_at: str | None = "2099-01-01T00:00:00Z",
     payload: JsonObject | None = None,
     environment: str = "production",
     namespace: str = Sandbox.NAMESPACE,
@@ -113,6 +122,8 @@ def command_request(
         requested_by="user-1",
         approval_ref=approval_ref,
         policy_decision_ref=policy_decision_ref,
+        approval_decided_by=approval_decided_by,
+        approval_expires_at=approval_expires_at,
         payload=payload or {},
     )
 
@@ -142,6 +153,8 @@ def configmap_command_request() -> CommandRequestedBody:
         requested_by="user-1",
         approval_ref="approval-1",
         policy_decision_ref="policy-decision-1",
+        approval_decided_by="approver-1",
+        approval_expires_at="2099-01-01T00:00:00Z",
     )
 
 
@@ -170,6 +183,8 @@ def manifest_command_request_with_same_image() -> CommandRequestedBody:
         requested_by="user-1",
         approval_ref="approval-1",
         policy_decision_ref="policy-decision-1",
+        approval_decided_by="approver-1",
+        approval_expires_at="2099-01-01T00:00:00Z",
     )
 
 
@@ -194,6 +209,8 @@ def test_build_plan_includes_agent_execution_metadata() -> None:
     assert body["routing_constraint"]["workspace_id"] == "workspace-1"
     assert body["approval_ref"] == "approval-1"
     assert body["policy_decision_ref"] == "policy-decision-1"
+    assert body["approval_decided_by"] == "approver-1"
+    assert body["approval_expires_at"] == "2099-01-01T00:00:00Z"
     assert body["payload"] == {}
 
 
@@ -231,6 +248,36 @@ def test_command_handler_queues_plan_payload_in_runtime_uow_boundary() -> None:
     assert plan_payload["routing_constraint"]["cluster_id"] == Target.DEFAULT_CLUSTER_ID
     assert events[-1].approval_ref == "approval-1"
     assert events[-1].policy_decision_ref == "policy-decision-1"
+    assert events[-1].approval_decided_by == "approver-1"
+    assert events[-1].approval_expires_at == "2099-01-01T00:00:00Z"
+
+
+def test_command_handler_fills_approval_evidence_from_record() -> None:
+    async def run() -> tuple[list[EventBody], SpyAgentCommandStore]:
+        store = SpyAgentCommandStore(
+            approval=approval_record(
+                decided_by="release-operator-1",
+                expires_at="2099-02-01T00:00:00Z",
+            )
+        )
+        ctx = SimpleNamespace(correlation_id="corr-1", db=store)
+        request = command_request(
+            Command.KUBERNETES_DEPLOYMENT_SCALE_ACTION,
+            approval_decided_by=None,
+            approval_expires_at=None,
+        )
+        events = await collect_events(handle_command_requested(request, ctx))
+        return events, store
+
+    events, store = asyncio.run(run())
+
+    assert [type(event) for event in events] == [
+        CommandDispatchedBody,
+        CommandQueuedForAgentBody,
+    ]
+    assert store.calls[0][1]["approval_decided_by"] == "release-operator-1"
+    assert store.calls[0][1]["approval_expires_at"] == "2099-02-01T00:00:00Z"
+    assert events[-1].approval_decided_by == "release-operator-1"
 
 
 def test_command_handler_rejects_management_cluster_before_queue() -> None:
@@ -389,6 +436,27 @@ def test_sweep_expired_commands_is_quiet_when_nothing_expired() -> None:
             approval_record(policy_decision_ref="policy-decision-other"),
             APPROVAL_POLICY_DECISION_MISMATCH_REASON,
             id="policy-decision-ref-mismatch",
+        ),
+        pytest.param(
+            command_request(Command.KUBERNETES_DEPLOYMENT_SCALE_ACTION),
+            approval_record(decided_by=None),
+            APPROVAL_DECIDED_BY_MISSING_REASON,
+            id="missing-approval-decided-by",
+        ),
+        pytest.param(
+            command_request(
+                Command.KUBERNETES_DEPLOYMENT_SCALE_ACTION,
+                approval_decided_by="someone-else",
+            ),
+            approval_record(decided_by="approver-1"),
+            APPROVAL_DECIDED_BY_MISMATCH_REASON,
+            id="approval-decided-by-mismatch",
+        ),
+        pytest.param(
+            command_request(Command.KUBERNETES_DEPLOYMENT_SCALE_ACTION),
+            approval_record(expires_at="2000-01-01T00:00:00Z"),
+            APPROVAL_EXPIRED_REASON,
+            id="approval-expired",
         ),
     ],
 )

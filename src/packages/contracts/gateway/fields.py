@@ -14,6 +14,8 @@ class Gateway(StrEnum):
     ACTION = "action"
     AGENT_ID = "agent_id"
     APPLIED = "applied"
+    APPROVAL_DECIDED_BY = "approval_decided_by"
+    APPROVAL_EXPIRES_AT = "approval_expires_at"
     APPROVAL_REF = "approval_ref"
     ACTOR = "actor"
     AUTHENTICATED = "authenticated"

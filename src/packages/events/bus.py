@@ -14,6 +14,7 @@ from packages.contracts.event_bus.bodies.platform import DeadLetterCreatedBody
 from packages.contracts.event_bus.interfaces import (
     EventBus,
     EventClient,
+    EventConsumerMetrics,
     EventEnvelope,
     EventPublisher,
     EventRecorder,
@@ -165,6 +166,18 @@ class NatsEventBus(EventBus):
         assert self.js is not None
         return await self.js.pull_subscribe(
             subject, durable=durable, stream=STREAM_NAME, config=consumer_config()
+        )
+
+    async def consumer_metrics(self, subject: str, durable: str) -> EventConsumerMetrics:
+        assert self.js is not None
+        info = await self.js.consumer_info(STREAM_NAME, durable)
+        return EventConsumerMetrics(
+            stream=STREAM_NAME,
+            subject=subject,
+            durable=durable,
+            pending=int(getattr(info, "num_pending", 0) or 0),
+            ack_pending=int(getattr(info, "num_ack_pending", 0) or 0),
+            redelivered=int(getattr(info, "num_redelivered", 0) or 0),
         )
 
     async def close(self) -> None:

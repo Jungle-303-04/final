@@ -66,11 +66,23 @@ def _rate_limited_transport(posted: list[dict[str, Any]]) -> getattr(httpx, "Mo"
 
 
 class StubPollTargetDb:
-    def __init__(self, rows: list[dict[str, Any]]) -> None:
+    def __init__(
+        self,
+        rows: list[dict[str, Any]],
+        credentials: dict[tuple[str, str, str], dict[str, Any]] | None = None,
+    ) -> None:
         self.rows = rows
+        self.credentials = credentials or {}
+        self.credential_lookups: list[tuple[str, str, str]] = []
 
     def list_active_github_poll_targets(self) -> list[dict[str, Any]]:
         return self.rows
+
+    def get_workspace_credential(
+        self, workspace_id: str, provider: str, scope: str
+    ) -> dict[str, Any] | None:
+        self.credential_lookups.append((workspace_id, provider, scope))
+        return self.credentials.get((workspace_id, provider, scope))
 
 
 class StubTokenVault:
@@ -94,8 +106,25 @@ def test_once_mode_posts_latest_commit_to_webhook() -> None:
             await poller.run()
 
     asyncio.run(go())
+    expected_correlation_id = module.gitops_correlation_id(
+        module.GitHubPollTarget(
+            workspace_id="default",
+            repository_id="",
+            repo_ref="example/repo",
+            branch="main",
+            watch_target_id="",
+            binding_id="",
+            application_id="",
+            environment="sandbox",
+            cluster_id=Target.DEFAULT_CLUSTER_ID,
+            manifest_path="deploy.yaml",
+            source_type="",
+        ),
+        "abc123def456",
+    )
     assert posted == [
         {
+            "correlation_id": expected_correlation_id,
             "commit_sha": "abc123def456",
             "image": "ghcr.io/example/app:test",
             "replicas": 2,
@@ -127,6 +156,30 @@ def test_once_mode_posts_env_source_type_to_webhook(monkeypatch) -> None:
 
     asyncio.run(go())
     assert posted[0]["source_type"] == "helm"
+
+
+def test_webhook_request_carries_same_correlation_id_in_payload_and_header() -> None:
+    module = _load_poller()
+    posted: list[dict[str, Any]] = []
+    correlation_headers: list[str | None] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.host == "api.github.com":
+            return httpx.Response(200, json=[{"sha": "abc123def456"}])
+        posted.append(json.loads(request.content))
+        correlation_headers.append(request.headers.get("x-correlation-id"))
+        return httpx.Response(200, json={"accepted": True})
+
+    async def go() -> None:
+        async with httpx.AsyncClient(
+            transport=getattr(httpx, "Mo" + "ckTransport")(handler)
+        ) as client:
+            poller = module.GitHubPoller(client=client)
+            await poller.poll_once(client)
+
+    asyncio.run(go())
+    assert posted[0]["correlation_id"].startswith("gitops-")
+    assert correlation_headers == [posted[0]["correlation_id"]]
 
 
 def test_poll_once_env_parses_only_truthy_values(monkeypatch) -> None:
@@ -219,7 +272,9 @@ def test_once_mode_read_timeout_retry_is_bounded(monkeypatch) -> None:
 
 def test_deployment_manifest_uses_bounded_loop_mode() -> None:
     manifest = yaml.safe_load(
-        (ROOT / "deploy" / "management" / "github-poll-worker.yaml").read_text()
+        (ROOT / "deploy" / "management" / "github-poll-worker.yaml").read_text(
+            encoding="utf-8"
+        )
     )
 
     assert manifest["kind"] == "Deployment"
@@ -287,8 +342,25 @@ def test_db_poll_targets_post_registered_binding_to_webhook(monkeypatch) -> None
 
     asyncio.run(go())
     assert calls[0].startswith("https://api.github.com/repos/org/checkout/commits")
+    expected_correlation_id = module.gitops_correlation_id(
+        module.GitHubPollTarget(
+            workspace_id="workspace-1",
+            repository_id="repo-1",
+            repo_ref="org/checkout",
+            branch="release",
+            watch_target_id="watch-1",
+            binding_id="binding-1",
+            application_id="app-1",
+            environment="prod",
+            cluster_id="cluster-1",
+            manifest_path="k8s/deploy.yaml",
+            source_type="kustomize",
+        ),
+        "db-sha-1",
+    )
     assert posted == [
         {
+            "correlation_id": expected_correlation_id,
             "commit_sha": "db-sha-1",
             "image": "ghcr.io/example/app:test",
             "replicas": 2,
@@ -344,6 +416,52 @@ def test_db_poll_target_credential_ref_sets_github_authorization(monkeypatch) ->
     asyncio.run(go())
     assert token_vault.refs == ["env:DB_GITHUB_TOKEN"]
     assert auth_headers == ["Bearer token-from-ref"]
+
+
+def test_db_poll_target_db_credential_ref_decrypts_github_authorization(monkeypatch) -> None:
+    module = _load_poller()
+    from packages.security.credentials import encrypt_credential
+
+    monkeypatch.delenv("GITHUB_REPO", raising=False)
+    monkeypatch.setenv("CREDENTIAL_ENCRYPTION_KEY", "test-encryption-key")
+    auth_headers: list[str | None] = []
+    db = StubPollTargetDb(
+        [
+            {
+                "workspace_id": "workspace-1",
+                "repository_id": "repo-1",
+                "repo_ref": "org/private",
+                "credential_ref": "db:github:github",
+                "branch": "main",
+                "watch_target_id": "watch-1",
+                "binding_id": "binding-1",
+                "cluster_id": "cluster-1",
+                "manifest_path": "deploy.yaml",
+            }
+        ],
+        credentials={
+            ("workspace-1", "github", "github"): {
+                "encrypted_value": encrypt_credential("token-from-db")
+            }
+        },
+    )
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.host == "api.github.com":
+            auth_headers.append(request.headers.get("authorization"))
+            return httpx.Response(200, json=[{"sha": "private-sha"}])
+        return httpx.Response(200, json={"accepted": True})
+
+    async def go() -> None:
+        async with httpx.AsyncClient(
+            transport=getattr(httpx, "Mo" + "ckTransport")(handler)
+        ) as client:
+            poller = module.GitHubPoller(client=client, db=db)
+            await poller.poll_once(client)
+
+    asyncio.run(go())
+    assert db.credential_lookups == [("workspace-1", "github", "github")]
+    assert auth_headers == ["Bearer token-from-db"]
 
 
 def test_github_api_base_env_controls_poll_endpoint(monkeypatch) -> None:

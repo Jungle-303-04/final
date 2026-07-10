@@ -143,6 +143,7 @@ def test_up_script_starts_management_workers_after_gateway() -> None:
     assert "leaving github-poll-worker Deployment scaled to 0" in up_script
     for deploy in (
         "workflow-controller",
+        "release-flow-worker",
         "alert-worker",
         "command-janitor",
         "outbox-relay",
@@ -163,6 +164,14 @@ def test_gateway_pool_capacity_covers_agent_long_poll_fanout() -> None:
     assert '- name: DB_POOL_SIZE\n              value: "16"' in services
     assert '- name: DB_MAX_OVERFLOW\n              value: "16"' in services
     assert '- name: DB_POOL_TIMEOUT_SECONDS\n              value: "20"' in services
+
+
+def test_api_gateway_is_prometheus_scrape_annotated() -> None:
+    services = read_project_file("deploy/management/services.yaml")
+
+    assert 'prometheus.io/scrape: "true"' in services
+    assert "prometheus.io/path: /metrics" in services
+    assert 'prometheus.io/port: "8000"' in services
 
 
 def test_local_up_and_smoke_use_runnable_sample_manifest_defaults() -> None:

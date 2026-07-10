@@ -7,7 +7,6 @@ import uuid
 from collections import defaultdict
 from collections.abc import Mapping
 from datetime import datetime, timezone
-
 from typing import Any
 
 from sqlalchemy import and_, delete, func, select
@@ -26,6 +25,7 @@ from domains.release_flow.redaction import redact_release_value
 from packages.contracts.event_bus.interfaces import JsonObject
 from packages.contracts.identity import DEFAULT_WORKSPACE_ID
 from packages.storage.engine import DatabaseConnection, iso_or_none
+from packages.storage.schema import EventModel
 
 DEFAULT_RELEASE_PLAN_STATUS = "draft"
 DEFAULT_RELEASE_RUN_STATUS = "running"
@@ -193,6 +193,66 @@ class ReleaseFlowRepository(DatabaseConnection):
             "status_breakdown": dict(status_breakdown),
             "plan_breakdown": dict(plan_breakdown),
             "recent_runs": summary_runs,
+        }
+
+    def find_release_safe_pr_evidence(
+        self,
+        workspace_id: str,
+        workflow_run_id: str,
+        *,
+        application_id: str | None = None,
+    ) -> JsonObject | None:
+        candidates = self.list_release_safe_pr_evidence(
+            workspace_id,
+            workflow_run_id,
+            application_id=application_id,
+            limit=1,
+        )
+        return candidates[0] if candidates else None
+
+    def list_release_safe_pr_evidence(
+        self,
+        workspace_id: str,
+        workflow_run_id: str,
+        *,
+        application_id: str | None = None,
+        limit: int = 20,
+    ) -> list[JsonObject]:
+        workflow_run_id = workflow_run_id.strip()
+        if not workflow_run_id:
+            return []
+        table = EventModel.__table__
+        statement = (
+            select(table.c.event_id, table.c.correlation_id, table.c.payload, table.c.created_at)
+            .where(
+                table.c.subject == "safe_pr.created",
+                table.c.payload["workspace_id"].astext == workspace_id,
+                table.c.payload["workflow_run_id"].astext == workflow_run_id,
+            )
+            .order_by(table.c.created_at.desc())
+            .limit(max(1, min(limit, 50)))
+        )
+        if application_id:
+            statement = statement.where(table.c.payload["application_id"].astext == application_id)
+        with self.connection() as conn:
+            rows = conn.execute(statement).mappings().all()
+        return [self._release_safe_pr_evidence_from_event(row) for row in rows]
+
+    def _release_safe_pr_evidence_from_event(self, row: Mapping[str, Any]) -> JsonObject:
+        payload = dict(row.get("payload") or {})
+        return {
+            "event_id": str(row["event_id"]),
+            "correlation_id": str(row["correlation_id"]),
+            "workflow_run_id": str(payload.get("workflow_run_id") or ""),
+            "pr_url": str(payload.get("pr_url") or ""),
+            "provider": str(payload.get("provider") or ""),
+            "repo_ref": str(payload.get("repo_ref") or ""),
+            "base_branch": str(payload.get("base_branch") or ""),
+            "environment": str(payload.get("environment") or ""),
+            "manifest_path": str(payload.get("manifest_path") or ""),
+            "commit_sha": str(payload.get("commit_sha") or ""),
+            "patch_sha256": str(payload.get("patch_sha256") or ""),
+            "created_at": iso_or_none(row.get("created_at")),
         }
 
     def list_release_audit_events(

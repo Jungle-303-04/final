@@ -24,10 +24,17 @@ class EventProcessingStore(EventRecorder, Protocol):
         self, evt: EventEnvelope, consumer: str
     ) -> EventProcessingRecord: ...
 
-    def finish_event_processing(self, evt: EventEnvelope, consumer: str) -> None: ...
+    def finish_event_processing(
+        self, evt: EventEnvelope, consumer: str, duration_ms: int | None = None
+    ) -> None: ...
 
     def fail_event_processing(
-        self, evt: EventEnvelope, consumer: str, error: str, status: str
+        self,
+        evt: EventEnvelope,
+        consumer: str,
+        error: str,
+        status: str,
+        duration_ms: int | None = None,
     ) -> None: ...
 
     def unit_of_work(self) -> AbstractContextManager[Any]: ...  # 트랜잭션 컨텍스트

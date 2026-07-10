@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import importlib.util
+import logging
 import sys
 from pathlib import Path
 
@@ -115,6 +116,18 @@ def register_agent_commands(module: object, agent: object) -> None:
     )
 
 
+def approval_evidence(
+    *,
+    expires_at: str = "2099-01-01T00:00:00Z",
+) -> dict[str, str]:
+    return {
+        "approval_ref": "approval-1",
+        "policy_decision_ref": "policy-decision-1",
+        "approval_decided_by": "approver-1",
+        "approval_expires_at": expires_at,
+    }
+
+
 def test_agent_unwraps_queued_command_payload() -> None:
     module = load_agent_module()
     agent = object.__new__(module.TargetClusterAgent)
@@ -158,8 +171,7 @@ def test_apply_manifest_keeps_plan_diff_payload() -> None:
         agent.execute_command(
             {
                 "action": module.AgentConfig.APPLY_MANIFEST_ACTION,
-                "approval_ref": "approval-1",
-                "policy_decision_ref": "policy-decision-1",
+                **approval_evidence(),
                 "payload": {
                     "diff": {
                         "resource": "configmap/demo-target-config",
@@ -209,7 +221,78 @@ def test_command_result_outbox_retries_until_gateway_accepts(tmp_path: Path) -> 
     assert client.completed[0]["command_id"] == "cmd-1"
 
 
-def test_command_result_outbox_abandons_poison_result(tmp_path: Path) -> None:
+def test_command_result_outbox_logs_result_summary(tmp_path: Path, caplog) -> None:
+    module = load_agent_module()
+    outbox = module.CommandResultOutbox(str(tmp_path / "command-outbox.db"))
+    caplog.set_level(logging.INFO)
+
+    outbox.enqueue_result(
+        command_id="cmd-1",
+        workspace_id="default",
+        lease_id="lease-1",
+        agent_id="agent-1",
+        result={
+            "status": "completed",
+            "cluster_id": "cluster-1",
+            "applied": True,
+            "retryable": False,
+            "resources": [{"resource": "deployment/checkout-api"}],
+        },
+    )
+
+    contexts = [
+        record.context
+        for record in caplog.records
+        if record.getMessage() == "agent_command_result_enqueued"
+        and isinstance(getattr(record, "context", None), dict)
+    ]
+    assert contexts
+    assert contexts[-1]["command_id"] == "cmd-1"
+    assert contexts[-1]["workspace_id"] == "default"
+    assert contexts[-1]["lease_id"] == "lease-1"
+    assert contexts[-1]["agent_id"] == "agent-1"
+    assert contexts[-1]["status"] == "completed"
+    assert contexts[-1]["cluster_id"] == "cluster-1"
+    assert contexts[-1]["applied"] is True
+    assert contexts[-1]["retryable"] is False
+    assert contexts[-1]["resource_count"] == 1
+
+
+def test_command_result_flush_logs_success(tmp_path: Path, caplog) -> None:
+    module = load_agent_module()
+    agent = object.__new__(module.TargetClusterAgent)
+    agent.cluster_id = "cluster-1"
+    agent.agent_id = "agent-1"
+    agent.command_outbox = module.CommandResultOutbox(str(tmp_path / "command-outbox.db"))
+    agent.command_outbox.enqueue_result(
+        command_id="cmd-1",
+        workspace_id="default",
+        lease_id="lease-1",
+        agent_id="agent-1",
+        result={"status": "completed", "cluster_id": "cluster-1", "applied": True},
+    )
+    client = StubCommandResultClient()
+    caplog.set_level(logging.INFO)
+
+    assert asyncio.run(agent.flush_command_results_once(client)) is True
+
+    contexts = [
+        record.context
+        for record in caplog.records
+        if record.getMessage() == "command_result_flushed"
+        and isinstance(getattr(record, "context", None), dict)
+    ]
+    assert contexts
+    assert contexts[-1]["command_id"] == "cmd-1"
+    assert contexts[-1]["workspace_id"] == "default"
+    assert contexts[-1]["lease_id"] == "lease-1"
+    assert contexts[-1]["agent_id"] == "agent-1"
+    assert contexts[-1]["cluster_id"] == "cluster-1"
+    assert contexts[-1]["status"] == "completed"
+    assert contexts[-1]["applied"] is True
+
+
+def test_command_result_outbox_abandons_poison_result(tmp_path: Path, caplog) -> None:
     module = load_agent_module()
     outbox = module.CommandResultOutbox(str(tmp_path / "command-outbox.db"))
     outbox.enqueue_result(
@@ -219,12 +302,23 @@ def test_command_result_outbox_abandons_poison_result(tmp_path: Path) -> None:
         agent_id="agent-1",
         result={"status": "completed", "cluster_id": "cluster-1"},
     )
+    caplog.set_level(logging.WARNING)
 
     assert outbox.record_failure("cmd-1", "lease expired", max_attempts=1) is True
 
     assert outbox.pending_count() == 0
     assert outbox.abandoned_count() == 1
     assert outbox.next_result() is None
+    contexts = [
+        record.context
+        for record in caplog.records
+        if record.getMessage() == "agent_command_result_outbox_abandoned"
+        and isinstance(getattr(record, "context", None), dict)
+    ]
+    assert contexts
+    assert contexts[-1]["command_id"] == "cmd-1"
+    assert contexts[-1]["attempt_count"] == 1
+    assert contexts[-1]["max_attempts"] == 1
 
 
 def test_agent_routes_unknown_command_to_default_handler() -> None:
@@ -254,8 +348,7 @@ def test_kubernetes_command_uses_typed_payload_and_client() -> None:
         agent.execute_command(
             {
                 "action": module.KUBERNETES_DEPLOYMENT_SCALE_ACTION,
-                "approval_ref": "approval-1",
-                "policy_decision_ref": "policy-decision-1",
+                **approval_evidence(),
                 "payload": {
                     "namespace": "sandbox",
                     "name": "checkout-api",
@@ -294,6 +387,33 @@ def test_kubernetes_scale_requires_approval_evidence() -> None:
 
     assert result["status"] == "failed"
     assert "requires approval_ref" in result["message"]
+    assert agent.kubernetes.patches == []
+
+
+def test_kubernetes_scale_rejects_expired_approval_evidence() -> None:
+    module = load_agent_module()
+    agent = object.__new__(module.TargetClusterAgent)
+    agent.cluster_id = "cluster-1"
+    agent.cluster_role = "target"
+    agent.kubernetes = StubKubernetesClient()
+    register_agent_commands(module, agent)
+
+    result = asyncio.run(
+        agent.execute_command(
+            {
+                "action": module.KUBERNETES_DEPLOYMENT_SCALE_ACTION,
+                **approval_evidence(expires_at="2000-01-01T00:00:00Z"),
+                "payload": {
+                    "namespace": "sandbox",
+                    "name": "checkout-api",
+                    "replicas": 3,
+                },
+            }
+        )
+    )
+
+    assert result["status"] == "failed"
+    assert result["message"] == "write command approval_expires_at is expired"
     assert agent.kubernetes.patches == []
 
 
@@ -338,8 +458,7 @@ def test_kubernetes_scale_rejects_namespace_outside_control_policy() -> None:
         agent.execute_command(
             {
                 "action": module.KUBERNETES_DEPLOYMENT_SCALE_ACTION,
-                "approval_ref": "approval-1",
-                "policy_decision_ref": "policy-decision-1",
+                **approval_evidence(),
                 "payload": {
                     "namespace": "kube-system",
                     "name": "checkout-api",
@@ -369,8 +488,7 @@ def test_kubernetes_scale_rejects_management_namespace_even_if_allowlisted(
         agent.execute_command(
             {
                 "action": module.KUBERNETES_DEPLOYMENT_SCALE_ACTION,
-                "approval_ref": "approval-1",
-                "policy_decision_ref": "policy-decision-1",
+                **approval_evidence(),
                 "payload": {
                     "namespace": "management",
                     "name": "api-gateway",
@@ -398,8 +516,7 @@ def test_management_agent_ignores_write_command_before_kubernetes_call() -> None
         agent.execute_command(
             {
                 "action": module.KUBERNETES_DEPLOYMENT_SCALE_ACTION,
-                "approval_ref": "approval-1",
-                "policy_decision_ref": "policy-decision-1",
+                **approval_evidence(),
                 "payload": {
                     "namespace": "sandbox",
                     "name": "checkout-api",

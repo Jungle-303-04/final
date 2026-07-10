@@ -96,6 +96,7 @@ APP_WORKER_DEPLOYMENTS=(
   safe-pr-worker
   scm-worker
   workflow-controller
+  release-flow-worker
   alert-worker
   mail-worker
   command-worker
@@ -129,6 +130,7 @@ SMOKE_WORKER_DEPLOYMENTS=(
   diff-analyze-worker
   safe-pr-worker
   workflow-controller
+  release-flow-worker
   outbox-relay
   audit-worker
   dashboard-worker
@@ -143,6 +145,7 @@ RCA_WORKER_DEPLOYMENTS=(
   safe-pr-worker
   scm-worker
   workflow-controller
+  release-flow-worker
   alert-worker
   command-worker
   command-janitor
