@@ -317,6 +317,14 @@ jobs:
             echo "::error title=Missing release-flow API URL::Set api_base_url or RELEASE_FLOW_API_BASE_URL before running production smoke."
             exit 1
           fi
+          if [[ "$API_BASE_URL" != https://* ]]; then
+            echo "::error title=Invalid release-flow API URL::release-flow production smoke requires an https API base URL."
+            exit 1
+          fi
+          if [[ "$API_BASE_URL" == *"localhost"* || "$API_BASE_URL" == *"127.0.0.1"* || "$API_BASE_URL" == *"example.com"* ]]; then
+            echo "::error title=Invalid release-flow API URL::release-flow production smoke must not target localhost or example hosts."
+            exit 1
+          fi
           if [ -z "$AUTH_EMAIL" ]; then
             echo "::error title=Missing release-flow auth email::Set RELEASE_FLOW_AUTH_EMAIL before running production smoke."
             exit 1
