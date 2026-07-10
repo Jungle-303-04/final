@@ -1843,6 +1843,7 @@ def test_evidence_job_completion_locks_one_job_before_update() -> None:
 def test_fail_expired_agent_commands_sweeps_abandoned_leases_atomically() -> None:
     from domains.command.repository import (
         EXPIRED_COMMAND_GRACE_SECONDS,
+        QUEUED_COMMAND_TTL_SECONDS,
         AgentCommandRepository,
     )
 
@@ -1872,9 +1873,11 @@ def test_fail_expired_agent_commands_sweeps_abandoned_leases_atomically() -> Non
     compiled = recorded[0].compile(dialect=postgresql.dialect())
     sql = str(compiled)
 
-    # 단일 원자 UPDATE ... RETURNING — LEASED/RUNNING 이면서 유예까지 지난 lease 만 종결
+    # 단일 원자 UPDATE ... RETURNING — 미수신 queue와 만료 lease를 함께 종결
     assert "UPDATE agent_commands" in sql
     assert "status IN" in sql
+    assert "created_at" in sql
+    assert f"interval '{QUEUED_COMMAND_TTL_SECONDS} seconds'" in sql
     assert f"interval '{EXPIRED_COMMAND_GRACE_SECONDS} seconds'" in sql
     assert "RETURNING agent_commands.command_id" in sql
     assert compiled.params["status"] == "failed"
