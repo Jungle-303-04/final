@@ -20,6 +20,7 @@ status: synced
 | import | `@/shared/lib/api`, `@/shared/lib/types`, `@/shared/lib/adapt`(`adaptApplication`, `adaptDeployment`, `adaptRun`), `@/shared/lib/format`, `@/ui`, `@/ui/motion` | [shared](shared.md) | API·UI |
 | import | `@/features/auth/api`(`useSession`) | [auth](./auth.md) | 승인 버튼 활성(`service_admin`, `release_operator`) |
 | import | `@/features/resources/ConnectRepoWizard` | [resources](./resources.md) | 목록 화면 위저드 |
+| import | `@/features/chat/context`(`encodeChatContext`) | [chat](./chat.md) | GitOps/Safe PR AI 설명 링크 context 직렬화 |
 | import | `@/features/console/ui`(`useConsolePath`) | [app](./app.md) | `/console` base path 보존 링크 |
 | import ← | [workflow](./workflow.md), [chat](./chat.md), [notifications](./notifications.md), [org](./org.md) | — | `useApplications`/`useRuns*`/`ApprovalCard` 소비 |
 | 백엔드 | `/applications/*`, `/approvals/*` | [api-gateway](../services/gateway-api-gateway.md) | |
@@ -86,13 +87,23 @@ export function ApprovalCard({ approvalId, summary, resolved, compact }:
   │   아니면 motion list(run별 token row):
   │     shortSha · StatusBadge(한국어) · timeAgo · "그래프 보기" → `pathFor('/workflows/${run_id}')`
   │     + STEP_ORDER rail(token bg success/warning/danger/info/raised)
-  │     + WAITING_FOR_APPROVAL && approval_id → ApprovalCard(compact) + DIFFING changes PlanDiffPanel
+  │     + WAITING_FOR_APPROVAL && approval_id → ApprovalCard(compact) + "AI 설명" + DIFFING changes PlanDiffPanel
   ├─ [배포 대상] Card + `@/ui Table`: 클러스터(Link `pathFor('/clusters/:id?tab=workloads')`)/네임스페이스/이름/이미지(CodeText)/Replicas/상태. loading/empty/error+retry 구분
-  ├─ [Safe PR] Card: loading/empty/error+retry 구분. PR 링크, 설명, before/after CodeBlock 2열, 실패 사유 + "AI 분석" 버튼
+  ├─ [Safe PR] Card: loading/empty/error+retry 구분. PR 링크, "AI 설명", 설명, before/after CodeBlock 2열, 실패 사유 + "AI 분석" 버튼
   └─ [설정] Card + KeyValueList: application_id/레포/브랜치/manifest/기본 클러스터
   ```
 
 - `RepoDetailView`는 `@/ui` 프리미티브와 `@/ui/motion` preset만 사용한다. `@/shared/ui`, `@/shared/motion`, 구 레거시 UI 패키지, inline style 의존은 없다.
+
+#### AI diff 설명 링크
+
+Repo 상세는 사용자가 보고 있는 run을 기준으로 AI 채팅을 열 수 있다. 이 링크는 채팅을 자동 전송하지 않고 `prefill`과 `context`만 채운다.
+
+- 실행 탭의 승인 대기 run: `diff_source="gitops"`, `workflow_run_id=run.run_id`, `approval_id=run.approval_id`, `application_id=run.application_id`를 전달한다. Chat AI의 `explain_diff_risk`는 `approval.details.diff`를 우선 조회하고, 없으면 workflow diff step을 조회한다.
+- Safe PR 탭: `diff_source="safe_pr"`, `workflow_run_id=run.run_id`, `application_id=run.application_id`를 전달한다. Chat AI의 `explain_diff_risk`는 `safe_pr.patch_prepared`/`diff.explained`/`safe_pr.ready_for_creation` 이벤트가 있을 때만 설명한다.
+- 실패 사유의 "AI 분석"도 같은 Safe PR context를 사용하고, prefill만 `Safe PR 실패 원인 분석: ...`로 바꾼다.
+
+프론트는 전체 manifest, patch, diff body를 context에 넣지 않는다. 화면이 가진 run 식별자만 넘기고, 실제 데이터 조회와 권한 검증은 백엔드 AI tool이 담당한다.
 
 ## 라우트
 
@@ -107,6 +118,7 @@ export function ApprovalCard({ approvalId, summary, resolved, compact }:
 - `useRunsAll`은 개별 앱 run 쿼리 실패를 `failed/error`로 combine 결과에 포함한다. workflow 화면은 이 값을 사용해 실패를 "run 없음"으로 오해하지 않고 재시도 UI를 렌더한다.
 - 승인 UI 는 `ApprovalCard` 하나만 존재 — 다른 feature 에서 재구현 금지.
 - 승인 성공 시 chat 캐시(`['ai']` prefix)도 무효화해 대화 속 `approval_ref` 상태를 동기화한다.
+- AI 설명 버튼은 승인/거절 실행과 독립이다. `explain_diff_risk`는 읽기 전용 설명 tool이며, 클릭만으로 approve/reject/command/Safe PR 생성이 발생하면 안 된다.
 - run 상태 문자열은 `adaptRun` 이 대문자로 정규화한 값으로만 비교한다(실백엔드 step 이름 매핑 포함 — [shared/adapt](shared.md#어댑터-libadaptts)).
 - manifest 는 Git 이 원본 — 콘솔은 링크("manifest 수정 ↗")만 제공하고 직접 편집 UI 를 만들지 않는다.
 - 앱 연결은 `/applications/connect` 단일 호출로 수행한다. 프론트는 `namespace`/`environment`를 고정값 사용하지 않고 manifest validation 결과와 선택 클러스터 환경에서 얻은 값이 있을 때만 보낸다.

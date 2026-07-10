@@ -75,6 +75,7 @@ status: synced
 | `get_incident_rca_context` | `async def get_incident_rca_context(context: ToolContext, correlation_id: str = "") -> dict[str, Any]` | `src/domains/ai/tools.py :: get_incident_rca_context` |
 | `get_conversation_summary` | `async def get_conversation_summary(context: ToolContext, conversation_id: str, limit: int = DEFAULT_MESSAGE_LIMIT) -> dict[str, Any]` | `src/domains/ai/tools.py :: get_conversation_summary` |
 | `recommend_recovery_action` | `async def recommend_recovery_action(context: ToolContext, correlation_id: str = "", plan_id: str = "", exclude_action_ids: list[str] \| None = None, exclude_action_types: list[str] \| None = None) -> dict[str, Any]` | `src/domains/ai/tools.py :: recommend_recovery_action` |
+| `explain_diff_risk` | `async def explain_diff_risk(context: ToolContext, diff_source: str = "", workflow_run_id: str = "", approval_id: str = "") -> dict[str, Any]` | `src/domains/ai/tools.py :: explain_diff_risk` |
 | `list_command_actions` | `async def list_command_actions(context: ToolContext) -> dict[str, Any]` | `src/domains/ai/tools.py :: list_command_actions` |
 
 - `list_recent_incidents`: `@ai.tool(name="list_recent_incidents", description="Recent RCA reports (root cause, recommended action) for this workspace.", parameters={"limit": {"type": "integer", "description": "max rows (1-20, default 5)"}})`. `context.db.list_rca_reports(context.workspace_id, limit=_clamp(limit, 5))` 호출, 반환 `{"incidents": [{"root_cause", "action", "correlation_id", "created_at"(str)} ...]}`.
@@ -127,6 +128,29 @@ status: synced
     }
   }
   ```
+- `explain_diff_risk`: 현재 화면에서 선택된 diff를 설명하는 읽기 전용 도구다. 홈 화면에서 diff를 검색하는 도구가 아니라, 프론트가 넘긴 `diff_source`와 식별자 힌트를 바탕으로 이미 존재하는 GitOps diff 또는 Safe PR patch 설명 이벤트를 조회한다. 이 도구가 필요한 이유는 “이 diff 위험해?” 같은 질문이 사용자 문장만으로는 GitOps apply diff인지 Safe PR patch 초안인지 구분되지 않기 때문이다. 화면은 전체 YAML/patch를 보내지 않고 작은 조회 힌트만 보낸다.
+
+  parameters:
+  - `diff_source`: `"gitops"` 또는 `"safe_pr"`. 비면 `ToolContext.resource_context["diff_source"]`를 사용한다.
+  - `workflow_run_id`: workflow/run 화면의 실행 id. 비면 `resource_context["workflow_run_id"]`를 사용한다.
+  - `approval_id`: GitOps 승인 화면의 승인 id. 비면 `resource_context["approval_id"]`를 사용한다.
+
+  GitOps 분기:
+  1. `approval_id`가 있으면 `context.db.get_workflow_approval(approval_id, workspace_id)`를 먼저 조회한다.
+  2. approval `details.diff`가 있으면 그것을 설명한다.
+  3. 없고 `workflow_run_id`가 있으면 `context.db.get_workflow_step_details(workflow_run_id, "diff")`를 조회한다.
+  4. diff가 없으면 `{"found": false, "source": "gitops", "missing_context": [...]}`를 반환한다.
+
+  GitOps 응답은 `summary`, `reasoning.current_context`, `reasoning.evidence.diff`, `reasoning.risk_notes`, `next_checks`, `possible_actions`, `caution`으로 구성된다. `caution.applies_to_cluster=true`이며, 승인 시 `command.requested`를 거쳐 target agent apply로 이어질 수 있음을 `risk_notes`에 남긴다. 단, 이 도구는 승인·거절·command 생성을 하지 않는다.
+
+  Safe PR 분기:
+  1. `workflow_run_id`가 없으면 `missing_context=["workflow_run_id"]`를 반환한다.
+  2. `context.db.list_release_safe_pr_diff_events(workspace_id, workflow_run_id, application_id?, limit=20)`를 조회한다.
+  3. `safe_pr.patch_prepared`, `diff.explained`, `safe_pr.ready_for_creation` 중 하나도 없으면 설명하지 않고 `missing_context=["safe_pr.patch_prepared", "diff.explained"]`를 반환한다.
+  4. 이벤트가 있으면 patch 경로, `patch_sha256`, `diff.explained.risk`, PR 생성 가능 여부를 설명한다.
+
+  Safe PR 응답은 PR 생성 전 patch 초안 기준이다. `caution.applies_to_cluster=false`이며, 아직 target cluster apply가 아니라는 점을 `reasoning.risk_notes`에 남긴다. PR 생성/머지는 `scm-worker`와 Git provider 리뷰 흐름에서 진행해야 한다.
+
 - `get_conversation_summary`: parameters에 `conversation_id`(string, required=True)·`limit`(integer). `context.db.list_ai_messages(context.workspace_id, str(conversation_id), newest=_clamp(limit, 10))` 호출, 반환 `{"conversation_id", "messages": [{"role", "content"(300자 절단), "created_at"(str)} ...]}`.
 - `list_command_actions`: parameters 없음. [command 카탈로그](./command.md)의 `registered_command_actions()` 순회, 반환 `{"actions": [{"action", "recovery_aliases"(list), "allowed_namespaces"(list), "requires_approval"(bool)} ...]}`.
 - 모든 도구는 읽기 전용, JSON 직렬화 가능한 dict 반환. DB 접근은 `ToolContext.db`(AsyncDb)로만.
