@@ -20,6 +20,7 @@ from packages.config.constants import Target
 from packages.contracts.event_bus.interfaces import JsonObject
 from packages.contracts.target import TARGET_NAMESPACE
 from providers.base import ConfigReader
+from providers.kubernetes_utils import items, metadata, spec, status
 
 SAFE_ANNOTATION_PREFIXES = (
     "deployment.kubernetes.io/",
@@ -1011,33 +1012,11 @@ def replicaset_revision_number(replicaset: JsonObject) -> int:
         return -1
 
 
-def items(payload: Any) -> list[JsonObject]:
-    """Return list items from a Kubernetes list response."""
-    if not isinstance(payload, dict):
-        return []
-    return list_items(payload.get("items"))
-
-
 def list_items(value: Any) -> list[JsonObject]:
     """Return dict items from a list value."""
     if not isinstance(value, list):
         return []
     return [item for item in value if isinstance(item, dict)]
-
-
-def metadata(item: JsonObject) -> JsonObject:
-    """Return object metadata, or an empty dict."""
-    return object_or_empty(item.get("metadata"))
-
-
-def spec(item: JsonObject) -> JsonObject:
-    """Return object spec, or an empty dict."""
-    return object_or_empty(item.get("spec"))
-
-
-def status(item: JsonObject) -> JsonObject:
-    """Return object status, or an empty dict."""
-    return object_or_empty(item.get("status"))
 
 
 def pod_template(deployment: JsonObject) -> JsonObject:

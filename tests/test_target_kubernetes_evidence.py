@@ -23,6 +23,7 @@ def load_evidence_modules():
         "span.otel",
         "providers",
         "providers.base",
+        "providers.kubernetes_utils",
         "providers.kubernetes_providers",
         "providers.loki_providers",
         "providers.prometheus_providers",

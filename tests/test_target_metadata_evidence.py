@@ -21,6 +21,7 @@ def load_metadata_modules():
         "span.otel",
         "providers",
         "providers.base",
+        "providers.kubernetes_utils",
         "providers.kubernetes_providers",
         "providers.loki_providers",
         "providers.metadata_providers",
