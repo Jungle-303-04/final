@@ -28,6 +28,7 @@ from release_flow_smoke import (
 PRODUCTION_ENVIRONMENTS = {"prod", "production"}
 PLACEHOLDER_CHANGE_TICKETS = {"CHG-PREFLIGHT"}
 PLACEHOLDER_IMAGES = {"ghcr.io/example/release-flow-smoke:live-preflight"}
+FAILED_RUN_STATES = {"cancelled", "canceled", "error", "failed", "failure", "rejected"}
 
 
 def parse_args(argv: list[str]) -> argparse.Namespace:
@@ -141,6 +142,36 @@ def validate_production_plan(plan: dict[str, Any]) -> list[str]:
     return blockers
 
 
+def validate_start_response(run: dict[str, Any], *, expected_step_count: int) -> list[str]:
+    blockers: list[str] = []
+    run_id = str(run.get("run_id") or "").strip()
+    if not run_id:
+        blockers.append("release start response must include run_id")
+    status = str(run.get("status") or "").strip().lower()
+    if status in FAILED_RUN_STATES:
+        blockers.append(f"release start response status must not be {status}")
+    steps = run.get("steps")
+    if not isinstance(steps, list) or not steps:
+        blockers.append("release start response must include step evidence")
+        return blockers
+    if len(steps) < expected_step_count:
+        blockers.append("release start response must include every planned step")
+    for index, step in enumerate(steps, start=1):
+        if not isinstance(step, dict):
+            blockers.append(f"release start response step {index} is not an object")
+            continue
+        step_status = str(step.get("status") or "").strip().lower()
+        if step_status in FAILED_RUN_STATES:
+            blockers.append(f"release start response step {index} status must not be {step_status}")
+        details = step.get("details")
+        if not isinstance(details, dict):
+            blockers.append(f"release start response step {index} must include details")
+            continue
+        if details.get("side_effects") is not True:
+            blockers.append(f"release start response step {index} must confirm side_effects")
+    return blockers
+
+
 def run_deploy(client: ApiClient, args: argparse.Namespace) -> list[SmokeResult]:
     results: list[SmokeResult] = []
     client.request("POST", "/auth/login", {"email": args.email, "password": args.password})
@@ -163,17 +194,15 @@ def run_deploy(client: ApiClient, args: argparse.Namespace) -> list[SmokeResult]
     if blockers:
         return results
     run = client.request("POST", "/release-plans/start", release_plan_start_payload(plan)).get("run", {})
-    run_id = str(run.get("run_id") or "")
-    side_effects = [
-        step.get("details", {}).get("side_effects")
-        for step in run.get("steps", [])
-        if isinstance(step, dict)
-    ]
+    if not isinstance(run, dict):
+        run = {}
+    expected_step_count = len(plan.get("steps") if isinstance(plan.get("steps"), list) else [])
+    start_blockers = validate_start_response(run, expected_step_count=expected_step_count)
     results.append(
         SmokeResult(
             "release-plans.start.production",
-            bool(run_id) and all(value is True for value in side_effects),
-            run_id or json.dumps(run, ensure_ascii=False, sort_keys=True),
+            not start_blockers,
+            str(run.get("run_id") or "") if not start_blockers else "; ".join(start_blockers),
         )
     )
     return results
