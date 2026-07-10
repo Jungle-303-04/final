@@ -85,6 +85,7 @@ def test_current_release_flow_production_readiness_static_checks_pass() -> None:
         "script.deploy.fetches_saved_plan",
         "script.deploy.api_base_url_guard",
         "script.deploy.plan_id_guard",
+        "script.deploy.auth_guard",
         "script.deploy.matches_gate_evidence",
         "script.deploy.requires_live_production_plan",
         "script.deploy.starts_release",

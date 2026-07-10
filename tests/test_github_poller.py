@@ -55,10 +55,14 @@ def _recording_transport(calls: list[str], sha: str = "abc123def456") -> getattr
     return getattr(httpx, "Mo" + "ckTransport")(handler)
 
 
-def _rate_limited_transport(posted: list[dict[str, Any]]) -> getattr(httpx, "Mo" + "ckTransport"):
+def _rate_limited_transport(
+    posted: list[dict[str, Any]], github_calls: list[int] | None = None
+) -> getattr(httpx, "Mo" + "ckTransport"):
     def handler(request: httpx.Request) -> httpx.Response:
         if request.url.host == "api.github.com":
-            return httpx.Response(403, json={"message": "rate limit exceeded"})
+            if github_calls is not None:
+                github_calls.append(1)
+            return httpx.Response(429, json={"message": "rate limit exceeded"})
         posted.append(json.loads(request.content))
         return httpx.Response(200, json={"accepted": True})
 
@@ -478,17 +482,88 @@ def test_github_api_base_env_controls_poll_endpoint(monkeypatch) -> None:
     assert calls[0].startswith("https://github.enterprise.local/api/v3/repos/example/repo/commits")
 
 
-def test_rate_limited_poll_exits_without_webhook_or_failure() -> None:
+def test_once_mode_rate_limited_poll_fails_visible_with_retry(monkeypatch) -> None:
+    monkeypatch.setenv("POLL_ONCE", "1")
+    monkeypatch.setenv("POLL_ONCE_MAX_ATTEMPTS", "2")
+    monkeypatch.setenv("POLL_RETRY_DELAY_SECONDS", "1")
+    monkeypatch.setenv("POLL_MAX_BACKOFF_SECONDS", "10")
+    monkeypatch.setenv("POLL_BACKOFF_JITTER_SECONDS", "0")
     module = _load_poller()
     posted: list[dict[str, Any]] = []
+    github_calls: list[int] = []
+    sleeps: list[float] = []
+
+    async def stub_sleep(seconds: float) -> None:
+        sleeps.append(seconds)
+
+    monkeypatch.setattr(module.asyncio, "sleep", stub_sleep)
 
     async def go() -> None:
-        async with httpx.AsyncClient(transport=_rate_limited_transport(posted)) as client:
+        async with httpx.AsyncClient(
+            transport=_rate_limited_transport(posted, github_calls)
+        ) as client:
             poller = module.GitHubPoller(client=client)
+            await poller.run()
+
+    with pytest.raises(httpx.HTTPStatusError):
+        asyncio.run(go())
+    assert len(github_calls) == 2
+    assert sleeps == [1.0]
+    assert posted == []
+
+
+def test_poll_continues_other_targets_when_one_target_access_fails(monkeypatch) -> None:
+    module = _load_poller()
+    monkeypatch.delenv("GITHUB_REPO", raising=False)
+    posted: list[dict[str, Any]] = []
+    db = StubPollTargetDb(
+        [
+            {
+                "workspace_id": "workspace-1",
+                "application_id": "private-app",
+                "repository_id": "repo-private",
+                "repo_ref": "org/private",
+                "branch": "main",
+                "watch_target_id": "watch-private",
+                "binding_id": "binding-private",
+                "environment": "prod",
+                "cluster_id": "cluster-1",
+                "manifest_path": "deploy/private.yaml",
+            },
+            {
+                "workspace_id": "workspace-1",
+                "application_id": "checkout",
+                "repository_id": "repo-checkout",
+                "repo_ref": "org/checkout",
+                "branch": "main",
+                "watch_target_id": "watch-checkout",
+                "binding_id": "binding-checkout",
+                "environment": "prod",
+                "cluster_id": "cluster-1",
+                "manifest_path": "deploy/checkout.yaml",
+            },
+        ]
+    )
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.host == "api.github.com":
+            if "/repos/org/private/commits" in request.url.path:
+                return httpx.Response(403, json={"message": "resource not accessible"})
+            return httpx.Response(200, json=[{"sha": "checkout-sha"}])
+        posted.append(json.loads(request.content))
+        return httpx.Response(200, json={"accepted": True})
+
+    async def go() -> None:
+        async with httpx.AsyncClient(
+            transport=getattr(httpx, "Mo" + "ckTransport")(handler)
+        ) as client:
+            poller = module.GitHubPoller(client=client, db=db)
             await poller.poll_once(client)
 
     asyncio.run(go())
-    assert posted == []
+    assert len(posted) == 1
+    assert posted[0]["repo_ref"] == "org/checkout"
+    assert posted[0]["commit_sha"] == "checkout-sha"
 
 
 def test_etag_conditional_request_skips_unchanged(monkeypatch: pytest.MonkeyPatch) -> None:

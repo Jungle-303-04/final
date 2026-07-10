@@ -929,6 +929,15 @@ def check_deploy_script_contract() -> list[ReadinessCheck]:
             "deploy script rejects unsafe release plan ids before API calls",
         ),
         ReadinessCheck(
+            "script.deploy.auth_guard",
+            "PLACEHOLDER_AUTH_EMAILS" in source
+            and "PLACEHOLDER_AUTH_PASSWORDS" in source
+            and "validate_deploy_auth" in source
+            and "real operator account" in source
+            and "non-placeholder secret" in source,
+            "deploy script rejects placeholder auth before API calls",
+        ),
+        ReadinessCheck(
             "script.deploy.matches_gate_evidence",
             "expected_plan_values" in source
             and "RELEASE_FLOW_DEPLOY_CHANGE_TICKET" in source

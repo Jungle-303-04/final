@@ -92,14 +92,14 @@ class Settings:
         "POLL_BACKOFF_JITTER_SECONDS"  # thundering herd 완화용 지터 초(기본 3)
     )
     POLL_BACKOFF_JITTER_SECONDS = int(env(POLL_BACKOFF_JITTER_SECONDS_ENV, "3"))
-    # once 모드 재시도 대상 — 설정 오류성 4xx 는 제외하고 일시 서버 오류만 재시도.
-    TRANSIENT_RETRY_STATUS_CODES = {408, 500, 502, 503, 504}
-    SOFT_SKIP_STATUS_CODES = {403, 429}
+    # once 모드 재시도 대상 — rate limit 과 일시 서버 오류만 재시도.
+    TRANSIENT_RETRY_STATUS_CODES = {408, 429, 500, 502, 503, 504}
+    RATE_LIMIT_STATUS_CODES = {429}
     # ETag(If-None-Match) 조건부 요청의 '변경 없음' — GitHub rate limit 을 소모하지 않음.
     NOT_MODIFIED_STATUS_CODE = 304
     # 인증/접근 오류 — 폴링 프로세스를 '실패'로 죽이지 않고 명확한 경고 후 스킵.
     # (private repo 무인증 404, 토큰 만료 401 등 설정 문제 → 로그로 드러내되 파이프라인은 계속)
-    ACCESS_ERROR_STATUS_CODES = {401, 404}
+    ACCESS_ERROR_STATUS_CODES = {401, 403, 404}
 
     WEBHOOK_IMAGE_ENV = "GITOPS_WEBHOOK_IMAGE"
     # webhook 바디 기본값 없음 — 배포 이미지는 repo manifest 또는 명시 env 로만 유입.

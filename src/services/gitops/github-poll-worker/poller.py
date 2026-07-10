@@ -234,9 +234,31 @@ class GitHubPoller:
             return exc.response.status_code
         return None
 
+    @staticmethod
+    def is_target_status_error(exc: Exception) -> bool:
+        if not isinstance(exc, httpx.HTTPStatusError):
+            return False
+        return exc.response.status_code in (
+            Settings.ACCESS_ERROR_STATUS_CODES | Settings.RATE_LIMIT_STATUS_CODES
+        )
+
+    @staticmethod
+    def github_error_kind(status_code: int) -> str:
+        if status_code in Settings.RATE_LIMIT_STATUS_CODES:
+            return "rate_limited"
+        return "access_denied"
+
     async def poll_once(self, client: httpx.AsyncClient) -> None:
+        target_errors: list[httpx.HTTPStatusError] = []
         for target in self.poll_targets():
-            commit_sha = await self.latest_commit_sha(client, target)
+            try:
+                commit_sha = await self.latest_commit_sha(client, target)
+            except httpx.HTTPStatusError as exc:
+                if not self.is_target_status_error(exc):
+                    raise
+                target_errors.append(exc)
+                self.log_target_status_error(target, exc)
+                continue
             if commit_sha is None or commit_sha == self._last_sha_by_target.get(target.key):
                 continue  # 새 커밋 없음 → webhook 안 쏨(dedup 은 ledger 가 최종 보장).
             correlation_id = gitops_correlation_id(target, commit_sha)
@@ -256,6 +278,28 @@ class GitHubPoller:
                     }
                 },
             )
+        if self.once and target_errors:
+            raise target_errors[0]
+
+    def log_target_status_error(
+        self, target: GitHubPollTarget, exc: httpx.HTTPStatusError
+    ) -> None:
+        status_code = exc.response.status_code
+        LOGGER.warning(
+            "github_poll_target_unavailable",
+            extra={
+                CONTEXT_KEY: {
+                    "repo": target.repo_ref,
+                    "branch": target.branch,
+                    "watch_target_id": target.watch_target_id,
+                    "binding_id": target.binding_id,
+                    "application_id": target.application_id,
+                    "status_code": status_code,
+                    "kind": self.github_error_kind(status_code),
+                    "hint": "check GitHub token permissions, repository access, and API rate limits",
+                }
+            },
+        )
 
     def poll_targets(self) -> list[GitHubPollTarget]:
         db_targets = self.db_poll_targets()
@@ -297,34 +341,6 @@ class GitHubPoller:
         )
         if response.status_code == Settings.NOT_MODIFIED_STATUS_CODE:
             return None  # ETag 일치 — 새 커밋 없음(rate limit 미소모).
-        if response.status_code in Settings.SOFT_SKIP_STATUS_CODES:
-            LOGGER.info(
-                "github_poll_skipped",
-                extra={
-                    CONTEXT_KEY: {
-                        "repo": target.repo_ref,
-                        "branch": target.branch,
-                        "watch_target_id": target.watch_target_id,
-                        "status_code": response.status_code,
-                    }
-                },
-            )
-            return None
-        if response.status_code in Settings.ACCESS_ERROR_STATUS_CODES:
-            # 인증/접근 오류 → 폴링 프로세스를 죽이지 않고 명확한 경고 후 스킵.
-            LOGGER.warning(
-                "github_poll_access_denied",
-                extra={
-                    CONTEXT_KEY: {
-                        "repo": target.repo_ref,
-                        "branch": target.branch,
-                        "watch_target_id": target.watch_target_id,
-                        "status_code": response.status_code,
-                        "hint": "GITHUB_TOKEN/GITHUB_REPO 확인 — private repo 는 읽기 토큰 필요",
-                    }
-                },
-            )
-            return None
         response.raise_for_status()
         etag = response.headers.get("etag")
         if etag:
