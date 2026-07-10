@@ -407,6 +407,18 @@ def current_workload_snapshots_payload(metadata: dict) -> dict:
     return {"items": snapshots} if snapshots else {}
 
 
+def metadata_list_payload(metadata: dict, key: str) -> dict:
+    raw = metadata.get(key)
+    if not isinstance(raw, list):
+        change_context = metadata.get("change_context")
+        if isinstance(change_context, dict):
+            raw = change_context.get(key)
+    if not isinstance(raw, list):
+        return {}
+    items = [dict(item) for item in raw if isinstance(item, dict) and item]
+    return {"items": items} if items else {}
+
+
 def collect_change_context(
     evt: EvidenceSource,
     *,
@@ -508,6 +520,31 @@ def collect_evidence_items(evt: EvidenceSource) -> list[EvidenceItem]:
                 name="current_workload_snapshot",
                 value=workload_snapshot,
                 summary=f"{target_summary} Workload snapshot 상세 근거입니다.",
+            )
+        )
+    service_selector_matches = metadata_list_payload(evt.metadata, "service_selector_matches")
+    if service_selector_matches:
+        items.append(
+            evidence_item(
+                evt,
+                source="metadata",
+                name="service_selector_matches",
+                value=service_selector_matches,
+                summary=f"{target_summary} Service selector와 Pod labels 매칭 근거입니다.",
+            )
+        )
+    endpoint_slice_ready_endpoints = metadata_list_payload(
+        evt.metadata,
+        "endpoint_slice_ready_endpoints",
+    )
+    if endpoint_slice_ready_endpoints:
+        items.append(
+            evidence_item(
+                evt,
+                source="metadata",
+                name="endpoint_slice_ready_endpoints",
+                value=endpoint_slice_ready_endpoints,
+                summary=f"{target_summary} EndpointSlice ready endpoint 근거입니다.",
             )
         )
     change_context = collect_change_context(

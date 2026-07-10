@@ -1243,6 +1243,11 @@ Provider가 이미 보내는 값은 다음과 같다.
 | 참조된 ConfigMap/Secret 객체 metadata 요약 | `metadata.change_context.referenced_config_objects[]` |
 | 특정 Deployment detail의 annotations/manager/scheduling/config refs/ReplicaSet conditions | `metadata.change_context.current_workload_snapshot.deployment_annotations`, `pod_template_annotations`, `managed_fields_managers`, `scheduling_constraints`, `containers[].env_refs`, `containers[].env_from_refs`, `containers[].volume_mount_refs`, `replicaset_revisions[].conditions` |
 
+RCA evidence bundle builder는 `metadata.change_context.service_selector_matches[]`를
+`metadata:service_selector_matches` item으로, `metadata.change_context.endpoint_slice_ready_endpoints[]`를
+`metadata:endpoint_slice_ready_endpoints` item으로 승격한다. 그래서 Service selector/EndpointSlice 정보는
+수집만 되고 버려지는 값이 아니라 RCA rule이 `metadata` source evidence로 직접 참고할 수 있는 값이다.
+
 RCA가 판단하려면 다음 값은 파생해야 한다.
 
 | 파생 값 | 파생에 쓸 필드 |
