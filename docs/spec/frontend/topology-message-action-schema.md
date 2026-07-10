@@ -1,6 +1,6 @@
 ---
 title: Topology Engine Message and Action Protocol
-status: authoritative-contract
+status: planned-protocol-contract
 owner: frontend-platform
 version: topology-engine-message/v1
 last_verified: 2026-07-11
@@ -18,6 +18,17 @@ last_verified: 2026-07-11
 - 모든 timestamp는 UTC canonical RFC 3339, ID/cursor/token은 opaque다.
 - timestamp, Kubernetes resourceVersion, generation, eventId를 stream ordering에 사용하지 않는다.
 - 사용자 intent, command receipt, operation progress는 resource success 상태를 optimistic하게 확정하지 않는다.
+
+계약 정의 위치는 다음과 같다. generated module은 이 경계를 실제 import 방향으로 보존해야 한다.
+
+| 계약 | 정의 위치 | 이 문서의 역할 |
+|---|---|---|
+| `RenderScene`, `RenderGeometry` | `topology-engine.md` renderer/scene contract | 참조만 하며 재선언하지 않음 |
+| `ActionDescriptor`, `AvailableAction` | `topology-engine.md` catalog/action contract | intent 검증에 사용하되 재선언하지 않음 |
+| `LayoutRequest`, layout worker result | 이 문서 §3.1 | effect/worker message 정의 |
+| `EngineTelemetry` | 이 문서 §3.2 | telemetry effect payload 정의 |
+
+`RenderScene`은 renderer에만 넘기는 immutable derived value이며 effect/wire payload가 아니다. `ActionDescriptor`는 catalog에서 받은 설명자이고, reducer는 current `AvailableAction`과 capability revision을 함께 검증한 후에만 command를 만든다.
 
 ## 1. 공통 envelope
 
@@ -91,6 +102,13 @@ type SystemMessageContext = {
   causationEventId: OpaqueId | null
 }
 
+type UrlPayload = {
+  type: "url.hydrated"
+  codecVersion: string
+  serializedHash: string
+  query: TopologyQuery
+}
+
 type EngineMessageBase<S extends EngineSource, C, P extends { type: string }> = {
   schemaVersion: "topology-engine-message/v1"
   eventId: OpaqueId
@@ -119,6 +137,10 @@ type EngineMessage =
 ```ts
 type QueryTokenId = OpaqueId
 type InvocationId = OpaqueId
+type FocusSankeyTransitionId = OpaqueId
+
+type FocusSankeyEntryMethod = "pointer" | "keyboard" | "explicit-control"
+type FocusSankeyExitMethod = "back" | "escape" | "explicit-control"
 
 type SelectionChange =
   | { kind: "replace"; entityKeys: readonly string[] }
@@ -131,6 +153,13 @@ type ActionTarget =
   | { kind: "entity"; entityKeys: NonEmptyReadonlyArray<string> }
   | { kind: "application-instance"; instanceId: OpaqueId; bindingId: OpaqueId }
   | { kind: "operation"; operationId: OpaqueId }
+
+type RouteRef = {
+  routeId: string
+  pathParameters: Readonly<Record<string, string>>
+  queryParameters: Readonly<Record<string, string | readonly string[]>>
+  fragment: string | null
+}
 
 type ActionParameterValue =
   | { kind: "text"; value: string }
@@ -154,6 +183,29 @@ type UserIntent =
     }
   | { type: "scope.entered"; scope: Scope; trigger: "pointer" | "keyboard" | "query" | "navigation" }
   | { type: "scope.exited"; expectedScope: Scope }
+  | {
+      type: "focusSankey.entered"
+      transitionId: FocusSankeyTransitionId
+      sourceEntityKey: string
+      expectedFrameId: OpaqueId
+      expectedPresentationRevision: OpaqueId
+      method: FocusSankeyEntryMethod
+    }
+  | {
+      type: "focusSankey.retargeted"
+      transitionId: FocusSankeyTransitionId
+      sourceEntityKey: string
+      expectedFrameId: OpaqueId
+      expectedPresentationRevision: OpaqueId
+      method: FocusSankeyEntryMethod
+    }
+  | {
+      type: "focusSankey.exited"
+      transitionId: FocusSankeyTransitionId
+      expectedFrameId: OpaqueId
+      expectedPresentationRevision: OpaqueId
+      method: FocusSankeyExitMethod
+    }
   | { type: "lens.progressChanged"; gestureId: OpaqueId; gestureRevision: LayoutRevision; progress: number }
   | { type: "lens.committed"; lens: Lens; method: "gesture" | "pointer" | "keyboard" | "url"; gestureId: OpaqueId | null }
   | { type: "entity.focused"; entityKey: string | null; reason: "pointer" | "keyboard" | "restoration" | "programmatic" }
@@ -190,6 +242,16 @@ Validation:
 - action descriptor의 target cardinality, parameter schema, capability revision, current permission을 reducer가 effect 생성 전에 검증한다.
 - capability 미로딩/stale/disabled이면 action intent를 command로 승격하지 않는다.
 
+Focus-Sankey intent refinement:
+
+- `entered`는 current presentation이 `map | fold-lens`이고 source가 그 presentation이 보존한 captured base map universe에 정확히 한 번 있을 때만 허용한다. fold-lens/gesture 중이면 active fold transition을 cancel하고 current interpolated geometry를 focus transition의 `fromGeometry`로 사용한다. map endpoint로 순간 복귀하거나 중간 frame을 commit하지 않는다.
+- `retargeted`는 current presentation이 focus-Sankey이고 새 source가 현재 visible column 또는 source에 있을 때만 허용한다. 같은 source로의 retarget은 no-op이다.
+- `exited`는 focus-Sankey preparing/transitioning/settled 중에만 허용한다.
+- 세 intent 모두 expected frame/presentation revision이 current와 같아야 한다. 다르면 추정하지 않고 stale intent no-op 후 현재 화면을 유지한다.
+- focus source를 filter나 selection으로 승격하지 않고 presentation 상태로만 보존한다.
+- `url.hydrated.query.presentation.kind="focus-sankey"`는 query plan/snapshot이 준비되기 전에 즉시 설치하지 않는다. source entity key를 새 authoritative map universe에서 재검증한 후 enter와 같은 freeze/layout 경로를 사용하며, 없거나 forbidden이면 map을 유지하고 typed restoration warning을 남긴다. URL presentation을 `UrlPayload`의 별도 field로 복제하지 않는다.
+- map에서 `entity.activated`를 받으면 activation router가 current catalog의 resolved `ActivationDescriptor`를 검증한다. descriptor가 focus-Sankey enter라면 `activationId`를 transitionId로 재사용하고 입력 method와 current frame/presentation revision을 보존한 `focusSankey.entered` EngineMessage를 단 한 번 같은 dispatch에 넣는다. 원 `entity.activated`는 focus state를 따로 mutation하지 않고 component callback/별도 event bus를 만들지 않는다.
+
 ## 3. Effect와 command
 
 ```ts
@@ -218,6 +280,148 @@ type CommandRequest = {
   precondition: CommandPrecondition
 }
 
+type LayoutViewport = {
+  contentRect: { x: number; y: number; width: number; height: number }
+  devicePixelRatio: number
+  direction: "ltr" | "rtl"
+  containerMode: "compact" | "medium" | "wide" | "xwide"
+}
+
+type LayoutTextMeasurement = {
+  entityKey: string
+  nameWidthPx: number
+  valueWidthPx: number | null
+}
+
+type LayoutEntityInput = {
+  entityKey: string
+  parentEntityKey: string | null
+  membershipRole: Entity["membershipRole"]
+  visualRole: "frame" | "tile" | "relation-entity" | "projection" | "structural-shelf"
+  stableOrderKey: string
+  sizeValueDecimal: DecimalString | null
+  sizeStatus: MetricStatus
+  healthLevel: TopologyHealthVerdict["level"]
+  text: LayoutTextMeasurement
+}
+
+type LayoutRelationInput = {
+  relationKey: string
+  sourceEntityKey: string
+  targetEntityKey: string
+  plane: RelationPlane
+  relationType: string
+  lifecycle: CanonicalRelation["lifecycle"]
+  resolution: CanonicalRelation["resolution"]
+}
+
+type PresentationUniverse = {
+  universeId: OpaqueId
+  universeRevision: OpaqueId
+  frameId: OpaqueId
+  stateRevision: StateRevision
+  catalogRevision: string
+  entitlementEpoch: OpaqueId
+  hashes: DataProjectionHashes
+  mapEntityKeys: readonly string[]
+  relationKeys: readonly string[]
+  capturedAt: Timestamp
+}
+
+type LayoutTarget =
+  | { targetId: OpaqueId; kind: "lens"; lens: Lens }
+  | {
+      targetId: OpaqueId
+      kind: "focus-sankey"
+      sourceEntityKey: string
+      grouping: "related-health"
+      relatedHealthOrder: readonly ["unhealthy", "degraded", "unknown", "neutral", "healthy"]
+      includeEveryUnrelatedEntity: true
+      ribbonMode: "one-face-ribbon-per-related-group"
+      expectedColumnCardinality: number
+    }
+
+type LayoutRequest = {
+  schemaVersion: "topology-layout-request/v1"
+  transactionId: OpaqueId
+  reason:
+    | "initial"
+    | "structure-changed"
+    | "geometry-metric-changed"
+    | "scope-changed"
+    | "lens-changed"
+    | "focus-sankey-enter"
+    | "focus-sankey-exit"
+    | "focus-sankey-retarget"
+    | "post-settle-reconcile"
+    | "viewport-changed"
+    | "policy-changed"
+    | "retry"
+  revision: LayoutRevision
+  presentationRevision: OpaqueId
+  universe: PresentationUniverse
+  viewport: LayoutViewport
+  entities: readonly LayoutEntityInput[]
+  relations: readonly LayoutRelationInput[]
+  targets: NonEmptyReadonlyArray<LayoutTarget>
+  previousGeometryByTarget: readonly { targetId: OpaqueId; geometry: RenderGeometry }[]
+  layoutPolicyId: string
+  visualMotionPolicyId: string
+}
+
+type FocusSankeyGroupProof = {
+  groupKey: string
+  healthLevel: TopologyHealthVerdict["level"]
+  memberEntityKeys: NonEmptyReadonlyArray<string>
+  sourceFaceStartRatio: DecimalString
+  sourceFaceEndRatio: DecimalString
+  ribbonConnectorKey: string
+}
+
+type FocusSankeyCompletenessProof = {
+  sourceEntityKey: string
+  mapEntityCount: number
+  columnEntityKeys: readonly string[]
+  unrelatedEntityKeys: readonly string[]
+  groups: readonly FocusSankeyGroupProof[]
+}
+
+type LayoutTargetResult = {
+  targetId: OpaqueId
+  geometry: RenderGeometry
+  focusSankeyProof: FocusSankeyCompletenessProof | null
+}
+
+type LayoutResult = {
+  schemaVersion: "topology-layout-result/v1"
+  transactionId: OpaqueId
+  presentationRevision: OpaqueId
+  universeId: OpaqueId
+  universeRevision: OpaqueId
+  revision: LayoutRevision
+  targets: NonEmptyReadonlyArray<LayoutTargetResult>
+  computeDurationMs: DurationMs
+  warnings: readonly StructuredWarning[]
+}
+
+type PresentationTransitionRequest = {
+  schemaVersion: "topology-presentation-transition/v1"
+  transitionId: FocusSankeyTransitionId
+  reason: "enter" | "exit" | "retarget" | "post-settle-reconcile"
+  presentationRevision: OpaqueId
+  universeId: OpaqueId
+  layoutRevision: LayoutRevision
+  sourceEntityKey: string | null
+  fromGeometry: RenderGeometry
+  toGeometry: RenderGeometry
+  sequencePolicyId:
+    | "focus-sankey-enter/v1"
+    | "focus-sankey-exit/v1"
+    | "focus-sankey-retarget/v1"
+    | "focus-sankey-reconcile/v1"
+  motionPolicyId: string
+}
+
 type EffectPayload =
   | { type: "catalog.fetch" }
   | { type: "query.plan"; query: TopologyQuery }
@@ -232,6 +436,7 @@ type EffectPayload =
   | { type: "command.receipt.lookup"; idempotencyKey: string }
   | { type: "operation.status.fetch"; operationId: string }
   | { type: "operation.watch"; operationId: string; cursor: ResumeCursor }
+  | { type: "presentation.transition.start"; request: PresentationTransitionRequest }
   | { type: "telemetry.record"; record: EngineTelemetry }
 
 type EffectEnvelope<P extends EffectPayload = EffectPayload> = {
@@ -248,7 +453,18 @@ type EffectEnvelope<P extends EffectPayload = EffectPayload> = {
 
 type EffectDirective =
   | { kind: "start"; effect: EffectEnvelope }
-  | { kind: "cancel"; abortKey: OpaqueId; reason: "superseded" | "session-ended" | "resync" | "user-dismissed" }
+  | {
+      kind: "cancel"
+      abortKey: OpaqueId
+      reason:
+        | "superseded"
+        | "session-ended"
+        | "resync"
+        | "user-dismissed"
+        | "presentation-retargeted"
+        | "entitlement-changed"
+        | "schema-changed"
+    }
 
 type EffectResultPayload =
   | { type: "catalog.changed"; response: ConsumerEnvelope<TopologyCatalogResponse> }
@@ -260,9 +476,27 @@ type EffectResultPayload =
   | { type: "command.receiptReceived"; receipt: CommandReceipt }
   | { type: "command.receiptLookupReceived"; response: ConsumerEnvelope<OperationReceiptLookupResult> }
   | { type: "operation.snapshotReceived"; response: ConsumerEnvelope<OperationStatusCut> }
+  | {
+      type: "focusSankey.transitionSettled"
+      transitionId: FocusSankeyTransitionId
+      presentationRevision: OpaqueId
+      universeId: OpaqueId
+      layoutRevision: LayoutRevision
+      settledAt: Timestamp
+    }
+  | { type: "telemetry.recorded"; recordId: OpaqueId }
   | { type: "url.replaceCompleted" }
   | { type: "navigation.completed" }
-  | { type: "effect.cancelled"; reason: "aborted" | "superseded" | "session-ended" }
+  | {
+      type: "effect.cancelled"
+      reason:
+        | "aborted"
+        | "superseded"
+        | "session-ended"
+        | "presentation-retargeted"
+        | "entitlement-changed"
+        | "schema-changed"
+    }
   | {
       type: "effect.failed"
       error: StructuredError
@@ -271,6 +505,231 @@ type EffectResultPayload =
 ```
 
 `command.execute`는 언제나 `retryPolicy.kind="none"`다. transport failure가 `possibly-sent`이면 command를 자동 반복하지 않고 idempotency key로 `command.receipt.lookup`을 먼저 실행한다. operation/status fetch는 receipt에서 operationId를 얻은 뒤에만 가능하다.
+
+### 3.1 Layout worker와 focus-Sankey presentation 계약
+
+```ts
+type WorkerPayload =
+  | { type: "layout.resolved"; result: LayoutResult }
+  | {
+      type: "layout.failed"
+      transactionId: OpaqueId
+      presentationRevision: OpaqueId
+      universeId: OpaqueId
+      revision: LayoutRevision
+      error: StructuredError
+    }
+
+type SystemPayload =
+  | {
+      type: "engine.initialized"
+      runtimePolicyRevision: string
+      configuredOrigin: DataOrigin
+    }
+  | {
+      type: "snapshot.requested"
+      planId: OpaqueId
+      queryId: OpaqueId
+      previousFrameId: OpaqueId | null
+    }
+  | {
+      type: "stream.resyncRequired"
+      reasonCode: string
+      retainedFrameId: OpaqueId | null
+    }
+  | { type: "layout.requested"; request: LayoutRequest }
+  | {
+      type: "layout.rejectedAsStale"
+      transactionId: OpaqueId
+      presentationRevision: OpaqueId
+      universeId: OpaqueId
+      requestedRevision: LayoutRevision
+      currentRevision: LayoutRevision
+    }
+
+type FocusSankeyPresentationState =
+  | { kind: "inactive"; presentationRevision: OpaqueId }
+  | {
+      kind: "preparing"
+      transitionId: FocusSankeyTransitionId
+      transitionKind: "enter" | "exit" | "retarget" | "post-settle-reconcile"
+      sourceEntityKey: string | null
+      frozenUniverse: PresentationUniverse
+      presentationRevision: OpaqueId
+      layoutTransactionId: OpaqueId
+      canonicalRevisionPending: StateRevision | null
+    }
+  | {
+      kind: "transitioning"
+      transitionId: FocusSankeyTransitionId
+      transitionKind: "enter" | "exit" | "retarget" | "post-settle-reconcile"
+      sourceEntityKey: string | null
+      frozenUniverse: PresentationUniverse
+      presentationRevision: OpaqueId
+      transitionEffectId: OpaqueId
+      canonicalRevisionPending: StateRevision | null
+    }
+  | {
+      kind: "settled"
+      sourceEntityKey: string
+      universe: PresentationUniverse
+      presentationRevision: OpaqueId
+      layoutRevision: LayoutRevision
+    }
+```
+
+generated `EngineState`는 `focusSankey: FocusSankeyPresentationState`를 정확히 하나 소유한다. canonical graph/frame store와 presentation store는 구분하지만 둘 다 같은 `ReducerTransition` 안에서만 commit되며 별도 reducer/event bus를 만들지 않는다. `presentationRevision`은 equality-only opaque revision이고 대소 비교하지 않는다. accepted focus intent, current layout commit, transition settle/reconcile 전환은 각각 새 revision을 발급하며 stale intent/result는 revision을 올리지 않는다.
+
+`LayoutRequest`의 모든 number는 finite이며 width/height/DPR/text width/duration/count는 non-negative다. count와 `StateRevision`은 safe integer다. `entities`, `relations`, target ID, previous geometry target ID는 각 자신의 범위에서 unique해야 한다. relation endpoint는 같은 request entity universe에 있어야 하며 renderer가 API DTO를 다시 해석하도록 raw object를 넘기지 않는다.
+
+request target ID와 result target ID는 exact bijection이다. `kind="focus-sankey"` target result만 non-null completeness proof를 가지고 lens target은 null이다. `previousGeometryByTarget`는 요청 target의 subset이고 targetId당 최대 하나다. fold-lens에서 focus enter할 때는 취소 시점의 current interpolated geometry를 previous/from geometry로 capture하며 placement endpoint geometry로 교체하지 않는다.
+
+`PresentationTransitionRequest`는 reason과 sequence policy가 1:1이다. enter/retarget/post-settle-reconcile의 `sourceEntityKey`는 non-null이고 exit는 null이다. enter/retarget/reconcile settle은 `FocusSankeyPresentationState.kind="settled"`, exit settle은 `kind="inactive"`로 이동한다. reduced motion에서 duration이 0이어도 같은 transition effect/settled message/correlation을 거치고 동기 직접 mutation으로 우회하지 않는다.
+
+`universeRevision`은 ordered `mapEntityKeys`, layout entity의 parent/role/order/size/health/text measurement, included relation key/endpoints/plane, viewport, layout/visual policy revision의 canonical encoding을 hash한다. focus-Sankey는 health로 group하므로 health 변화도 이 mode에서는 layout-affecting이다. worker result는 transaction, presentation, universe, layout revision을 byte-for-byte echo해야 하며 하나라도 current와 다르면 geometry를 commit하지 않는다.
+
+Focus-Sankey target은 다음 proof를 reducer에서 다시 검증한다.
+
+1. `mapEntityCount === mapEntityKeys.length`이고 source는 `mapEntityKeys`에 정확히 한 번 있다.
+2. `columnEntityKeys`는 source를 뺀 `mapEntityKeys`의 exact ordered permutation이다. 따라서 `columnEntityKeys.length + 1 === mapEntityKeys.length`다.
+3. `groups.flatMap(memberEntityKeys)`가 related exact set이다. related와 `unrelatedEntityKeys`는 서로소이고 합집합이 column이다. relation이 없는 entity를 삭제하지 않는다.
+4. related entity는 정확히 하나의 group에 속하고 모든 member의 frozen health는 group `healthLevel`과 같다. group key, health level, ribbon connector key는 각각 unique하며 severity/order policy와 일치한다.
+5. group 하나당 `ribbonConnectorKey`가 정확히 하나이고 geometry에 같은 `focus-face-connector.connectorKey`가 정확히 하나 있다. connector의 health/member key는 group proof와 정확히 같고 다른 group과 connector를 공유하지 않는다.
+6. source face ratio는 canonical decimal `0 <= start < end <= 1`이다. 첫 group은 0에서 시작하고 인접 group의 end/start가 정확히 같으며 마지막 group은 1에서 끝난다. group이 0개면 source face 분할/ribbon도 0개다. 비율은 member count의 exact share를 §8 DecimalPolicy로 quantize하고 residual/tie 규칙으로 합을 정확히 1로 닫는다.
+
+Transition이 preparing/transitioning으로 들어갈 때 reducer는 그 시점의 immutable `PresentationUniverse`와 presentation revision을 freeze한다. 이 freeze는 presentation 배치·grouping·label·health·ribbon membership만 대상이다. canonical entity/relation/metric reducer는 계속 모든 valid stream batch를 sequence 순서대로 atomic commit하고 `canonicalRevisionPending`에 latest revision을 coalesce한다. stream event를 버리거나 canonical state 적용을 지연하지 않는다.
+
+`focusSankey.transitionSettled`가 active effect/transition/revision과 정확히 일치하면 reducer는 settled presentation을 먼저 commit한 뒤 current canonical revision과 frozen universe를 비교한다.
+
+- layout-affecting input이 같으면 frozen flag만 해제하고 latest semantic overlay를 같은 entity key에 적용한다.
+- 다르고 source가 여전히 authorized/existing이면 방금 settled geometry를 `previousGeometryByTarget`로 사용한 `reason="post-settle-reconcile"` layout을 한 번 발행한다. 도착한 추가 revision은 또 latest 하나로 coalesce한다.
+- ordinary delete로 source가 사라졌으면 transition 중에는 interaction-disabled exit ghost로 유지하고 settle 후 latest map으로 exit/reconcile한다. 동명 entity를 source로 추정하지 않는다.
+- settle result가 stale/cancelled면 presentation을 진전시키지 않고 current interpolated geometry 또는 last valid scene을 유지한다.
+
+entitlement epoch 변경은 일반 data update가 아니다. active layout/transition을 즉시 cancel하고 frozen universe를 폐기하며, 이전 scene이 권한 밖 entity를 계속 그리지 않도록 authoritative resync 전까지 restricted/loading surface로 교체한다. compatible catalog/schema revision 변경은 transition을 cancel하고 replan한다. incompatible major는 frozen/last scene을 폐기하고 compatibility-fatal로 이동한다. 이 세 경우에는 post-settle reconcile로 구버전 presentation을 부활시키지 않는다.
+
+### 3.2 Engine telemetry 계약
+
+```ts
+type EngineTelemetryWindow = {
+  startedAt: Timestamp
+  endedAt: Timestamp
+  sampleCount: number
+}
+
+type EngineTelemetryContext = {
+  performancePolicyRevision: string
+  layoutPolicyId: string
+  visualMotionPolicyId: string
+  profileId: "S" | "M" | "F" | "X" | "unclassified"
+  scopeLevel: Scope["level"]
+  containerMode: LayoutViewport["containerMode"]
+  rendererTier: "dom" | "canvas" | "svg" | "webgl" | "mixed" | "none"
+  motionMode: "full" | "reduced"
+  dataOriginKind: DataOrigin["kind"]
+  layoutKind: "placement" | "lens" | "focus-sankey" | "none"
+}
+
+type EngineDurationMetricId =
+  | "interaction-frame"
+  | "input-to-presentation"
+  | "worker-layout"
+  | "validated-snapshot-to-first-meaningful-scene"
+  | "query-commit-to-settled-morph"
+  | "renderer-draw"
+  | "presentation-transition"
+
+type EngineCounterMetricId =
+  | "main-thread-long-task"
+  | "stream-coalesced-update"
+  | "stream-resync"
+  | "stale-worker-result"
+  | "dropped-presentation-frame"
+  | "renderer-handoff"
+  | "layout-failure"
+  | "protocol-corruption"
+  | "presentation-transition-interrupted"
+  | "post-settle-reconcile"
+
+type EngineGaugeMetricId =
+  | "stream-backlog-frame-batches"
+  | "dom-node-count"
+  | "heap-bytes"
+  | "detached-dom-node-count"
+  | "visible-entity-count"
+  | "visible-relation-count"
+  | "geometry-lag-ms"
+
+type EngineGaugeMeasurement =
+  | {
+      metricId: "stream-backlog-frame-batches"
+      unit: "frame-batches"
+      value: number
+    }
+  | {
+      metricId: "heap-bytes"
+      unit: "bytes"
+      value: number
+    }
+  | {
+      metricId: "geometry-lag-ms"
+      unit: "ms"
+      value: number
+    }
+  | {
+      metricId: Exclude<
+        EngineGaugeMetricId,
+        "stream-backlog-frame-batches" | "heap-bytes" | "geometry-lag-ms"
+      >
+      unit: "count"
+      value: number
+    }
+
+type EngineTelemetryBase = {
+  schemaVersion: "topology-engine-telemetry/v1"
+  recordId: OpaqueId
+  observedAt: Timestamp
+  window: EngineTelemetryWindow
+  context: EngineTelemetryContext
+}
+
+type EngineTelemetry =
+  | (EngineTelemetryBase & {
+      kind: "duration-summary"
+      metricId: EngineDurationMetricId
+      unit: "ms"
+      p50: number
+      p95: number
+      p99: number
+      max: number
+    })
+  | (EngineTelemetryBase & {
+      kind: "counter"
+      metricId: EngineCounterMetricId
+      unit: "count"
+      delta: number
+    })
+  | (EngineTelemetryBase & { kind: "gauge" } & EngineGaugeMeasurement)
+  | (EngineTelemetryBase & {
+      kind: "diagnostic"
+      event:
+        | "layout-rejected-stale"
+        | "layout-failed"
+        | "stream-gap"
+        | "resync-required"
+        | "renderer-context-lost"
+        | "presentation-transition-cancelled"
+        | "contract-refinement-rejected"
+      outcome: "recovered" | "degraded" | "failed" | "cancelled"
+      reasonCode: string
+    })
+```
+
+telemetry number는 모두 finite/non-negative이다. count/delta/sampleCount는 safe integer이고 `sampleCount >= 1`, `startedAt <= endedAt <= observedAt`, duration quantile은 `p50 <= p95 <= p99 <= max`여야 한다. gauge의 unit은 metric registry에 고정하며 잘못된 metric/unit 조합을 거부한다.
+
+frame/draw/layout raw sample은 in-process bounded ring buffer에서 summary로 집계한 후에만 adapter로 내보낸다. telemetry에 workspace ID, entity/resource/namespace/repository/operation ID, display name, label/annotation, URL, query text, raw error message, raw payload를 넣지 않는다. `reasonCode`는 versioned allowlist code만 허용하며 provider 문구나 exception message를 넣지 않는다. synthetic/replay는 `dataOriginKind`로 분리하고 live 성능 SLO에 합산하지 않는다.
+
+telemetry effect도 active effect registry를 누수하지 않도록 adapter가 성공 시 같은 `recordId`의 `telemetry.recorded`를 terminal result로 반환한다. 실패는 generic `effect.failed`로 닫되 제품 state/scene을 바꾸지 않는다. telemetry 성공/실패를 다시 telemetry effect로 보내는 재귀를 금지한다.
 
 ## 4. Snapshot과 stream wire
 
@@ -479,6 +938,77 @@ type StreamState =
   | { kind: "resyncing"; retainedFrameId: string | null; reasonCode: string }
   | { kind: "compatibility-fatal"; error: StructuredError }
 
+type CatalogState =
+  | { kind: "absent" }
+  | { kind: "loading"; effectId: OpaqueId }
+  | { kind: "ready"; response: TopologyCatalogResponse }
+  | { kind: "failed"; error: StructuredError }
+
+type EngineQueryState = {
+  draft: TopologyQuery
+  queryRevision: OpaqueId
+  committed:
+    | {
+        queryId: OpaqueId
+        planId: OpaqueId
+        canonicalQuery: TopologyQuery
+        hashes: QueryHashes
+      }
+    | null
+  activity: QueryActivity
+}
+
+type EnginePresentationState = {
+  settled:
+    | {
+        presentation: TopologyPresentation
+        layoutRevision: LayoutRevision
+        geometry: RenderGeometry
+      }
+    | null
+  target: TopologyPresentation
+  focusSankey: FocusSankeyPresentationState
+}
+
+type ActiveEffectState = {
+  effectId: OpaqueId
+  abortKey: OpaqueId
+  causationEventId: OpaqueId
+  payloadType: EffectPayload["type"]
+}
+
+type UnresolvedCommandState = {
+  request: CommandRequest
+  delivery: "not-sent" | "possibly-sent" | "acknowledged"
+  operationId: OpaqueId | null
+}
+
+type ReducerRetentionState = {
+  policyId: string
+  sessionEventIds: readonly OpaqueId[]
+  terminalEffectIds: readonly OpaqueId[]
+  streamPayloadDigests: readonly { streamId: OpaqueId; streamEpoch: OpaqueId; sequence: number; digest: string }[]
+}
+
+type EngineState = {
+  schemaVersion: "topology-engine-state/v1"
+  sessionId: OpaqueId
+  workspaceId: OpaqueId
+  configuredOrigin: DataOrigin
+  stateRevision: StateRevision
+  catalog: CatalogState
+  query: EngineQueryState
+  frame: VisibleFrameState
+  stream: StreamState
+  presentation: EnginePresentationState
+  selection: SelectionState
+  activeEffects: Readonly<Record<OpaqueId, ActiveEffectState>>
+  unresolvedCommands: Readonly<Record<OpaqueId, UnresolvedCommandState>>
+  operations: Readonly<Record<OpaqueId, GitOpsOperationStatus>>
+  errors: readonly StructuredError[]
+  retention: ReducerRetentionState
+}
+
 type ReducerTransition =
   | { kind: "committed"; nextState: EngineState; directives: readonly EffectDirective[] }
   | {
@@ -495,6 +1025,8 @@ type ReducerTransition =
     }
   | { kind: "compatibility-fatal"; nextState: EngineState; error: StructuredError }
 ```
+
+`EnginePresentationState.settled`은 마지막으로 완결된 geometry이고 `target`은 현재 intent의 canonical 목표다. transition 중 둘이 달라도 허용되며 두 field를 같은 의미로 읽지 않는다. `target.mode="focus-sankey"`이거나 active focus transition일 때만 `focusSankey`가 preparing/transitioning/settled일 수 있다. map/fold-lens가 settled되고 focus transition이 없으면 `focusSankey.kind="inactive"`다. activeEffects key는 내부 effectId와 같고 unresolvedCommands key는 invocationId와 같다. retention collection은 policy bound를 지키되 active stream cursor와 possibly-sent command를 제거하는 근거로 사용하지 않는다.
 
 Reducer pipeline은 고정한다.
 
@@ -577,7 +1109,9 @@ Canonical plain decimal grammar:
 - 동일 abortKey의 새 effect 전에 이전 effect를 cancelled registry에 기록한다.
 - cancelled/inactive effectId 결과는 hash가 같아도 적용하지 않는다.
 - 한 effectId의 첫 terminal result만 유효하며 다음 terminal result는 protocol error다.
-- query 변경은 이전 plan/snapshot/stream/detail/layout effect를 취소한다.
+- query/scope 변경은 이전 plan/snapshot/stream/detail/layout/presentation-transition effect를 취소한다.
+- focus-Sankey retarget/exit는 active layout/transition만 `presentation-retargeted`로 취소하고 topology stream과 canonical reducer는 계속 진행한다.
+- entitlement/schema 변경 취소는 frozen universe 폐기와 scene visibility 차단을 같은 reducer transition에서 atomic하게 수행한다. cancel directive만 내보내고 구 scene을 한 frame 더 노출하지 않는다.
 - 이미 전송됐을 수 있는 command는 query 변경으로 취소 완료 처리하지 않고 unresolved command ledger에 둔다.
 - registry/LRU는 bounded지만 active cursor와 unresolved command ledger는 임의 TTL/LRU eviction 대상이 아니다.
 
@@ -594,7 +1128,7 @@ Canonical plain decimal grammar:
 2. handshake의 workspace/query/entitlement/origin/hashes/stream/epoch/accepted sequence를 모두 검증한다.
 3. accepted+1부터 연속 replay한다.
 4. disconnect 중 마지막 valid scene을 유지하고 connection/freshness만 갱신한다.
-5. resume rejection, retention expiry, epoch/hash mismatch는 새 snapshot을 요구한다.
+5. resume rejection, retention expiry, stream epoch/hash mismatch는 last valid scene을 유지하고 새 snapshot을 요구한다. entitlement epoch mismatch는 active presentation과 scene을 폐기한 후 restricted/loading surface에서 새 snapshot을 요구한다.
 6. resync 중 old/new delta를 이어 붙이지 않는다.
 7. buffer overflow는 silent drop이 아니라 resync다.
 8. schema major mismatch는 resync loop가 아니라 compatibility fatal이다.
@@ -605,8 +1139,8 @@ Canonical plain decimal grammar:
 | Message / delta | 허용 source | 필수 검증 | commit / 실패 처리 |
 |---|---|---|---|
 | `engine.initialized` | system | uninitialized, config/schema/runtime policy | session 생성, catalog fetch |
-| `catalog.changed` | effect | active effect, envelope origin/access/completeness/schema, ID collision | compatible replan; major fatal |
-| `url.hydrated` | url | codec version/migration/size/depth/entitlement | pending query; invalid면 이전 scene 유지 |
+| `catalog.changed` | effect | active effect, envelope origin/access/completeness/schema, ID collision | active presentation cancel; compatible replan, major는 scene 폐기+fatal |
+| `url.hydrated` | url | codec version/migration/size/depth/entitlement | pending query; focus source는 snapshot 후 재검증, invalid면 map 유지 |
 | `query.textChanged` | ui | base revision, length/control char | draft만 변경 |
 | `query.tokenCommitted` | ui | token schema/catalog/revision/duplicate | canonical query + plan |
 | `query.tokenRemoved` | ui | token 존재/revision/default size | canonical query + plan |
@@ -614,10 +1148,13 @@ Canonical plain decimal grammar:
 | `query.planResolved` | effect | active effect/envelope origin/access/expiry/hash/catalog | loading snapshot |
 | `query.planRejected` | effect | active effect/typed error | 이전 scene 유지, rejected |
 | `scope.entered/exited` | ui | identity/entitlement/containment | query 변경; graph 직접 mutation 금지 |
+| `focusSankey.entered` | ui | map/fold-lens, captured base-map source exact membership, frame/presentation revision | fold transition은 cancel; current interpolated geometry에서 universe freeze+focus layout, map 순간 복귀 금지 |
+| `focusSankey.retargeted` | ui | focus mode, new source membership, frame/presentation revision | active layout/transition cancel, current geometry에서 retarget |
+| `focusSankey.exited` | ui | focus preparing/transitioning/settled, frame/presentation revision | active effect cancel, latest map target layout |
 | `lens.progressChanged` | ui | finite p, gesture/layout revision | presentation only |
 | `lens.committed` | ui | lens capability/data hash 불변 | URL/layout; data refetch 금지 |
 | `entity.focused` | ui | visible/restorable target | presentation only |
-| `entity.activated` | ui | current entity/activation descriptor | declared query/navigation/action |
+| `entity.activated` | ui | current entity/resolved activation descriptor/current frame+presentation revision | map focus descriptor는 exactly one `focusSankey.entered` dispatch; 원 activation은 presentation no-op, 그 외는 declared query/navigation/action |
 | `selection.changed` | ui | revision/entity existence/limit | atomic selection |
 | `viewport.changed` | ui | finite coordinate/zoom/policy | presentation only |
 | `action.invoked` | ui | descriptor/capability/target/parameters | confirmation 대기 또는 command effect |
@@ -627,7 +1164,7 @@ Canonical plain decimal grammar:
 | `snapshot.received` | snapshot | correlation/workspace/query/origin/epoch/catalog/hash/streamStart/frame invariant | frame atomic install; stream mode만 subscribe |
 | `stream.ready` | stream | accepted=requested, head>=accepted | accepted+1 replay |
 | `stream.disconnected` | effect | active subscribe | frame 유지/reconnect |
-| `stream.resyncRequired` | stream/system | active tuple/reason | frame 유지, stream/layout cancel, snapshot |
+| `stream.resyncRequired` | stream/system | active tuple/reason | stream/layout/transition cancel; entitlement/schema는 frozen/last scene 폐기, 그 외은 last valid frame 유지 후 snapshot |
 | `entityDetail.received` | effect | active effect/envelope origin/access/frame/cursor | matching inspector section replace |
 | `entity.upserted` | stream batch | UID identity/workspace/cluster/budget | full replace |
 | `entity.deleted` | stream batch | key/time/reason | tombstone; 이름 lookup 금지 |
@@ -644,15 +1181,19 @@ Canonical plain decimal grammar:
 | `source.watermarkReplaced` | stream batch | catalog/orthogonal axes | full source replace |
 | `frame.completenessReplaced` | stream batch | count/access/source consistency | completeness only |
 | `warning.*` | stream batch | stable key/redaction | keyed replace/delete |
-| `layout.resolved` | worker | active effect/full revision/transaction | geometry commit |
-| `layout.rejectedAsStale` | worker/system | revision mismatch | geometry 불변 |
+| `layout.requested` | system | current frame/presentation/universe, one active transaction per abortKey | layout compute effect |
+| `layout.resolved` | worker | active effect, transaction/presentation/universe/layout exact echo, focus completeness proof | current target geometry commit 후 transition effect |
+| `layout.rejectedAsStale` | system | revision mismatch and rejected transaction identity | geometry 불변 |
 | `layout.failed` | worker | active effect/recoverability | last layout 유지 |
+| `focusSankey.transitionSettled` | effect | active effect/transition/presentation/universe/layout revision | settled commit 후 latest canonical과 비교, 필요 시 post-settle reconcile |
+| `telemetry.recorded` | effect | active telemetry effect, exact recordId | terminal effect registry cleanup; product state/scene 불변 |
 | `command.receiptReceived` | effect | effect/key/dataOrigin/fingerprint | accepted canonical receipt install; rejected graph 불변 |
 | `command.receiptLookupReceived` | effect | active lookup/envelope origin/key/fingerprint | found/pending/not-found branch; graph 불변 |
 | `operation.eventReceived` | operation-stream | operationId/origin/full cursor/operationSequence/status contract | operation ledger; gap은 해당 status cut fetch |
 | `operation.snapshotReceived` | effect | active lookup/envelope origin/authoritative status cut | last-known/gap reconcile |
 | `theme.changed` | ui | registered complete token set | query/layout identity 불변 |
 | `motion.changed` | ui | registered policy | geometry identity 불변 |
+| `effect.cancelled` | effect | active/cancelled registry, reason/abortKey correlation | cancelled effect terminal 처리; presentation 임의 진전 금지 |
 | `effect.failed` | effect | active effect/scoped error/delivery | 이전 scene 유지, scope error |
 
 ## 11. Product DTO ↔ engine mapping
@@ -676,3 +1217,8 @@ Canonical plain decimal grammar:
 8. decimal grammar/overflow/half-even/residual tie/display separation property test가 있다.
 9. restricted mapping이 name/count/total/edge cardinality를 누출하지 않음을 검증한다.
 10. schema major incompatibility가 infinite resync loop가 아니라 fatal state로 끝남을 검증한다.
+11. focus-Sankey property test가 source exact membership, `column + 1 = map`, group-members/unrelated exact partition, health group exact partition, source face ratio의 gap/overlap 0·합 1, group↔ribbon connector 1:1을 임의의 입력 순서에서 검증한다.
+12. enter/exit/retarget 전환 중 ordinary stream batch가 canonical state에 모두 atomic commit되고 presentation만 freeze되며, settle 후 latest frame으로 유실 없이 reconcile되는지 fake clock과 interleaving property test로 검증한다.
+13. transition 중 source delete, retarget, Escape, entitlement epoch 변경, compatible/incompatible schema 변경을 각각 검증하며 entitlement/schema 변경 후 구 scene이 한 frame도 더 노출되지 않는다.
+14. stale/cancelled layout·transition result가 current geometry/presentation revision을 진전시키지 않고 post-settle reconcile가 latest revision 하나로 coalesce되는지 검증한다.
+15. telemetry runtime schema가 non-finite/negative/wrong-unit/raw identifier·message를 거부하고 synthetic/replay sample이 live SLO aggregate에 혼합되지 않는다.

@@ -1,6 +1,6 @@
 ---
 title: Universal Kubernetes Topology Engine Implementation Contract
-status: normative-design-contract
+status: planned-design-contract
 owner: frontend-platform
 last_verified: 2026-07-11
 ---
@@ -11,20 +11,20 @@ last_verified: 2026-07-11
 
 이 문서는 Kubernetes 시각화 제품의 frontend 의미·상태·상호작용·데이터 소비를 정리한 설계 계약 초안이다. 제품 기획 소개가 아니며 backend DTO를 복제하는 문서도 아니다. 현재 repo의 실제 코드와 통과한 테스트가 source of truth이고, 현재 코드에 package, route, schema, renderer, plugin이 없으면 구현 완료가 아니라 후속 작업 기준으로만 읽는다. 계약 변경은 frontend ADR, schema major/minor 판정, migration, test traceability 갱신 없이 허용하지 않는다. 실제 배포 완료는 승인된 OpenAPI, generated runtime schema, 구현 코드, executable test가 모두 통과한 경우에만 주장한다.
 
-동일 권한의 부속 계약:
+함께 읽는 부속 계약:
 
 - `product-data-contract.md`: Applications/GitOps/Tree/Timeline/Metrics/Topology/operation의 제품 consumer contract.
 - `topology-message-action-schema.md`: message/reducer/effect/snapshot/delta/action wire protocol.
 - `topology-visual-motion-tokens.md`: light/dark/high-contrast, geometry, gesture, motion, renderer handoff의 수치 계약.
 
-상충 시 제품 사용자 의미는 `product-data-contract.md`, protocol type/ordering은 message adjunct, visual/motion 수치는 visual adjunct가 우선한다.
+구현할 때는 제품 사용자 의미를 `product-data-contract.md`, protocol type/ordering을 message adjunct, visual/motion 수치를 visual adjunct에서 추적한다. 실제 충돌 판정은 코드와 통과한 테스트, 승인된 schema 변경 절차를 기준으로 한다.
 
 이 문서가 고정하는 결과는 다음과 같다.
 
 1. Cluster → Node → Pod → Container 실행 위치를 중첩 Treemap으로 표현한다.
 2. 실행 위치와 Service, Ingress/Gateway, Workload controller, 설정, 스토리지, 정책, GitOps, 실제 트래픽 관계를 서로 다른 relation plane으로 보존한다.
 3. Scope를 확대해도 같은 리소스 UID는 같은 시각 객체로 유지한다.
-4. 가운데 placement Treemap과 좌우 relation rail 사이를 종이접기처럼 연속 전환한다.
+4. placement map cube를 focus-Sankey로 전체 재투영하고, 지원 capability가 있을 때만 좌우 relation rail/fold를 보조 전환으로 제공한다.
 5. 모든 설치된 Kubernetes GVK와 CRD를 discovery 기반으로 generic하게 표시하고, 의미를 아는 종류는 plugin으로 보강한다.
 6. AWS, GCP, Azure, 온프레미스, bare metal, k3s, kind, minikube를 동일한 core 계약으로 처리한다.
 7. CPU, memory, storage, cost 등 합산 가능한 metric으로 면적을 계산하고, 복수 metric은 무차원 composite score로만 결합한다.
@@ -51,7 +51,7 @@ last_verified: 2026-07-11
 - 하나의 canonical directed edge만 저장한다. 역방향 표시는 renderer가 계산하며 inverse edge를 중복 저장하지 않는다.
 - `Service selector가 Pod를 선택함`, `EndpointSlice에 Pod가 실재함`, `트래픽이 관측됨`은 서로 다른 edge다.
 - ownership, placement, dependency edge의 두께는 수량을 뜻하지 않는다.
-- traffic edge만 정량적 width/particle encoding을 사용할 수 있다.
+- canonical relation 중에는 traffic edge만 정량적 width/particle encoding을 사용할 수 있다. `focus-face-connector`는 relation/traffic edge가 아닌 presentation geometry이며 face 결합 높이를 사용할 수 있다.
 - 근거가 없는 관계를 이름 prefix만으로 확정하지 않는다.
 - 관계마다 evidence, authority, state, observed time을 가진다.
 - 해석할 수 없는 참조는 삭제하지 않고 explicit placeholder로 남긴다.
@@ -132,12 +132,14 @@ last_verified: 2026-07-11
 | Projection | PodGroup, Unscheduled, Missing data rail처럼 계산된 객체 |
 | Scope | 현재 포함 계층의 범위: fleet, cluster, node, pod |
 | Lens | 같은 entity를 다른 관계 기준으로 재배치하는 관점 |
+| Presentation mode | 같은 query/projection 위에서 map, focus-Sankey, fold-lens 중 하나를 선택하는 상호작용 상태 |
 | Plane | placement, ownership, network 등 관계의 의미 축 |
 | Frame | 서로 다른 source의 시간과 completeness를 함께 고정한 투영 응답 |
 | Catalog | resource, relation, metric, renderer, action capability 목록 |
 | Query AST | Query Bar가 생성하고 URL/API가 공유하는 canonical typed query |
 | LOD | 정보를 버리지 않는 집계 projection과 expansion token |
 | Rail | Treemap 바깥에서 관계 entity를 정렬하는 좌우 영역 |
+| Focus face connector | focus-Sankey에서 health partition과 member 집합을 잇는 표현 전용 기하 ribbon. canonical relation이나 traffic 양이 아님 |
 
 ## 4. 제품 의미 모델
 
@@ -668,6 +670,19 @@ Data minimization policy:
 Provider는 다음 interface를 구현한다.
 
 ```ts
+type RelationContext = {
+  frameId: string
+  workspaceId: string
+  clusterUid: string | null
+  inventoryEpoch: string
+  entitlementEpoch: string
+  observedAt: string
+  signal: AbortSignal
+  getEntity(entityKey: string): Entity | null
+  listEntities(patterns: readonly CanonicalGvkPattern[]): AsyncIterable<Entity>
+  lookupByAttribute(catalogFieldId: string, value: JsonPrimitive): AsyncIterable<Entity>
+}
+
 type RelationProvider = {
   id: string
   inputGvks: readonly CanonicalGvkPattern[]
@@ -687,6 +702,8 @@ type RelationClaimInput = {
   evidence: readonly EvidenceRef[]
 }
 ```
+
+`RelationContext`는 validated/redacted canonical inventory reader다. provider SDK에 raw Kubernetes/client/provider object, credential, unrestricted JSON path, transport handle을 넘기지 않는다. lookup field는 catalog allowlist ID만 받고 결과는 현재 workspace/entitlement universe 안의 entity만 반환한다. abort 후 provider output은 commit하지 않는다.
 
 - `RelationClaimInput`은 key material, claim, evidence를 함께 제공하고 projection layer가 CanonicalRelation을 만든다.
 - provider output은 canonical relation key로 dedupe하되 claim은 claimId로 보존한다.
@@ -814,9 +831,9 @@ type PluginManifest = {
 - manifest signature, schema compatibility, collision, determinism, timeout, output budget, malicious payload contract test를 배포 전에 통과한다.
 - catalog revision이 plugin 추가/제거/major 변경으로 바뀌면 current query를 replan한다.
 
-## 8. Scope와 Lens
+## 8. Scope, presentation mode와 Lens
 
-Scope와 Lens는 하나의 enum으로 합치지 않는다.
+Scope, presentation mode, Lens는 하나의 enum으로 합치지 않는다. v0의 기본 상호작용은 `map → focus-sankey`이며, fold/rail lens는 이를 대체하지 않는 capability-gated 보조 상호작용이다.
 
 ```ts
 type Scope =
@@ -834,6 +851,16 @@ type Lens =
   | { kind: "gitops" }
   | { kind: "butterfly"; left: "network"; right: "ownership-gitops" }
 
+type TopologyPresentation =
+  | { mode: "map"; lens: { kind: "placement" } }
+  | { mode: "focus-sankey"; lens: { kind: "placement" }; focusEntityKey: string }
+  | {
+      mode: "fold-lens"
+      lens: Exclude<Lens, { kind: "placement" }>
+      anchorEntityKey: string | null
+      capabilityRevision: string
+    }
+
 type Grouping =
   | { kind: "placement-parent" }
   | { kind: "namespace" }
@@ -843,16 +870,16 @@ type Grouping =
   | { kind: "label"; key: string }
 ```
 
-Scope, Lens, Grouping은 서로 독립이다. Namespace는 API scope이자 논리 partition이지만 실행 위치 parent가 아니다. zone, node pool, application도 projection grouping이며 placement edge를 바꾸지 않는다. Namespace frame으로 관계 graph를 정리할 수는 있지만 중앙 containment truth를 `Cluster → Namespace → Workload`로 교체하지 않는다.
+Scope, presentation mode, Lens, Grouping은 서로 독립이다. `focus-sankey`는 Lens가 아니며 data query와 projection membership을 바꾸지 않는다. Namespace는 API scope이자 논리 partition이지만 실행 위치 parent가 아니다. zone, node pool, application도 projection grouping이며 placement edge를 바꾸지 않는다. Namespace frame으로 관계 graph를 정리할 수는 있지만 중앙 containment truth를 `Cluster → Namespace → Workload`로 교체하지 않는다.
 
 ### 8.1 Scope별 화면 계약
 
-| Scope | 중앙 placement | 관계 표현 | 클릭 결과 |
+| Scope | 중앙 placement | 관계 표현 | cube activation / 명시적 containment action |
 |---|---|---|---|
-| fleet | Cluster Treemap, 내부 Node micro-block | 선택 cluster의 관계 요약만 | Cluster scope로 zoom |
-| cluster | Node Treemap, 내부 Pod micro-block | Cluster detail부터 aggregate Service/controller bundle 제공 | Node scope 또는 relation focus |
-| node | 선택 Node의 Pod Treemap | 왼쪽 network, 오른쪽 ownership/GitOps exact Pod 관계 | Pod 또는 relation entity focus |
-| pod | Container Treemap/stack | config, storage, network, owner, events | detail/related resource navigation |
+| fleet | Cluster Treemap, 내부 Node micro-block | 선택 cluster의 관계 요약 | focus-Sankey / `Cluster로 들어가기` |
+| cluster | Node Treemap, 내부 Pod micro-block | aggregate Service/controller bundle | focus-Sankey / `Node로 들어가기` |
+| node | 선택 Node의 Pod Treemap | exact Pod network·ownership·GitOps 관계 | focus-Sankey / `Pod로 들어가기` |
+| pod | Container Treemap/stack | config, storage, network, owner, events | focus-Sankey / Container detail action |
 
 Node의 Service를 표현할 때 문구는 `이 Node가 소유한 Service`가 아니라 `이 Node에서 실행 중인 Pod와 연결된 Service`다.
 
@@ -860,7 +887,65 @@ Node의 Service를 표현할 때 문구는 `이 Node가 소유한 Service`가 �
 
 Service와 Deployment는 여러 Node의 Pod를 가로지른다. Node를 먼저 클릭해야만 관계가 보이면 사용자는 cluster 전체 분산과 장애 범위를 읽을 수 없다. Cluster detail에서는 Pod/Node aggregate bundle을 표시하고, Node detail에서 exact Pod edge로 펼친다.
 
-### 8.3 종이접기/FEZ 전환
+### 8.3 v0 기본: map → focus-Sankey
+
+초기 presentation은 `mode="map"`이다. 사용자가 map의 cube를 click/Enter하면 같은 authorized projection universe를 `mode="focus-sankey"`로 재투영한다. 선택 cube는 왼쪽 source가 되고, source를 제외한 모든 map item은 오른쪽 세로 열에 정확히 한 번 나타난다. 이 동작은 query를 다시 만들거나 resource를 숨기는 필터가 아니다.
+
+```ts
+type FocusHealthLevel = TopologyHealthVerdict["level"]
+
+type FocusSankeyMember =
+  | {
+      kind: "related"
+      entityKey: string
+      relationKeys: readonly [string, ...string[]]
+      healthLevel: FocusHealthLevel
+    }
+  | {
+      kind: "unrelated"
+      entityKey: string
+      relationKeys: readonly []
+      healthLevel: FocusHealthLevel
+    }
+
+type FocusSankeyConnector = {
+  connectorKey: string
+  healthLevel: FocusHealthLevel
+  memberEntityKeys: readonly [string, ...string[]]
+  canonicalRelationKeys: readonly [string, ...string[]]
+  sourceFaceStartRatio: DecimalString
+  sourceFaceEndRatio: DecimalString
+}
+
+type FocusSankeyLayout = {
+  layoutRevision: LayoutRevision
+  universeRevision: string
+  sourceEntityKey: string
+  members: readonly FocusSankeyMember[]
+  orderedRightEntityKeys: readonly string[]
+  connectors: readonly FocusSankeyConnector[]
+  unrelatedEntityKeys: readonly string[]
+}
+```
+
+Focus membership과 layout은 다음 불변조건을 모두 만족해야 commit된다.
+
+1. `sourceEntityKey`는 직전 committed map universe에 정확히 한 번 존재한다.
+2. `flatten(connectors.memberEntityKeys)`, `unrelatedEntityKeys`, `{sourceEntityKey}`는 서로소이고 그 합집합은 map universe와 정확히 같다.
+3. 따라서 `orderedRightEntityKeys.length + 1 === mapUniverse.length`이며 right item은 중복되거나 사라지지 않는다.
+4. source와 허용된 canonical relation이 하나 이상 연결된 item만 connector member다. 여러 relation이 있어도 item은 한 번만 배치하고 모든 relation key/evidence는 item과 inspector에 보존한다.
+5. connector는 `unhealthy > degraded > unknown > neutral > healthy` 순으로 배치하며 같은 group 안은 projection order 후 entityKey로 결정적으로 정렬한다.
+6. 관계가 없는 item도 right column 아래의 `unrelatedEntityKeys`에 남고 dimmed 처리할 뿐 숨기지 않는다.
+7. 비어 있지 않은 health connector마다 focus face connector를 정확히 하나 만든다. source 오른쪽 face partition의 합은 정확히 1이며 decimal residual은 §10의 largest-remainder/tie-break 규칙으로 배정한다.
+8. connector의 source 쪽 경계는 face partition, target 쪽 경계는 group 첫 item의 top부터 마지막 item의 bottom까지다. center-point attachment는 금지한다.
+9. focus face connector는 presentation geometry다. `CanonicalRelation` store, relation count, evidence authority, traffic legend, traffic metric 합계에 삽입하지 않는다.
+10. entitlement/schema epoch가 바뀌면 transition을 cancel하고 replan/resync한다. 일반 delta는 canonical reducer에 계속 적용하되 transition이 끝날 때까지 presentation universe/revision을 capture하고, settle 직후 latest frame으로 interruptible retarget한다.
+
+compact/mobile에서도 동일한 완전성 불변조건을 지킨다. ribbon을 축약하거나 accessible grouped list로 바꿀 수는 있지만 right member를 조용히 생략할 수 없다. 너무 큰 universe는 §19 LOD aggregate 자체를 map item으로 사용하며, focus 진입 후 임의 client-side sampling을 하지 않는다.
+
+`map`과 `focus-sankey`는 core capability다. `fold-lens`는 catalog가 현재 subject에 대해 지원 capability와 revision을 제공할 때만 노출한다. 의미 없는 대상에는 control을 숨기고, 사용자가 기대할 수 있지만 권한·source·viewport 조건으로 사용할 수 없을 때만 disabled reason을 표시한다.
+
+### 8.4 보조 기능: 종이접기/FEZ fold-lens 전환
 
 - gesture progress `p`는 `[-1, 1]`이다.
 - `p = 0`은 placement Treemap이다.
@@ -873,7 +958,7 @@ Service와 Deployment는 여러 Node의 Pod를 가로지른다. Node를 먼저 �
 - relation entity가 나타날 때 연결된 Pod tile은 같은 entityKey와 현재 interpolated rect를 유지한다.
 - keyboard 사용자는 lens tab/shortcut으로 동일 전환을 수행한다.
 
-### 8.4 Gesture와 async layout의 일관성
+### 8.5 Gesture와 async layout의 일관성
 
 ```ts
 type GestureLayoutSet = {
@@ -934,6 +1019,12 @@ type OmnibarSuggestion =
   | { kind: "query-token"; token: QueryToken }
   | { kind: "action"; actionId: string; labelKey: string; availability: "enabled" | "disabled" }
 
+type ScopeToken = {
+  type: "scope"
+  scope: Scope
+  label: string
+}
+
 type ResourceIdentityToken = {
   type: "resource-identity"
   entityKey: string
@@ -951,9 +1042,27 @@ type SizeMetricToken = {
   term: SizeMetricTerm
   label: string
 }
+
+type FlowMetricToken = {
+  type: "flow-metric"
+  expression: FlowExpression
+  label: string
+}
+
+type TimeToken = {
+  type: "time"
+  time: QueryTime
+  label: string
+}
+
+type LensToken = {
+  type: "lens"
+  lens: Lens
+  label: string
+}
 ```
 
-Resource token은 display name이 아니라 entityKey를 저장한다. 동명이인 resource를 합치지 않는다.
+Resource token은 display name이 아니라 entityKey를 저장한다. 동명이인 resource를 합치지 않는다. `LensToken`은 secondary fold-lens의 committed target 또는 placement 복귀만 나타내며 focus-Sankey source를 저장하지 않는다. focus source는 `TopologyPresentation`과 URL codec이 소유한다.
 
 ### 9.2 Query AST
 
@@ -985,11 +1094,6 @@ type TopologyProjection = {
   lodPolicyId: string
 }
 
-type TopologyPresentation = {
-  lens: Lens
-  relationFocusEntityKey?: string
-}
-
 type TopologyQuery = {
   schemaVersion: "topology-query/v1"
   data: TopologyDataQuery
@@ -1017,9 +1121,10 @@ type QueryHashes = {
 - query canonicalizer는 field/order/weight/window를 정규화하고 네 hash를 만든다.
 - `dataQueryHash`는 scope/filter/metric/flow/time/areaPolicy만 포함한다.
 - `projectionHash`는 data hash와 grouping/LOD policy를 포함한다.
-- `presentationHash`는 projection hash와 lens를 포함한다.
+- `presentationHash`는 projection hash와 committed presentation mode, lens, focus/anchor entityKey를 포함한다. drag progress와 animation progress는 포함하지 않는다.
 - `shareHash`는 URL에 직렬화되는 전체 canonical document의 hash다.
 - canonical query는 URL에 serialize되어 새로고침, 공유, back/forward가 재현 가능해야 한다.
+- URL codec은 `mode=focus-sankey`의 `focusEntityKey`를 opaque identity로 직렬화한다. 권한이 없어졌거나 현재 map universe에 없는 key는 추정 대상을 선택하지 않고 map으로 안전하게 복귀하며 이유를 알린다.
 - server planner가 반환한 canonical query가 최종 authority다.
 - exact identity token은 해당 entity와 필요한 ancestor/context relation만 남긴다. context membership role은 검색 결과 count에 포함하지 않는다.
 - filter가 없으면 predicate는 명시적 `{op:"true"}`다. empty `and/or` node는 canonical schema가 거부한다.
@@ -1542,9 +1647,12 @@ type CatalogCount = {
 | text | display name, 허용 밀도에서 absolute value 한 줄 |
 | focus ring | keyboard/pointer focus |
 | relation line | relation plane/lifecycle/resolution/freshness |
-| particle/ribbon | observed traffic only |
+| observed particle/flow ribbon | measured traffic rate만 표현. 두께·속도는 unit/window/source가 검증된 정량값 |
+| focus face connector | focus-Sankey health group의 face partition과 member 집합. 두께는 결합 face 높이의 기하 결과이며 traffic 양이 아님 |
 
 resource kind별 임의 색은 health color와 충돌하므로 기본 tile fill에 쓰지 않는다. Kind는 icon token과 label로 구분한다.
+
+두 ribbon은 타입, renderer primitive, legend, accessibility label을 공유하지 않는다. focus face connector에는 member count와 `관계 묶음` label을 표시하고 rate/unit/particle을 표시하지 않는다. observed traffic이 없다는 이유로 focus connector를 숨기지 않으며, focus connector가 있다는 이유로 traffic이 있다고 추론하지 않는다.
 
 ### 12.2 Density level
 
@@ -1812,6 +1920,9 @@ scope.entered
 scope.exited
 lens.progressChanged
 lens.committed
+focusSankey.entered
+focusSankey.retargeted
+focusSankey.exited
 entity.focused
 entity.activated
 entityDetail.received
@@ -1968,25 +2079,94 @@ stream events
 ### 17.1 Layout revision
 
 ```ts
+type SceneRect = { x: number; y: number; width: number; height: number }
+type ScenePoint = { x: number; y: number }
+
+type SceneEntityGeometry = {
+  entityKey: string
+  rect: SceneRect
+  zLayer: number
+  density: TileDensity
+  interactive: boolean
+}
+
+type SceneRelationGeometry =
+  | {
+      kind: "canonical-relation"
+      sceneRelationKey: string
+      relationKey: string
+      points: readonly [ScenePoint, ScenePoint, ...ScenePoint[]]
+    }
+  | {
+      kind: "observed-flow"
+      sceneRelationKey: string
+      relationKey: string
+      points: readonly [ScenePoint, ScenePoint, ...ScenePoint[]]
+      flowKey: string
+    }
+  | {
+      kind: "focus-face-connector"
+      sceneRelationKey: string
+      connectorKey: string
+      healthLevel: FocusHealthLevel
+      memberEntityKeys: readonly [string, ...string[]]
+      sourceFace: readonly [ScenePoint, ScenePoint]
+      targetFace: readonly [ScenePoint, ScenePoint]
+    }
+
+type RenderGeometry = {
+  bounds: SceneRect
+  entities: readonly SceneEntityGeometry[]
+  relations: readonly SceneRelationGeometry[]
+}
+
 type LayoutRevision = {
   structureRevision: string
   logicalMetricRevision: string
   geometryMetricRevision: string
+  presentationGroupingRevision: string
   dataQueryHash: string
   projectionHash: string
   presentationHash: string
   viewportRevision: string
   policyRevision: string
 }
+
+type RenderSceneEntity = SceneEntityGeometry & {
+  label: string
+  kindLabel: string
+  healthLevel: FocusHealthLevel
+  metricText: string | null
+  membershipRole: Entity["membershipRole"]
+  lifecycle: Entity["lifecycle"]
+  statusTokens: readonly string[]
+  accessibilityName: string
+}
+
+type RenderScene = {
+  schemaVersion: "topology-render-scene/v1"
+  frameId: string
+  layoutRevision: LayoutRevision
+  presentation: TopologyPresentation
+  mapUniverseEntityKeys: readonly string[]
+  geometry: RenderGeometry
+  entities: readonly RenderSceneEntity[]
+  focusedEntityKey: string | null
+  selectedEntityKeys: readonly string[]
+  completeness: CompletenessSummary
+  warnings: readonly StructuredWarning[]
+}
 ```
 
-- health/status만 바뀌면 layout하지 않는다.
+`RenderScene`은 renderer의 유일한 domain input이다. `geometry.entities`와 `entities`의 entityKey 집합은 정확히 같고 중복이 없어야 한다. `geometry.relations`의 discriminant를 지운 generic ribbon으로 합치지 않는다. 모든 좌표/치수는 finite이며 width/height는 non-negative다. renderer는 API DTO, canonical store, provider metadata를 직접 읽거나 health/traffic/focus 의미를 다시 계산하지 않는다.
+
+- map/fold-lens에서 health/status만 바뀌면 layout하지 않는다. focus-Sankey에서 effective health bucket이 바뀌면 right group/order와 face partition이 달라지므로 `presentationGroupingRevision`을 올리고 focus layout만 다시 계산한다.
 - structure add/delete는 worker layout을 요청한다.
 - metric value는 logical state에 즉시 적용한다. geometry는 별도 revision으로 추적한다.
 - projected cumulative boundary displacement가 0.5 CSS px 이상이면 layout을 요청한다.
 - 0.5px 미만 변화도 최대 250ms 또는 다음 interaction idle 중 먼저 도달한 시점에 coalesced layout으로 동기화한다.
 - logical/geometry revision이 다르면 inspector는 최신 값을 보여주되 `layout updating` 상태를 표시하고, tile 내부 absolute value line은 geometry sync 전 이전 geometry revision 값 또는 숨김을 사용한다.
-- gesture 중에는 §8.4의 captured geometry를 사용하고 pointer release 직후 latest logical revision으로 retarget한다.
+- gesture 중에는 §8.5의 captured geometry를 사용하고 pointer release 직후 latest logical revision으로 retarget한다.
 - geometry lag가 250ms를 넘으면 performance invariant failure이며 silent stale geometry를 허용하지 않는다.
 - lens 변화는 같은 entity set의 목표 geometry를 계산한다.
 - 늦은 worker 응답은 전체 revision이 맞지 않으면 폐기한다.
@@ -1999,6 +2179,7 @@ type LayoutRevision = {
 - Nested overview: outer Cluster/Node rect와 inner Node/Pod micro-layout을 별도 pass로 계산.
 - Rail: entity grouping, ordering, edge port allocation.
 - Bundle: shared source/target을 합치는 deterministic ribbon routing.
+- Focus-Sankey: §8.3의 exactly-once partition, health ordering, face interval, unrelated tail을 deterministic하게 계산한다.
 - Ownership detail: ELK layered layout adapter 사용 가능.
 - Layout은 main thread에서 전체 graph를 계산하지 않는다.
 - worker 사용 불가 시 low-volume safe fallback만 허용하고 명시적으로 degraded capability를 표시한다.
@@ -2097,7 +2278,9 @@ Required budgets:
 | main-thread long task during 5s gesture | 0 tasks > 50ms |
 | worker layout S/M/F | p95 ≤ 80ms / 250ms / 500ms |
 | validated snapshot → first meaningful scene | p95 ≤ 1,000ms |
-| committed lens/scope → settled morph | p95 ≤ 700ms |
+| committed fold-lens/scope → settled morph | p95 ≤ 700ms |
+| focus geometry ready → settled focus morph | `focusMorph=720ms` + 최대 1 animation frame |
+| focus activation → pending/first visual response | p95 ≤ 50ms |
 | Canvas/WebGL draw | p95 ≤ 8ms |
 | stream staged backlog | p95 ≤ 2 animation-frame batches; structural drop = 0 |
 | stable 1h run | unexpected resync = 0; detached DOM growth = 0 |
@@ -2187,9 +2370,9 @@ type TopologyThemeTokens = {
 - hover: 일시적 preview.
 - focus: keyboard/pointer가 현재 조작할 entity.
 - selection: multi-select/query context.
-- activation: click/Enter로 zoom, relation focus, detail navigation 실행.
+- activation: click/Enter로 현재 presentation이 선언한 focus, retarget, detail navigation을 실행.
 - scope: containment context.
-- relation focus: scope를 바꾸지 않고 connected subgraph를 강조.
+- relation focus: scope를 바꾸지 않고 connected subgraph를 강조. v0 map에서는 focus-Sankey presentation이 이를 담당한다.
 
 ```ts
 type SelectionState = {
@@ -2209,22 +2392,25 @@ type SelectionState = {
 
 ### 21.2 Activation routing
 
-| Entity | 기본 activation |
+같은 entity라도 현재 presentation과 surface role에 따라 descriptor가 달라진다. Kind switch로 처리하지 않는다.
+
+| Surface role | 기본 activation |
 |---|---|
-| Cluster | Cluster scope containment zoom |
-| Node | Node scope containment zoom |
-| Pod | Pod inspector 또는 Pod scope |
-| Container | Container detail/log/evidence action catalog |
-| Service | Service-centered relation focus |
-| Ingress/Gateway/Route | downstream network focus |
-| Deployment/StatefulSet/DaemonSet/Rollout | managed descendant focus |
-| ReplicaSet/Job | direct dependent focus |
-| ConfigMap/Secret/PVC/PV | dependency/storage focus와 inspector |
-| GitOps controller resource | GitOps detail route |
+| map cube | 해당 entity를 source로 `focus-sankey` 진입 |
+| focus-Sankey right member | 해당 entity를 새 source로 interruptible retarget |
+| focus-Sankey source | entity inspector 열기 |
+| Cluster/Node/Pod의 명시적 `들어가기` action | containment scope zoom |
+| Container의 detail action | Container detail/log/evidence |
+| Service/Ingress/Gateway/Route detail action | network relation inspector 또는 연결 화면 |
+| Deployment/StatefulSet/DaemonSet/Rollout/ReplicaSet/Job detail action | managed descendant/ownership inspector |
+| ConfigMap/Secret/PVC/PV detail action | dependency/storage inspector |
+| GitOps resource detail action | canonical GitOps detail route |
 | verified Git HTTP URL | external navigation effect |
 | projection/placeholder | explanatory inspector |
 
-Activation handler는 Kind switch가 아니라 catalog의 `ActivationDescriptor`를 dispatch한다.
+Cluster→Node→Pod→Container drill-down은 제거하지 않는다. 다만 cube click과 containment navigation을 한 제스처에 중복 배정하지 않는다. frame/header/inspector의 명시적 `들어가기` action과 breadcrumb가 scope를 바꾸며, map cube click/Enter는 focus-Sankey만 연다. scope마다 진입 대상이 없는 entity에는 `들어가기` action을 제공하지 않는다.
+
+Activation handler는 catalog의 `ActionDescriptor`를 dispatch한다. pointer와 keyboard는 같은 descriptor/actionId를 사용하고, focus transition과 inspector/navigation을 동시에 실행하지 않는다.
 
 ### 21.3 Focus restoration
 
@@ -2235,7 +2421,7 @@ Activation handler는 Kind switch가 아니라 catalog의 `ActivationDescriptor`
 
 ### 21.4 Undo와 URL
 
-- query token, scope, lens, relation-focus entity, time window는 URL codec이 직렬화한다. 일시적인 keyboard focus/hover는 URL에 넣지 않는다.
+- query token, scope, committed presentation mode, lens, focus-Sankey source, time window는 URL codec이 직렬화한다. 일시적인 keyboard focus/hover는 URL에 넣지 않는다.
 - high-frequency drag progress는 URL에 기록하지 않고 committed snap만 기록한다.
 - browser back/forward는 URL adapter가 `url.hydrated` message로 dispatch한다.
 - engine state를 component history와 별도로 유지하지 않는다.
@@ -2252,7 +2438,7 @@ Activation handler는 Kind switch가 아니라 catalog의 `ActivationDescriptor`
 - roving tabindex를 사용한다.
 - arrow key는 spatial neighbor index로 이동한다.
 - Enter는 activate, Space는 select, Escape는 relation focus/scope를 단계적으로 해제한다.
-- lens는 버튼/shortcut으로도 전환한다.
+- focus-Sankey 진입·retarget·복귀와 fold-lens는 버튼/shortcut으로도 실행할 수 있다.
 - screen reader label은 kind, name, namespace, status, selected metric exact value를 포함한다.
 - 관계는 source, type, target, truth, freshness를 읽을 수 있는 textual list를 제공한다.
 - 모든 telemetry tick을 aria-live로 알리지 않는다.
@@ -2440,6 +2626,94 @@ Restricted reference 규칙:
 ### 26.1 Catalog response
 
 ```ts
+type ClusterCapabilitySummary = {
+  clusterUid: string
+  displayName: string
+  access: CompletenessSummary["access"]
+  capabilityIds: readonly string[]
+  sourceIds: readonly string[]
+  observedAt: string | null
+  freshness: "fresh" | "stale" | "unknown"
+  completeness: "complete" | "partial" | "unknown"
+}
+
+type RelationCatalogEntry = {
+  relationType: string
+  plane: RelationPlane
+  labelKey: string
+  iconToken: string
+  direction: "directed"
+  authorities: readonly RelationAuthority[]
+  sourceFamilyIds: readonly string[]
+  targetFamilyIds: readonly string[]
+  renderChannel: "line" | "bracket" | "configured-edge" | "observed-flow"
+  capabilityId: string | null
+}
+
+type RendererDescriptor = {
+  rendererId: string
+  rendererRevision: string
+  roles: readonly ("frame" | "tile" | "relation" | "flow" | "focus-face-connector" | "accessibility-mirror")[]
+  tiers: readonly ("dom" | "canvas" | "svg" | "webgl")[]
+  entityClasses: readonly EntityClass[]
+  capabilityId: string | null
+  priority: number
+}
+
+type ActionParameterDescriptor = {
+  parameterId: string
+  labelKey: string
+  required: boolean
+} & (
+  | { kind: "text"; minLength: number; maxLength: number; patternId: string | null }
+  | { kind: "boolean"; defaultValue: boolean | null }
+  | { kind: "integer"; minimum: number | null; maximum: number | null }
+  | { kind: "decimal"; unitId: UnitId | null; minimum: DecimalString | null; maximum: DecimalString | null }
+  | { kind: "choice"; choices: readonly { value: string; labelKey: string }[]; allowMultiple: boolean }
+  | { kind: "entity"; familyIds: readonly string[]; cardinality: "one" | "many" }
+)
+
+type ActionDescriptor = {
+  actionId: string
+  descriptorRevision: string
+  labelKey: string
+  descriptionKey: string | null
+  category: "presentation" | "inspect" | "navigate" | "query" | "operation"
+  target:
+    | { kind: "entity"; cardinality: "one" | "many"; familyIds: readonly string[] }
+    | { kind: "application-instance"; cardinality: "one" }
+    | { kind: "operation"; cardinality: "one" }
+  capabilityId: string | null
+  permissionId: string
+  parameters: readonly ActionParameterDescriptor[]
+  confirmation:
+    | { kind: "not-required" }
+    | { kind: "required"; titleKey: string; bodyKey: string; risk: "low" | "medium" | "high" }
+  dispatch:
+    | { kind: "engine-intent"; intentType: string }
+    | { kind: "internal-route"; routeTemplateId: string }
+    | { kind: "external-navigation"; verifiedUrlFieldId: string }
+    | { kind: "command"; commandKind: string; idempotencyScope: "workspace-actor" }
+  invalidateTags: readonly string[]
+}
+
+type ActionUnavailableReason = {
+  code: string
+  messageKey: string
+  recoverable: boolean
+}
+
+type AvailableActionBase = {
+  actionId: string
+  descriptorRevision: string
+  capabilityRevision: string
+  expectedStateToken: string | null
+}
+
+type AvailableAction =
+  | (AvailableActionBase & { availability: "enabled"; reason: null })
+  | (AvailableActionBase & { availability: "disabled"; reason: ActionUnavailableReason })
+
 type TopologyCatalogResponse = {
   schemaVersion: string
   catalogRevision: string
@@ -2453,6 +2727,8 @@ type TopologyCatalogResponse = {
   sourceHealth: SourceWatermark[]
 }
 ```
+
+`ActionDescriptor`는 실행 가능 여부 그 자체가 아니라 catalog schema다. 현재 target의 enabled/disabled/hidden 판정은 descriptor revision, subject capability, permission, current state token을 결합한 `AvailableAction`에서 계산한다. hidden action은 `AvailableAction[]`에 포함하지 않으며 count나 disabled reason도 노출하지 않는다. provider 이름, provider DTO, 임의 URL, executable code를 descriptor에 넣지 않는다. unknown `intentType`, route template, command kind는 registry validation에서 catalog 전체를 거부하지 않고 해당 action만 unsupported로 격리한다.
 
 ### 26.2 Plan response
 
@@ -2480,6 +2756,63 @@ type QueryPlanResponse = {
 Entity detail은 raw object dump 하나가 아니다.
 
 ```ts
+type DetailFieldValue =
+  | { kind: "text"; value: string }
+  | { kind: "decimal"; value: DecimalString; unitId: UnitId }
+  | { kind: "count"; value: number }
+  | { kind: "timestamp"; value: string }
+  | { kind: "entity-ref"; entityKey: string; label: string }
+  | { kind: "health"; level: TopologyHealthVerdict["level"]; reason: string }
+
+type DetailField = {
+  fieldId: string
+  labelKey: string
+  value: DetailFieldValue
+  copyable: boolean
+}
+
+type DetailSection =
+  | { sectionId: string; labelKey: string; state: "available"; fields: readonly DetailField[] }
+  | {
+      sectionId: string
+      labelKey: string
+      state: "partial"
+      fields: readonly DetailField[]
+      warning: StructuredWarning
+    }
+  | {
+      sectionId: string
+      labelKey: string
+      state: "restricted" | "unavailable"
+      fields: readonly []
+      reason: ActionUnavailableReason
+    }
+
+type MetricSeriesRef = {
+  seriesKey: string
+  metricId: string
+  label: string
+  unitId: UnitId
+  window: TimeWindow
+  latestValueDecimal: DecimalString | null
+  status: MetricStatus
+  observedAt: string | null
+  freshness: "fresh" | "stale" | "unknown"
+  completeness: "complete" | "partial" | "unknown"
+}
+
+type KubernetesEventSummary = {
+  eventKey: string
+  regardingEntityKey: string
+  eventType: "normal" | "warning" | "unknown"
+  reason: string
+  sanitizedMessage: string | null
+  reportingController: string | null
+  occurrenceCount: number
+  firstObservedAt: string
+  lastObservedAt: string
+}
+
 type EntityDetail = {
   entity: Entity
   summarySections: DetailSection[]
@@ -2505,6 +2838,8 @@ type EntityDetailRequest = {
 
 action availability는 permission/capability/status를 반영하고 disabled 이유를 제공한다.
 
+- `DetailField`는 catalog allowlist field만 사용하며 Secret/config value, credential, raw manifest/provider JSON을 포함하지 않는다. `copyable=true`는 redaction과 safe-value policy를 통과한 값에만 허용한다.
+- Kubernetes event message는 control character/markup/credential policy를 통과한 plain text이며 raw object가 아니다. occurrenceCount는 1 이상의 safe integer이고 timestamp는 UTC canonical RFC 3339다.
 - pageSize는 server catalog limit 안에서 planner가 canonicalize한다.
 - page fetch는 entity focus/query change에서 abort한다.
 - nextCursor는 opaque하고 snapshotRevision에 bind한다. revision mismatch는 first-page refetch다.
@@ -2532,11 +2867,15 @@ action availability는 permission/capability/status를 반영하고 disabled 이
 - same name/new UID는 다른 entityKey다.
 - reducer는 동일 event를 두 번 적용해도 state가 같다.
 - out-of-order event가 state를 되돌리지 않는다.
-- lens change는 size score를 바꾸지 않는다.
-- lens-only change는 dataQueryHash를 바꾸지 않고 presentationHash만 바꾼다.
+- fold-lens change는 size score를 바꾸지 않는다.
+- fold-lens-only change는 dataQueryHash를 바꾸지 않고 presentationHash만 바꾼다.
+- map/focus-Sankey mode 또는 focus source change는 dataQueryHash/projectionHash를 바꾸지 않고 presentationHash만 바꾼다.
 - grouping change는 dataQueryHash를 바꾸지 않고 projection/presentation hash를 바꾼다.
-- health-only update는 layout revision을 바꾸지 않는다.
+- map/fold-lens의 health-only update는 layout revision을 바꾸지 않는다. focus-Sankey의 health bucket 변경은 data/projection hash를 유지하고 `presentationGroupingRevision`만 바꾼다.
 - snapshot cut S와 buffered `S+1...N` replay 결과는 동일 event log를 순차 적용한 결과와 같다.
+- focus partition은 임의 universe/relation/health 입력에서 `right + source = map universe`이고 source/connector/unrelated 집합이 서로소다.
+- focus connector 수는 non-empty related health group 수와 같고 source face partition 합은 정확히 1이다.
+- relation 수가 늘어도 같은 right entity가 중복되지 않으며 focus face connector는 canonical relation store를 바꾸지 않는다.
 
 ### 27.3 Generator/fuzz matrix
 
@@ -2567,6 +2906,9 @@ action availability는 permission/capability/status를 반영하고 disabled 이
 - no percentage gauge inside tiles.
 - long name, CJK, RTL, 200% zoom.
 - relation configured/effective/observed/dropped/stale states.
+- map/focus-Sankey와 focus 전환 50% frame, face connector draw 50% frame.
+- focus right column completeness, unrelated tail, health ordering, one connector/non-empty health group.
+- observed flow ribbon과 focus face connector의 legend/label/style 비혼동.
 
 ### 27.5 Interaction/click-path audit
 
@@ -2603,11 +2945,11 @@ reference profiles는 server-generated realistic topology로 고정하고 small/
 
 ### 27.8 License/SBOM
 
-- copied file inventory와 source commit.
-- Apache modification notice.
-- dependency license allow/deny policy.
-- brand/icon asset contamination scan.
-- generated SBOM과 third-party notices.
+- 실제 third-party source 파일 또는 substantial code를 복사·수정한 경우에만 copied-source ledger에 원본 URL, exact source version/commit/tag, 원본·제품 경로, license/copyright, modification summary를 기록한다.
+- Apache-2.0 code를 실제로 복사·수정한 경우에만 modified-file notice(§4(b))를 적용하고 upstream 배포물에 NOTICE가 실제로 있을 때만 NOTICE propagation(§4(d))을 적용한다. copied-source ledger가 비어 있으면 fabricated Apache notice를 만들지 않고 empty-ledger assertion을 통과시킨다.
+- 실제 dependency와 transitive dependency에는 license allow/deny policy를 항상 적용한다.
+- 실제 채택한 brand/icon/font/image asset에는 출처·재배포 권리·상표 오인 가능성 scan을 항상 적용한다.
+- production artifact에서 실제 도달 가능한 dependency/asset/copied source 기준으로 SBOM과 third-party notices를 생성한다.
 
 ## 28. 구현 순서: 완성 제품 vertical slices
 
@@ -2643,6 +2985,7 @@ reference profiles는 server-generated realistic topology로 고정하고 small/
 - physical/composite evaluator.
 - zero/missing/residual rails.
 - stable nested Treemap worker.
+- focus-Sankey exactly-once partition/health connector worker.
 - relation rail/bundle worker.
 - ELK ownership detail adapter.
 - revision/hash/stale-result handling.
@@ -2653,13 +2996,14 @@ reference profiles는 server-generated realistic topology로 고정하고 small/
 - semantic tiles/relations/particles.
 - light/dark/high-contrast/reduced-motion tokens.
 - object constancy and interruptible Motion morph.
+- map→focus-Sankey face connector renderer와 observed-flow ribbon 타입 분리.
 - accessibility mirror/spatial navigation.
 
 ### Phase 6 — Product composition
 
 - Query Bar.
 - Fleet/Cluster/Node/Pod scopes.
-- placement/network/ownership/butterfly lenses.
+- map/focus-Sankey 기본 presentation과 capability-gated network/ownership/butterfly fold-lens.
 - context strip, catalog sidebar, inspector.
 - relation focus and routing/actions.
 - all state/error/permission screens.
@@ -2685,9 +3029,9 @@ reference profiles는 server-generated realistic topology로 고정하고 small/
 
 다음 조건을 모두 만족해야 완료다.
 
-1. Fleet → Cluster → Node → Pod → Container가 authoritative UID로 drilldown된다.
+1. Fleet → Cluster → Node → Pod → Container가 명시적 `들어가기` action과 authoritative UID로 drilldown된다.
 2. Cluster detail부터 network와 ownership aggregate가 보이고 Node detail에서 exact Pod 관계로 펼쳐진다.
-3. placement/network/ownership/butterfly 전환이 같은 entity identity를 보존한다.
+3. map→focus-Sankey 기본 전환과 지원되는 placement/network/ownership/butterfly fold-lens가 같은 entity identity를 보존한다.
 4. Service selector, EndpointSlice, observed flow가 서로 다른 truth로 표시된다.
 5. Query Bar가 resource/filter/size/flow/time/lens token을 typed AST로 처리한다.
 6. metric add/remove가 canonical formula에 따라 면적과 정렬을 결정한다.
@@ -2703,6 +3047,7 @@ reference profiles는 server-generated realistic topology로 고정하고 small/
 16. 실제로 채택한 모든 third-party dependency의 license/notice/SBOM이 완성된다.
 17. 모든 visible click path에 handler, permission, loading, error, focus test가 있다.
 18. 이 문서의 필수 경우의 수가 traceability matrix에서 test ID와 연결된다.
+19. focus-Sankey의 `right + source = map universe`, 집합 서로소, health group당 connector 하나, source face partition 합 1이 property/visual/a11y test를 통과한다.
 
 ## 30. 명시적으로 허용하지 않는 미정의 상태
 
