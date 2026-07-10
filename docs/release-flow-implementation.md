@@ -291,6 +291,18 @@ python scripts/release_flow_smoke.py \
   --ci-artifacts-dir artifacts/release-flow
 ```
 
+GitHub Actions에서 바로 실행하려면 `.github/workflows/release-flow-smoke.yml`의 `Release Flow Smoke` workflow를 수동으로 dispatch한다. 자동 PR trigger로 열어두지 않은 이유는 운영 API URL과 로그인 secret이 필요한 smoke gate라서, 준비되지 않은 PR마다 실패시키지 않기 위해서다.
+
+필요한 repository secrets는 다음 세 가지다.
+
+- `RELEASE_FLOW_API_BASE_URL`: 예: `https://k8s.woonyong.org/api`
+- `RELEASE_FLOW_AUTH_EMAIL`: 운영 smoke용 계정 email
+- `RELEASE_FLOW_AUTH_PASSWORD`: 운영 smoke용 계정 password
+
+수동 실행 input으로 `api_base_url`을 넣으면 `RELEASE_FLOW_API_BASE_URL` secret보다 우선한다. `production_preflight_plan_id`를 넣으면 특정 release plan만 검사하고, `production_preflight_run_limit`은 각 guardrail에서 확인할 release run 개수를 제한한다.
+
+workflow는 `scripts/release_flow_smoke.py --production-preflight --ci --ci-artifacts-dir artifacts/release-flow`를 실행한다. smoke step은 먼저 GitHub step summary, output, annotation, JSON/JUnit/Markdown artifact를 남기고, artifact upload가 끝난 뒤 `release_smoke_ok` output이 `true`가 아니면 job을 실패시킨다.
+
 알림 채널이 실제로 validation alert를 받을 수 있는지 확인하려면 `--alert-preflight`를 붙인다. 이 모드는 enabled alert channel 중 요청 severity를 받을 수 있는 채널을 골라 `/alert-channels/test`를 호출하므로, 실제 Slack/webhook/온콜 테스트 메시지가 발송될 수 있다.
 
 ```bash
