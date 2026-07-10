@@ -164,11 +164,19 @@ def has_change_ticket(settings: Mapping[str, Any], config: Mapping[str, Any]) ->
 
 
 def has_safe_pr_ready(settings: Mapping[str, Any], config: Mapping[str, Any]) -> bool:
-    return bool(
-        config.get("safe_pr_ready")
-        or settings.get("safe_pr_ready")
-        or str(config.get("safe_pr_url") or settings.get("safe_pr_url") or "").strip()
-    )
+    return safe_pr_evidence_ready(config) or safe_pr_evidence_ready(settings)
+
+
+def safe_pr_evidence_ready(source: Mapping[str, Any]) -> bool:
+    if not source.get("safe_pr_ready"):
+        return False
+    evidence = mapping_value(source.get("safe_pr_evidence"))
+    required_fields = ("workflow_run_id", "pr_url", "created_at")
+    if not all(str(evidence.get(field) or "").strip() for field in required_fields):
+        return False
+    configured_url = str(source.get("safe_pr_url") or "").strip()
+    evidence_url = str(evidence.get("pr_url") or "").strip()
+    return not configured_url or configured_url == evidence_url
 
 
 def preview_steps_by_app(preview: Mapping[str, Any]) -> dict[str, Mapping[str, Any]]:

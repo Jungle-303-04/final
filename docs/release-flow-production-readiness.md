@@ -67,7 +67,7 @@ GitHub Actions production readiness:
 
 When `github_access_preflight` is enabled, the verifier must have an actual GitHub token value. If `RELEASE_FLOW_GITHUB_TOKEN_REF` points to a non-env vault ref such as `aws-sm:` or `k8s-secret:`, also set the `RELEASE_FLOW_GITHUB_TOKEN` secret for this readiness workflow so the read-only GitHub API check can run.
 
-`api_smoke_preflight` runs `scripts/release_flow_smoke.py --production-preflight --ci`. It verifies health, readiness, login, release plan APIs, generated manifest rendering, and existing release-run hygiene without starting a production release.
+`api_smoke_preflight` runs `scripts/release_flow_smoke.py --production-preflight --ci`. It verifies health, readiness, login, release plan APIs, generated manifest rendering, and existing release-run hygiene without starting a production release. The smoke result is appended to the GitHub Actions job summary when available and uploaded as `release-flow-smoke.md` in the readiness artifact.
 
 ## Live Gate Requirement
 
