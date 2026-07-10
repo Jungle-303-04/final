@@ -146,9 +146,13 @@ RCA는 provider가 보내준 evidence만 보고 symptom, root cause candidate, c
 
 - query
 - stream labels
-- log line samples
+- redacted log line samples
 - line_count
 - result_type
+- pattern_counts
+- severity_counts
+- trace_ids
+- redaction_summary
 
 현재 기본 policy query 예시:
 
@@ -156,7 +160,7 @@ RCA는 provider가 보내준 evidence만 보고 symptom, root cause candidate, c
 - node_collector_runtime_samples
 - target_agent_warnings
 
-### 추가로 요청해야 할 것
+### 추가 요청 항목과 현재 구현 상태
 
 - pattern
   - probe_failed
@@ -171,9 +175,24 @@ RCA는 provider가 보내준 evidence만 보고 symptom, root cause candidate, c
 - 대표 sample 제한
 - 민감정보 마스킹
 
+현재 구현 상태:
+
+- `logs[].streams[].values[].line`은 기존 `line` 필드 이름은 유지하되, 값은 provider에서 민감정보를 마스킹한 문자열로 보낸다.
+- `pattern_counts`는 probe, health endpoint, dependency timeout/error, image pull, OOM/memory, config/env/volume 계열 로그를 line 단위로 센다.
+- `severity_counts`는 `critical`, `error`, `warn`, `info`, `debug`, `trace`, `unknown`으로 정규화한다.
+- `trace_ids`는 32자리 hex trace id만 최대 20개까지 보낸다.
+- `redaction_summary`는 redaction 적용 여부와 실제로 값이 바뀐 line 개수를 담는다.
+
 주의:
 
-- 로그 샘플에는 개인정보, token, credential이 섞일 수 있으므로 sample 개수 제한과 redaction 기준 필요
+- 로그 샘플에는 개인정보, token, credential이 섞일 수 있으므로 provider가 sample line을 보내기 전에 redaction을 적용한다.
+- `password`, `token`, `secret`, `api_key`, `client_secret`, `credential`, `private_key`, `Authorization`, `Bearer`, `Cookie`, JWT, AWS access key, URL 계정정보, email은 가린다.
+- `trace_id`, `span_id`, `request_id`, namespace, pod name, root cause keyword는 RCA 판단에 필요하므로 유지한다.
+- 대표 sample 개수는 Loki query limit과 payload byte limit 안에서 제한한다.
+
+아직 별도 필드로 만들지 않은 값:
+
+- `window`: evidence job의 `window_start`와 query policy의 시간 범위를 함께 봐야 하므로 Loki result 내부에는 아직 별도 field로 넣지 않는다.
 
 ## Trace Provider
 

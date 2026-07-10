@@ -30,8 +30,9 @@ provider가 수집한 사실
 - `symptom`, `resource`, `severity`는 현재 real provider가 직접 넣는 필드가 아니다.
   RCA가 쓰려면 `pods`, `events`, `workloads`, `metrics`, `logs`, `traces`를 보고
   별도 정규화 단계에서 파생해야 한다.
-- Kubernetes bucket에는 `raw` 원본 object가 없다. provider가 선택한 summary 필드만 남긴다.
-  반대로 `metrics`, `logs`, `traces`는 query 결과별 `raw`를 보존한다.
+- provider bucket은 전체 API response raw를 기본으로 보존하지 않는다.
+  Kubernetes와 metadata는 선택한 summary 필드만 남기고, metrics/logs/traces도 samples, redacted log stream,
+  trace list처럼 provider가 정규화한 필드만 남긴다.
 - `metadata` bucket은 `change_context` 안에 Deployment snapshot과 namespace metadata
   summary를 함께 담는다.
 
@@ -85,7 +86,7 @@ provider가 수집한 사실
 | `containers[]` | container 목록 안의 항목 하나하나를 뜻한다. | `pods[0].containers[0]` |
 | `<query_name>` 또는 `<name>` | 실제 payload에서는 query 이름으로 바뀌는 자리다. | `metrics.results.scrape_targets_up` |
 | `*` | 여러 key 중 아무거나 올 수 있다는 뜻이다. | `metrics.results.*.samples` |
-| `raw` | provider API 응답 원본이다. 정규화 필드로 부족할 때 참고한다. | Prometheus/Loki/Tempo response |
+| `raw` | provider API 응답 원본을 뜻한다. 현재 evidence bucket에는 전체 raw payload를 기본으로 싣지 않는다. | 필요 시 별도 debug 자료 |
 
 ## 작은 예시로 보는 evidence
 
@@ -574,7 +575,9 @@ node memory 사용률 query의 첫 번째 sample 값이다.
 | `query` | string | 실행한 PromQL이다. |
 | `query_mode` | string | `instant` 또는 `range`다. |
 | `result_type` | string 또는 null | Prometheus `data.resultType`이다. 예: `vector`, `matrix`, `scalar`, `string`. |
-| `raw` | object | Prometheus API response 원본이다. RCA가 provider 정규화 밖의 값을 봐야 할 때 쓴다. |
+
+현재 Prometheus provider는 전체 API response raw field를 담지 않는다.
+RCA는 `result_type`, `samples`, `series`, `result` 중 provider가 정규화한 필드를 읽는다.
 
 Instant vector 결과일 때 추가 필드다.
 
@@ -635,10 +638,13 @@ Logs bucket은 Loki provider가 만든다.
 초심자 관점에서는 "애플리케이션이나 agent가 직접 남긴 문장 증거"다.
 Kubernetes Event가 "컨테이너가 재시작된다"고 말해준다면, log line은 "왜 프로세스가 죽었는지"를
 더 구체적으로 보여줄 수 있다.
+다만 `logs[].streams[].values[].line`은 Loki 원문 그대로가 아니라 provider가 민감정보를 마스킹한 문장이다.
+원문을 더 넓게 노출하지 않기 위해, RCA가 바로 쓰기 쉬운 pattern count, severity count, trace id 목록을 함께 보낸다.
 
 logs를 읽을 때는 `logs[].query_name`으로 어떤 로그 query 결과인지 확인하고,
-`line_count`로 잡힌 로그가 있는지 본 다음, 실제 문장은
-`logs[].streams[].values[].line`에서 읽는다.
+`line_count`로 잡힌 로그가 있는지 본 다음, 마스킹된 로그 문장은
+`logs[].streams[].values[].line`에서 읽는다. 빠른 판단에는 `pattern_counts`, `severity_counts`,
+`trace_ids`를 먼저 보면 된다.
 
 ```json
 [
@@ -649,7 +655,29 @@ logs를 읽을 때는 `logs[].query_name`으로 어떤 로그 query 결과인지
     "result_type": "streams",
     "streams": [],
     "line_count": 0,
-    "raw": {}
+    "pattern_counts": {
+      "probe_failed": 0,
+      "health_endpoint_error": 0,
+      "dependency_timeout": 0,
+      "dependency_error": 0,
+      "image_pull_error": 0,
+      "oom_or_memory": 0,
+      "config_error": 0
+    },
+    "severity_counts": {
+      "critical": 0,
+      "error": 0,
+      "warn": 0,
+      "info": 0,
+      "debug": 0,
+      "trace": 0,
+      "unknown": 0
+    },
+    "trace_ids": [],
+    "redaction_summary": {
+      "applied": true,
+      "redacted_line_count": 0
+    }
   }
 ]
 ```
@@ -663,7 +691,10 @@ logs를 읽을 때는 `logs[].query_name`으로 어떤 로그 query 결과인지
 | `logs[].result_type` | string 또는 null | Loki `data.resultType`이다. 보통 `streams`다. |
 | `logs[].streams` | list<object> | Loki stream 목록이다. |
 | `logs[].line_count` | number | 모든 stream의 log entry 개수 합계다. |
-| `logs[].raw` | object | Loki API response 원본이다. |
+| `logs[].pattern_counts` | object | provider가 마스킹된 log line을 읽고 계산한 장애 신호별 matching line 개수다. |
+| `logs[].severity_counts` | object | `ERROR`, `WARN`, `level=error` 같은 표현을 정규화한 severity별 line 개수다. |
+| `logs[].trace_ids` | list<string> | 로그에서 찾은 안전한 trace id 목록이다. 32자리 hex trace id만 최대 20개까지 담는다. |
+| `logs[].redaction_summary` | object | provider가 로그 마스킹을 적용했는지와 실제로 값이 바뀐 line 개수를 나타낸다. |
 
 ### `logs[].streams[]`
 
@@ -677,7 +708,25 @@ logs를 읽을 때는 `logs[].query_name`으로 어떤 로그 query 결과인지
 | 필드 | 타입 | 의미 |
 | --- | --- | --- |
 | `timestamp` | string 또는 null | Loki log timestamp다. nanosecond string 형태일 수 있다. |
-| `line` | string 또는 null | 실제 log line이다. root cause keyword 판단에 쓴다. |
+| `line` | string 또는 null | provider가 민감정보를 가린 log line이다. root cause keyword 판단에 쓴다. |
+
+마스킹 기준은 보수적으로 잡는다. `password`, `token`, `secret`, `api_key`, `client_secret`,
+`credential`, `private_key`, `Authorization`, `Bearer`, `Cookie`, JWT, AWS access key, URL 안의
+계정정보, email은 `[REDACTED]` 계열 값으로 바꾼다. 반대로 `trace_id`, `span_id`, `request_id`,
+namespace, pod name, `ERROR`, `timeout`, `probe failed`, `ImagePullBackOff`, `OOMKilled` 같은 RCA 판단
+키워드는 유지한다.
+
+`pattern_counts`는 각 pattern에 매칭된 log line 개수다. 현재 pattern key는 다음과 같다.
+
+| pattern key | 의미 |
+| --- | --- |
+| `probe_failed` | readiness/liveness/startup probe 실패 또는 `Unhealthy` 로그다. |
+| `health_endpoint_error` | `/health`, `/ready`, health check 실패 로그다. |
+| `dependency_timeout` | timeout, deadline exceeded, connection timed out 계열 로그다. |
+| `dependency_error` | connection refused/reset, DNS lookup failed, upstream/downstream 실패 로그다. |
+| `image_pull_error` | `ImagePullBackOff`, `ErrImagePull`, image pull 실패 로그다. |
+| `oom_or_memory` | OOMKilled, out of memory, memory limit/pressure 계열 로그다. |
+| `config_error` | ConfigMap/Secret/env/volume/mount 누락 또는 실패 로그다. |
 
 기본 policy query는 다음과 같다.
 
@@ -714,8 +763,7 @@ traces를 읽을 때는 `results.<query_name>.trace_count`로 잡힌 trace가 �
     "<query_name>": {
       "query": "{ status = error }",
       "traces": [],
-      "trace_count": 0,
-      "raw": {}
+      "trace_count": 0
     }
   }
 }
@@ -734,7 +782,9 @@ traces를 읽을 때는 `results.<query_name>.trace_count`로 잡힌 trace가 �
 | `query` | string | 실행한 TraceQL 또는 Tempo search query다. |
 | `traces` | list<object> | Tempo `/api/search`가 반환한 trace 목록이다. provider는 내부 trace object를 세부 정규화하지 않고 보존한다. |
 | `trace_count` | number | `traces` 목록 길이다. |
-| `raw` | object | Tempo API response 원본이다. |
+
+현재 Tempo provider는 전체 API response raw field를 담지 않는다.
+RCA는 `traces[]`와 `trace_count`를 기준으로 판단한다.
 
 `traces[]` 내부 object는 Tempo 응답에 따라 달라질 수 있다.
 테스트와 일반 search response 기준으로 다음 값이 들어올 수 있다.
@@ -760,7 +810,7 @@ RCA 파생 예시는 다음과 같다.
 
 | 파생 정보 | 볼 필드 |
 | --- | --- |
-| dependency timeout | `traces[].rootServiceName`, `rootTraceName`, `durationMs`, raw span/status 정보 |
+| dependency timeout | `traces[].rootServiceName`, `rootTraceName`, `durationMs`, Tempo search result의 span/status 관련 필드 |
 | management plane 문제 | `target_agent_error_spans`, `management_gateway_spans` |
 | application error path | `application_error_spans.trace_count`, trace root service/operation |
 
@@ -1187,10 +1237,10 @@ Kubernetes provider는 raw object를 그대로 넘기지 않고 summary만 보�
 | `cluster` | cluster metadata object다. cluster 갯수가 아니다. |
 | `pods` | Pod summary object의 list다. Pod 갯수는 `len(pods)` 또는 `provider_status.*.counts.pods`다. |
 | `events` | Event summary object의 list다. Event 갯수는 `len(events)` 또는 `provider_status.*.counts.events`다. |
-| `logs` | query별 Loki result list다. 로그 라인은 `logs[].streams[].values[]` 안에 있다. |
+| `logs` | query별 Loki result list다. 로그 라인은 `logs[].streams[].values[]` 안에 있고, line 값은 provider가 마스킹한 문자열이다. |
 | `traces` | Tempo result bucket object다. trace 갯수는 `traces.results.*.trace_count`다. |
 | `metrics.results` | query name을 key로 하는 object다. metric 값은 `samples[].value` 또는 `series[].values[].value`에 있다. |
-| `raw` | provider API response 원본이다. 정규화 필드 밖의 값을 확인할 때만 사용한다. |
+| `raw` | provider API response 원본을 뜻한다. 현재 provider bucket에는 전체 raw payload를 기본으로 싣지 않는다. |
 | `provider_status.*.counts` | Kubernetes provider가 정규화한 목록들의 길이다. cluster 전체 리소스 총량을 보장하는 inventory가 아니다. |
 
 ## 구현 위치
