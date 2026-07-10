@@ -90,6 +90,10 @@ Windows는 `.p12`를 더블클릭해 **현재 사용자 → 개인용** 인증�
 선택하면 로그인 세션 없이 콘솔이 열린다. 인증서를 분실한 사용자는 해당 Cloudflare client
 certificate만 revoke하고 새 키/CSR로 다시 발급한다.
 
+Bruno 3.5.1 CLI/앱은 일부 PKCS#12 암호화 형식을 읽지 못할 수 있으므로 Client Certificates에는
+같은 인증서의 `.pem`과 `.key`를 Certificate 형식으로 등록한다. Domain은
+`dev-k8s.woonyong.org`로 고정하며 개인키와 인증서는 팀원별로 섞어 쓰지 않는다.
+
 `dev.k8s.woonyong.org`처럼 두 단계인 하위 도메인은 Cloudflare Universal SSL의
 `*.woonyong.org` 범위 밖이다. 별도 유료 edge 인증서에 의존하지 않도록 개발 콘솔의 canonical
 hostname은 `dev-k8s.woonyong.org`로 고정한다.

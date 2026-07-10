@@ -94,9 +94,9 @@ def test_local_test_stack_uses_shared_aws_bruno_profile() -> None:
     assert "make local-up" in local_docs
     assert "make local-smoke" in local_docs
     assert "Environment를 `aws-test`로 고른다" in local_docs
-    assert "base_url: https://k8s.woonyong.org/api/" in bruno_aws
+    assert "base_url: https://dev-k8s.woonyong.org/api/" in bruno_aws
     assert "dev_security_bypass:" not in bruno_aws
-    assert "auto_login: true" in bruno_aws
+    assert "auto_login: false" in bruno_aws
 
 
 def test_operator_scripts_require_explicit_runtime_context() -> None:
