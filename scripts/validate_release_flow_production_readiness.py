@@ -85,6 +85,7 @@ def validate_readiness(
     checks.extend(check_smoke_script_contract())
     checks.extend(check_operator_documentation_contract())
     checks.extend(check_worker_topology_contract())
+    checks.extend(check_gitops_poll_observability_contract())
     checks.extend(check_metrics_scrape_contract())
     checks.extend(check_trace_correlation_contract())
     checks.extend(check_safe_pr_patch_contract())
@@ -373,6 +374,34 @@ def check_worker_topology_contract() -> list[ReadinessCheck]:
             if started == required_workers
             else f"missing startup workers: {', '.join(sorted(required_workers - started))}",
         ),
+    ]
+
+
+def check_gitops_poll_observability_contract() -> list[ReadinessCheck]:
+    repository_path = Path("src/domains/gitops/repository.py")
+    poller_path = Path("src/services/gitops/github-poll-worker/poller.py")
+    if not repository_path.is_file() or not poller_path.is_file():
+        return [
+            ReadinessCheck(
+                "gitops.poll_status_recording",
+                False,
+                "GitOps repository or GitHub poller source is missing",
+            )
+        ]
+    repository = repository_path.read_text(encoding="utf-8")
+    poller = poller_path.read_text(encoding="utf-8")
+    return [
+        ReadinessCheck(
+            "gitops.poll_status_recording",
+            "record_watch_poll_result" in repository
+            and "poll_status" in repository
+            and "poll_error_kind" in repository
+            and "last_polled_at" in repository
+            and "record_poll_result" in poller
+            and "github_poll_target_unavailable" in poller
+            and "target_errors" in poller,
+            "GitHub poll success/failure is recorded per watch target",
+        )
     ]
 
 
@@ -942,6 +971,14 @@ def check_deploy_script_contract() -> list[ReadinessCheck]:
             'settings.get("rollback_policy") != "safe_pr"' in source
             and "settings.rollback_policy must be safe_pr" in source,
             "deploy script requires Safe PR rollback policy for gated production starts",
+        ),
+        ReadinessCheck(
+            "script.deploy.gate_input_guard",
+            "REQUIRED_GATE_EVIDENCE_FIELDS" in source
+            and "validate_deploy_gate_inputs" in source
+            and "release-flow deploy requires gated evidence inputs" in source
+            and "for production deploy evidence" in source,
+            "deploy script requires live gate evidence inputs before API calls",
         ),
         ReadinessCheck(
             "script.deploy.matches_gate_evidence",

@@ -33,6 +33,14 @@ PLACEHOLDER_AUTH_EMAILS = {"release-oncall@example.com"}
 PLACEHOLDER_AUTH_PASSWORDS = {"secret", "password", "changeme", "change-me", "replace-me"}
 FAILED_RUN_STATES = {"cancelled", "canceled", "error", "failed", "failure", "rejected"}
 RELEASE_PLAN_ID_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$")
+REQUIRED_GATE_EVIDENCE_FIELDS = {
+    "change_ticket": "change ticket",
+    "runbook_url": "runbook URL",
+    "image": "production image",
+    "post_deploy_verification_url": "post-deploy verification URL",
+    "safe_pr_workflow_run_id": "Safe PR workflow run id",
+    "safe_pr_url": "Safe PR URL",
+}
 
 
 def parse_args(argv: list[str]) -> argparse.Namespace:
@@ -139,6 +147,29 @@ def validate_deploy_auth(args: argparse.Namespace) -> str | None:
         return "release-flow deploy auth email must be a real operator account"
     if len(password) < 12 or password.lower() in PLACEHOLDER_AUTH_PASSWORDS:
         return "release-flow deploy auth password must be a non-placeholder secret of at least 12 characters"
+    return None
+
+
+def validate_deploy_gate_inputs(args: argparse.Namespace) -> str | None:
+    values = expected_plan_values(args)
+    missing = [label for field, label in REQUIRED_GATE_EVIDENCE_FIELDS.items() if not values.get(field)]
+    if missing:
+        return "release-flow deploy requires gated evidence inputs: " + ", ".join(missing)
+    change_ticket = values["change_ticket"]
+    if change_ticket in PLACEHOLDER_CHANGE_TICKETS:
+        return f"release-flow deploy change ticket must not use placeholder {change_ticket}"
+    for field in ("runbook_url", "post_deploy_verification_url", "safe_pr_url"):
+        try:
+            validate_live_https_url(field, values[field], context="for production deploy evidence")
+        except ValueError as exc:
+            return str(exc)
+    image = values["image"]
+    if image in PLACEHOLDER_IMAGES:
+        return f"release-flow deploy image must not use production placeholder value {image}"
+    if image.endswith(":latest"):
+        return "release-flow deploy image must not use mutable latest tag"
+    if ":" not in image.rsplit("/", 1)[-1] and "@" not in image:
+        return "release-flow deploy image must include an immutable tag or digest"
     return None
 
 
@@ -314,6 +345,11 @@ def main(argv: list[str]) -> int:
     if auth_error:
         write_reports(args, ok=False, api_base_url=api_base_url, results=results, error=auth_error)
         print(auth_error, file=sys.stderr)
+        return 2
+    gate_input_error = validate_deploy_gate_inputs(args)
+    if gate_input_error:
+        write_reports(args, ok=False, api_base_url=api_base_url, results=results, error=gate_input_error)
+        print(gate_input_error, file=sys.stderr)
         return 2
     client = ApiClient(
         api_base_url,
