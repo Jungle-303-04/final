@@ -632,6 +632,11 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     parser.add_argument("--timeout", type=float, default=float(os.getenv("SMOKE_TIMEOUT_SECONDS", "15")))
     parser.add_argument("--demo-run", action="store_true", help="create a tracked demo release run")
     parser.add_argument(
+        "--report-path",
+        default=os.getenv("RELEASE_FLOW_SMOKE_REPORT_PATH", ""),
+        help="write the smoke JSON result to this path for CI artifacts",
+    )
+    parser.add_argument(
         "--production-preflight",
         action="store_true",
         help=(
@@ -774,12 +779,36 @@ def apply_production_preflight_flags(args: argparse.Namespace) -> None:
         args.change_freeze_run_limit = args.production_preflight_run_limit
 
 
+def smoke_report_payload(ok: bool, api_base_url: str, results: list[SmokeResult]) -> JsonMap:
+    return {
+        "ok": ok,
+        "api_base_url": api_base_url,
+        "checks": [item.__dict__ for item in results],
+    }
+
+
+def write_json_report(path: str, payload: JsonMap) -> None:
+    if not str(path or "").strip():
+        return
+    target = os.path.abspath(path)
+    os.makedirs(os.path.dirname(target), exist_ok=True)
+    with open(target, "w", encoding="utf-8") as report:
+        json.dump(payload, report, ensure_ascii=False, indent=2)
+        report.write("\n")
+
+
 def main(argv: list[str]) -> int:
     args = parse_args(argv)
     apply_production_preflight_flags(args)
     api_base_url = derive_api_base_url(args)
     if not api_base_url or not args.email or not args.password:
-        print("API_BASE_URL or BASE_URL, AUTH_EMAIL, and AUTH_PASSWORD are required", file=sys.stderr)
+        payload = {
+            "ok": False,
+            "api_base_url": api_base_url,
+            "error": "API_BASE_URL or BASE_URL, AUTH_EMAIL, and AUTH_PASSWORD are required",
+        }
+        write_json_report(args.report_path, payload)
+        print(payload["error"], file=sys.stderr)
         return 2
     client = ApiClient(api_base_url, timeout=args.timeout)
     try:
@@ -798,16 +827,14 @@ def main(argv: list[str]) -> int:
             args=args,
         )
     except Exception as exc:
-        print(json.dumps({"ok": False, "error": str(exc)}, ensure_ascii=False, indent=2), file=sys.stderr)
+        payload = {"ok": False, "api_base_url": client.api_base_url, "error": str(exc)}
+        write_json_report(args.report_path, payload)
+        print(json.dumps(payload, ensure_ascii=False, indent=2), file=sys.stderr)
         return 1
     ok = all(item.ok for item in results)
-    print(
-        json.dumps(
-            {"ok": ok, "api_base_url": client.api_base_url, "checks": [item.__dict__ for item in results]},
-            ensure_ascii=False,
-            indent=2,
-        )
-    )
+    payload = smoke_report_payload(ok, client.api_base_url, results)
+    write_json_report(args.report_path, payload)
+    print(json.dumps(payload, ensure_ascii=False, indent=2))
     return 0 if ok else 1
 
 
