@@ -39,6 +39,7 @@ from typing import Any
 JsonMap = dict[str, Any]
 RETRYABLE_HTTP_STATUSES = {429, 502, 503, 504}
 RETRYABLE_METHODS = {"GET", "HEAD", "OPTIONS"}
+TRUTHY_VALUES = {"1", "true", "yes"}
 REDACTED_VALUE = "<redacted>"
 SENSITIVE_ASSIGNMENT_PATTERN = re.compile(
     r"(?P<prefix>(?:\"|')?(?:authorization|bearer|credential|password|passwd|private[_ -]?key|secret|token|api[_ -]?key|apikey|cookie|set[_ -]?cookie)(?:\"|')?\s*[:=]\s*)(?P<quote>\"|')?(?P<value>[^,}\]\s\"']+)(?P=quote)?",
@@ -684,6 +685,17 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
         default=float(os.getenv("RELEASE_FLOW_SMOKE_RETRY_DELAY_SECONDS", "1")),
         help="wait this many seconds between safe smoke request retries",
     )
+    parser.add_argument(
+        "--ci",
+        action="store_true",
+        default=env_flag("RELEASE_FLOW_SMOKE_CI"),
+        help="enable the standard release-flow CI artifact and GitHub Actions integration bundle",
+    )
+    parser.add_argument(
+        "--ci-artifacts-dir",
+        default=os.getenv("RELEASE_FLOW_SMOKE_CI_ARTIFACTS_DIR", "artifacts"),
+        help="write default --ci artifacts under this directory when explicit paths are not supplied",
+    )
     parser.add_argument("--demo-run", action="store_true", help="create a tracked demo release run")
     parser.add_argument(
         "--report-path",
@@ -703,19 +715,19 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     parser.add_argument(
         "--github-step-summary",
         action="store_true",
-        default=os.getenv("RELEASE_FLOW_SMOKE_GITHUB_STEP_SUMMARY", "").strip().lower() in {"1", "true", "yes"},
+        default=env_flag("RELEASE_FLOW_SMOKE_GITHUB_STEP_SUMMARY"),
         help="append the smoke result Markdown to GITHUB_STEP_SUMMARY when running in GitHub Actions",
     )
     parser.add_argument(
         "--github-output",
         action="store_true",
-        default=os.getenv("RELEASE_FLOW_SMOKE_GITHUB_OUTPUT", "").strip().lower() in {"1", "true", "yes"},
+        default=env_flag("RELEASE_FLOW_SMOKE_GITHUB_OUTPUT"),
         help="append machine-readable smoke outputs to GITHUB_OUTPUT for downstream GitHub Actions steps",
     )
     parser.add_argument(
         "--github-annotations",
         action="store_true",
-        default=os.getenv("RELEASE_FLOW_SMOKE_GITHUB_ANNOTATIONS", "").strip().lower() in {"1", "true", "yes"},
+        default=env_flag("RELEASE_FLOW_SMOKE_GITHUB_ANNOTATIONS"),
         help="emit GitHub Actions error annotations for failed smoke checks",
     )
     parser.add_argument(
@@ -842,6 +854,10 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     return parser.parse_args(argv)
 
 
+def env_flag(name: str) -> bool:
+    return os.getenv(name, "").strip().lower() in TRUTHY_VALUES
+
+
 def apply_production_preflight_flags(args: argparse.Namespace) -> None:
     if not args.production_preflight:
         return
@@ -859,6 +875,24 @@ def apply_production_preflight_flags(args: argparse.Namespace) -> None:
         args.verification_run_limit = args.production_preflight_run_limit
         args.policy_override_run_limit = args.production_preflight_run_limit
         args.change_freeze_run_limit = args.production_preflight_run_limit
+
+
+def apply_ci_defaults(args: argparse.Namespace) -> None:
+    if not args.ci:
+        return
+    artifact_dir = str(args.ci_artifacts_dir or "artifacts")
+    if not str(args.report_path or "").strip():
+        args.report_path = os.path.join(artifact_dir, "release-flow-smoke.json")
+    if not str(args.junit_path or "").strip():
+        args.junit_path = os.path.join(artifact_dir, "release-flow-smoke.junit.xml")
+    if not str(args.markdown_path or "").strip():
+        args.markdown_path = os.path.join(artifact_dir, "release-flow-smoke.md")
+    if os.getenv("GITHUB_STEP_SUMMARY"):
+        args.github_step_summary = True
+    if os.getenv("GITHUB_OUTPUT"):
+        args.github_output = True
+    if env_flag("GITHUB_ACTIONS"):
+        args.github_annotations = True
 
 
 def smoke_report_payload(ok: bool, api_base_url: str, results: list[SmokeResult]) -> JsonMap:
@@ -1080,6 +1114,7 @@ def markdown_escape(value: Any) -> str:
 def main(argv: list[str]) -> int:
     args = parse_args(argv)
     apply_production_preflight_flags(args)
+    apply_ci_defaults(args)
     api_base_url = derive_api_base_url(args)
     if not api_base_url or not args.email or not args.password:
         payload = {

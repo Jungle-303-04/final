@@ -460,6 +460,45 @@ def test_smoke_github_annotations_emit_redacted_errors(capsys: Any) -> None:
     assert "raw-password" not in captured.err
 
 
+def test_smoke_ci_defaults_enable_standard_artifacts_and_github_integrations(
+    tmp_path: Path, monkeypatch: Any
+) -> None:
+    smoke = load_smoke_module()
+    monkeypatch.setenv("GITHUB_STEP_SUMMARY", str(tmp_path / "summary.md"))
+    monkeypatch.setenv("GITHUB_OUTPUT", str(tmp_path / "output.txt"))
+    monkeypatch.setenv("GITHUB_ACTIONS", "true")
+    artifact_dir = tmp_path / "release-artifacts"
+    args = smoke.parse_args(["--ci", "--ci-artifacts-dir", str(artifact_dir)])
+
+    smoke.apply_ci_defaults(args)
+
+    assert args.report_path == str(artifact_dir / "release-flow-smoke.json")
+    assert args.junit_path == str(artifact_dir / "release-flow-smoke.junit.xml")
+    assert args.markdown_path == str(artifact_dir / "release-flow-smoke.md")
+    assert args.github_step_summary is True
+    assert args.github_output is True
+    assert args.github_annotations is True
+
+
+def test_smoke_ci_defaults_preserve_explicit_artifact_paths(tmp_path: Path) -> None:
+    smoke = load_smoke_module()
+    explicit_report = tmp_path / "custom.json"
+    args = smoke.parse_args(
+        [
+            "--ci",
+            "--ci-artifacts-dir",
+            str(tmp_path / "release-artifacts"),
+            "--report-path",
+            str(explicit_report),
+        ]
+    )
+
+    smoke.apply_ci_defaults(args)
+
+    assert args.report_path == str(explicit_report)
+    assert args.junit_path == str(tmp_path / "release-artifacts" / "release-flow-smoke.junit.xml")
+
+
 def test_smoke_main_writes_report_when_credentials_are_missing(tmp_path: Path, monkeypatch: Any) -> None:
     smoke = load_smoke_module()
     for name in ("API_BASE_URL", "BASE_URL", "AUTH_EMAIL", "AUTH_PASSWORD"):
