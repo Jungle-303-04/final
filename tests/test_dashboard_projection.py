@@ -222,10 +222,12 @@ def test_timeline_update_preserves_command_and_pr_status_inputs() -> None:
     assert command["status"] == "command_queued"
     assert command["command_id"] == "cmd-1"
     assert command["action_route"] == "command"
+    assert command["incident_logical_key"] is None
     assert pr is not None
     assert pr["status"] == "pr_created"
     assert pr["pr_url"] == "https://github.example/pull/1"
     assert pr["action_route"] == "safe_pr"
+    assert pr["incident_logical_key"] is None
 
 
 class _RecordingConnection:

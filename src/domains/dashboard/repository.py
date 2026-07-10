@@ -810,7 +810,11 @@ def _incident_projection(
     if any(part not in (None, "") for part in parts[1:]):
         logical_key = "|".join(str(part or "unknown") for part in parts)
     else:
-        logical_key = incident_id or correlation_id
+        # approval/dispatch 같은 후속 이벤트는 incident 차원을 싣지 않을 수 있다.
+        # 이때 correlation fallback을 새 값으로 넣으면 upsert가 앞서 투영한 정규화 key를
+        # 덮어써 같은 장애가 여러 건으로 보인다. 최초 incident 이벤트는 차원을 싣는
+        # 계약이며, 구형 무차원 row의 조회 fallback은 incident_logical_key()가 담당한다.
+        logical_key = None
     return {
         "incident_namespace": namespace,
         "incident_resource_kind": resource_kind,

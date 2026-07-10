@@ -798,6 +798,35 @@ def test_stale_warning_event_does_not_open_incident_when_pod_is_healthy() -> Non
     assert detected.affected == []
 
 
+@pytest.mark.parametrize("include_recovered_pod", [False, True])
+def test_recent_probe_event_does_not_reopen_recovered_pod(
+    include_recovered_pod: bool,
+) -> None:
+    """최근 Event라도 대상 Pod가 삭제됐거나 Ready면 현재 장애로 재승격하지 않는다."""
+    pod_name = "api-gateway-old-1"
+    recovered = snapshot(
+        pods=(pod(pod_name),) if include_recovered_pod else (),
+        events=(
+            warning_event(
+                "Unhealthy",
+                "Readiness probe failed: dial tcp 10.1.0.7:8000: connection refused",
+                involved=("Pod", pod_name),
+                count=2,
+            ),
+        ),
+    )
+    recovered["cluster"]["collected_at"] = "2026-07-07T09:06:00+00:00"
+
+    events = run_to_plan(
+        evidence_payload(recovered),
+        correlation_id=f"corr-recovered-probe-{include_recovered_pod}",
+    )
+
+    detected = event_by_subject(events, "incident.detected")
+    assert detected.detected is False
+    assert detected.incident is None
+
+
 def test_multiple_failing_pods_pick_dominant_signal_and_keep_the_rest() -> None:
     """다중 장애 — 우선순위(imagepull > crashloop > oom)가 대표를 정하고 나머지는 보존."""
     mixed = snapshot(
