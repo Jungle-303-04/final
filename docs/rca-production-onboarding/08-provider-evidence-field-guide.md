@@ -380,9 +380,12 @@ RCA 파생 예시는 다음과 같다.
 | `exit_code` | number 또는 null | terminated state일 때 exit code다. |
 | `started_at` | string 또는 null | state payload의 startedAt이다. |
 | `finished_at` | string 또는 null | terminated state의 finishedAt이다. |
+| `last_state` | string 또는 null | Kubernetes `lastState` object의 첫 key다. 예: `terminated`. |
+| `last_state_reason` | string 또는 null | 직전 state payload의 reason이다. 예: `OOMKilled`, `Error`. |
+| `last_exit_code` | number 또는 null | 직전 terminated state의 exit code다. |
 
-주의: 현재 provider는 `lastState`를 별도 필드로 정규화하지 않는다.
-OOMKilled 같은 과거 종료 이유가 현재 `state`에 없으면 event/log/metrics와 함께 보거나 provider 확장이 필요하다.
+주의: 현재 provider는 `lastState`의 reason과 exit code를 작은 필드로 정규화한다.
+OOMKilled 같은 과거 종료 이유가 현재 `state`에 없어도 `last_state_reason`과 `last_exit_code`를 함께 볼 수 있다.
 
 ### `kubernetes.events[]`
 
@@ -908,9 +911,10 @@ detail snapshot인 `current_workload_snapshot` 단수 값으로 보낸다.
 
 단건 detail snapshot은 summary 필드에 더해 `deployment_annotations`,
 `pod_template_annotations`, `managed_fields_managers`,
-`containers[].env_refs`, `containers[].env_from_refs`,
-`containers[].volume_mount_refs`, `replicaset_revisions[].created_at`,
-`replicaset_revisions[].conditions`를 추가로 담는다.
+`scheduling_constraints`, `containers[].env_refs`,
+`containers[].env_from_refs`, `containers[].volume_mount_refs`,
+`replicaset_revisions[].created_at`, `replicaset_revisions[].conditions`를
+추가로 담는다.
 
 | 필드 | 타입 | 의미 |
 | --- | --- | --- |
@@ -951,6 +955,10 @@ detail snapshot인 `current_workload_snapshot` 단수 값으로 보낸다.
 | `change_context.current_workload_snapshot.deployment_annotations` | object | 단건 detail에만 있는 안전한 Deployment metadata annotations다. |
 | `change_context.current_workload_snapshot.pod_template_annotations` | object | 단건 detail에만 있는 안전한 Pod template metadata annotations다. |
 | `change_context.current_workload_snapshot.managed_fields_managers` | list<string> | 단건 detail에만 있는 Deployment managedFields의 manager 이름 목록이다. |
+| `change_context.current_workload_snapshot.scheduling_constraints` | object | 단건 detail에만 있는 Pod 배치 조건 요약이다. 전체 summary에는 담지 않는다. |
+| `change_context.current_workload_snapshot.scheduling_constraints.node_selector` | object | Pod template `nodeSelector`다. 단순 key-value 조건이라 그대로 담는다. |
+| `change_context.current_workload_snapshot.scheduling_constraints.tolerations` | list<object> | Pod template tolerations의 `key`, `operator`, `value`, `effect`, `toleration_seconds` 요약이다. |
+| `change_context.current_workload_snapshot.scheduling_constraints.affinity_summary` | object | affinity 원본 대신 `has_node_affinity`, `has_required_node_affinity`, `has_preferred_node_affinity`, `has_pod_affinity`, `has_pod_anti_affinity` boolean만 담는다. |
 | `change_context.current_workload_snapshot.containers[].env_refs` | list<object> | 단건 detail에만 있는 env ConfigMap/Secret key reference 요약이다. 값 자체는 담지 않는다. |
 | `change_context.current_workload_snapshot.containers[].env_from_refs` | list<object> | 단건 detail에만 있는 envFrom ConfigMap/Secret reference 요약이다. |
 | `change_context.current_workload_snapshot.containers[].volume_mount_refs` | list<object> | 단건 detail에만 있는 ConfigMap/Secret volume reference 요약이다. |
@@ -961,6 +969,11 @@ detail snapshot인 `current_workload_snapshot` 단수 값으로 보낸다.
 `normalize_payload()` 결과 bucket에는 `change_context`만 남긴다.
 전체 조회 summary는 annotations, managedFields, config reference, ReplicaSet condition을 담지 않는다.
 단건 detail은 안전한 Deployment/Pod template annotations만 남긴다.
+Scheduling constraints는 단건 detail에만 담는다. Scheduling 문제는 보통 특정 Deployment가
+Pending이거나 배치 실패 후보일 때 깊게 보는 값이고, 전체 namespace summary에 모든
+Deployment의 affinity 조건을 넣으면 payload가 커지고 원인 후보와 무관한 noise가 늘어난다.
+`node_selector`는 단순 key-value라 그대로 담지만, `tolerations`는 작은 필드만 남기고
+`affinity`는 구조가 깊고 label selector가 길어질 수 있어서 boolean summary만 남긴다.
 전체 summary query의 Service selector 비교 결과는 namespace의 모든 Service를 담는다.
 단건 detail query의 Service selector 비교 결과는 target Deployment와 관련 있는 Service만 담는다.
 관련 기준은 selector가 target pod template labels와 맞는 경우, selector가 실제 target Pod labels와 맞는 경우,
@@ -1024,10 +1037,10 @@ Provider가 이미 보내는 값은 다음과 같다.
 | log line | `logs[].streams[].values[].line` |
 | trace search 결과 | `traces.results.*.traces` |
 | 현재 workload snapshot 목록 | `metadata.change_context.current_workload_snapshots[]` |
-| 현재 image/probe/resources/labels/status/revision summary | `metadata.change_context.current_workload_snapshots[].containers[]`, `deployment_labels`, `pod_template_labels`, `deployment_status`, `pod_statuses`, `replicaset_revisions` |
+| 현재 image/probe/resources/labels/status/PVC refs/revision summary | `metadata.change_context.current_workload_snapshots[].containers[]`, `deployment_labels`, `pod_template_labels`, `persistent_volume_claim_refs`, `deployment_status`, `pod_statuses`, `replicaset_revisions` |
 | Service selector와 Pod labels 매칭 결과 | `metadata.change_context.service_selector_matches[]` |
 | EndpointSlice ready endpoint 요약 | `metadata.change_context.endpoint_slice_ready_endpoints[]` |
-| 특정 Deployment detail의 annotations/manager/config refs/ReplicaSet conditions | `metadata.change_context.current_workload_snapshot.deployment_annotations`, `pod_template_annotations`, `managed_fields_managers`, `containers[].env_refs`, `containers[].env_from_refs`, `containers[].volume_mount_refs`, `replicaset_revisions[].conditions` |
+| 특정 Deployment detail의 annotations/manager/scheduling/config refs/ReplicaSet conditions | `metadata.change_context.current_workload_snapshot.deployment_annotations`, `pod_template_annotations`, `managed_fields_managers`, `scheduling_constraints`, `containers[].env_refs`, `containers[].env_from_refs`, `containers[].volume_mount_refs`, `replicaset_revisions[].conditions` |
 
 RCA가 판단하려면 다음 값은 파생해야 한다.
 
@@ -1102,7 +1115,7 @@ Kubernetes provider는 raw object를 그대로 넘기지 않고 summary만 보�
 | Pod spec `containers[].resources.requests/limits` | scheduling failure, OOM, resource pressure confidence를 높인다. |
 | Pod spec `env`, `envFrom`, `volumes`, `volumeMounts` | config/env/secret missing 후보를 확인한다. |
 | Pod spec `imagePullSecrets`, serviceAccount | private registry/auth 문제를 확인한다. |
-| container `lastState` | 이전 종료 이유가 현재 state에 없을 때 OOMKilled, Error를 확인한다. |
+| container `lastState` raw payload | 현재 summary는 `last_state`, `last_state_reason`, `last_exit_code`만 제공한다. 직전 종료의 전체 message/time이 필요하면 provider 확장이 필요하다. |
 | Deployment template image/env/resources | rollout과 현재 Pod spec의 관계를 확인한다. |
 | ReplicaSet revision annotation/status | 특정 rollout revision에서만 문제가 났는지, 해당 ReplicaSet이 준비 상태인지 확인한다. |
 | Endpoint readiness conditions | endpoint 개수만으로 ready endpoint 여부를 확정하기 어렵다. |

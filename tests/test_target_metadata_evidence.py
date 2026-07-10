@@ -179,6 +179,63 @@ def test_metadata_provider_collects_one_deployment_snapshot(monkeypatch) -> None
                                         },
                                     },
                                 ],
+                                "nodeSelector": {
+                                    "disk": "ssd",
+                                    "workload": "checkout",
+                                },
+                                "tolerations": [
+                                    {
+                                        "key": "dedicated",
+                                        "operator": "Equal",
+                                        "value": "checkout",
+                                        "effect": "NoSchedule",
+                                        "tolerationSeconds": 300,
+                                        "ignoredField": "do-not-include",
+                                    }
+                                ],
+                                "affinity": {
+                                    "nodeAffinity": {
+                                        "requiredDuringSchedulingIgnoredDuringExecution": {
+                                            "nodeSelectorTerms": [
+                                                {
+                                                    "matchExpressions": [
+                                                        {
+                                                            "key": "disk",
+                                                            "operator": "In",
+                                                            "values": ["ssd"],
+                                                        }
+                                                    ]
+                                                }
+                                            ]
+                                        },
+                                        "preferredDuringSchedulingIgnoredDuringExecution": [
+                                            {
+                                                "weight": 50,
+                                                "preference": {
+                                                    "matchExpressions": [
+                                                        {
+                                                            "key": "zone",
+                                                            "operator": "In",
+                                                            "values": ["a"],
+                                                        }
+                                                    ]
+                                                },
+                                            }
+                                        ],
+                                    },
+                                    "podAntiAffinity": {
+                                        "requiredDuringSchedulingIgnoredDuringExecution": [
+                                            {
+                                                "labelSelector": {
+                                                    "matchLabels": {
+                                                        "app": "checkout-api"
+                                                    }
+                                                },
+                                                "topologyKey": "kubernetes.io/hostname",
+                                            }
+                                        ]
+                                    },
+                                },
                                 "containers": [
                                     {
                                         "name": "app",
@@ -646,6 +703,29 @@ def test_metadata_provider_collects_one_deployment_snapshot(monkeypatch) -> None
         "helm",
         "kube-controller-manager",
     ]
+    assert snapshot["scheduling_constraints"] == {
+        "node_selector": {
+            "disk": "ssd",
+            "workload": "checkout",
+        },
+        "tolerations": [
+            {
+                "key": "dedicated",
+                "operator": "Equal",
+                "value": "checkout",
+                "effect": "NoSchedule",
+                "toleration_seconds": 300,
+            }
+        ],
+        "affinity_summary": {
+            "has_node_affinity": True,
+            "has_required_node_affinity": True,
+            "has_preferred_node_affinity": True,
+            "has_pod_affinity": False,
+            "has_pod_anti_affinity": True,
+        },
+    }
+    assert "do-not-include" not in str(snapshot["scheduling_constraints"])
     assert snapshot["deployment_status"] == {
         "observed_generation": 12,
         "desired_replicas": 3,
@@ -1315,6 +1395,7 @@ def test_metadata_provider_collects_namespace_deployment_snapshots(monkeypatch) 
     assert "env_refs" not in snapshot["containers"][0]
     assert "env_from_refs" not in snapshot["containers"][0]
     assert "volume_mount_refs" not in snapshot["containers"][0]
+    assert "scheduling_constraints" not in snapshot
     assert snapshot["replicaset_revisions"] == [
         {
             "name": "shop-api-abc123",
