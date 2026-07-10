@@ -11,9 +11,7 @@ import yaml
 from domains.catalog.install import CatalogHelmInstallPayload
 
 ROOT_DIR = Path(__file__).resolve().parents[1]
-RUNNER_PATH = (
-    ROOT_DIR / "src" / "services" / "target" / "cluster-agent" / "commands" / "helm.py"
-)
+RUNNER_PATH = ROOT_DIR / "src" / "services" / "target" / "cluster-agent" / "commands" / "helm.py"
 
 
 def load_runner_module() -> ModuleType:

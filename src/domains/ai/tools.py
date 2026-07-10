@@ -157,7 +157,9 @@ def _gitops_diff_response(
             },
             "risk_notes": [
                 "이 diff는 승인되면 command.requested를 거쳐 target agent apply로 이어질 수 있습니다.",
-                f"변경 항목은 {len(changes)}건입니다." if changes else "세부 changes가 없거나 아직 투영되지 않았습니다.",
+                f"변경 항목은 {len(changes)}건입니다."
+                if changes
+                else "세부 changes가 없거나 아직 투영되지 않았습니다.",
             ],
         },
         "next_checks": [
@@ -172,7 +174,9 @@ def _gitops_diff_response(
         },
         "caution": {
             "risk_level": risk,
-            "approval_required": bool(approval and str(approval.get("status") or "") == "requested"),
+            "approval_required": bool(
+                approval and str(approval.get("status") or "") == "requested"
+            ),
             "applies_to_cluster": True,
         },
     }
@@ -235,7 +239,9 @@ def _safe_pr_diff_response(
         },
         "caution": {
             "risk_level": risk,
-            "approval_required": bool(patch_payload.get("approval_ref") or patch.get("approval_ref")),
+            "approval_required": bool(
+                patch_payload.get("approval_ref") or patch.get("approval_ref")
+            ),
             "applies_to_cluster": False,
         },
     }
@@ -420,7 +426,11 @@ def _candidate_summary(candidate: dict[str, Any]) -> dict[str, Any]:
 def _recommendation_reason(candidate: dict[str, Any]) -> str:
     risk = candidate.get("risk_level") or "unknown"
     route = candidate.get("route") or "unknown"
-    approval = "승인이 필요합니다" if candidate.get("approval_required") else "승인 없이 진행 가능한 후보입니다"
+    approval = (
+        "승인이 필요합니다"
+        if candidate.get("approval_required")
+        else "승인 없이 진행 가능한 후보입니다"
+    )
     return (
         f"{candidate.get('title') or candidate.get('action_id')} 후보가 현재 recovery plan에서 "
         f"risk_level={risk}, route={route}이며 {approval}."
@@ -666,7 +676,9 @@ async def recommend_recovery_action(
 
     excluded_ids = _string_set(exclude_action_ids)
     excluded_types = _string_set(exclude_action_types)
-    candidates = [dict(candidate) for candidate in plan.get("candidates", []) if isinstance(candidate, dict)]
+    candidates = [
+        dict(candidate) for candidate in plan.get("candidates", []) if isinstance(candidate, dict)
+    ]
     excluded = [
         candidate
         for candidate in candidates
@@ -682,7 +694,11 @@ async def recommend_recovery_action(
     recommendable = [candidate for candidate in available if candidate not in high_risk]
     preferred_id = str(plan.get("recommended_action_id") or "")
     recommended = next(
-        (candidate for candidate in recommendable if str(candidate.get("action_id") or "") == preferred_id),
+        (
+            candidate
+            for candidate in recommendable
+            if str(candidate.get("action_id") or "") == preferred_id
+        ),
         None,
     )
     if recommended is None and recommendable:
@@ -850,7 +866,11 @@ async def explain_diff_risk(
                 GITOPS_DIFF_STEP,
             )
             if isinstance(step_details, dict):
-                raw_diff = step_details.get("diff") if isinstance(step_details.get("diff"), dict) else step_details
+                raw_diff = (
+                    step_details.get("diff")
+                    if isinstance(step_details.get("diff"), dict)
+                    else step_details
+                )
                 diff = dict(raw_diff) if isinstance(raw_diff, dict) else {}
             lookup_source = lookup_source or "workflow_step"
 

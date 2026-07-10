@@ -30,9 +30,7 @@ async def emit_expired_command_completions(
 ) -> int:
     try:
         queue_ttl_seconds = int(env(QUEUE_TTL_SECONDS_ENV, str(QUEUED_COMMAND_TTL_SECONDS)))
-        expired = await db.fail_expired_agent_commands(
-            queue_ttl_seconds=queue_ttl_seconds
-        ) or []
+        expired = await db.fail_expired_agent_commands(queue_ttl_seconds=queue_ttl_seconds) or []
     except Exception:
         # rollout 시 schema lock 같은 일시 DB 경합은 다음 주기에 재시도한다.
         LOGGER.exception("expired_command_sweep_failed")

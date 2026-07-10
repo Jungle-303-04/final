@@ -259,7 +259,13 @@ class ReleaseFlowRepository(DatabaseConnection):
             "safe_pr.created",
         )
         statement = (
-            select(table.c.event_id, table.c.correlation_id, table.c.subject, table.c.payload, table.c.created_at)
+            select(
+                table.c.event_id,
+                table.c.correlation_id,
+                table.c.subject,
+                table.c.payload,
+                table.c.created_at,
+            )
             .where(
                 table.c.subject.in_(subjects),
                 table.c.payload["workspace_id"].astext == workspace_id,

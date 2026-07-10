@@ -263,9 +263,7 @@ class RcaTestScenario(StrictModel):
                     "verification_pending needs availability_reason and verification_work_needed"
                 )
         elif (
-            self.verification_work_needed
-            or self.fixture_requirements
-            or self.detector_work_needed
+            self.verification_work_needed or self.fixture_requirements or self.detector_work_needed
         ):
             raise ValueError("ready scenario cannot declare unavailable-work metadata")
 

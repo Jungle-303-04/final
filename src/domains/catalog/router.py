@@ -92,7 +92,9 @@ def ensure_target_cluster_ready(db: Any, workspace_id: str, cluster_id: str) -> 
     if is_management_registration(registration) or is_management_role(
         cluster_role_from_policy(policy)
     ):
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=management_readonly_detail())
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail=management_readonly_detail()
+        )
 
     agents = db.list_cluster_agent_statuses(workspace_id, cluster_id)
     online_agents = [
@@ -271,9 +273,7 @@ async def install_catalog_item(
         cluster_id=payload.cluster_id,
         payload=command_payload,
     )
-    inserted = db.queue_agent_command(
-        str(plan["correlation_id"]), plan, CommandStatus.QUEUED
-    )
+    inserted = db.queue_agent_command(str(plan["correlation_id"]), plan, CommandStatus.QUEUED)
     command_status = CommandStatus.QUEUED
     correlation_id = str(plan["correlation_id"])
     if not inserted:

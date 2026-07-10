@@ -83,9 +83,7 @@ class StubDb:
             {"role": "assistant", "content": "answer", "created_at": "2026-07-04T00:00:01"},
         ]
 
-    async def get_recovery_plan(
-        self, plan_id: str, workspace_id: str
-    ) -> dict[str, Any] | None:
+    async def get_recovery_plan(self, plan_id: str, workspace_id: str) -> dict[str, Any] | None:
         self.recovery_plan_query = ("plan", plan_id, workspace_id)
         return self._recovery_plan_record()
 
@@ -110,7 +108,9 @@ class StubDb:
             },
         }
 
-    async def get_workflow_step_details(self, workflow_run_id: str, name: str) -> dict[str, Any] | None:
+    async def get_workflow_step_details(
+        self, workflow_run_id: str, name: str
+    ) -> dict[str, Any] | None:
         self.workflow_step_query = (workflow_run_id, name)
         return self._gitops_diff()
 
