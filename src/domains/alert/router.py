@@ -18,10 +18,13 @@ from packages.contracts.gateway.responses import (
 )
 from packages.contracts.identity import DEFAULT_WORKSPACE_ID
 from packages.runtime.dependencies import get_db
+from packages.security.outbound_url import UnsafeOutboundUrlError, validate_outbound_url_syntax
 
 router = APIRouter()
 NOT_FOUND_CODE = 404
 CHANNEL_NOT_FOUND = "alert channel not found"
+UNSAFE_WEBHOOK_URL_CODE = "unsafe_webhook_url"
+UNSAFE_WEBHOOK_URL_DETAIL = "안전하지 않은 웹훅 URL입니다."
 
 
 @router.get(gateway_routes.ALERT_CHANNELS_PATH, response_model=AlertChannelListResponse)
@@ -43,6 +46,13 @@ async def upsert_alert_channel(
     db: Any = Depends(get_db),
 ) -> AlertChannelResponse:
     workspace_id = getattr(current, "workspace_id", DEFAULT_WORKSPACE_ID)
+    try:
+        validate_outbound_url_syntax(payload.url)
+    except UnsafeOutboundUrlError as exc:
+        raise HTTPException(
+            status_code=422,
+            detail={"code": UNSAFE_WEBHOOK_URL_CODE, "detail": UNSAFE_WEBHOOK_URL_DETAIL},
+        ) from exc
     try:
         saved = db.upsert_alert_channel(
             {
@@ -88,20 +98,25 @@ async def test_alert_channel(
             status_code=result.status_code,
             channel=channel,
         )
-    code = "timeout" if result.error == "timeout" else "delivery_failed"
+    if result.error == UNSAFE_WEBHOOK_URL_CODE:
+        code = UNSAFE_WEBHOOK_URL_CODE
+        detail = UNSAFE_WEBHOOK_URL_DETAIL
+    else:
+        code = "timeout" if result.error == "timeout" else "delivery_failed"
+        detail = "테스트 알림 전송에 실패했습니다."
     channel = record_channel_test_result(
         db,
         workspace_id,
         payload.channel_id,
         status="failed",
-        detail="테스트 알림 전송에 실패했습니다.",
+        detail=detail,
         status_code=result.status_code,
     )
     return AlertChannelTestResponse(
         valid=False,
         delivered=False,
         code=code,
-        detail="테스트 알림 전송에 실패했습니다.",
+        detail=detail,
         status_code=result.status_code,
         channel=channel,
     )
