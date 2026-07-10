@@ -80,6 +80,7 @@ def test_kubernetes_snapshot_provider_collects_namespace_state(monkeypatch) -> N
                                 {
                                     "name": "checkout-api",
                                     "image": "checkout:v1",
+                                    "imageID": "docker-pullable://checkout@sha256:abc123",
                                     "ready": True,
                                     "restartCount": 2,
                                     "state": {"running": {"startedAt": "2026-07-05T00:00:00Z"}},
@@ -228,6 +229,10 @@ def test_kubernetes_snapshot_provider_collects_namespace_state(monkeypatch) -> N
     assert validated.kubernetes["cluster"]["cluster_id"] == "cluster-1"
     assert validated.kubernetes["cluster"]["namespace"] == "target"
     assert validated.kubernetes["pods"][0]["name"] == "checkout-api-7f5c"
+    assert (
+        validated.kubernetes["pods"][0]["containers"][0]["image_id"]
+        == "docker-pullable://checkout@sha256:abc123"
+    )
     assert validated.kubernetes["pods"][0]["restart_total"] == 2
     assert validated.kubernetes["pods"][0]["cpu_mcores"] == 125.0
     assert validated.kubernetes["pods"][0]["mem_mib"] == 64.0

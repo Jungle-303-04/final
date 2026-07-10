@@ -45,7 +45,7 @@ RCA는 provider가 보내준 evidence만 보고 symptom, root cause candidate, c
 - service
 - endpointSlice
 - deployment/replicaSet status
-- image 일부
+- image와 현재 imageID 일부
 - node 정보
 
 ### MetadataProvider가 현재 추가로 보내는 것
@@ -59,6 +59,7 @@ RCA는 provider가 보내준 evidence만 보고 symptom, root cause candidate, c
   - path / port / timeoutSeconds / periodSeconds / failureThreshold
 - Deployment labels
 - Pod template labels
+- PVC refs
 - resources requests/limits
 - Deployment status and conditions
 - Pod status phase, ready flag, and conditions
@@ -73,10 +74,14 @@ RCA는 provider가 보내준 evidence만 보고 symptom, root cause candidate, c
 ### 추가로 요청해야 할 것
 
 - ConfigMap/Secret object metadata summary
-- pvc refs
 - resource quota
 - 상세 containerStatuses 원본 또는 더 풍부한 요약
 - node pressure / scheduling 관련 detail
+
+참고:
+
+- 현재 image digest는 Kubernetes provider의 `pods[].containers[].image_id`에서 확인할 수 있다.
+- 다만 이전 image나 rollout history는 아직 제공하지 않는다.
 
 주의:
 
@@ -203,6 +208,7 @@ summary snapshot에는 아래 필드만 남긴다.
 - change_context.current_workload_snapshots[].workload.kind/namespace/name
 - change_context.current_workload_snapshots[].deployment_labels
 - change_context.current_workload_snapshots[].pod_template_labels
+- change_context.current_workload_snapshots[].persistent_volume_claim_refs[].volume_name/claim_name
 - change_context.current_workload_snapshots[].deployment_status
 - change_context.current_workload_snapshots[].deployment_status.conditions[]
 - change_context.current_workload_snapshots[].pod_statuses[].name

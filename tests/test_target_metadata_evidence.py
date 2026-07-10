@@ -172,6 +172,12 @@ def test_metadata_provider_collects_one_deployment_snapshot(monkeypatch) -> None
                                             "optional": True,
                                         },
                                     },
+                                    {
+                                        "name": "checkout-data",
+                                        "persistentVolumeClaim": {
+                                            "claimName": "checkout-data-pvc"
+                                        },
+                                    },
                                 ],
                                 "containers": [
                                     {
@@ -629,6 +635,12 @@ def test_metadata_provider_collects_one_deployment_snapshot(monkeypatch) -> None
         "prometheus.io/path": "/metrics",
         "prometheus.io/scrape": "true",
     }
+    assert snapshot["persistent_volume_claim_refs"] == [
+        {
+            "volume_name": "checkout-data",
+            "claim_name": "checkout-data-pvc",
+        }
+    ]
     assert "secret.example.com/name" not in snapshot["pod_template_annotations"]
     assert snapshot["managed_fields_managers"] == [
         "helm",
@@ -1024,6 +1036,12 @@ def test_metadata_provider_collects_namespace_deployment_snapshots(monkeypatch) 
                                                 "configMap": {
                                                     "name": "shop-config",
                                                 },
+                                            },
+                                            {
+                                                "name": "shop-data",
+                                                "persistentVolumeClaim": {
+                                                    "claimName": "shop-data-pvc"
+                                                },
                                             }
                                         ],
                                         "containers": [
@@ -1249,6 +1267,12 @@ def test_metadata_provider_collects_namespace_deployment_snapshots(monkeypatch) 
     }
     assert snapshot["deployment_labels"] == {"app": "shop-api"}
     assert snapshot["pod_template_labels"] == {"app": "shop-api"}
+    assert snapshot["persistent_volume_claim_refs"] == [
+        {
+            "volume_name": "shop-data",
+            "claim_name": "shop-data-pvc",
+        }
+    ]
     assert "deployment_annotations" not in snapshot
     assert "pod_template_annotations" not in snapshot
     assert "managed_fields_managers" not in snapshot

@@ -388,6 +388,7 @@ def container_summary(item: JsonObject) -> JsonObject:
     return {
         "name": item.get("name"),
         "image": item.get("image"),
+        "image_id": item.get("imageID"),
         "ready": item.get("ready"),
         "restart_count": item.get("restartCount", 0),
         "state": state_name,
