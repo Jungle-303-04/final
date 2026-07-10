@@ -52,6 +52,7 @@ def validate_readiness(*, require_runtime_config: bool = False) -> list[Readines
     checks: list[ReadinessCheck] = []
     checks.extend(check_required_files())
     checks.extend(check_smoke_workflow_contract())
+    checks.extend(check_smoke_script_contract())
     checks.extend(check_production_gate_contract())
     checks.extend(check_gate_contract_workflow())
     checks.extend(check_runtime_config(require_runtime_config=require_runtime_config))
@@ -105,6 +106,24 @@ def check_smoke_workflow_contract() -> list[ReadinessCheck]:
             and "Missing release-flow auth password" in run,
             "runtime config fails before API calls",
         ),
+    ]
+
+
+def check_smoke_script_contract() -> list[ReadinessCheck]:
+    path = Path("scripts/release_flow_smoke.py")
+    if not path.is_file():
+        return [ReadinessCheck("script.smoke", False, "release_flow_smoke.py is missing")]
+    source = path.read_text(encoding="utf-8")
+    return [
+        ReadinessCheck(
+            "script.smoke.live_placeholder_guard",
+            "validate_live_preflight_inputs" in source
+            and "LIVE_PREFLIGHT_PLACEHOLDERS" in source
+            and "CHG-PREFLIGHT" in source
+            and "https://example.com/runbooks/release-flow" in source
+            and "release-oncall@example.com" in source,
+            "direct live preflight placeholder values are rejected",
+        )
     ]
 
 

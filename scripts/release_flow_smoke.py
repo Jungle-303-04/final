@@ -41,6 +41,12 @@ RETRYABLE_HTTP_STATUSES = {429, 502, 503, 504}
 RETRYABLE_METHODS = {"GET", "HEAD", "OPTIONS"}
 TRUTHY_VALUES = {"1", "true", "yes"}
 REDACTED_VALUE = "<redacted>"
+LIVE_PREFLIGHT_PLACEHOLDERS = {
+    "live_change_ticket": {"CHG-PREFLIGHT"},
+    "live_runbook_url": {"https://example.com/runbooks/release-flow"},
+    "live_release_owner": {"release-operator"},
+    "live_oncall_contact": {"release-oncall@example.com"},
+}
 SENSITIVE_ASSIGNMENT_PATTERN = re.compile(
     r"(?P<prefix>(?:\"|')?(?:authorization|bearer|credential|password|passwd|private[_ -]?key|secret|token|api[_ -]?key|apikey|cookie|set[_ -]?cookie)(?:\"|')?\s*[:=]\s*)(?P<quote>\"|')?(?P<value>[^,}\]\s\"']+)(?P=quote)?",
     re.IGNORECASE,
@@ -183,6 +189,7 @@ def build_demo_plan(applications: list[JsonMap]) -> JsonMap:
 
 
 def build_live_preflight_plan(applications: list[JsonMap], args: argparse.Namespace) -> JsonMap:
+    validate_live_preflight_inputs(args)
     plan = build_demo_plan(applications[:1])
     now_label = "release-flow-live-preflight"
     window_start, window_end = live_preflight_window(args)
@@ -242,6 +249,29 @@ def live_preflight_window(args: argparse.Namespace) -> tuple[str, str]:
 
 def live_preflight_timestamp() -> str:
     return datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+
+
+def validate_live_preflight_inputs(args: argparse.Namespace) -> None:
+    if not getattr(args, "live_preflight", False):
+        return
+    environment = str(getattr(args, "live_environment", "") or "").strip().lower()
+    if environment != "production":
+        return
+    required_values = {
+        "live_change_ticket": getattr(args, "live_change_ticket", ""),
+        "live_runbook_url": getattr(args, "live_runbook_url", ""),
+    }
+    for name, value in required_values.items():
+        if not str(value or "").strip():
+            raise ValueError(f"{name} is required for production live preflight")
+    if not str(getattr(args, "live_release_owner", "") or "").strip() and not str(
+        getattr(args, "live_oncall_contact", "") or ""
+    ).strip():
+        raise ValueError("live_release_owner or live_oncall_contact is required for production live preflight")
+    for name, placeholders in LIVE_PREFLIGHT_PLACEHOLDERS.items():
+        value = str(getattr(args, name, "") or "").strip()
+        if value in placeholders:
+            raise ValueError(f"{name} must not use production placeholder value {value}")
 
 
 def demo_step(app: JsonMap, index: int, selected: list[JsonMap]) -> JsonMap:
@@ -1148,6 +1178,40 @@ def main(argv: list[str]) -> int:
         emit_github_annotations(args.github_annotations, results=[], error=str(payload["error"]))
         print(payload["error"], file=sys.stderr)
         return 2
+    try:
+        validate_live_preflight_inputs(args)
+    except ValueError as exc:
+        payload = {
+            "ok": False,
+            "api_base_url": api_base_url,
+            "error": redact_sensitive_text(str(exc)),
+        }
+        write_json_report(args.report_path, payload)
+        write_junit_report(args.junit_path, [], error=str(payload["error"]))
+        write_markdown_report(
+            args.markdown_path,
+            ok=False,
+            api_base_url=api_base_url,
+            results=[],
+            error=str(payload["error"]),
+        )
+        append_github_step_summary(
+            args.github_step_summary,
+            ok=False,
+            api_base_url=api_base_url,
+            results=[],
+            error=str(payload["error"]),
+        )
+        append_github_output(
+            args.github_output,
+            ok=False,
+            api_base_url=api_base_url,
+            results=[],
+            error=str(payload["error"]),
+        )
+        emit_github_annotations(args.github_annotations, results=[], error=str(payload["error"]))
+        print(payload["error"], file=sys.stderr)
+        return 1
     client = ApiClient(
         api_base_url,
         timeout=args.timeout,

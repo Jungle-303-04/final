@@ -366,6 +366,10 @@ jobs:
               echo "::error title=Invalid live_change_ticket::live_change_ticket is required when live_preflight is enabled."
               exit 1
             fi
+            if [ "$LIVE_PREFLIGHT_ENVIRONMENT" = "production" ] && [ "$LIVE_PREFLIGHT_CHANGE_TICKET" = "CHG-PREFLIGHT" ]; then
+              echo "::error title=Invalid live_change_ticket::live_change_ticket must not use CHG-PREFLIGHT for production live_preflight."
+              exit 1
+            fi
             if [ "$LIVE_PREFLIGHT_ENVIRONMENT" = "production" ]; then
               if [ -z "$LIVE_PREFLIGHT_RUNBOOK_URL" ]; then
                 echo "::error title=Invalid live_runbook_url::live_runbook_url is required for production live_preflight."
