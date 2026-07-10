@@ -451,29 +451,30 @@ async def dispatch_release_plan(
     require_plan_application_manage_access(db, current, workspace_id, body["steps"])
     require_no_active_release_run(db, workspace_id, body)
     preview = build_release_plan_preview(body)
+    dispatch_plan = plan_with_safe_pr_evidence(body, preview, wave, workspace_id=workspace_id, db=db)
     blockers = list(preview.get("blockers", []))
     blockers.extend(
         release_dispatch_context_blockers(
-            body,
-            steps_for_wave(body, preview, wave),
+            dispatch_plan,
+            steps_for_wave(dispatch_plan, preview, wave),
             db,
             workspace_id,
         )
     )
     blockers.extend(
-        release_execution_blockers(body, preview, wave, workspace_id=workspace_id, db=db)
+        release_execution_blockers(dispatch_plan, preview, wave, workspace_id=workspace_id, db=db)
     )
-    blockers.extend(release_production_approval_evidence_blockers(body, preview, wave))
-    blockers.extend(release_production_change_ticket_blockers(body, preview, wave))
-    blockers.extend(release_production_window_blockers(body, preview, wave))
-    blockers.extend(release_production_freeze_blockers(body, preview, wave))
-    blockers.extend(release_production_runbook_blockers(body, preview, wave))
-    blockers.extend(release_production_owner_blockers(body, preview, wave))
-    blockers.extend(release_production_verification_blockers(body, preview, wave))
-    blockers.extend(release_production_abort_criteria_blockers(body, preview, wave))
-    blockers.extend(release_diagnostics_blockers(body))
-    blockers.extend(release_rollback_policy_blockers(body))
-    blockers.extend(release_live_alert_channel_blockers(body, db, workspace_id))
+    blockers.extend(release_production_approval_evidence_blockers(dispatch_plan, preview, wave))
+    blockers.extend(release_production_change_ticket_blockers(dispatch_plan, preview, wave))
+    blockers.extend(release_production_window_blockers(dispatch_plan, preview, wave))
+    blockers.extend(release_production_freeze_blockers(dispatch_plan, preview, wave))
+    blockers.extend(release_production_runbook_blockers(dispatch_plan, preview, wave))
+    blockers.extend(release_production_owner_blockers(dispatch_plan, preview, wave))
+    blockers.extend(release_production_verification_blockers(dispatch_plan, preview, wave))
+    blockers.extend(release_production_abort_criteria_blockers(dispatch_plan, preview, wave))
+    blockers.extend(release_diagnostics_blockers(dispatch_plan))
+    blockers.extend(release_rollback_policy_blockers(dispatch_plan))
+    blockers.extend(release_live_alert_channel_blockers(dispatch_plan, db, workspace_id))
     if blockers:
         raise HTTPException(
             status_code=HTTP_CONFLICT,
@@ -484,7 +485,7 @@ async def dispatch_release_plan(
         workspace_id,
         current,
         events,
-        body,
+        dispatch_plan,
         preview,
         wave,
     )
@@ -509,29 +510,30 @@ async def start_release_plan(
     require_no_active_release_run(db, workspace_id, body)
     preview = build_release_plan_preview(body)
     first_wave = first_preview_wave(preview)
+    dispatch_plan = plan_with_safe_pr_evidence(body, preview, first_wave, workspace_id=workspace_id, db=db)
     blockers = list(preview.get("blockers", []))
     blockers.extend(
         release_dispatch_context_blockers(
-            body,
-            steps_for_wave(body, preview, first_wave),
+            dispatch_plan,
+            steps_for_wave(dispatch_plan, preview, first_wave),
             db,
             workspace_id,
         )
     )
     blockers.extend(
-        release_execution_blockers(body, preview, first_wave, workspace_id=workspace_id, db=db)
+        release_execution_blockers(dispatch_plan, preview, first_wave, workspace_id=workspace_id, db=db)
     )
-    blockers.extend(release_production_approval_evidence_blockers(body, preview, first_wave))
-    blockers.extend(release_production_change_ticket_blockers(body, preview, first_wave))
-    blockers.extend(release_production_window_blockers(body, preview, first_wave))
-    blockers.extend(release_production_freeze_blockers(body, preview, first_wave))
-    blockers.extend(release_production_runbook_blockers(body, preview, first_wave))
-    blockers.extend(release_production_owner_blockers(body, preview, first_wave))
-    blockers.extend(release_production_verification_blockers(body, preview, first_wave))
-    blockers.extend(release_production_abort_criteria_blockers(body, preview, first_wave))
-    blockers.extend(release_diagnostics_blockers(body))
-    blockers.extend(release_rollback_policy_blockers(body))
-    blockers.extend(release_live_alert_channel_blockers(body, db, workspace_id))
+    blockers.extend(release_production_approval_evidence_blockers(dispatch_plan, preview, first_wave))
+    blockers.extend(release_production_change_ticket_blockers(dispatch_plan, preview, first_wave))
+    blockers.extend(release_production_window_blockers(dispatch_plan, preview, first_wave))
+    blockers.extend(release_production_freeze_blockers(dispatch_plan, preview, first_wave))
+    blockers.extend(release_production_runbook_blockers(dispatch_plan, preview, first_wave))
+    blockers.extend(release_production_owner_blockers(dispatch_plan, preview, first_wave))
+    blockers.extend(release_production_verification_blockers(dispatch_plan, preview, first_wave))
+    blockers.extend(release_production_abort_criteria_blockers(dispatch_plan, preview, first_wave))
+    blockers.extend(release_diagnostics_blockers(dispatch_plan))
+    blockers.extend(release_rollback_policy_blockers(dispatch_plan))
+    blockers.extend(release_live_alert_channel_blockers(dispatch_plan, db, workspace_id))
     if blockers:
         raise HTTPException(
             status_code=HTTP_CONFLICT,
@@ -542,7 +544,7 @@ async def start_release_plan(
         workspace_id,
         current,
         events,
-        body,
+        dispatch_plan,
         preview,
         first_wave,
     )
@@ -1046,26 +1048,27 @@ async def dispatch_wave_steps(
     *,
     run_id: str | None = None,
 ) -> list[dict[str, Any]]:
-    selected_steps = steps_for_wave(plan, preview, wave)
+    dispatch_plan = plan_with_safe_pr_evidence(plan, preview, wave, workspace_id=workspace_id, db=db)
+    selected_steps = steps_for_wave(dispatch_plan, preview, wave)
     if not selected_steps:
         raise HTTPException(
             status_code=HTTP_CONFLICT,
             detail={"message": RELEASE_PLAN_BLOCKED, "blockers": [f"wave {wave} has no steps"]},
         )
 
-    blockers = release_dispatch_context_blockers(plan, selected_steps, db, workspace_id)
-    blockers.extend(release_execution_blockers(plan, preview, wave, workspace_id=workspace_id, db=db))
-    blockers.extend(release_production_approval_evidence_blockers(plan, preview, wave))
-    blockers.extend(release_production_change_ticket_blockers(plan, preview, wave))
-    blockers.extend(release_production_window_blockers(plan, preview, wave))
-    blockers.extend(release_production_freeze_blockers(plan, preview, wave))
-    blockers.extend(release_production_runbook_blockers(plan, preview, wave))
-    blockers.extend(release_production_owner_blockers(plan, preview, wave))
-    blockers.extend(release_production_verification_blockers(plan, preview, wave))
-    blockers.extend(release_production_abort_criteria_blockers(plan, preview, wave))
-    blockers.extend(release_diagnostics_blockers(plan))
-    blockers.extend(release_rollback_policy_blockers(plan))
-    blockers.extend(release_live_alert_channel_blockers(plan, db, workspace_id))
+    blockers = release_dispatch_context_blockers(dispatch_plan, selected_steps, db, workspace_id)
+    blockers.extend(release_execution_blockers(dispatch_plan, preview, wave, workspace_id=workspace_id, db=db))
+    blockers.extend(release_production_approval_evidence_blockers(dispatch_plan, preview, wave))
+    blockers.extend(release_production_change_ticket_blockers(dispatch_plan, preview, wave))
+    blockers.extend(release_production_window_blockers(dispatch_plan, preview, wave))
+    blockers.extend(release_production_freeze_blockers(dispatch_plan, preview, wave))
+    blockers.extend(release_production_runbook_blockers(dispatch_plan, preview, wave))
+    blockers.extend(release_production_owner_blockers(dispatch_plan, preview, wave))
+    blockers.extend(release_production_verification_blockers(dispatch_plan, preview, wave))
+    blockers.extend(release_production_abort_criteria_blockers(dispatch_plan, preview, wave))
+    blockers.extend(release_diagnostics_blockers(dispatch_plan))
+    blockers.extend(release_rollback_policy_blockers(dispatch_plan))
+    blockers.extend(release_live_alert_channel_blockers(dispatch_plan, db, workspace_id))
     if blockers:
         raise HTTPException(
             status_code=HTTP_CONFLICT,
@@ -1073,12 +1076,12 @@ async def dispatch_wave_steps(
         )
 
     accepted_events: list[dict[str, Any]] = []
-    profile = execution_profile(plan)
-    release_guard = release_dispatch_guard_snapshot(plan, db, workspace_id, preview, wave)
+    profile = execution_profile(dispatch_plan)
+    release_guard = release_dispatch_guard_snapshot(dispatch_plan, db, workspace_id, preview, wave)
     for step in selected_steps:
         application_id = str(step["application_id"])
         application = db.get_application(workspace_id, application_id) or {}
-        request = dispatch_request_for_step(plan, step, application, workspace_id)
+        request = dispatch_request_for_step(dispatch_plan, step, application, workspace_id)
         require_cluster_access(
             db,
             current,

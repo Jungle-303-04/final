@@ -718,7 +718,7 @@ function PolicyEditor({ plan, setPolicy }: { plan: ReleasePlan; setPolicy: (patc
             )}
           </>
         )}
-        <Field label="Safe PR URL"><input className="input" value={getString(settings.safe_pr_url)} onChange={e => setPolicy({ safe_pr_url: e.target.value, safe_pr_ready: Boolean(e.target.value.trim()) })} /></Field>
+        <Field label="Safe PR URL"><input className="input" value={getString(settings.safe_pr_url)} onChange={e => setPolicy({ safe_pr_url: e.target.value })} /></Field>
         <label className="release-flow__check">
           <input type="checkbox" checked={Boolean(settings.require_diagnostics_pass)} onChange={e => setPolicy({ require_diagnostics_pass: e.target.checked })} />
           Require diagnostics pass before dispatch
@@ -745,10 +745,6 @@ function PolicyEditor({ plan, setPolicy }: { plan: ReleasePlan; setPolicy: (patc
             </Field>
           </>
         )}
-        <label className="release-flow__check">
-          <input type="checkbox" checked={Boolean(settings.safe_pr_ready)} onChange={e => setPolicy({ safe_pr_ready: e.target.checked })} />
-          Safe PR ready for this plan
-        </label>
       </div>
     </Card>
   );
@@ -795,14 +791,10 @@ function StepEditor({
         <SelectField label="Strategy" value={strategy} options={STRATEGIES} onChange={value => setStepConfig(selectedIndex, { strategy: value }, setPlan)} />
         <SelectField label="Approval gate" value={getString(config.approval_gate, 'inherit')} options={STEP_GATES} onChange={value => setStepConfig(selectedIndex, { approval_gate: value }, setPlan)} />
         <Field label="Change ticket"><input className="input" value={getString(config.change_ticket)} onChange={e => setStepConfig(selectedIndex, { change_ticket: e.target.value }, setPlan)} /></Field>
-        <Field label="Safe PR URL"><input className="input" value={getString(config.safe_pr_url)} onChange={e => setStepConfig(selectedIndex, { safe_pr_url: e.target.value, safe_pr_ready: Boolean(e.target.value.trim()) }, setPlan)} /></Field>
+        <Field label="Safe PR URL"><input className="input" value={getString(config.safe_pr_url)} onChange={e => setStepConfig(selectedIndex, { safe_pr_url: e.target.value }, setPlan)} /></Field>
         <label className="release-flow__check">
           <input type="checkbox" checked={Boolean(config.approval_granted)} onChange={e => setStepConfig(selectedIndex, { approval_granted: e.target.checked }, setPlan)} />
           Approval granted for this step
-        </label>
-        <label className="release-flow__check">
-          <input type="checkbox" checked={Boolean(config.safe_pr_ready)} onChange={e => setStepConfig(selectedIndex, { safe_pr_ready: e.target.checked }, setPlan)} />
-          Safe PR ready for this step
         </label>
         <Field label="Canary percent"><input className="input" type="number" min={1} max={99} value={getNumber(config.canary_percent, strategy === 'canary' ? 20 : 0)} onChange={e => setStepConfig(selectedIndex, { canary_percent: Number(e.target.value) }, setPlan)} /></Field>
         <Field label="Service name"><input className="input" value={getString(config.service_name)} onChange={e => setStepConfig(selectedIndex, { service_name: e.target.value }, setPlan)} /></Field>

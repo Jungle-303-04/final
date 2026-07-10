@@ -216,6 +216,14 @@ def check_smoke_script_contract() -> list[ReadinessCheck]:
             '"safe_pr_ready"] = True' not in source,
             "direct live preflight does not mark Safe PR ready without server-side evidence",
         ),
+        ReadinessCheck(
+            "script.smoke.ci_github_summary",
+            "def apply_ci_defaults" in source
+            and 'if os.getenv("GITHUB_STEP_SUMMARY"):' in source
+            and "args.github_step_summary = True" in source
+            and "append_github_step_summary" in source,
+            "CI smoke reports are appended to the GitHub Actions job summary when available",
+        ),
     ]
 
 
@@ -244,6 +252,7 @@ def check_operator_documentation_contract() -> list[ReadinessCheck]:
         "release-flow-production-gate.yml",
         "api_smoke_preflight",
         "release_flow_smoke.py --production-preflight --ci",
+        "release-flow-smoke.md",
         "live_safe_pr_workflow_run_id",
         "live_safe_pr_url",
     }
@@ -495,6 +504,29 @@ def check_safe_pr_patch_contract() -> list[ReadinessCheck]:
             ),
             "release readiness explains missing or mismatched Safe PR evidence",
         ),
+        ReadinessCheck(
+            "safe_pr.dispatch_uses_server_evidence",
+            source_contains(
+                Path("src/domains/release_flow/router.py"),
+                "dispatch_plan = plan_with_safe_pr_evidence",
+                "release_dispatch_context_blockers(dispatch_plan",
+                "release_execution_blockers(dispatch_plan",
+                "release_dispatch_guard_snapshot(dispatch_plan",
+                "dispatch_request_for_step(dispatch_plan",
+            ),
+            "live dispatch validates Safe PR readiness from server-side safe_pr.created evidence",
+        ),
+        ReadinessCheck(
+            "safe_pr.execution_requires_created_evidence",
+            source_contains(
+                Path("src/domains/release_flow/execution.py"),
+                "def safe_pr_evidence_ready",
+                "safe_pr_evidence",
+                '"workflow_run_id", "pr_url", "created_at"',
+                "configured_url == evidence_url",
+            ),
+            "live execution blockers require server-injected Safe PR evidence, not a user-supplied URL",
+        ),
     ]
 
 
@@ -558,6 +590,7 @@ def check_production_readiness_workflow_contract() -> list[ReadinessCheck]:
             "api_smoke_preflight" in inputs
             and "API_SMOKE_PREFLIGHT" in env
             and "scripts/release_flow_smoke.py" in run
+            and "--ci" in run
             and "--production-preflight" in run
             and "--ci-artifacts-dir artifacts" in run
             and "API_BASE_URL=\"$RELEASE_FLOW_API_BASE_URL\"" in run
