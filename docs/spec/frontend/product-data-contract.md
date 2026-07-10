@@ -1,6 +1,6 @@
 ---
 title: Frontend-led Product Data Consumer Contract
-status: planned-contract
+status: authoritative-contract
 owner: frontend-platform
 version: product-data/v1
 last_verified: 2026-07-11
@@ -10,15 +10,15 @@ last_verified: 2026-07-11
 
 ## 0. 권한, 범위, 비목표
 
-이 문서는 Applications, GitOps, Tree/Insights, Timeline, Metrics, Topology, GitOps Operations 화면이 소비할 canonical 데이터와 사용자 경험의 구현 예정 계약이다. 현재 repo의 실제 코드와 통과한 테스트가 source of truth이며, 아래 DTO와 schema가 현 코드에 없으면 구현 완료가 아니라 후속 작업 기준으로만 읽는다. 백엔드는 이 소비 의미를 OpenAPI와 runtime schema로 구현하고, 프론트는 `[OPENAPI_ACCEPTED]` 이후 live adapter를 확정한다.
+이 문서는 Applications, GitOps, Tree/Insights, Timeline, Metrics, Topology, GitOps Operations 화면이 소비할 canonical 데이터와 사용자 경험의 authoritative frontend contract다. 현재 구현이 이 계약을 충족하지 않으면 구현 gap이며, 기존 backend DTO나 미완성 frontend 코드가 이 의미를 축소하거나 덮어쓸 수 없다. 백엔드는 이 소비 의미를 OpenAPI와 runtime schema로 구현하고, 프론트는 `[OPENAPI_ACCEPTED]` 이후 live adapter를 확정한다.
 
 구현 우선순위:
 
-1. 현재 repo의 실제 코드와 통과한 executable test.
-2. 이 문서의 사용자 의미와 상태 전이.
-3. `topology-engine.md`의 identity, relation, metric, stream 불변조건.
-4. 승인된 OpenAPI와 생성된 TypeScript/runtime schema.
-5. 동일 계약 suite를 통과한 live/synthetic adapter와 제품 UI 구현.
+1. 이 문서의 사용자 의미와 상태 전이.
+2. `topology-engine.md`의 identity, relation, metric, stream 불변조건.
+3. 승인된 OpenAPI와 생성된 TypeScript/runtime schema.
+4. 동일 계약 suite를 통과한 live/synthetic adapter와 executable test.
+5. 제품 UI 구현. 상위 계약과 충돌하는 기존 코드는 수정 대상이다.
 
 비목표:
 
@@ -221,7 +221,6 @@ type CapabilityId =
   | "resume"
   | "terminate"
   | "rollback"
-  | "approval_decide"
   | "history"
   | "approval.decide"
   | "prune"
@@ -691,11 +690,12 @@ type ApplicationInstanceDetail = ApplicationInstanceSummary & {
 
 type ApplicationDetail = {
   application: ApplicationSummary
-  instances: CursorPage<ApplicationInstanceSummary>
 }
 ```
 
 Aggregate status는 worst color 하나만 반환하지 않는다. backend가 canonical aggregate level과 reason/count를 함께 반환하고, frontend는 instance count/partial coverage를 표시한다.
+
+Application detail root는 instance page를 내장하지 않는다. 화면은 `getApplication(applicationId)`와 `listInstances(ApplicationInstanceListQuery.applicationIds=[applicationId])`를 독립적으로 요청한다. 이렇게 해야 instance filter/sort/cursor가 id-only detail request에 암묵적으로 숨지 않고, 후속 page도 같은 query contract로 이어진다.
 
 Application 목록의 facet은 authorized instance universe를 먼저 제한한 뒤 Application을 group한다. `ApplicationSummary`의 모든 count와 aggregate, repositoryIds, latestOperation은 그 필터 결과 universe에 대해서만 계산한다. 필터에 맞는 instance가 0개인 Application은 반환하지 않는다. 전체 authorized instance 수가 필요하면 filter 없는 별도 query를 사용하며 한 row에 filtered count와 unfiltered count를 혼합하지 않는다.
 
@@ -1037,15 +1037,22 @@ type GraphStreamStart =
   | { mode: "poll"; pollAfterMs: DurationMs }
   | { mode: "static"; reason: StatusReason }
 
-type GraphSourceState = {
+type GraphSourceStateBase = {
   sourceId: string
-  state: "available" | "degraded" | "unavailable" | "forbidden" | "unsupported" | "unknown"
   watermark: string | null
   observedAt: Timestamp | null
   completeness: DataCompleteness
   freshness: Freshness
-  reason: StatusReason | null
 }
+
+type GraphSourceState = GraphSourceStateBase &
+  (
+    | { state: "available"; reason: null }
+    | {
+        state: "degraded" | "unavailable" | "forbidden" | "unsupported" | "unknown"
+        reason: StatusReason
+      }
+  )
 
 type GraphClusterCut =
   | {
@@ -1467,7 +1474,7 @@ type MetricPoint =
   | { timestamp: Timestamp; state: "value"; value: DecimalString; reason: null }
   | {
       timestamp: Timestamp
-      state: "missing" | "forbidden" | "source_error"
+      state: "no_data" | "missing" | "forbidden" | "source_error"
       value: null
       reason: StatusReason
     }
@@ -1584,7 +1591,7 @@ type MetricResult =
 
 - instant/range는 discriminated union이므로 적용되지 않는 time field 자체가 존재하지 않는다. range는 startAt < endAt이고 requested step은 >0이며, 자동 step은 explicit `{mode:"auto"}`다.
 - metric value는 절대값 decimal string이다. ratio/percent는 면적에 쓰지 않고 명시적으로 허용된 chart/summary에서만 표시한다.
-- zero는 `value:"0"`, missing은 `value:null,state:"missing"`이다. no-data, source error, permission denied를 같은 빈 chart로 합치지 않는다.
+- zero는 `value:"0"`이다. `no_data`는 query와 source가 유효하지만 해당 timestamp/window에 sample이 없다는 뜻이고, `missing`은 expected point 또는 scope가 coverage에서 누락됐다는 뜻이다. source error와 permission denied도 각각 `source_error`, `forbidden`으로 분리하며 같은 빈 chart로 합치지 않는다.
 - source가 여러 개면 합성 전에 unit/semantic compatibility와 duplicate ownership을 backend가 판정하고 completeness로 설명한다.
 - 서버는 requestedStepMs를 더 큰 effectiveStepMs로 올릴 수 있으나 maxPointsPerSeries를 넘기지 않는다. UI는 실제 step을 표시한다.
 - card는 최신 유효 point 1개, sparkline은 2개 이상일 때만 선을 그린다. range chart는 유효 point가 2개 미만이면 수치를 표시하되 선을 만들지 않는다. 화면은 임의 interpolation을 하지 않는다.
@@ -1631,8 +1638,8 @@ type TopologyProjection = {
 }
 
 type TopologyFilter =
-  | { type: "health"; values: NonEmptyReadonlyArray<HealthStatus["level"]> }
-  | { type: "sync"; values: NonEmptyReadonlyArray<SyncStatus["state"]> }
+  | { type: "health"; values: NonEmptyReadonlyArray<ResourceHealthStatus["level"]> }
+  | { type: "sync"; values: NonEmptyReadonlyArray<ResourceSyncStatus["state"]> }
   | { type: "freshness"; values: NonEmptyReadonlyArray<Freshness["state"]> }
   | { type: "resource_kind"; values: NonEmptyReadonlyArray<string> }
   | { type: "label"; key: string; operator: "equals" | "not_equals" | "in"; values: NonEmptyReadonlyArray<string> }
@@ -1679,11 +1686,13 @@ type ResourceGraphStreamEnvelope = {
   payload:
     | { type: "graph_delta"; delta: ResourceGraphDelta }
     | { type: "completeness_changed"; completeness: DataCompleteness }
-    | { type: "source_state_changed"; freshness: Freshness; reason: StatusReason | null }
+    | { type: "source_state_changed"; source: GraphSourceState }
     | { type: "projection_invalidated"; reason: StatusReason }
     | { type: "heartbeat"; graphRevision: string }
 }
 ```
+
+Topology scope의 applicationIds, instanceIds, clusterUids, namespaceRefs, rootEntityIds는 교집합 constraint이며 최소 하나의 anchor collection이 non-empty여야 한다. namespaceRefs가 non-empty이면 exact cluster/namespace pair만 포함하고 cluster-scoped resource는 includeClusterScoped=true일 때만 포함한다. 서로 양립할 수 없는 scope 조합은 empty가 아니라 `invalid_request`다. historical scope는 `topology.historical` exact capability가 enabled일 때만 요청한다.
 
 ### 9.2 Node/edge와 drill-down
 
@@ -1708,6 +1717,25 @@ Restricted node는 권한 있는 edge가 hidden peer를 참조한다는 사실�
 
 Delta는 evidence registry까지 snapshot과 같은 상태 공간을 완전히 표현한다. 새 edge/claim/insight가 처음 참조하는 evidenceId는 같은 delta의 `upsertEvidences`에 있어야 하며 기존 registry에도 없는 ID를 참조하면 batch 전체를 거부한다. `removeEvidenceIds`는 적용 후 어떤 node/edge/insight도 참조하지 않는 ID만 제거할 수 있다. node, edge, evidence, overlay 변경은 scratch state에서 검증한 뒤 하나의 graphRevision으로 원자 commit한다.
 
+### 9.4 Runtime Topology 단일 wire 권위
+
+Full Topology 화면의 backend wire와 realtime reducer authority는 `topology-message-action-schema.md`의 `SnapshotEnvelope`/`StreamEnvelope`와 `topology-engine.md`의 `TopologyGateway`/`ProjectionFrame` 하나다. §6의 `ResourceGraphSnapshot`/`ResourceGraphStreamEnvelope`는 GitOps Tree와 가벼운 cross-navigation graph facade가 소비하는 semantic view이며, Full Topology 화면이 별도 HTTP/WebSocket으로 동시에 받는 두 번째 wire가 아니다.
+
+`EngineBackedTopologyPort`는 같은 engine store에서 아래처럼 결정적으로 projection하며 backend를 직접 호출하지 않는다.
+
+| Facade field | Engine authority |
+|---|---|
+| snapshotId / graphRevision | committed `frameId` |
+| GraphQueryRef | planner `queryId` + dataQueryHash + projectionHash |
+| streamStart | snapshot의 동일 `StreamStart`; cursor 복제·재발급 금지 |
+| clusterCuts | `ProjectionFrame.clusterCuts`의 access/revision/source state를 손실 없이 변환 |
+| ResourceNode | versioned entity mapping catalog가 `Entity.entityKey`를 동일 nodeId/entityId로 보존 |
+| ResourceEdge / evidence | canonical relation/claim/evidence mapping catalog; unknown relation은 generic으로 보존 |
+| metric overlay | 동일 frame의 metricValues와 freshness/completeness; size/flow state는 Full Topology engine view가 직접 사용 |
+| delta | committed `baseFrameId → nextFrameId` batch 뒤 계산한 facade diff; 별도 ordering source가 아님 |
+
+한 runtime에서 backend-facing `TopologyGateway`와 별도 live `ResourceGraphFacadePort`를 동시에 등록하면 composition error다. `ProductPorts.topologyGraph`는 engine-backed 또는 GitOps Tree store facade만 가리키며 `LiveTopologyAdapter`라는 두 번째 transport 구현을 만들지 않는다. Tree의 GitOps graph stream과 Full Topology engine stream은 용도와 query가 다르지만 같은 canonical identity/evidence registry를 공유하며 서로의 cursor를 교환하지 않는다.
+
 ## 10. GitOps Operations
 
 ### 10.1 Canonical request, receipt, status
@@ -1724,6 +1752,7 @@ type GitOpsOperationKind =
   | "resume"
   | "terminate"
   | "rollback"
+  | "approval_decide"
 
 type OperationTarget = {
   applicationId: string
@@ -1827,7 +1856,11 @@ type GitOpsOperationRequest =
       target: OperationTarget
       idempotencyKey: string
       capabilityRevision: string
-      input: { targetOperationId: string; reason: string | null }
+      input: {
+        targetOperationId: string
+        targetOperationStatusVersion: string
+        reason: string | null
+      }
       confirmation: OperationConfirmation
     }
   | {
@@ -2089,7 +2122,7 @@ Ordered incremental event의 legal transition:
 | reconcile apply | plan review | planId+digest; write effect 확인 필수 | `reconcile.apply`; approval/permission/capability 모두 server 재검증 | 기존 sync 상태를 성공으로 바꾸지 않고 running overlay | instance/list, Tree, topology, timeline, metrics, history, capabilities | 최신 상태로 re-plan, approval 복구, 권한 요청 |
 | suspend | 상세 overflow/toolbar | 선택 reason; 확인 필수 | `suspend` | pending/running; lifecycle 기존값 유지 | instance/list, capabilities, timeline, history | 최신 lifecycle 확인 후 재시도 |
 | resume | suspended badge/toolbar | reason; 위험 정책일 때 확인 | `resume` | pending/running; active로 optimistic 변경 금지 | instance/list, capabilities, timeline, history | precondition 설명, 재-plan 또는 권한 요청 |
-| terminate | running operation panel | targetOperationId+reason; 확인 필수 | `terminate`; target effect를 서버가 판정 | terminate operation running과 target `취소 요청됨`을 분리 | target/current operation, timeline, capabilities | 이미 terminal이면 상태 동기화, 그 외 재시도 |
+| terminate | running operation panel | targetOperationId+statusVersion+reason; 확인 필수 | `terminate`; exact operation subject effect를 서버가 판정 | terminate operation running과 target `취소 요청됨`을 분리 | target/current operation, timeline, capabilities | 이미 terminal이면 상태 동기화, 그 외 재시도 |
 | rollback | history entry | historyEntryId; 오래된/위험 revision 확인 | `rollback` | rollback plan 생성 progress | plan/diff/approval/history | 다른 history point 선택, source refresh |
 | approval decide | approval card | exact approvalId+version, approve/reject, optional reason | `approval.decide`; pending exact version만 | 별도 operation overlay, 기존 approval 유지 | approval, capabilities, timeline; apply capability 재평가 | 최신 approval 조회, 만료/충돌 설명 |
 | history | 상세 tab | filter/cursor; mutation 아님 | `history` | page loading/background refresh | 해당 없음 | retry/filter reset |
@@ -2108,6 +2141,7 @@ Rollback은 즉시 write하지 않는다. `rollback`이 선택한 history point�
 - network timeout처럼 receipt 수신 여부가 불명확하면 같은 key로 `lookupReceipt`를 먼저 호출한다. found면 receipt를 사용하고, pending이면 poll하며, server가 not_found를 확정한 경우에만 원 request를 같은 key로 재전송한다. terminal business failure의 새 사용자 retry는 새 key다.
 - GitOpsOperationRequest.idempotencyKey가 semantic authority다. HTTP adapter가 transport header를 요구하면 body 값에서 파생하며 독립 입력으로 받지 않고 mismatch를 허용하지 않는다.
 - confirmation token은 kind, exact target, normalized payload digest, capability revision, plan digest, approval version, expiry에 bind한다.
+- terminate capability subject는 input의 targetOperationId+targetOperationStatusVersion과 정확히 일치해야 한다. selective resource가 non-empty인 plan은 `{type:"resource_selection"}` subject를, 그 외 plan/action은 `{type:"application_instance"}` subject를 재구성하며 request capabilityRevision은 그 exact subject revision이다.
 - 429/503은 retryAfterMs를 따르고 자동 retry는 read query와 receipt 확인에만 제한한다. write operation을 새로운 key로 자동 반복하지 않는다.
 - terminal `failed`, `cancelled`, `unsupported`는 이유와 recovery CTA를 유지하며 toast만 남기고 사라지지 않는다.
 - suspend/resume lifecycle의 허용 전이는 active→suspended와 suspended→active뿐이다. archived/unknown에는 두 capability가 disabled이며 reason을 제공한다.
@@ -2146,6 +2180,7 @@ Rollback은 즉시 write하지 않는다. `rollback`이 선택한 history point�
 type RevisionHistoryEntry = {
   historyEntryId: string
   instanceId: string
+  target: OperationTarget
   desiredRevision: string
   liveRevision: string | null
   operationId: string | null
@@ -2153,7 +2188,7 @@ type RevisionHistoryEntry = {
   actor: { actorId: string; displayName: string | null; redacted: boolean } | null
   summary: string
   recordedAt: Timestamp
-  rollbackCapability: CapabilityDecision
+  capabilities: CapabilitySet
   freshness: Freshness
 }
 
@@ -2168,6 +2203,8 @@ type RevisionHistoryQuery = {
 ```
 
 History는 provider log나 commit log를 그대로 노출하는 화면이 아니다. 한 instance에 대해 관측·operation과 연결된 canonical revision history다. approval은 versioned entity이며 pending approval UI는 approvalId, policy, immutable subject digest, requestedAt, expiry를 보여준다. `pending → approved|rejected|expired`만 허용하고 terminal version은 회귀하지 않는다. 새 승인 요청은 새 approvalId를 가진다. approval decide는 `ApprovalDecisionRequest` → 공통 operation receipt/status protocol을 사용하며 stale version은 409/412 후 최신 approval을 다시 표시한다. Apply의 approvalId+version은 exact target, requestDigest, planId+digest와 모두 일치해야 한다.
+
+Revision row의 `capabilities.subject`는 반드시 `{type:"history_entry", target, historyEntryId}`와 정확히 일치한다. `rollback` decision을 row 밖 instance capability나 provider 이름에서 추론하지 않는다.
 
 ## 12. 화면 상태 모델과 상태 행렬
 
@@ -2184,12 +2221,21 @@ type PanelLoadState<T> =
   | { fetch: "empty"; response: CompleteConsumerEnvelope<T>; reason: StatusReason | null }
   | { fetch: "error"; error: ApiError }
 
-type RemotePanelState<T> = {
-  load: PanelLoadState<T>
-  refreshing: boolean
-  refreshError: ApiError | null
-  connection: "connected" | "reconnecting" | "disconnected" | "not_applicable"
-}
+type PanelConnectionState = "connected" | "reconnecting" | "disconnected" | "not_applicable"
+
+type RemotePanelState<T> =
+  | {
+      load: Extract<PanelLoadState<T>, { fetch: "initial_loading" | "error" }>
+      refreshing: false
+      refreshError: null
+      connection: PanelConnectionState
+    }
+  | {
+      load: Extract<PanelLoadState<T>, { fetch: "ready" | "empty" }>
+      refreshing: boolean
+      refreshError: ApiError | null
+      connection: PanelConnectionState
+    }
 ```
 
 - `empty`는 해당 authorization scope의 complete collection이 0개임을 확인했을 때만 쓴다. forbidden, partial, disconnected, unavailable을 empty로 표현하지 않는다.
@@ -2389,9 +2435,13 @@ type MetricCatalogEntry = {
   defaultStaleAfterMs: DurationMs
   minStepMs: DurationMs
   maxPointsPerSeries: number
-  capabilities: {
-    instant: CapabilityDecision
-    range: CapabilityDecision
+  modeSupport: {
+    instant:
+      | { supported: true; reason: null }
+      | { supported: false; reason: StatusReason }
+    range:
+      | { supported: true; reason: null }
+      | { supported: false; reason: StatusReason }
   }
 }
 
@@ -2422,6 +2472,8 @@ type MetricSourceCatalogQuery = {
 }
 ```
 
+Metric catalog의 `modeSupport`는 metric 정의 자체가 instant/range 계산을 제공하는지 나타내는 discovery 정보일 뿐 actor permission이나 exact scope 실행 권위가 아니다. 실제 query 전에는 exact `CapabilitySubject(type="metric_query")`로 `CapabilitiesPort.get`을 호출한다. Topology snapshot/stream/historical도 exact `topology_query` subject의 CapabilitySet과 실제 snapshot `streamStart`를 모두 만족해야 한다.
+
 ConsumerEnvelope은 성공한 unary read response만 나타낸다. 전체 scope forbidden은 data가 든 200 envelope가 아니라 403 `permission_denied`이고 cached sensitive response를 제거한다. 부분 redaction은 SuccessfulAccessMode.redaction과 nested completeness/restricted DTO로 표현한다. unary request 범위의 generatedAt/freshness/completeness/access/dataOrigin은 envelope이 유일한 권위이며 payload에 같은 범위를 중복하지 않는다.
 
 Scope selector는 cluster → environment → namespace → application instance의 종속 facet을 catalog에서 만든다. 선택 목록에 없는 ID를 URL에서 받으면 자동으로 첫 항목을 선택하지 않고 `선택 대상에 접근할 수 없음`을 표시한다. `All instances`는 read aggregate일 뿐 mutation target이 아니다.
@@ -2437,7 +2489,7 @@ Scope selector는 cluster → environment → namespace → application instance
 | Application instance page | `applications.instances.list` | `ApplicationInstanceListQuery` | `ConsumerEnvelope<CursorPage<ApplicationInstanceSummary>>` | optional projection update stream 또는 polling |
 | GitOps 목록 | `gitops.instances.list` | `ApplicationInstanceListQuery` | 같은 instance page DTO | current operation이면 operation stream 결합 |
 | GitOps 상세 | `gitops.instances.get` | instanceId, bindingId | `ConsumerEnvelope<ApplicationInstanceDetail>` | background revalidate + operation targeted invalidate |
-| capabilities | `gitops.capabilities.get` | exact `OperationTarget` | `ConsumerEnvelope<CapabilitySet>` | operation/source/access change 시 즉시 invalidate |
+| capabilities | `capabilities.get` | exact `CapabilitySubject` | `ConsumerEnvelope<CapabilitySet>` | subject/operation/source/access change 시 즉시 invalidate |
 | diff 목록 | `gitops.diffs.list` | `DiffPageQuery` | `ConsumerEnvelope<CursorPage<ResourceDiff>>` | diff operation 완료 후 fetch; stream 자체는 불필요 |
 | Tree snapshot | `gitops.tree.snapshot` | `GitOpsTreeQuery` | `ConsumerEnvelope<ResourceGraphSnapshot>` | streamStart에 따라 GitOps tree stream/poll/static |
 | Tree expand | `gitops.tree.expand` | `ResourceGraphExpansionQuery` | `ConsumerEnvelope<ResourceGraphExpansion>` | 해당 graph revision에만 merge |
@@ -2451,15 +2503,16 @@ Scope selector는 cluster → environment → namespace → application instance
 | Metric catalog | `metrics.catalog` | `MetricCatalogQuery` | `ConsumerEnvelope<MetricCatalog>` | source/capability revision에 따라 refresh |
 | Metric source catalog | `metrics.sources.list` | `MetricSourceCatalogQuery` | `ConsumerEnvelope<MetricSourceCatalog>` | metric/source revision에 따라 독립 pagination |
 | Metric query | `metrics.query` | `MetricQuery` | `ConsumerEnvelope<MetricResult>` | v1 synchronous/cancellable; instant interval/range revalidate |
-| Topology snapshot | `topology.snapshot` | `TopologyQuery` | `ConsumerEnvelope<ResourceGraphSnapshot>` | `streamStart` mode에 따라 stream/poll/static |
-| Topology expansion | `topology.expand` | graph expansion query | graph expansion DTO | current revision에만 merge |
-| Topology stream | `topology.stream` | GraphQueryRef + snapshotId + full ResumeCursor | `ResourceGraphStreamEnvelope` | primary realtime; poll/static mode에서는 열지 않음 |
-| Metric overlay | `topology.metrics` | graphRevision + MetricQuery | `ConsumerEnvelope<TopologyMetricOverlay>` | metric freshness policy; graph revision mismatch discard |
+| Full Topology catalog | `topology.catalog` | workspace/authz | engine `ConsumerEnvelope<TopologyCatalogResponse>` | catalog revision change 시 replan |
+| Full Topology plan | `topology.plan` | engine `TopologyQuery` | `ConsumerEnvelope<QueryPlanResponse>` | canonical query/hash 발급 |
+| Full Topology snapshot | `topology.snapshot` | planId + previous frame precondition | engine `SnapshotEnvelope` | 동일 streamStart로 stream/poll/static |
+| Full Topology stream | `topology.stream` | engine `StreamSubscription` full cursor | engine `StreamEnvelope` | 유일한 runtime topology delta transport |
+| Full Topology detail | `topology.entities.get` | engine `EntityDetailRequest` | `ConsumerEnvelope<EntityDetail>` | frame/cursor revision 검증 |
 | Operation submit | `operations.submit` | `GitOpsOperationRequest`; body idempotencyKey가 semantic authority | `GitOpsOperationReceipt` (202) | receipt cursor로 stream/poll 시작 |
 | Receipt lookup | `operations.receipts.lookup` | idempotencyKey | `ConsumerEnvelope<OperationReceiptLookupResult>` | possibly-sent 복구 전용 |
 | Operation status | `operations.status.cut` | operationId | `ConsumerEnvelope<OperationStatusCut>` | status+streamStart atomic cut; poll fallback |
 | Operation events | `operations.stream` | operationId + full ResumeCursor | `GitOpsOperationEvent` | resume 가능한 ordered stream |
-| Approval decision | `approvals.decide` | `ApprovalDecisionRequest` | `ApprovalDecisionReceipt` (202) | 공통 operation status/stream |
+| Approval decision | `operations.submit` | `ApprovalDecisionRequest` | `ApprovalDecisionReceipt` (202) | 공통 operation status/stream; 별도 mutation 금지 |
 
 ### 13.3 Cursor, filter, sort 불변조건
 
@@ -2471,6 +2524,7 @@ Scope selector는 cluster → environment → namespace → application instance
 - 동일 facet 안 복수 값은 OR, 서로 다른 facet은 AND다. backend가 다른 의미를 쓰면 response metadata로 명시하는 것이 아니라 OpenAPI 계약을 수정한다.
 - namespace filter는 반드시 `NamespaceRef(clusterUid, namespace)`로 전달한다. `clusterUids=[]`는 cluster facet 제약 없음, `namespaceRefs=[]`는 namespace facet 제약 없음이다. namespaceRefs가 non-empty이면 exact pair만 포함하고 각 ref의 cluster는 non-empty clusterUids가 주어졌을 때 그 집합 안에 있어야 한다. cluster-scoped 항목 포함 여부는 각 query의 `includeClusterScoped`가 유일한 권위다.
 - sort는 반드시 stable ID tie-break를 포함한다. client가 page를 받은 뒤 전역 재정렬하지 않는다.
+- sort parameter가 없는 cursor collection의 wire order는 고정한다: scope/catalog는 locale-independent normalized display key ASC + stable ID ASC, namespaces는 clusterUid ASC + namespace ASC, Diff는 canonical resource logical key ASC + diffId ASC, Insights는 severity rank DESC + lastObservedAt DESC(null last) + insightId ASC, History는 recordedAt DESC + historyEntryId DESC, Metric catalog/source는 normalized display key ASC + stable key ASC, graph expansion은 server canonical layout order + nodeId/edgeId tie-break다. 이 순서는 schema version 안에서 바뀌지 않으며 다른 순서가 필요하면 새 explicit sort enum을 추가한다.
 - `total`은 exact/estimated/unknown/forbidden을 구분한다. unknown을 0으로 렌더링하지 않는다.
 - cursor가 만료되면 기존 page와 scroll anchor를 유지하고 first page 재조회 후 stable ID로 anchor를 복원한다.
 
@@ -2589,7 +2643,6 @@ interface ApplicationsPort {
 
 interface GitOpsPort {
   getInstance(instanceId: string, bindingId: string, context: RequestContext): Promise<ConsumerEnvelope<ApplicationInstanceDetail>>
-  getCapabilities(target: OperationTarget, context: RequestContext): Promise<ConsumerEnvelope<CapabilitySet>>
   listDiffs(query: DiffPageQuery, context: RequestContext): Promise<ConsumerEnvelope<CursorPage<ResourceDiff>>>
   getTree(query: GitOpsTreeQuery, context: RequestContext): Promise<ConsumerEnvelope<ResourceGraphSnapshot>>
   pollTree(request: GraphPollRequest, context: RequestContext): Promise<ConsumerEnvelope<ResourceGraphSnapshot>>
@@ -2598,6 +2651,10 @@ interface GitOpsPort {
   getResourceDetail(request: ResourceDetailRequest, context: RequestContext): Promise<ConsumerEnvelope<ResourceNodeDetail>>
   listInsights(query: InsightQuery, context: RequestContext): Promise<ConsumerEnvelope<GitOpsInsightPage>>
   listHistory(query: RevisionHistoryQuery, context: RequestContext): Promise<ConsumerEnvelope<CursorPage<RevisionHistoryEntry>>>
+}
+
+interface CapabilitiesPort {
+  get(subject: CapabilitySubject, context: RequestContext): Promise<ConsumerEnvelope<CapabilitySet>>
 }
 
 interface TimelinePort {
@@ -2613,7 +2670,7 @@ interface MetricsPort {
   query(query: MetricQuery, context: RequestContext): Promise<ConsumerEnvelope<MetricResult>>
 }
 
-interface TopologyPort {
+interface ResourceGraphFacadePort {
   snapshot(query: TopologyQuery, context: RequestContext): Promise<ConsumerEnvelope<ResourceGraphSnapshot>>
   poll(request: GraphPollRequest, context: RequestContext): Promise<ConsumerEnvelope<ResourceGraphSnapshot>>
   expand(query: ResourceGraphExpansionQuery, context: RequestContext): Promise<ConsumerEnvelope<ResourceGraphExpansion>>
@@ -2630,20 +2687,21 @@ interface OperationsPort {
 
 interface ApprovalsPort {
   get(approvalId: string, context: RequestContext): Promise<ConsumerEnvelope<Approval>>
-  getCapabilities(target: ApprovalDecisionTarget, context: RequestContext): Promise<ConsumerEnvelope<CapabilitySet>>
-  decide(request: ApprovalDecisionRequest, context: RequestContext): Promise<ApprovalDecisionReceipt>
 }
 
 type ProductPorts = {
   applications: ApplicationsPort
   gitOps: GitOpsPort
+  capabilities: CapabilitiesPort
   timeline: TimelinePort
   metrics: MetricsPort
-  topology: TopologyPort
+  topologyGraph: ResourceGraphFacadePort
   operations: OperationsPort
   approvals: ApprovalsPort
 }
 ```
+
+Capability query의 유일한 진입점은 `CapabilitiesPort.get`이다. GitOps, approval, history, resource selection, Metrics, Topology feature가 별도 capability endpoint나 local permission logic을 만들지 않는다. Approval decision도 `OperationsPort.submit(ApprovalDecisionRequest)` 한 mutation 경로를 사용하고 `ApprovalsPort`는 versioned approval read만 소유한다. Full Topology composition은 이 ProductPorts와 `topology-engine.md`의 `TopologyGateway`를 함께 주입한다. `ResourceGraphFacadePort`는 그 engine store 또는 GitOps Tree store를 읽는 frontend facade이며 live transport adapter가 아니다.
 
 UI component와 reducer는 URL, fetch, provider SDK를 호출하지 않고 이 ports를 effect를 통해서만 사용한다. runtime schema parse와 transport error mapping은 live adapter 경계에서 수행한다.
 
