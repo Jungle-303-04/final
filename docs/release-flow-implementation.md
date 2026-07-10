@@ -457,3 +457,17 @@ python scripts/release_flow_smoke.py --change-freeze-preflight
 - `live_runs`: live 모드이거나 step에 실제 side effect가 기록된 run 수
 - `succeeded_runs`, `cancelled_runs`, `paused_runs`, `rollback_requested_runs`, `waiting_for_approval_runs`, `unhealthy_runs`, `verification_failed_runs`, `failed_runs`: 대시보드 배지와 알림 라우팅에 바로 쓰는 세부 카운터
 - `last_run_status`: 접근 권한이 확인된 최신 run의 상태
+
+## Production live image guard
+
+Production `live_preflight` now requires an explicit `live_image` value before
+the smoke workflow calls `/release-readiness`. The direct smoke script, the
+reusable smoke workflow, and `release-flow-production-gate.yml` all reject an
+empty production image and the demo placeholder
+`ghcr.io/example/release-flow-smoke:live-preflight`.
+
+Production deploy workflows that call `Release Flow Production Gate` must pass
+`live_image` with the same real image/tag that the deploy will promote. The
+static contract checker also treats a missing `live_image` or the demo image as
+a release-flow gate violation, so placeholder production wiring fails in PR
+before it can reach a live gate run.

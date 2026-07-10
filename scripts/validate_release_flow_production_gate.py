@@ -15,13 +15,14 @@ import yaml
 
 WORKFLOW_SUFFIXES = {".yml", ".yaml"}
 GATE_WORKFLOW_PATH = "./.github/workflows/release-flow-production-gate.yml"
-REQUIRED_GATE_INPUTS = ("live_change_ticket", "live_runbook_url")
+REQUIRED_GATE_INPUTS = ("live_change_ticket", "live_runbook_url", "live_image")
 ONE_OF_GATE_INPUTS = ("live_release_owner", "live_oncall_contact")
 PLACEHOLDER_INPUT_VALUES = {
     "live_change_ticket": {"CHG-PREFLIGHT"},
     "live_runbook_url": {"https://example.com/runbooks/release-flow"},
     "live_release_owner": {"release-operator"},
     "live_oncall_contact": {"release-oncall@example.com"},
+    "live_image": {"ghcr.io/example/release-flow-smoke:live-preflight"},
 }
 IGNORED_WORKFLOW_NAMES = {
     "release-flow-smoke.yml",

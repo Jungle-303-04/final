@@ -123,6 +123,13 @@ def check_smoke_script_contract() -> list[ReadinessCheck]:
             and "https://example.com/runbooks/release-flow" in source
             and "release-oncall@example.com" in source,
             "direct live preflight placeholder values are rejected",
+        ),
+        ReadinessCheck(
+            "script.smoke.live_image_required",
+            '"live_image": getattr(args, "live_image", "")' in source
+            and '"image": args.live_image' in source
+            and "ghcr.io/example/release-flow-smoke:live-preflight" in source,
+            "direct production live preflight requires an explicit non-demo image",
         )
     ]
 
@@ -172,6 +179,13 @@ def check_production_gate_contract() -> list[ReadinessCheck]:
             and "real production owner" in validate_run
             and "real on-call contact" in validate_run,
             "production owner or on-call contact is required",
+        ),
+        ReadinessCheck(
+            "workflow.production_gate.image_required",
+            "LIVE_PREFLIGHT_IMAGE" in validate_job.get("env", {})
+            and "live_image is required for production live_preflight" in validate_run
+            and "real production image" in validate_run,
+            "production image is required",
         ),
         ReadinessCheck(
             "workflow.production_gate.validates_before_smoke",

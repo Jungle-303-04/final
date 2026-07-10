@@ -46,6 +46,7 @@ LIVE_PREFLIGHT_PLACEHOLDERS = {
     "live_runbook_url": {"https://example.com/runbooks/release-flow"},
     "live_release_owner": {"release-operator"},
     "live_oncall_contact": {"release-oncall@example.com"},
+    "live_image": {"ghcr.io/example/release-flow-smoke:live-preflight"},
 }
 SENSITIVE_ASSIGNMENT_PATTERN = re.compile(
     r"(?P<prefix>(?:\"|')?(?:authorization|bearer|credential|password|passwd|private[_ -]?key|secret|token|api[_ -]?key|apikey|cookie|set[_ -]?cookie)(?:\"|')?\s*[:=]\s*)(?P<quote>\"|')?(?P<value>[^,}\]\s\"']+)(?P=quote)?",
@@ -220,7 +221,7 @@ def build_live_preflight_plan(applications: list[JsonMap], args: argparse.Namesp
             "environment": args.live_environment,
             "namespace": args.live_namespace,
             "commit_sha": args.live_commit_sha or now_label,
-            "image": args.live_image or "ghcr.io/example/release-flow-smoke:live-preflight",
+            "image": args.live_image,
             "approval_gate": "manual",
         }
     )
@@ -260,6 +261,7 @@ def validate_live_preflight_inputs(args: argparse.Namespace) -> None:
     required_values = {
         "live_change_ticket": getattr(args, "live_change_ticket", ""),
         "live_runbook_url": getattr(args, "live_runbook_url", ""),
+        "live_image": getattr(args, "live_image", ""),
     }
     for name, value in required_values.items():
         if not str(value or "").strip():

@@ -377,6 +377,14 @@ jobs:
                 echo "::error title=Invalid live_runbook_url::live_runbook_url must not use example.com for production live_preflight."
                 exit 1
               fi
+              if [ -z "$LIVE_PREFLIGHT_IMAGE" ]; then
+                echo "::error title=Invalid live_image::live_image is required for production live_preflight."
+                exit 1
+              fi
+              if [ "$LIVE_PREFLIGHT_IMAGE" = "ghcr.io/example/release-flow-smoke:live-preflight" ]; then
+                echo "::error title=Invalid live_image::live_image must not use the demo live preflight image for production live_preflight."
+                exit 1
+              fi
               if [ -z "$LIVE_PREFLIGHT_RELEASE_OWNER" ] && [ -z "$LIVE_PREFLIGHT_ONCALL_CONTACT" ]; then
                 echo "::error title=Invalid live owner::live_release_owner or live_oncall_contact is required for production live_preflight."
                 exit 1

@@ -239,6 +239,7 @@ jobs:
       LIVE_PREFLIGHT_RUNBOOK_URL: ${{ inputs.live_runbook_url }}
       LIVE_PREFLIGHT_RELEASE_OWNER: ${{ inputs.live_release_owner }}
       LIVE_PREFLIGHT_ONCALL_CONTACT: ${{ inputs.live_oncall_contact }}
+      LIVE_PREFLIGHT_IMAGE: ${{ inputs.live_image }}
     steps:
       - name: Validate live production inputs
         id: validate
@@ -260,6 +261,14 @@ jobs:
             fi
             if [[ "$LIVE_PREFLIGHT_RUNBOOK_URL" == *"example.com"* ]]; then
               echo "::error title=Placeholder production runbook::Replace example.com runbook URL with the real production runbook."
+              exit 1
+            fi
+            if [ -z "$LIVE_PREFLIGHT_IMAGE" ]; then
+              echo "::error title=Missing production image::live_image is required for production live_preflight."
+              exit 1
+            fi
+            if [ "$LIVE_PREFLIGHT_IMAGE" = "ghcr.io/example/release-flow-smoke:live-preflight" ]; then
+              echo "::error title=Placeholder production image::Replace ghcr.io/example/release-flow-smoke:live-preflight with the real production image."
               exit 1
             fi
             if [ -z "$LIVE_PREFLIGHT_RELEASE_OWNER" ] && [ -z "$LIVE_PREFLIGHT_ONCALL_CONTACT" ]; then
