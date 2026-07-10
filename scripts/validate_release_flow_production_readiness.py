@@ -360,6 +360,7 @@ def check_evidence_verifier_contract() -> list[ReadinessCheck]:
             and "archive_download_url" in source
             and "release-flow-smoke-production" in source
             and "release-flow-production-deploy" in source
+            and "--github-sha is required when downloading GitHub artifacts" in source
             and "evidence.api_base_url_consistent" in source,
             "production evidence verifier can download GitHub Actions artifacts and require API consistency",
         ),
@@ -374,6 +375,7 @@ def check_evidence_verifier_contract() -> list[ReadinessCheck]:
             "docs.production_readiness.github_evidence_verifier",
             "--github-repo owner/repo" in docs
             and "--github-sha" in docs
+            and "exact deployed commit" in docs
             and "--github-output-dir" in docs
             and "same concrete HTTPS API base URL" in docs,
             "operator guide documents GitHub artifact download verification and API consistency",
@@ -816,6 +818,19 @@ def check_production_readiness_workflow_contract() -> list[ReadinessCheck]:
             and str(env.get("GITHUB_ACCESS_PREFLIGHT") or "") == "${{ inputs.github_access_preflight }}"
             and "--check-github-access" in run,
             "production readiness verifies GitHub repo access by default",
+        ),
+        ReadinessCheck(
+            "workflow.production_readiness.github_environment_preflight",
+            "github_environment_preflight" in inputs
+            and inputs.get("github_environment_preflight", {}).get("default") is True
+            and "GITHUB_ENVIRONMENT_PREFLIGHT" in env
+            and str(env.get("GITHUB_ENVIRONMENT_PREFLIGHT") or "") == "${{ inputs.github_environment_preflight }}"
+            and "RELEASE_FLOW_GITHUB_ENVIRONMENT_TOKEN" in env
+            and "GITHUB_ENVIRONMENT_NAME" in env
+            and "GITHUB_ENVIRONMENT_REPO" in env
+            and "scripts/verify_release_flow_github_environment.py" in run
+            and "artifacts/release-flow-github-environment.json" in run,
+            "production readiness verifies GitHub Environment config and uploads the report by default",
         ),
         ReadinessCheck(
             "workflow.production_readiness.api_smoke_preflight",

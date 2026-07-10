@@ -105,6 +105,11 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     parser.add_argument("--github-branch", default="dev")
     parser.add_argument("--github-sha", default="", help="Require successful workflow runs for this head SHA.")
     parser.add_argument(
+        "--allow-latest-github-run",
+        action="store_true",
+        help="Allow GitHub artifact lookup without --github-sha. Use only for exploratory checks.",
+    )
+    parser.add_argument(
         "--github-output-dir",
         type=Path,
         default=None,
@@ -242,6 +247,8 @@ def fetch_github_artifacts(args: argparse.Namespace, output_dir: Path) -> list[P
     api_base = str(args.github_api_base or DEFAULT_GITHUB_API_BASE).strip()
     branch = str(args.github_branch or "dev").strip()
     head_sha = str(args.github_sha or "").strip()
+    if not head_sha and not args.allow_latest_github_run:
+        raise GitHubEvidenceError("--github-sha is required when downloading GitHub artifacts")
     readiness_run = find_successful_workflow_run(
         api_base=api_base,
         repo=repo,
