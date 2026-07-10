@@ -95,6 +95,61 @@ class StubDb:
         self.recovery_plan_query = ("correlation", correlation_id, workspace_id)
         return self._recovery_plan_record()
 
+    async def get_workflow_approval(
+        self, approval_id: str, workspace_id: str
+    ) -> dict[str, Any] | None:
+        self.workflow_approval_query = (approval_id, workspace_id)
+        return {
+            "approval_id": approval_id,
+            "workflow_run_id": "wfr-1",
+            "workspace_id": workspace_id,
+            "status": "requested",
+            "reason": "approval required before write",
+            "details": {
+                "diff": self._gitops_diff(),
+            },
+        }
+
+    async def get_workflow_step_details(self, workflow_run_id: str, name: str) -> dict[str, Any] | None:
+        self.workflow_step_query = (workflow_run_id, name)
+        return self._gitops_diff()
+
+    async def list_release_safe_pr_diff_events(
+        self,
+        workspace_id: str,
+        workflow_run_id: str,
+        *,
+        application_id: str | None = None,
+        limit: int = 20,
+    ) -> list[dict[str, Any]]:
+        self.safe_pr_event_query = (workspace_id, workflow_run_id, application_id, limit)
+        return [
+            {
+                "subject": "safe_pr.patch_prepared",
+                "payload": {
+                    "title": "Apply manifest update",
+                    "provider": "github",
+                    "workflow_run_id": workflow_run_id,
+                    "workspace_id": workspace_id,
+                    "application_id": application_id or "app-1",
+                    "manifest_path": "deploy/app.yaml",
+                    "patch": {
+                        "patch_sha256": "sha256:patch",
+                        "patches": [{"path": "deploy/app.yaml", "description": "manifest"}],
+                    },
+                },
+            },
+            {
+                "subject": "diff.explained",
+                "payload": {
+                    "summary": "Apply manifest update 패치 초안은 PR 생성 게이트를 통과했습니다.",
+                    "risk": "low",
+                    "ready_for_creation": True,
+                    "reason": "safe patch",
+                },
+            },
+        ]
+
     @staticmethod
     def _recovery_plan_record() -> dict[str, Any]:
         return {
@@ -159,6 +214,29 @@ class StubDb:
             },
         }
 
+    @staticmethod
+    def _gitops_diff() -> dict[str, Any]:
+        return {
+            "resource": "Deployment/checkout-api",
+            "namespace": "sandbox",
+            "desired_image": "checkout:v2",
+            "actual_image": "checkout:v1",
+            "risk": "medium",
+            "workspace_id": "ws-1",
+            "application_id": "app-1",
+            "workflow_run_id": "wfr-1",
+            "manifest_path": "deploy/app.yaml",
+            "has_changes": True,
+            "changes": [
+                {
+                    "field_path": "spec.template.spec.containers[0].image",
+                    "before": "checkout:v1",
+                    "after": "checkout:v2",
+                    "classification": "intended_change",
+                }
+            ],
+        }
+
 
 def make_context(db: Any = None) -> ToolContext:
     return ToolContext(
@@ -187,6 +265,7 @@ def test_platform_tools_are_discovered_and_registered() -> None:
         "list_resource_rca_reports",
         "list_recovery_playbooks",
         "recommend_recovery_action",
+        "explain_diff_risk",
     } <= set(ai.tool_names())
 
 
@@ -305,6 +384,62 @@ def test_recommend_recovery_action_respects_excluded_actions() -> None:
     assert result["possible_actions"]["recommended"]["action_id"] == "safe-pr-probe"
     assert result["caution"]["automation"]["eligible"] is False
     assert result["possible_actions"]["not_recommended"][0]["action_id"] == "restart-api"
+    json.dumps(result)
+
+
+def test_explain_diff_risk_reads_gitops_approval_diff() -> None:
+    db = StubDb()
+    result = execute(
+        "explain_diff_risk",
+        {"diff_source": "gitops", "approval_id": "approval-1"},
+        db=db,
+    )
+
+    assert db.workflow_approval_query == ("approval-1", "ws-1")
+    assert result["found"] is True
+    assert result["source"] == "gitops"
+    assert result["workflow_run_id"] == "wfr-1"
+    assert result["caution"]["applies_to_cluster"] is True
+    assert result["reasoning"]["evidence"]["diff"]["resource"] == "Deployment/checkout-api"
+    json.dumps(result)
+
+
+def test_explain_diff_risk_reads_safe_pr_patch_events() -> None:
+    db = StubDb()
+    result = execute(
+        "explain_diff_risk",
+        {"diff_source": "safe_pr", "workflow_run_id": "wfr-1"},
+        db=db,
+    )
+
+    assert db.safe_pr_event_query == ("ws-1", "wfr-1", None, 20)
+    assert result["found"] is True
+    assert result["source"] == "safe_pr"
+    assert result["caution"]["applies_to_cluster"] is False
+    assert result["reasoning"]["evidence"]["patch_paths"] == ["deploy/app.yaml"]
+    json.dumps(result)
+
+
+def test_explain_diff_risk_requires_safe_pr_patch_context() -> None:
+    class EmptySafePrDb(StubDb):
+        async def list_release_safe_pr_diff_events(
+            self,
+            workspace_id: str,
+            workflow_run_id: str,
+            *,
+            application_id: str | None = None,
+            limit: int = 20,
+        ) -> list[dict[str, Any]]:
+            return [{"subject": "safe_pr.created", "payload": {"workflow_run_id": workflow_run_id}}]
+
+    result = execute(
+        "explain_diff_risk",
+        {"diff_source": "safe_pr", "workflow_run_id": "wfr-1"},
+        db=EmptySafePrDb(),
+    )
+
+    assert result["found"] is False
+    assert result["missing_context"] == ["safe_pr.patch_prepared", "diff.explained"]
     json.dumps(result)
 
 

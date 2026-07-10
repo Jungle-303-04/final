@@ -7,6 +7,7 @@
 
 from __future__ import annotations
 
+import inspect
 from typing import Any
 
 from domains.command.actions import registered_command_actions
@@ -21,6 +22,12 @@ RISK_ORDER = {"low": 0, "medium": 1, "high": 2}
 ROUTE_ORDER = {"auto": 0, "command": 1, "draft_pr": 2, "approval_required": 3}
 RECOMMENDABLE_RISKS = {"low", "medium"}
 AUTOMATION_ROUTES = {"auto", "command"}
+GITOPS_DIFF_STEP = "diff"
+SAFE_PR_DIFF_SUBJECTS = {
+    "safe_pr.patch_prepared",
+    "diff.explained",
+    "safe_pr.ready_for_creation",
+}
 INVENTORY_PUBLIC_FIELDS = (
     "inventory_key",
     "workspace_id",
@@ -61,6 +68,16 @@ def _context_value(context: ToolContext, key: str) -> str:
     return str(raw).strip() if raw not in (None, "") else ""
 
 
+async def _db_call(context: ToolContext, name: str, *args: Any, **kwargs: Any) -> Any:
+    method = getattr(context.db, name, None)
+    if not callable(method):
+        return None
+    result = method(*args, **kwargs)
+    if inspect.isawaitable(result):
+        return await result
+    return result
+
+
 def _public_inventory_resource(row: dict[str, Any]) -> dict[str, Any]:
     return {key: row.get(key) for key in INVENTORY_PUBLIC_FIELDS if key in row}
 
@@ -68,6 +85,160 @@ def _public_inventory_resource(row: dict[str, Any]) -> dict[str, Any]:
 def _row_payload(row: dict[str, Any]) -> dict[str, Any]:
     payload = row.get("payload")
     return payload if isinstance(payload, dict) else {}
+
+
+def _public_diff_payload(diff: dict[str, Any]) -> dict[str, Any]:
+    return {
+        key: diff.get(key)
+        for key in (
+            "resource",
+            "namespace",
+            "desired_image",
+            "actual_image",
+            "risk",
+            "workspace_id",
+            "repository_id",
+            "binding_id",
+            "application_id",
+            "workflow_run_id",
+            "environment",
+            "cluster_id",
+            "manifest_path",
+            "resource_class",
+            "status",
+            "has_changes",
+            "changes",
+            "basis",
+        )
+        if key in diff
+    }
+
+
+def _event_payload(event: dict[str, Any]) -> dict[str, Any]:
+    payload = event.get("payload")
+    return payload if isinstance(payload, dict) else {}
+
+
+def _subject_event(events: list[dict[str, Any]], subject: str) -> dict[str, Any] | None:
+    return next((event for event in events if str(event.get("subject") or "") == subject), None)
+
+
+def _gitops_diff_response(
+    *,
+    workflow_run_id: str,
+    approval_id: str,
+    diff: dict[str, Any],
+    approval: dict[str, Any] | None = None,
+    source: str,
+) -> dict[str, Any]:
+    risk = str(diff.get("risk") or "unknown")
+    resource = str(diff.get("resource") or "unknown resource")
+    namespace = str(diff.get("namespace") or "")
+    changes = diff.get("changes") if isinstance(diff.get("changes"), list) else []
+    return {
+        "found": True,
+        "source": "gitops",
+        "lookup_source": source,
+        "workflow_run_id": workflow_run_id,
+        "approval_id": approval_id or None,
+        "summary": f"{resource} GitOps diff 위험도는 {risk}입니다.",
+        "reasoning": {
+            "current_context": {
+                "resource": resource,
+                "namespace": namespace,
+                "manifest_path": diff.get("manifest_path"),
+                "status": diff.get("status"),
+                "has_changes": diff.get("has_changes"),
+            },
+            "evidence": {
+                "diff": _public_diff_payload(diff),
+                "approval_status": approval.get("status") if approval else None,
+                "approval_reason": approval.get("reason") if approval else None,
+            },
+            "risk_notes": [
+                "이 diff는 승인되면 command.requested를 거쳐 target agent apply로 이어질 수 있습니다.",
+                f"변경 항목은 {len(changes)}건입니다." if changes else "세부 changes가 없거나 아직 투영되지 않았습니다.",
+            ],
+        },
+        "next_checks": [
+            "변경 대상 namespace/resource가 의도한 배포 대상인지 확인합니다.",
+            "approval_id가 있으면 승인 전 diff와 정책 사유를 함께 검토합니다.",
+            "승인 후 command/agent 단계에서 실패 여부를 확인합니다.",
+        ],
+        "possible_actions": {
+            "explain_only": True,
+            "can_execute": False,
+            "handoff": "승인/적용은 별도 UI 또는 command flow에서 사용자 확인 후 진행해야 합니다.",
+        },
+        "caution": {
+            "risk_level": risk,
+            "approval_required": bool(approval and str(approval.get("status") or "") == "requested"),
+            "applies_to_cluster": True,
+        },
+    }
+
+
+def _safe_pr_diff_response(
+    *,
+    workflow_run_id: str,
+    events: list[dict[str, Any]],
+) -> dict[str, Any]:
+    patch_event = _subject_event(events, "safe_pr.patch_prepared")
+    explained_event = _subject_event(events, "diff.explained")
+    ready_event = _subject_event(events, "safe_pr.ready_for_creation")
+    patch_payload = _event_payload(patch_event or {})
+    explained_payload = _event_payload(explained_event or {})
+    ready_payload = _event_payload(ready_event or {})
+    patch = patch_payload.get("patch") if isinstance(patch_payload.get("patch"), dict) else {}
+    patches = patch.get("patches") if isinstance(patch.get("patches"), list) else []
+    risk = str(explained_payload.get("risk") or ready_payload.get("risk") or "unknown")
+    return {
+        "found": True,
+        "source": "safe_pr",
+        "workflow_run_id": workflow_run_id,
+        "summary": str(
+            explained_payload.get("summary")
+            or ready_payload.get("summary")
+            or "Safe PR patch 초안 위험도를 설명할 수 있습니다."
+        ),
+        "reasoning": {
+            "current_context": {
+                "title": patch_payload.get("title"),
+                "provider": patch_payload.get("provider") or patch.get("provider"),
+                "manifest_path": patch_payload.get("manifest_path") or patch.get("manifest_path"),
+                "ready_for_creation": explained_payload.get("ready_for_creation"),
+            },
+            "evidence": {
+                "patch_count": len(patches),
+                "patch_paths": [item.get("path") for item in patches if isinstance(item, dict)],
+                "patch_sha256": patch.get("patch_sha256"),
+                "approval_ref": patch_payload.get("approval_ref") or patch.get("approval_ref"),
+                "policy_decision_ref": patch_payload.get("policy_decision_ref")
+                or patch.get("policy_decision_ref"),
+                "diff_explained": explained_payload,
+                "ready": ready_payload if ready_payload else None,
+            },
+            "risk_notes": [
+                "이 설명은 PR 생성 전 patch 초안 기준이며, 아직 target cluster에 apply된 상태가 아닙니다.",
+                "PR 생성 가능 여부는 diff.explained 또는 safe_pr.ready_for_creation 이벤트 기준입니다.",
+            ],
+        },
+        "next_checks": [
+            "patch_paths가 의도한 manifest 파일인지 확인합니다.",
+            "diff.explained의 risk와 reason을 PR 리뷰 기준으로 확인합니다.",
+            "PR 생성 후에는 safe_pr.created의 pr_url과 patch_sha256을 확인합니다.",
+        ],
+        "possible_actions": {
+            "explain_only": True,
+            "can_execute": False,
+            "handoff": "PR 생성/머지는 scm-worker와 Git provider 리뷰 흐름에서 진행해야 합니다.",
+        },
+        "caution": {
+            "risk_level": risk,
+            "approval_required": bool(patch_payload.get("approval_ref") or patch.get("approval_ref")),
+            "applies_to_cluster": False,
+        },
+    }
 
 
 def _report_matches_context(row: dict[str, Any], context: ToolContext) -> bool:
@@ -612,6 +783,126 @@ async def recommend_recovery_action(
             },
         },
     }
+
+
+@ai.tool(
+    name="explain_diff_risk",
+    description="Explain a selected GitOps diff or Safe PR patch diff from screen context without approving or executing it.",
+    parameters={
+        "diff_source": {
+            "type": "string",
+            "description": "gitops or safe_pr; defaults to chat context",
+        },
+        "workflow_run_id": {
+            "type": "string",
+            "description": "workflow run id from the current diff/workflow screen",
+        },
+        "approval_id": {
+            "type": "string",
+            "description": "GitOps approval id; preferred for approval screens",
+        },
+    },
+)
+async def explain_diff_risk(
+    context: ToolContext,
+    diff_source: str = "",
+    workflow_run_id: str = "",
+    approval_id: str = "",
+) -> dict[str, Any]:
+    source = _ctx_or_arg(diff_source, _context_value(context, "diff_source")).lower()
+    resolved_workflow = _ctx_or_arg(workflow_run_id, _context_value(context, "workflow_run_id"))
+    resolved_approval = _ctx_or_arg(approval_id, _context_value(context, "approval_id"))
+    application_id = _context_value(context, "application_id")
+
+    if source not in {"gitops", "safe_pr"}:
+        return {
+            "found": False,
+            "error": "diff_source must be gitops or safe_pr",
+            "missing_context": ["diff_source"],
+        }
+
+    if source == "gitops":
+        approval: dict[str, Any] | None = None
+        diff: dict[str, Any] = {}
+        lookup_source = ""
+        if resolved_approval:
+            approval_record = await _db_call(
+                context,
+                "get_workflow_approval",
+                resolved_approval,
+                context.workspace_id,
+            )
+            approval = dict(approval_record or {}) if isinstance(approval_record, dict) else None
+            details = approval.get("details") if approval else None
+            details_payload = details if isinstance(details, dict) else {}
+            raw_diff = details_payload.get("diff")
+            diff = dict(raw_diff) if isinstance(raw_diff, dict) else {}
+            resolved_workflow = resolved_workflow or str(
+                approval.get("workflow_run_id") if approval else ""
+            )
+            lookup_source = "approval"
+
+        if not diff and resolved_workflow:
+            step_details = await _db_call(
+                context,
+                "get_workflow_step_details",
+                resolved_workflow,
+                GITOPS_DIFF_STEP,
+            )
+            if isinstance(step_details, dict):
+                raw_diff = step_details.get("diff") if isinstance(step_details.get("diff"), dict) else step_details
+                diff = dict(raw_diff) if isinstance(raw_diff, dict) else {}
+            lookup_source = lookup_source or "workflow_step"
+
+        if not diff:
+            missing = []
+            if not resolved_approval:
+                missing.append("approval_id")
+            if not resolved_workflow:
+                missing.append("workflow_run_id")
+            return {
+                "found": False,
+                "source": "gitops",
+                "error": "GitOps diff context was not found",
+                "missing_context": missing or ["diff"],
+            }
+
+        return _gitops_diff_response(
+            workflow_run_id=resolved_workflow,
+            approval_id=resolved_approval,
+            diff=diff,
+            approval=approval,
+            source=lookup_source,
+        )
+
+    if not resolved_workflow:
+        return {
+            "found": False,
+            "source": "safe_pr",
+            "error": "workflow_run_id is required for Safe PR diff lookup",
+            "missing_context": ["workflow_run_id"],
+        }
+
+    events = await _db_call(
+        context,
+        "list_release_safe_pr_diff_events",
+        context.workspace_id,
+        resolved_workflow,
+        application_id=application_id or None,
+        limit=20,
+    )
+    event_rows = [dict(event) for event in events or [] if isinstance(event, dict)]
+    available_subjects = {str(event.get("subject") or "") for event in event_rows}
+    if not (available_subjects & SAFE_PR_DIFF_SUBJECTS):
+        return {
+            "found": False,
+            "source": "safe_pr",
+            "workflow_run_id": resolved_workflow,
+            "error": "Safe PR patch/diff events were not found",
+            "missing_context": ["safe_pr.patch_prepared", "diff.explained"],
+            "available_subjects": sorted(subject for subject in available_subjects if subject),
+        }
+    return _safe_pr_diff_response(workflow_run_id=resolved_workflow, events=event_rows)
 
 
 @ai.tool(
