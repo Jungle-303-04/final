@@ -40,6 +40,7 @@ DEFAULT_SCM_BASE_BRANCH = "main"
 SCM_HTTP_TIMEOUT_SECONDS_ENV = "SCM_HTTP_TIMEOUT_SECONDS"  # GitHub API 타임아웃 초(기본 10)
 DEFAULT_SCM_HTTP_TIMEOUT_SECONDS = "10"
 GITHUB_REPO_REF_RE = re.compile(r"^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$")
+GITHUB_BRANCH_REF_RE = re.compile(r"^[A-Za-z0-9._/-]+$")
 
 PR_STATUS_CREATED = "created"
 BRANCH_PREFIX = "gitops"
@@ -47,6 +48,7 @@ CONFLICT_STATUS = 422
 OK_STATUS = 200
 PATCH_COMMIT_MESSAGE_PREFIX = "Apply manifest patch"
 INVALID_REPO_REF_MESSAGE = "safe pr repo_ref must be an owner/repo GitHub repository path"
+INVALID_BRANCH_REF_MESSAGE = "safe pr branch must be a safe GitHub branch ref"
 
 # 자격 증명 부재는 부팅 실패가 아니라 요청 시점 실패 — 워커는 뜨고,
 # 각 safe_pr.requested 는 safe_pr.failed 경로로 흐름.
@@ -62,8 +64,28 @@ MISSING_EXISTING_PR_MESSAGE = (
 LOGGER = get_logger(__name__)
 
 
+def normalize_branch_ref(branch: str) -> str:
+    ref = branch.strip()
+    parts = ref.split("/")
+    if (
+        not ref
+        or not GITHUB_BRANCH_REF_RE.match(ref)
+        or ref.startswith("/")
+        or ref.endswith("/")
+        or "//" in ref
+        or "\\" in ref
+        or ".." in ref
+        or "@{" in ref
+        or ref.endswith(".")
+        or ref.endswith(".lock")
+        or any(part in {"", ".", ".."} or part.endswith(".lock") for part in parts)
+    ):
+        raise ValueError(INVALID_BRANCH_REF_MESSAGE)
+    return ref
+
+
 def branch_name(request: SafePrRequestedBody) -> str:
-    return f"{BRANCH_PREFIX}/{request.workflow_run_id}"
+    return normalize_branch_ref(f"{BRANCH_PREFIX}/{request.workflow_run_id}")
 
 
 def change_document_path(request: SafePrRequestedBody) -> str:
@@ -111,7 +133,7 @@ def request_repo(request: SafePrRequestedBody) -> str:
 
 
 def request_base_branch(request: SafePrRequestedBody) -> str:
-    return (
+    return normalize_branch_ref(
         request.base_branch.strip()
         or env(SCM_BASE_BRANCH_ENV, DEFAULT_SCM_BASE_BRANCH).strip()
         or DEFAULT_SCM_BASE_BRANCH

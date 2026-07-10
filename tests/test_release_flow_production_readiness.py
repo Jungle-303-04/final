@@ -49,6 +49,7 @@ def test_current_release_flow_production_readiness_static_checks_pass() -> None:
         "safe_pr.evidence_mismatch_diagnostics",
         "safe_pr.dispatch_uses_server_evidence",
         "safe_pr.execution_requires_created_evidence",
+        "safe_pr.github_branch_ref_validation",
         "workflow.production_readiness.requires_runtime_config",
         "workflow.production_readiness.github_provider_env",
         "workflow.production_readiness.github_access_preflight",
