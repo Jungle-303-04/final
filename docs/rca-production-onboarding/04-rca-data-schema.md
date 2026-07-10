@@ -127,8 +127,14 @@ Prometheus range query는 현재 구현되어 있다.
 
 - 등록 위치: `PrometheusMetricsProvider`의 `@telemetry.source(..., range_query_type=PrometheusRangeQuery)`
 - 실행 위치: `PrometheusMetricsProvider.query_range()`
-- normalize 결과: `result_type="matrix"`, `series`, `point_count`
+- normalize 결과: `result_type="matrix"`, `series`, `point_count`, `analysis`
 - 테스트: `tests/test_target_metric_evidence.py`
+
+Prometheus provider는 instant/range 결과 모두에 `analysis`를 추가한다.
+`analysis`는 이미 받은 숫자만 보고 만든 요약이다. 항상 `metric_kind`, `unit`, `signals`를 담고,
+숫자 point가 있으면 `value_summary`를 담는다. known metric이면 `threshold`를 담을 수 있고,
+range query에서 비교 가능한 series가 있으면 `baseline_comparison`을 담는다.
+외부 baseline이나 이전 배포 기준선은 여기서 조회하지 않는다.
 
 ## Kubernetes snapshot payload
 
@@ -326,6 +332,11 @@ RCA evidence item:
 | string | 최대 1600자로 자른다. |
 | nested dict/list | 값 전체 대신 요약을 남긴다. |
 | `data`, `result`, `values`, `streams` list | list 내부를 최대 8개까지 재귀 compact한다. |
+
+provider 원본 payload의 `results.<query_name>.analysis`는 nested object다.
+현재 RCA evidence bundle compact 단계에서는 nested dict/list 규칙에 따라 요약될 수 있다.
+원본 evidence에는 `analysis.metric_kind`가 항상 남고, 조건이 맞으면 `analysis.threshold`,
+`analysis.baseline_comparison`도 남아 있다.
 
 #### `logs:related_logs`
 
