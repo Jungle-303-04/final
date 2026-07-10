@@ -215,6 +215,7 @@ def test_release_flow_smoke_workflow_uploads_artifacts_before_failing_gate() -> 
     assert "live_environment must be a Kubernetes-style DNS label" in validate_step["run"]
     assert "live_namespace must be a Kubernetes-style DNS label" in validate_step["run"]
     assert "live_change_ticket is required when live_preflight is enabled" in validate_step["run"]
+    assert "live_change_ticket must not use CHG-PREFLIGHT" in validate_step["run"]
     assert "live_runbook_url is required for production live_preflight" in validate_step["run"]
     assert "live_runbook_url must not use example.com" in validate_step["run"]
     assert "live_release_owner or live_oncall_contact is required" in validate_step["run"]

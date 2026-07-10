@@ -582,7 +582,19 @@ def test_smoke_ops_rehearsal_exercises_safe_operator_actions() -> None:
 def test_smoke_live_preflight_checks_readiness_without_starting_run() -> None:
     smoke = load_smoke_module()
     client = FakeClient()
-    args = smoke.parse_args(["--live-preflight"])
+    args = smoke.parse_args(
+        [
+            "--live-preflight",
+            "--live-change-ticket",
+            "CHG-12345",
+            "--live-runbook-url",
+            "https://wiki.example.test/runbooks/release-flow",
+            "--live-release-owner",
+            "release-team",
+            "--live-oncall-contact",
+            "release-oncall@example.test",
+        ]
+    )
 
     results = smoke.run_smoke(
         client,
@@ -606,15 +618,29 @@ def test_smoke_live_preflight_checks_readiness_without_starting_run() -> None:
     assert readiness_payload["settings"]["approval_granted_by"] == "release-operator"
     assert readiness_payload["settings"]["approval_reason"] == "live preflight approval evidence"
     assert readiness_payload["settings"]["approval_granted_at"].endswith("Z")
-    assert readiness_payload["settings"]["change_ticket"] == "CHG-PREFLIGHT"
+    assert readiness_payload["settings"]["change_ticket"] == "CHG-12345"
     assert readiness_payload["settings"]["release_window_start"].endswith("Z")
     assert readiness_payload["settings"]["release_window_end"].endswith("Z")
     assert readiness_payload["settings"]["runbook_url"].startswith("https://")
-    assert readiness_payload["settings"]["release_owner"] == "release-operator"
-    assert readiness_payload["settings"]["oncall_contact"] == "release-oncall@example.com"
+    assert readiness_payload["settings"]["release_owner"] == "release-team"
+    assert readiness_payload["settings"]["oncall_contact"] == "release-oncall@example.test"
     assert readiness_payload["steps"][0]["config"]["environment"] == "production"
     assert readiness_payload["steps"][0]["config"]["namespace"] == "production"
     assert readiness_payload["steps"][0]["config"]["approval_gate"] == "manual"
+
+
+def test_smoke_live_preflight_rejects_production_placeholders_before_payload() -> None:
+    smoke = load_smoke_module()
+    args = smoke.parse_args(["--live-preflight"])
+
+    try:
+        smoke.validate_live_preflight_inputs(args)
+    except ValueError as exc:
+        message = str(exc)
+    else:
+        raise AssertionError("expected production live preflight placeholder rejection")
+
+    assert "live_change_ticket must not use production placeholder value CHG-PREFLIGHT" in message
 
 
 def test_smoke_alert_preflight_tests_warning_capable_channel() -> None:
