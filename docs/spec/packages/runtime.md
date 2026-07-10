@@ -84,6 +84,8 @@ def ensure_has_handler(service: str, handlers: dict[Any, Any]) -> None      # �
 | `correlation_id` | `str` | 흐름 ID |
 | `causation_id` | `str \| None` | 부모 이벤트 |
 | `db` | `DbT` | `AsyncDb` 로 감싼 Database — `EventContext[RcaStore]` 처럼 [stores Protocol](contracts.md#모듈-storespy) 로 좁혀 받음 |
+| `source` | `str` | 원본 이벤트를 발행한 서비스. typed body 핸들러의 envelope 복원에 사용 |
+| `created_at` | `str` | 원본 이벤트 생성 시각(ISO 문자열) |
 
 ```python
 @classmethod

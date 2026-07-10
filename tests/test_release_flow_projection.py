@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from contextlib import contextmanager
 from typing import Any
 
@@ -16,6 +17,7 @@ from domains.release_flow.projection import (
 )
 from domains.release_flow.repository import ReleaseFlowRepository, merge_projection_details
 from packages.contracts.event_bus.interfaces import EventEnvelope
+from packages.runtime.dispatch import make_event_handler
 
 
 def _evt(subject: str, payload: dict[str, object] | None = None) -> EventEnvelope:
@@ -945,6 +947,30 @@ def test_release_flow_worker_projects_failure_and_queues_evidence() -> None:
     assert first_update["step_status"] == "failed"
     assert evidence_request["provider_keys"] == ["kubernetes", "metrics", "logs", "traces"]
     assert evidence_update["event_type"] == "evidence.queued"
+
+
+def test_release_flow_worker_typed_dispatch_preserves_envelope_metadata() -> None:
+    worker = load_service("projection/release-flow-worker")
+    db = ReleaseProjectionDb()
+    envelope = _evt(
+        "workflow.run.failed",
+        {
+            "workspace_id": "workspace-a",
+            "workflow_run_id": "workflow-1",
+            "application_id": "app-a",
+            "cluster_id": "target",
+            "reason": "rollout health failed",
+        },
+    )
+    subscription = next(
+        item for item in worker.app.subscriptions if item.subject == envelope.subject
+    )
+
+    outputs = asyncio.run(make_event_handler(subscription, db, worker.app.name)(envelope))
+
+    assert [item.subject for item in outputs] == ["alert.requested", "evidence.jobs.queued"]
+    assert all(item.correlation_id == envelope.correlation_id for item in outputs)
+    assert all(item.causation_id == envelope.event_id for item in outputs)
 
 
 def test_release_flow_worker_alerts_on_verification_failure() -> None:
