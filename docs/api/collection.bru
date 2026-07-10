@@ -2,7 +2,7 @@ vars:pre-request {
   base_url: https://k8s.woonyong.org/api/
   auto_login: false
   dev_security_bypass: false
-  dev_cluster_id: cluster-1
+  dev_cluster_id: api-verification-target
   auth_email: replace-with-auth-email
   auth_password: replace-with-auth-password
   signup_email: replace-with-signup-email
@@ -10,11 +10,11 @@ vars:pre-request {
   email_verification_token: replace-with-token-from-mail-event
   user_id: replace-with-user-id
   workspace_id: default
-  cluster_id: bruno-api-test
-  cluster_id_2: bruno-api-test
-  agent_cluster_id: bruno-api-test
-  target_name: Bruno API Test Target
-  agent_target_name: Bruno API Test Target
+  cluster_id: api-verification-target
+  cluster_id_2: api-verification-target
+  agent_cluster_id: api-verification-target
+  target_name: API Verification Target
+  agent_target_name: API Verification Target
   management_base_url: https://k8s.woonyong.org/api/
   service_image: 183548421506.dkr.ecr.ap-northeast-2.amazonaws.com/kubernetes-ops-service:4cb1f247eebec806e1191e72c9763557b55b027d
   namespace: sandbox
