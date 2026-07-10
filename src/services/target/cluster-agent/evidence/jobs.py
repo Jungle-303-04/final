@@ -363,7 +363,7 @@ def provider_has_actual_evidence(
     if provider_key == "traces":
         return traces_have_results(payload)
     if provider_key == "metadata":
-        return metadata_has_context(payload)
+        return metadata_has_context(payload, release_context)
     return False
 
 
@@ -446,10 +446,111 @@ def traces_have_results(payload: object) -> bool:
     )
 
 
-def metadata_has_context(payload: object) -> bool:
+def metadata_has_context(payload: object, release_context: Mapping[str, object]) -> bool:
     if not isinstance(payload, Mapping):
         return False
     change_context = payload.get("change_context")
     if not isinstance(change_context, Mapping):
         return False
-    return any(value not in (None, "", [], {}) for value in change_context.values())
+    if not any(value not in (None, "", [], {}) for value in change_context.values()):
+        return False
+    namespace = str(release_context.get("namespace") or "").strip()
+    if not namespace:
+        return False
+    if metadata_context_namespaces(change_context) != {namespace}:
+        return False
+    resource_name = str(release_context.get("resource_name") or "").strip()
+    if not resource_name:
+        return True
+    resource_kind = str(release_context.get("resource_kind") or "Deployment").strip()
+    return metadata_context_workload_identities(change_context) == {
+        normalized_workload_identity(resource_kind, namespace, resource_name)
+    }
+
+
+def metadata_context_namespaces(change_context: Mapping[str, object]) -> set[str]:
+    """Return namespaces found in metadata change context evidence."""
+    namespaces: set[str] = set()
+    add_snapshot_namespace(namespaces, change_context.get("current_workload_snapshot"))
+
+    snapshots = change_context.get("current_workload_snapshots")
+    if isinstance(snapshots, list):
+        for snapshot in snapshots:
+            add_snapshot_namespace(namespaces, snapshot)
+
+    for key in ("service_selector_matches", "endpoint_slice_ready_endpoints"):
+        values = change_context.get(key)
+        if isinstance(values, list):
+            for value in values:
+                add_nested_metadata_namespaces(namespaces, value)
+
+    for key in ("resource_quotas", "referenced_config_objects"):
+        values = change_context.get(key)
+        if isinstance(values, list):
+            for value in values:
+                add_resource_namespace(namespaces, value)
+
+    return namespaces
+
+
+def metadata_context_workload_identities(
+    change_context: Mapping[str, object],
+) -> set[tuple[str, str, str]]:
+    """Return workload identities found in metadata snapshot evidence."""
+    identities: set[tuple[str, str, str]] = set()
+    add_snapshot_identity(identities, change_context.get("current_workload_snapshot"))
+
+    snapshots = change_context.get("current_workload_snapshots")
+    if isinstance(snapshots, list):
+        for snapshot in snapshots:
+            add_snapshot_identity(identities, snapshot)
+
+    return identities
+
+
+def add_snapshot_identity(identities: set[tuple[str, str, str]], value: object) -> None:
+    """Add one workload identity from a metadata snapshot."""
+    if not isinstance(value, Mapping):
+        return
+    workload = value.get("workload")
+    if not isinstance(workload, Mapping):
+        return
+    kind = str(workload.get("kind") or "").strip()
+    namespace = str(workload.get("namespace") or "").strip()
+    name = str(workload.get("name") or "").strip()
+    if kind and namespace and name:
+        identities.add(normalized_workload_identity(kind, namespace, name))
+
+
+def normalized_workload_identity(kind: str, namespace: str, name: str) -> tuple[str, str, str]:
+    """Normalize one workload identity for strict RCA test matching."""
+    return (kind.casefold(), namespace, name)
+
+
+def add_snapshot_namespace(namespaces: set[str], value: object) -> None:
+    """Add the workload namespace from one metadata snapshot."""
+    if not isinstance(value, Mapping):
+        return
+    add_resource_namespace(namespaces, value.get("workload"))
+
+
+def add_nested_metadata_namespaces(namespaces: set[str], value: object) -> None:
+    """Add namespaces from nested Service, Pod, or EndpointSlice summaries."""
+    if not isinstance(value, Mapping):
+        return
+    for key in ("service", "endpoint_slice"):
+        add_resource_namespace(namespaces, value.get(key))
+    for key in ("matched_pods", "ready_targets"):
+        resources = value.get(key)
+        if isinstance(resources, list):
+            for resource in resources:
+                add_resource_namespace(namespaces, resource)
+
+
+def add_resource_namespace(namespaces: set[str], value: object) -> None:
+    """Add one resource namespace when it is present."""
+    if not isinstance(value, Mapping):
+        return
+    namespace = str(value.get("namespace") or "").strip()
+    if namespace:
+        namespaces.add(namespace)

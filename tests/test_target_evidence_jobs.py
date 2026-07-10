@@ -368,7 +368,10 @@ class StaticEvidenceCollector:
 def run_scoped_job(
     provider_key: str,
     *,
+    namespace: str = "sandbox",
     pod_names: list[str] | None = None,
+    resource_kind: str = "Deployment",
+    resource_name: str = "",
 ) -> dict[str, Any]:
     query_by_provider = {
         "kubernetes": "sandbox",
@@ -377,7 +380,12 @@ def run_scoped_job(
         "traces": "{ status = error }",
         "metadata": "change_context",
     }
-    release_context: dict[str, Any] = {"evidence_scope": "rca_test_run"}
+    release_context: dict[str, Any] = {
+        "evidence_scope": "rca_test_run",
+        "namespace": namespace,
+        "resource_kind": resource_kind,
+        "resource_name": resource_name,
+    }
     if pod_names is not None:
         release_context["pod_names"] = pod_names
     return {
@@ -490,6 +498,105 @@ def test_run_scoped_strict_kubernetes_job_keeps_actual_run_pod_evidence() -> Non
 
     assert client.completed[0]["status"] == "completed"
     assert client.completed[0]["result"] == result
+
+
+def test_run_scoped_strict_metadata_job_rejects_wrong_namespace_evidence() -> None:
+    module = load_evidence_module()
+    client = StubEvidenceJobClient()
+    client.jobs.append(run_scoped_job("metadata", namespace="sandbox", resource_name="sandbox-api"))
+    result = {
+        "metadata": {
+            "change_context": {
+                "current_workload_snapshots": [
+                    {
+                        "workload": {
+                            "kind": "Deployment",
+                            "namespace": "target",
+                            "name": "target-api",
+                        }
+                    }
+                ],
+                "service_selector_matches": [
+                    {
+                        "service": {"namespace": "sandbox", "name": "sandbox-api"},
+                        "match_status": "matched",
+                        "matched_pod_count": 1,
+                    }
+                ],
+            }
+        }
+    }
+    scheduler = make_scheduler(module, StaticEvidenceCollector(result))
+
+    assert asyncio.run(scheduler.work_once(client, "metadata", "metadata-worker")) is True
+
+    assert client.completed[0]["status"] == "failed"
+    assert client.completed[0]["result"] == {}
+    assert client.completed[0]["error"] == (
+        "metadata provider returned no evidence for strict run-scoped job"
+    )
+
+
+def test_run_scoped_strict_metadata_job_accepts_matching_namespace_evidence() -> None:
+    module = load_evidence_module()
+    client = StubEvidenceJobClient()
+    client.jobs.append(run_scoped_job("metadata", namespace="sandbox", resource_name="sandbox-api"))
+    result = {
+        "metadata": {
+            "change_context": {
+                "current_workload_snapshot": {
+                    "workload": {
+                        "kind": "Deployment",
+                        "namespace": "sandbox",
+                        "name": "sandbox-api",
+                    }
+                }
+            }
+        }
+    }
+    scheduler = make_scheduler(module, StaticEvidenceCollector(result))
+
+    assert asyncio.run(scheduler.work_once(client, "metadata", "metadata-worker")) is True
+
+    assert client.completed[0]["status"] == "completed"
+    assert client.completed[0]["result"] == result
+
+
+def test_run_scoped_strict_metadata_job_rejects_wrong_workload_in_same_namespace() -> None:
+    module = load_evidence_module()
+    client = StubEvidenceJobClient()
+    client.jobs.append(run_scoped_job("metadata", namespace="sandbox", resource_name="sandbox-api"))
+    result = {
+        "metadata": {
+            "change_context": {
+                "current_workload_snapshots": [
+                    {
+                        "workload": {
+                            "kind": "Deployment",
+                            "namespace": "sandbox",
+                            "name": "sandbox-api",
+                        }
+                    },
+                    {
+                        "workload": {
+                            "kind": "Deployment",
+                            "namespace": "sandbox",
+                            "name": "old-sandbox-api",
+                        }
+                    },
+                ]
+            }
+        }
+    }
+    scheduler = make_scheduler(module, StaticEvidenceCollector(result))
+
+    assert asyncio.run(scheduler.work_once(client, "metadata", "metadata-worker")) is True
+
+    assert client.completed[0]["status"] == "failed"
+    assert client.completed[0]["result"] == {}
+    assert client.completed[0]["error"] == (
+        "metadata provider returned no evidence for strict run-scoped job"
+    )
 
 
 def test_scheduler_loop_survives_management_schedule_errors() -> None:

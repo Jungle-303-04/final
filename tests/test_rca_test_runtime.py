@@ -373,6 +373,42 @@ def test_fault_observed_logs_are_scoped_to_observed_pods_and_short_range() -> No
     assert logs_policy["release_context"]["pod_names"] == POD_NAMES
 
 
+def test_fault_observed_metadata_is_scoped_to_observed_namespace() -> None:
+    worker = load_service("projection/release-flow-worker")
+    db = _ReleaseFlowDb()
+    result = _fault_observed_result()
+    result["rca_test"]["evidence_sources"] = ["metadata"]
+
+    run_handler(
+        worker.on_event,
+        CommandCompletedBody(command_id=INJECT_COMMAND_ID, result=result),
+        db,
+        subject=str(CommandCompletedBody.__subject__),
+        correlation_id=CORRELATION_ID,
+    )
+
+    request = db.queued[0]
+    metadata_policy = request["provider_policies"]["metadata"]
+    assert metadata_policy["queries"] == [
+        {
+            "name": "rca_test_metadata_snapshot",
+            "description": "RCA test run scoped metadata snapshot",
+            "query": f"deployment/sandbox/{RESOURCE_NAME}",
+        }
+    ]
+    assert metadata_policy["release_context"]["namespace"] == "sandbox"
+
+
+def test_rca_test_metadata_query_trims_target_identity() -> None:
+    worker = load_service("projection/release-flow-worker")
+
+    assert (
+        worker.rca_test_metadata_query(" sandbox ", " Deployment ", f" {RESOURCE_NAME} ")
+        == f"deployment/sandbox/{RESOURCE_NAME}"
+    )
+    assert worker.rca_test_metadata_query(" sandbox ", "Service", "checkout") == "sandbox"
+
+
 def test_evidence_aggregation_promotes_release_context_and_same_correlation() -> None:
     release_context = {
         "correlation_id": CORRELATION_ID,

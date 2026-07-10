@@ -430,6 +430,8 @@ def metadata_query_target(telemetry_query: MetadataSnapshotQuery) -> MetadataQue
         return MetadataQueryTarget(namespace=parts[1], deployment_name=parts[2])
     if len(parts) == 2:
         return MetadataQueryTarget(namespace=parts[0], deployment_name=parts[1])
+    if len(parts) == 1:
+        return MetadataQueryTarget(namespace=parts[0])
 
     return MetadataQueryTarget(namespace=TARGET_NAMESPACE)
 
