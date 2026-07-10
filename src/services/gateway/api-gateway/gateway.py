@@ -536,10 +536,14 @@ class ApiGateway:
     def _register_metrics_routes(self, app: FastAPI) -> None:
         @app.get("/metrics")
         async def metrics(request: Request) -> PlainTextResponse:
-            # METRICS_TOKEN 설정 시에만 Bearer 강제(설정 안 하면 클러스터 내부 스크레이핑 허용 —
-            # 외부 노출은 NetworkPolicy/별도 포트로 막아야 함). 토큰 불일치는 거부.
-            # 비교는 timing-safe(compare_digest)로 수행.
+            # 개발 환경은 내부 스크레이프 편의를 유지한다. 보호 환경은 설정 실수로
+            # 운영 지표가 공개되지 않도록 토큰 미설정도 실패로 처리한다.
             metrics_token = env(Settings.METRICS_TOKEN_ENV, "")
+            if not metrics_token and bypass_guard.is_protected_env():
+                raise HTTPException(
+                    status_code=503,
+                    detail=Settings.METRICS_TOKEN_NOT_CONFIGURED_MESSAGE,
+                )
             if metrics_token:
                 header = request.headers.get(Settings.AUTHORIZATION_HEADER, "")
                 if not secrets.compare_digest(header, f"Bearer {metrics_token}"):
