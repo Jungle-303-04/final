@@ -59,8 +59,8 @@ push 전에는 반드시 `git fetch origin dev` 후 원격 선행 커밋 유무�
 ### 이미지
 
 - 최종 live digest:
-  `sha256:5f02d9694e812c594b28aebb3b5c8989afecb94a7b48109b9a8c5e0088a472b8`
-- 배포 소스 commit: `8ef141a53182e4d08266a70841ff548f583ee77a`
+  `sha256:4618d644df3f82e2eaf9d79548ac0ccc05bb6e189ac92a186248148cf667cbc2`
+- 배포 소스 commit: `d168cc39c9ace72d1b5e584e3f5b55fe87c08c01`
 
 ## 4. 현재 라이브 상태
 
@@ -235,8 +235,8 @@ bash scripts/run-bruno-aws.sh
 
 마지막 결과:
 
-- pytest: `1480 passed, 3 skipped`
-- Ruff: 458 backend files clean
+- pytest: `1504 passed, 3 skipped`
+- Ruff: 459 backend files clean
 - import-linter: 2 contracts kept, 0 broken
 - manifest: management 68 objects, target 20 objects
 - Bruno mTLS session: 1/1 request, 2/2 tests PASS
@@ -343,7 +343,8 @@ DB 자격증명은 `postgresql-secret`에서 프로세스 변수로만 읽고 �
 - Cloudflare Tunnel origin: `http://console-dev.management.svc.cluster.local:80`
 - 인증서 없음: 403, 유효한 client certificate: index/session/refresh/fleet 200
 - 공개 `k8s.woonyong.org`의 session/fleet 및 Agent 무토큰 요청: 401
-- 배포 이미지: service/console `bf68cbeb8-mtls-20260711`
+- 배포 이미지: backend `d168cc39c9`/`sha256:4618...cbc2`, console
+  `bf68cbeb8-mtls-20260711`
 - Ready: api-gateway 2/2, realtime-gateway 1/1, console 1/1, console-dev 2/2,
   cloudflared 2/2
 - 로컬 보안 산출물: `~/.kubeheal/dev-console-certs/2026-07-11/dev-console-01..05.p12`
@@ -366,5 +367,8 @@ DB 자격증명은 `postgresql-secret`에서 프로세스 변수로만 읽고 �
 - 라이브 deployment binding 3개는 모두 `cluster-1`이며 정리할 management binding 잔재는 0건이다.
 - DB schema/migration 변경은 없다. 기존 registration의 `cluster_id`나 agent token hash도 변경하지
   않는다.
-- 검증: 집중 회귀 167 passed, 전체 1480 passed/3 skipped, Ruff 전체 통과,
+- 라이브 검증: inventory read 200, 명시 binding 400 `management_readonly`, sandbox 제어 명령
+  400 `management_readonly`. management agent ServiceAccount는 pod/service/deployment/configmap
+  create/patch/delete/update가 모두 `no`, pod/node get/list는 `yes`다.
+- 검증: 집중 회귀 167 passed, 원격 Evidence 통합 후 전체 1504 passed/3 skipped, Ruff 전체 통과,
   import-linter 2 kept/0 broken, manifest 68/20.
