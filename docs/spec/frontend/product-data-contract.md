@@ -1,6 +1,6 @@
 ---
 title: Frontend-led Product Data Consumer Contract
-status: authoritative-contract
+status: planned-consumer-contract
 owner: frontend-platform
 version: product-data/v1
 last_verified: 2026-07-11
@@ -414,7 +414,7 @@ type RepositoryLink =
   | { state: "available"; url: string }
   | { state: "not_exposed"; reason: StatusReason }
 
-type IntegrationDisplayField = {
+type ExtensionDisplayField = {
   key: string
   labelKey: string
   value:
@@ -422,11 +422,12 @@ type IntegrationDisplayField = {
     | { type: "safe_link"; label: string; url: string }
 }
 
-type IntegrationInspectorRef = {
-  integrationId: string
+type CanonicalExtensionEnvelope = {
+  extensionId: string
   schemaId: string
+  extensionKind: "source_integration" | "resource_inspector" | "operation_inspector"
   displayName: string
-  fields: readonly IntegrationDisplayField[]
+  fields: readonly ExtensionDisplayField[]
 }
 
 type GitSourceRef =
@@ -440,14 +441,14 @@ type GitSourceRef =
       requestedRevision: RevisionValue
       resolvedRevision: RevisionValue
       locator: SourceLocator
-      integration: IntegrationInspectorRef | null
+      extensions: readonly CanonicalExtensionEnvelope[]
     }
   | {
       disclosure: "restricted"
       sourceId: string
       repositoryId: string
       reason: StatusReason
-      integration: null
+      extensions: readonly []
     }
 
 type DeploymentDestination = {
@@ -467,7 +468,7 @@ type DeploymentDestination = {
 type NamespaceRef = { clusterUid: string; namespace: string }
 ```
 
-Integration inspector는 표시용 allowlist이며 key/schema/display value를 UI 분기 입력으로 쓰지 않는다. safe link는 credential/userinfo/query secret을 제거한 allowlisted `https` URL만 허용한다. restricted ResourceRef는 허용된 source가 이미 참조를 노출한 경우에만 disclosure 수준에 맞는 coordinate 일부를 포함하고, 추론으로 발견한 hidden peer는 ResourceRef 자체를 만들지 않는다. live Kubernetes branch의 UID는 필수이고 desired manifest branch에 가짜 UID를 만들지 않는다.
+Canonical extension envelope는 표시용 allowlist이며 extensionId/schemaId/extensionKind/display value를 route, component, capability, status mapping의 분기 입력으로 쓰지 않는다. core DTO에는 이 envelope 밖 provider-specific field를 둘 수 없고 raw provider JSON은 `fields` 값으로도 허용하지 않는다. safe link는 credential/userinfo/query secret을 제거한 allowlisted `https` URL만 허용한다. restricted source는 extension 존재나 개수를 노출하지 않는다. restricted ResourceRef는 허용된 source가 이미 참조를 노출한 경우에만 disclosure 수준에 맞는 coordinate 일부를 포함하고, 추론으로 발견한 hidden peer는 ResourceRef 자체를 만들지 않는다. live Kubernetes branch의 UID는 필수이고 desired manifest branch에 가짜 UID를 만들지 않는다.
 
 Kubernetes core API group은 빈 문자열이 아니라 canonical `core`로 wire에 표시한다. namespace=null은 cluster-scoped resource만 뜻하며 missing namespace 대용이 아니다.
 
@@ -1190,7 +1191,7 @@ type ResourceNodeDetail = {
   insights: ResourceDetailSection<{ page: CursorPage<GitOpsInsight>; evidences: readonly RelationEvidence[] }>
   recentTimeline: ResourceDetailSection<CursorPage<TimelineEvent>>
   metricQueryTemplates: ResourceDetailSection<readonly MetricQueryTemplate[]>
-  capabilities: CapabilitySet
+  operationTargets: ResourceDetailSection<readonly OperationTarget[]>
   availableNavigation: readonly ("timeline" | "metrics" | "topology" | "gitops")[]
 }
 ```
@@ -1200,6 +1201,7 @@ type ResourceNodeDetail = {
 - expansion 중 revision이 바뀌면 409/412 또는 typed `stale_cursor`로 현재 snapshot을 보존한 채 재동기화 CTA를 표시한다.
 - aggregate node 선택은 해당 묶음의 정확한 expansion query를 실행한다. frontend가 임의 node/edge를 만들어 채우지 않는다.
 - detail object는 metadata 기본이다. Secret data, ConfigMap content, credential, token, sensitive diff는 redaction 규칙을 강제한다.
+- `operationTargets`는 선택 resource와 직접 연결되고 현재 actor에게 공개 가능한 exact application instance binding만 포함한다. available+empty는 실행 target 없음이며 forbidden/unavailable과 구분한다. target이 여러 개면 사용자가 하나를 선택하고, UI가 target+resource entity ID로 `resource_selection` subject를 만들어 `CapabilitiesPort.get`을 호출한다. node detail이 별도 capability decision을 반환하지 않는다.
 
 ### 6.3 Insight
 
@@ -1628,7 +1630,7 @@ type TopologyScope =
   | (TopologyScopeBase & { timeMode: "historical"; at: Timestamp })
 
 type TopologyProjection = {
-  lens: "placement" | "network" | "ownership" | "dependencies" | "gitops" | "butterfly"
+  relationPlanes: readonly ("placement" | "network" | "ownership" | "dependencies" | "gitops")[]
   relationKinds: readonly ResourceEdgeKind[]
   nodeCategories: readonly ResourceNodeCategory[]
   metricOverlayKeys: readonly string[]
@@ -1691,6 +1693,8 @@ type ResourceGraphStreamEnvelope = {
     | { type: "heartbeat"; graphRevision: string }
 }
 ```
+
+`map`, `focus-sankey`, `fold-lens`, `butterfly`는 frontend engine의 상호 배타적 presentation state이며 backend `TopologyQuery`나 `TopologyProjection`의 lens가 아니다. presentation을 바꿔도 같은 scope/filter/relation-plane snapshot을 재사용하고, data가 더 필요하지 않으면 port query/cache key/capability subject를 바꾸지 않는다. focus-Sankey는 현재 authorized map universe 전체를 source 하나와 right collection으로 재투영하며 그 정확한 완전성·motion 계약은 `topology-engine.md`와 visual adjunct가 소유한다. `butterfly`도 두 relation plane의 동시 layout일 뿐 별도 backend relation truth가 아니다.
 
 Topology scope의 applicationIds, instanceIds, clusterUids, namespaceRefs, rootEntityIds는 교집합 constraint이며 최소 하나의 anchor collection이 non-empty여야 한다. namespaceRefs가 non-empty이면 exact cluster/namespace pair만 포함하고 cluster-scoped resource는 includeClusterScoped=true일 때만 포함한다. 서로 양립할 수 없는 scope 조합은 empty가 아니라 `invalid_request`다. historical scope는 `topology.historical` exact capability가 enabled일 때만 요청한다.
 
@@ -2098,6 +2102,8 @@ type GitOpsOperationEvent = {
 }
 ```
 
+Capability subject는 request마다 canonicalize한다. `operation`은 exact operationId+statusVersion, `history_entry`는 exact historyEntryId+target, `resource_selection`은 중복 제거 후 entityId byte order로 정렬한 non-empty 집합, `metric_query`는 metricKey+mode+canonical MetricScope, `topology_query`는 graphKind+canonical TopologyScope가 identity다. workspace와 actor authorization은 `RequestContext`에서 결합한다. 응답 `CapabilitySet.subject`는 요청 subject와 구조적으로 같아야 하고 `revision`은 그 subject·actor·access·source·precondition cut에 대한 opaque CAS 값이다. UI는 다른 subject의 decision이나 revision을 재사용하지 않는다.
+
 Determinate progress의 current/total은 non-negative safe integer, total>0, current≤total, percent는 0..100 finite이고 server 계산값과 일치한다. 정확한 total이 없으면 indeterminate variant이며 가짜 percent를 만들지 않는다. `statusVersion`은 equality/CAS용 opaque value이며 순서를 비교하지 않는다. event 순서는 ResumeCursor sequence와 operationSequence로만 판단한다.
 
 Ordered incremental event의 legal transition:
@@ -2478,16 +2484,18 @@ ConsumerEnvelope은 성공한 unary read response만 나타낸다. 전체 scope 
 
 Scope selector는 cluster → environment → namespace → application instance의 종속 facet을 catalog에서 만든다. 선택 목록에 없는 ID를 URL에서 받으면 자동으로 첫 항목을 선택하지 않고 `선택 대상에 접근할 수 없음`을 표시한다. `All instances`는 read aggregate일 뿐 mutation target이 아니다.
 
+`getScopeCatalog`는 active workspace에서 search/parent filter가 없는 각 facet의 첫 page만 반환한다. embedded page의 nextCursor는 같은 facet과 empty search/parent filter를 가진 `listScopeFacet`에서만 소비한다. 검색 또는 종속 selector는 처음부터 `ScopeFacetQuery(cursor=null)`로 시작하고 다른 query의 cursor를 재사용하지 않는다.
+
 ### 13.2 화면별 query / mutation / stream
 
 | 화면/목적 | Semantic query 또는 mutation | 주요 parameter | Response | Realtime / polling |
 |---|---|---|---|---|
-| 공통 scope | `scope.catalog` | workspace, optional search/scope | `ConsumerEnvelope<ScopeCatalog>` | catalog revision 변경 시 invalidate; 저빈도 polling 가능 |
+| 공통 scope | `scope.catalog` | `RequestContext.workspaceId` + authorization revision; unfiltered bootstrap pages | `ConsumerEnvelope<ScopeCatalog>` | catalog revision 변경 시 invalidate; 저빈도 polling 가능 |
 | scope facet 추가 page | `scope.facets.list` | `ScopeFacetQuery` | 해당 facet의 `ConsumerEnvelope<CursorPage<...>>` | selector 검색/scroll 시 요청 |
 | Applications 목록 | `applications.list` | `ApplicationListQuery` | `ConsumerEnvelope<CursorPage<ApplicationSummary>>` | foreground revalidate; operation completion invalidate |
 | Application 상세 | `applications.get` | applicationId | `ConsumerEnvelope<ApplicationDetail>` | background revalidate; instance operation event가 targeted invalidate |
 | Application instance page | `applications.instances.list` | `ApplicationInstanceListQuery` | `ConsumerEnvelope<CursorPage<ApplicationInstanceSummary>>` | optional projection update stream 또는 polling |
-| GitOps 목록 | `gitops.instances.list` | `ApplicationInstanceListQuery` | 같은 instance page DTO | current operation이면 operation stream 결합 |
+| GitOps 목록 | `applications.instances.list` 공유 query | `ApplicationInstanceListQuery` | 같은 instance page DTO/cache | current operation이면 operation stream 결합 |
 | GitOps 상세 | `gitops.instances.get` | instanceId, bindingId | `ConsumerEnvelope<ApplicationInstanceDetail>` | background revalidate + operation targeted invalidate |
 | capabilities | `capabilities.get` | exact `CapabilitySubject` | `ConsumerEnvelope<CapabilitySet>` | subject/operation/source/access change 시 즉시 invalidate |
 | diff 목록 | `gitops.diffs.list` | `DiffPageQuery` | `ConsumerEnvelope<CursorPage<ResourceDiff>>` | diff operation 완료 후 fetch; stream 자체는 불필요 |
@@ -2500,7 +2508,7 @@ Scope selector는 cluster → environment → namespace → application instance
 | Timeline history | `timeline.list` | `TimelinePageRequest` | `ConsumerEnvelope<TimelinePage>` | page의 queryId/hash/liveStart로 atomic cutover |
 | Timeline poll | `timeline.poll` | queryId + canonicalQueryHash + sinceCursor | `ConsumerEnvelope<TimelinePollBatch>` | poll mode 전용; history page와 혼합 금지 |
 | Timeline live | `timeline.stream` | queryId + canonicalQueryHash + full `ResumeCursor` | `TimelineStreamEnvelope` | stream mode 전용 resume |
-| Metric catalog | `metrics.catalog` | `MetricCatalogQuery` | `ConsumerEnvelope<MetricCatalog>` | source/capability revision에 따라 refresh |
+| Metric catalog | `metrics.catalog` | `MetricCatalogQuery` | `ConsumerEnvelope<MetricCatalog>` | metric definition/source revision에 따라 refresh |
 | Metric source catalog | `metrics.sources.list` | `MetricSourceCatalogQuery` | `ConsumerEnvelope<MetricSourceCatalog>` | metric/source revision에 따라 독립 pagination |
 | Metric query | `metrics.query` | `MetricQuery` | `ConsumerEnvelope<MetricResult>` | v1 synchronous/cancellable; instant interval/range revalidate |
 | Full Topology catalog | `topology.catalog` | workspace/authz | engine `ConsumerEnvelope<TopologyCatalogResponse>` | catalog revision change 시 replan |
@@ -2512,7 +2520,17 @@ Scope selector는 cluster → environment → namespace → application instance
 | Receipt lookup | `operations.receipts.lookup` | idempotencyKey | `ConsumerEnvelope<OperationReceiptLookupResult>` | possibly-sent 복구 전용 |
 | Operation status | `operations.status.cut` | operationId | `ConsumerEnvelope<OperationStatusCut>` | status+streamStart atomic cut; poll fallback |
 | Operation events | `operations.stream` | operationId + full ResumeCursor | `GitOpsOperationEvent` | resume 가능한 ordered stream |
+| Approval detail | `approvals.get` | approvalId | `ConsumerEnvelope<Approval>` | approval event/decision receipt 후 targeted invalidate |
 | Approval decision | `operations.submit` | `ApprovalDecisionRequest` | `ApprovalDecisionReceipt` (202) | 공통 operation status/stream; 별도 mutation 금지 |
+
+#### 13.2.1 외부 API 경계 불변조건
+
+- 모든 unary query/mutation과 stream handshake는 `RequestContext.workspaceId`, authenticated session, authorization revision에 bind한다. URL, body, cursor subject가 이 context와 다르면 merge하지 않고 403/409/412 중 정확한 canonical error로 거부한다.
+- 첫 cursor page는 `cursor=null`이며 continuation은 cursor/limit을 제외한 normalized filter/sort/scope/time query를 그대로 반복한다. backend가 cursor 안의 숨은 default로 화면 의미를 바꾸지 않는다.
+- 성공한 unary read는 정확한 `ConsumerEnvelope<ResponseDTO>`를, accepted mutation은 정확한 versioned receipt를 반환한다. `data`, receipt, stream payload 중 하나를 provider raw object나 자유형 `unknown` map으로 대체하지 않는다.
+- nullable field는 §1의 적용 가능한 미관측/redaction만, optional field는 명시적으로 요청하지 않은 expansion만 표현한다. permission, unsupported, source error를 field omission으로 표현하지 않는다.
+- snapshot response의 query ID/hash/revision과 streamStart cursor는 하나의 atomic cut이다. stream/poll은 그 cut을 그대로 사용하고 cursor 만료·epoch 변경·sequence gap·origin mismatch에서는 적용을 중단한 뒤 새 cut을 받는다.
+- `CanonicalExtensionEnvelope`는 provider-specific 표시 정보가 통과할 수 있는 유일한 외부 확장 경계다. extension이 없거나 이해되지 않아도 canonical status, capability, navigation, operation은 완전히 동작해야 한다.
 
 ### 13.3 Cursor, filter, sort 불변조건
 
@@ -2524,19 +2542,24 @@ Scope selector는 cluster → environment → namespace → application instance
 - 동일 facet 안 복수 값은 OR, 서로 다른 facet은 AND다. backend가 다른 의미를 쓰면 response metadata로 명시하는 것이 아니라 OpenAPI 계약을 수정한다.
 - namespace filter는 반드시 `NamespaceRef(clusterUid, namespace)`로 전달한다. `clusterUids=[]`는 cluster facet 제약 없음, `namespaceRefs=[]`는 namespace facet 제약 없음이다. namespaceRefs가 non-empty이면 exact pair만 포함하고 각 ref의 cluster는 non-empty clusterUids가 주어졌을 때 그 집합 안에 있어야 한다. cluster-scoped 항목 포함 여부는 각 query의 `includeClusterScoped`가 유일한 권위다.
 - sort는 반드시 stable ID tie-break를 포함한다. client가 page를 받은 뒤 전역 재정렬하지 않는다.
-- sort parameter가 없는 cursor collection의 wire order는 고정한다: scope/catalog는 locale-independent normalized display key ASC + stable ID ASC, namespaces는 clusterUid ASC + namespace ASC, Diff는 canonical resource logical key ASC + diffId ASC, Insights는 severity rank DESC + lastObservedAt DESC(null last) + insightId ASC, History는 recordedAt DESC + historyEntryId DESC, Metric catalog/source는 normalized display key ASC + stable key ASC, graph expansion은 server canonical layout order + nodeId/edgeId tie-break다. 이 순서는 schema version 안에서 바뀌지 않으며 다른 순서가 필요하면 새 explicit sort enum을 추가한다.
+- sort parameter가 없는 cursor collection의 wire order는 고정한다: scope/catalog는 locale-independent normalized display key ASC + facet별 stable ID ASC, namespaces는 clusterUid ASC + namespace ASC, Diff는 canonical resource logical key ASC + diffId ASC, Insights는 severity rank DESC + lastObservedAt DESC(null last) + insightId ASC, History는 recordedAt DESC + historyEntryId DESC, Metric catalog는 normalized display key ASC + metricKey ASC, Metric source는 normalized display key ASC + sourceId ASC, graph expansion은 server canonical layout order + nodeId/edgeId tie-break다. 이 순서는 schema version 안에서 바뀌지 않으며 다른 순서가 필요하면 새 explicit sort enum을 추가한다.
+- Insight severity rank는 `critical > warning > notice > info > unknown`으로 고정한다. scope facet stable ID는 applicationId, instanceId, clusterUid, `(clusterUid,namespace)`, environmentId, repositoryId 순으로 해당 facet identity를 사용하고 restricted entry는 restrictedScopeRefId만 사용한다.
 - `total`은 exact/estimated/unknown/forbidden을 구분한다. unknown을 0으로 렌더링하지 않는다.
 - cursor가 만료되면 기존 page와 scroll anchor를 유지하고 first page 재조회 후 stable ID로 anchor를 복원한다.
 
 ### 13.4 Cache key와 invalidation
 
+모든 cache key는 아래 표의 구성요소 앞에 `RequestContext.workspaceId`를 필수 namespace로 가진다. actor별 redaction 또는 permission이 결과를 바꾸는 read는 authorization revision도 포함한다. 표에 workspace가 다시 적혀 있어도 같은 값을 두 번 hash하지 않는다.
+
 | Data | Canonical cache key | Invalidation trigger |
 |---|---|---|
 | scope catalog | workspace + authz revision | session/permission/cluster/binding change |
+| scope facet page | workspace + normalized ScopeFacetQuery + authz revision | catalog/session/permission/cluster/binding change |
 | application list | workspace + normalized query hash + authz revision | relevant instance projection 또는 operation terminal |
-| application detail | applicationId + expansion flags + authz revision | instance/binding/source change |
+| application detail | workspace + applicationId + authz revision | instance/binding/source change |
+| application instance page | workspace + normalized ApplicationInstanceListQuery + authz revision | instance/binding/source/operation change |
 | instance detail | instanceId + bindingId + authz revision | operation terminal, approval/source/projection change |
-| capability | exact target + actor/authz revision + capability revision | access/source/lifecycle/current operation/freshness change |
+| capability | workspace + exact CapabilitySubject + actor/authz revision | response capability revision, access/source/lifecycle/current operation/freshness change |
 | approval | approvalId + version + authz revision | approval event/decision receipt; newer version whole replace |
 | diff | instanceId + compared revisions + filter + operation result version | refresh/plan/apply/new desired revision |
 | Tree/Topology | GraphQueryRef hashes + snapshot/graph revision + authz revision | stream invalidation, scope/query change |
@@ -2597,6 +2620,8 @@ Invalidate는 cache 삭제와 즉시 blank 화면을 뜻하지 않는다. 이전
 
 ```ts
 type RequestContext = {
+  workspaceId: string
+  authorizationRevision: string
   signal: AbortSignal
   requestId: string
 }
@@ -2703,7 +2728,7 @@ type ProductPorts = {
 
 Capability query의 유일한 진입점은 `CapabilitiesPort.get`이다. GitOps, approval, history, resource selection, Metrics, Topology feature가 별도 capability endpoint나 local permission logic을 만들지 않는다. Approval decision도 `OperationsPort.submit(ApprovalDecisionRequest)` 한 mutation 경로를 사용하고 `ApprovalsPort`는 versioned approval read만 소유한다. Full Topology composition은 이 ProductPorts와 `topology-engine.md`의 `TopologyGateway`를 함께 주입한다. `ResourceGraphFacadePort`는 그 engine store 또는 GitOps Tree store를 읽는 frontend facade이며 live transport adapter가 아니다.
 
-UI component와 reducer는 URL, fetch, provider SDK를 호출하지 않고 이 ports를 effect를 통해서만 사용한다. runtime schema parse와 transport error mapping은 live adapter 경계에서 수행한다.
+UI component와 reducer는 URL, fetch, provider SDK를 호출하지 않고 이 ports를 effect를 통해서만 사용한다. runtime schema parse와 transport error mapping은 live adapter 경계에서 수행한다. `workspaceId`와 `authorizationRevision`은 validated session store에서 만들며 사용자 입력이나 provider response가 덮어쓸 수 없다.
 
 - Graph/Timeline `mode="stream"` branch만 stream method에 전달할 수 있다. `mode="poll"`은 pollAfterMs에 따라 conditional poll, `mode="static"`은 자동 effect 0건이다.
 - Graph poll은 GraphQueryRef+snapshotId+graphRevision을 그대로 보내고 새 snapshot을 원자 교체한다. old/new delta를 이어 붙이지 않는다.
@@ -2744,7 +2769,7 @@ Backend/OpenAPI는 다음을 모두 보장해야 한다.
 3. lifecycle, sync, health, freshness, completeness, access, approval, operation phase를 독립 필드로 유지한다.
 4. 모든 collection에 filter/sort-bound opaque cursor, stable ID tie-break, hasMore, total state를 제공한다.
 5. capability를 adapter support ∩ applicability ∩ actor permission ∩ target access ∩ source connectivity ∩ freshness/precondition ∩ approval policy ∩ current operation 상태의 교집합으로 서버에서 계산한다.
-6. provider 이름을 canonical DTO top-level 분기 필드로 요구하지 않는다. provider metadata/extension은 allowlisted auxiliary object에 격리한다.
+6. provider 이름을 canonical DTO top-level 분기 필드로 요구하지 않는다. provider 표시 metadata는 `CanonicalExtensionEnvelope`에만 격리하고 raw provider object를 허용하지 않는다.
 7. management read-only write는 approval 생성 전과 operation receipt 생성 전에 capability/read-only error로 일관되게 차단한다. `승인 성공 후 apply 거부` 전이를 허용하지 않는다.
 8. 모든 mutation에 idempotency와 202 `GitOpsOperationReceipt`, idempotency-key receipt lookup, atomic OperationStatusCut, resume 가능한 progress stream 또는 polling start를 제공한다.
 9. refresh, diff, reconcile plan/apply, suspend, resume, terminate, rollback plan, approval decide, history, capabilities를 canonical 의미로 제공한다. prune/selective sync는 지원할 때만 capability로 노출한다.
@@ -2757,8 +2782,9 @@ Backend/OpenAPI는 다음을 모두 보장해야 한다.
 16. 모든 read root에 freshness, completeness, data origin, warnings를 제공하고 partial success를 200 + typed completeness로 표현한다.
 17. redaction은 name/count/total/edge를 통한 side channel까지 고려하며 Secret/sensitive content를 raw payload에 포함하지 않는다.
 18. 401/403/404/409/412/422/429/source unavailable/stale cursor/schema incompatible를 canonical error code로 구분한다.
-19. cursor, resume token, operation statusVersion, graph revision은 opaque하며 authorization scope에 bind하고 위조/재사용을 검증한다.
-20. OpenAPI의 nullable/required/enum/time/decimal 규칙이 이 문서와 일치하고 generated TypeScript + runtime validator가 같은 schema revision을 사용하게 한다.
+19. cursor, resume token, operation statusVersion, graph revision은 opaque하며 workspace/authorization scope에 bind하고 위조/재사용을 검증한다.
+20. 모든 request/stream handshake가 `RequestContext`의 active workspace와 authorization revision을 보존하고 context mismatch를 typed error로 거부한다.
+21. OpenAPI의 nullable/required/enum/time/decimal 규칙이 이 문서와 일치하고 generated TypeScript + runtime validator가 같은 schema revision을 사용하게 한다.
 
 ### 15.2 SHOULD
 
@@ -2783,14 +2809,15 @@ Backend/OpenAPI는 다음을 모두 보장해야 한다.
 
 허용:
 
-- `GitSourceRef.integration`의 allowlisted IntegrationInspectorRef.
+- `GitSourceRef.extensions` 안의 allowlisted `CanonicalExtensionEnvelope`.
 - opaque connector/source ID와 사용자에게 보여줄 source display name.
-- 명시적으로 격리된 optional extension inspector.
+- canonical extension envelope 안의 display-only field와 safe link.
 
 금지:
 
 - provider 이름을 switch/if key, route 선택, button availability, status mapping, component selection에 사용.
 - core DTO top-level의 provider 전용 revision/status/path/URL/credential 필드.
+- `CanonicalExtensionEnvelope` 밖의 provider-specific field 또는 envelope 안의 raw JSON/credential/query payload.
 - raw provider status를 `SyncStatus`, `HealthStatus`, `OperationPhase`로 parse하지 않고 그대로 표시.
 - provider endpoint URL, query language, token, webhook payload를 view state에 보관.
 - provider별 fixture로 제품 동작을 검증. capability/access/freshness matrix fixture를 사용한다.
@@ -2880,7 +2907,7 @@ Fixture 축은 provider가 아니라 다음 canonical 값이다.
 2. optional과 nullable이 §1 규칙대로 구분되고 빈 문자열/0으로 missing을 대체하지 않는다.
 3. applicationId-instanceId-bindingId-destinationId가 직접 연결되고 mutation target이 exact binding이다.
 4. list/filter/sort/cursor/totalState가 모든 collection에 일관된다.
-5. provider-specific top-level field와 provider-name operation 분기가 없다.
+5. provider-specific top-level field와 provider-name operation 분기가 없고 모든 display extension이 `CanonicalExtensionEnvelope`로 격리된다.
 6. capability에 exact subject, applicability/support/permission/enabled/visibility/effects/approval/confirmation/constraints/reason/revision이 있다.
 7. management read-only write가 approval/receipt 전에 차단된다.
 8. operation 202 receipt, idempotency receipt lookup, atomic status cut, operationSequence, progress/resume, terminal states, poll fallback이 있다.
@@ -2901,7 +2928,7 @@ Fixture 축은 provider가 아니라 다음 canonical 값이다.
 - Tree/Insights snapshot/expansion/node inspector와 partial/stale/restricted 상태.
 - Timeline page/live event/reconnect/out-of-order UI.
 - Metrics catalog/query/coverage/source/freshness/취소 UI.
-- Topology snapshot/delta/metric overlay/lens/drill-down/cross-navigation.
+- Topology snapshot/delta/metric overlay/map·focus-Sankey·보조 fold-lens/drill-down/cross-navigation.
 - 모든 operation receipt/progress/approval/terminal/recovery flow.
 - management read-only와 capability hide/disabled reason.
 - light/dark/high-contrast/reduced-motion/keyboard/large payload 테스트.
