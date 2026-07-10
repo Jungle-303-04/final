@@ -910,8 +910,11 @@ def check_deploy_script_contract() -> list[ReadinessCheck]:
             "script.deploy.starts_release",
             '"/release-plans/start"' in source
             and "release-plans.start.production" in source
-            and "side_effects" in source
-            and "all(value is True for value in side_effects)" in source,
+            and "validate_start_response" in source
+            and "FAILED_RUN_STATES" in source
+            and "release start response must include run_id" in source
+            and "release start response must include every planned step" in source
+            and "must confirm side_effects" in source,
             "deploy script starts the release and verifies live side-effect evidence",
         ),
     ]
