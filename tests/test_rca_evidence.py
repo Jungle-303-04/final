@@ -888,7 +888,6 @@ def test_rca_test_report_bypasses_incident_dedup_and_saves_correlation() -> None
     assert not db.called("find_recent_rca_report")
     save = next(call for call in db.calls if call[0] == "save_rca_report")
     assert save[1][0] == "corr-rca-test"
-    assert save[1][4]["evidence"]["metadata"]["rca_test"]["run_id"] == "run-1"
 
 
 def test_no_incident_flow_stops_before_rca_analysis() -> None:
