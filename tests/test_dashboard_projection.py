@@ -113,6 +113,28 @@ def test_dashboard_worker_ignores_unmapped_subjects() -> None:
     assert db.calls == []
 
 
+def test_dashboard_worker_ignores_pre_incident_evidence_events() -> None:
+    dashboard = load_service("projection/dashboard-worker")
+    for subject in ("cluster.evidence.received", "evidence.built"):
+        db = SpyDb()
+
+        outs = run_handler(
+            dashboard.on_event,
+            _evt(
+                subject,
+                {
+                    "workspace_id": "workspace-1",
+                    "cluster_id": "cluster-1",
+                    "evidence_key": "evidence-1",
+                },
+            ),
+            db=db,
+        )
+
+        assert outs == []
+        assert db.calls == []
+
+
 def test_dashboard_worker_ignores_non_incident_detection() -> None:
     dashboard = load_service("projection/dashboard-worker")
     db = SpyDb()

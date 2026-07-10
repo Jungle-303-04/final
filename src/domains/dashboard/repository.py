@@ -733,6 +733,10 @@ def timeline_update_from_event(evt: EventEnvelope) -> JsonObject | None:
     status = RCA_TIMELINE_STATUS_BY_SUBJECT.get(str(evt.subject))
     if status is None:
         return None
+    # Evidence 저장 상태는 evidence 전용 조회 모델에서 관리한다. 장애가 확인되기 전
+    # 샘플까지 incident timeline에 투영하면 정상 수집 주기마다 행이 무한히 늘어난다.
+    if status in PRE_INCIDENT_STATUSES:
+        return None
 
     payload = evt.payload if isinstance(evt.payload, dict) else {}
     if _is_non_incident_detection(str(evt.subject), payload):
