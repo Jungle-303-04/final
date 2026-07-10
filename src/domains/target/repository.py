@@ -6,7 +6,7 @@ import uuid
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
-from sqlalchemy import func, or_, select, update
+from sqlalchemy import delete, func, or_, select, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from domains.target.evidence_jobs import (
@@ -32,10 +32,28 @@ from domains.target.models import (
     TargetDesiredState,
     TargetReconcileRecord,
 )
+from packages.config.settings import env
 from packages.contracts.event_bus.interfaces import EventEnvelope, JsonObject
 from packages.contracts.target import TargetDesiredStateStatus
 from packages.storage.engine import DatabaseConnection, iso_or_none
 from packages.storage.schema import EventModel, OutboxModel
+
+AGENT_STATUS_RETENTION_SECONDS_ENV = "AGENT_STATUS_RETENTION_SECONDS"
+DEFAULT_AGENT_STATUS_RETENTION_SECONDS = 3600
+
+
+def agent_status_retention_seconds() -> int:
+    """종료된 agent pod 상태를 보존할 최대 시간을 반환한다."""
+    try:
+        configured = int(
+            env(
+                AGENT_STATUS_RETENTION_SECONDS_ENV,
+                str(DEFAULT_AGENT_STATUS_RETENTION_SECONDS),
+            )
+        )
+    except ValueError:
+        return DEFAULT_AGENT_STATUS_RETENTION_SECONDS
+    return max(300, configured)
 
 
 class TargetAgentRepository(DatabaseConnection):
@@ -76,6 +94,15 @@ class TargetAgentRepository(DatabaseConnection):
         )
         with self.connection() as conn:
             row = conn.execute(statement).mappings().one()
+            stale_before = datetime.now(UTC) - timedelta(seconds=agent_status_retention_seconds())
+            conn.execute(
+                delete(table).where(
+                    table.c.workspace_id == workspace_id,
+                    table.c.cluster_id == cluster_id,
+                    table.c.agent_id != agent_id,
+                    table.c.last_seen_at < stale_before,
+                )
+            )
         return self.serialize_cluster_agent_status(dict(row))
 
     def list_cluster_agent_statuses(
