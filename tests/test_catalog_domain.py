@@ -77,8 +77,14 @@ class StubCatalogDb:
                     "package_ref": "oci://registry-1.docker.io/bitnamicharts/postgresql",
                     "values_schema": {
                         "type": "object",
-                        "required": ["auth.database"],
-                        "properties": {"auth.database": {"type": "string"}},
+                        "required": [
+                            "auth.database",
+                            "primary.persistence.storageClass",
+                        ],
+                        "properties": {
+                            "auth.database": {"type": "string"},
+                            "primary.persistence.storageClass": {"type": "string"},
+                        },
                     },
                     "template": {"runner": "helm", "chart_version": "18.7.13"},
                 }
@@ -168,7 +174,10 @@ def install_body(**overrides: object) -> dict[str, object]:
         "namespace": "sandbox",
         "application_name": "orders-db",
         "release_name": "orders-db",
-        "values": {"auth.database": "orders"},
+        "values": {
+            "auth.database": "orders",
+            "primary.persistence.storageClass": "gp2",
+        },
     }
     body.update(overrides)
     return body
@@ -182,6 +191,19 @@ def test_bootstrap_catalog_contains_initial_open_source_recipes() -> None:
     slugs = {item["slug"] for item in BOOTSTRAP_CATALOG_ITEMS}
 
     assert {"postgresql", "redis", "fastapi-template", "nextjs-template"} <= slugs
+    helm_items = {
+        str(item["slug"]): item["versions"][0]
+        for item in BOOTSTRAP_CATALOG_ITEMS
+        if item["versions"][0]["package_type"] == "helm"
+    }
+    assert helm_items["postgresql"]["values_schema"]["required"] == [
+        "auth.database",
+        "primary.persistence.storageClass",
+    ]
+    assert helm_items["redis"]["values_schema"]["required"] == ["master.persistence.storageClass"]
+    for version in helm_items.values():
+        assert "image.digest" in version["template"]["fixed_values"]
+        assert "image.digest" not in version["values_schema"]["properties"]
 
 
 def test_catalog_list_route_returns_catalog_items() -> None:
@@ -218,7 +240,10 @@ def test_catalog_install_queues_real_high_priority_agent_command() -> None:
         "namespace": "sandbox",
         "application_name": "orders-db",
         "release_name": "orders-db",
-        "values": {"auth.database": "orders"},
+        "values": {
+            "auth.database": "orders",
+            "primary.persistence.storageClass": "gp2",
+        },
     }
     assert "package_ref" not in plan["payload"]
     assert "chart_url" not in plan["payload"]
@@ -286,8 +311,25 @@ def test_catalog_install_never_targets_management_cluster(role_source: str) -> N
     "body",
     [
         install_body(values={}),
-        install_body(values={"auth.database": 123}),
-        install_body(values={"auth.database": "orders", "chart.url": "https://evil.invalid"}),
+        install_body(
+            values={"auth.database": "orders"},
+        ),
+        install_body(
+            values={"auth.database": 123, "primary.persistence.storageClass": "gp2"},
+        ),
+        install_body(
+            values={
+                "auth.database": "orders",
+                "primary.persistence.storageClass": "gp2",
+                "chart.url": "https://evil.invalid",
+            },
+        ),
+        install_body(
+            values={
+                "auth.database": "orders",
+                "primary.persistence.storageClass": "INVALID..class",
+            },
+        ),
         install_body(application_name="Orders_DB"),
         install_body(namespace="management"),
         install_body(release_name="unsafe.release"),
@@ -330,7 +372,12 @@ def test_catalog_install_is_idempotent_and_rejects_key_reuse_with_new_payload() 
     replay = client.post("/catalog/items/postgresql/installs", json=install_body(), headers=headers)
     conflict = client.post(
         "/catalog/items/postgresql/installs",
-        json=install_body(values={"auth.database": "billing"}),
+        json=install_body(
+            values={
+                "auth.database": "billing",
+                "primary.persistence.storageClass": "gp2",
+            }
+        ),
         headers=headers,
     )
 

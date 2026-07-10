@@ -43,6 +43,7 @@ class ServerHelmRecipe:
     chart_version: str
     chart_digest: str
     values_schema: JsonObject
+    fixed_values: JsonObject
 
     @property
     def digest_reference(self) -> str:
@@ -79,6 +80,7 @@ def server_helm_recipe(item_id: str, version: str) -> ServerHelmRecipe:
                 chart_version=chart_version,
                 chart_digest=chart_digest,
                 values_schema=dict(candidate.get("values_schema") or {}),
+                fixed_values=dict(template.get("fixed_values") or {}),
             )
     raise CatalogRecipeUnsupported("catalog recipe is not executable by the target Agent")
 
@@ -103,6 +105,16 @@ def validate_install_names(
         or HELM_RELEASE_PATTERN.fullmatch(release_name) is None
     ):
         raise CatalogInstallValidationError("release_name must be a safe Helm release name")
+
+
+def is_kubernetes_dns_subdomain(value: str) -> bool:
+    if not value or len(value) > 253:
+        return False
+    labels = value.split(".")
+    return all(
+        len(label) <= MAX_KUBERNETES_NAME_LENGTH and DNS_LABEL_PATTERN.fullmatch(label) is not None
+        for label in labels
+    )
 
 
 def value_matches_type(value: object, expected: str) -> bool:
@@ -145,4 +157,12 @@ def validate_catalog_values(schema: JsonObject, values: JsonObject) -> JsonObjec
         allowed = rule.get("enum")
         if isinstance(allowed, list) and validated[name] not in allowed:
             raise CatalogInstallValidationError(f"catalog value is not an allowed option: {name}")
+        if (
+            rule.get("format") == "kubernetes-dns-subdomain"
+            and isinstance(validated[name], str)
+            and not is_kubernetes_dns_subdomain(validated[name])
+        ):
+            raise CatalogInstallValidationError(
+                f"catalog value is not a Kubernetes DNS subdomain: {name}"
+            )
     return validated

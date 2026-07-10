@@ -44,8 +44,8 @@ status: synced
 
 | item_id | slug | name | category | package_type | package_ref | template | values_schema properties |
 |---|---|---|---|---|---|---|---|
-| `catalog-postgresql` | `postgresql` | PostgreSQL | database | helm | `oci://registry-1.docker.io/bitnamicharts/postgresql` | chart `18.7.13`, OCI digest 고정 | `auth.database`(required string), `primary.persistence.size`(string, default `"8Gi"`) |
-| `catalog-redis` | `redis` | Redis | database | helm | `oci://registry-1.docker.io/bitnamicharts/redis` | chart `23.1.1`, OCI digest 고정 | (없음) |
+| `catalog-postgresql` | `postgresql` | PostgreSQL | database | helm | `oci://registry-1.docker.io/bitnamicharts/postgresql` | chart `18.7.13`, chart/image digest 고정 | `auth.database`, `primary.persistence.storageClass`(required string), `primary.persistence.size`(string, default `"8Gi"`) |
+| `catalog-redis` | `redis` | Redis | database | helm | `oci://registry-1.docker.io/bitnamicharts/redis` | chart `23.1.1`, chart/image digest 고정, standalone 강제 | `master.persistence.storageClass`(required string), `master.persistence.size`(string, default `"8Gi"`) |
 | `catalog-fastapi-template` | `fastapi-template` | FastAPI Service | application | template | `builtin://templates/fastapi` | `{"runner": "manifest-renderer", "kind": "Deployment"}` | `image`(string), `replicas`(integer) |
 | `catalog-nextjs-template` | `nextjs-template` | Next.js Web App | application | template | `builtin://templates/nextjs` | `{"runner": "manifest-renderer", "kind": "Deployment"}` | `image`(string), `replicas`(integer) |
 
@@ -66,7 +66,9 @@ metadata.tags: postgresql `["database","sql","stateful"]`, redis `["cache","key-
 - `server_helm_recipe(item_id, version)`은 코드에 동봉된 bootstrap Helm recipe만 반환한다. DB 저장 recipe나 요청 URL을 실행 대상으로 승격하지 않는다.
 - `CatalogHelmInstallPayload`에는 item/version, namespace, application/release 이름, 선언된 values만 있다. chart ref/digest는 Agent가 같은 서버 recipe에서 다시 해석한다.
 - application/namespace는 DNS label(최대 63), Helm release는 최대 53자로 검증한다.
-- `validate_catalog_values`는 schema `properties` 밖 필드, `required` 누락, 타입/enum 불일치를 거부한다.
+- `validate_catalog_values`는 schema `properties` 밖 필드, `required` 누락, 타입/enum/StorageClass DNS 이름 불일치를 거부한다.
+- server recipe의 `fixed_values`는 사용자 values 병합 뒤에 적용된다. PostgreSQL/Redis 컨테이너 이미지는 서버 소유 digest로 고정되며 사용자가 `latest`나 다른 repository로 덮어쓸 수 없다.
+- StorageClass는 클러스터마다 다르므로 코드에 특정 provider 값을 하드코딩하지 않는다. API 호출자가 카탈로그 schema에 선언된 필드로 명시해야 하며 누락 시 실행 전에 422로 거부한다.
 
 ### 라우터 — `src/domains/catalog/router.py`
 
