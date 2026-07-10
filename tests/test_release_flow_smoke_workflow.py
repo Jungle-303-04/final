@@ -27,10 +27,12 @@ def test_release_flow_smoke_workflow_declares_operator_inputs_and_secrets_for_di
 
     assert set(inputs) == {
         "api_base_url",
+        "github_environment",
         "production_preflight_plan_id",
         "production_preflight_run_limit",
     }
     assert inputs["production_preflight_run_limit"]["default"] == "20"
+    assert inputs["github_environment"]["default"] == "production"
     assert (
         job["env"]["API_BASE_URL"]
         == "${{ inputs.api_base_url || secrets.release_flow_api_base_url || secrets.RELEASE_FLOW_API_BASE_URL }}"
@@ -48,6 +50,7 @@ def test_release_flow_smoke_workflow_can_be_called_by_deploy_workflows() -> None
 
     assert set(workflow_call["inputs"]) == {
         "api_base_url",
+        "github_environment",
         "production_preflight_plan_id",
         "production_preflight_run_limit",
     }
@@ -57,6 +60,7 @@ def test_release_flow_smoke_workflow_can_be_called_by_deploy_workflows() -> None
         "release_flow_auth_password",
     }
     assert workflow_call["inputs"]["production_preflight_run_limit"]["default"] == "20"
+    assert workflow_call["inputs"]["github_environment"]["default"] == "production"
     assert workflow_call["outputs"]["release_smoke_ok"]["value"] == (
         "${{ jobs.release_flow_smoke.outputs.release_smoke_ok }}"
     )
@@ -70,11 +74,13 @@ def test_release_flow_smoke_workflow_can_be_called_by_deploy_workflows() -> None
 
 def test_release_flow_smoke_workflow_uploads_artifacts_before_failing_gate() -> None:
     workflow = load_workflow()
-    steps = workflow["jobs"]["release_flow_smoke"]["steps"]
+    job = workflow["jobs"]["release_flow_smoke"]
+    steps = job["steps"]
     smoke_step = next(step for step in steps if step.get("id") == "release_flow_smoke")
     upload_step = next(step for step in steps if step["name"] == "Upload release-flow smoke artifacts")
     fail_step = next(step for step in steps if step["name"] == "Fail when release-flow smoke failed")
 
+    assert job["environment"] == "${{ inputs.github_environment || 'production' }}"
     assert smoke_step["continue-on-error"] is True
     assert "--production-preflight" in smoke_step["run"]
     assert "--retry-attempts 5" in smoke_step["run"]
