@@ -1,6 +1,6 @@
 # 현재 서비스 상태
 
-마지막 실측: 2026-07-11 02:10:56 KST
+마지막 실측: 2026-07-11 06:26:25 KST
 
 이 문서는 `dev` 최종 소스와 같은 이미지로 배포한 뒤 측정한 라이브 기준선이다. 비밀값 원문과
 사용자 개인정보는 기록하지 않는다.
@@ -8,18 +8,21 @@
 ## 소스와 배포
 
 - 권위 브랜치/worktree: `dev` / `SW_AI_W17-21-final-dev`
-- 배포 소스 commit: `8ef141a53182e4d08266a70841ff548f583ee77a`
+- 배포 소스 commit: `d168cc39c9ace72d1b5e584e3f5b55fe87c08c01`
 - backend image:
-  `kubernetes-ops-service@sha256:5f02d9694e812c594b28aebb3b5c8989afecb94a7b48109b9a8c5e0088a472b8`
+  `kubernetes-ops-service@sha256:4618d644df3f82e2eaf9d79548ac0ccc05bb6e189ac92a186248148cf667cbc2`
 - management: Deployment 43개, replica 46/46 Ready, StatefulSet 3개, replica 3/3 Ready
 - backend service image Deployment: 38개 전부 위 digest와 일치
 - cluster-1 target Agent: 1/1 Ready, 같은 digest, restart 0
 - console/agent API health: 모두 HTTP 200 `status=ok`
-- 안정화 45초 로그: Agent/gateway warning·error 0
+- 최근 10분 핵심 Agent/gateway/relay/workflow 로그: warning·error 0
 
 ## 운영 데이터
 
 - 등록: `kubernetes-ops`(management), `cluster-1`(target) 2개, 모두 online
+- management canonical ID config/runtime/DB: 모두 `kubernetes-ops`
+- management deployment binding 0, 명시 binding/command는 400 `management_readonly`
+- management Agent ServiceAccount 쓰기 권한은 모두 `no`, inventory용 get/list는 `yes`
 - 사용자 계정 9개와 workspace/RBAC 보존
 - repo 2개, application 4개, deployment binding 3개 보존
 - 과거 command/RCA/evidence/event/audit/outbox와 고아 test registration 종속 행 삭제
@@ -55,12 +58,12 @@
 
 ## 최종 검증
 
-- pytest: `1456 passed, 3 skipped`
-- Ruff check/format: 통과
+- pytest: `1504 passed, 3 skipped`
+- Ruff check/format: 459 files 통과
 - import-linter: 2 contracts kept, 0 broken
-- manifest: management 62 objects, target 20 objects
+- manifest: management 68 objects, target 20 objects
 - RCA scenario catalog: 25개 schema/adapter/cause/evidence/recovery 계약 유효
-- Bruno live: 67/67 requests, 120/120 tests PASS
+- Bruno mTLS session: HTTP 200, workspace `default`, role `service_admin`
 - NATS consumer pending: 전 consumer 0
 
 다음 변경은 이 기준선에서 같은 검증을 다시 수행하고, 결과가 나빠지면 배포를 완료로 취급하지
