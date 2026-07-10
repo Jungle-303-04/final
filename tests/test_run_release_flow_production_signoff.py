@@ -1,8 +1,55 @@
 from __future__ import annotations
 
 import json
+from datetime import UTC, datetime, timedelta
 
 from scripts import run_release_flow_production_signoff as signoff
+
+
+def write_preflight_report(
+    tmp_path,
+    *,
+    github_sha: str = "sha-production",
+    generated_at: datetime | None = None,
+) -> None:
+    generated_at = generated_at or datetime.now(UTC)
+    (tmp_path / "release-flow-production-preflight.json").write_text(
+        json.dumps(
+            {
+                "status": "passed",
+                "generated_at": generated_at.isoformat(),
+                "expires_at": (generated_at + timedelta(minutes=60)).isoformat(),
+                "github_repo": "org/repo",
+                "github_branch": "release/prod",
+                "github_branch_head_sha": github_sha,
+                "github_sha": github_sha,
+                "github_environment": "production",
+                "release_plan_id": "plan-1",
+                "live_change_ticket": "CHG-123",
+                "live_runbook_url": "https://ops.example.internal/runbook",
+                "live_release_owner": "ops-owner",
+                "live_oncall_contact": "",
+                "live_image": "ghcr.io/org/app:sha-production",
+                "live_verification_url": "https://ops.example.internal/verify",
+                "live_safe_pr_workflow_run_id": "456",
+                "live_safe_pr_url": "https://github.com/org/repo/actions/runs/456",
+                "safe_pr_run": {
+                    "id": "456",
+                    "status": "completed",
+                    "conclusion": "success",
+                    "head_sha": github_sha,
+                    "html_url": "https://github.com/org/repo/actions/runs/456",
+                },
+                "workflows": [
+                    {"workflow": signoff.READINESS_WORKFLOW, "id": "1", "state": "active"},
+                    {"workflow": signoff.DEPLOY_WORKFLOW, "id": "2", "state": "active"},
+                ],
+                "dispatch_performed": False,
+            }
+        )
+        + "\n",
+        encoding="utf-8",
+    )
 
 
 def test_run_release_flow_production_signoff_requires_token(monkeypatch) -> None:
@@ -95,6 +142,7 @@ def test_run_release_flow_production_signoff_rejects_placeholder_inputs(
 
 def test_run_release_flow_production_signoff_dispatches_and_verifies(monkeypatch, tmp_path) -> None:
     calls: dict[str, object] = {"dispatches": [], "verifies": []}
+    write_preflight_report(tmp_path)
 
     def fake_dispatch_workflow(**kwargs: object) -> None:
         dispatches = calls["dispatches"]
@@ -274,6 +322,7 @@ def test_run_release_flow_production_signoff_preflight_only_checks_workflows(
     )
     assert report["status"] == "passed"
     assert report["dispatch_performed"] is False
+    assert "expires_at" in report
     assert report["github_branch_head_sha"] == "sha-production"
     assert report["safe_pr_run"]["id"] == "456"
     assert report["safe_pr_run"]["conclusion"] == "success"
@@ -425,6 +474,179 @@ def test_run_release_flow_production_signoff_rejects_failed_safe_pr_run(
     )
 
     assert "Safe PR run 456 did not conclude success" in capsys.readouterr().err
+
+
+def test_run_release_flow_production_signoff_requires_matching_preflight_report(
+    monkeypatch, tmp_path, capsys
+) -> None:
+    def fail_dispatch_workflow(**_kwargs: object) -> None:
+        raise AssertionError("missing preflight report must fail before workflow dispatch")
+
+    monkeypatch.setattr(signoff, "dispatch_workflow", fail_dispatch_workflow)
+    monkeypatch.setattr(signoff, "github_branch_head_sha", lambda _args, _token: "sha-production")
+    monkeypatch.setattr(
+        signoff,
+        "github_json",
+        lambda _url, _token: {
+            "id": 456,
+            "status": "completed",
+            "conclusion": "success",
+            "head_sha": "sha-production",
+        },
+    )
+
+    assert (
+        signoff.main(
+            [
+                "--github-repo",
+                "org/repo",
+                "--github-token",
+                "token-a",
+                "--github-branch",
+                "release/prod",
+                "--github-sha",
+                "sha-production",
+                "--skip-local-sha-check",
+                "--github-output-dir",
+                str(tmp_path),
+                "--release-plan-id",
+                "plan-1",
+                "--live-change-ticket",
+                "CHG-123",
+                "--live-runbook-url",
+                "https://ops.example.internal/runbook",
+                "--live-release-owner",
+                "ops-owner",
+                "--live-image",
+                "ghcr.io/org/app:sha-production",
+                "--live-verification-url",
+                "https://ops.example.internal/verify",
+                "--live-safe-pr-workflow-run-id",
+                "456",
+                "--live-safe-pr-url",
+                "https://github.com/org/repo/actions/runs/456",
+            ]
+        )
+        == 1
+    )
+
+    assert "preflight report is required" in capsys.readouterr().err
+
+
+def test_run_release_flow_production_signoff_rejects_mismatched_preflight_report(
+    monkeypatch, tmp_path, capsys
+) -> None:
+    def fail_dispatch_workflow(**_kwargs: object) -> None:
+        raise AssertionError("mismatched preflight report must fail before workflow dispatch")
+
+    write_preflight_report(tmp_path, github_sha="other-sha")
+    monkeypatch.setattr(signoff, "dispatch_workflow", fail_dispatch_workflow)
+    monkeypatch.setattr(signoff, "github_branch_head_sha", lambda _args, _token: "sha-production")
+    monkeypatch.setattr(
+        signoff,
+        "github_json",
+        lambda _url, _token: {
+            "id": 456,
+            "status": "completed",
+            "conclusion": "success",
+            "head_sha": "sha-production",
+        },
+    )
+
+    assert (
+        signoff.main(
+            [
+                "--github-repo",
+                "org/repo",
+                "--github-token",
+                "token-a",
+                "--github-branch",
+                "release/prod",
+                "--github-sha",
+                "sha-production",
+                "--skip-local-sha-check",
+                "--github-output-dir",
+                str(tmp_path),
+                "--release-plan-id",
+                "plan-1",
+                "--live-change-ticket",
+                "CHG-123",
+                "--live-runbook-url",
+                "https://ops.example.internal/runbook",
+                "--live-release-owner",
+                "ops-owner",
+                "--live-image",
+                "ghcr.io/org/app:sha-production",
+                "--live-verification-url",
+                "https://ops.example.internal/verify",
+                "--live-safe-pr-workflow-run-id",
+                "456",
+                "--live-safe-pr-url",
+                "https://github.com/org/repo/actions/runs/456",
+            ]
+        )
+        == 1
+    )
+
+    assert "preflight report does not match full sign-off inputs: github_sha" in capsys.readouterr().err
+
+
+def test_run_release_flow_production_signoff_rejects_stale_preflight_report(
+    monkeypatch, tmp_path, capsys
+) -> None:
+    def fail_dispatch_workflow(**_kwargs: object) -> None:
+        raise AssertionError("stale preflight report must fail before workflow dispatch")
+
+    write_preflight_report(tmp_path, generated_at=datetime.now(UTC) - timedelta(hours=2))
+    monkeypatch.setattr(signoff, "dispatch_workflow", fail_dispatch_workflow)
+    monkeypatch.setattr(signoff, "github_branch_head_sha", lambda _args, _token: "sha-production")
+    monkeypatch.setattr(
+        signoff,
+        "github_json",
+        lambda _url, _token: {
+            "id": 456,
+            "status": "completed",
+            "conclusion": "success",
+            "head_sha": "sha-production",
+        },
+    )
+
+    assert (
+        signoff.main(
+            [
+                "--github-repo",
+                "org/repo",
+                "--github-token",
+                "token-a",
+                "--github-branch",
+                "release/prod",
+                "--github-sha",
+                "sha-production",
+                "--skip-local-sha-check",
+                "--github-output-dir",
+                str(tmp_path),
+                "--release-plan-id",
+                "plan-1",
+                "--live-change-ticket",
+                "CHG-123",
+                "--live-runbook-url",
+                "https://ops.example.internal/runbook",
+                "--live-release-owner",
+                "ops-owner",
+                "--live-image",
+                "ghcr.io/org/app:sha-production",
+                "--live-verification-url",
+                "https://ops.example.internal/verify",
+                "--live-safe-pr-workflow-run-id",
+                "456",
+                "--live-safe-pr-url",
+                "https://github.com/org/repo/actions/runs/456",
+            ]
+        )
+        == 1
+    )
+
+    assert "preflight report is too old" in capsys.readouterr().err
 
 
 def test_run_release_flow_production_signoff_rejects_local_sha_mismatch(monkeypatch, capsys) -> None:

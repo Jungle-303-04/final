@@ -541,6 +541,17 @@ def check_production_signoff_runner_contract() -> list[ReadinessCheck]:
             "operator signoff runner verifies the exact readiness and deploy run artifacts",
         ),
         ReadinessCheck(
+            "script.production_signoff_runner.requires_preflight_report",
+            "verify_preflight_report" in source
+            and "skip_preflight_report_check" in source
+            and "preflight report is required before full sign-off dispatch" in source
+            and "preflight report does not match full sign-off inputs" in source
+            and "preflight_report_max_age_minutes" in source
+            and "preflight report is too old for full sign-off dispatch" in source
+            and "--skip-preflight-report-check" in docs,
+            "operator signoff runner requires a matching no-dispatch preflight report before full dispatch",
+        ),
+        ReadinessCheck(
             "script.production_signoff_runner.writes_signoff_report",
             "release-flow-production-signoff.json" in source
             and "write_signoff_report" in source
@@ -558,6 +569,7 @@ def check_production_signoff_runner_contract() -> list[ReadinessCheck]:
             and "full production sign-off" in docs
             and "--preflight-only" in docs
             and "release-flow-production-preflight.json" in docs
+            and "--preflight-report-max-age-minutes" in docs
             and "Safe PR GitHub Actions run" in docs,
             "operator guide documents one-command production sign-off",
         ),
