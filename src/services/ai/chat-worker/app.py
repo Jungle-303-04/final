@@ -109,6 +109,7 @@ async def on_ai_message_received(
                 context=ToolContext(
                     db=ctx.db,
                     workspace_id=evt.workspace_id,
+                    user_id=evt.user_id,
                     cluster_id=request_cluster_id(evt),
                     resource_type=resource_context.get("resource_type"),
                     kind=resource_context.get("kind"),

@@ -57,7 +57,7 @@ def test_prompt_includes_history_and_locale() -> None:
             system_prompt=build_system_prompt(Evt(), "ko"),
             history=history,
             user_message="왜 파드가 재시작되나요?",
-            context=ToolContext(db=None, workspace_id="w1"),
+            context=ToolContext(db=None, workspace_id="w1", user_id="u1"),
         )
     )
 
