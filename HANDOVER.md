@@ -25,25 +25,12 @@
 
 ## 2. 저장소와 Git
 
-- 원본 저장소: `/Users/woonyong/workspace/Krafton-Jungle/SW_AI_W17-21-final`
-- 현재 백엔드 worktree: `/tmp/sw-ai-runtime-hardening-20260710`
-- 작업 브랜치: `codex/runtime-hardening-20260710`
+- 원본/UI 작업공간: `/Users/woonyong/workspace/Krafton-Jungle/SW_AI_W17-21-final`
+- 권위 백엔드 worktree: `/Users/woonyong/workspace/Krafton-Jungle/SW_AI_W17-21-final-dev`
+- 작업 브랜치: `dev`
 - push 대상: `origin/dev`
 - remote: `https://github.com/Jungle-303-04/final.git`
-- 현재 소스 HEAD: `a182597d3`
-
-이번 작업열의 미푸시 커밋:
-
-- `7d6fb8bbe` agent 전용 API, management 읽기 RBAC, proxy 고가용성
-- `74aff3462` Bruno fixture 정리, agent 상태 수명, 테스트 삭제 경계
-- `02d0de854` 인시던트 집계, 구버전 logical key, projection 보존
-- `e25631536` management 관측 namespace와 읽기 RBAC 정합성
-- `e4a6a594e` realtime WSS, ELB TCP 전달, agent 주소 단일화
-- `fdce1f87a` test 목록 권한과 상세 인가 정합성
-- `9bc7bbef1` command janitor DB 경합 재시도와 프로세스 생존
-- `2c55f42a0` ephemeral 인시던트 inventory 회복 판정과 자동 종결
-- `243e7fc02` 회복된 probe 이벤트 오탐 차단과 logical key 보존
-- `a182597d3` runtime DB 읽기 검증과 schema-bootstrap 격리
+- 현재 정확한 HEAD와 미푸시 목록: `git rev-parse HEAD`, `git log --oneline origin/dev..HEAD`
 
 push 전에는 반드시 `git fetch origin dev` 후 원격 선행 커밋 유무를 다시 확인한다. 다른 팀원의
 변경을 reset/revert하지 않는다.
@@ -60,33 +47,31 @@ push 전에는 반드시 `git fetch origin dev` 후 원격 선행 커밋 유무�
 
 ### Kubernetes
 
-- management context: `mgmt`, namespace: `management`
+- management context: `kubernetes-ops`(`mgmt` alias도 존재), namespace: `management`
 - target context: `cluster-1`, agent namespace: `target`, demo namespace: `sandbox`
 - 등록 ID:
   - `kubernetes-ops`: role=`management`, environment=`management`
   - `cluster-1`: role=`target`, environment=`test`
-- management 서비스 Deployment 44개가 Ready이며 이 중 서비스 이미지 Deployment는 38개다.
+- 마지막 배포 전 실측: management Deployment 43개, 46/46 replicas Ready, StatefulSet 3/3 Ready.
 - api-gateway는 2 replicas, agent-api-proxy는 2 replicas와 PDB를 사용한다.
 - agent-api-proxy는 서로 다른 노드에 hard topology spread한다.
 
 ### 이미지
 
-- 최종 소스 태그: `2c55f42a0-runtime-final-20260710`
-- 최종 digest: `sha256:39ccede868cd15cae9f1109bd6124ccf7a46878426e9c3f2043f0595e6f50270`
-- 라이브 서비스 38개는 rollout 완료 후 위 digest로 고정해야 한다.
-- target의 기존 cluster-agent는 안정성을 위해 별도 rollout 전까지 기존 release-flow 이미지를
-  유지할 수 있다. 새 등록 manifest는 서버의 현재 `TARGET_AGENT_IMAGE` 설정을 사용한다.
+- 배포 전 live digest:
+  `sha256:5e6724ffdbc1adc7716d66979169ba3963764b9a6b300dd23cde673adcf3d936`
+- 최종 digest는 이번 변경을 build/rollout한 뒤 `docs/current-service-state.md`와 이 절에 기록한다.
 
 ## 4. 현재 라이브 상태
 
-2026-07-10 초기화 후 확인한 상태:
+배포 전 마지막 확인 상태는 `docs/current-service-state.md`가 권위값이다. 2026-07-11 재측정:
 
-- 열린 인시던트 0
-- 승인 대기 0
 - DLQ 0
 - outbox 미발행 0
-- running workflow 0
-- cluster-1 health=`healthy`, online
+- evidence job 비종결 0
+- 등록은 `kubernetes-ops`, `cluster-1` 두 개
+- 고아 `api-verification-target` queued 명령 4건 발견. 새 queued TTL 배포 후 종결하고 최종
+  데이터 정리에서 삭제한다.
 - 5회 연속 30초 evidence 주기에서 인시던트/DLQ 증가 0
 - fleet 집계 `EXPLAIN ANALYZE` 실행 시간 0.133ms(목표 10ms 이하)
 - management 정책 generation 3 적용:
@@ -166,7 +151,9 @@ DB 초기화는 로그인/워크스페이스/권한 이력과 두 cluster regist
 - 지원 범위는 코드에 동봉된 PostgreSQL `18.7.13`/Redis `23.1.1` OCI digest recipe와 sandbox namespace뿐이다. DB recipe, 사용자 chart URL/shell/manifest, template 항목은 실행하지 않는다.
 - Agent 이미지는 checksum 검증된 Helm `v3.21.2`를 포함한다. runner는 private values 파일, 명시 argv, `shell=False`, timeout, credential env allowlist를 사용하며 subprocess 출력/values를 로그나 command result에 남기지 않는다.
 - management role은 gateway registration/policy guard와 Agent executor/handler에서 차단되고 management manifest에는 catalog write Role이 없다. target에는 현재 두 chart가 렌더하는 namespaced 종류만 별도 Role로 추가했다.
-- 202는 설치 성공이 아니다. `GET /commands/{command_id}`의 `queued/leased/running/completed/failed`와 실제 result를 조회한다. generic queued TTL/janitor는 이 작업에서 변경하지 않았다.
+- 202는 설치 성공이 아니다. `GET /commands/{command_id}`의
+  `queued/leased/running/completed/failed`와 실제 result를 조회한다. 수신되지 않은 queued 명령은
+  `COMMAND_QUEUE_TTL_SECONDS` 기본 1800초 뒤 janitor가 원자 종결하고 `command.completed`를 발행한다.
 
 ### 위저드/검증 API
 
@@ -231,7 +218,7 @@ DB 초기화는 로그인/워크스페이스/권한 이력과 두 cluster regist
 ## 7. 검증 명령과 마지막 결과
 
 ```bash
-cd /tmp/sw-ai-runtime-hardening-20260710
+cd /Users/woonyong/workspace/Krafton-Jungle/SW_AI_W17-21-final-dev
 uv run python -m pytest -q
 uv run ruff check src scripts tests
 uv run ruff format --check src scripts tests
@@ -242,11 +229,11 @@ bash scripts/run-bruno-aws.sh
 
 마지막 결과:
 
-- pytest: `1247 passed, 3 skipped`
-- Ruff: 428 backend files clean
+- pytest: `1451 passed, 3 skipped`
+- Ruff: 451 backend files clean
 - import-linter: 2 contracts kept, 0 broken
-- manifest: management 62 objects, target 18 objects
-- Bruno: 67/67 requests, 120/120 tests
+- manifest: management 62 objects, target 20 objects
+- Bruno 정적 계약: 통과. 라이브 collection은 최종 rollout 뒤 다시 측정한다.
 
 `ruff check .`은 backend CI 명령이 아니다. `frontend/tests/smoke.py`의 기존 축약 문법을 잡지만
 해당 파일은 UI 작업열 소유다. 백엔드 작업자가 충돌을 만들지 말고 UI 작업열에서 정리한다.
@@ -317,15 +304,14 @@ DB 자격증명은 `postgresql-secret`에서 프로세스 변수로만 읽고 �
    교체. 앱의 읽기 전용 table/column 검증은 이미 분리됐으며, 후속으로 revision까지 확인한다.
 2. 외부 I/O handler의 긴 DB transaction을 effect-intent 구조로 분리. 짧은 claim TX -> 외부 I/O
    -> 짧은 result/business/outbox/ledger TX. `(consumer,event_id,target)` unique key 필요.
-3. subject별 independent fetch task + bounded queue/semaphore로 worker 다중 subject 지연 제거.
-   subject 내부 순서는 유지.
-4. event `payload_version`, tolerant reader, upcaster, golden compatibility fixture 완성.
-5. production HA: Multi-AZ PostgreSQL, Redis failover, NATS 3-node/R3, object storage, NetworkPolicy,
+3. event `payload_version`, tolerant reader, upcaster, golden compatibility fixture 완성. 현재 envelope
+   `schema_version`과 additive-field tolerant dispatch까지만 구현됐다.
+4. production HA: Multi-AZ PostgreSQL, Redis failover, NATS 3-node/R3, object storage, NetworkPolicy,
    stateless 2+ replicas, PDB/topology spread, lag 기반 HPA/KEDA.
-6. realtime-gateway 2+ replicas 전에는 shared Redis/NATS backplane과 sequence 소유권을 먼저 구현.
-7. production 인증 전환: `APP_ENV=production`, 모든 bypass off, 실제 회원가입/이메일 인증/승인 E2E.
-8. agent-api ACM/ELB/DNS lifecycle을 Terraform 또는 다른 IaC로 이전.
-9. frontend 작업열에서 `/` 제품 UI, `/console/` 아카이브, 실제 로그인 Playwright E2E와
+5. realtime-gateway 2+ replicas 전에는 shared Redis/NATS backplane과 sequence 소유권을 먼저 구현.
+6. production 인증 전환: `APP_ENV=production`, 모든 bypass off, 실제 회원가입/이메일 인증/승인 E2E.
+7. agent-api ACM/ELB/DNS lifecycle을 Terraform 또는 다른 IaC로 이전.
+8. frontend 작업열에서 `/` 제품 UI, `/console/` 아카이브, 실제 로그인 Playwright E2E와
    `frontend/tests/smoke.py` lint를 완료.
 
 `Jungle-303-04/k8s-incident-demo-target`의 `target-01.woonyong.org` 배포는 다른 작업열이 담당하므로

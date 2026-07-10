@@ -1,6 +1,6 @@
 # 현재 서비스 상태
 
-마지막 실측: 2026-07-10 23:23:41 KST
+마지막 실측: 2026-07-11 01:19:06 KST (신규 코드 배포 전)
 
 이 문서는 작업 중 기준선과 최종 배포 상태가 섞이지 않도록 현재 라이브 상태를 보존한다.
 비밀값 원문은 기록하지 않는다. 변경을 배포한 뒤에는 같은 항목을 다시 측정해 이 문서를
@@ -8,11 +8,11 @@
 
 ## 소스와 배포
 
-- 권위 브랜치: `dev`
-- 소스 HEAD: `072fbb249ae465450d3e35109fa20b9055a27d52`
+- 권위 브랜치/worktree: `dev` / `SW_AI_W17-21-final-dev`
+- 라이브 기준 소스: 기존 digest 배포 상태. 신규 로컬 커밋은 아직 미배포
 - backend image:
   `kubernetes-ops-service@sha256:5e6724ffdbc1adc7716d66979169ba3963764b9a6b300dd23cde673adcf3d936`
-- management backend: Deployment 38개, replica 39/39 Ready
+- management: Deployment 43개, replica 46/46 Ready, StatefulSet 3/3 Ready
 - cluster-1 target agent: replica 1/1 Ready, management와 동일 digest
 - console health: `{"status":"ok","service":"api-gateway"}`
 - agent API health: `{"status":"ok","service":"api-gateway"}`
@@ -23,12 +23,13 @@
 - outbox 미발행: 0
 - consumer pending/ack/redelivered: 0/0/0
 - evidence job: completed 1,079, 비종결 0
-- agent command queued/leased/running: 0
+- agent command queued/leased/running: 4/0/0
 - RCA timeline: `approval_recommended` 2
 - recovery plan: `selection_requested` 1
 
-RCA timeline과 recovery plan의 남은 행은 아래 골든 run의 감사 이력이다. 실제 장애·명령 적체는
-없다. 최종 검증 뒤 운영 화면을 깨끗하게 초기화할 때 verification 증거를 별도 보존한 후 정리한다.
+RCA timeline과 recovery plan의 남은 행은 아래 골든 run의 감사 이력이다. queued 4건은 등록에도
+없는 `api-verification-target`을 가리키는 과거 검증 잔재다. 신규 queued TTL 배포 후 종결하고,
+최종 검증 증거를 보존한 다음 테스트 행을 삭제한다.
 
 ## RCA 골든 run
 
@@ -41,14 +42,14 @@ RCA timeline과 recovery plan의 남은 행은 아래 골든 run의 감사 이�
 - 명시 cleanup: 완료
 - sandbox Deployment/Service/Pod 잔여: 0
 
-현재 catalog의 `ready` 표시는 다음 3개다.
+현재 catalog 상태는 다음과 같다.
 
 - `image.wrong-tag`: 라이브 생성부터 plan, cleanup 잔여 0까지 검증
-- `image.registry-down`: 라이브 전체 완주 미검증
-- `schedule.affinity`: 라이브 전체 완주 미검증
+- `image.registry-down`: `verification_pending`, 라이브 전체 완주 미검증
+- `schedule.affinity`: `verification_pending`, 라이브 전체 완주 미검증
 
-따라서 현재 `ready`와 `live verified`의 의미가 일치하지 않는다. 최종 RCA 구조화 작업에서는
-검증되지 않은 두 시나리오를 하향하거나 verification ledger로 두 상태를 명시적으로 분리한다.
+따라서 `ready`는 실제 완주가 증명된 `image.wrong-tag` 한 개뿐이다. 관리자가 명시적 검증 헤더로
+`verification_pending`을 실행해 완주한 경우에만 후속 커밋에서 승격한다.
 
 ## 다음 갱신 게이트
 
@@ -59,4 +60,3 @@ RCA timeline과 recovery plan의 남은 행은 아래 골든 run의 감사 이�
 5. provider 실패가 strict evidence job의 재시도/실패로 노출됨
 6. 생성, 관측, evidence, RCA, plan, cleanup과 잔여 0을 다시 확인
 7. DLQ, outbox, consumer lag, 활성 command가 모두 0
-
