@@ -338,10 +338,24 @@ def container_snapshot(
         "readiness_probe": probe_snapshot(container.get("readinessProbe")),
         "liveness_probe": probe_snapshot(container.get("livenessProbe")),
         "startup_probe": probe_snapshot(container.get("startupProbe")),
+        "resources": resource_snapshot(container),
         "env_refs": env_refs(container),
         "env_from_refs": env_from_refs(container),
         "volume_mount_refs": volume_mount_refs(container, volume_refs),
     }
+
+
+def resource_snapshot(container: JsonObject) -> JsonObject:
+    """Return container CPU and memory requests and limits."""
+    resources = object_or_empty(container.get("resources"))
+    requests = object_or_empty(resources.get("requests"))
+    limits = object_or_empty(resources.get("limits"))
+    return compact_dict(
+        {
+            "requests": compact_dict(requests),
+            "limits": compact_dict(limits),
+        }
+    )
 
 
 def env_refs(container: JsonObject) -> list[JsonObject]:
@@ -414,7 +428,7 @@ def env_from_refs(container: JsonObject) -> list[JsonObject]:
 
 
 def volume_reference_map(template_spec: JsonObject) -> dict[str, JsonObject]:
-    """Return safe ConfigMap and Secret refs by volume name."""
+    """Return ConfigMap and Secret volume refs by volume name."""
     refs: dict[str, JsonObject] = {}
     for volume in list_items(template_spec.get("volumes")):
         volume_name = volume.get("name")
@@ -453,7 +467,7 @@ def volume_mount_refs(
     container: JsonObject,
     volume_refs: dict[str, JsonObject],
 ) -> list[JsonObject]:
-    """Return mounted ConfigMap and Secret volume refs."""
+    """Return ConfigMap and Secret refs mounted by one container."""
     refs: list[JsonObject] = []
     for mount in list_items(container.get("volumeMounts")):
         volume_name = mount.get("name")
@@ -476,7 +490,7 @@ def volume_mount_refs(
 
 
 def volume_items(volume_source: JsonObject) -> list[JsonObject]:
-    """Return item keys and paths from a ConfigMap or Secret volume."""
+    """Return item keys and paths without reading item values."""
     return [
         compact_dict(
             {
