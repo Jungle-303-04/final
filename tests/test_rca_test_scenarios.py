@@ -425,13 +425,14 @@ def test_concurrent_test_run_requests_reserve_one_target_atomically(
     db.reservation_barrier = threading.Barrier(2)
     payload = {"cluster_id": "cluster-1", "scenario_id": "image.wrong-tag"}
 
+    def post_run(_index: int) -> Any:
+        # TestClient 하나를 여러 스레드에서 공유하면 AnyIO portal 자체가 직렬화될 수 있다.
+        # 앱과 DB stub만 공유하고 요청 transport는 스레드별로 분리한다.
+        with TestClient(client.app) as worker_client:
+            return worker_client.post(TEST_RUNS_PATH, headers=_test_headers(), json=payload)
+
     with ThreadPoolExecutor(max_workers=2) as executor:
-        responses = list(
-            executor.map(
-                lambda _index: client.post(TEST_RUNS_PATH, headers=_test_headers(), json=payload),
-                range(2),
-            )
-        )
+        responses = list(executor.map(post_run, range(2)))
 
     assert sorted(response.status_code for response in responses) == [202, 409]
     conflict = next(response for response in responses if response.status_code == 409)
