@@ -39,8 +39,8 @@ def test_team_env_bootstrap_renders_allowlisted_secret_values(tmp_path: Path) ->
     fake_aws = fake_bin / "aws"
     fake_aws.write_text(
         "#!/usr/bin/env bash\n"
-        "printf '%s\\n' '{\"AUTH_EMAIL\":\"team@example.com\","
-        "\"AUTH_PASSWORD\":\"secret value\",\"AWS_SECRET_ACCESS_KEY\":\"blocked\"}'\n",
+        'printf \'%s\\n\' \'{"AUTH_EMAIL":"team@example.com",'
+        '"AUTH_PASSWORD":"secret value","AWS_SECRET_ACCESS_KEY":"blocked"}\'\n',
         encoding="utf-8",
     )
     fake_aws.chmod(0o755)

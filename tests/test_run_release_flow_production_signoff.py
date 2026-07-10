@@ -605,7 +605,10 @@ def test_run_release_flow_production_signoff_rejects_mismatched_preflight_report
         == 1
     )
 
-    assert "preflight report does not match full sign-off inputs: github_sha" in capsys.readouterr().err
+    assert (
+        "preflight report does not match full sign-off inputs: github_sha"
+        in capsys.readouterr().err
+    )
 
 
 def test_run_release_flow_production_signoff_rejects_stale_preflight_report(
@@ -666,7 +669,9 @@ def test_run_release_flow_production_signoff_rejects_stale_preflight_report(
     assert "preflight report is too old" in capsys.readouterr().err
 
 
-def test_run_release_flow_production_signoff_rejects_local_sha_mismatch(monkeypatch, capsys) -> None:
+def test_run_release_flow_production_signoff_rejects_local_sha_mismatch(
+    monkeypatch, capsys
+) -> None:
     def fail_dispatch_workflow(**_kwargs: object) -> None:
         raise AssertionError("sha mismatch must fail before workflow dispatch")
 
@@ -748,4 +753,7 @@ def test_run_release_flow_production_signoff_rejects_github_branch_sha_mismatch(
         == 1
     )
 
-    assert "GitHub branch release/prod head actual-sha must match --github-sha" in capsys.readouterr().err
+    assert (
+        "GitHub branch release/prod head actual-sha must match --github-sha"
+        in capsys.readouterr().err
+    )

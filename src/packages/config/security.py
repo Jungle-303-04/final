@@ -27,9 +27,8 @@ def env_enabled(name: str) -> bool:
 
 def development_security_bypass_enabled() -> bool:
     """통합 개발 우회가 켜졌는지 매 요청 시 평가한다."""
-    return (
-        env(APP_ENV_ENV, "").strip().lower() == TEST_APP_ENV
-        or env_enabled(DEV_SECURITY_BYPASS_ENV)
+    return env(APP_ENV_ENV, "").strip().lower() == TEST_APP_ENV or env_enabled(
+        DEV_SECURITY_BYPASS_ENV
     )
 
 

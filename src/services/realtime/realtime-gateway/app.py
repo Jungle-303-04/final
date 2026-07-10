@@ -215,9 +215,7 @@ def create_app(
             return
         session = await authenticate_browser(browser_session_token(websocket))
         if session is None and development_session_bypass_enabled():
-            session = {
-                Gateway.WORKSPACE_ID: development_bypass_workspace_id(DEFAULT_WORKSPACE_ID)
-            }
+            session = {Gateway.WORKSPACE_ID: development_bypass_workspace_id(DEFAULT_WORKSPACE_ID)}
         session_workspace = session_workspace_id(session)
         if not session_workspace or params[Gateway.WORKSPACE_ID] != session_workspace:
             await websocket.close(code=CLOSE_UNAUTHORIZED)
