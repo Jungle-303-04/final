@@ -616,14 +616,10 @@ def validate_signoff(
             "signoff.distinct_workflow_runs",
             not required
             or (
-                bool(readiness_run_id)
-                and bool(deploy_run_id)
-                and readiness_run_id != deploy_run_id
+                bool(readiness_run_id) and bool(deploy_run_id) and readiness_run_id != deploy_run_id
             ),
             "signoff report references distinct readiness and deploy runs"
-            if bool(readiness_run_id)
-            and bool(deploy_run_id)
-            and readiness_run_id != deploy_run_id
+            if bool(readiness_run_id) and bool(deploy_run_id) and readiness_run_id != deploy_run_id
             else "signoff report readiness and deploy run ids must be distinct",
         ),
     ]
