@@ -42,8 +42,18 @@ class Command:
     DEFAULT_ACTION: Final[str] = "rollout_restart"
     APPLY_MANIFEST_ACTION: Final[str] = "apply_manifest"
     DELETE_WORKLOAD_ACTION: Final[str] = "delete_workload"
+    RCA_TEST_SCENARIO_INJECT_ACTION: Final[str] = "rca.test.inject"
+    RCA_TEST_SCENARIO_CLEANUP_ACTION: Final[str] = "rca.test.cleanup"
     KUBERNETES_DEPLOYMENT_SCALE_ACTION: Final[str] = "k8s.apps.v1.deployments.scale"
     TELEMETRY_QUERY_RUN_ACTION: Final[str] = "telemetry.query.run"
+
+
+RCA_TEST_COMMAND_ACTIONS: Final[frozenset[str]] = frozenset(
+    {
+        Command.RCA_TEST_SCENARIO_INJECT_ACTION,
+        Command.RCA_TEST_SCENARIO_CLEANUP_ACTION,
+    }
+)
 
 
 class CommandStatus:

@@ -86,6 +86,7 @@ class _SessionAuth:
 class _TestRunDb:
     def __init__(self) -> None:
         self.calls: list[tuple[str, tuple[Any, ...], dict[str, Any]]] = []
+        self.commands: dict[str, dict[str, Any]] = {}
 
     def can_access(self, *_args: Any) -> bool:
         return True
@@ -97,6 +98,7 @@ class _TestRunDb:
         return {
             "workspace_id": workspace_id,
             "cluster_id": cluster_id,
+            "environment": "aws-test",
             "settings": {"cluster_role": "target"},
         }
 
@@ -108,6 +110,34 @@ class _TestRunDb:
 
     def queue_agent_command(self, *args: Any, **kwargs: Any) -> None:
         self.calls.append(("queue_agent_command", args, kwargs))
+        correlation_id, plan, status = args
+        self.commands[str(plan["command_id"])] = {
+            "command_id": str(plan["command_id"]),
+            "cluster_id": str(plan["cluster_id"]),
+            "correlation_id": str(correlation_id),
+            "action": str(plan["action"]),
+            "payload": dict(plan),
+            "status": str(status),
+            "result": {},
+            "completed_at": None,
+        }
+
+    async def get_agent_command(self, command_id: str, _workspace_id: str) -> dict[str, Any] | None:
+        return self.commands.get(command_id)
+
+    def list_evidence_jobs_for_window(
+        self, _evidence_key: str, _workspace_id: str
+    ) -> list[dict[str, Any]]:
+        return []
+
+    def get_evidence_window(self, _evidence_key: str) -> None:
+        return None
+
+    def list_rca_report_records(self, *_args: Any, **_kwargs: Any) -> list[dict[str, Any]]:
+        return []
+
+    def get_recovery_plan_by_correlation(self, *_args: Any) -> None:
+        return None
 
 
 class _TestRunEvents:
@@ -160,6 +190,8 @@ def test_scenario_catalog_covers_every_registered_root_cause_with_safe_schema() 
         assert item["availability"] in {"ready", "fixture_required", "detector_gap"}
         assert item["expected"]["root_cause"]
         assert item["expected"]["symptom"]
+        if item["availability"] == "ready":
+            assert item["evidence_sources"]
 
         safety = item["safety"]
         assert safety["namespace"] == "sandbox"
@@ -177,6 +209,51 @@ def test_wrong_image_tag_is_a_ready_real_scenario() -> None:
         "root_cause": "wrong_image_tag",
         "symptom": "ImagePullBackOff",
     }
+
+
+@pytest.mark.parametrize(
+    "scenario_id",
+    ["crash.oom", "ingress.upstream-empty", "app.http-5xx"],
+)
+def test_scenarios_without_a_completable_agent_observation_are_detector_gaps(
+    scenario_id: str,
+) -> None:
+    scenario = next(item for item in _catalog_items() if item["scenario_id"] == scenario_id)
+
+    assert scenario["availability"] == "detector_gap"
+    assert scenario["availability_reason"]
+    assert scenario["detector_work_needed"]
+
+
+def test_every_ready_scenario_has_a_target_agent_matchable_signal_group() -> None:
+    runtime = importlib.import_module("domains.rca.test_runtime")
+    run_id = "catalog-observation-audit"
+
+    for scenario in _catalog_module().load_test_scenario_catalog():
+        if scenario.availability != "ready":
+            continue
+        pod_name = f"{scenario.scenario_id}-pod"
+        snapshot = {
+            "pods": [
+                {
+                    "name": pod_name,
+                    "labels": {"kubeheal.io/rca-test-run": run_id},
+                    "waiting_reasons": list(scenario.observe.pod_waiting_reasons),
+                    "terminated_reasons": list(scenario.observe.pod_terminated_reasons),
+                }
+            ],
+            "events": [
+                {
+                    "involved_name": pod_name,
+                    "reason": next(iter(scenario.observe.event_reasons), ""),
+                    "message": " ".join(scenario.observe.event_message_any),
+                }
+            ],
+        }
+
+        assert runtime.rca_test_observation_matches(scenario, snapshot, run_id), (
+            scenario.scenario_id
+        )
 
 
 def test_get_scenarios_exposes_the_catalog_contract(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -199,6 +276,27 @@ def test_get_scenarios_exposes_the_catalog_contract(monkeypatch: pytest.MonkeyPa
         <= set(item)
         for item in body["items"]
     )
+
+
+def test_rca_test_api_is_hidden_outside_explicit_test_mode(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    client, _db, _events = _client(monkeypatch)
+    monkeypatch.setenv("APP_ENV", "production")
+
+    response = client.get(TEST_SCENARIOS_PATH, headers=_test_headers())
+
+    assert response.status_code == 404
+
+
+def test_rca_test_api_rejects_an_invalid_dedicated_token(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    client, _db, _events = _client(monkeypatch)
+
+    response = client.get(TEST_SCENARIOS_PATH, headers={"x-rca-test-token": "wrong"})
+
+    assert response.status_code == 401
 
 
 def test_test_run_request_needs_only_cluster_and_scenario() -> None:
@@ -259,6 +357,39 @@ def test_post_test_run_accepts_minimal_ready_scenario(monkeypatch: pytest.Monkey
     assert body["status"] in {"queued", "injecting"}
 
 
+@pytest.mark.parametrize(
+    ("registration", "expected_status"),
+    [
+        (None, 404),
+        (
+            {
+                "workspace_id": "workspace-1",
+                "cluster_id": "cluster-1",
+                "environment": "production",
+                "settings": {"cluster_role": "target"},
+            },
+            409,
+        ),
+    ],
+)
+def test_test_run_rejects_unregistered_or_non_test_targets(
+    monkeypatch: pytest.MonkeyPatch,
+    registration: dict[str, Any] | None,
+    expected_status: int,
+) -> None:
+    client, db, _events = _client(monkeypatch)
+    monkeypatch.setattr(db, "get_cluster_registration", lambda *_args: registration)
+
+    response = client.post(
+        TEST_RUNS_PATH,
+        headers=_test_headers(),
+        json={"cluster_id": "cluster-1", "scenario_id": "image.wrong-tag"},
+    )
+
+    assert response.status_code == expected_status
+    assert db.commands == {}
+
+
 def test_detector_gap_scenario_cannot_be_triggered(monkeypatch: pytest.MonkeyPatch) -> None:
     client, _db, events = _client(monkeypatch)
     catalog = client.get(TEST_SCENARIOS_PATH, headers=_test_headers()).json()["items"]
@@ -272,3 +403,42 @@ def test_detector_gap_scenario_cannot_be_triggered(monkeypatch: pytest.MonkeyPat
 
     assert response.status_code == 409
     assert events.accepted == []
+
+
+def test_test_run_can_be_polled_and_cleanup_is_a_separate_safe_command(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    client, db, _events = _client(monkeypatch)
+    created = client.post(
+        TEST_RUNS_PATH,
+        headers=_test_headers(),
+        json={"cluster_id": "cluster-1", "scenario_id": "image.wrong-tag"},
+    )
+    assert created.status_code == 202
+    run_id = created.json()["run_id"]
+
+    status = client.get(f"{TEST_RUNS_PATH}/{run_id}", headers=_test_headers())
+    assert status.status_code == 200
+    assert status.json()["status"] == "injecting"
+    assert [item["step"] for item in status.json()["steps"]] == [
+        "fault_injection",
+        "fault_observation",
+        "evidence_collection",
+        "root_cause_analysis",
+        "recovery_plan",
+        "action_selection",
+        "cleanup",
+    ]
+
+    cleanup = client.delete(f"{TEST_RUNS_PATH}/{run_id}", headers=_test_headers())
+    assert cleanup.status_code == 202
+    assert cleanup.json()["status"] == "cleanup_queued"
+    command = db.commands[f"cmd-rca-test-cleanup-{run_id}"]
+    assert command["action"] == "rca.test.cleanup"
+    assert command["payload"]["payload"] == {
+        "run_id": run_id,
+        "scenario_id": "image.wrong-tag",
+        "scenario_version": 1,
+        "namespace": "sandbox",
+        "resource_name": "rca-test-image-wrong-tag",
+    }

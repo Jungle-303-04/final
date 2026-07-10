@@ -18,11 +18,23 @@ DEV_SECURITY_BYPASS_WORKSPACE_ID_ENV = "DEV_SECURITY_BYPASS_WORKSPACE_ID"
 DEV_SECURITY_BYPASS_CLUSTER_ID_ENV = "DEV_SECURITY_BYPASS_CLUSTER_ID"
 DEV_SECURITY_BYPASS_CLUSTER_HEADER = "x-dev-cluster-id"
 LEGACY_DEV_AUTH_BYPASS_ENV = "DEV_AUTH_BYPASS"
+RCA_TEST_RUNS_ENABLED_ENV = "RCA_TEST_RUNS_ENABLED"
+RCA_TEST_RUNS_DISABLED_MESSAGE = (
+    "RCA test commands require APP_ENV=test and RCA_TEST_RUNS_ENABLED=1"
+)
+RCA_TEST_TARGET_ENVIRONMENTS = frozenset({"test", "aws-test"})
 TRUE_ENV_VALUES = frozenset({"1", "true", "yes", "on"})
 
 
 def env_enabled(name: str) -> bool:
     return env(name, "").strip().lower() in TRUE_ENV_VALUES
+
+
+def rca_test_runs_enabled() -> bool:
+    """장애 주입 명령의 관리 plane·target agent 공통 fail-closed 조건."""
+    return env(APP_ENV_ENV, "").strip().lower() == TEST_APP_ENV and env_enabled(
+        RCA_TEST_RUNS_ENABLED_ENV
+    )
 
 
 def development_security_bypass_enabled() -> bool:

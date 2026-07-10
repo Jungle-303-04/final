@@ -328,6 +328,25 @@ class RecoveryPlanStatusResponse(StrictModel):
     candidates: list[RecoveryActionCandidateItem] = Field(default_factory=list)
 
 
+class RcaTestScenarioListResponse(StrictModel):
+    items: list[JsonMap] = Field(default_factory=list)
+
+
+class RcaTestRunResponse(StrictModel):
+    accepted: bool = True
+    run_id: str
+    scenario_id: str
+    scenario_version: int
+    cluster_id: str
+    correlation_id: str
+    command_id: str
+    evidence_key: str
+    status: str
+    cleanup_at: str
+    failure: JsonMap | None = None
+    steps: list[JsonMap] = Field(default_factory=list)
+
+
 class EvidenceJobScheduleResponse(StrictModel):
     accepted: bool
     evidence_key: str

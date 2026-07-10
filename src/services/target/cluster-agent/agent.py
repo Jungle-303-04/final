@@ -36,6 +36,7 @@ from providers import (
     TempoTracesProvider,
 )
 from queries import (
+    KubernetesSnapshotQuery,
     TelemetryQueryCommandPayload,
     TelemetryQueryDefinition,
     TelemetryQueryRegistry,
@@ -80,13 +81,35 @@ from config import (
 from config import (
     KUBERNETES_ROLLOUT_TIMEOUT_SECONDS as CONFIG_KUBERNETES_ROLLOUT_TIMEOUT_SECONDS,
 )
+from domains.rca.test_runtime import (
+    RCA_TEST_EXPIRES_AT_ANNOTATION,
+    RCA_TEST_RUN_ANNOTATION,
+    RCA_TEST_RUN_LABEL,
+    build_rca_test_manifests,
+    rca_test_fixture_owned_by_run,
+    rca_test_observation_matches,
+    rca_test_scenario_fixture_target,
+    validate_rca_test_fixture_target,
+)
+from domains.rca.test_scenarios import (
+    KubernetesDeploymentTrigger,
+    RcaTestScenario,
+    test_scenario_by_id,
+)
 from domains.target.management_guard import MANAGEMENT_CLUSTER_ROLE, MANAGEMENT_READONLY_CODE
-from packages.config.constants import Command, CommandStatus, Sandbox, Target
+from packages.config.constants import (
+    RCA_TEST_COMMAND_ACTIONS,
+    Command,
+    CommandStatus,
+    Sandbox,
+    Target,
+)
 from packages.config.control import (
     CONTROL_NAMESPACE_DENIED_MESSAGE,
     control_namespace_allowed,
 )
 from packages.config.logs import CONTEXT_KEY, get_logger
+from packages.config.security import RCA_TEST_RUNS_DISABLED_MESSAGE, rca_test_runs_enabled
 from packages.config.settings import env
 from packages.contracts.event_bus.interfaces import JsonObject
 from packages.contracts.gateway import routes as gateway_routes
@@ -113,6 +136,9 @@ SENSITIVE_OUTPUT_MARKERS = (
     "secret",
     "token",
 )
+RCA_TEST_CLEANUP_INTERVAL_SECONDS = 30
+RCA_TEST_OWNER_JSON_POINTER = "/metadata/annotations/kubeheal.io~1rca-test-run"
+RCA_TEST_CLEANUP_CONFLICT_STATUSES = frozenset({404, 409, 422})
 
 
 def parse_provider_worker_counts(raw_counts: str) -> dict[str, int]:
@@ -592,12 +618,70 @@ class TargetClusterAgent:
         await asyncio.gather(
             self.policy_sync.run(client),
             self.reconcile_node_collector_forever(),
+            self.cleanup_expired_rca_test_fixtures_forever(),
             self.evidence_scheduler.run(client),
             self.reconciler.run(client),
             self.poll_commands(client),
             self.flush_command_results_forever(client),
             self.live_summary.run(),
         )
+
+    async def cleanup_expired_rca_test_fixtures_forever(self) -> None:
+        if not rca_test_runs_enabled():
+            return
+        while True:
+            try:
+                cleaned = await self.cleanup_expired_rca_test_fixtures_once()
+                if cleaned:
+                    LOGGER.info(
+                        "rca_test_fixtures_expired",
+                        extra={CONTEXT_KEY: {"cluster_id": self.cluster_id, "cleaned": cleaned}},
+                    )
+            except Exception as exc:
+                LOGGER.warning(
+                    "rca_test_fixture_cleanup_failed",
+                    extra={
+                        CONTEXT_KEY: {
+                            "cluster_id": self.cluster_id,
+                            "exception_type": type(exc).__name__,
+                        }
+                    },
+                )
+            await asyncio.sleep(RCA_TEST_CLEANUP_INTERVAL_SECONDS)
+
+    async def cleanup_expired_rca_test_fixtures_once(self) -> int:
+        if not rca_test_runs_enabled():
+            return 0
+        base_url = kubernetes_api_base_url()
+        token = service_account_token()
+        if not base_url or not token or self.cluster_role == MANAGEMENT_CLUSTER_ROLE:
+            return 0
+        namespace = Sandbox.NAMESPACE
+        collection_url = f"{base_url}/apis/apps/v1/namespaces/{namespace}/deployments"
+        cleaned = 0
+        async with kubernetes_client(self.kubernetes_transport) as client:
+            response = await client.get(
+                collection_url,
+                params={"labelSelector": "kubeheal.io/rca-test=true"},
+                headers=kubernetes_headers(token),
+            )
+            response.raise_for_status()
+            body = response.json()
+            rows = body.get("items", []) if isinstance(body, dict) else []
+            for row in rows:
+                if not isinstance(row, dict) or not rca_test_fixture_expired(row):
+                    continue
+                metadata = row.get("metadata")
+                meta = metadata if isinstance(metadata, dict) else {}
+                name = str(meta.get("name") or "")
+                annotations = meta.get("annotations")
+                annotation_body = annotations if isinstance(annotations, dict) else {}
+                run_id = str(annotation_body.get(RCA_TEST_RUN_ANNOTATION) or "")
+                if not name or not run_id:
+                    continue
+                if await self.scale_rca_test_fixture_if_owned(namespace, name, run_id):
+                    cleaned += 1
+        return cleaned
 
     async def register(self, client: ManagementPlaneClient) -> None:
         while True:
@@ -815,6 +899,8 @@ class TargetClusterAgent:
     async def execute_command(self, command: CommandRecord) -> JsonObject:
         action = str(command.get(Gateway.ACTION, ""))
         payload = self.command_payload(command)
+        if action in RCA_TEST_COMMAND_ACTIONS and not rca_test_runs_enabled():
+            return self.command_result(False, RCA_TEST_RUNS_DISABLED_MESSAGE)
         if self.management_write_blocked(action):
             LOGGER.warning(
                 "management_agent_ignored_write_command",
@@ -874,6 +960,8 @@ class TargetClusterAgent:
             KUBERNETES_CONFIGMAP_PATCH_ACTION,
             KUBERNETES_DEPLOYMENT_PATCH_ACTION,
             KUBERNETES_DEPLOYMENT_SCALE_ACTION,
+            Command.RCA_TEST_SCENARIO_INJECT_ACTION,
+            Command.RCA_TEST_SCENARIO_CLEANUP_ACTION,
         }
 
     def command_metadata_value(self, command: CommandRecord, field: str) -> str:
@@ -1109,6 +1197,211 @@ class TargetClusterAgent:
             resource=str(diff.get("resource", "")),
             rollout=rollout,
         )
+
+    @command.handler(Command.RCA_TEST_SCENARIO_INJECT_ACTION)
+    async def rca_test_scenario_inject_command(
+        self,
+        ctx: CommandContext[JsonObject],
+    ) -> JsonObject:
+        run_id, scenario = self.rca_test_command_scenario(ctx.payload)
+        observed = await self.inject_rca_test_scenario(scenario, run_id)
+        return {
+            **self.command_result(
+                True,
+                "RCA test fixture applied and actual fault observed",
+                resource=f"rca-test/{scenario.scenario_id}",
+            ),
+            "rca_test": {
+                "run_id": run_id,
+                "scenario_id": scenario.scenario_id,
+                "scenario_version": scenario.version,
+                "evidence_sources": list(scenario.evidence_sources),
+                **observed,
+            },
+        }
+
+    @command.handler(Command.RCA_TEST_SCENARIO_CLEANUP_ACTION)
+    async def rca_test_scenario_cleanup_command(
+        self,
+        ctx: CommandContext[JsonObject],
+    ) -> JsonObject:
+        run_id, scenario_id, scenario_version, namespace, resource_name = (
+            self.rca_test_cleanup_command_target(ctx.payload)
+        )
+        cleaned = await self.scale_rca_test_fixture_if_owned(namespace, resource_name, run_id)
+        message = (
+            "RCA test fixture scaled to zero"
+            if cleaned
+            else "RCA test fixture owner changed; cleanup safely skipped"
+        )
+        result = self.command_result(
+            True,
+            message,
+            resource=f"rca-test/{scenario_id}",
+        )
+        if not cleaned:
+            result[Gateway.APPLIED] = False
+            for resource in result.get(Gateway.RESOURCES, []):
+                if isinstance(resource, dict):
+                    resource[Gateway.APPLIED] = False
+        return {
+            **result,
+            "rca_test": {
+                "run_id": run_id,
+                "scenario_id": scenario_id,
+                "scenario_version": scenario_version,
+                "cleanup_completed": cleaned,
+            },
+        }
+
+    def rca_test_cleanup_command_target(
+        self,
+        payload: JsonObject,
+    ) -> tuple[str, str, int, str, str]:
+        run_id = str(payload.get("run_id") or "")
+        scenario_id = str(payload.get("scenario_id") or "")
+        namespace = str(payload.get("namespace") or "")
+        resource_name = str(payload.get("resource_name") or "")
+        try:
+            scenario_version = int(payload.get("scenario_version"))
+        except (TypeError, ValueError) as exc:
+            raise ValueError("RCA test cleanup requires scenario_version") from exc
+        if not run_id or not scenario_id:
+            raise ValueError("RCA test cleanup requires run_id and scenario_id")
+        validate_rca_test_fixture_target(namespace, resource_name)
+        return run_id, scenario_id, scenario_version, namespace, resource_name
+
+    def rca_test_command_scenario(self, payload: JsonObject) -> tuple[str, RcaTestScenario]:
+        run_id = str(payload.get("run_id") or "")
+        scenario_id = str(payload.get("scenario_id") or "")
+        try:
+            requested_version = int(payload.get("scenario_version"))
+        except (TypeError, ValueError) as exc:
+            raise ValueError("RCA test command requires scenario_version") from exc
+        scenario = test_scenario_by_id(scenario_id)
+        if not run_id or scenario is None or scenario.availability != "ready":
+            raise ValueError("unknown or unavailable RCA test scenario")
+        if scenario.version != requested_version:
+            raise ValueError("RCA test scenario version changed; create a new run")
+        if not isinstance(scenario.trigger, KubernetesDeploymentTrigger):
+            raise ValueError("RCA test scenario adapter is not available on target agent")
+        expected_target = rca_test_scenario_fixture_target(scenario)
+        requested_namespace = str(payload.get("namespace") or "")
+        requested_resource_name = str(payload.get("resource_name") or "")
+        validate_rca_test_fixture_target(requested_namespace, requested_resource_name)
+        if (
+            requested_namespace != expected_target.namespace
+            or requested_resource_name != expected_target.resource_name
+        ):
+            raise ValueError("RCA test scenario target changed; create a new run")
+        return run_id, scenario
+
+    async def inject_rca_test_scenario(
+        self,
+        scenario: RcaTestScenario,
+        run_id: str,
+    ) -> JsonObject:
+        await self.ensure_rca_test_fixture_available(scenario, run_id)
+        manifests = build_rca_test_manifests(scenario, run_id)
+        for manifest in manifests:
+            applied, message, _rollout = await self.apply_kubernetes_manifest(
+                manifest,
+                scenario.safety.namespace,
+            )
+            if not applied:
+                raise RuntimeError(message)
+        await self.wait_for_rca_test_observation(scenario, run_id)
+        resource_name = scenario.trigger.params.resource_name
+        return {
+            "fault_observed": True,
+            "namespace": scenario.safety.namespace,
+            "resource_kind": "Deployment",
+            "resource_name": resource_name,
+            "label_selector": f"kubeheal.io/rca-test-run={run_id}",
+        }
+
+    async def ensure_rca_test_fixture_available(
+        self,
+        scenario: RcaTestScenario,
+        run_id: str,
+    ) -> None:
+        base_url = kubernetes_api_base_url()
+        token = service_account_token()
+        if not base_url or not token:
+            raise RuntimeError("kubernetes api not configured; RCA test run unavailable")
+        name = scenario.trigger.params.resource_name
+        url = f"{base_url}/apis/apps/v1/namespaces/{scenario.safety.namespace}/deployments/{name}"
+        async with kubernetes_client(self.kubernetes_transport) as client:
+            response = await client.get(url, headers=kubernetes_headers(token))
+        if response.status_code == 404:
+            return
+        response.raise_for_status()
+        current = response.json()
+        if not isinstance(current, dict):
+            raise RuntimeError("invalid Kubernetes fixture response")
+        if rca_test_fixture_owned_by_run(current, run_id):
+            return
+        spec = current.get("spec")
+        spec_body = spec if isinstance(spec, dict) else {}
+        if int(spec_body.get("replicas") or 0) == 0 or rca_test_fixture_expired(current):
+            return
+        raise RuntimeError(f"RCA test scenario already has an active run: {scenario.scenario_id}")
+
+    async def wait_for_rca_test_observation(
+        self,
+        scenario: RcaTestScenario,
+        run_id: str,
+    ) -> None:
+        provider = self.evidence_collector.providers.get("kubernetes")
+        if not isinstance(provider, KubernetesSnapshotProvider):
+            raise RuntimeError("Kubernetes evidence provider is unavailable")
+        query = KubernetesSnapshotQuery(
+            "rca_test_fault_observation",
+            "Observe the allowlisted RCA test fixture",
+            scenario.safety.namespace,
+            f"{RCA_TEST_RUN_LABEL}={run_id}",
+        )
+        deadline = time.monotonic() + scenario.observe.timeout_seconds
+        while True:
+            async with httpx.AsyncClient(timeout=provider.timeout_seconds) as client:
+                raw = await provider.query(client, query)
+            snapshot = provider.normalize_payload(raw, query)
+            if rca_test_observation_matches(scenario, snapshot, run_id):
+                return
+            if time.monotonic() >= deadline:
+                raise TimeoutError(
+                    f"RCA test fault was not observed before timeout: {scenario.scenario_id}"
+                )
+            await asyncio.sleep(scenario.observe.poll_seconds)
+
+    async def scale_rca_test_fixture_if_owned(
+        self,
+        namespace: str,
+        resource_name: str,
+        run_id: str,
+    ) -> bool:
+        validate_rca_test_fixture_target(namespace, resource_name)
+        if not run_id:
+            raise ValueError("RCA test cleanup requires run_id")
+        base_url = kubernetes_api_base_url()
+        token = service_account_token()
+        if not base_url or not token:
+            raise RuntimeError("kubernetes api not configured; RCA test cleanup unavailable")
+        patch = [
+            {"op": "test", "path": RCA_TEST_OWNER_JSON_POINTER, "value": run_id},
+            {"op": "replace", "path": "/spec/replicas", "value": 0},
+        ]
+        url = f"{base_url}/apis/apps/v1/namespaces/{namespace}/deployments/{resource_name}"
+        async with kubernetes_client(self.kubernetes_transport) as client:
+            response = await client.patch(
+                url,
+                json=patch,
+                headers=kubernetes_headers(token, "application/json-patch+json"),
+            )
+        if response.status_code in RCA_TEST_CLEANUP_CONFLICT_STATUSES:
+            return False
+        response.raise_for_status()
+        return True
 
     @command.handler(AgentConfig.ROLLOUT_RESTART_ACTION)
     async def rollout_restart_command(self, ctx: CommandContext[JsonObject]) -> JsonObject:
@@ -1434,6 +1727,18 @@ def parse_approval_expires_at(value: object) -> datetime | None:
     if parsed.tzinfo is None:
         return parsed.replace(tzinfo=UTC)
     return parsed.astimezone(UTC)
+
+
+def rca_test_fixture_expired(resource: JsonObject, now: datetime | None = None) -> bool:
+    metadata = resource.get("metadata")
+    meta = metadata if isinstance(metadata, dict) else {}
+    annotations = meta.get("annotations")
+    annotation_body = annotations if isinstance(annotations, dict) else {}
+    expires_at = parse_approval_expires_at(annotation_body.get(RCA_TEST_EXPIRES_AT_ANNOTATION))
+    spec = resource.get("spec")
+    spec_body = spec if isinstance(spec, dict) else {}
+    replicas = int(spec_body.get("replicas") or 0)
+    return expires_at is not None and expires_at <= (now or datetime.now(UTC)) and replicas > 0
 
 
 def kubernetes_manifest_resource(

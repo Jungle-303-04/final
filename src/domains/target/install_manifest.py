@@ -10,6 +10,12 @@ import json
 
 from domains.target.management_guard import MANAGEMENT_BOOTSTRAP_MODE, MANAGEMENT_CLUSTER_ROLE
 from packages.config.realtime import derive_realtime_gateway_url
+from packages.config.security import (
+    RCA_TEST_RUNS_ENABLED_ENV,
+    RCA_TEST_TARGET_ENVIRONMENTS,
+    TEST_APP_ENV,
+    rca_test_runs_enabled,
+)
 from packages.config.settings import env
 from packages.contracts.gateway.requests import DEFAULT_OTEL_SERVICE_NAME, TargetRegisterRequest
 from packages.contracts.target import SANDBOX_NAMESPACE, TARGET_NAMESPACE
@@ -241,6 +247,20 @@ def control_namespaces_line(payload: TargetRegisterRequest) -> str:
     return f"\n  CONTROL_ALLOWED_NAMESPACES: {yaml_string(value)}"
 
 
+def rca_test_runtime_config_lines(payload: TargetRegisterRequest) -> str:
+    registration_environment = payload.environment.strip().lower()
+    if (
+        payload.cluster_role == MANAGEMENT_CLUSTER_ROLE
+        or registration_environment not in RCA_TEST_TARGET_ENVIRONMENTS
+        or not rca_test_runs_enabled()
+    ):
+        return ""
+    return (
+        f"\n  APP_ENV: {yaml_string(TEST_APP_ENV)}"
+        f"\n  {RCA_TEST_RUNS_ENABLED_ENV}: {yaml_string('1')}"
+    )
+
+
 def runtime_config_manifest(payload: TargetRegisterRequest) -> str:
     namespace = agent_namespace(payload)
     node_collector_enabled = (
@@ -259,7 +279,7 @@ data:
   TARGET_CLUSTER_ID: {yaml_string(payload.cluster_id)}
   CLUSTER_ROLE: {yaml_string(payload.cluster_role)}
   BOOTSTRAP_MODE: {yaml_string(bootstrap_mode)}
-  WORKSPACE_ID: {yaml_string(payload.workspace_id)}
+  WORKSPACE_ID: {yaml_string(payload.workspace_id)}{rca_test_runtime_config_lines(payload)}
   EVIDENCE_INTERVAL_SECONDS: {yaml_string(str(payload.evidence_interval_seconds))}
   REALTIME_GATEWAY_URL: {yaml_string(derive_realtime_gateway_url(payload.management_base_url, management_cluster=payload.cluster_role == MANAGEMENT_CLUSTER_ROLE))}
   PROMETHEUS_BASE_URL: {yaml_string(payload.prometheus_base_url)}

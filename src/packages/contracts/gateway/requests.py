@@ -162,6 +162,13 @@ class RecoveryActionSelectByCorrelationRequest(StrictModel):
     reason: str | None = Field(default=None, max_length=500)
 
 
+class RcaTestRunCreateRequest(StrictModel):
+    """등록된 RCA 장애 시나리오 실행 요청 — manifest/evidence는 서버 카탈로그 소유."""
+
+    cluster_id: str = Field(min_length=1, max_length=253)
+    scenario_id: str = Field(min_length=1, max_length=120)
+
+
 class InventoryResource(StrictModel):
     resource_type: str = Field(min_length=1, max_length=80)
     api_version: str = Field(default="", max_length=120)

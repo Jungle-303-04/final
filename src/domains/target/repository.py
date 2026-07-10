@@ -574,6 +574,7 @@ class TargetAgentRepository(DatabaseConnection):
                 table.c.cluster_id,
                 table.c.source_id,
                 table.c.provider_key,
+                table.c.provider_policy,
                 table.c.window_start,
                 table.c.status,
                 table.c.failure_policy,
@@ -586,6 +587,30 @@ class TargetAgentRepository(DatabaseConnection):
         with self.connection() as conn:
             rows = [dict(row) for row in conn.execute(statement).mappings()]
         return aggregate_evidence_payload(rows)
+
+    def list_evidence_jobs_for_window(
+        self,
+        evidence_key_value: str,
+        workspace_id: str,
+    ) -> list[JsonObject]:
+        table = EvidenceJob.__table__
+        statement = (
+            select(
+                table.c.job_id,
+                table.c.provider_key,
+                table.c.status,
+                table.c.error,
+                table.c.attempt_count,
+                table.c.max_attempts,
+            )
+            .where(
+                table.c.evidence_key == evidence_key_value,
+                table.c.workspace_id == workspace_id,
+            )
+            .order_by(table.c.provider_key)
+        )
+        with self.connection() as conn:
+            return [dict(row) for row in conn.execute(statement).mappings()]
 
     def evidence_job_status_counts(self) -> dict[str, int]:
         table = EvidenceJob.__table__
