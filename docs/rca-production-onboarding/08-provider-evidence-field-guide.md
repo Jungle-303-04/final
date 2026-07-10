@@ -696,7 +696,7 @@ Logs bucket은 Loki provider가 만든다.
 초심자 관점에서는 "애플리케이션이나 agent가 직접 남긴 문장 증거"다.
 Kubernetes Event가 "컨테이너가 재시작된다"고 말해준다면, log line은 "왜 프로세스가 죽었는지"를
 더 구체적으로 보여줄 수 있다.
-다만 `logs[].streams[].values[].line`은 Loki 원문 그대로가 아니라 provider가 민감정보를 마스킹한 문장이다.
+다만 `logs[].streams[].values[].line`은 Loki 원문 그대로가 아니라 provider가 민감정보를 마스킹하고 최대 4096자로 제한한 문장이다.
 원문을 더 넓게 노출하지 않기 위해, RCA가 바로 쓰기 쉬운 pattern count, severity count, trace id 목록을 함께 보낸다.
 
 logs를 읽을 때는 `logs[].query_name`으로 어떤 로그 query 결과인지 확인하고,
@@ -734,7 +734,8 @@ logs를 읽을 때는 `logs[].query_name`으로 어떤 로그 query 결과인지
     "trace_ids": [],
     "redaction_summary": {
       "applied": true,
-      "redacted_line_count": 0
+      "redacted_line_count": 0,
+      "truncated_line_count": 0
     }
   }
 ]
@@ -752,7 +753,7 @@ logs를 읽을 때는 `logs[].query_name`으로 어떤 로그 query 결과인지
 | `logs[].pattern_counts` | object | provider가 마스킹된 log line을 읽고 계산한 장애 신호별 matching line 개수다. |
 | `logs[].severity_counts` | object | `ERROR`, `WARN`, `level=error` 같은 표현을 정규화한 severity별 line 개수다. |
 | `logs[].trace_ids` | list<string> | 로그에서 찾은 안전한 trace id 목록이다. 32자리 hex trace id만 최대 20개까지 담는다. |
-| `logs[].redaction_summary` | object | provider가 로그 마스킹을 적용했는지와 실제로 값이 바뀐 line 개수를 나타낸다. |
+| `logs[].redaction_summary` | object | provider가 로그 마스킹을 적용했는지, 실제로 값이 바뀐 line 개수, 길이 제한으로 잘린 line 개수를 나타낸다. |
 
 ### `logs[].streams[]`
 
@@ -766,13 +767,17 @@ logs를 읽을 때는 `logs[].query_name`으로 어떤 로그 query 결과인지
 | 필드 | 타입 | 의미 |
 | --- | --- | --- |
 | `timestamp` | string 또는 null | Loki log timestamp다. nanosecond string 형태일 수 있다. |
-| `line` | string 또는 null | provider가 민감정보를 가린 log line이다. root cause keyword 판단에 쓴다. |
+| `line` | string 또는 null | provider가 민감정보를 가리고 최대 4096자로 제한한 log line이다. root cause keyword 판단에 쓴다. |
+| `line_truncated` | boolean | line이 길이 제한으로 잘렸을 때만 true다. |
+| `original_line_length` | number | line이 잘렸을 때만 있는 제한 전 마스킹된 line 길이다. |
 
 마스킹 기준은 보수적으로 잡는다. `password`, `token`, `secret`, `api_key`, `client_secret`,
 `credential`, `private_key`, `Authorization`, `Bearer`, `Cookie`, JWT, AWS access key, URL 안의
 계정정보, email은 `[REDACTED]` 계열 값으로 바꾼다. 반대로 `trace_id`, `span_id`, `request_id`,
 namespace, pod name, `ERROR`, `timeout`, `probe failed`, `ImagePullBackOff`, `OOMKilled` 같은 RCA 판단
 키워드는 유지한다.
+pattern count, severity count, trace id 추출은 마스킹된 전체 line을 기준으로 먼저 계산하고,
+전송되는 `line` 문자열만 길이 제한으로 줄인다.
 
 `pattern_counts`는 각 pattern에 매칭된 log line 개수다. 현재 pattern key는 다음과 같다.
 
@@ -853,14 +858,21 @@ RCA가 표준 필드를 먼저 보고 싶을 때는 `results.<query_name>.analys
 | 필드 | 타입 | 의미 |
 | --- | --- | --- |
 | `query` | string | 실행한 TraceQL 또는 Tempo search query다. |
-| `traces` | list<object> | Tempo `/api/search`가 반환한 trace 목록이다. provider는 내부 trace object를 세부 정규화하지 않고 보존한다. |
-| `trace_count` | number | `traces` 목록 길이다. |
+| `traces` | list<object> | Tempo `/api/search`가 반환한 trace 목록을 전송 크기 안에서 제한한 값이다. |
+| `trace_count` | number | Tempo가 반환한 trace 수다. `collection_limits`가 있으면 실제 `traces` 길이와 다를 수 있다. |
 | `analysis` | object | RCA가 바로 읽기 쉬운 trace/span 요약이다. |
+| `collection_limits` | object | `traces` list가 전송 크기 보호를 위해 잘렸을 때만 있는 제한 요약이다. |
 
 현재 Tempo provider는 전체 API response raw field를 담지 않는다.
 RCA는 `analysis`를 먼저 보고, 필요하면 `traces[]`와 `trace_count`를 함께 본다.
+`analysis`는 `traces[]` list를 최종 제한하기 전 compact trace 기준으로 만든다.
+그래서 `collection_limits` 때문에 `traces[]`가 일부만 남아도 trace id, service, status,
+duration 같은 RCA용 요약은 `analysis`에 남을 수 있다.
 
 `traces[]` 내부 object는 Tempo 응답에 따라 달라질 수 있다.
+긴 문자열은 최대 1024자로 제한되고, 중첩 list는 최대 20개만 남긴다.
+한 trace가 계속 너무 크면 `traceID` 원본 모양 대신 RCA용 summary field와
+`trace_truncated`, `original_trace_bytes`만 남을 수 있다.
 테스트와 일반 search response 기준으로 다음 값이 들어올 수 있다.
 
 | 필드 예시 | 의미 |
@@ -870,6 +882,8 @@ RCA는 `analysis`를 먼저 보고, 필요하면 `traces[]`와 `trace_count`를 
 | `rootTraceName` | root span 또는 operation 이름이다. |
 | `durationMs` | trace duration millisecond다. |
 | `query` | 테스트 레거시 데이터에서는 어떤 query로 잡힌 trace인지 보조 정보로 들어간다. |
+| `trace_truncated` | trace object가 summary로 대체되었을 때 true다. |
+| `original_trace_bytes` | trace object가 summary로 대체되었을 때의 원래 JSON byte 크기다. |
 
 ### `traces.results.<query_name>.analysis`
 

@@ -208,10 +208,12 @@ RCA는 provider가 보내준 evidence만 보고 symptom, root cause candidate, c
 현재 구현 상태:
 
 - `logs[].streams[].values[].line`은 기존 `line` 필드 이름은 유지하되, 값은 provider에서 민감정보를 마스킹한 문자열로 보낸다.
+- `logs[].streams[].values[].line`은 전송 크기 보호를 위해 최대 4096자로 제한한다.
+- line이 잘리면 같은 value object에 `line_truncated=true`, `original_line_length`를 남긴다.
 - `pattern_counts`는 probe, health endpoint, dependency timeout/error, image pull, OOM/memory, config/env/volume 계열 로그를 line 단위로 센다.
 - `severity_counts`는 `critical`, `error`, `warn`, `info`, `debug`, `trace`, `unknown`으로 정규화한다.
 - `trace_ids`는 32자리 hex trace id만 최대 20개까지 보낸다.
-- `redaction_summary`는 redaction 적용 여부와 실제로 값이 바뀐 line 개수를 담는다.
+- `redaction_summary`는 redaction 적용 여부, 실제로 값이 바뀐 line 개수, 길이 제한으로 잘린 line 개수를 담는다.
 
 주의:
 
@@ -219,6 +221,7 @@ RCA는 provider가 보내준 evidence만 보고 symptom, root cause candidate, c
 - `password`, `token`, `secret`, `api_key`, `client_secret`, `credential`, `private_key`, `Authorization`, `Bearer`, `Cookie`, JWT, AWS access key, URL 계정정보, email은 가린다.
 - `trace_id`, `span_id`, `request_id`, namespace, pod name, root cause keyword는 RCA 판단에 필요하므로 유지한다.
 - 대표 sample 개수는 Loki query limit과 payload byte limit 안에서 제한한다.
+- pattern count, severity count, trace id 추출은 마스킹된 전체 line을 기준으로 계산하고, 전송되는 `line` 문자열만 길이 제한으로 줄인다.
 
 아직 별도 필드로 만들지 않은 값:
 
@@ -241,6 +244,13 @@ policy상 traces query는 존재한다.
 기존 `traces[]`와 `trace_count`를 유지한 채 `analysis`를 추가한다.
 `analysis`는 Tempo가 이미 응답한 값에서 RCA가 바로 쓰기 쉬운 작은 필드만 뽑는다.
 span attribute 전체나 payload 전체를 새로 복사하지 않는다.
+단, 전송 크기 보호를 위해 trace 내부의 긴 문자열은 최대 1024자로 제한하고,
+중첩 list는 최대 20개만 남긴다.
+한 trace가 계속 너무 크면 trace_id, service, operation, status, duration_ms, error, dependency 같은
+summary field와 `trace_truncated`, `original_trace_bytes`만 남길 수 있다.
+전체 query result가 여전히 크면 `collection_limits.lists.traces`에 전체 trace 수와 최종 반환 trace 수를 남긴다.
+`analysis`는 `traces[]` list를 최종 제한하기 전 compact trace 기준으로 만들기 때문에,
+`traces[]`가 일부만 남아도 RCA용 trace id, service, status 요약은 유지될 수 있다.
 
 현재 제공하는 값은 다음과 같다.
 

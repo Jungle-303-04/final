@@ -8,7 +8,7 @@ from urllib.parse import parse_qs
 
 import httpx
 
-from packages.contracts.gateway.requests import AgentEvidenceRequest
+from packages.contracts.gateway.requests import AgentEvidenceRequest, EvidenceJobResultRequest
 
 ROOT_DIR = Path(__file__).resolve().parents[1]
 TARGET_AGENT_DIR = ROOT_DIR / "src" / "services" / "target" / "cluster-agent"
@@ -115,6 +115,7 @@ def test_loki_logs_are_normalized_into_agent_evidence_shape() -> None:
     assert validated.logs[0]["redaction_summary"] == {
         "applied": True,
         "redacted_line_count": 0,
+        "truncated_line_count": 0,
     }
 
 
@@ -178,7 +179,48 @@ def test_loki_logs_redact_sensitive_values_and_add_rca_summaries() -> None:
     assert normalized["redaction_summary"] == {
         "applied": True,
         "redacted_line_count": 4,
+        "truncated_line_count": 0,
     }
+
+
+def test_loki_logs_truncate_single_oversized_line_before_job_result() -> None:
+    module = load_evidence_module()
+    logs_provider = module.LokiLogsProvider.from_config(lambda _name, default: default)
+
+    normalized = logs_provider.normalize_payload(
+        {
+            "data": {
+                "resultType": "streams",
+                "result": [
+                    {
+                        "stream": {"namespace": "target", "pod": "checkout-api-7f5c"},
+                        "values": [
+                            [
+                                "1782822589742000000",
+                                f"ERROR readiness probe failed {'x' * 1_100_000}",
+                            ]
+                        ],
+                    }
+                ],
+            },
+        }
+    )
+
+    value = normalized["streams"][0]["values"][0]
+
+    assert value["line"].endswith(" [TRUNCATED]")
+    assert len(value["line"]) == 4096
+    assert value["line_truncated"] is True
+    assert value["original_line_length"] > 4096
+    assert normalized["line_count"] == 1
+    assert normalized["pattern_counts"]["probe_failed"] == 1
+    assert normalized["redaction_summary"]["truncated_line_count"] == 1
+    EvidenceJobResultRequest(
+        agent_id="agent-1",
+        lease_id="lease-1",
+        status="completed",
+        result={"logs": [{"source": "loki", "query_name": "large_line", **normalized}]},
+    )
 
 
 def test_loki_range_query_sends_exact_start_and_end_bounds() -> None:
@@ -299,3 +341,92 @@ def test_tempo_traces_are_normalized_into_agent_evidence_shape() -> None:
         "error": True,
         "is_dependency": True,
     }
+
+
+def test_tempo_traces_compact_single_oversized_trace_before_job_result() -> None:
+    module = load_evidence_module()
+    traces_provider = module.TempoTracesProvider.from_config(lambda _name, default: default)
+
+    normalized = traces_provider.normalize_payload(
+        {
+            "traces": [
+                {
+                    "traceID": "trace-large",
+                    "rootServiceName": "checkout-api",
+                    "rootTraceName": "GET /checkout",
+                    "status": "error",
+                    "durationMs": 842,
+                    "blob": "x" * 1_100_000,
+                }
+            ]
+        }
+    )
+
+    trace = normalized["traces"][0]
+
+    assert normalized["trace_count"] == 1
+    assert trace["traceID"] == "trace-large"
+    assert trace["blob"].endswith(" [TRUNCATED]")
+    assert len(trace["blob"]) == 1024
+    assert "collection_limits" not in normalized
+    EvidenceJobResultRequest(
+        agent_id="agent-1",
+        lease_id="lease-1",
+        status="completed",
+        result={
+            "traces": {
+                "source": "tempo",
+                "results": {"large_trace": {"query": "{}", **normalized}},
+            }
+        },
+    )
+
+
+def test_tempo_traces_keep_analysis_when_trace_list_is_limited() -> None:
+    module = load_evidence_module()
+    traces_provider = module.TempoTracesProvider.from_config(lambda _name, default: default)
+    definition = module.TelemetryQueryDefinition.from_mapping(
+        {
+            "source": "tempo",
+            "name": "wide_traces",
+            "description": "Large trace search result.",
+            "query": '{ status = error }',
+        }
+    )
+    results: dict[str, object] = {}
+
+    traces_provider.append_result(
+        results,
+        definition.to_provider_query(),
+        {
+            "traces": [
+                {
+                    "traceID": f"trace-{index}",
+                    "rootServiceName": "checkout-api",
+                    "rootTraceName": f"GET /checkout/{index}",
+                    "status": "error",
+                    "durationMs": 800 + index,
+                    **{f"label_{label_index}": "x" * 900 for label_index in range(60)},
+                }
+                for index in range(20)
+            ]
+        },
+    )
+
+    result = results["wide_traces"]
+
+    assert result["trace_count"] == 20
+    assert len(result["traces"]) < 20
+    assert result["collection_limits"]["lists"]["traces"] == {
+        "truncated": True,
+        "original_count": 20,
+        "returned_count": len(result["traces"]),
+    }
+    assert result["analysis"]["trace_ids"] == [f"trace-{index}" for index in range(20)]
+    assert result["analysis"]["error_count"] == 20
+    EvidenceJobResultRequest(
+        agent_id="agent-1",
+        lease_id="lease-1",
+        status="completed",
+        result={"traces": {"source": "tempo", "results": results}},
+    )

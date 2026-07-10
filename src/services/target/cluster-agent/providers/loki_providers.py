@@ -20,6 +20,8 @@ REDACTED_VALUE = "[REDACTED]"
 REDACTED_JWT = "[REDACTED_JWT]"
 REDACTED_PRIVATE_KEY = "[REDACTED_PRIVATE_KEY]"
 MAX_TRACE_IDS = 20
+MAX_LOG_LINE_LENGTH = 4096
+TRUNCATED_LOG_LINE_SUFFIX = " [TRUNCATED]"
 
 LOG_PATTERN_NAMES = (
     "probe_failed",
@@ -175,6 +177,14 @@ def redact_log_line(line: str) -> str:
     return SENSITIVE_KEY_VALUE_RE.sub(rf"\1{REDACTED_VALUE}", redacted)
 
 
+def truncate_log_line(line: str) -> tuple[str, bool]:
+    """Keep a log line small enough for evidence payloads."""
+    if len(line) <= MAX_LOG_LINE_LENGTH:
+        return line, False
+    keep_length = max(0, MAX_LOG_LINE_LENGTH - len(TRUNCATED_LOG_LINE_SUFFIX))
+    return f"{line[:keep_length]}{TRUNCATED_LOG_LINE_SUFFIX}", True
+
+
 def empty_pattern_counts() -> dict[str, int]:
     """Create stable pattern count keys for one Loki result."""
     return {name: 0 for name in LOG_PATTERN_NAMES}
@@ -312,12 +322,15 @@ class LokiLogsProvider:
         trace_ids: list[str] = []
         seen_trace_ids: set[str] = set()
         redacted_line_count = 0
+        truncated_line_count = 0
 
         for item in result:
             values = []
             for raw_entry in item.get("values", []):
                 raw_line = raw_entry[1] if len(raw_entry) >= 2 else None
                 line = raw_line
+                line_truncated = False
+                original_line_length = None
                 if isinstance(raw_line, str):
                     line = redact_log_line(raw_line)
                     if line != raw_line:
@@ -329,13 +342,19 @@ class LokiLogsProvider:
                         trace_ids,
                         seen_trace_ids,
                     )
+                    original_line_length = len(line)
+                    line, line_truncated = truncate_log_line(line)
+                    if line_truncated:
+                        truncated_line_count += 1
 
-                values.append(
-                    {
-                        "timestamp": raw_entry[0] if len(raw_entry) >= 1 else None,
-                        "line": line,
-                    }
-                )
+                value = {
+                    "timestamp": raw_entry[0] if len(raw_entry) >= 1 else None,
+                    "line": line,
+                }
+                if line_truncated:
+                    value["line_truncated"] = True
+                    value["original_line_length"] = original_line_length
+                values.append(value)
 
             streams.append(
                 {
@@ -354,5 +373,6 @@ class LokiLogsProvider:
             "redaction_summary": {
                 "applied": True,
                 "redacted_line_count": redacted_line_count,
+                "truncated_line_count": truncated_line_count,
             },
         }
