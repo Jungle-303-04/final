@@ -83,6 +83,7 @@ Production deployment workflows must call `.github/workflows/release-flow-produc
 - a real `live_change_ticket`
 - a real HTTPS `live_runbook_url`
 - `live_release_owner` or `live_oncall_contact`
+- a real HTTPS `live_verification_url`
 - `live_approval_gate: safe_pr`
 - concrete `live_safe_pr_workflow_run_id`
 - concrete HTTPS `live_safe_pr_url` pointing at the real Safe PR
