@@ -34,7 +34,6 @@ provider가 수집한 사실
   반대로 `metrics`, `logs`, `traces`는 query 결과별 `raw`를 보존한다.
 - `metadata` bucket은 현재 `change_context.current_workload_snapshots` 또는
   `change_context.current_workload_snapshot`에 Deployment snapshot을 담는다.
-  RCA evidence bundle builder는 top-level 위치와 nested `change_context` 위치를 모두 읽는다.
 
 ## 이 문서 읽는 순서
 
@@ -926,15 +925,8 @@ RCA cause rules의 여러 candidate는 `metadata` source를 expected evidence로
 현재 provider job path에는 `metadata` bucket이 있고 기본 policy에도 `metadata.change_context` query가 있다.
 `ClusterEvidenceReceivedBody.metadata`는 `Evidence.metadata`로 복사된다.
 
-RCA evidence bundle builder는 다음 metadata evidence item을 만들 수 있다.
-
-| 입력 위치 | evidence item |
-| --- | --- |
-| `metadata.current_workload_snapshots` | `metadata:current_workload_snapshots` |
-| `metadata.current_workload_snapshot` | `metadata:current_workload_snapshot` |
-| `metadata.change_context.current_workload_snapshots` | `metadata:current_workload_snapshots` |
-| `metadata.change_context.current_workload_snapshot` | `metadata:current_workload_snapshot` |
-| `metadata.change_context` 중 `recent_changes`, `gitops`, `image`, `rollout`, `config`, `risk`가 비어 있지 않은 경우 | `metadata:change_context` |
+RCA evidence bundle builder가 어떤 metadata 위치를 evidence item으로 바꾸는지는
+RCA/evidence-worker 쪽 담당 영역이다. 이 문서는 provider가 보내는 bucket 구조만 기록한다.
 
 | 필요한 metadata | 현재 provider로 가능한지 | 보강 방향 |
 | --- | --- | --- |
