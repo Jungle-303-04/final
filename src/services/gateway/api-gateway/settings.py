@@ -94,8 +94,9 @@ class Settings:
     DEV_AUTH_BYPASS_TOKEN = "dev-auth-bypass"
     DEV_AUTH_BYPASS_USER_ID = "dev-auth-bypass"
     METRICS_TOKEN_ENV = (
-        "METRICS_TOKEN"  # 설정 시 /metrics 에 Bearer 강제(미설정=내부 스크레이핑 허용)
+        "METRICS_TOKEN"  # 설정 시 /metrics 에 Bearer 강제
     )
+    METRICS_TOKEN_NOT_CONFIGURED_MESSAGE = "metrics token is not configured"
     RATE_LIMIT_EXCEEDED_MESSAGE = "rate limit exceeded"
     AUTHENTICATION_REQUIRED_MESSAGE = "authentication required"
     REDIS_NOT_CONNECTED_MESSAGE = "Redis session store is not connected"

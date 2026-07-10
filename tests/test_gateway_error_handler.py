@@ -253,6 +253,26 @@ def test_gateway_metrics_uses_bearer_token_guard(monkeypatch) -> None:
     assert 'gitops_workflow_current_step_total{step="approval"} 1' in response.text
 
 
+def test_gateway_metrics_requires_token_configuration_in_protected_environment(
+    monkeypatch,
+) -> None:
+    monkeypatch.setenv("DATABASE_URL", "postgresql://user:pass@postgresql:5432/service")
+    monkeypatch.setenv("APP_ENV", "production")
+    monkeypatch.delenv("METRICS_TOKEN", raising=False)
+    gateway = load_gateway_module()
+
+    class MetricsDb:
+        pass
+
+    monkeypatch.setattr(gateway, "Database", MetricsDb)
+    client = TestClient(gateway.create_app())
+
+    response = client.get("/metrics")
+
+    assert response.status_code == 503
+    assert response.json() == {"detail": "metrics token is not configured"}
+
+
 def test_dead_letter_replay_rejects_archived_status(monkeypatch) -> None:
     monkeypatch.setenv("DATABASE_URL", "postgresql://user:pass@postgresql:5432/service")
     gateway = load_gateway_module()
