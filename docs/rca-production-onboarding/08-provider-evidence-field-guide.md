@@ -752,6 +752,8 @@ RCA 파생 예시는 다음과 같다.
 
 ## Metadata bucket
 
+구현 메모: `MetadataProvider`가 Kubernetes API 호출과 metadata evidence 조립을 담당한다. helper 모듈은 snapshot 생성, ConfigMap/Secret reference 요약, Service selector 매칭, Deployment/ReplicaSet/Pod 소유 관계 계산만 나누어 맡는다. 이 helper 모듈들은 event를 발행하지 않고 payload 계약도 바꾸지 않는다.
+
 Metadata bucket은 `MetadataProvider`가 만든다.
 현재 구현은 외부 배포 시스템을 직접 조회하지 않는다.
 대신 target namespace의 Deployment, ReplicaSet, Pod, Service 목록을 Kubernetes API에서 읽어
@@ -885,9 +887,9 @@ detail snapshot인 `current_workload_snapshot` 단수 값으로 보낸다.
 | `change_context.service_selector_matches[].service` | object | Service namespace와 name이다. |
 | `change_context.service_selector_matches[].selector` | object | Service spec.selector 요약이다. selector가 없으면 생략된다. |
 | `change_context.service_selector_matches[].match_status` | string | `matched`, `no_matching_pods`, `selector_missing` 중 하나다. |
-| `change_context.service_selector_matches[].target_relation` | string | 단건 detail에서 이 Service가 target Deployment와 관련 있다고 본 이유다. `exact_selector_match`, `live_pod_match`, `selector_key_overlap` 중 하나다. |
+| `change_context.service_selector_matches[].target_relation` | string | 단건 detail에서만 있는 값이다. 이 Service가 target Deployment와 관련 있다고 본 이유이며, `exact_selector_match`, `live_pod_match`, `selector_key_overlap` 중 하나다. |
 | `change_context.service_selector_matches[].matched_pod_count` | number | selector와 labels가 맞는 Pod 수다. |
-| `change_context.service_selector_matches[].matched_pods` | list<object> | selector와 labels가 맞는 Pod namespace/name 목록이다. |
+| `change_context.service_selector_matches[].matched_pods` | list<object> | selector와 labels가 맞는 Pod namespace/name 목록이다. matched Pod가 없으면 생략될 수 있다. |
 | `change_context.current_workload_snapshots[].workload` | object | workload kind, namespace, name이다. 현재 kind는 `Deployment`다. |
 | `change_context.current_workload_snapshots[].deployment_labels` | object | Deployment metadata labels다. |
 | `change_context.current_workload_snapshots[].pod_template_labels` | object | Pod template metadata labels다. |
