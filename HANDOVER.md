@@ -1,6 +1,6 @@
 # SW_AI_W17-21-final 인수인계
 
-최종 갱신: 2026-07-10 (Asia/Seoul)
+최종 갱신: 2026-07-11 (Asia/Seoul)
 
 이 문서는 이전 대화 없이 `dev` 작업을 이어가기 위한 단일 진입점이다. 과거 반복 로그와
 폐기된 계획은 제거했고, 현재 코드·라이브 실측·남은 구조적 과제만 남겼다. 자격증명 원문은
@@ -159,6 +159,14 @@ DB 초기화는 로그인/워크스페이스/권한 이력과 두 cluster regist
   unregister에서 각각 쓰기를 거부한다.
 - management 기본 evidence는 `management` namespace만 읽는다. target/sandbox 기본 query를
   재사용하지 않는다.
+
+### Catalog 실제 설치 runner
+
+- `POST /catalog/items/{item_id}/installs`는 필수 `Idempotency-Key`와 `DEPLOY_RUN` 권한을 검사하고, online `command_receiver` target Agent가 있을 때 실제 high-priority `agent_commands` 행을 만든 뒤 HTTP 202와 `command_id`를 반환한다.
+- 지원 범위는 코드에 동봉된 PostgreSQL `18.7.13`/Redis `23.1.1` OCI digest recipe와 sandbox namespace뿐이다. DB recipe, 사용자 chart URL/shell/manifest, template 항목은 실행하지 않는다.
+- Agent 이미지는 checksum 검증된 Helm `v3.21.2`를 포함한다. runner는 private values 파일, 명시 argv, `shell=False`, timeout, credential env allowlist를 사용하며 subprocess 출력/values를 로그나 command result에 남기지 않는다.
+- management role은 gateway registration/policy guard와 Agent executor/handler에서 차단되고 management manifest에는 catalog write Role이 없다. target에는 현재 두 chart가 렌더하는 namespaced 종류만 별도 Role로 추가했다.
+- 202는 설치 성공이 아니다. `GET /commands/{command_id}`의 `queued/leased/running/completed/failed`와 실제 result를 조회한다. generic queued TTL/janitor는 이 작업에서 변경하지 않았다.
 
 ### 위저드/검증 API
 

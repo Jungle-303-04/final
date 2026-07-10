@@ -1,5 +1,5 @@
 ---
-source_commit: 664925a6
+source_commit: d4b003525
 status: synced
 ---
 
@@ -166,7 +166,7 @@ status: synced
 | GET | `/providers/cluster-discovery` | admin | — |
 | POST | `/providers/validate` | admin | — |
 | GET | `/catalog/items` · `/catalog/items/{item_id}` | 세션 | — |
-| POST | `/catalog/items/{item_id}/installs` | 세션 | `require_cluster_access`; 설치 runner 연결 전 501 |
+| POST | `/catalog/items/{item_id}/installs` (202) | 세션 | `DEPLOY_RUN`; 필수 idempotency key, online target Agent, management readonly |
 | POST | `/repos/validate` | 세션 | admin |
 | GET | `/repos/branches` | 세션 | admin |
 | GET | `/repos/manifests` | 세션 | admin |

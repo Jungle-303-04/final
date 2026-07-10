@@ -1,5 +1,5 @@
 ---
-source_commit: 664925a6
+source_commit: d4b003525
 status: synced
 ---
 
@@ -252,13 +252,14 @@ HTTP 엔드포인트(핸들러 함수도 public 심볼):
 | 앵커 | 시그니처/값 | 의미 |
 |---|---|---|
 | `src/domains/target/install_manifest.py :: yaml_string` | `(value: str) -> str` | `json.dumps(value)` — YAML 안전 인용 |
-| `src/domains/target/install_manifest.py :: target_install_manifest` | `(payload: TargetRegisterRequest, agent_token: str) -> str` | role=`target`이면 namespace(`target`) → namespace(`sandbox`) → ServiceAccount → read RBAC → target write RBAC → sandbox RBAC → runtime ConfigMap → runtime Secret → (선택) sample workload → cluster-agent Deployment. role=`management`이면 namespace(`management`) → ServiceAccount → read RBAC(get/list/watch) → runtime ConfigMap/Secret → cluster-agent Deployment만 렌더한다. |
+| `src/domains/target/install_manifest.py :: target_install_manifest` | `(payload: TargetRegisterRequest, agent_token: str) -> str` | role=`target`이면 namespace(`target`) → namespace(`sandbox`) → ServiceAccount → read RBAC → target write RBAC → sandbox RBAC → catalog install RBAC → runtime ConfigMap/Secret → cluster-agent Deployment. role=`management`이면 읽기 RBAC와 runtime/Deployment만 렌더하며 catalog Role을 포함하지 않는다. |
 | `src/domains/target/install_manifest.py :: namespace_manifest` | `(name: str) -> str` | `v1/Namespace` |
 | `src/domains/target/install_manifest.py :: agent_namespace` | `(payload: TargetRegisterRequest) -> str` | role=`management`이면 `management`, 그 외 `target` |
 | `src/domains/target/install_manifest.py :: service_account_manifest` | `(namespace: str) -> str` | `cluster-agent` ServiceAccount |
 | `src/domains/target/install_manifest.py :: cluster_read_rbac_manifest` | `(namespace: str) -> str` | `cluster-agent-read` ClusterRole(코어: pods/events/nodes/services/endpoints, discovery.k8s.io: endpointslices, apps: deployments/replicasets/daemonsets/statefulsets — get/list/watch) + ClusterRoleBinding. create/update/patch/delete 동사 없음 |
 | `src/domains/target/install_manifest.py :: target_write_rbac_manifest` | `(namespace: str) -> str` | role=`target` 전용. `cluster-agent-self-manage` Role/RoleBinding(configmap `target-agent-policy` get/update/patch, deployment `cluster-agent` get/patch) + `cluster-agent-target-manage` Role/RoleBinding(apps daemonsets CRUD) |
 | `src/domains/target/install_manifest.py :: sandbox_rbac_manifest` | `(namespace: str) -> str` | role=`target` 전용. `cluster-agent-sandbox-write` Role/RoleBinding(namespace=`sandbox`: services/configmaps + deployments의 get/list/create/update/patch) |
+| `src/domains/target/install_manifest.py :: catalog_install_rbac_manifest` | `(namespace: str) -> str` | role=`target` 전용 별도 Role/RoleBinding. sandbox의 현재 고정 chart 렌더 종류(configmaps/secrets/serviceaccounts/services, statefulsets, networkpolicies, poddisruptionbudgets)에만 Helm wait/atomic CRUD 권한을 부여한다. |
 | `src/domains/target/install_manifest.py :: control_namespaces_line` | `(payload: TargetRegisterRequest) -> str` | `payload.control_namespaces`가 비어 있지 않으면 ConfigMap에 붙일 `CONTROL_ALLOWED_NAMESPACES: "<csv>"` 라인 반환, 빈 값이면 `""`(미지정 = 기존 manifest 동일 → agent 기본 sandbox만) |
 | `src/domains/target/install_manifest.py :: runtime_config_manifest` | `(payload: TargetRegisterRequest) -> str` | ConfigMap `target-runtime-config` — 키: `TARGET_CLUSTER_ID`, `CLUSTER_ROLE`, `BOOTSTRAP_MODE`, `WORKSPACE_ID`, `EVIDENCE_INTERVAL_SECONDS`, `REALTIME_GATEWAY_URL`, `PROMETHEUS_BASE_URL`, `LOKI_BASE_URL`, `TEMPO_BASE_URL`, `NODE_COLLECTOR_ENABLED`(management는 항상 `"false"`), (조건부) `CONTROL_ALLOWED_NAMESPACES`, `NODE_COLLECTOR_IMAGE`, `NODE_COLLECTOR_NAMESPACE`, `AGENT_CONTROL_DB_PATH`, `COMMAND_OUTBOX_DB_PATH`, `OTEL_SERVICE_NAME`, `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT` |
 | `src/domains/target/install_manifest.py :: runtime_secret_manifest` | `(agent_token: str, namespace: str) -> str` | Secret `target-runtime-secret`(Opaque) — `stringData.AGENT_TOKEN=<원문 토큰>` |
