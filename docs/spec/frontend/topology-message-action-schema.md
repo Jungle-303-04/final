@@ -10,7 +10,7 @@ last_verified: 2026-07-11
 
 ## 0. 권한과 경계
 
-이 문서는 `topology-engine.md`의 message, reducer, effect, snapshot/delta, action/operation wire 의미를 채우는 구현 예정 보조 계약이다. 현재 repo의 실제 코드와 통과한 테스트가 source of truth이며, 아래 discriminated union과 validation rule이 현 코드에 없으면 구현 완료가 아니라 후속 작업 기준으로만 읽는다. 제품 GitOps operation의 사용자 의미는 `product-data-contract.md`의 구현 예정 계약을 함께 따른다.
+이 문서는 `topology-engine.md`의 message, reducer, effect, snapshot/delta, action/operation wire 의미를 닫는 authoritative protocol adjunct다. 현재 코드에 아래 discriminated union과 validation rule이 없거나 다르면 구현 gap이다. 제품 GitOps operation의 사용자 의미는 `product-data-contract.md`가 우선하며, 이 문서는 그 의미를 topology reducer/effect 경계에서 다시 정의하지 않는다.
 
 - 모든 사용자/URL/stream/worker/effect/system 입력은 `dispatch(EngineMessage)` 한 경로만 사용한다.
 - runtime schema 검증 전 payload를 reducer에 전달하지 않는다.
@@ -28,7 +28,15 @@ type DurationMs = number
 type StateRevision = number
 type NonEmptyReadonlyArray<T> = readonly [T, ...T[]]
 
-type EngineSource = "ui" | "url" | "snapshot" | "stream" | "worker" | "effect" | "system"
+type EngineSource =
+  | "ui"
+  | "url"
+  | "snapshot"
+  | "stream"
+  | "operation-stream"
+  | "worker"
+  | "effect"
+  | "system"
 
 type DataProjectionHashes = Pick<QueryHashes, "dataQueryHash" | "projectionHash">
 
@@ -69,6 +77,14 @@ type StreamMessageContext = {
   hashes: DataProjectionHashes
 }
 
+type OperationStreamMessageContext = {
+  sessionId: OpaqueId
+  workspaceId: OpaqueId
+  operationId: OpaqueId
+  dataOrigin: DataOrigin
+  cursor: ResumeCursor
+}
+
 type SystemMessageContext = {
   sessionId: OpaqueId
   workspaceId: OpaqueId
@@ -90,12 +106,13 @@ type EngineMessage =
   | EngineMessageBase<"url", RootMessageContext, UrlPayload>
   | EngineMessageBase<"snapshot", EffectResultContext, SnapshotPayload>
   | EngineMessageBase<"stream", StreamMessageContext, StreamPayload>
+  | EngineMessageBase<"operation-stream", OperationStreamMessageContext, OperationStreamPayload>
   | EngineMessageBase<"worker", EffectResultContext, WorkerPayload>
   | EngineMessageBase<"effect", EffectResultContext, EffectResultPayload>
   | EngineMessageBase<"system", SystemMessageContext, SystemPayload>
 ```
 
-`StateRevision`, cursor sequence, progress count는 non-negative safe integer다. `source="stream"`의 cursor/hashes/origin은 검증된 outer wire envelope에서 context로 한 번만 복사하고 payload에 중복하지 않는다.
+`StateRevision`, cursor sequence, progress count는 non-negative safe integer다. `source="stream"`의 cursor/hashes/origin은 topology outer wire envelope에서 context로 한 번만 복사한다. `source="operation-stream"`은 operationId/dataOrigin/cursor만 가지며 topology queryId, entitlementEpoch, data/projection hash에 bind하지 않는다.
 
 ## 2. 사용자 intent
 
@@ -204,7 +221,7 @@ type CommandRequest = {
 type EffectPayload =
   | { type: "catalog.fetch" }
   | { type: "query.plan"; query: TopologyQuery }
-  | { type: "snapshot.fetch"; planId: string; queryId: string }
+  | { type: "snapshot.fetch"; planId: string; queryId: string; previousFrameId: string | null }
   | { type: "stream.subscribe"; request: StreamSubscription }
   | { type: "entityDetail.fetch"; request: EntityDetailRequest }
   | { type: "layout.compute"; request: LayoutRequest }
@@ -234,14 +251,15 @@ type EffectDirective =
   | { kind: "cancel"; abortKey: OpaqueId; reason: "superseded" | "session-ended" | "resync" | "user-dismissed" }
 
 type EffectResultPayload =
-  | { type: "catalog.changed"; catalog: TopologyCatalogResponse }
-  | { type: "query.planResolved"; plan: QueryPlanResponse }
+  | { type: "catalog.changed"; response: ConsumerEnvelope<TopologyCatalogResponse> }
+  | { type: "query.planResolved"; response: ConsumerEnvelope<QueryPlanResponse> }
   | { type: "query.planRejected"; error: StructuredError }
   | { type: "stream.connected"; acceptedCursor: ResumeCursor; headSequence: number }
   | { type: "stream.disconnected"; reasonCode: string; retryable: boolean; retryAfterMs: DurationMs | null }
+  | { type: "entityDetail.received"; response: ConsumerEnvelope<EntityDetail> }
   | { type: "command.receiptReceived"; receipt: CommandReceipt }
-  | { type: "command.receiptLookupReceived"; result: OperationReceiptLookupResult }
-  | { type: "operation.snapshotReceived"; cut: OperationStatusCut }
+  | { type: "command.receiptLookupReceived"; response: ConsumerEnvelope<OperationReceiptLookupResult> }
+  | { type: "operation.snapshotReceived"; response: ConsumerEnvelope<OperationStatusCut> }
   | { type: "url.replaceCompleted" }
   | { type: "navigation.completed" }
   | { type: "effect.cancelled"; reason: "aborted" | "superseded" | "session-ended" }
@@ -299,7 +317,6 @@ type StreamEnvelope = {
 type StreamPayload =
   | { type: "stream.ready"; acceptedCursor: ResumeCursor; headSequence: number }
   | { type: "stream.deltaBatch"; batch: TopologyDeltaBatch }
-  | { type: "operation.eventReceived"; event: OperationEvent }
   | { type: "catalog.revisionAnnounced"; catalogRevision: string }
   | {
       type: "stream.resyncRequired"
@@ -315,6 +332,11 @@ type StreamPayload =
         | "anti-entropy"
       retryAfterMs: DurationMs | null
     }
+
+type OperationStreamPayload = {
+  type: "operation.eventReceived"
+  event: GitOpsOperationEvent
+}
 ```
 
 각 ordered envelope은 그 sequence까지 resume 가능한 signed token을 포함한다. token을 매 envelope 갱신할 수 없는 transport는 별도 checkpoint payload와 최대 replay 거리/만료를 contract version에 명시해야 하며, client가 sequence만 조립해 token을 만들지 않는다.
@@ -383,6 +405,8 @@ type TopologyDelta =
       upserts: readonly Rollup[]
       removalKeys: readonly { parentEntityKey: string; metricId: string }[]
     }
+  | { type: "clusterCuts.replaced"; clusterCuts: readonly ClusterCut[] }
+  | { type: "effectiveWindow.replaced"; effectiveWindow: TimeWindow }
   | { type: "source.watermarkReplaced"; watermark: SourceWatermark }
   | { type: "frame.completenessReplaced"; completeness: CompletenessSummary }
   | { type: "warning.upserted"; warning: StructuredWarning }
@@ -391,6 +415,7 @@ type TopologyDelta =
 type TopologyDeltaBatch = {
   batchId: OpaqueId
   baseFrameId: OpaqueId
+  nextFrameId: OpaqueId
   deltas: NonEmptyReadonlyArray<TopologyDelta>
 }
 ```
@@ -401,57 +426,17 @@ type TopologyDeltaBatch = {
 
 1. entity upsert와 placeholder resolution.
 2. relation/restricted boundary upsert.
-3. metric/flow/size/rollup/watermark/completeness/warning replace.
+3. metric/flow/size/rollup/cluster-cuts/effective-window/watermark/completeness/warning replace.
 4. relation/boundary/value delete.
 5. entity delete.
 
-Relation endpoint는 기존 state 또는 같은 batch의 entity/placeholder에 존재해야 한다. 이미 없는 delete는 idempotent no-op이며 이름이나 좌표로 다른 항목을 추정 삭제하지 않는다. Snapshot이 가진 entity/relation/boundary/metric/flow/size/rollup/watermark/completeness/warning state-space를 delta가 모두 표현해야 한다.
+Relation endpoint는 기존 state 또는 같은 batch의 entity/placeholder에 존재해야 한다. 이미 없는 delete는 idempotent no-op이며 이름이나 좌표로 다른 항목을 추정 삭제하지 않는다. `baseFrameId`는 current frame과 같고 `nextFrameId`는 base와 달라야 하며 batch commit과 동시에 current frame ID가 next로 바뀐다. 다음 batch는 그 nextFrameId를 base로 사용한다. Snapshot이 가진 entity/relation/boundary/metric/flow/size/rollup/cluster-cuts/effective-window/watermark/completeness/warning state-space를 delta가 모두 표현해야 한다.
 
 ## 6. Command receipt와 operation
 
 ```ts
-type OperationProgress =
-  | { kind: "indeterminate" }
-  | {
-      kind: "fraction"
-      completedDecimal: DecimalString
-      totalDecimal: DecimalString
-      unitId: string | null
-      percentBasisPoints: number
-    }
-
-type OperationSnapshotBase = {
-  operationId: string
-  receiptId: string
-  actionId: string
-  target: ActionTarget
-  idempotencyKey: string
-  operationSequence: number
-  approval: ApprovalStatus
-  progress: OperationProgress
-  requestedAt: Timestamp
-  startedAt: Timestamp | null
-  auditRef: string
-}
-
-type OperationSnapshot = OperationSnapshotBase &
-  (
-    | {
-        phase: "pending" | "pending_approval" | "running"
-        finishedAt: null
-        reason: StatusReason | null
-      }
-    | { phase: "succeeded"; finishedAt: Timestamp; reason: null }
-    | {
-        phase: "failed" | "cancelled" | "unsupported"
-        finishedAt: Timestamp
-        reason: StatusReason
-      }
-  )
-
 type CommandReceiptBase = {
   schemaVersion: "topology-command-receipt/v1"
-  receiptId: string
   invocationId: InvocationId
   idempotencyKey: string
   dataOrigin: DataOrigin
@@ -459,79 +444,11 @@ type CommandReceiptBase = {
 }
 
 type CommandReceipt =
-  | (CommandReceiptBase & { outcome: "accepted"; operation: OperationSnapshot })
+  | (CommandReceiptBase & { outcome: "accepted"; receipt: GitOpsOperationReceipt })
   | (CommandReceiptBase & { outcome: "rejected"; error: StructuredError })
-  | (CommandReceiptBase & { outcome: "unknown"; lookupToken: string; reason: StatusReason })
-
-type OperationEventBase = {
-  schemaVersion: "topology-operation-event/v1"
-  dataOrigin: DataOrigin
-  operationEventId: OpaqueId
-  operationId: OpaqueId
-  receiptId: OpaqueId
-  actionId: string
-  target: ActionTarget
-  idempotencyKey: string
-  operationSequence: number
-  occurredAt: Timestamp
-  observedAt: Timestamp
-  auditRef: string
-}
-
-type OperationEvent =
-  | (OperationEventBase & { type: "operation.accepted"; phase: "pending" | "pending_approval" | "running" })
-  | (OperationEventBase & {
-      type: "operation.approvalRequested"
-      phase: "pending_approval"
-      approvalId: string
-      expiresAt: Timestamp | null
-    })
-  | (OperationEventBase & {
-      type: "operation.approvalDecided"
-      decision: "approved" | "rejected" | "expired"
-      phase: "pending" | "cancelled"
-    })
-  | (OperationEventBase & { type: "operation.started"; phase: "running"; startedAt: Timestamp })
-  | (OperationEventBase & { type: "operation.progressed"; phase: "running"; progress: OperationProgress })
-  | (OperationEventBase & {
-      type: "operation.succeeded"
-      phase: "succeeded"
-      finishedAt: Timestamp
-      resultRefs: readonly ResourceRef[]
-    })
-  | (OperationEventBase & {
-      type: "operation.failed"
-      phase: "failed"
-      finishedAt: Timestamp
-      error: StructuredError
-    })
-  | (OperationEventBase & {
-      type: "operation.cancelled"
-      phase: "cancelled"
-      finishedAt: Timestamp
-      reason: StatusReason
-    })
-  | (OperationEventBase & { type: "operation.unsupported"; phase: "unsupported"; reason: StatusReason })
 ```
 
-`percentBasisPoints`는 safe integer 0..10,000이다. total이 없으면 `indeterminate`; 가짜 percent를 만들지 않는다.
-
-Operation phase 전이:
-
-| 현재 | 허용 다음 phase |
-|---|---|
-| 없음 | pending, pending_approval |
-| pending | pending_approval, running, failed, cancelled, unsupported |
-| pending_approval | pending, running, failed, cancelled |
-| running | succeeded, failed, cancelled |
-| succeeded / failed / cancelled / unsupported | 없음 |
-
-- approval approved는 pending, rejected/expired는 실행되지 않은 종료 의미의 cancelled로 canonicalize한다.
-- cancel intent나 terminate receipt만으로 target operation을 cancelled로 바꾸지 않는다. authoritative cancelled event가 필요하다.
-- operationSequence gap은 topology 전체 resync가 아니라 해당 operation status fetch를 만든다.
-- terminal 뒤 다른 terminal 또는 non-terminal event는 protocol corruption이다.
-- same active phase progress는 lifecycle transition이 아니다. authoritative OperationStatusCut은 higher sequence에서 어떤 phase든 최초 설치할 수 있으며 이는 incremental event transition이 아니라 snapshot reconciliation이다.
-- connection/source 불확실성은 phase를 바꾸지 않고 ObservedOperationStatus가 last known status를 보존한다.
+`CommandReceipt`는 topology action invocation과 canonical GitOps receipt의 correlation wrapper일 뿐 별도 operation model이 아니다. accepted branch의 idempotencyKey/dataOrigin은 nested receipt와 정확히 같아야 한다. transport가 possibly-sent이면 receipt를 만들지 않고 `effect.failed(delivery="possibly-sent")`를 dispatch해 receipt lookup으로 수렴한다. phase/progress/approval/result/transition/status-cut 규칙은 `product-data-contract.md` §10 하나만 따른다.
 
 ## 7. Reducer state와 transition
 
@@ -688,13 +605,13 @@ Canonical plain decimal grammar:
 | Message / delta | 허용 source | 필수 검증 | commit / 실패 처리 |
 |---|---|---|---|
 | `engine.initialized` | system | uninitialized, config/schema/runtime policy | session 생성, catalog fetch |
-| `catalog.changed` | effect | active effect, schema, ID collision | compatible replan; major fatal |
+| `catalog.changed` | effect | active effect, envelope origin/access/completeness/schema, ID collision | compatible replan; major fatal |
 | `url.hydrated` | url | codec version/migration/size/depth/entitlement | pending query; invalid면 이전 scene 유지 |
 | `query.textChanged` | ui | base revision, length/control char | draft만 변경 |
 | `query.tokenCommitted` | ui | token schema/catalog/revision/duplicate | canonical query + plan |
 | `query.tokenRemoved` | ui | token 존재/revision/default size | canonical query + plan |
 | `query.planRequested` | ui/system | AST, field/unit/window/action 혼입 | 이전 query effect cancel, plan |
-| `query.planResolved` | effect | active effect/expiry/hash/catalog | loading snapshot |
+| `query.planResolved` | effect | active effect/envelope origin/access/expiry/hash/catalog | loading snapshot |
 | `query.planRejected` | effect | active effect/typed error | 이전 scene 유지, rejected |
 | `scope.entered/exited` | ui | identity/entitlement/containment | query 변경; graph 직접 mutation 금지 |
 | `lens.progressChanged` | ui | finite p, gesture/layout revision | presentation only |
@@ -711,6 +628,7 @@ Canonical plain decimal grammar:
 | `stream.ready` | stream | accepted=requested, head>=accepted | accepted+1 replay |
 | `stream.disconnected` | effect | active subscribe | frame 유지/reconnect |
 | `stream.resyncRequired` | stream/system | active tuple/reason | frame 유지, stream/layout cancel, snapshot |
+| `entityDetail.received` | effect | active effect/envelope origin/access/frame/cursor | matching inspector section replace |
 | `entity.upserted` | stream batch | UID identity/workspace/cluster/budget | full replace |
 | `entity.deleted` | stream batch | key/time/reason | tombstone; 이름 lookup 금지 |
 | `entity.resolutionCommitted` | stream batch | authoritative evidence/both entities | relation/focus/selection alias 이전 |
@@ -721,16 +639,18 @@ Canonical plain decimal grammar:
 | `flow.batchReceived` | stream batch | observed truth/window/unit/relation | keyed replace/delete |
 | `size.batchReceived` | stream batch | formula/cohort/hash/nonnegative | current formula only |
 | `rollup.batchReceived` | stream batch | leaf universe/sum/coverage | keyed replace/delete |
+| `clusterCuts.replaced` | stream batch | cluster uniqueness/access/revision/redaction | full collection replace |
+| `effectiveWindow.replaced` | stream batch | valid ordered window/query time | full window replace |
 | `source.watermarkReplaced` | stream batch | catalog/orthogonal axes | full source replace |
 | `frame.completenessReplaced` | stream batch | count/access/source consistency | completeness only |
 | `warning.*` | stream batch | stable key/redaction | keyed replace/delete |
 | `layout.resolved` | worker | active effect/full revision/transaction | geometry commit |
 | `layout.rejectedAsStale` | worker/system | revision mismatch | geometry 불변 |
 | `layout.failed` | worker | active effect/recoverability | last layout 유지 |
-| `command.receiptReceived` | effect | effect/key/dataOrigin/fingerprint | accepted op install; rejected/unknown graph 불변 |
-| `command.receiptLookupReceived` | effect | active lookup/key/fingerprint | found/pending/not-found branch; graph 불변 |
-| `operation.eventReceived` | stream | ID/cursor/operationSequence/receipt/key/legal phase | operation slice; gap은 status cut fetch |
-| `operation.snapshotReceived` | effect | active lookup/authoritative status cut | last-known/gap reconcile |
+| `command.receiptReceived` | effect | effect/key/dataOrigin/fingerprint | accepted canonical receipt install; rejected graph 불변 |
+| `command.receiptLookupReceived` | effect | active lookup/envelope origin/key/fingerprint | found/pending/not-found branch; graph 불변 |
+| `operation.eventReceived` | operation-stream | operationId/origin/full cursor/operationSequence/status contract | operation ledger; gap은 해당 status cut fetch |
+| `operation.snapshotReceived` | effect | active lookup/envelope origin/authoritative status cut | last-known/gap reconcile |
 | `theme.changed` | ui | registered complete token set | query/layout identity 불변 |
 | `motion.changed` | ui | registered policy | geometry identity 불변 |
 | `effect.failed` | effect | active effect/scoped error/delivery | 이전 scene 유지, scope error |
@@ -741,7 +661,7 @@ Canonical plain decimal grammar:
 - product `entityClass="restricted"`는 engine에서 `entityClass="placeholder", placeholderReason="restricted"`로만 표현한다. UI adapter는 좌표/이름/count를 추가 추론하지 않는다.
 - product `HealthStatus`는 Application Instance의 GitOps/aggregate health다. engine `TopologyHealthVerdict`는 개별 runtime entity의 판정이다. product health는 topology child health의 단순 worst-value 복사가 아니며 backend가 별도 reason/evidence로 제공한다.
 - product `ResourceEdgeKind`는 UI consumer taxonomy, engine `RelationPlane/relationType`은 projection taxonomy다. mapping catalog가 versioned many-to-one/one-to-many 규칙과 evidence 보존을 소유한다.
-- product `GitOpsOperationStatus`와 engine `OperationSnapshot`은 operationId/receiptId/idempotency/phase/approval를 동일 의미로 유지한다. engine은 topology action presentation에 필요한 slice이고 product port DTO가 최종 사용자 계약이다.
+- engine operation ledger는 product `GitOpsOperationReceipt`, `GitOpsOperationStatus`, `GitOpsOperationEvent`를 그대로 저장하고 presentation selector만 파생한다. topology 전용 phase/progress/approval DTO를 다시 만들지 않는다.
 - common `DecimalString`, `DataOrigin`, `StatusReason`, `OperationPhase`, `ApprovalStatus`는 한 generated core module에서 import하며 다시 선언하지 않는다.
 
 ## 12. Protocol release gates

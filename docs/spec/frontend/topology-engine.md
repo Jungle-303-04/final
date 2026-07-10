@@ -9,7 +9,7 @@ last_verified: 2026-07-11
 
 ## 0. 문서의 권한과 목적
 
-이 문서는 Kubernetes 시각화 제품의 frontend 의미·상태·상호작용·데이터 소비를 정리한 설계 계약 초안이다. 제품 기획 소개가 아니며 backend DTO를 복제하는 문서도 아니다. 현재 repo의 실제 코드와 통과한 테스트가 source of truth이고, 현재 코드에 package, route, schema, renderer, plugin이 없으면 구현 완료가 아니라 후속 작업 기준으로만 읽는다. 계약 변경은 frontend ADR, schema major/minor 판정, migration, test traceability 갱신 없이 허용하지 않는다. 실제 배포 완료는 승인된 OpenAPI, generated runtime schema, 구현 코드, executable test가 모두 통과한 경우에만 주장한다.
+이 문서는 Kubernetes 시각화 제품의 frontend 의미·상태·상호작용·데이터 소비를 고정하는 normative design contract다. 제품 기획 소개가 아니며 backend DTO를 복제하는 문서도 아니다. 현재 코드에 package, route, schema, renderer, plugin이 없으면 구현 gap이지만 그 부재가 이 사용자 의미를 축소하지 않는다. 계약 변경은 frontend ADR, schema major/minor 판정, migration, test traceability 갱신 없이 허용하지 않는다. 실제 배포 완료는 승인된 OpenAPI, generated runtime schema, 구현 코드, executable test가 모두 통과한 경우에만 주장한다.
 
 동일 권한의 부속 계약:
 
@@ -543,9 +543,14 @@ interface TopologyGateway {
   readonly configuredOrigin: DataOrigin
   getCatalog(signal: AbortSignal): Promise<ConsumerEnvelope<TopologyCatalogResponse>>
   plan(query: TopologyQuery, signal: AbortSignal): Promise<ConsumerEnvelope<QueryPlanResponse>>
-  getSnapshot(planId: string, signal: AbortSignal): Promise<SnapshotEnvelope>
+  getSnapshot(request: TopologySnapshotRequest, signal: AbortSignal): Promise<SnapshotEnvelope>
   openStream(request: StreamSubscription, signal: AbortSignal): AsyncIterable<StreamEnvelope>
   getEntityDetail(request: EntityDetailRequest, signal: AbortSignal): Promise<ConsumerEnvelope<EntityDetail>>
+}
+
+type TopologySnapshotRequest = {
+  planId: string
+  previousFrameId: string | null
 }
 
 interface TopologyCommandGateway {
@@ -586,6 +591,8 @@ product composition root
 - synthetic adapter는 success뿐 아니라 empty, partial, stale, forbidden, reconnect, gap, malformed payload test scenario를 deterministic seed/fake clock으로 제공한다.
 
 `ProjectionFrame`과 `StreamEnvelope`에는 `dataOrigin`을 포함하며 reducer는 한 query session 안에서 origin이 바뀌는 message를 거부하고 명시적 new session을 요구한다. 이 규칙으로 live와 fake가 한 화면에서 섞이는 것을 막는다.
+
+`TopologyGateway`는 Full Topology의 유일한 backend-facing port다. `product-data-contract.md`의 `ResourceGraphFacadePort`는 committed engine/GitOps Tree store를 읽는 frontend projection이며 HTTP/SSE/WebSocket을 열지 않는다. initial snapshot은 `previousFrameId=null`, poll/anti-entropy snapshot은 마지막 committed frameId를 보내고 응답은 항상 검증 가능한 full `SnapshotEnvelope`다. unchanged를 임의 empty frame으로 대체하지 않는다.
 
 ## 6. Backend projection architecture
 
@@ -715,6 +722,7 @@ type ProjectionFrame = {
   relations: readonly CanonicalRelation[]
   restrictedBoundaries: readonly RestrictedBoundaryMarker[]
   metricValues: readonly MetricValue[]
+  flowValues: readonly FlowValue[]
   sizeValues: readonly ComputedSizeValue[]
   rollups: readonly Rollup[]
   warnings: readonly StructuredWarning[]
@@ -1806,6 +1814,7 @@ lens.progressChanged
 lens.committed
 entity.focused
 entity.activated
+entityDetail.received
 selection.changed
 viewport.changed
 action.invoked
@@ -1853,7 +1862,7 @@ effect.failed
 - effect result는 active/cancelled effectId registry로 dedupe하고 effect 종료 후 session-scoped bounded LRU로 이동한다.
 - UI/URL message는 session-scoped bounded LRU와 causation-specific guard를 사용한다.
 - LRU size/TTL은 `EventRetentionPolicy`의 중앙 수치이며 eviction은 correctness에 필요한 stream cursor를 제거하지 않는다.
-- epoch/sequence continuity 규칙은 `source="stream"` message에만 적용한다. UI/URL/worker/effect message에는 query/layout revision과 effect correlation을 적용한다.
+- topology epoch/sequence/query-hash continuity는 `source="stream"`에 적용한다. `source="operation-stream"`은 별도 operationId/dataOrigin/cursor continuity와 product operationSequence를 적용하고 topology query hash를 요구하지 않는다. UI/URL/worker/effect message에는 query/layout revision과 effect correlation을 적용한다.
 - streamEpoch가 현재와 다르면 이전 delta를 적용하지 않는다.
 - stream sequence가 current 이하이면 duplicate/old replay로 no-op, current+1이면 atomic apply, current+1보다 크면 gap/resync다. 같은 stream tuple의 payload digest가 다르면 protocol corruption이다.
 - resourceVersion은 opaque token이므로 대소 비교하지 않는다. exact duplicate는 eventId/stream sequence/RV equality로 no-op하고 ordering은 query stream sequence와 epoch으로 판단한다.
@@ -1896,7 +1905,7 @@ GET  /api/v2/topology/stream?queryId=...&resumeToken=...
 GET  /api/v2/topology/entities/{entityKey}
 ```
 
-한 browser engine은 하나의 logical stream과 하나의 outer event envelope만 소비한다. inventory, relation, metric, flow는 payload channel로 구분하고 server가 channel별 rate policy를 적용한다. 별도 frontend event bus를 만들지 않는다.
+한 browser engine query는 inventory, relation, metric, flow를 묶은 topology logical stream 하나만 소비한다. 진행 중 GitOps operation watch는 operationId별 독립 stream이며 topology query cursor/hash와 섞지 않고 `source="operation-stream"` EngineMessage로 같은 dispatch에 들어온다. transport가 둘 이상이어도 별도 frontend event bus나 reducer write path를 만들지 않는다.
 
 물리 transport는 deployment capability에 따라 authenticated WebSocket 또는 resumable SSE가 될 수 있다. transport adapter가 연결/재시도/heartbeat를 담당하며 reducer에는 동일 StreamEnvelope만 전달한다. 고속 raw flow를 browser에 그대로 보내지 않고 server-side window aggregate/delta로 제한한다.
 
@@ -2250,7 +2259,7 @@ Activation handler는 Kind switch가 아니라 catalog의 `ActivationDescriptor`
 - user-triggered query/scope/lens 결과, disconnect, stale, action result만 polite announcement한다.
 - 200% zoom, keyboard only, screen reader, reduced motion, high contrast를 release gate에 넣는다.
 - tiny Canvas tile도 search/keyboard relation list에서 접근 가능하다.
-- pointer로 직접 조작하는 control/tile target은 최소 44×44 CSS px다. 그보다 작은 data mark는 직접 클릭 대상이 아니며 zoom/search/list를 통해 접근한다.
+- fine pointer와 keyboard accessibility mirror의 직접 target은 최소 24×24 CSS px, coarse pointer/touch target은 최소 44×44 CSS px다. 44×44보다 작은 tile의 touch는 visual adjunct의 56×56 target lens를 먼저 사용하며, 24×24보다 작은 data mark는 직접 조작 대상이 아니고 zoom/search/list로 접근한다.
 - zoom in/out/reset/fit-selection에 visible button과 keyboard shortcut을 제공한다. wheel/pinch만으로 zoom하지 않는다.
 - keyboard focus가 viewport 밖 entity로 이동하면 reduced-motion policy에 맞춰 camera가 해당 entity를 보이게 이동한다.
 - hierarchy mirror는 `aria-level`, `aria-posinset`, `aria-setsize`, expanded state를 제공한다.
