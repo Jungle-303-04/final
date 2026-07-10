@@ -110,6 +110,12 @@ def test_release_flow_smoke_workflow_can_be_called_by_deploy_workflows() -> None
     assert workflow_call["outputs"]["release_smoke_failed_checks"]["value"] == (
         "${{ jobs.release_flow_smoke.outputs.release_smoke_failed_checks }}"
     )
+    assert workflow_call["outputs"]["release_smoke_failed_count"]["value"] == (
+        "${{ jobs.release_flow_smoke.outputs.release_smoke_failed_count }}"
+    )
+    assert workflow_call["outputs"]["release_smoke_api_base_url"]["value"] == (
+        "${{ jobs.release_flow_smoke.outputs.release_smoke_api_base_url }}"
+    )
     assert workflow_call["outputs"]["release_smoke_error"]["value"] == (
         "${{ jobs.release_flow_smoke.outputs.release_smoke_error }}"
     )
@@ -129,6 +135,12 @@ def test_release_flow_smoke_workflow_uploads_artifacts_before_failing_gate() -> 
         "group": "release-flow-smoke-${{ inputs.github_environment || 'production' }}",
         "cancel-in-progress": False,
     }
+    assert job["outputs"]["release_smoke_failed_count"] == (
+        "${{ steps.release_flow_smoke.outputs.release_smoke_failed_count }}"
+    )
+    assert job["outputs"]["release_smoke_api_base_url"] == (
+        "${{ steps.release_flow_smoke.outputs.release_smoke_api_base_url }}"
+    )
     assert smoke_step["continue-on-error"] is True
     assert "--production-preflight" in smoke_step["run"]
     assert "smoke_args=(" in smoke_step["run"]
