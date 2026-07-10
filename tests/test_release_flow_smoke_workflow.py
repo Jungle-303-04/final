@@ -40,7 +40,10 @@ def test_release_flow_smoke_workflow_declares_operator_inputs_and_secrets_for_di
         "live_environment",
         "live_image",
         "live_namespace",
+        "live_oncall_contact",
         "live_preflight",
+        "live_release_owner",
+        "live_runbook_url",
         "live_verification_url",
         "production_preflight_plan_id",
         "production_preflight_run_limit",
@@ -83,6 +86,9 @@ def test_release_flow_smoke_workflow_declares_operator_inputs_and_secrets_for_di
     assert job["env"]["LIVE_PREFLIGHT_ENVIRONMENT"] == "${{ inputs.live_environment || 'production' }}"
     assert job["env"]["LIVE_PREFLIGHT_NAMESPACE"] == "${{ inputs.live_namespace || 'production' }}"
     assert job["env"]["LIVE_PREFLIGHT_CHANGE_TICKET"] == "${{ inputs.live_change_ticket || 'CHG-PREFLIGHT' }}"
+    assert job["env"]["LIVE_PREFLIGHT_RUNBOOK_URL"] == "${{ inputs.live_runbook_url }}"
+    assert job["env"]["LIVE_PREFLIGHT_RELEASE_OWNER"] == "${{ inputs.live_release_owner }}"
+    assert job["env"]["LIVE_PREFLIGHT_ONCALL_CONTACT"] == "${{ inputs.live_oncall_contact }}"
     assert job["env"]["LIVE_PREFLIGHT_IMAGE"] == "${{ inputs.live_image }}"
     assert job["env"]["LIVE_PREFLIGHT_VERIFICATION_URL"] == "${{ inputs.live_verification_url }}"
 
@@ -102,7 +108,10 @@ def test_release_flow_smoke_workflow_can_be_called_by_deploy_workflows() -> None
         "live_environment",
         "live_image",
         "live_namespace",
+        "live_oncall_contact",
         "live_preflight",
+        "live_release_owner",
+        "live_runbook_url",
         "live_verification_url",
         "production_preflight_plan_id",
         "production_preflight_run_limit",
@@ -178,6 +187,9 @@ def test_release_flow_smoke_workflow_uploads_artifacts_before_failing_gate() -> 
     assert "--live-environment" in smoke_step["run"]
     assert "--live-namespace" in smoke_step["run"]
     assert "--live-change-ticket" in smoke_step["run"]
+    assert "--live-runbook-url" in smoke_step["run"]
+    assert "--live-release-owner" in smoke_step["run"]
+    assert "--live-oncall-contact" in smoke_step["run"]
     assert "--live-image" in smoke_step["run"]
     assert "--live-verification-url" in smoke_step["run"]
     assert 'smoke_args+=(--alert-preflight --alert-severity "${ALERT_PREFLIGHT_SEVERITY}")' in smoke_step["run"]
@@ -203,6 +215,11 @@ def test_release_flow_smoke_workflow_uploads_artifacts_before_failing_gate() -> 
     assert "live_environment must be a Kubernetes-style DNS label" in validate_step["run"]
     assert "live_namespace must be a Kubernetes-style DNS label" in validate_step["run"]
     assert "live_change_ticket is required when live_preflight is enabled" in validate_step["run"]
+    assert "live_runbook_url is required for production live_preflight" in validate_step["run"]
+    assert "live_runbook_url must not use example.com" in validate_step["run"]
+    assert "live_release_owner or live_oncall_contact is required" in validate_step["run"]
+    assert "live_release_owner must identify the real production owner" in validate_step["run"]
+    assert "live_oncall_contact must identify the real on-call contact" in validate_step["run"]
 
     assert upload_step["if"] == "always()"
     assert upload_step["uses"] == "actions/upload-artifact@v4"

@@ -81,6 +81,18 @@ run-name: Release Flow Smoke / ${{ inputs.github_environment || 'production' }} 
         required: false
         default: CHG-PREFLIGHT
         type: string
+      live_runbook_url:
+        description: Production runbook URL recorded in live_preflight readiness payload.
+        required: false
+        type: string
+      live_release_owner:
+        description: Release owner recorded in live_preflight readiness payload.
+        required: false
+        type: string
+      live_oncall_contact:
+        description: On-call contact recorded in live_preflight readiness payload.
+        required: false
+        type: string
       live_image:
         description: Optional image used in the live_preflight readiness payload.
         required: false
@@ -164,6 +176,18 @@ run-name: Release Flow Smoke / ${{ inputs.github_environment || 'production' }} 
         required: false
         default: CHG-PREFLIGHT
         type: string
+      live_runbook_url:
+        description: Production runbook URL recorded in live_preflight readiness payload.
+        required: false
+        type: string
+      live_release_owner:
+        description: Release owner recorded in live_preflight readiness payload.
+        required: false
+        type: string
+      live_oncall_contact:
+        description: On-call contact recorded in live_preflight readiness payload.
+        required: false
+        type: string
       live_image:
         description: Optional image used in the live_preflight readiness payload.
         required: false
@@ -243,6 +267,9 @@ jobs:
       LIVE_PREFLIGHT_ENVIRONMENT: ${{ inputs.live_environment || 'production' }}
       LIVE_PREFLIGHT_NAMESPACE: ${{ inputs.live_namespace || 'production' }}
       LIVE_PREFLIGHT_CHANGE_TICKET: ${{ inputs.live_change_ticket || 'CHG-PREFLIGHT' }}
+      LIVE_PREFLIGHT_RUNBOOK_URL: ${{ inputs.live_runbook_url }}
+      LIVE_PREFLIGHT_RELEASE_OWNER: ${{ inputs.live_release_owner }}
+      LIVE_PREFLIGHT_ONCALL_CONTACT: ${{ inputs.live_oncall_contact }}
       LIVE_PREFLIGHT_IMAGE: ${{ inputs.live_image }}
       LIVE_PREFLIGHT_VERIFICATION_URL: ${{ inputs.live_verification_url }}
     steps:
@@ -339,6 +366,28 @@ jobs:
               echo "::error title=Invalid live_change_ticket::live_change_ticket is required when live_preflight is enabled."
               exit 1
             fi
+            if [ "$LIVE_PREFLIGHT_ENVIRONMENT" = "production" ]; then
+              if [ -z "$LIVE_PREFLIGHT_RUNBOOK_URL" ]; then
+                echo "::error title=Invalid live_runbook_url::live_runbook_url is required for production live_preflight."
+                exit 1
+              fi
+              if [[ "$LIVE_PREFLIGHT_RUNBOOK_URL" == *"example.com"* ]]; then
+                echo "::error title=Invalid live_runbook_url::live_runbook_url must not use example.com for production live_preflight."
+                exit 1
+              fi
+              if [ -z "$LIVE_PREFLIGHT_RELEASE_OWNER" ] && [ -z "$LIVE_PREFLIGHT_ONCALL_CONTACT" ]; then
+                echo "::error title=Invalid live owner::live_release_owner or live_oncall_contact is required for production live_preflight."
+                exit 1
+              fi
+              if [ "$LIVE_PREFLIGHT_RELEASE_OWNER" = "release-operator" ]; then
+                echo "::error title=Invalid live_release_owner::live_release_owner must identify the real production owner."
+                exit 1
+              fi
+              if [ "$LIVE_PREFLIGHT_ONCALL_CONTACT" = "release-oncall@example.com" ]; then
+                echo "::error title=Invalid live_oncall_contact::live_oncall_contact must identify the real on-call contact."
+                exit 1
+              fi
+            fi
           fi
 
       - name: Run release-flow production smoke
@@ -361,6 +410,9 @@ jobs:
               --live-environment "${LIVE_PREFLIGHT_ENVIRONMENT}"
               --live-namespace "${LIVE_PREFLIGHT_NAMESPACE}"
               --live-change-ticket "${LIVE_PREFLIGHT_CHANGE_TICKET}"
+              --live-runbook-url "${LIVE_PREFLIGHT_RUNBOOK_URL}"
+              --live-release-owner "${LIVE_PREFLIGHT_RELEASE_OWNER}"
+              --live-oncall-contact "${LIVE_PREFLIGHT_ONCALL_CONTACT}"
               --live-image "${LIVE_PREFLIGHT_IMAGE}"
               --live-verification-url "${LIVE_PREFLIGHT_VERIFICATION_URL}"
             )
