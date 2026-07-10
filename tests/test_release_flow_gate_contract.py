@@ -1,0 +1,173 @@
+from __future__ import annotations
+
+from pathlib import Path
+from textwrap import dedent
+
+from scripts.validate_release_flow_production_gate import main, validate_workflows
+
+
+def write_workflow(path: Path, body: str) -> Path:
+    path.write_text(dedent(body).strip() + "\n", encoding="utf-8")
+    return path
+
+
+def test_current_workflows_pass_release_flow_gate_contract() -> None:
+    result = validate_workflows([Path(".github/workflows")])
+
+    assert result.ok
+
+
+def test_valid_production_deploy_requires_release_flow_gate(tmp_path: Path) -> None:
+    workflow = write_workflow(
+        tmp_path / "deploy-production.yml",
+        """
+        name: Production Deploy
+        "on":
+          workflow_dispatch:
+        jobs:
+          release_flow_production_gate:
+            uses: ./.github/workflows/release-flow-production-gate.yml
+            secrets: inherit
+          deploy-production:
+            name: Deploy production
+            runs-on: ubuntu-latest
+            needs: release_flow_production_gate
+            if: needs.release_flow_production_gate.outputs.release_gate_ok == 'true'
+            steps:
+              - run: ./scripts/deploy-production.sh
+        """,
+    )
+
+    result = validate_workflows([workflow])
+
+    assert result.ok
+    assert [candidate.job_id for candidate in result.candidates] == ["deploy-production"]
+
+
+def test_ungated_production_deploy_is_rejected(tmp_path: Path) -> None:
+    workflow = write_workflow(
+        tmp_path / "deploy-production.yml",
+        """
+        name: Production Deploy
+        "on":
+          workflow_dispatch:
+        jobs:
+          deploy-production:
+            name: Deploy production
+            runs-on: ubuntu-latest
+            steps:
+              - run: ./scripts/deploy-production.sh
+        """,
+    )
+
+    result = validate_workflows([workflow])
+
+    assert not result.ok
+    assert result.candidates[0].job_id == "deploy-production"
+    messages = "\n".join(violation.message for violation in result.violations)
+    assert "no sibling job calling release-flow-production-gate.yml" in messages
+    assert "release_gate_ok" in messages
+
+
+def test_production_deploy_without_gate_success_condition_is_rejected(tmp_path: Path) -> None:
+    workflow = write_workflow(
+        tmp_path / "deploy-production.yml",
+        """
+        name: Production Deploy
+        "on":
+          workflow_dispatch:
+        jobs:
+          release_flow_production_gate:
+            uses: ./.github/workflows/release-flow-production-gate.yml
+            secrets: inherit
+          deploy-production:
+            name: Deploy production
+            runs-on: ubuntu-latest
+            needs: release_flow_production_gate
+            steps:
+              - run: ./scripts/deploy-production.sh
+        """,
+    )
+
+    result = validate_workflows([workflow])
+
+    assert not result.ok
+    assert len(result.violations) == 1
+    assert "release_gate_ok" in result.violations[0].message
+
+
+def test_production_deploy_needing_wrong_job_is_rejected(tmp_path: Path) -> None:
+    workflow = write_workflow(
+        tmp_path / "deploy-production.yml",
+        """
+        name: Production Deploy
+        "on":
+          workflow_dispatch:
+        jobs:
+          release_flow_production_gate:
+            uses: ./.github/workflows/release-flow-production-gate.yml
+            secrets: inherit
+          build:
+            runs-on: ubuntu-latest
+            steps:
+              - run: echo build
+          deploy-production:
+            name: Deploy production
+            runs-on: ubuntu-latest
+            needs: build
+            if: needs.build.outputs.release_gate_ok == 'true'
+            steps:
+              - run: ./scripts/deploy-production.sh
+        """,
+    )
+
+    result = validate_workflows([workflow])
+
+    assert not result.ok
+    assert any("must need one of the release-flow gate jobs" in item.message for item in result.violations)
+
+
+def test_cli_returns_failure_for_contract_violation(tmp_path: Path, capsys) -> None:
+    workflow = write_workflow(
+        tmp_path / "deploy-production.yml",
+        """
+        name: Production Deploy
+        "on":
+          workflow_dispatch:
+        jobs:
+          deploy-production:
+            runs-on: ubuntu-latest
+            environment: production
+            steps:
+              - run: echo deploy
+        """,
+    )
+
+    exit_code = main([str(workflow)])
+
+    assert exit_code == 1
+    captured = capsys.readouterr()
+    assert "production deploy candidates" in captured.out
+    assert "release-flow production gate violations" in captured.err
+
+
+def test_product_deploy_name_is_not_treated_as_production(tmp_path: Path) -> None:
+    workflow = write_workflow(
+        tmp_path / "deploy-product-catalog.yml",
+        """
+        name: Product Catalog Deploy
+        "on":
+          workflow_dispatch:
+        jobs:
+          deploy-product-catalog:
+            name: Deploy product catalog
+            runs-on: ubuntu-latest
+            steps:
+              - run: echo deploy product catalog
+        """,
+    )
+
+    result = validate_workflows([workflow])
+
+    assert result.ok
+    assert result.candidates == []

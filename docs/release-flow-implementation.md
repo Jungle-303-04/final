@@ -380,6 +380,8 @@ jobs:
 
 `Release Flow Smoke` 자체도 smoke 실행 전에 `api_base_url` 또는 `RELEASE_FLOW_API_BASE_URL`, `RELEASE_FLOW_AUTH_EMAIL`, `RELEASE_FLOW_AUTH_PASSWORD`가 비어 있는지 먼저 확인한다. 운영 secret이 빠져 있으면 API 호출을 시작하기 전에 GitHub annotation으로 실패하므로, 실제 배포 실패와 설정 실패를 구분하기 쉽다.
 
+`.github/workflows/release-flow-gate-contract.yml`은 workflow 변경 PR에서 production deploy job이 release-flow gate를 우회하지 않는지 검사한다. 검사 기준은 `scripts/validate_release_flow_production_gate.py`에 있다. production deploy로 보이는 job은 같은 workflow 안에서 `.github/workflows/release-flow-production-gate.yml`을 호출하는 job을 `needs`에 포함해야 하고, deploy job의 `if` 조건은 `needs.<gate job>.outputs.release_gate_ok == 'true'`를 확인해야 한다. 이 검사는 아직 production deploy workflow가 없는 상태에서는 통과하지만, 나중에 workflow가 추가되면 gate 연결을 빠뜨린 PR을 실패시킨다.
+
 알림 채널이 실제로 validation alert를 받을 수 있는지 확인하려면 `--alert-preflight`를 붙인다. 이 모드는 enabled alert channel 중 요청 severity를 받을 수 있는 채널을 골라 `/alert-channels/test`를 호출하므로, 실제 Slack/webhook/온콜 테스트 메시지가 발송될 수 있다.
 
 ```bash
