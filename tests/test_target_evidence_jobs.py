@@ -23,6 +23,7 @@ from domains.target.router import (
     evidence_job_result,
     poll_evidence_job,
     schedule_evidence_jobs,
+    touch_agent_seen,
 )
 from packages.contracts.gateway.requests import (
     EvidenceJobResultRequest,
@@ -32,6 +33,27 @@ from packages.contracts.gateway.requests import (
 ROOT_DIR = Path(__file__).resolve().parents[1]
 TARGET_AGENT_DIR = ROOT_DIR / "src" / "services" / "target" / "cluster-agent"
 IDENTITY = ClusterAgentIdentity(workspace_id="workspace-1", cluster_id="cluster-1")
+
+
+def test_agent_heartbeat_preserves_capabilities_registered_by_connect() -> None:
+    recorded: list[dict[str, Any]] = []
+
+    class HeartbeatDb:
+        def save_cluster_agent_status(self, **kwargs: Any) -> None:
+            recorded.append(kwargs)
+
+    touch_agent_seen(HeartbeatDb(), IDENTITY, "agent-1")
+
+    assert recorded == [
+        {
+            "workspace_id": "workspace-1",
+            "cluster_id": "cluster-1",
+            "agent_id": "agent-1",
+            "capabilities": None,
+            "status": "connected",
+            "details": {"heartbeat_source": "agent_api"},
+        }
+    ]
 
 
 class DeadlockOrig(Exception):
