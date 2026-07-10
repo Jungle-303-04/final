@@ -355,6 +355,7 @@ Target / Telemetry 선형 작업 문서는 아래에 있다.
 - [spec/frontend/topology-engine-claude](spec/frontend/topology-engine-claude.md)
 - [spec/frontend/topology-engine](spec/frontend/topology-engine.md)
 - [spec/frontend/topology-message-action-schema](spec/frontend/topology-message-action-schema.md)
+- [spec/frontend/topology-visual-motion-tokens](spec/frontend/topology-visual-motion-tokens.md)
 - [spec/frontend/workflow](spec/frontend/workflow.md)
 - [spec/packages/ai](spec/packages/ai.md)
 - [spec/packages/config](spec/packages/config.md)
