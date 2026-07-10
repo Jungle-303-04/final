@@ -59,6 +59,7 @@ RCA는 provider가 보내준 evidence만 보고 symptom, root cause candidate, c
 - safe Deployment annotations
 - Pod template labels
 - safe Pod template annotations
+- resources requests/limits
 - env/envFrom ConfigMap and Secret reference summary
 - mounted ConfigMap and Secret volume reference summary
 - managedFields manager 목록
@@ -200,6 +201,7 @@ policy상 traces query는 존재한다.
 - change_context.current_workload_snapshots[].containers[].readiness_probe
 - change_context.current_workload_snapshots[].containers[].liveness_probe
 - change_context.current_workload_snapshots[].containers[].startup_probe
+- change_context.current_workload_snapshots[].containers[].resources
 - change_context.current_workload_snapshots[].containers[].env_refs
 - change_context.current_workload_snapshots[].containers[].env_from_refs
 - change_context.current_workload_snapshots[].containers[].volume_mount_refs
