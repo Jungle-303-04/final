@@ -153,6 +153,8 @@ def validate_production_plan(
     expected_values = expected_values or {}
     if settings.get("runtime_mode") != "live":
         blockers.append("release plan settings.runtime_mode must be live")
+    if settings.get("rollback_policy") != "safe_pr":
+        blockers.append("release plan settings.rollback_policy must be safe_pr for gated production deploy")
     if not steps:
         blockers.append("release plan must contain at least one step")
     for index, step in enumerate(steps, start=1):

@@ -58,7 +58,7 @@ def production_plan() -> dict[str, object]:
         "plan_id": "plan-prod",
         "name": "Production release",
         "status": "active",
-        "settings": {"runtime_mode": "live"},
+        "settings": {"runtime_mode": "live", "rollback_policy": "safe_pr"},
         "steps": [
             {
                 "application_id": "checkout",
@@ -135,6 +135,31 @@ def test_release_flow_deploy_refuses_demo_plan_before_start() -> None:
 
     assert results[-1].ok is False
     assert "runtime_mode must be live" in results[-1].detail
+    assert all(path != "/release-plans/start" for _method, path, _payload in client.calls)
+
+
+def test_release_flow_deploy_refuses_non_safe_pr_rollback_before_start() -> None:
+    module = load_deploy_module()
+    plan = production_plan()
+    plan["settings"] = {"runtime_mode": "live", "rollback_policy": "disabled"}
+    args = module.parse_args(
+        [
+            "--api-base-url",
+            "https://release-flow.company.internal/api",
+            "--email",
+            "release@company.internal",
+            "--password",
+            "deploy-secret-12345",
+            "--plan-id",
+            "plan-prod",
+        ]
+    )
+    client = FakeClient(plan)
+
+    results = module.run_deploy(client, args)
+
+    assert results[-1].ok is False
+    assert "settings.rollback_policy must be safe_pr" in results[-1].detail
     assert all(path != "/release-plans/start" for _method, path, _payload in client.calls)
 
 

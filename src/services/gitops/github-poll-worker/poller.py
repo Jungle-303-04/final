@@ -257,8 +257,10 @@ class GitHubPoller:
                 if not self.is_target_status_error(exc):
                     raise
                 target_errors.append(exc)
+                self.record_poll_result(target, ok=False, exc=exc)
                 self.log_target_status_error(target, exc)
                 continue
+            self.record_poll_result(target, ok=True)
             if commit_sha is None or commit_sha == self._last_sha_by_target.get(target.key):
                 continue  # 새 커밋 없음 → webhook 안 쏨(dedup 은 ledger 가 최종 보장).
             correlation_id = gitops_correlation_id(target, commit_sha)
@@ -300,6 +302,41 @@ class GitHubPoller:
                 }
             },
         )
+
+    def record_poll_result(
+        self,
+        target: GitHubPollTarget,
+        *,
+        ok: bool,
+        exc: httpx.HTTPStatusError | None = None,
+    ) -> None:
+        record = getattr(self.db, "record_watch_poll_result", None)
+        if not callable(record):
+            return
+        try:
+            record(
+                target.watch_target_id,
+                workspace_id=target.workspace_id,
+                repository_id=target.repository_id,
+                branch=target.branch,
+                manifest_path=target.manifest_path,
+                ok=ok,
+                status_code=exc.response.status_code if exc is not None else None,
+                error_kind=self.github_error_kind(exc.response.status_code) if exc is not None else "",
+                error=str(exc) if exc is not None else "",
+            )
+        except Exception as record_exc:
+            LOGGER.warning(
+                "github_poll_status_record_failed",
+                extra={
+                    CONTEXT_KEY: {
+                        "repo": target.repo_ref,
+                        "branch": target.branch,
+                        "watch_target_id": target.watch_target_id,
+                        "exception_type": type(record_exc).__name__,
+                    }
+                },
+            )
 
     def poll_targets(self) -> list[GitHubPollTarget]:
         db_targets = self.db_poll_targets()

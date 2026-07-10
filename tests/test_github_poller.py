@@ -78,6 +78,7 @@ class StubPollTargetDb:
         self.rows = rows
         self.credentials = credentials or {}
         self.credential_lookups: list[tuple[str, str, str]] = []
+        self.poll_results: list[tuple[str, dict[str, Any]]] = []
 
     def list_active_github_poll_targets(self) -> list[dict[str, Any]]:
         return self.rows
@@ -87,6 +88,9 @@ class StubPollTargetDb:
     ) -> dict[str, Any] | None:
         self.credential_lookups.append((workspace_id, provider, scope))
         return self.credentials.get((workspace_id, provider, scope))
+
+    def record_watch_poll_result(self, watch_target_id: str, **payload: Any) -> None:
+        self.poll_results.append((watch_target_id, payload))
 
 
 class StubTokenVault:
@@ -346,6 +350,21 @@ def test_db_poll_targets_post_registered_binding_to_webhook(monkeypatch) -> None
 
     asyncio.run(go())
     assert calls[0].startswith("https://api.github.com/repos/org/checkout/commits")
+    assert db.poll_results == [
+        (
+            "watch-1",
+            {
+                "workspace_id": "workspace-1",
+                "repository_id": "repo-1",
+                "branch": "release",
+                "manifest_path": "k8s/deploy.yaml",
+                "ok": True,
+                "status_code": None,
+                "error_kind": "",
+                "error": "",
+            },
+        )
+    ]
     expected_correlation_id = module.gitops_correlation_id(
         module.GitHubPollTarget(
             workspace_id="workspace-1",
@@ -564,6 +583,23 @@ def test_poll_continues_other_targets_when_one_target_access_fails(monkeypatch) 
     assert len(posted) == 1
     assert posted[0]["repo_ref"] == "org/checkout"
     assert posted[0]["commit_sha"] == "checkout-sha"
+    assert db.poll_results[0][0] == "watch-private"
+    assert db.poll_results[0][1]["ok"] is False
+    assert db.poll_results[0][1]["status_code"] == 403
+    assert db.poll_results[0][1]["error_kind"] == "access_denied"
+    assert db.poll_results[1] == (
+        "watch-checkout",
+        {
+            "workspace_id": "workspace-1",
+            "repository_id": "repo-checkout",
+            "branch": "main",
+            "manifest_path": "deploy/checkout.yaml",
+            "ok": True,
+            "status_code": None,
+            "error_kind": "",
+            "error": "",
+        },
+    )
 
 
 def test_etag_conditional_request_skips_unchanged(monkeypatch: pytest.MonkeyPatch) -> None:
