@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import ast
 import json
 import os
 import sys
@@ -76,6 +77,32 @@ def load_yaml(path: Path) -> dict[str, Any]:
     return loaded if isinstance(loaded, dict) else {}
 
 
+def has_python_call_with_first_literal(source: str, function_name: str, literal: str) -> bool:
+    """포맷과 무관하게 지정 함수의 첫 문자열 인자를 확인한다."""
+    try:
+        tree = ast.parse(source)
+    except SyntaxError:
+        return False
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Call) or not node.args:
+            continue
+        called_name = (
+            node.func.id
+            if isinstance(node.func, ast.Name)
+            else node.func.attr
+            if isinstance(node.func, ast.Attribute)
+            else ""
+        )
+        first_arg = node.args[0]
+        if (
+            called_name == function_name
+            and isinstance(first_arg, ast.Constant)
+            and first_arg.value == literal
+        ):
+            return True
+    return False
+
+
 def validate_readiness(
     *,
     require_runtime_config: bool = False,
@@ -113,7 +140,13 @@ def validate_readiness(
 def check_required_files() -> list[ReadinessCheck]:
     checks: list[ReadinessCheck] = []
     for path in [*REQUIRED_WORKFLOW_FILES, *REQUIRED_SCRIPT_FILES, *REQUIRED_DOC_FILES]:
-        checks.append(ReadinessCheck(f"file.{path.as_posix()}", path.is_file(), "present" if path.is_file() else "missing"))
+        checks.append(
+            ReadinessCheck(
+                f"file.{path.as_posix()}",
+                path.is_file(),
+                "present" if path.is_file() else "missing",
+            )
+        )
     return checks
 
 
@@ -127,22 +160,32 @@ def check_smoke_workflow_contract() -> list[ReadinessCheck]:
     secrets = call.get("secrets", {}) if isinstance(call, dict) else {}
     jobs = workflow.get("jobs", {})
     job = jobs.get("release_flow_smoke", {}) if isinstance(jobs, dict) else {}
-    run = "\n".join(str(step.get("run", "")) for step in job.get("steps", []) if isinstance(step, dict))
+    run = "\n".join(
+        str(step.get("run", "")) for step in job.get("steps", []) if isinstance(step, dict)
+    )
     return [
         ReadinessCheck(
             "workflow.smoke.reusable",
             set(workflow.get("on", {})) == {"workflow_dispatch", "workflow_call"},
-            "manual and reusable" if set(workflow.get("on", {})) == {"workflow_dispatch", "workflow_call"} else "missing trigger",
+            "manual and reusable"
+            if set(workflow.get("on", {})) == {"workflow_dispatch", "workflow_call"}
+            else "missing trigger",
         ),
         ReadinessCheck(
             "workflow.smoke.outputs",
-            {"release_smoke_ok", "release_smoke_failed_checks", "release_smoke_failed_count", "release_smoke_error"}
+            {
+                "release_smoke_ok",
+                "release_smoke_failed_checks",
+                "release_smoke_failed_count",
+                "release_smoke_error",
+            }
             <= set(call.get("outputs", {})),
             "gate outputs exported",
         ),
         ReadinessCheck(
             "workflow.smoke.secret_aliases",
-            {"RELEASE_FLOW_API_BASE_URL", "RELEASE_FLOW_AUTH_EMAIL", "RELEASE_FLOW_AUTH_PASSWORD"} <= set(secrets),
+            {"RELEASE_FLOW_API_BASE_URL", "RELEASE_FLOW_AUTH_EMAIL", "RELEASE_FLOW_AUTH_PASSWORD"}
+            <= set(secrets),
             "uppercase repo secret aliases accepted",
         ),
         ReadinessCheck(
@@ -168,7 +211,8 @@ def check_smoke_workflow_contract() -> list[ReadinessCheck]:
             "live_safe_pr_workflow_run_id is required when live_approval_gate is safe_pr" in run
             and "live_safe_pr_url is required when live_approval_gate is safe_pr" in run
             and "live_safe_pr_url must use https when live_approval_gate is safe_pr" in run
-            and "live_safe_pr_url must not use localhost or example hosts when live_approval_gate is safe_pr" in run,
+            and "live_safe_pr_url must not use localhost or example hosts when live_approval_gate is safe_pr"
+            in run,
             "live safe_pr preflight fails before API calls without concrete Safe PR evidence",
         ),
         ReadinessCheck(
@@ -204,7 +248,7 @@ def check_smoke_script_contract() -> list[ReadinessCheck]:
             and "LIVE_PREFLIGHT_PLACEHOLDERS" in source
             and "LIVE_PREFLIGHT_PLACEHOLDER_HOSTS" in source
             and "example.test" in source
-            and "host.endswith(\".localhost\")" in source
+            and 'host.endswith(".localhost")' in source
             and "CHG-PREFLIGHT" in source
             and "https://example.com/runbooks/release-flow" in source
             and "https://example.com/verify/release-flow" in source
@@ -214,7 +258,9 @@ def check_smoke_script_contract() -> list[ReadinessCheck]:
         ReadinessCheck(
             "script.smoke.live_runbook_url_required",
             '"live_runbook_url": getattr(args, "live_runbook_url", "")' in source
-            and 'validate_live_https_url("live_runbook_url"' in source
+            and has_python_call_with_first_literal(
+                source, "validate_live_https_url", "live_runbook_url"
+            )
             and "LIVE_PREFLIGHT_PLACEHOLDER_HOSTS" in source
             and 'host.endswith(".example.test")' in source,
             "direct production live preflight requires a concrete https runbook URL",
@@ -230,7 +276,9 @@ def check_smoke_script_contract() -> list[ReadinessCheck]:
             "script.smoke.live_verification_url_required",
             '"live_verification_url": getattr(args, "live_verification_url", "")' in source
             and "is required for production live preflight" in source
-            and 'validate_live_https_url("live_verification_url"' in source
+            and has_python_call_with_first_literal(
+                source, "validate_live_https_url", "live_verification_url"
+            )
             and "LIVE_PREFLIGHT_PLACEHOLDER_HOSTS" in source
             and 'host.endswith(".example.test")' in source,
             "direct production live preflight requires a concrete https verification URL",
@@ -253,7 +301,9 @@ def check_smoke_script_contract() -> list[ReadinessCheck]:
             "script.smoke.production_verification_url_required",
             '"live_verification_url": getattr(args, "live_verification_url", "")' in source
             and "is required for production live preflight" in source
-            and 'validate_live_https_url("live_verification_url"' in source
+            and has_python_call_with_first_literal(
+                source, "validate_live_https_url", "live_verification_url"
+            )
             and "LIVE_PREFLIGHT_PLACEHOLDER_HOSTS" in source
             and 'host.endswith(".example.test")' in source,
             "direct production live preflight requires concrete post-deploy verification URL evidence",
@@ -295,7 +345,13 @@ def check_smoke_script_contract() -> list[ReadinessCheck]:
 def check_operator_documentation_contract() -> list[ReadinessCheck]:
     path = Path("docs/release-flow-production-readiness.md")
     if not path.is_file():
-        return [ReadinessCheck("docs.production_readiness", False, "release-flow production readiness operator guide is missing")]
+        return [
+            ReadinessCheck(
+                "docs.production_readiness",
+                False,
+                "release-flow production readiness operator guide is missing",
+            )
+        ]
     source = path.read_text(encoding="utf-8")
     required_terms = {
         "RELEASE_FLOW_API_BASE_URL",
@@ -343,7 +399,11 @@ def check_evidence_verifier_contract() -> list[ReadinessCheck]:
     path = Path("scripts/verify_release_flow_production_evidence.py")
     docs_path = Path("docs/release-flow-production-readiness.md")
     if not path.is_file():
-        return [ReadinessCheck("script.evidence_verifier", False, "production evidence verifier is missing")]
+        return [
+            ReadinessCheck(
+                "script.evidence_verifier", False, "production evidence verifier is missing"
+            )
+        ]
     source = path.read_text(encoding="utf-8")
     docs = docs_path.read_text(encoding="utf-8") if docs_path.is_file() else ""
     return [
@@ -394,7 +454,11 @@ def check_readiness_runner_contract() -> list[ReadinessCheck]:
     path = Path("scripts/run_release_flow_production_readiness.py")
     docs_path = Path("docs/release-flow-production-readiness.md")
     if not path.is_file():
-        return [ReadinessCheck("script.readiness_runner", False, "production readiness runner is missing")]
+        return [
+            ReadinessCheck(
+                "script.readiness_runner", False, "production readiness runner is missing"
+            )
+        ]
     source = path.read_text(encoding="utf-8")
     docs = docs_path.read_text(encoding="utf-8") if docs_path.is_file() else ""
     return [
@@ -429,7 +493,11 @@ def check_production_signoff_runner_contract() -> list[ReadinessCheck]:
     path = Path("scripts/run_release_flow_production_signoff.py")
     docs_path = Path("docs/release-flow-production-readiness.md")
     if not path.is_file():
-        return [ReadinessCheck("script.production_signoff_runner", False, "production signoff runner is missing")]
+        return [
+            ReadinessCheck(
+                "script.production_signoff_runner", False, "production signoff runner is missing"
+            )
+        ]
     source = path.read_text(encoding="utf-8")
     docs = docs_path.read_text(encoding="utf-8") if docs_path.is_file() else ""
     return [
@@ -550,11 +618,7 @@ def check_worker_topology_contract() -> list[ReadinessCheck]:
         for worker in required_workers
         if f"name: {worker}" in services and f"app: {worker}" in services
     }
-    started = {
-        worker
-        for worker in required_workers
-        if f"\n  {worker}\n" in up_script
-    }
+    started = {worker for worker in required_workers if f"\n  {worker}\n" in up_script}
     return [
         ReadinessCheck(
             "worker_topology.deployments",
@@ -852,7 +916,7 @@ def check_safe_pr_patch_contract() -> list[ReadinessCheck]:
                 "INVALID_BRANCH_REF_MESSAGE",
                 "GITHUB_BRANCH_REF_RE",
                 "request_base_branch",
-                "return normalize_branch_ref(f\"{BRANCH_PREFIX}/{request.workflow_run_id}\")",
+                'return normalize_branch_ref(f"{BRANCH_PREFIX}/{request.workflow_run_id}")',
             ),
             "GitHub Safe PR provider validates base/head branch refs before outbound writes",
         ),
@@ -862,7 +926,13 @@ def check_safe_pr_patch_contract() -> list[ReadinessCheck]:
 def check_production_readiness_workflow_contract() -> list[ReadinessCheck]:
     path = Path(".github/workflows/release-flow-production-readiness.yml")
     if not path.is_file():
-        return [ReadinessCheck("workflow.production_readiness", False, "release-flow-production-readiness.yml is missing")]
+        return [
+            ReadinessCheck(
+                "workflow.production_readiness",
+                False,
+                "release-flow-production-readiness.yml is missing",
+            )
+        ]
     workflow = load_yaml(path)
     workflow_source = path.read_text(encoding="utf-8")
     dispatch = workflow.get("on", {}).get("workflow_dispatch", {})
@@ -914,7 +984,8 @@ def check_production_readiness_workflow_contract() -> list[ReadinessCheck]:
             "RELEASE_FLOW_LIVE_ENABLED" in env
             and "RELEASE_FLOW_LIVE_WORKSPACES" in env
             and "RELEASE_FLOW_LIVE_ENABLED" in str(env.get("RELEASE_FLOW_LIVE_ENABLED") or "")
-            and "RELEASE_FLOW_LIVE_WORKSPACES" in str(env.get("RELEASE_FLOW_LIVE_WORKSPACES") or ""),
+            and "RELEASE_FLOW_LIVE_WORKSPACES"
+            in str(env.get("RELEASE_FLOW_LIVE_WORKSPACES") or ""),
             "production readiness receives live dispatch enablement and workspace allow-list env",
         ),
         ReadinessCheck(
@@ -922,7 +993,8 @@ def check_production_readiness_workflow_contract() -> list[ReadinessCheck]:
             "github_access_preflight" in inputs
             and inputs.get("github_access_preflight", {}).get("default") is True
             and "GITHUB_ACCESS_PREFLIGHT" in env
-            and str(env.get("GITHUB_ACCESS_PREFLIGHT") or "") == "${{ inputs.github_access_preflight }}"
+            and str(env.get("GITHUB_ACCESS_PREFLIGHT") or "")
+            == "${{ inputs.github_access_preflight }}"
             and "--check-github-access" in run,
             "production readiness verifies GitHub repo access by default",
         ),
@@ -931,7 +1003,8 @@ def check_production_readiness_workflow_contract() -> list[ReadinessCheck]:
             "github_environment_preflight" in inputs
             and inputs.get("github_environment_preflight", {}).get("default") is True
             and "GITHUB_ENVIRONMENT_PREFLIGHT" in env
-            and str(env.get("GITHUB_ENVIRONMENT_PREFLIGHT") or "") == "${{ inputs.github_environment_preflight }}"
+            and str(env.get("GITHUB_ENVIRONMENT_PREFLIGHT") or "")
+            == "${{ inputs.github_environment_preflight }}"
             and "RELEASE_FLOW_GITHUB_ENVIRONMENT_TOKEN" in env
             and "GITHUB_ENVIRONMENT_NAME" in env
             and "GITHUB_ENVIRONMENT_REPO" in env
@@ -949,9 +1022,9 @@ def check_production_readiness_workflow_contract() -> list[ReadinessCheck]:
             and "--ci" in run
             and "--production-preflight" in run
             and "--ci-artifacts-dir artifacts" in run
-            and "API_BASE_URL=\"$RELEASE_FLOW_API_BASE_URL\"" in run
-            and "AUTH_EMAIL=\"$RELEASE_FLOW_AUTH_EMAIL\"" in run
-            and "AUTH_PASSWORD=\"$RELEASE_FLOW_AUTH_PASSWORD\"" in run
+            and 'API_BASE_URL="$RELEASE_FLOW_API_BASE_URL"' in run
+            and 'AUTH_EMAIL="$RELEASE_FLOW_AUTH_EMAIL"' in run
+            and 'AUTH_PASSWORD="$RELEASE_FLOW_AUTH_PASSWORD"' in run
             and "artifacts/release-flow-*.*" in workflow_source,
             "production readiness runs live API smoke by default without release dispatch",
         ),
@@ -965,7 +1038,8 @@ def check_production_readiness_workflow_contract() -> list[ReadinessCheck]:
         ),
         ReadinessCheck(
             "workflow.production_readiness.github_api_base",
-            "GITHUB_API_BASE" in env and "RELEASE_FLOW_GITHUB_API_BASE" in str(env.get("GITHUB_API_BASE") or ""),
+            "GITHUB_API_BASE" in env
+            and "RELEASE_FLOW_GITHUB_API_BASE" in str(env.get("GITHUB_API_BASE") or ""),
             "production readiness can target GitHub Enterprise API base",
         ),
         ReadinessCheck(
@@ -991,14 +1065,22 @@ def check_production_readiness_workflow_contract() -> list[ReadinessCheck]:
 def check_production_gate_contract() -> list[ReadinessCheck]:
     path = Path(".github/workflows/release-flow-production-gate.yml")
     if not path.is_file():
-        return [ReadinessCheck("workflow.production_gate", False, "release-flow-production-gate.yml is missing")]
+        return [
+            ReadinessCheck(
+                "workflow.production_gate", False, "release-flow-production-gate.yml is missing"
+            )
+        ]
     workflow = load_yaml(path)
     jobs = workflow.get("jobs", {})
     validate_job = jobs.get("validate_production_gate_inputs", {}) if isinstance(jobs, dict) else {}
     smoke_job = jobs.get("release_flow_smoke", {}) if isinstance(jobs, dict) else {}
     gate_job = jobs.get("production_gate", {}) if isinstance(jobs, dict) else {}
-    validate_run = "\n".join(str(step.get("run", "")) for step in validate_job.get("steps", []) if isinstance(step, dict))
-    gate_run = "\n".join(str(step.get("run", "")) for step in gate_job.get("steps", []) if isinstance(step, dict))
+    validate_run = "\n".join(
+        str(step.get("run", "")) for step in validate_job.get("steps", []) if isinstance(step, dict)
+    )
+    gate_run = "\n".join(
+        str(step.get("run", "")) for step in gate_job.get("steps", []) if isinstance(step, dict)
+    )
     call = workflow.get("on", {}).get("workflow_call", {})
     outputs = call.get("outputs", {}) if isinstance(call, dict) else {}
     inputs = call.get("inputs", {}) if isinstance(call, dict) else {}
@@ -1022,15 +1104,18 @@ def check_production_gate_contract() -> list[ReadinessCheck]:
         ReadinessCheck(
             "workflow.production_gate.safe_pr_gate_default",
             call.get("inputs", {}).get("live_approval_gate", {}).get("default") == "safe_pr"
-            and smoke_job.get("with", {}).get("live_approval_gate") == "${{ inputs.live_approval_gate || 'safe_pr' }}",
+            and smoke_job.get("with", {}).get("live_approval_gate")
+            == "${{ inputs.live_approval_gate || 'safe_pr' }}",
             "production live preflight defaults to Safe PR approval gate",
         ),
         ReadinessCheck(
             "workflow.production_gate.safe_pr_evidence_inputs",
             "live_safe_pr_workflow_run_id" in inputs
             and "live_safe_pr_url" in inputs
-            and smoke_job.get("with", {}).get("live_safe_pr_workflow_run_id") == "${{ inputs.live_safe_pr_workflow_run_id }}"
-            and smoke_job.get("with", {}).get("live_safe_pr_url") == "${{ inputs.live_safe_pr_url }}",
+            and smoke_job.get("with", {}).get("live_safe_pr_workflow_run_id")
+            == "${{ inputs.live_safe_pr_workflow_run_id }}"
+            and smoke_job.get("with", {}).get("live_safe_pr_url")
+            == "${{ inputs.live_safe_pr_url }}",
             "production live preflight can receive existing Safe PR evidence",
         ),
         ReadinessCheck(
@@ -1038,10 +1123,12 @@ def check_production_gate_contract() -> list[ReadinessCheck]:
             "LIVE_PREFLIGHT_APPROVAL_GATE" in validate_job.get("env", {})
             and "LIVE_PREFLIGHT_SAFE_PR_WORKFLOW_RUN_ID" in validate_job.get("env", {})
             and "LIVE_PREFLIGHT_SAFE_PR_URL" in validate_job.get("env", {})
-            and "live_safe_pr_workflow_run_id is required when live_approval_gate is safe_pr" in validate_run
+            and "live_safe_pr_workflow_run_id is required when live_approval_gate is safe_pr"
+            in validate_run
             and "live_safe_pr_url is required when live_approval_gate is safe_pr" in validate_run
             and "live_safe_pr_url must use https when live_approval_gate is safe_pr" in validate_run
-            and "live_safe_pr_url must not use localhost or example hosts when live_approval_gate is safe_pr" in validate_run,
+            and "live_safe_pr_url must not use localhost or example hosts when live_approval_gate is safe_pr"
+            in validate_run,
             "production gate rejects safe_pr mode without existing Safe PR evidence before smoke calls",
         ),
         ReadinessCheck(
@@ -1088,12 +1175,15 @@ def check_production_gate_contract() -> list[ReadinessCheck]:
         ),
         ReadinessCheck(
             "workflow.production_gate.output",
-            outputs.get("release_gate_ok", {}).get("value") == "${{ jobs.production_gate.outputs.release_gate_ok }}",
+            outputs.get("release_gate_ok", {}).get("value")
+            == "${{ jobs.production_gate.outputs.release_gate_ok }}",
             "release_gate_ok exported",
         ),
         ReadinessCheck(
             "workflow.production_gate.fail_closed",
-            gate_job.get("if") == "always()" and "release_gate_ok=false" in gate_run and "exit 1" in gate_run,
+            gate_job.get("if") == "always()"
+            and "release_gate_ok=false" in gate_run
+            and "exit 1" in gate_run,
             "fails closed when smoke failed",
         ),
     ]
@@ -1102,7 +1192,11 @@ def check_production_gate_contract() -> list[ReadinessCheck]:
 def check_production_deploy_workflow_contract() -> list[ReadinessCheck]:
     path = Path(".github/workflows/release-flow-production-deploy.yml")
     if not path.is_file():
-        return [ReadinessCheck("workflow.production_deploy", False, "release-flow-production-deploy.yml is missing")]
+        return [
+            ReadinessCheck(
+                "workflow.production_deploy", False, "release-flow-production-deploy.yml is missing"
+            )
+        ]
     workflow = load_yaml(path)
     inputs = workflow.get("on", {}).get("workflow_dispatch", {}).get("inputs", {})
     concurrency = workflow.get("concurrency", {})
@@ -1110,7 +1204,9 @@ def check_production_deploy_workflow_contract() -> list[ReadinessCheck]:
     gate_job = jobs.get("release_flow_production_gate", {}) if isinstance(jobs, dict) else {}
     deploy_job = jobs.get("deploy-production", {}) if isinstance(jobs, dict) else {}
     deploy_steps = deploy_job.get("steps", []) if isinstance(deploy_job.get("steps"), list) else []
-    deploy_run = "\n".join(str(step.get("run", "")) for step in deploy_job.get("steps", []) if isinstance(step, dict))
+    deploy_run = "\n".join(
+        str(step.get("run", "")) for step in deploy_job.get("steps", []) if isinstance(step, dict)
+    )
     deploy_env = {}
     setup_python_step = next(
         (
@@ -1156,7 +1252,8 @@ def check_production_deploy_workflow_contract() -> list[ReadinessCheck]:
             "workflow.production_deploy.gates_start",
             deploy_job.get("needs") == "release_flow_production_gate"
             and deploy_job.get("environment") == "production"
-            and deploy_job.get("if") == "needs.release_flow_production_gate.outputs.release_gate_ok == 'true'",
+            and deploy_job.get("if")
+            == "needs.release_flow_production_gate.outputs.release_gate_ok == 'true'",
             "production release start is gated by release_gate_ok",
         ),
         ReadinessCheck(
@@ -1177,13 +1274,17 @@ def check_production_deploy_workflow_contract() -> list[ReadinessCheck]:
             and "RELEASE_FLOW_DEPLOY_PLAN_ID" in deploy_run
             and "RELEASE_FLOW_AUTH_EMAIL" in deploy_env
             and "RELEASE_FLOW_AUTH_PASSWORD" in deploy_env
-            and deploy_env.get("RELEASE_FLOW_DEPLOY_CHANGE_TICKET") == "${{ inputs.live_change_ticket }}"
-            and deploy_env.get("RELEASE_FLOW_DEPLOY_RUNBOOK_URL") == "${{ inputs.live_runbook_url }}"
+            and deploy_env.get("RELEASE_FLOW_DEPLOY_CHANGE_TICKET")
+            == "${{ inputs.live_change_ticket }}"
+            and deploy_env.get("RELEASE_FLOW_DEPLOY_RUNBOOK_URL")
+            == "${{ inputs.live_runbook_url }}"
             and deploy_env.get("RELEASE_FLOW_DEPLOY_IMAGE") == "${{ inputs.live_image }}"
-            and deploy_env.get("RELEASE_FLOW_DEPLOY_VERIFICATION_URL") == "${{ inputs.live_verification_url }}"
+            and deploy_env.get("RELEASE_FLOW_DEPLOY_VERIFICATION_URL")
+            == "${{ inputs.live_verification_url }}"
             and deploy_env.get("RELEASE_FLOW_DEPLOY_SAFE_PR_WORKFLOW_RUN_ID")
             == "${{ inputs.live_safe_pr_workflow_run_id }}"
-            and deploy_env.get("RELEASE_FLOW_DEPLOY_SAFE_PR_URL") == "${{ inputs.live_safe_pr_url }}",
+            and deploy_env.get("RELEASE_FLOW_DEPLOY_SAFE_PR_URL")
+            == "${{ inputs.live_safe_pr_url }}",
             "production deploy starts a release-flow run using release-flow credentials",
         ),
     ]
@@ -1267,13 +1368,19 @@ def check_deploy_script_contract() -> list[ReadinessCheck]:
     ]
 
 
-def check_gate_contract_workflow(*, require_production_deploy: bool = False) -> list[ReadinessCheck]:
-    result = validate_workflows([Path(".github/workflows")], require_production_deploy=require_production_deploy)
+def check_gate_contract_workflow(
+    *, require_production_deploy: bool = False
+) -> list[ReadinessCheck]:
+    result = validate_workflows(
+        [Path(".github/workflows")], require_production_deploy=require_production_deploy
+    )
     return [
         ReadinessCheck(
             "workflow.gate_contract.static_scan",
             result.ok,
-            "contract passed" if result.ok else "; ".join(item.message for item in result.violations),
+            "contract passed"
+            if result.ok
+            else "; ".join(item.message for item in result.violations),
         )
     ]
 
@@ -1281,7 +1388,11 @@ def check_gate_contract_workflow(*, require_production_deploy: bool = False) -> 
 def check_gate_contract_script_contract() -> list[ReadinessCheck]:
     path = Path("scripts/validate_release_flow_production_gate.py")
     if not path.is_file():
-        return [ReadinessCheck("script.gate_contract", False, "release-flow production gate validator is missing")]
+        return [
+            ReadinessCheck(
+                "script.gate_contract", False, "release-flow production gate validator is missing"
+            )
+        ]
     source = path.read_text(encoding="utf-8")
     return [
         ReadinessCheck(
@@ -1302,9 +1413,9 @@ def check_gate_contract_script_contract() -> list[ReadinessCheck]:
             "HTTPS_GATE_INPUTS" in source
             and "PLACEHOLDER_URL_HOSTS" in source
             and "validate_literal_url_input" in source
-            and "parsed.scheme != \"https\"" in source
-            and "host.endswith(\".localhost\")" in source
-            and "host.endswith(\".example.test\")" in source,
+            and 'parsed.scheme != "https"' in source
+            and 'host.endswith(".localhost")' in source
+            and 'host.endswith(".example.test")' in source,
             "production deploy workflows cannot hard-code non-https or placeholder live URLs",
         ),
     ]
@@ -1368,7 +1479,9 @@ def check_live_runtime_config(*, require_runtime_config: bool) -> list[Readiness
         checks.append(
             ReadinessCheck(
                 f"runtime.{name}",
-                (configured and valid) if require_runtime_config else (valid if configured else True),
+                (configured and valid)
+                if require_runtime_config
+                else (valid if configured else True),
                 runtime_config_detail(
                     configured=configured,
                     valid=valid,
@@ -1385,7 +1498,8 @@ def check_github_access_preflight() -> list[ReadinessCheck]:
     prerequisite_failures = [
         check
         for check in check_github_runtime_config(require_runtime_config=True)
-        if not check.ok and check.name in {"runtime.github_token", "runtime.scm_repo", "runtime.github_api_base"}
+        if not check.ok
+        and check.name in {"runtime.github_token", "runtime.scm_repo", "runtime.github_api_base"}
     ]
     if prerequisite_failures:
         return [
@@ -1400,8 +1514,13 @@ def check_github_access_preflight() -> list[ReadinessCheck]:
     if not token:
         return [ReadinessCheck("runtime.github_access_preflight", False, token_detail)]
     repo = os.getenv("SCM_REPO", "").strip()
-    base_branch = os.getenv("SCM_BASE_BRANCH", DEFAULT_SCM_BASE_BRANCH).strip() or DEFAULT_SCM_BASE_BRANCH
-    api_base = os.getenv("GITHUB_API_BASE", DEFAULT_GITHUB_API_BASE).strip().rstrip("/") or DEFAULT_GITHUB_API_BASE
+    base_branch = (
+        os.getenv("SCM_BASE_BRANCH", DEFAULT_SCM_BASE_BRANCH).strip() or DEFAULT_SCM_BASE_BRANCH
+    )
+    api_base = (
+        os.getenv("GITHUB_API_BASE", DEFAULT_GITHUB_API_BASE).strip().rstrip("/")
+        or DEFAULT_GITHUB_API_BASE
+    )
     headers = github_access_headers(token)
     try:
         repo_payload = github_json_get(f"{api_base}/repos/{repo}", headers=headers)
@@ -1413,7 +1532,9 @@ def check_github_access_preflight() -> list[ReadinessCheck]:
                     f"GitHub token can read {repo}, but repo permissions do not indicate write access for Safe PR branches",
                 )
             ]
-        github_json_get(f"{api_base}/repos/{repo}/git/ref/heads/{quote(base_branch, safe='/')}", headers=headers)
+        github_json_get(
+            f"{api_base}/repos/{repo}/git/ref/heads/{quote(base_branch, safe='/')}", headers=headers
+        )
         return [
             ReadinessCheck(
                 "runtime.github_access_preflight",
@@ -1452,7 +1573,9 @@ def github_json_get(url: str, *, headers: dict[str, str]) -> dict[str, Any]:
     with urllib.request.urlopen(request, timeout=10) as response:
         status = int(response.getcode())
         if status != 200:
-            raise urllib.error.HTTPError(url, status, f"unexpected status {status}", hdrs=None, fp=None)
+            raise urllib.error.HTTPError(
+                url, status, f"unexpected status {status}", hdrs=None, fp=None
+            )
         payload = json.loads(response.read().decode("utf-8") or "{}")
         return payload if isinstance(payload, dict) else {}
 
@@ -1563,7 +1686,11 @@ def live_runtime_config_state(name: str, value: str) -> tuple[bool, bool, str]:
         if not workspaces:
             return False, False, "missing"
         if "*" in workspaces:
-            return True, False, "must name explicit production workspace ids; wildcard * is not accepted"
+            return (
+                True,
+                False,
+                "must name explicit production workspace ids; wildcard * is not accepted",
+            )
         return True, True, ""
     return bool(value), bool(value), "" if value else "missing"
 
@@ -1583,7 +1710,11 @@ def runtime_config_validity(name: str, value: str) -> tuple[bool, str]:
         return https_url_validity(value)
     if name == "auth_email":
         lowered = value.lower()
-        if "@" not in value or lowered.endswith("@example.com") or lowered == "release-oncall@example.com":
+        if (
+            "@" not in value
+            or lowered.endswith("@example.com")
+            or lowered == "release-oncall@example.com"
+        ):
             return False, "must be a real operator account email"
         return True, ""
     if name == "auth_password":
@@ -1628,7 +1759,10 @@ def runtime_config_detail(
 
 def write_report(path: Path, checks: list[ReadinessCheck]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    payload = {"ok": all(check.ok for check in checks), "checks": [asdict(check) for check in checks]}
+    payload = {
+        "ok": all(check.ok for check in checks),
+        "checks": [asdict(check) for check in checks],
+    }
     path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
 
 
