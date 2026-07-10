@@ -27,6 +27,18 @@ Required live control-plane runtime settings:
 - `RELEASE_FLOW_LIVE_ENABLED=1`: enables live dispatch inside the management API.
 - `RELEASE_FLOW_LIVE_WORKSPACES`: comma-separated workspace allow-list for live dispatch. Use the production workspace id; avoid `*` for production unless a separate environment control already scopes access.
 
+Verify the GitHub Environment before running production workflows:
+
+```bash
+GITHUB_TOKEN="<token with repo/actions metadata access>" \
+python scripts/verify_release_flow_github_environment.py \
+  --github-repo owner/repo \
+  --environment production \
+  --github-token-env GITHUB_TOKEN
+```
+
+The verifier reads GitHub Environment secret names and variable values. It does not read secret values. It fails when required secret names are missing, when required variables/secrets are absent, when visible variables use unsafe values such as wildcard workspaces, or when the final GitHub access token secret is missing. Use `--allow-token-ref-only` only when the production runtime resolves `RELEASE_FLOW_GITHUB_TOKEN_REF` outside GitHub Actions and the final readiness run is intentionally not using GitHub API access preflight.
+
 ## Preflight Commands
 
 Local static wiring check:
@@ -61,6 +73,18 @@ python scripts/validate_release_flow_production_readiness.py \
   --require-runtime-config \
   --check-github-access
 ```
+
+GitHub Environment configuration check, using a token that can read environment secrets and variables:
+
+```bash
+python scripts/verify_release_flow_github_environment.py \
+  --github-repo owner/repo \
+  --environment production \
+  --github-token-env GITHUB_TOKEN \
+  --report-path ./release-flow-github-environment.json
+```
+
+This check confirms the production environment exposes the required release-flow secrets, a concrete `RELEASE_FLOW_SCM_REPO`, live dispatch enabled, and an explicit non-wildcard `RELEASE_FLOW_LIVE_WORKSPACES` allow-list before operators run the workflow.
 
 GitHub Actions production readiness:
 
@@ -123,15 +147,3 @@ python scripts/verify_release_flow_production_evidence.py \
 ```
 
 This path requires successful `release-flow-production-readiness.yml` and `release-flow-production-deploy.yml` runs for the selected branch/SHA, downloads the required artifacts, and then applies the same JSON checks. The smoke and deploy reports must point at the same concrete HTTPS API base URL.
-
-If the repository token can read GitHub Actions, the verifier can fetch the latest successful artifacts directly:
-
-```bash
-GITHUB_TOKEN="<token with actions read access>" \
-python scripts/verify_release_flow_production_evidence.py \
-  --github-repo owner/repo \
-  --github-branch dev \
-  --github-sha "<deployed commit sha>"
-```
-
-Use `--github-output-dir artifacts/release-flow-production-evidence` when the downloaded ZIP files should be kept for audit handoff. The verifier still requires the same readiness, smoke, and deploy reports after download, so a green GitHub run without the expected JSON evidence is not enough to complete production verification.

@@ -33,6 +33,7 @@ REQUIRED_SCRIPT_FILES = [
     Path("scripts/release_flow_smoke.py"),
     Path("scripts/release_flow_deploy.py"),
     Path("scripts/verify_release_flow_production_evidence.py"),
+    Path("scripts/verify_release_flow_github_environment.py"),
     Path("scripts/validate_release_flow_production_gate.py"),
     Path("scripts/up.sh"),
 ]
@@ -93,6 +94,7 @@ def validate_readiness(
     checks.extend(check_production_gate_contract())
     checks.extend(check_production_deploy_workflow_contract())
     checks.extend(check_deploy_script_contract())
+    checks.extend(check_github_environment_verifier_contract())
     checks.extend(check_evidence_verifier_contract())
     checks.extend(check_gate_contract_script_contract())
     checks.extend(check_gate_contract_workflow(require_production_deploy=require_production_deploy))
@@ -375,6 +377,49 @@ def check_evidence_verifier_contract() -> list[ReadinessCheck]:
             and "--github-output-dir" in docs
             and "same concrete HTTPS API base URL" in docs,
             "operator guide documents GitHub artifact download verification and API consistency",
+        ),
+    ]
+
+
+def check_github_environment_verifier_contract() -> list[ReadinessCheck]:
+    path = Path("scripts/verify_release_flow_github_environment.py")
+    docs_path = Path("docs/release-flow-production-readiness.md")
+    if not path.is_file():
+        return [
+            ReadinessCheck(
+                "script.github_environment_verifier",
+                False,
+                "GitHub environment verifier is missing",
+            )
+        ]
+    source = path.read_text(encoding="utf-8")
+    docs = docs_path.read_text(encoding="utf-8") if docs_path.is_file() else ""
+    return [
+        ReadinessCheck(
+            "script.github_environment_verifier.required_config",
+            "RELEASE_FLOW_API_BASE_URL" in source
+            and "RELEASE_FLOW_AUTH_EMAIL" in source
+            and "RELEASE_FLOW_AUTH_PASSWORD" in source
+            and "RELEASE_FLOW_GITHUB_TOKEN" in source
+            and "RELEASE_FLOW_SCM_REPO" in source
+            and "RELEASE_FLOW_LIVE_ENABLED" in source
+            and "RELEASE_FLOW_LIVE_WORKSPACES" in source,
+            "GitHub environment verifier checks required release-flow config names",
+        ),
+        ReadinessCheck(
+            "script.github_environment_verifier.value_guards",
+            "must not use wildcard workspace allow-list" in source
+            and "must be owner/repo" in source
+            and "must enable live dispatch" in source
+            and "must not use localhost or example hosts" in source,
+            "GitHub environment verifier validates inspectable production variable values",
+        ),
+        ReadinessCheck(
+            "docs.production_readiness.github_environment_verifier",
+            "verify_release_flow_github_environment.py" in docs
+            and "--github-repo owner/repo" in docs
+            and "--environment production" in docs,
+            "operator guide documents GitHub environment verification",
         ),
     ]
 
