@@ -945,6 +945,19 @@ detail snapshot인 `current_workload_snapshot` 단수 값으로 보낸다.
 | `change_context.resource_quotas[].namespace` | string | ResourceQuota namespace다. |
 | `change_context.resource_quotas[].hard` | object | ResourceQuota status.hard 값이다. CPU, memory, pod 수 같은 제한값을 Kubernetes quantity 문자열 그대로 담는다. |
 | `change_context.resource_quotas[].used` | object | ResourceQuota status.used 값이다. 현재 사용량을 Kubernetes quantity 문자열 그대로 담는다. |
+| `change_context.referenced_config_objects` | list<object> | 단건 detail에만 있는 참조된 ConfigMap/Secret 객체 metadata 요약이다. 객체 값은 담지 않는다. |
+| `change_context.referenced_config_objects[].kind` | string | `ConfigMap` 또는 `Secret`이다. |
+| `change_context.referenced_config_objects[].namespace` | string | 참조된 객체 namespace다. |
+| `change_context.referenced_config_objects[].name` | string | 참조된 객체 이름이다. |
+| `change_context.referenced_config_objects[].exists` | boolean 또는 null | 객체 존재 여부다. 권한이 없어 확인할 수 없으면 null이다. |
+| `change_context.referenced_config_objects[].access` | string | `ok`, `not_found`, `forbidden` 중 하나다. |
+| `change_context.referenced_config_objects[].created_at` | string | 객체 metadata.creationTimestamp다. 조회 성공 시에만 있다. |
+| `change_context.referenced_config_objects[].labels` | object | 안전하다고 본 labels 요약이다. 민감 token이 있는 label은 제외한다. |
+| `change_context.referenced_config_objects[].referenced_by` | list<object> | 어떤 container/env/envFrom/volume이 이 객체를 참조했는지 나타낸다. |
+| `change_context.referenced_config_objects[].referenced_key_checks` | list<object> | 명시적으로 참조한 key가 객체 안에 있는지 확인한 결과다. 조회 성공 시에만 있다. |
+| `change_context.referenced_config_objects[].referenced_key_checks[].key` | string | Deployment가 env keyRef 또는 volume items에서 직접 참조한 key 이름이다. |
+| `change_context.referenced_config_objects[].referenced_key_checks[].exists` | boolean | 해당 key가 ConfigMap/Secret data 또는 binaryData key로 존재하는지 여부다. 값은 담지 않는다. |
+| `change_context.referenced_config_objects[].referenced_key_checks[].sources` | list<string> | 이 key를 참조한 위치 종류다. 현재 `env`, `volume`만 쓴다. `envFrom`은 key를 명시하지 않으므로 제외한다. |
 | `change_context.current_workload_snapshots[].workload` | object | workload kind, namespace, name이다. 현재 kind는 `Deployment`다. |
 | `change_context.current_workload_snapshots[].deployment_labels` | object | Deployment metadata labels다. |
 | `change_context.current_workload_snapshots[].pod_template_labels` | object | Pod template metadata labels다. |
@@ -990,6 +1003,15 @@ ResourceQuota 요약은 workload 하나의 속성이 아니라 namespace 수준 
 그래서 summary query와 detail query 모두 `change_context.resource_quotas[]`에 담고,
 `current_workload_snapshot` 안에는 넣지 않는다.
 ResourceQuota 조회 권한이 없거나 API가 없으면 provider는 실패하지 않고 빈 목록을 남긴다.
+참조된 ConfigMap/Secret 객체 metadata 요약은 단건 detail query에만 담는다.
+전체 summary query에서는 참조 객체를 따라가지 않는다.
+이 요약은 객체 존재 여부와 참조 위치를 보기 위한 값이며 Secret/ConfigMap 값은 담지 않는다.
+Secret `data`, `binaryData`, `stringData`, ConfigMap `data`, `binaryData`,
+raw object, annotations는 제외한다.
+조회에 성공한 객체는 `referenced_key_checks[]`로 명시 참조 key 존재 여부를 제공한다.
+이때 전체 key 목록은 보내지 않고, Deployment가 직접 참조한 key만 확인한다.
+`envFrom`은 key를 지정하지 않으므로 key check 대상에서 제외한다.
+구현은 기존 config reference 흐름을 재사용한다. `metadata_config_refs.py`는 참조 객체와 참조 위치를 찾고, `metadata_config_objects.py`는 명시 key 존재 여부와 RCA에 넘길 안전한 객체 요약을 만든다.
 `kubectl.kubernetes.io/last-applied-configuration` 같은 원문 manifest annotation과
 secret/token/password/credential/private/authorization 이름이 들어간 annotation은 제외한다.
 단건 detail의 env/envFrom/volume ConfigMap/Secret reference는 name/key/path만 남기고 값 자체는 남기지 않는다.
@@ -1050,6 +1072,7 @@ Provider가 이미 보내는 값은 다음과 같다.
 | Service selector와 Pod labels 매칭 결과 | `metadata.change_context.service_selector_matches[]` |
 | EndpointSlice ready endpoint 요약 | `metadata.change_context.endpoint_slice_ready_endpoints[]` |
 | ResourceQuota hard/used 요약 | `metadata.change_context.resource_quotas[]` |
+| 참조된 ConfigMap/Secret 객체 metadata 요약 | `metadata.change_context.referenced_config_objects[]` |
 | 특정 Deployment detail의 annotations/manager/scheduling/config refs/ReplicaSet conditions | `metadata.change_context.current_workload_snapshot.deployment_annotations`, `pod_template_annotations`, `managed_fields_managers`, `scheduling_constraints`, `containers[].env_refs`, `containers[].env_from_refs`, `containers[].volume_mount_refs`, `replicaset_revisions[].conditions` |
 
 RCA가 판단하려면 다음 값은 파생해야 한다.
@@ -1106,7 +1129,8 @@ RCA/evidence-worker 쪽 담당 영역이다. 이 문서는 provider가 보내는
 | rollback 가능 여부 / risk_level | 없음 | 배포 이력, policy, GitOps/CI/CD 상태 연결 |
 | previous/current image digest | 일부 가능 | Kubernetes `pods[].containers[].image_id`로 현재 image digest를 볼 수 있다. rollout history와 previous image는 아직 없다. |
 | Deployment/Pod template annotations | 일부 가능 | 단건 detail에서 `ops.service/*`, `prometheus.io/*`, `deployment.kubernetes.io/*`, `kubectl.kubernetes.io/*` 중 안전한 key만 남긴다. |
-| ConfigMap/Secret key reference | 일부 가능 | 단건 detail에서 env/envFrom/volume reference name/key/path를 제공한다. Secret/ConfigMap 객체 metadata는 아직 조회하지 않는다. |
+| ConfigMap/Secret key reference | 가능 | 단건 detail에서 env/envFrom/volume reference name/key/path를 제공한다. 객체 metadata는 `referenced_config_objects[]`에서 별도로 제공한다. |
+| ConfigMap/Secret object metadata summary | 가능 | 단건 detail의 `referenced_config_objects[]`에서 존재 여부, 접근 상태, 생성 시각, 안전한 labels, 참조 위치, 명시 참조 key 존재 여부를 제공한다. 값과 annotations는 제공하지 않는다. |
 | resource requests/limits | 가능 | `containers[].resources.requests/limits`를 제공한다. |
 | Deployment/ReplicaSet/Pod status conditions | 가능 | `deployment_status.conditions`와 `pod_statuses[].conditions`는 summary에도 있고, `replicaset_revisions[].conditions`는 단건 detail에만 있다. |
 | Service selector와 Pod labels 매칭 결과 | 가능 | `service_selector_matches[]`에서 Service별 `match_status`, `matched_pod_count`, `matched_pods`를 제공한다. |
@@ -1130,7 +1154,8 @@ Kubernetes provider는 raw object를 그대로 넘기지 않고 summary만 보�
 | Deployment template image/env/resources | rollout과 현재 Pod spec의 관계를 확인한다. |
 | ReplicaSet revision annotation/status | 특정 rollout revision에서만 문제가 났는지, 해당 ReplicaSet이 준비 상태인지 확인한다. |
 | Endpoint readiness conditions | endpoint 개수만으로 ready endpoint 여부를 확정하기 어렵다. |
-| Ingress, NetworkPolicy, PVC object, ConfigMap, Secret summary | network, storage, config/security 계열 RCA에 필요하다. PVC refs는 metadata bucket에 있지만 PVC object summary는 아직 없다. |
+| Ingress, NetworkPolicy, PVC object | network, storage 계열 RCA에 필요하다. PVC refs는 metadata bucket에 있지만 PVC object summary는 아직 없다. |
+| ConfigMap/Secret data 또는 diff | config 값 오류 확인에는 필요할 수 있지만 민감정보 위험과 과거 상태 의존성이 있어 현재 provider는 보내지 않는다. |
 | Kubernetes raw object | summary 밖 필드를 임시로 확인하기 어렵다. |
 
 ## 자주 헷갈리는 필드

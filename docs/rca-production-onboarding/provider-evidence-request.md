@@ -1,6 +1,6 @@
 # RCA Provider Evidence 요청 정리
 
-구현 메모: metadata evidence는 workload snapshot, config reference, Service selector matching, ResourceQuota summary, ownership lookup helper 모듈로 나누어 구현할 수 있다. 이 helper 모듈들은 event를 발행하지 않는다. 등록된 metadata provider만 metadata bucket을 반환한다.
+구현 메모: metadata evidence는 workload snapshot, config reference, referenced config object summary, Service selector matching, ResourceQuota summary, ownership lookup helper 모듈로 나누어 구현할 수 있다. 이 helper 모듈들은 event를 발행하지 않는다. 등록된 metadata provider만 metadata bucket을 반환한다.
 
 ## 왜 필요한가
 
@@ -71,11 +71,11 @@ RCA는 provider가 보내준 evidence만 보고 symptom, root cause candidate, c
 - single Deployment detail query의 scheduling constraints summary
 - single Deployment detail query의 env/envFrom ConfigMap and Secret reference summary
 - single Deployment detail query의 mounted ConfigMap and Secret volume reference summary
+- single Deployment detail query의 referenced ConfigMap and Secret object metadata summary
 - single Deployment detail query의 ReplicaSet created_at and conditions
 
 ### 추가로 요청해야 할 것
 
-- ConfigMap/Secret object metadata summary
 - 상세 containerStatuses 원본 또는 더 풍부한 요약
 - node pressure / scheduler decision 관련 detail
 
@@ -290,6 +290,15 @@ detail snapshot은 summary 필드에 아래 필드를 추가로 담는다.
 - change_context.current_workload_snapshot.containers[].volume_mount_refs
 - change_context.current_workload_snapshot.replicaset_revisions[].created_at
 - change_context.current_workload_snapshot.replicaset_revisions[].conditions[]
+- change_context.referenced_config_objects[].kind
+- change_context.referenced_config_objects[].namespace
+- change_context.referenced_config_objects[].name
+- change_context.referenced_config_objects[].exists
+- change_context.referenced_config_objects[].access
+- change_context.referenced_config_objects[].created_at
+- change_context.referenced_config_objects[].labels
+- change_context.referenced_config_objects[].referenced_by[]
+- change_context.referenced_config_objects[].referenced_key_checks[]
 
 Scheduling constraints는 단건 detail query에만 담는다.
 전체 summary query는 target namespace의 모든 Deployment를 보내므로 affinity 원본이나 배치 조건을 모두 넣으면
@@ -297,6 +306,19 @@ payload가 커지고 RCA가 읽어야 할 noise가 늘어난다.
 대신 특정 Deployment가 Pending 또는 scheduling 실패 후보일 때 `deployment/<name>` query로 detail을 요청하면,
 `node_selector`는 그대로, `tolerations`는 작은 필드만, `affinity`는 boolean summary만 제공한다.
 이렇게 하면 raw affinity 전체를 노출하지 않으면서도 Node label, taint/toleration, affinity 조건이 있는지 판단할 수 있다.
+
+`referenced_config_objects[]`는 단건 detail query에만 담는다.
+Deployment가 env/envFrom/volume으로 참조하는 ConfigMap/Secret 객체만 조회하고,
+객체 값은 보내지 않는다.
+Secret `data`, `binaryData`, `stringData`, ConfigMap `data`, `binaryData`,
+raw object, annotations는 제외한다.
+권한이 없으면 `exists: null`, `access: "forbidden"`으로 보내고,
+객체가 없으면 `exists: false`, `access: "not_found"`으로 보낸다.
+조회에 성공한 객체는 Deployment가 명시적으로 참조한 key의 존재 여부도
+`referenced_key_checks[]`에 담는다.
+`env[].valueFrom.configMapKeyRef/secretKeyRef.key`와 volume `items[].key`만 확인한다.
+`envFrom`은 특정 key를 명시하지 않으므로 key check 대상에서 제외한다.
+전체 key 목록과 값은 보내지 않는다.
 
 기본 fallback 값은 `{"change_context": {"current_workload_snapshots": []}}`이다.
 기본 `change_context` query는 target namespace의 모든 Deployment를 목록으로 수집한다.
