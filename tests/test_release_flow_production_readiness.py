@@ -31,6 +31,7 @@ def test_current_release_flow_production_readiness_static_checks_pass() -> None:
         "workflow.smoke.safe_pr_evidence_required",
         "script.smoke.live_placeholder_guard",
         "script.smoke.live_image_required",
+        "script.smoke.live_runbook_url_required",
         "script.smoke.live_verification_url_required",
         "script.smoke.generated_manifest_render",
         "script.smoke.live_approval_gate",

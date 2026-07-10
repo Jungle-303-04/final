@@ -194,6 +194,13 @@ def check_smoke_script_contract() -> list[ReadinessCheck]:
             "direct live preflight placeholder values are rejected",
         ),
         ReadinessCheck(
+            "script.smoke.live_runbook_url_required",
+            '"live_runbook_url": getattr(args, "live_runbook_url", "")' in source
+            and "live_runbook_url must use https for production live preflight" in source
+            and "live_runbook_url must not use localhost or example.com placeholder value" in source,
+            "direct production live preflight requires a concrete https runbook URL",
+        ),
+        ReadinessCheck(
             "script.smoke.live_image_required",
             '"live_image": getattr(args, "live_image", "")' in source
             and '"image": args.live_image' in source
@@ -753,7 +760,8 @@ def check_production_gate_contract() -> list[ReadinessCheck]:
             "workflow.production_gate.runbook_required",
             "default" not in inputs.get("live_runbook_url", {})
             and "live_runbook_url is required" in validate_run
-            and "real production runbook" in validate_run,
+            and "live_runbook_url must use https for production live_preflight" in validate_run
+            and "live_runbook_url must not use localhost or example.com" in validate_run,
             "production runbook URL is required",
         ),
         ReadinessCheck(
