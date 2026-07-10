@@ -379,7 +379,7 @@ def test_rca_test_api_exposes_dedicated_header_in_every_openapi_operation(
             if item["in"] == "header" and item["name"] == "x-rca-test-token"
         )
         assert header["required"] is False
-        assert {item["type"] for item in header["schema"]["anyOf"]} == {"string", "null"}
+        assert header["schema"]["type"] == "string"
 
 
 def test_test_run_request_needs_only_cluster_and_scenario() -> None:

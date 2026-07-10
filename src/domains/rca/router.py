@@ -96,8 +96,8 @@ RCA_TEST_RUN_CONFLICT = "RCA test target already has an active run"
 
 
 def require_rca_test_api(
-    supplied: str | None = Header(
-        default=None,
+    supplied: str = Header(
+        default="",
         alias=RCA_TEST_RUNS_TOKEN_HEADER,
         description="RCA 테스트 실행 전용 토큰",
     ),
@@ -106,7 +106,7 @@ def require_rca_test_api(
     if not rca_test_runs_enabled():
         raise HTTPException(status_code=HTTP_NOT_FOUND, detail=RCA_TEST_API_NOT_FOUND)
     configured = env(RCA_TEST_RUNS_TOKEN_ENV, "").strip()
-    normalized = (supplied or "").strip()
+    normalized = supplied.strip()
     if not configured or not normalized or not secrets.compare_digest(normalized, configured):
         raise HTTPException(status_code=HTTP_UNAUTHORIZED, detail=RCA_TEST_TOKEN_INVALID)
 
