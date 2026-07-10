@@ -3,6 +3,7 @@ from __future__ import annotations
 import importlib.util
 import json
 import sys
+import xml.etree.ElementTree as ET
 from pathlib import Path
 from typing import Any
 
@@ -211,18 +212,43 @@ def test_smoke_report_writer_persists_json_artifact(tmp_path: Path) -> None:
     }
 
 
+def test_smoke_junit_writer_persists_ci_report(tmp_path: Path) -> None:
+    smoke = load_smoke_module()
+    junit_path = tmp_path / "artifacts" / "release-smoke.xml"
+
+    smoke.write_junit_report(
+        str(junit_path),
+        [
+            smoke.SmokeResult("healthz", True, "ok"),
+            smoke.SmokeResult("release-runs.policy-override-preflight", False, "run-policy-override"),
+        ],
+    )
+
+    suite = ET.parse(junit_path).getroot()
+    assert suite.tag == "testsuite"
+    assert suite.attrib["tests"] == "2"
+    assert suite.attrib["failures"] == "1"
+    failures = suite.findall(".//failure")
+    assert len(failures) == 1
+    assert failures[0].attrib["message"] == "run-policy-override"
+
+
 def test_smoke_main_writes_report_when_credentials_are_missing(tmp_path: Path, monkeypatch: Any) -> None:
     smoke = load_smoke_module()
     for name in ("API_BASE_URL", "BASE_URL", "AUTH_EMAIL", "AUTH_PASSWORD"):
         monkeypatch.delenv(name, raising=False)
     report_path = tmp_path / "missing-credentials.json"
+    junit_path = tmp_path / "missing-credentials.xml"
 
-    exit_code = smoke.main(["--report-path", str(report_path)])
+    exit_code = smoke.main(["--report-path", str(report_path), "--junit-path", str(junit_path)])
 
     assert exit_code == 2
     payload = json.loads(report_path.read_text(encoding="utf-8"))
     assert payload["ok"] is False
     assert "AUTH_EMAIL" in payload["error"]
+    suite = ET.parse(junit_path).getroot()
+    assert suite.attrib["failures"] == "1"
+    assert "AUTH_EMAIL" in suite.find(".//failure").attrib["message"]
 
 
 def test_smoke_default_does_not_start_release_run() -> None:
