@@ -23,6 +23,7 @@ from providers.collection_limits import (
     COLLECTION_LIMITS_KEY,
     attach_collection_limits,
     limit_payload_list,
+    limit_payload_size,
 )
 from providers.kubernetes_utils import (
     K8S_KIND_DEPLOYMENT,
@@ -575,5 +576,6 @@ def limit_change_context(change_context: JsonObject) -> JsonObject:
     limits: JsonObject = {}
     for key, max_items in CHANGE_CONTEXT_LIST_LIMITS.items():
         limit_payload_list(change_context, key, max_items, limits)
+    limit_payload_size(change_context, list_keys=CHANGE_CONTEXT_LIST_LIMITS, limits=limits)
     attach_collection_limits(change_context, limits)
     return change_context

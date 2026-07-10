@@ -7,6 +7,8 @@ from pathlib import Path
 
 import httpx
 
+from packages.contracts.gateway.requests import EvidenceJobResultRequest
+
 ROOT_DIR = Path(__file__).resolve().parents[1]
 TARGET_AGENT_DIR = ROOT_DIR / "src" / "services" / "target" / "cluster-agent"
 
@@ -143,6 +145,44 @@ def test_metadata_normalize_limits_large_namespace_lists() -> None:
             },
         },
     }
+
+
+def test_metadata_normalize_can_drop_single_oversized_top_level_item() -> None:
+    _module, metadata_module = load_metadata_modules()
+    provider = metadata_module.MetadataProvider(cluster_id="cluster-1")
+
+    normalized = provider.normalize_payload(
+        {
+            metadata_module.CHANGE_CONTEXT_KEY: {
+                metadata_module.CURRENT_WORKLOAD_SNAPSHOTS_KEY: [
+                    {
+                        "workload": {"kind": "Deployment", "namespace": "target", "name": "app"},
+                        "deployment_labels": {"large": "x" * 1_100_000},
+                    }
+                ]
+            }
+        },
+        metadata_module.MetadataSnapshotQuery(
+            "change_context",
+            "Namespace metadata snapshots.",
+            "change_context",
+        ),
+    )
+
+    assert normalized[metadata_module.CURRENT_WORKLOAD_SNAPSHOTS_KEY] == []
+    assert normalized[metadata_module.COLLECTION_LIMITS_KEY]["lists"][
+        metadata_module.CURRENT_WORKLOAD_SNAPSHOTS_KEY
+    ] == {
+        "truncated": True,
+        "original_count": 1,
+        "returned_count": 0,
+    }
+    EvidenceJobResultRequest(
+        agent_id="agent-1",
+        lease_id="lease-1",
+        status="completed",
+        result={"metadata": {metadata_module.CHANGE_CONTEXT_KEY: normalized}},
+    )
 
 
 def test_endpoint_slice_omitted_ready_condition_defaults_to_ready() -> None:

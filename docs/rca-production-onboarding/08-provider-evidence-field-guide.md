@@ -541,14 +541,15 @@ Prometheus, Loki, Tempo의 실패 처리는 `Evidence job 집계 규칙`에서 �
 `provider_status`는 query name별로 추가된다. 따라서 중복 namespace query를 넣으면
 목록에 같은 리소스가 중복될 수 있다.
 
-Kubernetes bucket은 `EvidenceJobResultRequest`의 1MiB 전송 제한을 넘지 않도록
+Kubernetes bucket은 `EvidenceJobResultRequest`의 1MiB 전송 제한을 넘길 위험을 줄이기 위해
 큰 list를 전송 직전에 제한한다. `pods`, `events`, `nodes`, `workloads`,
 `services`, `endpoints`가 잘리면 `kubernetes.collection_limits`에 원래 개수와
-반환 개수를 남긴다. `provider_status.*.counts`는 normalize 단계에서 본 개수이고,
+최종 반환 개수를 남긴다. `provider_status.*.counts`는 normalize 단계에서 본 개수이고,
 실제 payload에 들어간 개수는 `len(...)` 또는 `collection_limits`로 확인한다.
 namespace가 있는 list는 한 namespace가 다른 namespace를 전부 가리지 않도록
 namespace별 round-robin sampling을 쓴다.
-개수 제한 뒤에도 JSON byte 크기가 크면 가장 큰 list부터 추가로 줄인다.
+개수 제한 뒤에도 JSON byte 크기가 크면 JSON byte 크기가 가장 큰 list부터 추가로 줄인다.
+단일 항목이 너무 크면 해당 list는 0개까지 줄어들 수 있다.
 
 ## Metrics bucket
 
@@ -592,10 +593,13 @@ node memory 사용률 query의 첫 번째 sample 값이다.
 RCA는 `result_type`, `samples`, `series`, `result` 중 provider가 정규화한 필드를 읽는다.
 high cardinality metric처럼 결과가 큰 경우에는 `samples`, `series`, `series[].values`,
 또는 `result`가 제한될 수 있다. 잘리면 같은 query result object 안의
-`collection_limits.lists.<field>.original_count/returned_count`로 전체 개수와 반환 개수를
+`collection_limits.lists.<field>.original_count/returned_count`로 전체 개수와 최종 반환 개수를
 확인한다. `analysis`는 제한 전 normalized payload를 기준으로 계산되므로
 `sample_count`, `series_count`, `point_count`, `threshold` 판단은 샘플 제한 때문에 줄어들지 않는다.
-개수 제한 뒤에도 JSON byte 크기가 크면 가장 큰 list부터 추가로 줄인다.
+개수 제한 뒤에도 JSON byte 크기가 크면 JSON byte 크기가 가장 큰 list부터 추가로 줄인다.
+단일 항목이 너무 크면 해당 list는 0개까지 줄어들 수 있다. matrix의 `series.values`
+제한 정보는 최종 `series` 목록이 정해진 뒤 다시 계산하므로, `returned_count`는
+payload에 실제 남은 point 수와 맞는다.
 
 Instant vector 결과일 때 추가 필드다.
 
@@ -1145,7 +1149,7 @@ detail snapshot인 `current_workload_snapshot` 단수 값으로 보낸다.
 | `change_context.collection_limits` | object | metadata 목록이 전송 크기 보호를 위해 잘렸을 때만 있는 제한 요약이다. |
 | `change_context.collection_limits.truncated` | boolean | 하나 이상의 목록이 잘렸으면 true다. |
 | `change_context.collection_limits.lists.<field>.original_count` | number | 제한 전 전체 항목 수다. |
-| `change_context.collection_limits.lists.<field>.returned_count` | number | 실제 payload에 담긴 항목 수다. |
+| `change_context.collection_limits.lists.<field>.returned_count` | number | 최종 payload에 담긴 항목 수다. |
 | `change_context.current_workload_snapshots[].workload` | object | workload kind, namespace, name이다. 현재 kind는 `Deployment`다. |
 | `change_context.current_workload_snapshots[].deployment_labels` | object | Deployment metadata labels다. |
 | `change_context.current_workload_snapshots[].pod_template_labels` | object | Pod template metadata labels다. |
@@ -1216,8 +1220,10 @@ secret/token/password/credential/private/authorization 이름이 들어간 annot
 raw spec과 literal env value는 남기지 않는다.
 Deployment, ReplicaSet, Pod status는 작은 요약만 남기고 raw object와 containerStatuses는 남기지 않는다.
 Service selector 비교 결과는 selector와 matched Pod namespace/name만 남기고 raw Service/Pod object는 남기지 않는다.
-metadata provider는 evidence job result의 1MiB JSON 제한을 넘지 않도록 큰 list를 제한한다.
-top-level list가 잘리면 `change_context.collection_limits`에 원래 개수와 반환 개수를 남긴다.
+metadata provider는 evidence job result의 1MiB JSON 제한을 넘길 위험을 줄이기 위해 큰 list를 제한한다.
+먼저 top-level list 개수를 제한하고, 그래도 JSON byte 크기가 크면 JSON byte 크기가 가장 큰 list부터 추가로 줄인다.
+단일 항목이 너무 크면 해당 top-level list는 0개까지 줄어들 수 있다.
+top-level list가 잘리면 `change_context.collection_limits`에 원래 개수와 최종 반환 개수를 남긴다.
 RCA evidence bundle에서는 `metadata:current_workload_snapshots`,
 `metadata:service_selector_matches`, `metadata:endpoint_slice_ready_endpoints` item의
 `value.collection_limit`에도 같은 제한 정보가 붙는다.

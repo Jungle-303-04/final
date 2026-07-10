@@ -748,3 +748,33 @@ def test_kubernetes_snapshot_provider_limits_by_payload_bytes() -> None:
         status="completed",
         result={"kubernetes": limited},
     )
+
+
+def test_kubernetes_snapshot_provider_can_drop_single_oversized_list_item() -> None:
+    _module, kubernetes_module = load_evidence_modules()
+    provider = kubernetes_module.KubernetesSnapshotProvider(cluster_id="cluster-1")
+    results = provider.empty_results()
+    results["pods"] = [
+        {
+            "uid": "pod-1",
+            "name": "pod-1",
+            "namespace": "target",
+            "message": "x" * 1_100_000,
+            "containers": [],
+        }
+    ]
+
+    limited = provider.build_response(results)
+
+    assert limited["pods"] == []
+    assert limited["collection_limits"]["lists"]["pods"] == {
+        "truncated": True,
+        "original_count": 1,
+        "returned_count": 0,
+    }
+    EvidenceJobResultRequest(
+        agent_id="agent-1",
+        lease_id="lease-1",
+        status="completed",
+        result={"kubernetes": limited},
+    )
