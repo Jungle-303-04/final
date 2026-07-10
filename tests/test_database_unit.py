@@ -7,6 +7,7 @@ repository 의 실제 SQL 실행은 Postgres 전용(jsonb·on_conflict)이라 �
 from __future__ import annotations
 
 import asyncio
+import logging
 from contextlib import asynccontextmanager, contextmanager
 from datetime import UTC, datetime
 from types import SimpleNamespace
@@ -16,6 +17,7 @@ import pytest
 from sqlalchemy.dialects import postgresql
 
 from domains import registry
+from domains.ai.repository import AiConversationRepository
 from domains.audit.repository import AuditLogRepository
 from domains.dashboard.repository import DashboardRepository
 from domains.gitops.repository import (
@@ -28,6 +30,7 @@ from domains.gitops.repository import (
 )
 from domains.rca.repository import RcaRepository
 from domains.target.repository import TargetAgentRepository
+from packages.contracts.event_bus.interfaces import EventConsumerMetrics
 from packages.contracts.event_bus.processing import CLAIM_BLOCKED
 from packages.contracts.gitops import (
     DEFAULT_DEPLOYMENT_BINDING_ID,
@@ -36,6 +39,7 @@ from packages.contracts.gitops import (
 )
 from packages.contracts.identity import Permission, ResourceRole
 from packages.events.envelope import event
+from packages.ai.metrics import LlmInvocationMetric
 from packages.storage import database as db
 from packages.storage import engine as storage_engine
 from packages.storage.repositories import event as event_repository
@@ -138,6 +142,71 @@ def test_schema_defines_expected_tables() -> None:
 
 def test_event_schema_preserves_causation_id() -> None:
     assert "causation_id" in set(metadata.tables["events"].c.keys())
+
+
+def test_event_processing_schema_tracks_processing_duration() -> None:
+    assert "processing_duration_ms" in set(metadata.tables["event_processing"].c.keys())
+
+
+def test_event_consumer_metrics_schema_tracks_nats_lag() -> None:
+    columns = set(metadata.tables["event_consumer_metrics"].c.keys())
+    assert {
+        "consumer",
+        "subject",
+        "stream",
+        "pending_events",
+        "ack_pending_events",
+        "redelivered_events",
+        "observed_at",
+    }.issubset(columns)
+
+
+def test_ai_llm_invocation_metrics_schema_tracks_latency_cost() -> None:
+    columns = set(metadata.tables["ai_llm_invocation_metrics"].c.keys())
+    assert {
+        "workspace_id",
+        "provider",
+        "model",
+        "operation",
+        "status",
+        "latency_ms",
+        "prompt_tokens",
+        "completion_tokens",
+        "total_tokens",
+        "estimated_cost_micros",
+        "event_id",
+        "correlation_id",
+        "causation_id",
+        "error_type",
+        "created_at",
+    }.issubset(columns)
+
+
+def test_ai_llm_invocation_metric_compat_migration_adds_trace_columns() -> None:
+    columns = storage_engine.AI_LLM_INVOCATION_METRIC_COMPAT_COLUMNS
+    assert "event_id" in columns
+    assert "correlation_id" in columns
+    assert "causation_id" in columns
+    assert (
+        "alter table ai_llm_invocation_metrics add column if not exists correlation_id text"
+        in columns["correlation_id"]
+    )
+
+
+def test_ai_llm_invocation_metric_correlation_index_is_operational() -> None:
+    assert any(
+        "ix_ai_llm_invocation_correlation_created" in statement
+        and "where correlation_id is not null" in statement
+        for statement in storage_engine.OPERATIONAL_INDEXES
+    )
+
+
+def test_event_processing_compat_migration_adds_processing_duration() -> None:
+    assert "processing_duration_ms" in storage_engine.EVENT_PROCESSING_COMPAT_COLUMNS
+    assert (
+        "alter table event_processing add column if not exists processing_duration_ms integer"
+        in storage_engine.EVENT_PROCESSING_COMPAT_COLUMNS["processing_duration_ms"]
+    )
 
 
 def test_alert_channel_schema_tracks_validation_status() -> None:
@@ -245,6 +314,41 @@ def test_record_event_persists_causation_id() -> None:
     assert compiled.params["causation_id"] == "parent-event-1"
 
 
+def test_record_event_logs_correlation_context(caplog) -> None:
+    class StubConnection:
+        def execute(self, _statement: Any) -> None:
+            return None
+
+    @contextmanager
+    def stub_connection():
+        yield StubConnection()
+
+    repository = object.__new__(EventRepository)
+    repository.connection = stub_connection  # type: ignore[method-assign]
+    evt = event(
+        "git.changed",
+        "git-pull-worker",
+        {"commit_sha": "abc123"},
+        correlation_id="corr-1",
+        causation_id="parent-event-1",
+    )
+    caplog.set_level(logging.INFO)
+
+    repository.record_event(evt)
+
+    contexts = [
+        record.context
+        for record in caplog.records
+        if record.getMessage() == "db_event_recorded"
+        and isinstance(getattr(record, "context", None), dict)
+    ]
+    assert contexts
+    assert contexts[-1]["event_id"] == evt.event_id
+    assert contexts[-1]["subject"] == "git.changed"
+    assert contexts[-1]["correlation_id"] == "corr-1"
+    assert contexts[-1]["causation_id"] == "parent-event-1"
+
+
 def test_event_claim_upsert_guards_fresh_processing_lease() -> None:
     recorded: list[Any] = []
 
@@ -323,6 +427,247 @@ def test_begin_event_processing_reports_blocked_when_fresh_claim_exists() -> Non
     assert record.attempts == 2
 
 
+def test_finish_event_processing_records_processing_duration() -> None:
+    recorded: list[Any] = []
+
+    class StubConnection:
+        def execute(self, statement: Any) -> None:
+            recorded.append(statement)
+
+    @contextmanager
+    def stub_connection():
+        yield StubConnection()
+
+    repository = object.__new__(EventRepository)
+    repository.connection = stub_connection  # type: ignore[method-assign]
+    evt = event("git.changed", "git-pull-worker", {}, correlation_id="corr-1")
+
+    repository.finish_event_processing(evt, "command-worker", duration_ms=123)
+
+    compiled = recorded[0].compile(dialect=postgresql.dialect())
+    sql = str(compiled)
+    assert "processing_duration_ms" in sql
+    assert compiled.params["processing_duration_ms"] == 123
+
+
+def test_finish_event_processing_logs_status_context(caplog) -> None:
+    class StubConnection:
+        def execute(self, _statement: Any) -> None:
+            return None
+
+    @contextmanager
+    def stub_connection():
+        yield StubConnection()
+
+    repository = object.__new__(EventRepository)
+    repository.connection = stub_connection  # type: ignore[method-assign]
+    evt = event("git.changed", "git-pull-worker", {}, correlation_id="corr-1")
+    caplog.set_level(logging.INFO)
+
+    repository.finish_event_processing(evt, "workflow-controller", duration_ms=17)
+
+    contexts = [
+        record.context
+        for record in caplog.records
+        if record.getMessage() == "db_event_processing_finished"
+        and isinstance(getattr(record, "context", None), dict)
+    ]
+    assert contexts
+    assert contexts[-1]["event_id"] == evt.event_id
+    assert contexts[-1]["correlation_id"] == "corr-1"
+    assert contexts[-1]["consumer"] == "workflow-controller"
+    assert contexts[-1]["status"] == "processed"
+    assert contexts[-1]["processing_duration_ms"] == 17
+
+
+def test_event_processing_duration_metrics_group_by_consumer() -> None:
+    recorded: list[Any] = []
+
+    class StubResult:
+        def mappings(self) -> StubResult:
+            return self
+
+        def all(self) -> list[dict[str, object]]:
+            return [{"consumer": "command-worker", "duration": 12.5}]
+
+    class StubConnection:
+        def execute(self, statement: Any) -> StubResult:
+            recorded.append(statement)
+            return StubResult()
+
+    @contextmanager
+    def stub_connection():
+        yield StubConnection()
+
+    repository = object.__new__(EventRepository)
+    repository.connection = stub_connection  # type: ignore[method-assign]
+
+    assert repository.event_processing_duration_avg_ms_by_consumer() == {
+        "command-worker": 12.5
+    }
+
+    compiled = recorded[0].compile(dialect=postgresql.dialect())
+    sql = str(compiled)
+    assert "avg(event_processing.processing_duration_ms)" in sql
+    assert "event_processing.processing_duration_ms IS NOT NULL" in sql
+    assert "GROUP BY event_processing.consumer" in sql
+
+
+def test_record_event_consumer_metrics_upserts_by_consumer_subject() -> None:
+    recorded: list[Any] = []
+
+    class StubConnection:
+        def execute(self, statement: Any) -> None:
+            recorded.append(statement)
+
+    @contextmanager
+    def stub_connection():
+        yield StubConnection()
+
+    repository = object.__new__(EventRepository)
+    repository.connection = stub_connection  # type: ignore[method-assign]
+    sample = EventConsumerMetrics(
+        stream="SERVICE_EVENTS",
+        subject="command.requested",
+        durable="command-worker",
+        pending=4,
+        ack_pending=1,
+        redelivered=2,
+    )
+
+    repository.record_event_consumer_metrics(sample)
+
+    compiled = recorded[0].compile(dialect=postgresql.dialect())
+    sql = str(compiled)
+    assert "INSERT INTO event_consumer_metrics" in sql
+    assert "ON CONFLICT (consumer, subject) DO UPDATE" in sql
+    assert compiled.params["consumer"] == "command-worker"
+    assert compiled.params["pending_events"] == 4
+    assert compiled.params["ack_pending_events"] == 1
+    assert compiled.params["redelivered_events"] == 2
+
+
+def test_event_consumer_pending_metric_reads_latest_samples() -> None:
+    recorded: list[Any] = []
+
+    class StubResult:
+        def mappings(self) -> StubResult:
+            return self
+
+        def all(self) -> list[dict[str, object]]:
+            return [
+                {
+                    "consumer": "command-worker",
+                    "subject": "command.requested",
+                    "pending_events": 4,
+                }
+            ]
+
+    class StubConnection:
+        def execute(self, statement: Any) -> StubResult:
+            recorded.append(statement)
+            return StubResult()
+
+    @contextmanager
+    def stub_connection():
+        yield StubConnection()
+
+    repository = object.__new__(EventRepository)
+    repository.connection = stub_connection  # type: ignore[method-assign]
+
+    assert repository.event_consumer_pending_by_consumer_subject() == {
+        ("command-worker", "command.requested"): 4
+    }
+
+    compiled = recorded[0].compile(dialect=postgresql.dialect())
+    sql = str(compiled)
+    assert "event_consumer_metrics.consumer" in sql
+    assert "event_consumer_metrics.pending_events" in sql
+
+
+def test_record_llm_invocation_metric_inserts_latency_cost_sample() -> None:
+    recorded: list[Any] = []
+
+    class StubConnection:
+        def execute(self, statement: Any) -> None:
+            recorded.append(statement)
+
+    @contextmanager
+    def stub_connection():
+        yield StubConnection()
+
+    repository = object.__new__(AiConversationRepository)
+    repository.connection = stub_connection  # type: ignore[method-assign]
+    sample = LlmInvocationMetric(
+        workspace_id="ws-1",
+        provider="openai",
+        model="gpt-test",
+        operation="complete",
+        status="succeeded",
+        latency_ms=25,
+        prompt_tokens=10,
+        completion_tokens=5,
+        total_tokens=15,
+        estimated_cost_micros=3,
+        event_id="evt-1",
+        correlation_id="corr-1",
+        causation_id="parent-1",
+    )
+
+    repository.record_llm_invocation_metric(sample)
+
+    compiled = recorded[0].compile(dialect=postgresql.dialect())
+    sql = str(compiled)
+    assert "INSERT INTO ai_llm_invocation_metrics" in sql
+    assert compiled.params["provider"] == "openai"
+    assert compiled.params["latency_ms"] == 25
+    assert compiled.params["estimated_cost_micros"] == 3
+    assert compiled.params["event_id"] == "evt-1"
+    assert compiled.params["correlation_id"] == "corr-1"
+    assert compiled.params["causation_id"] == "parent-1"
+
+
+def test_llm_latency_metric_groups_by_provider_model_operation_status() -> None:
+    recorded: list[Any] = []
+
+    class StubResult:
+        def mappings(self) -> StubResult:
+            return self
+
+        def all(self) -> list[dict[str, object]]:
+            return [
+                {
+                    "provider": "openai",
+                    "model": "gpt-test",
+                    "operation": "complete",
+                    "status": "succeeded",
+                    "value": 25.5,
+                }
+            ]
+
+    class StubConnection:
+        def execute(self, statement: Any) -> StubResult:
+            recorded.append(statement)
+            return StubResult()
+
+    @contextmanager
+    def stub_connection():
+        yield StubConnection()
+
+    repository = object.__new__(AiConversationRepository)
+    repository.connection = stub_connection  # type: ignore[method-assign]
+
+    assert repository.llm_invocation_latency_avg_ms_by_provider_model_operation_status() == {
+        ("openai", "gpt-test", "complete", "succeeded"): 25.5
+    }
+
+    compiled = recorded[0].compile(dialect=postgresql.dialect())
+    sql = str(compiled)
+    assert "avg(ai_llm_invocation_metrics.latency_ms)" in sql
+    assert "GROUP BY ai_llm_invocation_metrics.provider" in sql
+    assert "ai_llm_invocation_metrics.operation" in sql
+
+
 def test_outbox_claim_uses_skip_locked_lease_update() -> None:
     recorded: list[Any] = []
 
@@ -354,6 +699,60 @@ def test_outbox_claim_uses_skip_locked_lease_update() -> None:
     assert "FOR UPDATE SKIP LOCKED" in sql
     assert "leased_until" in sql
     assert compiled.params["source_1"] == "api-gateway"
+
+
+def test_outbox_stage_logs_event_context(caplog) -> None:
+    class StubConnection:
+        def execute(self, _statement: Any) -> None:
+            return None
+
+    repository = object.__new__(OutboxRepository)
+    evt = event(
+        "safe_pr.created",
+        "scm-worker",
+        {"workflow_run_id": "run-1"},
+        correlation_id="corr-1",
+        causation_id="parent-1",
+    )
+    caplog.set_level(logging.INFO)
+
+    repository.stage_events(StubConnection(), [evt])
+
+    contexts = [
+        record.context
+        for record in caplog.records
+        if record.getMessage() == "db_outbox_event_staged"
+        and isinstance(getattr(record, "context", None), dict)
+    ]
+    assert contexts
+    assert contexts[-1]["event_id"] == evt.event_id
+    assert contexts[-1]["subject"] == "safe_pr.created"
+    assert contexts[-1]["source"] == "scm-worker"
+    assert contexts[-1]["correlation_id"] == "corr-1"
+    assert contexts[-1]["causation_id"] == "parent-1"
+
+
+def test_outbox_oldest_age_uses_unsent_occurred_at() -> None:
+    recorded: list[Any] = []
+
+    class StubConnection:
+        def execute(self, statement: Any) -> Any:
+            recorded.append(statement)
+            return SimpleNamespace(scalar=lambda: 12.5)
+
+    @contextmanager
+    def stub_connection():
+        yield StubConnection()
+
+    repository = object.__new__(OutboxRepository)
+    repository.connection = stub_connection  # type: ignore[method-assign]
+
+    assert repository.outbox_oldest_age_seconds() == 12.5
+
+    compiled = recorded[0].compile(dialect=postgresql.dialect())
+    sql = str(compiled)
+    assert "CAST(outbox.occurred_at AS TIMESTAMP WITH TIME ZONE)" in sql
+    assert "outbox.sent_at IS NULL" in sql
 
 
 def test_outbox_claim_without_source_omits_source_filter() -> None:
@@ -961,6 +1360,69 @@ def test_gitops_poll_targets_join_active_repository_application_binding() -> Non
     assert "JOIN git_repositories" in sql
     assert "JOIN applications" in sql
     assert "LEFT OUTER JOIN git_watch_targets" in sql
+    assert compiled.params["workspace_id_1"] == "workspace-b"
+
+
+def test_gitops_workflow_status_metrics_are_workspace_scoped() -> None:
+    recorded: list[Any] = []
+
+    class StubResult:
+        def all(self) -> list[tuple[str, int]]:
+            return [("applying", 2), ("failed", 1)]
+
+    class StubConnection:
+        def execute(self, statement: Any) -> StubResult:
+            recorded.append(statement)
+            return StubResult()
+
+    @contextmanager
+    def stub_connection():
+        yield StubConnection()
+
+    repository = object.__new__(RepoChangeRepository)
+    repository.connection = stub_connection  # type: ignore[method-assign]
+
+    assert repository.workflow_run_status_counts("workspace-b") == {
+        "applying": 2,
+        "failed": 1,
+    }
+
+    compiled = recorded[0].compile(dialect=postgresql.dialect())
+    sql = str(compiled)
+    assert "workflow_runs.workspace_id" in sql
+    assert "GROUP BY workflow_runs.status" in sql
+    assert compiled.params["workspace_id_1"] == "workspace-b"
+
+
+def test_gitops_workflow_current_step_metrics_ignore_terminal_runs() -> None:
+    recorded: list[Any] = []
+
+    class StubResult:
+        def all(self) -> list[tuple[str, int]]:
+            return [("approval", 3), ("apply", 1)]
+
+    class StubConnection:
+        def execute(self, statement: Any) -> StubResult:
+            recorded.append(statement)
+            return StubResult()
+
+    @contextmanager
+    def stub_connection():
+        yield StubConnection()
+
+    repository = object.__new__(RepoChangeRepository)
+    repository.connection = stub_connection  # type: ignore[method-assign]
+
+    assert repository.workflow_run_current_step_counts("workspace-b") == {
+        "approval": 3,
+        "apply": 1,
+    }
+
+    compiled = recorded[0].compile(dialect=postgresql.dialect())
+    sql = str(compiled)
+    assert "workflow_runs.workspace_id" in sql
+    assert "workflow_runs.status NOT IN" in sql
+    assert "GROUP BY workflow_runs.current_step" in sql
     assert compiled.params["workspace_id_1"] == "workspace-b"
 
 

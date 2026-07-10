@@ -72,6 +72,20 @@ EVENT_COMPAT_COLUMNS = {
         "alter table events add column if not exists schema_version integer not null default 1"
     ),
 }
+EVENT_PROCESSING_COMPAT_COLUMNS = {
+    "processing_duration_ms": (
+        "alter table event_processing add column if not exists processing_duration_ms integer"
+    ),
+}
+AI_LLM_INVOCATION_METRIC_COMPAT_COLUMNS = {
+    "event_id": "alter table ai_llm_invocation_metrics add column if not exists event_id text",
+    "correlation_id": (
+        "alter table ai_llm_invocation_metrics add column if not exists correlation_id text"
+    ),
+    "causation_id": (
+        "alter table ai_llm_invocation_metrics add column if not exists causation_id text"
+    ),
+}
 OUTBOX_COMPAT_COLUMNS = {
     "lease_id": "alter table outbox add column if not exists lease_id text",
     "leased_until": "alter table outbox add column if not exists leased_until timestamptz",
@@ -156,6 +170,11 @@ OPERATIONAL_INDEXES = (
     (
         "create index if not exists ix_events_correlation_created "
         "on events (correlation_id, created_at)"
+    ),
+    (
+        "create index if not exists ix_ai_llm_invocation_correlation_created "
+        "on ai_llm_invocation_metrics (correlation_id, created_at) "
+        "where correlation_id is not null"
     ),
 )
 REPO_CHANGE_COMPAT_COLUMNS = {
@@ -524,6 +543,12 @@ class DatabaseConnection:
 
     def _apply_compatible_schema(self, conn: Connection) -> None:
         self._add_missing_columns(conn, "events", EVENT_COMPAT_COLUMNS)
+        self._add_missing_columns(conn, "event_processing", EVENT_PROCESSING_COMPAT_COLUMNS)
+        self._add_missing_columns(
+            conn,
+            "ai_llm_invocation_metrics",
+            AI_LLM_INVOCATION_METRIC_COMPAT_COLUMNS,
+        )
         self._add_missing_columns(conn, "outbox", OUTBOX_COMPAT_COLUMNS)
         conn.execute(text(OUTBOX_CLAIM_INDEX))
         conn.execute(text(OUTBOX_CLAIM_ALL_SOURCES_INDEX))

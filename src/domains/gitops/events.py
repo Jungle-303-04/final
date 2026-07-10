@@ -128,6 +128,7 @@ class GitWebhookReceivedBody(EventBody):
     manifest_path: str = DEFAULT_MANIFEST_PATH
     source_type: str = ""
     force: bool = False
+    correlation_id: str = ""
 
 
 @event(EventSubject.GIT_CHANGED)

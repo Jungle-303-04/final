@@ -28,6 +28,7 @@ REQUIRED_WORKFLOW_FILES = [
 REQUIRED_SCRIPT_FILES = [
     Path("scripts/release_flow_smoke.py"),
     Path("scripts/validate_release_flow_production_gate.py"),
+    Path("scripts/up.sh"),
 ]
 REQUIRED_RUNTIME_CONFIG = {
     "api_base_url": ("RELEASE_FLOW_API_BASE_URL", "API_BASE_URL"),
@@ -53,6 +54,10 @@ def validate_readiness(*, require_runtime_config: bool = False) -> list[Readines
     checks.extend(check_required_files())
     checks.extend(check_smoke_workflow_contract())
     checks.extend(check_smoke_script_contract())
+    checks.extend(check_worker_topology_contract())
+    checks.extend(check_metrics_scrape_contract())
+    checks.extend(check_trace_correlation_contract())
+    checks.extend(check_safe_pr_patch_contract())
     checks.extend(check_production_gate_contract())
     checks.extend(check_gate_contract_workflow())
     checks.extend(check_runtime_config(require_runtime_config=require_runtime_config))
@@ -113,6 +118,13 @@ def check_smoke_workflow_contract() -> list[ReadinessCheck]:
             "live preflight can target existing Safe PR evidence",
         ),
         ReadinessCheck(
+            "workflow.smoke.safe_pr_evidence_required",
+            "live_safe_pr_workflow_run_id is required when live_approval_gate is safe_pr" in run
+            and "live_safe_pr_url is required when live_approval_gate is safe_pr" in run
+            and "live_safe_pr_url must not use example.com when live_approval_gate is safe_pr" in run,
+            "live safe_pr preflight fails before API calls without concrete Safe PR evidence",
+        ),
+        ReadinessCheck(
             "workflow.smoke.runtime_config_preflight",
             "Missing release-flow API URL" in run
             and "Missing release-flow auth email" in run
@@ -168,10 +180,256 @@ def check_smoke_script_contract() -> list[ReadinessCheck]:
             "direct live preflight can pass existing Safe PR evidence",
         ),
         ReadinessCheck(
+            "script.smoke.safe_pr_evidence_required",
+            "live_safe_pr_workflow_run_id is required when live_approval_gate is safe_pr" in source
+            and "live_safe_pr_url is required when live_approval_gate is safe_pr" in source
+            and "live_safe_pr_url must not use example.com placeholder value" in source,
+            "direct live safe_pr preflight requires concrete Safe PR evidence before readiness calls",
+        ),
+        ReadinessCheck(
             "script.smoke.safe_pr_ready_server_verified",
             '"safe_pr_ready"] = True' not in source,
             "direct live preflight does not mark Safe PR ready without server-side evidence",
-        )
+        ),
+    ]
+
+
+def check_worker_topology_contract() -> list[ReadinessCheck]:
+    services_path = Path("deploy/management/services.yaml")
+    up_path = Path("scripts/up.sh")
+    if not services_path.is_file() or not up_path.is_file():
+        return [
+            ReadinessCheck(
+                "worker_topology.files",
+                False,
+                "deploy/management/services.yaml or scripts/up.sh is missing",
+            )
+        ]
+    services = services_path.read_text(encoding="utf-8")
+    up_script = up_path.read_text(encoding="utf-8")
+    required_workers = {
+        "safe-pr-worker",
+        "scm-worker",
+        "release-flow-worker",
+        "outbox-relay",
+    }
+    deployed = {
+        worker
+        for worker in required_workers
+        if f"name: {worker}" in services and f"app: {worker}" in services
+    }
+    started = {
+        worker
+        for worker in required_workers
+        if f"\n  {worker}\n" in up_script
+    }
+    return [
+        ReadinessCheck(
+            "worker_topology.deployments",
+            deployed == required_workers,
+            "required live release workers are deployed"
+            if deployed == required_workers
+            else f"missing deployments: {', '.join(sorted(required_workers - deployed))}",
+        ),
+        ReadinessCheck(
+            "worker_topology.local_startup",
+            started == required_workers,
+            "local startup includes safe PR, SCM, projection, and outbox workers"
+            if started == required_workers
+            else f"missing startup workers: {', '.join(sorted(required_workers - started))}",
+        ),
+    ]
+
+
+def check_metrics_scrape_contract() -> list[ReadinessCheck]:
+    services_path = Path("deploy/management/services.yaml")
+    gateway_path = Path("src/services/gateway/api-gateway/gateway.py")
+    if not services_path.is_file() or not gateway_path.is_file():
+        return [
+            ReadinessCheck(
+                "metrics.scrape_contract.files",
+                False,
+                "management services manifest or api-gateway source is missing",
+            )
+        ]
+    services = services_path.read_text(encoding="utf-8")
+    gateway = gateway_path.read_text(encoding="utf-8")
+    return [
+        ReadinessCheck(
+            "metrics.api_gateway_endpoint",
+            '@app.get("/metrics")' in gateway
+            and "llm_invocation_latency_avg_ms" in gateway
+            and "gitops_workflow_running_total" in gateway
+            and "nats_consumer_pending_events" in gateway,
+            "api-gateway exposes control-plane, NATS, GitOps, and LLM metrics",
+        ),
+        ReadinessCheck(
+            "metrics.api_gateway_scrape_annotations",
+            'prometheus.io/scrape: "true"' in services
+            and "prometheus.io/path: /metrics" in services
+            and 'prometheus.io/port: "8000"' in services
+            and "name: api-gateway" in services,
+            "api-gateway pod is annotated for Prometheus /metrics scrape",
+        ),
+    ]
+
+
+def source_contains(path: Path, *needles: str) -> bool:
+    if not path.is_file():
+        return False
+    source = path.read_text(encoding="utf-8")
+    return all(needle in source for needle in needles)
+
+
+def check_trace_correlation_contract() -> list[ReadinessCheck]:
+    return [
+        ReadinessCheck(
+            "trace.gateway_request_logs",
+            source_contains(
+                Path("src/services/gateway/api-gateway/gateway.py"),
+                "gateway_request_completed",
+                "gateway_request_failed",
+                "request_correlation_id",
+                "duration_ms",
+            ),
+            "Gateway request boundary logs preserve method/path/status/duration and request correlation",
+        ),
+        ReadinessCheck(
+            "trace.gateway_event_acceptance_logs",
+            source_contains(
+                Path("src/packages/runtime/gateway.py"),
+                "gateway_event_accepted",
+                "correlation_id",
+                "causation_id",
+                "durable_outbox",
+            ),
+            "Gateway event acceptance logs preserve event/correlation identifiers",
+        ),
+        ReadinessCheck(
+            "trace.db_write_logs",
+            source_contains(
+                Path("src/packages/storage/repositories/event.py"),
+                "db_event_recorded",
+                "db_event_processing_claimed",
+                "db_event_processing_finished",
+                "db_event_processing_failed",
+            )
+            and source_contains(
+                Path("src/packages/storage/repositories/outbox.py"),
+                "db_outbox_event_staged",
+                "db_outbox_events_sent",
+                "db_outbox_event_dead_lettered",
+            ),
+            "event, event_processing, and outbox DB writes emit correlation-aware logs",
+        ),
+        ReadinessCheck(
+            "trace.github_provider_logs",
+            source_contains(
+                Path("src/services/gitops/scm-worker/github_provider.py"),
+                "github_provider_started",
+                "github_provider_response",
+                "github_provider_completed",
+                "workflow_run_id",
+                "head_branch",
+            ),
+            "GitHub Safe PR provider REST steps emit correlation-aware logs",
+        ),
+        ReadinessCheck(
+            "trace.target_agent_result_logs",
+            source_contains(
+                Path("src/services/target/cluster-agent/commands/outbox.py"),
+                "agent_command_result_enqueued",
+                "agent_command_result_outbox_sent",
+                "agent_command_result_outbox_abandoned",
+                "resource_count",
+            )
+            and source_contains(
+                Path("src/services/target/cluster-agent/agent.py"),
+                "command_result_flushed",
+                "attempt_count",
+            ),
+            "target-agent command result enqueue, flush, retry, and abandon paths are logged",
+        ),
+    ]
+
+
+def check_safe_pr_patch_contract() -> list[ReadinessCheck]:
+    return [
+        ReadinessCheck(
+            "safe_pr.provider_commits_patches",
+            source_contains(
+                Path("src/services/gitops/scm-worker/github_provider.py"),
+                "put_manifest_patches",
+                "for patch in request.patches",
+                "PATCH_COMMIT_MESSAGE_PREFIX",
+                "put_content_file",
+            ),
+            "GitHub Safe PR provider commits every requested manifest patch file",
+        ),
+        ReadinessCheck(
+            "safe_pr.generated_manifest_rollback_patch",
+            source_contains(
+                Path("src/domains/release_flow/router.py"),
+                "generated_manifest_rollback_patches",
+                "Generated rollback manifest from current application state",
+                ".gitops/rollback/",
+                "safe_pr_patch_sha256(patches)",
+            ),
+            "generated release Safe PR includes rollback patch content in the signed patch digest",
+        ),
+        ReadinessCheck(
+            "safe_pr.production_generated_manifest_rollback_required",
+            source_contains(
+                Path("src/domains/release_flow/router.py"),
+                "generated_manifest_safe_pr_blockers",
+                "release_step_targets_production",
+                "production generated Safe PR requires rollback_image",
+                "safe_pr_blockers",
+            ),
+            "production generated release Safe PR fails closed when rollback patch evidence is missing",
+        ),
+        ReadinessCheck(
+            "safe_pr.production_evidence_rollback_required",
+            source_contains(
+                Path("src/domains/release_flow/router.py"),
+                '"rollback_required": rollback_required',
+                "generated_safe_pr_rollback_patch_available",
+                'expected.get("rollback_required")',
+                'expected.get("rollback_available")',
+            ),
+            "production release readiness rejects Safe PR evidence when rollback patch source is unavailable",
+        ),
+        ReadinessCheck(
+            "safe_pr.evidence_candidate_matching",
+            source_contains(
+                Path("src/domains/release_flow/router.py"),
+                "SAFE_PR_EVIDENCE_LOOKUP_LIMIT",
+                "list_release_safe_pr_evidence",
+                "safe_pr_evidence_candidates",
+                "safe_pr_evidence_matches(candidate, expected)",
+            )
+            and source_contains(
+                Path("src/domains/release_flow/repository.py"),
+                "def list_release_safe_pr_evidence",
+                'table.c.subject == "safe_pr.created"',
+                ".order_by(table.c.created_at.desc())",
+            ),
+            "release readiness scans recent Safe PR evidence candidates before accepting a gate",
+        ),
+        ReadinessCheck(
+            "safe_pr.evidence_mismatch_diagnostics",
+            source_contains(
+                Path("src/domains/release_flow/router.py"),
+                "release_safe_pr_evidence_blockers",
+                "safe_pr_evidence_mismatch_reasons",
+                "safe_pr_evidence_field_reason",
+                "no safe_pr.created event was found",
+                "but none matched",
+                'for field in ("provider", "repo_ref", "base_branch", "commit_sha", "patch_sha256")',
+                "pr_url path does not match the expected GitHub repo_ref",
+            ),
+            "release readiness explains missing or mismatched Safe PR evidence",
+        ),
     ]
 
 
@@ -213,6 +471,16 @@ def check_production_gate_contract() -> list[ReadinessCheck]:
             and smoke_job.get("with", {}).get("live_safe_pr_workflow_run_id") == "${{ inputs.live_safe_pr_workflow_run_id }}"
             and smoke_job.get("with", {}).get("live_safe_pr_url") == "${{ inputs.live_safe_pr_url }}",
             "production live preflight can receive existing Safe PR evidence",
+        ),
+        ReadinessCheck(
+            "workflow.production_gate.safe_pr_evidence_required",
+            "LIVE_PREFLIGHT_APPROVAL_GATE" in validate_job.get("env", {})
+            and "LIVE_PREFLIGHT_SAFE_PR_WORKFLOW_RUN_ID" in validate_job.get("env", {})
+            and "LIVE_PREFLIGHT_SAFE_PR_URL" in validate_job.get("env", {})
+            and "live_safe_pr_workflow_run_id is required when live_approval_gate is safe_pr" in validate_run
+            and "live_safe_pr_url is required when live_approval_gate is safe_pr" in validate_run
+            and "live_safe_pr_url must not use example.com when live_approval_gate is safe_pr" in validate_run,
+            "production gate rejects safe_pr mode without existing Safe PR evidence before smoke calls",
         ),
         ReadinessCheck(
             "workflow.production_gate.change_ticket_required",

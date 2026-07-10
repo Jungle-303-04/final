@@ -43,6 +43,14 @@ class _FailingJsonLlm:
         raise self.error
 
 
+class MetricDb:
+    def __init__(self) -> None:
+        self.llm_samples: list[Any] = []
+
+    async def record_llm_invocation_metric(self, sample: Any) -> None:
+        self.llm_samples.append(sample)
+
+
 def fallback_body() -> RcaAiFallbackRequestedBody:
     incident = IncidentRecord(
         incident_id="incident-1",
@@ -123,8 +131,9 @@ def test_fallback_event_yields_candidates_planned_with_ai_source() -> None:
     llm = _ScriptedJsonLlm(llm_candidates_payload())
     worker.llm_client = llm
     body = fallback_body()
+    db = MetricDb()
 
-    outs = run_handler(worker.on_ai_fallback_requested, body)
+    outs = run_handler(worker.on_ai_fallback_requested, body, db=db)
 
     assert subjects_of(outs) == ["rca.candidates.planned"]
     planned = outs[0]
@@ -141,6 +150,10 @@ def test_fallback_event_yields_candidates_planned_with_ai_source() -> None:
     # 프롬프트에는 증상과 증거 요약이 실린다(원문 value 는 싣지 않음).
     assert "UnknownFailure" in llm.prompts[0]
     assert "memory usage near limit" in llm.prompts[0]
+    assert [sample.operation for sample in db.llm_samples] == ["complete_json"]
+    assert db.llm_samples[0].status == "succeeded"
+    assert db.llm_samples[0].event_id == "evt-1"
+    assert db.llm_samples[0].correlation_id == "corr-1"
 
 
 def test_ai_candidates_flow_through_rule_evaluation_path() -> None:

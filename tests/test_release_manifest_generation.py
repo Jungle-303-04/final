@@ -196,6 +196,7 @@ def test_release_manifest_safe_pr_route_submits_generated_file_patch(monkeypatch
             return {
                 "application_id": "checkout",
                 "name": "checkout-api",
+                "image": "ghcr.io/example/checkout-api:v1.2.2",
                 "repo_ref": "org/checkout",
                 "branch": "main",
                 "manifest_path": "deploy/live.yaml",
@@ -244,9 +245,15 @@ def test_release_manifest_safe_pr_route_submits_generated_file_patch(monkeypatch
     assert events.body.patch_sha256 == response.patch_sha256
     assert events.body.patches[0].path == "deploy/checkout.yaml"
     assert "kind: Deployment" in events.body.patches[0].content
+    assert len(events.body.patches) == 2
+    assert events.body.patches[1].path.startswith(".gitops/rollback/")
+    assert events.body.patches[1].description == "Generated rollback manifest from current application state"
+    assert "ghcr.io/example/checkout-api:v1.2.2" in events.body.patches[1].content
+    assert "ghcr.io/example/checkout-api:v1.2.3" not in events.body.patches[1].content
     assert "postgres://" not in events.body.patches[0].content
     assert "repo_ref: `org/checkout`" in events.body.body
     assert "branch: `main`" in events.body.body
+    assert "rollback_patch: `.gitops/rollback/" in events.body.body
 
 
 def test_release_manifest_safe_pr_route_blocks_error_diagnostics(monkeypatch) -> None:
@@ -273,6 +280,59 @@ def test_release_manifest_safe_pr_route_blocks_error_diagnostics(monkeypatch) ->
         assert "image is required" in str(exc.detail)
     else:
         raise AssertionError("Safe PR submission should be blocked when manifest has errors")
+
+
+def test_release_manifest_safe_pr_route_blocks_production_without_rollback_source(monkeypatch) -> None:
+    class Db:
+        def get_application(self, workspace_id: str, application_id: str) -> dict[str, object]:
+            assert workspace_id == "workspace-a"
+            assert application_id == "checkout"
+            return {
+                "application_id": "checkout",
+                "name": "checkout-api",
+                "repo_ref": "org/checkout",
+                "branch": "main",
+                "manifest_path": "deploy/live.yaml",
+                "cluster_id": "cluster-1",
+                "metadata": {"source_type": "raw-yaml"},
+            }
+
+    class Events:
+        called = False
+
+        async def accept_body(self, body: SafePrRequestedBody, **_kwargs: object) -> object:
+            self.called = True
+            return SimpleNamespace(
+                event=SimpleNamespace(event_id="evt-safe-pr", correlation_id="corr-safe-pr")
+            )
+
+    monkeypatch.setattr(release_router, "require_plan_application_manage_access", lambda *_args: None)
+    plan = full_plan()
+    step = plan["steps"][0]
+    assert isinstance(step, dict)
+    config = step["config"]
+    assert isinstance(config, dict)
+    config["environment"] = "production"
+    config["namespace"] = "production"
+    events = Events()
+    payload = ReleaseManifestSafePrRequest(plan=release_router.ReleasePlanUpsertRequest(**plan))
+
+    try:
+        asyncio.run(
+            release_router.submit_release_manifest_safe_pr(
+                payload,
+                current=SimpleNamespace(user_id="operator", workspace_id="workspace-a", roles=()),
+                db=Db(),
+                events=events,
+            )
+        )
+    except HTTPException as exc:
+        assert exc.status_code == 409
+        assert "production generated Safe PR requires rollback_image" in str(exc.detail)
+    else:
+        raise AssertionError("Production Safe PR should require rollback source")
+
+    assert events.called is False
 
 
 def test_release_manifest_safe_pr_route_requires_repository_context(monkeypatch) -> None:

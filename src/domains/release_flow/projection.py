@@ -894,18 +894,25 @@ def recovery_details(payload: Mapping[str, Any]) -> JsonObject:
 
 def safe_pr_details(payload: Mapping[str, Any]) -> JsonObject:
     request = mapping_value(payload.get("request"))
+    details = mapping_value(payload.get("details"))
     patches = payload.get("patches")
     if not isinstance(patches, list):
         patches = request.get("patches")
     return {
         "title": _first_string(payload, ("title",), ("request", "title")),
         "provider": _first_string(payload, ("provider",), ("request", "provider")),
+        "repo_ref": _first_string(payload, ("repo_ref",), ("request", "repo_ref")),
+        "base_branch": _first_string(payload, ("base_branch",), ("request", "base_branch")),
+        "manifest_path": _first_string(payload, ("manifest_path",), ("request", "manifest_path")),
+        "commit_sha": _first_string(payload, ("commit_sha",), ("request", "commit_sha")),
+        "patch_sha256": _first_string(payload, ("patch_sha256",), ("request", "patch_sha256")),
         "pr_url": _first_string(payload, ("pr_url",)),
         "mode": _first_string(payload, ("mode",)),
         "risk": _first_string(payload, ("risk",)),
         "reason": _first_string(payload, ("reason",)),
         "reason_code": _first_string(payload, ("reason_code",)),
         "stage": _first_string(payload, ("stage",)),
+        "exception_type": _first_string(details, ("exception_type",)),
         "summary": _first_string(payload, ("summary",)),
         "workflow_run_id": _workflow_run_id(payload),
         "patch_count": len(patches) if isinstance(patches, list) else 0,

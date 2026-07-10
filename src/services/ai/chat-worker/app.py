@@ -20,6 +20,7 @@ from domains.ai.messages import text
 from domains.registry import load_domain_tools
 from packages.ai.engine import ConversationEngine
 from packages.ai.llm import build_llm_client, describe_llm_client
+from packages.ai.metrics import metered_llm_client
 from packages.ai.tools import ToolContext, ai
 from packages.contracts.event_bus.bodies import EventBody
 from packages.contracts.stores import AiConversationStore
@@ -71,6 +72,23 @@ def request_resource_context(evt: AiMessageReceivedBody) -> dict[str, str]:
     }
 
 
+def engine_for_request(evt: AiMessageReceivedBody, ctx: EventContext[AiConversationStore]):
+    if not isinstance(engine, ConversationEngine):
+        return engine
+    return ConversationEngine(
+        metered_llm_client(
+            engine.llm,
+            ctx.db,
+            workspace_id=evt.workspace_id,
+            event_id=ctx.event_id,
+            correlation_id=ctx.correlation_id,
+            causation_id=ctx.causation_id,
+        ),
+        engine.registry,
+        max_tool_calls=engine.max_tool_calls,
+    )
+
+
 @app.on(AiMessageReceivedBody)
 async def on_ai_message_received(
     evt: AiMessageReceivedBody,
@@ -82,8 +100,9 @@ async def on_ai_message_received(
         history = await ctx.db.list_ai_messages(
             evt.workspace_id, evt.conversation_id, newest=HISTORY_LIMIT
         )
+        request_engine = engine_for_request(evt, ctx)
         result = await asyncio.wait_for(
-            engine.respond(
+            request_engine.respond(
                 system_prompt=build_system_prompt(evt, locale),
                 history=history,
                 user_message=evt.content,
@@ -114,7 +133,7 @@ async def on_ai_message_received(
             agent=evt.agent,
             workspace_id=evt.workspace_id,
             metadata={
-                "llm": describe_llm_client(engine.llm),
+                "llm": describe_llm_client(request_engine.llm),
                 "raw_length": result.raw_length,
                 "tool_trace": result.tool_trace,
                 "request_event_id": ctx.event_id,

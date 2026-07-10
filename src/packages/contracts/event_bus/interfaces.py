@@ -69,6 +69,16 @@ class EventSubscription(Protocol):
     async def fetch(self, batch: int, timeout: float | None = None) -> Sequence[EventMessage]: ...
 
 
+@dataclass(frozen=True)
+class EventConsumerMetrics:
+    stream: str
+    subject: str
+    durable: str
+    pending: int
+    ack_pending: int
+    redelivered: int
+
+
 class EventPublisher(Protocol):
     async def emit(
         self,
@@ -107,6 +117,8 @@ class EventConsumerBus(EventPublisher, EnvelopePublisher, Protocol):
     async def connect(self) -> None: ...
 
     async def subscribe(self, subject: str, durable: str) -> EventSubscription: ...
+
+    async def consumer_metrics(self, subject: str, durable: str) -> EventConsumerMetrics: ...
 
     async def close(self) -> None: ...
 

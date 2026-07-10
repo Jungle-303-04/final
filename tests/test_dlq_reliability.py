@@ -24,6 +24,7 @@ class _StubStore:
 
     def __init__(self) -> None:
         self.rows: dict[tuple[str, str], dict[str, Any]] = {}
+        self.durations: list[int | None] = []
 
     @contextmanager
     def unit_of_work(self) -> Any:
@@ -47,11 +48,22 @@ class _StubStore:
             row["status"] = EventProcessingStatus.PROCESSING
         return EventProcessingRecord(status=row["status"], attempts=row["attempts"])
 
-    def finish_event_processing(self, evt: Any, consumer: str) -> None:
+    def finish_event_processing(
+        self, evt: Any, consumer: str, duration_ms: int | None = None
+    ) -> None:
         self.rows[(evt.event_id, consumer)]["status"] = EventProcessingStatus.PROCESSED
+        self.durations.append(duration_ms)
 
-    def fail_event_processing(self, evt: Any, consumer: str, error: str, status: str) -> None:
+    def fail_event_processing(
+        self,
+        evt: Any,
+        consumer: str,
+        error: str,
+        status: str,
+        duration_ms: int | None = None,
+    ) -> None:
         self.rows[(evt.event_id, consumer)]["status"] = status
+        self.durations.append(duration_ms)
 
 
 class _Evt:
@@ -119,4 +131,5 @@ def test_handler_failure_accumulates_attempts_to_dlq() -> None:
     msg = asyncio.run(run())
     assert dead.captured == [("evt-1", 3)]  # 3회째에 DLQ 도달(롤백돼도 attempt 누적)
     assert store.rows[("evt-1", "svc")]["status"] == EventProcessingStatus.DEAD_LETTERED
+    assert all(isinstance(duration, int) for duration in store.durations)
     assert msg.naked == 2 and msg.acked == 1  # 1·2회 nak(재시도), 3회 ack(DLQ)

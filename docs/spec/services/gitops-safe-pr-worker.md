@@ -48,7 +48,7 @@ status: synced
 
 | 이벤트 | 라우팅 키(NATS subject) | body | 앵커 |
 |---|---|---|---|
-| `SafePrRequestedBody` | `safe_pr.requested` | `title: str`, `body: str`, `provider: str`, `patches: list[SafePrFilePatch] = []`, `workspace_id: str = "default"`, `repository_id: str = ""`, `binding_id: str = ""`, `application_id: str = ""`, `workflow_run_id: str = ""`, `environment: str = "sandbox"`, `manifest_path: str = "deploy.yaml"`, `approval_ref: str \| None = None`, `policy_decision_ref: str \| None = None`, `next_alert: AlertRequestedBody \| None = None` | `src/domains/scm/events.py :: SafePrRequestedBody` |
+| `SafePrRequestedBody` | `safe_pr.requested` | `title: str`, `body: str`, `provider: str`, `patches: list[SafePrFilePatch] = []`, `workspace_id: str = "default"`, `repository_id: str = ""`, `binding_id: str = ""`, `application_id: str = ""`, `workflow_run_id: str = ""`, `environment: str = "sandbox"`, `manifest_path: str = "deploy.yaml"`, `repo_ref: str = ""`, `base_branch: str = ""`, `commit_sha: str = ""`, `patch_sha256: str = ""`, `approval_ref: str \| None = None`, `policy_decision_ref: str \| None = None`, `next_alert: AlertRequestedBody \| None = None` | `src/domains/scm/events.py :: SafePrRequestedBody` |
 
 `SafePrFilePatch`(`src/domains/scm/events.py :: SafePrFilePatch`): `path: str`, `content: str`, `description: str = ""`.
 

@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import json
 import signal
+import time
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
@@ -48,6 +49,7 @@ WORKER_DEAD_LETTER_TIMEOUT_ENV = (
     "WORKER_DEAD_LETTER_TIMEOUT_SECONDS"  # DLQ 기록 대기 한도 초(기본 10)
 )
 WORKER_HEARTBEAT_PATH_ENV = "WORKER_HEARTBEAT_PATH"  # liveness 하트비트 파일 경로
+WORKER_CONSUMER_METRICS_INTERVAL_ENV = "WORKER_CONSUMER_METRICS_INTERVAL_SECONDS"
 DEFAULT_MAX_ATTEMPTS = int(env(WORKER_MAX_ATTEMPTS_ENV, "3"))
 DEFAULT_RETRY_DELAY_SECONDS = int(env(WORKER_RETRY_DELAY_ENV, "2"))
 DEFAULT_FETCH_BATCH_SIZE = int(env(WORKER_FETCH_BATCH_SIZE_ENV, "1"))
@@ -56,8 +58,15 @@ DEFAULT_IDLE_SLEEP_SECONDS = float(env(WORKER_IDLE_SLEEP_ENV, "0.25"))
 # 핸들러 hang 상한(안전망). 정상 최악 처리시간보다 넉넉히
 DEFAULT_HANDLER_TIMEOUT_SECONDS = int(env(WORKER_HANDLER_TIMEOUT_ENV, "30"))
 DEFAULT_DEAD_LETTER_TIMEOUT_SECONDS = int(env(WORKER_DEAD_LETTER_TIMEOUT_ENV, "10"))
+DEFAULT_CONSUMER_METRICS_INTERVAL_SECONDS = float(
+    env(WORKER_CONSUMER_METRICS_INTERVAL_ENV, "15")
+)
 # liveness exec probe 가 mtime 신선도 검사 — 컨테이너 파일시스템 정책에 따라 경로 오버라이드 가능
 HEARTBEAT_PATH = env(WORKER_HEARTBEAT_PATH_ENV, "/tmp/heartbeat")
+
+
+def elapsed_ms(start: float) -> int:
+    return max(0, int((time.perf_counter() - start) * 1000))
 
 
 @dataclass(frozen=True)
@@ -89,6 +98,28 @@ class EventHandlerSpec:
             return self.durable
         slug = subject.replace(".", "-").replace(">", "all").replace("*", "any")
         return f"{self.durable}-{slug}"
+
+
+async def record_consumer_lag_metrics(
+    bus: EventConsumerBus,
+    store: object,
+    spec: EventHandlerSpec,
+) -> None:
+    consumer_metrics = getattr(bus, "consumer_metrics", None)
+    record_metrics = getattr(store, "record_event_consumer_metrics", None)
+    if not callable(consumer_metrics) or not callable(record_metrics):
+        return
+    for subject in spec.subjects:
+        durable = spec.durable_for(subject)
+        try:
+            sample = await consumer_metrics(subject, durable)
+            record_metrics(sample)
+        except Exception as exc:
+            LOGGER.warning(
+                "consumer_metrics_error",
+                extra={"context": {"consumer": durable, "subject": subject}},
+                exc_info=exc,
+            )
 
 
 class Codec(Protocol):
@@ -162,6 +193,7 @@ class EventProcessor:
             await message.nak(delay=self.retry_policy.retry_delay_seconds)
             return
         attempts = processing.attempts  # 지금까지 시도 횟수(커밋되어 누적)
+        started_at = time.perf_counter()
         # 2) 업무쓰기 + outbox 적재 + ledger 완료를 한 트랜잭션으로(원자성).
         try:
             with self.store.unit_of_work() as conn:
@@ -174,15 +206,20 @@ class EventProcessor:
                         self.handler(evt), timeout=self.retry_policy.handler_timeout_seconds
                     )  # 핸들러 실행 → 다음 이벤트 봉투들 수집
                 self.store.stage_events(conn, outbox_events)  # 다음 이벤트들을 outbox 에 적재
-                self.ledger.finish(evt)  # 처리대장에 "완료" 기록
+                self.ledger.finish(evt, elapsed_ms(started_at))  # 처리대장에 "완료" 기록
             # with 끝 = 트랜잭션 커밋(업무 + outbox 함께 저장)
             await message.ack()  # NATS 에 "처리 완료" 통보 → 재배달 안 함
         except Exception as exc:
             # claim 이 이미 커밋되어 attempt 가 누적된 상태 → fail 이 그 row 를 갱신(재시도/DLQ).
-            await self.fail(message, evt, exc, attempts)
+            await self.fail(message, evt, exc, attempts, elapsed_ms(started_at))
 
     async def fail(
-        self, message: EventMessage, evt: EventEnvelope, error: Exception, attempts: int
+        self,
+        message: EventMessage,
+        evt: EventEnvelope,
+        error: Exception,
+        attempts: int,
+        duration_ms: int | None = None,
     ) -> None:
         context = {**event_context(evt), "consumer": self.service_name, "attempts": attempts}
         if attempts >= self.retry_policy.max_attempts:
@@ -195,7 +232,7 @@ class EventProcessor:
                     timeout=self.retry_policy.dead_letter_timeout_seconds,
                 )
             except Exception as capture_error:
-                self.ledger.retry(evt, error)
+                self.ledger.retry(evt, error, duration_ms)
                 LOGGER.error(
                     "dead_letter_capture_failed",
                     extra={"context": context},
@@ -203,12 +240,12 @@ class EventProcessor:
                 )
                 await message.nak(delay=self.retry_policy.retry_delay_seconds)
                 return
-            self.ledger.dead_letter(evt, error)
+            self.ledger.dead_letter(evt, error, duration_ms)
             LOGGER.error("dead_letter", extra={"context": context}, exc_info=error)
             await message.ack()
             return
 
-        self.ledger.retry(evt, error)
+        self.ledger.retry(evt, error, duration_ms)
         LOGGER.warning("retry", extra={"context": context}, exc_info=error)
         await message.nak(delay=self.retry_policy.retry_delay_seconds)
 
@@ -254,10 +291,15 @@ class WorkerRuntime:
         signal.signal(signal.SIGINT, lambda *_: stopping.set())
         lifecycle = {"consumer": self.spec.service_name, "subjects": list(self.spec.subjects)}
         LOGGER.info("subscribed", extra={"context": lifecycle})
+        last_consumer_metrics_at = 0.0
 
         while not stopping.is_set():
             Path(HEARTBEAT_PATH).touch()  # liveness 하트비트(루프 생존 신호)
             idle = True
+            now = time.monotonic()
+            if now - last_consumer_metrics_at >= DEFAULT_CONSUMER_METRICS_INTERVAL_SECONDS:
+                await record_consumer_lag_metrics(self.bus, self.db, self.spec)
+                last_consumer_metrics_at = now
             try:
                 relayed = await relay.run_once()  # outbox → NATS 발행
                 idle = idle and relayed == 0

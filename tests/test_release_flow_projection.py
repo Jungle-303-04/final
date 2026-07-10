@@ -829,6 +829,8 @@ def test_release_safe_pr_event_projects_pr_status() -> None:
                 "provider": "github",
                 "mode": "create",
                 "pr_url": "https://github.example/pull/1",
+                "commit_sha": "abc123",
+                "patch_sha256": "a" * 64,
             },
         )
     )
@@ -837,6 +839,42 @@ def test_release_safe_pr_event_projects_pr_status() -> None:
     assert update["workflow_run_id"] == "workflow-1"
     assert update["details"]["safe_pr"]["pr_url"] == "https://github.example/pull/1"
     assert update["details"]["safe_pr"]["provider"] == "github"
+    assert update["details"]["safe_pr"]["commit_sha"] == "abc123"
+    assert update["details"]["safe_pr"]["patch_sha256"] == "a" * 64
+
+
+def test_release_safe_pr_failed_projects_repo_and_failure_context() -> None:
+    update = release_workflow_update_from_event(
+        _evt(
+            "safe_pr.failed",
+            {
+                "workspace_id": "workspace-a",
+                "workflow_run_id": "workflow-1",
+                "application_id": "app-a",
+                "provider": "github",
+                "repo_ref": "org/checkout",
+                "base_branch": "release-main",
+                "manifest_path": "deploy/checkout.yaml",
+                "commit_sha": "abc123",
+                "patch_sha256": "b" * 64,
+                "reason": "safe pr provider failed before PR creation completed",
+                "reason_code": "provider_error",
+                "stage": "scm",
+                "details": {"exception_type": "ValueError"},
+            },
+        )
+    )
+
+    assert update is not None
+    safe_pr = update["details"]["safe_pr"]
+    assert safe_pr["repo_ref"] == "org/checkout"
+    assert safe_pr["base_branch"] == "release-main"
+    assert safe_pr["manifest_path"] == "deploy/checkout.yaml"
+    assert safe_pr["commit_sha"] == "abc123"
+    assert safe_pr["patch_sha256"] == "b" * 64
+    assert safe_pr["reason_code"] == "provider_error"
+    assert safe_pr["stage"] == "scm"
+    assert safe_pr["exception_type"] == "ValueError"
 
 
 def test_release_command_event_projects_agent_queue() -> None:

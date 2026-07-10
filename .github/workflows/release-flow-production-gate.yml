@@ -263,18 +263,35 @@ jobs:
       production_gate_inputs_ok: ${{ steps.validate.outputs.production_gate_inputs_ok }}
     env:
       LIVE_PREFLIGHT: ${{ inputs.live_preflight }}
+      LIVE_PREFLIGHT_APPROVAL_GATE: ${{ inputs.live_approval_gate || 'safe_pr' }}
       LIVE_PREFLIGHT_ENVIRONMENT: ${{ inputs.live_environment || 'production' }}
       LIVE_PREFLIGHT_CHANGE_TICKET: ${{ inputs.live_change_ticket }}
       LIVE_PREFLIGHT_RUNBOOK_URL: ${{ inputs.live_runbook_url }}
       LIVE_PREFLIGHT_RELEASE_OWNER: ${{ inputs.live_release_owner }}
       LIVE_PREFLIGHT_ONCALL_CONTACT: ${{ inputs.live_oncall_contact }}
       LIVE_PREFLIGHT_IMAGE: ${{ inputs.live_image }}
+      LIVE_PREFLIGHT_SAFE_PR_WORKFLOW_RUN_ID: ${{ inputs.live_safe_pr_workflow_run_id }}
+      LIVE_PREFLIGHT_SAFE_PR_URL: ${{ inputs.live_safe_pr_url }}
     steps:
       - name: Validate live production inputs
         id: validate
         run: |
           normalized_environment="$(printf '%s' "$LIVE_PREFLIGHT_ENVIRONMENT" | tr '[:upper:]' '[:lower:]')"
           normalized_ticket="$(printf '%s' "$LIVE_PREFLIGHT_CHANGE_TICKET" | tr '[:lower:]' '[:upper:]')"
+          if [ "$LIVE_PREFLIGHT" = "true" ] && [ "$LIVE_PREFLIGHT_APPROVAL_GATE" = "safe_pr" ]; then
+            if [ -z "$LIVE_PREFLIGHT_SAFE_PR_WORKFLOW_RUN_ID" ]; then
+              echo "::error title=Missing Safe PR workflow id::live_safe_pr_workflow_run_id is required when live_approval_gate is safe_pr."
+              exit 1
+            fi
+            if [ -z "$LIVE_PREFLIGHT_SAFE_PR_URL" ]; then
+              echo "::error title=Missing Safe PR URL::live_safe_pr_url is required when live_approval_gate is safe_pr."
+              exit 1
+            fi
+            if [[ "$LIVE_PREFLIGHT_SAFE_PR_URL" == *"example.com"* ]]; then
+              echo "::error title=Placeholder Safe PR URL::live_safe_pr_url must not use example.com when live_approval_gate is safe_pr."
+              exit 1
+            fi
+          fi
           if [ "$LIVE_PREFLIGHT" = "true" ] && [ "$normalized_environment" = "production" ]; then
             if [ -z "$LIVE_PREFLIGHT_CHANGE_TICKET" ]; then
               echo "::error title=Missing production change ticket::live_change_ticket is required for production live_preflight."
