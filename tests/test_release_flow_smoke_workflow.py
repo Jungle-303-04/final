@@ -64,7 +64,7 @@ def test_release_flow_smoke_workflow_declares_operator_inputs_and_secrets_for_di
     assert inputs["live_preflight"]["default"] is False
     assert inputs["live_environment"]["default"] == "production"
     assert inputs["live_namespace"]["default"] == "production"
-    assert inputs["live_change_ticket"]["default"] == "CHG-PREFLIGHT"
+    assert "default" not in inputs["live_change_ticket"]
     assert (
         job["env"]["API_BASE_URL"]
         == "${{ inputs.api_base_url || secrets.release_flow_api_base_url || secrets.RELEASE_FLOW_API_BASE_URL }}"
@@ -85,7 +85,7 @@ def test_release_flow_smoke_workflow_declares_operator_inputs_and_secrets_for_di
     assert job["env"]["LIVE_PREFLIGHT"] == "${{ inputs.live_preflight || false }}"
     assert job["env"]["LIVE_PREFLIGHT_ENVIRONMENT"] == "${{ inputs.live_environment || 'production' }}"
     assert job["env"]["LIVE_PREFLIGHT_NAMESPACE"] == "${{ inputs.live_namespace || 'production' }}"
-    assert job["env"]["LIVE_PREFLIGHT_CHANGE_TICKET"] == "${{ inputs.live_change_ticket || 'CHG-PREFLIGHT' }}"
+    assert job["env"]["LIVE_PREFLIGHT_CHANGE_TICKET"] == "${{ inputs.live_change_ticket }}"
     assert job["env"]["LIVE_PREFLIGHT_RUNBOOK_URL"] == "${{ inputs.live_runbook_url }}"
     assert job["env"]["LIVE_PREFLIGHT_RELEASE_OWNER"] == "${{ inputs.live_release_owner }}"
     assert job["env"]["LIVE_PREFLIGHT_ONCALL_CONTACT"] == "${{ inputs.live_oncall_contact }}"
@@ -139,7 +139,7 @@ def test_release_flow_smoke_workflow_can_be_called_by_deploy_workflows() -> None
     assert workflow_call["inputs"]["live_preflight"]["default"] is False
     assert workflow_call["inputs"]["live_environment"]["default"] == "production"
     assert workflow_call["inputs"]["live_namespace"]["default"] == "production"
-    assert workflow_call["inputs"]["live_change_ticket"]["default"] == "CHG-PREFLIGHT"
+    assert "default" not in workflow_call["inputs"]["live_change_ticket"]
     assert workflow_call["outputs"]["release_smoke_ok"]["value"] == (
         "${{ jobs.release_flow_smoke.outputs.release_smoke_ok }}"
     )
