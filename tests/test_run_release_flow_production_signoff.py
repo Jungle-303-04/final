@@ -93,8 +93,9 @@ def test_run_release_flow_production_signoff_dispatches_and_verifies(monkeypatch
         dispatches.append(kwargs)
 
     def fake_wait_for_run(**kwargs: object) -> dict:
+        run_id = 101 if kwargs["workflow"] == signoff.READINESS_WORKFLOW else 202
         return {
-            "id": f"run-{kwargs['workflow']}",
+            "id": run_id,
             "status": "completed",
             "conclusion": "success",
             "head_sha": "sha-production",
@@ -159,5 +160,11 @@ def test_run_release_flow_production_signoff_dispatches_and_verifies(monkeypatch
     verifies = calls["verifies"]
     assert isinstance(verifies, list)
     assert "--allow-missing-deploy" in verifies[0]
+    assert "--github-readiness-run-id" in verifies[0]
+    assert "101" in verifies[0]
     assert "--allow-missing-deploy" not in verifies[1]
+    assert "--github-readiness-run-id" in verifies[1]
+    assert "101" in verifies[1]
+    assert "--github-deploy-run-id" in verifies[1]
+    assert "202" in verifies[1]
     assert "sha-production" in verifies[1]
