@@ -23,6 +23,7 @@ REQUIRED_WORKFLOW_FILES = [
     Path(".github/workflows/release-flow-smoke.yml"),
     Path(".github/workflows/release-flow-production-gate.yml"),
     Path(".github/workflows/release-flow-gate-contract.yml"),
+    Path(".github/workflows/release-flow-production-readiness.yml"),
 ]
 REQUIRED_SCRIPT_FILES = [
     Path("scripts/release_flow_smoke.py"),
@@ -113,11 +114,14 @@ def check_production_gate_contract() -> list[ReadinessCheck]:
         return [ReadinessCheck("workflow.production_gate", False, "release-flow-production-gate.yml is missing")]
     workflow = load_yaml(path)
     jobs = workflow.get("jobs", {})
+    validate_job = jobs.get("validate_production_gate_inputs", {}) if isinstance(jobs, dict) else {}
     smoke_job = jobs.get("release_flow_smoke", {}) if isinstance(jobs, dict) else {}
     gate_job = jobs.get("production_gate", {}) if isinstance(jobs, dict) else {}
+    validate_run = "\n".join(str(step.get("run", "")) for step in validate_job.get("steps", []) if isinstance(step, dict))
     gate_run = "\n".join(str(step.get("run", "")) for step in gate_job.get("steps", []) if isinstance(step, dict))
     call = workflow.get("on", {}).get("workflow_call", {})
     outputs = call.get("outputs", {}) if isinstance(call, dict) else {}
+    inputs = call.get("inputs", {}) if isinstance(call, dict) else {}
     return [
         ReadinessCheck(
             "workflow.production_gate.calls_smoke",
@@ -128,6 +132,18 @@ def check_production_gate_contract() -> list[ReadinessCheck]:
             "workflow.production_gate.live_preflight_default",
             call.get("inputs", {}).get("live_preflight", {}).get("default") is True,
             "live readiness preflight defaults on",
+        ),
+        ReadinessCheck(
+            "workflow.production_gate.change_ticket_required",
+            "default" not in inputs.get("live_change_ticket", {})
+            and "CHG-PREFLIGHT" in validate_run
+            and "real production change ticket" in validate_run,
+            "production placeholder change ticket is blocked",
+        ),
+        ReadinessCheck(
+            "workflow.production_gate.validates_before_smoke",
+            smoke_job.get("needs") == "validate_production_gate_inputs",
+            "input validation runs before smoke",
         ),
         ReadinessCheck(
             "workflow.production_gate.output",

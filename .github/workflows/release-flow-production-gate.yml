@@ -74,7 +74,6 @@ run-name: Release Flow Gate / ${{ inputs.github_environment || 'production' }} /
       live_change_ticket:
         description: Change ticket recorded in live_preflight readiness payload.
         required: false
-        default: CHG-PREFLIGHT
         type: string
       live_image:
         description: Optional image used in the live_preflight readiness payload.
@@ -152,7 +151,6 @@ run-name: Release Flow Gate / ${{ inputs.github_environment || 'production' }} /
       live_change_ticket:
         description: Change ticket recorded in live_preflight readiness payload.
         required: false
-        default: CHG-PREFLIGHT
         type: string
       live_image:
         description: Optional image used in the live_preflight readiness payload.
@@ -205,8 +203,36 @@ permissions:
   contents: read
 
 jobs:
+  validate_production_gate_inputs:
+    name: Validate production gate inputs
+    runs-on: ubuntu-latest
+    outputs:
+      production_gate_inputs_ok: ${{ steps.validate.outputs.production_gate_inputs_ok }}
+    env:
+      LIVE_PREFLIGHT: ${{ inputs.live_preflight }}
+      LIVE_PREFLIGHT_ENVIRONMENT: ${{ inputs.live_environment || 'production' }}
+      LIVE_PREFLIGHT_CHANGE_TICKET: ${{ inputs.live_change_ticket }}
+    steps:
+      - name: Validate live production inputs
+        id: validate
+        run: |
+          normalized_environment="$(printf '%s' "$LIVE_PREFLIGHT_ENVIRONMENT" | tr '[:upper:]' '[:lower:]')"
+          normalized_ticket="$(printf '%s' "$LIVE_PREFLIGHT_CHANGE_TICKET" | tr '[:lower:]' '[:upper:]')"
+          if [ "$LIVE_PREFLIGHT" = "true" ] && [ "$normalized_environment" = "production" ]; then
+            if [ -z "$LIVE_PREFLIGHT_CHANGE_TICKET" ]; then
+              echo "::error title=Missing production change ticket::live_change_ticket is required for production live_preflight."
+              exit 1
+            fi
+            if [ "$normalized_ticket" = "CHG-PREFLIGHT" ]; then
+              echo "::error title=Placeholder production change ticket::Replace CHG-PREFLIGHT with the real production change ticket."
+              exit 1
+            fi
+          fi
+          echo "production_gate_inputs_ok=true" >> "$GITHUB_OUTPUT"
+
   release_flow_smoke:
     name: Release-flow smoke gate
+    needs: validate_production_gate_inputs
     uses: ./.github/workflows/release-flow-smoke.yml
     with:
       api_base_url: ${{ inputs.api_base_url }}
@@ -223,7 +249,7 @@ jobs:
       live_preflight: ${{ inputs.live_preflight }}
       live_environment: ${{ inputs.live_environment || 'production' }}
       live_namespace: ${{ inputs.live_namespace || 'production' }}
-      live_change_ticket: ${{ inputs.live_change_ticket || 'CHG-PREFLIGHT' }}
+      live_change_ticket: ${{ inputs.live_change_ticket }}
       live_image: ${{ inputs.live_image }}
       live_verification_url: ${{ inputs.live_verification_url }}
     secrets:
