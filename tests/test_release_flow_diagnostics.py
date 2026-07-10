@@ -2004,7 +2004,7 @@ def test_release_readiness_blocks_production_http_verification_url(monkeypatch) 
     assert verification_check["status"] == "blocked"
 
 
-def test_release_readiness_warns_when_production_verification_is_bypassed(monkeypatch) -> None:
+def test_release_readiness_blocks_when_production_verification_is_bypassed(monkeypatch) -> None:
     monkeypatch.setenv("RELEASE_FLOW_LIVE_ENABLED", "1")
     monkeypatch.setenv("RELEASE_FLOW_LIVE_WORKSPACES", "workspace-a")
     db = ReleaseReadinessDb(
@@ -2057,11 +2057,10 @@ def test_release_readiness_warns_when_production_verification_is_bypassed(monkey
         )
     )
 
-    assert response.ready is True
+    assert response.ready is False
+    assert any("post_deploy_verification_url" in item for item in response.blockers)
     verification_check = next(check for check in response.checks if check["check_id"] == "verification.plan")
-    assert verification_check["status"] == "warning"
-    verification_action = next(action for action in response.next_actions if action["check_id"] == "verification.plan")
-    assert verification_action["severity"] == "warning"
+    assert verification_check["status"] == "blocked"
 
 
 def test_release_readiness_blocks_production_live_without_abort_criteria(monkeypatch) -> None:
@@ -5982,7 +5981,7 @@ def test_dispatch_wave_steps_records_production_change_override(monkeypatch) -> 
             "change_freeze_override_reason": "incident commander approved emergency hotfix",
             "runbook_url": "https://wiki.company.internal/runbooks/storefront-release",
             "release_owner": "storefront-release-team",
-            "verification_override_reason": "synthetic monitor is temporarily owned by incident command",
+            "post_deploy_verification_url": "https://storefront.company.internal/readyz",
             "abort_criteria": "rollback if checkout error rate exceeds 5% for 5 minutes",
         },
         "steps": [
@@ -6047,13 +6046,11 @@ def test_dispatch_wave_steps_records_production_change_override(monkeypatch) -> 
         "Production change ticket gate is bypassed with an operator reason.",
         "Production release window is bypassed with an operator reason.",
         "Production change freeze is bypassed with an operator reason.",
-        "Post-deploy verification gate is bypassed with an operator reason.",
     ]
     assert [action["check_id"] for action in guard["readiness"]["next_actions"]] == [
         "change.ticket",
         "release.window",
         "change.freeze",
-        "verification.plan",
     ]
     assert guard["runbook"] == {
         "url": "https://wiki.company.internal/runbooks/storefront-release",
@@ -6068,16 +6065,28 @@ def test_dispatch_wave_steps_records_production_change_override(monkeypatch) -> 
         "production_targets": ["app-a"],
     }
     assert guard["verification"] == {
-        "evidence_present": False,
-        "override_reason": "synthetic monitor is temporarily owned by incident command",
+        "evidence_present": True,
+        "override_reason": None,
         "production_targets": ["app-a"],
         "health_check_paths": [],
-        "verification_urls": [],
+        "verification_urls": ["https://storefront.company.internal/readyz"],
     }
     assert guard["verification_jobs"] == {
-        "scheduled": False,
-        "job_count": 0,
-        "jobs": [],
+        "scheduled": True,
+        "job_count": 1,
+        "jobs": [
+            {
+                "application_id": "app-a",
+                "evidence_key": "plan-a:wave-1:app-a:post-deploy-verification",
+                "job_id": guard["verification_jobs"]["jobs"][0]["job_id"],
+                "kind": "http_probe",
+                "name": "checkout",
+                "queued_at": guard["verification_jobs"]["jobs"][0]["queued_at"],
+                "status": "pending",
+                "target": {"url": "https://storefront.company.internal/readyz"},
+                "timeout_minutes": 15,
+            }
+        ],
     }
     assert guard["abort_criteria"] == {
         "criteria": ["rollback if checkout error rate exceeds 5% for 5 minutes"],
