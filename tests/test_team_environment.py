@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import os
+import stat
+import subprocess
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -28,6 +31,41 @@ def test_team_env_bootstrap_uses_aws_secret_without_printing_values() -> None:
     assert "jq -e 'type == \"object\"'" in script
     assert "AWS_ACCESS_KEY_ID" not in script
     assert "AWS_SECRET_ACCESS_KEY" not in script
+
+
+def test_team_env_bootstrap_renders_allowlisted_secret_values(tmp_path: Path) -> None:
+    fake_bin = tmp_path / "bin"
+    fake_bin.mkdir()
+    fake_aws = fake_bin / "aws"
+    fake_aws.write_text(
+        "#!/usr/bin/env bash\n"
+        "printf '%s\\n' '{\"AUTH_EMAIL\":\"team@example.com\","
+        "\"AUTH_PASSWORD\":\"secret value\",\"AWS_SECRET_ACCESS_KEY\":\"blocked\"}'\n",
+        encoding="utf-8",
+    )
+    fake_aws.chmod(0o755)
+    template = tmp_path / "template.env"
+    template.write_text("APP_ENV=test\n", encoding="utf-8")
+    output = tmp_path / ".env.local-test"
+    environment = os.environ | {
+        "PATH": f"{fake_bin}:{os.environ['PATH']}",
+        "TEAM_ENV_TEMPLATE": str(template),
+        "TEAM_ENV_FILE": str(output),
+    }
+
+    subprocess.run(
+        ["bash", str(ROOT / "scripts" / "bootstrap-team-env.sh")],
+        check=True,
+        env=environment,
+        capture_output=True,
+        text=True,
+    )
+
+    rendered = output.read_text(encoding="utf-8")
+    assert "AUTH_EMAIL='team@example.com'" in rendered
+    assert "AUTH_PASSWORD='secret value'" in rendered
+    assert "AWS_SECRET_ACCESS_KEY" not in rendered
+    assert stat.S_IMODE(output.stat().st_mode) == 0o600
 
 
 def test_github_secret_sync_uses_stdin_and_explicit_allowlist() -> None:

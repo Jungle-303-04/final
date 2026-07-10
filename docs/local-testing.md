@@ -137,3 +137,29 @@ Bruno `local` profile은 개인이 Gateway를 별도로 띄워서 빠르게 확�
 팀 통합 테스트 기준은 아니다.
 
 팀원에게 재현을 요청할 때는 `aws-test` profile과 AWS CD run id를 기준으로 말한다.
+
+## 팀 환경과 비밀값
+
+GitHub Actions Secret은 workflow 안에서만 복호화되며 팀원 PC로 다시 내려받을 수 없다.
+따라서 로컬 개발 환경의 정본으로 사용하면 안 된다. 팀 공유 test 비밀값의 정본은
+AWS Secrets Manager의 `kubeheal/test/team`이고, GitHub에는 CI가 필요한 일부 값만
+별도로 동기화한다.
+
+AWS 자격증명을 준비한 뒤 다음 명령으로 `.env.local-test`를 만든다. 출력 파일은
+권한 `0600`이며 값은 터미널에 표시하지 않는다.
+
+```bash
+bash scripts/bootstrap-team-env.sh
+```
+
+GitHub 저장소 관리 권한이 있는 운영자는 같은 AWS secret에서 Actions Secret을
+동기화할 수 있다. secret 값은 표준 입력으로 전달되며 command 인자나 Git 이력에
+남지 않는다.
+
+```bash
+bash scripts/sync-github-actions-secrets.sh
+```
+
+장기 AWS access key는 팀 secret과 GitHub Secret에 넣지 않는다. 각 팀원은 AWS
+로그인 또는 개인 profile을 사용한다. `.env*`와 `*.local.bru`는 Git뿐 아니라 Docker
+build context에서도 제외한다.
