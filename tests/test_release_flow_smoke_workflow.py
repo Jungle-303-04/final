@@ -27,12 +27,14 @@ def test_release_flow_smoke_workflow_declares_operator_inputs_and_secrets_for_di
 
     assert set(inputs) == {
         "api_base_url",
+        "artifact_retention_days",
         "github_environment",
         "production_preflight_plan_id",
         "production_preflight_run_limit",
     }
     assert inputs["production_preflight_run_limit"]["default"] == "20"
     assert inputs["github_environment"]["default"] == "production"
+    assert inputs["artifact_retention_days"]["default"] == "30"
     assert (
         job["env"]["API_BASE_URL"]
         == "${{ inputs.api_base_url || secrets.release_flow_api_base_url || secrets.RELEASE_FLOW_API_BASE_URL }}"
@@ -50,6 +52,7 @@ def test_release_flow_smoke_workflow_can_be_called_by_deploy_workflows() -> None
 
     assert set(workflow_call["inputs"]) == {
         "api_base_url",
+        "artifact_retention_days",
         "github_environment",
         "production_preflight_plan_id",
         "production_preflight_run_limit",
@@ -61,6 +64,7 @@ def test_release_flow_smoke_workflow_can_be_called_by_deploy_workflows() -> None
     }
     assert workflow_call["inputs"]["production_preflight_run_limit"]["default"] == "20"
     assert workflow_call["inputs"]["github_environment"]["default"] == "production"
+    assert workflow_call["inputs"]["artifact_retention_days"]["default"] == "30"
     assert workflow_call["outputs"]["release_smoke_ok"]["value"] == (
         "${{ jobs.release_flow_smoke.outputs.release_smoke_ok }}"
     )
@@ -94,6 +98,7 @@ def test_release_flow_smoke_workflow_uploads_artifacts_before_failing_gate() -> 
     assert upload_step["if"] == "always()"
     assert upload_step["uses"] == "actions/upload-artifact@v4"
     assert upload_step["with"]["path"] == "artifacts/release-flow"
+    assert upload_step["with"]["retention-days"] == "${{ inputs.artifact_retention_days || '30' }}"
 
     assert fail_step["if"] == "steps.release_flow_smoke.outputs.release_smoke_ok != 'true'"
     assert "exit 1" in fail_step["run"]
