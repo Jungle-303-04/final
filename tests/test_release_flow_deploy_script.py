@@ -87,7 +87,7 @@ def test_release_flow_deploy_starts_valid_production_plan() -> None:
             "--email",
             "release@company.internal",
             "--password",
-            "secret",
+            "deploy-secret-12345",
             "--plan-id",
             "plan-prod",
             "--change-ticket",
@@ -124,7 +124,7 @@ def test_release_flow_deploy_refuses_demo_plan_before_start() -> None:
             "--email",
             "release@company.internal",
             "--password",
-            "secret",
+            "deploy-secret-12345",
             "--plan-id",
             "plan-prod",
         ]
@@ -147,7 +147,7 @@ def test_release_flow_deploy_refuses_plan_that_does_not_match_gate_inputs() -> N
             "--email",
             "release@company.internal",
             "--password",
-            "secret",
+            "deploy-secret-12345",
             "--plan-id",
             "plan-prod",
             "--change-ticket",
@@ -189,7 +189,7 @@ def test_release_flow_deploy_refuses_placeholder_production_values_before_start(
             "--email",
             "release@company.internal",
             "--password",
-            "secret",
+            "deploy-secret-12345",
             "--plan-id",
             "plan-prod",
         ]
@@ -217,7 +217,7 @@ def test_release_flow_deploy_refuses_plan_id_mismatch_before_start() -> None:
             "--email",
             "release@company.internal",
             "--password",
-            "secret",
+            "deploy-secret-12345",
             "--plan-id",
             "plan-prod",
         ]
@@ -240,7 +240,7 @@ def test_release_flow_deploy_treats_incomplete_start_response_as_failed() -> Non
             "--email",
             "release@company.internal",
             "--password",
-            "secret",
+            "deploy-secret-12345",
             "--plan-id",
             "plan-prod",
         ]
@@ -272,7 +272,7 @@ def test_release_flow_deploy_refuses_unsafe_plan_id_before_api_calls() -> None:
             "--email",
             "release@company.internal",
             "--password",
-            "secret",
+            "deploy-secret-12345",
             "--plan-id",
             "../plan-prod",
         ]
@@ -302,7 +302,7 @@ def test_release_flow_deploy_refuses_non_production_api_url_before_api_calls(tmp
             "--email",
             "release@company.internal",
             "--password",
-            "secret",
+            "deploy-secret-12345",
             "--plan-id",
             "plan-prod",
             "--report-path",
@@ -316,3 +316,71 @@ def test_release_flow_deploy_refuses_non_production_api_url_before_api_calls(tmp
     assert "api_base_url must use https" in captured.err
     assert payload["ok"] is False
     assert payload["error"] == "api_base_url must use https for production deploy"
+
+
+def test_release_flow_deploy_refuses_placeholder_operator_email_before_api_calls(
+    tmp_path: Path,
+    capsys,
+    monkeypatch,
+) -> None:
+    module = load_deploy_module()
+    report_path = tmp_path / "deploy.json"
+
+    def fail_client(*args, **kwargs):
+        raise AssertionError("ApiClient should not be constructed for invalid deploy auth")
+
+    monkeypatch.setattr(module, "ApiClient", fail_client)
+
+    exit_code = module.main(
+        [
+            "--api-base-url",
+            "https://release-flow.company.internal/api",
+            "--email",
+            "release-oncall@example.com",
+            "--password",
+            "secret",
+            "--plan-id",
+            "plan-prod",
+            "--report-path",
+            str(report_path),
+        ]
+    )
+
+    captured = capsys.readouterr()
+    payload = json.loads(report_path.read_text(encoding="utf-8"))
+    assert exit_code == 2
+    assert "auth email must be a real operator account" in captured.err
+    assert payload["ok"] is False
+    assert payload["error"] == "release-flow deploy auth email must be a real operator account"
+
+
+def test_release_flow_deploy_refuses_placeholder_auth_before_api_calls(tmp_path: Path, capsys, monkeypatch) -> None:
+    module = load_deploy_module()
+    report_path = tmp_path / "deploy.json"
+
+    def fail_client(*args, **kwargs):
+        raise AssertionError("ApiClient should not be constructed for invalid deploy auth")
+
+    monkeypatch.setattr(module, "ApiClient", fail_client)
+
+    exit_code = module.main(
+        [
+            "--api-base-url",
+            "https://release-flow.company.internal/api",
+            "--email",
+            "release@company.internal",
+            "--password",
+            "secret",
+            "--plan-id",
+            "plan-prod",
+            "--report-path",
+            str(report_path),
+        ]
+    )
+
+    captured = capsys.readouterr()
+    payload = json.loads(report_path.read_text(encoding="utf-8"))
+    assert exit_code == 2
+    assert "auth password must be a non-placeholder secret" in captured.err
+    assert payload["ok"] is False
+    assert payload["error"] == "release-flow deploy auth password must be a non-placeholder secret of at least 12 characters"

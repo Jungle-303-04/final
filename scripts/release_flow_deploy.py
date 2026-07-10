@@ -29,6 +29,8 @@ from release_flow_smoke import (
 PRODUCTION_ENVIRONMENTS = {"prod", "production"}
 PLACEHOLDER_CHANGE_TICKETS = {"CHG-PREFLIGHT"}
 PLACEHOLDER_IMAGES = {"ghcr.io/example/release-flow-smoke:live-preflight"}
+PLACEHOLDER_AUTH_EMAILS = {"release-oncall@example.com"}
+PLACEHOLDER_AUTH_PASSWORDS = {"secret", "password", "changeme", "change-me", "replace-me"}
 FAILED_RUN_STATES = {"cancelled", "canceled", "error", "failed", "failure", "rejected"}
 RELEASE_PLAN_ID_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$")
 
@@ -126,6 +128,17 @@ def validate_release_plan_id(plan_id: str) -> str | None:
         return "release_plan_id is required"
     if not RELEASE_PLAN_ID_PATTERN.fullmatch(plan_id):
         return "release_plan_id must be path-safe: letters, numbers, dot, underscore, colon, or hyphen only"
+    return None
+
+
+def validate_deploy_auth(args: argparse.Namespace) -> str | None:
+    email = str(args.email or "").strip()
+    password = str(args.password or "")
+    lowered_email = email.lower()
+    if "@" not in email or lowered_email.endswith("@example.com") or lowered_email in PLACEHOLDER_AUTH_EMAILS:
+        return "release-flow deploy auth email must be a real operator account"
+    if len(password) < 12 or password.lower() in PLACEHOLDER_AUTH_PASSWORDS:
+        return "release-flow deploy auth password must be a non-placeholder secret of at least 12 characters"
     return None
 
 
@@ -294,6 +307,11 @@ def main(argv: list[str]) -> int:
         error = str(exc)
         write_reports(args, ok=False, api_base_url=api_base_url, results=results, error=error)
         print(error, file=sys.stderr)
+        return 2
+    auth_error = validate_deploy_auth(args)
+    if auth_error:
+        write_reports(args, ok=False, api_base_url=api_base_url, results=results, error=auth_error)
+        print(auth_error, file=sys.stderr)
         return 2
     client = ApiClient(
         api_base_url,
