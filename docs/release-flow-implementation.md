@@ -384,7 +384,7 @@ jobs:
 
 같은 production gate는 `live_runbook_url`과 `live_release_owner` 또는 `live_oncall_contact`도 smoke 실행 전에 검사한다. `example.com` runbook, `release-operator`, `release-oncall@example.com` 같은 demo placeholder는 production gate에서 실패하므로 실제 runbook과 운영 책임자/온콜 연락처를 workflow input으로 넘겨야 한다.
 
-직접 `scripts/release_flow_smoke.py --live-preflight`를 실행하는 경우에도 production 환경에서는 같은 placeholder guard가 적용된다. `CHG-PREFLIGHT`, `https://example.com/runbooks/release-flow`, `release-operator`, `release-oncall@example.com` 기본값으로는 `/release-readiness` payload를 만들기 전에 실패한다.
+직접 `scripts/release_flow_smoke.py --live-preflight`를 실행하는 경우에도 production 환경에서는 같은 placeholder guard가 적용된다. live preflight의 변경 티켓, runbook, owner/on-call 값은 기본값이 없으며 명시적으로 넣어야 한다. `CHG-PREFLIGHT`, `https://example.com/runbooks/release-flow`, `release-operator`, `release-oncall@example.com` 같은 demo 값은 `/release-readiness` payload를 만들기 전에 실패한다.
 
 `.github/workflows/release-flow-gate-contract.yml`은 workflow 변경 PR에서 production deploy job이 release-flow gate를 우회하지 않는지 검사한다. 검사 기준은 `scripts/validate_release_flow_production_gate.py`에 있다. production deploy로 보이는 job은 같은 workflow 안에서 `.github/workflows/release-flow-production-gate.yml`을 호출하는 job을 `needs`에 포함해야 하고, deploy job의 `if` 조건은 `needs.<gate job>.outputs.release_gate_ok == 'true'`를 확인해야 한다. 이 검사는 아직 production deploy workflow가 없는 상태에서는 통과하지만, 나중에 workflow가 추가되면 gate 연결을 빠뜨린 PR을 실패시킨다.
 

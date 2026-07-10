@@ -79,7 +79,6 @@ run-name: Release Flow Smoke / ${{ inputs.github_environment || 'production' }} 
       live_change_ticket:
         description: Change ticket recorded in live_preflight readiness payload.
         required: false
-        default: CHG-PREFLIGHT
         type: string
       live_runbook_url:
         description: Production runbook URL recorded in live_preflight readiness payload.
@@ -174,7 +173,6 @@ run-name: Release Flow Smoke / ${{ inputs.github_environment || 'production' }} 
       live_change_ticket:
         description: Change ticket recorded in live_preflight readiness payload.
         required: false
-        default: CHG-PREFLIGHT
         type: string
       live_runbook_url:
         description: Production runbook URL recorded in live_preflight readiness payload.
@@ -266,7 +264,7 @@ jobs:
       LIVE_PREFLIGHT: ${{ inputs.live_preflight || false }}
       LIVE_PREFLIGHT_ENVIRONMENT: ${{ inputs.live_environment || 'production' }}
       LIVE_PREFLIGHT_NAMESPACE: ${{ inputs.live_namespace || 'production' }}
-      LIVE_PREFLIGHT_CHANGE_TICKET: ${{ inputs.live_change_ticket || 'CHG-PREFLIGHT' }}
+      LIVE_PREFLIGHT_CHANGE_TICKET: ${{ inputs.live_change_ticket }}
       LIVE_PREFLIGHT_RUNBOOK_URL: ${{ inputs.live_runbook_url }}
       LIVE_PREFLIGHT_RELEASE_OWNER: ${{ inputs.live_release_owner }}
       LIVE_PREFLIGHT_ONCALL_CONTACT: ${{ inputs.live_oncall_contact }}

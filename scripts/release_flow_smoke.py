@@ -851,7 +851,7 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     )
     parser.add_argument("--live-environment", default=os.getenv("LIVE_PREFLIGHT_ENVIRONMENT", "production"))
     parser.add_argument("--live-namespace", default=os.getenv("LIVE_PREFLIGHT_NAMESPACE", "production"))
-    parser.add_argument("--live-change-ticket", default=os.getenv("LIVE_PREFLIGHT_CHANGE_TICKET", "CHG-PREFLIGHT"))
+    parser.add_argument("--live-change-ticket", default=os.getenv("LIVE_PREFLIGHT_CHANGE_TICKET", ""))
     parser.add_argument("--live-approval-by", default=os.getenv("LIVE_PREFLIGHT_APPROVAL_BY", "release-operator"))
     parser.add_argument(
         "--live-approval-reason",
@@ -862,15 +862,15 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     parser.add_argument("--live-approval-at", default=os.getenv("LIVE_PREFLIGHT_APPROVAL_AT", ""))
     parser.add_argument(
         "--live-runbook-url",
-        default=os.getenv("LIVE_PREFLIGHT_RUNBOOK_URL", "https://example.com/runbooks/release-flow"),
+        default=os.getenv("LIVE_PREFLIGHT_RUNBOOK_URL", ""),
     )
     parser.add_argument(
         "--live-release-owner",
-        default=os.getenv("LIVE_PREFLIGHT_RELEASE_OWNER", "release-operator"),
+        default=os.getenv("LIVE_PREFLIGHT_RELEASE_OWNER", ""),
     )
     parser.add_argument(
         "--live-oncall-contact",
-        default=os.getenv("LIVE_PREFLIGHT_ONCALL_CONTACT", "release-oncall@example.com"),
+        default=os.getenv("LIVE_PREFLIGHT_ONCALL_CONTACT", ""),
     )
     parser.add_argument("--live-verification-url", default=os.getenv("LIVE_PREFLIGHT_VERIFICATION_URL", ""))
     parser.add_argument("--live-commit-sha", default=os.getenv("LIVE_PREFLIGHT_COMMIT_SHA", ""))
