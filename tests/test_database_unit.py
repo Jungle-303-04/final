@@ -99,6 +99,54 @@ def test_sqlalchemy_url_uses_psycopg_driver(monkeypatch) -> None:
     assert conn.sqlalchemy_url.startswith("postgresql+psycopg://")
 
 
+class _StartupStore:
+    def __init__(self) -> None:
+        self.calls: list[str] = []
+
+    def init(self) -> None:
+        self.calls.append("init")
+
+    def verify_schema(self) -> None:
+        self.calls.append("verify_schema")
+
+
+def test_wait_for_database_uses_verify_mode_without_schema_mutation(monkeypatch) -> None:
+    monkeypatch.setenv("DATABASE_STARTUP_MODE", "verify")
+    store = _StartupStore()
+
+    asyncio.run(db.wait_for_database(store))
+
+    assert store.calls == ["verify_schema"]
+
+
+def test_wait_for_database_keeps_initialize_compatibility(monkeypatch) -> None:
+    monkeypatch.setenv("DATABASE_STARTUP_MODE", "initialize")
+    store = _StartupStore()
+
+    asyncio.run(db.wait_for_database(store))
+
+    assert store.calls == ["init"]
+
+
+def test_production_defaults_to_read_only_schema_verification(monkeypatch) -> None:
+    monkeypatch.delenv("DATABASE_STARTUP_MODE", raising=False)
+    monkeypatch.setenv("APP_ENV", "production")
+    store = _StartupStore()
+
+    asyncio.run(db.wait_for_database(store))
+
+    assert store.calls == ["verify_schema"]
+
+
+def test_schema_compatibility_issues_reports_missing_tables_and_columns() -> None:
+    issues = storage_engine.schema_compatibility_issues(
+        {"events": {"event_id", "payload"}, "outbox": {"event_id"}},
+        {"events": {"event_id"}},
+    )
+
+    assert issues == ["column:events.payload", "table:outbox"]
+
+
 def test_schema_defines_expected_tables() -> None:
     expected = {
         "events",

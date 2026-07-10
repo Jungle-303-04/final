@@ -24,6 +24,7 @@ POSTGRES_USER="${POSTGRES_USER:-service}"
 POSTGRES_PASSWORD="${POSTGRES_PASSWORD:-}"
 POSTGRES_DB="${POSTGRES_DB:-service}"
 DATABASE_URL="${DATABASE_URL:-}"
+DATABASE_STARTUP_MODE="${DATABASE_STARTUP_MODE:-verify}"
 NATS_URL="${NATS_URL:-nats://nats:4222}"
 REDIS_URL="${REDIS_URL:-redis://redis:6379/0}"
 GITHUB_WEBHOOK_SECRET="${GITHUB_WEBHOOK_SECRET:-}"
@@ -413,6 +414,7 @@ kubectl --context "kind-${MGMT_CLUSTER}" -n management create secret generic pgb
 kubectl --context "kind-${MGMT_CLUSTER}" -n management create configmap management-runtime-config \
   --from-literal=NATS_URL="${NATS_URL}" \
   --from-literal=REDIS_URL="${REDIS_URL}" \
+  --from-literal=DATABASE_STARTUP_MODE="${DATABASE_STARTUP_MODE}" \
   --from-literal=MANAGEMENT_BASE_URL="http://api-gateway:8000" \
   --from-literal=GITHUB_REPO="${GITHUB_REPO}" \
   --from-literal=GITHUB_BRANCH="${GITHUB_BRANCH}" \

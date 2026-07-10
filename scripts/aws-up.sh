@@ -48,6 +48,7 @@ POSTGRES_USER="${POSTGRES_USER:-service}"
 POSTGRES_PASSWORD="${POSTGRES_PASSWORD:-}"
 POSTGRES_DB="${POSTGRES_DB:-service}"
 DATABASE_URL="${DATABASE_URL:-}"
+DATABASE_STARTUP_MODE="${DATABASE_STARTUP_MODE:-verify}"
 NATS_URL="${NATS_URL:-nats://nats:4222}"
 REDIS_URL="${REDIS_URL:-redis://redis:6379/0}"
 MINIO_ROOT_USER="${MINIO_ROOT_USER:-minioadmin}"
@@ -577,6 +578,7 @@ EOF
   kubectl --context "${context}" -n management create configmap management-runtime-config \
     --from-literal=NATS_URL="${NATS_URL}" \
     --from-literal=REDIS_URL="${REDIS_URL}" \
+    --from-literal=DATABASE_STARTUP_MODE="${DATABASE_STARTUP_MODE}" \
     --from-literal=OUTBOX_RELAY_BATCH="${OUTBOX_RELAY_BATCH:-10}" \
     --from-literal=MANAGEMENT_BASE_URL="http://api-gateway:8000" \
     --from-literal=PUBLIC_BASE_URL="${effective_public_base_url}" \
@@ -651,6 +653,76 @@ EOF
   kubectl --context "${context}" -n management create secret generic management-runtime-secret \
     "${secret_args[@]}" \
     --dry-run=client -o yaml | kubectl --context "${context}" apply -f -
+}
+
+bootstrap_management_schema() {
+  log "bootstrapping management database schema"
+  kubectl --context "${MGMT_CLUSTER}" apply -f "${ROOT_DIR}/deploy/management/storage.yaml"
+  kubectl --context "${MGMT_CLUSTER}" apply -f "${ROOT_DIR}/deploy/management/pgbouncer.yaml"
+  management_rollout_status statefulset/postgresql
+  management_rollout_status deployment/pgbouncer
+
+  kubectl --context "${MGMT_CLUSTER}" -n management delete job/management-schema-bootstrap \
+    --ignore-not-found --wait=true
+  cat <<EOF | kubectl --context "${MGMT_CLUSTER}" apply -f -
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: management-schema-bootstrap
+  namespace: management
+spec:
+  backoffLimit: 3
+  activeDeadlineSeconds: 300
+  ttlSecondsAfterFinished: 3600
+  template:
+    metadata:
+      labels:
+        app: management-schema-bootstrap
+    spec:
+      restartPolicy: Never
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: schema
+          image: ${IMAGE_NAME}
+          imagePullPolicy: IfNotPresent
+          command:
+            - python
+            - -c
+            - |
+              from packages.storage.database import Database
+
+              db = Database()
+              db.init()
+              db.verify_schema()
+          envFrom:
+            - configMapRef:
+                name: management-runtime-config
+            - secretRef:
+                name: management-runtime-secret
+          resources:
+            requests:
+              cpu: 25m
+              memory: 64Mi
+            limits:
+              cpu: "1"
+              memory: 512Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+EOF
+  if ! kubectl --context "${MGMT_CLUSTER}" -n management wait \
+    --for=condition=complete job/management-schema-bootstrap --timeout=300s; then
+    kubectl --context "${MGMT_CLUSTER}" -n management describe job/management-schema-bootstrap || true
+    kubectl --context "${MGMT_CLUSTER}" -n management logs job/management-schema-bootstrap \
+      --all-containers=true --tail=200 || true
+    return 1
+  fi
 }
 
 management_rollout_resources() {
@@ -1244,6 +1316,7 @@ main() {
     log "skipping EBS CSI setup"
   fi
   create_management_runtime
+  bootstrap_management_schema
   apply_management_plane
   lb_host="$(gateway_load_balancer_host)"
   base_url="http://${lb_host}"
