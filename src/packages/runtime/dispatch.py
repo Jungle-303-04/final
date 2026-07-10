@@ -71,7 +71,7 @@ def make_event_handler(sub: Subscription, db: Any, source: str) -> Callable[[Eve
     """타입 구독: 봉투 → body 디코드 → 콜백 → yield된 body 수집."""
 
     async def handle(evt: EventEnvelope) -> list[EventEnvelope]:
-        body = sub.body_type.from_body(evt.payload)
+        body = sub.body_type.from_body(evt.payload, strict=False)
         ctx = EventContext.of(evt, AsyncDb(db))
         result = sub.fn(body, ctx) if sub.wants_ctx else sub.fn(body)
         return await _collect(source, evt, result)
