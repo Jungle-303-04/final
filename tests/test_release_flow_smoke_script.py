@@ -178,6 +178,56 @@ class FakeClient:
         return {}
 
 
+class FakeHttpResponse:
+    def __init__(self, status: int, body: str) -> None:
+        self.status = status
+        self.body = body
+
+    def __enter__(self) -> "FakeHttpResponse":
+        return self
+
+    def __exit__(self, _exc_type: object, _exc: object, _traceback: object) -> None:
+        return None
+
+    def read(self) -> bytes:
+        return self.body.encode()
+
+
+class FakeHttpErrorBody:
+    def __init__(self, body: str) -> None:
+        self.body = body
+
+    def read(self) -> bytes:
+        return self.body.encode()
+
+    def close(self) -> None:
+        return None
+
+
+class SequencedOpener:
+    def __init__(self, responses: list[object]) -> None:
+        self.responses = responses
+        self.calls = 0
+
+    def open(self, _request: object, timeout: float) -> object:
+        assert timeout > 0
+        self.calls += 1
+        response = self.responses.pop(0)
+        if isinstance(response, BaseException):
+            raise response
+        return response
+
+
+def http_error(smoke: Any, status: int, body: str = '{"error":"busy"}') -> Exception:
+    return smoke.urllib.error.HTTPError(
+        "https://example.com/api/healthz",
+        status,
+        "busy",
+        {},
+        FakeHttpErrorBody(body),
+    )
+
+
 def test_build_demo_plan_is_demo_only() -> None:
     smoke = load_smoke_module()
 
@@ -192,6 +242,41 @@ def test_build_demo_plan_is_demo_only() -> None:
     assert plan["settings"]["provider_mode"] == "dry_run"
     assert plan["steps"][1]["depends_on"] == ["checkout"]
     assert plan["steps"][0]["config"]["commit_sha"] == "release-flow-smoke"
+
+
+def test_api_client_retries_safe_get_transient_http_errors() -> None:
+    smoke = load_smoke_module()
+    client = smoke.ApiClient("https://example.com/api", retry_attempts=2, retry_delay_seconds=0)
+    opener = SequencedOpener(
+        [
+            http_error(smoke, 503),
+            FakeHttpResponse(200, '{"status":"ok"}'),
+        ]
+    )
+    client.opener = opener
+
+    assert client.request("GET", "/healthz") == {"status": "ok"}
+    assert opener.calls == 2
+
+
+def test_api_client_does_not_retry_side_effect_post_errors() -> None:
+    smoke = load_smoke_module()
+    client = smoke.ApiClient("https://example.com/api", retry_attempts=3, retry_delay_seconds=0)
+    opener = SequencedOpener(
+        [
+            http_error(smoke, 503),
+            FakeHttpResponse(200, '{"run":{"run_id":"duplicate-risk"}}'),
+        ]
+    )
+    client.opener = opener
+
+    try:
+        client.request("POST", "/release-plans/start", {"name": "release"})
+    except smoke.ApiError as exc:
+        assert exc.status == 503
+    else:
+        raise AssertionError("POST release start must not be retried")
+    assert opener.calls == 1
 
 
 def test_smoke_report_writer_persists_json_artifact(tmp_path: Path) -> None:
