@@ -457,6 +457,8 @@ def test_kubernetes_snapshot_provider_scopes_one_rca_test_run(monkeypatch) -> No
         "/api/v1/namespaces/sandbox/services",
     }
     assert [item["name"] for item in kubernetes["pods"]] == ["pod-a"]
+    assert kubernetes["pods"][0]["labels"][selector_key] == "run-a"
+    assert len(kubernetes["pods"][0]["labels"]) == 12
     assert [item["name"] for item in kubernetes["workloads"]] == [
         "deployment-a",
         "replicaset-a",

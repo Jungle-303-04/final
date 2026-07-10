@@ -346,6 +346,7 @@ def merge_cluster_scoped_nodes(target: JsonObject, source: JsonObject) -> None:
 RCA_TEST_LABEL = "kubeheal.io/rca-test"
 RCA_TEST_RUN_LABEL = "kubeheal.io/rca-test-run"
 RCA_TEST_RESOURCE_PREFIX = "rca-test-"
+EVIDENCE_IDENTITY_LABELS = (RCA_TEST_RUN_LABEL, RCA_TEST_LABEL)
 
 
 def scoped_items(payload: Any, label_selector: str | None) -> list[JsonObject]:
@@ -437,11 +438,22 @@ def resource_labels(item: JsonObject) -> JsonObject:
 
 
 def safe_labels(item: JsonObject, limit: int = 12) -> JsonObject:
-    """Copy a small set of labels so the evidence stays small."""
+    """Copy bounded labels while preserving evidence identity labels first."""
     labels = metadata(item).get("labels", {})
-    if not isinstance(labels, dict):
+    if not isinstance(labels, dict) or limit <= 0:
         return {}
-    return {str(key): str(value) for key, value in list(labels.items())[:limit]}
+    compact: JsonObject = {}
+    for key in EVIDENCE_IDENTITY_LABELS:
+        if key in labels and len(compact) < limit:
+            compact[key] = str(labels[key])
+    for raw_key, raw_value in labels.items():
+        key = str(raw_key)
+        if key in compact:
+            continue
+        if len(compact) >= limit:
+            break
+        compact[key] = str(raw_value)
+    return compact
 
 
 def owner_ref(item: JsonObject) -> tuple[str | None, str | None]:
