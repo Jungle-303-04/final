@@ -46,6 +46,7 @@ SERVICE_LOCAL_MODULES = (
     "providers.loki_providers",
     "providers.prometheus_analysis",
     "providers.prometheus_providers",
+    "providers.tempo_analysis",
     "providers.tempo_providers",
     "queries",
     "queries.payloads",

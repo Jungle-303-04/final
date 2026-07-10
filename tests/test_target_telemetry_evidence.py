@@ -34,6 +34,7 @@ def load_evidence_module():
         "providers.metadata_workload_snapshots",
         "providers.prometheus_analysis",
         "providers.prometheus_providers",
+        "providers.tempo_analysis",
         "providers.tempo_providers",
         "kubernetes_api",
         "evidence",
@@ -201,8 +202,22 @@ def test_tempo_traces_are_normalized_into_agent_evidence_shape() -> None:
                     "traceID": "trace-123",
                     "rootServiceName": "checkout-api",
                     "rootTraceName": "GET /checkout",
+                    "status": "error",
                     "durationMs": 842,
                     "query": span_query.traceql,
+                    "spanSet": {
+                        "spans": [
+                            {
+                                "traceID": "trace-123",
+                                "spanID": "span-abc",
+                                "serviceName": "payment-api",
+                                "name": "POST /charge",
+                                "status": "STATUS_CODE_ERROR",
+                                "durationMs": 321,
+                                "kind": "SPAN_KIND_CLIENT",
+                            }
+                        ]
+                    },
                 }
             ]
         }
@@ -223,3 +238,27 @@ def test_tempo_traces_are_normalized_into_agent_evidence_shape() -> None:
     assert "checkout_slow_spans" in results
     assert results["checkout_slow_spans"]["trace_count"] == 1
     assert results["checkout_slow_spans"]["traces"][0]["traceID"] == "trace-123"
+    assert results["checkout_slow_spans"]["analysis"]["trace_ids"] == ["trace-123"]
+    assert results["checkout_slow_spans"]["analysis"]["services"] == ["checkout-api"]
+    assert results["checkout_slow_spans"]["analysis"]["operations"] == ["GET /checkout"]
+    assert results["checkout_slow_spans"]["analysis"]["status_counts"]["error"] == 1
+    assert results["checkout_slow_spans"]["analysis"]["error_count"] == 1
+    assert results["checkout_slow_spans"]["analysis"]["dependency_count"] == 1
+    assert results["checkout_slow_spans"]["analysis"]["duration_ms"]["max"] == 842.0
+    trace_summary = results["checkout_slow_spans"]["analysis"]["trace_summaries"][0]
+    assert trace_summary["trace_id"] == "trace-123"
+    assert trace_summary["service"] == "checkout-api"
+    assert trace_summary["operation"] == "GET /checkout"
+    assert trace_summary["status"] == "error"
+    assert trace_summary["error"] is True
+    assert trace_summary["is_dependency"] is True
+    assert trace_summary["span_summaries"][0] == {
+        "trace_id": "trace-123",
+        "span_id": "span-abc",
+        "service": "payment-api",
+        "operation": "POST /charge",
+        "status": "error",
+        "duration_ms": 321.0,
+        "error": True,
+        "is_dependency": True,
+    }

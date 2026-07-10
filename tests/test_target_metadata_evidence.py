@@ -34,6 +34,7 @@ def load_metadata_modules():
         "providers.metadata_providers",
         "providers.prometheus_analysis",
         "providers.prometheus_providers",
+        "providers.tempo_analysis",
         "providers.tempo_providers",
         "kubernetes_api",
         "evidence",
