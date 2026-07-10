@@ -527,6 +527,18 @@ def check_safe_pr_patch_contract() -> list[ReadinessCheck]:
             ),
             "live execution blockers require server-injected Safe PR evidence, not a user-supplied URL",
         ),
+        ReadinessCheck(
+            "safe_pr.github_branch_ref_validation",
+            source_contains(
+                Path("src/services/gitops/scm-worker/github_provider.py"),
+                "def normalize_branch_ref",
+                "INVALID_BRANCH_REF_MESSAGE",
+                "GITHUB_BRANCH_REF_RE",
+                "request_base_branch",
+                "return normalize_branch_ref(f\"{BRANCH_PREFIX}/{request.workflow_run_id}\")",
+            ),
+            "GitHub Safe PR provider validates base/head branch refs before outbound writes",
+        ),
     ]
 
 

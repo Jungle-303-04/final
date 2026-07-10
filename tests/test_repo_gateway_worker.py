@@ -239,6 +239,45 @@ def test_repo_gateway_falls_back_to_env_base_branch(monkeypatch) -> None:
     assert db.called("save_pull_request")
 
 
+def test_repo_gateway_rejects_unsafe_request_base_branch_before_github_write(monkeypatch) -> None:
+    monkeypatch.setenv("GITHUB_TOKEN", "token-1")
+    monkeypatch.setenv("SCM_REPO", "project/repo")
+    calls: list[tuple[str, str]] = []
+    repo = _load_with_transport(monkeypatch, calls=calls)
+    db = SpyDb()
+
+    outs = run_handler(
+        repo.on_safe_pr_ready_for_creation,
+        _ready(base_branch="../main"),
+        db=db,
+    )
+
+    assert subjects_of(outs) == ["safe_pr.failed"]
+    assert outs[0].reason_code == "provider_error"
+    assert outs[0].details["exception_type"] == "ValueError"
+    assert calls == []
+    assert not db.called("save_pull_request")
+
+
+def test_repo_gateway_rejects_unsafe_generated_head_branch_before_github_write(monkeypatch) -> None:
+    _github_env(monkeypatch)
+    calls: list[tuple[str, str]] = []
+    repo = _load_with_transport(monkeypatch, calls=calls)
+    db = SpyDb()
+
+    outs = run_handler(
+        repo.on_safe_pr_ready_for_creation,
+        _ready(workflow_run_id="run@{production"),
+        db=db,
+    )
+
+    assert subjects_of(outs) == ["safe_pr.failed"]
+    assert outs[0].reason_code == "provider_error"
+    assert outs[0].details["exception_type"] == "ValueError"
+    assert calls == []
+    assert not db.called("save_pull_request")
+
+
 def test_repo_gateway_rejects_invalid_request_repo_ref(monkeypatch) -> None:
     monkeypatch.setenv("GITHUB_TOKEN", "token-1")
     monkeypatch.delenv("SCM_REPO", raising=False)
