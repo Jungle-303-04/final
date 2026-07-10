@@ -20,7 +20,39 @@ from packages.config.constants import Target
 from packages.contracts.event_bus.interfaces import JsonObject
 from packages.contracts.target import TARGET_NAMESPACE
 from providers.base import ConfigReader
-from providers.kubernetes_utils import items, metadata, spec, status
+from providers.kubernetes_utils import (
+    K8S_DEPLOYMENT_REVISION_ANNOTATION,
+    K8S_KIND_DEPLOYMENT,
+    K8S_KIND_REPLICA_SET,
+    K8S_RESOURCE_DEPLOYMENTS,
+    K8S_RESOURCE_PODS,
+    K8S_RESOURCE_REPLICASETS,
+    K8S_RESOURCE_SERVICES,
+    items,
+    metadata,
+    spec,
+    status,
+)
+
+CHANGE_CONTEXT_KEY = "change_context"
+CURRENT_WORKLOAD_SNAPSHOT_KEY = "current_workload_snapshot"
+CURRENT_WORKLOAD_SNAPSHOTS_KEY = "current_workload_snapshots"
+SERVICE_SELECTOR_MATCHES_KEY = "service_selector_matches"
+SERVICE_SELECTOR_STATUS_MATCHED = "matched"
+SERVICE_SELECTOR_STATUS_NO_MATCHING_PODS = "no_matching_pods"
+SERVICE_SELECTOR_STATUS_SELECTOR_MISSING = "selector_missing"
+SERVICE_TARGET_RELATION_EXACT_SELECTOR_MATCH = "exact_selector_match"
+SERVICE_TARGET_RELATION_LIVE_POD_MATCH = "live_pod_match"
+SERVICE_TARGET_RELATION_SELECTOR_KEY_OVERLAP = "selector_key_overlap"
+DEFAULT_METADATA_QUERIES = {
+    CHANGE_CONTEXT_KEY,
+    CURRENT_WORKLOAD_SNAPSHOTS_KEY,
+    K8S_RESOURCE_DEPLOYMENTS,
+}
+DEPLOYMENT_QUERY_PREFIXES = {
+    K8S_KIND_DEPLOYMENT.lower(),
+    K8S_RESOURCE_DEPLOYMENTS,
+}
 
 SAFE_ANNOTATION_PREFIXES = (
     "deployment.kubernetes.io/",
@@ -98,7 +130,7 @@ class MetadataProvider:
             return {
                 "cluster_id": self.cluster_id,
                 "collected_at": datetime.now(UTC).isoformat(),
-                "change_context": empty_change_context(),
+                CHANGE_CONTEXT_KEY: empty_change_context(),
             }
 
         headers = kubernetes_headers(token)
@@ -111,7 +143,7 @@ class MetadataProvider:
                     headers,
                     namespaced_apps_path(
                         target.namespace,
-                        "deployments",
+                        K8S_RESOURCE_DEPLOYMENTS,
                         target.deployment_name,
                     ),
                     allow_not_found=True,
@@ -121,19 +153,19 @@ class MetadataProvider:
                         client,
                         base_url,
                         headers,
-                        namespaced_apps_path(target.namespace, "replicasets"),
+                        namespaced_apps_path(target.namespace, K8S_RESOURCE_REPLICASETS),
                     )
                     pod_list = await self.get_json(
                         client,
                         base_url,
                         headers,
-                        namespaced_core_path(target.namespace, "pods"),
+                        namespaced_core_path(target.namespace, K8S_RESOURCE_PODS),
                     )
                     service_list = await self.get_json(
                         client,
                         base_url,
                         headers,
-                        namespaced_core_path(target.namespace, "services"),
+                        namespaced_core_path(target.namespace, K8S_RESOURCE_SERVICES),
                     )
                     change_context = specific_workload_change_context(
                         deployment,
@@ -148,7 +180,7 @@ class MetadataProvider:
                     client,
                     base_url,
                     headers,
-                    namespaced_apps_path(target.namespace, "deployments"),
+                    namespaced_apps_path(target.namespace, K8S_RESOURCE_DEPLOYMENTS),
                 )
                 deployment_items = items(deployments)
                 replicasets: JsonObject = {"items": []}
@@ -158,19 +190,19 @@ class MetadataProvider:
                         client,
                         base_url,
                         headers,
-                        namespaced_apps_path(target.namespace, "replicasets"),
+                        namespaced_apps_path(target.namespace, K8S_RESOURCE_REPLICASETS),
                     )
                 pods = await self.get_json(
                     client,
                     base_url,
                     headers,
-                    namespaced_core_path(target.namespace, "pods"),
+                    namespaced_core_path(target.namespace, K8S_RESOURCE_PODS),
                 )
                 services = await self.get_json(
                     client,
                     base_url,
                     headers,
-                    namespaced_core_path(target.namespace, "services"),
+                    namespaced_core_path(target.namespace, K8S_RESOURCE_SERVICES),
                 )
                 if deployment_items:
                     snapshots = current_workload_snapshots(
@@ -179,8 +211,8 @@ class MetadataProvider:
                         items(pods),
                     )
                 change_context = {
-                    "current_workload_snapshots": snapshots,
-                    "service_selector_matches": service_selector_match_snapshots(
+                    CURRENT_WORKLOAD_SNAPSHOTS_KEY: snapshots,
+                    SERVICE_SELECTOR_MATCHES_KEY: service_selector_match_snapshots(
                         items(services),
                         items(pods),
                     ),
@@ -189,7 +221,7 @@ class MetadataProvider:
         return {
             "cluster_id": self.cluster_id,
             "collected_at": datetime.now(UTC).isoformat(),
-            "change_context": change_context,
+            CHANGE_CONTEXT_KEY: change_context,
         }
 
     async def get_json(
@@ -213,7 +245,7 @@ class MetadataProvider:
     def empty_results(self) -> JsonObject:
         """Create an empty metadata evidence bucket."""
         return {
-            "change_context": empty_change_context(),
+            CHANGE_CONTEXT_KEY: empty_change_context(),
         }
 
     def append_result(
@@ -223,12 +255,12 @@ class MetadataProvider:
         payload: JsonObject,
     ) -> None:
         """Normalize one metadata result and merge it into the bucket."""
-        change_context = object_or_empty(results.get("change_context"))
+        change_context = object_or_empty(results.get(CHANGE_CONTEXT_KEY))
         merge_change_context(
             change_context,
             self.normalize_payload(payload, telemetry_query),
         )
-        results["change_context"] = change_context or empty_change_context()
+        results[CHANGE_CONTEXT_KEY] = change_context or empty_change_context()
 
     def build_response(self, results: JsonObject) -> JsonObject:
         """Return the finished metadata evidence bucket."""
@@ -240,26 +272,26 @@ class MetadataProvider:
         _telemetry_query: MetadataSnapshotQuery,
     ) -> JsonObject:
         """Turn raw metadata data into the change context shape."""
-        change_context = payload.get("change_context", {})
+        change_context = payload.get(CHANGE_CONTEXT_KEY, {})
 
         if not isinstance(change_context, dict):
             return empty_change_context()
 
-        snapshots = change_context.get("current_workload_snapshots")
-        snapshot = change_context.get("current_workload_snapshot")
-        service_matches = change_context.get("service_selector_matches")
+        snapshots = change_context.get(CURRENT_WORKLOAD_SNAPSHOTS_KEY)
+        snapshot = change_context.get(CURRENT_WORKLOAD_SNAPSHOT_KEY)
+        service_matches = change_context.get(SERVICE_SELECTOR_MATCHES_KEY)
         normalized: JsonObject = {}
 
         if isinstance(snapshots, list):
-            normalized["current_workload_snapshots"] = [
+            normalized[CURRENT_WORKLOAD_SNAPSHOTS_KEY] = [
                 item for item in snapshots if isinstance(item, dict)
             ]
 
         if isinstance(snapshot, dict) and snapshot:
-            normalized["current_workload_snapshot"] = snapshot
+            normalized[CURRENT_WORKLOAD_SNAPSHOT_KEY] = snapshot
 
         if isinstance(service_matches, list):
-            normalized["service_selector_matches"] = [
+            normalized[SERVICE_SELECTOR_MATCHES_KEY] = [
                 item for item in service_matches if isinstance(item, dict)
             ]
 
@@ -269,13 +301,13 @@ class MetadataProvider:
 def metadata_query_target(telemetry_query: MetadataSnapshotQuery) -> MetadataQueryTarget:
     """Turn a metadata query string into a Deployment scope."""
     query = telemetry_query.query.strip()
-    if not query or query in {"change_context", "current_workload_snapshots", "deployments"}:
+    if not query or query in DEFAULT_METADATA_QUERIES:
         return MetadataQueryTarget(namespace=TARGET_NAMESPACE)
 
     parts = [part.strip() for part in query.split("/") if part.strip()]
-    if len(parts) == 2 and parts[0].lower() in {"deployment", "deployments"}:
+    if len(parts) == 2 and parts[0].lower() in DEPLOYMENT_QUERY_PREFIXES:
         return MetadataQueryTarget(namespace=TARGET_NAMESPACE, deployment_name=parts[1])
-    if len(parts) == 3 and parts[0].lower() in {"deployment", "deployments"}:
+    if len(parts) == 3 and parts[0].lower() in DEPLOYMENT_QUERY_PREFIXES:
         return MetadataQueryTarget(namespace=parts[1], deployment_name=parts[2])
     if len(parts) == 2:
         return MetadataQueryTarget(namespace=parts[0], deployment_name=parts[1])
@@ -324,12 +356,12 @@ def specific_workload_change_context(
     target_pods = pods_for_deployment(deployment, replicasets, pods)
     target_labels = object_or_empty(metadata(pod_template(deployment)).get("labels"))
     return {
-        "current_workload_snapshot": current_workload_detail_snapshot(
+        CURRENT_WORKLOAD_SNAPSHOT_KEY: current_workload_detail_snapshot(
             deployment,
             replicasets,
             pods,
         ),
-        "service_selector_matches": service_selector_match_snapshots(
+        SERVICE_SELECTOR_MATCHES_KEY: service_selector_match_snapshots(
             services,
             pods,
             target_labels=target_labels,
@@ -340,25 +372,25 @@ def specific_workload_change_context(
 
 def merge_change_context(target: JsonObject, source: JsonObject) -> None:
     """Merge one normalized change context into another."""
-    snapshots = source.get("current_workload_snapshots")
+    snapshots = source.get(CURRENT_WORKLOAD_SNAPSHOTS_KEY)
     if isinstance(snapshots, list):
-        target["current_workload_snapshots"] = snapshots
+        target[CURRENT_WORKLOAD_SNAPSHOTS_KEY] = snapshots
 
-    snapshot = source.get("current_workload_snapshot")
+    snapshot = source.get(CURRENT_WORKLOAD_SNAPSHOT_KEY)
     if isinstance(snapshot, dict) and snapshot:
-        if target.get("current_workload_snapshots") == []:
-            target.pop("current_workload_snapshots", None)
-        target["current_workload_snapshot"] = snapshot
+        if target.get(CURRENT_WORKLOAD_SNAPSHOTS_KEY) == []:
+            target.pop(CURRENT_WORKLOAD_SNAPSHOTS_KEY, None)
+        target[CURRENT_WORKLOAD_SNAPSHOT_KEY] = snapshot
 
-    service_matches = source.get("service_selector_matches")
+    service_matches = source.get(SERVICE_SELECTOR_MATCHES_KEY)
     if isinstance(service_matches, list):
-        target["service_selector_matches"] = service_matches
+        target[SERVICE_SELECTOR_MATCHES_KEY] = service_matches
 
 
 def empty_change_context() -> JsonObject:
     """Build the default change context shape."""
     return {
-        "current_workload_snapshots": [],
+        CURRENT_WORKLOAD_SNAPSHOTS_KEY: [],
     }
 
 
@@ -384,7 +416,7 @@ def current_workload_base_snapshot(
     template_meta = metadata(pod_template(deployment))
     return {
         "workload": {
-            "kind": "Deployment",
+            "kind": K8S_KIND_DEPLOYMENT,
             "namespace": meta.get("namespace"),
             "name": meta.get("name"),
         },
@@ -740,10 +772,10 @@ def service_selector_match_status(
 ) -> str:
     """Return a small status for one Service selector match."""
     if not selector:
-        return "selector_missing"
+        return SERVICE_SELECTOR_STATUS_SELECTOR_MISSING
     if matched_pods:
-        return "matched"
-    return "no_matching_pods"
+        return SERVICE_SELECTOR_STATUS_MATCHED
+    return SERVICE_SELECTOR_STATUS_NO_MATCHING_PODS
 
 
 def selector_matches_labels(selector: JsonObject, labels: JsonObject) -> bool:
@@ -761,20 +793,20 @@ def service_target_relation(
         return None
 
     if target_labels and selector_matches_labels(selector, target_labels):
-        return "exact_selector_match"
+        return SERVICE_TARGET_RELATION_EXACT_SELECTOR_MATCH
 
     pod_labels = [
         object_or_empty(metadata(pod).get("labels"))
         for pod in target_pods or []
     ]
     if any(selector_matches_labels(selector, labels) for labels in pod_labels):
-        return "live_pod_match"
+        return SERVICE_TARGET_RELATION_LIVE_POD_MATCH
 
     target_label_keys = set(target_labels or {})
     for labels in pod_labels:
         target_label_keys.update(labels)
     if target_label_keys.intersection(selector):
-        return "selector_key_overlap"
+        return SERVICE_TARGET_RELATION_SELECTOR_KEY_OVERLAP
 
     return None
 
@@ -944,7 +976,7 @@ def is_owned_by_replicaset(
 ) -> bool:
     """Check whether a Pod belongs to one ReplicaSet."""
     for owner in list_items(metadata(pod).get("ownerReferences")):
-        if owner.get("kind") != "ReplicaSet":
+        if owner.get("kind") != K8S_KIND_REPLICA_SET:
             continue
         owner_uid = str(owner.get("uid") or "")
         owner_name = str(owner.get("name") or "")
@@ -962,7 +994,7 @@ def is_owned_by_deployment(
 ) -> bool:
     """Check whether a ReplicaSet belongs to a Deployment."""
     for owner in list_items(metadata(replicaset).get("ownerReferences")):
-        if owner.get("kind") != "Deployment":
+        if owner.get("kind") != K8S_KIND_DEPLOYMENT:
             continue
         if deployment_uid and owner.get("uid") == deployment_uid:
             return True
@@ -980,7 +1012,7 @@ def replicaset_revision_summary_snapshot(replicaset: JsonObject) -> JsonObject:
     return compact_dict(
         {
             "name": meta.get("name"),
-            "revision": annotations.get("deployment.kubernetes.io/revision"),
+            "revision": annotations.get(K8S_DEPLOYMENT_REVISION_ANNOTATION),
             "desired_replicas": replicaset_spec.get("replicas"),
             "replicas": replicaset_status.get("replicas"),
             "ready_replicas": replicaset_status.get("readyReplicas"),
@@ -1005,7 +1037,7 @@ def replicaset_revision_detail_snapshot(replicaset: JsonObject) -> JsonObject:
 def replicaset_revision_number(replicaset: JsonObject) -> int:
     """Return the ReplicaSet revision as a sortable number."""
     annotations = object_or_empty(metadata(replicaset).get("annotations"))
-    revision = annotations.get("deployment.kubernetes.io/revision")
+    revision = annotations.get(K8S_DEPLOYMENT_REVISION_ANNOTATION)
     try:
         return int(str(revision))
     except (TypeError, ValueError):

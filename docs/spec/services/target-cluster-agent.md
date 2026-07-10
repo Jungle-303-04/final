@@ -5,7 +5,7 @@ status: synced
 
 # cluster-agent — target 클러스터 상주 에이전트 (증거 수집 · 커맨드 실행 · 정책 동기화 · 실시간 요약)
 
-> 소스: `src/services/target/cluster-agent/` · 테스트: `tests/test_target_agent_client.py`, `tests/test_target_agent_commands.py`, `tests/test_target_evidence_jobs.py`, `tests/test_target_policy_control.py`, `tests/test_target_reconciler.py`, `tests/test_live_summary.py`, `tests/test_telemetry_registry.py`, `tests/test_target_kubernetes_evidence.py`, `tests/test_target_metric_evidence.py`, `tests/test_target_telemetry_evidence.py`
+> 소스: `src/services/target/cluster-agent/` · 테스트: `tests/test_target_agent_client.py`, `tests/test_target_agent_commands.py`, `tests/test_target_evidence_jobs.py`, `tests/test_target_policy_control.py`, `tests/test_target_reconciler.py`, `tests/test_live_summary.py`, `tests/test_telemetry_registry.py`, `tests/test_target_kubernetes_evidence.py`, `tests/test_target_metadata_evidence.py`, `tests/test_target_metric_evidence.py`, `tests/test_target_telemetry_evidence.py`
 
 ## 책임 (Responsibility)
 
@@ -374,7 +374,11 @@ def build_response(self, results: JsonObject) -> JsonObject
 def normalize_payload(self, payload: JsonObject, telemetry_query) -> JsonObject
 ```
 
-모듈 함수(전부 public): `empty_snapshot(cluster_id) -> JsonObject`, `merge_snapshot(target, source) -> None`, `items(payload) -> list[JsonObject]`, `metadata(item)`, `status(item)`, `spec(item)`, `safe_labels(item, limit=12)`, `owner_ref(item) -> tuple[str | None, str | None]`, `as_text(value)`, `pod_summary(item)`, `container_summary(item)`, `event_summary(item)`, `node_summary(item)`, `workload_summaries(kind, rows)`, `workload_summary(kind, item)`, `service_summary(item)`, `endpoint_slice_summary(item)`, `workload_key(namespace, kind, name) -> str | None`(`"{ns}/{kind}/{name}"`). 앵커: `src/services/target/cluster-agent/providers/kubernetes_providers.py :: <함수명>`.
+#### `providers/kubernetes_utils.py`
+
+공용 Kubernetes helper와 상수: `K8S_KIND_DEPLOYMENT`, `K8S_KIND_REPLICA_SET`, `K8S_DEPLOYMENT_REVISION_ANNOTATION`, `K8S_RESOURCE_DEPLOYMENTS`, `K8S_RESOURCE_PODS`, `K8S_RESOURCE_REPLICASETS`, `K8S_RESOURCE_SERVICES`, `items(payload) -> list[JsonObject]`, `metadata(item)`, `status(item)`, `spec(item)`. `kubernetes_providers.py`와 `metadata_providers.py`가 같은 helper를 import해 Kubernetes list response와 object section을 같은 방식으로 다룬다.
+
+모듈 함수(전부 public): `empty_snapshot(cluster_id) -> JsonObject`, `merge_snapshot(target, source) -> None`, `merge_cluster_scoped_nodes(target, source) -> None`, `safe_labels(item, limit=12)`, `owner_ref(item) -> tuple[str | None, str | None]`, `as_text(value)`, `pod_summary(item)`, `container_summary(item)`, `event_summary(item)`, `node_summary(item)`, `workload_summaries(kind, rows)`, `workload_summary(kind, item)`, `service_summary(item)`, `endpoint_slice_summary(item)`, `workload_key(namespace, kind, name) -> str | None`(`"{ns}/{kind}/{name}"`). 앵커: `src/services/target/cluster-agent/providers/kubernetes_providers.py :: <함수명>`.
 
 #### `providers/prometheus_providers.py`
 
