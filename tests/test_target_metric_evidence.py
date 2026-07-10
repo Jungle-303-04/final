@@ -34,6 +34,7 @@ def load_evidence_module():
         "providers.metadata_providers",
         "providers.metadata_service_selectors",
         "providers.metadata_workload_snapshots",
+        "providers.prometheus_analysis",
         "providers.prometheus_providers",
         "providers.tempo_providers",
         "kubernetes_api",
@@ -99,6 +100,8 @@ def test_prometheus_metrics_are_normalized_into_agent_evidence_shape() -> None:
     assert validated.metrics["source"] == "prometheus"
     assert "node_collector_node_pod_count" in results
     assert results["node_collector_node_pod_count"]["samples"][0]["value"] == 26.0
+    assert results["node_collector_node_pod_count"]["analysis"]["metric_kind"] == "pod_count"
+    assert results["node_collector_node_pod_count"]["analysis"]["value_summary"]["latest"] == 26.0
     assert (
         results["node_collector_node_pod_count"]["samples"][0]["metric"]["node"]
         == "target-control-plane"
@@ -138,6 +141,161 @@ def test_collector_runs_one_off_query_definition() -> None:
 
     assert result["source"] == "prometheus"
     assert result["results"]["one_off_up"]["samples"][0]["value"] == 1.0
+    assert result["results"]["one_off_up"]["analysis"]["metric_kind"] == "scrape_health"
+    assert result["results"]["one_off_up"]["analysis"]["threshold"] == {
+        "comparator": "less_than",
+        "critical": 1.0,
+        "observed_value": 1.0,
+        "level": "none",
+        "exceeded": False,
+    }
+
+
+def test_prometheus_ratio_metrics_add_threshold_analysis() -> None:
+    module = load_evidence_module()
+    metrics_provider = module.PrometheusMetricsProvider.from_config(lambda _name, default: default)
+
+    result: dict[str, object] = {}
+    definition = module.TelemetryQueryDefinition.from_mapping(
+        {
+            "source": "prometheus",
+            "name": "node_memory_usage_ratio",
+            "description": "Node memory usage ratio.",
+            "query": "1 - (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes)",
+        }
+    )
+    metrics_provider.append_result(
+        result,
+        definition.to_provider_query(),
+        {
+            "status": "success",
+            "data": {
+                "resultType": "vector",
+                "result": [
+                    {
+                        "metric": {"instance": "node-a"},
+                        "value": [1782822589.742, "0.91"],
+                    },
+                    {
+                        "metric": {"instance": "node-b"},
+                        "value": [1782822590.742, "0.73"],
+                    },
+                ],
+            },
+        },
+    )
+
+    analysis = result["node_memory_usage_ratio"]["analysis"]
+
+    assert analysis["metric_kind"] == "memory_usage_ratio"
+    assert analysis["unit"] == "ratio"
+    assert analysis["value_summary"]["max"] == 0.91
+    assert analysis["value_summary"]["latest"] == 0.73
+    assert analysis["threshold"] == {
+        "comparator": "greater_than_or_equal",
+        "warning": 0.8,
+        "critical": 0.9,
+        "observed_value": 0.91,
+        "level": "critical",
+        "exceeded": True,
+    }
+    assert analysis["signals"] == ["memory_pressure"]
+
+
+def test_prometheus_range_metrics_add_baseline_comparison() -> None:
+    module = load_evidence_module()
+    metrics_provider = module.PrometheusMetricsProvider.from_config(lambda _name, default: default)
+
+    result: dict[str, object] = {}
+    definition = module.TelemetryQueryDefinition.from_mapping(
+        {
+            "source": "prometheus",
+            "name": "node_collector_node_not_ready_pod_count",
+            "description": "Not Ready pod count trend.",
+            "query": "node_collector_node_not_ready_pod_count",
+            "range_seconds": 900,
+            "step_seconds": 30,
+        }
+    )
+    metrics_provider.append_result(
+        result,
+        definition.to_provider_query(),
+        {
+            "status": "success",
+            "data": {
+                "resultType": "matrix",
+                "result": [
+                    {
+                        "metric": {"node": "node-a"},
+                        "values": [[1782822500.0, "0"], [1782822530.0, "2"]],
+                    },
+                    {
+                        "metric": {"node": "node-b"},
+                        "values": [[1782822500.0, "1"], [1782822530.0, "1"]],
+                    },
+                ],
+            },
+        },
+    )
+
+    analysis = result["node_collector_node_not_ready_pod_count"]["analysis"]
+
+    assert analysis["metric_kind"] == "pod_not_ready_count"
+    assert analysis["point_count"] == 4
+    assert analysis["threshold"]["exceeded"] is True
+    assert analysis["baseline_comparison"] == {
+        "basis": "first_point_in_range",
+        "series_count": 2,
+        "increased_series_count": 1,
+        "decreased_series_count": 0,
+        "flat_series_count": 1,
+        "max_delta": 2.0,
+        "max_percent_change": 0.0,
+    }
+    assert analysis["signals"] == ["increased_from_range_start", "not_ready_pods"]
+
+
+def test_prometheus_cpu_throttling_metrics_add_positive_signal() -> None:
+    module = load_evidence_module()
+    metrics_provider = module.PrometheusMetricsProvider.from_config(lambda _name, default: default)
+
+    result: dict[str, object] = {}
+    definition = module.TelemetryQueryDefinition.from_mapping(
+        {
+            "source": "prometheus",
+            "name": "container_cpu_throttling",
+            "description": "Container CPU throttling.",
+            "query": "sum(rate(container_cpu_cfs_throttled_periods_total[5m]))",
+        }
+    )
+    metrics_provider.append_result(
+        result,
+        definition.to_provider_query(),
+        {
+            "status": "success",
+            "data": {
+                "resultType": "vector",
+                "result": [
+                    {
+                        "metric": {"namespace": "target", "pod": "checkout-api-1"},
+                        "value": [1782822590.742, "4"],
+                    }
+                ],
+            },
+        },
+    )
+
+    analysis = result["container_cpu_throttling"]["analysis"]
+
+    assert analysis["metric_kind"] == "cpu_throttling"
+    assert analysis["threshold"] == {
+        "comparator": "greater_than",
+        "warning": 0.0,
+        "observed_value": 4.0,
+        "level": "warning",
+        "exceeded": True,
+    }
+    assert analysis["signals"] == ["cpu_throttling"]
 
 
 def test_prometheus_range_query_is_normalized_into_series() -> None:
@@ -181,6 +339,8 @@ def test_prometheus_range_query_is_normalized_into_series() -> None:
     assert restart_rate["result_type"] == "matrix"
     assert restart_rate["point_count"] == 2
     assert restart_rate["series"][0]["values"][1]["value"] == 3.0
+    assert restart_rate["analysis"]["metric_kind"] == "restart_count_or_rate"
+    assert restart_rate["analysis"]["baseline_comparison"]["increased_series_count"] == 1
 
 
 def test_collector_rejects_unknown_provider_keys() -> None:
