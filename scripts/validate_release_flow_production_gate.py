@@ -15,6 +15,14 @@ import yaml
 
 WORKFLOW_SUFFIXES = {".yml", ".yaml"}
 GATE_WORKFLOW_PATH = "./.github/workflows/release-flow-production-gate.yml"
+REQUIRED_GATE_INPUTS = ("live_change_ticket", "live_runbook_url")
+ONE_OF_GATE_INPUTS = ("live_release_owner", "live_oncall_contact")
+PLACEHOLDER_INPUT_VALUES = {
+    "live_change_ticket": {"CHG-PREFLIGHT"},
+    "live_runbook_url": {"https://example.com/runbooks/release-flow"},
+    "live_release_owner": {"release-operator"},
+    "live_oncall_contact": {"release-oncall@example.com"},
+}
 IGNORED_WORKFLOW_NAMES = {
     "release-flow-smoke.yml",
     "release-flow-production-gate.yml",
@@ -177,10 +185,71 @@ def validate_candidate(
 
     for gate_id in gate_needs:
         gate_job = jobs.get(gate_id, {})
+        if isinstance(gate_job, dict):
+            violations.extend(validate_gate_job_inputs(candidate.workflow, gate_id, gate_job))
         if isinstance(gate_job, dict) and gate_job.get("secrets") != "inherit":
             # Explicit secret mapping is allowed. This branch only keeps the rule obvious for future expansion.
             continue
     return violations
+
+
+def validate_gate_job_inputs(workflow: Path, gate_id: str, gate_job: dict[str, Any]) -> list[GateViolation]:
+    violations: list[GateViolation] = []
+    with_values = gate_job.get("with", {})
+    if not isinstance(with_values, dict):
+        with_values = {}
+    for input_name in REQUIRED_GATE_INPUTS:
+        value = with_values.get(input_name)
+        if not meaningful_input(value):
+            violations.append(
+                GateViolation(
+                    workflow,
+                    gate_id,
+                    f"release-flow production gate job must pass {input_name}",
+                )
+            )
+        elif is_placeholder_input(input_name, value):
+            violations.append(
+                GateViolation(
+                    workflow,
+                    gate_id,
+                    f"release-flow production gate job must not pass placeholder {input_name}",
+                )
+            )
+
+    owner_values = {input_name: with_values.get(input_name) for input_name in ONE_OF_GATE_INPUTS}
+    if not any(meaningful_input(value) for value in owner_values.values()):
+        violations.append(
+            GateViolation(
+                workflow,
+                gate_id,
+                "release-flow production gate job must pass live_release_owner or live_oncall_contact",
+            )
+        )
+    for input_name, value in owner_values.items():
+        if meaningful_input(value) and is_placeholder_input(input_name, value):
+            violations.append(
+                GateViolation(
+                    workflow,
+                    gate_id,
+                    f"release-flow production gate job must not pass placeholder {input_name}",
+                )
+            )
+    return violations
+
+
+def meaningful_input(value: Any) -> bool:
+    if value is None:
+        return False
+    if isinstance(value, bool):
+        return value
+    return bool(str(value).strip())
+
+
+def is_placeholder_input(input_name: str, value: Any) -> bool:
+    normalized = str(value).strip()
+    placeholders = PLACEHOLDER_INPUT_VALUES.get(input_name, set())
+    return normalized in placeholders
 
 
 def normalize_needs(value: Any) -> set[str]:
