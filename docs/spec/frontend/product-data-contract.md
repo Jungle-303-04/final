@@ -10,15 +10,15 @@ last_verified: 2026-07-11
 
 ## 0. 권한, 범위, 비목표
 
-이 문서는 Applications, GitOps, Tree/Insights, Timeline, Metrics, Topology, GitOps Operations 화면이 소비할 canonical 데이터와 사용자 경험의 구현 예정 계약이다. 현재 repo의 실제 코드와 통과한 테스트가 source of truth이며, 아래 DTO와 schema가 현 코드에 없으면 구현 완료가 아니라 후속 작업 기준으로만 읽는다. 백엔드는 이 의미 계약을 OpenAPI와 runtime schema로 구현하고, 프론트는 `[OPENAPI_ACCEPTED]` 이후 live adapter를 확정한다.
+이 문서는 Applications, GitOps, Tree/Insights, Timeline, Metrics, Topology, GitOps Operations 화면이 소비할 canonical 데이터와 사용자 경험의 구현 예정 계약이다. 현재 repo의 실제 코드와 통과한 테스트가 source of truth이며, 아래 DTO와 schema가 현 코드에 없으면 구현 완료가 아니라 후속 작업 기준으로만 읽는다. 백엔드는 이 소비 의미를 OpenAPI와 runtime schema로 구현하고, 프론트는 `[OPENAPI_ACCEPTED]` 이후 live adapter를 확정한다.
 
 구현 우선순위:
 
 1. 현재 repo의 실제 코드와 통과한 executable test.
 2. 이 문서의 사용자 의미와 상태 전이.
 3. `topology-engine.md`의 identity, relation, metric, stream 불변조건.
-4. 생성된 TypeScript/runtime schema와 승인된 OpenAPI.
-5. live/synthetic adapter 구현.
+4. 승인된 OpenAPI와 생성된 TypeScript/runtime schema.
+5. 동일 계약 suite를 통과한 live/synthetic adapter와 제품 UI 구현.
 
 비목표:
 
@@ -55,6 +55,7 @@ last_verified: 2026-07-11
 ```ts
 type OpaqueId = string
 type DecimalString = string & { readonly __brand: "DecimalString" }
+type OrderedSequence = string & { readonly __brand: "OrderedSequence" }
 type Timestamp = string
 type DurationMs = number
 type NonEmptyReadonlyArray<T> = readonly [T, ...T[]]
@@ -108,7 +109,14 @@ type DataCompleteness =
       reasons: NonEmptyReadonlyArray<StatusReason>
     }
   | {
-      state: "forbidden" | "unsupported"
+      state: "forbidden"
+      observedCount: null
+      expectedAuthorizedCount: null
+      missingSources: readonly []
+      reasons: NonEmptyReadonlyArray<StatusReason>
+    }
+  | {
+      state: "unsupported"
       observedCount: null
       expectedAuthorizedCount: null
       missingSources: readonly []
@@ -139,6 +147,8 @@ type SuccessfulAccessMode = Extract<AccessMode, { mode: "read_write" | "read_onl
 ```
 
 `detail`은 안전하게 redacted된 text이며 UI 분기에는 `code`를 사용한다.
+
+`OrderedSequence` wire grammar는 `^(0|[1-9][0-9]*)$`다. client는 BigInt 또는 arbitrary-precision decimal integer comparator로 비교하며 JS number나 문자열 사전식 비교를 사용하지 않는다. `ResumeCursor.sequence`는 safe integer 범위 안에서만 유효하고 server는 범위 소진 전에 새 stream epoch/snapshot으로 회전한다.
 
 ## 2. Canonical 상태와 capability
 
@@ -454,6 +464,8 @@ type DeploymentDestination = {
   managementRole: "workload" | "management" | "hybrid"
   access: SuccessfulAccessMode
 }
+
+type NamespaceRef = { clusterUid: string; namespace: string }
 ```
 
 Integration inspector는 표시용 allowlist이며 key/schema/display value를 UI 분기 입력으로 쓰지 않는다. safe link는 credential/userinfo/query secret을 제거한 allowlisted `https` URL만 허용한다. restricted ResourceRef는 허용된 source가 이미 참조를 노출한 경우에만 disclosure 수준에 맞는 coordinate 일부를 포함하고, 추론으로 발견한 hidden peer는 ResourceRef 자체를 만들지 않는다. live Kubernetes branch의 UID는 필수이고 desired manifest branch에 가짜 UID를 만들지 않는다.
@@ -506,6 +518,10 @@ type ApprovalStatus =
     }[ApprovalLifecycleState]
   | { state: "unknown"; approval: Approval | null; reason: StatusReason }
 
+type InstanceApprovalStatus =
+  | { state: "none"; approval: null; reason: null }
+  | ApprovalStatus
+
 type PolicyStatus = {
   state: "compliant" | "warning" | "violating" | "not_evaluated" | "unknown"
   findingCount: CountValue
@@ -515,7 +531,7 @@ type PolicyStatus = {
   completeness: DataCompleteness
 }
 
-type ApprovalFilterState = "none" | ApprovalStatus["state"]
+type ApprovalFilterState = InstanceApprovalStatus["state"]
 type OperationFilterPhase = "none" | OperationPhase
 
 type OperationPhase =
@@ -534,17 +550,46 @@ type ProgressSummary =
   | { state: "indeterminate" }
   | { state: "determinate"; percent: number }
 
-type LatestOperationSummary = {
+type LatestOperationSummaryBase = {
   operationId: string
   receiptId: string
   kind: GitOpsOperationKind
-  phase: OperationPhase
+  operationSequence: number
+  statusVersion: string
   requestedAt: Timestamp
-  startedAt: Timestamp | null
-  finishedAt: Timestamp | null
-  progress: ProgressSummary | null
-  reason: StatusReason | null
 }
+
+type LatestOperationSummary = LatestOperationSummaryBase &
+  (
+    | {
+        phase: "pending" | "pending_approval"
+        startedAt: null
+        finishedAt: null
+        progress: ProgressSummary | null
+        reason: StatusReason | null
+      }
+    | {
+        phase: "running"
+        startedAt: Timestamp
+        finishedAt: null
+        progress: ProgressSummary
+        reason: StatusReason | null
+      }
+    | {
+        phase: "succeeded"
+        startedAt: Timestamp | null
+        finishedAt: Timestamp
+        progress: ProgressSummary | null
+        reason: null
+      }
+    | {
+        phase: "failed" | "cancelled" | "unsupported"
+        startedAt: Timestamp | null
+        finishedAt: Timestamp
+        progress: ProgressSummary | null
+        reason: StatusReason
+      }
+  )
 
 type ResourceCountSummary = {
   desired: CountValue
@@ -569,9 +614,9 @@ type ApplicationInstanceSummary = {
   sync: SyncStatus
   health: HealthStatus
   freshness: Freshness
-  approval: ApprovalStatus | null
+  approval: InstanceApprovalStatus
   policy: PolicyStatus
-  diffSummary: DiffSummary | null
+  diffSummary: DiffSummary
   resources: ResourceCountSummary
   currentOperation: LatestOperationSummary | null
   latestOperation: LatestOperationSummary | null
@@ -624,8 +669,18 @@ type ApplicationSummary = {
   aggregateSync: AggregateSyncStatus
   aggregateHealth: AggregateHealthStatus
   aggregateFreshness: AggregateFreshness
+  policyCounts: Readonly<Record<PolicyStatus["state"], number>>
+  diffCounts: Readonly<Record<DiffSummary["state"], number>>
   approvalCounts: Readonly<Record<ApprovalFilterState, number>>
   operationCounts: Readonly<Record<OperationFilterPhase, number>>
+  latestOperation:
+    | {
+        instanceId: string
+        bindingId: string
+        destinationId: string
+        operation: LatestOperationSummary
+      }
+    | null
   completeness: DataCompleteness
 }
 
@@ -642,7 +697,11 @@ type ApplicationDetail = {
 
 Aggregate status는 worst color 하나만 반환하지 않는다. backend가 canonical aggregate level과 reason/count를 함께 반환하고, frontend는 instance count/partial coverage를 표시한다.
 
+Application 목록의 facet은 authorized instance universe를 먼저 제한한 뒤 Application을 group한다. `ApplicationSummary`의 모든 count와 aggregate, repositoryIds, latestOperation은 그 필터 결과 universe에 대해서만 계산한다. 필터에 맞는 instance가 0개인 Application은 반환하지 않는다. 전체 authorized instance 수가 필요하면 filter 없는 별도 query를 사용하며 한 row에 filtered count와 unfiltered count를 혼합하지 않는다.
+
 `sources`는 최소 한 개이며 `primarySource.sourceId`와 같은 항목을 정확히 하나 포함한다. `additionalSourceCount = sources.length - 1`이고 summary의 primarySource는 detail 항목과 동일 revision이다. desired/live revision의 instance-level 권위는 `SyncStatus` 하나이며 detail에 중복 필드를 두지 않는다. lifecycle, sync, health, freshness, policy, approval, operation은 서로 독립이다.
+
+Instance approval의 `none`은 현재 instance에 연결된 approval entity가 없다는 뜻이고, `not_required`는 특정 operation/plan이 정책 평가를 거쳐 승인이 필요 없다고 판정됐다는 뜻이다. Diff summary는 목록 필수 상태이므로 null이 아니며 아직 비교할 수 없으면 `unknown` 또는 `unavailable`과 reason을 반환한다.
 
 ### 4.2 목록 query
 
@@ -651,7 +710,7 @@ type ApplicationListQuery = {
   search: string | null
   clusterUids: readonly string[]
   environmentIds: readonly string[]
-  namespaces: readonly string[]
+  namespaceRefs: readonly NamespaceRef[]
   includeClusterScoped: boolean
   repositoryIds: readonly string[]
   lifecycleStates: readonly LifecycleStatus["state"][]
@@ -825,6 +884,20 @@ type ResourceNodeCategory =
   | "aggregate"
   | "restricted"
 
+type ResourceSyncStatus =
+  | SyncStatus
+  | {
+      state: "not_applicable"
+      desiredRevision: Extract<RevisionValue, { state: "not_applicable" }>
+      liveRevision: Extract<RevisionValue, { state: "not_applicable" }>
+      comparedAt: null
+      reason: null
+    }
+
+type ResourceHealthStatus =
+  | HealthStatus
+  | { level: "not_applicable"; observedAt: null; reason: null }
+
 type RelationEvidenceBase = {
   evidenceId: string
   type:
@@ -890,7 +963,7 @@ type ResourceEdgeClaim = {
   sourceId: string
   authority: RelationEvidence["authority"]
   conditions: ResourceEdgeConditions
-  evidenceIds: readonly string[]
+  evidenceIds: NonEmptyReadonlyArray<string>
   observedAt: Timestamp | null
   freshness: Freshness
 }
@@ -903,14 +976,14 @@ type ResourceNode = {
   desiredRef: ResourceRef | null
   liveRef: ResourceRef | null
   state: ResourceNodeState
-  sync: SyncStatus
-  health: HealthStatus
+  sync: ResourceSyncStatus
+  health: ResourceHealthStatus
   freshness: Freshness
   diffSummary: DiffSummary | null
   expansion:
     | { state: "not_requested"; childCount: CountValue }
     | { state: "available"; childCount: CountValue }
-    | { state: "exhausted"; childCount: { state: "exact"; value: 0; reason: null } }
+    | { state: "exhausted"; childCount: CountValue }
     | { state: "forbidden"; childCount: { state: "forbidden"; value: null; reason: StatusReason } }
   insightCounts: Readonly<Record<GitOpsInsightSeverity, CountValue>>
   completeness: DataCompleteness
@@ -924,8 +997,8 @@ type ResourceEdge = {
   plane: ResourceRelationPlane
   direction: "directed"
   effectiveConditions: ResourceEdgeConditions
-  claims: readonly ResourceEdgeClaim[]
-  evidenceIds: readonly string[]
+  claims: NonEmptyReadonlyArray<ResourceEdgeClaim>
+  evidenceIds: NonEmptyReadonlyArray<string>
   freshness: Freshness
 }
 ```
@@ -943,6 +1016,8 @@ Configured/effective/observed network truth는 각각 다른 `plane`의 edge다.
 - `orphan`: live object의 authoritative desired 또는 owner를 찾을 수 없고 instance 귀속도 확정되지 않았다.
 - `conflict`: 하나의 desired/live에 복수 대응 후보가 있거나 identity evidence가 충돌한다.
 - `unknown`은 자료 부족, `restricted`는 권한 때문에 구조 일부만 공개, `aggregate`는 budget 때문에 접힌 묶음이다.
+
+Resource sync/health의 `not_applicable`은 Cluster, Namespace, 외부 endpoint처럼 해당 질문 자체가 성립하지 않는 node에만 쓴다. 자료 부족인 `unknown`과 바꾸지 않는다. expansion의 `childCount`는 authorized 전체 child 수이며 `exhausted`는 추가 page가 없다는 뜻이지 child 수 0을 뜻하지 않는다.
 
 ### 6.2 Snapshot, expansion, detail
 
@@ -962,16 +1037,57 @@ type GraphStreamStart =
   | { mode: "poll"; pollAfterMs: DurationMs }
   | { mode: "static"; reason: StatusReason }
 
-type GraphClusterCut = {
-  clusterUid: string
-  projectionRevision: string | null
-  inventoryEpoch: string | null
-  access: "full" | "partial" | "restricted" | "unavailable"
-  sourceCuts: readonly { sourceId: string; watermark: string | null; observedAt: Timestamp | null }[]
+type GraphSourceState = {
+  sourceId: string
+  state: "available" | "degraded" | "unavailable" | "forbidden" | "unsupported" | "unknown"
+  watermark: string | null
+  observedAt: Timestamp | null
   completeness: DataCompleteness
   freshness: Freshness
   reason: StatusReason | null
 }
+
+type GraphClusterCut =
+  | {
+      clusterUid: string
+      access: "full"
+      projectionRevision: string
+      inventoryEpoch: string
+      sourceCuts: readonly GraphSourceState[]
+      completeness: Extract<DataCompleteness, { state: "complete" }>
+      freshness: Freshness
+      reason: null
+    }
+  | {
+      clusterUid: string
+      access: "partial"
+      projectionRevision: string
+      inventoryEpoch: string
+      sourceCuts: readonly GraphSourceState[]
+      completeness: Extract<DataCompleteness, { state: "partial" | "unknown" }>
+      freshness: Freshness
+      reason: StatusReason
+    }
+  | {
+      clusterUid: string
+      access: "restricted"
+      projectionRevision: null
+      inventoryEpoch: null
+      sourceCuts: readonly []
+      completeness: Extract<DataCompleteness, { state: "forbidden" }>
+      freshness: Freshness
+      reason: StatusReason
+    }
+  | {
+      clusterUid: string
+      access: "unavailable"
+      projectionRevision: null
+      inventoryEpoch: null
+      sourceCuts: readonly []
+      completeness: Extract<DataCompleteness, { state: "unknown" }>
+      freshness: Freshness
+      reason: StatusReason
+    }
 
 type ResourceGraphSnapshot = {
   snapshotId: string
@@ -1001,14 +1117,23 @@ type GitOpsTreeQuery = {
   maxInitialEdges: number
 }
 
-type ResourceGraphExpansionQuery = {
-  snapshotId: string
-  graphRevision: string
-  parentNodeId: string
-  relationKinds: readonly ResourceEdgeKind[]
-  cursor: string | null
-  limit: number
-}
+type ResourceGraphExpansionQuery =
+  | {
+      mode: "initial_continuation"
+      snapshotId: string
+      graphRevision: string
+      cursor: string
+      limit: number
+    }
+  | {
+      mode: "node_children"
+      snapshotId: string
+      graphRevision: string
+      parentNodeId: string
+      relationKinds: readonly ResourceEdgeKind[]
+      cursor: string | null
+      limit: number
+    }
 
 type ResourceGraphExpansion = {
   snapshotId: string
@@ -1020,11 +1145,13 @@ type ResourceGraphExpansion = {
 
 type ResourceObjectPayload =
   | { state: "available"; object: ResourceObjectView; reason: null }
-  | {
-      state: "not_requested" | "absent" | "forbidden" | "unsupported"
-      object: null
-      reason: StatusReason | null
-    }
+  | { state: "not_requested"; object: null; reason: null }
+  | { state: "absent" | "forbidden" | "unsupported"; object: null; reason: StatusReason }
+
+type ResourceDetailSection<T> =
+  | { state: "not_requested"; data: null; reason: null }
+  | { state: "available"; data: T; reason: null }
+  | { state: "forbidden" | "unsupported" | "unavailable"; data: null; reason: StatusReason }
 
 type ResourceDetailExpansion = {
   includeObjects: boolean
@@ -1033,7 +1160,8 @@ type ResourceDetailExpansion = {
   includeInsights: boolean
   includeTimeline: boolean
   includeMetricTemplates: boolean
-  relationCursor: string | null
+  inboundRelationCursor: string | null
+  outboundRelationCursor: string | null
   diffCursor: string | null
   insightCursor: string | null
   timelineCursor: string | null
@@ -1044,22 +1172,24 @@ type ResourceNodeDetail = {
   snapshotId: string
   graphRevision: string
   node: ResourceNode
-  inbound: CursorPage<ResourceEdge>
-  outbound: CursorPage<ResourceEdge>
-  evidences: readonly RelationEvidence[]
+  relations: ResourceDetailSection<{
+    inbound: CursorPage<ResourceEdge>
+    outbound: CursorPage<ResourceEdge>
+    evidences: readonly RelationEvidence[]
+  }>
   desiredObject: ResourceObjectPayload
   liveObject: ResourceObjectPayload
-  diffs: CursorPage<ResourceDiff>
-  insights: CursorPage<GitOpsInsight>
-  recentTimeline: CursorPage<TimelineEvent>
-  metricQueryTemplates: readonly MetricQueryTemplate[]
+  diffs: ResourceDetailSection<CursorPage<ResourceDiff>>
+  insights: ResourceDetailSection<{ page: CursorPage<GitOpsInsight>; evidences: readonly RelationEvidence[] }>
+  recentTimeline: ResourceDetailSection<CursorPage<TimelineEvent>>
+  metricQueryTemplates: ResourceDetailSection<readonly MetricQueryTemplate[]>
   capabilities: CapabilitySet
   availableNavigation: readonly ("timeline" | "metrics" | "topology" | "gitops")[]
 }
 ```
 
 - 초기 snapshot은 viewport와 node/edge budget에 맞춘 roots + 첫 depth만 반환한다. 전체 graph를 강제 직렬화하지 않는다.
-- expansion cursor는 snapshotId, graphRevision, parent, relationKinds, authorization scope에 bind한다.
+- initial continuation cursor는 snapshotId, graphRevision, root/query scope, authorization에 bind하고 `mode="initial_continuation"`에서만 소비한다. node child cursor는 snapshotId, graphRevision, parent, relationKinds, authorization scope에 bind하며 `mode="node_children"`에서만 소비한다. 두 cursor를 변환하거나 교차 사용하지 않는다.
 - expansion 중 revision이 바뀌면 409/412 또는 typed `stale_cursor`로 현재 snapshot을 보존한 채 재동기화 CTA를 표시한다.
 - aggregate node 선택은 해당 묶음의 정확한 expansion query를 실행한다. frontend가 임의 node/edge를 만들어 채우지 않는다.
 - detail object는 metadata 기본이다. Secret data, ConfigMap content, credential, token, sensitive diff는 redaction 규칙을 강제한다.
@@ -1200,7 +1330,7 @@ type TimelineEvent = {
   severity: TimelineEventSeverity
   occurredAt: Timestamp
   receivedAt: Timestamp
-  ingestSequence: string
+  ingestSequence: OrderedSequence
   late: boolean
   titleKey: string
   summary: string
@@ -1227,7 +1357,8 @@ type TimelineQuery = {
   instanceIds: readonly string[]
   bindingIds: readonly string[]
   clusterUids: readonly string[]
-  namespaces: readonly string[]
+  namespaceRefs: readonly NamespaceRef[]
+  includeClusterScoped: boolean
   resourceEntityIds: readonly string[]
   operationIds: readonly string[]
   correlationIds: readonly string[]
@@ -1244,6 +1375,22 @@ type TimelinePageRequest = {
   limit: number
 }
 
+type TimelineLivePayload =
+  | { type: "event_appended"; event: TimelineEvent }
+  | { type: "event_corrected"; event: TimelineEvent; replacesEventId: string }
+  | { type: "projection_invalidated"; reason: StatusReason }
+  | { type: "heartbeat"; watermark: Timestamp }
+
+type TimelinePollBatch = {
+  queryId: string
+  canonicalQueryHash: string
+  items: readonly TimelineLivePayload[]
+  nextSinceCursor: string
+  caughtUp: boolean
+  pollAfterMs: DurationMs
+  watermark: Timestamp
+}
+
 type TimelineStreamEnvelope = {
   schemaVersion: "timeline-stream/v1"
   dataOrigin: DataOrigin
@@ -1251,11 +1398,7 @@ type TimelineStreamEnvelope = {
   canonicalQueryHash: string
   cursor: ResumeCursor
   emittedAt: Timestamp
-  payload:
-    | { type: "event_appended"; event: TimelineEvent }
-    | { type: "event_corrected"; event: TimelineEvent; replacesEventId: string }
-    | { type: "projection_invalidated"; reason: StatusReason }
-    | { type: "heartbeat"; watermark: Timestamp }
+  payload: TimelineLivePayload
 }
 ```
 
@@ -1269,6 +1412,7 @@ type TimelineStreamEnvelope = {
 - TimelinePage의 total/totalState는 snapshotRevision 시점의 historical page total이며 live append로 증가시키지 않는다. 새 page cut에서만 바뀐다.
 - operation progress와 domain event는 같은 TimelineEvent shape를 쓰되 operation status의 최종 권위는 GitOpsOperationStatus다.
 - stream은 TimelinePage가 반환한 queryId/canonicalQueryHash/liveStart만 사용해 연결한다. client가 queryHash를 재구성하지 않는다. reconnect는 마지막 성공 적용 resumeToken으로 시작하고 token 만료/stale은 새 page+stream atomic cut을 받는다.
+- poll mode는 history page를 재사용하지 않는다. `TimelinePollBatch.nextSinceCursor`를 batch 원자 commit 뒤에만 저장하고 `caughtUp=false`면 같은 poll session을 즉시 이어 받는다. `caughtUp=true`일 때 server `pollAfterMs`를 따른다. poll item은 stream과 같은 `TimelineLivePayload` reducer 경로로 들어간다.
 
 ## 8. Metrics
 
@@ -1467,7 +1611,8 @@ type TopologyScopeBase = {
   applicationIds: readonly string[]
   instanceIds: readonly string[]
   clusterUids: readonly string[]
-  namespaces: readonly string[]
+  namespaceRefs: readonly NamespaceRef[]
+  includeClusterScoped: boolean
   rootEntityIds: readonly string[]
 }
 
@@ -1520,6 +1665,8 @@ type ResourceGraphDelta = {
   removeNodeIds: readonly string[]
   upsertEdges: readonly ResourceEdge[]
   removeEdgeIds: readonly string[]
+  upsertEvidences: readonly RelationEvidence[]
+  removeEvidenceIds: readonly string[]
   overlay: TopologyMetricOverlay | null
 }
 
@@ -1558,6 +1705,8 @@ type ResourceGraphStreamEnvelope = {
 Resume cursor는 query stream 전체에 하나뿐이다. `GraphClusterCut`은 각 cluster의 inventory epoch/source watermark와 skew를 설명하는 provenance이며 독립 stream cursor가 아니다. restricted/unavailable cluster는 projectionRevision/inventoryEpoch가 null일 수 있고 reason/completeness가 그 원인을 설명한다.
 
 Restricted node는 권한 있는 edge가 hidden peer를 참조한다는 사실을 허용된 정책이 명시할 때만 placeholder로 나타난다. 숨은 리소스 이름·namespace·UID·edge count를 추론해서는 안 된다. metric overlay는 graphRevision과 query hash가 맞는 경우에만 적용하고 coverage/freshness를 지속 표시한다.
+
+Delta는 evidence registry까지 snapshot과 같은 상태 공간을 완전히 표현한다. 새 edge/claim/insight가 처음 참조하는 evidenceId는 같은 delta의 `upsertEvidences`에 있어야 하며 기존 registry에도 없는 ID를 참조하면 batch 전체를 거부한다. `removeEvidenceIds`는 적용 후 어떤 node/edge/insight도 참조하지 않는 ID만 제거할 수 있다. node, edge, evidence, overlay 변경은 scratch state에서 검증한 뒤 하나의 graphRevision으로 원자 commit한다.
 
 ## 10. GitOps Operations
 
@@ -1598,6 +1747,14 @@ type CapabilitySubject =
       operationId: string
       statusVersion: string
     }
+  | { type: "history_entry"; target: OperationTarget; historyEntryId: string }
+  | {
+      type: "resource_selection"
+      target: OperationTarget
+      resourceEntityIds: NonEmptyReadonlyArray<string>
+    }
+  | { type: "metric_query"; metricKey: string; mode: "instant" | "range"; scope: MetricScope }
+  | { type: "topology_query"; graphKind: ResourceGraphKind; scope: TopologyScope }
 
 type OperationConfirmation = {
   confirmationToken: string
@@ -1856,22 +2013,38 @@ type GitOpsOperationStatus = {
   [K in GitOpsOperationKind]: OperationStatusFor<K>
 }[GitOpsOperationKind]
 
+type ActiveGitOpsOperationStatus = Extract<GitOpsOperationStatus, { phase: OperationActivePhase }>
+type TerminalGitOpsOperationStatus = Extract<GitOpsOperationStatus, { phase: OperationTerminalPhase }>
+
 type ObservedOperationStatus =
   | { observation: "known"; status: GitOpsOperationStatus }
   | {
       observation: "unknown"
-      lastKnownStatus: GitOpsOperationStatus | null
+      lastKnownStatus: ActiveGitOpsOperationStatus | null
       reason: StatusReason
     }
 
-type OperationStatusCut = {
-  status: ObservedOperationStatus
-  streamStart: OperationStreamStart
-}
+type OperationStatusCut =
+  | {
+      status: { observation: "known"; status: ActiveGitOpsOperationStatus }
+      streamStart: OperationActiveStreamStart
+    }
+  | {
+      status: { observation: "known"; status: TerminalGitOpsOperationStatus }
+      streamStart: Extract<OperationStreamStart, { mode: "terminal" }>
+    }
+  | {
+      status: {
+        observation: "unknown"
+        lastKnownStatus: ActiveGitOpsOperationStatus | null
+        reason: StatusReason
+      }
+      streamStart: OperationActiveStreamStart
+    }
 
 type OperationReceiptLookupResult =
   | { state: "found"; receipt: GitOpsOperationReceipt }
-  | { state: "pending"; lookupToken: string; retryAfterMs: DurationMs }
+  | { state: "pending"; retryAfterMs: DurationMs }
   | { state: "not_found" }
 
 type GitOpsOperationEvent = {
@@ -1887,7 +2060,7 @@ type GitOpsOperationEvent = {
     | { type: "status_changed"; status: GitOpsOperationStatus }
     | { type: "progress_changed"; progress: OperationProgress; steps: readonly OperationStep[] }
     | { type: "approval_changed"; approval: ApprovalStatus }
-    | { type: "completed"; status: GitOpsOperationStatus }
+    | { type: "completed"; status: TerminalGitOpsOperationStatus }
     | { type: "heartbeat" }
 }
 ```
@@ -1904,7 +2077,7 @@ Ordered incremental event의 legal transition:
 | running | succeeded, failed, cancelled |
 | terminal | 없음 |
 
-같은 active phase의 progress update는 lifecycle transition이 아니다. authoritative `OperationStatusCut`은 연결 전 이미 진행된 event를 반영하므로 더 높은 operationSequence에서 어떤 known phase든 최초 설치할 수 있다. 이는 ordered event 전이가 아니라 snapshot reconciliation이다. 같은 sequence+같은 digest는 duplicate, 같은 sequence+다른 digest는 protocol corruption, sequence gap은 새 status cut을 요구한다. 연결 불확실성은 OperationPhase를 unknown으로 바꾸지 않고 `ObservedOperationStatus`가 마지막 known status를 보존한다.
+같은 active phase의 progress update는 lifecycle transition이 아니다. authoritative `OperationStatusCut`은 연결 전 이미 진행된 event를 반영하므로 더 높은 operationSequence에서 어떤 known phase든 최초 설치할 수 있다. 이는 ordered event 전이가 아니라 snapshot reconciliation이다. non-heartbeat state event의 같은 operationSequence+같은 digest는 duplicate, 같은 sequence+다른 digest는 protocol corruption, sequence gap은 새 status cut을 요구한다. heartbeat는 stream cursor만 전진하고 마지막 operationSequence/statusVersion을 반복할 수 있으며 operation reducer에 상태 mutation을 만들지 않는다. 연결 불확실성은 OperationPhase를 unknown으로 바꾸지 않고 `ObservedOperationStatus`가 마지막 known active status를 보존한다. terminal status는 불변이므로 unknown으로 회귀하지 않는다.
 
 ### 10.2 Operation별 UX 계약
 
@@ -2158,7 +2331,7 @@ type ApplicationInstanceListQuery = {
   instanceIds: readonly string[]
   clusterUids: readonly string[]
   environmentIds: readonly string[]
-  namespaces: readonly string[]
+  namespaceRefs: readonly NamespaceRef[]
   includeClusterScoped: boolean
   repositoryIds: readonly string[]
   lifecycleStates: readonly LifecycleStatus["state"][]
@@ -2225,13 +2398,25 @@ type MetricCatalogEntry = {
 type MetricCatalog = {
   revision: string
   entries: CursorPage<MetricCatalogEntry>
-  sources: CursorPage<MetricSourceStatus>
 }
 
 type MetricCatalogQuery = {
   search: string | null
   scopeTypes: readonly MetricScope["type"][]
   areaEligible: boolean | null
+  cursor: string | null
+  limit: number
+}
+
+type MetricSourceCatalog = {
+  revision: string
+  sources: CursorPage<MetricSourceStatus>
+}
+
+type MetricSourceCatalogQuery = {
+  search: string | null
+  metricKeys: readonly string[]
+  states: readonly MetricSourceStatus["state"][]
   cursor: string | null
   limit: number
 }
@@ -2259,9 +2444,12 @@ Scope selector는 cluster → environment → namespace → application instance
 | Resource detail | `resources.get` | snapshotId, graphRevision, nodeId, expansion flags | `ConsumerEnvelope<ResourceNodeDetail>` | node change 시 invalidate, inspector background refresh |
 | Insights | `gitops.insights.list` | `InsightQuery` | `ConsumerEnvelope<GitOpsInsightPage>` | timeline/operation event 후 targeted invalidate |
 | History | `gitops.history.list` | `RevisionHistoryQuery` | `ConsumerEnvelope<CursorPage<RevisionHistoryEntry>>` | terminal operation 후 invalidate |
+| Timeline event type catalog | `timeline.event-types.get` | workspace/authz revision | `ConsumerEnvelope<TimelineEventTypeCatalog>` | catalog revision 변경 시 invalidate |
 | Timeline history | `timeline.list` | `TimelinePageRequest` | `ConsumerEnvelope<TimelinePage>` | page의 queryId/hash/liveStart로 atomic cutover |
-| Timeline live | `timeline.stream` | queryId + canonicalQueryHash + full `ResumeCursor` | `TimelineStreamEnvelope` | resume stream; poll mode는 sinceCursor 사용 |
+| Timeline poll | `timeline.poll` | queryId + canonicalQueryHash + sinceCursor | `ConsumerEnvelope<TimelinePollBatch>` | poll mode 전용; history page와 혼합 금지 |
+| Timeline live | `timeline.stream` | queryId + canonicalQueryHash + full `ResumeCursor` | `TimelineStreamEnvelope` | stream mode 전용 resume |
 | Metric catalog | `metrics.catalog` | `MetricCatalogQuery` | `ConsumerEnvelope<MetricCatalog>` | source/capability revision에 따라 refresh |
+| Metric source catalog | `metrics.sources.list` | `MetricSourceCatalogQuery` | `ConsumerEnvelope<MetricSourceCatalog>` | metric/source revision에 따라 독립 pagination |
 | Metric query | `metrics.query` | `MetricQuery` | `ConsumerEnvelope<MetricResult>` | v1 synchronous/cancellable; instant interval/range revalidate |
 | Topology snapshot | `topology.snapshot` | `TopologyQuery` | `ConsumerEnvelope<ResourceGraphSnapshot>` | `streamStart` mode에 따라 stream/poll/static |
 | Topology expansion | `topology.expand` | graph expansion query | graph expansion DTO | current revision에만 merge |
@@ -2281,6 +2469,7 @@ Scope selector는 cluster → environment → namespace → application instance
 - 모든 list/history/diff/insight query는 opaque cursor를 쓴다. offset pagination은 realtime 변경에서 중복/누락을 만들므로 canonical 계약이 아니다.
 - cursor는 normalized filter, sort, authorization scope, projection snapshot revision에 bind한다.
 - 동일 facet 안 복수 값은 OR, 서로 다른 facet은 AND다. backend가 다른 의미를 쓰면 response metadata로 명시하는 것이 아니라 OpenAPI 계약을 수정한다.
+- namespace filter는 반드시 `NamespaceRef(clusterUid, namespace)`로 전달한다. `clusterUids=[]`는 cluster facet 제약 없음, `namespaceRefs=[]`는 namespace facet 제약 없음이다. namespaceRefs가 non-empty이면 exact pair만 포함하고 각 ref의 cluster는 non-empty clusterUids가 주어졌을 때 그 집합 안에 있어야 한다. cluster-scoped 항목 포함 여부는 각 query의 `includeClusterScoped`가 유일한 권위다.
 - sort는 반드시 stable ID tie-break를 포함한다. client가 page를 받은 뒤 전역 재정렬하지 않는다.
 - `total`은 exact/estimated/unknown/forbidden을 구분한다. unknown을 0으로 렌더링하지 않는다.
 - cursor가 만료되면 기존 page와 scroll anchor를 유지하고 first page 재조회 후 stable ID로 anchor를 복원한다.
@@ -2412,13 +2601,15 @@ interface GitOpsPort {
 }
 
 interface TimelinePort {
+  getEventTypeCatalog(context: RequestContext): Promise<ConsumerEnvelope<TimelineEventTypeCatalog>>
   list(request: TimelinePageRequest, context: RequestContext): Promise<ConsumerEnvelope<TimelinePage>>
-  poll(request: TimelinePollRequest, context: RequestContext): Promise<ConsumerEnvelope<TimelinePage>>
+  poll(request: TimelinePollRequest, context: RequestContext): Promise<ConsumerEnvelope<TimelinePollBatch>>
   stream(request: TimelineStreamRequest, context: RequestContext): AsyncIterable<TimelineStreamEnvelope>
 }
 
 interface MetricsPort {
   getCatalog(query: MetricCatalogQuery, context: RequestContext): Promise<ConsumerEnvelope<MetricCatalog>>
+  getSources(query: MetricSourceCatalogQuery, context: RequestContext): Promise<ConsumerEnvelope<MetricSourceCatalog>>
   query(query: MetricQuery, context: RequestContext): Promise<ConsumerEnvelope<MetricResult>>
 }
 

@@ -1,6 +1,6 @@
 ---
 title: Topology Visual and Motion Token Contract
-status: planned-contract
+status: authoritative-contract
 owner: frontend-platform
 version: topology-visual-motion/v1
 last_verified: 2026-07-11
@@ -10,7 +10,7 @@ last_verified: 2026-07-11
 
 ## 0. 권한과 literal 규칙
 
-현재 repo의 실제 코드와 통과한 테스트가 source of truth다. 이 문서는 topology visual/motion token 구현 예정 계약이며, 아래 token과 policy가 현 코드에 없으면 구현 완료가 아니라 후속 작업 기준으로만 읽는다.
+이 문서는 topology visual/motion의 구현 예정 numeric contract다. 현재 repo의 실제 코드와 통과한 테스트가 source of truth이며, 아래 token과 policy가 현 코드에 없거나 값이 다르면 구현 완료가 아니라 후속 작업 기준으로만 읽는다.
 
 모든 수치와 시각 의미는 `TopologyVisualMotionPolicy/v1` 한 곳에서 소유한다. React component, renderer branch, CSS selector에 값·색상·duration literal을 중복하지 않는다.
 

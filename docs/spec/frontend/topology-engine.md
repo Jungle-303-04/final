@@ -9,7 +9,7 @@ last_verified: 2026-07-11
 
 ## 0. 문서의 권한과 목적
 
-이 문서는 Kubernetes 시각화 제품의 frontend 의미·상태·상호작용·데이터 소비를 고정하는 normative design contract다. 제품 기획 소개가 아니며 backend DTO를 복제하는 문서도 아니다. 현재 코드에 package, route, schema, renderer, plugin이 없으면 구현 gap이지만, 그 부재가 이 사용자 의미를 축소하지 않는다. 계약 변경은 frontend ADR, schema major/minor 판정, migration, test traceability 갱신 없이 허용하지 않는다. 실제 배포 완료는 승인된 OpenAPI, generated runtime schema, 구현 코드, executable test가 모두 통과한 경우에만 주장한다.
+이 문서는 Kubernetes 시각화 제품의 frontend 의미·상태·상호작용·데이터 소비를 정리한 설계 계약 초안이다. 제품 기획 소개가 아니며 backend DTO를 복제하는 문서도 아니다. 현재 repo의 실제 코드와 통과한 테스트가 source of truth이고, 현재 코드에 package, route, schema, renderer, plugin이 없으면 구현 완료가 아니라 후속 작업 기준으로만 읽는다. 계약 변경은 frontend ADR, schema major/minor 판정, migration, test traceability 갱신 없이 허용하지 않는다. 실제 배포 완료는 승인된 OpenAPI, generated runtime schema, 구현 코드, executable test가 모두 통과한 경우에만 주장한다.
 
 동일 권한의 부속 계약:
 
@@ -484,7 +484,7 @@ references/ui-layer-lab/src/product/features/topology
 
 이 mapping은 `AGENTS.md`의 `app → pages → features → shared`, `feature → product/api`, `product/api → shared` 방향을 유지한다. `@product/topology-*` physical package 추출은 별도 ADR에서 workspace tool, public API, versioning, license, build를 승인한 뒤에만 수행한다. Headless engine은 product import가 없도록 작성해 추출 가능성을 유지한다.
 
-기존 backend route/Pydantic contract는 현재 구현 gap을 확인하는 근거이지 제품 consumer 의미의 authority가 아니다. 이 문서의 신규 topology contract가 이미 구현됐다고 주장하지 않는다. 구현 순서는 frontend consumer contract 확정 → backend ADR/OpenAPI → frontend acceptance → generated schema → live adapter이며, `AGENTS.md`의 source-of-truth 절도 이 frontend-led gate와 generated cross-language contract를 반영해야 한다.
+기존 backend route/Pydantic contract는 현재 구현 사실을 확인하는 근거다. 이 문서의 신규 topology contract가 이미 구현됐다고 주장하지 않는다. 구현 순서는 frontend consumer contract 검토 → backend ADR/OpenAPI → frontend acceptance → generated schema → live adapter이며, source-of-truth 경계를 바꾸는 경우에는 같은 변경에서 실제 코드와 테스트 기준을 함께 갱신한다.
 
 ### 5.1 Dependency rules
 
