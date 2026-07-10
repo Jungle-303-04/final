@@ -211,6 +211,8 @@ def test_release_flow_smoke_workflow_uploads_artifacts_before_failing_gate() -> 
     assert "--ci-artifacts-dir artifacts/release-flow" in smoke_step["run"]
 
     assert "Set api_base_url or RELEASE_FLOW_API_BASE_URL" in validate_step["run"]
+    assert "release-flow production smoke requires an https API base URL" in validate_step["run"]
+    assert "release-flow production smoke must not target localhost or example hosts" in validate_step["run"]
     assert "Set RELEASE_FLOW_AUTH_EMAIL" in validate_step["run"]
     assert "Set RELEASE_FLOW_AUTH_PASSWORD" in validate_step["run"]
     assert "production_preflight_run_limit must be an integer between 1 and 500" in validate_step["run"]

@@ -247,6 +247,47 @@ def test_diff_marks_non_sandbox_namespace_unsafe() -> None:
     assert outs[0].diff.risk == Sandbox.UNSAFE_NAMESPACE_RISK_TAG
 
 
+def test_diff_marks_production_environment_review_required_even_in_sandbox_namespace() -> None:
+    diff = load_service("gitops/diff-worker")
+    analyze = load_service("gitops/diff-analyze-worker")
+    payload = ManifestRenderedBody(
+        rendered_manifest=RenderedManifest(
+            api_version="apps/v1",
+            kind="Deployment",
+            metadata=RenderedMetadata(name="checkout-api", namespace="sandbox"),
+            spec=RenderedSpec(replicas=2, image="img:new"),
+            manifest={
+                "apiVersion": "apps/v1",
+                "kind": "Deployment",
+                "metadata": {"name": "checkout-api", "namespace": "sandbox"},
+                "spec": {
+                    "replicas": 2,
+                    "template": {
+                        "spec": {
+                            "containers": [
+                                {
+                                    "name": "checkout-api",
+                                    "image": "img:new",
+                                }
+                            ]
+                        }
+                    },
+                },
+            },
+        ),
+        environment="production",
+    )
+
+    outs = run_handler(diff.on_manifest_rendered, payload)
+    analyzed = run_handler(analyze.on_desired_diff, outs[0])
+
+    assert outs[0].diff.risk == "review-required"
+    assert outs[0].diff.has_changes is True
+    assert outs[1].metadata["change_context"]["risk"]["approval_required"] is True
+    assert subjects_of(analyzed) == ["diff.analyzed"]
+    assert analyzed[0].safe is False
+
+
 def test_diff_uses_actual_resource_image_reader_when_available() -> None:
     diff = load_service("gitops/diff-worker")
     payload = ManifestRenderedBody(
