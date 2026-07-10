@@ -162,7 +162,7 @@ DB 초기화는 로그인/워크스페이스/권한 이력과 두 cluster regist
 
 ### Catalog 실제 설치 runner
 
-- `POST /catalog/items/{item_id}/installs`는 필수 `Idempotency-Key`와 `DEPLOY_RUN` 권한을 검사하고, online `command_receiver` target Agent가 있을 때 실제 high-priority `agent_commands` 행을 만든 뒤 HTTP 202와 `command_id`를 반환한다.
+- `POST /catalog/items/{item_id}/installs`는 필수 `Idempotency-Key`와 `DEPLOY_RUN` 권한을 검사하고, online target Agent가 `command_receiver`와 `catalog_helm_install` capability를 모두 광고할 때만 실제 high-priority `agent_commands` 행을 만든 뒤 HTTP 202와 `command_id`를 반환한다.
 - 지원 범위는 코드에 동봉된 PostgreSQL `18.7.13`/Redis `23.1.1` OCI digest recipe와 sandbox namespace뿐이다. DB recipe, 사용자 chart URL/shell/manifest, template 항목은 실행하지 않는다.
 - Agent 이미지는 checksum 검증된 Helm `v3.21.2`를 포함한다. runner는 private values 파일, 명시 argv, `shell=False`, timeout, credential env allowlist를 사용하며 subprocess 출력/values를 로그나 command result에 남기지 않는다.
 - management role은 gateway registration/policy guard와 Agent executor/handler에서 차단되고 management manifest에는 catalog write Role이 없다. target에는 현재 두 chart가 렌더하는 namespaced 종류만 별도 Role로 추가했다.

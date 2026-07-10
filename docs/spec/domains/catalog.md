@@ -1,5 +1,5 @@
 ---
-source_commit: d4b003525
+source_commit: 30465d0c4
 status: synced
 ---
 
@@ -133,7 +133,7 @@ metadata.tags: postgresql `["database","sql","stateful"]`, redis `["cache","key-
 1. `catalog_item_or_404(db, item_id)` — item_id 또는 slug 매칭(저장 → 부트스트랩 순).
 2. `catalog_version_or_default(item, payload.version)` — 지정 버전 또는 default_version.
 3. `DEPLOY_RUN` 권한 확인 후 registration/policy 어느 쪽이든 management role이면 HTTP 400 `management_readonly`.
-4. 최근 heartbeat가 online인 `command_receiver` Agent가 없으면 HTTP 400 `cluster_not_connected` 또는 `catalog_install_runner_unavailable`.
+4. 최근 heartbeat가 online이고 `command_receiver` + `catalog_helm_install` capability를 광고하는 Agent가 없으면 HTTP 400 `cluster_not_connected` 또는 `catalog_install_runner_unavailable`.
 5. 설치 범위는 sandbox와 코드 동봉 Helm recipe 2종뿐이다. 사용자 shell/manifest/chart URL 및 template recipe는 거부한다.
 6. 이름과 values를 검증하고 `workspace_id + requested_by + Idempotency-Key`로 결정적 command/correlation ID를 만든다.
 7. 기존 `queue_agent_command`의 PK conflict 멱등성을 사용한다. 같은 key+payload는 같은 command를 반환하고, 다른 payload 재사용은 HTTP 409 `idempotency_key_reused`.
