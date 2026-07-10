@@ -25,12 +25,13 @@ docs/api
 인증서를 자동으로 선택하지 않으므로 컬렉션마다 한 번 등록해야 한다.
 
 1. Bruno에서 `docs/api` 컬렉션의 Settings를 연다.
-2. Client Certificates에서 새 인증서를 추가한다.
-3. Domain은 `dev-k8s.woonyong.org`, Type은 `Certificate` 또는 `CRT + KEY`를 선택한다.
-4. 전달받은 `팀원N-dev-console.pem`과 `팀원N-dev-console.key`를 각각 지정한다. 암호는 비워 둔다.
+2. 전달받은 `팀원N-dev-console.pem`과 `팀원N-dev-console.key`를 `docs/api/.certs/`에
+   각각 `dev-console.pem`, `dev-console.key`라는 이름으로 둔다.
+3. 컬렉션을 다시 열면 `bruno.json`의 Client Certificates 설정이 두 파일을 사용한다.
+4. 설정 화면에서 Domain `dev-k8s.woonyong.org`, Type `Certificate`가 활성화됐는지 확인한다.
 5. `00-health-auth/07-session`을 보내 `workspace_id=default`, `roles=[service_admin]`을 확인한다.
 
-인증서와 암호는 Bruno 로컬 설정에만 저장하며 repository에 복사하거나 커밋하지 않는다.
+`docs/api/.certs/`는 gitignore 대상이며 인증서와 개인 키를 절대 커밋하지 않는다.
 `.p12`와 설치 암호는 Chrome 설치용이고, `.pem`과 `.key`는 Bruno용이다.
 현재 5개 인증서는 팀 공용 개발 주체 하나로 매핑되므로 감사 로그의 actor는
 `TRUSTED_PROXY_AUTH_USER_ID`로 동일하게 기록된다. Agent API의 `x-agent-token`, RCA 테스트의
@@ -75,9 +76,19 @@ cluster 실행은 허용하지 않는다.
 `aws-test` Environment는 `auto_login: false`이며, 보호 API는 인증서가 검증된 개발 주체로
 실행된다. Agent 요청은 등록 응답에서 1회 받은 실제 `agent_token`을 추가로 사용한다.
 
+컬렉션 전체 Runner의 기본값은 안전 모드다. `auth_flow_verification: false`이면 placeholder 계정을
+사용하는 가입·재전송·로그인·승인·검증·로그아웃 요청을 건너뛴다.
+`rca_test_verification: false`이면 실제 target에 장애를 만드는 `16 RCA 실제 E2E 워크플로우`를
+전부 건너뛴다. 해당 흐름을 명시적으로 검증할 때만 필요한 Secret을 로컬에 넣고 플래그를
+`true`로 바꾼다. 기본 Runner에서 `Skipped`는 안전 경계가 동작한 정상 결과다.
+열린 dead letter가 없으면 재처리 요청도 `Skipped`로 남으며, metrics token이 배포에 없으면
+metrics 요청의 `503`은 명시적인 미설정 상태로 통과한다.
+
 기본 Runner는 실제 `cluster-1` 대신 실행마다 `bruno-<시각>-<pid>` 형식의 격리
 cluster를 등록해 성공 경로를 검증하고 종료 trap에서 해제한다. CLI Runner는 Bruno의
 client certificate config가 필요하며 기본 경로는 `~/.kubeheal/bruno-client-cert-config.json`이다.
+Bruno 앱 전체 실행은 `cluster_purge: false`로 빠른 soft unregister를 사용하고, CLI Runner만
+고유한 test fixture에 `cluster_purge=true`를 주입해 물리 삭제한다.
 다른 경로는 `BRUNO_CLIENT_CERT_CONFIG`로 지정한다. 기존 DLQ replay, 임의 목록 항목 삭제, 실제 cluster
 scale/restart, 외부 webhook 전송은 기본 Runner에서 제외하고 해당 요청을 명시적으로
 선택했을 때만 실행한다.

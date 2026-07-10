@@ -374,3 +374,17 @@ DB 자격증명은 `postgresql-secret`에서 프로세스 변수로만 읽고 �
   create/patch/delete/update가 모두 `no`, pod/node get/list는 `yes`다.
 - 검증: 집중 회귀 167 passed, 원격 Evidence 통합 후 전체 1504 passed/3 skipped, Ruff 전체 통과,
   import-linter 2 kept/0 broken, manifest 68/20.
+
+## 14. 2026-07-11 Bruno mTLS 회귀 복구
+
+- 전체 403의 원인은 API가 아니라 `dev-k8s.woonyong.org` 앞단 Cloudflare mTLS에서 Bruno가
+  client certificate를 제시하지 않은 것이었다. 컬렉션은 gitignored `docs/api/.certs/`의
+  `dev-console.pem`/`dev-console.key`를 사용하며 실제 인증서와 개인 키는 저장소에 없다.
+- Bruno 3.4.2 안전 샌드박스에서 지원하지 않는 Node `crypto` 대신 내장 `crypto-js`로 GitHub
+  webhook HMAC을 계산한다. Secret 미설정 시 기존 401 계약을 유지한다.
+- 기본 전체 실행은 실제 가입/로그인/승인/로그아웃과 RCA 장애 주입·복구 선택을 요청 단위로
+  건너뛴다. 열린 DLQ가 없으면 replay도 건너뛰고, metrics token 미설정 503은 명시적 운영 상태다.
+- 이메일 검증은 가입 placeholder와 분리한 유효 형식 입력을 사용한다. Bruno 앱은 test cluster를
+  soft unregister하고, CLI 격리 Runner만 고유 ID에 `cluster_purge=true`를 주입한다.
+- 라이브 검증: `healthz`/`readyz`/OpenAPI/session 200, 공식 Runner 67/67 requests와 120/120 tests,
+  집중 pytest 33 passed, docs index 9 passed, Ruff clean. 종료 후 `bruno-*` cluster 잔재 0건.

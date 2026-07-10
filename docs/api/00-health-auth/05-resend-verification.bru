@@ -24,6 +24,15 @@ body:json {
   }
 }
 
+script:pre-request {
+  const enabled = String(
+    bru.getEnvVar("auth_flow_verification") || bru.getVar("auth_flow_verification") || "false"
+  ).trim().toLowerCase() === "true";
+  if (!enabled) {
+    bru.runner.skipRequest();
+  }
+}
+
 tests {
   test("response is explicit", function () {
     expect([200, 400, 401, 404, 422, 429]).to.include(res.status);

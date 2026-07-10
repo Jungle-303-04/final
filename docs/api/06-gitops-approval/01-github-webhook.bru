@@ -22,7 +22,6 @@ headers {
 script:pre-request {
   // body 조립과 HMAC 서명을 한 곳에서 처리 — 수동 signature 계산 불필요.
   // github_webhook_secret 이 비어 있으면 기존 github_webhook_signature 값 그대로 사용.
-  const crypto = require("crypto");
   const payload = {
     "commit_sha": "bruno-commit-001",
     "image": bru.getEnvVar("service_image") || "183548421506.dkr.ecr.ap-northeast-2.amazonaws.com/kubernetes-ops-service:latest",
@@ -52,7 +51,9 @@ script:pre-request {
   bru.setVar("github_webhook_body", body);
   const secret = bru.getEnvVar("github_webhook_secret") || "";
   if (secret && !secret.startsWith("replace-with")) {
-    const signature = crypto.createHmac("sha256", secret).update(body).digest("hex");
+    // Bruno 안전 샌드박스에 포함된 crypto-js만 사용한다.
+    const CryptoJS = require("crypto-js");
+    const signature = CryptoJS.HmacSHA256(body, secret).toString(CryptoJS.enc.Hex);
     bru.setVar("github_webhook_signature", "sha256=" + signature);
   }
 }

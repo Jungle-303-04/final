@@ -232,6 +232,71 @@ def test_bruno_collection_auto_login_is_request_scoped() -> None:
     assert '"/auth/logout"' in collection
 
 
+def test_bruno_default_runner_skips_explicit_auth_and_rca_mutations() -> None:
+    collection = (API_DIR / "collection.bru").read_text(encoding="utf-8")
+    environment = (API_DIR / "environments" / "aws-test.bru").read_text(encoding="utf-8")
+    rca_folder = (API_DIR / "16-rca-debug" / "folder.bru").read_text(encoding="utf-8")
+    rca_selection = (API_DIR / "16-rca-debug" / "07-select-recovery-action.bru").read_text(
+        encoding="utf-8"
+    )
+
+    assert "auth_flow_verification: false" in collection
+    assert "auth_flow_verification: false" in environment
+    assert 'bru.getEnvVar("rca_test_verification")' in rca_folder
+    assert "bru.runner.skipRequest()" in rca_folder
+    assert 'bru.getEnvVar("rca_test_verification")' in rca_selection
+    assert "if (!enabled)" in rca_selection
+    for request_name in (
+        "04-signup.bru",
+        "05-resend-verification.bru",
+        "06-login.bru",
+        "08-approve-user.bru",
+        "09-verify-email.bru",
+        "10-logout.bru",
+    ):
+        request = (API_DIR / "00-health-auth" / request_name).read_text(encoding="utf-8")
+        assert 'bru.getEnvVar("auth_flow_verification")' in request
+        assert "bru.runner.skipRequest()" in request
+
+
+def test_bruno_default_runner_handles_optional_operational_inputs() -> None:
+    collection = (API_DIR / "collection.bru").read_text(encoding="utf-8")
+    environment = (API_DIR / "environments" / "aws-test.bru").read_text(encoding="utf-8")
+    email_check = (API_DIR / "15-wizard-validation" / "01-check-email.bru").read_text(
+        encoding="utf-8"
+    )
+    replay = (API_DIR / "08-ops-dlq" / "02-replay-dead-letter.bru").read_text(
+        encoding="utf-8"
+    )
+    metrics = (API_DIR / "08-ops-dlq" / "03-metrics.bru").read_text(encoding="utf-8")
+
+    assert "check_email: bruno-validation@example.invalid" in collection
+    assert "check_email: bruno-validation@example.invalid" in environment
+    assert '"email": "{{check_email}}"' in email_check
+    assert '!/^\\d+$/.test(deadLetterId)' in replay
+    assert "bru.runner.skipRequest()" in replay
+    assert "[200, 401, 503]" in metrics
+
+
+def test_bruno_client_certificate_uses_ignored_portable_paths() -> None:
+    config = (API_DIR / "bruno.json").read_text(encoding="utf-8")
+    gitignore = (ROOT_DIR / ".gitignore").read_text(encoding="utf-8")
+
+    assert '"certFilePath": ".certs/dev-console.pem"' in config
+    assert '"keyFilePath": ".certs/dev-console.key"' in config
+    assert "docs/api/.certs/" in gitignore
+
+
+def test_github_webhook_signature_uses_bruno_safe_crypto_bundle() -> None:
+    request = (API_DIR / "06-gitops-approval" / "01-github-webhook.bru").read_text(
+        encoding="utf-8"
+    )
+
+    assert 'require("crypto")' not in request
+    assert 'require("crypto-js")' in request
+    assert "CryptoJS.HmacSHA256(body, secret)" in request
+
+
 def test_bruno_collection_never_strips_authentication_credentials() -> None:
     collection = (API_DIR / "collection.bru").read_text(encoding="utf-8")
 
@@ -261,6 +326,7 @@ def test_bruno_cli_runner_uses_isolated_profile_and_cleans_up_last() -> None:
     assert "--dns-result-order=ipv4first" in runner
     assert "--cache-ssl-session" in runner
     assert '--env-var "cluster_id=${RUN_ID}"' in runner
+    assert '--env-var "cluster_purge=true"' in runner
     assert '--env-var "signup_email=${RUN_ID}@example.com"' in runner
     assert runner.index("02-target-admin/01-register-target-dry-run.bru") < runner.index(
         "03-agent-runtime"
@@ -270,7 +336,7 @@ def test_bruno_cli_runner_uses_isolated_profile_and_cleans_up_last() -> None:
     assert runner.rstrip().endswith("cleanup")
     assert "16-rca-debug" not in runner
     assert '"environment": "test"' in register_request
-    assert "purge=true" in cleanup_request
+    assert "purge={{cluster_purge}}" in cleanup_request
 
 
 def test_rca_e2e_workflow_is_thin_separate_and_explicitly_selected() -> None:

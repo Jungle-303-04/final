@@ -2,6 +2,7 @@
 .env*
 .env.local-test
 *.local.bru
+docs/api/.certs/
 .data/
 .idea/
 .vscode/
