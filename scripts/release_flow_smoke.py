@@ -640,6 +640,17 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
         ),
     )
     parser.add_argument(
+        "--production-preflight-plan-id",
+        default=os.getenv("PRODUCTION_PREFLIGHT_PLAN_ID", ""),
+        help="apply one release plan scope to every production preflight check",
+    )
+    parser.add_argument(
+        "--production-preflight-run-limit",
+        type=int,
+        default=int(os.getenv("PRODUCTION_PREFLIGHT_RUN_LIMIT", "20")),
+        help="apply one release run list limit to every production preflight check",
+    )
+    parser.add_argument(
         "--alert-preflight",
         action="store_true",
         help="send a validation alert through enabled alert channels",
@@ -751,6 +762,16 @@ def apply_production_preflight_flags(args: argparse.Namespace) -> None:
     args.verification_preflight = True
     args.policy_override_preflight = True
     args.change_freeze_preflight = True
+    if args.production_preflight_plan_id:
+        args.run_health_plan_id = args.production_preflight_plan_id
+        args.verification_plan_id = args.production_preflight_plan_id
+        args.policy_override_plan_id = args.production_preflight_plan_id
+        args.change_freeze_plan_id = args.production_preflight_plan_id
+    if args.production_preflight_run_limit:
+        args.run_health_run_limit = args.production_preflight_run_limit
+        args.verification_run_limit = args.production_preflight_run_limit
+        args.policy_override_run_limit = args.production_preflight_run_limit
+        args.change_freeze_run_limit = args.production_preflight_run_limit
 
 
 def main(argv: list[str]) -> int:
