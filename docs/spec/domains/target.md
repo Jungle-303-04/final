@@ -82,13 +82,8 @@ docstring만 있는 패키지 마커("target cluster 등록 도메인"). public 
 | `serialize_evidence_job(row: JsonObject) -> JsonObject` | `leased_until`을 ISO 문자열/None으로 변환 |
 | `serialize_cluster_agent_status(row: JsonObject) -> JsonObject` | `last_seen_at`/`created_at`/`updated_at`을 ISO 문자열/None으로 변환 |
 | `get_evidence_window(evidence_key: str) -> JsonObject \| None` | `evidence_windows`에서 `event_id`/`correlation_id`/`updated_at` 조회 |
-| `record_evidence_window(evidence_key: str, workspace_id: str, cluster_id: str, source_id: str, window_start: str, agent_id: str \| None, event_id: str, correlation_id: str, payload: JsonObject) -> JsonObject` | `ON CONFLICT DO NOTHING` insert. 신규면 `{"duplicate": False, event_id, correlation_id}`, 기존 행 있으면 `{"duplicate": True, <기존 event_id/correlation_id>}` |
 | `record_evidence_event_once(*, evidence_key: str, workspace_id: str, cluster_id: str, source_id: str, window_start: str, agent_id: str \| None, event_envelope: EventEnvelope, payload: JsonObject) -> JsonObject` | **한 트랜잭션**에서 evidence window insert(중복이면 기존 event_id 반환하고 이벤트 미발행) + `events`/`outbox` 테이블에 envelope 스테이징(`stage_event_envelope`). 윈도우당 이벤트 정확히 1회 보장 |
-| `stage_event_once(event_envelope: EventEnvelope) -> JsonObject` | envelope만 `events`+`outbox`에 idempotent 스테이징. `{"event_id", "correlation_id"}` 반환 |
 | `stage_event_envelope(conn: Any, event_table: Any, outbox_table: Any, event_envelope: EventEnvelope) -> None` | 주어진 커넥션 위에서 `events`/`outbox` 두 테이블에 `ON CONFLICT (event_id) DO NOTHING` insert |
-| `claim_evidence_window(evidence_key: str, workspace_id: str, cluster_id: str, source_id: str, window_start: str, agent_id: str \| None, payload: JsonObject) -> JsonObject` | `event_id=correlation_id="pending:<uuid4>"`로 윈도우 선점 시도. 성공 `{"claimed": True, "duplicate": False, ...}`, 이미 있으면 `{"claimed": False, "duplicate": True, <기존 값>}` |
-| `complete_evidence_window(evidence_key: str, event_id: str, correlation_id: str, payload: JsonObject) -> JsonObject` | pending 윈도우를 실제 event_id/correlation_id/payload로 UPDATE |
-| `release_pending_evidence_window(evidence_key: str) -> None` | `event_id`가 `pending:` prefix인 행 삭제(선점 해제) |
 | `release_stale_pending_evidence_window(evidence_key: str, stale_after_seconds: int = DEFAULT_PENDING_EVIDENCE_EVENT_TTL_SECONDS) -> bool` | pending 행 중 `updated_at`이 TTL보다 오래된 것만 삭제. 삭제됐으면 `True` |
 
 ### 라우터 — `src/domains/target/router.py`
@@ -516,8 +511,8 @@ desired state 자체의 상태는 `TargetDesiredStateStatus.ACTIVE`(`"active"`) 
 
 | 상태 | event_id | 전이 |
 |---|---|---|
-| (없음) | — | `claim_evidence_window`/`record_evidence_event_once`/`record_evidence_window` insert |
-| pending | `pending:<uuid>` | `complete_evidence_window`로 확정, 또는 `release_pending_evidence_window`/`release_stale_pending_evidence_window`(TTL 경과)로 삭제 |
+| (없음) | — | `record_evidence_event_once`가 window+event+outbox를 한 트랜잭션으로 확정 |
+| pending(레거시) | `pending:<uuid>` | 신규 생성 경로 없음. TTL 경과 시 `release_stale_pending_evidence_window`로만 삭제 |
 | 확정 | 실제 event_id | 종결 — 이후 요청은 항상 기존 event_id 반환(duplicate) |
 
 ### 4. agent 정책 배포
