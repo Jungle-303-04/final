@@ -346,11 +346,13 @@ def check_evidence_verifier_contract() -> list[ReadinessCheck]:
         ReadinessCheck(
             "script.evidence_verifier.required_artifacts",
             "release-flow-readiness.json" in source
+            and "release-flow-github-environment.json" in source
             and "release-flow-smoke.json" in source
             and "release-flow-deploy.json" in source
             and "runtime.github_access_preflight" in source
+            and "secret.RELEASE_FLOW_API_BASE_URL" in source
             and "release-plans.start.production" in source,
-            "downloaded readiness, smoke, and deploy artifacts are verified before completion",
+            "downloaded readiness, environment, smoke, and deploy artifacts are verified before completion",
         ),
         ReadinessCheck(
             "script.evidence_verifier.github_artifacts",
