@@ -546,6 +546,7 @@ def validate_signoff(
     source: str,
     *,
     required: bool,
+    github_branch: str,
     github_sha: str,
     readiness_source: str,
     deploy_source: str,
@@ -586,21 +587,30 @@ def validate_signoff(
             else "signoff report commit SHA differs from requested commit SHA",
         ),
         EvidenceCheck(
+            "signoff.github_branch",
+            not github_branch or str(payload.get("github_branch") or "") == github_branch,
+            "signoff report matches requested GitHub branch"
+            if not github_branch or str(payload.get("github_branch") or "") == github_branch
+            else "signoff report GitHub branch differs from requested branch",
+        ),
+        EvidenceCheck(
             "signoff.readiness_run_id",
-            bool(readiness_run_id) and readiness_run_id in readiness_source,
+            source_matches_run_id(readiness_source, readiness_run_id),
             "signoff report references the verified readiness artifact run"
-            if readiness_run_id and readiness_run_id in readiness_source
+            if source_matches_run_id(readiness_source, readiness_run_id)
             else "signoff report readiness run id does not match verified artifact",
         ),
         EvidenceCheck(
             "signoff.deploy_run_id",
             (deploy is None and not required)
-            or (bool(deploy_run_id) and deploy_run_id in deploy_source),
+            or source_matches_run_id(deploy_source, deploy_run_id),
             "signoff report references the verified deploy artifact run"
-            if deploy_run_id and deploy_run_id in deploy_source
+            if source_matches_run_id(deploy_source, deploy_run_id)
             else "signoff report deploy run id does not match verified artifact",
         ),
     ]
+    checks.extend(validate_signoff_run_summary("signoff.readiness_run", readiness_run, github_sha))
+    checks.extend(validate_signoff_run_summary("signoff.deploy_run", deploy_run, github_sha))
     if deploy is not None:
         plan_id = str(deploy.get("plan_id") or "")
         checks.append(
@@ -614,6 +624,66 @@ def validate_signoff(
             )
         )
     return checks
+
+
+def source_matches_run_id(source: str, run_id: str) -> bool:
+    run_id = str(run_id or "").strip()
+    if not run_id:
+        return False
+    normalized = source.replace("\\", "/")
+    parts: list[str] = []
+    for segment in normalized.split("!"):
+        parts.extend(part for part in segment.split("/") if part)
+    return any(part == run_id or part.startswith(f"{run_id}-") for part in parts)
+
+
+def validate_signoff_run_summary(
+    prefix: str,
+    run: Any,
+    github_sha: str,
+) -> list[EvidenceCheck]:
+    if not isinstance(run, dict):
+        return [
+            EvidenceCheck(
+                prefix,
+                False,
+                "signoff report is missing run summary",
+            )
+        ]
+    run_id = str(run.get("id") or "").strip()
+    status = str(run.get("status") or "").strip()
+    conclusion = str(run.get("conclusion") or "").strip()
+    head_sha = str(run.get("head_sha") or "").strip()
+    return [
+        EvidenceCheck(
+            f"{prefix}.id",
+            run_id.isdigit(),
+            "signoff run summary has a numeric GitHub Actions run id"
+            if run_id.isdigit()
+            else "signoff run summary is missing a numeric GitHub Actions run id",
+        ),
+        EvidenceCheck(
+            f"{prefix}.status",
+            status == "completed",
+            "signoff run summary completed"
+            if status == "completed"
+            else "signoff run summary did not complete",
+        ),
+        EvidenceCheck(
+            f"{prefix}.conclusion",
+            conclusion == "success",
+            "signoff run summary succeeded"
+            if conclusion == "success"
+            else "signoff run summary did not succeed",
+        ),
+        EvidenceCheck(
+            f"{prefix}.head_sha",
+            not github_sha or head_sha == github_sha,
+            "signoff run summary matches requested commit SHA"
+            if not github_sha or head_sha == github_sha
+            else "signoff run summary commit SHA differs from requested commit SHA",
+        ),
+    ]
 
 
 def validate_named_checks(
@@ -714,6 +784,7 @@ def main(argv: list[str]) -> int:
                 signoff,
                 signoff_source,
                 required=args.require_signoff_report,
+                github_branch=str(args.github_branch or ""),
                 github_sha=str(args.github_sha or ""),
                 readiness_source=readiness_source,
                 deploy_source=deploy_source,
