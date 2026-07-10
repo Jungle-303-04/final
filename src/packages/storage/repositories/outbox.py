@@ -4,7 +4,8 @@ import uuid
 from datetime import UTC, datetime, timedelta
 
 from sqlalchemy import cast, func, or_, select, update
-from sqlalchemy.dialects.postgresql import TIMESTAMP, insert as pg_insert
+from sqlalchemy.dialects.postgresql import TIMESTAMP
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.engine import Connection
 
 from packages.config.logs import CONTEXT_KEY, get_logger

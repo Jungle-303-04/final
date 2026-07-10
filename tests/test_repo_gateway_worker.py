@@ -76,7 +76,9 @@ def test_repo_gateway_creates_pr_from_requested_event(monkeypatch) -> None:
 
     outs = run_handler(
         repo.on_safe_pr_ready_for_creation,
-        _ready(approval_ref="approval-1", policy_decision_ref="policy-decision-1", commit_sha="abc123"),
+        _ready(
+            approval_ref="approval-1", policy_decision_ref="policy-decision-1", commit_sha="abc123"
+        ),
         db=db,
     )
 

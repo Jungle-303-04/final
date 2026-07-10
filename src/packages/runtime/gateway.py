@@ -4,8 +4,8 @@ import asyncio
 from dataclasses import dataclass, fields, is_dataclass
 from typing import cast
 
-from packages.config.logs import CONTEXT_KEY, get_logger
 from packages.config.errors import require
+from packages.config.logs import CONTEXT_KEY, get_logger
 from packages.contracts.auth import Actor
 from packages.contracts.event_bus.bodies import EventBody
 from packages.contracts.event_bus.interfaces import (

@@ -316,11 +316,7 @@ def build_change_context(evt: ManifestRenderedBody, diff: Diff) -> dict[str, obj
         "config": config_context(diff),
         "risk": risk_context(diff, rollback_available),
     }
-    return {
-        key: value
-        for key, value in context.items()
-        if value not in ({}, [], None, "")
-    }
+    return {key: value for key, value in context.items() if value not in ({}, [], None, "")}
 
 
 def include_recent_change(change: Mapping[str, object]) -> bool:
@@ -493,7 +489,9 @@ def collect_references(value: object, references: dict[str, list[dict[str, objec
     if isinstance(value, Mapping):
         secret_key_ref = value.get("secretKeyRef")
         if isinstance(secret_key_ref, Mapping):
-            add_reference(references, "secrets", secret_key_ref.get("name"), secret_key_ref.get("key"))
+            add_reference(
+                references, "secrets", secret_key_ref.get("name"), secret_key_ref.get("key")
+            )
         config_map_key_ref = value.get("configMapKeyRef")
         if isinstance(config_map_key_ref, Mapping):
             add_reference(

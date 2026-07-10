@@ -13,7 +13,6 @@ from dataclasses import asdict, dataclass
 from typing import Any
 from urllib.parse import quote, urlparse
 
-
 DEFAULT_GITHUB_API_BASE = "https://api.github.com"
 REQUIRED_SECRETS = {
     "RELEASE_FLOW_API_BASE_URL",
@@ -79,7 +78,9 @@ def github_json(url: str, token: str) -> dict[str, Any]:
             payload = json.loads(response.read().decode("utf-8"))
     except urllib.error.HTTPError as exc:
         detail = exc.read().decode("utf-8", errors="replace")
-        raise GitHubEnvironmentError(f"GitHub API request failed: HTTP {exc.code} {detail}") from exc
+        raise GitHubEnvironmentError(
+            f"GitHub API request failed: HTTP {exc.code} {detail}"
+        ) from exc
     except urllib.error.URLError as exc:
         raise GitHubEnvironmentError(f"GitHub API request failed: {exc.reason}") from exc
     return payload if isinstance(payload, dict) else {}
@@ -98,7 +99,9 @@ def load_environment_configuration(
 ) -> tuple[set[str], dict[str, str]]:
     env_name = quote(environment, safe="")
     secrets = github_json(github_api_url(api_base, repo, f"environments/{env_name}/secrets"), token)
-    variables = github_json(github_api_url(api_base, repo, f"environments/{env_name}/variables"), token)
+    variables = github_json(
+        github_api_url(api_base, repo, f"environments/{env_name}/variables"), token
+    )
     secret_names = {
         str(item.get("name") or "")
         for item in secrets.get("secrets", [])
@@ -112,7 +115,9 @@ def load_environment_configuration(
     return secret_names, variable_values
 
 
-def configured_value(name: str, secret_names: set[str], variable_values: dict[str, str]) -> tuple[bool, str | None]:
+def configured_value(
+    name: str, secret_names: set[str], variable_values: dict[str, str]
+) -> tuple[bool, str | None]:
     if name in variable_values:
         return True, variable_values[name]
     if name in secret_names:
@@ -132,7 +137,9 @@ def validate_environment(
             EnvironmentCheck(
                 f"secret.{name}",
                 name in secret_names,
-                "configured as environment secret" if name in secret_names else "missing required environment secret",
+                "configured as environment secret"
+                if name in secret_names
+                else "missing required environment secret",
             )
         )
     token_secret_present = "RELEASE_FLOW_GITHUB_TOKEN" in secret_names
@@ -141,7 +148,9 @@ def validate_environment(
     if token_secret_present:
         token_detail = "RELEASE_FLOW_GITHUB_TOKEN configured for GitHub access preflight"
     elif token_ref_present and allow_token_ref_only:
-        token_detail = "RELEASE_FLOW_GITHUB_TOKEN_REF configured; token value resolution is operator-owned"
+        token_detail = (
+            "RELEASE_FLOW_GITHUB_TOKEN_REF configured; token value resolution is operator-owned"
+        )
     elif token_ref_present:
         token_detail = "RELEASE_FLOW_GITHUB_TOKEN is recommended for final GitHub access preflight"
     else:
@@ -155,7 +164,11 @@ def validate_environment(
     for name in sorted(OPTIONAL_VALUE_KEYS):
         configured, value = configured_value(name, secret_names, variable_values)
         if not configured:
-            checks.append(EnvironmentCheck(f"value.{name}", True, "not configured; workflow default will be used"))
+            checks.append(
+                EnvironmentCheck(
+                    f"value.{name}", True, "not configured; workflow default will be used"
+                )
+            )
             continue
         ok, detail = validate_optional_value(name, value=value)
         checks.append(EnvironmentCheck(f"value.{name}", ok, detail))
@@ -176,7 +189,9 @@ def validate_required_value(name: str, *, configured: bool, value: str | None) -
     if name == "RELEASE_FLOW_LIVE_ENABLED":
         return (
             stripped.lower() in {"1", "true", "yes", "on"},
-            "live dispatch enabled" if stripped.lower() in {"1", "true", "yes", "on"} else "must enable live dispatch",
+            "live dispatch enabled"
+            if stripped.lower() in {"1", "true", "yes", "on"}
+            else "must enable live dispatch",
         )
     if name == "RELEASE_FLOW_LIVE_WORKSPACES":
         if not stripped:
@@ -221,7 +236,9 @@ def placeholder_host(host: str) -> bool:
     )
 
 
-def write_report(path: str, *, ok: bool, repo: str, environment: str, checks: list[EnvironmentCheck]) -> None:
+def write_report(
+    path: str, *, ok: bool, repo: str, environment: str, checks: list[EnvironmentCheck]
+) -> None:
     if not path:
         return
     report_path = os.path.abspath(path)
@@ -245,7 +262,9 @@ def main(argv: list[str]) -> int:
         return 2
     token = str(args.github_token or os.getenv(str(args.github_token_env or "")) or "").strip()
     if not token:
-        print("fail input.github_token: --github-token or configured --github-token-env is required")
+        print(
+            "fail input.github_token: --github-token or configured --github-token-env is required"
+        )
         return 2
     try:
         secret_names, variable_values = load_environment_configuration(
@@ -264,7 +283,13 @@ def main(argv: list[str]) -> int:
     ok = all(check.ok for check in checks)
     for check in checks:
         print(f"{'ok' if check.ok else 'fail'} {check.name}: {check.detail}")
-    write_report(str(args.report_path or ""), ok=ok, repo=repo, environment=str(args.environment or "production"), checks=checks)
+    write_report(
+        str(args.report_path or ""),
+        ok=ok,
+        repo=repo,
+        environment=str(args.environment or "production"),
+        checks=checks,
+    )
     return 0 if ok else 1
 
 

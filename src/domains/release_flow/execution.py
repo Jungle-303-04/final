@@ -40,7 +40,9 @@ class ReleaseExecutionProfile:
 
 def execution_profile(plan: Mapping[str, Any]) -> ReleaseExecutionProfile:
     settings = mapping_value(plan.get("settings"))
-    runtime_mode = str(settings.get("runtime_mode") or settings.get("provider_mode") or RUNTIME_MODE_DEMO)
+    runtime_mode = str(
+        settings.get("runtime_mode") or settings.get("provider_mode") or RUNTIME_MODE_DEMO
+    )
     if runtime_mode not in RUNTIME_MODES:
         runtime_mode = RUNTIME_MODE_DEMO
     if runtime_mode == RUNTIME_MODE_LIVE:
@@ -103,7 +105,9 @@ def release_execution_blockers(
         gate = str(config.get("approval_gate") or "inherit")
         effective_gate = gate if gate != "inherit" else policy
 
-        if requires_external_ticket(policy, effective_gate) and not has_change_ticket(settings, config):
+        if requires_external_ticket(policy, effective_gate) and not has_change_ticket(
+            settings, config
+        ):
             blockers.append(
                 f"Application {application_id} requires an external change ticket before live dispatch."
             )

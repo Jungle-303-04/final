@@ -32,7 +32,7 @@ import urllib.parse
 import urllib.request
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 JsonMap = dict[str, Any]
@@ -153,7 +153,9 @@ def api_url(base_url: str, path: str) -> str:
 
 
 def query_path(path: str, params: dict[str, Any]) -> str:
-    query = urllib.parse.urlencode({key: value for key, value in params.items() if value not in (None, "")})
+    query = urllib.parse.urlencode(
+        {key: value for key, value in params.items() if value not in (None, "")}
+    )
     return f"{path}?{query}" if query else path
 
 
@@ -247,14 +249,14 @@ def build_live_preflight_plan(applications: list[JsonMap], args: argparse.Namesp
 def live_preflight_window(args: argparse.Namespace) -> tuple[str, str]:
     if args.live_window_start and args.live_window_end:
         return args.live_window_start, args.live_window_end
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     start = (now - timedelta(minutes=15)).replace(microsecond=0).isoformat().replace("+00:00", "Z")
     end = (now + timedelta(hours=1)).replace(microsecond=0).isoformat().replace("+00:00", "Z")
     return start, end
 
 
 def live_preflight_timestamp() -> str:
-    return datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+    return datetime.now(UTC).replace(microsecond=0).isoformat().replace("+00:00", "Z")
 
 
 def validate_live_https_url(field_name: str, value: str, *, context: str) -> None:
@@ -287,7 +289,9 @@ def validate_live_preflight_inputs(args: argparse.Namespace) -> None:
         )
     if approval_gate == "safe_pr":
         if not safe_pr_workflow_run_id:
-            raise ValueError("live_safe_pr_workflow_run_id is required when live_approval_gate is safe_pr")
+            raise ValueError(
+                "live_safe_pr_workflow_run_id is required when live_approval_gate is safe_pr"
+            )
         if not safe_pr_url:
             raise ValueError("live_safe_pr_url is required when live_approval_gate is safe_pr")
     environment = str(getattr(args, "live_environment", "") or "").strip().lower()
@@ -303,13 +307,20 @@ def validate_live_preflight_inputs(args: argparse.Namespace) -> None:
         if not str(value or "").strip():
             raise ValueError(f"{name} is required for production live preflight")
     runbook_url = str(getattr(args, "live_runbook_url", "") or "").strip()
-    validate_live_https_url("live_runbook_url", runbook_url, context="for production live preflight")
+    validate_live_https_url(
+        "live_runbook_url", runbook_url, context="for production live preflight"
+    )
     verification_url = str(getattr(args, "live_verification_url", "") or "").strip()
-    validate_live_https_url("live_verification_url", verification_url, context="for production live preflight")
-    if not str(getattr(args, "live_release_owner", "") or "").strip() and not str(
-        getattr(args, "live_oncall_contact", "") or ""
-    ).strip():
-        raise ValueError("live_release_owner or live_oncall_contact is required for production live preflight")
+    validate_live_https_url(
+        "live_verification_url", verification_url, context="for production live preflight"
+    )
+    if (
+        not str(getattr(args, "live_release_owner", "") or "").strip()
+        and not str(getattr(args, "live_oncall_contact", "") or "").strip()
+    ):
+        raise ValueError(
+            "live_release_owner or live_oncall_contact is required for production live preflight"
+        )
     for name, placeholders in LIVE_PREFLIGHT_PLACEHOLDERS.items():
         value = str(getattr(args, name, "") or "").strip()
         if value in placeholders:
@@ -369,7 +380,9 @@ def run_smoke(
     applications = client.request("GET", "/applications").get("applications", [])
     if not isinstance(applications, list):
         raise ValueError("/applications response did not contain an applications list")
-    results.append(SmokeResult("applications", bool(applications), f"{len(applications)} application(s)"))
+    results.append(
+        SmokeResult("applications", bool(applications), f"{len(applications)} application(s)")
+    )
     plans = client.request("GET", "/release-plans").get("plans", [])
     results.append(SmokeResult("release-plans", isinstance(plans, list), f"{len(plans)} plan(s)"))
     summary = client.request("GET", "/release-runs/summary")
@@ -474,8 +487,16 @@ def run_generated_manifest_check(client: ApiClient, plan: JsonMap, name: str) ->
     ]
     resource_count = int_count(generated.get("resource_count"))
     manifest = str(generated.get("manifest") or "")
-    ok = bool(manifest.strip()) and isinstance(files, list) and bool(files) and resource_count > 0 and not error_diagnostics
-    first_file = files[0] if isinstance(files, list) and files and isinstance(files[0], dict) else {}
+    ok = (
+        bool(manifest.strip())
+        and isinstance(files, list)
+        and bool(files)
+        and resource_count > 0
+        and not error_diagnostics
+    )
+    first_file = (
+        files[0] if isinstance(files, list) and files and isinstance(files[0], dict) else {}
+    )
     path = str(first_file.get("path") or "")
     detail = (
         f"path={path or 'unknown'}; resources={resource_count}; "
@@ -511,7 +532,9 @@ def run_release_health_preflight(
     attention_runs = release_runs_for_filter(client, params, "attention_only")
     details = [format_counts(blocking)]
     if attention_runs:
-        details.append(run_list_detail(sum(blocking.values()), attention_runs, "operator attention"))
+        details.append(
+            run_list_detail(sum(blocking.values()), attention_runs, "operator attention")
+        )
     if counts["stale_runs"] > 0:
         stale_runs = release_runs_for_filter(client, params, "stale_only")
         if stale_runs:
@@ -553,7 +576,9 @@ def run_verification_preflight(
             )
         )
     if timeout_count > 0:
-        timed_out_runs = release_runs_for_filter(client, params, "verification_pending_timeout_only")
+        timed_out_runs = release_runs_for_filter(
+            client, params, "verification_pending_timeout_only"
+        )
         results.append(
             SmokeResult(
                 "release-runs.verification-timeout",
@@ -628,10 +653,14 @@ def run_change_freeze_preflight(
     ]
     if active_count > 0:
         active_runs = release_runs_for_filter(client, params, "active_change_freeze_only")
-        detail_parts.append(run_list_detail(active_count, active_runs, "active change freeze review"))
+        detail_parts.append(
+            run_list_detail(active_count, active_runs, "active change freeze review")
+        )
     if override_count > 0:
         override_runs = release_runs_for_filter(client, params, "change_freeze_override_only")
-        detail_parts.append(run_list_detail(override_count, override_runs, "change freeze override review"))
+        detail_parts.append(
+            run_list_detail(override_count, override_runs, "change freeze override review")
+        )
     return [
         SmokeResult(
             "release-runs.change-freeze-preflight",
@@ -641,7 +670,9 @@ def run_change_freeze_preflight(
     ]
 
 
-def release_runs_for_filter(client: ApiClient, params: dict[str, Any], filter_name: str) -> list[JsonMap]:
+def release_runs_for_filter(
+    client: ApiClient, params: dict[str, Any], filter_name: str
+) -> list[JsonMap]:
     payload = dict(params)
     payload[filter_name] = "true"
     response = client.request("GET", query_path("/release-runs", payload))
@@ -777,7 +808,9 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     parser.add_argument("--base-url", default=os.getenv("BASE_URL", ""))
     parser.add_argument("--email", default=os.getenv("AUTH_EMAIL", ""))
     parser.add_argument("--password", default=os.getenv("AUTH_PASSWORD", ""))
-    parser.add_argument("--timeout", type=float, default=float(os.getenv("SMOKE_TIMEOUT_SECONDS", "15")))
+    parser.add_argument(
+        "--timeout", type=float, default=float(os.getenv("SMOKE_TIMEOUT_SECONDS", "15"))
+    )
     parser.add_argument(
         "--retry-attempts",
         type=int,
@@ -879,7 +912,9 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
         action="store_true",
         help="fail when existing release runs have failed or timed-out post-deploy verification jobs",
     )
-    parser.add_argument("--verification-plan-id", default=os.getenv("VERIFICATION_PREFLIGHT_PLAN_ID", ""))
+    parser.add_argument(
+        "--verification-plan-id", default=os.getenv("VERIFICATION_PREFLIGHT_PLAN_ID", "")
+    )
     parser.add_argument(
         "--verification-run-limit",
         type=int,
@@ -890,7 +925,9 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
         action="store_true",
         help="fail when existing release runs still require operator attention",
     )
-    parser.add_argument("--run-health-plan-id", default=os.getenv("RUN_HEALTH_PREFLIGHT_PLAN_ID", ""))
+    parser.add_argument(
+        "--run-health-plan-id", default=os.getenv("RUN_HEALTH_PREFLIGHT_PLAN_ID", "")
+    )
     parser.add_argument(
         "--run-health-run-limit",
         type=int,
@@ -901,8 +938,12 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
         action="store_true",
         help="fail when existing release runs used operator policy overrides",
     )
-    parser.add_argument("--policy-override-plan-id", default=os.getenv("POLICY_OVERRIDE_PREFLIGHT_PLAN_ID", ""))
-    parser.add_argument("--policy-override-source", default=os.getenv("POLICY_OVERRIDE_PREFLIGHT_SOURCE", ""))
+    parser.add_argument(
+        "--policy-override-plan-id", default=os.getenv("POLICY_OVERRIDE_PREFLIGHT_PLAN_ID", "")
+    )
+    parser.add_argument(
+        "--policy-override-source", default=os.getenv("POLICY_OVERRIDE_PREFLIGHT_SOURCE", "")
+    )
     parser.add_argument(
         "--policy-override-run-limit",
         type=int,
@@ -913,7 +954,9 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
         action="store_true",
         help="fail when existing release runs were evaluated during a change freeze",
     )
-    parser.add_argument("--change-freeze-plan-id", default=os.getenv("CHANGE_FREEZE_PREFLIGHT_PLAN_ID", ""))
+    parser.add_argument(
+        "--change-freeze-plan-id", default=os.getenv("CHANGE_FREEZE_PREFLIGHT_PLAN_ID", "")
+    )
     parser.add_argument(
         "--change-freeze-run-limit",
         type=int,
@@ -924,10 +967,18 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
         action="store_true",
         help="check live release readiness gates without starting or dispatching a run",
     )
-    parser.add_argument("--live-environment", default=os.getenv("LIVE_PREFLIGHT_ENVIRONMENT", "production"))
-    parser.add_argument("--live-namespace", default=os.getenv("LIVE_PREFLIGHT_NAMESPACE", "production"))
-    parser.add_argument("--live-change-ticket", default=os.getenv("LIVE_PREFLIGHT_CHANGE_TICKET", ""))
-    parser.add_argument("--live-approval-by", default=os.getenv("LIVE_PREFLIGHT_APPROVAL_BY", "release-operator"))
+    parser.add_argument(
+        "--live-environment", default=os.getenv("LIVE_PREFLIGHT_ENVIRONMENT", "production")
+    )
+    parser.add_argument(
+        "--live-namespace", default=os.getenv("LIVE_PREFLIGHT_NAMESPACE", "production")
+    )
+    parser.add_argument(
+        "--live-change-ticket", default=os.getenv("LIVE_PREFLIGHT_CHANGE_TICKET", "")
+    )
+    parser.add_argument(
+        "--live-approval-by", default=os.getenv("LIVE_PREFLIGHT_APPROVAL_BY", "release-operator")
+    )
     parser.add_argument(
         "--live-approval-reason",
         default=os.getenv("LIVE_PREFLIGHT_APPROVAL_REASON", "live preflight approval evidence"),
@@ -947,13 +998,22 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
         "--live-oncall-contact",
         default=os.getenv("LIVE_PREFLIGHT_ONCALL_CONTACT", ""),
     )
-    parser.add_argument("--live-verification-url", default=os.getenv("LIVE_PREFLIGHT_VERIFICATION_URL", ""))
+    parser.add_argument(
+        "--live-verification-url", default=os.getenv("LIVE_PREFLIGHT_VERIFICATION_URL", "")
+    )
     parser.add_argument("--live-commit-sha", default=os.getenv("LIVE_PREFLIGHT_COMMIT_SHA", ""))
     parser.add_argument("--live-image", default=os.getenv("LIVE_PREFLIGHT_IMAGE", ""))
-    parser.add_argument("--live-approval-gate", default=os.getenv("LIVE_PREFLIGHT_APPROVAL_GATE", "manual"))
-    parser.add_argument("--live-safe-pr-workflow-run-id", default=os.getenv("LIVE_PREFLIGHT_SAFE_PR_WORKFLOW_RUN_ID", ""))
+    parser.add_argument(
+        "--live-approval-gate", default=os.getenv("LIVE_PREFLIGHT_APPROVAL_GATE", "manual")
+    )
+    parser.add_argument(
+        "--live-safe-pr-workflow-run-id",
+        default=os.getenv("LIVE_PREFLIGHT_SAFE_PR_WORKFLOW_RUN_ID", ""),
+    )
     parser.add_argument("--live-safe-pr-url", default=os.getenv("LIVE_PREFLIGHT_SAFE_PR_URL", ""))
-    parser.add_argument("--live-rollback-policy", default=os.getenv("LIVE_PREFLIGHT_ROLLBACK_POLICY", "safe_pr"))
+    parser.add_argument(
+        "--live-rollback-policy", default=os.getenv("LIVE_PREFLIGHT_ROLLBACK_POLICY", "safe_pr")
+    )
     parser.add_argument(
         "--ops-rehearsal",
         action="store_true",
@@ -1023,7 +1083,10 @@ def redact_sensitive_text(value: Any) -> str:
 
 def _redact_assignment(match: re.Match[str]) -> str:
     quote = match.group("quote") or ""
-    if "authorization" in match.group("prefix").lower() and match.group("value").lower() == "bearer":
+    if (
+        "authorization" in match.group("prefix").lower()
+        and match.group("value").lower() == "bearer"
+    ):
         return match.group(0)
     return f"{match.group('prefix')}{quote}{REDACTED_VALUE}{quote}"
 
@@ -1097,7 +1160,9 @@ def write_markdown_report(
     target = os.path.abspath(path)
     os.makedirs(os.path.dirname(target), exist_ok=True)
     with open(target, "w", encoding="utf-8") as report:
-        report.write(build_markdown_report(ok=ok, api_base_url=api_base_url, results=results, error=error))
+        report.write(
+            build_markdown_report(ok=ok, api_base_url=api_base_url, results=results, error=error)
+        )
         report.write("\n")
 
 
@@ -1117,7 +1182,9 @@ def append_github_step_summary(
     target = os.path.abspath(path)
     os.makedirs(os.path.dirname(target), exist_ok=True)
     with open(target, "a", encoding="utf-8") as summary:
-        summary.write(build_markdown_report(ok=ok, api_base_url=api_base_url, results=results, error=error))
+        summary.write(
+            build_markdown_report(ok=ok, api_base_url=api_base_url, results=results, error=error)
+        )
         summary.write("\n\n")
 
 
@@ -1312,7 +1379,11 @@ def main(argv: list[str]) -> int:
             args=args,
         )
     except Exception as exc:
-        payload = {"ok": False, "api_base_url": client.api_base_url, "error": redact_sensitive_text(str(exc))}
+        payload = {
+            "ok": False,
+            "api_base_url": client.api_base_url,
+            "error": redact_sensitive_text(str(exc)),
+        }
         write_json_report(args.report_path, payload)
         write_junit_report(args.junit_path, [], error=str(payload["error"]))
         write_markdown_report(
@@ -1343,9 +1414,15 @@ def main(argv: list[str]) -> int:
     payload = smoke_report_payload(ok, client.api_base_url, results)
     write_json_report(args.report_path, payload)
     write_junit_report(args.junit_path, results)
-    write_markdown_report(args.markdown_path, ok=ok, api_base_url=client.api_base_url, results=results)
-    append_github_step_summary(args.github_step_summary, ok=ok, api_base_url=client.api_base_url, results=results)
-    append_github_output(args.github_output, ok=ok, api_base_url=client.api_base_url, results=results)
+    write_markdown_report(
+        args.markdown_path, ok=ok, api_base_url=client.api_base_url, results=results
+    )
+    append_github_step_summary(
+        args.github_step_summary, ok=ok, api_base_url=client.api_base_url, results=results
+    )
+    append_github_output(
+        args.github_output, ok=ok, api_base_url=client.api_base_url, results=results
+    )
     emit_github_annotations(args.github_annotations, results=results)
     print(json.dumps(payload, ensure_ascii=False, indent=2))
     return 0 if ok else 1

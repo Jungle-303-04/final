@@ -15,7 +15,6 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import quote, urlencode, urlparse
 
-
 READINESS_REPORT = "release-flow-readiness.json"
 ENVIRONMENT_REPORT = "release-flow-github-environment.json"
 SMOKE_REPORT = "release-flow-smoke.json"
@@ -115,7 +114,9 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     )
     parser.add_argument("--github-api-base", default=DEFAULT_GITHUB_API_BASE)
     parser.add_argument("--github-branch", default="dev")
-    parser.add_argument("--github-sha", default="", help="Require successful workflow runs for this head SHA.")
+    parser.add_argument(
+        "--github-sha", default="", help="Require successful workflow runs for this head SHA."
+    )
     parser.add_argument(
         "--github-readiness-run-id",
         default="",
@@ -191,7 +192,9 @@ def github_download(url: str, token: str) -> bytes:
             return response.read()
     except urllib.error.HTTPError as exc:
         detail = exc.read().decode("utf-8", errors="replace")
-        raise GitHubEvidenceError(f"GitHub artifact download failed: HTTP {exc.code} {detail}") from exc
+        raise GitHubEvidenceError(
+            f"GitHub artifact download failed: HTTP {exc.code} {detail}"
+        ) from exc
     except urllib.error.URLError as exc:
         raise GitHubEvidenceError(f"GitHub artifact download failed: {exc.reason}") from exc
 
@@ -246,11 +249,15 @@ def find_workflow_run_by_id(
         raise GitHubEvidenceError(f"{workflow} run id must be numeric")
     run = github_json(github_api_url(api_base, repo, f"actions/runs/{normalized_run_id}"), token)
     if str(run.get("id") or "") != normalized_run_id:
-        raise GitHubEvidenceError(f"GitHub run {normalized_run_id} response did not match requested id")
+        raise GitHubEvidenceError(
+            f"GitHub run {normalized_run_id} response did not match requested id"
+        )
     if run.get("conclusion") != "success":
         raise GitHubEvidenceError(f"GitHub run {normalized_run_id} did not conclude success")
     if head_sha and str(run.get("head_sha") or "") != head_sha:
-        raise GitHubEvidenceError(f"GitHub run {normalized_run_id} does not match required sha {head_sha}")
+        raise GitHubEvidenceError(
+            f"GitHub run {normalized_run_id} does not match required sha {head_sha}"
+        )
     if branch and str(run.get("head_branch") or branch) != branch:
         raise GitHubEvidenceError(f"GitHub run {normalized_run_id} does not match branch {branch}")
     path = str(run.get("path") or "")
@@ -279,7 +286,9 @@ def download_run_artifacts(
     by_name = {str(item.get("name") or ""): item for item in artifacts}
     missing = sorted(name for name in artifact_names if name not in by_name)
     if missing:
-        raise GitHubEvidenceError(f"workflow run {run_id} is missing artifacts: {', '.join(missing)}")
+        raise GitHubEvidenceError(
+            f"workflow run {run_id} is missing artifacts: {', '.join(missing)}"
+        )
     output_dir.mkdir(parents=True, exist_ok=True)
     paths: list[Path] = []
     for name in sorted(artifact_names):
@@ -288,7 +297,9 @@ def download_run_artifacts(
             raise GitHubEvidenceError(f"artifact {name} from workflow run {run_id} is expired")
         download_url = str(artifact.get("archive_download_url") or "")
         if not download_url:
-            raise GitHubEvidenceError(f"artifact {name} from workflow run {run_id} is missing download URL")
+            raise GitHubEvidenceError(
+                f"artifact {name} from workflow run {run_id} is missing download URL"
+            )
         destination = output_dir / f"{run_id}-{name}.zip"
         destination.write_bytes(github_download(download_url, token))
         paths.append(destination)
@@ -409,14 +420,18 @@ def validate_readiness(payload: dict[str, Any] | None, source: str) -> list[Evid
         EvidenceCheck(
             "readiness.ok",
             payload.get("ok") is True,
-            "readiness report passed" if payload.get("ok") is True else "readiness report did not pass",
+            "readiness report passed"
+            if payload.get("ok") is True
+            else "readiness report did not pass",
         )
     ]
     checks.extend(validate_named_checks("readiness", payload, REQUIRED_READINESS_CHECKS))
     return checks
 
 
-def validate_environment(payload: dict[str, Any] | None, source: str, *, required: bool) -> list[EvidenceCheck]:
+def validate_environment(
+    payload: dict[str, Any] | None, source: str, *, required: bool
+) -> list[EvidenceCheck]:
     if payload is None:
         return [
             EvidenceCheck(
@@ -438,7 +453,9 @@ def validate_environment(payload: dict[str, Any] | None, source: str, *, require
     return checks
 
 
-def validate_smoke(payload: dict[str, Any] | None, source: str, *, required: bool) -> list[EvidenceCheck]:
+def validate_smoke(
+    payload: dict[str, Any] | None, source: str, *, required: bool
+) -> list[EvidenceCheck]:
     if payload is None:
         return [
             EvidenceCheck(
@@ -451,7 +468,9 @@ def validate_smoke(payload: dict[str, Any] | None, source: str, *, required: boo
         EvidenceCheck(
             "smoke.ok",
             payload.get("ok") is True,
-            "production smoke passed" if payload.get("ok") is True else "production smoke did not pass",
+            "production smoke passed"
+            if payload.get("ok") is True
+            else "production smoke did not pass",
         ),
         validate_https_url("smoke.api_base_url", str(payload.get("api_base_url") or "")),
     ]
@@ -459,7 +478,9 @@ def validate_smoke(payload: dict[str, Any] | None, source: str, *, required: boo
     return checks
 
 
-def validate_deploy(payload: dict[str, Any] | None, source: str, *, required: bool) -> list[EvidenceCheck]:
+def validate_deploy(
+    payload: dict[str, Any] | None, source: str, *, required: bool
+) -> list[EvidenceCheck]:
     if payload is None:
         return [
             EvidenceCheck(
@@ -473,13 +494,17 @@ def validate_deploy(payload: dict[str, Any] | None, source: str, *, required: bo
         EvidenceCheck(
             "deploy.ok",
             payload.get("ok") is True,
-            "production deploy passed" if payload.get("ok") is True else "production deploy did not pass",
+            "production deploy passed"
+            if payload.get("ok") is True
+            else "production deploy did not pass",
         ),
         validate_https_url("deploy.api_base_url", str(payload.get("api_base_url") or "")),
         EvidenceCheck(
             "deploy.plan_id",
             bool(plan_id),
-            "production deploy recorded a plan id" if plan_id else "production deploy report is missing plan_id",
+            "production deploy recorded a plan id"
+            if plan_id
+            else "production deploy report is missing plan_id",
         ),
     ]
     checks.extend(validate_named_checks("deploy", payload, REQUIRED_DEPLOY_CHECKS))
@@ -489,7 +514,9 @@ def validate_deploy(payload: dict[str, Any] | None, source: str, *, required: bo
         EvidenceCheck(
             "deploy.run_id",
             bool(start and start.get("ok") is True and run_id),
-            f"production run started: {run_id}" if run_id else "deploy report is missing production run id",
+            f"production run started: {run_id}"
+            if run_id
+            else "deploy report is missing production run id",
         )
     )
     return checks
@@ -534,14 +561,21 @@ def validate_signoff(
         ]
     readiness_run = payload.get("readiness_run")
     deploy_run = payload.get("deploy_run")
-    readiness_run_id = str((readiness_run or {}).get("id") or "").strip() if isinstance(readiness_run, dict) else ""
-    deploy_run_id = str((deploy_run or {}).get("id") or "").strip() if isinstance(deploy_run, dict) else ""
+    readiness_run_id = (
+        str((readiness_run or {}).get("id") or "").strip()
+        if isinstance(readiness_run, dict)
+        else ""
+    )
+    deploy_run_id = (
+        str((deploy_run or {}).get("id") or "").strip() if isinstance(deploy_run, dict) else ""
+    )
     checks = [
         EvidenceCheck(
             "signoff.status",
             payload.get("status") == "passed" and payload.get("evidence_verification_status") == 0,
             "signoff report recorded passed evidence verification"
-            if payload.get("status") == "passed" and payload.get("evidence_verification_status") == 0
+            if payload.get("status") == "passed"
+            and payload.get("evidence_verification_status") == 0
             else "signoff report did not record passed evidence verification",
         ),
         EvidenceCheck(
@@ -560,7 +594,8 @@ def validate_signoff(
         ),
         EvidenceCheck(
             "signoff.deploy_run_id",
-            (deploy is None and not required) or (bool(deploy_run_id) and deploy_run_id in deploy_source),
+            (deploy is None and not required)
+            or (bool(deploy_run_id) and deploy_run_id in deploy_source),
             "signoff report references the verified deploy artifact run"
             if deploy_run_id and deploy_run_id in deploy_source
             else "signoff report deploy run id does not match verified artifact",
@@ -571,7 +606,8 @@ def validate_signoff(
         checks.append(
             EvidenceCheck(
                 "signoff.release_plan_id",
-                bool(payload.get("release_plan_id")) and str(payload.get("release_plan_id")) == plan_id,
+                bool(payload.get("release_plan_id"))
+                and str(payload.get("release_plan_id")) == plan_id,
                 "signoff report plan id matches deploy evidence"
                 if str(payload.get("release_plan_id") or "") == plan_id
                 else "signoff report plan id differs from deploy evidence",
@@ -580,15 +616,21 @@ def validate_signoff(
     return checks
 
 
-def validate_named_checks(prefix: str, payload: dict[str, Any], required_names: set[str]) -> list[EvidenceCheck]:
+def validate_named_checks(
+    prefix: str, payload: dict[str, Any], required_names: set[str]
+) -> list[EvidenceCheck]:
     actual = {str(item.get("name") or ""): item for item in payload_checks(payload)}
     missing = sorted(name for name in required_names if name not in actual)
-    failed = sorted(name for name in required_names if name in actual and actual[name].get("ok") is not True)
+    failed = sorted(
+        name for name in required_names if name in actual and actual[name].get("ok") is not True
+    )
     return [
         EvidenceCheck(
             f"{prefix}.required_checks_present",
             not missing,
-            "required checks are present" if not missing else "missing checks: " + ", ".join(missing),
+            "required checks are present"
+            if not missing
+            else "missing checks: " + ", ".join(missing),
         ),
         EvidenceCheck(
             f"{prefix}.required_checks_passed",
@@ -663,7 +705,9 @@ def main(argv: list[str]) -> int:
             )
         )
         checks.extend(validate_smoke(smoke, smoke_source, required=not args.allow_missing_smoke))
-        checks.extend(validate_deploy(deploy, deploy_source, required=not args.allow_missing_deploy))
+        checks.extend(
+            validate_deploy(deploy, deploy_source, required=not args.allow_missing_deploy)
+        )
         checks.extend(validate_artifact_consistency(smoke, deploy))
         checks.extend(
             validate_signoff(

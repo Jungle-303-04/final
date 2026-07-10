@@ -15,9 +15,7 @@ def render_labeled_counter(name: str, values: Mapping[str, int], label: str) -> 
     return render_labeled_gauge(name, values, label)
 
 
-def render_labeled_gauge(
-    name: str, values: Mapping[str, float | int], label: str
-) -> str:
+def render_labeled_gauge(name: str, values: Mapping[str, float | int], label: str) -> str:
     lines = [f"# TYPE {name} gauge"]
     for key, value in sorted(values.items()):
         safe_key = str(key).replace("\\", "\\\\").replace('"', '\\"')
