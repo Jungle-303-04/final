@@ -81,7 +81,7 @@ def test_verify_release_flow_production_evidence_reads_artifact_zip(tmp_path: Pa
 
 def test_verify_release_flow_production_evidence_rejects_placeholder_urls(tmp_path: Path) -> None:
     smoke = smoke_payload()
-    smoke["api_base_url"] = "https://example.com/api"
+    smoke["api_base_url"] = "https://api.example.com/api"
     write_json(tmp_path / evidence.READINESS_REPORT, readiness_payload())
     write_json(tmp_path / evidence.SMOKE_REPORT, smoke)
     write_json(tmp_path / evidence.DEPLOY_REPORT, deploy_payload())

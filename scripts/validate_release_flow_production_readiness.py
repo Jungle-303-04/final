@@ -1412,7 +1412,12 @@ def https_url_validity(value: str) -> tuple[bool, str]:
     host = (parsed.hostname or "").lower()
     if parsed.scheme != "https":
         return False, "must use https"
-    if host in RUNTIME_PLACEHOLDER_HOSTS or host.endswith(".localhost"):
+    if (
+        host in RUNTIME_PLACEHOLDER_HOSTS
+        or host.endswith(".localhost")
+        or host.endswith(".example.com")
+        or host.endswith(".example.test")
+    ):
         return False, "must not point at localhost or example hosts"
     return True, ""
 
