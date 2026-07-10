@@ -34,16 +34,16 @@ def test_bruno_collection_has_only_aws_test_profile() -> None:
     )
     aws = (API_DIR / "environments" / "aws-test.bru").read_text(encoding="utf-8")
 
-    assert "base_url: https://k8s.woonyong.org/api/" in collection
-    assert "auto_login: true" in collection
+    assert "base_url: https://dev-k8s.woonyong.org/api/" in collection
+    assert "auto_login: false" in collection
     assert "auth_email: replace-with-auth-email" in collection
     assert "auth_password: replace-with-auth-password" in collection
     assert "\n  cluster_id: api-verification-target\n" in collection
 
     assert environment_files == ["aws-test.bru"]
-    assert "base_url: https://k8s.woonyong.org/api/" in aws
-    assert "management_base_url: https://k8s.woonyong.org/api/" in aws
-    assert "auto_login: true" in aws
+    assert "base_url: https://dev-k8s.woonyong.org/api/" in aws
+    assert "management_base_url: https://dev-k8s.woonyong.org/api/" in aws
+    assert "auto_login: false" in aws
     assert "auth_email: replace-with-auth-email" in aws
     assert "auth_password: replace-with-auth-password" in aws
     assert "\n  cluster_id: api-verification-target\n" in aws
@@ -77,6 +77,15 @@ def test_rca_test_token_is_local_bruno_secret_without_tracked_placeholder() -> N
     assert "x-rca-test-token: {{rca_test_token}}" in workflow
     assert "x-rca-test-verification: {{rca_test_verification}}" in workflow
     assert "rca_test_verification: false" in environment
+
+
+def test_aws_session_request_fails_closed_without_mtls_development_identity() -> None:
+    request = (API_DIR / "00-health-auth" / "07-session.bru").read_text(encoding="utf-8")
+
+    assert 'baseUrl.includes("dev-k8s.woonyong.org")' in request
+    assert "expect(res.status).to.equal(200)" in request
+    assert 'expect(body).to.have.property("workspace_id", "default")' in request
+    assert 'expect(body.roles).to.include("service_admin")' in request
 
 
 def test_every_gateway_route_has_a_bruno_request() -> None:
@@ -246,6 +255,8 @@ def test_bruno_cli_runner_uses_isolated_profile_and_cleans_up_last() -> None:
     assert "environments/aws-test.bru" in runner
     assert "BRUNO_ENV_FILE" not in runner
     assert "--env-file" in runner
+    assert 'CLIENT_CERT_CONFIG="${BRUNO_CLIENT_CERT_CONFIG:-' in runner
+    assert "--client-cert-config" in runner
     assert "@usebruno/cli@3.5.1" in runner
     assert "--dns-result-order=ipv4first" in runner
     assert "--cache-ssl-session" in runner
@@ -311,7 +322,7 @@ def test_bruno_readme_explains_each_work_type() -> None:
         "15-wizard-validation",
         "정상 출력",
         "GitHub webhook signature",
-        "https://k8s.woonyong.org/api/",
+        "https://dev-k8s.woonyong.org/api/",
         "auto_login",
         "replace-with-auth-email",
         "BRUNO_CLUSTER_ID",

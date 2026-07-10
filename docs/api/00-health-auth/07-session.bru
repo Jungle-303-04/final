@@ -13,13 +13,25 @@ get {
 }
 
 tests {
-  test("200 after login, otherwise auth failure", function () {
+  const baseUrl = String(bru.getEnvVar("base_url") || bru.getVar("base_url") || "");
+  const mtlsDevelopmentEndpoint = baseUrl.includes("dev-k8s.woonyong.org");
+
+  test("mTLS development endpoint requires an authenticated session response", function () {
+    if (mtlsDevelopmentEndpoint) {
+      expect(res.status).to.equal(200);
+      return;
+    }
     expect([200, 401, 403]).to.include(res.status);
   });
 
   test("success body is authenticated", function () {
     if (res.status === 200) {
-      expect(res.getBody()).to.have.property("authenticated", true);
+      const body = res.getBody();
+      expect(body).to.have.property("authenticated", true);
+      if (mtlsDevelopmentEndpoint) {
+        expect(body).to.have.property("workspace_id", "default");
+        expect(body.roles).to.include("service_admin");
+      }
     }
   });
 }

@@ -7,6 +7,7 @@ ENV_FILE="${API_DIR}/environments/aws-test.bru"
 OUTPUT_FILE="${BRUNO_OUTPUT_FILE:-/tmp/bruno-aws-ordered-run.json}"
 DELAY_MS="${BRUNO_DELAY_MS:-250}"
 RUN_ID="bruno-$(date +%Y%m%d%H%M%S)-$$"
+CLIENT_CERT_CONFIG="${BRUNO_CLIENT_CERT_CONFIG:-${HOME}/.kubeheal/bruno-client-cert-config.json}"
 
 # Cloudflare가 AAAA/A를 함께 반환하지만 IPv6 route가 없는 개발 머신에서도
 # Node가 주소 선택에 따라 연결 timeout으로 빠지지 않게 IPv4를 우선한다.
@@ -18,11 +19,17 @@ if [[ ! -f "${ENV_FILE}" ]]; then
   echo "missing Bruno env file: ${ENV_FILE}" >&2
   exit 1
 fi
+if [[ ! -f "${CLIENT_CERT_CONFIG}" ]]; then
+  echo "missing Bruno mTLS client certificate config: ${CLIENT_CERT_CONFIG}" >&2
+  echo "set BRUNO_CLIENT_CERT_CONFIG to a local Bruno client certificate config file" >&2
+  exit 1
+fi
 
 cd "${API_DIR}"
 
 COMMON_ARGS=(
   --env-file "${ENV_FILE}"
+  --client-cert-config "${CLIENT_CERT_CONFIG}"
   --env-var "cluster_id=${RUN_ID}"
   --env-var "cluster_id_2=${RUN_ID}"
   --env-var "agent_cluster_id=${RUN_ID}"

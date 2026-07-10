@@ -18,6 +18,24 @@ docs/api
 5. 오른쪽 위 Environment에서 `aws-test`를 고른다.
 6. Environment 목록에는 `aws-test` 하나만 보여야 한다.
 
+## mTLS 인증서 최초 등록
+
+`aws-test`는 로그인 계정 대신 팀원별 mTLS 인증서로 보호되는
+`https://dev-k8s.woonyong.org/api/`를 사용한다. Bruno는 운영체제나 Chrome에 설치한
+인증서를 자동으로 선택하지 않으므로 컬렉션마다 한 번 등록해야 한다.
+
+1. Bruno에서 `docs/api` 컬렉션의 Settings를 연다.
+2. Client Certificates에서 새 인증서를 추가한다.
+3. Domain은 `dev-k8s.woonyong.org`, Type은 `Certificate` 또는 `CRT + KEY`를 선택한다.
+4. 전달받은 `팀원N-dev-console.pem`과 `팀원N-dev-console.key`를 각각 지정한다. 암호는 비워 둔다.
+5. `00-health-auth/07-session`을 보내 `workspace_id=default`, `roles=[service_admin]`을 확인한다.
+
+인증서와 암호는 Bruno 로컬 설정에만 저장하며 repository에 복사하거나 커밋하지 않는다.
+`.p12`와 설치 암호는 Chrome 설치용이고, `.pem`과 `.key`는 Bruno용이다.
+현재 5개 인증서는 팀 공용 개발 주체 하나로 매핑되므로 감사 로그의 actor는
+`TRUSTED_PROXY_AUTH_USER_ID`로 동일하게 기록된다. Agent API의 `x-agent-token`, RCA 테스트의
+`x-rca-test-token`, webhook 서명처럼 별도 보안 경계를 가진 값은 mTLS로 대체되지 않는다.
+
 깨졌다면 거의 항상 다른 폴더를 연 것이다. `docs/api` 바로 아래에 `bruno.json`과 `environments` 폴더가 있어야 한다.
 파일 경로는 `00-health-auth`처럼 영어 slug를 유지하고, Bruno 화면 표시명은 한글로 맞춘다.
 
@@ -53,13 +71,14 @@ cluster 실행은 허용하지 않는다.
 
 ## 전체 Runner 실행
 
-팀 공용 API는 사용자 세션과 cluster별 `x-agent-token`을 항상 검증한다.
-`aws-test` Environment는 `auto_login: true`로 보호 API 호출 전에 실제 로그인 세션을 만들고,
-Agent 요청은 등록 응답에서 1회 받은 실제 `agent_token`을 사용한다.
+팀 공용 개발 API는 mTLS 프록시 주체와 cluster별 `x-agent-token`을 각각 검증한다.
+`aws-test` Environment는 `auto_login: false`이며, 보호 API는 인증서가 검증된 개발 주체로
+실행된다. Agent 요청은 등록 응답에서 1회 받은 실제 `agent_token`을 추가로 사용한다.
 
 기본 Runner는 실제 `cluster-1` 대신 실행마다 `bruno-<시각>-<pid>` 형식의 격리
-cluster를 등록해 성공 경로를 검증하고 종료 trap에서 해제한다. Runner 실행 전에는
-`auth_email`/`auth_password`를 로컬 실행 변수로 제공해야 한다. 기존 DLQ replay, 임의 목록 항목 삭제, 실제 cluster
+cluster를 등록해 성공 경로를 검증하고 종료 trap에서 해제한다. CLI Runner는 Bruno의
+client certificate config가 필요하며 기본 경로는 `~/.kubeheal/bruno-client-cert-config.json`이다.
+다른 경로는 `BRUNO_CLIENT_CERT_CONFIG`로 지정한다. 기존 DLQ replay, 임의 목록 항목 삭제, 실제 cluster
 scale/restart, 외부 webhook 전송은 기본 Runner에서 제외하고 해당 요청을 명시적으로
 선택했을 때만 실행한다.
 
@@ -67,10 +86,9 @@ scale/restart, 외부 webhook 전송은 기본 Runner에서 제외하고 해당 
 bash scripts/run-bruno-aws.sh
 ```
 
-같은 순서를 Bruno 앱에서 실행할 때도 `00-health-auth/01`부터 `00-health-auth/07`까지 실행하고,
-그 다음 `01`부터 `13` 폴더를 실행한 뒤 `00-health-auth/10 로그아웃`을 마지막에 실행한다.
-`00-health-auth/10 로그아웃`을 중간에 실행해도 `auto_login`이 켜져 있으면 다음 보호 API에서 다시 로그인한다.
-로그아웃 이후 401 상태를 확인하려면 `auto_login`을 먼저 꺼 둔다.
+같은 순서를 Bruno 앱에서 실행할 때는 `00-health-auth/01`, `02`, `03`, `07`로 연결과 개발
+주체를 확인한 뒤 `01`부터 `13` 폴더를 실행한다. mTLS 개발 주체는 cookie 세션이 아니므로
+`00-health-auth/10 로그아웃`을 호출해도 인증서가 등록된 요청의 개발 권한은 유지된다.
 
 ## 2단계. 변수 채우기
 
@@ -78,9 +96,9 @@ bash scripts/run-bruno-aws.sh
 
 직접 채워야 하는 값은 처음 한 번만 본다.
 
-1. `base_url`은 Gateway API 주소다. 팀 공용 `aws-test`는 `https://k8s.woonyong.org/api/`로 고정한다. Bruno 요청 파일은 `{{base_url}}providers/validate`처럼 붙기 때문에 값이 반드시 `/`로 끝나야 한다.
-2. `auto_login`은 보호 API 호출 전에 Bruno가 실제 로그인 세션을 만들지 정한다.
-3. `auth_email`/`auth_password`는 로컬 실행 값이다. collection과 `aws-test`에는 placeholder만 커밋한다.
+1. `base_url`은 Gateway API 주소다. 팀 공용 `aws-test`는 `https://dev-k8s.woonyong.org/api/`로 고정한다. Bruno 요청 파일은 `{{base_url}}providers/validate`처럼 붙기 때문에 값이 반드시 `/`로 끝나야 한다.
+2. `auto_login`은 `false`로 유지한다. 일반 사용자 로그인 회귀는 공개 운영 주소에서 별도로 수행한다.
+3. `auth_email`/`auth_password` placeholder는 인증 API 자체를 명시적으로 검증할 때만 사용한다.
 4. `github_webhook_secret`은 배포에 설정된 `GITHUB_WEBHOOK_SECRET` 값이다. 이 값을 채우면 webhook signature를 Bruno가 요청 직전에 자동 계산한다.
 5. `metrics_token`과 `alertmanager_token`은 해당 외부 입구 인증을 별도로 검증할 때만 넣는다.
 6. `service_image`는 target manifest 발급 시 쓸 agent 이미지다.
@@ -89,7 +107,7 @@ bash scripts/run-bruno-aws.sh
 
 요청 순서대로 실행하면 아래 값은 자동으로 채워진다.
 
-1. `workspace_id`, `user_id`는 `06-login` 성공 후 저장된다.
+1. `workspace_id`, `user_id`는 `07-session` 응답의 mTLS 개발 주체 값으로 확인한다.
 2. `agent_token`은 `02-target-admin/01-register-target-dry-run` 성공 후 저장된다.
 3. `command_id`는 `04-command/02-debug-query` 또는 `03-agent-command-poll` 성공 후 저장된다.
 4. `evidence_key`, `evidence_job_id`는 `03-agent-runtime/05-schedule`, `06-poll` 성공 후 저장된다.
@@ -102,16 +120,18 @@ bash scripts/run-bruno-aws.sh
 
 아래는 각 값의 의미 설명이다.
 
-`base_url`은 Gateway API 주소다. `aws-test` Environment와 collection 기본 변수는 `https://k8s.woonyong.org/api/`를 쓴다.
-현재 AWS/CDN 라우팅은 프론트 콘솔을 `https://k8s.woonyong.org/`에 두고, Gateway API를 같은 origin의 `/api/*` 프록시로 연결한다. 그래서 Bruno에서는 `{{base_url}}healthz`, `{{base_url}}providers/validate`, `{{base_url}}agent/debug/query`처럼 Gateway route를 붙여 호출한다.
+`base_url`은 Gateway API 주소다. `aws-test` Environment와 collection 기본 변수는
+`https://dev-k8s.woonyong.org/api/`를 쓴다. 이 호스트는 Cloudflare mTLS 검증을 통과한 뒤
+개발 전용 프록시로만 연결된다.
 
-프론트 콘솔을 직접 여는 주소는 `https://k8s.woonyong.org/`지만, Bruno collection의 AWS `base_url`에는 `/api/`까지 포함한다.
+운영 콘솔은 `https://k8s.woonyong.org/`, 개발 콘솔과 Bruno API는
+`https://dev-k8s.woonyong.org/`를 사용한다. Bruno `base_url`에는 `/api/`까지 포함한다.
 
-Bruno 화면에서 Environment를 아직 고르지 않았더라도 `docs/api/collection.bru`의 기본 변수 때문에 `{{base_url}}`이 `https://k8s.woonyong.org/api/`로 풀린다.
+Bruno 화면에서 Environment를 아직 고르지 않았더라도 `docs/api/collection.bru`의 기본 변수 때문에 `{{base_url}}`이 `https://dev-k8s.woonyong.org/api/`로 풀린다.
 실제 API 테스트는 오른쪽 위 Environment에서 유일한 공용 환경인 `aws-test`를 선택한다.
 
-`auth_email`과 `auth_password`는 로그인할 운영자 계정이다.
-collection과 `aws-test` 기본값은 placeholder다.
+`auth_email`과 `auth_password`는 실제 로그인 API 자체를 별도로 검증할 때만 쓰며,
+일반 `aws-test` 요청 인증에는 사용하지 않는다. collection과 환경 기본값은 placeholder다.
 
 ```text
 auth_email: replace-with-auth-email
@@ -120,9 +140,8 @@ auth_password: replace-with-auth-password
 
 AWS 라이브 계정은 문서/collection 파일에 쓰지 않는다. Bruno 인증 회귀가 필요하면 팀 Secret으로 받은 로컬 값을 실행 시점에만 주입한다.
 
-`auto_login`은 collection pre-request script가 `/auth/login`을 호출할지 정한다.
-자동 로그인은 `service_session` cookie가 없을 때만 동작하며, `x-agent-token` API, install 링크, GitHub/Alertmanager webhook, `/metrics`, health/openapi/auth 흐름에는 붙지 않는다.
-인증 실패 응답을 직접 보고 싶으면 Environment에서 `auto_login`을 `false`로 바꾼다.
+`auto_login`은 기본적으로 `false`다. mTLS 인증서는 Bruno 전송 계층에서 제시되고,
+개발 프록시가 검증된 요청에만 고정 개발 주체를 부여하므로 `/auth/login` 선행 호출이 필요 없다.
 
 `aws-test`의 `cluster_id`/`cluster_id_2`는 격리된 `api-verification-target`이며,
 CLI Runner에서는 충돌을 피하려고 실행별 고유 ID를 사용한다.
@@ -156,7 +175,7 @@ collection 기본 생성 요청은 `enabled: false`로 보내므로 기본값 `h
 
 권한 기준은 세 가지로 보면 된다.
 인증 없이 보는 상태 확인 API, 로그인 세션이 필요한 운영자/사용자 API, `x-agent-token`이 필요한 target agent API다.
-로그인 세션 API는 `auto_login`이 켜져 있으면 Bruno가 먼저 세션을 만들고, 이후 `service_session` cookie를 자동으로 들고 간다.
+로그인 세션 API는 mTLS 개발 프록시가 제공하는 고정 개발 주체로 실행된다.
 target agent API는 Environment의 `agent_token`이 맞아야 한다.
 
 ### 00-health-auth
@@ -181,9 +200,8 @@ Bruno collection을 수정할 때도 이 API로 route가 실제 배포에 있는
 가입은 되었지만 검증 토큰을 놓쳤거나 만료된 경우에만 사용한다.
 이미 검증이 끝난 계정이면 다시 검증할 필요가 없다는 형태로 응답할 수 있다.
 
-`06-login`은 운영자 또는 팀원 계정으로 로그인하고 `service_session` cookie를 받는 API다.
-`auto_login`이 켜져 있으면 세션 API를 먼저 눌러도 같은 로그인을 pre-request에서 자동 수행한다.
-Bruno는 응답 cookie를 보관하므로, 같은 Environment에서 다음 요청을 그대로 보내면 된다.
+`06-login`은 운영자 또는 팀원 계정의 실제 비밀번호 인증 자체를 확인하는 API다.
+기본 개발 흐름에는 필요하지 않으며, mTLS 프록시를 통과한 이후 보호 API의 주체는 고정 개발 주체가 우선한다.
 
 `07-session`은 현재 cookie가 어떤 사용자, workspace, roles로 인식되는지 확인하는 API다.
 권한 문제를 디버깅할 때 제일 먼저 본다.
@@ -202,8 +220,8 @@ Bruno는 응답 cookie를 보관하므로, 같은 Environment에서 다음 요�
 
 ### 01-providers
 
-이 폴더의 요청은 provider catalog와 cluster 등록 후보를 다루므로 admin 세션이 필요하다.
-`auto_login` 기본값이면 바로 보낼 수 있다. 수동 흐름으로 확인하려면 먼저 `00-health-auth/06-login`으로 `service_admin` 계정에 로그인한다.
+이 폴더의 요청은 provider catalog와 cluster 등록 후보를 다루므로 admin 권한이 필요하다.
+유효한 mTLS 인증서를 등록하면 고정 개발 주체의 `service_admin` 권한으로 바로 보낼 수 있다.
 
 `01-provider-catalog`는 현재 Gateway가 알고 있는 provider 선택지를 보여주는 API다.
 target 등록 전에 어떤 source, deploy, cloud, secret provider 조합을 쓸 수 있는지 확인한다.
@@ -501,29 +519,30 @@ alert-worker가 `alert.requested`를 받았을 때 이 목록을 기준으로 �
 
 이 세 개가 실패하면 이후 요청은 보지 않는다. 먼저 Gateway 주소와 AWS CD 상태를 확인한다.
 
-## 4단계. 자동 로그인 확인
+## 4단계. mTLS 개발 주체 확인
 
 세션 API를 바로 확인하려면 `00-health-auth/07-session.bru`를 보낸다.
-cookie가 없으면 Bruno가 먼저 `/auth/login`을 호출하므로 정상 출력은 `authenticated: true`, `user_id`, `workspace_id`, `roles`다.
+cookie가 없어도 인증서가 검증되면 정상 출력은 `authenticated: true`, `user_id`,
+`workspace_id: default`, `roles: [service_admin]`다.
 
-수동 로그인 API 자체를 확인하려면 `00-health-auth/06-login.bru`를 보낸다.
+수동 로그인 API 자체를 별도로 확인하려면 `00-health-auth/06-login.bru`를 보낸다.
 
 정상 출력은 `authenticated: true`, `user_id`, `workspace_id`, `roles`다.
 Bruno는 `service_session` httpOnly cookie를 cookie jar에 보관하고 다음 요청에 자동으로 보낸다.
 
-로그인이 실패하면 아래만 확인한다.
+개발 주체 확인이 실패하면 아래를 확인한다.
 
-1. `auth_email`이 실제 등록된 계정인지 본다.
-2. `auth_password`가 맞는지 본다.
-3. 계정이 email verification 또는 approval 대기 상태인지 본다.
-4. 계정 권한이 cluster read/write에 충분한지 본다.
+1. Client Certificates의 domain이 `dev-k8s.woonyong.org`인지 본다.
+2. PFX 파일과 암호가 같은 팀원 폴더에서 전달된 한 쌍인지 본다.
+3. Environment가 `aws-test`이고 `auto_login: false`인지 본다.
+4. `base_url`이 `https://dev-k8s.woonyong.org/api/`인지 본다.
 
 ## 5단계. Provider catalog 확인
 
 `01-providers/01-provider-catalog.bru`를 보낸다.
 
 정상 출력에는 `providers`가 있다.
-401/403이면 먼저 admin 계정으로 로그인했는지 확인한다.
+401/403이면 먼저 mTLS 인증서와 `07-session`의 개발 주체를 확인한다.
 
 `01-providers/02-validate-provider-selection.bru`를 보낸다.
 
