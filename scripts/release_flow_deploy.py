@@ -1,0 +1,228 @@
+#!/usr/bin/env python3
+"""Start a gated production release through the release-flow API."""
+
+from __future__ import annotations
+
+import argparse
+import json
+import os
+import sys
+from typing import Any
+
+from release_flow_smoke import (
+    ApiClient,
+    SmokeResult,
+    append_github_output,
+    append_github_step_summary,
+    derive_api_base_url,
+    emit_github_annotations,
+    env_flag,
+    redact_sensitive_text,
+    validate_live_https_url,
+    write_json_report,
+    write_junit_report,
+    write_markdown_report,
+)
+
+
+PRODUCTION_ENVIRONMENTS = {"prod", "production"}
+PLACEHOLDER_CHANGE_TICKETS = {"CHG-PREFLIGHT"}
+PLACEHOLDER_IMAGES = {"ghcr.io/example/release-flow-smoke:live-preflight"}
+
+
+def parse_args(argv: list[str]) -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--api-base-url", default=os.getenv("RELEASE_FLOW_API_BASE_URL", ""))
+    parser.add_argument("--base-url", default=os.getenv("BASE_URL", ""))
+    parser.add_argument("--email", default=os.getenv("RELEASE_FLOW_AUTH_EMAIL") or os.getenv("AUTH_EMAIL", ""))
+    parser.add_argument(
+        "--password",
+        default=os.getenv("RELEASE_FLOW_AUTH_PASSWORD") or os.getenv("AUTH_PASSWORD", ""),
+    )
+    parser.add_argument("--plan-id", default=os.getenv("RELEASE_FLOW_DEPLOY_PLAN_ID", ""))
+    parser.add_argument("--timeout", type=float, default=float(os.getenv("RELEASE_FLOW_DEPLOY_TIMEOUT_SECONDS", "30")))
+    parser.add_argument(
+        "--retry-attempts",
+        type=int,
+        default=int(os.getenv("RELEASE_FLOW_DEPLOY_RETRY_ATTEMPTS", "3")),
+    )
+    parser.add_argument(
+        "--retry-delay-seconds",
+        type=float,
+        default=float(os.getenv("RELEASE_FLOW_DEPLOY_RETRY_DELAY_SECONDS", "1")),
+    )
+    parser.add_argument("--ci", action="store_true", default=env_flag("RELEASE_FLOW_DEPLOY_CI"))
+    parser.add_argument(
+        "--ci-artifacts-dir",
+        default=os.getenv("RELEASE_FLOW_DEPLOY_CI_ARTIFACTS_DIR", "artifacts/release-flow-deploy"),
+    )
+    parser.add_argument("--report-path", default=os.getenv("RELEASE_FLOW_DEPLOY_REPORT_PATH", ""))
+    parser.add_argument("--junit-path", default=os.getenv("RELEASE_FLOW_DEPLOY_JUNIT_PATH", ""))
+    parser.add_argument("--markdown-path", default=os.getenv("RELEASE_FLOW_DEPLOY_MARKDOWN_PATH", ""))
+    parser.add_argument("--github-step-summary", action="store_true", default=env_flag("RELEASE_FLOW_DEPLOY_GITHUB_STEP_SUMMARY"))
+    parser.add_argument("--github-output", action="store_true", default=env_flag("RELEASE_FLOW_DEPLOY_GITHUB_OUTPUT"))
+    parser.add_argument("--github-annotations", action="store_true", default=env_flag("RELEASE_FLOW_DEPLOY_GITHUB_ANNOTATIONS"))
+    return parser.parse_args(argv)
+
+
+def apply_ci_defaults(args: argparse.Namespace) -> None:
+    if not args.ci:
+        return
+    artifact_dir = str(args.ci_artifacts_dir or "artifacts/release-flow-deploy")
+    if not str(args.report_path or "").strip():
+        args.report_path = os.path.join(artifact_dir, "release-flow-deploy.json")
+    if not str(args.junit_path or "").strip():
+        args.junit_path = os.path.join(artifact_dir, "release-flow-deploy.junit.xml")
+    if not str(args.markdown_path or "").strip():
+        args.markdown_path = os.path.join(artifact_dir, "release-flow-deploy.md")
+    if os.getenv("GITHUB_STEP_SUMMARY"):
+        args.github_step_summary = True
+    if os.getenv("GITHUB_OUTPUT"):
+        args.github_output = True
+    if env_flag("GITHUB_ACTIONS"):
+        args.github_annotations = True
+
+
+def release_plan_start_payload(plan: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "plan_id": plan.get("plan_id"),
+        "name": plan.get("name") or "Production release",
+        "description": plan.get("description") or "",
+        "status": plan.get("status") or "active",
+        "settings": plan.get("settings") if isinstance(plan.get("settings"), dict) else {},
+        "steps": plan.get("steps") if isinstance(plan.get("steps"), list) else [],
+    }
+
+
+def validate_production_plan(plan: dict[str, Any]) -> list[str]:
+    blockers: list[str] = []
+    settings = plan.get("settings") if isinstance(plan.get("settings"), dict) else {}
+    steps = plan.get("steps") if isinstance(plan.get("steps"), list) else []
+    if settings.get("runtime_mode") != "live":
+        blockers.append("release plan settings.runtime_mode must be live")
+    if not steps:
+        blockers.append("release plan must contain at least one step")
+    for index, step in enumerate(steps, start=1):
+        if not isinstance(step, dict):
+            blockers.append(f"release plan step {index} is not an object")
+            continue
+        config = step.get("config") if isinstance(step.get("config"), dict) else {}
+        application_id = str(step.get("application_id") or f"step-{index}")
+        environment = str(config.get("environment") or settings.get("environment") or "").lower()
+        if environment not in PRODUCTION_ENVIRONMENTS:
+            blockers.append(f"{application_id} environment must be production")
+        for field in (
+            "change_ticket",
+            "runbook_url",
+            "post_deploy_verification_url",
+            "abort_criteria",
+            "image",
+        ):
+            if not str(config.get(field) or settings.get(field) or "").strip():
+                blockers.append(f"{application_id} requires {field}")
+        change_ticket = str(config.get("change_ticket") or settings.get("change_ticket") or "").strip()
+        if change_ticket in PLACEHOLDER_CHANGE_TICKETS:
+            blockers.append(f"{application_id} change_ticket must not use placeholder {change_ticket}")
+        for field in ("runbook_url", "post_deploy_verification_url"):
+            value = str(config.get(field) or settings.get(field) or "").strip()
+            if value:
+                try:
+                    validate_live_https_url(field, value, context="for production release plan")
+                except ValueError as exc:
+                    blockers.append(f"{application_id} {exc}")
+        image = str(config.get("image") or settings.get("image") or "").strip()
+        if image:
+            if image in PLACEHOLDER_IMAGES:
+                blockers.append(f"{application_id} image must not use production placeholder value {image}")
+            if image.endswith(":latest"):
+                blockers.append(f"{application_id} image must not use mutable latest tag")
+            if ":" not in image.rsplit("/", 1)[-1] and "@" not in image:
+                blockers.append(f"{application_id} image must include an immutable tag or digest")
+    return blockers
+
+
+def run_deploy(client: ApiClient, args: argparse.Namespace) -> list[SmokeResult]:
+    results: list[SmokeResult] = []
+    client.request("POST", "/auth/login", {"email": args.email, "password": args.password})
+    session = client.request("GET", "/auth/session")
+    results.append(SmokeResult("auth.session", bool(session.get("authenticated")), str(session)))
+    plan_response = client.request("GET", f"/release-plans/{args.plan_id}")
+    plan = plan_response.get("plan", {})
+    if not isinstance(plan, dict):
+        raise ValueError("release plan response did not contain a plan object")
+    blockers = validate_production_plan(plan)
+    if str(plan.get("plan_id") or "") != str(args.plan_id):
+        blockers.append("release plan response plan_id must match requested plan_id")
+    results.append(
+        SmokeResult(
+            "release-plan.production-contract",
+            not blockers,
+            "ok" if not blockers else "; ".join(blockers),
+        )
+    )
+    if blockers:
+        return results
+    run = client.request("POST", "/release-plans/start", release_plan_start_payload(plan)).get("run", {})
+    run_id = str(run.get("run_id") or "")
+    side_effects = [
+        step.get("details", {}).get("side_effects")
+        for step in run.get("steps", [])
+        if isinstance(step, dict)
+    ]
+    results.append(
+        SmokeResult(
+            "release-plans.start.production",
+            bool(run_id) and all(value is True for value in side_effects),
+            run_id or json.dumps(run, ensure_ascii=False, sort_keys=True),
+        )
+    )
+    return results
+
+
+def write_reports(args: argparse.Namespace, *, ok: bool, api_base_url: str, results: list[SmokeResult], error: str | None = None) -> None:
+    payload = {
+        "ok": ok,
+        "api_base_url": api_base_url,
+        "plan_id": args.plan_id,
+        "checks": [item.__dict__ for item in results],
+    }
+    if error:
+        payload["error"] = redact_sensitive_text(error)
+    write_json_report(args.report_path, payload)
+    write_junit_report(args.junit_path, results, error=error)
+    write_markdown_report(args.markdown_path, ok=ok, api_base_url=api_base_url, results=results, error=error)
+    append_github_step_summary(args.github_step_summary, ok=ok, api_base_url=api_base_url, results=results, error=error)
+    append_github_output(args.github_output, ok=ok, api_base_url=api_base_url, results=results, error=error)
+    emit_github_annotations(args.github_annotations, results=results, error=error)
+
+
+def main(argv: list[str]) -> int:
+    args = parse_args(argv)
+    apply_ci_defaults(args)
+    api_base_url = derive_api_base_url(args)
+    results: list[SmokeResult] = []
+    if not api_base_url or not args.email or not args.password or not args.plan_id:
+        error = "RELEASE_FLOW_API_BASE_URL, RELEASE_FLOW_AUTH_EMAIL, RELEASE_FLOW_AUTH_PASSWORD, and release_plan_id are required"
+        write_reports(args, ok=False, api_base_url=api_base_url, results=results, error=error)
+        print(error, file=sys.stderr)
+        return 2
+    client = ApiClient(
+        api_base_url,
+        timeout=args.timeout,
+        retry_attempts=args.retry_attempts,
+        retry_delay_seconds=args.retry_delay_seconds,
+    )
+    try:
+        results = run_deploy(client, args)
+        ok = all(item.ok for item in results)
+        write_reports(args, ok=ok, api_base_url=client.api_base_url, results=results)
+        return 0 if ok else 1
+    except Exception as exc:
+        error = redact_sensitive_text(str(exc))
+        write_reports(args, ok=False, api_base_url=client.api_base_url, results=results, error=error)
+        print(error, file=sys.stderr)
+        return 1
+
+
+if __name__ == "__main__":
+    raise SystemExit(main(sys.argv[1:]))

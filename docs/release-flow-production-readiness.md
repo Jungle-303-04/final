@@ -69,8 +69,9 @@ GitHub Actions production readiness:
 3. Select the production GitHub Environment.
 4. Enable `github_access_preflight` when you want the workflow to verify the GitHub token can read `RELEASE_FLOW_SCM_REPO` and `RELEASE_FLOW_SCM_BASE_BRANCH` before Safe PR creation.
 5. Enable `api_smoke_preflight` when you want the workflow to verify the live API without dispatching a release.
-6. Confirm the workflow summary contains `Result: passed`.
-7. Download the `release-flow-production-readiness` artifact and keep it with the release evidence.
+6. Keep `production_deploy_required` enabled for the final production-readiness run. Disable it only while wiring the first deployment workflow.
+7. Confirm the workflow summary contains `Result: passed`.
+8. Download the `release-flow-production-readiness` artifact and keep it with the release evidence.
 
 When `github_access_preflight` is enabled, the verifier must have an actual GitHub token value. If `RELEASE_FLOW_GITHUB_TOKEN_REF` points to a non-env vault ref such as `aws-sm:` or `k8s-secret:`, also set the `RELEASE_FLOW_GITHUB_TOKEN` secret for this readiness workflow so the read-only GitHub API check can run.
 
@@ -78,7 +79,7 @@ When `github_access_preflight` is enabled, the verifier must have an actual GitH
 
 ## Live Gate Requirement
 
-Production deployment workflows must call `.github/workflows/release-flow-production-gate.yml` before any write. The gate must pass with:
+Production deployment workflows must call `.github/workflows/release-flow-production-gate.yml` before any write. The provided `.github/workflows/release-flow-production-deploy.yml` workflow does this before starting a saved release plan through `scripts/release_flow_deploy.py`. The gate must pass with:
 
 - a real `live_change_ticket`
 - a real HTTPS `live_runbook_url`

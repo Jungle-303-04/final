@@ -26,10 +26,12 @@ REQUIRED_WORKFLOW_FILES = [
     Path(".github/workflows/release-flow-smoke.yml"),
     Path(".github/workflows/release-flow-production-gate.yml"),
     Path(".github/workflows/release-flow-gate-contract.yml"),
+    Path(".github/workflows/release-flow-production-deploy.yml"),
     Path(".github/workflows/release-flow-production-readiness.yml"),
 ]
 REQUIRED_SCRIPT_FILES = [
     Path("scripts/release_flow_smoke.py"),
+    Path("scripts/release_flow_deploy.py"),
     Path("scripts/validate_release_flow_production_gate.py"),
     Path("scripts/up.sh"),
 ]
@@ -74,6 +76,7 @@ def validate_readiness(
     *,
     require_runtime_config: bool = False,
     check_github_access: bool = False,
+    require_production_deploy: bool = False,
 ) -> list[ReadinessCheck]:
     checks: list[ReadinessCheck] = []
     checks.extend(check_required_files())
@@ -86,8 +89,10 @@ def validate_readiness(
     checks.extend(check_trace_correlation_contract())
     checks.extend(check_safe_pr_patch_contract())
     checks.extend(check_production_gate_contract())
+    checks.extend(check_production_deploy_workflow_contract())
+    checks.extend(check_deploy_script_contract())
     checks.extend(check_gate_contract_script_contract())
-    checks.extend(check_gate_contract_workflow())
+    checks.extend(check_gate_contract_workflow(require_production_deploy=require_production_deploy))
     checks.extend(check_runtime_config(require_runtime_config=require_runtime_config))
     checks.extend(check_github_runtime_config(require_runtime_config=require_runtime_config))
     checks.extend(check_live_runtime_config(require_runtime_config=require_runtime_config))
@@ -154,7 +159,7 @@ def check_smoke_workflow_contract() -> list[ReadinessCheck]:
             "live_safe_pr_workflow_run_id is required when live_approval_gate is safe_pr" in run
             and "live_safe_pr_url is required when live_approval_gate is safe_pr" in run
             and "live_safe_pr_url must use https when live_approval_gate is safe_pr" in run
-            and "live_safe_pr_url must not use localhost or example.com when live_approval_gate is safe_pr" in run,
+            and "live_safe_pr_url must not use localhost or example hosts when live_approval_gate is safe_pr" in run,
             "live safe_pr preflight fails before API calls without concrete Safe PR evidence",
         ),
         ReadinessCheck(
@@ -172,7 +177,7 @@ def check_smoke_workflow_contract() -> list[ReadinessCheck]:
             and "LIVE_PREFLIGHT_VERIFICATION_URL" in run
             and "live_verification_url is required for production live_preflight" in run
             and "live_verification_url must use https for production live_preflight" in run
-            and "live_verification_url must not use localhost or example.com" in run,
+            and "live_verification_url must not use localhost or example hosts" in run,
             "production live preflight requires a concrete https verification URL",
         ),
     ]
@@ -188,6 +193,9 @@ def check_smoke_script_contract() -> list[ReadinessCheck]:
             "script.smoke.live_placeholder_guard",
             "validate_live_preflight_inputs" in source
             and "LIVE_PREFLIGHT_PLACEHOLDERS" in source
+            and "LIVE_PREFLIGHT_PLACEHOLDER_HOSTS" in source
+            and "example.test" in source
+            and "host.endswith(\".localhost\")" in source
             and "CHG-PREFLIGHT" in source
             and "https://example.com/runbooks/release-flow" in source
             and "https://example.com/verify/release-flow" in source
@@ -197,8 +205,9 @@ def check_smoke_script_contract() -> list[ReadinessCheck]:
         ReadinessCheck(
             "script.smoke.live_runbook_url_required",
             '"live_runbook_url": getattr(args, "live_runbook_url", "")' in source
-            and "live_runbook_url must use https for production live preflight" in source
-            and "live_runbook_url must not use localhost or example.com placeholder value" in source,
+            and 'validate_live_https_url("live_runbook_url"' in source
+            and "LIVE_PREFLIGHT_PLACEHOLDER_HOSTS" in source
+            and 'host.endswith(".example.test")' in source,
             "direct production live preflight requires a concrete https runbook URL",
         ),
         ReadinessCheck(
@@ -212,8 +221,9 @@ def check_smoke_script_contract() -> list[ReadinessCheck]:
             "script.smoke.live_verification_url_required",
             '"live_verification_url": getattr(args, "live_verification_url", "")' in source
             and "is required for production live preflight" in source
-            and "live_verification_url must use https for production live preflight" in source
-            and "live_verification_url must not use localhost or example.com placeholder value" in source,
+            and 'validate_live_https_url("live_verification_url"' in source
+            and "LIVE_PREFLIGHT_PLACEHOLDER_HOSTS" in source
+            and 'host.endswith(".example.test")' in source,
             "direct production live preflight requires a concrete https verification URL",
         ),
         ReadinessCheck(
@@ -234,8 +244,9 @@ def check_smoke_script_contract() -> list[ReadinessCheck]:
             "script.smoke.production_verification_url_required",
             '"live_verification_url": getattr(args, "live_verification_url", "")' in source
             and "is required for production live preflight" in source
-            and "live_verification_url must use https for production live preflight" in source
-            and "live_verification_url must not use localhost or example.com placeholder value" in source,
+            and 'validate_live_https_url("live_verification_url"' in source
+            and "LIVE_PREFLIGHT_PLACEHOLDER_HOSTS" in source
+            and 'host.endswith(".example.test")' in source,
             "direct production live preflight requires concrete post-deploy verification URL evidence",
         ),
         ReadinessCheck(
@@ -251,8 +262,9 @@ def check_smoke_script_contract() -> list[ReadinessCheck]:
             "script.smoke.safe_pr_evidence_required",
             "live_safe_pr_workflow_run_id is required when live_approval_gate is safe_pr" in source
             and "live_safe_pr_url is required when live_approval_gate is safe_pr" in source
-            and "live_safe_pr_url must use https when live_approval_gate is safe_pr" in source
-            and "live_safe_pr_url must not use localhost or example.com placeholder value" in source,
+            and 'validate_live_https_url(\n            "live_safe_pr_url"' in source
+            and "LIVE_PREFLIGHT_PLACEHOLDER_HOSTS" in source
+            and 'host.endswith(".example.test")' in source,
             "direct live safe_pr preflight requires concrete Safe PR evidence before readiness calls",
         ),
         ReadinessCheck(
@@ -671,6 +683,14 @@ def check_production_readiness_workflow_contract() -> list[ReadinessCheck]:
             "production readiness can optionally run live API smoke without release dispatch",
         ),
         ReadinessCheck(
+            "workflow.production_readiness.production_deploy_required",
+            "production_deploy_required" in inputs
+            and inputs.get("production_deploy_required", {}).get("default") is True
+            and "PRODUCTION_DEPLOY_REQUIRED" in env
+            and "--require-production-deploy" in run,
+            "production readiness can require at least one gated production deploy workflow",
+        ),
+        ReadinessCheck(
             "workflow.production_readiness.github_api_base",
             "GITHUB_API_BASE" in env and "RELEASE_FLOW_GITHUB_API_BASE" in str(env.get("GITHUB_API_BASE") or ""),
             "production readiness can target GitHub Enterprise API base",
@@ -748,7 +768,7 @@ def check_production_gate_contract() -> list[ReadinessCheck]:
             and "live_safe_pr_workflow_run_id is required when live_approval_gate is safe_pr" in validate_run
             and "live_safe_pr_url is required when live_approval_gate is safe_pr" in validate_run
             and "live_safe_pr_url must use https when live_approval_gate is safe_pr" in validate_run
-            and "live_safe_pr_url must not use localhost or example.com when live_approval_gate is safe_pr" in validate_run,
+            and "live_safe_pr_url must not use localhost or example hosts when live_approval_gate is safe_pr" in validate_run,
             "production gate rejects safe_pr mode without existing Safe PR evidence before smoke calls",
         ),
         ReadinessCheck(
@@ -763,7 +783,7 @@ def check_production_gate_contract() -> list[ReadinessCheck]:
             "default" not in inputs.get("live_runbook_url", {})
             and "live_runbook_url is required" in validate_run
             and "live_runbook_url must use https for production live_preflight" in validate_run
-            and "live_runbook_url must not use localhost or example.com" in validate_run,
+            and "live_runbook_url must not use localhost or example hosts" in validate_run,
             "production runbook URL is required",
         ),
         ReadinessCheck(
@@ -785,7 +805,7 @@ def check_production_gate_contract() -> list[ReadinessCheck]:
             "LIVE_PREFLIGHT_VERIFICATION_URL" in validate_job.get("env", {})
             and "live_verification_url is required for production live_preflight" in validate_run
             and "live_verification_url must use https for production live_preflight" in validate_run
-            and "live_verification_url must not use localhost or example.com" in validate_run,
+            and "live_verification_url must not use localhost or example hosts" in validate_run,
             "production gate requires concrete post-deploy verification URL evidence",
         ),
         ReadinessCheck(
@@ -806,8 +826,99 @@ def check_production_gate_contract() -> list[ReadinessCheck]:
     ]
 
 
-def check_gate_contract_workflow() -> list[ReadinessCheck]:
-    result = validate_workflows([Path(".github/workflows")])
+def check_production_deploy_workflow_contract() -> list[ReadinessCheck]:
+    path = Path(".github/workflows/release-flow-production-deploy.yml")
+    if not path.is_file():
+        return [ReadinessCheck("workflow.production_deploy", False, "release-flow-production-deploy.yml is missing")]
+    workflow = load_yaml(path)
+    inputs = workflow.get("on", {}).get("workflow_dispatch", {}).get("inputs", {})
+    jobs = workflow.get("jobs", {})
+    gate_job = jobs.get("release_flow_production_gate", {}) if isinstance(jobs, dict) else {}
+    deploy_job = jobs.get("deploy-production", {}) if isinstance(jobs, dict) else {}
+    deploy_run = "\n".join(str(step.get("run", "")) for step in deploy_job.get("steps", []) if isinstance(step, dict))
+    deploy_env = {}
+    for step in deploy_job.get("steps", []) if isinstance(deploy_job.get("steps"), list) else []:
+        if isinstance(step, dict) and step.get("id") == "release_flow_deploy":
+            deploy_env = step.get("env", {}) if isinstance(step.get("env"), dict) else {}
+    return [
+        ReadinessCheck(
+            "workflow.production_deploy.required_inputs",
+            all(
+                inputs.get(name, {}).get("required") is True
+                for name in (
+                    "release_plan_id",
+                    "live_change_ticket",
+                    "live_runbook_url",
+                    "live_image",
+                    "live_verification_url",
+                    "live_safe_pr_workflow_run_id",
+                    "live_safe_pr_url",
+                )
+            ),
+            "production deploy workflow requires plan id and live evidence inputs",
+        ),
+        ReadinessCheck(
+            "workflow.production_deploy.calls_gate",
+            gate_job.get("uses") == "./.github/workflows/release-flow-production-gate.yml"
+            and gate_job.get("with", {}).get("live_preflight") is True
+            and gate_job.get("with", {}).get("live_approval_gate") == "safe_pr"
+            and gate_job.get("with", {}).get("live_safe_pr_workflow_run_id")
+            == "${{ inputs.live_safe_pr_workflow_run_id }}"
+            and gate_job.get("with", {}).get("live_safe_pr_url") == "${{ inputs.live_safe_pr_url }}"
+            and gate_job.get("secrets") == "inherit",
+            "production deploy must call the reusable production gate with Safe PR evidence",
+        ),
+        ReadinessCheck(
+            "workflow.production_deploy.gates_start",
+            deploy_job.get("needs") == "release_flow_production_gate"
+            and deploy_job.get("if") == "needs.release_flow_production_gate.outputs.release_gate_ok == 'true'",
+            "production release start is gated by release_gate_ok",
+        ),
+        ReadinessCheck(
+            "workflow.production_deploy.starts_release_flow",
+            "python scripts/release_flow_deploy.py" in deploy_run
+            and "--plan-id" in deploy_run
+            and "RELEASE_FLOW_DEPLOY_PLAN_ID" in deploy_run
+            and "RELEASE_FLOW_AUTH_EMAIL" in deploy_env
+            and "RELEASE_FLOW_AUTH_PASSWORD" in deploy_env,
+            "production deploy starts a release-flow run using release-flow credentials",
+        ),
+    ]
+
+
+def check_deploy_script_contract() -> list[ReadinessCheck]:
+    path = Path("scripts/release_flow_deploy.py")
+    if not path.is_file():
+        return [ReadinessCheck("script.deploy", False, "release_flow_deploy.py is missing")]
+    source = path.read_text(encoding="utf-8")
+    return [
+        ReadinessCheck(
+            "script.deploy.fetches_saved_plan",
+            '"/release-plans/{args.plan_id}"' in source
+            and "release_plan_start_payload" in source
+            and "validate_production_plan" in source,
+            "deploy script fetches and validates the saved release plan before start",
+        ),
+        ReadinessCheck(
+            "script.deploy.requires_live_production_plan",
+            "settings.runtime_mode must be live" in source
+            and "environment must be production" in source
+            and "release plan must contain at least one step" in source,
+            "deploy script refuses demo or non-production plans before side effects",
+        ),
+        ReadinessCheck(
+            "script.deploy.starts_release",
+            '"/release-plans/start"' in source
+            and "release-plans.start.production" in source
+            and "side_effects" in source
+            and "all(value is True for value in side_effects)" in source,
+            "deploy script starts the release and verifies live side-effect evidence",
+        ),
+    ]
+
+
+def check_gate_contract_workflow(*, require_production_deploy: bool = False) -> list[ReadinessCheck]:
+    result = validate_workflows([Path(".github/workflows")], require_production_deploy=require_production_deploy)
     return [
         ReadinessCheck(
             "workflow.gate_contract.static_scan",
@@ -842,7 +953,8 @@ def check_gate_contract_script_contract() -> list[ReadinessCheck]:
             and "PLACEHOLDER_URL_HOSTS" in source
             and "validate_literal_url_input" in source
             and "parsed.scheme != \"https\"" in source
-            and "host.endswith(\".localhost\")" in source,
+            and "host.endswith(\".localhost\")" in source
+            and "host.endswith(\".example.test\")" in source,
             "production deploy workflows cannot hard-code non-https or placeholder live URLs",
         ),
     ]
@@ -1184,6 +1296,7 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--require-runtime-config", action="store_true")
     parser.add_argument("--check-github-access", action="store_true")
+    parser.add_argument("--require-production-deploy", action="store_true")
     parser.add_argument("--report-path", type=Path)
     parser.add_argument("--markdown-path", type=Path)
     return parser.parse_args(argv)
@@ -1194,6 +1307,7 @@ def main(argv: list[str]) -> int:
     checks = validate_readiness(
         require_runtime_config=args.require_runtime_config,
         check_github_access=args.check_github_access,
+        require_production_deploy=args.require_production_deploy,
     )
     if args.report_path:
         write_report(args.report_path, checks)

@@ -64,6 +64,7 @@ def test_current_release_flow_production_readiness_static_checks_pass() -> None:
         "workflow.production_readiness.live_runtime_env",
         "workflow.production_readiness.github_access_preflight",
         "workflow.production_readiness.api_smoke_preflight",
+        "workflow.production_readiness.production_deploy_required",
         "workflow.production_readiness.github_secret_names",
         "workflow.production_gate.fail_closed",
         "workflow.production_gate.production_live_preflight_required",
@@ -76,6 +77,13 @@ def test_current_release_flow_production_readiness_static_checks_pass() -> None:
         "workflow.production_gate.image_required",
         "workflow.production_gate.verification_url_required",
         "workflow.production_gate.validates_before_smoke",
+        "workflow.production_deploy.required_inputs",
+        "workflow.production_deploy.calls_gate",
+        "workflow.production_deploy.gates_start",
+        "workflow.production_deploy.starts_release_flow",
+        "script.deploy.fetches_saved_plan",
+        "script.deploy.requires_live_production_plan",
+        "script.deploy.starts_release",
         "script.gate_contract.required_live_inputs",
         "script.gate_contract.literal_url_guard",
         "workflow.gate_contract.static_scan",
@@ -317,3 +325,29 @@ def test_release_flow_production_readiness_writes_reports(tmp_path: Path) -> Non
     payload = json.loads(report_path.read_text(encoding="utf-8"))
     assert payload["ok"] is True
     assert "# Release Flow Production Readiness" in markdown_path.read_text(encoding="utf-8")
+
+
+def test_release_flow_production_readiness_can_require_gated_production_deploy() -> None:
+    checks = validate_readiness(require_production_deploy=True)
+
+    gate_contract = next(check for check in checks if check.name == "workflow.gate_contract.static_scan")
+    assert gate_contract.ok is True
+    assert gate_contract.detail == "contract passed"
+
+    exit_code = main(["--require-production-deploy"])
+    assert exit_code == 0
+
+
+def test_release_flow_production_readiness_fails_when_gated_deploy_is_missing(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    workflows = tmp_path / ".github" / "workflows"
+    workflows.mkdir(parents=True)
+    monkeypatch.chdir(tmp_path)
+
+    checks = readiness.check_gate_contract_workflow(require_production_deploy=True)
+
+    gate_contract = next(check for check in checks if check.name == "workflow.gate_contract.static_scan")
+    assert gate_contract.ok is False
+    assert "no production deploy jobs were found to validate" in gate_contract.detail

@@ -411,8 +411,8 @@ jobs:
                 echo "::error title=Invalid Safe PR URL::live_safe_pr_url must use https when live_approval_gate is safe_pr."
                 exit 1
               fi
-              if [[ "$LIVE_PREFLIGHT_SAFE_PR_URL" == *"localhost"* || "$LIVE_PREFLIGHT_SAFE_PR_URL" == *"127.0.0.1"* || "$LIVE_PREFLIGHT_SAFE_PR_URL" == *"example.com"* ]]; then
-                echo "::error title=Placeholder Safe PR URL::live_safe_pr_url must not use localhost or example.com when live_approval_gate is safe_pr."
+              if [[ "$LIVE_PREFLIGHT_SAFE_PR_URL" == *"localhost"* || "$LIVE_PREFLIGHT_SAFE_PR_URL" == *"127.0.0.1"* || "$LIVE_PREFLIGHT_SAFE_PR_URL" == *"[::1]"* || "$LIVE_PREFLIGHT_SAFE_PR_URL" == *"example.com"* || "$LIVE_PREFLIGHT_SAFE_PR_URL" == *"example.test"* ]]; then
+                echo "::error title=Placeholder Safe PR URL::live_safe_pr_url must not use localhost or example hosts when live_approval_gate is safe_pr."
                 exit 1
               fi
             fi
@@ -442,8 +442,8 @@ jobs:
                 echo "::error title=Invalid live_runbook_url::live_runbook_url must use https for production live_preflight."
                 exit 1
               fi
-              if [[ "$LIVE_PREFLIGHT_RUNBOOK_URL" == *"localhost"* || "$LIVE_PREFLIGHT_RUNBOOK_URL" == *"127.0.0.1"* || "$LIVE_PREFLIGHT_RUNBOOK_URL" == *"example.com"* ]]; then
-                echo "::error title=Invalid live_runbook_url::live_runbook_url must not use localhost or example.com for production live_preflight."
+              if [[ "$LIVE_PREFLIGHT_RUNBOOK_URL" == *"localhost"* || "$LIVE_PREFLIGHT_RUNBOOK_URL" == *"127.0.0.1"* || "$LIVE_PREFLIGHT_RUNBOOK_URL" == *"[::1]"* || "$LIVE_PREFLIGHT_RUNBOOK_URL" == *"example.com"* || "$LIVE_PREFLIGHT_RUNBOOK_URL" == *"example.test"* ]]; then
+                echo "::error title=Invalid live_runbook_url::live_runbook_url must not use localhost or example hosts for production live_preflight."
                 exit 1
               fi
               if [ -z "$LIVE_PREFLIGHT_IMAGE" ]; then
@@ -462,8 +462,8 @@ jobs:
                 echo "::error title=Invalid live_verification_url::live_verification_url must use https for production live_preflight."
                 exit 1
               fi
-              if [[ "$LIVE_PREFLIGHT_VERIFICATION_URL" == *"localhost"* || "$LIVE_PREFLIGHT_VERIFICATION_URL" == *"127.0.0.1"* || "$LIVE_PREFLIGHT_VERIFICATION_URL" == *"example.com"* ]]; then
-                echo "::error title=Invalid live_verification_url::live_verification_url must not use localhost or example.com for production live_preflight."
+              if [[ "$LIVE_PREFLIGHT_VERIFICATION_URL" == *"localhost"* || "$LIVE_PREFLIGHT_VERIFICATION_URL" == *"127.0.0.1"* || "$LIVE_PREFLIGHT_VERIFICATION_URL" == *"[::1]"* || "$LIVE_PREFLIGHT_VERIFICATION_URL" == *"example.com"* || "$LIVE_PREFLIGHT_VERIFICATION_URL" == *"example.test"* ]]; then
+                echo "::error title=Invalid live_verification_url::live_verification_url must not use localhost or example hosts for production live_preflight."
                 exit 1
               fi
               if [ -z "$LIVE_PREFLIGHT_RELEASE_OWNER" ] && [ -z "$LIVE_PREFLIGHT_ONCALL_CONTACT" ]; then

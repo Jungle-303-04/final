@@ -287,7 +287,12 @@ def validate_literal_url_input(
                 f"release-flow production gate job must pass https {input_name}",
             )
         ]
-    if host in PLACEHOLDER_URL_HOSTS or host.endswith(".localhost"):
+    if (
+        host in PLACEHOLDER_URL_HOSTS
+        or host.endswith(".localhost")
+        or host.endswith(".example.com")
+        or host.endswith(".example.test")
+    ):
         return [
             GateViolation(
                 workflow,
