@@ -116,8 +116,10 @@ def trace_summary(trace: JsonObject) -> JsonObject:
     """Create one safe trace summary from a Tempo trace object."""
     spans = span_summaries(trace)
     status = normalized_status(first_present(trace, STATUS_KEYS))
-    error = is_error_status(status) or has_error_flag(trace) or any(
-        span.get("error") is True for span in spans
+    error = (
+        is_error_status(status)
+        or has_error_flag(trace)
+        or any(span.get("error") is True for span in spans)
     )
     is_dependency = is_dependency_trace(trace) or any(
         span.get("is_dependency") is True for span in spans

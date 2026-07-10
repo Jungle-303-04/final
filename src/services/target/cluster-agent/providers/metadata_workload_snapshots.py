@@ -197,9 +197,7 @@ def pod_template_auth(template_spec: JsonObject) -> JsonObject:
     return compact_dict(
         {
             "service_account_name": template_spec.get("serviceAccountName"),
-            "automount_service_account_token": template_spec.get(
-                "automountServiceAccountToken"
-            ),
+            "automount_service_account_token": template_spec.get("automountServiceAccountToken"),
             "image_pull_secret_refs": image_pull_secret_refs(template_spec),
         }
     )
@@ -258,9 +256,7 @@ def affinity_summary(value: Any) -> JsonObject:
         "has_required_node_affinity": bool(required_node_affinity),
         "has_preferred_node_affinity": bool(preferred_node_affinity),
         "has_pod_affinity": bool(object_or_empty(affinity.get("podAffinity"))),
-        "has_pod_anti_affinity": bool(
-            object_or_empty(affinity.get("podAntiAffinity"))
-        ),
+        "has_pod_anti_affinity": bool(object_or_empty(affinity.get("podAntiAffinity"))),
     }
 
 

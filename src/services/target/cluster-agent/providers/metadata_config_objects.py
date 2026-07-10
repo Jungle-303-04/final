@@ -197,7 +197,11 @@ def add_ref_from_summary(
         return
     kind, name = kind_name
     add_grouped_ref(
-        refs_by_key, kind, namespace, name, referenced_by,
+        refs_by_key,
+        kind,
+        namespace,
+        name,
+        referenced_by,
         referenced_key=referenced_key,
         key_source=key_source,
     )
@@ -215,8 +219,12 @@ def add_volume_key_refs(
     kind, name = kind_name
     for item in list_items(volume_ref.get("items")):
         add_grouped_key(
-            refs_by_key, kind, namespace, name,
-            item.get("key"), CONFIG_REF_SOURCE_VOLUME,
+            refs_by_key,
+            kind,
+            namespace,
+            name,
+            item.get("key"),
+            CONFIG_REF_SOURCE_VOLUME,
         )
 
 
@@ -248,8 +256,12 @@ def add_grouped_ref(
         existing["referenced_by"].append(compact_ref)
         existing["referenced_by"].sort(key=referenced_by_sort_key)
     add_grouped_key(
-        refs_by_key, kind, namespace, name,
-        referenced_key, key_source,
+        refs_by_key,
+        kind,
+        namespace,
+        name,
+        referenced_key,
+        key_source,
     )
 
 
