@@ -120,10 +120,96 @@ def test_metadata_provider_collects_one_deployment_snapshot(monkeypatch) -> None
                                 },
                             },
                             "spec": {
+                                "volumes": [
+                                    {
+                                        "name": "app-config",
+                                        "configMap": {
+                                            "name": "checkout-config",
+                                            "items": [
+                                                {
+                                                    "key": "application.yaml",
+                                                    "path": "application.yaml",
+                                                }
+                                            ],
+                                            "optional": False,
+                                        },
+                                    },
+                                    {
+                                        "name": "app-secret",
+                                        "secret": {
+                                            "secretName": "checkout-secret",
+                                            "items": [
+                                                {
+                                                    "key": "database-url",
+                                                    "path": "database-url",
+                                                }
+                                            ],
+                                            "optional": True,
+                                        },
+                                    },
+                                ],
                                 "containers": [
                                     {
                                         "name": "app",
                                         "image": "repo/checkout:v2",
+                                        "env": [
+                                            {
+                                                "name": "APP_MODE",
+                                                "valueFrom": {
+                                                    "configMapKeyRef": {
+                                                        "name": "checkout-config",
+                                                        "key": "mode",
+                                                        "optional": False,
+                                                    }
+                                                },
+                                            },
+                                            {
+                                                "name": "DATABASE_URL",
+                                                "valueFrom": {
+                                                    "secretKeyRef": {
+                                                        "name": "checkout-secret",
+                                                        "key": "database-url",
+                                                        "optional": True,
+                                                    }
+                                                },
+                                            },
+                                            {
+                                                "name": "LITERAL_VALUE",
+                                                "value": "do-not-include",
+                                            },
+                                        ],
+                                        "envFrom": [
+                                            {
+                                                "prefix": "APP_",
+                                                "configMapRef": {
+                                                    "name": "checkout-env",
+                                                    "optional": False,
+                                                },
+                                            },
+                                            {
+                                                "secretRef": {
+                                                    "name": "checkout-env-secret",
+                                                    "optional": True,
+                                                }
+                                            },
+                                        ],
+                                        "volumeMounts": [
+                                            {
+                                                "name": "app-config",
+                                                "mountPath": "/etc/app",
+                                                "readOnly": True,
+                                            },
+                                            {
+                                                "name": "app-secret",
+                                                "mountPath": "/etc/secret",
+                                                "readOnly": True,
+                                                "subPath": "database-url",
+                                            },
+                                            {
+                                                "name": "empty-dir",
+                                                "mountPath": "/tmp/cache",
+                                            },
+                                        ],
                                         "readinessProbe": {
                                             "httpGet": {"path": "/ready", "port": 8080},
                                             "timeoutSeconds": 2,
@@ -203,6 +289,57 @@ def test_metadata_provider_collects_one_deployment_snapshot(monkeypatch) -> None
         "period_seconds": 5,
         "failure_threshold": 4,
     }
+    assert snapshot["containers"][0]["env_refs"] == [
+        {
+            "env_name": "APP_MODE",
+            "source": "config_map_key_ref",
+            "config_map_name": "checkout-config",
+            "key": "mode",
+            "optional": False,
+        },
+        {
+            "env_name": "DATABASE_URL",
+            "source": "secret_key_ref",
+            "secret_name": "checkout-secret",
+            "key": "database-url",
+            "optional": True,
+        },
+    ]
+    assert snapshot["containers"][0]["env_from_refs"] == [
+        {
+            "source": "config_map_ref",
+            "config_map_name": "checkout-env",
+            "prefix": "APP_",
+            "optional": False,
+        },
+        {
+            "source": "secret_ref",
+            "secret_name": "checkout-env-secret",
+            "optional": True,
+        },
+    ]
+    assert snapshot["containers"][0]["volume_mount_refs"] == [
+        {
+            "volume_name": "app-config",
+            "source": "config_map",
+            "config_map_name": "checkout-config",
+            "optional": False,
+            "items": [{"key": "application.yaml", "path": "application.yaml"}],
+            "mount_path": "/etc/app",
+            "read_only": True,
+        },
+        {
+            "volume_name": "app-secret",
+            "source": "secret",
+            "secret_name": "checkout-secret",
+            "optional": True,
+            "items": [{"key": "database-url", "path": "database-url"}],
+            "mount_path": "/etc/secret",
+            "read_only": True,
+            "sub_path": "database-url",
+        },
+    ]
+    assert "do-not-include" not in str(snapshot["containers"][0])
     assert snapshot["replicaset_revisions"] == [
         {"name": "checkout-api-abc123", "revision": "7"}
     ]
