@@ -219,6 +219,19 @@ def test_alert_channel_schema_tracks_validation_status() -> None:
     } <= columns
 
 
+def test_alert_channel_compat_migration_adds_validation_status() -> None:
+    assert set(storage_engine.ALERT_CHANNEL_COMPAT_COLUMNS) == {
+        "last_tested_at",
+        "last_test_status",
+        "last_test_detail",
+        "last_test_status_code",
+    }
+    assert all(
+        "add column if not exists" in statement
+        for statement in storage_engine.ALERT_CHANNEL_COMPAT_COLUMNS.values()
+    )
+
+
 def test_outbox_schema_supports_relay_leases() -> None:
     columns = set(metadata.tables["outbox"].c.keys())
     assert {"lease_id", "leased_until", "sent_at"} <= columns
@@ -1683,12 +1696,13 @@ def test_evidence_job_completion_locks_one_job_before_update() -> None:
             self.calls += 1
             if self.calls == 1:
                 return StubResult(
-                    {
-                        "job_id": "job-1",
-                        "evidence_key": "workspace-1:cluster-1:cluster-snapshot:window-1",
-                        "attempt_count": 1,
-                        "max_attempts": 3,
-                    }
+                        {
+                            "job_id": "job-1",
+                            "evidence_key": "workspace-1:cluster-1:cluster-snapshot:window-1",
+                            "provider_key": "metrics",
+                            "attempt_count": 1,
+                            "max_attempts": 3,
+                        }
                 )
             return StubResult()
 

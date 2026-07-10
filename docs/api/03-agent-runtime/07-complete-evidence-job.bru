@@ -24,8 +24,6 @@ body:json {
     "lease_id": "{{lease_id}}",
     "status": "completed",
     "result": {
-      "source": "{{provider_key}}",
-      "provider_status": "ok",
       "kubernetes": {
         "pods": [],
         "events": [],
@@ -33,15 +31,6 @@ body:json {
         "workloads": [],
         "services": [],
         "endpoints": []
-      },
-      "metrics": {
-        "source": "prometheus",
-        "results": {}
-      },
-      "logs": [],
-      "traces": {
-        "source": "tempo",
-        "results": {}
       }
     },
     "error": ""

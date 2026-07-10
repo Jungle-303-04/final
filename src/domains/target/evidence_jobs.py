@@ -53,6 +53,18 @@ def empty_provider_payload(provider_key: str) -> object:
     return {}
 
 
+def normalize_evidence_provider_result(provider_key: str, result: JsonObject) -> JsonObject:
+    """리스된 provider bucket 하나만 집계 계약에 남긴다.
+
+    구형 agent는 bucket 내부 값만 보낼 수 있고, 잘못된 클라이언트는 여러 bucket과
+    전송 메타데이터를 함께 보낼 수 있다. 두 형식을 모두 받되 리스된 provider 외 값은
+    증거 본문으로 승격하지 않는다.
+    """
+    if provider_key in result:
+        return {provider_key: result[provider_key]}
+    return {provider_key: result}
+
+
 def aggregate_evidence_payload(rows: list[JsonObject]) -> JsonObject | None:
     """Merge provider job results into one evidence payload.
     Return None until the window is ready to emit.
@@ -81,7 +93,7 @@ def aggregate_evidence_payload(rows: list[JsonObject]) -> JsonObject | None:
     for row in rows:
         provider_key = str(row["provider_key"])
         if row["status"] == EVIDENCE_JOB_STATUS_COMPLETED and isinstance(row["result"], dict):
-            payload.update(row["result"])
+            payload.update(normalize_evidence_provider_result(provider_key, row["result"]))
         elif row["status"] == EVIDENCE_JOB_STATUS_FAILED:
             payload.setdefault(provider_key, empty_provider_payload(provider_key))
     return payload
