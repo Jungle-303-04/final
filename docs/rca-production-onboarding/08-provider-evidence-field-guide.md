@@ -255,7 +255,7 @@ agent는 이 query definition을 provider별 query object로 바꿔 실행한다
 | `source` | telemetry source다. policy에 없으면 provider key로 역조회해 채운다. 예: `metrics` provider는 `prometheus`. |
 | `name` | query 결과 key다. metrics/traces에서는 `results.<name>`, logs에서는 `logs[].query_name`, Kubernetes에서는 `provider_status.<name>`으로 쓰인다. metadata는 query별 key를 만들지 않고 현재 고정 `change_context` bucket으로 합쳐진다. |
 | `description` | 사람이 읽는 query 설명이다. provider payload에는 대부분 직접 들어가지 않는다. |
-| `query` | 실제 query 문자열이다. Prometheus는 PromQL, Loki는 LogQL, Tempo는 TraceQL/search query, Kubernetes는 namespace 문자열로 사용한다. Metadata는 `change_context`이면 target namespace 전체 Deployment 목록, `deployment/<name>` 또는 `deployment/<namespace>/<name>`이면 특정 Deployment 1개를 조회한다. |
+| `query` | 실제 query 문자열이다. Prometheus는 PromQL, Loki는 LogQL, Tempo는 TraceQL/search query, Kubernetes는 namespace 문자열로 사용한다. Metadata는 `change_context`이면 target namespace 전체 Deployment 목록, `<namespace>`이면 해당 namespace 전체 Deployment 목록, `deployment/<name>` 또는 `deployment/<namespace>/<name>`이면 특정 Deployment 1개를 조회한다. |
 | `range_seconds` | Prometheus range query일 때만 쓴다. 있으면 `PrometheusRangeQuery`가 된다. |
 | `step_seconds` | Prometheus range query step이다. 없으면 provider가 range 기준으로 계산한다. |
 
@@ -1200,6 +1200,7 @@ job들을 하나로 합친 뒤 `cluster.evidence.received`를 발행한다.
 | `allow_partial`이면 failed provider는 빈 payload로 대체될 수 있다 | `logs`는 `[]`, 나머지는 `{}`가 빈 payload다. |
 | completed provider result는 payload에 merge된다 | provider result는 `{"metrics": ...}`처럼 bucket key를 포함해야 한다. |
 | `metadata` bucket은 inner key 단위로 merge된다 | provider result가 `{"metadata": {"change_context": ...}}`를 보내도 기존 `metadata.rca_test`는 보존된다. `metadata.rca_test`는 RCA test run log 격리에 쓰는 값이므로 `release_context`에서 만든 값만 신뢰한다. |
+| strict RCA test의 `metadata`는 namespace와 resource가 맞아야 한다 | `metadata.change_context` 안에서 찾은 namespace가 `release_context.namespace` 하나로만 구성되어야 한다. `release_context.resource_name`이 있으면 workload identity도 그 resource 하나와 같아야 한다. target namespace metadata나 같은 sandbox 안의 다른 Deployment metadata는 sandbox RCA test 증거로 승인되지 않는다. |
 
 provider job 실패의 `error` 문자열은 `evidence_jobs.error`에 저장되지만,
 allow-partial로 최종 `cluster.evidence.received`가 발행될 때 body에 별도 error field로 들어가지 않는다.

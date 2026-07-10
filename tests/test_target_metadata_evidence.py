@@ -54,6 +54,21 @@ def load_metadata_modules():
                 sys.modules[name] = previous_modules[name]
 
 
+def test_metadata_query_target_accepts_namespace_query() -> None:
+    _module, metadata_module = load_metadata_modules()
+
+    target = metadata_module.metadata_query_target(
+        metadata_module.MetadataSnapshotQuery(
+            "rca_test_metadata_snapshot",
+            "RCA test run scoped metadata snapshot",
+            "sandbox",
+        )
+    )
+
+    assert target.namespace == "sandbox"
+    assert target.deployment_name is None
+
+
 def test_metadata_provider_collects_one_deployment_snapshot(monkeypatch) -> None:
     module, metadata_module = load_metadata_modules()
     requests: list[str] = []

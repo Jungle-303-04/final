@@ -505,6 +505,7 @@ desired state 자체의 상태는 `TargetDesiredStateStatus.ACTIVE`(`"active"`) 
 1. `get_evidence_window`: 윈도우가 이미 있고 event_id가 `pending:`이 아니면 기존 event_id/correlation_id로 즉시 응답(중복 발행 방지). `pending:`이면 `release_stale_pending_evidence_window`로 TTL(120초) 지난 것만 회수, 아니면 `None`(다른 요청이 발행 중).
 2. `evidence_payload_if_ready` → `aggregate_evidence_payload(rows)`: 행이 없거나, 하나라도 비종결(`queued`/`leased`) 상태면 `None`(아직 준비 안 됨). `failure_policy="strict"`인 행이 `failed`면 `None`(발행 포기). 그 외에는 첫 행에서 `workspace_id`/`cluster_id`/`source_id`/`window_start`/`evidence_key`/`agent_id`를 취하고 `kubernetes: {}`를 시드로, `completed` 잡의 `result` dict를 순서대로 merge, `failed` 잡은 provider 키에 `empty_provider_payload`(logs는 `[]`, 그 외 `{}`)를 `setdefault`.
    - `metadata` bucket은 top-level overwrite가 아니라 내부 key 단위로 merge한다. RCA test run에서는 `metadata.rca_test`가 Pod log 격리 기준이므로 provider result의 `metadata.rca_test`가 기존 값을 덮지 못하고, `release_context`에서 만든 값이 유지된다.
+   - strict RCA test run의 metadata result는 `change_context` 안에서 찾은 namespace가 `release_context.namespace` 하나와 정확히 같아야 실제 증거로 인정된다. `release_context.resource_name`이 있으면 workload identity도 그 resource 하나와 정확히 같아야 한다.
 3. payload로 `ClusterEvidenceReceivedBody` 구성 → `compact_cluster_evidence_payload`로 `{evidence_key, workspace_id, correlation_id, kind, payload_size, summary}` 중심 reference envelope 생성 → `record_evidence_event_once`가 한 트랜잭션에서 윈도우 원문 기록+`events`/`outbox` reference 스테이징(경쟁 시 먼저 넣은 쪽 승리).
 4. 반환된 event_id가 `pending:`이면 `None`, 아니면 `EvidenceJobResultResponse(accepted=True, evidence_key, event_id, correlation_id)`.
 

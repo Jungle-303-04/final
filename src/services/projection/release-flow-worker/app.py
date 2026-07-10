@@ -158,15 +158,17 @@ def rca_test_evidence_request(evt: EventEnvelope) -> dict[str, object] | None:
     cluster_id = str(result_body.get("cluster_id") or "")
     if not all((run_id, scenario_id, workspace_id, cluster_id)):
         return None
-    namespace = str(test_body.get("namespace") or "sandbox")
+    namespace = str(test_body.get("namespace") or "sandbox").strip() or "sandbox"
+    resource_kind = str(test_body.get("resource_kind") or "Deployment").strip() or "Deployment"
+    resource_name = str(test_body.get("resource_name") or "").strip()
     pod_names = normalized_pod_names(test_body.get("pod_names"))
     release_context = {
         "correlation_id": evt.correlation_id,
         "rca_test_run_id": run_id,
         "scenario_id": scenario_id,
         "namespace": namespace,
-        "resource_kind": str(test_body.get("resource_kind") or "Deployment"),
-        "resource_name": str(test_body.get("resource_name") or ""),
+        "resource_kind": resource_kind,
+        "resource_name": resource_name,
         "label_selector": str(test_body.get("label_selector") or ""),
         "evidence_scope": "rca_test_run",
     }
@@ -194,6 +196,18 @@ def rca_test_evidence_request(evt: EventEnvelope) -> dict[str, object] | None:
             ]
         elif provider_key == "logs":
             queries = rca_test_log_queries(namespace, pod_names)
+        elif provider_key == "metadata":
+            queries = [
+                {
+                    "name": "rca_test_metadata_snapshot",
+                    "description": "RCA test run scoped metadata snapshot",
+                    "query": rca_test_metadata_query(
+                        namespace,
+                        resource_kind,
+                        resource_name,
+                    ),
+                }
+            ]
         provider_policies[provider_key] = {
             "enabled": True,
             "queries": queries,
@@ -218,6 +232,15 @@ def normalized_pod_names(value: object) -> list[str]:
         return []
     names = [str(item).strip() for item in value if str(item).strip()]
     return list(dict.fromkeys(names))[:MAX_RCA_TEST_LOG_PODS]
+
+
+def rca_test_metadata_query(namespace: str, resource_kind: str, resource_name: str) -> str:
+    """Build the narrowest metadata query for one RCA test run."""
+    normalized_namespace = namespace.strip() or "sandbox"
+    normalized_resource_name = resource_name.strip()
+    if resource_kind.strip().casefold() == "deployment" and normalized_resource_name:
+        return f"deployment/{normalized_namespace}/{normalized_resource_name}"
+    return normalized_namespace
 
 
 def rca_test_log_queries(namespace: str, pod_names: list[str]) -> list[dict[str, object]]:
