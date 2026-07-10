@@ -46,13 +46,24 @@ RCA는 provider가 보내준 evidence만 보고 symptom, root cause candidate, c
 - image 일부
 - node 정보
 
-### 추가로 요청해야 할 것
+### MetadataProvider가 현재 추가로 보내는 것
 
+- target namespace의 Deployment별 current workload snapshot
+- current image
 - probe spec
   - readinessProbe
   - livenessProbe
   - startupProbe
   - path / port / timeoutSeconds / periodSeconds / failureThreshold
+- Deployment labels
+- safe Deployment annotations
+- Pod template labels
+- safe Pod template annotations
+- managedFields manager 목록
+- owned ReplicaSet revision annotation
+
+### 추가로 요청해야 할 것
+
 - env/config refs
   - env
   - envFrom
@@ -178,22 +189,35 @@ policy상 traces query는 존재한다.
 
 현재 target agent에는 `MetadataProvider`가 있고 `@telemetry.source(source="metadata", evidence_key="metadata", query_type=MetadataSnapshotQuery)`로 등록된다.
 기본 policy는 `metadata` provider에 `change_context` query를 넣는다.
-현재 provider가 최종 bucket에 남기는 필드는 아래 최소 구조다.
+현재 provider가 최종 bucket에 남기는 필드는 아래 구조다.
 
-- change_context.recent_changes
-- change_context.rollback_available
-- change_context.risk_level
+- change_context.current_workload_snapshots[]
+- change_context.current_workload_snapshot
+- change_context.current_workload_snapshots[].workload.kind/namespace/name
+- change_context.current_workload_snapshots[].deployment_labels
+- change_context.current_workload_snapshots[].deployment_annotations
+- change_context.current_workload_snapshots[].pod_template_labels
+- change_context.current_workload_snapshots[].pod_template_annotations
+- change_context.current_workload_snapshots[].managed_fields_managers[]
+- change_context.current_workload_snapshots[].containers[].name/image
+- change_context.current_workload_snapshots[].containers[].readiness_probe
+- change_context.current_workload_snapshots[].containers[].liveness_probe
+- change_context.current_workload_snapshots[].containers[].startup_probe
+- change_context.current_workload_snapshots[].replicaset_revisions[].name/revision
 
-기본값은 각각 `[]`, `null`, `"unknown"`이다.
+기본 fallback 값은 `{"change_context": {"current_workload_snapshots": []}}`이다.
+기본 `change_context` query는 target namespace의 모든 Deployment를 목록으로 수집한다.
+특정 Deployment 1개만 보려면 `deployment/<name>` 또는 `deployment/<namespace>/<name>` query를 쓴다.
 
-Kubernetes object에서도 일부 metadata를 참고할 수 있지만, 이것은 `metadata` bucket이 아니라
-`kubernetes` bucket summary 안에 남는 값이다.
+Kubernetes object에서도 일부 metadata를 참고할 수 있다.
+일부 값은 `kubernetes` bucket summary 안에도 있고, 일부 값은 `metadata` bucket의
+`current_workload_snapshots` 안에도 있다.
 
 - metadata.name
 - metadata.namespace
 - metadata.uid
 - labels
-- annotations 일부
+- annotations 일부(`metadata` bucket은 안전한 Deployment/Pod template annotation만 남김)
 - ownerReferences
 - image
 - deployment revision annotation 일부
@@ -207,18 +231,20 @@ Kubernetes object에서도 일부 metadata를 참고할 수 있지만, 이것은
 - rollout revision
 - recent manifest change
 - recent config/probe/resource change
-- actor/manager
+- deploy actor / CI job actor
 - rollback_available
 - risk_level
-- metadata bucket을 RCA evidence item으로 승격하는 단계
 
 주의:
 
 - GitOps/CI/CD/SCM/배포 시스템과 연결이 필요할 수 있음
-- annotation, managedFields, env, Secret reference는 저장 범위와 마스킹 기준 필요
+- annotation은 allowlist와 민감 key 제외 기준이 필요함
+- managedFields, env, Secret reference는 저장 범위와 마스킹 기준 필요
 
 ## 요약
 
 Kubernetes provider는 pods, events, workloads, services, endpointslices를 이미 수집한다.
-Metadata provider는 최소 `change_context` bucket을 만든다.
-다만 RCA가 세부 원인을 판단하려면 일부 데이터가 더 필요하다.
+Metadata provider는 target namespace의 Deployment 현재 snapshot 목록 또는 특정 Deployment 1개 snapshot을
+`change_context` bucket 안에 만든다.
+다만 RCA가 GitOps diff, rollback 가능 여부, risk_level 같은 세부 변경 원인을 판단하려면
+Management Server, GitOps, CI/CD, SCM 쪽 데이터가 더 필요하다.
