@@ -407,9 +407,6 @@ class StubEvidenceJobDb:
             "correlation_id": event_envelope.correlation_id,
         }
 
-    def release_pending_evidence_window(self, _evidence_key: str) -> None:
-        raise AssertionError("release should not be called")
-
     def release_stale_pending_evidence_window(
         self,
         _evidence_key: str,
