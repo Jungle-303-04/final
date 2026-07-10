@@ -535,6 +535,16 @@ Synthetic command adapter는 외부 부작용을 절대 실행하지 않고 rece
 
 제품 component, selector, reducer, renderer에는 fixture, mock, demo object, fallback count를 넣지 않는다. 데이터 요청은 engine effect runner가 다음 port만 호출한다.
 
+Cross-contract import ownership은 다음으로 고정한다.
+
+| Type | Owner/generated module |
+|---|---|
+| `ConsumerEnvelope`, `StatusReason` | `product-data-contract.md` canonical consumer core |
+| `OperationReceiptLookupResult`, `OperationStatusCut`, `GitOpsOperationEvent` | `product-data-contract.md` operation core |
+| `TopologyMessageV1.*`, `ResumeCursor`, `StreamStart` | `topology-message-action-schema.md` generated protocol module |
+
+이 표의 type을 각 문서나 adapter에서 재선언하지 않는다. generated build는 같은 schema revision의 module import로 연결하고 순환 import가 생기면 common canonical core로 추출한다.
+
 ```ts
 type DataOrigin =
   | { kind: "live"; adapterId: string; endpointId: string }
