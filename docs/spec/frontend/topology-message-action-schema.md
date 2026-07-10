@@ -212,8 +212,9 @@ type EffectPayload =
   | { type: "navigation.internal"; route: RouteRef }
   | { type: "navigation.external"; verifiedUrl: string }
   | { type: "command.execute"; command: CommandRequest }
-  | { type: "operation.status.fetch"; operationId: string; receiptId: string }
-  | { type: "operation.watch"; operationIds: NonEmptyReadonlyArray<string>; resumeToken: string | null }
+  | { type: "command.receipt.lookup"; idempotencyKey: string }
+  | { type: "operation.status.fetch"; operationId: string }
+  | { type: "operation.watch"; operationId: string; cursor: ResumeCursor }
   | { type: "telemetry.record"; record: EngineTelemetry }
 
 type EffectEnvelope<P extends EffectPayload = EffectPayload> = {
@@ -239,7 +240,8 @@ type EffectResultPayload =
   | { type: "stream.connected"; acceptedCursor: ResumeCursor; headSequence: number }
   | { type: "stream.disconnected"; reasonCode: string; retryable: boolean; retryAfterMs: DurationMs | null }
   | { type: "command.receiptReceived"; receipt: CommandReceipt }
-  | { type: "operation.snapshotReceived"; snapshot: OperationSnapshot }
+  | { type: "command.receiptLookupReceived"; result: OperationReceiptLookupResult }
+  | { type: "operation.snapshotReceived"; cut: OperationStatusCut }
   | { type: "url.replaceCompleted" }
   | { type: "navigation.completed" }
   | { type: "effect.cancelled"; reason: "aborted" | "superseded" | "session-ended" }
@@ -250,7 +252,7 @@ type EffectResultPayload =
     }
 ```
 
-`command.execute`는 언제나 `retryPolicy.kind="none"`다. transport failure가 `possibly-sent`이면 command를 자동 반복하지 않고 동일 idempotency key/receipt를 `operation.status.fetch`로 조회한다.
+`command.execute`는 언제나 `retryPolicy.kind="none"`다. transport failure가 `possibly-sent`이면 command를 자동 반복하지 않고 idempotency key로 `command.receipt.lookup`을 먼저 실행한다. operation/status fetch는 receipt에서 operationId를 얻은 뒤에만 가능하다.
 
 ## 4. Snapshot과 stream wire
 
@@ -418,28 +420,41 @@ type OperationProgress =
       percentBasisPoints: number
     }
 
-type OperationSnapshot = {
+type OperationSnapshotBase = {
   operationId: string
   receiptId: string
   actionId: string
   target: ActionTarget
   idempotencyKey: string
   operationSequence: number
-  phase: OperationPhase
   approval: ApprovalStatus
   progress: OperationProgress
   requestedAt: Timestamp
   startedAt: Timestamp | null
-  finishedAt: Timestamp | null
-  reason: StatusReason | null
   auditRef: string
 }
 
+type OperationSnapshot = OperationSnapshotBase &
+  (
+    | {
+        phase: "pending" | "pending_approval" | "running"
+        finishedAt: null
+        reason: StatusReason | null
+      }
+    | { phase: "succeeded"; finishedAt: Timestamp; reason: null }
+    | {
+        phase: "failed" | "cancelled" | "unsupported"
+        finishedAt: Timestamp
+        reason: StatusReason
+      }
+  )
+
 type CommandReceiptBase = {
+  schemaVersion: "topology-command-receipt/v1"
   receiptId: string
   invocationId: InvocationId
   idempotencyKey: string
-  origin: DataOrigin
+  dataOrigin: DataOrigin
   receivedAt: Timestamp
 }
 
@@ -449,6 +464,8 @@ type CommandReceipt =
   | (CommandReceiptBase & { outcome: "unknown"; lookupToken: string; reason: StatusReason })
 
 type OperationEventBase = {
+  schemaVersion: "topology-operation-event/v1"
+  dataOrigin: DataOrigin
   operationEventId: OpaqueId
   operationId: OpaqueId
   receiptId: OpaqueId
@@ -495,13 +512,6 @@ type OperationEvent =
       reason: StatusReason
     })
   | (OperationEventBase & { type: "operation.unsupported"; phase: "unsupported"; reason: StatusReason })
-  | (OperationEventBase & {
-      type: "operation.statusUnknown"
-      phase: "unknown"
-      lastKnownPhase: OperationPhase | null
-      reason: StatusReason
-    })
-  | (OperationEventBase & { type: "operation.reconciled"; snapshot: OperationSnapshot })
 ```
 
 `percentBasisPoints`는 safe integer 0..10,000이다. total이 없으면 `indeterminate`; 가짜 percent를 만들지 않는다.
@@ -510,17 +520,18 @@ Operation phase 전이:
 
 | 현재 | 허용 다음 phase |
 |---|---|
-| 없음 | pending, pending_approval, running, succeeded, failed, cancelled, unsupported, unknown |
-| pending | pending_approval, running, failed, cancelled, unsupported, unknown |
-| pending_approval | pending, failed, cancelled, unknown |
-| running | running, succeeded, failed, cancelled, unknown |
-| unknown | 더 높은 operationSequence의 authoritative snapshot이 가진 모든 phase |
-| succeeded / failed / cancelled / unsupported | 동일 terminal snapshot만 |
+| 없음 | pending, pending_approval |
+| pending | pending_approval, running, failed, cancelled, unsupported |
+| pending_approval | pending, running, failed, cancelled |
+| running | succeeded, failed, cancelled |
+| succeeded / failed / cancelled / unsupported | 없음 |
 
 - approval approved는 pending, rejected/expired는 실행되지 않은 종료 의미의 cancelled로 canonicalize한다.
 - cancel intent나 terminate receipt만으로 target operation을 cancelled로 바꾸지 않는다. authoritative cancelled event가 필요하다.
 - operationSequence gap은 topology 전체 resync가 아니라 해당 operation status fetch를 만든다.
 - terminal 뒤 다른 terminal 또는 non-terminal event는 protocol corruption이다.
+- same active phase progress는 lifecycle transition이 아니다. authoritative OperationStatusCut은 higher sequence에서 어떤 phase든 최초 설치할 수 있으며 이는 incremental event transition이 아니라 snapshot reconciliation이다.
+- connection/source 불확실성은 phase를 바꾸지 않고 ObservedOperationStatus가 last known status를 보존한다.
 
 ## 7. Reducer state와 transition
 
@@ -655,9 +666,9 @@ Canonical plain decimal grammar:
 
 ### 9.3 Command idempotency
 
-- key scope는 workspace + actor + action + target + parametersHash다.
+- idempotency uniqueness scope는 workspace + actor + idempotencyKey다. action + target + parametersHash + capability revision은 저장 fingerprint다.
 - 동일 key/fingerprint는 동일 receipt, 같은 key/다른 fingerprint는 conflict다.
-- transport failure가 `possibly-sent`이면 자동 재실행하지 않고 receipt/status를 조회한다.
+- transport failure가 `possibly-sent`이면 자동 재실행하지 않고 receipt lookup을 먼저 실행한다.
 - 같은 logical invocation retry는 key를 유지하고, 새 parameter/target/명시적 invocation만 새 key다.
 
 ### 9.4 Reconnect
@@ -696,7 +707,7 @@ Canonical plain decimal grammar:
 | `action.confirmed` | ui | pending invocation/token target/hash/expiry | 같은 invocation/key command |
 | `action.dismissed` | ui | pending invocation | local pending 제거 |
 | `operation.cancelRequested` | ui | non-terminal/cancel capability | command 제출; phase 유지 |
-| `snapshot.received` | snapshot | correlation/workspace/query/origin/epoch/catalog/hash/cursor/frame invariant | frame atomic install 후 subscribe |
+| `snapshot.received` | snapshot | correlation/workspace/query/origin/epoch/catalog/hash/streamStart/frame invariant | frame atomic install; stream mode만 subscribe |
 | `stream.ready` | stream | accepted=requested, head>=accepted | accepted+1 replay |
 | `stream.disconnected` | effect | active subscribe | frame 유지/reconnect |
 | `stream.resyncRequired` | stream/system | active tuple/reason | frame 유지, stream/layout cancel, snapshot |
@@ -716,9 +727,10 @@ Canonical plain decimal grammar:
 | `layout.resolved` | worker | active effect/full revision/transaction | geometry commit |
 | `layout.rejectedAsStale` | worker/system | revision mismatch | geometry 불변 |
 | `layout.failed` | worker | active effect/recoverability | last layout 유지 |
-| `command.receiptReceived` | effect | effect/key/origin/fingerprint | accepted op install; rejected/unknown graph 불변 |
-| `operation.eventReceived` | stream/effect | ID/sequence/receipt/key/legal phase | operation slice; gap은 status fetch |
-| `operation.snapshotReceived` | effect | active lookup/authoritative sequence | unknown/gap reconcile |
+| `command.receiptReceived` | effect | effect/key/dataOrigin/fingerprint | accepted op install; rejected/unknown graph 불변 |
+| `command.receiptLookupReceived` | effect | active lookup/key/fingerprint | found/pending/not-found branch; graph 불변 |
+| `operation.eventReceived` | stream | ID/cursor/operationSequence/receipt/key/legal phase | operation slice; gap은 status cut fetch |
+| `operation.snapshotReceived` | effect | active lookup/authoritative status cut | last-known/gap reconcile |
 | `theme.changed` | ui | registered complete token set | query/layout identity 불변 |
 | `motion.changed` | ui | registered policy | geometry identity 불변 |
 | `effect.failed` | effect | active effect/scoped error/delivery | 이전 scene 유지, scope error |
