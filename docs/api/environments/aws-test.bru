@@ -32,7 +32,6 @@ vars {
   evidence_key: aws-window-001
   rca_correlation_id: run-16-rca-debug-01-first
   rca_scenario_id: image.wrong-tag
-  rca_test_token: replace-with-RCA_TEST_RUNS_TOKEN
   rca_test_run_id: run-02-start-test-run-first
   rca_select_confirmation: CONFIRM_ONLY_BEFORE_STEP_07
   rca_event_id: run-16-rca-debug-01-first
@@ -56,3 +55,7 @@ vars {
   github_webhook_secret: replace-with-GITHUB_WEBHOOK_SECRET
   github_webhook_signature: auto-set-when-secret-is-filled
 }
+
+vars:secret [
+  rca_test_token
+]

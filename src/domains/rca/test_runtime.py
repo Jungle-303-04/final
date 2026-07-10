@@ -22,6 +22,7 @@ from packages.config.constants import (
 from packages.contracts.event_bus.interfaces import JsonObject
 
 RCA_TEST_EVIDENCE_SOURCE_ID = "rca-test"
+RCA_TEST_FIXTURE_RESOURCE_KIND = "Deployment"
 RCA_TEST_AGENT_ACTIONS = RCA_TEST_COMMAND_ACTIONS
 RCA_TEST_COMMAND_PRIORITY = 200
 RCA_TEST_RUN_ANNOTATION = "kubeheal.io/rca-test-run"
@@ -135,6 +136,7 @@ def _command_plan(
             "run_id": run_id,
             "scenario_id": scenario_id,
             "scenario_version": scenario_version,
+            "resource_kind": RCA_TEST_FIXTURE_RESOURCE_KIND,
             "namespace": namespace,
             "resource_name": resource_name,
         },

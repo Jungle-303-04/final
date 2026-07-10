@@ -426,8 +426,50 @@ def test_target_install_manifest_sets_agent_and_telemetry_config() -> None:
     assert 'AGENT_TOKEN: "agent-secret"' in manifest
     assert 'apiGroups: ["metrics.k8s.io"]' in manifest
     assert 'resources: ["pods", "nodes"]' in manifest
-    assert 'resources: ["services", "configmaps"]' in manifest
+    assert 'resources: ["services"]' in manifest
+    assert 'resources: ["configmaps"]' in manifest
     assert 'verbs: ["get", "list", "create", "update", "patch"]' in manifest
+    assert 'verbs: ["get", "list", "create", "update", "patch", "delete"]' in manifest
+
+
+def test_target_rca_cleanup_delete_permission_is_limited_to_owned_manifest_kinds() -> None:
+    manifest = target_install_manifest(target_request(), "agent-secret")
+    docs = [doc for doc in yaml.safe_load_all(manifest) if doc]
+    sandbox_role = next(
+        doc
+        for doc in docs
+        if doc.get("kind") == "Role"
+        and doc.get("metadata", {}).get("name") == "cluster-agent-sandbox-write"
+    )
+    delete_rules = [rule for rule in sandbox_role["rules"] if "delete" in rule.get("verbs", [])]
+
+    assert {
+        (tuple(rule.get("apiGroups", [])), tuple(rule.get("resources", [])))
+        for rule in delete_rules
+    } == {
+        (("",), ("services",)),
+        (("apps",), ("deployments",)),
+    }
+
+
+def test_static_target_manifest_keeps_the_same_minimal_rca_cleanup_permissions() -> None:
+    manifest_path = Path(__file__).resolve().parents[1] / "deploy/target/target.yaml"
+    docs = [doc for doc in yaml.safe_load_all(manifest_path.read_text()) if doc]
+    sandbox_role = next(
+        doc
+        for doc in docs
+        if doc.get("kind") == "Role"
+        and doc.get("metadata", {}).get("name") == "cluster-agent-sandbox-write"
+    )
+    delete_rules = [rule for rule in sandbox_role["rules"] if "delete" in rule.get("verbs", [])]
+
+    assert {
+        (tuple(rule.get("apiGroups", [])), tuple(rule.get("resources", [])))
+        for rule in delete_rules
+    } == {
+        (("",), ("services",)),
+        (("apps",), ("deployments",)),
+    }
 
 
 @pytest.mark.parametrize("registration_environment", ["test", "aws-test"])

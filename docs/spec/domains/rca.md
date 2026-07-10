@@ -14,6 +14,9 @@ status: synced
 - RCA 파이프라인 전 구간(증거 정규화 → 장애 감지 → 근거 번들 → 원인 후보 생성/평가 → 완료/차단/후속조치 → 복구 계획/선택 → Safe PR 패치)의 **이벤트 body 계약을 정의**한다.
 - 증거·RCA 리포트·RCA backlog·복구 계획을 **DB에 영속**한다(`RcaRepository`).
 - 사람이 복구 후보를 **선택하는 HTTP 엔드포인트**를 제공하고, 선택 시 승인 레코드 생성 + `recovery.action_selected` 이벤트를 발행한다.
+- test 환경에서만 열리는 실제 장애 시나리오 API를 제공한다. 모든 operation은 OpenAPI에
+  `x-rca-test-token` 헤더를 노출하고, 같은 cluster/fixture(kind·namespace·name) 실행은 DB 원자 가드로
+  catalog의 `max_concurrent_runs`를 강제한다.
 - **하지 않는 것**: 실제 RCA 분석/AI 추론(services 계층의 워커 담당), 이벤트 버스 구독 루프 실행, 복구 조치 실행.
 
 ## 의존성 (Dependencies)
@@ -118,6 +121,8 @@ dedup 리소스 키의 단일 출처(rca-worker 와 repository 가 공유).
 | `candidate_with_approval` | `(candidate: RecoveryActionCandidate, *, approval_ref: str, policy_decision_ref: str) -> RecoveryActionCandidate` — `dataclasses.replace`로 `draft.params`에 `approval_ref`/`policy_decision_ref` 주입한 새 후보 반환 | `src/domains/rca/router.py :: candidate_with_approval` |
 | `recovery_approval_payload` | `(plan: RecoveryPlan, selected: RecoveryActionCandidate, *, workspace_id: str, approval_ref: str, policy_decision_ref: str, selected_by: str, reason: str) -> dict[str, Any]` — 워크플로 승인 레코드 payload 구성(아래 동작 참조) | `src/domains/rca/router.py :: recovery_approval_payload` |
 | `select_recovery_action` | `async (plan_id: str, action_id: str, payload: RecoveryActionSelectRequest, current: Any = Depends(require_session), db: Any = Depends(get_db), events: Any = Depends(get_events)) -> AcceptedResponse` | `src/domains/rca/router.py :: select_recovery_action` |
+| `require_rca_test_api` | `x-rca-test-token` Header dependency. test 환경+enable flag를 먼저 확인해 비활성이면 404, 토큰 누락/불일치는 `compare_digest` 비교 후 401 | `src/domains/rca/router.py :: require_rca_test_api` |
+| `create_test_run` | catalog scenario와 test target을 검증한 뒤 `queue_rca_test_command_if_available`로 실행 예약+inject command를 원자 저장. 동시 한도 초과 시 `409`, code `rca_test_run_conflict` | `src/domains/rca/router.py :: create_test_run` |
 | `db_call` | `async (func: Any, *args: Any, **kwargs: Any) -> Any` — `asyncio.to_thread(func, *args, **kwargs)` 로 동기 DB 호출을 스레드로 위임 | `src/domains/rca/router.py :: db_call` |
 
 ### 조회 라우터 심볼 — `src/domains/rca/query_router.py`
