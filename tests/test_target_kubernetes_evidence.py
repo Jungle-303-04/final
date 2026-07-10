@@ -739,9 +739,7 @@ def test_kubernetes_snapshot_provider_limits_by_payload_bytes() -> None:
 
     assert len(limited["pods"]) < 20
     assert limited["collection_limits"]["lists"]["pods"]["original_count"] == 20
-    assert limited["collection_limits"]["lists"]["pods"]["returned_count"] == len(
-        limited["pods"]
-    )
+    assert limited["collection_limits"]["lists"]["pods"]["returned_count"] == len(limited["pods"])
     EvidenceJobResultRequest(
         agent_id="agent-1",
         lease_id="lease-1",

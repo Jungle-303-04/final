@@ -386,7 +386,7 @@ def test_tempo_traces_keep_analysis_when_trace_list_is_limited() -> None:
             "source": "tempo",
             "name": "wide_traces",
             "description": "Large trace search result.",
-            "query": '{ status = error }',
+            "query": "{ status = error }",
         }
     )
     results: dict[str, object] = {}

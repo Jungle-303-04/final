@@ -470,7 +470,11 @@ def test_prometheus_vector_samples_are_limited_by_payload_bytes() -> None:
                 "resultType": "vector",
                 "result": [
                     {
-                        "metric": {"namespace": "target", "pod": f"pod-{index}", "blob": "x" * 4000},
+                        "metric": {
+                            "namespace": "target",
+                            "pod": f"pod-{index}",
+                            "blob": "x" * 4000,
+                        },
                         "value": [1782822500.0 + index, "1"],
                     }
                     for index in range(500)

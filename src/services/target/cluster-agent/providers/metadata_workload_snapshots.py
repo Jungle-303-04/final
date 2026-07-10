@@ -80,9 +80,7 @@ def current_workload_base_snapshot(
         "pod_template_labels": object_or_empty(template_meta.get("labels")),
         "persistent_volume_claim_refs": persistent_volume_claim_refs(template_spec),
         "deployment_status": deployment_status_snapshot(deployment),
-        "pod_statuses": [
-            pod_status_snapshot(pod) for pod in owned_pods[:MAX_POD_STATUS_SUMMARIES]
-        ],
+        "pod_statuses": [pod_status_snapshot(pod) for pod in owned_pods[:MAX_POD_STATUS_SUMMARIES]],
     }
     if len(owned_pods) > MAX_POD_STATUS_SUMMARIES:
         snapshot["pod_status_count"] = len(owned_pods)
