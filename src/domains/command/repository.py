@@ -83,6 +83,7 @@ class AgentCommandRepository(DatabaseConnection):
             table.c.cluster_id,
             table.c.correlation_id,
             table.c.action,
+            table.c.payload,
             table.c.status,
             table.c.result,
             table.c.completed_at,

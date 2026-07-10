@@ -430,6 +430,46 @@ def test_target_install_manifest_sets_agent_and_telemetry_config() -> None:
     assert 'verbs: ["get", "list", "create", "update", "patch"]' in manifest
 
 
+@pytest.mark.parametrize("registration_environment", ["test", "aws-test"])
+def test_target_install_manifest_enables_rca_test_actions_only_for_test_registrations(
+    monkeypatch: pytest.MonkeyPatch,
+    registration_environment: str,
+) -> None:
+    monkeypatch.setenv("APP_ENV", "test")
+    monkeypatch.setenv("RCA_TEST_RUNS_ENABLED", "1")
+    request = target_request().model_copy(update={"environment": registration_environment})
+
+    manifest = target_install_manifest(request, "agent-secret")
+
+    assert 'APP_ENV: "test"' in manifest
+    assert 'RCA_TEST_RUNS_ENABLED: "1"' in manifest
+
+
+@pytest.mark.parametrize(
+    ("app_env", "enabled", "registration_environment"),
+    [
+        ("production", "1", "test"),
+        ("test", "0", "test"),
+        ("test", "1", "sandbox"),
+        ("test", "1", "production"),
+    ],
+)
+def test_target_install_manifest_does_not_enable_rca_test_actions_without_both_guards(
+    monkeypatch: pytest.MonkeyPatch,
+    app_env: str,
+    enabled: str,
+    registration_environment: str,
+) -> None:
+    monkeypatch.setenv("APP_ENV", app_env)
+    monkeypatch.setenv("RCA_TEST_RUNS_ENABLED", enabled)
+    request = target_request().model_copy(update={"environment": registration_environment})
+
+    manifest = target_install_manifest(request, "agent-secret")
+
+    assert "APP_ENV:" not in manifest
+    assert "RCA_TEST_RUNS_ENABLED:" not in manifest
+
+
 def test_management_install_manifest_is_read_only() -> None:
     request = target_request().model_copy(update={"cluster_role": "management"})
 

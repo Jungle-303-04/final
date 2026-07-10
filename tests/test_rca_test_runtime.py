@@ -83,6 +83,8 @@ def test_inject_plan_is_allowlisted_and_contains_no_raw_manifest_or_shell() -> N
         run_id=RUN_ID,
         scenario_id=SCENARIO_ID,
         scenario_version=1,
+        namespace="sandbox",
+        resource_name=RESOURCE_NAME,
         cluster_id=CLUSTER_ID,
         workspace_id=WORKSPACE_ID,
         requested_by="developer-1",
@@ -97,6 +99,8 @@ def test_inject_plan_is_allowlisted_and_contains_no_raw_manifest_or_shell() -> N
         "run_id": RUN_ID,
         "scenario_id": SCENARIO_ID,
         "scenario_version": 1,
+        "namespace": "sandbox",
+        "resource_name": RESOURCE_NAME,
     }
     serialized = json.dumps(plan, sort_keys=True).casefold()
     assert "manifest" not in serialized
@@ -115,6 +119,7 @@ def test_wrong_tag_fixture_is_server_owned_bounded_and_run_scoped() -> None:
     assert deployment["metadata"]["name"] == RESOURCE_NAME
     assert deployment["metadata"]["namespace"] == "sandbox"
     assert deployment["metadata"]["annotations"]["kubeheal.io/rca-test-run"] == RUN_ID
+    assert deployment["metadata"]["labels"]["kubeheal.io/rca-test-run"] == RUN_ID
     template = deployment["spec"]["template"]
     assert template["metadata"]["labels"]["kubeheal.io/rca-test-run"] == RUN_ID
     container = template["spec"]["containers"][0]
@@ -289,6 +294,11 @@ def test_evidence_aggregation_promotes_release_context_and_same_correlation() ->
         "run_id": RUN_ID,
         "scenario_id": SCENARIO_ID,
     }
+    assert payload["kubernetes"]["resource"] == {
+        "kind": "Deployment",
+        "name": RESOURCE_NAME,
+        "namespace": "sandbox",
+    }
 
 
 def test_status_projection_explains_each_stage_through_user_selection() -> None:
@@ -333,6 +343,70 @@ def test_status_projection_explains_each_stage_through_user_selection() -> None:
     }
 
 
+def test_status_projection_surfaces_terminal_evidence_failure() -> None:
+    runtime = _runtime()
+
+    status = _body(
+        runtime.synthesize_rca_test_run_status(
+            run_id=RUN_ID,
+            inject_command={
+                "command_id": INJECT_COMMAND_ID,
+                "status": CommandStatus.COMPLETED,
+                "result": _fault_observed_result(),
+            },
+            evidence_jobs=[
+                {
+                    "provider_key": "kubernetes",
+                    "status": CommandStatus.FAILED,
+                    "error": "provider timeout",
+                }
+            ],
+            evidence_window=None,
+            rca_report=None,
+            recovery_plan=None,
+            cleanup_command=None,
+        )
+    )
+
+    assert status["status"] == "failed"
+    assert status["failure"] == {
+        "stage": "evidence_collection",
+        "providers": [
+            {"provider_key": "kubernetes", "message": "provider timeout"},
+        ],
+    }
+    assert _step_statuses(status)["evidence_collection"] == "failed"
+
+
+def test_status_projection_does_not_claim_a_stale_cleanup_was_applied() -> None:
+    runtime = _runtime()
+
+    status = _body(
+        runtime.synthesize_rca_test_run_status(
+            run_id=RUN_ID,
+            inject_command={
+                "command_id": INJECT_COMMAND_ID,
+                "status": CommandStatus.COMPLETED,
+                "result": _fault_observed_result(),
+            },
+            evidence_jobs=[{"provider_key": "kubernetes", "status": "completed"}],
+            evidence_window={"event_id": "evt-evidence-1"},
+            rca_report={"root_cause": "wrong_image_tag"},
+            recovery_plan={"status": "selected"},
+            cleanup_command={
+                "status": CommandStatus.COMPLETED,
+                "result": {
+                    "status": CommandStatus.COMPLETED,
+                    "rca_test": {"cleanup_completed": False},
+                },
+            },
+        )
+    )
+
+    assert status["status"] == "selected"
+    assert _step_statuses(status)["cleanup"] == "skipped"
+
+
 def _fixture_deployment(owner_run_id: str) -> dict[str, Any]:
     return {
         "apiVersion": "apps/v1",
@@ -363,6 +437,8 @@ def test_cleanup_uses_a_separate_command_and_refuses_a_stale_run_owner() -> None
         run_id=RUN_ID,
         scenario_id=SCENARIO_ID,
         scenario_version=1,
+        namespace="sandbox",
+        resource_name=RESOURCE_NAME,
         cluster_id=CLUSTER_ID,
         workspace_id=WORKSPACE_ID,
         requested_by="developer-1",
@@ -376,6 +452,8 @@ def test_cleanup_uses_a_separate_command_and_refuses_a_stale_run_owner() -> None
         "run_id": RUN_ID,
         "scenario_id": SCENARIO_ID,
         "scenario_version": 1,
+        "namespace": "sandbox",
+        "resource_name": RESOURCE_NAME,
     }
     assert runtime.rca_test_fixture_owned_by_run(_fixture_deployment(RUN_ID), RUN_ID) is True
     assert runtime.rca_test_fixture_owned_by_run(_fixture_deployment(NEWER_RUN_ID), RUN_ID) is False

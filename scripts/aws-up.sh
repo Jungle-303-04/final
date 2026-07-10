@@ -55,6 +55,8 @@ MINIO_ROOT_USER="${MINIO_ROOT_USER:-minioadmin}"
 MINIO_ROOT_PASSWORD="${MINIO_ROOT_PASSWORD:-}"
 
 GITHUB_WEBHOOK_SECRET="${GITHUB_WEBHOOK_SECRET:-}"
+RCA_TEST_RUNS_ENABLED="${RCA_TEST_RUNS_ENABLED:-1}"
+RCA_TEST_RUNS_TOKEN="${RCA_TEST_RUNS_TOKEN:-}"
 GITHUB_REPO="${GITHUB_REPO:-$(default_github_repo)}"
 GITHUB_BRANCH="${GITHUB_BRANCH:-dev}"
 SMOKE_MANIFEST_PATH="${SMOKE_MANIFEST_PATH:-src/samples/smoke/deploy.yaml}"
@@ -514,6 +516,12 @@ create_management_runtime() {
   if [[ -z "${GITHUB_WEBHOOK_SECRET}" ]]; then
     GITHUB_WEBHOOK_SECRET="$(openssl rand -hex 32)"
   fi
+  if [[ -z "${RCA_TEST_RUNS_TOKEN}" ]]; then
+    RCA_TEST_RUNS_TOKEN="$(existing_secret_value "${context}" management-runtime-secret RCA_TEST_RUNS_TOKEN)"
+  fi
+  if [[ -z "${RCA_TEST_RUNS_TOKEN}" ]]; then
+    RCA_TEST_RUNS_TOKEN="$(openssl rand -hex 32)"
+  fi
 
   for key in \
     LLM_API_KEY \
@@ -579,6 +587,7 @@ EOF
     --from-literal=NATS_URL="${NATS_URL}" \
     --from-literal=REDIS_URL="${REDIS_URL}" \
     --from-literal=DATABASE_STARTUP_MODE="${DATABASE_STARTUP_MODE}" \
+    --from-literal=RCA_TEST_RUNS_ENABLED="${RCA_TEST_RUNS_ENABLED}" \
     --from-literal=OUTBOX_RELAY_BATCH="${OUTBOX_RELAY_BATCH:-10}" \
     --from-literal=MANAGEMENT_BASE_URL="http://api-gateway:8000" \
     --from-literal=PUBLIC_BASE_URL="${effective_public_base_url}" \
@@ -632,6 +641,7 @@ EOF
     # 경유로는 LISTEN 이 불가해 postgres 에 직접 붙는다(게이트웨이당 커넥션 1개).
     --from-literal=COMMAND_NOTIFY_DATABASE_URL="postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgresql:5432/${POSTGRES_DB}"
     --from-literal=GITHUB_WEBHOOK_SECRET="${GITHUB_WEBHOOK_SECRET}"
+    --from-literal=RCA_TEST_RUNS_TOKEN="${RCA_TEST_RUNS_TOKEN}"
   )
   if valid_github_token "${GITHUB_TOKEN}"; then
     secret_args+=(--from-literal=GITHUB_TOKEN="${GITHUB_TOKEN}")

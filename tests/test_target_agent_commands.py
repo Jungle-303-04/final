@@ -2,10 +2,13 @@ from __future__ import annotations
 
 import asyncio
 import importlib.util
+import json
 import logging
 import sys
 from pathlib import Path
+from types import SimpleNamespace
 
+import httpx
 import pytest
 
 ROOT_DIR = Path(__file__).resolve().parents[1]
@@ -198,7 +201,11 @@ def test_apply_manifest_keeps_plan_diff_payload() -> None:
     assert applied["manifest"]["kind"] == "ConfigMap"
 
 
-def test_rca_test_inject_command_returns_real_fault_observation() -> None:
+def test_rca_test_inject_command_returns_real_fault_observation(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("APP_ENV", "test")
+    monkeypatch.setenv("RCA_TEST_RUNS_ENABLED", "1")
     module = load_agent_module()
     agent = object.__new__(module.TargetClusterAgent)
     agent.cluster_id = "cluster-1"
@@ -227,6 +234,8 @@ def test_rca_test_inject_command_returns_real_fault_observation() -> None:
                     "run_id": "run-1",
                     "scenario_id": "image.wrong-tag",
                     "scenario_version": 1,
+                    "namespace": "sandbox",
+                    "resource_name": "rca-test-image-wrong-tag",
                 },
             }
         )
@@ -238,6 +247,219 @@ def test_rca_test_inject_command_returns_real_fault_observation() -> None:
     assert result["rca_test"]["fault_observed"] is True
     assert result["rca_test"]["scenario_id"] == "image.wrong-tag"
     assert result["rca_test"]["evidence_sources"] == ["kubernetes"]
+
+
+def test_rca_test_cleanup_uses_immutable_target_without_loading_current_catalog(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("APP_ENV", "test")
+    monkeypatch.setenv("RCA_TEST_RUNS_ENABLED", "1")
+    module = load_agent_module()
+    agent = object.__new__(module.TargetClusterAgent)
+    agent.cluster_id = "cluster-1"
+    agent.cluster_role = "target"
+    agent.kubernetes = StubKubernetesClient()
+    calls: list[tuple[str, str, str]] = []
+
+    def catalog_must_not_be_loaded(_scenario_id: str) -> object:
+        raise AssertionError("cleanup must not depend on the current scenario catalog")
+
+    async def atomic_cleanup(namespace: str, resource_name: str, run_id: str) -> bool:
+        calls.append((namespace, resource_name, run_id))
+        return True
+
+    monkeypatch.setattr(module, "test_scenario_by_id", catalog_must_not_be_loaded)
+    agent.scale_rca_test_fixture_if_owned = atomic_cleanup
+    register_agent_commands(module, agent)
+
+    result = asyncio.run(
+        agent.execute_command(
+            {
+                "action": module.Command.RCA_TEST_SCENARIO_CLEANUP_ACTION,
+                "payload": {
+                    "run_id": "run-1",
+                    "scenario_id": "image.wrong-tag",
+                    "scenario_version": 99,
+                    "namespace": "sandbox",
+                    "resource_name": "rca-test-image-wrong-tag",
+                },
+            }
+        )
+    )
+
+    assert calls == [("sandbox", "rca-test-image-wrong-tag", "run-1")]
+    assert result["status"] == "completed"
+    assert result["rca_test"]["cleanup_completed"] is True
+
+
+@pytest.mark.parametrize("conflict_status", [404, 409, 422])
+def test_atomic_rca_test_cleanup_conflict_is_a_safe_noop(
+    monkeypatch: pytest.MonkeyPatch,
+    conflict_status: int,
+) -> None:
+    module = load_agent_module()
+    requests: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        requests.append(request)
+        return httpx.Response(conflict_status, json={"message": "owner changed"})
+
+    monkeypatch.setattr(module, "kubernetes_api_base_url", lambda: "https://kubernetes.test")
+    monkeypatch.setattr(module, "service_account_token", lambda: "token")
+    agent = object.__new__(module.TargetClusterAgent)
+    agent.kubernetes_transport = httpx.MockTransport(handler)
+
+    cleaned = asyncio.run(
+        agent.scale_rca_test_fixture_if_owned(
+            "sandbox",
+            "rca-test-image-wrong-tag",
+            "run-1",
+        )
+    )
+
+    assert cleaned is False
+    assert len(requests) == 1
+    assert requests[0].headers["content-type"] == "application/json-patch+json"
+    assert json.loads(requests[0].content) == [
+        {
+            "op": "test",
+            "path": "/metadata/annotations/kubeheal.io~1rca-test-run",
+            "value": "run-1",
+        },
+        {"op": "replace", "path": "/spec/replicas", "value": 0},
+    ]
+
+
+def test_atomic_rca_test_cleanup_scales_only_the_matching_owner(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    module = load_agent_module()
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json={"metadata": {"name": "rca-test-image-wrong-tag"}})
+
+    monkeypatch.setattr(module, "kubernetes_api_base_url", lambda: "https://kubernetes.test")
+    monkeypatch.setattr(module, "service_account_token", lambda: "token")
+    agent = object.__new__(module.TargetClusterAgent)
+    agent.kubernetes_transport = httpx.MockTransport(handler)
+
+    assert (
+        asyncio.run(
+            agent.scale_rca_test_fixture_if_owned(
+                "sandbox",
+                "rca-test-image-wrong-tag",
+                "run-1",
+            )
+        )
+        is True
+    )
+
+
+def test_rca_test_observation_queries_only_the_current_run(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    module = load_agent_module()
+    run_id = "72b5f320-46e9-4dbd-9251-aedb8db52993"
+    scenario = module.test_scenario_by_id("image.wrong-tag")
+    assert scenario is not None
+    provider = module.KubernetesSnapshotProvider(cluster_id="cluster-1")
+    selectors: list[str | None] = []
+
+    async def query(_client: object, telemetry_query: object) -> dict[str, object]:
+        selectors.append(telemetry_query.label_selector)
+        return {}
+
+    def normalize(_payload: object, _telemetry_query: object) -> dict[str, object]:
+        return {
+            "pods": [
+                {
+                    "name": "rca-test-image-wrong-tag-pod",
+                    "labels": {"kubeheal.io/rca-test-run": run_id},
+                    "waiting_reasons": ["ImagePullBackOff"],
+                    "terminated_reasons": [],
+                }
+            ],
+            "events": [
+                {
+                    "involved_name": "rca-test-image-wrong-tag-pod",
+                    "reason": "Failed",
+                    "message": "manifest unknown: image not found",
+                }
+            ],
+        }
+
+    monkeypatch.setattr(provider, "query", query)
+    monkeypatch.setattr(provider, "normalize_payload", normalize)
+    agent = object.__new__(module.TargetClusterAgent)
+    agent.evidence_collector = SimpleNamespace(providers={"kubernetes": provider})
+
+    asyncio.run(agent.wait_for_rca_test_observation(scenario, run_id))
+
+    assert selectors == [f"kubeheal.io/rca-test-run={run_id}"]
+
+
+@pytest.mark.parametrize(
+    ("app_env", "enabled"),
+    [
+        ("production", "1"),
+        ("test", "0"),
+        ("test", ""),
+    ],
+)
+@pytest.mark.parametrize(
+    "action",
+    [
+        "rca.test.inject",
+        "rca.test.cleanup",
+    ],
+)
+def test_rca_test_commands_fail_closed_on_target_agent(
+    monkeypatch: pytest.MonkeyPatch,
+    app_env: str,
+    enabled: str,
+    action: str,
+) -> None:
+    monkeypatch.setenv("APP_ENV", app_env)
+    monkeypatch.setenv("RCA_TEST_RUNS_ENABLED", enabled)
+    module = load_agent_module()
+    agent = object.__new__(module.TargetClusterAgent)
+    agent.cluster_id = "cluster-1"
+    agent.cluster_role = "target"
+    agent.kubernetes = StubKubernetesClient()
+    register_agent_commands(module, agent)
+
+    result = asyncio.run(
+        agent.execute_command(
+            {
+                "action": action,
+                "payload": {
+                    "run_id": "run-1",
+                    "scenario_id": "image.wrong-tag",
+                    "scenario_version": 1,
+                },
+            }
+        )
+    )
+
+    assert result["status"] == "failed"
+    assert result["applied"] is False
+    assert "APP_ENV=test" in result["message"]
+    assert "RCA_TEST_RUNS_ENABLED=1" in result["message"]
+    assert agent.kubernetes.patches == []
+
+
+def test_expired_rca_test_fixture_cleanup_is_disabled_outside_test_mode(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("APP_ENV", "production")
+    monkeypatch.setenv("RCA_TEST_RUNS_ENABLED", "1")
+    module = load_agent_module()
+    agent = object.__new__(module.TargetClusterAgent)
+    agent.cluster_id = "cluster-1"
+    agent.cluster_role = "target"
+
+    assert asyncio.run(agent.cleanup_expired_rca_test_fixtures_once()) == 0
+    assert asyncio.run(agent.cleanup_expired_rca_test_fixtures_forever()) is None
 
 
 def test_command_result_outbox_retries_until_gateway_accepts(tmp_path: Path) -> None:
