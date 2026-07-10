@@ -25,10 +25,51 @@ from providers.kubernetes_utils import (
     K8S_RESOURCE_PODS,
     K8S_RESOURCE_REPLICASETS,
     K8S_RESOURCE_SERVICES,
+    compact_dict,
     items,
     metadata,
     spec,
     status,
+)
+
+EVENT_REASON_BACK_OFF = "BackOff"
+EVENT_REASON_FAILED = "Failed"
+EVENT_REASON_FAILED_MOUNT = "FailedMount"
+EVENT_REASON_FAILED_SCHEDULING = "FailedScheduling"
+EVENT_REASON_OOM_KILLING = "OOMKilling"
+EVENT_REASON_UNHEALTHY = "Unhealthy"
+
+EVENT_CATEGORY_BACKOFF = "backoff"
+EVENT_CATEGORY_CONFIG_MOUNT = "config_or_volume_mount"
+EVENT_CATEGORY_CONTAINER_RESTART = "container_restart"
+EVENT_CATEGORY_IMAGE_PULL = "image_pull"
+EVENT_CATEGORY_OOM = "oom_killed"
+EVENT_CATEGORY_PROBE = "probe"
+EVENT_CATEGORY_SCHEDULING = "scheduling"
+
+EVENT_SIGNAL_ERR_IMAGE_PULL = "ErrImagePull"
+EVENT_SIGNAL_FAILED_SCHEDULING = EVENT_REASON_FAILED_SCHEDULING
+EVENT_SIGNAL_IMAGE_PULL_BACKOFF = "ImagePullBackOff"
+EVENT_SIGNAL_OOM_KILLED = "OOMKilled"
+
+EVENT_SYMPTOM_CRASH_LOOP = "CrashLoopBackOff"
+EVENT_SYMPTOM_FAILED_MOUNT = EVENT_REASON_FAILED_MOUNT
+EVENT_SYMPTOM_FAILED_SCHEDULING = EVENT_REASON_FAILED_SCHEDULING
+EVENT_SYMPTOM_IMAGE_PULL = EVENT_SIGNAL_IMAGE_PULL_BACKOFF
+EVENT_SYMPTOM_PROBE_FAILURE = "ProbeFailure"
+
+PROBE_SIGNAL_DEFAULT = "ProbeFailed"
+PROBE_SIGNAL_LIVENESS = "LivenessProbeFailed"
+PROBE_SIGNAL_READINESS = "ReadinessProbeFailed"
+PROBE_SIGNAL_STARTUP = "StartupProbeFailed"
+
+SCHEDULING_CAUSE_PATTERNS = (
+    ("insufficient_cpu", ("insufficient cpu",)),
+    ("insufficient_memory", ("insufficient memory",)),
+    ("node_selector_mismatch", ("node affinity/selector", "node selector")),
+    ("taint_toleration_mismatch", ("taint", "toleration")),
+    ("pod_count_limit", ("too many pods",)),
+    ("volume_node_affinity_conflict", ("volume node affinity conflict",)),
 )
 
 
@@ -387,6 +428,7 @@ def container_summary(item: JsonObject) -> JsonObject:
     last_state_name, last_state_payload = container_state(item, "lastState")
     return {
         "name": item.get("name"),
+        "container_id": item.get("containerID"),
         "image": item.get("image"),
         "image_id": item.get("imageID"),
         "ready": item.get("ready"),
@@ -399,7 +441,10 @@ def container_summary(item: JsonObject) -> JsonObject:
         "finished_at": state_payload.get("finishedAt"),
         "last_state": last_state_name,
         "last_state_reason": last_state_payload.get("reason"),
+        "last_state_message": last_state_payload.get("message"),
         "last_exit_code": last_state_payload.get("exitCode"),
+        "last_started_at": last_state_payload.get("startedAt"),
+        "last_finished_at": last_state_payload.get("finishedAt"),
     }
 
 
@@ -421,7 +466,7 @@ def event_summary(item: JsonObject) -> JsonObject:
     source = item.get("source", {})
     if not isinstance(source, dict):
         source = {}
-    return {
+    summary = {
         "uid": meta.get("uid"),
         "namespace": meta.get("namespace"),
         "type": item.get("type"),
@@ -435,6 +480,86 @@ def event_summary(item: JsonObject) -> JsonObject:
         "involved_name": involved.get("name"),
         "involved_uid": involved.get("uid"),
     }
+    reason_summary = event_reason_summary(item)
+    if reason_summary:
+        summary["reason_summary"] = reason_summary
+    return summary
+
+
+def event_reason_summary(item: JsonObject) -> JsonObject:
+    """Build a small reason summary from Kubernetes Event data."""
+    reason = as_text(item.get("reason")) or ""
+    message = as_text(item.get("message")) or ""
+    message_text = message.casefold()
+    category, signal, symptom = event_reason_classification(reason, message_text)
+    return compact_dict(
+        {
+            "category": category,
+            "signal": signal,
+            "symptom": symptom,
+            "scheduling_causes": scheduling_causes(message_text)
+            if reason == EVENT_REASON_FAILED_SCHEDULING
+            else [],
+        }
+    )
+
+
+def event_reason_classification(
+    reason: str,
+    message_text: str,
+) -> tuple[str | None, str | None, str | None]:
+    """Return a stable RCA hint for known Kubernetes Event reasons."""
+    if reason == EVENT_REASON_FAILED_SCHEDULING:
+        return (
+            EVENT_CATEGORY_SCHEDULING,
+            EVENT_SIGNAL_FAILED_SCHEDULING,
+            EVENT_SYMPTOM_FAILED_SCHEDULING,
+        )
+    if reason == EVENT_REASON_OOM_KILLING or "oomkilled" in message_text:
+        return (EVENT_CATEGORY_OOM, EVENT_SIGNAL_OOM_KILLED, EVENT_SYMPTOM_CRASH_LOOP)
+    if reason == EVENT_REASON_FAILED and (
+        "pull image" in message_text or "errimagepull" in message_text
+    ):
+        return (EVENT_CATEGORY_IMAGE_PULL, EVENT_SIGNAL_ERR_IMAGE_PULL, EVENT_SYMPTOM_IMAGE_PULL)
+    if reason == EVENT_REASON_BACK_OFF and "pulling image" in message_text:
+        return (
+            EVENT_CATEGORY_IMAGE_PULL,
+            EVENT_SIGNAL_IMAGE_PULL_BACKOFF,
+            EVENT_SYMPTOM_IMAGE_PULL,
+        )
+    if reason == EVENT_REASON_BACK_OFF and "restarting failed container" in message_text:
+        return (
+            EVENT_CATEGORY_CONTAINER_RESTART,
+            EVENT_SYMPTOM_CRASH_LOOP,
+            EVENT_SYMPTOM_CRASH_LOOP,
+        )
+    if reason == EVENT_REASON_BACK_OFF:
+        return (EVENT_CATEGORY_BACKOFF, EVENT_REASON_BACK_OFF, None)
+    if reason == EVENT_REASON_UNHEALTHY and "probe" in message_text:
+        return (EVENT_CATEGORY_PROBE, probe_signal_label(message_text), EVENT_SYMPTOM_PROBE_FAILURE)
+    if reason == EVENT_REASON_FAILED_MOUNT:
+        return (EVENT_CATEGORY_CONFIG_MOUNT, EVENT_REASON_FAILED_MOUNT, EVENT_SYMPTOM_FAILED_MOUNT)
+    return (None, None, None)
+
+
+def probe_signal_label(message_text: str) -> str:
+    """Return the probe signal type from an Event message."""
+    if "readiness probe" in message_text:
+        return PROBE_SIGNAL_READINESS
+    if "liveness probe" in message_text:
+        return PROBE_SIGNAL_LIVENESS
+    if "startup probe" in message_text:
+        return PROBE_SIGNAL_STARTUP
+    return PROBE_SIGNAL_DEFAULT
+
+
+def scheduling_causes(message_text: str) -> list[str]:
+    """Return stable scheduling cause labels from a FailedScheduling message."""
+    causes: list[str] = []
+    for cause, patterns in SCHEDULING_CAUSE_PATTERNS:
+        if any(pattern in message_text for pattern in patterns):
+            causes.append(cause)
+    return causes
 
 
 def node_summary(item: JsonObject, metrics: JsonObject | None = None) -> JsonObject:

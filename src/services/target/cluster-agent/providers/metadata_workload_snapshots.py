@@ -67,7 +67,7 @@ def current_workload_base_snapshot(
     template = pod_template(deployment)
     template_meta = metadata(template)
     template_spec = spec(template)
-    return {
+    snapshot: JsonObject = {
         "workload": {
             "kind": K8S_KIND_DEPLOYMENT,
             "namespace": meta.get("namespace"),
@@ -82,6 +82,10 @@ def current_workload_base_snapshot(
             for pod in pods_for_deployment(deployment, replicasets, pods)
         ],
     }
+    auth = pod_template_auth(template_spec)
+    if auth:
+        snapshot["pod_template_auth"] = auth
+    return snapshot
 
 
 def current_workload_summary_snapshot(
@@ -186,6 +190,29 @@ def persistent_volume_claim_refs(template_spec: JsonObject) -> list[JsonObject]:
                     "claim_name": claim_name,
                 }
             )
+    return refs
+
+
+def pod_template_auth(template_spec: JsonObject) -> JsonObject:
+    """Return small Pod service account and image pull refs."""
+    return compact_dict(
+        {
+            "service_account_name": template_spec.get("serviceAccountName"),
+            "automount_service_account_token": template_spec.get(
+                "automountServiceAccountToken"
+            ),
+            "image_pull_secret_refs": image_pull_secret_refs(template_spec),
+        }
+    )
+
+
+def image_pull_secret_refs(template_spec: JsonObject) -> list[JsonObject]:
+    """Return imagePullSecrets names without reading Secret values."""
+    refs: list[JsonObject] = []
+    for secret in list_items(template_spec.get("imagePullSecrets")):
+        ref = compact_dict({"name": secret.get("name")})
+        if ref:
+            refs.append(ref)
     return refs
 
 

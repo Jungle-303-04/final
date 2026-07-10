@@ -81,11 +81,21 @@ def test_kubernetes_snapshot_provider_collects_namespace_state(monkeypatch) -> N
                             "containerStatuses": [
                                 {
                                     "name": "checkout-api",
+                                    "containerID": "containerd://container-123",
                                     "image": "checkout:v1",
                                     "imageID": "docker-pullable://checkout@sha256:abc123",
                                     "ready": True,
                                     "restartCount": 2,
                                     "state": {"running": {"startedAt": "2026-07-05T00:00:00Z"}},
+                                    "lastState": {
+                                        "terminated": {
+                                            "reason": "OOMKilled",
+                                            "message": "Container used too much memory",
+                                            "exitCode": 137,
+                                            "startedAt": "2026-07-04T23:55:00Z",
+                                            "finishedAt": "2026-07-04T23:59:00Z",
+                                        }
+                                    },
                                 }
                             ],
                         },
@@ -107,7 +117,52 @@ def test_kubernetes_snapshot_provider_collects_namespace_state(monkeypatch) -> N
                             "name": "checkout-api-7f5c",
                             "uid": "pod-1",
                         },
-                    }
+                    },
+                    {
+                        "metadata": {"uid": "event-2", "namespace": "target"},
+                        "type": "Warning",
+                        "reason": "FailedScheduling",
+                        "message": (
+                            "0/2 nodes are available: 1 Insufficient cpu, "
+                            "1 node(s) didn't match Pod's node affinity/selector."
+                        ),
+                        "count": 2,
+                        "eventTime": "2026-07-05T00:02:00Z",
+                        "reportingComponent": "default-scheduler",
+                        "involvedObject": {
+                            "kind": "Pod",
+                            "name": "checkout-api-7f5c",
+                            "uid": "pod-1",
+                        },
+                    },
+                    {
+                        "metadata": {"uid": "event-3", "namespace": "target"},
+                        "type": "Warning",
+                        "reason": "Unhealthy",
+                        "message": "Readiness probe failed: connection refused",
+                        "count": 4,
+                        "eventTime": "2026-07-05T00:03:00Z",
+                        "reportingComponent": "kubelet",
+                        "involvedObject": {
+                            "kind": "Pod",
+                            "name": "checkout-api-7f5c",
+                            "uid": "pod-1",
+                        },
+                    },
+                    {
+                        "metadata": {"uid": "event-4", "namespace": "target"},
+                        "type": "Normal",
+                        "reason": "Pulled",
+                        "message": "Successfully pulled image",
+                        "count": 1,
+                        "eventTime": "2026-07-05T00:04:00Z",
+                        "reportingComponent": "kubelet",
+                        "involvedObject": {
+                            "kind": "Pod",
+                            "name": "checkout-api-7f5c",
+                            "uid": "pod-1",
+                        },
+                    },
                 ]
             },
             "/api/v1/nodes": {
@@ -235,10 +290,42 @@ def test_kubernetes_snapshot_provider_collects_namespace_state(monkeypatch) -> N
         validated.kubernetes["pods"][0]["containers"][0]["image_id"]
         == "docker-pullable://checkout@sha256:abc123"
     )
+    assert (
+        validated.kubernetes["pods"][0]["containers"][0]["container_id"]
+        == "containerd://container-123"
+    )
+    assert validated.kubernetes["pods"][0]["containers"][0]["last_state_message"] == (
+        "Container used too much memory"
+    )
+    assert (
+        validated.kubernetes["pods"][0]["containers"][0]["last_started_at"]
+        == "2026-07-04T23:55:00Z"
+    )
+    assert (
+        validated.kubernetes["pods"][0]["containers"][0]["last_finished_at"]
+        == "2026-07-04T23:59:00Z"
+    )
     assert validated.kubernetes["pods"][0]["restart_total"] == 2
     assert validated.kubernetes["pods"][0]["cpu_mcores"] == 125.0
     assert validated.kubernetes["pods"][0]["mem_mib"] == 64.0
     assert validated.kubernetes["events"][0]["reason"] == "BackOff"
+    assert validated.kubernetes["events"][0]["reason_summary"] == {
+        "category": "container_restart",
+        "signal": "CrashLoopBackOff",
+        "symptom": "CrashLoopBackOff",
+    }
+    assert validated.kubernetes["events"][1]["reason_summary"] == {
+        "category": "scheduling",
+        "signal": "FailedScheduling",
+        "symptom": "FailedScheduling",
+        "scheduling_causes": ["insufficient_cpu", "node_selector_mismatch"],
+    }
+    assert validated.kubernetes["events"][2]["reason_summary"] == {
+        "category": "probe",
+        "signal": "ReadinessProbeFailed",
+        "symptom": "ProbeFailure",
+    }
+    assert "reason_summary" not in validated.kubernetes["events"][3]
     assert validated.kubernetes["nodes"][0]["ready"] is True
     assert validated.kubernetes["nodes"][0]["cpu_mcores"] == 390.0
     assert validated.kubernetes["nodes"][0]["cpu_ratio"] == 0.1
@@ -256,7 +343,7 @@ def test_kubernetes_snapshot_provider_collects_namespace_state(monkeypatch) -> N
     assert validated.kubernetes["endpoints"][0]["endpoint_count"] == 1
     assert validated.kubernetes["provider_status"]["target_namespace_snapshot"]["counts"] == {
         "pods": 1,
-        "events": 1,
+        "events": 4,
         "nodes": 1,
         "pod_metrics": 1,
         "node_metrics": 1,

@@ -147,6 +147,11 @@ def test_metadata_provider_collects_one_deployment_snapshot(monkeypatch) -> None
                                 },
                             },
                             "spec": {
+                                "serviceAccountName": "checkout-api-sa",
+                                "automountServiceAccountToken": False,
+                                "imagePullSecrets": [
+                                    {"name": "registry-credentials"}
+                                ],
                                 "volumes": [
                                     {
                                         "name": "app-config",
@@ -922,6 +927,11 @@ def test_metadata_provider_collects_one_deployment_snapshot(monkeypatch) -> None
         not in snapshot["deployment_annotations"]
     )
     assert snapshot["pod_template_labels"] == {"app": "checkout-api"}
+    assert snapshot["pod_template_auth"] == {
+        "service_account_name": "checkout-api-sa",
+        "automount_service_account_token": False,
+        "image_pull_secret_refs": [{"name": "registry-credentials"}],
+    }
     assert snapshot["pod_template_annotations"] == {
         "prometheus.io/path": "/metrics",
         "prometheus.io/scrape": "true",
@@ -1355,6 +1365,11 @@ def test_metadata_provider_collects_namespace_deployment_snapshots(monkeypatch) 
                                         },
                                     },
                                     "spec": {
+                                        "serviceAccountName": "shop-api-sa",
+                                        "automountServiceAccountToken": True,
+                                        "imagePullSecrets": [
+                                            {"name": "shop-registry"}
+                                        ],
                                         "volumes": [
                                             {
                                                 "name": "shop-config",
@@ -1631,6 +1646,11 @@ def test_metadata_provider_collects_namespace_deployment_snapshots(monkeypatch) 
     }
     assert snapshot["deployment_labels"] == {"app": "shop-api"}
     assert snapshot["pod_template_labels"] == {"app": "shop-api"}
+    assert snapshot["pod_template_auth"] == {
+        "service_account_name": "shop-api-sa",
+        "automount_service_account_token": True,
+        "image_pull_secret_refs": [{"name": "shop-registry"}],
+    }
     assert snapshot["persistent_volume_claim_refs"] == [
         {
             "volume_name": "shop-data",

@@ -40,7 +40,15 @@ RCA는 provider가 보내준 evidence만 보고 symptom, root cause candidate, c
 - pods
 - pod conditions
 - containerStatuses 요약
+  - containerID
+  - image/imageID
+  - ready/restartCount
+  - current state reason/message/exit code/time
+  - lastState reason/message/exit code/time
 - events reason/message/count
+- events reason_summary
+  - category/signal/symptom
+  - FailedScheduling scheduling_causes
 - ownerReferences 일부
 - service
 - endpointSlice
@@ -59,6 +67,7 @@ RCA는 provider가 보내준 evidence만 보고 symptom, root cause candidate, c
   - path / port / timeoutSeconds / periodSeconds / failureThreshold
 - Deployment labels
 - Pod template labels
+- Pod template serviceAccountName, automountServiceAccountToken, imagePullSecrets name summary
 - PVC refs
 - resources requests/limits
 - Deployment status and conditions
@@ -76,12 +85,13 @@ RCA는 provider가 보내준 evidence만 보고 symptom, root cause candidate, c
 
 ### 추가로 요청해야 할 것
 
-- 상세 containerStatuses 원본 또는 더 풍부한 요약
+- 상세 containerStatuses 원본
 - node pressure / scheduler decision 관련 detail
 
 참고:
 
 - 현재 image digest는 Kubernetes provider의 `pods[].containers[].image_id`에서 확인할 수 있다.
+- 현재 container ID와 직전 lastState의 message/time은 Kubernetes provider의 `pods[].containers[]` 요약에서 확인할 수 있다.
 - 다만 이전 image나 rollout history는 아직 제공하지 않는다.
 
 주의:
@@ -209,6 +219,9 @@ summary snapshot에는 아래 필드만 남긴다.
 - change_context.current_workload_snapshots[].workload.kind/namespace/name
 - change_context.current_workload_snapshots[].deployment_labels
 - change_context.current_workload_snapshots[].pod_template_labels
+- change_context.current_workload_snapshots[].pod_template_auth.service_account_name
+- change_context.current_workload_snapshots[].pod_template_auth.automount_service_account_token
+- change_context.current_workload_snapshots[].pod_template_auth.image_pull_secret_refs[].name
 - change_context.current_workload_snapshots[].persistent_volume_claim_refs[].volume_name/claim_name
 - change_context.current_workload_snapshots[].deployment_status
 - change_context.current_workload_snapshots[].deployment_status.conditions[]
@@ -275,6 +288,11 @@ raw spec/status, annotation, managedFields는 보내지 않는다.
 - change_context.resource_quotas[].namespace
 - change_context.resource_quotas[].hard
 - change_context.resource_quotas[].used
+
+`pod_template_auth`는 private image pull 실패와 service account 권한 문제 후보를 보기 위한 보수적 요약이다.
+관련 값이 하나도 없으면 `pod_template_auth`는 생략될 수 있다.
+`image_pull_secret_refs[].name`은 Deployment Pod template에 적힌 Secret 이름만 담는다.
+Secret 객체의 `data`, `binaryData`, `stringData` 값은 읽거나 보내지 않는다.
 
 `current_workload_snapshot`은 특정 Deployment 1개를 위한 detail snapshot이다.
 detail snapshot은 summary 필드에 아래 필드를 추가로 담는다.
