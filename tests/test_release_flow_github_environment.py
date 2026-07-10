@@ -118,6 +118,56 @@ def test_verify_github_environment_fetches_environment_configuration(monkeypatch
     assert "ok secret.RELEASE_FLOW_API_BASE_URL" in captured.out
 
 
+def test_verify_github_environment_writes_nested_report_path(monkeypatch, tmp_path) -> None:
+    class Response:
+        def __init__(self, payload: dict) -> None:
+            self.payload = payload
+
+        def __enter__(self) -> "Response":
+            return self
+
+        def __exit__(self, *_args: object) -> None:
+            return None
+
+        def read(self) -> bytes:
+            return json.dumps(self.payload).encode("utf-8")
+
+    def fake_urlopen(request: object, *, timeout: int) -> Response:
+        url = request.full_url  # type: ignore[attr-defined]
+        if url.endswith("/environments/production/secrets"):
+            return Response({"secrets": [{"name": name} for name in sorted(complete_secret_names())]})
+        if url.endswith("/environments/production/variables"):
+            return Response(
+                {
+                    "variables": [
+                        {"name": name, "value": value}
+                        for name, value in sorted(complete_variables().items())
+                    ]
+                }
+            )
+        raise AssertionError(f"unexpected URL: {url}")
+
+    monkeypatch.setattr(environment.urllib.request, "urlopen", fake_urlopen)
+    report_path = tmp_path / "artifacts" / "release-flow-github-environment.json"
+
+    assert (
+        environment.main(
+            [
+                "--github-repo",
+                "org/repo",
+                "--github-token",
+                "token-a",
+                "--report-path",
+                str(report_path),
+            ]
+        )
+        == 0
+    )
+    assert report_path.is_file()
+    payload = json.loads(report_path.read_text(encoding="utf-8"))
+    assert payload["ok"] is True
+
+
 def test_verify_github_environment_reports_http_failure(monkeypatch, capsys) -> None:
     def fake_urlopen(request: object, *, timeout: int) -> object:
         raise urllib.error.HTTPError(request.full_url, 404, "not found", hdrs=None, fp=None)  # type: ignore[attr-defined]

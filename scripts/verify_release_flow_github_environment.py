@@ -224,13 +224,15 @@ def placeholder_host(host: str) -> bool:
 def write_report(path: str, *, ok: bool, repo: str, environment: str, checks: list[EnvironmentCheck]) -> None:
     if not path:
         return
+    report_path = os.path.abspath(path)
+    os.makedirs(os.path.dirname(report_path), exist_ok=True)
     payload = {
         "ok": ok,
         "repo": repo,
         "environment": environment,
         "checks": [asdict(check) for check in checks],
     }
-    with open(path, "w", encoding="utf-8") as handle:
+    with open(report_path, "w", encoding="utf-8") as handle:
         json.dump(payload, handle, indent=2, sort_keys=True)
         handle.write("\n")
 
