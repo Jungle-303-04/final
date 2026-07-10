@@ -631,6 +631,7 @@ def test_cleanup_uses_a_separate_command_and_refuses_a_stale_run_owner() -> None
         "resource_kind": "Deployment",
         "namespace": "sandbox",
         "resource_name": RESOURCE_NAME,
+        "cleanup_adapter": "kubernetes.manifest_delete",
     }
     assert runtime.rca_test_fixture_owned_by_run(_fixture_deployment(RUN_ID), RUN_ID) is True
     assert runtime.rca_test_fixture_owned_by_run(_fixture_deployment(NEWER_RUN_ID), RUN_ID) is False

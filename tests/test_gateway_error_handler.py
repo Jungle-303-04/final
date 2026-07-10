@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+import asyncio
 import logging
 from typing import Any
 
+import pytest
 from conftest import ROOT, load_file
 from fastapi.testclient import TestClient
 
@@ -57,6 +59,32 @@ def test_gateway_docs_use_configured_external_api_root_path(monkeypatch) -> None
 
     assert response.status_code == 200
     assert "url: '/api/openapi.json'" in response.text
+
+
+def test_gateway_lifespan_validates_rca_scenario_adapters_before_external_connections(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("DATABASE_URL", "postgresql://user:pass@postgresql:5432/service")
+    gateway = load_gateway_module()
+    service = gateway.ApiGateway()
+    external_calls: list[str] = []
+
+    def invalid_catalog() -> None:
+        raise RuntimeError("RCA scenario adapter contract invalid")
+
+    async def must_not_wait(_db: Any) -> None:
+        external_calls.append("database")
+
+    monkeypatch.setattr(gateway, "validate_test_scenario_catalog", invalid_catalog)
+    monkeypatch.setattr(gateway, "wait_for_database", must_not_wait)
+
+    async def start() -> None:
+        async with service.lifespan(service.app):
+            raise AssertionError("invalid RCA scenario catalog must fail startup")
+
+    with pytest.raises(RuntimeError, match="adapter contract invalid"):
+        asyncio.run(start())
+    assert external_calls == []
 
 
 def test_gateway_request_logging_records_status_and_path(monkeypatch, caplog) -> None:
