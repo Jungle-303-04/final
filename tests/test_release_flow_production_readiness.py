@@ -1,8 +1,11 @@
 from __future__ import annotations
 
 import json
+import urllib.error
+from collections import deque
 from pathlib import Path
 
+import scripts.validate_release_flow_production_readiness as readiness
 from scripts.validate_release_flow_production_readiness import main, validate_readiness
 
 
@@ -12,6 +15,10 @@ def test_current_release_flow_production_readiness_static_checks_pass() -> None:
     assert checks
     assert all(check.ok for check in checks)
     assert {check.name for check in checks} >= {
+        "workflow.production_readiness.require_runtime_config",
+        "workflow.production_readiness.runtime_env",
+        "workflow.production_readiness.github_api_base",
+        "workflow.production_readiness.failure_report",
         "workflow.smoke.runtime_config_preflight",
         "workflow.smoke.live_approval_gate",
         "workflow.smoke.safe_pr_evidence_inputs",
@@ -23,6 +30,7 @@ def test_current_release_flow_production_readiness_static_checks_pass() -> None:
         "script.smoke.safe_pr_evidence_inputs",
         "script.smoke.safe_pr_evidence_required",
         "script.smoke.safe_pr_ready_server_verified",
+        "docs.production_readiness.operator_guide",
         "worker_topology.deployments",
         "worker_topology.local_startup",
         "metrics.api_gateway_endpoint",
@@ -38,6 +46,11 @@ def test_current_release_flow_production_readiness_static_checks_pass() -> None:
         "safe_pr.production_evidence_rollback_required",
         "safe_pr.evidence_candidate_matching",
         "safe_pr.evidence_mismatch_diagnostics",
+        "workflow.production_readiness.requires_runtime_config",
+        "workflow.production_readiness.github_provider_env",
+        "workflow.production_readiness.github_access_preflight",
+        "workflow.production_readiness.api_smoke_preflight",
+        "workflow.production_readiness.github_secret_names",
         "workflow.production_gate.fail_closed",
         "workflow.production_gate.safe_pr_gate_default",
         "workflow.production_gate.safe_pr_evidence_inputs",
@@ -48,6 +61,9 @@ def test_current_release_flow_production_readiness_static_checks_pass() -> None:
         "workflow.production_gate.image_required",
         "workflow.production_gate.validates_before_smoke",
         "workflow.gate_contract.static_scan",
+        "runtime.github_token",
+        "runtime.scm_repo",
+        "runtime.github_api_base",
     }
 
 
@@ -59,13 +75,23 @@ def test_release_flow_production_readiness_requires_runtime_config(monkeypatch) 
         "AUTH_EMAIL",
         "RELEASE_FLOW_AUTH_PASSWORD",
         "AUTH_PASSWORD",
+        "GITHUB_TOKEN_REF",
+        "GITHUB_TOKEN",
+        "SCM_REPO",
+        "GITHUB_API_BASE",
     ):
         monkeypatch.delenv(name, raising=False)
 
     checks = validate_readiness(require_runtime_config=True)
 
     failed = {check.name for check in checks if not check.ok}
-    assert failed == {"runtime.api_base_url", "runtime.auth_email", "runtime.auth_password"}
+    assert failed == {
+        "runtime.api_base_url",
+        "runtime.auth_email",
+        "runtime.auth_password",
+        "runtime.github_token",
+        "runtime.scm_repo",
+    }
 
 
 def test_release_flow_production_readiness_requires_live_release_workers(
@@ -91,13 +117,141 @@ def test_release_flow_production_readiness_requires_live_release_workers(
 
 
 def test_release_flow_production_readiness_accepts_runtime_config_aliases(monkeypatch) -> None:
-    monkeypatch.setenv("API_BASE_URL", "https://example.test/api")
-    monkeypatch.setenv("AUTH_EMAIL", "ops@example.test")
-    monkeypatch.setenv("AUTH_PASSWORD", "secret")
+    monkeypatch.setenv("API_BASE_URL", "https://release-flow.internal.test/api")
+    monkeypatch.setenv("AUTH_EMAIL", "ops@company.test")
+    monkeypatch.setenv("AUTH_PASSWORD", "correct-horse-battery")
+    monkeypatch.setenv("GITHUB_TOKEN_REF", "aws-sm:/myjob/prod/github-token#token")
+    monkeypatch.setenv("SCM_REPO", "org/checkout")
 
     checks = validate_readiness(require_runtime_config=True)
 
     assert all(check.ok for check in checks)
+
+
+def test_release_flow_production_readiness_rejects_placeholder_runtime_config(monkeypatch) -> None:
+    monkeypatch.setenv("RELEASE_FLOW_API_BASE_URL", "http://localhost:8000")
+    monkeypatch.setenv("RELEASE_FLOW_AUTH_EMAIL", "release-oncall@example.com")
+    monkeypatch.setenv("RELEASE_FLOW_AUTH_PASSWORD", "secret")
+    monkeypatch.setenv("GITHUB_TOKEN_REF", "github-token")
+    monkeypatch.setenv("SCM_REPO", "not-a-repo")
+    monkeypatch.setenv("GITHUB_API_BASE", "http://example.com/api")
+
+    checks = validate_readiness(require_runtime_config=True)
+
+    failed = {check.name for check in checks if not check.ok}
+    assert {
+        "runtime.api_base_url",
+        "runtime.auth_email",
+        "runtime.auth_password",
+        "runtime.github_token",
+        "runtime.scm_repo",
+        "runtime.github_api_base",
+    } <= failed
+    details = {check.name: check.detail for check in checks}
+    assert "must use https" in details["runtime.api_base_url"]
+    assert "real operator account" in details["runtime.auth_email"]
+    assert "non-placeholder secret" in details["runtime.auth_password"]
+    assert "placeholder token ref" in details["runtime.github_token"]
+    assert "owner/repo" in details["runtime.scm_repo"]
+    assert "must use https" in details["runtime.github_api_base"]
+
+
+def test_release_flow_production_readiness_github_access_preflight_success(monkeypatch) -> None:
+    monkeypatch.setenv("API_BASE_URL", "https://release-flow.internal.test/api")
+    monkeypatch.setenv("AUTH_EMAIL", "ops@company.test")
+    monkeypatch.setenv("AUTH_PASSWORD", "correct-horse-battery")
+    monkeypatch.setenv("GITHUB_TOKEN", "ghp_" + "a" * 32)
+    monkeypatch.setenv("SCM_REPO", "org/checkout")
+    monkeypatch.setenv("SCM_BASE_BRANCH", "release/main")
+    seen: dict[str, str] = {}
+    responses = deque(
+        [
+            {"permissions": {"push": True, "maintain": False, "admin": False}},
+            {"object": {"sha": "abc123"}},
+        ]
+    )
+
+    class Response:
+        def __init__(self, payload: dict[str, object]) -> None:
+            self.payload = payload
+
+        def __enter__(self) -> "Response":
+            return self
+
+        def __exit__(self, *_args: object) -> None:
+            return None
+
+        def getcode(self) -> int:
+            return 200
+
+        def read(self) -> bytes:
+            return json.dumps(self.payload).encode("utf-8")
+
+    def fake_urlopen(request: object, *, timeout: int) -> Response:
+        assert timeout == 10
+        seen["url"] = request.full_url  # type: ignore[attr-defined]
+        seen["authorization"] = request.headers["Authorization"]  # type: ignore[attr-defined,index]
+        return Response(responses.popleft())
+
+    monkeypatch.setattr(readiness.urllib.request, "urlopen", fake_urlopen)
+
+    checks = validate_readiness(require_runtime_config=True, check_github_access=True)
+
+    access = next(check for check in checks if check.name == "runtime.github_access_preflight")
+    assert access.ok is True
+    assert seen["url"].endswith("/repos/org/checkout/git/ref/heads/release/main")
+    assert seen["authorization"].startswith("Bearer ghp_")
+    assert "allows Safe PR writes" in access.detail
+
+
+def test_release_flow_production_readiness_github_access_preflight_rejects_read_only_token(monkeypatch) -> None:
+    monkeypatch.setenv("API_BASE_URL", "https://release-flow.internal.test/api")
+    monkeypatch.setenv("AUTH_EMAIL", "ops@company.test")
+    monkeypatch.setenv("AUTH_PASSWORD", "correct-horse-battery")
+    monkeypatch.setenv("GITHUB_TOKEN", "ghp_" + "a" * 32)
+    monkeypatch.setenv("SCM_REPO", "org/checkout")
+
+    class Response:
+        def __enter__(self) -> "Response":
+            return self
+
+        def __exit__(self, *_args: object) -> None:
+            return None
+
+        def getcode(self) -> int:
+            return 200
+
+        def read(self) -> bytes:
+            return json.dumps({"permissions": {"pull": True, "push": False}}).encode("utf-8")
+
+    monkeypatch.setattr(readiness.urllib.request, "urlopen", lambda *_args, **_kwargs: Response())
+
+    checks = validate_readiness(require_runtime_config=True, check_github_access=True)
+
+    access = next(check for check in checks if check.name == "runtime.github_access_preflight")
+    assert access.ok is False
+    assert "do not indicate write access" in access.detail
+
+
+def test_release_flow_production_readiness_github_access_preflight_reports_http_failure(monkeypatch) -> None:
+    monkeypatch.setenv("API_BASE_URL", "https://release-flow.internal.test/api")
+    monkeypatch.setenv("AUTH_EMAIL", "ops@company.test")
+    monkeypatch.setenv("AUTH_PASSWORD", "correct-horse-battery")
+    monkeypatch.setenv("GITHUB_TOKEN", "ghp_" + "a" * 32)
+    monkeypatch.setenv("SCM_REPO", "org/missing")
+
+    def fake_urlopen(request: object, *, timeout: int) -> object:
+        assert timeout == 10
+        raise urllib.error.HTTPError(request.full_url, 404, "not found", hdrs=None, fp=None)  # type: ignore[attr-defined]
+
+    monkeypatch.setattr(readiness.urllib.request, "urlopen", fake_urlopen)
+
+    checks = validate_readiness(require_runtime_config=True, check_github_access=True)
+
+    access = next(check for check in checks if check.name == "runtime.github_access_preflight")
+    assert access.ok is False
+    assert "HTTP 404" in access.detail
+    assert "org/missing@main" in access.detail
 
 
 def test_release_flow_production_readiness_writes_reports(tmp_path: Path) -> None:

@@ -7,6 +7,8 @@ import type {
   ReleasePlan,
   ReleasePlanDispatch,
   ReleasePlanPreview,
+  ReleaseGeneratedManifest,
+  ReleaseManifestSafePr,
   ReleaseReadiness,
   ReleaseRun,
   ReleaseRunHandoff,
@@ -195,6 +197,41 @@ export function useDiagnostics() {
 export function useReleasePreview() {
   return useMutation({
     mutationFn: (plan: ReleasePlan) => post<{ preview: ReleasePlanPreview }>('/release-plans/preview', plan),
+  });
+}
+
+export function useReleaseGeneratedManifest() {
+  return useMutation({
+    mutationFn: ({ plan, stepIndex }: { plan: ReleasePlan; stepIndex: number }) =>
+      post<ReleaseGeneratedManifest>('/release-plans/render-manifest', {
+        plan,
+        step_index: stepIndex,
+      }),
+  });
+}
+
+export function useSubmitReleaseGeneratedManifestSafePr() {
+  const qc = useQueryClient();
+  const { push } = useToast();
+  return useMutation({
+    mutationFn: ({ plan, stepIndex }: { plan: ReleasePlan; stepIndex: number }) =>
+      post<ReleaseManifestSafePr>('/release-plans/render-manifest/safe-pr', {
+        plan,
+        step_index: stepIndex,
+      }),
+    onSuccess: data => {
+      push({
+        tone: 'success',
+        title: 'Safe PR requested',
+        description: `Workflow ${data.workflow_run_id.slice(0, 12)} accepted with ${data.files.length} generated file${data.files.length === 1 ? '' : 's'}.`,
+      });
+      qc.invalidateQueries({ predicate: isReleaseRunQuery });
+    },
+    onError: err => push({
+      tone: 'danger',
+      title: 'Safe PR request blocked',
+      description: (err as Error).message || 'Generated manifest still has blockers.',
+    }),
   });
 }
 
