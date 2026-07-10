@@ -36,7 +36,7 @@ def test_bruno_collection_has_expected_root_and_profiles() -> None:
     assert "auto_login: false" in collection
     assert "auth_email: replace-with-auth-email" in collection
     assert "auth_password: replace-with-auth-password" in collection
-    assert "\n  cluster_id: bruno-api-test\n" in collection
+    assert "\n  cluster_id: api-verification-target\n" in collection
 
     assert "base_url: http://localhost:18080/" in local
     assert "auto_login: true" in local
@@ -48,7 +48,7 @@ def test_bruno_collection_has_expected_root_and_profiles() -> None:
     assert "auto_login: false" in aws
     assert "auth_email: replace-with-auth-email" in aws
     assert "auth_password: replace-with-auth-password" in aws
-    assert "\n  cluster_id: bruno-api-test\n" in aws
+    assert "\n  cluster_id: api-verification-target\n" in aws
 
     for env_text in (local, aws):
         assert "base_url:" in env_text
@@ -209,12 +209,14 @@ def test_bruno_cli_runner_uses_isolated_profile_and_cleans_up_last() -> None:
 
     assert "environments/aws-test.bru" in runner
     assert "aws-live.local.bru" not in runner
+    assert "@usebruno/cli@3.5.1" in runner
+    assert '--env-var "cluster_id=${RUN_ID}"' in runner
     assert runner.index("02-target-admin/01-register-target-dry-run.bru") < runner.index(
         "03-agent-runtime"
     )
-    assert runner.index("15-wizard-validation") < runner.index(
-        "11-clusters/12-unregister-cluster.bru"
-    )
+    assert runner.count("11-clusters/12-unregister-cluster.bru") == 1
+    assert "trap cleanup EXIT" in runner
+    assert runner.rstrip().endswith("cleanup")
 
 
 def test_bruno_readme_explains_each_work_type() -> None:
