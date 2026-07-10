@@ -24,6 +24,7 @@ import argparse
 import http.cookiejar
 import json
 import os
+import re
 import sys
 import time
 import urllib.error
@@ -38,6 +39,12 @@ from typing import Any
 JsonMap = dict[str, Any]
 RETRYABLE_HTTP_STATUSES = {429, 502, 503, 504}
 RETRYABLE_METHODS = {"GET", "HEAD", "OPTIONS"}
+REDACTED_VALUE = "<redacted>"
+SENSITIVE_ASSIGNMENT_PATTERN = re.compile(
+    r"(?P<prefix>(?:\"|')?(?:authorization|bearer|credential|password|passwd|private[_ -]?key|secret|token|api[_ -]?key|apikey|cookie|set[_ -]?cookie)(?:\"|')?\s*[:=]\s*)(?P<quote>\"|')?(?P<value>[^,}\]\s\"']+)(?P=quote)?",
+    re.IGNORECASE,
+)
+BEARER_PATTERN = re.compile(r"\bBearer\s+[A-Za-z0-9._~+/=-]+", re.IGNORECASE)
 
 
 @dataclass
@@ -846,8 +853,25 @@ def smoke_report_payload(ok: bool, api_base_url: str, results: list[SmokeResult]
     return {
         "ok": ok,
         "api_base_url": api_base_url,
-        "checks": [item.__dict__ for item in results],
+        "checks": [redacted_smoke_result(item).__dict__ for item in results],
     }
+
+
+def redacted_smoke_result(result: SmokeResult) -> SmokeResult:
+    return SmokeResult(result.name, result.ok, redact_sensitive_text(result.detail))
+
+
+def redact_sensitive_text(value: Any) -> str:
+    text = str(value)
+    text = BEARER_PATTERN.sub("Bearer <redacted>", text)
+    return SENSITIVE_ASSIGNMENT_PATTERN.sub(_redact_assignment, text)
+
+
+def _redact_assignment(match: re.Match[str]) -> str:
+    quote = match.group("quote") or ""
+    if "authorization" in match.group("prefix").lower() and match.group("value").lower() == "bearer":
+        return match.group(0)
+    return f"{match.group('prefix')}{quote}{REDACTED_VALUE}{quote}"
 
 
 def write_json_report(path: str, payload: JsonMap) -> None:
@@ -876,6 +900,7 @@ def write_junit_report(path: str, results: list[SmokeResult], *, error: str | No
         },
     )
     for item in results:
+        item = redacted_smoke_result(item)
         case = ET.SubElement(
             suite,
             "testcase",
@@ -890,6 +915,7 @@ def write_junit_report(path: str, results: list[SmokeResult], *, error: str | No
             failure = ET.SubElement(case, "failure", {"message": item.detail})
             failure.text = item.detail
     if error:
+        error = redact_sensitive_text(error)
         case = ET.SubElement(
             suite,
             "testcase",
@@ -955,10 +981,11 @@ def build_markdown_report(
         f"- API base URL: `{api_base_url or 'not configured'}`",
     ]
     if error:
-        lines.extend(["", "## Error", "", error])
+        lines.extend(["", "## Error", "", redact_sensitive_text(error)])
     if results:
         lines.extend(["", "## Checks", "", "| Check | Result | Detail |", "| --- | --- | --- |"])
         for item in results:
+            item = redacted_smoke_result(item)
             lines.append(
                 f"| `{markdown_escape(item.name)}` | {'pass' if item.ok else 'fail'} | {markdown_escape(item.detail)} |"
             )
@@ -1019,22 +1046,22 @@ def main(argv: list[str]) -> int:
             args=args,
         )
     except Exception as exc:
-        payload = {"ok": False, "api_base_url": client.api_base_url, "error": str(exc)}
+        payload = {"ok": False, "api_base_url": client.api_base_url, "error": redact_sensitive_text(str(exc))}
         write_json_report(args.report_path, payload)
-        write_junit_report(args.junit_path, [], error=str(exc))
+        write_junit_report(args.junit_path, [], error=str(payload["error"]))
         write_markdown_report(
             args.markdown_path,
             ok=False,
             api_base_url=client.api_base_url,
             results=[],
-            error=str(exc),
+            error=str(payload["error"]),
         )
         append_github_step_summary(
             args.github_step_summary,
             ok=False,
             api_base_url=client.api_base_url,
             results=[],
-            error=str(exc),
+            error=str(payload["error"]),
         )
         print(json.dumps(payload, ensure_ascii=False, indent=2), file=sys.stderr)
         return 1
