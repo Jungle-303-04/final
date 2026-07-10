@@ -147,3 +147,4 @@ python scripts/verify_release_flow_production_evidence.py \
 ```
 
 This path requires successful `release-flow-production-readiness.yml` and `release-flow-production-deploy.yml` runs for the selected branch/SHA, downloads the required artifacts, and then applies the same JSON checks. The smoke and deploy reports must point at the same concrete HTTPS API base URL.
+Keep `--github-sha` set for final production evidence so the downloaded artifacts prove the exact deployed commit. `--allow-latest-github-run` exists only for exploratory checks before final sign-off.

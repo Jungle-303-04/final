@@ -13,6 +13,11 @@ name: Release Flow Production Readiness
         required: false
         default: true
         type: boolean
+      github_environment_preflight:
+        description: Also verify production GitHub Environment release-flow secrets and variables.
+        required: false
+        default: true
+        type: boolean
       api_smoke_preflight:
         description: Also run the live release-flow API smoke without dispatching a release.
         required: false
@@ -53,14 +58,27 @@ jobs:
           RELEASE_FLOW_LIVE_WORKSPACES: ${{ vars.RELEASE_FLOW_LIVE_WORKSPACES || secrets.RELEASE_FLOW_LIVE_WORKSPACES }}
           GITHUB_TOKEN_REF: ${{ secrets.RELEASE_FLOW_GITHUB_TOKEN_REF }}
           GITHUB_TOKEN: ${{ secrets.RELEASE_FLOW_GITHUB_TOKEN }}
+          RELEASE_FLOW_GITHUB_ENVIRONMENT_TOKEN: ${{ secrets.RELEASE_FLOW_GITHUB_ENVIRONMENT_TOKEN || secrets.RELEASE_FLOW_GITHUB_TOKEN }}
           SCM_REPO: ${{ vars.RELEASE_FLOW_SCM_REPO || secrets.RELEASE_FLOW_SCM_REPO }}
           SCM_BASE_BRANCH: ${{ vars.RELEASE_FLOW_SCM_BASE_BRANCH || secrets.RELEASE_FLOW_SCM_BASE_BRANCH }}
           GITHUB_API_BASE: ${{ vars.RELEASE_FLOW_GITHUB_API_BASE || secrets.RELEASE_FLOW_GITHUB_API_BASE }}
           GITHUB_ACCESS_PREFLIGHT: ${{ inputs.github_access_preflight }}
+          GITHUB_ENVIRONMENT_PREFLIGHT: ${{ inputs.github_environment_preflight }}
+          GITHUB_ENVIRONMENT_NAME: ${{ inputs.github_environment || 'production' }}
+          GITHUB_ENVIRONMENT_REPO: ${{ github.repository }}
           API_SMOKE_PREFLIGHT: ${{ inputs.api_smoke_preflight }}
           PRODUCTION_DEPLOY_REQUIRED: ${{ inputs.production_deploy_required }}
         run: |
           set +e
+          environment_status=0
+          if [ "$GITHUB_ENVIRONMENT_PREFLIGHT" = "true" ]; then
+            python scripts/verify_release_flow_github_environment.py \
+              --github-repo "$GITHUB_ENVIRONMENT_REPO" \
+              --environment "$GITHUB_ENVIRONMENT_NAME" \
+              --github-token-env RELEASE_FLOW_GITHUB_ENVIRONMENT_TOKEN \
+              --report-path artifacts/release-flow-github-environment.json
+            environment_status=$?
+          fi
           github_access_args=""
           if [ "$GITHUB_ACCESS_PREFLIGHT" = "true" ]; then
             github_access_args="--check-github-access"
@@ -78,6 +96,9 @@ jobs:
           readiness_status=$?
           if [ -f artifacts/release-flow-readiness.md ]; then
             cat artifacts/release-flow-readiness.md >> "$GITHUB_STEP_SUMMARY"
+          fi
+          if [ "$environment_status" -ne 0 ]; then
+            exit "$environment_status"
           fi
           smoke_status=0
           if [ "$API_SMOKE_PREFLIGHT" = "true" ] && [ "$readiness_status" -eq 0 ]; then

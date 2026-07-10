@@ -186,3 +186,76 @@ def test_verify_release_flow_production_evidence_downloads_github_artifacts(
 
 def test_verify_release_flow_production_evidence_requires_github_token() -> None:
     assert evidence.main(["--github-repo", "org/repo"]) == 1
+
+
+def test_verify_release_flow_production_evidence_requires_github_sha(monkeypatch) -> None:
+    def fake_github_json(_url: str, _token: str) -> dict:
+        raise AssertionError("GitHub API should not be called before sha validation")
+
+    monkeypatch.setattr(evidence, "github_json", fake_github_json)
+
+    assert evidence.main(["--github-repo", "org/repo", "--github-token", "token-a"]) == 1
+
+
+def test_verify_release_flow_production_evidence_can_allow_latest_github_run(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    def fake_github_json(url: str, _token: str) -> dict:
+        if "release-flow-production-readiness.yml" in url:
+            return {"workflow_runs": [{"id": 101, "conclusion": "success", "head_sha": "sha-a"}]}
+        if "release-flow-production-deploy.yml" in url:
+            return {"workflow_runs": [{"id": 202, "conclusion": "success", "head_sha": "sha-a"}]}
+        if "actions/runs/101/artifacts" in url:
+            return {
+                "artifacts": [
+                    {
+                        "name": "release-flow-production-readiness",
+                        "expired": False,
+                        "archive_download_url": "https://artifacts/readiness.zip",
+                    }
+                ]
+            }
+        if "actions/runs/202/artifacts" in url:
+            return {
+                "artifacts": [
+                    {
+                        "name": "release-flow-smoke-production",
+                        "expired": False,
+                        "archive_download_url": "https://artifacts/smoke.zip",
+                    },
+                    {
+                        "name": "release-flow-production-deploy",
+                        "expired": False,
+                        "archive_download_url": "https://artifacts/deploy.zip",
+                    },
+                ]
+            }
+        raise AssertionError(f"unexpected GitHub URL: {url}")
+
+    def fake_download(url: str, _token: str) -> bytes:
+        if url.endswith("readiness.zip"):
+            return report_zip(evidence.READINESS_REPORT, readiness_payload())
+        if url.endswith("smoke.zip"):
+            return report_zip(evidence.SMOKE_REPORT, smoke_payload())
+        if url.endswith("deploy.zip"):
+            return report_zip(evidence.DEPLOY_REPORT, deploy_payload())
+        raise AssertionError(f"unexpected artifact URL: {url}")
+
+    monkeypatch.setattr(evidence, "github_json", fake_github_json)
+    monkeypatch.setattr(evidence, "github_download", fake_download)
+
+    assert (
+        evidence.main(
+            [
+                "--github-repo",
+                "org/repo",
+                "--github-token",
+                "token-a",
+                "--allow-latest-github-run",
+                "--github-output-dir",
+                str(tmp_path),
+            ]
+        )
+        == 0
+    )
