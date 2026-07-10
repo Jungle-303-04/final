@@ -121,6 +121,7 @@ def test_run_release_flow_production_signoff_dispatches_and_verifies(monkeypatch
     monkeypatch.setattr(signoff, "wait_for_run", fake_wait_for_run)
     monkeypatch.setattr(signoff, "verify_evidence_main", fake_verify_evidence_main)
     monkeypatch.setattr(signoff, "github_branch_head_sha", lambda _args, _token: "sha-production")
+    monkeypatch.setattr(signoff, "verify_safe_pr_run", lambda _args, _token: None)
 
     assert (
         signoff.main(
@@ -199,6 +200,211 @@ def test_run_release_flow_production_signoff_dispatches_and_verifies(monkeypatch
     assert report["readiness_run"]["id"] == "101"
     assert report["deploy_run"]["id"] == "202"
     assert report["evidence_verification_status"] == 0
+
+
+def test_run_release_flow_production_signoff_preflight_only_checks_workflows(
+    monkeypatch, capsys
+) -> None:
+    workflow_urls: list[str] = []
+
+    def fail_dispatch_workflow(**_kwargs: object) -> None:
+        raise AssertionError("preflight-only must not dispatch workflows")
+
+    def fake_github_json(url: str, token: str) -> dict:
+        assert token == "token-a"
+        if url.endswith("/actions/runs/456"):
+            return {"id": 456, "conclusion": "success", "head_sha": "sha-production"}
+        workflow_urls.append(url)
+        return {"id": len(workflow_urls), "state": "active"}
+
+    monkeypatch.setattr(signoff, "dispatch_workflow", fail_dispatch_workflow)
+    monkeypatch.setattr(signoff, "github_branch_head_sha", lambda _args, _token: "sha-production")
+    monkeypatch.setattr(signoff, "github_json", fake_github_json)
+
+    assert (
+        signoff.main(
+            [
+                "--github-repo",
+                "org/repo",
+                "--github-token",
+                "token-a",
+                "--github-branch",
+                "release/prod",
+                "--github-sha",
+                "sha-production",
+                "--skip-local-sha-check",
+                "--preflight-only",
+                "--release-plan-id",
+                "plan-1",
+                "--api-base-url",
+                "https://ops.example.internal/api",
+                "--live-change-ticket",
+                "CHG-123",
+                "--live-runbook-url",
+                "https://ops.example.internal/runbook",
+                "--live-release-owner",
+                "ops-owner",
+                "--live-image",
+                "ghcr.io/org/app:sha-production",
+                "--live-verification-url",
+                "https://ops.example.internal/verify",
+                "--live-safe-pr-workflow-run-id",
+                "456",
+                "--live-safe-pr-url",
+                "https://github.com/org/repo/actions/runs/456",
+            ]
+        )
+        == 0
+    )
+
+    assert len(workflow_urls) == 2
+    assert "release-flow-production-readiness.yml" in workflow_urls[0]
+    assert "release-flow-production-deploy.yml" in workflow_urls[1]
+    assert "ok signoff.preflight" in capsys.readouterr().out
+
+
+def test_run_release_flow_production_signoff_preflight_rejects_inactive_workflow(
+    monkeypatch, capsys
+) -> None:
+    def fail_dispatch_workflow(**_kwargs: object) -> None:
+        raise AssertionError("inactive workflow must fail before dispatch")
+
+    def fake_github_json(url: str, _token: str) -> dict:
+        if url.endswith("/actions/runs/456"):
+            return {"id": 456, "conclusion": "success", "head_sha": "sha-production"}
+        return {"id": 1, "state": "disabled_manually"}
+
+    monkeypatch.setattr(signoff, "dispatch_workflow", fail_dispatch_workflow)
+    monkeypatch.setattr(signoff, "github_branch_head_sha", lambda _args, _token: "sha-production")
+    monkeypatch.setattr(signoff, "github_json", fake_github_json)
+
+    assert (
+        signoff.main(
+            [
+                "--github-repo",
+                "org/repo",
+                "--github-token",
+                "token-a",
+                "--github-branch",
+                "release/prod",
+                "--github-sha",
+                "sha-production",
+                "--skip-local-sha-check",
+                "--preflight-only",
+                "--release-plan-id",
+                "plan-1",
+                "--live-change-ticket",
+                "CHG-123",
+                "--live-runbook-url",
+                "https://ops.example.internal/runbook",
+                "--live-release-owner",
+                "ops-owner",
+                "--live-image",
+                "ghcr.io/org/app:sha-production",
+                "--live-verification-url",
+                "https://ops.example.internal/verify",
+                "--live-safe-pr-workflow-run-id",
+                "456",
+                "--live-safe-pr-url",
+                "https://github.com/org/repo/actions/runs/456",
+            ]
+        )
+        == 1
+    )
+
+    assert "is disabled_manually, not active" in capsys.readouterr().err
+
+
+def test_run_release_flow_production_signoff_rejects_safe_pr_url_run_id_mismatch(
+    monkeypatch, capsys
+) -> None:
+    def fail_dispatch_workflow(**_kwargs: object) -> None:
+        raise AssertionError("safe pr URL mismatch must fail before workflow dispatch")
+
+    monkeypatch.setattr(signoff, "dispatch_workflow", fail_dispatch_workflow)
+
+    assert (
+        signoff.main(
+            [
+                "--github-repo",
+                "org/repo",
+                "--github-token",
+                "token-a",
+                "--github-sha",
+                "sha-production",
+                "--skip-local-sha-check",
+                "--release-plan-id",
+                "plan-1",
+                "--live-change-ticket",
+                "CHG-123",
+                "--live-runbook-url",
+                "https://ops.example.internal/runbook",
+                "--live-release-owner",
+                "ops-owner",
+                "--live-image",
+                "ghcr.io/org/app:sha-production",
+                "--live-verification-url",
+                "https://ops.example.internal/verify",
+                "--live-safe-pr-workflow-run-id",
+                "456",
+                "--live-safe-pr-url",
+                "https://github.com/org/repo/actions/runs/999",
+            ]
+        )
+        == 2
+    )
+
+    assert "live_safe_pr_url run id must match" in capsys.readouterr().err
+
+
+def test_run_release_flow_production_signoff_rejects_failed_safe_pr_run(
+    monkeypatch, capsys
+) -> None:
+    def fail_dispatch_workflow(**_kwargs: object) -> None:
+        raise AssertionError("failed safe pr run must fail before workflow dispatch")
+
+    monkeypatch.setattr(signoff, "dispatch_workflow", fail_dispatch_workflow)
+    monkeypatch.setattr(signoff, "github_branch_head_sha", lambda _args, _token: "sha-production")
+    monkeypatch.setattr(
+        signoff,
+        "github_json",
+        lambda _url, _token: {"id": 456, "conclusion": "failure", "head_sha": "sha-production"},
+    )
+
+    assert (
+        signoff.main(
+            [
+                "--github-repo",
+                "org/repo",
+                "--github-token",
+                "token-a",
+                "--github-branch",
+                "release/prod",
+                "--github-sha",
+                "sha-production",
+                "--skip-local-sha-check",
+                "--release-plan-id",
+                "plan-1",
+                "--live-change-ticket",
+                "CHG-123",
+                "--live-runbook-url",
+                "https://ops.example.internal/runbook",
+                "--live-release-owner",
+                "ops-owner",
+                "--live-image",
+                "ghcr.io/org/app:sha-production",
+                "--live-verification-url",
+                "https://ops.example.internal/verify",
+                "--live-safe-pr-workflow-run-id",
+                "456",
+                "--live-safe-pr-url",
+                "https://github.com/org/repo/actions/runs/456",
+            ]
+        )
+        == 1
+    )
+
+    assert "Safe PR run 456 did not conclude success" in capsys.readouterr().err
 
 
 def test_run_release_flow_production_signoff_rejects_local_sha_mismatch(monkeypatch, capsys) -> None:

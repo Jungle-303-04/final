@@ -515,7 +515,8 @@ def check_production_signoff_runner_contract() -> list[ReadinessCheck]:
             "validate_signoff_inputs" in source
             and "live_change_ticket must not use placeholder" in source
             and "live_image must not use mutable latest tag" in source
-            and "live_safe_pr_workflow_run_id must be a numeric GitHub Actions run id" in source,
+            and "live_safe_pr_workflow_run_id must be a numeric GitHub Actions run id" in source
+            and "live_safe_pr_url run id must match live_safe_pr_workflow_run_id" in source,
             "operator signoff runner rejects placeholder production inputs before dispatch",
         ),
         ReadinessCheck(
@@ -529,6 +530,10 @@ def check_production_signoff_runner_contract() -> list[ReadinessCheck]:
             and "local git HEAD must match --github-sha" in source
             and "GitHub branch" in source
             and "must match --github-sha" in source
+            and "verify_safe_pr_run" in source
+            and "Safe PR run" in source
+            and "verify_workflow_access" in source
+            and "--preflight-only" in source
             and "--github-sha" in source
             and "--github-output-dir" in source,
             "operator signoff runner verifies the exact readiness and deploy run artifacts",
@@ -548,7 +553,9 @@ def check_production_signoff_runner_contract() -> list[ReadinessCheck]:
             and "--release-plan-id" in docs
             and "--live-safe-pr-workflow-run-id" in docs
             and "release-flow-production-signoff.json" in docs
-            and "full production sign-off" in docs,
+            and "full production sign-off" in docs
+            and "--preflight-only" in docs
+            and "Safe PR GitHub Actions run" in docs,
             "operator guide documents one-command production sign-off",
         ),
     ]
