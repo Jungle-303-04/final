@@ -801,7 +801,7 @@ EOF
   for old_deploy in \
     oauth-auth-service git-event-processor manifest-renderer desired-state-sync \
     command-orchestrator command-dispatcher agent-connection-gateway \
-    evidence-builder ai-rca-service safe-pr-service rca-fallback-worker; do
+    evidence-builder ai-rca-service safe-pr-service rca-fallback-worker minio; do
     kubectl --context "${MGMT_CLUSTER}" -n management delete "deploy/${old_deploy}" --ignore-not-found
   done
 

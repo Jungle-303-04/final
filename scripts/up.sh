@@ -552,7 +552,7 @@ kubectl --context "kind-${MGMT_CLUSTER}" apply -k "${MANAGEMENT_INFRA_OVERLAY}"
 for old_deploy in \
   oauth-auth-service git-event-processor manifest-renderer desired-state-sync \
   command-orchestrator command-dispatcher agent-connection-gateway \
-  evidence-builder ai-rca-service safe-pr-service rca-fallback-worker; do
+  evidence-builder ai-rca-service safe-pr-service rca-fallback-worker minio; do
   kubectl --context "kind-${MGMT_CLUSTER}" -n management delete "deploy/${old_deploy}" --ignore-not-found
 done
 kubectl_retry --context "kind-${MGMT_CLUSTER}" -n management rollout status statefulset/postgresql --timeout=600s
@@ -665,7 +665,7 @@ kubectl --context "kind-${MGMT_CLUSTER}" -n management patch configmap managemen
 
 kubectl --context "kind-${MGMT_CLUSTER}" apply -k "${MANAGEMENT_APP_OVERLAY}"
 kubectl_retry --context "kind-${MGMT_CLUSTER}" -n management rollout status deploy/redis --timeout=120s
-kubectl_retry --context "kind-${MGMT_CLUSTER}" -n management rollout status deploy/minio --timeout=120s
+kubectl_retry --context "kind-${MGMT_CLUSTER}" -n management rollout status statefulset/minio --timeout=120s
 kubectl_retry --context "kind-${MGMT_CLUSTER}" -n management get deploy/github-poll-worker >/dev/null
 wait_management_pod_ready api-gateway 300s
 
