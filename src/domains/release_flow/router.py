@@ -2878,7 +2878,7 @@ def release_dispatch_guard_snapshot(
                 release_runbook_url_is_valid(release_runbook_url(settings, step_config(step)))
                 for step in production_steps
             ),
-            "override_reason": release_runbook_override_reason(plan) or None,
+            "override_reason": None,
             "production_targets": [
                 str(step.get("application_id") or "")
                 for step in production_steps
@@ -2901,7 +2901,7 @@ def release_dispatch_guard_snapshot(
                 release_verification_evidence_present(settings, step_config(step))
                 for step in production_steps
             ),
-            "override_reason": release_verification_override_reason(plan) or None,
+            "override_reason": None,
             "production_targets": [
                 str(step.get("application_id") or "")
                 for step in production_steps

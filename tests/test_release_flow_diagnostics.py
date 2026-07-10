@@ -5980,8 +5980,10 @@ def test_dispatch_wave_steps_records_production_change_override(monkeypatch) -> 
             "change_freeze_end": (datetime.now(timezone.utc) + timedelta(minutes=5)).isoformat(),
             "change_freeze_override_reason": "incident commander approved emergency hotfix",
             "runbook_url": "https://wiki.company.internal/runbooks/storefront-release",
+            "runbook_override_reason": "legacy operator note should not bypass production",
             "release_owner": "storefront-release-team",
             "post_deploy_verification_url": "https://storefront.company.internal/readyz",
+            "verification_override_reason": "legacy monitor note should not bypass production",
             "abort_criteria": "rollback if checkout error rate exceeds 5% for 5 minutes",
         },
         "steps": [
