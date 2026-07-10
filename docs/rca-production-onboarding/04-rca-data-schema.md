@@ -424,6 +424,11 @@ RCA evidence item:
 | `summary` | object | `results`가 없으면 payload 요약으로 대체한다. |
 
 `results.<query_name>`은 list를 최대 8개까지 남기고, 긴 문자열은 최대 1600자로 자른다.
+provider 원본 payload의 `results.<query_name>.analysis`는 nested object다.
+현재 RCA evidence bundle compact 단계에서는 nested dict/list 규칙에 따라 요약될 수 있다.
+원본 evidence에는 `trace_summaries`, `trace_ids`, `services`, `operations`,
+`status_counts`, `error_count`, `dependency_count`, `duration_ms` 같은 RCA용 표준 요약이 남아 있다.
+span attribute 원문 전체나 parent/child span 관계 전체는 이 구조화 필드에 넣지 않는다.
 
 #### `metadata:current_workload_snapshots`
 
