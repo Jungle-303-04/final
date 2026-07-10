@@ -120,6 +120,7 @@ def test_run_release_flow_production_signoff_dispatches_and_verifies(monkeypatch
     monkeypatch.setattr(signoff, "dispatch_workflow", fake_dispatch_workflow)
     monkeypatch.setattr(signoff, "wait_for_run", fake_wait_for_run)
     monkeypatch.setattr(signoff, "verify_evidence_main", fake_verify_evidence_main)
+    monkeypatch.setattr(signoff, "github_branch_head_sha", lambda _args, _token: "sha-production")
 
     assert (
         signoff.main(
@@ -238,3 +239,48 @@ def test_run_release_flow_production_signoff_rejects_local_sha_mismatch(monkeypa
     )
 
     assert "local git HEAD must match --github-sha" in capsys.readouterr().err
+
+
+def test_run_release_flow_production_signoff_rejects_github_branch_sha_mismatch(
+    monkeypatch, capsys
+) -> None:
+    def fail_dispatch_workflow(**_kwargs: object) -> None:
+        raise AssertionError("branch sha mismatch must fail before workflow dispatch")
+
+    monkeypatch.setattr(signoff, "dispatch_workflow", fail_dispatch_workflow)
+    monkeypatch.setattr(signoff, "github_branch_head_sha", lambda _args, _token: "actual-sha")
+
+    assert (
+        signoff.main(
+            [
+                "--github-repo",
+                "org/repo",
+                "--github-token",
+                "token-a",
+                "--github-branch",
+                "release/prod",
+                "--github-sha",
+                "sha-production",
+                "--skip-local-sha-check",
+                "--release-plan-id",
+                "plan-1",
+                "--live-change-ticket",
+                "CHG-123",
+                "--live-runbook-url",
+                "https://ops.example.internal/runbook",
+                "--live-release-owner",
+                "ops-owner",
+                "--live-image",
+                "ghcr.io/org/app:sha-production",
+                "--live-verification-url",
+                "https://ops.example.internal/verify",
+                "--live-safe-pr-workflow-run-id",
+                "456",
+                "--live-safe-pr-url",
+                "https://github.com/org/repo/actions/runs/456",
+            ]
+        )
+        == 1
+    )
+
+    assert "GitHub branch release/prod head actual-sha must match --github-sha" in capsys.readouterr().err

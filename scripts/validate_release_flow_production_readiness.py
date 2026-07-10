@@ -527,6 +527,8 @@ def check_production_signoff_runner_contract() -> list[ReadinessCheck]:
             and "--github-deploy-run-id" in source
             and "completed run did not report a numeric run id" in source
             and "local git HEAD must match --github-sha" in source
+            and "GitHub branch" in source
+            and "must match --github-sha" in source
             and "--github-sha" in source
             and "--github-output-dir" in source,
             "operator signoff runner verifies the exact readiness and deploy run artifacts",
