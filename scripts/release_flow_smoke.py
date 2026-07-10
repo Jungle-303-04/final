@@ -48,6 +48,7 @@ LIVE_PREFLIGHT_PLACEHOLDERS = {
     "live_image": {"ghcr.io/example/release-flow-smoke:live-preflight"},
     "live_verification_url": {"https://example.com/verify/release-flow"},
 }
+LIVE_PREFLIGHT_PLACEHOLDER_HOSTS = {"example.com", "example.test", "localhost", "127.0.0.1", "::1"}
 SENSITIVE_ASSIGNMENT_PATTERN = re.compile(
     r"(?P<prefix>(?:\"|')?(?:authorization|bearer|credential|password|passwd|private[_ -]?key|secret|token|api[_ -]?key|apikey|cookie|set[_ -]?cookie)(?:\"|')?\s*[:=]\s*)(?P<quote>\"|')?(?P<value>[^,}\]\s\"']+)(?P=quote)?",
     re.IGNORECASE,
@@ -256,6 +257,20 @@ def live_preflight_timestamp() -> str:
     return datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
 
 
+def validate_live_https_url(field_name: str, value: str, *, context: str) -> None:
+    parsed = urllib.parse.urlparse(value)
+    host = (parsed.hostname or "").lower()
+    if parsed.scheme.lower() != "https":
+        raise ValueError(f"{field_name} must use https {context}")
+    if (
+        host in LIVE_PREFLIGHT_PLACEHOLDER_HOSTS
+        or host.endswith(".localhost")
+        or host.endswith(".example.com")
+        or host.endswith(".example.test")
+    ):
+        raise ValueError(f"{field_name} must not use localhost or example hosts placeholder value")
+
+
 def validate_live_preflight_inputs(args: argparse.Namespace) -> None:
     if not getattr(args, "live_preflight", False):
         return
@@ -264,15 +279,12 @@ def validate_live_preflight_inputs(args: argparse.Namespace) -> None:
         raise ValueError("live_approval_gate must be manual or safe_pr")
     safe_pr_workflow_run_id = str(getattr(args, "live_safe_pr_workflow_run_id", "") or "").strip()
     safe_pr_url = str(getattr(args, "live_safe_pr_url", "") or "").strip()
-    normalized_safe_pr_url = safe_pr_url.lower()
-    if safe_pr_url and not normalized_safe_pr_url.startswith("https://"):
-        raise ValueError("live_safe_pr_url must use https when live_approval_gate is safe_pr")
-    if (
-        "localhost" in normalized_safe_pr_url
-        or "127.0.0.1" in normalized_safe_pr_url
-        or "example.com" in normalized_safe_pr_url
-    ):
-        raise ValueError("live_safe_pr_url must not use localhost or example.com placeholder value")
+    if safe_pr_url:
+        validate_live_https_url(
+            "live_safe_pr_url",
+            safe_pr_url,
+            context="when live_approval_gate is safe_pr",
+        )
     if approval_gate == "safe_pr":
         if not safe_pr_workflow_run_id:
             raise ValueError("live_safe_pr_workflow_run_id is required when live_approval_gate is safe_pr")
@@ -290,16 +302,10 @@ def validate_live_preflight_inputs(args: argparse.Namespace) -> None:
     for name, value in required_values.items():
         if not str(value or "").strip():
             raise ValueError(f"{name} is required for production live preflight")
-    runbook_url = str(getattr(args, "live_runbook_url", "") or "").strip().lower()
-    if not runbook_url.startswith("https://"):
-        raise ValueError("live_runbook_url must use https for production live preflight")
-    if "localhost" in runbook_url or "127.0.0.1" in runbook_url or "example.com" in runbook_url:
-        raise ValueError("live_runbook_url must not use localhost or example.com placeholder value")
-    verification_url = str(getattr(args, "live_verification_url", "") or "").strip().lower()
-    if not verification_url.startswith("https://"):
-        raise ValueError("live_verification_url must use https for production live preflight")
-    if "localhost" in verification_url or "127.0.0.1" in verification_url or "example.com" in verification_url:
-        raise ValueError("live_verification_url must not use localhost or example.com placeholder value")
+    runbook_url = str(getattr(args, "live_runbook_url", "") or "").strip()
+    validate_live_https_url("live_runbook_url", runbook_url, context="for production live preflight")
+    verification_url = str(getattr(args, "live_verification_url", "") or "").strip()
+    validate_live_https_url("live_verification_url", verification_url, context="for production live preflight")
     if not str(getattr(args, "live_release_owner", "") or "").strip() and not str(
         getattr(args, "live_oncall_contact", "") or ""
     ).strip():

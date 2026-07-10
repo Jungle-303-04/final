@@ -18,6 +18,11 @@ name: Release Flow Production Readiness
         required: false
         default: false
         type: boolean
+      production_deploy_required:
+        description: Fail readiness when no production deploy workflow is gated by release-flow-production-gate.
+        required: false
+        default: true
+        type: boolean
 
 permissions:
   contents: read
@@ -53,15 +58,21 @@ jobs:
           GITHUB_API_BASE: ${{ vars.RELEASE_FLOW_GITHUB_API_BASE || secrets.RELEASE_FLOW_GITHUB_API_BASE }}
           GITHUB_ACCESS_PREFLIGHT: ${{ inputs.github_access_preflight || false }}
           API_SMOKE_PREFLIGHT: ${{ inputs.api_smoke_preflight || false }}
+          PRODUCTION_DEPLOY_REQUIRED: ${{ inputs.production_deploy_required || true }}
         run: |
           set +e
           github_access_args=""
           if [ "$GITHUB_ACCESS_PREFLIGHT" = "true" ]; then
             github_access_args="--check-github-access"
           fi
+          production_deploy_args=""
+          if [ "$PRODUCTION_DEPLOY_REQUIRED" = "true" ]; then
+            production_deploy_args="--require-production-deploy"
+          fi
           python scripts/validate_release_flow_production_readiness.py \
             --require-runtime-config \
             $github_access_args \
+            $production_deploy_args \
             --report-path artifacts/release-flow-readiness.json \
             --markdown-path artifacts/release-flow-readiness.md
           readiness_status=$?
