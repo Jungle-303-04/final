@@ -36,7 +36,7 @@ class StubWebhookDb:
         ]
 
 
-def test_github_push_payload_fans_out_to_matching_binding_with_force(monkeypatch) -> None:
+def test_github_push_payload_fans_out_to_matching_binding_without_force(monkeypatch) -> None:
     monkeypatch.setenv("GITOPS_WEBHOOK_IMAGE", "ghcr.io/example/app:latest")
     payload = {
         "ref": "refs/heads/dev",
@@ -53,7 +53,7 @@ def test_github_push_payload_fans_out_to_matching_binding_with_force(monkeypatch
     assert body.branch == "dev"
     assert body.binding_id == "binding-1"
     assert body.cluster_id == "cluster-1"
-    assert body.force is True
+    assert body.force is False
 
 
 def test_github_merged_pr_payload_uses_merge_commit_sha(monkeypatch) -> None:
@@ -74,7 +74,7 @@ def test_github_merged_pr_payload_uses_merge_commit_sha(monkeypatch) -> None:
     assert bodies[0].commit_sha == "sha-main-merge"
     assert bodies[0].binding_id == "binding-2"
     assert bodies[0].environment == "prod"
-    assert bodies[0].force is True
+    assert bodies[0].force is False
 
 
 def test_internal_webhook_payload_remains_backward_compatible() -> None:
@@ -90,3 +90,19 @@ def test_internal_webhook_payload_remains_backward_compatible() -> None:
     assert len(bodies) == 1
     assert bodies[0].commit_sha == "abc123"
     assert bodies[0].force is False
+
+
+def test_internal_webhook_payload_can_explicitly_force_replay() -> None:
+    payload = {
+        "commit_sha": "abc123",
+        "image": "ghcr.io/example/app:v1",
+        "repo_ref": "org/repo",
+        "cluster_id": "cluster-1",
+        "force": True,
+    }
+
+    bodies = build_git_webhook_bodies(payload, db=StubWebhookDb(), event_name="")
+
+    assert len(bodies) == 1
+    assert bodies[0].commit_sha == "abc123"
+    assert bodies[0].force is True

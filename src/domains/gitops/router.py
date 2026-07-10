@@ -130,7 +130,6 @@ def body_for_poll_target(
         cluster_id=str(target.get("cluster_id") or Target.DEFAULT_CLUSTER_ID),
         manifest_path=str(target.get("manifest_path") or DEFAULT_MANIFEST_PATH),
         source_type=str(target.get("source_type") or ""),
-        force=True,
     )
 
 
