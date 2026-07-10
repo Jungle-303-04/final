@@ -8,6 +8,12 @@ OUTPUT_FILE="${BRUNO_OUTPUT_FILE:-/tmp/bruno-aws-ordered-run.json}"
 DELAY_MS="${BRUNO_DELAY_MS:-250}"
 RUN_ID="bruno-$(date +%Y%m%d%H%M%S)-$$"
 
+# Cloudflare가 AAAA/A를 함께 반환하지만 IPv6 route가 없는 개발 머신에서도
+# Node가 주소 선택에 따라 연결 timeout으로 빠지지 않게 IPv4를 우선한다.
+if [[ "${NODE_OPTIONS:-}" != *"--dns-result-order="* ]]; then
+  export NODE_OPTIONS="${NODE_OPTIONS:+${NODE_OPTIONS} }--dns-result-order=ipv4first"
+fi
+
 if [[ ! -f "${ENV_FILE}" ]]; then
   echo "missing Bruno env file: ${ENV_FILE}" >&2
   exit 1
@@ -26,7 +32,9 @@ COMMON_ARGS=(
   --env-var "agent_id=agent-${RUN_ID}"
   --env-var "evidence_key=evidence-${RUN_ID}"
   --env-var "lease_id=lease-${RUN_ID}"
+  --env-var "signup_email=${RUN_ID}@example.com"
   --sandbox developer
+  --cache-ssl-session
   --delay "${DELAY_MS}"
   --reporter-skip-body
   --reporter-skip-all-headers

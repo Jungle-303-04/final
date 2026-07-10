@@ -16,7 +16,7 @@ docs/api
 
 4. 왼쪽에 `00 상태와 인증`부터 `15 Wizard Validation`까지 폴더가 보이면 정상이다.
 5. 오른쪽 위 Environment에서 `aws-test`를 고른다.
-6. 로컬 Gateway를 직접 띄워 보는 경우에만 `local`을 고른다.
+6. Environment 목록에는 `aws-test` 하나만 보여야 한다.
 
 깨졌다면 거의 항상 다른 폴더를 연 것이다. `docs/api` 바로 아래에 `bruno.json`과 `environments` 폴더가 있어야 한다.
 파일 경로는 `00-health-auth`처럼 영어 slug를 유지하고, Bruno 화면 표시명은 한글로 맞춘다.
@@ -57,7 +57,7 @@ bash scripts/run-bruno-aws.sh
 6. `github_webhook_secret`은 배포에 설정된 `GITHUB_WEBHOOK_SECRET` 값이다. 이 값을 채우면 webhook signature를 Bruno가 요청 직전에 자동 계산한다.
 7. `metrics_token`과 `alertmanager_token`은 해당 외부 입구 인증을 별도로 검증할 때만 넣는다.
 8. `service_image`는 target manifest 발급 시 쓸 agent 이미지다.
-9. `cluster_id`/`cluster_id_2`의 저장 기본값은 `api-verification-target`이고 CLI Runner는 고유 ID로 덮어쓴다. 실제 `cluster-1`/`cluster-2` 드릴다운은 우회를 끈 개인 live Environment에서만 실행한다.
+9. `cluster_id`/`cluster_id_2`의 저장 기본값은 `api-verification-target`이고 CLI Runner는 고유 ID로 덮어쓴다. 실제 `cluster-1`/`cluster-2` 드릴다운이 필요하면 같은 `aws-test`에서 실행 변수만 명시적으로 덮어쓴다.
 
 요청 순서대로 실행하면 아래 값은 자동으로 채워진다.
 
@@ -90,8 +90,7 @@ auth_email: replace-with-auth-email
 auth_password: replace-with-auth-password
 ```
 
-로컬 bootstrap smoke 값은 `local` Environment에만 둔다.
-AWS 라이브 계정은 문서/collection 파일에 쓰지 않는다.
+AWS 라이브 계정은 문서/collection 파일에 쓰지 않는다. Bruno 인증 회귀가 필요하면 팀 Secret으로 받은 로컬 값을 실행 시점에만 주입한다.
 
 `auto_login`은 test 우회가 꺼졌을 때만 collection pre-request script가 `/auth/login`을 호출할지 정한다.
 `dev_security_bypass: true`이면 기존 cookie와 authorization, `x-session-token`,
@@ -108,7 +107,6 @@ CLI Runner에서는 충돌을 피하려고 실행별 고유 ID를 사용한다.
 
 팀 통합 테스트는 `aws-test` Environment가 기준이다.
 로컬에서는 [로컬 검증 실행 기준](../local-testing.md)을 따라 코드 정합성과 Bruno 문법만 확인하고, 실제 API 흐름은 AWS에서 확인한다.
-`local` Environment는 개인이 Gateway를 별도로 띄워 빠르게 확인할 때만 쓰는 보조 profile이다.
 Bruno 환경은 `docs/api/environments/aws-test.bru` 하나만 관리한다. 로컬 스택은 별도 smoke 스크립트로 검증하고 Bruno 계약은 팀 공용 AWS 배포를 기준으로 한다.
 
 `agent_token`은 우회를 끈 인증 회귀에서만 `02-target-admin/01-register-target-dry-run.bru` 응답값을 사용한다.

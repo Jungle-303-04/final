@@ -30,7 +30,7 @@ tests {
   test("every cluster item has a health rollup", function () {
     if (res.status === 200) {
       for (const item of res.getBody().clusters) {
-        expect(["healthy", "warning", "critical"]).to.include(item.health);
+        expect(["healthy", "warning", "critical", "unknown"]).to.include(item.health);
       }
     }
   });

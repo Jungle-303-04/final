@@ -208,7 +208,10 @@ def test_bruno_cli_runner_uses_isolated_profile_and_cleans_up_last() -> None:
     assert "BRUNO_ENV_FILE" not in runner
     assert "--env-file" in runner
     assert "@usebruno/cli@3.5.1" in runner
+    assert "--dns-result-order=ipv4first" in runner
+    assert "--cache-ssl-session" in runner
     assert '--env-var "cluster_id=${RUN_ID}"' in runner
+    assert '--env-var "signup_email=${RUN_ID}@example.com"' in runner
     assert runner.index("02-target-admin/01-register-target-dry-run.bru") < runner.index(
         "03-agent-runtime"
     )
