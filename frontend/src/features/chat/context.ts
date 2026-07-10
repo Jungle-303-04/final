@@ -1,5 +1,9 @@
 export interface AiChatContext {
   cluster_id?: string;
+  application_id?: string;
+  diff_source?: 'gitops' | 'safe_pr' | string;
+  workflow_run_id?: string;
+  approval_id?: string;
   resource_type?: string;
   kind?: string;
   namespace?: string;
@@ -43,6 +47,10 @@ export function chatContextFromSearchParams(params: URLSearchParams): AiChatCont
       const parsed = JSON.parse(encoded) as Record<string, unknown>;
       return compactContext({
         cluster_id: stringValue(parsed.cluster_id),
+        application_id: stringValue(parsed.application_id),
+        diff_source: stringValue(parsed.diff_source),
+        workflow_run_id: stringValue(parsed.workflow_run_id),
+        approval_id: stringValue(parsed.approval_id),
         resource_type: stringValue(parsed.resource_type),
         kind: stringValue(parsed.kind),
         namespace: stringValue(parsed.namespace),
@@ -60,6 +68,10 @@ export function chatContextFromSearchParams(params: URLSearchParams): AiChatCont
   }
   return compactContext({
     cluster_id: params.get('cluster_id') ?? params.get('cluster') ?? undefined,
+    application_id: params.get('application_id') ?? undefined,
+    diff_source: params.get('diff_source') ?? undefined,
+    workflow_run_id: params.get('workflow_run_id') ?? undefined,
+    approval_id: params.get('approval_id') ?? undefined,
     resource_type: params.get('resource_type') ?? params.get('subject') ?? undefined,
     kind: params.get('kind') ?? undefined,
     namespace: params.get('namespace') ?? undefined,
