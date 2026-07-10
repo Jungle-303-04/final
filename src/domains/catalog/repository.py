@@ -3,23 +3,15 @@
 from __future__ import annotations
 
 import hashlib
-import uuid
 from typing import Any
 
-from sqlalchemy import func, select
-from sqlalchemy.dialects.postgresql import insert as pg_insert
+from sqlalchemy import select
 
-from domains.catalog.models import (
-    CatalogInstallRunRecord,
-    CatalogItemRecord,
-    CatalogItemVersionRecord,
-)
+from domains.catalog.models import CatalogItemRecord, CatalogItemVersionRecord
 from packages.contracts.event_bus.interfaces import JsonObject
-from packages.contracts.identity import DEFAULT_WORKSPACE_ID
 from packages.storage.engine import DatabaseConnection, iso_or_none
 
 CATALOG_STATUS_ACTIVE = "active"
-CATALOG_INSTALL_STATUS_PLANNED = "planned"
 DEFAULT_CATALOG_VERSION = "1.0.0"
 
 BOOTSTRAP_CATALOG_ITEMS: tuple[JsonObject, ...] = (
@@ -144,15 +136,6 @@ def serialize_catalog_version(row: Any) -> JsonObject:
     return item
 
 
-def serialize_install_run(row: Any) -> JsonObject:
-    item = dict(row)
-    item["values"] = dict(item.get("values") or {})
-    item["plan"] = dict(item.get("plan") or {})
-    item["created_at"] = iso_or_none(item.get("created_at"))
-    item["updated_at"] = iso_or_none(item.get("updated_at"))
-    return item
-
-
 class CatalogRepository(DatabaseConnection):
     def list_catalog_items(self) -> list[JsonObject]:
         table = CatalogItemRecord.__table__
@@ -257,40 +240,3 @@ class CatalogRepository(DatabaseConnection):
         )
         with self.connection() as conn:
             return [serialize_catalog_version(row) for row in conn.execute(statement).mappings()]
-
-    def record_catalog_install_run(
-        self,
-        *,
-        workspace_id: str,
-        item_id: str,
-        version: str,
-        cluster_id: str,
-        namespace: str,
-        application_name: str,
-        requested_by: str,
-        values: JsonObject,
-        plan: JsonObject,
-    ) -> JsonObject:
-        install_id = str(uuid.uuid4())
-        table = CatalogInstallRunRecord.__table__
-        statement = (
-            pg_insert(table)
-            .values(
-                install_id=install_id,
-                workspace_id=workspace_id or DEFAULT_WORKSPACE_ID,
-                item_id=item_id,
-                version=version,
-                cluster_id=cluster_id,
-                namespace=namespace,
-                application_name=application_name,
-                status=CATALOG_INSTALL_STATUS_PLANNED,
-                requested_by=requested_by,
-                values=values,
-                plan=plan,
-                updated_at=func.now(),
-            )
-            .returning(table)
-        )
-        with self.connection() as conn:
-            row = conn.execute(statement).mappings().one()
-        return serialize_install_run(row)

@@ -3,6 +3,9 @@ from __future__ import annotations
 import asyncio
 from types import SimpleNamespace
 
+import pytest
+from fastapi import HTTPException
+
 from domains.catalog.repository import BOOTSTRAP_CATALOG_ITEMS, catalog_item_version_id
 from domains.catalog.router import install_catalog_item, list_catalog_items
 from packages.contracts.gateway.requests import CatalogInstallRequest
@@ -10,7 +13,6 @@ from packages.contracts.gateway.requests import CatalogInstallRequest
 
 class StubCatalogDb:
     def __init__(self) -> None:
-        self.install_runs: list[dict[str, object]] = []
         self.access_checks: list[tuple[str, str, str, str, str]] = []
 
     def list_catalog_items(self) -> list[dict[str, object]]:
@@ -61,10 +63,6 @@ class StubCatalogDb:
         self.access_checks.append((user_id, workspace_id, resource_type, resource_id, permission))
         return True
 
-    def record_catalog_install_run(self, **kwargs: object) -> dict[str, object]:
-        self.install_runs.append(kwargs)
-        return {"install_id": "install-1", "status": "planned", **kwargs}
-
 
 def current_session() -> SimpleNamespace:
     return SimpleNamespace(user_id="user-1", roles=("user",), workspace_id="ws-1")
@@ -85,7 +83,7 @@ def test_catalog_list_route_returns_catalog_items() -> None:
     assert response.items[0]["slug"] == "postgresql"
 
 
-def test_catalog_install_records_planned_run_and_requires_cluster_access() -> None:
+def test_catalog_install_fails_closed_until_real_runner_is_connected() -> None:
     db = StubCatalogDb()
 
     async def run():
@@ -101,14 +99,15 @@ def test_catalog_install_records_planned_run_and_requires_cluster_access() -> No
             db=db,
         )
 
-    response = asyncio.run(run())
+    with pytest.raises(HTTPException) as exc_info:
+        asyncio.run(run())
 
-    assert response.install["install_id"] == "install-1"
-    assert response.install["status"] == "planned"
+    assert exc_info.value.status_code == 501
+    assert exc_info.value.detail == {
+        "code": "catalog_install_runner_unavailable",
+        "detail": "설치 실행기가 연결되지 않아 카탈로그 설치를 시작할 수 없습니다.",
+    }
     assert db.access_checks == [("user-1", "ws-1", "cluster", "cluster-1", "deploy.run")]
-    assert db.install_runs[0]["item_id"] == "catalog-postgresql"
-    assert db.install_runs[0]["plan"]["package_type"] == "helm"
-    assert db.install_runs[0]["values"] == {"auth.database": "orders"}
 
 
 def test_catalog_version_id_is_stable() -> None:

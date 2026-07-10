@@ -166,7 +166,7 @@ status: synced
 | GET | `/providers/cluster-discovery` | admin | — |
 | POST | `/providers/validate` | admin | — |
 | GET | `/catalog/items` · `/catalog/items/{item_id}` | 세션 | — |
-| POST | `/catalog/items/{item_id}/installs` | 세션 | `require_cluster_access` |
+| POST | `/catalog/items/{item_id}/installs` | 세션 | `require_cluster_access`; 설치 runner 연결 전 501 |
 | POST | `/repos/validate` | 세션 | admin |
 | GET | `/repos/branches` | 세션 | admin |
 | GET | `/repos/manifests` | 세션 | admin |
