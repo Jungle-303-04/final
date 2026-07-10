@@ -16,12 +16,14 @@ from rate_limits import (
 from settings import Settings
 
 from packages.config.constants import Auth
-from packages.config.settings import env
+from packages.config.security import (
+    development_bypass_user_id,
+    development_bypass_workspace_id,
+    development_session_bypass_enabled,
+)
 from packages.contracts.identity import DEFAULT_WORKSPACE_ID, ServiceRole, UserStatus
 from packages.contracts.interfaces import SessionStore, UserStore
 from packages.storage.sessions import AuthSession, RateLimitExceeded
-
-TRUE_ENV_VALUES = {"1", "true", "yes", "on"}
 
 
 @dataclass(frozen=True)
@@ -73,17 +75,23 @@ class SessionAuthService:
 
 
 def dev_auth_bypass_enabled() -> bool:
-    """임시 dev 인증 우회 — DEV_AUTH_BYPASS=1 일 때만 세션 검증을 건너뜀."""
-    return env(Settings.DEV_AUTH_BYPASS_ENV, "0").strip().lower() in TRUE_ENV_VALUES
+    """통합 test/dev 플래그와 기존 세션 전용 플래그를 하위 호환한다."""
+    return development_session_bypass_enabled()
 
 
 def dev_auth_bypass_session() -> AuthSession:
     """임시 dev 인증 우회 세션 — API 단독 검증용 service_admin 권한."""
     return AuthSession(
         token=Settings.DEV_AUTH_BYPASS_TOKEN,
-        user_id=env(Settings.DEV_AUTH_BYPASS_USER_ID_ENV, Settings.DEV_AUTH_BYPASS_USER_ID),
+        user_id=development_bypass_user_id(
+            Settings.DEV_AUTH_BYPASS_USER_ID,
+            Settings.DEV_AUTH_BYPASS_USER_ID_ENV,
+        ),
         roles=[ServiceRole.SERVICE_ADMIN.value],
-        workspace_id=env(Settings.DEV_AUTH_BYPASS_WORKSPACE_ID_ENV, DEFAULT_WORKSPACE_ID),
+        workspace_id=development_bypass_workspace_id(
+            DEFAULT_WORKSPACE_ID,
+            Settings.DEV_AUTH_BYPASS_WORKSPACE_ID_ENV,
+        ),
     )
 
 
