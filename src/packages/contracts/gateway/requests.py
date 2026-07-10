@@ -407,6 +407,16 @@ class ReleasePlanUpsertRequest(StrictModel):
     steps: list[ReleasePlanStepRequest] = Field(default_factory=list, max_length=200)
 
 
+class ReleaseManifestRenderRequest(StrictModel):
+    plan: ReleasePlanUpsertRequest
+    step_index: int = Field(default=0, ge=0, le=199)
+
+
+class ReleaseManifestSafePrRequest(ReleaseManifestRenderRequest):
+    title: str | None = Field(default=None, max_length=180)
+    body: str | None = Field(default=None, max_length=4000)
+
+
 class ReleaseRunActionRequest(StrictModel):
     reason: str | None = Field(default=None, max_length=500)
 

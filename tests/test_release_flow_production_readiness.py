@@ -17,6 +17,7 @@ def test_current_release_flow_production_readiness_static_checks_pass() -> None:
         "workflow.smoke.safe_pr_evidence_inputs",
         "script.smoke.live_placeholder_guard",
         "script.smoke.live_image_required",
+        "script.smoke.generated_manifest_render",
         "script.smoke.live_approval_gate",
         "script.smoke.safe_pr_evidence_inputs",
         "script.smoke.safe_pr_ready_server_verified",

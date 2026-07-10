@@ -35,7 +35,6 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
-
 JsonMap = dict[str, Any]
 RETRYABLE_HTTP_STATUSES = {429, 502, 503, 504}
 RETRYABLE_METHODS = {"GET", "HEAD", "OPTIONS"}
@@ -369,6 +368,7 @@ def run_smoke(
             str(preview.get("summary") or preview),
         )
     )
+    results.append(run_generated_manifest_check(client, plan, "release-plans.generated-manifest"))
     if demo_run or ops_rehearsal:
         run = client.request("POST", "/release-plans/start", plan).get("run", {})
         run_id = str(run.get("run_id") or "")
@@ -399,6 +399,13 @@ def run_smoke(
         if args is None:
             raise ValueError("live preflight arguments are required")
         live_plan = build_live_preflight_plan(applications, args)
+        results.append(
+            run_generated_manifest_check(
+                client,
+                live_plan,
+                "release-plans.generated-manifest.live-preflight",
+            )
+        )
         readiness = client.request("POST", "/release-readiness", live_plan)
         blockers = readiness.get("blockers", [])
         checks = readiness.get("checks", [])
@@ -419,6 +426,31 @@ def run_smoke(
             raise ValueError("alert preflight arguments are required")
         results.extend(run_alert_preflight(client, args))
     return results
+
+
+def run_generated_manifest_check(client: ApiClient, plan: JsonMap, name: str) -> SmokeResult:
+    generated = client.request(
+        "POST",
+        "/release-plans/render-manifest",
+        {"plan": plan, "step_index": 0},
+    )
+    files = generated.get("files", [])
+    diagnostics = generated.get("diagnostics", [])
+    error_diagnostics = [
+        item
+        for item in diagnostics
+        if isinstance(item, dict) and str(item.get("severity") or "").lower() == "error"
+    ]
+    resource_count = int_count(generated.get("resource_count"))
+    manifest = str(generated.get("manifest") or "")
+    ok = bool(manifest.strip()) and isinstance(files, list) and bool(files) and resource_count > 0 and not error_diagnostics
+    first_file = files[0] if isinstance(files, list) and files and isinstance(files[0], dict) else {}
+    path = str(first_file.get("path") or "")
+    detail = (
+        f"path={path or 'unknown'}; resources={resource_count}; "
+        f"errors={len(error_diagnostics)}; warnings={len(generated.get('warnings', []) or [])}"
+    )
+    return SmokeResult(name, ok, detail)
 
 
 def run_release_health_preflight(
