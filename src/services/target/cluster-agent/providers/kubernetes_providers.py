@@ -18,6 +18,18 @@ from packages.config.constants import Target
 from packages.contracts.event_bus.interfaces import JsonObject
 from packages.contracts.target import TARGET_NAMESPACE
 from providers.base import ConfigReader
+from providers.kubernetes_utils import (
+    K8S_KIND_DEPLOYMENT,
+    K8S_KIND_REPLICA_SET,
+    K8S_RESOURCE_DEPLOYMENTS,
+    K8S_RESOURCE_PODS,
+    K8S_RESOURCE_REPLICASETS,
+    K8S_RESOURCE_SERVICES,
+    items,
+    metadata,
+    spec,
+    status,
+)
 
 
 @telemetry.source(
@@ -78,11 +90,11 @@ class KubernetesSnapshotProvider:
                 "namespace": namespace,
                 "cluster_id": self.cluster_id,
                 "collected_at": datetime.now(UTC).isoformat(),
-                "pods": await self.get_json(
+                K8S_RESOURCE_PODS: await self.get_json(
                     client,
                     base_url,
                     headers,
-                    f"/api/v1/namespaces/{namespace}/pods",
+                    f"/api/v1/namespaces/{namespace}/{K8S_RESOURCE_PODS}",
                 ),
                 "events": await self.get_json(
                     client,
@@ -95,7 +107,7 @@ class KubernetesSnapshotProvider:
                     client,
                     base_url,
                     headers,
-                    f"/apis/metrics.k8s.io/v1beta1/namespaces/{namespace}/pods",
+                    f"/apis/metrics.k8s.io/v1beta1/namespaces/{namespace}/{K8S_RESOURCE_PODS}",
                     allow_not_found=True,
                 ),
                 "node_metrics": await self.get_json(
@@ -105,11 +117,11 @@ class KubernetesSnapshotProvider:
                     "/apis/metrics.k8s.io/v1beta1/nodes",
                     allow_not_found=True,
                 ),
-                "deployments": await self.get_json(
+                K8S_RESOURCE_DEPLOYMENTS: await self.get_json(
                     client,
                     base_url,
                     headers,
-                    f"/apis/apps/v1/namespaces/{namespace}/deployments",
+                    f"/apis/apps/v1/namespaces/{namespace}/{K8S_RESOURCE_DEPLOYMENTS}",
                 ),
                 "statefulsets": await self.get_json(
                     client,
@@ -123,17 +135,17 @@ class KubernetesSnapshotProvider:
                     headers,
                     f"/apis/apps/v1/namespaces/{namespace}/daemonsets",
                 ),
-                "replicasets": await self.get_json(
+                K8S_RESOURCE_REPLICASETS: await self.get_json(
                     client,
                     base_url,
                     headers,
-                    f"/apis/apps/v1/namespaces/{namespace}/replicasets",
+                    f"/apis/apps/v1/namespaces/{namespace}/{K8S_RESOURCE_REPLICASETS}",
                 ),
-                "services": await self.get_json(
+                K8S_RESOURCE_SERVICES: await self.get_json(
                     client,
                     base_url,
                     headers,
-                    f"/api/v1/namespaces/{namespace}/services",
+                    f"/api/v1/namespaces/{namespace}/{K8S_RESOURCE_SERVICES}",
                 ),
                 "endpointslices": await self.get_json(
                     client,
@@ -195,7 +207,7 @@ class KubernetesSnapshotProvider:
         }
         pod_metrics = pod_metrics_by_key(items(payload.get("pod_metrics")))
         node_metrics = node_metrics_by_name(items(payload.get("node_metrics")))
-        snapshot["pods"] = [
+        snapshot[K8S_RESOURCE_PODS] = [
             pod_summary(
                 item,
                 pod_metrics.get(
@@ -205,7 +217,7 @@ class KubernetesSnapshotProvider:
                     )
                 ),
             )
-            for item in items(payload.get("pods"))
+            for item in items(payload.get(K8S_RESOURCE_PODS))
         ]
         snapshot["events"] = [event_summary(item) for item in items(payload.get("events"))]
         snapshot["nodes"] = [
@@ -213,12 +225,21 @@ class KubernetesSnapshotProvider:
             for item in items(payload.get("nodes"))
         ]
         snapshot["workloads"] = [
-            *workload_summaries("Deployment", items(payload.get("deployments"))),
+            *workload_summaries(
+                K8S_KIND_DEPLOYMENT,
+                items(payload.get(K8S_RESOURCE_DEPLOYMENTS)),
+            ),
             *workload_summaries("StatefulSet", items(payload.get("statefulsets"))),
             *workload_summaries("DaemonSet", items(payload.get("daemonsets"))),
-            *workload_summaries("ReplicaSet", items(payload.get("replicasets"))),
+            *workload_summaries(
+                K8S_KIND_REPLICA_SET,
+                items(payload.get(K8S_RESOURCE_REPLICASETS)),
+            ),
         ]
-        snapshot["services"] = [service_summary(item) for item in items(payload.get("services"))]
+        snapshot[K8S_RESOURCE_SERVICES] = [
+            service_summary(item)
+            for item in items(payload.get(K8S_RESOURCE_SERVICES))
+        ]
         snapshot["endpoints"] = [
             endpoint_slice_summary(item) for item in items(payload.get("endpointslices"))
         ]
@@ -228,13 +249,13 @@ class KubernetesSnapshotProvider:
                 "namespace": namespace,
                 "reason": payload.get("reason", ""),
                 "counts": {
-                    "pods": len(snapshot["pods"]),
+                    K8S_RESOURCE_PODS: len(snapshot[K8S_RESOURCE_PODS]),
                     "events": len(snapshot["events"]),
                     "nodes": len(snapshot["nodes"]),
                     "pod_metrics": len(pod_metrics),
                     "node_metrics": len(node_metrics),
                     "workloads": len(snapshot["workloads"]),
-                    "services": len(snapshot["services"]),
+                    K8S_RESOURCE_SERVICES: len(snapshot[K8S_RESOURCE_SERVICES]),
                     "endpoints": len(snapshot["endpoints"]),
                 },
             }
@@ -247,10 +268,10 @@ def empty_snapshot(cluster_id: str) -> JsonObject:
     return {
         "cluster": {"cluster_id": cluster_id},
         "workloads": [],
-        "pods": [],
+        K8S_RESOURCE_PODS: [],
         "events": [],
         "nodes": [],
-        "services": [],
+        K8S_RESOURCE_SERVICES: [],
         "endpoints": [],
         "provider_status": {},
     }
@@ -259,7 +280,7 @@ def empty_snapshot(cluster_id: str) -> JsonObject:
 def merge_snapshot(target: JsonObject, source: JsonObject) -> None:
     """Add one normalized snapshot into another snapshot."""
     target["cluster"] = {**dict(target.get("cluster", {})), **dict(source.get("cluster", {}))}
-    for key in ("workloads", "pods", "events", "services", "endpoints"):
+    for key in ("workloads", K8S_RESOURCE_PODS, "events", K8S_RESOURCE_SERVICES, "endpoints"):
         target.setdefault(key, [])
         target[key].extend(source.get(key, []))
     merge_cluster_scoped_nodes(target, source)
@@ -278,34 +299,6 @@ def merge_cluster_scoped_nodes(target: JsonObject, source: JsonObject) -> None:
             continue
         by_key[key] = node
     target["nodes"] = list(by_key.values())
-
-
-def items(payload: Any) -> list[JsonObject]:
-    """Return list items from a Kubernetes list response."""
-    if not isinstance(payload, dict):
-        return []
-    raw_items = payload.get("items", [])
-    if not isinstance(raw_items, list):
-        return []
-    return [item for item in raw_items if isinstance(item, dict)]
-
-
-def metadata(item: JsonObject) -> JsonObject:
-    """Return object metadata, or an empty dict when it is missing."""
-    value = item.get("metadata", {})
-    return value if isinstance(value, dict) else {}
-
-
-def status(item: JsonObject) -> JsonObject:
-    """Return object status, or an empty dict when it is missing."""
-    value = item.get("status", {})
-    return value if isinstance(value, dict) else {}
-
-
-def spec(item: JsonObject) -> JsonObject:
-    """Return object spec, or an empty dict when it is missing."""
-    value = item.get("spec", {})
-    return value if isinstance(value, dict) else {}
 
 
 def safe_labels(item: JsonObject, limit: int = 12) -> JsonObject:
