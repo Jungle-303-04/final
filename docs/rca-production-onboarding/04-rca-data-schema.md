@@ -215,10 +215,147 @@ consumer: `plan-worker`, `analyze-worker`, `rca-worker`
 
 | 필드 | 왜 필요한가 |
 | --- | --- |
-| `source` | `kubernetes`, `metrics`, `logs`, `traces` 중 어디서 왔는지 구분한다. |
+| `source` | `kubernetes`, `metrics`, `logs`, `traces`, `metadata` 중 어디서 왔는지 구분한다. |
 | `name` | rule이 찾는 evidence key다. |
 | `value` | 판단에 필요한 구조화 값이다. |
 | `summary` | 사람이 읽는 근거 설명이다. |
+
+### EvidenceItem value schema v1
+
+이 섹션은 provider payload가 RCA 내부에서 어떤 `EvidenceItem`으로 승격되는지 정리한다.
+DB table schema가 아니라 `EvidenceItem.value`에 들어가는 JSON 계약이다.
+
+현재 코드 기준 evidence key는 다음과 같다.
+
+| evidence key | 입력 위치 | RCA에서 쓰는 의미 |
+| --- | --- | --- |
+| `kubernetes:cluster_resource_state` | `ClusterEvidenceReceivedBody.kubernetes` | Pod, container, workload, service, endpoint, event 상태 근거 |
+| `metrics:telemetry_metrics` | `ClusterEvidenceReceivedBody.metrics` | Prometheus/metric 기반 resource, restart, latency, error 근거 |
+| `logs:related_logs` | `ClusterEvidenceReceivedBody.logs` | incident namespace/workload와 관련된 log snippet 근거 |
+| `traces:related_traces` | `ClusterEvidenceReceivedBody.traces` | trace/span 기반 dependency, timeout, error path 근거 |
+| `metadata:current_workload_snapshots` | `metadata.current_workload_snapshots` 또는 `metadata.change_context.current_workload_snapshots` | target namespace의 Deployment metadata snapshot 목록 |
+| `metadata:current_workload_snapshot` | `metadata.current_workload_snapshot` 또는 `metadata.change_context.current_workload_snapshot` | 특정 Deployment 1개의 metadata snapshot |
+
+#### `metadata:current_workload_snapshots`
+
+producer:
+
+- `MetadataProvider`
+- query: `change_context`, `current_workload_snapshots`, `deployments`
+
+provider bucket:
+
+```json
+{
+  "metadata": {
+    "change_context": {
+      "current_workload_snapshots": []
+    }
+  }
+}
+```
+
+RCA evidence item:
+
+```json
+{
+  "source": "metadata",
+  "name": "current_workload_snapshots",
+  "value": {
+    "items": []
+  }
+}
+```
+
+`value.items[]`:
+
+| 필드 | 타입 | 의미 |
+| --- | --- | --- |
+| `workload.kind` | string | 현재는 `Deployment` 중심이다. |
+| `workload.namespace` | string | workload namespace다. |
+| `workload.name` | string | workload 이름이다. |
+| `deployment_labels` | object | Deployment labels다. |
+| `deployment_annotations` | object | 안전한 Deployment annotations만 남긴다. |
+| `pod_template_labels` | object | Pod template labels다. |
+| `pod_template_annotations` | object | 안전한 Pod template annotations만 남긴다. |
+| `managed_fields_managers` | list<string> | Deployment managedFields manager 이름 목록이다. |
+| `containers[].name` | string | container 이름이다. |
+| `containers[].image` | string | 현재 cluster에서 보이는 container image다. |
+| `containers[].readiness_probe` | object | readiness probe 요약이다. |
+| `containers[].liveness_probe` | object | liveness probe 요약이다. |
+| `containers[].startup_probe` | object | startup probe 요약이다. |
+| `replicaset_revisions[].name` | string | Deployment가 소유한 ReplicaSet 이름이다. |
+| `replicaset_revisions[].revision` | string | `deployment.kubernetes.io/revision` 값이다. |
+
+probe summary:
+
+| 필드 | 타입 | 의미 |
+| --- | --- | --- |
+| `path` | string 또는 null | HTTP probe path다. |
+| `port` | string 또는 number 또는 null | probe port다. |
+| `timeout_seconds` | number 또는 null | timeout 설정이다. |
+| `period_seconds` | number 또는 null | probe 주기다. |
+| `failure_threshold` | number 또는 null | 실패 threshold다. |
+
+보안 기준:
+
+- `kubectl.kubernetes.io/last-applied-configuration` 같은 raw manifest annotation은 제외한다.
+- `secret`, `token`, `password`, `credential`, `authorization`, `private` 계열 annotation은 제외한다.
+- raw env value, Secret value, token value는 넣지 않는다.
+
+#### `metadata:current_workload_snapshot`
+
+producer:
+
+- `MetadataProvider`
+- query: `deployment/<name>`, `deployment/<namespace>/<name>`, `<namespace>/<name>`
+
+provider bucket:
+
+```json
+{
+  "metadata": {
+    "change_context": {
+      "current_workload_snapshot": {}
+    }
+  }
+}
+```
+
+RCA evidence item:
+
+```json
+{
+  "source": "metadata",
+  "name": "current_workload_snapshot",
+  "value": {}
+}
+```
+
+`value`는 `current_workload_snapshots.items[]`의 단일 object와 같은 형태다.
+특정 Deployment 하나를 자세히 볼 때 사용한다.
+
+#### `metadata:change_context`와의 관계
+
+현재 provider bucket 이름은 `change_context`지만, RCA v1에서는 이 이름을
+GitOps 변경 이력으로 해석하지 않는다.
+
+현재 의미는 다음과 같다.
+
+```text
+metadata.change_context.current_workload_snapshots
+= target agent가 Kubernetes API로 본 현재 workload metadata snapshot 목록
+```
+
+RCA bundle builder는 이 값을 다음 evidence item으로 승격한다.
+
+```text
+metadata:current_workload_snapshots
+metadata:current_workload_snapshot
+```
+
+Git commit, rollback 가능 여부, risk level, 실제 배포 이력은 이 schema의 필수 근거가 아니다.
+그 정보가 필요하면 GitOps/SCM/Safe PR 단계에서 별도 근거로 다룬다.
 
 ## CauseCandidate와 CauseEvaluation
 
