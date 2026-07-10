@@ -176,6 +176,17 @@ def test_every_bruno_request_has_expected_output_assertions() -> None:
     assert without_tests == []
 
 
+def test_catalog_install_bruno_uses_idempotent_real_command_contract() -> None:
+    request = (API_DIR / "12-catalog" / "03-install-item.bru").read_text(encoding="utf-8")
+
+    assert "Idempotency-Key:" in request
+    assert '"auth.database": "demo"' in request
+    assert 'res.status === 202 && body && body.command_id' in request
+    assert 'bru.setVar("command_id", body.command_id)' in request
+    assert "[202, 400, 401, 403, 404, 409, 422]" in request
+    assert "501" not in request
+
+
 def test_bruno_files_use_importable_v3_syntax() -> None:
     offenders: list[str] = []
 

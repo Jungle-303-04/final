@@ -1,5 +1,5 @@
 ---
-source_commit: 664925a6
+source_commit: d4b003525
 status: synced
 ---
 
@@ -152,6 +152,7 @@ def command_metadata_value(self, command: CommandRecord, field: str) -> str
 def approval_exempt_for_environment(self, action: str, command: CommandRecord) -> bool
 def has_approval_evidence(self, command: CommandRecord) -> bool
 async def run_query_command(self, ctx: CommandContext[TelemetryQueryCommandPayload]) -> JsonObject      # @command.handler(QUERY_RUN_ACTION, payload_model=TelemetryQueryCommandPayload)
+async def catalog_helm_install_command(self, ctx: CommandContext[CatalogHelmInstallPayload]) -> JsonObject  # @command.handler(Command.CATALOG_HELM_INSTALL_ACTION, ...)
 async def patch_deployment_command(self, ctx: CommandContext[KubernetesPatchPayload]) -> JsonObject      # @command.k8s(KUBERNETES_DEPLOYMENT_PATCH_ACTION, api_group="apps", version="v1", resource="deployments", verb="patch", payload_model=KubernetesPatchPayload)
 async def scale_deployment_command(self, ctx: CommandContext[KubernetesScalePayload]) -> JsonObject      # @command.k8s(KUBERNETES_DEPLOYMENT_SCALE_ACTION, ..., resource="deployments", verb="patch", payload_model=KubernetesScalePayload)
 async def patch_configmap_command(self, ctx: CommandContext[KubernetesPatchPayload]) -> JsonObject       # @command.k8s(KUBERNETES_CONFIGMAP_PATCH_ACTION, api_group="core", version="v1", resource="configmaps", verb="patch", payload_model=KubernetesPatchPayload)
@@ -222,6 +223,8 @@ manifest 고정 내용: `apiVersion: apps/v1`, `kind: DaemonSet`, labels `{app: 
 ### `commands/` — 커맨드 디스패치·k8s 클라이언트·결과 outbox
 
 `commands/__init__.py`가 재노출: `AgentCommandRegistry`, `CommandContext`, `CommandResult`, `CommandResultOutbox`, `CommandResultRecord`, `KubernetesApiClient`, `KubernetesGetPayload`, `KubernetesPatchPayload`, `KubernetesScalePayload`, `command`, `command_handler`, `kubernetes_command`.
+
+`commands/helm.py`는 catalog 전용 leaf runner다. `run_catalog_helm_install`은 서버 동봉 item/version을 digest-qualified OCI ref로 다시 해석하고 sandbox 이름/values를 재검증한다. values는 dotted key를 중첩 YAML로 바꿔 `0600` 임시 파일에 기록한다. 실행은 `helm upgrade --install ... --wait --atomic --timeout 300s`, 명시 argv, `shell=False`, subprocess timeout 330초다. 자식 환경은 Kubernetes/CA/proxy allowlist와 임시 `HELM_*_HOME`만 전달하며 stdout/stderr는 결과에 보존하지 않는다. 결과는 `HelmRunResult(succeeded, error_code, returncode)`로만 반환한다.
 
 #### `commands/context.py`
 
@@ -584,7 +587,7 @@ Metadata helper 모듈(module, 파이썬 코드 파일):
    - 백그라운드 태스크로 `heartbeat_command_until_done`(20초마다 heartbeat, 실패해도 경고만) 실행, 완료 시 cancel.
    - `execute_command(command)`:
      a. `action`, `command_payload(command)` 추출.
-     b. **승인 게이트**: `action ∈ {apply_manifest, k8s.apps.v1.deployments.scale}`(`write_action_requires_approval` — `rollout_restart`는 spec 변경이 없는 비파괴 조치라 제외)이고 `approval_ref`·`policy_decision_ref`(top-level 또는 payload 내부)가 둘 다 없고 `approval_exempt_for_environment(action, command)`도 아니면 즉시 실패 결과(`MISSING_APPROVAL_EVIDENCE_MESSAGE`). 면제 rule: `AGENT_AUTO_APPROVE_ACTIONS`(기본 `k8s.apps.v1.deployments.scale`) × `AGENT_AUTO_APPROVE_ENVIRONMENTS`(기본 `sandbox`) — plan 메타데이터의 `environment`가 매칭되면 승인 증적 없이 허용(command-worker의 `COMMAND_AUTO_APPROVE_*` rule과 대칭).
+     b. **승인 게이트**: `action ∈ {apply_manifest, k8s.apps.v1.deployments.scale}`(`write_action_requires_approval` — catalog install은 전용 `DEPLOY_RUN` route가 검증해 직접 queue, `rollout_restart`는 비파괴 조치라 제외)이고 승인 증적도 sandbox 면제도 없으면 즉시 실패한다.
      c. `command_registry.execute(action, payload, metadata={command_id, approval_ref, policy_decision_ref})`. 레지스트리는: 핸들러 조회(없으면 default) → `payload_model` 있으면 `model_validate`(pydantic `extra="forbid"`) → k8s spec 있으면 `KubernetesCommandPolicy.ensure_allowed` → `CommandContext` 구성 후 핸들러 호출.
      d. 예외는 전부 `command_result(False, str(exc))`로 흡수(폴링 루프는 죽지 않음).
 3. 결과는 `command_outbox.enqueue_result(...)`로 SQLite에 먼저 기록 후 `flush_command_results_once` 즉시 시도.
@@ -686,9 +689,10 @@ Kubernetes 스냅샷 정규화(`normalize_payload`): raw 응답을 `{cluster{clu
 8. **evidence 수집은 부분 실패 허용**: provider 하나의 실패는 해당 provider의 `empty_results()` 응답으로 대체되고 span에 `{source}.fallback_used=true`가 남는다(전체 잡은 성공으로 완료; 수집 자체가 예외로 끝난 경우에만 job을 `failed`로 보고).
 9. **레지스트리 fail-fast**: 커맨드 action 중복 등록·텔레메트리 소스 상이 계약 재등록·미등록 소스/쿼리 참조는 즉시 `ValueError`.
 10. **출력 위생**: 커맨드 결과 stdout/stderr는 `sanitize_command_output`으로 민감어 라인 마스킹(`[redacted]`) + 2000자 절단 후 전송된다.
-11. **k8s API 미구성 시 dry-run**: 쓰기 경로들은 실패 메시지(`"... dry-run only"`)를 반환할 뿐 예외를 던지지 않는다.
-12. **live summary는 bounded**: hot_pods ≤ 20, pod 조회 limit 200/네임스페이스, `LiveSummary`는 raw metric·전체 목록을 싣지 않는다(계약이 강제). 끄면(no-op) 기존 evidence/command 경로에 영향 없음.
-13. **SQLite store 사용 규칙**: `close()` 이후 접근은 `RuntimeError("... is closed")`. WAL + busy_timeout으로 단일 프로세스 내 동시 접근 견딤.
+11. **catalog Helm fail-closed**: management role은 top guard와 handler에서 이중 차단한다. target도 sandbox 및 서버 recipe/value 재검증을 통과해야 하며 binary 부재/timeout/non-zero exit는 `failed` command result로 남는다. 사용자 chart URL/shell/manifest는 payload 모델에 없다.
+12. **k8s API 미구성 시 dry-run**: 쓰기 경로들은 실패 메시지(`"... dry-run only"`)를 반환할 뿐 예외를 던지지 않는다.
+13. **live summary는 bounded**: hot_pods ≤ 20, pod 조회 limit 200/네임스페이스, `LiveSummary`는 raw metric·전체 목록을 싣지 않는다(계약이 강제). 끄면(no-op) 기존 evidence/command 경로에 영향 없음.
+14. **SQLite store 사용 규칙**: `close()` 이후 접근은 `RuntimeError("... is closed")`. WAL + busy_timeout으로 단일 프로세스 내 동시 접근 견딤.
 
 ## 설정 (Settings)
 
