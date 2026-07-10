@@ -47,6 +47,9 @@ def test_internal_gitops_workflow_remains_deployed() -> None:
     assert "@app.on(" in controller
     assert "name: workflow-controller" in services
     assert "src/services/gitops/workflow-controller/app.py" in services
+    assert "name: release-flow-worker" in services
+    assert "name: NATS_DELIVER_POLICY" in services
+    assert 'value: "new"' in services
 
 
 def test_local_test_stack_uses_shared_aws_bruno_profile() -> None:

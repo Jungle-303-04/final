@@ -29,6 +29,8 @@ class EventContext[DbT]:
     correlation_id: str
     causation_id: str | None
     db: DbT
+    source: str = ""
+    created_at: str = ""
 
     @classmethod
     def of(cls, evt: EventEnvelope, db: DbT) -> EventContext[DbT]:
@@ -38,6 +40,8 @@ class EventContext[DbT]:
             correlation_id=evt.correlation_id,
             causation_id=evt.causation_id,
             db=db,
+            source=evt.source,
+            created_at=evt.created_at,
         )
 
 

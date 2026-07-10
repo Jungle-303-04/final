@@ -42,6 +42,8 @@ MAX_DELIVER_ENV = "NATS_MAX_DELIVER"
 DEFAULT_MAX_DELIVER = "4"  # 워커 재시도 상한(기본 3) + 1 — 소진 후 DLQ 로 종결
 MAX_ACK_PENDING_ENV = "NATS_MAX_ACK_PENDING"
 DEFAULT_MAX_ACK_PENDING = "100"  # 컨슈머당 미확인 in-flight 상한(폭주 억제)
+DELIVER_POLICY_ENV = "NATS_DELIVER_POLICY"
+DEFAULT_DELIVER_POLICY = "all"
 LOGGER = get_logger(__name__)
 CURRENT_CAUSATION_ID: ContextVar[str | None] = ContextVar(
     "current_event_causation_id", default=None
@@ -62,12 +64,19 @@ def nats_not_found_error() -> type[Exception]:
 
 def consumer_config() -> Any:
     """pull 컨슈머 재배달 정책 — 재배달 창(ack_wait)·상한(max_deliver)·in-flight 한도 고정."""
-    from nats.js.api import ConsumerConfig
+    from nats.js.api import ConsumerConfig, DeliverPolicy
+
+    deliver_policy_value = env(DELIVER_POLICY_ENV, DEFAULT_DELIVER_POLICY).strip().lower()
+    try:
+        deliver_policy = DeliverPolicy(deliver_policy_value)
+    except ValueError as exc:
+        raise ValueError(f"unsupported NATS deliver policy: {deliver_policy_value}") from exc
 
     return ConsumerConfig(
         ack_wait=int(env(ACK_WAIT_SECONDS_ENV, DEFAULT_ACK_WAIT_SECONDS)),
         max_deliver=int(env(MAX_DELIVER_ENV, DEFAULT_MAX_DELIVER)),
         max_ack_pending=int(env(MAX_ACK_PENDING_ENV, DEFAULT_MAX_ACK_PENDING)),
+        deliver_policy=deliver_policy,
     )
 
 

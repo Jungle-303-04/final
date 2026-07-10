@@ -188,24 +188,28 @@ def test_consumer_config_defaults_bound_redelivery(monkeypatch) -> None:
     monkeypatch.delenv("NATS_ACK_WAIT_SECONDS", raising=False)
     monkeypatch.delenv("NATS_MAX_DELIVER", raising=False)
     monkeypatch.delenv("NATS_MAX_ACK_PENDING", raising=False)
+    monkeypatch.delenv("NATS_DELIVER_POLICY", raising=False)
 
     config = consumer_config()
 
     assert config.ack_wait == 60
     assert config.max_deliver == 4
     assert config.max_ack_pending == 100
+    assert config.deliver_policy.value == "all"
 
 
 def test_consumer_config_reads_env_overrides(monkeypatch) -> None:
     monkeypatch.setenv("NATS_ACK_WAIT_SECONDS", "120")
     monkeypatch.setenv("NATS_MAX_DELIVER", "6")
     monkeypatch.setenv("NATS_MAX_ACK_PENDING", "50")
+    monkeypatch.setenv("NATS_DELIVER_POLICY", "new")
 
     config = consumer_config()
 
     assert config.ack_wait == 120
     assert config.max_deliver == 6
     assert config.max_ack_pending == 50
+    assert config.deliver_policy.value == "new"
 
 
 def test_subscribe_applies_consumer_config_to_pull_consumer() -> None:

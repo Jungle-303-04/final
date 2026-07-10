@@ -1288,6 +1288,9 @@ spec:
               cpu: "1"
               memory: 512Mi
           command: ["python", "src/services/projection/release-flow-worker/app.py"]
+          env:
+            - name: NATS_DELIVER_POLICY
+              value: "new"
           livenessProbe:
             exec:
               command:
