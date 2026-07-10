@@ -124,7 +124,7 @@ def build_desired_diff(evt: ManifestRenderedBody, actual_image: str) -> Diff:
         namespace=namespace,
         desired_image=str(new_desired.fields.get(image_path, rendered.spec.image)),
         actual_image=str(live.fields.get(image_path, actual_image)),
-        risk=risk_for_diff(namespace, status),
+        risk=risk_for_diff(namespace, status, evt.environment),
         workspace_id=evt.workspace_id,
         repository_id=evt.repository_id,
         watch_target_id=evt.watch_target_id,
@@ -261,9 +261,11 @@ def approved_snapshot_required() -> bool:
     return env_enabled(REQUIRE_APPROVED_SNAPSHOT_ENV)
 
 
-def risk_for_diff(namespace: str, status: str) -> RiskLevel:
+def risk_for_diff(namespace: str, status: str, environment: str = "") -> RiskLevel:
     if namespace != Sandbox.NAMESPACE:
         return RiskLevel.NON_SANDBOX_NAMESPACE
+    if environment.strip().lower() == "production" and status != "no_change":
+        return RiskLevel.REVIEW_REQUIRED
     if status in {"review_required", "adoption_required"}:
         return RiskLevel.REVIEW_REQUIRED
     return RiskLevel.SANDBOX_ONLY

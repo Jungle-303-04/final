@@ -22,6 +22,11 @@ Optional variable or secret:
 - `RELEASE_FLOW_SCM_BASE_BRANCH`: Safe PR base branch to verify and use. Omit it for `main`.
 - `RELEASE_FLOW_GITHUB_API_BASE`: GitHub Enterprise API base URL. Omit it for `https://api.github.com`.
 
+Required live control-plane runtime settings:
+
+- `RELEASE_FLOW_LIVE_ENABLED=1`: enables live dispatch inside the management API.
+- `RELEASE_FLOW_LIVE_WORKSPACES`: comma-separated workspace allow-list for live dispatch. Use the production workspace id; avoid `*` for production unless a separate environment control already scopes access.
+
 ## Preflight Commands
 
 Local static wiring check:
@@ -38,6 +43,8 @@ RELEASE_FLOW_AUTH_EMAIL="release-operator@company.internal" \
 RELEASE_FLOW_AUTH_PASSWORD="<real secret>" \
 GITHUB_TOKEN_REF="aws-sm:/myjob/prod/github-token#token" \
 SCM_REPO="owner/repo" \
+RELEASE_FLOW_LIVE_ENABLED=1 \
+RELEASE_FLOW_LIVE_WORKSPACES="workspace-production" \
 python scripts/validate_release_flow_production_readiness.py --require-runtime-config
 ```
 

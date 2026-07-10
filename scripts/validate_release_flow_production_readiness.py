@@ -46,11 +46,16 @@ GITHUB_RUNTIME_CONFIG = {
     "scm_repo": ("SCM_REPO",),
     "github_api_base": ("GITHUB_API_BASE",),
 }
+LIVE_RUNTIME_CONFIG = {
+    "live_enabled": ("RELEASE_FLOW_LIVE_ENABLED",),
+    "live_workspaces": ("RELEASE_FLOW_LIVE_WORKSPACES",),
+}
 DEFAULT_GITHUB_API_BASE = "https://api.github.com"
 DEFAULT_SCM_BASE_BRANCH = "main"
 RUNTIME_PLACEHOLDER_HOSTS = {"example.com", "example.test", "localhost", "127.0.0.1", "::1"}
 RUNTIME_PLACEHOLDER_PASSWORDS = {"secret", "password", "changeme", "change-me", "replace-me"}
 GITHUB_PLACEHOLDER_TOKENS = {"secret", "token", "github-token", "changeme", "replace-me"}
+TRUTHY_RUNTIME_VALUES = {"1", "true", "yes", "on", "enabled"}
 
 
 @dataclass
@@ -84,6 +89,7 @@ def validate_readiness(
     checks.extend(check_gate_contract_workflow())
     checks.extend(check_runtime_config(require_runtime_config=require_runtime_config))
     checks.extend(check_github_runtime_config(require_runtime_config=require_runtime_config))
+    checks.extend(check_live_runtime_config(require_runtime_config=require_runtime_config))
     if check_github_access:
         checks.extend(check_github_access_preflight())
     return checks
@@ -241,6 +247,10 @@ def check_operator_documentation_contract() -> list[ReadinessCheck]:
         "RELEASE_FLOW_SCM_REPO",
         "RELEASE_FLOW_SCM_BASE_BRANCH",
         "RELEASE_FLOW_GITHUB_API_BASE",
+        "RELEASE_FLOW_LIVE_ENABLED",
+        "RELEASE_FLOW_LIVE_WORKSPACES",
+        "Required live control-plane runtime settings",
+        "avoid `*` for production",
         "non-env vault ref",
         "aws-sm:",
         "k8s-secret:",
@@ -576,6 +586,8 @@ def check_production_readiness_workflow_contract() -> list[ReadinessCheck]:
             "RELEASE_FLOW_API_BASE_URL" in env
             and "RELEASE_FLOW_AUTH_EMAIL" in env
             and "RELEASE_FLOW_AUTH_PASSWORD" in env
+            and "RELEASE_FLOW_LIVE_ENABLED" in env
+            and "RELEASE_FLOW_LIVE_WORKSPACES" in env
             and "GITHUB_TOKEN_REF" in env
             and "GITHUB_TOKEN" in env
             and "SCM_REPO" in env,
@@ -589,6 +601,14 @@ def check_production_readiness_workflow_contract() -> list[ReadinessCheck]:
             and "SCM_BASE_BRANCH" in env
             and "GITHUB_API_BASE" in env,
             "production readiness receives GitHub Safe PR provider env",
+        ),
+        ReadinessCheck(
+            "workflow.production_readiness.live_runtime_env",
+            "RELEASE_FLOW_LIVE_ENABLED" in env
+            and "RELEASE_FLOW_LIVE_WORKSPACES" in env
+            and "RELEASE_FLOW_LIVE_ENABLED" in str(env.get("RELEASE_FLOW_LIVE_ENABLED") or "")
+            and "RELEASE_FLOW_LIVE_WORKSPACES" in str(env.get("RELEASE_FLOW_LIVE_WORKSPACES") or ""),
+            "production readiness receives live dispatch enablement and workspace allow-list env",
         ),
         ReadinessCheck(
             "workflow.production_readiness.github_access_preflight",
@@ -792,6 +812,27 @@ def check_github_runtime_config(*, require_runtime_config: bool) -> list[Readine
     return checks
 
 
+def check_live_runtime_config(*, require_runtime_config: bool) -> list[ReadinessCheck]:
+    checks: list[ReadinessCheck] = []
+    for name, env_names in LIVE_RUNTIME_CONFIG.items():
+        value = runtime_config_value(env_names)
+        configured, valid, detail = live_runtime_config_state(name, value)
+        checks.append(
+            ReadinessCheck(
+                f"runtime.{name}",
+                (configured and valid) if require_runtime_config else (valid if configured else True),
+                runtime_config_detail(
+                    configured=configured,
+                    valid=valid,
+                    invalid_detail=detail,
+                    env_names=env_names,
+                    require_runtime_config=require_runtime_config,
+                ),
+            )
+        )
+    return checks
+
+
 def check_github_access_preflight() -> list[ReadinessCheck]:
     prerequisite_failures = [
         check
@@ -960,6 +1001,23 @@ def github_repo_ref_valid(value: str) -> bool:
         return False
     allowed = set("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_.-")
     return all(part and set(part) <= allowed for part in parts)
+
+
+def live_runtime_config_state(name: str, value: str) -> tuple[bool, bool, str]:
+    if name == "live_enabled":
+        if not value:
+            return False, False, "missing"
+        if value.strip().lower() not in TRUTHY_RUNTIME_VALUES:
+            return True, False, "must be enabled with one of 1, true, yes, on, enabled"
+        return True, True, ""
+    if name == "live_workspaces":
+        workspaces = [item.strip() for item in value.split(",") if item.strip()]
+        if not workspaces:
+            return False, False, "missing"
+        if "*" in workspaces:
+            return True, False, "must name explicit production workspace ids; wildcard * is not accepted"
+        return True, True, ""
+    return bool(value), bool(value), "" if value else "missing"
 
 
 def runtime_config_value(env_names: tuple[str, ...]) -> str:
