@@ -75,6 +75,18 @@ run-name: Release Flow Gate / ${{ inputs.github_environment || 'production' }} /
         description: Change ticket recorded in live_preflight readiness payload.
         required: false
         type: string
+      live_runbook_url:
+        description: Production runbook URL recorded in live_preflight readiness payload.
+        required: false
+        type: string
+      live_release_owner:
+        description: Release owner recorded in live_preflight readiness payload.
+        required: false
+        type: string
+      live_oncall_contact:
+        description: On-call contact recorded in live_preflight readiness payload.
+        required: false
+        type: string
       live_image:
         description: Optional image used in the live_preflight readiness payload.
         required: false
@@ -152,6 +164,18 @@ run-name: Release Flow Gate / ${{ inputs.github_environment || 'production' }} /
         description: Change ticket recorded in live_preflight readiness payload.
         required: false
         type: string
+      live_runbook_url:
+        description: Production runbook URL recorded in live_preflight readiness payload.
+        required: false
+        type: string
+      live_release_owner:
+        description: Release owner recorded in live_preflight readiness payload.
+        required: false
+        type: string
+      live_oncall_contact:
+        description: On-call contact recorded in live_preflight readiness payload.
+        required: false
+        type: string
       live_image:
         description: Optional image used in the live_preflight readiness payload.
         required: false
@@ -212,6 +236,9 @@ jobs:
       LIVE_PREFLIGHT: ${{ inputs.live_preflight }}
       LIVE_PREFLIGHT_ENVIRONMENT: ${{ inputs.live_environment || 'production' }}
       LIVE_PREFLIGHT_CHANGE_TICKET: ${{ inputs.live_change_ticket }}
+      LIVE_PREFLIGHT_RUNBOOK_URL: ${{ inputs.live_runbook_url }}
+      LIVE_PREFLIGHT_RELEASE_OWNER: ${{ inputs.live_release_owner }}
+      LIVE_PREFLIGHT_ONCALL_CONTACT: ${{ inputs.live_oncall_contact }}
     steps:
       - name: Validate live production inputs
         id: validate
@@ -225,6 +252,26 @@ jobs:
             fi
             if [ "$normalized_ticket" = "CHG-PREFLIGHT" ]; then
               echo "::error title=Placeholder production change ticket::Replace CHG-PREFLIGHT with the real production change ticket."
+              exit 1
+            fi
+            if [ -z "$LIVE_PREFLIGHT_RUNBOOK_URL" ]; then
+              echo "::error title=Missing production runbook::live_runbook_url is required for production live_preflight."
+              exit 1
+            fi
+            if [[ "$LIVE_PREFLIGHT_RUNBOOK_URL" == *"example.com"* ]]; then
+              echo "::error title=Placeholder production runbook::Replace example.com runbook URL with the real production runbook."
+              exit 1
+            fi
+            if [ -z "$LIVE_PREFLIGHT_RELEASE_OWNER" ] && [ -z "$LIVE_PREFLIGHT_ONCALL_CONTACT" ]; then
+              echo "::error title=Missing production owner::live_release_owner or live_oncall_contact is required for production live_preflight."
+              exit 1
+            fi
+            if [ "$LIVE_PREFLIGHT_RELEASE_OWNER" = "release-operator" ]; then
+              echo "::error title=Placeholder production owner::Replace release-operator with the real production owner."
+              exit 1
+            fi
+            if [ "$LIVE_PREFLIGHT_ONCALL_CONTACT" = "release-oncall@example.com" ]; then
+              echo "::error title=Placeholder on-call contact::Replace release-oncall@example.com with the real on-call contact."
               exit 1
             fi
           fi
@@ -250,6 +297,9 @@ jobs:
       live_environment: ${{ inputs.live_environment || 'production' }}
       live_namespace: ${{ inputs.live_namespace || 'production' }}
       live_change_ticket: ${{ inputs.live_change_ticket }}
+      live_runbook_url: ${{ inputs.live_runbook_url }}
+      live_release_owner: ${{ inputs.live_release_owner }}
+      live_oncall_contact: ${{ inputs.live_oncall_contact }}
       live_image: ${{ inputs.live_image }}
       live_verification_url: ${{ inputs.live_verification_url }}
     secrets:

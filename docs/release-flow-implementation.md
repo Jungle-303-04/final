@@ -382,6 +382,8 @@ jobs:
 
 `Release Flow Production Gate`는 production `live_preflight`가 켜진 경우 `live_change_ticket`을 필수로 요구하고, `CHG-PREFLIGHT` placeholder 값은 smoke 실행 전에 차단한다. 운영 배포 workflow에서는 실제 변경 티켓을 `live_change_ticket`에 넘겨야 하며, placeholder로 production gate를 통과시킬 수 없다.
 
+같은 production gate는 `live_runbook_url`과 `live_release_owner` 또는 `live_oncall_contact`도 smoke 실행 전에 검사한다. `example.com` runbook, `release-operator`, `release-oncall@example.com` 같은 demo placeholder는 production gate에서 실패하므로 실제 runbook과 운영 책임자/온콜 연락처를 workflow input으로 넘겨야 한다.
+
 `.github/workflows/release-flow-gate-contract.yml`은 workflow 변경 PR에서 production deploy job이 release-flow gate를 우회하지 않는지 검사한다. 검사 기준은 `scripts/validate_release_flow_production_gate.py`에 있다. production deploy로 보이는 job은 같은 workflow 안에서 `.github/workflows/release-flow-production-gate.yml`을 호출하는 job을 `needs`에 포함해야 하고, deploy job의 `if` 조건은 `needs.<gate job>.outputs.release_gate_ok == 'true'`를 확인해야 한다. 이 검사는 아직 production deploy workflow가 없는 상태에서는 통과하지만, 나중에 workflow가 추가되면 gate 연결을 빠뜨린 PR을 실패시킨다.
 
 production 환경을 실제로 켜기 전에는 `.github/workflows/release-flow-production-readiness.yml`의 `Release Flow Production Readiness`를 수동 실행한다. 이 workflow는 GitHub Environment를 걸고 `RELEASE_FLOW_API_BASE_URL`, `RELEASE_FLOW_AUTH_EMAIL`, `RELEASE_FLOW_AUTH_PASSWORD`가 실제로 주입되는지 확인한 뒤, smoke workflow/gate workflow/gate contract가 모두 repo에 있는지 검사한다. 로컬에서는 다음처럼 static wiring만 빠르게 확인할 수 있다.

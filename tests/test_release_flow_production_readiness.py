@@ -15,6 +15,8 @@ def test_current_release_flow_production_readiness_static_checks_pass() -> None:
         "workflow.smoke.runtime_config_preflight",
         "workflow.production_gate.fail_closed",
         "workflow.production_gate.change_ticket_required",
+        "workflow.production_gate.runbook_required",
+        "workflow.production_gate.owner_required",
         "workflow.production_gate.validates_before_smoke",
         "workflow.gate_contract.static_scan",
     }

@@ -141,6 +141,20 @@ def check_production_gate_contract() -> list[ReadinessCheck]:
             "production placeholder change ticket is blocked",
         ),
         ReadinessCheck(
+            "workflow.production_gate.runbook_required",
+            "default" not in inputs.get("live_runbook_url", {})
+            and "live_runbook_url is required" in validate_run
+            and "real production runbook" in validate_run,
+            "production runbook URL is required",
+        ),
+        ReadinessCheck(
+            "workflow.production_gate.owner_required",
+            "live_release_owner or live_oncall_contact is required" in validate_run
+            and "real production owner" in validate_run
+            and "real on-call contact" in validate_run,
+            "production owner or on-call contact is required",
+        ),
+        ReadinessCheck(
             "workflow.production_gate.validates_before_smoke",
             smoke_job.get("needs") == "validate_production_gate_inputs",
             "input validation runs before smoke",
