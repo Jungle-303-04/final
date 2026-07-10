@@ -52,6 +52,8 @@ def test_release_flow_production_gate_declares_operational_inputs() -> None:
     assert set(call_inputs) == expected_inputs
     assert dispatch_inputs["live_preflight"]["default"] is True
     assert call_inputs["live_preflight"]["default"] is True
+    assert "default" not in dispatch_inputs["live_change_ticket"]
+    assert "default" not in call_inputs["live_change_ticket"]
     assert dispatch_inputs["github_environment"]["default"] == "production"
     assert call_inputs["github_environment"]["default"] == "production"
     assert dispatch_inputs["production_preflight_run_limit"]["default"] == "20"
@@ -69,8 +71,18 @@ def test_release_flow_production_gate_declares_operational_inputs() -> None:
 
 def test_release_flow_production_gate_calls_smoke_workflow_with_real_guardrails() -> None:
     workflow = load_workflow()
+    validate_job = workflow["jobs"]["validate_production_gate_inputs"]
     smoke_job = workflow["jobs"]["release_flow_smoke"]
 
+    validate_step = validate_job["steps"][0]
+    assert validate_job["outputs"]["production_gate_inputs_ok"] == (
+        "${{ steps.validate.outputs.production_gate_inputs_ok }}"
+    )
+    assert validate_step["id"] == "validate"
+    assert "live_change_ticket is required for production live_preflight" in validate_step["run"]
+    assert "Replace CHG-PREFLIGHT with the real production change ticket" in validate_step["run"]
+    assert "production_gate_inputs_ok=true" in validate_step["run"]
+    assert smoke_job["needs"] == "validate_production_gate_inputs"
     assert smoke_job["uses"] == "./.github/workflows/release-flow-smoke.yml"
     assert smoke_job["with"]["production_preflight_plan_id"] == "${{ inputs.release_plan_id }}"
     assert smoke_job["with"]["production_preflight_run_limit"] == (
@@ -80,7 +92,7 @@ def test_release_flow_production_gate_calls_smoke_workflow_with_real_guardrails(
     assert smoke_job["with"]["artifact_name"] == "release-flow-smoke-${{ inputs.github_environment || 'production' }}"
     assert smoke_job["with"]["alert_preflight"] == "${{ inputs.alert_preflight || false }}"
     assert smoke_job["with"]["live_preflight"] == "${{ inputs.live_preflight }}"
-    assert smoke_job["with"]["live_change_ticket"] == "${{ inputs.live_change_ticket || 'CHG-PREFLIGHT' }}"
+    assert smoke_job["with"]["live_change_ticket"] == "${{ inputs.live_change_ticket }}"
     assert smoke_job["secrets"]["release_flow_api_base_url"] == (
         "${{ secrets.release_flow_api_base_url || secrets.RELEASE_FLOW_API_BASE_URL }}"
     )
