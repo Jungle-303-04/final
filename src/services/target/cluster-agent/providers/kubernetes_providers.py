@@ -18,6 +18,7 @@ from packages.config.constants import Target
 from packages.contracts.event_bus.interfaces import JsonObject
 from packages.contracts.target import TARGET_NAMESPACE
 from providers.base import ConfigReader
+from providers.kubernetes_utils import items, metadata, spec, status
 
 
 @telemetry.source(
@@ -278,34 +279,6 @@ def merge_cluster_scoped_nodes(target: JsonObject, source: JsonObject) -> None:
             continue
         by_key[key] = node
     target["nodes"] = list(by_key.values())
-
-
-def items(payload: Any) -> list[JsonObject]:
-    """Return list items from a Kubernetes list response."""
-    if not isinstance(payload, dict):
-        return []
-    raw_items = payload.get("items", [])
-    if not isinstance(raw_items, list):
-        return []
-    return [item for item in raw_items if isinstance(item, dict)]
-
-
-def metadata(item: JsonObject) -> JsonObject:
-    """Return object metadata, or an empty dict when it is missing."""
-    value = item.get("metadata", {})
-    return value if isinstance(value, dict) else {}
-
-
-def status(item: JsonObject) -> JsonObject:
-    """Return object status, or an empty dict when it is missing."""
-    value = item.get("status", {})
-    return value if isinstance(value, dict) else {}
-
-
-def spec(item: JsonObject) -> JsonObject:
-    """Return object spec, or an empty dict when it is missing."""
-    value = item.get("spec", {})
-    return value if isinstance(value, dict) else {}
 
 
 def safe_labels(item: JsonObject, limit: int = 12) -> JsonObject:
