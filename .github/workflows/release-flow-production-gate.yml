@@ -314,8 +314,12 @@ jobs:
               echo "::error title=Missing production runbook::live_runbook_url is required for production live_preflight."
               exit 1
             fi
-            if [[ "$LIVE_PREFLIGHT_RUNBOOK_URL" == *"example.com"* ]]; then
-              echo "::error title=Placeholder production runbook::Replace example.com runbook URL with the real production runbook."
+            if [[ "$LIVE_PREFLIGHT_RUNBOOK_URL" != https://* ]]; then
+              echo "::error title=Invalid production runbook::live_runbook_url must use https for production live_preflight."
+              exit 1
+            fi
+            if [[ "$LIVE_PREFLIGHT_RUNBOOK_URL" == *"localhost"* || "$LIVE_PREFLIGHT_RUNBOOK_URL" == *"127.0.0.1"* || "$LIVE_PREFLIGHT_RUNBOOK_URL" == *"example.com"* ]]; then
+              echo "::error title=Placeholder production runbook::live_runbook_url must not use localhost or example.com for production live_preflight."
               exit 1
             fi
             if [ -z "$LIVE_PREFLIGHT_IMAGE" ]; then
