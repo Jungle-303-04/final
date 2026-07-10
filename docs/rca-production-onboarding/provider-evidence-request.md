@@ -1,6 +1,6 @@
 # RCA Provider Evidence 요청 정리
 
-구현 메모: metadata evidence는 workload snapshot, config reference, Service selector matching, ownership lookup helper 모듈로 나누어 구현할 수 있다. 이 helper 모듈들은 event를 발행하지 않는다. 등록된 metadata provider만 metadata bucket을 반환한다.
+구현 메모: metadata evidence는 workload snapshot, config reference, Service selector matching, ResourceQuota summary, ownership lookup helper 모듈로 나누어 구현할 수 있다. 이 helper 모듈들은 event를 발행하지 않는다. 등록된 metadata provider만 metadata bucket을 반환한다.
 
 ## 왜 필요한가
 
@@ -64,6 +64,7 @@ RCA는 provider가 보내준 evidence만 보고 symptom, root cause candidate, c
 - Deployment status and conditions
 - Pod status phase, ready flag, and conditions
 - Service selector and Pod labels match result
+- ResourceQuota hard/used summary
 - owned ReplicaSet revision annotation and replica counts
 - single Deployment detail query의 safe Deployment/Pod template annotations
 - single Deployment detail query의 managedFields manager 목록
@@ -75,7 +76,6 @@ RCA는 provider가 보내준 evidence만 보고 symptom, root cause candidate, c
 ### 추가로 요청해야 할 것
 
 - ConfigMap/Secret object metadata summary
-- resource quota
 - 상세 containerStatuses 원본 또는 더 풍부한 요약
 - node pressure / scheduler decision 관련 detail
 
@@ -264,6 +264,17 @@ endpoint IP address는 보내지 않고, ready target Pod의 kind/namespace/name
 - change_context.endpoint_slice_ready_endpoints[].serving_endpoint_count
 - change_context.endpoint_slice_ready_endpoints[].terminating_endpoint_count
 - change_context.endpoint_slice_ready_endpoints[].ready_targets[].kind/namespace/name
+
+`resource_quotas[]`는 namespace 수준 ResourceQuota(네임스페이스 자원 할당량) 요약이다.
+특정 Deployment 하나의 spec이 아니라 같은 namespace의 생성/스케줄링 제한 맥락을 보기 위해
+`change_context` 바로 아래에 둔다.
+권한이 없거나 ResourceQuota API가 없으면 빈 목록을 보낸다.
+raw spec/status, annotation, managedFields는 보내지 않는다.
+
+- change_context.resource_quotas[].name
+- change_context.resource_quotas[].namespace
+- change_context.resource_quotas[].hard
+- change_context.resource_quotas[].used
 
 `current_workload_snapshot`은 특정 Deployment 1개를 위한 detail snapshot이다.
 detail snapshot은 summary 필드에 아래 필드를 추가로 담는다.

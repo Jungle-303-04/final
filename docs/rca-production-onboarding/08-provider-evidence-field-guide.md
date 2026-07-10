@@ -32,8 +32,8 @@ provider가 수집한 사실
   별도 정규화 단계에서 파생해야 한다.
 - Kubernetes bucket에는 `raw` 원본 object가 없다. provider가 선택한 summary 필드만 남긴다.
   반대로 `metrics`, `logs`, `traces`는 query 결과별 `raw`를 보존한다.
-- `metadata` bucket은 현재 `change_context.current_workload_snapshots` 또는
-  `change_context.current_workload_snapshot`에 Deployment snapshot을 담는다.
+- `metadata` bucket은 `change_context` 안에 Deployment snapshot과 namespace metadata
+  summary를 함께 담는다.
 
 ## 이 문서 읽는 순서
 
@@ -211,7 +211,7 @@ provider가 수집한 사실
 | `metrics` | object | Prometheus query 결과를 정규화한 bucket이다. |
 | `logs` | list<object> | Loki query 결과 목록이다. 로그 라인 목록 자체가 아니라 query별 결과 목록이다. |
 | `traces` | object | Tempo trace search 결과를 정규화한 bucket이다. |
-| `metadata` | object | `MetadataProvider`가 만든 변경 맥락 bucket이다. 현재 provider는 전체 조회 시 `change_context.current_workload_snapshots`, 단건 조회 시 `change_context.current_workload_snapshot`을 담는다. |
+| `metadata` | object | `MetadataProvider`가 만든 변경 맥락 bucket이다. 전체 조회 시 `change_context.current_workload_snapshots`, 단건 조회 시 `change_context.current_workload_snapshot`을 담고, Service selector/EndpointSlice/ResourceQuota 요약도 `change_context`에 함께 담는다. |
 
 HTTP `AgentEvidenceRequest`에는 `correlation_id`가 있지만, event body로는 들어가지 않는다.
 Gateway가 event envelope correlation으로 연결한다.
@@ -756,12 +756,12 @@ RCA 파생 예시는 다음과 같다.
 
 ## Metadata bucket
 
-구현 메모: `MetadataProvider`가 Kubernetes API 호출과 metadata evidence 조립을 담당한다. helper 모듈은 snapshot 생성, ConfigMap/Secret reference 요약, EndpointSlice ready endpoint 요약, Service selector 매칭, Deployment/ReplicaSet/Pod 소유 관계 계산만 나누어 맡는다. 이 helper 모듈들은 event를 발행하지 않고 payload 계약도 바꾸지 않는다.
+구현 메모: `MetadataProvider`가 Kubernetes API 호출과 metadata evidence 조립을 담당한다. helper 모듈은 snapshot 생성, ConfigMap/Secret reference 요약, EndpointSlice ready endpoint 요약, Service selector 매칭, ResourceQuota 요약, Deployment/ReplicaSet/Pod 소유 관계 계산만 나누어 맡는다. 이 helper 모듈들은 event를 발행하지 않고 payload 계약도 바꾸지 않는다.
 
 Metadata bucket은 `MetadataProvider`가 만든다.
 현재 구현은 외부 배포 시스템을 직접 조회하지 않는다.
-대신 target namespace의 Deployment, ReplicaSet, Pod, Service, EndpointSlice 목록을 Kubernetes API에서 읽어
-현재 workload snapshot 목록을 만든다.
+대신 target namespace의 Deployment, ReplicaSet, Pod, Service, ResourceQuota, EndpointSlice 목록을 Kubernetes API에서 읽어
+현재 workload snapshot과 namespace metadata summary를 만든다.
 
 `MetadataSnapshotQuery.query` 값이 `change_context`, `current_workload_snapshots`, `deployments`이면
 target namespace의 모든 Deployment를 summary snapshot 목록으로 보낸다.
@@ -940,6 +940,11 @@ detail snapshot인 `current_workload_snapshot` 단수 값으로 보낸다.
 | `change_context.endpoint_slice_ready_endpoints[].serving_endpoint_count` | number | condition `serving=true`인 endpoint 수다. |
 | `change_context.endpoint_slice_ready_endpoints[].terminating_endpoint_count` | number | condition `terminating=true`인 endpoint 수다. |
 | `change_context.endpoint_slice_ready_endpoints[].ready_targets` | list<object> | ready endpoint가 가리키는 target object kind/namespace/name이다. 보통 Pod다. endpoint IP address는 담지 않는다. |
+| `change_context.resource_quotas` | list<object> | namespace ResourceQuota hard/used 요약이다. summary query와 detail query 모두 같은 namespace 맥락으로 담는다. |
+| `change_context.resource_quotas[].name` | string | ResourceQuota 이름이다. |
+| `change_context.resource_quotas[].namespace` | string | ResourceQuota namespace다. |
+| `change_context.resource_quotas[].hard` | object | ResourceQuota status.hard 값이다. CPU, memory, pod 수 같은 제한값을 Kubernetes quantity 문자열 그대로 담는다. |
+| `change_context.resource_quotas[].used` | object | ResourceQuota status.used 값이다. 현재 사용량을 Kubernetes quantity 문자열 그대로 담는다. |
 | `change_context.current_workload_snapshots[].workload` | object | workload kind, namespace, name이다. 현재 kind는 `Deployment`다. |
 | `change_context.current_workload_snapshots[].deployment_labels` | object | Deployment metadata labels다. |
 | `change_context.current_workload_snapshots[].pod_template_labels` | object | Pod template metadata labels다. |
@@ -981,6 +986,10 @@ Deployment의 affinity 조건을 넣으면 payload가 커지고 원인 후보와
 EndpointSlice ready endpoint 요약도 같은 범위 규칙을 쓴다.
 전체 summary query는 namespace의 모든 EndpointSlice를 담고, 단건 detail query는 관련 Service의 EndpointSlice만 담는다.
 EndpointSlice endpoint의 IP address는 남기지 않는다.
+ResourceQuota 요약은 workload 하나의 속성이 아니라 namespace 수준 제한 정보다.
+그래서 summary query와 detail query 모두 `change_context.resource_quotas[]`에 담고,
+`current_workload_snapshot` 안에는 넣지 않는다.
+ResourceQuota 조회 권한이 없거나 API가 없으면 provider는 실패하지 않고 빈 목록을 남긴다.
 `kubectl.kubernetes.io/last-applied-configuration` 같은 원문 manifest annotation과
 secret/token/password/credential/private/authorization 이름이 들어간 annotation은 제외한다.
 단건 detail의 env/envFrom/volume ConfigMap/Secret reference는 name/key/path만 남기고 값 자체는 남기지 않는다.
@@ -1040,6 +1049,7 @@ Provider가 이미 보내는 값은 다음과 같다.
 | 현재 image/probe/resources/labels/status/PVC refs/revision summary | `metadata.change_context.current_workload_snapshots[].containers[]`, `deployment_labels`, `pod_template_labels`, `persistent_volume_claim_refs`, `deployment_status`, `pod_statuses`, `replicaset_revisions` |
 | Service selector와 Pod labels 매칭 결과 | `metadata.change_context.service_selector_matches[]` |
 | EndpointSlice ready endpoint 요약 | `metadata.change_context.endpoint_slice_ready_endpoints[]` |
+| ResourceQuota hard/used 요약 | `metadata.change_context.resource_quotas[]` |
 | 특정 Deployment detail의 annotations/manager/scheduling/config refs/ReplicaSet conditions | `metadata.change_context.current_workload_snapshot.deployment_annotations`, `pod_template_annotations`, `managed_fields_managers`, `scheduling_constraints`, `containers[].env_refs`, `containers[].env_from_refs`, `containers[].volume_mount_refs`, `replicaset_revisions[].conditions` |
 
 RCA가 판단하려면 다음 값은 파생해야 한다.
@@ -1101,6 +1111,7 @@ RCA/evidence-worker 쪽 담당 영역이다. 이 문서는 provider가 보내는
 | Deployment/ReplicaSet/Pod status conditions | 가능 | `deployment_status.conditions`와 `pod_statuses[].conditions`는 summary에도 있고, `replicaset_revisions[].conditions`는 단건 detail에만 있다. |
 | Service selector와 Pod labels 매칭 결과 | 가능 | `service_selector_matches[]`에서 Service별 `match_status`, `matched_pod_count`, `matched_pods`를 제공한다. |
 | EndpointSlice ready endpoint 요약 | 가능 | `endpoint_slice_ready_endpoints[]`에서 Service별 EndpointSlice ready/not ready count와 ready target Pod를 제공한다. endpoint IP address는 제공하지 않는다. |
+| ResourceQuota hard/used 요약 | 가능 | `resource_quotas[]`에서 namespace quota 제한값과 현재 사용량을 제공한다. 권한이 없으면 빈 목록이다. |
 | imagePullSecrets | 불충분 | Pod spec imagePullSecrets summary 추가 |
 | NetworkPolicy/Ingress | 없음 | Kubernetes provider 조회 resource 확장 |
 | PVC refs | 가능 | `metadata.change_context.current_workload_snapshots[].persistent_volume_claim_refs[]`를 제공한다. PVC object 자체는 조회하지 않는다. |

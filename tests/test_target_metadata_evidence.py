@@ -27,6 +27,7 @@ def load_metadata_modules():
         "providers.metadata_config_refs",
         "providers.metadata_endpoint_slices",
         "providers.metadata_ownership",
+        "providers.metadata_resource_quotas",
         "providers.metadata_service_selectors",
         "providers.metadata_workload_snapshots",
         "providers.metadata_providers",
@@ -443,6 +444,32 @@ def test_metadata_provider_collects_one_deployment_snapshot(monkeypatch) -> None
                     ]
                 },
             )
+        if request.url.path == "/api/v1/namespaces/sandbox/resourcequotas":
+            return httpx.Response(
+                200,
+                json={
+                    "items": [
+                        {
+                            "metadata": {
+                                "namespace": "sandbox",
+                                "name": "compute-quota",
+                            },
+                            "status": {
+                                "hard": {
+                                    "requests.cpu": "4",
+                                    "requests.memory": "8Gi",
+                                    "pods": "20",
+                                },
+                                "used": {
+                                    "requests.cpu": "1200m",
+                                    "requests.memory": "1Gi",
+                                    "pods": "5",
+                                },
+                            },
+                        }
+                    ]
+                },
+            )
         if request.url.path == "/apis/discovery.k8s.io/v1/namespaces/sandbox/endpointslices":
             return httpx.Response(
                 200,
@@ -589,6 +616,7 @@ def test_metadata_provider_collects_one_deployment_snapshot(monkeypatch) -> None
         "/apis/apps/v1/namespaces/sandbox/replicasets",
         "/api/v1/namespaces/sandbox/pods",
         "/api/v1/namespaces/sandbox/services",
+        "/api/v1/namespaces/sandbox/resourcequotas",
         "/apis/discovery.k8s.io/v1/namespaces/sandbox/endpointslices",
     ]
     assert "current_workload_snapshots" not in change_context
@@ -673,6 +701,22 @@ def test_metadata_provider_collects_one_deployment_snapshot(monkeypatch) -> None
     ]
     assert "10.0.0.1" not in str(change_context["endpoint_slice_ready_endpoints"])
     assert "billing-api-pod-1" not in str(change_context["endpoint_slice_ready_endpoints"])
+    assert change_context["resource_quotas"] == [
+        {
+            "name": "compute-quota",
+            "namespace": "sandbox",
+            "hard": {
+                "requests.cpu": "4",
+                "requests.memory": "8Gi",
+                "pods": "20",
+            },
+            "used": {
+                "requests.cpu": "1200m",
+                "requests.memory": "1Gi",
+                "pods": "5",
+            },
+        }
+    ]
     assert snapshot["workload"] == {
         "kind": "Deployment",
         "namespace": "sandbox",
@@ -937,6 +981,8 @@ def test_metadata_provider_collects_service_matches_without_deployments(
                     ]
                 },
             )
+        if request.url.path == "/api/v1/namespaces/target/resourcequotas":
+            return httpx.Response(403, json={"message": "forbidden"})
         if request.url.path == "/apis/discovery.k8s.io/v1/namespaces/target/endpointslices":
             return httpx.Response(
                 200,
@@ -996,6 +1042,7 @@ def test_metadata_provider_collects_service_matches_without_deployments(
         "/apis/apps/v1/namespaces/target/deployments",
         "/api/v1/namespaces/target/pods",
         "/api/v1/namespaces/target/services",
+        "/api/v1/namespaces/target/resourcequotas",
         "/apis/discovery.k8s.io/v1/namespaces/target/endpointslices",
     ]
     assert metadata["change_context"] == {
@@ -1031,6 +1078,7 @@ def test_metadata_provider_collects_service_matches_without_deployments(
                 ],
             }
         ],
+        "resource_quotas": [],
     }
 
 
@@ -1225,6 +1273,30 @@ def test_metadata_provider_collects_namespace_deployment_snapshots(monkeypatch) 
                     ]
                 },
             )
+        if request.url.path == "/api/v1/namespaces/target/resourcequotas":
+            return httpx.Response(
+                200,
+                json={
+                    "items": [
+                        {
+                            "metadata": {
+                                "namespace": "target",
+                                "name": "target-quota",
+                            },
+                            "status": {
+                                "hard": {
+                                    "requests.cpu": "8",
+                                    "requests.memory": "16Gi",
+                                },
+                                "used": {
+                                    "requests.cpu": "50m",
+                                    "requests.memory": "128Mi",
+                                },
+                            },
+                        }
+                    ]
+                },
+            )
         if request.url.path == "/apis/discovery.k8s.io/v1/namespaces/target/endpointslices":
             return httpx.Response(
                 200,
@@ -1298,6 +1370,7 @@ def test_metadata_provider_collects_namespace_deployment_snapshots(monkeypatch) 
         "/apis/apps/v1/namespaces/target/replicasets",
         "/api/v1/namespaces/target/pods",
         "/api/v1/namespaces/target/services",
+        "/api/v1/namespaces/target/resourcequotas",
         "/apis/discovery.k8s.io/v1/namespaces/target/endpointslices",
     ]
     assert "current_workload_snapshot" not in change_context
@@ -1338,6 +1411,20 @@ def test_metadata_provider_collects_namespace_deployment_snapshots(monkeypatch) 
                     "name": "shop-api-pod-1",
                 }
             ],
+        }
+    ]
+    assert change_context["resource_quotas"] == [
+        {
+            "name": "target-quota",
+            "namespace": "target",
+            "hard": {
+                "requests.cpu": "8",
+                "requests.memory": "16Gi",
+            },
+            "used": {
+                "requests.cpu": "50m",
+                "requests.memory": "128Mi",
+            },
         }
     ]
     assert snapshot["workload"] == {

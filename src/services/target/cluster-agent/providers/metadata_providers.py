@@ -25,6 +25,7 @@ from providers.kubernetes_utils import (
     K8S_RESOURCE_ENDPOINT_SLICES,
     K8S_RESOURCE_PODS,
     K8S_RESOURCE_REPLICASETS,
+    K8S_RESOURCE_RESOURCE_QUOTAS,
     K8S_RESOURCE_SERVICES,
     items,
     metadata,
@@ -32,6 +33,7 @@ from providers.kubernetes_utils import (
 )
 from providers.metadata_endpoint_slices import endpoint_slice_ready_endpoint_snapshots
 from providers.metadata_ownership import pods_for_deployment
+from providers.metadata_resource_quotas import resource_quota_snapshots
 from providers.metadata_service_selectors import service_selector_match_snapshots
 from providers.metadata_workload_snapshots import (
     current_workload_detail_snapshot,
@@ -43,6 +45,7 @@ CHANGE_CONTEXT_KEY = "change_context"
 CURRENT_WORKLOAD_SNAPSHOT_KEY = "current_workload_snapshot"
 CURRENT_WORKLOAD_SNAPSHOTS_KEY = "current_workload_snapshots"
 ENDPOINT_SLICE_READY_ENDPOINTS_KEY = "endpoint_slice_ready_endpoints"
+RESOURCE_QUOTAS_KEY = "resource_quotas"
 SERVICE_SELECTOR_MATCHES_KEY = "service_selector_matches"
 DEFAULT_METADATA_QUERIES = {
     CHANGE_CONTEXT_KEY,
@@ -147,6 +150,16 @@ class MetadataProvider:
                         headers,
                         namespaced_core_path(target.namespace, K8S_RESOURCE_SERVICES),
                     )
+                    resource_quota_list = await self.get_json(
+                        client,
+                        base_url,
+                        headers,
+                        namespaced_core_path(
+                            target.namespace,
+                            K8S_RESOURCE_RESOURCE_QUOTAS,
+                        ),
+                        allow_empty_list=True,
+                    )
                     endpoint_slice_list = await self.get_json(
                         client,
                         base_url,
@@ -163,6 +176,7 @@ class MetadataProvider:
                         items(pod_list),
                         items(service_list),
                         items(endpoint_slice_list),
+                        items(resource_quota_list),
                     )
                 else:
                     change_context = empty_change_context()
@@ -195,6 +209,16 @@ class MetadataProvider:
                     headers,
                     namespaced_core_path(target.namespace, K8S_RESOURCE_SERVICES),
                 )
+                resource_quotas = await self.get_json(
+                    client,
+                    base_url,
+                    headers,
+                    namespaced_core_path(
+                        target.namespace,
+                        K8S_RESOURCE_RESOURCE_QUOTAS,
+                    ),
+                    allow_empty_list=True,
+                )
                 endpoint_slices = await self.get_json(
                     client,
                     base_url,
@@ -221,6 +245,9 @@ class MetadataProvider:
                         endpoint_slice_ready_endpoint_snapshots(
                             items(endpoint_slices),
                         )
+                    ),
+                    RESOURCE_QUOTAS_KEY: resource_quota_snapshots(
+                        items(resource_quotas),
                     ),
                 }
 
@@ -292,6 +319,7 @@ class MetadataProvider:
         snapshots = change_context.get(CURRENT_WORKLOAD_SNAPSHOTS_KEY)
         snapshot = change_context.get(CURRENT_WORKLOAD_SNAPSHOT_KEY)
         endpoint_slices = change_context.get(ENDPOINT_SLICE_READY_ENDPOINTS_KEY)
+        resource_quotas = change_context.get(RESOURCE_QUOTAS_KEY)
         service_matches = change_context.get(SERVICE_SELECTOR_MATCHES_KEY)
         normalized: JsonObject = {}
 
@@ -311,6 +339,11 @@ class MetadataProvider:
         if isinstance(endpoint_slices, list):
             normalized[ENDPOINT_SLICE_READY_ENDPOINTS_KEY] = [
                 item for item in endpoint_slices if isinstance(item, dict)
+            ]
+
+        if isinstance(resource_quotas, list):
+            normalized[RESOURCE_QUOTAS_KEY] = [
+                item for item in resource_quotas if isinstance(item, dict)
             ]
 
         return normalized or empty_change_context()
@@ -380,6 +413,7 @@ def specific_workload_change_context(
     pods: list[JsonObject],
     services: list[JsonObject],
     endpoint_slices: list[JsonObject],
+    resource_quotas: list[JsonObject],
 ) -> JsonObject:
     """Build a change context for one Deployment."""
     if not deployment:
@@ -403,6 +437,7 @@ def specific_workload_change_context(
             endpoint_slices,
             service_matches=service_matches,
         ),
+        RESOURCE_QUOTAS_KEY: resource_quota_snapshots(resource_quotas),
     }
 
 
@@ -425,6 +460,10 @@ def merge_change_context(target: JsonObject, source: JsonObject) -> None:
     endpoint_slices = source.get(ENDPOINT_SLICE_READY_ENDPOINTS_KEY)
     if isinstance(endpoint_slices, list):
         target[ENDPOINT_SLICE_READY_ENDPOINTS_KEY] = endpoint_slices
+
+    resource_quotas = source.get(RESOURCE_QUOTAS_KEY)
+    if isinstance(resource_quotas, list):
+        target[RESOURCE_QUOTAS_KEY] = resource_quotas
 
 
 def empty_change_context() -> JsonObject:
