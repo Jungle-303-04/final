@@ -230,7 +230,12 @@ def validate_https_url(name: str, value: str) -> EvidenceCheck:
 
 
 def placeholder_host(host: str) -> bool:
-    return host in PLACEHOLDER_HOSTS or host.endswith(".localhost") or host.endswith(".example.test")
+    return (
+        host in PLACEHOLDER_HOSTS
+        or host.endswith(".localhost")
+        or host.endswith(".example.com")
+        or host.endswith(".example.test")
+    )
 
 
 def main(argv: list[str]) -> int:

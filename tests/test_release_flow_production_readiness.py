@@ -209,6 +209,24 @@ def test_release_flow_production_readiness_rejects_placeholder_runtime_config(mo
     assert "wildcard" in details["runtime.live_workspaces"]
 
 
+def test_release_flow_production_readiness_rejects_example_subdomain_runtime_urls(monkeypatch) -> None:
+    monkeypatch.setenv("RELEASE_FLOW_API_BASE_URL", "https://api.example.com")
+    monkeypatch.setenv("RELEASE_FLOW_AUTH_EMAIL", "ops@company.test")
+    monkeypatch.setenv("RELEASE_FLOW_AUTH_PASSWORD", "correct-horse-battery")
+    set_live_runtime_env(monkeypatch)
+    monkeypatch.setenv("GITHUB_TOKEN_REF", "aws-sm:/myjob/prod/github-token#token")
+    monkeypatch.setenv("SCM_REPO", "org/checkout")
+    monkeypatch.setenv("GITHUB_API_BASE", "https://api.example.com")
+
+    checks = validate_readiness(require_runtime_config=True)
+
+    failed = {check.name for check in checks if not check.ok}
+    assert {"runtime.api_base_url", "runtime.github_api_base"} <= failed
+    details = {check.name: check.detail for check in checks}
+    assert "example hosts" in details["runtime.api_base_url"]
+    assert "example hosts" in details["runtime.github_api_base"]
+
+
 def test_release_flow_production_readiness_github_access_preflight_success(monkeypatch) -> None:
     monkeypatch.setenv("API_BASE_URL", "https://release-flow.internal.test/api")
     monkeypatch.setenv("AUTH_EMAIL", "ops@company.test")
