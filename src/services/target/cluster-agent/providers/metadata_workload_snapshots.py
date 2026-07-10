@@ -123,6 +123,7 @@ def current_workload_detail_snapshot(
         "deployment_annotations": safe_annotations(meta),
         "pod_template_annotations": safe_annotations(template_meta),
         "managed_fields_managers": managed_field_managers(deployment),
+        "scheduling_constraints": scheduling_constraints(template_spec),
         "containers": [
             container_detail_snapshot(container, volume_refs)
             for container in list_items(template_spec.get("containers"))
@@ -186,6 +187,55 @@ def persistent_volume_claim_refs(template_spec: JsonObject) -> list[JsonObject]:
                 }
             )
     return refs
+
+
+def scheduling_constraints(template_spec: JsonObject) -> JsonObject:
+    """Return small Pod scheduling constraints for one Deployment."""
+    return {
+        "node_selector": object_or_empty(template_spec.get("nodeSelector")),
+        "tolerations": toleration_snapshots(template_spec.get("tolerations")),
+        "affinity_summary": affinity_summary(template_spec.get("affinity")),
+    }
+
+
+def toleration_snapshots(value: Any) -> list[JsonObject]:
+    """Return small toleration summaries."""
+    tolerations: list[JsonObject] = []
+    for toleration in list_items(value):
+        snapshot = compact_dict(
+            {
+                "key": toleration.get("key"),
+                "operator": toleration.get("operator"),
+                "value": toleration.get("value"),
+                "effect": toleration.get("effect"),
+                "toleration_seconds": toleration.get("tolerationSeconds"),
+            }
+        )
+        if snapshot:
+            tolerations.append(snapshot)
+    return tolerations
+
+
+def affinity_summary(value: Any) -> JsonObject:
+    """Return boolean flags for affinity rules."""
+    affinity = object_or_empty(value)
+    node_affinity = object_or_empty(affinity.get("nodeAffinity"))
+    required_node_affinity = object_or_empty(
+        node_affinity.get("requiredDuringSchedulingIgnoredDuringExecution")
+    )
+    preferred_node_affinity = list_items(
+        node_affinity.get("preferredDuringSchedulingIgnoredDuringExecution")
+    )
+
+    return {
+        "has_node_affinity": bool(node_affinity),
+        "has_required_node_affinity": bool(required_node_affinity),
+        "has_preferred_node_affinity": bool(preferred_node_affinity),
+        "has_pod_affinity": bool(object_or_empty(affinity.get("podAffinity"))),
+        "has_pod_anti_affinity": bool(
+            object_or_empty(affinity.get("podAntiAffinity"))
+        ),
+    }
 
 
 def deployment_status_snapshot(deployment: JsonObject) -> JsonObject:

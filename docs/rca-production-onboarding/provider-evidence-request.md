@@ -67,6 +67,7 @@ RCA는 provider가 보내준 evidence만 보고 symptom, root cause candidate, c
 - owned ReplicaSet revision annotation and replica counts
 - single Deployment detail query의 safe Deployment/Pod template annotations
 - single Deployment detail query의 managedFields manager 목록
+- single Deployment detail query의 scheduling constraints summary
 - single Deployment detail query의 env/envFrom ConfigMap and Secret reference summary
 - single Deployment detail query의 mounted ConfigMap and Secret volume reference summary
 - single Deployment detail query의 ReplicaSet created_at and conditions
@@ -76,7 +77,7 @@ RCA는 provider가 보내준 evidence만 보고 symptom, root cause candidate, c
 - ConfigMap/Secret object metadata summary
 - resource quota
 - 상세 containerStatuses 원본 또는 더 풍부한 요약
-- node pressure / scheduling 관련 detail
+- node pressure / scheduler decision 관련 detail
 
 참고:
 
@@ -270,11 +271,21 @@ detail snapshot은 summary 필드에 아래 필드를 추가로 담는다.
 - change_context.current_workload_snapshot.deployment_annotations
 - change_context.current_workload_snapshot.pod_template_annotations
 - change_context.current_workload_snapshot.managed_fields_managers[]
+- change_context.current_workload_snapshot.scheduling_constraints.node_selector
+- change_context.current_workload_snapshot.scheduling_constraints.tolerations[]
+- change_context.current_workload_snapshot.scheduling_constraints.affinity_summary
 - change_context.current_workload_snapshot.containers[].env_refs
 - change_context.current_workload_snapshot.containers[].env_from_refs
 - change_context.current_workload_snapshot.containers[].volume_mount_refs
 - change_context.current_workload_snapshot.replicaset_revisions[].created_at
 - change_context.current_workload_snapshot.replicaset_revisions[].conditions[]
+
+Scheduling constraints는 단건 detail query에만 담는다.
+전체 summary query는 target namespace의 모든 Deployment를 보내므로 affinity 원본이나 배치 조건을 모두 넣으면
+payload가 커지고 RCA가 읽어야 할 noise가 늘어난다.
+대신 특정 Deployment가 Pending 또는 scheduling 실패 후보일 때 `deployment/<name>` query로 detail을 요청하면,
+`node_selector`는 그대로, `tolerations`는 작은 필드만, `affinity`는 boolean summary만 제공한다.
+이렇게 하면 raw affinity 전체를 노출하지 않으면서도 Node label, taint/toleration, affinity 조건이 있는지 판단할 수 있다.
 
 기본 fallback 값은 `{"change_context": {"current_workload_snapshots": []}}`이다.
 기본 `change_context` query는 target namespace의 모든 Deployment를 목록으로 수집한다.
