@@ -632,6 +632,71 @@ def test_smoke_live_preflight_checks_readiness_without_starting_run() -> None:
     assert readiness_payload["steps"][0]["config"]["approval_gate"] == "manual"
 
 
+
+def test_smoke_live_preflight_can_exercise_safe_pr_gate() -> None:
+    smoke = load_smoke_module()
+    client = FakeClient()
+    args = smoke.parse_args(
+        [
+            "--live-preflight",
+            "--live-approval-gate",
+            "safe_pr",
+            "--live-safe-pr-workflow-run-id",
+            "workflow-safe-pr-1",
+            "--live-safe-pr-url",
+            "https://github.example/org/checkout/pull/7",
+            "--live-change-ticket",
+            "CHG-12345",
+            "--live-runbook-url",
+            "https://wiki.example.test/runbooks/release-flow",
+            "--live-release-owner",
+            "release-team",
+            "--live-image",
+            "ghcr.io/acme/checkout-api:2026.07.10",
+        ]
+    )
+
+    results = smoke.run_smoke(
+        client,
+        "ops@example.com",
+        "password",
+        demo_run=False,
+        live_preflight=True,
+        args=args,
+    )
+
+    assert all(result.ok for result in results)
+    readiness_payload = next(payload for _method, path, payload in client.calls if path == "/release-readiness")
+    assert readiness_payload is not None
+    config = readiness_payload["steps"][0]["config"]
+    assert config["approval_gate"] == "safe_pr"
+    assert config["safe_pr_workflow_run_id"] == "workflow-safe-pr-1"
+    assert config["safe_pr_url"] == "https://github.example/org/checkout/pull/7"
+    assert "safe_pr_ready" not in config
+
+
+def test_smoke_live_preflight_rejects_invalid_safe_pr_evidence_inputs() -> None:
+    smoke = load_smoke_module()
+    args = smoke.parse_args(
+        [
+            "--live-preflight",
+            "--live-approval-gate",
+            "safe_pr",
+            "--live-safe-pr-url",
+            "https://example.com/pull/1",
+        ]
+    )
+
+    try:
+        smoke.validate_live_preflight_inputs(args)
+    except ValueError as exc:
+        message = str(exc)
+    else:
+        raise AssertionError("expected placeholder Safe PR URL rejection")
+
+    assert "live_safe_pr_url must not use example.com placeholder value" in message
+
+
 def test_smoke_live_preflight_rejects_production_placeholders_before_payload() -> None:
     smoke = load_smoke_module()
     args = smoke.parse_args(

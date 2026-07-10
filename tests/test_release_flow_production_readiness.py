@@ -13,9 +13,16 @@ def test_current_release_flow_production_readiness_static_checks_pass() -> None:
     assert all(check.ok for check in checks)
     assert {check.name for check in checks} >= {
         "workflow.smoke.runtime_config_preflight",
+        "workflow.smoke.live_approval_gate",
+        "workflow.smoke.safe_pr_evidence_inputs",
         "script.smoke.live_placeholder_guard",
         "script.smoke.live_image_required",
+        "script.smoke.live_approval_gate",
+        "script.smoke.safe_pr_evidence_inputs",
+        "script.smoke.safe_pr_ready_server_verified",
         "workflow.production_gate.fail_closed",
+        "workflow.production_gate.safe_pr_gate_default",
+        "workflow.production_gate.safe_pr_evidence_inputs",
         "workflow.production_gate.change_ticket_required",
         "workflow.production_gate.runbook_required",
         "workflow.production_gate.owner_required",
