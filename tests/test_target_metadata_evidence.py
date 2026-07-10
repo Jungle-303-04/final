@@ -147,9 +147,7 @@ def test_metadata_provider_collects_one_deployment_snapshot(monkeypatch) -> None
                             "spec": {
                                 "serviceAccountName": "checkout-api-sa",
                                 "automountServiceAccountToken": False,
-                                "imagePullSecrets": [
-                                    {"name": "registry-credentials"}
-                                ],
+                                "imagePullSecrets": [{"name": "registry-credentials"}],
                                 "volumes": [
                                     {
                                         "name": "app-config",
@@ -179,9 +177,7 @@ def test_metadata_provider_collects_one_deployment_snapshot(monkeypatch) -> None
                                     },
                                     {
                                         "name": "checkout-data",
-                                        "persistentVolumeClaim": {
-                                            "claimName": "checkout-data-pvc"
-                                        },
+                                        "persistentVolumeClaim": {"claimName": "checkout-data-pvc"},
                                     },
                                 ],
                                 "nodeSelector": {
@@ -232,9 +228,7 @@ def test_metadata_provider_collects_one_deployment_snapshot(monkeypatch) -> None
                                         "requiredDuringSchedulingIgnoredDuringExecution": [
                                             {
                                                 "labelSelector": {
-                                                    "matchLabels": {
-                                                        "app": "checkout-api"
-                                                    }
+                                                    "matchLabels": {"app": "checkout-api"}
                                                 },
                                                 "topologyKey": "kubernetes.io/hostname",
                                             }
@@ -600,9 +594,7 @@ def test_metadata_provider_collects_one_deployment_snapshot(monkeypatch) -> None
                             "app": "checkout-api",
                             "password": "do-not-include",
                         },
-                        "annotations": {
-                            "ops.service/restarted-at": "do-not-include"
-                        },
+                        "annotations": {"ops.service/restarted-at": "do-not-include"},
                     },
                     "data": {
                         "mode": "do-not-include",
@@ -1346,9 +1338,7 @@ def test_metadata_provider_collects_namespace_deployment_snapshots(monkeypatch) 
                                     "spec": {
                                         "serviceAccountName": "shop-api-sa",
                                         "automountServiceAccountToken": True,
-                                        "imagePullSecrets": [
-                                            {"name": "shop-registry"}
-                                        ],
+                                        "imagePullSecrets": [{"name": "shop-registry"}],
                                         "volumes": [
                                             {
                                                 "name": "shop-config",
@@ -1361,7 +1351,7 @@ def test_metadata_provider_collects_namespace_deployment_snapshots(monkeypatch) 
                                                 "persistentVolumeClaim": {
                                                     "claimName": "shop-data-pvc"
                                                 },
-                                            }
+                                            },
                                         ],
                                         "containers": [
                                             {

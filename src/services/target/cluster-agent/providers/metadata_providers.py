@@ -338,9 +338,7 @@ class MetadataProvider:
                     str(reference.get("name") or ""),
                 ),
             )
-            summaries.append(
-                referenced_config_object_summary(reference, payload, access)
-            )
+            summaries.append(referenced_config_object_summary(reference, payload, access))
         return summaries
 
     def empty_results(self) -> JsonObject:

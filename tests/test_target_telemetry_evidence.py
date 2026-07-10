@@ -153,11 +153,7 @@ def test_loki_logs_redact_sensitive_values_and_add_rca_summaries() -> None:
         }
     )
 
-    lines = [
-        value["line"]
-        for stream in normalized["streams"]
-        for value in stream["values"]
-    ]
+    lines = [value["line"] for stream in normalized["streams"] for value in stream["values"]]
 
     assert lines == [
         f"ERROR readiness probe failed token=[REDACTED] trace_id={trace_id}",
