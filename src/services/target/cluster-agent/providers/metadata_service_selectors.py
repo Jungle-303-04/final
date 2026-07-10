@@ -1,7 +1,14 @@
 from __future__ import annotations
 
 from packages.contracts.event_bus.interfaces import JsonObject
-from providers.kubernetes_utils import compact_dict, metadata, object_or_empty, spec
+from providers.kubernetes_utils import (
+    compact_dict,
+    metadata,
+    object_or_empty,
+    resource_identity_snapshot,
+    resource_sort_key,
+    spec,
+)
 
 SERVICE_SELECTOR_STATUS_MATCHED = "matched"
 SERVICE_SELECTOR_STATUS_NO_MATCHING_PODS = "no_matching_pods"
@@ -111,24 +118,4 @@ def service_target_relation(
         return SERVICE_TARGET_RELATION_SELECTOR_KEY_OVERLAP
 
     return None
-
-
-def resource_identity_snapshot(resource: JsonObject) -> JsonObject:
-    """Return a small resource identity."""
-    meta = metadata(resource)
-    return compact_dict(
-        {
-            "namespace": meta.get("namespace"),
-            "name": meta.get("name"),
-        }
-    )
-
-
-def resource_sort_key(resource: JsonObject) -> tuple[str, str]:
-    """Return a stable sort key for Kubernetes resources."""
-    meta = metadata(resource)
-    return (
-        str(meta.get("namespace") or ""),
-        str(meta.get("name") or ""),
-    )
 
