@@ -92,6 +92,10 @@ class ReleaseFlowStore(Protocol):
 
 
 class WorkflowStore(Protocol):
+    async def get_cluster_registration(
+        self, workspace_id: str, cluster_id: str
+    ) -> JsonObject | None: ...
+
     async def upsert_application(self, payload: JsonObject) -> JsonObject: ...
 
     async def start_workflow_run(self, payload: JsonObject) -> JsonObject: ...

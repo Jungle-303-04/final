@@ -635,6 +635,7 @@ EOF
     --from-literal=TRUSTED_PROXY_AUTH_USER_ID="${TRUSTED_PROXY_AUTH_USER_ID}" \
     --from-literal=TRUSTED_PROXY_AUTH_WORKSPACE_ID="${TRUSTED_PROXY_AUTH_WORKSPACE_ID}" \
     --from-literal=API_ROOT_PATH="${API_ROOT_PATH}" \
+    --from-literal=MANAGEMENT_CLUSTER_ID="${MGMT_CLUSTER}" \
     --from-literal=OUTBOX_RELAY_BATCH="${OUTBOX_RELAY_BATCH:-10}" \
     --from-literal=MANAGEMENT_BASE_URL="http://api-gateway:8000" \
     --from-literal=PUBLIC_BASE_URL="${effective_public_base_url}" \

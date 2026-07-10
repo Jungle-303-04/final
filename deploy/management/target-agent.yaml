@@ -76,7 +76,10 @@ spec:
                   name: target-runtime-secret
                   key: AGENT_TOKEN
             - name: TARGET_CLUSTER_ID
-              value: "management-cluster"
+              valueFrom:
+                configMapKeyRef:
+                  name: management-runtime-config
+                  key: MANAGEMENT_CLUSTER_ID
             - name: CLUSTER_ROLE
               value: "management"
             - name: BOOTSTRAP_MODE

@@ -17,6 +17,10 @@ from domains.identity.dependencies import (
     require_resource_access,
     require_session,
 )
+from domains.target.management_guard import (
+    is_management_registration,
+    management_readonly_detail,
+)
 from domains.target.router import cluster_connection_status
 from packages.contracts.gateway import routes as gateway_routes
 from packages.contracts.gateway.requests import (
@@ -121,6 +125,30 @@ def require_connected_clusters(db: Any, workspace_id: str, cluster_ids: list[str
         )
 
 
+def cluster_registration(db: Any, workspace_id: str, cluster_id: str) -> dict[str, Any] | None:
+    getter = getattr(db, "get_cluster_registration", None)
+    if callable(getter):
+        return getter(workspace_id, cluster_id)
+    lister = getattr(db, "list_cluster_registrations", None)
+    if not callable(lister):
+        return None
+    return next(
+        (
+            registration
+            for registration in lister(workspace_id)
+            if str(registration.get("cluster_id")) == cluster_id
+        ),
+        None,
+    )
+
+
+def require_deployment_target_cluster(db: Any, workspace_id: str, cluster_id: str) -> None:
+    """deployment binding은 target 역할 클러스터만 허용한다."""
+    registration = cluster_registration(db, workspace_id, cluster_id)
+    if is_management_registration(registration):
+        raise HTTPException(status_code=400, detail=management_readonly_detail())
+
+
 def store_repo_token_if_present(db: Any, workspace_id: str, token: str | None) -> str | None:
     """레포 연결 토큰을 워크스페이스 credential vault에 저장하고 ref만 반환."""
     if not token:
@@ -192,6 +220,7 @@ async def connect_application(
 ) -> ApplicationResponse:
     """Repo scan 결과를 서버에서 재검증한 뒤 app + watch + binding 을 원자 등록."""
     workspace_id = getattr(current, "workspace_id", DEFAULT_WORKSPACE_ID)
+    require_deployment_target_cluster(db, workspace_id, payload.cluster_id)
     require_cluster_access(
         db,
         current,
@@ -334,6 +363,7 @@ async def upsert_application_deployment(
         Permission.APPLICATION_MANAGE.value,
     )
     if payload.cluster_id != GLOBAL_CLUSTER_SELECTOR:
+        require_deployment_target_cluster(db, workspace_id, payload.cluster_id)
         require_cluster_access(
             db,
             current,
@@ -355,7 +385,11 @@ async def upsert_application_deployment(
     # 각 바인딩에 deploy_policy.global 이 남아 (a) 웹훅 fan-out 대상이 되고
     # (b) 신규 클러스터 등록 시 workflow-controller 가 자동으로 합류시킨다.
     if payload.cluster_id == GLOBAL_CLUSTER_SELECTOR:
-        clusters = db.list_cluster_registrations(workspace_id)
+        clusters = [
+            cluster
+            for cluster in db.list_cluster_registrations(workspace_id)
+            if not is_management_registration(cluster)
+        ]
         if not clusters:
             raise HTTPException(status_code=422, detail=NO_CLUSTERS_FOR_GLOBAL_BINDING)
         # 전 대상 클러스터 deploy 권한을 먼저 검증 — 하나라도 없으면 아무것도 만들지 않음.

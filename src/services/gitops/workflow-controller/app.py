@@ -41,6 +41,7 @@ from domains.gitops.repository import (
 )
 from domains.scm.events import SafePrCreatedBody, SafePrFailedBody
 from domains.target.events import ClusterDesiredStateChangedBody
+from domains.target.management_guard import is_management_registration
 from packages.config.constants import CommandStatus, Sandbox, Target
 from packages.config.logs import get_logger
 from packages.contracts.event_bus.bodies import EventBody
@@ -955,6 +956,15 @@ async def fanout_global_bindings(
             continue
         if not binding_policy(binding).get(GLOBAL_BINDING_KEY):
             continue
+        registration = await ctx.db.get_cluster_registration(
+            evt.workspace_id, str(binding["cluster_id"])
+        )
+        if is_management_registration(registration):
+            LOGGER.warning(
+                "global_binding_management_skipped",
+                extra={"context": {"binding_id": binding["binding_id"]}},
+            )
+            continue
         if await run_exists_for(
             ctx,
             workspace_id=evt.workspace_id,
@@ -992,6 +1002,13 @@ async def on_cluster_registered_attach_globals(
     """신규 클러스터 합류 — 글로벌 그룹의 바인딩을 자동 생성하고, 템플릿 바인딩의
     최근 성공 run 이 있으면 그 commit·image 로 초기 배포 파이프라인을 연다."""
     if evt.reason != CLUSTER_REGISTERED_REASON:
+        return
+    registration = await ctx.db.get_cluster_registration(evt.workspace_id, evt.cluster_id)
+    if is_management_registration(registration):
+        LOGGER.info(
+            "global_binding_management_attach_skipped",
+            extra={"context": {"cluster_id": evt.cluster_id}},
+        )
         return
     bindings = await ctx.db.list_workspace_deployment_bindings(evt.workspace_id) or []
     global_bindings = [b for b in bindings if binding_policy(b).get(GLOBAL_BINDING_KEY)]
