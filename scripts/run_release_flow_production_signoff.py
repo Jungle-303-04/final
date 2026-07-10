@@ -19,6 +19,8 @@ try:
         DEPLOY_WORKFLOW,
         READINESS_WORKFLOW,
         GitHubEvidenceError,
+        github_api_url,
+        github_json,
     )
     from verify_release_flow_production_evidence import (
         main as verify_evidence_main,
@@ -30,6 +32,8 @@ except ImportError:  # pragma: no cover - used when imported as scripts.*
         DEPLOY_WORKFLOW,
         READINESS_WORKFLOW,
         GitHubEvidenceError,
+        github_api_url,
+        github_json,
     )
     from scripts.verify_release_flow_production_evidence import (
         main as verify_evidence_main,
@@ -63,6 +67,11 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
         "--skip-local-sha-check",
         action="store_true",
         help="Skip checking that the local git checkout matches --github-sha.",
+    )
+    parser.add_argument(
+        "--skip-github-branch-sha-check",
+        action="store_true",
+        help="Skip checking that --github-branch currently points at --github-sha.",
     )
     parser.add_argument("--environment", default="production", help="GitHub Environment input.")
     parser.add_argument("--timeout-seconds", type=int, default=1800)
@@ -152,6 +161,36 @@ def current_git_sha() -> str:
     except (OSError, subprocess.SubprocessError):
         return ""
     return result.stdout.strip()
+
+
+def github_branch_head_sha(args: argparse.Namespace, token: str) -> str:
+    branch = str(args.github_branch or "").strip()
+    if branch.startswith("refs/heads/"):
+        branch = branch.removeprefix("refs/heads/")
+    if not branch:
+        raise GitHubEvidenceError("--github-branch is required for production sign-off")
+    branch_ref = urllib.parse.quote(branch, safe="/")
+    payload = github_json(
+        github_api_url(args.github_api_base, args.github_repo, f"git/ref/heads/{branch_ref}"),
+        token,
+    )
+    ref_object = payload.get("object") if isinstance(payload.get("object"), dict) else {}
+    sha = str(ref_object.get("sha") or "").strip()
+    if not sha:
+        raise GitHubEvidenceError(f"GitHub branch {args.github_branch} did not report a head sha")
+    return sha
+
+
+def verify_github_branch_sha(args: argparse.Namespace, token: str) -> None:
+    if args.skip_github_branch_sha_check:
+        return
+    expected_sha = str(args.github_sha or "").strip()
+    actual_sha = github_branch_head_sha(args, token)
+    if actual_sha != expected_sha:
+        raise GitHubEvidenceError(
+            f"GitHub branch {args.github_branch} head {actual_sha} must match --github-sha {expected_sha}"
+        )
+    print(f"ok signoff.branch: {args.github_branch} matches {expected_sha}")
 
 
 def validate_signoff_inputs(args: argparse.Namespace) -> list[str]:
@@ -365,6 +404,7 @@ def main(argv: list[str]) -> int:
         return 2
 
     try:
+        verify_github_branch_sha(args, token)
         started_after = datetime.now(UTC) - timedelta(seconds=10)
         readiness_run = dispatch_and_wait(
             args=args,
