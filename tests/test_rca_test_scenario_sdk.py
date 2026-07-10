@@ -70,6 +70,15 @@ def test_only_live_completed_scenario_is_ready() -> None:
     assert ready_ids == {"image.wrong-tag"}
 
 
+def test_executable_but_unverified_scenarios_are_verification_pending() -> None:
+    scenarios = {scenario.scenario_id: scenario for scenario in load_test_scenario_catalog()}
+
+    assert scenarios["image.registry-down"].availability == "verification_pending"
+    assert scenarios["schedule.affinity"].availability == "verification_pending"
+    assert scenarios["image.registry-down"].verification_work_needed
+    assert scenarios["schedule.affinity"].verification_work_needed
+
+
 def test_ready_scenarios_have_executable_trigger_fault_observe_and_cleanup() -> None:
     registry = default_test_scenario_adapter_registry()
 

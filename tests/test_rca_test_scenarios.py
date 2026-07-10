@@ -79,10 +79,13 @@ def _catalog_items() -> list[dict[str, Any]]:
 
 
 class _SessionAuth:
+    def __init__(self, roles: tuple[str, ...] = ("release_operator",)) -> None:
+        self.roles = roles
+
     async def require_session(self, _request: Any) -> SimpleNamespace:
         return SimpleNamespace(
             user_id="developer-1",
-            roles=("release_operator",),
+            roles=self.roles,
             workspace_id="workspace-1",
         )
 
@@ -196,7 +199,11 @@ class _TestRunEvents:
         )
 
 
-def _client(monkeypatch: pytest.MonkeyPatch) -> tuple[TestClient, _TestRunDb, _TestRunEvents]:
+def _client(
+    monkeypatch: pytest.MonkeyPatch,
+    *,
+    roles: tuple[str, ...] = ("release_operator",),
+) -> tuple[TestClient, _TestRunDb, _TestRunEvents]:
     # 테스트 장애 주입 API는 명시적인 test 환경 + enable flag + 전용 토큰에서만 열린다.
     monkeypatch.setenv("APP_ENV", "test")
     monkeypatch.setenv("RCA_TEST_RUNS_ENABLED", "1")
@@ -207,7 +214,7 @@ def _client(monkeypatch: pytest.MonkeyPatch) -> tuple[TestClient, _TestRunDb, _T
     events = _TestRunEvents()
     app = FastAPI()
     app.include_router(rca_router)
-    app.state.auth = _SessionAuth()
+    app.state.auth = _SessionAuth(roles)
     app.state.db = db
     app.state.events = events
     return TestClient(app), db, events
@@ -232,7 +239,12 @@ def test_scenario_catalog_covers_every_registered_root_cause_with_safe_schema() 
         assert item["scenario_id"]
         assert isinstance(item["version"], int) and item["version"] >= 1
         assert item["execution"] in {"real", "hybrid", "external"}
-        assert item["availability"] in {"ready", "fixture_required", "detector_gap"}
+        assert item["availability"] in {
+            "ready",
+            "verification_pending",
+            "fixture_required",
+            "detector_gap",
+        }
         assert item["expected"]["root_cause"]
         assert item["expected"]["symptom"]
         if item["availability"] == "ready":
@@ -408,9 +420,16 @@ def test_scenario_list_openapi_uses_a_typed_item_model(
     )
     assert set(scenario_schema["properties"]["availability"]["enum"]) == {
         "ready",
+        "verification_pending",
         "fixture_required",
         "detector_gap",
     }
+
+    post_parameters = schema["paths"][TEST_RUNS_PATH]["post"]["parameters"]
+    assert any(
+        item["in"] == "header" and item["name"] == "x-rca-test-verification"
+        for item in post_parameters
+    )
 
 
 def test_test_run_request_needs_only_cluster_and_scenario() -> None:
@@ -474,6 +493,50 @@ def test_post_test_run_accepts_minimal_ready_scenario(monkeypatch: pytest.Monkey
     assert nested["expected_root_cause"] == "wrong_image_tag"
     assert nested["expected_symptom"] == "ImagePullBackOff"
     assert nested["expires_at"] == command["payload"]["expires_at"] == body["cleanup_at"]
+    assert nested["cleanup_adapter"] == "kubernetes.manifest_delete"
+    assert nested["verification_mode"] is False
+    assert body["verification_mode"] is False
+
+
+def test_verification_pending_scenario_needs_admin_and_explicit_header(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    client, db, _events = _client(monkeypatch)
+    payload = {"cluster_id": "cluster-1", "scenario_id": "image.registry-down"}
+
+    without_header = client.post(TEST_RUNS_PATH, headers=_test_headers(), json=payload)
+    non_admin = client.post(
+        TEST_RUNS_PATH,
+        headers={**_test_headers(), "x-rca-test-verification": "true"},
+        json=payload,
+    )
+
+    assert without_header.status_code == 409
+    assert non_admin.status_code == 403
+    assert db.commands == {}
+
+
+def test_admin_can_run_verification_pending_scenario_without_marking_it_ready(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    client, db, _events = _client(monkeypatch, roles=("service_admin",))
+
+    response = client.post(
+        TEST_RUNS_PATH,
+        headers={**_test_headers(), "x-rca-test-verification": "true"},
+        json={"cluster_id": "cluster-1", "scenario_id": "image.registry-down"},
+    )
+
+    assert response.status_code == 202
+    body = response.json()
+    assert body["verification_mode"] is True
+    command = db.commands[body["command_id"]]
+    nested = command["payload"]["payload"]
+    assert nested["verification_mode"] is True
+    assert nested["cleanup_adapter"] == "kubernetes.manifest_delete"
+    catalog = client.get(TEST_SCENARIOS_PATH, headers=_test_headers()).json()["items"]
+    scenario = next(item for item in catalog if item["scenario_id"] == "image.registry-down")
+    assert scenario["availability"] == "verification_pending"
 
 
 def test_concurrent_test_run_requests_reserve_one_target_atomically(
@@ -553,6 +616,13 @@ def test_detector_gap_scenario_cannot_be_triggered(monkeypatch: pytest.MonkeyPat
 
     assert response.status_code == 409
     assert events.accepted == []
+
+    verification_response = client.post(
+        TEST_RUNS_PATH,
+        headers={**_test_headers(), "x-rca-test-verification": "true"},
+        json={"cluster_id": "cluster-1", "scenario_id": detector_gap["scenario_id"]},
+    )
+    assert verification_response.status_code == 409
 
 
 def test_test_run_can_be_polled_and_cleanup_is_a_separate_safe_command(
