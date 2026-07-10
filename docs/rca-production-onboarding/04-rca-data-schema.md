@@ -241,6 +241,8 @@ DB table schema가 아니라 `EvidenceItem.value`에 들어가는 JSON 계약이
 | `traces:related_traces` | `ClusterEvidenceReceivedBody.traces` | trace/span 기반 dependency, timeout, error path 근거 |
 | `metadata:current_workload_snapshots` | `metadata.current_workload_snapshots` 또는 `metadata.change_context.current_workload_snapshots` | target namespace의 Deployment metadata snapshot 목록 |
 | `metadata:current_workload_snapshot` | `metadata.current_workload_snapshot` 또는 `metadata.change_context.current_workload_snapshot` | 특정 Deployment 1개의 metadata snapshot |
+| `metadata:service_selector_matches` | `metadata.service_selector_matches` 또는 `metadata.change_context.service_selector_matches` | Service selector와 Pod labels 매칭 결과 |
+| `metadata:endpoint_slice_ready_endpoints` | `metadata.endpoint_slice_ready_endpoints` 또는 `metadata.change_context.endpoint_slice_ready_endpoints` | EndpointSlice ready endpoint 요약 |
 
 #### `kubernetes:cluster_resource_state`
 
@@ -546,6 +548,8 @@ RCA bundle builder는 이 값을 다음 evidence item으로 승격한다.
 ```text
 metadata:current_workload_snapshots
 metadata:current_workload_snapshot
+metadata:service_selector_matches
+metadata:endpoint_slice_ready_endpoints
 ```
 
 Git commit, rollback 가능 여부, risk level, 실제 배포 이력은 이 schema의 필수 근거가 아니다.
