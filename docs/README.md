@@ -351,6 +351,7 @@ Target / Telemetry 선형 작업 문서는 아래에 있다.
 - [spec/frontend/repo](spec/frontend/repo.md)
 - [spec/frontend/resources](spec/frontend/resources.md)
 - [spec/frontend/shared](spec/frontend/shared.md)
+- [spec/frontend/topology-engine](spec/frontend/topology-engine.md)
 - [spec/frontend/workflow](spec/frontend/workflow.md)
 - [spec/packages/ai](spec/packages/ai.md)
 - [spec/packages/config](spec/packages/config.md)
