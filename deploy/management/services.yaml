@@ -505,6 +505,9 @@ spec:
                 name: management-runtime-config
             - secretRef:
                 name: management-runtime-secret
+          env:
+            - name: WORKER_FETCH_TIMEOUT_SECONDS
+              value: "0.05"
 ---
 apiVersion: apps/v1
 kind: Deployment
