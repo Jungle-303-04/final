@@ -7,6 +7,8 @@ from pathlib import Path
 
 import httpx
 
+from packages.contracts.gateway.requests import EvidenceJobResultRequest
+
 ROOT_DIR = Path(__file__).resolve().parents[1]
 TARGET_AGENT_DIR = ROOT_DIR / "src" / "services" / "target" / "cluster-agent"
 
@@ -21,6 +23,7 @@ def load_metadata_modules():
         "span.otel",
         "providers",
         "providers.base",
+        "providers.collection_limits",
         "providers.kubernetes_utils",
         "providers.kubernetes_providers",
         "providers.loki_providers",
@@ -52,6 +55,263 @@ def load_metadata_modules():
             sys.modules.pop(name, None)
             if previous_modules[name] is not None:
                 sys.modules[name] = previous_modules[name]
+
+
+def test_metadata_query_target_accepts_namespace_query() -> None:
+    _module, metadata_module = load_metadata_modules()
+
+    target = metadata_module.metadata_query_target(
+        metadata_module.MetadataSnapshotQuery(
+            "rca_test_metadata_snapshot",
+            "RCA test run scoped metadata snapshot",
+            "sandbox",
+        )
+    )
+
+    assert target.namespace == "sandbox"
+    assert target.deployment_name is None
+
+
+def test_metadata_normalize_limits_large_namespace_lists() -> None:
+    _module, metadata_module = load_metadata_modules()
+    provider = metadata_module.MetadataProvider(cluster_id="cluster-1")
+
+    normalized = provider.normalize_payload(
+        {
+            metadata_module.CHANGE_CONTEXT_KEY: {
+                metadata_module.CURRENT_WORKLOAD_SNAPSHOTS_KEY: [
+                    {"workload": {"name": f"app-{index}"}}
+                    for index in range(metadata_module.MAX_CURRENT_WORKLOAD_SNAPSHOTS + 2)
+                ],
+                metadata_module.SERVICE_SELECTOR_MATCHES_KEY: [
+                    {"service": {"name": f"svc-{index}"}}
+                    for index in range(metadata_module.MAX_SERVICE_SELECTOR_MATCHES + 1)
+                ],
+                metadata_module.ENDPOINT_SLICE_READY_ENDPOINTS_KEY: [
+                    {"endpoint_slice": {"name": f"slice-{index}"}}
+                    for index in range(
+                        metadata_module.MAX_ENDPOINT_SLICE_READY_ENDPOINTS + 1
+                    )
+                ],
+                metadata_module.RESOURCE_QUOTAS_KEY: [
+                    {"name": f"quota-{index}"}
+                    for index in range(metadata_module.MAX_RESOURCE_QUOTAS + 1)
+                ],
+            }
+        },
+        metadata_module.MetadataSnapshotQuery(
+            "change_context",
+            "Namespace metadata snapshots.",
+            "change_context",
+        ),
+    )
+
+    assert len(normalized[metadata_module.CURRENT_WORKLOAD_SNAPSHOTS_KEY]) == (
+        metadata_module.MAX_CURRENT_WORKLOAD_SNAPSHOTS
+    )
+    assert len(normalized[metadata_module.SERVICE_SELECTOR_MATCHES_KEY]) == (
+        metadata_module.MAX_SERVICE_SELECTOR_MATCHES
+    )
+    assert len(normalized[metadata_module.ENDPOINT_SLICE_READY_ENDPOINTS_KEY]) == (
+        metadata_module.MAX_ENDPOINT_SLICE_READY_ENDPOINTS
+    )
+    assert len(normalized[metadata_module.RESOURCE_QUOTAS_KEY]) == (
+        metadata_module.MAX_RESOURCE_QUOTAS
+    )
+    assert normalized[metadata_module.COLLECTION_LIMITS_KEY] == {
+        "truncated": True,
+        "lists": {
+            metadata_module.CURRENT_WORKLOAD_SNAPSHOTS_KEY: {
+                "truncated": True,
+                "original_count": metadata_module.MAX_CURRENT_WORKLOAD_SNAPSHOTS + 2,
+                "returned_count": metadata_module.MAX_CURRENT_WORKLOAD_SNAPSHOTS,
+            },
+            metadata_module.SERVICE_SELECTOR_MATCHES_KEY: {
+                "truncated": True,
+                "original_count": metadata_module.MAX_SERVICE_SELECTOR_MATCHES + 1,
+                "returned_count": metadata_module.MAX_SERVICE_SELECTOR_MATCHES,
+            },
+            metadata_module.ENDPOINT_SLICE_READY_ENDPOINTS_KEY: {
+                "truncated": True,
+                "original_count": (
+                    metadata_module.MAX_ENDPOINT_SLICE_READY_ENDPOINTS + 1
+                ),
+                "returned_count": metadata_module.MAX_ENDPOINT_SLICE_READY_ENDPOINTS,
+            },
+            metadata_module.RESOURCE_QUOTAS_KEY: {
+                "truncated": True,
+                "original_count": metadata_module.MAX_RESOURCE_QUOTAS + 1,
+                "returned_count": metadata_module.MAX_RESOURCE_QUOTAS,
+            },
+        },
+    }
+
+
+def test_metadata_normalize_can_drop_single_oversized_top_level_item() -> None:
+    _module, metadata_module = load_metadata_modules()
+    provider = metadata_module.MetadataProvider(cluster_id="cluster-1")
+
+    normalized = provider.normalize_payload(
+        {
+            metadata_module.CHANGE_CONTEXT_KEY: {
+                metadata_module.CURRENT_WORKLOAD_SNAPSHOTS_KEY: [
+                    {
+                        "workload": {"kind": "Deployment", "namespace": "target", "name": "app"},
+                        "deployment_labels": {"large": "x" * 1_100_000},
+                    }
+                ]
+            }
+        },
+        metadata_module.MetadataSnapshotQuery(
+            "change_context",
+            "Namespace metadata snapshots.",
+            "change_context",
+        ),
+    )
+
+    assert normalized[metadata_module.CURRENT_WORKLOAD_SNAPSHOTS_KEY] == []
+    assert normalized[metadata_module.COLLECTION_LIMITS_KEY]["lists"][
+        metadata_module.CURRENT_WORKLOAD_SNAPSHOTS_KEY
+    ] == {
+        "truncated": True,
+        "original_count": 1,
+        "returned_count": 0,
+    }
+    EvidenceJobResultRequest(
+        agent_id="agent-1",
+        lease_id="lease-1",
+        status="completed",
+        result={"metadata": {metadata_module.CHANGE_CONTEXT_KEY: normalized}},
+    )
+
+
+def test_endpoint_slice_omitted_ready_condition_defaults_to_ready() -> None:
+    _module, metadata_module = load_metadata_modules()
+
+    snapshots = metadata_module.endpoint_slice_ready_endpoint_snapshots(
+        [
+            {
+                "metadata": {
+                    "namespace": "sandbox",
+                    "name": "checkout-api-abc",
+                    "labels": {"kubernetes.io/service-name": "checkout-api"},
+                },
+                "addressType": "IPv4",
+                "endpoints": [
+                    {
+                        "conditions": {},
+                        "targetRef": {
+                            "kind": "Pod",
+                            "namespace": "sandbox",
+                            "name": "checkout-api-pod-1",
+                        },
+                    }
+                ],
+            }
+        ]
+    )
+
+    assert snapshots == [
+        {
+            "service": {"namespace": "sandbox", "name": "checkout-api"},
+            "endpoint_slice": {"namespace": "sandbox", "name": "checkout-api-abc"},
+            "address_type": "IPv4",
+            "endpoint_count": 1,
+            "ready_endpoint_count": 1,
+            "not_ready_endpoint_count": 0,
+            "unknown_ready_endpoint_count": 0,
+            "serving_endpoint_count": 1,
+            "terminating_endpoint_count": 0,
+            "ready_targets": [
+                {
+                    "kind": "Pod",
+                    "namespace": "sandbox",
+                    "name": "checkout-api-pod-1",
+                }
+            ],
+        }
+    ]
+
+
+def test_metadata_ownership_requires_uid_when_owner_uid_is_available() -> None:
+    _module, metadata_module = load_metadata_modules()
+    deployment = {
+        "metadata": {
+            "namespace": "sandbox",
+            "name": "checkout-api",
+            "uid": "deployment-current",
+        }
+    }
+    current_replicaset = {
+        "metadata": {
+            "namespace": "sandbox",
+            "name": "checkout-api-abc",
+            "uid": "replicaset-current",
+            "ownerReferences": [
+                {
+                    "kind": "Deployment",
+                    "name": "checkout-api",
+                    "uid": "deployment-current",
+                }
+            ],
+        }
+    }
+    stale_replicaset = {
+        "metadata": {
+            "namespace": "sandbox",
+            "name": "checkout-api-old",
+            "uid": "replicaset-old",
+            "ownerReferences": [
+                {
+                    "kind": "Deployment",
+                    "name": "checkout-api",
+                    "uid": "deployment-old",
+                }
+            ],
+        }
+    }
+    current_pod = {
+        "metadata": {
+            "namespace": "sandbox",
+            "name": "checkout-api-pod-1",
+            "ownerReferences": [
+                {
+                    "kind": "ReplicaSet",
+                    "name": "checkout-api-abc",
+                    "uid": "replicaset-current",
+                }
+            ],
+        }
+    }
+    stale_pod = {
+        "metadata": {
+            "namespace": "sandbox",
+            "name": "checkout-api-pod-old",
+            "ownerReferences": [
+                {
+                    "kind": "ReplicaSet",
+                    "name": "checkout-api-abc",
+                    "uid": "replicaset-old",
+                }
+            ],
+        }
+    }
+
+    owned_pods = metadata_module.pods_for_deployment(
+        deployment,
+        [current_replicaset, stale_replicaset],
+        [current_pod, stale_pod],
+    )
+    assert [pod["metadata"]["name"] for pod in owned_pods] == ["checkout-api-pod-1"]
+
+    assert (
+        metadata_module.pods_for_deployment(
+            deployment,
+            [current_replicaset],
+            [stale_pod],
+        )
+        == []
+    )
 
 
 def test_metadata_provider_collects_one_deployment_snapshot(monkeypatch) -> None:
@@ -723,7 +983,7 @@ def test_metadata_provider_collects_one_deployment_snapshot(monkeypatch) -> None
             "ready_endpoint_count": 1,
             "not_ready_endpoint_count": 0,
             "unknown_ready_endpoint_count": 0,
-            "serving_endpoint_count": 0,
+            "serving_endpoint_count": 1,
             "terminating_endpoint_count": 0,
             "ready_targets": [
                 {
@@ -1247,7 +1507,7 @@ def test_metadata_provider_collects_service_matches_without_deployments(
                 "ready_endpoint_count": 1,
                 "not_ready_endpoint_count": 0,
                 "unknown_ready_endpoint_count": 0,
-                "serving_endpoint_count": 0,
+                "serving_endpoint_count": 1,
                 "terminating_endpoint_count": 0,
                 "ready_targets": [
                     {

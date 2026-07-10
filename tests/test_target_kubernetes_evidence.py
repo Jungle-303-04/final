@@ -7,7 +7,7 @@ from pathlib import Path
 
 import httpx
 
-from packages.contracts.gateway.requests import AgentEvidenceRequest
+from packages.contracts.gateway.requests import AgentEvidenceRequest, EvidenceJobResultRequest
 
 ROOT_DIR = Path(__file__).resolve().parents[1]
 TARGET_AGENT_DIR = ROOT_DIR / "src" / "services" / "target" / "cluster-agent"
@@ -23,6 +23,7 @@ def load_evidence_modules():
         "span.otel",
         "providers",
         "providers.base",
+        "providers.collection_limits",
         "providers.kubernetes_utils",
         "providers.kubernetes_providers",
         "providers.loki_providers",
@@ -677,3 +678,103 @@ def test_regular_kubernetes_snapshot_excludes_scaled_down_replicaset_history() -
         "orders-api-current",
         "orders-api-terminating",
     ]
+
+
+def test_kubernetes_snapshot_provider_limits_large_payload_before_job_result() -> None:
+    _module, kubernetes_module = load_evidence_modules()
+    provider = kubernetes_module.KubernetesSnapshotProvider(cluster_id="cluster-1")
+    results = provider.empty_results()
+    results["pods"] = [
+        {
+            "uid": f"pod-{index}",
+            "name": f"pod-{index}",
+            "namespace": "target" if index % 2 == 0 else "sandbox",
+            "containers": [
+                {
+                    "name": "app",
+                    "container_id": f"containerd://container-{index}",
+                    "image": f"example/app:{index}",
+                    "image_id": f"docker-pullable://example/app@sha256:{index:064x}",
+                    "restart_count": index % 3,
+                }
+            ],
+        }
+        for index in range(1500)
+    ]
+
+    limited = provider.build_response(results)
+
+    assert len(limited["pods"]) < 1500
+    assert {item["namespace"] for item in limited["pods"]} == {"target", "sandbox"}
+    assert limited["collection_limits"]["truncated"] is True
+    assert limited["collection_limits"]["lists"]["pods"] == {
+        "truncated": True,
+        "original_count": 1500,
+        "returned_count": len(limited["pods"]),
+    }
+    EvidenceJobResultRequest(
+        agent_id="agent-1",
+        lease_id="lease-1",
+        status="completed",
+        result={"kubernetes": limited},
+    )
+
+
+def test_kubernetes_snapshot_provider_limits_by_payload_bytes() -> None:
+    _module, kubernetes_module = load_evidence_modules()
+    provider = kubernetes_module.KubernetesSnapshotProvider(cluster_id="cluster-1")
+    results = provider.empty_results()
+    results["pods"] = [
+        {
+            "uid": f"pod-{index}",
+            "name": f"pod-{index}",
+            "namespace": "target",
+            "message": "x" * 80_000,
+            "containers": [],
+        }
+        for index in range(20)
+    ]
+
+    limited = provider.build_response(results)
+
+    assert len(limited["pods"]) < 20
+    assert limited["collection_limits"]["lists"]["pods"]["original_count"] == 20
+    assert limited["collection_limits"]["lists"]["pods"]["returned_count"] == len(
+        limited["pods"]
+    )
+    EvidenceJobResultRequest(
+        agent_id="agent-1",
+        lease_id="lease-1",
+        status="completed",
+        result={"kubernetes": limited},
+    )
+
+
+def test_kubernetes_snapshot_provider_can_drop_single_oversized_list_item() -> None:
+    _module, kubernetes_module = load_evidence_modules()
+    provider = kubernetes_module.KubernetesSnapshotProvider(cluster_id="cluster-1")
+    results = provider.empty_results()
+    results["pods"] = [
+        {
+            "uid": "pod-1",
+            "name": "pod-1",
+            "namespace": "target",
+            "message": "x" * 1_100_000,
+            "containers": [],
+        }
+    ]
+
+    limited = provider.build_response(results)
+
+    assert limited["pods"] == []
+    assert limited["collection_limits"]["lists"]["pods"] == {
+        "truncated": True,
+        "original_count": 1,
+        "returned_count": 0,
+    }
+    EvidenceJobResultRequest(
+        agent_id="agent-1",
+        lease_id="lease-1",
+        status="completed",
+        result={"kubernetes": limited},
+    )

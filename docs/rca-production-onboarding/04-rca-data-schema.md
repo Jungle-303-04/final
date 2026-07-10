@@ -241,6 +241,8 @@ DB table schema가 아니라 `EvidenceItem.value`에 들어가는 JSON 계약이
 | `traces:related_traces` | `ClusterEvidenceReceivedBody.traces` | trace/span 기반 dependency, timeout, error path 근거 |
 | `metadata:current_workload_snapshots` | `metadata.current_workload_snapshots` 또는 `metadata.change_context.current_workload_snapshots` | target namespace의 Deployment metadata snapshot 목록 |
 | `metadata:current_workload_snapshot` | `metadata.current_workload_snapshot` 또는 `metadata.change_context.current_workload_snapshot` | 특정 Deployment 1개의 metadata snapshot |
+| `metadata:service_selector_matches` | `metadata.service_selector_matches` 또는 `metadata.change_context.service_selector_matches` | Service selector와 Pod labels 매칭 결과 |
+| `metadata:endpoint_slice_ready_endpoints` | `metadata.endpoint_slice_ready_endpoints` 또는 `metadata.change_context.endpoint_slice_ready_endpoints` | EndpointSlice ready endpoint 요약 |
 
 #### `kubernetes:cluster_resource_state`
 
@@ -371,15 +373,19 @@ RCA evidence item:
 | `entries[].streams` | list<object> | entry 안의 stream을 최대 4개 남긴다. |
 | `entries[].streams[].values` | list<object> | stream 안의 sample을 최대 20개 남긴다. |
 | `entries[].streams[].values[].line` | string | provider가 민감정보를 마스킹한 log line을 최대 1600자로 자른다. |
+| `entries[].streams[].values[].line_truncated` | boolean | provider 단계에서 line이 4096자 제한으로 잘렸으면 true다. |
+| `entries[].streams[].values[].original_line_length` | number | provider 단계에서 line이 잘렸을 때의 제한 전 마스킹된 line 길이다. |
 | `entries[].line_count` | number | namespace 필터 후 남은 stream value 개수를 계산한다. |
 | `entries[].pattern_counts` | object | provider가 수집 시 계산한 장애 pattern별 line 개수다. namespace 필터 후 다시 계산하지 않는다. |
 | `entries[].severity_counts` | object | provider가 수집 시 계산한 severity별 line 개수다. namespace 필터 후 다시 계산하지 않는다. |
 | `entries[].trace_ids` | list<string> | provider가 수집 시 추출한 안전한 trace id 목록이다. namespace 필터 후 다시 계산하지 않는다. |
-| `entries[].redaction_summary` | object | provider redaction 적용 여부와 redacted line 개수다. namespace 필터 후 다시 계산하지 않는다. |
+| `entries[].redaction_summary` | object | provider redaction 적용 여부, redacted line 개수, truncated line 개수다. namespace 필터 후 다시 계산하지 않는다. |
 
 Loki provider는 RCA가 로그 문맥을 읽을 수 있도록 `line` 필드는 유지한다.
 하지만 원문 그대로 보내지 않고 `password`, `token`, `secret`, `Authorization`, `Cookie`, JWT 같은
 민감값을 `[REDACTED]` 계열 문자열로 바꾼 뒤 전달한다.
+provider는 evidence job result 크기 보호를 위해 line을 최대 4096자로 먼저 제한하고,
+RCA bundle compact 단계는 다시 최대 1600자로 줄인다.
 
 namespace 필터:
 
@@ -424,6 +430,8 @@ RCA evidence item:
 | `summary` | object | `results`가 없으면 payload 요약으로 대체한다. |
 
 `results.<query_name>`은 list를 최대 8개까지 남기고, 긴 문자열은 최대 1600자로 자른다.
+provider 단계에서도 trace 내부 긴 문자열은 최대 1024자로 제한되고, 중첩 list는 최대 20개만 남는다.
+한 trace가 계속 너무 크면 provider가 `trace_truncated`, `original_trace_bytes`를 붙인 RCA용 summary로 대체할 수 있다.
 provider 원본 payload의 `results.<query_name>.analysis`는 nested object다.
 현재 RCA evidence bundle compact 단계에서는 nested dict/list 규칙에 따라 요약될 수 있다.
 원본 evidence에는 `trace_summaries`, `trace_ids`, `services`, `operations`,
@@ -469,17 +477,23 @@ RCA evidence item:
 | `workload.namespace` | string | workload namespace다. |
 | `workload.name` | string | workload 이름이다. |
 | `deployment_labels` | object | Deployment labels다. |
-| `deployment_annotations` | object | 안전한 Deployment annotations만 남긴다. |
 | `pod_template_labels` | object | Pod template labels다. |
-| `pod_template_annotations` | object | 안전한 Pod template annotations만 남긴다. |
-| `managed_fields_managers` | list<string> | Deployment managedFields manager 이름 목록이다. |
+| `pod_template_auth` | object | serviceAccountName, automountServiceAccountToken, imagePullSecrets name 요약이다. |
+| `persistent_volume_claim_refs` | list<object> | Pod template volume이 참조하는 PVC claim name 요약이다. |
+| `deployment_status` | object | Deployment replica count와 condition 요약이다. |
+| `pod_statuses` | list<object> | owned Pod phase, ready, condition 샘플 요약이다. |
 | `containers[].name` | string | container 이름이다. |
 | `containers[].image` | string | 현재 cluster에서 보이는 container image다. |
 | `containers[].readiness_probe` | object | readiness probe 요약이다. |
 | `containers[].liveness_probe` | object | liveness probe 요약이다. |
 | `containers[].startup_probe` | object | startup probe 요약이다. |
+| `containers[].resources` | object | requests/limits 요약이다. |
 | `replicaset_revisions[].name` | string | Deployment가 소유한 ReplicaSet 이름이다. |
 | `replicaset_revisions[].revision` | string | `deployment.kubernetes.io/revision` 값이다. |
+| `pod_status_count` | number | `pod_statuses`가 샘플로 잘렸을 때만 있는 전체 Pod 수다. |
+| `pod_statuses_truncated` | boolean | `pod_statuses`가 샘플로 잘렸을 때 true다. |
+| `replicaset_revision_count` | number | `replicaset_revisions`가 샘플로 잘렸을 때만 있는 전체 ReplicaSet 수다. |
+| `replicaset_revisions_truncated` | boolean | `replicaset_revisions`가 샘플로 잘렸을 때 true다. |
 
 probe summary:
 
@@ -526,8 +540,11 @@ RCA evidence item:
 }
 ```
 
-`value`는 `current_workload_snapshots.items[]`의 단일 object와 같은 형태다.
+`value`는 `current_workload_snapshots.items[]`의 summary 필드에 detail-only 필드를 더한 형태다.
 특정 Deployment 하나를 자세히 볼 때 사용한다.
+detail-only 필드는 안전한 `deployment_annotations`, `pod_template_annotations`,
+`managed_fields_managers`, `scheduling_constraints`, env/envFrom/volume reference,
+referenced ConfigMap/Secret object summary, ReplicaSet condition 요약이다.
 
 #### `metadata:change_context`와의 관계
 
@@ -546,7 +563,19 @@ RCA bundle builder는 이 값을 다음 evidence item으로 승격한다.
 ```text
 metadata:current_workload_snapshots
 metadata:current_workload_snapshot
+metadata:service_selector_matches
+metadata:endpoint_slice_ready_endpoints
 ```
+
+큰 namespace에서는 provider가 evidence job result의 1MiB JSON 제한을 피하기 위해
+metadata 목록을 샘플로 제한할 수 있다.
+이때 provider bucket에는 `metadata.change_context.collection_limits`가 남고,
+각 list별 `original_count`와 `returned_count`로 잘린 범위를 알 수 있다.
+RCA evidence item으로 승격될 때는 해당 목록 item의 `value.collection_limit`에도
+같은 제한 정보가 붙는다.
+Service selector의 `matched_pods`, EndpointSlice의 `ready_targets`, workload의
+`pod_statuses`와 `replicaset_revisions`도 샘플로 제한될 수 있으며, 전체 count와
+`*_truncated` flag가 함께 제공된다.
 
 Git commit, rollback 가능 여부, risk level, 실제 배포 이력은 이 schema의 필수 근거가 아니다.
 그 정보가 필요하면 GitOps/SCM/Safe PR 단계에서 별도 근거로 다룬다.

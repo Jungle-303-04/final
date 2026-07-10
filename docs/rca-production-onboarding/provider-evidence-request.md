@@ -34,6 +34,13 @@ RCA는 provider가 보내준 evidence만 보고 symptom, root cause candidate, c
 - services
 - endpointslices
 
+큰 namespace에서 evidence job result가 1MiB 제한을 넘길 위험을 줄이기 위해 Kubernetes provider는
+`pods`, `events`, `nodes`, `workloads`, `services`, `endpoints` 목록을 전송 직전에 제한한다.
+잘린 목록이 있으면 `kubernetes.collection_limits`에 전체 개수와 최종 반환 개수를 남긴다.
+기존 필드 이름은 유지되므로 RCA는 같은 경로를 읽되, `collection_limits`가 있으면 일부 샘플임을 고려한다.
+개수 제한 뒤에도 JSON byte 크기가 크면 JSON byte 크기가 가장 큰 목록부터 추가로 줄인다.
+단일 항목이 너무 크면 해당 목록은 0개까지 줄어들 수 있다.
+
 현재 payload에서 기대 가능한 정보:
 
 - resource
@@ -152,12 +159,14 @@ RCA는 provider가 보내준 evidence만 보고 symptom, root cause candidate, c
 - `threshold`는 보수적인 기본 기준만 쓴다. ratio 계열은 `0.8` 이상 warning, `0.9` 이상 critical이다. `up`은 `1` 미만이면 critical이다. restart/not ready/scrape error/throttling 계열은 `0`보다 크면 warning 신호로 본다. known metric이 아니거나 숫자 point가 없으면 생략될 수 있다.
 - `signals`는 threshold를 넘은 경우에만 `memory_pressure`, `cpu_pressure`, `cpu_throttling`, `scrape_target_down`, `collector_scrape_error`, `not_ready_pods`, `restart_increase` 같은 작은 label을 담는다.
 - `baseline_comparison`은 range query에서 비교 가능한 series가 있을 때만 만든다. 외부 기준선이나 이전 배포 기준선이 아니라, 같은 query window 안의 첫 point를 기준으로 증가/감소/유지 series 개수를 계산한다.
+- high cardinality metric 때문에 `samples`, `series`, `series[].values`, `result`가 너무 커질 수 있으므로 전송 전 제한한다. 제한되면 해당 query result의 `collection_limits`에 전체 개수와 최종 반환 개수를 남긴다. `analysis`는 제한 전 숫자 기준으로 계산한다. 개수 제한 뒤에도 JSON byte 크기가 크면 JSON byte 크기가 가장 큰 목록부터 추가로 줄인다. 단일 항목이 너무 크면 해당 목록은 0개까지 줄어들 수 있다. matrix의 `series.values` 제한 정보는 최종 `series` 목록이 정해진 뒤 다시 계산한다.
 
 주의:
 
 - 이번 변경은 provider가 새 PromQL query를 자동으로 추가하는 변경이 아니다. 이미 policy가 요청한 Prometheus 결과를 구조화한다.
 - CPU throttling, memory usage/limit ratio, restart trend 같은 값은 해당 query가 policy에 들어온 경우에만 `analysis`로 해석된다.
 - 외부 baseline, 배포 전 baseline, ingress 5xx, request latency는 별도 query나 외부 시스템 연결이 필요하므로 여기서 확정하지 않는다.
+- 제한은 기존 `samples`/`series` 필드를 없애는 변경이 아니다. 기존 필드는 유지하고, 일부만 담긴 경우 `collection_limits`로 표시한다.
 
 ## Logs Provider
 
@@ -199,10 +208,12 @@ RCA는 provider가 보내준 evidence만 보고 symptom, root cause candidate, c
 현재 구현 상태:
 
 - `logs[].streams[].values[].line`은 기존 `line` 필드 이름은 유지하되, 값은 provider에서 민감정보를 마스킹한 문자열로 보낸다.
+- `logs[].streams[].values[].line`은 전송 크기 보호를 위해 최대 4096자로 제한한다.
+- line이 잘리면 같은 value object에 `line_truncated=true`, `original_line_length`를 남긴다.
 - `pattern_counts`는 probe, health endpoint, dependency timeout/error, image pull, OOM/memory, config/env/volume 계열 로그를 line 단위로 센다.
 - `severity_counts`는 `critical`, `error`, `warn`, `info`, `debug`, `trace`, `unknown`으로 정규화한다.
 - `trace_ids`는 32자리 hex trace id만 최대 20개까지 보낸다.
-- `redaction_summary`는 redaction 적용 여부와 실제로 값이 바뀐 line 개수를 담는다.
+- `redaction_summary`는 redaction 적용 여부, 실제로 값이 바뀐 line 개수, 길이 제한으로 잘린 line 개수를 담는다.
 
 주의:
 
@@ -210,6 +221,7 @@ RCA는 provider가 보내준 evidence만 보고 symptom, root cause candidate, c
 - `password`, `token`, `secret`, `api_key`, `client_secret`, `credential`, `private_key`, `Authorization`, `Bearer`, `Cookie`, JWT, AWS access key, URL 계정정보, email은 가린다.
 - `trace_id`, `span_id`, `request_id`, namespace, pod name, root cause keyword는 RCA 판단에 필요하므로 유지한다.
 - 대표 sample 개수는 Loki query limit과 payload byte limit 안에서 제한한다.
+- pattern count, severity count, trace id 추출은 마스킹된 전체 line을 기준으로 계산하고, 전송되는 `line` 문자열만 길이 제한으로 줄인다.
 
 아직 별도 필드로 만들지 않은 값:
 
@@ -232,6 +244,13 @@ policy상 traces query는 존재한다.
 기존 `traces[]`와 `trace_count`를 유지한 채 `analysis`를 추가한다.
 `analysis`는 Tempo가 이미 응답한 값에서 RCA가 바로 쓰기 쉬운 작은 필드만 뽑는다.
 span attribute 전체나 payload 전체를 새로 복사하지 않는다.
+단, 전송 크기 보호를 위해 trace 내부의 긴 문자열은 최대 1024자로 제한하고,
+중첩 list는 최대 20개만 남긴다.
+한 trace가 계속 너무 크면 trace_id, service, operation, status, duration_ms, error, dependency 같은
+summary field와 `trace_truncated`, `original_trace_bytes`만 남길 수 있다.
+전체 query result가 여전히 크면 `collection_limits.lists.traces`에 전체 trace 수와 최종 반환 trace 수를 남긴다.
+`analysis`는 `traces[]` list를 최종 제한하기 전 compact trace 기준으로 만들기 때문에,
+`traces[]`가 일부만 남아도 RCA용 trace id, service, status 요약은 유지될 수 있다.
 
 현재 제공하는 값은 다음과 같다.
 
@@ -282,6 +301,8 @@ summary snapshot에는 아래 필드만 남긴다.
 - change_context.current_workload_snapshots[].pod_statuses[].message
 - change_context.current_workload_snapshots[].pod_statuses[].start_time
 - change_context.current_workload_snapshots[].pod_statuses[].conditions[]
+- change_context.current_workload_snapshots[].pod_status_count(잘렸을 때만 존재)
+- change_context.current_workload_snapshots[].pod_statuses_truncated(잘렸을 때만 존재)
 - change_context.current_workload_snapshots[].containers[].name/image
 - change_context.current_workload_snapshots[].containers[].readiness_probe
 - change_context.current_workload_snapshots[].containers[].liveness_probe
@@ -294,6 +315,8 @@ summary snapshot에는 아래 필드만 남긴다.
 - change_context.current_workload_snapshots[].replicaset_revisions[].ready_replicas
 - change_context.current_workload_snapshots[].replicaset_revisions[].available_replicas
 - change_context.current_workload_snapshots[].replicaset_revisions[].fully_labeled_replicas
+- change_context.current_workload_snapshots[].replicaset_revision_count(잘렸을 때만 존재)
+- change_context.current_workload_snapshots[].replicaset_revisions_truncated(잘렸을 때만 존재)
 
 `service_selector_matches[]`는 namespace Service selector와 Pod labels 비교 결과다.
 summary query와 detail query 모두 같은 기본 shape로 보내지만, 범위와 `target_relation` 포함 여부가 다르다.
@@ -305,6 +328,7 @@ summary query는 `target_relation`을 넣지 않고, detail query는 target Depl
 - change_context.service_selector_matches[].target_relation(detail query에서만 존재)
 - change_context.service_selector_matches[].matched_pod_count
 - change_context.service_selector_matches[].matched_pods[].namespace/name(matched Pod가 없으면 생략 가능)
+- change_context.service_selector_matches[].matched_pods_truncated(잘렸을 때만 존재)
 
 전체 summary query는 namespace의 모든 Service 비교 결과를 보낸다.
 특정 Deployment detail query는 target Deployment와 관련 있는 Service만 보낸다.
@@ -315,11 +339,14 @@ EndpointSlice(엔드포인트슬라이스)는 Kubernetes가 Service 뒤 endpoint
 summary query는 namespace의 모든 EndpointSlice 요약을 보낸다.
 detail query는 target Deployment와 관련 있는 Service의 EndpointSlice만 보낸다.
 endpoint IP address는 보내지 않고, ready target Pod의 kind/namespace/name만 보낸다.
+EndpointSlice condition은 Kubernetes API의 기본 해석을 따른다.
+`ready`와 `serving`이 생략되거나 null이면 true로 보고, `terminating`이 생략되거나 null이면 false로 본다.
 
 - change_context.endpoint_slice_ready_endpoints[].service.namespace/name
 - change_context.endpoint_slice_ready_endpoints[].endpoint_slice.namespace/name
 - change_context.endpoint_slice_ready_endpoints[].address_type
 - change_context.endpoint_slice_ready_endpoints[].ports[].name/port/protocol/app_protocol
+- change_context.endpoint_slice_ready_endpoints[].ports_truncated(잘렸을 때만 존재)
 - change_context.endpoint_slice_ready_endpoints[].endpoint_count
 - change_context.endpoint_slice_ready_endpoints[].ready_endpoint_count
 - change_context.endpoint_slice_ready_endpoints[].not_ready_endpoint_count
@@ -327,6 +354,16 @@ endpoint IP address는 보내지 않고, ready target Pod의 kind/namespace/name
 - change_context.endpoint_slice_ready_endpoints[].serving_endpoint_count
 - change_context.endpoint_slice_ready_endpoints[].terminating_endpoint_count
 - change_context.endpoint_slice_ready_endpoints[].ready_targets[].kind/namespace/name
+- change_context.endpoint_slice_ready_endpoints[].ready_targets_truncated(잘렸을 때만 존재)
+
+큰 namespace에서 evidence job result가 1MiB 제한을 넘길 위험을 줄이기 위해 metadata provider는 큰 목록을 제한한다.
+잘린 목록이 있으면 `change_context.collection_limits`에 전체 개수와 최종 반환 개수를 남긴다.
+전체 summary query는 `current_workload_snapshots`, `service_selector_matches`,
+`endpoint_slice_ready_endpoints`, `resource_quotas` 같은 top-level 목록에 상한을 둔다.
+개수 제한 뒤에도 JSON byte 크기가 크면 JSON byte 크기가 가장 큰 top-level 목록부터 추가로 줄인다.
+단일 항목이 너무 크면 해당 top-level 목록은 0개까지 줄어들 수 있다.
+항목 내부에서도 `matched_pods`, `ready_targets`, `pod_statuses`, `replicaset_revisions`는
+샘플 목록만 보내고 full count와 `*_truncated` flag로 잘림 여부를 표시한다.
 
 `resource_quotas[]`는 namespace 수준 ResourceQuota(네임스페이스 자원 할당량) 요약이다.
 특정 Deployment 하나의 spec이 아니라 같은 namespace의 생성/스케줄링 제한 맥락을 보기 위해

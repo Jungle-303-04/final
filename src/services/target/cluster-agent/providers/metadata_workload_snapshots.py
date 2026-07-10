@@ -43,6 +43,8 @@ SENSITIVE_ANNOTATION_TOKENS = (
 )
 MAX_SAFE_ANNOTATIONS = 12
 MAX_ANNOTATION_VALUE_LENGTH = 200
+MAX_POD_STATUS_SUMMARIES = 10
+MAX_REPLICASET_REVISION_SUMMARIES = 10
 
 
 def current_workload_snapshots(
@@ -67,6 +69,7 @@ def current_workload_base_snapshot(
     template = pod_template(deployment)
     template_meta = metadata(template)
     template_spec = spec(template)
+    owned_pods = pods_for_deployment(deployment, replicasets, pods)
     snapshot: JsonObject = {
         "workload": {
             "kind": K8S_KIND_DEPLOYMENT,
@@ -78,9 +81,12 @@ def current_workload_base_snapshot(
         "persistent_volume_claim_refs": persistent_volume_claim_refs(template_spec),
         "deployment_status": deployment_status_snapshot(deployment),
         "pod_statuses": [
-            pod_status_snapshot(pod) for pod in pods_for_deployment(deployment, replicasets, pods)
+            pod_status_snapshot(pod) for pod in owned_pods[:MAX_POD_STATUS_SUMMARIES]
         ],
     }
+    if len(owned_pods) > MAX_POD_STATUS_SUMMARIES:
+        snapshot["pod_status_count"] = len(owned_pods)
+        snapshot["pod_statuses_truncated"] = True
     auth = pod_template_auth(template_spec)
     if auth:
         snapshot["pod_template_auth"] = auth
@@ -95,8 +101,9 @@ def current_workload_summary_snapshot(
     """Build a summary snapshot for namespace-wide queries."""
     template = pod_template(deployment)
     template_spec = spec(template)
+    owned_replicasets = sorted_replicasets_for_deployment(deployment, replicasets)
 
-    return {
+    snapshot = {
         **current_workload_base_snapshot(deployment, replicasets, pods),
         "containers": [
             container_summary_snapshot(container)
@@ -104,9 +111,13 @@ def current_workload_summary_snapshot(
         ],
         "replicaset_revisions": [
             replicaset_revision_summary_snapshot(replicaset)
-            for replicaset in sorted_replicasets_for_deployment(deployment, replicasets)
+            for replicaset in owned_replicasets[:MAX_REPLICASET_REVISION_SUMMARIES]
         ],
     }
+    if len(owned_replicasets) > MAX_REPLICASET_REVISION_SUMMARIES:
+        snapshot["replicaset_revision_count"] = len(owned_replicasets)
+        snapshot["replicaset_revisions_truncated"] = True
+    return snapshot
 
 
 def current_workload_detail_snapshot(
@@ -120,8 +131,9 @@ def current_workload_detail_snapshot(
     template_meta = metadata(template)
     template_spec = spec(template)
     volume_refs = volume_reference_map(template_spec)
+    owned_replicasets = sorted_replicasets_for_deployment(deployment, replicasets)
 
-    return {
+    snapshot = {
         **current_workload_base_snapshot(deployment, replicasets, pods),
         "deployment_annotations": safe_annotations(meta),
         "pod_template_annotations": safe_annotations(template_meta),
@@ -133,9 +145,13 @@ def current_workload_detail_snapshot(
         ],
         "replicaset_revisions": [
             replicaset_revision_detail_snapshot(replicaset)
-            for replicaset in sorted_replicasets_for_deployment(deployment, replicasets)
+            for replicaset in owned_replicasets[:MAX_REPLICASET_REVISION_SUMMARIES]
         ],
     }
+    if len(owned_replicasets) > MAX_REPLICASET_REVISION_SUMMARIES:
+        snapshot["replicaset_revision_count"] = len(owned_replicasets)
+        snapshot["replicaset_revisions_truncated"] = True
+    return snapshot
 
 
 def container_summary_snapshot(container: JsonObject) -> JsonObject:

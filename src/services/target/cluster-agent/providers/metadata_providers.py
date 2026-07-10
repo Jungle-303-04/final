@@ -19,6 +19,12 @@ from packages.config.constants import Target
 from packages.contracts.event_bus.interfaces import JsonObject
 from packages.contracts.target import TARGET_NAMESPACE
 from providers.base import ConfigReader
+from providers.collection_limits import (
+    COLLECTION_LIMITS_KEY,
+    attach_collection_limits,
+    limit_payload_list,
+    limit_payload_size,
+)
 from providers.kubernetes_utils import (
     K8S_KIND_DEPLOYMENT,
     K8S_RESOURCE_DEPLOYMENTS,
@@ -64,6 +70,18 @@ DEFAULT_METADATA_QUERIES = {
 DEPLOYMENT_QUERY_PREFIXES = {
     K8S_KIND_DEPLOYMENT.lower(),
     K8S_RESOURCE_DEPLOYMENTS,
+}
+MAX_CURRENT_WORKLOAD_SNAPSHOTS = 200
+MAX_SERVICE_SELECTOR_MATCHES = 200
+MAX_ENDPOINT_SLICE_READY_ENDPOINTS = 200
+MAX_REFERENCED_CONFIG_OBJECTS = 100
+MAX_RESOURCE_QUOTAS = 50
+CHANGE_CONTEXT_LIST_LIMITS = {
+    CURRENT_WORKLOAD_SNAPSHOTS_KEY: MAX_CURRENT_WORKLOAD_SNAPSHOTS,
+    SERVICE_SELECTOR_MATCHES_KEY: MAX_SERVICE_SELECTOR_MATCHES,
+    ENDPOINT_SLICE_READY_ENDPOINTS_KEY: MAX_ENDPOINT_SLICE_READY_ENDPOINTS,
+    REFERENCED_CONFIG_OBJECTS_KEY: MAX_REFERENCED_CONFIG_OBJECTS,
+    RESOURCE_QUOTAS_KEY: MAX_RESOURCE_QUOTAS,
 }
 
 
@@ -412,7 +430,7 @@ class MetadataProvider:
                 item for item in resource_quotas if isinstance(item, dict)
             ]
 
-        return normalized or empty_change_context()
+        return limit_change_context(normalized) or empty_change_context()
 
 
 def metadata_query_target(telemetry_query: MetadataSnapshotQuery) -> MetadataQueryTarget:
@@ -428,6 +446,8 @@ def metadata_query_target(telemetry_query: MetadataSnapshotQuery) -> MetadataQue
         return MetadataQueryTarget(namespace=parts[1], deployment_name=parts[2])
     if len(parts) == 2:
         return MetadataQueryTarget(namespace=parts[0], deployment_name=parts[1])
+    if len(parts) == 1:
+        return MetadataQueryTarget(namespace=parts[0])
 
     return MetadataQueryTarget(namespace=TARGET_NAMESPACE)
 
@@ -537,9 +557,23 @@ def merge_change_context(target: JsonObject, source: JsonObject) -> None:
     if isinstance(resource_quotas, list):
         target[RESOURCE_QUOTAS_KEY] = resource_quotas
 
+    collection_limits = source.get(COLLECTION_LIMITS_KEY)
+    if isinstance(collection_limits, dict) and collection_limits:
+        target[COLLECTION_LIMITS_KEY] = collection_limits
+
 
 def empty_change_context() -> JsonObject:
     """Build the default change context shape."""
     return {
         CURRENT_WORKLOAD_SNAPSHOTS_KEY: [],
     }
+
+
+def limit_change_context(change_context: JsonObject) -> JsonObject:
+    """Limit large metadata lists and record what was truncated."""
+    limits: JsonObject = {}
+    for key, max_items in CHANGE_CONTEXT_LIST_LIMITS.items():
+        limit_payload_list(change_context, key, max_items, limits)
+    limit_payload_size(change_context, list_keys=CHANGE_CONTEXT_LIST_LIMITS, limits=limits)
+    attach_collection_limits(change_context, limits)
+    return change_context

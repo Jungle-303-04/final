@@ -255,7 +255,7 @@ agent는 이 query definition을 provider별 query object로 바꿔 실행한다
 | `source` | telemetry source다. policy에 없으면 provider key로 역조회해 채운다. 예: `metrics` provider는 `prometheus`. |
 | `name` | query 결과 key다. metrics/traces에서는 `results.<name>`, logs에서는 `logs[].query_name`, Kubernetes에서는 `provider_status.<name>`으로 쓰인다. metadata는 query별 key를 만들지 않고 현재 고정 `change_context` bucket으로 합쳐진다. |
 | `description` | 사람이 읽는 query 설명이다. provider payload에는 대부분 직접 들어가지 않는다. |
-| `query` | 실제 query 문자열이다. Prometheus는 PromQL, Loki는 LogQL, Tempo는 TraceQL/search query, Kubernetes는 namespace 문자열로 사용한다. Metadata는 `change_context`이면 target namespace 전체 Deployment 목록, `deployment/<name>` 또는 `deployment/<namespace>/<name>`이면 특정 Deployment 1개를 조회한다. |
+| `query` | 실제 query 문자열이다. Prometheus는 PromQL, Loki는 LogQL, Tempo는 TraceQL/search query, Kubernetes는 namespace 문자열로 사용한다. Metadata는 `change_context`이면 target namespace 전체 Deployment 목록, `<namespace>`이면 해당 namespace 전체 Deployment 목록, `deployment/<name>` 또는 `deployment/<namespace>/<name>`이면 특정 Deployment 1개를 조회한다. |
 | `range_seconds` | Prometheus range query일 때만 쓴다. 있으면 `PrometheusRangeQuery`가 된다. |
 | `step_seconds` | Prometheus range query step이다. 없으면 provider가 range 기준으로 계산한다. |
 
@@ -301,6 +301,7 @@ RCA를 처음 볼 때는 Kubernetes bucket 안에서 보통 아래 순서로 확
 | `services` | list<object> | Service 요약 목록이다. Service type, cluster IP, port, selector를 본다. |
 | `endpoints` | list<object> | EndpointSlice 요약 목록이다. Service 뒤에 실제 endpoint가 붙었는지 본다. |
 | `provider_status` | object | Kubernetes provider query별 수집 상태와 bucket별 count다. |
+| `collection_limits` | object | 큰 목록이 전송 크기 보호를 위해 잘렸을 때만 있는 제한 요약이다. |
 
 ### Kubernetes provider가 조회하는 API resource
 
@@ -540,6 +541,16 @@ Prometheus, Loki, Tempo의 실패 처리는 `Evidence job 집계 규칙`에서 �
 `provider_status`는 query name별로 추가된다. 따라서 중복 namespace query를 넣으면
 목록에 같은 리소스가 중복될 수 있다.
 
+Kubernetes bucket은 `EvidenceJobResultRequest`의 1MiB 전송 제한을 넘길 위험을 줄이기 위해
+큰 list를 전송 직전에 제한한다. `pods`, `events`, `nodes`, `workloads`,
+`services`, `endpoints`가 잘리면 `kubernetes.collection_limits`에 원래 개수와
+최종 반환 개수를 남긴다. `provider_status.*.counts`는 normalize 단계에서 본 개수이고,
+실제 payload에 들어간 개수는 `len(...)` 또는 `collection_limits`로 확인한다.
+namespace가 있는 list는 한 namespace가 다른 namespace를 전부 가리지 않도록
+namespace별 round-robin sampling을 쓴다.
+개수 제한 뒤에도 JSON byte 크기가 크면 JSON byte 크기가 가장 큰 list부터 추가로 줄인다.
+단일 항목이 너무 크면 해당 list는 0개까지 줄어들 수 있다.
+
 ## Metrics bucket
 
 Metrics bucket은 Prometheus provider가 만든다.
@@ -576,9 +587,19 @@ node memory 사용률 query의 첫 번째 sample 값이다.
 | `query_mode` | string | `instant` 또는 `range`다. |
 | `result_type` | string 또는 null | Prometheus `data.resultType`이다. 예: `vector`, `matrix`, `scalar`, `string`. |
 | `analysis` | object | provider가 sample/series 숫자만 보고 만든 RCA용 해석 요약이다. |
+| `collection_limits` | object | 큰 Prometheus 결과가 전송 크기 보호를 위해 잘렸을 때만 있는 제한 요약이다. |
 
 현재 Prometheus provider는 전체 API response raw field를 담지 않는다.
 RCA는 `result_type`, `samples`, `series`, `result` 중 provider가 정규화한 필드를 읽는다.
+high cardinality metric처럼 결과가 큰 경우에는 `samples`, `series`, `series[].values`,
+또는 `result`가 제한될 수 있다. 잘리면 같은 query result object 안의
+`collection_limits.lists.<field>.original_count/returned_count`로 전체 개수와 최종 반환 개수를
+확인한다. `analysis`는 제한 전 normalized payload를 기준으로 계산되므로
+`sample_count`, `series_count`, `point_count`, `threshold` 판단은 샘플 제한 때문에 줄어들지 않는다.
+개수 제한 뒤에도 JSON byte 크기가 크면 JSON byte 크기가 가장 큰 list부터 추가로 줄인다.
+단일 항목이 너무 크면 해당 list는 0개까지 줄어들 수 있다. matrix의 `series.values`
+제한 정보는 최종 `series` 목록이 정해진 뒤 다시 계산하므로, `returned_count`는
+payload에 실제 남은 point 수와 맞는다.
 
 Instant vector 결과일 때 추가 필드다.
 
@@ -598,6 +619,8 @@ Range matrix 결과일 때 추가 필드다.
 | `series` | list<object> | time series 목록이다. |
 | `series[].metric` | object | Prometheus label set이다. |
 | `series[].values` | list<object> | timestamp/value point 목록이다. |
+| `series[].value_count` | number | `series[].values`가 잘렸을 때 제한 전 point 개수다. |
+| `series[].values_truncated` | boolean | `series[].values`가 잘렸으면 true다. |
 | `series[].values[].timestamp` | number 또는 null | point timestamp다. |
 | `series[].values[].value` | number 또는 null | point value를 float으로 바꾼 값이다. |
 | `point_count` | number | 모든 series의 point 개수 합계다. |
@@ -673,7 +696,7 @@ Logs bucket은 Loki provider가 만든다.
 초심자 관점에서는 "애플리케이션이나 agent가 직접 남긴 문장 증거"다.
 Kubernetes Event가 "컨테이너가 재시작된다"고 말해준다면, log line은 "왜 프로세스가 죽었는지"를
 더 구체적으로 보여줄 수 있다.
-다만 `logs[].streams[].values[].line`은 Loki 원문 그대로가 아니라 provider가 민감정보를 마스킹한 문장이다.
+다만 `logs[].streams[].values[].line`은 Loki 원문 그대로가 아니라 provider가 민감정보를 마스킹하고 최대 4096자로 제한한 문장이다.
 원문을 더 넓게 노출하지 않기 위해, RCA가 바로 쓰기 쉬운 pattern count, severity count, trace id 목록을 함께 보낸다.
 
 logs를 읽을 때는 `logs[].query_name`으로 어떤 로그 query 결과인지 확인하고,
@@ -711,7 +734,8 @@ logs를 읽을 때는 `logs[].query_name`으로 어떤 로그 query 결과인지
     "trace_ids": [],
     "redaction_summary": {
       "applied": true,
-      "redacted_line_count": 0
+      "redacted_line_count": 0,
+      "truncated_line_count": 0
     }
   }
 ]
@@ -729,7 +753,7 @@ logs를 읽을 때는 `logs[].query_name`으로 어떤 로그 query 결과인지
 | `logs[].pattern_counts` | object | provider가 마스킹된 log line을 읽고 계산한 장애 신호별 matching line 개수다. |
 | `logs[].severity_counts` | object | `ERROR`, `WARN`, `level=error` 같은 표현을 정규화한 severity별 line 개수다. |
 | `logs[].trace_ids` | list<string> | 로그에서 찾은 안전한 trace id 목록이다. 32자리 hex trace id만 최대 20개까지 담는다. |
-| `logs[].redaction_summary` | object | provider가 로그 마스킹을 적용했는지와 실제로 값이 바뀐 line 개수를 나타낸다. |
+| `logs[].redaction_summary` | object | provider가 로그 마스킹을 적용했는지, 실제로 값이 바뀐 line 개수, 길이 제한으로 잘린 line 개수를 나타낸다. |
 
 ### `logs[].streams[]`
 
@@ -743,13 +767,17 @@ logs를 읽을 때는 `logs[].query_name`으로 어떤 로그 query 결과인지
 | 필드 | 타입 | 의미 |
 | --- | --- | --- |
 | `timestamp` | string 또는 null | Loki log timestamp다. nanosecond string 형태일 수 있다. |
-| `line` | string 또는 null | provider가 민감정보를 가린 log line이다. root cause keyword 판단에 쓴다. |
+| `line` | string 또는 null | provider가 민감정보를 가리고 최대 4096자로 제한한 log line이다. root cause keyword 판단에 쓴다. |
+| `line_truncated` | boolean | line이 길이 제한으로 잘렸을 때만 true다. |
+| `original_line_length` | number | line이 잘렸을 때만 있는 제한 전 마스킹된 line 길이다. |
 
 마스킹 기준은 보수적으로 잡는다. `password`, `token`, `secret`, `api_key`, `client_secret`,
 `credential`, `private_key`, `Authorization`, `Bearer`, `Cookie`, JWT, AWS access key, URL 안의
 계정정보, email은 `[REDACTED]` 계열 값으로 바꾼다. 반대로 `trace_id`, `span_id`, `request_id`,
 namespace, pod name, `ERROR`, `timeout`, `probe failed`, `ImagePullBackOff`, `OOMKilled` 같은 RCA 판단
 키워드는 유지한다.
+pattern count, severity count, trace id 추출은 마스킹된 전체 line을 기준으로 먼저 계산하고,
+전송되는 `line` 문자열만 길이 제한으로 줄인다.
 
 `pattern_counts`는 각 pattern에 매칭된 log line 개수다. 현재 pattern key는 다음과 같다.
 
@@ -830,14 +858,21 @@ RCA가 표준 필드를 먼저 보고 싶을 때는 `results.<query_name>.analys
 | 필드 | 타입 | 의미 |
 | --- | --- | --- |
 | `query` | string | 실행한 TraceQL 또는 Tempo search query다. |
-| `traces` | list<object> | Tempo `/api/search`가 반환한 trace 목록이다. provider는 내부 trace object를 세부 정규화하지 않고 보존한다. |
-| `trace_count` | number | `traces` 목록 길이다. |
+| `traces` | list<object> | Tempo `/api/search`가 반환한 trace 목록을 전송 크기 안에서 제한한 값이다. |
+| `trace_count` | number | Tempo가 반환한 trace 수다. `collection_limits`가 있으면 실제 `traces` 길이와 다를 수 있다. |
 | `analysis` | object | RCA가 바로 읽기 쉬운 trace/span 요약이다. |
+| `collection_limits` | object | `traces` list가 전송 크기 보호를 위해 잘렸을 때만 있는 제한 요약이다. |
 
 현재 Tempo provider는 전체 API response raw field를 담지 않는다.
 RCA는 `analysis`를 먼저 보고, 필요하면 `traces[]`와 `trace_count`를 함께 본다.
+`analysis`는 `traces[]` list를 최종 제한하기 전 compact trace 기준으로 만든다.
+그래서 `collection_limits` 때문에 `traces[]`가 일부만 남아도 trace id, service, status,
+duration 같은 RCA용 요약은 `analysis`에 남을 수 있다.
 
 `traces[]` 내부 object는 Tempo 응답에 따라 달라질 수 있다.
+긴 문자열은 최대 1024자로 제한되고, 중첩 list는 최대 20개만 남긴다.
+한 trace가 계속 너무 크면 `traceID` 원본 모양 대신 RCA용 summary field와
+`trace_truncated`, `original_trace_bytes`만 남을 수 있다.
 테스트와 일반 search response 기준으로 다음 값이 들어올 수 있다.
 
 | 필드 예시 | 의미 |
@@ -847,6 +882,8 @@ RCA는 `analysis`를 먼저 보고, 필요하면 `traces[]`와 `trace_count`를 
 | `rootTraceName` | root span 또는 operation 이름이다. |
 | `durationMs` | trace duration millisecond다. |
 | `query` | 테스트 레거시 데이터에서는 어떤 query로 잡힌 trace인지 보조 정보로 들어간다. |
+| `trace_truncated` | trace object가 summary로 대체되었을 때 true다. |
+| `original_trace_bytes` | trace object가 summary로 대체되었을 때의 원래 JSON byte 크기다. |
 
 ### `traces.results.<query_name>.analysis`
 
@@ -1089,19 +1126,22 @@ detail snapshot인 `current_workload_snapshot` 단수 값으로 보낸다.
 | `change_context.service_selector_matches[].match_status` | string | `matched`, `no_matching_pods`, `selector_missing` 중 하나다. |
 | `change_context.service_selector_matches[].target_relation` | string | 단건 detail에서만 있는 값이다. 이 Service가 target Deployment와 관련 있다고 본 이유이며, `exact_selector_match`, `live_pod_match`, `selector_key_overlap` 중 하나다. |
 | `change_context.service_selector_matches[].matched_pod_count` | number | selector와 labels가 맞는 Pod 수다. |
-| `change_context.service_selector_matches[].matched_pods` | list<object> | selector와 labels가 맞는 Pod namespace/name 목록이다. matched Pod가 없으면 생략될 수 있다. |
+| `change_context.service_selector_matches[].matched_pods` | list<object> | selector와 labels가 맞는 Pod namespace/name 샘플 목록이다. matched Pod가 없으면 생략될 수 있다. 목록이 잘려도 `matched_pod_count`는 전체 수를 유지한다. |
+| `change_context.service_selector_matches[].matched_pods_truncated` | boolean | `matched_pods` 샘플이 잘렸을 때만 true다. |
 | `change_context.endpoint_slice_ready_endpoints` | list<object> | EndpointSlice별 ready endpoint 요약이다. summary query는 namespace 전체를 담고, detail query는 관련 Service의 EndpointSlice만 담는다. |
 | `change_context.endpoint_slice_ready_endpoints[].service` | object | EndpointSlice가 연결된 Service namespace/name이다. `kubernetes.io/service-name` label에서 읽는다. |
 | `change_context.endpoint_slice_ready_endpoints[].endpoint_slice` | object | EndpointSlice namespace/name이다. |
 | `change_context.endpoint_slice_ready_endpoints[].address_type` | string | EndpointSlice address type이다. 예: `IPv4`, `IPv6`, `FQDN`. |
-| `change_context.endpoint_slice_ready_endpoints[].ports` | list<object> | EndpointSlice port name/port/protocol/app_protocol 요약이다. |
+| `change_context.endpoint_slice_ready_endpoints[].ports` | list<object> | EndpointSlice port name/port/protocol/app_protocol 샘플 요약이다. |
+| `change_context.endpoint_slice_ready_endpoints[].ports_truncated` | boolean | EndpointSlice port 샘플이 잘렸을 때만 true다. |
 | `change_context.endpoint_slice_ready_endpoints[].endpoint_count` | number | EndpointSlice 안의 전체 endpoint 수다. |
-| `change_context.endpoint_slice_ready_endpoints[].ready_endpoint_count` | number | condition `ready=true`인 endpoint 수다. |
+| `change_context.endpoint_slice_ready_endpoints[].ready_endpoint_count` | number | condition `ready=true`인 endpoint 수다. Kubernetes EndpointSlice API 기준으로 `ready`가 생략되거나 null이면 ready로 해석한다. |
 | `change_context.endpoint_slice_ready_endpoints[].not_ready_endpoint_count` | number | condition `ready=false`인 endpoint 수다. |
-| `change_context.endpoint_slice_ready_endpoints[].unknown_ready_endpoint_count` | number | ready condition이 boolean 값이 아닌 endpoint 수다. |
-| `change_context.endpoint_slice_ready_endpoints[].serving_endpoint_count` | number | condition `serving=true`인 endpoint 수다. |
+| `change_context.endpoint_slice_ready_endpoints[].unknown_ready_endpoint_count` | number | ready condition이 boolean 값이 아닌 endpoint 수다. `ready` 생략 또는 null은 unknown이 아니라 ready로 본다. |
+| `change_context.endpoint_slice_ready_endpoints[].serving_endpoint_count` | number | condition `serving=true`인 endpoint 수다. Kubernetes EndpointSlice API 기준으로 `serving`이 생략되거나 null이면 serving으로 해석한다. |
 | `change_context.endpoint_slice_ready_endpoints[].terminating_endpoint_count` | number | condition `terminating=true`인 endpoint 수다. |
-| `change_context.endpoint_slice_ready_endpoints[].ready_targets` | list<object> | ready endpoint가 가리키는 target object kind/namespace/name이다. 보통 Pod다. endpoint IP address는 담지 않는다. |
+| `change_context.endpoint_slice_ready_endpoints[].ready_targets` | list<object> | ready endpoint가 가리키는 target object kind/namespace/name 샘플이다. 보통 Pod다. endpoint IP address는 담지 않는다. |
+| `change_context.endpoint_slice_ready_endpoints[].ready_targets_truncated` | boolean | `ready_targets` 샘플이 잘렸을 때만 true다. |
 | `change_context.resource_quotas` | list<object> | namespace ResourceQuota hard/used 요약이다. summary query와 detail query 모두 같은 namespace 맥락으로 담는다. |
 | `change_context.resource_quotas[].name` | string | ResourceQuota 이름이다. |
 | `change_context.resource_quotas[].namespace` | string | ResourceQuota namespace다. |
@@ -1120,6 +1160,10 @@ detail snapshot인 `current_workload_snapshot` 단수 값으로 보낸다.
 | `change_context.referenced_config_objects[].referenced_key_checks[].key` | string | Deployment가 env keyRef 또는 volume items에서 직접 참조한 key 이름이다. |
 | `change_context.referenced_config_objects[].referenced_key_checks[].exists` | boolean | 해당 key가 ConfigMap/Secret data 또는 binaryData key로 존재하는지 여부다. 값은 담지 않는다. |
 | `change_context.referenced_config_objects[].referenced_key_checks[].sources` | list<string> | 이 key를 참조한 위치 종류다. 현재 `env`, `volume`만 쓴다. `envFrom`은 key를 명시하지 않으므로 제외한다. |
+| `change_context.collection_limits` | object | metadata 목록이 전송 크기 보호를 위해 잘렸을 때만 있는 제한 요약이다. |
+| `change_context.collection_limits.truncated` | boolean | 하나 이상의 목록이 잘렸으면 true다. |
+| `change_context.collection_limits.lists.<field>.original_count` | number | 제한 전 전체 항목 수다. |
+| `change_context.collection_limits.lists.<field>.returned_count` | number | 최종 payload에 담긴 항목 수다. |
 | `change_context.current_workload_snapshots[].workload` | object | workload kind, namespace, name이다. 현재 kind는 `Deployment`다. |
 | `change_context.current_workload_snapshots[].deployment_labels` | object | Deployment metadata labels다. |
 | `change_context.current_workload_snapshots[].pod_template_labels` | object | Pod template metadata labels다. |
@@ -1130,12 +1174,16 @@ detail snapshot인 `current_workload_snapshot` 단수 값으로 보낸다.
 | `change_context.current_workload_snapshots[].persistent_volume_claim_refs` | list<object> | Pod template volume이 참조하는 PVC volume name과 claim name 목록이다. PVC object 자체는 담지 않는다. |
 | `change_context.current_workload_snapshots[].deployment_status` | object | Deployment status의 replica count와 condition 요약이다. |
 | `change_context.current_workload_snapshots[].deployment_status.conditions` | list<object> | Deployment condition의 type/status/reason/message/time 요약이다. |
-| `change_context.current_workload_snapshots[].pod_statuses` | list<object> | 이 Deployment가 소유한 Pod의 phase, ready 여부, condition 요약이다. |
+| `change_context.current_workload_snapshots[].pod_statuses` | list<object> | 이 Deployment가 소유한 Pod의 phase, ready 여부, condition 샘플 요약이다. |
+| `change_context.current_workload_snapshots[].pod_status_count` | number | `pod_statuses`가 잘렸을 때만 있는 전체 owned Pod 수다. |
+| `change_context.current_workload_snapshots[].pod_statuses_truncated` | boolean | `pod_statuses` 샘플이 잘렸을 때만 true다. |
 | `change_context.current_workload_snapshots[].pod_statuses[].conditions` | list<object> | Pod condition의 type/status/reason/message/time 요약이다. |
 | `change_context.current_workload_snapshots[].containers[]` | list<object> | container name, image, readiness/liveness/startup probe 요약이다. |
 | `change_context.current_workload_snapshots[].containers[].*_probe` | object | probe의 path, port, timeout_seconds, period_seconds, failure_threshold 중 존재하는 값만 담는다. |
 | `change_context.current_workload_snapshots[].containers[].resources` | object | container resources requests/limits 요약이다. CPU/memory quantity 값은 문자열 그대로 담는다. |
 | `change_context.current_workload_snapshots[].replicaset_revisions[]` | list<object> | 이 Deployment가 소유한 ReplicaSet name, revision, replica count 요약이다. |
+| `change_context.current_workload_snapshots[].replicaset_revision_count` | number | `replicaset_revisions`가 잘렸을 때만 있는 전체 owned ReplicaSet 수다. |
+| `change_context.current_workload_snapshots[].replicaset_revisions_truncated` | boolean | `replicaset_revisions` 샘플이 잘렸을 때만 true다. |
 | `change_context.current_workload_snapshot.deployment_annotations` | object | 단건 detail에만 있는 안전한 Deployment metadata annotations다. |
 | `change_context.current_workload_snapshot.pod_template_annotations` | object | 단건 detail에만 있는 안전한 Pod template metadata annotations다. |
 | `change_context.current_workload_snapshot.managed_fields_managers` | list<string> | 단건 detail에만 있는 Deployment managedFields의 manager 이름 목록이다. |
@@ -1165,6 +1213,8 @@ Deployment의 affinity 조건을 넣으면 payload가 커지고 원인 후보와
 EndpointSlice ready endpoint 요약도 같은 범위 규칙을 쓴다.
 전체 summary query는 namespace의 모든 EndpointSlice를 담고, 단건 detail query는 관련 Service의 EndpointSlice만 담는다.
 EndpointSlice endpoint의 IP address는 남기지 않는다.
+EndpointSlice condition은 Kubernetes API의 기본 해석을 따른다. `ready`와 `serving`이 생략되거나 null이면 true로 보고, `terminating`이 생략되거나 null이면 false로 본다.
+Deployment, ReplicaSet, Pod 소유 관계는 기준 리소스의 UID를 알고 있으면 UID match만 인정한다. 기준 Deployment/ReplicaSet UID를 알고 있는데 ownerReference UID가 없거나 다르면 이름이 같아도 현재 Deployment 소유로 보지 않는다. 기준 UID 자체를 알 수 없는 오래된 형태의 데이터에서만 이름을 fallback으로 쓴다.
 ResourceQuota 요약은 workload 하나의 속성이 아니라 namespace 수준 제한 정보다.
 그래서 summary query와 detail query 모두 `change_context.resource_quotas[]`에 담고,
 `current_workload_snapshot` 안에는 넣지 않는다.
@@ -1184,6 +1234,15 @@ secret/token/password/credential/private/authorization 이름이 들어간 annot
 raw spec과 literal env value는 남기지 않는다.
 Deployment, ReplicaSet, Pod status는 작은 요약만 남기고 raw object와 containerStatuses는 남기지 않는다.
 Service selector 비교 결과는 selector와 matched Pod namespace/name만 남기고 raw Service/Pod object는 남기지 않는다.
+metadata provider는 evidence job result의 1MiB JSON 제한을 넘길 위험을 줄이기 위해 큰 list를 제한한다.
+먼저 top-level list 개수를 제한하고, 그래도 JSON byte 크기가 크면 JSON byte 크기가 가장 큰 list부터 추가로 줄인다.
+단일 항목이 너무 크면 해당 top-level list는 0개까지 줄어들 수 있다.
+top-level list가 잘리면 `change_context.collection_limits`에 원래 개수와 최종 반환 개수를 남긴다.
+RCA evidence bundle에서는 `metadata:current_workload_snapshots`,
+`metadata:service_selector_matches`, `metadata:endpoint_slice_ready_endpoints` item의
+`value.collection_limit`에도 같은 제한 정보가 붙는다.
+항목 내부의 `matched_pods`, `ready_targets`, `pod_statuses`, `replicaset_revisions`도 샘플로 제한하고,
+각 항목에 count와 `*_truncated` flag를 남긴다.
 
 ## Evidence job 집계 규칙
 
@@ -1199,6 +1258,8 @@ job들을 하나로 합친 뒤 `cluster.evidence.received`를 발행한다.
 | `failure_policy == strict`이고 failed job이 있으면 발행하지 않는다 | strict mode는 일부 provider 실패를 허용하지 않는다. |
 | `allow_partial`이면 failed provider는 빈 payload로 대체될 수 있다 | `logs`는 `[]`, 나머지는 `{}`가 빈 payload다. |
 | completed provider result는 payload에 merge된다 | provider result는 `{"metrics": ...}`처럼 bucket key를 포함해야 한다. |
+| `metadata` bucket은 inner key 단위로 merge된다 | provider result가 `{"metadata": {"change_context": ...}}`를 보내도 기존 `metadata.rca_test`는 보존된다. `metadata.rca_test`는 RCA test run log 격리에 쓰는 값이므로 `release_context`에서 만든 값만 신뢰한다. |
+| strict RCA test의 `metadata`는 namespace와 resource가 맞아야 한다 | `metadata.change_context` 안에서 찾은 namespace가 `release_context.namespace` 하나로만 구성되어야 한다. `release_context.resource_name`이 있으면 workload identity도 그 resource 하나와 같아야 한다. target namespace metadata나 같은 sandbox 안의 다른 Deployment metadata는 sandbox RCA test 증거로 승인되지 않는다. |
 
 provider job 실패의 `error` 문자열은 `evidence_jobs.error`에 저장되지만,
 allow-partial로 최종 `cluster.evidence.received`가 발행될 때 body에 별도 error field로 들어가지 않는다.
@@ -1240,6 +1301,11 @@ Provider가 이미 보내는 값은 다음과 같다.
 | ResourceQuota hard/used 요약 | `metadata.change_context.resource_quotas[]` |
 | 참조된 ConfigMap/Secret 객체 metadata 요약 | `metadata.change_context.referenced_config_objects[]` |
 | 특정 Deployment detail의 annotations/manager/scheduling/config refs/ReplicaSet conditions | `metadata.change_context.current_workload_snapshot.deployment_annotations`, `pod_template_annotations`, `managed_fields_managers`, `scheduling_constraints`, `containers[].env_refs`, `containers[].env_from_refs`, `containers[].volume_mount_refs`, `replicaset_revisions[].conditions` |
+
+RCA evidence bundle builder는 `metadata.change_context.service_selector_matches[]`를
+`metadata:service_selector_matches` item으로, `metadata.change_context.endpoint_slice_ready_endpoints[]`를
+`metadata:endpoint_slice_ready_endpoints` item으로 승격한다. 그래서 Service selector/EndpointSlice 정보는
+수집만 되고 버려지는 값이 아니라 RCA rule이 `metadata` source evidence로 직접 참고할 수 있는 값이다.
 
 RCA가 판단하려면 다음 값은 파생해야 한다.
 

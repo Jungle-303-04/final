@@ -404,7 +404,50 @@ def current_workload_snapshots_payload(metadata: dict) -> dict:
     if not isinstance(raw, list):
         return {}
     snapshots = [dict(item) for item in raw if isinstance(item, dict) and item]
-    return {"items": snapshots} if snapshots else {}
+    if not snapshots:
+        return {}
+    payload = {"items": snapshots}
+    attach_collection_limit(payload, metadata, "current_workload_snapshots")
+    return payload
+
+
+def metadata_list_payload(metadata: dict, key: str) -> dict:
+    raw = metadata.get(key)
+    if not isinstance(raw, list):
+        change_context = metadata.get("change_context")
+        if isinstance(change_context, dict):
+            raw = change_context.get(key)
+    if not isinstance(raw, list):
+        return {}
+    items = [dict(item) for item in raw if isinstance(item, dict) and item]
+    if not items:
+        return {}
+    payload = {"items": items}
+    attach_collection_limit(payload, metadata, key)
+    return payload
+
+
+def attach_collection_limit(payload: dict, metadata: dict, key: str) -> None:
+    """Attach truncation metadata for one promoted metadata list."""
+    limit = metadata_collection_limit(metadata, key)
+    if limit:
+        payload["collection_limit"] = limit
+
+
+def metadata_collection_limit(metadata: dict, key: str) -> dict:
+    """Return collection limit details for one metadata list."""
+    limits = metadata.get("collection_limits")
+    if not isinstance(limits, dict):
+        change_context = metadata.get("change_context")
+        if isinstance(change_context, dict):
+            limits = change_context.get("collection_limits")
+    if not isinstance(limits, dict):
+        return {}
+    lists = limits.get("lists")
+    if not isinstance(lists, dict):
+        return {}
+    limit = lists.get(key)
+    return dict(limit) if isinstance(limit, dict) and limit else {}
 
 
 def collect_change_context(
@@ -508,6 +551,31 @@ def collect_evidence_items(evt: EvidenceSource) -> list[EvidenceItem]:
                 name="current_workload_snapshot",
                 value=workload_snapshot,
                 summary=f"{target_summary} Workload snapshot 상세 근거입니다.",
+            )
+        )
+    service_selector_matches = metadata_list_payload(evt.metadata, "service_selector_matches")
+    if service_selector_matches:
+        items.append(
+            evidence_item(
+                evt,
+                source="metadata",
+                name="service_selector_matches",
+                value=service_selector_matches,
+                summary=f"{target_summary} Service selector와 Pod labels 매칭 근거입니다.",
+            )
+        )
+    endpoint_slice_ready_endpoints = metadata_list_payload(
+        evt.metadata,
+        "endpoint_slice_ready_endpoints",
+    )
+    if endpoint_slice_ready_endpoints:
+        items.append(
+            evidence_item(
+                evt,
+                source="metadata",
+                name="endpoint_slice_ready_endpoints",
+                value=endpoint_slice_ready_endpoints,
+                summary=f"{target_summary} EndpointSlice ready endpoint 근거입니다.",
             )
         )
     change_context = collect_change_context(

@@ -819,6 +819,120 @@ def test_evidence_bundle_adds_nested_workload_snapshot_metadata_items() -> None:
     assert "change_context" not in metadata_items
 
 
+def test_evidence_bundle_adds_service_and_endpoint_metadata_items() -> None:
+    db = SpyDb()
+    payload = crashloop_payload(
+        metadata={
+            "change_context": {
+                "service_selector_matches": [
+                    {
+                        "service": {"namespace": "sandbox", "name": "checkout-api"},
+                        "selector": {"app": "checkout-api"},
+                        "match_status": "matched",
+                        "matched_pod_count": 1,
+                        "matched_pods": [{"namespace": "sandbox", "name": "checkout-api-pod"}],
+                    }
+                ],
+                "endpoint_slice_ready_endpoints": [
+                    {
+                        "service": {"namespace": "sandbox", "name": "checkout-api"},
+                        "endpoint_slice": {"namespace": "sandbox", "name": "checkout-api-abc"},
+                        "endpoint_count": 1,
+                        "ready_endpoint_count": 0,
+                        "not_ready_endpoint_count": 1,
+                    }
+                ],
+            },
+        },
+    )
+
+    rca_events = run_to_rca(payload, db=db, correlation_id="corr-service-endpoint-metadata")
+
+    bundle = event_by_subject(rca_events, "evidence.bundle.built").evidence_bundle
+    metadata_items = {item.name: item for item in bundle.items if item.source == "metadata"}
+    service_matches = metadata_items["service_selector_matches"]
+    endpoint_slices = metadata_items["endpoint_slice_ready_endpoints"]
+    assert service_matches.value["items"][0]["service"]["name"] == "checkout-api"
+    assert service_matches.value["items"][0]["matched_pod_count"] == 1
+    assert endpoint_slices.value["items"][0]["endpoint_slice"]["name"] == "checkout-api-abc"
+    assert endpoint_slices.value["items"][0]["ready_endpoint_count"] == 0
+    assert "change_context" not in metadata_items
+
+
+def test_evidence_bundle_attaches_metadata_collection_limits() -> None:
+    db = SpyDb()
+    payload = crashloop_payload(
+        metadata={
+            "change_context": {
+                "current_workload_snapshots": [
+                    {
+                        "namespace": "sandbox",
+                        "kind": "Deployment",
+                        "name": "checkout-api",
+                    }
+                ],
+                "service_selector_matches": [
+                    {
+                        "service": {"namespace": "sandbox", "name": "checkout-api"},
+                        "match_status": "matched",
+                        "matched_pod_count": 25,
+                    }
+                ],
+                "endpoint_slice_ready_endpoints": [
+                    {
+                        "endpoint_slice": {
+                            "namespace": "sandbox",
+                            "name": "checkout-api-abc",
+                        },
+                        "ready_endpoint_count": 1,
+                    }
+                ],
+                "collection_limits": {
+                    "truncated": True,
+                    "lists": {
+                        "current_workload_snapshots": {
+                            "truncated": True,
+                            "original_count": 1000,
+                            "returned_count": 200,
+                        },
+                        "service_selector_matches": {
+                            "truncated": True,
+                            "original_count": 300,
+                            "returned_count": 200,
+                        },
+                        "endpoint_slice_ready_endpoints": {
+                            "truncated": True,
+                            "original_count": 250,
+                            "returned_count": 200,
+                        },
+                    },
+                },
+            },
+        },
+    )
+
+    rca_events = run_to_rca(payload, db=db, correlation_id="corr-metadata-limits")
+
+    bundle = event_by_subject(rca_events, "evidence.bundle.built").evidence_bundle
+    metadata_items = {item.name: item for item in bundle.items if item.source == "metadata"}
+    assert metadata_items["current_workload_snapshots"].value["collection_limit"] == {
+        "truncated": True,
+        "original_count": 1000,
+        "returned_count": 200,
+    }
+    assert metadata_items["service_selector_matches"].value["collection_limit"] == {
+        "truncated": True,
+        "original_count": 300,
+        "returned_count": 200,
+    }
+    assert metadata_items["endpoint_slice_ready_endpoints"].value["collection_limit"] == {
+        "truncated": True,
+        "original_count": 250,
+        "returned_count": 200,
+    }
+    assert "change_context" not in metadata_items
+
+
 def test_evidence_bundle_skips_empty_change_context_metadata_item() -> None:
     db = SpyDb()
     payload = crashloop_payload(
