@@ -127,8 +127,14 @@ Prometheus range query는 현재 구현되어 있다.
 
 - 등록 위치: `PrometheusMetricsProvider`의 `@telemetry.source(..., range_query_type=PrometheusRangeQuery)`
 - 실행 위치: `PrometheusMetricsProvider.query_range()`
-- normalize 결과: `result_type="matrix"`, `series`, `point_count`
+- normalize 결과: `result_type="matrix"`, `series`, `point_count`, `analysis`
 - 테스트: `tests/test_target_metric_evidence.py`
+
+Prometheus provider는 instant/range 결과 모두에 `analysis`를 추가한다.
+`analysis`는 이미 받은 숫자만 보고 만든 요약이다. 항상 `metric_kind`, `unit`, `signals`를 담고,
+숫자 point가 있으면 `value_summary`를 담는다. known metric이면 `threshold`를 담을 수 있고,
+range query에서 비교 가능한 series가 있으면 `baseline_comparison`을 담는다.
+외부 baseline이나 이전 배포 기준선은 여기서 조회하지 않는다.
 
 ## Kubernetes snapshot payload
 
@@ -327,6 +333,11 @@ RCA evidence item:
 | nested dict/list | 값 전체 대신 요약을 남긴다. |
 | `data`, `result`, `values`, `streams` list | list 내부를 최대 8개까지 재귀 compact한다. |
 
+provider 원본 payload의 `results.<query_name>.analysis`는 nested object다.
+현재 RCA evidence bundle compact 단계에서는 nested dict/list 규칙에 따라 요약될 수 있다.
+원본 evidence에는 `analysis.metric_kind`가 항상 남고, 조건이 맞으면 `analysis.threshold`,
+`analysis.baseline_comparison`도 남아 있다.
+
 #### `logs:related_logs`
 
 producer:
@@ -359,8 +370,16 @@ RCA evidence item:
 | `entries` | list<object> | incident namespace와 맞는 log entry를 최대 8개 남긴다. |
 | `entries[].streams` | list<object> | entry 안의 stream을 최대 4개 남긴다. |
 | `entries[].streams[].values` | list<object> | stream 안의 sample을 최대 20개 남긴다. |
-| `entries[].streams[].values[].line` | string | log line을 최대 1600자로 자른다. |
+| `entries[].streams[].values[].line` | string | provider가 민감정보를 마스킹한 log line을 최대 1600자로 자른다. |
 | `entries[].line_count` | number | namespace 필터 후 남은 stream value 개수를 계산한다. |
+| `entries[].pattern_counts` | object | provider가 수집 시 계산한 장애 pattern별 line 개수다. namespace 필터 후 다시 계산하지 않는다. |
+| `entries[].severity_counts` | object | provider가 수집 시 계산한 severity별 line 개수다. namespace 필터 후 다시 계산하지 않는다. |
+| `entries[].trace_ids` | list<string> | provider가 수집 시 추출한 안전한 trace id 목록이다. namespace 필터 후 다시 계산하지 않는다. |
+| `entries[].redaction_summary` | object | provider redaction 적용 여부와 redacted line 개수다. namespace 필터 후 다시 계산하지 않는다. |
+
+Loki provider는 RCA가 로그 문맥을 읽을 수 있도록 `line` 필드는 유지한다.
+하지만 원문 그대로 보내지 않고 `password`, `token`, `secret`, `Authorization`, `Cookie`, JWT 같은
+민감값을 `[REDACTED]` 계열 문자열로 바꾼 뒤 전달한다.
 
 namespace 필터:
 
@@ -405,6 +424,11 @@ RCA evidence item:
 | `summary` | object | `results`가 없으면 payload 요약으로 대체한다. |
 
 `results.<query_name>`은 list를 최대 8개까지 남기고, 긴 문자열은 최대 1600자로 자른다.
+provider 원본 payload의 `results.<query_name>.analysis`는 nested object다.
+현재 RCA evidence bundle compact 단계에서는 nested dict/list 규칙에 따라 요약될 수 있다.
+원본 evidence에는 `trace_summaries`, `trace_ids`, `services`, `operations`,
+`status_counts`, `error_count`, `dependency_count`, `duration_ms` 같은 RCA용 표준 요약이 남아 있다.
+span attribute 원문 전체나 parent/child span 관계 전체는 이 구조화 필드에 넣지 않는다.
 
 #### `metadata:current_workload_snapshots`
 

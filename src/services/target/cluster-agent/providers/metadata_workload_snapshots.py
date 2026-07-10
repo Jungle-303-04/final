@@ -64,8 +64,10 @@ def current_workload_base_snapshot(
 ) -> JsonObject:
     """Build fields shared by summary and detail snapshots."""
     meta = metadata(deployment)
-    template_meta = metadata(pod_template(deployment))
-    return {
+    template = pod_template(deployment)
+    template_meta = metadata(template)
+    template_spec = spec(template)
+    snapshot: JsonObject = {
         "workload": {
             "kind": K8S_KIND_DEPLOYMENT,
             "namespace": meta.get("namespace"),
@@ -73,11 +75,16 @@ def current_workload_base_snapshot(
         },
         "deployment_labels": object_or_empty(meta.get("labels")),
         "pod_template_labels": object_or_empty(template_meta.get("labels")),
+        "persistent_volume_claim_refs": persistent_volume_claim_refs(template_spec),
         "deployment_status": deployment_status_snapshot(deployment),
         "pod_statuses": [
             pod_status_snapshot(pod) for pod in pods_for_deployment(deployment, replicasets, pods)
         ],
     }
+    auth = pod_template_auth(template_spec)
+    if auth:
+        snapshot["pod_template_auth"] = auth
+    return snapshot
 
 
 def current_workload_summary_snapshot(
@@ -119,6 +126,7 @@ def current_workload_detail_snapshot(
         "deployment_annotations": safe_annotations(meta),
         "pod_template_annotations": safe_annotations(template_meta),
         "managed_fields_managers": managed_field_managers(deployment),
+        "scheduling_constraints": scheduling_constraints(template_spec),
         "containers": [
             container_detail_snapshot(container, volume_refs)
             for container in list_items(template_spec.get("containers"))
@@ -166,6 +174,94 @@ def resource_snapshot(container: JsonObject) -> JsonObject:
             "limits": compact_dict(limits),
         }
     )
+
+
+def persistent_volume_claim_refs(template_spec: JsonObject) -> list[JsonObject]:
+    """Return PVC names used by Pod template volumes."""
+    refs: list[JsonObject] = []
+    for volume in list_items(template_spec.get("volumes")):
+        pvc = object_or_empty(volume.get("persistentVolumeClaim"))
+        claim_name = pvc.get("claimName")
+        if claim_name:
+            refs.append(
+                {
+                    "volume_name": volume.get("name"),
+                    "claim_name": claim_name,
+                }
+            )
+    return refs
+
+
+def pod_template_auth(template_spec: JsonObject) -> JsonObject:
+    """Return small Pod service account and image pull refs."""
+    return compact_dict(
+        {
+            "service_account_name": template_spec.get("serviceAccountName"),
+            "automount_service_account_token": template_spec.get(
+                "automountServiceAccountToken"
+            ),
+            "image_pull_secret_refs": image_pull_secret_refs(template_spec),
+        }
+    )
+
+
+def image_pull_secret_refs(template_spec: JsonObject) -> list[JsonObject]:
+    """Return imagePullSecrets names without reading Secret values."""
+    refs: list[JsonObject] = []
+    for secret in list_items(template_spec.get("imagePullSecrets")):
+        ref = compact_dict({"name": secret.get("name")})
+        if ref:
+            refs.append(ref)
+    return refs
+
+
+def scheduling_constraints(template_spec: JsonObject) -> JsonObject:
+    """Return small Pod scheduling constraints for one Deployment."""
+    return {
+        "node_selector": object_or_empty(template_spec.get("nodeSelector")),
+        "tolerations": toleration_snapshots(template_spec.get("tolerations")),
+        "affinity_summary": affinity_summary(template_spec.get("affinity")),
+    }
+
+
+def toleration_snapshots(value: Any) -> list[JsonObject]:
+    """Return small toleration summaries."""
+    tolerations: list[JsonObject] = []
+    for toleration in list_items(value):
+        snapshot = compact_dict(
+            {
+                "key": toleration.get("key"),
+                "operator": toleration.get("operator"),
+                "value": toleration.get("value"),
+                "effect": toleration.get("effect"),
+                "toleration_seconds": toleration.get("tolerationSeconds"),
+            }
+        )
+        if snapshot:
+            tolerations.append(snapshot)
+    return tolerations
+
+
+def affinity_summary(value: Any) -> JsonObject:
+    """Return boolean flags for affinity rules."""
+    affinity = object_or_empty(value)
+    node_affinity = object_or_empty(affinity.get("nodeAffinity"))
+    required_node_affinity = object_or_empty(
+        node_affinity.get("requiredDuringSchedulingIgnoredDuringExecution")
+    )
+    preferred_node_affinity = list_items(
+        node_affinity.get("preferredDuringSchedulingIgnoredDuringExecution")
+    )
+
+    return {
+        "has_node_affinity": bool(node_affinity),
+        "has_required_node_affinity": bool(required_node_affinity),
+        "has_preferred_node_affinity": bool(preferred_node_affinity),
+        "has_pod_affinity": bool(object_or_empty(affinity.get("podAffinity"))),
+        "has_pod_anti_affinity": bool(
+            object_or_empty(affinity.get("podAntiAffinity"))
+        ),
+    }
 
 
 def deployment_status_snapshot(deployment: JsonObject) -> JsonObject:

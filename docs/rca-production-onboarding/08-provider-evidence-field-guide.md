@@ -30,10 +30,11 @@ provider가 수집한 사실
 - `symptom`, `resource`, `severity`는 현재 real provider가 직접 넣는 필드가 아니다.
   RCA가 쓰려면 `pods`, `events`, `workloads`, `metrics`, `logs`, `traces`를 보고
   별도 정규화 단계에서 파생해야 한다.
-- Kubernetes bucket에는 `raw` 원본 object가 없다. provider가 선택한 summary 필드만 남긴다.
-  반대로 `metrics`, `logs`, `traces`는 query 결과별 `raw`를 보존한다.
-- `metadata` bucket은 현재 `change_context.current_workload_snapshots` 또는
-  `change_context.current_workload_snapshot`에 Deployment snapshot을 담는다.
+- provider bucket은 전체 API response raw를 기본으로 보존하지 않는다.
+  Kubernetes와 metadata는 선택한 summary 필드만 남기고, metrics/logs/traces도 samples, redacted log stream,
+  trace list처럼 provider가 정규화한 필드만 남긴다.
+- `metadata` bucket은 `change_context` 안에 Deployment snapshot과 namespace metadata
+  summary를 함께 담는다.
 
 ## 이 문서 읽는 순서
 
@@ -85,7 +86,7 @@ provider가 수집한 사실
 | `containers[]` | container 목록 안의 항목 하나하나를 뜻한다. | `pods[0].containers[0]` |
 | `<query_name>` 또는 `<name>` | 실제 payload에서는 query 이름으로 바뀌는 자리다. | `metrics.results.scrape_targets_up` |
 | `*` | 여러 key 중 아무거나 올 수 있다는 뜻이다. | `metrics.results.*.samples` |
-| `raw` | provider API 응답 원본이다. 정규화 필드로 부족할 때 참고한다. | Prometheus/Loki/Tempo response |
+| `raw` | provider API 응답 원본을 뜻한다. 현재 evidence bucket에는 전체 raw payload를 기본으로 싣지 않는다. | 필요 시 별도 debug 자료 |
 
 ## 작은 예시로 보는 evidence
 
@@ -211,7 +212,7 @@ provider가 수집한 사실
 | `metrics` | object | Prometheus query 결과를 정규화한 bucket이다. |
 | `logs` | list<object> | Loki query 결과 목록이다. 로그 라인 목록 자체가 아니라 query별 결과 목록이다. |
 | `traces` | object | Tempo trace search 결과를 정규화한 bucket이다. |
-| `metadata` | object | `MetadataProvider`가 만든 변경 맥락 bucket이다. 현재 provider는 전체 조회 시 `change_context.current_workload_snapshots`, 단건 조회 시 `change_context.current_workload_snapshot`을 담는다. |
+| `metadata` | object | `MetadataProvider`가 만든 변경 맥락 bucket이다. 전체 조회 시 `change_context.current_workload_snapshots`, 단건 조회 시 `change_context.current_workload_snapshot`을 담고, Service selector/EndpointSlice/ResourceQuota 요약도 `change_context`에 함께 담는다. |
 
 HTTP `AgentEvidenceRequest`에는 `correlation_id`가 있지만, event body로는 들어가지 않는다.
 Gateway가 event envelope correlation으로 연결한다.
@@ -370,7 +371,9 @@ RCA 파생 예시는 다음과 같다.
 | 필드 | 타입 | 의미 |
 | --- | --- | --- |
 | `name` | string 또는 null | container 이름이다. |
+| `container_id` | string 또는 null | Kubernetes `containerID` 값이다. container runtime이 붙인 실행 container 식별자다. |
 | `image` | string 또는 null | container image name/tag/digest다. image rollout 문제 판단의 기본 재료다. |
+| `image_id` | string 또는 null | Kubernetes `imageID` 값이다. 현재 실행 중인 image digest 확인에 쓴다. |
 | `ready` | boolean 또는 null | container ready 여부다. |
 | `restart_count` | number | Kubernetes `restartCount` 값이다. |
 | `state` | string 또는 null | 현재 state 이름이다. provider는 `state` object의 첫 key를 사용한다. 예: `running`, `waiting`, `terminated`. |
@@ -379,9 +382,16 @@ RCA 파생 예시는 다음과 같다.
 | `exit_code` | number 또는 null | terminated state일 때 exit code다. |
 | `started_at` | string 또는 null | state payload의 startedAt이다. |
 | `finished_at` | string 또는 null | terminated state의 finishedAt이다. |
+| `last_state` | string 또는 null | Kubernetes `lastState` object의 첫 key다. 예: `terminated`. |
+| `last_state_reason` | string 또는 null | 직전 state payload의 reason이다. 예: `OOMKilled`, `Error`. |
+| `last_state_message` | string 또는 null | 직전 state payload의 message다. |
+| `last_exit_code` | number 또는 null | 직전 terminated state의 exit code다. |
+| `last_started_at` | string 또는 null | 직전 state payload의 startedAt이다. |
+| `last_finished_at` | string 또는 null | 직전 terminated state의 finishedAt이다. |
 
-주의: 현재 provider는 `lastState`를 별도 필드로 정규화하지 않는다.
-OOMKilled 같은 과거 종료 이유가 현재 `state`에 없으면 event/log/metrics와 함께 보거나 provider 확장이 필요하다.
+주의: 현재 provider는 `lastState` 원본 전체가 아니라 RCA 판단에 필요한 작은 필드만 정규화한다.
+OOMKilled 같은 과거 종료 이유가 현재 `state`에 없어도 `last_state_reason`, `last_exit_code`,
+`last_state_message`, `last_started_at`, `last_finished_at`을 함께 볼 수 있다.
 
 ### `kubernetes.events[]`
 
@@ -394,6 +404,11 @@ OOMKilled 같은 과거 종료 이유가 현재 `state`에 없으면 event/log/m
 | `type` | string 또는 null | Event type이다. 예: `Warning`, `Normal`. |
 | `reason` | string 또는 null | Event reason이다. 예: `BackOff`, `FailedScheduling`, `Unhealthy`, `FailedMount`. |
 | `message` | string 또는 null | Event message다. root cause 후보를 찾는 핵심 텍스트다. |
+| `reason_summary` | object | Event reason/message에서 만든 작은 RCA 힌트다. 원본 message를 대체하지 않고 `category`, `signal`, `symptom`, `scheduling_causes`를 보조로 제공한다. 알 수 없는 reason이면 생략될 수 있다. |
+| `reason_summary.category` | string | Event 종류를 크게 묶은 값이다. 예: `scheduling`, `probe`, `container_restart`, `image_pull`, `config_or_volume_mount`, `backoff`, `oom_killed`. |
+| `reason_summary.signal` | string | RCA가 바로 볼 수 있는 신호 이름이다. 예: `FailedScheduling`, `CrashLoopBackOff`, `ImagePullBackOff`, `ErrImagePull`, `ReadinessProbeFailed`, `FailedMount`, `OOMKilled`. |
+| `reason_summary.symptom` | string | 추정 symptom 힌트다. 예: `FailedScheduling`, `CrashLoopBackOff`, `ImagePullBackOff`, `ProbeFailure`, `FailedMount`. |
+| `reason_summary.scheduling_causes` | list<string> | `FailedScheduling` message에서 뽑은 작은 원인 label 목록이다. 예: `insufficient_cpu`, `insufficient_memory`, `node_selector_mismatch`, `taint_toleration_mismatch`, `pod_count_limit`, `volume_node_affinity_conflict`. |
 | `count` | number 또는 null | 같은 event가 반복된 횟수다. 심각도와 confidence 보조 신호다. |
 | `first_timestamp` | string 또는 null | 최초 발생 시각이다. `firstTimestamp`가 없으면 `eventTime`을 쓴다. |
 | `last_timestamp` | string 또는 null | 마지막 발생 시각이다. `lastTimestamp`가 없으면 `eventTime`을 쓴다. |
@@ -560,7 +575,10 @@ node memory 사용률 query의 첫 번째 sample 값이다.
 | `query` | string | 실행한 PromQL이다. |
 | `query_mode` | string | `instant` 또는 `range`다. |
 | `result_type` | string 또는 null | Prometheus `data.resultType`이다. 예: `vector`, `matrix`, `scalar`, `string`. |
-| `raw` | object | Prometheus API response 원본이다. RCA가 provider 정규화 밖의 값을 봐야 할 때 쓴다. |
+| `analysis` | object | provider가 sample/series 숫자만 보고 만든 RCA용 해석 요약이다. |
+
+현재 Prometheus provider는 전체 API response raw field를 담지 않는다.
+RCA는 `result_type`, `samples`, `series`, `result` 중 provider가 정규화한 필드를 읽는다.
 
 Instant vector 결과일 때 추가 필드다.
 
@@ -590,6 +608,38 @@ Vector/matrix가 아닌 결과일 때 추가 필드다.
 | --- | --- | --- |
 | `result` | any | Prometheus `data.result` 원본이다. |
 
+### `metrics.results.<metric_name>.analysis`
+
+`analysis`는 provider가 이미 받은 숫자만 보고 만든 보조 해석이다.
+새 Kubernetes API나 외부 baseline을 조회하지 않는다.
+따라서 데이터 전송 계약은 기존 `metrics.results.<metric_name>` object에 필드를 추가하는 방식으로만 넓어진다.
+
+| 필드 | 타입 | 의미 |
+| --- | --- | --- |
+| `metric_kind` | string | query name과 PromQL에서 추정한 metric 종류다. 예: `memory_usage_ratio`, `cpu_usage_ratio`, `cpu_throttling`, `scrape_health`, `pod_not_ready_count`, `restart_count_or_rate`. |
+| `unit` | string | 값 단위의 보수적 추정이다. 예: `ratio`, `count`, `boolean_0_or_1`, `count_or_ratio`, `count_or_rate`, `rate_or_cores`, `bytes_or_unknown`, `unknown`. |
+| `sample_count` | number | instant vector일 때 sample 개수다. |
+| `series_count` | number | range matrix일 때 series 개수다. |
+| `point_count` | number | range matrix일 때 point 개수다. |
+| `value_summary` | object | 숫자 point가 있을 때 `count`, `min`, `max`, `avg`, `latest`, `latest_timestamp`를 담는 요약이다. |
+| `threshold` | object | known metric이고 숫자 point가 있을 때 provider가 적용한 보수적 threshold 판단이다. |
+| `signals` | list<string> | threshold를 넘었거나 range 안에서 증가했을 때 붙는 작은 RCA signal label 목록이다. |
+| `baseline_comparison` | object | range query에서 비교 가능한 series가 있을 때 같은 window의 첫 point와 마지막 point를 비교한 요약이다. |
+
+Threshold 기준:
+
+| metric 종류 | 기준 |
+| --- | --- |
+| ratio 계열 | `0.8` 이상 warning, `0.9` 이상 critical |
+| `scrape_health` | `up < 1`이면 critical |
+| restart/not ready/scrape error/throttling 계열 | `0`보다 크면 warning |
+
+`baseline_comparison`은 외부 baseline이 아니다.
+같은 query window의 첫 point를 기준으로 `increased_series_count`, `decreased_series_count`,
+`flat_series_count`, `max_delta`, `max_percent_change`를 계산한다.
+배포 전후 비교나 장기 baseline 비교는 Management Server 또는 RCA worker가 별도 기준 데이터를 줄 때만 가능하다.
+`threshold`와 `baseline_comparison`은 조건이 맞지 않으면 생략될 수 있다.
+
 기본 policy query는 다음과 같다.
 
 | query name | 의미 |
@@ -612,6 +662,8 @@ RCA 파생 예시는 다음과 같다.
 | restart 증가 추세 | 별도 restart range query의 `series[].values` |
 | Deployment replica 이상 | `target_deployment_replicas.samples`, Kubernetes `workloads` |
 | 관측성 자체 문제 | `scrape_targets_up.samples`, `node_collector_scrape_error.samples` |
+| threshold 초과 여부 | `metrics.results.<metric_name>.analysis.threshold` |
+| window 안 증가 여부 | `metrics.results.<metric_name>.analysis.baseline_comparison` |
 
 ## Logs bucket
 
@@ -621,10 +673,13 @@ Logs bucket은 Loki provider가 만든다.
 초심자 관점에서는 "애플리케이션이나 agent가 직접 남긴 문장 증거"다.
 Kubernetes Event가 "컨테이너가 재시작된다"고 말해준다면, log line은 "왜 프로세스가 죽었는지"를
 더 구체적으로 보여줄 수 있다.
+다만 `logs[].streams[].values[].line`은 Loki 원문 그대로가 아니라 provider가 민감정보를 마스킹한 문장이다.
+원문을 더 넓게 노출하지 않기 위해, RCA가 바로 쓰기 쉬운 pattern count, severity count, trace id 목록을 함께 보낸다.
 
 logs를 읽을 때는 `logs[].query_name`으로 어떤 로그 query 결과인지 확인하고,
-`line_count`로 잡힌 로그가 있는지 본 다음, 실제 문장은
-`logs[].streams[].values[].line`에서 읽는다.
+`line_count`로 잡힌 로그가 있는지 본 다음, 마스킹된 로그 문장은
+`logs[].streams[].values[].line`에서 읽는다. 빠른 판단에는 `pattern_counts`, `severity_counts`,
+`trace_ids`를 먼저 보면 된다.
 
 ```json
 [
@@ -635,7 +690,29 @@ logs를 읽을 때는 `logs[].query_name`으로 어떤 로그 query 결과인지
     "result_type": "streams",
     "streams": [],
     "line_count": 0,
-    "raw": {}
+    "pattern_counts": {
+      "probe_failed": 0,
+      "health_endpoint_error": 0,
+      "dependency_timeout": 0,
+      "dependency_error": 0,
+      "image_pull_error": 0,
+      "oom_or_memory": 0,
+      "config_error": 0
+    },
+    "severity_counts": {
+      "critical": 0,
+      "error": 0,
+      "warn": 0,
+      "info": 0,
+      "debug": 0,
+      "trace": 0,
+      "unknown": 0
+    },
+    "trace_ids": [],
+    "redaction_summary": {
+      "applied": true,
+      "redacted_line_count": 0
+    }
   }
 ]
 ```
@@ -649,7 +726,10 @@ logs를 읽을 때는 `logs[].query_name`으로 어떤 로그 query 결과인지
 | `logs[].result_type` | string 또는 null | Loki `data.resultType`이다. 보통 `streams`다. |
 | `logs[].streams` | list<object> | Loki stream 목록이다. |
 | `logs[].line_count` | number | 모든 stream의 log entry 개수 합계다. |
-| `logs[].raw` | object | Loki API response 원본이다. |
+| `logs[].pattern_counts` | object | provider가 마스킹된 log line을 읽고 계산한 장애 신호별 matching line 개수다. |
+| `logs[].severity_counts` | object | `ERROR`, `WARN`, `level=error` 같은 표현을 정규화한 severity별 line 개수다. |
+| `logs[].trace_ids` | list<string> | 로그에서 찾은 안전한 trace id 목록이다. 32자리 hex trace id만 최대 20개까지 담는다. |
+| `logs[].redaction_summary` | object | provider가 로그 마스킹을 적용했는지와 실제로 값이 바뀐 line 개수를 나타낸다. |
 
 ### `logs[].streams[]`
 
@@ -663,7 +743,25 @@ logs를 읽을 때는 `logs[].query_name`으로 어떤 로그 query 결과인지
 | 필드 | 타입 | 의미 |
 | --- | --- | --- |
 | `timestamp` | string 또는 null | Loki log timestamp다. nanosecond string 형태일 수 있다. |
-| `line` | string 또는 null | 실제 log line이다. root cause keyword 판단에 쓴다. |
+| `line` | string 또는 null | provider가 민감정보를 가린 log line이다. root cause keyword 판단에 쓴다. |
+
+마스킹 기준은 보수적으로 잡는다. `password`, `token`, `secret`, `api_key`, `client_secret`,
+`credential`, `private_key`, `Authorization`, `Bearer`, `Cookie`, JWT, AWS access key, URL 안의
+계정정보, email은 `[REDACTED]` 계열 값으로 바꾼다. 반대로 `trace_id`, `span_id`, `request_id`,
+namespace, pod name, `ERROR`, `timeout`, `probe failed`, `ImagePullBackOff`, `OOMKilled` 같은 RCA 판단
+키워드는 유지한다.
+
+`pattern_counts`는 각 pattern에 매칭된 log line 개수다. 현재 pattern key는 다음과 같다.
+
+| pattern key | 의미 |
+| --- | --- |
+| `probe_failed` | readiness/liveness/startup probe 실패 또는 `Unhealthy` 로그다. |
+| `health_endpoint_error` | `/health`, `/ready`, health check 실패 로그다. |
+| `dependency_timeout` | timeout, deadline exceeded, connection timed out 계열 로그다. |
+| `dependency_error` | connection refused/reset, DNS lookup failed, upstream/downstream 실패 로그다. |
+| `image_pull_error` | `ImagePullBackOff`, `ErrImagePull`, image pull 실패 로그다. |
+| `oom_or_memory` | OOMKilled, out of memory, memory limit/pressure 계열 로그다. |
+| `config_error` | ConfigMap/Secret/env/volume/mount 누락 또는 실패 로그다. |
 
 기본 policy query는 다음과 같다.
 
@@ -692,6 +790,7 @@ upstream latency, management gateway 호출 실패 같은 흐름형 문제를 �
 
 traces를 읽을 때는 `results.<query_name>.trace_count`로 잡힌 trace가 있는지 보고,
 각 trace의 `rootServiceName`, `rootTraceName`, `durationMs`, `traceID` 같은 값을 확인한다.
+RCA가 표준 필드를 먼저 보고 싶을 때는 `results.<query_name>.analysis`를 읽는다.
 
 ```json
 {
@@ -701,7 +800,20 @@ traces를 읽을 때는 `results.<query_name>.trace_count`로 잡힌 trace가 �
       "query": "{ status = error }",
       "traces": [],
       "trace_count": 0,
-      "raw": {}
+      "analysis": {
+        "trace_summaries": [],
+        "trace_ids": [],
+        "services": [],
+        "operations": [],
+        "status_counts": {
+          "error": 0,
+          "ok": 0,
+          "unset": 0,
+          "unknown": 0
+        },
+        "error_count": 0,
+        "dependency_count": 0
+      }
     }
   }
 }
@@ -720,7 +832,10 @@ traces를 읽을 때는 `results.<query_name>.trace_count`로 잡힌 trace가 �
 | `query` | string | 실행한 TraceQL 또는 Tempo search query다. |
 | `traces` | list<object> | Tempo `/api/search`가 반환한 trace 목록이다. provider는 내부 trace object를 세부 정규화하지 않고 보존한다. |
 | `trace_count` | number | `traces` 목록 길이다. |
-| `raw` | object | Tempo API response 원본이다. |
+| `analysis` | object | RCA가 바로 읽기 쉬운 trace/span 요약이다. |
+
+현재 Tempo provider는 전체 API response raw field를 담지 않는다.
+RCA는 `analysis`를 먼저 보고, 필요하면 `traces[]`와 `trace_count`를 함께 본다.
 
 `traces[]` 내부 object는 Tempo 응답에 따라 달라질 수 있다.
 테스트와 일반 search response 기준으로 다음 값이 들어올 수 있다.
@@ -732,6 +847,48 @@ traces를 읽을 때는 `results.<query_name>.trace_count`로 잡힌 trace가 �
 | `rootTraceName` | root span 또는 operation 이름이다. |
 | `durationMs` | trace duration millisecond다. |
 | `query` | 테스트 레거시 데이터에서는 어떤 query로 잡힌 trace인지 보조 정보로 들어간다. |
+
+### `traces.results.<query_name>.analysis`
+
+`analysis`는 기존 trace 목록을 없애지 않고 옆에 추가되는 구조화 요약이다.
+목적은 Tempo 응답 모양이 조금 달라도 RCA가 같은 필드명으로 trace를 읽게 하는 것이다.
+민감정보 노출을 늘리지 않기 위해 span attribute 전체는 복사하지 않는다.
+각 trace 안의 span summary도 최대 8개까지만 남긴다.
+
+| 필드 | 타입 | 의미 |
+| --- | --- | --- |
+| `trace_summaries` | list<object> | trace별 표준 요약이다. 최대 20개를 만든다. |
+| `trace_ids` | list<string> | trace summary에서 뽑은 trace id 목록이다. |
+| `services` | list<string> | root service 이름 목록이다. |
+| `operations` | list<string> | root operation 이름 목록이다. |
+| `status_counts` | object | `error`, `ok`, `unset`, `unknown` trace 개수다. |
+| `error_count` | number | error trace 개수다. |
+| `dependency_count` | number | dependency 관련 trace 개수다. |
+| `span_count` | number | span summary가 있을 때만 들어가는 span summary 개수다. |
+| `error_span_count` | number | error span summary 개수다. |
+| `dependency_span_count` | number | dependency span summary 개수다. |
+| `duration_ms` | object | trace duration millisecond의 `count`, `min`, `max`, `avg` 요약이다. |
+
+dependency span 실패 여부를 바로 나타내는 단일 필드는 없다.
+필요하면 `error_span_count`, `dependency_span_count`, `span_summaries[].error`,
+`span_summaries[].is_dependency`를 함께 봐야 한다.
+
+`trace_summaries[]`의 주요 필드는 다음과 같다.
+
+| 필드 | 타입 | 의미 |
+| --- | --- | --- |
+| `trace_id` | string | trace 식별자다. |
+| `service` | string | root service 이름이다. |
+| `operation` | string | root span 또는 operation 이름이다. |
+| `status` | string | `error`, `ok`, `unset`, `unknown` 중 하나다. |
+| `duration_ms` | number | trace duration millisecond다. |
+| `error` | boolean | trace 또는 하위 span이 error로 보이는지 여부다. |
+| `is_dependency` | boolean | client/producer/consumer span 또는 dependency attribute가 있는지 여부다. |
+| `span_summaries` | list<object> | span별 표준 요약이다. trace마다 최대 8개만 담는다. |
+
+`span_summaries[]`는 `trace_id`, `span_id`, `service`, `operation`, `status`,
+`duration_ms`, `error`, `is_dependency`만 담는다.
+span attribute 원문 전체, parent/child 관계 전체, request/response payload는 담지 않는다.
 
 기본 policy query는 다음과 같다.
 
@@ -746,18 +903,18 @@ RCA 파생 예시는 다음과 같다.
 
 | 파생 정보 | 볼 필드 |
 | --- | --- |
-| dependency timeout | `traces[].rootServiceName`, `rootTraceName`, `durationMs`, raw span/status 정보 |
+| dependency timeout | `analysis.dependency_count`, `analysis.duration_ms.max`, `analysis.trace_summaries[].span_summaries[]` |
 | management plane 문제 | `target_agent_error_spans`, `management_gateway_spans` |
-| application error path | `application_error_spans.trace_count`, trace root service/operation |
+| application error path | `application_error_spans.trace_count`, `analysis.error_count`, `analysis.services`, `analysis.operations` |
 
 ## Metadata bucket
 
-구현 메모: `MetadataProvider`가 Kubernetes API 호출과 metadata evidence 조립을 담당한다. helper 모듈은 snapshot 생성, ConfigMap/Secret reference 요약, EndpointSlice ready endpoint 요약, Service selector 매칭, Deployment/ReplicaSet/Pod 소유 관계 계산만 나누어 맡는다. 이 helper 모듈들은 event를 발행하지 않고 payload 계약도 바꾸지 않는다.
+구현 메모: `MetadataProvider`가 Kubernetes API 호출과 metadata evidence 조립을 담당한다. helper 모듈은 snapshot 생성, ConfigMap/Secret reference 요약, EndpointSlice ready endpoint 요약, Service selector 매칭, ResourceQuota 요약, Deployment/ReplicaSet/Pod 소유 관계 계산만 나누어 맡는다. 이 helper 모듈들은 event를 발행하지 않고 payload 계약도 바꾸지 않는다.
 
 Metadata bucket은 `MetadataProvider`가 만든다.
 현재 구현은 외부 배포 시스템을 직접 조회하지 않는다.
-대신 target namespace의 Deployment, ReplicaSet, Pod, Service, EndpointSlice 목록을 Kubernetes API에서 읽어
-현재 workload snapshot 목록을 만든다.
+대신 target namespace의 Deployment, ReplicaSet, Pod, Service, ResourceQuota, EndpointSlice 목록을 Kubernetes API에서 읽어
+현재 workload snapshot과 namespace metadata summary를 만든다.
 
 `MetadataSnapshotQuery.query` 값이 `change_context`, `current_workload_snapshots`, `deployments`이면
 target namespace의 모든 Deployment를 summary snapshot 목록으로 보낸다.
@@ -776,6 +933,15 @@ detail snapshot인 `current_workload_snapshot` 단수 값으로 보낸다.
         },
         "deployment_labels": {},
         "pod_template_labels": {},
+        "pod_template_auth": {
+          "service_account_name": "checkout-api-sa",
+          "automount_service_account_token": false,
+          "image_pull_secret_refs": [
+            {
+              "name": "registry-credentials"
+            }
+          ]
+        },
         "deployment_status": {
           "observed_generation": 12,
           "desired_replicas": 3,
@@ -907,9 +1073,10 @@ detail snapshot인 `current_workload_snapshot` 단수 값으로 보낸다.
 
 단건 detail snapshot은 summary 필드에 더해 `deployment_annotations`,
 `pod_template_annotations`, `managed_fields_managers`,
-`containers[].env_refs`, `containers[].env_from_refs`,
-`containers[].volume_mount_refs`, `replicaset_revisions[].created_at`,
-`replicaset_revisions[].conditions`를 추가로 담는다.
+`scheduling_constraints`, `containers[].env_refs`,
+`containers[].env_from_refs`, `containers[].volume_mount_refs`,
+`replicaset_revisions[].created_at`, `replicaset_revisions[].conditions`를
+추가로 담는다.
 
 | 필드 | 타입 | 의미 |
 | --- | --- | --- |
@@ -935,9 +1102,32 @@ detail snapshot인 `current_workload_snapshot` 단수 값으로 보낸다.
 | `change_context.endpoint_slice_ready_endpoints[].serving_endpoint_count` | number | condition `serving=true`인 endpoint 수다. |
 | `change_context.endpoint_slice_ready_endpoints[].terminating_endpoint_count` | number | condition `terminating=true`인 endpoint 수다. |
 | `change_context.endpoint_slice_ready_endpoints[].ready_targets` | list<object> | ready endpoint가 가리키는 target object kind/namespace/name이다. 보통 Pod다. endpoint IP address는 담지 않는다. |
+| `change_context.resource_quotas` | list<object> | namespace ResourceQuota hard/used 요약이다. summary query와 detail query 모두 같은 namespace 맥락으로 담는다. |
+| `change_context.resource_quotas[].name` | string | ResourceQuota 이름이다. |
+| `change_context.resource_quotas[].namespace` | string | ResourceQuota namespace다. |
+| `change_context.resource_quotas[].hard` | object | ResourceQuota status.hard 값이다. CPU, memory, pod 수 같은 제한값을 Kubernetes quantity 문자열 그대로 담는다. |
+| `change_context.resource_quotas[].used` | object | ResourceQuota status.used 값이다. 현재 사용량을 Kubernetes quantity 문자열 그대로 담는다. |
+| `change_context.referenced_config_objects` | list<object> | 단건 detail에만 있는 참조된 ConfigMap/Secret 객체 metadata 요약이다. 객체 값은 담지 않는다. |
+| `change_context.referenced_config_objects[].kind` | string | `ConfigMap` 또는 `Secret`이다. |
+| `change_context.referenced_config_objects[].namespace` | string | 참조된 객체 namespace다. |
+| `change_context.referenced_config_objects[].name` | string | 참조된 객체 이름이다. |
+| `change_context.referenced_config_objects[].exists` | boolean 또는 null | 객체 존재 여부다. 권한이 없어 확인할 수 없으면 null이다. |
+| `change_context.referenced_config_objects[].access` | string | `ok`, `not_found`, `forbidden` 중 하나다. |
+| `change_context.referenced_config_objects[].created_at` | string | 객체 metadata.creationTimestamp다. 조회 성공 시에만 있다. |
+| `change_context.referenced_config_objects[].labels` | object | 안전하다고 본 labels 요약이다. 민감 token이 있는 label은 제외한다. |
+| `change_context.referenced_config_objects[].referenced_by` | list<object> | 어떤 container/env/envFrom/volume이 이 객체를 참조했는지 나타낸다. |
+| `change_context.referenced_config_objects[].referenced_key_checks` | list<object> | 명시적으로 참조한 key가 객체 안에 있는지 확인한 결과다. 조회 성공 시에만 있다. |
+| `change_context.referenced_config_objects[].referenced_key_checks[].key` | string | Deployment가 env keyRef 또는 volume items에서 직접 참조한 key 이름이다. |
+| `change_context.referenced_config_objects[].referenced_key_checks[].exists` | boolean | 해당 key가 ConfigMap/Secret data 또는 binaryData key로 존재하는지 여부다. 값은 담지 않는다. |
+| `change_context.referenced_config_objects[].referenced_key_checks[].sources` | list<string> | 이 key를 참조한 위치 종류다. 현재 `env`, `volume`만 쓴다. `envFrom`은 key를 명시하지 않으므로 제외한다. |
 | `change_context.current_workload_snapshots[].workload` | object | workload kind, namespace, name이다. 현재 kind는 `Deployment`다. |
 | `change_context.current_workload_snapshots[].deployment_labels` | object | Deployment metadata labels다. |
 | `change_context.current_workload_snapshots[].pod_template_labels` | object | Pod template metadata labels다. |
+| `change_context.current_workload_snapshots[].pod_template_auth` | object | Pod template의 service account와 image pull secret name 요약이다. private image pull 실패와 권한 문제 후보를 보기 위한 값이다. 값이 없으면 생략될 수 있고, Secret 값은 담지 않는다. |
+| `change_context.current_workload_snapshots[].pod_template_auth.service_account_name` | string | Pod template `serviceAccountName` 값이다. |
+| `change_context.current_workload_snapshots[].pod_template_auth.automount_service_account_token` | boolean | Pod template `automountServiceAccountToken` 값이다. `false`도 의미가 있으므로 보존한다. |
+| `change_context.current_workload_snapshots[].pod_template_auth.image_pull_secret_refs[].name` | string | Pod template `imagePullSecrets[].name` 값이다. Secret 객체의 data는 읽거나 보내지 않는다. |
+| `change_context.current_workload_snapshots[].persistent_volume_claim_refs` | list<object> | Pod template volume이 참조하는 PVC volume name과 claim name 목록이다. PVC object 자체는 담지 않는다. |
 | `change_context.current_workload_snapshots[].deployment_status` | object | Deployment status의 replica count와 condition 요약이다. |
 | `change_context.current_workload_snapshots[].deployment_status.conditions` | list<object> | Deployment condition의 type/status/reason/message/time 요약이다. |
 | `change_context.current_workload_snapshots[].pod_statuses` | list<object> | 이 Deployment가 소유한 Pod의 phase, ready 여부, condition 요약이다. |
@@ -949,6 +1139,10 @@ detail snapshot인 `current_workload_snapshot` 단수 값으로 보낸다.
 | `change_context.current_workload_snapshot.deployment_annotations` | object | 단건 detail에만 있는 안전한 Deployment metadata annotations다. |
 | `change_context.current_workload_snapshot.pod_template_annotations` | object | 단건 detail에만 있는 안전한 Pod template metadata annotations다. |
 | `change_context.current_workload_snapshot.managed_fields_managers` | list<string> | 단건 detail에만 있는 Deployment managedFields의 manager 이름 목록이다. |
+| `change_context.current_workload_snapshot.scheduling_constraints` | object | 단건 detail에만 있는 Pod 배치 조건 요약이다. 전체 summary에는 담지 않는다. |
+| `change_context.current_workload_snapshot.scheduling_constraints.node_selector` | object | Pod template `nodeSelector`다. 단순 key-value 조건이라 그대로 담는다. |
+| `change_context.current_workload_snapshot.scheduling_constraints.tolerations` | list<object> | Pod template tolerations의 `key`, `operator`, `value`, `effect`, `toleration_seconds` 요약이다. |
+| `change_context.current_workload_snapshot.scheduling_constraints.affinity_summary` | object | affinity 원본 대신 `has_node_affinity`, `has_required_node_affinity`, `has_preferred_node_affinity`, `has_pod_affinity`, `has_pod_anti_affinity` boolean만 담는다. |
 | `change_context.current_workload_snapshot.containers[].env_refs` | list<object> | 단건 detail에만 있는 env ConfigMap/Secret key reference 요약이다. 값 자체는 담지 않는다. |
 | `change_context.current_workload_snapshot.containers[].env_from_refs` | list<object> | 단건 detail에만 있는 envFrom ConfigMap/Secret reference 요약이다. |
 | `change_context.current_workload_snapshot.containers[].volume_mount_refs` | list<object> | 단건 detail에만 있는 ConfigMap/Secret volume reference 요약이다. |
@@ -959,6 +1153,11 @@ detail snapshot인 `current_workload_snapshot` 단수 값으로 보낸다.
 `normalize_payload()` 결과 bucket에는 `change_context`만 남긴다.
 전체 조회 summary는 annotations, managedFields, config reference, ReplicaSet condition을 담지 않는다.
 단건 detail은 안전한 Deployment/Pod template annotations만 남긴다.
+Scheduling constraints는 단건 detail에만 담는다. Scheduling 문제는 보통 특정 Deployment가
+Pending이거나 배치 실패 후보일 때 깊게 보는 값이고, 전체 namespace summary에 모든
+Deployment의 affinity 조건을 넣으면 payload가 커지고 원인 후보와 무관한 noise가 늘어난다.
+`node_selector`는 단순 key-value라 그대로 담지만, `tolerations`는 작은 필드만 남기고
+`affinity`는 구조가 깊고 label selector가 길어질 수 있어서 boolean summary만 남긴다.
 전체 summary query의 Service selector 비교 결과는 namespace의 모든 Service를 담는다.
 단건 detail query의 Service selector 비교 결과는 target Deployment와 관련 있는 Service만 담는다.
 관련 기준은 selector가 target pod template labels와 맞는 경우, selector가 실제 target Pod labels와 맞는 경우,
@@ -966,6 +1165,19 @@ detail snapshot인 `current_workload_snapshot` 단수 값으로 보낸다.
 EndpointSlice ready endpoint 요약도 같은 범위 규칙을 쓴다.
 전체 summary query는 namespace의 모든 EndpointSlice를 담고, 단건 detail query는 관련 Service의 EndpointSlice만 담는다.
 EndpointSlice endpoint의 IP address는 남기지 않는다.
+ResourceQuota 요약은 workload 하나의 속성이 아니라 namespace 수준 제한 정보다.
+그래서 summary query와 detail query 모두 `change_context.resource_quotas[]`에 담고,
+`current_workload_snapshot` 안에는 넣지 않는다.
+ResourceQuota 조회 권한이 없거나 API가 없으면 provider는 실패하지 않고 빈 목록을 남긴다.
+참조된 ConfigMap/Secret 객체 metadata 요약은 단건 detail query에만 담는다.
+전체 summary query에서는 참조 객체를 따라가지 않는다.
+이 요약은 객체 존재 여부와 참조 위치를 보기 위한 값이며 Secret/ConfigMap 값은 담지 않는다.
+Secret `data`, `binaryData`, `stringData`, ConfigMap `data`, `binaryData`,
+raw object, annotations는 제외한다.
+조회에 성공한 객체는 `referenced_key_checks[]`로 명시 참조 key 존재 여부를 제공한다.
+이때 전체 key 목록은 보내지 않고, Deployment가 직접 참조한 key만 확인한다.
+`envFrom`은 key를 지정하지 않으므로 key check 대상에서 제외한다.
+구현은 기존 config reference 흐름을 재사용한다. `metadata_config_refs.py`는 참조 객체와 참조 위치를 찾고, `metadata_config_objects.py`는 명시 key 존재 여부와 RCA에 넘길 안전한 객체 요약을 만든다.
 `kubectl.kubernetes.io/last-applied-configuration` 같은 원문 manifest annotation과
 secret/token/password/credential/private/authorization 이름이 들어간 annotation은 제외한다.
 단건 detail의 env/envFrom/volume ConfigMap/Secret reference는 name/key/path만 남기고 값 자체는 남기지 않는다.
@@ -1014,7 +1226,7 @@ Provider가 이미 보내는 값은 다음과 같다.
 | 수집 시각/window | `window_start`, `kubernetes.cluster.collected_at` |
 | Pod 상태 | `kubernetes.pods[]` |
 | container 상태 | `kubernetes.pods[].containers[]` |
-| Kubernetes warning/reason/message | `kubernetes.events[]` |
+| Kubernetes warning/reason/message/reason_summary | `kubernetes.events[]` |
 | node 상태와 capacity | `kubernetes.nodes[]` |
 | workload replica 상태 | `kubernetes.workloads[]` |
 | Service/endpoint 연결 | `kubernetes.services[]`, `kubernetes.endpoints[]` |
@@ -1022,16 +1234,18 @@ Provider가 이미 보내는 값은 다음과 같다.
 | log line | `logs[].streams[].values[].line` |
 | trace search 결과 | `traces.results.*.traces` |
 | 현재 workload snapshot 목록 | `metadata.change_context.current_workload_snapshots[]` |
-| 현재 image/probe/resources/labels/status/revision summary | `metadata.change_context.current_workload_snapshots[].containers[]`, `deployment_labels`, `pod_template_labels`, `deployment_status`, `pod_statuses`, `replicaset_revisions` |
+| 현재 image/probe/resources/labels/status/PVC refs/auth/revision summary | `metadata.change_context.current_workload_snapshots[].containers[]`, `deployment_labels`, `pod_template_labels`, `pod_template_auth`, `persistent_volume_claim_refs`, `deployment_status`, `pod_statuses`, `replicaset_revisions` |
 | Service selector와 Pod labels 매칭 결과 | `metadata.change_context.service_selector_matches[]` |
 | EndpointSlice ready endpoint 요약 | `metadata.change_context.endpoint_slice_ready_endpoints[]` |
-| 특정 Deployment detail의 annotations/manager/config refs/ReplicaSet conditions | `metadata.change_context.current_workload_snapshot.deployment_annotations`, `pod_template_annotations`, `managed_fields_managers`, `containers[].env_refs`, `containers[].env_from_refs`, `containers[].volume_mount_refs`, `replicaset_revisions[].conditions` |
+| ResourceQuota hard/used 요약 | `metadata.change_context.resource_quotas[]` |
+| 참조된 ConfigMap/Secret 객체 metadata 요약 | `metadata.change_context.referenced_config_objects[]` |
+| 특정 Deployment detail의 annotations/manager/scheduling/config refs/ReplicaSet conditions | `metadata.change_context.current_workload_snapshot.deployment_annotations`, `pod_template_annotations`, `managed_fields_managers`, `scheduling_constraints`, `containers[].env_refs`, `containers[].env_from_refs`, `containers[].volume_mount_refs`, `replicaset_revisions[].conditions` |
 
 RCA가 판단하려면 다음 값은 파생해야 한다.
 
 | 파생 값 | 파생에 쓸 필드 |
 | --- | --- |
-| `symptom` | `pods[].waiting_reasons`, `pods[].terminated_reasons`, `pods[].phase`, `events[].reason/message`, `workloads[].conditions` |
+| `symptom` | `pods[].waiting_reasons`, `pods[].terminated_reasons`, `pods[].phase`, `events[].reason/message/reason_summary`, `workloads[].conditions` |
 | `affected_resource` | `pods[].owner_kind/name`, `pods[].workload_key`, `events[].involved_kind/name`, `workloads[].kind/name` |
 | `severity` | `restart_total`, `events[].type/count`, `workloads[].unavailable_replicas`, node pressure, metric threshold, `logs[].line_count`, `trace_count` |
 | `root_cause_candidate` | symptom plus Kubernetes reason/message plus metrics/logs/traces evidence |
@@ -1057,7 +1271,7 @@ RCA가 판단하려면 다음 값은 파생해야 한다.
 | 파생 필드 | 추천 source |
 | --- | --- |
 | `resource` | `events[].involved_*`, `pods[].owner_*`, `workloads[]` 우선순위로 선택 |
-| `symptom` | `pods[].waiting_reasons`, `pods[].terminated_reasons`, `events[].reason/message`, `workloads[].conditions` |
+| `symptom` | `pods[].waiting_reasons`, `pods[].terminated_reasons`, `events[].reason/message/reason_summary`, `workloads[].conditions` |
 | `severity` | Warning event 반복 수, unavailable replica, restart_total, node pressure, error log count |
 | `first_seen_at` | `events[].first_timestamp`, `pods[].start_time`, earliest log timestamp |
 
@@ -1075,19 +1289,22 @@ RCA/evidence-worker 쪽 담당 영역이다. 이 문서는 provider가 보내는
 
 | 필요한 metadata | 현재 provider로 가능한지 | 보강 방향 |
 | --- | --- | --- |
-| target namespace Deployment별 현재 image/probe/resources/labels/status/Pod status/ReplicaSet revision summary | 가능 | `change_context.current_workload_snapshots[]`를 쓴다. 전체 조회에는 annotations, config refs, manager, ReplicaSet conditions를 넣지 않는다. |
+| target namespace Deployment별 현재 image/probe/resources/labels/status/Pod status/PVC refs/ReplicaSet revision summary | 가능 | `change_context.current_workload_snapshots[]`를 쓴다. 전체 조회에는 annotations, config refs, manager, ReplicaSet conditions를 넣지 않는다. |
 | 특정 Deployment 1개 detail snapshot | 가능 | `deployment/<name>` 또는 `deployment/<namespace>/<name>` query를 쓴다. 안전한 annotations, manager, ConfigMap/Secret references, ReplicaSet conditions를 추가로 제공한다. |
 | recent git commit / deploy revision | 없음 | GitOps event, manifest render, SCM metadata 연결 |
 | rollback 가능 여부 / risk_level | 없음 | 배포 이력, policy, GitOps/CI/CD 상태 연결 |
-| previous/current image digest | 일부만 가능 | `containers[].image`는 현재 image tag만 제공한다. digest, rollout history, previous image가 필요하다. |
+| previous/current image digest | 일부 가능 | Kubernetes `pods[].containers[].image_id`로 현재 image digest를 볼 수 있다. rollout history와 previous image는 아직 없다. |
 | Deployment/Pod template annotations | 일부 가능 | 단건 detail에서 `ops.service/*`, `prometheus.io/*`, `deployment.kubernetes.io/*`, `kubectl.kubernetes.io/*` 중 안전한 key만 남긴다. |
-| ConfigMap/Secret key reference | 일부 가능 | 단건 detail에서 env/envFrom/volume reference name/key/path를 제공한다. Secret/ConfigMap 객체 metadata는 아직 조회하지 않는다. |
+| ConfigMap/Secret key reference | 가능 | 단건 detail에서 env/envFrom/volume reference name/key/path를 제공한다. 객체 metadata는 `referenced_config_objects[]`에서 별도로 제공한다. |
+| ConfigMap/Secret object metadata summary | 가능 | 단건 detail의 `referenced_config_objects[]`에서 존재 여부, 접근 상태, 생성 시각, 안전한 labels, 참조 위치, 명시 참조 key 존재 여부를 제공한다. 값과 annotations는 제공하지 않는다. |
 | resource requests/limits | 가능 | `containers[].resources.requests/limits`를 제공한다. |
 | Deployment/ReplicaSet/Pod status conditions | 가능 | `deployment_status.conditions`와 `pod_statuses[].conditions`는 summary에도 있고, `replicaset_revisions[].conditions`는 단건 detail에만 있다. |
 | Service selector와 Pod labels 매칭 결과 | 가능 | `service_selector_matches[]`에서 Service별 `match_status`, `matched_pod_count`, `matched_pods`를 제공한다. |
 | EndpointSlice ready endpoint 요약 | 가능 | `endpoint_slice_ready_endpoints[]`에서 Service별 EndpointSlice ready/not ready count와 ready target Pod를 제공한다. endpoint IP address는 제공하지 않는다. |
-| imagePullSecrets | 불충분 | Pod spec imagePullSecrets summary 추가 |
-| NetworkPolicy/Ingress/PVC | 없음 | Kubernetes provider 조회 resource 확장 |
+| ResourceQuota hard/used 요약 | 가능 | `resource_quotas[]`에서 namespace quota 제한값과 현재 사용량을 제공한다. 권한이 없으면 빈 목록이다. |
+| imagePullSecrets / serviceAccountName | 가능 | `metadata.change_context.current_workload_snapshots[].pod_template_auth`에서 Secret name, service account name, automount flag를 제공한다. Secret 값은 제공하지 않는다. |
+| NetworkPolicy/Ingress | 없음 | Kubernetes provider 조회 resource 확장 |
+| PVC refs | 가능 | `metadata.change_context.current_workload_snapshots[].persistent_volume_claim_refs[]`를 제공한다. PVC object 자체는 조회하지 않는다. |
 
 ### 현재 Kubernetes summary에 없는 값
 
@@ -1098,12 +1315,12 @@ Kubernetes provider는 raw object를 그대로 넘기지 않고 summary만 보�
 | --- | --- |
 | Pod spec `containers[].resources.requests/limits` | scheduling failure, OOM, resource pressure confidence를 높인다. |
 | Pod spec `env`, `envFrom`, `volumes`, `volumeMounts` | config/env/secret missing 후보를 확인한다. |
-| Pod spec `imagePullSecrets`, serviceAccount | private registry/auth 문제를 확인한다. |
-| container `lastState` | 이전 종료 이유가 현재 state에 없을 때 OOMKilled, Error를 확인한다. |
+| container `lastState` raw payload | 현재 summary는 직전 state의 reason/message/exit code/time을 작은 필드로 제공한다. raw payload 전체는 아직 제공하지 않는다. |
 | Deployment template image/env/resources | rollout과 현재 Pod spec의 관계를 확인한다. |
 | ReplicaSet revision annotation/status | 특정 rollout revision에서만 문제가 났는지, 해당 ReplicaSet이 준비 상태인지 확인한다. |
 | Endpoint readiness conditions | endpoint 개수만으로 ready endpoint 여부를 확정하기 어렵다. |
-| Ingress, NetworkPolicy, PVC, ConfigMap, Secret summary | network, storage, config/security 계열 RCA에 필요하다. |
+| Ingress, NetworkPolicy, PVC object | network, storage 계열 RCA에 필요하다. PVC refs는 metadata bucket에 있지만 PVC object summary는 아직 없다. |
+| ConfigMap/Secret data 또는 diff | config 값 오류 확인에는 필요할 수 있지만 민감정보 위험과 과거 상태 의존성이 있어 현재 provider는 보내지 않는다. |
 | Kubernetes raw object | summary 밖 필드를 임시로 확인하기 어렵다. |
 
 ## 자주 헷갈리는 필드
@@ -1113,10 +1330,10 @@ Kubernetes provider는 raw object를 그대로 넘기지 않고 summary만 보�
 | `cluster` | cluster metadata object다. cluster 갯수가 아니다. |
 | `pods` | Pod summary object의 list다. Pod 갯수는 `len(pods)` 또는 `provider_status.*.counts.pods`다. |
 | `events` | Event summary object의 list다. Event 갯수는 `len(events)` 또는 `provider_status.*.counts.events`다. |
-| `logs` | query별 Loki result list다. 로그 라인은 `logs[].streams[].values[]` 안에 있다. |
+| `logs` | query별 Loki result list다. 로그 라인은 `logs[].streams[].values[]` 안에 있고, line 값은 provider가 마스킹한 문자열이다. |
 | `traces` | Tempo result bucket object다. trace 갯수는 `traces.results.*.trace_count`다. |
 | `metrics.results` | query name을 key로 하는 object다. metric 값은 `samples[].value` 또는 `series[].values[].value`에 있다. |
-| `raw` | provider API response 원본이다. 정규화 필드 밖의 값을 확인할 때만 사용한다. |
+| `raw` | provider API response 원본을 뜻한다. 현재 provider bucket에는 전체 raw payload를 기본으로 싣지 않는다. |
 | `provider_status.*.counts` | Kubernetes provider가 정규화한 목록들의 길이다. cluster 전체 리소스 총량을 보장하는 inventory가 아니다. |
 
 ## 구현 위치

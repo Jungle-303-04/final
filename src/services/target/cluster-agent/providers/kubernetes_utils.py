@@ -4,14 +4,19 @@ from typing import Any
 
 from packages.contracts.event_bus.interfaces import JsonObject
 
+K8S_KIND_CONFIG_MAP = "ConfigMap"
 K8S_KIND_DEPLOYMENT = "Deployment"
 K8S_KIND_REPLICA_SET = "ReplicaSet"
+K8S_KIND_SECRET = "Secret"
 K8S_DEPLOYMENT_REVISION_ANNOTATION = "deployment.kubernetes.io/revision"
 K8S_ENDPOINT_SLICE_SERVICE_NAME_LABEL = "kubernetes.io/service-name"
+K8S_RESOURCE_CONFIG_MAPS = "configmaps"
 K8S_RESOURCE_DEPLOYMENTS = "deployments"
 K8S_RESOURCE_ENDPOINT_SLICES = "endpointslices"
 K8S_RESOURCE_PODS = "pods"
 K8S_RESOURCE_REPLICASETS = "replicasets"
+K8S_RESOURCE_RESOURCE_QUOTAS = "resourcequotas"
+K8S_RESOURCE_SECRETS = "secrets"
 K8S_RESOURCE_SERVICES = "services"
 
 
