@@ -33,6 +33,7 @@ REQUIRED_SCRIPT_FILES = [
     Path("scripts/release_flow_smoke.py"),
     Path("scripts/release_flow_deploy.py"),
     Path("scripts/run_release_flow_production_readiness.py"),
+    Path("scripts/run_release_flow_production_signoff.py"),
     Path("scripts/verify_release_flow_production_evidence.py"),
     Path("scripts/verify_release_flow_github_environment.py"),
     Path("scripts/validate_release_flow_production_gate.py"),
@@ -96,6 +97,7 @@ def validate_readiness(
     checks.extend(check_production_deploy_workflow_contract())
     checks.extend(check_deploy_script_contract())
     checks.extend(check_readiness_runner_contract())
+    checks.extend(check_production_signoff_runner_contract())
     checks.extend(check_github_environment_verifier_contract())
     checks.extend(check_evidence_verifier_contract())
     checks.extend(check_gate_contract_script_contract())
@@ -418,6 +420,50 @@ def check_readiness_runner_contract() -> list[ReadinessCheck]:
             and "--verify-artifact" in docs
             and "--github-sha <production-commit-sha>" in docs,
             "operator guide documents dispatch, polling, and artifact verification",
+        ),
+    ]
+
+
+def check_production_signoff_runner_contract() -> list[ReadinessCheck]:
+    path = Path("scripts/run_release_flow_production_signoff.py")
+    docs_path = Path("docs/release-flow-production-readiness.md")
+    if not path.is_file():
+        return [ReadinessCheck("script.production_signoff_runner", False, "production signoff runner is missing")]
+    source = path.read_text(encoding="utf-8")
+    docs = docs_path.read_text(encoding="utf-8") if docs_path.is_file() else ""
+    return [
+        ReadinessCheck(
+            "script.production_signoff_runner.dispatches_readiness_and_deploy",
+            "READINESS_WORKFLOW" in source
+            and "DEPLOY_WORKFLOW" in source
+            and "dispatch_and_wait" in source
+            and "production_deploy_required" in source
+            and "release_plan_id" in source,
+            "operator signoff runner dispatches readiness before production deploy",
+        ),
+        ReadinessCheck(
+            "script.production_signoff_runner.validates_live_inputs",
+            "validate_signoff_inputs" in source
+            and "live_change_ticket must not use placeholder" in source
+            and "live_image must not use mutable latest tag" in source
+            and "live_safe_pr_workflow_run_id must be a numeric GitHub Actions run id" in source,
+            "operator signoff runner rejects placeholder production inputs before dispatch",
+        ),
+        ReadinessCheck(
+            "script.production_signoff_runner.verifies_final_evidence",
+            "--allow-missing-deploy" in source
+            and "allow_missing_deploy=False" in source
+            and "--github-sha" in source
+            and "--github-output-dir" in source,
+            "operator signoff runner verifies readiness evidence and then full deploy evidence",
+        ),
+        ReadinessCheck(
+            "docs.production_readiness.signoff_runner",
+            "run_release_flow_production_signoff.py" in docs
+            and "--release-plan-id" in docs
+            and "--live-safe-pr-workflow-run-id" in docs
+            and "full production sign-off" in docs,
+            "operator guide documents one-command production sign-off",
         ),
     ]
 
