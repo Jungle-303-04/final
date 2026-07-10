@@ -31,7 +31,7 @@ from domains.target.management_guard import (
     is_management_role,
     management_readonly_detail,
 )
-from packages.config.constants import Command, CommandStatus, Sandbox
+from packages.config.constants import RCA_TEST_COMMAND_ACTIONS, Command, CommandStatus, Sandbox
 from packages.config.control import (
     CONTROL_NAMESPACE_DENIED_MESSAGE,
     control_namespace_allowed,
@@ -77,6 +77,9 @@ RESOURCE_ACCESS_DENIED = RESOURCE_ACCESS_DENIED_MESSAGE
 # 수동 명령도 대상(diff)은 클라이언트가 명시해야 함 — 서버가 임의 리소스를 합성하지 않음.
 UNPROCESSABLE_CODE = 422
 MANUAL_DIFF_REQUIRED_MESSAGE = "diff is required for manual command requests"
+RCA_TEST_ACTION_DEDICATED_API_REQUIRED = (
+    "RCA test actions are reserved; use the dedicated /rca/test-runs API"
+)
 # 제어 허용 네임스페이스는 packages.config.control 단일 기준(기본 sandbox 만).
 CONTROL_NAMESPACE_NOT_ALLOWED = CONTROL_NAMESPACE_DENIED_MESSAGE
 COMMAND_PRIORITY_HIGH = 100
@@ -289,6 +292,11 @@ async def commands(
     db: Any = Depends(get_db),
     events: Any = Depends(get_events),
 ) -> AcceptedResponse:
+    if payload.action in RCA_TEST_COMMAND_ACTIONS:
+        raise HTTPException(
+            status_code=UNPROCESSABLE_CODE,
+            detail=RCA_TEST_ACTION_DEDICATED_API_REQUIRED,
+        )
     workspace_id = getattr(current, "workspace_id", DEFAULT_WORKSPACE_ID)
     require_cluster_deploy_access(db, current, workspace_id, payload.cluster_id)
     require_not_management_cluster(db, workspace_id, payload.cluster_id)

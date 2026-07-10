@@ -223,6 +223,24 @@ def test_verify_release_flow_production_evidence_rejects_signoff_report_mismatch
     assert evidence.main([str(tmp_path), "--github-sha", "sha-a", "--require-signoff-report"]) == 1
 
 
+def test_verify_release_flow_production_evidence_rejects_signoff_same_readiness_and_deploy_run(
+    tmp_path: Path,
+) -> None:
+    preflight = preflight_payload()
+    deploy = deploy_payload()
+    write_json(tmp_path / "101-readiness" / evidence.READINESS_REPORT, readiness_payload())
+    write_json(tmp_path / "101-readiness" / evidence.ENVIRONMENT_REPORT, environment_payload())
+    write_json(tmp_path / "101-smoke" / evidence.SMOKE_REPORT, smoke_payload())
+    write_json(tmp_path / "101-deploy" / evidence.DEPLOY_REPORT, deploy)
+    write_json(tmp_path / evidence.PREFLIGHT_REPORT, preflight)
+    write_json(
+        tmp_path / evidence.SIGNOFF_REPORT,
+        signoff_payload(deploy_run_id="101", preflight=preflight),
+    )
+
+    assert evidence.main([str(tmp_path), "--github-sha", "sha-a", "--require-signoff-report"]) == 1
+
+
 def test_verify_release_flow_production_evidence_rejects_ambiguous_run_id_source(
     tmp_path: Path,
 ) -> None:

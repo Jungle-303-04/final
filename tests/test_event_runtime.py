@@ -441,6 +441,37 @@ def test_event_processor_acks_and_raw_dead_letters_decode_failure() -> None:
     asyncio.run(run())
 
 
+def test_event_processor_naks_when_raw_dead_letter_storage_fails() -> None:
+    async def run() -> None:
+        message = StubMessage.raw(b"{not-json")
+        store = StubProcessingStore()
+
+        class FailingDeadLetters(StubDeadLetters):
+            async def capture_raw(
+                self, raw: bytes, consumer: str, error: Exception
+            ) -> EventEnvelope:
+                raise RuntimeError("dead letter database unavailable")
+
+        async def handler(_received: EventEnvelope) -> list[EventEnvelope]:
+            raise AssertionError("handler must not run for malformed payload")
+
+        processor = EventProcessor(
+            "command-worker",
+            handler,
+            store,  # type: ignore[arg-type]
+            FailingDeadLetters(),
+            EventRetryPolicy(max_attempts=2, retry_delay_seconds=7),
+        )
+
+        await processor.process(message)
+
+        assert message.acked is False
+        assert message.nak_delay == 7
+        assert store.recorded == []
+
+    asyncio.run(run())
+
+
 def test_record_consumer_lag_metrics_records_subject_durable_samples() -> None:
     async def run() -> None:
         class MetricsBus:

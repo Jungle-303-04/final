@@ -104,10 +104,7 @@ def service_target_relation(
     if target_labels and selector_matches_labels(selector, target_labels):
         return SERVICE_TARGET_RELATION_EXACT_SELECTOR_MATCH
 
-    pod_labels = [
-        object_or_empty(metadata(pod).get("labels"))
-        for pod in target_pods or []
-    ]
+    pod_labels = [object_or_empty(metadata(pod).get("labels")) for pod in target_pods or []]
     if any(selector_matches_labels(selector, labels) for labels in pod_labels):
         return SERVICE_TARGET_RELATION_LIVE_POD_MATCH
 
@@ -118,4 +115,3 @@ def service_target_relation(
         return SERVICE_TARGET_RELATION_SELECTOR_KEY_OVERLAP
 
     return None
-

@@ -8,6 +8,7 @@
 
 from __future__ import annotations
 
+from packages.config import bypass_guard
 from packages.config.settings import env
 
 APP_ENV_ENV = "APP_ENV"
@@ -18,6 +19,11 @@ DEV_SECURITY_BYPASS_WORKSPACE_ID_ENV = "DEV_SECURITY_BYPASS_WORKSPACE_ID"
 DEV_SECURITY_BYPASS_CLUSTER_ID_ENV = "DEV_SECURITY_BYPASS_CLUSTER_ID"
 DEV_SECURITY_BYPASS_CLUSTER_HEADER = "x-dev-cluster-id"
 LEGACY_DEV_AUTH_BYPASS_ENV = "DEV_AUTH_BYPASS"
+RCA_TEST_RUNS_ENABLED_ENV = "RCA_TEST_RUNS_ENABLED"
+RCA_TEST_RUNS_DISABLED_MESSAGE = (
+    "RCA test commands require APP_ENV=test and RCA_TEST_RUNS_ENABLED=1"
+)
+RCA_TEST_TARGET_ENVIRONMENTS = frozenset({"test", "aws-test"})
 TRUE_ENV_VALUES = frozenset({"1", "true", "yes", "on"})
 
 
@@ -25,16 +31,25 @@ def env_enabled(name: str) -> bool:
     return env(name, "").strip().lower() in TRUE_ENV_VALUES
 
 
+def rca_test_runs_enabled() -> bool:
+    """장애 주입 명령의 관리 plane·target agent 공통 fail-closed 조건."""
+    return env(APP_ENV_ENV, "").strip().lower() == TEST_APP_ENV and env_enabled(
+        RCA_TEST_RUNS_ENABLED_ENV
+    )
+
+
 def development_security_bypass_enabled() -> bool:
     """통합 개발 우회가 켜졌는지 매 요청 시 평가한다."""
-    return env(APP_ENV_ENV, "").strip().lower() == TEST_APP_ENV or env_enabled(
+    raw = env(APP_ENV_ENV, "").strip().lower() == TEST_APP_ENV or env_enabled(
         DEV_SECURITY_BYPASS_ENV
     )
+    return bypass_guard.enforce_fail_closed(raw)
 
 
 def development_session_bypass_enabled() -> bool:
     """통합 플래그와 기존 세션 전용 플래그를 하위 호환한다."""
-    return development_security_bypass_enabled() or env_enabled(LEGACY_DEV_AUTH_BYPASS_ENV)
+    raw = development_security_bypass_enabled() or env_enabled(LEGACY_DEV_AUTH_BYPASS_ENV)
+    return bypass_guard.enforce_fail_closed(raw)
 
 
 def development_bypass_user_id(default: str, legacy_env: str = "") -> str:

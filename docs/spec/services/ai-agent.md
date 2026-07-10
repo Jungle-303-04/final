@@ -1,5 +1,5 @@
 ---
-source_commit: 664925a6
+source_commit: 243e7fc0
 status: synced
 ---
 
@@ -168,7 +168,9 @@ class RecoveryPlanningPipeline:
 - Event 객체는 해결 뒤에도 남을 수 있으므로 `event_is_current_warning` 이 `Warning`
   또는 type 미기재 event만 본다. `cluster.collected_at` 이 있으면
   `last_timestamp`/`first_timestamp` 가 10분(`EVENT_SIGNAL_MAX_AGE`)보다 오래된 warning event는
-  symptom 신호에서 제외한다.
+  symptom 신호에서 제외한다. Pod 대상 Event는 같은 namespace/name의 현재 Pod가 있어야 하며,
+  probe 실패는 그 Pod가 아직 Ready가 아닐 때만 유효하다. 롤아웃으로 삭제됐거나 이미 Ready로
+  회복된 Pod의 최근 Event는 새 incident를 만들지 않는다.
 - `src/services/ai/agent/pipeline/symptom.py :: resolve_resource` — incident 대상 결정.
   명시 `kubernetes["resource"]` > 대표 신호의 리소스 힌트(파드 소유 워크로드 또는 Pod/Service)
   > `"Unknown"/"unknown"/None`.

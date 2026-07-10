@@ -29,7 +29,7 @@ from domains.gitops.repository import (
     derive_watch_target_id,
 )
 from domains.rca.repository import RcaRepository
-from domains.target.repository import TargetAgentRepository
+from domains.target.repository import TargetAgentRepository, agent_status_retention_seconds
 from packages.ai.metrics import LlmInvocationMetric
 from packages.contracts.event_bus.interfaces import EventConsumerMetrics
 from packages.contracts.event_bus.processing import CLAIM_BLOCKED
@@ -97,6 +97,54 @@ def test_sqlalchemy_url_uses_psycopg_driver(monkeypatch) -> None:
     monkeypatch.setenv("DATABASE_URL", "postgresql://user:pass@postgresql:5432/service")
     conn = db.Database()  # 엔진은 지연 생성(연결 안 함)
     assert conn.sqlalchemy_url.startswith("postgresql+psycopg://")
+
+
+class _StartupStore:
+    def __init__(self) -> None:
+        self.calls: list[str] = []
+
+    def init(self) -> None:
+        self.calls.append("init")
+
+    def verify_schema(self) -> None:
+        self.calls.append("verify_schema")
+
+
+def test_wait_for_database_uses_verify_mode_without_schema_mutation(monkeypatch) -> None:
+    monkeypatch.setenv("DATABASE_STARTUP_MODE", "verify")
+    store = _StartupStore()
+
+    asyncio.run(db.wait_for_database(store))
+
+    assert store.calls == ["verify_schema"]
+
+
+def test_wait_for_database_keeps_initialize_compatibility(monkeypatch) -> None:
+    monkeypatch.setenv("DATABASE_STARTUP_MODE", "initialize")
+    store = _StartupStore()
+
+    asyncio.run(db.wait_for_database(store))
+
+    assert store.calls == ["init"]
+
+
+def test_production_defaults_to_read_only_schema_verification(monkeypatch) -> None:
+    monkeypatch.delenv("DATABASE_STARTUP_MODE", raising=False)
+    monkeypatch.setenv("APP_ENV", "production")
+    store = _StartupStore()
+
+    asyncio.run(db.wait_for_database(store))
+
+    assert store.calls == ["verify_schema"]
+
+
+def test_schema_compatibility_issues_reports_missing_tables_and_columns() -> None:
+    issues = storage_engine.schema_compatibility_issues(
+        {"events": {"event_id", "payload"}, "outbox": {"event_id"}},
+        {"events": {"event_id"}},
+    )
+
+    assert issues == ["column:events.payload", "table:outbox"]
 
 
 def test_schema_defines_expected_tables() -> None:
@@ -851,6 +899,64 @@ def test_evidence_event_record_stages_window_event_and_outbox_atomically() -> No
     assert "INSERT INTO events" in event_sql
     assert "INSERT INTO outbox" in outbox_sql
     assert "lease_id" in outbox_sql
+
+
+def test_agent_status_upsert_prunes_only_superseded_expired_agents(monkeypatch) -> None:
+    recorded: list[Any] = []
+
+    class StubResult:
+        def mappings(self) -> StubResult:
+            return self
+
+        def one(self) -> dict[str, object]:
+            return {
+                "workspace_id": "workspace-1",
+                "cluster_id": "cluster-1",
+                "agent_id": "agent-current",
+                "status": "connected",
+                "capabilities": ["commands"],
+                "details": {},
+                "last_seen_at": datetime.now(UTC),
+                "created_at": datetime.now(UTC),
+                "updated_at": datetime.now(UTC),
+            }
+
+    class StubConnection:
+        def execute(self, statement: Any) -> StubResult:
+            recorded.append(statement)
+            return StubResult()
+
+    @contextmanager
+    def stub_connection():
+        yield StubConnection()
+
+    monkeypatch.setenv("AGENT_STATUS_RETENTION_SECONDS", "600")
+    repository = object.__new__(TargetAgentRepository)
+    repository.connection = stub_connection  # type: ignore[method-assign]
+
+    saved = repository.save_cluster_agent_status(
+        workspace_id="workspace-1",
+        cluster_id="cluster-1",
+        agent_id="agent-current",
+        capabilities=["commands"],
+    )
+
+    assert saved["agent_id"] == "agent-current"
+    assert len(recorded) == 2
+    delete_statement = recorded[1].compile(dialect=postgresql.dialect())
+    delete_sql = str(delete_statement)
+    assert "DELETE FROM cluster_agent_status" in delete_sql
+    assert "cluster_agent_status.agent_id !=" in delete_sql
+    assert "cluster_agent_status.last_seen_at <" in delete_sql
+    assert "agent-current" in delete_statement.params.values()
+
+
+def test_agent_status_retention_uses_safe_default_and_minimum(monkeypatch) -> None:
+    monkeypatch.setenv("AGENT_STATUS_RETENTION_SECONDS", "invalid")
+    assert agent_status_retention_seconds() == 3600
+
+    monkeypatch.setenv("AGENT_STATUS_RETENTION_SECONDS", "1")
+    assert agent_status_retention_seconds() == 300
 
 
 def test_manifest_artifact_upsert_is_scoped_by_workspace() -> None:
@@ -1737,6 +1843,7 @@ def test_evidence_job_completion_locks_one_job_before_update() -> None:
 def test_fail_expired_agent_commands_sweeps_abandoned_leases_atomically() -> None:
     from domains.command.repository import (
         EXPIRED_COMMAND_GRACE_SECONDS,
+        QUEUED_COMMAND_TTL_SECONDS,
         AgentCommandRepository,
     )
 
@@ -1766,9 +1873,11 @@ def test_fail_expired_agent_commands_sweeps_abandoned_leases_atomically() -> Non
     compiled = recorded[0].compile(dialect=postgresql.dialect())
     sql = str(compiled)
 
-    # 단일 원자 UPDATE ... RETURNING — LEASED/RUNNING 이면서 유예까지 지난 lease 만 종결
+    # 단일 원자 UPDATE ... RETURNING — 미수신 queue와 만료 lease를 함께 종결
     assert "UPDATE agent_commands" in sql
     assert "status IN" in sql
+    assert "created_at" in sql
+    assert f"interval '{QUEUED_COMMAND_TTL_SECONDS} seconds'" in sql
     assert f"interval '{EXPIRED_COMMAND_GRACE_SECONDS} seconds'" in sql
     assert "RETURNING agent_commands.command_id" in sql
     assert compiled.params["status"] == "failed"
@@ -1808,7 +1917,80 @@ def test_expire_stale_open_rca_incidents_closes_old_rows_atomically() -> None:
     assert "stale_open_incidents" in sql
     assert "FOR UPDATE SKIP LOCKED" in sql
     assert "incident_expired" in compiled.params.values()
+    status_values = next(value for value in compiled.params.values() if isinstance(value, list))
+    assert "incident_detected" in status_values
+    assert "evidence_received" not in status_values
     assert "RETURNING rca_timeline.id" in sql
+
+
+def test_delete_stale_pre_incident_timeline_is_bounded_and_scoped() -> None:
+    from domains.dashboard.repository import DashboardRepository
+
+    recorded: list[Any] = []
+
+    class StubResult:
+        def all(self) -> list[object]:
+            return [(1,), (2,)]
+
+    class StubConnection:
+        def execute(self, statement: Any) -> StubResult:
+            recorded.append(statement)
+            return StubResult()
+
+    @contextmanager
+    def stub_connection():
+        yield StubConnection()
+
+    repository = object.__new__(DashboardRepository)
+    repository.connection = stub_connection  # type: ignore[method-assign]
+
+    assert repository.delete_stale_pre_incident_timeline(retention_hours=12, limit=50) == 2
+
+    compiled = recorded[0].compile(dialect=postgresql.dialect())
+    sql = str(compiled)
+    assert "DELETE FROM rca_timeline" in sql
+    assert "stale_pre_incident_timeline" in sql
+    assert "FOR UPDATE SKIP LOCKED" in sql
+    status_values = next(value for value in compiled.params.values() if isinstance(value, list))
+    assert "evidence_received" in status_values
+    assert "evidence_built" in status_values
+    assert "incident_detected" not in status_values
+
+
+def test_resolve_recovered_ephemeral_incidents_is_bounded_and_inventory_aware() -> None:
+    from domains.dashboard.repository import DashboardRepository
+
+    recorded: list[Any] = []
+
+    class StubResult:
+        def mappings(self) -> StubResult:
+            return self
+
+        def all(self) -> list[dict[str, object]]:
+            return []
+
+    class StubConnection:
+        def execute(self, statement: Any) -> StubResult:
+            recorded.append(statement)
+            return StubResult()
+
+    @contextmanager
+    def stub_connection():
+        yield StubConnection()
+
+    repository = object.__new__(DashboardRepository)
+    repository.connection = stub_connection  # type: ignore[method-assign]
+
+    assert repository.resolve_recovered_ephemeral_incidents(grace_minutes=5, limit=25) == []
+
+    compiled = recorded[0].compile(dialect=postgresql.dialect())
+    sql = str(compiled)
+    assert "UPDATE rca_timeline" in sql
+    assert "cluster_inventory_resources" in sql
+    assert "recovered_ephemeral_incidents" in sql
+    assert "FOR UPDATE SKIP LOCKED" in sql
+    assert "incident_resolved" in compiled.params.values()
+    assert ["Pod", "ReplicaSet"] in compiled.params.values()
 
 
 def test_user_account_schema_supports_password_login() -> None:
@@ -1979,6 +2161,9 @@ class _SqlRecordingResult:
     def mappings(self) -> _SqlRecordingResult:
         return self
 
+    def first(self) -> Any | None:
+        return self._rows[0] if self._rows else None
+
 
 def _repository_with_recorded_sql(
     repository_type: type, recorded: list[Any], rows: list[Any] | None = None
@@ -2040,6 +2225,73 @@ def test_rca_report_query_omits_payload_from_select_list() -> None:
     assert "rca_reports.payload" not in select_list
     assert "rca_reports.candidates" in select_list
     assert "rca_reports.supporting_evidence_refs" in select_list
+
+
+def test_rca_test_analysis_outcome_reads_terminal_events_with_tenant_scope() -> None:
+    recorded: list[Any] = []
+    repository = _repository_with_recorded_sql(
+        RcaRepository,
+        recorded,
+        rows=[
+            {
+                "subject": "rca.analysis_blocked",
+                "payload": {"workspace_id": "workspace-1", "reason": "logs missing"},
+            }
+        ],
+    )
+
+    outcome = repository.get_rca_test_analysis_outcome("corr-1", "workspace-1")
+
+    assert outcome == {
+        "subject": "rca.analysis_blocked",
+        "payload": {"workspace_id": "workspace-1", "reason": "logs missing"},
+    }
+    compiled = recorded[0].compile(dialect=postgresql.dialect())
+    sql = str(compiled)
+    assert "FROM events" in sql
+    assert "events.correlation_id =" in sql
+    assert "events.payload" in sql
+    assert "ORDER BY events.created_at DESC" in sql
+    assert "rca.analysis_blocked" in compiled.params.values()
+    assert "incident.detected" in compiled.params.values()
+    assert "workspace-1" in compiled.params.values()
+
+
+def test_queue_agent_command_reports_insert_and_notifies_only_new_commands() -> None:
+    from domains.command.repository import AgentCommandRepository
+
+    recorded: list[Any] = []
+    scalar_values = ["cmd-1", None]
+
+    class StubResult:
+        def scalar_one_or_none(self) -> str | None:
+            return scalar_values.pop(0)
+
+    class StubConnection:
+        def execute(self, statement: Any, *_args: Any, **_kwargs: Any) -> StubResult:
+            recorded.append(statement)
+            return StubResult()
+
+    @contextmanager
+    def stub_connection():
+        yield StubConnection()
+
+    repository = object.__new__(AgentCommandRepository)
+    repository.connection = stub_connection  # type: ignore[method-assign]
+    plan = {
+        "command_id": "cmd-1",
+        "workspace_id": "workspace-1",
+        "cluster_id": "cluster-1",
+        "action": "rollout_restart",
+    }
+
+    assert repository.queue_agent_command("corr-1", plan, "queued") is True
+    assert repository.queue_agent_command("corr-1", plan, "queued") is False
+    assert len(recorded) == 3
+    assert "RETURNING agent_commands.command_id" in str(
+        recorded[0].compile(dialect=postgresql.dialect())
+    )
+    assert "pg_notify" in str(recorded[1])
 
 
 def test_rca_report_save_writes_projection_columns() -> None:

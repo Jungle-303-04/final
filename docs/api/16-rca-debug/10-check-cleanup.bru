@@ -1,0 +1,27 @@
+meta {
+  name: 10 Cleanup 완료 확인
+  type: http
+  seq: 10
+  tags: [rca, test-run, cleanup, read]
+}
+
+get {
+  url: {{base_url}}rca/test-runs/{{rca_test_run_id}}
+}
+
+headers {
+  x-rca-test-token: {{rca_test_token}}
+}
+
+tests {
+  test("Agent가 현재 run 소유 fixture를 실제로 정리했다", function () {
+    expect(res.status).to.equal(200);
+    const body = res.getBody();
+    const cleanup = body.steps.find((item) => item.step === "cleanup");
+    expect(cleanup).to.be.an("object");
+    if (["queued", "leased", "running"].includes(cleanup.status)) {
+      throw new Error(`cleanup 처리 중입니다(${cleanup.status}). 잠시 뒤 다시 보내세요.`);
+    }
+    expect(cleanup.status).to.equal("completed");
+  });
+}

@@ -44,10 +44,35 @@ status: synced
 
 | 심볼 | 앵커 | API | 설명 |
 |---|---|---|---|
-| `AiChatContext` | `frontend/src/features/chat/context.ts :: AiChatContext` | `cluster_id`, `resource_type`, `kind`, `namespace`, `name`, `uid`, `locale` 선택 필드 | AI 요청에 함께 보내는 리소스 컨텍스트 |
+| `AiChatContext` | `frontend/src/features/chat/context.ts :: AiChatContext` | `cluster_id`, `application_id`, `diff_source`, `workflow_run_id`, `approval_id`, `resource_type`, `kind`, `namespace`, `name`, `uid`, `incident_id`, `correlation_id`, `symptom`, `root_cause`, `locale` 선택 필드 | AI 요청에 함께 보내는 화면/리소스 컨텍스트 |
 | `compactContext` | `frontend/src/features/chat/context.ts :: compactContext` | `AiChatContext` → `AiChatContext \| undefined` | 문자열 trim, 빈 값 제거. `resource_type`만 있고 `kind`가 없으면 cluster/node/pod/service 기본 kind 보정 |
 | `encodeChatContext` | `frontend/src/features/chat/context.ts :: encodeChatContext` | `AiChatContext` → JSON 문자열 \| undefined | `ContextActions`가 `/ai?context=...` 링크를 만들 때 사용 |
-| `chatContextFromSearchParams` | `frontend/src/features/chat/context.ts :: chatContextFromSearchParams` | `URLSearchParams` → `AiChatContext \| undefined` | `context` JSON을 우선 파싱하고, 없으면 `cluster_id`/`cluster`, `resource_type`/`subject`, `kind`, `namespace`, `name`, `uid`, `locale` query를 보정 |
+| `chatContextFromSearchParams` | `frontend/src/features/chat/context.ts :: chatContextFromSearchParams` | `URLSearchParams` → `AiChatContext \| undefined` | `context` JSON을 우선 파싱하고, 없으면 `cluster_id`/`cluster`, `application_id`, `diff_source`, `workflow_run_id`, `approval_id`, `resource_type`/`subject`, `kind`, `namespace`, `name`, `uid`, `locale` query를 보정 |
+
+### Diff 설명 context
+
+GitOps/Workflow/Safe PR 화면에서 AI 채팅을 열 때는 전체 diff나 manifest YAML을 query string에 싣지 않는다. 대신 아래 작은 식별자만 `context` JSON으로 전달한다.
+
+```json
+{
+  "diff_source": "gitops",
+  "workflow_run_id": "workflow-...",
+  "approval_id": "approval-...",
+  "application_id": "app-..."
+}
+```
+
+또는 Safe PR 탭:
+
+```json
+{
+  "diff_source": "safe_pr",
+  "workflow_run_id": "workflow-...",
+  "application_id": "app-..."
+}
+```
+
+이 값은 `explain_diff_risk` tool의 조회 힌트다. 권한 근거가 아니며, 백엔드 tool은 workspace/session 범위 DB 조회와 기존 approval/event 데이터를 다시 확인해야 한다. context에 전체 patch/YAML/secret/config 내용을 넣지 않는다.
 
 ## 컴포넌트
 
@@ -105,7 +130,7 @@ status: synced
 3. 복구 액션: assistant `actions` 카드에서 radio 선택 → 선택 실행 → 서버가 `selected` 를 채우면 카드 잠금.
 4. 승인: assistant `approval_ref` 는 [repo](./repo.md) 의 `ApprovalCard` 로 처리(승인 성공 시 repo 쪽 훅이 `['ai']` 캐시도 invalidate).
 5. 대화 삭제: 좌측 행 또는 우측 헤더 삭제 → DELETE `/ai/conversations/:id` → 목록 갱신. 현재 대화 삭제 시 `pathFor('/ai')`로 이동.
-6. 타 화면에서 들어온 리소스 컨텍스트는 `/ai?prefill=...&context=<json>`으로만 전달하고, 전송 버튼을 누른 시점의 POST body에 포함한다(자동 전송 없음).
+6. 타 화면에서 들어온 리소스/diff 컨텍스트는 `/ai?prefill=...&context=<json>`으로만 전달하고, 전송 버튼을 누른 시점의 POST body에 포함한다(자동 전송 없음).
 7. LLM 미설정/키 오류/크레딧 오류는 입력창보다 먼저 설정 안내 카드를 표시한다. 사용자는 "운영 설정"으로 이동하거나 "다시 시도"로 목록/상세 쿼리를 재실행한다.
 
 ## 불변식·오류 (Invariants & Errors)
@@ -117,4 +142,4 @@ status: synced
 - 대화 목록 응답에는 `messages` 가 없다(`adaptConversationSummary` 로 요약 정규화).
 - 대화 단건 응답은 `{conversation, messages}` envelope 이며, `ChatView`는 `adaptConversationDetail`이 만든 `Conversation`만 소비한다. assistant 도구 표시는 message top-level `tool_calls`, `metadata.tool_calls`, `metadata.tool_trace`를 모두 허용한다.
 - 삭제는 workspace 범위 서버 검증에 의존한다. 클라이언트는 성공 후 해당 detail cache만 제거한다.
-- context 는 리소스 식별자만 담는다. 리소스 상세·이벤트·RCA report 는 백엔드 AI 도구가 세션 workspace 범위에서 다시 읽는다.
+- context 는 리소스·diff 식별자만 담는다. 리소스 상세·이벤트·RCA report·GitOps diff·Safe PR patch 는 백엔드 AI 도구가 세션 workspace 범위에서 다시 읽는다.

@@ -39,6 +39,29 @@ def test_removed_legacy_github_actions_have_no_active_repository_entrypoints() -
     assert "smoke: ## 현재 환경변수로 배포된 서비스 smoke 실행" in makefile
 
 
+def test_management_deploy_removes_legacy_minio_deployment() -> None:
+    aws_up = read("scripts/aws-up.sh")
+    local_up = read("scripts/up.sh")
+
+    assert "safe-pr-service rca-fallback-worker minio; do" in aws_up
+    assert "safe-pr-service rca-fallback-worker minio; do" in local_up
+    assert "rollout status statefulset/minio" in local_up
+    assert "rollout status deploy/minio" not in local_up
+
+
+def test_management_bootstrap_propagates_rca_test_and_api_prefix_config() -> None:
+    aws_up = read("scripts/aws-up.sh")
+    local_up = read("scripts/up.sh")
+
+    for script in (aws_up, local_up):
+        assert 'RCA_TEST_RUNS_ENABLED="${RCA_TEST_RUNS_ENABLED:-1}"' in script
+        assert 'RCA_TEST_RUNS_TOKEN="${RCA_TEST_RUNS_TOKEN:-}"' in script
+        assert 'API_ROOT_PATH="${API_ROOT_PATH:-/api}"' in script
+        assert '--from-literal=RCA_TEST_RUNS_ENABLED="${RCA_TEST_RUNS_ENABLED}"' in script
+        assert '--from-literal=RCA_TEST_RUNS_TOKEN="${RCA_TEST_RUNS_TOKEN}"' in script
+        assert '--from-literal=API_ROOT_PATH="${API_ROOT_PATH}"' in script
+
+
 def test_internal_gitops_workflow_remains_deployed() -> None:
     controller = read("src/services/gitops/workflow-controller/app.py")
     services = read("deploy/management/services.yaml")
@@ -125,6 +148,55 @@ def test_cloudflare_custom_domain_defaults_to_proxied_https() -> None:
     assert "Cloudflare API ${method} failed with HTTP ${http_code}" in script
     assert 'scheme="https"' in script
     assert "`CLOUDFLARE_PROXIED`" in runbook
+
+
+def test_agent_api_endpoint_uses_dns_only_tls_and_path_allowlist() -> None:
+    script = read("scripts/configure-agent-api-endpoint.sh")
+    manifest = read("deploy/management/agent-api-proxy.yaml")
+    kustomization = read("deploy/management/kustomization.yaml")
+    aws_up = read("scripts/aws-up.sh")
+    runbook = read("docs/aws-testing-runbook.md")
+
+    assert "AGENT_API_DOMAIN is required" in script
+    assert "AGENT_API_ACM_CERT_ARN is required" in script
+    assert "CLOUDFLARE_API_TOKEN is required" in script
+    assert "CLOUDFLARE_ZONE_ID is required" in script
+    assert "aws-load-balancer-ssl-cert" in script
+    assert "aws-load-balancer-ssl-ports: https" in script
+    assert "aws-load-balancer-backend-protocol: tcp" in script
+    assert "proxied:false" in script
+    assert "PUBLIC_MANAGEMENT_BASE_URL" in script
+    assert "rollout restart deployment/api-gateway" in script
+    assert "cloudflare-dns.com/dns-query" in script
+    assert '--resolve "${AGENT_API_DOMAIN}:443:${resolved_ip}"' in script
+    assert "agent-api.woonyong.org" not in script
+    assert "arn:aws:acm:ap-northeast-2" not in script
+    assert "location ^~ /api/agent/" in manifest
+    assert "location ^~ /api/install/" in manifest
+    assert "location = /api/healthz" in manifest
+    assert "location = /live/agent" in manifest
+    assert "proxy_set_header Upgrade $http_upgrade" in manifest
+    assert 'proxy_set_header Connection "upgrade"' in manifest
+    assert "location = /live/browser" not in manifest
+    assert "location /" in manifest
+    assert "return 404" in manifest
+    assert "location /api/auth" not in manifest
+    assert "replicas: 2" in manifest
+    assert "nginxinc/nginx-unprivileged:1.29-alpine@sha256:" in manifest
+    assert "automountServiceAccountToken: false" in manifest
+    assert "topologySpreadConstraints:" in manifest
+    assert "whenUnsatisfiable: DoNotSchedule" in manifest
+    assert "matchLabelKeys:" in manifest
+    assert "pod-template-hash" in manifest
+    assert "kind: PodDisruptionBudget" in manifest
+    assert "minAvailable: 1" in manifest
+    assert "agent-api-proxy.yaml" in kustomization
+    assert (
+        'PUBLIC_MANAGEMENT_BASE_URL="${PUBLIC_MANAGEMENT_BASE_URL:-${PUBLIC_API_BASE_URL}}"'
+        in aws_up
+    )
+    assert '--from-literal=PUBLIC_MANAGEMENT_BASE_URL="${PUBLIC_MANAGEMENT_BASE_URL}"' in aws_up
+    assert "configure-agent-api-endpoint.sh" in runbook
 
 
 def test_aws_management_rollout_status_retries_transient_eks_api_errors() -> None:

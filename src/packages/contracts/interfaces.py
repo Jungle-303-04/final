@@ -18,6 +18,8 @@ class EventProcessingRecord:
 class InitializableStore(Protocol):
     def init(self) -> None: ...
 
+    def verify_schema(self) -> None: ...
+
 
 class EventProcessingStore(EventRecorder, Protocol):
     def begin_event_processing(

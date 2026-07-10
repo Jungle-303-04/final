@@ -90,6 +90,29 @@ Cloudflare를 사용할 때 `CUSTOM_DOMAIN`, `CLOUDFLARE_ZONE_NAME`,
 `CLOUDFLARE_PROXIED` 기본값은 `1`이다. token 원문은 로그에 출력하지 않으며, DNS 변경이
 실패해도 AWS LoadBalancer origin으로 상태를 확인할 수 있어야 한다.
 
+브라우저 콘솔과 cluster-agent는 진입점을 분리한다. 무료 Cloudflare Bot Fight는 기계 요청에
+관리형 챌린지를 줄 수 있으므로 agent가 proxied console 주소를 사용하면 안 된다.
+`scripts/configure-agent-api-endpoint.sh`는 ACM 인증서를 붙인 AWS LoadBalancer와 DNS-only
+CNAME을 만들고, `/api/agent/*`, `/api/install/*`, `/api/healthz`와 agent WebSocket
+`/live/agent`만 허용하는 전용 proxy를 배포한다. ELB는 TLS를 종료한 뒤 backend TCP 전달을
+사용해 WebSocket Upgrade를 보존한다. 브라우저 경로 `/live/browser`와 일반 관리 API는
+404로 닫는다. ACM ARN과 도메인, Cloudflare 자격증명은 모두 환경에서 주입하며 소스에
+저장하지 않는다.
+
+```bash
+export KUBE_CONTEXT="<management context>"
+export AGENT_API_DOMAIN="<agent api hostname>"
+export AGENT_API_ACM_CERT_ARN="<issued ACM certificate ARN>"
+export CLOUDFLARE_ZONE_ID="<zone id>"
+export CLOUDFLARE_API_TOKEN="<DNS edit token>"
+bash scripts/configure-agent-api-endpoint.sh
+```
+
+스크립트는 `management-runtime-config.PUBLIC_MANAGEMENT_BASE_URL`을 전용 주소로 바꾸고
+api-gateway를 재시작한다. 따라서 이후 등록 manifest는 Bot Fight 경로를 거치지 않는다.
+이미 설치된 agent는 새 주소로 manifest를 재발급하거나 Deployment의
+`MANAGEMENT_BASE_URL`을 갱신해야 한다.
+
 ```bash
 curl -fsS https://k8s.woonyong.org/api/healthz
 ```

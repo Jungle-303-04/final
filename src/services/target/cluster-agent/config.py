@@ -1,6 +1,9 @@
 from __future__ import annotations
 
 from packages.config.constants import Command
+from packages.config.realtime import (
+    DEFAULT_REALTIME_GATEWAY_NODEPORT as DEFAULT_REALTIME_GATEWAY_NODEPORT,
+)
 from packages.config.settings import env
 from packages.contracts.gateway import requests as gateway_requests
 from packages.contracts.target import SANDBOX_NAMESPACE, TARGET_NAMESPACE
@@ -106,7 +109,11 @@ HOSTNAME_ENV = "HOSTNAME"
 AGENT_TOKEN_ENV = "AGENT_TOKEN"
 AGENT_TOKEN_HEADER = "x-agent-token"
 DEFAULT_AGENT_ID = "target-agent"
-AGENT_CAPABILITIES = ["collector", "command_receiver"]
+AGENT_CAPABILITIES = [
+    "collector",
+    "command_receiver",
+    Command.CATALOG_HELM_INSTALL_CAPABILITY,
+]
 
 COMMAND_COMPLETED_STATUS = "completed"
 COMMAND_FAILED_STATUS = "failed"
@@ -129,6 +136,6 @@ MAX_LIVE_SUMMARY_INTERVAL_SECONDS = 60.0
 LIVE_SUMMARY_RETRY_DELAY_SECONDS_ENV = "LIVE_SUMMARY_RETRY_DELAY_SECONDS"  # 재접속 백오프(기본 3)
 LIVE_SUMMARY_RETRY_DELAY_SECONDS = float(env(LIVE_SUMMARY_RETRY_DELAY_SECONDS_ENV, "3"))
 REALTIME_GATEWAY_URL_ENV = "REALTIME_GATEWAY_URL"  # 미설정 시 MANAGEMENT_BASE_URL 에서 유도
-DEFAULT_REALTIME_GATEWAY_NODEPORT = 30090  # deploy/management/services.yaml 의 NodePort 와 정렬
+# packages.config.realtime 상수를 재노출해 기존 agent 설정 계약을 유지한다.
 LIVE_SUMMARY_POD_LIST_LIMIT = 200  # 네임스페이스당 pod 조회 상한(무제한 목록 금지)
 LIVE_SUMMARY_NAMESPACES = (TARGET_NAMESPACE, SANDBOX_NAMESPACE)  # 계약이 단일 출처

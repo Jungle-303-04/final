@@ -165,7 +165,10 @@ def test_service_admin_can_access_every_resource_action() -> None:
     )
 
 
-def test_accessible_resource_ids_reuses_organization_scoped_role_policy() -> None:
+def test_accessible_resource_ids_reuses_organization_scoped_role_policy(monkeypatch) -> None:
+    monkeypatch.delenv("APP_ENV", raising=False)
+    monkeypatch.delenv("DEV_SECURITY_BYPASS", raising=False)
+
     class StubResult:
         def mappings(self) -> list[dict[str, str]]:
             return [
@@ -217,3 +220,18 @@ def test_accessible_resource_ids_reuses_organization_scoped_role_policy() -> Non
             "org-a",
         ),
     }
+
+
+def test_accessible_resource_ids_allows_all_in_development_bypass(monkeypatch) -> None:
+    monkeypatch.setenv("APP_ENV", "test")
+    repository = object.__new__(WorkspaceAccessRepository)
+
+    assert (
+        repository.accessible_resource_ids(
+            "dev-user",
+            "default",
+            AccessResourceType.CLUSTER.value,
+            Permission.CLUSTER_READ.value,
+        )
+        is None
+    )

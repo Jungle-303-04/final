@@ -612,6 +612,20 @@ def validate_signoff(
             if source_matches_run_id(deploy_source, deploy_run_id)
             else "signoff report deploy run id does not match verified artifact",
         ),
+        EvidenceCheck(
+            "signoff.distinct_workflow_runs",
+            not required
+            or (
+                bool(readiness_run_id)
+                and bool(deploy_run_id)
+                and readiness_run_id != deploy_run_id
+            ),
+            "signoff report references distinct readiness and deploy runs"
+            if bool(readiness_run_id)
+            and bool(deploy_run_id)
+            and readiness_run_id != deploy_run_id
+            else "signoff report readiness and deploy run ids must be distinct",
+        ),
     ]
     checks.extend(validate_signoff_run_summary("signoff.readiness_run", readiness_run, github_sha))
     checks.extend(validate_signoff_run_summary("signoff.deploy_run", deploy_run, github_sha))

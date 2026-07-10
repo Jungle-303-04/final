@@ -59,6 +59,10 @@ rules:
   - apiGroups: ["apps"]
     resources: ["deployments", "replicasets", "daemonsets", "statefulsets"]
     verbs: ["get", "list", "watch"]
+  # drilldown 실측 CPU·메모리는 Metrics API가 있을 때만 읽고, 없으면 null을 유지한다.
+  - apiGroups: ["metrics.k8s.io"]
+    resources: ["pods", "nodes"]
+    verbs: ["get", "list"]
 ---
 # 위 읽기 전용 ClusterRole을 cluster-agent ServiceAccount에 바인딩한다.
 apiVersion: rbac.authorization.k8s.io/v1
@@ -146,11 +150,14 @@ metadata:
   namespace: sandbox
 rules:
   - apiGroups: [""]
-    resources: ["services", "configmaps"]
+    resources: ["services"]
+    verbs: ["get", "list", "create", "update", "patch", "delete"]
+  - apiGroups: [""]
+    resources: ["configmaps"]
     verbs: ["get", "list", "create", "update", "patch"]
   - apiGroups: ["apps"]
     resources: ["deployments"]
-    verbs: ["get", "list", "create", "update", "patch"]
+    verbs: ["get", "list", "create", "update", "patch", "delete"]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
@@ -161,6 +168,39 @@ roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: Role
   name: cluster-agent-sandbox-write
+subjects:
+  - kind: ServiceAccount
+    name: cluster-agent
+    namespace: target
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: cluster-agent-catalog-install
+  namespace: sandbox
+rules:
+  - apiGroups: [""]
+    resources: ["configmaps", "secrets", "serviceaccounts", "services"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  - apiGroups: ["apps"]
+    resources: ["statefulsets"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  - apiGroups: ["networking.k8s.io"]
+    resources: ["networkpolicies"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  - apiGroups: ["policy"]
+    resources: ["poddisruptionbudgets"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: cluster-agent-catalog-install
+  namespace: sandbox
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: cluster-agent-catalog-install
 subjects:
   - kind: ServiceAccount
     name: cluster-agent

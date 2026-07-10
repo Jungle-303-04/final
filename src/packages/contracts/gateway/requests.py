@@ -156,6 +156,19 @@ class RecoveryActionSelectRequest(StrictModel):
     reason: str | None = Field(default=None, max_length=500)
 
 
+class RecoveryActionSelectByCorrelationRequest(StrictModel):
+    expected_plan_id: str = Field(min_length=1, max_length=2048)
+    action_id: str | None = Field(default=None, min_length=1, max_length=2048)
+    reason: str | None = Field(default=None, max_length=500)
+
+
+class RcaTestRunCreateRequest(StrictModel):
+    """등록된 RCA 장애 시나리오 실행 요청 — manifest/evidence는 서버 카탈로그 소유."""
+
+    cluster_id: str = Field(min_length=1, max_length=253)
+    scenario_id: str = Field(min_length=1, max_length=120)
+
+
 class InventoryResource(StrictModel):
     resource_type: str = Field(min_length=1, max_length=80)
     api_version: str = Field(default="", max_length=120)
@@ -436,6 +449,7 @@ class CatalogInstallRequest(StrictModel):
     cluster_id: str = Target.DEFAULT_CLUSTER_ID
     namespace: str = Sandbox.NAMESPACE
     application_name: str = Field(min_length=1, max_length=120)
+    release_name: str | None = Field(default=None, min_length=1, max_length=120)
     version: str | None = Field(default=None, max_length=80)
     values: dict[str, Any] = Field(default_factory=dict)
 
@@ -461,7 +475,7 @@ class AlertChannelUpsertRequest(StrictModel):
     channel_id: str = ""  # 빈 값이면 서버가 생성(신규)
     name: str = Field(min_length=1)
     kind: Literal["webhook"] = "webhook"
-    url: str = Field(min_length=1)
+    url: str = Field(min_length=1, max_length=2000)
     min_severity: Literal["info", "warning", "critical"] = "warning"
     enabled: bool = True
 
@@ -483,7 +497,7 @@ class RcaRuleValidateRequest(StrictModel):
 class MetricsValidateRequest(StrictModel):
     source: Literal["prometheus"] = "prometheus"
     query: str = Field(min_length=1, max_length=MAX_METRIC_QUERY_LENGTH)
-    base_url: str | None = Field(default=None, max_length=500)
+    base_url: str | None = Field(default=None, max_length=500, deprecated=True)
     range_seconds: int | None = Field(default=300, ge=MIN_METRIC_RANGE_SECONDS, le=3600)
     step_seconds: int | None = Field(default=30, ge=MIN_METRIC_STEP_SECONDS, le=300)
 

@@ -6,10 +6,15 @@ import asyncio
 from types import SimpleNamespace
 from typing import Any
 
+import httpx
 from fastapi import HTTPException
 
 import domains.dashboard.router as dashboard_router
-from domains.dashboard.metrics_validation import MetricsValidationResult
+from domains.dashboard.metrics_validation import (
+    PROMETHEUS_VALIDATE_BASE_URL_ENV,
+    MetricsValidationResult,
+    validate_promql_query,
+)
 from domains.dashboard.router import (
     delete_metric_query_preset,
     list_metric_query_presets,
@@ -159,10 +164,10 @@ def test_metric_query_presets_list_requires_dashboard_access() -> None:
 
 
 def test_metrics_validate_route_returns_prometheus_dry_run_result(monkeypatch) -> None:
-    calls: list[tuple[str, str | None, int | None, int | None]] = []
+    calls: list[tuple[str, int | None, int | None]] = []
 
-    async def stub_validate(query: str, *, base_url=None, range_seconds=None, step_seconds=None):
-        calls.append((query, base_url, range_seconds, step_seconds))
+    async def stub_validate(query: str, *, range_seconds=None, step_seconds=None):
+        calls.append((query, range_seconds, step_seconds))
         return MetricsValidationResult(
             valid=True,
             detail="PromQL dry-run 성공",
@@ -187,7 +192,77 @@ def test_metrics_validate_route_returns_prometheus_dry_run_result(monkeypatch) -
 
     asyncio.run(run())
 
-    assert calls == [("up", "http://prometheus:9090", 300, 30)]
+    assert calls == [("up", 300, 30)]
+
+
+def test_metrics_validate_ignores_attacker_base_url_and_uses_server_env(monkeypatch) -> None:
+    requested_urls: list[httpx.URL] = []
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        requested_urls.append(request.url)
+        return httpx.Response(
+            200,
+            json={"status": "success", "data": {"resultType": "matrix", "result": []}},
+        )
+
+    monkeypatch.setenv(PROMETHEUS_VALIDATE_BASE_URL_ENV, "https://prometheus.internal:9090")
+
+    result = asyncio.run(
+        validate_promql_query(
+            "up",
+            base_url="https://attacker.example/steal",
+            transport=httpx.MockTransport(handler),
+        )
+    )
+
+    assert result.valid is True
+    assert len(requested_urls) == 1
+    assert requested_urls[0].host == "prometheus.internal"
+    assert requested_urls[0].port == 9090
+    assert requested_urls[0].path == "/api/v1/query_range"
+
+
+def test_metrics_validate_requires_server_env_even_with_client_base_url(monkeypatch) -> None:
+    attempted = False
+
+    async def handler(_request: httpx.Request) -> httpx.Response:
+        nonlocal attempted
+        attempted = True
+        return httpx.Response(200)
+
+    monkeypatch.delenv(PROMETHEUS_VALIDATE_BASE_URL_ENV, raising=False)
+
+    result = asyncio.run(
+        validate_promql_query(
+            "up",
+            base_url="https://attacker.example/steal",
+            transport=httpx.MockTransport(handler),
+        )
+    )
+
+    assert result.valid is False
+    assert result.code == "prometheus_base_url_required"
+    assert result.detail == "Prometheus 검증 URL이 설정되지 않았습니다."
+    assert attempted is False
+
+
+def test_metrics_validate_does_not_reflect_prometheus_error_body(monkeypatch) -> None:
+    reflected_secret = "upstream-secret-response-body"
+
+    async def handler(_request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            422,
+            json={"status": "error", "error": reflected_secret},
+        )
+
+    monkeypatch.setenv(PROMETHEUS_VALIDATE_BASE_URL_ENV, "https://prometheus.internal")
+
+    result = asyncio.run(validate_promql_query("sum(", transport=httpx.MockTransport(handler)))
+
+    assert result.valid is False
+    assert result.code == "promql_invalid"
+    assert result.detail == "PromQL 쿼리가 유효하지 않습니다."
+    assert reflected_secret not in result.detail
 
 
 def test_metrics_validate_route_returns_validation_error(monkeypatch) -> None:

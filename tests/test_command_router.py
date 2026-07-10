@@ -16,6 +16,7 @@ from domains.command.router import (
     scale_deployment,
 )
 from domains.identity.dependencies import ClusterAgentIdentity
+from packages.config.constants import Command
 from packages.contracts.gateway.requests import (
     AgentDebugQueryRequest,
     CommandHeartbeatRequest,
@@ -176,6 +177,37 @@ def test_command_request_without_diff_is_rejected() -> None:
             raise AssertionError("expected HTTPException")
 
         assert events.body is None
+
+    asyncio.run(run())
+
+
+def test_general_command_api_rejects_reserved_rca_test_actions() -> None:
+    async def run() -> None:
+        for action in (
+            Command.RCA_TEST_SCENARIO_INJECT_ACTION,
+            Command.RCA_TEST_SCENARIO_CLEANUP_ACTION,
+        ):
+            db = SpyAccessDb(allowed=True)
+            events = SpyEvents()
+            try:
+                await commands(
+                    CommandRequest(
+                        cluster_id="cluster-1",
+                        action=action,
+                        diff=manual_diff(),
+                    ),
+                    current_session(),
+                    db,
+                    events,
+                )
+            except HTTPException as exc:
+                assert exc.status_code == 422
+                assert "/rca/test-runs" in exc.detail
+            else:
+                raise AssertionError("RCA test actions must use the dedicated test-run API")
+
+            assert db.calls == []
+            assert events.body is None
 
     asyncio.run(run())
 

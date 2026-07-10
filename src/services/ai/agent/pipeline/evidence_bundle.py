@@ -238,11 +238,13 @@ def missing_source_checks(missing_evidence: list[str]) -> list[MissingEvidenceCh
 
 # Loki 정규화 payload 의 stream 라벨 중 네임스페이스로 인정하는 키.
 LOG_STREAM_NAMESPACE_LABELS = ("k8s_namespace_name", "namespace")
+LOG_STREAM_POD_LABELS = ("k8s_pod_name", "pod", "pod_name", "kubernetes_pod_name")
 
 
 def select_incident_log_entries(
     logs: list[dict],
     namespace: str | None,
+    pod_names: set[str] | None = None,
 ) -> list[dict]:
     """incident 네임스페이스의 로그만 근거로 채택한다(다른 네임스페이스 노이즈 제외).
 
@@ -260,7 +262,7 @@ def select_incident_log_entries(
     남는다. 리포트가 소비하는 근거 번들(evidence_bundle)만 정제하는 최소 수정이며,
     수집 시점 분리(incident 별 로그 쿼리 실행)는 evidence 수집 파이프라인 후속 과제다.
     """
-    if not namespace:
+    if not namespace and pod_names is None:
         return list(logs)
     selected: list[dict] = []
     for entry in logs:
@@ -268,12 +270,14 @@ def select_incident_log_entries(
             continue
         streams = entry.get("streams")
         if not isinstance(streams, list):
-            selected.append(entry)
+            if pod_names is None:
+                selected.append(entry)
             continue
         kept = [
             stream
             for stream in streams
-            if isinstance(stream, dict) and stream_matches_namespace(stream, namespace)
+            if isinstance(stream, dict)
+            and stream_matches_incident_scope(stream, namespace, pod_names)
         ]
         if not kept:
             continue
@@ -287,6 +291,30 @@ def select_incident_log_entries(
     return selected
 
 
+def stream_matches_incident_scope(
+    stream: dict,
+    namespace: str | None,
+    pod_names: set[str] | None,
+) -> bool:
+    """일반 incident는 기존 규칙, RCA test는 namespace와 Pod를 모두 엄격히 확인한다."""
+    if pod_names is None:
+        return not namespace or stream_matches_namespace(stream, namespace)
+    if not namespace or not pod_names:
+        return False
+    labels = stream.get("stream")
+    if not isinstance(labels, dict):
+        return False
+    namespace_value = next(
+        (str(labels[key]) for key in LOG_STREAM_NAMESPACE_LABELS if labels.get(key) is not None),
+        None,
+    )
+    pod_value = next(
+        (str(labels[key]) for key in LOG_STREAM_POD_LABELS if labels.get(key) is not None),
+        None,
+    )
+    return namespace_value == namespace and pod_value in pod_names
+
+
 def stream_matches_namespace(stream: dict, namespace: str) -> bool:
     labels = stream.get("stream")
     if not isinstance(labels, dict):
@@ -296,6 +324,17 @@ def stream_matches_namespace(stream: dict, namespace: str) -> bool:
         if value is not None:
             return str(value) == namespace
     return True
+
+
+def rca_test_pod_names(metadata: dict) -> set[str] | None:
+    """RCA test metadata가 있으면 Pod 귀속을 필수화하고, 일반 incident면 None을 반환한다."""
+    test_context = metadata.get("rca_test")
+    if not isinstance(test_context, dict):
+        return None
+    raw_names = test_context.get("pod_names")
+    if not isinstance(raw_names, list):
+        return set()
+    return {str(name).strip() for name in raw_names if str(name).strip()}
 
 
 def change_context_payload(metadata: dict) -> dict:
@@ -424,7 +463,11 @@ def collect_evidence_items(evt: EvidenceSource) -> list[EvidenceItem]:
                 summary=f"{target_summary} Metric snapshot 근거입니다.",
             )
         )
-    log_entries = select_incident_log_entries(evt.logs, namespace)
+    log_entries = select_incident_log_entries(
+        evt.logs,
+        namespace,
+        pod_names=rca_test_pod_names(evt.metadata),
+    )
     if log_entries:
         items.append(
             evidence_item(

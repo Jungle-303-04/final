@@ -163,6 +163,9 @@ secret 이름과 주입 경계는 [Secrets](secrets.md)를 본다.
 - [aws-testing-runbook](aws-testing-runbook.md)
 - [cloudflare-waf-and-login](cloudflare-waf-and-login.md)
 - [continuation-execution-plan-2026-07-07](continuation-execution-plan-2026-07-07.md)
+- [current-service-state](current-service-state.md)
+- [security-review-20260710](security-review-20260710.md)
+- [unimplemented-review-20260711](unimplemented-review-20260711.md)
 - [events](events.md)
 - [external-console-cluster-interactions](external-console-cluster-interactions.md)
 - [external-console-instances](external-console-instances.md)
@@ -188,6 +191,7 @@ secret 이름과 주입 경계는 [Secrets](secrets.md)를 본다.
 - [fd/05-routes-ia](fd/05-routes-ia.md)
 - [fd/06-api-map](fd/06-api-map.md)
 - [fd/07-build-plan](fd/07-build-plan.md)
+- [fd/08-frontend-execution-plan](fd/08-frontend-execution-plan.md)
 - [fd/views/auth](fd/views/auth.md)
 - [fd/views/org-admin](fd/views/org-admin.md)
 - [fd/views/resources](fd/views/resources.md)
@@ -270,6 +274,7 @@ Target / Telemetry 선형 작업 문서는 아래에 있다.
 새 문서를 만들면 이 목록에도 연결한다.
 
 - [api/README](api/README.md)
+- [api/16-rca-debug/README](api/16-rca-debug/README.md)
 - [architecture-diagram](architecture-diagram.md)
 - [architecture](architecture.md)
 - [architecture/service-consolidation-plan](architecture/service-consolidation-plan.md)

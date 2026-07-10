@@ -47,8 +47,7 @@ def endpoint_slice_ready_endpoint_snapshot(
         if endpoint_condition(endpoint, ENDPOINT_CONDITION_READY) is True
     ]
     ready_states = [
-        endpoint_condition(endpoint, ENDPOINT_CONDITION_READY)
-        for endpoint in endpoints
+        endpoint_condition(endpoint, ENDPOINT_CONDITION_READY) for endpoint in endpoints
     ]
     return compact_dict(
         {
@@ -116,11 +115,7 @@ def endpoint_ports_snapshot(value: Any) -> list[JsonObject]:
 
 def endpoint_condition_count(endpoints: list[JsonObject], condition_name: str) -> int:
     """Count endpoints where one condition is true."""
-    return sum(
-        1
-        for endpoint in endpoints
-        if endpoint_condition(endpoint, condition_name) is True
-    )
+    return sum(1 for endpoint in endpoints if endpoint_condition(endpoint, condition_name) is True)
 
 
 def endpoint_condition(endpoint: JsonObject, condition_name: str) -> bool | None:
@@ -151,8 +146,7 @@ def target_ref_snapshot(
     return compact_dict(
         {
             "kind": target_ref.get("kind"),
-            "namespace": target_ref.get("namespace")
-            or metadata(endpoint_slice).get("namespace"),
+            "namespace": target_ref.get("namespace") or metadata(endpoint_slice).get("namespace"),
             "name": target_ref.get("name"),
         }
     )

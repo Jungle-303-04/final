@@ -59,11 +59,7 @@ def pods_for_deployment(
         if metadata(replicaset).get("name")
     }
     return sorted(
-        [
-            pod
-            for pod in pods
-            if is_owned_by_replicaset(pod, replicaset_uids, replicaset_names)
-        ],
+        [pod for pod in pods if is_owned_by_replicaset(pod, replicaset_uids, replicaset_names)],
         key=lambda pod: str(metadata(pod).get("name") or ""),
     )
 
@@ -110,4 +106,3 @@ def replicaset_revision_number(replicaset: JsonObject) -> int:
         return int(str(revision))
     except (TypeError, ValueError):
         return -1
-

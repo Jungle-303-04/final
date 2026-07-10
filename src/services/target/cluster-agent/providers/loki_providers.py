@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import re
+import time
 
 import httpx
 from queries import LokiLogQuery
@@ -223,6 +224,7 @@ def update_log_summaries(
     evidence_key="logs",
     query_type=LokiLogQuery,
     empty_payload=list,  # log payload's shape is list
+    range_query_type=LokiLogQuery,
 )
 class LokiLogsProvider:
     """Collect log data from Loki.
@@ -253,9 +255,22 @@ class LokiLogsProvider:
         """Run one Loki query and return the raw API result."""
         with TRACER.start_as_current_span("loki.query_range") as span:
             span.attr("loki.query", telemetry_query.logql)
+            params: dict[str, str | int] = {
+                "query": telemetry_query.logql,
+                "limit": LOKI_QUERY_LIMIT,
+            }
+            if telemetry_query.range_seconds is not None:
+                end_ns = time.time_ns()
+                params.update(
+                    {
+                        "start": end_ns - telemetry_query.range_seconds * 1_000_000_000,
+                        "end": end_ns,
+                        "direction": "backward",
+                    }
+                )
             response = await client.get(
                 f"{self.base_url}/loki/api/v1/query_range",
-                params={"query": telemetry_query.logql, "limit": LOKI_QUERY_LIMIT},
+                params=params,
             )
             span.http_status(response.status_code)
             response.raise_for_status()
@@ -272,14 +287,15 @@ class LokiLogsProvider:
         payload: JsonObject,
     ) -> None:
         """Normalize one Loki result and add it to the bucket."""
-        results.append(
-            {
-                "source": self.source,
-                "query_name": telemetry_query.query_name,
-                "query": telemetry_query.logql,
-                **self.normalize_payload(payload),
-            }
-        )
+        result = {
+            "source": self.source,
+            "query_name": telemetry_query.query_name,
+            "query": telemetry_query.logql,
+            **self.normalize_payload(payload),
+        }
+        if telemetry_query.range_seconds is not None:
+            result["range_seconds"] = telemetry_query.range_seconds
+        results.append(result)
 
     def build_response(self, results: list[JsonObject]) -> list[JsonObject]:
         """Return the finished logs evidence bucket."""

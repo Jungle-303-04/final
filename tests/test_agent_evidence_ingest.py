@@ -39,8 +39,6 @@ class DedupeDb:
     def __init__(self, existing: dict[str, str] | None = None) -> None:
         self.existing = existing
         self.recorded: list[dict[str, object]] = []
-        self.staged: list[object] = []
-        self.released: list[str] = []
 
     def get_evidence_window(self, _evidence_key: str) -> dict[str, str] | None:
         return self.existing
@@ -66,16 +64,6 @@ class DedupeDb:
             "event_id": event_envelope.event_id,
             "correlation_id": event_envelope.correlation_id,
         }
-
-    def stage_event_once(self, event_envelope: object) -> dict[str, object]:
-        self.staged.append(event_envelope)
-        return {
-            "event_id": event_envelope.event_id,
-            "correlation_id": event_envelope.correlation_id,
-        }
-
-    def release_pending_evidence_window(self, evidence_key: str) -> None:
-        self.released.append(evidence_key)
 
 
 def evidence_request() -> AgentEvidenceRequest:
@@ -141,7 +129,6 @@ def test_agent_evidence_reuses_existing_window_without_outbox_duplicate() -> Non
     assert response.correlation_id == "corr-old"
     assert events.accepted == 0
     assert db.recorded == []
-    assert db.released == []
 
 
 def test_agent_evidence_without_key_records_window_reference_outbox() -> None:
@@ -154,7 +141,6 @@ def test_agent_evidence_without_key_records_window_reference_outbox() -> None:
     assert response.event_id
     assert response.correlation_id
     assert events.accepted == 0
-    assert db.staged == []
     assert len(db.recorded) == 1
     recorded = db.recorded[0]
     claimed_key = recorded["evidence_key"]
