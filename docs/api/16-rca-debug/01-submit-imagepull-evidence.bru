@@ -1,0 +1,113 @@
+meta {
+  name: 01 ImagePull 장애 Evidence 제출
+  type: http
+  seq: 1
+  tags: [agent, evidence, rca, debug]
+}
+
+post {
+  url: {{base_url}}agent/evidence
+  body: json
+}
+
+headers {
+  content-type: application/json
+  x-agent-token: {{agent_token}}
+}
+
+script:pre-request {
+  const runId = bru.interpolate("{{$randomUUID}}");
+  const now = new Date().toISOString();
+  const shortId = runId.replace(/-/g, "").slice(0, 10);
+
+  bru.setVar("rca_debug_run_id", runId);
+  bru.setVar("rca_requested_correlation_id", `corr-bruno-imagepull-${runId}`);
+  bru.setVar("rca_evidence_key", `bruno-imagepull-${runId}`);
+  bru.setVar("rca_window_start", now);
+  bru.setVar("rca_resource_name", `rca-imagepull-${shortId}`);
+}
+
+body:json {
+  {
+    "cluster_id": "{{dev_cluster_id}}",
+    "workspace_id": "{{workspace_id}}",
+    "correlation_id": "{{rca_requested_correlation_id}}",
+    "agent_id": "bruno-rca-debug",
+    "source_id": "bruno-direct-imagepull",
+    "window_start": "{{rca_window_start}}",
+    "evidence_key": "{{rca_evidence_key}}",
+    "kubernetes": {
+      "cluster": {
+        "cluster_id": "{{dev_cluster_id}}",
+        "namespace": "sandbox",
+        "collected_at": "{{rca_window_start}}"
+      },
+      "workloads": [],
+      "pods": [
+        {
+          "uid": "uid-{{rca_debug_run_id}}",
+          "name": "{{rca_resource_name}}-pod",
+          "namespace": "sandbox",
+          "phase": "Pending",
+          "owner_kind": "Deployment",
+          "owner_name": "{{rca_resource_name}}",
+          "workload_key": "sandbox/Deployment/{{rca_resource_name}}",
+          "conditions": [
+            {
+              "type": "Ready",
+              "status": "False"
+            }
+          ],
+          "containers": [],
+          "restart_total": 0,
+          "waiting_reasons": ["ImagePullBackOff"],
+          "terminated_reasons": []
+        }
+      ],
+      "events": [
+        {
+          "uid": "uid-event-{{rca_debug_run_id}}",
+          "namespace": "sandbox",
+          "type": "Warning",
+          "reason": "Failed",
+          "message": "Failed to pull image example.invalid/{{rca_resource_name}}:not-found: manifest unknown",
+          "count": 6,
+          "first_timestamp": "{{rca_window_start}}",
+          "last_timestamp": "{{rca_window_start}}",
+          "reporting_component": "kubelet",
+          "involved_kind": "Pod",
+          "involved_name": "{{rca_resource_name}}-pod",
+          "involved_uid": "uid-{{rca_debug_run_id}}"
+        }
+      ],
+      "nodes": [],
+      "services": [],
+      "endpoints": [],
+      "provider_status": {}
+    },
+    "metrics": {},
+    "logs": [],
+    "traces": {},
+    "metadata": {
+      "test_fixture": "bruno-imagepull-wrong-tag"
+    }
+  }
+}
+
+script:post-response {
+  const body = res.getBody();
+  if (res.status === 200 && body && body.correlation_id) {
+    bru.setVar("rca_correlation_id", String(body.correlation_id));
+    bru.setVar("rca_event_id", String(body.event_id || ""));
+  }
+}
+
+tests {
+  test("장애 Evidence 접수가 반드시 성공한다", function () {
+    expect(res.status).to.equal(200);
+    const body = res.getBody();
+    expect(body).to.have.property("accepted", true);
+    expect(body).to.have.property("event_id");
+    expect(body.correlation_id).to.equal(bru.getVar("rca_requested_correlation_id"));
+  });
+}
