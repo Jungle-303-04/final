@@ -39,3 +39,20 @@ def status(item: JsonObject) -> JsonObject:
     """Return object status, or an empty dict."""
     value = item.get("status", {})
     return value if isinstance(value, dict) else {}
+
+
+def list_items(value: Any) -> list[JsonObject]:
+    """Return dict items from a list value."""
+    if not isinstance(value, list):
+        return []
+    return [item for item in value if isinstance(item, dict)]
+
+
+def object_or_empty(value: Any) -> JsonObject:
+    """Return a dict value, or an empty dict."""
+    return value if isinstance(value, dict) else {}
+
+
+def compact_dict(value: JsonObject) -> JsonObject:
+    """Drop empty values while keeping false boolean values."""
+    return {key: item for key, item in value.items() if item not in (None, "", [], {})}
