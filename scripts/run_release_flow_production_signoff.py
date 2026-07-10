@@ -12,6 +12,8 @@ import urllib.parse
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
+DEFAULT_PREFLIGHT_REPORT_MAX_AGE_MINUTES = 60
+
 try:
     from run_release_flow_production_readiness import dispatch_workflow, wait_for_run
     from verify_release_flow_production_evidence import (
@@ -95,6 +97,17 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
         "--preflight-only",
         action="store_true",
         help="Validate sign-off inputs, branch SHA, Safe PR run, and workflow access without dispatching workflows.",
+    )
+    parser.add_argument(
+        "--skip-preflight-report-check",
+        action="store_true",
+        help="Skip requiring release-flow-production-preflight.json before full sign-off dispatch.",
+    )
+    parser.add_argument(
+        "--preflight-report-max-age-minutes",
+        type=int,
+        default=DEFAULT_PREFLIGHT_REPORT_MAX_AGE_MINUTES,
+        help="Maximum age for release-flow-production-preflight.json before full sign-off dispatch.",
     )
     parser.add_argument("--release-plan-id", required=True)
     parser.add_argument("--api-base-url", default="")
@@ -308,6 +321,8 @@ def validate_signoff_inputs(args: argparse.Namespace) -> list[str]:
         )
     if not str(args.live_safe_pr_workflow_run_id or "").strip().isdigit():
         errors.append("live_safe_pr_workflow_run_id must be a numeric GitHub Actions run id")
+    if int(args.preflight_report_max_age_minutes or 0) <= 0:
+        errors.append("preflight_report_max_age_minutes must be positive")
     safe_pr_url_error = validate_safe_pr_url(args)
     if safe_pr_url_error:
         errors.append(safe_pr_url_error)
@@ -452,9 +467,13 @@ def write_preflight_report(
 ) -> Path:
     path = preflight_report_path(args)
     path.parent.mkdir(parents=True, exist_ok=True)
+    generated_at = datetime.now(UTC)
     payload = {
         "status": "passed",
-        "generated_at": datetime.now(UTC).isoformat(),
+        "generated_at": generated_at.isoformat(),
+        "expires_at": (
+            generated_at + timedelta(minutes=int(args.preflight_report_max_age_minutes))
+        ).isoformat(),
         "github_repo": args.github_repo,
         "github_branch": args.github_branch,
         "github_branch_head_sha": github_branch_head_sha,
@@ -476,6 +495,94 @@ def write_preflight_report(
     path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     print(f"ok signoff.preflight_report: {path}")
     return path
+
+
+def parse_report_timestamp(value: object, field_name: str) -> datetime:
+    try:
+        timestamp = datetime.fromisoformat(str(value or ""))
+    except ValueError as exc:
+        raise GitHubEvidenceError(f"preflight report {field_name} is invalid") from exc
+    if timestamp.tzinfo is None:
+        timestamp = timestamp.replace(tzinfo=UTC)
+    return timestamp.astimezone(UTC)
+
+
+def verify_preflight_report(args: argparse.Namespace) -> None:
+    if args.skip_preflight_report_check:
+        return
+    path = preflight_report_path(args)
+    if not path.is_file():
+        raise GitHubEvidenceError(
+            f"preflight report is required before full sign-off dispatch: {path}"
+        )
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        raise GitHubEvidenceError(f"preflight report is not valid JSON: {path}") from exc
+    if not isinstance(payload, dict):
+        raise GitHubEvidenceError(f"preflight report must be a JSON object: {path}")
+    if payload.get("status") != "passed" or payload.get("dispatch_performed") is not False:
+        raise GitHubEvidenceError("preflight report did not pass without dispatch")
+
+    now = datetime.now(UTC)
+    generated_at = parse_report_timestamp(payload.get("generated_at"), "generated_at")
+    max_age = timedelta(minutes=int(args.preflight_report_max_age_minutes))
+    if generated_at > now + timedelta(minutes=5):
+        raise GitHubEvidenceError("preflight report generated_at is in the future")
+    if now - generated_at > max_age:
+        raise GitHubEvidenceError("preflight report is too old for full sign-off dispatch")
+    if payload.get("expires_at"):
+        expires_at = parse_report_timestamp(payload.get("expires_at"), "expires_at")
+        if expires_at < now:
+            raise GitHubEvidenceError("preflight report has expired")
+
+    expected_inputs = {
+        "github_repo": args.github_repo,
+        "github_branch": args.github_branch,
+        "github_sha": args.github_sha,
+        "github_environment": args.environment,
+        "release_plan_id": args.release_plan_id,
+        "live_change_ticket": args.live_change_ticket,
+        "live_runbook_url": args.live_runbook_url,
+        "live_release_owner": str(args.live_release_owner or ""),
+        "live_oncall_contact": str(args.live_oncall_contact or ""),
+        "live_image": args.live_image,
+        "live_verification_url": args.live_verification_url,
+        "live_safe_pr_workflow_run_id": args.live_safe_pr_workflow_run_id,
+        "live_safe_pr_url": args.live_safe_pr_url,
+    }
+    mismatched = [
+        key
+        for key, value in expected_inputs.items()
+        if str(payload.get(key) or "") != str(value or "")
+    ]
+    if mismatched:
+        raise GitHubEvidenceError(
+            "preflight report does not match full sign-off inputs: " + ", ".join(mismatched)
+        )
+    if str(payload.get("github_branch_head_sha") or "") != str(args.github_sha or ""):
+        raise GitHubEvidenceError("preflight report branch head does not match --github-sha")
+
+    safe_pr_run = payload.get("safe_pr_run") if isinstance(payload.get("safe_pr_run"), dict) else {}
+    if str(safe_pr_run.get("id") or "") != str(args.live_safe_pr_workflow_run_id):
+        raise GitHubEvidenceError("preflight report Safe PR run id does not match inputs")
+    if str(safe_pr_run.get("conclusion") or "") != "success":
+        raise GitHubEvidenceError("preflight report Safe PR run did not conclude success")
+    if str(safe_pr_run.get("head_sha") or "") != str(args.github_sha):
+        raise GitHubEvidenceError("preflight report Safe PR run head does not match --github-sha")
+
+    workflows = payload.get("workflows") if isinstance(payload.get("workflows"), list) else []
+    workflow_names = {
+        str(item.get("workflow") or "")
+        for item in workflows
+        if isinstance(item, dict) and str(item.get("state") or "") == "active"
+    }
+    missing_workflows = sorted({READINESS_WORKFLOW, DEPLOY_WORKFLOW} - workflow_names)
+    if missing_workflows:
+        raise GitHubEvidenceError(
+            "preflight report is missing active workflows: " + ", ".join(missing_workflows)
+        )
+    print(f"ok signoff.preflight_report: {path} matches full sign-off inputs")
 
 
 def write_signoff_report(
@@ -540,6 +647,7 @@ def main(argv: list[str]) -> int:
             )
             print("ok signoff.preflight: inputs, branch SHA, Safe PR run, and workflow access passed")
             return 0
+        verify_preflight_report(args)
         started_after = datetime.now(UTC) - timedelta(seconds=10)
         readiness_run = dispatch_and_wait(
             args=args,
