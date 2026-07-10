@@ -44,6 +44,7 @@ def load_agent_module():
         "providers.kubernetes_utils",
         "providers.kubernetes_providers",
         "providers.loki_providers",
+        "providers.metadata_config_objects",
         "providers.metadata_config_refs",
         "providers.metadata_endpoint_slices",
         "providers.metadata_ownership",
