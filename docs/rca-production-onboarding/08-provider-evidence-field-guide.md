@@ -1199,6 +1199,7 @@ job들을 하나로 합친 뒤 `cluster.evidence.received`를 발행한다.
 | `failure_policy == strict`이고 failed job이 있으면 발행하지 않는다 | strict mode는 일부 provider 실패를 허용하지 않는다. |
 | `allow_partial`이면 failed provider는 빈 payload로 대체될 수 있다 | `logs`는 `[]`, 나머지는 `{}`가 빈 payload다. |
 | completed provider result는 payload에 merge된다 | provider result는 `{"metrics": ...}`처럼 bucket key를 포함해야 한다. |
+| `metadata` bucket은 inner key 단위로 merge된다 | provider result가 `{"metadata": {"change_context": ...}}`를 보내도 기존 `metadata.rca_test`는 보존된다. `metadata.rca_test`는 RCA test run log 격리에 쓰는 값이므로 `release_context`에서 만든 값만 신뢰한다. |
 
 provider job 실패의 `error` 문자열은 `evidence_jobs.error`에 저장되지만,
 allow-partial로 최종 `cluster.evidence.received`가 발행될 때 body에 별도 error field로 들어가지 않는다.
