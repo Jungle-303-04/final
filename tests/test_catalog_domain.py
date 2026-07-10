@@ -20,7 +20,7 @@ class StubCatalogDb:
         self.access_checks: list[tuple[str, str, str, str, str]] = []
         self.cluster_role = "target"
         self.connected = True
-        self.command_capabilities = ["collector", "command_receiver"]
+        self.command_capabilities = ["collector", "command_receiver", "catalog_helm_install"]
         self.commands: dict[str, dict[str, object]] = {}
         self.queue_attempts = 0
 
@@ -236,6 +236,21 @@ def test_catalog_install_requires_online_command_receiver() -> None:
 
     assert response.status_code == 400
     assert response.json()["detail"]["code"] == "cluster_not_connected"
+    assert db.commands == {}
+
+
+def test_catalog_install_requires_agent_runner_capability() -> None:
+    db = StubCatalogDb()
+    db.command_capabilities = ["collector", "command_receiver"]
+
+    response = catalog_client(db).post(
+        "/catalog/items/postgresql/installs",
+        json=install_body(),
+        headers=install_headers(),
+    )
+
+    assert response.status_code == 400
+    assert response.json()["detail"]["code"] == "catalog_install_runner_unavailable"
     assert db.commands == {}
 
 
