@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import sys
 from typing import Any
 
@@ -29,6 +30,7 @@ PRODUCTION_ENVIRONMENTS = {"prod", "production"}
 PLACEHOLDER_CHANGE_TICKETS = {"CHG-PREFLIGHT"}
 PLACEHOLDER_IMAGES = {"ghcr.io/example/release-flow-smoke:live-preflight"}
 FAILED_RUN_STATES = {"cancelled", "canceled", "error", "failed", "failure", "rejected"}
+RELEASE_PLAN_ID_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$")
 
 
 def parse_args(argv: list[str]) -> argparse.Namespace:
@@ -63,6 +65,15 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     parser.add_argument("--github-step-summary", action="store_true", default=env_flag("RELEASE_FLOW_DEPLOY_GITHUB_STEP_SUMMARY"))
     parser.add_argument("--github-output", action="store_true", default=env_flag("RELEASE_FLOW_DEPLOY_GITHUB_OUTPUT"))
     parser.add_argument("--github-annotations", action="store_true", default=env_flag("RELEASE_FLOW_DEPLOY_GITHUB_ANNOTATIONS"))
+    parser.add_argument("--change-ticket", default=os.getenv("RELEASE_FLOW_DEPLOY_CHANGE_TICKET", ""))
+    parser.add_argument("--runbook-url", default=os.getenv("RELEASE_FLOW_DEPLOY_RUNBOOK_URL", ""))
+    parser.add_argument("--image", default=os.getenv("RELEASE_FLOW_DEPLOY_IMAGE", ""))
+    parser.add_argument("--verification-url", default=os.getenv("RELEASE_FLOW_DEPLOY_VERIFICATION_URL", ""))
+    parser.add_argument(
+        "--safe-pr-workflow-run-id",
+        default=os.getenv("RELEASE_FLOW_DEPLOY_SAFE_PR_WORKFLOW_RUN_ID", ""),
+    )
+    parser.add_argument("--safe-pr-url", default=os.getenv("RELEASE_FLOW_DEPLOY_SAFE_PR_URL", ""))
     return parser.parse_args(argv)
 
 
@@ -95,10 +106,38 @@ def release_plan_start_payload(plan: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def validate_production_plan(plan: dict[str, Any]) -> list[str]:
+def expected_plan_values(args: argparse.Namespace) -> dict[str, str]:
+    return {
+        "change_ticket": str(args.change_ticket or "").strip(),
+        "runbook_url": str(args.runbook_url or "").strip(),
+        "image": str(args.image or "").strip(),
+        "post_deploy_verification_url": str(args.verification_url or "").strip(),
+        "safe_pr_workflow_run_id": str(args.safe_pr_workflow_run_id or "").strip(),
+        "safe_pr_url": str(args.safe_pr_url or "").strip(),
+    }
+
+
+def plan_value(settings: dict[str, Any], config: dict[str, Any], field: str) -> str:
+    return str(config.get(field) or settings.get(field) or "").strip()
+
+
+def validate_release_plan_id(plan_id: str) -> str | None:
+    if not plan_id.strip():
+        return "release_plan_id is required"
+    if not RELEASE_PLAN_ID_PATTERN.fullmatch(plan_id):
+        return "release_plan_id must be path-safe: letters, numbers, dot, underscore, colon, or hyphen only"
+    return None
+
+
+def validate_production_plan(
+    plan: dict[str, Any],
+    *,
+    expected_values: dict[str, str] | None = None,
+) -> list[str]:
     blockers: list[str] = []
     settings = plan.get("settings") if isinstance(plan.get("settings"), dict) else {}
     steps = plan.get("steps") if isinstance(plan.get("steps"), list) else []
+    expected_values = expected_values or {}
     if settings.get("runtime_mode") != "live":
         blockers.append("release plan settings.runtime_mode must be live")
     if not steps:
@@ -118,20 +157,31 @@ def validate_production_plan(plan: dict[str, Any]) -> list[str]:
             "post_deploy_verification_url",
             "abort_criteria",
             "image",
+            "safe_pr_workflow_run_id",
+            "safe_pr_url",
         ):
-            if not str(config.get(field) or settings.get(field) or "").strip():
+            if not plan_value(settings, config, field):
                 blockers.append(f"{application_id} requires {field}")
-        change_ticket = str(config.get("change_ticket") or settings.get("change_ticket") or "").strip()
+        for field, expected in expected_values.items():
+            if expected and plan_value(settings, config, field) != expected:
+                blockers.append(f"{application_id} {field} must match gated deploy input")
+        change_ticket = plan_value(settings, config, "change_ticket")
         if change_ticket in PLACEHOLDER_CHANGE_TICKETS:
             blockers.append(f"{application_id} change_ticket must not use placeholder {change_ticket}")
         for field in ("runbook_url", "post_deploy_verification_url"):
-            value = str(config.get(field) or settings.get(field) or "").strip()
+            value = plan_value(settings, config, field)
             if value:
                 try:
                     validate_live_https_url(field, value, context="for production release plan")
                 except ValueError as exc:
                     blockers.append(f"{application_id} {exc}")
-        image = str(config.get("image") or settings.get("image") or "").strip()
+        safe_pr_url = plan_value(settings, config, "safe_pr_url")
+        if safe_pr_url:
+            try:
+                validate_live_https_url("safe_pr_url", safe_pr_url, context="for production release plan")
+            except ValueError as exc:
+                blockers.append(f"{application_id} {exc}")
+        image = plan_value(settings, config, "image")
         if image:
             if image in PLACEHOLDER_IMAGES:
                 blockers.append(f"{application_id} image must not use production placeholder value {image}")
@@ -174,6 +224,9 @@ def validate_start_response(run: dict[str, Any], *, expected_step_count: int) ->
 
 def run_deploy(client: ApiClient, args: argparse.Namespace) -> list[SmokeResult]:
     results: list[SmokeResult] = []
+    plan_id_error = validate_release_plan_id(str(args.plan_id or ""))
+    if plan_id_error:
+        return [SmokeResult("release-plan.id", False, plan_id_error)]
     client.request("POST", "/auth/login", {"email": args.email, "password": args.password})
     session = client.request("GET", "/auth/session")
     results.append(SmokeResult("auth.session", bool(session.get("authenticated")), str(session)))
@@ -181,7 +234,7 @@ def run_deploy(client: ApiClient, args: argparse.Namespace) -> list[SmokeResult]
     plan = plan_response.get("plan", {})
     if not isinstance(plan, dict):
         raise ValueError("release plan response did not contain a plan object")
-    blockers = validate_production_plan(plan)
+    blockers = validate_production_plan(plan, expected_values=expected_plan_values(args))
     if str(plan.get("plan_id") or "") != str(args.plan_id):
         blockers.append("release plan response plan_id must match requested plan_id")
     results.append(

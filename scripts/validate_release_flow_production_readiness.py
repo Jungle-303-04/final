@@ -832,6 +832,7 @@ def check_production_deploy_workflow_contract() -> list[ReadinessCheck]:
         return [ReadinessCheck("workflow.production_deploy", False, "release-flow-production-deploy.yml is missing")]
     workflow = load_yaml(path)
     inputs = workflow.get("on", {}).get("workflow_dispatch", {}).get("inputs", {})
+    concurrency = workflow.get("concurrency", {})
     jobs = workflow.get("jobs", {})
     gate_job = jobs.get("release_flow_production_gate", {}) if isinstance(jobs, dict) else {}
     deploy_job = jobs.get("deploy-production", {}) if isinstance(jobs, dict) else {}
@@ -860,6 +861,7 @@ def check_production_deploy_workflow_contract() -> list[ReadinessCheck]:
         ReadinessCheck(
             "workflow.production_deploy.calls_gate",
             gate_job.get("uses") == "./.github/workflows/release-flow-production-gate.yml"
+            and gate_job.get("with", {}).get("github_environment") == "production"
             and gate_job.get("with", {}).get("live_preflight") is True
             and gate_job.get("with", {}).get("live_approval_gate") == "safe_pr"
             and gate_job.get("with", {}).get("live_safe_pr_workflow_run_id")
@@ -871,8 +873,15 @@ def check_production_deploy_workflow_contract() -> list[ReadinessCheck]:
         ReadinessCheck(
             "workflow.production_deploy.gates_start",
             deploy_job.get("needs") == "release_flow_production_gate"
+            and deploy_job.get("environment") == "production"
             and deploy_job.get("if") == "needs.release_flow_production_gate.outputs.release_gate_ok == 'true'",
             "production release start is gated by release_gate_ok",
+        ),
+        ReadinessCheck(
+            "workflow.production_deploy.concurrency",
+            concurrency.get("group") == "release-flow-production-deploy"
+            and concurrency.get("cancel-in-progress") is False,
+            "production deploy workflow serializes production release starts",
         ),
         ReadinessCheck(
             "workflow.production_deploy.starts_release_flow",
@@ -880,7 +889,14 @@ def check_production_deploy_workflow_contract() -> list[ReadinessCheck]:
             and "--plan-id" in deploy_run
             and "RELEASE_FLOW_DEPLOY_PLAN_ID" in deploy_run
             and "RELEASE_FLOW_AUTH_EMAIL" in deploy_env
-            and "RELEASE_FLOW_AUTH_PASSWORD" in deploy_env,
+            and "RELEASE_FLOW_AUTH_PASSWORD" in deploy_env
+            and deploy_env.get("RELEASE_FLOW_DEPLOY_CHANGE_TICKET") == "${{ inputs.live_change_ticket }}"
+            and deploy_env.get("RELEASE_FLOW_DEPLOY_RUNBOOK_URL") == "${{ inputs.live_runbook_url }}"
+            and deploy_env.get("RELEASE_FLOW_DEPLOY_IMAGE") == "${{ inputs.live_image }}"
+            and deploy_env.get("RELEASE_FLOW_DEPLOY_VERIFICATION_URL") == "${{ inputs.live_verification_url }}"
+            and deploy_env.get("RELEASE_FLOW_DEPLOY_SAFE_PR_WORKFLOW_RUN_ID")
+            == "${{ inputs.live_safe_pr_workflow_run_id }}"
+            and deploy_env.get("RELEASE_FLOW_DEPLOY_SAFE_PR_URL") == "${{ inputs.live_safe_pr_url }}",
             "production deploy starts a release-flow run using release-flow credentials",
         ),
     ]
@@ -898,6 +914,21 @@ def check_deploy_script_contract() -> list[ReadinessCheck]:
             and "release_plan_start_payload" in source
             and "validate_production_plan" in source,
             "deploy script fetches and validates the saved release plan before start",
+        ),
+        ReadinessCheck(
+            "script.deploy.plan_id_guard",
+            "RELEASE_PLAN_ID_PATTERN" in source
+            and "validate_release_plan_id" in source
+            and "release-plan.id" in source,
+            "deploy script rejects unsafe release plan ids before API calls",
+        ),
+        ReadinessCheck(
+            "script.deploy.matches_gate_evidence",
+            "expected_plan_values" in source
+            and "RELEASE_FLOW_DEPLOY_CHANGE_TICKET" in source
+            and "RELEASE_FLOW_DEPLOY_SAFE_PR_WORKFLOW_RUN_ID" in source
+            and "must match gated deploy input" in source,
+            "deploy script requires saved plan evidence to match gated workflow inputs",
         ),
         ReadinessCheck(
             "script.deploy.requires_live_production_plan",
