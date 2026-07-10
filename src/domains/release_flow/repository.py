@@ -239,6 +239,50 @@ class ReleaseFlowRepository(DatabaseConnection):
             rows = conn.execute(statement).mappings().all()
         return [self._release_safe_pr_evidence_from_event(row) for row in rows]
 
+    def list_release_safe_pr_diff_events(
+        self,
+        workspace_id: str,
+        workflow_run_id: str,
+        *,
+        application_id: str | None = None,
+        limit: int = 20,
+    ) -> list[JsonObject]:
+        workflow_run_id = workflow_run_id.strip()
+        if not workflow_run_id:
+            return []
+        table = EventModel.__table__
+        subjects = (
+            "safe_pr.patch_prepared",
+            "diff.explained",
+            "safe_pr.ready_for_creation",
+            "safe_pr.failed",
+            "safe_pr.created",
+        )
+        statement = (
+            select(table.c.event_id, table.c.correlation_id, table.c.subject, table.c.payload, table.c.created_at)
+            .where(
+                table.c.subject.in_(subjects),
+                table.c.payload["workspace_id"].astext == workspace_id,
+                table.c.payload["workflow_run_id"].astext == workflow_run_id,
+            )
+            .order_by(table.c.created_at.desc())
+            .limit(max(1, min(limit, 50)))
+        )
+        if application_id:
+            statement = statement.where(table.c.payload["application_id"].astext == application_id)
+        with self.connection() as conn:
+            rows = conn.execute(statement).mappings().all()
+        return [
+            {
+                "event_id": str(row["event_id"]),
+                "correlation_id": str(row["correlation_id"]),
+                "subject": str(row["subject"]),
+                "payload": dict(row.get("payload") or {}),
+                "created_at": iso_or_none(row.get("created_at")),
+            }
+            for row in rows
+        ]
+
     def _release_safe_pr_evidence_from_event(self, row: Mapping[str, Any]) -> JsonObject:
         payload = dict(row.get("payload") or {})
         return {
