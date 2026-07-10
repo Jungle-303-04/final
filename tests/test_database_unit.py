@@ -961,6 +961,22 @@ def test_workflow_status_ranks_never_allow_terminal_regression() -> None:
     )
 
 
+def test_workflow_step_status_ranks_never_allow_terminal_regression() -> None:
+    from domains.gitops.repository import (
+        TERMINAL_WORKFLOW_STEP_STATUSES,
+        WORKFLOW_STEP_STATUS_RANKS,
+    )
+
+    terminal_rank = max(WORKFLOW_STEP_STATUS_RANKS.values())
+    for status in TERMINAL_WORKFLOW_STEP_STATUSES:
+        assert WORKFLOW_STEP_STATUS_RANKS[status] == terminal_rank
+    assert (
+        WORKFLOW_STEP_STATUS_RANKS["pending"]
+        < WORKFLOW_STEP_STATUS_RANKS["running"]
+        < WORKFLOW_STEP_STATUS_RANKS["succeeded"]
+    )
+
+
 def _capture_workflow_statements() -> tuple[Any, list[Any]]:
     recorded: list[Any] = []
 
@@ -1153,6 +1169,28 @@ def test_update_workflow_run_for_command_guards_status_transition() -> None:
 
     # 재배달 완료/큐잉 이벤트가 SUCCEEDED 를 APPLYING 으로 되돌릴 수 없음
     assert "UPDATE workflow_runs" in sql
+    assert "CASE" in sql
+    assert "NOT IN" in sql
+
+
+def test_record_workflow_step_guards_status_transition() -> None:
+    repository, recorded = _capture_workflow_statements()
+
+    repository.record_workflow_step(
+        {
+            "workspace_id": "workspace-1",
+            "workflow_run_id": "workflow-1",
+            "application_id": "app-1",
+            "binding_id": "binding-1",
+            "name": "apply",
+            "status": "running",
+        }
+    )
+
+    sql = str(recorded[0].compile(dialect=postgresql.dialect()))
+
+    # 늦게 재전달된 queued 이벤트가 이미 완료된 apply 단계를 RUNNING 으로 되돌릴 수 없음
+    assert "ON CONFLICT (workflow_run_id, name) DO UPDATE" in sql
     assert "CASE" in sql
     assert "NOT IN" in sql
 
