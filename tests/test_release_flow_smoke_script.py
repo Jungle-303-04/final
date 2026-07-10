@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import importlib.util
+import json
 import sys
 from pathlib import Path
 from typing import Any
@@ -190,6 +191,38 @@ def test_build_demo_plan_is_demo_only() -> None:
     assert plan["settings"]["provider_mode"] == "dry_run"
     assert plan["steps"][1]["depends_on"] == ["checkout"]
     assert plan["steps"][0]["config"]["commit_sha"] == "release-flow-smoke"
+
+
+def test_smoke_report_writer_persists_json_artifact(tmp_path: Path) -> None:
+    smoke = load_smoke_module()
+    report_path = tmp_path / "artifacts" / "release-smoke.json"
+    payload = smoke.smoke_report_payload(
+        True,
+        "https://example.com/api",
+        [smoke.SmokeResult("healthz", True, "ok")],
+    )
+
+    smoke.write_json_report(str(report_path), payload)
+
+    assert json.loads(report_path.read_text(encoding="utf-8")) == {
+        "ok": True,
+        "api_base_url": "https://example.com/api",
+        "checks": [{"name": "healthz", "ok": True, "detail": "ok"}],
+    }
+
+
+def test_smoke_main_writes_report_when_credentials_are_missing(tmp_path: Path, monkeypatch: Any) -> None:
+    smoke = load_smoke_module()
+    for name in ("API_BASE_URL", "BASE_URL", "AUTH_EMAIL", "AUTH_PASSWORD"):
+        monkeypatch.delenv(name, raising=False)
+    report_path = tmp_path / "missing-credentials.json"
+
+    exit_code = smoke.main(["--report-path", str(report_path)])
+
+    assert exit_code == 2
+    payload = json.loads(report_path.read_text(encoding="utf-8"))
+    assert payload["ok"] is False
+    assert "AUTH_EMAIL" in payload["error"]
 
 
 def test_smoke_default_does_not_start_release_run() -> None:

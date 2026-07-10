@@ -223,6 +223,14 @@ python scripts/release_flow_smoke.py \
   --production-preflight-run-limit 10
 ```
 
+CI artifact로 smoke 결과를 보관하려면 `--report-path`를 함께 쓴다. 성공/실패 모두 같은 JSON 구조로 저장되며, 실패한 preflight check와 대상 run id를 나중에 다시 볼 수 있다.
+
+```bash
+python scripts/release_flow_smoke.py \
+  --production-preflight \
+  --report-path artifacts/release-flow-smoke.json
+```
+
 알림 채널이 실제로 validation alert를 받을 수 있는지 확인하려면 `--alert-preflight`를 붙인다. 이 모드는 enabled alert channel 중 요청 severity를 받을 수 있는 채널을 골라 `/alert-channels/test`를 호출하므로, 실제 Slack/webhook/온콜 테스트 메시지가 발송될 수 있다.
 
 ```bash
