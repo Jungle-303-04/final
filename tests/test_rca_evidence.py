@@ -533,8 +533,17 @@ def test_evidence_bundle_promotes_lineage_to_rca_items(monkeypatch) -> None:
     assert kubernetes_lineage["window_start"] == "window-2"
 
 
-def loki_log_entry(namespace: str, line: str, *, query_name: str = "namespace_errors") -> dict:
+def loki_log_entry(
+    namespace: str,
+    line: str,
+    *,
+    query_name: str = "namespace_errors",
+    pod_name: str | None = None,
+) -> dict:
     """Loki provider(normalize_payload) 출력과 같은 모양의 로그 evidence 항목."""
+    stream_labels = {"k8s_namespace_name": namespace, "k8s_container_name": "app"}
+    if pod_name:
+        stream_labels["k8s_pod_name"] = pod_name
     return {
         "source": "loki",
         "query_name": query_name,
@@ -542,7 +551,7 @@ def loki_log_entry(namespace: str, line: str, *, query_name: str = "namespace_er
         "result_type": "streams",
         "streams": [
             {
-                "stream": {"k8s_namespace_name": namespace, "k8s_container_name": "app"},
+                "stream": stream_labels,
                 "values": [{"timestamp": "1751871600000000000", "line": line}],
             }
         ],
@@ -615,6 +624,67 @@ def test_evidence_bundle_keeps_only_incident_namespace_log_streams() -> None:
     completed = event_by_subject(rca_events, "rca.completed")
     assert completed.root_cause == "config_env_error"
     assert completed.root_cause != "oom_killed"
+
+
+def test_rca_test_bundle_excludes_prior_run_logs_from_same_namespace() -> None:
+    """동일 namespace의 이전 test Pod 로그가 현재 run의 원인 판정을 오염시키지 않는다."""
+    current_pod = "rca-test-crash-app-startup-7f8d9c6b5-x2k4m"
+    payload = crashloop_payload(
+        logs=[
+            loki_log_entry(
+                "sandbox",
+                "FATAL: required environment variable DATABASE_URL is not set",
+                pod_name="rca-test-crash-config-env-6d7c8b5f4-p9q2r",
+            ),
+            loki_log_entry(
+                "sandbox",
+                "FATAL: startup failed",
+                pod_name=current_pod,
+            ),
+        ],
+        metadata={
+            "rca_test": {
+                "run_id": "run-app-startup",
+                "scenario_id": "crash.app-startup",
+                "pod_names": [current_pod],
+            }
+        },
+    )
+
+    rca_events = run_to_rca(payload, db=SpyDb(), correlation_id="corr-test-pod-filter")
+
+    bundle = event_by_subject(rca_events, "evidence.bundle.built").evidence_bundle
+    logs_item = next(item for item in bundle.items if item.source == "logs")
+    selected_lines = [
+        value["line"]
+        for entry in logs_item.value["entries"]
+        for stream in entry["streams"]
+        for value in stream["values"]
+    ]
+    assert selected_lines == ["FATAL: startup failed"]
+    completed = event_by_subject(rca_events, "rca.completed")
+    assert completed.root_cause == "app_startup_failure"
+
+
+def test_rca_test_bundle_rejects_log_stream_without_pod_identity() -> None:
+    """RCA test 로그에 Pod 라벨이 없으면 다른 run 혼입 위험 때문에 근거로 사용하지 않는다."""
+    payload = crashloop_payload(
+        logs=[loki_log_entry("sandbox", "FATAL: startup failed")],
+        traces={},
+        metadata={
+            "rca_test": {
+                "run_id": "run-app-startup",
+                "scenario_id": "crash.app-startup",
+                "pod_names": ["rca-test-crash-app-startup-7f8d9c6b5-x2k4m"],
+            }
+        },
+    )
+
+    rca_events = run_to_rca(payload, db=SpyDb(), correlation_id="corr-test-no-pod-label")
+
+    bundle = event_by_subject(rca_events, "evidence.bundle.built").evidence_bundle
+    assert all(item.source != "logs" for item in bundle.items)
+    assert rca_events[-1].__subject__ == "rca.analysis_blocked"
 
 
 def test_target_namespace_only_logs_do_not_count_as_workload_evidence() -> None:

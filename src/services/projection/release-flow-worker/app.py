@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from collections.abc import AsyncIterator
 
 from domains.command.events import (
@@ -55,6 +56,9 @@ from packages.contracts.stores import ReleaseFlowStore
 from packages.runtime.app import App, EventContext
 
 app = App("release-flow-worker")
+RCA_TEST_LOG_RANGE_SECONDS = 120
+MAX_RCA_TEST_LOG_PODS = 16
+RCA_TEST_LOG_PATTERN = "ERROR|FATAL|panic|error|failed"
 
 
 @app.on(CommandCompletedBody)
@@ -155,6 +159,7 @@ def rca_test_evidence_request(evt: EventEnvelope) -> dict[str, object] | None:
     if not all((run_id, scenario_id, workspace_id, cluster_id)):
         return None
     namespace = str(test_body.get("namespace") or "sandbox")
+    pod_names = normalized_pod_names(test_body.get("pod_names"))
     release_context = {
         "correlation_id": evt.correlation_id,
         "rca_test_run_id": run_id,
@@ -165,6 +170,8 @@ def rca_test_evidence_request(evt: EventEnvelope) -> dict[str, object] | None:
         "label_selector": str(test_body.get("label_selector") or ""),
         "evidence_scope": "rca_test_run",
     }
+    if pod_names:
+        release_context["pod_names"] = pod_names
     requested_sources = test_body.get("evidence_sources")
     provider_keys = (
         [str(source) for source in requested_sources if str(source)]
@@ -185,6 +192,8 @@ def rca_test_evidence_request(evt: EventEnvelope) -> dict[str, object] | None:
                     "label_selector": str(test_body.get("label_selector") or ""),
                 }
             ]
+        elif provider_key == "logs":
+            queries = rca_test_log_queries(namespace, pod_names)
         provider_policies[provider_key] = {
             "enabled": True,
             "queries": queries,
@@ -201,6 +210,32 @@ def rca_test_evidence_request(evt: EventEnvelope) -> dict[str, object] | None:
         "policy_generation": 0,
         "provider_policies": provider_policies,
     }
+
+
+def normalized_pod_names(value: object) -> list[str]:
+    """관측 결과의 Pod 이름을 순서 보존·중복 제거·상한 적용해 전달한다."""
+    if not isinstance(value, list):
+        return []
+    names = [str(item).strip() for item in value if str(item).strip()]
+    return list(dict.fromkeys(names))[:MAX_RCA_TEST_LOG_PODS]
+
+
+def rca_test_log_queries(namespace: str, pod_names: list[str]) -> list[dict[str, object]]:
+    """현재 test run에서 실제 관측된 Pod만 조회하는 짧은 Loki 정책을 만든다."""
+    namespace_literal = json.dumps(namespace, ensure_ascii=False)
+    return [
+        {
+            "name": f"rca_test_pod_log_{index}",
+            "description": "현재 RCA test run Pod 로그",
+            "query": (
+                f"{{k8s_namespace_name={namespace_literal}, "
+                f"k8s_pod_name={json.dumps(pod_name, ensure_ascii=False)}}} "
+                f'|~ "{RCA_TEST_LOG_PATTERN}"'
+            ),
+            "range_seconds": RCA_TEST_LOG_RANGE_SECONDS,
+        }
+        for index, pod_name in enumerate(pod_names)
+    ]
 
 
 def evidence_jobs_queued_body(

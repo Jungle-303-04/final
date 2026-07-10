@@ -177,6 +177,8 @@ class LokiLogQuery:
     query_name: str
     description: str
     logql: str
+    range_seconds: int | None = None
+    step_seconds: int | None = None
 
 
 @dataclass(frozen=True)

@@ -32,6 +32,7 @@ WORKSPACE_ID = "workspace-1"
 CLUSTER_ID = "cluster-1"
 RESOURCE_NAME = "rca-test-image-wrong-tag"
 RUN_LABEL = f"kubeheal.io/rca-test-run={RUN_ID}"
+POD_NAMES = ["rca-test-crash-app-startup-7f8d9c6b5-x2k4m"]
 
 
 def _runtime() -> Any:
@@ -248,6 +249,38 @@ def test_fault_observed_completion_queues_scoped_kubernetes_evidence_job() -> No
     assert any(isinstance(item, EvidenceJobsQueuedBody) for item in outputs)
 
 
+def test_fault_observed_logs_are_scoped_to_observed_pods_and_short_range() -> None:
+    worker = load_service("projection/release-flow-worker")
+    db = _ReleaseFlowDb()
+    result = _fault_observed_result()
+    result["rca_test"]["evidence_sources"] = ["kubernetes", "logs"]
+    result["rca_test"]["pod_names"] = POD_NAMES
+
+    run_handler(
+        worker.on_event,
+        CommandCompletedBody(command_id=INJECT_COMMAND_ID, result=result),
+        db,
+        subject=str(CommandCompletedBody.__subject__),
+        correlation_id=CORRELATION_ID,
+    )
+
+    request = db.queued[0]
+    logs_policy = request["provider_policies"]["logs"]
+    assert logs_policy["queries"] == [
+        {
+            "name": "rca_test_pod_log_0",
+            "description": "현재 RCA test run Pod 로그",
+            "query": (
+                '{k8s_namespace_name="sandbox", '
+                'k8s_pod_name="rca-test-crash-app-startup-7f8d9c6b5-x2k4m"} '
+                '|~ "ERROR|FATAL|panic|error|failed"'
+            ),
+            "range_seconds": 120,
+        }
+    ]
+    assert logs_policy["release_context"]["pod_names"] == POD_NAMES
+
+
 def test_evidence_aggregation_promotes_release_context_and_same_correlation() -> None:
     release_context = {
         "correlation_id": CORRELATION_ID,
@@ -257,6 +290,7 @@ def test_evidence_aggregation_promotes_release_context_and_same_correlation() ->
         "resource_kind": "Deployment",
         "resource_name": RESOURCE_NAME,
         "label_selector": RUN_LABEL,
+        "pod_names": POD_NAMES,
         "evidence_scope": "rca_test_run",
     }
 
@@ -293,6 +327,7 @@ def test_evidence_aggregation_promotes_release_context_and_same_correlation() ->
     assert payload["metadata"]["rca_test"] == {
         "run_id": RUN_ID,
         "scenario_id": SCENARIO_ID,
+        "pod_names": POD_NAMES,
     }
     assert payload["kubernetes"]["resource"] == {
         "kind": "Deployment",
