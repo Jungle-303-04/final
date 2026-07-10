@@ -270,6 +270,7 @@ jobs:
       LIVE_PREFLIGHT_RELEASE_OWNER: ${{ inputs.live_release_owner }}
       LIVE_PREFLIGHT_ONCALL_CONTACT: ${{ inputs.live_oncall_contact }}
       LIVE_PREFLIGHT_IMAGE: ${{ inputs.live_image }}
+      LIVE_PREFLIGHT_VERIFICATION_URL: ${{ inputs.live_verification_url }}
       LIVE_PREFLIGHT_SAFE_PR_WORKFLOW_RUN_ID: ${{ inputs.live_safe_pr_workflow_run_id }}
       LIVE_PREFLIGHT_SAFE_PR_URL: ${{ inputs.live_safe_pr_url }}
     steps:
@@ -319,6 +320,18 @@ jobs:
             fi
             if [ "$LIVE_PREFLIGHT_IMAGE" = "ghcr.io/example/release-flow-smoke:live-preflight" ]; then
               echo "::error title=Placeholder production image::Replace ghcr.io/example/release-flow-smoke:live-preflight with the real production image."
+              exit 1
+            fi
+            if [ -z "$LIVE_PREFLIGHT_VERIFICATION_URL" ]; then
+              echo "::error title=Missing production verification URL::live_verification_url is required for production live_preflight."
+              exit 1
+            fi
+            if [[ "$LIVE_PREFLIGHT_VERIFICATION_URL" != https://* ]]; then
+              echo "::error title=Invalid production verification URL::live_verification_url must use https for production live_preflight."
+              exit 1
+            fi
+            if [[ "$LIVE_PREFLIGHT_VERIFICATION_URL" == *"localhost"* || "$LIVE_PREFLIGHT_VERIFICATION_URL" == *"127.0.0.1"* || "$LIVE_PREFLIGHT_VERIFICATION_URL" == *"example.com"* ]]; then
+              echo "::error title=Placeholder production verification URL::live_verification_url must not use localhost or example.com for production live_preflight."
               exit 1
             fi
             if [ -z "$LIVE_PREFLIGHT_RELEASE_OWNER" ] && [ -z "$LIVE_PREFLIGHT_ONCALL_CONTACT" ]; then
