@@ -353,10 +353,11 @@ def check_evidence_verifier_contract() -> list[ReadinessCheck]:
             and "release-flow-github-environment.json" in source
             and "release-flow-smoke.json" in source
             and "release-flow-deploy.json" in source
+            and "release-flow-production-signoff.json" in source
             and "runtime.github_access_preflight" in source
             and "secret.RELEASE_FLOW_API_BASE_URL" in source
             and "release-plans.start.production" in source,
-            "downloaded readiness, environment, smoke, and deploy artifacts are verified before completion",
+            "downloaded readiness, environment, smoke, deploy, and signoff artifacts are verified before completion",
         ),
         ReadinessCheck(
             "script.evidence_verifier.github_artifacts",
@@ -453,6 +454,7 @@ def check_production_signoff_runner_contract() -> list[ReadinessCheck]:
             "script.production_signoff_runner.verifies_final_evidence",
             "--allow-missing-deploy" in source
             and "allow_missing_deploy=False" in source
+            and "--require-signoff-report" in source
             and "--github-readiness-run-id" in source
             and "--github-deploy-run-id" in source
             and "completed run did not report a numeric run id" in source
@@ -461,10 +463,20 @@ def check_production_signoff_runner_contract() -> list[ReadinessCheck]:
             "operator signoff runner verifies the exact readiness and deploy run artifacts",
         ),
         ReadinessCheck(
+            "script.production_signoff_runner.writes_signoff_report",
+            "release-flow-production-signoff.json" in source
+            and "write_signoff_report" in source
+            and "readiness_run" in source
+            and "deploy_run" in source
+            and "evidence_verification_status" in source,
+            "operator signoff runner writes a final auditable sign-off report",
+        ),
+        ReadinessCheck(
             "docs.production_readiness.signoff_runner",
             "run_release_flow_production_signoff.py" in docs
             and "--release-plan-id" in docs
             and "--live-safe-pr-workflow-run-id" in docs
+            and "release-flow-production-signoff.json" in docs
             and "full production sign-off" in docs,
             "operator guide documents one-command production sign-off",
         ),
@@ -609,6 +621,13 @@ def check_gitops_poll_observability_contract() -> list[ReadinessCheck]:
             and "table.c.manifest_path" in repository
             and repository.count("index_elements=[\n                table.c.workspace_id,") >= 2,
             "watch observe and poll status upserts use source identity, not only watch_target_id",
+        ),
+        ReadinessCheck(
+            "gitops.watch_source_identity_lookup",
+            "watch_target_id = func.coalesce(" in repository
+            and "watch_by_source.c.branch == repo_table.c.default_branch" in repository
+            and "watch_by_source.c.manifest_path == binding_manifest_path" in repository,
+            "GitHub poll target lookup falls back to source identity when watch ids differ",
         ),
     ]
 

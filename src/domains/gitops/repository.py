@@ -701,25 +701,38 @@ class RepoChangeRepository(DatabaseConnection):
         """
         repo_table = GitRepository.__table__
         watch_table = GitWatchTarget.__table__
+        watch_by_id = watch_table.alias("watch_by_id")
+        watch_by_source = watch_table.alias("watch_by_source")
         binding_table = DeploymentBinding.__table__
         app_table = Application.__table__
-        branch = func.coalesce(watch_table.c.branch, repo_table.c.default_branch).label("branch")
-        manifest_path = func.coalesce(
-            watch_table.c.manifest_path,
+        binding_manifest_path = func.coalesce(
             binding_table.c.manifest_path,
             app_table.c.manifest_path,
+        )
+        branch = func.coalesce(
+            watch_by_id.c.branch,
+            watch_by_source.c.branch,
+            repo_table.c.default_branch,
+        ).label("branch")
+        manifest_path = func.coalesce(
+            watch_by_id.c.manifest_path,
+            watch_by_source.c.manifest_path,
+            binding_manifest_path,
         ).label("manifest_path")
         source_type = func.coalesce(
-            watch_table.c.settings["source_type"].astext,
+            watch_by_id.c.settings["source_type"].astext,
+            watch_by_source.c.settings["source_type"].astext,
             binding_table.c.deploy_policy["manifest_source"].astext,
             binding_table.c.deploy_policy["source_type"].astext,
             app_table.c.metadata["source_type"].astext,
             "",
         ).label("source_type")
         watch_target_id = func.coalesce(
-            watch_table.c.watch_target_id,
+            watch_by_id.c.watch_target_id,
+            watch_by_source.c.watch_target_id,
             binding_table.c.watch_target_id,
         ).label("watch_target_id")
+        watch_status = func.coalesce(watch_by_id.c.status, watch_by_source.c.status)
         statement = (
             select(
                 binding_table.c.workspace_id,
@@ -734,7 +747,10 @@ class RepoChangeRepository(DatabaseConnection):
                 binding_table.c.cluster_id,
                 manifest_path,
                 source_type,
-                watch_table.c.last_seen_commit_sha,
+                func.coalesce(
+                    watch_by_id.c.last_seen_commit_sha,
+                    watch_by_source.c.last_seen_commit_sha,
+                ).label("last_seen_commit_sha"),
             )
             .select_from(binding_table)
             .join(
@@ -753,11 +769,21 @@ class RepoChangeRepository(DatabaseConnection):
                 ),
             )
             .outerjoin(
-                watch_table,
+                watch_by_id,
                 and_(
-                    watch_table.c.workspace_id == binding_table.c.workspace_id,
-                    watch_table.c.repository_id == binding_table.c.repository_id,
-                    watch_table.c.watch_target_id == binding_table.c.watch_target_id,
+                    watch_by_id.c.workspace_id == binding_table.c.workspace_id,
+                    watch_by_id.c.repository_id == binding_table.c.repository_id,
+                    watch_by_id.c.watch_target_id == binding_table.c.watch_target_id,
+                ),
+            )
+            .outerjoin(
+                watch_by_source,
+                and_(
+                    watch_by_id.c.watch_target_id.is_(None),
+                    watch_by_source.c.workspace_id == binding_table.c.workspace_id,
+                    watch_by_source.c.repository_id == binding_table.c.repository_id,
+                    watch_by_source.c.branch == repo_table.c.default_branch,
+                    watch_by_source.c.manifest_path == binding_manifest_path,
                 ),
             )
             .where(
@@ -766,8 +792,8 @@ class RepoChangeRepository(DatabaseConnection):
                 app_table.c.status == ApplicationStatus.ACTIVE.value,
                 binding_table.c.status == DeploymentBindingStatus.ACTIVE.value,
                 or_(
-                    watch_table.c.watch_target_id.is_(None),
-                    watch_table.c.status == WatchTargetStatus.ACTIVE.value,
+                    watch_status.is_(None),
+                    watch_status == WatchTargetStatus.ACTIVE.value,
                 ),
             )
             .order_by(repo_table.c.repo_ref, branch, binding_table.c.cluster_id)

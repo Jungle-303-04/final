@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import json
 import os
 import sys
 import urllib.parse
@@ -53,6 +54,12 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     parser.add_argument("--timeout-seconds", type=int, default=1800)
     parser.add_argument("--poll-seconds", type=int, default=15)
     parser.add_argument("--github-output-dir", type=Path, default=Path("release-flow-production-evidence"))
+    parser.add_argument(
+        "--signoff-report-path",
+        type=Path,
+        default=None,
+        help="Write the final sign-off summary JSON. Defaults under --github-output-dir.",
+    )
     parser.add_argument("--release-plan-id", required=True)
     parser.add_argument("--api-base-url", default="")
     parser.add_argument("--live-change-ticket", required=True)
@@ -185,6 +192,7 @@ def verify_artifacts(
     allow_missing_deploy: bool,
     readiness_run_id: str,
     deploy_run_id: str = "",
+    require_signoff_report: bool = False,
 ) -> int:
     argv = [
         "--github-repo",
@@ -206,6 +214,8 @@ def verify_artifacts(
         argv.extend(["--github-deploy-run-id", deploy_run_id])
     if allow_missing_deploy:
         argv.append("--allow-missing-deploy")
+    if require_signoff_report:
+        argv.append("--require-signoff-report")
     return verify_evidence_main(argv)
 
 
@@ -248,6 +258,57 @@ def dispatch_and_wait(
     return run
 
 
+def run_summary(run: dict) -> dict[str, str]:
+    return {
+        "id": str(run.get("id") or ""),
+        "status": str(run.get("status") or ""),
+        "conclusion": str(run.get("conclusion") or ""),
+        "head_sha": str(run.get("head_sha") or ""),
+        "html_url": str(run.get("html_url") or ""),
+    }
+
+
+def signoff_report_path(args: argparse.Namespace) -> Path:
+    if args.signoff_report_path:
+        return Path(args.signoff_report_path)
+    return Path(args.github_output_dir) / "release-flow-production-signoff.json"
+
+
+def write_signoff_report(
+    args: argparse.Namespace,
+    *,
+    readiness_run: dict,
+    deploy_run: dict,
+    evidence_status: int,
+) -> Path:
+    path = signoff_report_path(args)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    payload = {
+        "status": "passed" if evidence_status == 0 else "failed",
+        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "github_repo": args.github_repo,
+        "github_branch": args.github_branch,
+        "github_sha": args.github_sha,
+        "github_environment": args.environment,
+        "release_plan_id": args.release_plan_id,
+        "live_change_ticket": args.live_change_ticket,
+        "live_runbook_url": args.live_runbook_url,
+        "live_release_owner": str(args.live_release_owner or ""),
+        "live_oncall_contact": str(args.live_oncall_contact or ""),
+        "live_image": args.live_image,
+        "live_verification_url": args.live_verification_url,
+        "live_safe_pr_workflow_run_id": args.live_safe_pr_workflow_run_id,
+        "live_safe_pr_url": args.live_safe_pr_url,
+        "readiness_run": run_summary(readiness_run),
+        "deploy_run": run_summary(deploy_run),
+        "evidence_verification_status": evidence_status,
+        "evidence_output_dir": str(args.github_output_dir),
+    }
+    path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    print(f"ok signoff.report: {path}")
+    return path
+
+
 def main(argv: list[str]) -> int:
     args = parse_args(argv)
     token = str(args.github_token or os.getenv(str(args.github_token_env or "")) or "").strip()
@@ -286,12 +347,23 @@ def main(argv: list[str]) -> int:
             started_after=started_after,
         )
         deploy_run_id = str(deploy_run.get("id") or "")
+        final_status = verify_artifacts(
+            args,
+            token,
+            allow_missing_deploy=False,
+            readiness_run_id=readiness_run_id,
+            deploy_run_id=deploy_run_id,
+        )
+        write_signoff_report(args, readiness_run=readiness_run, deploy_run=deploy_run, evidence_status=final_status)
+        if final_status != 0:
+            return final_status
         return verify_artifacts(
             args,
             token,
             allow_missing_deploy=False,
             readiness_run_id=readiness_run_id,
             deploy_run_id=deploy_run_id,
+            require_signoff_report=True,
         )
     except GitHubEvidenceError as exc:
         print(f"fail signoff.github: {exc}", file=sys.stderr)

@@ -129,10 +129,11 @@ python scripts/run_release_flow_production_signoff.py \
   --live-verification-url https://ops.company.internal/verify/release-flow \
   --live-safe-pr-workflow-run-id <safe-pr-workflow-run-id> \
   --live-safe-pr-url https://github.com/owner/repo/actions/runs/<safe-pr-workflow-run-id> \
-  --github-output-dir ./release-flow-production-evidence
+  --github-output-dir ./release-flow-production-evidence \
+  --signoff-report-path ./release-flow-production-evidence/release-flow-production-signoff.json
 ```
 
-This full production sign-off runner dispatches `release-flow-production-readiness.yml` with every final gate enabled, verifies the readiness artifact while deploy evidence is still absent, dispatches `release-flow-production-deploy.yml`, waits for the deploy run to complete, and then runs `verify_release_flow_production_evidence.py` without any missing-artifact escape hatch. The verifier is pinned to the exact readiness and deploy workflow run ids returned by the runner, so final evidence cannot accidentally come from an older successful run for the same commit.
+This full production sign-off runner dispatches `release-flow-production-readiness.yml` with every final gate enabled, verifies the readiness artifact while deploy evidence is still absent, dispatches `release-flow-production-deploy.yml`, waits for the deploy run to complete, and then runs `verify_release_flow_production_evidence.py` without any missing-artifact escape hatch. The verifier is pinned to the exact readiness and deploy workflow run ids returned by the runner, so final evidence cannot accidentally come from an older successful run for the same commit. On completion it writes `release-flow-production-signoff.json` with the exact commit, plan id, readiness run id, deploy run id, Safe PR evidence, and final evidence verification status.
 
 When `github_access_preflight` is enabled, the verifier must have an actual GitHub token value. If `RELEASE_FLOW_GITHUB_TOKEN_REF` points to a non-env vault ref such as `aws-sm:` or `k8s-secret:`, also set the `RELEASE_FLOW_GITHUB_TOKEN` secret for this readiness workflow so the read-only GitHub API check can run.
 

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import json
+
 from scripts import run_release_flow_production_signoff as signoff
 
 
@@ -159,6 +161,7 @@ def test_run_release_flow_production_signoff_dispatches_and_verifies(monkeypatch
 
     verifies = calls["verifies"]
     assert isinstance(verifies, list)
+    assert len(verifies) == 3
     assert "--allow-missing-deploy" in verifies[0]
     assert "--github-readiness-run-id" in verifies[0]
     assert "101" in verifies[0]
@@ -168,3 +171,17 @@ def test_run_release_flow_production_signoff_dispatches_and_verifies(monkeypatch
     assert "--github-deploy-run-id" in verifies[1]
     assert "202" in verifies[1]
     assert "sha-production" in verifies[1]
+    assert "--require-signoff-report" in verifies[2]
+    assert "--github-readiness-run-id" in verifies[2]
+    assert "--github-deploy-run-id" in verifies[2]
+    assert "101" in verifies[2]
+    assert "202" in verifies[2]
+
+    report = json.loads((tmp_path / "release-flow-production-signoff.json").read_text(encoding="utf-8"))
+    assert report["status"] == "passed"
+    assert report["github_repo"] == "org/repo"
+    assert report["github_sha"] == "sha-production"
+    assert report["release_plan_id"] == "plan-1"
+    assert report["readiness_run"]["id"] == "101"
+    assert report["deploy_run"]["id"] == "202"
+    assert report["evidence_verification_status"] == 0
