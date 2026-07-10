@@ -16,6 +16,18 @@ DEFAULT_CLUSTER_ROLE = "target"
 MANAGEMENT_CLUSTER_ROLE = "management"
 DEFAULT_BOOTSTRAP_MODE = "target"
 MANAGEMENT_DEFAULT_EVIDENCE_PROVIDERS = {"kubernetes"}
+MANAGEMENT_EVIDENCE_PROVIDER_QUERIES: dict[str, list[dict[str, str]]] = {
+    "kubernetes": [
+        {
+            "name": "management_namespace_snapshot",
+            "description": (
+                "Kubernetes pods, events, nodes, workloads, services, and endpoint slices "
+                "in the management namespace."
+            ),
+            "query": "management",
+        }
+    ]
+}
 
 # Default evidence queries sent to each provider.
 # These values seed the agent policy for a target cluster.
@@ -157,6 +169,7 @@ def default_evidence_provider_policy(
     interval_seconds: int,
     *,
     enabled: bool = True,
+    queries: list[dict[str, str]] | None = None,
 ) -> EvidenceProviderPolicy:
     """Build the default policy for one evidence provider."""
     return EvidenceProviderPolicy(
@@ -164,7 +177,9 @@ def default_evidence_provider_policy(
         interval_seconds=interval_seconds,
         min_workers=DEFAULT_EVIDENCE_PROVIDER_WORKERS,
         max_workers=DEFAULT_EVIDENCE_PROVIDER_MAX_WORKERS,
-        queries=list(DEFAULT_EVIDENCE_PROVIDER_QUERIES.get(provider_key, [])),
+        queries=list(
+            DEFAULT_EVIDENCE_PROVIDER_QUERIES.get(provider_key, []) if queries is None else queries
+        ),
     )
 
 
@@ -181,6 +196,11 @@ def default_evidence_providers(
             enabled=(
                 cluster_role != MANAGEMENT_CLUSTER_ROLE
                 or provider_key in MANAGEMENT_DEFAULT_EVIDENCE_PROVIDERS
+            ),
+            queries=(
+                MANAGEMENT_EVIDENCE_PROVIDER_QUERIES.get(provider_key, [])
+                if cluster_role == MANAGEMENT_CLUSTER_ROLE
+                else None
             ),
         )
         for provider_key in DEFAULT_EVIDENCE_PROVIDER_QUERIES
