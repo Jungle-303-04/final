@@ -384,13 +384,19 @@ def test_rca_test_cleanup_uses_immutable_target_without_loading_current_catalog(
     agent.cluster_id = "cluster-1"
     agent.cluster_role = "target"
     agent.kubernetes = StubKubernetesClient()
-    calls: list[tuple[str, str, str]] = []
+    calls: list[tuple[str, str, str, str]] = []
 
     def catalog_must_not_be_loaded(_scenario_id: str) -> object:
         raise AssertionError("cleanup must not depend on the current scenario catalog")
 
-    async def atomic_cleanup(namespace: str, resource_name: str, run_id: str) -> bool:
-        calls.append((namespace, resource_name, run_id))
+    async def atomic_cleanup(
+        namespace: str,
+        resource_name: str,
+        run_id: str,
+        *,
+        cleanup_adapter: str,
+    ) -> bool:
+        calls.append((namespace, resource_name, run_id, cleanup_adapter))
         return True
 
     monkeypatch.setattr(module, "test_scenario_by_id", catalog_must_not_be_loaded)
@@ -413,7 +419,14 @@ def test_rca_test_cleanup_uses_immutable_target_without_loading_current_catalog(
         )
     )
 
-    assert calls == [("sandbox", "rca-test-image-wrong-tag", "run-1")]
+    assert calls == [
+        (
+            "sandbox",
+            "rca-test-image-wrong-tag",
+            "run-1",
+            "kubernetes.manifest_delete",
+        )
+    ]
     assert result["status"] == "completed"
     assert result["rca_test"]["cleanup_completed"] is True
 

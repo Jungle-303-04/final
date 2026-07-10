@@ -35,20 +35,46 @@ def validate_scenario_adapter_contracts(
             continue
         capabilities = adapter.capabilities
         fault_mode = str(getattr(scenario.trigger.params, "fault_mode", ""))
-        if not capabilities.trigger or fault_mode not in capabilities.fault_modes:
-            errors.append(f"{scenario.scenario_id}: trigger/fault is not executable ({fault_mode})")
-        if not capabilities.observation:
-            errors.append(f"{scenario.scenario_id}: observation is not executable")
+        scenario_errors: list[str] = []
+        if (
+            not capabilities.trigger
+            or adapter.fixture_target_builder is None
+            or adapter.trigger_builder is None
+            or fault_mode not in capabilities.fault_modes
+        ):
+            scenario_errors.append(
+                f"{scenario.scenario_id}: trigger/fault is not executable ({fault_mode})"
+            )
+        if not capabilities.observation or adapter.observation_matcher is None:
+            scenario_errors.append(f"{scenario.scenario_id}: observation is not executable")
         unsupported = sorted(
             set(scenario.observe.configured_predicates) - capabilities.observation_predicates
         )
         if unsupported:
-            errors.append(
+            scenario_errors.append(
                 f"{scenario.scenario_id}: unsupported observation predicates: "
                 f"{', '.join(unsupported)}"
             )
-        if not capabilities.cleanup:
-            errors.append(f"{scenario.scenario_id}: cleanup is not executable")
+        if not capabilities.cleanup or adapter.cleanup_builder is None:
+            scenario_errors.append(f"{scenario.scenario_id}: cleanup is not executable")
+        if scenario_errors:
+            errors.extend(scenario_errors)
+            continue
+        try:
+            target = adapter.fixture_target(scenario)
+            manifests = adapter.build_trigger(
+                scenario,
+                "catalog-validation",
+                "2099-01-01T00:00:00+00:00",
+            )
+            cleanup_plan = adapter.build_cleanup(target.namespace, target.resource_name)
+        except (TestScenarioAdapterError, TypeError, ValueError) as exc:
+            errors.append(f"{scenario.scenario_id}: adapter execution contract failed: {exc}")
+            continue
+        if not manifests:
+            errors.append(f"{scenario.scenario_id}: trigger produced no manifests")
+        if not cleanup_plan.resources:
+            errors.append(f"{scenario.scenario_id}: cleanup produced no resources")
     if errors:
         raise TestScenarioContractError(
             "RCA test scenario adapter contract invalid: " + "; ".join(errors)

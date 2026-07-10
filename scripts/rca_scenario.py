@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import os
 import sys
 from pathlib import Path
 from typing import get_args
@@ -156,7 +157,8 @@ def _scaffold_document(args: argparse.Namespace) -> dict[str, object]:
     }
 
 
-def _fixture_test_text(scenario_id: str, yaml_filename: str) -> str:
+def _fixture_test_text(scenario_id: str, yaml_path: Path, test_path: Path) -> str:
+    relative_yaml = Path(os.path.relpath(yaml_path, test_path.parent)).as_posix()
     return f'''"""Fixture contract scaffold for {scenario_id}."""
 
 from pathlib import Path
@@ -164,7 +166,7 @@ from pathlib import Path
 from domains.rca.test_scenarios import parse_test_scenario_file
 
 
-SCENARIO_FILE = Path(__file__).resolve().parents[1] / "catalog" / "{yaml_filename}"
+SCENARIO_FILE = Path(__file__).resolve().parent / "{relative_yaml}"
 
 
 def test_{_scenario_slug(scenario_id)}_stays_unverified_until_live_completion() -> None:
@@ -193,7 +195,10 @@ def scaffold_command(args: argparse.Namespace) -> int:
         yaml.safe_dump(_scaffold_document(args), sort_keys=False, allow_unicode=True),
         encoding="utf-8",
     )
-    test_path.write_text(_fixture_test_text(args.scenario_id, yaml_path.name), encoding="utf-8")
+    test_path.write_text(
+        _fixture_test_text(args.scenario_id, yaml_path, test_path),
+        encoding="utf-8",
+    )
     print(yaml_path)
     print(test_path)
     return 0
