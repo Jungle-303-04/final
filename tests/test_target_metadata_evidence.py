@@ -24,6 +24,7 @@ def load_metadata_modules():
         "providers.kubernetes_utils",
         "providers.kubernetes_providers",
         "providers.loki_providers",
+        "providers.metadata_config_objects",
         "providers.metadata_config_refs",
         "providers.metadata_endpoint_slices",
         "providers.metadata_ownership",
@@ -269,6 +270,16 @@ def test_metadata_provider_collects_one_deployment_snapshot(monkeypatch) -> None
                                                         "name": "checkout-secret",
                                                         "key": "database-url",
                                                         "optional": True,
+                                                    }
+                                                },
+                                            },
+                                            {
+                                                "name": "MISSING_MODE",
+                                                "valueFrom": {
+                                                    "configMapKeyRef": {
+                                                        "name": "checkout-config",
+                                                        "key": "missing-mode",
+                                                        "optional": False,
                                                     }
                                                 },
                                             },
@@ -582,6 +593,54 @@ def test_metadata_provider_collects_one_deployment_snapshot(monkeypatch) -> None
                     ]
                 },
             )
+        if request.url.path == "/api/v1/namespaces/sandbox/configmaps/checkout-config":
+            return httpx.Response(
+                200,
+                json={
+                    "metadata": {
+                        "namespace": "sandbox",
+                        "name": "checkout-config",
+                        "creationTimestamp": "2026-07-10T08:30:00Z",
+                        "labels": {
+                            "app": "checkout-api",
+                            "password": "do-not-include",
+                        },
+                        "annotations": {
+                            "ops.service/restarted-at": "do-not-include"
+                        },
+                    },
+                    "data": {
+                        "mode": "do-not-include",
+                        "application.yaml": "do-not-include",
+                    },
+                },
+            )
+        if request.url.path == "/api/v1/namespaces/sandbox/configmaps/checkout-env":
+            return httpx.Response(404, json={"message": "not found"})
+        if request.url.path == "/api/v1/namespaces/sandbox/secrets/checkout-env-secret":
+            return httpx.Response(403, json={"message": "forbidden"})
+        if request.url.path == "/api/v1/namespaces/sandbox/secrets/checkout-secret":
+            return httpx.Response(
+                200,
+                json={
+                    "metadata": {
+                        "namespace": "sandbox",
+                        "name": "checkout-secret",
+                        "creationTimestamp": "2026-07-10T08:31:00Z",
+                        "labels": {
+                            "app": "checkout-api",
+                            "token-owner": "do-not-include",
+                        },
+                    },
+                    "type": "Opaque",
+                    "data": {
+                        "database-url": "do-not-include",
+                    },
+                    "stringData": {
+                        "raw": "do-not-include",
+                    },
+                },
+            )
         return httpx.Response(404, json={})
 
     monkeypatch.setattr(
@@ -618,6 +677,10 @@ def test_metadata_provider_collects_one_deployment_snapshot(monkeypatch) -> None
         "/api/v1/namespaces/sandbox/services",
         "/api/v1/namespaces/sandbox/resourcequotas",
         "/apis/discovery.k8s.io/v1/namespaces/sandbox/endpointslices",
+        "/api/v1/namespaces/sandbox/configmaps/checkout-config",
+        "/api/v1/namespaces/sandbox/configmaps/checkout-env",
+        "/api/v1/namespaces/sandbox/secrets/checkout-env-secret",
+        "/api/v1/namespaces/sandbox/secrets/checkout-secret",
     ]
     assert "current_workload_snapshots" not in change_context
     assert change_context["service_selector_matches"] == [
@@ -717,6 +780,133 @@ def test_metadata_provider_collects_one_deployment_snapshot(monkeypatch) -> None
             },
         }
     ]
+    assert change_context["referenced_config_objects"] == [
+        {
+            "kind": "ConfigMap",
+            "namespace": "sandbox",
+            "name": "checkout-config",
+            "exists": True,
+            "access": "ok",
+            "referenced_by": [
+                {
+                    "container_name": "app",
+                    "source": "env",
+                    "env_name": "APP_MODE",
+                    "key": "mode",
+                    "optional": False,
+                },
+                {
+                    "container_name": "app",
+                    "source": "env",
+                    "env_name": "MISSING_MODE",
+                    "key": "missing-mode",
+                    "optional": False,
+                },
+                {
+                    "source": "volume",
+                    "volume_name": "app-config",
+                    "optional": False,
+                },
+                {
+                    "container_name": "app",
+                    "source": "volume_mount",
+                    "volume_name": "app-config",
+                    "mount_path": "/etc/app",
+                    "read_only": True,
+                    "optional": False,
+                },
+            ],
+            "created_at": "2026-07-10T08:30:00Z",
+            "labels": {"app": "checkout-api"},
+            "referenced_key_checks": [
+                {
+                    "key": "application.yaml",
+                    "exists": True,
+                    "sources": ["volume"],
+                },
+                {
+                    "key": "missing-mode",
+                    "exists": False,
+                    "sources": ["env"],
+                },
+                {
+                    "key": "mode",
+                    "exists": True,
+                    "sources": ["env"],
+                },
+            ],
+        },
+        {
+            "kind": "ConfigMap",
+            "namespace": "sandbox",
+            "name": "checkout-env",
+            "exists": False,
+            "access": "not_found",
+            "referenced_by": [
+                {
+                    "container_name": "app",
+                    "source": "env_from",
+                    "prefix": "APP_",
+                    "optional": False,
+                }
+            ],
+        },
+        {
+            "kind": "Secret",
+            "namespace": "sandbox",
+            "name": "checkout-env-secret",
+            "exists": None,
+            "access": "forbidden",
+            "referenced_by": [
+                {
+                    "container_name": "app",
+                    "source": "env_from",
+                    "optional": True,
+                }
+            ],
+        },
+        {
+            "kind": "Secret",
+            "namespace": "sandbox",
+            "name": "checkout-secret",
+            "exists": True,
+            "access": "ok",
+            "referenced_by": [
+                {
+                    "container_name": "app",
+                    "source": "env",
+                    "env_name": "DATABASE_URL",
+                    "key": "database-url",
+                    "optional": True,
+                },
+                {
+                    "source": "volume",
+                    "volume_name": "app-secret",
+                    "optional": True,
+                },
+                {
+                    "container_name": "app",
+                    "source": "volume_mount",
+                    "volume_name": "app-secret",
+                    "mount_path": "/etc/secret",
+                    "read_only": True,
+                    "optional": True,
+                },
+            ],
+            "created_at": "2026-07-10T08:31:00Z",
+            "labels": {"app": "checkout-api"},
+            "referenced_key_checks": [
+                {
+                    "key": "database-url",
+                    "exists": True,
+                    "sources": ["env", "volume"],
+                }
+            ],
+        },
+    ]
+    assert "do-not-include" not in str(change_context["referenced_config_objects"])
+    assert "annotations" not in str(change_context["referenced_config_objects"])
+    assert "stringData" not in str(change_context["referenced_config_objects"])
     assert snapshot["workload"] == {
         "kind": "Deployment",
         "namespace": "sandbox",
@@ -835,6 +1025,13 @@ def test_metadata_provider_collects_one_deployment_snapshot(monkeypatch) -> None
             "secret_name": "checkout-secret",
             "key": "database-url",
             "optional": True,
+        },
+        {
+            "env_name": "MISSING_MODE",
+            "source": "config_map_key_ref",
+            "config_map_name": "checkout-config",
+            "key": "missing-mode",
+            "optional": False,
         },
     ]
     assert snapshot["containers"][0]["env_from_refs"] == [

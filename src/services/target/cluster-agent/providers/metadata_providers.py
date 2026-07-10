@@ -31,6 +31,14 @@ from providers.kubernetes_utils import (
     metadata,
     object_or_empty,
 )
+from providers.metadata_config_objects import (
+    CONFIG_OBJECT_FORBIDDEN,
+    CONFIG_OBJECT_NOT_FOUND,
+    CONFIG_OBJECT_OK,
+    config_object_resource,
+    referenced_config_object_refs,
+    referenced_config_object_summary,
+)
 from providers.metadata_endpoint_slices import endpoint_slice_ready_endpoint_snapshots
 from providers.metadata_ownership import pods_for_deployment
 from providers.metadata_resource_quotas import resource_quota_snapshots
@@ -45,6 +53,7 @@ CHANGE_CONTEXT_KEY = "change_context"
 CURRENT_WORKLOAD_SNAPSHOT_KEY = "current_workload_snapshot"
 CURRENT_WORKLOAD_SNAPSHOTS_KEY = "current_workload_snapshots"
 ENDPOINT_SLICE_READY_ENDPOINTS_KEY = "endpoint_slice_ready_endpoints"
+REFERENCED_CONFIG_OBJECTS_KEY = "referenced_config_objects"
 RESOURCE_QUOTAS_KEY = "resource_quotas"
 SERVICE_SELECTOR_MATCHES_KEY = "service_selector_matches"
 DEFAULT_METADATA_QUERIES = {
@@ -170,6 +179,13 @@ class MetadataProvider:
                         ),
                         allow_empty_list=True,
                     )
+                    referenced_config_objects = await self.get_config_object_summaries(
+                        client,
+                        base_url,
+                        headers,
+                        deployment,
+                        target.namespace,
+                    )
                     change_context = specific_workload_change_context(
                         deployment,
                         items(replicasets),
@@ -177,6 +193,7 @@ class MetadataProvider:
                         items(service_list),
                         items(endpoint_slice_list),
                         items(resource_quota_list),
+                        referenced_config_objects,
                     )
                 else:
                     change_context = empty_change_context()
@@ -281,6 +298,51 @@ class MetadataProvider:
 
         return payload if isinstance(payload, dict) else {"items": []}
 
+    async def get_optional_json(
+        self,
+        client: httpx.AsyncClient,
+        base_url: str,
+        headers: dict[str, str],
+        path: str,
+    ) -> tuple[JsonObject, str]:
+        """Call one optional Kubernetes API path."""
+        response = await client.get(f"{base_url}{path}", headers=headers)
+        if response.status_code == httpx.codes.FORBIDDEN:
+            return {}, CONFIG_OBJECT_FORBIDDEN
+        if response.status_code == httpx.codes.NOT_FOUND:
+            return {}, CONFIG_OBJECT_NOT_FOUND
+        response.raise_for_status()
+        payload = response.json()
+        return payload if isinstance(payload, dict) else {}, CONFIG_OBJECT_OK
+
+    async def get_config_object_summaries(
+        self,
+        client: httpx.AsyncClient,
+        base_url: str,
+        headers: dict[str, str],
+        deployment: JsonObject,
+        namespace: str,
+    ) -> list[JsonObject]:
+        """Read safe metadata for referenced ConfigMaps and Secrets."""
+        summaries: list[JsonObject] = []
+        for reference in referenced_config_object_refs(deployment, namespace):
+            kind = str(reference.get("kind") or "")
+            resource = config_object_resource(kind)
+            payload, access = await self.get_optional_json(
+                client,
+                base_url,
+                headers,
+                namespaced_core_path(
+                    namespace,
+                    resource,
+                    str(reference.get("name") or ""),
+                ),
+            )
+            summaries.append(
+                referenced_config_object_summary(reference, payload, access)
+            )
+        return summaries
+
     def empty_results(self) -> JsonObject:
         """Create an empty metadata evidence bucket."""
         return {
@@ -319,6 +381,7 @@ class MetadataProvider:
         snapshots = change_context.get(CURRENT_WORKLOAD_SNAPSHOTS_KEY)
         snapshot = change_context.get(CURRENT_WORKLOAD_SNAPSHOT_KEY)
         endpoint_slices = change_context.get(ENDPOINT_SLICE_READY_ENDPOINTS_KEY)
+        referenced_config_objects = change_context.get(REFERENCED_CONFIG_OBJECTS_KEY)
         resource_quotas = change_context.get(RESOURCE_QUOTAS_KEY)
         service_matches = change_context.get(SERVICE_SELECTOR_MATCHES_KEY)
         normalized: JsonObject = {}
@@ -339,6 +402,11 @@ class MetadataProvider:
         if isinstance(endpoint_slices, list):
             normalized[ENDPOINT_SLICE_READY_ENDPOINTS_KEY] = [
                 item for item in endpoint_slices if isinstance(item, dict)
+            ]
+
+        if isinstance(referenced_config_objects, list):
+            normalized[REFERENCED_CONFIG_OBJECTS_KEY] = [
+                item for item in referenced_config_objects if isinstance(item, dict)
             ]
 
         if isinstance(resource_quotas, list):
@@ -414,6 +482,7 @@ def specific_workload_change_context(
     services: list[JsonObject],
     endpoint_slices: list[JsonObject],
     resource_quotas: list[JsonObject],
+    referenced_config_objects: list[JsonObject],
 ) -> JsonObject:
     """Build a change context for one Deployment."""
     if not deployment:
@@ -437,6 +506,7 @@ def specific_workload_change_context(
             endpoint_slices,
             service_matches=service_matches,
         ),
+        REFERENCED_CONFIG_OBJECTS_KEY: referenced_config_objects,
         RESOURCE_QUOTAS_KEY: resource_quota_snapshots(resource_quotas),
     }
 
@@ -460,6 +530,10 @@ def merge_change_context(target: JsonObject, source: JsonObject) -> None:
     endpoint_slices = source.get(ENDPOINT_SLICE_READY_ENDPOINTS_KEY)
     if isinstance(endpoint_slices, list):
         target[ENDPOINT_SLICE_READY_ENDPOINTS_KEY] = endpoint_slices
+
+    referenced_config_objects = source.get(REFERENCED_CONFIG_OBJECTS_KEY)
+    if isinstance(referenced_config_objects, list):
+        target[REFERENCED_CONFIG_OBJECTS_KEY] = referenced_config_objects
 
     resource_quotas = source.get(RESOURCE_QUOTAS_KEY)
     if isinstance(resource_quotas, list):
