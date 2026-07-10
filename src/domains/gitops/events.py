@@ -168,6 +168,8 @@ class ManifestRenderedBody(EventBody):
     cluster_id: str = Target.DEFAULT_CLUSTER_ID
     commit_sha: str = ""
     manifest_path: str = DEFAULT_MANIFEST_PATH
+    repo_ref: str = DEFAULT_REPO_REF
+    branch: str = DEFAULT_REPO_BRANCH
 
 
 @event(EventSubject.MANIFEST_INVALID)
@@ -194,6 +196,27 @@ class DesiredDesiredDiffDetectedBody(EventBody):
     """desired.diff.detected — 적용해야 할 차이를 감지."""
 
     diff: Diff
+
+
+@event(EventSubject.GITOPS_CHANGE_CONTEXT_DETECTED)
+@dataclass(frozen=True)
+class GitOpsChangeContextDetectedBody(EventBody):
+    """gitops.change_context.detected — RCA용 변경 맥락 metadata."""
+
+    metadata: JsonObject
+    workspace_id: str = DEFAULT_WORKSPACE_ID
+    repository_id: str = DEFAULT_REPOSITORY_ID
+    watch_target_id: str = DEFAULT_WATCH_TARGET_ID
+    binding_id: str = DEFAULT_DEPLOYMENT_BINDING_ID
+    application_id: str = DEFAULT_APPLICATION_ID
+    workflow_run_id: str = DEFAULT_WORKFLOW_RUN_ID
+    environment: str = DEFAULT_ENVIRONMENT
+    cluster_id: str = Target.DEFAULT_CLUSTER_ID
+    commit_sha: str = ""
+    manifest_path: str = DEFAULT_MANIFEST_PATH
+    repo_ref: str = DEFAULT_REPO_REF
+    branch: str = DEFAULT_REPO_BRANCH
+    resource: str = ""
 
 
 @event(EventSubject.DIFF_ANALYZED)

@@ -242,8 +242,23 @@ def _deployment_fields(obj: Mapping[str, Any]) -> JsonObject:
                 fields[f"{prefix}.image"] = container["image"]
             if "env" in container:
                 fields[f"{prefix}.env"] = container["env"]
+            if "envFrom" in container:
+                fields[f"{prefix}.envFrom"] = container["envFrom"]
             if "resources" in container:
                 fields[f"{prefix}.resources"] = container["resources"]
+            for probe in ("readinessProbe", "livenessProbe", "startupProbe"):
+                if probe in container:
+                    fields[f"{prefix}.{probe}"] = container[probe]
+    volumes = pod_spec.get("volumes", [])
+    if isinstance(volumes, list):
+        for item in volumes:
+            volume = _mapping(item)
+            name = str(volume.get("name", "unnamed"))
+            prefix = f"spec.template.spec.volumes[name={name}]"
+            if "configMap" in volume:
+                fields[f"{prefix}.configMap"] = volume["configMap"]
+            if "secret" in volume:
+                fields[f"{prefix}.secret"] = volume["secret"]
     return fields
 
 

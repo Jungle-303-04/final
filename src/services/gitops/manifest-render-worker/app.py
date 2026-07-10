@@ -1054,6 +1054,8 @@ async def on_git_changed(
                 cluster_id=evt.cluster_id,
                 commit_sha=evt.commit_sha,
                 manifest_path=event_manifest_path,
+                repo_ref=evt.repo_ref,
+                branch=evt.branch,
             )
         await ctx.db.mark_watch_observed(
             evt.watch_target_id,
@@ -1133,6 +1135,8 @@ async def on_git_changed(
             cluster_id=evt.cluster_id,
             commit_sha=evt.commit_sha,
             manifest_path=event_manifest_path,
+            repo_ref=evt.repo_ref,
+            branch=evt.branch,
         )
     await ctx.db.mark_watch_observed(
         evt.watch_target_id,
