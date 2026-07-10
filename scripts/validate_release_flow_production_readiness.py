@@ -351,11 +351,28 @@ def check_evidence_verifier_contract() -> list[ReadinessCheck]:
             "downloaded readiness, smoke, and deploy artifacts are verified before completion",
         ),
         ReadinessCheck(
+            "script.evidence_verifier.github_artifacts",
+            "--github-repo" in source
+            and "actions/workflows" in source
+            and "actions/runs" in source
+            and "archive_download_url" in source
+            and "release-flow-smoke-production" in source
+            and "release-flow-production-deploy" in source,
+            "production evidence verifier can download GitHub Actions artifacts by workflow run",
+        ),
+        ReadinessCheck(
             "docs.production_readiness.evidence_verifier",
             "verify_release_flow_production_evidence.py" in docs
             and "release-flow-production-readiness" in docs
             and "release-flow-production-deploy" in docs,
             "operator guide documents final evidence artifact verification",
+        ),
+        ReadinessCheck(
+            "docs.production_readiness.github_evidence_verifier",
+            "--github-repo Jungle-303-04/final" in docs
+            and "--github-sha" in docs
+            and "--github-output-dir" in docs,
+            "operator guide documents GitHub artifact download verification",
         ),
     ]
 

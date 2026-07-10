@@ -110,3 +110,27 @@ python scripts/verify_release_flow_production_evidence.py \
 ```
 
 The verifier accepts extracted artifact directories, individual JSON reports, or artifact ZIP files. It fails unless the readiness report passed with runtime config, GitHub access, API smoke, and deploy-gate checks; the smoke report passed the production preflight checks; and the deploy report recorded a successful `release-plans.start.production` run id against a concrete HTTPS API URL.
+
+If the verifier has a GitHub token with Actions read access, it can fetch the successful workflow artifacts directly:
+
+```bash
+python scripts/verify_release_flow_production_evidence.py \
+  --github-repo owner/repo \
+  --github-branch dev \
+  --github-sha <production-commit-sha> \
+  --github-token-env GITHUB_TOKEN
+```
+
+This path requires successful `release-flow-production-readiness.yml` and `release-flow-production-deploy.yml` runs for the selected branch/SHA, downloads the required artifacts, and then applies the same JSON checks. The smoke and deploy reports must point at the same concrete HTTPS API base URL.
+
+If the repository token can read GitHub Actions, the verifier can fetch the latest successful artifacts directly:
+
+```bash
+GITHUB_TOKEN="<token with actions read access>" \
+python scripts/verify_release_flow_production_evidence.py \
+  --github-repo owner/repo \
+  --github-branch dev \
+  --github-sha "<deployed commit sha>"
+```
+
+Use `--github-output-dir artifacts/release-flow-production-evidence` when the downloaded ZIP files should be kept for audit handoff. The verifier still requires the same readiness, smoke, and deploy reports after download, so a green GitHub run without the expected JSON evidence is not enough to complete production verification.
