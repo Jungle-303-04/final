@@ -16,6 +16,11 @@ name: Release Flow Smoke
         required: false
         default: "20"
         type: string
+      github_environment:
+        description: GitHub Environment that protects this smoke gate.
+        required: false
+        default: production
+        type: string
   workflow_call:
     inputs:
       api_base_url:
@@ -30,6 +35,11 @@ name: Release Flow Smoke
         description: Maximum release runs to inspect for each guardrail.
         required: false
         default: "20"
+        type: string
+      github_environment:
+        description: GitHub Environment that protects this smoke gate.
+        required: false
+        default: production
         type: string
     secrets:
       release_flow_api_base_url:
@@ -60,6 +70,7 @@ jobs:
     name: Production preflight
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    environment: ${{ inputs.github_environment || 'production' }}
     outputs:
       release_smoke_ok: ${{ steps.release_flow_smoke.outputs.release_smoke_ok }}
       release_smoke_failed_checks: ${{ steps.release_flow_smoke.outputs.release_smoke_failed_checks }}

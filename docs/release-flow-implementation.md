@@ -299,7 +299,7 @@ GitHub Actions에서 바로 실행하려면 `.github/workflows/release-flow-smok
 - `RELEASE_FLOW_AUTH_EMAIL`: 운영 smoke용 계정 email
 - `RELEASE_FLOW_AUTH_PASSWORD`: 운영 smoke용 계정 password
 
-수동 실행 input으로 `api_base_url`을 넣으면 `RELEASE_FLOW_API_BASE_URL` secret보다 우선한다. `production_preflight_plan_id`를 넣으면 특정 release plan만 검사하고, `production_preflight_run_limit`은 각 guardrail에서 확인할 release run 개수를 제한한다.
+수동 실행 input으로 `api_base_url`을 넣으면 `RELEASE_FLOW_API_BASE_URL` secret보다 우선한다. `production_preflight_plan_id`를 넣으면 특정 release plan만 검사하고, `production_preflight_run_limit`은 각 guardrail에서 확인할 release run 개수를 제한한다. `github_environment`는 기본 `production`이며, GitHub Environments의 required reviewers와 environment-scoped secrets를 smoke gate 앞에 붙이는 데 쓴다.
 
 workflow는 `scripts/release_flow_smoke.py --production-preflight --ci --ci-artifacts-dir artifacts/release-flow`를 실행한다. smoke step은 먼저 GitHub step summary, output, annotation, JSON/JUnit/Markdown artifact를 남기고, artifact upload가 끝난 뒤 `release_smoke_ok` output이 `true`가 아니면 job을 실패시킨다.
 
@@ -310,6 +310,7 @@ jobs:
   release_flow_smoke:
     uses: ./.github/workflows/release-flow-smoke.yml
     with:
+      github_environment: production
       production_preflight_plan_id: ${{ inputs.release_plan_id }}
       production_preflight_run_limit: "20"
     secrets:
