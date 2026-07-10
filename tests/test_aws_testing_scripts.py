@@ -49,11 +49,11 @@ def test_internal_gitops_workflow_remains_deployed() -> None:
     assert "src/services/gitops/workflow-controller/app.py" in services
 
 
-def test_local_test_profile_wires_bootstrap_smoke_and_bruno() -> None:
+def test_local_test_stack_uses_shared_aws_bruno_profile() -> None:
     makefile = read("Makefile")
     local_env = read("config/env/local-test.env.example")
     local_docs = read("docs/local-testing.md")
-    bruno_local = read("docs/api/environments/local.bru")
+    bruno_aws = read("docs/api/environments/aws-test.bru")
 
     assert "local-test-env:" in makefile
     assert "local-up:" in makefile
@@ -65,9 +65,9 @@ def test_local_test_profile_wires_bootstrap_smoke_and_bruno() -> None:
     assert "SMOKE_CLUSTER_ID=target" in local_env
     assert "make local-up" in local_docs
     assert "make local-smoke" in local_docs
-    assert "auth_email: admin.local@example.com" in bruno_local
-    assert "auth_password: local-test-password-1234" in bruno_local
-    assert "cluster_id: target" in bruno_local
+    assert "Environment를 `aws-test`로 고른다" in local_docs
+    assert "base_url: https://k8s.woonyong.org/api/" in bruno_aws
+    assert "dev_security_bypass: true" in bruno_aws
 
 
 def test_operator_scripts_require_explicit_runtime_context() -> None:
