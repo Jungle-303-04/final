@@ -819,18 +819,6 @@ type MetricValueKey = {
   windowKey: string
 }
 
-type FlowValue = {
-  flowKey: string
-  relationKey: string
-  metricId: string
-  valueDecimal: DecimalString | null
-  unitId: UnitId
-  status: MetricStatus
-  window: TimeWindow
-  observedAt: Timestamp
-  sourceId: string
-}
-
 type TopologyDelta =
   | { type: "entity.upserted"; entity: Entity }
   | { type: "entity.deleted"; entityKey: string; deletedAt: Timestamp; reasonCode: string }

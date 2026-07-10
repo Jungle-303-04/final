@@ -1743,6 +1743,18 @@ type FlowExpression = {
   window: TimeWindow
   truth: "observed"
 }
+
+type FlowValue = {
+  flowKey: string
+  relationKey: string
+  metricId: string
+  valueDecimal: DecimalString | null
+  unitId: UnitId
+  status: MetricStatus
+  window: TimeWindow
+  observedAt: string
+  sourceId: string
+}
 ```
 
 - ribbon width는 `bytes/s`가 있으면 기본으로 사용한다. 없으면 사용자가 선택한 declared flow magnitude를 사용하고 단위를 표시한다.
