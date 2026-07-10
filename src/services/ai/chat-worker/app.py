@@ -55,6 +55,10 @@ def request_cluster_id(evt: AiMessageReceivedBody) -> str | None:
 def request_resource_context(evt: AiMessageReceivedBody) -> dict[str, str]:
     context = evt.context or {}
     keys = (
+        "application_id",
+        "diff_source",
+        "workflow_run_id",
+        "approval_id",
         "resource_type",
         "kind",
         "namespace",
