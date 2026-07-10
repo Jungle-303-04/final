@@ -402,7 +402,7 @@ def query_metadata(self, telemetry_query) -> JsonObject                # instant
 
 #### `providers/loki_providers.py`
 
-`LokiLogsProvider`: `span_name="loki.collect"`, `timeout_seconds=LOKI_TIMEOUT_SECONDS`, `failure_message="loki log collection failed"`. `__init__(self, base_url: str)`, `from_config`은 `read_config("LOKI_BASE_URL", DEFAULT_LOKI_BASE_URL)`. `empty_results() -> list[JsonObject]` = `[]`. `append_result`는 `{"source": "loki", "query_name", "query": logql, result_type, streams, line_count}`를 리스트에 append. `normalize_payload`: `data.result[*]` → `streams: [{stream, values: [{timestamp, line}]}]`, `line_count = Σ len(values)`.
+`LokiLogsProvider`: `span_name="loki.collect"`, `timeout_seconds=LOKI_TIMEOUT_SECONDS`, `failure_message="loki log collection failed"`. `__init__(self, base_url: str)`, `from_config`은 `read_config("LOKI_BASE_URL", DEFAULT_LOKI_BASE_URL)`. `empty_results() -> list[JsonObject]` = `[]`. `append_result`는 `{"source": "loki", "query_name", "query": logql, result_type, streams, line_count, pattern_counts, severity_counts, trace_ids, redaction_summary}`를 리스트에 append. `normalize_payload`: `data.result[*]` → `streams: [{stream, values: [{timestamp, line}]}]`, `line_count = Σ len(values)`. `line` 값은 provider에서 민감정보를 마스킹한 문자열이고, `pattern_counts`/`severity_counts`/`trace_ids`는 마스킹된 line 기준으로 계산한다.
 
 #### `providers/tempo_providers.py`
 
@@ -651,6 +651,8 @@ Metadata helper 모듈(module, 파이썬 코드 파일):
 | `TempoTracesProvider.query` | `GET {TEMPO_BASE_URL}/api/search` | `q=<traceql>`, `limit=TEMPO_QUERY_LIMIT(20)` (span `tempo.search`) |
 
 Kubernetes 스냅샷 정규화(`normalize_payload`): raw 응답을 `{cluster{cluster_id, namespace, collected_at}, pods[], events[], nodes[], workloads[](Deployment/StatefulSet/DaemonSet/ReplicaSet 요약 통합), services[], endpoints[], provider_status{query_name: {status, namespace, reason, counts}}}` 요약으로 변환. pod 요약에는 `workload_key`(`"{ns}/{kind}/{name}"`), 컨테이너별 상태/restart(+ `container_id`, `last_state`/`last_state_reason`/`last_state_message`/`last_exit_code`/`last_started_at`/`last_finished_at` — crashloop 중 waiting 이어도 직전 크래시의 종료 사유/시간 보존), `waiting_reasons`/`terminated_reasons`(현재 terminated 와 lastState terminated 사유를 함께 승격 — OOMKilled/exit 137 판별 근거) 포함. event 요약에는 알려진 reason일 때 `reason_summary`가 포함되며 `FailedScheduling`은 `scheduling_causes`로 `insufficient_cpu`, `insufficient_memory`, `node_selector_mismatch`, `taint_toleration_mismatch`, `pod_count_limit`, `volume_node_affinity_conflict` 같은 작은 label을 제공한다. 복수 쿼리 결과는 `merge_snapshot`으로 목록 concat + provider_status 병합.
+
+Loki 로그 정규화(`normalize_payload`): query별 결과를 `logs[]` object로 만들고, 각 object에 `result_type`, `streams`, `line_count`, `pattern_counts`, `severity_counts`, `trace_ids`, `redaction_summary`를 담는다. `streams[].values[].line` 필드는 유지하지만 Loki 원문 그대로가 아니라 provider가 `password`/`token`/`secret`/`Authorization`/`Cookie`/JWT/URL 계정정보/email 같은 민감값을 `[REDACTED]` 계열 값으로 바꾼 문자열이다. pattern count는 probe 실패, health endpoint 오류, dependency timeout/error, image pull 오류, OOM/memory, config/env/volume 오류를 line 단위로 센다. trace id는 32자리 hex 값만 최대 20개까지 유지한다.
 
 ### span / otel
 

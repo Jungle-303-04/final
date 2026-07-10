@@ -359,8 +359,16 @@ RCA evidence item:
 | `entries` | list<object> | incident namespace와 맞는 log entry를 최대 8개 남긴다. |
 | `entries[].streams` | list<object> | entry 안의 stream을 최대 4개 남긴다. |
 | `entries[].streams[].values` | list<object> | stream 안의 sample을 최대 20개 남긴다. |
-| `entries[].streams[].values[].line` | string | log line을 최대 1600자로 자른다. |
+| `entries[].streams[].values[].line` | string | provider가 민감정보를 마스킹한 log line을 최대 1600자로 자른다. |
 | `entries[].line_count` | number | namespace 필터 후 남은 stream value 개수를 계산한다. |
+| `entries[].pattern_counts` | object | provider가 수집 시 계산한 장애 pattern별 line 개수다. namespace 필터 후 다시 계산하지 않는다. |
+| `entries[].severity_counts` | object | provider가 수집 시 계산한 severity별 line 개수다. namespace 필터 후 다시 계산하지 않는다. |
+| `entries[].trace_ids` | list<string> | provider가 수집 시 추출한 안전한 trace id 목록이다. namespace 필터 후 다시 계산하지 않는다. |
+| `entries[].redaction_summary` | object | provider redaction 적용 여부와 redacted line 개수다. namespace 필터 후 다시 계산하지 않는다. |
+
+Loki provider는 RCA가 로그 문맥을 읽을 수 있도록 `line` 필드는 유지한다.
+하지만 원문 그대로 보내지 않고 `password`, `token`, `secret`, `Authorization`, `Cookie`, JWT 같은
+민감값을 `[REDACTED]` 계열 문자열로 바꾼 뒤 전달한다.
 
 namespace 필터:
 
