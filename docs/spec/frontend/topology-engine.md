@@ -1288,7 +1288,7 @@ Pod
 | network | Gateway, Route, ReferenceGrant | parents/backendRefs/conditions/grants | configured/effective network |
 | network policy | NetworkPolicy and policy CRDs | selector/policy effect evidence | policy-security |
 | configuration | ConfigMap, Secret metadata | Pod references, keys count only | dependency |
-| identity | ServiceAccount, Role/Binding | usage and access context without secret | dependency/policy |
+| identity | ServiceAccount, Role/Binding | usage and access context without secret | dependency/policy-security |
 | storage | PVC, PV, StorageClass, VolumeAttachment | claim/binding/class/attachment | storage |
 | scaling | HPA, VPA, KEDA scalers | scaleTargetRef, conditions | scaling-policy |
 | availability | PDB | selector and disruption status | policy-availability |
