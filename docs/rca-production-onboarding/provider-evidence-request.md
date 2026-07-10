@@ -56,14 +56,15 @@ RCA는 provider가 보내준 evidence만 보고 symptom, root cause candidate, c
   - startupProbe
   - path / port / timeoutSeconds / periodSeconds / failureThreshold
 - Deployment labels
-- safe Deployment annotations
 - Pod template labels
-- safe Pod template annotations
 - resources requests/limits
-- env/envFrom ConfigMap and Secret reference summary
-- mounted ConfigMap and Secret volume reference summary
-- managedFields manager 목록
-- owned ReplicaSet revision annotation
+- Deployment status and conditions
+- owned ReplicaSet revision annotation and replica counts
+- single Deployment detail query의 safe Deployment/Pod template annotations
+- single Deployment detail query의 managedFields manager 목록
+- single Deployment detail query의 env/envFrom ConfigMap and Secret reference summary
+- single Deployment detail query의 mounted ConfigMap and Secret volume reference summary
+- single Deployment detail query의 ReplicaSet created_at and conditions
 
 ### 추가로 요청해야 할 것
 
@@ -191,21 +192,39 @@ policy상 traces query는 존재한다.
 
 - change_context.current_workload_snapshots[]
 - change_context.current_workload_snapshot
+
+`current_workload_snapshots[]`는 target namespace의 모든 Deployment를 위한 summary snapshot이다.
+summary snapshot에는 아래 필드만 남긴다.
+
 - change_context.current_workload_snapshots[].workload.kind/namespace/name
 - change_context.current_workload_snapshots[].deployment_labels
-- change_context.current_workload_snapshots[].deployment_annotations
 - change_context.current_workload_snapshots[].pod_template_labels
-- change_context.current_workload_snapshots[].pod_template_annotations
-- change_context.current_workload_snapshots[].managed_fields_managers[]
+- change_context.current_workload_snapshots[].deployment_status
+- change_context.current_workload_snapshots[].deployment_status.conditions[]
 - change_context.current_workload_snapshots[].containers[].name/image
 - change_context.current_workload_snapshots[].containers[].readiness_probe
 - change_context.current_workload_snapshots[].containers[].liveness_probe
 - change_context.current_workload_snapshots[].containers[].startup_probe
 - change_context.current_workload_snapshots[].containers[].resources
-- change_context.current_workload_snapshots[].containers[].env_refs
-- change_context.current_workload_snapshots[].containers[].env_from_refs
-- change_context.current_workload_snapshots[].containers[].volume_mount_refs
-- change_context.current_workload_snapshots[].replicaset_revisions[].name/revision
+- change_context.current_workload_snapshots[].replicaset_revisions[].name
+- change_context.current_workload_snapshots[].replicaset_revisions[].revision
+- change_context.current_workload_snapshots[].replicaset_revisions[].desired_replicas
+- change_context.current_workload_snapshots[].replicaset_revisions[].replicas
+- change_context.current_workload_snapshots[].replicaset_revisions[].ready_replicas
+- change_context.current_workload_snapshots[].replicaset_revisions[].available_replicas
+- change_context.current_workload_snapshots[].replicaset_revisions[].fully_labeled_replicas
+
+`current_workload_snapshot`은 특정 Deployment 1개를 위한 detail snapshot이다.
+detail snapshot은 summary 필드에 아래 필드를 추가로 담는다.
+
+- change_context.current_workload_snapshot.deployment_annotations
+- change_context.current_workload_snapshot.pod_template_annotations
+- change_context.current_workload_snapshot.managed_fields_managers[]
+- change_context.current_workload_snapshot.containers[].env_refs
+- change_context.current_workload_snapshot.containers[].env_from_refs
+- change_context.current_workload_snapshot.containers[].volume_mount_refs
+- change_context.current_workload_snapshot.replicaset_revisions[].created_at
+- change_context.current_workload_snapshot.replicaset_revisions[].conditions[]
 
 기본 fallback 값은 `{"change_context": {"current_workload_snapshots": []}}`이다.
 기본 `change_context` query는 target namespace의 모든 Deployment를 목록으로 수집한다.
@@ -219,11 +238,11 @@ Kubernetes object에서도 일부 metadata를 참고할 수 있다.
 - metadata.namespace
 - metadata.uid
 - labels
-- annotations 일부(`metadata` bucket은 안전한 Deployment/Pod template annotation만 남김)
+- annotations 일부(`metadata` bucket은 단건 detail에서 안전한 Deployment/Pod template annotation만 남김)
 - ownerReferences
 - image
 - deployment revision annotation 일부
-- managedFields manager 일부
+- managedFields manager 일부(detail query에서만 제공)
 
 ### 추가로 요청해야 할 것
 

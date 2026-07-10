@@ -58,6 +58,7 @@ def test_metadata_provider_collects_one_deployment_snapshot(monkeypatch) -> None
                         {
                             "metadata": {
                                 "name": "checkout-api-abc123",
+                                "creationTimestamp": "2026-07-10T09:00:00Z",
                                 "annotations": {
                                     "deployment.kubernetes.io/revision": "7"
                                 },
@@ -66,6 +67,21 @@ def test_metadata_provider_collects_one_deployment_snapshot(monkeypatch) -> None
                                         "kind": "Deployment",
                                         "name": "checkout-api",
                                         "uid": "deployment-1",
+                                    }
+                                ],
+                            },
+                            "spec": {
+                                "replicas": 2,
+                            },
+                            "status": {
+                                "replicas": 2,
+                                "readyReplicas": 1,
+                                "availableReplicas": 1,
+                                "fullyLabeledReplicas": 2,
+                                "conditions": [
+                                    {
+                                        "type": "ReplicaFailure",
+                                        "status": "False",
                                     }
                                 ],
                             }
@@ -110,6 +126,7 @@ def test_metadata_provider_collects_one_deployment_snapshot(monkeypatch) -> None
                         ],
                     },
                     "spec": {
+                        "replicas": 3,
                         "template": {
                             "metadata": {
                                 "labels": {"app": "checkout-api"},
@@ -231,6 +248,23 @@ def test_metadata_provider_collects_one_deployment_snapshot(monkeypatch) -> None
                             },
                         }
                     },
+                    "status": {
+                        "observedGeneration": 12,
+                        "replicas": 3,
+                        "updatedReplicas": 2,
+                        "readyReplicas": 1,
+                        "availableReplicas": 1,
+                        "unavailableReplicas": 2,
+                        "conditions": [
+                            {
+                                "type": "Progressing",
+                                "status": "False",
+                                "reason": "ProgressDeadlineExceeded",
+                                "message": "ReplicaSet timed out.",
+                                "lastTransitionTime": "2026-07-10T10:00:00Z",
+                            }
+                        ],
+                    },
                 },
             )
         return httpx.Response(404, json={})
@@ -291,6 +325,24 @@ def test_metadata_provider_collects_one_deployment_snapshot(monkeypatch) -> None
         "helm",
         "kube-controller-manager",
     ]
+    assert snapshot["deployment_status"] == {
+        "observed_generation": 12,
+        "desired_replicas": 3,
+        "replicas": 3,
+        "updated_replicas": 2,
+        "ready_replicas": 1,
+        "available_replicas": 1,
+        "unavailable_replicas": 2,
+        "conditions": [
+            {
+                "type": "Progressing",
+                "status": "False",
+                "reason": "ProgressDeadlineExceeded",
+                "message": "ReplicaSet timed out.",
+                "last_transition_time": "2026-07-10T10:00:00Z",
+            }
+        ],
+    }
     assert snapshot["containers"][0]["image"] == "repo/checkout:v2"
     assert snapshot["containers"][0]["readiness_probe"] == {
         "path": "/ready",
@@ -355,7 +407,22 @@ def test_metadata_provider_collects_one_deployment_snapshot(monkeypatch) -> None
     ]
     assert "do-not-include" not in str(snapshot["containers"][0])
     assert snapshot["replicaset_revisions"] == [
-        {"name": "checkout-api-abc123", "revision": "7"}
+        {
+            "name": "checkout-api-abc123",
+            "revision": "7",
+            "created_at": "2026-07-10T09:00:00Z",
+            "desired_replicas": 2,
+            "replicas": 2,
+            "ready_replicas": 1,
+            "available_replicas": 1,
+            "fully_labeled_replicas": 2,
+            "conditions": [
+                {
+                    "type": "ReplicaFailure",
+                    "status": "False",
+                }
+            ],
+        }
     ]
 
 
@@ -373,6 +440,7 @@ def test_metadata_provider_collects_namespace_deployment_snapshots(monkeypatch) 
                         {
                             "metadata": {
                                 "name": "shop-api-abc123",
+                                "creationTimestamp": "2026-07-10T08:00:00Z",
                                 "annotations": {
                                     "deployment.kubernetes.io/revision": "2"
                                 },
@@ -383,7 +451,22 @@ def test_metadata_provider_collects_namespace_deployment_snapshots(monkeypatch) 
                                         "uid": "deployment-3",
                                     }
                                 ],
-                            }
+                            },
+                            "spec": {
+                                "replicas": 1,
+                            },
+                            "status": {
+                                "replicas": 1,
+                                "readyReplicas": 1,
+                                "availableReplicas": 1,
+                                "fullyLabeledReplicas": 1,
+                                "conditions": [
+                                    {
+                                        "type": "ReplicaFailure",
+                                        "status": "False",
+                                    }
+                                ],
+                            },
                         }
                     ]
                 },
@@ -403,8 +486,12 @@ def test_metadata_provider_collects_namespace_deployment_snapshots(monkeypatch) 
                                     "ops.service/apply-at": "1783612345",
                                     "private.example.com/value": "hidden",
                                 },
+                                "managedFields": [
+                                    {"manager": "argocd-controller"},
+                                ],
                             },
                             "spec": {
+                                "replicas": 1,
                                 "template": {
                                     "metadata": {
                                         "labels": {"app": "shop-api"},
@@ -414,10 +501,41 @@ def test_metadata_provider_collects_namespace_deployment_snapshots(monkeypatch) 
                                         },
                                     },
                                     "spec": {
+                                        "volumes": [
+                                            {
+                                                "name": "shop-config",
+                                                "configMap": {
+                                                    "name": "shop-config",
+                                                },
+                                            }
+                                        ],
                                         "containers": [
                                             {
                                                 "name": "app",
                                                 "image": "repo/shop:v3",
+                                                "resources": {
+                                                    "requests": {
+                                                        "cpu": "50m",
+                                                        "memory": "128Mi",
+                                                    },
+                                                },
+                                                "env": [
+                                                    {
+                                                        "name": "SHOP_MODE",
+                                                        "valueFrom": {
+                                                            "configMapKeyRef": {
+                                                                "name": "shop-config",
+                                                                "key": "mode",
+                                                            }
+                                                        },
+                                                    }
+                                                ],
+                                                "volumeMounts": [
+                                                    {
+                                                        "name": "shop-config",
+                                                        "mountPath": "/etc/shop",
+                                                    }
+                                                ],
                                                 "livenessProbe": {
                                                     "tcpSocket": {"port": 8080},
                                                     "timeoutSeconds": 1,
@@ -426,6 +544,19 @@ def test_metadata_provider_collects_namespace_deployment_snapshots(monkeypatch) 
                                         ]
                                     },
                                 }
+                            },
+                            "status": {
+                                "observedGeneration": 4,
+                                "replicas": 1,
+                                "updatedReplicas": 1,
+                                "readyReplicas": 1,
+                                "availableReplicas": 1,
+                                "conditions": [
+                                    {
+                                        "type": "Available",
+                                        "status": "True",
+                                    }
+                                ],
                             },
                         }
                     ]
@@ -470,11 +601,45 @@ def test_metadata_provider_collects_namespace_deployment_snapshots(monkeypatch) 
         "namespace": "target",
         "name": "shop-api",
     }
-    assert snapshot["deployment_annotations"] == {"ops.service/apply-at": "1783612345"}
-    assert "private.example.com/value" not in snapshot["deployment_annotations"]
-    assert snapshot["pod_template_annotations"] == {"prometheus.io/port": "8080"}
-    assert "token.example.com/value" not in snapshot["pod_template_annotations"]
+    assert snapshot["deployment_labels"] == {"app": "shop-api"}
+    assert snapshot["pod_template_labels"] == {"app": "shop-api"}
+    assert "deployment_annotations" not in snapshot
+    assert "pod_template_annotations" not in snapshot
+    assert "managed_fields_managers" not in snapshot
+    assert snapshot["deployment_status"] == {
+        "observed_generation": 4,
+        "desired_replicas": 1,
+        "replicas": 1,
+        "updated_replicas": 1,
+        "ready_replicas": 1,
+        "available_replicas": 1,
+        "conditions": [
+            {
+                "type": "Available",
+                "status": "True",
+            }
+        ],
+    }
     assert snapshot["containers"][0]["liveness_probe"] == {
         "port": 8080,
         "timeout_seconds": 1,
     }
+    assert snapshot["containers"][0]["resources"] == {
+        "requests": {"cpu": "50m", "memory": "128Mi"}
+    }
+    assert "env_refs" not in snapshot["containers"][0]
+    assert "env_from_refs" not in snapshot["containers"][0]
+    assert "volume_mount_refs" not in snapshot["containers"][0]
+    assert snapshot["replicaset_revisions"] == [
+        {
+            "name": "shop-api-abc123",
+            "revision": "2",
+            "desired_replicas": 1,
+            "replicas": 1,
+            "ready_replicas": 1,
+            "available_replicas": 1,
+            "fully_labeled_replicas": 1,
+        }
+    ]
+    assert "created_at" not in snapshot["replicaset_revisions"][0]
+    assert "conditions" not in snapshot["replicaset_revisions"][0]
