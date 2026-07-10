@@ -373,15 +373,19 @@ RCA evidence item:
 | `entries[].streams` | list<object> | entry 안의 stream을 최대 4개 남긴다. |
 | `entries[].streams[].values` | list<object> | stream 안의 sample을 최대 20개 남긴다. |
 | `entries[].streams[].values[].line` | string | provider가 민감정보를 마스킹한 log line을 최대 1600자로 자른다. |
+| `entries[].streams[].values[].line_truncated` | boolean | provider 단계에서 line이 4096자 제한으로 잘렸으면 true다. |
+| `entries[].streams[].values[].original_line_length` | number | provider 단계에서 line이 잘렸을 때의 제한 전 마스킹된 line 길이다. |
 | `entries[].line_count` | number | namespace 필터 후 남은 stream value 개수를 계산한다. |
 | `entries[].pattern_counts` | object | provider가 수집 시 계산한 장애 pattern별 line 개수다. namespace 필터 후 다시 계산하지 않는다. |
 | `entries[].severity_counts` | object | provider가 수집 시 계산한 severity별 line 개수다. namespace 필터 후 다시 계산하지 않는다. |
 | `entries[].trace_ids` | list<string> | provider가 수집 시 추출한 안전한 trace id 목록이다. namespace 필터 후 다시 계산하지 않는다. |
-| `entries[].redaction_summary` | object | provider redaction 적용 여부와 redacted line 개수다. namespace 필터 후 다시 계산하지 않는다. |
+| `entries[].redaction_summary` | object | provider redaction 적용 여부, redacted line 개수, truncated line 개수다. namespace 필터 후 다시 계산하지 않는다. |
 
 Loki provider는 RCA가 로그 문맥을 읽을 수 있도록 `line` 필드는 유지한다.
 하지만 원문 그대로 보내지 않고 `password`, `token`, `secret`, `Authorization`, `Cookie`, JWT 같은
 민감값을 `[REDACTED]` 계열 문자열로 바꾼 뒤 전달한다.
+provider는 evidence job result 크기 보호를 위해 line을 최대 4096자로 먼저 제한하고,
+RCA bundle compact 단계는 다시 최대 1600자로 줄인다.
 
 namespace 필터:
 
@@ -426,6 +430,8 @@ RCA evidence item:
 | `summary` | object | `results`가 없으면 payload 요약으로 대체한다. |
 
 `results.<query_name>`은 list를 최대 8개까지 남기고, 긴 문자열은 최대 1600자로 자른다.
+provider 단계에서도 trace 내부 긴 문자열은 최대 1024자로 제한되고, 중첩 list는 최대 20개만 남는다.
+한 trace가 계속 너무 크면 provider가 `trace_truncated`, `original_trace_bytes`를 붙인 RCA용 summary로 대체할 수 있다.
 provider 원본 payload의 `results.<query_name>.analysis`는 nested object다.
 현재 RCA evidence bundle compact 단계에서는 nested dict/list 규칙에 따라 요약될 수 있다.
 원본 evidence에는 `trace_summaries`, `trace_ids`, `services`, `operations`,
