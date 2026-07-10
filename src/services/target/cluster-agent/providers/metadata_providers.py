@@ -256,7 +256,7 @@ def specific_workload_change_context(
     if not deployment:
         return empty_change_context()
     return {
-        "current_workload_snapshot": current_workload_snapshot(
+        "current_workload_snapshot": current_workload_detail_snapshot(
             deployment,
             replicasets,
         ),
@@ -288,20 +288,16 @@ def current_workload_snapshots(
     replicasets: list[JsonObject],
 ) -> list[JsonObject]:
     """Build small snapshots for all Deployments."""
-    return [current_workload_snapshot(deployment, replicasets) for deployment in deployments]
+    return [
+        current_workload_summary_snapshot(deployment, replicasets)
+        for deployment in deployments
+    ]
 
 
-def current_workload_snapshot(
-    deployment: JsonObject,
-    replicasets: list[JsonObject],
-) -> JsonObject:
-    """Build one small Deployment snapshot."""
+def current_workload_base_snapshot(deployment: JsonObject) -> JsonObject:
+    """Build fields shared by summary and detail snapshots."""
     meta = metadata(deployment)
-    template = pod_template(deployment)
-    template_meta = metadata(template)
-    template_spec = spec(template)
-    volume_refs = volume_reference_map(template_spec)
-
+    template_meta = metadata(pod_template(deployment))
     return {
         "workload": {
             "kind": "Deployment",
@@ -309,29 +305,61 @@ def current_workload_snapshot(
             "name": meta.get("name"),
         },
         "deployment_labels": object_or_empty(meta.get("labels")),
-        "deployment_annotations": safe_annotations(meta),
-        "pod_template_annotations": safe_annotations(template_meta),
         "pod_template_labels": object_or_empty(template_meta.get("labels")),
-        "managed_fields_managers": managed_field_managers(deployment),
+        "deployment_status": deployment_status_snapshot(deployment),
+    }
+
+
+def current_workload_summary_snapshot(
+    deployment: JsonObject,
+    replicasets: list[JsonObject],
+) -> JsonObject:
+    """Build a summary snapshot for namespace-wide queries."""
+    template = pod_template(deployment)
+    template_spec = spec(template)
+
+    return {
+        **current_workload_base_snapshot(deployment),
         "containers": [
-            container_snapshot(container, volume_refs)
+            container_summary_snapshot(container)
             for container in list_items(template_spec.get("containers"))
         ],
         "replicaset_revisions": [
-            replicaset_revision_snapshot(replicaset)
-            for replicaset in sorted(
-                replicasets_for_deployment(deployment, replicasets),
-                key=replicaset_revision_number,
-            )
+            replicaset_revision_summary_snapshot(replicaset)
+            for replicaset in sorted_replicasets_for_deployment(deployment, replicasets)
         ],
     }
 
 
-def container_snapshot(
-    container: JsonObject,
-    volume_refs: dict[str, JsonObject],
+def current_workload_detail_snapshot(
+    deployment: JsonObject,
+    replicasets: list[JsonObject],
 ) -> JsonObject:
-    """Build a small container snapshot."""
+    """Build a detail snapshot for one Deployment query."""
+    meta = metadata(deployment)
+    template = pod_template(deployment)
+    template_meta = metadata(template)
+    template_spec = spec(template)
+    volume_refs = volume_reference_map(template_spec)
+
+    return {
+        **current_workload_base_snapshot(deployment),
+        "deployment_annotations": safe_annotations(meta),
+        "pod_template_annotations": safe_annotations(template_meta),
+        "managed_fields_managers": managed_field_managers(deployment),
+        "containers": [
+            container_detail_snapshot(container, volume_refs)
+            for container in list_items(template_spec.get("containers"))
+        ],
+        "replicaset_revisions": [
+            replicaset_revision_detail_snapshot(replicaset)
+            for replicaset in sorted_replicasets_for_deployment(deployment, replicasets)
+        ],
+    }
+
+
+def container_summary_snapshot(container: JsonObject) -> JsonObject:
+    """Build a container summary for namespace-wide queries."""
     return {
         "name": container.get("name"),
         "image": container.get("image"),
@@ -339,6 +367,16 @@ def container_snapshot(
         "liveness_probe": probe_snapshot(container.get("livenessProbe")),
         "startup_probe": probe_snapshot(container.get("startupProbe")),
         "resources": resource_snapshot(container),
+    }
+
+
+def container_detail_snapshot(
+    container: JsonObject,
+    volume_refs: dict[str, JsonObject],
+) -> JsonObject:
+    """Build a container detail for one Deployment query."""
+    return {
+        **container_summary_snapshot(container),
         "env_refs": env_refs(container),
         "env_from_refs": env_from_refs(container),
         "volume_mount_refs": volume_mount_refs(container, volume_refs),
@@ -502,6 +540,43 @@ def volume_items(volume_source: JsonObject) -> list[JsonObject]:
     ]
 
 
+def deployment_status_snapshot(deployment: JsonObject) -> JsonObject:
+    """Return Deployment status counts and conditions."""
+    deployment_spec = spec(deployment)
+    deployment_status = status(deployment)
+    return compact_dict(
+        {
+            "observed_generation": deployment_status.get("observedGeneration"),
+            "desired_replicas": deployment_spec.get("replicas"),
+            "replicas": deployment_status.get("replicas"),
+            "updated_replicas": deployment_status.get("updatedReplicas"),
+            "ready_replicas": deployment_status.get("readyReplicas"),
+            "available_replicas": deployment_status.get("availableReplicas"),
+            "unavailable_replicas": deployment_status.get("unavailableReplicas"),
+            "conditions": conditions_snapshot(deployment_status.get("conditions")),
+        }
+    )
+
+
+def conditions_snapshot(value: Any) -> list[JsonObject]:
+    """Return small condition summaries."""
+    conditions: list[JsonObject] = []
+    for condition in list_items(value):
+        snapshot = compact_dict(
+            {
+                "type": condition.get("type"),
+                "status": condition.get("status"),
+                "reason": condition.get("reason"),
+                "message": condition.get("message"),
+                "last_transition_time": condition.get("lastTransitionTime"),
+                "last_update_time": condition.get("lastUpdateTime"),
+            }
+        )
+        if snapshot:
+            conditions.append(snapshot)
+    return conditions
+
+
 def probe_snapshot(value: Any) -> JsonObject:
     """Build a small probe snapshot."""
     probe = object_or_empty(value)
@@ -579,6 +654,17 @@ def replicasets_for_deployment(
     ]
 
 
+def sorted_replicasets_for_deployment(
+    deployment: JsonObject,
+    replicasets: list[JsonObject],
+) -> list[JsonObject]:
+    """Return owned ReplicaSets sorted by revision."""
+    return sorted(
+        replicasets_for_deployment(deployment, replicasets),
+        key=replicaset_revision_number,
+    )
+
+
 def is_owned_by_deployment(
     replicaset: JsonObject,
     deployment_uid: str,
@@ -595,19 +681,41 @@ def is_owned_by_deployment(
     return False
 
 
-def replicaset_revision_snapshot(replicaset: JsonObject) -> JsonObject:
-    """Build a small ReplicaSet revision snapshot."""
+def replicaset_revision_summary_snapshot(replicaset: JsonObject) -> JsonObject:
+    """Build a ReplicaSet summary for namespace-wide queries."""
     meta = metadata(replicaset)
     annotations = object_or_empty(meta.get("annotations"))
-    return {
-        "name": meta.get("name"),
-        "revision": annotations.get("deployment.kubernetes.io/revision"),
-    }
+    replicaset_spec = spec(replicaset)
+    replicaset_status = status(replicaset)
+    return compact_dict(
+        {
+            "name": meta.get("name"),
+            "revision": annotations.get("deployment.kubernetes.io/revision"),
+            "desired_replicas": replicaset_spec.get("replicas"),
+            "replicas": replicaset_status.get("replicas"),
+            "ready_replicas": replicaset_status.get("readyReplicas"),
+            "available_replicas": replicaset_status.get("availableReplicas"),
+            "fully_labeled_replicas": replicaset_status.get("fullyLabeledReplicas"),
+        }
+    )
+
+
+def replicaset_revision_detail_snapshot(replicaset: JsonObject) -> JsonObject:
+    """Build a ReplicaSet detail for one Deployment query."""
+    meta = metadata(replicaset)
+    return compact_dict(
+        {
+            **replicaset_revision_summary_snapshot(replicaset),
+            "created_at": meta.get("creationTimestamp"),
+            "conditions": conditions_snapshot(status(replicaset).get("conditions")),
+        }
+    )
 
 
 def replicaset_revision_number(replicaset: JsonObject) -> int:
     """Return the ReplicaSet revision as a sortable number."""
-    revision = replicaset_revision_snapshot(replicaset).get("revision")
+    annotations = object_or_empty(metadata(replicaset).get("annotations"))
+    revision = annotations.get("deployment.kubernetes.io/revision")
     try:
         return int(str(revision))
     except (TypeError, ValueError):
@@ -636,6 +744,11 @@ def metadata(item: JsonObject) -> JsonObject:
 def spec(item: JsonObject) -> JsonObject:
     """Return object spec, or an empty dict."""
     return object_or_empty(item.get("spec"))
+
+
+def status(item: JsonObject) -> JsonObject:
+    """Return object status, or an empty dict."""
+    return object_or_empty(item.get("status"))
 
 
 def pod_template(deployment: JsonObject) -> JsonObject:
