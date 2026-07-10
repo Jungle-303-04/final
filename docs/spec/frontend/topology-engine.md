@@ -50,7 +50,7 @@ last_verified: 2026-07-11
 - 근거가 없는 관계를 이름 prefix만으로 확정하지 않는다.
 - 관계마다 evidence, authority, state, observed time을 가진다.
 - 해석할 수 없는 참조는 삭제하지 않고 explicit placeholder로 남긴다.
-- 권한이 없는 peer는 존재 정보를 노출하지 않는 restricted placeholder로 축약한다.
+- 권한이 없는 peer는 explicit-reference redaction policy를 통과한 경우만 restricted placeholder로 축약한다. 추론으로만 발견한 hidden peer는 entity/edge/count를 만들지 않는다.
 
 ### 1.3 식별자 불변조건
 
@@ -203,7 +203,9 @@ type RelationPlane =
   | "dependency"
   | "storage"
   | "scaling-policy"
-  | "policy"
+  | "policy-security"
+  | "policy-availability"
+  | "policy-governance"
   | "gitops-provenance"
 
 type RelationAuthority = "authoritative" | "derived" | "heuristic"
@@ -280,7 +282,9 @@ Relation key는 `plane + relationType + source.entityKey + target.entityKey + po
 | dependency | consumer → dependency | Pod → ConfigMap/Secret/ServiceAccount |
 | storage | consumer → claim/backing | Pod → PVC → PV → StorageClass |
 | scaling-policy | policy → scale target | HPA/KEDA → Deployment |
-| policy | policy/constraint → selected or bound subject | NetworkPolicy/PDB/RBAC/Quota → subject/scope |
+| policy-security | security policy/binding → selected or bound subject | NetworkPolicy/RBAC → subject/scope |
+| policy-availability | availability policy → selected workload | PDB → workload/Pods |
+| policy-governance | quota/constraint → namespace or selected subject | Quota/LimitRange → scope |
 | gitops-provenance | declaration → managed target | Git revision → Argo/Flux object → Workload |
 
 UI가 오른쪽 rail에서 `Pod ← ReplicaSet ← Deployment`로 보이게 하더라도 stored edge는 owner → dependent 방향을 유지한다.
@@ -354,6 +358,14 @@ type StructuredError = {
   message: string
   retryAfterMs?: number
   causeRef?: string
+}
+
+type RestrictedBoundaryMarker = {
+  sourceEntityKey: string
+  plane: RelationPlane
+  direction: "incoming" | "outgoing" | "unknown"
+  policyId: string
+  messageKey: string
 }
 
 type Entity = {
@@ -532,6 +544,7 @@ type ProjectionFrame = {
   completeness: CompletenessSummary
   entities: readonly Entity[]
   relations: readonly CanonicalRelation[]
+  restrictedBoundaries: readonly RestrictedBoundaryMarker[]
   metricValues: readonly MetricValue[]
   rollups: readonly Rollup[]
   warnings: readonly StructuredWarning[]
@@ -1229,7 +1242,7 @@ EndpointSlice endpoint는 독립 Kubernetes object가 아니므로 `EndpointSlic
 - Pod → ServiceAccount를 추출한다.
 - Pod → PVC → PV → StorageClass를 추출한다.
 - HPA/VPA/KEDA → scaleTargetRef를 추출한다.
-- PDB/NetworkPolicy selector는 ownership이 아니라 scaling-policy/policy relation이다.
+- PDB와 NetworkPolicy selector는 ownership이나 scaling이 아니라 각각 policy-availability, policy-security relation이다.
 - Secret value와 권한 밖 reference detail은 노출하지 않는다.
 
 ### 14.3 GitOps provenance
@@ -1273,13 +1286,13 @@ Pod
 | network | EndpointSlice | service label, targetRef, conditions, hints | effective network |
 | network | Ingress, IngressClass | rules/default backend/LB | configured network |
 | network | Gateway, Route, ReferenceGrant | parents/backendRefs/conditions/grants | configured/effective network |
-| network policy | NetworkPolicy and policy CRDs | selector/policy effect evidence | policy |
+| network policy | NetworkPolicy and policy CRDs | selector/policy effect evidence | policy-security |
 | configuration | ConfigMap, Secret metadata | Pod references, keys count only | dependency |
 | identity | ServiceAccount, Role/Binding | usage and access context without secret | dependency/policy |
 | storage | PVC, PV, StorageClass, VolumeAttachment | claim/binding/class/attachment | storage |
 | scaling | HPA, VPA, KEDA scalers | scaleTargetRef, conditions | scaling-policy |
-| availability | PDB | selector and disruption status | policy |
-| governance | ResourceQuota, LimitRange | namespace constraint | policy/group context |
+| availability | PDB | selector and disruption status | policy-availability |
+| governance | ResourceQuota, LimitRange | namespace constraint | policy-governance/group context |
 | packaging | Helm release evidence | desired/release provenance | gitops-provenance |
 | GitOps | Argo/Flux resources | source revision/inventory/health | gitops-provenance |
 | events | Kubernetes Event | involvedObject UID/reason/count/time | timeline evidence |
@@ -1763,6 +1776,14 @@ Composition 규칙은 다음과 같다.
 - projection, count, metric coverage denominator, relation traversal 모두 이 universe 안에서 수행한다.
 - derived relation이 forbidden peer identity를 노출하지 않는다.
 - user permission이 바뀌면 catalog/snapshot/stream epoch를 갱신한다.
+
+Restricted reference 규칙:
+
+- authorized source object의 spec에 target name/coordinate가 이미 명시돼 있으면 그 coordinate 범위 안에서만 restricted placeholder를 만들 수 있다. 예: 읽을 수 있는 PodSpec의 `secretName`.
+- traffic, cost, metric join 또는 hidden object traversal에서 처음 발견한 peer는 placeholder, 이름, namespace, Kind, count를 만들지 않는다.
+- 제품적으로 boundary 존재를 알릴 권한이 있을 때만 source에 cardinality 없는 `RestrictedBoundaryMarker`를 붙인다.
+- marker는 peer 수, identity, namespace를 포함하지 않는다. 정책상 boundary 존재도 숨겨야 하면 marker도 생략한다.
+- permission 변화 시 placeholder/marker를 같은 stream epoch에서 patch하지 않고 entitlement epoch를 바꾸고 resync한다.
 
 ### 24.2 Stream isolation
 
