@@ -14,6 +14,23 @@ def set_live_runtime_env(monkeypatch) -> None:
     monkeypatch.setenv("RELEASE_FLOW_LIVE_WORKSPACES", "workspace-production")
 
 
+def test_python_call_contract_is_independent_of_formatter_line_breaks() -> None:
+    source = """
+validate_live_https_url(
+    "live_verification_url",
+    verification_url,
+    context="for production live preflight",
+)
+"""
+
+    assert readiness.has_python_call_with_first_literal(
+        source, "validate_live_https_url", "live_verification_url"
+    )
+    assert not readiness.has_python_call_with_first_literal(
+        source, "validate_live_https_url", "live_runbook_url"
+    )
+
+
 def test_current_release_flow_production_readiness_static_checks_pass() -> None:
     checks = validate_readiness()
 
@@ -223,7 +240,9 @@ def test_release_flow_production_readiness_rejects_placeholder_runtime_config(mo
     assert "wildcard" in details["runtime.live_workspaces"]
 
 
-def test_release_flow_production_readiness_rejects_example_subdomain_runtime_urls(monkeypatch) -> None:
+def test_release_flow_production_readiness_rejects_example_subdomain_runtime_urls(
+    monkeypatch,
+) -> None:
     monkeypatch.setenv("RELEASE_FLOW_API_BASE_URL", "https://api.example.com")
     monkeypatch.setenv("RELEASE_FLOW_AUTH_EMAIL", "ops@company.test")
     monkeypatch.setenv("RELEASE_FLOW_AUTH_PASSWORD", "correct-horse-battery")
@@ -261,7 +280,7 @@ def test_release_flow_production_readiness_github_access_preflight_success(monke
         def __init__(self, payload: dict[str, object]) -> None:
             self.payload = payload
 
-        def __enter__(self) -> "Response":
+        def __enter__(self) -> Response:
             return self
 
         def __exit__(self, *_args: object) -> None:
@@ -290,7 +309,9 @@ def test_release_flow_production_readiness_github_access_preflight_success(monke
     assert "allows Safe PR writes" in access.detail
 
 
-def test_release_flow_production_readiness_github_access_preflight_rejects_read_only_token(monkeypatch) -> None:
+def test_release_flow_production_readiness_github_access_preflight_rejects_read_only_token(
+    monkeypatch,
+) -> None:
     monkeypatch.setenv("API_BASE_URL", "https://release-flow.internal.test/api")
     monkeypatch.setenv("AUTH_EMAIL", "ops@company.test")
     monkeypatch.setenv("AUTH_PASSWORD", "correct-horse-battery")
@@ -299,7 +320,7 @@ def test_release_flow_production_readiness_github_access_preflight_rejects_read_
     monkeypatch.setenv("SCM_REPO", "org/checkout")
 
     class Response:
-        def __enter__(self) -> "Response":
+        def __enter__(self) -> Response:
             return self
 
         def __exit__(self, *_args: object) -> None:
@@ -339,7 +360,9 @@ def test_release_flow_production_readiness_github_access_preflight_requires_reso
     assert "non-env token refs" in access.detail
 
 
-def test_release_flow_production_readiness_github_access_preflight_reports_http_failure(monkeypatch) -> None:
+def test_release_flow_production_readiness_github_access_preflight_reports_http_failure(
+    monkeypatch,
+) -> None:
     monkeypatch.setenv("API_BASE_URL", "https://release-flow.internal.test/api")
     monkeypatch.setenv("AUTH_EMAIL", "ops@company.test")
     monkeypatch.setenv("AUTH_PASSWORD", "correct-horse-battery")
@@ -376,7 +399,9 @@ def test_release_flow_production_readiness_writes_reports(tmp_path: Path) -> Non
 def test_release_flow_production_readiness_can_require_gated_production_deploy() -> None:
     checks = validate_readiness(require_production_deploy=True)
 
-    gate_contract = next(check for check in checks if check.name == "workflow.gate_contract.static_scan")
+    gate_contract = next(
+        check for check in checks if check.name == "workflow.gate_contract.static_scan"
+    )
     assert gate_contract.ok is True
     assert gate_contract.detail == "contract passed"
 
@@ -394,6 +419,8 @@ def test_release_flow_production_readiness_fails_when_gated_deploy_is_missing(
 
     checks = readiness.check_gate_contract_workflow(require_production_deploy=True)
 
-    gate_contract = next(check for check in checks if check.name == "workflow.gate_contract.static_scan")
+    gate_contract = next(
+        check for check in checks if check.name == "workflow.gate_contract.static_scan"
+    )
     assert gate_contract.ok is False
     assert "no production deploy jobs were found to validate" in gate_contract.detail
