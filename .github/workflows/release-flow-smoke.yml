@@ -1,4 +1,5 @@
 name: Release Flow Smoke
+run-name: Release Flow Smoke / ${{ inputs.github_environment || 'production' }} / ${{ inputs.production_preflight_plan_id || 'all-plans' }}
 
 "on":
   workflow_dispatch:
@@ -25,6 +26,11 @@ name: Release Flow Smoke
         description: Number of days to keep release-flow smoke artifacts.
         required: false
         default: "30"
+        type: string
+      artifact_name:
+        description: Name for the uploaded release-flow smoke artifact.
+        required: false
+        default: release-flow-smoke
         type: string
       alert_preflight:
         description: Send a validation alert through enabled alert channels.
@@ -92,6 +98,11 @@ name: Release Flow Smoke
         description: Number of days to keep release-flow smoke artifacts.
         required: false
         default: "30"
+        type: string
+      artifact_name:
+        description: Name for the uploaded release-flow smoke artifact.
+        required: false
+        default: release-flow-smoke
         type: string
       alert_preflight:
         description: Send a validation alert through enabled alert channels.
@@ -183,6 +194,7 @@ jobs:
       PRODUCTION_PREFLIGHT_PLAN_ID: ${{ inputs.production_preflight_plan_id }}
       PRODUCTION_PREFLIGHT_RUN_LIMIT: ${{ inputs.production_preflight_run_limit || '20' }}
       ARTIFACT_RETENTION_DAYS: ${{ inputs.artifact_retention_days || '30' }}
+      ARTIFACT_NAME: ${{ inputs.artifact_name || 'release-flow-smoke' }}
       ALERT_PREFLIGHT: ${{ inputs.alert_preflight || false }}
       ALERT_PREFLIGHT_SEVERITY: ${{ inputs.alert_severity || 'warning' }}
       LIVE_PREFLIGHT: ${{ inputs.live_preflight || false }}
@@ -216,6 +228,14 @@ jobs:
           fi
           if [ "$ARTIFACT_RETENTION_DAYS" -lt 1 ] || [ "$ARTIFACT_RETENTION_DAYS" -gt 90 ]; then
             echo "::error title=Invalid artifact_retention_days::artifact_retention_days must be between 1 and 90."
+            exit 1
+          fi
+          if [ -z "$ARTIFACT_NAME" ]; then
+            echo "::error title=Invalid artifact_name::artifact_name is required."
+            exit 1
+          fi
+          if [[ "$ARTIFACT_NAME" =~ [\\/:*?\"<>|] ]]; then
+            echo "::error title=Invalid artifact_name::artifact_name cannot contain \\, /, :, *, ?, quote, <, >, or |."
             exit 1
           fi
           if [ "$ALERT_PREFLIGHT" = "true" ]; then
@@ -276,7 +296,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: release-flow-smoke
+          name: ${{ env.ARTIFACT_NAME }}
           path: artifacts/release-flow
           if-no-files-found: warn
           retention-days: ${{ env.ARTIFACT_RETENTION_DAYS }}

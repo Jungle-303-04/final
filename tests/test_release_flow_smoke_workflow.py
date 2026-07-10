@@ -16,6 +16,10 @@ def test_release_flow_smoke_workflow_is_manual_and_read_only() -> None:
     workflow = load_workflow()
 
     assert workflow["name"] == "Release Flow Smoke"
+    assert workflow["run-name"] == (
+        "Release Flow Smoke / ${{ inputs.github_environment || 'production' }} / "
+        "${{ inputs.production_preflight_plan_id || 'all-plans' }}"
+    )
     assert set(workflow["on"]) == {"workflow_dispatch", "workflow_call"}
     assert workflow["permissions"] == {"contents": "read"}
 
@@ -29,6 +33,7 @@ def test_release_flow_smoke_workflow_declares_operator_inputs_and_secrets_for_di
         "api_base_url",
         "alert_preflight",
         "alert_severity",
+        "artifact_name",
         "artifact_retention_days",
         "github_environment",
         "live_change_ticket",
@@ -43,6 +48,7 @@ def test_release_flow_smoke_workflow_declares_operator_inputs_and_secrets_for_di
     assert inputs["production_preflight_run_limit"]["default"] == "20"
     assert inputs["github_environment"]["default"] == "production"
     assert inputs["artifact_retention_days"]["default"] == "30"
+    assert inputs["artifact_name"]["default"] == "release-flow-smoke"
     assert inputs["alert_preflight"]["default"] is False
     assert inputs["alert_severity"]["default"] == "warning"
     assert inputs["alert_severity"]["options"] == ["info", "warning", "critical"]
@@ -61,6 +67,7 @@ def test_release_flow_smoke_workflow_declares_operator_inputs_and_secrets_for_di
     )
     assert job["env"]["PRODUCTION_PREFLIGHT_RUN_LIMIT"] == "${{ inputs.production_preflight_run_limit || '20' }}"
     assert job["env"]["ARTIFACT_RETENTION_DAYS"] == "${{ inputs.artifact_retention_days || '30' }}"
+    assert job["env"]["ARTIFACT_NAME"] == "${{ inputs.artifact_name || 'release-flow-smoke' }}"
     assert job["env"]["ALERT_PREFLIGHT"] == "${{ inputs.alert_preflight || false }}"
     assert job["env"]["ALERT_PREFLIGHT_SEVERITY"] == "${{ inputs.alert_severity || 'warning' }}"
     assert job["env"]["LIVE_PREFLIGHT"] == "${{ inputs.live_preflight || false }}"
@@ -79,6 +86,7 @@ def test_release_flow_smoke_workflow_can_be_called_by_deploy_workflows() -> None
         "api_base_url",
         "alert_preflight",
         "alert_severity",
+        "artifact_name",
         "artifact_retention_days",
         "github_environment",
         "live_change_ticket",
@@ -98,6 +106,7 @@ def test_release_flow_smoke_workflow_can_be_called_by_deploy_workflows() -> None
     assert workflow_call["inputs"]["production_preflight_run_limit"]["default"] == "20"
     assert workflow_call["inputs"]["github_environment"]["default"] == "production"
     assert workflow_call["inputs"]["artifact_retention_days"]["default"] == "30"
+    assert workflow_call["inputs"]["artifact_name"]["default"] == "release-flow-smoke"
     assert workflow_call["inputs"]["alert_preflight"]["default"] is False
     assert workflow_call["inputs"]["alert_severity"]["default"] == "warning"
     assert workflow_call["inputs"]["live_preflight"]["default"] is False
@@ -159,6 +168,8 @@ def test_release_flow_smoke_workflow_uploads_artifacts_before_failing_gate() -> 
     assert "production_preflight_run_limit must be between 1 and 500" in validate_step["run"]
     assert "artifact_retention_days must be an integer between 1 and 90" in validate_step["run"]
     assert "artifact_retention_days must be between 1 and 90" in validate_step["run"]
+    assert "artifact_name is required" in validate_step["run"]
+    assert "artifact_name cannot contain" in validate_step["run"]
     assert "alert_severity must be one of info, warning, or critical" in validate_step["run"]
     assert "live_environment must be a Kubernetes-style DNS label" in validate_step["run"]
     assert "live_namespace must be a Kubernetes-style DNS label" in validate_step["run"]
@@ -166,6 +177,7 @@ def test_release_flow_smoke_workflow_uploads_artifacts_before_failing_gate() -> 
 
     assert upload_step["if"] == "always()"
     assert upload_step["uses"] == "actions/upload-artifact@v4"
+    assert upload_step["with"]["name"] == "${{ env.ARTIFACT_NAME }}"
     assert upload_step["with"]["path"] == "artifacts/release-flow"
     assert upload_step["with"]["retention-days"] == "${{ env.ARTIFACT_RETENTION_DAYS }}"
 
