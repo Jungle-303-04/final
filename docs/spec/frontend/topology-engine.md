@@ -322,7 +322,8 @@ type SourceLifecycle =
 type SourceWatermark = {
   sourceId: string
   lifecycle: SourceLifecycle
-  support: "supported" | "unsupported"
+  implementation: "supported" | "unsupported"
+  installation: "installed" | "not-installed" | "unknown"
   access: "allowed" | "forbidden"
   availability: "available" | "partial" | "unavailable" | "error"
   freshness: "fresh" | "stale" | "unknown"
@@ -564,7 +565,7 @@ type ClusterCut = {
 }
 ```
 
-`resourceCursors`의 key는 canonical GVR이고 value는 opaque resourceVersion/resume token이다. 서로 다른 GVR 또는 cluster의 resourceVersion을 비교하지 않는다. `SourceWatermark`는 observedAt, window, lastSuccess, age, maxAge, lifecycle/support/access/availability/freshness/completeness/coverage 축을 포함한다. UI는 frame freshness를 표시하며 source skew가 정책 한계를 넘으면 completeness와 freshness 축을 각각 `partial`, `stale`로 둔다.
+`resourceCursors`의 key는 canonical GVR이고 value는 opaque resourceVersion/resume token이다. 서로 다른 GVR 또는 cluster의 resourceVersion을 비교하지 않는다. `SourceWatermark`는 observedAt, window, lastSuccess, age, maxAge, lifecycle/implementation/installation/access/availability/freshness/completeness/coverage 축을 포함한다. UI는 frame freshness를 표시하며 source skew가 정책 한계를 넘으면 completeness와 freshness 축을 각각 `partial`, `stale`로 둔다.
 
 ## 7. Cloud/provider neutral capability model
 
@@ -574,7 +575,8 @@ type ClusterCut = {
 type ProviderCapability = {
   capabilityId: string
   providerId: string
-  support: "supported" | "unsupported"
+  implementation: "supported" | "unsupported"
+  installation: "installed" | "not-installed" | "unknown"
   access: "allowed" | "forbidden"
   availability: "available" | "partial" | "unavailable" | "error"
   scopes: readonly string[]
@@ -584,6 +586,13 @@ type ProviderCapability = {
 ```
 
 예시 adapter는 AWS pricing/load balancer, GCP billing/network endpoint group, Azure cost/load balancer, OpenCost, on-prem Prometheus다. adapter가 없어도 placement, ownership, Kubernetes-configured/effective network는 동작해야 한다.
+
+- `implementation=unsupported`: 제품 adapter/plugin이 해당 capability를 이해하지 못한다.
+- `installation=not-installed`: authoritative API discovery 또는 provider discovery가 부재를 확인했다.
+- `access=forbidden`: 설치 여부를 누설하지 않는 범위에서 authorization이 거부됐다.
+- `availability=unavailable`: 지원되고 설치됐지만 현재 endpoint/collector가 동작하지 않는다.
+- `availability=error`: 시도 결과 오류이며 reason code가 있다.
+- proxy/router의 HTTP 404 하나만으로 `not-installed`를 판정하지 않는다. discovery 결과와 endpoint identity가 일치해야 한다.
 
 ### 7.2 금지되는 provider 가정
 
