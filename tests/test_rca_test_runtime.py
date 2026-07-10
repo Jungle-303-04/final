@@ -477,7 +477,7 @@ def test_evidence_aggregation_promotes_release_context_and_same_correlation() ->
                                     }
                                 }
                             ]
-                        }
+                        },
                     }
                 },
             },

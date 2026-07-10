@@ -89,9 +89,7 @@ def test_metadata_normalize_limits_large_namespace_lists() -> None:
                 ],
                 metadata_module.ENDPOINT_SLICE_READY_ENDPOINTS_KEY: [
                     {"endpoint_slice": {"name": f"slice-{index}"}}
-                    for index in range(
-                        metadata_module.MAX_ENDPOINT_SLICE_READY_ENDPOINTS + 1
-                    )
+                    for index in range(metadata_module.MAX_ENDPOINT_SLICE_READY_ENDPOINTS + 1)
                 ],
                 metadata_module.RESOURCE_QUOTAS_KEY: [
                     {"name": f"quota-{index}"}
@@ -133,9 +131,7 @@ def test_metadata_normalize_limits_large_namespace_lists() -> None:
             },
             metadata_module.ENDPOINT_SLICE_READY_ENDPOINTS_KEY: {
                 "truncated": True,
-                "original_count": (
-                    metadata_module.MAX_ENDPOINT_SLICE_READY_ENDPOINTS + 1
-                ),
+                "original_count": (metadata_module.MAX_ENDPOINT_SLICE_READY_ENDPOINTS + 1),
                 "returned_count": metadata_module.MAX_ENDPOINT_SLICE_READY_ENDPOINTS,
             },
             metadata_module.RESOURCE_QUOTAS_KEY: {
