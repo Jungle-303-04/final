@@ -136,6 +136,9 @@ EVIDENCE_QUERY_PATH = "/evidence"
 RCA_REPORTS_PATH = "/rca-reports"
 RCA_RULES_VALIDATE_PATH = "/rca/rules/validate"
 RCA_RECOVERY_PLAN_BY_CORRELATION_PATH = "/rca/recovery-plans/by-correlation/{correlation_id}"
+RCA_RECOVERY_ACTION_SELECT_BY_CORRELATION_PATH = (
+    "/rca/recovery-plans/by-correlation/{correlation_id}/actions/select"
+)
 RCA_RECOVERY_ACTION_SELECT_PATH = "/rca/recovery-plans/{plan_id}/actions/{action_id}/select"
 
 
