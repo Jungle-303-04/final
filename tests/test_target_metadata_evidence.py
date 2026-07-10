@@ -152,6 +152,16 @@ def test_metadata_provider_collects_one_deployment_snapshot(monkeypatch) -> None
                                     {
                                         "name": "app",
                                         "image": "repo/checkout:v2",
+                                        "resources": {
+                                            "requests": {
+                                                "cpu": "100m",
+                                                "memory": "256Mi",
+                                            },
+                                            "limits": {
+                                                "cpu": "500m",
+                                                "memory": "512Mi",
+                                            },
+                                        },
                                         "env": [
                                             {
                                                 "name": "APP_MODE",
@@ -288,6 +298,10 @@ def test_metadata_provider_collects_one_deployment_snapshot(monkeypatch) -> None
         "timeout_seconds": 2,
         "period_seconds": 5,
         "failure_threshold": 4,
+    }
+    assert snapshot["containers"][0]["resources"] == {
+        "requests": {"cpu": "100m", "memory": "256Mi"},
+        "limits": {"cpu": "500m", "memory": "512Mi"},
     }
     assert snapshot["containers"][0]["env_refs"] == [
         {
