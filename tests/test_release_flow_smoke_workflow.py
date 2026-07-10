@@ -72,16 +72,10 @@ def test_release_flow_smoke_workflow_declares_operator_inputs_and_secrets_for_di
     assert "default" not in inputs["live_change_ticket"]
     assert (
         job["env"]["API_BASE_URL"]
-        == "${{ inputs.api_base_url || secrets.release_flow_api_base_url || secrets.RELEASE_FLOW_API_BASE_URL }}"
+        == "${{ inputs.api_base_url || secrets.RELEASE_FLOW_API_BASE_URL }}"
     )
-    assert (
-        job["env"]["AUTH_EMAIL"]
-        == "${{ secrets.release_flow_auth_email || secrets.RELEASE_FLOW_AUTH_EMAIL }}"
-    )
-    assert (
-        job["env"]["AUTH_PASSWORD"]
-        == "${{ secrets.release_flow_auth_password || secrets.RELEASE_FLOW_AUTH_PASSWORD }}"
-    )
+    assert job["env"]["AUTH_EMAIL"] == "${{ secrets.RELEASE_FLOW_AUTH_EMAIL }}"
+    assert job["env"]["AUTH_PASSWORD"] == "${{ secrets.RELEASE_FLOW_AUTH_PASSWORD }}"
     assert (
         job["env"]["PRODUCTION_PREFLIGHT_RUN_LIMIT"]
         == "${{ inputs.production_preflight_run_limit || '20' }}"
@@ -146,9 +140,6 @@ def test_release_flow_smoke_workflow_can_be_called_by_deploy_workflows() -> None
         "RELEASE_FLOW_API_BASE_URL",
         "RELEASE_FLOW_AUTH_EMAIL",
         "RELEASE_FLOW_AUTH_PASSWORD",
-        "release_flow_api_base_url",
-        "release_flow_auth_email",
-        "release_flow_auth_password",
     }
     assert workflow_call["inputs"]["production_preflight_run_limit"]["default"] == "20"
     assert workflow_call["inputs"]["request_timeout_seconds"]["default"] == "15"
