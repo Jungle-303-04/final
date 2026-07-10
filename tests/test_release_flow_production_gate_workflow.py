@@ -89,6 +89,7 @@ def test_release_flow_production_gate_calls_smoke_workflow_with_real_guardrails(
         "${{ steps.validate.outputs.production_gate_inputs_ok }}"
     )
     assert validate_step["id"] == "validate"
+    assert "live_preflight must be true for production release gates" in validate_step["run"]
     assert "live_change_ticket is required for production live_preflight" in validate_step["run"]
     assert "Replace CHG-PREFLIGHT with the real production change ticket" in validate_step["run"]
     assert "live_runbook_url is required for production live_preflight" in validate_step["run"]
