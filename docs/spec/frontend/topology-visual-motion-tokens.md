@@ -10,7 +10,7 @@ last_verified: 2026-07-11
 
 ## 0. 권한과 literal 규칙
 
-이 문서는 topology visual/motion의 authoritative numeric contract다. 현재 코드에 아래 token과 policy가 없거나 값이 다르면 구현 gap이며, 임시 CSS·renderer literal·기존 화면이 이 수치를 덮어쓸 수 없다.
+이 문서는 topology visual/motion의 구현 예정 numeric contract다. 현재 repo의 실제 코드와 통과한 테스트가 source of truth이며, 아래 token과 policy가 현 코드에 없거나 값이 다르면 구현 완료가 아니라 후속 작업 기준으로만 읽는다.
 
 모든 수치와 시각 의미는 `TopologyVisualMotionPolicy/v1` 한 곳에서 소유한다. React component, renderer branch, CSS selector에 값·색상·duration literal을 중복하지 않는다.
 
