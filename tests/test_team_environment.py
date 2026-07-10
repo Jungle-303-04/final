@@ -45,7 +45,7 @@ def test_team_env_bootstrap_renders_allowlisted_secret_values(tmp_path: Path) ->
     )
     fake_aws.chmod(0o755)
     template = tmp_path / "template.env"
-    template.write_text("APP_ENV=test\n", encoding="utf-8")
+    template.write_text("PROJECT_SLUG=kubeheal\n", encoding="utf-8")
     output = tmp_path / ".env.local-test"
     environment = os.environ | {
         "PATH": f"{fake_bin}:{os.environ['PATH']}",

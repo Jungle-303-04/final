@@ -35,7 +35,7 @@ def test_bruno_collection_has_only_aws_test_profile() -> None:
     aws = (API_DIR / "environments" / "aws-test.bru").read_text(encoding="utf-8")
 
     assert "base_url: https://k8s.woonyong.org/api/" in collection
-    assert "auto_login: false" in collection
+    assert "auto_login: true" in collection
     assert "auth_email: replace-with-auth-email" in collection
     assert "auth_password: replace-with-auth-password" in collection
     assert "\n  cluster_id: api-verification-target\n" in collection
@@ -43,15 +43,15 @@ def test_bruno_collection_has_only_aws_test_profile() -> None:
     assert environment_files == ["aws-test.bru"]
     assert "base_url: https://k8s.woonyong.org/api/" in aws
     assert "management_base_url: https://k8s.woonyong.org/api/" in aws
-    assert "auto_login: false" in aws
+    assert "auto_login: true" in aws
     assert "auth_email: replace-with-auth-email" in aws
     assert "auth_password: replace-with-auth-password" in aws
     assert "\n  cluster_id: api-verification-target\n" in aws
 
     assert "base_url:" in aws
     assert "auto_login:" in aws
-    assert "dev_security_bypass: true" in aws
-    assert "dev_cluster_id:" in aws
+    assert "dev_security_bypass:" not in aws
+    assert "dev_cluster_id:" not in aws
     assert "auth_email:" in aws
     assert "agent_token:" in aws
     assert "cluster_id:" in aws
@@ -223,15 +223,15 @@ def test_bruno_collection_auto_login_is_request_scoped() -> None:
     assert '"/auth/logout"' in collection
 
 
-def test_bruno_test_profile_removes_session_and_agent_tokens() -> None:
+def test_bruno_collection_never_strips_authentication_credentials() -> None:
     collection = (API_DIR / "collection.bru").read_text(encoding="utf-8")
 
-    assert 'readVar("dev_security_bypass", "false")' in collection
-    assert 'req.deleteHeader("authorization")' in collection
-    assert 'req.deleteHeader("x-session-token")' in collection
-    assert 'req.deleteHeader("x-agent-token")' in collection
-    assert 'req.setHeader("x-dev-cluster-id", devClusterId)' in collection
-    assert "securityBypass ||" in collection
+    assert "dev_security_bypass" not in collection
+    assert "x-dev-cluster-id" not in collection
+    assert 'req.deleteHeader("authorization")' not in collection
+    assert 'req.deleteHeader("x-session-token")' not in collection
+    assert 'req.deleteHeader("x-agent-token")' not in collection
+    assert "agentRequest;" in collection
 
 
 def test_bruno_cli_runner_uses_isolated_profile_and_cleans_up_last() -> None:

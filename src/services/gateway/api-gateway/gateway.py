@@ -43,7 +43,6 @@ from domains.release_flow.router import router as release_flow_router
 from domains.target.events import AgentConnectedBody
 from domains.target.evidence_jobs import EVIDENCE_JOB_STATUS_LEASED, EVIDENCE_JOB_STATUS_QUEUED
 from domains.target.router import router as target_router
-from packages.config import bypass_guard
 from packages.config.constants import Auth, CommandStatus
 from packages.config.constants import Redis as RedisConfig
 from packages.config.logs import CONTEXT_KEY, get_logger
@@ -67,6 +66,7 @@ from packages.runtime.metrics import (
     render_multi_labeled_gauge,
     render_prometheus_metrics,
 )
+from packages.security.trusted_proxy import assert_trusted_proxy_config_safe
 from packages.storage.database import Database, wait_for_database
 from packages.storage.engine import unit_of_work_or_null
 from packages.storage.sessions import RedisSessionStore, RedisSessionStoreConfig
@@ -237,7 +237,7 @@ class ApiGateway:
 
     @asynccontextmanager
     async def lifespan(self, _app: FastAPI) -> AsyncIterator[None]:
-        bypass_guard.assert_bypass_safe_at_startup()
+        assert_trusted_proxy_config_safe()
         validate_test_scenario_catalog()
         await wait_for_database(self.db)
         await self.sessions.connect()
@@ -536,10 +536,8 @@ class ApiGateway:
     def _register_metrics_routes(self, app: FastAPI) -> None:
         @app.get("/metrics")
         async def metrics(request: Request) -> PlainTextResponse:
-            # 개발 환경은 내부 스크레이프 편의를 유지한다. 보호 환경은 설정 실수로
-            # 운영 지표가 공개되지 않도록 토큰 미설정도 실패로 처리한다.
             metrics_token = env(Settings.METRICS_TOKEN_ENV, "")
-            if not metrics_token and bypass_guard.is_protected_env():
+            if not metrics_token:
                 raise HTTPException(
                     status_code=503,
                     detail=Settings.METRICS_TOKEN_NOT_CONFIGURED_MESSAGE,

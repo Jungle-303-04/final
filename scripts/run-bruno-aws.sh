@@ -26,7 +26,6 @@ COMMON_ARGS=(
   --env-var "cluster_id=${RUN_ID}"
   --env-var "cluster_id_2=${RUN_ID}"
   --env-var "agent_cluster_id=${RUN_ID}"
-  --env-var "dev_cluster_id=${RUN_ID}"
   --env-var "target_name=API Verification ${RUN_ID}"
   --env-var "agent_target_name=API Verification ${RUN_ID}"
   --env-var "agent_id=agent-${RUN_ID}"
@@ -41,7 +40,7 @@ COMMON_ARGS=(
 )
 
 cleanup() {
-  # 서버가 APP_ENV=test와 등록 environment=test를 모두 확인한 뒤에만 물리 삭제한다.
+  # 서버가 명시적 purge capability와 registration environment=test를 모두 확인한다.
   npx --yes @usebruno/cli@3.5.1 run \
     11-clusters/12-unregister-cluster.bru \
     "${COMMON_ARGS[@]}" >/dev/null 2>&1 || true

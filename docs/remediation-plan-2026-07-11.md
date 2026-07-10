@@ -3,7 +3,7 @@
 ## 목적
 
 이 문서는 2026-07-11 `dev` 감사에서 확인한 결함의 해결 방향과 완료 조건을 고정한다.
-현재 단계에서는 구현하지 않는다. 다음 구현자는 아래 순서와 불변 조건을 유지해야 한다.
+이 문서는 구현 전 계획에서 시작했으며, 완료된 항목은 현재 구조로 갱신한다.
 
 원칙:
 
@@ -25,56 +25,29 @@
 | P2 | Metadata 크기·소유권·EndpointSlice 의미 | 대형 cluster 실패 및 오래된 리소스 혼입 차단 |
 | P2 | Safe PR 조회·문서 정합성 | 위험 설명 누락과 운영자 오해 차단 |
 
-## 1. 개발 인증 우회를 비공개로 유지하는 방법
+## 1. mTLS 개발 콘솔 격리
 
-### 현재 모순
-
-`APP_ENV=test`는 팀 개발을 위해 세션과 Agent token을 우회한다. 그러나 같은 gateway가
-공개 `LoadBalancer` 뒤에서 `k8s.woonyong.org`를 제공하므로 개발 편의 설정이 인터넷 전체에
-노출된다. 애플리케이션 인증 우회와 네트워크 공개를 한 deployment에서 동시에 유지할 수 없다.
-
-### 권장 구조
-
-공개 경로와 개발 우회 경로를 분리한다.
+환경값에 따라 세션·리소스 인가·Agent token을 우회하던 코드는 삭제했다. 공개 콘솔은 기존
+로그인 세션을 사용하고, 로그인 없는 개발 콘솔은 Cloudflare mTLS와 내부 프록시 비밀값을
+모두 검증한다.
 
 ```text
 Internet
   -> public gateway / public console
-     APP_ENV=production
      세션 인증·Agent token 필수
 
-Developer VPN 또는 kubectl port-forward
-  -> dev gateway ClusterIP
-     APP_ENV=test
-     개발 우회 허용
-     외부 LoadBalancer/Ingress 없음
+Chrome + client certificate
+  -> Cloudflare mTLS/WAF
+  -> cloudflared Tunnel
+  -> console-dev ClusterIP
+  -> 내부 신뢰 헤더
+  -> api/realtime gateway ClusterIP
 ```
 
-공개 gateway와 dev gateway는 같은 이미지를 사용해도 되지만 Deployment, Service, hostname,
-ConfigMap을 분리한다. `APP_ENV=test`인 Pod는 `ClusterIP`만 허용하고 공개 Ingress backend로
-선택되지 않게 label도 분리한다.
-
-### 접근 방법 선택지
-
-1. **가장 단순한 개발 방식:** dev gateway는 `ClusterIP`, 팀원은
-   `kubectl port-forward`로 접근한다. 별도 네트워크 제품이 필요 없다.
-2. **팀 공용 방식:** Tailscale/WireGuard/AWS Client VPN 내부에서만 dev hostname을 해석한다.
-3. **임시 완화:** `loadBalancerSourceRanges` 또는 AWS Security Group에 팀·target NAT 공인 IP만
-   허용한다. IP 변경과 Agent egress 관리가 필요하므로 영구 구조로는 권장하지 않는다.
-4. **사람 UI 보호:** Cloudflare Access를 console hostname 앞에 둘 수 있다. Agent API는 브라우저
-   로그인을 사용할 수 없으므로 별도 hostname과 token 인증을 유지해야 한다.
-
-`NetworkPolicy`만으로 인터넷 공개 LoadBalancer 문제를 해결했다고 간주하면 안 된다. 외부 진입
-제어는 LoadBalancer/Ingress/Security Group/VPN 경계에서 하고, NetworkPolicy는 Pod 간 이동을
-추가로 제한하는 방어층으로 사용한다.
-
-### 영구 가드
-
-- `APP_ENV=production|staging`에서 개발 우회가 켜지면 gateway가 부팅을 거부한다.
-- `APP_ENV=test` gateway를 가리키는 `LoadBalancer`, public Ingress가 렌더되면 CI가 실패한다.
-- 공개 smoke에서 익명 `/api/auth/session`, `/api/fleet/summary`는 항상 `401`이어야 한다.
-- dev smoke는 port-forward/VPN 경로에서만 우회 성공을 확인한다.
-- Agent 공개 hostname은 `x-agent-token` 없는 요청이 항상 `401`이어야 한다.
+일반 nginx는 내부 헤더를 항상 삭제한다. API/realtime Service는 기본 `ClusterIP`이고 local kind
+스크립트만 명시적으로 NodePort를 연다. Agent API에는 mTLS 프록시 신원을 적용하지 않으며
+`x-agent-token`이 항상 필요하다. RCA 장애 주입과 fixture purge는 각각
+`RCA_TEST_RUNS_ENABLED`, `TEST_FIXTURE_PURGE_ENABLED` capability로 분리했다.
 
 ## 2. Metadata evidence 문맥과 namespace 정합성
 

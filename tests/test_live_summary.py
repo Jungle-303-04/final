@@ -202,8 +202,8 @@ def test_derive_gateway_url_from_management_base_url() -> None:
     assert module.derive_gateway_url("") == ""
 
 
-def test_default_nodeport_aligned_with_management_manifest() -> None:
-    """agent 기본 NodePort ↔ deploy manifest 정렬 — 한쪽만 바뀌는 drift 를 차단."""
+def test_management_gateway_is_internal_and_kind_opens_expected_realtime_nodeport() -> None:
+    """운영 기본은 ClusterIP, kind 스크립트만 realtime fallback 포트를 연다."""
     module = load_live_summary_module()
     manifest = (ROOT / "deploy" / "management" / "services.yaml").read_text(encoding="utf-8")
     service = next(
@@ -213,5 +213,7 @@ def test_default_nodeport_aligned_with_management_manifest() -> None:
         and doc.get("kind") == "Service"
         and doc.get("metadata", {}).get("name") == "realtime-gateway"
     )
-    node_ports = [port["nodePort"] for port in service["spec"]["ports"]]
-    assert node_ports == [module.agent_config.DEFAULT_REALTIME_GATEWAY_NODEPORT]
+    assert service["spec"]["type"] == "ClusterIP"
+    assert all("nodePort" not in port for port in service["spec"]["ports"])
+    local_up = (ROOT / "scripts" / "up.sh").read_text(encoding="utf-8")
+    assert f'"nodePort":{module.agent_config.DEFAULT_REALTIME_GATEWAY_NODEPORT}' in local_up

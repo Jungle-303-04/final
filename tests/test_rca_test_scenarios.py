@@ -204,8 +204,7 @@ def _client(
     *,
     roles: tuple[str, ...] = ("release_operator",),
 ) -> tuple[TestClient, _TestRunDb, _TestRunEvents]:
-    # 테스트 장애 주입 API는 명시적인 test 환경 + enable flag + 전용 토큰에서만 열린다.
-    monkeypatch.setenv("APP_ENV", "test")
+    # 테스트 장애 주입 API는 명시적인 capability + 전용 토큰에서만 열린다.
     monkeypatch.setenv("RCA_TEST_RUNS_ENABLED", "1")
     monkeypatch.setenv("RCA_TEST_RUNS_TOKEN", TEST_TOKEN)
     monkeypatch.setenv("RCA_TEST_TOKEN", TEST_TOKEN)
@@ -357,7 +356,18 @@ def test_get_scenarios_exposes_the_catalog_contract(monkeypatch: pytest.MonkeyPa
     )
 
 
-def test_rca_test_api_is_hidden_outside_explicit_test_mode(
+def test_rca_test_api_is_hidden_when_capability_is_disabled(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    client, _db, _events = _client(monkeypatch)
+    monkeypatch.setenv("RCA_TEST_RUNS_ENABLED", "0")
+
+    response = client.get(TEST_SCENARIOS_PATH, headers=_test_headers())
+
+    assert response.status_code == 404
+
+
+def test_rca_test_api_does_not_use_app_environment_as_authorization(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     client, _db, _events = _client(monkeypatch)
@@ -365,7 +375,7 @@ def test_rca_test_api_is_hidden_outside_explicit_test_mode(
 
     response = client.get(TEST_SCENARIOS_PATH, headers=_test_headers())
 
-    assert response.status_code == 404
+    assert response.status_code == 200
 
 
 def test_rca_test_api_rejects_an_invalid_dedicated_token(
@@ -543,6 +553,8 @@ def test_concurrent_test_run_requests_reserve_one_target_atomically(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     client, db, _events = _client(monkeypatch)
+    # FastAPI/Pydantic dependency schema 생성은 전역 캐시를 갱신하므로 요청 스레드보다 먼저 끝낸다.
+    client.app.openapi()
     db.reservation_barrier = threading.Barrier(2)
     payload = {"cluster_id": "cluster-1", "scenario_id": "image.wrong-tag"}
 

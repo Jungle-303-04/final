@@ -32,6 +32,7 @@ from packages.contracts.gateway.responses import (
 )
 from packages.contracts.identity import DEFAULT_WORKSPACE_ID
 from packages.runtime.dependencies import get_events
+from packages.security.trusted_proxy import TRUSTED_PROXY_SESSION_TOKEN
 
 router = APIRouter()
 PUBLIC_BASE_URL_ENV = "PUBLIC_BASE_URL"
@@ -138,6 +139,8 @@ async def refresh_session(
     current: Any = Depends(require_session),
     password_auth: Any = Depends(get_password_auth),
 ) -> AuthSessionResponse:
+    if current.token == TRUSTED_PROXY_SESSION_TOKEN:
+        return _authenticated_body(current)
     if not await password_auth.sessions.touch_session(current.token):
         raise HTTPException(status_code=401, detail="authentication required")
     _set_session_cookie(response, current)

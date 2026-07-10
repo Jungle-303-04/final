@@ -84,7 +84,6 @@ def test_release_operator_policy_supports_application_and_catalog_actions() -> N
         for _organization_id, resource_type, role, permission, status in DEFAULT_ROLE_PERMISSION_ROWS
         if status == AccessStatus.ACTIVE.value
     }
-
     assert (
         AccessResourceType.APPLICATION.value,
         ResourceRole.RELEASE_OPERATOR.value,
@@ -165,10 +164,7 @@ def test_service_admin_can_access_every_resource_action() -> None:
     )
 
 
-def test_accessible_resource_ids_reuses_organization_scoped_role_policy(monkeypatch) -> None:
-    monkeypatch.delenv("APP_ENV", raising=False)
-    monkeypatch.delenv("DEV_SECURITY_BYPASS", raising=False)
-
+def test_accessible_resource_ids_reuses_organization_scoped_role_policy() -> None:
     class StubResult:
         def mappings(self) -> list[dict[str, str]]:
             return [
@@ -220,18 +216,3 @@ def test_accessible_resource_ids_reuses_organization_scoped_role_policy(monkeypa
             "org-a",
         ),
     }
-
-
-def test_accessible_resource_ids_allows_all_in_development_bypass(monkeypatch) -> None:
-    monkeypatch.setenv("APP_ENV", "test")
-    repository = object.__new__(WorkspaceAccessRepository)
-
-    assert (
-        repository.accessible_resource_ids(
-            "dev-user",
-            "default",
-            AccessResourceType.CLUSTER.value,
-            Permission.CLUSTER_READ.value,
-        )
-        is None
-    )

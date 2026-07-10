@@ -16,13 +16,9 @@ from rate_limits import (
 from settings import Settings
 
 from packages.config.constants import Auth
-from packages.config.security import (
-    development_bypass_user_id,
-    development_bypass_workspace_id,
-    development_session_bypass_enabled,
-)
 from packages.contracts.identity import DEFAULT_WORKSPACE_ID, ServiceRole, UserStatus
 from packages.contracts.interfaces import SessionStore, UserStore
+from packages.security.trusted_proxy import TRUSTED_PROXY_SESSION_TOKEN, trusted_proxy_identity
 from packages.storage.sessions import AuthSession, RateLimitExceeded
 
 
@@ -59,8 +55,14 @@ class SessionAuthService:
         self.sessions = sessions
 
     async def require_session(self, request: Request) -> AuthSession:
-        if dev_auth_bypass_enabled():
-            return dev_auth_bypass_session()
+        proxy_identity = trusted_proxy_identity(request.headers)
+        if proxy_identity is not None:
+            return AuthSession(
+                token=TRUSTED_PROXY_SESSION_TOKEN,
+                user_id=proxy_identity.user_id,
+                roles=[ServiceRole.SERVICE_ADMIN.value],
+                workspace_id=proxy_identity.workspace_id,
+            )
         token = extract_session_token(request)
         session = await self.sessions.get_session(token)
         if session is None:
@@ -72,27 +74,6 @@ class SessionAuthService:
                 status_code=429, detail=Settings.RATE_LIMIT_EXCEEDED_MESSAGE
             ) from None
         return session
-
-
-def dev_auth_bypass_enabled() -> bool:
-    """통합 test/dev 플래그와 기존 세션 전용 플래그를 하위 호환한다."""
-    return development_session_bypass_enabled()
-
-
-def dev_auth_bypass_session() -> AuthSession:
-    """임시 dev 인증 우회 세션 — API 단독 검증용 service_admin 권한."""
-    return AuthSession(
-        token=Settings.DEV_AUTH_BYPASS_TOKEN,
-        user_id=development_bypass_user_id(
-            Settings.DEV_AUTH_BYPASS_USER_ID,
-            Settings.DEV_AUTH_BYPASS_USER_ID_ENV,
-        ),
-        roles=[ServiceRole.SERVICE_ADMIN.value],
-        workspace_id=development_bypass_workspace_id(
-            DEFAULT_WORKSPACE_ID,
-            Settings.DEV_AUTH_BYPASS_WORKSPACE_ID_ENV,
-        ),
-    )
 
 
 class PasswordAuthService:

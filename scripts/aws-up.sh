@@ -57,6 +57,11 @@ MINIO_ROOT_PASSWORD="${MINIO_ROOT_PASSWORD:-}"
 GITHUB_WEBHOOK_SECRET="${GITHUB_WEBHOOK_SECRET:-}"
 RCA_TEST_RUNS_ENABLED="${RCA_TEST_RUNS_ENABLED:-1}"
 RCA_TEST_RUNS_TOKEN="${RCA_TEST_RUNS_TOKEN:-}"
+TEST_FIXTURE_PURGE_ENABLED="${TEST_FIXTURE_PURGE_ENABLED:-1}"
+TRUSTED_PROXY_AUTH_SECRET="${TRUSTED_PROXY_AUTH_SECRET:-}"
+TRUSTED_PROXY_AUTH_USER_ID="${TRUSTED_PROXY_AUTH_USER_ID:-}"
+TRUSTED_PROXY_AUTH_WORKSPACE_ID="${TRUSTED_PROXY_AUTH_WORKSPACE_ID:-default}"
+METRICS_TOKEN="${METRICS_TOKEN:-}"
 API_ROOT_PATH="${API_ROOT_PATH:-/api}"
 GITHUB_REPO="${GITHUB_REPO:-$(default_github_repo)}"
 GITHUB_BRANCH="${GITHUB_BRANCH:-dev}"
@@ -219,6 +224,14 @@ existing_secret_value() {
   { kubectl --context "${context}" -n management get secret "${secret_name}" \
     -o "jsonpath={.data.${key}}" 2>/dev/null || true; } \
     | python3 -c 'import base64, sys; data=sys.stdin.read().strip(); print(base64.b64decode(data).decode() if data else "")'
+}
+
+existing_config_value() {
+  local context="$1"
+  local config_name="$2"
+  local key="$3"
+  kubectl --context "${context}" -n management get configmap "${config_name}" \
+    -o "jsonpath={.data.${key}}" 2>/dev/null || true
 }
 
 valid_github_token() {
@@ -523,6 +536,35 @@ create_management_runtime() {
   if [[ -z "${RCA_TEST_RUNS_TOKEN}" ]]; then
     RCA_TEST_RUNS_TOKEN="$(openssl rand -hex 32)"
   fi
+  if [[ -z "${TRUSTED_PROXY_AUTH_SECRET}" ]]; then
+    TRUSTED_PROXY_AUTH_SECRET="$(existing_secret_value "${context}" management-runtime-secret TRUSTED_PROXY_AUTH_SECRET)"
+  fi
+  if [[ ${#TRUSTED_PROXY_AUTH_SECRET} -lt 32 ]]; then
+    TRUSTED_PROXY_AUTH_SECRET="$(openssl rand -hex 32)"
+  fi
+  if [[ -z "${TRUSTED_PROXY_AUTH_USER_ID}" ]]; then
+    TRUSTED_PROXY_AUTH_USER_ID="$(existing_config_value "${context}" management-runtime-config TRUSTED_PROXY_AUTH_USER_ID)"
+  fi
+  if [[ -z "${TRUSTED_PROXY_AUTH_USER_ID}" ]]; then
+    if [[ -z "${AUTH_EMAIL}" ]]; then
+      echo "TRUSTED_PROXY_AUTH_USER_ID 또는 AUTH_EMAIL이 필요합니다" >&2
+      return 1
+    fi
+    TRUSTED_PROXY_AUTH_USER_ID="$(python3 - "${PROJECT_SLUG}" "${AUTH_EMAIL}" <<'PY'
+import sys
+import uuid
+
+project_slug, email = sys.argv[1:]
+print("user-" + str(uuid.uuid5(uuid.NAMESPACE_URL, f"{project_slug}:{email.strip().lower()}")))
+PY
+)"
+  fi
+  if [[ -z "${METRICS_TOKEN}" ]]; then
+    METRICS_TOKEN="$(existing_secret_value "${context}" management-runtime-secret METRICS_TOKEN)"
+  fi
+  if [[ -z "${METRICS_TOKEN}" ]]; then
+    METRICS_TOKEN="$(openssl rand -hex 32)"
+  fi
 
   for key in \
     LLM_API_KEY \
@@ -589,6 +631,9 @@ EOF
     --from-literal=REDIS_URL="${REDIS_URL}" \
     --from-literal=DATABASE_STARTUP_MODE="${DATABASE_STARTUP_MODE}" \
     --from-literal=RCA_TEST_RUNS_ENABLED="${RCA_TEST_RUNS_ENABLED}" \
+    --from-literal=TEST_FIXTURE_PURGE_ENABLED="${TEST_FIXTURE_PURGE_ENABLED}" \
+    --from-literal=TRUSTED_PROXY_AUTH_USER_ID="${TRUSTED_PROXY_AUTH_USER_ID}" \
+    --from-literal=TRUSTED_PROXY_AUTH_WORKSPACE_ID="${TRUSTED_PROXY_AUTH_WORKSPACE_ID}" \
     --from-literal=API_ROOT_PATH="${API_ROOT_PATH}" \
     --from-literal=OUTBOX_RELAY_BATCH="${OUTBOX_RELAY_BATCH:-10}" \
     --from-literal=MANAGEMENT_BASE_URL="http://api-gateway:8000" \
@@ -644,6 +689,8 @@ EOF
     --from-literal=COMMAND_NOTIFY_DATABASE_URL="postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgresql:5432/${POSTGRES_DB}"
     --from-literal=GITHUB_WEBHOOK_SECRET="${GITHUB_WEBHOOK_SECRET}"
     --from-literal=RCA_TEST_RUNS_TOKEN="${RCA_TEST_RUNS_TOKEN}"
+    --from-literal=TRUSTED_PROXY_AUTH_SECRET="${TRUSTED_PROXY_AUTH_SECRET}"
+    --from-literal=METRICS_TOKEN="${METRICS_TOKEN}"
   )
   if valid_github_token "${GITHUB_TOKEN}"; then
     secret_args+=(--from-literal=GITHUB_TOKEN="${GITHUB_TOKEN}")

@@ -12,8 +12,8 @@
    명시적 unavailable 상태를 표시한다.
 2. management 클러스터는 관측 전용이다. gateway, worker, agent, RBAC 네 경계에서 쓰기·명령·
    등록 해제를 거부한다.
-3. 개발 인증 우회는 `APP_ENV=test` 또는 명시적 개발 플래그에서만 허용한다. production/staging
-   에서는 fail-closed여야 한다.
+3. 사용자 세션과 agent token의 환경별 우회는 없다. 로그인 없는 개발 콘솔은 Cloudflare mTLS와
+   내부 전용 프록시 비밀값을 모두 통과하며, 일반 콘솔은 내부 헤더를 제거한다.
 4. agent token 원문은 1회 응답과 설치 Secret에서만 사용한다. DB에는 SHA-256 hash만 저장하고
    로그·문서·커밋에 원문을 남기지 않는다.
 5. `/console/`은 보존용 데모다. 실제 제품은 `/`이며 Plural 콘솔 계열의 조용하고 밀도 높은
@@ -182,10 +182,10 @@ inventory resource 1,364, snapshot/usage 각 3개의 새 실데이터를 다시 
 ### Bruno
 
 - 환경은 `docs/api/environments/aws-test.bru` 하나만 유지한다.
-- `APP_ENV=test`에서는 세션/리소스 권한/agent token 우회를 일관되게 적용한다.
-- 목록 필터도 상세 인가와 동일하게 test bypass에서 전체 리소스를 반환한다.
+- 사용자 API는 실제 세션, Agent API는 실제 cluster token을 환경과 무관하게 검증한다.
+- Chrome 개발 콘솔은 `dev.k8s.woonyong.org`에서 설치된 mTLS 인증서로만 접근한다.
 - test registration의 명시적 `purge=true`만 물리 삭제한다. 조건은 admin session,
-  `APP_ENV=test`, registration environment=`test`, non-management다.
+  `TEST_FIXTURE_PURGE_ENABLED=1`, registration environment=`test`, non-management다.
 - 마지막 라이브 결과: 67/67 requests, 120/120 tests PASS.
 
 ## 6. 프론트 제품 목표

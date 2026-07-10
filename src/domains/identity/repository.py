@@ -20,12 +20,7 @@ from domains.identity.models import (
     Workspace,
 )
 from domains.target.management_guard import MANAGEMENT_CLUSTER_ROLE, TARGET_CLUSTER_ROLE
-from packages.config.security import (
-    APP_ENV_ENV,
-    TEST_APP_ENV,
-    development_security_bypass_enabled,
-)
-from packages.config.settings import env
+from packages.config.security import TEST_FIXTURE_ENVIRONMENT, test_fixture_purge_enabled
 from packages.contracts.event_bus.interfaces import JsonObject
 from packages.contracts.identity import (
     DEFAULT_GROUP_ID,
@@ -249,7 +244,7 @@ class IdentityAccessRepository(DatabaseConnection):
 
     def purge_test_target_cluster_registration(self, workspace_id: str, cluster_id: str) -> bool:
         """테스트 fixture registration과 전용 접근 할당을 물리 삭제한다."""
-        if env(APP_ENV_ENV, "").strip().lower() != TEST_APP_ENV:
+        if not test_fixture_purge_enabled():
             return False
 
         cluster = self.cluster_table
@@ -264,7 +259,7 @@ class IdentityAccessRepository(DatabaseConnection):
             .where(
                 cluster.c.workspace_id == workspace_id,
                 cluster.c.cluster_id == cluster_id,
-                cluster.c.environment == TEST_APP_ENV,
+                cluster.c.environment == TEST_FIXTURE_ENVIRONMENT,
                 cluster_role != MANAGEMENT_CLUSTER_ROLE,
             )
             .returning(cluster.c.cluster_id)
@@ -752,10 +747,6 @@ class IdentityAccessRepository(DatabaseConnection):
         resource_type: str,
         action: str,
     ) -> set[str] | None:
-        # 상세 인가와 목록 필터가 서로 다른 결과를 내지 않도록 개발 우회를 한곳에서 맞춘다.
-        if development_security_bypass_enabled():
-            return None
-
         def lookup() -> set[str] | None:
             if self.is_service_admin(user_id):
                 return None
