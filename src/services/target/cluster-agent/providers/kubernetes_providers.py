@@ -777,12 +777,14 @@ def service_summary(item: JsonObject) -> JsonObject:
 def endpoint_slice_summary(item: JsonObject) -> JsonObject:
     """Build a small endpoint slice summary with endpoint and port counts."""
     endpoint_spec = item
+    endpoints = endpoint_spec.get("endpoints")
+    ports = endpoint_spec.get("ports")
     return {
         "namespace": metadata(item).get("namespace"),
         "name": metadata(item).get("name"),
         "address_type": endpoint_spec.get("addressType"),
-        "endpoint_count": len(endpoint_spec.get("endpoints", [])),
-        "ports": endpoint_spec.get("ports", []),
+        "endpoint_count": len(endpoints) if isinstance(endpoints, list) else 0,
+        "ports": ports if isinstance(ports, list) else [],
     }
 
 

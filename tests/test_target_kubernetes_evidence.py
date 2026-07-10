@@ -52,6 +52,22 @@ def load_evidence_modules():
                 sys.modules[name] = previous_modules[name]
 
 
+def test_endpoint_slice_summary_normalizes_null_collections() -> None:
+    _, kubernetes_module = load_evidence_modules()
+
+    summary = kubernetes_module.endpoint_slice_summary(
+        {
+            "metadata": {"name": "checkout-api-abc", "namespace": "target"},
+            "addressType": "IPv4",
+            "endpoints": None,
+            "ports": None,
+        }
+    )
+
+    assert summary["endpoint_count"] == 0
+    assert summary["ports"] == []
+
+
 def test_kubernetes_snapshot_provider_collects_namespace_state(monkeypatch) -> None:
     module, kubernetes_module = load_evidence_modules()
     requests: list[httpx.Request] = []
