@@ -370,6 +370,7 @@ RCA 파생 예시는 다음과 같다.
 | 필드 | 타입 | 의미 |
 | --- | --- | --- |
 | `name` | string 또는 null | container 이름이다. |
+| `container_id` | string 또는 null | Kubernetes `containerID` 값이다. container runtime이 붙인 실행 container 식별자다. |
 | `image` | string 또는 null | container image name/tag/digest다. image rollout 문제 판단의 기본 재료다. |
 | `image_id` | string 또는 null | Kubernetes `imageID` 값이다. 현재 실행 중인 image digest 확인에 쓴다. |
 | `ready` | boolean 또는 null | container ready 여부다. |
@@ -382,10 +383,14 @@ RCA 파생 예시는 다음과 같다.
 | `finished_at` | string 또는 null | terminated state의 finishedAt이다. |
 | `last_state` | string 또는 null | Kubernetes `lastState` object의 첫 key다. 예: `terminated`. |
 | `last_state_reason` | string 또는 null | 직전 state payload의 reason이다. 예: `OOMKilled`, `Error`. |
+| `last_state_message` | string 또는 null | 직전 state payload의 message다. |
 | `last_exit_code` | number 또는 null | 직전 terminated state의 exit code다. |
+| `last_started_at` | string 또는 null | 직전 state payload의 startedAt이다. |
+| `last_finished_at` | string 또는 null | 직전 terminated state의 finishedAt이다. |
 
-주의: 현재 provider는 `lastState`의 reason과 exit code를 작은 필드로 정규화한다.
-OOMKilled 같은 과거 종료 이유가 현재 `state`에 없어도 `last_state_reason`과 `last_exit_code`를 함께 볼 수 있다.
+주의: 현재 provider는 `lastState` 원본 전체가 아니라 RCA 판단에 필요한 작은 필드만 정규화한다.
+OOMKilled 같은 과거 종료 이유가 현재 `state`에 없어도 `last_state_reason`, `last_exit_code`,
+`last_state_message`, `last_started_at`, `last_finished_at`을 함께 볼 수 있다.
 
 ### `kubernetes.events[]`
 
@@ -398,6 +403,11 @@ OOMKilled 같은 과거 종료 이유가 현재 `state`에 없어도 `last_state
 | `type` | string 또는 null | Event type이다. 예: `Warning`, `Normal`. |
 | `reason` | string 또는 null | Event reason이다. 예: `BackOff`, `FailedScheduling`, `Unhealthy`, `FailedMount`. |
 | `message` | string 또는 null | Event message다. root cause 후보를 찾는 핵심 텍스트다. |
+| `reason_summary` | object | Event reason/message에서 만든 작은 RCA 힌트다. 원본 message를 대체하지 않고 `category`, `signal`, `symptom`, `scheduling_causes`를 보조로 제공한다. 알 수 없는 reason이면 생략될 수 있다. |
+| `reason_summary.category` | string | Event 종류를 크게 묶은 값이다. 예: `scheduling`, `probe`, `container_restart`, `image_pull`, `config_or_volume_mount`, `backoff`, `oom_killed`. |
+| `reason_summary.signal` | string | RCA가 바로 볼 수 있는 신호 이름이다. 예: `FailedScheduling`, `CrashLoopBackOff`, `ImagePullBackOff`, `ErrImagePull`, `ReadinessProbeFailed`, `FailedMount`, `OOMKilled`. |
+| `reason_summary.symptom` | string | 추정 symptom 힌트다. 예: `FailedScheduling`, `CrashLoopBackOff`, `ImagePullBackOff`, `ProbeFailure`, `FailedMount`. |
+| `reason_summary.scheduling_causes` | list<string> | `FailedScheduling` message에서 뽑은 작은 원인 label 목록이다. 예: `insufficient_cpu`, `insufficient_memory`, `node_selector_mismatch`, `taint_toleration_mismatch`, `pod_count_limit`, `volume_node_affinity_conflict`. |
 | `count` | number 또는 null | 같은 event가 반복된 횟수다. 심각도와 confidence 보조 신호다. |
 | `first_timestamp` | string 또는 null | 최초 발생 시각이다. `firstTimestamp`가 없으면 `eventTime`을 쓴다. |
 | `last_timestamp` | string 또는 null | 마지막 발생 시각이다. `lastTimestamp`가 없으면 `eventTime`을 쓴다. |
@@ -780,6 +790,15 @@ detail snapshot인 `current_workload_snapshot` 단수 값으로 보낸다.
         },
         "deployment_labels": {},
         "pod_template_labels": {},
+        "pod_template_auth": {
+          "service_account_name": "checkout-api-sa",
+          "automount_service_account_token": false,
+          "image_pull_secret_refs": [
+            {
+              "name": "registry-credentials"
+            }
+          ]
+        },
         "deployment_status": {
           "observed_generation": 12,
           "desired_replicas": 3,
@@ -961,6 +980,10 @@ detail snapshot인 `current_workload_snapshot` 단수 값으로 보낸다.
 | `change_context.current_workload_snapshots[].workload` | object | workload kind, namespace, name이다. 현재 kind는 `Deployment`다. |
 | `change_context.current_workload_snapshots[].deployment_labels` | object | Deployment metadata labels다. |
 | `change_context.current_workload_snapshots[].pod_template_labels` | object | Pod template metadata labels다. |
+| `change_context.current_workload_snapshots[].pod_template_auth` | object | Pod template의 service account와 image pull secret name 요약이다. private image pull 실패와 권한 문제 후보를 보기 위한 값이다. 값이 없으면 생략될 수 있고, Secret 값은 담지 않는다. |
+| `change_context.current_workload_snapshots[].pod_template_auth.service_account_name` | string | Pod template `serviceAccountName` 값이다. |
+| `change_context.current_workload_snapshots[].pod_template_auth.automount_service_account_token` | boolean | Pod template `automountServiceAccountToken` 값이다. `false`도 의미가 있으므로 보존한다. |
+| `change_context.current_workload_snapshots[].pod_template_auth.image_pull_secret_refs[].name` | string | Pod template `imagePullSecrets[].name` 값이다. Secret 객체의 data는 읽거나 보내지 않는다. |
 | `change_context.current_workload_snapshots[].persistent_volume_claim_refs` | list<object> | Pod template volume이 참조하는 PVC volume name과 claim name 목록이다. PVC object 자체는 담지 않는다. |
 | `change_context.current_workload_snapshots[].deployment_status` | object | Deployment status의 replica count와 condition 요약이다. |
 | `change_context.current_workload_snapshots[].deployment_status.conditions` | list<object> | Deployment condition의 type/status/reason/message/time 요약이다. |
@@ -1060,7 +1083,7 @@ Provider가 이미 보내는 값은 다음과 같다.
 | 수집 시각/window | `window_start`, `kubernetes.cluster.collected_at` |
 | Pod 상태 | `kubernetes.pods[]` |
 | container 상태 | `kubernetes.pods[].containers[]` |
-| Kubernetes warning/reason/message | `kubernetes.events[]` |
+| Kubernetes warning/reason/message/reason_summary | `kubernetes.events[]` |
 | node 상태와 capacity | `kubernetes.nodes[]` |
 | workload replica 상태 | `kubernetes.workloads[]` |
 | Service/endpoint 연결 | `kubernetes.services[]`, `kubernetes.endpoints[]` |
@@ -1068,7 +1091,7 @@ Provider가 이미 보내는 값은 다음과 같다.
 | log line | `logs[].streams[].values[].line` |
 | trace search 결과 | `traces.results.*.traces` |
 | 현재 workload snapshot 목록 | `metadata.change_context.current_workload_snapshots[]` |
-| 현재 image/probe/resources/labels/status/PVC refs/revision summary | `metadata.change_context.current_workload_snapshots[].containers[]`, `deployment_labels`, `pod_template_labels`, `persistent_volume_claim_refs`, `deployment_status`, `pod_statuses`, `replicaset_revisions` |
+| 현재 image/probe/resources/labels/status/PVC refs/auth/revision summary | `metadata.change_context.current_workload_snapshots[].containers[]`, `deployment_labels`, `pod_template_labels`, `pod_template_auth`, `persistent_volume_claim_refs`, `deployment_status`, `pod_statuses`, `replicaset_revisions` |
 | Service selector와 Pod labels 매칭 결과 | `metadata.change_context.service_selector_matches[]` |
 | EndpointSlice ready endpoint 요약 | `metadata.change_context.endpoint_slice_ready_endpoints[]` |
 | ResourceQuota hard/used 요약 | `metadata.change_context.resource_quotas[]` |
@@ -1079,7 +1102,7 @@ RCA가 판단하려면 다음 값은 파생해야 한다.
 
 | 파생 값 | 파생에 쓸 필드 |
 | --- | --- |
-| `symptom` | `pods[].waiting_reasons`, `pods[].terminated_reasons`, `pods[].phase`, `events[].reason/message`, `workloads[].conditions` |
+| `symptom` | `pods[].waiting_reasons`, `pods[].terminated_reasons`, `pods[].phase`, `events[].reason/message/reason_summary`, `workloads[].conditions` |
 | `affected_resource` | `pods[].owner_kind/name`, `pods[].workload_key`, `events[].involved_kind/name`, `workloads[].kind/name` |
 | `severity` | `restart_total`, `events[].type/count`, `workloads[].unavailable_replicas`, node pressure, metric threshold, `logs[].line_count`, `trace_count` |
 | `root_cause_candidate` | symptom plus Kubernetes reason/message plus metrics/logs/traces evidence |
@@ -1105,7 +1128,7 @@ RCA가 판단하려면 다음 값은 파생해야 한다.
 | 파생 필드 | 추천 source |
 | --- | --- |
 | `resource` | `events[].involved_*`, `pods[].owner_*`, `workloads[]` 우선순위로 선택 |
-| `symptom` | `pods[].waiting_reasons`, `pods[].terminated_reasons`, `events[].reason/message`, `workloads[].conditions` |
+| `symptom` | `pods[].waiting_reasons`, `pods[].terminated_reasons`, `events[].reason/message/reason_summary`, `workloads[].conditions` |
 | `severity` | Warning event 반복 수, unavailable replica, restart_total, node pressure, error log count |
 | `first_seen_at` | `events[].first_timestamp`, `pods[].start_time`, earliest log timestamp |
 
@@ -1136,7 +1159,7 @@ RCA/evidence-worker 쪽 담당 영역이다. 이 문서는 provider가 보내는
 | Service selector와 Pod labels 매칭 결과 | 가능 | `service_selector_matches[]`에서 Service별 `match_status`, `matched_pod_count`, `matched_pods`를 제공한다. |
 | EndpointSlice ready endpoint 요약 | 가능 | `endpoint_slice_ready_endpoints[]`에서 Service별 EndpointSlice ready/not ready count와 ready target Pod를 제공한다. endpoint IP address는 제공하지 않는다. |
 | ResourceQuota hard/used 요약 | 가능 | `resource_quotas[]`에서 namespace quota 제한값과 현재 사용량을 제공한다. 권한이 없으면 빈 목록이다. |
-| imagePullSecrets | 불충분 | Pod spec imagePullSecrets summary 추가 |
+| imagePullSecrets / serviceAccountName | 가능 | `metadata.change_context.current_workload_snapshots[].pod_template_auth`에서 Secret name, service account name, automount flag를 제공한다. Secret 값은 제공하지 않는다. |
 | NetworkPolicy/Ingress | 없음 | Kubernetes provider 조회 resource 확장 |
 | PVC refs | 가능 | `metadata.change_context.current_workload_snapshots[].persistent_volume_claim_refs[]`를 제공한다. PVC object 자체는 조회하지 않는다. |
 
@@ -1149,8 +1172,7 @@ Kubernetes provider는 raw object를 그대로 넘기지 않고 summary만 보�
 | --- | --- |
 | Pod spec `containers[].resources.requests/limits` | scheduling failure, OOM, resource pressure confidence를 높인다. |
 | Pod spec `env`, `envFrom`, `volumes`, `volumeMounts` | config/env/secret missing 후보를 확인한다. |
-| Pod spec `imagePullSecrets`, serviceAccount | private registry/auth 문제를 확인한다. |
-| container `lastState` raw payload | 현재 summary는 `last_state`, `last_state_reason`, `last_exit_code`만 제공한다. 직전 종료의 전체 message/time이 필요하면 provider 확장이 필요하다. |
+| container `lastState` raw payload | 현재 summary는 직전 state의 reason/message/exit code/time을 작은 필드로 제공한다. raw payload 전체는 아직 제공하지 않는다. |
 | Deployment template image/env/resources | rollout과 현재 Pod spec의 관계를 확인한다. |
 | ReplicaSet revision annotation/status | 특정 rollout revision에서만 문제가 났는지, 해당 ReplicaSet이 준비 상태인지 확인한다. |
 | Endpoint readiness conditions | endpoint 개수만으로 ready endpoint 여부를 확정하기 어렵다. |
