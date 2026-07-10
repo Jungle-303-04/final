@@ -103,6 +103,76 @@ def test_loki_logs_are_normalized_into_agent_evidence_shape() -> None:
     assert validated.logs[0]["line_count"] == 1
     assert validated.logs[0]["streams"][0]["stream"]["namespace"] == "target"
     assert validated.logs[0]["streams"][0]["values"][0]["line"] == "node_runtime_sample"
+    assert validated.logs[0]["pattern_counts"]["probe_failed"] == 0
+    assert validated.logs[0]["severity_counts"]["unknown"] == 1
+    assert validated.logs[0]["trace_ids"] == []
+    assert validated.logs[0]["redaction_summary"] == {
+        "applied": True,
+        "redacted_line_count": 0,
+    }
+
+
+def test_loki_logs_redact_sensitive_values_and_add_rca_summaries() -> None:
+    module = load_evidence_module()
+    logs_provider = module.LokiLogsProvider.from_config(lambda _name, default: default)
+    trace_id = "4bf92f3577b34da6a3ce929d0e0e4736"
+
+    normalized = logs_provider.normalize_payload(
+        {
+            "data": {
+                "resultType": "streams",
+                "result": [
+                    {
+                        "stream": {"namespace": "target", "pod": "checkout-api-7f5c"},
+                        "values": [
+                            [
+                                "1782822589742000000",
+                                f"ERROR readiness probe failed token=secret-value trace_id={trace_id}",
+                            ],
+                            [
+                                "1782822589743000000",
+                                "WARN upstream dependency timed out Authorization: Bearer raw-token",
+                            ],
+                            [
+                                "1782822589744000000",
+                                "ErrImagePull secret=registry-token",
+                            ],
+                            [
+                                "1782822589745000000",
+                                'INFO login password="hello world"',
+                            ],
+                        ],
+                    }
+                ],
+            },
+        }
+    )
+
+    lines = [
+        value["line"]
+        for stream in normalized["streams"]
+        for value in stream["values"]
+    ]
+
+    assert lines == [
+        f"ERROR readiness probe failed token=[REDACTED] trace_id={trace_id}",
+        "WARN upstream dependency timed out Authorization: Bearer [REDACTED]",
+        "ErrImagePull secret=[REDACTED]",
+        "INFO login password=[REDACTED]",
+    ]
+    assert normalized["line_count"] == 4
+    assert normalized["pattern_counts"]["probe_failed"] == 1
+    assert normalized["pattern_counts"]["dependency_timeout"] == 1
+    assert normalized["pattern_counts"]["image_pull_error"] == 1
+    assert normalized["severity_counts"]["error"] == 1
+    assert normalized["severity_counts"]["warn"] == 1
+    assert normalized["severity_counts"]["info"] == 1
+    assert normalized["severity_counts"]["unknown"] == 1
+    assert normalized["trace_ids"] == [trace_id]
+    assert normalized["redaction_summary"] == {
+        "applied": True,
+        "redacted_line_count": 4,
+    }
 
 
 # ── Tempo 트레이스 증거 ─────────────────────────────────────
