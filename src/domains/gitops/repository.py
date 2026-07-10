@@ -1273,7 +1273,12 @@ class RepoChangeRepository(DatabaseConnection):
             updated_at=func.now(),
         )
         statement = insert.on_conflict_do_update(
-            index_elements=[table.c.watch_target_id],
+            index_elements=[
+                table.c.workspace_id,
+                table.c.repository_id,
+                table.c.branch,
+                table.c.manifest_path,
+            ],
             set_={
                 "last_seen_commit_sha": insert.excluded.last_seen_commit_sha,
                 "last_polled_at": func.now(),
@@ -1316,7 +1321,12 @@ class RepoChangeRepository(DatabaseConnection):
             updated_at=func.now(),
         )
         statement = insert.on_conflict_do_update(
-            index_elements=[table.c.watch_target_id],
+            index_elements=[
+                table.c.workspace_id,
+                table.c.repository_id,
+                table.c.branch,
+                table.c.manifest_path,
+            ],
             set_={
                 "last_polled_at": func.now(),
                 "settings": table.c.settings.op("||")(insert.excluded.settings),

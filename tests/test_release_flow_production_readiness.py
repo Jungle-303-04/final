@@ -45,6 +45,7 @@ def test_current_release_flow_production_readiness_static_checks_pass() -> None:
         "worker_topology.local_startup",
         "gitops.poll_status_recording",
         "gitops.poll_status_api",
+        "gitops.watch_source_identity_upsert",
         "metrics.api_gateway_endpoint",
         "metrics.api_gateway_scrape_annotations",
         "trace.gateway_request_logs",

@@ -1463,7 +1463,7 @@ def test_gitops_watch_poll_result_records_status_in_settings() -> None:
     compiled = recorded[0].compile(dialect=postgresql.dialect())
     sql = str(compiled)
     assert "INSERT INTO git_watch_targets" in sql
-    assert "ON CONFLICT (watch_target_id) DO UPDATE" in sql
+    assert "ON CONFLICT (workspace_id, repository_id, branch, manifest_path) DO UPDATE" in sql
     assert "last_polled_at" in sql
     assert "settings = (git_watch_targets.settings || excluded.settings)" in sql
     assert compiled.params["watch_target_id"] == "watch-1"
@@ -1471,6 +1471,39 @@ def test_gitops_watch_poll_result_records_status_in_settings() -> None:
     assert compiled.params["settings"]["poll_status"] == "failed"
     assert compiled.params["settings"]["poll_status_code"] == 403
     assert compiled.params["settings"]["poll_error_kind"] == "access_denied"
+
+
+def test_gitops_mark_watch_observed_uses_source_identity_for_upsert() -> None:
+    recorded: list[Any] = []
+
+    class StubConnection:
+        def execute(self, statement: Any) -> None:
+            recorded.append(statement)
+
+    @contextmanager
+    def stub_connection():
+        yield StubConnection()
+
+    repository = object.__new__(RepoChangeRepository)
+    repository.connection = stub_connection  # type: ignore[method-assign]
+
+    repository.mark_watch_observed(
+        "watch-derived",
+        "commit-sha",
+        workspace_id="workspace-b",
+        repository_id="repo-1",
+        branch="release",
+        manifest_path="k8s/deploy.yaml",
+    )
+
+    compiled = recorded[0].compile(dialect=postgresql.dialect())
+    sql = str(compiled)
+    assert "INSERT INTO git_watch_targets" in sql
+    assert "ON CONFLICT (workspace_id, repository_id, branch, manifest_path) DO UPDATE" in sql
+    assert "last_seen_commit_sha" in sql
+    assert compiled.params["watch_target_id"] == "watch-derived"
+    assert compiled.params["last_seen_commit_sha"] == "commit-sha"
+    assert compiled.params["workspace_id"] == "workspace-b"
 
 
 def test_gitops_workflow_status_metrics_are_workspace_scoped() -> None:

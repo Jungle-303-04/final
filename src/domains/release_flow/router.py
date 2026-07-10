@@ -101,6 +101,7 @@ SAFE_PR_EVIDENCE_MAX_AGE_HOURS_ENV = "RELEASE_FLOW_SAFE_PR_EVIDENCE_MAX_AGE_HOUR
 DEFAULT_SAFE_PR_EVIDENCE_MAX_AGE_HOURS = 24
 APPROVAL_CLOCK_SKEW_MINUTES = 5
 SAFE_PR_EVIDENCE_LOOKUP_LIMIT = 20
+PLACEHOLDER_EVIDENCE_HOSTS = {"example.com", "example.test", "localhost", "127.0.0.1", "::1"}
 
 
 @router.get(gateway_routes.RELEASE_PLANS_PATH, response_model=ReleasePlanListResponse)
@@ -2453,7 +2454,7 @@ def release_production_runbook_blockers(
         label = str(step.get("name") or step.get("application_id") or "release step")
         if url:
             blockers.append(
-                f"{label} targets production and requires an http(s) runbook_url or runbook override reason."
+                f"{label} targets production and requires a live https runbook_url or runbook override reason."
             )
         else:
             blockers.append(
@@ -2483,8 +2484,7 @@ def release_runbook_url(settings: dict[str, Any], config: dict[str, Any]) -> str
 
 
 def release_runbook_url_is_valid(value: str) -> bool:
-    normalized = value.lower()
-    return normalized.startswith("https://") or normalized.startswith("http://")
+    return release_live_evidence_url_is_valid(value)
 
 
 def release_runbook_override_reason(plan: dict[str, Any]) -> str:
@@ -2542,8 +2542,8 @@ def release_production_verification_blockers(
             continue
         label = str(step.get("name") or step.get("application_id") or "release step")
         blockers.append(
-            f"{label} targets production and requires health_check_path, "
-            "post_deploy_verification_url, or verification override reason before live dispatch."
+            f"{label} targets production and requires live https post_deploy_verification_url "
+            "or verification override reason before live dispatch."
         )
     return blockers
 
@@ -2566,7 +2566,7 @@ def release_production_verification_bypassed(
 
 def release_verification_evidence_present(settings: dict[str, Any], config: dict[str, Any]) -> bool:
     verification_url = release_verification_url(settings, config)
-    return bool(release_health_check_path(settings, config) or release_verification_url_is_valid(verification_url))
+    return release_verification_url_is_valid(verification_url)
 
 
 def release_verification_url(settings: dict[str, Any], config: dict[str, Any]) -> str:
@@ -2580,8 +2580,20 @@ def release_verification_url(settings: dict[str, Any], config: dict[str, Any]) -
 
 
 def release_verification_url_is_valid(value: str) -> bool:
-    normalized = value.lower()
-    return normalized.startswith("https://") or normalized.startswith("http://")
+    return release_live_evidence_url_is_valid(value)
+
+
+def release_live_evidence_url_is_valid(value: str) -> bool:
+    parsed = urlparse(value.strip())
+    if parsed.scheme.lower() != "https" or not parsed.netloc:
+        return False
+    host = (parsed.hostname or "").lower()
+    return not (
+        host in PLACEHOLDER_EVIDENCE_HOSTS
+        or host.endswith(".example.com")
+        or host.endswith(".example.test")
+        or host.endswith(".localhost")
+    )
 
 
 def release_verification_override_reason(plan: dict[str, Any]) -> str:
