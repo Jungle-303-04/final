@@ -111,6 +111,9 @@ def test_release_flow_smoke_workflow_can_be_called_by_deploy_workflows() -> None
         "retry_delay_seconds",
     }
     assert set(workflow_call["secrets"]) == {
+        "RELEASE_FLOW_API_BASE_URL",
+        "RELEASE_FLOW_AUTH_EMAIL",
+        "RELEASE_FLOW_AUTH_PASSWORD",
         "release_flow_api_base_url",
         "release_flow_auth_email",
         "release_flow_auth_password",
@@ -181,6 +184,9 @@ def test_release_flow_smoke_workflow_uploads_artifacts_before_failing_gate() -> 
     assert "--ci" in smoke_step["run"]
     assert "--ci-artifacts-dir artifacts/release-flow" in smoke_step["run"]
 
+    assert "Set api_base_url or RELEASE_FLOW_API_BASE_URL" in validate_step["run"]
+    assert "Set RELEASE_FLOW_AUTH_EMAIL" in validate_step["run"]
+    assert "Set RELEASE_FLOW_AUTH_PASSWORD" in validate_step["run"]
     assert "production_preflight_run_limit must be an integer between 1 and 500" in validate_step["run"]
     assert "production_preflight_run_limit must be between 1 and 500" in validate_step["run"]
     assert "request_timeout_seconds must be a number between 1 and 120" in validate_step["run"]

@@ -182,6 +182,15 @@ run-name: Release Flow Smoke / ${{ inputs.github_environment || 'production' }} 
       release_flow_auth_password:
         description: Release-flow smoke account password.
         required: false
+      RELEASE_FLOW_API_BASE_URL:
+        description: API base URL uppercase alias for repository secret inheritance.
+        required: false
+      RELEASE_FLOW_AUTH_EMAIL:
+        description: Release-flow smoke account email uppercase alias for repository secret inheritance.
+        required: false
+      RELEASE_FLOW_AUTH_PASSWORD:
+        description: Release-flow smoke account password uppercase alias for repository secret inheritance.
+        required: false
     outputs:
       release_smoke_ok:
         description: Whether every release-flow smoke check passed.
@@ -247,6 +256,18 @@ jobs:
 
       - name: Validate workflow inputs
         run: |
+          if [ -z "$API_BASE_URL" ]; then
+            echo "::error title=Missing release-flow API URL::Set api_base_url or RELEASE_FLOW_API_BASE_URL before running production smoke."
+            exit 1
+          fi
+          if [ -z "$AUTH_EMAIL" ]; then
+            echo "::error title=Missing release-flow auth email::Set RELEASE_FLOW_AUTH_EMAIL before running production smoke."
+            exit 1
+          fi
+          if [ -z "$AUTH_PASSWORD" ]; then
+            echo "::error title=Missing release-flow auth password::Set RELEASE_FLOW_AUTH_PASSWORD before running production smoke."
+            exit 1
+          fi
           if ! [[ "$PRODUCTION_PREFLIGHT_RUN_LIMIT" =~ ^[0-9]+$ ]]; then
             echo "::error title=Invalid production_preflight_run_limit::production_preflight_run_limit must be an integer between 1 and 500."
             exit 1
