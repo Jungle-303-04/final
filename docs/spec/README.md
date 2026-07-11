@@ -90,9 +90,11 @@
 
 - [frontend/CODEX-BRIEFING-20260711](frontend/CODEX-BRIEFING-20260711.md)
 - [frontend/codex-directive-24h-20260711](frontend/codex-directive-24h-20260711.md)
+- [frontend/codex-directive-goalmode-20260711](frontend/codex-directive-goalmode-20260711.md)
 - [frontend/codex-directive-reference-pivot-20260711](frontend/codex-directive-reference-pivot-20260711.md)
 - [frontend/codex-progress-20260711](frontend/codex-progress-20260711.md)
 - [frontend/product-data-contract](frontend/product-data-contract.md)
+- [frontend/reference-feature-inventory](frontend/reference-feature-inventory.md)
 - [frontend/reference-porting-contract](frontend/reference-porting-contract.md)
 - [frontend/topology-engine](frontend/topology-engine.md)
 - [frontend/topology-message-action-schema](frontend/topology-message-action-schema.md)
