@@ -166,6 +166,43 @@ stale/partial/RBAC, LOD, 보안, 검증처럼 뷰와 무관한 장기 규칙이 
 주의: 500kB 초과 chunk warning은 기존 성능 과제로 유지
 ```
 
+### 2026-07-11 surface release와 transport guard 강화
+
+- 보강 커밋: `d5cf111c0`
+- route 등록 단어를 target runtime capability와 분리해 `ProductSurfaceId`, `releasedSurfaceIds`로
+  고정했다. API 완료 여부는 screen release 여부를 결정하고, cluster별 permission/capability는
+  release된 screen 내부 control 노출만 결정한다.
+- `ProductShell`은 mobile도 동일한 collapsed sidebar 계약을 쓰도록 `defaultSidebarCollapsed`를
+  테스트 가능한 prop으로 분리했고, toggle label을 접힘/펼침 상태에 맞춰 바꾼다.
+- `apiBoundary.test.ts`는 `API 완성:` 기록의 hash가 실제 조상 커밋인지, 해당 커밋의 API barrel이
+  endpoint를 export하는지, 같은 커밋의 test diff가 endpoint 이름을 언급하는지까지 검사한다.
+- `product-design-guard.mjs`는 제품 API 폴더 밖의 직접 transport 사용을 막는다. direct `fetch`,
+  `WebSocket`, `EventSource`, `XMLHttpRequest`, `navigator.sendBeacon`, global alias, computed
+  member, `Reflect.get` 우회를 모두 violation으로 판정한다.
+- approval action API 요청 큐에 `grantApproval`, `rejectApproval`을 추가했고, Issues 목록은 별도
+  `listRcaIncidents`가 아니라 범용 timeline 함수 재사용으로 정리했다.
+
+```text
+명령: cd references/ui-layer-lab && npm run check
+결과: PASS
+  - TypeScript: PASS
+  - ESLint: PASS
+  - Vitest: 7 files, 35 tests PASS
+  - product design guard: 40 files PASS
+  - UI catalog source audit: 482 previews PASS, upstream 21e4ceb
+  - Vite production build: PASS
+주의: 500kB 초과 chunk warning은 기존 성능 과제로 유지
+
+명령: uv run pytest tests/test_docs_index.py tests/test_bruno_collection.py -q
+결과: PASS — 17 passed
+
+명령: make manifest-check
+결과: PASS — management manifest objects 56, target manifest objects 18
+```
+
+이 보강도 새 endpoint 완료를 의미하지 않는다. `API 완성:` 기록과 contract test 근거가 생긴 함수만
+`app/apiComposition.ts`에서 정적 named import할 수 있다.
+
 ### 런타임 조사 안전 사고
 
 - read-only 조사를 맡긴 browser 작업자가 Workload의 confirmation 존재 여부를 확인하려다
