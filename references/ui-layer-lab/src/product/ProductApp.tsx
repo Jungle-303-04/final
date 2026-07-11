@@ -7,13 +7,7 @@ import { ProductRouter } from "./app/ProductRouter";
 import "./styles/tokens.css";
 import "./styles/foundation.css";
 
-export interface ProductAppProps {
-  compositionFactory?: typeof createApiComposition;
-}
-
-export default function ProductApp({
-  compositionFactory = createApiComposition,
-}: ProductAppProps) {
+export default function ProductApp() {
   useEffect(() => {
     document.title = "KubeHeal";
   }, []);
@@ -27,18 +21,14 @@ export default function ProductApp({
         storageKey="kubeheal-theme"
         themes={["light", "dark"]}
       >
-        <ProductRuntime compositionFactory={compositionFactory} />
+        <ProductRuntime />
       </ThemeProvider>
     </ProductErrorBoundary>
   );
 }
 
-function ProductRuntime({
-  compositionFactory,
-}: {
-  compositionFactory: typeof createApiComposition;
-}) {
-  const [composition] = useState(compositionFactory);
+function ProductRuntime() {
+  const [composition] = useState(createApiComposition);
 
   return (
     <BrowserRouter>
