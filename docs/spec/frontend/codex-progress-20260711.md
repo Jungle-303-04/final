@@ -318,13 +318,15 @@ P2를 완료로 판정한다. 다음 단계는 `final-questions.md`에 남은 �
 ## 2026-07-11 제품 오류 경계와 안전 복구 보강
 
 - 구현 커밋: `3d3c2cb94`
+- 후속 정리 커밋: `f9586d0b6`
 - `ProductApp`은 `ProductErrorBoundary`로 runtime을 감싸고, composition initialization failure를
-  raw stack 없이 `ProductStateScreen kind="error"`로 표시한다.
+  raw stack 없이 `ProductStateScreen kind="error"`로 표시한다. 실패 검증은 public prop을 열지 않고
+  private composition module mock으로 분리했다.
 - retry는 사용자 클릭으로만 child runtime을 remount한다. persistent crash는 focus, online,
   offline, visibilitychange, timer 진행에도 자동 retry loop나 fetch, XMLHttpRequest, sendBeacon,
   EventSource, 제품 WebSocket 호출을 만들지 않는다.
-- composition은 mounted runtime당 한 번만 생성된다. rerender는 API composition을 다시 만들지
-  않고, 명시 retry 후에만 새 runtime을 생성한다.
+- composition은 `useState(createApiComposition)` lazy initializer로 mounted runtime 안에 고정된다.
+  명시 retry 후에만 새 runtime을 생성한다.
 - 이 변경은 새 endpoint 완료가 아니며 `API 완성:` 0행과 network-silent release gate 계약을 유지한다.
 
 ```text
@@ -332,12 +334,12 @@ P2를 완료로 판정한다. 다음 단계는 `final-questions.md`에 남은 �
 결과: PASS
   - TypeScript: PASS
   - ESLint: PASS
-  - Vitest: 14 files, 73 tests PASS
-  - product design guard: 60 files PASS
+  - Vitest: 15 files, 72 tests PASS
+  - product design guard: 61 files PASS
   - UI catalog source audit: 482 previews PASS, upstream 21e4ceb
   - Vite production build: PASS
   - ProductApp CSS: 42.69 kB (gzip 8.49 kB)
-  - ProductApp JS: 68.89 kB (gzip 23.85 kB)
+  - ProductApp JS: 68.82 kB (gzip 23.84 kB)
 주의: 500kB 초과 chunk warning은 reference catalog 기존 성능 과제로 유지
 
 명령: cd references/ui-layer-lab && npm run visual-product
