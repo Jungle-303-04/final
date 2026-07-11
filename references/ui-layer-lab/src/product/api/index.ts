@@ -19,6 +19,10 @@ export { getCluster } from "./cluster-detail";
 export { getClusterConnectionStatus } from "./cluster-connection";
 export { getInventorySummary } from "./inventory-summary";
 export {
+  listInventoryEvents,
+  type InventoryEventListOptions,
+} from "./inventory-events";
+export {
   getClusterSummary,
   getClusterNodesSummary,
   getNodePodsSummary,
@@ -73,6 +77,10 @@ export {
   inventorySummarySchema,
   type InventorySummary,
 } from "./inventory-summary-schemas";
+export {
+  inventoryEventListSchema,
+  type InventoryEventList,
+} from "./inventory-events-schemas";
 export {
   clusterSummaryDetailSchema,
   clusterNodesSummarySchema,
