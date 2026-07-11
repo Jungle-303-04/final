@@ -96,5 +96,4 @@ export {
   EmptyHeader,
   EmptyMedia,
   EmptyTitle,
-  emptyMediaVariants,
 };

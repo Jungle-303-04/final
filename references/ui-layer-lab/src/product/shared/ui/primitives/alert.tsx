@@ -66,4 +66,4 @@ function AlertAction({ className, ...props }: ComponentProps<"div">) {
   );
 }
 
-export { Alert, AlertAction, AlertDescription, AlertTitle, alertVariants };
+export { Alert, AlertAction, AlertDescription, AlertTitle };

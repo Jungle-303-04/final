@@ -25,6 +25,7 @@ beforeEach(() => {
 
 afterEach(() => {
   cleanup();
+  vi.useRealTimers();
   document.documentElement.className = "";
   window.localStorage.clear();
 });
@@ -57,6 +58,7 @@ describe("ProductShell keyboard and help interaction", () => {
     await user.keyboard("g");
     await user.keyboard("i");
     expect(screen.getByText("Issue content")).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "Issues", level: 1 })).toBeTruthy();
     expect(screen.getByRole("link", { name: "Issues" }).getAttribute("aria-current")).toBe("page");
     await waitFor(() => expect(document.activeElement?.id).toBe("product-main"));
 
@@ -84,6 +86,7 @@ describe("ProductShell keyboard and help interaction", () => {
   });
 
   it("keeps the production release gate shell-free and network-silent without API approvals", async () => {
+    vi.useFakeTimers();
     const fetchSpy = vi.fn();
     const webSocketSpy = vi.fn();
     const eventSourceSpy = vi.fn();
@@ -103,7 +106,13 @@ describe("ProductShell keyboard and help interaction", () => {
       expect(screen.queryByRole("navigation")).toBeNull();
       expect(screen.queryByRole("button", { name: "키보드 단축키" })).toBeNull();
 
-      await userEvent.setup().keyboard("?gi");
+      window.dispatchEvent(new KeyboardEvent("keydown", { key: "?" }));
+      window.dispatchEvent(new Event("focus"));
+      window.dispatchEvent(new Event("online"));
+      window.dispatchEvent(new Event("offline"));
+      document.dispatchEvent(new Event("visibilitychange"));
+      vi.advanceTimersByTime(300_000);
+      await Promise.resolve();
       expect(fetchSpy).not.toHaveBeenCalled();
       expect(webSocketSpy).not.toHaveBeenCalled();
       expect(eventSourceSpy).not.toHaveBeenCalled();
