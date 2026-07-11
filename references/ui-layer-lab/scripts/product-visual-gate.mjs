@@ -339,6 +339,9 @@ async function assertForcedColors(page, label) {
       completeProgressIndicator: document.querySelector(
         "[data-visual-progress='complete'] [data-slot='progress-indicator']",
       ),
+      completeProgressTrack: document.querySelector(
+        "[data-visual-progress='complete'] [data-slot='progress-track']",
+      ),
       indeterminateProgressIndicator: document.querySelector(
         "[data-visual-progress='indeterminate'] [data-slot='progress-indicator']",
       ),
@@ -358,6 +361,7 @@ async function assertForcedColors(page, label) {
       focusTarget,
       disabledButton,
       completeProgressIndicator,
+      completeProgressTrack,
       indeterminateProgressIndicator,
     } = elements;
     focusTarget.focus();
@@ -369,6 +373,7 @@ async function assertForcedColors(page, label) {
     const focusStyle = getComputedStyle(focusTarget);
     const disabledStyle = getComputedStyle(disabledButton);
     const completeProgressStyle = getComputedStyle(completeProgressIndicator);
+    const completeProgressTrackStyle = getComputedStyle(completeProgressTrack);
     const indeterminateProgressStyle = getComputedStyle(indeterminateProgressIndicator);
     const selectionStyle = getComputedStyle(heading, "::selection");
     const marker = status.querySelector("[aria-hidden='true']");
@@ -463,11 +468,18 @@ async function assertForcedColors(page, label) {
       disabledVisible: disabledButton.getBoundingClientRect().width > 0,
       completeProgressWidth: completeProgressIndicator.getBoundingClientRect().width,
       indeterminateProgressAnimationName: indeterminateProgressStyle.animationName,
+      indeterminateProgressBackgroundClip: indeterminateProgressStyle.backgroundClip,
+      indeterminateProgressBorderColor: indeterminateProgressStyle.borderTopColor,
       indeterminateProgressBorderStyle: indeterminateProgressStyle.borderTopStyle,
       indeterminateProgressBorderWidth: Number.parseFloat(indeterminateProgressStyle.borderTopWidth),
       indeterminateProgressOpacity: effectiveOpacity(indeterminateProgressIndicator),
       indeterminateProgressWidth: indeterminateProgressIndicator.getBoundingClientRect().width,
       progressTrackWidth: completeProgressIndicator.parentElement?.getBoundingClientRect().width ?? 0,
+      progressTrackBackground: effectiveBackground(completeProgressTrack),
+      progressTrackBorderColor: completeProgressTrackStyle.borderTopColor,
+      progressTrackBorderStyle: completeProgressTrackStyle.borderTopStyle,
+      progressTrackBorderWidth: Number.parseFloat(completeProgressTrackStyle.borderTopWidth),
+      progressTrackOpacity: effectiveOpacity(completeProgressTrack),
       completeProgressVisible: completeProgressStyle.display !== "none"
         && completeProgressStyle.visibility !== "hidden",
       markerBackground: effectiveBackground(marker),
@@ -493,6 +505,7 @@ async function assertForcedColors(page, label) {
     focus: result.focusOpacity,
     heading: result.headingOpacity,
     indeterminateProgress: result.indeterminateProgressOpacity,
+    progressTrack: result.progressTrackOpacity,
     selection: result.selectionOpacity,
     status: result.markerOpacity,
     surface: result.surfaceOpacity,
@@ -510,6 +523,20 @@ async function assertForcedColors(page, label) {
   assertContrast(label, "focus outline", result.focusOutlineColor, result.focusBackground, 3);
   assertContrast(label, "disabled text", result.disabledColor, result.disabledBackground, 3);
   assertContrast(label, "status marker", result.markerBorderColor, result.markerBackground, 3);
+  assertContrast(
+    label,
+    "progress track border",
+    result.progressTrackBorderColor,
+    result.progressTrackBackground,
+    3,
+  );
+  assertContrast(
+    label,
+    "indeterminate progress border",
+    result.indeterminateProgressBorderColor,
+    result.progressTrackBackground,
+    3,
+  );
   assertContrast(
     label,
     "selection",
@@ -531,19 +558,25 @@ async function assertForcedColors(page, label) {
     || completeRatio < 0.98
     || indeterminateRatio < 0.25
     || indeterminateRatio > 0.45
+    || result.indeterminateProgressBackgroundClip !== "padding-box"
     || result.indeterminateProgressBorderStyle !== "dashed"
     || result.indeterminateProgressBorderWidth < 1
+    || result.progressTrackBorderStyle === "none"
+    || result.progressTrackBorderWidth < 1
     || result.indeterminateProgressAnimationName !== "none") {
     throw new Error(
       `${label}: indeterminate progress must remain a static partial dashed shape in reduced-motion forced-colors `
       + JSON.stringify({
         animationName: result.indeterminateProgressAnimationName,
+        backgroundClip: result.indeterminateProgressBackgroundClip,
         borderStyle: result.indeterminateProgressBorderStyle,
         borderWidth: result.indeterminateProgressBorderWidth,
         completeRatio,
         completeWidth: result.completeProgressWidth,
         ratio: indeterminateRatio,
         trackWidth: result.progressTrackWidth,
+        trackBorderStyle: result.progressTrackBorderStyle,
+        trackBorderWidth: result.progressTrackBorderWidth,
       }),
     );
   }

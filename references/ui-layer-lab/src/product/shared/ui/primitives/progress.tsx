@@ -26,7 +26,9 @@ type ProtectedProgressProps =
   | "style"
   | "value";
 
-type ProgressBaseProps = Omit<ProgressPrimitive.Root.Props, ProtectedProgressProps> & {
+type ProgressPassthroughProps = Omit<ProgressPrimitive.Root.Props, ProtectedProgressProps>;
+
+type ProgressBaseProps = ProgressPassthroughProps & {
   "aria-hidden"?: never;
   className?: string;
   value: number | null;
@@ -36,6 +38,24 @@ type ProgressBaseProps = Omit<ProgressPrimitive.Root.Props, ProtectedProgressPro
 export type ProgressProps = ProgressBaseProps & ProgressAccessibleName;
 
 const INDETERMINATE_VALUE_TEXT = "진행 상태를 확인하는 중";
+const RUNTIME_PROTECTED_PROGRESS_PROPS = [
+  "aria-hidden",
+  "aria-valuemax",
+  "aria-valuemin",
+  "aria-valuenow",
+  "aria-valuetext",
+  "children",
+  "dangerouslySetInnerHTML",
+  "format",
+  "getAriaValueText",
+  "locale",
+  "max",
+  "min",
+  "render",
+  "role",
+  "style",
+  "value",
+] as const;
 
 export function Progress({
   "aria-label": ariaLabel,
@@ -45,6 +65,7 @@ export function Progress({
   valueText,
   ...rootProps
 }: ProgressProps) {
+  const sanitizedRootProps = sanitizeRootProps(rootProps);
   const normalizedValue = normalizeProgressValue(value);
   const normalizedLabel = normalizeRequiredText(
     ariaLabel ?? ariaLabelledBy,
@@ -59,7 +80,7 @@ export function Progress({
 
   return (
     <ProgressPrimitive.Root
-      {...rootProps}
+      {...sanitizedRootProps}
       aria-label={ariaLabel === undefined ? undefined : normalizedLabel}
       aria-labelledby={ariaLabelledBy === undefined ? undefined : normalizedLabel}
       aria-valuemax={100}
@@ -74,16 +95,24 @@ export function Progress({
       value={normalizedValue}
     >
       <ProgressPrimitive.Track
-        className="relative h-2 w-full overflow-hidden rounded-full bg-secondary"
+        className="relative h-2 w-full overflow-hidden rounded-full bg-secondary forced-colors:border forced-colors:border-current"
         data-slot="progress-track"
       >
         <ProgressPrimitive.Indicator
-          className="h-full rounded-full bg-primary transition-[width] duration-300 ease-out data-indeterminate:w-1/3 data-indeterminate:border data-indeterminate:border-dashed data-indeterminate:border-primary data-indeterminate:motion-safe:animate-pulse data-indeterminate:motion-reduce:animate-none motion-reduce:transition-none forced-colors:bg-[Highlight] forced-colors:data-indeterminate:animate-none forced-colors:data-indeterminate:border-[Highlight]"
+          className="h-full rounded-full bg-primary bg-clip-padding transition-[width] duration-300 ease-out data-indeterminate:w-1/3 data-indeterminate:border data-indeterminate:border-dashed data-indeterminate:border-primary data-indeterminate:motion-safe:animate-pulse data-indeterminate:motion-reduce:animate-none motion-reduce:transition-none forced-colors:bg-[Highlight] forced-colors:data-indeterminate:animate-none forced-colors:data-indeterminate:border-[Highlight]"
           data-slot="progress-indicator"
         />
       </ProgressPrimitive.Track>
     </ProgressPrimitive.Root>
   );
+}
+
+function sanitizeRootProps(rootProps: object): ProgressPassthroughProps {
+  const sanitized = { ...rootProps } as Record<string, unknown>;
+  for (const protectedProp of RUNTIME_PROTECTED_PROGRESS_PROPS) {
+    Reflect.deleteProperty(sanitized, protectedProp);
+  }
+  return sanitized as unknown as ProgressPassthroughProps;
 }
 
 function normalizeProgressValue(value: number | null): number | null {

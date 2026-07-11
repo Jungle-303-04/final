@@ -96,6 +96,31 @@ describe("product Progress primitive", () => {
       <Progress aria-label="배포" value={20} valueText="   " />,
     )).toThrow("Progress valueText must be non-empty when provided");
   });
+
+  it("drops unsafe runtime attempts to replace semantics or internal structure", () => {
+    const unsafeProps = {
+      "aria-label": "안전한 진행률",
+      "aria-hidden": true,
+      "aria-valuemax": 999,
+      children: "주입된 자식",
+      dangerouslySetInnerHTML: { __html: "<span>주입된 HTML</span>" },
+      max: 999,
+      min: -999,
+      role: "none",
+      style: { display: "none" },
+      value: 50,
+    } as unknown as Parameters<typeof Progress>[0];
+
+    const { container } = render(<Progress {...unsafeProps} />);
+
+    const progress = screen.getByRole("progressbar", { name: "안전한 진행률" });
+    expect(progress.getAttribute("aria-hidden")).toBeNull();
+    expect(progress.getAttribute("aria-valuemin")).toBe("0");
+    expect(progress.getAttribute("aria-valuemax")).toBe("100");
+    expect(progress.getAttribute("style")).toBeNull();
+    expect(container.textContent).not.toContain("주입된");
+    expect(container.querySelector('[data-slot="progress-track"]')).toBeTruthy();
+  });
 });
 
 function assertProgressTypeContracts() {
