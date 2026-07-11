@@ -10,7 +10,7 @@ last_verified: 2026-07-11
 
 ## 0. 권한과 literal 규칙
 
-이 문서는 topology visual/motion의 구현 예정 numeric contract다. 현재 repo의 실제 코드와 통과한 테스트가 source of truth이며, 아래 token과 policy가 현 코드에 없거나 값이 다르면 구현 완료가 아니라 후속 작업 기준으로만 읽는다. 다른 문서나 component literal이 임시값을 쓰는 경우도 실제 구현과 테스트에서 확인한 뒤 반영한다.
+이 문서는 topology visual/motion의 구현 예정 numeric contract다. 현재 repo의 실제 코드와 통과한 테스트가 source of truth이며, 아래 token과 policy가 현 코드에 없거나 값이 다르면 구현 완료가 아니라 후속 작업 기준으로만 읽는다. 실측으로 값을 바꿀 때도 versioned policy와 회귀 기준, 구현, 테스트를 같은 변경에서 동기화한다.
 
 모든 수치와 시각 의미는 `TopologyVisualMotionPolicy/v1` 한 곳에서 소유한다. React component, renderer branch, CSS selector에 값·색상·duration literal을 중복하지 않는다.
 
@@ -237,7 +237,7 @@ Worker가 CSS px rect와 실제 text measurement를 함께 만족할 때만 상�
 
 - non-empty health group 하나가 connector 하나이고 connector 하나가 정확히 ribbon-shaped band 하나다. member별 분기, 중앙점 결합, 같은 group의 중복 ribbon을 금지한다.
 - target face는 group 첫 target cube의 block-start부터 마지막 cube의 block-end까지다. source face는 target group face 높이 비율로 segment를 나눈다.
-- source segment는 source face 전체를 gap/overlap 없이 정확히 partition한다. CSS pixel 반올림 residual은 fractional remainder가 가장 큰 group에 먼저 배정하고 tie는 health order 뒤 group key 순으로 끊는다.
+- source segment는 source face 전체를 gap/overlap 없이 정확히 partition한다. 비율 입력은 settled target group의 block-start부터 block-end까지의 face block-size이며, member 수는 접근성 label의 `memberCount`에만 쓴다. CSS pixel 반올림 residual은 fractional remainder가 가장 큰 group에 먼저 배정하고 tie는 health order 뒤 group key 순으로 끊는다.
 - target group이 `g`개이면 source segment와 focus face connector도 정확히 `g`개다. 관련 item이 0개이면 둘 다 0개다. 관련 없는 `N`에는 connector가 없다.
 - band 두께는 양쪽 결합 face의 기하적 결과이며 traffic, request rate, byte rate, latency, weight가 아니다. label/accessible name에 `관련 {memberCount}개 · 집합 크기`를 표시한다.
 - fill은 source health token에서 target group health token으로 향하는 static gradient이고 relation plane icon/pattern을 member label에 보존한다. `observed` palette token을 사용하지 않는다.
@@ -349,6 +349,8 @@ ease = cubic-bezier(0.2,0.8,0.2,1)
 | focusRibbon ease | `cubic-bezier(0.33,1,0.68,1)` | connector reveal |
 
 `focusCubeStagger`의 정렬 key는 base rect의 logical inline 좌표, block 좌표, `entityKey` 순이며 배열 index나 random delay를 사용하지 않는다. 각 cube의 duration은 720ms이고 `delay=min(rank×24ms,300ms)`다. 따라서 connector 시작 gate는 고정 `780ms`가 아니라 실제 마지막 cube의 settled signal이다.
+
+focus geometry가 준비된 시점부터 마지막 cube settle까지의 upper bound는 `720ms + 300ms = 1,020ms`와 최대 1 animation frame이다. connector completion은 이 morph budget에 포함하지 않는다. group 수를 `G`라 할 때 마지막 cube settle부터 마지막 connector completion까지는 `G=0`이면 0ms, 그 외 `560ms + (G-1)×110ms`와 최대 1 animation frame이며 health group은 최대 5개다.
 
 Map → focus-sankey:
 
@@ -527,7 +529,7 @@ Handoff:
 3. map cube의 기본 activation이 focus-sankey이고 rail/fold capability false일 때 listener/control/progress state가 없는지 검증.
 4. 임의 `U`, source, relation multigraph, health에 대해 `right.length+1=U.size`, right unique, `A/N` disjoint·exhaustive, health group partition을 property test.
 5. non-empty health group 수 = source face segment 수 = `focus-face-connector` 수 = rendered band 수이고, group 하나당 band가 정확히 하나인지 검증.
-6. source face segment의 gap/overlap이 0이고 rounded height 합이 source face height와 정확히 같은지 residual/tie 입력을 포함해 검증.
+6. source face segment가 settled target group block-size 비율과 일치하고 gap/overlap이 0이며 rounded height 합이 source face height와 정확히 같은지 residual/tie와 서로 다른 member-count/block-size 입력을 포함해 검증.
 7. focus face connector에 flow width cohort, particle, speed, latency, observed palette가 적용되지 않고 observed-flow ribbon과 runtime discriminant가 다른지 검증.
 8. fake clock으로 focusMorph 720ms, focusRibbonDraw 560ms, cube stagger 24ms/cap 300ms, connector stagger 110ms 및 `마지막 cube settle → connector draw` gate를 검증.
 9. focus 진입/복귀/다른 source retarget/stream coalesced retarget 각 중간 frame에서 entityKey가 같고 rect jump가 0인지 검증.

@@ -17,7 +17,7 @@ last_verified: 2026-07-11
 - `topology-message-action-schema.md`: message/reducer/effect/snapshot/delta/action wire protocol.
 - `topology-visual-motion-tokens.md`: light/dark/high-contrast, geometry, gesture, motion, renderer handoff의 수치 계약.
 
-구현할 때는 제품 사용자 의미를 `product-data-contract.md`, protocol type/ordering을 message adjunct, visual/motion 수치를 visual adjunct에서 추적한다. 실제 충돌 판정은 코드와 통과한 테스트, 승인된 schema 변경 절차를 기준으로 한다.
+구현할 때는 제품 사용자 의미를 `product-data-contract.md`, protocol type/ordering을 message adjunct, visual/motion 수치를 visual adjunct에서 추적한다. 실제 충돌 판정은 현재 코드와 통과한 테스트, 승인된 schema 변경 절차를 기준으로 한다.
 
 이 문서가 고정하는 결과는 다음과 같다.
 
@@ -486,7 +486,7 @@ references/ui-layer-lab/src/product/features/topology
 
 이 mapping은 `AGENTS.md`의 `app → pages → features → shared`, `feature → product/api`, `product/api → shared` 방향을 유지한다. `@product/topology-*` physical package 추출은 별도 ADR에서 workspace tool, public API, versioning, license, build를 승인한 뒤에만 수행한다. Headless engine은 product import가 없도록 작성해 추출 가능성을 유지한다.
 
-기존 backend route/Pydantic contract는 현재 구현 사실을 확인하는 근거다. 이 문서의 신규 topology contract가 이미 구현됐다고 주장하지 않는다. 구현 순서는 frontend consumer contract 검토 → backend ADR/OpenAPI → frontend acceptance → generated schema → live adapter이며, source-of-truth 경계를 바꾸는 경우에는 같은 변경에서 실제 코드와 테스트 기준을 함께 갱신한다.
+기존 backend route/Pydantic contract는 현재 구현 사실을 확인하는 근거다. 이 문서의 신규 topology contract가 이미 구현됐다고 주장하지 않으며, 구현 순서는 frontend consumer contract 검토 → backend ADR/OpenAPI → frontend acceptance → generated schema → live adapter다. 계약 변경은 schema revision과 함께 승인하고 같은 변경에서 코드·test traceability를 동기화한다.
 
 ### 5.1 Dependency rules
 
@@ -539,22 +539,17 @@ Cross-contract import ownership은 다음으로 고정한다.
 
 | Type | Owner/generated module |
 |---|---|
-| `ConsumerEnvelope`, `StatusReason` | `product-data-contract.md` canonical consumer core |
+| `ConsumerEnvelope`, `DataOrigin`, `DecimalString`, `StatusReason` | `product-data-contract.md` canonical consumer core |
 | `OperationReceiptLookupResult`, `OperationStatusCut`, `GitOpsOperationEvent` | `product-data-contract.md` operation core |
 | `TopologyMessageV1.*`, `ResumeCursor`, `StreamStart` | `topology-message-action-schema.md` generated protocol module |
 
 이 표의 type을 각 문서나 adapter에서 재선언하지 않는다. generated build는 같은 schema revision의 module import로 연결하고 순환 import가 생기면 common canonical core로 추출한다.
 
 ```ts
-type DataOrigin =
-  | { kind: "live"; adapterId: string; endpointId: string }
-  | { kind: "synthetic"; adapterId: string; datasetId: string; seed: string }
-  | { kind: "replay"; adapterId: string; recordingId: string }
-
 interface TopologyGateway {
   readonly configuredOrigin: DataOrigin
   getCatalog(signal: AbortSignal): Promise<ConsumerEnvelope<TopologyCatalogResponse>>
-  plan(query: TopologyQuery, signal: AbortSignal): Promise<ConsumerEnvelope<QueryPlanResponse>>
+  plan(query: TopologyPlanQuery, signal: AbortSignal): Promise<ConsumerEnvelope<QueryPlanResponse>>
   getSnapshot(request: TopologySnapshotRequest, signal: AbortSignal): Promise<SnapshotEnvelope>
   openStream(request: StreamSubscription, signal: AbortSignal): AsyncIterable<StreamEnvelope>
   getEntityDetail(request: EntityDetailRequest, signal: AbortSignal): Promise<ConsumerEnvelope<EntityDetail>>
@@ -946,8 +941,8 @@ Focus membership과 layout은 다음 불변조건을 모두 만족해야 commit�
 4. source와 허용된 canonical relation이 하나 이상 연결된 item만 connector member다. 여러 relation이 있어도 item은 한 번만 배치하고 모든 relation key/evidence는 item과 inspector에 보존한다.
 5. connector는 `unhealthy > degraded > unknown > neutral > healthy` 순으로 배치하며 같은 group 안은 projection order 후 entityKey로 결정적으로 정렬한다.
 6. 관계가 없는 item도 right column 아래의 `unrelatedEntityKeys`에 남고 dimmed 처리할 뿐 숨기지 않는다.
-7. 비어 있지 않은 health connector마다 focus face connector를 정확히 하나 만든다. source 오른쪽 face partition의 합은 정확히 1이며 decimal residual은 §10의 largest-remainder/tie-break 규칙으로 배정한다.
-8. connector의 source 쪽 경계는 face partition, target 쪽 경계는 group 첫 item의 top부터 마지막 item의 bottom까지다. center-point attachment는 금지한다.
+7. 비어 있지 않은 health connector마다 focus face connector를 정확히 하나 만든다. source 오른쪽 face partition은 settled target geometry에서 group 첫 item의 block-start부터 마지막 item의 block-end까지 측정한 face block-size 비율로 계산하고 합은 정확히 1이다. decimal residual은 §10의 largest-remainder/tie-break 규칙으로 배정하며 member 수는 label에만 쓰고 비율 입력으로 사용하지 않는다.
+8. connector의 source 쪽 경계는 이 face partition, target 쪽 경계는 같은 settled group block-start/block-end다. center-point attachment와 member-count 기반 face 분할은 금지한다.
 9. focus face connector는 presentation geometry다. `CanonicalRelation` store, relation count, evidence authority, traffic legend, traffic metric 합계에 삽입하지 않는다.
 10. entitlement/schema epoch가 바뀌면 transition을 cancel하고 replan/resync한다. 일반 delta는 canonical reducer에 계속 적용하되 transition이 끝날 때까지 presentation universe/revision을 capture하고, settle 직후 latest frame으로 interruptible retarget한다.
 
@@ -1104,8 +1099,14 @@ type TopologyProjection = {
   lodPolicyId: string
 }
 
+type TopologyPlanQuery = {
+  schemaVersion: "topology-plan-query/v1"
+  data: TopologyDataQuery
+  projection: TopologyProjection
+}
+
 type TopologyQuery = {
-  schemaVersion: "topology-query/v1"
+  schemaVersion: "topology-view-query/v1"
   data: TopologyDataQuery
   projection: TopologyProjection
   presentation: TopologyPresentation
@@ -1117,6 +1118,8 @@ type QueryHashes = {
   presentationHash: string
   shareHash: string
 }
+
+type TopologyPlanHashes = Pick<QueryHashes, "dataQueryHash" | "projectionHash">
 ```
 
 ### 9.3 Parsing과 boolean 규칙
@@ -1128,14 +1131,14 @@ type QueryHashes = {
 - exact resource 선택은 focus와 identity filter를 동시에 명시한다.
 - Kind sidebar 클릭도 같은 Query AST에 Kind filter를 dispatch한다.
 - filter 결과의 ancestor는 `membershipRole="ancestor-context"`로 유지할 수 있다.
-- query canonicalizer는 field/order/weight/window를 정규화하고 네 hash를 만든다.
+- query canonicalizer는 field/order/weight/window를 정규화하고 네 hash를 만든다. `TopologyQuery`는 URL/로컬 view state이고, effect runner는 그중 data/projection만 `TopologyPlanQuery`로 투영해 backend planner에 보낸다. presentation은 backend request, plan cache key, capability subject에 포함하지 않는다.
 - `dataQueryHash`는 scope/filter/metric/flow/time/areaPolicy만 포함한다.
 - `projectionHash`는 data hash와 grouping/LOD policy를 포함한다.
 - `presentationHash`는 projection hash와 committed presentation mode, lens, focus/anchor entityKey를 포함한다. drag progress와 animation progress는 포함하지 않는다.
 - `shareHash`는 URL에 직렬화되는 전체 canonical document의 hash다.
 - canonical query는 URL에 serialize되어 새로고침, 공유, back/forward가 재현 가능해야 한다.
 - URL codec은 `mode=focus-sankey`의 `focusEntityKey`를 opaque identity로 직렬화한다. 권한이 없어졌거나 현재 map universe에 없는 key는 추정 대상을 선택하지 않고 map으로 안전하게 복귀하며 이유를 알린다.
-- server planner가 반환한 canonical query가 최종 authority다.
+- server planner가 반환한 canonical `TopologyPlanQuery`와 `TopologyPlanHashes`가 data/projection의 최종 authority다. reducer는 이를 local `TopologyQuery`의 data/projection에 병합하되 current presentation을 보존하고 `presentationHash`/`shareHash`는 frontend canonicalizer가 계산한다. presentation validity는 committed frame에서 별도로 재검증한다.
 - exact identity token은 해당 entity와 필요한 ancestor/context relation만 남긴다. context membership role은 검색 결과 count에 포함하지 않는다.
 - filter가 없으면 predicate는 명시적 `{op:"true"}`다. empty `and/or` node는 canonical schema가 거부한다.
 - action suggestion은 QueryToken/AST가 아니다. 선택하면 `action.invoked` EngineMessage를 dispatch하고 command effect 정책을 따른다.
@@ -1192,7 +1195,6 @@ planner는 실행 전에 다음을 검증한다.
 ```ts
 type MetricDimensionId = string & { readonly __brand: "MetricDimensionId" }
 type MetricMeasureId = string & { readonly __brand: "MetricMeasureId" }
-type DecimalString = string & { readonly __brand: "DecimalString" }
 type UnitId = string & { readonly __brand: "UnitId" }
 
 type MetricUnitDescriptor = {
@@ -2301,7 +2303,8 @@ Required budgets:
 | worker layout S/M/F | p95 ≤ 80ms / 250ms / 500ms |
 | validated snapshot → first meaningful scene | p95 ≤ 1,000ms |
 | committed fold-lens/scope → settled morph | p95 ≤ 700ms |
-| focus geometry ready → settled focus morph | `focusMorph=720ms` + 최대 1 animation frame |
+| focus geometry ready → 마지막 cube settle | `focusMorph=720ms` + `focusCubeStagger` 최대 300ms + 최대 1 animation frame, 즉 최대 1,020ms + 1 frame |
+| 마지막 cube settle → 마지막 connector complete | connector 0개면 0ms; 그 외 `focusRibbonDraw=560ms + (G-1)×110ms` + 최대 1 animation frame. `G≤5`이므로 최대 1,000ms + 1 frame |
 | focus activation → pending/first visual response | p95 ≤ 50ms |
 | Canvas/WebGL draw | p95 ≤ 8ms |
 | stream staged backlog | p95 ≤ 2 animation-frame batches; structural drop = 0 |
@@ -2759,8 +2762,8 @@ type QueryPlanResponse = {
   schemaVersion: string
   planId: string
   queryId: string
-  canonicalQuery: TopologyQuery
-  hashes: QueryHashes
+  canonicalPlanQuery: TopologyPlanQuery
+  hashes: TopologyPlanHashes
   estimated: {
     entities: number
     relations: number
@@ -2965,14 +2968,6 @@ reference profiles는 server-generated realistic topology로 고정하고 small/
 - malicious query/regex/URL.
 - replayed/stale stream token.
 
-### 27.8 License/SBOM
-
-- 실제 third-party source 파일 또는 substantial code를 복사·수정한 경우에만 copied-source ledger에 원본 URL, exact source version/commit/tag, 원본·제품 경로, license/copyright, modification summary를 기록한다.
-- Apache-2.0 code를 실제로 복사·수정한 경우에만 modified-file notice(§4(b))를 적용하고 upstream 배포물에 NOTICE가 실제로 있을 때만 NOTICE propagation(§4(d))을 적용한다. copied-source ledger가 비어 있으면 fabricated Apache notice를 만들지 않고 empty-ledger assertion을 통과시킨다.
-- 실제 dependency와 transitive dependency에는 license allow/deny policy를 항상 적용한다.
-- 실제 채택한 brand/icon/font/image asset에는 출처·재배포 권리·상표 오인 가능성 scan을 항상 적용한다.
-- production artifact에서 실제 도달 가능한 dependency/asset/copied source 기준으로 SBOM과 third-party notices를 생성한다.
-
 ## 28. 구현 순서: 완성 제품 vertical slices
 
 이 순서는 MVP 범위를 줄이는 목록이 아니다. 최종 제품을 오류 없이 조립하기 위한 dependency order다. 각 단계는 다음 단계 전에 contract와 test를 완료한다.
@@ -3044,7 +3039,6 @@ reference profiles는 server-generated realistic topology로 고정하고 small/
 - API compatibility and migration tests.
 - plugin SDK docs and sample external CRD plugin.
 - theming/embedding/white-label contracts.
-- SBOM, notices, license audit.
 - telemetry, diagnostics, support bundle.
 
 ## 29. Definition of Done
@@ -3066,10 +3060,9 @@ reference profiles는 server-generated realistic topology로 고정하고 small/
 13. light/dark/high-contrast/reduced-motion과 keyboard/screen reader가 통과한다.
 14. reference performance profiles의 p95 budgets와 soak memory bound를 통과한다.
 15. tenancy/redaction/action authorization을 통과한다.
-16. 실제로 채택한 모든 third-party dependency의 license/notice/SBOM이 완성된다.
-17. 모든 visible click path에 handler, permission, loading, error, focus test가 있다.
-18. 이 문서의 필수 경우의 수가 traceability matrix에서 test ID와 연결된다.
-19. focus-Sankey의 `right + source = map universe`, 집합 서로소, health group당 connector 하나, source face partition 합 1이 property/visual/a11y test를 통과한다.
+16. 모든 visible click path에 handler, permission, loading, error, focus test가 있다.
+17. 이 문서의 필수 경우의 수가 traceability matrix에서 test ID와 연결된다.
+18. focus-Sankey의 `right + source = map universe`, 집합 서로소, health group당 connector 하나, settled target group block-size 기반 source face partition 합 1이 property/visual/a11y test를 통과한다.
 
 ## 30. 명시적으로 허용하지 않는 미정의 상태
 

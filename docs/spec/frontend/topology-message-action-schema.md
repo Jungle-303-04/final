@@ -51,8 +51,6 @@ type EngineSource =
   | "effect"
   | "system"
 
-type DataProjectionHashes = Pick<QueryHashes, "dataQueryHash" | "projectionHash">
-
 type RootMessageContext = {
   sessionId: OpaqueId
   workspaceId: OpaqueId
@@ -87,7 +85,7 @@ type StreamMessageContext = {
   entitlementEpoch: OpaqueId
   dataOrigin: DataOrigin
   cursor: ResumeCursor
-  hashes: DataProjectionHashes
+  hashes: TopologyPlanHashes
 }
 
 type OperationStreamMessageContext = {
@@ -211,7 +209,15 @@ type UserIntent =
   | { type: "lens.progressChanged"; gestureId: OpaqueId; gestureRevision: LayoutRevision; progress: number }
   | { type: "lens.committed"; lens: Lens; method: "gesture" | "pointer" | "keyboard" | "url"; gestureId: OpaqueId | null }
   | { type: "entity.focused"; entityKey: string | null; reason: "pointer" | "keyboard" | "restoration" | "programmatic" }
-  | { type: "entity.activated"; entityKey: string; activationId: OpaqueId; method: "pointer" | "keyboard" }
+  | {
+      type: "entity.activated"
+      entityKey: string
+      activationId: OpaqueId
+      actionId: string
+      descriptorRevision: string
+      capabilityRevision: string
+      method: "pointer" | "keyboard"
+    }
   | { type: "selection.changed"; change: SelectionChange; expectedSelectionRevision: OpaqueId }
   | { type: "viewport.changed"; viewportRevision: OpaqueId; centerX: number; centerY: number; zoom: number }
   | {
@@ -251,8 +257,9 @@ Focus-Sankey intent refinement:
 - `exited`는 focus-Sankey preparing/transitioning/settled 중에만 허용한다.
 - 세 intent 모두 expected frame/presentation revision이 current와 같아야 한다. 다르면 추정하지 않고 stale intent no-op 후 현재 화면을 유지한다.
 - focus source를 filter나 selection으로 승격하지 않고 presentation 상태로만 보존한다.
-- `url.hydrated.query.presentation.kind="focus-sankey"`는 query plan/snapshot이 준비되기 전에 즉시 설치하지 않는다. source entity key를 새 authoritative map universe에서 재검증한 후 enter와 같은 freeze/layout 경로를 사용하며, 없거나 forbidden이면 map을 유지하고 typed restoration warning을 남긴다. URL presentation을 `UrlPayload`의 별도 field로 복제하지 않는다.
-- map에서 `entity.activated`를 받으면 activation router가 current catalog의 resolved `ActivationDescriptor`를 검증한다. descriptor가 focus-Sankey enter라면 `activationId`를 transitionId로 재사용하고 입력 method와 current frame/presentation revision을 보존한 `focusSankey.entered` EngineMessage를 단 한 번 같은 dispatch에 넣는다. 원 `entity.activated`는 focus state를 따로 mutation하지 않고 component callback/별도 event bus를 만들지 않는다.
+- `url.hydrated.query.presentation.mode="focus-sankey"`는 query plan/snapshot이 준비되기 전에 즉시 설치하지 않는다. source entity key를 새 authoritative map universe에서 재검증한 후 enter와 같은 freeze/layout 경로를 사용하며, 없거나 forbidden이면 map을 유지하고 typed restoration warning을 남긴다. URL presentation을 `UrlPayload`의 별도 field로 복제하지 않는다.
+- UI activation resolver는 pointer/keyboard activation 하나를 current catalog의 `ActionDescriptor`와 `AvailableAction`으로 먼저 해석한다. descriptor가 `dispatch.kind="engine-intent"`, `intentType="focusSankey.entered"`이면 resolver는 `entity.activated`를 만들지 않고 current frame/presentation revision을 채운 `focusSankey.entered`를 유일한 `EngineMessage`로 dispatch한다.
+- `entity.activated`는 focus 진입이 아닌 catalog-declared inspect/navigation/query activation에만 쓴다. reducer는 `actionId`, descriptor/capability revision, entity target을 current catalog에서 다시 검증하고 같은 reducer transition에서 detail/navigation/query effect를 직접 반환한다. `entity.activated`가 `focusSankey.entered`나 다른 `EngineMessage`를 후속 dispatch하는 것은 금지한다.
 
 ## 3. Effect와 command
 
@@ -313,8 +320,8 @@ type LayoutRelationInput = {
   targetEntityKey: string
   plane: RelationPlane
   relationType: string
-  lifecycle: CanonicalRelation["lifecycle"]
-  resolution: CanonicalRelation["resolution"]
+  conditions: CanonicalRelation["effective"]["conditions"]
+  authority: CanonicalRelation["effective"]["authority"]
 }
 
 type PresentationUniverse = {
@@ -324,7 +331,7 @@ type PresentationUniverse = {
   stateRevision: StateRevision
   catalogRevision: string
   entitlementEpoch: OpaqueId
-  hashes: DataProjectionHashes
+  hashes: TopologyPlanHashes
   mapEntityKeys: readonly string[]
   relationKeys: readonly string[]
   capturedAt: Timestamp
@@ -426,7 +433,7 @@ type PresentationTransitionRequest = {
 
 type EffectPayload =
   | { type: "catalog.fetch" }
-  | { type: "query.plan"; query: TopologyQuery }
+  | { type: "query.plan"; query: TopologyPlanQuery }
   | { type: "snapshot.fetch"; planId: string; queryId: string; previousFrameId: string | null }
   | { type: "stream.subscribe"; request: StreamSubscription }
   | { type: "entityDetail.fetch"; request: EntityDetailRequest }
@@ -597,7 +604,7 @@ Focus-Sankey target은 다음 proof를 reducer에서 다시 검증한다.
 3. `groups.flatMap(memberEntityKeys)`가 related exact set이다. related와 `unrelatedEntityKeys`는 서로소이고 합집합이 column이다. relation이 없는 entity를 삭제하지 않는다.
 4. related entity는 정확히 하나의 group에 속하고 모든 member의 frozen health는 group `healthLevel`과 같다. group key, health level, ribbon connector key는 각각 unique하며 severity/order policy와 일치한다.
 5. group 하나당 `ribbonConnectorKey`가 정확히 하나이고 geometry에 같은 `focus-face-connector.connectorKey`가 정확히 하나 있다. connector의 health/member key는 group proof와 정확히 같고 다른 group과 connector를 공유하지 않는다.
-6. source face ratio는 canonical decimal `0 <= start < end <= 1`이다. 첫 group은 0에서 시작하고 인접 group의 end/start가 정확히 같으며 마지막 group은 1에서 끝난다. group이 0개면 source face 분할/ribbon도 0개다. 비율은 member count의 exact share를 §8 DecimalPolicy로 quantize하고 residual/tie 규칙으로 합을 정확히 1로 닫는다.
+6. source face ratio는 canonical decimal `0 <= start < end <= 1`이다. 첫 group은 0에서 시작하고 인접 group의 end/start가 정확히 같으며 마지막 group은 1에서 끝난다. group이 0개면 source face 분할/ribbon도 0개다. worker는 먼저 각 target group의 settled block-start부터 block-end까지의 face block-size를 계산하고, 그 합에 대한 exact share를 §8 DecimalPolicy로 quantize해 residual/tie 규칙으로 합을 정확히 1로 닫는다. reducer는 `RenderGeometry`에서 같은 block-size를 독립적으로 다시 계산해 proof ratio와 일치하는지 검증한다. `memberEntityKeys.length`는 label의 `memberCount`에만 쓰며 source face ratio 입력으로 사용하지 않는다.
 
 Transition이 preparing/transitioning으로 들어갈 때 reducer는 그 시점의 immutable `PresentationUniverse`와 presentation revision을 freeze한다. 이 freeze는 presentation 배치·grouping·label·health·ribbon membership만 대상이다. canonical entity/relation/metric reducer는 계속 모든 valid stream batch를 sequence 순서대로 atomic commit하고 `canonicalRevisionPending`에 latest revision을 coalesce한다. stream event를 버리거나 canonical state 적용을 지연하지 않는다.
 
@@ -746,7 +753,7 @@ type SnapshotEnvelope = {
   catalogRevision: string
   frameId: OpaqueId
   dataOrigin: DataOrigin
-  hashes: DataProjectionHashes
+  hashes: TopologyPlanHashes
   streamStart: StreamStart
   emittedAt: Timestamp
   frame: Omit<
@@ -771,7 +778,7 @@ type StreamEnvelope = {
   cursor: ResumeCursor
   emittedAt: Timestamp
   observedAt: Timestamp
-  hashes: DataProjectionHashes
+  hashes: TopologyPlanHashes
   payload: StreamPayload
 }
 
@@ -914,7 +921,7 @@ type VisibleFrameState =
   | {
       kind: "installed"
       frameId: string
-      hashes: DataProjectionHashes
+      hashes: TopologyPlanHashes
       streamStart: StreamStart
       visibility: "current-query" | "previous-while-planning" | "stale-while-disconnected"
       content: "nonempty" | "empty-authoritative"
@@ -941,7 +948,7 @@ type EngineQueryState = {
     | {
         queryId: OpaqueId
         planId: OpaqueId
-        canonicalQuery: TopologyQuery
+        canonicalPlanQuery: TopologyPlanQuery
         hashes: QueryHashes
       }
     | null
@@ -1135,7 +1142,7 @@ Canonical plain decimal grammar:
 | `query.tokenCommitted` | ui | token schema/catalog/revision/duplicate | canonical query + plan |
 | `query.tokenRemoved` | ui | token 존재/revision/default size | canonical query + plan |
 | `query.planRequested` | ui/system | AST, field/unit/window/action 혼입 | 이전 query effect cancel, plan |
-| `query.planResolved` | effect | active effect/envelope origin/access/expiry/hash/catalog | loading snapshot |
+| `query.planResolved` | effect | active effect/envelope origin/access/expiry/data+projection hash/catalog; response에 presentation 없음 | canonical plan을 local view query에 병합하고 frontend presentation/share hash 계산 후 loading snapshot |
 | `query.planRejected` | effect | active effect/typed error | 이전 scene 유지, rejected |
 | `scope.entered/exited` | ui | identity/entitlement/containment | query 변경; graph 직접 mutation 금지 |
 | `focusSankey.entered` | ui | map/fold-lens, captured base-map source exact membership, frame/presentation revision | fold transition은 cancel; current interpolated geometry에서 universe freeze+focus layout, map 순간 복귀 금지 |
@@ -1144,7 +1151,7 @@ Canonical plain decimal grammar:
 | `lens.progressChanged` | ui | finite p, gesture/layout revision | presentation only |
 | `lens.committed` | ui | lens capability/data hash 불변 | URL/layout; data refetch 금지 |
 | `entity.focused` | ui | visible/restorable target | presentation only |
-| `entity.activated` | ui | current entity/resolved activation descriptor/current frame+presentation revision | map focus descriptor는 exactly one `focusSankey.entered` dispatch; 원 activation은 presentation no-op, 그 외는 declared query/navigation/action |
+| `entity.activated` | ui | current entity, current `ActionDescriptor`/`AvailableAction`, action/descriptor/capability revision, focus intent가 아님 | 같은 reducer transition에서 declared inspect/navigation/query effect; 다른 `EngineMessage` 후속 dispatch 금지 |
 | `selection.changed` | ui | revision/entity existence/limit | atomic selection |
 | `viewport.changed` | ui | finite coordinate/zoom/policy | presentation only |
 | `action.invoked` | ui | descriptor/capability/target/parameters | confirmation 대기 또는 command effect |
@@ -1193,7 +1200,7 @@ Canonical plain decimal grammar:
 - product `HealthStatus`는 Application Instance의 GitOps/aggregate health다. engine `TopologyHealthVerdict`는 개별 runtime entity의 판정이다. product health는 topology child health의 단순 worst-value 복사가 아니며 backend가 별도 reason/evidence로 제공한다.
 - product `ResourceEdgeKind`는 UI consumer taxonomy, engine `RelationPlane/relationType`은 projection taxonomy다. mapping catalog가 versioned many-to-one/one-to-many 규칙과 evidence 보존을 소유한다.
 - engine operation ledger는 product `GitOpsOperationReceipt`, `GitOpsOperationStatus`, `GitOpsOperationEvent`를 그대로 저장하고 presentation selector만 파생한다. topology 전용 phase/progress/approval DTO를 다시 만들지 않는다.
-- common `DecimalString`, `DataOrigin`, `StatusReason`, `OperationPhase`, `ApprovalStatus`는 한 generated core module에서 import하며 다시 선언하지 않는다.
+- common `DecimalString`, `DataOrigin`, `StatusReason`, `OperationPhase`, `ApprovalStatus`는 `product-data-contract.md`의 generated canonical consumer core에서 import하며 다시 선언하지 않는다.
 
 ## 12. Protocol release gates
 
@@ -1207,7 +1214,7 @@ Canonical plain decimal grammar:
 8. decimal grammar/overflow/half-even/residual tie/display separation property test가 있다.
 9. restricted mapping이 name/count/total/edge cardinality를 누출하지 않음을 검증한다.
 10. schema major incompatibility가 infinite resync loop가 아니라 fatal state로 끝남을 검증한다.
-11. focus-Sankey property test가 source exact membership, `column + 1 = map`, group-members/unrelated exact partition, health group exact partition, source face ratio의 gap/overlap 0·합 1, group↔ribbon connector 1:1을 임의의 입력 순서에서 검증한다.
+11. focus-Sankey property test가 source exact membership, `column + 1 = map`, group-members/unrelated exact partition, health group exact partition, settled target group block-size와 source face ratio의 일치·gap/overlap 0·합 1, group↔ribbon connector 1:1을 임의의 입력 순서와 서로 다른 member-count/block-size에서 검증한다.
 12. enter/exit/retarget 전환 중 ordinary stream batch가 canonical state에 모두 atomic commit되고 presentation만 freeze되며, settle 후 latest frame으로 유실 없이 reconcile되는지 fake clock과 interleaving property test로 검증한다.
 13. transition 중 source delete, retarget, Escape, entitlement epoch 변경, compatible/incompatible schema 변경을 각각 검증하며 entitlement/schema 변경 후 구 scene이 한 frame도 더 노출되지 않는다.
 14. stale/cancelled layout·transition result가 current geometry/presentation revision을 진전시키지 않고 post-settle reconcile가 latest revision 하나로 coalesce되는지 검증한다.

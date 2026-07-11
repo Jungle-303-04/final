@@ -10,7 +10,7 @@ last_verified: 2026-07-11
 
 ## 0. 권한, 범위, 비목표
 
-이 문서는 Applications, GitOps, Tree/Insights, Timeline, Metrics, Topology, GitOps Operations 화면이 소비할 canonical 데이터와 사용자 경험의 구현 예정 계약이다. 현재 repo의 실제 코드와 통과한 테스트가 source of truth이며, 아래 DTO와 schema가 현 코드에 없으면 구현 완료가 아니라 후속 작업 기준으로만 읽는다. 백엔드는 이 소비 의미를 OpenAPI와 runtime schema로 구현하고, 프론트는 `[OPENAPI_ACCEPTED]` 이후 live adapter를 확정한다.
+이 문서는 Applications, GitOps, Tree/Insights, Timeline, Metrics, Topology, GitOps Operations 화면이 소비할 canonical 데이터와 사용자 경험의 구현 예정 계약이다. 현재 repo의 실제 코드와 통과한 테스트가 source of truth이며, 아래 DTO와 schema가 현 코드에 없으면 구현 완료가 아니라 후속 작업 기준으로만 읽는다. 백엔드는 이 소비 의미를 OpenAPI와 runtime schema로 구현하고, 프론트는 `[OPENAPI_ACCEPTED]` 이후 live adapter를 확정한다. 배포 완료는 승인된 OpenAPI, generated runtime schema, live/synthetic 공통 contract suite와 제품 UI test가 모두 통과한 뒤에만 주장한다.
 
 구현 우선순위:
 
@@ -145,6 +145,8 @@ type AccessMode =
 
 type SuccessfulAccessMode = Extract<AccessMode, { mode: "read_write" | "read_only" }>
 ```
+
+`DecimalString`과 `DataOrigin`은 이 문서의 generated canonical consumer core가 각각 정확히 한 번 정의하고 export한다. topology engine, message protocol, adapters는 이 두 타입을 같은 module에서 import하며 재선언하거나 구조가 같은 별도 alias를 만들지 않는다.
 
 `detail`은 안전하게 redacted된 text이며 UI 분기에는 `code`를 사용한다.
 
@@ -1629,7 +1631,7 @@ type TopologyScope =
   | (TopologyScopeBase & { timeMode: "live" })
   | (TopologyScopeBase & { timeMode: "historical"; at: Timestamp })
 
-type TopologyProjection = {
+type ResourceGraphProjection = {
   relationPlanes: readonly ("placement" | "network" | "ownership" | "dependencies" | "gitops")[]
   relationKinds: readonly ResourceEdgeKind[]
   nodeCategories: readonly ResourceNodeCategory[]
@@ -1647,9 +1649,9 @@ type TopologyFilter =
   | { type: "label"; key: string; operator: "equals" | "not_equals" | "in"; values: NonEmptyReadonlyArray<string> }
   | { type: "search"; value: string }
 
-type TopologyQuery = {
+type ResourceGraphQuery = {
   scope: TopologyScope
-  projection: TopologyProjection
+  projection: ResourceGraphProjection
   filters: readonly TopologyFilter[]
 }
 
@@ -1694,7 +1696,9 @@ type ResourceGraphStreamEnvelope = {
 }
 ```
 
-`map`, `focus-sankey`, `fold-lens`, `butterfly`는 frontend engine의 상호 배타적 presentation state이며 backend `TopologyQuery`나 `TopologyProjection`의 lens가 아니다. presentation을 바꿔도 같은 scope/filter/relation-plane snapshot을 재사용하고, data가 더 필요하지 않으면 port query/cache key/capability subject를 바꾸지 않는다. focus-Sankey는 현재 authorized map universe 전체를 source 하나와 right collection으로 재투영하며 그 정확한 완전성·motion 계약은 `topology-engine.md`와 visual adjunct가 소유한다. `butterfly`도 두 relation plane의 동시 layout일 뿐 별도 backend relation truth가 아니다.
+`ResourceGraphQuery`와 `ResourceGraphProjection`은 GitOps Tree/cross-navigation facade가 읽는 semantic graph query다. Full Topology engine의 local view document인 `TopologyQuery` 및 backend-facing `TopologyPlanQuery`와 이름·소유권·wire를 공유하지 않는다.
+
+`map`, `focus-sankey`, `fold-lens`, `butterfly`는 frontend engine의 상호 배타적 presentation state이며 `ResourceGraphQuery`, `ResourceGraphProjection`, engine `TopologyPlanQuery`의 lens가 아니다. presentation을 바꿔도 같은 scope/filter/relation-plane snapshot을 재사용하고, data가 더 필요하지 않으면 port query/cache key/capability subject를 바꾸지 않는다. focus-Sankey는 현재 authorized map universe 전체를 source 하나와 right collection으로 재투영하며 그 정확한 완전성·motion 계약은 `topology-engine.md`와 visual adjunct가 소유한다. `butterfly`도 두 relation plane의 동시 layout일 뿐 별도 backend relation truth가 아니다.
 
 Topology scope의 applicationIds, instanceIds, clusterUids, namespaceRefs, rootEntityIds는 교집합 constraint이며 최소 하나의 anchor collection이 non-empty여야 한다. namespaceRefs가 non-empty이면 exact cluster/namespace pair만 포함하고 cluster-scoped resource는 includeClusterScoped=true일 때만 포함한다. 서로 양립할 수 없는 scope 조합은 empty가 아니라 `invalid_request`다. historical scope는 `topology.historical` exact capability가 enabled일 때만 요청한다.
 
@@ -2512,7 +2516,7 @@ Scope selector는 cluster → environment → namespace → application instance
 | Metric source catalog | `metrics.sources.list` | `MetricSourceCatalogQuery` | `ConsumerEnvelope<MetricSourceCatalog>` | metric/source revision에 따라 독립 pagination |
 | Metric query | `metrics.query` | `MetricQuery` | `ConsumerEnvelope<MetricResult>` | v1 synchronous/cancellable; instant interval/range revalidate |
 | Full Topology catalog | `topology.catalog` | workspace/authz | engine `ConsumerEnvelope<TopologyCatalogResponse>` | catalog revision change 시 replan |
-| Full Topology plan | `topology.plan` | engine `TopologyQuery` | `ConsumerEnvelope<QueryPlanResponse>` | canonical query/hash 발급 |
+| Full Topology plan | `topology.plan` | engine `TopologyPlanQuery` | `ConsumerEnvelope<QueryPlanResponse>` | canonical data/projection query와 hash 발급; presentation 전송 금지 |
 | Full Topology snapshot | `topology.snapshot` | planId + previous frame precondition | engine `SnapshotEnvelope` | 동일 streamStart로 stream/poll/static |
 | Full Topology stream | `topology.stream` | engine `StreamSubscription` full cursor | engine `StreamEnvelope` | 유일한 runtime topology delta transport |
 | Full Topology detail | `topology.entities.get` | engine `EntityDetailRequest` | `ConsumerEnvelope<EntityDetail>` | frame/cursor revision 검증 |
@@ -2696,7 +2700,7 @@ interface MetricsPort {
 }
 
 interface ResourceGraphFacadePort {
-  snapshot(query: TopologyQuery, context: RequestContext): Promise<ConsumerEnvelope<ResourceGraphSnapshot>>
+  snapshot(query: ResourceGraphQuery, context: RequestContext): Promise<ConsumerEnvelope<ResourceGraphSnapshot>>
   poll(request: GraphPollRequest, context: RequestContext): Promise<ConsumerEnvelope<ResourceGraphSnapshot>>
   expand(query: ResourceGraphExpansionQuery, context: RequestContext): Promise<ConsumerEnvelope<ResourceGraphExpansion>>
   metricOverlay(snapshotId: string, graphRevision: string, query: MetricQuery, context: RequestContext): Promise<ConsumerEnvelope<TopologyMetricOverlay>>
