@@ -2292,8 +2292,9 @@ Required budgets:
 | worker layout S/M/F | p95 ≤ 80ms / 250ms / 500ms |
 | validated snapshot → first meaningful scene | p95 ≤ 1,000ms |
 | committed fold-lens/scope → settled morph | p95 ≤ 700ms |
-| focus geometry ready → 마지막 cube settle | `focusMorph=720ms` + `focusCubeStagger` 최대 300ms + 최대 1 animation frame, 즉 최대 1,020ms + 1 frame |
-| 마지막 cube settle → 마지막 connector complete | connector 0개면 0ms; 그 외 `focusRibbonDraw=560ms + (G-1)×110ms` + 최대 1 animation frame. `G≤5`이므로 최대 1,000ms + 1 frame |
+| focus ribbon erase | canonical `ribbonErase=150ms` + 최대 1 animation frame; 완료 전 morph 0건 |
+| ribbon erase 완료 → 마지막 cube settle | canonical `focusMorph=720ms` + map x순 stagger 최대 300ms + 최대 1 animation frame, 즉 최대 1,020ms + 1 frame; label은 cube-local `labelReveal=80%` |
+| 마지막 cube settle → 마지막 connector complete | connector 0개면 0ms; 그 외 정지 60ms + canonical `ribbonDraw=560ms + (G-1)×connectorStagger(110ms)` + 최대 1 animation frame. `G≤5`이므로 최대 1,060ms + 1 frame |
 | focus activation → pending/first visual response | p95 ≤ 50ms |
 | Canvas/WebGL draw | p95 ≤ 8ms |
 | stream staged backlog | p95 ≤ 2 animation-frame batches; structural drop = 0 |
