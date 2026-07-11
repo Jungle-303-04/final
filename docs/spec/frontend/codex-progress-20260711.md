@@ -502,3 +502,47 @@ P2를 완료로 판정한다. 다음 단계는 `final-questions.md`에 남은 �
 명령: make manifest-check
 결과: PASS — management manifest objects 56, target manifest objects 18
 ```
+
+### 상태 계약·무네트워크 경계 최종 보강
+
+- 상태 계약 커밋: `54ce56480`
+- 경계 후속 커밋: `15019d495`
+- 401 `unauthorized`는 세션 게이트만 담당하고, `ProductStateScreen`의 권한 부족 상태는 403
+  `forbidden`만 허용하도록 타입을 닫았다. 원시 `Error`와 401을 presentation state에 넣는 코드는
+  TypeScript 계약 테스트에서 거부한다.
+- retry label은 공백 문자열도 `다시 시도`로 정규화한다. pending 상태는 disabled와 `aria-busy`를
+  함께 노출하고, 같은 pending cycle의 빠른 이중 호출은 한 번만 실행한다. 부모가 pending으로
+  전환하지 않은 요청은 다음 task에서 invocation guard를 해제해 후속 재시도를 막지 않는다.
+- 전역 부팅 skeleton을 기본값으로 유지하면서 feature가 실제 화면 기하를 보존하는
+  `loadingPreview`를 loading 상태에만 전달할 수 있게 했다. preview wrapper가 `aria-hidden`과
+  `inert`를 강제해 호출자가 interactive node를 넘겨도 보조 기술과 포커스 순서에 노출하지 않는다.
+- 제품 셸 route 제목을 `h1`, content state 제목을 `h2`로 고정했다. 긴 safe detail은 임의 문자열을
+  추정·변환하지 않고 줄바꿈하여 모바일 수평 overflow를 막는다.
+- 승인 API가 0개인 release gate에서 transport spy를 설치한 뒤 제품 모듈을 다시 import한다.
+  이후 keydown, focus, online, offline, visibilitychange를 발생시키고 5분을 진행해도 fetch,
+  XMLHttpRequest, sendBeacon, EventSource, 제품 WebSocket 호출이 모두 0건임을 검증한다.
+- §6b 조율 상태는 `api-needs.md`의 `requested` 26행, progress의 유효한 `API 완성:` 앵커 0개다.
+  이 보강은 `src/product/api/**`, `client.ts`, `url.ts`를 수정하지 않았고 새 endpoint 요구도
+  만들지 않았다.
+
+```text
+명령: cd references/ui-layer-lab && npm run check
+결과: PASS
+  - TypeScript: PASS
+  - ESLint: PASS
+  - Vitest: 11 files, 62 tests PASS
+  - product design guard: 56 files PASS
+  - UI catalog source audit: 482 previews PASS, upstream 21e4ceb
+  - Vite production build: PASS
+  - ProductApp CSS: 42.13 kB (gzip 8.36 kB)
+  - ProductApp JS: 67.77 kB (gzip 23.48 kB)
+주의: 500kB 초과 chunk warning은 reference catalog 기존 성능 과제로 유지
+
+명령: cd references/ui-layer-lab && npm run visual-product
+결과: PASS — desktop light + mobile dark, API request 0, product WebSocket 0,
+      console/page error 0, horizontal overflow 0, main landmark 1
+설정: prefers-reduced-motion=reduce
+스크린샷:
+  - references/ui-layer-lab/output/playwright/product-release-desktop-light.png
+  - references/ui-layer-lab/output/playwright/product-release-mobile-dark.png
+```
