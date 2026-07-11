@@ -1073,3 +1073,47 @@ npm run check: PASS
 ```
 
 API transport: apiRequestNoContent (af03639ee)
+
+## 2026-07-12 Sidebar 제품 셸 탐색 계약 종결
+
+- Sidebar 셸 기준 커밋: `346d5a886`; semantic 경계 보강 커밋: `6a40a5d01`; disabled reflow
+  시각 게이트 보강 커밋: `643dc87d9`.
+- `SidebarMenuLink`는 내부 React Router `Link`만 생성하고 검증된 내부 절대 경로만 받는다. 임의
+  React element, 사용자 컴포넌트, Fragment, `render` 주입은 타입과 runtime 양쪽에서 거부한다.
+- `SidebarMenuButton`은 native `button[type=button]`만 생성한다. page-current 의미는 link만 소유하며
+  action button의 `isActive`, `aria-current`, `data-active` 경로를 제거했다.
+- desktop Sidebar는 11rem 확장·3.5rem 축소 토큰과 같은 DOM link를 유지한다. 축소 전환에도 focus와
+  link identity가 보존되고 tooltip은 축소 desktop에서만 제공된다.
+- mobile Sidebar는 17rem modal Dialog drawer다. 390px·320px·200% text에서 overlay, Escape,
+  focus trap, focus return, navigation 후 닫힘을 검증했다. desktop과 mobile open state는 독립적이다.
+- ProductShell은 released surface 집합에서만 메뉴를 만들고 단일 main landmark, skip link, sticky
+  header, keyboard help, theme action을 유지한다. API·synthetic data·provider 분기를 추가하지 않았다.
+- 시각 게이트는 interaction-disabled와 layout-suppressed를 분리한다. 화면에 보이는 disabled
+  Button·Tabs·Item도 own overflow와 viewport bounds 검사를 받으며 state 시나리오마다 실제 검사된
+  disabled 요소가 1개 이상인지 assert한다.
+- 독립 적대 재검토 결과: 구현 P0 0·P1 0, 시각 게이트 P0 0·P1 0.
+- `http://127.0.0.1:5180/metrics`를 반복 갱신하던 1시간 이상 된 Vite HMR 프로세스는 종료했다.
+  `/metrics`는 제품 route가 아니며 올바른 제품 진입점은 `/product`다.
+- API queue는 requested 26행, in_progress 0행, blocked 0행, valid completion anchors 3을 유지한다.
+  Sidebar 커밋은 `src/product/api/**`, API queue, backend 파일을 수정하지 않았다.
+
+```text
+대상 회귀: Sidebar/ProductShell 5 files, 44 tests PASS
+npm run check: PASS
+  - TypeScript: PASS
+  - ESLint: PASS
+  - Vitest: 28 files, 212 tests PASS
+  - product design guard: 83 files PASS
+  - shadcn source audit: 482 previews PASS, upstream 21e4ceb
+  - production build: PASS
+  - ProductApp CSS: 61.43 kB (gzip 11.17 kB)
+  - ProductApp JS: 78.44 kB (gzip 26.41 kB)
+npm run visual-product: PASS — 12 scenarios, network-silent
+  - release: desktop/light, mobile/dark, 320px, 200% text
+  - shared state: 320px, 200% text, forced-colors
+  - ProductShell: desktop expanded, desktop collapsed/forced-colors,
+    mobile drawer 390px·320px, mobile 200% text
+스크린샷:
+  - references/ui-layer-lab/output/playwright/product-shell-desktop-expanded-light.png
+  - references/ui-layer-lab/output/playwright/product-shell-mobile-drawer-dark-390.png
+```
