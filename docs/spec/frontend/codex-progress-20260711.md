@@ -315,6 +315,45 @@ P2를 완료로 판정한다. 다음 단계는 `final-questions.md`에 남은 �
 결과: PASS — management manifest objects 56, target manifest objects 18
 ```
 
+## 2026-07-11 제품 오류 경계와 안전 복구 보강
+
+- 구현 커밋: `3d3c2cb94`
+- `ProductApp`은 `ProductErrorBoundary`로 runtime을 감싸고, composition initialization failure를
+  raw stack 없이 `ProductStateScreen kind="error"`로 표시한다.
+- retry는 사용자 클릭으로만 child runtime을 remount한다. persistent crash는 focus, online,
+  offline, visibilitychange, timer 진행에도 자동 retry loop나 fetch, XMLHttpRequest, sendBeacon,
+  EventSource, 제품 WebSocket 호출을 만들지 않는다.
+- composition은 mounted runtime당 한 번만 생성된다. rerender는 API composition을 다시 만들지
+  않고, 명시 retry 후에만 새 runtime을 생성한다.
+- 이 변경은 새 endpoint 완료가 아니며 `API 완성:` 0행과 network-silent release gate 계약을 유지한다.
+
+```text
+명령: cd references/ui-layer-lab && npm run check
+결과: PASS
+  - TypeScript: PASS
+  - ESLint: PASS
+  - Vitest: 14 files, 73 tests PASS
+  - product design guard: 60 files PASS
+  - UI catalog source audit: 482 previews PASS, upstream 21e4ceb
+  - Vite production build: PASS
+  - ProductApp CSS: 42.69 kB (gzip 8.49 kB)
+  - ProductApp JS: 68.89 kB (gzip 23.85 kB)
+주의: 500kB 초과 chunk warning은 reference catalog 기존 성능 과제로 유지
+
+명령: cd references/ui-layer-lab && npm run visual-product
+결과: PASS — release-desktop-light, release-mobile-dark, release-reflow-320-light,
+      release-text-resize-200-light, state-reflow-320-light,
+      state-text-resize-200-light, state-forced-colors; network-silent
+```
+
+```text
+명령: uv run pytest tests/test_docs_index.py tests/test_bruno_collection.py -q
+결과: PASS — 17 passed
+
+명령: make manifest-check
+결과: PASS — management manifest objects 56, target manifest objects 18
+```
+
 ### 게이트 판정
 
 | 게이트 | 결과 | 근거 |
