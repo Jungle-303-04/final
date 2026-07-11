@@ -663,6 +663,48 @@ class TargetAgentRepository(DatabaseConnection):
             payload = conn.execute(statement).scalar_one_or_none()
         return payload if isinstance(payload, dict) else None
 
+    def get_evidence_window_payload_for_workspace(
+        self, workspace_id: str, evidence_key: str
+    ) -> JsonObject | None:
+        table = EvidenceWindow.__table__
+        statement = select(table.c.payload).where(
+            table.c.workspace_id == workspace_id,
+            table.c.evidence_key == evidence_key,
+        )
+        with self.connection() as conn:
+            payload = conn.execute(statement).scalar_one_or_none()
+        return payload if isinstance(payload, dict) else None
+
+    def list_evidence_windows_for_workspace(
+        self,
+        workspace_id: str,
+        *,
+        limit: int,
+        offset: int = 0,
+    ) -> list[JsonObject]:
+        table = EvidenceWindow.__table__
+        statement = (
+            select(
+                table.c.evidence_key,
+                table.c.workspace_id,
+                table.c.cluster_id,
+                table.c.source_id,
+                table.c.window_start,
+                table.c.agent_id,
+                table.c.correlation_id,
+                table.c.payload,
+                table.c.created_at,
+                table.c.updated_at,
+            )
+            .where(table.c.workspace_id == workspace_id)
+            .order_by(table.c.updated_at.desc(), table.c.evidence_key.desc())
+            .limit(limit)
+            .offset(offset)
+        )
+        with self.connection() as conn:
+            rows = conn.execute(statement).mappings().all()
+        return [dict(row) for row in rows]
+
     def record_evidence_event_once(
         self,
         *,

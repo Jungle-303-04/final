@@ -133,6 +133,8 @@ DASHBOARD_RCA_TIMELINE_PATH = "/dashboard/rca/timeline"
 DASHBOARD_RCA_INCIDENT_PATH = "/dashboard/rca/incidents/{incident_id}"
 # 범용 조회 API — 세션 워크스페이스 범위의 evidence/RCA report 목록(read-only)
 EVIDENCE_QUERY_PATH = "/evidence"
+EVIDENCE_WINDOWS_PATH = "/evidence/windows"
+EVIDENCE_WINDOW_PATH = "/evidence/windows/{evidence_key}"
 RCA_REPORTS_PATH = "/rca-reports"
 RCA_RULES_VALIDATE_PATH = "/rca/rules/validate"
 RCA_TEST_SCENARIOS_PATH = "/rca/test-scenarios"
