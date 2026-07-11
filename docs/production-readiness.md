@@ -62,7 +62,7 @@
 | RCA 후보/평가 | 확정 원인과 근거 부족을 구분해야 한다 | `plan-worker`, `analyze-worker`, `rca-worker` | `tests/test_rca_evidence.py` |
 | insufficient evidence path | 근거 부족을 확정 원인처럼 보여주면 안 된다 | `RcaActionRequiredBody` | `tests/test_rca_evidence.py` |
 | recovery route 선택 | command와 Safe PR 경계를 분리해야 한다 | `recovery-worker`, `select-worker`, `dispatch-worker` | `tests/test_event_golden_path.py` |
-| Safe PR request | RCA worker가 GitHub에 직접 쓰지 않고 scm-worker 단일 경계에서 패치 초안과 PR 생성 결과를 결속해야 한다 | `safe_pr.requested`, `safe_pr.patch_prepared`, `safe_pr.created`, `scm-worker` | `tests/test_repo_gateway_worker.py`, `tests/test_event_golden_path.py` |
+| Safe PR request | RCA worker가 GitHub에 직접 쓰지 않고 safe-pr-worker, ai-diff-worker, scm-worker 경계에서 패치 초안, diff 게이트, PR 생성 결과를 분리해야 한다 | `safe_pr.requested`, `safe_pr.patch_prepared`, `safe_pr.ready_for_creation`, `safe_pr.created`, `safe-pr-worker`, `ai-diff-worker`, `scm-worker` | `tests/test_repo_gateway_worker.py`, `tests/test_event_golden_path.py` |
 | GithubScmProvider non-leak | token 원문이 event/log/response에 남으면 안 된다 | `src/domains/scm`, `scm-worker` | `tests/test_repo_gateway_worker.py`, `docs/secrets.md` |
 | dashboard/audit 연결 | RCA 결과를 사람이 추적할 수 있어야 한다 | `audit-worker`, `dashboard-worker` | `tests/test_projection.py`, `tests/test_dashboard_projection.py` |
 | Bruno RCA/API 확인 | timeline과 Safe PR 흐름을 직접 확인해야 한다 | `docs/api/05-rca-dashboard`, `docs/api/06-gitops-approval` | Bruno `aws-test` profile |

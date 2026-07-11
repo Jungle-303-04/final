@@ -4,7 +4,7 @@
 
 중요한 기준은 하나다.
 RCA는 GitHub에 직접 쓰지 않는다.
-PR이 필요하면 `safe_pr.requested`만 만들고, 실제 branch, commit, PR 생성은 `scm-worker`와 `GithubScmProvider`가 담당한다.
+PR이 필요하면 `safe_pr.requested`만 만들고, `safe-pr-worker`와 `ai-diff-worker`가 준비 게이트를 통과시킨 뒤 실제 branch, commit, PR 생성은 `scm-worker`와 `GithubScmProvider`가 담당한다.
 
 ## 1단계. RCA event 계약을 연다
 
@@ -232,16 +232,22 @@ PYTHONPATH=src .venv/bin/python -m pytest tests/test_rca_evidence.py -q
 이 파일을 연다.
 
 ```text
+src/services/gitops/safe-pr-worker/app.py
+src/services/ai/diff-worker/app.py
 src/services/gitops/scm-worker/app.py
 ```
 
-찾을 함수는 `on_safe_pr_requested`다.
+찾을 함수는 `on_safe_pr_requested`, `on_safe_pr_patch_prepared`, `on_safe_pr_ready_for_creation`이다.
 
 흐름은 아래다.
 
 ```text
 RecoveryDispatcher
   -> SafePrRequestedBody
+  -> safe-pr-worker
+  -> SafePrPatchPreparedBody
+  -> ai-diff-worker
+  -> SafePrReadyForCreationBody
   -> scm-worker
   -> GithubScmProvider
   -> SafePrCreatedBody 또는 SafePrFailedBody

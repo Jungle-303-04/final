@@ -2,7 +2,7 @@
 
 가인 파트는 민정이 만든 evidence를 근거 있는 RCA 결과와 조치 후보로 바꾸는 역할이다.
 RCA worker가 GitHub에 직접 쓰지 않는다.
-PR이 필요하면 `safe_pr.requested`를 만들고, 실제 PR 생성은 `scm-worker`와 `GithubScmProvider`가 담당한다.
+PR이 필요하면 `safe_pr.requested`를 만들고, 준비 게이트는 `safe-pr-worker`와 `ai-diff-worker`가 지나며 실제 PR 생성은 `scm-worker`와 `GithubScmProvider`가 담당한다.
 
 이 문서는 한 번에 하나씩 따라간다.
 각 단계는 파일 하나 또는 흐름 하나만 본다.
@@ -238,6 +238,8 @@ PYTHONPATH=src .venv/bin/python -m pytest tests/test_rca_evidence.py -q
 이 파일을 연다.
 
 ```text
+src/services/gitops/safe-pr-worker/app.py
+src/services/ai/diff-worker/app.py
 src/services/gitops/scm-worker/app.py
 ```
 
@@ -253,6 +255,10 @@ GithubScmProvider
 
 ```text
 safe_pr.requested
+  -> safe-pr-worker
+  -> safe_pr.patch_prepared
+  -> ai-diff-worker
+  -> safe_pr.ready_for_creation
   -> scm-worker
   -> GithubScmProvider
   -> safe_pr.created 또는 safe_pr.failed
