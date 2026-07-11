@@ -467,6 +467,41 @@ P2를 완료로 판정한다. 다음 단계는 `final-questions.md`에 남은 �
   - references/ui-layer-lab/output/playwright/product-release-mobile-dark.png
 ```
 
+## 2026-07-11 display primitive 의미 계약 보강
+
+- 구현 커밋: `ea936acb1`
+- `Surface`는 기본 `section`·`aside` surface에 accessible name을 요구한다. layout-only surface는
+  명시적으로 `as="div"`를 써야 하며 이 경우 region role을 만들지 않는다.
+- `Metric`은 `null`을 unavailable 상태로 다루고 실제 숫자 `0`과 분리한다. 단위와 note는
+  description list 안의 별도 `dd`로 유지해 값·단위·보조 설명의 의미를 섞지 않는다.
+- `StatusMark`는 모든 tone에 기본 텍스트 fallback을 제공하고, live announcement는 `live` prop을
+  명시한 경우에만 `role="status"`와 polite live region을 만든다. 상태 점은 decorative로 숨기고
+  forced-colors에서 currentColor border로 남는다.
+- 타입 계약 테스트는 이름 없는 semantic surface, `undefined` metric value, provider-specific
+  free-form status tone을 거부한다.
+- 이 변경은 새 endpoint 완료를 의미하지 않는다. `API 완성:` 기록은 0행이며 product API 소비
+  경계와 network-silent release gate 계약은 유지한다.
+
+```text
+명령: cd references/ui-layer-lab && npm run check
+결과: PASS
+  - TypeScript: PASS
+  - ESLint: PASS
+  - Vitest: 12 files, 65 tests PASS
+  - product design guard: 57 files PASS
+  - UI catalog source audit: 482 previews PASS, upstream 21e4ceb
+  - Vite production build: PASS
+주의: 500kB 초과 chunk warning은 reference catalog 기존 성능 과제로 유지
+```
+
+```text
+명령: uv run pytest tests/test_docs_index.py tests/test_bruno_collection.py -q
+결과: PASS — 17 passed
+
+명령: make manifest-check
+결과: PASS — management manifest objects 56, target manifest objects 18
+```
+
 ## 2026-07-11 상태 화면 primitive 접근성 보강
 
 - 구현 커밋: `1c821b640`
