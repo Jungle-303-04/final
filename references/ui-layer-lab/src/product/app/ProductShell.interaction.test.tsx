@@ -11,17 +11,21 @@ import { createApiComposition } from "./apiComposition";
 import { ProductRouter } from "./ProductRouter";
 
 beforeEach(() => {
+  installMatchMedia(false);
+});
+
+function installMatchMedia(matches: boolean) {
   Object.defineProperty(window, "matchMedia", {
     configurable: true,
     value: vi.fn(() => ({
-      matches: false,
+      matches,
       addListener: vi.fn(),
       removeListener: vi.fn(),
       addEventListener: vi.fn(),
       removeEventListener: vi.fn(),
     })),
   });
-});
+}
 
 afterEach(() => {
   cleanup();
@@ -83,6 +87,51 @@ describe("ProductShell keyboard and help interaction", () => {
     expect(screen.getByText("Home content")).toBeTruthy();
     expect(screen.queryByRole("dialog")).toBeNull();
     expect((input as HTMLInputElement).value).toBe("gi?");
+  });
+
+  it("collapses the desktop rail without remounting links and exposes focus tooltips only when slim", async () => {
+    const user = userEvent.setup();
+    const { container } = renderShell();
+    const sidebar = screen.getByRole("complementary", { name: "제품 메뉴" });
+    const home = screen.getByRole("link", { name: "Home" });
+    const collapse = screen.getByRole("button", { name: "사이드바 접기" });
+
+    expect(sidebar.getAttribute("data-state")).toBe("expanded");
+    await user.hover(home);
+    expect(screen.queryByRole("tooltip")).toBeNull();
+    await user.click(collapse);
+
+    const expand = screen.getByRole("button", { name: "사이드바 펼치기" });
+    expect(expand).toBe(collapse);
+    expect(document.activeElement).toBe(expand);
+    expect(expand.getAttribute("aria-expanded")).toBe("false");
+    expect(sidebar.getAttribute("data-state")).toBe("collapsed");
+    expect(screen.getByRole("link", { name: "Home" })).toBe(home);
+    expect(container.querySelectorAll("[data-slot='sidebar-menu-button']")).toHaveLength(2);
+
+    home.focus();
+    await waitFor(() => expect(screen.getByRole("tooltip").textContent).toBe("Home"));
+  });
+
+  it("uses a modal mobile drawer with Escape focus return and closes it after navigation", async () => {
+    installMatchMedia(true);
+    const user = userEvent.setup();
+    renderShell();
+    const open = screen.getByRole("button", { name: "모바일 사이드바 열기" });
+    expect(screen.queryByRole("navigation", { name: "주요 메뉴" })).toBeNull();
+
+    await user.click(open);
+    const dialog = await screen.findByRole("dialog", { name: "제품 탐색" });
+    expect(dialog.contains(document.activeElement)).toBe(true);
+    await user.keyboard("{Escape}");
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    expect(document.activeElement).toBe(open);
+
+    await user.click(open);
+    await user.click(await screen.findByRole("link", { name: "Issues" }));
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    expect(screen.getByText("Issue content")).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "Issues", level: 1 })).toBeTruthy();
   });
 
   it("keeps the production release gate shell-free and network-silent without API approvals", async () => {
