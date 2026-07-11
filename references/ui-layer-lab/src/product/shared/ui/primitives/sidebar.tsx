@@ -215,7 +215,7 @@ export function SidebarTrigger({
   mobileOpenLabel,
   ...triggerProps
 }: SidebarTriggerProps) {
-  const { currentOpen, isMobile, toggle } = useSidebar();
+  const { currentOpen, isMobile, state, toggle } = useSidebar();
   const labels = [collapseLabel, expandLabel, mobileCloseLabel, mobileOpenLabel]
     .map((label) => nonEmpty(label, "SidebarTrigger labels"));
   if (!LABEL_MODES.includes(labelMode)) throw new TypeError("SidebarTrigger labelMode must be responsive or sr-only");
@@ -228,7 +228,7 @@ export function SidebarTrigger({
       aria-controls={nonEmpty(controls, "SidebarTrigger controls")}
       aria-expanded={currentOpen}
       aria-label={label}
-      className={cn("forced-colors:focus-visible:outline forced-colors:focus-visible:outline-2 forced-colors:focus-visible:outline-[Highlight] motion-reduce:transition-none", triggerProps.className)}
+      className={cn("forced-colors:focus-visible:outline forced-colors:focus-visible:outline-2 forced-colors:focus-visible:outline-[Highlight] motion-reduce:transition-none", labelMode === "responsive" && "w-full", labelMode === "responsive" && (state === "expanded" ? "justify-start" : "px-0"), triggerProps.className)}
       data-slot="sidebar-trigger"
       onClick={toggle}
       type="button"

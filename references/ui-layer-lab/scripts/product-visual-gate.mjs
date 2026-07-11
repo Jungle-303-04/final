@@ -9,6 +9,7 @@ const runNonce = randomUUID();
 const baseUrl = `http://127.0.0.1:${port}`;
 const productUrl = `${baseUrl}/product`;
 const stateHarnessUrl = `${baseUrl}/scripts/fixtures/product-state-visual-harness.html`;
+const shellHarnessUrl = `${baseUrl}/scripts/fixtures/product-shell-visual-harness.html`;
 const outputDir = new URL("../output/playwright/", import.meta.url).pathname;
 const releaseSelectors = ["[data-slot='empty']", "[data-slot='badge']", "h1", "p"];
 const stateSelectors = [
@@ -38,6 +39,16 @@ const stateSelectors = [
   "h2",
   "p",
   "code",
+];
+const shellSelectors = [
+  "[data-slot='sidebar-provider']",
+  "[data-slot='sidebar-inset']",
+  "[data-slot='sidebar-navigation']",
+  "[data-slot='sidebar-menu']",
+  "[data-slot='sidebar-trigger']",
+  "[data-shell-harness-outlet]",
+  "header",
+  "main",
 ];
 const visualScenarios = [
   {
@@ -114,6 +125,77 @@ const visualScenarios = [
     colorScheme: "light",
     forcedColors: "active",
     stateAssertions: true,
+  },
+  {
+    id: "shell-desktop-expanded-light",
+    url: shellHarnessUrl,
+    heading: "Home",
+    requiredSelectors: [...shellSelectors, "[data-slot='sidebar']"],
+    viewport: { width: 1440, height: 900 },
+    theme: "light",
+    colorScheme: "light",
+    forcedColors: "none",
+    shellMode: "desktop-expanded",
+  },
+  {
+    id: "shell-desktop-collapsed-forced-colors",
+    url: shellHarnessUrl,
+    heading: "Home",
+    requiredSelectors: [...shellSelectors, "[data-slot='sidebar']"],
+    viewport: { width: 1440, height: 900 },
+    theme: "light",
+    colorScheme: "light",
+    forcedColors: "active",
+    shellMode: "desktop-collapsed",
+  },
+  {
+    id: "shell-mobile-drawer-dark-390",
+    url: shellHarnessUrl,
+    heading: "Home",
+    requiredSelectors: [
+      ...shellSelectors,
+      "[data-slot='sidebar-mobile']",
+      "[data-slot='dialog-content']",
+      "[data-slot='dialog-overlay']",
+    ],
+    viewport: { width: 390, height: 844 },
+    theme: "dark",
+    colorScheme: "dark",
+    forcedColors: "none",
+    shellMode: "mobile-open",
+  },
+  {
+    id: "shell-mobile-drawer-dark-320",
+    url: shellHarnessUrl,
+    heading: "Home",
+    requiredSelectors: [
+      ...shellSelectors,
+      "[data-slot='sidebar-mobile']",
+      "[data-slot='dialog-content']",
+      "[data-slot='dialog-overlay']",
+    ],
+    viewport: { width: 320, height: 800 },
+    theme: "dark",
+    colorScheme: "dark",
+    forcedColors: "none",
+    shellMode: "mobile-open",
+  },
+  {
+    id: "shell-text-resize-200-light",
+    url: shellHarnessUrl,
+    heading: "Home",
+    requiredSelectors: [
+      ...shellSelectors,
+      "[data-slot='sidebar-mobile']",
+      "[data-slot='dialog-content']",
+      "[data-slot='dialog-overlay']",
+    ],
+    viewport: { width: 640, height: 900 },
+    theme: "light",
+    colorScheme: "light",
+    forcedColors: "none",
+    rootFontScale: 2,
+    shellMode: "mobile-open",
   },
 ];
 
@@ -212,9 +294,13 @@ async function captureScenario(page, scenario) {
 
   await page.getByRole("heading", { name: scenario.heading }).waitFor();
   await assertScenarioEnvironment(page, scenario, baselineRootFontSize);
-  await page.keyboard.press("?");
-  if (await page.getByRole("dialog").count()) {
-    throw new Error(`${scenario.id}: release-only shortcut dialog mounted unexpectedly`);
+  if (scenario.shellMode) {
+    await prepareProductShellScenario(page, scenario);
+  } else {
+    await page.keyboard.press("?");
+    if (await page.getByRole("dialog").count()) {
+      throw new Error(`${scenario.id}: release-only shortcut dialog mounted unexpectedly`);
+    }
   }
   if (await page.getByRole("main").count() !== 1) {
     throw new Error(`${scenario.id}: visual surface must expose one main landmark`);
@@ -224,14 +310,238 @@ async function captureScenario(page, scenario) {
     await assertStatePrimitiveContracts(page, scenario.id);
     await assertInteractionPrimitiveContracts(page, scenario.id);
   }
+  if (scenario.shellMode) {
+    await assertProductShellContracts(page, scenario);
+  }
   await assertNoOverflow(page, scenario.id, scenario.requiredSelectors);
   if (scenario.forcedColors === "active") {
-    await assertForcedColors(page, scenario.id);
+    if (scenario.shellMode) await assertProductShellForcedColors(page, scenario.id);
+    else await assertForcedColors(page, scenario.id);
   }
   await page.screenshot({
     path: `${outputDir}product-${scenario.id}.png`,
     fullPage: true,
   });
+}
+
+async function prepareProductShellScenario(page, scenario) {
+  if (scenario.shellMode === "desktop-collapsed") {
+    const trigger = page.getByRole("button", { name: "사이드바 접기" });
+    await trigger.click();
+    await page.getByRole("button", { name: "사이드바 펼치기" }).waitFor();
+  }
+  if (scenario.shellMode === "mobile-open") {
+    await page.getByRole("button", { name: "모바일 사이드바 열기" }).click();
+    const dialog = page.getByRole("dialog", { name: "제품 탐색" });
+    await dialog.waitFor();
+    await page.waitForFunction(() => {
+      const popup = document.querySelector("[data-slot='dialog-content']");
+      return popup instanceof HTMLElement
+        && popup.contains(document.activeElement)
+        && popup.getBoundingClientRect().width > 0;
+    });
+  }
+}
+
+async function assertProductShellContracts(page, scenario) {
+  if (scenario.shellMode === "mobile-open") await assertMobileFocusTrap(page, scenario.id);
+  const result = await page.evaluate((mode) => {
+    const provider = document.querySelector("[data-slot='sidebar-provider']");
+    const inset = document.querySelector("[data-slot='sidebar-inset']");
+    const main = document.querySelector("main");
+    const navigation = document.querySelector("[data-slot='sidebar-navigation']");
+    const menu = document.querySelector("[data-slot='sidebar-menu']");
+    const desktopSidebar = document.querySelector("[data-slot='sidebar']");
+    const mobileSidebar = document.querySelector("[data-slot='sidebar-mobile']");
+    const trigger = document.querySelector("[data-slot='sidebar-trigger']");
+    const dialog = document.querySelector("[data-slot='dialog-content']");
+    const overlay = document.querySelector("[data-slot='dialog-overlay']");
+    const required = [provider, inset, main, navigation, menu, trigger];
+    if (required.some((element) => !(element instanceof HTMLElement))) return { missing: true };
+
+    const rect = (element) => {
+      const bounds = element.getBoundingClientRect();
+      return {
+        bottom: bounds.bottom,
+        height: bounds.height,
+        left: bounds.left,
+        right: bounds.right,
+        top: bounds.top,
+        width: bounds.width,
+      };
+    };
+    const links = [...menu.querySelectorAll("a[href]")];
+    const items = [...menu.children];
+    const currentLinks = links.filter((link) => link.getAttribute("aria-current") === "page");
+    const motion = [desktopSidebar, mobileSidebar, trigger, dialog, overlay, ...links]
+      .filter((element) => element instanceof HTMLElement)
+      .map((element) => {
+        const style = getComputedStyle(element);
+        return {
+          animationDuration: style.animationDuration,
+          animationName: style.animationName,
+          slot: element.getAttribute("data-slot") ?? element.tagName.toLowerCase(),
+          transitionDuration: style.transitionDuration,
+          transitionProperty: style.transitionProperty,
+        };
+      });
+    const rootStyle = getComputedStyle(document.documentElement);
+    return {
+      missing: false,
+      currentHref: currentLinks[0]?.getAttribute("href") ?? null,
+      currentLabel: currentLinks[0]?.textContent?.trim() ?? null,
+      currentLinks: currentLinks.length,
+      desktopSidebarCount: desktopSidebar ? 1 : 0,
+      dialogRect: dialog instanceof HTMLElement ? rect(dialog) : null,
+      insetRect: rect(inset),
+      itemCount: items.length,
+      itemTags: items.map((item) => item.tagName),
+      linkCount: links.length,
+      linkLabels: links.map((link) => link.getAttribute("aria-label")),
+      mainRect: rect(main),
+      mobileSidebarCount: mobileSidebar ? 1 : 0,
+      motion,
+      navigationLabel: navigation.getAttribute("aria-label"),
+      navigationRole: navigation.getAttribute("role") ?? navigation.tagName.toLowerCase(),
+      overlayRect: overlay instanceof HTMLElement ? rect(overlay) : null,
+      providerRect: rect(provider),
+      rootFontSize: Number.parseFloat(rootStyle.fontSize),
+      sidebarRect: desktopSidebar instanceof HTMLElement ? rect(desktopSidebar) : null,
+      sidebarState: (desktopSidebar ?? mobileSidebar)?.getAttribute("data-state") ?? null,
+      sidebarWidthCollapsed: rootStyle.getPropertyValue("--product-sidebar-width-collapsed").trim(),
+      sidebarWidthExpanded: rootStyle.getPropertyValue("--product-sidebar-width").trim(),
+      sidebarWidthMobile: rootStyle.getPropertyValue("--product-sidebar-width-mobile").trim(),
+      triggerControls: trigger.getAttribute("aria-controls"),
+      triggerExpanded: trigger.getAttribute("aria-expanded"),
+      triggerFocused: document.activeElement === trigger,
+      triggerLabel: trigger.getAttribute("aria-label"),
+      viewportHeight: window.innerHeight,
+      viewportWidth: window.innerWidth,
+      mode,
+    };
+  }, scenario.shellMode);
+
+  if (result.missing) throw new Error(`${scenario.id}: ProductShell fixture is incomplete`);
+  if (result.navigationRole !== "nav" || result.navigationLabel !== "주요 메뉴"
+    || result.itemCount !== 3 || result.linkCount !== 3
+    || result.currentLinks !== 1 || result.currentHref !== "/product"
+    || result.currentLabel !== "Home"
+    || result.itemTags.some((tag) => tag !== "LI")
+    || result.linkLabels.join("|") !== "Home|Issues|Timeline") {
+    throw new Error(`${scenario.id}: navigation/list/current semantics failed ${JSON.stringify(result)}`);
+  }
+  if (result.sidebarWidthExpanded !== "11rem"
+    || result.sidebarWidthCollapsed !== "3.5rem"
+    || result.sidebarWidthMobile !== "17rem") {
+    throw new Error(`${scenario.id}: sidebar token contract changed ${JSON.stringify(result)}`);
+  }
+  if (!rectContains(result.providerRect, result.insetRect, 1)
+    || !rectContains(result.insetRect, result.mainRect, 1)) {
+    throw new Error(`${scenario.id}: provider/inset/main containment failed ${JSON.stringify(result)}`);
+  }
+
+  if (scenario.shellMode.startsWith("desktop")) {
+    const collapsed = scenario.shellMode === "desktop-collapsed";
+    const expectedWidth = result.rootFontSize * (collapsed ? 3.5 : 11);
+    if (!result.sidebarRect || Math.abs(result.sidebarRect.width - expectedWidth) > 1
+      || result.desktopSidebarCount !== 1 || result.mobileSidebarCount !== 0
+      || result.sidebarState !== (collapsed ? "collapsed" : "expanded")
+      || result.triggerExpanded !== String(!collapsed)
+      || result.triggerLabel !== (collapsed ? "사이드바 펼치기" : "사이드바 접기")
+      || result.triggerControls !== "product-primary-navigation") {
+      throw new Error(`${scenario.id}: desktop sidebar geometry/state failed ${JSON.stringify(result)}`);
+    }
+    if (collapsed && !result.triggerFocused) {
+      throw new Error(`${scenario.id}: collapse action must retain focus on its trigger`);
+    }
+  } else {
+    const expectedWidth = Math.min(result.rootFontSize * 17, result.viewportWidth - result.rootFontSize);
+    if (result.desktopSidebarCount !== 0 || result.mobileSidebarCount !== 1
+      || !result.dialogRect || Math.abs(result.dialogRect.width - expectedWidth) > 1
+      || !result.overlayRect || result.overlayRect.left > 1 || result.overlayRect.top > 1
+      || result.overlayRect.width < result.viewportWidth - 1
+      || result.overlayRect.height < result.viewportHeight - 1
+      || result.triggerLabel !== "모바일 사이드바 열기"
+      || result.triggerExpanded !== "true") {
+      throw new Error(`${scenario.id}: mobile dialog geometry/state failed ${JSON.stringify(result)}`);
+    }
+  }
+  for (const motion of result.motion) {
+    if (motion.transitionProperty !== "none"
+      && maxCssTimeMilliseconds(motion.transitionDuration) > 1) {
+      throw new Error(`${scenario.id}: ${motion.slot} reduced-motion transition remains ${motion.transitionDuration}`);
+    }
+    if (motion.animationName !== "none"
+      && maxCssTimeMilliseconds(motion.animationDuration) > 1) {
+      throw new Error(`${scenario.id}: ${motion.slot} reduced-motion animation remains ${motion.animationDuration}`);
+    }
+  }
+}
+
+async function assertMobileFocusTrap(page, label) {
+  const dialog = page.getByRole("dialog", { name: "제품 탐색" });
+  const focusable = dialog.locator("a[href], button:not(:disabled), [tabindex]:not([tabindex='-1'])");
+  const count = await focusable.count();
+  if (count < 2) throw new Error(`${label}: mobile dialog needs multiple focusable controls`);
+  await focusable.nth(count - 1).focus();
+  await page.keyboard.press("Tab");
+  if (!(await focusable.nth(0).evaluate((element) => element === document.activeElement))) {
+    throw new Error(`${label}: Tab did not wrap from the dialog end to its start`);
+  }
+  await focusable.nth(0).focus();
+  await page.keyboard.press("Shift+Tab");
+  if (!(await focusable.nth(count - 1).evaluate((element) => element === document.activeElement))) {
+    throw new Error(`${label}: Shift+Tab did not wrap from the dialog start to its end`);
+  }
+}
+
+async function assertProductShellForcedColors(page, label) {
+  await page.keyboard.press("Tab");
+  await page.keyboard.press("Shift+Tab");
+  const result = await page.evaluate(() => {
+    const sidebar = document.querySelector("[data-slot='sidebar']");
+    const trigger = document.querySelector("[data-slot='sidebar-trigger']");
+    const current = document.querySelector("[data-slot='sidebar-menu-button'][aria-current='page']");
+    if (!(sidebar instanceof HTMLElement)
+      || !(trigger instanceof HTMLElement)
+      || !(current instanceof HTMLElement)) return { missing: true };
+    const sidebarStyle = getComputedStyle(sidebar);
+    const triggerStyle = getComputedStyle(trigger);
+    const currentStyle = getComputedStyle(current);
+    return {
+      missing: false,
+      active: matchMedia("(forced-colors: active)").matches,
+      currentBackground: currentStyle.backgroundColor,
+      currentColor: currentStyle.color,
+      currentOpacity: Number.parseFloat(currentStyle.opacity),
+      sidebarBackground: sidebarStyle.backgroundColor,
+      sidebarBorderColor: sidebarStyle.borderRightColor,
+      sidebarBorderStyle: sidebarStyle.borderRightStyle,
+      sidebarBorderWidth: Number.parseFloat(sidebarStyle.borderRightWidth),
+      triggerFocused: document.activeElement === trigger,
+      triggerOpacity: Number.parseFloat(triggerStyle.opacity),
+      triggerOutlineColor: triggerStyle.outlineColor,
+      triggerOutlineStyle: triggerStyle.outlineStyle,
+      triggerOutlineWidth: Number.parseFloat(triggerStyle.outlineWidth),
+    };
+  });
+  if (result.missing || !result.active || !result.triggerFocused
+    || result.sidebarBorderStyle === "none" || result.sidebarBorderWidth < 1
+    || result.triggerOutlineStyle === "none" || result.triggerOutlineWidth < 2
+    || result.currentOpacity !== 1 || result.triggerOpacity !== 1
+    || result.currentBackground === result.sidebarBackground) {
+    throw new Error(`${label}: forced-colors sidebar state is not preserved ${JSON.stringify(result)}`);
+  }
+  assertContrast(label, "sidebar border", result.sidebarBorderColor, result.sidebarBackground, 3);
+  assertContrast(label, "sidebar trigger focus", result.triggerOutlineColor, result.sidebarBackground, 3);
+  assertContrast(
+    label,
+    "current navigation",
+    result.currentColor,
+    result.currentBackground,
+    4.5,
+    result.sidebarBackground,
+  );
 }
 
 async function assertStatePrimitiveContracts(page, label) {

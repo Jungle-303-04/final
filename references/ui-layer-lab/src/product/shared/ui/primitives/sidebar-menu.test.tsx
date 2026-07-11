@@ -68,7 +68,8 @@ describe("product-owned Sidebar menu", () => {
     await user.hover(link);
     await waitFor(() => expect(screen.getByRole("tooltip").textContent).toBe("홈"));
     await user.unhover(link);
-    link.focus();
+    await user.tab();
+    expect(document.activeElement).toBe(link);
     await waitFor(() => expect(screen.getByRole("tooltip").textContent).toBe("홈"));
     collapsed.unmount();
 
@@ -76,7 +77,8 @@ describe("product-owned Sidebar menu", () => {
     const expandedLink = screen.getByRole("link", { name: "홈" });
     await user.hover(expandedLink);
     expect(screen.queryByRole("tooltip")).toBeNull();
-    expandedLink.focus();
+    await user.tab();
+    expect(document.activeElement).toBe(expandedLink);
     expect(screen.queryByRole("tooltip")).toBeNull();
   });
 
