@@ -123,3 +123,71 @@ Block A는 코드 구현과 비인증 경로 검증까지 완료됐지만, 지�
 stale/partial/RBAC, LOD, 보안, 검증처럼 뷰와 무관한 장기 규칙이 많아 이번 단계에서는 전체를
 보존했다. 전용 presentation, layout, motion, test, DoD 절은 P1·P2 구현 근거로 사용하지 않는다.
 후속 검토에서 뷰 중립 core를 먼저 추출한 뒤 전용 절을 분리하는 것이 안전하다는 판정이다.
+
+## 2026-07-11 P1 — 외부 기준 저장소 기능 전수표 완료
+
+### 적용
+
+- P1 최종 보강 커밋: `69ae6e1ccd30ea9d60bd9fb9d42d4d0e1da8b912`
+- 문서 위생·API 병렬 조율 커밋: `8bc45894f8516b144d12cf16999b4cd8263ed94c`
+- 원격 브랜치: `origin/woonyong/ui-layer-lab`
+- 실행 인스턴스 `http://127.0.0.1:9280`의 `mgmt`, `cluster-1` context를 browser에서
+  관찰하고 동일 버전 source tag `v1.8.1`, commit
+  `3ff2b1095151c690bf536e8e6ca685c2703fcd70`과 대조했다.
+- primary/contextual route, 전역 shell, URL/deep-link, drawer/detail, keyboard, filter,
+  polling, SSE/WebSocket, capability/RBAC 동작을 `reference-feature-inventory.md`에 기록했다.
+- standalone browser 소비 API를 7.2~7.11의 **136 mapping unit**으로 고정했다. P2는 같은
+  단위·순서로 `P1 136 = P2 136`을 증명해야 한다.
+- server 등록 경로 중 standalone browser가 소비하지 않는 endpoint는 7.12로 분리했다.
+- 원형 계약의 Traffic no-permission response shape 불일치, metrics 공통 freshness 부재,
+  Timeline/SSE resume cursor 부재, Helm/log stream resume·idempotency 부재, GitOps operation
+  receipt 부재를 숨기지 않고 기록했다.
+- RCA는 Home/Issues/resource/workload/GitOps/Timeline의 논리 삽입 후보만 기록했으며 구현하지 않았다.
+- `api-needs.md`를 병렬 API 작업자와의 단일 요청 큐로 만들었다. P1 단계에서는 우리 backend
+  매핑을 하지 않았으므로 요청 행을 만들지 않았다.
+
+### 검증
+
+```text
+명령: awk로 reference-feature-inventory.md §7.2~§7.11의 Markdown body row 재계수
+결과: PASS — 136행
+
+명령: git diff --check / git diff --cached --check
+결과: PASS
+
+명령: cd references/ui-layer-lab && npm run check
+결과: PASS
+  - TypeScript: PASS
+  - ESLint: PASS
+  - Vitest: 4 files, 22 tests PASS
+  - product design guard: 41 files PASS
+  - UI catalog source audit: 482 previews PASS, upstream 21e4ceb
+  - Vite production build: PASS
+주의: 500kB 초과 chunk warning은 기존 성능 과제로 유지
+```
+
+### 런타임 조사 안전 사고
+
+- read-only 조사를 맡긴 browser 작업자가 Workload의 confirmation 존재 여부를 확인하려다
+  `target/cluster-agent`의 Restart를 1회 실행했다. 실행판은 confirmation 없이 즉시
+  `POST /api/workloads/deployments/target/cluster-agent/restart`를 전송했다.
+- 사고 직후 모든 runtime mutation을 중단했고 추가 변경은 실행하지 않았다.
+- GET-only 사후 확인에서 Deployment generation/observedGeneration은 `45/45`, revision은 `41`,
+  replicas/updated/ready/available은 모두 `1`이었다. 새 Pod
+  `cluster-agent-6549f6845b-swh4n`은 `Running`, `Ready=True`, restart count `0`으로 정상 수렴했다.
+- 후속 reference runtime 조사는 GET, DOM, source 확인만 허용한다. mutation interaction은 source
+  call-chain과 capability 상태로만 검증한다.
+
+### 게이트 판정
+
+| 게이트 | 결과 | 근거 |
+|---|---|---|
+| P1 route·screen·interaction 전수 | 통과 | inventory §2~§5 |
+| refresh·realtime 전수 | 통과 | inventory §6, §7.5, §7.8, §7.11 |
+| browser 소비 API 전수 | 통과 | inventory 136 mapping unit |
+| runtime/source 이중 근거 구분 | 통과 | `runtime+source`, `source-confirmed`, `runtime-gated` 판정 |
+| 제품 코드·RCA 구현 미착수 | 통과 | P1 commit은 docs-only |
+| synthetic·fixture 유입 | 통과 | 제품 파일 변경 없음 |
+
+P1을 완료로 판정한다. 다음 단계는 136개 mapping unit 전부를 우리 `routes.py` 근거와 대조하는
+P2 `reference-contract-map.md`이며, 필요한 API 함수는 직접 만들지 않고 `api-needs.md`에 요청한다.
