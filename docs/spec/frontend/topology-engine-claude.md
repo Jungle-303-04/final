@@ -12,7 +12,7 @@ last_verified: 2026-07-11
 
 ## 0. 문서의 위치와 규율
 
-**문서 간 충돌에서 Home treemap의 interaction model과 전환 sequence의 정본은 이 문서다.** 색·치수·density·z-order 및 duration/easing literal의 정본은 `topology-visual-motion-tokens.md`다. domain 의미·상태의 장기 계획은 `topology-engine.md`, protocol은 `topology-message-action-schema.md`, 제품 API 소비 의미는 `product-data-contract.md`를 함께 본다.
+이 문서는 Home treemap의 interaction model과 전환 sequence를 정리한 구현 예정 계약이다. 색·치수·density·z-order 및 duration/easing literal은 `topology-visual-motion-tokens.md`에서 함께 추적한다. domain 의미·상태의 장기 계획은 `topology-engine.md`, protocol은 `topology-message-action-schema.md`, 제품 API 소비 의미는 `product-data-contract.md`를 함께 본다.
 
 현재 repo의 실제 코드와 통과한 테스트가 구현 완료 여부의 source of truth다. 이 문서는 구현할 interaction 순서와 불변조건을 작업 기준으로 정리한다. 본문의 시각·motion 수치는 token 이름의 설명용 alias이며 값이 다르면 실제 코드/테스트와 `topology-visual-motion-tokens.md`를 함께 동기화한다.
 
@@ -134,10 +134,17 @@ Container arm이 추가된 뒤 진행한다.
 ### 2.1 Home IA와 모드 (확정)
 
 - 별도 `Topology` 탭·메뉴·route는 만들지 않는다. 기존 항목이 있으면 제거한다.
-- **Home이 treemap의 유일한 제품 surface**다. Home은 실제 cluster selector(`kubernetes-ops`,
-  `cluster-1`)와 선택 클러스터의 node frame 안 pod tile treemap을 중심 화면으로 가진다.
-- sidebar는 backend capability가 실존하는 `Home`, `Resources`, `Issues`, `Timeline`, `GitOps`,
-  `Settings`만 둔다. `Cost`, `Helm`, `Live Traffic`, `Checks`는 disabled 항목도 만들지 않는다.
+- **Home이 treemap의 유일한 제품 surface**이며, **제품은 클러스터에서 시작한다**:
+  Home 최상단은 실제 cluster selector(`kubernetes-ops`, `cluster-1`)이고, 연결된 클러스터가
+  없거나 새 클러스터를 추가할 때는 Home 안에서 기존 등록 위저드(provider catalog →
+  preflight → register → bootstrap → connection-status)로 진입한다. 연결 후에는 node frame
+  안 pod tile treemap + focus 관계뷰가 중심 화면이다.
+- sidebar 최종안(2026-07-11 확정): `Home`, `Resources`, `Issues`, `Timeline`, `GitOps`,
+  `Helm`(BE-5 조회 API 완료 후 노출 — 그 전에는 메뉴 자체를 만들지 않음), `Settings`.
+  `Traffic` 탭은 영구적으로 만들지 않는다 — configured/effective 트래픽 사슬은 Home의
+  왼쪽 전개(focus)가 담당하며, observed 유량 소스가 생기는 시점에만 재논의한다.
+  `Audit`은 v1 이후 백로그(BE-8), `Cost`·`Checks`·`Image FS`는 계획 없음. 어떤 경우에도
+  backend capability 없는 메뉴는 disabled 상태로도 만들지 않는다.
 - Home 내부 presentation은 두 개뿐이다(URL `?focus={entityKey}` 유무로 결정):
   - **map**: placement treemap이 캔버스 전폭을 채운다(§3.1).
   - **focus**: 큐브 클릭으로 진입. 클릭한 큐브가 왼쪽 소스 큐브가 되고, **맵의 나머지
@@ -193,12 +200,12 @@ empty-authoritative / stale(배지) / populated. 각 상태는 시각 회귀 대
   workload group projection으로 집계한다. projection member count와 전체 pod count 보존은
   assert한다.
 - 정렬 tie-break: namespace asc → name asc (결정적).
-- `Unscheduled` shelf는 node_name null인 pod만 포함하며 geometry는 visual token 정본을 따른다.
+- `Unscheduled` shelf는 node_name null인 pod만 포함하며 geometry는 visual token 문서를 따른다.
 
 ### 3.2 focus 모드 (좌 소스 큐브 / 우 전체 세로 열 / 연결체당 리본 1개) — 확정
 
 focus 대상은 map의 모든 큐브다(pod 타일, node frame 헤더 포함). 소스가 무엇이든 연관
-집합의 원천은 서버 계산 관계(§1.2)뿐이다. geometry/density literal은 visual token 정본을 따른다.
+집합의 원천은 서버 계산 관계(§1.2)뿐이다. geometry/density literal은 visual token 문서를 따른다.
 
 - **오른쪽 열 (전체 항목 — §2.1 완전성 불변조건 적용)**:
   - logical inline-end에 map의 source를 제외한 **모든 항목**을 세로 1열로 둔다.
@@ -209,11 +216,11 @@ focus 대상은 map의 모든 큐브다(pod 타일, node frame 헤더 포함). �
     kind 아이콘 토큰으로 보조한다.
   - 하단 = 비연관 항목 전부. dim 처리하되 identity·label·keyboard access를 유지하고 리본은 없다.
 - **왼쪽 소스 큐브**: logical inline-start에 고정하고 source face 전체를 health connector face
-  비율로 gap/overlap 없이 partition한다. source/target size와 label density는 visual token 정본을 따른다.
+  비율로 gap/overlap 없이 partition한다. source/target size와 label density는 visual token 문서를 따른다.
 - **리본 — 연결체당 정확히 1개, 세 갈래 금지**: 양끝이 **세로면 전체**와 결합한다.
   소스 오른면은 연결체 face 높이 비례로 빈틈없이 분할하고, 연결체 왼면은 첫 멤버
   위끝부터 마지막 멤버 아래끝까지 전체를 덮는다. **중앙점 결합 금지**. 경로는 상·하
-  두 변의 cubic bezier band이며 routing tension은 visual token 정본을 따른다.
+  두 변의 cubic bezier band이며 routing tension은 visual token 문서를 따른다.
 - 항목이 열 높이를 넘치면 논리 collection을 그대로 유지한 채 vertical scroll/virtualization을
   사용한다. mount된 DOM 수가 아니라 logical collection으로 완전성 assert를 계산한다.
 
@@ -248,7 +255,7 @@ focus 대상은 map의 모든 큐브다(pod 타일, node frame 헤더 포함). �
    `ribbonDraw`를 source face→target face 방향으로 실행한다. connector start는
    `connectorStagger`를 적용한다. fade-in으로 방향성 draw를 대체하지 않는다.
 
-현재 canonical token 해석은 `150ms erase → 720ms morph(24ms/cube, cap 300ms) → local 80% label reveal → 마지막 settle +60ms → 560ms draw(110ms/connector)`다. 값 변경은 visual token 정본에서만 한다.
+현재 canonical token 해석은 `150ms erase → 720ms morph(24ms/cube, cap 300ms) → local 80% label reveal → 마지막 settle +60ms → 560ms draw(110ms/connector)`다. 값 변경은 visual token 문서와 코드/테스트를 같은 변경에서 동기화한다.
 
 **복귀(focus → map)**: `ribbonErase` 완료 → 전체 cube `focusMorph`(비연관 opacity 복원 동시)
 → `labelReveal`에서 map label 등장. ribbon draw의 역재생은 하지 않는다.
@@ -263,7 +270,7 @@ focus 대상은 map의 모든 큐브다(pod 타일, node frame 헤더 포함). �
 
 ### 4.2b 자연스러움 원칙 (모든 모션 공통 — 게이트 대상)
 
-1. easing은 visual token 정본의 `focusMorphEase`, `ribbonDrawEase`만 사용한다.
+1. easing은 visual token 문서의 `focusMorphEase`, `ribbonDrawEase`만 사용한다.
 2. 이동하는 요소는 위치·크기를 **한 트랜지션에서 동시에** 보간한다(순차 보간 금지).
 3. stagger는 항상 공간 좌표 순서 기반 — 인덱스·랜덤 기반 금지. 물결에는 방향이 있어야 한다.
 4. 요소별 모션 문법 고정: 큐브=morph, 리본=성장 드로우, 라벨=페이드+슬라이드. 같은 요소가
@@ -299,12 +306,12 @@ focus/URL 결과는 일반 motion과 같아야 한다. 파티클·펄스류는 v
 
 Home map은 canonical `packedPodTileMinimum=14×14px`, `nestedChildGap=2px`,
 `namespaceStabilityStripWidth=3px`를 사용한다. radius, selection ring, typography, frame header,
-usage bar와 focus column geometry는 visual token 정본을 직접 참조한다. 이 문서에 대체 pixel
+usage bar와 focus column geometry는 visual token 문서를 직접 참조한다. 이 문서에 대체 pixel
 literal을 만들지 않는다.
 
 ### 5.3 밀도 규칙
 
-`TileDensity`는 visual token 정본의 측정 기반 `marker | name | name-value | summary` policy를
+`TileDensity`는 visual token 문서의 측정 기반 `marker | name | name-value | summary` policy를
 그대로 사용한다. 판정은 layout 함수가 Rect와 actual text measurement를 함께 사용해 반환한다.
 Home 전용 threshold를 만들지 않는다.
 
@@ -388,7 +395,7 @@ surface가 아니다. Resources inline detail은 Home 완료 뒤 별도 capabili
 ## 9. 확정/연기 경계
 
 - §2~§4의 Home map/focus model, 완전성 invariant, 균등 면적과 sequence는 v0 확정이다.
-- 색·치수·density·z-order와 motion literal은 visual token 정본에서 확정한다.
+- 색·치수·density·z-order와 motion literal은 visual token 문서에서 관리하고 코드/테스트와 함께 동기화한다.
 - fold drag gesture와 Container treemap entity는 v1 이후다. v0 implementation surface에
   disabled UI나 dormant listener로도 넣지 않는다.
 - workload projection threshold는 실제 cluster bounds로 선택할 수 있지만 canonical tile minimum,

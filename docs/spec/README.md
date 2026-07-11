@@ -88,6 +88,7 @@
 
 ## frontend
 
+- [frontend/CODEX-BRIEFING-20260711](frontend/CODEX-BRIEFING-20260711.md)
 - [frontend/design-system](frontend/design-system.md)
 - [frontend/product-data-contract](frontend/product-data-contract.md)
 - [frontend/topology-api-integration](frontend/topology-api-integration.md)

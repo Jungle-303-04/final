@@ -10,7 +10,7 @@ last_verified: 2026-07-11
 
 ## 0. 권한과 literal 규칙
 
-**문서 간 충돌에서 색·치수·density·z-order의 정본은 이 문서다.** interaction model과 전환 단계·순서의 정본은 `topology-engine-claude.md`다. 단계의 의미와 gate는 interaction 정본을 따르고, duration/easing/geometry literal은 이 문서의 canonical token만 사용한다. 실제 구현 완료 여부는 코드와 테스트로 판정하며 두 문서는 같은 변경에서 동기화한다.
+`topology-engine-claude.md`는 interaction model과 전환 단계·순서를 설명하고, 이 문서는 색·치수·density·z-order 및 duration/easing/geometry literal을 추적한다. 단계의 의미·gate와 token 값이 함께 바뀌면 두 문서와 코드/테스트를 같은 변경에서 동기화한다.
 
 이 문서는 topology visual/motion의 구현 예정 numeric contract다. 현재 repo의 실제 코드와 통과한 테스트가 source of truth이며, 아래 token과 policy가 현 코드에 없거나 값이 다르면 구현 완료가 아니라 후속 작업 기준으로만 읽는다. 실측으로 값을 바꿀 때도 versioned policy와 회귀 기준, 구현, 테스트를 같은 변경에서 동기화한다.
 
