@@ -88,25 +88,13 @@
 
 ## frontend
 
-- [frontend/app](frontend/app.md)
-- [frontend/auth](frontend/auth.md)
-- [frontend/chat](frontend/chat.md)
-- [frontend/cluster](frontend/cluster.md)
 - [frontend/design-system](frontend/design-system.md)
-- [frontend/fleet](frontend/fleet.md)
-- [frontend/metrics](frontend/metrics.md)
-- [frontend/notifications](frontend/notifications.md)
-- [frontend/org](frontend/org.md)
 - [frontend/product-data-contract](frontend/product-data-contract.md)
-- [frontend/repo](frontend/repo.md)
-- [frontend/resources](frontend/resources.md)
-- [frontend/shared](frontend/shared.md)
 - [frontend/topology-api-integration](frontend/topology-api-integration.md)
 - [frontend/topology-engine-claude](frontend/topology-engine-claude.md)
 - [frontend/topology-engine](frontend/topology-engine.md)
 - [frontend/topology-message-action-schema](frontend/topology-message-action-schema.md)
 - [frontend/topology-visual-motion-tokens](frontend/topology-visual-motion-tokens.md)
-- [frontend/workflow](frontend/workflow.md)
 
 ## 유지 규칙
 

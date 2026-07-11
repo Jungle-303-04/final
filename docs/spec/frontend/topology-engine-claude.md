@@ -1,6 +1,6 @@
 ---
-title: Topology Engine — 초기 v0 검토 기록
-status: superseded-reference
+title: Topology Engine — Home Treemap Interaction Contract
+status: planned-interaction-contract
 owner: frontend-platform
 constitution: docs/spec/frontend/topology-engine.md (장기 헌법, 의미론 상속)
 backend_basis: src/domains/inventory, src/domains/dashboard/fleet_router.py, src/packages/contracts/realtime.py
@@ -8,37 +8,37 @@ product_basis: references/ui-layer-lab/src/product (AGENTS.md, PRODUCT_FRONTEND.
 last_verified: 2026-07-11
 ---
 
-# Topology Engine — 초기 v0 검토 기록
+# Topology Engine — Home Treemap Interaction Contract
 
 ## 0. 문서의 위치와 규율
 
-이 문서는 초기 v0 검토 기록이며 구현 또는 계약의 source of truth가 아니다. 현재 repo의 실제 코드와 통과한 테스트가 source of truth이고, 의미·상태·interaction은 `topology-engine.md`, protocol은 `topology-message-action-schema.md`, visual/motion 수치는 `topology-visual-motion-tokens.md`, 제품 API 소비 의미는 `product-data-contract.md`를 구현 예정 참고 문서로 함께 본다. 이 문서와 현재 코드/테스트 또는 구현 예정 문서가 다르면 이 문서의 값·타입·순서를 사용하지 않는다.
+이 문서는 Home treemap의 interaction model과 전환 sequence를 정리한 구현 예정 계약이다. 색·치수·density·z-order 및 duration/easing literal은 `topology-visual-motion-tokens.md`에서 함께 추적한다. domain 의미·상태의 장기 계획은 `topology-engine.md`, protocol은 `topology-message-action-schema.md`, 제품 API 소비 의미는 `product-data-contract.md`를 함께 본다.
 
-아래 본문은 당시 제안과 검토 근거를 보존한 historical snapshot이다. 본문 안의 “확정”, “게이트”, “전부”, “위반” 표현과 `⚠︎초안값` 유무는 현재 구현 의무나 예외를 만들지 않는다. 현재 구현과 구현 예정 문서에서 제거·변경된 범위, API, 타입, 수치, 인터랙션을 이 문서에서 다시 채택하려면 schema 변경 절차와 코드·테스트 동기화가 먼저 필요하다.
+현재 repo의 실제 코드와 통과한 테스트가 구현 완료 여부의 source of truth다. 이 문서는 구현할 interaction 순서와 불변조건을 작업 기준으로 정리한다. 본문의 시각·motion 수치는 token 이름의 설명용 alias이며 값이 다르면 실제 코드/테스트와 `topology-visual-motion-tokens.md`를 함께 동기화한다.
 
-### 0.1 과거 헌법 검토 기록
+### 0.1 v0 결정 기록
 
 | # | 헌법의 문제 | v0의 해소 |
 |---|---|---|
-| M1 | 모션·토큰·payload를 미존재 정책으로 위임 | 이 문서 §4·§5·§6이 전부 정의 |
-| M2 | Container가 `EntityRef` union에 표현 불가 | v0 treemap 계층은 Pod까지. Container는 Pod drawer의 목록 데이터이며 entity가 아니다(§1.4). Container entity화는 헌법 개정(전용 arm 추가) 후 v1 |
-| M3 | 제스처 연속 보간 × 비동기 레이아웃 계약 부재 | v0은 **드래그 제스처를 제공하지 않는다**. 뷰 전환은 세그먼트 컨트롤/키보드의 이산 전환이며 전환 시퀀스는 §4.2로 확정. 연속 제스처는 프로토타입 검증 후 v1 |
+| M1 | 모션·토큰·payload를 미존재 정책으로 위임 | interaction/sequence는 이 문서 §4, numeric visual/motion token은 `topology-visual-motion-tokens.md`, payload는 §6과 message schema로 소유자를 분리 |
+| M2 | Container가 `EntityRef` union에 표현 불가 | v0 Home treemap 계층은 Pod까지. Container는 Home 완료 이후 Resources pod 행의 inline detail에만 표시하며 treemap entity가 아니다(§1.4) |
+| M3 | 제스처 연속 보간 × 비동기 레이아웃 계약 부재 | v0은 **드래그 제스처를 제공하지 않는다**. map cube activation의 이산 focus 전환만 §4.2로 확정하며 fold drag는 v1 이후다 |
 | M4 | decimal string 나눗셈 rounding 미정의 | v0 metric은 pod 수·재시작 수(정수)와 서버 계산 pct(이미 반올림된 float)만 사용. 클라이언트 나눗셈은 레이아웃 비율 계산뿐이며 IEEE754 double로 충분(면적 오차는 픽셀 반올림 이하). decimal wire 정밀도는 cost 도입 시점(v2)의 문제 |
 | M5 | 외부 기준 저장소 익명 | 이 문서는 외부 저장소를 인용하지 않는다. 근거는 이 repo의 백엔드 코드 경로만 사용 |
 | M6 | synthetic adapter가 과거 실패 패턴 재도입 | v0은 **synthetic/replay adapter를 만들지 않는다**. 실 API만 사용하고, 테스트 데이터는 레이아웃 순수 함수의 단위 테스트 입력으로만 존재(제품 번들 밖 `tests/`) |
 | M7 | 10-패키지 모노레포 vs 현 단일 앱 | v0은 `src/product/features/topology/` 한 feature로 구현하고 AGENTS.md 의존 규칙을 그대로 따른다. 패키지 분리는 두 번째 소비자가 생길 때 |
-| M8 | query session·resume stream 등 서버 신규 서브시스템 필요 | v0은 기존 계약만 사용: REST 폴링(30s) + 기존 `/api/live/browser` WS. 신규 백엔드 API를 요구하지 않는다(§1.6의 소규모 필드 추가 4건만 요청) |
+| M8 | query session·resume stream 등 서버 신규 서브시스템 필요 | Home v0은 기존 inventory REST D1~D5만 사용한다. 신규 backend/stream subsystem을 요구하지 않는다 |
 
 ### 0.2 v0 범위 제외 목록 (명시적)
 
 query planner/AST, CRD discovery, composite metric, cost/flow(observed traffic), WebGL/Canvas,
 layout worker, LOD expansion token, RBAC universe 계산, resumable stream, multi-cluster fleet
-treemap(기존 FleetPage가 담당), 드래그 제스처, saved view. 각각의 재도입 조건은 헌법의
-해당 절이 정의한다.
+treemap, 드래그 제스처, saved view. fold drag는 v1 이후이며 v0 event/listener/control을 만들지
+않는다. Home 완료 gate 전에는 Resources 인라인 상세를 포함한 다른 화면 구현을 시작하지 않는다.
 
 ## 1. 데이터 현실 계약
 
-v0이 소비하는 API는 아래가 전부다. 이 목록 밖 호출은 게이트 위반이다.
+Home v0이 소비하는 API는 아래가 전부다. 이 목록 밖 호출과 synthetic/replay gateway는 게이트 위반이다.
 
 | # | API | 용도 | 폴링 |
 |---|---|---|---|
@@ -47,11 +47,11 @@ v0이 소비하는 API는 아래가 전부다. 이 목록 밖 호출은 게이�
 | D3 | `GET /api/clusters/{id}/inventory/services` | service 목록: ns, name, type, summary.selector | 30s |
 | D4 | `GET /api/clusters/{id}/inventory/workloads` | workload 목록: kind, ns, name, desired/ready, selector | 30s |
 | D5 | `GET /api/clusters/{id}/inventory/resource-detail` | 선택 entity의 서버 계산 1-hop 관계(`related.pods`)와 events | 선택 시 |
-| D6 | `GET /api/applications` + `/{id}/deployments` | repo↔deployment binding (gitops 점선 근거) | 진입 시 1회 + 60s |
-| D7 | `WS /api/live/browser?workspace_id=` | `live.summary`(hot_pods, restart_delta, rollout_phase), `resource.delta`(pod replace/remove) | 상시 |
 
 모든 응답은 `product/api` zod strictObject로 검증한다(기존 `client.ts` 경로). 검증 실패는
 `invalid-payload`이며 화면은 마지막 유효 scene + error 배지를 유지한다.
+
+등록 클러스터 식별자는 `kubernetes-ops`, `cluster-1`만 사용하며 예시용 가짜 클러스터 이름을 만들지 않는다. local backend가 직접 닿지 않을 때만 Vite `/api` proxy를 `https://k8s.woonyong.org/api`에 연결한다. proxy로도 실 API가 검증되지 않으면 synthetic data로 대체하지 않고 Home 구현을 blocked로 보고한다.
 
 ### 1.1 Entity identity (헌법 §1.3의 v0 적용)
 
@@ -61,7 +61,6 @@ type TopoEntity =
   | { entityKey: `node:${string}`;     kind: "node";     name: string }
   | { entityKey: `service:${string}`;  kind: "service";  namespace: string; name: string }
   | { entityKey: `workload:${string}`; kind: "workload"; workloadKind: string; namespace: string; name: string }
-  | { entityKey: `repo:${string}`;     kind: "repo";     applicationId: string; name: string }
   | { entityKey: `group:${string}`;    kind: "podgroup"; workloadKey: string; memberCount: number }
 ```
 
@@ -78,11 +77,11 @@ type TopoEntity =
 ```ts
 type TopoRelation = {
   relationKey: string   // `${plane}:${type}:${sourceKey}->${targetKey}` 그대로 (v0은 hash 불필요)
-  plane: "placement" | "network-configured" | "ownership" | "gitops-provenance"
-  relationType: "scheduled-on" | "selects" | "owns" | "declares"
+  plane: "placement" | "network-configured" | "ownership"
+  relationType: "scheduled-on" | "selects" | "owns"
   source: string        // entityKey — canonical 방향 고정 (헌법 §4.3)
   target: string
-  evidence: "server-related" | "owner-ref" | "binding"
+  evidence: "server-related" | "owner-ref"
 }
 ```
 
@@ -93,7 +92,6 @@ type TopoRelation = {
 | pod →(scheduled-on)→ node | D1의 `summary.node_name` | node_name null이면 `Unscheduled` shelf |
 | service →(selects)→ pod | D5 `related.pods` (서버 selector 매칭) | 표시는 **configured truth** — 점선. EndpointSlice effective는 BE-3 이후 실선 추가 |
 | workload →(owns)→ pod | D5 `related.pods` (서버 selector/owner 매칭) | pod의 `owner_kind`가 ReplicaSet이면 edge 중간 라벨로 RS 이름 표시. RS 노드 열은 만들지 않음(리소스 미수집 — 상태 없는 노드 금지) |
-| repo →(declares)→ workload | D6 binding | binding 없으면 workload에 `배포 원천 확인 불가` 배지. 추정 금지 |
 
 역방향은 renderer가 계산한다. 오른쪽 rail이 `Pod ← Deployment`로 보여도 저장은 owner→dependent.
 
@@ -103,54 +101,52 @@ type TopoRelation = {
   실측 사용량을 면적에 쓰면 재배치 불안정(헌법과 동일 판단). 사용량(cpu_mcores/mem_mib)은
   타일 내부 하단 1.5px 막대 2개로 표시하되 **값이 null이면 막대 자체를 그리지 않는다**(0으로
   그리지 않음).
-- BE-1 완료 시 면적 기준 토글 `균등 | CPU request | Memory request`를 추가한다. 토글 UI는
-  v0에 비활성 상태로 두지 않는다 — 존재하지 않는 capability는 UI에도 없다.
+- BE-1 완료 여부와 무관하게 Home v0 면적은 균등 1로 고정한다. CPU/memory request를 받더라도
+  Home 면적 토글을 추가하지 않으며 usage는 내부 bar와 tooltip에만 표시한다.
 - percentage는 타일 내부 금지(헌법 상속). node frame 헤더의 `CPU 42.1%`는 허용하되 서버가
   이미 percent로 준 값만 그대로 표기하고 클라이언트 ×100 변환을 하지 않는다(단위 규약).
 
 ### 1.4 Container
 
-Container는 v0에서 entity가 아니다. Pod drawer의 "컨테이너" 섹션에 D1 `containers` 배열을
-목록으로 표시한다(이름, 이미지, waiting_reason). treemap 4단계(Cluster→Node→Pod→Container)는
-헌법 개정으로 Container arm이 추가된 뒤 진행한다.
+Container는 v0 Home treemap entity가 아니다. D1 `containers` 배열의 상세 표시는 Home 완료
+이후 Resources 목록의 해당 pod 행을 제자리에서 펼치는 inline detail이 소유한다. 별도 상세
+route나 drawer를 만들지 않는다. treemap 4단계(Cluster→Node→Pod→Container)는 헌법 개정으로
+Container arm이 추가된 뒤 진행한다.
 
-### 1.5 실시간 반영 규칙 (이전 구현 L군 결함의 반대 계약)
+### 1.5 REST 갱신 규칙
 
-1. WS 메시지는 zod로 검증하고 미지 `type`은 폐기한다(dev 모드 console.warn 1회/타입).
-2. `seq`는 연결 단위 단조 증가 가드: `seq <= lastSeq`인 메시지는 폐기.
-3. `resource.delta`는 key를 `{cluster}/{ns}/pod/{name}`으로 파싱하되, **uid가 없으므로 기존
-   entity 갱신(update-only)에만 사용**한다. 미발견 pod의 delta는 삽입하지 않고 해당 클러스터
-   inventory 재조회를 1회 예약한다(디바운스 3s). — 삽입 금지가 L1의 해소다.
-4. delta로 갱신하는 필드는 REST와 동일한 zod 스키마의 부분집합을 통과시킨다(L2 해소).
-5. `live.summary.restart_delta`는 구간값으로만 취급하며 누적값과 같은 시리즈에 넣지 않는다(L3).
-6. 화면 이탈·로그아웃 시 구독 해제, 재연결 시 보류 버퍼 폐기, `hello`→스냅샷 적용 전 delta는
-   버퍼 후 순서 적용(L4·L5·L7).
-7. `document.visibilityState !== 'visible'`이면 delta 적용을 중단하고 복귀 시 inventory를
-   즉시 재조회한다(L6 해소 — rAF 적체 자체를 만들지 않음).
+1. D1~D4는 같은 cluster selection과 request generation으로 묶고, 늦게 끝난 이전 generation이 최신 frame을 덮지 못하게 한다.
+2. 30초 polling 응답은 전부 zod 검증을 통과한 뒤에만 committed frame에 합친다. 일부 실패는 마지막 유효 scene을 유지하고 partial/error 상태를 별도로 표시한다.
+3. `document.visibilityState !== 'visible'`이면 polling을 중단하고 복귀 시 inventory를 즉시 재조회한다.
+4. 전환 중에도 transport/reducer 적용을 지연하지 않는다. transition이 캡처한 geometry를 settle한 뒤 최신 frame을 한 번 coalesce해 retarget한다(§4.2).
 
 ### 1.6 백엔드 요청 (v0 병행, v0 완성의 전제 아님)
 
 - **BE-1**: pod spec의 cpu/memory request 수집(`cluster-agent` pod 수집기 +
-  `kubernetes_snapshot._pod_resource` 필드 추가). → 면적 기준 토글 활성화.
+  `kubernetes_snapshot._pod_resource` 필드 추가). Home v0 면적은 완료 여부와 무관하게 균등 1을 유지하며 면적 토글은 만들지 않는다.
 - **BE-2**: inventory node/service/workload에 `uid` 노출. → §1.1 한계 해소.
 - **BE-3**: EndpointSlice의 service label·targetRef를 관계로 노출. → effective truth 실선.
 - **BE-4**: `GET /dashboard/rca/incidents/{id}`의 correlation_id 폴백 조회. → pod 타일
-  인시던트 배지에서 상세 링크 활성화(그 전까지 배지는 비활성 표시).
+  인시던트 배지에서 상세 링크 활성화(그 전까지 해당 배지를 렌더하지 않음).
 
 ## 2. 화면과 상태 기계
 
-### 2.1 라우트와 모드 (2026-07-11 데모 v5로 확정)
+### 2.1 Home IA와 모드 (확정)
 
-- 라우트: `/product/clusters/:clusterId/topology` (product 라우터 내 신규 feature).
-- 모드는 두 개뿐이다(URL `?focus={entityKey}` 유무로 결정):
+- 별도 `Topology` 탭·메뉴·route는 만들지 않는다. 기존 항목이 있으면 제거한다.
+- **Home이 treemap의 유일한 제품 surface**다. Home은 실제 cluster selector(`kubernetes-ops`,
+  `cluster-1`)와 선택 클러스터의 node frame 안 pod tile treemap을 중심 화면으로 가진다.
+- sidebar는 backend capability가 실존하는 `Home`, `Resources`, `Issues`, `Timeline`, `GitOps`,
+  `Settings`만 둔다. `Cost`, `Helm`, `Live Traffic`, `Checks`는 disabled 항목도 만들지 않는다.
+- Home 내부 presentation은 두 개뿐이다(URL `?focus={entityKey}` 유무로 결정):
   - **map**: placement treemap이 캔버스 전폭을 채운다(§3.1).
   - **focus**: 큐브 클릭으로 진입. 클릭한 큐브가 왼쪽 소스 큐브가 되고, **맵의 나머지
     전체 항목**이 오른쪽 세로 1열로 재배치되며, 연관 항목은 상태(색)별 연결체로 뭉쳐
     소스와 리본으로 연결된다(§3.2). `← 전체 맵` 버튼과 Esc로 복귀.
-- 드릴 상태(URL): `?pod={ns}/{name}` (drawer). 대상 소멸 시 drawer는 닫히지 않고
-  `리소스 없음 — 마지막 관측 {timeAgo}` 상태를 렌더한다(이전 U5의 반대 계약).
+- 상세는 Home의 별도 page/drawer가 아니다. Home 완료 이후 Resources 목록에서 선택한 행이
+  제자리 inline expansion으로 펼쳐지는 모델만 허용한다.
 - 초기 설계의 세그먼트 뷰(traffic/delivery/butterfly)는 focus 모드로 **대체·삭제**한다.
-  드래그 제스처 없음(§0.1 M3).
+  fold drag gesture는 v1 이후이며 v0 listener/state/control이 없다(§0.1 M3).
 
 **완전성 불변조건(누락 금지)**: focus 모드에서 `오른쪽 열 항목 수 + 1(소스) = map 항목 수`
 가 항상 성립한다. 연관 없는 항목도 열 하단에 반드시 나타난다(dim 처리, 화면에서 소멸
@@ -162,120 +158,112 @@ Container는 v0에서 entity가 아니다. Pod drawer의 "컨테이너" 섹션�
 type TopoStatus = {
   query: "loading-initial" | "ready" | "failed"          // REST inventory
   frame: "absent" | "nonempty" | "empty-authoritative"   // pods+nodes 모두 0이고 query ready일 때만 empty
-  connection: "connecting" | "connected" | "disconnected" // WS
   freshness: "fresh" | "stale"                           // 마지막 성공 폴링 후 90s 초과 시 stale
   scopedError: { code: string; message: string } | null
 }
 ```
 
-합성 규칙: ① 유효 frame이 하나라도 있으면 이후의 폴링 실패·WS 단절 중에도 마지막 scene을
+합성 규칙: ① 유효 frame이 하나라도 있으면 이후의 폴링 실패 중에도 마지막 scene을
 유지하고 상단에 상태 배지만 바꾼다. ② `empty-authoritative`만 empty 일러스트를 렌더한다 —
 403은 forbidden 화면, 타임아웃은 error+retry. ③ stale은 화면 채도를 낮추지 않는다(색은
 health 채널 전용). 우상단 배지 `{n}s 전 데이터`로만 표현한다.
 
 ### 2.3 UI 7상태
 
-loading(스켈레톤: node frame 자리 3개 고정 높이 220px — 레이아웃 이동 금지) /
+loading(고정된 node frame skeleton으로 레이아웃 이동 금지) /
 unauthenticated(제품 공통) / forbidden / error(+재시도, mutation reset 포함) /
 empty-authoritative / stale(배지) / populated. 각 상태는 시각 회귀 대상(§8).
 
 ## 3. 레이아웃 수학 (전부 순수 함수, 단위 테스트 대상)
 
-모든 좌표는 컨테이너 상대 px. 컨테이너는 ResizeObserver로 측정하고 250ms trailing debounce로
-재계산한다. 레이아웃 함수 시그니처는 `layoutX(graph, bounds): Map<entityKey, Rect>`.
+모든 좌표는 container-relative CSS px이며 dimension literal은 `topology-visual-motion-tokens.md`
+에서만 정의한다. 컨테이너는 ResizeObserver로 측정하고 layout revision 단위로 재계산한다.
+레이아웃 함수 시그니처는 `layoutX(graph, bounds): Map<entityKey, Rect>`다.
 
-### 3.1 overview (placement treemap)
+### 3.1 Home map (placement treemap)
 
-- node frame 배치: 컬럼 수 `cols = clamp(1, floor(W / 300), 4)`, 프레임 간 gap 12px.
-  각 frame 높이는 내부 pod 수 기반 `clamp(160, ceil(pods/perRow) * 24 + 56, 480)`.
-- frame 내부 pod 타일: `d3-hierarchy` `treemapResquarify`, 값=균등 1, padding 2px,
-  frame 내부 상단 여백 32px(헤더).
-- **최소 타일 14×14px**. treemap 결과가 이보다 작아지는 pod 수(≈ frame당 200개 초과)면
-  해당 frame은 pod 타일 대신 **workload 그룹 타일**(podgroup projection)로 강등하고 헤더에
-  `Pods {n} · {g}개 그룹`을 표시한다. 강등은 frame 단위 결정적 규칙이며 애니메이션 중
-  토글되지 않도록 히스테리시스 ±10%를 둔다. ⚠︎초안값[강등 임계 200/프레임 | 실 클러스터
-  + 단위 테스트 401 pods 케이스로 검증 | P1 종료 게이트]
+- 선택한 cluster가 root이고 node가 frame, pod가 frame 내부 leaf tile이다. 별도 topology page나
+  node tree view를 중첩하지 않는다.
+- frame 내부 pod tile은 deterministic treemap(`treemapResquarify`)으로 배치하고 모든 leaf
+  value를 **정확히 1**로 둔다. CPU/memory usage는 면적에 절대 반영하지 않는다.
+- 기본은 packed/high-density다. canonical `packedPodTileMinimum=14×14px`, `nestedChildGap=2px`를
+  적용한다. 사용할 수 있는 frame 내부에 거대한 빈 tile/영역이 생기면 의도된 여백이 아니라
+  layout bug다.
+- canonical minimum을 지키지 못하면 member를 임의 삭제하거나 타일을 부풀리지 않고 결정적
+  workload group projection으로 집계한다. projection member count와 전체 pod count 보존은
+  assert한다.
 - 정렬 tie-break: namespace asc → name asc (결정적).
-- `Unscheduled` shelf: 캔버스 하단 전폭, 높이 56px, node_name null인 pod만.
+- `Unscheduled` shelf는 node_name null인 pod만 포함하며 geometry는 visual token 정본을 따른다.
 
-### 3.2 focus 모드 (좌 소스 큐브 / 우 전체 세로 열 / 연결체당 리본 1개) — 데모 v5 확정
+### 3.2 focus 모드 (좌 소스 큐브 / 우 전체 세로 열 / 연결체당 리본 1개) — 확정
 
 focus 대상은 map의 모든 큐브다(pod 타일, node frame 헤더 포함). 소스가 무엇이든 연관
-집합의 원천은 서버 계산 관계(§1.2)뿐이다. 모든 수치는 px.
+집합의 원천은 서버 계산 관계(§1.2)뿐이다. geometry/density literal은 visual token 정본을 따른다.
 
 - **오른쪽 열 (전체 항목 — §2.1 완전성 불변조건 적용)**:
-  - 열 x = W − 300, 큐브 폭 118, radius 5. 라벨은 열 우측 160 영역(이름 13px/700,
-    값 11px, 좌측 정렬).
-  - 상단 = 연관 항목: **health(색)별로 뭉친 연결체**. 멤버 높이 46, 연결체 내부 간격 3
-    (한 덩어리로 읽히는 간격), 연결체 사이 20.
+  - logical inline-end에 map의 source를 제외한 **모든 항목**을 세로 1열로 둔다.
+  - 상단 = 연관 항목: **health별로 뭉친 연결체**.
   - 뭉침 기준 = health level. 근거: 색이 곧 상태 채널이므로 "같은 색끼리 뭉침"이 시각과
     의미를 일치시킨다. 연결체 정렬은 심각도 내림차순(unhealthy → degraded → unknown →
-    healthy), 연결체 내부는 name asc — 문제가 항상 위에 온다. kind 구분은 라벨 앞
+    neutral → healthy), 연결체 내부는 canonical label sort key 뒤 entityKey 순이다. kind 구분은 라벨 앞
     kind 아이콘 토큰으로 보조한다.
-  - 하단 = 비연관 항목 전부: 높이 22, 간격 5, opacity 0.30, 라벨 11px/불투명도 45%,
-    리본 없음. 연관 영역과의 구분 여백 28.
-- **왼쪽 소스 큐브**: x = 176, 폭 86, 높이 = min(연관 영역 총높이, H−90), radius 8,
-  세로 중앙 = 연관 영역 세로 중앙. 라벨은 소스 왼쪽 158 영역 우측 정렬
-  (이름 15px/750 + `관련 {n}개` 11px).
+  - 하단 = 비연관 항목 전부. dim 처리하되 identity·label·keyboard access를 유지하고 리본은 없다.
+- **왼쪽 소스 큐브**: logical inline-start에 고정하고 source face 전체를 health connector face
+  비율로 gap/overlap 없이 partition한다. source/target size와 label density는 visual token 정본을 따른다.
 - **리본 — 연결체당 정확히 1개, 세 갈래 금지**: 양끝이 **세로면 전체**와 결합한다.
   소스 오른면은 연결체 face 높이 비례로 빈틈없이 분할하고, 연결체 왼면은 첫 멤버
   위끝부터 마지막 멤버 아래끝까지 전체를 덮는다. **중앙점 결합 금지**. 경로는 상·하
-  두 변의 cubic bezier 밴드, 제어점 x offset = 구간 폭의 42%.
-- 항목이 열 높이를 넘치면(> 18개) 열은 세로 스크롤하되 소스 큐브는 고정하고 리본
-  끝점이 스크롤 위치를 따라간다. 스크롤 중에도 완전성 불변조건은 DOM 기준으로 유지된다.
-  ⚠︎초안값[18 | 실 클러스터 항목 수로 검증 | P2 게이트]
+  두 변의 cubic bezier band이며 routing tension은 visual token 정본을 따른다.
+- 항목이 열 높이를 넘치면 논리 collection을 그대로 유지한 채 vertical scroll/virtualization을
+  사용한다. mount된 DOM 수가 아니라 logical collection으로 완전성 assert를 계산한다.
 
 ### 3.3 리본 두께의 의미 (헌법 §1.2 적용)
 
-리본 두께는 연결체 face 높이(멤버 수 × 46 비례)의 기하적 결과다. 트래픽량이 아니라
+리본 두께는 연결체 face 높이의 기하적 결과다. 트래픽량이 아니라
 **집합 크기(cardinality)**이며, 라벨에 멤버 수를 병기해 트래픽으로 오인하지 않게 한다.
-헌법 §1.2("비트래픽 edge 두께는 수량 금지")에 예외 1줄을 제안한다: "face-결합 리본의
-두께는 결합 면 높이의 기하적 결과로서 허용한다".
+헌법의 확정 예외는 다음과 같다: **"face-결합 리본의 두께는 결합 면 높이의 기하적 결과(집합 크기)로서 허용한다".**
 
 ## 4. 모션 계약
 
-### 4.1 토큰 (product `ui` motion 상수로 정의, 컴포넌트 literal 금지)
+### 4.1 sequence token alias (컴포넌트 literal 금지)
 
-| 토큰 | 값 | 용도 |
-|---|---|---|
-| `topo-duration-morph` | 720ms | 큐브 위치/크기 morph (map↔focus) |
-| `topo-duration-ribbon` | 560ms | 리본 좌→우 성장 드로우 (연결체당) |
-| `topo-duration-ui` | 160ms | drawer, 배지, 라벨 페이드 |
-| `topo-ease-morph` | cubic-bezier(0.3, 0.7, 0, 1) | 큐브 morph (감속 지배) |
-| `topo-ease-draw` | cubic-bezier(0.33, 1, 0.68, 1) | 리본 성장 (easeOutCubic) |
-| `topo-stagger-cube` | 24ms/큐브 (맵 x좌표 오름차순), 총합 max 300ms | 캐스케이드 |
-| `topo-stagger-ribbon` | 110ms/연결체 | 리본 순차 드로우 |
-| `topo-max-concurrent` | 큐브 300개 초과 시 morph 없이 crossfade 200ms | 성능 하한 |
+| sequence 역할 | canonical token (`topology-visual-motion-tokens.md`) |
+|---|---|
+| 기존 ribbon 완전 소거 | `ribbonErase` |
+| cube geometry morph + map x순 stagger/cap | `focusMorph` |
+| cube-local label 등장 gate | `labelReveal` |
+| settle 뒤 정지 + ribbon 좌→우 성장 | `ribbonDraw` |
+| health connector 간 시작 간격 | `connectorStagger` |
 
-⚠︎초안값[720/560/24/110ms와 bezier 값 | 동작 프로토타입 육안 3인 + 60fps 측정 |
-P1 종료 게이트에서 확정, 이후 변경은 문서 개정]
+위 이름은 alias가 아니라 canonical token key다. 숫자와 easing을 이 문서나 component에 다시 선언하지 않는다.
 
 ### 4.2 전환 시퀀스 (focus 진입/복귀 — 확정 규칙)
 
 **진입(map → focus)**
-1. 0ms: 기존 리본·라벨 150ms 페이드아웃, 비연관 큐브 opacity 0.30으로 감쇠 시작.
-2. 0→720ms: 소스·연관 큐브가 목표 좌표로 morph(`layoutId=entityKey`). stagger는
-   **맵에서의 x좌표 오름차순**(물결이 왼→오로 읽히는 방향) — 랜덤 지연 금지.
-3. 580ms(=morph 80%)부터: 소스/열 라벨이 페이드+16px 슬라이드로 등장 — 완전 순차보다
-   약간의 오버랩이 자연스럽다.
-4. 780ms(=morph 완료+60ms 정지 여유)부터: 리본이 연결체 순서대로 **소스면에서
-   자라나며** 드로우(560ms, easeOutCubic, 110ms stagger). 페이드인 금지 — 흐름의
-   방향이 읽혀야 한다.
+1. 기존 ribbon/connector를 `ribbonErase`로 완전히 소거한다. 이 단계가 끝나기 전 cube morph를 시작하지 않는다.
+2. source와 map의 **모든 나머지 cube**를 `focusMorph`로 목표 좌표에 morph한다. stagger는
+   map의 logical x좌표 오름차순, block 좌표, entityKey 순이며 random/index delay를 금지한다.
+3. 각 cube의 local morph가 `labelReveal` gate에 도달하면 source/target label이 등장한다.
+4. 마지막 cube가 settle한 뒤 canonical 정지 gate를 기다리고, health connector 순서대로
+   `ribbonDraw`를 source face→target face 방향으로 실행한다. connector start는
+   `connectorStagger`를 적용한다. fade-in으로 방향성 draw를 대체하지 않는다.
 
-**복귀(focus → map)**: 리본 150ms 페이드아웃 → 전체 큐브 720ms morph(비연관 opacity
-복원 동시) → 맵 라벨 등장. 리본 드로우의 역재생은 하지 않는다.
+현재 canonical token 해석은 `150ms erase → 720ms morph(24ms/cube, cap 300ms) → local 80% label reveal → 마지막 settle +60ms → 560ms draw(110ms/connector)`다. 값 변경은 visual token 정본에서만 한다.
 
-5. 전환 중 새 폴링/delta 도착: 적용을 버퍼하고 시퀀스 완료 직후 일괄 적용. 전환은
-   데이터에 의해 중단되지 않는다.
+**복귀(focus → map)**: `ribbonErase` 완료 → 전체 cube `focusMorph`(비연관 opacity 복원 동시)
+→ `labelReveal`에서 map label 등장. ribbon draw의 역재생은 하지 않는다.
+
+5. 전환 중 새 polling frame이 도착하면 reducer에는 즉시 적용한다. transition이 캡처한 universe와
+   geometry만 settle까지 유지하고 완료 직후 최신 frame을 한 번 coalesce해 현재 rect에서 retarget한다.
 6. 전환 중 다른 큐브 클릭/Esc: 현재 보간 위치에서 새 목표로 retarget(위치 점프 금지),
-   리본은 즉시 소거 후 새 기준으로 재드로우.
+   리본은 `ribbonErase` 후 새 기준으로 재드로우.
 7. enter(새 항목): 최종 위치에서 scale 0.9→1 + fade 160ms. exit(삭제): fade 160ms 후
    제거. **동명 재생성은 §1.1 한계로 enter가 생략될 수 있음을 문서화된 결함으로
    유지**(BE-2로 해소).
 
 ### 4.2b 자연스러움 원칙 (모든 모션 공통 — 게이트 대상)
 
-1. easing은 §4.1의 두 곡선만 사용한다. 한 화면에 다른 가감속 성격이 섞이면 부자연스럽다.
+1. easing은 visual token 정본의 `focusMorphEase`, `ribbonDrawEase`만 사용한다.
 2. 이동하는 요소는 위치·크기를 **한 트랜지션에서 동시에** 보간한다(순차 보간 금지).
 3. stagger는 항상 공간 좌표 순서 기반 — 인덱스·랜덤 기반 금지. 물결에는 방향이 있어야 한다.
 4. 요소별 모션 문법 고정: 큐브=morph, 리본=성장 드로우, 라벨=페이드+슬라이드. 같은 요소가
@@ -285,61 +273,46 @@ P1 종료 게이트에서 확정, 이후 변경은 문서 개정]
 
 ### 4.3 reduced motion
 
-`prefers-reduced-motion`: 모든 morph·stagger·드로우를 즉시 상태로 대체(선은 처음부터 표시),
-enter/exit는 opacity 100ms만. 파티클·펄스류는 v0에 존재하지 않는다.
+`prefers-reduced-motion`: `ribbonErase`, `focusMorph`/stagger, `labelReveal`, `ribbonDraw`,
+`connectorStagger`를 즉시 완료 상태로 대체한다. 논리 universe, 우측 열 순서, connector count,
+focus/URL 결과는 일반 motion과 같아야 한다. 파티클·펄스류는 v0에 존재하지 않는다.
 
 ## 5. 시각 계약
 
-### 5.1 색 토큰 (product `styles/tokens.css`에 추가, raw 값은 이 파일에만)
+색 literal, contrast, pattern, gradient, dimension, density, z-order는 모두
+`topology-visual-motion-tokens.md`에서만 정의한다. 이 절은 semantic channel만 고정한다.
 
-| 토큰 | dark | light | 용도 |
-|---|---|---|---|
-| `--topo-health-healthy` | oklch(0.72 0.12 155) | oklch(0.55 0.13 155) | 타일 fill |
-| `--topo-health-degraded` | oklch(0.75 0.14 75) | oklch(0.60 0.14 75) | 〃 |
-| `--topo-health-unhealthy` | oklch(0.62 0.19 25) | oklch(0.53 0.19 25) | 〃 |
-| `--topo-health-unknown` | oklch(0.55 0.02 260) | oklch(0.70 0.02 260) | 〃 |
-| `--topo-rel-configured` | oklch(0.65 0.10 250) | oklch(0.50 0.10 250) | 점선 |
-| `--topo-rel-ownership` | oklch(0.70 0.09 300) | oklch(0.52 0.09 300) | 실선 |
-| `--topo-rel-gitops` | oklch(0.68 0.10 200) | oklch(0.50 0.10 200) | 점선 |
-| `--topo-frame-border` | 기존 `border` 토큰 재사용 | 〃 | node frame |
-| `--topo-stale-pattern` | 대각 45° 해치, 선폭 1px, 간격 4px, 불투명도 0.25 | 〃 | stale 타일 오버레이 |
-| `--topo-ribbon-glow` | drop-shadow(0 0 12px 소스색@20%) | 강도 절반 | focus 리본 발광 |
-| `--topo-cube-radius-src` | 8px | 〃 | focus 소스 큐브 |
-| `--topo-cube-radius-col` | 5px | 〃 | focus 열 큐브 |
+### 5.1 색 channel
 
-리본 그라디언트(확정): 3-stop `0%: 소스 health색 α0.95 → 55%: 소스색 α0.38 → 100%:
-연결체 health색 α0.95`. `gradientUnits=userSpaceOnUse`로 좌표를 고정해 성장 드로우 중
-그라디언트가 흐르지 않게 한다. 드로우는 clip 폭 애니메이션으로 구현한다(경로 재계산 금지).
-
-- health 어휘는 백엔드 inventory `health` 리터럴(`healthy|degraded`) + phase 파생 없이
-  `unknown`(값 부재)만 사용한다. `unhealthy`는 BE가 해당 리터럴을 방출하기 전까지 미사용
-  토큰으로 정의만 해둔다(클라이언트 판정 금지).
-- 대비 기준: 텍스트 4.5:1, 타일/선/보더 3:1 (WCAG 2.1 AA). 토큰 확정 시 자동 검사
-  스크립트(§8)로 강제. ⚠︎초안값[위 oklch 수치 | 대비 검사 + 기존 tokens.css와 병치 스크린샷 |
-  P1 게이트]
-- 상태는 색+텍스트 병기: 타일 tooltip과 접근성 라벨에 상태 문자열 포함(§7).
-- namespace 안정 색: `hue = FNV-1a(namespace) mod 360`, `oklch(0.65 0.09 hue)`(dark) /
-  `oklch(0.50 0.09 hue)`(light). **표시 위치는 타일 좌변 3px 스트립과 rail 카드 좌변만** —
-  health(면)와 채널 분리. hue가 health 4색의 ±20° 안이면 +40° 시프트(충돌 회피, 결정적).
+- pod health는 canonical health fill/stroke pair를 사용해 **타일 전체 면을 채운다**. health를
+  얇은 좌측 strip으로 축약하는 표현은 금지한다.
+- 타일 좌측 canonical 3px strip은 `namespaceStableFill`만 사용한다. namespace strip에 health,
+  kind, selection 색을 넣지 않는다.
+- backend health literal을 client가 임의 재판정하지 않는다. 값 부재는 `unknown`이고 상태는
+  tooltip/accessibility label의 text와 함께 전달한다.
+- CPU/memory usage는 면적이나 health fill을 바꾸지 않는다. 사용량은 tile 내부 하단 bar와
+  tooltip에서만 보이며 null은 0으로 그리지 않고 bar 자체를 생략한다.
+- focus connector gradient/palette와 observed flow ribbon은 서로 다른 canonical token channel이다.
+  focus connector에 traffic rate, particle, speed encoding을 적용하지 않는다.
 
 ### 5.2 크기·타이포
 
-타일: min 14×14px, gap 2px, radius 3px, 선택 ring 2px(`focusRing` 토큰), 좌변 namespace
-스트립 3px. 라벨: 타일 폭 ≥56px일 때 이름 1줄(11px, 기존 mono 토큰, ellipsis), ≥96px일 때
-이름+재시작 수. 그 미만은 라벨 없음(tooltip·접근성 미러로 보완). node frame: 헤더 32px
-(이름 12px semibold + ready 배지 + CPU/MEM % 텍스트), 보더 1.5px, radius 6px, 패딩 8px.
-usage 막대: 타일 하단 1.5px×2(CPU 위, MEM 아래), 배경 대비 3:1.
+Home map은 canonical `packedPodTileMinimum=14×14px`, `nestedChildGap=2px`,
+`namespaceStabilityStripWidth=3px`를 사용한다. radius, selection ring, typography, frame header,
+usage bar와 focus column geometry는 visual token 정본을 직접 참조한다. 이 문서에 대체 pixel
+literal을 만들지 않는다.
 
 ### 5.3 밀도 규칙
 
-`TileDensity`(헌법 §12.2 상속): 폭 <56px `marker` / 56–95px `name` / ≥96px `name-value`.
-`summary`는 v0 미사용. 판정은 레이아웃 함수가 Rect와 함께 반환(측정 로직 단일화).
+`TileDensity`는 visual token 정본의 측정 기반 `marker | name | name-value | summary` policy를
+그대로 사용한다. 판정은 layout 함수가 Rect와 actual text measurement를 함께 사용해 반환한다.
+Home 전용 threshold를 만들지 않는다.
 
 ### 5.4 breakpoints
 
-`wide ≥1280px`: 4뷰 전부. `medium 768–1279px`: both 숨김, rail은 overlay(캔버스 위 32%
-슬라이드 패널). `narrow <768px`: treemap 대신 node 아코디언 목록 + 관계는 선 없이 카드
-목록(선택 체인만). 어떤 폭에서도 가로 스크롤 금지.
+viewport 상수가 아니라 topology root container inline-size와 canonical container mode를 쓴다.
+compact의 focus는 같은 universe/order를 가진 grouped list fallback이며 완전성 불변조건을
+그대로 지킨다. 어떤 폭에서도 별도 Topology surface나 fold gesture를 되살리지 않는다.
 
 ## 6. 이벤트·액션 계약
 
@@ -347,44 +320,39 @@ usage 막대: 타일 하단 1.5px×2(CPU 위, MEM 아래), 배경 대비 3:1.
 
 ```ts
 type TopoMsg =
+  | { type: "cluster.selected"; clusterId: "kubernetes-ops" | "cluster-1" }
   | { type: "focus.entered"; entityKey: string; via: "click" | "keyboard" | "url" }
   | { type: "focus.exited"; via: "back" | "escape" | "url" }
-  | { type: "entity.activated"; entityKey: string }        // pod→drawer, service/workload→relation focus
-  | { type: "relationFocus.cleared" }
-  | { type: "drawer.closed" }
   | { type: "inventory.applied"; frame: TopoFrame; fetchedAt: string }   // REST 폴링 결과(zod 통과 후)
   | { type: "inventory.failed"; error: { code: string; message: string } }
-  | { type: "live.summaryApplied"; clusterId: string; summary: LiveSummary; seq: number }
-  | { type: "live.deltaApplied"; updates: PodPatch[]; seq: number }      // update-only (§1.5.3)
-  | { type: "live.connectionChanged"; state: "connecting" | "connected" | "disconnected" }
+  | { type: "relations.applied"; sourceKey: string; relations: TopoRelation[] }
+  | { type: "relations.failed"; sourceKey: string; error: { code: string; message: string } }
   | { type: "visibility.changed"; visible: boolean }
-  | { type: "viewport.resized"; width: number; height: number }
+  | { type: "container.resized"; width: number; height: number }
   | { type: "retry.requested" }
 ```
 
-- 처리기는 단일 `useReducer`(pure). fetch/WS/타이머는 effect 훅이 수행하고 결과를 메시지로
+- 처리기는 단일 `useReducer`(pure). fetch/timer는 effect 훅이 수행하고 결과를 메시지로
   dispatch한다. 컴포넌트가 상태를 직접 쓰거나 fetch하는 경로는 금지(헌법 §1.5 상속).
 - `TopoFrame = { entities: TopoEntity[]; relations: TopoRelation[]; usage: ...; fetchedAt }` —
-  D1~D4 응답을 어댑터가 병합한 형태. WS 패치도 이 형태의 부분집합만 쓴다.
-- URL 동기화: `focus.entered/exited`(`?focus=`)와 `entity.activated`(pod drawer, `?pod=`)만
-  URL에 기록. keyboard focus/hover는 기록하지 않는다(헌법 §21.4 상속).
+  D1~D5 실 API 응답을 adapter가 병합한 형태다. runtime synthetic adapter는 없다.
+- URL 동기화는 Home의 `focus.entered/exited`(`?focus=`)만 기록한다. resource detail URL이나
+  drawer route를 만들지 않는다. keyboard focus/hover는 기록하지 않는다.
 
 ### 6.2 액션
 
-v0 토폴로지는 **조회 전용**이다. scale/restart 등 명령은 기존 클러스터 상세의 명령 UI가
-담당하며, pod drawer에는 해당 화면으로의 내부 이동 링크만 둔다(`navigation.internal`).
-따라서 v0에 `ActionDescriptor`류 미정의 타입이 필요 없다 — 명령 표면이 토폴로지에 들어오는
-시점(v1)에 기존 command gateway 계약을 그대로 사용한다.
+Home treemap은 **조회 전용**이다. scale/restart 등 mutation과 resource detail은 Home의
+surface가 아니다. Resources inline detail은 Home 완료 뒤 별도 capability slice에서 구현한다.
 
 ### 6.3 상호작용 매핑 (헌법 §21 상속, v0 전량)
 
 | 입력 | 결과 |
 |---|---|
-| 큐브 hover | tooltip(이름, ns, 상태 텍스트, CPU/MEM 값 or `측정 없음`, 재시작 수) 300ms 지연 |
+| 큐브 hover | tooltip(이름, namespace, 상태 text, CPU/MEM 값 또는 `측정 없음`, 재시작 수) |
 | 큐브 클릭/Enter (map) | focus 진입 — 클릭한 큐브가 소스 |
 | 열 큐브 클릭/Enter (focus) | 그 큐브를 소스로 focus 재진입(§4.2-6 retarget) |
-| 소스 큐브 클릭/Enter (focus) | 상세 drawer 열기(pod면 URL `?pod=`) |
-| `← 전체 맵` 버튼 / Esc | drawer → focus → map 순 단계 해제 |
+| 소스 큐브 클릭/Enter (focus) | focus 유지; 별도 detail page/drawer를 열지 않음 |
+| `← 전체 맵` 버튼 / Esc | focus → Home map 복귀 |
 | 화살표 | 공간 이웃으로 keyboard focus 이동(§7) |
 
 ## 7. 접근성 (구체)
@@ -393,48 +361,45 @@ v0 토폴로지는 **조회 전용**이다. scale/restart 등 명령은 기존 �
 - 화살표 이동: 레이아웃 함수가 반환한 Rect 중심점 기준 방향 최근접(유클리드), 없으면 유지.
 - 라벨 형식: `"{name}, {namespace} 네임스페이스, 상태 {health}, 재시작 {n}회{, 인시던트 있음}"`.
   값 부재는 "측정 없음"으로 읽는다.
-- aria-live(polite)는 다음만: 뷰 전환 완료(`"{view} 보기, 항목 {n}개"`), 연결 끊김/복구,
-  재시도 결과. 폴링 갱신은 알리지 않는다.
-- 200% zoom에서 §5.4 narrow 규칙 적용을 시각 회귀로 검증.
+- aria-live(polite)는 다음만: presentation 전환 완료(`"{view} 보기, 항목 {n}개"`)와 재시도
+  결과. polling 갱신은 알리지 않는다.
+- 200% zoom에서 §5.4 compact fallback과 동일한 logical universe/order를 시각 회귀로 검증한다.
 
 ## 8. 테스트·게이트
 
-- **레이아웃 단위 테스트**(node `--test`): pods 0/1/13/200/401, node 0/1/5, 미스케줄 pod,
-  frame 강등 히스테리시스, 밀도 판정 경계(55/56/95/96px), 화살표 이웃 결정성.
+- **레이아웃 단위 테스트**: pods 0/1/13/200/401, node 0/1/5, 미스케줄 pod, packed geometry,
+  canonical 14×14 minimum/2px gap, 거대한 빈 tile 0건, projection count 보존, 화살표 이웃 결정성.
   **focus 완전성**: 임의 입력에서 `열 항목 수 + 1 = map 항목 수` property 테스트,
   뭉침 결정성(동일 입력 → 동일 연결체 분할), 연결체 심각도 정렬, 소스면 분할 합 = 소스면
   전체(빈틈 0), 연결체당 리본 수 = 1.
-- **reducer 테스트**: seq 역전 폐기, 미발견 delta 미삽입+재조회 예약, visibility 중단/복귀,
-  전환 중 데이터 버퍼, focus 중 소스 소멸 시 `리소스 없음` 상태 유지.
+- **reducer 테스트**: stale request generation 폐기, visibility polling 중단/복귀, 전환 중 최신
+  frame 즉시 적용+settle 뒤 coalesced retarget, focus 중 source 소멸 처리.
+- **motion fake-clock**: `ribbonErase=150ms` 완료 전 morph 0건, `focusMorph=720ms`와 map x순
+  24ms/cube·cap 300ms, `labelReveal=80%`, 마지막 settle+60ms 전 ribbon 0건,
+  `ribbonDraw=560ms`, `connectorStagger=110ms`를 검증한다.
 - **시각 회귀**: map/focus × light/dark × 1440/1024/390 × {populated, empty, error, stale} +
   reduced-motion 1세트 + focus 전환 중간 프레임(morph 50%·리본 드로우 50%) 2컷.
   기존 `visual-product` 게이트에 추가.
 - **대비 자동 검사**: 토큰 조합 전수(텍스트 4.5:1, 그래픽 3:1) 스크립트를 `check:design`에 추가.
-- **실측 게이트**: 라이브 `cluster-1`에서 4뷰 순회, WS 5분 관찰(유령 pod 0, 콘솔 오류 0),
-  pod 강제 재시작 시 enter/exit 모션 확인.
-- 기존 `npm run check` 전 항목 통과. 이 문서의 ⚠︎초안값 항목은 해당 게이트에서 값 확정 후
-  마커를 제거하는 커밋을 남긴다.
+- **실측 게이트**: 실제 API의 `cluster-1`을 선택해 Home map/focus를 렌더하고 synthetic dataset,
+  `DEMO DATA`, fake cluster label이 0건인지 확인한다.
+- `references/ui-layer-lab/src/product`에서 `npm run check` 전 항목과 frontend 디렉토리 부재를 확인한다.
 
-## 9. 미확정 항목 대장 (전체 — 이 표 밖 미확정은 존재하지 않는다)
+## 9. 확정/연기 경계
 
-| # | 항목 | 초안값 | 검증 방법 | 확정 게이트 |
-|---|---|---|---|---|
-| U1 | morph duration/easing | 720ms / cubic-bezier(0.3,0.7,0,1) | 프로토타입 육안 3인 + 60fps 측정 | P1 종료 |
-| U2 | 리본 드로우/stagger | 560ms / 110ms·연결체 | 〃 + §4.2b "부자연 0건" | P2 종료 |
-| U3 | frame 강등 임계 | 200 pods/frame, 히스테리시스 ±10% | 401-pod 단위 테스트 + 실측 | P1 종료 |
-| U4 | focus 열 스크롤 임계 | 18항목 | 실 클러스터 항목 수 검증 | P2 종료 |
-| U5 | 색 토큰 oklch 수치 | §5.1 표 | 대비 검사 + 병치 스크린샷 | P1 종료 |
-| U6 | crossfade 강등 임계 | 동시 300 큐브 | 성능 측정(p95 프레임) | P2 종료 |
+- §2~§4의 Home map/focus model, 완전성 invariant, 균등 면적과 sequence는 v0 확정이다.
+- 색·치수·density·z-order와 motion literal은 visual token 정본에서 확정한다.
+- fold drag gesture와 Container treemap entity는 v1 이후다. v0 implementation surface에
+  disabled UI나 dormant listener로도 넣지 않는다.
+- workload projection threshold는 실제 cluster bounds로 선택할 수 있지만 canonical tile minimum,
+  전체 count 보존, packed/no-large-blank invariant를 완화할 수 없다.
 
-## 10. 구현 순서
+## 10. 구현 순서와 다음 화면 차단 gate
 
-- **P0 (0.5일)**: 이 문서 리뷰 승인, tokens.css 토큰 추가 + 대비 검사 스크립트.
-- **P1 (2일)**: D1~D4 zod 스키마·어댑터, reducer, map 레이아웃+캐스케이드 morph, 7상태,
-  단위 테스트. 게이트: U1·U3·U5 확정.
-- **P2 (2일)**: focus 모드 — 전체 열·health 뭉침·연결체당 리본 1개·완전성 assert·성장
-  드로우, D5·D6 연동. 게이트: U2·U4·U6 확정 + §4.2b 자연스러움 판정.
-- **P3 (1일)**: drawer, WS 실시간 규칙(§1.5), 전환 중 데이터 버퍼.
-- **P4 (1일)**: 접근성 마감, 시각 회귀 map/focus 세트, 라이브 실측 게이트, ⚠︎마커 제거 커밋.
+1. `frontend/` 부재와 product code root가 `references/ui-layer-lab/src/product`뿐인지 확인한다.
+2. D1~D4 actual API schema/adapter와 Home cluster selector, node frame/pod packed treemap을 완성한다.
+3. D5 관계를 연결하고 전체 focus column, health connector, face ribbon, sequence, 완전성 assert를 완성한다.
+4. 실제 API `cluster-1` Home 렌더, motion/property/visual gate와 `npm run check`를 통과한다.
 
-총 6.5일. 각 단계는 독립 커밋이며 `npm run check` 통과가 커밋 조건이다. BE-1~4는 병행
-요청하되 v0 완성의 전제가 아니다 — 이 문서의 모든 기능은 오늘의 백엔드로 동작한다.
+위 네 단계가 모두 끝나기 전에는 Resources inline expansion을 포함한 다른 화면을 시작하지
+않는다. 각 commit 직전 `npm run check`를 통과해야 하며 synthetic data로 gate를 대체할 수 없다.

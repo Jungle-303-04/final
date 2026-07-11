@@ -119,7 +119,7 @@ last_verified: 2026-07-11
 - server-provided catalog와 capability
 - injected `EngineConfig`, theme token, motion token, layout policy
 - Kubernetes 표준 field를 읽는 versioned extractor plugin
-- test fixture와 Storybook/testkit sample
+- product tree 밖 test runner의 pure generator와 network-boundary fixture. runtime gateway/adapter나 product composition binding으로 재사용할 수 없음
 
 허용되는 literal도 view에 중복하지 않는다. schema generator 또는 한 registry source에서 생성하고 exhaustiveness test로 보호한다.
 
@@ -461,8 +461,8 @@ ISO timestamp는 timezone offset을 포함하고 server에서 UTC로 canonicaliz
 @product/topology-theme
   ├─ semantic tokens, light/dark/high-contrast/motion
   ↓
-@product/topology-testkit
-  └─ generators, fake clock, stream chaos, visual/perf fixtures
+tests/topology (product tree 밖)
+  └─ pure generators, fake clock, stream chaos, test-runner network fixtures; runtime adapter 없음
 
 references/ui-layer-lab/src/product/features/topology
   └─ product composition only; no domain rules
@@ -480,13 +480,13 @@ references/ui-layer-lab/src/product/features/topology
 | layout worker | `src/product/features/topology/layout/` | contracts, core scene input types |
 | renderer | `src/product/features/topology/renderer/` | contracts, layout output, injected theme contract |
 | React/application | `src/product/features/topology/react/` | feature modules, `product/api` public gateway, `product/shared` |
-| live API adapter | `src/product/api/topology/` | `product/api` schemas/transport, `product/shared` only |
+| actual API adapter | `src/product/api/topology/` | `product/api` schemas/transport, `product/shared` only |
 | product theme values | `src/product/styles/tokens.css` | raw colors의 유일한 product source |
-| testkit/adapters | `tests/topology/` | public contracts/modules; production import 금지 |
+| test-only network fixtures | `tests/topology/network-fixtures/` | test runner만 사용; gateway/adapter 구현과 production import 금지 |
 
 이 mapping은 `AGENTS.md`의 `app → pages → features → shared`, `feature → product/api`, `product/api → shared` 방향을 유지한다. `@product/topology-*` physical package 추출은 별도 ADR에서 workspace tool, public API, versioning, license, build를 승인한 뒤에만 수행한다. Headless engine은 product import가 없도록 작성해 추출 가능성을 유지한다.
 
-기존 backend route/Pydantic contract는 현재 구현 사실을 확인하는 근거다. 이 문서의 신규 topology contract가 이미 구현됐다고 주장하지 않으며, 구현 순서는 frontend consumer contract 검토 → backend ADR/OpenAPI → frontend acceptance → generated schema → live adapter다. 계약 변경은 schema revision과 함께 승인하고 같은 변경에서 코드·test traceability를 동기화한다.
+기존 backend route/Pydantic contract는 현재 구현 사실을 확인하는 근거다. 이 문서의 신규 topology contract가 이미 구현됐다고 주장하지 않으며, 구현 순서는 frontend consumer contract 검토 → backend ADR/OpenAPI → frontend acceptance → generated schema → actual API adapter다. 계약 변경은 schema revision과 함께 승인하고 같은 변경에서 코드·test traceability를 동기화한다.
 
 ### 5.1 Dependency rules
 
@@ -499,37 +499,36 @@ references/ui-layer-lab/src/product/features/topology
 - geometry는 worker가 계산하고 typed CSS custom property 또는 typed scene buffer로 전달한다.
 - product style은 모든 색·spacing·type·radius·shadow·z-index·motion을 named token으로만 사용한다.
 
-### 5.2 제품 전체 API port와 synthetic adapter 격리
+### 5.2 제품 전체 API port와 test-only network fixture 경계
 
 이 절은 topology feature만의 규칙이 아니라 전체 frontend service architecture의 최상위 정책이다. Auth, organization, Fleet, inventory, topology, metrics, RCA, incident, notification, GitOps, repository, workflow, cost, command/action 등 모든 API feature에 적용한다.
 
 - feature의 application/core package가 port interface를 소유한다.
-- `product/api` 또는 infrastructure package가 live adapter를 구현한다.
-- synthetic/mock/replay adapter와 dataset은 product tree 밖 testkit이 구현한다.
-- composition root가 validated config로 adapter를 한 번 주입한다.
+- `references/ui-layer-lab/src/product` runtime은 `product/api`의 actual HTTP adapter만 사용한다.
+- composition root에는 actual adapter 하나만 주입한다. dev, preview, query parameter, environment variable로 다른 data adapter를 선택하는 mode를 만들지 않는다.
 - view, hook, selector, reducer는 concrete adapter, base URL, fetch, WebSocket, environment variable을 알지 못한다.
-- API JSON은 live/synthetic 모두 동일 generated runtime schema로 validate한 뒤에만 domain message가 된다.
-- live 실패를 fake success, sample count, fixture object, 임의 empty array로 바꾸지 않는다.
+- actual API JSON은 generated runtime schema로 validate한 뒤에만 domain message가 된다.
+- actual request 실패를 fake success, sample count, fixture object, 임의 empty array로 바꾸지 않는다.
 - loading skeleton, blank placeholder, empty-state illustration은 허용하지만 실제 resource/metric처럼 보이는 가짜 이름·숫자·상태는 product code에 둘 수 없다.
-- Storybook/visual-test sample은 test-only entry와 bundle에만 존재한다.
-- production dependency graph, ESLint boundary, bundle scan이 testkit/mock/MSW/fixture import를 차단한다.
-- 모든 feature response에는 가능한 범위에서 live/synthetic/replay provenance를 보존하고 synthetic/replay 화면과 export에 명확히 표시한다.
+- test payload가 필요하면 product tree 밖 `tests/**/network-fixtures`에서 test runner가 actual HTTP boundary를 intercept한다. fixture는 gateway/adapter를 구현하거나 product composition에 bind하지 않는다.
+- test-only network fixture 응답도 production runtime schema를 통과해야 하며 product/preview/dev bundle에는 포함하지 않는다.
+- production dependency graph, ESLint boundary, bundle scan이 test fixture/MSW import를 차단한다.
 - write/command adapter는 read adapter와 분리하고 idempotency/audit/confirmation 규칙을 동일하게 지킨다.
 
-Feature별 port 예시는 다음과 같고 이름은 generated architecture registry에서 관리한다.
+Feature별 runtime port binding은 actual adapter 하나뿐이며 이름은 generated architecture registry에서 관리한다.
 
 ```text
-SessionGateway          → HttpSessionAdapter          | SyntheticSessionAdapter
-FleetGateway            → HttpFleetAdapter            | SyntheticFleetAdapter
-TopologyGateway         → HttpTopologyGateway         | SyntheticTopologyGateway
-MetricsGateway          → HttpMetricsAdapter          | SyntheticMetricsAdapter
-IncidentGateway         → HttpIncidentAdapter         | SyntheticIncidentAdapter
-GitOpsGateway           → HttpGitOpsAdapter           | SyntheticGitOpsAdapter
-NotificationGateway     → HttpNotificationAdapter     | SyntheticNotificationAdapter
-CommandGateway          → HttpCommandAdapter          | SyntheticCommandAdapter(test only)
+SessionGateway          → HttpSessionAdapter
+FleetGateway            → HttpFleetAdapter
+TopologyGateway         → HttpTopologyGateway
+MetricsGateway          → HttpMetricsAdapter
+IncidentGateway         → HttpIncidentAdapter
+GitOpsGateway           → HttpGitOpsAdapter
+NotificationGateway     → HttpNotificationAdapter
+CommandGateway          → HttpCommandAdapter
 ```
 
-Synthetic command adapter는 외부 부작용을 절대 실행하지 않고 receipt에 synthetic임을 표시한다. production에서 synthetic write adapter 등록은 build failure다.
+backend endpoint/capability가 실제로 없으면 해당 gateway method와 UI surface를 구현·노출하지 않는다. disabled menu나 demo response로 capability 존재를 가장하지 않는다.
 
 ### 5.3 Topology port의 구체 계약
 
@@ -547,7 +546,6 @@ Cross-contract import ownership은 다음으로 고정한다.
 
 ```ts
 interface TopologyGateway {
-  readonly configuredOrigin: DataOrigin
   getCatalog(signal: AbortSignal): Promise<ConsumerEnvelope<TopologyCatalogResponse>>
   plan(query: TopologyPlanQuery, signal: AbortSignal): Promise<ConsumerEnvelope<QueryPlanResponse>>
   getSnapshot(request: TopologySnapshotRequest, signal: AbortSignal): Promise<SnapshotEnvelope>
@@ -568,36 +566,25 @@ interface TopologyCommandGateway {
 }
 ```
 
-Adapter는 다음으로 분리한다.
+Product runtime binding은 하나뿐이다.
 
 ```text
 product composition root
   └─ injects exactly one TopologyGateway
-       ├─ HttpTopologyGateway        production/live
-       ├─ SyntheticTopologyGateway   explicit dev/test only
-       └─ ReplayTopologyGateway      explicit QA/repro only
+       └─ HttpTopologyGateway        actual /api only
 ```
 
 강제 규칙:
 
-- 실제 adapter와 synthetic adapter는 동일 generated runtime schema를 통과한다.
-- configuredOrigin은 composition expectation일 뿐 wire authority가 아니다. 모든 root/stream/receipt의 DataOrigin을 검증하며 mismatch를 merge하지 않는다.
-- synthetic/replay 구현과 dataset은 `@product/topology-testkit/adapters` 아래에만 둔다.
-- `references/ui-layer-lab/src/product`의 component, core, query, renderer는 testkit을 import할 수 없다.
-- composition root의 validated runtime config만 adapter를 선택한다. component/environment conditional branch로 선택하지 않는다.
-- production build graph는 synthetic/replay package import가 있으면 실패한다.
-- live request 실패 시 synthetic data로 자동 fallback하지 않는다. error/stale state를 표시한다.
-- synthetic mode는 frame, stream, telemetry에 `DataOrigin.kind=synthetic`을 유지하고 화면에 제거할 수 없는 localized `DEMO DATA` banner/watermark를 표시한다.
-- replay mode도 `REPLAY DATA`와 recording 시각을 표시한다.
-- screenshot, export, support bundle에도 data origin을 포함한다.
-- generated API contract와 `HttpTopologyGateway` boundary를 먼저 만든 뒤 synthetic adapter가 그 contract를 구현한다. synthetic dataset이 contract나 UI 의미를 정의하면 안 된다.
-- development composition에서 명시적으로 synthetic binding을 사용할 수 있고 이후 live binding으로 교체해도 engine/view 코드는 바뀌지 않는다. 그러나 synthetic-only 상태를 feature complete로 표시하지 않는다.
-- product의 기본 binding은 항상 Http adapter다. synthetic은 explicit dev/test profile과 visible origin 표시가 있을 때만 선택된다.
-- Definition of Done은 live contract test와 실제 API E2E를 요구하며 synthetic visual test만으로 통과할 수 없다.
-- 두 adapter 모두 같은 contract/property/click-path test suite를 실행한다.
-- synthetic adapter는 success뿐 아니라 empty, partial, stale, forbidden, reconnect, gap, malformed payload test scenario를 deterministic seed/fake clock으로 제공한다.
+- `HttpTopologyGateway` 응답만 production runtime schema를 통과해 reducer로 들어간다.
+- `references/ui-layer-lab/src/product`의 component, core, query, renderer, composition root는 test fixture/MSW를 import할 수 없다.
+- component/environment conditional branch로 data source를 선택하지 않는다.
+- actual request 실패 시 error/stale state를 표시하고 다른 data source로 fallback하지 않는다.
+- test-only network fixture는 `tests/topology/network-fixtures`에서 actual HTTP boundary를 intercept할 수 있지만 `TopologyGateway` 구현체가 아니며 composition root에 등록할 수 없다.
+- fixture scenario는 empty, partial, stale, forbidden, reconnect, gap, malformed payload를 포함할 수 있고 deterministic seed/fake clock을 쓸 수 있다. 해당 fixture는 test runner process와 test bundle 밖으로 나가지 않는다.
+- Definition of Done은 actual API contract test와 실제 API E2E를 요구하며 fixture 기반 visual test만으로 통과할 수 없다.
 
-`ProjectionFrame`과 `StreamEnvelope`에는 `dataOrigin`을 포함하며 reducer는 한 query session 안에서 origin이 바뀌는 message를 거부하고 명시적 new session을 요구한다. 이 규칙으로 live와 fake가 한 화면에서 섞이는 것을 막는다.
+`ProjectionFrame`과 `StreamEnvelope`의 `dataOrigin`은 wire provenance 검증용이다. product runtime은 actual API가 제공하는 origin만 허용하고 다른 origin을 UI mode로 선택하거나 화면 데이터로 병합하지 않는다.
 
 `TopologyGateway`는 Full Topology의 유일한 backend-facing port다. `product-data-contract.md`의 `ResourceGraphFacadePort`는 committed engine/GitOps Tree store를 읽는 frontend projection이며 HTTP/SSE/WebSocket을 열지 않는다. initial snapshot은 `previousFrameId=null`, poll/anti-entropy snapshot은 마지막 committed frameId를 보내고 응답은 항상 검증 가능한 full `SnapshotEnvelope`다. unchanged를 임의 empty frame으로 대체하지 않는다.
 
@@ -1558,7 +1545,7 @@ type CostFact = {
 - 한 frame에서 currency와 window가 일치해야 합산한다.
 - 서로 다른 currency는 FX source와 FX observedAt 없이 합산하지 않는다.
 - Node와 Workload cost를 서로 다른 query에서 가져와 같은 total인 것처럼 보이지 않는다.
-- allocated Pod fact만으로 전체 cluster cost를 만들지 않는다. control plane, Node/PV/LB asset, idle, shared, unallocated fact를 synthetic cost leaf로 보존한다.
+- allocated Pod fact만으로 전체 cluster cost를 만들지 않는다. control plane, Node/PV/LB asset, idle, shared, unallocated fact를 명시적 cost leaf로 보존한다.
 - factId는 ledger 내 unique하며 여러 Node/Workload rollup에서 같은 fact를 중복 합산하지 않는다.
 - placement lens에서는 Pod에 귀속 가능한 allocated fact와 명시적 Node/Cluster residual만 사용한다. asset/storage cost는 적합한 lens에 둔다.
 - FX 변환이 허용되면 원 amount/currency와 FX rate/source/observedAt을 보존하고 converted fact를 별도 derived claim으로 만든다.
@@ -1661,6 +1648,8 @@ type CatalogCount = {
 | relation line | relation plane/lifecycle/resolution/freshness |
 | observed particle/flow ribbon | measured traffic rate만 표현. 두께·속도는 unit/window/source가 검증된 정량값 |
 | focus face connector | focus-Sankey health group의 face partition과 member 집합. 두께는 결합 face 높이의 기하 결과이며 traffic 양이 아님 |
+
+리본 규칙의 유일한 비정량 두께 예외: **face-결합 리본의 두께는 결합 면 높이의 기하적 결과(집합 크기)로서 허용한다.**
 
 resource kind별 임의 색은 health color와 충돌하므로 기본 tile fill에 쓰지 않는다. Kind는 icon token과 label로 구분한다.
 
@@ -1879,7 +1868,7 @@ Pod
 | core | Namespace | logical scope, quota context | grouping/filter |
 | execution | Node | Ready, allocatable, topology, taints | placement |
 | execution | Pod | nodeName, phase, readiness, owners, resources | placement/ownership |
-| execution | Container/init/ephemeral | state, resources, image | placement synthetic child |
+| execution | Container/init/ephemeral | state, resources, image | derived placement child projection |
 | workload | Deployment, ReplicaSet | owner chain, replica revision | ownership |
 | workload | StatefulSet, ControllerRevision | ordinal/revision/claim templates | ownership/storage |
 | workload | DaemonSet | desired/current/ready scheduled | ownership |
@@ -2978,7 +2967,7 @@ reference profiles는 server-generated realistic topology로 고정하고 small/
 - generated TypeScript/runtime-schema models와 backend 구현 언어 model. 현재 backend가 Python이면 Python model을 생성하며 존재하지 않는 언어 artifact를 요구하지 않는다.
 - pure reducer, effect descriptions, invariant checker.
 - Query AST, canonicalizer, URL codec, planner contract.
-- testkit generators and fake clock.
+- product tree 밖 pure generators, fake clock, test-runner network fixtures.
 
 ### Phase 2 — Universal collection and projection
 

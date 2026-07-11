@@ -10,6 +10,8 @@ last_verified: 2026-07-11
 
 ## 0. 권한과 literal 규칙
 
+이 문서는 색·치수·density·z-order의 구현 예정 token과 policy를 정리한다. interaction model과 전환 단계·순서는 `topology-engine-claude.md`에서 함께 추적한다. 단계의 의미와 gate, duration/easing/geometry literal은 실제 코드와 테스트를 기준으로 두 문서를 같은 변경에서 동기화한다.
+
 이 문서는 topology visual/motion의 구현 예정 numeric contract다. 현재 repo의 실제 코드와 통과한 테스트가 source of truth이며, 아래 token과 policy가 현 코드에 없거나 값이 다르면 구현 완료가 아니라 후속 작업 기준으로만 읽는다. 실측으로 값을 바꿀 때도 versioned policy와 회귀 기준, 구현, 테스트를 같은 변경에서 동기화한다.
 
 모든 수치와 시각 의미는 `TopologyVisualMotionPolicy/v1` 한 곳에서 소유한다. React component, renderer branch, CSS selector에 값·색상·duration literal을 중복하지 않는다.
@@ -19,7 +21,7 @@ last_verified: 2026-07-11
 - runtime geometry는 typed CSS custom property 또는 renderer buffer로만 전달한다.
 - theme/renderer/motion 변화는 query hash, entity identity, layout revision의 의미를 바꾸지 않는다.
 
-v0 presentation의 초기 상태는 `map`이고, map cube의 기본 activation 결과는 `focus-sankey`다. `rail`, horizontal `fold` gesture, `butterfly`는 primary interaction의 대체물이 아니라 capability-gated secondary presentation이다. 이 네 presentation은 동시에 활성화하지 않는다. provider 이름이나 viewport 조건으로 support를 추정하지 않고 주입된 presentation capability와 이 문서의 applicability 조건을 함께 판정한다.
+v0 presentation의 초기 상태는 `map`이고, map cube의 기본 activation 결과는 `focus-sankey`다. `rail`과 `butterfly`는 capability-gated secondary presentation이다. horizontal `fold` drag gesture는 **v1 이후** 범위이며 v0에서는 listener, progress state, control을 만들지 않는다. 활성 presentation은 하나뿐이며 provider 이름이나 viewport 조건으로 support를 추정하지 않고 주입된 presentation capability와 이 문서의 applicability 조건을 함께 판정한다.
 
 ## 1. Color contract
 
@@ -58,6 +60,10 @@ v0 presentation의 초기 상태는 `map`이고, map cube의 기본 activation �
 | degraded | `#FFF0CE` / `#9A5B00` | `#3A2B11` / `#F2BE5C` | `#2A2200` / `#FFD400` |
 | unhealthy | `#FDE5E2` / `#B42318` | `#411F22` / `#FF8178` | `#2A0000` / `#FF4D4D` |
 | unknown | `#EBEDF0` / `#626A73` | `#252D33` / `#91A4AD` | `#171717` / `#C0C0C0` |
+
+Home treemap의 pod tile은 해당 health의 **fill을 타일 전체 면에** 적용하고 같은 행의 stroke를 경계에 적용한다. health를 얇은 좌측 strip으로 축약하는 표현은 금지한다. 좌측 3px strip은 namespace 안정 색인 `namespaceStableFill` 전용이며 health channel과 공유하지 않는다.
+
+`namespaceStableFill`은 UTF-8 namespace의 FNV-1a hash를 `hue = hash mod 360`으로 투영한다. light는 `oklch(0.50 0.09 hue)`, dark는 `oklch(0.65 0.09 hue)`를 쓰고, hue가 health palette hue의 ±20°이면 +40°를 적용해 다시 판정한다. high contrast/forced-colors에서는 `CanvasText`와 namespace text label을 함께 사용한다. namespace 색은 면적, health, relation 의미를 대신하지 않는다.
 
 ### 1.3 Relation plane
 
@@ -113,6 +119,8 @@ High contrast는 stroke 2px, dot radius 1.5px, pitch 6px, opacity 100%다. 우�
 | frame border / radius / header | 1 / 8 / 28 |
 | frame inner inset | 4 |
 | tile border / radius / selected border | 1 / 4 / 2 |
+| packed pod tile minimum / gap | 14×14 / 2 |
+| namespace stability strip width | 3 |
 | focus ring / offset | 2 / 2 |
 | status marker / summary marker | 6 / 8 |
 | relation port / edge-to-node clearance | 6 / 6 |
@@ -162,10 +170,10 @@ Viewport가 아니라 topology root container inline-size를 기준으로 한다
 | map | required | topology 진입·focus 종료 | 항상 enabled |
 | focus-sankey | required, primary | map cube click/Enter | 항상 enabled; compact는 동일 논리의 list fallback |
 | rail | optional, secondary | explicit lens control | `rail=true`일 때만; false면 control 숨김 |
-| fold gesture | optional, secondary | rail endpoint 사이 horizontal drag | `rail=true && foldGesture=true`, medium 이상, reduced motion 아님 |
+| fold gesture | v1 이후, v0 금지 | v1 이후 rail endpoint 사이 horizontal drag | v0에서는 `foldGesture=false`; listener/progress/control 없음 |
 | butterfly | optional, secondary | explicit control | `butterfly=true`와 §4 size 조건을 모두 만족 |
 
-Capability가 catalog에는 있지만 현재 runtime·input·container 조건 때문에 applicable하지 않으면 control은 disabled이고 이유를 표시한다. capability 자체가 false인 실험 기능은 v0 surface에서 숨긴다. capability 판정은 provider 이름 branch가 아니라 injected presentation policy 하나에서 온다. focus-sankey와 rail/fold/butterfly는 상호 배타적이며, secondary presentation에서 focus를 요청하면 먼저 map geometry로 순간 이동하지 않고 현재 rect에서 focus target으로 직접 retarget한다.
+Capability가 catalog에는 있지만 현재 runtime·input·container 조건 때문에 applicable하지 않으면 control은 disabled이고 이유를 표시한다. capability 자체가 false인 실험 기능은 v0 surface에서 숨긴다. capability 판정은 provider 이름 branch가 아니라 injected presentation policy 하나에서 온다. v0의 focus-sankey와 rail/butterfly는 상호 배타적이며, secondary presentation에서 focus를 요청하면 먼저 map geometry로 순간 이동하지 않고 현재 rect에서 focus target으로 직접 retarget한다. fold gesture는 v1 전까지 capability catalog와 v0 UI 모두에 노출하지 않는다.
 
 ### 4.2 Focus-Sankey geometry와 전체 항목 불변조건
 
@@ -210,7 +218,7 @@ Worker가 CSS px rect와 실제 text measurement를 함께 만족할 때만 상�
 
 - padding은 marker 0, name 6, name-value 8, summary 10px.
 - measured text가 `width - 2×padding`에 맞지 않으면 한 단계 낮춘다.
-- morph 중 source density를 70% progress까지 유지하고 target density를 100ms crossfade한다.
+- morph 중 target label/density는 `labelReveal` 전까지 숨기고 cube-local `focusMorph` progress 80%에서 등장시킨다. 별도 70% threshold나 component-local duration을 만들지 않는다.
 - rect 한 변 <2px 또는 area <4px²이면 부풀리지 않고 같은 parent의 `Subpixel remainder` projection으로 정확히 합산한다. 원 member는 zoom/LOD expansion으로 조회 가능해야 한다.
 
 ## 6. Relation과 ribbon
@@ -285,9 +293,9 @@ travelMs = clamp(600, 2400, 450 + 450*log10(1 + latencyMs))
 
 Latency가 없으면 1,200ms 고정이고 tooltip은 `방향만 표현 · 이동 시간은 지연 시간이 아님`을 표시한다. stale 전환 시 신규 emission을 즉시 중단하고 기존 particle을 120ms fade-out한다. rate가 없거나 reduced motion이면 particle은 0개다.
 
-## 8. Secondary rail/fold gesture와 semantic progress
+## 8. Secondary rail/fold gesture와 semantic progress — v1 이후
 
-이 절은 `rail=true && foldGesture=true`인 secondary presentation에만 적용한다. focus-sankey 진입/복귀와 cube activation에는 `p`를 사용하지 않는다. capability가 false이면 gesture listener와 progress state 자체를 만들지 않는다. `p`는 single-side rail lens 전환에만 쓴다.
+**이 절은 v1 이후 설계 기록이며 현재 v0 구현이 금지된다.** v0에서는 `foldGesture=false`이고 gesture listener, pointer capture, progress state, control을 만들지 않는다. v1에서 별도 승인된 `rail=true && foldGesture=true` secondary presentation에만 아래 규칙을 적용한다. focus-sankey 진입/복귀와 cube activation에는 `p`를 사용하지 않는다. `p`는 single-side rail lens 전환에만 쓴다.
 
 - `p=0`: placement.
 - `p=+1`: network, logical inline-start.
@@ -333,49 +341,52 @@ snapDuration = clamp(140ms, 320ms, 120ms + 200ms*abs(targetP-currentP))
 ease = cubic-bezier(0.2,0.8,0.2,1)
 ```
 
-## 9. Focus-Sankey와 secondary Fold transition sequence
+## 9. Focus-Sankey와 v1 이후 secondary Fold transition sequence
 
 ### 9.1 Focus-Sankey motion tokens
 
-이 토큰은 focus-sankey에만 적용한다. 아래의 generic `morph=320ms`, `lineUnfold=200ms`, `stagger=12ms`가 focus 값으로 대체되거나 반대로 focus 값이 scope/rail/fold에 번지면 contract 위반이다.
+이 토큰은 focus-sankey에만 적용한다. 아래의 generic `morph=320ms`, `lineUnfold=200ms`, `stagger=12ms`가 focus 값으로 대체되거나 반대로 focus 값이 scope/rail 또는 v1 이후 fold에 번지면 contract 위반이다.
 
 | Token | 값 | 의미 |
 |---|---:|---|
-| focusMorph | 720ms | 각 cube의 map↔focus x/y/w/h/radius 동시 보간 |
-| focusRibbonDraw | 560ms | settled geometry에서 `focus-face-connector` band 하나의 source→target reveal |
-| focusCubeStagger | 24ms / cube, 누적 delay 최대 300ms | base map의 logical inline-start→end 공간 순서 |
-| focusConnectorStagger | 110ms / health group | severity order connector 시작 간격 |
-| focusMorph ease | `cubic-bezier(0.3,0.7,0,1)` | 감속 지배 spatial morph |
-| focusRibbon ease | `cubic-bezier(0.33,1,0.68,1)` | connector reveal |
+| `ribbonErase` | 150ms | 기존 ribbon/connector를 완전히 소거한 뒤 morph를 시작 |
+| `focusMorph` | 720ms; map x순 24ms/cube stagger, 누적 delay cap 300ms | 각 cube의 map↔focus x/y/w/h/radius 동시 보간 |
+| `labelReveal` | cube-local `focusMorph` progress 80% | source/target label 등장 gate |
+| `ribbonDraw` | 560ms; 마지막 cube settle 뒤 60ms 정지 후 시작 | settled geometry에서 `focus-face-connector` band 하나의 source→target reveal |
+| `connectorStagger` | 110ms / non-empty health connector | severity order connector 시작 간격 |
+| `focusMorphEase` | `cubic-bezier(0.3,0.7,0,1)` | 감속 지배 spatial morph |
+| `ribbonDrawEase` | `cubic-bezier(0.33,1,0.68,1)` | connector reveal |
 
-`focusCubeStagger`의 정렬 key는 base rect의 logical inline 좌표, block 좌표, `entityKey` 순이며 배열 index나 random delay를 사용하지 않는다. 각 cube의 duration은 720ms이고 `delay=min(rank×24ms,300ms)`다. 따라서 connector 시작 gate는 고정 `780ms`가 아니라 실제 마지막 cube의 settled signal이다.
+`focusMorph` stagger의 정렬 key는 base rect의 logical inline 좌표, block 좌표, `entityKey` 순이며 배열 index나 random delay를 사용하지 않는다. 각 cube의 duration은 720ms이고 `delay=min(rank×24ms,300ms)`다. connector 시작 gate는 고정 clock이 아니라 실제 마지막 cube의 settled signal과 그 뒤 60ms 정지다.
 
-focus geometry가 준비된 시점부터 마지막 cube settle까지의 upper bound는 `720ms + 300ms = 1,020ms`와 최대 1 animation frame이다. connector completion은 이 morph budget에 포함하지 않는다. group 수를 `G`라 할 때 마지막 cube settle부터 마지막 connector completion까지는 `G=0`이면 0ms, 그 외 `560ms + (G-1)×110ms`와 최대 1 animation frame이며 health group은 최대 5개다.
+`ribbonErase`가 끝나고 focus geometry가 시작된 시점부터 마지막 cube settle까지의 upper bound는 `720ms + 300ms = 1,020ms`와 최대 1 animation frame이다. connector completion은 이 morph budget에 포함하지 않는다. group 수를 `G`라 할 때 마지막 cube settle부터 마지막 connector completion까지는 `G=0`이면 0ms, 그 외 `60ms + 560ms + (G-1)×110ms`와 최대 1 animation frame이며 health group은 최대 5개다.
 
 Map → focus-sankey:
 
 1. focus layout 전체와 §4.2 집합/face invariant가 통과하기 전에는 transition을 commit하지 않는다. 120ms를 넘으면 source cube에 cancellable pending indicator를 표시한다.
-2. Z=0에서 기존 relation/observed-flow layer를 80ms 안에 멈추고 fade한다. 새 focus face connector는 0개다.
-3. 모든 `U` cube를 현재 presentation rect에서 target rect로 보간한다. source와 관련/비관련 cube 모두 object identity를 유지하고, 비관련 cube의 최종 opacity만 0.30이다.
-4. density text는 각 cube local geometry progress 70%에서 100ms crossfade한다. label은 geometry보다 먼저 target 위치로 점프하지 않는다.
-5. 마지막 cube가 settle한 뒤에만 non-empty health group 순서로 connector reveal을 시작한다. connector마다 560ms, 시작 간격은 110ms이며 source face에서 target group face 방향으로 clip/path를 연다. fade-in만으로 방향을 대체하지 않는다.
+2. 기존 relation/observed-flow/focus ribbon layer를 `ribbonErase=150ms`로 완전히 소거한다. 소거가 끝나기 전에는 cube morph를 시작하지 않으며 새 focus face connector는 0개다.
+3. 소거 완료 뒤 모든 `U` cube를 현재 presentation rect에서 target rect로 `focusMorph`한다. source와 관련/비관련 cube 모두 object identity를 유지하고, 비관련 cube의 최종 opacity만 0.30이다.
+4. source/target label은 각 cube-local morph progress가 `labelReveal=80%`에 도달할 때 등장한다. label은 geometry보다 먼저 target 위치로 점프하지 않는다.
+5. 마지막 cube가 settle하면 60ms 정지한 뒤 non-empty health group 순서로 connector reveal을 시작한다. connector마다 `ribbonDraw=560ms`, 시작 간격은 `connectorStagger=110ms`이며 source face에서 target group face 방향으로 clip/path를 연다. fade-in만으로 방향을 대체하지 않는다.
 6. 마지막 connector가 끝난 뒤 focus completion을 한 번 announce한다. connector가 0개이면 cube settle이 completion이다.
 
 Focus-sankey → map:
 
-1. face connector와 focus label을 160ms 안에 제거한다. connector reveal을 역재생하지 않는다.
-2. connector opacity가 0이 된 뒤 현재 rect에서 map rect로 cube를 720ms morph한다. 공간 stagger는 focus 진입과 같은 canonical base-map order를 사용한다.
-3. map label/density는 local geometry progress 70%에서 crossfade하고 마지막 cube settle 뒤 mode completion을 commit한다.
+1. face connector를 `ribbonErase=150ms`로 완전히 제거한다. connector reveal을 역재생하지 않는다.
+2. connector opacity가 0이 된 뒤 현재 rect에서 map rect로 cube를 `focusMorph`한다. 공간 stagger는 focus 진입과 같은 canonical base-map order를 사용한다.
+3. map label/density는 cube-local `labelReveal=80%`에 등장하고 마지막 cube settle 뒤 mode completion을 commit한다.
 
 Interruption과 realtime:
 
-- 사용자가 다른 target을 activation하면 기존 connector draw를 취소하고 80ms 안에 제거하며, 각 cube의 현재 interpolated rect를 새 720ms morph의 source로 캡처한다. map rect로 순간 복귀하거나 처음 rect에서 재시작하지 않는다.
+- 사용자가 다른 target을 activation하면 기존 connector draw를 취소하고 `ribbonErase=150ms`로 제거하며, 각 cube의 현재 interpolated rect를 새 `focusMorph`의 source로 캡처한다. map rect로 순간 복귀하거나 처음 rect에서 재시작하지 않는다.
 - Escape/back은 같은 규칙으로 현재 rect에서 map target으로 retarget한다.
 - stream delta는 canonical reducer에 계속 적용한다. transition이 캡처한 `U`와 geometry만 settle까지 유지하고, 최신 frame의 membership/health/relation 변경은 완료 직후 한 번 coalesce해 현재 rect에서 새 focus layout으로 retarget한다. data event 자체를 폐기하거나 transport 적용을 지연하지 않는다.
 - transition 중 source가 삭제되면 interaction-disabled tombstone으로 exit 160ms를 완료한 뒤 최신 frame의 map으로 복귀한다. 이름이 같은 다른 UID를 source로 대체하지 않는다.
 - 새 connector는 언제나 새 target geometry가 settle한 뒤 그 geometry로 다시 계산한다. 움직이는 cube를 connector endpoint가 뒤쫓지 않는다.
 
-### 9.2 Secondary fold geometry와 sequence
+### 9.2 Secondary fold geometry와 sequence — v1 이후, v0 구현 금지
+
+이 절의 geometry, duration, gesture sequence는 v1 이후 참고값이다. v0 product code, event union, capability UI, test expectation에 이 절을 구현하거나 노출하지 않는다.
 
 - drag frame은 captured endpoint rect의 screen-space x/y/w/h/radius를 선형 보간하고 worker를 호출하지 않는다.
 - child는 interpolated parent clip을 유지한다.
@@ -460,7 +471,7 @@ Drill-out:
 - lens/scope는 최대 80ms opacity crossfade만 허용.
 - particle, moving dash, pulse, seam, parallax, stagger, count-up 0.
 - relation은 즉시 static width/dash/arrow/pattern.
-- map↔focus-sankey는 같은 `U/A/N/G`와 right-column 순서를 즉시 commit한다. focusMorph, focusCubeStagger, focusRibbonDraw, focusConnectorStagger는 모두 0ms다.
+- map↔focus-sankey는 같은 `U/A/N/G`와 right-column 순서를 즉시 commit한다. `ribbonErase`, `focusMorph`와 그 stagger, `labelReveal`, `ribbonDraw`, `connectorStagger`는 모두 즉시 완료한다.
 - graphical mode의 `focus-face-connector`는 완성된 static face band로 즉시 표시하고 compact fallback은 동일 grouped list를 사용한다. connector count, member count, face partition, accessible label은 일반 motion과 같다.
 - enter/delete 최대 80ms opacity만.
 - smooth scroll 금지.
@@ -531,7 +542,7 @@ Handoff:
 5. non-empty health group 수 = source face segment 수 = `focus-face-connector` 수 = rendered band 수이고, group 하나당 band가 정확히 하나인지 검증.
 6. source face segment가 settled target group block-size 비율과 일치하고 gap/overlap이 0이며 rounded height 합이 source face height와 정확히 같은지 residual/tie와 서로 다른 member-count/block-size 입력을 포함해 검증.
 7. focus face connector에 flow width cohort, particle, speed, latency, observed palette가 적용되지 않고 observed-flow ribbon과 runtime discriminant가 다른지 검증.
-8. fake clock으로 focusMorph 720ms, focusRibbonDraw 560ms, cube stagger 24ms/cap 300ms, connector stagger 110ms 및 `마지막 cube settle → connector draw` gate를 검증.
+8. fake clock으로 `ribbonErase=150ms`, `focusMorph=720ms`와 map x순 stagger 24ms/cap 300ms, `labelReveal=80%`, settle 뒤 60ms 정지, `ribbonDraw=560ms`, `connectorStagger=110ms` 및 단계 간 직렬 gate를 검증.
 9. focus 진입/복귀/다른 source retarget/stream coalesced retarget 각 중간 frame에서 entityKey가 같고 rect jump가 0인지 검증.
 10. reduced motion에서 spatial transform/particle/infinite animation/stagger/draw 0건이며 일반 mode와 `U/A/N/G`, connector count, focus/URL/announcement 결과가 같은지 검증.
 11. secondary capability가 enabled일 때만 `p=-1,-.75,-.5,-.25,0,.25,.5,.75,1` visual regression과 RTL logicalDx/p sign property test를 실행.
@@ -545,7 +556,7 @@ Handoff:
 
 ## 15. 닫힌 시각적 모순
 
-- v0의 기본 relation interaction은 map cube → focus-sankey이고, rail/fold/butterfly는 capability-gated secondary presentation이다.
+- v0의 기본 relation interaction은 map cube → focus-sankey이고 rail/butterfly는 capability-gated secondary presentation이다. fold drag gesture는 v1 이후이며 v0 구현·노출을 금지한다.
 - focus-sankey는 현재 map의 전체 logical item을 source 하나와 exhaustively partition된 target column으로 재투영하며 virtualization을 누락으로 취급하지 않는다.
 - `p`는 focus-sankey에 사용하지 않는다. secondary rail에서 양쪽 relation을 동시에 표현하지 못하므로 butterfly를 별도 endpoint geometry/control로 분리한다.
 - drag 중 worker 재계산을 하지 않고 captured source/target rect만 보간한다.

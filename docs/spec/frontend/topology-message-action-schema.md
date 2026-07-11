@@ -736,7 +736,7 @@ type EngineTelemetry =
 
 telemetry number는 모두 finite/non-negative이다. count/delta/sampleCount는 safe integer이고 `sampleCount >= 1`, `startedAt <= endedAt <= observedAt`, duration quantile은 `p50 <= p95 <= p99 <= max`여야 한다. gauge의 unit은 metric registry에 고정하며 잘못된 metric/unit 조합을 거부한다.
 
-frame/draw/layout raw sample은 in-process bounded ring buffer에서 summary로 집계한 후에만 adapter로 내보낸다. telemetry에 workspace ID, entity/resource/namespace/repository/operation ID, display name, label/annotation, URL, query text, raw error message, raw payload를 넣지 않는다. `reasonCode`는 versioned allowlist code만 허용하며 provider 문구나 exception message를 넣지 않는다. synthetic/replay는 `dataOriginKind`로 분리하고 live 성능 SLO에 합산하지 않는다.
+frame/draw/layout raw sample은 in-process bounded ring buffer에서 summary로 집계한 후에만 adapter로 내보낸다. telemetry에 workspace ID, entity/resource/namespace/repository/operation ID, display name, label/annotation, URL, query text, raw error message, raw payload를 넣지 않는다. `reasonCode`는 versioned allowlist code만 허용하며 provider 문구나 exception message를 넣지 않는다. Runtime `dataOriginKind`는 실제 live source만 허용하고 test fixture sample은 production telemetry adapter에 전달하지 않는다.
 
 telemetry effect도 active effect registry를 누수하지 않도록 adapter가 성공 시 같은 `recordId`의 `telemetry.recorded`를 terminal result로 반환한다. 실패는 generic `effect.failed`로 닫되 제품 state/scene을 바꾸지 않는다. telemetry 성공/실패를 다시 telemetry effect로 보내는 재귀를 금지한다.
 
@@ -1218,4 +1218,4 @@ Canonical plain decimal grammar:
 12. enter/exit/retarget 전환 중 ordinary stream batch가 canonical state에 모두 atomic commit되고 presentation만 freeze되며, settle 후 latest frame으로 유실 없이 reconcile되는지 fake clock과 interleaving property test로 검증한다.
 13. transition 중 source delete, retarget, Escape, entitlement epoch 변경, compatible/incompatible schema 변경을 각각 검증하며 entitlement/schema 변경 후 구 scene이 한 frame도 더 노출되지 않는다.
 14. stale/cancelled layout·transition result가 current geometry/presentation revision을 진전시키지 않고 post-settle reconcile가 latest revision 하나로 coalesce되는지 검증한다.
-15. telemetry runtime schema가 non-finite/negative/wrong-unit/raw identifier·message를 거부하고 synthetic/replay sample이 live SLO aggregate에 혼합되지 않는다.
+15. telemetry runtime schema가 non-finite/negative/wrong-unit/raw identifier·message를 거부하고 test fixture sample이 live SLO aggregate에 유입되지 않는다.
