@@ -27,14 +27,14 @@ cd references/ui-layer-lab
 npm run check
 ```
 
-결과: **exit 0, 전체 통과**. 현재 `check` 체인은 `typecheck → lint → check:design → check:shadcn → build` 순서다(`references/ui-layer-lab/package.json:7-18`, 미커밋 작업 트리, HEAD `40bdea2d7` 관측).
+결과: **exit 0, 전체 통과**. 현재 `check` 체인은 `typecheck → lint → check:design → UI catalog check → build` 순서다(`references/ui-layer-lab/package.json:7-18`, 미커밋 작업 트리, HEAD `40bdea2d7` 관측).
 
 | 항목 | 실행 결과 | 판정 |
 |---|---|---|
 | `typecheck` | `tsc -b`, 진단 없음 | 통과 |
-| `lint` | `eslint src/main.tsx src/App.tsx src/product src/shadcn-lab --max-warnings 0`, 경고·오류 없음 | 통과 |
+| `lint` | product entry와 UI catalog lab 대상 ESLint, 경고·오류 없음 | 통과 |
 | `check:design` | `Product design guard passed (22 files checked).` | 통과 |
-| `check:shadcn` | `482 documented previews (445 components + 10 area charts + 27 blocks), commit 21e4ceb.` | 통과 |
+| UI catalog check | `482 documented previews (445 components + 10 area charts + 27 blocks), commit 21e4ceb.` | 통과 |
 | `build` | Vite 6.4.3, 14,345 modules transformed, build 25.47s | 통과, 500kB 초과 chunk 경고 존재 |
 
 주의: 위 결과는 현재 dirty 작업 트리 기준이다. `package.json`의 현재 검사 스크립트와 `scripts/product-design-guard.mjs` 등 일부 기반 파일은 HEAD에 완전히 반영되지 않았으므로 재현 가능한 커밋 게이트로는 아직 인정할 수 없다(`references/ui-layer-lab/package.json:6-18`, `references/ui-layer-lab/scripts/product-design-guard.mjs:15-20,227-245`, 미커밋 작업 트리, HEAD `40bdea2d7` 관측).
@@ -104,7 +104,7 @@ HTTP/1.1 401 Unauthorized
 
 ## Q3 Home 구현 설계
 
-현재 구현 판정: **Home treemap, focus reducer, pending 상태, 완전성 검증, SVG face connector, canonical focus motion은 모두 미구현**이다. 현재 HEAD가 추적하는 제품 구현은 `src/product/api/**` 계층이며, 작업 트리의 `ProductApp`·Fleet feature도 미추적 상태다(`references/ui-layer-lab/src/product/ProductApp.tsx:1-32`, 미커밋 작업 트리; API 근거 커밋 `8dbcfde9c51a931c6b4d1c6865b6983aa44c0e0d`).
+현재 구현 판정: **Home treemap, focus reducer, pending 상태, 완전성 검증, SVG face connector, canonical focus motion은 모두 구현 전**이다. 현재 HEAD가 추적하는 제품 구현은 `src/product/api/**` 계층이며, 작업 트리의 `ProductApp`·Fleet feature도 미추적 상태다(`references/ui-layer-lab/src/product/ProductApp.tsx:1-32`, 미커밋 작업 트리; API 근거 커밋 `8dbcfde9c51a931c6b4d1c6865b6983aa44c0e0d`).
 
 ### Q3(a) treemap 레이아웃 함수·알고리즘·tie-break
 
@@ -122,7 +122,7 @@ references/ui-layer-lab/src/product/features/home/
   useHomeTopology.ts
 ```
 
-`features/home`을 사용하는 이유는 디자인 정본이 Home renderer의 유일한 위치로 지정하기 때문이다(`docs/spec/frontend/design-system.md:40-51`, 커밋 `ac1905be226336494fb7a162cdb0f27cf40a17ed`). `topology-engine-claude.md:29`의 과거 `features/topology` 표기는 브리핑의 “Topology 탭 금지, Home 단일 surface”보다 우선하지 않는다(`docs/spec/frontend/CODEX-BRIEFING-20260711.md:36-53`, 커밋 `40bdea2d73b06cd4950910209cfe27a6fad70c48`).
+`features/home`을 사용하는 이유는 디자인 문서가 Home renderer의 위치를 이 경로로 지정하기 때문이다(`docs/spec/frontend/design-system.md:40-51`, 커밋 `ac1905be226336494fb7a162cdb0f27cf40a17ed`). `topology-engine-claude.md:29`의 과거 `features/topology` 표기는 브리핑의 “Topology 탭 금지, Home 단일 surface” 결정과 맞지 않는다(`docs/spec/frontend/CODEX-BRIEFING-20260711.md:36-53`, 커밋 `40bdea2d73b06cd4950910209cfe27a6fad70c48`).
 
 알고리즘:
 
@@ -160,7 +160,7 @@ references/ui-layer-lab/src/product/features/home/
 - non-empty health group과 connector 1:1
 - source face interval gap/overlap 0, 합계 1
 
-정본 등식과 proof 구조는 `docs/spec/frontend/topology-visual-motion-tokens.md:189-206` 및 `docs/spec/frontend/topology-message-action-schema.md:381-402,600-607`에 있다(커밋 `40bdea2d7`, `ac1905be2`).
+기준 등식과 proof 구조는 `docs/spec/frontend/topology-visual-motion-tokens.md:189-206` 및 `docs/spec/frontend/topology-message-action-schema.md:381-402,600-607`에 있다(커밋 `40bdea2d7`, `ac1905be2`).
 
 reducer가 layout commit 직전에 같은 proof를 2차 검증한다. 실패 시 throw로 전체 앱을 죽이지 않고 typed invariant failure를 기록하며 map/마지막 valid scene을 유지하고 morph를 0건으로 만든다. property test는 임의 universe·source·relation 조합에서 `column.length + 1 === U.size`를 강제한다(`docs/spec/frontend/topology-engine-claude.md:158-160,375-386`, 커밋 `40bdea2d7`).
 
@@ -192,7 +192,7 @@ reducer가 layout commit 직전에 같은 proof를 2차 검증한다. 실패 시
 | `focusMorphEase` | `cubic-bezier(0.3,0.7,0,1)` |
 | `ribbonDrawEase` | `cubic-bezier(0.33,1,0.68,1)` |
 
-정본 표는 `docs/spec/frontend/topology-visual-motion-tokens.md:346-370`이고 Home sequence alias는 `docs/spec/frontend/topology-engine-claude.md:235-258`이다(커밋 `40bdea2d73b06cd4950910209cfe27a6fad70c48`). 현재 제품 코드에는 이 token key가 없고 `--duration-fast`, `--duration-base`, `--ease-standard`만 있으므로 구현되지 않은 상태다(`references/ui-layer-lab/src/product/styles/tokens.css:25-27`, 미커밋 작업 트리, HEAD `40bdea2d7` 관측).
+기준 표는 `docs/spec/frontend/topology-visual-motion-tokens.md:346-370`이고 Home sequence alias는 `docs/spec/frontend/topology-engine-claude.md:235-258`이다(커밋 `40bdea2d73b06cd4950910209cfe27a6fad70c48`). 현재 제품 코드에는 이 token key가 없고 `--duration-fast`, `--duration-base`, `--ease-standard`만 있으므로 구현되지 않은 상태다(`references/ui-layer-lab/src/product/styles/tokens.css:25-27`, 미커밋 작업 트리, HEAD `40bdea2d7` 관측).
 
 ## Q4 IA 계획
 
@@ -241,7 +241,7 @@ src/product/features/home/
 
 | 예상일 | 단계·산출물 | 소비 API | 완료 게이트 |
 |---|---|---|---|
-| 07-13 | H0 결정·기반: Q6 해소 반영, stale 작업 트리 분리, route registry/shell 경계, Home reducer/message 보강, test runner | session, `GET /api/clusters` | 정본 문서 동기화, 새 dependency 명시, `npm run check` |
+| 07-13 | H0 결정·기반: Q6 해소 반영, stale 작업 트리 분리, route registry/shell 경계, Home reducer/message 보강, test runner | session, `GET /api/clusters` | 기준 문서 동기화, 새 dependency 명시, `npm run check` |
 | 07-14~15 | H1 cluster-first map: selector, node/pod adapter, equal-area nested treemap, loading/empty/forbidden/error/partial/background-refresh | D1 pod, D2 node | same-generation node+pod commit, 14×14/2px, count/overlap/blank/property tests |
 | 07-16 | H2 registration: admin add/empty flow, preflight, one-time bootstrap result, connection polling | provider catalog/discovery/validate, targets preflight/register, connection-status | 401/403 first-class, token 비저장, synthetic 0건, connected 후 list refresh |
 | 07-17~20 | H3 focus data/engine: D3/D4 catalog, D5 fetch-then-morph, pending, full logical column, health grouping, face connector, keyboard/reduced motion | D3 service, D4 workload, D5 resource-detail | Q6 relation/universe 결정, complete proof, group↔connector 1:1, fake-clock token sequence |
@@ -253,10 +253,10 @@ src/product/features/home/
 
 ## Q6 충돌·리스크·결정 요청
 
-### Q6.1 브리핑 우선순위로 해소한 충돌
+### Q6.1 브리핑 기준으로 해소한 충돌
 
-1. **Fleet-first vs cluster-first Home**: 미추적 `PRODUCT_FRONTEND.md`와 `PRODUCT_PLAN.md`는 fleet summary 첫 화면을 규정하고 현재 작업 트리도 FleetPage를 직접 렌더한다(`references/ui-layer-lab/PRODUCT_FRONTEND.md:13-50`, `references/ui-layer-lab/PRODUCT_PLAN.md:10-23,75-100`, `references/ui-layer-lab/src/product/ProductApp.tsx:9-32`, 모두 미커밋 작업 트리). 브리핑 우선순위에 따라 이를 Home 정본으로 보지 않고 cluster-first Home으로 교체한다(`docs/spec/frontend/CODEX-BRIEFING-20260711.md:10-18,36-53`, 커밋 `40bdea2d7`).
-2. **D1-D5 소비 시점**: API 가이드는 D3/D4/D5를 Resources 후순위로 적었지만 Home 정본은 focus에 D1-D5가 모두 필요하다(`docs/spec/frontend/topology-api-integration.md:288-337`, 커밋 `ac1905be2`; `docs/spec/frontend/topology-engine-claude.md:41-49`, 커밋 `40bdea2d7`). Home이 D3/D4 relation catalog와 D5 activation fetch를 먼저 소비하고 Resources가 같은 API 함수를 나중에 재사용한다.
+1. **Fleet-first vs cluster-first Home**: 미추적 `PRODUCT_FRONTEND.md`와 `PRODUCT_PLAN.md`는 fleet summary 첫 화면을 규정하고 현재 작업 트리도 FleetPage를 직접 렌더한다(`references/ui-layer-lab/PRODUCT_FRONTEND.md:13-50`, `references/ui-layer-lab/PRODUCT_PLAN.md:10-23,75-100`, `references/ui-layer-lab/src/product/ProductApp.tsx:9-32`, 모두 미커밋 작업 트리). 브리핑 기준에 따라 이를 Home 구현 완료 근거로 보지 않고 cluster-first Home으로 교체한다(`docs/spec/frontend/CODEX-BRIEFING-20260711.md:10-18,36-53`, 커밋 `40bdea2d7`).
+2. **D1-D5 소비 시점**: API 가이드는 D3/D4/D5를 Resources 후순위로 적었지만 Home focus에는 D1-D5가 모두 필요하다(`docs/spec/frontend/topology-api-integration.md:288-337`, 커밋 `ac1905be2`; `docs/spec/frontend/topology-engine-claude.md:41-49`, 커밋 `40bdea2d7`). Home이 D3/D4 relation catalog와 D5 activation fetch를 먼저 소비하고 Resources가 같은 API 함수를 나중에 재사용한다.
 3. **feature 경로**: `features/topology` 과거 표기보다 `features/home` 디자인 소유권과 Topology 탭 금지가 우선한다(`docs/spec/frontend/topology-engine-claude.md:29,134-160`, `docs/spec/frontend/design-system.md:40-51`, 커밋 `40bdea2d7`, `ac1905be2`).
 4. **focus source activation**: 장기 헌법은 source 재클릭 시 inspector를 열지만 v0은 focus 유지와 detail page/drawer 금지를 명시한다(`docs/spec/frontend/topology-engine.md:2408-2428`, 커밋 `f04b755d2`; `docs/spec/frontend/topology-engine-claude.md:354-363`, 커밋 `40bdea2d7`). v0에서는 inspector를 열지 않는다.
 5. **동적 cluster ID**: v0 message union의 두 literal ID는 실제 selector 계약과 충돌한다(`docs/spec/frontend/topology-engine-claude.md:326-345`, 커밋 `40bdea2d7`; `docs/spec/frontend/topology-api-integration.md:241-263`, 커밋 `ac1905be2`). `cluster.selected.clusterId`는 string으로 바꾸고 현재 `listClusters` membership을 검증한다. `cluster-1`은 QA fixture가 아니라 실제 검증 target으로만 사용한다.
@@ -303,4 +303,4 @@ src/product/features/home/
 - 현재 통과한 `npm run check`와 mocked `visual-product`는 작업 트리 품질 신호지만 실 Home acceptance는 아니다.
 - 새 화면 구현은 이 보고서 커밋 전까지 시작하지 않았다.
 - Q6의 relation universe·Pod 역관계·completeness·protocol 결정 없이는 focus 구현을 시작하지 않는다.
-- 다음 단계는 검토자가 `coordination/`에 추가할 상세 지시와 Q6 결정을 반영하는 것이다(`docs/spec/frontend/CODEX-BRIEFING-20260711.md:117-120`, 커밋 `40bdea2d7`).
+- 다음 단계는 검토자가 `docs/spec/frontend/`에 추가할 상세 지시와 Q6 결정을 반영하는 것이다(`docs/spec/frontend/CODEX-BRIEFING-20260711.md:117-120`, 커밋 `40bdea2d7`).
