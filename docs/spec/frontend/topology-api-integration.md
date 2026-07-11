@@ -1,6 +1,6 @@
 ---
 title: Topology Hierarchy API Integration Handoff
-status: planned-backend-handoff-code-sync-required
+status: implemented-frontend-backend-handoff
 owner: frontend-platform
 version: topology-hierarchy/v1
 last_verified: 2026-07-11
@@ -24,7 +24,7 @@ GET /api/v1/workspaces/{workspaceId}/topology/hierarchy-snapshots/current
 
 ## 1. 구현 기준 위치와 책임
 
-현재 repo의 실제 코드와 통과한 테스트가 source of truth다. 이 문서는 backend handoff를 위한 구현 예정 계약이며, 현재 프론트 코드는 freshness를 제외한 bootstrap wire를 구현했다. 아래 §1.1 gap을 프론트에 동기화하기 전에는 production 연동 완료를 선언하지 않는다.
+이 문서가 backend handoff의 semantic authority이며, 아래 TypeScript DTO·Zod schema·adapter·tests가 동일 계약의 실행 정본이다. 문서와 실행 코드가 다르면 production 연동을 중단하고 둘을 같은 변경에서 다시 동기화한다.
 
 | 책임 | 구현 기준 위치 |
 |---|---|
@@ -36,19 +36,9 @@ GET /api/v1/workspaces/{workspaceId}/topology/hierarchy-snapshots/current
 | live/synthetic 선택 경계 | [`liveComposition.ts`](../../../frontend/src/composition/liveComposition.ts) |
 | request/error/cancel contract test | [`HttpTopologyHierarchyGateway.test.ts`](../../../frontend/src/features/topology/adapters/HttpTopologyHierarchyGateway.test.ts) |
 
-### 1.1 현재 코드와 이 계약의 차이
+### 1.1 문서·코드 동기화 상태
 
-`TopologyHierarchySnapshot.freshness`는 이 문서의 구현 작업 항목이며 현재 코드에는 아직 없다.
-
-| Gap | 현재 코드 | 필요한 동기화 |
-|---|---|---|
-| DTO | `contracts.ts`의 snapshot에 `freshness` 없음 | §5.8의 discriminated union을 required field로 추가 |
-| Runtime schema | `topologyHierarchySchema.ts`가 freshness를 검증하지 않고 unknown field를 제거할 수 있음 | timestamp/duration/reason과 cross-field 계산식을 Zod + semantic validation에 추가 |
-| Engine projection | `engineProjection.ts`가 entity/relation freshness를 항상 `unknown`으로 만듦 | snapshot freshness를 engine verdict/claim에 손실 없이 mapping |
-| UI | 현재 context bar는 complete/partial만 표시 | stale/unknown을 completeness와 독립 badge/reason으로 표시 |
-| Test fixture | adapter/composition/engine fixture에 freshness 없음 | fresh/stale/unknown, 경계값, 계산 불일치 test 추가 |
-
-Backend는 §5.8을 포함해 구현한다. Frontend root는 live 연결 전에 위 gap을 닫아야 한다. 이 gap을 이유로 backend가 freshness를 생략하거나 임시 string 상태로 보내면 안 된다.
+`TopologyHierarchySnapshot.freshness`를 포함한 §5 전체가 DTO, runtime schema, engine projection, UI badge/notice, live·synthetic fixture와 contract test에 구현되어 있다. Backend는 §5.8을 생략하거나 임시 string 상태로 바꾸면 안 된다.
 
 완성형 제품 계약은 다음 문서를 함께 따른다.
 
@@ -328,8 +318,9 @@ Freshness 계산 불변조건:
 3. `stale`은 `ageMs > staleAfterMs`다.
 4. `unknown`은 신뢰 가능한 source observation timestamp를 만들 수 없을 때만 사용하며 `observedAt`/`ageMs`가 둘 다 null이다.
 5. 여러 source를 합친 bootstrap snapshot에서 `freshness.observedAt`은 포함된 필수 source observation 중 가장 오래된 시각을 사용한다. 따라서 `ageMs`는 snapshot의 worst included age다.
-6. Top-level `observedAt`은 hierarchy projection cut commit 시각이고, `freshness.observedAt`은 source observation 시각이다. `fresh`/`stale`이면 `freshness.observedAt <= observedAt <= receivedAt`이어야 한다.
-7. `receivedAt`과 `ageMs`만 매 요청마다 달라졌다는 이유로 topology identity/revision을 churn시키지 않는다. Freshness state, source cut, topology/metric/health/completeness가 의미 있게 변하면 `snapshotRevision`을 갱신한다.
+6. Top-level `observedAt`은 hierarchy projection cut commit 시각이고 `receivedAt`보다 늦을 수 없다. 이 순서는 `unknown`에서도 검증한다.
+7. `fresh`/`stale`에서 `freshness.observedAt`은 source observation 시각이며 `freshness.observedAt <= observedAt <= receivedAt`이어야 한다.
+8. `receivedAt`과 `ageMs`만 매 요청마다 달라졌다는 이유로 topology identity/revision을 churn시키지 않는다. Freshness state, source cut, topology/metric/health/completeness가 의미 있게 변하면 `snapshotRevision`을 갱신한다.
 
 Sync, health, freshness, completeness는 서로 직교한다. 예를 들어 향후 binding overlay가 synchronized여도 hierarchy health가 unhealthy이고 snapshot freshness가 stale일 수 있다. Bootstrap DTO는 sync를 아직 포함하지 않지만 health에서 freshness를 추론하거나 stale을 unhealthy로 변환하지 않는다. `partial + fresh`, `complete + stale`, `partial + unknown`도 모두 유효하다.
 
@@ -612,7 +603,7 @@ Frontend는 backend `message`를 그대로 UI에 표시하지 않고 category별
 | request abort | 연결 종료 | 오류 표시 안 함, obsolete response commit 안 함. |
 | schema 위반 | HTTP가 200이어도 invalid response | 전체 새 response 거부, 이전 성공 snapshot이 있으면 유지. |
 
-현재 코드의 freshness 동기화 누락은 §1.1의 즉시 동기화 gap이다. Backend response는 §5.8의 canonical freshness를 반드시 제공하며 frontend는 live 연결 전에 이를 검증·표시한다. Bootstrap은 snapshot 전체 freshness까지만 소유하고 per-source/per-metric coverage는 Full Topology 계약에서 확장한다.
+Backend response는 §5.8의 canonical freshness를 반드시 제공하며 frontend는 이를 검증한 뒤 completeness·health와 독립적으로 표시한다. Bootstrap은 snapshot 전체 freshness까지만 소유하고 per-source/per-metric coverage는 Full Topology 계약에서 확장한다.
 
 ## 11. 인증, workspace binding, redaction
 
@@ -797,7 +788,7 @@ npm run check
 - valid atomic snapshot parsing.
 - default metric cross-field violation 거부.
 - duplicate metric order 거부.
-- freshness variant와 timestamp/age/threshold 불변조건 검증. 이 항목은 §1.1 code sync에서 test에 추가해야 한다.
+- freshness variant와 timestamp/age/threshold 불변조건 검증.
 - 403 안전한 error mapping과 backend message 비노출.
 - 429 `Retry-After` 보존.
 - AbortError pass-through.
