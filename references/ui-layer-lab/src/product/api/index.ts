@@ -1,6 +1,7 @@
 export {
   ApiError,
   apiRequest,
+  apiRequestNoContent,
   isApiError,
   type ApiErrorKind,
   type ApiPath,
