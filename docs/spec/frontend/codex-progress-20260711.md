@@ -261,3 +261,18 @@ P2 `reference-contract-map.md`이며, 필요한 API 함수는 직접 만들지 �
 
 P2를 완료로 판정한다. 다음 단계는 `final-questions.md`에 남은 결정 요청을 정확히 한 번에 모아
 커밋하는 최종 질문 라운드다. 그 이후 새 모호함은 goalmode 기본 결정 규칙으로 자체 해소한다.
+
+## 2026-07-11 최종 질문 라운드 발행
+
+- 발행·활성 계약 정리 커밋: `8c88e9c31`
+- 질문 정본: `final-questions.md`
+- 발행 시각: `2026-07-11 16:29 KST`
+- 기본 결정 적용 시각: `2026-07-12 16:29 KST`
+- 결정 요청은 graph layout stack, virtualization, editor·terminal 설치 시점, 외부 reference 코드
+  이식 범위 네 가지다. 이미 확정된 IA·API 경계·Backend gap은 다시 질문하지 않았다.
+- API 작업자의 완료 기록은 export 함수 하나당 `API 완성:` 한 줄로 고정했다. 같은 queue 행에
+  묶인 함수는 모든 export의 완료 기록과 contract test를 확인한 뒤에만 queue에서 제거한다.
+- 발행 전 `npm run check` 결과는 TypeScript·ESLint·Vitest 4 files/22 tests·design guard 41 files·
+  catalog audit 482 previews·production build 모두 PASS다.
+- 검토자가 일부 항목만 답하면 나머지는 문서의 권고안으로 확정한다. 기본 결정 시각까지 답변이
+  없으면 네 권고안을 모두 적용하고 이후 질문 라운드는 만들지 않는다.
