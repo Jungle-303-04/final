@@ -92,6 +92,7 @@
 - [frontend/claude-directive-20260711](frontend/claude-directive-20260711.md)
 - [frontend/codex-directive-24h-20260711](frontend/codex-directive-24h-20260711.md)
 - [frontend/codex-plan-report-20260711](frontend/codex-plan-report-20260711.md)
+- [frontend/codex-progress-20260711](frontend/codex-progress-20260711.md)
 - [frontend/design-system](frontend/design-system.md)
 - [frontend/product-data-contract](frontend/product-data-contract.md)
 - [frontend/topology-api-integration](frontend/topology-api-integration.md)
