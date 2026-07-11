@@ -35,7 +35,7 @@ directive: codex-directive-24h-20260711.md
   - ESLint: PASS
   - Vitest: 4 files, 21 tests PASS
   - product design guard: 41 files PASS
-  - shadcn source audit: 482 previews PASS, upstream 21e4ceb
+  - UI catalog source audit: 482 previews PASS, upstream 21e4ceb
   - Vite production build: PASS
 주의: reference catalogue의 500kB 초과 chunk 경고는 Block F 최적화 대상으로 유지
 ```
@@ -86,6 +86,6 @@ Block A는 코드 구현과 비인증 경로 검증까지 완료됐지만, 지�
 - 클러스터 선택 변경 직후 이전 cluster의 usage/live 값이 남지 않도록 상태 scope를 격리했다.
 - snapshot open map과 command raw result를 제품 상태에서 제거하고, 검증된 시계열 point와
   command summary만 유지했다.
-- `npm run check` 재실행 결과: 4 files, 22 tests, design guard 41 files, shadcn audit,
+- `npm run check` 재실행 결과: 4 files, 22 tests, design guard 41 files, UI catalog audit,
   production build 모두 통과했다.
 - 인증 게이트 판정은 변함없이 401 대기이며 Block B는 시작하지 않았다.

@@ -344,6 +344,7 @@ Target / Telemetry 선형 작업 문서는 아래에 있다.
 - [spec/frontend/claude-directive-20260711](spec/frontend/claude-directive-20260711.md)
 - [spec/frontend/codex-directive-24h-20260711](spec/frontend/codex-directive-24h-20260711.md)
 - [spec/frontend/codex-plan-report-20260711](spec/frontend/codex-plan-report-20260711.md)
+- [spec/frontend/codex-progress-20260711](spec/frontend/codex-progress-20260711.md)
 - [spec/frontend/design-system](spec/frontend/design-system.md)
 - [spec/frontend/product-data-contract](spec/frontend/product-data-contract.md)
 - [spec/frontend/topology-api-integration](spec/frontend/topology-api-integration.md)
