@@ -1030,3 +1030,46 @@ P2를 완료로 판정한다. 다음 단계는 `final-questions.md`에 남은 �
 API 완성: getSession (a245f02a)
 API 완성: login (a245f02a)
 API 완성: logout (a245f02a)
+
+## 2026-07-12 API 감사 후속·BLOCK-204-001 해소
+
+- 감사 확인: APIQ-021은 claim `c0acb7cae` → 구현·검증 `a245f02ad` → 완료 조율
+  `beb7fb577` 순서를 지켰고 금지 파일 접촉은 0건이다. exact 완료 앵커 3개와 canonical ancestor를
+  다시 확인했다.
+- transport 단독 커밋: `af03639ee` (`fix: API 무본문 전송 계약 추가`). 변경 파일은
+  `client.ts`, `client.test.ts` 두 개뿐이며 기존 `apiRequest` 시그니처·JSON 동작은 유지했다.
+- `apiRequestNoContent`는 credentials·CSRF·Accept·기존 `httpError` 경로를 공유한다. raw body 길이가
+  정확히 0인 HTTP 204/205만 성공하며, 200 empty, whitespace body, 204/205 body 포함 응답은
+  `invalid-payload`로 거부한다. fetch와 `response.text()` 단계 AbortError를 그대로 전파하며 재시도는
+  0회다.
+- `BLOCK-204-001`은 `af03639ee`로 해소했다. APIQ-020을 `requested`로 되돌리고 비고에 해시를
+  고정했다. `client.ts` 동결은 이 커밋 직후 다시 유효하다. `index.ts`는 이 transport 커밋에서
+  수정하지 않았다.
+- 다음 claim 권장 순서는 APIQ-001 → APIQ-002 → 이후 P1·P2다. 유효한 기존 `in_progress` lease는
+  건드리지 않는다.
+- 24시간 대행은 P0부터 수행하고 일반 작업과 동일한 전역 `in_progress` 1행 lock·2커밋 절차를
+  지킨다. 대행 시 원 요청 시각·시작 시각·경과 시간·사유를 이 파일 EOF에 기록하고, API 작업자가
+  복귀하면 이미 claim한 행 완료 후 다음 행부터 양보한다.
+- `index.ts` 병목이 생기면 도메인별 barrel 제안서를 progress에 먼저 기록한다. 검토자 승인 전에는
+  임의 분리를 수행하지 않는다.
+- `APIQ-022`의 test 커밋 `8be4467a9`는 canonical branch에 있으나 선행 claim·exact 완료 앵커가
+  확인되지 않아 queue를 그대로 유지하고 제품 소비를 승인하지 않았다.
+- LIVE_MUTATION_NOT_RUN: 승인·sandbox 부재. no-content transport 검증에서 실제 DELETE를 호출하지
+  않았다.
+
+```text
+TDD 선행 실패: client.test.ts 8 tests 중 7 FAIL / 1 PASS (함수 추가 전)
+최종 API 회귀: client/auth/metrics/live 4 files, 35 tests PASS
+독립 적대 검토: P0 0, P1 0
+npm run check: PASS
+  - TypeScript: PASS
+  - ESLint: PASS
+  - Vitest: 27 files, 199 tests PASS
+  - product design guard: 82 files PASS
+  - shadcn source audit: 482 previews PASS, upstream 21e4ceb
+  - production build: PASS
+  - ProductApp CSS: 61.43 kB (gzip 11.17 kB)
+  - ProductApp JS: 79.03 kB (gzip 26.56 kB)
+```
+
+API transport: apiRequestNoContent (af03639ee)
