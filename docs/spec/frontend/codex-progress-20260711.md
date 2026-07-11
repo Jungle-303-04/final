@@ -1158,12 +1158,13 @@ API 완성: listInventoryServices (94ad64bf1)
 API 완성: listInventoryWorkloads (94ad64bf1)
 API 완성: getInventoryResourceDetail (94ad64bf1)
 API 완성: listInventoryEvents (89a6a8edd)
+API 완성: listInventoryResourcesByType (6aaf19fea)
 
 - `api-needs.md`에서 `APIQ-001`, `APIQ-002`, `APIQ-003`, `APIQ-004`, `APIQ-023`,
-  `APIQ-007`, `APIQ-024`, `APIQ-025`, `APIQ-026` 행을 제거하고 snapshot을 17행·32함수, requested 17,
-  valid completion anchors 17로 갱신했다.
+  `APIQ-007`, `APIQ-008`, `APIQ-024`, `APIQ-025`, `APIQ-026` 행을 제거하고 snapshot을 16행·31함수, requested 16,
+  valid completion anchors 18로 갱신했다.
 - `reference-contract-map.md`의 connection, cluster-info, dashboard, namespace, metrics, RCA teaser
-  adapter와 inventory resource/detail/event 상태도 queue가 아니라 위 완료 앵커를 가리킨다.
+  adapter와 inventory resource/detail/event/type-query 상태도 queue가 아니라 위 완료 앵커를 가리킨다.
 - Auth 기반 구현은 `features/auth/AuthBarrier.tsx`, `authContract.ts`, `createAuthAdapter.ts`와
   form primitive `Field`, `Input`, `Label`로 분리했다. 이 단계는 실제 session port와 form semantics
   테스트를 추가하지만, 제품 route에 아직 Home·cluster selector를 소비시키지 않는다.

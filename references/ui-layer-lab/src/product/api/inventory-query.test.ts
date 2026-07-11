@@ -53,15 +53,15 @@ describe("inventory resource type query API", () => {
     );
   });
 
-  it("rejects an empty type and out-of-range limits before requesting", async () => {
+  it("throws on an empty type and out-of-range limits before requesting", () => {
     const fetchMock = vi.spyOn(globalThis, "fetch");
 
-    await expect(
-      listInventoryResourcesByType("cluster-1", { resourceType: "  " }),
-    ).rejects.toThrow("resourceType must not be empty");
-    await expect(
+    expect(() => listInventoryResourcesByType("cluster-1", { resourceType: "  " })).toThrow(
+      "resourceType must not be empty",
+    );
+    expect(() =>
       listInventoryResourcesByType("cluster-1", { resourceType: "pod", limit: 1001 }),
-    ).rejects.toThrow("resource query limit must be an integer from 1 to 1000");
+    ).toThrow("resource query limit must be an integer from 1 to 1000");
     expect(fetchMock).not.toHaveBeenCalled();
   });
 

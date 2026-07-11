@@ -5,7 +5,7 @@ date: 2026-07-12
 audience: 프론트↔백엔드 API 연결 담당 개발자
 queue: api-needs.md
 owner_paths: references/ui-layer-lab/src/product/api/** + 두 조율 문서의 제한된 상태 변경
-verified_against: transport 커밋 af03639ee / routes.py 실제 router·request·response 교차 검증 / API 큐 17행·32함수
+verified_against: transport 커밋 af03639ee / routes.py 실제 router·request·response 교차 검증 / API 큐 16행·31함수
 ---
 
 # API 연결 작업지시서
@@ -21,7 +21,7 @@ API 작업자는 백엔드 wire 계약을 프론트가 호출할 수 있는 **�
 
 | 항목 | 현재값 | 의미 |
 |---|---:|---|
-| 큐 행 | 17 | `requested` 17행 + `in_progress` 0행 + `blocked` 0행 |
+| 큐 행 | 16 | `requested` 16행 + `in_progress` 0행 + `blocked` 0행 |
 | 큐가 요구하는 export 함수 | 32 | 완료 앵커가 확인된 17함수를 제거한 남은 수 |
 | 현재 존재하는 HTTP·composition 함수 | 22 | exact 완료 앵커 17함수 + 미승인 5함수 |
 | 현재 존재하는 realtime 함수 | 3 | HTTP 큐 밖이며 별도 승인 전 소비 금지 |
@@ -180,7 +180,7 @@ queue 상태를 `blocked`로 바꾸고 비고에 다음 네 가지를 남긴다.
 대행은 `requested` 행이 요청 시각부터 24시간 동안 미처리되었거나 `in_progress` heartbeat가
 24시간을 초과했을 때만 coordinator가 발동한다. 다음 조건을 모두 지킨다.
 
-1. `APIQ-001`, `APIQ-002`, `APIQ-003`, `APIQ-004`, `APIQ-007`, `APIQ-023`, `APIQ-024`, `APIQ-025`, `APIQ-026`은
+1. `APIQ-001`, `APIQ-002`, `APIQ-003`, `APIQ-004`, `APIQ-007`, `APIQ-008`, `APIQ-023`, `APIQ-024`, `APIQ-025`, `APIQ-026`은
    완료 앵커가 있으므로 다음 대행은 queue의 P0, P1, P2 순서로 이동한다.
 2. 대행 전에도 전체 queue의 `in_progress`가 0개인지 확인하고, 대상 행 하나만 claim한다. 대행이라는
    이유로 전역 단일 행 lock을 우회하거나 여러 행을 병렬 claim하지 않는다.
@@ -194,8 +194,8 @@ queue 상태를 `blocked`로 바꾸고 비고에 다음 네 가지를 남긴다.
 
 ## 4. 현재 API 코드와 소비 승인 상태
 
-현재 `src/product/api`에는 38개 파일이 있다. wire HTTP·composition 함수 22개와 realtime 함수
-3개 중 exact 완료 앵커가 있는 것은 17함수다. `apiRequestNoContent`는 endpoint 완료 함수가
+현재 `src/product/api`에는 41개 파일이 있다. wire HTTP·composition 함수 23개와 realtime 함수
+3개 중 exact 완료 앵커가 있는 것은 18함수다. `apiRequestNoContent`는 endpoint 완료 함수가
 아닌 transport helper이므로 `API 완성:` 앵커 수에 포함하지 않는다.
 
 | 기존 모듈 | 함수 | test 상태 | queue |
@@ -208,6 +208,7 @@ queue 상태를 `blocked`로 바꾸고 비고에 다음 네 가지를 남긴다.
 | `rca.ts` | `getRcaTimeline` | contract PASS, exact 앵커 1 | 완료 |
 | `inventory-summary.ts` | `getInventorySummary` | contract PASS, exact 앵커 1 | 완료 |
 | `inventory-events.ts` | `listInventoryEvents` | contract PASS, exact 앵커 1 | 완료 |
+| `inventory-query.ts` | `listInventoryResourcesByType` | contract PASS, exact 앵커 1 | 완료 |
 | `cluster-summary.ts` | `getClusterSummary`, `getClusterNodesSummary`, `getNodePodsSummary` | contract PASS, exact 앵커 3 | 완료 |
 | `inventory.ts` | resource/service/workload/detail 4함수 | contract PASS, exact 앵커 4 | 완료 |
 | `metrics.ts` | usage/submit/status/poll/run 5함수 | usage exact 앵커 1; Prometheus/status/poll/run은 queue | `APIQ-027` |
