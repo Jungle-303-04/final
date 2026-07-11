@@ -1017,3 +1017,16 @@ P2를 완료로 판정한다. 다음 단계는 `final-questions.md`에 남은 �
 결과: PASS — 7 scenarios, network-silent
 검증: 320px reflow, 200% text resize, reduced-motion, forced-colors 포함
 ```
+
+## 2026-07-11 APIQ-021 인증 API 계약 완료
+
+- 코드 커밋: `a245f02a` (`test: verify auth API contracts`)
+- `getSession`: GET `/api/auth/session`, cookie credentials, 401, strict wire schema, AbortSignal 검증
+- `login`: POST `/api/auth/login`, exact JSON body, CSRF, cookie credentials, possibly-sent POST 비재전송 검증
+- `logout`: POST `/api/auth/logout`, JSON 200 응답, CSRF, AbortSignal, POST 비재전송 검증
+- targeted Vitest: 1 file, 8 tests PASS
+- full gate: 25 files, 177 tests, TypeScript, ESLint, design guard, shadcn audit, production build PASS
+
+API 완성: getSession (a245f02a)
+API 완성: login (a245f02a)
+API 완성: logout (a245f02a)
