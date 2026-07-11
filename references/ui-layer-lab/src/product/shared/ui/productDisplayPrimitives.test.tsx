@@ -26,6 +26,12 @@ describe("product display primitives", () => {
     expect(screen.getByTestId("layout-surface").getAttribute("role")).toBeNull();
   });
 
+  it("fails fast when semantic surfaces have an empty accessible name", () => {
+    expect(() => render(<Surface aria-label="   ">이름 없음</Surface>)).toThrow(
+      "Semantic Surface requires one non-empty accessible name",
+    );
+  });
+
   it("renders unavailable separately from a real zero and preserves units", () => {
     const { rerender } = render(
       <Metric label="월간 비용" value={null} />,
@@ -54,13 +60,19 @@ describe("product display primitives", () => {
     expect(status.getAttribute("aria-live")).toBe("polite");
     expect(status.textContent).toContain("연결 지연");
     expect(status.getAttribute("data-status")).toBe("warning");
+    expect(status.querySelector('[aria-hidden="true"]')?.className).toContain("forced-colors:border");
   });
 });
 
 function assertDisplayPrimitiveTypeContracts() {
   // @ts-expect-error semantic section surfaces require an accessible name
   void <Surface>이름 없는 section</Surface>;
+  // @ts-expect-error semantic surfaces cannot erase their landmark semantics
+  void <Surface aria-label="요약" role="none">숨겨진 section</Surface>;
+  // @ts-expect-error semantic surfaces cannot be removed from the accessibility tree
+  void <Surface aria-hidden aria-label="요약">숨겨진 section</Surface>;
   void <Surface as="div">레이아웃 전용 surface</Surface>;
+  void <Surface aria-hidden as="div" role="presentation">장식용 layout surface</Surface>;
   // @ts-expect-error undefined is not an unavailable metric value
   void <Metric label="CPU" value={undefined} />;
   // @ts-expect-error provider-specific free-form tones are not canonical status tones
