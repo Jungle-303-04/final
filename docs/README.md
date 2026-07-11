@@ -353,6 +353,7 @@ Target / Telemetry 선형 작업 문서는 아래에 있다.
 - [spec/frontend/repo](spec/frontend/repo.md)
 - [spec/frontend/resources](spec/frontend/resources.md)
 - [spec/frontend/shared](spec/frontend/shared.md)
+- [spec/frontend/topology-api-integration](spec/frontend/topology-api-integration.md)
 - [spec/frontend/topology-engine-claude](spec/frontend/topology-engine-claude.md)
 - [spec/frontend/topology-engine](spec/frontend/topology-engine.md)
 - [spec/frontend/topology-message-action-schema](spec/frontend/topology-message-action-schema.md)

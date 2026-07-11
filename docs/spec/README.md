@@ -101,6 +101,7 @@
 - [frontend/repo](frontend/repo.md)
 - [frontend/resources](frontend/resources.md)
 - [frontend/shared](frontend/shared.md)
+- [frontend/topology-api-integration](frontend/topology-api-integration.md)
 - [frontend/topology-engine-claude](frontend/topology-engine-claude.md)
 - [frontend/topology-engine](frontend/topology-engine.md)
 - [frontend/topology-message-action-schema](frontend/topology-message-action-schema.md)

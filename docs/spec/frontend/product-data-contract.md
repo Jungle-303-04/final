@@ -2149,7 +2149,7 @@ Rollback은 즉시 write하지 않는다. `rollback`이 선택한 history point�
 - suspend/resume도 성공 status와 갱신된 instance query가 모두 확인되기 전 canonical lifecycle을 확정하지 않는다.
 - idempotency uniqueness scope는 workspace + authenticated actor + idempotencyKey다. kind+exact target+normalized payload+capability revision이 저장 fingerprint다. 같은 key/fingerprint는 같은 receipt, 같은 key/다른 fingerprint는 409 conflict다.
 - network timeout처럼 receipt 수신 여부가 불명확하면 같은 key로 `lookupReceipt`를 먼저 호출한다. found면 receipt를 사용하고, pending이면 poll하며, server가 not_found를 확정한 경우에만 원 request를 같은 key로 재전송한다. terminal business failure의 새 사용자 retry는 새 key다.
-- GitOpsOperationRequest.idempotencyKey가 semantic authority다. HTTP adapter가 transport header를 요구하면 body 값에서 파생하며 독립 입력으로 받지 않고 mismatch를 허용하지 않는다.
+- GitOpsOperationRequest.idempotencyKey가 semantic key다. HTTP adapter가 transport header를 요구하면 body 값에서 파생하며 독립 입력으로 받지 않고 mismatch를 허용하지 않는다.
 - confirmation token은 kind, exact target, normalized payload digest, capability revision, plan digest, approval version, expiry에 bind한다.
 - terminate capability subject는 input의 targetOperationId+targetOperationStatusVersion과 정확히 일치해야 한다. selective resource가 non-empty인 plan은 `{type:"resource_selection"}` subject를, 그 외 plan/action은 `{type:"application_instance"}` subject를 재구성하며 request capabilityRevision은 그 exact subject revision이다.
 - 429/503은 retryAfterMs를 따르고 자동 retry는 read query와 receipt 확인에만 제한한다. write operation을 새로운 key로 자동 반복하지 않는다.
@@ -2520,7 +2520,7 @@ Scope selector는 cluster → environment → namespace → application instance
 | Full Topology snapshot | `topology.snapshot` | planId + previous frame precondition | engine `SnapshotEnvelope` | 동일 streamStart로 stream/poll/static |
 | Full Topology stream | `topology.stream` | engine `StreamSubscription` full cursor | engine `StreamEnvelope` | 유일한 runtime topology delta transport |
 | Full Topology detail | `topology.entities.get` | engine `EntityDetailRequest` | `ConsumerEnvelope<EntityDetail>` | frame/cursor revision 검증 |
-| Operation submit | `operations.submit` | `GitOpsOperationRequest`; body idempotencyKey가 semantic authority | `GitOpsOperationReceipt` (202) | receipt cursor로 stream/poll 시작 |
+| Operation submit | `operations.submit` | `GitOpsOperationRequest`; body idempotencyKey가 semantic key | `GitOpsOperationReceipt` (202) | receipt cursor로 stream/poll 시작 |
 | Receipt lookup | `operations.receipts.lookup` | idempotencyKey | `ConsumerEnvelope<OperationReceiptLookupResult>` | possibly-sent 복구 전용 |
 | Operation status | `operations.status.cut` | operationId | `ConsumerEnvelope<OperationStatusCut>` | status+streamStart atomic cut; poll fallback |
 | Operation events | `operations.stream` | operationId + full ResumeCursor | `GitOpsOperationEvent` | resume 가능한 ordered stream |
