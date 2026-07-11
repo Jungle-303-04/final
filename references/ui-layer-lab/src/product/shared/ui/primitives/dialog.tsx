@@ -66,7 +66,7 @@ function DialogContent({
               />
             )}
           >
-            <XIcon aria-hidden="true" />
+            <XIcon aria-hidden="true" data-icon="inline-start" />
             <span className="sr-only">{closeLabel}</span>
           </DialogPrimitive.Close>
         ) : null}
