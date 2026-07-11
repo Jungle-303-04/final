@@ -276,3 +276,53 @@ P2를 완료로 판정한다. 다음 단계는 `final-questions.md`에 남은 �
   catalog audit 482 previews·production build 모두 PASS다.
 - 검토자가 일부 항목만 답하면 나머지는 문서의 권고안으로 확정한다. 기본 결정 시각까지 답변이
   없으면 네 권고안을 모두 적용하고 이후 질문 라운드는 만들지 않는다.
+
+## 2026-07-11 API 완료 게이트 제품 셸 구현
+
+- 구현 커밋: `93e344f2c`
+- `ProductApp`은 인증·fleet·metrics demo surface를 직접 마운트하지 않고 `createApiComposition()`만
+  production composition root로 사용한다.
+- `apiComposition.ts`는 progress의 `API 완성:` 기록이 없는 동안 surface 등록을 0개로 유지한다.
+  이 상태에서는 제품 화면이 서버 endpoint를 import하거나 요청하지 않고 release gate 화면만
+  렌더한다.
+- `ProductShell`은 등록된 capability만 navigation에 노출한다. `traffic`, `helm`, `checks`,
+  `cost`, `settings`처럼 route 없는 Backend gap surface는 primary route catalog에 넣지 않았다.
+- 제품 소유 primitive는 `src/product/shared/ui/primitives/**`로 분리했고, catalog runtime import를
+  제품 entry에서 제거했다. 원천·라이선스 고지는 `references/ui-layer-lab/THIRD_PARTY_NOTICES.md`에
+  남겼다.
+- API boundary test는 제품 코드의 endpoint import가 `app/apiComposition.ts`에만 존재하도록 검사하고,
+  composition root가 import한 endpoint 함수가 `API 완성: <함수명> (<hash>)` 기록에 없으면 실패한다.
+
+### 검증
+
+```text
+명령: cd references/ui-layer-lab && npm run check
+결과: PASS
+  - TypeScript: PASS
+  - ESLint: PASS
+  - Vitest: 6 files, 30 tests PASS
+  - product design guard: 40 files PASS
+  - UI catalog source audit: 482 previews PASS, upstream 21e4ceb
+  - Vite production build: PASS
+주의: 500kB 초과 chunk warning은 기존 성능 과제로 유지
+```
+
+```text
+명령: uv run pytest tests/test_docs_index.py tests/test_bruno_collection.py -q
+결과: PASS — 17 passed
+
+명령: make manifest-check
+결과: PASS — management manifest objects 56, target manifest objects 18
+```
+
+### 게이트 판정
+
+| 게이트 | 결과 | 근거 |
+|---|---|---|
+| `API 완성:` 0개일 때 API 소비 0개 | 통과 | `createApiComposition([])` + `apiBoundary.test.ts` |
+| Backend gap surface 미노출 | 통과 | route catalog test |
+| 제품 primitive 소유 경계 | 통과 | 제품 entry의 catalog runtime import 제거 |
+| 전체 제품 check | 통과 | 위 `npm run check` 결과 |
+
+이 구현은 새 endpoint 완료를 의미하지 않는다. API 작업자가 progress에 export 함수별
+`API 완성:` 기록과 contract test 근거를 남길 때까지 새 제품 surface는 등록하지 않는다.
