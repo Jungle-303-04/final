@@ -16,6 +16,10 @@ components as implementation references:
 | `src/components/ui/badge.tsx` | `src/product/shared/ui/primitives/badge.tsx` | product-relative utility import, reduced variants |
 | `src/components/ui/separator.tsx` | `src/product/shared/ui/primitives/separator.tsx` | product-relative utility import |
 | `src/components/ui/tooltip.tsx` | `src/product/shared/ui/primitives/tooltip.tsx` | product-relative utility import, compact transition and positioning surface |
+| `src/components/ui/dialog.tsx` | `src/product/shared/ui/primitives/dialog.tsx` | product-relative imports, Base UI 1.6 focus treatment and iOS backdrop coverage |
+| `src/components/ui/kbd.tsx` | `src/product/shared/ui/primitives/kbd.tsx` | product-relative utility import, corrected `KbdGroup` element prop type |
+| `src/components/ui/table.tsx` | `src/product/shared/ui/primitives/table.tsx` | product-relative utility import |
+| `src/components/ui/toggle.tsx` | `src/product/shared/ui/primitives/toggle.tsx` | product-relative utility import, compact icon size variant |
 | `src/index.css` Base Nova variables | `src/product/styles/tokens.css` | lab/vendor sources removed, product-only source scan, two-theme contract, product status aliases |
 
 The product does not import the generated catalog or vendor snapshot at runtime. These adaptations are

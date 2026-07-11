@@ -11,7 +11,7 @@ import {
   TriangleAlert,
   type LucideIcon,
 } from "lucide-react";
-import { useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { NavLink, Outlet, useLocation } from "react-router-dom";
 import { ThemeToggle } from "../shared/ui/ThemeToggle";
 import { Button } from "../shared/ui/primitives/button";
@@ -22,12 +22,16 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "../shared/ui/primitives/tooltip";
+import { useProductTheme } from "../shared/ui/useProductTheme";
+import { ShortcutHelpDialog } from "./ShortcutHelpDialog";
 import {
   productNavigationForReleasedSurfaces,
   productRouteForPath,
   type ProductSurfaceId,
   type ProductRouteIcon,
 } from "./productRoutes";
+import { shellShortcutDefinitions } from "./shortcutRegistry";
+import { useProductShortcuts } from "./useProductShortcuts";
 
 interface ProductShellProps {
   releasedSurfaceIds: ReadonlySet<ProductSurfaceId>;
@@ -50,11 +54,28 @@ export function ProductShell({
 }: ProductShellProps) {
   const [isSidebarCollapsed, setSidebarCollapsed] = useState(() => (
     defaultSidebarCollapsed ?? (
-      typeof window !== "undefined" && window.matchMedia("(max-width: 767px)").matches
+      typeof window !== "undefined"
+      && typeof window.matchMedia === "function"
+      && window.matchMedia("(max-width: 767px)").matches
     )
   ));
+  const [isShortcutHelpOpen, setShortcutHelpOpen] = useState(false);
   const location = useLocation();
+  const themeController = useProductTheme();
   const navigationRoutes = productNavigationForReleasedSurfaces(releasedSurfaceIds);
+  const shortcutDefinitions = useMemo(
+    () => shellShortcutDefinitions(releasedSurfaceIds),
+    [releasedSurfaceIds],
+  );
+  const toggleShortcutHelp = useCallback(() => {
+    setShortcutHelpOpen((value) => !value);
+  }, []);
+  useProductShortcuts({
+    definitions: shortcutDefinitions,
+    isHelpOpen: isShortcutHelpOpen,
+    onHelpToggle: toggleShortcutHelp,
+    onThemeToggle: themeController.toggle,
+  });
   const matchedRoute = productRouteForPath(location.pathname);
   const currentRoute = matchedRoute && releasedSurfaceIds.has(matchedRoute.id)
     ? matchedRoute
@@ -130,8 +151,8 @@ export function ProductShell({
               onClick={() => setSidebarCollapsed((value) => !value)}
             >
               {isSidebarCollapsed
-                ? <PanelLeftOpen aria-hidden="true" />
-                : <PanelLeftClose aria-hidden="true" />}
+                ? <PanelLeftOpen aria-hidden="true" data-icon="inline-start" />
+                : <PanelLeftClose aria-hidden="true" data-icon="inline-start" />}
               <span className={cn(isSidebarCollapsed && "sr-only")}>{sidebarToggleLabel}</span>
             </Button>
           </div>
@@ -144,7 +165,12 @@ export function ProductShell({
               <p className="truncate text-xs text-muted-foreground">Operations workspace</p>
             </div>
             <div className="flex items-center gap-1">
-              <ThemeToggle />
+              <ShortcutHelpDialog
+                definitions={shortcutDefinitions}
+                open={isShortcutHelpOpen}
+                onOpenChange={setShortcutHelpOpen}
+              />
+              <ThemeToggle controller={themeController} />
             </div>
           </header>
 
