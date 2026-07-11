@@ -1,6 +1,6 @@
 ---
 title: Topology Engine Message and Action Protocol
-status: planned-protocol-contract
+status: long-term-review-contract
 owner: frontend-platform
 version: topology-engine-message/v1
 last_verified: 2026-07-11
@@ -11,6 +11,11 @@ last_verified: 2026-07-11
 ## 0. 권한과 경계
 
 이 문서는 `topology-engine.md`의 message, reducer, effect, snapshot/delta, action/operation wire 의미를 채우는 구현 예정 보조 계약이다. 현재 repo의 실제 코드와 통과한 테스트가 source of truth이며, 아래 discriminated union과 validation rule이 현 코드에 없으면 구현 완료가 아니라 후속 작업 기준으로만 읽는다. 제품 GitOps operation의 사용자 의미는 `product-data-contract.md`의 구현 예정 계약을 함께 따른다.
+
+외부 기준 저장소 피벗 이후 이 문서의 presentation 전용 타입과 절은 P1·P2·P3 구현 근거가 아니다. generic
+message ordering, idempotency, atomic delta, command receipt 규칙의 장기 보존 여부와 presentation
+전용 절 분리는 `topology-engine.md` 후속 검토에서 함께 결정한다. 현재 화면과 interaction은
+`reference-feature-inventory.md`가 정본이다.
 
 - 모든 사용자/URL/stream/worker/effect/system 입력은 `dispatch(EngineMessage)` 한 경로만 사용한다.
 - runtime schema 검증 전 payload를 reducer에 전달하지 않는다.
