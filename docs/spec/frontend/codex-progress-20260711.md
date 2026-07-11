@@ -315,6 +315,43 @@ P2를 완료로 판정한다. 다음 단계는 `final-questions.md`에 남은 �
 결과: PASS — management manifest objects 56, target manifest objects 18
 ```
 
+## 2026-07-11 카드·진행률 primitive 계약 보강
+
+- 구현 커밋: `3aca551c8`
+- 제품 소유 `Card` primitive는 title·description을 중립 `div` wrapper로 유지한다. 실제 heading
+  hierarchy와 paragraph semantics는 호출 화면이 소유하며, slot marker와 size marker는 component가
+  고정한다.
+- 제품 소유 `Progress` primitive는 접근 가능한 이름을 필수로 요구하고, 0–100 범위를 벗어나거나
+  finite가 아닌 determinate value를 거부한다. `null` value는 numeric `aria-valuenow` 없이
+  불확정 상태 문구로 표현한다.
+- `aria-hidden`, custom min/max, raw HTML replacement, accessible name 중복은 타입 계약에서
+  거부한다. `aria-hidden`은 JSX ARIA 경로로 다시 열리지 않도록 explicit `never`로 닫았다.
+- visual harness와 gate는 complete progress, indeterminate progress, progress track, indicator를
+  required selector와 forced-colors 검사에 포함한다. 첫 점검에서 track border 때문에 complete
+  indicator가 track보다 2px 짧아지는 조건을 잡았고, track border를 제거해 complete ratio 1.0,
+  indeterminate ratio 약 1/3, dashed border, reduced-motion animation none 조건으로 수렴했다.
+- 이 변경은 product UI primitive와 visual gate 계약 보강이며 새 endpoint 완료가 아니다. §6b 조율
+  상태는 `api-needs.md`의 `requested` 26행, 유효한 완료 앵커 0개다.
+
+```text
+명령: cd references/ui-layer-lab && npm run check
+결과: PASS
+  - TypeScript: PASS
+  - ESLint: PASS
+  - Vitest: 17 files, 87 tests PASS
+  - product design guard: 65 files PASS
+  - UI catalog source audit: 482 previews PASS, upstream 21e4ceb
+  - Vite production build: PASS
+  - ProductApp CSS: 45.77 kB (gzip 9.07 kB)
+  - ProductApp JS: 68.82 kB (gzip 23.84 kB)
+주의: 500kB 초과 chunk warning은 reference catalog 기존 성능 과제로 유지
+
+명령: cd references/ui-layer-lab && npm run visual-product
+결과: PASS — release-desktop-light, release-mobile-dark, release-reflow-320-light,
+      release-text-resize-200-light, state-reflow-320-light,
+      state-text-resize-200-light, state-forced-colors; network-silent
+```
+
 ## 2026-07-11 제품 오류 경계와 안전 복구 보강
 
 - 구현 커밋: `3d3c2cb94`
