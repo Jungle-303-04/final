@@ -141,6 +141,14 @@ const snapshot: TopologyHierarchySnapshot = {
   defaultAreaMetricId: "cpu.usage.cores",
   clusters,
   completeness: { state: "complete" },
+  freshness: {
+    state: "fresh",
+    receivedAt: "2026-07-11T00:00:01Z",
+    staleAfterMs: 15000,
+    observedAt: "2026-07-10T23:59:59.500Z",
+    ageMs: 1500,
+    reason: null,
+  },
 };
 
 export class SyntheticTopologyHierarchyGateway implements TopologyHierarchyGateway {

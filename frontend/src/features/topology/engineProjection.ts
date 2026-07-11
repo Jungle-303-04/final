@@ -36,18 +36,38 @@ function engineHealth(level: HealthLevel): EngineHealthLevel {
 function healthVerdict(
   level: HealthLevel,
   reason: string,
-  observedAt: string,
-  complete: boolean,
+  snapshot: TopologyHierarchySnapshot,
 ) {
   return {
     level: engineHealth(level),
     reason,
     source: "topology-hierarchy-gateway",
-    observedAt,
-    freshness: "unknown",
-    completeness: complete ? "complete" : "partial",
+    observedAt: snapshot.observedAt,
+    freshness: snapshot.freshness.state,
+    completeness:
+      snapshot.completeness.state === "complete" ? "complete" : "partial",
     access: "allowed",
     evidenceIds: [],
+  } as const;
+}
+
+function freshnessEvidence(
+  freshness: TopologyHierarchySnapshot["freshness"],
+) {
+  return {
+    state: freshness.state,
+    receivedAt: freshness.receivedAt,
+    staleAfterMs: freshness.staleAfterMs,
+    observedAt: freshness.observedAt,
+    ageMs: freshness.ageMs,
+    reason:
+      freshness.reason === null
+        ? null
+        : {
+            code: freshness.reason.code,
+            messageKey: freshness.reason.messageKey,
+            detail: freshness.reason.detail,
+          },
   } as const;
 }
 
@@ -108,8 +128,7 @@ function podRef(
 function canonicalEntity(
   ref: EntityRef,
   entity: ClusterTopologyEntity | NodeTopologyEntity | PodTopologyEntity,
-  observedAt: string,
-  complete: boolean,
+  snapshot: TopologyHierarchySnapshot,
   parentEntityKey?: string,
 ): CanonicalEntity {
   return {
@@ -121,11 +140,12 @@ function canonicalEntity(
     ...(parentEntityKey === undefined
       ? {}
       : { parentEntityKey: entityKey(parentEntityKey) }),
-    ownHealth: healthVerdict(entity.health, entity.healthReason, observedAt, complete),
+    ownHealth: healthVerdict(entity.health, entity.healthReason, snapshot),
     attributes: {
       hierarchyKind: entity.kind,
+      freshness: freshnessEvidence(snapshot.freshness),
     },
-    observedAt,
+    observedAt: snapshot.observedAt,
   };
 }
 
@@ -133,7 +153,7 @@ function placementRelation(
   source: EntityRef,
   target: EntityRef,
   relationType: "contains-node" | "schedules-pod",
-  observedAt: string,
+  snapshot: TopologyHierarchySnapshot,
 ): CanonicalRelation {
   const key = `${relationType}:${String(source.entityKey)}:${String(target.entityKey)}`;
   const conditions = {
@@ -143,8 +163,9 @@ function placementRelation(
     activity: "active",
     resolution: "resolved",
     access: "allowed",
-    freshness: "unknown",
+    freshness: snapshot.freshness.state,
   } as const;
+  const evidence = freshnessEvidence(snapshot.freshness);
 
   return {
     relationKey: relationKey(key),
@@ -159,8 +180,8 @@ function placementRelation(
         authority: "authoritative",
         conditions,
         evidenceIds: [],
-        observedAt,
-        attributes: {},
+        observedAt: snapshot.observedAt,
+        attributes: { freshness: evidence },
       },
     ],
     effective: {
@@ -170,8 +191,8 @@ function placementRelation(
       conflictAxes: [],
     },
     evidenceIds: [],
-    observedAt,
-    attributes: {},
+    observedAt: snapshot.observedAt,
+    attributes: { freshness: evidence },
   };
 }
 
@@ -203,12 +224,10 @@ function canonicalGraph(
 ): CanonicalGraphState {
   const entities: CanonicalEntity[] = [];
   const relations: CanonicalRelation[] = [];
-  const complete = snapshot.completeness.state === "complete";
-
   for (const cluster of snapshot.clusters) {
     const clusterIdentity = clusterRef(snapshot, cluster);
     entities.push(
-      canonicalEntity(clusterIdentity, cluster, snapshot.observedAt, complete),
+      canonicalEntity(clusterIdentity, cluster, snapshot),
     );
 
     for (const node of cluster.nodes) {
@@ -217,8 +236,7 @@ function canonicalGraph(
         canonicalEntity(
           nodeIdentity,
           node,
-          snapshot.observedAt,
-          complete,
+          snapshot,
           cluster.entityKey,
         ),
       );
@@ -227,7 +245,7 @@ function canonicalGraph(
           clusterIdentity,
           nodeIdentity,
           "contains-node",
-          snapshot.observedAt,
+          snapshot,
         ),
       );
 
@@ -237,8 +255,7 @@ function canonicalGraph(
           canonicalEntity(
             podIdentity,
             pod,
-            snapshot.observedAt,
-            complete,
+            snapshot,
             node.entityKey,
           ),
         );
@@ -247,7 +264,7 @@ function canonicalGraph(
             nodeIdentity,
             podIdentity,
             "schedules-pod",
-            snapshot.observedAt,
+            snapshot,
           ),
         );
       }
