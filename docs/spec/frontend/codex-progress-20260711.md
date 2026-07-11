@@ -415,7 +415,7 @@ P2를 완료로 판정한다. 다음 단계는 `final-questions.md`에 남은 �
   - TypeScript: PASS
   - ESLint: PASS
   - Vitest: 10 files, 52 tests PASS
-  - product design guard: 50 files PASS
+  - product design guard: 51 files PASS
   - UI catalog source audit: 482 previews PASS, upstream 21e4ceb
   - Vite production build: PASS
 주의: 500kB 초과 chunk warning은 reference catalog 기존 성능 과제로 유지
@@ -427,4 +427,42 @@ P2를 완료로 판정한다. 다음 단계는 `final-questions.md`에 남은 �
 
 명령: make manifest-check
 결과: PASS — management manifest objects 56, target manifest objects 18
+```
+
+### shortcut 접근성·시각 게이트 후속 보강
+
+- 보강 커밋: `636b6819b`
+- 벤치마크가 multi-key timeout의 존재만 규정하고 수치를 제공하지 않아 1,000ms를 자체결정으로
+  확정했다. `g` prefix 뒤 1,000ms가 지나거나 Escape·blur·hidden·IME·modifier·editable event가
+  끼면 pending sequence를 폐기한다. 잘못된 suffix는 단독 shortcut으로 재해석하지 않는다.
+- `ShortcutHelpDialog`는 시각적 `Kbd`와 별도로 `g 다음 i` 형식의 screen-reader text를 제공한다.
+  Dialog를 route shortcut으로 연 뒤 닫아도 기존 `#product-main` focus를 Base UI 계약으로 복원한다.
+- 사용자 확정값에 따라 theme은 light/dark 두 모드만 유지한다. 저장값이 없으면 light이며 system을
+  제3의 선택지 또는 초기 mode로 등록하지 않는다.
+- 기존 visual gate의 mock API·가짜 user/cluster 응답을 제거했다. 현재 승인된 endpoint가 0개인
+  production composition은 network-silent release gate만 렌더하고, 제품 `/api/**` HTTP 요청과
+  WebSocket을 모두 0건으로 검증한다.
+- §6b 조율 상태는 `api-needs.md`의 `requested` 26행, progress의 `API 완성:` 0행이다. 이 보강은
+  `src/product/api/**`를 수정하지 않았고 새 API 요구도 만들지 않았다.
+
+```text
+명령: cd references/ui-layer-lab && npm run check
+결과: PASS
+  - TypeScript: PASS
+  - ESLint: PASS
+  - Vitest: 10 files, 52 tests PASS
+  - product design guard: 51 files PASS
+  - UI catalog source audit: 482 previews PASS, upstream 21e4ceb
+  - Vite production build: PASS
+  - ProductApp CSS: 39.21 kB (gzip 7.71 kB)
+  - ProductApp JS: 61.96 kB (gzip 21.88 kB)
+주의: 500kB 초과 chunk warning은 reference catalog 기존 성능 과제로 유지
+
+명령: cd references/ui-layer-lab && npm run visual-product
+결과: PASS — desktop light + mobile dark, API request 0, product WebSocket 0,
+      console/page error 0, horizontal overflow 0, main landmark 1
+설정: prefers-reduced-motion=reduce
+스크린샷:
+  - references/ui-layer-lab/output/playwright/product-release-desktop-light.png
+  - references/ui-layer-lab/output/playwright/product-release-mobile-dark.png
 ```
