@@ -326,3 +326,25 @@ P2를 완료로 판정한다. 다음 단계는 `final-questions.md`에 남은 �
 
 이 구현은 새 endpoint 완료를 의미하지 않는다. API 작업자가 progress에 export 함수별
 `API 완성:` 기록과 contract test 근거를 남길 때까지 새 제품 surface는 등록하지 않는다.
+
+### 2026-07-11 API 완료 게이트 사후 강화
+
+- 보강 커밋: `5cfa5bbd9`
+- `ProductShell`은 현재 URL이 catalog에는 있어도 등록되지 않은 capability이면 그 route label을
+  header에 노출하지 않고, 등록된 첫 navigation capability를 현재 route로 표시한다.
+- 등록 surface가 없는 상태는 `ProductRouter`의 release gate가 처리한다. `ProductShell` 자체는
+  최소 1개 released capability를 요구하도록 fail-fast를 유지한다.
+- API boundary test는 static import/export뿐 아니라 dynamic `import()`와 `require()`가
+  `src/product/api/**`를 가리키는 경우도 검출한다. composition root도 정적 named import만 허용한다.
+
+```text
+명령: cd references/ui-layer-lab && npm run check
+결과: PASS
+  - TypeScript: PASS
+  - ESLint: PASS
+  - Vitest: 6 files, 31 tests PASS
+  - product design guard: 40 files PASS
+  - UI catalog source audit: 482 previews PASS, upstream 21e4ceb
+  - Vite production build: PASS
+주의: 500kB 초과 chunk warning은 기존 성능 과제로 유지
+```
