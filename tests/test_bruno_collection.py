@@ -156,6 +156,7 @@ def test_every_gateway_route_has_a_bruno_request() -> None:
         routes.PROVIDERS_CATALOG_PATH,
         routes.PROVIDERS_CLUSTER_DISCOVERY_PATH,
         routes.PROVIDERS_VALIDATE_PATH,
+        routes.RCA_RULES_PATH,
         routes.RCA_RULES_VALIDATE_PATH,
         routes.RCA_TEST_SCENARIOS_PATH,
         routes.RCA_TEST_RUNS_PATH,

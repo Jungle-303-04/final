@@ -772,6 +772,26 @@ class RcaRuleValidateResponse(StrictModel):
     candidates_count: int = 0
 
 
+class RcaRuleCandidateItem(StrictModel):
+    candidate_id: str
+    title: str
+    expected_evidence: list[str] = Field(default_factory=list)
+    signals_count: int = 0
+
+
+class RcaRuleCatalogItem(StrictModel):
+    rule_id: str
+    symptoms: list[str] = Field(default_factory=list)
+    required_sources: list[str] = Field(default_factory=list)
+    candidates: list[RcaRuleCandidateItem] = Field(default_factory=list)
+
+
+class RcaRuleCatalogResponse(StrictModel):
+    items: list[RcaRuleCatalogItem] = Field(default_factory=list)
+    rules_count: int = 0
+    candidates_count: int = 0
+
+
 class MetricsValidateResponse(StrictModel):
     valid: bool
     code: str | None = None
