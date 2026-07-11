@@ -14,18 +14,22 @@ import ts from 'typescript'
 
 const projectRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const sourceRoot = resolve(projectRoot, 'src')
-const productRoot = resolve(sourceRoot, 'product')
+const productRoot = process.env.PRODUCT_DESIGN_GUARD_ROOT
+  ? resolve(process.env.PRODUCT_DESIGN_GUARD_ROOT)
+  : resolve(sourceRoot, 'product')
 const apiRoot = resolve(productRoot, 'api')
 const tokenFile = resolve(productRoot, 'styles', 'tokens.css')
 
 const checkedExtensions = new Set([
   '.cjs',
+  '.cts',
   '.css',
   '.html',
   '.js',
   '.jsx',
   '.less',
   '.mjs',
+  '.mts',
   '.sass',
   '.scss',
   '.svg',
@@ -34,13 +38,15 @@ const checkedExtensions = new Set([
 ])
 const scriptExtensions = new Set([
   '.cjs',
+  '.cts',
   '.js',
   '.jsx',
   '.mjs',
+  '.mts',
   '.ts',
   '.tsx',
 ])
-const typeScriptExtensions = new Set(['.ts', '.tsx'])
+const typeScriptExtensions = new Set(['.cts', '.mts', '.ts', '.tsx'])
 
 const rawColorPatterns = [
   { label: 'hex', pattern: /#(?:[\da-f]{8}|[\da-f]{6}|[\da-f]{4}|[\da-f]{3})(?![\da-f])/giu },
@@ -48,6 +54,20 @@ const rawColorPatterns = [
   { label: 'hsl/hsla', pattern: /\bhsla?\s*\(/giu },
   { label: 'oklch', pattern: /\boklch\s*\(/giu },
 ]
+
+const restrictedNetworkApis = new Set([
+  'EventSource',
+  'WebSocket',
+  'XMLHttpRequest',
+  'fetch',
+  'sendBeacon',
+])
+const networkCapableGlobals = new Set([
+  'globalThis',
+  'navigator',
+  'self',
+  'window',
+])
 
 const violations = []
 
@@ -173,20 +193,187 @@ function stringArgument(node) {
     : null
 }
 
-function isFetchCall(node) {
-  if (!ts.isCallExpression(node)) {
+function staticStringValue(node) {
+  if (ts.isStringLiteralLike(node)) {
+    return node.text
+  }
+
+  if (ts.isParenthesizedExpression(node)) {
+    return staticStringValue(node.expression)
+  }
+
+  if (
+    ts.isBinaryExpression(node) &&
+    node.operatorToken.kind === ts.SyntaxKind.PlusToken
+  ) {
+    const left = staticStringValue(node.left)
+    const right = staticStringValue(node.right)
+    return left === null || right === null ? null : left + right
+  }
+
+  return null
+}
+
+function unwrapExpression(node) {
+  let current = node
+
+  while (
+    ts.isAsExpression(current) ||
+    ts.isNonNullExpression(current) ||
+    ts.isParenthesizedExpression(current) ||
+    ts.isSatisfiesExpression(current) ||
+    ts.isTypeAssertionExpression(current)
+  ) {
+    current = current.expression
+  }
+
+  return current
+}
+
+function isNetworkCapableGlobal(node, aliases = networkCapableGlobals) {
+  const expression = unwrapExpression(node)
+  return ts.isIdentifier(expression) && aliases.has(expression.text)
+}
+
+function isTypeOnlyIdentifier(node) {
+  for (let current = node.parent; current; current = current.parent) {
+    if (ts.isTypeNode(current)) {
+      return true
+    }
+
+    if (ts.isExpression(current) || ts.isStatement(current) || ts.isSourceFile(current)) {
+      return false
+    }
+  }
+
+  return false
+}
+
+function isDeclarationOrPropertyName(node) {
+  const { parent } = node
+
+  if (
+    (ts.isPropertyAccessExpression(parent) || ts.isPropertyAccessChain(parent)) &&
+    parent.name === node
+  ) {
+    return true
+  }
+
+  if (
+    (ts.isPropertyAssignment(parent) ||
+      ts.isMethodDeclaration(parent) ||
+      ts.isGetAccessorDeclaration(parent) ||
+      ts.isSetAccessorDeclaration(parent)) &&
+    parent.name === node
+  ) {
+    return true
+  }
+
+  return ts.isDeclaration(parent) && 'name' in parent && parent.name === node
+}
+
+function bindingInitializer(node) {
+  const pattern = node.parent
+  const declaration = pattern?.parent
+  return ts.isObjectBindingPattern(pattern) && ts.isVariableDeclaration(declaration)
+    ? declaration.initializer
+    : null
+}
+
+function restrictedNetworkReference(node, globalAliases, localNames) {
+  if (ts.isPropertyAccessExpression(node) || ts.isPropertyAccessChain(node)) {
+    if (!restrictedNetworkApis.has(node.name.text)) {
+      return null
+    }
+    return isNetworkCapableGlobal(node.expression, globalAliases) ? node.name.text : null
+  }
+
+  if (ts.isElementAccessExpression(node) || ts.isElementAccessChain(node)) {
+    const memberName = node.argumentExpression
+      ? staticStringValue(node.argumentExpression)
+      : null
+
+    if (
+      memberName &&
+      restrictedNetworkApis.has(memberName) &&
+      isNetworkCapableGlobal(node.expression, globalAliases)
+    ) {
+      return memberName
+    }
+
+    return null
+  }
+
+  if (ts.isBindingElement(node)) {
+    const bindingName = node.propertyName ?? node.name
+    const memberName = ts.isIdentifier(bindingName)
+      ? bindingName.text
+      : ts.isComputedPropertyName(bindingName)
+        ? staticStringValue(bindingName.expression)
+        : null
+
+    const initializer = bindingInitializer(node)
+    return (
+      memberName &&
+      restrictedNetworkApis.has(memberName) &&
+      initializer &&
+      isNetworkCapableGlobal(initializer, globalAliases)
+    ) ? memberName : null
+  }
+
+  if (
+    ts.isIdentifier(node) &&
+    restrictedNetworkApis.has(node.text) &&
+    node.text !== 'sendBeacon' &&
+    !localNames.has(node.text) &&
+    !isTypeOnlyIdentifier(node) &&
+    !isDeclarationOrPropertyName(node)
+  ) {
+    return node.text
+  }
+
+  return null
+}
+
+function isDynamicGlobalAccess(node, globalAliases) {
+  return (
+    (ts.isElementAccessExpression(node) || ts.isElementAccessChain(node)) &&
+    isNetworkCapableGlobal(node.expression, globalAliases) &&
+    (!node.argumentExpression || staticStringValue(node.argumentExpression) === null)
+  )
+}
+
+function isDynamicReflectGet(node, globalAliases) {
+  const expression = ts.isCallExpression(node) ? node.expression : null
+  const reflectMember = expression && (
+    ts.isPropertyAccessExpression(expression) || ts.isElementAccessExpression(expression)
+  ) ? expression : null
+  const reflectTarget = reflectMember?.expression
+  const reflectMemberName = reflectMember && (
+    ts.isPropertyAccessExpression(reflectMember)
+      ? reflectMember.name.text
+      : reflectMember.argumentExpression
+        ? staticStringValue(reflectMember.argumentExpression)
+        : null
+  )
+  if (
+    !ts.isCallExpression(node) ||
+    !reflectMember ||
+    !reflectTarget ||
+    !ts.isIdentifier(reflectTarget) ||
+    reflectTarget.text !== 'Reflect' ||
+    reflectMemberName !== 'get'
+  ) {
     return false
   }
 
-  if (ts.isIdentifier(node.expression)) {
-    return node.expression.text === 'fetch'
+  const [target, property] = node.arguments
+  if (!target || !property || !isNetworkCapableGlobal(target, globalAliases)) {
+    return false
   }
 
-  return (
-    (ts.isPropertyAccessExpression(node.expression) ||
-      ts.isPropertyAccessChain(node.expression)) &&
-    node.expression.name.text === 'fetch'
-  )
+  const propertyName = staticStringValue(property)
+  return propertyName === null || restrictedNetworkApis.has(propertyName)
 }
 
 function inspectScript(filePath, source, extension) {
@@ -197,6 +384,42 @@ function inspectScript(filePath, source, extension) {
     true,
     scriptKindFor(extension),
   )
+  const enforceApiBoundary = !isWithin(filePath, apiRoot)
+  const globalAliases = new Set(networkCapableGlobals)
+  const localNames = new Set()
+
+  function collectBindingNames(name) {
+    if (ts.isIdentifier(name)) {
+      localNames.add(name.text)
+      return
+    }
+    for (const element of name.elements) {
+      if (ts.isBindingElement(element)) collectBindingNames(element.name)
+    }
+  }
+
+  function collectBindings(node) {
+    if (ts.isVariableDeclaration(node)) {
+      collectBindingNames(node.name)
+      if (
+        ts.isIdentifier(node.name) &&
+        node.initializer &&
+        isNetworkCapableGlobal(node.initializer, globalAliases)
+      ) {
+        globalAliases.add(node.name.text)
+      }
+    }
+    if (ts.isParameter(node)) collectBindingNames(node.name)
+    if ((ts.isFunctionDeclaration(node) || ts.isClassDeclaration(node)) && node.name) {
+      localNames.add(node.name.text)
+    }
+    if (ts.isImportClause(node) && node.name) localNames.add(node.name.text)
+    if (ts.isImportSpecifier(node)) localNames.add(node.name.text)
+    if (ts.isNamespaceImport(node)) localNames.add(node.name.text)
+    ts.forEachChild(node, collectBindings)
+  }
+
+  collectBindings(sourceFile)
 
   function visit(node) {
     if (
@@ -224,13 +447,37 @@ function inspectScript(filePath, source, extension) {
       }
     }
 
-    if (isFetchCall(node) && !isWithin(filePath, apiRoot)) {
+    const networkApi = enforceApiBoundary
+      ? restrictedNetworkReference(node, globalAliases, localNames)
+      : null
+
+    if (networkApi) {
       addViolation(
         filePath,
         sourceFile,
         node.getStart(sourceFile),
         'api-boundary',
-        'Direct fetch calls are allowed only under src/product/api.',
+        `Direct ${networkApi} access is allowed only under src/product/api.`,
+      )
+    }
+
+    if (enforceApiBoundary && isDynamicGlobalAccess(node, globalAliases)) {
+      addViolation(
+        filePath,
+        sourceFile,
+        node.getStart(sourceFile),
+        'api-boundary',
+        'Dynamic access to a network-capable global is allowed only under src/product/api.',
+      )
+    }
+
+    if (enforceApiBoundary && isDynamicReflectGet(node, globalAliases)) {
+      addViolation(
+        filePath,
+        sourceFile,
+        node.getStart(sourceFile),
+        'api-boundary',
+        'Reflective access to a network transport is allowed only under src/product/api.',
       )
     }
 

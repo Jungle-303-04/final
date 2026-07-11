@@ -1,23 +1,23 @@
 import type { ComponentType } from "react";
 import {
   PRODUCT_ROUTE_CATALOG,
-  type ProductCapabilityId,
+  type ProductSurfaceId,
 } from "./productRoutes";
 
 export interface ProductSurfaceRegistration {
-  id: ProductCapabilityId;
+  id: ProductSurfaceId;
   Component: ComponentType;
 }
 
 export interface ProductComposition {
   surfaces: readonly ProductSurfaceRegistration[];
-  capabilities: ReadonlySet<ProductCapabilityId>;
+  releasedSurfaceIds: ReadonlySet<ProductSurfaceId>;
 }
 
 export function createProductComposition(
   registrations: readonly ProductSurfaceRegistration[],
 ): ProductComposition {
-  const byId = new Map<ProductCapabilityId, ProductSurfaceRegistration>();
+  const byId = new Map<ProductSurfaceId, ProductSurfaceRegistration>();
 
   for (const registration of registrations) {
     if (byId.has(registration.id)) {
@@ -39,6 +39,6 @@ export function createProductComposition(
 
   return {
     surfaces,
-    capabilities: new Set(surfaces.map((surface) => surface.id)),
+    releasedSurfaceIds: new Set(surfaces.map((surface) => surface.id)),
   };
 }

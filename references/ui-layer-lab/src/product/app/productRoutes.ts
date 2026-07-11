@@ -1,4 +1,4 @@
-export type ProductCapabilityId =
+export type ProductSurfaceId =
   | "home"
   | "resources"
   | "issues"
@@ -17,7 +17,7 @@ export type ProductRouteIcon =
   | "gitops";
 
 export interface ProductRouteDefinition {
-  id: ProductCapabilityId;
+  id: ProductSurfaceId;
   label: string;
   path: `/product${string}`;
   icon: ProductRouteIcon;
@@ -35,10 +35,10 @@ export const PRODUCT_ROUTE_CATALOG = [
   route("gitops", "GitOps", "/product/gitops", "g o"),
 ] as const satisfies readonly ProductRouteDefinition[];
 
-export function productNavigationForCapabilities(
-  capabilities: ReadonlySet<ProductCapabilityId>,
+export function productNavigationForReleasedSurfaces(
+  releasedSurfaceIds: ReadonlySet<ProductSurfaceId>,
 ): readonly ProductRouteDefinition[] {
-  return PRODUCT_ROUTE_CATALOG.filter((routeDefinition) => capabilities.has(routeDefinition.id));
+  return PRODUCT_ROUTE_CATALOG.filter((routeDefinition) => releasedSurfaceIds.has(routeDefinition.id));
 }
 
 export function productRouteForPath(pathname: string): ProductRouteDefinition | null {
@@ -49,16 +49,16 @@ export function resolveProductRoute(pathname: string): ProductRouteDefinition {
   return productRouteForPath(pathname) ?? PRODUCT_ROUTE_CATALOG[0];
 }
 
-export function routeDefinitionForCapability(
-  capability: ProductCapabilityId,
+export function routeDefinitionForSurface(
+  surfaceId: ProductSurfaceId,
 ): ProductRouteDefinition {
-  const routeDefinition = PRODUCT_ROUTE_CATALOG.find((candidate) => candidate.id === capability);
-  if (!routeDefinition) throw new Error(`unknown product capability: ${capability}`);
+  const routeDefinition = PRODUCT_ROUTE_CATALOG.find((candidate) => candidate.id === surfaceId);
+  if (!routeDefinition) throw new Error(`unknown product surface: ${surfaceId}`);
   return routeDefinition;
 }
 
 function route(
-  id: ProductCapabilityId,
+  id: ProductSurfaceId,
   label: string,
   path: `/product${string}`,
   shortcut: `g ${string}`,

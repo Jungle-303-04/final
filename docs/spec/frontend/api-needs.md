@@ -44,9 +44,10 @@ workorder: api-integration-workorder-20260711.md
 | `listMetricQueryPresets`, `runMetricQueryPreset` | `CLUSTER_METRIC_QUERY_PRESETS_PATH`, `CLUSTER_METRIC_QUERY_PRESET_RUN_PATH` | resource·PVC Metrics | 2026-07-11 16:19 KST | requested | run은 receipt만 확정하고 완료는 `getCommandStatus`로 수렴 |
 | `runTelemetryQuery` | `AGENT_DEBUG_QUERY_PATH`, `COMMAND_STATUS_PATH` | Pod log snapshot | 2026-07-11 16:19 KST | requested | Prometheus 전용 함수와 분리; registered telemetry source literal 보존, POST 재전송 금지 |
 | `submitCommand` | `COMMANDS_PATH` | Resources apply / remediation | 2026-07-11 16:19 KST | requested | `AcceptedResponse`를 성공으로 해석하지 않음; 현재 command id 부재는 `Cross-Gap-001`로 유지 |
+| `grantApproval`, `rejectApproval` | `APPROVAL_GRANT_PATH`, `APPROVAL_REJECT_PATH` | Applications / GitOps operation approval | 2026-07-11 17:17 KST | requested | nullable `ApprovalDecisionRequest.reason`과 `AcceptedResponse` 전체 보존; receipt 전 비낙관, `409`는 application runs·approval projection 재조회; approval id별 중복 제출 금지 |
 | `restartDeployment`, `scaleDeployment` | `CLUSTER_DEPLOYMENT_RESTART_PATH`, `CLUSTER_DEPLOYMENT_SCALE_PATH` | Resources workload actions | 2026-07-11 16:19 KST | requested | Deployment capability에서만 사용; approval field와 management read-only 오류 보존 |
 | `listCatalogItems`, `getCatalogItem` | `CATALOG_ITEMS_PATH`, `CATALOG_ITEM_PATH` | provider-neutral Catalog | 2026-07-11 16:19 KST | requested | install은 실행 계약이 없어 제외; 조회 응답만 구현 |
-| `listRcaIncidents`, `getRcaIncident` | `DASHBOARD_RCA_TIMELINE_PATH`, `DASHBOARD_RCA_INCIDENT_PATH` | Issues 목록 / incident 상세 | 2026-07-11 16:19 KST | requested | timeline teaser와 분리; stable incident id가 있는 행만 상세 이동 |
+| `getRcaIncident` | `DASHBOARD_RCA_INCIDENT_PATH` | Issues incident 상세 | 2026-07-11 16:19 KST | requested | Issues 목록은 `listRcaTimeline` 재사용; stable incident id가 있는 행만 상세 이동 |
 | `getRecoveryPlanByCorrelation`, `selectRecoveryAction` | `RCA_RECOVERY_PLAN_BY_CORRELATION_PATH`, `RCA_RECOVERY_ACTION_SELECT_PATH` | incident 상세 복구 조치 | 2026-07-11 16:19 KST | requested | selection은 비낙관 receipt; `409`이면 plan 재조회 |
 | `listEvidence`, `listRcaReports` | `EVIDENCE_QUERY_PATH`, `RCA_REPORTS_PATH` | evidence trail / resource-scoped AI 분석 | 2026-07-11 16:19 KST | requested | cursor·offset wire 의미 보존; stable correlation 없으면 호출하지 않음 |
 | `listAiConversations`, `getAiConversation`, `createAiConversation`, `appendAiMessage`, `deleteAiConversation` | `AI_CONVERSATIONS_PATH`, `AI_CONVERSATION_PATH`, `AI_CONVERSATION_MESSAGES_PATH` | global AI conversation drawer | 2026-07-11 16:19 KST | requested | status literal 전체 보존; accepted 후 detail poll; delete 204 처리 |
@@ -65,7 +66,7 @@ workorder: api-integration-workorder-20260711.md
 | `getRcaTimeline` | `DASHBOARD_RCA_TIMELINE_PATH` | Home RCA teaser | 2026-07-11 16:19 KST | requested | 고정 limit 6 의미를 유지; Issues 전체 목록에 사용 금지 |
 | `listInventoryResources`, `listInventoryServices`, `listInventoryWorkloads`, `getInventoryResourceDetail` | `CLUSTER_INVENTORY_RESOURCES_PATH`, `CLUSTER_INVENTORY_SERVICES_PATH`, `CLUSTER_INVENTORY_WORKLOADS_PATH`, `CLUSTER_INVENTORY_RESOURCE_DETAIL_PATH` | Home / Resources / topology projection | 2026-07-11 16:19 KST | requested | D1–D5 contract test와 cluster-1 실응답 검증 후 승인 |
 | `getClusterUsage` | `CLUSTER_USAGE_PATH` | cluster-level usage card | 2026-07-11 16:19 KST | requested | cluster rollup 전용; Pod·Node history에 사용 금지 |
-| `submitPrometheusQuery`, `getCommandStatus`, `pollCommand`, `runPrometheusQuery` | `AGENT_DEBUG_QUERY_PATH`, `COMMAND_STATUS_PATH` | Metrics / operation progress | 2026-07-11 16:19 KST | requested | possibly-sent POST 재전송 금지와 receipt polling을 contract test로 검증 |
+| `submitPrometheusQuery`, `getCommandStatus`, `pollCommand`, `runPrometheusQuery` | `AGENT_DEBUG_QUERY_PATH`, `COMMAND_STATUS_PATH` | Metrics / operation progress | 2026-07-11 16:19 KST | requested | possibly-sent POST 재전송 금지와 receipt polling을 contract test로 검증; API test fixture를 API 폴더가 소유하고 `features/**` 역방향 import 제거 |
 
 ## 큐 밖 Backend gap
 

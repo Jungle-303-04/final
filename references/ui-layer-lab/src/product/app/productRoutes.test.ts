@@ -1,10 +1,10 @@
 import { describe, expect, it } from "vitest";
 import {
   PRODUCT_ROUTE_CATALOG,
-  productNavigationForCapabilities,
+  productNavigationForReleasedSurfaces,
   productRouteForPath,
   resolveProductRoute,
-  type ProductCapabilityId,
+  type ProductSurfaceId,
 } from "./productRoutes";
 
 describe("product route release registry", () => {
@@ -29,10 +29,10 @@ describe("product route release registry", () => {
     ]);
   });
 
-  it("shows only capabilities released by the composition root", () => {
-    const available = new Set<ProductCapabilityId>(["home", "issues", "timeline"]);
+  it("shows only surfaces released by the composition root", () => {
+    const released = new Set<ProductSurfaceId>(["home", "issues", "timeline"]);
 
-    expect(productNavigationForCapabilities(available).map((route) => route.id)).toEqual([
+    expect(productNavigationForReleasedSurfaces(released).map((route) => route.id)).toEqual([
       "home",
       "issues",
       "timeline",

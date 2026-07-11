@@ -49,7 +49,13 @@ api-needs.md requested row
 
 `src/product/app/apiBoundary.test.ts` enforces this path. Product code outside
 `app/apiComposition.ts` cannot import `product/api`, and the composition root cannot value-import an
-endpoint without a matching completion record.
+endpoint without a matching completion record. The record hash must be an ancestor commit whose API
+barrel exports that endpoint and whose changed contract test references the same function. Computed
+dynamic imports are prohibited; code splitting uses statically analyzable literal imports.
+
+The product design guard separately rejects direct `fetch`, WebSocket, EventSource, XHR, and beacon
+access outside `src/product/api`. This prevents a surface from bypassing the composition root by
+opening its own transport.
 
 ## Runtime composition
 
@@ -61,9 +67,9 @@ src/
     api/                           # API-worker-owned transport and wire schemas
     app/
       apiComposition.ts            # the only approved API import boundary
-      productComposition.ts        # registered surface/capability set
+      productComposition.ts        # released surface set
       ProductRouter.tsx            # release gate or registered routes
-      ProductShell.tsx             # navigation derived from registered capabilities
+      ProductShell.tsx             # navigation derived from released surfaces
       productRoutes.ts             # canonical route metadata
     shared/ui/
       primitives/                  # product-owned shadcn adaptations
@@ -76,13 +82,15 @@ Product code must not import `src/components/ui`, `src/shadcn-lab`, `vendor`, or
 ## Surface registration rule
 
 `createProductComposition` is the single source for released product surfaces. A registration
-contains a canonical capability ID and a component. The composition derives both the router and the
+contains a canonical surface ID and a component. The composition derives both the router and the
 sidebar from that same list, so a route cannot exist without navigation metadata and an unsupported
 menu cannot remain visible.
 
-Provider names are never route conditions. A surface is registered from canonical capabilities only.
-Target-level permission and partial-data states stay inside a released surface; build-time absence of
-an approved API keeps the entire surface unregistered.
+Released surface IDs and target runtime capabilities are deliberately separate contracts. API
+approval decides whether a screen can ship; the selected cluster/binding capability and permission
+set decides which controls inside that screen are visible or disabled. Provider names are never route
+conditions. Target-level permission and partial-data states stay inside a released surface;
+build-time absence of an approved API keeps the entire surface unregistered.
 
 ## Design foundation
 
@@ -112,6 +120,6 @@ an approved API keeps the entire surface unregistered.
 - Every endpoint value import has an anchored completion record.
 - No synthetic, fixture, dummy, or guessed production data is rendered.
 - Zero approved surfaces produce a network-silent release gate.
-- Navigation contains exactly the registered capability set.
+- Navigation contains exactly the released surface set.
 - Product CSS is isolated from the reference catalog.
 - `npm run check` passes with no warning promoted by the product design guard.
