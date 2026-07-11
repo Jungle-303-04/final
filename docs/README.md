@@ -340,6 +340,7 @@ Target / Telemetry 선형 작업 문서는 아래에 있다.
 - [spec/domains/registry](spec/domains/registry.md)
 - [spec/domains/scm](spec/domains/scm.md)
 - [spec/domains/target](spec/domains/target.md)
+- [spec/frontend/CODEX-BRIEFING-20260711](spec/frontend/CODEX-BRIEFING-20260711.md)
 - [spec/frontend/design-system](spec/frontend/design-system.md)
 - [spec/frontend/product-data-contract](spec/frontend/product-data-contract.md)
 - [spec/frontend/topology-api-integration](spec/frontend/topology-api-integration.md)
