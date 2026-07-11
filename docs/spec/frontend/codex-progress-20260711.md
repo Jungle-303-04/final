@@ -79,3 +79,13 @@ Block A는 코드 구현과 비인증 경로 검증까지 완료됐지만, 지�
   series point가 하나 이상일 때만 성공으로 판정한다.
 - realtime seq는 hub 전역 번호라 subscription에서 gap이 정상 발생한다. 프론트는 역행·중복만
   폐기하고 snapshot을 재동기화 기준으로 사용한다.
+
+### 2026-07-11 Block A 사후 강화
+
+- 보강 커밋: `9babc493a7557e3b17a2802603897788d7b3b775`
+- 클러스터 선택 변경 직후 이전 cluster의 usage/live 값이 남지 않도록 상태 scope를 격리했다.
+- snapshot open map과 command raw result를 제품 상태에서 제거하고, 검증된 시계열 point와
+  command summary만 유지했다.
+- `npm run check` 재실행 결과: 4 files, 22 tests, design guard 41 files, shadcn audit,
+  production build 모두 통과했다.
+- 인증 게이트 판정은 변함없이 401 대기이며 Block B는 시작하지 않았다.
