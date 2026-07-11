@@ -65,17 +65,15 @@ export function ShortcutHelpDialog({
               <TableRow key={definition.id}>
                 <TableCell>{definition.label}</TableCell>
                 <TableCell>
-                  <span
-                    aria-label={definition.sequence.join(" 다음 ")}
-                    className="flex items-center justify-end gap-1"
-                  >
+                  <span aria-hidden="true" className="flex items-center justify-end gap-1">
                     {definition.sequence.map((key, index) => (
                       <span className="contents" key={`${definition.id}:${index}`}>
                         {index > 0 && <span aria-hidden="true" className="text-muted-foreground">+</span>}
-                        <Kbd aria-hidden="true">{key}</Kbd>
+                        <Kbd>{key}</Kbd>
                       </span>
                     ))}
                   </span>
+                  <span className="sr-only">{definition.sequence.join(" 다음 ")}</span>
                 </TableCell>
               </TableRow>
             ))}

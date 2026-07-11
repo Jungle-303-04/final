@@ -64,6 +64,7 @@ describe("ProductShell keyboard and help interaction", () => {
     expect(screen.getByRole("dialog", { name: "키보드 단축키" })).toBeTruthy();
     await user.keyboard("?");
     await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    await waitFor(() => expect(document.activeElement?.id).toBe("product-main"));
 
     await user.keyboard("t");
     expect(screen.getByRole("button", { name: "라이트 모드로 전환" })).toBeTruthy();
