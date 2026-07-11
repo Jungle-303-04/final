@@ -48,7 +48,7 @@ last_verified: 2026-07-11
 | feature layout과 domain binding | `frontend/src/features/<feature>/` | semantic token과 public component만 소비 |
 | topology 전용 renderer presentation contract | `frontend/src/features/topology-engine/core/presentation.ts` | global token을 입력받고 상태/관계 예외만 확장 |
 
-위 경로가 현재 runtime 정본이다. 동일 책임을 임시로 다른 파일에 복제하지 않는다.
+위 경로가 현재 runtime 기준 위치다. 동일 책임을 임시로 다른 파일에 복제하지 않는다.
 
 ### 1.2 계약 우선순위
 
@@ -151,8 +151,8 @@ Chart palette는 아직 runtime token으로 구현되지 않았다. `chart-1..5`
 ### 3.4 Theme 적용
 
 - app root의 `data-theme` 값은 `light | dark | high-contrast`다.
-- 사용자 선택은 저장하며 첫 paint 전에 적용한다. 저장값이 없을 때만 system light/dark를 따른다.
-- `prefers-contrast: more` 또는 `forced-colors: active`는 high-contrast policy를 우선 적용한다.
+- 사용자에게 노출하는 theme control은 `light ↔ dark` 두 상태만 순환하고 이 선택만 저장한다. 저장값이 없을 때만 system light/dark를 따른다.
+- `high-contrast`는 수동 순환의 세 번째 theme가 아니다. `prefers-contrast: more` 또는 `forced-colors: active`가 요청할 때만 접근성 policy로 우선 적용한다.
 - `forced-colors: active`에서는 `Canvas`, `CanvasText`, `ButtonText`, `Highlight`, `HighlightText` system color를 사용하고 그림자와 decorative image를 제거한다.
 - theme 변경은 entity identity, layout revision, query, filter, selection을 초기화하지 않는다.
 - Canvas/SVG/WebGL은 DOM CSS를 추측하지 않고 theme controller가 만든 `ResolvedProductTheme`를 주입받는다.
@@ -505,6 +505,7 @@ CSS와 TypeScript는 아래 동일 recipe 이름을 공유한다. 실제 수치�
 | `micro` | `--ds-motion-duration-micro` / `MOTION_RECIPE.micro` | hover, border, color micro feedback |
 | `standard` | `--ds-motion-duration-standard` / `MOTION_RECIPE.standard` | dropdown, tooltip, shell transition |
 | `hierarchyMorph` | `--ds-motion-duration-hierarchy` / `MOTION_RECIPE.hierarchyMorph` | Cluster → Node → Pod shared-layout 전환 |
+| `zoomableHierarchy` | `--ds-motion-duration-zoom-hierarchy` / `MOTION_RECIPE.zoomableHierarchy` | zoomable treemap scope 전환 |
 | `loading` | `--ds-motion-duration-loading` / `MOTION_RECIPE.loading` | Spinner의 반복 주기 |
 | `standard easing` | `--ds-motion-ease-standard` / `MOTION_EASING.standard` | reversible chrome motion |
 | `emphasized easing` | `--ds-motion-ease-emphasized` / `MOTION_EASING.emphasized` | hierarchy/layout retarget |
@@ -521,7 +522,7 @@ CSS와 TypeScript는 아래 동일 recipe 이름을 공유한다. 실제 수치�
 
 ### 8.2 Topology 의미 motion 예외
 
-현재 runtime topology motion은 `MOTION_RECIPE.hierarchyMorph` 하나만 구현한다. focus-Sankey의 ribbon/stagger/settle recipe는 아직 runtime design system에 구현되지 않았으므로 이름이나 수치를 feature에서 선점할 수 없다. 해당 interaction을 연결할 때 `topology-visual-motion-tokens.md`의 sequence 의미를 검토한 뒤 CSS와 TypeScript 중앙 source에 함께 추가한다.
+현재 runtime topology motion은 `MOTION_RECIPE.hierarchyMorph`와 `MOTION_RECIPE.zoomableHierarchy`를 구현한다. focus-Sankey의 ribbon/stagger/settle recipe는 아직 runtime design system에 구현되지 않았으므로 이름이나 수치를 feature에서 선점할 수 없다. 해당 interaction을 연결할 때 `topology-visual-motion-tokens.md`의 sequence 의미를 검토한 뒤 CSS와 TypeScript 중앙 source에 함께 추가한다.
 
 - topology transition은 entity key continuity를 보존한다. fade-out 후 unrelated node를 생성하는 방식은 금지다.
 - focus sequence가 구현되면 morph, ribbon, stagger, settle을 각각 측정하며 하나의 총 duration으로 뭉개지 않는다.
@@ -574,7 +575,7 @@ routes/composition root
 - `frontend/src/design-system/`은 feature/domain type을 import하지 않는다.
 - feature는 다른 feature의 private component 또는 CSS를 deep import하지 않는다.
 - alias는 project TypeScript config의 실제 alias를 사용한다. `../../../../components` 경로를 복제하지 않는다.
-- conditional class는 공통 `cn()` utility로 조합하며 string interpolation variant를 새로 만들지 않는다.
+- conditional class는 `frontend/src/design-system/cx.ts`의 공통 `cx()` utility로 조합하며 string interpolation variant를 새로 만들지 않는다.
 - color/size/variant map은 component module 한 곳에서 typed object 또는 variant utility로 소유한다.
 - CSS module/global selector로 다른 component 내부 DOM을 덮어쓰지 않는다.
 - feature page는 `.button`, `.card`, `.badge`, `.dialog` 같은 global class를 정의하지 않는다.
@@ -606,12 +607,19 @@ routes/composition root
 
 다음 검사 중 하나라도 실패하면 merge/release할 수 없다.
 
+`frontend/scripts/check-architecture.mjs`가 직접 차단하는 항목:
+
+- live dependency graph의 synthetic/demo module 유입 0건.
+- adapter boundary 밖의 `fetch` 0건.
+- demo adapter 밖의 provider 이름 기반 branch/literal 0건.
 - `frontend/src/styles/design-system.css` 외 CSS/TS/TSX의 hex, `rgb`, `hsl`, `oklch` raw color 0건.
 - CSS time literal은 `frontend/src/styles/design-system.css`, TypeScript motion literal은 `frontend/src/design-system/motion.ts` 외 0건.
 - raw `<select>`는 `NativeSelect.tsx` 외 0건, raw `<button>`은 `Button.tsx`와 §6.1의 semantic scrim 외 0건.
 - `motion.button`은 §6.1의 topology domain renderer 예외 외 0건.
+
+TypeScript/build/component 접근성 test와 review gate가 담당하는 항목:
+
 - feature에 manual light/dark/high-contrast color branch 0건.
-- feature에 provider 이름 기반 variant/layout branch 0건.
 - interactive `div/span onClick` 0건.
 - icon-only control의 accessible name 누락 0건.
 - Dialog/Sheet/Drawer title 누락 0건.
