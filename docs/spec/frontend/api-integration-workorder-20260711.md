@@ -1,11 +1,11 @@
 ---
 title: API 연결 작업지시서 — 프론트↔백엔드 전송 계층 담당자용
 status: active-directive — 골모드 allowlist 8번·§6b 실행 정본
-date: 2026-07-11
+date: 2026-07-12
 audience: 프론트↔백엔드 API 연결 담당 개발자
 queue: api-needs.md
 owner_paths: references/ui-layer-lab/src/product/api/** + 두 조율 문서의 제한된 상태 변경
-verified_against: 기준 커밋 32ef74ed5 / routes.py 실제 router·request·response 교차 검증 / API 큐 27행·49함수
+verified_against: transport 커밋 af03639ee / routes.py 실제 router·request·response 교차 검증 / API 큐 26행·46함수
 ---
 
 # API 연결 작업지시서
@@ -21,12 +21,12 @@ API 작업자는 백엔드 wire 계약을 프론트가 호출할 수 있는 **�
 
 | 항목 | 현재값 | 의미 |
 |---|---:|---|
-| 큐 행 | 27 | `requested` 26행 + `blocked` 1행 |
-| 큐가 요구하는 export 함수 | 49 | 기존 검증 15 + 신규 구현 34 |
-| 현재 존재하는 HTTP·composition 함수 | 15 | 모두 완료 앵커가 없어 제품 소비 금지 |
+| 큐 행 | 26 | `requested` 26행 + `in_progress` 0행 + `blocked` 0행 |
+| 큐가 요구하는 export 함수 | 46 | APIQ-021의 인증 3함수 완료 후 남은 수 |
+| 현재 존재하는 HTTP·composition 함수 | 15 | 인증 3함수만 exact 완료 앵커가 있음 |
 | 현재 존재하는 realtime 함수 | 3 | HTTP 큐 밖이며 별도 승인 전 소비 금지 |
 | 실 contract fixture | 0 | mock test만 일부 존재 |
-| 정확한 `API 완성:` 앵커 | 0 | 현재 제품에서 소비 가능한 API 0개 |
+| 정확한 `API 완성:` 앵커 | 3 | `getSession`, `login`, `logout`만 소비 가능 |
 
 **작업 범위는 `api-needs.md`의 claim한 한 행뿐이다.** routes.py 접두 전체, 인접 endpoint,
 provider별 endpoint를 임의로 추가하지 않는다. 큐에 없는 함수가 필요하면 구현하지 말고 큐
@@ -85,12 +85,14 @@ synthetic session을 발명하지 않는다.
 | `references/ui-layer-lab/src/product/api/index.ts` | 제한적 수정 | claim 함수·wire type export 추가만; 기존 export 재정렬 금지 |
 | `docs/spec/frontend/api-needs.md` | 조율 예외 | claim·heartbeat·blocked·완료 제거만 |
 | `docs/spec/frontend/codex-progress-20260711.md` | 조율 예외 | 완료 시 EOF append만; 기존 줄 수정 금지 |
-| `references/ui-layer-lab/src/product/api/client.ts` | **수정 금지** | 유일한 HTTP transport |
+| `references/ui-layer-lab/src/product/api/client.ts` | **수정 금지** | `af03639ee`의 JSON/no-content transport 계약으로 재동결 |
 | `references/ui-layer-lab/src/product/api/url.ts` | **수정 금지** | 경로·query helper |
 | `references/ui-layer-lab/src/product/**` 중 `api` 밖 | 수정 금지 | adapter·composition·화면은 Codex 소유 |
 | `src/**`, `deploy/**`, `migrations/**` | 읽기 전용 | backend 계약을 고치지 않는다 |
 
-`client.ts`·`url.ts` 변경이 필요해 보이면 우회 fetch를 만들지 말고 `blocked`로 전환한다.
+`client.ts`의 `BLOCK-204-001` 한정 변경은 transport owner 승인에 따라 `af03639ee`에서 완료됐다.
+이 커밋 이후 동결 규칙이 다시 유효하다. `client.ts`·`url.ts` 변경이 다시 필요해 보이면 우회 fetch를
+만들지 말고 `blocked`로 전환한다.
 `apiRequest` 밖의 `fetch`, XHR, EventSource, WebSocket을 endpoint 파일에 추가하지 않는다.
 
 ## 3. `api-needs.md` 큐 사용법
@@ -173,23 +175,40 @@ queue 상태를 `blocked`로 바꾸고 비고에 다음 네 가지를 남긴다.
 
 부분 구현을 `index.ts`에 export하거나 완료 앵커를 쓰지 않는다. 다른 행으로 이동한다.
 
+### 3.5 24시간 대행 절차
+
+대행은 `requested` 행이 요청 시각부터 24시간 동안 미처리되었거나 `in_progress` heartbeat가
+24시간을 초과했을 때만 coordinator가 발동한다. 다음 조건을 모두 지킨다.
+
+1. 대행 순서는 `APIQ-001` → `APIQ-002`다. 두 P0가 끝난 뒤 queue의 P1, P2 순서로 이동한다.
+2. 대행 전에도 전체 queue의 `in_progress`가 0개인지 확인하고, 대상 행 하나만 claim한다. 대행이라는
+   이유로 전역 단일 행 lock을 우회하거나 여러 행을 병렬 claim하지 않는다.
+3. 일반 작업자와 동일하게 claim 커밋, 코드 커밋 A, 완료 앵커·행 제거 커밋 B의 절차를 지킨다.
+4. `codex-progress-20260711.md` EOF에 대상 APIQ, 원 요청 시각, 대행 시작 시각, 실제 경과 시간,
+   대행 사유를 기록한다.
+5. API 작업자가 복귀하면 이미 claim한 대행 행만 완료하고 다음 행부터는 작업자에게 양보한다.
+   대행의 목적은 정체 해소이며 API 작업자의 병렬 작업 역할을 제거하는 것이 아니다.
+6. `index.ts` lock이 병목이면 먼저 progress EOF에 도메인별 barrel 분리 제안서와 영향 파일·이행
+   순서·호환성 검증을 기록한다. 검토자 승인 전에는 `index-*.ts`를 만들거나 export를 이동하지 않는다.
+
 ## 4. 현재 API 코드와 소비 승인 상태
 
-현재 `src/product/api`에는 17개 파일이 있다. wire HTTP·composition 함수 15개와 realtime 함수
-3개가 있지만 완료 앵커는 없다.
+현재 `src/product/api`에는 20개 파일이 있다. wire HTTP·composition 함수 15개와 realtime 함수
+3개 중 exact 완료 앵커가 있는 것은 인증 3함수뿐이다. `apiRequestNoContent`는 endpoint 완료 함수가
+아닌 transport helper이므로 `API 완성:` 앵커 수에 포함하지 않는다.
 
 | 기존 모듈 | 함수 | test 상태 | queue |
 |---|---|---|---|
-| `auth.ts` | `getSession`, `login`, `logout` | 없음 | `APIQ-021` |
-| `clusters.ts` | `listClusters` | 없음 | `APIQ-022` |
+| `auth.ts` | `getSession`, `login`, `logout` | contract 8 PASS, exact 앵커 3 | 완료 |
+| `clusters.ts` | `listClusters` | contract test 커밋 존재, exact 앵커 없음 | `APIQ-022` |
 | `fleet.ts` | `getFleetSummary` | 없음 | `APIQ-023` |
 | `rca.ts` | `getRcaTimeline` | 없음 | `APIQ-024` |
 | `inventory.ts` | resource/service/workload/detail 4함수 | 없음 | `APIQ-025` |
 | `metrics.ts` | usage/submit/status/poll/run 5함수 | mock 8개; feature 역방향 import 존재 | `APIQ-026`, `APIQ-027` |
 | `live.ts` | build/create/connect realtime 3함수 | message 일부만; connection 계약 미검증 | HTTP 큐 밖 |
 
-기존 코드가 있다는 것은 승인됐다는 뜻이 아니다. test·실응답·오류·AbortSignal 검증과 exact
-완료 앵커가 모두 필요하다.
+기존 코드나 test 커밋이 있다는 것은 승인됐다는 뜻이 아니다. 선행 claim, test·실응답·오류·
+AbortSignal 검증과 exact 완료 앵커가 모두 필요하다.
 
 ## 5. backend 계약을 찾는 순서
 
@@ -243,7 +262,8 @@ listThings(scope: string, options: ListThingsOptions = {}, signal?: AbortSignal)
 mutateThing(identity: ThingIdentity, request: ThingRequest, signal?: AbortSignal)
 ```
 
-- `AbortSignal`은 마지막 인자이며 `apiRequest(..., { signal })`까지 전달한다.
+- `AbortSignal`은 마지막 인자이며 `apiRequest(..., { signal })` 또는 204/205 endpoint의
+  `apiRequestNoContent(..., { signal })`까지 전달한다.
 - path segment는 `encodePathSegment`, query는 `withQuery`를 사용한다.
 - `undefined`는 query에서 생략하고 `null`은 backend가 명시적으로 구분할 때만 body에 보낸다.
 - request body는 request schema로 먼저 검증한 뒤 한 번만 `JSON.stringify`한다.
@@ -318,12 +338,12 @@ mutation은 실제 상태를 바꿀 수 있으므로 다음 규칙을 따른다.
 - `submitCommand`는 `Cross-Gap-001`을 유지한다. endpoint 함수는 raw receipt까지만 구현할 수 있고
   완료 추적 함수를 발명하지 않는다.
 
-### 9.1 204 차단
+### 9.1 204/205 no-content
 
-현재 `client.ts`는 빈 response body를 `invalid-payload`로 처리한다. `z.undefined()`를 넘겨도
-schema 실행 전에 실패한다. 따라서 `deleteAiConversation`은 `BLOCK-204-001`로 blocked다.
-직접 fetch, 가짜 JSON, `client.ts` 수정으로 우회하지 않는다. transport owner가 승인된 no-content
-지원을 별도 제공하거나 backend 계약이 body 응답으로 바뀐 뒤 queue를 `requested`로 돌린다.
+현재 `client.ts`는 JSON response용 `apiRequest`와 204/205 empty body용
+`apiRequestNoContent`를 분리한다. `deleteAiConversation`처럼 본문 없는 성공 응답은
+`apiRequestNoContent`를 사용하고, 직접 fetch나 가짜 JSON body로 우회하지 않는다. 200 JSON
+endpoint에는 계속 `apiRequest`와 runtime schema를 사용한다.
 
 ## 10. queue 함수별 실제 backend 계약
 
@@ -367,7 +387,7 @@ schema 실행 전에 실패한다. 따라서 `deleteAiConversation`은 `BLOCK-20
 | APIQ-019 | AI list/detail | GET `/ai/conversations[/{id}]` | path만 | list/detail response, 200 | pagination 없음·내부 JsonMap |
 | APIQ-019 | AI create | POST `/ai/conversations` | message 필수; title/agent/context 선택 | `AiConversationAcceptedResponse`, 200 | 202 아님 |
 | APIQ-019 | AI append | POST `/ai/conversations/{id}/messages` | message 필수; agent/context 선택 | accepted response, 200 | 자동 재전송 금지 |
-| APIQ-020 | AI delete | DELETE `/ai/conversations/{id}` | path | empty, 204 | `BLOCK-204-001` |
+| APIQ-020 | AI delete | DELETE `/ai/conversations/{id}` | path | empty, 204 | `apiRequestNoContent` |
 
 ## 11. 큐 밖 항목
 
