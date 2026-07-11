@@ -92,6 +92,7 @@
 - [frontend/auth](frontend/auth.md)
 - [frontend/chat](frontend/chat.md)
 - [frontend/cluster](frontend/cluster.md)
+- [frontend/design-system](frontend/design-system.md)
 - [frontend/fleet](frontend/fleet.md)
 - [frontend/metrics](frontend/metrics.md)
 - [frontend/notifications](frontend/notifications.md)

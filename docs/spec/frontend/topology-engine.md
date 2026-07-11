@@ -2643,7 +2643,7 @@ Restricted reference 규칙:
 - 삭제된 `frontend/`는 복구하거나 기반으로 삼지 않는다.
 - 현재 product token은 dark-only이므로 light/high-contrast set을 추가해야 한다.
 - product component는 `product/api` 밖에서 fetch하지 않는다.
-- shadcn lab/vendor/generated component를 product에 import하지 않는다.
+- 외부 기준 저장소의 lab/vendor/generated component를 product에 import하지 않는다.
 - runtime JSON은 generated schema로 validate한다.
 
 ## 26. API contract 상세

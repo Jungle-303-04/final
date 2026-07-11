@@ -344,6 +344,7 @@ Target / Telemetry 선형 작업 문서는 아래에 있다.
 - [spec/frontend/auth](spec/frontend/auth.md)
 - [spec/frontend/chat](spec/frontend/chat.md)
 - [spec/frontend/cluster](spec/frontend/cluster.md)
+- [spec/frontend/design-system](spec/frontend/design-system.md)
 - [spec/frontend/fleet](spec/frontend/fleet.md)
 - [spec/frontend/metrics](spec/frontend/metrics.md)
 - [spec/frontend/notifications](spec/frontend/notifications.md)
