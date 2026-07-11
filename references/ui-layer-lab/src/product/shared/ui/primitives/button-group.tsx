@@ -1,5 +1,10 @@
 import { cva } from "class-variance-authority";
-import type { ComponentProps, ReactNode } from "react";
+import {
+  createContext,
+  useContext,
+  type ComponentProps,
+  type ReactNode,
+} from "react";
 import { cn } from "./cn";
 import { Separator } from "./separator";
 
@@ -74,12 +79,15 @@ type ButtonGroupSeparatorProps = Omit<
   className?: string;
   "data-orientation"?: never;
   "data-slot"?: never;
-  orientation?: ButtonGroupOrientation;
+  orientation?: never;
   render?: never;
   role?: never;
   style?: never;
   tabIndex?: never;
 };
+
+const ButtonGroupOrientationContext =
+  createContext<ButtonGroupOrientation | null>(null);
 
 const buttonGroupVariants = cva(
   "isolate inline-flex w-fit items-stretch gap-0 [&>[data-slot=button]:focus-visible]:relative [&>[data-slot=button]:focus-visible]:z-10 motion-reduce:[&>[data-slot=button]]:transition-none forced-colors:[&>[data-slot=button]:disabled]:border-[GrayText] forced-colors:[&>[data-slot=button]:disabled]:text-[GrayText] forced-colors:[&>[data-slot=button]:disabled]:opacity-100 forced-colors:[&>[data-slot=button]:focus-visible]:outline forced-colors:[&>[data-slot=button]:focus-visible]:outline-2 forced-colors:[&>[data-slot=button]:focus-visible]:outline-[Highlight]",
@@ -87,9 +95,9 @@ const buttonGroupVariants = cva(
     variants: {
       orientation: {
         horizontal:
-          "flex-row [&>[data-slot]]:rounded-r-none [&>[data-slot]:last-child]:rounded-r-lg [&>[data-slot]:not(:first-child)]:rounded-l-none [&>[data-slot]:not(:first-child)]:border-l-0",
+          "flex-row *:data-slot:rounded-r-none [&>[data-slot]:not(:has(~[data-slot]))]:rounded-r-lg! [&>[data-slot]~[data-slot]]:rounded-l-none [&>[data-slot]~[data-slot]]:border-l-0",
         vertical:
-          "flex-col [&>[data-slot]]:rounded-b-none [&>[data-slot]:last-child]:rounded-b-lg [&>[data-slot]:not(:first-child)]:rounded-t-none [&>[data-slot]:not(:first-child)]:border-t-0",
+          "flex-col *:data-slot:rounded-b-none [&>[data-slot]:not(:has(~[data-slot]))]:rounded-b-lg! [&>[data-slot]~[data-slot]]:rounded-t-none [&>[data-slot]~[data-slot]]:border-t-0",
       },
     },
     defaultVariants: { orientation: "horizontal" },
@@ -121,7 +129,9 @@ export function ButtonGroup({
       data-slot="button-group"
       role="group"
     >
-      {children}
+      <ButtonGroupOrientationContext.Provider value={normalizedOrientation}>
+        {children}
+      </ButtonGroupOrientationContext.Provider>
     </div>
   );
 }
@@ -148,10 +158,15 @@ export function ButtonGroupText({
 
 export function ButtonGroupSeparator({
   className,
-  orientation = "vertical",
   ...separatorProps
 }: ButtonGroupSeparatorProps) {
-  const normalizedOrientation = normalizeOrientation(orientation);
+  const groupOrientation = useContext(ButtonGroupOrientationContext);
+  if (!groupOrientation) {
+    throw new TypeError("ButtonGroupSeparator must be inside ButtonGroup");
+  }
+  const separatorOrientation = groupOrientation === "horizontal"
+    ? "vertical"
+    : "horizontal";
   const safeSeparatorProps = sanitizePartProps(
     separatorProps,
     "ButtonGroupSeparator",
@@ -164,7 +179,7 @@ export function ButtonGroupSeparator({
         className,
       )}
       data-slot="button-group-separator"
-      orientation={normalizedOrientation}
+      orientation={separatorOrientation}
     />
   );
 }
@@ -207,6 +222,7 @@ function sanitizePartProps<Props>(props: Props, part: string): Props {
   Reflect.deleteProperty(safeProps, "data-orientation");
   Reflect.deleteProperty(safeProps, "data-slot");
   Reflect.deleteProperty(safeProps, "aria-orientation");
+  Reflect.deleteProperty(safeProps, "orientation");
   return safeProps as Props;
 }
 

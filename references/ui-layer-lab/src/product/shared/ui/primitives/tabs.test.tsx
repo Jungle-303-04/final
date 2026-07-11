@@ -78,7 +78,7 @@ describe("product Tabs primitive", () => {
     const onControlledChange = vi.fn();
 
     function ControlledTabs() {
-      const [value, setValue] = useState("overview");
+      const [value, setValue] = useState<string | null>("overview");
       return (
         <>
           <output aria-label="현재 탭">{value}</output>
@@ -102,14 +102,15 @@ describe("product Tabs primitive", () => {
 
     const { unmount } = render(<ControlledTabs />);
     await user.click(screen.getByRole("tab", { name: "이벤트" }));
-    expect(onControlledChange).toHaveBeenCalledWith("events");
+    expect(onControlledChange.mock.calls[0]?.[0]).toBe("events");
     expect(screen.getByRole("status", { name: "현재 탭" }).textContent).toContain("events");
     unmount();
 
     const onUncontrolledChange = vi.fn();
     renderTabs({ onValueChange: onUncontrolledChange });
     await user.click(screen.getByRole("tab", { name: "이벤트" }));
-    expect(onUncontrolledChange).toHaveBeenCalledWith("events");
+    expect(onUncontrolledChange.mock.calls[0]?.[0]).toBe("events");
+    expect(onUncontrolledChange.mock.calls[0]?.[1]?.reason).toBe("none");
     expect(screen.getByRole("tabpanel", { name: "이벤트" }).hidden).toBe(false);
   });
 
@@ -228,7 +229,7 @@ function renderTabs({
 }: {
   activationMode?: "automatic" | "manual";
   disabledEvents?: boolean;
-  onValueChange?: (value: string) => void;
+  onValueChange?: (value: string | null) => void;
   orientation?: "horizontal" | "vertical";
 } = {}) {
   return render(

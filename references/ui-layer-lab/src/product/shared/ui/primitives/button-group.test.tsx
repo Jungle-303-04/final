@@ -51,7 +51,7 @@ describe("product-owned ButtonGroup", () => {
           <ButtonGroupText id="current-mode">현재: 표</ButtonGroupText>
           <Button variant="outline">표</Button>
           <Button variant="outline">타일</Button>
-          <ButtonGroupSeparator orientation="horizontal" />
+          <ButtonGroupSeparator />
         </ButtonGroup>
       </>,
     );
@@ -71,6 +71,25 @@ describe("product-owned ButtonGroup", () => {
     expect(separator.getAttribute("aria-orientation")).toBe("horizontal");
     expect(separator.className).toContain("forced-colors:bg-[ButtonText]");
     expect(container.querySelectorAll("button")).toHaveLength(2);
+  });
+
+  it("derives separator direction and keeps slot-relative boundaries with neutral siblings", () => {
+    const { container } = render(
+      <ButtonGroup aria-label="혼합 동작" orientation="vertical">
+        <span aria-hidden="true">장식</span>
+        <Button variant="outline">첫 동작</Button>
+        <ButtonGroupSeparator />
+        <Button variant="outline">마지막 동작</Button>
+        <span aria-hidden="true">후행 장식</span>
+      </ButtonGroup>,
+    );
+
+    const group = screen.getByRole("group", { name: "혼합 동작" });
+    const separator = screen.getByRole("separator");
+    expect(separator.getAttribute("aria-orientation")).toBe("horizontal");
+    expect(group.className).toContain(":not(:has(~[data-slot]))");
+    expect(group.className).toContain("[&>[data-slot]~[data-slot]]:border-t-0");
+    expect(container.querySelectorAll("[data-slot]")).toHaveLength(4);
   });
 
   it("rejects missing, conflicting, blank names and unknown orientations", () => {
@@ -183,6 +202,7 @@ describe("product-owned ButtonGroup", () => {
         {...({ role: "presentation" } as unknown as Parameters<typeof ButtonGroupSeparator>[0])}
       />,
     )],
+    ["orphan separator", () => render(<ButtonGroupSeparator />)],
   ])("rejects %s bypass", (_label, renderUnsafePart) => {
     expect(renderUnsafePart).toThrow();
   });
@@ -214,8 +234,8 @@ function assertButtonGroupTypeContracts() {
   void <ButtonGroupText onClick={() => undefined}>텍스트</ButtonGroupText>;
   // @ts-expect-error ButtonGroupSeparator owns native separator semantics
   void <ButtonGroupSeparator role="presentation" />;
-  // @ts-expect-error separator orientation supports only canonical values
-  void <ButtonGroupSeparator orientation="diagonal" />;
+  // @ts-expect-error separator direction is derived from the group
+  void <ButtonGroupSeparator orientation="horizontal" />;
 }
 
 void assertButtonGroupTypeContracts;
