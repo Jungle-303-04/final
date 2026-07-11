@@ -1,23 +1,27 @@
 import { Navigate, Route, Routes } from "react-router-dom";
-import type { AuthSession } from "../api";
-import { FleetRoute } from "../features/fleet/FleetRoute";
-import { MetricsConnectionPage } from "../features/metrics/MetricsConnectionPage";
 import { ProductStateScreen } from "../shared/ui/ProductStateScreen";
 import { ProductShell } from "./ProductShell";
+import type { ProductComposition } from "./productComposition";
+import { routeDefinitionForCapability } from "./productRoutes";
 
-interface ProductRouterProps {
-  session: AuthSession;
-  onSignOut: () => Promise<void>;
-}
+export function ProductRouter({ composition }: { composition: ProductComposition }) {
+  if (composition.surfaces.length === 0) {
+    return <ProductStateScreen kind="release" />;
+  }
 
-export function ProductRouter({ session, onSignOut }: ProductRouterProps) {
+  const fallbackRoute = routeDefinitionForCapability(composition.surfaces[0].id);
+
   return (
     <Routes>
-      <Route element={<ProductShell session={session} onSignOut={onSignOut} />}>
-        <Route path="/product" element={<FleetRoute />} />
-        <Route path="/metrics" element={<MetricsConnectionPage />} />
-        <Route path="/product/metrics" element={<Navigate replace to="/metrics" />} />
-        <Route path="*" element={<ProductStateScreen kind="error" error="요청한 제품 화면을 찾을 수 없습니다." />} />
+      <Route element={<ProductShell availableCapabilities={composition.capabilities} />}>
+        {composition.surfaces.map(({ id, Component }) => {
+          const routeDefinition = routeDefinitionForCapability(id);
+          const routePath = routeDefinition.match === "prefix"
+            ? `${routeDefinition.path}/*`
+            : routeDefinition.path;
+          return <Route key={id} path={routePath} element={<Component />} />;
+        })}
+        <Route path="*" element={<Navigate replace to={fallbackRoute.path} />} />
       </Route>
     </Routes>
   );

@@ -3,8 +3,7 @@ import ReactDOM from "react-dom/client";
 
 const isProductRoute =
   window.location.pathname === "/product" ||
-  window.location.pathname.startsWith("/product/") ||
-  window.location.pathname === "/metrics";
+  window.location.pathname.startsWith("/product/");
 
 const appModule = isProductRoute
   ? import("./product/ProductApp")
