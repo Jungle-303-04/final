@@ -15,6 +15,26 @@ export { getFleetSummary } from "./fleet";
 export { getRcaTimeline } from "./rca";
 export { listClusters, type ListClustersOptions } from "./clusters";
 export {
+  getClusterUsage,
+  getCommandStatus,
+  pollCommand,
+  runPrometheusQuery,
+  submitPrometheusQuery,
+  MetricQueryExecutionError,
+  type ClusterUsageOptions,
+  type PollCommandOptions,
+  type PrometheusQueryRun,
+  type SubmittedPrometheusQuery,
+} from "./metrics";
+export {
+  connectRealtime,
+  createRealtimeClient,
+  type RealtimeClient,
+  type RealtimeClientOptions,
+  type RealtimeConnectionState,
+  type RealtimeConnectionStatus,
+} from "./live";
+export {
   getInventoryResourceDetail,
   listInventoryResources,
   listInventoryServices,
@@ -39,6 +59,33 @@ export {
   type InventoryResourceDetail,
   type InventoryResourceList,
 } from "./inventory-schemas";
+export {
+  clusterUsageResponseSchema,
+  clusterUsageSampleSchema,
+  clusterUsageSchema,
+  commandStatusSchema,
+  prometheusQueryDefinitionSchema,
+  prometheusRangeResultSchema,
+  type AgentDebugQueryReceipt,
+  type ClusterUsage,
+  type ClusterUsageResponse,
+  type ClusterUsageSample,
+  type CommandStatus,
+  type CommandStatusValue,
+  type PrometheusMetricPoint,
+  type PrometheusMetricSeries,
+  type PrometheusQueryDefinition,
+  type PrometheusRangeResult,
+} from "./metrics-schemas";
+export {
+  liveSummarySchema,
+  parseRealtimeMessage,
+  realtimeMessageSchema,
+  type LiveSubscription,
+  type LiveSummary,
+  type LiveSummaryMessage,
+  type RealtimeMessage,
+} from "./live-schemas";
 export {
   authSessionSchema,
   fleetClusterSummarySchema,
