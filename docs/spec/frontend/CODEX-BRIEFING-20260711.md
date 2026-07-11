@@ -9,7 +9,7 @@ verified_against: HEAD e20376321 (2026-07-11 관측) — 본문 주장은 전부
 
 ## 0. 사용법과 참조 순서
 
-너(Codex)는 이 파일을 읽고 §3 보고서를 `docs/spec/frontend/coordination/codex-plan-report-20260711.md`
+너(Codex)는 이 파일을 읽고 §3 보고서를 `docs/spec/frontend/codex-plan-report-20260711.md`
 에 작성한다. 보고서 커밋 전에는 새 화면 구현을 시작하지 않는다(진행 중 커밋의 마무리는 허용).
 기존 문서와 내용이 다르면 실제 코드·통과한 테스트·관련 spec을 다시 확인하고, 확인 결과를 보고서 Q6에 기록한다.
 
@@ -98,7 +98,7 @@ verified_against: HEAD e20376321 (2026-07-11 관측) — 본문 주장은 전부
 
 ## 3. 요구 보고서 (신규 화면 구현 착수 전 제출)
 
-경로: `docs/spec/frontend/coordination/codex-plan-report-20260711.md`. 형식: 질문 번호
+경로: `docs/spec/frontend/codex-plan-report-20260711.md`. 형식: 질문 번호
 그대로, 모든 주장에 파일경로(:라인)/커밋 해시, 실행 결과는 명령+출력 요약, 모르면 "모름".
 
 - **Q1 게이트 상태**: `npm run check` 각 항목의 현재 결과와 `visual-product` 실행 여부.
@@ -116,5 +116,5 @@ verified_against: HEAD e20376321 (2026-07-11 관측) — 본문 주장은 전부
 
 ## 4. 이후 절차
 
-보고서 커밋 후 검토자가 `coordination/`에 단계별 상세 지시서(+Q6 결정)를 추가한다.
+보고서 커밋 후 검토자가 `docs/spec/frontend/`에 단계별 상세 지시서(+Q6 결정)를 추가한다.
 검토자는 지시 전 반드시 HEAD 변경분을 재검증한다(이 브리핑도 그 절차로 작성됐다).
