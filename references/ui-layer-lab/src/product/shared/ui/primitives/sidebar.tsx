@@ -17,7 +17,6 @@ import {
   DialogDescription,
   DialogTitle,
 } from "./dialog";
-
 const MOBILE_QUERY = "(max-width: 767px)";
 const LABEL_MODES = ["responsive", "sr-only"] as const;
 type StateUpdater = boolean | ((current: boolean) => boolean);
@@ -31,15 +30,12 @@ export type SidebarContextValue = {
   setMobileOpen: (next: StateUpdater) => void;
   toggle: () => void;
 };
-
 const SidebarContext = createContext<SidebarContextValue | null>(null);
-
 export function useSidebar(): SidebarContextValue {
   const context = useContext(SidebarContext);
   if (!context) throw new TypeError("useSidebar must be inside SidebarProvider");
   return context;
 }
-
 type DesktopControl =
   | { open: boolean; onOpenChange: (open: boolean) => void; defaultOpen?: never }
   | { open?: never; defaultOpen?: boolean; onOpenChange?: (open: boolean) => void };
