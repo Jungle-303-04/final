@@ -467,6 +467,47 @@ P2를 완료로 판정한다. 다음 단계는 `final-questions.md`에 남은 �
   - references/ui-layer-lab/output/playwright/product-release-mobile-dark.png
 ```
 
+## 2026-07-11 visual gate 소유권과 대비 검증 보강
+
+- 구현 커밋: `e4c17efcd`
+- visual gate는 고정 port 대신 실행 시점에 빈 port를 찾고, `VITE_VISUAL_GATE_NONCE`를 harness
+  HTML meta에 주입한 뒤 해당 nonce가 보이는 서버만 owned server로 인정한다. dev server가 nonce
+  확인 전에 종료되거나 다른 프로세스가 응답하면 실패한다.
+- visual scenario 실행 중에도 dev server 생존 상태를 확인한다. gate가 끝날 때 이미 종료된
+  서버에는 추가 SIGTERM을 보내지 않는다.
+- reflow exemption은 빈 값으로 둘 수 없고, horizontal scroll owner이면서 keyboard reachable한
+  요소에만 허용한다. 그렇지 않은 `data-reflow-exempt`는 visual gate 실패로 처리한다.
+- forced-colors 검증은 단순 색상 불일치 대신 relative luminance contrast ratio를 계산한다.
+  heading·selection은 4.5:1, border·focus outline·disabled text·status marker는 3:1 이상이어야
+  한다. 반투명 색은 opaque underlay와 blend해 계산한다.
+- 이 변경은 새 endpoint 완료를 의미하지 않는다. product visual gate는 API request와 product
+  WebSocket 0건을 유지한다.
+
+```text
+명령: cd references/ui-layer-lab && npm run visual-product
+결과: PASS — release-desktop-light, release-mobile-dark, release-reflow-320-light,
+      release-text-resize-200-light, state-reflow-320-light,
+      state-text-resize-200-light, state-forced-colors; network-silent
+
+명령: cd references/ui-layer-lab && npm run check
+결과: PASS
+  - TypeScript: PASS
+  - ESLint: PASS
+  - Vitest: 12 files, 66 tests PASS
+  - product design guard: 57 files PASS
+  - UI catalog source audit: 482 previews PASS, upstream 21e4ceb
+  - Vite production build: PASS
+주의: 500kB 초과 chunk warning은 reference catalog 기존 성능 과제로 유지
+```
+
+```text
+명령: uv run pytest tests/test_docs_index.py tests/test_bruno_collection.py -q
+결과: PASS — 17 passed
+
+명령: make manifest-check
+결과: PASS — management manifest objects 56, target manifest objects 18
+```
+
 ## 2026-07-11 display primitive 의미 계약 보강
 
 - 구현 커밋: `ea936acb1`
