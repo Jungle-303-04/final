@@ -8,6 +8,7 @@ const ownedTypeScriptFiles = [
   'src/App.tsx',
   'src/product/**/*.{ts,tsx}',
   'src/shadcn-lab/**/*.{ts,tsx}',
+  'scripts/fixtures/**/*.tsx',
 ]
 
 const reactHookRules = Object.fromEntries(
@@ -59,6 +60,23 @@ export default tseslint.config(
           varsIgnorePattern: '^_',
         },
       ],
+    },
+  },
+  {
+    name: 'owned-visual-gate',
+    files: ['scripts/product-visual-gate.mjs'],
+    extends: [js.configs.recommended],
+    languageOptions: {
+      ecmaVersion: 'latest',
+      sourceType: 'module',
+      globals: {
+        ...globals.browser,
+        ...globals.node,
+      },
+    },
+    linterOptions: {
+      reportUnusedDisableDirectives: 'error',
+      reportUnusedInlineConfigs: 'error',
     },
   },
 )

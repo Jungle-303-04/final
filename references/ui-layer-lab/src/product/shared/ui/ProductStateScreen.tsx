@@ -282,7 +282,12 @@ function RetryAction({ retry }: { retry: ProductStateRetry }) {
 
   return (
     <EmptyContent className="mt-2 items-start">
-      <Button aria-busy={retry.pending || undefined} disabled={retry.pending} onClick={handleRetry}>
+      <Button
+        aria-busy={retry.pending || undefined}
+        className="h-auto min-h-8 max-w-full whitespace-normal text-left [overflow-wrap:anywhere]"
+        disabled={retry.pending}
+        onClick={handleRetry}
+      >
         {retry.pending ? <Spinner data-icon="inline-start" decorative /> : null}
         {retry.pending ? `${label} 중` : label}
       </Button>
