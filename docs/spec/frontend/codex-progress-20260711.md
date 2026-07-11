@@ -1094,7 +1094,7 @@ API transport: apiRequestNoContent (af03639ee)
 - 독립 적대 재검토 결과: 구현 P0 0·P1 0, 시각 게이트 P0 0·P1 0.
 - `http://127.0.0.1:5180/metrics`를 반복 갱신하던 1시간 이상 된 Vite HMR 프로세스는 종료했다.
   `/metrics`는 제품 route가 아니며 올바른 제품 진입점은 `/product`다.
-- API queue는 requested 26행, in_progress 0행, blocked 0행, valid completion anchors 3을 유지한다.
+- 당시 API queue는 requested 26행, in_progress 0행, blocked 0행, valid completion anchors 3이었다.
   Sidebar 커밋은 `src/product/api/**`, API queue, backend 파일을 수정하지 않았다.
 
 ```text
@@ -1133,11 +1133,37 @@ npm run visual-product: PASS — 12 scenarios, network-silent
   되살리지 않는다.
 - final question 4건은 2026-07-12 16:29 KST 기한 전이므로 기본 권고를 조기 확정하지 않는다.
 - 자체결정: 질문과 무관하고 exact 완료 앵커가 있는 `getSession`, `login`, `logout`만 사용하는 실제
-  Auth session barrier를 다음 구현 단위로 선택한다. Home·cluster selector는 APIQ-001/002와 관련
-  완료 앵커 전까지 release하지 않는다.
+  Auth session barrier를 다음 구현 단위로 선택한다. Home·cluster selector는 `listClusters`
+  완료 앵커 전까지 release 결합하지 않는다.
 
 ```text
 P1 API 136 = P2 API 136
 P2 unresolved 0
 allowlist 밖 product-source 참조 0
 ```
+
+## 2026-07-12 APIQ 완료 앵커와 Auth barrier 기반 구현
+
+API 완성: getCluster (60d0d63d7)
+API 완성: getClusterConnectionStatus (3d99514d6)
+API 완성: getInventorySummary (310c24a0d)
+API 완성: getClusterSummary (94063b29d)
+API 완성: getClusterNodesSummary (94063b29d)
+API 완성: getNodePodsSummary (94063b29d)
+API 완성: getFleetSummary (0de498e01)
+API 완성: getRcaTimeline (7ad3800e6)
+API 완성: getClusterUsage (1fe5bc859)
+API 완성: listInventoryResources (94ad64bf1)
+API 완성: listInventoryServices (94ad64bf1)
+API 완성: listInventoryWorkloads (94ad64bf1)
+API 완성: getInventoryResourceDetail (94ad64bf1)
+API 완성: listInventoryEvents (89a6a8edd)
+
+- `api-needs.md`에서 `APIQ-001`, `APIQ-002`, `APIQ-003`, `APIQ-004`, `APIQ-023`,
+  `APIQ-007`, `APIQ-024`, `APIQ-025`, `APIQ-026` 행을 제거하고 snapshot을 17행·32함수, requested 17,
+  valid completion anchors 17로 갱신했다.
+- `reference-contract-map.md`의 connection, cluster-info, dashboard, namespace, metrics, RCA teaser
+  adapter와 inventory resource/detail/event 상태도 queue가 아니라 위 완료 앵커를 가리킨다.
+- Auth 기반 구현은 `features/auth/AuthBarrier.tsx`, `authContract.ts`, `createAuthAdapter.ts`와
+  form primitive `Field`, `Input`, `Label`로 분리했다. 이 단계는 실제 session port와 form semantics
+  테스트를 추가하지만, 제품 route에 아직 Home·cluster selector를 소비시키지 않는다.

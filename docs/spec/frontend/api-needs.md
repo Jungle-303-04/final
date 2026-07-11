@@ -4,7 +4,7 @@ status: active-coordination-queue
 date: 2026-07-12
 owners: Codex 요청 / API 연결 작업자 claim·처리
 workorder: api-integration-workorder-20260711.md
-snapshot: 26행·46함수 / requested 26 / in_progress 0 / blocked 0 / valid completion anchors 3
+snapshot: 17행·32함수 / requested 17 / in_progress 0 / blocked 0 / valid completion anchors 17
 ---
 
 # 프론트 API 요청 큐
@@ -16,7 +16,7 @@ snapshot: 26행·46함수 / requested 26 / in_progress 0 / blocked 0 / valid com
 상세한 경로, 소유권, schema, test, mutation 안전, 2커밋 완료 절차는
 `api-integration-workorder-20260711.md`가 정본이다.
 
-> **다음 claim 권장 순서:** `APIQ-001` → `APIQ-002` → 이후 P1·P2 순서. 이미 원격에서 유효하게
+> **다음 claim 권장 순서:** `APIQ-022` → `APIQ-020` → 이후 P2 순서. 이미 원격에서 유효하게
 > `in_progress`인 행이 있으면 그 행의 lease를 우선하며, 권장 순서는 다음 claim부터 적용한다.
 
 ## 1. 상태와 claim 규칙
@@ -37,8 +37,10 @@ snapshot: 26행·46함수 / requested 26 / in_progress 0 / blocked 0 / valid com
 9. `client.ts`, `url.ts`, 화면, adapter, backend는 이 큐의 수정 권한 밖이다.
 10. canonical branch force-push 금지. feature branch를 썼다면 merge/cherry-pick 후의 최종 hash만
     앵커로 기록하고, squash/rebase로 이미 기록한 hash를 제거하지 않는다.
-11. 24시간 대행도 `in_progress` 1행 lock과 코드·조율 2커밋 절차를 그대로 지킨다. P0 대행 순서는
-    `APIQ-001` → `APIQ-002`이며, 원 요청 시각·대행 시작 시각·경과 시간·사유를 progress EOF에 남긴다.
+11. 24시간 대행도 `in_progress` 1행 lock과 코드·조율 2커밋 절차를 그대로 지킨다. `APIQ-001`,
+    `APIQ-002`, `APIQ-003`, `APIQ-004`, `APIQ-007`, `APIQ-023`, `APIQ-024`, `APIQ-025`, `APIQ-026`은 완료 앵커가 있으므로
+    다음 대행은 queue의 P0·P1·P2 순서를 따른다. 원 요청 시각·대행
+    시작 시각·경과 시간·사유를 progress EOF에 남긴다.
 12. API 작업자가 복귀하면 대행자가 이미 claim한 행만 완료하고 다음 행부터 양보한다.
 13. `index.ts` 병목은 임의 barrel 분리의 근거가 아니다. progress에 도메인별 barrel 제안서를 먼저
     올리고 검토자 승인을 받은 뒤에만 구조를 변경한다.
@@ -58,13 +60,8 @@ claim·heartbeat: YYYY-MM-DD HH:mm KST
 
 | ID | 우선 | 함수명 | routes.py 상수 | 대상 파일 | 필요한 화면 | 요청 시각 | 상태 | 담당/브랜치 | claim·heartbeat | 완료 조건·주의 |
 |---|---:|---|---|---|---|---|---|---|---|---|
-| `APIQ-001` | P0 | `getCluster` | `CLUSTER_PATH` | `cluster-detail.ts`, `cluster-detail-schemas.ts`, test | 전역 셸 / Home / capability | 2026-07-11 16:19 KST | requested | — | — | `ClusterResponse`의 cluster·agents 전체 wire 계약 |
-| `APIQ-002` | P0 | `getClusterConnectionStatus` | `CLUSTER_CONNECTION_STATUS_PATH` | `cluster-connection.ts`, `cluster-connection-schemas.ts`, test | 전역 셸 연결 상태 | 2026-07-11 16:19 KST | requested | — | — | last-seen·status·agent capability 축소 금지 |
-| `APIQ-003` | P1 | `getInventorySummary` | `CLUSTER_INVENTORY_SUMMARY_PATH` | `inventory-summary.ts`, `inventory-summary-schemas.ts`, test | namespace picker / Home / Resources | 2026-07-11 16:19 KST | requested | — | — | latest snapshot, counts, type·health 구분 |
-| `APIQ-004` | P1 | `getClusterSummary`, `getClusterNodesSummary`, `getNodePodsSummary` | `CLUSTER_SUMMARY_PATH`, `CLUSTER_NODES_SUMMARY_PATH`, `CLUSTER_NODE_PODS_SUMMARY_PATH` | `cluster-summary.ts`, `cluster-summary-schemas.ts`, test | Home / Metrics / topology projection | 2026-07-11 16:19 KST | requested | — | — | 세 response model을 동일 test suite에서 개별 검증 |
 | `APIQ-005` | P2 | `listRcaTimeline` | `DASHBOARD_RCA_TIMELINE_PATH` | `rca-list.ts`, `rca-list-schemas.ts`, test | Issues / Timeline / resource detail | 2026-07-11 16:19 KST | requested | — | — | `cluster_id?`, `limit=50`(1..100), signal; teaser 함수와 분리 |
 | `APIQ-006` | P2 | `listApplications`, `getApplication`, `listApplicationDeployments`, `listApplicationRuns` | `APPLICATIONS_PATH`, `APPLICATION_PATH`, `APPLICATION_DEPLOYMENTS_PATH`, `APPLICATION_RUNS_PATH` | `applications.ts`, `applications-schemas.ts`, test | Applications / GitOps / history | 2026-07-11 16:19 KST | requested | — | — | list limit 1..500; 내부 JsonMap 보존; cursor/filter 발명 금지 |
-| `APIQ-007` | P2 | `listInventoryEvents` | `CLUSTER_INVENTORY_EVENTS_PATH` | `inventory-events.ts`, `inventory-events-schemas.ts`, test | Timeline / Home activity | 2026-07-11 16:19 KST | requested | — | — | namespace, limit 1..1000, signal; 임의 event 정규화 금지 |
 | `APIQ-008` | P2 | `listInventoryResourcesByType` | `CLUSTER_INVENTORY_RESOURCES_PATH` | `inventory-query.ts`, `inventory-query-schemas.ts`, test | Resources / topology projection | 2026-07-11 16:19 KST | requested | — | — | 기존 Home node·pod 함수 변경 금지; 동일 route의 범용 query |
 | `APIQ-009` | P2 | `getClusterResourceUsageSeries` | `CLUSTER_USAGE_PATH` | `usage-series.ts`, `usage-series-schemas.ts`, test | Pod·Node history / top metrics | 2026-07-11 16:19 KST | requested | — | — | limit 1..2000; `samples[].usage` JsonMap 보존; rollup으로 대체 금지 |
 | `APIQ-010` | P2 | `listMetricQueryPresets`, `runMetricQueryPreset` | `CLUSTER_METRIC_QUERY_PRESETS_PATH`, `CLUSTER_METRIC_QUERY_PRESET_RUN_PATH` | `metric-presets.ts`, `metric-presets-schemas.ts`, test | resource·PVC Metrics | 2026-07-11 16:19 KST | requested | — | — | run body 없음; `AgentDebugQueryResponse`, HTTP 200 receipt |
@@ -88,10 +85,6 @@ AbortSignal contract test를 추가하고, 필요한 경우 claim 범위 안에�
 | ID | 우선 | 함수명 | routes.py 상수 | 대상 파일 | 필요한 화면 | 요청 시각 | 상태 | 담당/브랜치 | claim·heartbeat | 완료 조건·주의 |
 |---|---:|---|---|---|---|---|---|---|---|---|
 | `APIQ-022` | P0 | `listClusters` | `CLUSTERS_PATH` | `clusters.ts`, `cluster-schemas.ts`, `clusters.test.ts` | cluster selector | 2026-07-11 16:19 KST | requested | — | — | limit default 100, signal, strict 실응답 |
-| `APIQ-023` | P1 | `getFleetSummary` | `FLEET_SUMMARY_PATH` | `fleet.ts`, `schemas.ts`, `fleet.test.ts` | Home | 2026-07-11 16:19 KST | requested | — | — | 실제 session scope summary와 nullable 검증 |
-| `APIQ-024` | P1 | `getRcaTimeline` | `DASHBOARD_RCA_TIMELINE_PATH` | `rca.ts`, `schemas.ts`, `rca.test.ts` | Home RCA teaser | 2026-07-11 16:19 KST | requested | — | — | 고정 `limit=6`; Issues 전체 목록에 사용 금지 |
-| `APIQ-025` | P1 | `listInventoryResources`, `listInventoryServices`, `listInventoryWorkloads`, `getInventoryResourceDetail` | `CLUSTER_INVENTORY_RESOURCES_PATH`, `CLUSTER_INVENTORY_SERVICES_PATH`, `CLUSTER_INVENTORY_WORKLOADS_PATH`, `CLUSTER_INVENTORY_RESOURCE_DETAIL_PATH` | `inventory.ts`, `inventory-schemas.ts`, `inventory.test.ts` | Home / Resources / topology projection | 2026-07-11 16:19 KST | requested | — | — | workorder D1–D8, cluster-1 실응답, bounds·signal |
-| `APIQ-026` | P1 | `getClusterUsage` | `CLUSTER_USAGE_PATH` | `metrics.ts`, `metrics-schemas.ts`, `metrics.test.ts` | cluster usage card | 2026-07-11 16:19 KST | requested | — | — | cluster rollup 전용; `features/**` test fixture 역방향 import 제거 |
 | `APIQ-027` | P2 | `submitPrometheusQuery`, `getCommandStatus`, `pollCommand`, `runPrometheusQuery` | `AGENT_DEBUG_QUERY_PATH`, `COMMAND_STATUS_PATH` | `metrics.ts`, `metrics-schemas.ts`, `metrics.test.ts` | Metrics / operation progress | 2026-07-11 16:19 KST | requested | — | — | possibly-sent POST 재전송 0, polling GET만, terminal/timeout/abort, API-owned fixture |
 
 ## 4. 큐 밖 Backend gap과 realtime
