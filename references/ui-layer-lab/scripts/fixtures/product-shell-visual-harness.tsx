@@ -37,13 +37,13 @@ function ShellOutletBoundary() {
   return (
     <section
       aria-labelledby="shell-outlet-title"
-      className="mx-auto grid w-full max-w-5xl gap-2 p-4 sm:p-6"
+      className="mx-auto grid w-full min-w-0 max-w-5xl gap-2 p-4 sm:p-6"
       data-shell-harness-outlet
     >
-      <h2 className="text-base font-semibold" id="shell-outlet-title">
+      <h2 className="min-w-0 break-all text-base font-semibold" id="shell-outlet-title">
         화면 본문 경계
       </h2>
-      <p className="text-sm text-muted-foreground">
+      <p className="min-w-0 break-all text-sm text-muted-foreground">
         외부 데이터 없이 제품 셸의 탐색·레이아웃·포커스 계약만 검증합니다.
       </p>
     </section>
