@@ -1,190 +1,388 @@
 ---
-title: API 연결 작업지시서 — 백엔드 연동 담당자용 (병렬 작업)
-status: active-directive — 골모드 allowlist 8번 항목 (병렬 API 작업의 정본)
+title: API 연결 작업지시서 — 프론트↔백엔드 전송 계층 담당자용
+status: active-directive — 골모드 allowlist 8번·§6b 실행 정본
 date: 2026-07-11
-audience: 프론트↔백엔드 API 연결 담당 개발자 (이 문서만 따라 하면 완결되도록 작성됨)
-owner_paths: references/ui-layer-lab/src/product/api/** (이 폴더만 수정한다)
-verified_against: HEAD d61623c11 — routes.py 경로 상수 100개, 기존 api 파일 17개 확인
+audience: 프론트↔백엔드 API 연결 담당 개발자
+queue: api-needs.md
+owner_paths: references/ui-layer-lab/src/product/api/** + 두 조율 문서의 제한된 상태 변경
+verified_against: HEAD 652af1254 / routes.py 실제 router·request·response 교차 검증 / API 큐 27행·49함수
 ---
 
 # API 연결 작업지시서
 
-## 0. 당신의 역할과 경계 (가장 중요)
+## 0. 이 문서로 만들어야 하는 결과
 
-- 당신의 임무: 백엔드 API를 프론트에서 호출 가능한 **타입 안전 함수**로 만드는 것.
-  화면(컴포넌트)은 만들지 않는다 — 그건 골모드 작업자(Codex)의 몫이다.
-- **수정 가능한 폴더는 정확히 하나**: `references/ui-layer-lab/src/product/api/`.
-  다른 폴더의 파일은 읽기만 한다. 특히 `client.ts`, `url.ts`는 **절대 수정 금지**
-  (모든 함수가 공유하는 기반이라 깨지면 전체가 죽는다).
-- 골모드 작업자와의 병렬 규칙:
-  1. 당신이 함수를 하나 완성할 때마다 `docs/spec/frontend/codex-progress-20260711.md`에
-     `API 완성: <함수명> (<커밋 해시>)` 한 줄을 append한다. Codex는 이 목록에 있는 것만 쓴다.
-  2. Codex가 필요한데 아직 없는 함수는 `docs/spec/frontend/api-needs.md`에 요청 행을
-     쌓는다. 당신은 §6 우선순위보다 이 파일의 요청을 먼저 처리한다.
-  3. 요청이 24시간 넘게 미처리면 Codex가 직접 만들 수 있다(같은 레시피 준수) —
-     그러니 매일 `api-needs.md`를 먼저 확인하라.
-- 모르면 **추측으로 구현하지 말고** progress 파일에
-  `blocked: <함수명> — <이유>`를 기록하고 다음 항목으로 넘어간다.
+API 작업자는 백엔드 wire 계약을 프론트가 호출할 수 있는 **타입 안전 endpoint 함수**로 만든다.
+화면, feature state, provider 분기, 화면용 필드 변환은 만들지 않는다. 완료 함수는
+`api-needs.md`의 원자적 claim과 `codex-progress-20260711.md`의 정확한 완료 앵커를 통해서만
+제품 소비가 허용된다.
 
-## 1. 최초 1회 준비 (약 15분)
+현재 기준선은 다음과 같다.
+
+| 항목 | 현재값 | 의미 |
+|---|---:|---|
+| 큐 행 | 27 | `requested` 26행 + `blocked` 1행 |
+| 큐가 요구하는 export 함수 | 49 | 기존 검증 15 + 신규 구현 34 |
+| 현재 존재하는 HTTP·composition 함수 | 15 | 모두 완료 앵커가 없어 제품 소비 금지 |
+| 현재 존재하는 realtime 함수 | 3 | HTTP 큐 밖이며 별도 승인 전 소비 금지 |
+| 실 contract fixture | 0 | mock test만 일부 존재 |
+| 정확한 `API 완성:` 앵커 | 0 | 현재 제품에서 소비 가능한 API 0개 |
+
+**작업 범위는 `api-needs.md`의 claim한 한 행뿐이다.** routes.py 접두 전체, 인접 endpoint,
+provider별 endpoint를 임의로 추가하지 않는다. 큐에 없는 함수가 필요하면 구현하지 말고 큐
+coordinator에게 새 행을 요청한다.
+
+## 1. 경로를 틀리지 않는 최초 준비
+
+문서의 모든 경로는 저장소 루트 기준이다. 먼저 두 절대 경로를 만든다.
 
 ```bash
-cd references/ui-layer-lab
-npm install
-npm run check          # 전부 통과해야 시작 가능. 실패하면 만지지 말고 blocked 보고
-npm run dev            # http://127.0.0.1:5173 (vite가 /api 를 백엔드로 proxy)
+export REPO_ROOT="$(git rev-parse --show-toplevel)"
+export UI_ROOT="$REPO_ROOT/references/ui-layer-lab"
+cd "$REPO_ROOT"
+git status --short --branch
+git fetch origin woonyong/ui-layer-lab
 ```
 
-로그인 세션 만들기(터미널 검증용 — 자격증명은 팀에서 받고 **절대 커밋 금지**):
+`src/domains/**`, `src/packages/contracts/**`는 `$REPO_ROOT` 아래에 있고, 제품 API 코드는
+`$UI_ROOT/src/product/api/**`에 있다. `$UI_ROOT`로 이동한 뒤 `src/domains`를 찾으면 실패한다.
+
+기준 게이트와 개발 서버는 다음처럼 실행한다.
 
 ```bash
-# 쿠키 저장소를 만들며 로그인
+cd "$UI_ROOT"
+npm install
+npm run check
+npm run dev -- --host 127.0.0.1 --port 5173 --strictPort
+```
+
+`strictPort`가 실패하면 다른 포트로 조용히 이동하지 않는다. 기존 프로세스의 소유자를 확인하고
+중지한 뒤 다시 실행한다. 브라우저 경로는 FastAPI router 경로 앞에 `/api`를 붙인다. `/api`는
+router prefix가 아니라 gateway middleware가 제거하는 browser alias다.
+
+세션 검증 예시는 다음과 같다. 실제 자격증명·쿠키·토큰·응답의 개인정보는 문서나 커밋에 넣지
+않는다.
+
+```bash
 curl -c /tmp/kh.cookie -H 'content-type: application/json' \
   -X POST http://127.0.0.1:5173/api/auth/login \
-  -d '{"email":"<받은 이메일>","password":"<받은 비밀번호>"}' -i
-
-# 세션 확인 — 200 과 authenticated:true 가 나와야 정상
+  -d '{"email":"<팀에서 받은 이메일>","password":"<팀에서 받은 비밀번호>"}' -i
 curl -b /tmp/kh.cookie http://127.0.0.1:5173/api/auth/session
 ```
 
-401이 계속 나오면: vite proxy 문제다. 우회 코드를 만들지 말고 blocked 보고.
+작업 종료 때 `/tmp/kh.cookie`를 삭제한다. 401을 피하려고 bearer token, localStorage token,
+synthetic session을 발명하지 않는다.
 
-## 2. 반드시 먼저 읽을 기존 부품 (모범 답안)
+## 2. 소유권과 수정 가능 파일
 
-| 파일 | 역할 | 당신이 할 일 |
+| 경로 | API 작업자 권한 | 규칙 |
 |---|---|---|
-| `src/product/api/client.ts` | 유일한 fetch 관문 `apiRequest(path, schema, init)` — zod 검증, CSRF, 쿠키 자동 처리 | 그대로 사용. 수정 금지 |
-| `src/product/api/url.ts` | 경로 조립 헬퍼(`withQuery`, `encodePathSegment`) | 그대로 사용 |
-| `src/product/api/inventory.ts` + `inventory-schemas.ts` | **모범 예제** — 함수/스키마 분리, limit 상수, AbortSignal | 새 파일은 이 구조를 그대로 복사해 시작 |
-| `src/product/api/index.ts` | 모든 함수의 export 목록 | 함수 만들 때마다 여기 추가 |
+| `references/ui-layer-lab/src/product/api/<claim 파일>` | 수정 가능 | claim한 행의 endpoint·schema·test만 |
+| `references/ui-layer-lab/src/product/api/index.ts` | 제한적 수정 | claim 함수·wire type export 추가만; 기존 export 재정렬 금지 |
+| `docs/spec/frontend/api-needs.md` | 조율 예외 | claim·heartbeat·blocked·완료 제거만 |
+| `docs/spec/frontend/codex-progress-20260711.md` | 조율 예외 | 완료 시 EOF append만; 기존 줄 수정 금지 |
+| `references/ui-layer-lab/src/product/api/client.ts` | **수정 금지** | 유일한 HTTP transport |
+| `references/ui-layer-lab/src/product/api/url.ts` | **수정 금지** | 경로·query helper |
+| `references/ui-layer-lab/src/product/**` 중 `api` 밖 | 수정 금지 | adapter·composition·화면은 Codex 소유 |
+| `src/**`, `deploy/**`, `migrations/**` | 읽기 전용 | backend 계약을 고치지 않는다 |
 
-이미 완성된 영역(수정 금지, 참고만): `auth.ts`, `clusters.ts`, `fleet.ts`,
-`inventory.ts`, `live.ts`, `metrics.ts`, `rca.ts`.
+`client.ts`·`url.ts` 변경이 필요해 보이면 우회 fetch를 만들지 말고 `blocked`로 전환한다.
+`apiRequest` 밖의 `fetch`, XHR, EventSource, WebSocket을 endpoint 파일에 추가하지 않는다.
 
-## 3. 새 endpoint 하나를 붙이는 표준 레시피 (7단계 — 항상 이 순서)
+## 3. `api-needs.md` 큐 사용법
 
-예제: "명령 상태 조회" `GET /commands/{command_id}` 를 붙인다고 하자.
+### 3.1 canonical branch와 상태 기계
 
-**1단계 — 경로 상수 확인.** 백엔드 계약 정본은
-`src/packages/contracts/gateway/routes.py` 하나다. 열어서 찾는다:
-`COMMAND_STATUS_PATH = "/commands/{command_id}"` (23행). 브라우저에서 실제 호출 경로는
-항상 앞에 `/api`를 붙인 `/api/commands/{command_id}`다.
+조율 정본은 `origin/woonyong/ui-layer-lab` 하나다. claim, 코드, 완료 앵커가 이 원격 branch에
+도달하기 전에는 다른 작업자와 Codex가 보았다고 간주하지 않는다. 이 branch를 force-push하거나
+완료 앵커가 가리키는 commit을 rebase·squash로 없애지 않는다.
 
-**2단계 — 응답 모양 찾기.** 절대 추측하지 않는다. 순서:
-
-```bash
-# (a) 이 경로 상수를 쓰는 라우터 파일 찾기
-grep -rn "COMMAND_STATUS_PATH" src/domains/
-# (b) 그 라우터 함수의 response_model=XxxResponse 클래스명 확인
-# (c) 그 클래스 정의를 열기
-grep -n "class XxxResponse" src/packages/contracts/gateway/responses.py
+```text
+requested ──claim──> in_progress ──검증 실패──> blocked
+    ▲                     │                       │
+    └────lease 회수───────┘                       └──근거 해소 후 requested
+                          └──코드 커밋+게이트+앵커──> 행 제거
 ```
 
-응답 클래스의 필드 하나하나가 곧 zod 스키마의 필드다. `Optional[...] = None` 필드는
-`.nullable()` 또는 `.optional()`, 나머지는 필수.
+- 전체 queue에서 `in_progress` 행은 동시에 정확히 하나만 허용한다. 모든 행이 `index.ts`를 공유하고
+  일부 행은 schema·test 파일도 공유하므로 행 단위 전역 직렬화가 file lock이다. Codex의 API 밖
+  작업은 병렬로 계속할 수 있다.
+- 한 작업자는 동시에 한 행만 claim한다.
+- 한 행은 분할 claim하지 않는다. 함수군을 나눠야 하면 먼저 queue 행을 둘로 나누는 조율 커밋을
+  만든다.
+- `in_progress` 행은 다른 작업자가 건드리지 않는다.
+- `requested`가 24시간 미처리되었거나 `in_progress`의 마지막 heartbeat가 24시간 지났을 때만
+  coordinator가 회수할 수 있다. 회수는 상태를 `requested`로 되돌리고 담당·브랜치·claim 시각을
+  비운 커밋이 원격에 반영된 뒤 유효하다.
+- 작업 중단·교대 때는 반드시 상태를 `blocked` 또는 `requested`로 바꾼다.
 
-**3단계 — 스키마 파일 작성.** `src/product/api/commands-schemas.ts` 생성:
+### 3.2 claim 절차
 
-```ts
-import { z } from "zod";
+1. `git pull --rebase origin woonyong/ui-layer-lab` 후 queue와 progress를 다시 읽는다.
+2. `in_progress` 행이 0개이고, 원하는 행이 `requested`이며 동일 함수의 exact 완료 앵커가 없음을
+   확인한다.
+3. queue 행을 `in_progress`로 바꾸고 `담당/브랜치`, `claim·heartbeat`를 채운다.
+4. `docs: APIQ-XXX 작업 선점`으로 커밋·push한다.
+5. push가 거절되면 재base 후 그 행을 다시 확인한다. 이미 선점되었으면 다른 행을 고른다.
 
-export const commandStatusSchema = z.object({
-  command_id: z.string(),
-  status: z.string(),          // 상태 리터럴은 절대 축소하지 않는다(§4-5)
-  // ...responses.py 필드를 전부, 이름 그대로(snake_case 유지)
-}).strict();
+heartbeat는 코드 커밋 또는 queue의 시각 갱신 커밋으로 남긴다. 채팅 메시지만으로는 lease가
+갱신되지 않는다.
 
-export type CommandStatus = z.infer<typeof commandStatusSchema>;
+### 3.3 완료는 반드시 2커밋
+
+코드 commit hash를 같은 commit 안에 기록할 수 없으므로 다음 순서를 고정한다.
+
+1. **커밋 A — 코드:** endpoint, schema, contract test, `index.ts` export를 포함한다.
+   메시지는 `feat: <한국어 API 함수군 설명>` 또는 검증 전용이면
+   `test: <한국어 API 계약 검증 설명>`이다. 커밋 A를 canonical branch에 먼저 push한다.
+2. 원격에 올라간 커밋 A에서 `npm run check`와 필요한 실검증을 통과시킨다.
+3. **커밋 B — 조율:** progress 파일 EOF에 export 함수별 exact 앵커를 append하고, 같은 함수군의
+   모든 앵커가 있을 때 queue 행을 제거한다. 메시지는
+   `docs: APIQ-XXX 완료 앵커 등록 / 요청 큐 정리`다.
+4. 커밋 B를 push한 뒤에만 Codex가 함수를 소비한다.
+
+앵커는 열 첫 칸부터 다음 정규식과 정확히 일치해야 한다.
+
+```text
+^API 완성: [A-Za-z][A-Za-z0-9]* \([0-9a-f]{7,40}\)$
 ```
 
-**4단계 — 함수 작성.** `src/product/api/commands.ts` 생성:
+앵커의 hash는 **커밋 B가 아니라 커밋 A**다. bullet, backtick, 설명 접미사, 함수군 합친 한 줄은
+유효하지 않다. 기존 함수 검증 행은 contract test를 추가한 커밋 A의 hash를 사용한다. 예외적으로
+작업 branch를 사용했다면 그 branch의 hash로 앵커를 쓰지 않는다. coordinator가 canonical branch에
+merge 또는 cherry-pick한 뒤 `git merge-base --is-ancestor <hash> origin/woonyong/ui-layer-lab`가
+성공하는 최종 hash만 기록한다. squash로 hash가 바뀌면 squash 결과 hash가 커밋 A다.
 
-```ts
-import { apiRequest } from "./client";
-import { encodePathSegment } from "./url";
-import { commandStatusSchema, type CommandStatus } from "./commands-schemas";
+### 3.4 blocked 절차
 
-export function getCommandStatus(
-  commandId: string,
-  signal?: AbortSignal,
-): Promise<CommandStatus> {
-  return apiRequest(
-    `/api/commands/${encodePathSegment(commandId)}`,
-    commandStatusSchema,
-    { signal },
-  );
-}
-```
+queue 상태를 `blocked`로 바꾸고 비고에 다음 네 가지를 남긴다.
 
-쓰기 요청(POST/PUT/DELETE)이면 `{ method: "POST", body: JSON.stringify(payload), signal }`
-— CSRF 헤더는 `client.ts`가 자동으로 붙이므로 신경 쓰지 않는다.
+1. blocker ID와 한 문장 원인
+2. 재현 명령·HTTP status·관련 backend 파일 위치
+3. 필요한 결정 또는 선행 함수
+4. 재개 조건과 소유자
 
-**5단계 — export.** `index.ts`에 `export { getCommandStatus } from "./commands";` 추가.
+부분 구현을 `index.ts`에 export하거나 완료 앵커를 쓰지 않는다. 다른 행으로 이동한다.
 
-**6단계 — 실검증.** 두 가지 다 한다:
+## 4. 현재 API 코드와 소비 승인 상태
 
-```bash
-# (a) 터미널: 실제 응답과 스키마 필드 눈으로 대조
-curl -b /tmp/kh.cookie http://127.0.0.1:5173/api/commands/<실제ID> | python3 -m json.tool
-# (b) 게이트
-npm run check
-```
+현재 `src/product/api`에는 17개 파일이 있다. wire HTTP·composition 함수 15개와 realtime 함수
+3개가 있지만 완료 앵커는 없다.
 
-스키마가 실제 응답과 다르면 화면이 error 배지를 띄우게 되어 있다 — **스키마를 실제 응답에
-맞춘다**(응답을 스키마에 맞추려고 백엔드를 고치지 않는다. 백엔드가 이상하면 blocked 보고).
-
-**7단계 — 커밋.** 형식: `feat: api — 명령 상태 조회 함수` (한 함수군 = 한 커밋).
-커밋 후 progress 파일에는 export 함수 하나당 `API 완성:` 한 줄을 append한다(§0-1). 한 커밋에
-여러 함수를 포함해도 각 함수가 독립적인 소비 게이트이므로 완료 기록을 합치지 않는다.
-
-## 4. zod 다섯 계명 (전 스키마 공통)
-
-1. 최상위 객체는 `.strict()` — 단, `summary` 같은 잡동사니 통은
-   `z.record(z.string(), z.unknown())`으로 열어둔다(서버가 필드를 늘려도 안 죽게).
-2. `raw` 필드는 스키마에 넣지 않는다(브라우저 계약상 금지).
-3. 상태 문자열은 `z.string()` 그대로 두거나 백엔드 리터럴 **전부**를 enum으로 —
-   일부만 골라 담아 축소하는 것 금지(예전 사고: `failed`가 사라져 실패가 '완료'로 표시됨).
-4. 숫자 0과 null은 다르다 — `.nullable()`을 정확히, 코드에서 `?? 0` 금지.
-5. 타임스탬프는 `z.string()` — 클라이언트에서 변환하지 않고 그대로 전달.
-
-## 5. 초보자가 반드시 빠지는 함정 10개
-
-1. `/api` 접두 누락 → 404. routes.py 경로 앞에 항상 `/api`.
-2. 쿠키 없이 curl → 401. 항상 `-b /tmp/kh.cookie`.
-3. 401이 나온다고 fetch에 토큰 헤더 발명 금지 — 이 시스템은 쿠키 세션이다.
-4. percent 값(`cpu_pct` 등)은 서버가 이미 percent다. ×100 하지 않는다.
-5. DELETE는 204 무본문일 수 있다 — 그 경우 스키마는 `z.undefined()`가 아니라
-   `client.ts`의 no-content 처리를 따른다(기존 함수 예 참고, 없으면 blocked).
-6. 생성/실행류 POST는 즉시 결과가 아니라 `202 accepted` 봉투(correlation/command id)를
-   줄 수 있다 — 봉투 그대로 스키마로 만들고, "결과처럼" 가공하지 않는다.
-7. 목록에는 `limit` 파라미터가 있다 — inventory.ts의 상수 패턴을 따라 명시한다.
-8. 필드명은 snake_case 그대로 — camelCase로 바꾸지 않는다(변환 계층은 Codex 몫).
-9. 같은 파일을 Codex와 동시에 만지지 않는다 — api-needs.md로 조율.
-10. 실검증 없이 커밋 금지 — 6단계 (a)를 건너뛰면 반드시 사고 난다.
-
-## 6. 작업 목록 (우선순위순 — routes.py 상수명 기준)
-
-이미 있음(건드리지 않음): AUTH_*, CLUSTERS/CLUSTER_PATH, FLEET_SUMMARY,
-CLUSTER_INVENTORY_* 전부, CLUSTER_USAGE, CLUSTER_METRIC_* (metrics.ts 확인),
-RCA 타임라인(rca.ts 확인 — 부족분은 아래 1군에서 보강).
-
-| 순위 | 군 | routes.py 상수 | 만들 파일 |
+| 기존 모듈 | 함수 | test 상태 | queue |
 |---|---|---|---|
-| 1 (RCA — 골모드 §4 의존) | 인시던트 상세·복구·증거 | RCA_INCIDENT 상세, RCA_RECOVERY_PLAN_BY_CORRELATION_PATH, RCA_RECOVERY_ACTION_SELECT_PATH, EVIDENCE 계열 | `rca-detail.ts`, `recovery.ts`, `evidence.ts` (+각 -schemas) |
-| 2 | 명령·승인 | COMMANDS_PATH, COMMAND_STATUS_PATH, APPROVAL_GRANT/REJECT_PATH | `commands.ts`, `approvals.ts` |
-| 3 | 애플리케이션·릴리스 | APPLICATIONS_*, APPLICATION_DEPLOYMENTS/RUNS, RELEASE 계열 | `applications.ts`, `releases.ts` |
-| 4 | 레포 연결 | REPOSITORY_DISCOVERY_*(probe/branches/manifests/validate) | `repo-discovery.ts` |
-| 5 | 클러스터 등록 | PROVIDERS 계열, TARGETS_PATH, TARGETS preflight, CLUSTER_CONNECTION_STATUS_PATH | `providers.ts`, `targets.ts` |
-| 6 | AI 채팅 | AI_CONVERSATIONS_PATH, AI_CONVERSATION_PATH, AI_CONVERSATION_MESSAGES_PATH | `conversations.ts` |
-| 7 | 조직·운영 | ORGS/GROUPS/USERS/ACCESS, ALERT_CHANNELS_*, DEAD_LETTERS_* | `org.ts`, `alert-channels.ts`, `dead-letters.ts` |
+| `auth.ts` | `getSession`, `login`, `logout` | 없음 | `APIQ-021` |
+| `clusters.ts` | `listClusters` | 없음 | `APIQ-022` |
+| `fleet.ts` | `getFleetSummary` | 없음 | `APIQ-023` |
+| `rca.ts` | `getRcaTimeline` | 없음 | `APIQ-024` |
+| `inventory.ts` | resource/service/workload/detail 4함수 | 없음 | `APIQ-025` |
+| `metrics.ts` | usage/submit/status/poll/run 5함수 | mock 8개; feature 역방향 import 존재 | `APIQ-026`, `APIQ-027` |
+| `live.ts` | build/create/connect realtime 3함수 | message 일부만; connection 계약 미검증 | HTTP 큐 밖 |
 
-각 군의 정확한 상수 전체 목록은 `routes.py`에서 해당 접두로 검색해 **전부** 구현한다
-(예: `grep "APPLICATION" routes.py`). 군 하나 끝날 때마다 §3-7 커밋 + progress 기록.
-agent 전용 경로(AGENT_*), webhook 경로(GITHUB/ALERTMANAGER), INSTALL_MANIFEST는
-브라우저가 호출하지 않는다 — **만들지 않는다**.
+기존 코드가 있다는 것은 승인됐다는 뜻이 아니다. test·실응답·오류·AbortSignal 검증과 exact
+완료 앵커가 모두 필요하다.
 
-## 7. 함수 하나의 완료 기준 (전부 충족 = 완료)
+## 5. backend 계약을 찾는 순서
 
-스키마 파일 존재(다섯 계명 준수) · 함수 파일 존재(레시피 형태) · index.ts export ·
-실호출 검증 로그(6단계-a 출력 일부를 progress에 붙임) · `npm run check` 통과 ·
-progress에 해당 export 함수 이름의 `API 완성:` 기록. 여섯 개 중 하나라도 빠지면 미완료다.
+추측하지 말고 저장소 루트에서 항상 다음 순서로 찾는다.
+
+```bash
+cd "$REPO_ROOT"
+rg -n "<ROUTE_CONSTANT>" src/packages/contracts/gateway/routes.py src/domains
+rg -n "class <RequestOrResponseModel>" \
+  src/packages/contracts/gateway/requests.py \
+  src/packages/contracts/gateway/responses.py
+```
+
+1. `routes.py`의 정확한 상수와 path를 확인한다.
+2. 그 상수를 쓰는 router decorator에서 HTTP method, `response_model`, 명시적 `status_code`를
+   확인한다. 명시가 없으면 현재 FastAPI 기본은 200이다.
+3. router 함수 signature에서 path/query/body의 required, default, bounds를 확인한다.
+4. request/response Pydantic model에서 필드와 nested model을 끝까지 확인한다.
+5. `response_model_exclude_none`, `exclude_unset`, custom serialization 여부를 확인한다.
+6. GET은 실제 세션 응답으로 모델과 JSON을 대조한다.
+
+`AcceptedResponse`라는 이름만 보고 HTTP 202라고 가정하지 않는다. 현재 queue의 approval,
+command, deployment, recovery POST는 모두 명시적 202가 아니라 200이다.
+
+## 6. 파일 구성과 함수 형식
+
+신규 함수군은 queue의 `대상 파일`을 따른다.
+
+```text
+src/product/api/
+  <domain>.ts             endpoint 함수·wire request type
+  <domain>-schemas.ts     response/request Zod schema·wire output type
+  <domain>.test.ts        URL·body·schema·오류·AbortSignal contract test
+  index.ts                공개 export 추가만
+```
+
+함수 signature 규칙은 다음과 같다.
+
+```ts
+// 단건 GET
+getThing(id: string, signal?: AbortSignal): Promise<ThingResponse>
+
+// 목록 GET
+listThings(scope: string, options: ListThingsOptions = {}, signal?: AbortSignal)
+
+// mutation — wire request는 backend snake_case를 유지
+mutateThing(identity: ThingIdentity, request: ThingRequest, signal?: AbortSignal)
+```
+
+- `AbortSignal`은 마지막 인자이며 `apiRequest(..., { signal })`까지 전달한다.
+- path segment는 `encodePathSegment`, query는 `withQuery`를 사용한다.
+- `undefined`는 query에서 생략하고 `null`은 backend가 명시적으로 구분할 때만 body에 보낸다.
+- request body는 request schema로 먼저 검증한 뒤 한 번만 `JSON.stringify`한다.
+- endpoint 계층에서 camelCase view model, status 번역, fallback 값, `?? 0`, provider 분기를 만들지
+  않는다.
+- POST는 자동 재시도하지 않는다. network error 뒤 요청이 서버에 도착했는지 알 수 없으면
+  possibly-sent로 취급한다.
+
+## 7. Zod wire schema 규칙
+
+Pydantic의 required와 nullable은 별개다.
+
+| backend 의미 | Zod |
+|---|---|
+| 필수·null 불가 | `field: schema` |
+| 필수·null 허용 | `field: schema.nullable()` |
+| 생략 가능·null 불가 | `field: schema.optional()` |
+| 생략 가능·null 허용 | `field: schema.nullable().optional()` |
+
+추가 규칙:
+
+1. 고정 객체는 `z.strictObject({...})`를 사용한다.
+2. backend `JsonMap`·`dict[str, Any]` 필드만
+   `z.record(z.string(), z.unknown())`으로 열어 둔다. 상위 객체까지 느슨하게 만들지 않는다.
+3. wire field는 snake_case 그대로 둔다. view 변환은 Codex adapter 소유다.
+4. 상태 문자열은 backend의 전체 리터럴을 증명할 수 있을 때만 enum이다. 자유형 map 속 status는
+   `z.string()`으로 보존한다.
+5. 숫자는 coercion하지 않는다. `0`, `null`, field 누락을 서로 바꾸지 않는다.
+6. timestamp는 wire에서 `z.string()`으로 보존한다. endpoint 함수에서 `Date`로 바꾸지 않는다.
+7. browser 금지 `raw` payload는 공개 schema에 추가하지 않는다.
+8. request model도 `StrictModel(extra=forbid)`와 맞게 strict schema로 검증한다.
+
+## 8. contract test 필수 매트릭스
+
+각 함수군 test는 최소 다음을 검증한다. production 코드에 fixture를 넣지 않고 test 파일 또는
+API test 전용 fixture만 사용한다. `features/**`를 API test가 import하지 않는다.
+
+| ID | 검증 |
+|---|---|
+| D1 | 정확한 method, `/api` path, percent encoding, query default·생략·bounds |
+| D2 | 대표 정상 응답, nested required field, nullable/optional 네 조합 |
+| D3 | 고정 객체의 unknown field와 required field 누락이 `invalid-payload`로 실패 |
+| D4 | 401/403/404/409/422/429가 `ApiError` status·kind·code·retryAfter를 보존 |
+| D5 | AbortSignal 취소가 AbortError로 전파되고 재요청하지 않음 |
+| D6 | mutation body가 exact snake_case이며 한 사용자 동작당 POST 한 번 |
+| D7 | receipt를 최종 결과로 바꾸지 않고 status literal·nullable field를 축소하지 않음 |
+| D8 | 목록 limit·cursor·offset이 backend default와 bounds를 그대로 반영 |
+
+GET 함수는 cluster-1 또는 세션에 보이는 실제 ID로 curl 실검증이 필수다. 응답 전문 대신 key 목록,
+개수, redacted ID, HTTP status만 progress에 기록한다.
+
+mutation은 실제 상태를 바꿀 수 있으므로 다음 규칙을 따른다.
+
+- mock contract test는 필수다.
+- sandbox 대상과 coordinator의 명시적 승인 없이는 live POST/DELETE를 호출하지 않는다.
+- 승인 없이 live mutation을 생략한 것은 실패가 아니다. progress에
+  `LIVE_MUTATION_NOT_RUN: 승인·sandbox 부재`를 기록한다.
+- production cluster의 scale, restart, approval, recovery selection, conversation delete를 검증
+  목적으로 호출하지 않는다.
+
+## 9. mutation·receipt·polling 계약
+
+- 현재 `AcceptedResponse`는 `accepted`, `event_id`, `correlation_id`만 있고 `command_id`가 없다.
+  `submitCommand`, `scaleDeployment`, `restartDeployment`, approval, recovery selection을
+  `getCommandStatus`와 임의 연결하지 않는다.
+- `AgentDebugQueryResponse`처럼 실제 `command_id`가 있는 응답만 command polling에 사용한다.
+- HTTP 200이어도 receipt는 terminal success가 아니다. UI 상태 변경은 Codex adapter·query
+  invalidation이 담당한다.
+- network failure 뒤 mutation POST를 자동 재전송하지 않는다.
+- `pollCommand`는 최초 POST를 다시 호출하지 않고 GET만 반복하며 AbortSignal, terminal status,
+  timeout을 보존한다.
+- `submitCommand`는 `Cross-Gap-001`을 유지한다. endpoint 함수는 raw receipt까지만 구현할 수 있고
+  완료 추적 함수를 발명하지 않는다.
+
+### 9.1 204 차단
+
+현재 `client.ts`는 빈 response body를 `invalid-payload`로 처리한다. `z.undefined()`를 넘겨도
+schema 실행 전에 실패한다. 따라서 `deleteAiConversation`은 `BLOCK-204-001`로 blocked다.
+직접 fetch, 가짜 JSON, `client.ts` 수정으로 우회하지 않는다. transport owner가 승인된 no-content
+지원을 별도 제공하거나 backend 계약이 body 응답으로 바뀐 뒤 queue를 `requested`로 돌린다.
+
+## 10. queue 함수별 실제 backend 계약
+
+아래 router path 앞에 browser 호출용 `/api`를 붙인다.
+
+| Queue | 함수 | Method·router path | 입력·default | response·status | 주의 |
+|---|---|---|---|---|---|
+| APIQ-021 | `getSession` | GET `/auth/session` | 없음 | `AuthSessionResponse`, 200 | 미인증은 401 |
+| APIQ-021 | `login` | POST `/auth/login` | `LoginRequest(email,password)` | `AuthSessionResponse`, 200 | cookie 설정 |
+| APIQ-021 | `logout` | POST `/auth/logout` | 없음 | `LogoutResponse`, 200 | 204 아님 |
+| APIQ-022 | `listClusters` | GET `/clusters` | `limit=100` | `ClusterListResponse`, 200 | bounds 명시 없음 |
+| APIQ-001 | `getCluster` | GET `/clusters/{cluster_id}` | path | `ClusterResponse`, 200 | cluster·agents 보존 |
+| APIQ-002 | `getClusterConnectionStatus` | GET `/clusters/{cluster_id}/connection-status` | path | `ClusterConnectionStatusResponse`, 200 | capability 축소 금지 |
+| APIQ-023 | `getFleetSummary` | GET `/fleet/summary` | 없음 | `FleetSummaryResponse`, 200 | read-only |
+| APIQ-004 | `getClusterSummary` | GET `/clusters/{cluster_id}/summary` | path | `ClusterSummaryDetailResponse`, 200 | JsonMap 위치 확인 |
+| APIQ-004 | `getClusterNodesSummary` | GET `/clusters/{cluster_id}/nodes/summary` | path | `ClusterNodesSummaryResponse`, 200 |  |
+| APIQ-004 | `getNodePodsSummary` | GET `/clusters/{cluster_id}/nodes/{node_name}/pods/summary` | 2 path | `NodePodsSummaryResponse`, 200 |  |
+| APIQ-025·008 | inventory resources | GET `/clusters/{cluster_id}/inventory/resources` | `resource_type?`, `namespace?`, `include_deleted=false`, `limit=200`(1..1000) | `InventoryResourceListResponse`, 200 | 두 함수가 같은 route |
+| APIQ-025 | `getInventoryResourceDetail` | GET `.../inventory/resource-detail` | 필수 `resource_type,kind,name`; `namespace?`; `related_limit=100`; `event_limit=50` | `InventoryResourceDetailResponse`, 200 | query identity |
+| APIQ-025·007 | services/workloads/events | GET 각 inventory collection | `namespace?`, `limit=200`(1..1000) | `InventoryResourceListResponse`, 200 | events도 같은 response |
+| APIQ-003 | `getInventorySummary` | GET `.../inventory/summary` | cluster path | `InventorySummaryResponse`, 200 | latest snapshot 구분 |
+| APIQ-026·009 | usage | GET `/clusters/{cluster_id}/usage` | `limit=288`(1..2000) | `ClusterUsageResponse`, 200 | `samples[].usage`는 JsonMap |
+| APIQ-010 | `listMetricQueryPresets` | GET `.../metric-query-presets` | cluster path | `MetricQueryPresetListResponse`, 200 | query 없음 |
+| APIQ-010 | `runMetricQueryPreset` | POST `.../metric-query-presets/{preset_id}/run` | body 없음 | `AgentDebugQueryResponse`, 200 | 202 아님 |
+| APIQ-011·027 | telemetry submit | POST `/agent/debug/query` | `AgentDebugQueryRequest`; `query` 필수 | `AgentDebugQueryResponse`, 200 | 이 queue 행만 AGENT_* browser 예외 |
+| APIQ-027 | `getCommandStatus` | GET `/commands/{command_id}` | path | `CommandStatusResponse`, 200 | poll/run은 client composition |
+| APIQ-012 | `submitCommand` | POST `/commands` | `CommandRequest`; route상 `diff` 필요 | `AcceptedResponse`, 200 | command_id 없음 |
+| APIQ-014 | `scaleDeployment` | POST `.../deployments/{deployment}/scale` | `DeploymentScaleRequest`; replicas 0..100 | `AcceptedResponse`, 200 | live mutation 제한 |
+| APIQ-014 | `restartDeployment` | POST `.../deployments/{deployment}/restart` | body 객체 필수; 내부 필드 optional | `AcceptedResponse`, 200 | command_id 없음 |
+| APIQ-013 | approval grant/reject | POST `/approvals/{approval_id}/{grant|reject}` | body absent/null/`{}` 허용; reason nullable | `AcceptedResponse`, 200 | 404/409 가능 |
+| APIQ-006 | applications list | GET `/applications` | `limit=100`(1..500) | `ApplicationListResponse`, 200 | cursor/filter/sort 없음 |
+| APIQ-006 | application detail | GET `/applications/{application_id}` | path | `ApplicationResponse`, 200 | 내부 JsonMap |
+| APIQ-006 | deployments/runs | GET 각 application subresource | `limit=100`(1..500) | binding/run list, 200 | 내부 JsonMap |
+| APIQ-015 | catalog list/detail | GET `/catalog/items[/{item_id}]` | item path만 | list/detail response, 200 | item JsonMap·pagination 없음 |
+| APIQ-024·005 | RCA timeline | GET `/dashboard/rca/timeline` | `cluster_id?`, `limit=50`(1..100) | `RcaTimelineResponse`, 200 | teaser만 limit=6 |
+| APIQ-016 | `getRcaIncident` | GET `/dashboard/rca/incidents/{incident_id}` | path, `cluster_id?` | `RcaIncidentResponse`, 200 | stable id 필요 |
+| APIQ-017 | recovery lookup | GET `/rca/recovery-plans/by-correlation/{correlation_id}` | path | `RecoveryPlanStatusResponse`, 200 |  |
+| APIQ-017 | recovery select | POST `/rca/recovery-plans/{plan_id}/actions/{action_id}/select` | body 필수, `{}` 허용, reason nullable | `AcceptedResponse`, 200 | 404/409 가능 |
+| APIQ-018 | evidence | GET `/evidence` | correlation/kind/since/until/limit=50/offset=0/cursor | `EvidenceQueryResponse`, 200 | 실제 cursor 제공 |
+| APIQ-018 | RCA reports | GET `/rca-reports` | evidence와 동일하나 kind 없음 | `RcaReportListResponse`, 200 | ISO/cursor 오류 422 |
+| APIQ-019 | AI list/detail | GET `/ai/conversations[/{id}]` | path만 | list/detail response, 200 | pagination 없음·내부 JsonMap |
+| APIQ-019 | AI create | POST `/ai/conversations` | message 필수; title/agent/context 선택 | `AiConversationAcceptedResponse`, 200 | 202 아님 |
+| APIQ-019 | AI append | POST `/ai/conversations/{id}/messages` | message 필수; agent/context 선택 | accepted response, 200 | 자동 재전송 금지 |
+| APIQ-020 | AI delete | DELETE `/ai/conversations/{id}` | path | empty, 204 | `BLOCK-204-001` |
+
+## 11. 큐 밖 항목
+
+- route가 없는 `BE-Gap-*`은 endpoint 함수로 만들지 않는다.
+- repo/provider/target/org/alert/dead-letter는 현재 queue에 없으므로 workorder만 보고 선행 구현하지
+  않는다.
+- agent poll/result, webhook, install manifest는 browser endpoint가 아니다.
+- `/api/live/browser` realtime은 HTTP 큐와 분리한다. `API 완성: connectRealtime (...)` exact
+  앵커 전에는 소비하지 않는다.
+
+## 12. 검증과 완료 체크리스트
+
+함수군 완료 전 아래를 전부 확인한다.
+
+- [ ] queue 행을 원격에서 claim했고 lease가 유효하다.
+- [ ] exact route constant, router method, request/response model 근거를 test 주석에 남겼다.
+- [ ] endpoint, schema, test, `index.ts` export가 있다.
+- [ ] D1–D8 중 해당 항목을 검증했다.
+- [ ] AbortSignal과 path/query encoding을 검증했다.
+- [ ] mutation은 한 번만 전송되며 receipt를 terminal success로 바꾸지 않는다.
+- [ ] GET은 실제 세션으로 redacted 실응답 검증을 했다.
+- [ ] mutation live 검증은 sandbox·승인 있을 때만 수행했다.
+- [ ] `src/product/api/**`가 `features/**`, 화면, synthetic fixture를 import하지 않는다.
+- [ ] `client.ts`, `url.ts`, backend 파일을 수정하지 않았다.
+- [ ] targeted test·typecheck·lint 후 clean merged HEAD에서 `npm run check`가 통과했다.
+- [ ] 커밋 A를 push하고 그 hash를 함수별 exact 완료 앵커로 EOF에 append했다.
+- [ ] 모든 함수 앵커가 생긴 뒤 queue 행을 제거한 커밋 B를 push했다.
+
+병렬 작업 때문에 전체 test가 timeout이면 즉시 timeout 값을 늘리지 않는다. 다른 test process가
+끝난 뒤 한 번 재실행하고, 계속 실패하면 자신의 targeted 결과와 전체 실패 파일을 `blocked` 근거로
+남긴다. 완료 앵커는 full gate가 통과하기 전 작성하지 않는다.
