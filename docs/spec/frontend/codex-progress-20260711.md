@@ -721,3 +721,51 @@ P2를 완료로 판정한다. 다음 단계는 `final-questions.md`에 남은 �
 명령: make manifest-check
 결과: PASS — management manifest objects 56, target manifest objects 18
 ```
+
+## 2026-07-11 제품 오류 경계 최종 계약 정정
+
+- 최초 구현 커밋: `3d3c2cb94`
+- composition 우회 제거 커밋: `f9586d0b6`
+- 위의 선행 기록 중 “mounted runtime당 initializer 한 번”은 React `StrictMode` 계약이 아니다.
+  이 정정 기록이 해당 문장보다 우선한다.
+- `ProductApp`은 `ProductErrorBoundary` 바깥에 공개 composition 주입점을 두지 않는다. private
+  `ProductRuntime`이 경계 내부에서 `useState(createApiComposition)`으로 초기화하므로 동기
+  composition 오류도 raw message·stack 없이 `ProductStateScreen kind="error"`로 수렴한다.
+- 실패 주입은 별도 테스트 파일의 module mock에만 존재한다. production export·route·composition에는
+  테스트 factory나 미승인 surface 우회점이 없다.
+- retry는 사용자 클릭 때만 keyed child runtime을 remount한다. fallback 진입과 복구 후 모두
+  `#product-main`으로 focus를 복원하며 persistent crash는 같은 안전 fallback으로 다시 수렴한다.
+- 실제 entry와 같은 React `StrictMode`에서 initializer의 정확한 호출 횟수를 가정하지 않는다.
+  initialization은 side effect와 network가 없는 composition 계산만 수행하고, 테스트는 retry 전후의
+  terminal UI와 새로운 시도만 검증한다.
+- focus, online, offline, visibilitychange와 5분 timer 진행에도 자동 retry나 fetch,
+  XMLHttpRequest, sendBeacon, EventSource, 제품 WebSocket 호출은 0건이다.
+- §6b 조율 상태는 `api-needs.md`의 `requested` 26행, 유효한 완료 앵커 0개다. 이번 변경은
+  `src/product/api/**`, `client.ts`, `url.ts`를 수정하지 않았으며 production surface는 0개다.
+
+```text
+명령: cd references/ui-layer-lab && npm run check
+결과: PASS
+  - TypeScript: PASS
+  - ESLint: PASS
+  - Vitest: 15 files, 72 tests PASS
+  - product design guard: 61 files PASS
+  - UI catalog source audit: 482 previews PASS, upstream 21e4ceb
+  - Vite production build: PASS
+  - ProductApp CSS: 42.69 kB (42,694 bytes)
+  - ProductApp JS: 68.82 kB (68,819 bytes)
+주의: 500kB 초과 chunk warning은 reference catalog 기존 성능 과제로 유지
+
+명령: cd references/ui-layer-lab && npm run visual-product
+결과: PASS — release-desktop-light, release-mobile-dark, release-reflow-320-light,
+      release-text-resize-200-light, state-reflow-320-light,
+      state-text-resize-200-light, state-forced-colors; network-silent
+```
+
+```text
+명령: uv run pytest tests/test_docs_index.py tests/test_bruno_collection.py -q
+결과: PASS — 17 passed
+
+명령: make manifest-check
+결과: PASS — management manifest objects 56, target manifest objects 18
+```
