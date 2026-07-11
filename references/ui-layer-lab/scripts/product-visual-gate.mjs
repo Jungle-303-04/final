@@ -15,9 +15,16 @@ const stateSelectors = [
   "[data-slot='empty']",
   "[data-slot='surface']",
   "[data-slot='button']",
+  "[data-slot='item']",
+  "[data-slot='item-title']",
+  "[data-slot='item-description']",
   "[data-slot='progress']",
   "[data-slot='progress-track']",
   "[data-slot='progress-indicator']",
+  "[data-slot='scroll-area']",
+  "[data-slot='scroll-area-viewport']",
+  "[data-slot='scroll-area-scrollbar']",
+  "[data-slot='scroll-area-thumb']",
   "[data-slot='status-mark']",
   "[role='alert']",
   "h1",
@@ -76,6 +83,7 @@ const visualScenarios = [
     theme: "light",
     colorScheme: "light",
     forcedColors: "none",
+    stateAssertions: true,
   },
   {
     id: "state-text-resize-200-light",
@@ -87,6 +95,7 @@ const visualScenarios = [
     colorScheme: "light",
     forcedColors: "none",
     rootFontScale: 2,
+    stateAssertions: true,
   },
   {
     id: "state-forced-colors",
@@ -97,6 +106,7 @@ const visualScenarios = [
     theme: "light",
     colorScheme: "light",
     forcedColors: "active",
+    stateAssertions: true,
   },
 ];
 
@@ -203,12 +213,113 @@ async function captureScenario(page, scenario) {
     throw new Error(`${scenario.id}: visual surface must expose one main landmark`);
   }
 
+  if (scenario.stateAssertions) await assertStatePrimitiveContracts(page, scenario.id);
   await assertNoOverflow(page, scenario.id, scenario.requiredSelectors);
   if (scenario.forcedColors === "active") await assertForcedColors(page, scenario.id);
   await page.screenshot({
     path: `${outputDir}product-${scenario.id}.png`,
     fullPage: true,
   });
+}
+
+async function assertStatePrimitiveContracts(page, label) {
+  await page.waitForFunction(() => {
+    const viewport = document.querySelector("[data-slot='scroll-area-viewport']");
+    const scrollbar = document.querySelector("[data-slot='scroll-area-scrollbar']");
+    const thumb = document.querySelector("[data-slot='scroll-area-thumb']");
+    if (!(viewport instanceof HTMLElement)
+      || !(scrollbar instanceof HTMLElement)
+      || !(thumb instanceof HTMLElement)) return false;
+    const scrollbarRect = scrollbar.getBoundingClientRect();
+    const thumbRect = thumb.getBoundingClientRect();
+    return viewport.hasAttribute("data-has-overflow-y")
+      && scrollbar.hasAttribute("data-has-overflow-y")
+      && viewport.tabIndex === 0
+      && scrollbarRect.width > 0
+      && scrollbarRect.height > 0
+      && thumbRect.width > 0
+      && thumbRect.height > 0;
+  });
+
+  const result = await page.evaluate(() => {
+    const item = document.querySelector("[data-visual-disabled-item]");
+    const viewport = document.querySelector("[data-slot='scroll-area-viewport']");
+    const scrollbar = document.querySelector("[data-slot='scroll-area-scrollbar']");
+    const thumb = document.querySelector("[data-slot='scroll-area-thumb']");
+    if (!(item instanceof HTMLButtonElement)
+      || !(viewport instanceof HTMLElement)
+      || !(scrollbar instanceof HTMLElement)
+      || !(thumb instanceof HTMLElement)) return { missing: true };
+
+    const itemStyle = getComputedStyle(item);
+    const viewportStyle = getComputedStyle(viewport);
+    const scrollbarStyle = getComputedStyle(scrollbar);
+    const scrollbarRect = scrollbar.getBoundingClientRect();
+    const thumbRect = thumb.getBoundingClientRect();
+    return {
+      missing: false,
+      itemDisabled: item.disabled,
+      itemTransitionDuration: itemStyle.transitionDuration,
+      itemTransitionProperty: itemStyle.transitionProperty,
+      scrollbarDisplay: scrollbarStyle.display,
+      scrollbarHasOverflowY: scrollbar.hasAttribute("data-has-overflow-y"),
+      scrollbarHeight: scrollbarRect.height,
+      scrollbarTransitionDuration: scrollbarStyle.transitionDuration,
+      scrollbarTransitionProperty: scrollbarStyle.transitionProperty,
+      scrollbarVisibility: scrollbarStyle.visibility,
+      scrollbarWidth: scrollbarRect.width,
+      thumbHeight: thumbRect.height,
+      thumbWidth: thumbRect.width,
+      viewportClientHeight: viewport.clientHeight,
+      viewportHasOverflowY: viewport.hasAttribute("data-has-overflow-y"),
+      viewportScrollHeight: viewport.scrollHeight,
+      viewportTabIndex: viewport.tabIndex,
+      viewportTransitionDuration: viewportStyle.transitionDuration,
+      viewportTransitionProperty: viewportStyle.transitionProperty,
+    };
+  });
+
+  if (result.missing) throw new Error(`${label}: Item or ScrollArea visual fixture is missing`);
+  if (!result.itemDisabled) throw new Error(`${label}: Item fixture must be a disabled button`);
+  if (!result.viewportHasOverflowY
+    || !result.scrollbarHasOverflowY
+    || result.viewportTabIndex !== 0
+    || result.viewportScrollHeight <= result.viewportClientHeight + 1) {
+    throw new Error(
+      `${label}: ScrollArea must expose real vertical overflow and a keyboard viewport `
+      + JSON.stringify(result),
+    );
+  }
+  if (result.scrollbarDisplay === "none"
+    || result.scrollbarVisibility === "hidden"
+    || result.scrollbarWidth < 1
+    || result.scrollbarHeight < 1
+    || result.thumbWidth < 1
+    || result.thumbHeight < 1
+    || result.thumbHeight >= result.scrollbarHeight) {
+    throw new Error(
+      `${label}: ScrollArea scrollbar and thumb need visible overflow geometry `
+      + JSON.stringify(result),
+    );
+  }
+  for (const [name, property, duration] of [
+    ["Item", result.itemTransitionProperty, result.itemTransitionDuration],
+    ["ScrollArea viewport", result.viewportTransitionProperty, result.viewportTransitionDuration],
+    ["ScrollArea scrollbar", result.scrollbarTransitionProperty, result.scrollbarTransitionDuration],
+  ]) {
+    if (property !== "none" && maxCssTimeMilliseconds(duration) > 1) {
+      throw new Error(`${label}: ${name} reduced-motion transition remains ${duration}`);
+    }
+  }
+}
+
+function maxCssTimeMilliseconds(value) {
+  return Math.max(...value.split(",").map((part) => {
+    const token = part.trim();
+    if (token.endsWith("ms")) return Number.parseFloat(token);
+    if (token.endsWith("s")) return Number.parseFloat(token) * 1_000;
+    return Number.POSITIVE_INFINITY;
+  }));
 }
 
 async function assertScenarioEnvironment(page, scenario, baselineRootFontSize) {
@@ -336,6 +447,17 @@ async function assertForcedColors(page, label) {
       status: document.querySelector("[data-slot='status-mark']"),
       focusTarget: document.querySelector("[data-visual-focus-target]"),
       disabledButton: document.querySelector("[data-slot='button'][disabled]"),
+      disabledItem: document.querySelector("[data-visual-disabled-item]"),
+      disabledItemTitle: document.querySelector(
+        "[data-visual-disabled-item] [data-slot='item-title']",
+      ),
+      disabledItemDescription: document.querySelector(
+        "[data-visual-disabled-item] [data-slot='item-description']",
+      ),
+      scrollArea: document.querySelector("[data-visual-scroll-area]"),
+      scrollViewport: document.querySelector("[data-slot='scroll-area-viewport']"),
+      scrollBar: document.querySelector("[data-slot='scroll-area-scrollbar']"),
+      scrollThumb: document.querySelector("[data-slot='scroll-area-thumb']"),
       completeProgressIndicator: document.querySelector(
         "[data-visual-progress='complete'] [data-slot='progress-indicator']",
       ),
@@ -360,6 +482,13 @@ async function assertForcedColors(page, label) {
       status,
       focusTarget,
       disabledButton,
+      disabledItem,
+      disabledItemTitle,
+      disabledItemDescription,
+      scrollArea,
+      scrollViewport,
+      scrollBar,
+      scrollThumb,
       completeProgressIndicator,
       completeProgressTrack,
       indeterminateProgressIndicator,
@@ -372,6 +501,15 @@ async function assertForcedColors(page, label) {
     const headingStyle = getComputedStyle(heading);
     const focusStyle = getComputedStyle(focusTarget);
     const disabledStyle = getComputedStyle(disabledButton);
+    const disabledItemStyle = getComputedStyle(disabledItem);
+    const disabledItemTitleStyle = getComputedStyle(disabledItemTitle);
+    const disabledItemDescriptionStyle = getComputedStyle(disabledItemDescription);
+    const scrollAreaStyle = getComputedStyle(scrollArea);
+    const scrollViewportStyle = getComputedStyle(scrollViewport);
+    const scrollBarStyle = getComputedStyle(scrollBar);
+    const scrollThumbStyle = getComputedStyle(scrollThumb);
+    const scrollBarRect = scrollBar.getBoundingClientRect();
+    const scrollThumbRect = scrollThumb.getBoundingClientRect();
     const completeProgressStyle = getComputedStyle(completeProgressIndicator);
     const completeProgressTrackStyle = getComputedStyle(completeProgressTrack);
     const indeterminateProgressStyle = getComputedStyle(indeterminateProgressIndicator);
@@ -466,6 +604,37 @@ async function assertForcedColors(page, label) {
       disabledColor: disabledStyle.color,
       disabledOpacity: effectiveOpacity(disabledButton),
       disabledVisible: disabledButton.getBoundingClientRect().width > 0,
+      disabledItemBackground: effectiveBackground(disabledItem),
+      disabledItemBorderColor: disabledItemStyle.borderTopColor,
+      disabledItemBorderStyle: disabledItemStyle.borderTopStyle,
+      disabledItemBorderWidth: Number.parseFloat(disabledItemStyle.borderTopWidth),
+      disabledItemDescriptionColor: disabledItemDescriptionStyle.color,
+      disabledItemOpacity: effectiveOpacity(disabledItem),
+      disabledItemTitleColor: disabledItemTitleStyle.color,
+      disabledItemVisible: disabledItem.getBoundingClientRect().width > 0,
+      scrollAreaBackground: effectiveBackground(scrollArea),
+      scrollAreaBorderColor: scrollAreaStyle.borderTopColor,
+      scrollAreaBorderStyle: scrollAreaStyle.borderTopStyle,
+      scrollAreaBorderWidth: Number.parseFloat(scrollAreaStyle.borderTopWidth),
+      scrollAreaOpacity: effectiveOpacity(scrollArea),
+      scrollBarBackground: effectiveBackground(scrollBar),
+      scrollBarBorderColor: scrollBarStyle.borderTopColor,
+      scrollBarBorderStyle: scrollBarStyle.borderTopStyle,
+      scrollBarBorderWidth: Number.parseFloat(scrollBarStyle.borderTopWidth),
+      scrollBarDisplay: scrollBarStyle.display,
+      scrollBarHasOverflowY: scrollBar.hasAttribute("data-has-overflow-y"),
+      scrollBarHeight: scrollBarRect.height,
+      scrollBarOpacity: effectiveOpacity(scrollBar),
+      scrollBarVisibility: scrollBarStyle.visibility,
+      scrollBarWidth: scrollBarRect.width,
+      scrollThumbBackground: scrollThumbStyle.backgroundColor,
+      scrollThumbHeight: scrollThumbRect.height,
+      scrollThumbOpacity: effectiveOpacity(scrollThumb),
+      scrollThumbWidth: scrollThumbRect.width,
+      scrollViewportHasOverflowY: scrollViewport.hasAttribute("data-has-overflow-y"),
+      scrollViewportOpacity: effectiveOpacity(scrollViewport),
+      scrollViewportOverflowY: scrollViewportStyle.overflowY,
+      scrollViewportTabIndex: scrollViewport.tabIndex,
       completeProgressWidth: completeProgressIndicator.getBoundingClientRect().width,
       indeterminateProgressAnimationName: indeterminateProgressStyle.animationName,
       indeterminateProgressBackgroundClip: indeterminateProgressStyle.backgroundClip,
@@ -501,12 +670,17 @@ async function assertForcedColors(page, label) {
     alert: result.alertOpacity,
     badge: result.badgeOpacity,
     disabled: result.disabledOpacity,
+    disabledItem: result.disabledItemOpacity,
     empty: result.emptyOpacity,
     focus: result.focusOpacity,
     heading: result.headingOpacity,
     indeterminateProgress: result.indeterminateProgressOpacity,
     progressTrack: result.progressTrackOpacity,
     selection: result.selectionOpacity,
+    scrollArea: result.scrollAreaOpacity,
+    scrollBar: result.scrollBarOpacity,
+    scrollThumb: result.scrollThumbOpacity,
+    scrollViewport: result.scrollViewportOpacity,
     status: result.markerOpacity,
     surface: result.surfaceOpacity,
   };
@@ -522,6 +696,48 @@ async function assertForcedColors(page, label) {
   assertContrast(label, "alert border", result.alertBorderColor, result.alertBackground, 3);
   assertContrast(label, "focus outline", result.focusOutlineColor, result.focusBackground, 3);
   assertContrast(label, "disabled text", result.disabledColor, result.disabledBackground, 3);
+  assertContrast(
+    label,
+    "disabled Item title",
+    result.disabledItemTitleColor,
+    result.disabledItemBackground,
+    3,
+  );
+  assertContrast(
+    label,
+    "disabled Item description",
+    result.disabledItemDescriptionColor,
+    result.disabledItemBackground,
+    3,
+  );
+  assertContrast(
+    label,
+    "disabled Item border",
+    result.disabledItemBorderColor,
+    result.disabledItemBackground,
+    3,
+  );
+  assertContrast(
+    label,
+    "ScrollArea border",
+    result.scrollAreaBorderColor,
+    result.scrollAreaBackground,
+    3,
+  );
+  assertContrast(
+    label,
+    "ScrollArea scrollbar border",
+    result.scrollBarBorderColor,
+    result.scrollBarBackground,
+    3,
+  );
+  assertContrast(
+    label,
+    "ScrollArea thumb",
+    result.scrollThumbBackground,
+    result.scrollBarBackground,
+    3,
+  );
   assertContrast(label, "status marker", result.markerBorderColor, result.markerBackground, 3);
   assertContrast(
     label,
@@ -545,8 +761,37 @@ async function assertForcedColors(page, label) {
     4.5,
     result.selectionUnderlay,
   );
-  if (!result.headingVisible || !result.disabledVisible || !result.statusText) {
+  if (!result.headingVisible
+    || !result.disabledVisible
+    || !result.disabledItemVisible
+    || !result.statusText) {
     throw new Error(`${label}: forced-colors text or controls are not visible`);
+  }
+  if (!result.scrollViewportHasOverflowY
+    || !result.scrollBarHasOverflowY
+    || result.scrollViewportTabIndex !== 0
+    || result.scrollBarDisplay === "none"
+    || result.scrollBarVisibility === "hidden"
+    || result.scrollBarWidth < 1
+    || result.scrollBarHeight < 1
+    || result.scrollThumbWidth < 1
+    || result.scrollThumbHeight < 1
+    || result.scrollThumbHeight >= result.scrollBarHeight) {
+    throw new Error(
+      `${label}: forced-colors ScrollArea geometry or keyboard overflow contract failed `
+      + JSON.stringify({
+        barDisplay: result.scrollBarDisplay,
+        barHasOverflowY: result.scrollBarHasOverflowY,
+        barHeight: result.scrollBarHeight,
+        barVisibility: result.scrollBarVisibility,
+        barWidth: result.scrollBarWidth,
+        thumbHeight: result.scrollThumbHeight,
+        thumbWidth: result.scrollThumbWidth,
+        viewportHasOverflowY: result.scrollViewportHasOverflowY,
+        viewportOverflowY: result.scrollViewportOverflowY,
+        viewportTabIndex: result.scrollViewportTabIndex,
+      }),
+    );
   }
   const indeterminateRatio = result.progressTrackWidth > 0
     ? result.indeterminateProgressWidth / result.progressTrackWidth
@@ -587,6 +832,9 @@ async function assertForcedColors(page, label) {
     || result.surfaceBorderStyle === "none" || result.surfaceBorderWidth < 1
     || result.badgeBorderStyle === "none" || result.badgeBorderWidth < 1
     || result.alertBorderStyle === "none" || result.alertBorderWidth < 1
+    || result.disabledItemBorderStyle === "none" || result.disabledItemBorderWidth < 1
+    || result.scrollAreaBorderStyle === "none" || result.scrollAreaBorderWidth < 1
+    || result.scrollBarBorderStyle === "none" || result.scrollBarBorderWidth < 1
     || result.markerBorderStyle === "none" || result.markerBorderWidth < 1) {
     throw new Error(`${label}: a required forced-colors border is not preserved`);
   }

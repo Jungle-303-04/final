@@ -10,7 +10,8 @@ afterEach(() => {
 });
 
 describe("product ScrollArea primitive", () => {
-  it("keeps children inside a named, keyboard-focusable vertical viewport", () => {
+  it("keeps non-overflowing content named without adding an unnecessary tab stop", async () => {
+    mockOverflow({ x: false, y: false });
     const { container } = render(
       <ScrollArea
         aria-label="활성 이슈"
@@ -33,9 +34,7 @@ describe("product ScrollArea primitive", () => {
     expect(root?.getAttribute("data-orientation")).toBe("vertical");
     expect(root?.getAttribute("aria-label")).toBeNull();
     expect(viewport.getAttribute("data-slot")).toBe("scroll-area-viewport");
-    expect(viewport.tabIndex).toBe(0);
-    viewport.focus();
-    expect(document.activeElement).toBe(viewport);
+    await waitFor(() => expect(viewport.tabIndex).toBe(-1));
 
     expect(content?.parentElement).toBe(viewport);
     expect(payload.parentElement).toBe(content);
@@ -44,10 +43,31 @@ describe("product ScrollArea primitive", () => {
     const scrollbars = container.querySelectorAll('[data-slot="scroll-area-scrollbar"]');
     expect(scrollbars).toHaveLength(1);
     expect(scrollbars[0]?.getAttribute("data-orientation")).toBe("vertical");
+    expect(scrollbars[0]?.hasAttribute("data-has-overflow-y")).toBe(false);
     expect(scrollbars[0]?.querySelector('[data-slot="scroll-area-thumb"]')).toBeTruthy();
   });
 
-  it("supports aria-labelledby and renders only the requested horizontal axis", () => {
+  it("makes the viewport keyboard-focusable only when the requested vertical axis overflows", async () => {
+    mockOverflow({ x: false, y: true });
+    const { container } = render(
+      <ScrollArea aria-label="활성 이슈" orientation="vertical">
+        <div>긴 이슈 목록</div>
+      </ScrollArea>,
+    );
+
+    const viewport = screen.getByRole("region", { name: "활성 이슈" });
+    const scrollbar = container.querySelector<HTMLElement>('[data-slot="scroll-area-scrollbar"]');
+    await waitFor(() => {
+      expect(viewport.tabIndex).toBe(0);
+      expect(viewport.hasAttribute("data-has-overflow-y")).toBe(true);
+      expect(scrollbar?.hasAttribute("data-has-overflow-y")).toBe(true);
+    });
+    viewport.focus();
+    expect(document.activeElement).toBe(viewport);
+  });
+
+  it("supports aria-labelledby and renders only an overflowing horizontal axis", async () => {
+    mockOverflow({ x: true, y: false });
     const { container } = render(
       <>
         <h2 id="history-title">배포 기록</h2>
@@ -66,10 +86,16 @@ describe("product ScrollArea primitive", () => {
     expect(viewport.getAttribute("aria-labelledby")).toBe("history-title");
     expect(scrollbar?.getAttribute("data-orientation")).toBe("horizontal");
     expect(container.querySelectorAll('[data-slot="scroll-area-scrollbar"]')).toHaveLength(1);
+    await waitFor(() => {
+      expect(viewport.tabIndex).toBe(0);
+      expect(viewport.hasAttribute("data-has-overflow-x")).toBe(true);
+      expect(viewport.hasAttribute("data-has-overflow-y")).toBe(false);
+      expect(scrollbar?.hasAttribute("data-has-overflow-x")).toBe(true);
+    });
   });
 
   it("assembles both scrollbars and the Base UI corner for two-axis overflow", async () => {
-    mockTwoAxisOverflow();
+    mockOverflow({ x: true, y: true });
 
     const { container } = render(
       <ScrollArea aria-label="리소스 행렬" orientation="both">
@@ -84,6 +110,9 @@ describe("product ScrollArea primitive", () => {
     expect(orientations).toEqual(["vertical", "horizontal"]);
 
     await waitFor(() => {
+      const viewport = screen.getByRole("region", { name: "리소스 행렬" });
+      expect(viewport.hasAttribute("data-has-overflow-x")).toBe(true);
+      expect(viewport.hasAttribute("data-has-overflow-y")).toBe(true);
       expect(container.querySelector('[data-slot="scroll-area-corner"]')).toBeTruthy();
     });
   });
@@ -175,11 +204,11 @@ describe("product ScrollArea primitive", () => {
   });
 });
 
-function mockTwoAxisOverflow() {
+function mockOverflow({ x, y }: { x: boolean; y: boolean }) {
   vi.spyOn(HTMLElement.prototype, "clientHeight", "get").mockReturnValue(100);
   vi.spyOn(HTMLElement.prototype, "clientWidth", "get").mockReturnValue(100);
-  vi.spyOn(HTMLElement.prototype, "scrollHeight", "get").mockReturnValue(200);
-  vi.spyOn(HTMLElement.prototype, "scrollWidth", "get").mockReturnValue(200);
+  vi.spyOn(HTMLElement.prototype, "scrollHeight", "get").mockReturnValue(y ? 200 : 100);
+  vi.spyOn(HTMLElement.prototype, "scrollWidth", "get").mockReturnValue(x ? 200 : 100);
 }
 
 function assertScrollAreaTypeContracts() {

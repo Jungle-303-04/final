@@ -5,7 +5,14 @@ import { ProductStateScreen } from "../../src/product/shared/ui/ProductStateScre
 import { StatusMark } from "../../src/product/shared/ui/StatusMark";
 import { Surface } from "../../src/product/shared/ui/Surface";
 import { Button } from "../../src/product/shared/ui/primitives/button";
+import {
+  Item,
+  ItemContent,
+  ItemDescription,
+  ItemTitle,
+} from "../../src/product/shared/ui/primitives/item";
 import { Progress } from "../../src/product/shared/ui/primitives/progress";
+import { ScrollArea } from "../../src/product/shared/ui/primitives/scroll-area";
 import "../../src/product/styles/tokens.css";
 import "../../src/product/styles/foundation.css";
 
@@ -66,6 +73,41 @@ function ProductStateVisualHarness() {
           <div className="flex flex-wrap gap-2">
             <Button data-visual-focus-target type="button" variant="outline">포커스 확인</Button>
             <Button disabled type="button" variant="outline">비활성 작업</Button>
+          </div>
+          <Item
+            as="button"
+            data-visual-disabled-item
+            disabled
+            variant="outline"
+          >
+            <ItemContent>
+              <ItemTitle>비활성 리소스 작업</ItemTitle>
+              <ItemDescription>
+                현재 권한에서는 이 리소스 작업을 실행할 수 없습니다.
+              </ItemDescription>
+            </ItemContent>
+          </Item>
+          <div className="grid gap-2">
+            <h2 className="text-sm font-medium" id="scroll-area-harness-title">
+              실제 세로 오버플로 목록
+            </h2>
+            <ScrollArea
+              aria-labelledby="scroll-area-harness-title"
+              className="h-40 rounded-lg border border-border"
+              data-visual-scroll-area
+              orientation="vertical"
+            >
+              <div className="grid gap-2 p-2 pr-4">
+                {Array.from({ length: 12 }, (_, index) => (
+                  <div
+                    className="rounded-md border border-border px-3 py-2 text-sm"
+                    key={index}
+                  >
+                    감사 이벤트 {index + 1}
+                  </div>
+                ))}
+              </div>
+            </ScrollArea>
           </div>
         </Surface>
       </div>
