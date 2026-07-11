@@ -981,3 +981,39 @@ P2를 완료로 판정한다. 다음 단계는 `final-questions.md`에 남은 �
       release-text-resize-200-light, state-reflow-320-light,
       state-text-resize-200-light, state-forced-colors; network-silent
 ```
+
+## 2026-07-11 ButtonGroup·Tabs P1 종결 검증
+
+- 정본 보강 커밋: `1e788cde4` (`fix: Tabs·ButtonGroup 상태·시각 계약 보강`)
+- `ButtonGroupSeparator` 방향을 가장 가까운 부모 `ButtonGroup`의 방향에서 직교 방향으로
+  파생한다. 부모 밖 separator와 소비자가 직접 지정하는 모순된 방향은 허용하지 않는다.
+- 결합 경계 selector는 DOM의 첫째·마지막 자식이 아니라 `[data-slot]` 형제 관계를 기준으로
+  계산한다. 따라서 장식 또는 비-slot 자식이 사이에 있어도 radius와 중복 border가 깨지지 않는다.
+- `Tabs`의 canonical 선택값은 `string | null`이다. 선택 탭 제거와 모든 탭 비활성 시 Base UI의
+  `missing`·`disabled` reason 및 원본 change details를 보존하여 `null`로 수렴한다.
+- `TabsList`는 `default | line` variant를 component-owned `data-variant`와 함께 제공한다.
+  가로 default trigger 높이는 list content box 안에 포함되도록 조정했고, line indicator는 가로·세로
+  orientation, reduced-motion, forced-colors 규칙을 공유한다.
+- unit class 문자열 확인만으로 통과시키지 않는다. 시각 게이트가 실제 DOM role/name/state,
+  ButtonGroup 결합 rect와 border collapse, Tabs list/trigger containment, line pseudo indicator,
+  reduced-motion 1ms 이하, forced-colors active/focus/disabled 대비를 계산한다.
+- `api-needs.md` 상태는 `requested` 26행, `blocked` 1행, 유효한 `API 완성:` 앵커 0개다.
+  이번 보강은 `src/product/api/**`, `client.ts`, `url.ts`를 수정하지 않았다.
+
+```text
+명령: cd references/ui-layer-lab && npm run check
+결과: PASS
+  - TypeScript: PASS
+  - ESLint: PASS
+  - Vitest: 22 files, 150 tests PASS
+  - product design guard: 74 files PASS
+  - UI catalog source audit: 482 previews PASS, upstream 21e4ceb
+  - Vite production build: PASS
+  - ProductApp CSS: 59.08 kB (gzip 10.80 kB)
+  - ProductApp JS: 68.82 kB (gzip 23.84 kB)
+주의: 500 kB 초과 chunk warning은 reference catalog 기존 성능 과제로 유지
+
+명령: cd references/ui-layer-lab && npm run visual-product
+결과: PASS — 7 scenarios, network-silent
+검증: 320px reflow, 200% text resize, reduced-motion, forced-colors 포함
+```
