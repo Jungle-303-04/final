@@ -622,3 +622,61 @@ P2를 완료로 판정한다. 다음 단계는 `final-questions.md`에 남은 �
   - references/ui-layer-lab/output/playwright/product-release-desktop-light.png
   - references/ui-layer-lab/output/playwright/product-release-mobile-dark.png
 ```
+
+## 2026-07-11 시각 게이트 경계 최종 보강
+
+- 최종 보강 커밋: `a5d32e78c`
+- visual gate가 띄운 npm·Vite 프로세스는 임의 port와 실행별 nonce로 소유권을 증명한다. POSIX에서는
+  detached process group 전체에 TERM을 보내고 제한 시간 뒤 KILL로 수렴한다. Windows에서는
+  `taskkill /PID /T` 뒤 `/F` fallback을 사용한다. 두 경로 모두 npm child exit와 nonce 응답 중단을
+  함께 확인하므로 stale server를 통과시키거나 Vite child를 남기지 않는다.
+- reflow exemption은 이유가 있는 horizontal scroll owner에만 허용한다. accessible name, non-negative
+  tab index, 실제 `focus()` 뒤 `activeElement`, disabled·aria-disabled·hidden·aria-hidden·inert 여부를
+  모두 검사하므로 속성만 붙여 320px 검증을 우회할 수 없다.
+- forced-colors 대비는 조상 순서로 반투명 background를 합성한 뒤 heading·selection 4.5:1,
+  border·focus outline·disabled text·status marker 3:1을 검증한다. 대상 또는 조상에 group opacity가
+  있으면 부정확한 근사 계산을 하지 않고 gate를 실패시킨다. disabled product button은 forced-colors에서
+  `opacity: 1`, `GrayText` text·border로 보정한다.
+- 7개 declarative scenario는 release desktop light, release mobile dark, release 320px,
+  release text 200%, state 320px, state text 200%, state forced-colors다. 실제 product primitive를 쓰는
+  test-only harness는 production route·composition·dependency graph 밖에 있다.
+- 첫 320px state 검증은 retry action의 문서 폭 126px 초과를 실제로 탐지했고, action을 wrap 가능한
+  높이와 `overflow-wrap:anywhere`로 수정한 뒤 통과했다.
+- §6b 조율 상태는 `api-needs.md`의 `requested` 26행, progress의 유효한 완료 앵커 0개다. 이번
+  보강도 `src/product/api/**`, `client.ts`, `url.ts`를 수정하지 않았고 새 endpoint 요구를 만들지
+  않았다.
+
+```text
+명령: cd references/ui-layer-lab && npm run check
+결과: PASS
+  - TypeScript: PASS
+  - ESLint: PASS
+  - Vitest: 12 files, 66 tests PASS
+  - product design guard: 57 files PASS
+  - UI catalog source audit: 482 previews PASS, upstream 21e4ceb
+  - Vite production build: PASS
+  - ProductApp CSS: 42.67 kB (42,670 bytes)
+  - ProductApp JS: 67.86 kB (67,856 bytes)
+주의: 500kB 초과 chunk warning은 reference catalog 기존 성능 과제로 유지
+
+명령: cd references/ui-layer-lab && npm run visual-product
+결과: PASS — release-desktop-light, release-mobile-dark, release-reflow-320-light,
+      release-text-resize-200-light, state-reflow-320-light,
+      state-text-resize-200-light, state-forced-colors; network-silent
+검증: API request 0, product WebSocket 0, console/page error 0,
+      required selector 존재, horizontal overflow 0, main landmark 1
+스크린샷:
+  - references/ui-layer-lab/output/playwright/product-release-desktop-light.png
+  - references/ui-layer-lab/output/playwright/product-release-mobile-dark.png
+  - references/ui-layer-lab/output/playwright/product-state-reflow-320-light.png
+  - references/ui-layer-lab/output/playwright/product-state-text-resize-200-light.png
+  - references/ui-layer-lab/output/playwright/product-state-forced-colors.png
+```
+
+```text
+명령: uv run pytest tests/test_docs_index.py tests/test_bruno_collection.py -q
+결과: PASS — 17 passed
+
+명령: make manifest-check
+결과: PASS — management manifest objects 56, target manifest objects 18
+```
