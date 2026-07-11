@@ -15,7 +15,7 @@ from domains.rca.events import (
     EvidenceItem,
     IncidentRecord,
 )
-from domains.rca.router import validate_rca_rule_catalog
+from domains.rca.router import list_rca_rule_catalog, validate_rca_rule_catalog
 from packages.contracts.gateway.requests import RcaRuleValidateRequest
 from services.ai.agent.causes.engine import evaluate_causes, plan_causes, required_evidence_sources
 from services.ai.agent.causes.loader import (
@@ -370,6 +370,25 @@ def test_rca_rule_validate_route_reports_schema_errors() -> None:
 
     assert response.valid is False
     assert response.errors[0].code == "schema_error"
+
+
+def test_rca_rule_catalog_route_lists_loaded_rules() -> None:
+    response = asyncio.run(
+        list_rca_rule_catalog(SimpleNamespace(user_id="user-1", workspace_id="workspace-1"))
+    )
+
+    by_id = {item.rule_id: item for item in response.items}
+
+    assert response.rules_count == len(response.items)
+    assert response.candidates_count == sum(len(item.candidates) for item in response.items)
+    assert by_id["runtime_config_error"].symptoms == [
+        "ConfigMap not found",
+        "CreateContainerConfigError",
+        "Invalid environment config",
+    ]
+    assert [candidate.candidate_id for candidate in by_id["runtime_config_error"].candidates][
+        0
+    ] == "missing_configmap_reference"
 
 
 def test_catalog_oom_killed_candidate_keeps_full_field_parity() -> None:

@@ -355,6 +355,9 @@ resolved 알림만 들어오면 이벤트를 새로 만들지 않고 `accepted: 
 payload 원문 대신 `root_cause`, `action`, incident 요약, `confidence` 같은 화이트리스트 필드만 내려간다.
 secret 원문이 응답에 실리지 않게 하기 위한 계약이므로 프론트는 이 요약 필드만 렌더링한다.
 
+`12-rca-rules`는 현재 API 프로세스가 로딩한 RCA rule catalog를 확인하는 디버그 API다.
+배포 후 새 YAML rule이 서버 이미지에 포함됐는지 확인할 때 사용하며, rule id, symptoms, required sources, candidate id를 내려준다.
+
 `07-fleet-summary`는 콘솔 루트 화면용 fleet 롤업 API다.
 세션 사용자가 읽을 수 있는 cluster마다 `health`(healthy/warning/critical/stale/unknown), pod/node 수, 최근 재시작 델타, 열린 incident 수를 내려주고,
 `totals`에 cluster 수, health별 수(healthy/warning/critical/stale/unknown), 대기 approval, 진행 중 workflow, dead letter 개수를 합산한다.
