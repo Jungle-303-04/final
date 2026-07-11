@@ -7,7 +7,7 @@ const ITEM_ELEMENTS = ["div", "a", "button"] as const;
 const ITEM_VARIANTS = ["default", "outline", "muted"] as const;
 const ITEM_SIZES = ["default", "sm", "xs"] as const;
 const ITEM_MEDIA_VARIANTS = ["default", "icon", "image"] as const;
-
+const ITEM_NEUTRAL_ROLES = ["article", "group", "listitem", "none", "presentation", "row", "treeitem"] as const;
 export type ItemElement = (typeof ITEM_ELEMENTS)[number];
 export type ItemVariant = (typeof ITEM_VARIANTS)[number];
 export type ItemSize = (typeof ITEM_SIZES)[number];
@@ -24,21 +24,8 @@ type SharedItemProps = OwnedItemData & {
   size?: ItemSize;
   variant?: ItemVariant;
 };
-type NativeItemKeys =
-  | "children"
-  | "className"
-  | "data-size"
-  | "data-slot"
-  | "data-variant";
-type NeutralItemRole =
-  | "article"
-  | "group"
-  | "listitem"
-  | "none"
-  | "presentation"
-  | "region"
-  | "row"
-  | "treeitem";
+type NativeItemKeys = "children" | "className" | "data-size" | "data-slot" | "data-variant";
+type NeutralItemRole = (typeof ITEM_NEUTRAL_ROLES)[number];
 type DivItemProps = SharedItemProps &
   Omit<ComponentProps<"div">, NativeItemKeys | "onClick" | "role" | "tabIndex"> & {
     as?: "div";
@@ -47,13 +34,15 @@ type DivItemProps = SharedItemProps &
     tabIndex?: never;
   };
 type LinkItemProps = SharedItemProps &
-  Omit<ComponentProps<"a">, NativeItemKeys | "href"> & {
+  Omit<ComponentProps<"a">, NativeItemKeys | "href" | "role"> & {
     as: "a";
     href: string;
+    role?: never;
   };
 type ButtonItemProps = SharedItemProps &
-  Omit<ComponentProps<"button">, NativeItemKeys | "type"> & {
+  Omit<ComponentProps<"button">, NativeItemKeys | "role" | "type"> & {
     as: "button";
+    role?: never;
     type?: never;
   };
 
@@ -112,7 +101,7 @@ export function Item({
       itemVariants({ size, variant }),
       as === "div"
         ? undefined
-        : "cursor-pointer hover:bg-muted disabled:pointer-events-none disabled:opacity-50",
+        : "cursor-pointer hover:bg-muted disabled:pointer-events-none disabled:opacity-50 forced-colors:disabled:border-[GrayText] forced-colors:disabled:text-[GrayText] forced-colors:disabled:opacity-100",
       className,
     ),
     "data-size": size,
@@ -121,6 +110,7 @@ export function Item({
   } as const;
 
   if (as === "a") {
+    assertAbsent(elementProps, "role", "Link Item owns native link semantics");
     const { href, ...anchorProps } = elementProps as Record<string, unknown>;
     return (
       <a
@@ -133,6 +123,7 @@ export function Item({
     );
   }
   if (as === "button") {
+    assertAbsent(elementProps, "role", "Button Item owns native button semantics");
     assertAbsent(elementProps, "type", "Button Item owns type=button");
     return (
       <button
@@ -147,8 +138,13 @@ export function Item({
 
   assertAbsent(elementProps, "onClick", "Div Item cannot receive onClick");
   assertAbsent(elementProps, "tabIndex", "Div Item cannot receive tabIndex");
-  if ((elementProps as { role?: unknown }).role === "button") {
-    throw new TypeError("Div Item cannot use role=button");
+  const neutralRole = (elementProps as { role?: unknown }).role;
+  if (neutralRole !== undefined) {
+    assertChoice(
+      neutralRole,
+      isNeutralItemRole,
+      "Div Item role must be neutral and context-owned",
+    );
   }
   return (
     <div {...(elementProps as ComponentProps<"div">)} {...rootProps}>
@@ -164,7 +160,18 @@ type ParagraphSlotProps = OwnedSlot & Omit<ComponentProps<"p">, "data-slot">;
 export function ItemGroup({
   className,
   ...props
-}: OwnedSlot & Omit<ComponentProps<"div">, "data-slot" | "role">) {
+}: OwnedSlot &
+  Omit<
+    ComponentProps<"div">,
+    "data-slot" | "onClick" | "role" | "tabIndex"
+  > & {
+    onClick?: never;
+    role?: never;
+    tabIndex?: never;
+  }) {
+  assertAbsent(props, "onClick", "ItemGroup cannot receive onClick");
+  assertAbsent(props, "role", "ItemGroup leaves semantics to its owner");
+  assertAbsent(props, "tabIndex", "ItemGroup cannot enter the tab order");
   return (
     <div
       {...props}
@@ -173,7 +180,6 @@ export function ItemGroup({
         className,
       )}
       data-slot="item-group"
-      role="list"
     />
   );
 }
@@ -261,6 +267,9 @@ export function isItemSize(value: unknown): value is ItemSize {
 }
 export function isItemMediaVariant(value: unknown): value is ItemMediaVariant {
   return isChoice(value, ITEM_MEDIA_VARIANTS);
+}
+function isNeutralItemRole(value: unknown): value is NeutralItemRole {
+  return isChoice(value, ITEM_NEUTRAL_ROLES);
 }
 function isChoice<Choice extends string>(
   value: unknown,

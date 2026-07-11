@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import type { ComponentProps } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   Item,
@@ -21,25 +22,27 @@ afterEach(cleanup);
 describe("product-owned Item", () => {
   it("renders the canonical family while leaving heading hierarchy to the screen", () => {
     const { container } = render(
-      <ItemGroup>
-        <Item as="div" role="listitem" size="sm" variant="outline">
-          <ItemMedia variant="icon" aria-hidden="true">
-            <svg />
-          </ItemMedia>
-          <ItemContent>
-            <ItemHeader>
-              <ItemTitle>worker-01</ItemTitle>
-              <ItemActions>정상</ItemActions>
-            </ItemHeader>
-            <ItemDescription>노드에서 실행 중인 파드입니다.</ItemDescription>
-            <ItemFooter>방금 갱신됨</ItemFooter>
-          </ItemContent>
-        </Item>
-        <ItemSeparator />
-      </ItemGroup>,
+      <div role="list">
+        <ItemGroup>
+          <Item as="div" role="listitem" size="sm" variant="outline">
+            <ItemMedia variant="icon" aria-hidden="true">
+              <svg />
+            </ItemMedia>
+            <ItemContent>
+              <ItemHeader>
+                <ItemTitle>worker-01</ItemTitle>
+                <ItemActions>정상</ItemActions>
+              </ItemHeader>
+              <ItemDescription>노드에서 실행 중인 파드입니다.</ItemDescription>
+              <ItemFooter>방금 갱신됨</ItemFooter>
+            </ItemContent>
+          </Item>
+          <ItemSeparator />
+        </ItemGroup>
+      </div>,
     );
 
-    expect(screen.getByRole("list")).toBeTruthy();
+    expect(container.querySelector('[data-slot="item-group"]')?.getAttribute("role")).toBeNull();
     expect(screen.getByRole("listitem").getAttribute("data-size")).toBe("sm");
     expect(screen.getByRole("listitem").getAttribute("data-variant")).toBe("outline");
     expect(screen.getByText("worker-01").tagName).toBe("DIV");
@@ -96,6 +99,7 @@ describe("product-owned Item", () => {
 
     const button = screen.getByRole("button", { name: "다시 시도" });
     expect(button.getAttribute("type")).toBe("button");
+    expect(button.className).toContain("forced-colors:disabled:opacity-100");
     fireEvent.click(button);
     expect(onClick).toHaveBeenCalledTimes(1);
   });
@@ -123,8 +127,12 @@ describe("product-owned Item", () => {
     ["clickable div", { as: "div", onClick: vi.fn() }],
     ["focusable div", { as: "div", tabIndex: 0 }],
     ["button-role div", { as: "div", role: "button" }],
+    ["unknown-role div", { as: "div", role: "checkbox" }],
+    ["unnamed-region div", { as: "div", role: "region" }],
     ["anchor without a destination", { as: "a", href: "   " }],
+    ["link role override", { as: "a", href: "/product", role: "button" }],
     ["button with a caller-owned type", { as: "button", type: "submit" }],
+    ["button role override", { as: "button", role: "link" }],
     ["unknown element", { as: "span" }],
     ["unknown variant", { as: "div", variant: "ghost" }],
     ["unknown size", { as: "div", size: "lg" }],
@@ -134,6 +142,20 @@ describe("product-owned Item", () => {
         <Item {...(unsafeProps as unknown as ItemProps)}>
           잘못된 항목
         </Item>,
+      ),
+    ).toThrow();
+  });
+
+  it.each([
+    ["role", { role: "list" }],
+    ["click behavior", { onClick: vi.fn() }],
+    ["tab stop", { tabIndex: 0 }],
+  ])("rejects ItemGroup runtime attempts to own %s", (_label, unsafeProps) => {
+    expect(() =>
+      render(
+        <ItemGroup {...(unsafeProps as unknown as ComponentProps<typeof ItemGroup>)}>
+          안전한 항목 그룹
+        </ItemGroup>,
       ),
     ).toThrow();
   });
@@ -152,8 +174,12 @@ function assertItemTypeContracts() {
   void <Item role="button">버튼 역할 div</Item>;
   // @ts-expect-error an anchor requires a navigation destination
   void <Item as="a">목적지 없는 링크</Item>;
+  // @ts-expect-error links retain native link semantics
+  void <Item as="a" href="/product" role="button">잘못된 링크 역할</Item>;
   // @ts-expect-error button type is fixed by Item
   void <Item as="button" type="submit">제출</Item>;
+  // @ts-expect-error buttons retain native button semantics
+  void <Item as="button" role="link">잘못된 버튼 역할</Item>;
   // @ts-expect-error only div, anchor, and button roots are supported
   void <Item as="span">지원하지 않는 요소</Item>;
   // @ts-expect-error Item supports only canonical visual variants
@@ -170,6 +196,12 @@ function assertItemTypeContracts() {
   void <ItemMedia variant="avatar">잘못된 미디어 변형</ItemMedia>;
   // @ts-expect-error canonical part slot markers are component-owned
   void <ItemTitle data-slot="other">잘못된 제목 슬롯</ItemTitle>;
+  // @ts-expect-error ItemGroup leaves list semantics to an external owner
+  void <ItemGroup role="list">잘못된 목록 소유자</ItemGroup>;
+  // @ts-expect-error ItemGroup is a neutral layout and cannot own click behavior
+  void <ItemGroup onClick={() => undefined}>클릭 가능한 그룹</ItemGroup>;
+  // @ts-expect-error ItemGroup cannot enter the tab order
+  void <ItemGroup tabIndex={0}>포커스 가능한 그룹</ItemGroup>;
 }
 
 void assertItemTypeContracts;
