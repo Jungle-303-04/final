@@ -15,6 +15,9 @@ const stateSelectors = [
   "[data-slot='empty']",
   "[data-slot='surface']",
   "[data-slot='button']",
+  "[data-slot='progress']",
+  "[data-slot='progress-track']",
+  "[data-slot='progress-indicator']",
   "[data-slot='status-mark']",
   "[role='alert']",
   "h1",
@@ -333,12 +336,30 @@ async function assertForcedColors(page, label) {
       status: document.querySelector("[data-slot='status-mark']"),
       focusTarget: document.querySelector("[data-visual-focus-target]"),
       disabledButton: document.querySelector("[data-slot='button'][disabled]"),
+      completeProgressIndicator: document.querySelector(
+        "[data-visual-progress='complete'] [data-slot='progress-indicator']",
+      ),
+      indeterminateProgressIndicator: document.querySelector(
+        "[data-visual-progress='indeterminate'] [data-slot='progress-indicator']",
+      ),
     };
     if (Object.values(elements).some((element) => !(element instanceof HTMLElement))) {
       return { missing: true };
     }
 
-    const { main, empty, surface, badge, alert, heading, status, focusTarget, disabledButton } = elements;
+    const {
+      main,
+      empty,
+      surface,
+      badge,
+      alert,
+      heading,
+      status,
+      focusTarget,
+      disabledButton,
+      completeProgressIndicator,
+      indeterminateProgressIndicator,
+    } = elements;
     focusTarget.focus();
     const emptyStyle = getComputedStyle(empty);
     const surfaceStyle = getComputedStyle(surface);
@@ -347,6 +368,8 @@ async function assertForcedColors(page, label) {
     const headingStyle = getComputedStyle(heading);
     const focusStyle = getComputedStyle(focusTarget);
     const disabledStyle = getComputedStyle(disabledButton);
+    const completeProgressStyle = getComputedStyle(completeProgressIndicator);
+    const indeterminateProgressStyle = getComputedStyle(indeterminateProgressIndicator);
     const selectionStyle = getComputedStyle(heading, "::selection");
     const marker = status.querySelector("[aria-hidden='true']");
     if (!(marker instanceof HTMLElement)) return { missing: true };
@@ -438,6 +461,15 @@ async function assertForcedColors(page, label) {
       disabledColor: disabledStyle.color,
       disabledOpacity: effectiveOpacity(disabledButton),
       disabledVisible: disabledButton.getBoundingClientRect().width > 0,
+      completeProgressWidth: completeProgressIndicator.getBoundingClientRect().width,
+      indeterminateProgressAnimationName: indeterminateProgressStyle.animationName,
+      indeterminateProgressBorderStyle: indeterminateProgressStyle.borderTopStyle,
+      indeterminateProgressBorderWidth: Number.parseFloat(indeterminateProgressStyle.borderTopWidth),
+      indeterminateProgressOpacity: effectiveOpacity(indeterminateProgressIndicator),
+      indeterminateProgressWidth: indeterminateProgressIndicator.getBoundingClientRect().width,
+      progressTrackWidth: completeProgressIndicator.parentElement?.getBoundingClientRect().width ?? 0,
+      completeProgressVisible: completeProgressStyle.display !== "none"
+        && completeProgressStyle.visibility !== "hidden",
       markerBackground: effectiveBackground(marker),
       markerBorderColor: markerStyle.borderTopColor,
       markerOpacity: effectiveOpacity(marker),
@@ -460,6 +492,7 @@ async function assertForcedColors(page, label) {
     empty: result.emptyOpacity,
     focus: result.focusOpacity,
     heading: result.headingOpacity,
+    indeterminateProgress: result.indeterminateProgressOpacity,
     selection: result.selectionOpacity,
     status: result.markerOpacity,
     surface: result.surfaceOpacity,
@@ -487,6 +520,32 @@ async function assertForcedColors(page, label) {
   );
   if (!result.headingVisible || !result.disabledVisible || !result.statusText) {
     throw new Error(`${label}: forced-colors text or controls are not visible`);
+  }
+  const indeterminateRatio = result.progressTrackWidth > 0
+    ? result.indeterminateProgressWidth / result.progressTrackWidth
+    : 0;
+  const completeRatio = result.progressTrackWidth > 0
+    ? result.completeProgressWidth / result.progressTrackWidth
+    : 0;
+  if (!result.completeProgressVisible
+    || completeRatio < 0.98
+    || indeterminateRatio < 0.25
+    || indeterminateRatio > 0.45
+    || result.indeterminateProgressBorderStyle !== "dashed"
+    || result.indeterminateProgressBorderWidth < 1
+    || result.indeterminateProgressAnimationName !== "none") {
+    throw new Error(
+      `${label}: indeterminate progress must remain a static partial dashed shape in reduced-motion forced-colors `
+      + JSON.stringify({
+        animationName: result.indeterminateProgressAnimationName,
+        borderStyle: result.indeterminateProgressBorderStyle,
+        borderWidth: result.indeterminateProgressBorderWidth,
+        completeRatio,
+        completeWidth: result.completeProgressWidth,
+        ratio: indeterminateRatio,
+        trackWidth: result.progressTrackWidth,
+      }),
+    );
   }
   if (result.focusOutlineStyle === "none" || result.focusOutlineWidth < 2) {
     throw new Error(`${label}: focus outline is not preserved`);

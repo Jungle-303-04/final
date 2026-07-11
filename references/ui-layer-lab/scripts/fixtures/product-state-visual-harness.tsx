@@ -5,6 +5,7 @@ import { ProductStateScreen } from "../../src/product/shared/ui/ProductStateScre
 import { StatusMark } from "../../src/product/shared/ui/StatusMark";
 import { Surface } from "../../src/product/shared/ui/Surface";
 import { Button } from "../../src/product/shared/ui/primitives/button";
+import { Progress } from "../../src/product/shared/ui/primitives/progress";
 import "../../src/product/styles/tokens.css";
 import "../../src/product/styles/foundation.css";
 
@@ -58,6 +59,10 @@ function ProductStateVisualHarness() {
             </p>
           </div>
           <StatusMark label="연결 지연 — 마지막 관측값이 오래되었습니다" tone="warning" />
+          <div className="grid gap-2">
+            <Progress aria-label="완료 진행률" data-visual-progress="complete" value={100} />
+            <Progress aria-label="불확정 진행률" data-visual-progress="indeterminate" value={null} />
+          </div>
           <div className="flex flex-wrap gap-2">
             <Button data-visual-focus-target type="button" variant="outline">포커스 확인</Button>
             <Button disabled type="button" variant="outline">비활성 작업</Button>
