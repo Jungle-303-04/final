@@ -2,7 +2,7 @@
 title: Codex 24시간 실행 진행 기록
 status: active
 date: 2026-07-11
-directive: codex-directive-24h-20260711.md
+directive: codex-directive-reference-pivot-20260711.md
 ---
 
 # Codex 24시간 실행 진행 기록
@@ -89,3 +89,37 @@ Block A는 코드 구현과 비인증 경로 검증까지 완료됐지만, 지�
 - `npm run check` 재실행 결과: 4 files, 22 tests, design guard 41 files, UI catalog audit,
   production build 모두 통과했다.
 - 인증 게이트 판정은 변함없이 401 대기이며 Block B는 시작하지 않았다.
+
+## 2026-07-11 P0 — 철회 문서 제거와 포팅 계약 이관 완료
+
+### 적용
+
+- 정리 커밋: `f79b39036a7a9608f437df4aaa0b39c026434982`
+- 원격 브랜치: `origin/woonyong/ui-layer-lab`
+- 철회된 중앙 뷰 전용 계약, 과거 계획 보고서·지시서, 자체 디자인 계약을 삭제했다.
+- D1~D5, entity identity, strict Zod, request generation, partial/last-valid, cluster URL,
+  실제 API 전용 경계를 `reference-porting-contract.md`로 이관했다.
+- 자체 시각 token 문서는 외부 기준 저장소와 벤치마크 최소선, 접근성 계약만 연결하는
+  최소 bridge로 축소했다.
+- `product-data-contract.md`의 presentation 전용 문구를 provider-neutral 데이터 계약으로 바꿨다.
+- `topology-engine.md`는 명시된 freeze에 따라 수정하지 않았다.
+
+### 검증
+
+```text
+명령: git diff --cached --check
+결과: PASS
+
+명령: 철회 키워드와 삭제 문서 참조 rg 검색
+결과: 피벗 지시, 장기 헌법, 장기 검토 프로토콜을 제외하고 0건
+
+명령: git diff -- docs/spec/frontend/topology-engine.md
+결과: 출력 0건
+```
+
+### 장기 헌법 보존 판정
+
+`topology-engine.md`에는 identity, canonical relation, capability, event ordering, API-only 경계,
+stale/partial/RBAC, LOD, 보안, 검증처럼 뷰와 무관한 장기 규칙이 많아 이번 단계에서는 전체를
+보존했다. 전용 presentation, layout, motion, test, DoD 절은 P1·P2 구현 근거로 사용하지 않는다.
+후속 검토에서 뷰 중립 core를 먼저 추출한 뒤 전용 절을 분리하는 것이 안전하다는 판정이다.
