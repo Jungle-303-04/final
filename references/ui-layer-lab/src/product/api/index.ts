@@ -16,6 +16,7 @@ export { getFleetSummary } from "./fleet";
 export { getRcaTimeline } from "./rca";
 export { listClusters, type ListClustersOptions } from "./clusters";
 export { getCluster } from "./cluster-detail";
+export { getClusterConnectionStatus } from "./cluster-connection";
 export {
   getClusterUsage,
   getCommandStatus,
@@ -58,6 +59,10 @@ export {
   type ClusterAgentStatus,
   type ClusterResponse,
 } from "./cluster-schemas";
+export {
+  clusterConnectionStatusSchema,
+  type ClusterConnectionStatus,
+} from "./cluster-connection-schemas";
 export {
   inventoryResourceDetailSchema,
   inventoryResourceListSchema,
