@@ -25,8 +25,8 @@ export default function WorkflowListView() {
     <div className="grid gap-6">
       <PageHeader
         title="워크플로우"
-        description="레포 변경 감지부터 정책 검증, 승인, 적용까지의 실행 흐름입니다"
-        actions={<Button onClick={() => nav(pathFor('/repos'))}>레포 보기</Button>}
+        description="변경 감지부터 렌더, 정책 검증, 승인, 적용까지 이어지는 실행 흐름입니다."
+        actions={<Button onClick={() => nav(pathFor('/release-flows'))}>릴리즈 플로우 보기</Button>}
       />
 
       <Card>
@@ -35,7 +35,7 @@ export default function WorkflowListView() {
         ) : apps.isError || all.failed ? (
           <EmptyState
             title="워크플로우 조회 실패"
-            description={(error as Error | undefined)?.message ?? '실행 목록을 불러오지 못했습니다'}
+            description={(error as Error | undefined)?.message ?? '실행 목록을 불러오지 못했습니다.'}
             action={<Button size="sm" onClick={() => apps.refetch()}>다시 시도</Button>}
           />
         ) : (
@@ -45,9 +45,9 @@ export default function WorkflowListView() {
             onRowClick={(row) => nav(pathFor(`/workflows/${row.run_id}`))}
             empty={(
               <EmptyState
-                title="실행된 워크플로우가 없습니다"
-                description="레포를 연결하면 첫 커밋 감지 후 실행 기록이 여기에 표시됩니다"
-                action={<Button size="sm" onClick={() => nav(pathFor('/repos'))}>레포 연결</Button>}
+                title="아직 실행된 워크플로우가 없습니다"
+                description="릴리즈 플로우에서 실행을 시작하면 렌더, 검증, 승인, 적용 기록이 여기에 표시됩니다."
+                action={<Button size="sm" onClick={() => nav(pathFor('/release-flows'))}>릴리즈 플로우 열기</Button>}
               />
             )}
             columns={[

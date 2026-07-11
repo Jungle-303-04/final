@@ -175,6 +175,7 @@ function releaseAuditPath(
 
 export function useSaveReleasePlan(planId?: string) {
   const qc = useQueryClient();
+  const { push } = useToast();
   return useMutation({
     mutationFn: (plan: ReleasePlan) =>
       planId
@@ -183,7 +184,17 @@ export function useSaveReleasePlan(planId?: string) {
     onSuccess: data => {
       qc.invalidateQueries({ queryKey: releaseKeys.plans() });
       if (data.plan.plan_id) qc.invalidateQueries({ queryKey: releaseKeys.plan(data.plan.plan_id) });
+      push({
+        tone: 'success',
+        title: planId ? '플랜 수정 완료' : '새 플랜 저장 완료',
+        description: data.plan.name ? `"${data.plan.name}" 플랜이 저장되었습니다.` : '릴리즈 플랜이 저장되었습니다.',
+      });
     },
+    onError: err => push({
+      tone: 'danger',
+      title: planId ? '플랜 수정 실패' : '새 플랜 저장 실패',
+      description: (err as Error).message || '잠시 후 다시 시도해주세요.',
+    }),
   });
 }
 
