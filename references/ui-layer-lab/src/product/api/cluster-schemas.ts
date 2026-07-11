@@ -30,5 +30,25 @@ export const clusterListSchema = z.strictObject({
   clusters: z.array(clusterSummarySchema),
 });
 
+/** Runtime contract for `GET /clusters/{cluster_id}`. */
+export const clusterAgentStatusSchema = z.strictObject({
+  workspace_id: z.string(),
+  cluster_id: z.string(),
+  agent_id: z.string(),
+  status: z.string(),
+  capabilities: z.array(z.string()),
+  details: unknownRecordSchema,
+  last_seen_at: nullableStringSchema,
+  created_at: nullableStringSchema,
+  updated_at: nullableStringSchema,
+});
+
+export const clusterResponseSchema = z.strictObject({
+  cluster: clusterSummarySchema,
+  agents: z.array(clusterAgentStatusSchema),
+});
+
 export type ClusterSummary = z.infer<typeof clusterSummarySchema>;
 export type ClusterList = z.infer<typeof clusterListSchema>;
+export type ClusterAgentStatus = z.infer<typeof clusterAgentStatusSchema>;
+export type ClusterResponse = z.infer<typeof clusterResponseSchema>;
