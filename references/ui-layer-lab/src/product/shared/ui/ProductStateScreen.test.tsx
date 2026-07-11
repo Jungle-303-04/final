@@ -85,7 +85,9 @@ describe("ProductStateScreen", () => {
       />,
     );
 
-    expect(screen.getByRole("button", { name: "다시 시도" })).toBeTruthy();
+    const fallbackRetry = screen.getByRole("button", { name: "다시 시도" });
+    expect(fallbackRetry.className).toContain("max-w-full");
+    expect(fallbackRetry.className).toContain("whitespace-normal");
     rerender(
       <ProductStateScreen
         kind="loading"
