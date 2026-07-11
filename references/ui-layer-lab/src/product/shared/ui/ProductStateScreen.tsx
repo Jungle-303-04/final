@@ -77,18 +77,19 @@ export type ProductStateScreenProps =
       issue: ProductStateIssue & { code: "forbidden" };
       retry?: never;
     })
-  | {
+  | (StateBase & {
+      action?: ReactNode;
       kind: "release";
       placement?: "root";
       issue?: never;
       retry?: never;
-    };
+    });
 
 const stateCopy: Record<ProductStateKind, { eyebrow: string; title: string; body: string }> = {
   loading: {
     eyebrow: "CONTROL PLANE",
     title: "운영 상태를 확인하는 중입니다",
-    body: "세션과 관측 데이터의 최신 계약을 확인하고 있습니다.",
+    body: "인증 세션과 연결 상태를 확인하고 있습니다.",
   },
   empty: {
     eyebrow: "NO DATA",
@@ -113,7 +114,7 @@ const stateCopy: Record<ProductStateKind, { eyebrow: string; title: string; body
   release: {
     eyebrow: "RELEASE GATE",
     title: "API 연결 계층을 검증하고 있습니다",
-    body: "완료 기록이 있는 endpoint만 제품에 연결합니다. 현재 화면은 서버 데이터를 요청하지 않습니다.",
+    body: "완료 기록이 있는 endpoint만 제품에 연결합니다. 인증 세션 외 기능 데이터는 요청하지 않습니다.",
   },
 };
 
@@ -126,6 +127,7 @@ export function ProductStateScreen(props: ProductStateScreenProps) {
   const issue = "issue" in props ? props.issue : undefined;
   const retry = "retry" in props ? props.retry : undefined;
   const loadingPreview = props.kind === "loading" ? props.loadingPreview : undefined;
+  const action = "action" in props ? props.action : undefined;
   const issueKind = isIssueStateKind(kind) ? kind : null;
   const content = (
     <Empty className="w-full max-w-lg items-start rounded-xl border border-solid bg-card p-8 text-left text-card-foreground shadow-sm">
@@ -142,6 +144,7 @@ export function ProductStateScreen(props: ProductStateScreenProps) {
       ) : null}
       {issue && issueKind ? <IssueAlert issue={issue} kind={issueKind} /> : null}
       {retry ? <RetryAction retry={retry} /> : null}
+      {action ? <EmptyContent className="mt-2 max-w-none items-stretch">{action}</EmptyContent> : null}
     </Empty>
   );
 

@@ -5,11 +5,18 @@ import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { ProductShell } from "../../src/product/app/ProductShell";
 import "../../src/product/styles/tokens.css";
 import "../../src/product/styles/foundation.css";
+import type { AuthenticatedAuthState } from "../../src/product/features/auth/authContract";
 
 const root = document.getElementById("root");
 if (!root) throw new Error("ProductShell visual harness root is missing");
 
 const releasedSurfaceIds = new Set(["home", "issues", "timeline"] as const);
+const testAuth: AuthenticatedAuthState = {
+  session: { userId: "visual-user", roles: ["viewer"], workspaceId: "visual-workspace" },
+  signOutIssue: null,
+  signOutPending: false,
+  onSignOut: () => undefined,
+};
 
 createRoot(root).render(
   <StrictMode>
@@ -22,7 +29,7 @@ createRoot(root).render(
     >
       <MemoryRouter initialEntries={["/product"]}>
         <Routes>
-          <Route element={<ProductShell releasedSurfaceIds={releasedSurfaceIds} />}>
+          <Route element={<ProductShell auth={testAuth} releasedSurfaceIds={releasedSurfaceIds} />}>
             <Route path="/product" element={<ShellOutletBoundary />} />
             <Route path="/product/issues" element={<ShellOutletBoundary />} />
             <Route path="/product/timeline" element={<ShellOutletBoundary />} />

@@ -4,6 +4,7 @@ import { BrowserRouter } from "react-router-dom";
 import { createApiComposition } from "./app/apiComposition";
 import { ProductErrorBoundary } from "./app/ProductErrorBoundary";
 import { ProductRouter } from "./app/ProductRouter";
+import { AuthBarrier } from "./features/auth/AuthBarrier";
 import "./styles/tokens.css";
 import "./styles/foundation.css";
 
@@ -32,7 +33,9 @@ function ProductRuntime() {
 
   return (
     <BrowserRouter>
-      <ProductRouter composition={composition} />
+      <AuthBarrier port={composition.auth}>
+        {(auth) => <ProductRouter auth={auth} composition={composition} />}
+      </AuthBarrier>
     </BrowserRouter>
   );
 }

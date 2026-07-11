@@ -9,6 +9,14 @@ import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { ProductShell } from "./ProductShell";
 import { createApiComposition } from "./apiComposition";
 import { ProductRouter } from "./ProductRouter";
+import type { AuthenticatedAuthState } from "../features/auth/authContract";
+
+const testAuth: AuthenticatedAuthState = {
+  session: { userId: "test-user", roles: ["viewer"], workspaceId: "test-workspace" },
+  signOutIssue: null,
+  signOutPending: false,
+  onSignOut: () => undefined,
+};
 
 beforeEach(() => {
   installMatchMedia(false);
@@ -158,7 +166,7 @@ describe("ProductShell keyboard and help interaction", () => {
       expect(xhrSpy).not.toHaveBeenCalled();
       expect(sendBeaconSpy).not.toHaveBeenCalled();
 
-      render(<ProductRouter composition={createApiComposition()} />);
+      render(<ProductRouter auth={testAuth} composition={createApiComposition()} />);
       expect(screen.getByRole("heading", { name: "API 연결 계층을 검증하고 있습니다" })).toBeTruthy();
       expect(screen.queryByRole("navigation")).toBeNull();
       expect(screen.queryByRole("button", { name: "키보드 단축키" })).toBeNull();
@@ -192,7 +200,9 @@ function renderShell() {
       >
         <MemoryRouter initialEntries={["/product"]}>
           <Routes>
-            <Route element={<ProductShell releasedSurfaceIds={new Set(["home", "issues"])} />}>
+            <Route element={(
+              <ProductShell auth={testAuth} releasedSurfaceIds={new Set(["home", "issues"])} />
+            )}>
               <Route path="/product" element={<><p>Home content</p><input aria-label="화면 입력" /></>} />
               <Route path="/product/issues" element={<p>Issue content</p>} />
             </Route>

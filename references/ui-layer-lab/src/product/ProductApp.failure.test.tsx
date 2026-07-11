@@ -14,12 +14,17 @@ vi.mock("./app/apiComposition", async () => {
   const { createProductComposition } = await vi.importActual<
     typeof import("./app/productComposition")
   >("./app/productComposition");
+  const auth = {
+    loadSession: async () => ({ status: "unauthenticated" as const }),
+    signIn: async () => { throw new Error("not used"); },
+    signOut: async () => undefined,
+  };
 
   return {
     createApiComposition() {
       compositionMock.attempts += 1;
       if (compositionMock.shouldFail) throw new Error("private-composition-stack-token");
-      return createProductComposition([]);
+      return createProductComposition([], auth);
     },
   };
 });
@@ -66,7 +71,7 @@ describe("ProductApp composition failure", () => {
     await userEvent.setup().click(screen.getByRole("button", { name: "화면 다시 열기" }));
 
     expect(compositionMock.attempts).toBeGreaterThan(attemptsBeforeRetry);
-    expect(screen.getByRole("heading", { name: "API 연결 계층을 검증하고 있습니다" })).toBeTruthy();
+    expect(await screen.findByRole("heading", { name: "KubeHeal에 로그인" })).toBeTruthy();
     expect(screen.queryByRole("alert")).toBeNull();
-  });
+  }, 15_000);
 });

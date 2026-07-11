@@ -3,6 +3,7 @@ import {
   PRODUCT_ROUTE_CATALOG,
   type ProductSurfaceId,
 } from "./productRoutes";
+import type { AuthPort } from "../features/auth/authContract";
 
 export interface ProductSurfaceRegistration {
   id: ProductSurfaceId;
@@ -10,12 +11,14 @@ export interface ProductSurfaceRegistration {
 }
 
 export interface ProductComposition {
+  auth: AuthPort;
   surfaces: readonly ProductSurfaceRegistration[];
   releasedSurfaceIds: ReadonlySet<ProductSurfaceId>;
 }
 
 export function createProductComposition(
   registrations: readonly ProductSurfaceRegistration[],
+  auth: AuthPort,
 ): ProductComposition {
   const byId = new Map<ProductSurfaceId, ProductSurfaceRegistration>();
 
@@ -38,6 +41,7 @@ export function createProductComposition(
   }
 
   return {
+    auth,
     surfaces,
     releasedSurfaceIds: new Set(surfaces.map((surface) => surface.id)),
   };

@@ -31,6 +31,8 @@ import {
 } from "../shared/ui/primitives/sidebar";
 import { TooltipProvider } from "../shared/ui/primitives/tooltip";
 import { useProductTheme } from "../shared/ui/useProductTheme";
+import { AuthSessionControl } from "../features/auth/AuthSessionControl";
+import type { AuthenticatedAuthState } from "../features/auth/authContract";
 import { ShortcutHelpDialog } from "./ShortcutHelpDialog";
 import {
   productNavigationForReleasedSurfaces,
@@ -42,6 +44,7 @@ import { shellShortcutDefinitions } from "./shortcutRegistry";
 import { useProductShortcuts } from "./useProductShortcuts";
 
 interface ProductShellProps {
+  auth: AuthenticatedAuthState;
   releasedSurfaceIds: ReadonlySet<ProductSurfaceId>;
   defaultSidebarCollapsed?: boolean;
 }
@@ -57,21 +60,23 @@ const routeIcons: Record<ProductRouteIcon, LucideIcon> = {
 };
 
 export function ProductShell({
+  auth,
   releasedSurfaceIds,
   defaultSidebarCollapsed,
 }: ProductShellProps) {
   return (
     <TooltipProvider>
       <SidebarProvider defaultOpen={!defaultSidebarCollapsed}>
-        <ProductShellFrame releasedSurfaceIds={releasedSurfaceIds} />
+        <ProductShellFrame auth={auth} releasedSurfaceIds={releasedSurfaceIds} />
       </SidebarProvider>
     </TooltipProvider>
   );
 }
 
 function ProductShellFrame({
+  auth,
   releasedSurfaceIds,
-}: Pick<ProductShellProps, "releasedSurfaceIds">) {
+}: Pick<ProductShellProps, "auth" | "releasedSurfaceIds">) {
   const [isShortcutHelpOpen, setShortcutHelpOpen] = useState(false);
   const location = useLocation();
   const { isMobile } = useSidebar();
@@ -152,7 +157,7 @@ function ProductShellFrame({
       </Sidebar>
 
       <SidebarInset className="flex min-h-svh flex-col bg-background text-foreground">
-        <header className="sticky top-0 z-30 flex h-14 items-center justify-between gap-4 border-b bg-background/95 px-4 backdrop-blur supports-[backdrop-filter]:bg-background/75">
+        <header className="sticky top-0 z-30 flex min-h-14 items-center justify-between gap-4 border-b bg-background/95 px-4 py-2 backdrop-blur supports-[backdrop-filter]:bg-background/75">
           <div className="flex min-w-0 items-center gap-2">
             {isMobile ? <ProductSidebarTrigger labelMode="sr-only" /> : null}
             <div className="min-w-0">
@@ -161,6 +166,7 @@ function ProductShellFrame({
             </div>
           </div>
           <div className="flex items-center gap-1">
+            <AuthSessionControl auth={auth} mode="toolbar" />
             <ShortcutHelpDialog
               definitions={shortcutDefinitions}
               onOpenChange={setShortcutHelpOpen}

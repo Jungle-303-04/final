@@ -33,6 +33,21 @@ describe("ProductStateScreen", () => {
     expect(screen.queryByRole("button")).toBeNull();
   });
 
+  it("accepts an explicit authenticated release action without changing state semantics", () => {
+    render(
+      <ProductStateScreen
+        action={<button type="button">세션 종료</button>}
+        kind="release"
+      />,
+    );
+
+    expect(screen.getByRole("button", { name: "세션 종료" })).toBeTruthy();
+    expect(screen.getByRole("heading", {
+      name: "API 연결 계층을 검증하고 있습니다",
+    })).toBeTruthy();
+    expect(screen.queryByRole("alert")).toBeNull();
+  });
+
   it("exposes hard-error detail and a single retry action", async () => {
     const onRetry = vi.fn(async () => undefined);
     render(
@@ -163,6 +178,8 @@ function assertProductStateTypeContracts() {
   void <ProductStateScreen kind="error" issue={new Error("raw stack")} />;
   // @ts-expect-error 401 belongs to the session barrier, not the forbidden state
   void <ProductStateScreen kind="forbidden" issue={{ code: "unauthorized" }} />;
+  // @ts-expect-error state-specific actions are available only at the authenticated release gate
+  void <ProductStateScreen action={<button type="button" />} kind="loading" />;
 }
 
 void assertProductStateTypeContracts;

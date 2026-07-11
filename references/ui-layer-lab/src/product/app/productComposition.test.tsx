@@ -1,13 +1,20 @@
 import type { ComponentType } from "react";
 import { describe, expect, it } from "vitest";
 import { createProductComposition } from "./productComposition";
+import type { AuthPort } from "../features/auth/authContract";
 
 const EmptySurface: ComponentType = () => null;
+const testAuthPort: AuthPort = {
+  loadSession: async () => ({ status: "unauthenticated" }),
+  signIn: async () => { throw new Error("not used"); },
+  signOut: async () => undefined,
+};
 
 describe("product composition", () => {
   it("keeps the production release closed when no approved surface is registered", () => {
-    const composition = createProductComposition([]);
+    const composition = createProductComposition([], testAuthPort);
 
+    expect(composition.auth).toBe(testAuthPort);
     expect(composition.surfaces).toEqual([]);
     expect([...composition.releasedSurfaceIds]).toEqual([]);
   });
@@ -17,7 +24,7 @@ describe("product composition", () => {
       { id: "timeline", Component: EmptySurface },
       { id: "home", Component: EmptySurface },
       { id: "issues", Component: EmptySurface },
-    ]);
+    ], testAuthPort);
 
     expect(composition.surfaces.map((surface) => surface.id)).toEqual([
       "home",
@@ -30,6 +37,6 @@ describe("product composition", () => {
     expect(() => createProductComposition([
       { id: "home", Component: EmptySurface },
       { id: "home", Component: EmptySurface },
-    ])).toThrow(/duplicate product surface: home/u);
+    ], testAuthPort)).toThrow(/duplicate product surface: home/u);
   });
 });
