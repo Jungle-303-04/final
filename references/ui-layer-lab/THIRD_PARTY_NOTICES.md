@@ -20,6 +20,10 @@ components as implementation references:
 | `src/components/ui/kbd.tsx` | `src/product/shared/ui/primitives/kbd.tsx` | product-relative utility import, corrected `KbdGroup` element prop type |
 | `src/components/ui/table.tsx` | `src/product/shared/ui/primitives/table.tsx` | product-relative utility import |
 | `src/components/ui/toggle.tsx` | `src/product/shared/ui/primitives/toggle.tsx` | product-relative utility import, compact icon size variant |
+| `src/components/ui/alert.tsx` | `src/product/shared/ui/primitives/alert.tsx` | product-relative utility import, overridable live-region role |
+| `src/components/ui/empty.tsx` | `src/product/shared/ui/primitives/empty.tsx` | product-relative utility import, semantic paragraph correction |
+| `src/components/ui/skeleton.tsx` | `src/product/shared/ui/primitives/skeleton.tsx` | product-relative utility import, hidden decorative default and reduced-motion behavior |
+| `src/components/ui/spinner.tsx` | `src/product/shared/ui/primitives/spinner.tsx` | product-relative utility import, localized status label and reduced-motion behavior |
 | `src/index.css` Base Nova variables | `src/product/styles/tokens.css` | lab/vendor sources removed, product-only source scan, two-theme contract, product status aliases |
 
 The product does not import the generated catalog or vendor snapshot at runtime. These adaptations are

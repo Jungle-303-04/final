@@ -5,6 +5,7 @@ import userEvent from "@testing-library/user-event";
 import { createRef } from "react";
 import { afterEach, describe, expect, it } from "vitest";
 import { Button } from "./button";
+import { Alert, AlertDescription, AlertTitle } from "./alert";
 import {
   Dialog,
   DialogContent,
@@ -13,6 +14,13 @@ import {
   DialogTrigger,
 } from "./dialog";
 import { Kbd, KbdGroup } from "./kbd";
+import {
+  Empty,
+  EmptyDescription,
+  EmptyHeader,
+} from "./empty";
+import { Skeleton } from "./skeleton";
+import { Spinner } from "./spinner";
 import {
   Table,
   TableBody,
@@ -96,5 +104,41 @@ describe("product-owned primitive accessibility", () => {
     expect(screen.getByRole("columnheader", { name: "이름" }).getAttribute("aria-sort")).toBe("ascending");
     expect(screen.getAllByRole("row")).toHaveLength(2);
     expect(screen.getAllByRole("cell")).toHaveLength(2);
+  });
+
+  it("keeps alert and empty copy semantic while hiding visual skeletons", () => {
+    const { container } = render(
+      <>
+        <Alert>
+          <AlertTitle>부분 데이터</AlertTitle>
+          <AlertDescription>권한이 있는 범위만 표시합니다.</AlertDescription>
+        </Alert>
+        <Alert aria-live="polite" role="status">
+          <AlertTitle>백그라운드 갱신 실패</AlertTitle>
+        </Alert>
+        <Empty>
+          <EmptyHeader>
+            <h2>표시할 리소스 없음</h2>
+            <EmptyDescription>현재 필터와 일치하는 리소스가 없습니다.</EmptyDescription>
+          </EmptyHeader>
+        </Empty>
+        <Skeleton />
+      </>,
+    );
+
+    expect(screen.getByRole("alert").textContent).toContain("부분 데이터");
+    expect(screen.getByRole("status").textContent).toContain("백그라운드 갱신 실패");
+    expect(screen.getByText("현재 필터와 일치하는 리소스가 없습니다.").tagName).toBe("P");
+    const skeleton = container.querySelector('[data-slot="skeleton"]');
+    expect(skeleton?.getAttribute("aria-hidden")).toBe("true");
+    expect(skeleton?.className).toContain("motion-reduce:animate-none");
+  });
+
+  it("gives the spinner a localized status name", () => {
+    const { rerender } = render(<Spinner />);
+
+    expect(screen.getByRole("status", { name: "로딩 중" })).toBeTruthy();
+    rerender(<Spinner decorative data-icon="inline-start" />);
+    expect(screen.queryByRole("status")).toBeNull();
   });
 });
