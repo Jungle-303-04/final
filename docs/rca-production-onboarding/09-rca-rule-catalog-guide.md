@@ -82,6 +82,10 @@ rules:
 | `deployment_gitops.yaml` | `ProgressDeadlineExceeded`, `Rollout failed`, `GitOps Sync Failed` | Deployment rollout 또는 GitOps sync가 실패한 상태다. rollout deadline, replica unavailable, manifest validation 문제를 다룬다. |
 | `dependencies.yaml` | `DB connection failed` | 애플리케이션이 DB 같은 외부 의존성에 연결하지 못하는 상태다. 연결 경로 문제와 credential/config 문제를 구분한다. |
 | `external_dependencies.yaml` | `Redis unavailable`, `Kafka consumer lag`, `External API timeout`, `DB/cache/queue dependency failure` | Redis, Kafka, 외부 API, queue/cache 계열 dependency 장애다. exporter metric, log, trace를 함께 본다. |
+| `autoscaling.yaml` | `HPA scaling failed`, `FailedGetResourceMetric`, `FailedComputeMetricsReplicas` | HPA가 metrics를 가져오지 못하거나 resource request/max replica 조건 때문에 scale 계산 또는 확장에 실패하는 상태다. |
+| `node_health.yaml` | `NodeNotReady`, `KubeletNotReady`, `Pod evicted`, `Evicted` | 노드 heartbeat/runtime/network 문제와 kubelet eviction 계열이다. Node condition, Pod eviction event, node metric/log를 함께 본다. |
+| `storage_volume.yaml` | `FailedMount`, `VolumeMountFailed`, `FailedAttachVolume`, `VolumeAttachFailed` | PVC 바인딩, CSI driver, volume attach, StorageClass/topology 문제처럼 Pod volume 준비가 실패하는 상태다. |
+| `runtime_config.yaml` | `ConfigMap not found`, `CreateContainerConfigError`, `Invalid environment config` | ConfigMap 참조, key, env 값, config volume mount 문제처럼 런타임 설정 때문에 컨테이너 생성/시작이 실패하는 상태다. |
 | `security_policy.yaml` | `Secret not found` | Secret 참조 또는 Secret key 누락으로 컨테이너 생성/실행이 실패하는 상태다. 민감값은 보지 않고 reference/key 존재 여부만 근거로 삼는다. |
 | `policy_rejection.yaml` | `Admission / policy rejection`, `Admission webhook denied`, `RBAC denied`, `Certificate expired`, `TLS handshake failed` | Admission/RBAC/TLS 정책 거절 계열이다. 보안 영향이 크므로 값 자체보다 event/log와 안전한 reference 중심으로 판단한다. |
 | `readiness.yaml` | `Probe failure`, `ReadinessProbeFailed`, `LivenessProbeFailed`, `PodNotReady`, `Service has no ready endpoints`, `ServiceEndpointsEmpty` | Probe와 Service endpoint readiness 계열이다. probe path/port/timing 문제, 실제 app health 실패, selector/endpoint/port 문제를 구분한다. |
