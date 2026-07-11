@@ -62,6 +62,8 @@ const structuredDetailSchema = z.object({
 interface ResponseBody {
   value: unknown;
   parseError: unknown | null;
+  empty: boolean;
+  rawEmpty: boolean;
 }
 
 interface ErrorMetadata {
@@ -75,26 +77,7 @@ export async function apiRequest<TSchema extends z.ZodType>(
   schema: TSchema,
   init: RequestInit = {},
 ): Promise<z.output<TSchema>> {
-  const method = (init.method ?? "GET").toUpperCase();
-  const headers = new Headers(init.headers);
-  headers.set("accept", "application/json");
-
-  if (STATE_CHANGING_METHODS.has(method)) {
-    headers.set(CSRF_HEADER, CSRF_VALUE);
-  }
-
-  let response: Response;
-  try {
-    response = await fetch(path, {
-      ...init,
-      method,
-      headers,
-      credentials: "include",
-    });
-  } catch (cause) {
-    if (isAbortError(cause)) throw cause;
-    throw new ApiError("network", "API request could not be completed.", { cause });
-  }
+  const response = await request(path, init);
 
   const body = await readResponseBody(response);
 
@@ -120,6 +103,48 @@ export async function apiRequest<TSchema extends z.ZodType>(
   return result.data;
 }
 
+export async function apiRequestNoContent(
+  path: ApiPath,
+  init: RequestInit = {},
+): Promise<void> {
+  const response = await request(path, init);
+  const body = await readResponseBody(response);
+
+  if (!response.ok) {
+    throw httpError(response, body.value);
+  }
+
+  if ((response.status !== 204 && response.status !== 205) || !body.rawEmpty) {
+    throw new ApiError(
+      "invalid-payload",
+      "API response did not match the 204/205 no-content contract.",
+      { status: response.status, cause: body.parseError ?? body.value },
+    );
+  }
+}
+
+async function request(path: ApiPath, init: RequestInit): Promise<Response> {
+  const method = (init.method ?? "GET").toUpperCase();
+  const headers = new Headers(init.headers);
+  headers.set("accept", "application/json");
+
+  if (STATE_CHANGING_METHODS.has(method)) {
+    headers.set(CSRF_HEADER, CSRF_VALUE);
+  }
+
+  try {
+    return await fetch(path, {
+      ...init,
+      method,
+      headers,
+      credentials: "include",
+    });
+  } catch (cause) {
+    if (isAbortError(cause)) throw cause;
+    throw new ApiError("network", "API request could not be completed.", { cause });
+  }
+}
+
 async function readResponseBody(response: Response): Promise<ResponseBody> {
   let text: string;
   try {
@@ -133,14 +158,16 @@ async function readResponseBody(response: Response): Promise<ResponseBody> {
     return {
       value: undefined,
       parseError: new Error("Response body was empty."),
+      empty: true,
+      rawEmpty: text.length === 0,
     };
   }
 
   try {
     const value: unknown = JSON.parse(text);
-    return { value, parseError: null };
+    return { value, parseError: null, empty: false, rawEmpty: false };
   } catch (parseError) {
-    return { value: undefined, parseError };
+    return { value: undefined, parseError, empty: false, rawEmpty: false };
   }
 }
 
