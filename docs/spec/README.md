@@ -92,13 +92,14 @@
 - [frontend/api-needs](frontend/api-needs.md)
 - [frontend/codex-directive-goalmode-20260711](frontend/codex-directive-goalmode-20260711.md)
 - [frontend/codex-progress-20260711](frontend/codex-progress-20260711.md)
+- [frontend/final-questions](frontend/final-questions.md)
 - [frontend/product-data-contract](frontend/product-data-contract.md)
 - [frontend/reference-feature-inventory](frontend/reference-feature-inventory.md)
 - [frontend/reference-contract-map](frontend/reference-contract-map.md)
 - [frontend/reference-porting-contract](frontend/reference-porting-contract.md)
 
-위 목록만 현재 frontend 구현의 활성 문서다. `final-questions.md`는 해당 단계에서 생성한 뒤 색인한다.
-같은 디렉터리의 `status: archived` 문서는 현재 작업에 참조하지 않는다.
+위 목록만 현재 frontend 구현의 활성 문서다. 같은 디렉터리의 `status: archived` 문서는 현재 작업에
+참조하지 않는다.
 
 ### frontend 보존 링크
 

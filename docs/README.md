@@ -347,6 +347,7 @@ Target / Telemetry 선형 작업 문서는 아래에 있다.
 - [spec/frontend/codex-directive-goalmode-20260711](spec/frontend/codex-directive-goalmode-20260711.md)
 - [spec/frontend/codex-directive-reference-pivot-20260711](spec/frontend/codex-directive-reference-pivot-20260711.md) — archived, 현재 구현 참조 금지
 - [spec/frontend/codex-progress-20260711](spec/frontend/codex-progress-20260711.md)
+- [spec/frontend/final-questions](spec/frontend/final-questions.md)
 - [spec/frontend/product-data-contract](spec/frontend/product-data-contract.md)
 - [spec/frontend/reference-feature-inventory](spec/frontend/reference-feature-inventory.md)
 - [spec/frontend/reference-contract-map](spec/frontend/reference-contract-map.md)
