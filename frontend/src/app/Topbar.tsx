@@ -1,4 +1,5 @@
 import type { TopbarProps } from "./shell.types";
+import { Button } from "../design-system";
 
 function MenuIcon() {
   return (
@@ -18,6 +19,7 @@ export function Topbar({
   compactSidebarOpen,
   compactTriggerRef,
   breadcrumbs,
+  scope,
   search,
   status,
   themeControl,
@@ -29,19 +31,20 @@ export function Topbar({
   return (
     <header className="app-topbar" data-shell-region="topbar">
       <div className="app-topbar__scope">
-        <button
+        <Button
           ref={compactTriggerRef}
           className="app-topbar__navigation-trigger"
-          type="button"
+          size="icon"
+          variant="ghost"
           aria-label={messages.openNavigation}
           aria-controls={sidebarId}
           aria-expanded={compactSidebarOpen}
           onClick={() => onCompactSidebarOpenChange(true)}
         >
           <MenuIcon />
-        </button>
+        </Button>
 
-        {breadcrumbs && breadcrumbs.length > 0 ? (
+        {scope ?? (breadcrumbs && breadcrumbs.length > 0 ? (
           <nav
             className="app-topbar__breadcrumbs"
             aria-label={messages.breadcrumbs}
@@ -71,7 +74,7 @@ export function Topbar({
               })}
             </ol>
           </nav>
-        ) : null}
+        ) : null)}
       </div>
 
       {search ? (

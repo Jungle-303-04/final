@@ -1,3 +1,4 @@
+@import "./design-system.css";
 @import "@fontsource-variable/geist";
 
 * {
@@ -7,9 +8,9 @@
 html {
   min-width: 320px;
   min-height: 100%;
-  background: var(--canvas, #ffffff);
-  color: var(--text, #09090b);
-  font-family: "Geist Variable", "Pretendard", system-ui, sans-serif;
+  background: var(--ds-background);
+  color: var(--ds-foreground);
+  font-family: var(--ds-font-sans);
   font-synthesis: none;
   text-rendering: optimizeLegibility;
 }
@@ -34,39 +35,18 @@ body,
   --focus-ring: var(--shell-color-focus);
   --hover-wash: var(--shell-color-surface-muted);
   --healthy-fill: transparent;
-  --healthy-stroke: #22c55e;
+  --healthy-stroke: var(--ds-status-success);
   --neutral-fill: transparent;
-  --neutral-stroke: #a1a1aa;
+  --neutral-stroke: var(--ds-status-neutral);
   --degraded-fill: transparent;
-  --degraded-stroke: #f59e0b;
+  --degraded-stroke: var(--ds-status-warning);
   --unhealthy-fill: transparent;
-  --unhealthy-stroke: #ef4444;
+  --unhealthy-stroke: var(--ds-destructive);
   --unknown-fill: transparent;
-  --unknown-stroke: #71717a;
+  --unknown-stroke: var(--ds-muted-foreground);
   --warning-fill: var(--degraded-fill);
   --warning-stroke: var(--degraded-stroke);
   --warning-text: var(--text);
-}
-
-.app-shell[data-theme="light"] {
-  --healthy-stroke: #16a34a;
-  --neutral-stroke: #71717a;
-  --degraded-stroke: #d97706;
-  --unhealthy-stroke: #dc2626;
-  --unknown-stroke: #71717a;
-}
-
-.app-shell[data-theme="high-contrast"] {
-  --healthy-fill: transparent;
-  --healthy-stroke: #00ff9c;
-  --neutral-fill: transparent;
-  --neutral-stroke: #ffffff;
-  --degraded-fill: transparent;
-  --degraded-stroke: #ffd400;
-  --unhealthy-fill: transparent;
-  --unhealthy-stroke: #ff4d4d;
-  --unknown-fill: transparent;
-  --unknown-stroke: #ffffff;
 }
 
 .product-brand,
@@ -81,7 +61,7 @@ body,
 
 .product-brand {
   min-width: 0;
-  gap: 9px;
+  gap: var(--ds-space-2);
 }
 
 .product-brand__mark {
@@ -90,7 +70,7 @@ body,
   flex: 0 0 auto;
   justify-content: center;
   border: 1px solid var(--shell-color-sidebar-border);
-  border-radius: 6px;
+  border-radius: var(--ds-radius-sm);
   color: var(--shell-color-sidebar-emphasis);
   background: var(--shell-color-sidebar);
 }
@@ -139,24 +119,51 @@ body,
   box-shadow: none;
 }
 
+.product-scope-selectors {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: var(--ds-space-1);
+}
+
+.product-scope-selectors .connection-indicator {
+  min-height: var(--ds-control-height-sm);
+  padding-inline: var(--ds-space-1-5);
+}
+
+.product-command-search {
+  width: 100%;
+  justify-content: flex-start;
+  color: var(--ds-muted-foreground);
+  box-shadow: none;
+}
+
+.product-command-search > span {
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
+  text-align: start;
+  text-overflow: ellipsis;
+}
+
+.product-command-search kbd {
+  padding: var(--ds-space-0-5) var(--ds-space-1-5);
+  border: 1px solid var(--ds-border);
+  border-radius: var(--ds-radius-xs);
+  color: var(--ds-muted-foreground);
+  background: var(--ds-background);
+  font-family: var(--ds-font-mono);
+  font-size: var(--ds-text-xs);
+  font-weight: 500;
+}
+
 .topbar-icon-button,
 .sidebar-footer-action {
   justify-content: center;
-  border: 1px solid var(--shell-color-border);
-  border-radius: 6px;
-  background: transparent;
-  color: var(--shell-color-text-muted);
 }
 
 .topbar-icon-button {
-  width: 32px;
-  height: 32px;
-  cursor: pointer;
-}
-
-.topbar-icon-button:hover {
-  color: var(--shell-color-text);
-  background: var(--shell-color-surface-muted);
+  flex: 0 0 auto;
 }
 
 .topbar-icon-button svg,
@@ -166,11 +173,6 @@ body,
 
 .sidebar-footer-action {
   width: 100%;
-  min-height: 38px;
-  gap: 10px;
-  border-color: var(--shell-color-sidebar-border);
-  background: transparent;
-  color: var(--shell-color-sidebar-muted);
 }
 
 button,
@@ -183,10 +185,10 @@ button {
   color: inherit;
 }
 
-button:focus-visible,
-select:focus-visible,
+button:not(.ds-button):focus-visible,
+select:not(.ds-native-select__control):focus-visible,
 input:focus-visible {
-  outline: 2px solid var(--focus-ring, #18181b);
+  outline: 2px solid var(--focus-ring);
   outline-offset: 2px;
 }
 
@@ -207,8 +209,8 @@ input:focus-visible {
   *::before,
   *::after {
     scroll-behavior: auto !important;
-    animation-duration: 0.01ms !important;
+    animation-duration: var(--ds-motion-duration-reduced) !important;
     animation-iteration-count: 1 !important;
-    transition-duration: 0.01ms !important;
+    transition-duration: var(--ds-motion-duration-reduced) !important;
   }
 }

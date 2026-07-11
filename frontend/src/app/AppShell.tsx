@@ -62,6 +62,7 @@ export function AppShell({
   sidebarBrand,
   sidebarFooter,
   breadcrumbs,
+  topbarScope,
   topbarSearch,
   topbarStatus,
   topbarTheme,
@@ -156,6 +157,7 @@ export function AppShell({
           compactSidebarOpen={compactSidebarOpen}
           compactTriggerRef={compactTriggerRef}
           breadcrumbs={breadcrumbs}
+          scope={topbarScope}
           search={topbarSearch}
           status={topbarStatus}
           themeControl={topbarTheme}
