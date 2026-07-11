@@ -11,7 +11,24 @@ const productUrl = `${baseUrl}/product`;
 const stateHarnessUrl = `${baseUrl}/scripts/fixtures/product-state-visual-harness.html`;
 const shellHarnessUrl = `${baseUrl}/scripts/fixtures/product-shell-visual-harness.html`;
 const outputDir = new URL("../output/playwright/", import.meta.url).pathname;
-const releaseSelectors = ["[data-slot='empty']", "[data-slot='badge']", "h1", "p"];
+const authLoginSelectors = [
+  "[data-slot='card']",
+  "[data-slot='card-header']",
+  "[data-slot='card-content']",
+  "[data-slot='field-group']",
+  "[data-slot='field']",
+  "[data-slot='input']",
+  "[data-slot='button']",
+  "form",
+  "h1",
+  "label",
+];
+const authStateSelectors = [
+  "[data-slot='empty']",
+  "[data-slot='badge']",
+  "h1",
+  "p",
+];
 const stateSelectors = [
   "[data-slot='empty']",
   "[data-slot='surface']",
@@ -52,45 +69,93 @@ const shellSelectors = [
 ];
 const visualScenarios = [
   {
-    id: "release-desktop-light",
+    id: "auth-unauthenticated-desktop-light",
     url: productUrl,
-    heading: "API 연결 계층을 검증하고 있습니다",
-    requiredSelectors: releaseSelectors,
+    authSession: "unauthenticated",
+    heading: "KubeHeal에 로그인",
+    requiredSelectors: authLoginSelectors,
     viewport: { width: 1440, height: 1000 },
     theme: "light",
     colorScheme: "light",
     forcedColors: "none",
   },
   {
-    id: "release-mobile-dark",
+    id: "auth-unauthenticated-mobile-dark",
     url: productUrl,
-    heading: "API 연결 계층을 검증하고 있습니다",
-    requiredSelectors: releaseSelectors,
+    authSession: "unauthenticated",
+    heading: "KubeHeal에 로그인",
+    requiredSelectors: authLoginSelectors,
     viewport: { width: 390, height: 844 },
     theme: "dark",
     colorScheme: "dark",
     forcedColors: "none",
   },
   {
-    id: "release-reflow-320-light",
+    id: "auth-unauthenticated-reflow-320-light",
     url: productUrl,
-    heading: "API 연결 계층을 검증하고 있습니다",
-    requiredSelectors: releaseSelectors,
+    authSession: "unauthenticated",
+    heading: "KubeHeal에 로그인",
+    requiredSelectors: authLoginSelectors,
     viewport: { width: 320, height: 800 },
     theme: "light",
     colorScheme: "light",
     forcedColors: "none",
   },
   {
-    id: "release-text-resize-200-light",
+    id: "auth-unauthenticated-text-resize-200-light",
     url: productUrl,
-    heading: "API 연결 계층을 검증하고 있습니다",
-    requiredSelectors: releaseSelectors,
+    authSession: "unauthenticated",
+    heading: "KubeHeal에 로그인",
+    requiredSelectors: authLoginSelectors,
     viewport: { width: 640, height: 800 },
     theme: "light",
     colorScheme: "light",
     forcedColors: "none",
     rootFontScale: 2,
+  },
+  {
+    id: "auth-unauthenticated-forced-colors",
+    url: productUrl,
+    authSession: "unauthenticated",
+    heading: "KubeHeal에 로그인",
+    requiredSelectors: authLoginSelectors,
+    viewport: { width: 1024, height: 900 },
+    theme: "light",
+    colorScheme: "light",
+    forcedColors: "active",
+  },
+  {
+    id: "auth-authenticated-release-light",
+    url: productUrl,
+    authSession: "authenticated",
+    heading: "API 연결 계층을 검증하고 있습니다",
+    requiredSelectors: authStateSelectors,
+    viewport: { width: 1440, height: 1000 },
+    theme: "light",
+    colorScheme: "light",
+    forcedColors: "none",
+  },
+  {
+    id: "auth-session-error-light",
+    url: productUrl,
+    authSession: "error",
+    heading: "검증된 응답을 읽지 못했습니다",
+    requiredSelectors: [...authStateSelectors, "[role='alert']", "[data-slot='button']"],
+    viewport: { width: 1024, height: 900 },
+    theme: "light",
+    colorScheme: "light",
+    forcedColors: "none",
+  },
+  {
+    id: "auth-session-loading-light",
+    url: productUrl,
+    authSession: "loading",
+    heading: "운영 상태를 확인하는 중입니다",
+    requiredSelectors: [...authStateSelectors, "[data-slot='loading-preview']"],
+    viewport: { width: 1024, height: 900 },
+    theme: "light",
+    colorScheme: "light",
+    forcedColors: "none",
   },
   {
     id: "state-reflow-320-light",
@@ -233,34 +298,14 @@ try {
   serverReady = true;
   assertServerAlive();
   browser = await chromium.launch({ headless: true });
-  const page = await browser.newPage();
-  const errors = [];
-  const apiRequests = [];
-  const sockets = [];
-
-  page.on("console", (message) => {
-    if (message.type() === "error" && !message.text().includes("favicon")) errors.push(message.text());
-  });
-  page.on("pageerror", (error) => errors.push(error.message));
-  page.on("request", (request) => {
-    if (isApiPath(request.url())) apiRequests.push(request.url());
-  });
-  page.on("websocket", (socket) => {
-    if (isApiPath(socket.url())) sockets.push(socket.url());
-  });
-
-  await page.goto(productUrl, { waitUntil: "networkidle" });
   for (const scenario of visualScenarios) {
     assertServerAlive();
-    await captureScenario(page, scenario);
+    await runVisualScenario(browser, scenario);
   }
   assertServerAlive();
 
-  if (errors.length) throw new Error(`product visual console errors\n${errors.join("\n")}`);
-  if (apiRequests.length) throw new Error(`visual gate made API requests\n${apiRequests.join("\n")}`);
-  if (sockets.length) throw new Error(`visual gate opened API WebSockets\n${sockets.join("\n")}`);
   console.log(
-    `product visual gate passed (${visualScenarios.map(({ id }) => id).join(", ")}; network-silent)`,
+    `product visual gate passed (${visualScenarios.map(({ id }) => id).join(", ")}; isolated contexts; exact auth-session request; feature-network/websocket-silent)`,
   );
 } finally {
   try {
@@ -274,15 +319,179 @@ try {
   }
 }
 
-async function captureScenario(page, scenario) {
-  await page.setViewportSize(scenario.viewport);
-  await page.emulateMedia({
+async function runVisualScenario(browserInstance, scenario) {
+  const context = await browserInstance.newContext({
     colorScheme: scenario.colorScheme,
     forcedColors: scenario.forcedColors,
     reducedMotion: "reduce",
+    viewport: scenario.viewport,
   });
-  await page.evaluate((theme) => localStorage.setItem("kubeheal-theme", theme), scenario.theme);
-  await page.goto(scenario.url, { waitUntil: "networkidle" });
+  await context.addInitScript((theme) => {
+    localStorage.setItem("kubeheal-theme", theme);
+  }, scenario.theme);
+
+  const page = await context.newPage();
+  const errors = [];
+  const apiRequests = [];
+  const networkRequests = [];
+  const sockets = [];
+  const authStub = await installAuthSessionStub(page, scenario.authSession);
+
+  page.on("console", (message) => {
+    const text = message.text();
+    if (message.type() === "error"
+      && !text.includes("favicon")
+      && !isExpectedAuthSessionConsoleNoise(text, scenario.authSession)) {
+      errors.push(message.text());
+    }
+  });
+  page.on("pageerror", (error) => errors.push(error.message));
+  page.on("request", (request) => {
+    const record = `${request.method()} ${request.url()} (${request.resourceType()})`;
+    const authSessionRequest = isExactAuthSessionRequest(request);
+    if (isApiPath(request.url())) {
+      apiRequests.push({
+        method: request.method(),
+        resourceType: request.resourceType(),
+        url: request.url(),
+      });
+    }
+    if (!authSessionRequest && isUnexpectedFeatureNetworkRequest(request)) {
+      networkRequests.push(record);
+    }
+  });
+  page.on("websocket", (socket) => {
+    if (!isViteDevelopmentSocket(socket.url())) sockets.push(socket.url());
+  });
+
+  try {
+    await captureScenario(page, scenario);
+    assertScenarioNetworkContract(scenario, {
+      apiRequests,
+      errors,
+      networkRequests,
+      sockets,
+    });
+  } finally {
+    await authStub.release();
+    await context.close();
+  }
+}
+
+async function installAuthSessionStub(page, authSession) {
+  if (!authSession) return { release: async () => {} };
+
+  let releaseLoading = () => {};
+  let loadingRouteCompletion = null;
+  const loadingGate = authSession === "loading"
+    ? new Promise((resolve) => { releaseLoading = resolve; })
+    : null;
+
+  await page.route("**/api/auth/session", async (route) => {
+    if (authSession === "loading") {
+      loadingRouteCompletion = (async () => {
+        await loadingGate;
+        try {
+          await route.abort("timedout");
+        } catch {
+          // The isolated context may already be closing after the loading screenshot.
+        }
+      })();
+      await loadingRouteCompletion;
+      return;
+    }
+
+    if (authSession === "authenticated") {
+      await route.fulfill({
+        contentType: "application/json",
+        status: 200,
+        body: JSON.stringify({
+          authenticated: true,
+          user_id: "visual-gate-user",
+          roles: ["viewer"],
+          workspace_id: "visual-gate-workspace",
+        }),
+      });
+      return;
+    }
+
+    if (authSession === "unauthenticated") {
+      await route.fulfill({
+        contentType: "application/json",
+        status: 401,
+        body: JSON.stringify({ detail: "visual gate unauthenticated session" }),
+      });
+      return;
+    }
+
+    if (authSession === "error") {
+      await route.fulfill({
+        contentType: "application/json",
+        status: 503,
+        body: JSON.stringify({ detail: "visual gate session unavailable" }),
+      });
+      return;
+    }
+
+    throw new Error(`Unsupported visual auth session state: ${authSession}`);
+  });
+
+  return {
+    async release() {
+      releaseLoading();
+      await loadingRouteCompletion;
+    },
+  };
+}
+
+function assertScenarioNetworkContract(
+  scenario,
+  { apiRequests, errors, networkRequests, sockets },
+) {
+  const authSessionRequests = apiRequests.filter((request) => (
+    request.method === "GET" && isExactAuthSessionUrl(request.url)
+  ));
+  const unexpectedApiRequests = apiRequests.filter((request) => (
+    request.method !== "GET" || !isExactAuthSessionUrl(request.url)
+  ));
+  const formatRequests = (requests) => requests.map((request) => (
+    typeof request === "string"
+      ? request
+      : `${request.method} ${request.url} (${request.resourceType})`
+  )).join("\n");
+
+  if (errors.length) {
+    throw new Error(`${scenario.id}: visual console errors\n${errors.join("\n")}`);
+  }
+  if (unexpectedApiRequests.length) {
+    throw new Error(
+      `${scenario.id}: visual gate made unexpected API requests\n${formatRequests(unexpectedApiRequests)}`,
+    );
+  }
+  const expectedAuthSessionRequests = scenario.authSession ? 1 : 0;
+  if (authSessionRequests.length !== expectedAuthSessionRequests) {
+    throw new Error(
+      `${scenario.id}: expected ${expectedAuthSessionRequests} exact GET /api/auth/session request, `
+      + `received ${authSessionRequests.length}\n${formatRequests(apiRequests)}`,
+    );
+  }
+  if (networkRequests.length) {
+    throw new Error(
+      `${scenario.id}: visual gate made unexpected feature or external network requests\n`
+      + formatRequests(networkRequests),
+    );
+  }
+  if (sockets.length) {
+    throw new Error(
+      `${scenario.id}: visual gate opened unexpected WebSockets\n${sockets.join("\n")}`,
+    );
+  }
+}
+
+async function captureScenario(page, scenario) {
+  await page.goto(scenario.url, {
+    waitUntil: scenario.authSession === "loading" ? "domcontentloaded" : "networkidle",
+  });
   const baselineRootFontSize = await page.evaluate(() => Number.parseFloat(getComputedStyle(document.documentElement).fontSize));
   if (scenario.rootFontScale) {
     await page.evaluate((scale) => {
@@ -296,7 +505,7 @@ async function captureScenario(page, scenario) {
   await assertScenarioEnvironment(page, scenario, baselineRootFontSize);
   if (scenario.shellMode) {
     await prepareProductShellScenario(page, scenario);
-  } else {
+  } else if (!scenario.authSession || scenario.authSession === "authenticated") {
     await page.keyboard.press("?");
     if (await page.getByRole("dialog").count()) {
       throw new Error(`${scenario.id}: release-only shortcut dialog mounted unexpectedly`);
@@ -319,6 +528,9 @@ async function captureScenario(page, scenario) {
   await assertNoOverflow(page, scenario.id, scenario.requiredSelectors);
   if (scenario.forcedColors === "active") {
     if (scenario.shellMode) await assertProductShellForcedColors(page, scenario.id);
+    else if (scenario.authSession === "unauthenticated") {
+      await assertAuthForcedColors(page, scenario.id);
+    }
     else await assertForcedColors(page, scenario.id);
   }
   await page.screenshot({
@@ -1037,6 +1249,88 @@ async function assertNoOverflow(page, label, requiredSelectors) {
   }
 }
 
+async function assertAuthForcedColors(page, label) {
+  const result = await page.evaluate(() => {
+    const main = document.querySelector("main");
+    const card = document.querySelector("[data-slot='card']");
+    const heading = document.querySelector("h1");
+    const email = document.querySelector("#product-auth-email");
+    const password = document.querySelector("#product-auth-password");
+    const submit = document.querySelector("form [data-slot='button']");
+    if (!(main instanceof HTMLElement)
+      || !(card instanceof HTMLElement)
+      || !(heading instanceof HTMLElement)
+      || !(email instanceof HTMLInputElement)
+      || !(password instanceof HTMLInputElement)
+      || !(submit instanceof HTMLButtonElement)) {
+      return { missing: true };
+    }
+
+    email.focus();
+    const mainStyle = getComputedStyle(main);
+    const cardStyle = getComputedStyle(card);
+    const headingStyle = getComputedStyle(heading);
+    const emailStyle = getComputedStyle(email);
+    const passwordStyle = getComputedStyle(password);
+    const submitStyle = getComputedStyle(submit);
+    const visible = (element) => {
+      const rect = element.getBoundingClientRect();
+      return rect.width > 0 && rect.height > 0;
+    };
+
+    return {
+      missing: false,
+      active: matchMedia("(forced-colors: active)").matches,
+      cardVisible: visible(card),
+      emailBackground: emailStyle.backgroundColor,
+      emailBorderStyle: emailStyle.borderTopStyle,
+      emailBorderWidth: Number.parseFloat(emailStyle.borderTopWidth),
+      emailColor: emailStyle.color,
+      emailFocused: document.activeElement === email,
+      emailOpacity: Number.parseFloat(emailStyle.opacity),
+      emailOutlineColor: emailStyle.outlineColor,
+      emailOutlineStyle: emailStyle.outlineStyle,
+      emailOutlineWidth: Number.parseFloat(emailStyle.outlineWidth),
+      emailVisible: visible(email),
+      headingColor: headingStyle.color,
+      headingOpacity: Number.parseFloat(headingStyle.opacity),
+      headingVisible: visible(heading),
+      mainBackground: mainStyle.backgroundColor,
+      passwordBorderStyle: passwordStyle.borderTopStyle,
+      passwordBorderWidth: Number.parseFloat(passwordStyle.borderTopWidth),
+      passwordVisible: visible(password),
+      submitBackground: submitStyle.backgroundColor,
+      submitBorderStyle: submitStyle.borderTopStyle,
+      submitBorderWidth: Number.parseFloat(submitStyle.borderTopWidth),
+      submitColor: submitStyle.color,
+      submitOpacity: Number.parseFloat(submitStyle.opacity),
+      submitVisible: visible(submit),
+      cardBackground: cardStyle.backgroundColor,
+    };
+  });
+
+  if (result.missing || !result.active
+    || !result.cardVisible || !result.headingVisible
+    || !result.emailVisible || !result.passwordVisible || !result.submitVisible
+    || !result.emailFocused) {
+    throw new Error(`${label}: forced-colors login surface is incomplete ${JSON.stringify(result)}`);
+  }
+  if (result.emailBorderStyle === "none" || result.emailBorderWidth < 1
+    || result.passwordBorderStyle === "none" || result.passwordBorderWidth < 1
+    || result.emailOutlineStyle === "none" || result.emailOutlineWidth < 2) {
+    throw new Error(`${label}: forced-colors login borders or focus are missing ${JSON.stringify(result)}`);
+  }
+  if (Math.abs(result.emailOpacity - 1) > 0.001
+    || Math.abs(result.headingOpacity - 1) > 0.001
+    || Math.abs(result.submitOpacity - 1) > 0.001) {
+    throw new Error(`${label}: forced-colors login controls use group opacity ${JSON.stringify(result)}`);
+  }
+  assertContrast(label, "login heading", result.headingColor, result.mainBackground, 4.5);
+  assertContrast(label, "login input", result.emailColor, result.emailBackground, 4.5);
+  assertContrast(label, "login input focus", result.emailOutlineColor, result.emailBackground, 3);
+  assertContrast(label, "login action", result.submitColor, result.submitBackground, 4.5);
+}
+
 async function assertForcedColors(page, label) {
   const result = await page.evaluate(() => {
     const elements = {
@@ -1583,6 +1877,41 @@ function relativeLuminance([red, green, blue]) {
 function isApiPath(url) {
   const pathname = new URL(url).pathname;
   return pathname === "/api" || pathname.startsWith("/api/");
+}
+
+function isExactAuthSessionRequest(request) {
+  return request.method() === "GET" && isExactAuthSessionUrl(request.url());
+}
+
+function isExactAuthSessionUrl(url) {
+  const parsed = new URL(url);
+  return parsed.origin === baseUrl
+    && parsed.pathname === "/api/auth/session"
+    && parsed.search === "";
+}
+
+function isExpectedAuthSessionConsoleNoise(text, authSession) {
+  if (!text.startsWith("Failed to load resource: the server responded with a status of ")) {
+    return false;
+  }
+  if (authSession === "unauthenticated") return text.includes("401 (Unauthorized)");
+  if (authSession === "error") return text.includes("503 (Service Unavailable)");
+  return false;
+}
+
+function isUnexpectedFeatureNetworkRequest(request) {
+  const parsed = new URL(request.url());
+  return parsed.origin !== baseUrl
+    || ["eventsource", "fetch", "xhr"].includes(request.resourceType());
+}
+
+function isViteDevelopmentSocket(url) {
+  const parsed = new URL(url);
+  const serverUrl = new URL(baseUrl);
+  return parsed.hostname === serverUrl.hostname
+    && parsed.port === serverUrl.port
+    && parsed.pathname === "/"
+    && parsed.searchParams.has("token");
 }
 
 async function stopOwnedServer() {

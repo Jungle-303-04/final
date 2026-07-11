@@ -3,6 +3,14 @@ import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { describe, expect, it } from "vitest";
 import { ProductShell } from "./ProductShell";
 import type { ProductSurfaceId } from "./productRoutes";
+import type { AuthenticatedAuthState } from "../features/auth/authContract";
+
+const testAuth: AuthenticatedAuthState = {
+  session: { userId: "test-user", roles: ["viewer"], workspaceId: "test-workspace" },
+  signOutIssue: null,
+  signOutPending: false,
+  onSignOut: () => undefined,
+};
 
 describe("ProductShell", () => {
   it("renders only released surfaces and keeps the current route accessible", () => {
@@ -10,7 +18,7 @@ describe("ProductShell", () => {
     const markup = renderToStaticMarkup(
       <MemoryRouter initialEntries={["/product/issues"]}>
         <Routes>
-          <Route element={<ProductShell releasedSurfaceIds={releasedSurfaceIds} />}>
+          <Route element={<ProductShell auth={testAuth} releasedSurfaceIds={releasedSurfaceIds} />}>
             <Route path="/product/issues" element={<p>Issue content</p>} />
           </Route>
         </Routes>
@@ -22,7 +30,8 @@ describe("ProductShell", () => {
     expect(markup).toContain("Timeline");
     expect(markup).not.toContain("Topology");
     expect(markup).not.toContain("workspace_id");
-    expect(markup).not.toContain("로그아웃");
+    expect(markup).toContain("로그아웃");
+    expect(markup).toContain("test-user");
     expect(markup).toContain('aria-current="page"');
     expect(markup).toContain('href="#product-main"');
     expect(markup).toContain("Issue content");
@@ -32,7 +41,7 @@ describe("ProductShell", () => {
     const markup = renderToStaticMarkup(
       <MemoryRouter initialEntries={["/product/not-released"]}>
         <Routes>
-          <Route element={<ProductShell releasedSurfaceIds={new Set(["timeline"])} />}>
+          <Route element={<ProductShell auth={testAuth} releasedSurfaceIds={new Set(["timeline"])} />}>
             <Route path="*" element={<p>Redirecting</p>} />
           </Route>
         </Routes>
@@ -50,6 +59,7 @@ describe("ProductShell", () => {
           <Route
             element={(
               <ProductShell
+                auth={testAuth}
                 defaultSidebarCollapsed
                 releasedSurfaceIds={new Set(["home"])}
               />

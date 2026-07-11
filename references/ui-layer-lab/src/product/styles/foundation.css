@@ -64,4 +64,17 @@
     border-color: GrayText;
     opacity: 1;
   }
+
+  [data-slot="input"] {
+    color: CanvasText;
+    background: Canvas;
+    border-color: ButtonBorder;
+    forced-color-adjust: auto;
+  }
+
+  [data-slot="input"]:disabled {
+    color: GrayText;
+    border-color: GrayText;
+    opacity: 1;
+  }
 }
