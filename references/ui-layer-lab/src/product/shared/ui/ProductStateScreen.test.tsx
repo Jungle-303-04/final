@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ProductStateScreen } from "./ProductStateScreen";
@@ -77,7 +77,7 @@ describe("ProductStateScreen", () => {
 
   it("falls back to a non-empty retry name and accepts feature-shaped loading geometry", () => {
     const onRetry = vi.fn();
-    const { rerender } = render(
+    const { container, rerender } = render(
       <ProductStateScreen
         kind="offline"
         issue={{ code: "network" }}
@@ -89,10 +89,38 @@ describe("ProductStateScreen", () => {
     rerender(
       <ProductStateScreen
         kind="loading"
-        loadingPreview={<div aria-hidden="true" data-testid="feature-loading-geometry" />}
+        loadingPreview={
+          <button data-testid="feature-loading-geometry" type="button">장식용 로딩 타일</button>
+        }
       />,
     );
     expect(screen.getByTestId("feature-loading-geometry")).toBeTruthy();
+    const preview = container.querySelector('[data-slot="loading-preview"]');
+    expect(preview?.getAttribute("aria-hidden")).toBe("true");
+    expect(preview?.hasAttribute("inert")).toBe(true);
+    expect(screen.queryByRole("button", { name: "장식용 로딩 타일" })).toBeNull();
+  });
+
+  it("releases the invocation guard when a retry never enters pending", () => {
+    vi.useFakeTimers();
+    const onRetry = vi.fn();
+    render(
+      <ProductStateScreen
+        kind="offline"
+        issue={{ code: "network" }}
+        retry={{ pending: false, onRetry }}
+      />,
+    );
+
+    const retry = screen.getByRole("button", { name: "다시 시도" });
+    fireEvent.click(retry);
+    fireEvent.click(retry);
+    expect(onRetry).toHaveBeenCalledOnce();
+
+    vi.runOnlyPendingTimers();
+    fireEvent.click(retry);
+    expect(onRetry).toHaveBeenCalledTimes(2);
+    vi.useRealTimers();
   });
 
   it("separates quiet empty state from forbidden access", () => {

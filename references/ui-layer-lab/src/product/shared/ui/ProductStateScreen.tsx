@@ -5,7 +5,7 @@ import {
   ShieldCheck,
   WifiOff,
 } from "lucide-react";
-import { useEffect, useId, useRef, type ReactNode } from "react";
+import { useEffect, useId, useRef, type MouseEvent, type ReactNode } from "react";
 import { Alert, AlertDescription, AlertTitle } from "./primitives/alert";
 import { Badge } from "./primitives/badge";
 import { Button } from "./primitives/button";
@@ -137,7 +137,9 @@ export function ProductStateScreen(props: ProductStateScreenProps) {
         <StateHeading level={isContent ? 2 : 1} titleId={titleId}>{copy.title}</StateHeading>
         <EmptyDescription className="text-pretty leading-6">{copy.body}</EmptyDescription>
       </EmptyHeader>
-      {isLoading ? (loadingPreview ?? <LoadingPreview />) : null}
+      {isLoading ? (
+        <LoadingPreviewSlot>{loadingPreview ?? <LoadingPreview />}</LoadingPreviewSlot>
+      ) : null}
       {issue && issueKind ? <IssueAlert issue={issue} kind={issueKind} /> : null}
       {retry ? <RetryAction retry={retry} /> : null}
     </Empty>
@@ -205,6 +207,19 @@ function LoadingPreview() {
   );
 }
 
+function LoadingPreviewSlot({ children }: { children: ReactNode }) {
+  return (
+    <div
+      aria-hidden="true"
+      className="contents pointer-events-none select-none"
+      data-slot="loading-preview"
+      inert
+    >
+      {children}
+    </div>
+  );
+}
+
 function isIssueStateKind(kind: ProductStateKind): kind is "forbidden" | "offline" | "error" {
   return kind === "forbidden" || kind === "offline" || kind === "error";
 }
@@ -245,16 +260,24 @@ function IssueAlert({
 
 function RetryAction({ retry }: { retry: ProductStateRetry }) {
   const invokedRef = useRef(false);
+  const pendingRef = useRef(retry.pending);
   const label = retry.label?.trim() || "다시 시도";
 
   useEffect(() => {
+    pendingRef.current = retry.pending;
     if (!retry.pending) invokedRef.current = false;
   }, [retry.pending]);
 
-  const handleRetry = () => {
-    if (retry.pending || invokedRef.current) return;
+  const handleRetry = (event: MouseEvent<HTMLButtonElement>) => {
+    if (event.detail > 1 || retry.pending || invokedRef.current) return;
     invokedRef.current = true;
-    retry.onRetry();
+    try {
+      retry.onRetry();
+    } finally {
+      window.setTimeout(() => {
+        if (!pendingRef.current) invokedRef.current = false;
+      });
+    }
   };
 
   return (
