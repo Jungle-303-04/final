@@ -342,11 +342,18 @@ Target / Telemetry 선형 작업 문서는 아래에 있다.
 - [spec/domains/target](spec/domains/target.md)
 - [spec/frontend/api-integration-workorder-20260711](spec/frontend/api-integration-workorder-20260711.md)
 - [spec/frontend/api-needs](spec/frontend/api-needs.md)
+- [spec/frontend/CODEX-BRIEFING-20260711](spec/frontend/CODEX-BRIEFING-20260711.md) — archived, 현재 구현 참조 금지
+- [spec/frontend/codex-directive-24h-20260711](spec/frontend/codex-directive-24h-20260711.md) — archived, 현재 구현 참조 금지
 - [spec/frontend/codex-directive-goalmode-20260711](spec/frontend/codex-directive-goalmode-20260711.md)
+- [spec/frontend/codex-directive-reference-pivot-20260711](spec/frontend/codex-directive-reference-pivot-20260711.md) — archived, 현재 구현 참조 금지
 - [spec/frontend/codex-progress-20260711](spec/frontend/codex-progress-20260711.md)
 - [spec/frontend/product-data-contract](spec/frontend/product-data-contract.md)
 - [spec/frontend/reference-feature-inventory](spec/frontend/reference-feature-inventory.md)
+- [spec/frontend/reference-contract-map](spec/frontend/reference-contract-map.md)
 - [spec/frontend/reference-porting-contract](spec/frontend/reference-porting-contract.md)
+- [spec/frontend/topology-engine](spec/frontend/topology-engine.md) — archived, 현재 구현 참조 금지
+- [spec/frontend/topology-message-action-schema](spec/frontend/topology-message-action-schema.md) — archived, 현재 구현 참조 금지
+- [spec/frontend/topology-visual-motion-tokens](spec/frontend/topology-visual-motion-tokens.md) — archived, 현재 구현 참조 금지
 - [spec/packages/ai](spec/packages/ai.md)
 - [spec/packages/config](spec/packages/config.md)
 - [spec/packages/contracts](spec/packages/contracts.md)

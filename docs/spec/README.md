@@ -94,10 +94,20 @@
 - [frontend/codex-progress-20260711](frontend/codex-progress-20260711.md)
 - [frontend/product-data-contract](frontend/product-data-contract.md)
 - [frontend/reference-feature-inventory](frontend/reference-feature-inventory.md)
+- [frontend/reference-contract-map](frontend/reference-contract-map.md)
 - [frontend/reference-porting-contract](frontend/reference-porting-contract.md)
 
-위 목록만 현재 frontend 구현의 활성 문서다. `reference-contract-map.md`와 `final-questions.md`는
-해당 단계에서 생성한 뒤 색인한다. 같은 디렉터리의 `status: archived` 문서는 현재 작업에 참조하지 않는다.
+위 목록만 현재 frontend 구현의 활성 문서다. `final-questions.md`는 해당 단계에서 생성한 뒤 색인한다.
+같은 디렉터리의 `status: archived` 문서는 현재 작업에 참조하지 않는다.
+
+### frontend 보존 링크
+
+- [frontend/CODEX-BRIEFING-20260711](frontend/CODEX-BRIEFING-20260711.md) — archived, 현재 구현 참조 금지
+- [frontend/codex-directive-24h-20260711](frontend/codex-directive-24h-20260711.md) — archived, 현재 구현 참조 금지
+- [frontend/codex-directive-reference-pivot-20260711](frontend/codex-directive-reference-pivot-20260711.md) — archived, 현재 구현 참조 금지
+- [frontend/topology-engine](frontend/topology-engine.md) — archived, 현재 구현 참조 금지
+- [frontend/topology-message-action-schema](frontend/topology-message-action-schema.md) — archived, 현재 구현 참조 금지
+- [frontend/topology-visual-motion-tokens](frontend/topology-visual-motion-tokens.md) — archived, 현재 구현 참조 금지
 
 ## 유지 규칙
 
