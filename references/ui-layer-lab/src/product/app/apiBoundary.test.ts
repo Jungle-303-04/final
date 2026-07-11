@@ -24,15 +24,9 @@ describe("product API consumption boundary", () => {
       }
 
       const source = await readFile(filePath, "utf8");
-      const sourceFile = ts.createSourceFile(filePath, source, ts.ScriptTarget.Latest, true);
-
-      sourceFile.forEachChild((node) => {
-        if (!ts.isImportDeclaration(node) || !ts.isStringLiteralLike(node.moduleSpecifier)) return;
-        const specifier = node.moduleSpecifier.text;
-        if (!specifier.startsWith(".")) return;
-        if (!isWithin(resolve(dirname(filePath), specifier), apiRoot)) return;
-        violations.push(`${relative(productRoot, filePath)} -> ${specifier}`);
-      });
+      for (const reference of apiModuleReferences(filePath, source)) {
+        violations.push(`${relative(productRoot, filePath)} -> ${reference}`);
+      }
     }
 
     expect(violations, "endpoint imports must be isolated behind app/apiComposition.ts").toEqual([]);
@@ -48,13 +42,55 @@ describe("product API consumption boundary", () => {
         .map((match) => match[1]),
     );
     const importedValues = valueImportsFromApi(compositionRoot, compositionSource);
+    const unverifiableReferences = apiModuleReferences(compositionRoot, compositionSource)
+      .filter((reference) => reference.startsWith("dynamic:"));
 
     expect(
       importedValues.filter((name) => !approved.has(name)),
       "apiComposition.ts imported an endpoint without an anchored API 완성 record",
     ).toEqual([]);
+    expect(
+      unverifiableReferences,
+      "apiComposition.ts must use statically verifiable named imports",
+    ).toEqual([]);
   });
 });
+
+function apiModuleReferences(filePath: string, source: string): string[] {
+  const sourceFile = ts.createSourceFile(filePath, source, ts.ScriptTarget.Latest, true);
+  const references: string[] = [];
+
+  function visit(node: ts.Node) {
+    if (
+      (ts.isImportDeclaration(node) || ts.isExportDeclaration(node)) &&
+      node.moduleSpecifier &&
+      ts.isStringLiteralLike(node.moduleSpecifier)
+    ) {
+      record(node.moduleSpecifier.text);
+    }
+
+    if (ts.isCallExpression(node) && node.arguments.length === 1) {
+      const [argument] = node.arguments;
+      const isDynamicImport = node.expression.kind === ts.SyntaxKind.ImportKeyword;
+      const isRequire = ts.isIdentifier(node.expression) && node.expression.text === "require";
+      if ((isDynamicImport || isRequire) && ts.isStringLiteralLike(argument)) {
+        record(`dynamic:${argument.text}`);
+      }
+    }
+
+    ts.forEachChild(node, visit);
+  }
+
+  function record(specifier: string) {
+    const normalized = specifier.startsWith("dynamic:") ? specifier.slice(8) : specifier;
+    if (!normalized.startsWith(".")) return;
+    if (!isWithin(resolve(dirname(filePath), normalized), apiRoot)) return;
+    references.push(specifier);
+  }
+
+  visit(sourceFile);
+  return references.sort();
+}
 
 function valueImportsFromApi(filePath: string, source: string): string[] {
   const sourceFile = ts.createSourceFile(filePath, source, ts.ScriptTarget.Latest, true);

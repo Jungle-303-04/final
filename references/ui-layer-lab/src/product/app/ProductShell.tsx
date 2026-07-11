@@ -24,7 +24,7 @@ import {
 } from "../shared/ui/primitives/tooltip";
 import {
   productNavigationForCapabilities,
-  resolveProductRoute,
+  productRouteForPath,
   type ProductCapabilityId,
   type ProductRouteIcon,
 } from "./productRoutes";
@@ -46,8 +46,15 @@ const routeIcons: Record<ProductRouteIcon, LucideIcon> = {
 export function ProductShell({ availableCapabilities }: ProductShellProps) {
   const [isSidebarCollapsed, setSidebarCollapsed] = useState(false);
   const location = useLocation();
-  const currentRoute = resolveProductRoute(location.pathname);
   const navigationRoutes = productNavigationForCapabilities(availableCapabilities);
+  const matchedRoute = productRouteForPath(location.pathname);
+  const currentRoute = matchedRoute && availableCapabilities.has(matchedRoute.id)
+    ? matchedRoute
+    : navigationRoutes[0];
+
+  if (!currentRoute) {
+    throw new Error("ProductShell requires at least one released capability");
+  }
 
   return (
     <TooltipProvider>

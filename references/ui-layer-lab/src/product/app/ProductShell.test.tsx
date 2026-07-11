@@ -27,4 +27,19 @@ describe("ProductShell", () => {
     expect(markup).toContain('href="#product-main"');
     expect(markup).toContain("Issue content");
   });
+
+  it("never names an unreleased route while an unknown URL redirects", () => {
+    const markup = renderToStaticMarkup(
+      <MemoryRouter initialEntries={["/product/not-released"]}>
+        <Routes>
+          <Route element={<ProductShell availableCapabilities={new Set(["timeline"])} />}>
+            <Route path="*" element={<p>Redirecting</p>} />
+          </Route>
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    expect(markup).toContain("Timeline");
+    expect(markup).not.toContain("Home");
+  });
 });
