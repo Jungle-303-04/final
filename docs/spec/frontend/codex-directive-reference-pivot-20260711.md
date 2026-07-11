@@ -1,6 +1,6 @@
 ---
 title: 전면 피벗 지시서 — 외부 기준 저장소 기능 동등 포팅 + 벤치마크 최소선 (검토자 → Codex)
-status: active-directive (최상위 — 이전 모든 프론트 지시·기획보다 우선)
+status: archived — 현재 작업에 참조 금지
 date: 2026-07-11
 verified_against: HEAD 817636767 — 로컬 비교 실행 스크립트(cluster-1·mgmt 연결, :9280),
   components.json·제품 UI 생성물 존재, Block A~B 진행 커밋(c4e2391, 9babc49) 확인

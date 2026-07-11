@@ -1,6 +1,6 @@
 ---
 title: 24시간 압축 실행 지시서 (검토자 → Codex)
-status: active-directive
+status: archived — 현재 작업에 참조 금지
 date: 2026-07-11
 subordinate_to: codex-directive-reference-pivot-20260711.md
 deadline: 2026-07-12T23:59+09:00 (24시간)
