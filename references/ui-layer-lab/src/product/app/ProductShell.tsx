@@ -10,12 +10,12 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { useCallback, useMemo, useState } from "react";
-import { NavLink, Outlet, useLocation } from "react-router-dom";
+import { Outlet, useLocation } from "react-router-dom";
 import { ThemeToggle } from "../shared/ui/ThemeToggle";
 import {
   SidebarMenu,
-  SidebarMenuButton,
   SidebarMenuItem,
+  SidebarMenuLink,
   SidebarNavigation,
 } from "../shared/ui/primitives/sidebar-menu";
 import {
@@ -131,20 +131,14 @@ function ProductShellFrame({
                 const Icon = routeIcons[routeDefinition.icon];
                 return (
                   <SidebarMenuItem key={routeDefinition.id}>
-                    <SidebarMenuButton
+                    <SidebarMenuLink
                       isActive={currentRoute.id === routeDefinition.id}
-                      render={(
-                        <NavLink
-                          aria-label={routeDefinition.label}
-                          end={routeDefinition.id === "home"}
-                          to={routeDefinition.path}
-                        />
-                      )}
+                      to={routeDefinition.path}
                       tooltip={routeDefinition.label}
                     >
                       <Icon aria-hidden="true" className="size-4 shrink-0" />
                       <SidebarText>{routeDefinition.label}</SidebarText>
-                    </SidebarMenuButton>
+                    </SidebarMenuLink>
                   </SidebarMenuItem>
                 );
               })}

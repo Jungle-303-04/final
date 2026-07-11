@@ -3,12 +3,13 @@
 import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { MemoryRouter, NavLink } from "react-router-dom";
+import { MemoryRouter } from "react-router-dom";
 import { SidebarProvider, useSidebar } from "./sidebar";
 import {
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
+  SidebarMenuLink,
   SidebarNavigation,
   type SidebarNavigationProps,
 } from "./sidebar-menu";
@@ -82,7 +83,7 @@ describe("product-owned Sidebar menu", () => {
     expect(screen.queryByRole("tooltip")).toBeNull();
   });
 
-  it("prevents disabled rendered links from activation and the tab order", async () => {
+  it("prevents disabled menu links from activation and the tab order", async () => {
     const user = userEvent.setup();
     const onClick = vi.fn();
     renderMenu({ defaultOpen: false, disabled: true, onClick });
@@ -145,19 +146,12 @@ describe("product-owned Sidebar menu", () => {
   });
 
   it("protects canonical semantics and provides reduced-motion and forced-color states", () => {
-    const { container } = renderMenu({
-      active: true,
-      buttonProps: {
-        "data-active": "unsafe",
-        "data-sidebar-state": "unsafe",
-        "data-slot": "unsafe",
-      },
-    });
+    renderMenu({ active: true });
     const navigation = screen.getByRole("navigation", { name: "주요 메뉴" });
     const link = screen.getByRole("link", { name: "홈" });
 
     expect(navigation.getAttribute("data-slot")).toBe("sidebar-navigation");
-    expect(link.getAttribute("data-slot")).toBe("sidebar-menu-button");
+    expect(link.getAttribute("data-slot")).toBe("sidebar-menu-link");
     expect(link.getAttribute("data-sidebar-state")).toBe("expanded");
     expect(link.getAttribute("data-active")).toBe("");
     expect(link.className).toContain("motion-reduce:transition-none");
@@ -166,7 +160,6 @@ describe("product-owned Sidebar menu", () => {
     expect(link.className).toContain("forced-colors:focus-visible:outline-[CanvasText]");
     expect(link.className).toContain("forced-colors:aria-disabled:text-[GrayText]");
     expect(link.className).toContain("forced-colors:aria-disabled:opacity-100");
-    expect(container.querySelector('[data-slot="unsafe"]')).toBeNull();
   });
 
   it.each([
@@ -211,17 +204,17 @@ function renderMenu({
           <SidebarNavigation aria-label="주요 메뉴" id="product-primary-navigation">
             <SidebarMenu>
               <SidebarMenuItem>
-                <SidebarMenuButton
-                  {...(buttonProps as Parameters<typeof SidebarMenuButton>[0])}
+                <SidebarMenuLink
+                  {...(buttonProps as Parameters<typeof SidebarMenuLink>[0])}
                   disabled={disabled}
                   isActive={active}
                   onClick={onClick}
-                  render={<NavLink aria-label="홈" to="/product" />}
+                  to="/product"
                   tooltip="홈"
                 >
                   <svg aria-hidden="true" />
                   <span>홈</span>
-                </SidebarMenuButton>
+                </SidebarMenuLink>
               </SidebarMenuItem>
             </SidebarMenu>
           </SidebarNavigation>
@@ -250,6 +243,15 @@ function assertSidebarMenuTypeContracts() {
   void <SidebarNavigation aria-label="메뉴" aria-labelledby="menu-title"><SidebarMenu /></SidebarNavigation>;
   // @ts-expect-error native navigation semantics are component-owned
   void <SidebarNavigation aria-label="메뉴" role="presentation"><SidebarMenu /></SidebarNavigation>;
+  void <SidebarMenuLink to="/product">홈</SidebarMenuLink>;
+  // @ts-expect-error arbitrary render elements are forbidden
+  void <SidebarMenuLink render={<span />} to="/product">홈</SidebarMenuLink>;
+  // @ts-expect-error route targets must be strings
+  void <SidebarMenuLink to={{ pathname: "/product" }}>홈</SidebarMenuLink>;
+  // @ts-expect-error action buttons cannot become polymorphic links
+  void <SidebarMenuButton render={<a href="/product" />}>홈</SidebarMenuButton>;
+  // @ts-expect-error page-current state belongs to navigation links
+  void <SidebarMenuButton isActive>새로 고침</SidebarMenuButton>;
 }
 
 void assertSidebarMenuTypeContracts;

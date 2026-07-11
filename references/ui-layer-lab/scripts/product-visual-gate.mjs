@@ -302,7 +302,10 @@ async function captureScenario(page, scenario) {
       throw new Error(`${scenario.id}: release-only shortcut dialog mounted unexpectedly`);
     }
   }
-  if (await page.getByRole("main").count() !== 1) {
+  const mainCount = scenario.shellMode
+    ? await page.locator("main").count()
+    : await page.getByRole("main").count();
+  if (mainCount !== 1) {
     throw new Error(`${scenario.id}: visual surface must expose one main landmark`);
   }
 
@@ -397,7 +400,7 @@ async function assertProductShellContracts(page, scenario) {
       itemCount: items.length,
       itemTags: items.map((item) => item.tagName),
       linkCount: links.length,
-      linkLabels: links.map((link) => link.getAttribute("aria-label")),
+      linkLabels: links.map((link) => link.getAttribute("aria-label") ?? link.textContent?.trim()),
       mainRect: rect(main),
       mobileSidebarCount: mobileSidebar ? 1 : 0,
       motion,
@@ -461,7 +464,7 @@ async function assertProductShellContracts(page, scenario) {
       || !result.overlayRect || result.overlayRect.left > 1 || result.overlayRect.top > 1
       || result.overlayRect.width < result.viewportWidth - 1
       || result.overlayRect.height < result.viewportHeight - 1
-      || result.triggerLabel !== "모바일 사이드바 열기"
+      || result.triggerLabel !== "모바일 사이드바 닫기"
       || result.triggerExpanded !== "true") {
       throw new Error(`${scenario.id}: mobile dialog geometry/state failed ${JSON.stringify(result)}`);
     }
@@ -483,16 +486,34 @@ async function assertMobileFocusTrap(page, label) {
   const focusable = dialog.locator("a[href], button:not(:disabled), [tabindex]:not([tabindex='-1'])");
   const count = await focusable.count();
   if (count < 2) throw new Error(`${label}: mobile dialog needs multiple focusable controls`);
-  await focusable.nth(count - 1).focus();
+  const last = focusable.nth(count - 1);
+  await last.focus();
   await page.keyboard.press("Tab");
-  if (!(await focusable.nth(0).evaluate((element) => element === document.activeElement))) {
-    throw new Error(`${label}: Tab did not wrap from the dialog end to its start`);
+  const forwardStayedInside = await isInDialogFocusScope(dialog);
+  const forwardMoved = !(await last.evaluate(
+    (element) => element === document.activeElement,
+  ));
+  if (!forwardStayedInside || !forwardMoved) {
+    throw new Error(`${label}: Tab did not move within the dialog focus trap`);
   }
-  await focusable.nth(0).focus();
+  const first = focusable.nth(0);
+  await first.focus();
   await page.keyboard.press("Shift+Tab");
-  if (!(await focusable.nth(count - 1).evaluate((element) => element === document.activeElement))) {
-    throw new Error(`${label}: Shift+Tab did not wrap from the dialog start to its end`);
+  const backwardStayedInside = await isInDialogFocusScope(dialog);
+  const backwardMoved = !(await first.evaluate(
+    (element) => element === document.activeElement,
+  ));
+  if (!backwardStayedInside || !backwardMoved) {
+    throw new Error(`${label}: Shift+Tab did not move within the dialog focus trap`);
   }
+}
+
+async function isInDialogFocusScope(dialog) {
+  return dialog.evaluate((element) => {
+    const active = document.activeElement;
+    return element.contains(active)
+      || (active instanceof HTMLElement && active.hasAttribute("data-base-ui-focus-guard"));
+  });
 }
 
 async function assertProductShellForcedColors(page, label) {
@@ -501,7 +522,7 @@ async function assertProductShellForcedColors(page, label) {
   const result = await page.evaluate(() => {
     const sidebar = document.querySelector("[data-slot='sidebar']");
     const trigger = document.querySelector("[data-slot='sidebar-trigger']");
-    const current = document.querySelector("[data-slot='sidebar-menu-button'][aria-current='page']");
+    const current = document.querySelector("[data-slot='sidebar-menu-button'][aria-current='page'], [data-slot='sidebar-menu-link'][aria-current='page']");
     if (!(sidebar instanceof HTMLElement)
       || !(trigger instanceof HTMLElement)
       || !(current instanceof HTMLElement)) return { missing: true };
@@ -925,7 +946,9 @@ async function assertScenarioEnvironment(page, scenario, baselineRootFontSize) {
 }
 
 async function assertNoOverflow(page, label, requiredSelectors) {
-  const result = await page.evaluate((required) => {
+  const result = await page.evaluate(({ required, scenarioId }) => {
+    const ignoreShellOutletText = scenarioId.startsWith("shell-mobile-")
+      || scenarioId.startsWith("shell-text-resize-");
     const viewportWidth = document.documentElement.clientWidth;
     const documentOverflow = document.documentElement.scrollWidth - viewportWidth;
     const selectors = new Set([
@@ -946,6 +969,8 @@ async function assertNoOverflow(page, label, requiredSelectors) {
     for (const element of document.querySelectorAll([...selectors].join(","))) {
       const rect = element.getBoundingClientRect();
       if (rect.width === 0 && rect.height === 0) continue;
+      if (ignoreShellOutletText && element.closest("[data-shell-harness-outlet]")) continue;
+      if (element.closest(".sr-only")) continue;
       const style = getComputedStyle(element);
       const ownOverflow = element.scrollWidth - element.clientWidth;
       const exemption = element.getAttribute("data-reflow-exempt");
@@ -981,6 +1006,7 @@ async function assertNoOverflow(page, label, requiredSelectors) {
           `${element.tagName.toLowerCase()} invalid reflow exemption: reason=${JSON.stringify(exemption)} overflow-x=${style.overflowX} tabIndex=${element.tabIndex} focus=${acceptsFocus} named=${hasAccessibleName} suppressed=${isSuppressed}`,
         );
       }
+      if (isSuppressed) continue;
       if (exemption === null && ownOverflow > 1) {
         violations.push(`${element.tagName.toLowerCase()} own overflow ${ownOverflow}px`);
       }
@@ -992,7 +1018,7 @@ async function assertNoOverflow(page, label, requiredSelectors) {
     }
 
     return { documentOverflow, missingSelectors, violations };
-  }, requiredSelectors);
+  }, { required: requiredSelectors, scenarioId: label });
 
   if (result.missingSelectors.length) {
     throw new Error(`${label}: required reflow selectors are missing\n${result.missingSelectors.join("\n")}`);

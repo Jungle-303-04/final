@@ -1,12 +1,13 @@
 // @vitest-environment jsdom
 
 import { cleanup, render } from "@testing-library/react";
-import type { ComponentProps, ReactElement } from "react";
+import { Fragment, type ReactElement } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { MemoryRouter, NavLink } from "react-router-dom";
+import { MemoryRouter } from "react-router-dom";
 import { SidebarProvider } from "./sidebar";
 import {
   SidebarMenuButton,
+  SidebarMenuLink,
   SidebarNavigation,
   type SidebarNavigationProps,
 } from "./sidebar-menu";
@@ -23,14 +24,45 @@ describe("Sidebar menu runtime boundary", () => {
     ["capture bypass", { onClickCapture: vi.fn() }],
     ["tab order", { tabIndex: 0 }],
     ["inline style", { style: { display: "none" } }],
-  ])("rejects a render element %s override", (_label, unsafeProps) => {
-    expect(() => renderButton(
-      <NavLink
-        {...(unsafeProps as unknown as ComponentProps<typeof NavLink>)}
-        aria-label="홈"
-        to="/product"
-      />,
-    )).toThrow(/SidebarMenuButton render owns/);
+  ])("rejects a link %s override", (_label, unsafeProps) => {
+    expect(() => renderLink(unsafeProps)).toThrow(/SidebarMenuLink does not accept/);
+  });
+
+  it.each([
+    ["custom component", <UnsafeCustomLink key="custom" />],
+    ["Fragment", <Fragment key="fragment"><a href="/product">홈</a></Fragment>],
+  ])("rejects an arbitrary %s render path", (_label, renderElement) => {
+    expect(() => renderLink({ render: renderElement })).toThrow(
+      /SidebarMenuLink does not accept render/,
+    );
+  });
+
+  it("rejects polymorphic render injection into an action button", () => {
+    expect(() => render(
+      <SidebarProvider>
+        <SidebarMenuButton
+          {...({ render: <a href="/product" /> } as unknown as Parameters<
+            typeof SidebarMenuButton
+          >[0])}
+        >
+          홈
+        </SidebarMenuButton>
+      </SidebarProvider>,
+    )).toThrow(/SidebarMenuButton does not accept render/);
+  });
+
+  it("rejects page-current state on an action button", () => {
+    expect(() => render(
+      <SidebarProvider>
+        <SidebarMenuButton
+          {...({ isActive: true } as unknown as Parameters<
+            typeof SidebarMenuButton
+          >[0])}
+        >
+          새로 고침
+        </SidebarMenuButton>
+      </SidebarProvider>,
+    )).toThrow(/SidebarMenuButton does not accept isActive/);
   });
 
   it.each([
@@ -52,16 +84,24 @@ describe("Sidebar menu runtime boundary", () => {
   });
 });
 
-function renderButton(renderElement: ReactElement) {
+function renderLink(unsafeProps: Record<string, unknown>) {
   return render(
     <MemoryRouter>
       <TooltipProvider delay={0}>
         <SidebarProvider>
-          <SidebarMenuButton render={renderElement} tooltip="홈">
+          <SidebarMenuLink
+            {...(unsafeProps as Parameters<typeof SidebarMenuLink>[0])}
+            to="/product"
+            tooltip="홈"
+          >
             홈
-          </SidebarMenuButton>
+          </SidebarMenuLink>
         </SidebarProvider>
       </TooltipProvider>
     </MemoryRouter>,
   );
+}
+
+function UnsafeCustomLink(): ReactElement {
+  return <a href="/product">홈</a>;
 }

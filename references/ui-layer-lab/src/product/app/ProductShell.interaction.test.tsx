@@ -107,7 +107,7 @@ describe("ProductShell keyboard and help interaction", () => {
     expect(expand.getAttribute("aria-expanded")).toBe("false");
     expect(sidebar.getAttribute("data-state")).toBe("collapsed");
     expect(screen.getByRole("link", { name: "Home" })).toBe(home);
-    expect(container.querySelectorAll("[data-slot='sidebar-menu-button']")).toHaveLength(2);
+    expect(container.querySelectorAll("[data-slot='sidebar-menu-link']")).toHaveLength(2);
 
     home.focus();
     await waitFor(() => expect(screen.getByRole("tooltip").textContent).toBe("Home"));

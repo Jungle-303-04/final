@@ -1,21 +1,6 @@
-import { isValidElement, type ReactElement } from "react";
-
 const NEUTRAL_PROTECTED = [
   "aria-hidden", "contentEditable", "dangerouslySetInnerHTML", "data-slot",
   "draggable", "render", "role", "style", "tabIndex",
-] as const;
-const BUTTON_DERIVED = [
-  "aria-current", "data-active", "data-disabled", "data-sidebar-state", "data-slot",
-] as const;
-const BUTTON_REJECTED = [
-  "aria-hidden", "contentEditable", "dangerouslySetInnerHTML", "draggable",
-  "onClickCapture", "onKeyDownCapture", "role", "style", "tabIndex", "type",
-] as const;
-const RENDER_REJECTED = [
-  ...BUTTON_DERIVED,
-  ...BUTTON_REJECTED,
-  "aria-disabled",
-  "disabled",
 ] as const;
 
 export function normalizeAccessibleName(label: unknown, labelledBy: unknown) {
@@ -36,28 +21,38 @@ export function normalizeBoolean(value: unknown, label: string): boolean {
   return value;
 }
 
-export function normalizeAriaDisabled(value: unknown): boolean {
-  if (value === undefined || value === false || value === "false") return false;
-  if (value === true || value === "true") return true;
-  throw new TypeError("SidebarMenuButton aria-disabled must be boolean-like");
-}
-
 export function normalizeTooltip(value: unknown): string | undefined {
   if (value === undefined) return undefined;
   if (typeof value !== "string" || !value.trim()) {
-    throw new TypeError("SidebarMenuButton tooltip must be a non-empty string");
+    throw new TypeError("Sidebar menu tooltip must be a non-empty string");
   }
   return value.trim();
 }
 
-export function normalizeRenderElement(value: unknown): ReactElement | undefined {
-  if (value === undefined) return undefined;
-  if (!isValidElement(value)) {
-    throw new TypeError("SidebarMenuButton render must be a React element");
+export function normalizeRouteTarget(value: unknown): string {
+  if (typeof value !== "string") {
+    throw new TypeError("SidebarMenuLink to must be an internal absolute path");
   }
-  const props = value.props as Record<string, unknown>;
-  assertProtected(props, "SidebarMenuButton render", RENDER_REJECTED);
-  return value;
+  const path = value.trim();
+  const containsControlCharacter = Array.from(path).some((character) => {
+    const code = character.charCodeAt(0);
+    return code < 32 || code === 127;
+  });
+  if (
+    !/^\/(?!\/)/.test(path)
+    || path.includes("\\")
+    || containsControlCharacter
+  ) {
+    throw new TypeError("SidebarMenuLink to must be an internal absolute path");
+  }
+  return path;
+}
+
+export function assertNoUnexpectedProps(props: object, part: string): void {
+  const keys = Object.keys(props);
+  if (keys.length > 0) {
+    throw new TypeError(`${part} does not accept ${keys.sort().join(", ")}`);
+  }
 }
 
 export function sanitizeNeutralPartProps<Props extends object>(
@@ -71,13 +66,6 @@ export function sanitizeNeutralPartProps<Props extends object>(
   }
   assertProtected(props, part, NEUTRAL_PROTECTED);
   return { ...props };
-}
-
-export function sanitizeButtonProps<Props extends object>(props: Props, part: string): Props {
-  assertProtected(props, part, BUTTON_REJECTED);
-  const safeProps = { ...props } as Record<string, unknown>;
-  BUTTON_DERIVED.forEach((key) => Reflect.deleteProperty(safeProps, key));
-  return safeProps as Props;
 }
 
 function assertProtected(
