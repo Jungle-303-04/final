@@ -2,6 +2,7 @@ import { useEffect, useRef } from "react";
 import type { KeyboardEvent as ReactKeyboardEvent, ReactNode } from "react";
 
 import type { SidebarNavigationItem, SidebarProps } from "./shell.types";
+import { Button } from "../design-system";
 
 const ENABLED_NAVIGATION_SELECTOR =
   '[data-shell-navigation-item="true"]:not([aria-disabled="true"])';
@@ -30,11 +31,6 @@ function itemContent(
         {item.description ? (
           <span className="app-sidebar__item-description">
             {item.description}
-          </span>
-        ) : null}
-        {item.disabledReason ? (
-          <span className="app-sidebar__item-reason">
-            {item.disabledReason}
           </span>
         ) : null}
       </span>
@@ -201,15 +197,16 @@ export function Sidebar({
     >
       <div className="app-sidebar__header">
         {brand ? <div className="app-sidebar__brand">{brand}</div> : null}
-        <button
+        <Button
           className="app-sidebar__mobile-close"
-          type="button"
+          size="icon"
+          variant="ghost"
           aria-label={messages.closeNavigation}
           aria-controls={id}
           onClick={() => onOverlayOpenChange(false)}
         >
           <span aria-hidden="true">×</span>
-        </button>
+        </Button>
       </div>
 
       <nav
@@ -245,6 +242,7 @@ export function Sidebar({
                         tabIndex={0}
                         aria-disabled="true"
                         aria-describedby={tooltipId}
+                        title={item.disabledReason}
                         data-shell-navigation-item="true"
                       >
                         {itemContent(item, tooltipId)}
@@ -278,9 +276,9 @@ export function Sidebar({
 
       <div className="app-sidebar__footer">
         {footer ? <div className="app-sidebar__footer-slot">{footer}</div> : null}
-        <button
+        <Button
           className="app-sidebar__collapse"
-          type="button"
+          variant="ghost"
           aria-expanded={expanded}
           aria-controls={id}
           aria-label={
@@ -294,7 +292,7 @@ export function Sidebar({
               ? messages.collapseNavigation
               : messages.expandNavigation}
           </span>
-        </button>
+        </Button>
       </div>
     </aside>
   );

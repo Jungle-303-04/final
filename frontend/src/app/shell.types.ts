@@ -77,6 +77,7 @@ export interface TopbarProps {
   readonly compactSidebarOpen: boolean;
   readonly compactTriggerRef: RefObject<HTMLButtonElement | null>;
   readonly breadcrumbs?: readonly ScopeBreadcrumb[] | undefined;
+  readonly scope?: ReactNode | undefined;
   readonly search?: ReactNode | undefined;
   readonly status?: ReactNode | undefined;
   readonly themeControl?: ReactNode | undefined;
@@ -113,6 +114,7 @@ interface AppShellBaseProps {
   readonly sidebarFooter?: ReactNode;
   readonly breadcrumbs?: readonly ScopeBreadcrumb[];
   readonly topbarSearch?: ReactNode;
+  readonly topbarScope?: ReactNode;
   readonly topbarStatus?: ReactNode;
   readonly topbarTheme?: ReactNode;
   readonly topbarActions?: ReactNode;
