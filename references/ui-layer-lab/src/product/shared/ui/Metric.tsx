@@ -1,3 +1,5 @@
+import { cn } from "./primitives/cn";
+
 export function Metric({ label, value, tone = "neutral", note }: {
   label: string;
   value: string | number;
@@ -5,10 +7,16 @@ export function Metric({ label, value, tone = "neutral", note }: {
   note?: string;
 }) {
   return (
-    <div className="metric" data-tone={tone}>
-      <span className="metric__label">{label}</span>
-      <strong className="metric__value">{value}</strong>
-      {note ? <span className="metric__note">{note}</span> : null}
+    <div className="grid min-w-0 gap-1 p-4" data-tone={tone}>
+      <span className="truncate text-xs font-medium text-muted-foreground">{label}</span>
+      <strong className={cn(
+        "font-mono text-xl font-semibold tracking-tight",
+        tone === "critical" && "text-destructive",
+        tone === "warning" && "text-status-warning",
+      )}>
+        {value}
+      </strong>
+      {note ? <span className="text-xs text-muted-foreground">{note}</span> : null}
     </div>
   );
 }

@@ -1,22 +1,21 @@
-import type { FleetHealth } from "../../api";
+import { cn } from "./primitives/cn";
 
-const statusLabels: Record<FleetHealth, string> = {
-  healthy: "정상",
-  warning: "주의",
-  critical: "위험",
-  stale: "오래됨",
-  unknown: "미확인",
-};
+export type StatusTone = "healthy" | "warning" | "critical" | "stale" | "unknown";
 
-export function StatusMark({ health }: { health: FleetHealth }) {
+export function StatusMark({ tone, label }: { tone: StatusTone; label: string }) {
   return (
-    <span className="status-mark" data-health={health}>
-      <span className="status-mark__dot" aria-hidden="true" />
-      <span>{statusLabels[health]}</span>
+    <span className="inline-flex items-center gap-2 text-xs font-medium text-muted-foreground" data-status={tone}>
+      <span
+        className={cn(
+          "size-2 rounded-full bg-status-unknown",
+          tone === "healthy" && "bg-status-healthy",
+          tone === "warning" && "bg-status-warning",
+          tone === "critical" && "bg-destructive",
+          tone === "stale" && "bg-status-stale",
+        )}
+        aria-hidden="true"
+      />
+      <span>{label}</span>
     </span>
   );
-}
-
-export function healthLabel(health: FleetHealth): string {
-  return statusLabels[health];
 }
