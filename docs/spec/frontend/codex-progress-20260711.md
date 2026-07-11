@@ -940,3 +940,44 @@ P2를 완료로 판정한다. 다음 단계는 `final-questions.md`에 남은 �
 실행 화면: http://127.0.0.1:5180/product
 브라우저 검증: title KubeHeal, console warning/error 0, release gate 표시
 ```
+
+## 2026-07-11 ButtonGroup·Tabs primitive 계약 보강
+
+- 구현 커밋: `83aa4d83a`
+- `ButtonGroup`은 `aria-label` 또는 `aria-labelledby` 중 하나를 필수로 요구하고, 둘이 동시에
+  있거나 빈 accessible name이면 거부한다. root는 `role="group"`과 orientation marker를 component가
+  소유하며 event handler, role, tab stop, raw render, raw HTML, inline style, hidden override를
+  받지 않는다.
+- `ButtonGroupText`는 중립 non-clickable div이고, `ButtonGroupSeparator`는 separator semantics와
+  orientation marker를 component가 소유한다. disabled child button의 activation은 native button에
+  맡기며 forced-colors disabled/focus treatment를 group에서 보강한다.
+- `Tabs`는 controlled 또는 uncontrolled selection 중 정확히 하나만 허용한다. controlled mode는
+  `onValueChange`가 필수이고, `TabsList`는 accessible name이 필수다.
+- `TabsTrigger`는 native button semantics와 active/disabled/orientation marker를 Base UI가 소유한다.
+  disabled tab은 roving focus에서 focus될 수 있지만 `aria-disabled=true` 상태에서는 선택되지 않고,
+  다음 enabled tab으로 이동한 뒤 automatic activation이 일어난다.
+- `TabsContent`는 tabpanel semantics와 focus marker를 component가 소유하며, heading hierarchy는 각
+  화면이 외부 heading으로 소유한다.
+- `THIRD_PARTY_NOTICES.md`에 ButtonGroup·Tabs의 upstream-derived source, product target, material
+  change를 추가했다. 이 변경은 product primitive/test 보강이며 새 endpoint 완료가 아니다.
+- §6b 조율 상태는 `api-needs.md`의 `requested` 26행, `blocked` 1행, 유효한 완료 앵커 0개다. 이번
+  변경은 `src/product/api/**`, `client.ts`, `url.ts`를 수정하지 않았다.
+
+```text
+명령: cd references/ui-layer-lab && npm run check
+결과: PASS
+  - TypeScript: PASS
+  - ESLint: PASS
+  - Vitest: 21 files, 144 tests PASS
+  - product design guard: 73 files PASS
+  - UI catalog source audit: 482 previews PASS, upstream 21e4ceb
+  - Vite production build: PASS
+  - ProductApp CSS: 55.54 kB (55,540 bytes)
+  - ProductApp JS: 68.82 kB (68,819 bytes)
+주의: 500kB 초과 chunk warning은 reference catalog 기존 성능 과제로 유지
+
+명령: cd references/ui-layer-lab && npm run visual-product
+결과: PASS — release-desktop-light, release-mobile-dark, release-reflow-320-light,
+      release-text-resize-200-light, state-reflow-320-light,
+      state-text-resize-200-light, state-forced-colors; network-silent
+```
