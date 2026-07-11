@@ -101,6 +101,14 @@ describe("ProductShell keyboard and help interaction", () => {
     ];
 
     try {
+      vi.resetModules();
+      await Promise.all([import("./ProductRouter"), import("./apiComposition")]);
+      expect(fetchSpy).not.toHaveBeenCalled();
+      expect(webSocketSpy).not.toHaveBeenCalled();
+      expect(eventSourceSpy).not.toHaveBeenCalled();
+      expect(xhrSpy).not.toHaveBeenCalled();
+      expect(sendBeaconSpy).not.toHaveBeenCalled();
+
       render(<ProductRouter composition={createApiComposition()} />);
       expect(screen.getByRole("heading", { name: "API 연결 계층을 검증하고 있습니다" })).toBeTruthy();
       expect(screen.queryByRole("navigation")).toBeNull();
