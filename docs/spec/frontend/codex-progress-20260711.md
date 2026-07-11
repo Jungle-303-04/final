@@ -392,3 +392,39 @@ P2를 완료로 판정한다. 다음 단계는 `final-questions.md`에 남은 �
 
 이 보강도 새 endpoint 완료를 의미하지 않는다. API 작업자가 함수별 완료 증거를 남길 때까지
 `app/apiComposition.ts`는 surface 0개를 유지하고 제품은 network-silent release gate만 렌더한다.
+
+## 2026-07-11 shortcut help와 product primitive 보강
+
+- 구현 커밋: `3032218cd`
+- `ProductShell`에 released surface 기준 shortcut registry를 연결했다. route chord는 release된
+  screen만 대상으로 생성하고, `?`는 shortcut help, `t`는 theme 전환으로 고정했다.
+- shortcut matcher는 editable control focus, modifier key, IME composing, repeat, blur,
+  visibility hidden, invalid chord suffix를 명시적으로 처리한다. dialog가 열려 있을 때는 `?`
+  외 shortcut을 실행하지 않는다.
+- `ShortcutHelpDialog`는 현재 활성 shortcut만 table로 표시한다. product-owned `Dialog`, `Kbd`,
+  `Table`, `Toggle` primitive와 `useProductTheme` controller를 추가했고 원천 고지는
+  `references/ui-layer-lab/THIRD_PARTY_NOTICES.md`에 남겼다.
+- `ThemeToggle`은 product theme controller를 받아 aria pressed 상태와 `aria-keyshortcuts="t"`를
+  제공한다.
+- 이 변경은 새 endpoint 완료를 의미하지 않는다. `API 완성:` 기록은 여전히 0행이며
+  `app/apiComposition.ts`는 surface 0개를 유지한다.
+
+```text
+명령: cd references/ui-layer-lab && npm run check
+결과: PASS
+  - TypeScript: PASS
+  - ESLint: PASS
+  - Vitest: 10 files, 52 tests PASS
+  - product design guard: 50 files PASS
+  - UI catalog source audit: 482 previews PASS, upstream 21e4ceb
+  - Vite production build: PASS
+주의: 500kB 초과 chunk warning은 reference catalog 기존 성능 과제로 유지
+```
+
+```text
+명령: uv run pytest tests/test_docs_index.py tests/test_bruno_collection.py -q
+결과: PASS — 17 passed
+
+명령: make manifest-check
+결과: PASS — management manifest objects 56, target manifest objects 18
+```
