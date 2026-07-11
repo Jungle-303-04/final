@@ -26,6 +26,8 @@ components as implementation references:
 | `src/components/ui/spinner.tsx` | `src/product/shared/ui/primitives/spinner.tsx` | product-relative utility import, localized status label, decorative mode, and reduced-motion behavior |
 | `src/components/ui/card.tsx` | `src/product/shared/ui/primitives/card.tsx` | product-relative utility import, neutral title/description semantics, protected slot and size markers |
 | `src/components/ui/progress.tsx` | `src/product/shared/ui/primitives/progress.tsx` | product-relative utility import, fixed accessible 0–100 contract, indeterminate and forced-colors treatment |
+| `src/components/ui/item.tsx` | `src/product/shared/ui/primitives/item.tsx` | product-relative utility import, explicit root element contract, neutral div roles, protected slot/variant/size markers |
+| `src/components/ui/scroll-area.tsx` | `src/product/shared/ui/primitives/scroll-area.tsx` | product-relative utility import, required accessible viewport name, fixed orientation contract, protected viewport/content structure |
 | `src/index.css` Base Nova variables | `src/product/styles/tokens.css` | lab/vendor sources removed, product-only source scan, two-theme contract, product status aliases |
 
 The product does not import the generated catalog or vendor snapshot at runtime. These adaptations are
