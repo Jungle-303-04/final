@@ -23,14 +23,15 @@ import {
   TooltipTrigger,
 } from "../shared/ui/primitives/tooltip";
 import {
-  productNavigationForCapabilities,
+  productNavigationForReleasedSurfaces,
   productRouteForPath,
-  type ProductCapabilityId,
+  type ProductSurfaceId,
   type ProductRouteIcon,
 } from "./productRoutes";
 
 interface ProductShellProps {
-  availableCapabilities: ReadonlySet<ProductCapabilityId>;
+  releasedSurfaceIds: ReadonlySet<ProductSurfaceId>;
+  defaultSidebarCollapsed?: boolean;
 }
 
 const routeIcons: Record<ProductRouteIcon, LucideIcon> = {
@@ -43,17 +44,25 @@ const routeIcons: Record<ProductRouteIcon, LucideIcon> = {
   gitops: GitBranch,
 };
 
-export function ProductShell({ availableCapabilities }: ProductShellProps) {
-  const [isSidebarCollapsed, setSidebarCollapsed] = useState(false);
+export function ProductShell({
+  releasedSurfaceIds,
+  defaultSidebarCollapsed,
+}: ProductShellProps) {
+  const [isSidebarCollapsed, setSidebarCollapsed] = useState(() => (
+    defaultSidebarCollapsed ?? (
+      typeof window !== "undefined" && window.matchMedia("(max-width: 767px)").matches
+    )
+  ));
   const location = useLocation();
-  const navigationRoutes = productNavigationForCapabilities(availableCapabilities);
+  const navigationRoutes = productNavigationForReleasedSurfaces(releasedSurfaceIds);
   const matchedRoute = productRouteForPath(location.pathname);
-  const currentRoute = matchedRoute && availableCapabilities.has(matchedRoute.id)
+  const currentRoute = matchedRoute && releasedSurfaceIds.has(matchedRoute.id)
     ? matchedRoute
     : navigationRoutes[0];
+  const sidebarToggleLabel = isSidebarCollapsed ? "사이드바 펼치기" : "사이드바 접기";
 
   if (!currentRoute) {
-    throw new Error("ProductShell requires at least one released capability");
+    throw new Error("ProductShell requires at least one released surface");
   }
 
   return (
@@ -68,7 +77,7 @@ export function ProductShell({ availableCapabilities }: ProductShellProps) {
 
         <aside
           className={cn(
-            "sticky top-0 flex h-svh shrink-0 flex-col border-r bg-sidebar text-sidebar-foreground transition-[width] duration-200 ease-out max-md:w-14",
+            "sticky top-0 flex h-svh shrink-0 flex-col border-r bg-sidebar text-sidebar-foreground transition-[width] duration-200 ease-out",
             isSidebarCollapsed ? "w-14" : "w-44",
           )}
           aria-label="제품 메뉴"
@@ -77,7 +86,7 @@ export function ProductShell({ availableCapabilities }: ProductShellProps) {
             <span className="grid size-8 shrink-0 place-items-center rounded-lg border border-sidebar-border bg-sidebar-primary text-sidebar-primary-foreground">
               <Activity className="size-4" aria-hidden="true" />
             </span>
-            <span className={cn("min-w-0 text-sm font-semibold tracking-tight max-md:sr-only", isSidebarCollapsed && "sr-only")}>
+            <span className={cn("min-w-0 text-sm font-semibold tracking-tight", isSidebarCollapsed && "sr-only")}>
               KubeHeal
             </span>
           </div>
@@ -97,7 +106,7 @@ export function ProductShell({ availableCapabilities }: ProductShellProps) {
                   to={routeDefinition.path}
                 >
                   <Icon className="size-4 shrink-0" aria-hidden="true" />
-                  <span className={cn("truncate max-md:sr-only", isSidebarCollapsed && "sr-only")}>
+                  <span className={cn("truncate", isSidebarCollapsed && "sr-only")}>
                     {routeDefinition.label}
                   </span>
                 </NavLink>
@@ -112,7 +121,7 @@ export function ProductShell({ availableCapabilities }: ProductShellProps) {
             })}
           </nav>
 
-          <div className="border-t border-sidebar-border p-2 max-md:hidden">
+          <div className="border-t border-sidebar-border p-2">
             <Button
               aria-controls="product-primary-navigation"
               aria-expanded={!isSidebarCollapsed}
@@ -123,7 +132,7 @@ export function ProductShell({ availableCapabilities }: ProductShellProps) {
               {isSidebarCollapsed
                 ? <PanelLeftOpen aria-hidden="true" />
                 : <PanelLeftClose aria-hidden="true" />}
-              <span className={cn(isSidebarCollapsed && "sr-only")}>사이드바 접기</span>
+              <span className={cn(isSidebarCollapsed && "sr-only")}>{sidebarToggleLabel}</span>
             </Button>
           </div>
         </aside>

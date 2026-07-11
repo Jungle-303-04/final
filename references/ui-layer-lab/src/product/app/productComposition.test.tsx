@@ -9,7 +9,7 @@ describe("product composition", () => {
     const composition = createProductComposition([]);
 
     expect(composition.surfaces).toEqual([]);
-    expect([...composition.capabilities]).toEqual([]);
+    expect([...composition.releasedSurfaceIds]).toEqual([]);
   });
 
   it("sorts registered surfaces by the canonical navigation order", () => {

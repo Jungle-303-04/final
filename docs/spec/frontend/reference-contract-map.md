@@ -306,7 +306,7 @@ interaction만 구현한다.
 
 | 삽입 지점 | 우리 route 상수·path | 제품 동작 | API 함수 상태 | 판정 |
 |---|---|---|---|---|
-| Issues incident 목록·상세 | `DASHBOARD_RCA_TIMELINE_PATH` `GET /api/dashboard/rca/timeline` → `RcaTimelineResponse`; `DASHBOARD_RCA_INCIDENT_PATH` `GET /api/dashboard/rca/incidents/{incident_id}` → `RcaIncidentResponse` | cluster/limit 목록 → stable incident detail; WS에 RCA event가 없어 30s poll | 기존 `getRcaTimeline`도 `API 완성` 미기록; `listRcaIncidents`, `getRcaIncident` queue | `직결` |
+| Issues incident 목록·상세 | `DASHBOARD_RCA_TIMELINE_PATH` `GET /api/dashboard/rca/timeline` → `RcaTimelineResponse`; `DASHBOARD_RCA_INCIDENT_PATH` `GET /api/dashboard/rca/incidents/{incident_id}` → `RcaIncidentResponse` | cluster/limit 목록 → stable incident detail; WS에 RCA event가 없어 30s poll | 기존 `getRcaTimeline`도 `API 완성` 미기록; 범용 `listRcaTimeline`과 `getRcaIncident` queue | `직결` |
 | “복구 조치” | `RCA_RECOVERY_PLAN_BY_CORRELATION_PATH` `GET /api/rca/recovery-plans/by-correlation/{correlation_id}` → `RecoveryPlanStatusResponse`; `RCA_RECOVERY_ACTION_SELECT_PATH` `POST /api/rca/recovery-plans/{plan_id}/actions/{action_id}/select` → `AcceptedResponse` | plan 조회; action은 비낙관 receipt 후 30s poll, `409`면 plan 재조회 | `getRecoveryPlanByCorrelation`, `selectRecoveryAction` queue | `직결` |
 | evidence trail | `EVIDENCE_QUERY_PATH` `GET /api/evidence` → `EvidenceQueryResponse` | correlation cursor pagination; raw 비노출 | `listEvidence` queue | `직결` |
 | resource-scoped AI analysis | `RCA_REPORTS_PATH` `GET /api/rca-reports` → `RcaReportListResponse` + recovery/evidence correlation 조회 | resource→correlation이 실제 binding될 때만 section render; 추정 금지 | `listRcaReports` queue | `어댑터` |
