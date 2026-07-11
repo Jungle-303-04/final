@@ -23,7 +23,7 @@ last_verified: 2026-07-11
 적용 범위:
 
 - application shell, sidebar, topbar, page, card, form, overlay, feedback.
-- Applications, GitOps, Timeline, Metrics, Topology를 포함한 모든 feature surface.
+- Home, Resources, Issues, Timeline, GitOps, Settings를 포함한 모든 feature surface.
 - light, dark, high-contrast theme.
 - DOM, SVG, Canvas, WebGL renderer에 전달되는 resolved visual policy.
 - mouse, touch, pen, keyboard, screen reader, reduced motion, forced colors.
@@ -41,12 +41,12 @@ last_verified: 2026-07-11
 
 | 책임 | 유일한 소유 위치 | 소비 규칙 |
 |---|---|---|
-| raw color, shadow, font, spacing, radius, CSS motion literal | `frontend/src/styles/design-system.css` | 다른 CSS/TS/TSX에서 raw literal 금지 |
-| TypeScript motion duration과 easing literal | `frontend/src/design-system/motion.ts` | feature는 public motion recipe만 소비 |
-| theme 선택과 resolved token object | `frontend/src/ProductRoot.tsx`, `frontend/src/styles/design-system.css` | composition root가 theme를 선택하고 shell과 renderer에 동일 policy 주입 |
-| 접근 가능한 UI primitive, variant, 반복 조합 | `frontend/src/design-system/` | feature가 primitive를 재정의하지 않고 public barrel만 소비 |
-| feature layout과 domain binding | `frontend/src/features/<feature>/` | semantic token과 public component만 소비 |
-| topology 전용 renderer presentation contract | `frontend/src/features/topology-engine/core/presentation.ts` | global token을 입력받고 상태/관계 예외만 확장 |
+| raw color, shadow, font, spacing, radius, CSS motion literal | `references/ui-layer-lab/src/product/styles/tokens.css` | 다른 product CSS/TS/TSX에서 raw literal 금지 |
+| TypeScript motion duration과 easing literal | `references/ui-layer-lab/src/product/shared/motion.ts` | feature는 public motion recipe만 소비 |
+| theme 선택과 resolved token object | `references/ui-layer-lab/src/product/ProductApp.tsx`, `references/ui-layer-lab/src/product/styles/tokens.css` | product root가 theme를 선택하고 shell과 renderer에 동일 policy 주입 |
+| 접근 가능한 UI primitive, variant, 반복 조합 | `references/ui-layer-lab/src/product/shared/ui/` | feature가 primitive를 재정의하지 않고 shared public API만 소비 |
+| feature layout과 domain binding | `references/ui-layer-lab/src/product/features/<feature>/` | semantic token과 shared component만 소비 |
+| Home treemap과 focus renderer | `references/ui-layer-lab/src/product/features/home/` | global token을 입력받고 topology 상태/관계 예외만 확장 |
 
 위 경로가 현재 runtime 기준 위치다. 동일 책임을 임시로 다른 파일에 복제하지 않는다.
 
@@ -82,7 +82,7 @@ last_verified: 2026-07-11
 
 ### 3.1 Core token pair
 
-CSS 변수 이름은 아래 semantic 이름 앞에 `--ds-`를 붙인다. `*-foreground`는 해당 surface 위의 text/icon만을 의미한다. 색 수치를 이 문서에 복제하지 않는다. light, dark, high-contrast의 실제 값과 theme key parity는 `frontend/src/styles/design-system.css` 한 파일만 소유한다.
+CSS 변수 이름은 아래 semantic 이름 앞에 `--ds-`를 붙인다. `*-foreground`는 해당 surface 위의 text/icon만을 의미한다. 색 수치를 이 문서에 복제하지 않는다. light, dark, high-contrast의 실제 값과 theme key parity는 `references/ui-layer-lab/src/product/styles/tokens.css` 한 파일만 소유한다.
 
 | Semantic token | Runtime CSS variable | 의미 |
 |---|---|---|
@@ -110,7 +110,7 @@ CSS 변수 이름은 아래 semantic 이름 앞에 `--ds-`를 붙인다. `*-fore
 
 ### 3.2 Chart token
 
-Chart palette는 아직 runtime token으로 구현되지 않았다. `chart-1..5` 같은 이름이나 색 수치를 구현된 계약처럼 소비하면 안 된다. Metrics chart를 구현할 때 세 theme의 palette, foreground/contrast, high-contrast dash/marker를 `frontend/src/styles/design-system.css`에 먼저 추가하고 이 절의 상태를 갱신한다.
+Chart palette는 아직 runtime token으로 구현되지 않았다. `chart-1..5` 같은 이름이나 색 수치를 구현된 계약처럼 소비하면 안 된다. Metrics chart를 구현할 때 세 theme의 palette, foreground/contrast, high-contrast dash/marker를 product `tokens.css`에 먼저 추가하고 이 절의 상태를 갱신한다.
 
 - metric series는 canonical metric identity를 안정적으로 hash해 token에 배정한다. filter/sort 순서가 바뀌어도 색이 바뀌지 않는다.
 - 같은 chart에서 색만으로 series를 구분하지 않는다. legend label과 point/line pattern을 함께 사용한다.
@@ -140,7 +140,7 @@ Chart palette는 아직 runtime token으로 구현되지 않았다. `chart-1..5`
 
 금지:
 
-- sidebar, topbar, 일반 card 전체를 status 색으로 채우기.
+- sidebar, topbar, 일반 card 전체를 status 색으로 채우기. Home의 bounded Pod treemap tile은 아래 명시된 예외다.
 - cluster/provider별 임의 색.
 - health를 CPU/메모리/비용 metric color로 재사용하기.
 - accent만 있고 text/icon/pattern이 없는 상태 표현.
@@ -169,7 +169,7 @@ Chart palette는 아직 runtime token으로 구현되지 않았다. `chart-1..5`
 
 ### 4.1 Spacing
 
-기본 단위는 4px이다. 현재 runtime spacing scale은 아래 변수만 제공하며 실제 수치는 `frontend/src/styles/design-system.css`가 소유한다.
+기본 단위는 4px이다. 현재 runtime spacing scale은 아래 변수만 제공하며 실제 수치는 product `tokens.css`가 소유한다.
 
 | Runtime token | 용도 |
 |---|---|
@@ -230,7 +230,7 @@ row, card padding, stack gap은 별도 density token으로 구현되지 않았�
 | `--ds-shadow-sm` | popover/menu/tooltip |
 | `--ds-shadow-md` | dialog/sheet/overlay |
 
-theme별 shadow color와 high-contrast의 shadow 제거는 `frontend/src/styles/design-system.css`가 소유한다.
+theme별 shadow color와 high-contrast의 shadow 제거는 product `styles/tokens.css`가 소유한다.
 
 - elevation은 surface + border + shadow 세 요소를 모두 강하게 사용하지 않는다.
 - sticky topbar/sidebar는 border로 분리하고 기본 shadow를 쓰지 않는다.
@@ -348,20 +348,19 @@ Card composition은 `CardHeader`, `CardTitle`, 선택적 `CardDescription`/`Card
 
 새 UI를 만들 때 다음 순서를 지킨다.
 
-1. `frontend/src/design-system/`의 기존 primitive와 variant 확인.
+1. `references/ui-layer-lab/src/product/shared/ui/`의 기존 primitive와 variant 확인.
 2. 두 개 이상 feature에서 반복되면 같은 design-system public API의 product composition으로 승격.
 3. domain 의미만 feature component에 둔다.
 4. renderer가 필요한 geometry만 topology renderer에 둔다.
 
-현재 public barrel에 구현된 primitive는 Alert, Badge, Breadcrumb, Button, Card, Empty, NativeSelect, Separator, Skeleton, Spinner다. Checkbox, Command, Dialog, Drawer, DropdownMenu, Field, Input, Popover, Progress, Select, Sheet, Switch, Table, Tabs, ToggleGroup, Tooltip는 필요한 화면과 상태 계약이 생길 때 같은 경계에 추가한다. 아직 export되지 않은 이름을 구현된 component처럼 import하거나 feature-local 대체물로 위조하지 않는다.
+현재 구현 여부는 `references/ui-layer-lab/src/product/shared/ui/`의 실제 export와 `npm run check`가 결정한다. 문서에 이름이 있다는 이유로 아직 없는 primitive를 import하거나 feature-local 대체물로 위조하지 않는다.
 
 Native control 소유권:
 
-- 일반 `<button>`은 `frontend/src/design-system/Button.tsx`만 생성한다.
-- 일반 `<select>`는 `frontend/src/design-system/NativeSelect.tsx`만 생성한다. feature의 raw `<select>`는 금지다.
-- `frontend/src/app/AppShell.tsx`의 `app-shell__scrim` button은 보이는 제품 control이 아니라 modal navigation을 닫는 full-screen semantic overlay이므로 유일한 shell 예외다. 이 요소는 class와 `type="button"`을 유지해야 하며 다른 action을 겸하지 않는다.
-- `frontend/src/features/topology/hierarchy/HierarchyTreemap.tsx`의 `motion.button`은 absolute geometry, stable layout identity, native keyboard activation을 한 DOM node에 결합하는 domain renderer 예외다. 일반 toolbar/header action에 사용할 수 없다.
-- 위 예외와 primitive owner는 `frontend/scripts/check-architecture.mjs`가 정확한 파일/markup 경계로 검사한다. 새 예외는 이 계약을 먼저 변경하지 않으면 추가할 수 없다.
+- 재사용 control은 `product/shared/ui`가 소유하고, feature는 public component를 소비한다.
+- app shell scrim은 보이는 제품 control이 아니라 modal navigation을 닫는 full-screen semantic overlay이며 다른 action을 겸하지 않는다.
+- Home treemap의 geometry tile은 absolute runtime geometry, stable entity identity, native keyboard activation을 한 DOM node에 결합할 수 있는 renderer 예외다. 일반 toolbar/header action에 이 예외를 확장하지 않는다.
+- 예외와 API boundary는 `references/ui-layer-lab/scripts/product-design-guard.mjs`가 검사한다. 새 예외는 이 계약과 guard를 같은 변경에서 수정하지 않으면 추가할 수 없다.
 
 ### 6.2 Variant 의미
 
@@ -490,15 +489,15 @@ DOM input → component intent → application command/query → state transitio
 - mutation: operation receipt 수신 전 성공 state를 optimistic하게 확정하지 않는다.
 - submit 직후 control은 `aria-busy`, disabled, stable width를 유지한다.
 - receipt 후 `pending | pending_approval | running | succeeded | failed | cancelled | unsupported`를 canonical status로 표시한다.
-- connection이 끊기면 마지막 confirmed state와 disconnected/stale reason을 함께 유지한다. synthetic로 자동 fallback하지 않는다.
-- Spinner flash 억제를 위한 별도 delay token은 현재 구현하지 않았다. 필요해지면 control 잠금과 시각 지연을 분리한 recipe를 `frontend/src/design-system/motion.ts`에 먼저 추가한다.
+- connection이 끊기면 마지막 confirmed state와 disconnected/stale reason을 함께 유지한다. fixture나 임의 값으로 대체하지 않는다.
+- Spinner flash 억제를 위한 별도 delay token은 현재 구현하지 않았다. 필요해지면 control 잠금과 시각 지연을 분리한 recipe를 product `shared/motion.ts`에 먼저 추가한다.
 - retry는 새로운 idempotency key를 만드는 명시 action이다. possibly-sent command를 자동 재발행하지 않는다.
 
 ## 8. Motion
 
 ### 8.1 Global motion token
 
-CSS와 TypeScript는 아래 동일 recipe 이름을 공유한다. 실제 수치는 각각 `frontend/src/styles/design-system.css`와 `frontend/src/design-system/motion.ts`가 소유하며 이 문서에 복제하지 않는다.
+CSS와 TypeScript는 아래 동일 recipe 이름을 공유한다. 실제 수치는 각각 product `styles/tokens.css`와 `shared/motion.ts`가 소유하며 이 문서에 복제하지 않는다.
 
 | Recipe | CSS token / TypeScript API | 용도 |
 |---|---|---|
@@ -522,7 +521,7 @@ CSS와 TypeScript는 아래 동일 recipe 이름을 공유한다. 실제 수치�
 
 ### 8.2 Topology 의미 motion 예외
 
-현재 runtime topology motion은 `MOTION_RECIPE.hierarchyMorph`와 `MOTION_RECIPE.zoomableHierarchy`를 구현한다. focus-Sankey의 ribbon/stagger/settle recipe는 아직 runtime design system에 구현되지 않았으므로 이름이나 수치를 feature에서 선점할 수 없다. 해당 interaction을 연결할 때 `topology-visual-motion-tokens.md`의 sequence 의미를 검토한 뒤 CSS와 TypeScript 중앙 source에 함께 추가한다.
+Home focus interaction의 ribbon erase, cube morph, label reveal, settle, ribbon draw, connector stagger는 `topology-visual-motion-tokens.md`의 확정 recipe를 product 중앙 token source에 같은 이름으로 구현한다. feature가 별도 숫자 timing을 선언하면 계약 위반이다.
 
 - topology transition은 entity key continuity를 보존한다. fade-out 후 unrelated node를 생성하는 방식은 금지다.
 - focus sequence가 구현되면 morph, ribbon, stagger, settle을 각각 측정하며 하나의 총 duration으로 뭉개지 않는다.
@@ -542,13 +541,14 @@ CSS와 TypeScript는 아래 동일 recipe 이름을 공유한다. 실제 수치�
 
 ## 9. Topology UI 통합 규칙
 
-Topology는 별도의 시각 제품이 아니다. shell, context bar, control, inspector, tooltip, dialog는 이 문서의 component와 theme를 그대로 사용한다.
+Home treemap과 focus relation은 별도 `Topology` navigation page가 아니다. shell, context bar, control, inspector, tooltip, dialog는 이 문서의 component와 theme를 그대로 사용한다.
 
 - topology canvas background = `background` 또는 bounded frame의 `card`.
 - cluster/node/pod frame 기본 = `card`, `card-foreground`, `border`.
 - hover = `accent`; selected = `selection`; keyboard focus = `ring`.
-- health는 §3.3 accent marker/stroke만 사용한다. 전체 treemap을 무지개 health fill로 만들지 않는다.
-- tile 면적은 합산 가능한 metric absolute value만 표현한다. 색은 면적 metric을 중복 인코딩하지 않는다.
+- Home의 bounded Pod treemap은 health를 tile 전체 fill로 표시한다. fill/foreground/border pair는 중앙 topology health token을 사용하고 text, marker 또는 pattern을 함께 제공한다. 3px inline-start strip은 health가 아니라 namespace 안정 색 전용이다.
+- Home Pod tile의 면적 가중치는 모두 `1`이다. CPU·memory 등 사용량은 면적을 바꾸지 않고 tile 하단 bar와 tooltip에만 표시하며, 측정값이 없으면 unavailable로 남긴다.
+- packed layout은 실제 container pixel 좌표를 사용하고 최소 tile 14×14px, gap 2px를 지킨다. 거대한 빈 tile 또는 header가 정량 면적을 차지하면 layout defect다.
 - zero/no-data/unavailable/restricted는 사라지지 않고 구조 shelf/pattern/text로 표현한다.
 - relation plane과 observed traffic의 renderer color는 `topology-visual-motion-tokens.md`의 typed semantic token이 소유하되 global surface raw color를 재선언하지 않는다.
 - inspector는 product Card/Sheet/Drawer composition을 사용한다.
@@ -563,19 +563,19 @@ Topology는 별도의 시각 제품이 아니다. shell, context bar, control, i
 허용 방향:
 
 ```text
-styles/design-system.css + design-system/motion.ts
+product/styles/tokens.css + product/shared/motion.ts
   ↓
-design-system public barrel
+product/shared/ui public API
   ↓
-features
+product/features
   ↓
-routes/composition root
+product pages/app root
 ```
 
-- `frontend/src/design-system/`은 feature/domain type을 import하지 않는다.
+- `references/ui-layer-lab/src/product/shared/ui/`는 feature/domain type을 import하지 않는다.
 - feature는 다른 feature의 private component 또는 CSS를 deep import하지 않는다.
 - alias는 project TypeScript config의 실제 alias를 사용한다. `../../../../components` 경로를 복제하지 않는다.
-- conditional class는 `frontend/src/design-system/cx.ts`의 공통 `cx()` utility로 조합하며 string interpolation variant를 새로 만들지 않는다.
+- conditional class는 product shared utility로 조합하며 string interpolation variant를 새로 만들지 않는다.
 - color/size/variant map은 component module 한 곳에서 typed object 또는 variant utility로 소유한다.
 - CSS module/global selector로 다른 component 내부 DOM을 덮어쓰지 않는다.
 - feature page는 `.button`, `.card`, `.badge`, `.dialog` 같은 global class를 정의하지 않는다.
@@ -586,7 +586,7 @@ routes/composition root
 
 1. 현재 project runner와 CLI의 `info`로 framework/base/icon/alias를 확인한다.
 2. component docs와 registry diff를 먼저 검토한다.
-3. 필요한 primitive만 local `frontend/src/design-system/`에 추가하고 public barrel로 export한다.
+3. 필요한 primitive만 local `references/ui-layer-lab/src/product/shared/ui/`에 추가하고 public API로 export한다.
 4. import, base primitive, icon library, accessibility name, theme token을 이 계약에 맞춘다.
 5. upstream provenance/revision/license와 product modification을 기록한다.
 6. component state matrix와 theme visual test가 통과한 뒤 사용한다.
@@ -607,15 +607,14 @@ routes/composition root
 
 다음 검사 중 하나라도 실패하면 merge/release할 수 없다.
 
-`frontend/scripts/check-architecture.mjs`가 직접 차단하는 항목:
+`references/ui-layer-lab/scripts/product-design-guard.mjs`가 직접 차단하는 항목:
 
-- live dependency graph의 synthetic/demo module 유입 0건.
+- runtime product dependency graph의 fixture/demo module 유입 0건.
 - adapter boundary 밖의 `fetch` 0건.
-- demo adapter 밖의 provider 이름 기반 branch/literal 0건.
-- `frontend/src/styles/design-system.css` 외 CSS/TS/TSX의 hex, `rgb`, `hsl`, `oklch` raw color 0건.
-- CSS time literal은 `frontend/src/styles/design-system.css`, TypeScript motion literal은 `frontend/src/design-system/motion.ts` 외 0건.
-- raw `<select>`는 `NativeSelect.tsx` 외 0건, raw `<button>`은 `Button.tsx`와 §6.1의 semantic scrim 외 0건.
-- `motion.button`은 §6.1의 topology domain renderer 예외 외 0건.
+- provider 이름 기반 UI branch/literal 0건.
+- product `styles/tokens.css` 외 CSS/TS/TSX의 hex, `rgb`, `hsl`, `oklch` raw color 0건.
+- feature의 CSS/TypeScript raw motion literal 0건.
+- inline style은 typed runtime geometry CSS custom property 전달 외 0건.
 
 TypeScript/build/component 접근성 test와 review gate가 담당하는 항목:
 
@@ -685,7 +684,7 @@ TypeScript/build/component 접근성 test와 review gate가 담당하는 항목:
 Token/component 변경은 다음을 한 변경 단위에서 함께 수행한다.
 
 1. 이 문서의 의미 또는 numeric token 변경.
-2. `frontend/src/styles/design-system.css`, 필요 시 `frontend/src/design-system/motion.ts`와 resolved renderer policy 변경.
+2. product `styles/tokens.css`, 필요 시 `shared/motion.ts`와 resolved renderer policy 변경.
 3. 영향을 받는 primitive/pattern 변경.
 4. 세 theme component matrix와 screen visual snapshot 갱신.
 5. contrast, keyboard, reduced motion, event-count test 실행.
@@ -703,8 +702,8 @@ release 완료를 주장하려면:
 
 - 모든 production route가 이 component/token graph만 소비해야 한다.
 - 이전 shell/theme CSS의 raw literal과 중복 component가 제거돼야 한다.
-- live와 explicit synthetic adapter가 같은 UI 상태 component를 사용해야 한다.
-- DEMO DATA 표시는 adapter origin에 의해 지속적으로 보이고, theme와 관계없이 읽혀야 한다.
+- runtime product는 실제 API만 사용하고 fixture/synthetic/demo dataset을 import하지 않아야 한다.
+- API 접근 불가 시 loading을 가짜 성공 화면으로 바꾸지 않고 차단 원인을 표시해야 한다.
 - §11 gate 결과가 CI artifact로 남아야 한다.
 
 ## 13. 구현 검토 체크리스트

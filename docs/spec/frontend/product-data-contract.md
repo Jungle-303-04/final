@@ -10,15 +10,17 @@ last_verified: 2026-07-11
 
 ## 0. 권한, 범위, 비목표
 
-이 문서는 Applications, GitOps, Tree/Insights, Timeline, Metrics, Topology, GitOps Operations 화면이 소비할 canonical 데이터와 사용자 경험의 구현 예정 계약이다. 현재 repo의 실제 코드와 통과한 테스트가 source of truth이며, 아래 DTO와 schema가 현 코드에 없으면 구현 완료가 아니라 후속 작업 기준으로만 읽는다. 백엔드는 이 소비 의미를 OpenAPI와 runtime schema로 구현하고, 프론트는 `[OPENAPI_ACCEPTED]` 이후 live adapter를 확정한다. 배포 완료는 승인된 OpenAPI, generated runtime schema, live/synthetic 공통 contract suite와 제품 UI test가 모두 통과한 뒤에만 주장한다.
+이 문서는 Applications, GitOps, Tree/Insights, Timeline, Metrics, Topology, GitOps Operations 화면이 소비할 canonical 데이터와 사용자 경험의 구현 예정 계약이다. 현재 repo의 실제 코드와 통과한 테스트가 source of truth이며, 아래 DTO와 schema가 현 코드에 없으면 구현 완료가 아니라 후속 작업 기준으로만 읽는다. Runtime 제품은 `references/ui-layer-lab/src/product/`에서 실제 same-origin `/api`만 사용한다. 배포 완료는 승인된 OpenAPI, runtime schema, live adapter contract suite와 제품 UI test가 모두 통과한 뒤에만 주장한다.
+
+여기서 Topology는 Home treemap/focus relation engine과 Resources의 관계 projection을 뜻하며 독립 sidebar 메뉴나 `/topology` route를 뜻하지 않는다. v0 정보 구조는 Home, Resources, Issues, Timeline, GitOps, Settings만 노출한다.
 
 구현 우선순위:
 
 1. 이 문서의 사용자 의미와 상태 전이.
 2. `topology-engine.md`의 identity, relation, metric, stream 불변조건.
 3. 승인된 OpenAPI와 생성된 TypeScript/runtime schema.
-4. 동일 계약 suite를 통과한 live/synthetic adapter와 executable test.
-5. 동일 계약 suite를 통과한 live/synthetic adapter와 제품 UI 구현.
+4. 실제 `/api`를 소비하는 live adapter와 executable contract test.
+5. 실제 API의 loading/empty/error/stale/permission 상태를 처리하는 제품 UI 구현.
 
 비목표:
 
@@ -69,9 +71,7 @@ type ResumeCursor = {
 }
 
 type DataOrigin =
-  | { kind: "live"; adapterId: string; endpointId: string }
-  | { kind: "synthetic"; adapterId: string; datasetId: string; seed: string }
-  | { kind: "replay"; adapterId: string; recordingId: string }
+  { kind: "live"; adapterId: string; endpointId: string }
 
 type PageContinuation =
   | { hasMore: false; nextCursor: null }
@@ -2250,7 +2250,7 @@ type RemotePanelState<T> =
 
 - `empty`는 해당 authorization scope의 complete collection이 0개임을 확인했을 때만 쓴다. forbidden, partial, disconnected, unavailable을 empty로 표현하지 않는다.
 - background refresh는 마지막 성공 data를 유지하는 직교 flag다. refresh 실패 시 data + stale/오류를 함께 보여준다.
-- synthetic/replay origin은 fetch 상태와 무관하며 화면 최상위에 `DEMO DATA`/`REPLAY DATA` marker를 지속 표시한다.
+- runtime response의 `DataOrigin`은 실제 live endpoint만 나타낸다. test fixture는 wire DTO의 origin으로 승격하지 않는다.
 - pending approval/running/succeeded/failed는 operation 상태다. resource의 sync/health/freshness를 덮어쓰지 않는다.
 - refreshing/refreshError는 ready 또는 empty에서만 의미가 있다. initial/error branch에는 false/null이다. ready/empty는 response envelope 전체를 보존해 metadata를 복제하지 않는다. empty는 complete envelope와 화면별 empty predicate를 모두 만족해야 하며, error는 non-null ApiError를 타입으로 강제한다.
 
@@ -2739,28 +2739,26 @@ UI component와 reducer는 URL, fetch, provider SDK를 호출하지 않고 이 p
 - GitOps Tree와 runtime Topology는 같은 graph update protocol을 사용하므로 둘 다 stream/poll method를 가진다.
 - Timeline poll/stream은 TimelinePage가 발급한 queryId/canonicalQueryHash/cursor를 그대로 사용하며 client가 hash/cursor 종류를 변환하지 않는다.
 
-### 14.2 Adapter와 data origin
+### 14.2 Live adapter와 data origin
 
-- `Live*Adapter`는 승인된 OpenAPI 이후 구현을 확정하며 모든 unknown JSON을 runtime schema로 검증한다.
-- `Synthetic*Adapter`는 동일 port와 동일 contract test suite를 구현한다. dataset, seed, fake clock, capability matrix를 constructor로 주입하고 view/component에 fixture import를 허용하지 않는다.
-- synthetic는 `DataOrigin.kind="synthetic"`를 모든 root response/stream/receipt에 넣는다. product shell은 route 전체에 `DEMO DATA` marker를 지속 표시한다.
-- replay도 `REPLAY DATA`를 표시하고 live로 오인되는 timestamp/count를 만들지 않는다.
-- live adapter failure는 synthetic로 자동 fallback하지 않는다. offline/source unavailable/error 상태로 남는다.
-- composition root는 `mode: "live" | "synthetic" | "replay"`를 explicit build/runtime config로 선택한다. mode가 없거나 잘못되면 startup을 실패시키며 추정 default를 쓰지 않는다.
-- production build/CI dependency graph는 `Synthetic`, `fixture`, `demoDataset`, testkit import가 product live entry에 도달하면 실패한다.
+- Runtime 제품은 `references/ui-layer-lab/src/product/api/`의 live adapter만 사용하고 모든 unknown JSON을 runtime schema로 검증한다.
+- 모든 request는 same-origin `/api`와 `credentials: "include"`를 사용한다. state-changing request는 중앙 client가 CSRF header를 추가한다.
+- API 실패는 offline/source unavailable/error/permission 상태로 남는다. fixture, sample count, 임의 성공 상태로 대체하지 않는다.
+- Browser test는 test file 안에서 network response를 mock할 수 있으나 runtime product module이 fixture를 import해서는 안 된다.
+- production build/CI dependency graph는 `Synthetic`, `fixture`, `demoDataset`, seeded generator, fake clock import가 product entry에 도달하면 실패한다.
 
 ### 14.3 Composition root 불변조건
 
 ```ts
-type ProductRuntimeConfig =
-  | { mode: "live"; baseUrl: string }
-  | { mode: "synthetic"; datasetId: string; seed: string }
-  | { mode: "replay"; recordingId: string }
+type ProductRuntimeConfig = {
+  apiPrefix: "/api"
+  credentials: "include"
+}
 
 declare function createProductPorts(config: ProductRuntimeConfig): ProductPorts
 ```
 
-Production release artifact는 live entry만 export한다. 별도 demo entry가 synthetic composition을 import한다. Story/test entry는 testkit을 사용할 수 있다. 동일 화면이 어떤 adapter에서도 DTO 의미를 바꾸지 않으며 provider별 fixture 대신 capability matrix를 조합한다.
+Production release artifact는 live product entry만 export한다. Story/browser test는 test runner의 network interception을 사용할 수 있지만 runtime composition에는 adapter mode selector나 demo entry가 없다. Capability 조합 test도 provider fixture가 아니라 test-only canonical matrix를 사용한다.
 
 ## 15. Backend 소비자 계약 우선순위
 
@@ -2838,9 +2836,9 @@ Adapter는 provider response를 이 canonical contract로 변환할 수 없으�
 - DecimalString은 finite canonical decimal grammar를 검증하고 JS binary float로 합계/비교하지 않는다.
 - Date parse는 RFC 3339 offset을 검증하고 invalid date를 `unknown freshness`로 조용히 바꾸지 않고 schema error로 처리한다.
 
-### 17.2 동일 adapter contract suite
+### 17.2 Live adapter contract suite
 
-Live와 Synthetic adapter는 같은 port contract suite를 통과해야 한다.
+각 live adapter와 runtime schema는 같은 canonical contract suite를 통과해야 한다. Test fixture는 test file 또는 test support에만 존재하며 runtime adapter 구현이 아니다.
 
 | Suite | 필수 사례 |
 |---|---|
@@ -2856,9 +2854,9 @@ Live와 Synthetic adapter는 같은 port contract suite를 통과해야 한다.
 | security | Secret/diff redaction, HTML/script text, URL allowlist, cache purge on permission loss |
 | accessibility | keyboard/roving focus, screen reader status, 44px touch target, focus restore, reduced motion |
 
-### 17.3 Canonical capability matrix fixture
+### 17.3 Test-only canonical capability matrix
 
-Fixture 축은 provider가 아니라 다음 canonical 값이다.
+Test-only matrix의 축은 provider가 아니라 다음 canonical 값이다.
 
 - applicable true/false.
 - supported true/false.
@@ -2872,12 +2870,12 @@ Fixture 축은 provider가 아니라 다음 canonical 값이다.
 
 모든 P0 경계와 pairwise 조합을 실행하고, write+read_only, unsupported+visible, hidden+forbidden, approval+stale plan, terminate+already terminal은 전용 case로 고정한다.
 
-### 17.4 Production synthetic 차단
+### 17.4 Production fixture/synthetic 차단
 
-- live product entry dependency graph에 `Synthetic*Adapter`, dataset, fixture, seeded generator, fake clock import가 0건인지 CI가 검사한다.
-- live runtime config에서 `mode=synthetic/replay`를 허용하지 않는다. demo/replay는 별도 entry/artifact다.
-- live failure를 catch하여 demo를 반환하는 코드 pattern을 lint/architecture test로 금지한다.
-- synthetic response에는 모든 root/stream/receipt에 synthetic DataOrigin이 있어야 하며 shell marker가 사라지는 route가 없어야 한다.
+- product entry dependency graph에 `Synthetic*Adapter`, dataset, fixture, seeded generator, fake clock import가 0건인지 CI가 검사한다.
+- runtime config에는 `mode=synthetic/replay` selector가 없다.
+- live failure를 catch하여 fixture 또는 sample success를 반환하는 code pattern을 lint/design guard로 금지한다.
+- browser/unit test mock은 production bundle dependency graph에 들어가지 않아야 한다.
 
 ### 17.5 Interaction, accessibility, performance
 
@@ -2921,23 +2919,18 @@ Fixture 축은 provider가 아니라 다음 canonical 값이다.
 12. Metrics decimal/unit/scope/window/step/source/freshness/coverage/missing state가 있다.
 13. HTTP error가 canonical ApiError로 손실 없이 mapping된다.
 14. payload budget, page/expansion/downsampling, cancellation 식별자가 있다.
-15. DataOrigin이 live root/stream/receipt에 있으며 synthetic/replay와 같은 union을 쓴다.
-16. generated contract test가 Synthetic adapter suite와 동일한 semantic fixture를 통과한다.
+15. DataOrigin이 실제 live root/stream/receipt에 있으며 test/runtime origin을 혼합하지 않는다.
+16. generated contract test가 test-only canonical matrix의 required/nullable/error case를 통과한다.
 
 하나라도 충족하지 않으면 `[OPENAPI_CHANGES_REQUIRED]`이며 live adapter를 확정하지 않는다. 모두 충족하고 contract tests가 통과한 경우에만 `[OPENAPI_ACCEPTED]`다.
 
-### 18.3 Synthetic adapter로 선행 가능한 범위
+### 18.3 API가 준비되지 않은 기능의 처리
 
-- Applications/GitOps list/detail, binding selector, 검색/filter/sort/cursor UX.
-- Tree/Insights snapshot/expansion/node inspector와 partial/stale/restricted 상태.
-- Timeline page/live event/reconnect/out-of-order UI.
-- Metrics catalog/query/coverage/source/freshness/취소 UI.
-- Topology snapshot/delta/metric overlay/map·focus-Sankey·보조 fold-lens/drill-down/cross-navigation.
-- 모든 operation receipt/progress/approval/terminal/recovery flow.
-- management read-only와 capability hide/disabled reason.
-- light/dark/high-contrast/reduced-motion/keyboard/large payload 테스트.
-
-단, synthetic-only 통과는 live contract 완료가 아니며 demo entry에서만 실행한다. `[OPENAPI_ACCEPTED]` 전 live adapter endpoint/schema를 고정하지 않는다.
+- 실제 endpoint와 runtime schema가 없는 제품 화면은 sample data로 먼저 완성하지 않는다.
+- UI component 단위 상태는 test-only network mock으로 검증할 수 있지만 runtime route에 성공 데이터가 나타나서는 안 된다.
+- API가 없거나 인증·권한 때문에 접근할 수 없으면 해당 기능은 capability에서 제거하거나 명시적 blocked/error 상태로 남긴다.
+- 현재 우선순위는 실제 inventory API로 구동되는 Home treemap이며 Resources 인라인 상세 등 후속 화면은 Home 완료 gate 이후 시작한다.
+- `[OPENAPI_ACCEPTED]` 전에는 아직 존재하지 않는 endpoint/schema를 runtime adapter에서 추정하지 않는다.
 
 ## 19. 요구사항 추적표
 
@@ -2952,7 +2945,7 @@ Fixture 축은 provider가 아니라 다음 canonical 값이다.
 | Operations/history/capabilities | §10–11 |
 | 상태 행렬 | §12 |
 | consumer API/cache/error/SLO | §13 |
-| ports/live/synthetic/composition | §14 |
+| ports/live composition | §14 |
 | backend MUST/SHOULD/OPTIONAL | §15 |
 | provider-neutral 검토 | §16 |
 | test/quality | §17 |
