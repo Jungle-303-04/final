@@ -282,7 +282,7 @@ AWS smoke webhook body에는 `force: true`를 넣는다.
 | Deploy script -> target registration | `MANAGEMENT_BASE_URL`, `cluster_id`, agent token, target display name | target agent manifest/API | target agent가 management로 outbound polling과 evidence result 전송을 하기 위해 필요하다. |
 | Target agent -> Gateway | `x-agent-token`, command/evidence job result body | `/agent/commands/*`, `/agent/evidence/jobs/*` | agent identity를 확인하고 workspace/cluster 위조를 막는다. |
 | Evidence job -> RCA chain | `workspace_id`, `cluster_id`, `evidence_key`, `kubernetes`, `metrics`, `logs`, `traces` | `cluster.evidence.received` | 가인이 RCA 입력으로 쓸 수 있는 window 단위 evidence 묶음이다. |
-| RCA/dispatch -> Command or PR | `command.requested` 또는 `safe_pr.requested` | `command-worker`, `scm-worker/GithubScmProvider` | 실제 target 실행과 GitHub PR 생성을 분리한다. |
+| RCA/dispatch -> Command or PR | `command.requested` 또는 `safe_pr.requested` | `command-worker`, `safe-pr-worker`, `ai-diff-worker`, `scm-worker/GithubScmProvider` | 실제 target 실행과 GitHub PR 생성을 분리한다. |
 | Dashboard projection | `cluster.evidence.received`, `rca.*`, `command.*`, `safe_pr.*` | `dashboard-worker` | 찬빈 화면이 raw event bus가 아니라 read model/API를 읽게 한다. |
 
 ## 역할별로 봐야 하는 결과

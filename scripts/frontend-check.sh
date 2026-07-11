@@ -7,22 +7,34 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "${ROOT_DIR}/frontend"
 
 echo "[frontend-check] design-system guard"
-feature_css_files="$(find src/features -type f -name '*.css' -print)"
+feature_roots=()
+for candidate in src/features src/product/features; do
+  if [[ -d "${candidate}" ]]; then
+    feature_roots+=("${candidate}")
+  fi
+done
+
+feature_css_files=""
+if (( ${#feature_roots[@]} > 0 )); then
+  feature_css_files="$(find "${feature_roots[@]}" -type f -name '*.css' -print)"
+fi
 if [[ -n "${feature_css_files}" ]]; then
   echo "feature 코드에 새 CSS 파일을 추가할 수 없습니다:" >&2
   printf '%s\n' "${feature_css_files}" >&2
   exit 1
 fi
 
-if rg -n --glob 'src/features/**/*.{ts,tsx}' 'style\s*=' src/features; then
-  echo "feature 코드에서 inline style= 사용은 금지입니다. src/ui 프리미티브와 Tailwind semantic token을 사용하세요." >&2
-  exit 1
-fi
+for feature_root in "${feature_roots[@]}"; do
+  if rg -n --glob "${feature_root}/**/*.{ts,tsx}" 'style\s*=' "${feature_root}"; then
+    echo "feature 코드에서 inline style= 사용은 금지입니다. src/ui 프리미티브와 Tailwind semantic token을 사용하세요." >&2
+    exit 1
+  fi
 
-if rg -n --glob 'src/features/**/*.{ts,tsx}' '#[0-9a-fA-F]{3}([0-9a-fA-F]{3})?([0-9a-fA-F]{2})?\b' src/features; then
-  echo "feature 코드에서 raw hex 색상 사용은 금지입니다. src/ui/theme.css semantic token을 사용하세요." >&2
-  exit 1
-fi
+  if rg -n --glob "${feature_root}/**/*.{ts,tsx}" '#[0-9a-fA-F]{3}([0-9a-fA-F]{3})?([0-9a-fA-F]{2})?\b' "${feature_root}"; then
+    echo "feature 코드에서 raw hex 색상 사용은 금지입니다. src/ui/theme.css semantic token을 사용하세요." >&2
+    exit 1
+  fi
+done
 
 echo "[frontend-check] npm ci"
 npm ci --include=dev --no-audit --no-fund

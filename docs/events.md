@@ -280,12 +280,21 @@ async def on_event(evt: EventEnvelope, ctx):
 | Diff Analyze Worker (App) | `src/services/gitops/diff-analyze-worker/app.py` | `desired.diff.detected` |
 | Workflow Controller (App) | `src/services/gitops/workflow-controller/app.py` | `git.webhook.received`, `git.changed`, `manifest.rendered`, `manifest.invalid`, `desired.diff.detected`, `diff.analyzed`, `safe_pr.created`, `safe_pr.failed`, `approval.granted`, `approval.rejected`, `command.queued_for_agent`, `command.completed` |
 | AI Diff Worker (App) | `src/services/ai/diff-worker/app.py` | `safe_pr.patch_prepared` |
-| SCM Worker (App) | `src/services/gitops/scm-worker/app.py` | `safe_pr.requested` |
+| Safe PR Worker (App) | `src/services/gitops/safe-pr-worker/app.py` | `safe_pr.requested` |
+| SCM Worker (App) | `src/services/gitops/scm-worker/app.py` | `safe_pr.ready_for_creation` |
 | Command Worker (App) | `src/services/command/command-worker/app.py` | `command.requested` |
 | Alert Worker (App) | `src/services/alert/alert-worker/app.py` | `alert.requested` |
 | Mail Worker (App) | `src/services/mail/mail-worker/app.py` | `mail.email_verification.requested` |
 | Target Reconcile Worker (App) | `src/services/target/reconcile-worker/app.py` | `cluster.desired_state.changed`, `cluster.reconcile.requested` |
-| RCA Worker (App) | `src/services/ai/rca-worker/app.py` | `cluster.evidence.received` |
+| Target Drift Worker (App) | `src/services/target/drift-worker/app.py` | `cluster.drift.detected` |
+| Evidence Worker (App) | `src/services/ai/evidence-worker/app.py` | `cluster.evidence.received` |
+| Incident Worker (App) | `src/services/ai/incident-worker/app.py` | `evidence.built` |
+| Plan Worker (App) | `src/services/ai/plan-worker/app.py` | `evidence.bundle.built` |
+| Analyze Worker (App) | `src/services/ai/analyze-worker/app.py` | `rca.candidates.planned` |
+| RCA Worker (App) | `src/services/ai/rca-worker/app.py` | `rca.candidates.evaluated` |
+| Recovery Worker (App) | `src/services/ai/recovery-worker/app.py` | `rca.completed` |
+| Select Worker (App) | `src/services/ai/select-worker/app.py` | `recovery.planned` |
+| Dispatch Worker (App) | `src/services/ai/dispatch-worker/app.py` | `recovery.action_selected` |
 | Audit Timeline Service (`@app.on_any`) | `src/services/projection/audit-worker/app.py` | `>` |
 | Dashboard Projection Service (`@app.on_any`) | `src/services/projection/dashboard-worker/app.py` | `>` |
 
@@ -301,9 +310,9 @@ async def on_event(evt: EventEnvelope, ctx):
 
 이 표준 모양은 `src/packages/runtime/outbound.py`의 helper `deliver(call, ok, fail)`로 구현한다. 외부 호출 1회를 받아 성공이면 `ok(결과)` body를, 실패면 `fail(예외)` body를 yield한다.
 
-예: `safe_pr.requested -> scm-worker -> safe_pr.patch_prepared + safe_pr.created`, 그리고 `safe_pr.patch_prepared -> ai-diff-worker -> diff.explained`. PR 생성은 `scm-worker`가 단일 repo write boundary로 수행하고, diff 설명은 AI sidecar 이벤트로 분리된다.
+예: `safe_pr.requested -> safe-pr-worker -> safe_pr.patch_prepared -> ai-diff-worker -> diff.explained + safe_pr.ready_for_creation -> scm-worker -> safe_pr.created | safe_pr.failed`. PR 생성은 `scm-worker`가 단일 repo write boundary로 수행하고, 요청 준비와 diff 설명은 앞단 worker 이벤트로 분리된다.
 
-`safe_pr.requested`는 검토 문서만이 아니라 `patches: list[SafePrFilePatch]`를 함께 실을 수 있다. `diff-analyze-worker`는 `desired_manifest`가 있는 안전 diff를 `manifest_path`에 대한 rendered manifest patch와 `.gitops/rollback/<workflow_run_id>/...` rollback patch로 변환한다. `scm-worker`는 이 요청을 `safe_pr.patch_prepared`로 정규화한 뒤 안전한 repository-relative path만 허용해 검토 문서, apply patch, rollback patch를 같은 PR branch에 커밋한다. `ai-diff-worker`는 `safe_pr.patch_prepared`를 소비해 `diff.explained` sidecar 이벤트만 발행한다.
+`safe_pr.requested`는 검토 문서만이 아니라 `patches: list[SafePrFilePatch]`를 함께 실을 수 있다. `diff-analyze-worker`는 `desired_manifest`가 있는 안전 diff를 `manifest_path`에 대한 rendered manifest patch와 `.gitops/rollback/<workflow_run_id>/...` rollback patch로 변환한다. `safe-pr-worker`는 이 요청을 `safe_pr.patch_prepared`로 정규화한 뒤 안전한 repository-relative path만 통과시킨다. `ai-diff-worker`는 `safe_pr.patch_prepared`를 소비해 `diff.explained`를 발행하고, 통과한 요청만 `safe_pr.ready_for_creation`으로 넘긴다. `scm-worker`는 검토 문서, apply patch, rollback patch를 같은 PR branch에 커밋한다.
 
 `command.requested` 계열 write command는 `approval_ref`와 `policy_decision_ref`를 계약에 포함한다. `command-worker`는 write action catalog에서 approval이 필요한 action을 queue 전에 검증하고, DB의 approval record가 없거나 granted/not_required 상태가 아니거나 policy decision ref가 다르면 fail-closed한다. 통과한 ref는 `Plan`과 `command.queued_for_agent`에도 복사한다. target `cluster-agent`도 실행 직전 같은 ref가 없으면 fail-closed한다.
 
