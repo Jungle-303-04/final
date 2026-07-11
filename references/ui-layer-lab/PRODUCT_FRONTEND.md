@@ -1,79 +1,117 @@
 # Product frontend foundation
 
-## Product frame
+This file explains the runtime boundary for contributors working in
+`references/ui-layer-lab/src/product`. Product scope and screen semantics remain authoritative in
+`docs/spec/frontend/codex-directive-goalmode-20260711.md` and its active-document allowlist.
 
-The first production surface is an operations control room for people responsible for Kubernetes fleet health and remediation.
+## Current release state
 
-- Primary question: **What needs attention now?**
-- Secondary question: **Which cluster should I inspect next?**
-- Tone: calm, industrial, precise, and evidence-led.
-- Visual direction: dense operational editorial rather than a generic card dashboard.
-- Memorable element: a fleet status field where health, freshness, incidents, and measured capacity can be scanned without opening each cluster.
+The product entry is `/product`. It is not a demo route and must never render catalog fixtures,
+synthetic Kubernetes resources, or guessed API values.
 
-## Backend-backed first slice
-
-The product screen at `/product` is driven by backend contracts only. The demo catalog at `/` is intentionally backend-independent.
-
-| UI need | Backend contract | Use |
-| --- | --- | --- |
-| Session and workspace | `GET /auth/session` | user, roles, workspace scope |
-| Fleet rollup | `GET /fleet/summary` | cluster rows and all top-level counts |
-| Incident queue | `GET /dashboard/rca/timeline?limit=6` | optional list when the user has RCA read access |
-| Live connection | `WS /api/live/browser?workspace_id=...` | connection freshness and bounded live summaries |
-
-The fleet endpoint is the authoritative root-screen projection. Health means:
-
-- `critical`: degraded workload or a not-ready node exists.
-- `warning`: recent restarts or an open incident exists.
-- `stale`: observations exist but the agent is not online.
-- `unknown`: no pod, node, or usage observation exists yet.
-- `healthy`: none of the above.
-
-CPU and memory are nullable measurements. A missing value is shown as unavailable, never as zero.
-
-There is no global approval list, global workflow list, command history list, or persistent notification inbox endpoint. The root may show their backend-provided counts but must not fabricate list items or read state.
-
-## First-screen composition
+The frontend may register a product surface only after every endpoint function required by that
+surface has an anchored completion record in:
 
 ```text
-top utility bar: product context | workspace | API/live state
+docs/spec/frontend/codex-progress-20260711.md
 
-fleet headline + concise health statement
-status index: critical / warning / stale / unknown / healthy
-
-main field                              attention rail
-cluster scan rows                       real incident rows when allowed
-pods · nodes · incidents                approval/workflow/DLQ counts
-measured CPU · memory · last seen       honest unavailable states
+API 완성: functionName (commitHash)
 ```
 
-The layout uses one dominant field and one narrower attention rail. It avoids a symmetric pile of cards. On small screens the attention rail follows the fleet list, and scan rows become two-level summaries without horizontal scrolling.
+There are currently no completion records. Therefore `/product` renders a release gate, performs no
+product API request, opens no product WebSocket, and exposes no unfinished navigation. This is the
+required safe state, not a fallback.
 
-## Runtime boundaries
+## API coordination
+
+The ownership rule is defined by goalmode §6b.
+
+- API transport functions and wire schemas under `src/product/api/**` belong to the API integration
+  worker.
+- Missing or unapproved functions are requested only through
+  `docs/spec/frontend/api-needs.md`.
+- Frontend contributors do not add duplicate queue rows and do not infer response shapes.
+- `src/product/api/client.ts` and `src/product/api/url.ts` are frozen for both sides.
+- Product adapters and view-model conversion remain frontend-owned.
+- A live API failure never falls back to synthetic data.
+
+The approval path is:
+
+```text
+api-needs.md requested row
+  -> API worker implementation and contract tests
+  -> anchored API 완성 record in codex-progress-20260711.md
+  -> endpoint import in app/apiComposition.ts
+  -> canonical adapter
+  -> surface registration
+  -> route and navigation become visible together
+```
+
+`src/product/app/apiBoundary.test.ts` enforces this path. Product code outside
+`app/apiComposition.ts` cannot import `product/api`, and the composition root cannot value-import an
+endpoint without a matching completion record.
+
+## Runtime composition
 
 ```text
 src/
-  main.tsx                    # loads official lab at / and product at /product
-  shadcn-lab/                 # reference host; forbidden product dependency
-  components/ui/             # generated lab primitives; forbidden product dependency
+  main.tsx
   product/
-    ProductApp.tsx
-    api/                      # transport, schemas, endpoint functions
-    features/fleet/           # root vertical slice
-    shared/ui/                # domain-free primitives
-    styles/                   # tokens, foundation, shared UI, page layout
-vendor/shadcn/                # immutable official source; never imported by product
+    ProductApp.tsx                 # theme and router root
+    api/                           # API-worker-owned transport and wire schemas
+    app/
+      apiComposition.ts            # the only approved API import boundary
+      productComposition.ts        # registered surface/capability set
+      ProductRouter.tsx            # release gate or registered routes
+      ProductShell.tsx             # navigation derived from registered capabilities
+      productRoutes.ts             # canonical route metadata
+    shared/ui/
+      primitives/                  # product-owned shadcn adaptations
+    styles/                        # product-owned light/dark tokens and foundations
 ```
 
-The official reference catalogue remains available under `/` and is code-split away from the product entry.
+The official component catalog remains available at `/` and is code-split from the product entry.
+Product code must not import `src/components/ui`, `src/shadcn-lab`, `vendor`, or catalog styles.
 
-## First-slice acceptance
+## Surface registration rule
 
-- The product entry imports no reference-lab component or stylesheet.
-- The screen renders loading, unauthenticated, offline, forbidden, empty, stale, and populated states honestly.
-- No product metric or incident is hardcoded.
-- API responses are runtime-validated.
-- The app has no page-level overflow at 390px, 768px, or 1440px.
-- Keyboard focus is visible; status is conveyed by text as well as color.
-- Reduced-motion users receive no pulsing or staged entrance animation.
-- `/` renders the pinned official shadcn catalogue without backend requests.
+`createProductComposition` is the single source for released product surfaces. A registration
+contains a canonical capability ID and a component. The composition derives both the router and the
+sidebar from that same list, so a route cannot exist without navigation metadata and an unsupported
+menu cannot remain visible.
+
+Provider names are never route conditions. A surface is registered from canonical capabilities only.
+Target-level permission and partial-data states stay inside a released surface; build-time absence of
+an approved API keeps the entire surface unregistered.
+
+## Design foundation
+
+- Product primitives are local adaptations under `src/product/shared/ui/primitives`.
+- Light and dark are the only theme states; system is not a third selectable mode.
+- The shell uses the benchmark-minimum shadcn token vocabulary.
+- Keyboard focus, skip navigation, reduced motion, forced colors, and 390/768/1440 layouts are release
+  requirements.
+- Third-party provenance and modifications are recorded in `THIRD_PARTY_NOTICES.md`.
+
+## Contributor workflow
+
+1. Read `AGENTS.md` and the active goalmode documents.
+2. Check `codex-progress-20260711.md` for anchored `API 완성:` records.
+3. If an endpoint is missing, append one non-duplicate request to `api-needs.md`; do not edit
+   `src/product/api/**` before the 24-hour exception applies.
+4. Add a failing contract or interaction test outside the API directory.
+5. Implement the adapter and surface through `apiComposition.ts` only after approval.
+6. Run `npm run check` before every commit.
+7. Verify the production bundle at 390px, 768px, and 1440px in light/dark, keyboard, and
+   reduced-motion modes.
+8. Append the screen commit, gate output, and reference-equivalence result to the progress log.
+
+## Baseline acceptance
+
+- No product API import exists outside `app/apiComposition.ts`.
+- Every endpoint value import has an anchored completion record.
+- No synthetic, fixture, dummy, or guessed production data is rendered.
+- Zero approved surfaces produce a network-silent release gate.
+- Navigation contains exactly the registered capability set.
+- Product CSS is isolated from the reference catalog.
+- `npm run check` passes with no warning promoted by the product design guard.
