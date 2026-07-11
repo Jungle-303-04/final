@@ -4,7 +4,7 @@ status: active-coordination-queue
 date: 2026-07-12
 owners: Codex 요청 / API 연결 작업자 claim·처리
 workorder: api-integration-workorder-20260711.md
-snapshot: 17행·32함수 / requested 17 / in_progress 0 / blocked 0 / valid completion anchors 17
+snapshot: 16행·31함수 / requested 16 / in_progress 0 / blocked 0 / valid completion anchors 18
 ---
 
 # 프론트 API 요청 큐
@@ -38,7 +38,7 @@ snapshot: 17행·32함수 / requested 17 / in_progress 0 / blocked 0 / valid com
 10. canonical branch force-push 금지. feature branch를 썼다면 merge/cherry-pick 후의 최종 hash만
     앵커로 기록하고, squash/rebase로 이미 기록한 hash를 제거하지 않는다.
 11. 24시간 대행도 `in_progress` 1행 lock과 코드·조율 2커밋 절차를 그대로 지킨다. `APIQ-001`,
-    `APIQ-002`, `APIQ-003`, `APIQ-004`, `APIQ-007`, `APIQ-023`, `APIQ-024`, `APIQ-025`, `APIQ-026`은 완료 앵커가 있으므로
+    `APIQ-002`, `APIQ-003`, `APIQ-004`, `APIQ-007`, `APIQ-008`, `APIQ-023`, `APIQ-024`, `APIQ-025`, `APIQ-026`은 완료 앵커가 있으므로
     다음 대행은 queue의 P0·P1·P2 순서를 따른다. 원 요청 시각·대행
     시작 시각·경과 시간·사유를 progress EOF에 남긴다.
 12. API 작업자가 복귀하면 대행자가 이미 claim한 행만 완료하고 다음 행부터 양보한다.
@@ -62,7 +62,6 @@ claim·heartbeat: YYYY-MM-DD HH:mm KST
 |---|---:|---|---|---|---|---|---|---|---|---|
 | `APIQ-005` | P2 | `listRcaTimeline` | `DASHBOARD_RCA_TIMELINE_PATH` | `rca-list.ts`, `rca-list-schemas.ts`, test | Issues / Timeline / resource detail | 2026-07-11 16:19 KST | requested | — | — | `cluster_id?`, `limit=50`(1..100), signal; teaser 함수와 분리 |
 | `APIQ-006` | P2 | `listApplications`, `getApplication`, `listApplicationDeployments`, `listApplicationRuns` | `APPLICATIONS_PATH`, `APPLICATION_PATH`, `APPLICATION_DEPLOYMENTS_PATH`, `APPLICATION_RUNS_PATH` | `applications.ts`, `applications-schemas.ts`, test | Applications / GitOps / history | 2026-07-11 16:19 KST | requested | — | — | list limit 1..500; 내부 JsonMap 보존; cursor/filter 발명 금지 |
-| `APIQ-008` | P2 | `listInventoryResourcesByType` | `CLUSTER_INVENTORY_RESOURCES_PATH` | `inventory-query.ts`, `inventory-query-schemas.ts`, test | Resources / topology projection | 2026-07-11 16:19 KST | requested | — | — | 기존 Home node·pod 함수 변경 금지; 동일 route의 범용 query |
 | `APIQ-009` | P2 | `getClusterResourceUsageSeries` | `CLUSTER_USAGE_PATH` | `usage-series.ts`, `usage-series-schemas.ts`, test | Pod·Node history / top metrics | 2026-07-11 16:19 KST | requested | — | — | limit 1..2000; `samples[].usage` JsonMap 보존; rollup으로 대체 금지 |
 | `APIQ-010` | P2 | `listMetricQueryPresets`, `runMetricQueryPreset` | `CLUSTER_METRIC_QUERY_PRESETS_PATH`, `CLUSTER_METRIC_QUERY_PRESET_RUN_PATH` | `metric-presets.ts`, `metric-presets-schemas.ts`, test | resource·PVC Metrics | 2026-07-11 16:19 KST | requested | — | — | run body 없음; `AgentDebugQueryResponse`, HTTP 200 receipt |
 | `APIQ-011` | P2 | `runTelemetryQuery` | `AGENT_DEBUG_QUERY_PATH`, `COMMAND_STATUS_PATH` | `telemetry.ts`, `telemetry-schemas.ts`, test | Pod log snapshot | 2026-07-11 16:19 KST | requested | — | — | `APIQ-027` 완료 앵커 의존; 완료 전 claim 금지. 명시적 AGENT_* browser 예외; POST 1회; source literal 보존 |
