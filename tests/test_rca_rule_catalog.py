@@ -235,6 +235,88 @@ EXPECTED_RULE_SNAPSHOT: dict[str, tuple[list[str], list[str]]] = {
         ],
         ["metrics", "logs", "traces", "metadata"],
     ),
+    "HPA scaling failed": (
+        [
+            "metrics_server_unavailable",
+            "missing_resource_requests",
+            "max_replica_limit_reached",
+        ],
+        ["kubernetes", "metrics", "logs"],
+    ),
+    "FailedGetResourceMetric": (
+        [
+            "metrics_server_unavailable",
+            "missing_resource_requests",
+            "max_replica_limit_reached",
+        ],
+        ["kubernetes", "metrics", "logs"],
+    ),
+    "NodeNotReady": (
+        [
+            "kubelet_unavailable",
+            "container_runtime_unavailable",
+            "node_network_unavailable",
+        ],
+        ["kubernetes", "metrics", "logs"],
+    ),
+    "KubeletNotReady": (
+        [
+            "kubelet_unavailable",
+            "container_runtime_unavailable",
+            "node_network_unavailable",
+        ],
+        ["kubernetes", "metrics", "logs"],
+    ),
+    "Pod evicted": (
+        [
+            "pod_evicted_memory_pressure",
+            "pod_evicted_disk_pressure",
+            "pod_evicted_pid_pressure",
+        ],
+        ["kubernetes", "metrics", "logs"],
+    ),
+    "Evicted": (
+        [
+            "pod_evicted_memory_pressure",
+            "pod_evicted_disk_pressure",
+            "pod_evicted_pid_pressure",
+        ],
+        ["kubernetes", "metrics", "logs"],
+    ),
+    "ConfigMap not found": (
+        [
+            "missing_configmap_reference",
+            "config_key_missing",
+            "invalid_env_value",
+            "config_volume_mount_failed",
+        ],
+        ["kubernetes", "logs", "metadata"],
+    ),
+    "CreateContainerConfigError": (
+        [
+            "missing_configmap_reference",
+            "config_key_missing",
+            "invalid_env_value",
+            "config_volume_mount_failed",
+        ],
+        ["kubernetes", "logs", "metadata"],
+    ),
+    "FailedMount": (
+        [
+            "pvc_not_bound",
+            "csi_driver_unavailable",
+            "volume_attach_timeout",
+            "storage_class_mismatch",
+        ],
+        ["kubernetes", "logs", "metadata"],
+    ),
+    "FailedAttachVolume": (
+        [
+            "volume_multi_attach_conflict",
+            "volume_attachment_orphaned",
+        ],
+        ["kubernetes", "logs", "metadata"],
+    ),
 }
 
 
@@ -478,6 +560,71 @@ def test_policy_and_dependency_rules_use_schema_v1_evidence_keys() -> None:
     ]
 
 
+def test_autoscaling_and_node_health_rules_use_schema_v1_evidence_keys() -> None:
+    hpa_plan = plan_for("HPA scaling failed")
+    hpa_by_id = {candidate.candidate_id: candidate for candidate in hpa_plan.candidates}
+    node_plan = plan_for("NodeNotReady")
+    node_by_id = {candidate.candidate_id: candidate for candidate in node_plan.candidates}
+    eviction_plan = plan_for("Pod evicted")
+    eviction_by_id = {candidate.candidate_id: candidate for candidate in eviction_plan.candidates}
+
+    assert hpa_by_id["metrics_server_unavailable"].expected_evidence == [
+        "kubernetes:cluster_resource_state",
+        "metrics:telemetry_metrics",
+        "logs:related_logs",
+    ]
+    assert hpa_by_id["missing_resource_requests"].expected_evidence == [
+        "kubernetes:cluster_resource_state",
+        "logs:related_logs",
+        "metadata:current_workload_snapshots",
+    ]
+    assert node_by_id["kubelet_unavailable"].expected_evidence == [
+        "kubernetes:cluster_resource_state",
+        "metrics:telemetry_metrics",
+        "logs:related_logs",
+    ]
+    assert eviction_by_id["pod_evicted_disk_pressure"].expected_evidence == [
+        "kubernetes:cluster_resource_state",
+        "metrics:telemetry_metrics",
+        "logs:related_logs",
+    ]
+
+
+def test_storage_and_runtime_config_rules_use_schema_v1_evidence_keys() -> None:
+    mount_plan = plan_for("FailedMount")
+    mount_by_id = {candidate.candidate_id: candidate for candidate in mount_plan.candidates}
+    attach_plan = plan_for("FailedAttachVolume")
+    attach_by_id = {candidate.candidate_id: candidate for candidate in attach_plan.candidates}
+    config_plan = plan_for("ConfigMap not found")
+    config_by_id = {candidate.candidate_id: candidate for candidate in config_plan.candidates}
+
+    assert mount_by_id["pvc_not_bound"].expected_evidence == [
+        "kubernetes:cluster_resource_state",
+        "logs:related_logs",
+        "metadata:current_workload_snapshots",
+    ]
+    assert mount_by_id["csi_driver_unavailable"].expected_evidence == [
+        "kubernetes:cluster_resource_state",
+        "logs:related_logs",
+        "metrics:telemetry_metrics",
+    ]
+    assert attach_by_id["volume_multi_attach_conflict"].expected_evidence == [
+        "kubernetes:cluster_resource_state",
+        "logs:related_logs",
+        "metadata:current_workload_snapshots",
+    ]
+    assert config_by_id["missing_configmap_reference"].expected_evidence == [
+        "kubernetes:cluster_resource_state",
+        "logs:related_logs",
+        "metadata:current_workload_snapshots",
+    ]
+    assert config_by_id["invalid_env_value"].expected_evidence == [
+        "kubernetes:cluster_resource_state",
+        "logs:related_logs",
+        "metadata:current_workload_snapshots",
+    ]
+
+
 def test_probe_path_wrong_evaluates_with_named_evidence_and_event_signal() -> None:
     plan = plan_for("Probe failure")
     bundle = EvidenceBundle(
@@ -518,6 +665,93 @@ def test_probe_path_wrong_evaluates_with_named_evidence_and_event_signal() -> No
 
     assert by_id["probe_path_wrong"].score == 1.0
     assert by_id["probe_path_wrong"].missing_evidence == []
+
+
+def test_node_not_ready_evaluates_with_named_evidence_and_event_signal() -> None:
+    plan = plan_for("NodeNotReady")
+    bundle = EvidenceBundle(
+        incident_id="inc-node",
+        items=[
+            EvidenceItem(
+                source="kubernetes",
+                name="cluster_resource_state",
+                value={
+                    "nodes": [{"name": "worker-1", "conditions": [{"type": "Ready"}]}],
+                    "events": [
+                        {
+                            "reason": "KubeletNotReady",
+                            "message": "node is not ready: kubelet stopped posting node status",
+                        }
+                    ],
+                },
+                summary="Kubernetes node event",
+            ),
+            EvidenceItem(
+                source="metrics",
+                name="telemetry_metrics",
+                value={"results": {"node_up": {"value": 0}}},
+                summary="Node metric",
+            ),
+            EvidenceItem(
+                source="logs",
+                name="related_logs",
+                value={"entries": [{"line": "node status update failed"}]},
+                summary="Node logs",
+            ),
+        ],
+        missing_evidence=[],
+        complete=True,
+    )
+
+    by_id = {e.candidate_id: e for e in evaluate_causes(plan.candidates, bundle)}
+
+    assert by_id["kubelet_unavailable"].score == 1.0
+    assert by_id["kubelet_unavailable"].missing_evidence == []
+
+
+def test_failed_mount_pvc_rule_evaluates_with_named_evidence_and_event_signal() -> None:
+    plan = plan_for("FailedMount")
+    bundle = EvidenceBundle(
+        incident_id="inc-volume",
+        items=[
+            EvidenceItem(
+                source="kubernetes",
+                name="cluster_resource_state",
+                value={
+                    "pods": [{"name": "checkout-api-0", "namespace": "sandbox"}],
+                    "events": [
+                        {
+                            "reason": "FailedMount",
+                            "message": (
+                                "pod has unbound immediate PersistentVolumeClaims: "
+                                "claim checkout-data is not bound"
+                            ),
+                        }
+                    ],
+                },
+                summary="Kubernetes volume event",
+            ),
+            EvidenceItem(
+                source="logs",
+                name="related_logs",
+                value={"entries": [{"line": "persistentvolumeclaim checkout-data not bound"}]},
+                summary="Volume logs",
+            ),
+            EvidenceItem(
+                source="metadata",
+                name="current_workload_snapshots",
+                value={"items": [{"name": "checkout-api"}]},
+                summary="Workload snapshots",
+            ),
+        ],
+        missing_evidence=[],
+        complete=True,
+    )
+
+    by_id = {e.candidate_id: e for e in evaluate_causes(plan.candidates, bundle)}
+
+    assert by_id["pvc_not_bound"].score == 1.0
+    assert by_id["pvc_not_bound"].missing_evidence == []
 
 
 def test_unmatched_symptom_still_reports_rule_missing() -> None:
