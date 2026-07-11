@@ -36,10 +36,12 @@ export interface PollCommandOptions {
 
 export type RunPrometheusQueryOptions = PollCommandOptions;
 
+export type MetricCommandSummary = Omit<CommandStatus, "result">;
+
 export interface PrometheusQueryRun {
   queryName: string;
   receipt: AgentDebugQueryReceipt;
-  command: CommandStatus;
+  command: MetricCommandSummary;
   result: PrometheusRangeResult;
 }
 
@@ -47,12 +49,12 @@ export type MetricQueryExecutionErrorKind = "timeout" | "failed" | "empty-result
 
 export class MetricQueryExecutionError extends Error {
   readonly kind: MetricQueryExecutionErrorKind;
-  readonly command: CommandStatus | null;
+  readonly command: MetricCommandSummary | null;
 
   constructor(
     kind: MetricQueryExecutionErrorKind,
     message: string,
-    command: CommandStatus | null = null,
+    command: MetricCommandSummary | null = null,
   ) {
     super(message);
     this.name = "MetricQueryExecutionError";
@@ -124,7 +126,7 @@ export async function pollCommand(
       throw new MetricQueryExecutionError(
         "timeout",
         "Metric query did not finish within 60 seconds.",
-        latest,
+        commandSummary(latest),
       );
     }
 
@@ -151,7 +153,7 @@ export async function runPrometheusQuery(
     throw new MetricQueryExecutionError(
       "failed",
       commandFailureMessage(command),
-      command,
+      commandSummary(command),
     );
   }
   if (command.action !== TELEMETRY_QUERY_ACTION) {
@@ -174,14 +176,14 @@ export async function runPrometheusQuery(
     throw new MetricQueryExecutionError(
       "empty-result",
       "Metric query completed without any observed points.",
-      command,
+      commandSummary(command),
     );
   }
 
   return {
     queryName: submitted.query.name,
     receipt: submitted.receipt,
-    command,
+    command: commandSummary(command),
     result,
   };
 }
@@ -197,6 +199,11 @@ function commandFailureMessage(command: CommandStatus): string {
   return typeof message === "string" && message.trim() !== ""
     ? message
     : "Metric query command failed.";
+}
+
+function commandSummary(command: CommandStatus): MetricCommandSummary {
+  const { result: _result, ...summary } = command;
+  return summary;
 }
 
 function invalidTelemetryPayload(message: string, cause?: unknown): ApiError {

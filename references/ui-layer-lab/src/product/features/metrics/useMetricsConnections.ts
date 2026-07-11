@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { ApiError, listClusters, type ClusterSummary } from "../../api";
+import { ApiError, listClusters } from "../../api";
 import { getClusterUsage } from "../../api/metrics";
 import type { ClusterUsageResponse } from "../../api/metrics-schemas";
 import {
@@ -13,8 +13,15 @@ const USAGE_REFRESH_INTERVAL_MS = 30_000;
 
 export type ClusterListState =
   | { status: "loading" }
-  | { status: "ready"; clusters: ClusterSummary[] }
+  | { status: "ready"; clusters: MetricClusterOption[] }
   | { status: "error"; error: ApiError };
+
+export interface MetricClusterOption {
+  clusterId: string;
+  name: string;
+  status: string;
+  connectionStatus: string;
+}
 
 export type UsageState =
   | { status: "idle" }
@@ -27,6 +34,16 @@ export interface LiveMetricsState {
   summary: LiveSummary | null;
 }
 
+interface ScopedUsageState {
+  clusterId: string | null;
+  value: UsageState;
+}
+
+interface ScopedLiveState {
+  clusterId: string | null;
+  value: LiveMetricsState;
+}
+
 export function useClusterList(): ClusterListState {
   const [state, setState] = useState<ClusterListState>({ status: "loading" });
 
@@ -35,7 +52,15 @@ export function useClusterList(): ClusterListState {
     queueMicrotask(async () => {
       try {
         const response = await listClusters({}, controller.signal);
-        setState({ status: "ready", clusters: response.clusters });
+        setState({
+          status: "ready",
+          clusters: response.clusters.map((cluster) => ({
+            clusterId: cluster.cluster_id,
+            name: cluster.name,
+            status: cluster.status,
+            connectionStatus: cluster.connection_status,
+          })),
+        });
       } catch (error) {
         if (!controller.signal.aborted) setState({ status: "error", error: asApiError(error) });
       }
@@ -47,7 +72,10 @@ export function useClusterList(): ClusterListState {
 }
 
 export function useClusterUsage(clusterId: string | null): UsageState {
-  const [state, setState] = useState<UsageState>({ status: "idle" });
+  const [scopedState, setScopedState] = useState<ScopedUsageState>({
+    clusterId: null,
+    value: { status: "idle" },
+  });
 
   useEffect(() => {
     if (clusterId === null) return;
@@ -57,14 +85,25 @@ export function useClusterUsage(clusterId: string | null): UsageState {
 
     async function load(background: boolean) {
       if (!active) return;
-      setState((current) => background && current.status === "ready"
-        ? { ...current, refreshing: true }
-        : { status: "loading" });
+      setScopedState((current) => ({
+        clusterId: activeClusterId,
+        value: background && current.clusterId === activeClusterId && current.value.status === "ready"
+          ? { ...current.value, refreshing: true }
+          : { status: "loading" },
+      }));
       try {
         const value = await getClusterUsage(activeClusterId, {}, controller.signal);
-        setState({ status: "ready", value, refreshing: false });
+        setScopedState({
+          clusterId: activeClusterId,
+          value: { status: "ready", value, refreshing: false },
+        });
       } catch (error) {
-        if (!controller.signal.aborted) setState({ status: "error", error: asApiError(error) });
+        if (!controller.signal.aborted) {
+          setScopedState({
+            clusterId: activeClusterId,
+            value: { status: "error", error: asApiError(error) },
+          });
+        }
       }
     }
 
@@ -77,30 +116,49 @@ export function useClusterUsage(clusterId: string | null): UsageState {
     };
   }, [clusterId]);
 
-  return state;
+  if (scopedState.clusterId === clusterId) return scopedState.value;
+  return clusterId === null ? { status: "idle" } : { status: "loading" };
 }
 
 export function useLiveMetrics(
   workspaceId: string,
   clusterId: string | null,
 ): LiveMetricsState {
-  const [state, setState] = useState<LiveMetricsState>({ connection: null, summary: null });
+  const [scopedState, setScopedState] = useState<ScopedLiveState>({
+    clusterId: null,
+    value: { connection: null, summary: null },
+  });
 
   useEffect(() => {
     if (clusterId === null) return;
+    const activeClusterId = clusterId;
     let client: RealtimeClient | null = null;
     let active = true;
     queueMicrotask(() => {
       if (!active) return;
       client = connectRealtime({
-        subscription: { workspaceId, clusterId },
+        subscription: { workspaceId, clusterId: activeClusterId },
         onMessage(message) {
-          if (message.type === "live.summary" && message.cluster_id === clusterId) {
-            setState((current) => ({ ...current, summary: message.summary }));
+          if (message.type === "live.summary" && message.cluster_id === activeClusterId) {
+            setScopedState((current) => ({
+              clusterId: activeClusterId,
+              value: {
+                connection: current.clusterId === activeClusterId
+                  ? current.value.connection
+                  : null,
+                summary: message.summary,
+              },
+            }));
           }
         },
         onStateChange(connection) {
-          setState((current) => ({ ...current, connection }));
+          setScopedState((current) => ({
+            clusterId: activeClusterId,
+            value: {
+              connection,
+              summary: current.clusterId === activeClusterId ? current.value.summary : null,
+            },
+          }));
         },
       });
     });
@@ -110,7 +168,9 @@ export function useLiveMetrics(
     };
   }, [clusterId, workspaceId]);
 
-  return state;
+  return scopedState.clusterId === clusterId
+    ? scopedState.value
+    : { connection: null, summary: null };
 }
 
 function asApiError(error: unknown): ApiError {

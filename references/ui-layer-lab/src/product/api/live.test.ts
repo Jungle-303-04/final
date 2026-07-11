@@ -165,7 +165,6 @@ describe("realtime sequence reducer", () => {
       snapshotReceived: true,
       connected: true,
       lastSequence: 400,
-      snapshotState: { old: true },
     };
     const reset = reduceRealtimeSequence(current, {
       type: "snapshot",
@@ -175,7 +174,7 @@ describe("realtime sequence reducer", () => {
 
     expect(reset.accepted).toBe(true);
     expect(reset.state.lastSequence).toBe(40);
-    expect(reset.state.snapshotState).toEqual({ recovered: true });
+    expect(reset.state).not.toHaveProperty("snapshotState");
   });
 
   it("does not advance sequence for ping messages", () => {

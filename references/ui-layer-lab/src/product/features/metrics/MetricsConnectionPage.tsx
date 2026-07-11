@@ -19,18 +19,18 @@ export function MetricsConnectionPage() {
     if (requestedClusterId === null) {
       return { cluster: clusterList.clusters[0] ?? null, inaccessibleId: null };
     }
-    const cluster = clusterList.clusters.find(({ cluster_id }) => cluster_id === requestedClusterId);
+    const cluster = clusterList.clusters.find(({ clusterId }) => clusterId === requestedClusterId);
     return { cluster: cluster ?? null, inaccessibleId: cluster ? null : requestedClusterId };
   }, [clusterList, requestedClusterId]);
 
   useEffect(() => {
     if (requestedClusterId !== null || selection.cluster === null) return;
     const next = new URLSearchParams(searchParams);
-    next.set("cluster", selection.cluster.cluster_id);
+    next.set("cluster", selection.cluster.clusterId);
     setSearchParams(next, { replace: true });
   }, [requestedClusterId, searchParams, selection.cluster, setSearchParams]);
 
-  const selectedClusterId = selection.cluster?.cluster_id ?? null;
+  const selectedClusterId = selection.cluster?.clusterId ?? null;
   const usage = useClusterUsage(selectedClusterId);
   const live = useLiveMetrics(session.workspace_id, selectedClusterId);
 
@@ -56,8 +56,8 @@ export function MetricsConnectionPage() {
               onChange={(event) => selectCluster(event.target.value)}
             >
               {clusterList.clusters.map((cluster) => (
-                <option key={cluster.cluster_id} value={cluster.cluster_id}>
-                  {cluster.name} · {cluster.cluster_id}
+                <option key={cluster.clusterId} value={cluster.clusterId}>
+                  {cluster.name} · {cluster.clusterId}
                 </option>
               ))}
             </select>
@@ -90,7 +90,7 @@ export function MetricsConnectionPage() {
             </Surface>
           </section>
 
-          <MetricPresetPanel key={selection.cluster.cluster_id} cluster={selection.cluster} />
+          <MetricPresetPanel key={selection.cluster.clusterId} cluster={selection.cluster} />
         </>
       ) : null}
     </div>

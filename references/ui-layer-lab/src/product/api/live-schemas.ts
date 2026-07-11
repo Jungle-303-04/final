@@ -93,7 +93,6 @@ export interface RealtimeSequenceState {
   readonly snapshotReceived: boolean;
   readonly connected: boolean;
   readonly lastSequence: number | null;
-  readonly snapshotState: Readonly<Record<string, unknown>> | null;
 }
 
 export type RealtimeSequenceReduction =
@@ -121,7 +120,6 @@ export function createRealtimeSequenceState(): RealtimeSequenceState {
     snapshotReceived: false,
     connected: false,
     lastSequence: null,
-    snapshotState: null,
   };
 }
 
@@ -147,7 +145,6 @@ export function reduceRealtimeSequence(
         snapshotReceived: true,
         connected: state.helloReceived,
         lastSequence: message.seq,
-        snapshotState: message.state,
       },
     };
   }

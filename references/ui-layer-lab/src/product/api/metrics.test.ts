@@ -9,7 +9,11 @@ import {
   runPrometheusQuery,
   submitPrometheusQuery,
 } from "./metrics";
-import { buildPrometheusQuery, getMetricPreset } from "../features/metrics/presets";
+import {
+  buildPrometheusQuery,
+  getMetricPreset,
+  type MetricPreset,
+} from "../features/metrics/presets";
 
 function jsonResponse(payload: unknown, status = 200): Response {
   return new Response(JSON.stringify(payload), {
@@ -30,6 +34,45 @@ function commandPayload(
     status,
     result,
     completed_at: status === "completed" || status === "failed" ? "2026-07-11T00:00:00Z" : null,
+  };
+}
+
+function telemetryResult(
+  preset: MetricPreset,
+  queryName: string,
+  values: Array<{ timestamp: number; value: number }>,
+): Record<string, unknown> {
+  return {
+    status: "completed",
+    cluster_id: "cluster-1",
+    applied: false,
+    message: "telemetry query executed",
+    retryable: false,
+    resources: [],
+    stdout: "",
+    stderr: "",
+    query: {
+      source: "prometheus",
+      name: queryName,
+      description: preset.description,
+      query: preset.promql,
+      range_seconds: preset.rangeSeconds,
+      step_seconds: preset.stepSeconds,
+    },
+    result: {
+      source: "prometheus",
+      results: {
+        [queryName]: {
+          query: preset.promql,
+          query_mode: "range",
+          range_seconds: preset.rangeSeconds,
+          step_seconds: preset.stepSeconds,
+          result_type: "matrix",
+          series: values.length === 0 ? [] : [{ metric: { instance: "node-1" }, values }],
+          point_count: values.length,
+        },
+      },
+    },
   };
 }
 
@@ -171,38 +214,6 @@ describe("metrics API", () => {
     const preset = getMetricPreset("node-cpu-usage");
     const queryName = "node_cpu_usage_ratio__run-empty";
     const query = buildPrometheusQuery(preset, "run-empty");
-    const telemetryResult = {
-      status: "completed",
-      cluster_id: "cluster-1",
-      applied: false,
-      message: "telemetry query executed",
-      retryable: false,
-      resources: [],
-      stdout: "",
-      stderr: "",
-      query: {
-        source: "prometheus",
-        name: queryName,
-        description: preset.description,
-        query: preset.promql,
-        range_seconds: preset.rangeSeconds,
-        step_seconds: preset.stepSeconds,
-      },
-      result: {
-        source: "prometheus",
-        results: {
-          [queryName]: {
-            query: preset.promql,
-            query_mode: "range",
-            range_seconds: preset.rangeSeconds,
-            step_seconds: preset.stepSeconds,
-            result_type: "matrix",
-            series: [],
-            point_count: 0,
-          },
-        },
-      },
-    };
     const fetchMock = vi
       .spyOn(globalThis, "fetch")
       .mockResolvedValueOnce(
@@ -213,7 +224,7 @@ describe("metrics API", () => {
         }),
       )
       .mockResolvedValueOnce(
-        jsonResponse(commandPayload("completed", telemetryResult)),
+        jsonResponse(commandPayload("completed", telemetryResult(preset, queryName, []))),
       );
 
     await expect(
@@ -223,5 +234,26 @@ describe("metrics API", () => {
     } satisfies Partial<MetricQueryExecutionError>);
     expect(fetchMock).toHaveBeenCalledTimes(2);
     expect(fetchMock.mock.calls.filter(([, init]) => init?.method === "POST")).toHaveLength(1);
+  });
+
+  it("returns normalized points without leaking the raw command result", async () => {
+    const preset = getMetricPreset("node-cpu-usage");
+    const queryName = "node_cpu_usage_ratio__run-observed";
+    const query = buildPrometheusQuery(preset, "run-observed");
+    vi.spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(jsonResponse({
+        accepted: true,
+        command_id: "cmd-debug-1",
+        correlation_id: "corr-debug-1",
+      }))
+      .mockResolvedValueOnce(jsonResponse(commandPayload(
+        "completed",
+        telemetryResult(preset, queryName, [{ timestamp: 1, value: 0.42 }]),
+      )));
+
+    const run = await runPrometheusQuery("cluster-1", query);
+
+    expect(run.result.point_count).toBe(1);
+    expect(run.command).not.toHaveProperty("result");
   });
 });
