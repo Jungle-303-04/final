@@ -1,0 +1,594 @@
+.topology-experience {
+  position: relative;
+  display: grid;
+  min-width: 0;
+  min-height: 0;
+  height: 100%;
+  grid-template-rows: auto auto minmax(0, 1fr);
+  color: var(--text);
+}
+
+.demo-data-banner {
+  position: fixed;
+  z-index: 100;
+  right: 16px;
+  bottom: 16px;
+  padding: 5px 9px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface-raised);
+  color: var(--text-muted);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  box-shadow: 0 1px 2px rgb(0 0 0 / 6%);
+}
+
+.topology-context-bar {
+  display: flex;
+  min-height: 54px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 9px 16px;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface);
+}
+
+.topology-breadcrumbs,
+.topology-context-bar__actions,
+.snapshot-status,
+.metric-selector {
+  display: flex;
+  align-items: center;
+}
+
+.topology-breadcrumbs {
+  min-width: 0;
+  gap: 3px;
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
+.topology-breadcrumbs svg {
+  width: 14px;
+}
+
+.topology-breadcrumbs button,
+.topology-breadcrumbs span {
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.topology-breadcrumbs button {
+  padding: 4px 6px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  cursor: pointer;
+}
+
+.topology-breadcrumbs button:hover {
+  color: var(--text);
+  background: var(--hover-wash);
+}
+
+.topology-context-bar__actions {
+  gap: 8px;
+}
+
+.snapshot-status {
+  gap: 6px;
+  color: var(--text-muted);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.snapshot-status svg {
+  width: 12px;
+  color: var(--healthy-stroke);
+}
+
+.metric-selector {
+  height: 32px;
+  gap: 7px;
+  padding-left: 9px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.metric-selector select {
+  height: 100%;
+  min-width: 156px;
+  border: 0;
+  border-left: 1px solid var(--border);
+  padding: 0 28px 0 9px;
+  background: var(--surface);
+  color: var(--text);
+}
+
+.icon-action {
+  display: inline-grid;
+  width: 32px;
+  height: 32px;
+  place-items: center;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface);
+  cursor: pointer;
+}
+
+.icon-action:hover:not(:disabled) {
+  border-color: var(--border-strong);
+  background: var(--surface-inset);
+}
+
+.icon-action svg {
+  width: 16px;
+}
+
+.icon-action:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.topology-canvas-frame {
+  position: relative;
+  grid-row: 3;
+  min-width: 0;
+  min-height: 0;
+  margin: 16px;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  box-shadow: none;
+}
+
+.canvas-heading {
+  position: absolute;
+  z-index: 70;
+  top: 13px;
+  left: 14px;
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  pointer-events: none;
+}
+
+.canvas-heading span {
+  color: var(--text-muted);
+  font-size: 11px;
+  letter-spacing: 0;
+}
+
+.canvas-heading strong {
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.canvas-heading:focus,
+.canvas-heading:focus-visible {
+  outline: none;
+}
+
+.hierarchy-canvas {
+  position: absolute;
+  inset: 44px 12px 38px;
+}
+
+.hierarchy-tile {
+  position: absolute;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface-raised);
+  color: var(--text);
+  box-shadow: none;
+}
+
+.hierarchy-tile--healthy {
+  --health-fill: var(--healthy-fill);
+  --health-stroke: var(--healthy-stroke);
+}
+
+.hierarchy-tile--neutral {
+  --health-fill: var(--neutral-fill);
+  --health-stroke: var(--neutral-stroke);
+}
+
+.hierarchy-tile--degraded {
+  --health-fill: var(--degraded-fill);
+  --health-stroke: var(--degraded-stroke);
+}
+
+.hierarchy-tile--unhealthy {
+  --health-fill: var(--unhealthy-fill);
+  --health-stroke: var(--unhealthy-stroke);
+}
+
+.hierarchy-tile--unknown {
+  --health-fill: var(--unknown-fill);
+  --health-stroke: var(--unknown-stroke);
+}
+
+.hierarchy-tile--residual {
+  border-style: dashed;
+  background: var(--surface-inset);
+  box-shadow: none;
+}
+
+.hierarchy-tile--residual .tile-copy small::before {
+  content: "Residual · ";
+  color: var(--text-muted);
+}
+
+.cluster-tile,
+.node-tile {
+  background: var(--surface-raised);
+}
+
+.hierarchy-tile__header {
+  position: relative;
+  z-index: 54;
+  display: flex;
+  height: 12%;
+  min-height: 34px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 0 10px;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface-inset);
+}
+
+.hierarchy-tile__header--cluster {
+  height: 13%;
+  min-height: 38px;
+}
+
+.hierarchy-tile__header > span,
+.hierarchy-tile__header > span > span {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 7px;
+}
+
+.hierarchy-tile__header > span > span {
+  align-items: baseline;
+}
+
+.hierarchy-tile__header svg {
+  width: 15px;
+  flex: 0 0 auto;
+  color: var(--health-stroke);
+}
+
+.hierarchy-tile__header strong {
+  overflow: hidden;
+  font-size: 12px;
+  font-weight: 550;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.hierarchy-tile__header small {
+  color: var(--text-muted);
+  font-size: 10px;
+}
+
+.hierarchy-tile__header button {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  border: 0;
+  padding: 5px 7px;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-soft);
+  font-size: 10px;
+  font-weight: 500;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.hierarchy-tile__header button:hover {
+  color: var(--text);
+  background: var(--surface-raised);
+}
+
+.hierarchy-tile__header button svg {
+  width: 12px;
+}
+
+.tile-layer {
+  position: absolute;
+  inset: 0;
+}
+
+.pod-tile {
+  display: block;
+  padding: 7px 8px;
+  border-width: 1px;
+  text-align: left;
+  cursor: pointer;
+  box-shadow: inset 3px 0 0 var(--health-stroke);
+}
+
+button.pod-tile:hover {
+  z-index: 56;
+  border-color: var(--border-strong);
+  background: var(--surface-inset);
+  box-shadow: inset 3px 0 0 var(--health-stroke);
+}
+
+.pod-tile--dense {
+  padding: 3px;
+  border-radius: 4px;
+  cursor: default;
+}
+
+.tile-copy {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.tile-copy strong {
+  overflow: hidden;
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 1.15;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tile-copy small {
+  color: var(--text-soft);
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+}
+
+.node-tile--micro {
+  border-radius: 4px;
+}
+
+.health-legend {
+  position: absolute;
+  z-index: 72;
+  right: 14px;
+  bottom: 9px;
+  display: flex;
+  gap: 12px;
+  color: var(--text-muted);
+  font-size: 10px;
+}
+
+.health-legend span {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.health-legend i {
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background: var(--legend-color);
+}
+
+.health-legend [data-health="healthy"] { --legend-color: var(--healthy-stroke); }
+.health-legend [data-health="neutral"] { --legend-color: var(--neutral-stroke); }
+.health-legend [data-health="degraded"] { --legend-color: var(--degraded-stroke); }
+.health-legend [data-health="unhealthy"] { --legend-color: var(--unhealthy-stroke); }
+.health-legend [data-health="unknown"] { --legend-color: var(--unknown-stroke); }
+
+.pod-inspector {
+  position: absolute;
+  z-index: 90;
+  top: 68px;
+  right: 24px;
+  width: min(340px, calc(100% - 56px));
+  padding: 16px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface-overlay);
+  box-shadow: 0 6px 18px rgb(0 0 0 / 10%);
+}
+
+.pod-inspector header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  color: var(--text-muted);
+  font-size: 11px;
+  letter-spacing: 0;
+}
+
+.pod-inspector header span {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.pod-inspector header svg {
+  width: 14px;
+}
+
+.pod-inspector > strong {
+  display: block;
+  margin-top: 18px;
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.pod-inspector dl {
+  margin: 18px 0 0;
+}
+
+.pod-inspector dl div {
+  display: grid;
+  grid-template-columns: 92px 1fr;
+  gap: 12px;
+  padding: 9px 0;
+  border-top: 1px solid var(--border);
+}
+
+.pod-inspector dt {
+  color: var(--text-muted);
+  font-size: 11px;
+}
+
+.pod-inspector dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+  font-size: 12px;
+}
+
+.topology-state {
+  display: grid;
+  min-height: 100%;
+  place-content: center;
+  justify-items: center;
+  gap: 10px;
+  padding: 40px;
+  text-align: center;
+}
+
+.topology-state > svg {
+  width: 28px;
+  height: 28px;
+  color: var(--text-muted);
+}
+
+.topology-state strong {
+  font-size: 16px;
+}
+
+.topology-state span {
+  max-width: 520px;
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
+.topology-state button {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  margin-top: 8px;
+  padding: 8px 12px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface-raised);
+  cursor: pointer;
+}
+
+.topology-state button svg {
+  width: 15px;
+}
+
+.topology-state__pulse {
+  width: 34px;
+  height: 34px;
+  border: 2px solid var(--border);
+  border-top-color: var(--focus-ring);
+  border-radius: 50%;
+  animation: topology-spin 0.9s linear infinite;
+}
+
+.refresh-warning {
+  padding: 7px 16px;
+  border-bottom: 1px solid var(--border);
+  box-shadow: inset 3px 0 0 var(--degraded-stroke);
+  background: var(--surface-inset);
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.hierarchy-empty {
+  display: grid;
+  height: 100%;
+  place-content: center;
+  justify-items: center;
+  gap: 8px;
+  color: var(--text-muted);
+}
+
+.hierarchy-empty svg {
+  width: 30px;
+}
+
+.hierarchy-empty span {
+  font-size: 12px;
+}
+
+.is-spinning {
+  animation: topology-spin 0.8s linear infinite;
+}
+
+@keyframes topology-spin {
+  to { transform: rotate(360deg); }
+}
+
+@media (max-width: 900px) {
+  .snapshot-status {
+    display: none;
+  }
+
+  .topology-context-bar {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .topology-context-bar__actions {
+    width: 100%;
+  }
+
+  .metric-selector {
+    flex: 1;
+  }
+
+  .metric-selector select {
+    min-width: 0;
+    flex: 1;
+  }
+
+  .topology-canvas-frame {
+    margin: 10px;
+  }
+
+  .hierarchy-canvas {
+    inset-inline: 8px;
+  }
+}
+
+@media (max-width: 620px) {
+  .health-legend {
+    left: 12px;
+    right: auto;
+    max-width: calc(100% - 24px);
+    gap: 8px;
+    overflow-x: auto;
+  }
+
+  .hierarchy-tile__header button {
+    width: 30px;
+    height: 30px;
+    justify-content: center;
+    overflow: hidden;
+    color: transparent;
+  }
+
+  .hierarchy-tile__header button svg {
+    color: var(--text-soft);
+  }
+}
