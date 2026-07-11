@@ -191,3 +191,73 @@ stale/partial/RBAC, LOD, 보안, 검증처럼 뷰와 무관한 장기 규칙이 
 
 P1을 완료로 판정한다. 다음 단계는 136개 mapping unit 전부를 우리 `routes.py` 근거와 대조하는
 P2 `reference-contract-map.md`이며, 필요한 API 함수는 직접 만들지 않고 `api-needs.md`에 요청한다.
+
+## 2026-07-11 P2 — 제품 계약·컴포넌트·RCA 매핑 완료
+
+### 적용
+
+- P2 정본·API 요청 큐 커밋: `6cf6073de`
+- 원격 브랜치: `origin/woonyong/ui-layer-lab`
+- `REF-API-001`~`REF-API-136`을 P1과 동일한 순서·단위로 매핑했다.
+- 판정은 `직결 0 / 어댑터 34 / BE-Gap 102 / 미정 0`이다. provider-neutral backend
+  projection과 endpoint 결합이 필요하므로 reference endpoint를 변환 없이 쓰는 직결은 없다.
+- `BE-Gap-001`~`BE-Gap-102`를 연속 stable ID로 고정하고 domain별 노출 정책을 대장에 기록했다.
+- generic command의 `AcceptedResponse`에 `command_id`가 없어 terminal status를 연결하지 못하는
+  문제는 `Cross-Gap-001`로 별도 기록했다. receipt를 성공으로 해석하거나 optimistic 완료를
+  표시하지 않는다.
+- UI 요소 73개와 RCA 전용 삽입 UI 10개를 제품 소유 primitive·composite에 매핑했다. graph,
+  editor/diff, logs/terminal, virtualization만 외부 dependency 최종 결정 대상으로 분리했다.
+- RCA 데이터 삽입점 5개는 `직결 4 / 어댑터 1 / gap 0`으로 확정했다.
+- `api-needs.md`에 신규 endpoint 함수·schema 18개 함수군과 기존 구현 검증·승인 7개 함수군,
+  합계 25개 요청 행을 등록했다. route 자체가 없는 Backend gap은 queue에 넣지 않았다.
+- `reference-porting-contract.md`와 `product-data-contract.md`에 남아 있던 archived 문서 정본 참조를
+  goalmode와 active porting contract로 교정했다. 이 progress의 과거 절에 남은 문서명은 당시 작업
+  사실을 보존하는 append-only 역사 기록이며 현재 구현 근거로 사용하지 않는다.
+- 이 시점의 `API 완성:` 기록은 0개다. 따라서 API 작업자가 progress에 완료를 기록하기 전에는
+  기존 함수를 포함한 어떤 endpoint 함수도 새 제품 화면에서 소비하지 않는다.
+- Codex는 `src/product/api/**`, `client.ts`, `url.ts`를 수정하지 않았다.
+
+### 검증
+
+```text
+명령: REF-API ID를 추출해 seq 001..136과 comm 비교
+결과: PASS — 누락 0, 초과 0, 중복 0
+
+명령: API 행 판정 집계
+결과: PASS — 직결 0, 어댑터 34, BE-Gap 102, 합계 136
+
+명령: API 행에서 BE-Gap ID를 추출해 seq 001..102와 comm 비교
+결과: PASS — 누락 0, 초과 0, 중복 0
+
+명령: Markdown API·queue 표 열 수 검사
+결과: PASS — REF 136행과 queue 25행 모두 규정 열 수 일치
+
+명령: git diff --check
+결과: PASS
+```
+
+```text
+명령: cd references/ui-layer-lab && npm run check
+결과: PASS
+  - TypeScript: PASS
+  - ESLint: PASS
+  - Vitest: 4 files, 22 tests PASS
+  - product design guard: 41 files PASS
+  - UI catalog source audit: 482 previews PASS, upstream 21e4ceb
+  - Vite production build: PASS
+주의: 500kB 초과 chunk warning은 기존 성능 과제로 유지
+```
+
+### 게이트 판정
+
+| 게이트 | 결과 | 근거 |
+|---|---|---|
+| `P1 136 = P2 136` | 통과 | 연속성·유일성 기계 검증 |
+| 판정 미정 0개 | 통과 | 34 adapter + 102 Backend gap |
+| 컴포넌트 전수 매핑 | 통과 | UI 73개 + RCA UI 10개 |
+| RCA 5개 삽입점 | 통과 | data route·response·polling·노출 규칙 |
+| §6b API 소유 경계 | 통과 | API 코드 수정 0, queue 25행 |
+| 전체 제품 check | 통과 | 위 `npm run check` 결과 |
+
+P2를 완료로 판정한다. 다음 단계는 `final-questions.md`에 남은 결정 요청을 정확히 한 번에 모아
+커밋하는 최종 질문 라운드다. 그 이후 새 모호함은 goalmode 기본 결정 규칙으로 자체 해소한다.

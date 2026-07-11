@@ -134,7 +134,8 @@ npm run check
 맞춘다**(응답을 스키마에 맞추려고 백엔드를 고치지 않는다. 백엔드가 이상하면 blocked 보고).
 
 **7단계 — 커밋.** 형식: `feat: api — 명령 상태 조회 함수` (한 함수군 = 한 커밋).
-커밋 후 progress 파일에 `API 완성:` 한 줄 append(§0-1).
+커밋 후 progress 파일에는 export 함수 하나당 `API 완성:` 한 줄을 append한다(§0-1). 한 커밋에
+여러 함수를 포함해도 각 함수가 독립적인 소비 게이트이므로 완료 기록을 합치지 않는다.
 
 ## 4. zod 다섯 계명 (전 스키마 공통)
 
@@ -186,4 +187,4 @@ agent 전용 경로(AGENT_*), webhook 경로(GITHUB/ALERTMANAGER), INSTALL_MANIF
 
 스키마 파일 존재(다섯 계명 준수) · 함수 파일 존재(레시피 형태) · index.ts export ·
 실호출 검증 로그(6단계-a 출력 일부를 progress에 붙임) · `npm run check` 통과 ·
-progress에 `API 완성:` 기록. 여섯 개 중 하나라도 빠지면 미완료다.
+progress에 해당 export 함수 이름의 `API 완성:` 기록. 여섯 개 중 하나라도 빠지면 미완료다.

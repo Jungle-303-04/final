@@ -21,7 +21,7 @@ authority:
 
 정본 우선순위는 다음과 같다.
 
-1. `codex-directive-reference-pivot-20260711.md`
+1. `codex-directive-goalmode-20260711.md`
 2. 외부 기준 저장소 실행 인스턴스의 관찰 결과와 동일 커밋 소스 확인 결과
 3. 이 문서의 뷰-비의존 프론트 계약
 4. 실제 백엔드 route 및 response schema

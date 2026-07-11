@@ -18,7 +18,7 @@ last_verified: 2026-07-11
 구현 우선순위:
 
 1. 이 문서의 사용자 의미와 상태 전이.
-2. `topology-engine.md`의 identity, relation, metric, stream 불변조건.
+2. `reference-porting-contract.md`의 identity, runtime validation, request generation, stream 불변조건.
 3. 승인된 OpenAPI와 생성된 TypeScript/runtime schema.
 4. 실제 `/api`를 소비하는 live adapter와 executable contract test.
 5. 실제 API의 loading/empty/error/stale/permission 상태를 처리하는 제품 UI 구현.
@@ -1731,7 +1731,12 @@ Delta는 evidence registry까지 snapshot과 같은 상태 공간을 완전히 �
 
 ### 9.4 Runtime Topology 단일 wire 권위
 
-Full Topology 화면의 backend wire와 realtime reducer authority는 `topology-message-action-schema.md`의 `SnapshotEnvelope`/`StreamEnvelope`와 `topology-engine.md`의 `TopologyGateway`/`ProjectionFrame` 하나다. §6의 `ResourceGraphSnapshot`/`ResourceGraphStreamEnvelope`는 GitOps Tree와 가벼운 cross-navigation graph facade가 소비하는 semantic view이며, Full Topology 화면이 별도 HTTP/WebSocket으로 동시에 받는 두 번째 wire가 아니다.
+Full Topology 화면의 backend wire와 realtime reducer authority는 API 작업자가 완료 등록한 inventory
+endpoint 함수군과 `packages.contracts.realtime.BROWSER_LIVE_PATH`를 구현한 live adapter 하나다.
+검증·identity·request generation·stream 재수렴 규칙은 `reference-porting-contract.md`를 따른다.
+§6의 `ResourceGraphSnapshot`/`ResourceGraphStreamEnvelope`는 GitOps Tree와 가벼운
+cross-navigation graph facade가 소비하는 semantic view이며, Full Topology 화면이 별도
+HTTP/WebSocket으로 동시에 받는 두 번째 wire가 아니다.
 
 `EngineBackedTopologyPort`는 같은 engine store에서 아래처럼 결정적으로 projection하며 backend를 직접 호출하지 않는다.
 
@@ -2734,7 +2739,12 @@ type ProductPorts = {
 }
 ```
 
-Capability query의 유일한 진입점은 `CapabilitiesPort.get`이다. GitOps, approval, history, resource selection, Metrics, Topology feature가 별도 capability endpoint나 local permission logic을 만들지 않는다. Approval decision도 `OperationsPort.submit(ApprovalDecisionRequest)` 한 mutation 경로를 사용하고 `ApprovalsPort`는 versioned approval read만 소유한다. Full Topology composition은 이 ProductPorts와 `topology-engine.md`의 `TopologyGateway`를 함께 주입한다. `ResourceGraphFacadePort`는 그 engine store 또는 GitOps Tree store를 읽는 frontend facade이며 live transport adapter가 아니다.
+Capability query의 유일한 진입점은 `CapabilitiesPort.get`이다. GitOps, approval, history, resource
+selection, Metrics, Topology feature가 별도 capability endpoint나 local permission logic을 만들지
+않는다. Approval decision도 `OperationsPort.submit(ApprovalDecisionRequest)` 한 mutation 경로를
+사용하고 `ApprovalsPort`는 versioned approval read만 소유한다. Full Topology composition은 이
+ProductPorts와 완료 등록된 inventory·realtime adapter를 함께 주입한다. `ResourceGraphFacadePort`는
+동일 canonical store 또는 GitOps Tree store를 읽는 frontend facade이며 live transport adapter가 아니다.
 
 UI component와 reducer는 URL, fetch, provider SDK를 호출하지 않고 이 ports를 effect를 통해서만 사용한다. runtime schema parse와 transport error mapping은 live adapter 경계에서 수행한다. `workspaceId`와 `authorizationRevision`은 validated session store에서 만들며 사용자 입력이나 provider response가 덮어쓸 수 없다.
 
@@ -2945,7 +2955,7 @@ Test-only matrix의 축은 provider가 아니라 다음 canonical 값이다.
 | Tree/Insights | §6, §12, §13 |
 | Timeline | §7, §12, §13 |
 | Metrics | §8, §12, §13 |
-| Topology | §9 및 `topology-engine.md` |
+| Topology | §9 및 `reference-porting-contract.md` |
 | Operations/history/capabilities | §10–11 |
 | 상태 행렬 | §12 |
 | consumer API/cache/error/SLO | §13 |
