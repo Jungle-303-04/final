@@ -17,6 +17,7 @@ export { getRcaTimeline } from "./rca";
 export { listClusters, type ListClustersOptions } from "./clusters";
 export { getCluster } from "./cluster-detail";
 export { getClusterConnectionStatus } from "./cluster-connection";
+export { getInventorySummary } from "./inventory-summary";
 export {
   getClusterUsage,
   getCommandStatus,
@@ -63,6 +64,10 @@ export {
   clusterConnectionStatusSchema,
   type ClusterConnectionStatus,
 } from "./cluster-connection-schemas";
+export {
+  inventorySummarySchema,
+  type InventorySummary,
+} from "./inventory-summary-schemas";
 export {
   inventoryResourceDetailSchema,
   inventoryResourceListSchema,
