@@ -103,11 +103,23 @@ EXPECTED_RULE_SNAPSHOT: dict[str, tuple[list[str], list[str]]] = {
         ["kubernetes", "metrics", "logs", "metadata"],
     ),
     "ImagePullBackOff": (
-        ["wrong_image_tag", "missing_image_pull_secret", "registry_unavailable"],
+        [
+            "wrong_image_tag",
+            "missing_image_pull_secret",
+            "registry_unavailable",
+            "registry_rate_limited",
+            "image_platform_mismatch",
+        ],
         ["kubernetes"],
     ),
     "ErrImagePull": (
-        ["wrong_image_tag", "missing_image_pull_secret", "registry_unavailable"],
+        [
+            "wrong_image_tag",
+            "missing_image_pull_secret",
+            "registry_unavailable",
+            "registry_rate_limited",
+            "image_platform_mismatch",
+        ],
         ["kubernetes"],
     ),
     "DNS lookup failed": (
@@ -141,7 +153,7 @@ EXPECTED_RULE_SNAPSHOT: dict[str, tuple[list[str], list[str]]] = {
         ["kubernetes"],
     ),
     "Secret not found": (
-        ["missing_secret_reference", "secret_key_missing"],
+        ["missing_secret_reference", "secret_key_missing", "external_secret_sync_failed"],
         ["kubernetes", "logs", "metadata"],
     ),
     "Probe failure": (
@@ -399,7 +411,11 @@ def test_catalog_oom_killed_candidate_keeps_full_field_parity() -> None:
     assert oom.candidate_id == "oom_killed"
     assert oom.title == "컨테이너 OOMKilled"
     assert oom.description == "컨테이너가 메모리 제한을 초과해 재시작됐을 가능성이 있습니다."
-    assert oom.expected_evidence == ["kubernetes", "metrics", "logs"]
+    assert oom.expected_evidence == [
+        "kubernetes:cluster_resource_state",
+        "metrics:telemetry_metrics",
+        "logs:related_logs",
+    ]
     assert oom.checks == [
         "containerStatuses.lastState.terminated.reason == OOMKilled 확인",
         "restartCount 증가와 memory usage가 limit 근처인지 확인",
@@ -407,8 +423,22 @@ def test_catalog_oom_killed_candidate_keeps_full_field_parity() -> None:
     ]
 
 
+EVIDENCE_ITEM_NAMES = {
+    "kubernetes": "cluster_resource_state",
+    "metrics": "telemetry_metrics",
+    "logs": "related_logs",
+    "traces": "related_traces",
+    "metadata": "current_workload_snapshots",
+}
+
+
 def evidence_item(source: str, value: dict) -> EvidenceItem:
-    return EvidenceItem(source=source, name=f"{source}_item", value=value, summary=f"{source} 근거")
+    return EvidenceItem(
+        source=source,
+        name=EVIDENCE_ITEM_NAMES.get(source, f"{source}_item"),
+        value=value,
+        summary=f"{source} 근거",
+    )
 
 
 def crashloop_bundle(*, log_lines: list[str], pods: list[dict]) -> EvidenceBundle:
@@ -438,6 +468,11 @@ def crashloop_pod(**overrides: object) -> dict:
 
 def evaluations_by_id(bundle: EvidenceBundle) -> dict:
     plan = plan_for("CrashLoopBackOff")
+    return {e.candidate_id: e for e in evaluate_causes(plan.candidates, bundle)}
+
+
+def evaluations_for(symptom: str, bundle: EvidenceBundle) -> dict:
+    plan = plan_for(symptom)
     return {e.candidate_id: e for e in evaluate_causes(plan.candidates, bundle)}
 
 
@@ -510,6 +545,79 @@ def test_no_candidate_gets_full_score_without_distinguishing_evidence() -> None:
 
     assert all(evaluation.score < 1.0 for evaluation in by_id.values())
     assert all(evaluation.missing_evidence for evaluation in by_id.values())
+
+
+def test_image_pull_rate_limit_uses_named_evidence_and_event_signal() -> None:
+    bundle = EvidenceBundle(
+        incident_id="inc-image",
+        items=[
+            EvidenceItem(
+                source="kubernetes",
+                name="cluster_resource_state",
+                value={
+                    "pods": [{"name": "checkout-api-1", "waiting_reasons": ["ImagePullBackOff"]}],
+                    "events": [
+                        {
+                            "reason": "Failed",
+                            "message": "Failed to pull image: toomanyrequests: rate limit exceeded",
+                        }
+                    ],
+                },
+                summary="Kubernetes image pull event",
+            ),
+        ],
+        missing_evidence=[],
+        complete=True,
+    )
+
+    by_id = evaluations_for("ImagePullBackOff", bundle)
+
+    assert by_id["registry_rate_limited"].score == 1.0
+    assert by_id["registry_rate_limited"].missing_evidence == []
+
+
+def test_secret_not_found_uses_named_evidence_and_event_signal() -> None:
+    bundle = EvidenceBundle(
+        incident_id="inc-secret",
+        items=[
+            EvidenceItem(
+                source="kubernetes",
+                name="cluster_resource_state",
+                value={
+                    "pods": [{"name": "checkout-api-1", "namespace": "sandbox"}],
+                    "events": [
+                        {
+                            "reason": "FailedMount",
+                            "message": (
+                                'MountVolume.SetUp failed for volume "api-secret": '
+                                'secret "api-secret" not found'
+                            ),
+                        }
+                    ],
+                },
+                summary="Kubernetes secret event",
+            ),
+            EvidenceItem(
+                source="logs",
+                name="related_logs",
+                value={"entries": [{"line": "secret not found: api-secret"}]},
+                summary="Secret logs",
+            ),
+            EvidenceItem(
+                source="metadata",
+                name="current_workload_snapshots",
+                value={"items": [{"name": "checkout-api"}]},
+                summary="Workload snapshots",
+            ),
+        ],
+        missing_evidence=[],
+        complete=True,
+    )
+
+    by_id = evaluations_for("Secret not found", bundle)
+
+    assert by_id["missing_secret_reference"].score == 1.0
+    assert by_id["missing_secret_reference"].missing_evidence == []
 
 
 def test_probe_failure_rule_uses_schema_v1_evidence_keys() -> None:
