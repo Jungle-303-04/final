@@ -270,7 +270,7 @@ last-success 유지, empty issue를 구분한다.
 | `Escape` | overlay/drawer/search 닫기 | active overlay 우선 |
 
 shortcut registry는 input, textarea, select, contenteditable에서 기본 shortcut을 억제하고 명시적으로
-`allowInInputs`인 shortcut만 허용한다. multi-key sequence는 timeout 뒤 취소되고 화면 scope shortcut이
+`allowInInputs`인 shortcut만 허용한다. multi-key sequence는 1,000ms 뒤 취소되고 화면 scope shortcut이
 global보다 우선한다.
 
 ## 6. 실시간·polling·cache 모델

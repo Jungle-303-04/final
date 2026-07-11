@@ -238,8 +238,8 @@ interaction만 구현한다.
 | `UI-024` | search·filter·option | Port `InputGroup`, `Combobox`, `Select`, `Checkbox`, `ToggleGroup`, `Switch`, `Popover` | 조합 | 없음 | clear filter, 2~7 options는 ToggleGroup |
 | `UI-025` | detail section/tab | Port `Tabs`, `Accordion`, `Collapsible`, `Breadcrumb` | 조합 | 없음 | URL tab과 focus 동기화 |
 | `UI-026` | Settings·wizard form | Port `Field`, `InputGroup`, `Select`, `Checkbox`, `RadioGroup`, `Textarea` | 조합 | 없음 | FieldSet/Legend, `aria-invalid` |
-| `UI-027` | shortcut help·registry | Port `Dialog`, `Table`, `Kbd` + `useShortcutRegistry` | Custom | scoped chord, timeout, input 억제, scope priority | allowInInputs만 허용, sequence 취소 |
-| `UI-028` | light/dark toggle | Port `Toggle` + existing theme runtime | 직접 | 없음 | label, `aria-pressed`, OS initial value |
+| `UI-027` | shortcut help·registry | Port `Dialog`, `Table`, `Kbd` + `createShortcutMatcher`·`useProductShortcuts` | Custom | scoped chord, timeout, input 억제, scope priority | allowInInputs만 허용, 1,000ms sequence 취소 |
+| `UI-028` | light/dark toggle | Port `Toggle` + existing theme runtime | 직접 | 없음 | label, `aria-pressed`, 저장값 우선·미설정 light, system 제3모드 금지 |
 
 ### 4.2 화면별 요소
 
