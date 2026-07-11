@@ -76,10 +76,10 @@ describe("inventory events API", () => {
     );
   });
 
-  it("rejects an out-of-range event limit before making a request", async () => {
+  it("throws on an out-of-range event limit before making a request", () => {
     const fetchMock = vi.spyOn(globalThis, "fetch");
 
-    await expect(listInventoryEvents("cluster-1", { limit: 1001 })).rejects.toThrow(
+    expect(() => listInventoryEvents("cluster-1", { limit: 1001 })).toThrow(
       "event limit must be an integer from 1 to 1000",
     );
     expect(fetchMock).not.toHaveBeenCalled();
