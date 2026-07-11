@@ -82,6 +82,15 @@ frontend에서 숨기는 것은 UX일 뿐이다.
 7. 테스트를 찾는다.
 8. Bruno 요청을 찾는다.
 
+## 7단계. RCA rule catalog를 추가할 때 본다
+
+RCA rule을 추가할 때는 [RCA Rule Catalog Guide](09-rca-rule-catalog-guide.md)를 연다.
+
+스프레드시트의 증상/후보 자료는 설계 기준이고, 실제 plan-worker가 읽는 실행 계약은
+`src/services/ai/agent/causes/catalog/*.yaml`이다.
+새 rule은 `symptoms`, `required_sources`, `candidates`, `expected_evidence`, `checks`, `signals`
+구조를 맞춰 추가한다.
+
 ## 역할 경계
 
 민정은 command, target agent, evidence provider, evidence job을 맡는다.

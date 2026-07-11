@@ -144,6 +144,97 @@ EXPECTED_RULE_SNAPSHOT: dict[str, tuple[list[str], list[str]]] = {
         ["missing_secret_reference", "secret_key_missing"],
         ["kubernetes", "logs", "metadata"],
     ),
+    "Probe failure": (
+        [
+            "probe_path_wrong",
+            "probe_port_wrong",
+            "timeout_too_short",
+            "startup_window_too_short",
+            "app_real_health_failure",
+        ],
+        ["kubernetes", "metrics", "logs", "metadata"],
+    ),
+    "ReadinessProbeFailed": (
+        [
+            "probe_path_wrong",
+            "probe_port_wrong",
+            "timeout_too_short",
+            "startup_window_too_short",
+            "app_real_health_failure",
+        ],
+        ["kubernetes", "metrics", "logs", "metadata"],
+    ),
+    "Service has no ready endpoints": (
+        [
+            "selector_label_mismatch",
+            "pods_not_ready",
+            "rollout_unavailable",
+            "wrong_service_port",
+            "endpoint_slice_delay",
+        ],
+        ["kubernetes", "metadata"],
+    ),
+    "ServiceEndpointsEmpty": (
+        [
+            "selector_label_mismatch",
+            "pods_not_ready",
+            "rollout_unavailable",
+            "wrong_service_port",
+            "endpoint_slice_delay",
+        ],
+        ["kubernetes", "metadata"],
+    ),
+    "OOMKilled": (
+        [
+            "memory_limit_too_low",
+            "memory_leak",
+            "traffic_spike",
+            "node_memory_pressure",
+            "bad_release_memory_regression",
+        ],
+        ["kubernetes", "metrics", "logs"],
+    ),
+    "CPU Saturation": (
+        ["cpu_limit_or_throttling"],
+        ["kubernetes", "metrics"],
+    ),
+    "Disk Pressure": (
+        ["node_disk_pressure", "ephemeral_storage_exhausted"],
+        ["kubernetes", "metrics", "logs"],
+    ),
+    "Admission webhook denied": (
+        ["policy_violation", "invalid_manifest", "image_vulnerability_block"],
+        ["kubernetes", "logs", "metadata"],
+    ),
+    "RBAC denied": (
+        ["service_account_permission_denied"],
+        ["kubernetes", "logs", "metadata"],
+    ),
+    "Certificate expired": (
+        ["certificate_expired_or_invalid"],
+        ["kubernetes", "logs", "traces", "metadata"],
+    ),
+    "Redis unavailable": (
+        ["redis_dependency_unavailable"],
+        ["metrics", "logs", "traces"],
+    ),
+    "Kafka consumer lag": (
+        ["consumer_lag_backlog"],
+        ["metrics", "logs"],
+    ),
+    "External API timeout": (
+        ["external_api_timeout"],
+        ["metrics", "logs", "traces"],
+    ),
+    "DB/cache/queue dependency failure": (
+        [
+            "dependency_down",
+            "connection_pool_exhausted",
+            "wrong_endpoint_config",
+            "credential_rotation_issue",
+        ],
+        ["metrics", "logs", "traces", "metadata"],
+    ),
 }
 
 
@@ -318,6 +409,115 @@ def test_no_candidate_gets_full_score_without_distinguishing_evidence() -> None:
 
     assert all(evaluation.score < 1.0 for evaluation in by_id.values())
     assert all(evaluation.missing_evidence for evaluation in by_id.values())
+
+
+def test_probe_failure_rule_uses_schema_v1_evidence_keys() -> None:
+    plan = plan_for("Probe failure")
+    by_id = {candidate.candidate_id: candidate for candidate in plan.candidates}
+
+    assert by_id["probe_path_wrong"].expected_evidence == [
+        "kubernetes:cluster_resource_state",
+        "logs:related_logs",
+        "metadata:current_workload_snapshots",
+    ]
+    assert by_id["app_real_health_failure"].expected_evidence == [
+        "kubernetes:cluster_resource_state",
+        "metrics:telemetry_metrics",
+        "logs:related_logs",
+        "traces:related_traces",
+    ]
+
+
+def test_service_endpoint_rule_uses_metadata_endpoint_evidence_keys() -> None:
+    plan = plan_for("Service has no ready endpoints")
+    by_id = {candidate.candidate_id: candidate for candidate in plan.candidates}
+
+    assert by_id["selector_label_mismatch"].expected_evidence == [
+        "kubernetes:cluster_resource_state",
+        "metadata:service_selector_matches",
+        "metadata:endpoint_slice_ready_endpoints",
+    ]
+    assert by_id["wrong_service_port"].expected_evidence == [
+        "kubernetes:cluster_resource_state",
+        "metadata:service_selector_matches",
+    ]
+
+
+def test_resource_pressure_rule_uses_schema_v1_evidence_keys() -> None:
+    plan = plan_for("OOMKilled")
+    by_id = {candidate.candidate_id: candidate for candidate in plan.candidates}
+
+    assert by_id["memory_limit_too_low"].expected_evidence == [
+        "kubernetes:cluster_resource_state",
+        "metrics:telemetry_metrics",
+        "logs:related_logs",
+    ]
+    assert by_id["bad_release_memory_regression"].expected_evidence == [
+        "kubernetes:cluster_resource_state",
+        "metrics:telemetry_metrics",
+        "logs:related_logs",
+        "metadata:current_workload_snapshots",
+    ]
+
+
+def test_policy_and_dependency_rules_use_schema_v1_evidence_keys() -> None:
+    policy_plan = plan_for("Admission webhook denied")
+    policy_by_id = {candidate.candidate_id: candidate for candidate in policy_plan.candidates}
+    dependency_plan = plan_for("External API timeout")
+    dependency_by_id = {candidate.candidate_id: candidate for candidate in dependency_plan.candidates}
+
+    assert policy_by_id["policy_violation"].expected_evidence == [
+        "kubernetes:cluster_resource_state",
+        "logs:related_logs",
+        "metadata:current_workload_snapshots",
+    ]
+    assert dependency_by_id["external_api_timeout"].expected_evidence == [
+        "metrics:telemetry_metrics",
+        "logs:related_logs",
+        "traces:related_traces",
+    ]
+
+
+def test_probe_path_wrong_evaluates_with_named_evidence_and_event_signal() -> None:
+    plan = plan_for("Probe failure")
+    bundle = EvidenceBundle(
+        incident_id="inc-probe",
+        items=[
+            EvidenceItem(
+                source="kubernetes",
+                name="cluster_resource_state",
+                value={
+                    "pods": [],
+                    "events": [
+                        {
+                            "reason": "Unhealthy",
+                            "message": "Readiness probe failed: HTTP probe failed with statuscode: 404",
+                        }
+                    ],
+                },
+                summary="Kubernetes probe event",
+            ),
+            EvidenceItem(
+                source="logs",
+                name="related_logs",
+                value={"entries": [{"line": "GET /healthz returned 404 not found"}]},
+                summary="Probe logs",
+            ),
+            EvidenceItem(
+                source="metadata",
+                name="current_workload_snapshots",
+                value={"items": [{"name": "checkout-api"}]},
+                summary="Workload snapshots",
+            ),
+        ],
+        missing_evidence=[],
+        complete=True,
+    )
+
+    by_id = {e.candidate_id: e for e in evaluate_causes(plan.candidates, bundle)}
+
+    assert by_id["probe_path_wrong"].score == 1.0
+    assert by_id["probe_path_wrong"].missing_evidence == []
 
 
 def test_unmatched_symptom_still_reports_rule_missing() -> None:
