@@ -1,22 +1,47 @@
 import { cn } from "./primitives/cn";
 
-export function Metric({ label, value, tone = "neutral", note }: {
+export type MetricTone = "neutral" | "critical" | "warning";
+export type MetricValue = string | number | null;
+
+export interface MetricProps {
   label: string;
-  value: string | number;
-  tone?: "neutral" | "critical" | "warning";
   note?: string;
-}) {
+  tone?: MetricTone;
+  unavailableLabel?: string;
+  unit?: string;
+  value: MetricValue;
+}
+
+export function Metric({
+  label,
+  value,
+  tone = "neutral",
+  note,
+  unit,
+  unavailableLabel,
+}: MetricProps) {
+  const unavailable = unavailableLabel?.trim() || "사용할 수 없음";
+
   return (
-    <div className="grid min-w-0 gap-1 p-4" data-tone={tone}>
-      <span className="truncate text-xs font-medium text-muted-foreground">{label}</span>
-      <strong className={cn(
-        "font-mono text-xl font-semibold tracking-tight",
-        tone === "critical" && "text-destructive",
-        tone === "warning" && "text-status-warning",
-      )}>
-        {value}
-      </strong>
-      {note ? <span className="text-xs text-muted-foreground">{note}</span> : null}
-    </div>
+    <dl className="grid min-w-0 gap-1 p-4" data-slot="metric" data-tone={tone}>
+      <dt className="truncate text-xs font-medium text-muted-foreground">{label}</dt>
+      <dd className="m-0 flex min-w-0 items-baseline gap-1">
+        {value === null ? (
+          <span className="text-sm font-medium text-muted-foreground">{unavailable}</span>
+        ) : (
+          <>
+            <strong className={cn(
+              "min-w-0 font-mono text-xl font-semibold tracking-tight",
+              tone === "critical" && "text-destructive",
+              tone === "warning" && "text-status-warning",
+            )}>
+              {value}
+            </strong>
+            {unit ? <span className="text-xs text-muted-foreground">{unit}</span> : null}
+          </>
+        )}
+      </dd>
+      {note ? <dd className="m-0 text-xs text-muted-foreground">{note}</dd> : null}
+    </dl>
   );
 }
