@@ -806,3 +806,49 @@ P2를 완료로 판정한다. 다음 단계는 `final-questions.md`에 남은 �
 명령: make manifest-check
 결과: PASS — management manifest objects 56, target manifest objects 18
 ```
+
+## 2026-07-11 카드·진행률 primitive 최종 계약 정정
+
+- 최초 구현 커밋: `3aca551c8`
+- 런타임·강제색 보강 커밋: `d8de5f3c4`
+- 위의 선행 기록 중 “track border를 제거해 complete ratio 1.0으로 수렴”은 폐기한다. forced-colors에서
+  track 경계를 잃지 않도록 border를 복원했고, border box 2px를 제외한 complete ratio 0.98 이상을
+  완료 기준으로 사용한다. 이 정정 기록이 해당 문장보다 우선한다.
+- `CardTitle`·`CardDescription`은 중립 `div`로 유지해 실제 heading level과 paragraph를 화면이
+  소유한다. 모든 canonical slot·size marker는 타입과 runtime prop 순서 양쪽에서 덮어쓰기를 막는다.
+- `Progress`는 finite 0–100 또는 `null`만 받는다. 범위 밖 관측값을 clamp해 변조하지 않고
+  `RangeError`로 계약 오류를 드러낸다. `null`은 numeric `aria-valuenow` 없이 불확정 문구로 읽힌다.
+- 타입 보호와 별도로 runtime sanitizer가 `aria-hidden`, raw HTML, children, role, min/max,
+  aria value, style, Base UI render·format 계열 override를 제거한다. unsafe-cast 회귀 테스트는 실제
+  DOM에서 named progressbar와 내부 track이 보존되는지 검증한다.
+- 불확정 indicator는 reduced-motion과 forced-colors에서도 전체 완료와 같아지지 않는다. 1/3 폭,
+  dashed border, `background-clip: padding-box`, animation none을 유지한다. track border와 indicator
+  border는 각각 실제 배경 대비 3:1 이상이어야 하며 visual gate가 geometry·clip·contrast를 함께
+  검사한다.
+- `THIRD_PARTY_NOTICES.md`에 Card·Progress의 upstream source, product target, material change를
+  기록했다. product runtime의 lab/generated/vendor import는 0건이다.
+- §6b 조율 상태는 `api-needs.md`의 `requested` 26행, 유효한 완료 앵커 0개다. product surface와
+  API composition 등록은 계속 0개다.
+
+```text
+명령: cd references/ui-layer-lab && npm run check
+결과: PASS
+  - TypeScript: PASS
+  - ESLint: PASS
+  - Vitest: 17 files, 88 tests PASS
+  - product design guard: 65 files PASS
+  - UI catalog source audit: 482 previews PASS, upstream 21e4ceb
+  - Vite production build: PASS
+  - ProductApp CSS: 45.77 kB (45,769 bytes)
+  - ProductApp JS: 68.82 kB (68,819 bytes)
+주의: 500kB 초과 chunk warning은 reference catalog 기존 성능 과제로 유지
+
+명령: cd references/ui-layer-lab && npm run visual-product
+결과: PASS — release-desktop-light, release-mobile-dark, release-reflow-320-light,
+      release-text-resize-200-light, state-reflow-320-light,
+      state-text-resize-200-light, state-forced-colors; network-silent
+검증: forced-colors track border/contrast, complete ratio ≥0.98,
+      indeterminate ratio 0.25–0.45, dashed border, padding-box clip, animation none
+스크린샷:
+  - references/ui-layer-lab/output/playwright/product-state-forced-colors.png
+```
