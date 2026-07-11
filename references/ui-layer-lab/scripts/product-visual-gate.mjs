@@ -101,6 +101,7 @@ const server = spawn(
   "npm",
   ["run", "dev", "--", "--host", "127.0.0.1", "--port", String(port), "--strictPort"],
   {
+    detached: process.platform !== "win32",
     env: { ...process.env, VITE_VISUAL_GATE_NONCE: runNonce },
     stdio: ["ignore", "pipe", "pipe"],
   },
@@ -160,9 +161,15 @@ try {
     `product visual gate passed (${visualScenarios.map(({ id }) => id).join(", ")}; network-silent)`,
   );
 } finally {
-  await browser?.close();
-  if (!serverExit) server.kill("SIGTERM");
-  if (output.includes("error")) process.stderr.write(output);
+  try {
+    await browser?.close();
+  } finally {
+    try {
+      await stopOwnedServer();
+    } finally {
+      if (output.includes("error")) process.stderr.write(output);
+    }
+  }
 }
 
 async function captureScenario(page, scenario) {
@@ -260,15 +267,35 @@ async function assertNoOverflow(page, label, requiredSelectors) {
       const ownOverflow = element.scrollWidth - element.clientWidth;
       const exemption = element.getAttribute("data-reflow-exempt");
       const isHorizontalScrollOwner = style.overflowX === "auto" || style.overflowX === "scroll";
-      const isKeyboardReachable = element.tabIndex >= 0
-        || element.matches("a[href],button,input,select,textarea");
+      const labelledBy = element.getAttribute("aria-labelledby")
+        ?.split(/\s+/)
+        .filter(Boolean)
+        .map((id) => document.getElementById(id)?.textContent?.trim() ?? "")
+        .join(" ")
+        .trim();
+      const hasAccessibleName = Boolean(element.getAttribute("aria-label")?.trim() || labelledBy);
+      const isSuppressed = element.matches(":disabled,[aria-disabled='true'],[hidden]")
+        || Boolean(element.closest("[aria-hidden='true'],[inert]"))
+        || style.display === "none"
+        || style.visibility === "hidden";
+      let acceptsFocus = false;
+      if (exemption !== null && !isSuppressed && element.tabIndex >= 0) {
+        const previousFocus = document.activeElement;
+        element.focus({ preventScroll: true });
+        acceptsFocus = document.activeElement === element;
+        if (previousFocus instanceof HTMLElement) previousFocus.focus({ preventScroll: true });
+        else element.blur();
+      }
       if (exemption !== null && (
         exemption.trim().length === 0
         || !isHorizontalScrollOwner
-        || !isKeyboardReachable
+        || element.tabIndex < 0
+        || isSuppressed
+        || !acceptsFocus
+        || !hasAccessibleName
       )) {
         violations.push(
-          `${element.tagName.toLowerCase()} invalid reflow exemption: reason=${JSON.stringify(exemption)} overflow-x=${style.overflowX} tabIndex=${element.tabIndex}`,
+          `${element.tagName.toLowerCase()} invalid reflow exemption: reason=${JSON.stringify(exemption)} overflow-x=${style.overflowX} tabIndex=${element.tabIndex} focus=${acceptsFocus} named=${hasAccessibleName} suppressed=${isSuppressed}`,
         );
       }
       if (exemption === null && ownOverflow > 1) {
@@ -325,20 +352,54 @@ async function assertForcedColors(page, label) {
     if (!(marker instanceof HTMLElement)) return { missing: true };
     const markerStyle = getComputedStyle(marker);
 
-    function alphaOf(color) {
-      if (color === "transparent") return 0;
+    function parseColor(color) {
       const channels = color.match(/[\d.]+/g)?.map(Number) ?? [];
-      return channels.length >= 4 ? channels[3] : 1;
+      return {
+        alpha: color === "transparent" ? 0 : channels.length >= 4 ? channels[3] : 1,
+        blue: channels[2] ?? 0,
+        green: channels[1] ?? 0,
+        red: channels[0] ?? 0,
+      };
+    }
+
+    function composite(top, bottom) {
+      const alpha = top.alpha + bottom.alpha * (1 - top.alpha);
+      if (alpha === 0) return { alpha: 0, blue: 0, green: 0, red: 0 };
+      return {
+        alpha,
+        blue: (top.blue * top.alpha + bottom.blue * bottom.alpha * (1 - top.alpha)) / alpha,
+        green: (top.green * top.alpha + bottom.green * bottom.alpha * (1 - top.alpha)) / alpha,
+        red: (top.red * top.alpha + bottom.red * bottom.alpha * (1 - top.alpha)) / alpha,
+      };
     }
 
     function effectiveBackground(element) {
+      const ancestry = [];
       let current = element;
       while (current instanceof HTMLElement) {
-        const background = getComputedStyle(current).backgroundColor;
-        if (alphaOf(background) >= 0.99) return background;
+        ancestry.push(current);
         current = current.parentElement;
       }
-      return getComputedStyle(document.documentElement).backgroundColor;
+      let result = { alpha: 0, blue: 0, green: 0, red: 0 };
+      for (const ancestor of ancestry.reverse()) {
+        const style = getComputedStyle(ancestor);
+        const layer = parseColor(style.backgroundColor);
+        result = composite(layer, result);
+      }
+      const alpha = Number(result.alpha.toFixed(4));
+      return alpha >= 0.999
+        ? `rgb(${result.red}, ${result.green}, ${result.blue})`
+        : `rgba(${result.red}, ${result.green}, ${result.blue}, ${alpha})`;
+    }
+
+    function effectiveOpacity(element) {
+      let opacity = 1;
+      let current = element;
+      while (current instanceof HTMLElement) {
+        opacity *= Number.parseFloat(getComputedStyle(current).opacity || "1");
+        current = current.parentElement;
+      }
+      return opacity;
     }
 
     return {
@@ -347,35 +408,44 @@ async function assertForcedColors(page, label) {
       mainBackground: effectiveBackground(main),
       emptyBackground: effectiveBackground(empty),
       emptyBorderColor: emptyStyle.borderTopColor,
+      emptyOpacity: effectiveOpacity(empty),
       emptyBorderStyle: emptyStyle.borderTopStyle,
       emptyBorderWidth: Number.parseFloat(emptyStyle.borderTopWidth),
       surfaceBackground: effectiveBackground(surface),
       surfaceBorderColor: surfaceStyle.borderTopColor,
+      surfaceOpacity: effectiveOpacity(surface),
       surfaceBorderStyle: surfaceStyle.borderTopStyle,
       surfaceBorderWidth: Number.parseFloat(surfaceStyle.borderTopWidth),
       badgeBackground: effectiveBackground(badge),
       badgeBorderColor: badgeStyle.borderTopColor,
+      badgeOpacity: effectiveOpacity(badge),
       badgeBorderStyle: badgeStyle.borderTopStyle,
       badgeBorderWidth: Number.parseFloat(badgeStyle.borderTopWidth),
       alertBackground: effectiveBackground(alert),
       alertBorderColor: alertStyle.borderTopColor,
+      alertOpacity: effectiveOpacity(alert),
       alertBorderStyle: alertStyle.borderTopStyle,
       alertBorderWidth: Number.parseFloat(alertStyle.borderTopWidth),
       headingColor: headingStyle.color,
+      headingOpacity: effectiveOpacity(heading),
       headingVisible: heading.getBoundingClientRect().width > 0,
       focusBackground: effectiveBackground(focusTarget),
       focusOutlineColor: focusStyle.outlineColor,
+      focusOpacity: effectiveOpacity(focusTarget),
       focusOutlineStyle: focusStyle.outlineStyle,
       focusOutlineWidth: Number.parseFloat(focusStyle.outlineWidth),
       disabledBackground: effectiveBackground(disabledButton),
       disabledColor: disabledStyle.color,
+      disabledOpacity: effectiveOpacity(disabledButton),
       disabledVisible: disabledButton.getBoundingClientRect().width > 0,
       markerBackground: effectiveBackground(marker),
       markerBorderColor: markerStyle.borderTopColor,
+      markerOpacity: effectiveOpacity(marker),
       markerBorderStyle: markerStyle.borderTopStyle,
       markerBorderWidth: Number.parseFloat(markerStyle.borderTopWidth),
       selectionBackground: selectionStyle.backgroundColor,
       selectionColor: selectionStyle.color,
+      selectionOpacity: effectiveOpacity(heading),
       selectionUnderlay: effectiveBackground(heading),
       statusText: status.textContent?.trim() ?? "",
     };
@@ -383,6 +453,22 @@ async function assertForcedColors(page, label) {
 
   if (result.missing) throw new Error(`${label}: required forced-colors elements are missing`);
   if (!result.active) throw new Error(`${label}: forced-colors media query is not active`);
+  const opacityChecks = {
+    alert: result.alertOpacity,
+    badge: result.badgeOpacity,
+    disabled: result.disabledOpacity,
+    empty: result.emptyOpacity,
+    focus: result.focusOpacity,
+    heading: result.headingOpacity,
+    selection: result.selectionOpacity,
+    status: result.markerOpacity,
+    surface: result.surfaceOpacity,
+  };
+  for (const [element, opacity] of Object.entries(opacityChecks)) {
+    if (Math.abs(opacity - 1) > 0.001) {
+      throw new Error(`${label}: ${element} uses group opacity ${opacity}; forced-colors contrast must be opaque`);
+    }
+  }
   assertContrast(label, "heading", result.headingColor, result.mainBackground, 4.5);
   assertContrast(label, "empty border", result.emptyBorderColor, result.emptyBackground, 3);
   assertContrast(label, "surface border", result.surfaceBorderColor, result.surfaceBackground, 3);
@@ -476,6 +562,57 @@ function relativeLuminance([red, green, blue]) {
 function isApiPath(url) {
   const pathname = new URL(url).pathname;
   return pathname === "/api" || pathname.startsWith("/api/");
+}
+
+async function stopOwnedServer() {
+  if (serverExit && !(await isOwnedServerResponding())) return;
+  await signalOwnedServer("SIGTERM");
+  if (await waitForOwnedServerStop(3_000)) return;
+
+  await signalOwnedServer("SIGKILL");
+  if (await waitForOwnedServerStop(1_000)) return;
+  throw new Error("Owned visual Vite did not exit after SIGTERM and SIGKILL");
+}
+
+async function signalOwnedServer(signal) {
+  if (!server.pid) throw new Error(`Owned visual Vite has no pid for ${signal}`);
+  if (process.platform === "win32") {
+    await runWindowsTreeKill(signal);
+    return;
+  }
+  try {
+    process.kill(-server.pid, signal);
+  } catch (error) {
+    if (error?.code !== "ESRCH") throw error;
+  }
+}
+
+async function runWindowsTreeKill(signal) {
+  const args = ["/PID", String(server.pid), "/T"];
+  if (signal === "SIGKILL") args.push("/F");
+  await new Promise((resolve, reject) => {
+    const killer = spawn("taskkill", args, { stdio: "ignore" });
+    killer.once("error", reject);
+    killer.once("exit", resolve);
+  });
+}
+
+async function waitForOwnedServerStop(timeoutMs) {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    if (serverExit && !(await isOwnedServerResponding())) return true;
+    await new Promise((resolve) => setTimeout(resolve, 25));
+  }
+  return false;
+}
+
+async function isOwnedServerResponding() {
+  try {
+    const response = await fetch(stateHarnessUrl);
+    return response.ok && (await response.text()).includes(runNonce);
+  } catch {
+    return false;
+  }
 }
 
 function assertServerAlive() {
