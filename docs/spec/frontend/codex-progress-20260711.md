@@ -898,3 +898,45 @@ P2를 완료로 판정한다. 다음 단계는 `final-questions.md`에 남은 �
       viewport `data-has-overflow-y`/keyboard focus, visible scrollbar/thumb geometry,
       reduced-motion transition duration
 ```
+
+## 2026-07-11 §6b API 작업지시서·요청 큐 최신화
+
+- 작업지시서·원자 queue 커밋: `32ef74ed5`
+- canonical branch·file lock·완료 앵커 보강 커밋: `64c509805`
+- 정본은 `api-integration-workorder-20260711.md`, 실행 큐는 `api-needs.md`다. 작업자는 queue에서
+  전역 단일 `in_progress` 행을 claim하고, endpoint·schema·contract test·barrel export 코드 커밋 A를
+  canonical branch에 push한 뒤, progress EOF 앵커와 queue 제거를 커밋 B로 분리한다.
+- queue는 `APIQ-001`~`APIQ-027` 27행, 개별 export 함수 49개, `requested` 26행,
+  `blocked` 1행이다. 기존 구현 검증 15함수와 신규 구현 34함수가 중복 없이 일치한다.
+- backend route constant 41개와 실제 router method·path·request/response model·default·status를
+  교차 검증했다. `AcceptedResponse` mutation은 현재 HTTP 200이며 submit/scale/restart receipt에
+  `command_id`가 없으므로 임의 polling을 만들지 않는다.
+- `deleteAiConversation`의 backend 204 empty body는 frozen `client.ts`가 처리할 수 없어
+  `APIQ-020`·`BLOCK-204-001`로 분리했다. transport 또는 backend 계약이 승인되어 바뀌기 전에는
+  direct fetch나 가짜 body로 우회하지 않는다.
+- 현 시점 exact `API 완성:` 앵커는 0개다. `src/product/api/**`, `client.ts`, `url.ts`는 이번 문서
+  작업에서 수정하지 않았고 제품 release surface는 계속 network-silent gate를 표시한다.
+
+```text
+명령: uv run pytest tests/test_docs_index.py tests/test_bruno_collection.py -q
+결과: PASS — 17 tests
+
+명령: make manifest-check
+결과: PASS — management 56, target 18
+
+명령: cd references/ui-layer-lab && npm run check
+결과: PASS
+  - TypeScript: PASS
+  - ESLint: PASS
+  - Vitest: 19 files, 115 tests PASS
+  - product design guard: 69 files PASS
+  - UI catalog source audit: 482 previews PASS, upstream 21e4ceb
+  - Vite production build: PASS
+  - ProductApp CSS: 49.27 kB
+  - ProductApp JS: 68.82 kB
+
+명령: cd references/ui-layer-lab && npm run visual-product
+결과: PASS — 7 scenarios, network-silent
+실행 화면: http://127.0.0.1:5180/product
+브라우저 검증: title KubeHeal, console warning/error 0, release gate 표시
+```
