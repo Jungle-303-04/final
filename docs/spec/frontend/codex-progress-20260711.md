@@ -466,3 +466,39 @@ P2를 완료로 판정한다. 다음 단계는 `final-questions.md`에 남은 �
   - references/ui-layer-lab/output/playwright/product-release-desktop-light.png
   - references/ui-layer-lab/output/playwright/product-release-mobile-dark.png
 ```
+
+## 2026-07-11 상태 화면 primitive 접근성 보강
+
+- 구현 커밋: `1c821b640`
+- `ProductStateScreen`은 `loading`, `empty`, `forbidden`, `offline`, `error`, `release` 상태를
+  discriminated union으로 받는다. loading·empty는 retry와 issue를 받지 않고, hard error와
+  offline·forbidden 상태만 safe presentation issue를 노출한다.
+- root 배치는 `main#product-main`을 유지하고, content 배치는 중첩 main을 만들지 않도록 named
+  `section`을 쓴다. content 배치의 제목은 `h2`, root 배치의 제목은 `h1`이다.
+- `Alert`, `Empty`, `Skeleton`, `Spinner` primitive를 product-owned surface에 추가했다. alert는
+  role override를 허용하고, empty description은 paragraph semantics를 유지하며, skeleton은 항상
+  decorative hidden이고 reduced motion에서 animation을 끈다. spinner는 기본 status label을
+  `로딩 중`으로 제공하고 decorative mode에서는 role을 제거한다.
+- retry button은 pending 상태에서 disabled와 `aria-busy`를 함께 제공한다.
+- 이 변경은 새 endpoint 완료를 의미하지 않는다. `API 완성:` 기록은 0행이며 product API 소비
+  경계와 network-silent release gate 계약은 유지한다.
+
+```text
+명령: cd references/ui-layer-lab && npm run check
+결과: PASS
+  - TypeScript: PASS
+  - ESLint: PASS
+  - Vitest: 11 files, 60 tests PASS
+  - product design guard: 56 files PASS
+  - UI catalog source audit: 482 previews PASS, upstream 21e4ceb
+  - Vite production build: PASS
+주의: 500kB 초과 chunk warning은 reference catalog 기존 성능 과제로 유지
+```
+
+```text
+명령: uv run pytest tests/test_docs_index.py tests/test_bruno_collection.py -q
+결과: PASS — 17 passed
+
+명령: make manifest-check
+결과: PASS — management manifest objects 56, target manifest objects 18
+```
