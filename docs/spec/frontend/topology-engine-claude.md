@@ -12,7 +12,7 @@ last_verified: 2026-07-11
 
 ## 0. 문서의 위치와 규율
 
-이 문서는 Home treemap의 interaction model과 전환 sequence를 정리한 구현 예정 계약이다. 색·치수·density·z-order 및 duration/easing literal은 `topology-visual-motion-tokens.md`에서 함께 추적한다. domain 의미·상태의 장기 계획은 `topology-engine.md`, protocol은 `topology-message-action-schema.md`, 제품 API 소비 의미는 `product-data-contract.md`를 함께 본다.
+**문서 간 충돌에서 Home treemap의 interaction model과 전환 sequence의 정본은 이 문서다.** 색·치수·density·z-order 및 duration/easing literal의 정본은 `topology-visual-motion-tokens.md`다. domain 의미·상태의 장기 계획은 `topology-engine.md`, protocol은 `topology-message-action-schema.md`, 제품 API 소비 의미는 `product-data-contract.md`를 함께 본다.
 
 현재 repo의 실제 코드와 통과한 테스트가 구현 완료 여부의 source of truth다. 이 문서는 구현할 interaction 순서와 불변조건을 작업 기준으로 정리한다. 본문의 시각·motion 수치는 token 이름의 설명용 alias이며 값이 다르면 실제 코드/테스트와 `topology-visual-motion-tokens.md`를 함께 동기화한다.
 
