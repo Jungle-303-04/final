@@ -2,8 +2,7 @@
 title: 24시간 압축 실행 지시서 (검토자 → Codex)
 status: active-directive
 date: 2026-07-11
-supersedes: claude-directive-20260711.md §3 일정(H0~H6 2주 계획)
-prior_decisions: claude-directive-20260711.md §1 결정 12건 전부 유효
+subordinate_to: codex-directive-reference-pivot-20260711.md
 deadline: 2026-07-12T23:59+09:00 (24시간)
 ---
 
@@ -11,11 +10,10 @@ deadline: 2026-07-12T23:59+09:00 (24시간)
 
 ## 0. 배경과 효력
 
-`codex-plan-report-20260711.md`의 보고서와 `claude-directive-20260711.md`의 12개 결정은 **전부 유효**하다.
-이 문서는 일정만 변경한다: 2주(07-13~07-24) → **24시간 이내 완료**.
+이 문서는 `codex-directive-reference-pivot-20260711.md`에 종속된다. 메트릭, RCA, 리커버리,
+실 API 연결, 등록처럼 뷰와 무관한 작업만 계속 유효하며, 철회된 중앙 뷰 계획과 그 순서는 유효하지 않다.
 
-Home topology의 완벽한 구현보다 **실동작하는 제품**이 우선이다.
-즉, 실제 클러스터 데이터로 메트릭이 보이고, 인시던트에 복구 계획이 붙고,
+실제 클러스터 데이터로 메트릭이 보이고, 인시던트에 복구 계획이 붙고,
 프론트엔드가 백엔드와 실 연동되는 상태가 24시간 안에 달성되어야 한다.
 
 우선순위 (사용자 지정):
@@ -103,16 +101,10 @@ Home topology의 완벽한 구현보다 **실동작하는 제품**이 우선이�
 
 작업:
 1. 클러스터 등록 플로우 (provider catalog → preflight → register → bootstrap → connection-status)
-2. **Home 중심 뷰 = treemap** (확정 계약 유지): node frame + pod 균등(=1) 타일,
-   health 전체 fill, 좌측 3px namespace 스트립, 14×14px min/2px gap.
-   Block B의 usage 요약은 treemap 상단 스트립으로 통합한다 — 확정된 핵심 화면을
-   24h 압축에서 제외하지 않는다.
-3. 인벤토리 리소스 목록 + 인라인 확장 상세 기본 구조
-4. 사이드바 메뉴: Home / Resources / Issues / Timeline / GitOps / Settings
-   - capability 없는 항목은 disabled로도 만들지 않음
-   - Helm은 BE-5 완료 전 미생성
-5. GitOps 기본 뷰 (applications, release-plans, release-runs 연결)
-6. Timeline 기본 뷰 (이벤트 + 인시던트 생명주기)
+2. P1에서 확인한 외부 기준 저장소 IA와 P2에서 `직결 가능` 또는 `어댑터 필요`로 확정된 범위의 인벤토리 연결
+3. capability 없는 항목은 disabled로 만들지 않음
+4. GitOps 데이터 경로 (applications, release-plans, release-runs 연결)
+5. Timeline 데이터 경로 (이벤트 + 인시던트 생명주기)
 
 게이트:
 - 등록 위저드에서 실 provider catalog 표시
@@ -125,12 +117,11 @@ Home topology의 완벽한 구현보다 **실동작하는 제품**이 우선이�
 
 작업:
 1. 라이트/다크 테마 동작
-2. health fill 타일 전체 면 적용, 좌측 3px namespace 스트립
-3. 반응형: 390px / 768px / 1024px / 1440px
-4. 로딩/빈 상태/에러 상태 처리
-5. 키보드 네비게이션 기본
-6. reduced motion 지원
-7. AI 삽입 3지점:
+2. 반응형: 390px / 768px / 1024px / 1440px
+3. 로딩/빈 상태/에러 상태 처리
+4. 키보드 네비게이션 기본
+5. reduced motion 지원
+6. AI 삽입 후보:
    - Home attention 요소 (인시던트 배지 → RCA 내러티브)
    - Resources 인라인 "AI 분석" 섹션
    - 전역 채팅 드로어 (conversation API 연결)
@@ -160,30 +151,25 @@ Home topology의 완벽한 구현보다 **실동작하는 제품**이 우선이�
 
 ## 2. 핵심 규칙 (기존 지시서에서 재확인)
 
-1. synthetic/replay/가짜 리소스 이름 금지 — 개발·검증은 `cluster-1` 고정
-2. focus = 클릭 → resource-detail fetch 완료 → morph (120ms 초과 시 pending)
-3. zod 스키마 엄격 + summary passthrough, raw 금지
-4. health = 타일 전체 fill, 3px strip = namespace
-5. SVG 그라디언트는 resolved token 주입, raw hex 금지
-6. proxy cookie 보존 — 401 시 우회 코드 넣지 말고 blocked 보고
-7. Home 게이트 전 타 화면 착수 금지 → **24h 내에서는 Block B 완료가 Home 게이트 역할**
+1. synthetic/replay/가짜 리소스 이름 금지
+2. zod 스키마 엄격 + summary open record, raw 금지
+3. proxy cookie 보존 — 401 시 우회 코드 넣지 말고 blocked 보고
+4. 동적 cluster selector와 `?cluster=` 보존, 접근 불가 ID 자동 교정 금지
+5. 제품 view가 transport를 직접 호출하지 않고 `src/product/api/**`만 사용
+6. 화면 포팅 순서는 외부 기준 저장소 P1 전수표와 P2 계약 매핑 게이트를 따른다
 
-## 3. 기존 결정 12건 요약 (claude-directive-20260711.md에서)
+## 3. 보존된 뷰-비의존 결정
 
 | # | 결정 |
 |---|---|
-| 1 | 집계 블록 없음, logical right 전량 유지 + 비연관 영역 내부 스크롤 |
-| 2 | BE-9: pod detail에 related.services/workloads 서버 계산 (잠정: node placement만) |
-| 3 | U = node header + pod tile, service/workload는 별도 actor collection |
-| 4 | pod uid non-null refine + BE-10 근본 해소 |
-| 5 | raw 금지, summary만 open record |
-| 6 | focus.requested/pending/ready/failed/cancelled + requestId를 TopoMsg에 추가 |
-| 7 | clientRefreshDelayed(90s)와 backend freshness 분리 |
-| 8 | react-router-dom nested shell |
-| 9 | Vitest + seeded deterministic property loop |
-| 10 | frontend release registry가 메뉴 권위 |
-| 11 | 모든 cluster selector 유지, non-online은 resume surface |
-| 12 | ?cluster= URL 보존, 접근 불가 ID는 명시 오류 |
+| 1 | Pod UID가 필요한 기능은 non-null refine, inventory key로 조용히 대체 금지 |
+| 2 | raw 금지, summary만 명시된 open record |
+| 3 | client refresh 지연과 backend freshness 분리 |
+| 4 | react-router-dom nested shell |
+| 5 | Vitest + seeded deterministic property loop |
+| 6 | frontend release registry와 capability가 메뉴 권위 |
+| 7 | 모든 접근 가능한 cluster를 selector에 유지, non-online 상태를 정직하게 표시 |
+| 8 | `?cluster=` URL 보존, 접근 불가 ID는 명시 오류 |
 
 ## 4. 메트릭 쿼리 참조 (즉시 사용)
 
@@ -224,17 +210,16 @@ pod_total/running/pending/failed, restart_total, node_total/ready, cpu_pct/mem_p
 
 ## 6. 시간 부족 시 삭감 순서 (트리아지 — 이 순서 외 임의 삭감 금지)
 
-1. focus-sankey 모프 애니메이션 → 정적 관계 패널(클릭 시 연관 목록 사이드 패널)로 대체.
-   treemap 자체와 fetch-then-morph 데이터 규칙은 삭감 불가.
-2. 라이트 테마 → 다크 단일(현 tokens.css 기준)로 출시, 라이트는 후속.
-3. GitOps·Timeline 뷰 → 목록 최소형(카드 없이 행 목록)으로 축소.
-4. AI 채팅 드로어 → 후속(단, 인시던트 RCA 내러티브는 삭감 불가 — 우선순위 2).
-5. 등록 위저드 → catalog·register·bootstrap 표시·polling의 직선 경로만(고급 검증 UI 축소).
+1. 라이트 테마 → 다크 단일로 출시, 라이트는 후속.
+2. GitOps·Timeline 뷰 → 목록 최소형(카드 없이 행 목록)으로 축소.
+3. AI 채팅 드로어 → 후속(단, 인시던트 RCA 내러티브는 삭감 불가 — 우선순위 2).
+4. 등록 위저드 → catalog·register·bootstrap 표시·polling의 직선 경로만(고급 검증 UI 축소).
 
 삭감 발생 시 `codex-progress-20260711.md`에 항목과 사유를 기록한다.
 
 ## 7. 착수
 
-이 지시서를 읽는 즉시 Block A부터 시작한다.
+외부 기준 저장소 피벗 이후 작업 순서는 P1 전수표 → P2 계약 매핑 → 검토자 승인 → P3·P4다.
+이 문서의 미완료 뷰-비의존 항목은 해당 순서를 침범하지 않는 범위에서 수행한다.
 각 Block 완료 시 게이트 결과(명령+출력 요약, 커밋 해시)를 `codex-progress-20260711.md`에
 append한다. Block B (메트릭 대시보드) 완료가 최우선이다.

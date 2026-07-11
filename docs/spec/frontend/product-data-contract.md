@@ -12,7 +12,8 @@ last_verified: 2026-07-11
 
 이 문서는 Applications, GitOps, Tree/Insights, Timeline, Metrics, Topology, GitOps Operations 화면이 소비할 canonical 데이터와 사용자 경험의 구현 예정 계약이다. 현재 repo의 실제 코드와 통과한 테스트가 source of truth이며, 아래 DTO와 schema가 현 코드에 없으면 구현 완료가 아니라 후속 작업 기준으로만 읽는다. Runtime 제품은 `references/ui-layer-lab/src/product/`에서 실제 same-origin `/api`만 사용한다. 배포 완료는 승인된 OpenAPI, runtime schema, live adapter contract suite와 제품 UI test가 모두 통과한 뒤에만 주장한다.
 
-여기서 Topology는 Home treemap/focus relation engine과 Resources의 관계 projection을 뜻하며 독립 sidebar 메뉴나 `/topology` route를 뜻하지 않는다. v0 정보 구조는 Home, Resources, Issues, Timeline, GitOps, Settings만 노출한다.
+이 문서의 Topology는 provider-neutral resource graph 소비 계약을 뜻한다. 실제 route, menu, 중앙 뷰,
+상세 진입 방식은 P1 외부 기준 저장소 기능 전수표에서 확정하며, 이 데이터 계약이 화면을 선행 결정하지 않는다.
 
 구현 우선순위:
 
@@ -1698,7 +1699,10 @@ type ResourceGraphStreamEnvelope = {
 
 `ResourceGraphQuery`와 `ResourceGraphProjection`은 GitOps Tree/cross-navigation facade가 읽는 semantic graph query다. Full Topology engine의 local view document인 `TopologyQuery` 및 backend-facing `TopologyPlanQuery`와 이름·소유권·wire를 공유하지 않는다.
 
-`map`, `focus-sankey`, `fold-lens`, `butterfly`는 frontend engine의 상호 배타적 presentation state이며 `ResourceGraphQuery`, `ResourceGraphProjection`, engine `TopologyPlanQuery`의 lens가 아니다. presentation을 바꿔도 같은 scope/filter/relation-plane snapshot을 재사용하고, data가 더 필요하지 않으면 port query/cache key/capability subject를 바꾸지 않는다. focus-Sankey는 현재 authorized map universe 전체를 source 하나와 right collection으로 재투영하며 그 정확한 완전성·motion 계약은 `topology-engine.md`와 visual adjunct가 소유한다. `butterfly`도 두 relation plane의 동시 layout일 뿐 별도 backend relation truth가 아니다.
+presentation state는 프론트 렌더링 관심사이며 `ResourceGraphQuery`, `ResourceGraphProjection`,
+engine `TopologyPlanQuery`의 lens가 아니다. 외부 기준 저장소 동등 화면에서 presentation만 바뀌고 추가 데이터가
+필요하지 않으면 같은 scope/filter/relation-plane snapshot을 재사용하며 port query, cache key,
+capability subject를 임의로 바꾸지 않는다. presentation 이름과 전환은 P1 실측 전수표가 소유한다.
 
 Topology scope의 applicationIds, instanceIds, clusterUids, namespaceRefs, rootEntityIds는 교집합 constraint이며 최소 하나의 anchor collection이 non-empty여야 한다. namespaceRefs가 non-empty이면 exact cluster/namespace pair만 포함하고 cluster-scoped resource는 includeClusterScoped=true일 때만 포함한다. 서로 양립할 수 없는 scope 조합은 empty가 아니라 `invalid_request`다. historical scope는 `topology.historical` exact capability가 enabled일 때만 요청한다.
 
@@ -2929,7 +2933,7 @@ Test-only matrix의 축은 provider가 아니라 다음 canonical 값이다.
 - 실제 endpoint와 runtime schema가 없는 제품 화면은 sample data로 먼저 완성하지 않는다.
 - UI component 단위 상태는 test-only network mock으로 검증할 수 있지만 runtime route에 성공 데이터가 나타나서는 안 된다.
 - API가 없거나 인증·권한 때문에 접근할 수 없으면 해당 기능은 capability에서 제거하거나 명시적 blocked/error 상태로 남긴다.
-- 현재 우선순위는 실제 inventory API로 구동되는 Home treemap이며 Resources 인라인 상세 등 후속 화면은 Home 완료 gate 이후 시작한다.
+- 현재 우선순위는 P1 외부 기준 저장소 기능 전수표와 P2 계약 매핑이다. P2 검토 승인 전 화면 포팅을 시작하지 않는다.
 - `[OPENAPI_ACCEPTED]` 전에는 아직 존재하지 않는 endpoint/schema를 runtime adapter에서 추정하지 않는다.
 
 ## 19. 요구사항 추적표
