@@ -79,7 +79,7 @@ AbortSignal contract test를 추가하고, 필요한 경우 claim 범위 안에�
 
 | ID | 우선 | 함수명 | routes.py 상수 | 대상 파일 | 필요한 화면 | 요청 시각 | 상태 | 담당/브랜치 | claim·heartbeat | 완료 조건·주의 |
 |---|---:|---|---|---|---|---|---|---|---|---|
-| `APIQ-021` | P0 | `getSession`, `login`, `logout` | `AUTH_SESSION_PATH`, `AUTH_LOGIN_PATH`, `AUTH_LOGOUT_PATH` | `auth.ts`, `schemas.ts`, `auth.test.ts` | session gate / 전역 셸 | 2026-07-11 16:19 KST | requested | — | — | 세션 cookie, 401, login body, logout JSON 200, AbortSignal |
+| `APIQ-021` | P0 | `getSession`, `login`, `logout` | `AUTH_SESSION_PATH`, `AUTH_LOGIN_PATH`, `AUTH_LOGOUT_PATH` | `auth.ts`, `schemas.ts`, `auth.test.ts` | session gate / 전역 셸 | 2026-07-11 16:19 KST | in_progress | Codex@woonyong/ui-layer-lab | 2026-07-11 23:55 KST | 세션 cookie, 401, login body, logout JSON 200, AbortSignal |
 | `APIQ-022` | P0 | `listClusters` | `CLUSTERS_PATH` | `clusters.ts`, `cluster-schemas.ts`, `clusters.test.ts` | cluster selector | 2026-07-11 16:19 KST | requested | — | — | limit default 100, signal, strict 실응답 |
 | `APIQ-023` | P1 | `getFleetSummary` | `FLEET_SUMMARY_PATH` | `fleet.ts`, `schemas.ts`, `fleet.test.ts` | Home | 2026-07-11 16:19 KST | requested | — | — | 실제 session scope summary와 nullable 검증 |
 | `APIQ-024` | P1 | `getRcaTimeline` | `DASHBOARD_RCA_TIMELINE_PATH` | `rca.ts`, `schemas.ts`, `rca.test.ts` | Home RCA teaser | 2026-07-11 16:19 KST | requested | — | — | 고정 `limit=6`; Issues 전체 목록에 사용 금지 |
