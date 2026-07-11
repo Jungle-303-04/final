@@ -166,43 +166,6 @@ stale/partial/RBAC, LOD, 보안, 검증처럼 뷰와 무관한 장기 규칙이 
 주의: 500kB 초과 chunk warning은 기존 성능 과제로 유지
 ```
 
-### 2026-07-11 surface release와 transport guard 강화
-
-- 보강 커밋: `d5cf111c0`
-- route 등록 단어를 target runtime capability와 분리해 `ProductSurfaceId`, `releasedSurfaceIds`로
-  고정했다. API 완료 여부는 screen release 여부를 결정하고, cluster별 permission/capability는
-  release된 screen 내부 control 노출만 결정한다.
-- `ProductShell`은 mobile도 동일한 collapsed sidebar 계약을 쓰도록 `defaultSidebarCollapsed`를
-  테스트 가능한 prop으로 분리했고, toggle label을 접힘/펼침 상태에 맞춰 바꾼다.
-- `apiBoundary.test.ts`는 `API 완성:` 기록의 hash가 실제 조상 커밋인지, 해당 커밋의 API barrel이
-  endpoint를 export하는지, 같은 커밋의 test diff가 endpoint 이름을 언급하는지까지 검사한다.
-- `product-design-guard.mjs`는 제품 API 폴더 밖의 직접 transport 사용을 막는다. direct `fetch`,
-  `WebSocket`, `EventSource`, `XMLHttpRequest`, `navigator.sendBeacon`, global alias, computed
-  member, `Reflect.get` 우회를 모두 violation으로 판정한다.
-- approval action API 요청 큐에 `grantApproval`, `rejectApproval`을 추가했고, Issues 목록은 별도
-  `listRcaIncidents`가 아니라 범용 timeline 함수 재사용으로 정리했다.
-
-```text
-명령: cd references/ui-layer-lab && npm run check
-결과: PASS
-  - TypeScript: PASS
-  - ESLint: PASS
-  - Vitest: 7 files, 35 tests PASS
-  - product design guard: 40 files PASS
-  - UI catalog source audit: 482 previews PASS, upstream 21e4ceb
-  - Vite production build: PASS
-주의: 500kB 초과 chunk warning은 기존 성능 과제로 유지
-
-명령: uv run pytest tests/test_docs_index.py tests/test_bruno_collection.py -q
-결과: PASS — 17 passed
-
-명령: make manifest-check
-결과: PASS — management manifest objects 56, target manifest objects 18
-```
-
-이 보강도 새 endpoint 완료를 의미하지 않는다. `API 완성:` 기록과 contract test 근거가 생긴 함수만
-`app/apiComposition.ts`에서 정적 named import할 수 있다.
-
 ### 런타임 조사 안전 사고
 
 - read-only 조사를 맡긴 browser 작업자가 Workload의 confirmation 존재 여부를 확인하려다
@@ -385,3 +348,47 @@ P2를 완료로 판정한다. 다음 단계는 `final-questions.md`에 남은 �
   - Vite production build: PASS
 주의: 500kB 초과 chunk warning은 기존 성능 과제로 유지
 ```
+
+## 2026-07-11 surface release와 transport guard 강화
+
+- 보강 커밋: `d5cf111c0`
+- route 등록 단어를 target runtime capability와 분리해 `ProductSurfaceId`, `releasedSurfaceIds`로
+  고정했다. API 완료 여부는 screen release 여부를 결정하고, cluster별 permission/capability는
+  release된 screen 내부 control 노출만 결정한다.
+- `ProductShell`은 390px에서도 collapsed sidebar를 다시 펼칠 수 있고, toggle label을 현재 상태에서
+  실행할 동작에 맞춰 제공한다.
+- `apiBoundary.test.ts`는 alias·re-export·dynamic import·product 외부 bridge를 차단한다. 또한
+  `API 완성:` hash가 실제 조상 커밋인지, 해당 API barrel의 named export인지, 같은 커밋에서 변경된
+  contract test가 endpoint identifier를 검증하는지 확인한다.
+- `product-design-guard.mjs`는 제품 API 폴더 밖의 direct `fetch`, `WebSocket`, `EventSource`,
+  `XMLHttpRequest`, `navigator.sendBeacon`, global alias, computed member, `Reflect.get` 우회를
+  차단한다. `.mts`·`.cts`도 같은 검사를 받으며 일반 객체의 동명 method는 허용한다.
+- approval action 큐에 `grantApproval`, `rejectApproval`을 추가했고, Issues 목록은 별도
+  `listRcaIncidents` 대신 범용 `listRcaTimeline`을 재사용하도록 모순을 제거했다. 요청 큐는
+  `requested` 26행, `API 완성:` 기록은 여전히 0행이다.
+
+```text
+명령: cd references/ui-layer-lab && npm run check
+결과: PASS
+  - TypeScript: PASS
+  - ESLint: PASS
+  - Vitest: 7 files, 35 tests PASS
+  - product design guard: 40 files PASS
+  - UI catalog source audit: 482 previews PASS, upstream 21e4ceb
+  - Vite production build: PASS
+  - ProductApp CSS: 31.43 kB (gzip 6.54 kB)
+주의: 500kB 초과 chunk warning은 reference catalog 기존 성능 과제로 유지
+
+브라우저: production preview /product, /product/topology
+결과: 1440 light·390 dark 모두 HTTP 200, API request 0, product WebSocket 0,
+      console error 0, page error 0, horizontal overflow 0, main landmark 1
+설정: prefers-reduced-motion=reduce
+스크린샷:
+  - /Users/woonyong/capture/kubeheal-release-gate-1440-light.png
+  - /Users/woonyong/capture/kubeheal-release-gate-1440-dark.png
+  - /Users/woonyong/capture/kubeheal-release-gate-768-light.png
+  - /Users/woonyong/capture/kubeheal-release-gate-390-dark.png
+```
+
+이 보강도 새 endpoint 완료를 의미하지 않는다. API 작업자가 함수별 완료 증거를 남길 때까지
+`app/apiComposition.ts`는 surface 0개를 유지하고 제품은 network-silent release gate만 렌더한다.
