@@ -22,6 +22,9 @@ workorder: api-integration-workorder-20260711.md
    표에서 제거하며 git history로 보존한다.
 5. 응답 shape를 추측하거나 화면 component에 임시 fetch를 추가하지 않는다.
 6. 24시간 미처리 전에는 Codex가 `src/product/api/**` endpoint·schema를 신설하지 않는다.
+7. 완료 기록은 export 함수 하나당 정확히 한 줄로 쓴다. 같은 커밋에서 함수군을 구현해도
+   `API 완성: getCluster (<hash>)`, `API 완성: getInventorySummary (<hash>)`처럼 분리한다.
+8. 함수군 행은 포함된 모든 함수의 완료 기록과 contract test 통과를 확인한 뒤에만 제거한다.
 
 ## 요청
 
