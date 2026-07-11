@@ -2,15 +2,43 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import {
   AlertTriangle,
   Box,
-  ChevronRight,
   CircleDot,
+  Clock3,
   Database,
   RefreshCw,
   X,
 } from "lucide-react";
 
+import {
+  Alert,
+  AlertDescription,
+  AlertTitle,
+  Badge,
+  Breadcrumb,
+  BreadcrumbItem,
+  BreadcrumbList,
+  BreadcrumbPage,
+  BreadcrumbSeparator,
+  Button,
+  Card,
+  CardAction,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+  Empty,
+  EmptyDescription,
+  EmptyHeader,
+  EmptyMedia,
+  EmptyTitle,
+  NativeSelect,
+  NativeSelectOption,
+  Spinner,
+} from "../../design-system";
+
 import type {
   AreaMetricDescriptor,
+  Freshness,
   PodTopologyEntity,
   TopologyHierarchyGateway,
 } from "./contracts";
@@ -28,6 +56,30 @@ function scopeLabel(scope: HierarchyScope) {
   return "노드";
 }
 
+function durationLabel(durationMs: number): string {
+  if (durationMs < 1_000) return `${durationMs}ms`;
+  const seconds = durationMs / 1_000;
+  if (seconds < 60) return `${seconds.toLocaleString("ko-KR")}초`;
+  const minutes = seconds / 60;
+  return `${minutes.toLocaleString("ko-KR")}분`;
+}
+
+function freshnessLabel(freshness: Freshness): string {
+  if (freshness.state === "fresh") return "최신";
+  if (freshness.state === "stale") return "오래된 스냅샷";
+  return "관측 시각 불명";
+}
+
+function freshnessDetail(freshness: Freshness): string | null {
+  if (freshness.state === "fresh") return null;
+  const safeDetail = freshness.reason.detail?.trim();
+  if (safeDetail) return safeDetail;
+  if (freshness.state === "stale") {
+    return `마지막 관측이 ${durationLabel(freshness.ageMs)} 전이며 최신성 기준 ${durationLabel(freshness.staleAfterMs)}을 초과했습니다. 마지막 성공 배치를 유지합니다.`;
+  }
+  return "신뢰할 수 있는 관측 시각을 확인할 수 없습니다. 제공된 마지막 성공 배치를 유지합니다.";
+}
+
 function MetricSelector({
   metrics,
   selectedMetricId,
@@ -40,16 +92,20 @@ function MetricSelector({
   return (
     <label className="metric-selector">
       <span>면적 기준</span>
-      <select value={selectedMetricId} onChange={(event) => onChange(event.target.value)}>
+      <NativeSelect
+        size="sm"
+        value={selectedMetricId}
+        onChange={(event) => onChange(event.target.value)}
+      >
         {metrics
           .slice()
           .sort((left, right) => left.order - right.order)
           .map((metric) => (
-            <option key={metric.metricId} value={metric.metricId}>
+            <NativeSelectOption key={metric.metricId} value={metric.metricId}>
               {metric.label}
-            </option>
+            </NativeSelectOption>
           ))}
-      </select>
+      </NativeSelect>
     </label>
   );
 }
@@ -97,51 +153,57 @@ export function TopologyExperience({ gateway }: TopologyExperienceProps) {
 
   if (state.status === "loading") {
     return (
-      <section className="topology-state" aria-busy="true" aria-live="polite">
-        <div className="topology-state__pulse" />
-        <strong>Topology 스냅샷을 불러오는 중입니다</strong>
-        <span>가짜 리소스나 수치를 대신 표시하지 않습니다.</span>
-      </section>
+      <Empty className="topology-state" aria-busy="true" aria-live="polite">
+        <EmptyHeader>
+          <EmptyMedia variant="icon"><Spinner label="Topology 불러오는 중" /></EmptyMedia>
+          <EmptyTitle>Topology 스냅샷을 불러오는 중입니다</EmptyTitle>
+          <EmptyDescription>가짜 리소스나 수치를 대신 표시하지 않습니다.</EmptyDescription>
+        </EmptyHeader>
+      </Empty>
     );
   }
 
   if (state.status === "error") {
     return (
-      <section className="topology-state topology-state--error" role="alert">
-        <AlertTriangle aria-hidden="true" />
-        <strong>Topology 데이터에 연결할 수 없습니다</strong>
-        <span>{state.error.message}</span>
-        <button type="button" onClick={refresh}>
-          <RefreshCw aria-hidden="true" /> 다시 시도
-        </button>
-      </section>
+      <Alert className="topology-state topology-state--error" variant="destructive" role="alert">
+        <AlertTriangle aria-hidden="true" data-icon="inline-start" />
+        <AlertTitle>Topology 데이터에 연결할 수 없습니다</AlertTitle>
+        <AlertDescription>{state.error.message}</AlertDescription>
+        <Button variant="outline" size="sm" onClick={refresh}>
+          <RefreshCw aria-hidden="true" data-icon="inline-start" /> 다시 시도
+        </Button>
+      </Alert>
     );
   }
 
   if (selectedMetric === null) {
     return (
-      <section className="topology-state" role="status">
-        <Database aria-hidden="true" />
-        <strong>면적에 사용할 지표가 없습니다</strong>
-        <span>백엔드 metric catalog에서 합산 가능한 절대값 지표를 제공해야 합니다.</span>
-      </section>
+      <Empty className="topology-state" role="status">
+        <EmptyHeader>
+          <EmptyMedia variant="icon"><Database aria-hidden="true" /></EmptyMedia>
+          <EmptyTitle>면적에 사용할 지표가 없습니다</EmptyTitle>
+          <EmptyDescription>
+            백엔드 metric catalog에서 합산 가능한 절대값 지표를 제공해야 합니다.
+          </EmptyDescription>
+        </EmptyHeader>
+      </Empty>
     );
   }
 
   if (engineProjection === null || !engineProjection.ok) {
     return (
-      <section className="topology-state topology-state--error" role="alert">
-        <AlertTriangle aria-hidden="true" />
-        <strong>Topology 계약을 검증할 수 없습니다</strong>
-        <span>
+      <Alert className="topology-state topology-state--error" variant="destructive" role="alert">
+        <AlertTriangle aria-hidden="true" data-icon="inline-start" />
+        <AlertTitle>Topology 계약을 검증할 수 없습니다</AlertTitle>
+        <AlertDescription>
           {engineProjection?.ok === false
             ? engineProjection.error.message
             : "Topology engine projection is unavailable."}
-        </span>
-        <button type="button" onClick={refresh}>
-          <RefreshCw aria-hidden="true" /> 다시 시도
-        </button>
-      </section>
+        </AlertDescription>
+        <Button variant="outline" size="sm" onClick={refresh}>
+          <RefreshCw aria-hidden="true" data-icon="inline-start" /> 다시 시도
+        </Button>
+      </Alert>
     );
   }
 
@@ -157,64 +219,152 @@ export function TopologyExperience({ gateway }: TopologyExperienceProps) {
   return (
     <section className="topology-experience" aria-label="Kubernetes 실행 계층 Topology">
       {state.snapshot.dataOrigin.kind === "synthetic" && (
-        <div className="demo-data-banner" role="status">
+        <Badge className="demo-data-banner" variant="warning" role="status">
           DEMO DATA · {state.snapshot.dataOrigin.datasetId}
-        </div>
+        </Badge>
       )}
 
       <header className="topology-context-bar">
-        <nav aria-label="Topology 범위" className="topology-breadcrumbs">
-          <button type="button" onClick={() => setScope({ level: "fleet" })}>
-            클러스터
-          </button>
-          {cluster !== null && (
-            <>
-              <ChevronRight aria-hidden="true" />
-              <button
-                type="button"
-                onClick={() =>
-                  setScope({ level: "cluster", clusterKey: cluster.entityKey })
-                }
-              >
-                {cluster.displayName}
-              </button>
-            </>
-          )}
-          {node !== null && (
-            <>
-              <ChevronRight aria-hidden="true" />
-              <span aria-current="page">{node.displayName}</span>
-            </>
-          )}
-        </nav>
+        <Breadcrumb aria-label="Topology 범위" className="topology-breadcrumbs">
+          <BreadcrumbList>
+            <BreadcrumbItem>
+              {scope.level === "fleet" ? (
+                <BreadcrumbPage>클러스터</BreadcrumbPage>
+              ) : (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setScope({ level: "fleet" })}
+                >
+                  클러스터
+                </Button>
+              )}
+            </BreadcrumbItem>
+            {cluster !== null && (
+              <>
+                <BreadcrumbSeparator />
+                <BreadcrumbItem>
+                  {scope.level === "cluster" ? (
+                    <BreadcrumbPage>{cluster.displayName}</BreadcrumbPage>
+                  ) : (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() =>
+                        setScope({ level: "cluster", clusterKey: cluster.entityKey })
+                      }
+                    >
+                      {cluster.displayName}
+                    </Button>
+                  )}
+                </BreadcrumbItem>
+              </>
+            )}
+            {node !== null && (
+              <>
+                <BreadcrumbSeparator />
+                <BreadcrumbItem>
+                  <BreadcrumbPage>{node.displayName}</BreadcrumbPage>
+                </BreadcrumbItem>
+              </>
+            )}
+          </BreadcrumbList>
+        </Breadcrumb>
 
         <div className="topology-context-bar__actions">
-          <span className="snapshot-status">
-            <CircleDot aria-hidden="true" />
+          <Badge
+            className="snapshot-status"
+            variant={
+              state.snapshot.completeness.state === "complete"
+                ? "outline"
+                : "warning"
+            }
+          >
+            <CircleDot aria-hidden="true" data-icon="inline-start" />
             {state.snapshot.completeness.state === "complete" ? "완전한 스냅샷" : "부분 스냅샷"}
-          </span>
+          </Badge>
+          <Badge
+            className="freshness-status"
+            variant={
+              state.snapshot.freshness.state === "fresh"
+                ? "success"
+                : state.snapshot.freshness.state === "stale"
+                  ? "warning"
+                  : "info"
+            }
+          >
+            <Clock3 aria-hidden="true" data-icon="inline-start" />
+            {freshnessLabel(state.snapshot.freshness)}
+          </Badge>
           <MetricSelector
             metrics={state.snapshot.areaMetrics}
             selectedMetricId={selectedMetric.metricId}
             onChange={setSelectedMetricId}
           />
-          <button
-            type="button"
+          <Button
             className="icon-action"
+            size="icon"
+            variant="outline"
             aria-label="Topology 새로고침"
             onClick={refresh}
             disabled={state.refreshing}
           >
-            <RefreshCw aria-hidden="true" className={state.refreshing ? "is-spinning" : ""} />
-          </button>
+            {state.refreshing
+              ? <Spinner label="Topology 새로고침 중" />
+              : <RefreshCw aria-hidden="true" />}
+          </Button>
         </div>
       </header>
 
-      {state.refreshError !== null && (
-        <div className="refresh-warning" role="status">
-          최신 갱신에 실패했습니다. 마지막 성공 스냅샷을 유지합니다.
-        </div>
-      )}
+      <div
+        className="topology-notices"
+        role="region"
+        aria-label="Topology 상태 알림"
+      >
+        {state.refreshError !== null && (
+          <Alert className="topology-notice" variant="warning" role="status">
+            <AlertTriangle aria-hidden="true" data-icon="inline-start" />
+            <AlertTitle>새로고침 실패</AlertTitle>
+            <AlertDescription>
+              최신 갱신에 실패했습니다. 마지막 성공 스냅샷을 유지합니다.
+            </AlertDescription>
+          </Alert>
+        )}
+
+        {state.snapshot.completeness.state === "partial" && (
+          <Alert className="topology-notice" variant="warning" role="status">
+            <AlertTriangle aria-hidden="true" data-icon="inline-start" />
+            <AlertTitle>일부 데이터만 표시 중</AlertTitle>
+            <AlertDescription>
+              <ul className="topology-notice__reasons">
+                {state.snapshot.completeness.reasons.map((reason, index) => (
+                  <li key={`${index}:${reason}`}>{reason}</li>
+                ))}
+              </ul>
+            </AlertDescription>
+          </Alert>
+        )}
+
+        {state.snapshot.freshness.state !== "fresh" && (
+          <Alert
+            className="topology-notice"
+            variant={
+              state.snapshot.freshness.state === "stale" ? "warning" : "info"
+            }
+            role="status"
+          >
+            <Clock3 aria-hidden="true" data-icon="inline-start" />
+            <AlertTitle>
+              {state.snapshot.freshness.state === "stale"
+                ? "최신성 기준 초과"
+                : "관측 시각 확인 불가"}
+            </AlertTitle>
+            <AlertDescription>
+              {freshnessDetail(state.snapshot.freshness)}
+            </AlertDescription>
+          </Alert>
+        )}
+      </div>
 
       <div className="topology-canvas-frame">
         <div
@@ -253,26 +403,37 @@ export function TopologyExperience({ gateway }: TopologyExperienceProps) {
       </div>
 
       {inspectedPod !== null && (
-        <aside className="pod-inspector" aria-label={`${inspectedPod.displayName} 상세`}>
-          <header>
-            <span><Box aria-hidden="true" /> Pod</span>
-            <button
-              type="button"
-              className="icon-action"
-              aria-label="Pod 상세 닫기"
-              onClick={() => setInspectedPod(null)}
-            >
-              <X aria-hidden="true" />
-            </button>
-          </header>
-          <strong>{inspectedPod.displayName}</strong>
-          <dl>
-            <div><dt>Namespace</dt><dd>{inspectedPod.namespace}</dd></div>
-            <div><dt>Phase</dt><dd>{inspectedPod.phase}</dd></div>
-            <div><dt>상태</dt><dd>{inspectedPod.health}</dd></div>
-            <div><dt>근거</dt><dd>{inspectedPod.healthReason}</dd></div>
-          </dl>
-        </aside>
+        <Card
+          className="pod-inspector"
+          role="complementary"
+          aria-label={`${inspectedPod.displayName} 상세`}
+        >
+          <CardHeader className="pod-inspector__header">
+            <CardTitle>{inspectedPod.displayName}</CardTitle>
+            <CardDescription>
+              <Box aria-hidden="true" /> Pod
+            </CardDescription>
+            <CardAction>
+              <Button
+                className="icon-action"
+                size="icon"
+                variant="ghost"
+                aria-label="Pod 상세 닫기"
+                onClick={() => setInspectedPod(null)}
+              >
+                <X aria-hidden="true" />
+              </Button>
+            </CardAction>
+          </CardHeader>
+          <CardContent className="pod-inspector__content">
+            <dl>
+              <div><dt>Namespace</dt><dd>{inspectedPod.namespace}</dd></div>
+              <div><dt>Phase</dt><dd>{inspectedPod.phase}</dd></div>
+              <div><dt>상태</dt><dd>{inspectedPod.health}</dd></div>
+              <div><dt>근거</dt><dd>{inspectedPod.healthReason}</dd></div>
+            </dl>
+          </CardContent>
+        </Card>
       )}
     </section>
   );

@@ -40,6 +40,39 @@ export type AreaMetricDescriptor = {
   readonly order: number;
 };
 
+export type StatusReason = {
+  readonly code: string;
+  readonly messageKey: string;
+  readonly detail: string | null;
+};
+
+export type FreshnessBase = {
+  readonly receivedAt: string;
+  readonly staleAfterMs: number;
+};
+
+export type Freshness = FreshnessBase &
+  (
+    | {
+        readonly state: "fresh";
+        readonly observedAt: string;
+        readonly ageMs: number;
+        readonly reason: null;
+      }
+    | {
+        readonly state: "stale";
+        readonly observedAt: string;
+        readonly ageMs: number;
+        readonly reason: StatusReason;
+      }
+    | {
+        readonly state: "unknown";
+        readonly observedAt: null;
+        readonly ageMs: null;
+        readonly reason: StatusReason;
+      }
+  );
+
 export type TopologyEntityBase = {
   readonly entityKey: string;
   readonly displayName: string;
@@ -80,6 +113,7 @@ export type TopologyHierarchySnapshot = {
   readonly completeness:
     | { readonly state: "complete" }
     | { readonly state: "partial"; readonly reasons: readonly string[] };
+  readonly freshness: Freshness;
 };
 
 export class TopologyGatewayError extends Error {

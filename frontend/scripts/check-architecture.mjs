@@ -5,7 +5,28 @@ const root = resolve(import.meta.dirname, "..");
 const sourceRoot = join(root, "src");
 const liveEntry = join(sourceRoot, "main.tsx");
 const sourceExtensions = [".ts", ".tsx"];
+const designSourceExtensions = new Set([".css", ...sourceExtensions]);
 const importPattern = /(?:import|export)\s+(?:[^"']*?\s+from\s+)?["']([^"']+)["']/g;
+
+const designTokenSource = normalize("styles/design-system.css");
+const designMotionSource = normalize("design-system/motion.ts");
+const buttonPrimitiveSource = normalize("design-system/Button.tsx");
+const selectPrimitiveSource = normalize("design-system/NativeSelect.tsx");
+const shellScrimSource = normalize("app/AppShell.tsx");
+const hierarchyRendererSource = normalize(
+  "features/topology/hierarchy/HierarchyTreemap.tsx",
+);
+
+const rawColorPattern =
+  /#[\da-f]{3,8}\b|(?:rgb|hsl)a?\s*\(|oklch\s*\(/giu;
+const rawCssDurationPattern = /\b(?:\d+(?:\.\d+)?|\.\d+)(?:ms|s)\b/giu;
+const rawScriptTimingPattern =
+  /\b(?:duration|delay|transitionDuration|animationDuration)\s*:\s*(?:(?:\d+(?:\.\d+)?|\.\d+)\b|["'`]\s*(?:\d+(?:\.\d+)?|\.\d+)(?:ms|s)\b)/gu;
+const rawScriptTransitionPattern =
+  /\b(?:transition|animation)\s*:\s*["'`][^"'`\n]*\b(?:\d+(?:\.\d+)?|\.\d+)(?:ms|s)\b/gu;
+const nativeButtonPattern = /<button(?:\s|>)[\s\S]*?>/gu;
+const nativeSelectPattern = /<select(?:\s|>)[\s\S]*?>/gu;
+const motionButtonPattern = /<motion\.button(?:\s|>)/gu;
 
 function resolveImport(fromFile, specifier) {
   if (!specifier.startsWith(".")) return null;
@@ -40,12 +61,23 @@ function collectGraph(entry) {
   return visited;
 }
 
-function walk(directory) {
+function walk(directory, extensions = new Set(sourceExtensions)) {
   return readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
     const path = join(directory, entry.name);
-    if (entry.isDirectory()) return walk(path);
-    return sourceExtensions.includes(extname(path)) ? [path] : [];
+    if (entry.isDirectory()) return walk(path, extensions);
+    return extensions.has(extname(path)) ? [path] : [];
   });
+}
+
+function lineNumberAt(source, index) {
+  return source.slice(0, index).split("\n").length;
+}
+
+function reportMatches({ source, relative, pattern, message }) {
+  pattern.lastIndex = 0;
+  for (const match of source.matchAll(pattern)) {
+    errors.push(`${message}: ${relative}:${lineNumberAt(source, match.index)}`);
+  }
 }
 
 const errors = [];
@@ -71,6 +103,85 @@ for (const file of walk(sourceRoot)) {
   }
   if (/\b(?:aws|gcp|azure)\b/i.test(source) && !relative.startsWith(`demo${normalize("/")}`)) {
     errors.push(`provider name branch/literal outside demo adapter: ${relative}`);
+  }
+}
+
+for (const file of walk(sourceRoot, designSourceExtensions)) {
+  const relative = normalize(file.slice(sourceRoot.length + 1));
+  const source = readFileSync(file, "utf8");
+
+  if (relative !== designTokenSource) {
+    reportMatches({
+      source,
+      relative,
+      pattern: rawColorPattern,
+      message: "raw color outside the design-system token source",
+    });
+  }
+
+  if (extname(file) === ".css" && relative !== designTokenSource) {
+    reportMatches({
+      source,
+      relative,
+      pattern: rawCssDurationPattern,
+      message: "raw CSS duration outside the design-system token source",
+    });
+  }
+
+  if (
+    sourceExtensions.includes(extname(file)) &&
+    relative !== designMotionSource
+  ) {
+    reportMatches({
+      source,
+      relative,
+      pattern: rawScriptTimingPattern,
+      message: "raw script timing outside the design-system motion source",
+    });
+    reportMatches({
+      source,
+      relative,
+      pattern: rawScriptTransitionPattern,
+      message: "raw script transition outside the design-system motion source",
+    });
+  }
+
+  nativeSelectPattern.lastIndex = 0;
+  if (relative !== selectPrimitiveSource && nativeSelectPattern.test(source)) {
+    reportMatches({
+      source,
+      relative,
+      pattern: nativeSelectPattern,
+      message: "native select outside the design-system NativeSelect primitive",
+    });
+  }
+
+  nativeButtonPattern.lastIndex = 0;
+  for (const match of source.matchAll(nativeButtonPattern)) {
+    const isPrimitiveOwner = relative === buttonPrimitiveSource;
+    const isSemanticScrim =
+      relative === shellScrimSource &&
+      match[0].includes('className="app-shell__scrim"') &&
+      match[0].includes('type="button"');
+
+    if (!isPrimitiveOwner && !isSemanticScrim) {
+      errors.push(
+        `native button outside the design-system Button primitive: ${relative}:${lineNumberAt(source, match.index)}`,
+      );
+    }
+  }
+
+  motionButtonPattern.lastIndex = 0;
+  if (
+    relative !== hierarchyRendererSource &&
+    motionButtonPattern.test(source)
+  ) {
+    reportMatches({
+      source,
+      relative,
+      pattern: motionButtonPattern,
+      message: "motion.button outside the topology domain renderer exception",
+    });
   }
 }
 
