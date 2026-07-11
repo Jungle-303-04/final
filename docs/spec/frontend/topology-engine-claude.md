@@ -3,7 +3,7 @@ title: Topology Engine — Home Treemap Interaction Contract
 status: planned-interaction-contract
 owner: frontend-platform
 constitution: docs/spec/frontend/topology-engine.md (장기 헌법, 의미론 상속)
-backend_basis: src/domains/inventory, src/domains/dashboard/fleet_router.py, src/packages/contracts/realtime.py
+backend_basis: src/domains/inventory
 product_basis: references/ui-layer-lab/src/product (AGENTS.md, PRODUCT_FRONTEND.md 준수)
 last_verified: 2026-07-11
 ---
