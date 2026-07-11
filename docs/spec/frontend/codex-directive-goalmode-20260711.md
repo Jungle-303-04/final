@@ -27,6 +27,8 @@ mode: goal — §2 최종 질문 1회 후 완성까지 중단 없이 실행
 5. `final-questions.md` (§2 산출물)
 6. `codex-progress-20260711.md` (진행 증거, append-only)
 7. `product-data-contract.md` (API 의미 — 단, 이 지시서와 충돌 시 이 지시서 우선)
+8. `api-integration-workorder-20260711.md` (병렬 API 작업자용 정본 — §6b)
+9. `api-needs.md` (Codex→API 작업자 요청 큐)
 
 그 외 `docs/spec/frontend/*` 전부(브리핑, 24h 지시서, reference-pivot 지시서,
 topology-engine.md 헌법, 토큰/프로토콜 문서 포함)는 같은 디렉터리에서 archived 상태로
@@ -96,6 +98,21 @@ RCA는 별도 앱처럼 붙이지 말고 참조 IA에 자연 삽입한다: 메�
 5. 벤치마크 최소선 스캐폴드(라우터·셸) → 6. 화면별 포팅(직결 비율 높은 순) + RCA 통합 →
 7. §7 인수. 각 커밋 `npm run check` 통과, 화면마다 progress에
 `화면명/커밋/게이트 로그/참조 동등성 체크리스트` append.
+
+## 6b. 병렬 API 작업 연동 (사람 개발자와의 분업 — 필수 준수)
+
+`api-integration-workorder-20260711.md`에 따라 별도 개발자가 `src/product/api/**`의
+endpoint 함수·스키마를 병렬로 먼저 구축한다. 규칙:
+
+1. **소유 경계**: `src/product/api/**`의 endpoint 함수·스키마 신설은 그 개발자 소유다.
+   Codex는 progress 파일의 `API 완성:` 목록에 오른 함수만 소비한다.
+2. **필요한 함수가 아직 없으면**: 직접 만들지 말고 `docs/spec/frontend/api-needs.md`에
+   요청 행(`함수명 / routes.py 상수 / 필요한 화면 / 요청 시각`)을 append하고, 그동안
+   해당 화면의 다른 부분 또는 다음 화면을 진행한다(대기로 멈추지 않는다).
+3. **24시간 경과 미처리 요청만** Codex가 직접 구현할 수 있다 — 이때 workorder의
+   7단계 레시피·다섯 계명을 동일하게 따르고 progress에 대행 사실을 기록한다.
+4. 같은 파일 동시 수정 금지. `client.ts`·`url.ts`는 양쪽 모두 수정 금지.
+5. 어댑터(형태 변환) 계층은 Codex 소유로 남는다 — endpoint 함수(전송)와 분리한다.
 
 ## 7. 인수 조건 (전부 충족 시에만 "완성" 선언)
 

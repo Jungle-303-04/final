@@ -1,6 +1,6 @@
 ---
 title: 프론트 작업 조율 브리핑
-status: retained-evidence
+status: archived — 현재 작업에 참조 금지
 date: 2026-07-11
 verified_against: HEAD e20376321
 subordinate_to: codex-directive-reference-pivot-20260711.md

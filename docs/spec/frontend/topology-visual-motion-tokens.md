@@ -1,6 +1,6 @@
 ---
 title: Topology Visual and Motion Authority Bridge
-status: active-bridge
+status: archived — 현재 작업에 참조 금지
 date: 2026-07-11
 design_authority: 벤치마크 최소선
 behavior_authority: reference-feature-inventory.md

@@ -1,6 +1,6 @@
 ---
 title: Topology Engine Message and Action Protocol
-status: long-term-review-contract
+status: archived — 현재 작업에 참조 금지
 owner: frontend-platform
 version: topology-engine-message/v1
 last_verified: 2026-07-11

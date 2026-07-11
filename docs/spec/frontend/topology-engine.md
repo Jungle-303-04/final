@@ -1,6 +1,6 @@
 ---
 title: Universal Kubernetes Topology Engine Implementation Contract
-status: planned-design-contract
+status: archived — 현재 작업에 참조 금지
 owner: frontend-platform
 last_verified: 2026-07-11
 ---
