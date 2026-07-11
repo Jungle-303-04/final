@@ -20,6 +20,46 @@ provider가 수집한 사실
   -> recovery/dispatch worker가 command 또는 Safe PR 가능성을 판단
 ```
 
+## RCA Evidence Provider Schema v1
+
+이 문서의 기준 스키마는 v1로 확정한다.
+provider raw payload는 source별 bucket으로 들어오고, RCA 내부 근거 묶음에서는
+아래 `source:name` EvidenceItem key로 승격된다.
+
+| provider bucket | RCA EvidenceItem key | v1 상태 | 비고 |
+| --- | --- | --- | --- |
+| `kubernetes` | `kubernetes:cluster_resource_state` | 확정 | Pod, Event, Node, Workload, Service, EndpointSlice 상태 요약이다. |
+| `metrics` | `metrics:telemetry_metrics` | 확정 | Prometheus query 결과와 query별 analysis 요약이다. |
+| `logs` | `logs:related_logs` | 확정 | incident namespace/resource와 관련 있는 Loki log stream 요약이다. |
+| `traces` | `traces:related_traces` | 확정 | Tempo query 결과다. `trace_count=0`이어도 payload와 item은 정상일 수 있다. |
+| `metadata` | `metadata:current_workload_snapshots` | 확정 | `current_workload_snapshots` 배열에 object가 있을 때만 생성된다. 빈 배열은 정상 가능하며 item은 만들지 않는다. |
+
+rule catalog의 `expected_evidence`는 v1부터 source 단위와 `source:name` 단위를 모두 사용할 수 있다.
+예를 들어 `kubernetes`는 Kubernetes evidence source가 있기만 하면 충족되고,
+`kubernetes:cluster_resource_state`는 해당 이름의 EvidenceItem이 있을 때 충족된다.
+새 rule은 가능하면 `source:name`을 써서 어떤 근거 묶음이 필요한지 구체적으로 남긴다.
+
+### Rule catalog 자료를 v1 key로 옮기는 기준
+
+rule 후보 정리표에서 쓰는 `events`, `services`, `endpoints`, `workloads` 같은 표현은
+현재 RCA EvidenceItem key와 1:1로 분리되어 있지 않다.
+이 값들은 Kubernetes provider payload의 하위 목록이며, RCA 내부에서는
+`kubernetes:cluster_resource_state` item의 `value` 안에 함께 들어간다.
+
+| rule 자료 표현 | v1 `expected_evidence` key | 비고 |
+| --- | --- | --- |
+| `kubernetes` | `kubernetes:cluster_resource_state` | Kubernetes 상태/이벤트/리소스 목록 전체를 포함한다. |
+| `events` | `kubernetes:cluster_resource_state` | `value.events[]`에서 Event reason/message를 본다. |
+| `services` | `kubernetes:cluster_resource_state` 또는 `metadata:service_selector_matches` | Service 원본 상태는 Kubernetes item, selector 비교 요약은 metadata item이다. |
+| `endpoints` | `kubernetes:cluster_resource_state` 또는 `metadata:endpoint_slice_ready_endpoints` | EndpointSlice 원본 상태는 Kubernetes item, ready endpoint 요약은 metadata item이다. |
+| `workloads` | `kubernetes:cluster_resource_state` 또는 `metadata:current_workload_snapshots` | Deployment/ReplicaSet 상태는 Kubernetes item, 상세 spec/status snapshot은 metadata item이다. |
+| `metrics` | `metrics:telemetry_metrics` | Prometheus query 결과와 analysis를 본다. |
+| `logs` | `logs:related_logs` | Loki log stream과 대표 log line을 본다. |
+| `traces` | `traces:related_traces` | Tempo trace query 결과를 본다. `trace_count=0`은 정상 가능하다. |
+| `metadata/change` | 상황별 metadata key | 현재 상태는 `metadata:current_workload_snapshots`, 단건 상세는 `metadata:current_workload_snapshot`, selector/endpoint 요약은 각각 별도 metadata item을 쓴다. 실제 Git/GitOps 변경 이력은 아직 항상 들어오는 근거가 아니므로 필수 expected evidence로 둘 때 주의한다. |
+| `provider_status` | 아직 별도 RCA EvidenceItem key 없음 | 수집 품질 판단용이다. rule root cause 근거로 쓰려면 별도 item 또는 signal 보강이 필요하다. |
+| `window_start` | 아직 별도 RCA EvidenceItem key 없음 | evidence window 메타데이터다. stale evidence 판단 rule에는 추가 모델링이 필요하다. |
+
 중요한 기준은 다음과 같다.
 
 - `cluster`, `pods`, `events` 같은 필드 이름 자체가 갯수를 의미하지 않는다.
@@ -33,8 +73,8 @@ provider가 수집한 사실
 - provider bucket은 전체 API response raw를 기본으로 보존하지 않는다.
   Kubernetes와 metadata는 선택한 summary 필드만 남기고, metrics/logs/traces도 samples, redacted log stream,
   trace list처럼 provider가 정규화한 필드만 남긴다.
-- `metadata` bucket은 `change_context` 안에 Deployment snapshot과 namespace metadata
-  summary를 함께 담는다.
+- `metadata` bucket은 현재 Kubernetes 상태를 `change_context.current_workload_snapshots` 같은
+  하위 필드에 담을 수 있다. 배열이 비어 있으면 metadata source는 도착했지만 RCA 근거 item은 없다.
 
 ## 이 문서 읽는 순서
 

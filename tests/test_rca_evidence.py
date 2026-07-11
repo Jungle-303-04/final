@@ -533,6 +533,38 @@ def test_evidence_bundle_promotes_lineage_to_rca_items(monkeypatch) -> None:
     assert kubernetes_lineage["window_start"] == "window-2"
 
 
+def test_evidence_bundle_preserves_provider_schema_v1_item_keys() -> None:
+    db = SpyDb()
+    payload = crashloop_payload(
+        traces={
+            "source": "tempo",
+            "results": {
+                "application_error_spans": {
+                    "query": "{ status = error }",
+                    "traces": [],
+                    "analysis": {"error_count": 0},
+                    "trace_count": 0,
+                }
+            },
+        },
+        metadata={"change_context": {"current_workload_snapshots": []}},
+    )
+
+    rca_events = run_to_rca(payload, db=db, correlation_id="corr-schema-v1")
+
+    bundle = event_by_subject(rca_events, "evidence.bundle.built").evidence_bundle
+    item_keys = {f"{item.source}:{item.name}" for item in bundle.items}
+    assert {
+        "kubernetes:cluster_resource_state",
+        "metrics:telemetry_metrics",
+        "logs:related_logs",
+        "traces:related_traces",
+    } <= item_keys
+    assert "metadata:current_workload_snapshots" not in item_keys
+    trace_item = next(item for item in bundle.items if item.source == "traces")
+    assert trace_item.value["results"]["application_error_spans"]["trace_count"] == 0
+
+
 def loki_log_entry(
     namespace: str,
     line: str,
