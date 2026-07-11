@@ -19,6 +19,10 @@ export { getCluster } from "./cluster-detail";
 export { getClusterConnectionStatus } from "./cluster-connection";
 export { getInventorySummary } from "./inventory-summary";
 export {
+  listInventoryResourcesByType,
+  type InventoryResourceTypeQuery,
+} from "./inventory-query";
+export {
   listInventoryEvents,
   type InventoryEventListOptions,
 } from "./inventory-events";
@@ -77,6 +81,10 @@ export {
   inventorySummarySchema,
   type InventorySummary,
 } from "./inventory-summary-schemas";
+export {
+  inventoryQueryResponseSchema,
+  type InventoryQueryResponse,
+} from "./inventory-query-schemas";
 export {
   inventoryEventListSchema,
   type InventoryEventList,
