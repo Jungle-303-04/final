@@ -5,7 +5,7 @@ date: 2026-07-11
 audience: 프론트↔백엔드 API 연결 담당 개발자
 queue: api-needs.md
 owner_paths: references/ui-layer-lab/src/product/api/** + 두 조율 문서의 제한된 상태 변경
-verified_against: HEAD 652af1254 / routes.py 실제 router·request·response 교차 검증 / API 큐 27행·49함수
+verified_against: 기준 커밋 32ef74ed5 / routes.py 실제 router·request·response 교차 검증 / API 큐 27행·49함수
 ---
 
 # API 연결 작업지시서
@@ -51,10 +51,14 @@ git fetch origin woonyong/ui-layer-lab
 
 ```bash
 cd "$UI_ROOT"
-npm install
+npm ci
 npm run check
 npm run dev -- --host 127.0.0.1 --port 5173 --strictPort
 ```
+
+최신 canonical branch에서 최초 `npm run check`가 실패하면 queue를 claim하지 않는다. 같은 machine의
+병렬 test process를 종료한 뒤 한 번 재실행하고, 계속 실패하면 명령·실패 파일·현재 HEAD를 queue
+coordinator인 현재 primary Codex 작업(`/root`)에 전달한다.
 
 `strictPort`가 실패하면 다른 포트로 조용히 이동하지 않는다. 기존 프로세스의 소유자를 확인하고
 중지한 뒤 다시 실행한다. 브라우저 경로는 FastAPI router 경로 앞에 `/api`를 붙인다. `/api`는
@@ -125,8 +129,9 @@ requested ──claim──> in_progress ──검증 실패──> blocked
 4. `docs: APIQ-XXX 작업 선점`으로 커밋·push한다.
 5. push가 거절되면 재base 후 그 행을 다시 확인한다. 이미 선점되었으면 다른 행을 고른다.
 
-heartbeat는 코드 커밋 또는 queue의 시각 갱신 커밋으로 남긴다. 채팅 메시지만으로는 lease가
-갱신되지 않는다.
+heartbeat는 queue의 `claim·heartbeat` 시각을 갱신한 커밋이 canonical branch에 push되어야만
+유효하다. 코드 commit 시각이나 채팅 메시지만으로 lease를 갱신하지 않는다. 행 분할·회수·unblock의
+승인 주체는 queue coordinator인 현재 primary Codex 작업(`/root`)이다.
 
 ### 3.3 완료는 반드시 2커밋
 
@@ -136,10 +141,14 @@ heartbeat는 코드 커밋 또는 queue의 시각 갱신 커밋으로 남긴다.
    메시지는 `feat: <한국어 API 함수군 설명>` 또는 검증 전용이면
    `test: <한국어 API 계약 검증 설명>`이다. 커밋 A를 canonical branch에 먼저 push한다.
 2. 원격에 올라간 커밋 A에서 `npm run check`와 필요한 실검증을 통과시킨다.
-3. **커밋 B — 조율:** progress 파일 EOF에 export 함수별 exact 앵커를 append하고, 같은 함수군의
+3. 커밋 B를 만들기 직전 `git pull --rebase origin woonyong/ui-layer-lab`을 실행하고
+   `git merge-base --is-ancestor <A hash> origin/woonyong/ui-layer-lab` 및 queue claim이 여전히 자기
+   것인지 확인한다. 이 시점에 rebase로 A hash가 바뀌었다면 새 hash로 gate를 다시 실행한다.
+4. **커밋 B — 조율:** progress 파일 EOF에 export 함수별 exact 앵커를 append하고, 같은 함수군의
    모든 앵커가 있을 때 queue 행을 제거한다. 메시지는
    `docs: APIQ-XXX 완료 앵커 등록 / 요청 큐 정리`다.
-4. 커밋 B를 push한 뒤에만 Codex가 함수를 소비한다.
+5. 커밋 B push가 거절되면 pull·claim·ancestor 검사를 반복한다. 성공한 뒤에만 Codex가 함수를
+   소비한다.
 
 앵커는 열 첫 칸부터 다음 정규식과 정확히 일치해야 한다.
 
@@ -216,6 +225,10 @@ src/product/api/
   <domain>.test.ts        URL·body·schema·오류·AbortSignal contract test
   index.ts                공개 export 추가만
 ```
+
+queue의 대상 파일 열에서 `test`는 첫 endpoint 파일과 같은 stem의 `<domain>.test.ts`를 뜻한다.
+예: `cluster-detail.ts`의 test는 `cluster-detail.test.ts`, `metric-presets.ts`의 test는
+`metric-presets.test.ts`다.
 
 함수 signature 규칙은 다음과 같다.
 
@@ -328,14 +341,14 @@ schema 실행 전에 실패한다. 따라서 `deleteAiConversation`은 `BLOCK-20
 | APIQ-004 | `getClusterSummary` | GET `/clusters/{cluster_id}/summary` | path | `ClusterSummaryDetailResponse`, 200 | JsonMap 위치 확인 |
 | APIQ-004 | `getClusterNodesSummary` | GET `/clusters/{cluster_id}/nodes/summary` | path | `ClusterNodesSummaryResponse`, 200 |  |
 | APIQ-004 | `getNodePodsSummary` | GET `/clusters/{cluster_id}/nodes/{node_name}/pods/summary` | 2 path | `NodePodsSummaryResponse`, 200 |  |
-| APIQ-025·008 | inventory resources | GET `/clusters/{cluster_id}/inventory/resources` | `resource_type?`, `namespace?`, `include_deleted=false`, `limit=200`(1..1000) | `InventoryResourceListResponse`, 200 | 두 함수가 같은 route |
+| APIQ-025 / APIQ-008 | inventory resources | GET `/clusters/{cluster_id}/inventory/resources` | `resource_type?`, `namespace?`, `include_deleted=false`, `limit=200`(1..1000) | `InventoryResourceListResponse`, 200 | 두 함수가 같은 route |
 | APIQ-025 | `getInventoryResourceDetail` | GET `.../inventory/resource-detail` | 필수 `resource_type,kind,name`; `namespace?`; `related_limit=100`; `event_limit=50` | `InventoryResourceDetailResponse`, 200 | query identity |
-| APIQ-025·007 | services/workloads/events | GET 각 inventory collection | `namespace?`, `limit=200`(1..1000) | `InventoryResourceListResponse`, 200 | events도 같은 response |
+| APIQ-025 / APIQ-007 | services/workloads/events | GET 각 inventory collection | `namespace?`, `limit=200`(1..1000) | `InventoryResourceListResponse`, 200 | events도 같은 response |
 | APIQ-003 | `getInventorySummary` | GET `.../inventory/summary` | cluster path | `InventorySummaryResponse`, 200 | latest snapshot 구분 |
-| APIQ-026·009 | usage | GET `/clusters/{cluster_id}/usage` | `limit=288`(1..2000) | `ClusterUsageResponse`, 200 | `samples[].usage`는 JsonMap |
+| APIQ-026 / APIQ-009 | usage | GET `/clusters/{cluster_id}/usage` | `limit=288`(1..2000) | `ClusterUsageResponse`, 200 | `samples[].usage`는 JsonMap |
 | APIQ-010 | `listMetricQueryPresets` | GET `.../metric-query-presets` | cluster path | `MetricQueryPresetListResponse`, 200 | query 없음 |
 | APIQ-010 | `runMetricQueryPreset` | POST `.../metric-query-presets/{preset_id}/run` | body 없음 | `AgentDebugQueryResponse`, 200 | 202 아님 |
-| APIQ-011·027 | telemetry submit | POST `/agent/debug/query` | `AgentDebugQueryRequest`; `query` 필수 | `AgentDebugQueryResponse`, 200 | 이 queue 행만 AGENT_* browser 예외 |
+| APIQ-011 / APIQ-027 | telemetry submit | POST `/agent/debug/query` | `AgentDebugQueryRequest`; `query` 필수 | `AgentDebugQueryResponse`, 200 | 이 queue 행만 AGENT_* browser 예외 |
 | APIQ-027 | `getCommandStatus` | GET `/commands/{command_id}` | path | `CommandStatusResponse`, 200 | poll/run은 client composition |
 | APIQ-012 | `submitCommand` | POST `/commands` | `CommandRequest`; route상 `diff` 필요 | `AcceptedResponse`, 200 | command_id 없음 |
 | APIQ-014 | `scaleDeployment` | POST `.../deployments/{deployment}/scale` | `DeploymentScaleRequest`; replicas 0..100 | `AcceptedResponse`, 200 | live mutation 제한 |
@@ -345,7 +358,7 @@ schema 실행 전에 실패한다. 따라서 `deleteAiConversation`은 `BLOCK-20
 | APIQ-006 | application detail | GET `/applications/{application_id}` | path | `ApplicationResponse`, 200 | 내부 JsonMap |
 | APIQ-006 | deployments/runs | GET 각 application subresource | `limit=100`(1..500) | binding/run list, 200 | 내부 JsonMap |
 | APIQ-015 | catalog list/detail | GET `/catalog/items[/{item_id}]` | item path만 | list/detail response, 200 | item JsonMap·pagination 없음 |
-| APIQ-024·005 | RCA timeline | GET `/dashboard/rca/timeline` | `cluster_id?`, `limit=50`(1..100) | `RcaTimelineResponse`, 200 | teaser만 limit=6 |
+| APIQ-024 / APIQ-005 | RCA timeline | GET `/dashboard/rca/timeline` | `cluster_id?`, `limit=50`(1..100) | `RcaTimelineResponse`, 200 | teaser만 limit=6 |
 | APIQ-016 | `getRcaIncident` | GET `/dashboard/rca/incidents/{incident_id}` | path, `cluster_id?` | `RcaIncidentResponse`, 200 | stable id 필요 |
 | APIQ-017 | recovery lookup | GET `/rca/recovery-plans/by-correlation/{correlation_id}` | path | `RecoveryPlanStatusResponse`, 200 |  |
 | APIQ-017 | recovery select | POST `/rca/recovery-plans/{plan_id}/actions/{action_id}/select` | body 필수, `{}` 허용, reason nullable | `AcceptedResponse`, 200 | 404/409 가능 |

@@ -35,6 +35,10 @@ snapshot: 27행·49함수 / requested 26 / blocked 1 / valid completion anchors 
 10. canonical branch force-push 금지. feature branch를 썼다면 merge/cherry-pick 후의 최종 hash만
     앵커로 기록하고, squash/rebase로 이미 기록한 hash를 제거하지 않는다.
 
+queue coordinator와 행 분할·회수·unblock 승인 주체는 현재 primary Codex 작업(`/root`)이다.
+`claim·heartbeat`는 queue 시각 갱신 커밋이 canonical branch에 push된 경우에만 유효하다. 대상 파일의
+`test` 표기는 첫 endpoint 파일과 같은 stem의 `<domain>.test.ts`다.
+
 시각 형식:
 
 ```text
@@ -56,7 +60,7 @@ claim·heartbeat: YYYY-MM-DD HH:mm KST
 | `APIQ-008` | P2 | `listInventoryResourcesByType` | `CLUSTER_INVENTORY_RESOURCES_PATH` | `inventory-query.ts`, `inventory-query-schemas.ts`, test | Resources / topology projection | 2026-07-11 16:19 KST | requested | — | — | 기존 Home node·pod 함수 변경 금지; 동일 route의 범용 query |
 | `APIQ-009` | P2 | `getClusterResourceUsageSeries` | `CLUSTER_USAGE_PATH` | `usage-series.ts`, `usage-series-schemas.ts`, test | Pod·Node history / top metrics | 2026-07-11 16:19 KST | requested | — | — | limit 1..2000; `samples[].usage` JsonMap 보존; rollup으로 대체 금지 |
 | `APIQ-010` | P2 | `listMetricQueryPresets`, `runMetricQueryPreset` | `CLUSTER_METRIC_QUERY_PRESETS_PATH`, `CLUSTER_METRIC_QUERY_PRESET_RUN_PATH` | `metric-presets.ts`, `metric-presets-schemas.ts`, test | resource·PVC Metrics | 2026-07-11 16:19 KST | requested | — | — | run body 없음; `AgentDebugQueryResponse`, HTTP 200 receipt |
-| `APIQ-011` | P2 | `runTelemetryQuery` | `AGENT_DEBUG_QUERY_PATH`, `COMMAND_STATUS_PATH` | `telemetry.ts`, `telemetry-schemas.ts`, test | Pod log snapshot | 2026-07-11 16:19 KST | requested | — | — | 명시적 AGENT_* browser 예외; POST 1회; source literal 자유형 보존 |
+| `APIQ-011` | P2 | `runTelemetryQuery` | `AGENT_DEBUG_QUERY_PATH`, `COMMAND_STATUS_PATH` | `telemetry.ts`, `telemetry-schemas.ts`, test | Pod log snapshot | 2026-07-11 16:19 KST | requested | — | — | `APIQ-027` 완료 앵커 의존; 완료 전 claim 금지. 명시적 AGENT_* browser 예외; POST 1회; source literal 보존 |
 | `APIQ-012` | P3 | `submitCommand` | `COMMANDS_PATH` | `commands.ts`, `commands-schemas.ts`, test | Resources apply / remediation | 2026-07-11 16:19 KST | requested | — | — | `AcceptedResponse` 200; command_id 없음; `Cross-Gap-001`, polling 발명 금지 |
 | `APIQ-013` | P2 | `grantApproval`, `rejectApproval` | `APPROVAL_GRANT_PATH`, `APPROVAL_REJECT_PATH` | `approvals.ts`, `approvals-schemas.ts`, test | Applications / GitOps approval | 2026-07-11 17:17 KST | requested | — | — | body absent/null/`{}` 허용; reason nullable; 404/409; POST 재전송 금지 |
 | `APIQ-014` | P3 | `restartDeployment`, `scaleDeployment` | `CLUSTER_DEPLOYMENT_RESTART_PATH`, `CLUSTER_DEPLOYMENT_SCALE_PATH` | `deployments.ts`, `deployments-schemas.ts`, test | Resources workload actions | 2026-07-11 16:19 KST | requested | — | — | body·path strict; accepted 200에 command_id 없음; live mutation 승인 필요 |
