@@ -20,6 +20,46 @@ provider가 수집한 사실
   -> recovery/dispatch worker가 command 또는 Safe PR 가능성을 판단
 ```
 
+## RCA Evidence Provider Schema v1
+
+이 문서의 기준 스키마는 v1로 확정한다.
+provider raw payload는 source별 bucket으로 들어오고, RCA 내부 근거 묶음에서는
+아래 `source:name` EvidenceItem key로 승격된다.
+
+| provider bucket | RCA EvidenceItem key | v1 상태 | 비고 |
+| --- | --- | --- | --- |
+| `kubernetes` | `kubernetes:cluster_resource_state` | 확정 | Pod, Event, Node, Workload, Service, EndpointSlice 상태 요약이다. |
+| `metrics` | `metrics:telemetry_metrics` | 확정 | Prometheus query 결과와 query별 analysis 요약이다. |
+| `logs` | `logs:related_logs` | 확정 | incident namespace/resource와 관련 있는 Loki log stream 요약이다. |
+| `traces` | `traces:related_traces` | 확정 | Tempo query 결과다. `trace_count=0`이어도 payload와 item은 정상일 수 있다. |
+| `metadata` | `metadata:current_workload_snapshots` | 확정 | `current_workload_snapshots` 배열에 object가 있을 때만 생성된다. 빈 배열은 정상 가능하며 item은 만들지 않는다. |
+
+rule catalog의 `expected_evidence`는 v1부터 source 단위와 `source:name` 단위를 모두 사용할 수 있다.
+예를 들어 `kubernetes`는 Kubernetes evidence source가 있기만 하면 충족되고,
+`kubernetes:cluster_resource_state`는 해당 이름의 EvidenceItem이 있을 때 충족된다.
+새 rule은 가능하면 `source:name`을 써서 어떤 근거 묶음이 필요한지 구체적으로 남긴다.
+
+### Rule catalog 자료를 v1 key로 옮기는 기준
+
+rule 후보 정리표에서 쓰는 `events`, `services`, `endpoints`, `workloads` 같은 표현은
+현재 RCA EvidenceItem key와 1:1로 분리되어 있지 않다.
+이 값들은 Kubernetes provider payload의 하위 목록이며, RCA 내부에서는
+`kubernetes:cluster_resource_state` item의 `value` 안에 함께 들어간다.
+
+| rule 자료 표현 | v1 `expected_evidence` key | 비고 |
+| --- | --- | --- |
+| `kubernetes` | `kubernetes:cluster_resource_state` | Kubernetes 상태/이벤트/리소스 목록 전체를 포함한다. |
+| `events` | `kubernetes:cluster_resource_state` | `value.events[]`에서 Event reason/message를 본다. |
+| `services` | `kubernetes:cluster_resource_state` 또는 `metadata:service_selector_matches` | Service 원본 상태는 Kubernetes item, selector 비교 요약은 metadata item이다. |
+| `endpoints` | `kubernetes:cluster_resource_state` 또는 `metadata:endpoint_slice_ready_endpoints` | EndpointSlice 원본 상태는 Kubernetes item, ready endpoint 요약은 metadata item이다. |
+| `workloads` | `kubernetes:cluster_resource_state` 또는 `metadata:current_workload_snapshots` | Deployment/ReplicaSet 상태는 Kubernetes item, 상세 spec/status snapshot은 metadata item이다. |
+| `metrics` | `metrics:telemetry_metrics` | Prometheus query 결과와 analysis를 본다. |
+| `logs` | `logs:related_logs` | Loki log stream과 대표 log line을 본다. |
+| `traces` | `traces:related_traces` | Tempo trace query 결과를 본다. `trace_count=0`은 정상 가능하다. |
+| `metadata/change` | 상황별 metadata key | 현재 상태는 `metadata:current_workload_snapshots`, 단건 상세는 `metadata:current_workload_snapshot`, selector/endpoint 요약은 각각 별도 metadata item을 쓴다. 실제 Git/GitOps 변경 이력은 아직 항상 들어오는 근거가 아니므로 필수 expected evidence로 둘 때 주의한다. |
+| `provider_status` | 아직 별도 RCA EvidenceItem key 없음 | 수집 품질 판단용이다. rule root cause 근거로 쓰려면 별도 item 또는 signal 보강이 필요하다. |
+| `window_start` | 아직 별도 RCA EvidenceItem key 없음 | evidence window 메타데이터다. stale evidence 판단 rule에는 추가 모델링이 필요하다. |
+
 중요한 기준은 다음과 같다.
 
 - `cluster`, `pods`, `events` 같은 필드 이름 자체가 갯수를 의미하지 않는다.
@@ -33,8 +73,8 @@ provider가 수집한 사실
 - provider bucket은 전체 API response raw를 기본으로 보존하지 않는다.
   Kubernetes와 metadata는 선택한 summary 필드만 남기고, metrics/logs/traces도 samples, redacted log stream,
   trace list처럼 provider가 정규화한 필드만 남긴다.
-- `metadata` bucket은 `change_context` 안에 Deployment snapshot과 namespace metadata
-  summary를 함께 담는다.
+- `metadata` bucket은 현재 Kubernetes 상태를 `change_context.current_workload_snapshots` 같은
+  하위 필드에 담을 수 있다. 배열이 비어 있으면 metadata source는 도착했지만 RCA 근거 item은 없다.
 
 ## 이 문서 읽는 순서
 
@@ -270,6 +310,32 @@ Kubernetes bucket은 target namespace와 cluster 주변 상태를 요약한 snap
 장애의 겉모습, 즉 어떤 Pod가 죽고 있는지, 어떤 Event가 반복되는지, workload replica가 부족한지,
 Service 뒤에 endpoint가 있는지 확인하는 가장 중요한 bucket이다.
 
+실제 evidence window raw API에서는 다음 wrapper 안에 들어온다.
+
+```json
+{
+  "evidence_key": "default:cluster-1:cluster-snapshot:2026-07-11T07:25:00+00:00",
+  "workspace_id": "default",
+  "cluster_id": "cluster-1",
+  "source": "kubernetes",
+  "payload": {
+    "kubernetes": {}
+  }
+}
+```
+
+RCA 내부에서는 이 raw bucket 전체를 그대로 rule에 넘기지 않고, incident와 관련 있는 부분을 골라
+`EvidenceItem` 하나로 승격한다.
+
+| raw 위치 | RCA EvidenceItem | 왜 이렇게 바꾸는가 |
+| --- | --- | --- |
+| `payload.kubernetes` | `source="kubernetes"`, `name="cluster_resource_state"` | rule catalog가 `kubernetes:cluster_resource_state`를 기대 근거로 요구할 수 있게 한다. |
+
+즉 source/name key로 쓰면 `kubernetes:cluster_resource_state`다.
+이 item의 `value`에는 incident resource와 관련된 `pods`, `events`, `nodes`, `workloads`,
+`services`, `endpoints`만 compact되어 들어간다. 원본 전체는 evidence window raw API와 DB payload에 남고,
+RCA worker 사이 이벤트에는 판단에 필요한 요약만 흐른다.
+
 RCA를 처음 볼 때는 Kubernetes bucket 안에서 보통 아래 순서로 확인한다.
 
 1. `provider_status`로 수집이 성공했는지 본다.
@@ -287,9 +353,28 @@ RCA를 처음 볼 때는 Kubernetes bucket 안에서 보통 아래 순서로 확
   "nodes": [],
   "services": [],
   "endpoints": [],
-  "provider_status": {}
+  "provider_status": {},
+  "collection_limits": {}
 }
 ```
+
+`collection_limits`는 항상 있는 필드가 아니다. provider가 전송 크기 제한 때문에 일부 목록을 잘랐을 때만
+붙는다. 없으면 이 응답에서는 잘림 여부를 따로 보고하지 않은 것이다.
+
+2026-07-11 실제 응답에서는 다음처럼 들어왔다.
+
+| 항목 | 실제 개수 |
+| --- | --- |
+| `pods` | 20 |
+| `events` | 9 |
+| `nodes` | 2 |
+| `workloads` | 21 |
+| `services` | 14 |
+| `endpoints` | 16 |
+
+`provider_status`는 namespace별 query 결과를 나눠서 보여준다. 같은 raw 응답에는
+`target_namespace_snapshot`, `sandbox_namespace_snapshot` 두 query가 있었고,
+각 query의 `counts` 안에는 `pod_metrics`, `node_metrics`도 같이 들어왔다.
 
 | 필드 | 타입 | 의미 |
 | --- | --- | --- |
@@ -302,6 +387,11 @@ RCA를 처음 볼 때는 Kubernetes bucket 안에서 보통 아래 순서로 확
 | `endpoints` | list<object> | EndpointSlice 요약 목록이다. Service 뒤에 실제 endpoint가 붙었는지 본다. |
 | `provider_status` | object | Kubernetes provider query별 수집 상태와 bucket별 count다. |
 | `collection_limits` | object | 큰 목록이 전송 크기 보호를 위해 잘렸을 때만 있는 제한 요약이다. |
+
+주의할 점은 `payload.kubernetes` 안에 `symptom` 문자열이 항상 들어오는 구조가 아니라는 점이다.
+현재 raw 응답처럼 `symptom`이 없어도 정상이다. RCA는 `waiting_reasons`, `terminated_reasons`,
+`events[].reason/message`, `workloads[].conditions`, `endpoints[].endpoint_count` 같은 상태 필드를 보고
+코드 규칙으로 symptom을 파생한다. 여기서 말하는 파생은 AI 추론이 아니라 문자열/상태값 기반 분류다.
 
 ### Kubernetes provider가 조회하는 API resource
 
@@ -441,6 +531,10 @@ RCA 파생 예시는 다음과 같다.
 | `capacity` | object | Node status capacity 원본 object다. CPU, memory, pods 등 총량이다. |
 | `allocatable` | object | Node status allocatable 원본 object다. 실제 scheduling 가능한 CPU, memory, pods 등이다. |
 | `node_info` | object | Kubernetes nodeInfo 원본 object다. kubeletVersion, OS, architecture 등을 볼 수 있다. |
+| `cpu_mcores` | number 또는 null | node CPU 사용량을 millicore 단위로 정규화한 값이다. |
+| `mem_mib` | number 또는 null | node memory 사용량을 MiB 단위로 정규화한 값이다. |
+| `cpu_ratio` | number 또는 null | allocatable 대비 CPU 사용 비율이다. |
+| `mem_ratio` | number 또는 null | allocatable 대비 memory 사용 비율이다. |
 
 ### `kubernetes.workloads[]`
 
@@ -482,6 +576,9 @@ RCA 파생 예시는 다음과 같다.
 | `cluster_ip` | string 또는 null | Service clusterIP다. headless service면 `None` 또는 관련 값일 수 있다. |
 | `ports` | list<object> | Service ports 원본 목록이다. port, targetPort, protocol 등을 볼 수 있다. |
 | `selector` | object | Service selector 원본 object다. Pod labels와 비교해 endpoint 누락을 판단한다. |
+| `load_balancer` | object 또는 null | LoadBalancer ingress/status 요약이다. 없을 수 있다. |
+| `external_hosts` | list<string> | 외부 접근 가능한 host/ip 후보 목록이다. 없으면 빈 목록일 수 있다. |
+| `external_url` | string 또는 null | provider가 추정한 외부 접근 URL이다. 없을 수 있다. |
 
 ### `kubernetes.endpoints[]`
 
@@ -532,6 +629,8 @@ RCA 파생 예시는 다음과 같다.
 | `<query_name>.counts.workloads` | number | `workloads` 목록 길이다. |
 | `<query_name>.counts.services` | number | `services` 목록 길이다. |
 | `<query_name>.counts.endpoints` | number | `endpoints` 목록 길이다. |
+| `<query_name>.counts.pod_metrics` | number | pod resource metric이 붙은 항목 수다. |
+| `<query_name>.counts.node_metrics` | number | node resource metric이 붙은 항목 수다. |
 
 다른 provider bucket에는 현재 이 형태의 `provider_status`가 없다.
 Prometheus, Loki, Tempo의 실패 처리는 `Evidence job 집계 규칙`에서 따로 설명한다.
@@ -558,6 +657,30 @@ Metrics bucket은 Prometheus provider가 만든다.
 Kubernetes bucket이 리소스 상태를 보여준다면, metrics bucket은 CPU, memory, filesystem,
 replica 수, scrape 성공 여부처럼 시간에 따라 변하는 숫자를 보여준다.
 
+실제 evidence window raw API에서는 다음 wrapper 안에 들어온다.
+
+```json
+{
+  "evidence_key": "default:cluster-1:cluster-snapshot:2026-07-11T07:25:00+00:00",
+  "workspace_id": "default",
+  "cluster_id": "cluster-1",
+  "source": "metrics",
+  "payload": {
+    "metrics": {}
+  }
+}
+```
+
+RCA 내부에서는 metrics bucket이 다음 EvidenceItem으로 승격된다.
+
+| raw 위치 | RCA EvidenceItem | 왜 이렇게 바꾸는가 |
+| --- | --- | --- |
+| `payload.metrics` | `source="metrics"`, `name="telemetry_metrics"` | rule catalog가 `metrics:telemetry_metrics`를 기대 근거로 요구할 수 있게 한다. |
+
+즉 source/name key로 쓰면 `metrics:telemetry_metrics`다.
+이 item의 `value`에는 `source`, `results`와 query별 `analysis`가 들어간다.
+raw 응답 전체는 evidence window payload에 남고, RCA worker 사이 이벤트에는 query 결과를 compact한 형태가 흐른다.
+
 metrics를 읽을 때 가장 먼저 볼 것은 `results` 아래의 query 이름이다.
 예를 들어 `metrics.results.node_memory_usage_ratio.samples[0].value`는
 node memory 사용률 query의 첫 번째 sample 값이다.
@@ -576,6 +699,25 @@ node memory 사용률 query의 첫 번째 sample 값이다.
 | `source` | string | provider source 이름이다. 항상 `prometheus`다. |
 | `results` | object | query name을 key로 하는 Prometheus query 결과 묶음이다. |
 | `results.<metric_name>` | object | query 하나의 정규화 결과다. `<metric_name>`은 policy query의 `name`이다. |
+
+2026-07-11 실제 응답에서는 다음 9개 query가 들어왔다.
+
+| query name | mode/type | 실제 개수 | 이 값으로 보는 것 |
+| --- | --- | --- | --- |
+| `target_pod_info` | `instant` / `vector` | samples 16 | target namespace Pod 목록과 node, owner, image 관련 label 연결 |
+| `scrape_targets_up` | `instant` / `vector` | samples 17 | Prometheus scrape target이 살아 있는지 |
+| `node_cpu_usage_ratio` | `instant` / `vector` | samples 2 | node CPU 사용률 |
+| `node_memory_usage_ratio` | `instant` / `vector` | samples 2 | node memory 사용률 |
+| `target_deployment_replicas` | `instant` / `vector` | samples 5 | target namespace Deployment replica 수 |
+| `node_collector_scrape_error` | `instant` / `vector` | samples 2 | optional node collector 수집 에러 여부 |
+| `node_filesystem_usage_ratio` | `instant` / `vector` | samples 0 | node filesystem 사용률. 이번 응답에는 sample 없음 |
+| `node_collector_node_pod_count` | `range` / `matrix` | series 0, points 0 | node별 pod 수 추세. 이번 응답에는 point 없음 |
+| `node_collector_node_not_ready_pod_count` | `range` / `matrix` | series 0, points 0 | node별 Not Ready pod 수 추세. 이번 응답에는 point 없음 |
+
+sample이나 series가 0개여도 query 결과 object 자체는 남는다.
+이 경우 "문제가 없다"가 아니라 "해당 query에서 반환된 metric point가 없다"로 읽어야 한다.
+판단은 `analysis.sample_count`, `analysis.series_count`, `analysis.point_count`,
+그리고 `collection_limits` 유무를 같이 보고 한다.
 
 ### `metrics.results.<metric_name>`
 
@@ -609,6 +751,21 @@ Instant vector 결과일 때 추가 필드다.
 | `samples[].metric` | object | Prometheus label set이다. 예: `pod`, `namespace`, `node`, `instance`. |
 | `samples[].timestamp` | number 또는 null | Prometheus sample timestamp다. |
 | `samples[].value` | number 또는 null | sample value를 float으로 바꾼 값이다. |
+
+이번 실제 응답에서 자주 보이는 label은 다음과 같다.
+
+| label | 의미 |
+| --- | --- |
+| `namespace` | metric이 속한 Kubernetes namespace다. |
+| `pod` | Pod 단위 metric일 때 Pod 이름이다. |
+| `node` | Pod가 올라간 node 또는 node metric 대상이다. |
+| `instance` | Prometheus scrape target instance다. 보통 `host:port` 형태다. |
+| `job` | Prometheus scrape job 이름이다. |
+| `service` | scrape된 Kubernetes Service 이름이다. |
+| `uid` | kube-state-metrics Pod UID다. Pod metric과 Kubernetes pod snapshot을 연결할 수 있다. |
+| `created_by_kind` | Pod owner kind다. 예: `ReplicaSet`, `DaemonSet`, `StatefulSet`. |
+| `created_by_name` | Pod owner name이다. workload 연결에 쓴다. |
+| `deployment` | Deployment replica metric에서 Deployment 이름이다. |
 
 Range matrix 결과일 때 추가 필드다.
 
@@ -677,6 +834,11 @@ Threshold 기준:
 | `node_collector_node_not_ready_pod_count` | node별 Not Ready pod 수 range query다. |
 | `node_collector_scrape_error` | optional node collector의 Kubernetes API read 실패 여부다. |
 
+이번 실제 응답의 `analysis` 기준으로는 `node_collector_scrape_error`에
+`signals: ["collector_scrape_error"]`와 warning threshold 초과가 있었다.
+이건 애플리케이션 장애 원인 자체라기보다, node collector 관측값을 완전히 신뢰해도 되는지 확인하는
+보조 신호로 먼저 읽는다.
+
 RCA 파생 예시는 다음과 같다.
 
 | 파생 정보 | 볼 필드 |
@@ -698,6 +860,32 @@ Kubernetes Event가 "컨테이너가 재시작된다"고 말해준다면, log li
 더 구체적으로 보여줄 수 있다.
 다만 `logs[].streams[].values[].line`은 Loki 원문 그대로가 아니라 provider가 민감정보를 마스킹하고 최대 4096자로 제한한 문장이다.
 원문을 더 넓게 노출하지 않기 위해, RCA가 바로 쓰기 쉬운 pattern count, severity count, trace id 목록을 함께 보낸다.
+
+실제 evidence window raw API에서는 다음 wrapper 안에 들어온다.
+
+```json
+{
+  "evidence_key": "default:cluster-1:cluster-snapshot:2026-07-11T07:25:00+00:00",
+  "workspace_id": "default",
+  "cluster_id": "cluster-1",
+  "source": "logs",
+  "payload": {
+    "logs": []
+  }
+}
+```
+
+RCA 내부에서는 logs bucket이 다음 EvidenceItem으로 승격된다.
+
+| raw 위치 | RCA EvidenceItem | 왜 이렇게 바꾸는가 |
+| --- | --- | --- |
+| `payload.logs` | `source="logs"`, `name="related_logs"` | rule catalog가 `logs:related_logs`를 기대 근거로 요구할 수 있게 한다. |
+
+즉 source/name key로 쓰면 `logs:related_logs`다.
+다만 raw `payload.logs` 전체가 무조건 근거로 쓰이는 것은 아니다.
+RCA는 incident namespace와 관련된 stream을 먼저 고르고, RCA test run이면 관련 pod 이름까지 맞춰서
+noise를 줄인 뒤 `related_logs` item을 만든다. stream label에서는 주로 `k8s_namespace_name`,
+`namespace`, `k8s_pod_name`, `pod`, `pod_name`, `kubernetes_pod_name`을 본다.
 
 logs를 읽을 때는 `logs[].query_name`으로 어떤 로그 query 결과인지 확인하고,
 `line_count`로 잡힌 로그가 있는지 본 다음, 마스킹된 로그 문장은
@@ -755,12 +943,44 @@ logs를 읽을 때는 `logs[].query_name`으로 어떤 로그 query 결과인지
 | `logs[].trace_ids` | list<string> | 로그에서 찾은 안전한 trace id 목록이다. 32자리 hex trace id만 최대 20개까지 담는다. |
 | `logs[].redaction_summary` | object | provider가 로그 마스킹을 적용했는지, 실제로 값이 바뀐 line 개수, 길이 제한으로 잘린 line 개수를 나타낸다. |
 
+2026-07-11 실제 응답에서는 다음 4개 query 결과가 들어왔다.
+
+| query name | line count | stream count | 의미 |
+| --- | --- | --- | --- |
+| `target_namespace_errors` | 20 | 20 | target namespace에서 `ERROR` 문자열을 포함한 로그 |
+| `sandbox_namespace_errors` | 0 | 0 | sandbox namespace의 `ERROR/FATAL/panic` 로그. 이번 응답에는 없음 |
+| `node_collector_runtime_samples` | 20 | 20 | optional node collector의 runtime sample 로그 |
+| `target_agent_warnings` | 20 | 20 | cluster-agent container의 `WARN/ERROR/failed` 로그 |
+
+이번 응답에서 `pattern_counts`는 모든 query에서 0이었다.
+즉 로그 라인은 있었지만, provider가 아는 `probe_failed`, `oom_or_memory`,
+`dependency_timeout`, `config_error` 같은 RCA pattern에는 걸리지 않았다.
+`target_namespace_errors`는 `severity_counts.info=16`, `unknown=4`였고,
+나머지 line이 있는 query는 대부분 `unknown=20`이었다.
+이런 경우 RCA는 로그가 있다는 사실만으로 root cause를 확정하지 않고,
+Kubernetes event/reason, metrics threshold, metadata snapshot과 같이 본다.
+
 ### `logs[].streams[]`
 
 | 필드 | 타입 | 의미 |
 | --- | --- | --- |
 | `stream` | object | Loki stream label set이다. 예: namespace, pod, container, app label. |
 | `values` | list<object> | 이 stream의 log entry 목록이다. |
+
+이번 실제 응답에서 자주 보이는 stream label은 다음과 같다.
+
+| label | 의미 |
+| --- | --- |
+| `k8s_namespace_name` | 로그가 나온 Kubernetes namespace다. incident namespace 필터에 쓴다. |
+| `k8s_pod_name` | 로그를 남긴 Pod 이름이다. incident pod 또는 관련 pod 필터에 쓴다. |
+| `k8s_pod_uid` | Pod UID다. Kubernetes snapshot의 pod UID와 연결할 수 있다. |
+| `k8s_container_name` | 로그를 남긴 container 이름이다. |
+| `service_name` | OpenTelemetry/Loki pipeline이 붙인 service 이름이다. |
+| `log_iostream` | stdout 또는 stderr다. |
+| `detected_level` | collector가 감지한 level이다. 실제 RCA severity는 `severity_counts`와 함께 본다. |
+| `k8s_container_restart_count` | 로그 시점의 container restart count label이다. 문자열로 들어올 수 있다. |
+| `observed_timestamp` | collector가 관측한 timestamp다. nanosecond 문자열일 수 있다. |
+| `log_file_path` | node 안의 container log path다. 위치 확인용이며 root cause 자체는 아니다. |
 
 ### `logs[].streams[].values[]`
 
@@ -816,6 +1036,30 @@ Traces bucket은 Tempo provider가 만든다.
 CrashLoop, ImagePull처럼 Kubernetes 자체에서 바로 보이는 문제보다, DB/API timeout,
 upstream latency, management gateway 호출 실패 같은 흐름형 문제를 판단할 때 도움이 된다.
 
+실제 evidence window raw API에서는 다음 wrapper 안에 들어온다.
+
+```json
+{
+  "evidence_key": "default:cluster-1:cluster-snapshot:2026-07-11T07:25:00+00:00",
+  "workspace_id": "default",
+  "cluster_id": "cluster-1",
+  "source": "traces",
+  "payload": {
+    "traces": {}
+  }
+}
+```
+
+RCA 내부에서는 traces bucket이 다음 EvidenceItem으로 승격된다.
+
+| raw 위치 | RCA EvidenceItem | 왜 이렇게 바꾸는가 |
+| --- | --- | --- |
+| `payload.traces` | `source="traces"`, `name="related_traces"` | rule catalog가 `traces:related_traces`를 기대 근거로 요구할 수 있게 한다. |
+
+즉 source/name key로 쓰면 `traces:related_traces`다.
+단, `payload.traces`가 존재하면 item은 만들어지지만, 각 query의 `trace_count`가 0이면 실제 trace 근거는 없는 상태다.
+이 경우는 "trace provider가 실패했다"가 아니라 "Tempo는 응답했지만 해당 query에 매칭된 trace가 없다"로 먼저 읽는다.
+
 traces를 읽을 때는 `results.<query_name>.trace_count`로 잡힌 trace가 있는지 보고,
 각 trace의 `rootServiceName`, `rootTraceName`, `durationMs`, `traceID` 같은 값을 확인한다.
 RCA가 표준 필드를 먼저 보고 싶을 때는 `results.<query_name>.analysis`를 읽는다.
@@ -852,6 +1096,20 @@ RCA가 표준 필드를 먼저 보고 싶을 때는 `results.<query_name>.analys
 | `source` | string | provider source 이름이다. 항상 `tempo`다. |
 | `results` | object | query name을 key로 하는 trace search 결과 묶음이다. |
 | `results.<query_name>` | object | query 하나의 정규화 결과다. |
+
+2026-07-11 실제 응답에서는 다음 4개 query가 모두 실행됐지만 trace는 0개였다.
+
+| query name | query | trace count | 읽는 법 |
+| --- | --- | --- | --- |
+| `application_error_spans` | `{ status = error }` | 0 | error status application span이 잡히지 않았다. |
+| `management_gateway_spans` | `{ resource.service.name = "api-gateway" }` | 0 | API Gateway 관련 Tempo trace가 잡히지 않았다. |
+| `target_agent_error_spans` | `{ resource.service.name = "target-cluster-agent" && status = error }` | 0 | target agent error span이 잡히지 않았다. |
+| `target_agent_recent_spans` | `{ resource.service.name = "target-cluster-agent" }` | 0 | target agent 최근 span도 잡히지 않았다. |
+
+이 상태에서 확인할 수 있는 것은 "trace 기반 근거가 없다"는 점이다.
+원인은 실제 요청 trace가 없었거나, application/agent가 OTEL trace를 내보내지 않았거나,
+Tempo query label이 실제 span resource label과 맞지 않는 경우일 수 있다.
+하지만 provider 실패라면 보통 query 결과 object 자체가 없거나 evidence job 실패로 드러난다.
 
 ### `traces.results.<query_name>`
 
@@ -952,6 +1210,48 @@ Metadata bucket은 `MetadataProvider`가 만든다.
 현재 구현은 외부 배포 시스템을 직접 조회하지 않는다.
 대신 target namespace의 Deployment, ReplicaSet, Pod, Service, ResourceQuota, EndpointSlice 목록을 Kubernetes API에서 읽어
 현재 workload snapshot과 namespace metadata summary를 만든다.
+
+실제 evidence window raw API에서는 다음 wrapper 안에 들어온다.
+
+```json
+{
+  "evidence_key": "default:cluster-1:cluster-snapshot:2026-07-11T07:25:00+00:00",
+  "workspace_id": "default",
+  "cluster_id": "cluster-1",
+  "source": "metadata",
+  "payload": {
+    "metadata": {}
+  }
+}
+```
+
+RCA 내부에서는 metadata bucket 안의 하위 list/object가 있을 때만 EvidenceItem으로 승격된다.
+
+| raw 위치 | RCA EvidenceItem | 만들어지는 조건 |
+| --- | --- | --- |
+| `metadata.change_context.current_workload_snapshots[]` | `metadata:current_workload_snapshots` | snapshot list에 항목이 있을 때 |
+| `metadata.change_context.current_workload_snapshot` | `metadata:current_workload_snapshot` | 단건 detail object가 있을 때 |
+| `metadata.change_context.service_selector_matches[]` | `metadata:service_selector_matches` | Service selector 매칭 목록이 있을 때 |
+| `metadata.change_context.endpoint_slice_ready_endpoints[]` | `metadata:endpoint_slice_ready_endpoints` | EndpointSlice ready endpoint 목록이 있을 때 |
+| `metadata.change_context`의 `recent_changes/gitops/image/rollout/config/risk` | `metadata:change_context` | 변경 맥락 섹션에 실제 내용이 있을 때 |
+
+2026-07-11 실제 응답은 다음처럼 비어 있었다.
+
+```json
+{
+  "metadata": {
+    "change_context": {
+      "current_workload_snapshots": []
+    }
+  }
+}
+```
+
+이 경우 metadata provider bucket은 도착했지만, RCA evidence bundle에는 metadata item이 만들어지지 않는다.
+`current_workload_snapshots`가 빈 list이기 때문이다.
+따라서 이 응답은 "metadata source 호출은 됐지만 RCA가 쓸 workload snapshot 근거는 없다"로 읽는다.
+원인은 target namespace에 조회 가능한 Deployment가 없거나, metadata query가 기대 namespace/resource와 맞지 않거나,
+수집 권한/필터 때문에 snapshot 대상이 비어 있는 경우일 수 있다.
 
 `MetadataSnapshotQuery.query` 값이 `change_context`, `current_workload_snapshots`, `deployments`이면
 target namespace의 모든 Deployment를 summary snapshot 목록으로 보낸다.
