@@ -965,6 +965,7 @@ async function assertNoOverflow(page, label, requiredSelectors) {
     ]);
     const missingSelectors = required.filter((selector) => document.querySelectorAll(selector).length === 0);
     const violations = [];
+    let checkedVisibleDisabled = 0;
 
     for (const element of document.querySelectorAll([...selectors].join(","))) {
       const rect = element.getBoundingClientRect();
@@ -982,12 +983,15 @@ async function assertNoOverflow(page, label, requiredSelectors) {
         .join(" ")
         .trim();
       const hasAccessibleName = Boolean(element.getAttribute("aria-label")?.trim() || labelledBy);
-      const isSuppressed = element.matches(":disabled,[aria-disabled='true'],[hidden]")
+      const isInteractionDisabled = element.matches(":disabled,[aria-disabled='true']");
+      const isLayoutSuppressed = element.matches("[hidden]")
         || Boolean(element.closest("[aria-hidden='true'],[inert]"))
         || style.display === "none"
         || style.visibility === "hidden";
+      const isFocusSuppressed = isInteractionDisabled || isLayoutSuppressed;
+      if (isInteractionDisabled && !isLayoutSuppressed) checkedVisibleDisabled += 1;
       let acceptsFocus = false;
-      if (exemption !== null && !isSuppressed && element.tabIndex >= 0) {
+      if (exemption !== null && !isFocusSuppressed && element.tabIndex >= 0) {
         const previousFocus = document.activeElement;
         element.focus({ preventScroll: true });
         acceptsFocus = document.activeElement === element;
@@ -998,15 +1002,15 @@ async function assertNoOverflow(page, label, requiredSelectors) {
         exemption.trim().length === 0
         || !isHorizontalScrollOwner
         || element.tabIndex < 0
-        || isSuppressed
+        || isFocusSuppressed
         || !acceptsFocus
         || !hasAccessibleName
       )) {
         violations.push(
-          `${element.tagName.toLowerCase()} invalid reflow exemption: reason=${JSON.stringify(exemption)} overflow-x=${style.overflowX} tabIndex=${element.tabIndex} focus=${acceptsFocus} named=${hasAccessibleName} suppressed=${isSuppressed}`,
+          `${element.tagName.toLowerCase()} invalid reflow exemption: reason=${JSON.stringify(exemption)} overflow-x=${style.overflowX} tabIndex=${element.tabIndex} focus=${acceptsFocus} named=${hasAccessibleName} focus-suppressed=${isFocusSuppressed}`,
         );
       }
-      if (isSuppressed) continue;
+      if (isLayoutSuppressed) continue;
       if (exemption === null && ownOverflow > 1) {
         violations.push(`${element.tagName.toLowerCase()} own overflow ${ownOverflow}px`);
       }
@@ -1017,11 +1021,14 @@ async function assertNoOverflow(page, label, requiredSelectors) {
       }
     }
 
-    return { documentOverflow, missingSelectors, violations };
+    return { checkedVisibleDisabled, documentOverflow, missingSelectors, violations };
   }, { required: requiredSelectors, scenarioId: label });
 
   if (result.missingSelectors.length) {
     throw new Error(`${label}: required reflow selectors are missing\n${result.missingSelectors.join("\n")}`);
+  }
+  if (label.startsWith("state-") && result.checkedVisibleDisabled < 1) {
+    throw new Error(`${label}: visual gate did not inspect a visible disabled element`);
   }
   if (result.documentOverflow > 1 || result.violations.length) {
     throw new Error(
