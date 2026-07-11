@@ -852,3 +852,43 @@ P2를 완료로 판정한다. 다음 단계는 `final-questions.md`에 남은 �
 스크린샷:
   - references/ui-layer-lab/output/playwright/product-state-forced-colors.png
 ```
+
+## 2026-07-11 Item·ScrollArea primitive 계약 보강
+
+- 구현 커밋: `36f23f06e`
+- `Item`은 `div`, `a`, `button` root만 허용한다. `div`는 중립 구조 role만 받을 수 있고
+  `onClick`, `tabIndex`, `role="button"`은 타입 계약과 runtime guard 양쪽에서 거부한다.
+- anchor item은 비어 있지 않은 `href`를 필수로 받고, button item은 `type="button"`을 component가
+  소유한다. variant, size, slot marker도 호출자가 덮어쓸 수 없다.
+- Item group, media, content, title, actions, header, footer, description, separator는 canonical
+  slot marker를 component가 소유한다. title은 heading을 만들지 않아 화면 heading hierarchy를
+  호출자가 소유한다.
+- `ScrollArea`는 `aria-label` 또는 `aria-labelledby` 중 하나를 필수로 요구하고, 둘을 동시에
+  받거나 빈 accessible name을 받으면 거부한다. viewport만 `role="region"`과 `tabIndex=0`을
+  가진다.
+- orientation은 `vertical`, `horizontal`, `both` 중 하나로 고정한다. root의 role, style, render,
+  raw HTML, slot, orientation, accessible-name override는 runtime sanitizer가 제거하고 children은
+  canonical viewport/content 안에 둔다.
+- `THIRD_PARTY_NOTICES.md`에 Item·ScrollArea의 upstream-derived source, product target, material
+  change를 추가했다. product runtime의 lab/generated/vendor import는 0건이다.
+- §6b 조율 상태는 `api-needs.md`의 `requested` 26행, 유효한 완료 앵커 0개다. 이번 변경은
+  `src/product/api/**`, `client.ts`, `url.ts`를 수정하지 않았고 새 endpoint 요구를 만들지 않았다.
+
+```text
+명령: cd references/ui-layer-lab && npm run check
+결과: PASS
+  - TypeScript: PASS
+  - ESLint: PASS
+  - Vitest: 19 files, 107 tests PASS
+  - product design guard: 69 files PASS
+  - UI catalog source audit: 482 previews PASS, upstream 21e4ceb
+  - Vite production build: PASS
+  - ProductApp CSS: 49.07 kB (49,073 bytes)
+  - ProductApp JS: 68.82 kB (68,819 bytes)
+주의: 500kB 초과 chunk warning은 reference catalog 기존 성능 과제로 유지
+
+명령: cd references/ui-layer-lab && npm run visual-product
+결과: PASS — release-desktop-light, release-mobile-dark, release-reflow-320-light,
+      release-text-resize-200-light, state-reflow-320-light,
+      state-text-resize-200-light, state-forced-colors; network-silent
+```
