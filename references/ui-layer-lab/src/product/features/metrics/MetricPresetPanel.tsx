@@ -1,16 +1,17 @@
 import { useEffect, useRef, useState } from "react";
-import { ApiError, type ClusterSummary } from "../../api";
+import { ApiError } from "../../api";
 import { MetricQueryExecutionError } from "../../api/metrics";
 import { Surface } from "../../shared/ui/Surface";
 import { runMetricPreset, type MetricPresetRun } from "./metricRunner";
 import { METRIC_PRESETS, type MetricPreset } from "./presets";
+import type { MetricClusterOption } from "./useMetricsConnections";
 
 type PresetRunState =
   | { status: "running" }
   | { status: "succeeded"; run: MetricPresetRun }
   | { status: "failed"; message: string };
 
-export function MetricPresetPanel({ cluster }: { cluster: ClusterSummary }) {
+export function MetricPresetPanel({ cluster }: { cluster: MetricClusterOption }) {
   const [runs, setRuns] = useState<Readonly<Record<string, PresetRunState>>>({});
   const controllers = useRef(new Map<string, AbortController>());
 
@@ -30,7 +31,7 @@ export function MetricPresetPanel({ cluster }: { cluster: ClusterSummary }) {
 
     try {
       const run = await runMetricPreset(
-        cluster.cluster_id,
+        cluster.clusterId,
         preset,
         `run-${crypto.randomUUID()}`,
         { signal: controller.signal },

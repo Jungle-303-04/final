@@ -22,6 +22,7 @@ export {
   submitPrometheusQuery,
   MetricQueryExecutionError,
   type ClusterUsageOptions,
+  type MetricCommandSummary,
   type PollCommandOptions,
   type PrometheusQueryRun,
   type SubmittedPrometheusQuery,
