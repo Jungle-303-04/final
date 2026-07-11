@@ -52,6 +52,9 @@ from packages.contracts.gateway.requests import (
 )
 from packages.contracts.gateway.responses import (
     AcceptedResponse,
+    RcaRuleCandidateItem,
+    RcaRuleCatalogItem,
+    RcaRuleCatalogResponse,
     RcaRuleValidateResponse,
     RcaTestRunResponse,
     RcaTestScenarioListResponse,
@@ -71,6 +74,7 @@ from packages.events.envelope import event
 from packages.runtime.dependencies import get_db, get_events
 from packages.storage.engine import unit_of_work_or_null
 from packages.storage.retry import to_thread_db_retry
+from services.ai.agent.playbooks.cause import registered_cause_profiles
 
 # per-cluster 토큰 인증 — evidence 의 workspace/cluster 는 토큰 identity 에서만 취함.
 router = APIRouter()
@@ -475,6 +479,35 @@ async def validate_rca_rule_catalog(
         valid=True,
         matched_symptom=first_rule.symptoms[0] if first_rule else None,
         candidates_count=sum(len(rule.candidates) for rule in result.rules),
+    )
+
+
+@router.get(gateway_routes.RCA_RULES_PATH, response_model=RcaRuleCatalogResponse)
+async def list_rca_rule_catalog(
+    _current: Any = Depends(require_session),
+) -> RcaRuleCatalogResponse:
+    profiles = registered_cause_profiles()
+    items = [
+        RcaRuleCatalogItem(
+            rule_id=profile.rule_id or "",
+            symptoms=list(profile.symptoms),
+            required_sources=list(profile.required_sources),
+            candidates=[
+                RcaRuleCandidateItem(
+                    candidate_id=candidate.candidate_id,
+                    title=candidate.title,
+                    expected_evidence=list(candidate.expected_evidence),
+                    signals_count=len(candidate.signals),
+                )
+                for candidate in profile.candidate_specs
+            ],
+        )
+        for profile in profiles
+    ]
+    return RcaRuleCatalogResponse(
+        items=items,
+        rules_count=len(items),
+        candidates_count=sum(len(item.candidates) for item in items),
     )
 
 
