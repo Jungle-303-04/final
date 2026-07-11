@@ -28,7 +28,7 @@ next_gate: reference-contract-map.md 검토 승인
 | 판정 | 의미 |
 |---|---|
 | `runtime+source` | `:9280`에서 직접 관찰했고 v1.8.1 소스로 의미를 확정 |
-| `source-confirmed` | 현재 cluster data·capability·제한 flag 때문에 runtime에서 끝까지 실행하지 못했으나 v1.8.1 제품 경로에 존재 |
+| `source-confirmed` | runtime에서 해당 screen·control·gated/empty/capability 상태를 관찰하고, 데이터·권한·안전 제한으로 끝까지 실행하지 않은 계약을 v1.8.1 call-chain으로 확정 |
 | `runtime-gated` | control 또는 route는 관찰됐지만 권한·capability·데이터 부재로 하위 동작이 차단됨 |
 
 ## 1. 조사 기준선
@@ -38,6 +38,7 @@ next_gate: reference-contract-map.md 검토 승인
 | 실행 URL | `http://127.0.0.1:9280` | HTTP 200과 browser 관찰 |
 | 비교 실행 도구 | `1.8.1` | 로컬 CLI `--version` |
 | source | tag `v1.8.1`, commit `3ff2b1095151c690bf536e8e6ca685c2703fcd70` | 공식 저장소 tag와 실행 version 대조 |
+| source license | Apache-2.0 | 동일 checkout의 `LICENSE` 직접 확인 |
 | 실행 context | `cluster-1`, `mgmt`; 관찰 시작 current=`mgmt` | `GET /api/contexts`, process argument |
 | 인증 | local no-auth (`authEnabled=false`, `authMode=none`) | `GET /api/auth/me` |
 | 제한 flag | exec, Helm write, local terminal 비활성 | process argument와 `GET /api/capabilities` |
@@ -213,6 +214,8 @@ last-success 유지, empty issue를 구분한다.
 - Resources tab은 drift, desired/live change, recent event, remediation plan을 표시한다.
 - Activity tab은 operation/history와 rollback 진입점을 제공한다.
 - terminating resource는 mutation을 제한하고 lifecycle 상태를 status보다 우선한다.
+- Applications mode만 실제 화면이다. Sources, Projects, Alerts mode는 현재 placeholder이므로 구현된
+  독립 화면으로 계산하지 않는다.
 
 ### 4.10 Checks
 
@@ -315,6 +318,26 @@ background 실패는 console warning과 화면 freshness/error를 병행하고 d
 이 절은 외부 기준 저장소의 browser 소비 계약이다. 경로는 runtime에서 `/api` 아래에 mount된다.
 `요청/응답`은 wire의 주요 shape이며 P2에서 우리 canonical DTO와 별도 매핑한다.
 
+P1의 **browser 소비 API mapping unit은 136행**이다. P2는 아래 7.2~7.11의 Markdown body row를
+같은 단위·순서로 모두 옮겨 `P1 136 = P2 136`을 증명한다. 동일 shape·consumer를 가진 endpoint
+variant가 한 행에 묶인 경우 그 행 전체가 한 mapping unit이다. P2에서 임의로 합치거나 빼지 않으며,
+분할이 필요하면 P1과 P2를 같은 커밋에서 함께 갱신한다. 7.12의 standalone browser 비소비 경로는
+136행에서 제외한다.
+
+| 절 | mapping unit |
+|---|---:|
+| 7.2 Bootstrap·전역 셸·desktop | 24 |
+| 7.3 Home·Issues·Applications·Topology·Timeline | 11 |
+| 7.4 Resource browser·detail·RBAC·compare | 19 |
+| 7.5 Metrics·logs·dock | 21 |
+| 7.6 Resource·workload mutation | 14 |
+| 7.7 Live Traffic | 5 |
+| 7.8 Helm | 23 |
+| 7.9 GitOps | 11 |
+| 7.10 Cost·Settings·기타 overlay | 7 |
+| 7.11 실시간 event | 1 |
+| **합계** | **136** |
+
 ### 7.1 공통 wire 규칙
 
 - 기본 base는 `/api`이고 embedded cluster surface에서는 `/c/{cluster-id}/api` 같은 host base로 바뀐다.
@@ -383,9 +406,9 @@ background 실패는 console warning과 화면 freshness/error를 병행하고 d
 | Method·path | 요청 | 응답 주요 shape | 소비 위치·주기 | 판정 |
 |---|---|---|---|---|
 | `GET /resource-counts` | `namespaces?` | `{counts,forbidden?,unavailable?,reasons?}` | Resources catalog·GitOps kind detection, 60s | `runtime+source` |
-| `GET /resources/{resource-name}` | `namespace?` 또는 `namespaces?`, `group?`, `include=summary|raw` | bare Kubernetes object array | Resources·GitOps·compare candidate, 60/120s + SSE invalidate | `runtime+source` |
-| `GET /resources/{resource-name}/{ns-or-_}/{name}` | `group?` | `{resource,relationships?,certificateInfo?,hpaDiagnosis?}` | drawer·Workload·Compare·GitOps node | `runtime+source` |
-| `GET /resources/{resource-name}/{ns-or-_}/{name}/cascade-preview` | `group?` | `{root,dependents[]}` | delete confirm 전 | `runtime+source` |
+| `GET /resources/{kind}` | `namespace?` 또는 `namespaces?`, `group?`, `include=summary|raw` | bare Kubernetes object array | Resources·GitOps·compare candidate, 60/120s + SSE invalidate | `runtime+source` |
+| `GET /resources/{kind}/{ns-or-_}/{name}` | `group?` | `{resource,relationships?,certificateInfo?,hpaDiagnosis?}` | drawer·Workload·Compare·GitOps node | `runtime+source` |
+| `GET /resources/{kind}/{ns-or-_}/{name}/cascade-preview` | `group?` | `{root,dependents[]}` | delete confirm 전 | `runtime+source` |
 | `GET /issues/resource/{kind}/{ns-or-_}/{name}` | `group?` | `Issue[]` | resource/workload issue section, stale 30s | `runtime+source` |
 | `GET /audit/resource/{kind}/{ns}/{name}` | 없음 | `AuditFinding[]` | resource/workload check section | `runtime+source` |
 | `GET /rbac/subject/{kind}/{ns}/{name}` | ServiceAccount identity | subject binding·effective role summary | Pod/ServiceAccount detail, stale 15s | `runtime+source` |
@@ -402,7 +425,7 @@ background 실패는 console warning과 화면 freshness/error를 병행하고 d
 | `GET /capi/clusters/{ns}/{name}/kubeconfig` | 없음 | kubeconfig file | CAPI Cluster detail | `source-confirmed` |
 | `POST /capi/clusters/{ns}/{name}/connect` | body 없음 | connection/context result | CAPI Cluster Connect action | `source-confirmed` |
 
-`GET /resources/{resource-name}`의 `403`·deferred `503`·실제 empty `[]`는 서로 다른 의미다. legacy RBAC
+`GET /resources/{kind}`의 `403`·deferred `503`·실제 empty `[]`는 서로 다른 의미다. legacy RBAC
 preflight가 `200 []`를 반환하는 예외도 있어 P2 adapter가 HTTP status만으로 empty를 단정하면 안 된다.
 
 ### 7.5 Metrics·logs·dock
@@ -414,27 +437,30 @@ preflight가 `200 []`를 반환하는 예외도 있어 P2 adapter가 HTTP status
 | `GET /metrics/pods/{ns}/{name}/history` | 없음 | `{namespace,name,containers:[{name,dataPoints[{timestamp,cpu,memory}]}],metricsUnavailable?,...}` | Pod chart, 30s | `runtime+source` |
 | `GET /metrics/nodes/{name}/history` | 없음 | `{name,dataPoints[{timestamp,cpu,memory}],metricsUnavailable?,...}` | Node chart, 30s | `source-confirmed` |
 | `GET /metrics/top/pods` | `namespaces?` | `[{namespace,name,cpu,memory,cpuRequest,cpuLimit,memoryRequest,memoryLimit}]` | Pod table columns, 30s | `runtime+source` |
-| `GET /metrics/top/nodes` | 없음 | `[{name,cpu,memory,podCount,cpuAllocatable,memoryAllocatable}]` | Node table columns, 30s | `runtime+source` |
+| `GET /metrics/top/nodes` | 없음 | `[{name,cpu,memory,podCount,cpuAllocatable,memoryAllocatable}]` | Node table columns, 30s | `source-confirmed` |
 | `GET /prometheus/status` | 없음 | `{available,connected,address?,service?,contextName?,error?}` | metric panels, 60s | `runtime+source` |
 | `POST /prometheus/connect` | `optional=true?`, body 없음 | Prometheus status | auto/manual discovery 후 status invalidate | `source-confirmed` |
-| `GET /prometheus/resources/{kind}/{ns?}/{name}` | `category=cpu|memory|network_rx|network_tx|filesystem|restarts`, `range` | `{kind,namespace?,name,category,unit,range,result:{resultType,series[]},query?,hint?}` | resource/workload charts, 60s | `runtime+source` |
+| `GET /prometheus/resources/{kind}/{ns}/{name}`, `GET /prometheus/resources/{kind}/{name}` | `category=cpu|memory|network_rx|network_tx|filesystem|restarts`, `range` | `{kind,namespace?,name,category,unit,range,result:{resultType,series[]},query?,hint?}` | resource/workload charts, 60s | `runtime+source` |
 | `GET /prometheus/query` | `query,range` | `{resultType,series[]}` | HPA PromQL range chart, 60s | `source-confirmed` |
 | `GET /prometheus/pvc/{ns}/{name}` | 없음 | `{namespace,name,used,capacity,ratio,hasData}` | PVC usage, 120s | `source-confirmed` |
 | `GET /prometheus/rightsizing/{kind}/{ns}/{name}` | 없음 | `{kind,namespace,name,window,sampleAvailable,rows[],reason?}` | workload rightsizing, 10m | `runtime+source` |
 | `GET /pods/{ns}/{name}/logs` | `container?,tailLines?,sinceSeconds?,timestamps?` | `{podName,namespace,containers,logs}` | Pod log initial snapshot, stale 5s | `source-confirmed` |
 | `SSE /pods/{ns}/{name}/logs/stream` | 같은 log query | `connected|log|end|error` event | Pod Logs tab/dock | `source-confirmed` |
-| `SSE /workloads/{kind}/{ns}/{name}/logs/stream` | 같은 log query | `connected|log|end|error` event | Workload Logs tab | `source-confirmed` |
+| `SSE /workloads/{kind}/{ns}/{name}/logs/stream` | 같은 log query | `connected|log|pod_added|pod_removed|end|error` event | Workload Logs tab | `source-confirmed` |
 | `WS /pods/{ns}/{name}/exec` | `container?,shell?` | terminal byte/message stream | exec dock; capability gated | `source-confirmed` |
 | `WS /local-terminal` | shell/session query | terminal byte/message stream | local terminal dock; capability gated | `source-confirmed` |
 | `GET /portforwards` | 없음 | active forward session array | header/dock, 30s | `runtime+source` |
 | `GET /portforwards/available/{type}/{ns}/{name}` | 없음 | `{ports[]}` 또는 available port array | resource Port Forward action | `runtime+source` |
-| `POST /portforwards` | resource type/ns/name/remote port/local port/listen address | created session | port-forward dialog | `source-confirmed` |
+| `POST /portforwards` | `{namespace,podName?|serviceName?,podPort,localPort?,listenAddress?}` | created session | port-forward dialog | `source-confirmed` |
 | `DELETE /portforwards/{id}` | 없음 | success/204 | dock stop/reconnect replacement | `source-confirmed` |
 
 metrics source마다 freshness 의미가 통일되어 있지 않다. metrics.k8s.io만 `timestamp/window`, Prometheus는
 series point와 optional `query/hint`, OpenCost는 `available/reason`을 사용하며 공통 `observedAt`, `stale`,
 `coverage`, `partial` 필드는 없다. metrics unavailable 분류도 stable error code가 아니라 일부 404/500
 message token heuristic을 사용한다. 이는 원형의 계약 한계이며 P2에서 숨기지 않는다.
+
+Pod·Workload log stream과 exec/local-terminal WebSocket에는 event ID, resume cursor, application-level
+reconnect 계약이 없다. log client는 `error` 또는 `end`에서 stream을 닫고 사용자가 새 요청을 시작해야 한다.
 
 ### 7.6 Resource·workload mutation
 
@@ -448,11 +474,11 @@ message token heuristic을 사용한다. 이는 원형의 계약 한계이며 P2
 | `GET /workloads/{kind}/{ns}/{name}/revisions` | 없음 | revision history array | rollback dialog | `runtime+source` |
 | `POST /workloads/{kind}/{ns}/{name}/rollback` | `{revision}` | rollback result | revision confirm | `runtime-gated` |
 | `POST /cronjobs/{ns}/{name}/trigger` | body 없음 | created Job/result | CronJob action | `source-confirmed` |
-| `POST /cronjobs/{ns}/{name}/suspend`, `POST .../resume` | body 없음 | updated CronJob/result | CronJob action | `source-confirmed` |
-| `POST /nodes/{name}/cordon`, `POST .../uncordon` | body 없음 | updated node/result | Node action | `source-confirmed` |
+| `POST /cronjobs/{ns}/{name}/suspend`, `POST /cronjobs/{ns}/{name}/resume` | body 없음 | updated CronJob/result | CronJob action | `source-confirmed` |
+| `POST /nodes/{name}/cordon`, `POST /nodes/{name}/uncordon` | body 없음 | updated node/result | Node action | `source-confirmed` |
 | `POST /nodes/{name}/drain` | drain option payload | `{evictedPods?,errors?}`; 장시간 요청 | Node confirm/progress | `source-confirmed` |
 | `POST /pods/{ns}/{name}/debug` | `{targetContainer}` | ephemeral-container result | Pod debug terminal | `source-confirmed` |
-| `POST /nodes/{name}/debug`, `DELETE .../debug` | create는 `{}` | debug pod/session 또는 cleanup result | Node terminal | `source-confirmed` |
+| `POST /nodes/{name}/debug`, `DELETE /nodes/{name}/debug` | create는 `{}` | debug pod/session 또는 cleanup result | Node terminal | `source-confirmed` |
 | `POST /curl/service` | `{namespace,name,port,scheme,path}` | status, headers, body, duration/error | Service Curl dialog | `source-confirmed` |
 
 현재 실행판에서 `Restart`는 confirmation 없이 즉시 mutation을 보낸다. 이는 관찰 결과일 뿐 우리 제품의
@@ -462,11 +488,11 @@ message token heuristic을 사용한다. 이는 원형의 계약 한계이며 P2
 
 | Method·path | 요청 | 응답 주요 shape | 소비 위치·주기 | 판정 |
 |---|---|---|---|---|
-| `GET /traffic/sources` | 없음 | `{sources[],recommended?,active?,platform?}` | source detection·wizard, stale 30s | `runtime+source` |
+| `GET /traffic/sources` | 없음 | `{cluster,active,detected[],notDetected[],recommended?}` | source detection·wizard, stale 30s | `runtime+source` |
 | `POST /traffic/source` | `{source}` | active source result | source 변경 후 flows invalidate | `source-confirmed` |
 | `POST /traffic/connect` | body 없음 | connection state | wizard connect | `source-confirmed` |
-| `GET /traffic/flows` | `namespace?`, `since?` | `{flows,source?,timeRange?,warnings?}` | graph·flow dock REST snapshot, 수동 refresh | `runtime-gated` |
-| `GET /network-policies/evaluate` | selected flow identity·direction query | policy match/effect explanation | flow detail policy check | `source-confirmed` |
+| `GET /traffic/flows` | `namespace?`, `since=5m|1h?` | `{source,timestamp,flows[],aggregated[],warning?}` | graph·flow dock REST snapshot, 수동 refresh | `runtime-gated` |
+| `GET /network-policies/evaluate` | pod/label identity, direction, port, protocol | `{selectingPolicies[],verdict}` | flow detail policy check | `source-confirmed` |
 
 server에는 `GET /traffic/flows/stream`이 등록되어 있지만 v1.8.1 standalone browser는 호출하지 않는다.
 따라서 P1 소비 API에 포함하지 않고 §7.12의 server-only 경로로 분리한다.
@@ -481,24 +507,24 @@ client는 object를 전제로 하므로 이 예외도 P2에서 명시적으로 �
 | `GET /helm/releases/{ns}/{name}` | 없음 | release detail·history·values metadata·resources | drawer, mutation 중 10s | `source-confirmed` |
 | `GET /helm/releases/{ns}/{name}/manifest` | `revision?` | manifest text/object | Manifest·compare | `source-confirmed` |
 | `GET /helm/releases/{ns}/{name}/values` | `revision?`, `all?` | values text/object | Values·compare | `source-confirmed` |
-| `GET .../diff`, `GET .../values/diff` | `revision1,revision2`; values는 mode option | diff sections | compare Summary/Values | `source-confirmed` |
-| `GET .../notes/diff`, `GET .../hooks/diff`, `GET .../resources/diff` | `revision1,revision2` | domain별 diff | Helm compare | `source-confirmed` |
-| `GET .../upgrade-info` | 없음 | current/latest version, available, reason | drawer | `source-confirmed` |
-| `GET .../versions` | 없음 | chart version array | upgrade dialog | `source-confirmed` |
+| `GET /helm/releases/{ns}/{name}/diff`, `GET /helm/releases/{ns}/{name}/values/diff` | `revision1,revision2`; values는 mode option | diff sections | compare Summary/Values | `source-confirmed` |
+| `GET /helm/releases/{ns}/{name}/notes/diff`, `GET /helm/releases/{ns}/{name}/hooks/diff`, `GET /helm/releases/{ns}/{name}/resources/diff` | `revision1,revision2` | domain별 diff | Helm compare | `source-confirmed` |
+| `GET /helm/releases/{ns}/{name}/upgrade-info` | 없음 | current/latest version, available, reason | drawer | `source-confirmed` |
+| `GET /helm/releases/{ns}/{name}/versions` | 없음 | chart version array | upgrade dialog | `source-confirmed` |
 | `GET /helm/upgrade-check` | `namespaces?` | release별 upgrade map | list batch decoration | `source-confirmed` |
 | `GET /helm/repositories` | 없음 | repository array | Catalog | `source-confirmed` |
 | `POST /helm/repositories/{name}/update` | body 없음 | update result | Catalog refresh | `source-confirmed` |
 | `GET /helm/oci-sources` | 없음 | OCI source array | catalog source setting | `source-confirmed` |
 | `POST /helm/oci-sources`, `DELETE /helm/oci-sources` | source identity/credentials 또는 delete identity | source result | Track chart source | `source-confirmed` |
 | `GET /helm/charts` | repo/search/filter query | chart summary array | local Catalog search | `source-confirmed` |
-| `GET /helm/charts/{repo}/{chart}[/{version}]` | path version 또는 latest | chart detail·versions·values schema | install wizard | `source-confirmed` |
+| `GET /helm/charts/{repo}/{chart}`, `GET /helm/charts/{repo}/{chart}/{version}` | path version 또는 latest | chart detail·versions·values schema | install wizard | `source-confirmed` |
 | `GET /helm/artifacthub/search` | `q,offset,limit,sort,official?,verified?` | paged chart hits | ArtifactHub Catalog | `source-confirmed` |
-| `GET /helm/artifacthub/charts/{repo}/{chart}[/{version}]` | path version 또는 latest | ArtifactHub chart detail | install wizard | `source-confirmed` |
+| `GET /helm/artifacthub/charts/{repo}/{chart}`, `GET /helm/artifacthub/charts/{repo}/{chart}/{version}` | path version 또는 latest | ArtifactHub chart detail | install wizard | `source-confirmed` |
 | `POST /helm/releases/install-stream` | chart/repo/version/release/ns/values/options | fetch stream의 `data:` progress frame + terminal result | install progress | `source-confirmed` |
-| `POST .../upgrade-stream` | version·repository·values·options query/body | progress frame + terminal result | upgrade confirm/progress | `source-confirmed` |
-| `POST .../rollback-stream` | `revision` | progress frame + terminal result | rollback confirm/progress | `source-confirmed` |
-| `POST .../values/preview` | candidate values | rendered/validated preview | Values editor | `source-confirmed` |
-| `PUT .../values` | values + upgrade options | apply result | Values Apply | `source-confirmed` |
+| `POST /helm/releases/{ns}/{name}/upgrade-stream` | version·repository·values·options query/body | progress frame + terminal result | upgrade confirm/progress | `source-confirmed` |
+| `POST /helm/releases/{ns}/{name}/rollback-stream` | `revision` | progress frame + terminal result | rollback confirm/progress | `source-confirmed` |
+| `POST /helm/releases/{ns}/{name}/values/preview` | candidate values | rendered/validated preview | Values editor | `source-confirmed` |
+| `PUT /helm/releases/{ns}/{name}/values` | values + upgrade options | apply result | Values Apply | `source-confirmed` |
 | `DELETE /helm/releases/{ns}/{name}` | uninstall options | uninstall result | uninstall confirm | `source-confirmed` |
 
 Helm write 경로는 현재 runtime의 `helmWrite=false` 때문에 실행하지 않았다. Flux 관리 HelmRelease는 직접
@@ -516,12 +542,12 @@ heartbeat, resume, reconnect, operation receipt, idempotency key는 없다.
 | `GET /gitops/insights/{kind}/{ns-or-_}/{name}` | `group?,namespaces?` | `{summary,issues?,changes?,plan?,history?,capabilities?,warnings?,partial?}` | detail Resources/Activity, stale 5s; Running 2s | `source-confirmed` |
 | `POST /flux/{kind}/{ns}/{name}/reconcile` | body 없음 | 즉시 `{message,operation,tool,resource,requestedAt?,source?}` | list/detail action | `source-confirmed` |
 | `POST /flux/{kind}/{ns}/{name}/sync-with-source` | body 없음 | 같은 immediate response | list/detail action | `source-confirmed` |
-| `POST /flux/{kind}/{ns}/{name}/suspend`, `POST .../resume` | body 없음 | 같은 immediate response | lifecycle action | `source-confirmed` |
+| `POST /flux/{kind}/{ns}/{name}/suspend`, `POST /flux/{kind}/{ns}/{name}/resume` | body 없음 | 같은 immediate response | lifecycle action | `source-confirmed` |
 | `POST /argo/applications/{ns}/{name}/sync` | `{resources?,revision?,prune?,dryRun?,force?,applyOnly?,syncOptions?}` | 같은 immediate response | sync dialog/action | `source-confirmed` |
 | `POST /argo/applications/{ns}/{name}/refresh` | `type=hard?`, body 없음 | 같은 immediate response | refresh/hard refresh | `source-confirmed` |
 | `POST /argo/applications/{ns}/{name}/rollback` | `{id,prune?,dryRun?}` | 같은 immediate response | history rollback | `source-confirmed` |
 | `POST /argo/applications/{ns}/{name}/terminate` | body 없음 | 같은 immediate response | running operation action | `source-confirmed` |
-| `POST /argo/applications/{ns}/{name}/suspend`, `POST .../resume` | body 없음 | 같은 immediate response | lifecycle action | `source-confirmed` |
+| `POST /argo/applications/{ns}/{name}/suspend`, `POST /argo/applications/{ns}/{name}/resume` | body 없음 | 같은 immediate response | lifecycle action | `source-confirmed` |
 
 operation receipt·idempotency key·progress cursor endpoint는 없다. Argo는 insights의 Running phase를 2초
 polling하고 Flux는 별도 in-flight 계약이 없다. 또한 UI operation union과 backend가 반환 가능한 rollback
@@ -531,13 +557,17 @@ polling하고 Flux는 별도 in-flight 계약이 없다. 또한 UI operation uni
 
 | Method·path | 요청 | 응답 주요 shape | 소비 위치·주기 | 판정 |
 |---|---|---|---|---|
-| `GET /opencost/summary` | 없음 | availability/reason, cluster hourly·monthly, CPU/memory/storage totals, namespace summary | Home Cost·Cost header, 60s | `runtime+source` |
+| `GET /opencost/summary` | 없음 | `available`, `reason?`, currency/window, hourly·monthly, storage/idle, efficiency, namespaces | Home Cost·Cost header, 60s | `runtime+source` |
 | `GET /opencost/workloads` | `namespace` | workload cost rows | namespace inline expand | `source-confirmed` |
 | `GET /opencost/trend` | `range=6h|24h|7d` | time buckets by namespace/category | Cost trend, 120s | `source-confirmed` |
 | `GET /opencost/nodes` | 없음 | node cost/efficiency rows | Cost nodes, 120s | `runtime+source` |
-| `GET /config` | 없음 | startup config: kubeconfig dirs/default ns/port/browser/MCP/timeline/Prometheus 등 | Settings/MCP setup | `runtime+source` |
+| `GET /config` | 없음 | `{file,effective,isDesktop,prometheusHeaderKeys?}`; config에 kubeconfig dirs/default ns/port/browser/MCP/timeline/Prometheus 포함 | Settings/MCP setup | `runtime+source` |
 | `PUT /config` | 전체 config object | saved config | Settings Save; 다음 launch 적용 | `source-confirmed` |
-| `PUT /integrations/prometheus` | `{prometheusUrl,headers?}` | probe가 반영된 Prometheus status/config result | Settings Apply now | `source-confirmed` |
+| `PUT /integrations/prometheus` | `{prometheusUrl,headers?}` | `{connected,address?,error?}`; persist + live probe 결과 | Settings Apply now | `source-confirmed` |
+
+OpenCost unavailable reason은 `no_prometheus`, `no_metrics`, `query_error`를 구분한다. config 응답은
+Prometheus secret header의 값은 노출하지 않고 key만 반환한다. integration update에서 headers 생략은
+기존 secret 유지, 빈 object는 삭제 의미다.
 
 ### 7.11 실시간 event 계약
 
@@ -562,8 +592,8 @@ sequence number는 없다. 재연결 시 full initial topology로 다시 수렴�
 | `GET /traffic/source`, `GET /traffic/connection` | client hook은 있으나 standalone component import/call 없음 |
 | `GET /changes/{kind}/{ns}/{name}/children` | client hook은 있으나 standalone component import/call 없음 |
 | `GET /prometheus/namespace/{ns}`, `GET /prometheus/cluster` | client hook은 있으나 standalone component import/call 없음 |
-| `GET /workloads/{kind}/{ns}/{name}/pods`, `GET .../logs` | client hook은 있으나 UI는 workload log SSE를 직접 사용 |
-| `POST /helm/releases`, `POST .../rollback`, `POST .../upgrade` | non-stream 경로는 정의·등록됐지만 UI는 progress stream 경로를 사용 |
+| `GET /workloads/{kind}/{ns}/{name}/pods`, `GET /workloads/{kind}/{ns}/{name}/logs` | client hook은 있으나 UI는 workload log SSE를 직접 사용 |
+| `POST /helm/releases`, `POST /helm/releases/{ns}/{name}/rollback`, `POST /helm/releases/{ns}/{name}/upgrade` | non-stream 경로는 정의·등록됐지만 UI는 progress stream 경로를 사용 |
 | `GET /ai/**`, `GET /debug/**`, `/debug/pprof/**` | MCP·diagnostics 개발용 server surface; 제품 browser screen call 없음 |
 | `POST /agent/self-upgrade` | server/Hub 운영 경로; standalone desktop update UI는 `/desktop/update*` 사용 |
 
@@ -601,7 +631,9 @@ RCA가 없는 대상에는 빈 card나 가짜 요약을 만들지 않는다. P2�
 - 모든 primary·contextual route가 route 표와 화면 절에 존재한다.
 - 전역 shell, mouse, keyboard, URL, focus, realtime 동작이 기록됐다.
 - browser가 호출하는 read·mutation·stream endpoint가 §7에 한 번 이상 존재한다.
-- source-only와 runtime 관찰 완료를 구분했다.
+- browser 소비 API mapping unit 136행을 기계적으로 재계수했고 P2의 동일 행 수 게이트를 고정했다.
+- runtime 완결 관찰과 gated/source-confirmed 관찰을 구분했다.
 - 외부 코드·스타일을 제품에 복사하지 않았다.
+- 동일 checkout의 Apache-2.0 license를 확인했으며 P1에서는 코드를 이식하지 않았다.
 - RCA는 후보 위치만 기록했다.
 - P2는 이 문서의 API row를 한 행도 생략하지 않고 우리 route 근거와 매핑한다.
