@@ -2,7 +2,7 @@
 title: Codex 24시간 실행 진행 기록
 status: active
 date: 2026-07-11
-directive: codex-directive-reference-pivot-20260711.md
+directive: codex-directive-goalmode-20260711.md
 ---
 
 # Codex 24시간 실행 진행 기록
@@ -1116,4 +1116,28 @@ npm run visual-product: PASS — 12 scenarios, network-silent
 스크린샷:
   - references/ui-layer-lab/output/playwright/product-shell-desktop-expanded-light.png
   - references/ui-layer-lab/output/playwright/product-shell-mobile-drawer-dark-390.png
+```
+
+## 2026-07-12 골모드 P1·P2·allowlist 재감사
+
+- P1 browser API mapping unit은 136행이고 절 분포는 24/11/19/21/14/5/23/11/7/1이다.
+- P2는 REF-API-001~136이 연속·유일하다. 판정은 직결 0, 어댑터 34, BE-Gap 102, 미정 0이며
+  BE-Gap-001~102도 누락·중복이 없다.
+- UI mapping은 UI-001~073 연속 73개, RCA 데이터 삽입점 5개, RCA UI mapping RCA-001~010
+  10개다.
+- allowlist 밖 frontend 문서 6개는 모두 정확히 archived이며 제품 소스의 파일명·import·URL 참조는
+  0건이다. progress frontmatter의 과거 directive 포인터 1건을 현재 최상위 골모드 지시서로 교정했다.
+- `reference-contract-map.md`의 `getSession` 상태를 exact 완료 앵커 `a245f02a`와 동기화했다.
+- P1·P2 완료 뒤에도 남아 있던 중앙 뷰의 과거 시점 문구를 제거했다. 현재 중앙 content의 기준은
+  P1/P2 Home route이며, 승인 API로 만들 수 있는 section만 release한다. 사용자 정의 중앙 시각화를
+  되살리지 않는다.
+- final question 4건은 2026-07-12 16:29 KST 기한 전이므로 기본 권고를 조기 확정하지 않는다.
+- 자체결정: 질문과 무관하고 exact 완료 앵커가 있는 `getSession`, `login`, `logout`만 사용하는 실제
+  Auth session barrier를 다음 구현 단위로 선택한다. Home·cluster selector는 APIQ-001/002와 관련
+  완료 앵커 전까지 release하지 않는다.
+
+```text
+P1 API 136 = P2 API 136
+P2 unresolved 0
+allowlist 밖 product-source 참조 0
 ```

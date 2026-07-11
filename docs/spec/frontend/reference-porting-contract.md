@@ -16,8 +16,10 @@ authority:
 접근성 계약을 한곳에 고정한다. 화면 종류, 정보 구조, 구성 요소, 상호작용, 단축키, 갱신 방식은
 `reference-feature-inventory.md`의 외부 기준 저장소 실측 결과가 정본이다. 시각 디자인은 벤치마크 최소선을 따른다.
 
-이 문서는 중앙 뷰를 정의하지 않는다. 철회된 사용자 정의 중앙 뷰를 제품 요구로 해석하지 않으며,
-중앙 뷰는 P1·P2 검증이 끝날 때까지 미정이다.
+이 문서는 별도의 사용자 정의 중앙 시각화를 정의하지 않는다. P1·P2가 완료된 현재 중앙 content의
+기준은 `reference-feature-inventory.md`와 `reference-contract-map.md`의 Home route다. Home 안에서도
+exact 완료 앵커가 있는 API로 만들 수 있는 section만 release하고, 철회된 사용자 정의 중앙 뷰를
+제품 요구로 되살리지 않는다.
 
 정본 우선순위는 다음과 같다.
 

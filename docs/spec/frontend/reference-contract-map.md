@@ -2,6 +2,7 @@
 title: 외부 기준 기능 → 제품 계약 매핑표
 status: p2-source-of-truth
 date: 2026-07-11
+api_status_synced_at: 2026-07-12 00:57 KST
 source_inventory: reference-feature-inventory.md
 source_mapping_units: 136
 target_mapping_units: 136
@@ -66,12 +67,12 @@ wire 계약 사이에 view-neutral adapter가 필요하다.
 |---|---|---|---|---|---|
 | `REF-API-001` | `GET /health` | `HEALTHZ_PATH` `GET /api/healthz` → `HealthResponse` | `BE-Gap` | `BE-Gap-001`: `status,service`만 있어 runtime·timeline·resource count 진단을 제공하지 못함 | backend 선행 |
 | `REF-API-002` | `GET /diagnostics` | 없음 | `BE-Gap` | `BE-Gap-002`: informer·cache·drop·runtime 진단 계약 없음 | backend 선행 |
-| `REF-API-003` | `GET /auth/me` | `AUTH_SESSION_PATH` `GET /api/auth/session` → `AuthSessionResponse` | `어댑터` | session barrier·user identity로 변환; auth mode/cloud role은 unavailable | `getSession` 존재·`API 완성` 미기록 |
+| `REF-API-003` | `GET /auth/me` | `AUTH_SESSION_PATH` `GET /api/auth/session` → `AuthSessionResponse` | `어댑터` | session barrier·user identity로 변환; auth mode/cloud role은 unavailable | `getSession` `API 완성: a245f02a` |
 | `REF-API-004` | `GET /version-check` | 없음 | `BE-Gap` | `BE-Gap-003`: 제품·최신 version 비교 계약 없음 | backend 선행 |
 | `REF-API-005` | `GET /connection` | `CLUSTERS_PATH` `GET /api/clusters` → `ClusterListResponse`; `CLUSTER_CONNECTION_STATUS_PATH` `GET .../connection-status` → `ClusterConnectionStatusResponse` | `어댑터` | current context를 URL cluster로 치환하고 agent last-seen·connection 결합 | `listClusters` 미승인; `getClusterConnectionStatus` queue |
 | `REF-API-006` | `POST /connection/retry` | 없음 | `BE-Gap` | `BE-Gap-004`: 사용자 주도 agent/connection retry operation 없음 | backend 선행 |
 | `REF-API-007` | `GET /cluster-info` | `CLUSTER_PATH` `GET /api/clusters/{cluster_id}` → `ClusterResponse`; `CLUSTER_INVENTORY_SUMMARY_PATH` `GET .../inventory/summary` → `InventorySummaryResponse` | `어댑터` | registration·agent·snapshot을 결합; platform·CRD discovery는 unavailable | `getCluster`, `getInventorySummary` queue |
-| `REF-API-008` | `GET /capabilities` | `CLUSTER_PATH` → `ClusterResponse`; `AUTH_SESSION_PATH` → `AuthSessionResponse` | `어댑터` | agent capabilities와 role에서 명시적 true만 노출; 미확인 verb는 미노출 | `getCluster` queue; `getSession` 미승인 |
+| `REF-API-008` | `GET /capabilities` | `CLUSTER_PATH` → `ClusterResponse`; `AUTH_SESSION_PATH` → `AuthSessionResponse` | `어댑터` | agent capabilities와 role에서 명시적 true만 노출; 미확인 verb는 미노출 | `getCluster` queue; `getSession` `API 완성: a245f02a` |
 | `REF-API-009` | `GET /namespaces` | `CLUSTER_INVENTORY_SUMMARY_PATH` → `InventorySummaryResponse` | `어댑터` | latest snapshot의 실제 namespace 집합; status·authoritative access는 unavailable | `getInventorySummary` queue |
 | `REF-API-010` | `GET /api-resources` | 없음 | `BE-Gap` | `BE-Gap-005`: group/version/kind/namespaced/verbs discovery 계약 없음 | backend 선행 |
 | `REF-API-011` | `GET /contexts` | `CLUSTERS_PATH` → `ClusterListResponse` | `어댑터` | Kubernetes context를 접근 가능한 registered cluster로 치환 | `listClusters` 존재·미승인 |
