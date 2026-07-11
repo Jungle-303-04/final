@@ -90,6 +90,7 @@
 
 - [frontend/CODEX-BRIEFING-20260711](frontend/CODEX-BRIEFING-20260711.md)
 - [frontend/claude-directive-20260711](frontend/claude-directive-20260711.md)
+- [frontend/codex-directive-24h-20260711](frontend/codex-directive-24h-20260711.md)
 - [frontend/codex-plan-report-20260711](frontend/codex-plan-report-20260711.md)
 - [frontend/design-system](frontend/design-system.md)
 - [frontend/product-data-contract](frontend/product-data-contract.md)
