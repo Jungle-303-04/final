@@ -216,6 +216,38 @@ class EvidenceQueryResponse(StrictModel):
     next_cursor: str | None = None
 
 
+class EvidenceWindowSummaryItem(StrictModel):
+    """저장된 evidence window 목록 — 원문 payload 없이 source 존재 여부만 노출."""
+
+    evidence_key: str
+    workspace_id: str
+    cluster_id: str | None = None
+    source_id: str | None = None
+    window_start: str | None = None
+    agent_id: str | None = None
+    correlation_id: str | None = None
+    sources: list[str] = Field(default_factory=list)
+    created_at: str | None = None
+    updated_at: str | None = None
+
+
+class EvidenceWindowListResponse(StrictModel):
+    items: list[EvidenceWindowSummaryItem]
+    limit: int
+    offset: int
+    has_more: bool
+
+
+class EvidenceWindowPayloadResponse(StrictModel):
+    """저장된 evidence window 원문 조회 — RCA 스키마 확정용 read-only debug 응답."""
+
+    evidence_key: str
+    workspace_id: str
+    cluster_id: str | None = None
+    source: str | None = None
+    payload: JsonMap
+
+
 class RcaCandidateScoreItem(StrictModel):
     """원인 후보 1개의 평가 결과 — 카탈로그 메타(제목/출처) + 평가(점수/근거) 병합."""
 
