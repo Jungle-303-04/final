@@ -1,12 +1,22 @@
 import { Tabs as TabsPrimitive } from "@base-ui/react/tabs";
+import { cva } from "class-variance-authority";
 import { createContext, useContext, type ReactNode } from "react";
 import { cn } from "./cn";
 
 const ORIENTATIONS = ["horizontal", "vertical"] as const;
 const ACTIVATION_MODES = ["automatic", "manual"] as const;
+const LIST_VARIANTS = ["default", "line"] as const;
 export type TabsOrientation = (typeof ORIENTATIONS)[number];
 export type TabsActivationMode = (typeof ACTIVATION_MODES)[number];
-export type TabsValueChangeHandler = (value: string) => void;
+export type TabsListVariant = (typeof LIST_VARIANTS)[number];
+export type TabsValue = string | null;
+export type TabsValueChangeDetails = Parameters<
+  NonNullable<TabsPrimitive.Root.Props["onValueChange"]>
+>[1];
+export type TabsValueChangeHandler = (
+  value: TabsValue,
+  details: TabsValueChangeDetails,
+) => void;
 
 type OwnedRootKey =
   | "children" | "className" | "dangerouslySetInnerHTML" | "data-activation-direction"
@@ -24,12 +34,12 @@ type RootBase = RootPassthrough & {
   "data-slot"?: never;
 };
 type ControlledSelection = {
-  value: string;
+  value: TabsValue;
   defaultValue?: never;
   onValueChange: TabsValueChangeHandler;
 };
 type UncontrolledSelection = {
-  defaultValue: string;
+  defaultValue: TabsValue;
   value?: never;
   onValueChange?: TabsValueChangeHandler;
 };
@@ -86,7 +96,7 @@ type AccessibleName =
 type ListOwnedKey =
   | "activateOnFocus" | "aria-label" | "aria-labelledby" | "children" | "className"
   | "dangerouslySetInnerHTML" | "data-activation-direction" | "data-orientation"
-  | "data-slot" | "loopFocus" | "render" | "role" | "style";
+  | "data-slot" | "data-variant" | "loopFocus" | "render" | "role" | "style";
 export type TabsListProps = Omit<TabsPrimitive.List.Props, ListOwnedKey> &
   AccessibleName & {
     children: ReactNode;
@@ -94,29 +104,44 @@ export type TabsListProps = Omit<TabsPrimitive.List.Props, ListOwnedKey> &
     "data-activation-direction"?: never;
     "data-orientation"?: never;
     "data-slot"?: never;
+    "data-variant"?: never;
+    variant?: TabsListVariant;
   };
+
+const tabsListVariants = cva(
+  "group/tabs-list inline-flex w-fit shrink-0 items-center justify-center rounded-lg p-[3px] text-muted-foreground data-[orientation=horizontal]:h-8 data-[orientation=vertical]:h-fit data-[orientation=vertical]:flex-col data-[variant=line]:rounded-none",
+  {
+    variants: {
+      variant: {
+        default: "bg-muted",
+        line: "gap-1 bg-transparent",
+      },
+    },
+    defaultVariants: { variant: "default" },
+  },
+);
 
 export function TabsList({
   "aria-label": ariaLabel,
   "aria-labelledby": ariaLabelledBy,
   children,
   className,
+  variant = "default",
   ...listProps
 }: TabsListProps) {
   const behavior = useTabsBehavior("TabsList");
   if (useContext(TabsListContext)) throw new TypeError("TabsList cannot be nested inside TabsList");
   const name = normalizeAccessibleName(ariaLabel, ariaLabelledBy);
+  assertChoice(variant, LIST_VARIANTS, "TabsList variant must be default or line");
   return (
     <TabsListContext.Provider value>
       <TabsPrimitive.List
         {...sanitize(listProps, LIST_PROTECTED)}
         {...name}
         activateOnFocus={behavior.activationMode === "automatic"}
-        className={cn(
-          "inline-flex w-fit shrink-0 items-center justify-center rounded-lg bg-muted p-[3px] text-muted-foreground data-[orientation=horizontal]:h-8 data-[orientation=vertical]:h-fit data-[orientation=vertical]:flex-col",
-          className,
-        )}
+        className={cn(tabsListVariants({ variant }), className)}
         data-slot="tabs-list"
+        data-variant={variant}
         loopFocus={behavior.loopFocus}
       >
         {children}
@@ -147,7 +172,7 @@ export function TabsTrigger({ children, className, value, ...tabProps }: TabsTri
     <TabsPrimitive.Tab
       {...sanitize(tabProps, TRIGGER_PROTECTED)}
       className={cn(
-        "relative inline-flex min-h-8 flex-1 items-center justify-center gap-1.5 whitespace-nowrap rounded-md border border-transparent px-2 py-1 text-sm font-medium text-foreground/60 transition-[color,background-color,box-shadow,border-color] duration-100 data-[orientation=vertical]:w-full data-[orientation=vertical]:justify-start hover:text-foreground focus-visible:z-10 focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none aria-disabled:pointer-events-none aria-disabled:opacity-50 data-active:bg-background data-active:text-foreground data-active:shadow-sm motion-reduce:transition-none forced-colors:border forced-colors:border-transparent forced-colors:data-active:border-[Highlight] forced-colors:data-active:bg-[Highlight] forced-colors:data-active:text-[HighlightText] forced-colors:focus-visible:outline forced-colors:focus-visible:outline-2 forced-colors:focus-visible:outline-offset-2 forced-colors:focus-visible:outline-[CanvasText] forced-colors:aria-disabled:border-[GrayText] forced-colors:aria-disabled:text-[GrayText] forced-colors:aria-disabled:opacity-100",
+        "relative inline-flex h-[calc(100%-1px)] flex-1 items-center justify-center gap-1.5 whitespace-nowrap rounded-md border border-transparent px-1.5 py-0.5 text-sm font-medium text-foreground/60 transition-[color,background-color,box-shadow,border-color] duration-100 after:absolute after:bg-foreground after:opacity-0 after:transition-opacity data-[orientation=horizontal]:after:inset-x-0 data-[orientation=horizontal]:after:bottom-[-5px] data-[orientation=horizontal]:after:h-0.5 data-[orientation=vertical]:h-8 data-[orientation=vertical]:w-full data-[orientation=vertical]:shrink-0 data-[orientation=vertical]:justify-start data-[orientation=vertical]:after:inset-y-0 data-[orientation=vertical]:after:-right-1 data-[orientation=vertical]:after:w-0.5 hover:text-foreground focus-visible:z-10 focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none aria-disabled:pointer-events-none aria-disabled:opacity-50 data-active:bg-background data-active:text-foreground data-active:shadow-sm group-data-[variant=line]/tabs-list:bg-transparent group-data-[variant=line]/tabs-list:data-active:bg-transparent group-data-[variant=line]/tabs-list:data-active:shadow-none group-data-[variant=line]/tabs-list:data-active:after:opacity-100 motion-reduce:transition-none motion-reduce:after:transition-none forced-colors:border forced-colors:border-transparent forced-colors:data-active:border-[Highlight] forced-colors:data-active:bg-[Highlight] forced-colors:data-active:text-[HighlightText] forced-colors:focus-visible:outline forced-colors:focus-visible:outline-2 forced-colors:focus-visible:outline-offset-2 forced-colors:focus-visible:outline-[CanvasText] forced-colors:aria-disabled:border-[GrayText] forced-colors:aria-disabled:text-[GrayText] forced-colors:aria-disabled:opacity-100 forced-colors:group-data-[variant=line]/tabs-list:data-active:after:bg-[Highlight]",
         className,
       )}
       data-slot="tabs-trigger"
@@ -192,7 +217,7 @@ export function TabsContent({ children, className, value, ...panelProps }: TabsC
 }
 
 const ROOT_PROTECTED = ["dangerouslySetInnerHTML", "data-activation-direction", "data-orientation", "data-slot", "render", "role", "style"] as const;
-const LIST_PROTECTED = ["activateOnFocus", "dangerouslySetInnerHTML", "data-activation-direction", "data-orientation", "data-slot", "loopFocus", "render", "role", "style"] as const;
+const LIST_PROTECTED = ["activateOnFocus", "dangerouslySetInnerHTML", "data-activation-direction", "data-orientation", "data-slot", "data-variant", "loopFocus", "render", "role", "style"] as const;
 const TRIGGER_PROTECTED = ["dangerouslySetInnerHTML", "data-active", "data-activation-direction", "data-disabled", "data-orientation", "data-slot", "nativeButton", "render", "role", "style", "type"] as const;
 const CONTENT_PROTECTED = ["dangerouslySetInnerHTML", "data-activation-direction", "data-ending-style", "data-hidden", "data-index", "data-orientation", "data-slot", "data-starting-style", "hidden", "inert", "render", "role", "style", "tabIndex"] as const;
 
@@ -208,9 +233,21 @@ function normalizeSelection(value: unknown, defaultValue: unknown, onChange: unk
   if (controlled === uncontrolled) throw new TypeError("Tabs requires exactly one controlled or default value");
   if (onChange !== undefined && typeof onChange !== "function") throw new TypeError("Tabs onValueChange must be a function");
   if (controlled && typeof onChange !== "function") throw new TypeError("Controlled Tabs require onValueChange");
-  const selected = normalizeValue(controlled ? value : defaultValue, "Tabs selected value");
-  const callback = typeof onChange === "function" ? (next: unknown) => onChange(normalizeValue(next, "Tabs next value")) : undefined;
+  const selected = normalizeSelectedValue(
+    controlled ? value : defaultValue,
+    "Tabs selected value",
+  );
+  const callback = typeof onChange === "function"
+    ? (next: unknown, details: TabsValueChangeDetails) => onChange(
+      normalizeSelectedValue(next, "Tabs next value"),
+      details,
+    )
+    : undefined;
   return controlled ? { value: selected, onValueChange: callback } : { defaultValue: selected, onValueChange: callback };
+}
+
+function normalizeSelectedValue(value: unknown, label: string): TabsValue {
+  return value === null ? null : normalizeValue(value, label);
 }
 
 function normalizeAccessibleName(label: unknown, labelledBy: unknown) {
@@ -233,3 +270,5 @@ function sanitize<T extends object>(props: T, protectedKeys: readonly string[]):
   for (const key of protectedKeys) Reflect.deleteProperty(result, key);
   return result as T;
 }
+
+export { tabsListVariants };

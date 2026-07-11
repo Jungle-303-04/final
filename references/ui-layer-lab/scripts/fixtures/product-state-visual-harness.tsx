@@ -6,6 +6,11 @@ import { StatusMark } from "../../src/product/shared/ui/StatusMark";
 import { Surface } from "../../src/product/shared/ui/Surface";
 import { Button } from "../../src/product/shared/ui/primitives/button";
 import {
+  ButtonGroup,
+  ButtonGroupSeparator,
+  ButtonGroupText,
+} from "../../src/product/shared/ui/primitives/button-group";
+import {
   Item,
   ItemContent,
   ItemDescription,
@@ -13,6 +18,12 @@ import {
 } from "../../src/product/shared/ui/primitives/item";
 import { Progress } from "../../src/product/shared/ui/primitives/progress";
 import { ScrollArea } from "../../src/product/shared/ui/primitives/scroll-area";
+import {
+  Tabs,
+  TabsContent,
+  TabsList,
+  TabsTrigger,
+} from "../../src/product/shared/ui/primitives/tabs";
 import "../../src/product/styles/tokens.css";
 import "../../src/product/styles/foundation.css";
 
@@ -74,6 +85,89 @@ function ProductStateVisualHarness() {
             <Button data-visual-focus-target type="button" variant="outline">포커스 확인</Button>
             <Button disabled type="button" variant="outline">비활성 작업</Button>
           </div>
+          <section aria-labelledby="interaction-primitives-title" className="grid min-w-0 gap-4">
+            <div className="grid gap-1">
+              <h2 className="text-sm font-medium" id="interaction-primitives-title">
+                탭과 버튼 그룹
+              </h2>
+              <p className="text-sm text-muted-foreground">
+                선택·포커스·비활성 상태와 가로·세로 결합 경계를 검증합니다.
+              </p>
+            </div>
+
+            <div className="flex min-w-0 flex-wrap items-start gap-3">
+              <ButtonGroup aria-label="기간 선택" data-visual-button-group="horizontal">
+                <Button data-visual-button-group-focus type="button" variant="outline">
+                  1시간
+                </Button>
+                <ButtonGroupSeparator data-visual-button-group-separator="horizontal" />
+                <Button disabled type="button" variant="outline">
+                  6시간
+                </Button>
+                <Button type="button" variant="outline">
+                  24시간
+                </Button>
+              </ButtonGroup>
+              <ButtonGroup
+                aria-label="표시 방식"
+                data-visual-button-group="vertical"
+                orientation="vertical"
+              >
+                <ButtonGroupText>배치</ButtonGroupText>
+                <ButtonGroupSeparator data-visual-button-group-separator="vertical" />
+                <Button type="button" variant="outline">압축</Button>
+                <Button disabled type="button" variant="outline">분산</Button>
+              </ButtonGroup>
+            </div>
+
+            <Tabs data-visual-tabs="default" defaultValue="overview">
+              <TabsList aria-label="기본 리소스 탭" data-visual-tabs-list="default">
+                <TabsTrigger data-visual-tabs-active="default" value="overview">
+                  개요
+                </TabsTrigger>
+                <TabsTrigger data-visual-tabs-focus value="metrics">
+                  지표
+                </TabsTrigger>
+                <TabsTrigger data-visual-tabs-disabled disabled value="events">
+                  이벤트
+                </TabsTrigger>
+              </TabsList>
+              <TabsContent data-visual-tabs-content="default" value="overview">
+                기본 탭의 선택된 패널입니다.
+              </TabsContent>
+              <TabsContent value="metrics">지표 패널입니다.</TabsContent>
+              <TabsContent value="events">이벤트 패널입니다.</TabsContent>
+            </Tabs>
+
+            <Tabs data-visual-tabs="line" defaultValue="traffic">
+              <TabsList
+                aria-label="선형 트래픽 탭"
+                data-visual-tabs-list="line"
+                variant="line"
+              >
+                <TabsTrigger
+                  data-visual-tabs-active="line"
+                  value="traffic"
+                >
+                  트래픽
+                </TabsTrigger>
+                <TabsTrigger value="routes">
+                  라우팅
+                </TabsTrigger>
+                <TabsTrigger
+                  disabled
+                  value="policies"
+                >
+                  정책
+                </TabsTrigger>
+              </TabsList>
+              <TabsContent data-visual-tabs-content="line" value="traffic">
+                선형 탭의 선택된 패널입니다.
+              </TabsContent>
+              <TabsContent value="routes">라우팅 패널입니다.</TabsContent>
+              <TabsContent value="policies">정책 패널입니다.</TabsContent>
+            </Tabs>
+          </section>
           <Item
             as="button"
             data-visual-disabled-item

@@ -15,6 +15,9 @@ const stateSelectors = [
   "[data-slot='empty']",
   "[data-slot='surface']",
   "[data-slot='button']",
+  "[data-slot='button-group']",
+  "[data-slot='button-group-separator']",
+  "[data-slot='button-group-text']",
   "[data-slot='item']",
   "[data-slot='item-title']",
   "[data-slot='item-description']",
@@ -26,6 +29,10 @@ const stateSelectors = [
   "[data-slot='scroll-area-scrollbar']",
   "[data-slot='scroll-area-thumb']",
   "[data-slot='status-mark']",
+  "[data-slot='tabs']",
+  "[data-slot='tabs-list']",
+  "[data-slot='tabs-trigger']",
+  "[data-slot='tabs-content']",
   "[role='alert']",
   "h1",
   "h2",
@@ -213,9 +220,14 @@ async function captureScenario(page, scenario) {
     throw new Error(`${scenario.id}: visual surface must expose one main landmark`);
   }
 
-  if (scenario.stateAssertions) await assertStatePrimitiveContracts(page, scenario.id);
+  if (scenario.stateAssertions) {
+    await assertStatePrimitiveContracts(page, scenario.id);
+    await assertInteractionPrimitiveContracts(page, scenario.id);
+  }
   await assertNoOverflow(page, scenario.id, scenario.requiredSelectors);
-  if (scenario.forcedColors === "active") await assertForcedColors(page, scenario.id);
+  if (scenario.forcedColors === "active") {
+    await assertForcedColors(page, scenario.id);
+  }
   await page.screenshot({
     path: `${outputDir}product-${scenario.id}.png`,
     fullPage: true,
@@ -311,6 +323,253 @@ async function assertStatePrimitiveContracts(page, label) {
       throw new Error(`${label}: ${name} reduced-motion transition remains ${duration}`);
     }
   }
+}
+
+async function assertInteractionPrimitiveContracts(page, label) {
+  await page.waitForFunction(() => {
+    const horizontal = document.querySelector("[data-visual-button-group='horizontal']");
+    const vertical = document.querySelector("[data-visual-button-group='vertical']");
+    const defaultTabs = document.querySelector("[data-visual-tabs='default']");
+    const lineTabs = document.querySelector("[data-visual-tabs='line']");
+    const defaultContent = document.querySelector("[data-visual-tabs-content='default']");
+    const lineContent = document.querySelector("[data-visual-tabs-content='line']");
+    return horizontal instanceof HTMLElement
+      && vertical instanceof HTMLElement
+      && defaultTabs instanceof HTMLElement
+      && lineTabs instanceof HTMLElement
+      && defaultContent instanceof HTMLElement
+      && lineContent instanceof HTMLElement
+      && defaultContent.getBoundingClientRect().height > 0
+      && lineContent.getBoundingClientRect().height > 0;
+  });
+
+  const result = await page.evaluate(() => {
+    const horizontal = document.querySelector("[data-visual-button-group='horizontal']");
+    const vertical = document.querySelector("[data-visual-button-group='vertical']");
+    const defaultTabs = document.querySelector("[data-visual-tabs='default']");
+    const lineTabs = document.querySelector("[data-visual-tabs='line']");
+    const defaultList = document.querySelector("[data-visual-tabs-list='default']");
+    const lineList = document.querySelector("[data-visual-tabs-list='line']");
+    const defaultActive = document.querySelector("[data-visual-tabs-active='default']");
+    const defaultFocus = document.querySelector("[data-visual-tabs-focus]");
+    const defaultDisabled = document.querySelector("[data-visual-tabs-disabled]");
+    const lineActive = document.querySelector("[data-visual-tabs-active='line']");
+    const lineInactive = lineList?.querySelector("[data-slot='tabs-trigger']:not([data-active]):not(:disabled)");
+    const defaultContent = document.querySelector("[data-visual-tabs-content='default']");
+    const lineContent = document.querySelector("[data-visual-tabs-content='line']");
+    const required = [
+      horizontal,
+      vertical,
+      defaultTabs,
+      lineTabs,
+      defaultList,
+      lineList,
+      defaultActive,
+      defaultFocus,
+      defaultDisabled,
+      lineActive,
+      lineInactive,
+      defaultContent,
+      lineContent,
+    ];
+    if (required.some((element) => !(element instanceof HTMLElement))) {
+      return { missing: true };
+    }
+
+    const horizontalChildren = [...horizontal.children].filter(
+      (element) => element instanceof HTMLElement,
+    );
+    const verticalChildren = [...vertical.children].filter(
+      (element) => element instanceof HTMLElement,
+    );
+    if (horizontalChildren.length !== 4 || verticalChildren.length !== 4) {
+      return { missing: true };
+    }
+
+    const rect = (element) => {
+      const bounds = element.getBoundingClientRect();
+      return {
+        bottom: bounds.bottom,
+        height: bounds.height,
+        left: bounds.left,
+        right: bounds.right,
+        top: bounds.top,
+        width: bounds.width,
+      };
+    };
+    const motionTargets = [
+      ...horizontalChildren,
+      ...verticalChildren,
+      defaultList,
+      lineList,
+      defaultActive,
+      defaultFocus,
+      defaultDisabled,
+      lineActive,
+      lineInactive,
+      defaultContent,
+      lineContent,
+    ];
+    const motion = motionTargets.map((element) => {
+      const style = getComputedStyle(element);
+      return {
+        animationDuration: style.animationDuration,
+        animationName: style.animationName,
+        slot: element.getAttribute("data-slot") ?? element.tagName.toLowerCase(),
+        transitionDuration: style.transitionDuration,
+        transitionProperty: style.transitionProperty,
+      };
+    });
+    const horizontalSecondStyle = getComputedStyle(horizontalChildren[1]);
+    const verticalSecondStyle = getComputedStyle(verticalChildren[1]);
+    const lineActiveIndicatorStyle = getComputedStyle(lineActive, "::after");
+    const lineInactiveIndicatorStyle = getComputedStyle(lineInactive, "::after");
+    motion.push({
+      animationDuration: lineActiveIndicatorStyle.animationDuration,
+      animationName: lineActiveIndicatorStyle.animationName,
+      slot: "tabs-trigger::after",
+      transitionDuration: lineActiveIndicatorStyle.transitionDuration,
+      transitionProperty: lineActiveIndicatorStyle.transitionProperty,
+    });
+
+    return {
+      missing: false,
+      defaultActiveData: defaultActive.hasAttribute("data-active"),
+      defaultActiveSelected: defaultActive.getAttribute("aria-selected"),
+      defaultContentRole: defaultContent.getAttribute("role"),
+      defaultContentVisible: defaultContent.getBoundingClientRect().height > 0
+        && !defaultContent.hidden,
+      defaultDisabled: defaultDisabled instanceof HTMLButtonElement
+        && (defaultDisabled.disabled || defaultDisabled.getAttribute("aria-disabled") === "true"),
+      defaultListLabel: defaultList.getAttribute("aria-label"),
+      defaultListRole: defaultList.getAttribute("role"),
+      defaultListVariant: defaultList.getAttribute("data-variant"),
+      defaultListRect: rect(defaultList),
+      defaultRootOrientation: defaultTabs.getAttribute("data-orientation"),
+      defaultTriggerRects: [...defaultList.querySelectorAll("[data-slot='tabs-trigger']")].map(rect),
+      horizontalLabel: horizontal.getAttribute("aria-label"),
+      horizontalOrientation: horizontal.getAttribute("data-orientation"),
+      horizontalRects: horizontalChildren.map(rect),
+      horizontalRole: horizontal.getAttribute("role"),
+      horizontalRootRect: rect(horizontal),
+      horizontalSeparatorOrientation: horizontalChildren[1].getAttribute("aria-orientation"),
+      horizontalSecondBorderLeftWidth: Number.parseFloat(horizontalSecondStyle.borderLeftWidth),
+      lineActiveData: lineActive.hasAttribute("data-active"),
+      lineActiveIndicatorBackground: lineActiveIndicatorStyle.backgroundColor,
+      lineActiveIndicatorHeight: Number.parseFloat(lineActiveIndicatorStyle.height),
+      lineActiveIndicatorOpacity: Number.parseFloat(lineActiveIndicatorStyle.opacity),
+      lineActiveIndicatorWidth: Number.parseFloat(lineActiveIndicatorStyle.width),
+      lineActiveSelected: lineActive.getAttribute("aria-selected"),
+      lineContentRole: lineContent.getAttribute("role"),
+      lineContentVisible: lineContent.getBoundingClientRect().height > 0 && !lineContent.hidden,
+      lineInactiveIndicatorBackground: lineInactiveIndicatorStyle.backgroundColor,
+      lineInactiveIndicatorOpacity: Number.parseFloat(lineInactiveIndicatorStyle.opacity),
+      lineListLabel: lineList.getAttribute("aria-label"),
+      lineListRole: lineList.getAttribute("role"),
+      lineListVariant: lineList.getAttribute("data-variant"),
+      lineListRect: rect(lineList),
+      lineRootOrientation: lineTabs.getAttribute("data-orientation"),
+      lineTriggerRects: [...lineList.querySelectorAll("[data-slot='tabs-trigger']")].map(rect),
+      motion,
+      verticalLabel: vertical.getAttribute("aria-label"),
+      verticalOrientation: vertical.getAttribute("data-orientation"),
+      verticalRects: verticalChildren.map(rect),
+      verticalRole: vertical.getAttribute("role"),
+      verticalRootRect: rect(vertical),
+      verticalSeparatorOrientation: verticalChildren[1].getAttribute("aria-orientation"),
+      verticalSecondBorderTopWidth: Number.parseFloat(verticalSecondStyle.borderTopWidth),
+    };
+  });
+
+  if (result.missing) {
+    throw new Error(`${label}: ButtonGroup or Tabs visual fixture is missing`);
+  }
+  if (result.horizontalRole !== "group"
+    || result.horizontalLabel !== "기간 선택"
+    || result.horizontalOrientation !== "horizontal"
+    || result.horizontalSeparatorOrientation !== "vertical"
+    || result.verticalRole !== "group"
+    || result.verticalLabel !== "표시 방식"
+    || result.verticalOrientation !== "vertical"
+    || result.verticalSeparatorOrientation !== "horizontal") {
+    throw new Error(`${label}: ButtonGroup semantics are incomplete ${JSON.stringify(result)}`);
+  }
+  for (const [name, rootRect, childRects] of [
+    ["horizontal ButtonGroup", result.horizontalRootRect, result.horizontalRects],
+    ["vertical ButtonGroup", result.verticalRootRect, result.verticalRects],
+    ["default TabsList", result.defaultListRect, result.defaultTriggerRects],
+    ["line TabsList", result.lineListRect, result.lineTriggerRects],
+  ]) {
+    for (const childRect of childRects) {
+      if (!rectContains(rootRect, childRect, 1)) {
+        throw new Error(`${label}: ${name} does not contain child geometry ${JSON.stringify({ childRect, rootRect })}`);
+      }
+    }
+  }
+  for (let index = 1; index < result.horizontalRects.length; index += 1) {
+    const previous = result.horizontalRects[index - 1];
+    const current = result.horizontalRects[index];
+    if (Math.abs(previous.right - current.left) > 1) {
+      throw new Error(`${label}: horizontal ButtonGroup is not edge-joined ${JSON.stringify(result.horizontalRects)}`);
+    }
+  }
+  for (let index = 1; index < result.verticalRects.length; index += 1) {
+    const previous = result.verticalRects[index - 1];
+    const current = result.verticalRects[index];
+    if (Math.abs(previous.bottom - current.top) > 1) {
+      throw new Error(`${label}: vertical ButtonGroup is not edge-joined ${JSON.stringify(result.verticalRects)}`);
+    }
+  }
+  if (result.horizontalSecondBorderLeftWidth > 0.1
+    || result.verticalSecondBorderTopWidth > 0.1) {
+    throw new Error(`${label}: ButtonGroup adjacent borders were not collapsed ${JSON.stringify(result)}`);
+  }
+  if (result.defaultListRole !== "tablist"
+    || result.defaultListLabel !== "기본 리소스 탭"
+    || result.defaultListVariant !== "default"
+    || result.defaultRootOrientation !== "horizontal"
+    || result.defaultActiveSelected !== "true"
+    || !result.defaultActiveData
+    || !result.defaultDisabled
+    || result.defaultContentRole !== "tabpanel"
+    || !result.defaultContentVisible) {
+    throw new Error(`${label}: default Tabs state contract failed ${JSON.stringify(result)}`);
+  }
+  if (result.lineListRole !== "tablist"
+    || result.lineListLabel !== "선형 트래픽 탭"
+    || result.lineListVariant !== "line"
+    || result.lineRootOrientation !== "horizontal"
+    || result.lineActiveSelected !== "true"
+    || !result.lineActiveData
+    || result.lineContentRole !== "tabpanel"
+    || !result.lineContentVisible
+    || result.lineActiveIndicatorOpacity < 0.99
+    || result.lineInactiveIndicatorOpacity > 0.01
+    || result.lineActiveIndicatorHeight < 1
+    || result.lineActiveIndicatorWidth < 1) {
+    throw new Error(`${label}: line Tabs visual distinction failed ${JSON.stringify(result)}`);
+  }
+  for (const motion of result.motion) {
+    if (motion.transitionProperty !== "none"
+      && maxCssTimeMilliseconds(motion.transitionDuration) > 1) {
+      throw new Error(
+        `${label}: ${motion.slot} reduced-motion transition remains ${motion.transitionDuration}`,
+      );
+    }
+    if (motion.animationName !== "none"
+      && maxCssTimeMilliseconds(motion.animationDuration) > 1) {
+      throw new Error(
+        `${label}: ${motion.slot} reduced-motion animation remains ${motion.animationDuration}`,
+      );
+    }
+  }
+}
+
+function rectContains(outer, inner, tolerance = 0) {
+  return inner.left >= outer.left - tolerance
+    && inner.right <= outer.right + tolerance
+    && inner.top >= outer.top - tolerance
+    && inner.bottom <= outer.bottom + tolerance;
 }
 
 function maxCssTimeMilliseconds(value) {
@@ -467,6 +726,13 @@ async function assertForcedColors(page, label) {
       indeterminateProgressIndicator: document.querySelector(
         "[data-visual-progress='indeterminate'] [data-slot='progress-indicator']",
       ),
+      tabsActive: document.querySelector("[data-visual-tabs-active='default']"),
+      tabsFocus: document.querySelector("[data-visual-tabs-focus]"),
+      tabsDisabled: document.querySelector("[data-visual-tabs-disabled]"),
+      groupFocus: document.querySelector("[data-visual-button-group-focus]"),
+      groupDisabled: document.querySelector(
+        "[data-visual-button-group='horizontal'] [data-slot='button']:disabled",
+      ),
     };
     if (Object.values(elements).some((element) => !(element instanceof HTMLElement))) {
       return { missing: true };
@@ -492,6 +758,11 @@ async function assertForcedColors(page, label) {
       completeProgressIndicator,
       completeProgressTrack,
       indeterminateProgressIndicator,
+      tabsActive,
+      tabsFocus,
+      tabsDisabled,
+      groupFocus,
+      groupDisabled,
     } = elements;
     focusTarget.focus();
     const emptyStyle = getComputedStyle(empty);
@@ -500,6 +771,9 @@ async function assertForcedColors(page, label) {
     const alertStyle = getComputedStyle(alert);
     const headingStyle = getComputedStyle(heading);
     const focusStyle = getComputedStyle(focusTarget);
+    const focusOutlineColor = focusStyle.outlineColor;
+    const focusOutlineStyle = focusStyle.outlineStyle;
+    const focusOutlineWidth = Number.parseFloat(focusStyle.outlineWidth);
     const disabledStyle = getComputedStyle(disabledButton);
     const disabledItemStyle = getComputedStyle(disabledItem);
     const disabledItemTitleStyle = getComputedStyle(disabledItemTitle);
@@ -568,6 +842,24 @@ async function assertForcedColors(page, label) {
       return opacity;
     }
 
+    const tabsActiveStyle = getComputedStyle(tabsActive);
+    const tabsDisabledStyle = getComputedStyle(tabsDisabled);
+    const groupDisabledStyle = getComputedStyle(groupDisabled);
+    tabsFocus.focus();
+    const tabsFocusStyle = getComputedStyle(tabsFocus);
+    const tabsFocusOutline = {
+      color: tabsFocusStyle.outlineColor,
+      style: tabsFocusStyle.outlineStyle,
+      width: Number.parseFloat(tabsFocusStyle.outlineWidth),
+    };
+    groupFocus.focus();
+    const groupFocusStyle = getComputedStyle(groupFocus);
+    const groupFocusOutline = {
+      color: groupFocusStyle.outlineColor,
+      style: groupFocusStyle.outlineStyle,
+      width: Number.parseFloat(groupFocusStyle.outlineWidth),
+    };
+
     return {
       missing: false,
       active: matchMedia("(forced-colors: active)").matches,
@@ -596,10 +888,10 @@ async function assertForcedColors(page, label) {
       headingOpacity: effectiveOpacity(heading),
       headingVisible: heading.getBoundingClientRect().width > 0,
       focusBackground: effectiveBackground(focusTarget),
-      focusOutlineColor: focusStyle.outlineColor,
+      focusOutlineColor,
       focusOpacity: effectiveOpacity(focusTarget),
-      focusOutlineStyle: focusStyle.outlineStyle,
-      focusOutlineWidth: Number.parseFloat(focusStyle.outlineWidth),
+      focusOutlineStyle,
+      focusOutlineWidth,
       disabledBackground: effectiveBackground(disabledButton),
       disabledColor: disabledStyle.color,
       disabledOpacity: effectiveOpacity(disabledButton),
@@ -661,6 +953,29 @@ async function assertForcedColors(page, label) {
       selectionOpacity: effectiveOpacity(heading),
       selectionUnderlay: effectiveBackground(heading),
       statusText: status.textContent?.trim() ?? "",
+      tabsActiveBackground: effectiveBackground(tabsActive),
+      tabsActiveColor: tabsActiveStyle.color,
+      tabsActiveOpacity: effectiveOpacity(tabsActive),
+      tabsDisabledBackground: effectiveBackground(tabsDisabled),
+      tabsDisabledBorderColor: tabsDisabledStyle.borderTopColor,
+      tabsDisabledBorderStyle: tabsDisabledStyle.borderTopStyle,
+      tabsDisabledBorderWidth: Number.parseFloat(tabsDisabledStyle.borderTopWidth),
+      tabsDisabledColor: tabsDisabledStyle.color,
+      tabsDisabledOpacity: effectiveOpacity(tabsDisabled),
+      tabsFocusBackground: effectiveBackground(tabsFocus),
+      tabsFocusOutlineColor: tabsFocusOutline.color,
+      tabsFocusOutlineStyle: tabsFocusOutline.style,
+      tabsFocusOutlineWidth: tabsFocusOutline.width,
+      groupDisabledBackground: effectiveBackground(groupDisabled),
+      groupDisabledBorderColor: groupDisabledStyle.borderTopColor,
+      groupDisabledBorderStyle: groupDisabledStyle.borderTopStyle,
+      groupDisabledBorderWidth: Number.parseFloat(groupDisabledStyle.borderTopWidth),
+      groupDisabledColor: groupDisabledStyle.color,
+      groupDisabledOpacity: effectiveOpacity(groupDisabled),
+      groupFocusBackground: effectiveBackground(groupFocus),
+      groupFocusOutlineColor: groupFocusOutline.color,
+      groupFocusOutlineStyle: groupFocusOutline.style,
+      groupFocusOutlineWidth: groupFocusOutline.width,
     };
   });
 
@@ -671,6 +986,7 @@ async function assertForcedColors(page, label) {
     badge: result.badgeOpacity,
     disabled: result.disabledOpacity,
     disabledItem: result.disabledItemOpacity,
+    groupDisabled: result.groupDisabledOpacity,
     empty: result.emptyOpacity,
     focus: result.focusOpacity,
     heading: result.headingOpacity,
@@ -683,6 +999,8 @@ async function assertForcedColors(page, label) {
     scrollViewport: result.scrollViewportOpacity,
     status: result.markerOpacity,
     surface: result.surfaceOpacity,
+    tabsActive: result.tabsActiveOpacity,
+    tabsDisabled: result.tabsDisabledOpacity,
   };
   for (const [element, opacity] of Object.entries(opacityChecks)) {
     if (Math.abs(opacity - 1) > 0.001) {
@@ -761,6 +1079,17 @@ async function assertForcedColors(page, label) {
     4.5,
     result.selectionUnderlay,
   );
+  for (const [name, foreground, background, minimum] of [
+    ["Tabs active text", result.tabsActiveColor, result.tabsActiveBackground, 4.5],
+    ["Tabs focus outline", result.tabsFocusOutlineColor, result.tabsFocusBackground, 3],
+    ["Tabs disabled text", result.tabsDisabledColor, result.tabsDisabledBackground, 3],
+    ["Tabs disabled border", result.tabsDisabledBorderColor, result.tabsDisabledBackground, 3],
+    ["ButtonGroup focus outline", result.groupFocusOutlineColor, result.groupFocusBackground, 3],
+    ["ButtonGroup disabled text", result.groupDisabledColor, result.groupDisabledBackground, 3],
+    ["ButtonGroup disabled border", result.groupDisabledBorderColor, result.groupDisabledBackground, 3],
+  ]) {
+    assertContrast(label, name, foreground, background, minimum);
+  }
   if (!result.headingVisible
     || !result.disabledVisible
     || !result.disabledItemVisible
@@ -825,7 +1154,9 @@ async function assertForcedColors(page, label) {
       }),
     );
   }
-  if (result.focusOutlineStyle === "none" || result.focusOutlineWidth < 2) {
+  if (result.focusOutlineStyle === "none" || result.focusOutlineWidth < 2
+    || result.tabsFocusOutlineStyle === "none" || result.tabsFocusOutlineWidth < 2
+    || result.groupFocusOutlineStyle === "none" || result.groupFocusOutlineWidth < 2) {
     throw new Error(`${label}: focus outline is not preserved`);
   }
   if (result.emptyBorderStyle === "none" || result.emptyBorderWidth < 1
@@ -835,8 +1166,15 @@ async function assertForcedColors(page, label) {
     || result.disabledItemBorderStyle === "none" || result.disabledItemBorderWidth < 1
     || result.scrollAreaBorderStyle === "none" || result.scrollAreaBorderWidth < 1
     || result.scrollBarBorderStyle === "none" || result.scrollBarBorderWidth < 1
-    || result.markerBorderStyle === "none" || result.markerBorderWidth < 1) {
+    || result.markerBorderStyle === "none" || result.markerBorderWidth < 1
+    || result.tabsDisabledBorderStyle === "none" || result.tabsDisabledBorderWidth < 1
+    || result.groupDisabledBorderStyle === "none" || result.groupDisabledBorderWidth < 1) {
     throw new Error(`${label}: a required forced-colors border is not preserved`);
+  }
+  if (result.tabsActiveBackground === result.tabsFocusBackground
+    || result.tabsActiveBackground === result.tabsDisabledBackground
+    || result.tabsDisabledColor === result.tabsActiveColor) {
+    throw new Error(`${label}: Tabs active, focused, and disabled states are not distinct`);
   }
 }
 
