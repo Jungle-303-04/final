@@ -5,7 +5,7 @@ import {
   ShieldCheck,
   WifiOff,
 } from "lucide-react";
-import { useId, type ReactNode } from "react";
+import { useEffect, useId, useRef, type ReactNode } from "react";
 import { Alert, AlertDescription, AlertTitle } from "./primitives/alert";
 import { Badge } from "./primitives/badge";
 import { Button } from "./primitives/button";
@@ -29,7 +29,6 @@ export type ProductStateKind =
 
 export type ProductStateErrorCode =
   | "network"
-  | "unauthorized"
   | "forbidden"
   | "invalid-response"
   | "server"
@@ -54,7 +53,13 @@ interface StateBase {
 }
 
 export type ProductStateScreenProps =
-  | (StateBase & { kind: "loading" | "empty"; issue?: never; retry?: never })
+  | (StateBase & {
+      kind: "loading";
+      issue?: never;
+      retry?: never;
+      loadingPreview?: ReactNode;
+    })
+  | (StateBase & { kind: "empty"; issue?: never; retry?: never })
   | (StateBase & {
       kind: "offline";
       issue: ProductStateIssue & { code: "network" };
@@ -69,7 +74,7 @@ export type ProductStateScreenProps =
     })
   | (StateBase & {
       kind: "forbidden";
-      issue: ProductStateIssue & { code: "unauthorized" | "forbidden" };
+      issue: ProductStateIssue & { code: "forbidden" };
       retry?: never;
     })
   | {
@@ -120,6 +125,7 @@ export function ProductStateScreen(props: ProductStateScreenProps) {
   const isLoading = kind === "loading";
   const issue = "issue" in props ? props.issue : undefined;
   const retry = "retry" in props ? props.retry : undefined;
+  const loadingPreview = props.kind === "loading" ? props.loadingPreview : undefined;
   const issueKind = isIssueStateKind(kind) ? kind : null;
   const content = (
     <Empty className="w-full max-w-lg items-start rounded-xl border border-solid bg-card p-8 text-left text-card-foreground shadow-sm">
@@ -131,7 +137,7 @@ export function ProductStateScreen(props: ProductStateScreenProps) {
         <StateHeading level={isContent ? 2 : 1} titleId={titleId}>{copy.title}</StateHeading>
         <EmptyDescription className="text-pretty leading-6">{copy.body}</EmptyDescription>
       </EmptyHeader>
-      {isLoading ? <LoadingPreview /> : null}
+      {isLoading ? (loadingPreview ?? <LoadingPreview />) : null}
       {issue && issueKind ? <IssueAlert issue={issue} kind={issueKind} /> : null}
       {retry ? <RetryAction retry={retry} /> : null}
     </Empty>
@@ -225,7 +231,7 @@ function IssueAlert({
           <span>오류 코드</span>
           <code className="font-mono text-xs">{issue.code}</code>
         </p>
-        {issue.safeDetail ? <p>{issue.safeDetail}</p> : null}
+        {issue.safeDetail ? <p className="break-words [overflow-wrap:anywhere]">{issue.safeDetail}</p> : null}
         {issue.correlationId ? (
           <p className="flex flex-wrap gap-x-2">
             <span>상관 ID</span>
@@ -238,10 +244,22 @@ function IssueAlert({
 }
 
 function RetryAction({ retry }: { retry: ProductStateRetry }) {
-  const label = retry.label ?? "다시 시도";
+  const invokedRef = useRef(false);
+  const label = retry.label?.trim() || "다시 시도";
+
+  useEffect(() => {
+    if (!retry.pending) invokedRef.current = false;
+  }, [retry.pending]);
+
+  const handleRetry = () => {
+    if (retry.pending || invokedRef.current) return;
+    invokedRef.current = true;
+    retry.onRetry();
+  };
+
   return (
     <EmptyContent className="mt-2 items-start">
-      <Button aria-busy={retry.pending || undefined} disabled={retry.pending} onClick={retry.onRetry}>
+      <Button aria-busy={retry.pending || undefined} disabled={retry.pending} onClick={handleRetry}>
         {retry.pending ? <Spinner data-icon="inline-start" decorative /> : null}
         {retry.pending ? `${label} 중` : label}
       </Button>

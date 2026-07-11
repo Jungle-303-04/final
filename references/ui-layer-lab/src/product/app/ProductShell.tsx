@@ -161,7 +161,7 @@ export function ProductShell({
         <div className="min-w-0 flex-1">
           <header className="sticky top-0 z-30 flex h-14 items-center justify-between gap-4 border-b bg-background/95 px-4 backdrop-blur supports-[backdrop-filter]:bg-background/75">
             <div className="min-w-0">
-              <p className="truncate text-sm font-medium">{currentRoute.label}</p>
+              <h1 className="truncate text-sm font-medium">{currentRoute.label}</h1>
               <p className="truncate text-xs text-muted-foreground">Operations workspace</p>
             </div>
             <div className="flex items-center gap-1">

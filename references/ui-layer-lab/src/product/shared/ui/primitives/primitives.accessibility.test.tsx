@@ -127,7 +127,9 @@ describe("product-owned primitive accessibility", () => {
     );
 
     expect(screen.getByRole("alert").textContent).toContain("부분 데이터");
-    expect(screen.getByRole("status").textContent).toContain("백그라운드 갱신 실패");
+    const politeStatus = screen.getByRole("status");
+    expect(politeStatus.textContent).toContain("백그라운드 갱신 실패");
+    expect(politeStatus.getAttribute("aria-live")).toBe("polite");
     expect(screen.getByText("현재 필터와 일치하는 리소스가 없습니다.").tagName).toBe("P");
     const skeleton = container.querySelector('[data-slot="skeleton"]');
     expect(skeleton?.getAttribute("aria-hidden")).toBe("true");
@@ -135,10 +137,12 @@ describe("product-owned primitive accessibility", () => {
   });
 
   it("gives the spinner a localized status name", () => {
-    const { rerender } = render(<Spinner />);
+    const { rerender } = render(<Spinner aria-label="클러스터 로딩 중" />);
 
-    expect(screen.getByRole("status", { name: "로딩 중" })).toBeTruthy();
+    const spinner = screen.getByRole("status", { name: "클러스터 로딩 중" });
+    expect(spinner.classList.contains("motion-reduce:animate-none")).toBe(true);
     rerender(<Spinner decorative data-icon="inline-start" />);
     expect(screen.queryByRole("status")).toBeNull();
+    expect(document.querySelector('[data-slot="spinner"]')?.getAttribute("aria-hidden")).toBe("true");
   });
 });

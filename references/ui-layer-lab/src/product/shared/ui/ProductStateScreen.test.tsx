@@ -50,8 +50,9 @@ describe("ProductStateScreen", () => {
     const alert = screen.getByRole("alert");
     expect(alert.textContent).toContain("invalid-response");
     expect(alert.textContent).toContain("corr-17");
-    expect(alert.textContent).toContain("응답 계약이 일치하지 않습니다.");
-    await userEvent.setup().click(screen.getByRole("button", { name: "응답 다시 읽기" }));
+    const safeDetail = screen.getByText("응답 계약이 일치하지 않습니다.");
+    expect(safeDetail.className).toContain("[overflow-wrap:anywhere]");
+    await userEvent.setup().dblClick(screen.getByRole("button", { name: "응답 다시 읽기" }));
     expect(onRetry).toHaveBeenCalledOnce();
   });
 
@@ -67,9 +68,31 @@ describe("ProductStateScreen", () => {
 
     const retry = screen.getByRole("button", { name: "연결 다시 확인 중" });
     expect(retry.getAttribute("disabled")).not.toBeNull();
+    expect(retry.getAttribute("aria-busy")).toBe("true");
+    expect(screen.queryByRole("status")).toBeNull();
     await userEvent.setup().click(retry);
     expect(onRetry).not.toHaveBeenCalled();
     expect(screen.getByRole("alert").textContent).toContain("network");
+  });
+
+  it("falls back to a non-empty retry name and accepts feature-shaped loading geometry", () => {
+    const onRetry = vi.fn();
+    const { rerender } = render(
+      <ProductStateScreen
+        kind="offline"
+        issue={{ code: "network" }}
+        retry={{ label: "   ", pending: false, onRetry }}
+      />,
+    );
+
+    expect(screen.getByRole("button", { name: "다시 시도" })).toBeTruthy();
+    rerender(
+      <ProductStateScreen
+        kind="loading"
+        loadingPreview={<div aria-hidden="true" data-testid="feature-loading-geometry" />}
+      />,
+    );
+    expect(screen.getByTestId("feature-loading-geometry")).toBeTruthy();
   });
 
   it("separates quiet empty state from forbidden access", () => {
@@ -108,6 +131,8 @@ function assertProductStateTypeContracts() {
   void <ProductStateScreen kind="error" />;
   // @ts-expect-error raw Error objects are not valid presentation DTOs
   void <ProductStateScreen kind="error" issue={new Error("raw stack")} />;
+  // @ts-expect-error 401 belongs to the session barrier, not the forbidden state
+  void <ProductStateScreen kind="forbidden" issue={{ code: "unauthorized" }} />;
 }
 
 void assertProductStateTypeContracts;
