@@ -431,6 +431,11 @@ preflight가 `200 []`를 반환하는 예외도 있어 P2 adapter가 HTTP status
 | `POST /portforwards` | resource type/ns/name/remote port/local port/listen address | created session | port-forward dialog | `source-confirmed` |
 | `DELETE /portforwards/{id}` | 없음 | success/204 | dock stop/reconnect replacement | `source-confirmed` |
 
+metrics source마다 freshness 의미가 통일되어 있지 않다. metrics.k8s.io만 `timestamp/window`, Prometheus는
+series point와 optional `query/hint`, OpenCost는 `available/reason`을 사용하며 공통 `observedAt`, `stale`,
+`coverage`, `partial` 필드는 없다. metrics unavailable 분류도 stable error code가 아니라 일부 404/500
+message token heuristic을 사용한다. 이는 원형의 계약 한계이며 P2에서 숨기지 않는다.
+
 ### 7.6 Resource·workload mutation
 
 | Method·path | 요청 | 응답·후속 동작 | 소비 위치 | 판정 |
@@ -489,7 +494,7 @@ client는 object를 전제로 하므로 이 예외도 P2에서 명시적으로 �
 | `GET /helm/charts/{repo}/{chart}[/{version}]` | path version 또는 latest | chart detail·versions·values schema | install wizard | `source-confirmed` |
 | `GET /helm/artifacthub/search` | `q,offset,limit,sort,official?,verified?` | paged chart hits | ArtifactHub Catalog | `source-confirmed` |
 | `GET /helm/artifacthub/charts/{repo}/{chart}[/{version}]` | path version 또는 latest | ArtifactHub chart detail | install wizard | `source-confirmed` |
-| `POST /helm/releases/install-stream` | 같은 install payload | NDJSON/progress event stream + terminal result | install progress | `source-confirmed` |
+| `POST /helm/releases/install-stream` | chart/repo/version/release/ns/values/options | fetch stream의 `data:` progress frame + terminal result | install progress | `source-confirmed` |
 | `POST .../upgrade-stream` | version·repository·values·options query/body | progress frame + terminal result | upgrade confirm/progress | `source-confirmed` |
 | `POST .../rollback-stream` | `revision` | progress frame + terminal result | rollback confirm/progress | `source-confirmed` |
 | `POST .../values/preview` | candidate values | rendered/validated preview | Values editor | `source-confirmed` |
@@ -498,6 +503,9 @@ client는 object를 전제로 하므로 이 예외도 P2에서 명시적으로 �
 
 Helm write 경로는 현재 runtime의 `helmWrite=false` 때문에 실행하지 않았다. Flux 관리 HelmRelease는 직접
 upgrade를 노출하지 않고 GitOps detail로 보낸다.
+세 progress stream 모두 `{type:'progress',phase?,message?,detail?}`와 terminal
+`{type:'complete',message,release?}` 또는 `{type:'error',message}`를 전달한다. event ID, sequence,
+heartbeat, resume, reconnect, operation receipt, idempotency key는 없다.
 
 ### 7.9 GitOps
 
