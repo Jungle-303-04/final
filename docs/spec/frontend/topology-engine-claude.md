@@ -1,6 +1,6 @@
 ---
-title: Topology Engine — 클로드 버전 구현 기획 (v0 계약)
-status: planned-implementation-contract
+title: Topology Engine — 초기 v0 검토 기록
+status: superseded-reference
 owner: frontend-platform
 constitution: docs/spec/frontend/topology-engine.md (장기 헌법, 의미론 상속)
 backend_basis: src/domains/inventory, src/domains/dashboard/fleet_router.py, src/packages/contracts/realtime.py
@@ -8,27 +8,15 @@ product_basis: references/ui-layer-lab/src/product (AGENTS.md, PRODUCT_FRONTEND.
 last_verified: 2026-07-11
 ---
 
-# Topology Engine — 클로드 버전 구현 기획 (v0)
+# Topology Engine — 초기 v0 검토 기록
 
 ## 0. 문서의 위치와 규율
 
-현재 repo의 실제 코드와 통과한 테스트가 source of truth다. 이 문서는 현재 백엔드 코드로 v0을 구현하기 위한 계획이며, 아래 값과 타입이 현 코드에 없으면 구현 완료가 아니라 후속 작업 기준으로만 읽는다.
+이 문서는 초기 v0 검토 기록이며 구현 또는 계약의 source of truth가 아니다. 현재 repo의 실제 코드와 통과한 테스트가 source of truth이고, 의미·상태·interaction은 `topology-engine.md`, protocol은 `topology-message-action-schema.md`, visual/motion 수치는 `topology-visual-motion-tokens.md`, 제품 API 소비 의미는 `product-data-contract.md`를 구현 예정 참고 문서로 함께 본다. 이 문서와 현재 코드/테스트 또는 구현 예정 문서가 다르면 이 문서의 값·타입·순서를 사용하지 않는다.
 
-`topology-engine.md`(이하 "헌법")는 장기 목표의 의미론을 정의한다. 이 문서는 그 부분집합인
-**v0을 현재 백엔드로 구현 가능한 수준까지 완전 확정**한 계약이다. 두 문서의 관계는 다음과 같다.
+아래 본문은 당시 제안과 검토 근거를 보존한 historical snapshot이다. 본문 안의 “확정”, “게이트”, “전부”, “위반” 표현과 `⚠︎초안값` 유무는 현재 구현 의무나 예외를 만들지 않는다. 현재 구현과 구현 예정 문서에서 제거·변경된 범위, API, 타입, 수치, 인터랙션을 이 문서에서 다시 채택하려면 schema 변경 절차와 코드·테스트 동기화가 먼저 필요하다.
 
-- 헌법의 **의미론 불변조건은 전부 상속**한다: UID 우선 identity, 역방향 edge 저장 금지,
-  network truth 분리, 타일 내부 percentage gauge 금지, missing≠0, 직교 상태축,
-  미정의 상태 금지(§32).
-- 헌법이 **정책/토큰/스키마로 위임하고 비워둔 모든 값**을 이 문서가 숫자와 타입으로 채운다.
-- 헌법의 **범위 중 v0이 하지 않는 것**은 §0.2에 명시적으로 제외한다. 제외는 포기가 아니라
-  순서이며, 각 항목에 제외 근거를 남긴다.
-
-경험적 검증 없이는 확정할 수 없는 값은 `⚠︎초안값` 마커와 함께 **초안값 + 검증 방법 +
-확정 게이트**를 명시한다(§9 대장). 마커 없는 모든 수치·타입·규칙은 이 문서로 확정이며,
-변경은 이 문서의 개정으로만 한다. "구현하면서 정한다"는 상태는 존재하지 않는다.
-
-### 0.1 헌법 검토에서 확인된 모순의 해소
+### 0.1 과거 헌법 검토 기록
 
 | # | 헌법의 문제 | v0의 해소 |
 |---|---|---|
