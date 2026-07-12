@@ -151,6 +151,8 @@ EXPECTED_RULE_SNAPSHOT: dict[str, tuple[list[str], list[str]]] = {
             "insufficient_cpu",
             "insufficient_memory",
             "node_affinity_or_taint_mismatch",
+            "node_selector_mismatch",
+            "untolerated_taint",
             "pvc_pending",
         ],
         ["kubernetes"],
@@ -160,6 +162,8 @@ EXPECTED_RULE_SNAPSHOT: dict[str, tuple[list[str], list[str]]] = {
             "insufficient_cpu",
             "insufficient_memory",
             "node_affinity_or_taint_mismatch",
+            "node_selector_mismatch",
+            "untolerated_taint",
             "pvc_pending",
         ],
         ["kubernetes"],
@@ -707,6 +711,44 @@ def test_connection_timeout_network_policy_uses_named_evidence_and_log_signal() 
     assert by_id["network_policy_denied"].missing_evidence == []
 
 
+def test_failed_scheduling_taint_uses_named_evidence_and_event_signal() -> None:
+    bundle = EvidenceBundle(
+        incident_id="inc-scheduling",
+        items=[
+            EvidenceItem(
+                source="kubernetes",
+                name="cluster_resource_state",
+                value={
+                    "pods": [{"name": "checkout-api-1", "namespace": "sandbox"}],
+                    "events": [
+                        {
+                            "reason": "FailedScheduling",
+                            "message": (
+                                "0/3 nodes are available: 3 node(s) had untolerated "
+                                "taint {dedicated: gpu}."
+                            ),
+                        }
+                    ],
+                },
+                summary="Kubernetes scheduling event",
+            ),
+            EvidenceItem(
+                source="metadata",
+                name="current_workload_snapshots",
+                value={"items": [{"name": "checkout-api", "tolerations": []}]},
+                summary="Workload snapshots",
+            ),
+        ],
+        missing_evidence=[],
+        complete=True,
+    )
+
+    by_id = evaluations_for("FailedScheduling", bundle)
+
+    assert by_id["untolerated_taint"].score == 1.0
+    assert by_id["untolerated_taint"].missing_evidence == []
+
+
 def test_probe_failure_rule_uses_schema_v1_evidence_keys() -> None:
     plan = plan_for("Probe failure")
     by_id = {candidate.candidate_id: candidate for candidate in plan.candidates}
@@ -830,6 +872,27 @@ def test_rollout_and_db_rules_use_schema_v1_evidence_keys() -> None:
         "metrics:telemetry_metrics",
         "logs:related_logs",
         "traces:related_traces",
+    ]
+
+
+def test_scheduling_rules_use_schema_v1_evidence_keys() -> None:
+    plan = plan_for("FailedScheduling")
+    by_id = {candidate.candidate_id: candidate for candidate in plan.candidates}
+
+    assert by_id["insufficient_cpu"].expected_evidence == [
+        "kubernetes:cluster_resource_state",
+        "metrics:telemetry_metrics",
+    ]
+    assert by_id["node_selector_mismatch"].expected_evidence == [
+        "kubernetes:cluster_resource_state",
+        "metadata:current_workload_snapshots",
+    ]
+    assert by_id["untolerated_taint"].expected_evidence == [
+        "kubernetes:cluster_resource_state",
+        "metadata:current_workload_snapshots",
+    ]
+    assert by_id["pvc_pending"].expected_evidence == [
+        "kubernetes:cluster_resource_state",
     ]
 
 
