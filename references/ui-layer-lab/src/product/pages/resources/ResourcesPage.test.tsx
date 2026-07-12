@@ -145,15 +145,26 @@ describe("ResourcesPage scope and collection semantics", () => {
     });
     renderResources(port, "/product/resources/pod?cluster=cluster-1");
 
-    expect(await screen.findByRole("heading", { name: "이 범위에 접근할 수 없습니다" }))
+    await waitFor(() => expect(port.listResources).toHaveBeenCalledOnce(), { timeout: 5_000 });
+    expect(await screen.findByRole(
+      "heading",
+      { name: "이 범위에 접근할 수 없습니다" },
+      { timeout: 5_000 },
+    ))
       .toBeTruthy();
     expect(screen.queryByRole("table", { name: "리소스 목록" })).toBeNull();
   });
 
   it("states that search and counts are bounded to the loaded result window", async () => {
-    renderResources(resourcesPort(), "/product/resources/pod?cluster=cluster-1");
+    const port = resourcesPort();
+    renderResources(port, "/product/resources/pod?cluster=cluster-1");
 
-    const table = await screen.findByRole("table", { name: "리소스 목록" });
+    await waitFor(() => expect(port.listResources).toHaveBeenCalledOnce(), { timeout: 5_000 });
+    const table = await screen.findByRole(
+      "table",
+      { name: "리소스 목록" },
+      { timeout: 5_000 },
+    );
     expect(table.textContent).toContain("checkout-api-0");
     expect(screen.queryByText("Resources", { exact: true })).toBeNull();
     expect(screen.queryByText(/실 API|30초 자동 갱신/u)).toBeNull();
