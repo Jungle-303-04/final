@@ -130,6 +130,35 @@ def test_application_create_with_foreign_repository_id_is_rejected_before_victim
     assert db.victim == victim_row
 
 
+def test_server_generated_repository_collision_maps_to_non_disclosing_404() -> None:
+    class CollisionDb:
+        def register_repository(self, _payload: dict[str, object]) -> dict[str, object]:
+            raise LookupError("foreign workspace repository repo-secret exists")
+
+        def upsert_application(self, payload: dict[str, object]) -> dict[str, object]:
+            pytest.fail(f"application write must not run after repository conflict: {payload}")
+
+    session = SimpleNamespace(
+        user_id="attacker-a",
+        roles=("user",),
+        workspace_id="workspace-a",
+    )
+
+    async def run() -> object:
+        return await upsert_application(
+            ApplicationUpsertRequest(name="attacker-app", repo_ref="attacker/checkout"),
+            current=session,
+            db=CollisionDb(),
+        )
+
+    with pytest.raises(HTTPException) as exc:
+        asyncio.run(run())
+
+    assert exc.value.status_code == 404
+    assert exc.value.detail == "repository not found"
+    assert "repo-secret" not in str(exc.value.detail)
+
+
 def test_repository_conflict_update_is_workspace_fenced_in_postgresql() -> None:
     statements: list[Any] = []
 
@@ -195,8 +224,8 @@ def test_cross_workspace_repository_conflict_is_rejected_without_credential_over
             if workspace_fenced and not same_workspace:
                 return _MappedResult(None)
 
-            # PostgreSQL's current unguarded ON CONFLICT behavior: mutable
-            # repository fields, including credential_ref, are overwritten.
+            # Regression model for an unguarded ON CONFLICT: mutable repository
+            # fields, including credential_ref, would be overwritten.
             for field in (
                 "provider",
                 "repo_ref",
