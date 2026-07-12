@@ -516,13 +516,14 @@ def test_authorized_legacy_repository_upsert_reuses_stored_id_without_owner_regr
         }
     )
 
-    assert getattr(statements[0], "is_select", False)
-    select_sql, select_params = _compiled(statements[0])
+    lock_sql, _lock_params = _compiled(statements[0])
+    assert "pg_advisory_xact_lock" in lock_sql
+    select_sql, select_params = _compiled(statements[1])
     assert "git_repositories.workspace_id =" in select_sql
-    assert "git_repositories.repo_ref =" in select_sql
+    assert "lower(git_repositories.repo_ref) =" in select_sql
     assert {"workspace-a", "acme/checkout"}.issubset(set(select_params.values()))
 
-    insert_sql, insert_params = _compiled(statements[1])
+    insert_sql, insert_params = _compiled(statements[2])
     assert "ON CONFLICT (repository_id) DO UPDATE" in insert_sql
     assert insert_params["repository_id"] == victim_row["repository_id"]
     assert stored["repository_id"] == victim_row["repository_id"]
@@ -885,7 +886,7 @@ def test_server_generated_repository_collision_maps_to_non_disclosing_404() -> N
 
     session = SimpleNamespace(
         user_id="attacker-a",
-        roles=("user",),
+        roles=("service_admin",),
         workspace_id="workspace-a",
     )
 
@@ -1291,7 +1292,10 @@ def test_admin_connect_uses_wizard_credential_for_manifest_validation(
     assert discovery.tokens == ["ghp_wizard-scoped"]
 
 
-def test_existing_repository_without_token_preserves_credential_ref() -> None:
+def test_existing_repository_without_token_preserves_credential_ref(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("CREDENTIAL_ENCRYPTION_KEY", "existing-credential-test-key")
     workspace_id = "workspace-a"
     repo_ref = "acme/existing-checkout"
     repository_id = "repo-existing-checkout"
@@ -1307,6 +1311,15 @@ def test_existing_repository_without_token_preserves_credential_ref() -> None:
             "default_branch": "main",
             "credential_ref": existing_credential_ref,
             "access_policy": {"visibility": "private"},
+        },
+        credentials={
+            "repo-existing-checkout": {
+                "workspace_id": workspace_id,
+                "provider": "github",
+                "scope": "repo-existing-checkout",
+                "encrypted_value": encrypt_credential("ghp_existing-private"),
+                "metadata": {"repository_id": repository_id},
+            }
         },
     )
     session = SimpleNamespace(user_id="manager-a", roles=("user",), workspace_id=workspace_id)
@@ -1333,7 +1346,10 @@ def test_existing_repository_without_token_preserves_credential_ref() -> None:
     assert db.repository["credential_ref"] == existing_credential_ref
 
 
-def test_connect_without_token_reuses_wizard_per_repository_credential() -> None:
+def test_connect_without_token_reuses_wizard_per_repository_credential(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("CREDENTIAL_ENCRYPTION_KEY", "wizard-reuse-test-key")
     workspace_id = "workspace-a"
     repo_ref = "acme/wizard-checkout"
     repository_id = derive_repository_id({"workspace_id": workspace_id, "repo_ref": repo_ref})
@@ -1348,7 +1364,7 @@ def test_connect_without_token_reuses_wizard_per_repository_credential() -> None
                 "workspace_id": workspace_id,
                 "provider": "github",
                 "scope": scope,
-                "encrypted_value": "fernet:v1:wizard-token",
+                "encrypted_value": encrypt_credential("ghp_wizard-token"),
                 "metadata": {
                     "credential_ref": credential_ref,
                     "repository_id": repository_id,
@@ -1637,6 +1653,42 @@ def test_repository_conflict_update_is_workspace_fenced_in_postgresql() -> None:
     assert "ON CONFLICT (repository_id) DO UPDATE" in sql
     assert "WHERE git_repositories.workspace_id = excluded.workspace_id" in sql
     assert "RETURNING" in sql
+
+
+def test_repository_lookup_uses_exact_index_before_legacy_casefold_fallback() -> None:
+    statements: list[Any] = []
+    legacy_row = {
+        "workspace_id": "workspace-a",
+        "repository_id": "repo-legacy-case",
+        "repo_ref": "Acme/Checkout",
+    }
+
+    class LookupConnection:
+        def execute(self, statement: Any) -> _MappedResult:
+            statements.append(statement)
+            sql, _params = _compiled(statement)
+            if "lower(git_repositories.repo_ref)" in sql:
+                return _MappedResult(dict(legacy_row))
+            return _MappedResult(None)
+
+    @contextmanager
+    def lookup_connection():
+        yield LookupConnection()
+
+    repository = object.__new__(RepoChangeRepository)
+    repository.connection = lookup_connection  # type: ignore[method-assign]
+
+    found = repository.get_repository_by_ref("workspace-a", "ACME/CHECKOUT.git")
+
+    assert found == legacy_row
+    assert len(statements) == 2
+    exact_sql, exact_params = _compiled(statements[0])
+    fallback_sql, fallback_params = _compiled(statements[1])
+    assert "git_repositories.repo_ref =" in exact_sql
+    assert "lower(git_repositories.repo_ref)" not in exact_sql
+    assert "lower(git_repositories.repo_ref) =" in fallback_sql
+    assert "acme/checkout" in exact_params.values()
+    assert "acme/checkout" in fallback_params.values()
 
 
 def test_cross_workspace_repository_conflict_is_rejected_without_credential_overwrite() -> None:
