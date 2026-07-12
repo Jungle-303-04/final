@@ -996,6 +996,38 @@ def test_connect_uses_explicit_token_for_manifest_validation(
     assert discovery.tokens == ["ghp_request-scoped"]
 
 
+def test_new_repository_without_token_strips_ambient_discovery_credential() -> None:
+    workspace_id = "workspace-a"
+    repo_ref = "acme/public-checkout"
+    repository_id = derive_repository_id({"workspace_id": workspace_id, "repo_ref": repo_ref})
+    db = _ConnectDb(
+        workspace_id=workspace_id,
+        repo_ref=repo_ref,
+        repository_id=repository_id,
+    )
+    discovery = _TokenAwareRepositoryDiscovery()
+    session = SimpleNamespace(user_id="user-a", roles=("user",), workspace_id=workspace_id)
+
+    async def run() -> object:
+        return await connect_application(
+            ApplicationConnectRequest(
+                name="public-checkout",
+                repo_ref=repo_ref,
+                branch="main",
+                manifest_path="deploy/app.yaml",
+                source_type="raw-yaml",
+                cluster_id="cluster-1",
+            ),
+            current=session,
+            db=db,
+            discovery=discovery,
+        )
+
+    asyncio.run(run())
+
+    assert discovery.tokens == [""]
+
+
 def test_existing_repository_denial_happens_before_manifest_http() -> None:
     workspace_id = "workspace-a"
     repo_ref = "acme/existing-private"
