@@ -576,6 +576,56 @@ def test_authorized_repository_update_without_credential_field_preserves_existin
     assert update_params.get("credential_ref") is None
 
 
+def test_repository_manage_composition_locks_identity_before_read() -> None:
+    statements: list[Any] = []
+    victim_row = {
+        "repository_id": "repo-existing",
+        "workspace_id": "workspace-a",
+        "provider": "github",
+        "repo_ref": "acme/checkout",
+        "default_branch": "main",
+        "credential_ref": None,
+        "status": "active",
+        "access_policy": {},
+    }
+
+    class LockOrderConnection:
+        def execute(self, statement: Any) -> _MappedResult:
+            statements.append(statement)
+            sql = str(statement.compile(dialect=postgresql.dialect()))
+            if "pg_advisory_xact_lock" in sql:
+                return _MappedResult(None)
+            if "FROM git_repositories" in sql:
+                return _MappedResult(dict(victim_row))
+            return _MappedResult(dict(victim_row))
+
+    @contextmanager
+    def lock_order_connection():
+        yield LockOrderConnection()
+
+    repository = object.__new__(RepoChangeRepository)
+    repository.connection = lock_order_connection  # type: ignore[method-assign]
+    repository.unit_of_work = lock_order_connection  # type: ignore[method-assign]
+    repository.list_repository_applications = lambda *_args: [  # type: ignore[attr-defined]
+        {"application_id": "app-existing"}
+    ]
+    repository.can_access = lambda *_args: True  # type: ignore[attr-defined]
+    repository.is_service_admin = lambda _user_id: False  # type: ignore[attr-defined]
+
+    repository.register_repository(
+        {
+            "workspace_id": "workspace-a",
+            "repo_ref": "acme/checkout",
+            "user_id": "manager-a",
+        }
+    )
+
+    first_sql = str(statements[0].compile(dialect=postgresql.dialect()))
+    second_sql = str(statements[1].compile(dialect=postgresql.dialect()))
+    assert "pg_advisory_xact_lock" in first_sql
+    assert "FROM git_repositories" in second_sql
+
+
 def test_application_create_with_foreign_repository_id_is_rejected_before_victim_write() -> None:
     victim_row = {
         "repository_id": "repo-owned-by-workspace-b",
@@ -1456,6 +1506,53 @@ def test_application_late_identity_conflict_is_rejected_instead_of_updated() -> 
         )
 
     assert len(statements) == 3
+
+
+def test_application_write_locks_repository_before_application_identity() -> None:
+    statements: list[Any] = []
+
+    class ScalarResult:
+        def __init__(self, value: str | None = None) -> None:
+            self.value = value
+
+        def scalar_one_or_none(self) -> str | None:
+            return self.value
+
+    class LockOrderConnection:
+        def execute(self, statement: Any) -> ScalarResult:
+            statements.append(statement)
+            sql = str(statement.compile(dialect=postgresql.dialect()))
+            if "FROM applications" in sql:
+                return ScalarResult()
+            if "INSERT INTO applications" in sql:
+                return ScalarResult("app-created")
+            return ScalarResult()
+
+    @contextmanager
+    def lock_order_connection():
+        yield LockOrderConnection()
+
+    repository = object.__new__(RepoChangeRepository)
+    repository.connection = lock_order_connection  # type: ignore[method-assign]
+    repository.unit_of_work = lock_order_connection  # type: ignore[method-assign]
+    repository.can_access = lambda *_args: False  # type: ignore[attr-defined]
+    repository._grant_owner_if_present = lambda *_args: None  # type: ignore[method-assign]
+
+    repository.upsert_application(
+        {
+            "workspace_id": "workspace-a",
+            "repository_id": "repo-a",
+            "repo_ref": "acme/checkout",
+            "name": "checkout",
+            "manifest_path": "deploy/app.yaml",
+            "user_id": "user-a",
+        }
+    )
+
+    sql = [str(statement.compile(dialect=postgresql.dialect())) for statement in statements]
+    assert "pg_advisory_xact_lock" in sql[0]
+    assert "pg_advisory_xact_lock" in sql[1]
+    assert "FROM applications" in sql[2]
 
 
 def test_repository_conflict_update_is_workspace_fenced_in_postgresql() -> None:
