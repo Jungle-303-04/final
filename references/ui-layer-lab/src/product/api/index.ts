@@ -50,6 +50,11 @@ export {
   type ApplicationHistoryOptions,
   type ApplicationListOptions,
 } from "./applications";
+export {
+  grantApproval,
+  rejectApproval,
+  type ApprovalDecisionOptions,
+} from "./approvals";
 export { listClusters, type ListClustersOptions } from "./clusters";
 export { getCluster } from "./cluster-detail";
 export { getClusterConnectionStatus } from "./cluster-connection";
@@ -262,3 +267,7 @@ export {
   type DeploymentBindingList,
   type WorkflowRunList,
 } from "./applications-schemas";
+export {
+  approvalDecisionResponseSchema,
+  type ApprovalDecisionResponse,
+} from "./approvals-schemas";
