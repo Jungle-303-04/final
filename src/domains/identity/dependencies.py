@@ -163,7 +163,13 @@ def resolve_allowed_cluster_ids(
     별도 조회하고, 그 외 ``None``/누락/빈 입력은 항상 빈 집합으로 닫는다.
     """
     user_id = getattr(current, "user_id", None)
-    if not workspace_id or not isinstance(user_id, str) or not user_id:
+    session_workspace_id = getattr(current, "workspace_id", None)
+    if (
+        not workspace_id
+        or workspace_id != session_workspace_id
+        or not isinstance(user_id, str)
+        or not user_id
+    ):
         return set()
     accessible = getattr(db, "accessible_resource_ids", None)
     if not callable(accessible):

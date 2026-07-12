@@ -194,7 +194,7 @@ class _AdapterDb(_GrantedClustersDb):
 
 def test_none_access_is_fail_closed_but_admin_clusters_are_explicitly_materialized() -> None:
     member_db = _GrantedClustersDb(None)
-    member = SimpleNamespace(user_id="user-a", roles=("user",))
+    member = SimpleNamespace(user_id="user-a", workspace_id="workspace-a", roles=("user",))
 
     assert (
         _allowed_cluster_ids(
@@ -208,7 +208,11 @@ def test_none_access_is_fail_closed_but_admin_clusters_are_explicitly_materializ
     assert member_db.materialized is False
 
     admin_db = _GrantedClustersDb(None)
-    admin = SimpleNamespace(user_id="user-a", roles=(ServiceRole.SERVICE_ADMIN.value,))
+    admin = SimpleNamespace(
+        user_id="user-a",
+        workspace_id="workspace-a",
+        roles=(ServiceRole.SERVICE_ADMIN.value,),
+    )
 
     assert _allowed_cluster_ids(
         admin_db,
@@ -237,7 +241,7 @@ def test_cluster_1_grant_cannot_read_cluster_2_raw_evidence() -> None:
             return _MappingsResult([{"payload": victim_payload}])
 
     access_db = _GrantedClustersDb({"cluster-1"})
-    current = SimpleNamespace(user_id="user-a", roles=("user",))
+    current = SimpleNamespace(user_id="user-a", workspace_id="workspace-a", roles=("user",))
     allowed = _allowed_cluster_ids(
         access_db,
         current,
