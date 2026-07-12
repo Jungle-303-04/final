@@ -14,6 +14,12 @@ export {
 } from "./auth";
 export { getFleetSummary } from "./fleet";
 export { getRcaTimeline } from "./rca";
+export {
+  listRcaTimeline,
+  RCA_LIST_DEFAULT_LIMIT,
+  RCA_LIST_MAX_LIMIT,
+  type ListRcaTimelineOptions,
+} from "./rca-list";
 export { listClusters, type ListClustersOptions } from "./clusters";
 export { getCluster } from "./cluster-detail";
 export { getClusterConnectionStatus } from "./cluster-connection";
@@ -186,3 +192,8 @@ export {
   type RcaTimeline,
   type RcaTimelineItem,
 } from "./schemas";
+export {
+  rcaListSchema,
+  type RcaList,
+  type RcaListItem,
+} from "./rca-list-schemas";
