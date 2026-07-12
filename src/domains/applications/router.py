@@ -53,7 +53,11 @@ GLOBAL_CLUSTER_SELECTOR = "*"
 GLOBAL_BINDING_KEY = "global"
 NO_CLUSTERS_FOR_GLOBAL_BINDING = "no registered clusters to expand global binding"
 HTTP_NOT_FOUND = 404
+HTTP_UNPROCESSABLE_ENTITY = 422
 APPLICATION_NOT_FOUND = "application not found"
+EXPLICIT_REPOSITORY_ID_NOT_ALLOWED = (
+    "repository_id must not be provided when creating an application"
+)
 MANIFEST_VALIDATION_FAILED = "manifest validation failed"
 CLUSTER_NOT_CONNECTED_CODE = "cluster_not_connected"
 CLUSTER_NOT_CONNECTED_DETAIL = "에이전트가 연결되지 않은 클러스터입니다"
@@ -197,6 +201,11 @@ async def upsert_application(
     current: Any = Depends(require_session),
     db: Any = Depends(get_db),
 ) -> ApplicationResponse:
+    if payload.repository_id.strip():
+        raise HTTPException(
+            status_code=HTTP_UNPROCESSABLE_ENTITY,
+            detail=EXPLICIT_REPOSITORY_ID_NOT_ALLOWED,
+        )
     workspace_id = getattr(current, "workspace_id", DEFAULT_WORKSPACE_ID)
     body = {
         **payload.model_dump(),

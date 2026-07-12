@@ -11,7 +11,7 @@ from typing import Any
 from fastapi import APIRouter, Depends, HTTPException, Response
 from pydantic import Field
 
-from domains.identity.dependencies import require_admin_session, require_session
+from domains.identity.dependencies import require_admin_session
 from packages.contracts.gateway import routes as gateway_routes
 from packages.contracts.gateway.base import StrictModel
 from packages.runtime.dependencies import get_db
@@ -189,7 +189,7 @@ async def list_users(
 @router.get(gateway_routes.ACCESS_PATH, response_model=AccessListResponse)
 async def list_access(
     resource_id: str | None = None,
-    _current: Any = Depends(require_session),
+    _current: Any = Depends(require_admin_session),
     db: Any = Depends(get_db),
 ) -> AccessListResponse:
     return AccessListResponse(grants=db.list_access_grants(resource_id))

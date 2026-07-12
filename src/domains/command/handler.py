@@ -41,6 +41,7 @@ from domains.target.management_guard import (
 from packages.config.constants import Command, CommandStatus, Sandbox, Target
 from packages.config.control import CONTROL_NAMESPACE_DENIED_MESSAGE
 from packages.config.logs import CONTEXT_KEY, get_logger
+from packages.config.security import env_enabled
 from packages.config.settings import env
 from packages.contracts.event_bus.bodies import EventBody
 from packages.contracts.event_bus.interfaces import JsonObject
@@ -103,6 +104,8 @@ APPROVAL_EXPIRES_AT_INVALID_REASON = "write command approval_expires_at is inval
 MANAGEMENT_READONLY_REASON = management_readonly_detail()["code"]
 COMMAND_APPROVAL_EVIDENCE_TTL_SECONDS_ENV = "COMMAND_APPROVAL_EVIDENCE_TTL_SECONDS"
 DEFAULT_COMMAND_APPROVAL_EVIDENCE_TTL_SECONDS = "3600"
+AUTO_COMMANDS_ENABLED_ENV = "AUTO_COMMANDS_ENABLED"
+AUTO_COMMANDS_DISABLED_REASON = f"AI automatic commands require {AUTO_COMMANDS_ENABLED_ENV}=1"
 LOGGER = get_logger(__name__)
 
 
@@ -446,6 +449,13 @@ async def sweep_expired_agent_commands(
 async def handle_command_requested(
     evt: CommandRequestedBody, ctx: EventContext[AgentCommandStore]
 ) -> AsyncIterator[EventBody]:
+    if (
+        isinstance(evt.actor, dict)
+        and evt.actor.get("auto_selected") is True
+        and not env_enabled(AUTO_COMMANDS_ENABLED_ENV)
+    ):
+        yield CommandRejectedBody(reason=AUTO_COMMANDS_DISABLED_REASON, requested=evt.to_body())
+        return
     management_result = await evaluate_management_guard(evt, ctx.db)
     if not management_result.allowed:
         yield CommandRejectedBody(
