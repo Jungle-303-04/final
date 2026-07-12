@@ -1,10 +1,12 @@
 import {
   Activity,
   Boxes,
+  ChartNoAxesCombined,
   GitBranch,
   History,
   Home,
   Layers3,
+  Library,
   Network,
   TriangleAlert,
   type LucideIcon,
@@ -56,9 +58,11 @@ const routeIcons: Record<ProductRouteIcon, LucideIcon> = {
   resources: Boxes,
   issues: TriangleAlert,
   topology: Network,
+  metrics: ChartNoAxesCombined,
   applications: Layers3,
   timeline: History,
   gitops: GitBranch,
+  catalog: Library,
 };
 
 const navLabelKeys = {
@@ -66,9 +70,11 @@ const navLabelKeys = {
   gitops: "shell.nav.gitops",
   home: "shell.nav.home",
   issues: "shell.nav.issues",
+  metrics: "shell.nav.metrics",
   resources: "shell.nav.resources",
   timeline: "shell.nav.timeline",
   topology: "shell.nav.topology",
+  catalog: "shell.nav.catalog",
 } satisfies Record<ProductSurfaceId, MessageKey>;
 
 export function ProductShell({

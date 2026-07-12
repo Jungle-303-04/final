@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   PRODUCT_ROUTE_CATALOG,
+  PRODUCT_LANE_ROUTE_STUBS,
   productNavigationForReleasedSurfaces,
   productRouteForPath,
   resolveProductRoute,
@@ -14,19 +15,33 @@ describe("product route release registry", () => {
       "resources",
       "issues",
       "topology",
+      "metrics",
       "applications",
       "timeline",
       "gitops",
+      "catalog",
     ]);
     expect(PRODUCT_ROUTE_CATALOG.map((route) => route.label)).toEqual([
       "Home",
       "Resources",
       "Issues",
       "Topology",
+      "Metrics",
       "Applications",
       "Timeline",
       "GitOps",
+      "Catalog",
     ]);
+  });
+
+  it("registers every sprint lane path without releasing an empty surface", () => {
+    expect(PRODUCT_LANE_ROUTE_STUBS).toEqual({
+      rca: ["issues"],
+      metrics: ["metrics"],
+      "workloads-gitops": ["applications", "gitops"],
+      "ai-catalog": ["catalog"],
+    });
+    expect(productNavigationForReleasedSurfaces(new Set())).toEqual([]);
   });
 
   it("shows only surfaces released by the composition root", () => {
@@ -43,7 +58,9 @@ describe("product route release registry", () => {
     ["/product", "home"],
     ["/product/resources/pods", "resources"],
     ["/product/topology", "topology"],
+    ["/product/metrics", "metrics"],
     ["/product/gitops/detail/application/default/storefront", "gitops"],
+    ["/product/catalog/items/prometheus", "catalog"],
   ] as const)("maps %s to its owning screen", (pathname, routeId) => {
     expect(productRouteForPath(pathname)?.id).toBe(routeId);
   });
