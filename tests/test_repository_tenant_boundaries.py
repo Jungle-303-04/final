@@ -1263,10 +1263,59 @@ def test_non_admin_cannot_attach_orphan_wizard_credential_to_new_repository() ->
             discovery=_ValidRepositoryDiscovery(),
         )
 
-    asyncio.run(run())
+    with pytest.raises(HTTPException) as exc:
+        asyncio.run(run())
 
-    assert db.registered_payload is not None
-    assert "credential_ref" not in db.registered_payload
+    assert exc.value.status_code in {403, 409}
+    assert db.registered_payload is None
+    assert db.credentials[scope]["encrypted_value"] == "fernet:v1:admin-wizard-token"
+
+
+def test_non_admin_explicit_token_cannot_clobber_orphan_wizard_credential(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("CREDENTIAL_ENCRYPTION_KEY", "orphan-clobber-test-key")
+    workspace_id = "workspace-a"
+    repo_ref = "acme/orphan-private"
+    repository_id = derive_repository_id({"workspace_id": workspace_id, "repo_ref": repo_ref})
+    scope = f"repository:{repository_id}"
+    original_credential = {
+        "workspace_id": workspace_id,
+        "provider": "github",
+        "scope": scope,
+        "encrypted_value": encrypt_credential("ghp_admin-owned"),
+        "metadata": {"repository_id": repository_id},
+    }
+    db = _ConnectDb(
+        workspace_id=workspace_id,
+        repo_ref=repo_ref,
+        repository_id=repository_id,
+        credentials={scope: original_credential},
+    )
+    session = SimpleNamespace(user_id="user-a", roles=("user",), workspace_id=workspace_id)
+
+    async def run() -> object:
+        return await connect_application(
+            ApplicationConnectRequest(
+                name="orphan-private",
+                repo_ref=repo_ref,
+                token="ghp_attacker-replacement",
+                branch="main",
+                manifest_path="deploy/app.yaml",
+                source_type="raw-yaml",
+                cluster_id="cluster-1",
+            ),
+            current=session,
+            db=db,
+            discovery=_TokenAwareRepositoryDiscovery(),
+        )
+
+    with pytest.raises(HTTPException) as exc:
+        asyncio.run(run())
+
+    assert exc.value.status_code in {403, 409}
+    assert db.registered_payload is None
+    assert db.credentials[scope] == original_credential
 
 
 def test_application_storage_rechecks_manage_after_identity_lock() -> None:
