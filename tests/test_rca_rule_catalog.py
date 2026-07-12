@@ -67,6 +67,8 @@ EXPECTED_RULE_SNAPSHOT: dict[str, tuple[list[str], list[str]]] = {
             "oom_killed",
             "bad_image_rollout",
             "config_env_error",
+            "app_port_bind_failed",
+            "permission_denied_startup",
             "app_startup_failure",
             "dependency_connection_failure",
         ],
@@ -77,6 +79,8 @@ EXPECTED_RULE_SNAPSHOT: dict[str, tuple[list[str], list[str]]] = {
             "oom_killed",
             "bad_image_rollout",
             "config_env_error",
+            "app_port_bind_failed",
+            "permission_denied_startup",
             "app_startup_failure",
             "dependency_connection_failure",
         ],
@@ -224,7 +228,7 @@ EXPECTED_RULE_SNAPSHOT: dict[str, tuple[list[str], list[str]]] = {
     ),
     "CPU Saturation": (
         ["cpu_limit_or_throttling"],
-        ["kubernetes", "metrics"],
+        ["kubernetes", "metrics", "logs"],
     ),
     "Disk Pressure": (
         ["node_disk_pressure", "ephemeral_storage_exhausted"],
@@ -492,6 +496,24 @@ def evaluations_for(symptom: str, bundle: EvidenceBundle) -> dict:
     return {e.candidate_id: e for e in evaluate_causes(plan.candidates, bundle)}
 
 
+def resource_pressure_bundle(
+    *,
+    log_lines: list[str],
+    events: list[dict] | None = None,
+    pods: list[dict] | None = None,
+) -> EvidenceBundle:
+    return EvidenceBundle(
+        incident_id="inc-resource-pressure",
+        items=[
+            evidence_item("kubernetes", {"pods": pods or [], "events": events or []}),
+            evidence_item("metrics", {"results": [{"query": "resource pressure"}]}),
+            evidence_item("logs", {"entries": [{"line": line} for line in log_lines]}),
+        ],
+        missing_evidence=[],
+        complete=True,
+    )
+
+
 def test_oom_killed_requires_positive_oom_evidence_for_full_score() -> None:
     """exit 1 크래시(OOM 신호 없음) — oom_killed 는 1.0 불가 + signal 누락 토큰을 남긴다."""
     bundle = crashloop_bundle(
@@ -553,6 +575,34 @@ def test_non_oom_exit_code_supports_app_startup_failure() -> None:
     assert by_id["oom_killed"].score < 1.0
 
 
+def test_port_bind_failure_reaches_full_score_with_startup_log() -> None:
+    """포트 bind 실패 로그가 있으면 일반 startup failure보다 구체 후보가 완결된다."""
+    bundle = crashloop_bundle(
+        log_lines=["listen tcp :8080: bind: address already in use"],
+        pods=[crashloop_pod()],
+    )
+
+    by_id = evaluations_by_id(bundle)
+
+    assert by_id["app_port_bind_failed"].score == 1.0
+    assert by_id["app_port_bind_failed"].missing_evidence == []
+    assert by_id["app_startup_failure"].score < 1.0
+
+
+def test_permission_denied_startup_reaches_full_score_with_startup_log() -> None:
+    """권한 오류 로그가 있으면 permission_denied_startup 후보가 완결된다."""
+    bundle = crashloop_bundle(
+        log_lines=["permission denied opening /app/config/config.yaml"],
+        pods=[crashloop_pod()],
+    )
+
+    by_id = evaluations_by_id(bundle)
+
+    assert by_id["permission_denied_startup"].score == 1.0
+    assert by_id["permission_denied_startup"].missing_evidence == []
+    assert by_id["app_startup_failure"].score < 1.0
+
+
 def test_no_candidate_gets_full_score_without_distinguishing_evidence() -> None:
     """판별 신호가 전혀 없는 근거(소스만 존재)로는 어떤 crashloop 후보도 1.0 이 될 수 없다."""
     bundle = crashloop_bundle(log_lines=["container restarted"], pods=[crashloop_pod()])
@@ -561,6 +611,31 @@ def test_no_candidate_gets_full_score_without_distinguishing_evidence() -> None:
 
     assert all(evaluation.score < 1.0 for evaluation in by_id.values())
     assert all(evaluation.missing_evidence for evaluation in by_id.values())
+
+
+def test_traffic_spike_reaches_full_score_with_request_spike_log() -> None:
+    """트래픽 급증/큐 포화 로그가 있으면 traffic_spike 후보가 완결된다."""
+    bundle = resource_pressure_bundle(
+        log_lines=["request rate spike caused queue full and server overloaded"],
+        pods=[crashloop_pod(terminated_reasons=["OOMKilled"])],
+    )
+
+    by_id = evaluations_for("OOMKilled", bundle)
+
+    assert by_id["traffic_spike"].score == 1.0
+    assert by_id["traffic_spike"].missing_evidence == []
+
+
+def test_cpu_throttling_reaches_full_score_with_cfs_quota_log() -> None:
+    """CPU quota/throttling 로그가 있으면 cpu_limit_or_throttling 후보가 완결된다."""
+    bundle = resource_pressure_bundle(
+        log_lines=["container was cpu throttled by cfs quota; context deadline exceeded"],
+    )
+
+    by_id = evaluations_for("CPU Saturation", bundle)
+
+    assert by_id["cpu_limit_or_throttling"].score == 1.0
+    assert by_id["cpu_limit_or_throttling"].missing_evidence == []
 
 
 def test_image_pull_rate_limit_uses_named_evidence_and_event_signal() -> None:
@@ -784,6 +859,8 @@ def test_service_endpoint_rule_uses_metadata_endpoint_evidence_keys() -> None:
 def test_resource_pressure_rule_uses_schema_v1_evidence_keys() -> None:
     plan = plan_for("OOMKilled")
     by_id = {candidate.candidate_id: candidate for candidate in plan.candidates}
+    cpu_plan = plan_for("CPU Saturation")
+    cpu_by_id = {candidate.candidate_id: candidate for candidate in cpu_plan.candidates}
 
     assert by_id["memory_limit_too_low"].expected_evidence == [
         "kubernetes:cluster_resource_state",
@@ -795,6 +872,11 @@ def test_resource_pressure_rule_uses_schema_v1_evidence_keys() -> None:
         "metrics:telemetry_metrics",
         "logs:related_logs",
         "metadata:current_workload_snapshots",
+    ]
+    assert cpu_by_id["cpu_limit_or_throttling"].expected_evidence == [
+        "kubernetes:cluster_resource_state",
+        "metrics:telemetry_metrics",
+        "logs:related_logs",
     ]
 
 
