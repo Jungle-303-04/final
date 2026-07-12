@@ -1086,6 +1086,61 @@ def test_existing_repository_denial_happens_before_manifest_http() -> None:
     assert exc.value.status_code in {403, 404}
 
 
+def test_existing_repository_alias_cannot_bypass_manage_preflight() -> None:
+    workspace_id = "workspace-a"
+    stored_repo_ref = "acme/existing-private"
+    repository_id = "repo-existing-private"
+
+    class DeniedExistingRepositoryDb(_ConnectDb):
+        def can_access(
+            self,
+            _user_id: str,
+            _workspace_id: str,
+            resource_type: str,
+            _resource_id: str,
+            permission: str,
+        ) -> bool:
+            return (resource_type, permission) == ("cluster", "deploy.run")
+
+    class ForbiddenDiscovery:
+        async def validate_manifest(self, _payload: Any) -> object:
+            pytest.fail("case alias must be denied before manifest HTTP")
+
+    db = DeniedExistingRepositoryDb(
+        workspace_id=workspace_id,
+        repo_ref=stored_repo_ref,
+        repository_id=repository_id,
+        repository={
+            "workspace_id": workspace_id,
+            "repository_id": repository_id,
+            "repo_ref": stored_repo_ref,
+            "credential_ref": "db:github:repository:repo-existing-private",
+        },
+    )
+    session = SimpleNamespace(user_id="user-a", roles=("user",), workspace_id=workspace_id)
+
+    async def run() -> object:
+        return await connect_application(
+            ApplicationConnectRequest(
+                name="existing-private",
+                repo_ref="ACME/EXISTING-PRIVATE.git",
+                branch="main",
+                manifest_path="deploy/app.yaml",
+                source_type="raw-yaml",
+                cluster_id="cluster-1",
+            ),
+            current=session,
+            db=db,
+            discovery=ForbiddenDiscovery(),  # type: ignore[arg-type]
+        )
+
+    with pytest.raises(HTTPException) as exc:
+        asyncio.run(run())
+
+    assert exc.value.status_code in {403, 404}
+    assert db.registered_payload is None
+
+
 def test_admin_connect_uses_wizard_credential_for_manifest_validation(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
