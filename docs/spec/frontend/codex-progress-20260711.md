@@ -1205,3 +1205,13 @@ API 완성: listInventoryResourcesByType (6aaf19fea)
 브라우저 검증: http://127.0.0.1:5180/product
 결과: 실제 session API 실패를 synthetic fallback 없이 session error 화면으로 표시
 ```
+
+## 2026-07-12 APIQ-022 24시간 대행 착수
+
+- 원 요청 시각: 2026-07-11 16:19 KST
+- 대행 시작 시각: 2026-07-12 20:21 KST
+- 경과 시간: 28시간 02분
+- 사유: Home cluster selector의 유일한 권위인 `GET /api/clusters`의 `listClusters` 완료 앵커가
+  없고 queue 전체의 `in_progress`가 0인 상태로 24시간을 초과했다.
+- queue의 단일 `in_progress` lock을 `APIQ-022`에 획득했다. 이 행의 코드·contract test·완료
+  앵커까지만 대행하고, API 작업자가 복귀하면 다음 행부터 다시 양보한다.
