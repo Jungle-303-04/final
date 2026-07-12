@@ -34,6 +34,12 @@ export {
   type EvidenceListOptions,
   type RcaReportListOptions,
 } from "./evidence";
+export {
+  getRecoveryPlanByCorrelation,
+  selectRecoveryAction,
+  type RecoveryRequestOptions,
+  type SelectRecoveryActionInput,
+} from "./recovery";
 export { listClusters, type ListClustersOptions } from "./clusters";
 export { getCluster } from "./cluster-detail";
 export { getClusterConnectionStatus } from "./cluster-connection";
@@ -226,3 +232,11 @@ export {
   type RcaReport,
   type RcaReportList,
 } from "./evidence-schemas";
+export {
+  recoveryActionAcceptedSchema,
+  recoveryActionCandidateSchema,
+  recoveryPlanSchema,
+  type RecoveryActionAccepted,
+  type RecoveryActionCandidate,
+  type RecoveryPlan,
+} from "./recovery-schemas";
