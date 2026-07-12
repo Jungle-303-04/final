@@ -20,6 +20,10 @@ export {
   RCA_LIST_MAX_LIMIT,
   type ListRcaTimelineOptions,
 } from "./rca-list";
+export {
+  getRcaIncident,
+  type GetRcaIncidentOptions,
+} from "./rca-detail";
 export { listClusters, type ListClustersOptions } from "./clusters";
 export { getCluster } from "./cluster-detail";
 export { getClusterConnectionStatus } from "./cluster-connection";
@@ -197,3 +201,8 @@ export {
   type RcaList,
   type RcaListItem,
 } from "./rca-list-schemas";
+export {
+  rcaIncidentSchema,
+  type RcaIncident,
+  type RcaIncidentItem,
+} from "./rca-detail-schemas";
