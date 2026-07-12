@@ -189,6 +189,33 @@ BQ-001/002/003 은 **이미 origin/dev(`03e90ddb6`)에 착륙 완료**다. 아�
 A단계에서 로컬 dev에 `docs:` 커밋으로 추적을 시작한다(내용 수정 없이 track만).
 이후 조율 문서 변경은 커밋으로 이력이 증명된다.
 
+### [D-009] 2026-07-13 — C단계 BLOCKED 해소 승인 + 브랜치 전략 확정 (작성: 우녕 위임 조율 세션)
+
+**1. 백엔드 BLOCKED C 판정: 정당한 발견. 선행 단계 C0을 승인한다.**
+audit_log에 workspace 귀속이 없는 상태로 correlation 단독 조회 route를 여는 것은
+테넌트 간 열람(BOLA) 경로가 맞다. 해소 설계(전부 additive):
+- EventEnvelope에 `workspace_id` optional 필드 추가 (기존 필드 무변경)
+- outbox 적재·relay 경로에서 envelope의 workspace_id 보존
+- `audit_log.workspace_id` nullable 컬럼 + (workspace_id, correlation_id, created_at) 인덱스
+  + 마이그레이션 (기존 행 backfill 없음 — null 유지)
+- BQ-004 타임라인 조회는 **workspace-scoped 필수**: 요청 주체의 workspace로 필터하고
+  workspace_id null인 레거시 행은 결과에서 제외한다. payload 안의 workspace 값·correlation
+  비밀성은 인가 근거로 사용하지 않는다(백엔드 보고의 원칙 그대로 채택).
+- C0은 gateway 계약 lock 대상이 아니다(event_bus/storage 계층). 단 발행 워커들의
+  envelope 생성 지점이 워커별로 흩어져 있으므로, 수정 범위는 "envelope 생성 공통 경로"로
+  한정하고 frozen paths 불변식은 그대로 적용한다.
+백엔드 Codex는 C0 완료(델타-그린 + 마이그레이션 up/down) 후 C(BQ-004)를 재개하라.
+
+**2. 브랜치 전략 확정: 단일 브랜치 통일 금지, 방향 있는 동기화 도입.**
+- 백엔드(dev + lane)와 프론트(woonyong/ui-layer-lab)의 분리는 유지한다 — 자동화 규율
+  전체가 트랙별 canonical을 전제한다.
+- 프론트 파이프라인에 A2(dev→lab 단방향 동기화 merge) 단계를 신설한다.
+  **첫 동기화(465커밋)는 사람 GO 필수(🔒)**, 이후 반복 동기화는 조건 충족 시 Codex 수행:
+  (a) 충돌이 프론트 소유 경로(references/ui-layer-lab/**, docs/spec/frontend/**) 밖이면
+  dev 쪽 채택, (b) 프론트 소유 경로 충돌은 수동 해소, (c) merge 후 full gate 통과,
+  (d) 실패 시 merge abort 후 BLOCKED.
+- lab→dev 통합(제품 콘솔 승격)은 별도 사람 게이트로 남는다.
+
 ### [D-008] 2026-07-13 04:50 KST 기록 정합 (작성: 자동 판단자)
 
 [D-007](판단자)과 [D-006](조율 세션)이 04:47경 동시 기록되어 파일 내 순서가 ID 순서와 어긋났다.
