@@ -257,6 +257,75 @@ behavior-preserving 분해 + import-linter 계약 추가. **착수는 H(merge) �
 명시까지만(로드맵 후순위 유지). OSS 공개 준비(라이선스·공개 저장소·Helm chart)는
 oss-remediation-roadmap.md §8의 사람+별도 트랙 몫이다.
 
+### [D-011] 2026-07-13 — R-트랙(RCA baseline 수렴) 정식 등록 (작성: 우녕 위임 조율 세션)
+
+**목적.** release 기준 red의 원인인 RCA 소유 실패 8건을 기계 안의 정식 트랙으로 수렴시킨다.
+F-트랙·P단계와 꼬이지 않도록 경로·lane·baseline 갱신 규칙을 고정한다.
+
+**R-트랙 소유 항목 (이것만, 전부).**
+- pytest 6 node: `tests/test_incident_symptom_derivation.py::...[crashloop|imagepull|oom|sched-fail]`
+  (규칙 확장 후 기대 candidate 수 미갱신),
+  `tests/test_rca_evidence.py::test_crashloop_flow_auto_selects_restart_and_queues_command`,
+  `tests/test_rca_scenario_cli.py::test_validate_checks_scenario_adapter_cause_evidence_and_recovery_contracts`
+- ruff format 2 파일: `tests/test_bruno_collection.py`, `tests/test_rca_rule_catalog.py`
+- import-linter 1 계약: `domains.rca.router -> services` (해소 방법: rca router가 services를
+  직접 import하지 않도록 의존 방향 교정. 계약 완화·예외 추가로 "해소"하는 것 금지)
+
+**lane 규칙.** 신규 lane `codex/rca-baseline-convergence` 1개를 승인한다(신규 브랜치 금지의
+명시적 예외). 전용 worktree 분리. origin/dev merge·push는 🔒 사람 게이트 — H와 같은 규칙.
+
+**경로 상호 배제 (안 꼬이게 하는 핵심).**
+- R-트랙 금지 경로: `src/services/ai/agent/recovery/**` (P단계 BQ-009/010의 영토,
+  P 완료 전까지), `src/packages/contracts/gateway/**`, release_flow, 조율 문서의 상태 칸.
+- F-트랙 금지 경로(기존 frozen 유지): R-트랙 소유 테스트 5파일과 그 대상 규칙·시나리오
+  파일. P단계가 R-소유 파일을 건드려야 하는 상황 = BLOCKED 후 조율.
+- 양쪽 다 필요해지는 파일이 발견되면 먼저 발견한 쪽이 BLOCKED + night-log 보고. 추측 금지.
+
+**baseline 축소 프로토콜.**
+1. R-트랙이 항목 해소 시 night-log에 완료 증거(대상 node/파일, 커밋 hash, 로컬 전체
+   pytest/ruff/import-linter 결과) append.
+2. 백엔드 Codex가 자기 lane에서 같은 항목의 green을 재확인한 뒤에만
+   backend-pipeline.md §1.4 baseline에서 해당 항목을 제거(축소만, 이 편집은 상태 칸
+   규칙의 예외로 허용).
+3. 판단자는 baseline 축소가 "R-트랙 증거 + 백엔드 재확인" 두 기록을 모두 가질 때만 승인.
+   증거 없는 축소 = HOLD 사유.
+
+**보고 채널.** R-트랙도 night-log에 `[시각] [RCA] ...` 형식으로 append하고
+night-directives 최하단 폴링(HOLD [RCA] 적용 대상)을 따른다. 판단자 점검 루틴에
+R-트랙이 추가된다: 소유 항목 밖 파일 변경 흔적 = HOLD [RCA].
+
+**완료 정의.** 8건 전부 해소 + baseline 공집합 + `make test` 전체 그린. 이 시점에
+델타-그린 규칙은 자동 만료되고 전체 통과 규칙으로 복귀한다(§4 원문 그대로).
+
+### [D-012] 2026-07-13 — R 착륙 확정 + BLOCKED P 해소 결정 (작성: 우녕 위임 조율 세션)
+
+**1. GO [R] — R-트랙 착륙.** 사람(우녕)이 `codex/rca-baseline-convergence`를 dev에
+merge하고 push했다(충돌은 night-log.md 1건뿐, 양측 보존으로 해소, merge 후 `make test`
+전체 그린: 470 format PASS, import-linter 2 kept/0 broken, pytest 1646 passed/0 failed).
+- 백엔드 Codex: origin/dev에서 R 착륙을 §1.5 명령으로 재확인한 뒤
+  backend-pipeline.md §1.4 baseline을 **공집합으로 소거**하라([D-011] 프로토콜의
+  재확인 증거 = merge된 dev에서의 위 전체 그린).
+- **델타-그린 규칙은 이 시점부로 만료. 전체 통과 규칙으로 복귀한다.**
+  이후 모든 단계의 exit criteria는 `bash scripts/test.sh` 무조건 전체 그린이다.
+- R-트랙 세션은 임무 종료. lane과 worktree는 백엔드가 회수 절차(-d 거부 시 중단 보고)로 정리.
+- release blocker 목록에서 "RCA baseline 8건" 항목 제거. 남은 blocker:
+  GitHub Actions red, Integration Smoke off, RemediationBundle API 라이브 미배포.
+
+**2. BLOCKED P 해소 — dispatch 단계 read port 승인 (제시된 두 안 중 후자).**
+recovery plan hydration(이벤트에 manifest 탑재) 방식은 **기각**한다: 이벤트가 무거워지고,
+plan 시점과 PR 생성 시점 사이의 신선도 문제(승인 스냅샷 갱신)가 생기며, payload에 실린
+manifest는 위조 면에서 신뢰 불가라는 백엔드의 원칙과 충돌한다.
+승인하는 설계:
+- `contracts`에 **읽기 전용 GitOps 권위 컨텍스트 port**(Protocol)를 추가하고 dispatcher가
+  주입받는다. 순수성은 주입으로 보존(테스트에서 fake 주입).
+- 단일 소스 = gitops 도메인이 이미 추적하는 승인 스냅샷·binding·repository·base SHA.
+  **F단계가 착륙시킨 `source_patch.py`의 권위 컨텍스트(exact base SHA, SCM provenance,
+  원문 byte 보존)를 재사용하라** — 같은 문제를 두 번 풀지 마라.
+- 조회 시점 = patch 생성 시점(신선도 보장). payload/params의 manifest 값은 인가·입력
+  근거로 사용 금지(백엔드가 기각한 우회 3종 전부 동의).
+- 이 port는 gateway 계약이 아니므로 계약 lock 대상 아님. additive-only 불변.
+P는 이 결정으로 재개한다. C0·C·D·E와의 순서 규칙은 파이프라인 그대로.
+
 ### [D-008] 2026-07-13 04:50 KST 기록 정합 (작성: 자동 판단자)
 
 [D-007](판단자)과 [D-006](조율 세션)이 04:47경 동시 기록되어 파일 내 순서가 ID 순서와 어긋났다.

@@ -71,6 +71,7 @@ from packages.security.trusted_proxy import assert_trusted_proxy_config_safe
 from packages.storage.database import Database, wait_for_database
 from packages.storage.engine import unit_of_work_or_null
 from packages.storage.sessions import RedisSessionStore, RedisSessionStoreConfig
+from services.ai.agent.playbooks.cause import registered_cause_profiles
 
 LOGGER = get_logger(__name__)
 STATE_CHANGING_METHODS = {"POST", "PUT", "PATCH", "DELETE"}
@@ -123,6 +124,7 @@ class ApiGateway:
         self.app.state.events = self.events
         self.app.state.auth = self.auth
         self.app.state.password_auth = self.password_auth
+        self.app.state.rca_rule_profiles = registered_cause_profiles()
         self.configure_routes()
 
     @staticmethod

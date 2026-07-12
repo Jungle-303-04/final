@@ -8,7 +8,7 @@ import secrets
 import uuid
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
-from typing import Any
+from typing import Any, Protocol
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Request
 
@@ -74,7 +74,6 @@ from packages.events.envelope import event
 from packages.runtime.dependencies import get_db, get_events
 from packages.storage.engine import unit_of_work_or_null
 from packages.storage.retry import to_thread_db_retry
-from services.ai.agent.playbooks.cause import registered_cause_profiles
 
 # per-cluster 토큰 인증 — evidence 의 workspace/cluster 는 토큰 identity 에서만 취함.
 router = APIRouter()
@@ -98,6 +97,28 @@ RCA_TEST_MANAGEMENT_CLUSTER_DENIED = "RCA test runs cannot target a management c
 RCA_TEST_TARGET_NOT_FOUND = "RCA test target cluster is not registered"
 RCA_TEST_TARGET_ENVIRONMENT_DENIED = "RCA test runs require a test or aws-test target"
 RCA_TEST_RUN_CONFLICT = "RCA test target already has an active run"
+
+
+class RcaRuleCandidateView(Protocol):
+    candidate_id: str
+    title: str
+    expected_evidence: tuple[str, ...]
+    signals: tuple[object, ...]
+
+
+class RcaRuleProfileView(Protocol):
+    rule_id: str | None
+    symptoms: tuple[str, ...]
+    required_sources: tuple[str, ...]
+    candidate_specs: tuple[RcaRuleCandidateView, ...]
+
+
+def get_rca_rule_profiles(request: Request) -> tuple[RcaRuleProfileView, ...]:
+    """Gateway composition이 주입한 AI rule profile read port를 반환한다."""
+    profiles = getattr(request.app.state, "rca_rule_profiles", None)
+    if profiles is None:
+        raise RuntimeError("RCA rule catalog provider is not configured")
+    return tuple(profiles)
 
 
 def require_rca_test_api(
@@ -485,8 +506,8 @@ async def validate_rca_rule_catalog(
 @router.get(gateway_routes.RCA_RULES_PATH, response_model=RcaRuleCatalogResponse)
 async def list_rca_rule_catalog(
     _current: Any = Depends(require_session),
+    profiles: tuple[RcaRuleProfileView, ...] = Depends(get_rca_rule_profiles),
 ) -> RcaRuleCatalogResponse:
-    profiles = registered_cause_profiles()
     items = [
         RcaRuleCatalogItem(
             rule_id=profile.rule_id or "",

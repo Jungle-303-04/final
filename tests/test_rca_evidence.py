@@ -310,7 +310,7 @@ def test_crashloop_flow_auto_selects_restart_and_queues_command() -> None:
     assert detected.affected[0]["workspace_id"] == "workspace-1"
 
     planned = event_by_subject(rca_events, "rca.candidates.planned")
-    assert planned.candidate_count == 5
+    assert planned.candidate_count == 7
     assert [candidate.candidate_id for candidate in planned.candidates][:2] == [
         "oom_killed",
         "bad_image_rollout",
