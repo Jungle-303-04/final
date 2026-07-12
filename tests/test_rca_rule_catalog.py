@@ -83,7 +83,11 @@ EXPECTED_RULE_SNAPSHOT: dict[str, tuple[list[str], list[str]]] = {
         ["kubernetes", "metrics", "logs"],
     ),
     "DB connection failed": (
-        ["database_connectivity_failure", "database_credential_or_config_error"],
+        [
+            "database_connectivity_failure",
+            "database_credential_or_config_error",
+            "database_connection_pool_exhausted",
+        ],
         ["kubernetes", "metrics", "logs", "traces", "metadata"],
     ),
     "ProgressDeadlineExceeded": (
@@ -796,6 +800,39 @@ def test_network_rules_use_schema_v1_evidence_keys() -> None:
     ]
 
 
+def test_rollout_and_db_rules_use_schema_v1_evidence_keys() -> None:
+    rollout_plan = plan_for("ProgressDeadlineExceeded")
+    rollout_by_id = {candidate.candidate_id: candidate for candidate in rollout_plan.candidates}
+    gitops_plan = plan_for("GitOps Sync Failed")
+    gitops_by_id = {candidate.candidate_id: candidate for candidate in gitops_plan.candidates}
+    db_plan = plan_for("DB connection failed")
+    db_by_id = {candidate.candidate_id: candidate for candidate in db_plan.candidates}
+
+    assert rollout_by_id["deployment_progress_deadline_exceeded"].expected_evidence == [
+        "kubernetes:cluster_resource_state",
+        "metrics:telemetry_metrics",
+        "logs:related_logs",
+        "metadata:current_workload_snapshots",
+    ]
+    assert gitops_by_id["manifest_validation_failed"].expected_evidence == [
+        "kubernetes:cluster_resource_state",
+        "logs:related_logs",
+        "metadata:current_workload_snapshots",
+    ]
+    assert db_by_id["database_connectivity_failure"].expected_evidence == [
+        "kubernetes:cluster_resource_state",
+        "metrics:telemetry_metrics",
+        "logs:related_logs",
+        "traces:related_traces",
+        "metadata:current_workload_snapshots",
+    ]
+    assert db_by_id["database_connection_pool_exhausted"].expected_evidence == [
+        "metrics:telemetry_metrics",
+        "logs:related_logs",
+        "traces:related_traces",
+    ]
+
+
 def test_autoscaling_and_node_health_rules_use_schema_v1_evidence_keys() -> None:
     hpa_plan = plan_for("HPA scaling failed")
     hpa_by_id = {candidate.candidate_id: candidate for candidate in hpa_plan.candidates}
@@ -988,6 +1025,83 @@ def test_failed_mount_pvc_rule_evaluates_with_named_evidence_and_event_signal() 
 
     assert by_id["pvc_not_bound"].score == 1.0
     assert by_id["pvc_not_bound"].missing_evidence == []
+
+
+def test_rollout_progress_deadline_evaluates_with_named_evidence_and_event_signal() -> None:
+    plan = plan_for("ProgressDeadlineExceeded")
+    bundle = EvidenceBundle(
+        incident_id="inc-rollout",
+        items=[
+            evidence_item(
+                "kubernetes",
+                {
+                    "events": [
+                        {
+                            "reason": "ProgressDeadlineExceeded",
+                            "message": "Deployment exceeded its progress deadline",
+                        }
+                    ]
+                },
+            ),
+            evidence_item("metrics", {"results": {"unavailable_replicas": {"value": 2}}}),
+            evidence_item(
+                "logs",
+                {"entries": [{"line": "rollout exceeded progress deadline for checkout-api"}]},
+            ),
+            evidence_item("metadata", {"items": [{"name": "checkout-api", "revision": "7"}]}),
+        ],
+        missing_evidence=[],
+        complete=True,
+    )
+
+    by_id = {e.candidate_id: e for e in evaluate_causes(plan.candidates, bundle)}
+
+    assert by_id["deployment_progress_deadline_exceeded"].score == 1.0
+    assert by_id["deployment_progress_deadline_exceeded"].missing_evidence == []
+
+
+def test_database_config_error_evaluates_with_named_evidence_and_log_signal() -> None:
+    plan = plan_for("DB connection failed")
+    bundle = EvidenceBundle(
+        incident_id="inc-db",
+        items=[
+            evidence_item("kubernetes", {"pods": [{"name": "checkout-api-1"}], "events": []}),
+            evidence_item(
+                "logs",
+                {"entries": [{"line": "password authentication failed for user checkout"}]},
+            ),
+            evidence_item("metadata", {"items": [{"name": "checkout-api", "secretRefs": ["db"]}]}),
+        ],
+        missing_evidence=[],
+        complete=True,
+    )
+
+    by_id = {e.candidate_id: e for e in evaluate_causes(plan.candidates, bundle)}
+
+    assert by_id["database_credential_or_config_error"].score == 1.0
+    assert by_id["database_credential_or_config_error"].missing_evidence == []
+
+
+def test_database_pool_exhausted_evaluates_with_named_evidence_and_log_signal() -> None:
+    plan = plan_for("DB connection failed")
+    bundle = EvidenceBundle(
+        incident_id="inc-db-pool",
+        items=[
+            evidence_item("metrics", {"results": {"db_pool_usage": {"value": 1.0}}}),
+            evidence_item(
+                "logs",
+                {"entries": [{"line": "connection pool exhausted while acquiring DB client"}]},
+            ),
+            evidence_item("traces", {"results": {"db_spans": {"error_count": 12}}}),
+        ],
+        missing_evidence=[],
+        complete=True,
+    )
+
+    by_id = {e.candidate_id: e for e in evaluate_causes(plan.candidates, bundle)}
+
+    assert by_id["database_connection_pool_exhausted"].score == 1.0
+    assert by_id["database_connection_pool_exhausted"].missing_evidence == []
 
 
 def test_unmatched_symptom_still_reports_rule_missing() -> None:
