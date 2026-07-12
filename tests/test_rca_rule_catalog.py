@@ -406,7 +406,10 @@ def test_rca_rule_validate_route_reports_schema_errors() -> None:
 
 def test_rca_rule_catalog_route_lists_loaded_rules() -> None:
     response = asyncio.run(
-        list_rca_rule_catalog(SimpleNamespace(user_id="user-1", workspace_id="workspace-1"))
+        list_rca_rule_catalog(
+            SimpleNamespace(user_id="user-1", workspace_id="workspace-1"),
+            registered_cause_profiles(),
+        )
     )
 
     by_id = {item.rule_id: item for item in response.items}
@@ -726,12 +729,7 @@ def test_dns_lookup_failed_service_name_mismatch_uses_named_evidence_and_log_sig
                 name="related_logs",
                 value={
                     "entries": [
-                        {
-                            "line": (
-                                "lookup checkout-api.sanbbox.svc.cluster.local: "
-                                "no such host"
-                            )
-                        }
+                        {"line": ("lookup checkout-api.sanbbox.svc.cluster.local: no such host")}
                     ]
                 },
                 summary="DNS logs",
@@ -884,7 +882,9 @@ def test_policy_and_dependency_rules_use_schema_v1_evidence_keys() -> None:
     policy_plan = plan_for("Admission webhook denied")
     policy_by_id = {candidate.candidate_id: candidate for candidate in policy_plan.candidates}
     dependency_plan = plan_for("External API timeout")
-    dependency_by_id = {candidate.candidate_id: candidate for candidate in dependency_plan.candidates}
+    dependency_by_id = {
+        candidate.candidate_id: candidate for candidate in dependency_plan.candidates
+    }
 
     assert policy_by_id["policy_violation"].expected_evidence == [
         "kubernetes:cluster_resource_state",

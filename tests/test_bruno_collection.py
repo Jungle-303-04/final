@@ -266,15 +266,13 @@ def test_bruno_default_runner_handles_optional_operational_inputs() -> None:
     email_check = (API_DIR / "15-wizard-validation" / "01-check-email.bru").read_text(
         encoding="utf-8"
     )
-    replay = (API_DIR / "08-ops-dlq" / "02-replay-dead-letter.bru").read_text(
-        encoding="utf-8"
-    )
+    replay = (API_DIR / "08-ops-dlq" / "02-replay-dead-letter.bru").read_text(encoding="utf-8")
     metrics = (API_DIR / "08-ops-dlq" / "03-metrics.bru").read_text(encoding="utf-8")
 
     assert "check_email: bruno-validation@example.invalid" in collection
     assert "check_email: bruno-validation@example.invalid" in environment
     assert '"email": "{{check_email}}"' in email_check
-    assert '!/^\\d+$/.test(deadLetterId)' in replay
+    assert "!/^\\d+$/.test(deadLetterId)" in replay
     assert "bru.runner.skipRequest()" in replay
     assert "[200, 401, 503]" in metrics
 
@@ -289,9 +287,7 @@ def test_bruno_client_certificate_uses_ignored_portable_paths() -> None:
 
 
 def test_github_webhook_signature_uses_bruno_safe_crypto_bundle() -> None:
-    request = (API_DIR / "06-gitops-approval" / "01-github-webhook.bru").read_text(
-        encoding="utf-8"
-    )
+    request = (API_DIR / "06-gitops-approval" / "01-github-webhook.bru").read_text(encoding="utf-8")
 
     assert 'require("crypto")' not in request
     assert 'require("crypto-js")' in request
