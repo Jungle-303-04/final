@@ -5,7 +5,7 @@ from __future__ import annotations
 import hashlib
 from typing import Any
 
-from sqlalchemy import and_, case, func, or_, select
+from sqlalchemy import and_, bindparam, case, func, or_, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from domains.command.models import AgentCommand
@@ -49,6 +49,7 @@ from packages.contracts.gitops import (
 from packages.contracts.identity import (
     DEFAULT_WORKSPACE_ID,
     AccessResourceType,
+    Permission,
     ResourceRole,
 )
 from packages.storage.engine import DatabaseConnection, iso_or_none, row_dict
@@ -200,6 +201,22 @@ class RepoChangeRepository(DatabaseConnection):
             row = conn.execute(statement).mappings().first()
         return row_dict(row) if row is not None else None
 
+    def get_repository_by_ref(self, workspace_id: str, repo_ref: str) -> JsonObject | None:
+        if not workspace_id or not repo_ref:
+            return None
+        table = GitRepository.__table__
+        statement = (
+            select(table)
+            .where(
+                table.c.workspace_id == workspace_id,
+                table.c.repo_ref == repo_ref,
+            )
+            .limit(1)
+        )
+        with self.connection() as conn:
+            row = conn.execute(statement).mappings().first()
+        return row_dict(row) if row is not None else None
+
     def register_repository(self, payload: JsonObject) -> JsonObject:
         workspace_id = str(payload.get("workspace_id", DEFAULT_WORKSPACE_ID))
         # Create IDs are always server-derived.  ``derive_repository_id`` must
@@ -207,44 +224,84 @@ class RepoChangeRepository(DatabaseConnection):
         # so remove the untrusted create field only at this storage boundary.
         create_identity = {**payload}
         create_identity.pop("repository_id", None)
-        repository_id = derive_repository_id(create_identity)
+        derived_repository_id = derive_repository_id(create_identity)
         user_id = payload.get("user_id")
         table = GitRepository.__table__
-        insert = pg_insert(table).values(
-            repository_id=repository_id,
-            workspace_id=workspace_id,
-            provider=str(payload.get("provider", GitProvider.GITHUB.value)),
-            repo_ref=str(payload.get("repo_ref", DEFAULT_REPO_REF)),
-            default_branch=str(payload.get("default_branch", DEFAULT_REPO_BRANCH)),
-            credential_ref=payload.get("credential_ref"),
-            status=str(payload.get("status", RepositoryStatus.ACTIVE.value)),
-            access_policy=dict(payload.get("access_policy", {})),
-            updated_at=func.now(),
-        )
-        statement = insert.on_conflict_do_update(
-            index_elements=[table.c.repository_id],
-            set_={
-                "provider": insert.excluded.provider,
-                "repo_ref": insert.excluded.repo_ref,
-                "default_branch": insert.excluded.default_branch,
-                "credential_ref": insert.excluded.credential_ref,
-                "status": insert.excluded.status,
-                "access_policy": insert.excluded.access_policy,
-                "updated_at": func.now(),
-            },
-            where=table.c.workspace_id == insert.excluded.workspace_id,
-        ).returning(table)
-        with self.connection() as conn:
-            row = conn.execute(statement).mappings().first()
-        if row is None:
-            # ON CONFLICT's workspace guard deliberately yields no row for a
-            # foreign owner.  Keep the error generic so tenant existence and
-            # credential metadata cannot be inferred by callers or logs.
-            raise LookupError("repository not found in workspace")
-        self._grant_owner_if_present(
-            workspace_id, user_id, AccessResourceType.REPOSITORY.value, repository_id
-        )
-        return {**payload, "workspace_id": workspace_id, "repository_id": repository_id}
+        with self.unit_of_work():
+            existing = self.get_repository_by_ref(
+                workspace_id,
+                str(payload.get("repo_ref", DEFAULT_REPO_REF)),
+            )
+            if existing is not None:
+                repository_id = str(existing["repository_id"])
+                can_access = getattr(self, "can_access", None)
+                if (
+                    not user_id
+                    or not callable(can_access)
+                    or not can_access(
+                        str(user_id),
+                        workspace_id,
+                        AccessResourceType.REPOSITORY.value,
+                        repository_id,
+                        Permission.REPOSITORY_MANAGE.value,
+                    )
+                ):
+                    raise LookupError("repository not found in workspace")
+                authorized_repository_id: str | None = repository_id
+            else:
+                repository_id = derived_repository_id
+                # A row appearing after the authoritative lookup must not be
+                # updated by this create attempt. The caller can retry and go
+                # through the existing-row manage check.
+                authorized_repository_id = None
+
+            insert = pg_insert(table).values(
+                repository_id=repository_id,
+                workspace_id=workspace_id,
+                provider=str(payload.get("provider", GitProvider.GITHUB.value)),
+                repo_ref=str(payload.get("repo_ref", DEFAULT_REPO_REF)),
+                default_branch=str(payload.get("default_branch", DEFAULT_REPO_BRANCH)),
+                credential_ref=payload.get("credential_ref"),
+                status=str(payload.get("status", RepositoryStatus.ACTIVE.value)),
+                access_policy=dict(payload.get("access_policy", {})),
+                updated_at=func.now(),
+            )
+            statement = insert.on_conflict_do_update(
+                index_elements=[table.c.repository_id],
+                set_={
+                    "provider": insert.excluded.provider,
+                    "repo_ref": insert.excluded.repo_ref,
+                    "default_branch": insert.excluded.default_branch,
+                    "credential_ref": insert.excluded.credential_ref,
+                    "status": insert.excluded.status,
+                    "access_policy": insert.excluded.access_policy,
+                    "updated_at": func.now(),
+                },
+                where=and_(
+                    table.c.workspace_id == insert.excluded.workspace_id,
+                    table.c.repository_id
+                    == bindparam("authorized_repository_id", authorized_repository_id),
+                ),
+            ).returning(table)
+            with self.connection() as conn:
+                row = conn.execute(statement).mappings().first()
+            if row is None:
+                # Conditional conflict updates deliberately return no row for
+                # foreign ownership, unapproved races, or stale identities.
+                raise LookupError("repository not found in workspace")
+            if existing is None:
+                self._grant_owner_if_present(
+                    workspace_id,
+                    user_id,
+                    AccessResourceType.REPOSITORY.value,
+                    repository_id,
+                )
+        return {
+            **payload,
+            **row_dict(row),
+            "workspace_id": workspace_id,
+            "repository_id": repository_id,
+        }
 
     def register_watch_target(self, payload: JsonObject) -> JsonObject:
         workspace_id = str(payload.get("workspace_id", DEFAULT_WORKSPACE_ID))

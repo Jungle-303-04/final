@@ -100,6 +100,31 @@ def register_repository_or_404(db: Any, body: dict[str, Any]) -> dict[str, Any]:
         raise HTTPException(status_code=HTTP_NOT_FOUND, detail=REPOSITORY_NOT_FOUND) from exc
 
 
+def require_repository_manage_if_registered(
+    db: Any,
+    current: Any,
+    workspace_id: str,
+    repo_ref: str,
+) -> None:
+    get_repository = getattr(db, "get_repository_by_ref", None)
+    if not callable(get_repository):
+        raise HTTPException(status_code=403, detail="resource access denied")
+    repository = get_repository(workspace_id, repo_ref)
+    if repository is None:
+        return
+    repository_id = str(repository.get("repository_id") or "")
+    if not repository_id:
+        raise HTTPException(status_code=HTTP_NOT_FOUND, detail=REPOSITORY_NOT_FOUND)
+    require_resource_access(
+        db,
+        current,
+        workspace_id,
+        AccessResourceType.REPOSITORY.value,
+        repository_id,
+        Permission.REPOSITORY_MANAGE.value,
+    )
+
+
 def latest_agents_for_clusters(
     db: Any,
     workspace_id: str,
@@ -222,6 +247,12 @@ async def upsert_application(
     }
     with unit_of_work_or_null(db):
         if payload.repo_ref:
+            require_repository_manage_if_registered(
+                db,
+                current,
+                workspace_id,
+                payload.repo_ref,
+            )
             repository = register_repository_or_404(db, body)
             body["repository_id"] = repository["repository_id"]
         stored = db.upsert_application(body)
@@ -284,7 +315,6 @@ async def connect_application(
         "validation_mode": validation.validation_mode,
     }
     settings = {"source_type": source_type}
-    credential = store_repo_token_if_present(db, workspace_id, payload.token)
     body = {
         "workspace_id": workspace_id,
         "user_id": current.user_id,
@@ -301,9 +331,16 @@ async def connect_application(
         "settings": settings,
         "access_policy": payload.access_policy,
     }
-    if credential is not None:
-        body["credential_ref"] = credential
     with unit_of_work_or_null(db):
+        require_repository_manage_if_registered(
+            db,
+            current,
+            workspace_id,
+            validation.repo_ref,
+        )
+        credential = store_repo_token_if_present(db, workspace_id, payload.token)
+        if credential is not None:
+            body["credential_ref"] = credential
         repository = register_repository_or_404(db, body)
         body["repository_id"] = repository["repository_id"]
         stored = db.upsert_application(body)

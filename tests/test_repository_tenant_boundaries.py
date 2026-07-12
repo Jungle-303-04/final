@@ -133,6 +133,8 @@ def test_repository_create_ignores_client_controlled_repository_id() -> None:
     class StubConnection:
         def execute(self, statement: Any) -> _MappedResult:
             statements.append(statement)
+            if getattr(statement, "is_select", False):
+                return _MappedResult(None)
             _sql, params = _compiled(statement)
             return _MappedResult(params)
 
@@ -142,10 +144,11 @@ def test_repository_create_ignores_client_controlled_repository_id() -> None:
 
     repository = object.__new__(RepoChangeRepository)
     repository.connection = stub_connection  # type: ignore[method-assign]
+    repository.unit_of_work = stub_connection  # type: ignore[method-assign]
 
     stored = repository.register_repository(payload)
 
-    _sql, params = _compiled(statements[0])
+    _sql, params = _compiled(statements[-1])
     assert params["repository_id"] == expected_repository_id
     assert stored["repository_id"] == expected_repository_id
     assert stored["repository_id"] != payload["repository_id"]
@@ -333,6 +336,11 @@ def test_application_create_with_foreign_repository_id_is_rejected_before_victim
 
 def test_server_generated_repository_collision_maps_to_non_disclosing_404() -> None:
     class CollisionDb:
+        def get_repository_by_ref(
+            self, _workspace_id: str, _repo_ref: str
+        ) -> dict[str, object] | None:
+            return None
+
         def register_repository(self, _payload: dict[str, object]) -> dict[str, object]:
             raise LookupError("foreign workspace repository repo-secret exists")
 
@@ -487,6 +495,8 @@ def test_repository_conflict_update_is_workspace_fenced_in_postgresql() -> None:
     class StubConnection:
         def execute(self, statement: Any) -> _MappedResult:
             statements.append(statement)
+            if getattr(statement, "is_select", False):
+                return _MappedResult(None)
             _sql, params = _compiled(statement)
             return _MappedResult(params)
 
@@ -496,6 +506,7 @@ def test_repository_conflict_update_is_workspace_fenced_in_postgresql() -> None:
 
     repository = object.__new__(RepoChangeRepository)
     repository.connection = stub_connection  # type: ignore[method-assign]
+    repository.unit_of_work = stub_connection  # type: ignore[method-assign]
 
     repository.register_repository(
         {
@@ -505,7 +516,7 @@ def test_repository_conflict_update_is_workspace_fenced_in_postgresql() -> None:
         }
     )
 
-    sql, _params = _compiled(statements[0])
+    sql, _params = _compiled(statements[-1])
     assert "ON CONFLICT (repository_id) DO UPDATE" in sql
     assert "WHERE git_repositories.workspace_id = excluded.workspace_id" in sql
     assert "RETURNING" in sql
@@ -534,6 +545,8 @@ def test_cross_workspace_repository_conflict_is_rejected_without_credential_over
 
     class ConflictStoreConnection:
         def execute(self, statement: Any) -> _MappedResult:
+            if getattr(statement, "is_select", False):
+                return _MappedResult(None)
             sql, params = _compiled(statement)
             repository_id = str(params["repository_id"])
             existing = rows.get(repository_id)
@@ -565,6 +578,7 @@ def test_cross_workspace_repository_conflict_is_rejected_without_credential_over
 
     repository = object.__new__(RepoChangeRepository)
     repository.connection = conflict_store_connection  # type: ignore[method-assign]
+    repository.unit_of_work = conflict_store_connection  # type: ignore[method-assign]
 
     error: LookupError | None = None
     try:

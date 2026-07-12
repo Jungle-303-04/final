@@ -1387,7 +1387,9 @@ def test_gitops_registration_stores_workspace_scoped_default_ids() -> None:
         def mappings(self) -> StubResult:
             return self
 
-        def first(self) -> dict[str, object]:
+        def first(self) -> dict[str, object] | None:
+            if getattr(self.statement, "is_select", False):
+                return None
             compiled = self.statement.compile(dialect=postgresql.dialect())
             return dict(compiled.params)
 
@@ -1402,6 +1404,7 @@ def test_gitops_registration_stores_workspace_scoped_default_ids() -> None:
 
     repository = object.__new__(RepoChangeRepository)
     repository.connection = stub_connection  # type: ignore[method-assign]
+    repository.unit_of_work = stub_connection  # type: ignore[method-assign]
     payload = {
         "workspace_id": "workspace-b",
         "repo_ref": "org/checkout",
@@ -1421,7 +1424,11 @@ def test_gitops_registration_stores_workspace_scoped_default_ids() -> None:
     assert binding["repository_id"] == repo["repository_id"]
     assert binding["watch_target_id"] == watch["watch_target_id"]
 
-    compiled = [statement.compile(dialect=postgresql.dialect()) for statement in recorded]
+    compiled = [
+        statement.compile(dialect=postgresql.dialect())
+        for statement in recorded
+        if not getattr(statement, "is_select", False)
+    ]
     assert compiled[0].params["repository_id"] == repo["repository_id"]
     assert compiled[1].params["watch_target_id"] == watch["watch_target_id"]
     assert compiled[2].params["binding_id"] == binding["binding_id"]
