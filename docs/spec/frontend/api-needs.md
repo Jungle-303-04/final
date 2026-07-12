@@ -51,6 +51,12 @@ snapshot: 13행·27함수 / requested 12 / in_progress 1 / blocked 0 / valid com
 14. (2026-07-13 검토자 결정) 착륙 대기로 **동결**된 `in_progress` 행은 코드 파일을 수정하지
     않는 상태이므로 규칙 4의 lock을 점유하지 않는다. 동결 행을 제외한 `in_progress`는
     여전히 동시 1행만 허용한다. 동결 해제는 검토자 지시로만 한다.
+15. (2026-07-13 검토자 결정 — 완성 스프린트 병렬 모드) 규칙 4의 동시 1행 제한을 **레인 단위
+    소유권**으로 대체한다. 규칙 13의 도메인별 barrel 분리를 승인한다: fan-out 전에 통합자가
+    `index.ts`를 도메인 barrel로 분리하는 선행 커밋 1개를 만들고, 이후 각 레인은 자기 도메인
+    barrel·자기 파일만 수정한다. 공유 파일(라우터·셸·네비·테마·`index.ts` 재수출)은 통합자
+    단독 소유. 두 레인이 같은 파일을 수정해야 하면 설계 오류 — 중단 후 보고. 동결 행(029)과
+    §4b 대기(012)는 병렬 모드에서도 그대로다.
 
 queue coordinator와 행 분할·회수·unblock 승인 주체는 현재 primary Codex 작업(`/root`)이다.
 `claim·heartbeat`는 queue 시각 갱신 커밋이 canonical branch에 push된 경우에만 유효하다. 대상 파일의
