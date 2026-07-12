@@ -101,4 +101,15 @@ describe("RCA Incident detail API", () => {
       status: 200,
     } satisfies Partial<ApiError>);
   });
+
+  it("rejects unknown Incident response fields as contract drift", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      jsonResponse({ ...RCA_INCIDENT, provider: "unknown" }),
+    );
+
+    await expect(getRcaIncident("inc-456")).rejects.toMatchObject({
+      kind: "invalid-payload",
+      status: 200,
+    } satisfies Partial<ApiError>);
+  });
 });

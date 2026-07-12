@@ -101,4 +101,15 @@ describe("Issues RCA list API", () => {
       status: 200,
     } satisfies Partial<ApiError>);
   });
+
+  it("rejects unknown timeline response fields as contract drift", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      jsonResponse({ items: [], total: 0 }),
+    );
+
+    await expect(listRcaTimeline()).rejects.toMatchObject({
+      kind: "invalid-payload",
+      status: 200,
+    } satisfies Partial<ApiError>);
+  });
 });

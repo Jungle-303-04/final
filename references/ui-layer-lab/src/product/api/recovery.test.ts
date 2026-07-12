@@ -71,29 +71,56 @@ describe("recovery plan API", () => {
     );
   });
 
-  it("selects an action with the expected plan version", async () => {
+  it("selects one action through the canonical plan and action path", async () => {
     const fetchMock = vi
       .spyOn(globalThis, "fetch")
       .mockResolvedValue(jsonResponse(ACCEPTED));
 
     await expect(
-      selectRecoveryAction("corr-123", {
-        expectedPlanId: "plan-123",
-        actionId: "increase-memory",
+      selectRecoveryAction("plan-123", "increase-memory", {
         reason: "Memory pressure is confirmed by the evidence",
       }),
     ).resolves.toEqual(ACCEPTED);
     expect(fetchMock).toHaveBeenCalledWith(
-      "/api/rca/recovery-plans/by-correlation/corr-123/actions/select",
+      "/api/rca/recovery-plans/plan-123/actions/increase-memory/select",
       expect.objectContaining({
         method: "POST",
         credentials: "include",
         body: JSON.stringify({
-          expected_plan_id: "plan-123",
-          action_id: "increase-memory",
           reason: "Memory pressure is confirmed by the evidence",
         }),
       }),
+    );
+  });
+
+  it("sends the required empty JSON object when no reason is provided", async () => {
+    const fetchMock = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValue(jsonResponse(ACCEPTED));
+
+    await expect(
+      selectRecoveryAction("plan/123", "increase memory"),
+    ).resolves.toEqual(ACCEPTED);
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/rca/recovery-plans/plan%2F123/actions/increase%20memory/select",
+      expect.objectContaining({
+        method: "POST",
+        body: "{}",
+        headers: expect.any(Headers),
+      }),
+    );
+  });
+
+  it("preserves an explicit null reason and does not derive one client-side", async () => {
+    const fetchMock = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValue(jsonResponse(ACCEPTED));
+
+    await selectRecoveryAction("plan-123", "increase-memory", { reason: null });
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/rca/recovery-plans/plan-123/actions/increase-memory/select",
+      expect.objectContaining({ body: JSON.stringify({ reason: null }) }),
     );
   });
 
@@ -117,7 +144,7 @@ describe("recovery plan API", () => {
     );
 
     await expect(
-      selectRecoveryAction("corr-123", { expectedPlanId: "stale-plan" }),
+      selectRecoveryAction("plan-123", "increase-memory"),
     ).rejects.toMatchObject({
       kind: "http",
       status: 409,
@@ -128,6 +155,17 @@ describe("recovery plan API", () => {
   it("rejects malformed recovery plans", async () => {
     vi.spyOn(globalThis, "fetch").mockResolvedValue(
       jsonResponse({ ...RECOVERY_PLAN, candidates: [{ action_id: "only-id" }] }),
+    );
+
+    await expect(getRecoveryPlanByCorrelation("corr-123")).rejects.toMatchObject({
+      kind: "invalid-payload",
+      status: 200,
+    } satisfies Partial<ApiError>);
+  });
+
+  it("rejects unknown recovery plan fields as contract drift", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      jsonResponse({ ...RECOVERY_PLAN, provider: "unknown" }),
     );
 
     await expect(getRecoveryPlanByCorrelation("corr-123")).rejects.toMatchObject({
