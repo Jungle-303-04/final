@@ -30,3 +30,28 @@ format: "[시각] [트랙] 한 줄 상태 + 커밋 hash (있으면)"
 [2026-07-13 04:26:03 KST] [백엔드] 브랜치 지형 보고 완료 — 세 브랜치 착륙·stack·clean merge 확인
 
 [2026-07-13 04:25 KST] [판단자] 판정: 정상 — 착륙 위반 0건(dev에 backend-f-progress.md 미존재·VP 행 불변), AcceptedResponse 3필드+optional 유지, APIQ-029 동결 유지, 신규 작업 보고 0건(첫 사이클로 판단). 지시 [D-002] 발행.
+
+[2026-07-13 04:30:27 KST] [백엔드] [D-003] 정정 수용 — `1a439b002` 지형 보고는 무효; `git ls-remote`의 dev=`03e90ddb6`와 BQ 실물 3종으로 착륙 완료 재확인, 재merge 대상 0건. 회수 대상 worktree·로컬 브랜치 각 3개 삭제 완료, `codex/f-audit-timeline` 유지.
+
+## 2026-07-13 04:30:27 KST — in-process event bus 완료 증거
+
+- branch: `codex/f-inprocess-event-bus`
+- HEAD: `88740e523c2740b560269f4601fe62c6ac7f7480`
+- commits:
+  - `88740e523` test: 지연 재배달 / 타이밍 여유 / flake 제거
+  - `0cd735880` test: App 기본 버스 / NATS 경로 / 명시 주입
+  - `ee3d76596` test: 지연 재배달 / 버스 생명주기 / 경계 조건
+  - `9f43665b6` feat: in-memory 이벤트 버스 / 런타임 주입 / NATS 기본값
+  - `f2dd3a762` test: in-memory 이벤트 버스 / 주입 배선 / NATS 회귀
+- stat: 4 files changed, 529 insertions(+), 5 deletions(-)
+  - `src/packages/events/in_memory.py`
+  - `src/packages/runtime/app.py`
+  - `src/packages/runtime/service.py`
+  - `tests/test_in_memory_event_bus.py`
+- 신규 회귀: `7 passed in 2.90s` — ack/nak/지연 재배달, wildcard fan-out, App/WorkerService 주입, NATS 기본값.
+- 전체 pytest: 기존 RCA baseline 6건만 실패, `1647 passed, 3 skipped`; 신규 실패 0건.
+- Ruff lint PASS; Ruff format은 기존 2파일만 대상; import-linter는 기존 `domains.rca.router -> services` 1건만 유지.
+- compileall PASS; manifest PASS(`management 68`, `target 20`).
+- gateway 계약·RCA·AI·`runtime/worker.py` 변경 0건. merge·push·앵커 0건.
+
+[2026-07-13 04:30:27 KST] [백엔드] in-process event bus delta-green 완료, WATCH 전환 `88740e523`
