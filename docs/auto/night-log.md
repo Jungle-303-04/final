@@ -136,3 +136,21 @@ $ git cat-file -e origin/dev:src/domains/rca_bundle/router.py; echo $?
 ```
 
 - 결과: VP-001 판정 `직결`, APIQ-029 active in_progress, APIQ-012 requested/claim 가능.
+
+[2026-07-13 06:13 KST] [프론트] A2 🔒waiting — 첫 dev→lab 동기화의 사람 GO 요청, merge 실행 없음
+
+## GO-REQUEST [FE-A2]
+
+- 목적: `origin/dev`를 `woonyong/ui-layer-lab`에 최초 단방향 merge.
+- source: `origin/dev` `03e90ddb6d6e50e1b7e39739c20210e28e1dc4a2`.
+- target: `0626d14ec41accbb124e213367371540fb93c275`; merge-base
+  `9fe235e7b03032af7d7ac3b14d05ab0f17306b02`; divergence target-only 206 / source-only 465.
+- `git merge-tree --write-tree HEAD origin/dev` 예측: 총 36 conflict.
+  - 프론트 소유 경로 12건: `docs/spec/frontend/**` 3건, `references/ui-layer-lab/**` 9건 — 수동 해소 대상.
+  - legacy `frontend/**` 15건(파일/디렉터리 충돌 포함) — dev 채택 시 부활 금지 정책과 충돌하므로
+    사람의 명시 판정 필요.
+  - 기타 경로 9건: root/docs/backend/tests — [D-009] 규칙상 dev 채택 대상.
+- 실행 명령: `git merge --no-ff origin/dev`.
+- 실패·취소 명령: `git merge --abort`.
+- 후속 검증: `npm run check` 전체 PASS 및 충돌 해소 목록 기록 전에는 A2 완료 처리 금지.
+- 현재 조치: merge·push·배포 실행 없음. B단계는 정본의 병행 허용 규칙에 따라 진행한다.
