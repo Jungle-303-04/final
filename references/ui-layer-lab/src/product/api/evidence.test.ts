@@ -117,6 +117,29 @@ describe("Evidence and RCA report API", () => {
     );
   });
 
+  it("preserves ISO range filters and the opaque server cursor", async () => {
+    const fetchMock = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValue(jsonResponse({
+        ...EVIDENCE,
+        has_more: true,
+        next_cursor: "eyJ2IjoxLCJpZCI6N30",
+      }));
+
+    const result = await listEvidence({
+      correlationId: "corr/123",
+      since: "2026-07-13T00:00:00+09:00",
+      until: "2026-07-14T00:00:00Z",
+      cursor: "cursor/+==",
+    });
+
+    expect(result.next_cursor).toBe("eyJ2IjoxLCJpZCI6N30");
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/evidence?correlation_id=corr%2F123&since=2026-07-13T00%3A00%3A00%2B09%3A00&until=2026-07-14T00%3A00%3A00Z&limit=50&cursor=cursor%2F%2B%3D%3D",
+      expect.objectContaining({ method: "GET" }),
+    );
+  });
+
   it("forwards AbortSignal to Evidence requests", async () => {
     const controller = new AbortController();
     const abortError = new DOMException("Aborted", "AbortError");
@@ -150,6 +173,17 @@ describe("Evidence and RCA report API", () => {
     );
 
     await expect(listRcaReports()).rejects.toMatchObject({
+      kind: "invalid-payload",
+      status: 200,
+    } satisfies Partial<ApiError>);
+  });
+
+  it("rejects unknown evidence page fields as contract drift", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      jsonResponse({ ...EVIDENCE, total: 1 }),
+    );
+
+    await expect(listEvidence()).rejects.toMatchObject({
       kind: "invalid-payload",
       status: 200,
     } satisfies Partial<ApiError>);

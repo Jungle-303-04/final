@@ -8,9 +8,7 @@ import {
 import { encodePathSegment } from "./url";
 
 export interface SelectRecoveryActionInput {
-  expectedPlanId: string;
-  actionId?: string;
-  reason?: string;
+  reason?: string | null;
 }
 
 export interface RecoveryRequestOptions {
@@ -29,20 +27,17 @@ export function getRecoveryPlanByCorrelation(
 
 /** Selects one recovery candidate without executing it directly. */
 export function selectRecoveryAction(
-  correlationId: string,
-  input: SelectRecoveryActionInput,
+  planId: string,
+  actionId: string,
+  input: SelectRecoveryActionInput = {},
   options: RecoveryRequestOptions = {},
 ): Promise<RecoveryActionAccepted> {
   const path =
-    `/api/rca/recovery-plans/by-correlation/${encodePathSegment(correlationId)}/actions/select` as ApiPath;
+    `/api/rca/recovery-plans/${encodePathSegment(planId)}/actions/${encodePathSegment(actionId)}/select` as ApiPath;
   return apiRequest(path, recoveryActionAcceptedSchema, {
     method: "POST",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({
-      expected_plan_id: input.expectedPlanId,
-      action_id: input.actionId,
-      reason: input.reason,
-    }),
+    body: JSON.stringify(input.reason === undefined ? {} : { reason: input.reason }),
     signal: options.signal,
   });
 }
