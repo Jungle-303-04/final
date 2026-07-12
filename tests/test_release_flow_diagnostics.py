@@ -80,13 +80,34 @@ class ReleasePlanWriteDb:
     def __init__(self) -> None:
         self.upserts: list[dict[str, object]] = []
 
-    def get_release_plan(self, workspace_id: str, plan_id: str) -> dict[str, object] | None:
+    def lock_release_plan_identity(self, _workspace_id: str, _name: str) -> None:
+        return None
+
+    def get_release_plan(
+        self,
+        workspace_id: str,
+        plan_id: str,
+        *,
+        for_update: bool = False,
+    ) -> dict[str, object] | None:
+        del for_update
         if workspace_id == "workspace-a" and plan_id == "path-plan":
             return {
                 "workspace_id": workspace_id,
                 "plan_id": plan_id,
+                "name": "Existing release",
                 "steps": [{"application_id": "app-a", "position": 0}],
             }
+        return None
+
+    def get_release_plan_by_name(
+        self,
+        _workspace_id: str,
+        _name: str,
+        *,
+        for_update: bool = False,
+    ) -> dict[str, object] | None:
+        del for_update
         return None
 
     def can_access(

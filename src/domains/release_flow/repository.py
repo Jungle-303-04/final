@@ -75,7 +75,13 @@ class ReleaseFlowRepository(DatabaseConnection):
             serialize_release_plan(row, steps=steps_by_plan[str(row["plan_id"])]) for row in rows
         ]
 
-    def get_release_plan(self, workspace_id: str, plan_id: str) -> JsonObject | None:
+    def get_release_plan(
+        self,
+        workspace_id: str,
+        plan_id: str,
+        *,
+        for_update: bool = False,
+    ) -> JsonObject | None:
         plan_table = ReleasePlan.__table__
         step_table = ReleasePlanStep.__table__
         plan_statement = (
@@ -83,6 +89,8 @@ class ReleaseFlowRepository(DatabaseConnection):
             .where(plan_table.c.workspace_id == workspace_id, plan_table.c.plan_id == plan_id)
             .limit(1)
         )
+        if for_update:
+            plan_statement = plan_statement.with_for_update()
         step_statement = (
             select(step_table)
             .where(step_table.c.workspace_id == workspace_id, step_table.c.plan_id == plan_id)
@@ -95,7 +103,13 @@ class ReleaseFlowRepository(DatabaseConnection):
             steps = conn.execute(step_statement).mappings().all()
         return serialize_release_plan(plan, steps=[serialize_release_step(row) for row in steps])
 
-    def get_release_plan_by_name(self, workspace_id: str, name: str) -> JsonObject | None:
+    def get_release_plan_by_name(
+        self,
+        workspace_id: str,
+        name: str,
+        *,
+        for_update: bool = False,
+    ) -> JsonObject | None:
         if not workspace_id or not name:
             return None
         table = ReleasePlan.__table__
@@ -107,11 +121,19 @@ class ReleaseFlowRepository(DatabaseConnection):
             )
             .limit(1)
         )
+        if for_update:
+            statement = statement.with_for_update()
         with self.connection() as conn:
             plan_id = conn.execute(statement).scalar_one_or_none()
         if plan_id is None:
             return None
-        return self.get_release_plan(workspace_id, str(plan_id))
+        return self.get_release_plan(workspace_id, str(plan_id), for_update=for_update)
+
+    def lock_release_plan_identity(self, workspace_id: str, name: str) -> None:
+        """Serialize create/name mutation decisions for one workspace+name."""
+        lock_key = release_plan_identity_lock_key(workspace_id, name)
+        with self.connection() as conn:
+            conn.execute(select(func.pg_advisory_xact_lock(lock_key)))
 
     def upsert_release_plan(self, payload: JsonObject) -> JsonObject:
         workspace_id = str(payload.get("workspace_id", DEFAULT_WORKSPACE_ID))
@@ -930,6 +952,11 @@ def derive_release_plan_id(payload: JsonObject) -> str:
         ]
     )
     return f"release-plan-{hashlib.sha256(raw.encode()).hexdigest()[:24]}"
+
+
+def release_plan_identity_lock_key(workspace_id: str, name: str) -> int:
+    raw = f"release-plan\0{workspace_id}\0{name}".encode()
+    return int.from_bytes(hashlib.sha256(raw).digest()[:8], byteorder="big", signed=True)
 
 
 def derive_release_step_id(plan_id: str, payload: Mapping[str, Any], position: int) -> str:
