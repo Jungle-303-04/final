@@ -216,6 +216,17 @@ class _ConnectDb:
     def upsert_workspace_credential(self, payload: dict[str, object]) -> None:
         self.credentials[str(payload["scope"])] = dict(payload)
 
+    def get_workspace_credential(
+        self,
+        requested_workspace_id: str,
+        provider: str,
+        scope: str,
+    ) -> dict[str, object] | None:
+        if requested_workspace_id != self.workspace_id or provider != "github":
+            return None
+        credential = self.credentials.get(scope)
+        return dict(credential) if credential is not None else None
+
     def register_repository(self, payload: dict[str, object]) -> dict[str, object]:
         self.registered_payload = dict(payload)
         if self.repository is None:
@@ -932,6 +943,52 @@ def test_existing_repository_without_token_preserves_credential_ref() -> None:
     assert db.registered_payload is not None
     assert db.registered_payload.get("credential_ref") == existing_credential_ref
     assert db.repository["credential_ref"] == existing_credential_ref
+
+
+def test_connect_without_token_reuses_wizard_per_repository_credential() -> None:
+    workspace_id = "workspace-a"
+    repo_ref = "acme/wizard-checkout"
+    repository_id = derive_repository_id({"workspace_id": workspace_id, "repo_ref": repo_ref})
+    scope = f"repository:{repository_id}"
+    credential_ref = f"db:github:{scope}"
+    db = _ConnectDb(
+        workspace_id=workspace_id,
+        repo_ref=repo_ref,
+        repository_id=repository_id,
+        credentials={
+            scope: {
+                "workspace_id": workspace_id,
+                "provider": "github",
+                "scope": scope,
+                "encrypted_value": "fernet:v1:wizard-token",
+                "metadata": {
+                    "credential_ref": credential_ref,
+                    "repository_id": repository_id,
+                },
+            }
+        },
+    )
+    session = SimpleNamespace(user_id="user-a", roles=("user",), workspace_id=workspace_id)
+
+    async def run() -> object:
+        return await connect_application(
+            ApplicationConnectRequest(
+                name="wizard-checkout",
+                repo_ref=repo_ref,
+                branch="main",
+                manifest_path="deploy/app.yaml",
+                source_type="raw-yaml",
+                cluster_id="cluster-1",
+            ),
+            current=session,
+            db=db,
+            discovery=_ValidRepositoryDiscovery(),
+        )
+
+    asyncio.run(run())
+
+    assert db.registered_payload is not None
+    assert db.registered_payload["credential_ref"] == credential_ref
 
 
 def test_repository_conflict_update_is_workspace_fenced_in_postgresql() -> None:
