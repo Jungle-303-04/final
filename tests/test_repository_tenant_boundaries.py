@@ -1125,6 +1125,8 @@ def test_new_repository_without_token_strips_ambient_discovery_credential() -> N
     asyncio.run(run())
 
     assert discovery.tokens == [""]
+    assert db.registered_payload is not None
+    assert db.registered_payload["credential_ref"] == "public:anonymous"
 
 
 def test_existing_repository_denial_happens_before_manifest_http() -> None:
