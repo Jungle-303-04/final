@@ -115,10 +115,12 @@ def body_for_poll_target(
     *,
     commit_sha: str,
     image: str,
+    correlation_id: str | None = None,
     replicas: int = DEFAULT_WEBHOOK_REPLICAS,
     force: bool = False,
 ) -> GitWebhookReceivedBody:
     return GitWebhookReceivedBody(
+        correlation_id=correlation_id,
         commit_sha=commit_sha,
         image=image,
         replicas=replicas,
@@ -215,6 +217,7 @@ def build_git_webhook_bodies(
                 target,
                 commit_sha=requested.commit_sha,
                 image=requested.image,
+                correlation_id=requested.correlation_id,
                 replicas=requested.replicas,
                 force=requested.force,
             )
