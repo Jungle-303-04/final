@@ -7,7 +7,7 @@ governing: docs/f-coordination-plan.md · docs/backend-f-workqueue.md
 
 # 백엔드 F 진행 현황
 
-현재 상태: **앵커 2건**
+현재 상태: **앵커 3건**
 
 ## Delta-green baseline
 
@@ -67,3 +67,86 @@ governing: docs/f-coordination-plan.md · docs/backend-f-workqueue.md
   작업의 필수 게이트로 이관한다. 현재 스키마 부트스트랩은 `create_all` 경로를 사용한다.
 
 계약 완성: audit_log.causation_id + ix_audit_log_correlation_id_created_at (1080363a735e42a4cf542a11400a32ddaa0e9437) [delta-green]
+
+### BQ-003
+
+- canonical 착륙 commit: `44f35234e7dcd9c8d221242d7688556e2d30e819`
+- 완료 후 측정: `6 failed, 1640 passed, 3 skipped`
+- delta-green 판정: 상단 RCA pytest 6개, Ruff format 2파일, import-linter 1계약과
+  실패 집합이 동일하며 신규 실패 0건
+- gateway 계약 lock: BQ-003을 `completed`로 전환해 해제
+- route: `GET /api/rca/bundles/{correlation_id}`
+- JSON Schema: `docs/spec/remediation-bundle.schema.json`
+- Bruno: `docs/api/05-rca-dashboard/13-remediation-bundle.bru`
+
+#### 프론트 인계 — RemediationBundleResponse 3계층
+
+- `meta`
+  - `correlation_id: string`
+  - `incident_id: string | null`
+  - `cluster_id: string`
+  - `workspace_id: string`
+  - `created_at: string | null`
+- `diagnosis`
+  - `root_cause: string`
+  - `confidence: number | null`
+  - `supporting_evidence: string[]`
+  - `missing_evidence: string[]`
+  - `supporting_evidence_refs: RcaEvidenceRefItem[]`
+  - `missing_evidence_checks: RcaMissingCheckItem[]`
+  - `selected_candidate_id: string | null`
+- `RcaEvidenceRefItem`
+  - 필수: `source: string`, `name: string`
+  - 선택: `check_id`, `summary`, `query`, `evidence_ref`, `source_version`, `collector`,
+    `collector_version`, `query_version`, `collected_at`, `evidence_key`, `source_id`,
+    `agent_id`, `window_start`는 `string | null`
+  - 선택: `schema_version: integer | null`
+- `RcaMissingCheckItem`
+  - `check_id: string`
+  - `source: string | null`
+  - `status: string | null`
+  - `reason: string | null`
+- `remediation: null | object`
+  - `status: string`
+  - `selected_action_id: string | null`
+  - `selected_by: string | null`
+  - `candidates: RemediationBundleRecoveryCandidate[]`
+  - `evidence_ref: string`
+- `RemediationBundleRecoveryCandidate`
+  - `action_id: string`
+  - `title: string`
+  - `description: string`
+  - `route: string`
+  - `rank: integer`
+  - `score: number`
+  - `risk_level: string`
+  - `blast_radius: string`
+  - `approval_required: boolean`
+  - `prerequisites: string[]`
+  - `validation_checks: string[]`
+  - `rollback_plan: string`
+  - `evidence_refs: string[]`
+  - `draft.action_type: string`
+  - `draft.namespace: string`
+  - `draft.resource_kind: string`
+  - `draft.resource_name: string`
+  - `draft.reason: string`
+  - `draft.risk_level: string`
+  - `draft.dry_run: boolean`
+  - `draft.source_evidence: string[]`
+  - `draft.params: JSON object`
+
+`diagnosis.selected_candidate_id`는 RCA 진단 후보 선택이고,
+`remediation.selected_action_id`는 복구 실행 후보 선택이다. 서로 다른 계층이므로 병합하거나
+대체하지 않는다. recovery plan이 생성되지 않은 정상 상태에서는 `remediation`이 `null`이며
+Bundle route는 200을 반환한다.
+
+#### 알려진 결합 및 후속 전달
+
+`RemediationBundleRecoveryCandidate`의 shape는
+`recovery_plans.payload.candidates`를 그대로 투영한다. 이 payload 구조는 RCA 작업열이 쓰므로
+가인 님이 candidate payload 구조를 바꾸면 프론트에 노출된 Bundle 계약의 breaking change가
+된다. 후속 전달 항목: 가인 님에게 "recovery candidate payload 구조 변경은 BQ-003 Bundle
+계약의 breaking change"임을 전달한다. 이 앵커에서는 RCA 작업열 코드를 변경하지 않는다.
+
+계약 완성: RCA_BUNDLE_PATH + RemediationBundleResponse (44f35234e7dcd9c8d221242d7688556e2d30e819) [delta-green]
