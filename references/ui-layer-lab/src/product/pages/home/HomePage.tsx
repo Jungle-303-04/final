@@ -1,14 +1,13 @@
 import { CircleAlert, RefreshCw, Server } from "lucide-react";
-import type {
-  HomeConnectionState,
-  HomePort,
-  HomePortFailure,
-} from "../../features/home/homeContract";
+import type { HomePort, HomePortFailure } from "../../features/home/homeContract";
 import { useI18n } from "../../shared/i18n/I18nProvider";
-import { StatusMark, type StatusTone } from "../../shared/ui/StatusMark";
 import { ProductStateScreen } from "../../shared/ui/ProductStateScreen";
+import { ProductPageFrame } from "../../shared/ui/ProductPageFrame";
 import { Surface } from "../../shared/ui/Surface";
-import { clusterDisplayLabel } from "../../shared/ui/ClusterConnectionStatus";
+import {
+  ClusterConnectionStatus,
+  clusterDisplayLabel,
+} from "../../shared/ui/ClusterConnectionStatus";
 import { Alert, AlertDescription, AlertTitle } from "../../shared/ui/primitives/alert";
 import { Button } from "../../shared/ui/primitives/button";
 import {
@@ -20,7 +19,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "../../shared/ui/primitives/select";
-import { Tooltip, TooltipContent, TooltipTrigger } from "../../shared/ui/primitives/tooltip";
 import { HomeClusterHealth } from "./HomeClusterHealth";
 import { HomeIssuesRail } from "./HomeIssuesRail";
 import { HomeLiveBand } from "./HomeLiveBand";
@@ -56,11 +54,11 @@ export function HomePage({ port }: { port: HomePort }) {
   }
 
   return (
-    <div className="mx-auto grid w-full max-w-[100rem] gap-4 p-4 sm:p-6">
+    <ProductPageFrame>
       <header className="flex min-w-0 justify-end">
         <div className="flex w-full min-w-0 items-center justify-end gap-2 xl:w-auto">
           {selectedCluster ? (
-            <HomeClusterConnectionStatus
+            <ClusterConnectionStatus
               connectionState={selectedCluster.connectionState}
               lastObservedAt={selectedCluster.lastObservedAt}
             />
@@ -125,7 +123,7 @@ export function HomePage({ port }: { port: HomePort }) {
           </div>
         </>
       )}
-    </div>
+    </ProductPageFrame>
   );
 }
 
@@ -206,55 +204,6 @@ function HomeFailureScreen({
     />
   );
 }
-
-function HomeClusterConnectionStatus({
-  connectionState,
-  lastObservedAt,
-}: {
-  connectionState: HomeConnectionState;
-  lastObservedAt: string | null;
-}) {
-  const { formatDate, t } = useI18n();
-  const label = t(connectionMessageKeys[connectionState]);
-  const observation = lastObservedAt === null
-    ? t("common.state.unknown")
-    : formatDate(new Date(lastObservedAt), { dateStyle: "medium", timeStyle: "short" });
-  return (
-    <Tooltip>
-      <TooltipTrigger
-        render={(
-          <Button
-            aria-label={t("home.connection.aria", { status: label, time: observation })}
-            size="sm"
-            type="button"
-            variant="ghost"
-          />
-        )}
-      >
-        <StatusMark label={label} tone={connectionTones[connectionState]} />
-      </TooltipTrigger>
-      <TooltipContent side="bottom">
-        {t("home.lastObserved", { time: observation })}
-      </TooltipContent>
-    </Tooltip>
-  );
-}
-
-const connectionMessageKeys = {
-  online: "home.connection.online",
-  stale: "home.connection.stale",
-  pending: "home.connection.pending",
-  offline: "home.connection.offline",
-  unknown: "home.connection.unknown",
-} as const;
-
-const connectionTones: Record<HomeConnectionState, StatusTone> = {
-  online: "healthy",
-  stale: "stale",
-  pending: "warning",
-  offline: "critical",
-  unknown: "unknown",
-};
 
 function clusterOptionLabel(cluster: {
   environment: string;

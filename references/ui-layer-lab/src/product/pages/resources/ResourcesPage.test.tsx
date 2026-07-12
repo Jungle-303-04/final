@@ -176,6 +176,9 @@ describe("ResourcesPage scope and collection semantics", () => {
 
     const table = await screen.findByRole("table", { name: "Resource list" });
     expect(screen.getByRole("searchbox", { name: "Search displayed results" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Apply" }).className).toContain("w-24");
+    expect(screen.getByRole("button", { name: "Include inactive resources" }).className)
+      .toContain("w-32");
     expect(screen.getByText("Types observed in the inventory snapshot")).toBeTruthy();
     expect(within(table).getAllByText("Running").length).toBeGreaterThan(0);
     expect(within(table).getAllByText("Pod").length).toBeGreaterThan(0);

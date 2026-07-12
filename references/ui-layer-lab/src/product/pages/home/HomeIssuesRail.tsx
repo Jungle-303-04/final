@@ -32,12 +32,12 @@ export function HomeIssuesRail({
       aria-labelledby="active-issues-title"
       className="grid min-w-0 content-start overflow-hidden"
     >
-      <div className="flex items-center justify-between gap-3 border-b p-4">
-        <h2 className="text-base font-semibold" id="active-issues-title">
+      <div className="grid min-h-16 grid-cols-[minmax(0,1fr)_8rem] items-center gap-3 border-b p-4">
+        <h2 className="truncate text-base font-semibold" id="active-issues-title">
           {t("home.section.activeIssues")}
         </h2>
         {overview.phase === "ready" ? (
-          <span className="text-xs text-muted-foreground">
+          <span className="line-clamp-2 text-right text-xs text-muted-foreground">
             {t("home.issue.counts", {
               incidents: cluster === null
                 ? t("common.value.unavailable")

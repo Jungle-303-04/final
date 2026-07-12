@@ -34,8 +34,8 @@ export function LocaleToggle() {
       }}
       value={locale}
     >
-      <SelectTrigger aria-label={controlLabel} size="sm">
-        <SelectValue />
+      <SelectTrigger aria-label={controlLabel} className="w-24 min-w-0" size="sm">
+        <SelectValue className="truncate" />
       </SelectTrigger>
       <SelectContent alignItemWithTrigger={false}>
         <SelectGroup>

@@ -1,4 +1,4 @@
-import { CircleAlert, RefreshCw, Server } from "lucide-react";
+import { RefreshCw, Server } from "lucide-react";
 import { useEffect } from "react";
 import type { HomePort } from "../../features/home/homeContract";
 import type {
@@ -11,6 +11,7 @@ import {
   clusterDisplayLabel,
 } from "../../shared/ui/ClusterConnectionStatus";
 import { ProductStateScreen } from "../../shared/ui/ProductStateScreen";
+import { ProductPageFrame } from "../../shared/ui/ProductPageFrame";
 import { Surface } from "../../shared/ui/Surface";
 import { Badge } from "../../shared/ui/primitives/badge";
 import { Button } from "../../shared/ui/primitives/button";
@@ -26,11 +27,16 @@ import {
 import { ResourceDetailSheet } from "./ResourceDetailSheet";
 import { ResourcesCatalog } from "./ResourcesCatalog";
 import {
+  ResourcesCatalogLoadingPreview,
+  ResourcesListLoadingPreview,
+} from "./ResourcesLoadingPreview";
+import {
   CatalogFreshness,
   ResourcesDenied,
   ResourcesFailure,
   ResourcesRefreshFeedback,
   UnknownCompletenessEmpty,
+  UnknownSelection,
 } from "./ResourcesPageFeedback";
 import { filterResourceRows, ResourcesTable } from "./ResourcesTable";
 import { ResourcesToolbar } from "./ResourcesToolbar";
@@ -73,7 +79,7 @@ export function ResourcesPage({
     (resource) => resource.phase === "ready" && resource.refreshing,
   );
   return (
-    <div className="mx-auto grid w-full max-w-[100rem] gap-4 p-4 sm:p-6">
+    <ProductPageFrame>
       <header className="flex min-w-0 justify-end">
         <div className="flex w-full min-w-0 items-center justify-end gap-2 xl:w-auto">
           {state.automaticRefreshPaused ? (
@@ -95,7 +101,7 @@ export function ResourcesPage({
           >
             <SelectTrigger
               aria-label={t("resources.cluster.select")}
-              className="min-w-0 flex-1 xl:w-80 xl:flex-none"
+              className="min-w-0 flex-1 xl:w-96 xl:flex-none"
             >
               <Server aria-hidden="true" />
               <SelectValue placeholder={t("resources.cluster.select")} />
@@ -130,7 +136,11 @@ export function ResourcesPage({
       {!state.selectedClusterExists ? (
         <UnknownSelection value={state.selectedClusterId} variant="cluster" />
       ) : state.catalog.phase === "loading" || state.catalog.phase === "idle" ? (
-        <ProductStateScreen kind="loading" placement="content" />
+        <ProductStateScreen
+          kind="loading"
+          loadingPreview={<ResourcesCatalogLoadingPreview />}
+          placement="content"
+        />
       ) : state.catalog.phase === "failed" ? (
         <ResourcesFailure
           failure={state.catalog.failure}
@@ -175,7 +185,7 @@ export function ResourcesPage({
         open={state.detailRequested}
         tab={state.detailTab}
       />
-    </div>
+    </ProductPageFrame>
   );
 }
 
@@ -201,7 +211,13 @@ function ResourcesListSurface({ state }: { state: ReturnType<typeof useResources
 function ResourcesListBody({ state }: { state: ReturnType<typeof useResourcesPageState> }) {
   const { t } = useI18n();
   if (state.list.phase === "idle" || state.list.phase === "loading") {
-    return <ProductStateScreen kind="loading" placement="content" />;
+    return (
+      <ProductStateScreen
+        kind="loading"
+        loadingPreview={<ResourcesListLoadingPreview />}
+        placement="content"
+      />
+    );
   }
   if (state.list.phase === "failed") {
     return (
@@ -257,26 +273,6 @@ function ListScopeStatus({ filtered, list }: { filtered: number; list: ResourceL
       )}
       {list.limitReached ? ` · ${t("resources.list.scope.limitReached")}` : ""}
     </div>
-  );
-}
-
-function UnknownSelection({ value, variant }: { value: string | null; variant: "cluster" | "resource" }) {
-  const { t } = useI18n();
-  const title = variant === "cluster"
-    ? t("resources.selection.cluster.title")
-    : t("resources.selection.resource.title");
-  return (
-    <Surface aria-labelledby="unknown-selection-title" className="grid min-h-72 place-items-center p-6">
-      <div className="grid max-w-md justify-items-center gap-3 text-center">
-        <CircleAlert aria-hidden="true" className="size-8 text-muted-foreground" />
-        <h3 className="text-lg font-semibold" id="unknown-selection-title">{title}</h3>
-        <p className="text-sm text-muted-foreground">
-          {t("resources.selection.description", {
-            value: value ?? t("resources.selection.urlScope"),
-          })}
-        </p>
-      </div>
-    </Surface>
   );
 }
 

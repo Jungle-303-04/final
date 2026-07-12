@@ -40,7 +40,7 @@ export function ResourcesCatalog({
         <h3 className="text-sm font-medium" id="resource-catalog-title">
           {t("resources.catalog.title")}
         </h3>
-        <p className="mt-1 text-xs text-muted-foreground">
+        <p className="mt-1 min-h-8 line-clamp-2 text-xs text-muted-foreground">
           {t("resources.catalog.description")}
         </p>
       </div>

@@ -21,6 +21,7 @@ export function ClusterConnectionStatus({
         render={(
           <Button
             aria-label={t("home.connection.aria", { status: label, time: observation })}
+            className="w-24 min-w-0 justify-start"
             size="sm"
             type="button"
             variant="ghost"
