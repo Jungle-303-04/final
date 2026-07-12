@@ -1515,3 +1515,44 @@ API 완성: runPrometheusQuery (b92d081eb)
   - shadcn source audit: 482 previews PASS, upstream 21e4ceb
   - Vite production build: PASS
 ```
+
+## 2026-07-13 API queue batch anchors
+
+API 완성: listApplications (56c689e61)
+API 완성: getApplication (56c689e61)
+API 완성: listApplicationDeployments (56c689e61)
+API 완성: listApplicationRuns (56c689e61)
+API 완성: grantApproval (56c689e61)
+API 완성: rejectApproval (56c689e61)
+API 완성: restartDeployment (56c689e61)
+API 완성: scaleDeployment (56c689e61)
+API 완성: listRcaTimeline (c875efb1f)
+API 완성: getRcaIncident (c875efb1f)
+API 완성: listEvidence (c875efb1f)
+API 완성: listRcaReports (c875efb1f)
+API 완성: getRecoveryPlanByCorrelation (c875efb1f)
+API 완성: selectRecoveryAction (c875efb1f)
+API 완성: getClusterResourceUsageSeries (004f23d52)
+API 완성: listMetricQueryPresets (004f23d52)
+API 완성: runMetricQueryPreset (004f23d52)
+API 완성: runTelemetryQuery (004f23d52)
+
+- 세 코드 커밋은 모두 `origin/woonyong/ui-layer-lab`의 ancestor다.
+- `56c689e61`은 Applications history, GitOps approval, workload deployment action 계약을
+  보강했다.
+- `c875efb1f`는 RCA list/detail, evidence/report, recovery action 계약을 보강했다.
+- `004f23d52`는 usage series, metric query preset run, telemetry log query 계약을 보강했다.
+- 현재 작업 트리에 untracked feature draft가 남아 있어 이번 heartbeat에서는 full UI gate를 깨끗한
+  트리에서 재실행하지 않았다. 아래 targeted API contract test와 docs/manifest 검증만 완료 증거로
+  남긴다.
+
+```text
+명령: npx vitest run src/product/api/rca-list.test.ts src/product/api/rca-detail.test.ts src/product/api/evidence.test.ts src/product/api/recovery.test.ts src/product/api/applications.test.ts src/product/api/approvals.test.ts src/product/api/deployments.test.ts src/product/api/metric-query-presets.test.ts src/product/api/telemetry.test.ts src/product/api/usage-series.test.ts --reporter verbose
+결과: PASS — 10 files, 70 tests
+
+명령: uv run pytest tests/test_docs_index.py tests/test_bruno_collection.py -q
+결과: PASS — 17 tests
+
+명령: make manifest-check
+결과: PASS — management 56, target 18
+```

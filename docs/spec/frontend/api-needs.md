@@ -4,7 +4,7 @@ status: active-coordination-queue
 date: 2026-07-13
 owners: Codex 요청 / API 연결 작업자 claim·처리 / F 트랙 행(APIQ-029)·계약 갱신(APIQ-012)은 검토자 기록
 workorder: api-integration-workorder-20260711.md
-snapshot: 12행·23함수 / requested 12 / in_progress 0 / blocked 0 / valid completion anchors 27
+snapshot: 2행·6함수 / requested 2 / in_progress 0 / blocked 0 / valid completion anchors 45
 ---
 
 # 프론트 API 요청 큐
@@ -17,9 +17,7 @@ snapshot: 12행·23함수 / requested 12 / in_progress 0 / blocked 0 / valid com
 `api-integration-workorder-20260711.md`가 정본이다.
 
 > **다음 claim 고정 순서 (2026-07-13 파이프라인 A단계 갱신):**
-> `APIQ-005` → `APIQ-016` → `APIQ-017` → `APIQ-018` →
-> `APIQ-019` → `APIQ-013` → `APIQ-006` → `APIQ-009` → `APIQ-010` → `APIQ-011`
-> → `APIQ-014` → `APIQ-015`.
+> `APIQ-019` → `APIQ-015`.
 > BQ-001·BQ-003의 `origin/dev` 착륙은 파이프라인 A단계 명령으로 재검증했다.
 > 각 행의 완료 앵커와 조율 커밋이 원격에 반영된 뒤에만 다음 행을 claim한다.
 
@@ -73,17 +71,7 @@ claim·heartbeat: YYYY-MM-DD HH:mm KST
 
 | ID | 우선 | 함수명 | routes.py 상수 | 대상 파일 | 필요한 화면 | 요청 시각 | 상태 | 담당/브랜치 | claim·heartbeat | 완료 조건·주의 |
 |---|---:|---|---|---|---|---|---|---|---|---|
-| `APIQ-005` | P2 | `listRcaTimeline` | `DASHBOARD_RCA_TIMELINE_PATH` | `rca-list.ts`, `rca-list-schemas.ts`, test | Issues / Timeline / resource detail | 2026-07-11 16:19 KST | requested | — | — | `cluster_id?`, `limit=50`(1..100), signal; teaser 함수와 분리 |
-| `APIQ-006` | P2 | `listApplications`, `getApplication`, `listApplicationDeployments`, `listApplicationRuns` | `APPLICATIONS_PATH`, `APPLICATION_PATH`, `APPLICATION_DEPLOYMENTS_PATH`, `APPLICATION_RUNS_PATH` | `applications.ts`, `applications-schemas.ts`, test | Applications / GitOps / history | 2026-07-11 16:19 KST | requested | — | — | list limit 1..500; 내부 JsonMap 보존; cursor/filter 발명 금지 |
-| `APIQ-009` | P2 | `getClusterResourceUsageSeries` | `CLUSTER_USAGE_PATH` | `usage-series.ts`, `usage-series-schemas.ts`, test | Pod·Node history / top metrics | 2026-07-11 16:19 KST | requested | — | — | limit 1..2000; `samples[].usage` JsonMap 보존; rollup으로 대체 금지 |
-| `APIQ-010` | P2 | `listMetricQueryPresets`, `runMetricQueryPreset` | `CLUSTER_METRIC_QUERY_PRESETS_PATH`, `CLUSTER_METRIC_QUERY_PRESET_RUN_PATH` | `metric-presets.ts`, `metric-presets-schemas.ts`, test | resource·PVC Metrics | 2026-07-11 16:19 KST | requested | — | — | run body 없음; `AgentDebugQueryResponse`, HTTP 200 receipt |
-| `APIQ-011` | P2 | `runTelemetryQuery` | `AGENT_DEBUG_QUERY_PATH`, `COMMAND_STATUS_PATH` | `telemetry.ts`, `telemetry-schemas.ts`, test | Pod log snapshot | 2026-07-11 16:19 KST | requested | — | — | `APIQ-027` 완료 앵커 `b92d081eb` 확인됨. 명시적 AGENT_* browser 예외; POST 1회; source literal 보존 |
-| `APIQ-013` | P2 | `grantApproval`, `rejectApproval` | `APPROVAL_GRANT_PATH`, `APPROVAL_REJECT_PATH` | `approvals.ts`, `approvals-schemas.ts`, test | Applications / GitOps approval | 2026-07-11 17:17 KST | requested | — | — | body absent/null/`{}` 허용; reason nullable; 404/409; POST 재전송 금지 |
-| `APIQ-014` | P3 | `restartDeployment`, `scaleDeployment` | `CLUSTER_DEPLOYMENT_RESTART_PATH`, `CLUSTER_DEPLOYMENT_SCALE_PATH` | `deployments.ts`, `deployments-schemas.ts`, test | Resources workload actions | 2026-07-11 16:19 KST | requested | — | — | body·path strict; accepted 200에 command_id 없음; live mutation 승인 필요 |
 | `APIQ-015` | P3 | `listCatalogItems`, `getCatalogItem` | `CATALOG_ITEMS_PATH`, `CATALOG_ITEM_PATH` | `catalog.ts`, `catalog-schemas.ts`, test | provider-neutral Catalog | 2026-07-11 16:19 KST | requested | — | — | item JsonMap 보존; pagination/filter 발명 금지; install 제외 |
-| `APIQ-016` | P2 | `getRcaIncident` | `DASHBOARD_RCA_INCIDENT_PATH` | `rca-detail.ts`, `rca-detail-schemas.ts`, test | Issues incident 상세 | 2026-07-11 16:19 KST | requested | — | — | incident path + `cluster_id?`; stable incident id가 있을 때만 호출 |
-| `APIQ-017` | P2 | `getRecoveryPlanByCorrelation`, `selectRecoveryAction` | `RCA_RECOVERY_PLAN_BY_CORRELATION_PATH`, `RCA_RECOVERY_ACTION_SELECT_PATH` | `recovery.ts`, `recovery-schemas.ts`, test | incident 상세 복구 조치 | 2026-07-11 16:19 KST | requested | — | — | selection body 필수·`{}` 허용; receipt 200; 409 후 plan 재조회는 adapter 소유 |
-| `APIQ-018` | P2 | `listEvidence`, `listRcaReports` | `EVIDENCE_QUERY_PATH`, `RCA_REPORTS_PATH` | `evidence.ts`, `evidence-schemas.ts`, test | evidence trail / AI 분석 | 2026-07-11 16:19 KST | requested | — | — | ISO time, limit/offset/cursor, next_cursor 보존; correlation 없으면 호출 안 함 |
 | `APIQ-019` | P2 | `listAiConversations`, `getAiConversation`, `createAiConversation`, `appendAiMessage` | `AI_CONVERSATIONS_PATH`, `AI_CONVERSATION_PATH`, `AI_CONVERSATION_MESSAGES_PATH` | `conversations.ts`, `conversations-schemas.ts`, test | global AI conversation drawer | 2026-07-11 16:19 KST | requested | — | — | 내부 JsonMap·status string 보존; create/append 200 receipt; POST 재전송 금지 |
 
 ## 3. 기존 구현 검증·승인

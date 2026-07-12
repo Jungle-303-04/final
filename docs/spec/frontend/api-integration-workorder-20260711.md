@@ -82,7 +82,8 @@ synthetic session을 발명하지 않는다.
 | 경로 | API 작업자 권한 | 규칙 |
 |---|---|---|
 | `references/ui-layer-lab/src/product/api/<claim 파일>` | 수정 가능 | claim한 행의 endpoint·schema·test만 |
-| `references/ui-layer-lab/src/product/api/index.ts` | 제한적 수정 | claim 함수·wire type export 추가만; 기존 export 재정렬 금지 |
+| `references/ui-layer-lab/src/product/api/barrels/<domain>.ts` | 제한적 수정 | claim 함수·wire type export 추가만; 자기 도메인 barrel만 |
+| `references/ui-layer-lab/src/product/api/index.ts` | 통합자 전용 | 도메인 barrel 재수출만; claim 작업자가 직접 수정하지 않음 |
 | `docs/spec/frontend/api-needs.md` | 조율 예외 | claim·heartbeat·blocked·완료 제거만 |
 | `docs/spec/frontend/codex-progress-20260711.md` | 조율 예외 | 완료 시 EOF append만; 기존 줄 수정 금지 |
 | `references/ui-layer-lab/src/product/api/client.ts` | **수정 금지** | `af03639ee`의 JSON/no-content transport 계약으로 재동결 |
@@ -110,9 +111,10 @@ requested ──claim──> in_progress ──검증 실패──> blocked
                           └──코드 커밋+게이트+앵커──> 행 제거
 ```
 
-- 전체 queue에서 `in_progress` 행은 동시에 정확히 하나만 허용한다. 모든 행이 `index.ts`를 공유하고
-  일부 행은 schema·test 파일도 공유하므로 행 단위 전역 직렬화가 file lock이다. Codex의 API 밖
-  작업은 병렬로 계속할 수 있다.
+- 전체 queue에서 `in_progress` 행은 동시에 정확히 하나만 허용한다는 기존 규칙은 2026-07-13
+  병렬 모드 결정으로 레인 단위 소유권에 양보한다. 현재 `index.ts`는 도메인 barrel만 재수출하고,
+  작업자는 자기 도메인 barrel과 claim 파일만 수정한다. 두 레인이 같은 파일을 수정해야 하면
+  중단 후 coordinator에게 보고한다.
 - 한 작업자는 동시에 한 행만 claim한다.
 - 한 행은 분할 claim하지 않는다. 함수군을 나눠야 하면 먼저 queue 행을 둘로 나누는 조율 커밋을
   만든다.
@@ -139,7 +141,7 @@ heartbeat는 queue의 `claim·heartbeat` 시각을 갱신한 커밋이 canonical
 
 코드 commit hash를 같은 commit 안에 기록할 수 없으므로 다음 순서를 고정한다.
 
-1. **커밋 A — 코드:** endpoint, schema, contract test, `index.ts` export를 포함한다.
+1. **커밋 A — 코드:** endpoint, schema, contract test, 해당 도메인 barrel export를 포함한다.
    메시지는 `feat: <한국어 API 함수군 설명>` 또는 검증 전용이면
    `test: <한국어 API 계약 검증 설명>`이다. 커밋 A를 canonical branch에 먼저 push한다.
 2. 원격에 올라간 커밋 A에서 `npm run check`와 필요한 실검증을 통과시킨다.
@@ -173,7 +175,7 @@ queue 상태를 `blocked`로 바꾸고 비고에 다음 네 가지를 남긴다.
 3. 필요한 결정 또는 선행 함수
 4. 재개 조건과 소유자
 
-부분 구현을 `index.ts`에 export하거나 완료 앵커를 쓰지 않는다. 다른 행으로 이동한다.
+부분 구현을 도메인 barrel에 export하거나 완료 앵커를 쓰지 않는다. 다른 행으로 이동한다.
 
 ### 3.5 24시간 대행 절차
 
@@ -249,7 +251,8 @@ src/product/api/
   <domain>.ts             endpoint 함수·wire request type
   <domain>-schemas.ts     response/request Zod schema·wire output type
   <domain>.test.ts        URL·body·schema·오류·AbortSignal contract test
-  index.ts                공개 export 추가만
+  barrels/<lane>.ts       공개 export 추가만
+  index.ts                도메인 barrel 재수출만
 ```
 
 queue의 대상 파일 열에서 `test`는 첫 endpoint 파일과 같은 stem의 `<domain>.test.ts`를 뜻한다.
@@ -428,7 +431,7 @@ endpoint에는 계속 `apiRequest`와 runtime schema를 사용한다.
 
 - [ ] queue 행을 원격에서 claim했고 lease가 유효하다.
 - [ ] exact route constant, router method, request/response model 근거를 test 주석에 남겼다.
-- [ ] endpoint, schema, test, `index.ts` export가 있다.
+- [ ] endpoint, schema, test, 해당 도메인 barrel export가 있다.
 - [ ] D1–D8 중 해당 항목을 검증했다.
 - [ ] AbortSignal과 path/query encoding을 검증했다.
 - [ ] mutation은 한 번만 전송되며 receipt를 terminal success로 바꾸지 않는다.
