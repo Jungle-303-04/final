@@ -18,7 +18,7 @@ from domains.gitops.repository_discovery import (
     manifest_candidates_from_tree,
     normalize_github_repo_ref,
 )
-from domains.gitops.repository_discovery_router import validate_repo_for_wizard
+from domains.gitops.repository_discovery_router import discovery_service, validate_repo_for_wizard
 from packages.contracts.gateway.requests import (
     RepositoryManifestValidationRequest,
     RepositoryProbeRequest,
@@ -308,6 +308,15 @@ def test_normalize_github_repo_ref_casefolds_identity_aliases() -> None:
         "acme/private-api"
     )
     assert normalize_github_repo_ref("ACME/PRIVATE-API") == "acme/private-api"
+
+
+def test_session_discovery_service_does_not_inherit_ambient_github_token(monkeypatch) -> None:
+    monkeypatch.setenv("GITHUB_TOKEN", "ambient-privileged-token")
+
+    service = discovery_service()
+
+    assert isinstance(service.client, GitHubRepositoryClient)
+    assert service.client.token == ""
 
 
 def test_manifest_validation_counts_static_yaml_resources() -> None:
