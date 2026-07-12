@@ -4,7 +4,7 @@ status: active-coordination-queue
 date: 2026-07-13
 owners: Codex 요청 / API 연결 작업자 claim·처리 / F 트랙 행(APIQ-029)·계약 갱신(APIQ-012)은 검토자 기록
 workorder: api-integration-workorder-20260711.md
-snapshot: 16행·30함수 / requested 14 / in_progress 2(동결 1) / blocked 0 / valid completion anchors 20
+snapshot: 15행·29함수 / requested 14 / in_progress 1(동결 1) / blocked 0 / valid completion anchors 21
 ---
 
 # 프론트 API 요청 큐
@@ -17,7 +17,7 @@ snapshot: 16행·30함수 / requested 14 / in_progress 2(동결 1) / blocked 0 /
 `api-integration-workorder-20260711.md`가 정본이다.
 
 > **다음 claim 고정 순서 (2026-07-13 야간, 검토자 갱신):**
-> `APIQ-020`(P1) → `APIQ-027` → `APIQ-005` → `APIQ-016` → `APIQ-017` → `APIQ-018` →
+> `APIQ-027` → `APIQ-005` → `APIQ-016` → `APIQ-017` → `APIQ-018` →
 > `APIQ-019` → `APIQ-013` → `APIQ-006` → `APIQ-009` → `APIQ-010` → (`APIQ-011`은 027 완료
 > 앵커 후) → `APIQ-014` → `APIQ-015`.
 > **제외:** `APIQ-029`(착륙 대기 동결), `APIQ-012`(BQ-001 앵커 착륙을 §4b 절차로 확인한 뒤에만).
@@ -80,7 +80,6 @@ claim·heartbeat: YYYY-MM-DD HH:mm KST
 | `APIQ-017` | P2 | `getRecoveryPlanByCorrelation`, `selectRecoveryAction` | `RCA_RECOVERY_PLAN_BY_CORRELATION_PATH`, `RCA_RECOVERY_ACTION_SELECT_PATH` | `recovery.ts`, `recovery-schemas.ts`, test | incident 상세 복구 조치 | 2026-07-11 16:19 KST | requested | — | — | selection body 필수·`{}` 허용; receipt 200; 409 후 plan 재조회는 adapter 소유 |
 | `APIQ-018` | P2 | `listEvidence`, `listRcaReports` | `EVIDENCE_QUERY_PATH`, `RCA_REPORTS_PATH` | `evidence.ts`, `evidence-schemas.ts`, test | evidence trail / AI 분석 | 2026-07-11 16:19 KST | requested | — | — | ISO time, limit/offset/cursor, next_cursor 보존; correlation 없으면 호출 안 함 |
 | `APIQ-019` | P2 | `listAiConversations`, `getAiConversation`, `createAiConversation`, `appendAiMessage` | `AI_CONVERSATIONS_PATH`, `AI_CONVERSATION_PATH`, `AI_CONVERSATION_MESSAGES_PATH` | `conversations.ts`, `conversations-schemas.ts`, test | global AI conversation drawer | 2026-07-11 16:19 KST | requested | — | — | 내부 JsonMap·status string 보존; create/append 200 receipt; POST 재전송 금지 |
-| `APIQ-020` | P1 | `deleteAiConversation` | `AI_CONVERSATION_PATH` | `conversations.ts`, `conversations-schemas.ts`, test | AI conversation 삭제 | 2026-07-11 21:55 KST | in_progress | `Codex-API@woonyong/ui-layer-lab` | 2026-07-13 04:30 KST | `BLOCK-204-001` 해소: `af03639ee`. raw body가 정확히 빈 204/205만 `apiRequestNoContent`로 처리; 직접 fetch·가짜 JSON 금지 |
 | `APIQ-029` | P2 | `getRemediationBundle` | `RCA_BUNDLE_PATH` | `rca-bundle.ts`, `rca-bundle-schemas.ts`, test | incident 상세 RemediationBundle 뷰 (VP-001) | 2026-07-13 | in_progress **(동결 — 착륙 대기)** | `Codex-API@woonyong/ui-layer-lab` | 2026-07-13 03:59 KST | **[착륙 대기 — 앵커 미유효]** BQ-003 앵커 `44f35234e`는 canonical dev 미착륙(f-coordination-plan §4b — 앵커 확인은 공유 dev worktree `docs/backend-f-progress.md` 단일 수단). 작성한 스키마·함수는 폐기하지 않되 동결: **완료 앵커 기록 금지, 화면·adapter 소비 금지.** merge 착륙 + 백엔드 ancestor 재증명 후 착륙본과 diff 대조, 이상 없을 때만 완료 절차 재개. 3계층 meta/diagnosis/remediation 전부 strictObject close — 유일한 open record는 `draft.params`(action_type별 가변). `remediation: null` = plan 미생성 정상 상태(HTTP 200), 가짜 값 대체 금지. `diagnosis.selected_candidate_id`와 `remediation.selected_action_id`는 다른 계층 — 병합·상호 대체 금지. zod 검증 실패 시 fallback·부분 렌더 금지(오류 그대로 반환, 표시 정책은 adapter/화면 소유). 필드 정본: dev repo `docs/backend-f-progress.md` BQ-003 프론트 인계 절 + `docs/spec/remediation-bundle.schema.json` + Bruno `docs/api/05-rca-dashboard/13-remediation-bundle.bru` |
 
 ## 3. 기존 구현 검증·승인
