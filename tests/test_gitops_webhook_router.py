@@ -45,6 +45,7 @@ class StubWebhookDb:
 
 def internal_webhook_payload(**overrides: object) -> dict[str, object]:
     payload: dict[str, object] = {
+        "correlation_id": "correlation-poller-1",
         "commit_sha": "abc123",
         "image": "ghcr.io/example/app:v1",
         "workspace_id": "ws-1",
@@ -113,6 +114,7 @@ def test_internal_webhook_payload_is_rebound_to_registered_target() -> None:
     assert bodies[0].commit_sha == "abc123"
     assert bodies[0].workspace_id == "ws-1"
     assert bodies[0].binding_id == "binding-1"
+    assert bodies[0].correlation_id == "correlation-poller-1"
     assert bodies[0].force is False
 
 
@@ -174,4 +176,5 @@ def test_github_webhook_seeds_registered_workspace_context() -> None:
     response = asyncio.run(github_webhook(request, payload, Events(), StubWebhookDb()))
 
     assert response.event["workspace_id"] == "ws-1"
+    assert response.correlation_id == "correlation-poller-1"
     assert seen == ["ws-1"]

@@ -115,6 +115,7 @@ class GitWebhookReceivedBody(EventBody):
     commit_sha: str
     image: str
     replicas: int
+    correlation_id: str | None = None
     workspace_id: str = DEFAULT_WORKSPACE_ID
     repository_id: str = DEFAULT_REPOSITORY_ID
     repo_ref: str = DEFAULT_REPO_REF
