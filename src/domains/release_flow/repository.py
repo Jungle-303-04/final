@@ -95,6 +95,24 @@ class ReleaseFlowRepository(DatabaseConnection):
             steps = conn.execute(step_statement).mappings().all()
         return serialize_release_plan(plan, steps=[serialize_release_step(row) for row in steps])
 
+    def get_release_plan_by_name(self, workspace_id: str, name: str) -> JsonObject | None:
+        if not workspace_id or not name:
+            return None
+        table = ReleasePlan.__table__
+        statement = (
+            select(table.c.plan_id)
+            .where(
+                table.c.workspace_id == workspace_id,
+                table.c.name == name,
+            )
+            .limit(1)
+        )
+        with self.connection() as conn:
+            plan_id = conn.execute(statement).scalar_one_or_none()
+        if plan_id is None:
+            return None
+        return self.get_release_plan(workspace_id, str(plan_id))
+
     def upsert_release_plan(self, payload: JsonObject) -> JsonObject:
         workspace_id = str(payload.get("workspace_id", DEFAULT_WORKSPACE_ID))
         plan_id = derive_release_plan_id({**payload, "workspace_id": workspace_id})
