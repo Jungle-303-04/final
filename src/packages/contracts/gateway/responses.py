@@ -18,6 +18,7 @@ class AcceptedResponse(StrictModel):
     accepted: bool
     event_id: str
     correlation_id: str
+    command_id: str | None = None
 
 
 class AcceptedEventResponse(AcceptedResponse):

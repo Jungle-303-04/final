@@ -11,6 +11,7 @@ from typing import Any, cast
 from fastapi import APIRouter, Depends, HTTPException
 
 from domains.command.events import CommandRequestedBody
+from domains.command.handler import build_plan, command_requires_recorded_approval
 from domains.command.policy import (
     DEFAULT_COMMAND_HEARTBEAT_INTERVAL_SECONDS,
     DEFAULT_COMMAND_LEASE_SECONDS,
@@ -85,6 +86,20 @@ CONTROL_NAMESPACE_NOT_ALLOWED = CONTROL_NAMESPACE_DENIED_MESSAGE
 COMMAND_PRIORITY_HIGH = 100
 
 router = APIRouter()
+
+
+def command_accepted_response(command: CommandRequestedBody, accepted: Any) -> AcceptedResponse:
+    command_id = (
+        None
+        if command_requires_recorded_approval(command)
+        else build_plan(command, accepted.event.correlation_id).command_id
+    )
+    return AcceptedResponse(
+        accepted=True,
+        event_id=accepted.event.event_id,
+        correlation_id=accepted.event.correlation_id,
+        command_id=command_id,
+    )
 
 
 def command_diff(payload: CommandRequest, workspace_id: str) -> Diff:
@@ -173,27 +188,24 @@ async def accept_deployment_control(
         action=action,
         basis=payload,
     )
+    command = CommandRequestedBody(
+        cluster_id=cluster_id,
+        action=action,
+        namespace=namespace,
+        reason=reason,
+        diff=diff,
+        payload=payload,
+        workspace_id=workspace_id,
+        priority=COMMAND_PRIORITY_HIGH,
+        requested_by=current.user_id,
+        approval_ref=approval_ref,
+        policy_decision_ref=policy_decision_ref,
+    )
     accepted = await events.accept_body(
-        CommandRequestedBody(
-            cluster_id=cluster_id,
-            action=action,
-            namespace=namespace,
-            reason=reason,
-            diff=diff,
-            payload=payload,
-            workspace_id=workspace_id,
-            priority=COMMAND_PRIORITY_HIGH,
-            requested_by=current.user_id,
-            approval_ref=approval_ref,
-            policy_decision_ref=policy_decision_ref,
-        ),
+        command,
         actor=Actor(current.user_id, tuple(current.roles)),
     )
-    return AcceptedResponse(
-        accepted=True,
-        event_id=accepted.event.event_id,
-        correlation_id=accepted.event.correlation_id,
-    )
+    return command_accepted_response(command, accepted)
 
 
 def require_cluster_read_access(db: Any, current: Any, workspace_id: str, cluster_id: str) -> None:
@@ -300,26 +312,23 @@ async def commands(
     workspace_id = getattr(current, "workspace_id", DEFAULT_WORKSPACE_ID)
     require_cluster_deploy_access(db, current, workspace_id, payload.cluster_id)
     require_not_management_cluster(db, workspace_id, payload.cluster_id)
+    command = CommandRequestedBody(
+        cluster_id=payload.cluster_id,
+        action=payload.action,
+        namespace=payload.namespace,
+        reason=payload.reason or "manual command request",
+        diff=command_diff(payload, workspace_id),
+        workspace_id=workspace_id,
+        priority=COMMAND_PRIORITY_HIGH,
+        requested_by=current.user_id,
+        approval_ref=payload.approval_ref,
+        policy_decision_ref=payload.policy_decision_ref,
+    )
     accepted = await events.accept_body(
-        CommandRequestedBody(
-            cluster_id=payload.cluster_id,
-            action=payload.action,
-            namespace=payload.namespace,
-            reason=payload.reason or "manual command request",
-            diff=command_diff(payload, workspace_id),
-            workspace_id=workspace_id,
-            priority=COMMAND_PRIORITY_HIGH,
-            requested_by=current.user_id,
-            approval_ref=payload.approval_ref,
-            policy_decision_ref=payload.policy_decision_ref,
-        ),
+        command,
         actor=Actor(current.user_id, tuple(current.roles)),
     )
-    return AcceptedResponse(
-        accepted=True,
-        event_id=accepted.event.event_id,
-        correlation_id=accepted.event.correlation_id,
-    )
+    return command_accepted_response(command, accepted)
 
 
 @router.post(gateway_routes.CLUSTER_DEPLOYMENT_SCALE_PATH, response_model=AcceptedResponse)
