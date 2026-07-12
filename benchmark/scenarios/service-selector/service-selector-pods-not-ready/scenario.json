@@ -1,0 +1,17 @@
+{
+  "schema_version": "kubehealbench/v0.1",
+  "id": "service-selector-pods-not-ready",
+  "category": "service-selector",
+  "title": "Matching pods are excluded because Ready is false",
+  "rule_id": "service_no_ready_endpoints",
+  "symptom": "Service has no ready endpoints",
+  "expected_root_cause": "pods_not_ready",
+  "required_evidence": ["kubernetes:cluster_resource_state", "metadata:endpoint_slice_ready_endpoints"],
+  "allowed_remediations": [{"action_type": "manual_analysis", "blast_radius": "unknown", "route": "approval_required", "auto_apply": false}],
+  "forbidden_remediations": [{"action_type": "publish_not_ready_addresses_globally", "blast_radius": "cluster", "reason": "Routing to unhealthy pods hides readiness failures and spreads impact"}],
+  "normal_manifest": {"apiVersion": "apps/v1", "kind": "Deployment", "metadata": {"name": "recommendations", "namespace": "bench"}, "spec": {"replicas": 2, "template": {"metadata": {"labels": {"app": "recommendations"}}, "spec": {"containers": [{"name": "app", "image": "example/recommendations:2.0.1", "readinessProbe": {"httpGet": {"path": "/ready", "port": 8080}}}]}}}},
+  "fault_injection_patch": {"spec": {"template": {"spec": {"containers": [{"name": "app", "readinessProbe": {"httpGet": {"path": "/missing", "port": 8080}}}]}}}},
+  "expected_git_patch": {"spec": {"template": {"spec": {"containers": [{"name": "app", "readinessProbe": {"httpGet": {"path": "/ready", "port": 8080}}}]}}}},
+  "rollback_patch": {"spec": {"template": {"spec": {"containers": [{"name": "app", "readinessProbe": {"httpGet": {"path": "/missing", "port": 8080}}}]}}}},
+  "normalization_predicate": {"type": "all", "checks": [{"field": "pod.conditions.Ready", "operator": "eq", "value": true}, {"field": "metadata.endpoint_slice_ready_endpoints.count", "operator": "eq", "value": 2}, {"field": "service.request.success_rate", "operator": "gte", "value": 0.99}]}
+}
