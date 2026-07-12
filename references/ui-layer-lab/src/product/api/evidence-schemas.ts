@@ -1,7 +1,6 @@
 import { z } from "zod";
 
 const nullableStringSchema = z.string().nullable();
-const jsonMapSchema = z.record(z.string(), z.unknown());
 
 const evidenceSourceSummarySchema = z.strictObject({
   source: z.string().min(1),
