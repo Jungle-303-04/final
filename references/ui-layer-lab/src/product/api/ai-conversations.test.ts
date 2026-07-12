@@ -117,14 +117,17 @@ describe("AI conversation API", () => {
     const controller = new AbortController();
 
     await expect(deleteAiConversation("aic/123", controller.signal)).resolves.toBeUndefined();
-    expect(fetchMock).toHaveBeenCalledWith(
-      "/api/ai/conversations/aic%2F123",
-      expect.objectContaining({
-        method: "DELETE",
-        credentials: "include",
-        signal: controller.signal,
-      }),
-    );
+    expect(fetchMock).toHaveBeenCalledOnce();
+    const [path, init] = fetchMock.mock.calls[0] ?? [];
+    const headers = new Headers(init?.headers);
+    expect(path).toBe("/api/ai/conversations/aic%2F123");
+    expect(init).toMatchObject({
+      method: "DELETE",
+      credentials: "include",
+      signal: controller.signal,
+    });
+    expect(headers.get("accept")).toBe("application/json");
+    expect(headers.get("x-service-csrf")).toBe("same-origin");
   });
 
   it("rejects an empty conversation id before making a request", () => {
