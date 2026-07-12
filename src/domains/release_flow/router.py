@@ -13,6 +13,7 @@ from typing import Any
 from urllib.parse import unquote, urlparse
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Response
+from sqlalchemy.exc import IntegrityError
 
 from domains.alert.events import AlertRequestedBody
 from domains.alert.repository import severity_matches
@@ -1039,7 +1040,7 @@ async def create_release_plan(
     current: Any = Depends(require_session),
     db: Any = Depends(get_db),
 ) -> ReleasePlanResponse:
-    if payload.plan_id is not None and payload.plan_id.strip():
+    if payload.plan_id is not None:
         raise HTTPException(
             status_code=HTTP_UNPROCESSABLE_ENTITY,
             detail=EXPLICIT_RELEASE_PLAN_ID_NOT_ALLOWED,
@@ -1047,12 +1048,20 @@ async def create_release_plan(
     workspace_id = getattr(current, "workspace_id", DEFAULT_WORKSPACE_ID)
     body = {**payload.model_dump(), "workspace_id": workspace_id, "user_id": current.user_id}
     with unit_of_work_or_null(db):
+        lock_identity = getattr(db, "lock_release_plan_identity", None)
+        if not callable(lock_identity):
+            raise HTTPException(status_code=503, detail="release plan storage unavailable")
+        lock_identity(workspace_id, str(body["name"]))
         get_by_name = getattr(db, "get_release_plan_by_name", None)
         if callable(get_by_name):
-            existing = get_by_name(workspace_id, str(body["name"]))
+            existing = get_by_name(
+                workspace_id,
+                str(body["name"]),
+                for_update=True,
+            )
         else:
             existing_plan_id = derive_release_plan_id(body)
-            existing = db.get_release_plan(workspace_id, existing_plan_id)
+            existing = db.get_release_plan(workspace_id, existing_plan_id, for_update=True)
         if existing is not None:
             require_plan_application_plan_manage_access(
                 db,
@@ -1066,7 +1075,8 @@ async def create_release_plan(
                 status_code=HTTP_UNPROCESSABLE_ENTITY,
                 detail=EMPTY_RELEASE_PLAN_NOT_ALLOWED,
             )
-        require_plan_application_plan_manage_access(db, current, workspace_id, body["steps"])
+        if body["steps"]:
+            require_plan_application_plan_manage_access(db, current, workspace_id, body["steps"])
         plan = upsert_release_plan_or_404(db, body)
     return ReleasePlanResponse(plan=plan)
 
@@ -1080,7 +1090,7 @@ async def update_release_plan(
 ) -> ReleasePlanResponse:
     workspace_id = getattr(current, "workspace_id", DEFAULT_WORKSPACE_ID)
     with unit_of_work_or_null(db):
-        existing = db.get_release_plan(workspace_id, plan_id)
+        existing = db.get_release_plan(workspace_id, plan_id, for_update=True)
         if existing is None:
             raise HTTPException(status_code=HTTP_NOT_FOUND, detail=RELEASE_PLAN_NOT_FOUND)
         require_plan_application_plan_manage_access(
@@ -1090,7 +1100,21 @@ async def update_release_plan(
             existing.get("steps", []),
         )
         body = {**payload.model_dump(), "plan_id": plan_id, "workspace_id": workspace_id}
-        require_plan_application_plan_manage_access(db, current, workspace_id, body["steps"])
+        if str(body["name"]) != str(existing.get("name") or ""):
+            lock_identity = getattr(db, "lock_release_plan_identity", None)
+            get_by_name = getattr(db, "get_release_plan_by_name", None)
+            if not callable(lock_identity) or not callable(get_by_name):
+                raise HTTPException(status_code=503, detail="release plan storage unavailable")
+            lock_identity(workspace_id, str(body["name"]))
+            name_owner = get_by_name(
+                workspace_id,
+                str(body["name"]),
+                for_update=True,
+            )
+            if name_owner is not None and str(name_owner.get("plan_id")) != plan_id:
+                raise HTTPException(status_code=HTTP_CONFLICT, detail="release plan name conflict")
+        if body["steps"]:
+            require_plan_application_plan_manage_access(db, current, workspace_id, body["steps"])
         plan = upsert_release_plan_or_404(db, body)
     return ReleasePlanResponse(plan=plan)
 
@@ -3589,6 +3613,8 @@ def upsert_release_plan_or_404(db: Any, body: dict[str, Any]) -> dict[str, Any]:
         return db.upsert_release_plan(body)
     except ReleasePlanWorkspaceMismatchError as exc:
         raise HTTPException(status_code=HTTP_NOT_FOUND, detail=RELEASE_PLAN_NOT_FOUND) from exc
+    except IntegrityError as exc:
+        raise HTTPException(status_code=HTTP_CONFLICT, detail="release plan conflict") from exc
 
 
 def require_plan_application_rollback_access(
