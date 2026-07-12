@@ -1299,3 +1299,62 @@ API 완성: listClusters (257581398)
   - references/ui-layer-lab/output/playwright/product-home-authenticated-node-mobile-dark.png
   - references/ui-layer-lab/output/playwright/product-home-authenticated-node-reflow-320-light.png
 ```
+
+## 2026-07-13 Home 부분 실패 격리와 Resources 검증 흐름
+
+- 제품 통합 커밋: `5fe3ddb47`.
+- `usage` 불변식 위반은 Home 전체 실패가 아니라 `usage: null`과 structured warning으로
+  강등한다. `pods_total` 누락과 `pods_running: 5` 조합에서도 클러스터·인시던트 영역은
+  유지되고 사용량만 `—`로 표시된다.
+- workload `ready: ""`는 해당 행만 degraded 값 `—`로 표시하고, `incident_id: ""`는 링크 없는
+  인시던트 행으로 보존한다. 다른 정상 행과 섹션은 계속 렌더한다.
+- `ProductErrorBoundary.componentDidCatch`는 원본 error/stack을 DOM이나 로그 payload로 복사하지
+  않고 구조화된 제품 경계 이벤트만 기록한다.
+- transport Zod가 `usage.pods_total`을 아직 필수로 거부하는 실제 API 경계는 `APIQ-028`로
+  요청했다. 완료 앵커 전까지 feature canonical 격리만으로 end-to-end 완료라고 판정하지 않는다.
+- Resources는 malformed optional row/fact를 행 단위로 격리하고 excluded count와 structured warning을
+  제공한다. 403은 캐시를 폐기하고 자동 polling을 중지하며, invalid response와 429는 서로 다른
+  복구 정책을 유지한다.
+
+```text
+검증: npm run check
+결과: PASS — TypeScript, ESLint, 72 files/510 tests, design guard 210 files,
+      shadcn audit 482 previews, production build
+```
+
+## 2026-07-13 Home·Resources 텍스트 밀도와 시각 회귀
+
+- 코드 커밋: `f4abc423b`.
+- 전 화면 규칙은 `reference-porting-contract.md` §7.1 `텍스트 밀도 규칙`이 정본이다.
+- visible route 이름은 데스크톱 sidebar에서만 한 번 표시한다. 상단바 route 설명과 Home/Resources
+  본문 제목, 정상 상태 상주 설명, eyebrow, `LIVE API`·`실 API` 배지를 제거했다.
+- 연결 상태와 마지막 관측 시각은 공용 `ClusterConnectionStatus` 하나로 통합했다. 마지막 관측은
+  keyboard focus 가능한 tooltip과 accessible name으로 제공한다. 정상 snapshot은 badge를 만들지
+  않고 stale·미제공처럼 판단이 달라지는 상태만 표시한다.
+- CPU·memory는 진행바 행에서만 수치를 표시하고, Pod·Node는 `18 · 17 running` 형식으로 줄였다.
+  Resources list 범위도 `표시 2 · 전체 수 미확인 · 최대 200`으로 같은 단위 규칙을 따른다.
+- 모바일 wide table은 암묵적 잘림 대신 이름, `region`, `tabIndex=0`을 가진 명시적 가로 스크롤
+  영역으로 제공한다. modal이 열린 동안 inert가 된 배경 표는 별도 desktop/mobile 시나리오에서
+  접근성과 reflow를 검증한다.
+
+시각 비교 경로:
+
+- 변경 전: `references/ui-layer-lab/output/playwright/product-home-authenticated-node-desktop-light.png`
+- 변경 후: `references/ui-layer-lab/output/playwright/product-home-authenticated-node-desktop-light-text-diet.png`
+- Resources: `references/ui-layer-lab/output/playwright/product-resources-authenticated-desktop-light.png`
+
+```text
+명령: cd references/ui-layer-lab && npm run check
+결과: PASS
+  - TypeScript / ESLint: PASS
+  - Vitest: 73 files, 512 tests PASS
+  - product design guard: 212 files PASS
+  - shadcn source audit: 482 previews PASS, upstream 21e4ceb
+  - Vite production build: PASS
+
+명령: npm run visual-product
+결과: PASS — 29 isolated scenarios
+  - Home 전/후, Node/Pod, desktop/mobile/320px/200%/forced-colors
+  - Resources list/detail, desktop/mobile/320px/200%/forced-colors
+  - exact scenario API request, unexpected feature network·WebSocket 0
+```
