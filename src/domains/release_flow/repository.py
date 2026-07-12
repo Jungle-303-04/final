@@ -38,6 +38,10 @@ FAILED_STEP_STATUS = "failed"
 TERMINAL_RUN_STATUSES = {"succeeded", "failed", "cancelled", "rollback_requested"}
 
 
+class ReleasePlanWorkspaceMismatchError(LookupError):
+    """A plan id already belongs to a different workspace."""
+
+
 class ReleaseFlowRepository(DatabaseConnection):
     def list_release_plans(self, workspace_id: str, *, limit: int = 100) -> list[JsonObject]:
         table = ReleasePlan.__table__
@@ -113,11 +117,19 @@ class ReleaseFlowRepository(DatabaseConnection):
                 "settings": insert.excluded.settings,
                 "updated_at": func.now(),
             },
-        )
+            where=plan_table.c.workspace_id == insert.excluded.workspace_id,
+        ).returning(plan_table.c.plan_id)
         with self.connection() as conn:
-            conn.execute(statement)
+            persisted_plan_id = conn.execute(statement).scalar_one_or_none()
+            if persisted_plan_id is None:
+                raise ReleasePlanWorkspaceMismatchError("release plan not found")
             step_table = ReleasePlanStep.__table__
-            conn.execute(delete(step_table).where(step_table.c.plan_id == plan_id))
+            conn.execute(
+                delete(step_table).where(
+                    step_table.c.workspace_id == workspace_id,
+                    step_table.c.plan_id == plan_id,
+                )
+            )
             for index, raw_step in enumerate(payload.get("steps", [])):
                 if isinstance(raw_step, Mapping):
                     conn.execute(
