@@ -1397,3 +1397,26 @@ API 완성: getClusterSummary (ef7d3a1e9)
   diff 대조 무결성 확인이다.
 - BQ-001도 같은 착륙 확인 절차를 통과하기 전까지 `submitCommand`와 command status 행을
   claim하지 않는다. 그동안 완료 앵커가 유효한 기존 adapter 트랙만 계속한다.
+
+## 2026-07-13 AI 대화 삭제 API 완료
+
+API 완성: deleteAiConversation (abe804f4e)
+
+- `DELETE /api/ai/conversations/{conversation_id}`는 path segment를 인코딩하고
+  `apiRequestNoContent`만 사용한다. request body를 만들거나 직접 `fetch`로 우회하지 않는다.
+- endpoint contract test에서 credentials, CSRF, Accept, AbortSignal, 호출 1회, 204 무본문 성공을
+  검증했다. 401·403·409·422·429의 structured 오류와 retry metadata도 그대로 보존한다.
+- 코드 커밋 `abe804f4e`가 `origin/woonyong/ui-layer-lab`의 ancestor임을 확인했다.
+
+```text
+명령: npm run test -- --run src/product/api/ai-conversations.test.ts src/product/api/client.test.ts
+결과: PASS — 2 files, 26 tests
+
+명령: npm run check
+결과: PASS
+  - TypeScript / ESLint: PASS
+  - Vitest: 92 files, 657 tests PASS
+  - product design guard: 271 files PASS
+  - shadcn source audit: 482 previews PASS, upstream 21e4ceb
+  - Vite production build: PASS
+```
