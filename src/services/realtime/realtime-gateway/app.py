@@ -174,7 +174,8 @@ def create_app(
         browser_session_store = RedisSessionStore(session_store_config())
         authenticate_browser = redis_session_authenticator(browser_session_store)
     if authorize_browser_cluster is None:
-        assert db is not None
+        if db is None:  # pragma: no cover - create_app 위의 DB 생성 불변식 방어
+            raise RuntimeError("database is required for browser cluster authorization")
         authorize_browser_cluster = database_browser_cluster_authorizer(db)
 
     hub = RealtimeHub()
