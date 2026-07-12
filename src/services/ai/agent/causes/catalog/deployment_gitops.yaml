@@ -7,16 +7,30 @@ rules:
       - candidate_id: "deployment_progress_deadline_exceeded"
         title: "Deployment rollout 진행 기한 초과"
         description: "새 ReplicaSet의 Pod가 Ready로 전환되지 못해 Deployment rollout이 실패했을 가능성이 있습니다."
-        expected_evidence: ["kubernetes", "metrics", "logs", "metadata"]
+        expected_evidence:
+          - "kubernetes:cluster_resource_state"
+          - "metrics:telemetry_metrics"
+          - "logs:related_logs"
+          - "metadata:current_workload_snapshots"
         checks:
           - "Deployment.status.conditions.reason == ProgressDeadlineExceeded 확인"
           - "updatedReplicas 대비 availableReplicas가 부족한지 확인"
           - "신규 ReplicaSet Pod의 probe 실패, CrashLoopBackOff, ImagePullBackOff 확인"
           - "image digest, git_sha, helm revision 변경 이후 발생했는지 확인"
+        signals:
+          - id: "progress_deadline_signal"
+            any_of:
+              - event_pattern: "ProgressDeadlineExceeded"
+              - event_pattern: "progress deadline"
+              - log_pattern: "ProgressDeadlineExceeded"
+              - log_pattern: "rollout exceeded"
       - candidate_id: "replica_unavailable_after_rollout"
         title: "Rollout 이후 replica unavailable"
         description: "배포 이후 원하는 replica 수만큼 ready Pod가 확보되지 않았을 가능성이 있습니다."
-        expected_evidence: ["kubernetes", "metrics", "logs"]
+        expected_evidence:
+          - "kubernetes:cluster_resource_state"
+          - "metrics:telemetry_metrics"
+          - "logs:related_logs"
         checks:
           - "Deployment.status.unavailableReplicas와 ReplicaSet.readyReplicas 확인"
           - "kube_deployment_status_replicas_unavailable 증가 확인"
@@ -37,17 +51,39 @@ rules:
       - candidate_id: "gitops_sync_failed"
         title: "GitOps sync 실패"
         description: "GitOps controller sync 과정에서 manifest render 또는 apply가 실패했을 가능성이 있습니다."
-        expected_evidence: ["kubernetes", "metrics", "logs", "metadata"]
+        expected_evidence:
+          - "kubernetes:cluster_resource_state"
+          - "metrics:telemetry_metrics"
+          - "logs:related_logs"
+          - "metadata:current_workload_snapshots"
         checks:
           - "Application.status.sync.status와 Application.status.conditions 확인"
           - "app sync failed metric 확인"
           - "GitOps controller/repo-server log에서 render/apply 오류 확인"
           - "git revision, manifest path, Helm values 변경 이후 실패했는지 확인"
+        signals:
+          - id: "gitops_sync_failed_signal"
+            any_of:
+              - event_pattern: "SyncFailed"
+              - log_pattern: "sync failed"
+              - log_pattern: "comparison error"
+              - log_pattern: "manifest generation error"
       - candidate_id: "manifest_validation_failed"
         title: "Manifest 검증 실패"
         description: "Kubernetes API schema 또는 admission 정책 검증에서 manifest가 거부됐을 가능성이 있습니다."
-        expected_evidence: ["kubernetes", "logs", "metadata"]
+        expected_evidence:
+          - "kubernetes:cluster_resource_state"
+          - "logs:related_logs"
+          - "metadata:current_workload_snapshots"
         checks:
           - "kubectl apply dry-run 또는 AdmissionReview denied 응답 확인"
           - "API version, required field, immutable field 오류 확인"
           - "위반 필드가 최근 Git commit 변경분과 연결되는지 확인"
+        signals:
+          - id: "manifest_validation_signal"
+            any_of:
+              - event_pattern: "Invalid"
+              - log_pattern: "validation failed"
+              - log_pattern: "immutable field"
+              - log_pattern: "unknown field"
+              - log_pattern: "admission webhook"
