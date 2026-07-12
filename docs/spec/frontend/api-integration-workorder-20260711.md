@@ -5,7 +5,7 @@ date: 2026-07-12
 audience: 프론트↔백엔드 API 연결 담당 개발자
 queue: api-needs.md
 owner_paths: references/ui-layer-lab/src/product/api/** + 두 조율 문서의 제한된 상태 변경
-verified_against: transport 커밋 af03639ee / routes.py 실제 router·request·response 교차 검증 / API 큐 16행·31함수
+verified_against: transport 커밋 af03639ee / routes.py 실제 router·request·response 교차 검증 / API 큐 15행·30함수
 ---
 
 # API 연결 작업지시서
@@ -21,12 +21,12 @@ API 작업자는 백엔드 wire 계약을 프론트가 호출할 수 있는 **�
 
 | 항목 | 현재값 | 의미 |
 |---|---:|---|
-| 큐 행 | 16 | `requested` 16행 + `in_progress` 0행 + `blocked` 0행 |
-| 큐가 요구하는 export 함수 | 32 | 완료 앵커가 확인된 17함수를 제거한 남은 수 |
-| 현재 존재하는 HTTP·composition 함수 | 22 | exact 완료 앵커 17함수 + 미승인 5함수 |
+| 큐 행 | 15 | `requested` 15행 + `in_progress` 0행 + `blocked` 0행 |
+| 큐가 요구하는 export 함수 | 30 | 완료 앵커가 확인된 함수를 제거한 남은 수 |
+| 현재 존재하는 HTTP·composition 함수 | 23 | exact 완료 앵커 19함수 + 미승인 4함수 |
 | 현재 존재하는 realtime 함수 | 3 | HTTP 큐 밖이며 별도 승인 전 소비 금지 |
 | 실 contract fixture | 0 | mock test만 일부 존재 |
-| 정확한 `API 완성:` 앵커 | 17 | progress의 exact anchor 함수만 소비 가능 |
+| 정확한 `API 완성:` 앵커 | 19 | progress의 exact anchor 함수만 소비 가능 |
 
 **작업 범위는 `api-needs.md`의 claim한 한 행뿐이다.** routes.py 접두 전체, 인접 endpoint,
 provider별 endpoint를 임의로 추가하지 않는다. 큐에 없는 함수가 필요하면 구현하지 말고 큐
@@ -195,13 +195,13 @@ queue 상태를 `blocked`로 바꾸고 비고에 다음 네 가지를 남긴다.
 ## 4. 현재 API 코드와 소비 승인 상태
 
 현재 `src/product/api`에는 41개 파일이 있다. wire HTTP·composition 함수 23개와 realtime 함수
-3개 중 exact 완료 앵커가 있는 것은 18함수다. `apiRequestNoContent`는 endpoint 완료 함수가
+3개 중 exact 완료 앵커가 있는 것은 19함수다. `apiRequestNoContent`는 endpoint 완료 함수가
 아닌 transport helper이므로 `API 완성:` 앵커 수에 포함하지 않는다.
 
 | 기존 모듈 | 함수 | test 상태 | queue |
 |---|---|---|---|
 | `auth.ts` | `getSession`, `login`, `logout` | contract 8 PASS, exact 앵커 3 | 완료 |
-| `clusters.ts` | `listClusters` | contract test 커밋 존재, exact 앵커 없음 | `APIQ-022` |
+| `clusters.ts` | `listClusters` | contract 9 PASS, exact 앵커 `257581398` | 완료 |
 | `cluster-detail.ts` | `getCluster` | contract PASS, exact 앵커 1 | 완료 |
 | `cluster-connection.ts` | `getClusterConnectionStatus` | contract PASS, exact 앵커 1 | 완료 |
 | `fleet.ts` | `getFleetSummary` | contract PASS, exact 앵커 1 | 완료 |

@@ -1,14 +1,20 @@
 ---
 title: 골모드 최종 질문 라운드
-status: awaiting-review-or-default
+status: resolved-by-default
 date: 2026-07-11
 issued_at: 2026-07-11 16:29 KST
 default_at: 2026-07-12 16:29 KST
 questions: 4
 authority: codex-directive-goalmode-20260711.md §2
+resolved_at: 2026-07-12 16:29 KST
 ---
 
 # 골모드 최종 질문 라운드
+
+> 기한까지 별도 답변이 없어 문서에 적힌 자체 권고를 기본값으로 확정했다. Q1은
+> `@xyflow/react + elkjs`, Q2는 `@tanstack/react-virtual`, Q3은 backend capability 완료 뒤
+> editor·diff·terminal dependency 도입, Q4는 제품 소유 독립 구현이다. 이 결정은 dependency를
+> 즉시 설치하라는 뜻이 아니며 해당 화면의 실제 구현 시점에 release gate와 라이선스 검증을 거친다.
 
 이 문서는 P1·P2 이후 남은 결정 요청을 한 번에 모은 **유일한 질문 라운드**다. 답변이 일부만
 오면 답하지 않은 항목에는 각 권고안을 적용한다. `2026-07-12 16:29 KST`까지 답변이 없으면 네
