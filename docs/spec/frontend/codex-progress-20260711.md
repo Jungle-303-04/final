@@ -1575,3 +1575,13 @@ API 완성: runTelemetryQuery (004f23d52)
   - shadcn source audit: 482 previews PASS, upstream 21e4ceb
   - Vite production build: PASS (14,506 modules transformed)
 ```
+
+## 2026-07-13 테마 첫 페인트 검증
+
+- 저장 테마와 시스템 테마를 반대로 설정한 뒤 light/dark 각각 5회 새로고침했다.
+- 각 새로고침의 최초 5개 animation frame에서 `documentElement.className`,
+  `style.colorScheme`, 계산된 배경색을 기록했다.
+- light는 전 프레임 `class=""`, `colorScheme=light`, `oklch(1 0 0)`이었고 dark는 전 프레임
+  `class=dark`, `colorScheme=dark`, `oklch(0.145 0 0)`이었다. 투명 또는 반대 테마 프레임은 0개다.
+- 상세 결과와 10개 스크린샷은 `theme-first-paint-evidence-20260713.md` 및
+  `theme-flash-{light,dark}-{1..5}.png`에 기록했다.
