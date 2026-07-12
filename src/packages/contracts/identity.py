@@ -48,6 +48,7 @@ class Permission(StrEnum):
     EVIDENCE_READ = "evidence.read"
     RCA_READ = "rca.read"
     MANIFEST_READ = "manifest.read"
+    REPOSITORY_MANAGE = "repository.manage"
     APPLICATION_READ = "application.read"
     APPLICATION_MANAGE = "application.manage"
     DEPLOYMENT_READ = "deployment.read"
@@ -153,6 +154,7 @@ OBSERVABILITY_PERMISSIONS: frozenset[str] = frozenset(
 RELEASE_PERMISSIONS: frozenset[str] = OBSERVABILITY_PERMISSIONS | frozenset(
     {
         Permission.DASHBOARD_MANAGE.value,
+        Permission.REPOSITORY_MANAGE.value,
         Permission.APPLICATION_MANAGE.value,
         Permission.DEPLOY_RUN.value,
         Permission.WORKLOAD_SCALE.value,
@@ -221,6 +223,7 @@ SERVICE_ROLE_PERMISSIONS: dict[str, frozenset[str]] = {
 }
 
 PLATFORM_RESOURCE_TYPES: tuple[str, ...] = (
+    AccessResourceType.REPOSITORY.value,
     AccessResourceType.CLUSTER.value,
     AccessResourceType.NAMESPACE.value,
     AccessResourceType.WORKLOAD.value,

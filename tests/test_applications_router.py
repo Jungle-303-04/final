@@ -84,6 +84,9 @@ class StubApplicationsDb:
         self.registered_repositories.append(payload)
         return {**payload, "repository_id": "repo-1"}
 
+    def get_repository_by_ref(self, _workspace_id: str, _repo_ref: str) -> dict[str, object] | None:
+        return None
+
     def upsert_workspace_credential(self, payload: dict[str, object]) -> None:
         self.credentials.append(payload)
 
