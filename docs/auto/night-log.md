@@ -187,3 +187,5 @@ $ git merge-base --is-ancestor 97c862da1 origin/woonyong/ui-layer-lab; echo $?
 [2026-07-13 06:57 KST] [프론트] D in_progress — APIQ-027 command polling 계약 claim; API-owned fixture와 failure·terminal·abort·barrel 회귀를 앵커 전에 보강한다.
 
 [2026-07-13 07:30 KST] [프론트] APIQ-027 완료 — `submitPrometheusQuery`, `getCommandStatus`, `pollCommand`, `runPrometheusQuery` 앵커 `b92d081eb`; full gate PASS(TypeScript·ESLint, 95 files / 674 tests, design guard 278, shadcn 482, production build).
+
+[2026-07-13 08:13 KST] [프론트] API queue batch 앵커 동기화 — `56c689e61`(Applications/GitOps approval/workload action), `c875efb1f`(RCA/evidence/recovery), `004f23d52`(usage/preset/telemetry) 원격 ancestor 확인. targeted API contract 10 files / 70 tests PASS, docs/Bruno 17 tests PASS, manifest-check PASS. untracked feature draft가 남아 있어 full UI gate는 이번 heartbeat 완료 증거로 쓰지 않음.
