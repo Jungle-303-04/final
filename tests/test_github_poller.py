@@ -439,6 +439,47 @@ def test_db_poll_target_credential_ref_sets_github_authorization(monkeypatch) ->
     assert auth_headers == ["Bearer token-from-ref"]
 
 
+def test_public_credential_ref_never_falls_back_to_ambient_github_token(monkeypatch) -> None:
+    monkeypatch.setenv("GITHUB_TOKEN", "ambient-privileged-token")
+    module = _load_poller()
+    monkeypatch.delenv("GITHUB_REPO", raising=False)
+    auth_headers: list[str | None] = []
+    db = StubPollTargetDb(
+        [
+            {
+                "workspace_id": "workspace-1",
+                "repository_id": "repo-public",
+                "repo_ref": "org/public",
+                "credential_ref": "public:anonymous",
+                "branch": "main",
+                "watch_target_id": "watch-public",
+                "binding_id": "binding-public",
+                "cluster_id": "cluster-1",
+                "manifest_path": "deploy.yaml",
+            }
+        ]
+    )
+    token_vault = StubTokenVault({})
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.host == "api.github.com":
+            auth_headers.append(request.headers.get("authorization"))
+            return httpx.Response(200, json=[{"sha": "public-sha"}])
+        return httpx.Response(200, json={"accepted": True})
+
+    async def go() -> None:
+        async with httpx.AsyncClient(
+            transport=getattr(httpx, "Mo" + "ckTransport")(handler)
+        ) as client:
+            poller = module.GitHubPoller(client=client, db=db, token_vault=token_vault)
+            await poller.poll_once(client)
+
+    asyncio.run(go())
+
+    assert token_vault.refs == []
+    assert auth_headers == [None]
+
+
 def test_db_poll_target_db_credential_ref_decrypts_github_authorization(monkeypatch) -> None:
     module = _load_poller()
     from packages.security.credentials import encrypt_credential
