@@ -296,6 +296,8 @@ FAULT_CASES: dict[str, tuple[dict[str, Any], str, list[str]]] = {
             "oom_killed",
             "bad_image_rollout",
             "config_env_error",
+            "app_port_bind_failed",
+            "permission_denied_startup",
             "app_startup_failure",
             "dependency_connection_failure",
         ],
