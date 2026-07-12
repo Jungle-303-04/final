@@ -1337,6 +1337,8 @@ async function assertProductLoadingScreenContracts(page, scenario) {
     const preview = document.querySelector("[data-slot='loading-preview']");
     const shell = document.querySelector("[data-slot='product-shell-loading']");
     const shellSidebar = shell?.querySelector("aside");
+    const shellHeader = shell?.querySelector("header");
+    const sessionIdentity = shell?.querySelector("[data-slot='loading-session-identity']");
     const pageFrame = shell?.querySelector("[data-slot='product-page-frame']");
     const status = document.querySelector("[role='status']");
     const skeletons = [...document.querySelectorAll("[data-slot='skeleton']")];
@@ -1344,6 +1346,7 @@ async function assertProductLoadingScreenContracts(page, scenario) {
       if (!(element instanceof HTMLElement)) return null;
       const bounds = element.getBoundingClientRect();
       return {
+        height: bounds.height,
         left: bounds.left,
         right: bounds.right,
         width: bounds.width,
@@ -1356,6 +1359,15 @@ async function assertProductLoadingScreenContracts(page, scenario) {
     const sidebarWidth = sidebarWidthToken.endsWith("rem")
       ? Number.parseFloat(sidebarWidthToken) * Number.parseFloat(rootStyle.fontSize)
       : Number.parseFloat(sidebarWidthToken);
+    const rootFontSize = Number.parseFloat(rootStyle.fontSize);
+    const identityWidthToken = rootStyle
+      .getPropertyValue("--product-toolbar-identity-width")
+      .trim();
+    const expectedIdentityWidth = matchMedia("(min-width: 64rem)").matches
+      ? identityWidthToken.endsWith("rem")
+        ? Number.parseFloat(identityWidthToken) * rootFontSize
+        : Number.parseFloat(identityWidthToken)
+      : 0;
     return {
       legacyContentCount: document.querySelectorAll("[data-slot='empty'], h1, p").length,
       mainCount: document.querySelectorAll("main[aria-busy='true']").length,
@@ -1369,8 +1381,12 @@ async function assertProductLoadingScreenContracts(page, scenario) {
         (skeleton) => skeleton.getAttribute("aria-hidden") === "true",
       ),
       shellFrameRect: rect(pageFrame),
+      shellHeaderRect: rect(shellHeader),
+      shellIdentityRect: rect(sessionIdentity),
       shellRect: rect(shell),
       shellSidebarRect: rect(shellSidebar),
+      expectedHeaderHeight: 3.5 * rootFontSize,
+      expectedIdentityWidth,
       sidebarWidth,
       statusLabel: status?.getAttribute("aria-label") ?? null,
       statusText: status?.textContent?.trim() ?? null,
@@ -1399,6 +1415,14 @@ async function assertProductLoadingScreenContracts(page, scenario) {
         `${scenario.id}: loading shell geometry diverged from product tokens ${JSON.stringify(result)}`,
       );
     }
+  }
+  if (result.expectedIdentityWidth > 0
+    && (!result.shellIdentityRect || !result.shellHeaderRect
+      || Math.abs(result.shellIdentityRect.width - result.expectedIdentityWidth) > 1
+      || Math.abs(result.shellHeaderRect.height - result.expectedHeaderHeight) > 1)) {
+    throw new Error(
+      `${scenario.id}: loading toolbar did not reserve ready-state geometry ${JSON.stringify(result)}`,
+    );
   }
 }
 
@@ -1692,7 +1716,16 @@ async function assertProductHomeSidebarReflow(page, label) {
         width: bounds.width,
       };
     };
+    const rootStyle = getComputedStyle(document.documentElement);
+    const toPixels = (token) => {
+      const value = rootStyle.getPropertyValue(token).trim();
+      return value.endsWith("rem")
+        ? Number.parseFloat(value) * Number.parseFloat(rootStyle.fontSize)
+        : Number.parseFloat(value);
+    };
     return {
+      expectedCollapsedWidth: toPixels("--product-sidebar-width-collapsed"),
+      expectedExpandedWidth: toPixels("--product-sidebar-width"),
       frame: rect(document.querySelector("[data-slot='product-page-frame']")),
       inset: rect(document.querySelector("[data-slot='sidebar-inset']")),
       main: rect(document.querySelector("#product-main")),
@@ -1702,6 +1735,16 @@ async function assertProductHomeSidebarReflow(page, label) {
   const expanded = await capture();
   await page.getByRole("button", { name: "사이드바 접기" }).click();
   await page.getByRole("button", { name: "사이드바 펼치기" }).waitFor();
+  await page.waitForFunction(() => {
+    const sidebar = document.querySelector("[data-slot='sidebar']");
+    if (!(sidebar instanceof HTMLElement)) return false;
+    const rootStyle = getComputedStyle(document.documentElement);
+    const value = rootStyle.getPropertyValue("--product-sidebar-width-collapsed").trim();
+    const expected = value.endsWith("rem")
+      ? Number.parseFloat(value) * Number.parseFloat(rootStyle.fontSize)
+      : Number.parseFloat(value);
+    return Math.abs(sidebar.getBoundingClientRect().width - expected) <= 1;
+  });
   await waitForStableLayout(page);
   const collapsed = await capture();
   const required = [expanded.frame, expanded.inset, expanded.main, expanded.sidebar,
@@ -1710,8 +1753,11 @@ async function assertProductHomeSidebarReflow(page, label) {
     throw new Error(`${label}: sidebar reflow fixture is incomplete`);
   }
   const delta = expanded.sidebar.width - collapsed.sidebar.width;
+  const expectedDelta = expanded.expectedExpandedWidth - collapsed.expectedCollapsedWidth;
   const close = (left, right) => Math.abs(left - right) <= 1;
-  if (delta <= 1
+  if (!close(expanded.sidebar.width, expanded.expectedExpandedWidth)
+    || !close(collapsed.sidebar.width, collapsed.expectedCollapsedWidth)
+    || !close(delta, expectedDelta)
     || !close(collapsed.inset.width, expanded.inset.width + delta)
     || !close(collapsed.inset.left, expanded.inset.left - delta)
     || !close(collapsed.inset.right, expanded.inset.right)

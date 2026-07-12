@@ -70,7 +70,7 @@ export function HomePage({ port }: { port: HomePort }) {
           >
             <SelectTrigger
               aria-label={t("home.cluster.select")}
-              className="w-full min-w-0 flex-1 xl:w-96 xl:flex-none"
+              className="w-full min-w-0 flex-1 xl:w-(--product-cluster-select-width) xl:flex-none"
             >
               <Server aria-hidden="true" />
               <SelectValue placeholder={t("home.cluster.select")} />

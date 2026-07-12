@@ -34,7 +34,11 @@ export function LocaleToggle() {
       }}
       value={locale}
     >
-      <SelectTrigger aria-label={controlLabel} className="w-24 min-w-0" size="sm">
+      <SelectTrigger
+        aria-label={controlLabel}
+        className="w-(--product-toolbar-compact-control-width) min-w-0"
+        size="sm"
+      >
         <SelectValue className="truncate" />
       </SelectTrigger>
       <SelectContent alignItemWithTrigger={false}>
