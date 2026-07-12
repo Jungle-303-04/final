@@ -3,7 +3,20 @@ import {
   type ProductSurfaceId,
 } from "./productRoutes";
 
-export type ShortcutGroup = "navigation" | "global";
+export type ShortcutGroup = "navigation" | "global" | "context";
+
+export const PRODUCT_SHORTCUT_EVENT = "kubeheal:product-shortcut";
+
+export type ProductContextShortcutId =
+  | "resources:next-row"
+  | "resources:previous-row"
+  | "resources:first-row"
+  | "resources:last-row"
+  | "resources:open-row";
+
+export interface ProductShortcutEventDetail {
+  id: ProductContextShortcutId;
+}
 
 export interface ShortcutDefinition {
   id: string;
@@ -41,6 +54,7 @@ const CHORD_TIMEOUT_MS = 1_000;
 
 export function shellShortcutDefinitions(
   releasedSurfaceIds: ReadonlySet<ProductSurfaceId>,
+  activeSurfaceId?: ProductSurfaceId,
 ): readonly ShortcutDefinition[] {
   const navigation = productNavigationForReleasedSurfaces(releasedSurfaceIds).map((routeDefinition) => ({
     id: `route:${routeDefinition.id}`,
@@ -50,8 +64,13 @@ export function shellShortcutDefinitions(
     targetPath: routeDefinition.path,
   }));
 
+  const context = activeSurfaceId === "resources" && releasedSurfaceIds.has("resources")
+    ? resourcesShortcutDefinitions
+    : [];
+
   return [
     ...navigation,
+    ...context,
     {
       id: "theme",
       label: "테마 전환",
@@ -65,6 +84,47 @@ export function shellShortcutDefinitions(
       sequence: ["?"],
     },
   ];
+}
+
+const resourcesShortcutDefinitions: readonly ShortcutDefinition[] = [
+  {
+    id: "resources:next-row",
+    label: "다음 리소스",
+    group: "context",
+    sequence: ["j"],
+  },
+  {
+    id: "resources:previous-row",
+    label: "이전 리소스",
+    group: "context",
+    sequence: ["k"],
+  },
+  {
+    id: "resources:first-row",
+    label: "첫 리소스",
+    group: "context",
+    sequence: ["g", "g"],
+  },
+  {
+    id: "resources:last-row",
+    label: "마지막 리소스",
+    group: "context",
+    sequence: ["shift+g"],
+  },
+  {
+    id: "resources:open-row",
+    label: "리소스 상세 열기",
+    group: "context",
+    sequence: ["d"],
+  },
+];
+
+const productContextShortcutIds = new Set<ProductContextShortcutId>(
+  resourcesShortcutDefinitions.map(({ id }) => id as ProductContextShortcutId),
+);
+
+export function isProductContextShortcutId(value: string): value is ProductContextShortcutId {
+  return productContextShortcutIds.has(value as ProductContextShortcutId);
 }
 
 export function createShortcutMatcher(
@@ -128,7 +188,7 @@ export function createShortcutMatcher(
         return null;
       }
 
-      const key = normalizeEventKey(event.key);
+      const key = normalizeEventKey(event.key, event.shiftKey);
       if (!key) {
         reset();
         return null;
@@ -185,7 +245,7 @@ function shouldIgnoreEvent(event: ShortcutKeyEvent): boolean {
     return true;
   }
 
-  return event.shiftKey && event.key !== "?";
+  return false;
 }
 
 function isEditableEvent(event: ShortcutKeyEvent): boolean {
@@ -211,15 +271,18 @@ function isEditableCandidate(candidate: unknown): boolean {
 }
 
 function normalizeDefinitionKey(key: string): string {
-  const normalized = normalizeEventKey(key);
-  if (!normalized) throw new Error(`invalid shortcut key: ${key}`);
-  return normalized;
+  const normalized = key.toLocaleLowerCase("en-US");
+  if (/^(?:[a-z0-9?]|shift\+[a-z0-9])$/u.test(normalized)) return normalized;
+  throw new Error(`invalid shortcut key: ${key}`);
 }
 
-function normalizeEventKey(key: string): string | null {
+function normalizeEventKey(key: string, shiftKey: boolean): string | null {
   if (key === "?") return key;
   if (key.length !== 1) return null;
-  return key.toLocaleLowerCase("en-US");
+  const normalized = key.toLocaleLowerCase("en-US");
+  if (!/^[a-z0-9]$/u.test(normalized)) return null;
+  const isShiftedLetter = /^[A-Z]$/u.test(key);
+  return shiftKey || isShiftedLetter ? `shift+${normalized}` : normalized;
 }
 
 function serializeSequence(sequence: readonly string[]): string {

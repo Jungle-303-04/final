@@ -9,7 +9,7 @@ import {
   TriangleAlert,
   type LucideIcon,
 } from "lucide-react";
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useState } from "react";
 import { Outlet, useLocation } from "react-router-dom";
 import { ThemeToggle } from "../shared/ui/ThemeToggle";
 import {
@@ -82,10 +82,12 @@ function ProductShellFrame({
   const { isMobile } = useSidebar();
   const themeController = useProductTheme();
   const navigationRoutes = productNavigationForReleasedSurfaces(releasedSurfaceIds);
-  const shortcutDefinitions = useMemo(
-    () => shellShortcutDefinitions(releasedSurfaceIds),
-    [releasedSurfaceIds],
-  );
+  const matchedRoute = productRouteForPath(location.pathname);
+  const currentRoute = matchedRoute && releasedSurfaceIds.has(matchedRoute.id)
+    ? matchedRoute
+    : navigationRoutes[0];
+  const activeSurfaceId = currentRoute?.id;
+  const shortcutDefinitions = shellShortcutDefinitions(releasedSurfaceIds, activeSurfaceId);
   const toggleShortcutHelp = useCallback(() => {
     setShortcutHelpOpen((value) => !value);
   }, []);
@@ -95,11 +97,6 @@ function ProductShellFrame({
     onHelpToggle: toggleShortcutHelp,
     onThemeToggle: themeController.toggle,
   });
-  const matchedRoute = productRouteForPath(location.pathname);
-  const currentRoute = matchedRoute && releasedSurfaceIds.has(matchedRoute.id)
-    ? matchedRoute
-    : navigationRoutes[0];
-
   if (!currentRoute) {
     throw new Error("ProductShell requires at least one released surface");
   }
@@ -160,12 +157,7 @@ function ProductShellFrame({
         <header className="sticky top-0 z-30 flex min-h-14 items-center justify-between gap-4 border-b bg-background/95 px-4 py-2 backdrop-blur supports-[backdrop-filter]:bg-background/75">
           <div className="flex min-w-0 items-center gap-2">
             {isMobile ? <ProductSidebarTrigger labelMode="sr-only" /> : null}
-            <div className="min-w-0">
-              <h1 className="truncate text-sm font-medium">{currentRoute.label}</h1>
-              <p className="hidden truncate text-xs text-muted-foreground lg:block">
-                Operations workspace
-              </p>
-            </div>
+            <h1 className="sr-only">{currentRoute.label}</h1>
           </div>
           <div className="flex items-center gap-1">
             <AuthSessionControl auth={auth} mode="toolbar" />

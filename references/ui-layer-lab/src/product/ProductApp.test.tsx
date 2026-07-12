@@ -87,7 +87,7 @@ describe("ProductApp root recovery", () => {
 
     render(<StrictMode><ProductApp /></StrictMode>);
 
-    expect(await screen.findByRole("heading", { name: "Resources", level: 2 })).toBeTruthy();
+    expect(await screen.findByRole("table", { name: "리소스 목록" })).toBeTruthy();
     expect(screen.getByRole("link", { name: "Resources" }).getAttribute("aria-current"))
       .toBe("page");
     const resource = await screen.findByRole("button", { name: "checkout-api-0 상세 열기" });

@@ -4,11 +4,9 @@ import type { HomePort } from "../../features/home/homeContract";
 import type {
   ResourceList,
   ResourcesPort,
-  ResourcesPortFailure,
 } from "../../features/resources/resourcesContract";
 import { ProductStateScreen } from "../../shared/ui/ProductStateScreen";
 import { Surface } from "../../shared/ui/Surface";
-import { Alert, AlertDescription, AlertTitle } from "../../shared/ui/primitives/alert";
 import { Badge } from "../../shared/ui/primitives/badge";
 import { Button } from "../../shared/ui/primitives/button";
 import {
@@ -22,6 +20,13 @@ import {
 } from "../../shared/ui/primitives/select";
 import { ResourceDetailSheet } from "./ResourceDetailSheet";
 import { ResourcesCatalog } from "./ResourcesCatalog";
+import {
+  CatalogFreshness,
+  ResourcesDenied,
+  ResourcesFailure,
+  ResourcesRefreshFeedback,
+  UnknownCompletenessEmpty,
+} from "./ResourcesPageFeedback";
 import { filterResourceRows, ResourcesTable } from "./ResourcesTable";
 import { ResourcesToolbar } from "./ResourcesToolbar";
 import { useResourcesPageState } from "./useResourcesPageState";
@@ -42,13 +47,19 @@ export function ResourcesPage({
     return <ProductStateScreen kind="loading" placement="content" />;
   }
   if (state.choices.phase === "failed") {
-    return <ResourcesFailure failure={state.choices.failure} onRetry={state.refresh} />;
+    return (
+      <ResourcesFailure
+        failure={state.choices.failure}
+        onRetry={state.refresh}
+        retryWaitSeconds={state.retryWaitSeconds}
+      />
+    );
   }
   if (state.choices.data.clusters.length === 0) {
     return <ProductStateScreen kind="empty" placement="content" />;
   }
   if (state.denied) {
-    return <ProductStateScreen issue={{ code: "forbidden" }} kind="forbidden" placement="content" />;
+    return <ResourcesDenied onRetry={state.refresh} />;
   }
 
   const selectedCluster = state.choices.data.clusters.find(
@@ -64,13 +75,15 @@ export function ResourcesPage({
         <div className="grid min-w-0 gap-1">
           <div className="flex min-w-0 flex-wrap items-center gap-2">
             <h2 className="text-xl font-semibold tracking-tight">Resources</h2>
-            <Badge variant="outline">실 API · 30초 자동 갱신</Badge>
+            <Badge variant="outline">
+              {state.automaticRefreshPaused ? "자동 갱신 일시 중지" : "실 API · 30초 자동 갱신"}
+            </Badge>
           </div>
           <p className="text-sm text-muted-foreground">
             관측된 리소스 종류를 탐색하고 같은 화면에서 서버 계산 관계와 이벤트를 확인합니다.
           </p>
         </div>
-        <div className="flex w-full min-w-0 items-center gap-2 xl:w-auto">
+        <div className="flex w-full min-w-0 items-center justify-end gap-2 xl:w-auto">
           <Select
             items={state.choices.data.clusters.map((cluster) => ({
               label: `${cluster.name} · ${cluster.environment} · ${cluster.id}`,
@@ -96,7 +109,7 @@ export function ResourcesPage({
           </Select>
           <Button
             aria-label="새로 고침"
-            disabled={refreshing}
+            disabled={refreshing || (state.retryWaitSeconds ?? 0) > 0}
             onClick={state.refresh}
             size="icon"
             type="button"
@@ -115,12 +128,21 @@ export function ResourcesPage({
       ) : state.catalog.phase === "loading" || state.catalog.phase === "idle" ? (
         <ProductStateScreen kind="loading" placement="content" />
       ) : state.catalog.phase === "failed" ? (
-        <ResourcesFailure failure={state.catalog.failure} onRetry={state.refresh} />
+        <ResourcesFailure
+          failure={state.catalog.failure}
+          onRetry={state.refresh}
+          retryWaitSeconds={state.retryWaitSeconds}
+        />
       ) : state.catalog.data.items.length === 0 ? (
-        <ProductStateScreen kind="empty" placement="content" />
+        <UnknownCompletenessEmpty variant="catalog" />
       ) : (
         <>
-          <ResourcesRefreshFeedback state={state} />
+          <ResourcesRefreshFeedback
+            catalog={state.catalog}
+            choices={state.choices}
+            list={state.list}
+          />
+          <CatalogFreshness observedAt={state.catalog.data.observedAt} />
           <div className="grid min-w-0 items-start gap-4 lg:grid-cols-[16rem_minmax(0,1fr)]">
             <ResourcesCatalog
               items={state.catalog.data.items}
@@ -159,11 +181,10 @@ function ResourcesListSurface({ state }: { state: ReturnType<typeof useResources
       <div className="flex flex-wrap items-center justify-between gap-2 border-b px-4 py-3">
         <div>
           <h3 className="font-medium" id="resources-list-title">{state.selectedResourceType}</h3>
-          <p className="text-xs text-muted-foreground">현재 cluster inventory의 정제된 read model</p>
         </div>
-        {state.catalog.phase === "ready" ? (
+        {state.catalog.phase === "ready" && state.namespace === null && !state.includeDeleted ? (
           <Badge variant="secondary">
-            snapshot 집계 {state.catalog.data.items.find(
+            클러스터 활성 집계 {state.catalog.data.items.find(
               (item) => item.resourceType === state.selectedResourceType,
             )?.count.toLocaleString() ?? "미확인"}
           </Badge>
@@ -187,10 +208,16 @@ function ResourcesListBody({ state }: { state: ReturnType<typeof useResourcesPag
     return <ProductStateScreen kind="loading" placement="content" />;
   }
   if (state.list.phase === "failed") {
-    return <ResourcesFailure failure={state.list.failure} onRetry={state.refresh} />;
+    return (
+      <ResourcesFailure
+        failure={state.list.failure}
+        onRetry={state.refresh}
+        retryWaitSeconds={state.retryWaitSeconds}
+      />
+    );
   }
   if (state.list.data.items.length === 0) {
-    return <ProductStateScreen kind="empty" placement="content" />;
+    return <UnknownCompletenessEmpty variant="list" />;
   }
   const filtered = filterResourceRows(state.list.data.items, state.search);
   return (
@@ -213,28 +240,18 @@ function ResourcesListBody({ state }: { state: ReturnType<typeof useResourcesPag
 
 function ListScopeStatus({ filtered, list }: { filtered: number; list: ResourceList }) {
   const filteredText = filtered === list.returned ? "" : ` · 검색 결과 ${filtered}개`;
+  const excludedText = (list.excludedCount ?? 0) > 0
+    ? ` · 검증 실패로 제외 ${list.excludedCount}개`
+    : "";
   return (
     <div
       aria-label="목록 범위"
       className="border-b bg-muted/30 px-3 py-2 text-xs text-muted-foreground"
       role="status"
     >
-      표시된 {list.returned}개{filteredText} · 전체 수 미확인 · 최대 {list.limit}개 응답
+      표시된 {list.returned}개{filteredText}{excludedText} · 전체 수 미확인 · 최대 {list.limit}개 응답
       {list.limitReached ? " · 조회 한도 도달" : ""}
     </div>
-  );
-}
-
-function ResourcesRefreshFeedback({ state }: { state: ReturnType<typeof useResourcesPageState> }) {
-  const listFailure = state.list.phase === "ready" ? state.list.refreshFailure : null;
-  const catalogFailure = state.catalog.phase === "ready" ? state.catalog.refreshFailure : null;
-  if (!listFailure && !catalogFailure) return null;
-  return (
-    <Alert>
-      <CircleAlert aria-hidden="true" />
-      <AlertTitle>{listFailure ? "목록을 갱신하지 못했습니다" : "종류 정보를 갱신하지 못했습니다"}</AlertTitle>
-      <AlertDescription>마지막으로 검증된 실 API 응답을 유지합니다.</AlertDescription>
-    </Alert>
   );
 }
 
@@ -253,30 +270,6 @@ function UnknownSelection({ value, variant }: { value: string | null; variant: "
         </p>
       </div>
     </Surface>
-  );
-}
-
-function ResourcesFailure({ failure, onRetry }: { failure: ResourcesPortFailure; onRetry: () => void }) {
-  if (failure.code === "forbidden") {
-    return <ProductStateScreen issue={{ code: "forbidden" }} kind="forbidden" placement="content" />;
-  }
-  if (failure.code === "offline") {
-    return (
-      <ProductStateScreen
-        issue={{ code: "network" }}
-        kind="offline"
-        placement="content"
-        retry={{ label: "다시 불러오기", onRetry, pending: false }}
-      />
-    );
-  }
-  return (
-    <ProductStateScreen
-      issue={{ code: failure.code === "invalid-response" ? "invalid-response" : "server" }}
-      kind="error"
-      placement="content"
-      retry={{ label: "다시 불러오기", onRetry, pending: false }}
-    />
   );
 }
 

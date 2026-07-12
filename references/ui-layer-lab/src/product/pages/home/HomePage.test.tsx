@@ -17,7 +17,12 @@ describe("HomePage", () => {
       .toBeTruthy();
     expect(screen.getByRole("combobox", { name: "클러스터 선택" }).textContent)
       .toContain("cluster-1");
-    expect(screen.getByText("42.5", { selector: "strong" })).toBeTruthy();
+    expect(screen.getByText("42.5%")).toBeTruthy();
+    expect(screen.queryByText("Fleet Home")).toBeNull();
+    expect(screen.queryByText("CLUSTER HEALTH")).toBeNull();
+    expect(screen.queryByText("ATTENTION")).toBeNull();
+    expect(screen.queryByText("RESOURCE SNAPSHOT")).toBeNull();
+    expect(screen.queryByText(/실 API/u)).toBeNull();
     expect(await screen.findByRole("button", { name: /worker-a/u }, { timeout: 5_000 }))
       .toBeTruthy();
     expect(screen.getByRole("complementary", { name: "활성 이슈" }).textContent)

@@ -29,6 +29,9 @@ export function ResourcesCatalog({
   selectedResourceType: string | null;
 }) {
   const groups = groupCatalog(items);
+  const selectedCategory = groups.find((group) => group.items.some(
+    (item) => item.resourceType === selectedResourceType,
+  ))?.category.id ?? groups[0]?.category.id;
   return (
     <Surface aria-labelledby="resource-catalog-title" className="min-w-0 overflow-hidden">
       <div className="border-b px-4 py-3">
@@ -36,13 +39,14 @@ export function ResourcesCatalog({
         <p className="mt-1 text-xs text-muted-foreground">실제 inventory snapshot에서 관측된 종류</p>
       </div>
       <ScrollArea
-        aria-labelledby="resource-catalog-title"
+        aria-label="리소스 유형 목록"
         className="max-h-[calc(100svh-13rem)]"
         orientation="vertical"
       >
         <Accordion
           className="px-2 py-2"
-          defaultValue={groups.map((group) => group.category.id)}
+          defaultValue={selectedCategory ? [selectedCategory] : []}
+          key={selectedCategory ?? "empty"}
           multiple
         >
           {groups.map(({ category, items: groupItems }) => {

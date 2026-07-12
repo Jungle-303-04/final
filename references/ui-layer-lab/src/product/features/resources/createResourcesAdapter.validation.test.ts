@@ -109,10 +109,24 @@ describe("canonical Resources adapter validation", () => {
       ...RESOURCE_DETAIL,
       resource: { ...RESOURCE_DETAIL.resource, name: "other" },
     }],
+    ["primary resource kind", {
+      ...RESOURCE_DETAIL,
+      resource: { ...RESOURCE_DETAIL.resource, kind: "Other" },
+    }],
+    ["primary resource namespace", {
+      ...RESOURCE_DETAIL,
+      resource: { ...RESOURCE_DETAIL.resource, namespace: "other" },
+    }],
     ["related cluster", {
       ...RESOURCE_DETAIL,
       related: {
         pods: [endpointResource({ cluster_id: "other" })],
+      },
+    }],
+    ["related namespace shape", {
+      ...RESOURCE_DETAIL,
+      related: {
+        pods: [endpointResource({ namespace: " " })],
       },
     }],
     ["event cluster", {
@@ -163,14 +177,7 @@ describe("canonical Resources adapter validation", () => {
 
   it.each([
     ["blank identity", endpointResource({ name: " " })],
-    ["invalid timestamp", endpointResource({ observed_at: "yesterday" })],
-    ["negative Pod restart", endpointResource({
-      summary: { restart_total: -1 },
-    })],
-    ["invalid known Pod fact type", endpointResource({
-      summary: { cpu_mcores: "lots" },
-    })],
-  ])("rejects %s", async (_name, resource) => {
+  ])("isolates %s at the resource row", async (_name, resource) => {
     await expect(createResourcesAdapter(endpoints({
       listInventoryResourcesByType: vi.fn().mockResolvedValue({
         cluster_id: "cluster-1",
@@ -178,10 +185,10 @@ describe("canonical Resources adapter validation", () => {
         resources: [resource],
       }),
     })).listResources("cluster-1", { resourceType: "pod" }))
-      .rejects.toMatchObject({ code: "invalid-response" });
+      .resolves.toMatchObject({ items: [], excludedCount: 1 });
   });
 
-  it("rejects duplicate canonical identities", async () => {
+  it("isolates duplicate canonical identities", async () => {
     const duplicate = endpointResource();
 
     await expect(createResourcesAdapter(endpoints({
@@ -191,6 +198,26 @@ describe("canonical Resources adapter validation", () => {
         resources: [duplicate, { ...duplicate, inventory_key: "different-key" }],
       }),
     })).listResources("cluster-1", { resourceType: "pod" }))
-      .rejects.toMatchObject({ code: "invalid-response" });
+      .resolves.toMatchObject({
+        items: [{ id: "resource:cluster-1/uid-pod-1" }],
+        excludedCount: 1,
+      });
+  });
+
+  it.each([
+    ["cluster", endpointResource({ cluster_id: "other" })],
+    ["resource type", endpointResource({ resource_type: "service" })],
+    ["namespace", endpointResource({ namespace: "other" })],
+  ])("keeps a list item %s boundary mismatch as a hard failure", async (_name, resource) => {
+    await expect(createResourcesAdapter(endpoints({
+      listInventoryResourcesByType: vi.fn().mockResolvedValue({
+        cluster_id: "cluster-1",
+        resource_type: "pod",
+        resources: [resource],
+      }),
+    })).listResources("cluster-1", {
+      resourceType: "pod",
+      namespace: "shop",
+    })).rejects.toMatchObject({ code: "invalid-response" });
   });
 });

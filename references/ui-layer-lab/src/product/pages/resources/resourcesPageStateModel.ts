@@ -12,6 +12,20 @@ import { ResourcesPortFailure as PortFailure } from "../../features/resources/re
 
 export type ResourcesResourceState<T> = AsyncResourceState<T, ResourcesPortFailure>;
 
+export type ResourcesRequestTarget = "choices" | "catalog" | "list" | "detail";
+export type ResourcesRetryBlockCode = "forbidden" | "invalid-response" | "rate-limited";
+
+export interface ResourcesRetryBlock {
+  code: ResourcesRetryBlockCode;
+  retryAt: number | null;
+  retryAfterSeconds: number | null;
+  target: ResourcesRequestTarget;
+}
+
+export type ResourcesRetryBlocks = Partial<
+  Record<ResourcesRequestTarget, ResourcesRetryBlock>
+>;
+
 export const RESOURCES_IDLE = ASYNC_IDLE;
 export const RESOURCES_LOADING = ASYNC_LOADING;
 
@@ -41,6 +55,68 @@ export function toResourcesFailure(error: unknown): ResourcesPortFailure {
     return new PortFailure(code, readableRetryAfter(error));
   }
   return new PortFailure("error");
+}
+
+export function blockForFailure(
+  target: ResourcesRequestTarget,
+  failure: ResourcesPortFailure,
+  now = Date.now(),
+): ResourcesRetryBlock | null {
+  if (
+    failure.code !== "forbidden" &&
+    failure.code !== "invalid-response" &&
+    failure.code !== "rate-limited"
+  ) return null;
+  const retryAfterSeconds = failure.code === "rate-limited"
+    ? failure.retryAfterSeconds
+    : null;
+  return {
+    code: failure.code,
+    retryAfterSeconds,
+    retryAt: retryAfterSeconds === null ? null : now + retryAfterSeconds * 1_000,
+    target,
+  };
+}
+
+export function withRetryBlock(
+  blocks: ResourcesRetryBlocks,
+  block: ResourcesRetryBlock,
+): ResourcesRetryBlocks {
+  return { ...blocks, [block.target]: block };
+}
+
+export function withoutRetryBlock(
+  blocks: ResourcesRetryBlocks,
+  target: ResourcesRequestTarget,
+): ResourcesRetryBlocks {
+  if (!(target in blocks)) return blocks;
+  const next = { ...blocks };
+  delete next[target];
+  return next;
+}
+
+export function hasRetryBlocks(blocks: ResourcesRetryBlocks): boolean {
+  return Object.values(blocks).some(Boolean);
+}
+
+export function scheduledRateLimitRetryAt(
+  blocks: ResourcesRetryBlocks,
+): number | null {
+  const values = Object.values(blocks).filter(isRetryBlock);
+  if (
+    values.length === 0 ||
+    values.some(({ code, retryAt }) => code !== "rate-limited" || retryAt === null)
+  ) return null;
+  return Math.max(...values.map(({ retryAt }) => retryAt!));
+}
+
+export function retryWaitSeconds(blocks: ResourcesRetryBlocks, now = Date.now()): number | null {
+  const retryAt = scheduledRateLimitRetryAt(blocks);
+  return retryAt === null ? null : Math.max(0, Math.ceil((retryAt - now) / 1_000));
+}
+
+function isRetryBlock(value: ResourcesRetryBlock | undefined): value is ResourcesRetryBlock {
+  return value !== undefined;
 }
 
 function readableCode(error: unknown): string | null {

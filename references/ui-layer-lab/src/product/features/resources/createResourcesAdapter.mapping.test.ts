@@ -57,6 +57,8 @@ describe("canonical Resources catalog and list mapping", () => {
       limit: 2,
       returned: 2,
       limitReached: true,
+      excludedCount: 0,
+      dataQualityWarnings: [],
       items: [
         {
           id: "resource:cluster-1/uid-pod-1",

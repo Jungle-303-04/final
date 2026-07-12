@@ -12,6 +12,7 @@ const homeClusterId = "visual-cluster";
 const homeNodeName = "visual-node";
 const homePodName = "checkout-api-0";
 const productHomeUrl = `${productUrl}?cluster=${homeClusterId}`;
+const productResourcesUrl = `${productUrl}/resources/pod?cluster=${homeClusterId}`;
 const authSessionPath = "/api/auth/session";
 const homeBaseApiPaths = [
   "/api/clusters?limit=100",
@@ -21,6 +22,13 @@ const homeBaseApiPaths = [
 const homePodApiPath =
   `/api/clusters/${homeClusterId}/nodes/${homeNodeName}/pods/summary`;
 const homeFeatureApiPaths = [...homeBaseApiPaths, homePodApiPath];
+const resourcesSummaryApiPath =
+  `/api/clusters/${homeClusterId}/inventory/summary`;
+const resourcesListApiPath =
+  `/api/clusters/${homeClusterId}/inventory/resources?resource_type=pod&include_deleted=false&limit=200`;
+const resourcesDetailApiPath =
+  `/api/clusters/${homeClusterId}/inventory/resource-detail?resource_type=pod&kind=Pod&name=${homePodName}&namespace=shop&related_limit=100&event_limit=50`;
+const resourcesBaseApiPaths = [homeBaseApiPaths[0], resourcesSummaryApiPath, resourcesListApiPath];
 const stateHarnessUrl = `${baseUrl}/scripts/fixtures/product-state-visual-harness.html`;
 const shellHarnessUrl = `${baseUrl}/scripts/fixtures/product-shell-visual-harness.html`;
 const outputDir = new URL("../output/playwright/", import.meta.url).pathname;
@@ -113,6 +121,33 @@ const homeForbiddenSelectors = [
   "h2",
   "p",
 ];
+const resourcesSelectors = [
+  "[data-slot='sidebar-provider']",
+  "[data-slot='sidebar-inset']",
+  "[data-slot='sidebar-trigger']",
+  "[data-slot='surface']",
+  "[data-slot='badge']",
+  "[data-slot='select-trigger']",
+  "[data-slot='accordion']",
+  "[data-slot='accordion-trigger']",
+  "[data-slot='table-container']",
+  "[data-slot='table']",
+  "[data-slot='status-mark']",
+  "header",
+  "main",
+  "h2",
+  "h3",
+  "p",
+];
+const resourcesDetailSelectors = [
+  ...resourcesSelectors,
+  "[data-slot='sheet-overlay']",
+  "[data-slot='sheet-content']",
+  "[data-slot='sheet-title']",
+  "[data-slot='tabs']",
+  "[data-slot='tabs-list']",
+  "[data-slot='tabs-trigger']",
+];
 const visualScenarios = [
   {
     id: "auth-unauthenticated-desktop-light",
@@ -171,7 +206,7 @@ const visualScenarios = [
     forcedColors: "active",
   },
   {
-    id: "home-authenticated-node-desktop-light",
+    id: "home-authenticated-node-desktop-light-text-diet",
     url: productHomeUrl,
     authSession: "authenticated",
     homeScenario: true,
@@ -258,6 +293,94 @@ const visualScenarios = [
     theme: "light",
     colorScheme: "light",
     forcedColors: "active",
+  },
+  {
+    id: "resources-authenticated-desktop-light",
+    url: productResourcesUrl,
+    authSession: "authenticated",
+    resourcesScenario: true,
+    heading: "Resources",
+    requiredSelectors: resourcesSelectors,
+    viewport: { width: 1440, height: 1000 },
+    theme: "light",
+    colorScheme: "light",
+    forcedColors: "none",
+  },
+  {
+    id: "resources-authenticated-mobile-dark",
+    url: productResourcesUrl,
+    authSession: "authenticated",
+    resourcesScenario: true,
+    heading: "Resources",
+    requiredSelectors: resourcesSelectors,
+    viewport: { width: 390, height: 844 },
+    theme: "dark",
+    colorScheme: "dark",
+    forcedColors: "none",
+  },
+  {
+    id: "resources-authenticated-reflow-320-light",
+    url: productResourcesUrl,
+    authSession: "authenticated",
+    resourcesScenario: true,
+    heading: "Resources",
+    requiredSelectors: resourcesSelectors,
+    viewport: { width: 320, height: 900 },
+    theme: "light",
+    colorScheme: "light",
+    forcedColors: "none",
+  },
+  {
+    id: "resources-authenticated-text-resize-200-light",
+    url: productResourcesUrl,
+    authSession: "authenticated",
+    resourcesScenario: true,
+    heading: "Resources",
+    requiredSelectors: resourcesSelectors,
+    viewport: { width: 640, height: 1000 },
+    theme: "light",
+    colorScheme: "light",
+    forcedColors: "none",
+    rootFontScale: 2,
+  },
+  {
+    id: "resources-authenticated-forced-colors",
+    url: productResourcesUrl,
+    authSession: "authenticated",
+    resourcesScenario: true,
+    heading: "Resources",
+    requiredSelectors: resourcesSelectors,
+    viewport: { width: 1024, height: 900 },
+    theme: "light",
+    colorScheme: "light",
+    forcedColors: "active",
+  },
+  {
+    id: "resources-detail-reflow-320-dark",
+    url: `${productResourcesUrl}&resource=shop%2F${homePodName}&kind=Pod`,
+    authSession: "authenticated",
+    resourcesScenario: true,
+    resourcesDetail: true,
+    heading: `${homePodName} 상세`,
+    requiredSelectors: resourcesDetailSelectors,
+    viewport: { width: 320, height: 900 },
+    theme: "dark",
+    colorScheme: "dark",
+    forcedColors: "none",
+  },
+  {
+    id: "resources-detail-full-reflow-320-light",
+    url: `${productResourcesUrl}&resource=shop%2F${homePodName}&kind=Pod&full=1`,
+    authSession: "authenticated",
+    resourcesScenario: true,
+    resourcesDetail: true,
+    resourcesFull: true,
+    heading: `${homePodName} 상세`,
+    requiredSelectors: resourcesDetailSelectors,
+    viewport: { width: 320, height: 900 },
+    theme: "light",
+    colorScheme: "light",
+    forcedColors: "none",
   },
   {
     id: "home-cluster-forbidden-light",
@@ -522,6 +645,128 @@ const homeFeatureApiFixtures = new Map([
   }],
 ]);
 
+const resourcesFeatureApiFixtures = new Map([
+  [homeBaseApiPaths[0], homeFeatureApiFixtures.get(homeBaseApiPaths[0])],
+  [resourcesSummaryApiPath, {
+    cluster_id: homeClusterId,
+    latest_snapshot: {
+      snapshot_id: "visual-snapshot",
+      collected_at: "2026-07-12T10:00:00Z",
+    },
+    counts: [
+      { resource_type: "pod", health: "healthy", count: 1 },
+      { resource_type: "pod", health: "degraded", count: 1 },
+      { resource_type: "service", health: "healthy", count: 1 },
+    ],
+  }],
+  [resourcesListApiPath, {
+    cluster_id: homeClusterId,
+    resource_type: "pod",
+    resources: [
+      visualInventoryResource(),
+      visualInventoryResource({
+        inventory_key: "visual-pod-payments",
+        name: "payments-api-0",
+        uid: "visual-pod-payments-uid",
+        health: "healthy",
+        summary: {
+          phase: "Running",
+          node_name: homeNodeName,
+          restart_total: 0,
+          cpu_mcores: 128,
+          mem_mib: 256,
+        },
+      }),
+    ],
+  }],
+  [resourcesDetailApiPath, {
+    cluster_id: homeClusterId,
+    identity: {
+      resource_type: "pod",
+      kind: "Pod",
+      namespace: "shop",
+      name: homePodName,
+    },
+    resource: visualInventoryResource(),
+    related: {
+      services: [visualInventoryResource({
+        inventory_key: "visual-service-checkout",
+        resource_type: "service",
+        kind: "Service",
+        name: "checkout",
+        uid: "visual-service-checkout-uid",
+        status: "Active",
+        summary: {
+          type: "ClusterIP",
+          cluster_ip: "10.96.0.10",
+          external_url: null,
+          external_hosts: [],
+          ports: [{ name: "http", protocol: "TCP", port: 80, target_port: 8080 }],
+        },
+      })],
+    },
+    events: [visualInventoryResource({
+      inventory_key: "visual-event-backoff",
+      resource_type: "event",
+      kind: "Event",
+      name: "visual-pod:Pod:checkout-api-0:BackOff",
+      uid: null,
+      status: "Warning",
+      health: "warning",
+      summary: {
+        type: "Warning",
+        reason: "BackOff",
+        message: "Container is restarting",
+        count: 2,
+        first_timestamp: "2026-07-12T09:58:00Z",
+        last_timestamp: "2026-07-12T09:59:00Z",
+        reporting_component: "kubelet",
+        involved_kind: "Pod",
+        involved_name: homePodName,
+        involved_uid: "visual-pod-checkout-uid",
+      },
+    })],
+  }],
+]);
+
+function visualInventoryResource(overrides = {}) {
+  return {
+    inventory_key: "visual-pod-checkout",
+    snapshot_id: "visual-snapshot",
+    workspace_id: "visual-workspace",
+    cluster_id: homeClusterId,
+    resource_type: "pod",
+    api_version: "v1",
+    kind: "Pod",
+    namespace: "shop",
+    name: homePodName,
+    uid: "visual-pod-checkout-uid",
+    resource_version: "10",
+    status: "Running",
+    health: "degraded",
+    labels: { app: "checkout" },
+    annotations: { "kubectl.kubernetes.io/last-applied-configuration": "visual-secret-must-not-render" },
+    summary: {
+      phase: "Running",
+      node_name: homeNodeName,
+      owner_kind: "Deployment",
+      owner_name: "checkout-api",
+      restart_total: 3,
+      cpu_mcores: 245.5,
+      mem_mib: 382,
+      waiting_reasons: ["CrashLoopBackOff"],
+      terminated_reasons: [],
+    },
+    observed_at: "2026-07-12T10:00:00Z",
+    first_seen_at: "2026-07-12T09:00:00Z",
+    last_seen_at: "2026-07-12T10:00:00Z",
+    deleted_at: null,
+    created_at: "2026-07-12T09:00:00Z",
+    updated_at: "2026-07-12T10:00:00Z",
+    ...overrides,
+  };
+}
+
 const server = spawn(
   "npm",
   ["run", "dev", "--", "--host", "127.0.0.1", "--port", String(port), "--strictPort"],
@@ -656,6 +901,11 @@ async function installScenarioApiFixtures(page, scenario) {
       });
     }
   }
+  if (scenario.resourcesScenario) {
+    for (const [path, body] of resourcesFeatureApiFixtures) {
+      await installExactJsonGetFixture(page, path, { body, status: 200 });
+    }
+  }
   return authFixture;
 }
 
@@ -773,7 +1023,7 @@ function assertScenarioNetworkContract(
   if (errors.length) {
     throw new Error(`${scenario.id}: visual console errors\n${errors.join("\n")}`);
   }
-  if (!scenario.homeScenario && featureApiRequests.length !== 0) {
+  if (!scenario.homeScenario && !scenario.resourcesScenario && featureApiRequests.length !== 0) {
     throw new Error(
       `${scenario.id}: expected 0 feature API requests, received ${featureApiRequests.length}\n`
       + formatRequests(featureApiRequests),
@@ -813,6 +1063,8 @@ function expectedScenarioApiPaths(scenario) {
     ...(scenario.authSession ? [authSessionPath] : []),
     ...(scenario.homeScenario ? homeBaseApiPaths : []),
     ...(scenario.homeFrame === "pods" ? [homePodApiPath] : []),
+    ...(scenario.resourcesScenario ? resourcesBaseApiPaths : []),
+    ...(scenario.resourcesDetail ? [resourcesDetailApiPath] : []),
   ];
 }
 
@@ -836,19 +1088,25 @@ async function captureScenario(page, scenario) {
     await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => resolve())));
   }
 
-  await page.getByRole("heading", { name: scenario.heading }).waitFor();
+  if (scenario.resourcesDetail) {
+    await page.getByRole("dialog", { name: scenario.heading }).waitFor();
+  } else {
+    await page.getByRole("heading", { name: scenario.heading }).waitFor();
+  }
   await assertScenarioEnvironment(page, scenario, baselineRootFontSize);
   if (scenario.shellMode) {
     await prepareProductShellScenario(page, scenario);
   } else if (scenario.homeScenario) {
     await prepareProductHomeScenario(page, scenario);
+  } else if (scenario.resourcesScenario) {
+    await prepareProductResourcesScenario(page, scenario);
   } else if (!scenario.authSession || scenario.authSession === "authenticated") {
     await page.keyboard.press("?");
     if (await page.getByRole("dialog").count()) {
       throw new Error(`${scenario.id}: release-only shortcut dialog mounted unexpectedly`);
     }
   }
-  const mainCount = scenario.shellMode
+  const mainCount = scenario.shellMode || scenario.resourcesDetail
     ? await page.locator("main").count()
     : await page.getByRole("main").count();
   if (mainCount !== 1) {
@@ -866,6 +1124,7 @@ async function captureScenario(page, scenario) {
   if (scenario.forcedColors === "active") {
     if (scenario.shellMode) await assertProductShellForcedColors(page, scenario.id);
     else if (scenario.homeScenario) await assertProductHomeForcedColors(page, scenario.id);
+    else if (scenario.resourcesScenario) await assertProductResourcesForcedColors(page, scenario.id);
     else if (scenario.authSession === "unauthenticated") {
       await assertAuthForcedColors(page, scenario.id);
     }
@@ -954,6 +1213,123 @@ async function prepareProductHomeScenario(page, scenario) {
   });
 }
 
+async function prepareProductResourcesScenario(page, scenario) {
+  await page.waitForFunction(() => document.title === "KubeHeal");
+  const table = page.getByRole("table", { name: "리소스 목록" });
+  await table.waitFor();
+  await page.getByText(homePodName, { exact: true }).first().waitFor();
+
+  const clusterSelect = page.getByRole("combobox", { name: "클러스터 선택" });
+  await clusterSelect.waitFor();
+  if (!(await clusterSelect.textContent())?.includes(homeClusterId)) {
+    throw new Error(`${scenario.id}: Resources cluster selector omitted ${homeClusterId}`);
+  }
+
+  const scopeText = await page.getByRole("status", { name: "목록 범위" }).innerText();
+  if (!/표시된\s*2개/u.test(scopeText) || !/전체 수 미확인/u.test(scopeText)) {
+    throw new Error(
+      `${scenario.id}: Resources unknown-completeness list copy is dishonest ${JSON.stringify(scopeText)}`,
+    );
+  }
+  const productText = await page.locator("main").innerText();
+  if (productText.includes("visual-secret-must-not-render")) {
+    throw new Error(`${scenario.id}: unredacted annotation reached the Resources DOM`);
+  }
+  if (!/관측/u.test(productText)) {
+    throw new Error(`${scenario.id}: Resources does not disclose snapshot observation time`);
+  }
+
+  const desktop = scenario.viewport.width >= 768;
+  const navigation = page.getByRole("navigation", { name: "주요 메뉴" });
+  if (desktop) {
+    const resourcesLink = page.getByRole("link", { name: "Resources", exact: true });
+    if (await resourcesLink.getAttribute("aria-current") !== "page") {
+      throw new Error(`${scenario.id}: desktop Resources link must be current`);
+    }
+  } else if (await navigation.count() !== 0) {
+    throw new Error(`${scenario.id}: closed mobile Resources must not mount drawer navigation`);
+  }
+
+  if (scenario.resourcesDetail) {
+    const dialog = page.getByRole("dialog", { name: `${homePodName} 상세` });
+    await dialog.waitFor();
+    const bounds = await dialog.boundingBox();
+    if (!bounds || bounds.width < scenario.viewport.width - 2) {
+      throw new Error(
+        `${scenario.id}: 320px detail Sheet must use the viewport width ${JSON.stringify(bounds)}`,
+      );
+    }
+    if (await dialog.getByRole("tab", { name: /개요/u }).count() !== 1) {
+      throw new Error(`${scenario.id}: Resources detail tabs are missing`);
+    }
+    const url = new URL(page.url());
+    if (url.searchParams.get("resource") !== `shop/${homePodName}`
+      || url.searchParams.get("kind") !== "Pod"
+      || (scenario.resourcesFull && url.searchParams.get("full") !== "1")) {
+      throw new Error(`${scenario.id}: detail URL identity is not exact: ${url.href}`);
+    }
+  } else {
+    const url = new URL(page.url());
+    if (url.pathname !== "/product/resources/pod"
+      || url.searchParams.get("cluster") !== homeClusterId
+      || url.searchParams.has("resource")) {
+      throw new Error(`${scenario.id}: Resources list URL is not exact: ${url.href}`);
+    }
+  }
+
+  await assertProductResourcesReducedMotion(page, scenario.id);
+}
+
+async function assertProductResourcesReducedMotion(page, label) {
+  const result = await page.evaluate(() => {
+    const selector = [
+      "[data-slot='sidebar-trigger']",
+      "[data-slot='select-trigger']",
+      "[data-slot='accordion-trigger']",
+      "[data-slot='button']",
+      "[data-slot='sheet-content']",
+      "[data-slot='sheet-overlay']",
+    ].join(",");
+    const elements = [...document.querySelectorAll(selector)].filter((element) => {
+      const rect = element.getBoundingClientRect();
+      const style = getComputedStyle(element);
+      return rect.width > 0 && rect.height > 0
+        && style.display !== "none" && style.visibility !== "hidden";
+    });
+    return {
+      active: matchMedia("(prefers-reduced-motion: reduce)").matches,
+      count: elements.length,
+      motion: elements.map((element) => {
+        const style = getComputedStyle(element);
+        return {
+          animationDuration: style.animationDuration,
+          animationName: style.animationName,
+          slot: element.getAttribute("data-slot"),
+          transitionDuration: style.transitionDuration,
+          transitionProperty: style.transitionProperty,
+        };
+      }),
+    };
+  });
+  if (!result.active || result.count === 0) {
+    throw new Error(`${label}: Resources reduced-motion fixture is incomplete`);
+  }
+  for (const motion of result.motion) {
+    if (motion.transitionProperty !== "none"
+      && maxCssTimeMilliseconds(motion.transitionDuration) > 1) {
+      throw new Error(
+        `${label}: ${motion.slot} reduced-motion transition remains ${motion.transitionDuration}`,
+      );
+    }
+    if (motion.animationName !== "none"
+      && maxCssTimeMilliseconds(motion.animationDuration) > 1) {
+      throw new Error(
+        `${label}: ${motion.slot} reduced-motion animation remains ${motion.animationDuration}`,
+      );
+    }
+  }
+}
+
 async function assertProductHomeFreshnessContract(page, label) {
   const refresh = page.getByRole("button", { name: /새로\s*고침/u });
   if (await refresh.count() !== 1) {
@@ -962,12 +1338,18 @@ async function assertProductHomeFreshnessContract(page, label) {
   await refresh.waitFor();
 
   const mainText = await page.getByRole("main").innerText();
-  if (!/30\s*초[^\n]*자동 갱신/u.test(mainText)) {
-    throw new Error(`${label}: Home must disclose its 30-second automatic refresh cadence`);
+  if (/30\s*초[^\n]*자동 갱신|실 API|LIVE API|Fleet Home|CLUSTER HEALTH|ATTENTION|RESOURCE SNAPSHOT/u
+    .test(mainText)) {
+    throw new Error(`${label}: Home rendered a prohibited standing label or transport badge`);
   }
-  if (/(^|\n)\s*LIVE(?: API)?\s*($|\n)/u.test(mainText)) {
-    throw new Error(`${label}: snapshot Home must not claim an unqualified LIVE state`);
+  const connection = page.getByRole("button", {
+    name: /연결(?:됨| 지연| 대기| 끊김| 상태 알 수 없음).*마지막 관측/u,
+  });
+  if (await connection.count() !== 1) {
+    throw new Error(`${label}: Home must expose one connection freshness control`);
   }
+  await connection.focus();
+  await page.locator("[data-slot='tooltip-content']").waitFor();
 }
 
 async function assertProductHomeNodeFrame(page, label) {
@@ -995,9 +1377,6 @@ async function assertProductHomePodFrame(page, label) {
 
   const section = page.locator("section[aria-labelledby='pod-list-title']");
   const text = await section.innerText();
-  if (!/워크로드 Pod/u.test(text)) {
-    throw new Error(`${label}: Pod frame must identify its workload Pod resource type`);
-  }
   if (!/표시\s*2개/u.test(text) || !/전체 수 미확인/u.test(text)) {
     throw new Error(
       `${label}: Pod collection with unknown completeness must say `
@@ -1880,6 +2259,47 @@ async function assertNoOverflow(page, label, requiredSelectors) {
   if (result.documentOverflow > 1 || result.violations.length) {
     throw new Error(
       `${label} reflow failure: document=${result.documentOverflow}px\n${result.violations.join("\n")}`,
+    );
+  }
+}
+
+async function assertProductResourcesForcedColors(page, label) {
+  const result = await page.evaluate(() => {
+    const select = document.querySelector("[data-slot='select-trigger']");
+    const row = document.querySelector("[data-slot='table-row']");
+    const action = document.querySelector("[data-slot='table-body'] [data-slot='button']");
+    const status = document.querySelector("[data-slot='status-mark']");
+    const marker = status?.querySelector("[aria-hidden='true']");
+    const required = [select, row, action, status, marker];
+    if (required.some((element) => !(element instanceof HTMLElement))) {
+      return { missing: true };
+    }
+    action.focus();
+    const selectStyle = getComputedStyle(select);
+    const rowStyle = getComputedStyle(row);
+    const actionStyle = getComputedStyle(action);
+    const markerStyle = getComputedStyle(marker);
+    return {
+      missing: false,
+      active: matchMedia("(forced-colors: active)").matches,
+      actionFocused: document.activeElement === action,
+      actionOutlineStyle: actionStyle.outlineStyle,
+      actionOutlineWidth: Number.parseFloat(actionStyle.outlineWidth),
+      markerBorderStyle: markerStyle.borderTopStyle,
+      markerBorderWidth: Number.parseFloat(markerStyle.borderTopWidth),
+      rowBorderStyle: rowStyle.borderBottomStyle,
+      rowBorderWidth: Number.parseFloat(rowStyle.borderBottomWidth),
+      selectBorderStyle: selectStyle.borderTopStyle,
+      selectBorderWidth: Number.parseFloat(selectStyle.borderTopWidth),
+    };
+  });
+  if (result.missing || !result.active || !result.actionFocused
+    || result.selectBorderStyle === "none" || result.selectBorderWidth < 1
+    || result.rowBorderStyle === "none" || result.rowBorderWidth < 1
+    || result.markerBorderStyle === "none" || result.markerBorderWidth < 1
+    || result.actionOutlineStyle === "none" || result.actionOutlineWidth < 2) {
+    throw new Error(
+      `${label}: forced-colors Resources state is not preserved ${JSON.stringify(result)}`,
     );
   }
 }

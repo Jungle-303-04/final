@@ -31,18 +31,16 @@ describe("HomePage data semantics", () => {
       getClusterSummary: vi.fn().mockResolvedValue({
         ...CLUSTER_OVERVIEW,
         usage,
-      } as never),
+      }),
     })), ["/product?cluster=cluster-1"]);
 
-    const clusterStatus = await screen.findByRole("region", { name: "클러스터 상태" }, { timeout: 5_000 });
-    await waitFor(() => expect(within(clusterStatus).getAllByText("CPU 사용률").length)
-      .toBeGreaterThan(0));
-    const cpuLabels = within(clusterStatus).getAllByText("CPU 사용률");
-    const cpuMetric = cpuLabels.map((label) => label.closest("[data-slot='metric']"))
-      .find((metric) => metric !== null);
-
-    expect(cpuMetric).not.toBeNull();
-    expect(within(cpuMetric as HTMLElement).getByText("—")).toBeTruthy();
+    const clusterStatus = await screen.findByRole("region", {
+      name: "클러스터 상태",
+    }, { timeout: 5_000 });
+    await waitFor(() => {
+      expect(within(clusterStatus).getAllByText("—").length).toBeGreaterThanOrEqual(1);
+    });
+    expect(within(clusterStatus).queryByRole("progressbar", { name: "CPU 사용률" })).toBeNull();
     expect(screen.getByRole("complementary", { name: "활성 이슈" })).toBeTruthy();
     expect(screen.getByText("Restart loop")).toBeTruthy();
   }, 15_000);
@@ -95,7 +93,7 @@ describe("HomePage data semantics", () => {
     const incidentLabel = await screen.findByText("활성 인시던트");
     expect(incidentLabel.closest("[data-slot='metric']")?.textContent).toContain("7");
     const issues = screen.getByRole("complementary", { name: "활성 이슈" });
-    expect(issues.textContent).toMatch(/인시던트\s*1/u);
+    expect(issues.textContent).toMatch(/인시던트\s*7.*표시\s*1/u);
     expect(issues.textContent).toMatch(/경고\s*2/u);
   });
 
@@ -149,7 +147,7 @@ describe("HomePage data semantics", () => {
     expect(status?.getAttribute("data-status")).toBe("warning");
   });
 
-  it("disambiguates duplicate cluster names with environment, id, and connection status", async () => {
+  it("disambiguates duplicate cluster names without repeating connection status", async () => {
     const user = userEvent.setup();
     const duplicateClusters: HomeClusterChoices = {
       completeness: "unknown",
@@ -168,9 +166,10 @@ describe("HomePage data semantics", () => {
     await user.click(await screen.findByRole("combobox", { name: "클러스터 선택" }));
     const options = await screen.findAllByRole("option");
     expect(options.map((option) => option.textContent)).toEqual(expect.arrayContaining([
-      expect.stringMatching(/shared.*production.*shared-a.*연결됨/u),
-      expect.stringMatching(/shared.*management.*shared-b.*연결 끊김/u),
+      expect.stringMatching(/shared.*production.*shared-a/u),
+      expect.stringMatching(/shared.*management.*shared-b/u),
     ]));
+    expect(options.some((option) => /연결됨|연결 끊김/u.test(option.textContent ?? ""))).toBe(false);
   });
 
   it.each([

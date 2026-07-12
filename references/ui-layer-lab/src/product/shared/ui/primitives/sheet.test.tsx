@@ -16,10 +16,12 @@ import {
 afterEach(cleanup);
 
 function ResourceSheet({
+  contentClassName,
   closeLabel,
   showCloseButton = true,
   side = "right",
 }: {
+  contentClassName?: string;
   closeLabel?: string;
   showCloseButton?: boolean;
   side?: "top" | "right" | "bottom" | "left";
@@ -28,6 +30,7 @@ function ResourceSheet({
     <Sheet>
       <SheetTrigger>리소스 상세 열기</SheetTrigger>
       <SheetContent
+        className={contentClassName}
         closeLabel={closeLabel}
         showCloseButton={showCloseButton}
         side={side}
@@ -78,6 +81,21 @@ describe("product-owned Sheet", () => {
     await user.click(screen.getByRole("button", { name: "리소스 상세 열기" }));
     expect(await screen.findByRole("dialog", { name: "Pod 상세" })).toBeTruthy();
     expect(screen.queryByRole("button", { name: "닫기" })).toBeNull();
+  });
+
+  it("uses the full mobile viewport for lateral sheets and permits a product width override", async () => {
+    const user = userEvent.setup();
+    const { rerender } = render(<ResourceSheet />);
+
+    await user.click(screen.getByRole("button", { name: "리소스 상세 열기" }));
+    const content = await screen.findByRole("dialog", { name: "Pod 상세" });
+    expect(content.className.split(" ")).toContain("w-full");
+    expect(content.className).not.toContain("w-3/4");
+
+    rerender(<ResourceSheet contentClassName="w-full max-w-none sm:max-w-none" />);
+    expect(content.className.split(" ")).toContain("max-w-none");
+    expect(content.className.split(" ")).toContain("sm:max-w-none");
+    expect(content.className.split(" ")).not.toContain("sm:max-w-sm");
   });
 
   it("keeps canonical slots, side geometry, semantic colors, and accessibility fallbacks", async () => {

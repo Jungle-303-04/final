@@ -1,7 +1,6 @@
 import { CircleAlert, Clock3 } from "lucide-react";
 import type { HomeClusterChoice, HomeClusterOverview } from "../../features/home/homeContract";
 import { Surface } from "../../shared/ui/Surface";
-import { Badge } from "../../shared/ui/primitives/badge";
 import {
   Item,
   ItemContent,
@@ -32,17 +31,12 @@ export function HomeIssuesRail({
       className="grid min-w-0 content-start overflow-hidden"
     >
       <div className="flex items-center justify-between gap-3 border-b p-4">
-        <div className="grid gap-1">
-          <p className="text-xs font-medium text-muted-foreground">ATTENTION</p>
-          <h2 className="text-base font-semibold" id="active-issues-title">활성 이슈</h2>
-        </div>
+        <h2 className="text-base font-semibold" id="active-issues-title">활성 이슈</h2>
         {overview.phase === "ready" ? (
-          <div className="flex flex-wrap justify-end gap-1.5">
-            <Badge variant={(cluster?.incidentCount ?? 0) ? "destructive" : "secondary"}>
-              전체 집계 인시던트 {cluster?.incidentCount ?? "—"}
-            </Badge>
-            <Badge variant="outline">표시 경고 {overview.data.warnings.length}</Badge>
-          </div>
+          <span className="text-xs text-muted-foreground">
+            인시던트 {cluster?.incidentCount ?? "—"} · 표시 {overview.data.incidents.length}
+            {" · "}경고 {overview.data.warnings.length}
+          </span>
         ) : null}
       </div>
       <IssueContent onRefresh={onRefresh} overview={overview} />
@@ -79,10 +73,6 @@ function IssueContent({
   return (
     <>
       <HomeRefreshFailure failure={overview.refreshFailure} label="활성 이슈" onRetry={onRefresh} />
-      <p className="px-4 pt-3 text-xs text-muted-foreground">
-        표시 인시던트 {overview.data.incidents.length} · 표시 경고 {overview.data.warnings.length}
-        {" · "}전체 수 미확인
-      </p>
       <ScrollArea
         aria-label="활성 이슈 목록"
         className="max-h-[32rem]"

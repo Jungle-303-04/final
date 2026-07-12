@@ -1,6 +1,7 @@
 import type { ResourceSummary } from "./resourcesContract";
 import type { ResourcesEndpointResource } from "./resourcesEndpointContract";
 import { toResourceFacts } from "./resourceFacts";
+import type { ResourceFactWarningSink } from "./resourceFactSafety";
 import {
   assertSameIdentity,
   assertSameOptionalIdentity,
@@ -24,6 +25,7 @@ export function toResourceSummary(
   wire: ResourcesEndpointResource,
   expectedClusterId: string,
   expectations: ResourceExpectations = {},
+  warnFact?: ResourceFactWarningSink,
 ): ResourceSummary {
   assertSameIdentity(wire.cluster_id, expectedClusterId);
   const resourceType = responseResourceType(wire.resource_type);
@@ -62,7 +64,7 @@ export function toResourceSummary(
     status,
     health: healthTone(healthStatus),
     healthStatus,
-    facts: toResourceFacts(resourceType, wire.summary),
+    facts: toResourceFacts(resourceType, wire.summary, warnFact),
     observedAt: responseTimestamp(wire.observed_at),
     firstSeenAt: responseTimestamp(wire.first_seen_at),
     lastSeenAt: responseTimestamp(wire.last_seen_at),

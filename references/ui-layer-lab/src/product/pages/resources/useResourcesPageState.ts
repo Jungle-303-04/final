@@ -12,11 +12,19 @@ import { acquireSharedRequest } from "../../shared/data/sharedRequest";
 import { useVisibleRefreshClock } from "../../shared/data/useVisibleRefreshClock";
 import {
   RESOURCES_LOADING,
+  blockForFailure,
+  hasRetryBlocks,
   resourcesFailure,
   resourcesSuccess,
+  retryWaitSeconds,
+  scheduledRateLimitRetryAt,
   startResourcesResource,
   toResourcesFailure,
+  withRetryBlock,
+  withoutRetryBlock,
+  type ResourcesRequestTarget,
   type ResourcesResourceState,
+  type ResourcesRetryBlocks,
 } from "./resourcesPageStateModel";
 import {
   decodeResourceSelection,
@@ -49,9 +57,34 @@ export function useResourcesPageState(port: ResourcesPort, clusterPort: ClusterP
   const [choices, setChoices] = useState<ResourcesResourceState<HomeClusterChoices>>(
     RESOURCES_LOADING,
   );
+  const [retryBlocks, setRetryBlocks] = useState<ResourcesRetryBlocks>({});
   const rowButtons = useRef(new Map<string, HTMLButtonElement>());
   const restoreRowKey = useRef<string | null>(null);
-  const { refresh, revision } = useVisibleRefreshClock(true, RESOURCES_POLL_INTERVAL_MS);
+  const automaticRefreshPaused = hasRetryBlocks(retryBlocks);
+  const { refresh: advanceRevision, revision } = useVisibleRefreshClock(
+    !automaticRefreshPaused,
+    RESOURCES_POLL_INTERVAL_MS,
+  );
+  const recordFailure = useCallback((
+    target: ResourcesRequestTarget,
+    failure: ReturnType<typeof toResourcesFailure>,
+  ) => {
+    const block = blockForFailure(target, failure);
+    setRetryBlocks((current) => block
+      ? withRetryBlock(current, block)
+      : withoutRetryBlock(current, target));
+  }, []);
+  const recordSuccess = useCallback((target: ResourcesRequestTarget) => {
+    setRetryBlocks((current) => withoutRetryBlock(current, target));
+  }, []);
+  const refresh = useCallback(() => advanceRevision(), [advanceRevision]);
+
+  useEffect(() => {
+    const retryAt = scheduledRateLimitRetryAt(retryBlocks);
+    if (retryAt === null) return;
+    const timer = window.setTimeout(advanceRevision, Math.max(0, retryAt - Date.now()));
+    return () => window.clearTimeout(timer);
+  }, [advanceRevision, retryBlocks]);
 
   useEffect(() => {
     let active = true;
@@ -62,16 +95,23 @@ export function useResourcesPageState(port: ResourcesPort, clusterPort: ClusterP
       (signal) => clusterPort.listClusterChoices(signal),
     );
     void request.promise.then(
-      (data) => { if (active) setChoices(resourcesSuccess(data)); },
+      (data) => {
+        if (!active) return;
+        setChoices(resourcesSuccess(data));
+        recordSuccess("choices");
+      },
       (error: unknown) => {
         if (!active || isAbort(error)) return;
         const failure = toResourcesFailure(error);
         if (failure.code === "unauthorized") reportUnauthorized();
-        else setChoices((current) => resourcesFailure(current, failure));
+        else {
+          recordFailure("choices", failure);
+          setChoices((current) => resourcesFailure(current, failure));
+        }
       },
     );
     return () => { active = false; request.release(); };
-  }, [clusterPort, reportUnauthorized, revision]);
+  }, [clusterPort, recordFailure, recordSuccess, reportUnauthorized, revision]);
 
   useEffect(() => {
     if (choices.phase !== "ready" || selectedClusterId !== null) return;
@@ -89,6 +129,8 @@ export function useResourcesPageState(port: ResourcesPort, clusterPort: ClusterP
     includeDeleted,
     namespace,
     port,
+    onRequestFailure: recordFailure,
+    onRequestSuccess: recordSuccess,
     reportUnauthorized,
     revision,
     selectedClusterExists,
@@ -109,11 +151,16 @@ export function useResourcesPageState(port: ResourcesPort, clusterPort: ClusterP
     setSearchParams(next, { replace });
   }, [searchParams, setSearchParams]);
   const selectResourceType = useCallback((resourceType: string) => {
+    setRetryBlocks((current) => withoutRetryBlock(
+      withoutRetryBlock(current, "list"),
+      "detail",
+    ));
     const next = new URLSearchParams(searchParams);
     clearDetail(next);
     navigate({ pathname: resourceTypePath(resourceType), search: next.toString() });
   }, [navigate, searchParams]);
   const closeDetail = useCallback(() => {
+    setRetryBlocks((current) => withoutRetryBlock(current, "detail"));
     const key = restoreRowKey.current;
     restoreRowKey.current = null;
     const next = new URLSearchParams(searchParams);
@@ -136,8 +183,11 @@ export function useResourcesPageState(port: ResourcesPort, clusterPort: ClusterP
     includeDeleted,
     detailTab: searchParams.get("tab") ?? "overview",
     fullDetail: searchParams.get("full") === "1",
+    automaticRefreshPaused,
+    retryWaitSeconds: retryWaitSeconds(retryBlocks),
     refresh,
     selectCluster(clusterId: string) {
+      setRetryBlocks({});
       updateQuery((next) => { next.set("cluster", clusterId); clearDetail(next); }, false);
     },
     selectResourceType,
@@ -159,6 +209,10 @@ export function useResourcesPageState(port: ResourcesPort, clusterPort: ClusterP
       });
     },
     setNamespace(value: string | null) {
+      setRetryBlocks((current) => withoutRetryBlock(
+        withoutRetryBlock(current, "list"),
+        "detail",
+      ));
       updateQuery((next) => {
         if (value) next.set("namespace", value);
         else next.delete("namespace");
@@ -166,6 +220,10 @@ export function useResourcesPageState(port: ResourcesPort, clusterPort: ClusterP
       }, false);
     },
     setIncludeDeleted(value: boolean) {
+      setRetryBlocks((current) => withoutRetryBlock(
+        withoutRetryBlock(current, "list"),
+        "detail",
+      ));
       updateQuery((next) => {
         if (value) next.set("showInactive", "1");
         else next.delete("showInactive");
@@ -189,9 +247,9 @@ export function useResourcesPageState(port: ResourcesPort, clusterPort: ClusterP
       else rowButtons.current.delete(key);
     },
   }), [
-    choices, closeDetail, detailIdentity, detailRequested, frame, includeDeleted,
+    automaticRefreshPaused, choices, closeDetail, detailIdentity, detailRequested, frame, includeDeleted,
     namespace, refresh, searchParams, selectedClusterExists, selectedClusterId,
-    selectedResourceType, selectResourceType, typeResolution.kind, updateQuery,
+    retryBlocks, selectedResourceType, selectResourceType, typeResolution.kind, updateQuery,
   ]);
 }
 

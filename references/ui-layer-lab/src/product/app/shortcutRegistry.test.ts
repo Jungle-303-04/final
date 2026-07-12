@@ -43,6 +43,51 @@ describe("shell shortcut registry", () => {
     expect(matcher.handle(keyEvent("o"))).toBeNull();
   });
 
+  it("owns route and Resources collection chords in one active-surface registry", () => {
+    const resources = shellShortcutDefinitions(new Set(["home", "resources"]), "resources");
+    const matcher = createShortcutMatcher(resources);
+
+    expect(resources.map((definition) => definition.id)).toEqual([
+      "route:home",
+      "route:resources",
+      "resources:next-row",
+      "resources:previous-row",
+      "resources:first-row",
+      "resources:last-row",
+      "resources:open-row",
+      "theme",
+      "help",
+    ]);
+    expect(resources.map((definition) => definition.sequence.join(" "))).toEqual([
+      "g h",
+      "g r",
+      "j",
+      "k",
+      "g g",
+      "shift+g",
+      "d",
+      "t",
+      "?",
+    ]);
+
+    matcher.handle(keyEvent("g"));
+    expect(matcher.handle(keyEvent("g"))?.id).toBe("resources:first-row");
+    matcher.handle(keyEvent("g"));
+    expect(matcher.handle(keyEvent("h"))?.id).toBe("route:home");
+    expect(matcher.handle(keyEvent("G"))?.id).toBe("resources:last-row");
+    expect(matcher.handle(keyEvent("g", { shiftKey: true }))?.id)
+      .toBe("resources:last-row");
+  });
+
+  it("does not publish Resources context actions outside the active Resources surface", () => {
+    const definitions = shellShortcutDefinitions(new Set(["home", "resources"]), "home");
+
+    expect(definitions.map(({ id }) => id)).not.toEqual(expect.arrayContaining([
+      "resources:next-row",
+      "resources:first-row",
+    ]));
+  });
+
   it("suppresses shortcuts in editable controls unless explicitly allowed", () => {
     const definitions: readonly ShortcutDefinition[] = [
       ...shellShortcutDefinitions(new Set(["home"])),
