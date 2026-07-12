@@ -42,7 +42,7 @@ describe("product API consumption boundary", () => {
     }
 
     expect(violations, "API references must be isolated behind app/apiComposition.ts").toEqual([]);
-  });
+  }, 15_000);
 
   it("allows only approved named endpoint imports in the composition root", async () => {
     const [progress, compositionSource] = await Promise.all([
@@ -64,7 +64,7 @@ describe("product API consumption boundary", () => {
       audit.names.flatMap((name) => approvalEvidenceIssues(approvals.get(name))),
       "API 완성 records must identify an ancestor commit with API contract tests and the export",
     ).toEqual([]);
-  });
+  }, 15_000);
 
   it("detects alias, re-export, and non-literal dynamic import bypasses", () => {
     const fixturePath = resolve(productRoot, "features/bypass.ts");

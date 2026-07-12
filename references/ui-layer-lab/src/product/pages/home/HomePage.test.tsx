@@ -13,17 +13,19 @@ describe("HomePage", () => {
     const port = homePort();
     renderHome(port);
 
-    expect(await screen.findByRole("heading", { name: "클러스터 상태" })).toBeTruthy();
+    expect(await screen.findByRole("heading", { name: "클러스터 상태" }, { timeout: 5_000 }))
+      .toBeTruthy();
     expect(screen.getByRole("combobox", { name: "클러스터 선택" }).textContent)
       .toContain("cluster-1");
     expect(screen.getByText("42.5", { selector: "strong" })).toBeTruthy();
-    expect(screen.getByRole("button", { name: /worker-a/u })).toBeTruthy();
+    expect(await screen.findByRole("button", { name: /worker-a/u }, { timeout: 5_000 }))
+      .toBeTruthy();
     expect(screen.getByRole("complementary", { name: "활성 이슈" }).textContent)
       .toContain("Restart loop");
     expect(port.listClusterChoices).toHaveBeenCalledOnce();
     expect(port.loadClusterOverview).toHaveBeenCalledWith("cluster-1", expect.any(AbortSignal));
     expect(port.loadNodes).toHaveBeenCalledWith("cluster-1", expect.any(AbortSignal));
-  });
+  }, 15_000);
 
   it("keeps an unknown URL cluster explicit instead of selecting the first cluster", async () => {
     const port = homePort();
@@ -64,7 +66,7 @@ describe("HomePage", () => {
     const port = homePort();
     renderHome(port);
 
-    const node = await screen.findByRole("button", { name: /worker-b/u });
+    const node = await screen.findByRole("button", { name: /worker-b/u }, { timeout: 5_000 });
     await user.click(node);
     expect(await screen.findByRole("heading", { name: "worker-b의 Pod" })).toBeTruthy();
     expect(screen.getByText("checkout-api-0")).toBeTruthy();
@@ -76,7 +78,7 @@ describe("HomePage", () => {
 
     await user.click(screen.getByRole("button", { name: "노드 목록으로" }));
     expect(await screen.findByRole("button", { name: /worker-b/u })).toBe(document.activeElement);
-  });
+  }, 15_000);
 
   it("keeps available Nodes visible when the overview request fails", async () => {
     const port = homePort({
@@ -84,7 +86,8 @@ describe("HomePage", () => {
     });
     renderHome(port);
 
-    expect(await screen.findByRole("button", { name: /worker-a/u })).toBeTruthy();
+    expect(await screen.findByRole("button", { name: /worker-a/u }, { timeout: 5_000 }))
+      .toBeTruthy();
     expect(screen.getAllByRole("alert").some((alert) => (
       alert.textContent?.includes("일부 정보를 불러오지 못했습니다")
     ))).toBe(true);

@@ -109,13 +109,123 @@ describe("canonical Home adapter validation", () => {
   it.each([
     ["usage running count", { ...CLUSTER_OVERVIEW.usage, pods_running: 19 }],
     ["negative usage percent", { ...CLUSTER_OVERVIEW.usage, cpu_pct: -1 }],
-  ])("rejects invalid %s invariants", async (_name, usage) => {
+  ])("isolates invalid %s values to the usage snapshot", async (_name, usage) => {
     const dependencies = endpoints({
       getClusterSummary: vi.fn().mockResolvedValue({ ...CLUSTER_OVERVIEW, usage }),
     });
 
     await expect(createHomeAdapter(dependencies).loadClusterOverview("cluster-1"))
-      .rejects.toMatchObject({ code: "invalid-response" });
+      .resolves.toMatchObject({
+        clusterId: "cluster-1",
+        health: "critical",
+        usage: null,
+        workloads: expect.any(Array),
+        warnings: expect.any(Array),
+        incidents: expect.any(Array),
+        dataQualityWarnings: [{
+          code: "usage-unavailable",
+          section: "usage",
+          entityId: null,
+        }],
+      });
+  });
+
+  it("keeps overview sections alive when pods_total is missing", async () => {
+    const usage = { ...CLUSTER_OVERVIEW.usage } as Record<string, unknown>;
+    delete usage.pods_total;
+    usage.pods_running = 5;
+    const dependencies = endpoints({
+      getClusterSummary: vi.fn().mockResolvedValue({
+        ...CLUSTER_OVERVIEW,
+        usage,
+      }),
+    });
+
+    await expect(createHomeAdapter(dependencies).loadClusterOverview("cluster-1"))
+      .resolves.toMatchObject({
+        health: "critical",
+        usage: null,
+        workloads: [{ name: "catalog-api" }, { name: "checkout-api" }],
+        warnings: [{ name: "checkout-warning" }],
+        incidents: [{ symptom: "Restart loop" }],
+        dataQualityWarnings: [{ code: "usage-unavailable", section: "usage" }],
+      });
+  });
+
+  it("treats a zero usage total as unknown capacity instead of a broken invariant", async () => {
+    const dependencies = endpoints({
+      getClusterSummary: vi.fn().mockResolvedValue({
+        ...CLUSTER_OVERVIEW,
+        usage: { ...CLUSTER_OVERVIEW.usage, pods_running: 5, pods_total: 0 },
+      }),
+    });
+
+    await expect(createHomeAdapter(dependencies).loadClusterOverview("cluster-1"))
+      .resolves.toMatchObject({
+        usage: { podsRunning: 5, podsTotal: 0 },
+        dataQualityWarnings: [],
+      });
+  });
+
+  it("degrades only a workload row whose readiness is empty", async () => {
+    const dependencies = endpoints({
+      getClusterSummary: vi.fn().mockResolvedValue({
+        ...CLUSTER_OVERVIEW,
+        workloads: {
+          ...CLUSTER_OVERVIEW.workloads,
+          healthy: [
+            CLUSTER_OVERVIEW.workloads.healthy[0],
+            {
+              ...CLUSTER_OVERVIEW.workloads.healthy[0],
+              name: "readiness-missing",
+              ready: "",
+            },
+          ],
+        },
+      }),
+    });
+
+    const result = await createHomeAdapter(dependencies).loadClusterOverview("cluster-1");
+
+    expect(result.workloads).toEqual(expect.arrayContaining([
+      expect.objectContaining({ name: "catalog-api", health: "healthy", ready: "3/3" }),
+      expect.objectContaining({ name: "readiness-missing", health: "warning", ready: "—" }),
+    ]));
+    expect(result.dataQualityWarnings).toContainEqual(expect.objectContaining({
+      code: "workload-readiness-unavailable",
+      section: "workloads",
+    }));
+  });
+
+  it("keeps an incident with an empty incident_id as a non-linkable row", async () => {
+    const dependencies = endpoints({
+      getClusterSummary: vi.fn().mockResolvedValue({
+        ...CLUSTER_OVERVIEW,
+        open_incidents: [
+          CLUSTER_OVERVIEW.open_incidents[0],
+          {
+            ...CLUSTER_OVERVIEW.open_incidents[0],
+            incident_id: "",
+            correlation_id: "correlation-without-link",
+            symptom: "Link target unavailable",
+          },
+        ],
+      }),
+    });
+
+    const result = await createHomeAdapter(dependencies).loadClusterOverview("cluster-1");
+
+    expect(result.incidents).toHaveLength(2);
+    expect(result.incidents[1]).toMatchObject({
+      incidentId: null,
+      symptom: "Link target unavailable",
+    });
+    expect(result.incidents[1]?.id).toMatch(/^incident-row:/u);
+    expect(result.dataQualityWarnings).toContainEqual(expect.objectContaining({
+      code: "incident-link-unavailable",
+      section: "incidents",
+      entityId: result.incidents[1]?.id,
+    }));
   });
 
   it("rejects malformed Pod readiness and negative usage", async () => {

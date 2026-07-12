@@ -65,7 +65,16 @@ export function clusterChoices(): HomeClusterChoices {
 }
 
 export function overview(clusterId: string, name: string): HomeClusterOverview {
-  return { clusterId, name, health: "healthy", usage: null, workloads: [], warnings: [], incidents: [] };
+  return {
+    clusterId,
+    name,
+    health: "healthy",
+    usage: null,
+    workloads: [],
+    warnings: [],
+    incidents: [],
+    dataQualityWarnings: [],
+  };
 }
 
 export function nodes(clusterId: string, names: string[]): HomeNodeCollection {

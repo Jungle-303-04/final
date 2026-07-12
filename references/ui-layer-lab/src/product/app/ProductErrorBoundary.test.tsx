@@ -47,6 +47,36 @@ describe("ProductErrorBoundary", () => {
     expect(document.body.textContent).not.toContain("ImmediateCrash");
   });
 
+  it("records one structured diagnostic without the raw error or component stack", () => {
+    const consoleErrorSpy = vi.mocked(console.error);
+
+    render(
+      <ProductErrorBoundary>
+        <ImmediateCrash />
+      </ProductErrorBoundary>,
+    );
+
+    const boundaryLogs = consoleErrorSpy.mock.calls.filter(
+      ([payload]) =>
+        typeof payload === "object" &&
+        payload !== null &&
+        Reflect.get(payload, "event") === "product.error_boundary.caught",
+    );
+
+    expect(boundaryLogs).toEqual([
+      [
+        {
+          boundary: "ProductErrorBoundary",
+          event: "product.error_boundary.caught",
+          recovery: "manual_retry",
+          severity: "error",
+        },
+      ],
+    ]);
+    expect(JSON.stringify(boundaryLogs)).not.toContain(RAW_ERROR_TOKEN);
+    expect(JSON.stringify(boundaryLogs)).not.toContain("ImmediateCrash");
+  });
+
   it("remounts the child only after the user requests a retry", async () => {
     let mountSequence = 0;
 

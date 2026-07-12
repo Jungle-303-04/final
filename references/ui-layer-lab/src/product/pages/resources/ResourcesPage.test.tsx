@@ -1,0 +1,155 @@
+// @vitest-environment jsdom
+
+import { act, cleanup, screen, waitFor, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { HomePortFailure } from "../../features/home/homeContract";
+import { ResourcesPortFailure } from "../../features/resources/resourcesContract";
+import {
+  DISCOVERED_CATALOG,
+  CATALOG,
+  CLUSTERS,
+  deferred,
+  POD_LIST,
+  renderResources,
+  resourcesClusterPort,
+  resourcesPort,
+} from "./ResourcesPage.testSupport";
+
+afterEach(cleanup);
+
+describe("ResourcesPage scope and collection semantics", () => {
+  it("exposes progressive cluster and catalog loading without fabricating a resource type", async () => {
+    const clusters = deferred<typeof CLUSTERS>();
+    const catalog = deferred<typeof CATALOG>();
+    const port = resourcesPort({ loadCatalog: vi.fn().mockReturnValue(catalog.promise) });
+    const clusterPort = resourcesClusterPort({
+      listClusterChoices: vi.fn().mockReturnValue(clusters.promise),
+    });
+    renderResources(port, "/product/resources", clusterPort);
+
+    const initialHeading = await screen.findByRole("heading", {
+      name: "운영 상태를 확인하는 중입니다",
+    });
+    expect(initialHeading.closest("section")?.getAttribute("aria-busy")).toBe("true");
+    expect(port.loadCatalog).not.toHaveBeenCalled();
+    expect(screen.getByTestId("resources-location").textContent).toBe("/product/resources");
+
+    act(() => clusters.resolve(CLUSTERS));
+    await waitFor(() => expect(port.loadCatalog).toHaveBeenCalledOnce());
+    expect(screen.getByRole("heading", { name: "운영 상태를 확인하는 중입니다" }))
+      .toBeTruthy();
+    expect(port.listResources).not.toHaveBeenCalled();
+    act(() => catalog.resolve(CATALOG));
+    await waitFor(() => expect(port.listResources).toHaveBeenCalledOnce());
+  });
+
+  it("selects the first real cluster and redirects to an API-discovered resource type", async () => {
+    const port = resourcesPort({
+      loadCatalog: vi.fn().mockResolvedValue(DISCOVERED_CATALOG),
+      listResources: vi.fn().mockResolvedValue({
+        ...POD_LIST,
+        resourceType: "widget",
+      }),
+    });
+    renderResources(port);
+
+    await waitFor(() => expect(screen.getByTestId("resources-location").textContent)
+      .toContain("/product/resources/widget?cluster=cluster-1"), { timeout: 5_000 });
+    expect(port.loadCatalog).toHaveBeenCalledWith("cluster-1", expect.any(AbortSignal));
+    expect(port.listResources).toHaveBeenCalledWith(
+      "cluster-1",
+      expect.objectContaining({ resourceType: "widget" }),
+      expect.any(AbortSignal),
+    );
+  }, 15_000);
+
+  it("keeps an unknown URL cluster explicit instead of selecting another cluster", async () => {
+    const port = resourcesPort();
+    renderResources(port, "/product/resources/pod?cluster=missing");
+
+    expect(await screen.findByRole("heading", { name: "현재 조회 목록에서 확인할 수 없습니다" }))
+      .toBeTruthy();
+    expect(port.loadCatalog).not.toHaveBeenCalled();
+    expect(port.listResources).not.toHaveBeenCalled();
+  });
+
+  it("reconciles a cluster catalog 401 through the single session authority", async () => {
+    const reportUnauthorized = vi.fn();
+    const port = resourcesPort();
+    const clusterPort = resourcesClusterPort({
+      listClusterChoices: vi.fn().mockRejectedValue(new HomePortFailure("unauthorized")),
+    });
+    renderResources(port, "/product/resources", clusterPort, reportUnauthorized);
+
+    await waitFor(() => expect(reportUnauthorized).toHaveBeenCalledOnce());
+    expect(port.loadCatalog).not.toHaveBeenCalled();
+    expect(screen.queryByRole("heading", { name: "검증된 응답을 읽지 못했습니다" }))
+      .toBeNull();
+  });
+
+  it("reconciles a Resources API 401 through the same session authority", async () => {
+    const reportUnauthorized = vi.fn();
+    const port = resourcesPort({
+      loadCatalog: vi.fn().mockRejectedValue(new ResourcesPortFailure("unauthorized")),
+    });
+    renderResources(
+      port,
+      "/product/resources/pod?cluster=cluster-1",
+      resourcesClusterPort(),
+      reportUnauthorized,
+    );
+
+    await waitFor(() => expect(reportUnauthorized).toHaveBeenCalledOnce());
+    expect(screen.queryByRole("heading", { name: "검증된 응답을 읽지 못했습니다" }))
+      .toBeNull();
+  });
+
+  it("renders a first-class cluster-read 403 and removes cached resource content", async () => {
+    const port = resourcesPort({
+      loadCatalog: vi.fn().mockRejectedValue(new ResourcesPortFailure("forbidden")),
+    });
+    renderResources(port, "/product/resources/pod?cluster=cluster-1");
+
+    expect(await screen.findByRole("heading", { name: "이 범위에 접근할 수 없습니다" }))
+      .toBeTruthy();
+    expect(screen.queryByText("checkout-api-0")).toBeNull();
+    expect(port.listResources).not.toHaveBeenCalled();
+  });
+
+  it("promotes a list 403 to the same cluster-wide authority", async () => {
+    const port = resourcesPort({
+      listResources: vi.fn().mockRejectedValue(new ResourcesPortFailure("forbidden")),
+    });
+    renderResources(port, "/product/resources/pod?cluster=cluster-1");
+
+    expect(await screen.findByRole("heading", { name: "이 범위에 접근할 수 없습니다" }))
+      .toBeTruthy();
+    expect(screen.queryByRole("table", { name: "리소스 목록" })).toBeNull();
+  });
+
+  it("states that search and counts are bounded to the loaded result window", async () => {
+    renderResources(resourcesPort(), "/product/resources/pod?cluster=cluster-1");
+
+    const table = await screen.findByRole("table", { name: "리소스 목록" });
+    expect(table.textContent).toContain("checkout-api-0");
+    const scope = screen.getByRole("status", { name: "목록 범위" });
+    expect(scope.textContent).toMatch(/표시된 3개/u);
+    expect(scope.textContent).toMatch(/전체 수 미확인/u);
+    expect(scope.textContent).toMatch(/최대 3개 응답/u);
+  });
+
+  it("filters only the loaded rows and labels the search scope honestly", async () => {
+    const user = userEvent.setup();
+    renderResources(resourcesPort(), "/product/resources/pod?cluster=cluster-1");
+
+    const search = await screen.findByRole("searchbox", { name: "표시된 결과 검색" });
+    expect(search.getAttribute("placeholder")).toMatch(/표시된 결과/u);
+    await user.type(search, "checkout");
+
+    const table = screen.getByRole("table", { name: "리소스 목록" });
+    expect(within(table).getByText("checkout-api-0")).toBeTruthy();
+    expect(within(table).queryByText("orders-api-0")).toBeNull();
+    expect(within(table).queryByText("telemetry-0")).toBeNull();
+  });
+});

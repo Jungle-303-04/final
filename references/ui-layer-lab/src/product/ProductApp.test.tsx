@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { StrictMode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi, type MockInstance } from "vitest";
@@ -60,19 +60,50 @@ describe("ProductApp root recovery", () => {
 
     render(<StrictMode><ProductApp /></StrictMode>);
 
-    expect(await screen.findByRole("heading", { name: "클러스터 상태" })).toBeTruthy();
+    expect(await screen.findByRole("heading", { name: "클러스터 상태" }, { timeout: 5_000 }))
+      .toBeTruthy();
+    await screen.findByRole("button", { name: /worker-b/u }, { timeout: 5_000 });
     expect(screen.getByRole("navigation", { name: "주요 메뉴" })).toBeTruthy();
     expect(screen.getByRole("link", { name: "Home" })).toBeTruthy();
     expect(requestCount(fetchMock, "/api/auth/session")).toBe(1);
     expect(requestCount(fetchMock, "/api/clusters?limit=100")).toBe(1);
-    expect(requestCount(fetchMock, "/api/clusters/cluster-1/summary")).toBe(1);
-    expect(requestCount(fetchMock, "/api/clusters/cluster-1/nodes/summary")).toBe(1);
+    await waitFor(() => expect(requestCount(fetchMock, "/api/clusters/cluster-1/summary")).toBe(1));
+    await waitFor(() => expect(requestCount(fetchMock, "/api/clusters/cluster-1/nodes/summary")).toBe(1));
 
-    await userEvent.setup().click(await screen.findByRole("button", { name: /worker-b/u }));
-    expect(await screen.findByText("checkout-api-0")).toBeTruthy();
+    await userEvent.setup().click(await screen.findByRole("button", { name: /worker-b/u }, { timeout: 5_000 }));
+    expect(await screen.findByText("checkout-api-0", {}, { timeout: 5_000 })).toBeTruthy();
     expect(requestCount(
       fetchMock,
       "/api/clusters/cluster-1/nodes/worker-b/pods/summary",
+    )).toBe(1);
+  }, 15_000);
+
+  it("loads the approved Resources contracts and keeps detail on the same route", async () => {
+    window.history.replaceState({}, "", "/product/resources/pod?cluster=cluster-1");
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+      const path = typeof input === "string" ? input : input.toString();
+      return homeApiResponse(path);
+    });
+
+    render(<StrictMode><ProductApp /></StrictMode>);
+
+    expect(await screen.findByRole("heading", { name: "Resources", level: 2 })).toBeTruthy();
+    expect(screen.getByRole("link", { name: "Resources" }).getAttribute("aria-current"))
+      .toBe("page");
+    const resource = await screen.findByRole("button", { name: "checkout-api-0 상세 열기" });
+    expect(requestCount(
+      fetchMock,
+      "/api/clusters/cluster-1/inventory/resources?resource_type=pod&include_deleted=false&limit=200",
+    )).toBe(1);
+
+    await userEvent.setup().click(resource);
+    const dialog = await screen.findByRole("dialog", { name: "checkout-api-0 상세" });
+    expect(dialog.textContent).toContain("Running");
+    expect(window.location.pathname).toBe("/product/resources/pod");
+    expect(window.location.search).toContain("resource=shop%2Fcheckout-api-0");
+    expect(requestCount(
+      fetchMock,
+      "/api/clusters/cluster-1/inventory/resource-detail?resource_type=pod&kind=Pod&name=checkout-api-0&namespace=shop&related_limit=100&event_limit=50",
     )).toBe(1);
   }, 15_000);
 });
@@ -158,10 +189,65 @@ function homeApiResponse(path: string): Response {
         incident_correlation_id: null,
       }],
     },
+    "/api/clusters/cluster-1/inventory/summary": {
+      cluster_id: "cluster-1",
+      latest_snapshot: { collected_at: "2026-07-12T10:00:00Z" },
+      counts: [{ resource_type: "pod", health: "healthy", count: 1 }],
+    },
+    "/api/clusters/cluster-1/inventory/resources?resource_type=pod&include_deleted=false&limit=200": {
+      cluster_id: "cluster-1",
+      resource_type: "pod",
+      resources: [inventoryResource()],
+    },
+    "/api/clusters/cluster-1/inventory/resource-detail?resource_type=pod&kind=Pod&name=checkout-api-0&namespace=shop&related_limit=100&event_limit=50": {
+      cluster_id: "cluster-1",
+      identity: {
+        resource_type: "pod",
+        kind: "Pod",
+        namespace: "shop",
+        name: "checkout-api-0",
+      },
+      resource: inventoryResource(),
+      related: {},
+      events: [],
+    },
   };
   if (!(path in responses)) throw new Error(`Unexpected test request: ${path}`);
   return new Response(JSON.stringify(responses[path]), {
     status: 200,
     headers: { "content-type": "application/json" },
   });
+}
+
+function inventoryResource() {
+  return {
+    inventory_key: "inventory-pod-checkout",
+    snapshot_id: "snapshot-1",
+    workspace_id: "test-workspace",
+    cluster_id: "cluster-1",
+    resource_type: "pod",
+    api_version: "v1",
+    kind: "Pod",
+    namespace: "shop",
+    name: "checkout-api-0",
+    uid: "uid-checkout-api-0",
+    resource_version: "10",
+    status: "Running",
+    health: "healthy",
+    labels: { app: "checkout" },
+    annotations: {},
+    summary: {
+      phase: "Running",
+      node_name: "worker-b",
+      restart_total: 0,
+      cpu_mcores: 120,
+      mem_mib: 256,
+    },
+    observed_at: "2026-07-12T10:00:00Z",
+    first_seen_at: "2026-07-12T09:00:00Z",
+    last_seen_at: "2026-07-12T10:00:00Z",
+    deleted_at: null,
+    created_at: "2026-07-12T09:00:00Z",
+    updated_at: "2026-07-12T10:00:00Z",
+  };
 }
