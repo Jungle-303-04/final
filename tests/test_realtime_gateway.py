@@ -264,6 +264,28 @@ def test_browser_cannot_subscribe_to_cluster_without_grant() -> None:
     assert excinfo.value.code == 4401
 
 
+def test_browser_cluster_authorization_error_fails_closed() -> None:
+    module = load_gateway_module()
+
+    async def failed_authorizer(_session: object, _workspace_id: str, _cluster_id: str) -> bool:
+        raise RuntimeError("authorization backend unavailable")
+
+    app = module.create_app(
+        authenticate_agent=stub_authenticator,
+        authenticate_browser=stub_browser_session,
+        authorize_browser_cluster=failed_authorizer,
+    )
+    client = TestClient(app)
+
+    with client.websocket_connect(
+        f"/live/browser?workspace_id={WORKSPACE}&cluster_id={CLUSTER}",
+        headers=browser_headers(),
+    ) as browser:
+        with pytest.raises(WebSocketDisconnect) as excinfo:
+            browser.receive_json()
+    assert excinfo.value.code == 4401
+
+
 def test_browser_rejects_cluster_wildcard() -> None:
     _, client = make_client()
     with client.websocket_connect(
