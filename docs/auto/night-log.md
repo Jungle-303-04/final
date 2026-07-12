@@ -407,10 +407,17 @@ format: "[시각] [트랙] 한 줄 상태 + 커밋 hash (있으면)"
 
 [2026-07-13 07:40 KST] [벤치] oom 2개 + 7da4d6ba7
 
-[2026-07-13 07:44 KST] [벤치] crashloop 2개 + 7ab0d447b
+[2026-07-13 07:40 KST] [벤치] crashloop 2개 + 7ab0d447b
 
-[2026-07-13 07:47 KST] [벤치] imagepull 2개 + 281c636b4
+[2026-07-13 07:41 KST] [벤치] imagepull 2개 + 281c636b4
 
-[2026-07-13 07:50 KST] [벤치] probe 2개 + cc0b91ce7
+[2026-07-13 07:42 KST] [벤치] probe 2개 + cc0b91ce7
 
-[2026-07-13 07:53 KST] [벤치] service-selector 2개 + dd601b3f8
+[2026-07-13 07:43 KST] [벤치] service-selector 2개 + dd601b3f8
+
+[2026-07-13 07:46 KST] [벤치] BLOCKED — `bash scripts/test.sh`: 1 failed, 1645 passed,
+3 skipped. `tests/test_docs_index.py::test_all_markdown_docs_are_linked_from_docs_root`가 신규
+`docs/spec/remediation-bundle-v1alpha1.md`의 `docs/README.md` 링크를 요구함. 해결 파일
+`docs/README.md`는 [D-013] 소유 경로 밖이므로 수정 금지. 자체 채점은 10개 전부 PASS,
+ruff/import-linter PASS. 질문: B-트랙에 `docs/README.md` 링크 1줄 수정 권한을 추가할지,
+백엔드 문서 소유자가 링크를 착륙시킬지 결정 요청.
