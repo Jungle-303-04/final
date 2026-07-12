@@ -175,6 +175,7 @@ secret 이름과 주입 경계는 [Secrets](secrets.md)를 본다.
 - [external-console-instances](external-console-instances.md)
 - [frontend-framework-design](frontend-framework-design.md)
 - [frontend-metrics-queries](frontend-metrics-queries.md)
+- [github-poll-scoped-credential-cutover](github-poll-scoped-credential-cutover.md)
 - [infra/cloudflare-dev-mtls](infra/cloudflare-dev-mtls.md)
 - [local-testing](local-testing.md)
 - [operations-deployment](operations-deployment.md)
@@ -228,6 +229,7 @@ RCA 프로덕션 온보딩 문서는 아래에 있다.
 - [rca-production-onboarding/06-chanbin-permission-dashboard](rca-production-onboarding/06-chanbin-permission-dashboard.md)
 - [rca-production-onboarding/07-how-to-find-and-implement](rca-production-onboarding/07-how-to-find-and-implement.md)
 - [rca-production-onboarding/08-provider-evidence-field-guide](rca-production-onboarding/08-provider-evidence-field-guide.md)
+- [rca-production-onboarding/09-rca-rule-catalog-guide](rca-production-onboarding/09-rca-rule-catalog-guide.md)
 - [rca-production-onboarding/provider-evidence-request](rca-production-onboarding/provider-evidence-request.md)
 
 팀 문서는 아래에 있다.
