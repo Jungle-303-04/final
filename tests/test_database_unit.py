@@ -192,6 +192,19 @@ def test_event_schema_preserves_causation_id() -> None:
     assert "causation_id" in set(metadata.tables["events"].c.keys())
 
 
+def test_audit_log_schema_tracks_causation_and_correlation_timeline_index() -> None:
+    table = metadata.tables["audit_log"]
+
+    assert table.c.causation_id.nullable is True
+    indexes = {index.name: index for index in table.indexes}
+    assert tuple(
+        column.name for column in indexes["ix_audit_log_correlation_id_created_at"].columns
+    ) == ("correlation_id", "created_at")
+    assert tuple(column.name for column in indexes["ix_audit_log_created_at"].columns) == (
+        "created_at",
+    )
+
+
 def test_event_processing_schema_tracks_processing_duration() -> None:
     assert "processing_duration_ms" in set(metadata.tables["event_processing"].c.keys())
 
