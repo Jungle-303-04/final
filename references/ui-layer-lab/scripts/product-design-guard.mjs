@@ -369,7 +369,53 @@ function jsxAttributeName(node) {
     : node.name.getText()
 }
 
-function isUserFacingJsxAttribute(name) {
+function jsxAttributeElement(node) {
+  const element = node.parent?.parent
+  return element && (
+    ts.isJsxOpeningElement(element) || ts.isJsxSelfClosingElement(element)
+  ) ? element : null
+}
+
+function intrinsicJsxTagName(node) {
+  const element = jsxAttributeElement(node)
+  return element && ts.isIdentifier(element.tagName)
+    ? element.tagName.text
+    : null
+}
+
+function jsxAttributeByName(element, name) {
+  return element.attributes.properties.find((property) =>
+    ts.isJsxAttribute(property) && jsxAttributeName(property) === name,
+  )
+}
+
+function staticJsxAttributeValue(node) {
+  const initializer = node.initializer
+  if (!initializer) return null
+  if (ts.isStringLiteralLike(initializer)) return initializer.text
+  return ts.isJsxExpression(initializer) && initializer.expression
+    ? staticStringValue(initializer.expression)
+    : null
+}
+
+function isVisibleNativeFormValueAttribute(node, name) {
+  if (name !== 'value') return false
+  const tagName = intrinsicJsxTagName(node)
+  if (tagName === 'textarea') return true
+  if (tagName !== 'input') return false
+
+  const element = jsxAttributeElement(node)
+  const typeAttribute = element && jsxAttributeByName(element, 'type')
+  if (!typeAttribute || !ts.isJsxAttribute(typeAttribute)) return true
+  const staticType = staticJsxAttributeValue(typeAttribute)
+  return normalizedUiLiteral(staticType ?? '').toLowerCase() !== 'hidden'
+}
+
+function isUserFacingJsxAttribute(node) {
+  const name = jsxAttributeName(node)
+  if (name === 'children' || isVisibleNativeFormValueAttribute(node, name)) {
+    return true
+  }
   if (
     name.startsWith('data-') ||
     structuralJsxAttributes.has(name) ||
@@ -400,7 +446,7 @@ function staticJsxLiteralFragments(node) {
   }
   if (
     ts.isBinaryExpression(expression) &&
-    expression.operatorToken.kind === ts.SyntaxKind.PlusToken
+    staticBranchOperators.has(expression.operatorToken.kind)
   ) {
     return [
       ...staticJsxLiteralFragments(expression.left),
@@ -413,8 +459,19 @@ function staticJsxLiteralFragments(node) {
       ...staticJsxLiteralFragments(expression.whenFalse),
     ]
   }
+  if (ts.isCommaListExpression(expression)) {
+    return expression.elements.flatMap(staticJsxLiteralFragments)
+  }
   return []
 }
+
+const staticBranchOperators = new Set([
+  ts.SyntaxKind.AmpersandAmpersandToken,
+  ts.SyntaxKind.BarBarToken,
+  ts.SyntaxKind.CommaToken,
+  ts.SyntaxKind.PlusToken,
+  ts.SyntaxKind.QuestionQuestionToken,
+])
 
 function jsxAttributeLiteralFragments(node) {
   const initializer = node.initializer
@@ -460,8 +517,7 @@ export function scanJsxUserFacingLiterals(filePath, source) {
     if (ts.isJsxText(node)) {
       record(node, node.text)
     } else if (ts.isJsxAttribute(node)) {
-      const name = jsxAttributeName(node)
-      if (isUserFacingJsxAttribute(name)) {
+      if (isUserFacingJsxAttribute(node)) {
         for (const fragment of jsxAttributeLiteralFragments(node)) {
           record(fragment.node, fragment.text)
         }

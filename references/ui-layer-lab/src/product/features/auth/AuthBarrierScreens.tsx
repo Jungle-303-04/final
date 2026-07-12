@@ -1,6 +1,7 @@
 import { Activity, CircleAlert } from "lucide-react";
 import { useEffect, useId, useRef, useState, type FormEvent } from "react";
 import { ProductStateScreen } from "../../shared/ui/ProductStateScreen";
+import { LocaleToggle } from "../../shared/ui/LocaleToggle";
 import { ThemeToggle } from "../../shared/ui/ThemeToggle";
 import { Alert, AlertDescription, AlertTitle } from "../../shared/ui/primitives/alert";
 import { Button } from "../../shared/ui/primitives/button";
@@ -40,7 +41,9 @@ function AuthLoginScreen({
   const passwordErrorId = useId();
   const themeController = useProductTheme();
   const { t } = useI18n();
-  const issueMessage = issue ? t(issue.messageKey, issue.messageParams) : null;
+  const issueMessage = issue
+    ? issue.safeDetail ?? t(issue.messageKey, issue.messageParams)
+    : null;
 
   useEffect(() => {
     const activeElement = document.activeElement;
@@ -95,7 +98,10 @@ function AuthLoginScreen({
               {t("auth.login.subtitle")}
             </CardDescription>
             <CardAction>
-              <ThemeToggle controller={themeController} />
+              <div className="flex items-center gap-1">
+                <LocaleToggle />
+                <ThemeToggle controller={themeController} />
+              </div>
             </CardAction>
           </CardHeader>
           <CardContent>

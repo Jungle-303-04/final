@@ -28,12 +28,18 @@ export type AuthFailureCode =
 export class AuthPortFailure extends Error {
   readonly code: AuthFailureCode;
   readonly retryAfterSeconds: number | null;
+  readonly safeDetail: string | null;
 
-  constructor(code: AuthFailureCode, retryAfterSeconds: number | null = null) {
+  constructor(
+    code: AuthFailureCode,
+    retryAfterSeconds: number | null = null,
+    safeDetail: string | null = null,
+  ) {
     super(`Authentication port failed: ${code}`);
     this.name = "AuthPortFailure";
     this.code = code;
     this.retryAfterSeconds = retryAfterSeconds;
+    this.safeDetail = safeDetail;
   }
 }
 

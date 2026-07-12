@@ -35,8 +35,9 @@ exact 완료 앵커가 있는 API로 만들 수 있는 section만 release하고,
 - 모든 서버 데이터는 `src/product/api/**`를 통과한다. React component, hook, reducer, store는
   `fetch`, `WebSocket`, `EventSource`를 직접 호출하지 않는다.
 - 요청은 same-origin `/api` 경로를 사용하고 `credentials: "include"`를 유지한다.
-- 로컬 개발 proxy의 upstream은 `VITE_BACKEND_ORIGIN`으로 주입한다. 로컬 backend에 접근할 수
-  없을 때는 `VITE_BACKEND_ORIGIN=https://k8s.woonyong.org`로 실행하며 제품 코드에 origin을
+- 개발 proxy의 upstream은 `VITE_BACKEND_ORIGIN`으로 주입한다. 실측 기본값은
+  `npm run dev:aws`가 주입하는 AWS 배포이며, AWS 게이트가 닫혔을 때만 기본 `npm run dev`의
+  로컬 backend를 폴백으로 사용한다. 제품 코드와 `vite.config.ts` 기본값에 개인 origin을
   하드코딩하지 않는다.
 - 상태 변경 HTTP 요청은 공통 client가 CSRF header를 부착한다.
 - 외부 JSON은 항상 `unknown`에서 시작해 Zod 검증을 통과한 값만 제품 상태에 들어간다.

@@ -1,6 +1,7 @@
 import { ThemeProvider } from "next-themes";
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
+import { I18nProvider } from "../../src/product/shared/i18n";
 import { ProductStateScreen } from "../../src/product/shared/ui/ProductStateScreen";
 import { StatusMark } from "../../src/product/shared/ui/StatusMark";
 import { Surface } from "../../src/product/shared/ui/Surface";
@@ -32,15 +33,17 @@ if (!root) throw new Error("Visual harness root is missing");
 
 createRoot(root).render(
   <StrictMode>
-    <ThemeProvider
-      attribute="class"
-      defaultTheme="light"
-      enableSystem={false}
-      storageKey="kubeheal-theme"
-      themes={["light", "dark"]}
-    >
-      <ProductStateVisualHarness />
-    </ThemeProvider>
+    <I18nProvider navigatorLanguage="ko" storage={null}>
+      <ThemeProvider
+        attribute="class"
+        defaultTheme="light"
+        enableSystem={false}
+        storageKey="kubeheal-theme"
+        themes={["light", "dark"]}
+      >
+        <ProductStateVisualHarness />
+      </ThemeProvider>
+    </I18nProvider>
   </StrictMode>,
 );
 

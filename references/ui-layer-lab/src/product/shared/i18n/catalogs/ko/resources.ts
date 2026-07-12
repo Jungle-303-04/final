@@ -11,7 +11,7 @@ export const resourcesKo = {
   "resources.search.placeholder": "리소스 검색",
   "resources.stale": "마지막 관측 리소스를 표시합니다.",
   "resources.table.health": "상태",
-  "resources.table.kind": "종류",
+  "resources.table.kind": "Kind",
   "resources.table.name": "이름",
   "resources.table.namespace": "Namespace",
   "resources.table.observedAt": "관측 시각",

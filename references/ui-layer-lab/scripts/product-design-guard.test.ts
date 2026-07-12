@@ -128,6 +128,37 @@ describe("product design guard i18n JSX boundary", () => {
     expect(result.output).not.toContain("subject}");
   });
 
+  it("rejects copy hidden in expression branches, explicit children, and native form values", async () => {
+    const result = await runGuard({
+      "BranchedCopy.tsx": [
+        "interface Props { copy: string | null; enabled: boolean; status: string }",
+        "const Card = ({ children }: { children: unknown }) => <section>{children}</section>;",
+        "export function BranchedCopy({ copy, enabled, status }: Props) {",
+        "  return <main>",
+        "    <p>{enabled && \"Conditional English sentence\"}</p>",
+        "    <p>{copy ?? \"Fallback English sentence\"}</p>",
+        "    <p>{(status, \"Comma English sentence\")}</p>",
+        "    <p>{enabled ? \"Ternary English sentence\" : status}</p>",
+        "    <Card children=\"Explicit children sentence\" />",
+        "    <input readOnly value=\"Visible input sentence\" />",
+        "    <input type={enabled ? \"hidden\" : \"text\"} value=\"Conditionally visible input sentence\" />",
+        "    <textarea readOnly value={\"Visible textarea sentence\"} />",
+        "  </main>;",
+        "}",
+      ].join("\n"),
+    }, { enforceI18nLiterals: true });
+
+    expect(result.exitCode).toBe(1);
+    expect(result.output).toContain("Conditional English sentence");
+    expect(result.output).toContain("Fallback English sentence");
+    expect(result.output).toContain("Comma English sentence");
+    expect(result.output).toContain("Ternary English sentence");
+    expect(result.output).toContain("Explicit children sentence");
+    expect(result.output).toContain("Visible input sentence");
+    expect(result.output).toContain("Conditionally visible input sentence");
+    expect(result.output).toContain("Visible textarea sentence");
+  });
+
   it("allows catalog bindings, dynamic data, domain terms, and structural props", async () => {
     const result = await runGuard({
       "Surface.tsx": [
@@ -141,6 +172,9 @@ describe("product design guard i18n JSX boundary", () => {
         "    <span>KubeHeal</span><span>m</span><span>MiB</span>",
         "    <a aria-labelledby=\"issues-title\" href={route} labelMode=\"sr-only\">Service</a>",
         "    <section titleId=\"issues-panel-title\" statusMode=\"literal\" />",
+        "    <SelectItem value=\"structural-resource-key\">{status}</SelectItem>",
+        "    <input type=\"hidden\" value=\"hidden-structural-token\" />",
+        "    <input readOnly value={status} />",
         "  </main>;",
         "}",
       ].join("\n"),

@@ -32,6 +32,8 @@ const resourcesBaseApiPaths = [homeBaseApiPaths[0], resourcesSummaryApiPath, res
 const stateHarnessUrl = `${baseUrl}/scripts/fixtures/product-state-visual-harness.html`;
 const shellHarnessUrl = `${baseUrl}/scripts/fixtures/product-shell-visual-harness.html`;
 const outputDir = new URL("../output/playwright/", import.meta.url).pathname;
+// Deterministic fixture captures guard local UI contracts only. AWS-backed acceptance
+// evidence is captured by a separate workflow and must not reuse these screenshots.
 const authLoginSelectors = [
   "[data-slot='card']",
   "[data-slot='card-header']",
@@ -48,6 +50,14 @@ const authStateSelectors = [
   "[data-slot='empty']",
   "h1",
   "p",
+];
+const authLoadingSelectors = [
+  "main[aria-busy='true']",
+  "[role='status']",
+  "[data-slot='loading-preview']",
+  "[data-slot='skeleton']",
+  "aside",
+  "header",
 ];
 const stateSelectors = [
   "[data-slot='empty']",
@@ -144,7 +154,7 @@ const resourcesDetailSelectors = [
   "[data-slot='tabs-list']",
   "[data-slot='tabs-trigger']",
 ];
-const productLocaleStorageKey = "product.locale";
+const localeStorageKey = "kubeheal.locale";
 const browserLocales = {
   en: "en-US",
   ko: "ko-KR",
@@ -175,6 +185,16 @@ const localeSmokeCopy = {
       navigation: "주요 메뉴",
       route: "리소스",
     },
+  },
+};
+const localeControlCopy = {
+  en: {
+    control: "Language: English",
+    options: { en: "English", ko: "Korean" },
+  },
+  ko: {
+    control: "언어: 한국어",
+    options: { en: "영어", ko: "한국어" },
   },
 };
 const visualScenarios = [
@@ -357,6 +377,10 @@ const visualScenarios = [
   {
     id: "home-locale-smoke-en",
     locale: "en",
+    navigatorLocale: "ko",
+    persistedLocale: "en",
+    verifyPersistedLocalePrecedence: true,
+    expectedApiRequestCount: 2,
     url: productHomeUrl,
     authSession: "authenticated",
     homeScenario: true,
@@ -443,6 +467,8 @@ const visualScenarios = [
   {
     id: "resources-locale-smoke-ko",
     locale: "ko",
+    verifyLocaleTogglePersistence: "en",
+    expectedApiRequestCount: 2,
     url: productResourcesUrl,
     authSession: "authenticated",
     resourcesScenario: true,
@@ -530,7 +556,8 @@ const visualScenarios = [
     url: productUrl,
     authSession: "loading",
     status: "세션 확인 중",
-    requiredSelectors: [...authStateSelectors, "[data-slot='loading-preview']"],
+    loadingAssertions: true,
+    requiredSelectors: authLoadingSelectors,
     viewport: { width: 1024, height: 900 },
     theme: "light",
     colorScheme: "light",
@@ -949,9 +976,11 @@ try {
 }
 
 async function runVisualScenario(browserInstance, scenario) {
-  const browserLocale = browserLocales[scenario.locale];
+  const navigatorLocale = scenario.navigatorLocale ?? scenario.locale;
+  const persistedLocale = scenario.persistedLocale ?? scenario.locale;
+  const browserLocale = browserLocales[navigatorLocale];
   if (!browserLocale) {
-    throw new Error(`${scenario.id}: unsupported or missing locale ${scenario.locale}`);
+    throw new Error(`${scenario.id}: unsupported or missing navigator locale ${navigatorLocale}`);
   }
   const context = await browserInstance.newContext({
     colorScheme: scenario.colorScheme,
@@ -962,10 +991,12 @@ async function runVisualScenario(browserInstance, scenario) {
   });
   await context.addInitScript(({ locale, localeStorageKey, theme }) => {
     localStorage.setItem("kubeheal-theme", theme);
-    localStorage.setItem(localeStorageKey, locale);
+    if (localStorage.getItem(localeStorageKey) === null) {
+      localStorage.setItem(localeStorageKey, locale);
+    }
   }, {
-    locale: scenario.locale,
-    localeStorageKey: productLocaleStorageKey,
+    locale: persistedLocale,
+    localeStorageKey,
     theme: scenario.theme,
   });
 
@@ -1170,13 +1201,14 @@ function assertScenarioNetworkContract(
       `${scenario.id}: visual gate made unexpected API requests\n${formatRequests(unexpectedApiRequests)}`,
     );
   }
+  const expectedRequestCount = scenario.expectedApiRequestCount ?? 1;
   for (const path of expectedApiPaths) {
     const matchingRequests = apiRequests.filter((request) => (
       request.method === "GET" && isExactProductApiUrl(request.url, path)
     ));
-    if (matchingRequests.length !== 1) {
+    if (matchingRequests.length !== expectedRequestCount) {
       throw new Error(
-        `${scenario.id}: expected 1 exact GET ${path} request, `
+        `${scenario.id}: expected ${expectedRequestCount} exact GET ${path} requests, `
         + `received ${matchingRequests.length}\n${formatRequests(apiRequests)}`,
       );
     }
@@ -1253,6 +1285,9 @@ async function captureScenario(page, scenario) {
     throw new Error(`${scenario.id}: visual surface must expose one main landmark`);
   }
 
+  if (scenario.loadingAssertions) {
+    await assertProductLoadingScreenContracts(page, scenario);
+  }
   if (scenario.stateAssertions) {
     await assertStatePrimitiveContracts(page, scenario.id);
     await assertInteractionPrimitiveContracts(page, scenario.id);
@@ -1276,6 +1311,44 @@ async function captureScenario(page, scenario) {
   });
 }
 
+async function assertProductLoadingScreenContracts(page, scenario) {
+  const result = await page.evaluate(() => {
+    const main = document.querySelector("main[aria-busy='true']");
+    const preview = document.querySelector("[data-slot='loading-preview']");
+    const status = document.querySelector("[role='status']");
+    const skeletons = [...document.querySelectorAll("[data-slot='skeleton']")];
+    return {
+      legacyContentCount: document.querySelectorAll("[data-slot='empty'], h1, p").length,
+      mainCount: document.querySelectorAll("main[aria-busy='true']").length,
+      mainLabel: main?.getAttribute("aria-label") ?? null,
+      previewAriaHidden: preview?.getAttribute("aria-hidden") ?? null,
+      previewContainsAllSkeletons: preview instanceof HTMLElement
+        && skeletons.every((skeleton) => preview.contains(skeleton)),
+      previewInert: preview?.hasAttribute("inert") ?? false,
+      skeletonCount: skeletons.length,
+      skeletonsAreHidden: skeletons.every(
+        (skeleton) => skeleton.getAttribute("aria-hidden") === "true",
+      ),
+      statusLabel: status?.getAttribute("aria-label") ?? null,
+      statusText: status?.textContent?.trim() ?? null,
+    };
+  });
+  if (result.mainCount !== 1
+    || result.mainLabel !== scenario.status
+    || result.statusLabel !== scenario.status
+    || result.statusText !== scenario.status
+    || result.skeletonCount === 0
+    || !result.skeletonsAreHidden
+    || !result.previewContainsAllSkeletons
+    || result.previewAriaHidden !== "true"
+    || !result.previewInert
+    || result.legacyContentCount !== 0) {
+    throw new Error(
+      `${scenario.id}: ProductLoadingScreen skeleton contract failed ${JSON.stringify(result)}`,
+    );
+  }
+}
+
 async function prepareProductLocaleSmokeScenario(page, scenario) {
   const copy = localeSmokeCopy[scenario.locale]?.[scenario.localeSmoke];
   if (!copy) {
@@ -1284,23 +1357,25 @@ async function prepareProductLocaleSmokeScenario(page, scenario) {
     );
   }
   await page.waitForFunction(() => document.title === "KubeHeal");
-  const localeState = await page.evaluate((localeStorageKey) => ({
-    documentLocale: document.documentElement.lang,
-    persistedLocale: localStorage.getItem(localeStorageKey),
-  }), productLocaleStorageKey);
-  if (localeState.documentLocale !== scenario.locale
-    || localeState.persistedLocale !== scenario.locale) {
-    throw new Error(
-      `${scenario.id}: locale state does not match the scenario ${JSON.stringify(localeState)}`,
-    );
+  await assertPageLocaleState(
+    page,
+    scenario,
+    scenario.locale,
+    scenario.persistedLocale ?? scenario.locale,
+    "initial",
+  );
+  if (scenario.verifyPersistedLocalePrecedence) {
+    if (scenario.locale !== "en"
+      || scenario.persistedLocale !== "en"
+      || scenario.navigatorLocale !== "ko") {
+      throw new Error(`${scenario.id}: persisted-locale precedence fixture must be ko navigator + en storage`);
+    }
+    await page.reload({ waitUntil: "networkidle" });
+    await page.getByRole("heading", { name: copy.heading }).waitFor();
+    await assertPageLocaleState(page, scenario, "en", "en", "precedence reload");
   }
 
-  const navigation = page.getByRole("navigation", { name: copy.navigation });
-  await navigation.waitFor();
-  const activeRoute = navigation.getByRole("link", { name: copy.route, exact: true });
-  if (await activeRoute.getAttribute("aria-current") !== "page") {
-    throw new Error(`${scenario.id}: localized ${copy.route} route must be current`);
-  }
+  await assertLocalizedRouteCurrent(page, scenario.localeSmoke, scenario.locale, scenario.id);
 
   await page.getByText("KubeHeal", { exact: true }).waitFor();
   if (scenario.localeSmoke === "home") {
@@ -1324,6 +1399,81 @@ async function prepareProductLocaleSmokeScenario(page, scenario) {
       `${scenario.id}: locale smoke changed or omitted source text ${missingSourceText.join(", ")}`,
     );
   }
+  if (scenario.verifyLocaleTogglePersistence) {
+    await assertLocaleToggleReloadPersistence(
+      page,
+      scenario,
+      scenario.verifyLocaleTogglePersistence,
+    );
+  }
+}
+
+async function assertPageLocaleState(
+  page,
+  scenario,
+  expectedLocale,
+  expectedPersistedLocale,
+  phase,
+) {
+  const localeState = await page.evaluate((storageKey) => ({
+    browserLocale: navigator.language,
+    documentLocale: document.documentElement.lang,
+    persistedLocale: localStorage.getItem(storageKey),
+  }), localeStorageKey);
+  const expectedBrowserLocale = browserLocales[scenario.navigatorLocale ?? scenario.locale];
+  if (localeState.browserLocale !== expectedBrowserLocale
+    || localeState.documentLocale !== expectedLocale
+    || localeState.persistedLocale !== expectedPersistedLocale) {
+    throw new Error(
+      `${scenario.id}: ${phase} locale state mismatch ${JSON.stringify(localeState)}`,
+    );
+  }
+}
+
+async function assertLocalizedRouteCurrent(page, surface, locale, label) {
+  const copy = localeSmokeCopy[locale]?.[surface];
+  if (!copy) throw new Error(`${label}: missing ${locale}/${surface} locale route copy`);
+  const navigation = page.getByRole("navigation", { name: copy.navigation });
+  await navigation.waitFor();
+  const activeRoute = navigation.getByRole("link", { name: copy.route, exact: true });
+  if (await activeRoute.getAttribute("aria-current") !== "page") {
+    throw new Error(`${label}: localized ${copy.route} route must be current`);
+  }
+}
+
+async function assertLocaleToggleReloadPersistence(page, scenario, targetLocale) {
+  const initialLocale = scenario.locale;
+  if (targetLocale === initialLocale
+    || !localeControlCopy[initialLocale]
+    || !localeControlCopy[targetLocale]) {
+    throw new Error(`${scenario.id}: invalid locale-toggle persistence fixture ${targetLocale}`);
+  }
+  await selectLocale(page, initialLocale, targetLocale);
+  await assertPageLocaleState(page, scenario, targetLocale, targetLocale, "after locale toggle");
+
+  await page.reload({ waitUntil: "networkidle" });
+  const targetCopy = localeSmokeCopy[targetLocale]?.[scenario.localeSmoke];
+  if (!targetCopy) throw new Error(`${scenario.id}: missing target locale smoke copy`);
+  await page.getByRole("heading", { name: targetCopy.heading }).waitFor();
+  await assertPageLocaleState(page, scenario, targetLocale, targetLocale, "toggle reload");
+  await assertLocalizedRouteCurrent(page, scenario.localeSmoke, targetLocale, scenario.id);
+
+  await selectLocale(page, targetLocale, initialLocale);
+  await page.getByRole("heading", { name: localeSmokeCopy[initialLocale][scenario.localeSmoke].heading }).waitFor();
+  await assertPageLocaleState(page, scenario, initialLocale, initialLocale, "locale restore");
+  await assertLocalizedRouteCurrent(page, scenario.localeSmoke, initialLocale, scenario.id);
+}
+
+async function selectLocale(page, currentLocale, targetLocale) {
+  const currentCopy = localeControlCopy[currentLocale];
+  const targetCopy = localeControlCopy[targetLocale];
+  const trigger = page.getByRole("combobox", { name: currentCopy.control });
+  await trigger.click();
+  await page.getByRole("option", {
+    name: currentCopy.options[targetLocale],
+    exact: true,
+  }).click();
+  await page.getByRole("combobox", { name: targetCopy.control }).waitFor();
 }
 
 async function prepareProductHomeScenario(page, scenario) {
@@ -2369,7 +2519,7 @@ function maxCssTimeMilliseconds(value) {
 }
 
 async function assertScenarioEnvironment(page, scenario, baselineRootFontSize) {
-  const result = await page.evaluate((localeStorageKey) => ({
+  const result = await page.evaluate((storageKey) => ({
     browserLocale: navigator.language,
     documentLocale: document.documentElement.lang,
     viewportWidth: window.innerWidth,
@@ -2378,18 +2528,19 @@ async function assertScenarioEnvironment(page, scenario, baselineRootFontSize) {
     reducedMotion: matchMedia("(prefers-reduced-motion: reduce)").matches,
     forcedColors: matchMedia("(forced-colors: active)").matches,
     rootFontSize: Number.parseFloat(getComputedStyle(document.documentElement).fontSize),
-    persistedLocale: localStorage.getItem(localeStorageKey),
+    persistedLocale: localStorage.getItem(storageKey),
     themeClasses: [...document.documentElement.classList],
-  }), productLocaleStorageKey);
+  }), localeStorageKey);
   const expectedRootFontSize = baselineRootFontSize * (scenario.rootFontScale ?? 1);
-  const expectedBrowserLocale = browserLocales[scenario.locale];
+  const expectedBrowserLocale = browserLocales[scenario.navigatorLocale ?? scenario.locale];
+  const expectedPersistedLocale = scenario.persistedLocale ?? scenario.locale;
 
   if (result.viewportWidth !== scenario.viewport.width) {
     throw new Error(`${scenario.id}: viewport ${result.viewportWidth}px != ${scenario.viewport.width}px`);
   }
   if (result.browserLocale !== expectedBrowserLocale
     || result.documentLocale !== scenario.locale
-    || result.persistedLocale !== scenario.locale) {
+    || result.persistedLocale !== expectedPersistedLocale) {
     throw new Error(
       `${scenario.id}: locale environment does not match ${scenario.locale} `
       + JSON.stringify({
@@ -2644,7 +2795,6 @@ async function assertForcedColors(page, label) {
       main: document.querySelector("main"),
       empty: document.querySelector("[data-slot='empty']"),
       surface: document.querySelector("[data-slot='surface']"),
-      badge: document.querySelector("[data-slot='badge']"),
       alert: document.querySelector("[role='alert']"),
       heading: document.querySelector("h1"),
       status: document.querySelector("[data-slot='status-mark']"),
@@ -2686,7 +2836,6 @@ async function assertForcedColors(page, label) {
       main,
       empty,
       surface,
-      badge,
       alert,
       heading,
       status,
@@ -2711,7 +2860,6 @@ async function assertForcedColors(page, label) {
     focusTarget.focus();
     const emptyStyle = getComputedStyle(empty);
     const surfaceStyle = getComputedStyle(surface);
-    const badgeStyle = getComputedStyle(badge);
     const alertStyle = getComputedStyle(alert);
     const headingStyle = getComputedStyle(heading);
     const focusStyle = getComputedStyle(focusTarget);
@@ -2818,11 +2966,6 @@ async function assertForcedColors(page, label) {
       surfaceOpacity: effectiveOpacity(surface),
       surfaceBorderStyle: surfaceStyle.borderTopStyle,
       surfaceBorderWidth: Number.parseFloat(surfaceStyle.borderTopWidth),
-      badgeBackground: effectiveBackground(badge),
-      badgeBorderColor: badgeStyle.borderTopColor,
-      badgeOpacity: effectiveOpacity(badge),
-      badgeBorderStyle: badgeStyle.borderTopStyle,
-      badgeBorderWidth: Number.parseFloat(badgeStyle.borderTopWidth),
       alertBackground: effectiveBackground(alert),
       alertBorderColor: alertStyle.borderTopColor,
       alertOpacity: effectiveOpacity(alert),
@@ -2927,7 +3070,6 @@ async function assertForcedColors(page, label) {
   if (!result.active) throw new Error(`${label}: forced-colors media query is not active`);
   const opacityChecks = {
     alert: result.alertOpacity,
-    badge: result.badgeOpacity,
     disabled: result.disabledOpacity,
     disabledItem: result.disabledItemOpacity,
     groupDisabled: result.groupDisabledOpacity,
@@ -2954,7 +3096,6 @@ async function assertForcedColors(page, label) {
   assertContrast(label, "heading", result.headingColor, result.mainBackground, 4.5);
   assertContrast(label, "empty border", result.emptyBorderColor, result.emptyBackground, 3);
   assertContrast(label, "surface border", result.surfaceBorderColor, result.surfaceBackground, 3);
-  assertContrast(label, "badge border", result.badgeBorderColor, result.badgeBackground, 3);
   assertContrast(label, "alert border", result.alertBorderColor, result.alertBackground, 3);
   assertContrast(label, "focus outline", result.focusOutlineColor, result.focusBackground, 3);
   assertContrast(label, "disabled text", result.disabledColor, result.disabledBackground, 3);
@@ -3105,7 +3246,6 @@ async function assertForcedColors(page, label) {
   }
   if (result.emptyBorderStyle === "none" || result.emptyBorderWidth < 1
     || result.surfaceBorderStyle === "none" || result.surfaceBorderWidth < 1
-    || result.badgeBorderStyle === "none" || result.badgeBorderWidth < 1
     || result.alertBorderStyle === "none" || result.alertBorderWidth < 1
     || result.disabledItemBorderStyle === "none" || result.disabledItemBorderWidth < 1
     || result.scrollAreaBorderStyle === "none" || result.scrollAreaBorderWidth < 1

@@ -98,7 +98,7 @@ function toPortFailure(error: unknown): AuthPortFailure {
     approval_pending: "approval-pending",
   };
   const canonicalReason = canonicalReasonByTransportCode[transportCode(error) ?? ""];
-  if (transportKind(error) === "forbidden" && canonicalReason !== undefined) {
+  if (canonicalReason !== undefined) {
     return new AuthPortFailure(canonicalReason, transportRetryAfter(error));
   }
 
@@ -111,6 +111,7 @@ function toPortFailure(error: unknown): AuthPortFailure {
   return new AuthPortFailure(
     codeByTransportKind[transportKind(error) ?? ""] ?? "server",
     transportRetryAfter(error),
+    safePlainDetail(transportDetail(error)),
   );
 }
 
@@ -126,6 +127,29 @@ function transportKind(error: unknown): string | null {
     typeof error.kind === "string"
     ? error.kind
     : null;
+}
+
+function transportDetail(error: unknown): string | null {
+  return typeof error === "object" && error !== null && "detail" in error &&
+    typeof error.detail === "string"
+    ? error.detail
+    : null;
+}
+
+const UNSAFE_DETAIL_PATTERN =
+  /(?:<[^>]*>|&#?\w+;|\b(?:authorization|cookie|password|secret|session|token)\b\s*[:=]?|\b(?:error|exception)\s*:|(?:^|\s)at\s+\S+\s*\()/iu;
+
+function safePlainDetail(detail: string | null): string | null {
+  if (detail === null) return null;
+  const normalized = detail.trim();
+  if (normalized === "" || normalized.length > 240) return null;
+  if ([...normalized].some(isControlCharacter)) return null;
+  return UNSAFE_DETAIL_PATTERN.test(normalized) ? null : normalized;
+}
+
+function isControlCharacter(character: string): boolean {
+  const codePoint = character.codePointAt(0);
+  return codePoint !== undefined && (codePoint <= 0x1f || codePoint === 0x7f);
 }
 
 function transportRetryAfter(error: unknown): number | null {

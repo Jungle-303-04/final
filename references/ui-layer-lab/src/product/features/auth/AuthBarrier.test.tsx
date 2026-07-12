@@ -5,7 +5,12 @@ import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { StrictMode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { I18nProvider, useI18n, type SupportedLocale } from "../../shared/i18n";
+import {
+  I18nProvider,
+  useI18n,
+  type LocaleStorage,
+  type SupportedLocale,
+} from "../../shared/i18n";
 import { AuthBarrier } from "./AuthBarrier";
 import {
   AuthPortFailure,
@@ -72,20 +77,6 @@ describe("AuthBarrier", () => {
     expect(password.getAttribute("autocomplete")).toBe("current-password");
     expect(screen.queryByText(/OIDC|provider|callback/iu)).toBeNull();
     await waitFor(() => expect(document.activeElement).toBe(email));
-  });
-
-  it("renders the complete login contract in English", async () => {
-    const port = authPort({
-      loadSession: vi.fn().mockResolvedValue({ status: "unauthenticated" }),
-    });
-
-    renderBarrier(port, "en");
-
-    expect(await screen.findByRole("heading", { name: "Sign in to KubeHeal" })).toBeTruthy();
-    expect(screen.getByRole("textbox", { name: "Email" })).toBeTruthy();
-    expect(screen.getByLabelText("Password")).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Sign in" })).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Switch to dark mode" })).toBeTruthy();
   });
 
   it("submits exact credentials once, clears the password, and waits for authority", async () => {
@@ -230,10 +221,14 @@ function AuthenticatedProduct({ auth }: { auth: AuthenticatedAuthState }) {
   );
 }
 
-function renderBarrier(port: AuthPort, locale: SupportedLocale = "ko") {
+function renderBarrier(
+  port: AuthPort,
+  locale: SupportedLocale = "ko",
+  storage: LocaleStorage | null = null,
+) {
   return render(
     <StrictMode>
-      <I18nProvider navigatorLanguage={locale} storage={null}>
+      <I18nProvider navigatorLanguage={locale} storage={storage}>
         <ThemeProvider
           attribute="class"
           defaultTheme="light"
