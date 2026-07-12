@@ -174,6 +174,21 @@ class RcaTimelineResponse(StrictModel):
     items: list[RcaTimelineItem]
 
 
+class AuditTimelineItem(StrictModel):
+    subject: str
+    source: str
+    created_at: str
+    causation_id: str | None = None
+    payload_summary: JsonMap = Field(default_factory=dict)
+
+
+class AuditTimelineResponse(StrictModel):
+    items: list[AuditTimelineItem] = Field(default_factory=list)
+    limit: int
+    has_more: bool
+    next_cursor: str | None = None
+
+
 class RcaIncidentResponse(StrictModel):
     item: RcaTimelineItem
 
