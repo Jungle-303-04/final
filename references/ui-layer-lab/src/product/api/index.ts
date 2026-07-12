@@ -55,6 +55,16 @@ export {
   rejectApproval,
   type ApprovalDecisionOptions,
 } from "./approvals";
+export {
+  appendAiMessage,
+  createAiConversation,
+  getAiConversation,
+  listAiConversations,
+  MAX_AI_MESSAGE_LENGTH,
+  type AiConversationContext,
+  type AiConversationCreateInput,
+  type AiMessageInput,
+} from "./ai-conversations";
 export { listClusters, type ListClustersOptions } from "./clusters";
 export { getCluster } from "./cluster-detail";
 export { getClusterConnectionStatus } from "./cluster-connection";
@@ -271,3 +281,13 @@ export {
   approvalDecisionResponseSchema,
   type ApprovalDecisionResponse,
 } from "./approvals-schemas";
+export {
+  aiConversationAcceptedSchema,
+  aiConversationDetailSchema,
+  aiConversationListSchema,
+  aiConversationSummarySchema,
+  type AiConversationAccepted,
+  type AiConversationDetail,
+  type AiConversationList,
+  type AiConversationSummary,
+} from "./ai-conversations-schemas";
