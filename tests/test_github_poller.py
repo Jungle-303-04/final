@@ -495,6 +495,7 @@ def test_db_target_without_credential_never_falls_back_to_ambient_token(monkeypa
         environment="prod",
         cluster_id="cluster-1",
         manifest_path="deploy.yaml",
+        database_managed=True,
     )
     poller = module.GitHubPoller(db=StubPollTargetDb([]))
 

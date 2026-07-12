@@ -21,6 +21,10 @@ from domains.gitops.models import (
     WorkflowRunStep,
     WorkspaceCredential,
 )
+from domains.gitops.repository_discovery import (
+    RepositoryDiscoveryError,
+    normalize_github_repo_ref,
+)
 from packages.config.constants import Target
 from packages.config.logs import get_logger
 from packages.contracts.event_bus.interfaces import JsonObject
@@ -55,6 +59,7 @@ from packages.contracts.identity import (
 from packages.storage.engine import DatabaseConnection, iso_or_none, row_dict
 
 LOGGER = get_logger(__name__)
+GITHUB_REPOSITORY_CREDENTIAL_SCOPE_PREFIX = "repository"
 
 # 원자 해결 대상으로 열림으로 간주하는 승인 상태 — 라우터의 open 판정과 동일해야 함
 OPEN_APPROVAL_STATUSES = (
@@ -156,6 +161,21 @@ def watch_target_settings(payload: JsonObject) -> JsonObject:
 
 
 class RepoChangeRepository(DatabaseConnection):
+    def lock_repository_identity(self, workspace_id: str, repo_ref: str) -> None:
+        lock_key = repository_identity_lock_key(workspace_id, repo_ref)
+        with self.connection() as conn:
+            conn.execute(select(func.pg_advisory_xact_lock(lock_key)))
+
+    def lock_workspace_credential_scope(
+        self,
+        workspace_id: str,
+        provider: str,
+        scope: str,
+    ) -> None:
+        lock_key = workspace_credential_lock_key(workspace_id, provider, scope)
+        with self.connection() as conn:
+            conn.execute(select(func.pg_advisory_xact_lock(lock_key)))
+
     def upsert_workspace_credential(self, payload: JsonObject) -> JsonObject:
         workspace_id = str(payload.get("workspace_id", DEFAULT_WORKSPACE_ID))
         provider = str(payload["provider"])
@@ -204,21 +224,86 @@ class RepoChangeRepository(DatabaseConnection):
     def get_repository_by_ref(self, workspace_id: str, repo_ref: str) -> JsonObject | None:
         if not workspace_id or not repo_ref:
             return None
+        try:
+            canonical_repo_ref = normalize_github_repo_ref(repo_ref)
+        except (RepositoryDiscoveryError, ValueError):
+            return None
         table = GitRepository.__table__
-        statement = (
+        exact_statement = (
             select(table)
             .where(
                 table.c.workspace_id == workspace_id,
-                table.c.repo_ref == repo_ref,
+                table.c.repo_ref == canonical_repo_ref,
+            )
+            .limit(1)
+        )
+        legacy_statement = (
+            select(table)
+            .where(
+                table.c.workspace_id == workspace_id,
+                func.lower(table.c.repo_ref) == canonical_repo_ref,
             )
             .limit(1)
         )
         with self.connection() as conn:
-            row = conn.execute(statement).mappings().first()
+            row = conn.execute(exact_statement).mappings().first()
+            if row is None:
+                row = conn.execute(legacy_statement).mappings().first()
         return row_dict(row) if row is not None else None
+
+    def list_repository_applications(
+        self,
+        workspace_id: str,
+        repository_id: str,
+    ) -> list[JsonObject]:
+        table = Application.__table__
+        statement = (
+            select(table.c.application_id)
+            .where(
+                table.c.workspace_id == workspace_id,
+                table.c.repository_id == repository_id,
+            )
+            .order_by(table.c.application_id)
+        )
+        with self.connection() as conn:
+            rows = conn.execute(statement).mappings().all()
+        return [dict(row) for row in rows]
+
+    def can_manage_repository(
+        self,
+        user_id: str,
+        workspace_id: str,
+        repository_id: str,
+    ) -> bool:
+        is_service_admin = getattr(self, "is_service_admin", None)
+        if callable(is_service_admin) and is_service_admin(user_id):
+            return True
+        applications = self.list_repository_applications(workspace_id, repository_id)
+        if not applications:
+            return False
+        can_access = getattr(self, "can_access", None)
+        if not callable(can_access):
+            return False
+        decisions = [
+            bool(
+                can_access(
+                    user_id,
+                    workspace_id,
+                    AccessResourceType.APPLICATION.value,
+                    str(application["application_id"]),
+                    Permission.APPLICATION_MANAGE.value,
+                )
+            )
+            for application in applications
+        ]
+        return all(decisions)
 
     def register_repository(self, payload: JsonObject) -> JsonObject:
         workspace_id = str(payload.get("workspace_id", DEFAULT_WORKSPACE_ID))
+        payload = {
+            **payload,
+            "repo_ref": normalize_github_repo_ref(str(payload.get("repo_ref", DEFAULT_REPO_REF))),
+        }
         # Create IDs are always server-derived.  ``derive_repository_id`` must
         # keep accepting explicit IDs for event/worker identity normalization,
         # so remove the untrusted create field only at this storage boundary.
@@ -228,23 +313,18 @@ class RepoChangeRepository(DatabaseConnection):
         user_id = payload.get("user_id")
         table = GitRepository.__table__
         with self.unit_of_work():
+            if user_id:
+                self.lock_repository_identity(workspace_id, str(payload["repo_ref"]))
             existing = self.get_repository_by_ref(
                 workspace_id,
                 str(payload.get("repo_ref", DEFAULT_REPO_REF)),
             )
             if existing is not None:
                 repository_id = str(existing["repository_id"])
-                can_access = getattr(self, "can_access", None)
-                if (
-                    not user_id
-                    or not callable(can_access)
-                    or not can_access(
-                        str(user_id),
-                        workspace_id,
-                        AccessResourceType.REPOSITORY.value,
-                        repository_id,
-                        Permission.REPOSITORY_MANAGE.value,
-                    )
+                if not user_id or not self.can_manage_repository(
+                    str(user_id),
+                    workspace_id,
+                    repository_id,
                 ):
                     raise LookupError("repository not found in workspace")
                 authorized_repository_id: str | None = repository_id
@@ -272,7 +352,11 @@ class RepoChangeRepository(DatabaseConnection):
                     "provider": insert.excluded.provider,
                     "repo_ref": insert.excluded.repo_ref,
                     "default_branch": insert.excluded.default_branch,
-                    "credential_ref": insert.excluded.credential_ref,
+                    "credential_ref": (
+                        insert.excluded.credential_ref
+                        if "credential_ref" in payload
+                        else table.c.credential_ref
+                    ),
                     "status": insert.excluded.status,
                     "access_policy": insert.excluded.access_policy,
                     "updated_at": func.now(),
@@ -289,13 +373,6 @@ class RepoChangeRepository(DatabaseConnection):
                 # Conditional conflict updates deliberately return no row for
                 # foreign ownership, unapproved races, or stale identities.
                 raise LookupError("repository not found in workspace")
-            if existing is None:
-                self._grant_owner_if_present(
-                    workspace_id,
-                    user_id,
-                    AccessResourceType.REPOSITORY.value,
-                    repository_id,
-                )
         return {
             **payload,
             **row_dict(row),
@@ -411,6 +488,7 @@ class RepoChangeRepository(DatabaseConnection):
                 table.c.name == name,
             )
             .limit(1)
+            .with_for_update()
         )
         update_values = {
             "repository_id": repository_id,
@@ -430,52 +508,100 @@ class RepoChangeRepository(DatabaseConnection):
             metadata=dict(payload.get("metadata", {})),
             updated_at=func.now(),
         )
-        statement = insert.on_conflict_do_update(
-            index_elements=[table.c.application_id],
-            set_={
-                "repository_id": insert.excluded.repository_id,
-                "name": insert.excluded.name,
-                "manifest_path": insert.excluded.manifest_path,
-                "status": insert.excluded.status,
-                "metadata": insert.excluded.metadata,
-                "updated_at": func.now(),
-            },
-        )
-        with self.connection() as conn:
-            existing_application_id = conn.execute(
-                existing_application_id_statement
-            ).scalar_one_or_none()
-            if existing_application_id and str(existing_application_id) != application_id:
-                # 같은 workspace+repo+name 은 같은 application 으로 흡수(dedup).
-                # 서로 다른 앱이 동명일 가능성이 있어 silent merge 대신 경고를 남김.
-                resolved_application_id = str(existing_application_id)
-                LOGGER.warning(
-                    "application_id_merged_by_name",
-                    extra={
-                        "context": {
-                            "workspace_id": workspace_id,
-                            "repository_id": repository_id,
-                            "name": name,
-                            "incoming_application_id": application_id,
-                            "resolved_application_id": resolved_application_id,
-                        }
-                    },
-                )
-                conn.execute(
-                    table.update()
-                    .where(table.c.application_id == resolved_application_id)
-                    .values(**update_values)
-                )
-            else:
-                conn.execute(statement)
-                resolved_application_id = application_id
-        self._grant_owner_if_present(
-            workspace_id,
-            payload.get("user_id"),
-            AccessResourceType.APPLICATION.value,
-            resolved_application_id,
-        )
+        user_id = str(payload.get("user_id") or "")
+        with self.unit_of_work():
+            repo_ref = str(payload.get("repo_ref") or "").strip()
+            if repo_ref:
+                self.lock_repository_identity(workspace_id, repo_ref)
+            if user_id:
+                self.lock_application_identity(workspace_id, repository_id, name)
+            with self.connection() as conn:
+                existing_application_id = conn.execute(
+                    existing_application_id_statement
+                ).scalar_one_or_none()
+            if existing_application_id is not None and user_id:
+                can_access = getattr(self, "can_access", None)
+                if not callable(can_access) or not can_access(
+                    user_id,
+                    workspace_id,
+                    AccessResourceType.APPLICATION.value,
+                    str(existing_application_id),
+                    Permission.APPLICATION_MANAGE.value,
+                ):
+                    raise LookupError("application not found in workspace")
+
+            authorized_application_id = (
+                str(existing_application_id)
+                if user_id and existing_application_id is not None
+                else application_id
+                if not user_id
+                else None
+            )
+            statement = insert.on_conflict_do_update(
+                index_elements=[table.c.application_id],
+                set_={
+                    "repository_id": insert.excluded.repository_id,
+                    "name": insert.excluded.name,
+                    "manifest_path": insert.excluded.manifest_path,
+                    "status": insert.excluded.status,
+                    "metadata": insert.excluded.metadata,
+                    "updated_at": func.now(),
+                },
+                where=and_(
+                    table.c.workspace_id == insert.excluded.workspace_id,
+                    table.c.application_id
+                    == bindparam("authorized_application_id", authorized_application_id),
+                ),
+            ).returning(table.c.application_id)
+            with self.connection() as conn:
+                if existing_application_id and str(existing_application_id) != application_id:
+                    # 같은 workspace+repo+name 은 같은 application 으로 흡수(dedup).
+                    # 서로 다른 앱이 동명일 가능성이 있어 silent merge 대신 경고를 남김.
+                    resolved_application_id = str(existing_application_id)
+                    LOGGER.warning(
+                        "application_id_merged_by_name",
+                        extra={
+                            "context": {
+                                "workspace_id": workspace_id,
+                                "repository_id": repository_id,
+                                "name": name,
+                                "incoming_application_id": application_id,
+                                "resolved_application_id": resolved_application_id,
+                            }
+                        },
+                    )
+                    conn.execute(
+                        table.update()
+                        .where(
+                            table.c.workspace_id == workspace_id,
+                            table.c.application_id == resolved_application_id,
+                        )
+                        .values(**update_values)
+                    )
+                else:
+                    persisted_application_id = conn.execute(statement).scalar_one_or_none()
+                    if persisted_application_id is None:
+                        raise LookupError("application not found in workspace")
+                    resolved_application_id = str(persisted_application_id)
+        if existing_application_id is None:
+            self._grant_owner_if_present(
+                workspace_id,
+                payload.get("user_id"),
+                AccessResourceType.APPLICATION.value,
+                resolved_application_id,
+            )
         return {**payload, "workspace_id": workspace_id, "application_id": resolved_application_id}
+
+    def lock_application_identity(
+        self,
+        workspace_id: str,
+        repository_id: str,
+        name: str,
+    ) -> None:
+        """Serialize user-originated create/update authorization for one app identity."""
+        lock_key = application_identity_lock_key(workspace_id, repository_id, name)
+        with self.connection() as conn:
+            conn.execute(select(func.pg_advisory_xact_lock(lock_key)))
 
     def list_applications(
         self,
@@ -549,6 +675,28 @@ class RepoChangeRepository(DatabaseConnection):
         with self.connection() as conn:
             row = conn.execute(statement).mappings().first()
         return serialize_application(row) if row else None
+
+    def get_application_by_identity(
+        self,
+        workspace_id: str,
+        repository_id: str,
+        name: str,
+    ) -> JsonObject | None:
+        table = Application.__table__
+        statement = (
+            select(table.c.application_id)
+            .where(
+                table.c.workspace_id == workspace_id,
+                table.c.repository_id == repository_id,
+                table.c.name == name,
+            )
+            .limit(1)
+        )
+        with self.connection() as conn:
+            application_id = conn.execute(statement).scalar_one_or_none()
+        if application_id is None:
+            return None
+        return self.get_application(workspace_id, str(application_id))
 
     def list_application_deployment_bindings(
         self,
@@ -1552,6 +1700,11 @@ def stable_credential_id(workspace_id: str, provider: str, scope: str) -> str:
     return f"cred-{hashlib.sha256(raw.encode()).hexdigest()[:32]}"
 
 
+def repository_credential_scope(repository_id: str) -> str:
+    """Return the canonical vault scope for one GitHub repository."""
+    return f"{GITHUB_REPOSITORY_CREDENTIAL_SCOPE_PREFIX}:{repository_id}"
+
+
 def derive_watch_target_id(payload: JsonObject) -> str:
     explicit = payload.get("watch_target_id")
     if explicit and explicit != DEFAULT_WATCH_TARGET_ID:
@@ -1597,6 +1750,22 @@ def derive_application_id(payload: JsonObject) -> str:
         ]
     )
     return f"app-{hashlib.sha256(raw.encode()).hexdigest()[:32]}"
+
+
+def application_identity_lock_key(workspace_id: str, repository_id: str, name: str) -> int:
+    raw = f"application\0{workspace_id}\0{repository_id}\0{name}".encode()
+    return int.from_bytes(hashlib.sha256(raw).digest()[:8], byteorder="big", signed=True)
+
+
+def repository_identity_lock_key(workspace_id: str, repo_ref: str) -> int:
+    canonical_repo_ref = normalize_github_repo_ref(repo_ref)
+    raw = f"repository\0{workspace_id}\0{canonical_repo_ref}".encode()
+    return int.from_bytes(hashlib.sha256(raw).digest()[:8], byteorder="big", signed=True)
+
+
+def workspace_credential_lock_key(workspace_id: str, provider: str, scope: str) -> int:
+    raw = f"workspace-credential\0{workspace_id}\0{provider}\0{scope}".encode()
+    return int.from_bytes(hashlib.sha256(raw).digest()[:8], byteorder="big", signed=True)
 
 
 def derive_application_name(payload: JsonObject) -> str:

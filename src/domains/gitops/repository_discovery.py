@@ -715,7 +715,7 @@ def normalize_github_repo_ref(value: str) -> str:
     if host and host != GITHUB_HOST:
         raise RepositoryDiscoveryError(422, "unsupported_host")
     try:
-        return normalize_repo_ref(repo)
+        return normalize_repo_ref(repo).casefold()
     except ValueError as exc:
         raise ValueError("GitHub 저장소는 owner/repo 형식이어야 합니다.") from exc
 

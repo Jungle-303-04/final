@@ -28,6 +28,7 @@ from settings import Settings
 from packages.config.logs import CONTEXT_KEY, get_logger
 from packages.config.settings import env
 from packages.contracts.gateway import routes as gateway_routes
+from packages.contracts.gitops import PUBLIC_GITHUB_CREDENTIAL_REF
 from packages.contracts.security import SecretRef
 from packages.security import SecretNotFound, build_token_vault
 from packages.security.credentials import (
@@ -73,6 +74,7 @@ class GitHubPollTarget:
     manifest_path: str
     source_type: str = ""
     credential_ref: str = ""
+    database_managed: bool = False
 
     @property
     def key(self) -> str:
@@ -106,6 +108,7 @@ class GitHubPollTarget:
             manifest_path=str(row.get("manifest_path") or Settings.DEFAULT_MANIFEST_PATH),
             source_type=str(row.get("source_type") or ""),
             credential_ref=str(row.get("credential_ref") or ""),
+            database_managed=True,
         )
 
 
@@ -445,11 +448,15 @@ class GitHubPoller:
     def _github_token(self, target: GitHubPollTarget) -> str:
         if target.credential_ref:
             return self._read_token_ref(target.credential_ref, target)
+        if target.database_managed:
+            return ""
         if self.token_ref:
             return self._read_token_ref(self.token_ref, target)
         return self.token
 
     def _read_token_ref(self, ref: str, target: GitHubPollTarget) -> str:
+        if ref == PUBLIC_GITHUB_CREDENTIAL_REF:
+            return ""
         if ref.startswith("db:"):
             return self._read_db_token_ref(ref, target)
         try:
