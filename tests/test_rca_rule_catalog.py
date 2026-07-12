@@ -406,7 +406,10 @@ def test_rca_rule_validate_route_reports_schema_errors() -> None:
 
 def test_rca_rule_catalog_route_lists_loaded_rules() -> None:
     response = asyncio.run(
-        list_rca_rule_catalog(SimpleNamespace(user_id="user-1", workspace_id="workspace-1"))
+        list_rca_rule_catalog(
+            SimpleNamespace(user_id="user-1", workspace_id="workspace-1"),
+            registered_cause_profiles(),
+        )
     )
 
     by_id = {item.rule_id: item for item in response.items}
