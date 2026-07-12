@@ -1,78 +1,17 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
-  MetricQueryExecutionError,
+  ApiError,
   getCommandStatus,
   pollCommand,
   runPrometheusQuery,
   submitPrometheusQuery,
-} from "./metrics";
+} from "./index";
 import {
-  buildPrometheusQuery,
-  getMetricPreset,
-  type MetricPreset,
-} from "../features/metrics/presets";
-
-function jsonResponse(payload: unknown, status = 200): Response {
-  return new Response(JSON.stringify(payload), {
-    status,
-    headers: { "content-type": "application/json" },
-  });
-}
-
-function commandPayload(
-  status: "queued" | "leased" | "running" | "completed" | "failed",
-  result: Record<string, unknown> = {},
-): Record<string, unknown> {
-  return {
-    command_id: "cmd-debug-1",
-    cluster_id: "cluster-1",
-    correlation_id: "corr-debug-1",
-    action: "telemetry.query.run",
-    status,
-    result,
-    completed_at: status === "completed" || status === "failed" ? "2026-07-11T00:00:00Z" : null,
-  };
-}
-
-function telemetryResult(
-  preset: MetricPreset,
-  queryName: string,
-  values: Array<{ timestamp: number; value: number }>,
-): Record<string, unknown> {
-  return {
-    status: "completed",
-    cluster_id: "cluster-1",
-    applied: false,
-    message: "telemetry query executed",
-    retryable: false,
-    resources: [],
-    stdout: "",
-    stderr: "",
-    query: {
-      source: "prometheus",
-      name: queryName,
-      description: preset.description,
-      query: preset.promql,
-      range_seconds: preset.rangeSeconds,
-      step_seconds: preset.stepSeconds,
-    },
-    result: {
-      source: "prometheus",
-      results: {
-        [queryName]: {
-          query: preset.promql,
-          query_mode: "range",
-          range_seconds: preset.rangeSeconds,
-          step_seconds: preset.stepSeconds,
-          result_type: "matrix",
-          series: values.length === 0 ? [] : [{ metric: { instance: "node-1" }, values }],
-          point_count: values.length,
-        },
-      },
-    },
-  };
-}
+  NAMESPACE_POD_QUERY,
+  commandPayload,
+  jsonResponse,
+} from "./metrics-command.testSupport";
 
 describe("metrics command API", () => {
   beforeEach(() => {
@@ -83,7 +22,16 @@ describe("metrics command API", () => {
     vi.useRealTimers();
   });
 
-  it("submits one command with the execution id suffixed query name", async () => {
+  it("exports the command functions through the public API barrel", () => {
+    expect([
+      submitPrometheusQuery,
+      getCommandStatus,
+      pollCommand,
+      runPrometheusQuery,
+    ].every((value) => typeof value === "function")).toBe(true);
+  });
+
+  it("submits one API-owned query fixture with its stable name", async () => {
     const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(
       jsonResponse({
         accepted: true,
@@ -91,12 +39,9 @@ describe("metrics command API", () => {
         correlation_id: "corr-debug-1",
       }),
     );
-    const preset = getMetricPreset("namespace-pod-count");
-    const query = buildPrometheusQuery(preset, "run-20260711-001");
-
     const submitted = await submitPrometheusQuery(
       "cluster-1",
-      query,
+      NAMESPACE_POD_QUERY,
     );
 
     expect(submitted.query.name).toBe(
@@ -115,6 +60,37 @@ describe("metrics command API", () => {
     );
   });
 
+  it("does not retry a possibly-sent query POST after a network failure", async () => {
+    const fetchMock = vi
+      .spyOn(globalThis, "fetch")
+      .mockRejectedValue(new TypeError("Failed to fetch"));
+
+    await expect(
+      submitPrometheusQuery("cluster-1", NAMESPACE_POD_QUERY),
+    ).rejects.toMatchObject({kind: "network"} satisfies Partial<ApiError>);
+
+    expect(fetchMock).toHaveBeenCalledOnce();
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/agent/debug/query",
+      expect.objectContaining({method: "POST"}),
+    );
+  });
+
+  it("rejects an unknown receipt field as contract drift", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      jsonResponse({
+        accepted: true,
+        command_id: "cmd-debug-1",
+        correlation_id: "corr-debug-1",
+        unexpected: true,
+      }),
+    );
+
+    await expect(
+      submitPrometheusQuery("cluster-1", NAMESPACE_POD_QUERY),
+    ).rejects.toMatchObject({kind: "invalid-payload"} satisfies Partial<ApiError>);
+  });
+
   it("loads and validates a command status without re-enqueueing it", async () => {
     const fetchMock = vi
       .spyOn(globalThis, "fetch")
@@ -129,6 +105,73 @@ describe("metrics command API", () => {
       expect.objectContaining({ method: "GET" }),
     );
   });
+
+  it("rejects a command status with a missing required key", async () => {
+    const {completed_at: _completedAt, ...missingCompletedAt} = commandPayload("running");
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      jsonResponse(missingCompletedAt),
+    );
+
+    await expect(getCommandStatus("cmd-debug-1")).rejects.toMatchObject({
+      kind: "invalid-payload",
+    } satisfies Partial<ApiError>);
+  });
+
+  it.each([
+    {status: 401, kind: "unauthorized", code: "session_required"},
+    {status: 403, kind: "forbidden", code: "cluster_forbidden"},
+    {status: 404, kind: "not-found", code: "command_not_found"},
+  ] as const)(
+    "preserves a $status command lookup error",
+    async ({status, kind, code}) => {
+      const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+        jsonResponse({
+          detail: {code, detail: `command status ${status}`},
+        }, status),
+      );
+
+      await expect(getCommandStatus("cmd-debug-1")).rejects.toMatchObject({
+        code,
+        detail: `command status ${status}`,
+        kind,
+        status,
+      } satisfies Partial<ApiError>);
+      expect(fetchMock).toHaveBeenCalledOnce();
+    },
+  );
+
+  it.each([
+    {status: 422, kind: "invalid-request", code: "invalid_query"},
+    {status: 429, kind: "rate-limited", code: "query_rate_limited"},
+  ] as const)(
+    "preserves a $status query submission error without retrying",
+    async ({status, kind, code}) => {
+      const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+        jsonResponse({
+          detail: {
+            code,
+            detail: `query submission ${status}`,
+            retry_after: status === 429 ? 17 : undefined,
+          },
+        }, status),
+      );
+
+      await expect(
+        submitPrometheusQuery("cluster-1", NAMESPACE_POD_QUERY),
+      ).rejects.toMatchObject({
+        code,
+        detail: `query submission ${status}`,
+        kind,
+        retryAfter: status === 429 ? 17 : null,
+        status,
+      } satisfies Partial<ApiError>);
+      expect(fetchMock).toHaveBeenCalledOnce();
+      expect(fetchMock).toHaveBeenCalledWith(
+        "/api/agent/debug/query",
+        expect.objectContaining({method: "POST"}),
+      );
+    },
+  );
 
   it("polls every three seconds until completed", async () => {
     vi.useFakeTimers();
@@ -147,6 +190,21 @@ describe("metrics command API", () => {
     expect(fetchMock.mock.calls.every(([path]) => path === "/api/commands/cmd-debug-1")).toBe(true);
   });
 
+  it("returns a failed terminal command without another GET", async () => {
+    vi.useFakeTimers();
+    const fetchMock = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValue(jsonResponse(commandPayload("failed", {message: "query failed"})));
+
+    await expect(pollCommand("cmd-debug-1")).resolves.toMatchObject({
+      status: "failed",
+    });
+    await vi.advanceTimersByTimeAsync(60_000);
+
+    expect(fetchMock).toHaveBeenCalledOnce();
+    expect(fetchMock.mock.calls.every(([, init]) => init?.method === "GET")).toBe(true);
+  });
+
   it("times out after sixty seconds without submitting another POST", async () => {
     vi.useFakeTimers();
     const fetchMock = vi
@@ -159,52 +217,5 @@ describe("metrics command API", () => {
 
     await rejection;
     expect(fetchMock.mock.calls.some(([, init]) => init?.method === "POST")).toBe(false);
-  });
-
-  it("does not treat a completed command with empty series as success", async () => {
-    const preset = getMetricPreset("node-cpu-usage");
-    const queryName = "node_cpu_usage_ratio__run-empty";
-    const query = buildPrometheusQuery(preset, "run-empty");
-    const fetchMock = vi
-      .spyOn(globalThis, "fetch")
-      .mockResolvedValueOnce(
-        jsonResponse({
-          accepted: true,
-          command_id: "cmd-debug-1",
-          correlation_id: "corr-debug-1",
-        }),
-      )
-      .mockResolvedValueOnce(
-        jsonResponse(commandPayload("completed", telemetryResult(preset, queryName, []))),
-      );
-
-    await expect(
-      runPrometheusQuery("cluster-1", query),
-    ).rejects.toMatchObject({
-      kind: "empty-result",
-    } satisfies Partial<MetricQueryExecutionError>);
-    expect(fetchMock).toHaveBeenCalledTimes(2);
-    expect(fetchMock.mock.calls.filter(([, init]) => init?.method === "POST")).toHaveLength(1);
-  });
-
-  it("returns normalized points without leaking the raw command result", async () => {
-    const preset = getMetricPreset("node-cpu-usage");
-    const queryName = "node_cpu_usage_ratio__run-observed";
-    const query = buildPrometheusQuery(preset, "run-observed");
-    vi.spyOn(globalThis, "fetch")
-      .mockResolvedValueOnce(jsonResponse({
-        accepted: true,
-        command_id: "cmd-debug-1",
-        correlation_id: "corr-debug-1",
-      }))
-      .mockResolvedValueOnce(jsonResponse(commandPayload(
-        "completed",
-        telemetryResult(preset, queryName, [{ timestamp: 1, value: 0.42 }]),
-      )));
-
-    const run = await runPrometheusQuery("cluster-1", query);
-
-    expect(run.result.point_count).toBe(1);
-    expect(run.command).not.toHaveProperty("result");
   });
 });

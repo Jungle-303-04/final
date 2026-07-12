@@ -199,7 +199,7 @@ describe("metrics API", () => {
   it("stops polling when the caller aborts", async () => {
     vi.useFakeTimers();
     const controller = new AbortController();
-    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(
       jsonResponse({
         command_id: "cmd-metrics-1",
         cluster_id: "cluster-1",
@@ -218,5 +218,7 @@ describe("metrics API", () => {
     await vi.runAllTimersAsync();
 
     await rejection;
+    expect(fetchMock).toHaveBeenCalledOnce();
+    expect(fetchMock.mock.calls.every(([, init]) => init?.method === "GET")).toBe(true);
   });
 });
