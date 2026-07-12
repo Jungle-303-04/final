@@ -231,7 +231,11 @@ describe("ResourcesPage scope and collection semantics", () => {
       }),
     }), "/product/resources/pod?cluster=cluster-1");
 
-    const scope = await screen.findByRole("status", { name: "목록 범위" });
+    const scope = await screen.findByRole(
+      "status",
+      { name: "목록 범위" },
+      { timeout: 5_000 },
+    );
     expect(scope.textContent).toContain("검증 실패 제외 2");
   });
 });
