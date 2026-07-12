@@ -229,6 +229,19 @@ def test_app_run_forwards_optional_bus_to_worker_service(
     assert captured["bus"] is bus
     assert captured["ran"] is True
 
+    captured.clear()
+    nats_default_app = App("nats-default-worker")
+
+    @nats_default_app.on_any
+    async def handle_with_default(_evt: EventEnvelope) -> None:
+        return None
+
+    nats_default_app.run()
+
+    assert captured["service_name"] == "nats-default-worker"
+    assert captured["bus"] is None
+    assert captured["ran"] is True
+
 
 def test_worker_service_injects_bus_and_keeps_nats_default(
     monkeypatch: pytest.MonkeyPatch,
