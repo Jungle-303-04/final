@@ -46,7 +46,10 @@ describe("clusters API", () => {
         method: "GET",
       }),
     );
-    expect(fetchMock.mock.calls[0]?.[1]).not.toHaveProperty("body");
+    const init = fetchMock.mock.calls[0]?.[1];
+    expect(init).not.toHaveProperty("body");
+    expect(new Headers(init?.headers).get("accept")).toBe("application/json");
+    expect(new Headers(init?.headers).has("x-service-csrf")).toBe(false);
   });
 
   it("uses an explicitly requested list limit without inventing pagination", async () => {
@@ -83,6 +86,50 @@ describe("clusters API", () => {
       kind: "unauthorized",
       status: 401,
       detail: "Not authenticated",
+    } satisfies Partial<ApiError>);
+  });
+
+  it("preserves a structured 403 without turning it into an empty list", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      jsonResponse({
+        detail: {
+          code: "cluster_read_forbidden",
+          detail: "Cluster access is restricted.",
+        },
+      }, 403),
+    );
+
+    await expect(listClusters()).rejects.toMatchObject({
+      code: "cluster_read_forbidden",
+      detail: "Cluster access is restricted.",
+      kind: "forbidden",
+      status: 403,
+    } satisfies Partial<ApiError>);
+  });
+
+  it("preserves an unexpected server response as an HTTP failure", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      jsonResponse({ detail: "Service unavailable" }, 503),
+    );
+
+    await expect(listClusters()).rejects.toMatchObject({
+      detail: "Service unavailable",
+      kind: "http",
+      status: 503,
+    } satisfies Partial<ApiError>);
+  });
+
+  it("rejects invalid JSON before committing a cluster collection", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response("not-json", {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      }),
+    );
+
+    await expect(listClusters()).rejects.toMatchObject({
+      kind: "invalid-payload",
+      status: 200,
     } satisfies Partial<ApiError>);
   });
 
