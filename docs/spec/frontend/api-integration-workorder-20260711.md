@@ -365,7 +365,7 @@ endpoint에는 계속 `apiRequest`와 runtime schema를 사용한다.
 | APIQ-001 | `getCluster` | GET `/clusters/{cluster_id}` | path | `ClusterResponse`, 200 | cluster·agents 보존 |
 | APIQ-002 | `getClusterConnectionStatus` | GET `/clusters/{cluster_id}/connection-status` | path | `ClusterConnectionStatusResponse`, 200 | capability 축소 금지 |
 | APIQ-023 | `getFleetSummary` | GET `/fleet/summary` | 없음 | `FleetSummaryResponse`, 200 | read-only |
-| APIQ-004 | `getClusterSummary` | GET `/clusters/{cluster_id}/summary` | path | `ClusterSummaryDetailResponse`, 200 | JsonMap 위치 확인 |
+| APIQ-004 / APIQ-028 | `getClusterSummary` | GET `/clusters/{cluster_id}/summary` | path | `ClusterSummaryDetailResponse`, 200 | `usage.pods_total` 누락은 `undefined`로 보존; 다른 section strict |
 | APIQ-004 | `getClusterNodesSummary` | GET `/clusters/{cluster_id}/nodes/summary` | path | `ClusterNodesSummaryResponse`, 200 |  |
 | APIQ-004 | `getNodePodsSummary` | GET `/clusters/{cluster_id}/nodes/{node_name}/pods/summary` | 2 path | `NodePodsSummaryResponse`, 200 |  |
 | APIQ-025 / APIQ-008 | inventory resources | GET `/clusters/{cluster_id}/inventory/resources` | `resource_type?`, `namespace?`, `include_deleted=false`, `limit=200`(1..1000) | `InventoryResourceListResponse`, 200 | 두 함수가 같은 route |
@@ -395,6 +395,23 @@ endpoint에는 계속 `apiRequest`와 runtime schema를 사용한다.
 | APIQ-019 | AI create | POST `/ai/conversations` | message 필수; title/agent/context 선택 | `AiConversationAcceptedResponse`, 200 | 202 아님 |
 | APIQ-019 | AI append | POST `/ai/conversations/{id}/messages` | message 필수; agent/context 선택 | accepted response, 200 | 자동 재전송 금지 |
 | APIQ-020 | AI delete | DELETE `/ai/conversations/{id}` | path | empty, 204 | `apiRequestNoContent` |
+
+### 10.1 Home usage 부분 실패 경계 (`APIQ-028`)
+
+`getClusterSummary`의 workload·warning·incident를 살릴 수 있는데 usage 필드 하나가 없다는 이유로
+응답 전체를 거부하면 안 된다. API 작업자는 다음 경계를 그대로 구현한다.
+
+1. `clusterSummaryDetailSchema`와 workload·warning·incident schema는 계속 strict다.
+2. `usage.pods_total`만 누락을 허용하고 결과를 `undefined`로 보존한다. `0`, `null`, 누락을 서로
+   바꾸거나 `pods_running`으로 합계를 만들어 넣지 않는다.
+3. 숫자가 존재하지만 음수·소수·문자열이면 기존처럼 `invalid-payload`다.
+4. API test는 실제 `getClusterSummary`를 호출하는 fetch fixture에서 `pods_running=5`이고
+   `pods_total`만 없는 200 응답을 사용한다. resolve 결과에 workload·warning·incident가 그대로
+   남고 `usage.pods_total === undefined`임을 검증한다.
+5. feature adapter의 별도 contract test가 이 결과를 받아 `usage=null`,
+   `dataQualityWarnings=[{code:"usage-unavailable",section:"usage",...}]`로 강등하는 책임을 가진다.
+6. 기존 완료 앵커 `94063b29d`는 이 부분 실패 계약의 근거가 아니다. 수정 코드와 API test가 포함된
+   새 canonical branch ancestor hash를 `API 완성: getClusterSummary (<hash>)`로 기록한다.
 
 ## 11. 큐 밖 항목
 

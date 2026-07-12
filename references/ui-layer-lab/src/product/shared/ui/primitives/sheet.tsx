@@ -8,6 +8,13 @@ type OwnedSlot<T> = Omit<T, "data-slot"> & { "data-slot"?: never };
 
 export type SheetSide = "top" | "right" | "bottom" | "left";
 
+const sheetSideClassName: Record<SheetSide, string> = {
+  top: "inset-x-0 top-0 h-auto w-full border-b data-ending-style:-translate-y-10 data-starting-style:-translate-y-10",
+  right: "inset-y-0 right-0 h-full w-full border-l data-ending-style:translate-x-10 data-starting-style:translate-x-10 sm:max-w-sm",
+  bottom: "inset-x-0 bottom-0 h-auto w-full border-t data-ending-style:translate-y-10 data-starting-style:translate-y-10",
+  left: "inset-y-0 left-0 h-full w-full border-r data-ending-style:-translate-x-10 data-starting-style:-translate-x-10 sm:max-w-sm",
+};
+
 type SheetContentProps = Omit<
   OwnedSlot<SheetPrimitive.Popup.Props>,
   "data-side"
@@ -68,7 +75,8 @@ function SheetContent({
       <SheetPrimitive.Popup
         {...props}
         className={cn(
-          "fixed isolate z-50 flex flex-col gap-4 bg-popover bg-clip-padding text-sm text-popover-foreground shadow-lg ring-1 ring-foreground/10 transition duration-200 ease-in-out outline-none focus-visible:ring-3 focus-visible:ring-ring/50 data-ending-style:opacity-0 data-starting-style:opacity-0 data-[side=bottom]:inset-x-0 data-[side=bottom]:bottom-0 data-[side=bottom]:h-auto data-[side=bottom]:border-t data-[side=bottom]:data-ending-style:translate-y-10 data-[side=bottom]:data-starting-style:translate-y-10 data-[side=left]:inset-y-0 data-[side=left]:left-0 data-[side=left]:h-full data-[side=left]:w-3/4 data-[side=left]:border-r data-[side=left]:data-ending-style:-translate-x-10 data-[side=left]:data-starting-style:-translate-x-10 data-[side=right]:inset-y-0 data-[side=right]:right-0 data-[side=right]:h-full data-[side=right]:w-3/4 data-[side=right]:border-l data-[side=right]:data-ending-style:translate-x-10 data-[side=right]:data-starting-style:translate-x-10 data-[side=top]:inset-x-0 data-[side=top]:top-0 data-[side=top]:h-auto data-[side=top]:border-b data-[side=top]:data-ending-style:-translate-y-10 data-[side=top]:data-starting-style:-translate-y-10 data-[side=left]:sm:max-w-sm data-[side=right]:sm:max-w-sm motion-reduce:duration-0 motion-reduce:transition-none forced-colors:border forced-colors:border-[CanvasText] forced-colors:shadow-none",
+          "fixed isolate z-50 flex flex-col gap-4 bg-popover bg-clip-padding text-sm text-popover-foreground shadow-lg ring-1 ring-foreground/10 transition duration-200 ease-in-out outline-none focus-visible:ring-3 focus-visible:ring-ring/50 data-ending-style:opacity-0 data-starting-style:opacity-0 motion-reduce:duration-0 motion-reduce:transition-none forced-colors:border forced-colors:border-[CanvasText] forced-colors:shadow-none",
+          sheetSideClassName[side],
           className,
         )}
         data-side={side}

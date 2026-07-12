@@ -2,6 +2,9 @@ import { useEffect } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import {
   createShortcutMatcher,
+  isProductContextShortcutId,
+  PRODUCT_SHORTCUT_EVENT,
+  type ProductShortcutEventDetail,
   type ShortcutDefinition,
 } from "./shortcutRegistry";
 
@@ -33,6 +36,10 @@ export function useProductShortcuts({
         matcher.reset();
         return;
       }
+      if (!isHelpOpen && document.querySelector('[role="dialog"]')) {
+        matcher.reset();
+        return;
+      }
 
       const definition = matcher.handle(event);
       if (!definition) return;
@@ -40,6 +47,14 @@ export function useProductShortcuts({
       if (definition.id.startsWith("route:") && definition.targetPath) {
         if (location.pathname !== definition.targetPath) navigate(definition.targetPath);
         focusMain();
+        return;
+      }
+
+      if (isProductContextShortcutId(definition.id)) {
+        window.dispatchEvent(new CustomEvent<ProductShortcutEventDetail>(
+          PRODUCT_SHORTCUT_EVENT,
+          { detail: { id: definition.id } },
+        ));
         return;
       }
 

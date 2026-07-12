@@ -12,7 +12,7 @@ export interface ListRcaTimelineOptions {
 }
 
 /** Loads the full Issues/RCA list, optionally scoped to one cluster. */
-export function listRcaTimeline(
+export async function listRcaTimeline(
   options: ListRcaTimelineOptions = {},
 ): Promise<RcaList> {
   const limit = options.limit ?? RCA_LIST_DEFAULT_LIMIT;

@@ -1,178 +1,252 @@
 import type {
   ResourceFacts,
-  ResourceInvolvedFact,
-  ResourceOwnerFact,
-  ResourcePortFact,
-  ResourceReadinessFact,
 } from "./resourcesContract";
 import {
-  invalidResponse,
-  nonNegativeInteger,
+  involvedFact,
+  nodePodCapacity,
+  ownerFact,
+  podReadiness,
+  resourcePorts,
+  serviceSelector,
+} from "./resourceFactDetails";
+import {
+  ignoreResourceFactWarning,
+  optionalFact,
+  type ResourceFactWarningSink,
+} from "./resourceFactSafety";
+import {
   optionalNonNegativeInteger,
   optionalNonNegativeNumber,
-  optionalResponseRecord,
   responseBoolean,
-  responseIdentity,
   responseOptionalText,
   responseRecord,
   responseStringArray,
   responseTimestamp,
-  safeScalarEntries,
 } from "./resourcesValidation";
 
 export function toResourceFacts(
   resourceType: string,
   rawSummary: Record<string, unknown>,
+  warn: ResourceFactWarningSink = ignoreResourceFactWarning,
 ): ResourceFacts {
   const summary = responseRecord(rawSummary);
   switch (resourceType) {
     case "pod":
-      return podFacts(summary);
+      return podFacts(summary, warn);
     case "node":
-      return nodeFacts(summary);
+      return nodeFacts(summary, warn);
     case "workload":
-      return workloadFacts(summary);
+      return workloadFacts(summary, warn);
     case "service":
-      return serviceFacts(summary);
+      return serviceFacts(summary, warn);
     case "event":
-      return eventFacts(summary);
+      return eventFacts(summary, warn);
     default:
       return { type: "generic" };
   }
 }
 
-function podFacts(summary: Record<string, unknown>): ResourceFacts {
+function podFacts(
+  summary: Record<string, unknown>,
+  warn: ResourceFactWarningSink,
+): ResourceFacts {
   return {
     type: "pod",
-    phase: responseOptionalText(summary.phase),
-    nodeName: responseOptionalText(summary.node_name),
-    owner: ownerFact(summary.owner_kind, summary.owner_name),
-    readiness: podReadiness(summary.containers),
-    restartCount: optionalNonNegativeInteger(summary.restart_total),
-    cpuMillicores: optionalNonNegativeNumber(summary.cpu_mcores),
-    memoryMebibytes: optionalNonNegativeNumber(summary.mem_mib),
-    podIp: responseOptionalText(summary.pod_ip),
-    hostIp: responseOptionalText(summary.host_ip),
-    waitingReasons: responseStringArray(summary.waiting_reasons),
-    terminatedReasons: responseStringArray(summary.terminated_reasons),
-  };
-}
-
-function nodeFacts(summary: Record<string, unknown>): ResourceFacts {
-  return {
-    type: "node",
-    ready: responseBoolean(summary.ready),
-    podCapacity: nodePodCapacity(summary),
-    cpuMillicores: optionalNonNegativeNumber(summary.cpu_mcores),
-    memoryMebibytes: optionalNonNegativeNumber(summary.mem_mib),
-    cpuRatio: optionalNonNegativeNumber(summary.cpu_ratio),
-    memoryRatio: optionalNonNegativeNumber(summary.mem_ratio),
-  };
-}
-
-function workloadFacts(summary: Record<string, unknown>): ResourceFacts {
-  return {
-    type: "workload",
-    desiredReplicas: optionalNonNegativeInteger(summary.desired_replicas),
-    readyReplicas: optionalNonNegativeInteger(summary.ready_replicas),
-    availableReplicas: optionalNonNegativeInteger(summary.available_replicas),
-    updatedReplicas: optionalNonNegativeInteger(summary.updated_replicas),
-    unavailableReplicas: optionalNonNegativeInteger(summary.unavailable_replicas),
-    generation: optionalNonNegativeInteger(summary.generation),
-    observedGeneration: optionalNonNegativeInteger(summary.observed_generation),
-  };
-}
-
-function serviceFacts(summary: Record<string, unknown>): ResourceFacts {
-  return {
-    type: "service",
-    serviceType: responseOptionalText(summary.type),
-    clusterIp: responseOptionalText(summary.cluster_ip),
-    externalUrl: responseOptionalText(summary.external_url),
-    externalHosts: responseStringArray(summary.external_hosts),
-    selector: summary.selector === null || summary.selector === undefined
-      ? []
-      : safeScalarEntries(summary.selector),
-    ports: resourcePorts(summary.ports),
-  };
-}
-
-function eventFacts(summary: Record<string, unknown>): ResourceFacts {
-  return {
-    type: "event",
-    eventType: responseOptionalText(summary.type),
-    reason: responseOptionalText(summary.reason),
-    message: responseOptionalText(summary.message),
-    occurrenceCount: optionalNonNegativeInteger(summary.count),
-    firstSeenAt: responseTimestamp(summary.first_timestamp),
-    lastSeenAt: responseTimestamp(summary.last_timestamp),
-    reportingComponent: responseOptionalText(summary.reporting_component),
-    involvedResource: involvedFact(
-      summary.involved_kind,
-      summary.involved_name,
-      summary.involved_uid,
+    phase: optionalFact("phase", null, () => responseOptionalText(summary.phase), warn),
+    nodeName: optionalFact(
+      "nodeName",
+      null,
+      () => responseOptionalText(summary.node_name),
+      warn,
+    ),
+    owner: optionalFact(
+      "owner",
+      null,
+      () => ownerFact(summary.owner_kind, summary.owner_name),
+      warn,
+    ),
+    readiness: optionalFact("readiness", null, () => podReadiness(summary.containers), warn),
+    restartCount: optionalFact(
+      "restartCount",
+      null,
+      () => optionalNonNegativeInteger(summary.restart_total),
+      warn,
+    ),
+    cpuMillicores: optionalFact(
+      "cpuMillicores",
+      null,
+      () => optionalNonNegativeNumber(summary.cpu_mcores),
+      warn,
+    ),
+    memoryMebibytes: optionalFact(
+      "memoryMebibytes",
+      null,
+      () => optionalNonNegativeNumber(summary.mem_mib),
+      warn,
+    ),
+    podIp: optionalFact("podIp", null, () => responseOptionalText(summary.pod_ip), warn),
+    hostIp: optionalFact("hostIp", null, () => responseOptionalText(summary.host_ip), warn),
+    waitingReasons: optionalFact(
+      "waitingReasons",
+      [],
+      () => responseStringArray(summary.waiting_reasons),
+      warn,
+    ),
+    terminatedReasons: optionalFact(
+      "terminatedReasons",
+      [],
+      () => responseStringArray(summary.terminated_reasons),
+      warn,
     ),
   };
 }
 
-function ownerFact(kindValue: unknown, nameValue: unknown): ResourceOwnerFact | null {
-  const kind = responseOptionalText(kindValue);
-  const name = responseOptionalText(nameValue);
-  return kind === null || name === null ? null : { kind, name };
+function nodeFacts(
+  summary: Record<string, unknown>,
+  warn: ResourceFactWarningSink,
+): ResourceFacts {
+  return {
+    type: "node",
+    ready: optionalFact("ready", null, () => responseBoolean(summary.ready), warn),
+    podCapacity: optionalFact("podCapacity", null, () => nodePodCapacity(summary), warn),
+    cpuMillicores: optionalFact(
+      "cpuMillicores",
+      null,
+      () => optionalNonNegativeNumber(summary.cpu_mcores),
+      warn,
+    ),
+    memoryMebibytes: optionalFact(
+      "memoryMebibytes",
+      null,
+      () => optionalNonNegativeNumber(summary.mem_mib),
+      warn,
+    ),
+    cpuRatio: optionalFact(
+      "cpuRatio",
+      null,
+      () => optionalNonNegativeNumber(summary.cpu_ratio),
+      warn,
+    ),
+    memoryRatio: optionalFact(
+      "memoryRatio",
+      null,
+      () => optionalNonNegativeNumber(summary.mem_ratio),
+      warn,
+    ),
+  };
 }
 
-function involvedFact(
-  kindValue: unknown,
-  nameValue: unknown,
-  uidValue: unknown,
-): ResourceInvolvedFact | null {
-  const kind = responseOptionalText(kindValue);
-  const name = responseOptionalText(nameValue);
-  const uid = responseOptionalText(uidValue);
-  return kind === null || name === null ? null : { kind, name, uid };
+function workloadFacts(
+  summary: Record<string, unknown>,
+  warn: ResourceFactWarningSink,
+): ResourceFacts {
+  return {
+    type: "workload",
+    desiredReplicas: integerFact("desiredReplicas", summary.desired_replicas, warn),
+    readyReplicas: integerFact("readyReplicas", summary.ready_replicas, warn),
+    availableReplicas: integerFact("availableReplicas", summary.available_replicas, warn),
+    updatedReplicas: integerFact("updatedReplicas", summary.updated_replicas, warn),
+    unavailableReplicas: integerFact(
+      "unavailableReplicas",
+      summary.unavailable_replicas,
+      warn,
+    ),
+    generation: integerFact("generation", summary.generation, warn),
+    observedGeneration: integerFact(
+      "observedGeneration",
+      summary.observed_generation,
+      warn,
+    ),
+  };
 }
 
-function podReadiness(value: unknown): ResourceReadinessFact | null {
-  if (value === null || value === undefined) return null;
-  if (!Array.isArray(value)) invalidResponse();
-  let ready = 0;
-  for (const rawContainer of value) {
-    const container = responseRecord(rawContainer);
-    if (responseBoolean(container.ready) === true) ready += 1;
-  }
-  return { ready, total: value.length };
+function serviceFacts(
+  summary: Record<string, unknown>,
+  warn: ResourceFactWarningSink,
+): ResourceFacts {
+  return {
+    type: "service",
+    serviceType: optionalFact(
+      "serviceType",
+      null,
+      () => responseOptionalText(summary.type),
+      warn,
+    ),
+    clusterIp: optionalFact(
+      "clusterIp",
+      null,
+      () => responseOptionalText(summary.cluster_ip),
+      warn,
+    ),
+    externalUrl: optionalFact(
+      "externalUrl",
+      null,
+      () => responseOptionalText(summary.external_url),
+      warn,
+    ),
+    externalHosts: optionalFact(
+      "externalHosts",
+      [],
+      () => responseStringArray(summary.external_hosts),
+      warn,
+    ),
+    selector: optionalFact("selector", [], () => serviceSelector(summary.selector), warn),
+    ports: optionalFact("ports", [], () => resourcePorts(summary.ports), warn),
+  };
 }
 
-function nodePodCapacity(summary: Record<string, unknown>): number | null {
-  for (const key of ["allocatable", "capacity"] as const) {
-    const capacity = optionalResponseRecord(summary[key]);
-    if (capacity === null || capacity.pods === null || capacity.pods === undefined) continue;
-    if (typeof capacity.pods === "number") return nonNegativeInteger(capacity.pods);
-    if (typeof capacity.pods === "string" && /^\d+$/.test(capacity.pods)) {
-      return nonNegativeInteger(Number(capacity.pods));
-    }
-    invalidResponse();
-  }
-  return optionalNonNegativeInteger(summary.pod_capacity);
+function eventFacts(
+  summary: Record<string, unknown>,
+  warn: ResourceFactWarningSink,
+): ResourceFacts {
+  return {
+    type: "event",
+    eventType: textFact("eventType", summary.type, warn),
+    reason: textFact("reason", summary.reason, warn),
+    message: textFact("message", summary.message, warn),
+    occurrenceCount: integerFact("occurrenceCount", summary.count, warn),
+    firstSeenAt: optionalFact(
+      "firstSeenAt",
+      null,
+      () => responseTimestamp(summary.first_timestamp),
+      warn,
+    ),
+    lastSeenAt: optionalFact(
+      "lastSeenAt",
+      null,
+      () => responseTimestamp(summary.last_timestamp),
+      warn,
+    ),
+    reportingComponent: textFact(
+      "reportingComponent",
+      summary.reporting_component,
+      warn,
+    ),
+    involvedResource: optionalFact(
+      "involvedResource",
+      null,
+      () => involvedFact(
+        summary.involved_kind,
+        summary.involved_name,
+        summary.involved_uid,
+      ),
+      warn,
+    ),
+  };
 }
 
-function resourcePorts(value: unknown): ResourcePortFact[] {
-  if (value === null || value === undefined) return [];
-  if (!Array.isArray(value)) invalidResponse();
-  return value.map((rawPort) => {
-    const port = responseRecord(rawPort);
-    return {
-      name: responseOptionalText(port.name),
-      protocol: responseOptionalText(port.protocol),
-      port: optionalNonNegativeInteger(port.port),
-      targetPort: targetPort(port.targetPort ?? port.target_port),
-      nodePort: optionalNonNegativeInteger(port.nodePort ?? port.node_port),
-    };
-  });
+function integerFact(
+  field: string,
+  value: unknown,
+  warn: ResourceFactWarningSink,
+): number | null {
+  return optionalFact(field, null, () => optionalNonNegativeInteger(value), warn);
 }
 
-function targetPort(value: unknown): string | null {
-  if (value === null || value === undefined) return null;
-  if (typeof value === "string") return responseIdentity(value);
-  return String(nonNegativeInteger(value));
+function textFact(
+  field: string,
+  value: unknown,
+  warn: ResourceFactWarningSink,
+): string | null {
+  return optionalFact(field, null, () => responseOptionalText(value), warn);
 }

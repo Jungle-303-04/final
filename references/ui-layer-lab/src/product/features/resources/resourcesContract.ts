@@ -9,6 +9,25 @@ export type ResourceHealthTone =
 
 export type ResourceIdentityStability = "uid" | "fallback";
 
+export type ResourceDataQualityWarningCode =
+  | "optional-fact-unavailable"
+  | "invalid-resource-excluded"
+  | "duplicate-resource-excluded";
+
+export type ResourceDataQualitySection =
+  | "resource"
+  | "list"
+  | "related"
+  | "events";
+
+export interface ResourceDataQualityWarning {
+  code: ResourceDataQualityWarningCode;
+  section: ResourceDataQualitySection;
+  field: string | null;
+  rowIndex: number | null;
+  group: string | null;
+}
+
 export interface ResourceHealthCounts {
   healthy: number;
   warning: number;
@@ -152,6 +171,9 @@ export interface ResourceList {
   limit: number;
   returned: number;
   limitReached: boolean;
+  /** Canonical adapters always populate diagnostics; optional keeps external port fixtures additive. */
+  excludedCount?: number;
+  dataQualityWarnings?: ResourceDataQualityWarning[];
   items: ResourceSummary[];
 }
 
@@ -164,6 +186,8 @@ export interface ResourceIdentity {
 
 export interface ResourceRelatedGroup {
   name: string;
+  /** Canonical adapters always report how many malformed rows were isolated. */
+  excludedCount?: number;
   items: ResourceSummary[];
 }
 
@@ -173,8 +197,11 @@ export interface ResourceDetail {
   resource: ResourceSummary;
   relatedCompleteness: ResourcesCollectionCompleteness;
   related: ResourceRelatedGroup[];
+  relatedExcludedCount?: number;
   eventsCompleteness: ResourcesCollectionCompleteness;
   events: ResourceSummary[];
+  eventExcludedCount?: number;
+  dataQualityWarnings?: ResourceDataQualityWarning[];
 }
 
 export type ResourcesFailureCode =

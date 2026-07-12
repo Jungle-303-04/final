@@ -3,11 +3,41 @@
 import { cleanup, fireEvent, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import {
+  createShortcutMatcher,
+  PRODUCT_SHORTCUT_EVENT,
+  shellShortcutDefinitions,
+  type ProductShortcutEventDetail,
+  type ShortcutMatcher,
+} from "../../app/shortcutRegistry";
 import { renderResources, resourcesPort } from "./ResourcesPage.testSupport";
 
-beforeEach(resetDocumentTestClock);
+let shortcutMatcher: ShortcutMatcher;
+let shortcutKeydown: (event: KeyboardEvent) => void;
+const matchedRoutes = vi.fn();
+
+beforeEach(() => {
+  resetDocumentTestClock();
+  matchedRoutes.mockReset();
+  shortcutMatcher = createShortcutMatcher(
+    shellShortcutDefinitions(new Set(["home", "resources"]), "resources"),
+  );
+  shortcutKeydown = (event: KeyboardEvent) => {
+    const definition = shortcutMatcher.handle(event);
+    if (!definition) return;
+    if (definition.id.startsWith("route:")) matchedRoutes(definition.id);
+    if (definition.group === "context") {
+      window.dispatchEvent(new CustomEvent<ProductShortcutEventDetail>(PRODUCT_SHORTCUT_EVENT, {
+        detail: { id: definition.id as ProductShortcutEventDetail["id"] },
+      }));
+    }
+  };
+  window.addEventListener("keydown", shortcutKeydown);
+});
 
 afterEach(() => {
+  window.removeEventListener("keydown", shortcutKeydown);
+  shortcutMatcher.dispose();
   cleanup();
   resetDocumentTestClock();
 });
@@ -66,6 +96,26 @@ describe("ResourcesPage keyboard navigation", () => {
     expect(screen.queryByRole("dialog")).toBeNull();
     expect(screen.getByTestId("resources-location").textContent)
       .toContain("/product/resources/pod?cluster=cluster-1");
+  }, 15_000);
+
+  it("keeps global g chords available while reserving gg for the first resource row", async () => {
+    renderResources(resourcesPort(), "/product/resources/pod?cluster=cluster-1");
+    const checkout = await screen.findByRole(
+      "button",
+      { name: /checkout-api-0/u },
+      { timeout: 5_000 },
+    );
+
+    fireEvent.keyDown(window, { key: "g" });
+    fireEvent.keyDown(window, { key: "h" });
+    expect(matchedRoutes).toHaveBeenCalledExactlyOnceWith("route:home");
+
+    document.body.tabIndex = -1;
+    document.body.focus();
+    fireEvent.keyDown(window, { key: "g" });
+    fireEvent.keyDown(window, { key: "g" });
+    expect(document.activeElement).toBe(checkout);
+    expect(matchedRoutes).toHaveBeenCalledTimes(1);
   }, 15_000);
 });
 

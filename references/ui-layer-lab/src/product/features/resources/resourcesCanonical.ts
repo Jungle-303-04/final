@@ -1,17 +1,25 @@
 import type {
   ResourceCatalog,
+  ResourceDataQualityWarning,
   ResourceDetail,
   ResourceHealthCounts,
   ResourceIdentity,
   ResourceList,
   ResourceRelatedGroup,
+  ResourceSummary,
 } from "./resourcesContract";
 import type {
   ResourcesEndpointInventorySummary,
   ResourcesEndpointResourceDetail,
   ResourcesEndpointResourceList,
 } from "./resourcesEndpointContract";
-import { toResourceSummary } from "./resourceProjection";
+import {
+  assertResourceBoundary,
+  excludedWarning,
+  isolateCollection,
+  isolateProjection,
+  projectResource,
+} from "./resourceCollectionIsolation";
 import type { CanonicalResourceListRequest } from "./resourcesRequests";
 import {
   assertSameIdentity,
@@ -66,16 +74,39 @@ export function toResourceList(
   if (wire.resource_type === null) invalidResponse();
   assertSameResourceType(wire.resource_type, request.resourceType);
   if (wire.resources.length > request.limit) invalidResponse();
-  const items = wire.resources.map((resource) => {
-    const item = toResourceSummary(resource, request.clusterId, {
+  const dataQualityWarnings: ResourceDataQualityWarning[] = [];
+  const items: ResourceSummary[] = [];
+  const seenIds = new Set<string>();
+  const seenInventoryKeys = new Set<string>();
+  let excludedCount = 0;
+  wire.resources.forEach((resource, rowIndex) => {
+    assertResourceBoundary(
+      resource,
+      request.clusterId,
+      request.resourceType,
+      request.namespace,
+      request.namespace !== null,
+    );
+    const projected = isolateProjection(resource, request.clusterId, {
       expectedResourceType: request.resourceType,
       expectedNamespace: request.namespace,
       enforceNamespace: request.namespace !== null,
-    });
-    if (!request.includeDeleted && item.deletedAt !== null) invalidResponse();
-    return item;
+    }, "list", rowIndex, null);
+    if (projected === null || (!request.includeDeleted && projected.item.deletedAt !== null)) {
+      excludedCount += 1;
+      dataQualityWarnings.push(excludedWarning("invalid-resource-excluded", "list", rowIndex));
+      return;
+    }
+    if (seenIds.has(projected.item.id) || seenInventoryKeys.has(projected.item.inventoryKey)) {
+      excludedCount += 1;
+      dataQualityWarnings.push(excludedWarning("duplicate-resource-excluded", "list", rowIndex));
+      return;
+    }
+    seenIds.add(projected.item.id);
+    seenInventoryKeys.add(projected.item.inventoryKey);
+    items.push(projected.item);
+    dataQualityWarnings.push(...projected.warnings);
   });
-  assertResourceCollection(items);
   return {
     clusterId: request.clusterId,
     resourceType: request.resourceType,
@@ -84,7 +115,9 @@ export function toResourceList(
     completeness: "unknown",
     limit: request.limit,
     returned: items.length,
-    limitReached: items.length === request.limit,
+    limitReached: wire.resources.length === request.limit,
+    excludedCount,
+    dataQualityWarnings,
     items,
   };
 }
@@ -96,41 +129,51 @@ export function toResourceDetail(
 ): ResourceDetail {
   assertSameIdentity(wire.cluster_id, requestedClusterId);
   assertDetailIdentity(wire.identity, requestedIdentity);
-  const resource = toResourceSummary(wire.resource, requestedClusterId, {
+  assertResourceBoundary(
+    wire.resource,
+    requestedClusterId,
+    requestedIdentity.resourceType,
+    requestedIdentity.namespace,
+    true,
+  );
+  const primary = projectResource(wire.resource, requestedClusterId, {
     expectedResourceType: requestedIdentity.resourceType,
     expectedNamespace: requestedIdentity.namespace,
     enforceNamespace: true,
-  });
+  }, "resource", null, null);
+  const resource = primary.item;
   assertSameIdentity(resource.kind, requestedIdentity.kind);
   assertSameIdentity(resource.name, requestedIdentity.name);
-  const related: ResourceRelatedGroup[] = Object.entries(wire.related).map(
-    ([name, resources]) => {
-      const items = resources.map((item) => toResourceSummary(item, requestedClusterId));
-      assertResourceCollection(items);
-      return { name: responseIdentity(name), items };
-    },
-  );
+  const dataQualityWarnings = [...primary.warnings];
+  let relatedExcludedCount = 0;
+  const related: ResourceRelatedGroup[] = Object.entries(wire.related).map(([rawName, rows]) => {
+    const name = responseIdentity(rawName);
+    const projected = isolateCollection(rows, requestedClusterId, "related", name);
+    relatedExcludedCount += projected.excludedCount;
+    dataQualityWarnings.push(...projected.warnings);
+    return { name, excludedCount: projected.excludedCount, items: projected.items };
+  });
   assertUnique(related.map(({ name }) => name));
-  const events = wire.events.map((event) => toResourceSummary(event, requestedClusterId, {
-    expectedResourceType: "event",
-  }));
-  assertResourceCollection(events);
+  const projectedEvents = isolateCollection(
+    wire.events,
+    requestedClusterId,
+    "events",
+    null,
+    "event",
+  );
+  dataQualityWarnings.push(...projectedEvents.warnings);
   return {
     clusterId: requestedClusterId,
     identity: requestedIdentity,
     resource,
     relatedCompleteness: "unknown",
     related,
+    relatedExcludedCount,
     eventsCompleteness: "unknown",
-    events,
+    events: projectedEvents.items,
+    eventExcludedCount: projectedEvents.excludedCount,
+    dataQualityWarnings,
   };
-}
-
-function assertResourceCollection(
-  items: Array<{ id: string; inventoryKey: string }>,
-): void {
-  assertUnique(items.map(({ id }) => id));
-  assertUnique(items.map(({ inventoryKey }) => inventoryKey));
 }
 
 function catalogObservedAt(snapshot: Record<string, unknown> | null): string | null {

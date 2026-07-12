@@ -1,5 +1,10 @@
 import { ArrowDown, ArrowUp, ChevronsUpDown } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
+import {
+  isProductContextShortcutId,
+  PRODUCT_SHORTCUT_EVENT,
+  type ProductShortcutEventDetail,
+} from "../../app/shortcutRegistry";
 import type {
   ResourceIdentity,
   ResourceSummary,
@@ -38,56 +43,36 @@ export function ResourcesTable({
   }), [items, sort]);
 
   useEffect(() => {
-    let pendingG = false;
-    let clearG: number | null = null;
-    const resetG = () => {
-      pendingG = false;
-      if (clearG !== null) window.clearTimeout(clearG);
-      clearG = null;
-    };
-    const keydown = (event: KeyboardEvent) => {
-      if (event.defaultPrevented || event.metaKey || event.ctrlKey || event.altKey ||
-        isTextEditingTarget(event.target) || document.querySelector('[role="dialog"]')) return;
+    const handleShortcut = (event: Event) => {
+      const detail = (event as CustomEvent<ProductShortcutEventDetail>).detail;
+      if (!detail || !isProductContextShortcutId(detail.id)) return;
       const buttons = sorted.map((item) => rowButtons.current.get(item.id)).filter(isButton);
       if (buttons.length === 0) return;
       const current = buttons.indexOf(document.activeElement as HTMLButtonElement);
-      if (event.key === "j" || event.key === "k") {
-        event.preventDefault();
-        resetG();
+      if (detail.id === "resources:next-row" || detail.id === "resources:previous-row") {
         const next = current < 0
           ? 0
-          : Math.max(0, Math.min(buttons.length - 1, current + (event.key === "j" ? 1 : -1)));
+          : Math.max(0, Math.min(
+            buttons.length - 1,
+            current + (detail.id === "resources:next-row" ? 1 : -1),
+          ));
         buttons[next]?.focus();
         return;
       }
-      if (event.key === "G") {
-        event.preventDefault();
-        resetG();
+      if (detail.id === "resources:first-row") {
+        buttons[0]?.focus();
+        return;
+      }
+      if (detail.id === "resources:last-row") {
         buttons[buttons.length - 1]?.focus();
         return;
       }
-      if (event.key === "g") {
-        event.preventDefault();
-        if (pendingG) {
-          resetG();
-          buttons[0]?.focus();
-        } else {
-          pendingG = true;
-          clearG = window.setTimeout(resetG, 1_000);
-        }
-        return;
-      }
-      resetG();
-      if (event.key === "d") {
-        event.preventDefault();
+      if (detail.id === "resources:open-row") {
         (current >= 0 ? buttons[current] : buttons[0])?.click();
       }
     };
-    document.addEventListener("keydown", keydown);
-    return () => {
-      document.removeEventListener("keydown", keydown);
-      resetG();
-    };
+    window.addEventListener(PRODUCT_SHORTCUT_EVENT, handleShortcut);
+    return () => window.removeEventListener(PRODUCT_SHORTCUT_EVENT, handleShortcut);
   }, [sorted]);
 
   function updateSort(key: SortKey) {
@@ -209,11 +194,6 @@ function formatTimestamp(value: string | null): string {
     dateStyle: "short",
     timeStyle: "short",
   }).format(new Date(value));
-}
-
-function isTextEditingTarget(target: EventTarget | null): boolean {
-  if (!(target instanceof HTMLElement)) return false;
-  return target.matches("input, textarea, select, [contenteditable=true]");
 }
 
 function isButton(value: HTMLButtonElement | undefined): value is HTMLButtonElement {

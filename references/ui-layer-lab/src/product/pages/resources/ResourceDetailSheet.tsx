@@ -51,7 +51,7 @@ export function ResourceDetailSheet({
           <SheetTitle>{title}</SheetTitle>
           <SheetDescription>
             {identity
-              ? `${identity.kind} · ${identity.namespace ?? "cluster scope"} · 실 API read model`
+              ? `${identity.kind} · ${identity.namespace ?? "클러스터 범위"}`
               : "URL의 리소스 identity를 해석할 수 없습니다."}
           </SheetDescription>
         </SheetHeader>
@@ -119,7 +119,6 @@ function DetailBody({
           ]} />
         </section>
         <Facts facts={resource.facts} />
-        <MetadataDisclosure />
       </TabsContent>
       <TabsContent className="grid gap-3 py-4" value="relations">
         {detail.data.related.length === 0 ? (
@@ -169,17 +168,6 @@ function Facts({ facts }: { facts: ResourceFacts }) {
     <section aria-labelledby="resource-facts-title" className="grid gap-3 rounded-lg border p-4">
       <h3 className="font-medium" id="resource-facts-title">관측 요약</h3>
       <DefinitionGrid entries={entries} />
-    </section>
-  );
-}
-
-function MetadataDisclosure() {
-  return (
-    <section aria-labelledby="resource-metadata-title" className="grid gap-3 rounded-lg border p-4">
-      <h3 className="font-medium" id="resource-metadata-title">Metadata</h3>
-      <p className="text-sm text-muted-foreground">
-        서버의 metadata redaction 계약이 확정되기 전까지 labels와 annotations를 표시하지 않습니다.
-      </p>
     </section>
   );
 }

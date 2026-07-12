@@ -1,15 +1,18 @@
 // @vitest-environment jsdom
 
-import { act, cleanup, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { HomePortFailure } from "../../features/home/homeContract";
 import { ResourcesPortFailure } from "../../features/resources/resourcesContract";
 import {
   CATALOG,
+  CLUSTERS,
   deferred,
   NODE_LIST,
   POD_LIST,
   renderResources,
+  resourcesClusterPort,
   resourcesPort,
   setVisibility,
 } from "./ResourcesPage.testSupport";
@@ -109,6 +112,125 @@ describe("ResourcesPage refresh and generation safety", () => {
     expect(port.listResources).toHaveBeenCalledTimes(3);
     expect(port.loadCatalog).toHaveBeenCalledTimes(3);
     expect(rendered.clusterPort.listClusterChoices).toHaveBeenCalledTimes(3);
+  });
+
+  it("does not automatically retry a forbidden read and exposes an explicit safe recovery", async () => {
+    vi.useFakeTimers();
+    setVisibility("visible");
+    const recovery = deferred<typeof POD_LIST>();
+    const listResources = vi.fn()
+      .mockResolvedValueOnce(POD_LIST)
+      .mockRejectedValueOnce(new ResourcesPortFailure("forbidden"))
+      .mockReturnValueOnce(recovery.promise);
+    renderResources(
+      resourcesPort({ listResources }),
+      "/product/resources/pod?cluster=cluster-1",
+    );
+    await flushPromises();
+    expect(screen.getByText("checkout-api-0")).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: "새로 고침" }));
+    await flushPromises();
+
+    expect(screen.getByRole("heading", { name: "이 범위에 접근할 수 없습니다" })).toBeTruthy();
+    act(() => vi.advanceTimersByTime(90_000));
+    await flushPromises();
+    expect(listResources).toHaveBeenCalledTimes(2);
+
+    fireEvent.click(screen.getByRole("button", { name: "권한 다시 확인" }));
+    await flushPromises();
+    expect(listResources).toHaveBeenCalledTimes(3);
+    expect(screen.queryByText("checkout-api-0")).toBeNull();
+
+    act(() => recovery.resolve({
+      ...POD_LIST,
+      items: [POD_LIST.items[1]!],
+      limitReached: false,
+      returned: 1,
+    }));
+    await flushPromises();
+    expect(screen.getByText("orders-api-0")).toBeTruthy();
+    expect(screen.queryByRole("heading", { name: "이 범위에 접근할 수 없습니다" })).toBeNull();
+  });
+
+  it("does not automatically retry an incompatible response", async () => {
+    vi.useFakeTimers();
+    setVisibility("visible");
+    const listResources = vi.fn()
+      .mockRejectedValueOnce(new ResourcesPortFailure("invalid-response"))
+      .mockResolvedValueOnce(POD_LIST);
+    renderResources(
+      resourcesPort({ listResources }),
+      "/product/resources/pod?cluster=cluster-1",
+    );
+    await flushPromises();
+
+    expect(screen.getByRole("heading", { name: "검증된 응답을 읽지 못했습니다" })).toBeTruthy();
+    act(() => vi.advanceTimersByTime(90_000));
+    await flushPromises();
+    expect(listResources).toHaveBeenCalledOnce();
+
+    fireEvent.click(screen.getByRole("button", { name: "다시 불러오기" }));
+    await flushPromises();
+    expect(listResources).toHaveBeenCalledTimes(2);
+    expect(screen.getByText("checkout-api-0")).toBeTruthy();
+  });
+
+  it("honors Retry-After before an automatic rate-limit recovery", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-07-12T10:00:00Z"));
+    setVisibility("visible");
+    const listResources = vi.fn()
+      .mockRejectedValueOnce(new ResourcesPortFailure("rate-limited", 45))
+      .mockResolvedValueOnce(POD_LIST);
+    renderResources(
+      resourcesPort({ listResources }),
+      "/product/resources/pod?cluster=cluster-1",
+    );
+    await flushPromises();
+
+    expect(screen.getByText(/45초 이후 자동으로 다시 확인합니다/u)).toBeTruthy();
+    act(() => vi.advanceTimersByTime(44_999));
+    await flushPromises();
+    expect(listResources).toHaveBeenCalledOnce();
+
+    act(() => vi.advanceTimersByTime(1));
+    await flushPromises();
+    expect(listResources).toHaveBeenCalledTimes(2);
+    expect(screen.getByText("checkout-api-0")).toBeTruthy();
+  });
+
+  it("surfaces a cluster-choice background failure while preserving the last valid frame", async () => {
+    const clusterPort = resourcesClusterPort({
+      listClusterChoices: vi.fn()
+        .mockResolvedValueOnce(CLUSTERS)
+        .mockRejectedValueOnce(new HomePortFailure("offline")),
+    });
+    renderResources(
+      resourcesPort(),
+      "/product/resources/pod?cluster=cluster-1",
+      clusterPort,
+    );
+    expect(await screen.findByText("checkout-api-0")).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: "새로 고침" }));
+
+    expect(await screen.findByText("클러스터 목록을 갱신하지 못했습니다")).toBeTruthy();
+    expect(screen.getByText("checkout-api-0")).toBeTruthy();
+  });
+
+  it("shows catalog observation freshness instead of implying that polling made stale data current", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-07-12T10:05:00Z"));
+    setVisibility("visible");
+    renderResources(
+      resourcesPort(),
+      "/product/resources/pod?cluster=cluster-1",
+    );
+    await flushPromises();
+
+    expect(screen.getByText("스냅샷 지연")).toBeTruthy();
+    expect(screen.getByText(/5분 전 관측/u)).toBeTruthy();
   });
 });
 

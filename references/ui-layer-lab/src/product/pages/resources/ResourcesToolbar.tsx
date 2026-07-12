@@ -46,7 +46,7 @@ export function ResourcesToolbar({
           aria-label="표시된 결과 검색"
           className="pl-8"
           onChange={(event) => onSearchChange(event.target.value)}
-          placeholder="표시된 결과에서 이름, 상태, label 검색"
+          placeholder="표시된 결과에서 이름과 상태 검색"
           type="search"
           value={search}
         />

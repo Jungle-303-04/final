@@ -3,7 +3,7 @@
 import { ThemeProvider } from "next-themes";
 import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { StrictMode } from "react";
+import { StrictMode, useEffect, useState } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { ProductShell } from "./ProductShell";
@@ -11,6 +11,10 @@ import { createApiComposition } from "./apiComposition";
 import { createProductComposition } from "./productComposition";
 import { ProductRouter } from "./ProductRouter";
 import type { AuthenticatedAuthState } from "../features/auth/authContract";
+import {
+  PRODUCT_SHORTCUT_EVENT,
+  type ProductShortcutEventDetail,
+} from "./shortcutRegistry";
 
 const testAuth: AuthenticatedAuthState = {
   session: { userId: "test-user", roles: ["viewer"], workspaceId: "test-workspace" },
@@ -83,6 +87,23 @@ describe("ProductShell keyboard and help interaction", () => {
 
     await user.keyboard("t");
     expect(screen.getByRole("button", { name: "라이트 모드로 전환" })).toBeTruthy();
+  });
+
+  it("dispatches Resources actions and route chords from one shortcut authority", async () => {
+    const user = userEvent.setup();
+    renderShell({
+      initialEntry: "/product/resources",
+      releasedSurfaceIds: new Set(["home", "resources"]),
+    });
+
+    await user.keyboard("j");
+    expect(screen.getByTestId("resources-shortcut").textContent).toBe("resources:next-row");
+    await user.keyboard("G");
+    expect(screen.getByTestId("resources-shortcut").textContent).toBe("resources:last-row");
+    await user.keyboard("gg");
+    expect(screen.getByTestId("resources-shortcut").textContent).toBe("resources:first-row");
+    await user.keyboard("gh");
+    await waitFor(() => expect(screen.getByText("Home content")).toBeTruthy());
   });
 
   it("does not run global shortcuts while an editable control owns focus", async () => {
@@ -198,7 +219,13 @@ describe("ProductShell keyboard and help interaction", () => {
   });
 });
 
-function renderShell() {
+function renderShell({
+  initialEntry = "/product",
+  releasedSurfaceIds = new Set(["home", "issues"]),
+}: {
+  initialEntry?: string;
+  releasedSurfaceIds?: ReadonlySet<"home" | "resources" | "issues">;
+} = {}) {
   return render(
     <StrictMode>
       <ThemeProvider
@@ -207,12 +234,13 @@ function renderShell() {
         enableSystem={false}
         themes={["light", "dark"]}
       >
-        <MemoryRouter initialEntries={["/product"]}>
+        <MemoryRouter initialEntries={[initialEntry]}>
           <Routes>
             <Route element={(
-              <ProductShell auth={testAuth} releasedSurfaceIds={new Set(["home", "issues"])} />
+              <ProductShell auth={testAuth} releasedSurfaceIds={releasedSurfaceIds} />
             )}>
               <Route path="/product" element={<><p>Home content</p><input aria-label="화면 입력" /></>} />
+              <Route path="/product/resources" element={<ResourcesShortcutProbe />} />
               <Route path="/product/issues" element={<p>Issue content</p>} />
             </Route>
           </Routes>
@@ -220,6 +248,21 @@ function renderShell() {
       </ThemeProvider>
     </StrictMode>,
   );
+}
+
+function ResourcesShortcutProbe() {
+  const [shortcutId, setShortcutId] = useState("none");
+
+  useEffect(() => {
+    const handleShortcut = (event: Event) => {
+      const detail = (event as CustomEvent<ProductShortcutEventDetail>).detail;
+      setShortcutId(detail.id);
+    };
+    window.addEventListener(PRODUCT_SHORTCUT_EVENT, handleShortcut);
+    return () => window.removeEventListener(PRODUCT_SHORTCUT_EVENT, handleShortcut);
+  }, []);
+
+  return <p data-testid="resources-shortcut">{shortcutId}</p>;
 }
 
 function replaceProperty(target: object, property: PropertyKey, value: unknown) {

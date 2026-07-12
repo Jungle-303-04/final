@@ -18,9 +18,18 @@ docs/spec/frontend/codex-progress-20260711.md
 API 완성: functionName (commitHash)
 ```
 
-There are currently no completion records. Therefore `/product` renders a release gate, performs no
-product API request, opens no product WebSocket, and exposes no unfinished navigation. This is the
-required safe state, not a fallback.
+The released composition currently contains two real-API surfaces:
+
+- `Home` consumes the anchored cluster list, cluster summary, Node summary, and Node Pod summary
+  contracts. It keeps cluster and Node selection in the URL and never substitutes synthetic data.
+- `Resources` consumes the anchored inventory summary, resource list, and resource-detail contracts.
+  The list and URL-backed detail Sheet share one route; relations and events come only from the
+  backend detail read model.
+
+Only these surfaces appear in navigation. An unfinished surface still remains absent from routing,
+navigation, and runtime requests. API failures render explicit loading, forbidden, unavailable, or
+partial states and never activate a fallback adapter. `APIQ-028` tracks the remaining transport-schema
+change required to preserve the non-usage parts of Home when `usage.pods_total` is absent.
 
 ## API coordination
 
@@ -71,6 +80,13 @@ src/
       ProductRouter.tsx            # release gate or registered routes
       ProductShell.tsx             # navigation derived from released surfaces
       productRoutes.ts             # canonical route metadata
+    features/
+      home/                         # Home canonical DTO, port, validation, adapter
+      resources/                    # inventory canonical DTO, port, validation, adapter
+    pages/
+      home/                         # cluster -> Node -> Pod interaction
+      resources/                    # catalog, bounded list, same-route detail Sheet
+    shared/data/                    # shared request and async refresh state machinery
     shared/ui/
       primitives/                  # product-owned shadcn adaptations
     styles/                        # product-owned light/dark tokens and foundations
@@ -100,6 +116,8 @@ build-time absence of an approved API keeps the entire surface unregistered.
 - Keyboard focus, skip navigation, reduced motion, forced colors, and 390/768/1440 layouts are release
   requirements.
 - Third-party provenance and modifications are recorded in `THIRD_PARTY_NOTICES.md`.
+- Open API records are never rendered directly. In particular, Resources suppresses labels and
+  annotations until the backend provides an explicit redacted presentation contract.
 
 ## Contributor workflow
 

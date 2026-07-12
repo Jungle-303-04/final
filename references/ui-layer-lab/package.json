@@ -7,7 +7,7 @@
     "dev": "vite --host 0.0.0.0",
     "build": "tsc -b && vite build",
     "typecheck": "tsc -b",
-    "test": "vitest run --maxWorkers=2 --testTimeout=30000 --hookTimeout=30000",
+    "test": "vitest run",
     "lint": "eslint src/main.tsx src/App.tsx src/product src/shadcn-lab scripts/product-visual-gate.mjs scripts/fixtures/product-state-visual-harness.tsx --max-warnings 0",
     "check:design": "node scripts/product-design-guard.mjs",
     "check:shadcn": "node scripts/check-shadcn.mjs",

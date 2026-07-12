@@ -4,7 +4,6 @@ import { ProductStateScreen } from "../../shared/ui/ProductStateScreen";
 import { StatusMark } from "../../shared/ui/StatusMark";
 import { Surface } from "../../shared/ui/Surface";
 import { Alert, AlertDescription, AlertTitle } from "../../shared/ui/primitives/alert";
-import { Badge } from "../../shared/ui/primitives/badge";
 import { Button } from "../../shared/ui/primitives/button";
 import {
   Select,
@@ -15,6 +14,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "../../shared/ui/primitives/select";
+import { Tooltip, TooltipContent, TooltipTrigger } from "../../shared/ui/primitives/tooltip";
 import { HomeClusterHealth } from "./HomeClusterHealth";
 import { HomeIssuesRail } from "./HomeIssuesRail";
 import { HomeLiveBand } from "./HomeLiveBand";
@@ -50,23 +50,9 @@ export function HomePage({ port }: { port: HomePort }) {
 
   return (
     <div className="mx-auto grid w-full max-w-[100rem] gap-4 p-4 sm:p-6">
-      <header className="flex min-w-0 flex-col justify-between gap-3 xl:flex-row xl:items-center">
-        <div className="grid min-w-0 gap-1">
-          <div className="flex min-w-0 items-center gap-2">
-            <h2 className="truncate text-xl font-semibold tracking-tight">Fleet Home</h2>
-            <Badge variant="outline">실 API · 30초 자동 갱신</Badge>
-          </div>
-          <p className="text-sm text-muted-foreground">
-            클러스터 상태에서 Node와 Pod까지 같은 흐름으로 탐색합니다.
-          </p>
-        </div>
-        <div className="flex w-full min-w-0 items-center gap-2 xl:w-auto">
-          {selectedCluster ? (
-            <StatusMark
-              label={connectionLabel(selectedCluster.connectionState)}
-              tone={connectionTone(selectedCluster.connectionState)}
-            />
-          ) : null}
+      <header className="flex min-w-0 justify-end">
+        <div className="flex w-full min-w-0 items-center justify-end gap-2 xl:w-auto">
+          {selectedCluster ? <ClusterConnectionStatus cluster={selectedCluster} /> : null}
           <Select
             items={selectItems}
             onValueChange={(value) => { if (value) state.selectCluster(value); }}
@@ -207,12 +193,11 @@ function HomeFailureScreen({
 }
 
 function clusterOptionLabel(cluster: {
-  connectionState: string;
   environment: string;
   id: string;
   name: string;
 }) {
-  return `${cluster.name} · ${cluster.environment} · ${cluster.id} · ${connectionLabel(cluster.connectionState)}`;
+  return [...new Set([cluster.name, cluster.environment, cluster.id].filter(Boolean))].join(" · ");
 }
 
 function connectionTone(state: string) {
@@ -231,4 +216,39 @@ function connectionLabel(state: string) {
     unknown: "연결 상태 알 수 없음",
   };
   return labels[state] ?? labels.unknown;
+}
+
+function ClusterConnectionStatus({ cluster }: {
+  cluster: {
+    connectionState: string;
+    lastObservedAt: string | null;
+  };
+}) {
+  const label = connectionLabel(cluster.connectionState);
+  const observation = formatObservation(cluster.lastObservedAt);
+  return (
+    <Tooltip>
+      <TooltipTrigger
+        render={(
+          <Button
+            aria-label={`${label} · 마지막 관측 ${observation}`}
+            size="sm"
+            type="button"
+            variant="ghost"
+          />
+        )}
+      >
+        <StatusMark label={label} tone={connectionTone(cluster.connectionState)} />
+      </TooltipTrigger>
+      <TooltipContent side="bottom">마지막 관측 {observation}</TooltipContent>
+    </Tooltip>
+  );
+}
+
+function formatObservation(value: string | null) {
+  if (!value) return "알 수 없음";
+  return new Intl.DateTimeFormat("ko-KR", {
+    dateStyle: "medium",
+    timeStyle: "short",
+  }).format(new Date(value));
 }

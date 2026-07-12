@@ -69,11 +69,13 @@ export function ShortcutHelpDialog({
                     {definition.sequence.map((key, index) => (
                       <span className="contents" key={`${definition.id}:${index}`}>
                         {index > 0 && <span aria-hidden="true" className="text-muted-foreground">+</span>}
-                        <Kbd>{key}</Kbd>
+                        <Kbd>{displayShortcutKey(key)}</Kbd>
                       </span>
                     ))}
                   </span>
-                  <span className="sr-only">{definition.sequence.join(" 다음 ")}</span>
+                  <span className="sr-only">
+                    {definition.sequence.map(describeShortcutKey).join(" 다음 ")}
+                  </span>
                 </TableCell>
               </TableRow>
             ))}
@@ -82,4 +84,14 @@ export function ShortcutHelpDialog({
       </DialogContent>
     </Dialog>
   );
+}
+
+function displayShortcutKey(key: string): string {
+  return key.startsWith("shift+") ? key.slice("shift+".length).toUpperCase() : key;
+}
+
+function describeShortcutKey(key: string): string {
+  return key.startsWith("shift+")
+    ? `Shift + ${key.slice("shift+".length).toUpperCase()}`
+    : key;
 }
