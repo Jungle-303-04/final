@@ -1,5 +1,9 @@
 import { z } from "zod";
 
+export const approvalDecisionRequestSchema = z.strictObject({
+  reason: z.string().nullable().optional(),
+});
+
 /** Shared response for a GitOps approval decision event. */
 export const approvalDecisionResponseSchema = z.strictObject({
   accepted: z.boolean(),
@@ -10,3 +14,4 @@ export const approvalDecisionResponseSchema = z.strictObject({
 export type ApprovalDecisionResponse = z.infer<
   typeof approvalDecisionResponseSchema
 >;
+export type ApprovalDecisionRequest = z.infer<typeof approvalDecisionRequestSchema>;

@@ -39,6 +39,7 @@ export function getApplication(
   applicationId: string,
   signal?: AbortSignal,
 ): Promise<ApplicationResponse> {
+  assertApplicationId(applicationId);
   const path = `/api/applications/${encodePathSegment(applicationId)}` as ApiPath;
   return apiRequest(path, applicationResponseSchema, { signal });
 }
@@ -48,6 +49,7 @@ export async function listApplicationDeployments(
   applicationId: string,
   options: ApplicationHistoryOptions = {},
 ): Promise<DeploymentBindingList> {
+  assertApplicationId(applicationId);
   const limit = options.limit ?? APPLICATIONS_DEFAULT_LIMIT;
   assertLimit(limit);
   const basePath =
@@ -61,6 +63,7 @@ export async function listApplicationRuns(
   applicationId: string,
   options: ApplicationHistoryOptions = {},
 ): Promise<WorkflowRunList> {
+  assertApplicationId(applicationId);
   const limit = options.limit ?? APPLICATIONS_DEFAULT_LIMIT;
   assertLimit(limit);
   const basePath =
@@ -78,5 +81,11 @@ function assertLimit(limit: number): void {
     throw new RangeError(
       `application history limit must be an integer from 1 to ${APPLICATIONS_MAX_LIMIT}`,
     );
+  }
+}
+
+function assertApplicationId(applicationId: string): void {
+  if (applicationId.trim() === "") {
+    throw new RangeError("applicationId must not be empty");
   }
 }

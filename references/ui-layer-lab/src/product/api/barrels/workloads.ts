@@ -13,7 +13,12 @@ export {
 } from "../commands";
 export {
   deploymentActionAcceptedSchema,
+  deploymentActionReasonSchema,
+  deploymentRestartRequestSchema,
+  deploymentScaleRequestSchema,
   type DeploymentActionAccepted,
+  type DeploymentRestartRequest,
+  type DeploymentScaleRequest,
 } from "../deployments-schemas";
 export {
   commandAcceptedSchema,
