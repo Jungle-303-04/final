@@ -6,11 +6,11 @@ from collections.abc import Callable
 from typing import Any
 
 import pytest
-from packages.events.in_memory import InMemoryEventBus
 
 from packages.contracts.event_bus.interfaces import EventEnvelope
 from packages.events.bus import NatsEventBus
 from packages.events.envelope import event
+from packages.events.in_memory import InMemoryEventBus
 from packages.runtime.app import App
 from packages.runtime.service import WorkerService
 from packages.runtime.worker import EventHandlerSpec, WorkerRuntime
@@ -113,6 +113,75 @@ def test_in_memory_bus_fans_out_to_matching_durable_subscriptions_only() -> None
 
         await exact_message.ack()
         await audit_message.ack()
+        await bus.close()
+
+    asyncio.run(run())
+
+
+def test_in_memory_bus_honors_nak_delay_and_closes_cleanly() -> None:
+    async def run() -> None:
+        bus = InMemoryEventBus()
+        await bus.connect()
+        subscription = await bus.subscribe("command.requested", durable="command-worker")
+        await bus.emit(
+            "command.requested",
+            "api-gateway",
+            {"command": "restart"},
+            correlation_id="corr-delayed-redelivery",
+        )
+
+        first = (await subscription.fetch(batch=1))[0]
+        await first.nak(delay=1)
+        metrics = await bus.consumer_metrics("command.requested", "command-worker")
+        assert (metrics.pending, metrics.ack_pending, metrics.redelivered) == (1, 0, 0)
+        with pytest.raises(TimeoutError):
+            await subscription.fetch(batch=1, timeout=0.01)
+
+        redelivered = (await subscription.fetch(batch=1, timeout=1.1))[0]
+        await redelivered.ack()
+        await redelivered.ack()
+        await redelivered.nak()
+        metrics = await bus.consumer_metrics("command.requested", "command-worker")
+        assert (metrics.pending, metrics.ack_pending, metrics.redelivered) == (0, 0, 1)
+
+        await bus.close()
+        await bus.close()
+        with pytest.raises(RuntimeError, match="subscription is closed"):
+            await subscription.fetch(batch=1, timeout=0)
+        with pytest.raises(RuntimeError, match="event bus is closed"):
+            await bus.connect()
+
+    asyncio.run(run())
+
+
+def test_in_memory_bus_rejects_invalid_state_and_consumer_inputs() -> None:
+    async def run() -> None:
+        bus = InMemoryEventBus()
+        with pytest.raises(RuntimeError, match="not connected"):
+            await bus.emit("command.requested", "test", {})
+
+        await bus.connect()
+        subscription = await bus.subscribe("command.requested", durable="command-worker")
+        assert await bus.subscribe("command.requested", durable="command-worker") is subscription
+        with pytest.raises(LookupError, match="unknown in-memory consumer"):
+            await bus.consumer_metrics("command.requested", "missing-worker")
+        with pytest.raises(ValueError, match="batch must be positive"):
+            await subscription.fetch(batch=0)
+        with pytest.raises(TimeoutError):
+            await subscription.fetch(batch=1, timeout=0)
+
+        too_specific = await bus.subscribe(
+            "command.requested.extra",
+            durable="too-specific-worker",
+        )
+        await bus.emit("command.requested", "test", {})
+        with pytest.raises(TimeoutError):
+            await too_specific.fetch(batch=1, timeout=0)
+
+        message = (await subscription.fetch(batch=1))[0]
+        with pytest.raises(ValueError, match="delay must be non-negative"):
+            await message.nak(delay=-1)
+        await message.ack()
         await bus.close()
 
     asyncio.run(run())
