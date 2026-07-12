@@ -164,6 +164,7 @@ secret 이름과 주입 경계는 [Secrets](secrets.md)를 본다.
 - [aws-testing-runbook](aws-testing-runbook.md)
 - [cloudflare-waf-and-login](cloudflare-waf-and-login.md)
 - [continuation-execution-plan-2026-07-07](continuation-execution-plan-2026-07-07.md)
+- [codex-work-order-20260712](codex-work-order-20260712.md)
 - [current-service-state](current-service-state.md)
 - [security-review-20260710](security-review-20260710.md)
 - [unimplemented-review-20260711](unimplemented-review-20260711.md)
