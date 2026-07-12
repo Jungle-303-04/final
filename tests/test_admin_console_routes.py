@@ -122,7 +122,7 @@ def test_list_access_uses_session_workspace_and_excludes_other_workspace_email()
     response = asyncio.run(
         list_access(
             resource_id=None,
-            _current=SimpleNamespace(workspace_id="workspace-a"),
+            current=SimpleNamespace(workspace_id="workspace-a"),
             db=db,
         )
     )
