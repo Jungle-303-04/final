@@ -4,6 +4,7 @@ import { ApiError } from "./client";
 import {
   appendAiMessage,
   createAiConversation,
+  deleteAiConversation,
   getAiConversation,
   listAiConversations,
 } from "./ai-conversations";
@@ -21,6 +22,10 @@ function jsonResponse(payload: unknown, status = 200): Response {
     status,
     headers: { "content-type": "application/json" },
   });
+}
+
+function emptyResponse(status = 204): Response {
+  return new Response(null, { status });
 }
 
 describe("AI conversation API", () => {
@@ -105,6 +110,31 @@ describe("AI conversation API", () => {
     );
   });
 
+  it("deletes a conversation and accepts the 204 response", async () => {
+    const fetchMock = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValue(emptyResponse());
+    const controller = new AbortController();
+
+    await expect(deleteAiConversation("aic/123", controller.signal)).resolves.toBeUndefined();
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/ai/conversations/aic%2F123",
+      expect.objectContaining({
+        method: "DELETE",
+        credentials: "include",
+        signal: controller.signal,
+      }),
+    );
+  });
+
+  it("rejects an empty conversation id before making a request", () => {
+    const fetchMock = vi.spyOn(globalThis, "fetch");
+    expect(() => deleteAiConversation(" ")).toThrow(
+      "conversationId must not be empty",
+    );
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
   it("validates message length before making a request", async () => {
     const fetchMock = vi.spyOn(globalThis, "fetch");
 
@@ -123,6 +153,18 @@ describe("AI conversation API", () => {
     );
 
     await expect(getAiConversation("missing")).rejects.toMatchObject({
+      kind: "not-found",
+      status: 404,
+      detail: "conversation not found",
+    } satisfies Partial<ApiError>);
+  });
+
+  it("preserves a delete error", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      jsonResponse({ detail: "conversation not found" }, 404),
+    );
+
+    await expect(deleteAiConversation("missing")).rejects.toMatchObject({
       kind: "not-found",
       status: 404,
       detail: "conversation not found",
