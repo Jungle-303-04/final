@@ -421,3 +421,37 @@ format: "[시각] [트랙] 한 줄 상태 + 커밋 hash (있으면)"
 `docs/README.md`는 [D-013] 소유 경로 밖이므로 수정 금지. 자체 채점은 10개 전부 PASS,
 ruff/import-linter PASS. 질문: B-트랙에 `docs/README.md` 링크 1줄 수정 권한을 추가할지,
 백엔드 문서 소유자가 링크를 착륙시킬지 결정 요청.
+
+## GO-REQUEST [B] — KubeHealBench v0.1 lane 통합 승인 요청
+
+- 대상: `codex/bench-scenarios` (산출물 HEAD `221207fe0`; 이 블록은 별도 docs 증거 커밋).
+- 완료 범위: [D-013]/[D-014] — 실제 cause/recovery 카탈로그 기반 정답 시나리오 10개
+  (oom/crashloop/imagepull/probe/service-selector 각 2개), 자기완결 정적 채점기, 공개 지표
+  6개 정의, RemediationBundle v1alpha1 공개 규격, docs 색인 링크.
+- 커밋: `7da4d6ba7`, `7ab0d447b`, `281c636b4`, `cc0b91ce7`, `dd601b3f8`,
+  `8d5442985`, `0ccddaf3f`, `221207fe0`.
+- 자체 채점: `python3 benchmark/score.py` → `RESULT PASS (10 scenarios;
+  crashloop=2, imagepull=2, oom=2, probe=2, service-selector=2)`; live catalog/recovery 원본
+  SHA-256 일치, schema/candidate/named evidence/recovery action/forbidden blast-radius 검증.
+- 최종 전체 게이트: `bash scripts/test.sh` → Ruff lint PASS / format
+  `470 files already formatted` / import-linter `2 kept, 0 broken` / pytest
+  `1646 passed, 3 skipped`.
+- 범위 증거: `src/**` 변경 0건. [D-014] 예외 `docs/README.md`는 자기 산출물 링크 1줄
+  추가만 존재하며 기존 줄 수정·삭제 0건. 그 외 변경은 `benchmark/**`,
+  `docs/spec/remediation-bundle-v1alpha1.md`, 요구된 `docs/auto/night-log.md` 기록뿐.
+- 사람 검증 명령(복사 가능):
+
+  ```bash
+  git -C /private/tmp/sw-ai-bench-scenarios status --short
+  git -C /private/tmp/sw-ai-bench-scenarios diff --name-only f086be51c...codex/bench-scenarios
+  git -C /private/tmp/sw-ai-bench-scenarios diff --name-only f086be51c...codex/bench-scenarios -- 'src/**'
+  python3 /private/tmp/sw-ai-bench-scenarios/benchmark/score.py
+  bash /private/tmp/sw-ai-bench-scenarios/scripts/test.sh
+  ```
+
+- 예상 결과: 첫 명령 0줄, 변경은 B-트랙 소유 경로·night-log·[D-014] 색인 1줄뿐,
+  `src/**` 명령 0줄, scorer 10개 PASS, 전체 gate PASS.
+- 사람 GO 후 통합: dev worktree를 clean 상태로 만든 뒤 `--no-ff` merge와 `origin dev` push.
+  이 세션은 merge/push하지 않고 대기한다.
+- 실패 시 롤백: push 전 충돌/검증 실패는 merge를 완료하거나 push하지 말고 사람 판단;
+  push 후에는 이력 보존형 `git revert -m 1 <merge_commit>` 후 전체 gate 재검증.
