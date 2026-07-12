@@ -27,7 +27,11 @@ describe("ResourcesPage scope and collection semantics", () => {
   it("exposes progressive cluster and catalog loading without fabricating a resource type", async () => {
     const clusters = deferred<typeof CLUSTERS>();
     const catalog = deferred<typeof CATALOG>();
-    const port = resourcesPort({ loadCatalog: vi.fn().mockReturnValue(catalog.promise) });
+    const list = deferred<typeof POD_LIST>();
+    const port = resourcesPort({
+      loadCatalog: vi.fn().mockReturnValue(catalog.promise),
+      listResources: vi.fn().mockReturnValue(list.promise),
+    });
     const clusterPort = resourcesClusterPort({
       listClusterChoices: vi.fn().mockReturnValue(clusters.promise),
     });
@@ -46,12 +50,20 @@ describe("ResourcesPage scope and collection semantics", () => {
     });
     await waitFor(() => expect(port.loadCatalog).toHaveBeenCalledOnce());
     expect(screen.getByRole("status", { name: "불러오는 중" })).toBeTruthy();
+    expect(document.querySelectorAll('[data-slot="product-page-frame"]')).toHaveLength(1);
+    expect(document.querySelector('[data-slot="resources-catalog-loading"]')).toBeTruthy();
     expect(port.listResources).not.toHaveBeenCalled();
     await act(async () => {
       catalog.resolve(CATALOG);
       await catalog.promise;
     });
     await waitFor(() => expect(port.listResources).toHaveBeenCalledOnce());
+    expect(document.querySelectorAll('[data-slot="product-page-frame"]')).toHaveLength(1);
+    expect(document.querySelector('[data-slot="resources-list-loading"]')).toBeTruthy();
+    await act(async () => {
+      list.resolve(POD_LIST);
+      await list.promise;
+    });
   });
 
   it("selects the first real cluster and redirects to an API-discovered resource type", async () => {
