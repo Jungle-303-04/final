@@ -198,6 +198,13 @@ class _PlanAuthorizationDb:
         )
         return {**self.plan, "steps": steps}
 
+    def get_release_plan_by_name(self, workspace_id: str, name: str) -> dict[str, object] | None:
+        if self.plan is None:
+            return None
+        if self.plan["workspace_id"] != workspace_id or self.plan["name"] != name:
+            return None
+        return self.get_release_plan(workspace_id, str(self.plan["plan_id"]))
+
     def can_access(
         self,
         user_id: str,
@@ -338,3 +345,51 @@ def test_server_derived_plan_collision_maps_to_generic_client_error() -> None:
     assert exc.value.status_code in {404, 409}
     assert "foreign workspace" not in str(exc.value.detail).lower()
     assert len(db.upserts) == 1
+
+
+def test_legacy_plan_id_is_found_by_workspace_name_before_incoming_scope() -> None:
+    victim = {
+        **_existing_plan(),
+        "plan_id": "legacy-client-selected-plan-id",
+    }
+    db = _PlanAuthorizationDb(existing_plan=victim)
+
+    with pytest.raises(HTTPException) as exc:
+        asyncio.run(
+            release_router.create_release_plan(
+                release_router.ReleasePlanUpsertRequest(
+                    name="Shared release",
+                    steps=[{"application_id": "app-a", "position": 0}],
+                ),
+                current=_member(),
+                db=db,
+            )
+        )
+
+    assert exc.value.status_code == 403
+    assert db.upserts == []
+    assert db.plan == victim
+    _assert_existing_application_manage_check(db)
+
+
+def test_authorized_legacy_plan_reuses_stored_id_instead_of_unique_name_conflict() -> None:
+    victim = {
+        **_existing_plan(),
+        "plan_id": "legacy-client-selected-plan-id",
+    }
+    db = _PlanAuthorizationDb(existing_plan=victim, allow_access=True)
+
+    response = asyncio.run(
+        release_router.create_release_plan(
+            release_router.ReleasePlanUpsertRequest(
+                name="Shared release",
+                steps=[{"application_id": "app-a", "position": 0}],
+            ),
+            current=_member(),
+            db=db,
+        )
+    )
+
+    assert response.plan["plan_id"] == "legacy-client-selected-plan-id"
+    assert db.upserts[0]["plan_id"] == "legacy-client-selected-plan-id"
+    assert [check[3] for check in db.access_checks] == ["app-b", "app-a"]
