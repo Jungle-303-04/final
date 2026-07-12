@@ -123,11 +123,19 @@ EXPECTED_RULE_SNAPSHOT: dict[str, tuple[list[str], list[str]]] = {
         ["kubernetes"],
     ),
     "DNS lookup failed": (
-        ["service_dns_resolution_failure"],
+        [
+            "service_dns_resolution_failure",
+            "service_name_or_namespace_mismatch",
+            "coredns_unavailable",
+        ],
         ["kubernetes", "metrics", "logs", "metadata"],
     ),
     "Connection timeout": (
-        ["network_path_timeout"],
+        [
+            "network_path_timeout",
+            "network_policy_denied",
+            "endpoint_unavailable_timeout",
+        ],
         ["kubernetes", "metrics", "logs", "traces", "metadata"],
     ),
     "Ingress 502/503": (
@@ -620,6 +628,81 @@ def test_secret_not_found_uses_named_evidence_and_event_signal() -> None:
     assert by_id["missing_secret_reference"].missing_evidence == []
 
 
+def test_dns_lookup_failed_service_name_mismatch_uses_named_evidence_and_log_signal() -> None:
+    bundle = EvidenceBundle(
+        incident_id="inc-dns",
+        items=[
+            EvidenceItem(
+                source="kubernetes",
+                name="cluster_resource_state",
+                value={"services": [], "events": []},
+                summary="Kubernetes service state",
+            ),
+            EvidenceItem(
+                source="logs",
+                name="related_logs",
+                value={
+                    "entries": [
+                        {
+                            "line": (
+                                "lookup checkout-api.sanbbox.svc.cluster.local: "
+                                "no such host"
+                            )
+                        }
+                    ]
+                },
+                summary="DNS logs",
+            ),
+            EvidenceItem(
+                source="metadata",
+                name="service_selector_matches",
+                value={"items": [{"service": "checkout-api", "match_status": "not_found"}]},
+                summary="Service selector metadata",
+            ),
+        ],
+        missing_evidence=[],
+        complete=True,
+    )
+
+    by_id = evaluations_for("DNS lookup failed", bundle)
+
+    assert by_id["service_name_or_namespace_mismatch"].score == 1.0
+    assert by_id["service_name_or_namespace_mismatch"].missing_evidence == []
+
+
+def test_connection_timeout_network_policy_uses_named_evidence_and_log_signal() -> None:
+    bundle = EvidenceBundle(
+        incident_id="inc-timeout",
+        items=[
+            EvidenceItem(
+                source="kubernetes",
+                name="cluster_resource_state",
+                value={"network_policies": [{"name": "deny-egress"}], "events": []},
+                summary="Kubernetes network policy state",
+            ),
+            EvidenceItem(
+                source="logs",
+                name="related_logs",
+                value={"entries": [{"line": "request failed: network policy egress denied"}]},
+                summary="Timeout logs",
+            ),
+            EvidenceItem(
+                source="metadata",
+                name="network_policy_allows",
+                value={"allowed": False, "reason": "egress denied"},
+                summary="Network policy metadata",
+            ),
+        ],
+        missing_evidence=[],
+        complete=True,
+    )
+
+    by_id = evaluations_for("Connection timeout", bundle)
+
+    assert by_id["network_policy_denied"].score == 1.0
+    assert by_id["network_policy_denied"].missing_evidence == []
+
+
 def test_probe_failure_rule_uses_schema_v1_evidence_keys() -> None:
     plan = plan_for("Probe failure")
     by_id = {candidate.candidate_id: candidate for candidate in plan.candidates}
@@ -684,6 +767,32 @@ def test_policy_and_dependency_rules_use_schema_v1_evidence_keys() -> None:
         "metrics:telemetry_metrics",
         "logs:related_logs",
         "traces:related_traces",
+    ]
+
+
+def test_network_rules_use_schema_v1_evidence_keys() -> None:
+    dns_plan = plan_for("DNS lookup failed")
+    dns_by_id = {candidate.candidate_id: candidate for candidate in dns_plan.candidates}
+    timeout_plan = plan_for("Connection timeout")
+    timeout_by_id = {candidate.candidate_id: candidate for candidate in timeout_plan.candidates}
+    ingress_plan = plan_for("Ingress 502/503")
+    ingress_by_id = {candidate.candidate_id: candidate for candidate in ingress_plan.candidates}
+
+    assert dns_by_id["service_dns_resolution_failure"].expected_evidence == [
+        "kubernetes:cluster_resource_state",
+        "metrics:telemetry_metrics",
+        "logs:related_logs",
+        "metadata:service_selector_matches",
+    ]
+    assert timeout_by_id["network_policy_denied"].expected_evidence == [
+        "kubernetes:cluster_resource_state",
+        "logs:related_logs",
+        "metadata:network_policy_allows",
+    ]
+    assert ingress_by_id["upstream_unavailable"].expected_evidence == [
+        "kubernetes:cluster_resource_state",
+        "metrics:telemetry_metrics",
+        "logs:related_logs",
     ]
 
 
