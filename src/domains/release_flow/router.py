@@ -1046,22 +1046,27 @@ async def create_release_plan(
         )
     workspace_id = getattr(current, "workspace_id", DEFAULT_WORKSPACE_ID)
     body = {**payload.model_dump(), "workspace_id": workspace_id, "user_id": current.user_id}
-    existing_plan_id = derive_release_plan_id(body)
-    existing = db.get_release_plan(workspace_id, existing_plan_id)
-    if existing is not None:
-        require_plan_application_plan_manage_access(
-            db,
-            current,
-            workspace_id,
-            existing.get("steps", []),
-        )
-    elif not body["steps"]:
-        raise HTTPException(
-            status_code=HTTP_UNPROCESSABLE_ENTITY,
-            detail=EMPTY_RELEASE_PLAN_NOT_ALLOWED,
-        )
-    require_plan_application_plan_manage_access(db, current, workspace_id, body["steps"])
     with unit_of_work_or_null(db):
+        get_by_name = getattr(db, "get_release_plan_by_name", None)
+        if callable(get_by_name):
+            existing = get_by_name(workspace_id, str(body["name"]))
+        else:
+            existing_plan_id = derive_release_plan_id(body)
+            existing = db.get_release_plan(workspace_id, existing_plan_id)
+        if existing is not None:
+            require_plan_application_plan_manage_access(
+                db,
+                current,
+                workspace_id,
+                existing.get("steps", []),
+            )
+            body["plan_id"] = str(existing["plan_id"])
+        elif not body["steps"]:
+            raise HTTPException(
+                status_code=HTTP_UNPROCESSABLE_ENTITY,
+                detail=EMPTY_RELEASE_PLAN_NOT_ALLOWED,
+            )
+        require_plan_application_plan_manage_access(db, current, workspace_id, body["steps"])
         plan = upsert_release_plan_or_404(db, body)
     return ReleasePlanResponse(plan=plan)
 
@@ -1074,18 +1079,18 @@ async def update_release_plan(
     db: Any = Depends(get_db),
 ) -> ReleasePlanResponse:
     workspace_id = getattr(current, "workspace_id", DEFAULT_WORKSPACE_ID)
-    existing = db.get_release_plan(workspace_id, plan_id)
-    if existing is None:
-        raise HTTPException(status_code=HTTP_NOT_FOUND, detail=RELEASE_PLAN_NOT_FOUND)
-    require_plan_application_plan_manage_access(
-        db,
-        current,
-        workspace_id,
-        existing.get("steps", []),
-    )
-    body = {**payload.model_dump(), "plan_id": plan_id, "workspace_id": workspace_id}
-    require_plan_application_plan_manage_access(db, current, workspace_id, body["steps"])
     with unit_of_work_or_null(db):
+        existing = db.get_release_plan(workspace_id, plan_id)
+        if existing is None:
+            raise HTTPException(status_code=HTTP_NOT_FOUND, detail=RELEASE_PLAN_NOT_FOUND)
+        require_plan_application_plan_manage_access(
+            db,
+            current,
+            workspace_id,
+            existing.get("steps", []),
+        )
+        body = {**payload.model_dump(), "plan_id": plan_id, "workspace_id": workspace_id}
+        require_plan_application_plan_manage_access(db, current, workspace_id, body["steps"])
         plan = upsert_release_plan_or_404(db, body)
     return ReleasePlanResponse(plan=plan)
 
