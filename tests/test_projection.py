@@ -12,17 +12,26 @@ from packages.contracts.event_bus.interfaces import EventEnvelope
 
 
 def _evt(
-    subject: str, source: str = "rca-worker", payload: dict[str, object] | None = None
+    subject: str,
+    source: str = "rca-worker",
+    payload: dict[str, object] | None = None,
+    causation_id: str | None = None,
 ) -> EventEnvelope:
     return EventEnvelope(
         event_id="e1",
         subject=subject,
         source=source,
         correlation_id="c1",
-        causation_id=None,
+        causation_id=causation_id,
         created_at="t",
         payload=payload or {},
     )
+
+
+def test_audit_log_row_preserves_causation_id() -> None:
+    row = audit_log_row(_evt("rca.completed", causation_id="parent-event-1"))
+
+    assert row["causation_id"] == "parent-event-1"
 
 
 def test_audit_appends_log_without_chaining() -> None:
