@@ -53,6 +53,12 @@ describe("localized authentication boundary", () => {
     expect(screen.getByLabelText("Password")).toBeTruthy();
     expect(screen.getByRole("button", { name: "Sign in" })).toBeTruthy();
     expect(screen.getByRole("button", { name: "Switch to dark mode" })).toBeTruthy();
+    const publicHeader = screen.getByRole("banner");
+    const loginCard = screen.getByRole("heading", { name: "Sign in to KubeHeal" })
+      .closest('[data-slot="card"]');
+    expect(publicHeader.textContent).toContain("KubeHeal");
+    expect(publicHeader.querySelector('[aria-label="Language: English"]')).toBeTruthy();
+    expect(loginCard?.querySelector('[aria-label="Language: English"]')).toBeNull();
   });
 
   it("switches and persists locale before authentication", async () => {
