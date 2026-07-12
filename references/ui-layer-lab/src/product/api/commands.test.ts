@@ -7,6 +7,7 @@ const ACCEPTED = {
   accepted: true,
   event_id: "evt-command-1",
   correlation_id: "corr-command-1",
+  command_id: "cmd-command-1",
 };
 
 function jsonResponse(payload: unknown, status = 200): Response {
@@ -77,6 +78,19 @@ describe("general command API", () => {
     );
   });
 
+  it("preserves a null command id when approval prevents derivation at submission time", async () => {
+    const receipt = { ...ACCEPTED, command_id: null };
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(jsonResponse(receipt));
+
+    await expect(
+      submitCommand({
+        clusterId: "prod-1",
+        action: "apply_manifest",
+        namespace: "sandbox",
+      }),
+    ).resolves.toEqual(receipt);
+  });
+
   it("rejects missing identifiers before making a request", async () => {
     const fetchMock = vi.spyOn(globalThis, "fetch");
 
@@ -101,6 +115,18 @@ describe("general command API", () => {
     vi.restoreAllMocks();
     vi.spyOn(globalThis, "fetch").mockResolvedValue(
       jsonResponse({ accepted: true, event_id: "evt-only", correlation_id: 7 }),
+    );
+    await expect(
+      submitCommand({ clusterId: "prod-1", action: "rollout_restart", namespace: "sandbox" }),
+    ).rejects.toMatchObject({ kind: "invalid-payload", status: 200 } satisfies Partial<ApiError>);
+
+    vi.restoreAllMocks();
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      jsonResponse({
+        accepted: true,
+        event_id: "evt-only",
+        correlation_id: "corr-only",
+      }),
     );
     await expect(
       submitCommand({ clusterId: "prod-1", action: "rollout_restart", namespace: "sandbox" }),
