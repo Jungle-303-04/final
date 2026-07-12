@@ -154,3 +154,5 @@ $ git cat-file -e origin/dev:src/domains/rca_bundle/router.py; echo $?
 - 실패·취소 명령: `git merge --abort`.
 - 후속 검증: `npm run check` 전체 PASS 및 충돌 해소 목록 기록 전에는 A2 완료 처리 금지.
 - 현재 조치: merge·push·배포 실행 없음. B단계는 정본의 병행 허용 규칙에 따라 진행한다.
+
+[2026-07-13 06:15:14 KST] [프론트] B in_progress — APIQ-029 착륙본 schema·progress·Bruno와 동결 Zod diff 대조 착수
