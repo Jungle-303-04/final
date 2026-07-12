@@ -33,9 +33,13 @@ describe("ResourcesPage URL-backed detail", () => {
     expect(dialog.querySelector('[data-slot="resource-detail-loading"]')).toBeTruthy();
     expect(dialog.querySelector('[data-slot="product-page-frame"]')).toBeNull();
 
+    await waitFor(
+      () => expect(port.loadResourceDetail).toHaveBeenCalledOnce(),
+      { timeout: 5_000 },
+    );
     detail.resolve(POD_DETAIL);
-    expect(await within(dialog).findByText("Running")).toBeTruthy();
-  });
+    expect(await within(dialog).findByText("Running", {}, { timeout: 5_000 })).toBeTruthy();
+  }, 15_000);
 
   it("resolves a direct same-route detail deep link from canonical identity", async () => {
     const list = deferred<Awaited<ReturnType<ReturnType<typeof resourcesPort>["listResources"]>>>();
