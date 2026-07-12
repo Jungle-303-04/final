@@ -1,5 +1,5 @@
 import { Activity, CircleAlert } from "lucide-react";
-import { useEffect, useId, useRef, useState, type FormEvent } from "react";
+import { useEffect, useId, useRef, useState, type FormEvent, type ReactNode } from "react";
 import { ProductStateScreen } from "../../shared/ui/ProductStateScreen";
 import { LocaleToggle } from "../../shared/ui/LocaleToggle";
 import { ThemeToggle } from "../../shared/ui/ThemeToggle";
@@ -7,7 +7,6 @@ import { Alert, AlertDescription, AlertTitle } from "../../shared/ui/primitives/
 import { Button } from "../../shared/ui/primitives/button";
 import {
   Card,
-  CardAction,
   CardContent,
   CardDescription,
   CardHeader,
@@ -39,7 +38,6 @@ function AuthLoginScreen({
   const issueId = useId();
   const emailErrorId = useId();
   const passwordErrorId = useId();
-  const themeController = useProductTheme();
   const { t } = useI18n();
   const issueMessage = issue
     ? issue.safeDetail ?? t(issue.messageKey, issue.messageParams)
@@ -77,18 +75,15 @@ function AuthLoginScreen({
   };
 
   return (
-    <TooltipProvider>
+    <AuthPublicFrame>
       <main
         aria-labelledby={titleId}
-        className="grid min-h-svh place-items-center bg-background p-4 text-foreground sm:p-6"
+        className="grid min-h-full place-items-center bg-background p-4 text-foreground sm:p-6"
         id="product-main"
         tabIndex={-1}
       >
         <Card className="w-full max-w-sm">
           <CardHeader>
-            <div className="mb-2 grid size-9 place-items-center rounded-lg bg-primary text-primary-foreground">
-              <Activity aria-hidden="true" className="size-4" />
-            </div>
             <CardTitle>
               <h1 className="text-xl font-semibold tracking-tight" id={titleId}>
                 {t("auth.login.title")}
@@ -97,12 +92,6 @@ function AuthLoginScreen({
             <CardDescription>
               {t("auth.login.subtitle")}
             </CardDescription>
-            <CardAction>
-              <div className="flex items-center gap-1">
-                <LocaleToggle />
-                <ThemeToggle controller={themeController} />
-              </div>
-            </CardAction>
           </CardHeader>
           <CardContent>
             <form aria-busy={pending || undefined} aria-labelledby={titleId} noValidate onSubmit={handleSubmit}>
@@ -175,7 +164,7 @@ function AuthLoginScreen({
           </CardContent>
         </Card>
       </main>
-    </TooltipProvider>
+    </AuthPublicFrame>
   );
 }
 
@@ -190,31 +179,76 @@ function SessionFailureScreen({
   const safeDetail = issue.safeDetail ?? t(issue.messageKey, issue.messageParams);
   if (issue.code === "forbidden") {
     return (
-      <ProductStateScreen
-        issue={{ code: "forbidden", safeDetail }}
-        kind="forbidden"
-      />
+      <AuthPublicStateFrame>
+        <ProductStateScreen
+          issue={{ code: "forbidden", safeDetail }}
+          kind="forbidden"
+          placement="content"
+        />
+      </AuthPublicStateFrame>
     );
   }
   const retry = { label: t("auth.session.retry"), onRetry, pending: false };
   if (issue.code === "network") {
     return (
-      <ProductStateScreen
-        issue={{ code: "network", safeDetail }}
-        kind="offline"
-        retry={retry}
-      />
+      <AuthPublicStateFrame>
+        <ProductStateScreen
+          issue={{ code: "network", safeDetail }}
+          kind="offline"
+          placement="content"
+          retry={retry}
+        />
+      </AuthPublicStateFrame>
     );
   }
   return (
-    <ProductStateScreen
-      issue={{
-        code: issue.code === "invalid-response" ? "invalid-response" : "server",
-        safeDetail,
-      }}
-      kind="error"
-      retry={retry}
-    />
+    <AuthPublicStateFrame>
+      <ProductStateScreen
+        issue={{
+          code: issue.code === "invalid-response" ? "invalid-response" : "server",
+          safeDetail,
+        }}
+        kind="error"
+        placement="content"
+        retry={retry}
+      />
+    </AuthPublicStateFrame>
+  );
+}
+
+function AuthPublicStateFrame({ children }: { children: ReactNode }) {
+  return (
+    <AuthPublicFrame>
+      <main className="min-h-0 bg-background text-foreground" id="product-main" tabIndex={-1}>
+        {children}
+      </main>
+    </AuthPublicFrame>
+  );
+}
+
+function AuthPublicFrame({ children }: { children: ReactNode }) {
+  const themeController = useProductTheme();
+  return (
+    <TooltipProvider>
+      <div className="grid min-h-svh grid-rows-[3.5rem_minmax(0,1fr)] bg-background text-foreground">
+        <header
+          className="flex h-14 items-center justify-between gap-4 border-b bg-background/95 px-4 py-2 backdrop-blur supports-[backdrop-filter]:bg-background/75"
+          data-slot="auth-public-header"
+        >
+          <div className="flex min-w-0 items-center gap-2">
+            <span className="grid size-8 shrink-0 place-items-center rounded-lg border bg-primary text-primary-foreground">
+              <Activity aria-hidden="true" className="size-4" />
+            </span>
+            <span className="truncate text-sm font-semibold tracking-tight">KubeHeal</span>
+          </div>
+          <div className="flex shrink-0 items-center gap-1">
+            <LocaleToggle />
+            <ThemeToggle controller={themeController} />
+          </div>
+        </header>
+        {children}
+      </div>
+    </TooltipProvider>
   );
 }
 
