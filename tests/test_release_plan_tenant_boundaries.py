@@ -481,11 +481,41 @@ def test_create_acquires_name_identity_lock_before_lookup_and_write() -> None:
     )
 
     assert response.plan["name"] == "New release"
-    assert db.events[:2] == [
+    assert db.events[:3] == [
+        (
+            "lock_identity",
+            "workspace-a",
+            release_router.RELEASE_PLAN_WORKSPACE_MUTATION_LOCK,
+        ),
         ("lock_identity", "workspace-a", "New release"),
         ("get_by_name_for_update", "workspace-a", "New release"),
     ]
     assert db.events[-1] == ("upsert", "workspace-a", "New release")
+
+
+def test_update_acquires_workspace_lock_before_plan_row_lock() -> None:
+    victim = _existing_plan(name="Plan A")
+    db = _PlanAuthorizationDb(existing_plan=victim, allow_access=True)
+
+    asyncio.run(
+        release_router.update_release_plan(
+            str(victim["plan_id"]),
+            release_router.ReleasePlanUpsertRequest(
+                name="Plan B",
+                steps=[{"application_id": "app-b", "position": 0}],
+            ),
+            current=_member(),
+            db=db,
+        )
+    )
+
+    assert db.events[0] == (
+        "lock_identity",
+        "workspace-a",
+        release_router.RELEASE_PLAN_WORKSPACE_MUTATION_LOCK,
+    )
+    assert db.events[1] == ("get_by_id_for_update", "workspace-a", victim["plan_id"])
+    assert db.events[2] == ("lock_identity", "workspace-a", "Plan B")
 
 
 def test_server_derived_plan_collision_maps_to_generic_client_error() -> None:
