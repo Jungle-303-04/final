@@ -93,6 +93,15 @@ function canonicalIdentity(value: string): string | null {
 }
 
 function toPortFailure(error: unknown): AuthPortFailure {
+  const canonicalReasonByTransportCode: Record<string, AuthFailureCode> = {
+    email_unverified: "email-unverified",
+    approval_pending: "approval-pending",
+  };
+  const canonicalReason = canonicalReasonByTransportCode[transportCode(error) ?? ""];
+  if (transportKind(error) === "forbidden" && canonicalReason !== undefined) {
+    return new AuthPortFailure(canonicalReason, transportRetryAfter(error));
+  }
+
   const codeByTransportKind: Record<string, AuthFailureCode> = {
     forbidden: "forbidden",
     "rate-limited": "rate-limited",
@@ -103,6 +112,13 @@ function toPortFailure(error: unknown): AuthPortFailure {
     codeByTransportKind[transportKind(error) ?? ""] ?? "server",
     transportRetryAfter(error),
   );
+}
+
+function transportCode(error: unknown): string | null {
+  return typeof error === "object" && error !== null && "code" in error &&
+    typeof error.code === "string"
+    ? error.code
+    : null;
 }
 
 function transportKind(error: unknown): string | null {

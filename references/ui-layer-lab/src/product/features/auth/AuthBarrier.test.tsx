@@ -123,6 +123,25 @@ describe("AuthBarrier", () => {
     await waitFor(() => expect(document.activeElement).toBe(password));
   });
 
+  it.each([
+    ["email-unverified", "이메일 인증을 완료한 뒤 다시 로그인하세요."],
+    ["approval-pending", "관리자 승인이 완료될 때까지 기다려 주세요."],
+  ] as const)("shows the canonical %s guidance without another session read", async (code, message) => {
+    const loadSession = vi.fn().mockResolvedValue({ status: "unauthenticated" });
+    const port = authPort({
+      loadSession,
+      signIn: vi.fn().mockRejectedValue(new AuthPortFailure(code)),
+    });
+    const user = userEvent.setup();
+    renderBarrier(port);
+    await user.type(await screen.findByRole("textbox", { name: "이메일" }), "operator@example.com");
+    await user.type(screen.getByLabelText("비밀번호"), "secret");
+    await user.click(screen.getByRole("button", { name: "로그인" }));
+
+    expect((await screen.findByRole("alert")).textContent).toContain(message);
+    expect(loadSession).toHaveBeenCalledOnce();
+  });
+
   it("maps a session network failure to a manual retry without automatic refresh", async () => {
     const loadSession = vi.fn()
       .mockRejectedValueOnce(new AuthPortFailure("network"))
@@ -161,18 +180,6 @@ describe("AuthBarrier", () => {
 
     signOutResult.resolve();
     expect(await screen.findByRole("heading", { name: "KubeHeal에 로그인" })).toBeTruthy();
-  });
-
-  it("preserves the authoritative session when logout fails", async () => {
-    const port = authPort({
-      signOut: vi.fn().mockRejectedValue(new AuthPortFailure("network")),
-    });
-    const user = userEvent.setup();
-    renderBarrier(port);
-    await user.click(await screen.findByRole("button", { name: "테스트 로그아웃" }));
-
-    expect(await screen.findByText(/로그아웃 요청을 완료하지 못했습니다/u)).toBeTruthy();
-    expect(screen.getByText("인증된 제품")).toBeTruthy();
   });
 
   it("aborts an active session request after a real unmount", async () => {

@@ -95,6 +95,39 @@ describe("canonical auth adapter", () => {
     },
   );
 
+  it.each([
+    ["email_unverified", "email-unverified"],
+    ["approval_pending", "approval-pending"],
+  ] as const)("maps the canonical login reason %s to %s", async (transportCode, code) => {
+    const dependencies = endpoints({
+      login: vi.fn().mockRejectedValue({
+        kind: "forbidden",
+        code: transportCode,
+        detail: "private",
+      }),
+    });
+
+    await expect(createAuthAdapter(dependencies).signIn({
+      email: "operator@example.com",
+      password: "secret",
+    })).rejects.toMatchObject({ code });
+  });
+
+  it("keeps an unknown forbidden login reason provider-neutral", async () => {
+    const dependencies = endpoints({
+      login: vi.fn().mockRejectedValue({
+        kind: "forbidden",
+        code: "provider_only_reason",
+        detail: "private",
+      }),
+    });
+
+    await expect(createAuthAdapter(dependencies).signIn({
+      email: "operator@example.com",
+      password: "secret",
+    })).rejects.toMatchObject({ code: "forbidden" });
+  });
+
   it("treats an authenticated:false login response as rejected credentials", async () => {
     const dependencies = endpoints({
       login: vi.fn().mockResolvedValue({
