@@ -372,7 +372,13 @@ class AgentCommandRepository(DatabaseConnection):
                 return None
 
             body = CommandCompletedBody(command_id=command_id, result=result)
-            completed = event(body.__subject__, source, body.to_body(), str(row["correlation_id"]))
+            completed = event(
+                body.__subject__,
+                source,
+                body.to_body(),
+                str(row["correlation_id"]),
+                workspace_id=workspace_id,
+            )
             await conn.execute(
                 pg_insert(event_table)
                 .values(
@@ -393,6 +399,7 @@ class AgentCommandRepository(DatabaseConnection):
                     source=completed.source,
                     correlation_id=completed.correlation_id,
                     causation_id=completed.causation_id,
+                    workspace_id=completed.workspace_id,
                     occurred_at=completed.created_at,
                     payload=completed.payload,
                 )
