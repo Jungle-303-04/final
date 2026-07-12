@@ -1,9 +1,10 @@
 import { execFileSync } from "node:child_process";
 import { readdir, readFile } from "node:fs/promises";
-import { dirname, extname, relative, resolve, sep } from "node:path";
+import { dirname, extname, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import ts from "typescript";
 import { describe, expect, it } from "vitest";
+import { containsIdentifier, hasNamedExport, isWithin } from "./apiBoundary.testSupport";
 
 const appRoot = dirname(fileURLToPath(import.meta.url));
 const productRoot = resolve(appRoot, "..");
@@ -270,45 +271,4 @@ async function collectScripts(directory: string): Promise<string[]> {
 
 function git(args: string[]): string {
   return execFileSync("git", ["-C", repositoryRoot, ...args], { encoding: "utf8" }).trim();
-}
-
-function containsIdentifier(source: string, identifier: string): boolean {
-  const sourceFile = ts.createSourceFile("contract.test.ts", source, ts.ScriptTarget.Latest, true);
-  let found = false;
-  function visit(node: ts.Node) {
-    if (ts.isIdentifier(node) && node.text === identifier) found = true;
-    if (!found) ts.forEachChild(node, visit);
-  }
-  visit(sourceFile);
-  return found;
-}
-
-function hasNamedExport(source: string, exportedName: string): boolean {
-  const sourceFile = ts.createSourceFile("index.ts", source, ts.ScriptTarget.Latest, true);
-  let found = false;
-
-  sourceFile.forEachChild((node) => {
-    if (ts.isExportDeclaration(node) && node.exportClause && ts.isNamedExports(node.exportClause)) {
-      if (node.exportClause.elements.some((element) => element.name.text === exportedName)) found = true;
-    }
-    if (
-      (ts.isFunctionDeclaration(node) || ts.isVariableStatement(node)) &&
-      ts.getModifiers(node)?.some((modifier) => modifier.kind === ts.SyntaxKind.ExportKeyword)
-    ) {
-      if (ts.isFunctionDeclaration(node) && node.name?.text === exportedName) found = true;
-      if (ts.isVariableStatement(node) && node.declarationList.declarations.some((declaration) => (
-        ts.isIdentifier(declaration.name) && declaration.name.text === exportedName
-      ))) found = true;
-    }
-  });
-
-  return found;
-}
-
-function isWithin(candidate: string, directory: string): boolean {
-  const pathFromDirectory = relative(directory, candidate);
-  return pathFromDirectory === "" || (
-    pathFromDirectory !== ".." &&
-    !pathFromDirectory.startsWith(`..${sep}`)
-  );
 }
