@@ -361,6 +361,67 @@ class RecoveryPlanStatusResponse(StrictModel):
     candidates: list[RecoveryActionCandidateItem] = Field(default_factory=list)
 
 
+class RemediationBundleMeta(StrictModel):
+    correlation_id: str
+    incident_id: str | None
+    cluster_id: str
+    workspace_id: str
+    created_at: str | None
+
+
+class RemediationBundleDiagnosis(StrictModel):
+    root_cause: str
+    confidence: float | None
+    supporting_evidence: list[str]
+    missing_evidence: list[str]
+    supporting_evidence_refs: list[RcaEvidenceRefItem]
+    missing_evidence_checks: list[RcaMissingCheckItem]
+    selected_candidate_id: str | None
+
+
+class RemediationBundleActionDraft(StrictModel):
+    action_type: str
+    namespace: str
+    resource_kind: str
+    resource_name: str
+    reason: str
+    risk_level: str
+    dry_run: bool
+    source_evidence: list[str]
+    params: JsonMap
+
+
+class RemediationBundleRecoveryCandidate(StrictModel):
+    action_id: str
+    title: str
+    description: str
+    draft: RemediationBundleActionDraft
+    route: str
+    rank: int
+    score: float
+    risk_level: str
+    blast_radius: str
+    approval_required: bool
+    prerequisites: list[str]
+    validation_checks: list[str]
+    rollback_plan: str
+    evidence_refs: list[str]
+
+
+class RemediationBundleRemediation(StrictModel):
+    status: str
+    selected_action_id: str | None
+    selected_by: str | None
+    candidates: list[RemediationBundleRecoveryCandidate]
+    evidence_ref: str
+
+
+class RemediationBundleResponse(StrictModel):
+    meta: RemediationBundleMeta
+    diagnosis: RemediationBundleDiagnosis
+    remediation: RemediationBundleRemediation | None
+
+
 class RcaTestScenarioExpectedItem(StrictModel):
     root_cause: str
     symptom: str
