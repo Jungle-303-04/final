@@ -51,6 +51,14 @@ export {
   type ApplicationListOptions,
 } from "./applications";
 export {
+  restartDeployment,
+  scaleDeployment,
+  DEPLOYMENT_MAX_REASON_LENGTH,
+  DEPLOYMENT_MAX_REPLICAS,
+  type DeploymentActionOptions,
+  type ScaleDeploymentOptions,
+} from "./deployments";
+export {
   grantApproval,
   rejectApproval,
   type ApprovalDecisionOptions,
@@ -277,6 +285,10 @@ export {
   type DeploymentBindingList,
   type WorkflowRunList,
 } from "./applications-schemas";
+export {
+  deploymentActionAcceptedSchema,
+  type DeploymentActionAccepted,
+} from "./deployments-schemas";
 export {
   approvalDecisionResponseSchema,
   type ApprovalDecisionResponse,
