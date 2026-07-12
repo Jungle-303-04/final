@@ -23,6 +23,7 @@ from domains.applications.router import connect_application, upsert_application
 from domains.gitops.repository import RepoChangeRepository, derive_repository_id
 from packages.contracts.gateway.requests import ApplicationConnectRequest, ApplicationUpsertRequest
 from packages.contracts.gateway.responses import RepositoryManifestValidationResponse
+from packages.security.credentials import encrypt_credential
 
 
 class _MappedResult:
@@ -137,6 +138,15 @@ class _ValidRepositoryDiscovery:
             warnings=[],
             errors=[],
         )
+
+
+class _TokenAwareRepositoryDiscovery(_ValidRepositoryDiscovery):
+    def __init__(self) -> None:
+        self.tokens: list[str] = []
+
+    def with_token(self, token: str) -> _TokenAwareRepositoryDiscovery:
+        self.tokens.append(token)
+        return self
 
 
 class _ConnectDb:
@@ -948,6 +958,149 @@ def test_new_repository_token_uses_per_repository_scope_without_rotating_other_r
     assert repository_id in new_scope
     assert db.registered_payload is not None
     assert db.registered_payload["credential_ref"] == f"db:github:{new_scope}"
+
+
+def test_connect_uses_explicit_token_for_manifest_validation(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("CREDENTIAL_ENCRYPTION_KEY", "explicit-token-validation-key")
+    workspace_id = "workspace-a"
+    repo_ref = "acme/private-checkout"
+    repository_id = derive_repository_id({"workspace_id": workspace_id, "repo_ref": repo_ref})
+    db = _ConnectDb(
+        workspace_id=workspace_id,
+        repo_ref=repo_ref,
+        repository_id=repository_id,
+    )
+    discovery = _TokenAwareRepositoryDiscovery()
+    session = SimpleNamespace(user_id="user-a", roles=("user",), workspace_id=workspace_id)
+
+    async def run() -> object:
+        return await connect_application(
+            ApplicationConnectRequest(
+                name="private-checkout",
+                repo_ref=repo_ref,
+                token="ghp_request-scoped",
+                branch="main",
+                manifest_path="deploy/app.yaml",
+                source_type="raw-yaml",
+                cluster_id="cluster-1",
+            ),
+            current=session,
+            db=db,
+            discovery=discovery,
+        )
+
+    asyncio.run(run())
+
+    assert discovery.tokens == ["ghp_request-scoped"]
+
+
+def test_existing_repository_denial_happens_before_manifest_http() -> None:
+    workspace_id = "workspace-a"
+    repo_ref = "acme/existing-private"
+    repository_id = "repo-existing-private"
+
+    class DeniedExistingRepositoryDb(_ConnectDb):
+        def can_access(
+            self,
+            _user_id: str,
+            _workspace_id: str,
+            resource_type: str,
+            _resource_id: str,
+            permission: str,
+        ) -> bool:
+            if (resource_type, permission) == ("cluster", "deploy.run"):
+                return True
+            if (resource_type, permission) == ("application", "application.manage"):
+                return False
+            return False
+
+    class ForbiddenDiscovery:
+        async def validate_manifest(self, _payload: Any) -> object:
+            pytest.fail("manifest HTTP must not run before repository authorization")
+
+    db = DeniedExistingRepositoryDb(
+        workspace_id=workspace_id,
+        repo_ref=repo_ref,
+        repository_id=repository_id,
+        repository={
+            "workspace_id": workspace_id,
+            "repository_id": repository_id,
+            "repo_ref": repo_ref,
+            "credential_ref": "db:github:repository:repo-existing-private",
+        },
+    )
+    session = SimpleNamespace(user_id="user-a", roles=("user",), workspace_id=workspace_id)
+
+    async def run() -> object:
+        return await connect_application(
+            ApplicationConnectRequest(
+                name="existing-private",
+                repo_ref=repo_ref,
+                branch="main",
+                manifest_path="deploy/app.yaml",
+                source_type="raw-yaml",
+                cluster_id="cluster-1",
+            ),
+            current=session,
+            db=db,
+            discovery=ForbiddenDiscovery(),  # type: ignore[arg-type]
+        )
+
+    with pytest.raises(HTTPException) as exc:
+        asyncio.run(run())
+
+    assert exc.value.status_code in {403, 404}
+
+
+def test_admin_connect_uses_wizard_credential_for_manifest_validation(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("CREDENTIAL_ENCRYPTION_KEY", "wizard-validation-key")
+    workspace_id = "workspace-a"
+    repo_ref = "acme/wizard-private"
+    repository_id = derive_repository_id({"workspace_id": workspace_id, "repo_ref": repo_ref})
+    scope = f"repository:{repository_id}"
+    db = _ConnectDb(
+        workspace_id=workspace_id,
+        repo_ref=repo_ref,
+        repository_id=repository_id,
+        credentials={
+            scope: {
+                "workspace_id": workspace_id,
+                "provider": "github",
+                "scope": scope,
+                "encrypted_value": encrypt_credential("ghp_wizard-scoped"),
+                "metadata": {"repository_id": repository_id},
+            }
+        },
+    )
+    discovery = _TokenAwareRepositoryDiscovery()
+    session = SimpleNamespace(
+        user_id="admin-a",
+        roles=("service_admin",),
+        workspace_id=workspace_id,
+    )
+
+    async def run() -> object:
+        return await connect_application(
+            ApplicationConnectRequest(
+                name="wizard-private",
+                repo_ref=repo_ref,
+                branch="main",
+                manifest_path="deploy/app.yaml",
+                source_type="raw-yaml",
+                cluster_id="cluster-1",
+            ),
+            current=session,
+            db=db,
+            discovery=discovery,
+        )
+
+    asyncio.run(run())
+
+    assert discovery.tokens == ["ghp_wizard-scoped"]
 
 
 def test_existing_repository_without_token_preserves_credential_ref() -> None:
