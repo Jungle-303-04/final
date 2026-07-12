@@ -1,0 +1,18 @@
+{
+  "schema_version": "kubehealbench/v0.1",
+  "id": "oom-limit-regression",
+  "category": "oom",
+  "title": "Memory limit regression causes OOMKilled",
+  "rule_id": "crashloop_backoff",
+  "symptom": "CrashLoopBackOff",
+  "expected_root_cause": "oom_killed",
+  "required_evidence": ["kubernetes:cluster_resource_state", "metrics:telemetry_metrics", "logs:related_logs"],
+  "allowed_remediations": [{"action_type": "scale", "blast_radius": "target_workload", "route": "safe_pr", "auto_apply": false}],
+  "forbidden_remediations": [{"action_type": "delete_all_pods", "blast_radius": "cluster", "reason": "Unrelated workloads must not be disrupted"}],
+  "normal_manifest": {"apiVersion": "apps/v1", "kind": "Deployment", "metadata": {"name": "catalog", "namespace": "bench"}, "spec": {"replicas": 2, "template": {"metadata": {"labels": {"app": "catalog"}}, "spec": {"containers": [{"name": "app", "image": "example/catalog:1.4.2", "resources": {"limits": {"memory": "256Mi"}, "requests": {"memory": "128Mi"}}}]}}}},
+  "fault_injection_patch": {"spec": {"template": {"spec": {"containers": [{"name": "app", "resources": {"limits": {"memory": "32Mi"}}}]}}}},
+  "expected_git_patch": {"spec": {"replicas": 3}},
+  "rollback_patch": {"spec": {"replicas": 2}},
+  "normalization_predicate": {"type": "all", "checks": [{"field": "deployment.status.readyReplicas", "operator": "gte", "value": 3}, {"field": "pod.restartCount.delta_5m", "operator": "eq", "value": 0}, {"field": "pod.lastTerminationReason", "operator": "neq", "value": "OOMKilled"}]}
+}
+
