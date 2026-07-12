@@ -18,18 +18,22 @@ describe("ClusterConnectionStatus", () => {
 
     renderStatus("en-US", observedAt);
 
-    expect(screen.getByRole("button", {
+    const control = screen.getByRole("button", {
       name: `Connected · last observed ${expectedTime}`,
-    })).toBeTruthy();
+    });
+    expect(control.className).toContain("w-24");
+    expect(control.className).toContain("min-w-0");
     expect(screen.getByText("Connected")).toBeTruthy();
   });
 
   it("keeps missing observations explicit in Korean", () => {
     renderStatus("ko-KR", null, "unknown");
 
-    expect(screen.getByRole("button", {
+    const control = screen.getByRole("button", {
       name: "연결 상태 미확인 · 마지막 관측 알 수 없음",
-    })).toBeTruthy();
+    });
+    expect(control.className).toContain("w-24");
+    expect(screen.getByText("연결 상태 미확인").className).toContain("truncate");
   });
 });
 
