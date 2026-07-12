@@ -404,3 +404,19 @@ format: "[시각] [트랙] 한 줄 상태 + 커밋 hash (있으면)"
 - 삭제 후 `git ls-remote --heads origin` 재검증: 대상 21개 잔존 0개.
 - [B] 활성 lane 5개·보호 6개는 유지했다.
 - [C] 166개는 사람 판단 대기로 유지했다.
+
+## 2026-07-13 07:46 KST — C0 완료 증거
+
+- branch: `codex/f-audit-timeline`
+- HEAD: `308a6edc1d4f07198aa3b64390af94a690895b11`
+- commits: `308a6edc1 feat: 이벤트 테넌트 귀속 / outbox 보존 / 감사 인덱스`
+- stat: 27 files changed, 799 insertions(+), 56 deletions(-); 신규 migration·workspace context·테넌시 테스트 포함.
+- 신규 테스트: workspace 봉투·outbox/relay·audit 적재·인증 경계·worker 자식·GitHub 권위 binding·구버전 positional ABI·migration up/down/autocommit 경계 `21 passed`.
+- 전체 게이트: Ruff lint/format PASS, import-linter 2 kept/0 broken, compileall PASS, pytest `1664 passed, 3 skipped`, manifest PASS(management 68, target 20).
+- migration: Alembic 단일 head `20260713_0655`; nullable 컬럼·재시도 가능 DDL·CONCURRENTLY autocommit 경계·downgrade 순서 검증.
+- 독립 감사: 계약·보안 최종 P0 0건/P1 0건.
+- frozen path·gateway 계약 변경 0건: `src/domains/rca/**`, `src/services/ai/**`, `src/packages/runtime/worker.py`, `src/packages/contracts/gateway/**`.
+
+[2026-07-13 07:46 KST] [백엔드] C in_progress — C0 완료 후 workspace-scoped audit timeline 계약 lock 확보
+
+[2026-07-13 07:46 KST] [백엔드] BLOCKED P — 사유: 실제 런타임 GitOps 권위 port 주입에는 frozen `src/services/ai/dispatch-worker/app.py` handler의 `EventContext` 배선이 필수이나 [D-012] 예외는 `src/services/ai/agent/recovery/**`만 허용 / 재현: 무인자 `RecoveryDispatcher()` 운영 경로는 DB authority를 받을 수 없어 모든 실제 patch가 `unsupported` / 질문: `dispatch-worker/app.py`의 handler `(evt, ctx)`·`RecoveryDispatcher(authority=ctx.db)` 최소 배선 예외 승인 여부 / 재개 조건: 해당 파일 3개 논리 변경 승인
