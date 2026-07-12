@@ -519,6 +519,53 @@ def test_authorized_legacy_repository_upsert_reuses_stored_id_without_owner_regr
     assert grants == []
 
 
+def test_authorized_repository_update_without_credential_field_preserves_existing_ref() -> None:
+    victim_row = {
+        "repository_id": "repo-existing",
+        "workspace_id": "workspace-a",
+        "provider": "github",
+        "repo_ref": "acme/checkout",
+        "default_branch": "main",
+        "credential_ref": "db:github:repository:repo-existing",
+        "status": "active",
+        "access_policy": {"visibility": "private"},
+    }
+    statements: list[Any] = []
+
+    class ExistingConnection:
+        def execute(self, statement: Any) -> _MappedResult:
+            statements.append(statement)
+            if getattr(statement, "is_select", False):
+                return _MappedResult(dict(victim_row))
+            return _MappedResult(dict(victim_row))
+
+    @contextmanager
+    def existing_connection():
+        yield ExistingConnection()
+
+    repository = object.__new__(RepoChangeRepository)
+    repository.connection = existing_connection  # type: ignore[method-assign]
+    repository.unit_of_work = existing_connection  # type: ignore[method-assign]
+    repository.list_repository_applications = lambda *_args: [  # type: ignore[attr-defined]
+        {"application_id": "app-existing"}
+    ]
+    repository.can_access = lambda *_args: True  # type: ignore[attr-defined]
+    repository.is_service_admin = lambda _user_id: False  # type: ignore[attr-defined]
+
+    repository.register_repository(
+        {
+            "workspace_id": "workspace-a",
+            "repo_ref": "acme/checkout",
+            "default_branch": "release",
+            "user_id": "repository-manager",
+        }
+    )
+
+    update_sql, update_params = _compiled(statements[-1])
+    assert "credential_ref = git_repositories.credential_ref" in update_sql
+    assert update_params.get("credential_ref") is None
+
+
 def test_application_create_with_foreign_repository_id_is_rejected_before_victim_write() -> None:
     victim_row = {
         "repository_id": "repo-owned-by-workspace-b",
@@ -968,7 +1015,11 @@ def test_connect_without_token_reuses_wizard_per_repository_credential() -> None
             }
         },
     )
-    session = SimpleNamespace(user_id="user-a", roles=("user",), workspace_id=workspace_id)
+    session = SimpleNamespace(
+        user_id="admin-a",
+        roles=("service_admin",),
+        workspace_id=workspace_id,
+    )
 
     async def run() -> object:
         return await connect_application(
@@ -989,6 +1040,133 @@ def test_connect_without_token_reuses_wizard_per_repository_credential() -> None
 
     assert db.registered_payload is not None
     assert db.registered_payload["credential_ref"] == credential_ref
+
+
+def test_non_admin_cannot_attach_orphan_wizard_credential_to_new_repository() -> None:
+    workspace_id = "workspace-a"
+    repo_ref = "acme/orphan-private"
+    repository_id = derive_repository_id({"workspace_id": workspace_id, "repo_ref": repo_ref})
+    scope = f"repository:{repository_id}"
+    db = _ConnectDb(
+        workspace_id=workspace_id,
+        repo_ref=repo_ref,
+        repository_id=repository_id,
+        credentials={
+            scope: {
+                "workspace_id": workspace_id,
+                "provider": "github",
+                "scope": scope,
+                "encrypted_value": "fernet:v1:admin-wizard-token",
+                "metadata": {"repository_id": repository_id},
+            }
+        },
+    )
+    session = SimpleNamespace(user_id="user-a", roles=("user",), workspace_id=workspace_id)
+
+    async def run() -> object:
+        return await connect_application(
+            ApplicationConnectRequest(
+                name="orphan-private",
+                repo_ref=repo_ref,
+                branch="main",
+                manifest_path="deploy/app.yaml",
+                source_type="raw-yaml",
+                cluster_id="cluster-1",
+            ),
+            current=session,
+            db=db,
+            discovery=_ValidRepositoryDiscovery(),
+        )
+
+    asyncio.run(run())
+
+    assert db.registered_payload is not None
+    assert "credential_ref" not in db.registered_payload
+
+
+def test_application_storage_rechecks_manage_after_identity_lock() -> None:
+    statements: list[Any] = []
+
+    class ScalarResult:
+        def __init__(self, value: str | None = None) -> None:
+            self.value = value
+
+        def scalar_one_or_none(self) -> str | None:
+            return self.value
+
+    class InterleavedConnection:
+        def execute(self, statement: Any) -> ScalarResult:
+            statements.append(statement)
+            sql = str(statement.compile(dialect=postgresql.dialect()))
+            if "pg_advisory_xact_lock" in sql:
+                return ScalarResult()
+            if "FROM applications" in sql:
+                return ScalarResult("app-created-by-other-request")
+            pytest.fail(f"unauthorized application write reached storage: {sql}")
+
+    @contextmanager
+    def interleaved_connection():
+        yield InterleavedConnection()
+
+    repository = object.__new__(RepoChangeRepository)
+    repository.connection = interleaved_connection  # type: ignore[method-assign]
+    repository.unit_of_work = interleaved_connection  # type: ignore[method-assign]
+    repository.can_access = lambda *_args: False  # type: ignore[attr-defined]
+
+    with pytest.raises(LookupError):
+        repository.upsert_application(
+            {
+                "workspace_id": "workspace-a",
+                "repository_id": "repo-a",
+                "name": "checkout",
+                "manifest_path": "deploy/app.yaml",
+                "metadata": {"owner": "attacker"},
+                "user_id": "attacker-a",
+            }
+        )
+
+    assert len(statements) == 2
+
+
+def test_application_late_identity_conflict_is_rejected_instead_of_updated() -> None:
+    statements: list[Any] = []
+
+    class ScalarResult:
+        def __init__(self, value: str | None = None) -> None:
+            self.value = value
+
+        def scalar_one_or_none(self) -> str | None:
+            return self.value
+
+    class LateConflictConnection:
+        def execute(self, statement: Any) -> ScalarResult:
+            statements.append(statement)
+            return ScalarResult()
+
+    @contextmanager
+    def late_conflict_connection():
+        yield LateConflictConnection()
+
+    repository = object.__new__(RepoChangeRepository)
+    repository.connection = late_conflict_connection  # type: ignore[method-assign]
+    repository.unit_of_work = late_conflict_connection  # type: ignore[method-assign]
+    repository.can_access = lambda *_args: False  # type: ignore[attr-defined]
+    repository._grant_owner_if_present = (  # type: ignore[method-assign]
+        lambda *_args: pytest.fail("late conflict must not grant ownership")
+    )
+
+    with pytest.raises(LookupError):
+        repository.upsert_application(
+            {
+                "workspace_id": "workspace-a",
+                "repository_id": "repo-a",
+                "name": "checkout",
+                "manifest_path": "deploy/app.yaml",
+                "user_id": "attacker-a",
+            }
+        )
+
+    assert len(statements) == 3
 
 
 def test_repository_conflict_update_is_workspace_fenced_in_postgresql() -> None:
