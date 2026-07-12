@@ -20,6 +20,7 @@ def audit_log_row(evt: EventEnvelope) -> JsonObject:
         "source": evt.source,
         "correlation_id": evt.correlation_id,
         "causation_id": evt.causation_id,
+        "workspace_id": evt.workspace_id,
         "payload": evt.payload,
     }
 

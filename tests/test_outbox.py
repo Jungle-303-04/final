@@ -11,7 +11,7 @@ from packages.contracts.event_bus.interfaces import EventEnvelope
 from packages.runtime.relay import OutboxRelay
 
 
-def _evt(event_id: str) -> EventEnvelope:
+def _evt(event_id: str, *, workspace_id: str | None = None) -> EventEnvelope:
     return EventEnvelope(
         event_id=event_id,
         subject="git.changed",
@@ -20,6 +20,7 @@ def _evt(event_id: str) -> EventEnvelope:
         causation_id=None,
         created_at="t",
         payload={},
+        workspace_id=workspace_id,
     )
 
 
@@ -49,9 +50,11 @@ class StubOutboxStore:
 class StubPublisher:
     def __init__(self) -> None:
         self.published: list[str] = []
+        self.envelopes: list[EventEnvelope] = []
 
     async def publish_envelope(self, evt: EventEnvelope) -> EventEnvelope:
         self.published.append(evt.event_id)
+        self.envelopes.append(evt)
         return evt
 
 
@@ -65,6 +68,15 @@ def test_relay_publishes_then_marks_sent() -> None:
     assert sent == 2
     assert publisher.published == ["a", "b"]  # 저장된 event_id 그대로 발행
     assert store.sent == ["a", "b"]
+
+
+def test_relay_preserves_workspace_envelope_metadata() -> None:
+    owned = _evt("owned", workspace_id="workspace-a")
+    store = StubOutboxStore([owned])
+    publisher = StubPublisher()
+
+    assert asyncio.run(OutboxRelay(store, publisher, "api-gateway").run_once()) == 1
+    assert publisher.envelopes[0].workspace_id == "workspace-a"
 
 
 def test_relay_marks_only_published_on_midbatch_failure() -> None:

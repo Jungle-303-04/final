@@ -10,6 +10,7 @@ from domains.command.repository import QUEUED_COMMAND_TTL_SECONDS
 from packages.config.logs import get_logger
 from packages.config.settings import env
 from packages.events.bus import NatsEventBus, RecordedEventClient
+from packages.events.context import event_workspace
 from packages.runtime.async_db import AsyncDb
 from packages.runtime.service import AsyncService
 from packages.runtime.worker import HEARTBEAT_PATH
@@ -39,12 +40,13 @@ async def emit_expired_command_completions(
         command_id = str(row["command_id"])
         body = CommandCompletedBody(command_id=command_id, result=dict(row["result"]))
         correlation_id = str(row.get("correlation_id") or f"{COMMAND_JANITOR}:{command_id}")
-        await events.emit(
-            body.__subject__,
-            service_name,
-            body.to_body(),
-            correlation_id=correlation_id,
-        )
+        with event_workspace(row.get("workspace_id")):
+            await events.emit(
+                body.__subject__,
+                service_name,
+                body.to_body(),
+                correlation_id=correlation_id,
+            )
     return len(expired)
 
 

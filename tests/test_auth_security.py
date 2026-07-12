@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from types import SimpleNamespace
 
 import pytest
@@ -34,8 +35,8 @@ def request_with_agent_token(token: str | None, db: object) -> Request:
 
 def test_require_cluster_agent_uses_registered_token_identity() -> None:
     deps = load_file(ROOT / "src" / "domains" / "identity" / "dependencies.py", "id_deps")
-    identity = deps.require_cluster_agent(
-        request_with_agent_token("agent-secret", AgentAuthDb(deps))
+    identity = asyncio.run(
+        deps.require_cluster_agent(request_with_agent_token("agent-secret", AgentAuthDb(deps)))
     )
 
     assert identity.workspace_id == "workspace-1"
@@ -45,11 +46,13 @@ def test_require_cluster_agent_uses_registered_token_identity() -> None:
 def test_require_cluster_agent_fail_closed_without_registered_token() -> None:
     deps = load_file(ROOT / "src" / "domains" / "identity" / "dependencies.py", "id_deps")
     with pytest.raises(HTTPException) as exc:
-        deps.require_cluster_agent(request_with_agent_token("wrong-token", AgentAuthDb(deps)))
+        asyncio.run(
+            deps.require_cluster_agent(request_with_agent_token("wrong-token", AgentAuthDb(deps)))
+        )
     assert exc.value.status_code == 401
 
     with pytest.raises(HTTPException) as missing:
-        deps.require_cluster_agent(request_with_agent_token(None, AgentAuthDb(deps)))
+        asyncio.run(deps.require_cluster_agent(request_with_agent_token(None, AgentAuthDb(deps))))
     assert missing.value.status_code == 401
 
 

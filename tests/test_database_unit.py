@@ -196,6 +196,7 @@ def test_audit_log_schema_tracks_causation_and_correlation_timeline_index() -> N
     table = metadata.tables["audit_log"]
 
     assert table.c.causation_id.nullable is True
+    assert table.c.workspace_id.nullable is True
     indexes = {index.name: index for index in table.indexes}
     assert tuple(
         column.name for column in indexes["ix_audit_log_correlation_id_created_at"].columns
@@ -203,6 +204,10 @@ def test_audit_log_schema_tracks_causation_and_correlation_timeline_index() -> N
     assert tuple(column.name for column in indexes["ix_audit_log_created_at"].columns) == (
         "created_at",
     )
+    assert tuple(
+        column.name
+        for column in indexes["ix_audit_log_workspace_id_correlation_id_created_at"].columns
+    ) == ("workspace_id", "correlation_id", "created_at")
 
 
 def test_event_processing_schema_tracks_processing_duration() -> None:
@@ -295,7 +300,7 @@ def test_alert_channel_compat_migration_adds_validation_status() -> None:
 
 def test_outbox_schema_supports_relay_leases() -> None:
     columns = set(metadata.tables["outbox"].c.keys())
-    assert {"lease_id", "leased_until", "sent_at"} <= columns
+    assert {"lease_id", "leased_until", "sent_at", "workspace_id"} <= columns
 
 
 def test_outbox_compat_migration_adds_relay_lease_columns() -> None:
@@ -905,13 +910,15 @@ def test_evidence_event_record_stages_window_event_and_outbox_atomically() -> No
     assert result == {"duplicate": False, "event_id": "evt-1", "correlation_id": "corr-1"}
     window_sql = str(recorded[0].compile(dialect=postgresql.dialect()))
     event_sql = str(recorded[1].compile(dialect=postgresql.dialect()))
-    outbox_sql = str(recorded[2].compile(dialect=postgresql.dialect()))
+    outbox_compiled = recorded[2].compile(dialect=postgresql.dialect())
+    outbox_sql = str(outbox_compiled)
 
     assert "INSERT INTO evidence_windows" in window_sql
     assert "ON CONFLICT" in window_sql
     assert "INSERT INTO events" in event_sql
     assert "INSERT INTO outbox" in outbox_sql
     assert "lease_id" in outbox_sql
+    assert outbox_compiled.params["workspace_id"] == "workspace-1"
 
 
 def test_agent_status_upsert_prunes_only_superseded_expired_agents(monkeypatch) -> None:
