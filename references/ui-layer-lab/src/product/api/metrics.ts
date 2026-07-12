@@ -1,4 +1,4 @@
-import { apiRequest, ApiError, type ApiPath } from "./client";
+import {ApiError, apiRequest, type ApiPath} from './client';
 import {
   agentDebugQueryReceiptSchema,
   clusterUsageResponseSchema,
@@ -10,8 +10,8 @@ import {
   type CommandStatus,
   type PrometheusQueryDefinition,
   type PrometheusRangeResult,
-} from "./metrics-schemas";
-import { encodePathSegment, withQuery } from "./url";
+} from './metrics-schemas';
+import {encodePathSegment, withQuery} from './url';
 
 export const COMMAND_POLL_INTERVAL_MS = 3_000;
 export const COMMAND_POLL_TIMEOUT_MS = 60_000;
@@ -19,7 +19,7 @@ export const COMMAND_POLL_TIMEOUT_MS = 60_000;
 const DEFAULT_USAGE_LIMIT = 288;
 const MIN_USAGE_LIMIT = 1;
 const MAX_USAGE_LIMIT = 2_000;
-const TELEMETRY_QUERY_ACTION = "telemetry.query.run";
+const TELEMETRY_QUERY_ACTION = 'telemetry.query.run';
 
 export interface ClusterUsageOptions {
   limit?: number;
@@ -36,7 +36,7 @@ export interface PollCommandOptions {
 
 export type RunPrometheusQueryOptions = PollCommandOptions;
 
-export type MetricCommandSummary = Omit<CommandStatus, "result">;
+export type MetricCommandSummary = Omit<CommandStatus, 'result'>;
 
 export interface PrometheusQueryRun {
   queryName: string;
@@ -45,7 +45,10 @@ export interface PrometheusQueryRun {
   result: PrometheusRangeResult;
 }
 
-export type MetricQueryExecutionErrorKind = "timeout" | "failed" | "empty-result";
+export type MetricQueryExecutionErrorKind =
+  | 'timeout'
+  | 'failed'
+  | 'empty-result';
 
 export class MetricQueryExecutionError extends Error {
   readonly kind: MetricQueryExecutionErrorKind;
@@ -57,7 +60,7 @@ export class MetricQueryExecutionError extends Error {
     command: MetricCommandSummary | null = null,
   ) {
     super(message);
-    this.name = "MetricQueryExecutionError";
+    this.name = 'MetricQueryExecutionError';
     this.kind = kind;
     this.command = command;
   }
@@ -71,11 +74,13 @@ export function getClusterUsage(
 ): Promise<ClusterUsageResponse> {
   const limit = options.limit ?? DEFAULT_USAGE_LIMIT;
   assertUsageLimit(limit);
-  const basePath = `/api/clusters/${encodePathSegment(clusterId)}/usage` as ApiPath;
-  const path = withQuery(basePath, [["limit", limit]]);
-  return apiRequest(path, clusterUsageResponseSchema, { signal });
+  const basePath =
+    `/api/clusters/${encodePathSegment(clusterId)}/usage` as ApiPath;
+  const path = withQuery(basePath, [['limit', limit]]);
+  return apiRequest(path, clusterUsageResponseSchema, {signal});
 }
 
+// 백엔드에 프로메테우스 실행 요청 한번 보내고 command_id를 받는다
 /**
  * Queues exactly one Prometheus command. There is deliberately no transport or
  * application retry here: a possibly-sent POST must converge through its
@@ -88,24 +93,25 @@ export async function submitPrometheusQuery(
 ): Promise<SubmittedPrometheusQuery> {
   const validatedQuery = prometheusQueryDefinitionSchema.parse(query);
   const receipt = await apiRequest(
-    "/api/agent/debug/query",
+    '/api/agent/debug/query',
     agentDebugQueryReceiptSchema,
     {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ cluster_id: clusterId, query: validatedQuery }),
+      method: 'POST',
+      headers: {'content-type': 'application/json'},
+      body: JSON.stringify({cluster_id: clusterId, query: validatedQuery}),
       signal,
     },
   );
-  return { receipt, query: validatedQuery };
+  return {receipt, query: validatedQuery};
 }
 
+// 백엔드에 현재 명령 상태를 물어본다
 export function getCommandStatus(
   commandId: string,
   signal?: AbortSignal,
 ): Promise<CommandStatus> {
   const path = `/api/commands/${encodePathSegment(commandId)}` as ApiPath;
-  return apiRequest(path, commandStatusSchema, { signal });
+  return apiRequest(path, commandStatusSchema, {signal});
 }
 
 /** Polls one receipt without ever re-enqueueing its originating POST. */
@@ -117,15 +123,15 @@ export async function pollCommand(
 
   while (true) {
     const latest = await getCommandStatus(commandId, options.signal);
-    if (latest.status === "completed" || latest.status === "failed") {
+    if (latest.status === 'completed' || latest.status === 'failed') {
       return latest;
     }
 
     const elapsed = Date.now() - startedAt;
     if (elapsed >= COMMAND_POLL_TIMEOUT_MS) {
       throw new MetricQueryExecutionError(
-        "timeout",
-        "Metric query did not finish within 60 seconds.",
+        'timeout',
+        'Metric query did not finish within 60 seconds.',
         commandSummary(latest),
       );
     }
@@ -149,33 +155,37 @@ export async function runPrometheusQuery(
   );
   const command = await pollCommand(submitted.receipt.command_id, options);
 
-  if (command.status === "failed") {
+  if (command.status === 'failed') {
     throw new MetricQueryExecutionError(
-      "failed",
+      'failed',
       commandFailureMessage(command),
       commandSummary(command),
     );
   }
   if (command.action !== TELEMETRY_QUERY_ACTION) {
-    throw invalidTelemetryPayload("Completed command had an unexpected action.");
+    throw invalidTelemetryPayload(
+      'Completed command had an unexpected action.',
+    );
   }
 
   const parsed = telemetryCommandResultSchema.safeParse(command.result);
   if (!parsed.success) {
     throw invalidTelemetryPayload(
-      "Completed metric command did not match the telemetry result contract.",
+      'Completed metric command did not match the telemetry result contract.',
       parsed.error,
     );
   }
   if (parsed.data.query.name !== submitted.query.name) {
-    throw invalidTelemetryPayload("Completed metric command returned a different query name.");
+    throw invalidTelemetryPayload(
+      'Completed metric command returned a different query name.',
+    );
   }
 
   const result = parsed.data.result.results[submitted.query.name];
   if (result === undefined || result.point_count === 0) {
     throw new MetricQueryExecutionError(
-      "empty-result",
-      "Metric query completed without any observed points.",
+      'empty-result',
+      'Metric query completed without any observed points.',
       commandSummary(command),
     );
   }
@@ -189,25 +199,31 @@ export async function runPrometheusQuery(
 }
 
 function assertUsageLimit(limit: number): void {
-  if (!Number.isInteger(limit) || limit < MIN_USAGE_LIMIT || limit > MAX_USAGE_LIMIT) {
-    throw new RangeError(`usage limit must be an integer from 1 to ${MAX_USAGE_LIMIT}`);
+  if (
+    !Number.isInteger(limit) ||
+    limit < MIN_USAGE_LIMIT ||
+    limit > MAX_USAGE_LIMIT
+  ) {
+    throw new RangeError(
+      `usage limit must be an integer from 1 to ${MAX_USAGE_LIMIT}`,
+    );
   }
 }
 
 function commandFailureMessage(command: CommandStatus): string {
   const message = command.result.message;
-  return typeof message === "string" && message.trim() !== ""
+  return typeof message === 'string' && message.trim() !== ''
     ? message
-    : "Metric query command failed.";
+    : 'Metric query command failed.';
 }
 
 function commandSummary(command: CommandStatus): MetricCommandSummary {
-  const { result: _result, ...summary } = command;
+  const {result: _result, ...summary} = command;
   return summary;
 }
 
 function invalidTelemetryPayload(message: string, cause?: unknown): ApiError {
-  return new ApiError("invalid-payload", message, { cause });
+  return new ApiError('invalid-payload', message, {cause});
 }
 
 function waitForNextPoll(delayMs: number, signal?: AbortSignal): Promise<void> {
@@ -215,20 +231,24 @@ function waitForNextPoll(delayMs: number, signal?: AbortSignal): Promise<void> {
 
   return new Promise((resolve, reject) => {
     const timeoutId = globalThis.setTimeout(() => {
-      signal?.removeEventListener("abort", onAbort);
+      signal?.removeEventListener('abort', onAbort);
       resolve();
     }, delayMs);
 
     function onAbort(): void {
       globalThis.clearTimeout(timeoutId);
-      signal?.removeEventListener("abort", onAbort);
-      reject(signal === undefined ? new DOMException("Aborted", "AbortError") : abortReason(signal));
+      signal?.removeEventListener('abort', onAbort);
+      reject(
+        signal === undefined
+          ? new DOMException('Aborted', 'AbortError')
+          : abortReason(signal),
+      );
     }
 
-    signal?.addEventListener("abort", onAbort, { once: true });
+    signal?.addEventListener('abort', onAbort, {once: true});
   });
 }
 
 function abortReason(signal: AbortSignal): unknown {
-  return signal.reason ?? new DOMException("Aborted", "AbortError");
+  return signal.reason ?? new DOMException('Aborted', 'AbortError');
 }
