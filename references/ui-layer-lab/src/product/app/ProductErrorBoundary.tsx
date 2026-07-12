@@ -24,6 +24,12 @@ export class ProductErrorBoundary extends Component<
   }
 
   componentDidCatch() {
+    console.error({
+      boundary: "ProductErrorBoundary",
+      event: "product.error_boundary.caught",
+      recovery: "manual_retry",
+      severity: "error",
+    });
     this.focusProductMain();
   }
 

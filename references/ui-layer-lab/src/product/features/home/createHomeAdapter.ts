@@ -6,7 +6,7 @@ import {
   toPodCollection,
 } from "./homeCanonical";
 import type { HomeEndpointDependencies } from "./homeEndpointContract";
-import { HomeCanonicalError } from "./homeValidation";
+import { isHomeCanonicalError } from "./homeValidation";
 
 export type {
   HomeEndpointClusterList,
@@ -59,7 +59,7 @@ async function withCanonicalFailure<T>(operation: () => Promise<T>): Promise<T> 
     return await operation();
   } catch (error) {
     if (isAbortError(error) || error instanceof HomePortFailure) throw error;
-    if (error instanceof HomeCanonicalError) {
+    if (isHomeCanonicalError(error)) {
       throw new HomePortFailure("invalid-response");
     }
     throw toPortFailure(error);

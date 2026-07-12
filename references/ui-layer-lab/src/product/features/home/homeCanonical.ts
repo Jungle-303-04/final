@@ -2,7 +2,7 @@ import type {
   HomeClusterChoice,
   HomeClusterChoices,
   HomeClusterOverview,
-  HomeIncidentSummary,
+  HomeDataQualityWarning,
   HomeNodeCollection,
   HomeNodeSummary,
   HomePodCollection,
@@ -10,34 +10,34 @@ import type {
   HomePodReadiness,
   HomePodSummary,
   HomeUsageSnapshot,
-  HomeWarningSummary,
-  HomeWorkloadSummary,
 } from "./homeContract";
 import type {
   HomeEndpointClusterList,
   HomeEndpointClusterOverview,
   HomeEndpointClusterSummary,
-  HomeEndpointIncident,
   HomeEndpointNode,
   HomeEndpointNodeCollection,
   HomeEndpointPod,
   HomeEndpointPodCollection,
-  HomeEndpointUsage,
-  HomeEndpointWarning,
-  HomeEndpointWorkload,
 } from "./homeEndpointContract";
+import {
+  toIncident,
+  toUsage,
+  toWarning,
+  toWorkload,
+} from "./homeOverviewCanonical";
 import {
   assertSameIdentity,
   assertUnique,
   canonicalDisplayLabel,
   canonicalIdentity,
   canonicalOptionalIdentity,
-  canonicalOptionalText,
   canonicalTimestamp,
   connectionState,
   ephemeralId,
   healthTone,
   invalidResponse,
+  isHomeCanonicalError,
   nonNegativeInteger,
   nonNegativeNumber,
   percentage,
@@ -79,88 +79,41 @@ export function toClusterOverview(
 ): HomeClusterOverview {
   const clusterId = canonicalIdentity(requestedClusterId);
   assertSameIdentity(wire.cluster_id, clusterId);
+  const dataQualityWarnings: HomeDataQualityWarning[] = [];
   const workloads = Object.values(wire.workloads).flatMap((items) =>
-    items.map((item) => toWorkload(clusterId, item))
+    items.map((item) => toWorkload(clusterId, item, dataQualityWarnings))
   ).sort((left, right) => left.id.localeCompare(right.id));
   const warnings = wire.warning_events.map((item) => toWarning(clusterId, item));
-  const incidents = wire.open_incidents.map(toIncident);
+  const incidents = wire.open_incidents.map((item, index) =>
+    toIncident(clusterId, index, item, dataQualityWarnings)
+  );
   assertUnique(workloads.map(({ id }) => id));
   assertUnique(warnings.map(({ id }) => id));
   assertUnique(incidents.map(({ id }) => id));
+
+  let usage: HomeUsageSnapshot | null = null;
+  if (wire.usage !== null) {
+    try {
+      usage = toUsage(wire.usage);
+    } catch (error) {
+      if (!isHomeCanonicalError(error)) throw error;
+      dataQualityWarnings.push({
+        code: "usage-unavailable",
+        section: "usage",
+        entityId: null,
+      });
+    }
+  }
 
   return {
     clusterId,
     name: canonicalDisplayLabel(wire.name, clusterId),
     health: healthTone(wire.health),
-    usage: wire.usage === null ? null : toUsage(wire.usage),
+    usage,
     workloads,
     warnings,
     incidents,
-  };
-}
-
-function toUsage(wire: HomeEndpointUsage): HomeUsageSnapshot {
-  const podsRunning = nonNegativeInteger(wire.pods_running);
-  const podsTotal = nonNegativeInteger(wire.pods_total);
-  const nodesReady = nonNegativeInteger(wire.nodes_ready);
-  const nodesTotal = nonNegativeInteger(wire.nodes_total);
-  if (podsRunning > podsTotal || nodesReady > nodesTotal) invalidResponse();
-  return {
-    observedAt: canonicalTimestamp(wire.sampled_at),
-    podsRunning,
-    podsTotal,
-    nodesReady,
-    nodesTotal,
-    restartCount: nonNegativeInteger(wire.restart_total),
-    cpuPercent: percentage(wire.cpu_pct),
-    memoryPercent: percentage(wire.mem_pct),
-  };
-}
-
-function toWorkload(clusterId: string, wire: HomeEndpointWorkload): HomeWorkloadSummary {
-  const name = canonicalIdentity(wire.name);
-  const kind = canonicalIdentity(wire.kind);
-  const namespace = canonicalOptionalIdentity(wire.namespace);
-  return {
-    id: ephemeralId("workload", clusterId, namespace ?? "", kind, name),
-    identityStability: "ephemeral",
-    name,
-    kind,
-    namespace,
-    health: healthTone(wire.health),
-    ready: canonicalIdentity(wire.ready),
-    restartCount: nonNegativeInteger(wire.restarts),
-  };
-}
-
-function toWarning(clusterId: string, wire: HomeEndpointWarning): HomeWarningSummary {
-  const name = canonicalIdentity(wire.name);
-  const namespace = canonicalOptionalIdentity(wire.namespace);
-  return {
-    id: ephemeralId("warning", clusterId, namespace ?? "", name),
-    identityStability: "ephemeral",
-    name,
-    namespace,
-    reason: canonicalOptionalText(wire.reason),
-    message: canonicalOptionalText(wire.message),
-    involvedKind: canonicalOptionalIdentity(wire.involved_kind),
-    involvedName: canonicalOptionalIdentity(wire.involved_name),
-    occurrenceCount: nonNegativeInteger(wire.count),
-    lastSeenAt: canonicalTimestamp(wire.last_seen_at),
-  };
-}
-
-function toIncident(wire: HomeEndpointIncident): HomeIncidentSummary {
-  return {
-    id: canonicalIdentity(wire.incident_id),
-    correlationId: canonicalIdentity(wire.correlation_id),
-    symptom: canonicalOptionalText(wire.symptom),
-    rootCause: canonicalOptionalText(wire.root_cause),
-    namespace: canonicalOptionalIdentity(wire.namespace),
-    resourceKind: canonicalOptionalIdentity(wire.resource_kind),
-    resourceName: canonicalOptionalIdentity(wire.resource_name),
-    status: canonicalIdentity(wire.status),
-    createdAt: canonicalTimestamp(wire.created_at),
+    dataQualityWarnings,
   };
 }
 

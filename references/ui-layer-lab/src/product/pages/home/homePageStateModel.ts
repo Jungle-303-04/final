@@ -4,18 +4,17 @@ import {
   type HomeNodeCollection,
   type HomePodCollection,
 } from "../../features/home/homeContract";
+import {
+  ASYNC_IDLE,
+  ASYNC_LOADING,
+  asyncResourceFailure,
+  asyncResourceSuccess,
+  isAbortError as isSharedAbortError,
+  startAsyncResource,
+  type AsyncResourceState,
+} from "../../shared/data/asyncResourceState";
 
-export type HomeResourceState<T> =
-  | { phase: "idle"; data: null; failure: null }
-  | { phase: "loading"; data: null; failure: null }
-  | {
-    phase: "ready";
-    data: T;
-    failure: null;
-    refreshing: boolean;
-    refreshFailure: HomePortFailure | null;
-  }
-  | { phase: "failed"; data: null; failure: HomePortFailure };
+export type HomeResourceState<T> = AsyncResourceState<T, HomePortFailure>;
 
 export type HomeClusterAccess =
   | { kind: "allowed"; failure: null }
@@ -38,8 +37,8 @@ export interface HomeClusterFrame {
   pods: HomeResourceState<HomePodCollection>;
 }
 
-export const HOME_IDLE = { phase: "idle", data: null, failure: null } as const;
-export const HOME_LOADING = { phase: "loading", data: null, failure: null } as const;
+export const HOME_IDLE = ASYNC_IDLE;
+export const HOME_LOADING = ASYNC_LOADING;
 export const HOME_ALLOWED = { kind: "allowed", failure: null } as const;
 
 export const EMPTY_HOME_FRAME: HomeClusterFrame = {
@@ -70,20 +69,18 @@ export function startClusterFrame(
 }
 
 export function startResource<T>(state: HomeResourceState<T>): HomeResourceState<T> {
-  if (state.phase !== "ready") return HOME_LOADING;
-  return { ...state, refreshing: true, refreshFailure: null };
+  return startAsyncResource(state);
 }
 
 export function resourceSuccess<T>(data: T): HomeResourceState<T> {
-  return { phase: "ready", data, failure: null, refreshing: false, refreshFailure: null };
+  return asyncResourceSuccess(data);
 }
 
 export function resourceFailure<T>(
   current: HomeResourceState<T>,
   failure: HomePortFailure,
 ): HomeResourceState<T> {
-  if (current.phase !== "ready") return { phase: "failed", data: null, failure };
-  return { ...current, refreshing: false, refreshFailure: failure };
+  return asyncResourceFailure(current, failure);
 }
 
 export function forbidClusterFrame(
@@ -121,6 +118,5 @@ export function toHomeFailure(error: unknown): HomePortFailure {
 }
 
 export function isAbortError(error: unknown): boolean {
-  return typeof error === "object" && error !== null && "name" in error &&
-    error.name === "AbortError";
+  return isSharedAbortError(error);
 }

@@ -54,7 +54,7 @@ export interface HomeEndpointIncident {
 export interface HomeEndpointUsage {
   sampled_at: string | null;
   pods_running: number;
-  pods_total: number;
+  pods_total?: number;
   nodes_ready: number;
   nodes_total: number;
   restart_total: number;

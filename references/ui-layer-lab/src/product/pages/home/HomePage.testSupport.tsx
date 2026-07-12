@@ -70,6 +70,7 @@ export const OVERVIEW: HomeClusterOverview = {
   }],
   incidents: [{
     id: "incident-1",
+    incidentId: "incident-1",
     correlationId: "correlation-1",
     symptom: "Restart loop",
     rootCause: null,
@@ -79,6 +80,7 @@ export const OVERVIEW: HomeClusterOverview = {
     status: "open",
     createdAt: "2026-07-12T09:58:00.000Z",
   }],
+  dataQualityWarnings: [],
 };
 
 export const NODES: HomeNodeCollection = {

@@ -65,6 +65,8 @@ export interface HomeWarningSummary {
 
 export interface HomeIncidentSummary {
   id: string;
+  /** Server incident identifier used only when a detail link is available. */
+  incidentId: string | null;
   correlationId: string;
   symptom: string | null;
   rootCause: string | null;
@@ -75,6 +77,18 @@ export interface HomeIncidentSummary {
   createdAt: string | null;
 }
 
+export type HomeDataQualityWarningCode =
+  | "usage-unavailable"
+  | "workload-readiness-unavailable"
+  | "incident-link-unavailable";
+
+export interface HomeDataQualityWarning {
+  code: HomeDataQualityWarningCode;
+  section: "usage" | "workloads" | "incidents";
+  /** Canonical row identity when the warning belongs to one row. */
+  entityId: string | null;
+}
+
 export interface HomeClusterOverview {
   clusterId: string;
   name: string;
@@ -83,6 +97,7 @@ export interface HomeClusterOverview {
   workloads: HomeWorkloadSummary[];
   warnings: HomeWarningSummary[];
   incidents: HomeIncidentSummary[];
+  dataQualityWarnings: HomeDataQualityWarning[];
 }
 
 export interface HomeNodeSummary {

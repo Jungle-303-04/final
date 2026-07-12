@@ -102,6 +102,12 @@ export class HomeCanonicalError extends Error {
   }
 }
 
+export function isHomeCanonicalError(error: unknown): error is HomeCanonicalError {
+  return error instanceof HomeCanonicalError ||
+    (typeof error === "object" && error !== null && "name" in error &&
+      error.name === "HomeCanonicalError");
+}
+
 export function invalidResponse(): never {
   throw new HomeCanonicalError();
 }

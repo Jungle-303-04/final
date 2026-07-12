@@ -90,9 +90,24 @@ function HealthContent({
           unit="개"
           value={usage?.nodesTotal ?? cluster?.nodeCount ?? null}
         />
-        <Metric label="CPU 사용률" unit="%" value={usage?.cpuPercent ?? null} />
-        <Metric label="메모리 사용률" unit="%" value={usage?.memoryPercent ?? null} />
-        <Metric label="최근 재시작" unit="회" value={usage?.restartCount ?? null} />
+        <Metric
+          label="CPU 사용률"
+          unavailableLabel="—"
+          unit="%"
+          value={usage?.cpuPercent ?? null}
+        />
+        <Metric
+          label="메모리 사용률"
+          unavailableLabel="—"
+          unit="%"
+          value={usage?.memoryPercent ?? null}
+        />
+        <Metric
+          label="최근 재시작"
+          unavailableLabel="—"
+          unit="회"
+          value={usage?.restartCount ?? null}
+        />
         <Metric
           label="활성 인시던트"
           note={`표시 경고 ${overview.warnings.length} · 전체 수 미확인`}
@@ -147,7 +162,12 @@ function UsageProgress({
           <span className="[&_svg]:size-3.5">{icon}</span>{label}
         </span>
         <span className="font-mono text-muted-foreground">
-          {value === null ? "사용할 수 없음" : `${value}%`}
+          {value === null ? (
+            <>
+              <span aria-hidden="true">—</span>
+              <span className="sr-only">사용할 수 없음</span>
+            </>
+          ) : `${value}%`}
         </span>
       </div>
       {value === null ? (
