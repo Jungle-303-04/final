@@ -116,3 +116,23 @@ format: "[시각] [트랙] 한 줄 상태 + 커밋 hash (있으면)"
 [2026-07-13 05:19 KST] [백엔드] F 시도 2/3 실패 — 렌더 산출물을 Helm·Kustomize·멀티문서 원본 경로에 덮어써 소스 훼손·비밀값 노출 가능 — 소스 유형·단일 파일·단일 문서 증거를 전파하고 안전한 raw manifest만 패치하도록 회귀 테스트 후 재검증
 
 [2026-07-13 06:06:51 KST] [프론트] A in_progress — origin/dev 착륙 3건 재검증 및 VP-001·APIQ 동결 해제 착수
+
+## 2026-07-13 06:11 KST — [프론트] A 완료 증거
+
+- 대상: VP-001 착륙 확정, APIQ-029 동결 해제, APIQ-012 claim 가능 갱신.
+- 조율·추적 커밋: `f2da1a266` (`docs/auto` 정본 추적 + A in_progress).
+- 판정 갱신 커밋: `d50a53a75` (VP-001·API queue). 두 커밋을 분리해 canonical branch에 push 완료.
+- full gate: 직전 코드 HEAD `5e3dd16f3`에서 `npm run check` PASS — 94 files / 661 tests,
+  design guard 275 files, shadcn audit 482 previews, Vite production build PASS. 이후 변경은 문서뿐이다.
+- origin 검증 출력 전문:
+
+```text
+$ git merge-base --is-ancestor 44f35234e origin/dev; echo $?
+0
+$ git cat-file -e origin/dev:docs/backend-f-progress.md; echo $?
+0
+$ git cat-file -e origin/dev:src/domains/rca_bundle/router.py; echo $?
+0
+```
+
+- 결과: VP-001 판정 `직결`, APIQ-029 active in_progress, APIQ-012 requested/claim 가능.
