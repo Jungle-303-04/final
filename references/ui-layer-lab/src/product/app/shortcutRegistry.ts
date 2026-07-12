@@ -45,22 +45,22 @@ export interface ShortcutKeyEvent {
   getModifierState?: (modifier: string) => boolean;
   preventDefault: () => void;
 }
-
 export interface ShortcutMatcher {
   handle: (event: ShortcutKeyEvent) => ShortcutDefinition | null;
   reset: () => void;
   dispose: () => void;
 }
-
 const CHORD_TIMEOUT_MS = 1_000;
 const shortcutRouteLabelKeys = {
   applications: "shell.shortcut.route.applications",
   gitops: "shell.shortcut.route.gitops",
   home: "shell.shortcut.route.home",
   issues: "shell.shortcut.route.issues",
+  metrics: "shell.shortcut.route.metrics",
   resources: "shell.shortcut.route.resources",
   timeline: "shell.shortcut.route.timeline",
   topology: "shell.shortcut.route.topology",
+  catalog: "shell.shortcut.route.catalog",
 } satisfies Record<ProductSurfaceId, MessageKey>;
 
 export function shellShortcutDefinitions(

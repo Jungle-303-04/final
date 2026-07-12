@@ -13,6 +13,7 @@ const labRoot = resolve(sourceRoot, "..");
 const repositoryRoot = resolve(labRoot, "../..");
 const apiRoot = resolve(productRoot, "api");
 const apiIndexFromRepository = "references/ui-layer-lab/src/product/api/index.ts";
+const apiBarrelsFromRepository = "references/ui-layer-lab/src/product/api/barrels";
 const compositionRoot = resolve(appRoot, "apiComposition.ts");
 const progressPath = resolve(repositoryRoot, "docs/spec/frontend/codex-progress-20260711.md");
 const scriptExtensions = new Set([".cjs", ".cts", ".js", ".jsx", ".mjs", ".mts", ".ts", ".tsx"]);
@@ -30,7 +31,7 @@ interface ApprovalRecord {
 interface ApprovalCommitEvidence {
   changedFiles: string[];
   contractTestSources: string[];
-  indexSource: string;
+  publicBarrelSources: string[];
 }
 
 const API_BOUNDARY_TIMEOUT_MS = 30_000;
@@ -219,7 +220,7 @@ function approvalEvidenceIssues(record: ApprovalRecord | undefined): string[] {
   ))) {
     issues.push("completion function absent from changed contract tests");
   }
-  if (!hasNamedExport(evidence.indexSource, record.name)) {
+  if (!evidence.publicBarrelSources.some((source) => hasNamedExport(source, record.name))) {
     issues.push("named export absent at completion commit");
   }
   return issues.map((issue) => `${record.name}@${record.hash}: ${issue}`);
@@ -237,10 +238,21 @@ function approvalCommitEvidence(hash: string): ApprovalCommitEvidence | null {
     const contractTests = changedFiles.filter((file) => (
       file.startsWith(apiPrefix) && /\.test\.[cm]?[jt]sx?$/u.test(file)
     ));
+    const domainBarrels = git([
+      "ls-tree",
+      "-r",
+      "--name-only",
+      hash,
+      "--",
+      apiBarrelsFromRepository,
+    ]).split("\n").filter(Boolean);
     const evidence = {
       changedFiles,
       contractTestSources: contractTests.map((file) => git(["show", `${hash}:${file}`])),
-      indexSource: git(["show", `${hash}:${apiIndexFromRepository}`]),
+      publicBarrelSources: [
+        git(["show", `${hash}:${apiIndexFromRepository}`]),
+        ...domainBarrels.map((file) => git(["show", `${hash}:${file}`])),
+      ],
     };
     approvalEvidenceByHash.set(hash, evidence);
     return evidence;
