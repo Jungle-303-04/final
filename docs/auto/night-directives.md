@@ -326,6 +326,50 @@ manifest는 위조 면에서 신뢰 불가라는 백엔드의 원칙과 충돌�
 - 이 port는 gateway 계약이 아니므로 계약 lock 대상 아님. additive-only 불변.
 P는 이 결정으로 재개한다. C0·C·D·E와의 순서 규칙은 파이프라인 그대로.
 
+### [D-013] 2026-07-13 — B-트랙(벤치마크) 정식 등록 (작성: 우녕 위임 조율 세션)
+
+**목적.** oss-remediation-roadmap.md §6의 벤치마크(정답이 있는 장애 데이터셋)를 구축한다.
+코드보다 복제하기 어려운 해자이며, "harmful action rate 0%"와 "모르면 행동하지 않는다"를
+측정 가능하게 만드는 자산이다. 담당: 구 R-트랙 세션(RCA 규칙·시나리오 계약 숙련).
+
+**소유 경로 (이것만).**
+- `benchmark/**` (신규 디렉터리 — 시나리오·채점 스크립트·README)
+- `docs/spec/remediation-bundle-v1alpha1.md` (신규 — 착륙된 BQ-003 스키마의 공개 규격
+  문서화. 스키마 자체를 바꾸는 것이 아니라 문서화만)
+- src/** 는 **읽기 전용** (기대 후보·evidence 도출을 위한 참조만, 수정 0건)
+
+**시나리오 형식 (각 시나리오 디렉터리, 로드맵 §6 그대로).**
+정상 manifest / 장애 주입 patch / 예상 root cause / 필요한 evidence 목록 /
+허용되는 remediation / **금지되는 위험한 remediation** / 예상 Git patch / rollback patch /
+정상화 판정 조건. v0.1 대상: oom, crashloop, imagepull, probe, service-selector
+(+여유 시 scheduling, pvc) — 카테고리당 2~4개, 총 10~20개.
+
+**검증 기준.**
+- 각 시나리오의 예상 root cause·candidate가 **실제 카탈로그 규칙과 일치**해야 한다 —
+  기존 rca 시나리오 validate CLI 계약(test_rca_scenario_cli가 검증하는 그것)을 재사용해
+  기계 검증 가능하게 만든다. 상상 속 규칙에 대한 시나리오 금지.
+- 채점 스크립트는 benchmark/ 안에서 자기완결: 시나리오 스키마 유효성 + 카탈로그 일치 +
+  금지 remediation 목록의 blast radius 태그 검사. 실행 파이프라인 연동(실제 클러스터
+  주입·측정)은 v0.2 — 지금은 정적 채점까지만.
+- 공개 지표 정의 문서: RCA Top-1 정확도, insufficient-evidence 정확도, patch apply
+  성공률, 정책 위반 제안율, harmful action rate, 정상화 성공률 (측정 방법 포함).
+
+**lane·규칙.** 신규 lane `codex/bench-scenarios` 1개 승인. 전체 그린 규칙 적용
+(`bash scripts/test.sh` — benchmark는 기존 테스트에 영향 없어야 함). merge는
+GO-REQUEST [B]로 사람 게이트. night-log 보고·폴링·HOLD 규칙은 R-트랙과 동일.
+금지: src/** 수정, 백엔드 lane 경로 접근, 카탈로그에 없는 규칙 가정.
+
+### [D-014] 2026-07-13 — B-트랙 BLOCKED 해소: 색인 권한 부여 (작성: 우녕 위임 조율 세션)
+
+B-트랙의 BLOCKED(docs/README.md 색인 링크 필요)를 해소한다. 판정: **색인 갱신은
+산출물의 일부다** — 백엔드가 문서 도입 커밋에서 색인을 함께 갱신한 선례와 동일하다.
+
+**권한 부여 (정확히 이만큼):** B-트랙은 docs/README.md에 **자기 산출물 링크 추가만**
+할 수 있다 (docs/spec/remediation-bundle-v1alpha1.md 및 test_docs_index가 요구하는
+자기 소유 .md). 기존 링크·다른 줄의 수정·삭제는 금지. diff는 추가 줄만 있어야 한다.
+
+후속: 링크 추가 → 전체 게이트 재실행(전체 그린 필수) → GO-REQUEST [B] 작성 → 대기.
+
 ### [D-008] 2026-07-13 04:50 KST 기록 정합 (작성: 자동 판단자)
 
 [D-007](판단자)과 [D-006](조율 세션)이 04:47경 동시 기록되어 파일 내 순서가 ID 순서와 어긋났다.
