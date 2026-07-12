@@ -681,6 +681,55 @@ def test_application_create_with_foreign_repository_id_is_rejected_before_victim
     assert db.victim == victim_row
 
 
+def test_plain_application_create_cannot_register_new_repository_as_non_admin() -> None:
+    writes: list[str] = []
+
+    class PlainCreateDb:
+        @contextmanager
+        def unit_of_work(self):
+            yield object()
+
+        def get_repository_by_ref(
+            self,
+            _workspace_id: str,
+            _repo_ref: str,
+        ) -> dict[str, object] | None:
+            return None
+
+        def register_repository(self, _payload: dict[str, object]) -> dict[str, object]:
+            writes.append("repository")
+            return {"repository_id": "repo-new"}
+
+        def upsert_application(self, _payload: dict[str, object]) -> dict[str, object]:
+            writes.append("application")
+            return {"application_id": "app-new"}
+
+        def get_application(
+            self,
+            _workspace_id: str,
+            _application_id: str,
+        ) -> dict[str, object] | None:
+            return None
+
+    session = SimpleNamespace(user_id="user-a", roles=("user",), workspace_id="workspace-a")
+
+    async def run() -> object:
+        return await upsert_application(
+            ApplicationUpsertRequest(
+                name="private-target",
+                repo_ref="acme/private-target",
+            ),
+            current=session,
+            db=PlainCreateDb(),
+        )
+
+    with pytest.raises(HTTPException) as exc:
+        asyncio.run(run())
+
+    assert exc.value.status_code == 403
+    assert writes == []
+
+
 def test_application_create_rejects_whitespace_repository_id_before_writes() -> None:
     class WriteSpyDb:
         def __init__(self) -> None:
