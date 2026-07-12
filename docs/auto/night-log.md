@@ -79,3 +79,23 @@ format: "[시각] [트랙] 한 줄 상태 + 커밋 hash (있으면)"
 [2026-07-13 04:57 KST] [백엔드] B in_progress — origin/dev 착륙 3건과 in-process bus 미착륙 lane 상태를 작업 큐에 정합
 
 [2026-07-13 04:59 KST] [백엔드] B 시도 1/3 실패 — docs/auto 추적 뒤 문서 색인 4건 누락 — docs/README 색인 보완 후 재검증
+
+## 2026-07-13 04:59 KST — B 완료 증거
+
+- branch: local `dev` (push 없음)
+- HEAD: `80b9ee78899db187952b49c944e4b91c1c00b576`
+- commit: `80b9ee788 docs: 큐 착륙 상태 / 자동 문서 색인 / 단계 착수`
+- stat: 4 files changed, 18 insertions(+), 6 deletions(-); 조율 문서와 누락된 `docs/auto/*` 색인만 변경
+- origin 대조:
+
+| 큐 | 기준 커밋·lane | origin/dev 판정 | workqueue 상태 |
+|---|---|---|---|
+| BQ-001 | `4e6216052` | ancestor exit 0, 계약 실물 존재 | `landed` |
+| BQ-002 | `2886f0e49` | ancestor exit 0, migration 실물 존재 | `landed` |
+| BQ-003 | `44f35234e` | ancestor exit 0, `src/domains/rca_bundle/router.py` 실물 존재 | `landed` |
+| BQ-008 | `codex/f-inprocess-event-bus` `88740e523` | ancestor exit 1, origin/dev 대비 `0 5`, lane clean | `done-pending-merge` |
+
+- `origin/dev`: `03e90ddb6d6e50e1b7e39739c20210e28e1dc4a2` (`git ls-remote origin refs/heads/dev`)
+- 검증: `.venv/bin/python -m pytest -q tests/test_docs_index.py` → `9 passed`; 최초 색인 4건 누락은 같은 단계에서 보완
+- `docs/backend-f-progress.md` BQ-008 예비 앵커 0건; 코드·gateway 계약·frozen path 변경 0건
+- merge·push·배포·앵커 0건
