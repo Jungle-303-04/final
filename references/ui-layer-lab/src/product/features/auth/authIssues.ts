@@ -16,6 +16,7 @@ export function toAuthActionIssue(error: unknown): AuthActionIssue {
       ? { seconds: failure.retryAfterSeconds }
       : undefined,
     retryAfterSeconds: failure.retryAfterSeconds,
+    safeDetail: failure.safeDetail ?? undefined,
   };
 }
 

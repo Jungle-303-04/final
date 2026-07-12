@@ -17,7 +17,8 @@ export function AuthSessionControl({
   const { t } = useI18n();
   const label = auth.signOutPending ? t("auth.logout.pending") : t("auth.logout.action");
   const issueMessage = auth.signOutIssue
-    ? t(auth.signOutIssue.messageKey, auth.signOutIssue.messageParams)
+    ? auth.signOutIssue.safeDetail ??
+      t(auth.signOutIssue.messageKey, auth.signOutIssue.messageParams)
     : null;
   return (
     <div className={cn("grid min-w-0 gap-2", isToolbar ? "justify-items-end" : "w-full")}>

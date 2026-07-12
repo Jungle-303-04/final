@@ -3,6 +3,7 @@ import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { ProductShell } from "../../src/product/app/ProductShell";
+import { I18nProvider } from "../../src/product/shared/i18n";
 import "../../src/product/styles/tokens.css";
 import "../../src/product/styles/foundation.css";
 import type { AuthenticatedAuthState } from "../../src/product/features/auth/authContract";
@@ -20,23 +21,25 @@ const testAuth: AuthenticatedAuthState = {
 
 createRoot(root).render(
   <StrictMode>
-    <ThemeProvider
-      attribute="class"
-      defaultTheme="light"
-      enableSystem={false}
-      storageKey="kubeheal-theme"
-      themes={["light", "dark"]}
-    >
-      <MemoryRouter initialEntries={["/product"]}>
-        <Routes>
-          <Route element={<ProductShell auth={testAuth} releasedSurfaceIds={releasedSurfaceIds} />}>
-            <Route path="/product" element={<ShellOutletBoundary />} />
-            <Route path="/product/issues" element={<ShellOutletBoundary />} />
-            <Route path="/product/timeline" element={<ShellOutletBoundary />} />
-          </Route>
-        </Routes>
-      </MemoryRouter>
-    </ThemeProvider>
+    <I18nProvider navigatorLanguage="ko" storage={null}>
+      <ThemeProvider
+        attribute="class"
+        defaultTheme="light"
+        enableSystem={false}
+        storageKey="kubeheal-theme"
+        themes={["light", "dark"]}
+      >
+        <MemoryRouter initialEntries={["/product"]}>
+          <Routes>
+            <Route element={<ProductShell auth={testAuth} releasedSurfaceIds={releasedSurfaceIds} />}>
+              <Route path="/product" element={<ShellOutletBoundary />} />
+              <Route path="/product/issues" element={<ShellOutletBoundary />} />
+              <Route path="/product/timeline" element={<ShellOutletBoundary />} />
+            </Route>
+          </Routes>
+        </MemoryRouter>
+      </ThemeProvider>
+    </I18nProvider>
   </StrictMode>,
 );
 

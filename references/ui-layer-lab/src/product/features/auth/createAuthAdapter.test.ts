@@ -107,25 +107,69 @@ describe("canonical auth adapter", () => {
       }),
     });
 
-    await expect(createAuthAdapter(dependencies).signIn({
+    const result = createAuthAdapter(dependencies).signIn({
       email: "operator@example.com",
       password: "secret",
-    })).rejects.toMatchObject({ code });
+    });
+
+    await expect(result).rejects.toMatchObject({ code, safeDetail: null });
   });
 
-  it("keeps an unknown forbidden login reason provider-neutral", async () => {
+  it("keeps an unknown forbidden login reason provider-neutral with safe plain detail", async () => {
     const dependencies = endpoints({
       login: vi.fn().mockRejectedValue({
         kind: "forbidden",
         code: "provider_only_reason",
-        detail: "private",
+        detail: "This account is not assigned to the requested workspace.",
       }),
     });
 
     await expect(createAuthAdapter(dependencies).signIn({
       email: "operator@example.com",
       password: "secret",
-    })).rejects.toMatchObject({ code: "forbidden" });
+    })).rejects.toMatchObject({
+      code: "forbidden",
+      safeDetail: "This account is not assigned to the requested workspace.",
+    });
+  });
+
+  it.each([null, "provider_only_reason"])(
+    "preserves safe plain API detail when the structured code is %s",
+    async (code) => {
+      const dependencies = endpoints({
+        getSession: vi.fn().mockRejectedValue({
+          kind: "http",
+          code: code ?? undefined,
+          detail: "Authentication is temporarily unavailable.",
+          status: 503,
+        }),
+      });
+
+      await expect(createAuthAdapter(dependencies).loadSession()).rejects.toMatchObject({
+        code: "server",
+        safeDetail: "Authentication is temporarily unavailable.",
+      });
+    },
+  );
+
+  it.each([
+    "<script>alert('x')</script>",
+    "Error: private failure\n    at authenticate (/srv/auth.ts:10:2)",
+    "authorization token=secret-value",
+    "x".repeat(241),
+  ])("rejects unsafe authentication detail: %s", async (detail) => {
+    const dependencies = endpoints({
+      getSession: vi.fn().mockRejectedValue({
+        kind: "http",
+        detail,
+        status: 500,
+      }),
+    });
+
+    await expect(createAuthAdapter(dependencies).loadSession()).rejects.toMatchObject({
+      code: "server",
+      safeDetail: null,
+    });
   });
 
   it("treats an authenticated:false login response as rejected credentials", async () => {
@@ -156,12 +200,12 @@ describe("canonical auth adapter", () => {
     await expect(createAuthAdapter(dependencies).loadSession()).rejects.toMatchObject({ code });
   });
 
-  it("preserves a valid retry-after delay without exposing server detail", async () => {
+  it("preserves a valid retry-after delay without exposing secret detail", async () => {
     const dependencies = endpoints({
       login: vi.fn().mockRejectedValue({
         kind: "rate-limited",
         retryAfter: 12,
-        detail: "private",
+        detail: "token=private",
       }),
     });
 
@@ -171,6 +215,7 @@ describe("canonical auth adapter", () => {
     })).rejects.toMatchObject({
       code: "rate-limited",
       retryAfterSeconds: 12,
+      safeDetail: null,
     });
   });
 

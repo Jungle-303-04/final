@@ -33,6 +33,19 @@ describe("structured authentication issues", () => {
     });
   });
 
+  it("preserves only the adapter-approved plain fallback detail", () => {
+    const issue = toAuthActionIssue(new AuthPortFailure(
+      "server",
+      null,
+      "Authentication is temporarily unavailable.",
+    ));
+
+    expect(issue).toMatchObject({
+      messageKey: "auth.failure.server",
+      safeDetail: "Authentication is temporarily unavailable.",
+    });
+  });
+
   it("uses a logout-specific recovery message without leaking raw errors", () => {
     const raw = new Error("private backend detail and stack");
     const issue = logoutIssue(raw);
