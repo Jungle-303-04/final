@@ -5,6 +5,10 @@ import type {
   ResourceList,
   ResourcesPort,
 } from "../../features/resources/resourcesContract";
+import {
+  ClusterConnectionStatus,
+  clusterDisplayLabel,
+} from "../../shared/ui/ClusterConnectionStatus";
 import { ProductStateScreen } from "../../shared/ui/ProductStateScreen";
 import { Surface } from "../../shared/ui/Surface";
 import { Badge } from "../../shared/ui/primitives/badge";
@@ -71,22 +75,20 @@ export function ResourcesPage({
 
   return (
     <div className="mx-auto grid w-full max-w-[100rem] gap-4 p-4 sm:p-6">
-      <header className="flex min-w-0 flex-col justify-between gap-3 xl:flex-row xl:items-center">
-        <div className="grid min-w-0 gap-1">
-          <div className="flex min-w-0 flex-wrap items-center gap-2">
-            <h2 className="text-xl font-semibold tracking-tight">Resources</h2>
-            <Badge variant="outline">
-              {state.automaticRefreshPaused ? "자동 갱신 일시 중지" : "실 API · 30초 자동 갱신"}
-            </Badge>
-          </div>
-          <p className="text-sm text-muted-foreground">
-            관측된 리소스 종류를 탐색하고 같은 화면에서 서버 계산 관계와 이벤트를 확인합니다.
-          </p>
-        </div>
+      <header className="flex min-w-0 justify-end">
         <div className="flex w-full min-w-0 items-center justify-end gap-2 xl:w-auto">
+          {state.automaticRefreshPaused ? (
+            <Badge variant="outline">자동 갱신 일시 중지</Badge>
+          ) : null}
+          {selectedCluster ? (
+            <ClusterConnectionStatus
+              connectionState={selectedCluster.connectionState}
+              lastObservedAt={selectedCluster.lastObservedAt}
+            />
+          ) : null}
           <Select
             items={state.choices.data.clusters.map((cluster) => ({
-              label: `${cluster.name} · ${cluster.environment} · ${cluster.id}`,
+              label: clusterDisplayLabel(cluster),
               value: cluster.id,
             }))}
             onValueChange={(value) => { if (value) state.selectCluster(value); }}
@@ -101,7 +103,7 @@ export function ResourcesPage({
                 <SelectLabel>조회 가능한 클러스터</SelectLabel>
                 {state.choices.data.clusters.map((cluster) => (
                   <SelectItem key={cluster.id} value={cluster.id}>
-                    {cluster.name} · {cluster.environment} · {cluster.id}
+                    {clusterDisplayLabel(cluster)}
                   </SelectItem>
                 ))}
               </SelectGroup>
@@ -178,17 +180,8 @@ export function ResourcesPage({
 function ResourcesListSurface({ state }: { state: ReturnType<typeof useResourcesPageState> }) {
   return (
     <Surface aria-labelledby="resources-list-title" className="min-w-0 overflow-hidden">
-      <div className="flex flex-wrap items-center justify-between gap-2 border-b px-4 py-3">
-        <div>
-          <h3 className="font-medium" id="resources-list-title">{state.selectedResourceType}</h3>
-        </div>
-        {state.catalog.phase === "ready" && state.namespace === null && !state.includeDeleted ? (
-          <Badge variant="secondary">
-            클러스터 활성 집계 {state.catalog.data.items.find(
-              (item) => item.resourceType === state.selectedResourceType,
-            )?.count.toLocaleString() ?? "미확인"}
-          </Badge>
-        ) : null}
+      <div className="border-b px-4 py-3">
+        <h3 className="font-medium" id="resources-list-title">{state.selectedResourceType}</h3>
       </div>
       <ResourcesToolbar
         includeDeleted={state.includeDeleted}
@@ -239,9 +232,9 @@ function ResourcesListBody({ state }: { state: ReturnType<typeof useResourcesPag
 }
 
 function ListScopeStatus({ filtered, list }: { filtered: number; list: ResourceList }) {
-  const filteredText = filtered === list.returned ? "" : ` · 검색 결과 ${filtered}개`;
+  const filteredText = filtered === list.returned ? "" : ` · 검색 ${filtered}`;
   const excludedText = (list.excludedCount ?? 0) > 0
-    ? ` · 검증 실패로 제외 ${list.excludedCount}개`
+    ? ` · 검증 실패 제외 ${list.excludedCount}`
     : "";
   return (
     <div
@@ -249,7 +242,7 @@ function ListScopeStatus({ filtered, list }: { filtered: number; list: ResourceL
       className="border-b bg-muted/30 px-3 py-2 text-xs text-muted-foreground"
       role="status"
     >
-      표시된 {list.returned}개{filteredText}{excludedText} · 전체 수 미확인 · 최대 {list.limit}개 응답
+      표시 {list.returned}{filteredText}{excludedText} · 전체 수 미확인 · 최대 {list.limit}
       {list.limitReached ? " · 조회 한도 도달" : ""}
     </div>
   );

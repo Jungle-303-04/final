@@ -22,7 +22,7 @@ export function UnknownCompletenessEmpty({ variant }: { variant: "catalog" | "li
       <div className="grid max-w-md justify-items-center gap-3 text-center">
         <Inbox aria-hidden="true" className="size-8 text-muted-foreground" />
         <h2 className="text-lg font-semibold" id="resources-unknown-empty-title">{title}</h2>
-        <p className="text-sm text-muted-foreground">조회 응답에서 관측된 항목은 0건입니다.</p>
+        <p className="text-sm text-muted-foreground">조회 응답에서 관측된 항목은 0입니다.</p>
         <p className="text-sm text-muted-foreground">전체 범위의 부재는 확인할 수 없습니다.</p>
       </div>
     </Surface>
@@ -112,7 +112,7 @@ export function ResourcesRefreshFeedback({
         <ul className="list-disc pl-4">
           {failures.map((message) => <li key={message}>{message}</li>)}
         </ul>
-        <p>마지막으로 검증된 실 API 응답을 유지합니다.</p>
+        <p>마지막으로 검증된 응답을 유지합니다.</p>
       </AlertDescription>
     </Alert>
   );
@@ -127,12 +127,11 @@ export function CatalogFreshness({ observedAt }: { observedAt: string | null }) 
   const ageMilliseconds = Math.max(0, renderedAt - Date.parse(observedAt));
   const ageMinutes = Math.floor(ageMilliseconds / 60_000);
   const stale = ageMilliseconds > 90_000;
+  if (!stale) return null;
   return (
     <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground" role="status">
-      <Badge variant={stale ? "destructive" : "outline"}>
-        {stale ? "스냅샷 지연" : "스냅샷 최신"}
-      </Badge>
-      <span>{ageMinutes < 1 ? "방금 관측" : `${ageMinutes}분 전 관측`}</span>
+      <Badge variant="destructive">스냅샷 지연</Badge>
+      <span>{ageMinutes}분 전 관측</span>
     </div>
   );
 }

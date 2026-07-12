@@ -1,9 +1,20 @@
 import type { ComponentProps } from "react";
 import { cn } from "./cn";
 
-function Table({ className, ...props }: ComponentProps<"table">) {
+interface TableProps extends ComponentProps<"table"> {
+  scrollAreaLabel?: string;
+}
+
+function Table({ className, scrollAreaLabel, ...props }: TableProps) {
   return (
-    <div data-slot="table-container" className="relative w-full overflow-x-auto">
+    <div
+      aria-label={scrollAreaLabel}
+      className="relative w-full overflow-x-auto"
+      data-reflow-exempt={scrollAreaLabel ? "wide-table-horizontal-scroll" : undefined}
+      data-slot="table-container"
+      role={scrollAreaLabel ? "region" : undefined}
+      tabIndex={scrollAreaLabel ? 0 : undefined}
+    >
       <table
         data-slot="table"
         className={cn("w-full caption-bottom text-sm", className)}

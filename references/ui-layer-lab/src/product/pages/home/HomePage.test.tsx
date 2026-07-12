@@ -23,6 +23,9 @@ describe("HomePage", () => {
     expect(screen.queryByText("ATTENTION")).toBeNull();
     expect(screen.queryByText("RESOURCE SNAPSHOT")).toBeNull();
     expect(screen.queryByText(/실 API/u)).toBeNull();
+    expect(screen.queryByText("Home", { exact: true })).toBeNull();
+    expect(screen.queryByText(/클러스터 상태에서 Node와 Pod까지/u)).toBeNull();
+    expect(screen.queryByText(/시스템·관측 에이전트를 제외한/u)).toBeNull();
     expect(await screen.findByRole("button", { name: /worker-a/u }, { timeout: 5_000 }))
       .toBeTruthy();
     expect(screen.getByRole("complementary", { name: "활성 이슈" }).textContent)

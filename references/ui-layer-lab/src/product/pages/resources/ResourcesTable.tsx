@@ -82,7 +82,7 @@ export function ResourcesTable({
   }
 
   return (
-    <Table aria-label="리소스 목록">
+    <Table aria-label="리소스 목록" scrollAreaLabel="리소스 표 가로 스크롤">
       <TableCaption className="sr-only">
         현재 API 응답 범위에서 표시하는 Kubernetes 리소스 목록
       </TableCaption>

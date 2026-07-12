@@ -1,8 +1,11 @@
 import { CircleAlert, RefreshCw, Server } from "lucide-react";
 import type { HomePort, HomePortFailure } from "../../features/home/homeContract";
 import { ProductStateScreen } from "../../shared/ui/ProductStateScreen";
-import { StatusMark } from "../../shared/ui/StatusMark";
 import { Surface } from "../../shared/ui/Surface";
+import {
+  ClusterConnectionStatus,
+  clusterDisplayLabel,
+} from "../../shared/ui/ClusterConnectionStatus";
 import { Alert, AlertDescription, AlertTitle } from "../../shared/ui/primitives/alert";
 import { Button } from "../../shared/ui/primitives/button";
 import {
@@ -14,7 +17,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "../../shared/ui/primitives/select";
-import { Tooltip, TooltipContent, TooltipTrigger } from "../../shared/ui/primitives/tooltip";
 import { HomeClusterHealth } from "./HomeClusterHealth";
 import { HomeIssuesRail } from "./HomeIssuesRail";
 import { HomeLiveBand } from "./HomeLiveBand";
@@ -52,7 +54,12 @@ export function HomePage({ port }: { port: HomePort }) {
     <div className="mx-auto grid w-full max-w-[100rem] gap-4 p-4 sm:p-6">
       <header className="flex min-w-0 justify-end">
         <div className="flex w-full min-w-0 items-center justify-end gap-2 xl:w-auto">
-          {selectedCluster ? <ClusterConnectionStatus cluster={selectedCluster} /> : null}
+          {selectedCluster ? (
+            <ClusterConnectionStatus
+              connectionState={selectedCluster.connectionState}
+              lastObservedAt={selectedCluster.lastObservedAt}
+            />
+          ) : null}
           <Select
             items={selectItems}
             onValueChange={(value) => { if (value) state.selectCluster(value); }}
@@ -146,7 +153,7 @@ function PartialFailureBanner({ state }: { state: ReturnType<typeof useHomePageS
       <CircleAlert aria-hidden="true" />
       <AlertTitle>일부 정보를 불러오지 못했습니다</AlertTitle>
       <AlertDescription>
-        성공한 실 API 응답만 유지했습니다. 누락 영역은 값을 0으로 대체하지 않습니다.
+        마지막으로 검증된 응답만 유지했습니다. 누락 영역은 값을 0으로 대체하지 않습니다.
       </AlertDescription>
     </Alert>
   );
@@ -197,58 +204,5 @@ function clusterOptionLabel(cluster: {
   id: string;
   name: string;
 }) {
-  return [...new Set([cluster.name, cluster.environment, cluster.id].filter(Boolean))].join(" · ");
-}
-
-function connectionTone(state: string) {
-  if (state === "online") return "healthy" as const;
-  if (state === "stale") return "stale" as const;
-  if (state === "offline") return "critical" as const;
-  return "unknown" as const;
-}
-
-function connectionLabel(state: string) {
-  const labels: Record<string, string> = {
-    online: "연결됨",
-    stale: "연결 지연",
-    pending: "연결 대기",
-    offline: "연결 끊김",
-    unknown: "연결 상태 알 수 없음",
-  };
-  return labels[state] ?? labels.unknown;
-}
-
-function ClusterConnectionStatus({ cluster }: {
-  cluster: {
-    connectionState: string;
-    lastObservedAt: string | null;
-  };
-}) {
-  const label = connectionLabel(cluster.connectionState);
-  const observation = formatObservation(cluster.lastObservedAt);
-  return (
-    <Tooltip>
-      <TooltipTrigger
-        render={(
-          <Button
-            aria-label={`${label} · 마지막 관측 ${observation}`}
-            size="sm"
-            type="button"
-            variant="ghost"
-          />
-        )}
-      >
-        <StatusMark label={label} tone={connectionTone(cluster.connectionState)} />
-      </TooltipTrigger>
-      <TooltipContent side="bottom">마지막 관측 {observation}</TooltipContent>
-    </Tooltip>
-  );
-}
-
-function formatObservation(value: string | null) {
-  if (!value) return "알 수 없음";
-  return new Intl.DateTimeFormat("ko-KR", {
-    dateStyle: "medium",
-    timeStyle: "short",
-  }).format(new Date(value));
+  return clusterDisplayLabel(cluster);
 }
