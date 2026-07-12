@@ -26,9 +26,9 @@ api-needs.md와 같은 규율로 운영한다. 상태는 `requested`/`in_progres
 
 | ID | 상태 | 기능 | 작업 내용 | 신규 계약(제안 — 백엔드가 확정) | 완료 기준 추가분 |
 |---|---|---|---|---|---|
-| BQ-001 | in_progress | 배관 | `AcceptedResponse`에 `command_id` optional 필드 추가, command 제출 경로에서 채움 (Cross-Gap-001)<br>담당: Codex 백엔드 세션<br>브랜치: `codex/bq-001-command-id-receipt` | 기존 `COMMANDS_PATH` 응답 확장(additive) | 기존 응답 소비자 회귀 테스트 |
+| BQ-001 | completed | 배관 | `AcceptedResponse`에 `command_id` optional 필드 추가, command 제출 경로에서 채움 (Cross-Gap-001)<br>담당: Codex 백엔드 세션<br>브랜치: `codex/bq-001-command-id-receipt` | 기존 `COMMANDS_PATH` 응답 확장(additive) | 기존 응답 소비자 회귀 테스트 |
 | BQ-002 | completed | F2 배관 | `audit_log`에 `causation_id` 컬럼 추가 + envelope에서 적재 + correlation_id/created_at 복합 인덱스<br>담당: Codex 백엔드 세션<br>브랜치: `codex/bq-002-audit-causation` | (route 없음) | 마이그레이션 up/down 검증 |
-| BQ-003 | requested | F1 | RemediationBundle serializer: rca_reports·evidence·recovery candidate 기존 필드를 재조합해 단일 문서로. supporting/missing 2분류(반증 없음). JSON Schema 문서 동반 | `RCA_BUNDLE_PATH` `GET /api/rca/bundles/{correlation_id}` → `RemediationBundleResponse` | 신규 저장 모델 0개 (투영만) |
+| BQ-003 | in_progress | F1 | RemediationBundle serializer: rca_reports·evidence·recovery candidate 기존 필드를 재조합해 단일 문서로. supporting/missing 2분류(반증 없음). JSON Schema 문서 동반<br>담당: Codex 백엔드 세션<br>브랜치: `codex/bq-003-remediation-bundle` | `RCA_BUNDLE_PATH` `GET /api/rca/bundles/{correlation_id}` → `RemediationBundleResponse` | 신규 저장 모델 0개 (투영만) |
 | BQ-004 | requested | F2 | correlation 타임라인 조회: audit_log를 correlation_id로 시간순 반환 (subject, source, created_at, causation_id, payload 요약) | `AUDIT_TIMELINE_PATH` `GET /api/audit/timeline?correlation_id=` → `AuditTimelineResponse` | 커서 페이지네이션 |
 | BQ-005 | requested | F4 | 변경↔장애 상관 projection: gitops 배포 이벤트를 워크로드 키 `(workspace, cluster, ns, kind, name)`로 인덱싱하는 projection 워커(신규 구독자) + 인시던트의 워크로드 키로 직전 N개 변경 조회 route | `RCA_RECENT_CHANGES_PATH` `GET /api/rca/incidents/{incident_id}/recent-changes` → `RecentChangeListResponse` | 기존 워커 수정 0건 (신규 구독자만) |
 | BQ-006 | requested | F3 | 승격 게이트 노출: `on_run_completed_promote` 현행 조건(rollout health 포함)을 응답/문서로 노출. 관측 윈도우 게이트는 별도 후속 행으로 분리(지금 하지 않음) | 기존 workflow run 응답에 `promotion_gate` 필드 추가(additive) | — |
