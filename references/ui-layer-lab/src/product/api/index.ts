@@ -53,6 +53,12 @@ export {
   type UsageSeriesOptions,
 } from "./usage-series";
 export {
+  runTelemetryQuery,
+  TelemetryQueryExecutionError,
+  type RunTelemetryQueryOptions,
+  type TelemetryQueryRun,
+} from "./telemetry";
+export {
   connectRealtime,
   createRealtimeClient,
   type RealtimeClient,
@@ -146,6 +152,14 @@ export {
   type ResourceUsageSeriesPoint,
   type UsageSeriesResponse,
 } from "./usage-series-schemas";
+export {
+  telemetryCommandResultSchema,
+  telemetryLogResultSchema,
+  telemetryQueryDefinitionSchema,
+  type TelemetryCommandResult,
+  type TelemetryLogResult,
+  type TelemetryQueryDefinition,
+} from "./telemetry-schemas";
 export {
   liveSummarySchema,
   parseRealtimeMessage,
