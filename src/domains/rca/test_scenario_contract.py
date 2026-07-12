@@ -112,7 +112,12 @@ def validate_scenario_cross_contracts(
         expected_evidence = {
             source for candidate in candidates for source in candidate.expected_evidence
         }
-        missing_evidence = sorted(expected_evidence - set(scenario.evidence_sources))
+        scenario_sources = set(scenario.evidence_sources)
+        missing_evidence = sorted(
+            requirement
+            for requirement in expected_evidence
+            if requirement.partition(":")[0] not in scenario_sources
+        )
         if missing_evidence:
             errors.append(
                 f"{scenario.scenario_id}: evidence sources do not cover candidate evidence: "
