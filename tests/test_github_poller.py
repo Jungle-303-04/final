@@ -480,6 +480,27 @@ def test_public_credential_ref_never_falls_back_to_ambient_github_token(monkeypa
     assert auth_headers == [None]
 
 
+def test_db_target_without_credential_never_falls_back_to_ambient_token(monkeypatch) -> None:
+    monkeypatch.setenv("GITHUB_TOKEN", "ambient-privileged-token")
+    module = _load_poller()
+    target = module.GitHubPollTarget(
+        workspace_id="workspace-1",
+        repository_id="repo-legacy-null-ref",
+        repo_ref="org/repository",
+        credential_ref="",
+        branch="main",
+        watch_target_id="watch-1",
+        binding_id="binding-1",
+        application_id="app-1",
+        environment="prod",
+        cluster_id="cluster-1",
+        manifest_path="deploy.yaml",
+    )
+    poller = module.GitHubPoller(db=StubPollTargetDb([]))
+
+    assert poller._github_token(target) == ""
+
+
 def test_db_poll_target_db_credential_ref_decrypts_github_authorization(monkeypatch) -> None:
     module = _load_poller()
     from packages.security.credentials import encrypt_credential
