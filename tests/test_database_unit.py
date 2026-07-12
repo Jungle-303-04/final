@@ -1380,9 +1380,21 @@ def test_gitops_default_ids_are_workspace_scoped() -> None:
 def test_gitops_registration_stores_workspace_scoped_default_ids() -> None:
     recorded: list[Any] = []
 
+    class StubResult:
+        def __init__(self, statement: Any) -> None:
+            self.statement = statement
+
+        def mappings(self) -> StubResult:
+            return self
+
+        def first(self) -> dict[str, object]:
+            compiled = self.statement.compile(dialect=postgresql.dialect())
+            return dict(compiled.params)
+
     class StubConnection:
-        def execute(self, statement: Any) -> None:
+        def execute(self, statement: Any) -> StubResult:
             recorded.append(statement)
+            return StubResult(statement)
 
     @contextmanager
     def stub_connection():

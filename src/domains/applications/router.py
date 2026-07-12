@@ -55,6 +55,7 @@ NO_CLUSTERS_FOR_GLOBAL_BINDING = "no registered clusters to expand global bindin
 HTTP_NOT_FOUND = 404
 HTTP_UNPROCESSABLE_ENTITY = 422
 APPLICATION_NOT_FOUND = "application not found"
+REPOSITORY_NOT_FOUND = "repository not found"
 EXPLICIT_REPOSITORY_ID_NOT_ALLOWED = (
     "repository_id must not be provided when creating an application"
 )
@@ -90,6 +91,13 @@ def get_application_or_404(db: Any, workspace_id: str, application_id: str) -> d
     if application is None:
         raise HTTPException(status_code=HTTP_NOT_FOUND, detail=APPLICATION_NOT_FOUND)
     return application
+
+
+def register_repository_or_404(db: Any, body: dict[str, Any]) -> dict[str, Any]:
+    try:
+        return db.register_repository(body)
+    except LookupError as exc:
+        raise HTTPException(status_code=HTTP_NOT_FOUND, detail=REPOSITORY_NOT_FOUND) from exc
 
 
 def latest_agents_for_clusters(
@@ -214,7 +222,8 @@ async def upsert_application(
     }
     with unit_of_work_or_null(db):
         if payload.repo_ref:
-            db.register_repository(body)
+            repository = register_repository_or_404(db, body)
+            body["repository_id"] = repository["repository_id"]
         stored = db.upsert_application(body)
     application = db.get_application(workspace_id, stored["application_id"]) or stored
     return ApplicationResponse(application=application)
@@ -295,7 +304,8 @@ async def connect_application(
     if credential is not None:
         body["credential_ref"] = credential
     with unit_of_work_or_null(db):
-        db.register_repository(body)
+        repository = register_repository_or_404(db, body)
+        body["repository_id"] = repository["repository_id"]
         stored = db.upsert_application(body)
         application_id = str(stored["application_id"])
         application = db.get_application(workspace_id, application_id) or stored

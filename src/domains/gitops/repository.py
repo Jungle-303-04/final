@@ -202,7 +202,12 @@ class RepoChangeRepository(DatabaseConnection):
 
     def register_repository(self, payload: JsonObject) -> JsonObject:
         workspace_id = str(payload.get("workspace_id", DEFAULT_WORKSPACE_ID))
-        repository_id = derive_repository_id(payload)
+        # Create IDs are always server-derived.  ``derive_repository_id`` must
+        # keep accepting explicit IDs for event/worker identity normalization,
+        # so remove the untrusted create field only at this storage boundary.
+        create_identity = {**payload}
+        create_identity.pop("repository_id", None)
+        repository_id = derive_repository_id(create_identity)
         user_id = payload.get("user_id")
         table = GitRepository.__table__
         insert = pg_insert(table).values(
@@ -227,9 +232,15 @@ class RepoChangeRepository(DatabaseConnection):
                 "access_policy": insert.excluded.access_policy,
                 "updated_at": func.now(),
             },
-        )
+            where=table.c.workspace_id == insert.excluded.workspace_id,
+        ).returning(table)
         with self.connection() as conn:
-            conn.execute(statement)
+            row = conn.execute(statement).mappings().first()
+        if row is None:
+            # ON CONFLICT's workspace guard deliberately yields no row for a
+            # foreign owner.  Keep the error generic so tenant existence and
+            # credential metadata cannot be inferred by callers or logs.
+            raise LookupError("repository not found in workspace")
         self._grant_owner_if_present(
             workspace_id, user_id, AccessResourceType.REPOSITORY.value, repository_id
         )
