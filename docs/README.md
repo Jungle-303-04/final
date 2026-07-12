@@ -191,6 +191,7 @@ secret 이름과 주입 경계는 [Secrets](secrets.md)를 본다.
 - [release-flow-implementation](release-flow-implementation.md)
 - [scenarios](scenarios.md)
 - [secrets](secrets.md)
+- [spec/remediation-bundle-v1alpha1](spec/remediation-bundle-v1alpha1.md)
 
 자동 조율 문서는 아래에 있다.
 
