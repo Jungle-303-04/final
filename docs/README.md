@@ -275,6 +275,8 @@ Target / Telemetry 선형 작업 문서는 아래에 있다.
 - [architecture-diagram](architecture-diagram.md)
 - [architecture](architecture.md)
 - [architecture/service-consolidation-plan](architecture/service-consolidation-plan.md)
+- [auto/frontend-pipeline](auto/frontend-pipeline.md)
+- [auto/night-log](auto/night-log.md)
 - [aws-cicd](aws-cicd.md)
 - [aws-testing-runbook](aws-testing-runbook.md)
 - [cloudflare-waf-and-login](cloudflare-waf-and-login.md)
