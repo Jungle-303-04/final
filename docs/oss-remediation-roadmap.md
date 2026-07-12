@@ -49,7 +49,13 @@ Alert 발생 → 증거 자동 수집 → 원인 + 반증 가능한 근거 제�
 
 ## 2. 선행 검증 (착수 전, ~3일)
 
-- [ ] **heal8s 실존 확인**. 있으면 기능 표 작성, 없으면 전략 문서에서 제거.
+- [x] **heal8s 실존 확인 (2026-07-13 완료)**: github.com/heal8s/heal8s 실존.
+  Apache-2.0, Go, operator+GitHub App 구조, OOMKill/ScaleUp/RollbackImage **실제 patch**,
+  CRD·Helm chart·`make verify` 원커맨드 Kind 검증, 웹 대시보드. 단 **0 stars·3 commits·
+  릴리스 0·기여자 0** — 시장 견인력 없음. 판정: 코드 위협이 아니라 "동일 방향 진입"의
+  증거. §4(실제 patch 5종)의 시급성 상향 근거로 사용. 차별화는 원안대로
+  (multi-signal evidence, 반증/누락 기록, 정책·blast radius 게이트, 승격 거버넌스,
+  multi-tenant) 유지하되 "설치성·공개성"에서는 heal8s가 이미 앞서 있음을 인정.
 - [ ] 프로젝트 이름 확정 + 도메인/상표/GitHub org/PyPI 선점 확인.
 - [ ] 라이선스 최종 결정 (기본안: Apache-2.0 — 기업 채택·CNCF Sandbox 요건 충족).
 - [ ] 팀 캐파 확정. 아래 일정은 **전담 2~3인 기준**이며, 기존 플랫폼 유지보수와 병행 시 1.5배로 늘려 잡는다.

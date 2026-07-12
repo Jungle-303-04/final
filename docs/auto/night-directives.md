@@ -216,6 +216,47 @@ audit_log에 workspace 귀속이 없는 상태로 correlation 단독 조회 rout
   (d) 실패 시 merge abort 후 BLOCKED.
 - lab→dev 통합(제품 콘솔 승격)은 별도 사람 게이트로 남는다.
 
+### [D-010] 2026-07-13 — 외부 감사 5개 약점의 큐 반영 (작성: 우녕 위임 조율 세션)
+
+**근거 실측**: `dispatch.py` `safe_pr_patches()`가 후보 `params.patches` 부재 시
+`fallback_recovery_patch()`로 `.gitops/recovery/*.md` 문서 PR을 생성함을 코드로 확인.
+heal8s(github.com/heal8s/heal8s)는 실존(Apache-2.0, OOM/Scale/RollbackImage 실제 patch,
+CRD·Helm·원커맨드 verify)하나 0 stars·3 commits·릴리스 0 — 방향 선점의 증거로만 취급.
+
+**1. BQ-009 신설 승인 — 권위 patch 엔진 (제품 경쟁력 1순위).**
+safe_pr 경로의 markdown fallback을 실제 patch 생성으로 교체한다:
+- `safe_pr_patches()`가 patches 부재 시 action_type별 생성기를 호출:
+  `oom_memory`(현재 usage/limit 분석 → 상한 정책 적용 request/limit 계산),
+  `image_rollback`/`image_tag_fix`(last_approved_snapshot·직전 정상 digest),
+  `replica_scale`, `probe_fix`(timeout/port/path), `selector_fix`(최소 selector).
+- 생성기는 diff-worker·release flow가 이미 추적하는 desired manifest/승인 스냅샷을
+  단일 소스로 사용한다 — RCA 복구와 Release Flow의 patch 체계를 하나로 결합.
+- **대상 manifest를 확보 못 하면 `unsupported`로 정직 종료.** 문서 PR을 복구로
+  위장하는 경로는 제거한다(검토 문서는 `gitops_recovery_review` 전용으로 격리, BQ-010).
+- rollback patch 동반 필수. flag·승인 게이트·scm-worker 단일 PR 생성자 경계 불변.
+- **frozen 예외 부여**: BQ-009/010에 한해 `src/services/ai/agent/recovery/**` 수정 허용.
+  단 RCA 작업열이 같은 파일을 만지고 있지 않음을 착수 시 확인·기록할 것.
+- lane: F(BQ-007) 완료 후 같은 lane(`codex/f-auto-revert-pr`)에서 이어서. 신규 브랜치 금지 유지.
+
+**2. BQ-010 신설 승인 — 카탈로그 patch 파라미터 구체화.**
+`builtin.py`의 `params={"patch": "recovery_review"}` 류를 BQ-009 생성기가 소비할
+선언적 파라미터로 교체. 검토 문서 액션은 실제 복구 액션과 action_type 수준에서 분리하고
+score를 실제 patch 액션보다 낮게 조정.
+
+**3. BQ-011 신설 승인 — release_flow 내부 모듈 분해 (구조 부채).**
+`release_flow/router.py`(5,297줄)를 policy/readiness/verification/report 내부 모듈로
+behavior-preserving 분해 + import-linter 계약 추가. **착수는 H(merge) 이후** — F-track
+기능 완주가 우선이다. exit: 전 테스트 결과 불변 + 분해 전후 줄수 보고.
+
+**4. release-red 가시화.** G·I단계 exit에 추가: 현재 release 기준 red 항목
+(RCA baseline 8건, GitHub Actions red, Integration Smoke off, RemediationBundle API
+라이브 미배포)을 deploy-plan.md에 "release blocker 목록"으로 명시해 사람의 H/J GO
+판단 자료로 제공한다. baseline 8건의 수렴은 F-track이 아니라 RCA 작업열 소유다.
+
+**5. HA·OSS 준비는 이 큐가 아니다.** HA 보강은 deploy-plan에 "1 replica 위험 목록"
+명시까지만(로드맵 후순위 유지). OSS 공개 준비(라이선스·공개 저장소·Helm chart)는
+oss-remediation-roadmap.md §8의 사람+별도 트랙 몫이다.
+
 ### [D-008] 2026-07-13 04:50 KST 기록 정합 (작성: 자동 판단자)
 
 [D-007](판단자)과 [D-006](조율 세션)이 04:47경 동시 기록되어 파일 내 순서가 ID 순서와 어긋났다.
