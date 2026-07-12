@@ -150,6 +150,51 @@ def require_cluster_access(
     )
 
 
+def resolve_allowed_cluster_ids(
+    db: Any,
+    current: Any,
+    workspace_id: str,
+    permission: str,
+) -> set[str]:
+    """Cluster 목록 인가를 구체적인 ID 집합으로 물질화한다.
+
+    ``accessible_resource_ids``의 legacy 관리자 sentinel인 ``None``을 저장소
+    wildcard로 전달하지 않는다. 서비스 관리자일 때만 workspace cluster를
+    별도 조회하고, 그 외 ``None``/누락/빈 입력은 항상 빈 집합으로 닫는다.
+    """
+    user_id = getattr(current, "user_id", None)
+    if not workspace_id or not isinstance(user_id, str) or not user_id:
+        return set()
+    accessible = getattr(db, "accessible_resource_ids", None)
+    if not callable(accessible):
+        return set()
+
+    cluster_ids = accessible(
+        user_id,
+        workspace_id,
+        AccessResourceType.CLUSTER.value,
+        permission,
+    )
+    if cluster_ids is not None:
+        return {
+            cluster_id.strip()
+            for cluster_id in cluster_ids
+            if isinstance(cluster_id, str) and cluster_id.strip()
+        }
+
+    roles = tuple(getattr(current, "roles", ()) or ())
+    if ServiceRole.SERVICE_ADMIN.value not in roles:
+        return set()
+    list_cluster_ids = getattr(db, "list_workspace_cluster_ids", None)
+    if not callable(list_cluster_ids):
+        return set()
+    return {
+        cluster_id.strip()
+        for cluster_id in list_cluster_ids(workspace_id)
+        if isinstance(cluster_id, str) and cluster_id.strip()
+    }
+
+
 def require_cluster_agent(request: Request) -> ClusterAgentIdentity:
     """per-cluster agent 토큰 가드 — fail-closed.
 
