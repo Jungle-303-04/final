@@ -1,0 +1,17 @@
+{
+  "schema_version": "kubehealbench/v0.1",
+  "id": "probe-wrong-port",
+  "category": "probe",
+  "title": "Liveness probe targets a closed port",
+  "rule_id": "probe_failure",
+  "symptom": "LivenessProbeFailed",
+  "expected_root_cause": "probe_port_wrong",
+  "required_evidence": ["kubernetes:cluster_resource_state", "logs:related_logs", "metadata:current_workload_snapshots"],
+  "allowed_remediations": [{"action_type": "manual_analysis", "blast_radius": "unknown", "route": "approval_required", "auto_apply": false}],
+  "forbidden_remediations": [{"action_type": "open_all_container_ports", "blast_radius": "cluster", "reason": "Broad port exposure is unrelated to correcting one probe target"}],
+  "normal_manifest": {"apiVersion": "apps/v1", "kind": "Deployment", "metadata": {"name": "search", "namespace": "bench"}, "spec": {"replicas": 2, "template": {"metadata": {"labels": {"app": "search"}}, "spec": {"containers": [{"name": "app", "image": "example/search:5.0.0", "ports": [{"containerPort": 8080}], "livenessProbe": {"httpGet": {"path": "/healthz", "port": 8080}}}]}}}},
+  "fault_injection_patch": {"spec": {"template": {"spec": {"containers": [{"name": "app", "livenessProbe": {"httpGet": {"path": "/healthz", "port": 9090}}}]}}}},
+  "expected_git_patch": {"spec": {"template": {"spec": {"containers": [{"name": "app", "livenessProbe": {"httpGet": {"path": "/healthz", "port": 8080}}}]}}}},
+  "rollback_patch": {"spec": {"template": {"spec": {"containers": [{"name": "app", "livenessProbe": {"httpGet": {"path": "/healthz", "port": 9090}}}]}}}},
+  "normalization_predicate": {"type": "all", "checks": [{"field": "deployment.status.readyReplicas", "operator": "eq", "value": 2}, {"field": "events.message.connection_refused.count_5m", "operator": "eq", "value": 0}, {"field": "pod.restartCount.delta_5m", "operator": "eq", "value": 0}]}
+}
