@@ -1485,3 +1485,33 @@ API 완성: submitCommand (d763ab682)
   - shadcn source audit: 482 previews PASS, upstream 21e4ceb
   - Vite production build: PASS
 ```
+
+## 2026-07-13 Prometheus command polling API 완료
+
+API 완성: submitPrometheusQuery (b92d081eb)
+API 완성: getCommandStatus (b92d081eb)
+API 완성: pollCommand (b92d081eb)
+API 완성: runPrometheusQuery (b92d081eb)
+
+- APIQ-027 claim 범위의 네 함수는 `AGENT_DEBUG_QUERY_PATH` 1회 POST receipt와
+  `COMMAND_STATUS_PATH` GET polling만 사용한다. possibly-sent POST는 transport/network failure
+  뒤에도 재전송하지 않는다.
+- command status는 401/403/404/invalid payload를 공용 API 오류 경계로 보존하고, polling은
+  queued/leased/running 동안 GET만 반복한다. failed terminal은 추가 GET 없이 반환하거나
+  `runPrometheusQuery`에서 명시적 `MetricQueryExecutionError("failed")`로 승격한다.
+- completed telemetry result는 query name, action, point_count, empty-result를 검증하고 raw
+  command result를 제품 소비 값에 누출하지 않는다.
+- 코드 커밋 `b92d081eb`는 `origin/woonyong/ui-layer-lab`의 ancestor다.
+
+```text
+명령: npx vitest run src/product/api/metrics-command.test.ts src/product/api/metrics-command-run.test.ts src/product/api/metrics.test.ts src/product/app/apiBoundary.test.ts --reporter verbose
+결과: PASS — 4 files, 27 tests
+
+명령: npm run check
+결과: PASS (2026-07-13 07:23~07:30 KST)
+  - TypeScript / ESLint: PASS
+  - Vitest: 95 files, 674 tests PASS
+  - product design guard: 278 files PASS
+  - shadcn source audit: 482 previews PASS, upstream 21e4ceb
+  - Vite production build: PASS
+```
