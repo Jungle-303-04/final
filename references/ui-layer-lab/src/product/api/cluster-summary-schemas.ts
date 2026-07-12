@@ -38,7 +38,7 @@ export const clusterOpenIncidentItemSchema = z.strictObject({
 export const clusterUsageSnapshotSchema = z.strictObject({
   sampled_at: nullableStringSchema,
   pods_running: z.number().int(),
-  pods_total: z.number().int(),
+  pods_total: z.number().int().optional(),
   nodes_ready: z.number().int(),
   nodes_total: z.number().int(),
   restart_total: z.number().int(),
