@@ -1,5 +1,6 @@
 import { apiRequest, type ApiPath } from "./client";
 import {
+  approvalDecisionRequestSchema,
   approvalDecisionResponseSchema,
   type ApprovalDecisionResponse,
 } from "./approvals-schemas";
@@ -31,12 +32,18 @@ function decideApproval(
   approvalId: string,
   options: ApprovalDecisionOptions,
 ): Promise<ApprovalDecisionResponse> {
+  if (approvalId.trim() === "") {
+    throw new RangeError("approvalId must not be empty");
+  }
   const path =
     `/api/approvals/${encodePathSegment(approvalId)}/${decision}` as ApiPath;
+  const body = approvalDecisionRequestSchema.parse({
+    reason: options.reason ?? null,
+  });
   return apiRequest(path, approvalDecisionResponseSchema, {
     method: "POST",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({ reason: options.reason ?? null }),
+    body: JSON.stringify(body),
     signal: options.signal,
   });
 }

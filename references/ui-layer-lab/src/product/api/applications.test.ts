@@ -94,11 +94,36 @@ describe("Application deployment history API", () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
+  it("rejects an empty Application identity before making a request", () => {
+    const fetchMock = vi.spyOn(globalThis, "fetch");
+
+    expect(() => getApplication("")).toThrow("applicationId must not be empty");
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
   it("rejects malformed Application list responses", async () => {
     vi.spyOn(globalThis, "fetch").mockResolvedValue(
       jsonResponse({ applications: "not-an-array" }),
     );
 
+    await expect(listApplications()).rejects.toMatchObject({
+      kind: "invalid-payload",
+      status: 200,
+    } satisfies Partial<ApiError>);
+  });
+
+  it("strictly closes response envelopes while preserving inner JsonMap fields", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(
+      jsonResponse({ applications: [{ ...APPLICATION, extension: { source: "provider" } }] }),
+    );
+    await expect(listApplications()).resolves.toEqual({
+      applications: [{ ...APPLICATION, extension: { source: "provider" } }],
+    });
+
+    vi.restoreAllMocks();
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      jsonResponse({ applications: [APPLICATION], next_cursor: "invented" }),
+    );
     await expect(listApplications()).rejects.toMatchObject({
       kind: "invalid-payload",
       status: 200,

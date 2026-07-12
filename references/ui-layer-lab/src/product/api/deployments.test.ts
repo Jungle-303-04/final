@@ -95,6 +95,32 @@ describe("Deployment action API", () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
+  it("rejects empty deployment identity segments before making a request", () => {
+    const fetchMock = vi.spyOn(globalThis, "fetch");
+
+    expect(() => restartDeployment("", "default", "api")).toThrow(
+      "deployment clusterId must not be empty",
+    );
+    expect(() => restartDeployment("prod-1", "", "api")).toThrow(
+      "deployment namespace must not be empty",
+    );
+    expect(() => restartDeployment("prod-1", "default", "")).toThrow(
+      "deployment name must not be empty",
+    );
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("does not retry a possibly-sent restart mutation", async () => {
+    const fetchMock = vi
+      .spyOn(globalThis, "fetch")
+      .mockRejectedValue(new TypeError("connection closed after send"));
+
+    await expect(restartDeployment("prod-1", "default", "api")).rejects.toMatchObject({
+      kind: "network",
+    } satisfies Partial<ApiError>);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
   it("preserves backend errors and rejects malformed responses", async () => {
     vi.spyOn(globalThis, "fetch").mockResolvedValue(
       jsonResponse({ detail: "deployment is not allowed" }, 403),
@@ -108,6 +134,15 @@ describe("Deployment action API", () => {
     vi.restoreAllMocks();
     vi.spyOn(globalThis, "fetch").mockResolvedValue(
       jsonResponse({ accepted: true, event_id: "evt-only", correlation_id: 1 }),
+    );
+    await expect(restartDeployment("prod-1", "default", "api")).rejects.toMatchObject({
+      kind: "invalid-payload",
+      status: 200,
+    } satisfies Partial<ApiError>);
+
+    vi.restoreAllMocks();
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      jsonResponse({ ...ACCEPTED, command_id: "command-not-in-contract" }),
     );
     await expect(restartDeployment("prod-1", "default", "api")).rejects.toMatchObject({
       kind: "invalid-payload",

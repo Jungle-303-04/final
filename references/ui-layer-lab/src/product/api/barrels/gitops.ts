@@ -26,6 +26,8 @@ export {
   type WorkflowRunList,
 } from "../applications-schemas";
 export {
+  approvalDecisionRequestSchema,
   approvalDecisionResponseSchema,
+  type ApprovalDecisionRequest,
   type ApprovalDecisionResponse,
 } from "../approvals-schemas";
