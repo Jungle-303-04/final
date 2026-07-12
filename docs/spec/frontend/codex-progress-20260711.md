@@ -1385,3 +1385,15 @@ API 완성: getClusterSummary (ef7d3a1e9)
 명령: npm run visual-product
 결과: PASS — 33 isolated scenarios, exact API request contract, unexpected network 0
 ```
+
+## 2026-07-13 RemediationBundle API 착륙 대기 동결
+
+- BQ-003 앵커는 f-coordination-plan §4b가 정한 단일 확인 수단인 공유 dev worktree의
+  `docs/backend-f-progress.md`에서 확인되지 않아 유효한 완료 근거로 사용하지 않는다.
+- 작성한 `rca-bundle.ts`, `rca-bundle-schemas.ts`, `rca-bundle.test.ts`는 폐기하지 않고
+  동결한다. API barrel export는 제거했으며 제품 화면·adapter 소비는 시작하지 않았다.
+- `API 완성: getRemediationBundle (...)` 앵커는 기록하지 않는다. 재개 조건은 BQ-003 merge
+  착륙, 공유 dev worktree progress의 백엔드 ancestor 재증명, 착륙본 schema와 작성한 Zod의
+  diff 대조 무결성 확인이다.
+- BQ-001도 같은 착륙 확인 절차를 통과하기 전까지 `submitCommand`와 command status 행을
+  claim하지 않는다. 그동안 완료 앵커가 유효한 기존 adapter 트랙만 계속한다.
