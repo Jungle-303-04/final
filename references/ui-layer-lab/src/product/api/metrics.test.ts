@@ -212,10 +212,11 @@ describe("metrics API", () => {
     );
 
     const pending = pollCommand("cmd-metrics-1", { signal: controller.signal });
+    const rejection = expect(pending).rejects.toMatchObject({ name: "AbortError" });
     await Promise.resolve();
     controller.abort();
     await vi.runAllTimersAsync();
 
-    await expect(pending).rejects.toMatchObject({ name: "AbortError" });
+    await rejection;
   });
 });

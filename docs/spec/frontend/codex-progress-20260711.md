@@ -1215,3 +1215,11 @@ API 완성: listInventoryResourcesByType (6aaf19fea)
   없고 queue 전체의 `in_progress`가 0인 상태로 24시간을 초과했다.
 - queue의 단일 `in_progress` lock을 `APIQ-022`에 획득했다. 이 행의 코드·contract test·완료
   앵커까지만 대행하고, API 작업자가 복귀하면 다음 행부터 다시 양보한다.
+
+### 병렬 APIQ-027 테스트 회귀 격리
+
+- 병렬 작업자의 `ca30b74a6`이 queue claim 없이 `metrics.test.ts`를 갱신한 직후 전체 gate와
+  해당 파일 단독 실행에서 `PromiseRejectionHandledWarning`/unhandled `AbortError`가 반복 재현됐다.
+- `pollCommand` 구현은 바꾸지 않고 rejection matcher를 `AbortController.abort()` 전에 연결해
+  거절 관찰 공백만 제거했다. 이 hotfix는 APIQ-027 완료 앵커가 아니며 해당 queue 행은 계속
+  `requested`다. APIQ-022 단일 `in_progress` lock도 유지한다.
