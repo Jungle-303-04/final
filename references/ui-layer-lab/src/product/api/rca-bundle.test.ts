@@ -1,7 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { ApiError } from "./client";
+import {
+  getRemediationBundle as getPublicRemediationBundle,
+  remediationBundleResponseSchema as publicRemediationBundleResponseSchema,
+} from "./index";
 import { getRemediationBundle } from "./rca-bundle";
+import { remediationBundleResponseSchema } from "./rca-bundle-schemas";
 
 const EVIDENCE_REF = {
   source: "kubernetes",
@@ -148,6 +153,11 @@ function jsonResponse(payload: unknown, status = 200): Response {
 describe("RemediationBundle API", () => {
   beforeEach(() => {
     vi.restoreAllMocks();
+  });
+
+  it("exposes the verified endpoint and response schema through the public API barrel", () => {
+    expect(getPublicRemediationBundle).toBe(getRemediationBundle);
+    expect(publicRemediationBundleResponseSchema).toBe(remediationBundleResponseSchema);
   });
 
   it("loads every bundle layer without merging the two selected ids", async () => {

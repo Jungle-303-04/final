@@ -41,6 +41,10 @@ export {
   type SelectRecoveryActionInput,
 } from "./recovery";
 export {
+  getRemediationBundle,
+  type GetRemediationBundleOptions,
+} from "./rca-bundle";
+export {
   getApplication,
   listApplicationDeployments,
   listApplicationRuns,
@@ -280,6 +284,24 @@ export {
   type RecoveryActionCandidate,
   type RecoveryPlan,
 } from "./recovery-schemas";
+export {
+  remediationBundleActionDraftSchema,
+  remediationBundleDiagnosisSchema,
+  remediationBundleEvidenceRefSchema,
+  remediationBundleMetaSchema,
+  remediationBundleMissingCheckSchema,
+  remediationBundleRecoveryCandidateSchema,
+  remediationBundleRemediationSchema,
+  remediationBundleResponseSchema,
+  type RemediationBundleActionDraft,
+  type RemediationBundleDiagnosis,
+  type RemediationBundleEvidenceRef,
+  type RemediationBundleMeta,
+  type RemediationBundleMissingCheck,
+  type RemediationBundleRecoveryCandidate,
+  type RemediationBundleRemediation,
+  type RemediationBundleResponse,
+} from "./rca-bundle-schemas";
 export {
   applicationListSchema,
   applicationResponseSchema,
