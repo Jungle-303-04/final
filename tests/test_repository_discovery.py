@@ -10,6 +10,7 @@ import httpx
 import pytest
 
 import domains.gitops.repository_discovery as repository_discovery
+import domains.gitops.repository_discovery_router as repository_discovery_router
 from domains.gitops.repository import derive_repository_id
 from domains.gitops.repository_discovery import (
     GitHubRepositoryClient,
@@ -317,6 +318,56 @@ def test_session_discovery_service_does_not_inherit_ambient_github_token(monkeyp
 
     assert isinstance(service.client, GitHubRepositoryClient)
     assert service.client.token == ""
+
+
+def test_admin_wizard_reuses_scoped_token_for_followup_discovery(monkeypatch) -> None:
+    monkeypatch.setenv("CREDENTIAL_ENCRYPTION_KEY", "wizard-followup-key")
+    from packages.security.credentials import encrypt_credential
+
+    class StubDb:
+        def get_repository_by_ref(
+            self,
+            workspace_id: str,
+            repo_ref: str,
+        ) -> dict[str, object] | None:
+            assert workspace_id == "workspace-1"
+            assert repo_ref == "owner/service"
+            return {
+                "workspace_id": workspace_id,
+                "repository_id": "repo-legacy-client-id",
+                "repo_ref": repo_ref,
+            }
+
+        def get_workspace_credential(
+            self,
+            workspace_id: str,
+            provider: str,
+            scope: str,
+        ) -> dict[str, object] | None:
+            assert (workspace_id, provider, scope) == (
+                "workspace-1",
+                "github",
+                "repository:repo-legacy-client-id",
+            )
+            return {
+                "workspace_id": workspace_id,
+                "provider": provider,
+                "scope": scope,
+                "encrypted_value": encrypt_credential("ghp_wizard-followup"),
+            }
+
+    fallback = RepositoryDiscoveryService(GitHubRepositoryClient(token=""))
+    current = type("Session", (), {"workspace_id": "workspace-1"})()
+
+    scoped = repository_discovery_router.wizard_discovery_service(
+        StubDb(),
+        current,
+        "OWNER/SERVICE.git",
+        fallback,
+    )
+
+    assert isinstance(scoped.client, GitHubRepositoryClient)
+    assert scoped.client.token == "ghp_wizard-followup"
 
 
 def test_manifest_validation_counts_static_yaml_resources() -> None:

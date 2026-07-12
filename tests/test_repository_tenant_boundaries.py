@@ -520,7 +520,7 @@ def test_authorized_legacy_repository_upsert_reuses_stored_id_without_owner_regr
     assert "pg_advisory_xact_lock" in lock_sql
     select_sql, select_params = _compiled(statements[1])
     assert "git_repositories.workspace_id =" in select_sql
-    assert "lower(git_repositories.repo_ref) =" in select_sql
+    assert "git_repositories.repo_ref =" in select_sql
     assert {"workspace-a", "acme/checkout"}.issubset(set(select_params.values()))
 
     insert_sql, insert_params = _compiled(statements[2])
