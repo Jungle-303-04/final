@@ -7,7 +7,7 @@ governing: docs/f-coordination-plan.md · docs/backend-f-workqueue.md
 
 # 백엔드 F 진행 현황
 
-현재 상태: **앵커 1건**
+현재 상태: **앵커 2건**
 
 ## Delta-green baseline
 
@@ -53,3 +53,17 @@ governing: docs/f-coordination-plan.md · docs/backend-f-workqueue.md
   `approval_decided_by`와 `approval_expires_at`가 없어 정확한 ID를 파생할 수 없다.
 
 계약 완성: AcceptedResponse.command_id receipt (4e6216052f4505fa247d9ed8be033477447696d7) [delta-green]
+
+### BQ-002
+
+- canonical 착륙 commit: `1080363a735e42a4cf542a11400a32ddaa0e9437`
+- 완료 후 측정: `6 failed, 1630 passed, 3 skipped`
+- delta-green 판정: 상단 RCA pytest 6개, Ruff format 2파일, import-linter 1계약과
+  실패 집합이 동일하며 신규 실패 0건
+- 프론트 인계: `ix_audit_log_correlation_id_created_at`는 BQ-004 correlation 타임라인
+  조회의 선행 조건이다. `causation_id`는 nullable이므로 기존 행은 `null`이다.
+- API 영향: 신규 route가 없어 Bruno 변경 없음
+- 후속 검증: 실 PostgreSQL online upgrade/downgrade/upgrade는 Alembic revision 전환
+  작업의 필수 게이트로 이관한다. 현재 스키마 부트스트랩은 `create_all` 경로를 사용한다.
+
+계약 완성: audit_log.causation_id + ix_audit_log_correlation_id_created_at (1080363a735e42a4cf542a11400a32ddaa0e9437) [delta-green]
