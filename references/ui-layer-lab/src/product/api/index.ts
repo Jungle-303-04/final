@@ -63,6 +63,7 @@ export {
   type SubmitCommandInput,
   type SubmitCommandOptions,
 } from "./commands";
+export { getCatalogItem, listCatalogItems } from "./catalog";
 export {
   grantApproval,
   rejectApproval,
@@ -298,6 +299,14 @@ export {
   commandAcceptedSchema,
   type CommandAccepted,
 } from "./commands-schemas";
+export {
+  catalogItemListSchema,
+  catalogItemResponseSchema,
+  catalogItemSchema,
+  type CatalogItem,
+  type CatalogItemList,
+  type CatalogItemResponse,
+} from "./catalog-schemas";
 export {
   approvalDecisionResponseSchema,
   type ApprovalDecisionResponse,
