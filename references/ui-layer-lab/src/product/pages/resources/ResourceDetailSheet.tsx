@@ -25,6 +25,7 @@ import {
   TabsTrigger,
 } from "../../shared/ui/primitives/tabs";
 import { DefinitionGrid, ResourceFactsPanel } from "./ResourceFactsPanel";
+import { ResourceDetailLoadingPreview } from "./ResourcesLoadingPreview";
 import type { ResourcesResourceState } from "./resourcesPageStateModel";
 
 export function ResourceDetailSheet({
@@ -91,7 +92,13 @@ function DetailBody({
     );
   }
   if (detail.phase === "idle" || detail.phase === "loading") {
-    return <ProductStateScreen kind="loading" placement="content" />;
+    return (
+      <ProductStateScreen
+        kind="loading"
+        loadingPreview={<ResourceDetailLoadingPreview />}
+        placement="content"
+      />
+    );
   }
   if (detail.phase === "failed") {
     if (detail.failure.code === "not-found") {

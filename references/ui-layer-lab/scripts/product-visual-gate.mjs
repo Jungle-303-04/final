@@ -279,6 +279,26 @@ const visualScenarios = [
     forcedColors: "none",
   },
   {
+    id: "home-sidebar-reflow-1920-light",
+    locale: "ko",
+    url: productHomeUrl,
+    authSession: "authenticated",
+    homeScenario: true,
+    homeFrame: "nodes",
+    sidebarReflowAssertions: true,
+    heading: "클러스터 상태",
+    requiredSelectors: [
+      ...homeSelectors,
+      "[data-slot='sidebar']",
+      "[data-slot='sidebar-inset']",
+      "[data-slot='product-page-frame']",
+    ],
+    viewport: { width: 1920, height: 1080 },
+    theme: "light",
+    colorScheme: "light",
+    forcedColors: "none",
+  },
+  {
     id: "home-authenticated-pod-desktop-light",
     locale: "ko",
     url: productHomeUrl,
@@ -1315,8 +1335,27 @@ async function assertProductLoadingScreenContracts(page, scenario) {
   const result = await page.evaluate(() => {
     const main = document.querySelector("main[aria-busy='true']");
     const preview = document.querySelector("[data-slot='loading-preview']");
+    const shell = document.querySelector("[data-slot='product-shell-loading']");
+    const shellSidebar = shell?.querySelector("aside");
+    const pageFrame = shell?.querySelector("[data-slot='product-page-frame']");
     const status = document.querySelector("[role='status']");
     const skeletons = [...document.querySelectorAll("[data-slot='skeleton']")];
+    const rect = (element) => {
+      if (!(element instanceof HTMLElement)) return null;
+      const bounds = element.getBoundingClientRect();
+      return {
+        left: bounds.left,
+        right: bounds.right,
+        width: bounds.width,
+      };
+    };
+    const rootStyle = getComputedStyle(document.documentElement);
+    const sidebarWidthToken = rootStyle
+      .getPropertyValue("--product-sidebar-width")
+      .trim();
+    const sidebarWidth = sidebarWidthToken.endsWith("rem")
+      ? Number.parseFloat(sidebarWidthToken) * Number.parseFloat(rootStyle.fontSize)
+      : Number.parseFloat(sidebarWidthToken);
     return {
       legacyContentCount: document.querySelectorAll("[data-slot='empty'], h1, p").length,
       mainCount: document.querySelectorAll("main[aria-busy='true']").length,
@@ -1329,6 +1368,10 @@ async function assertProductLoadingScreenContracts(page, scenario) {
       skeletonsAreHidden: skeletons.every(
         (skeleton) => skeleton.getAttribute("aria-hidden") === "true",
       ),
+      shellFrameRect: rect(pageFrame),
+      shellRect: rect(shell),
+      shellSidebarRect: rect(shellSidebar),
+      sidebarWidth,
       statusLabel: status?.getAttribute("aria-label") ?? null,
       statusText: status?.textContent?.trim() ?? null,
     };
@@ -1346,6 +1389,16 @@ async function assertProductLoadingScreenContracts(page, scenario) {
     throw new Error(
       `${scenario.id}: ProductLoadingScreen skeleton contract failed ${JSON.stringify(result)}`,
     );
+  }
+  if (scenario.viewport.width >= 768 && result.shellRect) {
+    if (!result.shellSidebarRect || !result.shellFrameRect
+      || Math.abs(result.shellSidebarRect.width - result.sidebarWidth) > 1
+      || Math.abs(result.shellFrameRect.left - result.sidebarWidth) > 1
+      || Math.abs(result.shellFrameRect.right - result.shellRect.right) > 1) {
+      throw new Error(
+        `${scenario.id}: loading shell geometry diverged from product tokens ${JSON.stringify(result)}`,
+      );
+    }
   }
 }
 
@@ -1448,7 +1501,11 @@ async function assertLocaleToggleReloadPersistence(page, scenario, targetLocale)
     || !localeControlCopy[targetLocale]) {
     throw new Error(`${scenario.id}: invalid locale-toggle persistence fixture ${targetLocale}`);
   }
+  const initialGeometry = await captureLocalizedGeometry(page, initialLocale);
   await selectLocale(page, initialLocale, targetLocale);
+  await waitForStableLayout(page);
+  const targetGeometry = await captureLocalizedGeometry(page, targetLocale);
+  assertStableGeometry(initialGeometry, targetGeometry, scenario.id);
   await assertPageLocaleState(page, scenario, targetLocale, targetLocale, "after locale toggle");
 
   await page.reload({ waitUntil: "networkidle" });
@@ -1462,6 +1519,64 @@ async function assertLocaleToggleReloadPersistence(page, scenario, targetLocale)
   await page.getByRole("heading", { name: localeSmokeCopy[initialLocale][scenario.localeSmoke].heading }).waitFor();
   await assertPageLocaleState(page, scenario, initialLocale, initialLocale, "locale restore");
   await assertLocalizedRouteCurrent(page, scenario.localeSmoke, initialLocale, scenario.id);
+}
+
+async function captureLocalizedGeometry(page, locale) {
+  const control = localeControlCopy[locale];
+  return page.evaluate((controlLabel) => {
+    const rect = (element) => {
+      if (!(element instanceof HTMLElement)) return null;
+      const bounds = element.getBoundingClientRect();
+      return {
+        height: bounds.height,
+        left: bounds.left,
+        top: bounds.top,
+        width: bounds.width,
+      };
+    };
+    const frame = document.querySelector("[data-slot='product-page-frame']");
+    const frameHeader = frame?.querySelector(":scope > header");
+    const localeTrigger = [...document.querySelectorAll("[data-slot='select-trigger']")]
+      .find((element) => element.getAttribute("aria-label") === controlLabel);
+    const connection = frameHeader?.querySelector("[data-slot='button']");
+    const clusterSelect = frameHeader?.querySelector("[data-slot='select-trigger']");
+    const frameButtons = frameHeader?.querySelectorAll("[data-slot='button']") ?? [];
+    const refresh = frameButtons.item(frameButtons.length - 1);
+    return {
+      clusterSelect: rect(clusterSelect),
+      connection: rect(connection),
+      frame: rect(frame),
+      localeTrigger: rect(localeTrigger),
+      refresh: rect(refresh),
+      shellHeader: rect(document.querySelector("[data-slot='sidebar-inset'] > header")),
+    };
+  }, control.control);
+}
+
+function assertStableGeometry(before, after, label) {
+  for (const key of Object.keys(before)) {
+    const left = before[key];
+    const right = after[key];
+    if (!left || !right) {
+      throw new Error(`${label}: locale geometry fixture missing ${key}`);
+    }
+    for (const axis of ["height", "left", "top", "width"]) {
+      if (Math.abs(left[axis] - right[axis]) > 1) {
+        throw new Error(
+          `${label}: locale changed ${key}.${axis} ${JSON.stringify({ before: left, after: right })}`,
+        );
+      }
+    }
+  }
+}
+
+async function waitForStableLayout(page) {
+  await page.evaluate(async () => {
+    await document.fonts.ready;
+    await new Promise((resolve) => requestAnimationFrame(() => (
+      requestAnimationFrame(resolve)
+    )));
+  });
 }
 
 async function selectLocale(page, currentLocale, targetLocale) {
@@ -1525,6 +1640,9 @@ async function prepareProductHomeScenario(page, scenario) {
   await assertProductHomeReducedMotion(page, `${scenario.id}:node`);
   await assertProductHomeFreshnessContract(page, scenario.id);
   await assertProductHomeNodeFrame(page, scenario.id);
+  if (scenario.sidebarReflowAssertions) {
+    await assertProductHomeSidebarReflow(page, scenario.id);
+  }
 
   if (scenario.homeFrame === "nodes") {
     const currentUrl = new URL(page.url());
@@ -1561,6 +1679,52 @@ async function prepareProductHomeScenario(page, scenario) {
     window.scrollTo(0, 0);
     return new Promise((resolve) => requestAnimationFrame(() => resolve()));
   });
+}
+
+async function assertProductHomeSidebarReflow(page, label) {
+  const capture = () => page.evaluate(() => {
+    const rect = (element) => {
+      if (!(element instanceof HTMLElement)) return null;
+      const bounds = element.getBoundingClientRect();
+      return {
+        left: bounds.left,
+        right: bounds.right,
+        width: bounds.width,
+      };
+    };
+    return {
+      frame: rect(document.querySelector("[data-slot='product-page-frame']")),
+      inset: rect(document.querySelector("[data-slot='sidebar-inset']")),
+      main: rect(document.querySelector("#product-main")),
+      sidebar: rect(document.querySelector("[data-slot='sidebar']")),
+    };
+  });
+  const expanded = await capture();
+  await page.getByRole("button", { name: "사이드바 접기" }).click();
+  await page.getByRole("button", { name: "사이드바 펼치기" }).waitFor();
+  await waitForStableLayout(page);
+  const collapsed = await capture();
+  const required = [expanded.frame, expanded.inset, expanded.main, expanded.sidebar,
+    collapsed.frame, collapsed.inset, collapsed.main, collapsed.sidebar];
+  if (required.some((value) => value === null)) {
+    throw new Error(`${label}: sidebar reflow fixture is incomplete`);
+  }
+  const delta = expanded.sidebar.width - collapsed.sidebar.width;
+  const close = (left, right) => Math.abs(left - right) <= 1;
+  if (delta <= 1
+    || !close(collapsed.inset.width, expanded.inset.width + delta)
+    || !close(collapsed.inset.left, expanded.inset.left - delta)
+    || !close(collapsed.inset.right, expanded.inset.right)
+    || !close(collapsed.main.width, expanded.main.width + delta)
+    || !close(collapsed.main.left, expanded.main.left - delta)
+    || !close(collapsed.main.right, expanded.main.right)
+    || !close(collapsed.frame.width, expanded.frame.width + delta)
+    || !close(collapsed.frame.left, expanded.frame.left - delta)
+    || !close(collapsed.frame.right, expanded.frame.right)) {
+    throw new Error(
+      `${label}: sidebar collapse did not redistribute width ${JSON.stringify({ expanded, collapsed, delta })}`,
+    );
+  }
 }
 
 async function visibleExactTextCount(page, text) {

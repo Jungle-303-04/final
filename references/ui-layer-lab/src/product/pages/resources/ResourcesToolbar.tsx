@@ -63,12 +63,13 @@ export function ResourcesToolbar({
             value={namespaceDraft}
           />
         </label>
-        <Button size="sm" type="submit" variant="outline">
+        <Button className="w-24" size="sm" type="submit" variant="outline">
           {t("resources.filter.apply")}
         </Button>
       </form>
       <Toggle
         aria-label={t("resources.filter.includeInactive")}
+        className="w-32 shrink-0"
         onPressedChange={onIncludeDeletedChange}
         pressed={includeDeleted}
         variant="outline"

@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import { DEFAULT_LOCALE, translate, useOptionalI18n } from "../i18n";
+import { ProductPageFrame } from "./ProductPageFrame";
 import { Skeleton } from "./primitives/skeleton";
 
 type ProductStatePlacement = "root" | "content";
@@ -54,11 +55,13 @@ export function ProductLoadingScreen({
 
 function ContentLoadingGeometry() {
   return (
-    <div className="mx-auto grid w-full max-w-[100rem] gap-4 p-4 sm:p-6">
-      <div className="flex justify-end gap-2">
-        <Skeleton aria-hidden="true" className="h-8 w-24" />
-        <Skeleton aria-hidden="true" className="h-8 w-72 max-w-[55vw]" />
-        <Skeleton aria-hidden="true" className="size-8" />
+    <ProductPageFrame>
+      <div className="flex min-w-0 justify-end">
+        <div className="flex w-full min-w-0 items-center justify-end gap-2 xl:w-auto">
+          <Skeleton aria-hidden="true" className="h-7 w-24 shrink-0" />
+          <Skeleton aria-hidden="true" className="h-8 min-w-0 flex-1 xl:w-96 xl:flex-none" />
+          <Skeleton aria-hidden="true" className="size-8 shrink-0" />
+        </div>
       </div>
       <div className="grid min-w-0 gap-4 xl:grid-cols-[minmax(0,1fr)_20rem]">
         <div className="grid min-w-0 gap-4">
@@ -85,13 +88,16 @@ function ContentLoadingGeometry() {
         </div>
         <Skeleton aria-hidden="true" className="h-[30rem] rounded-xl" />
       </div>
-    </div>
+    </ProductPageFrame>
   );
 }
 
 function ProductShellLoadingGeometry() {
   return (
-    <div className="grid min-h-svh md:grid-cols-[16rem_minmax(0,1fr)]">
+    <div
+      className="grid min-h-svh md:grid-cols-[var(--product-sidebar-width)_minmax(0,1fr)]"
+      data-slot="product-shell-loading"
+    >
       <aside className="hidden border-r bg-sidebar p-3 md:grid md:grid-rows-[2.5rem_1fr_auto] md:gap-5">
         <div className="flex items-center gap-2">
           <Skeleton aria-hidden="true" className="size-8" />
@@ -108,8 +114,10 @@ function ProductShellLoadingGeometry() {
         <header className="flex items-center justify-between border-b px-4">
           <Skeleton aria-hidden="true" className="h-5 w-28 md:hidden" />
           <span className="hidden md:block" />
-          <div className="flex gap-2">
+          <div className="flex items-center gap-1">
             <Skeleton aria-hidden="true" className="size-8" />
+            <Skeleton aria-hidden="true" className="size-8" />
+            <Skeleton aria-hidden="true" className="h-7 w-24" />
             <Skeleton aria-hidden="true" className="size-8" />
           </div>
         </header>

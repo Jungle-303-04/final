@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { cleanup, screen, waitFor } from "@testing-library/react";
+import { cleanup, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ResourcesPortFailure } from "../../features/resources/resourcesContract";
@@ -19,6 +19,24 @@ afterEach(() => {
 });
 
 describe("ResourcesPage URL-backed detail", () => {
+  it("keeps detail loading inside the sheet without nesting a page frame", async () => {
+    const detail = deferred<typeof POD_DETAIL>();
+    const port = resourcesPort({
+      loadResourceDetail: vi.fn().mockReturnValue(detail.promise),
+    });
+    renderResources(
+      port,
+      "/product/resources/pod?cluster=cluster-1&resource=shop%2Fcheckout-api-0&kind=Pod",
+    );
+
+    const dialog = await screen.findByRole("dialog", { name: "checkout-api-0 상세" });
+    expect(dialog.querySelector('[data-slot="resource-detail-loading"]')).toBeTruthy();
+    expect(dialog.querySelector('[data-slot="product-page-frame"]')).toBeNull();
+
+    detail.resolve(POD_DETAIL);
+    expect(await within(dialog).findByText("Running")).toBeTruthy();
+  });
+
   it("resolves a direct same-route detail deep link from canonical identity", async () => {
     const list = deferred<Awaited<ReturnType<ReturnType<typeof resourcesPort>["listResources"]>>>();
     const port = resourcesPort({ listResources: vi.fn().mockReturnValue(list.promise) });

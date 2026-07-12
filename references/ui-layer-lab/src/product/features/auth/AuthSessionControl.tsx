@@ -23,7 +23,10 @@ export function AuthSessionControl({
   return (
     <div className={cn("grid min-w-0 gap-2", isToolbar ? "justify-items-end" : "w-full")}>
       <div className="flex min-w-0 max-w-full items-center justify-end gap-2">
-        <div className={cn("min-w-0 text-right", isToolbar ? "hidden lg:block" : "block")}>
+        <div className={cn(
+          "min-w-0 text-right",
+          isToolbar ? "hidden lg:block lg:w-40 xl:w-48" : "block",
+        )}>
           <p className="truncate text-xs font-medium" title={auth.session.userId}>
             {auth.session.userId}
           </p>

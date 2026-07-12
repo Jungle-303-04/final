@@ -35,6 +35,32 @@ export function UnknownCompletenessEmpty({ variant }: { variant: "catalog" | "li
   );
 }
 
+export function UnknownSelection({
+  value,
+  variant,
+}: {
+  value: string | null;
+  variant: "cluster" | "resource";
+}) {
+  const { t } = useI18n();
+  const title = variant === "cluster"
+    ? t("resources.selection.cluster.title")
+    : t("resources.selection.resource.title");
+  return (
+    <Surface aria-labelledby="unknown-selection-title" className="grid min-h-72 place-items-center p-6">
+      <div className="grid max-w-md justify-items-center gap-3 text-center">
+        <CircleAlert aria-hidden="true" className="size-8 text-muted-foreground" />
+        <h3 className="text-lg font-semibold" id="unknown-selection-title">{title}</h3>
+        <p className="text-sm text-muted-foreground">
+          {t("resources.selection.description", {
+            value: value ?? t("resources.selection.urlScope"),
+          })}
+        </p>
+      </div>
+    </Surface>
+  );
+}
+
 export function ResourcesDenied({ onRetry }: { onRetry: () => void }) {
   const { t } = useI18n();
   return (
