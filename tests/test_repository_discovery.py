@@ -252,6 +252,57 @@ def test_repo_validate_stores_token_as_encrypted_workspace_credential(monkeypatc
     assert "ghp_secret" not in str(db.saved[0]["encrypted_value"])
 
 
+def test_repo_validate_uses_existing_legacy_repository_id_for_credential_scope(
+    monkeypatch,
+) -> None:
+    monkeypatch.setenv("CREDENTIAL_ENCRYPTION_KEY", "local-test-key")
+
+    class StubClient(StubGitHubClient):
+        def __init__(self, *, token=None, **_kwargs):
+            super().__init__()
+            self.token = token
+
+    class StubDb:
+        def __init__(self) -> None:
+            self.saved: list[dict[str, object]] = []
+
+        def get_repository_by_ref(
+            self,
+            workspace_id: str,
+            repo_ref: str,
+        ) -> dict[str, object] | None:
+            assert workspace_id == "workspace-1"
+            assert repo_ref == "owner/service"
+            return {
+                "workspace_id": workspace_id,
+                "repository_id": "repo-legacy-client-id",
+                "repo_ref": repo_ref,
+            }
+
+        def upsert_workspace_credential(self, payload: dict[str, object]) -> dict[str, object]:
+            self.saved.append(payload)
+            return {**payload, "credential_id": "cred-legacy"}
+
+    monkeypatch.setattr(
+        "domains.gitops.repository_discovery_router.GitHubRepositoryClient", StubClient
+    )
+    db = StubDb()
+
+    async def run():
+        return await validate_repo_for_wizard(
+            RepoValidateRequest(url="owner/service", token="ghp_rotated"),
+            current=type("Session", (), {"workspace_id": "workspace-1"})(),
+            db=db,
+        )
+
+    response = asyncio.run(run())
+
+    expected_scope = "repository:repo-legacy-client-id"
+    assert response.credential_ref == f"db:github:{expected_scope}"
+    assert db.saved[0]["scope"] == expected_scope
+    assert db.saved[0]["metadata"]["repository_id"] == "repo-legacy-client-id"
+
+
 def test_manifest_validation_counts_static_yaml_resources() -> None:
     manifest = b"""
 apiVersion: apps/v1
