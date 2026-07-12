@@ -316,7 +316,13 @@ FAULT_CASES: dict[str, tuple[dict[str, Any], str, list[str]]] = {
     "imagepull": (
         IMAGEPULL_SNAPSHOT,
         "ImagePullBackOff",
-        ["wrong_image_tag", "missing_image_pull_secret", "registry_unavailable"],
+        [
+            "wrong_image_tag",
+            "missing_image_pull_secret",
+            "registry_unavailable",
+            "registry_rate_limited",
+            "image_platform_mismatch",
+        ],
     ),
     "probe-fail": (
         PROBE_FAIL_SNAPSHOT,
