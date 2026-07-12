@@ -45,6 +45,11 @@ export {
   type SubmittedPrometheusQuery,
 } from "./metrics";
 export {
+  getClusterResourceUsageSeries,
+  type ResourceUsageTarget,
+  type UsageSeriesOptions,
+} from "./usage-series";
+export {
   connectRealtime,
   createRealtimeClient,
   type RealtimeClient,
@@ -126,6 +131,12 @@ export {
   type PrometheusQueryDefinition,
   type PrometheusRangeResult,
 } from "./metrics-schemas";
+export {
+  usageSeriesResponseSchema,
+  type ClusterResourceUsageSeries,
+  type ResourceUsageSeriesPoint,
+  type UsageSeriesResponse,
+} from "./usage-series-schemas";
 export {
   liveSummarySchema,
   parseRealtimeMessage,
