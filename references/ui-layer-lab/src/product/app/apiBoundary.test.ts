@@ -26,6 +26,15 @@ interface ApprovalRecord {
   hash: string;
 }
 
+interface ApprovalCommitEvidence {
+  changedFiles: string[];
+  contractTestSources: string[];
+  indexSource: string;
+}
+
+const API_BOUNDARY_TIMEOUT_MS = 30_000;
+const approvalEvidenceByHash = new Map<string, ApprovalCommitEvidence | null>();
+
 describe("product API consumption boundary", () => {
   it("allows product/api references only from the composition root", async () => {
     const violations: string[] = [];
@@ -42,7 +51,7 @@ describe("product API consumption boundary", () => {
     }
 
     expect(violations, "API references must be isolated behind app/apiComposition.ts").toEqual([]);
-  }, 15_000);
+  }, API_BOUNDARY_TIMEOUT_MS);
 
   it("allows only approved named endpoint imports in the composition root", async () => {
     const [progress, compositionSource] = await Promise.all([
@@ -64,7 +73,7 @@ describe("product API consumption boundary", () => {
       audit.names.flatMap((name) => approvalEvidenceIssues(approvals.get(name))),
       "API 완성 records must identify an ancestor commit with API contract tests and the export",
     ).toEqual([]);
-  }, 15_000);
+  }, API_BOUNDARY_TIMEOUT_MS);
 
   it("detects alias, re-export, and non-literal dynamic import bypasses", () => {
     const fixturePath = resolve(productRoot, "features/bypass.ts");
@@ -193,32 +202,51 @@ function latestApprovalRecords(progress: string): Map<string, ApprovalRecord> {
 function approvalEvidenceIssues(record: ApprovalRecord | undefined): string[] {
   if (!record) return ["missing approval record"];
   const issues: string[] = [];
+  const evidence = approvalCommitEvidence(record.hash);
+  if (!evidence) {
+    issues.push("invalid or non-ancestor completion commit");
+    return issues.map((issue) => `${record.name}@${record.hash}: ${issue}`);
+  }
+  const apiPrefix = "references/ui-layer-lab/src/product/api/";
+  if (!evidence.changedFiles.some((file) => file.startsWith(apiPrefix))) {
+    issues.push("no API change");
+  }
+  if (evidence.contractTestSources.length === 0) {
+    issues.push("no API contract test changed");
+  } else if (!evidence.contractTestSources.some((source) => (
+    containsIdentifier(source, record.name)
+  ))) {
+    issues.push("completion function absent from changed contract tests");
+  }
+  if (!hasNamedExport(evidence.indexSource, record.name)) {
+    issues.push("named export absent at completion commit");
+  }
+  return issues.map((issue) => `${record.name}@${record.hash}: ${issue}`);
+}
+
+function approvalCommitEvidence(hash: string): ApprovalCommitEvidence | null {
+  const cached = approvalEvidenceByHash.get(hash);
+  if (cached !== undefined) return cached;
   try {
-    git(["cat-file", "-e", `${record.hash}^{commit}`]);
-    git(["merge-base", "--is-ancestor", record.hash, "HEAD"]);
-    const changedFiles = git(["diff-tree", "--no-commit-id", "--name-only", "-r", record.hash])
+    git(["cat-file", "-e", `${hash}^{commit}`]);
+    git(["merge-base", "--is-ancestor", hash, "HEAD"]);
+    const changedFiles = git(["diff-tree", "--no-commit-id", "--name-only", "-r", hash])
       .split("\n").filter(Boolean);
     const apiPrefix = "references/ui-layer-lab/src/product/api/";
     const contractTests = changedFiles.filter((file) => (
       file.startsWith(apiPrefix) && /\.test\.[cm]?[jt]sx?$/u.test(file)
     ));
-    if (!changedFiles.some((file) => file.startsWith(apiPrefix))) issues.push("no API change");
-    if (contractTests.length === 0) {
-      issues.push("no API contract test changed");
-    } else if (!contractTests.some((file) => containsIdentifier(
-      git(["show", `${record.hash}:${file}`]),
-      record.name,
-    ))) {
-      issues.push("completion function absent from changed contract tests");
-    }
-    const indexAtCommit = git(["show", `${record.hash}:${apiIndexFromRepository}`]);
-    if (!hasNamedExport(indexAtCommit, record.name)) {
-      issues.push("named export absent at completion commit");
-    }
+    const evidence = {
+      changedFiles,
+      contractTestSources: contractTests.map((file) => git(["show", `${hash}:${file}`])),
+      indexSource: git(["show", `${hash}:${apiIndexFromRepository}`]),
+    };
+    approvalEvidenceByHash.set(hash, evidence);
+    return evidence;
   } catch {
-    issues.push("invalid or non-ancestor completion commit");
+    approvalEvidenceByHash.set(hash, null);
+    return null;
   }
-  return issues.map((issue) => `${record.name}@${record.hash}: ${issue}`);
 }
 
 function resolveModuleReference(filePath: string, specifier: string): string | null {
