@@ -8,6 +8,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { ProductShell } from "./ProductShell";
 import { createApiComposition } from "./apiComposition";
+import { createProductComposition } from "./productComposition";
 import { ProductRouter } from "./ProductRouter";
 import type { AuthenticatedAuthState } from "../features/auth/authContract";
 
@@ -130,7 +131,7 @@ describe("ProductShell keyboard and help interaction", () => {
 
     await user.click(open);
     const dialog = await screen.findByRole("dialog", { name: "제품 탐색" });
-    expect(dialog.contains(document.activeElement)).toBe(true);
+    await waitFor(() => expect(dialog.contains(document.activeElement)).toBe(true));
     await user.keyboard("{Escape}");
     await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
     expect(document.activeElement).toBe(open);
@@ -166,7 +167,15 @@ describe("ProductShell keyboard and help interaction", () => {
       expect(xhrSpy).not.toHaveBeenCalled();
       expect(sendBeaconSpy).not.toHaveBeenCalled();
 
-      render(<ProductRouter auth={testAuth} composition={createApiComposition()} />);
+      const releaseGateComposition = createProductComposition(
+        [],
+        createApiComposition().auth,
+      );
+      render(
+        <MemoryRouter initialEntries={["/product"]}>
+          <ProductRouter auth={testAuth} composition={releaseGateComposition} />
+        </MemoryRouter>,
+      );
       expect(screen.getByRole("heading", { name: "API 연결 계층을 검증하고 있습니다" })).toBeTruthy();
       expect(screen.queryByRole("navigation")).toBeNull();
       expect(screen.queryByRole("button", { name: "키보드 단축키" })).toBeNull();
