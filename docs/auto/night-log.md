@@ -215,9 +215,9 @@ format: "[시각] [트랙] 한 줄 상태 + 커밋 hash (있으면)"
 | `feat/ummfieg/rca-worker` | C | 1 | 사람 판단 대기 | 미착륙·비활성; ahead=290; 2026-06-30; Merge remote-tracking branch 'origin/dev' into feat/ummfieg/rca-worker |
 | `main` | 보호 | 1 | 보존 | 명시 보호 브랜치; ahead=34; 2026-06-26; refactor: 이벤트 계약 / 구독 선언 / Gateway 계약 |
 | `origin/chanbin-authority` | C | 1 | 사람 판단 대기 | 미착륙·비활성; ahead=512; 2026-07-07; fix: workload scale 명령 실행 정책 정합성 |
-| `origin/codex/bq-001-command-id-receipt` | A | 0 | 삭제 예정 | origin/dev ancestor 증명; ahead=0; 2026-07-13; docs: BQ-001 계약 완성 / delta-green 앵커 / 프론트 인계 |
-| `origin/codex/bq-002-audit-causation` | A | 0 | 삭제 예정 | origin/dev ancestor 증명; ahead=0; 2026-07-13; docs: BQ-002 계약 완성 / delta-green 앵커 / 프론트 인계 |
-| `origin/codex/bq-003-remediation-bundle` | A | 0 | 삭제 예정 | origin/dev ancestor 증명; ahead=0; 2026-07-13; feat: RemediationBundle 3계층 조회 계약 추가 |
+| `origin/codex/bq-001-command-id-receipt` | A | 0 | 원격 삭제 완료 | origin/dev ancestor 증명; ahead=0; 2026-07-13; docs: BQ-001 계약 완성 / delta-green 앵커 / 프론트 인계 |
+| `origin/codex/bq-002-audit-causation` | A | 0 | 원격 삭제 완료 | origin/dev ancestor 증명; ahead=0; 2026-07-13; docs: BQ-002 계약 완성 / delta-green 앵커 / 프론트 인계 |
+| `origin/codex/bq-003-remediation-bundle` | A | 0 | 원격 삭제 완료 | origin/dev ancestor 증명; ahead=0; 2026-07-13; feat: RemediationBundle 3계층 조회 계약 추가 |
 | `origin/codex/chanbin-dev-infra-base` | C | 1 | 사람 판단 대기 | 미착륙·비활성; ahead=315; 2026-07-05; fix: workspace 관련 제거 |
 | `origin/codex/data-dashboard-variants` | C | 1 | 사람 판단 대기 | 미착륙·비활성; ahead=1; 2026-07-09; feat: redesign operations homepage variants |
 | `origin/codex/f-auto-revert-pr` | B | 1 | 보존 | 활성 lane; ahead=1; 2026-07-13; feat: rollout 실패 revert PR / 기본 비활성 / 권위 컨텍스트 |
@@ -226,14 +226,14 @@ format: "[시각] [트랙] 한 줄 상태 + 커밋 hash (있으면)"
 | `origin/codex/gitops-cache-db-crd` | C | 1 | 사람 판단 대기 | 미착륙·비활성; ahead=462; 2026-07-04; feat: add gitops cache db crd rendering |
 | `origin/codex/headlamptest` | C | 1 | 사람 판단 대기 | 미착륙·비활성; ahead=607; 2026-07-07; feat(frontend): add headlamp network resource views |
 | `origin/codex/platform-foundation` | C | 1 | 사람 판단 대기 | 미착륙·비활성; ahead=555; 2026-07-06; docs: 운영 검증 용어 정리 |
-| `origin/codex/radar` | A | 0 | 삭제 예정 | origin/dev ancestor 증명; ahead=0; 2026-07-11; ci: dev 푸시 AWS 직접 배포 활성화 |
+| `origin/codex/radar` | A | 0 | 원격 삭제 완료 | origin/dev ancestor 증명; ahead=0; 2026-07-11; ci: dev 푸시 AWS 직접 배포 활성화 |
 | `origin/codex/rca-log-evidence-scope-20260710` | C | 1 | 사람 판단 대기 | 미착륙·비활성; ahead=1; 2026-07-10; fix: RCA 시나리오 가용성 / provider 검증 경계 |
 | `origin/codex/release-flow-frontend-safe-pr-144` | C | 1 | 사람 판단 대기 | 미착륙·비활성; ahead=2; 2026-07-10; feat: add production readiness runner |
-| `origin/codex/release-flow-gate-contract-check-133` | A | 0 | 삭제 예정 | origin/dev ancestor 증명; ahead=0; 2026-07-10; feat: enforce release flow production gate contract |
-| `origin/codex/release-flow-gate-input-contract-137` | A | 0 | 삭제 예정 | origin/dev ancestor 증명; ahead=0; 2026-07-10; feat: require production gate inputs in deploy workflows |
-| `origin/codex/release-flow-generated-manifest-safe-pr-142` | A | 0 | 삭제 예정 | origin/dev ancestor 증명; ahead=0; 2026-07-10; feat: add generated release manifest safe pr |
-| `origin/codex/release-flow-live-image-guard-140` | A | 0 | 삭제 예정 | origin/dev ancestor 증명; ahead=0; 2026-07-10; feat: require explicit production live image |
-| `origin/codex/release-flow-live-preflight-explicit-inputs-139` | A | 0 | 삭제 예정 | origin/dev ancestor 증명; ahead=0; 2026-07-10; feat: require explicit live preflight inputs |
+| `origin/codex/release-flow-gate-contract-check-133` | A | 0 | 원격 삭제 완료 | origin/dev ancestor 증명; ahead=0; 2026-07-10; feat: enforce release flow production gate contract |
+| `origin/codex/release-flow-gate-input-contract-137` | A | 0 | 원격 삭제 완료 | origin/dev ancestor 증명; ahead=0; 2026-07-10; feat: require production gate inputs in deploy workflows |
+| `origin/codex/release-flow-generated-manifest-safe-pr-142` | A | 0 | 원격 삭제 완료 | origin/dev ancestor 증명; ahead=0; 2026-07-10; feat: add generated release manifest safe pr |
+| `origin/codex/release-flow-live-image-guard-140` | A | 0 | 원격 삭제 완료 | origin/dev ancestor 증명; ahead=0; 2026-07-10; feat: require explicit production live image |
+| `origin/codex/release-flow-live-preflight-explicit-inputs-139` | A | 0 | 원격 삭제 완료 | origin/dev ancestor 증명; ahead=0; 2026-07-10; feat: require explicit live preflight inputs |
 | `origin/codex/release-flow-prod-abort-criteria-52` | C | 1 | 사람 판단 대기 | 미착륙·비활성; ahead=49; 2026-07-10; feat: require production abort criteria |
 | `origin/codex/release-flow-prod-action-disabled-hints-83` | C | 1 | 사람 판단 대기 | 미착륙·비활성; ahead=82; 2026-07-10; feat: show disabled release action hints |
 | `origin/codex/release-flow-prod-action-reason-presets-81` | C | 1 | 사람 판단 대기 | 미착륙·비활성; ahead=80; 2026-07-10; feat: improve release action reason presets |
@@ -350,11 +350,11 @@ format: "[시각] [트랙] 한 줄 상태 + 커밋 hash (있으면)"
 | `origin/codex/release-flow-prod-verification-timeout-alert-62` | C | 1 | 사람 판단 대기 | 미착륙·비활성; ahead=59; 2026-07-10; feat: escalate release verification timeouts |
 | `origin/codex/release-flow-prod-verification-timeout-smoke-70` | C | 1 | 사람 판단 대기 | 미착륙·비활성; ahead=67; 2026-07-10; feat: smoke release verification preflight |
 | `origin/codex/release-flow-prod-verification-timeout-status-64` | C | 1 | 사람 판단 대기 | 미착륙·비활성; ahead=61; 2026-07-10; feat: handle release verification timeout status |
-| `origin/codex/release-flow-production-deploy-gate-132` | A | 0 | 삭제 예정 | origin/dev ancestor 증명; ahead=0; 2026-07-10; feat: add release flow production deploy gate |
-| `origin/codex/release-flow-production-ownership-guard-136` | A | 0 | 삭제 예정 | origin/dev ancestor 증명; ahead=0; 2026-07-10; feat: require production ownership evidence |
-| `origin/codex/release-flow-production-placeholder-guard-135` | A | 0 | 삭제 예정 | origin/dev ancestor 증명; ahead=0; 2026-07-10; feat: block production placeholder change tickets |
-| `origin/codex/release-flow-production-readiness-check-134` | A | 0 | 삭제 예정 | origin/dev ancestor 증명; ahead=0; 2026-07-10; feat: add release flow production readiness check |
-| `origin/codex/release-flow-safe-pr-evidence-gate-141` | A | 0 | 삭제 예정 | origin/dev ancestor 증명; ahead=0; 2026-07-10; feat: verify live safe pr evidence |
+| `origin/codex/release-flow-production-deploy-gate-132` | A | 0 | 원격 삭제 완료 | origin/dev ancestor 증명; ahead=0; 2026-07-10; feat: add release flow production deploy gate |
+| `origin/codex/release-flow-production-ownership-guard-136` | A | 0 | 원격 삭제 완료 | origin/dev ancestor 증명; ahead=0; 2026-07-10; feat: require production ownership evidence |
+| `origin/codex/release-flow-production-placeholder-guard-135` | A | 0 | 원격 삭제 완료 | origin/dev ancestor 증명; ahead=0; 2026-07-10; feat: block production placeholder change tickets |
+| `origin/codex/release-flow-production-readiness-check-134` | A | 0 | 원격 삭제 완료 | origin/dev ancestor 증명; ahead=0; 2026-07-10; feat: add release flow production readiness check |
+| `origin/codex/release-flow-safe-pr-evidence-gate-141` | A | 0 | 원격 삭제 완료 | origin/dev ancestor 증명; ahead=0; 2026-07-10; feat: verify live safe pr evidence |
 | `origin/codex/release-flow-smoke-alert-preflight-126` | C | 1 | 사람 판단 대기 | 미착륙·비활성; ahead=124; 2026-07-10; feat: add optional release flow alert preflight |
 | `origin/codex/release-flow-smoke-artifact-retention-124` | C | 1 | 사람 판단 대기 | 미착륙·비활성; ahead=122; 2026-07-10; feat: configure release flow smoke artifact retention |
 | `origin/codex/release-flow-smoke-concurrency-123` | C | 1 | 사람 판단 대기 | 미착륙·비활성; ahead=121; 2026-07-10; feat: serialize release flow smoke gates |
@@ -362,28 +362,28 @@ format: "[시각] [트랙] 한 줄 상태 + 커밋 hash (있으면)"
 | `origin/codex/release-flow-smoke-expanded-outputs-128` | C | 1 | 사람 판단 대기 | 미착륙·비활성; ahead=126; 2026-07-10; feat: expose release flow smoke workflow outputs |
 | `origin/codex/release-flow-smoke-identity-129` | C | 1 | 사람 판단 대기 | 미착륙·비활성; ahead=127; 2026-07-10; feat: identify release flow smoke runs and artifacts |
 | `origin/codex/release-flow-smoke-input-validation-125` | C | 1 | 사람 판단 대기 | 미착륙·비활성; ahead=123; 2026-07-10; feat: validate release flow smoke workflow inputs |
-| `origin/codex/release-flow-smoke-live-placeholder-guard-138` | A | 0 | 삭제 예정 | origin/dev ancestor 증명; ahead=0; 2026-07-10; feat: block direct live smoke placeholders |
+| `origin/codex/release-flow-smoke-live-placeholder-guard-138` | A | 0 | 원격 삭제 완료 | origin/dev ancestor 증명; ahead=0; 2026-07-10; feat: block direct live smoke placeholders |
 | `origin/codex/release-flow-smoke-live-preflight-127` | C | 1 | 사람 판단 대기 | 미착륙·비활성; ahead=125; 2026-07-10; feat: add optional release flow live preflight |
 | `origin/codex/release-flow-smoke-request-timeout-130` | C | 1 | 사람 판단 대기 | 미착륙·비활성; ahead=128; 2026-07-10; feat: configure release flow smoke request timeout |
 | `origin/codex/release-flow-smoke-retry-policy-131` | C | 1 | 사람 판단 대기 | 미착륙·비활성; ahead=129; 2026-07-10; feat: configure release flow smoke retry policy |
 | `origin/codex/release-flow-smoke-reusable-workflow-121` | C | 1 | 사람 판단 대기 | 미착륙·비활성; ahead=119; 2026-07-10; feat: make release flow smoke workflow reusable |
-| `origin/codex/release-flow-worker-topology-143` | A | 0 | 삭제 예정 | origin/dev ancestor 증명; ahead=0; 2026-07-10; feat: harden release flow production operations |
-| `origin/codex/team-release-flow-production-evidence-verifier` | A | 0 | 삭제 예정 | origin/dev ancestor 증명; ahead=0; 2026-07-10; fix: pin production evidence to workflow run ids |
-| `origin/codex/testtttt` | A | 0 | 삭제 예정 | origin/dev ancestor 증명; ahead=0; 2026-07-10; feat: emit gitops change context for RCA |
+| `origin/codex/release-flow-worker-topology-143` | A | 0 | 원격 삭제 완료 | origin/dev ancestor 증명; ahead=0; 2026-07-10; feat: harden release flow production operations |
+| `origin/codex/team-release-flow-production-evidence-verifier` | A | 0 | 원격 삭제 완료 | origin/dev ancestor 증명; ahead=0; 2026-07-10; fix: pin production evidence to workflow run ids |
+| `origin/codex/testtttt` | A | 0 | 원격 삭제 완료 | origin/dev ancestor 증명; ahead=0; 2026-07-10; feat: emit gitops change context for RCA |
 | `origin/codex/ui-layer-lab-references` | C | 1 | 사람 판단 대기 | 미착륙·비활성; ahead=4; 2026-07-09; 문서: 디지털 트윈 데모 색인 연결 |
 | `origin/codex/yaml-editor` | C | 1 | 사람 판단 대기 | 미착륙·비활성; ahead=406; 2026-07-04; feat: add yaml editor frontend |
 | `origin/dev` | 보호 | 0 | 보존 | 명시 보호 브랜치; ahead=0; 2026-07-13; docs: R 후속 정리 / baseline 공집합 / P 재개 |
 | `origin/feat/jeonwoohyun-hydromel/command-worker` | C | 1 | 사람 판단 대기 | 미착륙·비활성; ahead=229; 2026-06-30; Merge remote-tracking branch 'origin/dev' into HEAD |
 | `origin/feat/jeonwoohyun-hydromel/gitops-sync-worker` | C | 1 | 사람 판단 대기 | 미착륙·비활성; ahead=228; 2026-06-30; Merge remote-tracking branch 'origin/dev' into HEAD |
 | `origin/feat/minmings111/agent-command-k8s` | C | 1 | 사람 판단 대기 | 미착륙·비활성; ahead=459; 2026-07-04; refactor: realtime 계약 상수 / Gateway 필드 / drift 방지 |
-| `origin/feat/minmings111/expand-provider-evidence-dev` | A | 0 | 삭제 예정 | origin/dev ancestor 증명; ahead=0; 2026-07-11; fix(target-agent): bound loki and tempo evidence items |
+| `origin/feat/minmings111/expand-provider-evidence-dev` | A | 0 | 원격 삭제 완료 | origin/dev ancestor 증명; ahead=0; 2026-07-11; fix(target-agent): bound loki and tempo evidence items |
 | `origin/feat/minmings111/expand-provider-evidence` | C | 1 | 사람 판단 대기 | 미착륙·비활성; ahead=531; 2026-07-08; test: update telemetry registry metadata source |
 | `origin/feat/minmings111/node-collector` | C | 1 | 사람 판단 대기 | 미착륙·비활성; ahead=228; 2026-06-30; Merge remote-tracking branch 'origin/dev' into HEAD |
 | `origin/feat/minmings111/remove-provider-raw-payload` | C | 1 | 사람 판단 대기 | 미착륙·비활성; ahead=525; 2026-07-06; fix: remove raw telemetry payloads |
 | `origin/feat/ummfieg/audit-timeline-service` | C | 1 | 사람 판단 대기 | 미착륙·비활성; ahead=228; 2026-06-30; Merge remote-tracking branch 'origin/dev' into HEAD |
 | `origin/feat/ummfieg/dashboard-projection-service` | C | 1 | 사람 판단 대기 | 미착륙·비활성; ahead=228; 2026-06-30; Merge remote-tracking branch 'origin/dev' into HEAD |
-| `origin/feat/ummfieg/rca-evidence-schema-finalization` | A | 0 | 삭제 예정 | origin/dev ancestor 증명; ahead=0; 2026-07-11; RCA evidence window Bruno 요청 추가 |
-| `origin/feat/ummfieg/rca-rollout-dependency-rules` | A | 0 | 삭제 예정 | origin/dev ancestor 증명; ahead=0; 2026-07-12; feat: RCA 스케줄링 룰 보강 |
+| `origin/feat/ummfieg/rca-evidence-schema-finalization` | A | 0 | 원격 삭제 완료 | origin/dev ancestor 증명; ahead=0; 2026-07-11; RCA evidence window Bruno 요청 추가 |
+| `origin/feat/ummfieg/rca-rollout-dependency-rules` | A | 0 | 원격 삭제 완료 | origin/dev ancestor 증명; ahead=0; 2026-07-12; feat: RCA 스케줄링 룰 보강 |
 | `origin/feat/ummfieg/rca-workers` | C | 1 | 사람 판단 대기 | 미착륙·비활성; ahead=323; 2026-07-03; refactor: agent pipeline / 죽은 코드 / export 정리 |
 | `origin/feat/ummfieg/rca-worker` | C | 1 | 사람 판단 대기 | 미착륙·비활성; ahead=228; 2026-06-30; Merge remote-tracking branch 'origin/dev' into HEAD |
 | `origin/main` | 보호 | 1 | 보존 | 명시 보호 브랜치; ahead=1324; 2026-07-11; Merge pull request #585 from Jungle-303-04/codex/cloudflare-mtls-dispatch |
@@ -398,3 +398,9 @@ format: "[시각] [트랙] 한 줄 상태 + 커밋 hash (있으면)"
 - [A]는 이 표가 선행 커밋된 뒤에만 삭제한다. 모든 [A]는 `origin/dev` ancestor exit 0이다.
 - [B] 활성 lane과 보호 브랜치는 처리하지 않는다.
 - [C]는 미착륙 상태이므로 전부 사람 판단 대기로 보존한다.
+
+[2026-07-13 07:34 KST] [백엔드] 브랜치 회수 완료 — [A] 원격 21개 삭제 / 로컬 대상 0개 / 관련 worktree 0개 / `git worktree prune` 완료
+
+- 삭제 후 `git ls-remote --heads origin` 재검증: 대상 21개 잔존 0개.
+- [B] 활성 lane 5개·보호 6개는 유지했다.
+- [C] 166개는 사람 판단 대기로 유지했다.
