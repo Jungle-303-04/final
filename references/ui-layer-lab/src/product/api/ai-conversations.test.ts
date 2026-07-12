@@ -126,8 +126,25 @@ describe("AI conversation API", () => {
       credentials: "include",
       signal: controller.signal,
     });
+    expect(init?.body).toBeUndefined();
     expect(headers.get("accept")).toBe("application/json");
     expect(headers.get("x-service-csrf")).toBe("same-origin");
+  });
+
+  it("preserves AbortError and does not retry a possibly-sent deletion", async () => {
+    const abortError = new DOMException("Aborted", "AbortError");
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockRejectedValue(abortError);
+    const controller = new AbortController();
+    controller.abort();
+
+    await expect(
+      deleteAiConversation("aic-123", controller.signal),
+    ).rejects.toBe(abortError);
+    expect(fetchMock).toHaveBeenCalledOnce();
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/ai/conversations/aic-123",
+      expect.objectContaining({ signal: controller.signal }),
+    );
   });
 
   it("rejects an empty conversation id before making a request", () => {
@@ -173,4 +190,36 @@ describe("AI conversation API", () => {
       detail: "conversation not found",
     } satisfies Partial<ApiError>);
   });
+
+  it.each([
+    [401, "unauthorized"],
+    [403, "forbidden"],
+    [409, "http"],
+    [422, "invalid-request"],
+    [429, "rate-limited"],
+  ] as const)(
+    "preserves a structured %i delete error",
+    async (status, kind) => {
+      vi.spyOn(globalThis, "fetch").mockResolvedValue(
+        new Response(JSON.stringify({
+          detail: {
+            code: `delete_${status}`,
+            detail: `delete failed with ${status}`,
+            ...(status === 429 ? { retry_after: 7 } : {}),
+          },
+        }), {
+          status,
+          headers: { "content-type": "application/json" },
+        }),
+      );
+
+      await expect(deleteAiConversation("aic-123")).rejects.toMatchObject({
+        code: `delete_${status}`,
+        detail: `delete failed with ${status}`,
+        kind,
+        retryAfter: status === 429 ? 7 : null,
+        status,
+      } satisfies Partial<ApiError>);
+    },
+  );
 });
