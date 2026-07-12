@@ -966,7 +966,11 @@ async def install_manifest_by_token(
         raise HTTPException(status_code=NOT_FOUND_CODE, detail="install link not found")
     payload = target_register_payload_from_settings(registration.get("settings") or {})
     manifest = target_install_manifest(payload, agent_token)
-    return PlainTextResponse(manifest, media_type="text/yaml")
+    return PlainTextResponse(
+        manifest,
+        media_type="text/yaml",
+        headers={"Cache-Control": "no-store"},
+    )
 
 
 @router.get(gateway_routes.CLUSTERS_PATH, response_model=ClusterListResponse)

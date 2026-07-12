@@ -82,7 +82,9 @@ from packages.storage.engine import unit_of_work_or_null
 router = APIRouter()
 HTTP_NOT_FOUND = 404
 HTTP_CONFLICT = 409
+HTTP_UNPROCESSABLE_ENTITY = 422
 RELEASE_PLAN_NOT_FOUND = "release plan not found"
+EXPLICIT_RELEASE_PLAN_ID_NOT_ALLOWED = "plan_id must not be provided when creating a release plan"
 RELEASE_RUN_NOT_FOUND = "release run not found"
 RELEASE_PLAN_BLOCKED = "release plan has blockers"
 RELEASE_RUN_BLOCKED = "release run cannot advance"
@@ -1031,6 +1033,11 @@ async def create_release_plan(
     current: Any = Depends(require_session),
     db: Any = Depends(get_db),
 ) -> ReleasePlanResponse:
+    if payload.plan_id is not None and payload.plan_id.strip():
+        raise HTTPException(
+            status_code=HTTP_UNPROCESSABLE_ENTITY,
+            detail=EXPLICIT_RELEASE_PLAN_ID_NOT_ALLOWED,
+        )
     workspace_id = getattr(current, "workspace_id", DEFAULT_WORKSPACE_ID)
     require_plan_application_plan_manage_access(
         db, current, workspace_id, payload.model_dump()["steps"]

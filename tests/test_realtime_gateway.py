@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from typing import Any
 
 import pytest
@@ -34,8 +35,8 @@ async def stub_browser_session(token: str | None) -> dict[str, str] | None:
     return None
 
 
-async def stub_accessible_clusters(_session: object, _workspace_id: str) -> set[str]:
-    return {CLUSTER}
+async def stub_cluster_authorizer(_session: object, _workspace_id: str, cluster_id: str) -> bool:
+    return cluster_id == CLUSTER
 
 
 def browser_headers() -> dict[str, str]:
@@ -47,7 +48,7 @@ def make_client() -> tuple[Any, TestClient]:
     app = module.create_app(
         authenticate_agent=stub_authenticator,
         authenticate_browser=stub_browser_session,
-        accessible_browser_clusters=stub_accessible_clusters,
+        authorize_browser_cluster=stub_cluster_authorizer,
     )
     return module, TestClient(app)
 
@@ -171,7 +172,7 @@ def test_mtls_proxy_authenticates_browser_but_never_agent(
     app = module.create_app(
         authenticate_agent=lambda _token: None,
         authenticate_browser=deny_browser,
-        accessible_browser_clusters=stub_accessible_clusters,
+        authorize_browser_cluster=stub_cluster_authorizer,
     )
     client = TestClient(app)
 
@@ -271,3 +272,89 @@ def test_browser_rejects_cluster_wildcard() -> None:
         with pytest.raises(WebSocketDisconnect) as excinfo:
             browser.receive_json()
     assert excinfo.value.code == 4400
+
+
+def test_database_cluster_authorizer_uses_session_identity_and_cluster_read() -> None:
+    module = load_gateway_module()
+
+    class ScopedDb:
+        def __init__(self) -> None:
+            self.checks: list[tuple[str, str, str, str, str]] = []
+
+        def get_cluster_registration(
+            self, workspace_id: str, cluster_id: str
+        ) -> dict[str, str] | None:
+            if (workspace_id, cluster_id) == (WORKSPACE, CLUSTER):
+                return {"workspace_id": workspace_id, "cluster_id": cluster_id}
+            return None
+
+        def can_access(
+            self,
+            user_id: str,
+            workspace_id: str,
+            resource_type: str,
+            resource_id: str,
+            permission: str,
+        ) -> bool:
+            self.checks.append((user_id, workspace_id, resource_type, resource_id, permission))
+            return True
+
+    db = ScopedDb()
+    authorize = module.database_browser_cluster_authorizer(db)
+
+    allowed = asyncio.run(
+        authorize({"user_id": "user-1", "workspace_id": WORKSPACE}, WORKSPACE, CLUSTER)
+    )
+    missing = asyncio.run(
+        authorize(
+            {"user_id": "user-1", "workspace_id": WORKSPACE},
+            WORKSPACE,
+            "missing-cluster",
+        )
+    )
+
+    assert allowed is True
+    assert missing is False
+    assert db.checks == [
+        ("user-1", WORKSPACE, "cluster", CLUSTER, "cluster.read"),
+    ]
+
+
+def test_database_cluster_authorizer_fails_closed_without_user() -> None:
+    module = load_gateway_module()
+
+    class UnexpectedDb:
+        def get_cluster_registration(self, *_args: object) -> None:
+            raise AssertionError("missing user must not reach the database")
+
+    authorize = module.database_browser_cluster_authorizer(UnexpectedDb())
+
+    assert asyncio.run(authorize({}, WORKSPACE, CLUSTER)) is False
+
+
+def test_database_cluster_authorizer_allows_authenticated_service_admin() -> None:
+    module = load_gateway_module()
+
+    class AdminDb:
+        def get_cluster_registration(self, workspace_id: str, cluster_id: str) -> dict[str, str]:
+            return {"workspace_id": workspace_id, "cluster_id": cluster_id}
+
+        def can_access(self, *_args: object) -> bool:
+            raise AssertionError("service admin role should use the authenticated role")
+
+    authorize = module.database_browser_cluster_authorizer(AdminDb())
+
+    assert (
+        asyncio.run(
+            authorize(
+                {
+                    "user_id": "proxy-admin",
+                    "workspace_id": WORKSPACE,
+                    "roles": ["service_admin"],
+                },
+                WORKSPACE,
+                CLUSTER,
+            )
+        )
+        is True
+    )

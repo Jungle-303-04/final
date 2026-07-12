@@ -73,10 +73,18 @@ from packages.storage.sessions import RedisSessionStore, RedisSessionStoreConfig
 
 LOGGER = get_logger(__name__)
 STATE_CHANGING_METHODS = {"POST", "PUT", "PATCH", "DELETE"}
+INSTALL_LOG_PATH_PREFIX = gateway_routes.INSTALL_MANIFEST_PATH.partition("{")[0]
+INSTALL_LOG_REDACTED_PATH = f"{INSTALL_LOG_PATH_PREFIX}[REDACTED]"
 
 
 def elapsed_ms(started_at: float) -> int:
     return max(0, int((time.perf_counter() - started_at) * 1000))
+
+
+def sanitize_request_log_path(path: str) -> str:
+    if path.startswith(INSTALL_LOG_PATH_PREFIX) and len(path) > len(INSTALL_LOG_PATH_PREFIX):
+        return INSTALL_LOG_REDACTED_PATH
+    return path
 
 
 def agent_connected_body_from_request(
@@ -151,7 +159,7 @@ class ApiGateway:
             started_at = time.perf_counter()
             context = {
                 "method": request.method,
-                "path": request.url.path,
+                "path": sanitize_request_log_path(request.url.path),
                 "client_host": request.client.host if request.client else None,
                 "request_correlation_id": request.headers.get(Gateway.CORRELATION_ID),
             }
