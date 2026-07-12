@@ -1,7 +1,11 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { ApiError } from "./client";
-import { getClusterUsage } from "./metrics";
+import {
+  getClusterUsage,
+  pollCommand,
+  submitPrometheusQuery,
+} from "./metrics";
 
 function jsonResponse(payload: unknown, status = 200): Response {
   return new Response(JSON.stringify(payload), {
@@ -13,6 +17,10 @@ function jsonResponse(payload: unknown, status = 200): Response {
 describe("metrics API", () => {
   beforeEach(() => {
     vi.restoreAllMocks();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
   });
 
   it("normalizes known usage fields and drops open summary extras", async () => {
@@ -115,5 +123,99 @@ describe("metrics API", () => {
     await expect(getClusterUsage("cluster-1")).rejects.toMatchObject({
       kind: "invalid-payload",
     } satisfies Partial<ApiError>);
+  });
+
+  it("submits one Prometheus command and returns its receipt", async () => {
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      jsonResponse({
+        accepted: true,
+        command_id: "cmd-metrics-1",
+        correlation_id: "corr-metrics-1",
+      }),
+    );
+    const query = {
+      source: "prometheus" as const,
+      name: "pod_cpu_usage",
+      description: "Pod CPU usage",
+      query: "sum(rate(container_cpu_usage_seconds_total[5m])) by (pod)",
+      range_seconds: 3600,
+      step_seconds: 60,
+    };
+
+    await expect(submitPrometheusQuery("cluster-1", query)).resolves.toMatchObject({
+      receipt: {
+        accepted: true,
+        command_id: "cmd-metrics-1",
+        correlation_id: "corr-metrics-1",
+      },
+    });
+    expect(fetchMock).toHaveBeenCalledOnce();
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/agent/debug/query",
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({ cluster_id: "cluster-1", query }),
+      }),
+    );
+  });
+
+  it("polls command status with GET until the command completes", async () => {
+    vi.useFakeTimers();
+    const fetchMock = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(
+        jsonResponse({
+          command_id: "cmd-metrics-1",
+          cluster_id: "cluster-1",
+          correlation_id: "corr-metrics-1",
+          action: "telemetry.query.run",
+          status: "running",
+          result: {},
+          completed_at: null,
+        }),
+      )
+      .mockResolvedValueOnce(
+        jsonResponse({
+          command_id: "cmd-metrics-1",
+          cluster_id: "cluster-1",
+          correlation_id: "corr-metrics-1",
+          action: "telemetry.query.run",
+          status: "completed",
+          result: {},
+          completed_at: "2026-07-12T10:30:00Z",
+        }),
+      );
+
+    const pending = pollCommand("cmd-metrics-1");
+    await vi.runAllTimersAsync();
+    await expect(pending).resolves.toMatchObject({
+      command_id: "cmd-metrics-1",
+      status: "completed",
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(fetchMock.mock.calls.every(([, init]) => init?.method === "GET")).toBe(true);
+  });
+
+  it("stops polling when the caller aborts", async () => {
+    vi.useFakeTimers();
+    const controller = new AbortController();
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      jsonResponse({
+        command_id: "cmd-metrics-1",
+        cluster_id: "cluster-1",
+        correlation_id: "corr-metrics-1",
+        action: "telemetry.query.run",
+        status: "running",
+        result: {},
+        completed_at: null,
+      }),
+    );
+
+    const pending = pollCommand("cmd-metrics-1", { signal: controller.signal });
+    await Promise.resolve();
+    controller.abort();
+    await vi.runAllTimersAsync();
+
+    await expect(pending).rejects.toMatchObject({ name: "AbortError" });
   });
 });
