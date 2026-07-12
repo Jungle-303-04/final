@@ -72,6 +72,42 @@ rules:
               - log_pattern: "secret not found"
               - log_pattern: "not set"
               - log_pattern: "invalid configuration"
+      - candidate_id: "app_port_bind_failed"
+        title: "애플리케이션 port bind 실패"
+        description: "애플리케이션이 시작 중 listen port를 열지 못해 프로세스가 종료됐을 가능성이 있습니다."
+        expected_evidence:
+          - "kubernetes:cluster_resource_state"
+          - "logs:related_logs"
+        checks:
+          - "로그에 address already in use, listen tcp, bind 실패 문구가 있는지 확인"
+          - "애플리케이션 listen port와 containerPort/Service targetPort 설정을 비교"
+          - "privileged port 또는 잘못된 bind address를 사용했는지 확인"
+        signals:
+          - id: "port_bind_failure_signal"
+            any_of:
+              - log_pattern: "address already in use"
+              - log_pattern: "listen tcp"
+              - log_pattern: "bind: permission denied"
+              - log_pattern: "cannot assign requested address"
+              - log_pattern: "port already in use"
+      - candidate_id: "permission_denied_startup"
+        title: "시작 중 권한 오류"
+        description: "애플리케이션 시작 중 파일, 디렉터리, volume, 인증서 접근 권한이 없어 종료됐을 가능성이 있습니다."
+        expected_evidence:
+          - "kubernetes:cluster_resource_state"
+          - "logs:related_logs"
+        checks:
+          - "로그에 permission denied, operation not permitted, read-only file system 확인"
+          - "securityContext의 runAsUser, fsGroup, readOnlyRootFilesystem 설정 확인"
+          - "Secret/ConfigMap/volume mount path와 파일 권한을 확인"
+        signals:
+          - id: "startup_permission_denied_signal"
+            any_of:
+              - log_pattern: "permission denied"
+              - log_pattern: "operation not permitted"
+              - log_pattern: "read-only file system"
+              - log_pattern: "eacces"
+              - log_pattern: "permissionerror"
       - candidate_id: "app_startup_failure"
         title: "애플리케이션 시작 실패"
         description: "애플리케이션 초기화 코드나 런타임 오류로 프로세스가 종료됐을 가능성이 있습니다."

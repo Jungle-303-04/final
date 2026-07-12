@@ -67,6 +67,8 @@ EXPECTED_RULE_SNAPSHOT: dict[str, tuple[list[str], list[str]]] = {
             "oom_killed",
             "bad_image_rollout",
             "config_env_error",
+            "app_port_bind_failed",
+            "permission_denied_startup",
             "app_startup_failure",
             "dependency_connection_failure",
         ],
@@ -77,6 +79,8 @@ EXPECTED_RULE_SNAPSHOT: dict[str, tuple[list[str], list[str]]] = {
             "oom_killed",
             "bad_image_rollout",
             "config_env_error",
+            "app_port_bind_failed",
+            "permission_denied_startup",
             "app_startup_failure",
             "dependency_connection_failure",
         ],
@@ -551,6 +555,34 @@ def test_non_oom_exit_code_supports_app_startup_failure() -> None:
 
     assert by_id["app_startup_failure"].score == 1.0
     assert by_id["oom_killed"].score < 1.0
+
+
+def test_port_bind_failure_reaches_full_score_with_startup_log() -> None:
+    """포트 bind 실패 로그가 있으면 일반 startup failure보다 구체 후보가 완결된다."""
+    bundle = crashloop_bundle(
+        log_lines=["listen tcp :8080: bind: address already in use"],
+        pods=[crashloop_pod()],
+    )
+
+    by_id = evaluations_by_id(bundle)
+
+    assert by_id["app_port_bind_failed"].score == 1.0
+    assert by_id["app_port_bind_failed"].missing_evidence == []
+    assert by_id["app_startup_failure"].score < 1.0
+
+
+def test_permission_denied_startup_reaches_full_score_with_startup_log() -> None:
+    """권한 오류 로그가 있으면 permission_denied_startup 후보가 완결된다."""
+    bundle = crashloop_bundle(
+        log_lines=["permission denied opening /app/config/config.yaml"],
+        pods=[crashloop_pod()],
+    )
+
+    by_id = evaluations_by_id(bundle)
+
+    assert by_id["permission_denied_startup"].score == 1.0
+    assert by_id["permission_denied_startup"].missing_evidence == []
+    assert by_id["app_startup_failure"].score < 1.0
 
 
 def test_no_candidate_gets_full_score_without_distinguishing_evidence() -> None:
