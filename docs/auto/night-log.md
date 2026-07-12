@@ -75,3 +75,7 @@ format: "[시각] [트랙] 한 줄 상태 + 커밋 hash (있으면)"
 - exit criteria: `git log dev..origin/dev` 공집합, `docs/backend-f-progress.md`·`src/domains/rca_bundle/` 실재, `git status --short` 0줄
 - 테스트: 문서 tracking 단계로 신규 코드·테스트 없음
 - frozen path·gateway 계약·`src/**` 변경 0건; merge·push·배포·앵커 0건
+
+[2026-07-13 04:57 KST] [백엔드] B in_progress — origin/dev 착륙 3건과 in-process bus 미착륙 lane 상태를 작업 큐에 정합
+
+[2026-07-13 04:59 KST] [백엔드] B 시도 1/3 실패 — docs/auto 추적 뒤 문서 색인 4건 누락 — docs/README 색인 보완 후 재검증

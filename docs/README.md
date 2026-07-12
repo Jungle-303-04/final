@@ -192,6 +192,13 @@ secret 이름과 주입 경계는 [Secrets](secrets.md)를 본다.
 - [scenarios](scenarios.md)
 - [secrets](secrets.md)
 
+자동 조율 문서는 아래에 있다.
+
+- [auto/backend-pipeline](auto/backend-pipeline.md)
+- [auto/frontend-pipeline](auto/frontend-pipeline.md)
+- [auto/night-directives](auto/night-directives.md)
+- [auto/night-log](auto/night-log.md)
+
 프론트 상세 설계 문서는 아래에 있다.
 
 - [fd/README](fd/README.md)
