@@ -16,12 +16,14 @@ api-needs.md와 같은 규율로 운영한다. 작업 상태는 `requested`/`in_
 
 모든 행 공통 완료 기준:
 (1) additive-only 준수 (기존 필드 rename·삭제·타입변경 0건)
-(2) 단위 테스트 추가 + `bash scripts/test.sh` 전체 통과 — 단, 다른 작업열 소유의
-    기존 실패가 있는 동안은 f-coordination-plan.md §4의 **델타-그린 규칙** 적용
-    (baseline 대비 신규 실패 0건 + 해당 BQ 신규 테스트 전부 통과)
+(2) 단위 테스트 추가 + `bash scripts/test.sh` 전체 통과. [D-012]에서 RCA baseline이
+    공집합이 되어 델타-그린은 만료됐으며 이후 예외 없이 전체 통과만 인정한다.
 (3) 신규 route는 Bruno collection(docs/api)에 요청 추가
 (4) DB 변경은 마이그레이션 동반
 (5) progress 파일 EOF에 앵커 기록. 앵커 없이는 프론트가 소비하지 않는다.
+
+R-트랙([D-011])은 dev merge `257f91846`으로 landed/closed 되었고, 전용 worktree와
+로컬 `codex/rca-baseline-convergence` 브랜치는 [D-012] 회수 절차로 삭제 완료했다.
 
 ## 큐 (권장 순서대로)
 
@@ -35,8 +37,8 @@ api-needs.md와 같은 규율로 운영한다. 작업 상태는 `requested`/`in_
 | BQ-006 | requested | F3 | 승격 게이트 노출: `on_run_completed_promote` 현행 조건(rollout health 포함)을 응답/문서로 노출. 관측 윈도우 게이트는 별도 후속 행으로 분리(지금 하지 않음) | 기존 workflow run 응답에 `promotion_gate` 필드 추가(additive) | — |
 | BQ-007 | done-pending-merge | F5 | RolloutDiagnosed(next_action≠observe) → 직전 정상 이미지 patch 생성 → SafePrRequested 발행 배선. **`RECOVERY_ENABLE_AUTO_REVERT_PR` flag(기본 false) 필수**<br>담당: Codex 백엔드 세션<br>브랜치: `codex/f-auto-revert-pr`<br>HEAD: `68e94c148` | (신규 route 없음, 이벤트 배선) | flag off에서 무발화 테스트 / on에서 sandbox E2E |
 | BQ-008 | done-pending-merge | F0 (병행 가능) | in-process event bus: `EventConsumerBus` Protocol 구현(내부 큐 + ack/nak/재배달 에뮬) + `WorkerService`/`App.run()` bus 파라미터 배선. NATS 기본값 유지<br>담당: Codex 백엔드 세션<br>브랜치: `codex/f-inprocess-event-bus` | (계약 변경 없음 — 기존 Protocol 구현 추가) | 기존 NATS 경로 회귀 테스트 |
-| BQ-009 | blocked | 권위 patch 엔진 ([D-010] 1항) | `safe_pr_patches()`(dispatch.py)의 markdown fallback을 action_type별 실제 patch 생성기로 교체: `oom_memory`(usage/limit 분석+상한 정책), `image_rollback`/`image_tag_fix`(last_approved_snapshot·직전 정상 digest), `replica_scale`, `probe_fix`, `selector_fix`. desired manifest/승인 스냅샷을 단일 소스로 사용(RCA 복구와 Release Flow patch 체계 결합). 확보 불가 시 `unsupported` 정직 종료 — 문서 PR로 복구 위장 금지. rollback patch 동반. **frozen 예외: `src/services/ai/agent/recovery/**` 한정([D-010]), RCA 작업열 비충돌 확인 후 착수** | (gateway 계약 변경 없음) | 생성기별 단위테스트(6종) + unsupported 경로 테스트 + 델타-그린. **F(BQ-007) 완료 후 같은 lane(`codex/f-auto-revert-pr`)에서 이어서** |
-| BQ-010 | blocked | 카탈로그 정비 ([D-010] 2항) | `builtin.py`의 `params={"patch": "recovery_review"}` 류를 BQ-009 생성기가 소비할 선언적 파라미터로 교체. 검토 문서 액션은 실제 복구 액션과 action_type 수준 분리 + score 하향 | (gateway 계약 변경 없음) | 카탈로그 계약 테스트 + 델타-그린. BQ-009와 같은 lane, BQ-009 직후 |
+| BQ-009 | in_progress | 권위 patch 엔진 ([D-010] 1항, [D-012] 2항으로 BLOCKED 해소) | `contracts` read-only GitOps 권위 컨텍스트 port를 dispatcher에 주입하고 `source_patch.py`의 exact base SHA·SCM provenance·원문 byte 보존을 재사용. patch 생성 시점에 승인 snapshot·binding·repository를 조회해 `safe_pr_patches()`의 markdown fallback을 action_type별 실제 patch 생성기(`oom_memory`, `image_rollback`/`image_tag_fix`, `replica_scale`, `probe_fix`, `selector_fix`)로 교체. 확보 불가 시 `unsupported`, rollback patch 동반. **frozen 예외: `src/services/ai/agent/recovery/**` 한정**<br>담당: Codex 백엔드 세션<br>브랜치: `codex/f-auto-revert-pr` | (gateway 계약 변경 없음; read-only port는 계약 lock 비대상) | 생성기별 단위테스트(6종) + unsupported 경로 테스트 + 전체 통과 |
+| BQ-010 | requested | 카탈로그 정비 ([D-010] 2항) | `builtin.py`의 `params={"patch": "recovery_review"}` 류를 BQ-009 생성기가 소비할 선언적 파라미터로 교체. 검토 문서 액션은 실제 복구 액션과 action_type 수준 분리 + score 하향 | (gateway 계약 변경 없음) | 카탈로그 계약 테스트 + 전체 통과. BQ-009와 같은 lane, BQ-009 직후 |
 | BQ-011 | requested | release_flow 분해 ([D-010] 3항, **H 이후 착수**) | `release_flow/router.py`(5,297줄)를 policy/readiness/verification/report 내부 모듈로 behavior-preserving 분해 + import-linter 계약 추가. 신규 microservice 분리 금지 — 내부 모듈화만 | (계약 변경 없음 — 내부 구조만) | 전 테스트 결과 불변(green 동일) + 분해 전후 줄수 보고 |
 
 ## claim 규칙
