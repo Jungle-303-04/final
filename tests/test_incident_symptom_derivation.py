@@ -338,6 +338,8 @@ FAULT_CASES: dict[str, tuple[dict[str, Any], str, list[str]]] = {
             "insufficient_cpu",
             "insufficient_memory",
             "node_affinity_or_taint_mismatch",
+            "node_selector_mismatch",
+            "untolerated_taint",
             "pvc_pending",
         ],
     ),
