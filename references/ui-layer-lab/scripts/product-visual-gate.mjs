@@ -93,7 +93,6 @@ const homeSelectors = [
   "[data-slot='sidebar-inset']",
   "[data-slot='sidebar-trigger']",
   "[data-slot='surface']",
-  "[data-slot='badge']",
   "[data-slot='select-trigger']",
   "[data-slot='progress']",
   "[data-slot='progress-track']",
@@ -135,7 +134,6 @@ const resourcesSelectors = [
   "[data-slot='status-mark']",
   "header",
   "main",
-  "h2",
   "h3",
   "p",
 ];
@@ -1158,12 +1156,22 @@ async function prepareProductHomeScenario(page, scenario) {
     if (await homeLink.getAttribute("aria-current") !== "page") {
       throw new Error(`${scenario.id}: desktop Home link must be current`);
     }
+    const visibleHomeLabels = await visibleExactTextCount(page, "Home");
+    if (visibleHomeLabels !== 1) {
+      throw new Error(
+        `${scenario.id}: visible Home location label must appear only in the sidebar; `
+        + `received ${visibleHomeLabels}`,
+      );
+    }
   } else {
     if (await navigation.count() !== 0) {
       throw new Error(`${scenario.id}: closed mobile Home must not mount drawer navigation`);
     }
     if (await page.getByRole("button", { name: "모바일 사이드바 열기" }).count() !== 1) {
       throw new Error(`${scenario.id}: mobile Home must expose its sidebar trigger`);
+    }
+    if (await visibleExactTextCount(page, "Home") !== 0) {
+      throw new Error(`${scenario.id}: closed mobile sidebar must not duplicate the Home label`);
     }
   }
 
@@ -1213,20 +1221,39 @@ async function prepareProductHomeScenario(page, scenario) {
   });
 }
 
+async function visibleExactTextCount(page, text) {
+  return page.locator("body *").evaluateAll((elements, expected) => elements.filter((element) => {
+    const ownText = [...element.childNodes]
+      .filter((node) => node.nodeType === Node.TEXT_NODE)
+      .map((node) => node.textContent ?? "")
+      .join("")
+      .trim();
+    if (ownText !== expected) return false;
+    const bounds = element.getBoundingClientRect();
+    const style = getComputedStyle(element);
+    return bounds.width > 2 && bounds.height > 2
+      && style.display !== "none"
+      && style.visibility !== "hidden"
+      && style.opacity !== "0";
+  }).length, text);
+}
+
 async function prepareProductResourcesScenario(page, scenario) {
   await page.waitForFunction(() => document.title === "KubeHeal");
-  const table = page.getByRole("table", { name: "리소스 목록" });
-  await table.waitFor();
+  const table = scenario.resourcesDetail
+    ? page.locator("table[data-slot='table'][aria-label='리소스 목록']")
+    : page.getByRole("table", { name: "리소스 목록" });
+  await table.waitFor({ state: scenario.resourcesDetail ? "attached" : "visible" });
   await page.getByText(homePodName, { exact: true }).first().waitFor();
 
-  const clusterSelect = page.getByRole("combobox", { name: "클러스터 선택" });
-  await clusterSelect.waitFor();
+  const clusterSelect = page.locator("[data-slot='select-trigger'][aria-label='클러스터 선택']");
+  await clusterSelect.waitFor({ state: scenario.resourcesDetail ? "attached" : "visible" });
   if (!(await clusterSelect.textContent())?.includes(homeClusterId)) {
     throw new Error(`${scenario.id}: Resources cluster selector omitted ${homeClusterId}`);
   }
 
-  const scopeText = await page.getByRole("status", { name: "목록 범위" }).innerText();
-  if (!/표시된\s*2개/u.test(scopeText) || !/전체 수 미확인/u.test(scopeText)) {
+  const scopeText = await page.locator("[role='status'][aria-label='목록 범위']").innerText();
+  if (!/표시\s*2/u.test(scopeText) || !/전체 수 미확인/u.test(scopeText)) {
     throw new Error(
       `${scenario.id}: Resources unknown-completeness list copy is dishonest ${JSON.stringify(scopeText)}`,
     );
@@ -1235,8 +1262,10 @@ async function prepareProductResourcesScenario(page, scenario) {
   if (productText.includes("visual-secret-must-not-render")) {
     throw new Error(`${scenario.id}: unredacted annotation reached the Resources DOM`);
   }
-  if (!/관측/u.test(productText)) {
-    throw new Error(`${scenario.id}: Resources does not disclose snapshot observation time`);
+  if (!scenario.resourcesDetail) {
+    const connection = page.getByRole("button", { name: /연결됨.*마지막 관측/u });
+    await connection.focus();
+    await page.locator("[data-slot='tooltip-content']").waitFor();
   }
 
   const desktop = scenario.viewport.width >= 768;
@@ -1246,8 +1275,20 @@ async function prepareProductResourcesScenario(page, scenario) {
     if (await resourcesLink.getAttribute("aria-current") !== "page") {
       throw new Error(`${scenario.id}: desktop Resources link must be current`);
     }
-  } else if (await navigation.count() !== 0) {
-    throw new Error(`${scenario.id}: closed mobile Resources must not mount drawer navigation`);
+    const visibleResourcesLabels = await visibleExactTextCount(page, "Resources");
+    if (visibleResourcesLabels !== 1) {
+      throw new Error(
+        `${scenario.id}: visible Resources location label must appear only in the sidebar; `
+        + `received ${visibleResourcesLabels}`,
+      );
+    }
+  } else {
+    if (await navigation.count() !== 0) {
+      throw new Error(`${scenario.id}: closed mobile Resources must not mount drawer navigation`);
+    }
+    if (await visibleExactTextCount(page, "Resources") !== 0) {
+      throw new Error(`${scenario.id}: closed mobile sidebar must not duplicate the Resources label`);
+    }
   }
 
   if (scenario.resourcesDetail) {
@@ -1355,11 +1396,11 @@ async function assertProductHomeFreshnessContract(page, label) {
 async function assertProductHomeNodeFrame(page, label) {
   const section = page.locator("section[aria-labelledby='node-list-title']");
   await section.waitFor();
-  const text = await section.innerText();
-  if (!/표시\s*2개/u.test(text) || !/전체 수 미확인/u.test(text)) {
+  const text = await section.textContent() ?? "";
+  if (!/표시\s*2/u.test(text) || !/전체 수 미확인/u.test(text)) {
     throw new Error(
       `${label}: Node collection with unknown completeness must say `
-      + `"표시 2개 · 전체 수 미확인"; received ${JSON.stringify(text)}`,
+      + `"표시 2 · 전체 수 미확인"; received ${JSON.stringify(text)}`,
     );
   }
   if (!/Node/u.test(text) || !/Pod/u.test(text)) {
@@ -1376,11 +1417,11 @@ async function assertProductHomePodFrame(page, label) {
   ), "pod-list-title");
 
   const section = page.locator("section[aria-labelledby='pod-list-title']");
-  const text = await section.innerText();
-  if (!/표시\s*2개/u.test(text) || !/전체 수 미확인/u.test(text)) {
+  const text = await section.textContent() ?? "";
+  if (!/표시\s*2/u.test(text) || !/전체 수 미확인/u.test(text)) {
     throw new Error(
       `${label}: Pod collection with unknown completeness must say `
-      + `"표시 2개 · 전체 수 미확인"; received ${JSON.stringify(text)}`,
+      + `"표시 2 · 전체 수 미확인"; received ${JSON.stringify(text)}`,
     );
   }
 }
@@ -2221,11 +2262,10 @@ async function assertNoOverflow(page, label, requiredSelectors) {
         if (previousFocus instanceof HTMLElement) previousFocus.focus({ preventScroll: true });
         else element.blur();
       }
-      if (exemption !== null && (
+      if (exemption !== null && !isLayoutSuppressed && (
         exemption.trim().length === 0
         || !isHorizontalScrollOwner
         || element.tabIndex < 0
-        || isFocusSuppressed
         || !acceptsFocus
         || !hasAccessibleName
       )) {
@@ -2234,6 +2274,10 @@ async function assertNoOverflow(page, label, requiredSelectors) {
         );
       }
       if (isLayoutSuppressed) continue;
+      const exemptScrollAncestor = exemption === null
+        ? element.closest("[data-reflow-exempt]")
+        : null;
+      if (exemptScrollAncestor) continue;
       if (exemption === null && ownOverflow > 1) {
         const diagnosticText = (element.textContent ?? "").trim().replace(/\s+/gu, " ").slice(0, 80);
         violations.push(

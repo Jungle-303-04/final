@@ -83,7 +83,7 @@ describe("product-owned primitive accessibility", () => {
 
   it("preserves native table caption, header, row, and cell semantics", () => {
     render(
-      <Table>
+      <Table scrollAreaLabel="클러스터 표 가로 스크롤">
         <TableCaption>클러스터 리소스</TableCaption>
         <TableHeader>
           <TableRow>
@@ -101,6 +101,9 @@ describe("product-owned primitive accessibility", () => {
     );
 
     expect(screen.getByRole("table", { name: "클러스터 리소스" })).toBeTruthy();
+    const scrollArea = screen.getByRole("region", { name: "클러스터 표 가로 스크롤" });
+    expect(scrollArea.getAttribute("tabindex")).toBe("0");
+    expect(scrollArea.getAttribute("data-reflow-exempt")).toBe("wide-table-horizontal-scroll");
     expect(screen.getByRole("columnheader", { name: "이름" }).getAttribute("aria-sort")).toBe("ascending");
     expect(screen.getAllByRole("row")).toHaveLength(2);
     expect(screen.getAllByRole("cell")).toHaveLength(2);

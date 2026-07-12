@@ -133,10 +133,14 @@ describe("ResourcesPage scope and collection semantics", () => {
 
     const table = await screen.findByRole("table", { name: "리소스 목록" });
     expect(table.textContent).toContain("checkout-api-0");
+    expect(screen.queryByText("Resources", { exact: true })).toBeNull();
+    expect(screen.queryByText(/실 API|30초 자동 갱신/u)).toBeNull();
+    expect(screen.queryByText("스냅샷 최신")).toBeNull();
+    expect(screen.getByRole("button", { name: /연결됨.*마지막 관측/u })).toBeTruthy();
     const scope = screen.getByRole("status", { name: "목록 범위" });
-    expect(scope.textContent).toMatch(/표시된 3개/u);
+    expect(scope.textContent).toMatch(/표시 3/u);
     expect(scope.textContent).toMatch(/전체 수 미확인/u);
-    expect(scope.textContent).toMatch(/최대 3개 응답/u);
+    expect(scope.textContent).toMatch(/최대 3/u);
   });
 
   it("filters only the loaded rows and labels the search scope honestly", async () => {
@@ -202,6 +206,6 @@ describe("ResourcesPage scope and collection semantics", () => {
     }), "/product/resources/pod?cluster=cluster-1");
 
     const scope = await screen.findByRole("status", { name: "목록 범위" });
-    expect(scope.textContent).toContain("검증 실패로 제외 2개");
+    expect(scope.textContent).toContain("검증 실패 제외 2");
   });
 });
