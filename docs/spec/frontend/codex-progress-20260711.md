@@ -1420,3 +1420,25 @@ API 완성: deleteAiConversation (abe804f4e)
   - shadcn source audit: 482 previews PASS, upstream 21e4ceb
   - Vite production build: PASS
 ```
+
+## 2026-07-13 RemediationBundle API 완료
+
+API 완성: getRemediationBundle (97c862da1)
+
+- BQ-003 앵커 `44f35234e`의 `origin/dev` 착륙과 progress·router 실물을 재검증했다.
+- 착륙본 JSON Schema·Bruno·serializer와 동결 Zod를 대조한 결과 필드·required·nullable·
+  strict/open 경계가 일치한다. `remediation`은 required nullable이고, 유일한 open record는
+  `draft.params`다. diagnosis/remediation selected ID는 분리한다.
+- public barrel에 endpoint·response schema·canonical type을 export하고 직접 모듈과 동일한
+  identity임을 회귀 테스트로 고정했다.
+- 코드 커밋 `97c862da1`은 `origin/woonyong/ui-layer-lab`의 ancestor다.
+
+```text
+명령: npm run check
+결과: PASS
+  - TypeScript / ESLint: PASS
+  - Vitest: 94 files, 662 tests PASS
+  - product design guard: 275 files PASS
+  - shadcn source audit: 482 previews PASS, upstream 21e4ceb
+  - Vite production build: PASS
+```

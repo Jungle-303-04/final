@@ -19,7 +19,7 @@ api-needs.md에 APIQ 행을 추가하지 않고 화면도 렌더하지 않는다
 
 | ID | 삽입점 | 백엔드 큐 | 우리 계약 (백엔드 앵커로 확정) | 판정 | UI 매핑 (기존 자산 재사용) | API 함수 상태 |
 |---|---|---|---|---|---|---|
-| VP-001 | 인시던트 상세의 RemediationBundle 뷰 — 증거·진단·patch·rollback·검증 조건을 단일 문서로 표시, 다운로드 제공 | BQ-003 | `RCA_BUNDLE_PATH` = `GET /api/rca/bundles/{correlation_id}` · `RemediationBundleResponse` 3계층 meta/diagnosis/remediation · 앵커 `44f35234e` (`origin/dev` ancestor exit 0, progress·router 실물 확인) | 직결 | `RCA-004 RecoveryPlanSection`·`RCA-005 EvidenceTrail` 패턴 조합 + Port `Card`/`Collapsible`. supporting/missing 축소 금지 | `APIQ-029` in_progress — 착륙본 diff 대조 후 완료 게이트 |
+| VP-001 | 인시던트 상세의 RemediationBundle 뷰 — 증거·진단·patch·rollback·검증 조건을 단일 문서로 표시, 다운로드 제공 | BQ-003 | `RCA_BUNDLE_PATH` = `GET /api/rca/bundles/{correlation_id}` · `RemediationBundleResponse` 3계층 meta/diagnosis/remediation · 앵커 `44f35234e` (`origin/dev` ancestor exit 0, progress·router 실물 확인) | 직결 | `RCA-004 RecoveryPlanSection`·`RCA-005 EvidenceTrail` 패턴 조합 + Port `Card`/`Collapsible`. supporting/missing 축소 금지 | `API 완성: getRemediationBundle (97c862da1)` |
 | VP-002 | correlation 감사 타임라인 — 인시던트의 전체 이벤트 체인을 시간순 표시 | BQ-002+004 | `AUDIT_TIMELINE_PATH` (예정 — BQ-002 배관 앵커 `1080363a7` 존재(미착륙), 조회 route는 BQ-004 대기) | backend 선행 | `UI-021 Item`·`Collapsible`·`Badge`, 커서 페이지네이션 | 미요청 |
 | VP-003 | 이벤트 여정 뷰 — VP-002 데이터를 워커 흐름(alert→evidence→rca→recovery→PR)으로 렌더 | BQ-004 | VP-002와 동일 route 소비 | backend 선행 | `UI-056 TimelineSwimlane` 선례의 custom. causation_id 있으면 트리, 없으면 시간순으로 강등 표시 | 미요청 |
 | VP-004 | 인시던트 상세 "최근 변경" 섹션 — "이 장애 N분 전 PR #x로 image y 배포됨" | BQ-005 | `RCA_RECENT_CHANGES_PATH` (예정) | backend 선행 | `RCA-002 IncidentWorkspace`에 섹션 추가. 변경 없으면 섹션 미렌더(빈 카드 금지) | 미요청 |
