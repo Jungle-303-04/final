@@ -105,6 +105,7 @@ def command_request(
     payload: JsonObject | None = None,
     environment: str = "production",
     namespace: str = Sandbox.NAMESPACE,
+    actor: JsonObject | None = None,
 ) -> CommandRequestedBody:
     return CommandRequestedBody(
         cluster_id=Target.DEFAULT_CLUSTER_ID,
@@ -123,6 +124,7 @@ def command_request(
         workspace_id="workspace-1",
         workflow_run_id="workflow-1",
         requested_by="user-1",
+        actor=actor,
         approval_ref=approval_ref,
         policy_decision_ref=policy_decision_ref,
         approval_decided_by=approval_decided_by,
@@ -193,6 +195,80 @@ def manifest_command_request_with_same_image() -> CommandRequestedBody:
 
 async def collect_events(source: AsyncIterator[EventBody]) -> list[EventBody]:
     return [body async for body in source]
+
+
+@pytest.mark.parametrize("flag_value", [None, "0"], ids=["unset", "disabled"])
+def test_auto_selected_command_is_explicitly_rejected_when_kill_switch_is_off(
+    monkeypatch: pytest.MonkeyPatch,
+    flag_value: str | None,
+) -> None:
+    if flag_value is None:
+        monkeypatch.delenv("AUTO_COMMANDS_ENABLED", raising=False)
+    else:
+        monkeypatch.setenv("AUTO_COMMANDS_ENABLED", flag_value)
+    store = SpyAgentCommandStore()
+    request = command_request(actor={"auto_selected": True})
+
+    events = asyncio.run(
+        collect_events(
+            handle_command_requested(
+                request,
+                SimpleNamespace(correlation_id="corr-auto-disabled", db=store),
+            )
+        )
+    )
+
+    assert len(events) == 1
+    assert isinstance(events[0], CommandRejectedBody)
+    assert "AUTO_COMMANDS_ENABLED" in events[0].reason
+    assert events[0].requested == request.to_body()
+    assert store.calls == []
+
+
+def test_auto_selected_command_is_queued_when_kill_switch_is_enabled(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("AUTO_COMMANDS_ENABLED", "1")
+    store = SpyAgentCommandStore()
+
+    events = asyncio.run(
+        collect_events(
+            handle_command_requested(
+                command_request(actor={"auto_selected": True}),
+                SimpleNamespace(correlation_id="corr-auto-enabled", db=store),
+            )
+        )
+    )
+
+    assert [type(event) for event in events] == [
+        CommandDispatchedBody,
+        CommandQueuedForAgentBody,
+    ]
+    assert len(store.calls) == 1
+
+
+@pytest.mark.parametrize("actor", [None, {"auto_selected": False}], ids=["absent", "false"])
+def test_human_command_is_queued_when_auto_command_kill_switch_is_off(
+    monkeypatch: pytest.MonkeyPatch,
+    actor: JsonObject | None,
+) -> None:
+    monkeypatch.setenv("AUTO_COMMANDS_ENABLED", "0")
+    store = SpyAgentCommandStore()
+
+    events = asyncio.run(
+        collect_events(
+            handle_command_requested(
+                command_request(actor=actor),
+                SimpleNamespace(correlation_id="corr-human", db=store),
+            )
+        )
+    )
+
+    assert [type(event) for event in events] == [
+        CommandDispatchedBody,
+        CommandQueuedForAgentBody,
+    ]
+    assert len(store.calls) == 1
 
 
 def test_build_plan_includes_agent_execution_metadata() -> None:

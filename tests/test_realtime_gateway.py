@@ -34,6 +34,10 @@ async def stub_browser_session(token: str | None) -> dict[str, str] | None:
     return None
 
 
+async def stub_accessible_clusters(_session: object, _workspace_id: str) -> set[str]:
+    return {CLUSTER}
+
+
 def browser_headers() -> dict[str, str]:
     return {"x-session-token": GOOD_SESSION}
 
@@ -43,6 +47,7 @@ def make_client() -> tuple[Any, TestClient]:
     app = module.create_app(
         authenticate_agent=stub_authenticator,
         authenticate_browser=stub_browser_session,
+        accessible_browser_clusters=stub_accessible_clusters,
     )
     return module, TestClient(app)
 
@@ -72,7 +77,8 @@ def test_health_endpoints() -> None:
 def test_browser_receives_hello_then_snapshot() -> None:
     _, client = make_client()
     with client.websocket_connect(
-        f"/live/browser?workspace_id={WORKSPACE}", headers=browser_headers()
+        f"/live/browser?workspace_id={WORKSPACE}&cluster_id={CLUSTER}",
+        headers=browser_headers(),
     ) as browser:
         hello = browser.receive_json()
         snapshot = browser.receive_json()
@@ -84,7 +90,8 @@ def test_browser_receives_hello_then_snapshot() -> None:
 def test_agent_summary_fans_out_to_browser() -> None:
     _, client = make_client()
     with client.websocket_connect(
-        f"/live/browser?workspace_id={WORKSPACE}", headers=browser_headers()
+        f"/live/browser?workspace_id={WORKSPACE}&cluster_id={CLUSTER}",
+        headers=browser_headers(),
     ) as browser:
         browser.receive_json()  # hello
         browser.receive_json()  # snapshot
@@ -104,7 +111,8 @@ def test_agent_summary_fans_out_to_browser() -> None:
 def test_late_browser_gets_state_via_snapshot() -> None:
     _, client = make_client()
     with client.websocket_connect(
-        f"/live/browser?workspace_id={WORKSPACE}", headers=browser_headers()
+        f"/live/browser?workspace_id={WORKSPACE}&cluster_id={CLUSTER}",
+        headers=browser_headers(),
     ) as first_browser:
         first_browser.receive_json()  # hello
         first_browser.receive_json()  # snapshot(빈 상태)
@@ -125,7 +133,8 @@ def test_late_browser_gets_state_via_snapshot() -> None:
             assert first_browser.receive_json()["type"] == "live.summary"
             assert first_browser.receive_json()["type"] == "resource.delta"
             with client.websocket_connect(
-                f"/live/browser?workspace_id={WORKSPACE}", headers=browser_headers()
+                f"/live/browser?workspace_id={WORKSPACE}&cluster_id={CLUSTER}",
+                headers=browser_headers(),
             ) as late_browser:
                 late_browser.receive_json()  # hello
                 snapshot = late_browser.receive_json()
@@ -162,11 +171,12 @@ def test_mtls_proxy_authenticates_browser_but_never_agent(
     app = module.create_app(
         authenticate_agent=lambda _token: None,
         authenticate_browser=deny_browser,
+        accessible_browser_clusters=stub_accessible_clusters,
     )
     client = TestClient(app)
 
     with client.websocket_connect(
-        f"/live/browser?workspace_id={WORKSPACE}",
+        f"/live/browser?workspace_id={WORKSPACE}&cluster_id={CLUSTER}",
         headers={"x-kubeheal-internal-auth": proxy_secret},
     ) as browser:
         assert browser.receive_json()["type"] == "hello"
@@ -223,7 +233,9 @@ def test_browser_requires_workspace_id() -> None:
 
 def test_browser_requires_session() -> None:
     _, client = make_client()
-    with client.websocket_connect(f"/live/browser?workspace_id={WORKSPACE}") as browser:
+    with client.websocket_connect(
+        f"/live/browser?workspace_id={WORKSPACE}&cluster_id={CLUSTER}"
+    ) as browser:
         with pytest.raises(WebSocketDisconnect) as excinfo:
             browser.receive_json()
     assert excinfo.value.code == 4401
@@ -232,8 +244,30 @@ def test_browser_requires_session() -> None:
 def test_browser_cannot_subscribe_to_foreign_workspace() -> None:
     _, client = make_client()
     with client.websocket_connect(
-        "/live/browser?workspace_id=other-workspace", headers=browser_headers()
+        f"/live/browser?workspace_id=other-workspace&cluster_id={CLUSTER}",
+        headers=browser_headers(),
     ) as browser:
         with pytest.raises(WebSocketDisconnect) as excinfo:
             browser.receive_json()
     assert excinfo.value.code == 4401
+
+
+def test_browser_cannot_subscribe_to_cluster_without_grant() -> None:
+    _, client = make_client()
+    with client.websocket_connect(
+        f"/live/browser?workspace_id={WORKSPACE}&cluster_id=forbidden-cluster",
+        headers=browser_headers(),
+    ) as browser:
+        with pytest.raises(WebSocketDisconnect) as excinfo:
+            browser.receive_json()
+    assert excinfo.value.code == 4401
+
+
+def test_browser_rejects_cluster_wildcard() -> None:
+    _, client = make_client()
+    with client.websocket_connect(
+        f"/live/browser?workspace_id={WORKSPACE}", headers=browser_headers()
+    ) as browser:
+        with pytest.raises(WebSocketDisconnect) as excinfo:
+            browser.receive_json()
+    assert excinfo.value.code == 4400

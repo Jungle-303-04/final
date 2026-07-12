@@ -5,6 +5,7 @@ from datetime import UTC, datetime
 from types import SimpleNamespace
 
 import pytest
+from fastapi import HTTPException
 
 from domains.applications.router import (
     connect_application,
@@ -31,6 +32,7 @@ class StubApplicationsDb:
         self.registered_repositories: list[dict[str, object]] = []
         self.registered_watch_targets: list[dict[str, object]] = []
         self.registered_bindings: list[dict[str, object]] = []
+        self.upserted_applications: list[dict[str, object]] = []
         self.credentials: list[dict[str, object]] = []
         self.registration_calls: list[str] = []
         self.access_checks: list[tuple[str, str, str, str, str]] = []
@@ -86,6 +88,7 @@ class StubApplicationsDb:
         self.credentials.append(payload)
 
     def upsert_application(self, payload: dict[str, object]) -> dict[str, object]:
+        self.upserted_applications.append(payload)
         return {**payload, "application_id": "app-1", "repository_id": "repo-1"}
 
     def get_application(
@@ -237,6 +240,28 @@ def test_upsert_application_registers_repository_when_repo_ref_is_present() -> N
     assert response.application["application_id"] == "app-1"
     assert db.registered_repositories[0]["repo_ref"] == "org/checkout"
     assert db.registered_repositories[0]["user_id"] == "user-1"
+
+
+def test_create_application_rejects_explicit_repository_id_before_writes() -> None:
+    db = StubApplicationsDb()
+
+    async def run():
+        return await upsert_application(
+            ApplicationUpsertRequest(
+                name="checkout-api",
+                repo_ref="org/checkout",
+                repository_id="client-controlled-repository",
+            ),
+            current=current_session(),
+            db=db,
+        )
+
+    with pytest.raises(HTTPException) as exc:
+        asyncio.run(run())
+
+    assert exc.value.status_code == 422
+    assert db.registered_repositories == []
+    assert db.upserted_applications == []
 
 
 def test_connect_application_registers_repo_watch_binding_atomically() -> None:

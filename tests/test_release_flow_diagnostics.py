@@ -76,6 +76,81 @@ def release_plan_request(plan_id: str | None = None) -> release_router.ReleasePl
     )
 
 
+class ReleasePlanWriteDb:
+    def __init__(self) -> None:
+        self.upserts: list[dict[str, object]] = []
+
+    def get_release_plan(self, workspace_id: str, plan_id: str) -> dict[str, object] | None:
+        if workspace_id == "workspace-a" and plan_id == "path-plan":
+            return {"workspace_id": workspace_id, "plan_id": plan_id, "steps": []}
+        return None
+
+    def upsert_release_plan(self, payload: dict[str, object]) -> dict[str, object]:
+        self.upserts.append(payload)
+        return payload
+
+
+def release_operator() -> SimpleNamespace:
+    return SimpleNamespace(
+        workspace_id="workspace-a",
+        user_id="operator",
+        roles=("release_operator",),
+    )
+
+
+def test_create_release_plan_without_explicit_id_still_writes() -> None:
+    db = ReleasePlanWriteDb()
+
+    response = asyncio.run(
+        release_router.create_release_plan(
+            release_router.ReleasePlanUpsertRequest(name="Checkout release"),
+            current=release_operator(),
+            db=db,
+        )
+    )
+
+    assert response.plan["workspace_id"] == "workspace-a"
+    assert db.upserts[0]["plan_id"] is None
+
+
+def test_create_release_plan_rejects_explicit_plan_id_before_write() -> None:
+    db = ReleasePlanWriteDb()
+
+    with pytest.raises(HTTPException) as exc:
+        asyncio.run(
+            release_router.create_release_plan(
+                release_router.ReleasePlanUpsertRequest(
+                    plan_id="client-controlled-plan",
+                    name="Checkout release",
+                ),
+                current=release_operator(),
+                db=db,
+            )
+        )
+
+    assert exc.value.status_code == 422
+    assert db.upserts == []
+
+
+def test_update_release_plan_keeps_using_path_id() -> None:
+    db = ReleasePlanWriteDb()
+
+    response = asyncio.run(
+        release_router.update_release_plan(
+            "path-plan",
+            release_router.ReleasePlanUpsertRequest(
+                plan_id="ignored-body-plan",
+                name="Updated release",
+            ),
+            current=release_operator(),
+            db=db,
+        )
+    )
+
+    assert response.plan["plan_id"] == "path-plan"
+    assert db.upserts[0]["plan_id"] == "path-plan"
+
+
 def test_release_run_summary_route_precedes_dynamic_run_route() -> None:
     paths = [
         route.path
