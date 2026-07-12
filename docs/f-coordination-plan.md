@@ -76,6 +76,15 @@ frontend_map: (final repo) docs/spec/frontend/verified-pipeline-insertion-map.md
 - 앵커 hash는 canonical branch의 ancestor여야 한다 (api-needs와 동일 규칙).
 - 이 문서와 하위 큐 문서가 충돌하면 이 문서가 이긴다. 로드맵과 이 문서가 충돌하면 로드맵이 이긴다.
 
+### 4b. 착륙(landing) 규칙
+
+1. 앵커 hash의 canonical은 통합 브랜치인 `origin/dev`다. feature 브랜치 자기 자신을
+   대상으로 한 `git merge-base --is-ancestor` 증명은 순환이므로 무효다.
+2. feature 브랜치의 앵커는 해당 hash가 `origin/dev`의 ancestor로 편입된 시점부터 유효하다.
+   착륙은 `git ls-remote`로 원격 dev HEAD를 확인하거나 `origin/dev`에서 해당 실물 파일·커밋의
+   존재를 확인해 증명한다. 뒤처질 수 있는 로컬 `dev` HEAD를 canonical로 오인하지 않는다.
+3. Codex는 감독 세션의 검증과 명시적 GO 전에 앵커를 커밋하지 않는다.
+
 ## 5. 완료 정의
 
 BQ-001~BQ-007 앵커 완료 + insertion-map 전 행 직결/어댑터 판정 + G3 통과.
