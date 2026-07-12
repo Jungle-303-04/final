@@ -8,6 +8,19 @@ const port = await findAvailablePort();
 const runNonce = randomUUID();
 const baseUrl = `http://127.0.0.1:${port}`;
 const productUrl = `${baseUrl}/product`;
+const homeClusterId = "visual-cluster";
+const homeNodeName = "visual-node";
+const homePodName = "checkout-api-0";
+const productHomeUrl = `${productUrl}?cluster=${homeClusterId}`;
+const authSessionPath = "/api/auth/session";
+const homeBaseApiPaths = [
+  "/api/clusters?limit=100",
+  `/api/clusters/${homeClusterId}/summary`,
+  `/api/clusters/${homeClusterId}/nodes/summary`,
+];
+const homePodApiPath =
+  `/api/clusters/${homeClusterId}/nodes/${homeNodeName}/pods/summary`;
+const homeFeatureApiPaths = [...homeBaseApiPaths, homePodApiPath];
 const stateHarnessUrl = `${baseUrl}/scripts/fixtures/product-state-visual-harness.html`;
 const shellHarnessUrl = `${baseUrl}/scripts/fixtures/product-shell-visual-harness.html`;
 const outputDir = new URL("../output/playwright/", import.meta.url).pathname;
@@ -67,6 +80,39 @@ const shellSelectors = [
   "header",
   "main",
 ];
+const homeSelectors = [
+  "[data-slot='sidebar-provider']",
+  "[data-slot='sidebar-inset']",
+  "[data-slot='sidebar-trigger']",
+  "[data-slot='surface']",
+  "[data-slot='badge']",
+  "[data-slot='select-trigger']",
+  "[data-slot='progress']",
+  "[data-slot='progress-track']",
+  "[data-slot='progress-indicator']",
+  "[data-slot='item']",
+  "[data-slot='item-title']",
+  "[data-slot='item-description']",
+  "[data-slot='status-mark']",
+  "header",
+  "main",
+  "h1",
+  "h2",
+  "h3",
+  "p",
+];
+const homeForbiddenSelectors = [
+  "[data-slot='sidebar-provider']",
+  "[data-slot='sidebar-inset']",
+  "[data-slot='sidebar-trigger']",
+  "[data-slot='empty']",
+  "[data-slot='badge']",
+  "[role='alert']",
+  "header",
+  "main",
+  "h2",
+  "p",
+];
 const visualScenarios = [
   {
     id: "auth-unauthenticated-desktop-light",
@@ -125,12 +171,104 @@ const visualScenarios = [
     forcedColors: "active",
   },
   {
-    id: "auth-authenticated-release-light",
-    url: productUrl,
+    id: "home-authenticated-node-desktop-light",
+    url: productHomeUrl,
     authSession: "authenticated",
-    heading: "API 연결 계층을 검증하고 있습니다",
-    requiredSelectors: authStateSelectors,
+    homeScenario: true,
+    homeFrame: "nodes",
+    heading: "클러스터 상태",
+    requiredSelectors: [
+      ...homeSelectors,
+      "[data-slot='sidebar']",
+      "[data-slot='sidebar-navigation']",
+      "[data-slot='sidebar-menu']",
+    ],
     viewport: { width: 1440, height: 1000 },
+    theme: "light",
+    colorScheme: "light",
+    forcedColors: "none",
+  },
+  {
+    id: "home-authenticated-pod-desktop-light",
+    url: productHomeUrl,
+    authSession: "authenticated",
+    homeScenario: true,
+    homeFrame: "pods",
+    heading: "클러스터 상태",
+    requiredSelectors: [
+      ...homeSelectors,
+      "[data-slot='sidebar']",
+      "[data-slot='sidebar-navigation']",
+      "[data-slot='sidebar-menu']",
+    ],
+    viewport: { width: 1440, height: 1000 },
+    theme: "light",
+    colorScheme: "light",
+    forcedColors: "none",
+  },
+  {
+    id: "home-authenticated-node-mobile-dark",
+    url: productHomeUrl,
+    authSession: "authenticated",
+    homeScenario: true,
+    homeFrame: "nodes",
+    heading: "클러스터 상태",
+    requiredSelectors: homeSelectors,
+    viewport: { width: 390, height: 844 },
+    theme: "dark",
+    colorScheme: "dark",
+    forcedColors: "none",
+  },
+  {
+    id: "home-authenticated-node-reflow-320-light",
+    url: productHomeUrl,
+    authSession: "authenticated",
+    homeScenario: true,
+    homeFrame: "nodes",
+    heading: "클러스터 상태",
+    requiredSelectors: homeSelectors,
+    viewport: { width: 320, height: 900 },
+    theme: "light",
+    colorScheme: "light",
+    forcedColors: "none",
+  },
+  {
+    id: "home-authenticated-node-text-resize-200-light",
+    url: productHomeUrl,
+    authSession: "authenticated",
+    homeScenario: true,
+    homeFrame: "nodes",
+    heading: "클러스터 상태",
+    requiredSelectors: homeSelectors,
+    viewport: { width: 640, height: 1000 },
+    theme: "light",
+    colorScheme: "light",
+    forcedColors: "none",
+    rootFontScale: 2,
+  },
+  {
+    id: "home-authenticated-node-forced-colors",
+    url: productHomeUrl,
+    authSession: "authenticated",
+    homeScenario: true,
+    homeFrame: "nodes",
+    heading: "클러스터 상태",
+    requiredSelectors: homeSelectors,
+    viewport: { width: 1024, height: 900 },
+    theme: "light",
+    colorScheme: "light",
+    forcedColors: "active",
+  },
+  {
+    id: "home-cluster-forbidden-light",
+    url: productHomeUrl,
+    authSession: "authenticated",
+    homeScenario: true,
+    homeFrame: "nodes",
+    homeFeatureState: "cluster-forbidden",
+    heading: "이 범위에 접근할 수 없습니다",
+    requiredSelectors: homeForbiddenSelectors,
+    viewport: { width: 1024, height: 900 },
     theme: "light",
     colorScheme: "light",
     forcedColors: "none",
@@ -264,6 +402,126 @@ const visualScenarios = [
   },
 ];
 
+const homeFeatureApiFixtures = new Map([
+  [homeFeatureApiPaths[0], {
+    clusters: [{
+      workspace_id: "visual-workspace",
+      cluster_id: homeClusterId,
+      name: "visual-cluster",
+      environment: "production",
+      status: "active",
+      settings: {},
+      connection_status: "online",
+      last_agent_id: "visual-agent",
+      last_agent_seen_at: "2026-07-12T10:00:00Z",
+      node_count: 2,
+      pod_count: 18,
+      incident_count: 1,
+      created_at: "2026-07-01T00:00:00Z",
+      updated_at: "2026-07-12T10:00:01Z",
+    }],
+  }],
+  [homeFeatureApiPaths[1], {
+    cluster_id: homeClusterId,
+    name: "visual-cluster",
+    health: "warning",
+    workloads: {
+      deployments: [{
+        name: "checkout-api",
+        kind: "Deployment",
+        namespace: "shop",
+        health: "warning",
+        ready: "2/3",
+        restarts: 3,
+      }],
+    },
+    warning_events: [{
+      namespace: "shop",
+      name: "checkout-warning",
+      reason: "BackOff",
+      message: "Container is restarting",
+      involved_kind: "Pod",
+      involved_name: homePodName,
+      count: 2,
+      last_seen_at: "2026-07-12T09:59:00Z",
+    }],
+    open_incidents: [{
+      incident_id: "visual-incident",
+      correlation_id: "visual-correlation",
+      symptom: "Restart loop",
+      root_cause: null,
+      namespace: "shop",
+      resource_kind: "Pod",
+      resource_name: homePodName,
+      status: "open",
+      created_at: "2026-07-12T09:58:00Z",
+    }],
+    usage: {
+      sampled_at: "2026-07-12T10:00:00Z",
+      pods_running: 17,
+      pods_total: 18,
+      nodes_ready: 2,
+      nodes_total: 2,
+      restart_total: 3,
+      cpu_pct: 42.5,
+      mem_pct: 61.25,
+    },
+  }],
+  [homeFeatureApiPaths[2], {
+    cluster_id: homeClusterId,
+    nodes: [{
+      name: homeNodeName,
+      ready: true,
+      health: "healthy",
+      pods_running: 9,
+      pods_capacity: 110,
+      cpu_pct: 37.5,
+      mem_pct: 54,
+      restarts_recent: 0,
+      conditions: [],
+    }, {
+      name: "visual-node-warning",
+      ready: false,
+      health: "warning",
+      pods_running: 8,
+      pods_capacity: 110,
+      cpu_pct: null,
+      mem_pct: null,
+      restarts_recent: 3,
+      conditions: ["MemoryPressure"],
+    }],
+  }],
+  [homeFeatureApiPaths[3], {
+    cluster_id: homeClusterId,
+    node_name: homeNodeName,
+    pods: [{
+      name: homePodName,
+      namespace: "shop",
+      phase: "Running",
+      health: "warning",
+      ready: "1/2",
+      restarts: 3,
+      owner_kind: "Deployment",
+      owner_name: "checkout-api",
+      cpu_mcores: 245.5,
+      mem_mib: 382,
+      incident_correlation_id: "visual-correlation",
+    }, {
+      name: "payments-api-0",
+      namespace: "shop",
+      phase: "Running",
+      health: "healthy",
+      ready: "1/1",
+      restarts: 0,
+      owner_kind: "Deployment",
+      owner_name: "payments-api",
+      cpu_mcores: 128,
+      mem_mib: 256,
+      incident_correlation_id: null,
+    }],
+  }],
+]);
+
 const server = spawn(
   "npm",
   ["run", "dev", "--", "--host", "127.0.0.1", "--port", String(port), "--strictPort"],
@@ -305,7 +563,7 @@ try {
   assertServerAlive();
 
   console.log(
-    `product visual gate passed (${visualScenarios.map(({ id }) => id).join(", ")}; isolated contexts; exact auth-session request; feature-network/websocket-silent)`,
+    `product visual gate passed (${visualScenarios.map(({ id }) => id).join(", ")}; isolated contexts; exact scenario API requests; unexpected feature-network/websocket-silent)`,
   );
 } finally {
   try {
@@ -335,20 +593,20 @@ async function runVisualScenario(browserInstance, scenario) {
   const apiRequests = [];
   const networkRequests = [];
   const sockets = [];
-  const authStub = await installAuthSessionStub(page, scenario.authSession);
+  const apiFixtures = await installScenarioApiFixtures(page, scenario);
 
   page.on("console", (message) => {
     const text = message.text();
     if (message.type() === "error"
       && !text.includes("favicon")
-      && !isExpectedAuthSessionConsoleNoise(text, scenario.authSession)) {
+      && !isExpectedAuthSessionConsoleNoise(text, scenario.authSession)
+      && !isExpectedHomeFeatureConsoleNoise(text, scenario)) {
       errors.push(message.text());
     }
   });
   page.on("pageerror", (error) => errors.push(error.message));
   page.on("request", (request) => {
     const record = `${request.method()} ${request.url()} (${request.resourceType()})`;
-    const authSessionRequest = isExactAuthSessionRequest(request);
     if (isApiPath(request.url())) {
       apiRequests.push({
         method: request.method(),
@@ -356,7 +614,8 @@ async function runVisualScenario(browserInstance, scenario) {
         url: request.url(),
       });
     }
-    if (!authSessionRequest && isUnexpectedFeatureNetworkRequest(request)) {
+    if (!isExpectedScenarioApiRequest(scenario, request)
+      && isUnexpectedFeatureNetworkRequest(request)) {
       networkRequests.push(record);
     }
   });
@@ -373,9 +632,31 @@ async function runVisualScenario(browserInstance, scenario) {
       sockets,
     });
   } finally {
-    await authStub.release();
+    await apiFixtures.release();
     await context.close();
   }
+}
+
+function isExpectedHomeFeatureConsoleNoise(text, scenario) {
+  return scenario.homeFeatureState === "cluster-forbidden"
+    && /Failed to load resource:.*403 \(Forbidden\)/u.test(text);
+}
+
+async function installScenarioApiFixtures(page, scenario) {
+  const authFixture = await installAuthSessionStub(page, scenario.authSession);
+  if (scenario.homeScenario) {
+    for (const [path, body] of homeFeatureApiFixtures) {
+      const forbiddenOverview = scenario.homeFeatureState === "cluster-forbidden"
+        && path === homeBaseApiPaths[1];
+      await installExactJsonGetFixture(page, path, {
+        body: forbiddenOverview
+          ? { detail: "visual gate overview permission denied" }
+          : body,
+        status: forbiddenOverview ? 403 : 200,
+      });
+    }
+  }
+  return authFixture;
 }
 
 async function installAuthSessionStub(page, authSession) {
@@ -387,7 +668,11 @@ async function installAuthSessionStub(page, authSession) {
     ? new Promise((resolve) => { releaseLoading = resolve; })
     : null;
 
-  await page.route("**/api/auth/session", async (route) => {
+  await page.route((url) => isExactProductApiUrl(url, authSessionPath), async (route) => {
+    if (route.request().method() !== "GET") {
+      await fulfillMethodNotAllowed(route);
+      return;
+    }
     if (authSession === "loading") {
       loadingRouteCompletion = (async () => {
         await loadingGate;
@@ -444,15 +729,40 @@ async function installAuthSessionStub(page, authSession) {
   };
 }
 
+async function installExactJsonGetFixture(page, path, { body, status }) {
+  await page.route((url) => isExactProductApiUrl(url, path), async (route) => {
+    if (route.request().method() !== "GET") {
+      await fulfillMethodNotAllowed(route);
+      return;
+    }
+    await route.fulfill({
+      body: JSON.stringify(body),
+      contentType: "application/json",
+      status,
+    });
+  });
+}
+
+async function fulfillMethodNotAllowed(route) {
+  await route.fulfill({
+    body: JSON.stringify({ detail: "visual gate fixtures only allow GET" }),
+    contentType: "application/json",
+    headers: { allow: "GET" },
+    status: 405,
+  });
+}
+
 function assertScenarioNetworkContract(
   scenario,
   { apiRequests, errors, networkRequests, sockets },
 ) {
-  const authSessionRequests = apiRequests.filter((request) => (
-    request.method === "GET" && isExactAuthSessionUrl(request.url)
-  ));
+  const expectedApiPaths = expectedScenarioApiPaths(scenario);
+  const featureApiRequests = apiRequests.filter(
+    (request) => !isExactProductApiUrl(request.url, authSessionPath),
+  );
   const unexpectedApiRequests = apiRequests.filter((request) => (
-    request.method !== "GET" || !isExactAuthSessionUrl(request.url)
+    request.method !== "GET"
+    || !expectedApiPaths.some((path) => isExactProductApiUrl(request.url, path))
   ));
   const formatRequests = (requests) => requests.map((request) => (
     typeof request === "string"
@@ -463,17 +773,27 @@ function assertScenarioNetworkContract(
   if (errors.length) {
     throw new Error(`${scenario.id}: visual console errors\n${errors.join("\n")}`);
   }
+  if (!scenario.homeScenario && featureApiRequests.length !== 0) {
+    throw new Error(
+      `${scenario.id}: expected 0 feature API requests, received ${featureApiRequests.length}\n`
+      + formatRequests(featureApiRequests),
+    );
+  }
   if (unexpectedApiRequests.length) {
     throw new Error(
       `${scenario.id}: visual gate made unexpected API requests\n${formatRequests(unexpectedApiRequests)}`,
     );
   }
-  const expectedAuthSessionRequests = scenario.authSession ? 1 : 0;
-  if (authSessionRequests.length !== expectedAuthSessionRequests) {
-    throw new Error(
-      `${scenario.id}: expected ${expectedAuthSessionRequests} exact GET /api/auth/session request, `
-      + `received ${authSessionRequests.length}\n${formatRequests(apiRequests)}`,
-    );
+  for (const path of expectedApiPaths) {
+    const matchingRequests = apiRequests.filter((request) => (
+      request.method === "GET" && isExactProductApiUrl(request.url, path)
+    ));
+    if (matchingRequests.length !== 1) {
+      throw new Error(
+        `${scenario.id}: expected 1 exact GET ${path} request, `
+        + `received ${matchingRequests.length}\n${formatRequests(apiRequests)}`,
+      );
+    }
   }
   if (networkRequests.length) {
     throw new Error(
@@ -486,6 +806,21 @@ function assertScenarioNetworkContract(
       `${scenario.id}: visual gate opened unexpected WebSockets\n${sockets.join("\n")}`,
     );
   }
+}
+
+function expectedScenarioApiPaths(scenario) {
+  return [
+    ...(scenario.authSession ? [authSessionPath] : []),
+    ...(scenario.homeScenario ? homeBaseApiPaths : []),
+    ...(scenario.homeFrame === "pods" ? [homePodApiPath] : []),
+  ];
+}
+
+function isExpectedScenarioApiRequest(scenario, request) {
+  return request.method() === "GET"
+    && expectedScenarioApiPaths(scenario).some(
+      (path) => isExactProductApiUrl(request.url(), path),
+    );
 }
 
 async function captureScenario(page, scenario) {
@@ -505,6 +840,8 @@ async function captureScenario(page, scenario) {
   await assertScenarioEnvironment(page, scenario, baselineRootFontSize);
   if (scenario.shellMode) {
     await prepareProductShellScenario(page, scenario);
+  } else if (scenario.homeScenario) {
+    await prepareProductHomeScenario(page, scenario);
   } else if (!scenario.authSession || scenario.authSession === "authenticated") {
     await page.keyboard.press("?");
     if (await page.getByRole("dialog").count()) {
@@ -528,6 +865,7 @@ async function captureScenario(page, scenario) {
   await assertNoOverflow(page, scenario.id, scenario.requiredSelectors);
   if (scenario.forcedColors === "active") {
     if (scenario.shellMode) await assertProductShellForcedColors(page, scenario.id);
+    else if (scenario.homeScenario) await assertProductHomeForcedColors(page, scenario.id);
     else if (scenario.authSession === "unauthenticated") {
       await assertAuthForcedColors(page, scenario.id);
     }
@@ -537,6 +875,198 @@ async function captureScenario(page, scenario) {
     path: `${outputDir}product-${scenario.id}.png`,
     fullPage: true,
   });
+}
+
+async function prepareProductHomeScenario(page, scenario) {
+  await page.waitForFunction(() => document.title === "KubeHeal");
+  if (scenario.homeFeatureState === "cluster-forbidden") {
+    await assertProductHomeClusterForbidden(page, scenario.id);
+    return;
+  }
+  const clusterSelect = page.getByRole("combobox", { name: "클러스터 선택" });
+  await clusterSelect.waitFor();
+  if (!(await clusterSelect.textContent())?.includes(homeClusterId)) {
+    throw new Error(`${scenario.id}: Home cluster selector did not render ${homeClusterId}`);
+  }
+
+  const desktop = scenario.viewport.width >= 768;
+  const navigation = page.getByRole("navigation", { name: "주요 메뉴" });
+  if (desktop) {
+    if (await navigation.count() !== 1) {
+      throw new Error(`${scenario.id}: desktop Home must expose one primary navigation`);
+    }
+    const homeLink = page.getByRole("link", { name: "Home", exact: true });
+    if (await homeLink.getAttribute("aria-current") !== "page") {
+      throw new Error(`${scenario.id}: desktop Home link must be current`);
+    }
+  } else {
+    if (await navigation.count() !== 0) {
+      throw new Error(`${scenario.id}: closed mobile Home must not mount drawer navigation`);
+    }
+    if (await page.getByRole("button", { name: "모바일 사이드바 열기" }).count() !== 1) {
+      throw new Error(`${scenario.id}: mobile Home must expose its sidebar trigger`);
+    }
+  }
+
+  const node = page.getByRole("button", { name: /^visual-node(?:\s|$)/u });
+  await node.waitFor();
+  if (await node.count() !== 1) {
+    throw new Error(`${scenario.id}: expected exactly one ${homeNodeName} Node control`);
+  }
+  await assertProductHomeReducedMotion(page, `${scenario.id}:node`);
+  await assertProductHomeFreshnessContract(page, scenario.id);
+  await assertProductHomeNodeFrame(page, scenario.id);
+
+  if (scenario.homeFrame === "nodes") {
+    const currentUrl = new URL(page.url());
+    if (currentUrl.origin !== baseUrl
+      || currentUrl.pathname !== "/product"
+      || currentUrl.searchParams.size !== 1
+      || currentUrl.searchParams.get("cluster") !== homeClusterId
+      || currentUrl.searchParams.has("node")) {
+      throw new Error(`${scenario.id}: Node frame URL is not exact: ${currentUrl.href}`);
+    }
+    if (await page.getByRole("heading", { name: `${homeNodeName}의 Pod` }).count()) {
+      throw new Error(`${scenario.id}: Node frame mounted a Pod drill-in before selection`);
+    }
+    return;
+  }
+
+  if (scenario.homeFrame !== "pods") {
+    throw new Error(`${scenario.id}: unsupported Home frame ${scenario.homeFrame}`);
+  }
+
+  await node.click();
+  await assertProductHomePodFrame(page, scenario.id);
+
+  const currentUrl = new URL(page.url());
+  if (currentUrl.origin !== baseUrl
+    || currentUrl.pathname !== "/product"
+    || currentUrl.searchParams.size !== 2
+    || currentUrl.searchParams.get("cluster") !== homeClusterId
+    || currentUrl.searchParams.get("node") !== homeNodeName) {
+    throw new Error(`${scenario.id}: Node drill-in URL is not exact: ${currentUrl.href}`);
+  }
+  await assertProductHomeReducedMotion(page, `${scenario.id}:pods`);
+  await page.evaluate(() => {
+    window.scrollTo(0, 0);
+    return new Promise((resolve) => requestAnimationFrame(() => resolve()));
+  });
+}
+
+async function assertProductHomeFreshnessContract(page, label) {
+  const refresh = page.getByRole("button", { name: /새로\s*고침/u });
+  if (await refresh.count() !== 1) {
+    throw new Error(`${label}: Home must expose one manual refresh action`);
+  }
+  await refresh.waitFor();
+
+  const mainText = await page.getByRole("main").innerText();
+  if (!/30\s*초[^\n]*자동 갱신/u.test(mainText)) {
+    throw new Error(`${label}: Home must disclose its 30-second automatic refresh cadence`);
+  }
+  if (/(^|\n)\s*LIVE(?: API)?\s*($|\n)/u.test(mainText)) {
+    throw new Error(`${label}: snapshot Home must not claim an unqualified LIVE state`);
+  }
+}
+
+async function assertProductHomeNodeFrame(page, label) {
+  const section = page.locator("section[aria-labelledby='node-list-title']");
+  await section.waitFor();
+  const text = await section.innerText();
+  if (!/표시\s*2개/u.test(text) || !/전체 수 미확인/u.test(text)) {
+    throw new Error(
+      `${label}: Node collection with unknown completeness must say `
+      + `"표시 2개 · 전체 수 미확인"; received ${JSON.stringify(text)}`,
+    );
+  }
+  if (!/Node/u.test(text) || !/Pod/u.test(text)) {
+    throw new Error(`${label}: Node frame must keep Node and Pod resource-type context`);
+  }
+}
+
+async function assertProductHomePodFrame(page, label) {
+  const podHeading = page.getByRole("heading", { name: `${homeNodeName}의 Pod` });
+  await podHeading.waitFor();
+  await page.getByText(homePodName, { exact: true }).waitFor();
+  await page.waitForFunction((headingId) => (
+    document.activeElement?.id === headingId
+  ), "pod-list-title");
+
+  const section = page.locator("section[aria-labelledby='pod-list-title']");
+  const text = await section.innerText();
+  if (!/워크로드 Pod/u.test(text)) {
+    throw new Error(`${label}: Pod frame must identify its workload Pod resource type`);
+  }
+  if (!/표시\s*2개/u.test(text) || !/전체 수 미확인/u.test(text)) {
+    throw new Error(
+      `${label}: Pod collection with unknown completeness must say `
+      + `"표시 2개 · 전체 수 미확인"; received ${JSON.stringify(text)}`,
+    );
+  }
+}
+
+async function assertProductHomeClusterForbidden(page, label) {
+  const alert = page.getByRole("alert");
+  await alert.waitFor();
+  const mainText = await page.getByRole("main").innerText();
+  if (!/필요한 조회 권한/u.test(mainText)) {
+    throw new Error(`${label}: cluster forbidden state needs a permission reason`);
+  }
+  if (await page.getByRole("combobox", { name: "클러스터 선택" }).count()
+    || await page.getByRole("heading", { name: "클러스터 상태" }).count()
+    || await page.getByRole("heading", { name: "Node" }).count()
+    || await page.getByText(homeNodeName, { exact: true }).count()) {
+    throw new Error(`${label}: cluster forbidden state leaked cached cluster content`);
+  }
+}
+
+async function assertProductHomeReducedMotion(page, label) {
+  const result = await page.evaluate(() => {
+    const requiredSlots = ["sidebar-trigger", "select-trigger", "progress-indicator", "item"];
+    const selector = requiredSlots.map((slot) => `[data-slot='${slot}']`).join(",");
+    const elements = [...document.querySelectorAll(selector)].filter((element) => {
+      const rect = element.getBoundingClientRect();
+      const style = getComputedStyle(element);
+      return rect.width > 0 && rect.height > 0
+        && style.display !== "none" && style.visibility !== "hidden";
+    });
+    const presentSlots = new Set(elements.map((element) => element.getAttribute("data-slot")));
+    return {
+      missingSlots: requiredSlots.filter((slot) => !presentSlots.has(slot)),
+      motion: elements.map((element) => {
+        const style = getComputedStyle(element);
+        return {
+          animationDuration: style.animationDuration,
+          animationName: style.animationName,
+          slot: element.getAttribute("data-slot"),
+          transitionDuration: style.transitionDuration,
+          transitionProperty: style.transitionProperty,
+        };
+      }),
+      reducedMotion: matchMedia("(prefers-reduced-motion: reduce)").matches,
+    };
+  });
+
+  if (!result.reducedMotion || result.missingSlots.length) {
+    throw new Error(
+      `${label}: Home reduced-motion fixture is incomplete ${JSON.stringify(result.missingSlots)}`,
+    );
+  }
+  for (const motion of result.motion) {
+    if (motion.transitionProperty !== "none"
+      && maxCssTimeMilliseconds(motion.transitionDuration) > 1) {
+      throw new Error(
+        `${label}: ${motion.slot} reduced-motion transition remains ${motion.transitionDuration}`,
+      );
+    }
+    if (motion.animationName !== "none"
+      && maxCssTimeMilliseconds(motion.animationDuration) > 1) {
+      throw new Error(
+        `${label}: ${motion.slot} reduced-motion animation remains ${motion.animationDuration}`,
+      );
+    }
+  }
 }
 
 async function prepareProductShellScenario(page, scenario) {
@@ -775,6 +1305,108 @@ async function assertProductShellForcedColors(page, label) {
     4.5,
     result.sidebarBackground,
   );
+}
+
+async function assertProductHomeForcedColors(page, label) {
+  const result = await page.evaluate(() => {
+    const main = document.querySelector("main");
+    const surface = document.querySelector("[data-slot='surface']");
+    const select = document.querySelector("[data-slot='select-trigger']");
+    const node = document.querySelector("section[aria-labelledby='node-list-title'] [data-slot='item']");
+    const status = document.querySelector("[data-slot='status-mark']");
+    const marker = status?.querySelector("[aria-hidden='true']");
+    const required = [main, surface, select, node, status, marker];
+    if (required.some((element) => !(element instanceof HTMLElement))) {
+      return { missing: true };
+    }
+
+    node.focus();
+    const mainStyle = getComputedStyle(main);
+    const surfaceStyle = getComputedStyle(surface);
+    const selectStyle = getComputedStyle(select);
+    const nodeStyle = getComputedStyle(node);
+    const statusStyle = getComputedStyle(status);
+    const markerStyle = getComputedStyle(marker);
+    const visible = (element) => {
+      const rect = element.getBoundingClientRect();
+      return rect.width > 0 && rect.height > 0;
+    };
+
+    return {
+      missing: false,
+      active: matchMedia("(forced-colors: active)").matches,
+      mainBackground: mainStyle.backgroundColor,
+      markerBackground: markerStyle.backgroundColor,
+      markerBorderStyle: markerStyle.borderTopStyle,
+      markerBorderWidth: Number.parseFloat(markerStyle.borderTopWidth),
+      markerOpacity: Number.parseFloat(markerStyle.opacity),
+      nodeBackground: nodeStyle.backgroundColor,
+      nodeBorderColor: nodeStyle.borderTopColor,
+      nodeBorderStyle: nodeStyle.borderTopStyle,
+      nodeBorderWidth: Number.parseFloat(nodeStyle.borderTopWidth),
+      nodeColor: nodeStyle.color,
+      nodeFocused: document.activeElement === node,
+      nodeOpacity: Number.parseFloat(nodeStyle.opacity),
+      nodeOutlineColor: nodeStyle.outlineColor,
+      nodeOutlineStyle: nodeStyle.outlineStyle,
+      nodeOutlineWidth: Number.parseFloat(nodeStyle.outlineWidth),
+      nodeVisible: visible(node),
+      selectBorderStyle: selectStyle.borderTopStyle,
+      selectBorderWidth: Number.parseFloat(selectStyle.borderTopWidth),
+      selectOpacity: Number.parseFloat(selectStyle.opacity),
+      selectVisible: visible(select),
+      statusOpacity: Number.parseFloat(statusStyle.opacity),
+      statusVisible: visible(status),
+      surfaceBackground: surfaceStyle.backgroundColor,
+      surfaceBorderColor: surfaceStyle.borderTopColor,
+      surfaceBorderStyle: surfaceStyle.borderTopStyle,
+      surfaceBorderWidth: Number.parseFloat(surfaceStyle.borderTopWidth),
+      surfaceOpacity: Number.parseFloat(surfaceStyle.opacity),
+      surfaceVisible: visible(surface),
+    };
+  });
+
+  if (result.missing || !result.active
+    || !result.surfaceVisible || !result.selectVisible
+    || !result.nodeVisible || !result.statusVisible || !result.nodeFocused) {
+    throw new Error(`${label}: forced-colors Home surface is incomplete ${JSON.stringify(result)}`);
+  }
+  if (result.surfaceBorderStyle === "none" || result.surfaceBorderWidth < 1
+    || result.selectBorderStyle === "none" || result.selectBorderWidth < 1
+    || result.nodeBorderStyle === "none" || result.nodeBorderWidth < 1
+    || result.markerBorderStyle === "none" || result.markerBorderWidth < 1
+    || result.nodeOutlineStyle === "none" || result.nodeOutlineWidth < 2) {
+    throw new Error(`${label}: forced-colors Home borders or focus are missing ${JSON.stringify(result)}`);
+  }
+  for (const [name, opacity] of Object.entries({
+    marker: result.markerOpacity,
+    node: result.nodeOpacity,
+    select: result.selectOpacity,
+    status: result.statusOpacity,
+    surface: result.surfaceOpacity,
+  })) {
+    if (Math.abs(opacity - 1) > 0.001) {
+      throw new Error(`${label}: forced-colors Home ${name} uses group opacity ${opacity}`);
+    }
+  }
+  assertContrast(label, "Home surface border", result.surfaceBorderColor, result.surfaceBackground, 3);
+  assertContrast(
+    label,
+    "Home Node border",
+    result.nodeBorderColor,
+    result.nodeBackground,
+    3,
+    result.surfaceBackground,
+  );
+  assertContrast(
+    label,
+    "Home Node text",
+    result.nodeColor,
+    result.nodeBackground,
+    4.5,
+    result.surfaceBackground,
+  );
+  assertContrast(label, "Home Node focus", result.nodeOutlineColor, result.surfaceBackground, 3);
 }
 
 async function assertStatePrimitiveContracts(page, label) {
@@ -1224,7 +1856,10 @@ async function assertNoOverflow(page, label, requiredSelectors) {
       }
       if (isLayoutSuppressed) continue;
       if (exemption === null && ownOverflow > 1) {
-        violations.push(`${element.tagName.toLowerCase()} own overflow ${ownOverflow}px`);
+        const diagnosticText = (element.textContent ?? "").trim().replace(/\s+/gu, " ").slice(0, 80);
+        violations.push(
+          `${element.tagName.toLowerCase()} own overflow ${ownOverflow}px text=${JSON.stringify(diagnosticText)}`,
+        );
       }
       if (rect.left < -1 || rect.right > viewportWidth + 1) {
         violations.push(
@@ -1879,15 +2514,12 @@ function isApiPath(url) {
   return pathname === "/api" || pathname.startsWith("/api/");
 }
 
-function isExactAuthSessionRequest(request) {
-  return request.method() === "GET" && isExactAuthSessionUrl(request.url());
-}
-
-function isExactAuthSessionUrl(url) {
-  const parsed = new URL(url);
-  return parsed.origin === baseUrl
-    && parsed.pathname === "/api/auth/session"
-    && parsed.search === "";
+function isExactProductApiUrl(url, path) {
+  const parsed = url instanceof URL ? url : new URL(url);
+  const expected = new URL(path, baseUrl);
+  return parsed.origin === expected.origin
+    && parsed.pathname === expected.pathname
+    && parsed.search === expected.search;
 }
 
 function isExpectedAuthSessionConsoleNoise(text, authSession) {

@@ -162,7 +162,9 @@ function ProductShellFrame({
             {isMobile ? <ProductSidebarTrigger labelMode="sr-only" /> : null}
             <div className="min-w-0">
               <h1 className="truncate text-sm font-medium">{currentRoute.label}</h1>
-              <p className="truncate text-xs text-muted-foreground">Operations workspace</p>
+              <p className="hidden truncate text-xs text-muted-foreground lg:block">
+                Operations workspace
+              </p>
             </div>
           </div>
           <div className="flex items-center gap-1">
