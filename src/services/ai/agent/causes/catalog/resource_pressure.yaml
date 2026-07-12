@@ -63,6 +63,12 @@ rules:
               - log_pattern: "too many requests"
               - log_pattern: "rate limit"
               - log_pattern: "backpressure"
+              - log_pattern: "request rate"
+              - log_pattern: "traffic spike"
+              - log_pattern: "traffic surge"
+              - log_pattern: "queue full"
+              - log_pattern: "server overloaded"
+              - log_pattern: "429"
       - candidate_id: "node_memory_pressure"
         title: "노드 메모리 압박"
         description: "개별 컨테이너 문제가 아니라 Node MemoryPressure 또는 eviction으로 Pod가 영향을 받았을 가능성이 있습니다."
@@ -100,7 +106,7 @@ rules:
 
   - id: "cpu_saturation"
     symptoms: ["CPU Saturation"]
-    required_sources: ["kubernetes", "metrics"]
+    required_sources: ["kubernetes", "metrics", "logs"]
     candidates:
       - candidate_id: "cpu_limit_or_throttling"
         title: "CPU limit 또는 throttling"
@@ -108,15 +114,24 @@ rules:
         expected_evidence:
           - "kubernetes:cluster_resource_state"
           - "metrics:telemetry_metrics"
+          - "logs:related_logs"
         checks:
           - "container CPU usage와 CPU limit/request 비교"
           - "CPU throttling metric 증가 확인"
+          - "로그에 throttled, cfs quota, deadline exceeded 문구가 있는지 확인"
           - "limit 조정이 node capacity와 정책상 가능한지 확인"
         signals:
           - id: "cpu_throttling_log_signal"
             any_of:
               - log_pattern: "cpu throttling"
+              - log_pattern: "cpu throttled"
+              - log_pattern: "throttled"
+              - log_pattern: "cfs throttled"
+              - log_pattern: "cfs quota"
+              - log_pattern: "cpu quota"
               - log_pattern: "deadline exceeded"
+              - log_pattern: "context deadline exceeded"
+              - log_pattern: "request timed out"
 
   - id: "node_disk_pressure"
     symptoms: ["Disk Pressure", "Ephemeral Storage 부족"]
