@@ -1455,11 +1455,15 @@ API 완성: submitCommand (d763ab682)
 - 코드 커밋 `d763ab682`는 `origin/woonyong/ui-layer-lab`의 ancestor다.
 
 ```text
+명령: npx vitest run src/product/api/commands.test.ts --reporter verbose
+결과: PASS — 1 file, 5 tests
+
+명령: make check
+결과: PASS — root checks 838 passed, 3 skipped + manifest-check
+
 명령: npm run check
-결과: PASS
-  - TypeScript / ESLint: PASS
-  - Vitest: 94 files, 663 tests PASS
-  - product design guard: 275 files PASS
-  - shadcn source audit: 482 previews PASS, upstream 21e4ceb
-  - Vite production build: PASS
+결과: FAIL(2026-07-13 06:37 KST 재실행)
+  - Vitest 단계에서 `src/product/app/apiBoundary.test.ts` timeout
+  - `src/product/pages/resources/ResourcesPage.test.tsx` 표 조회 assertion 실패
+  - `submitCommand` targeted test는 PASS였으므로 이 실패를 APIQ-012 완료 PASS 증거로 쓰지 않음
 ```
