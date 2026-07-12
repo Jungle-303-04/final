@@ -4,7 +4,7 @@ status: active-coordination-queue
 date: 2026-07-13
 owners: Codex 요청 / API 연결 작업자 claim·처리 / F 트랙 행(APIQ-029)·계약 갱신(APIQ-012)은 검토자 기록
 workorder: api-integration-workorder-20260711.md
-snapshot: 17행·31함수 / requested 16 / in_progress 1 / blocked 0 / valid completion anchors 19
+snapshot: 16행·30함수 / requested 16 / in_progress 0 / blocked 0 / valid completion anchors 20
 ---
 
 # 프론트 API 요청 큐
@@ -16,7 +16,7 @@ snapshot: 17행·31함수 / requested 16 / in_progress 1 / blocked 0 / valid com
 상세한 경로, 소유권, schema, test, mutation 안전, 2커밋 완료 절차는
 `api-integration-workorder-20260711.md`가 정본이다.
 
-> **다음 claim 고정 순서:** `APIQ-028` 완료 → `APIQ-029` → `APIQ-012` → `APIQ-027`.
+> **다음 claim 고정 순서:** `APIQ-029` → `APIQ-012` → `APIQ-027`.
 > 이미 원격에서 유효하게 `in_progress`인 행의 lease를 우선하고, 각 행의 완료 앵커와 조율
 > 커밋이 원격에 반영된 뒤에만 다음 행을 claim한다.
 
@@ -85,7 +85,6 @@ AbortSignal contract test를 추가하고, 필요한 경우 claim 범위 안에�
 
 | ID | 우선 | 함수명 | routes.py 상수 | 대상 파일 | 필요한 화면 | 요청 시각 | 상태 | 담당/브랜치 | claim·heartbeat | 완료 조건·주의 |
 |---|---:|---|---|---|---|---|---|---|---|---|
-| `APIQ-028` | P0 | `getClusterSummary` usage partial schema 보정 | `CLUSTER_SUMMARY_PATH` | `cluster-summary-schemas.ts`, `cluster-summary.test.ts` | Home usage 오류 격리 | 2026-07-12 23:40 KST | in_progress | `Codex-API@woonyong/ui-layer-lab` | 2026-07-13 01:35 KST | `usage.pods_total` 누락만 transport에서 `undefined`로 보존하고 summary의 workloads/warning_events/open_incidents는 그대로 통과시킨다. 기본값·가짜 합계 금지. 실제 `getClusterSummary` 통합 테스트에서 `pods_total` 누락 응답이 resolve되고, Home adapter가 usage만 `null`+structured warning으로 강등하는 경계를 증명한다. 기존 함수 완료 앵커 `94063b29d`는 이 보정의 완료 근거가 아니므로 새 코드 hash 앵커 필수 |
 | `APIQ-027` | P2 | `submitPrometheusQuery`, `getCommandStatus`, `pollCommand`, `runPrometheusQuery` | `AGENT_DEBUG_QUERY_PATH`, `COMMAND_STATUS_PATH` | `metrics.ts`, `metrics-schemas.ts`, `metrics.test.ts` | Metrics / operation progress | 2026-07-11 16:19 KST | requested | — | — | possibly-sent POST 재전송 0, polling GET만, terminal/timeout/abort, API-owned fixture |
 
 ## 4. 큐 밖 Backend gap과 realtime

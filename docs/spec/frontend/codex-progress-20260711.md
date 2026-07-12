@@ -1358,3 +1358,30 @@ API 완성: listClusters (257581398)
   - Resources list/detail, desktop/mobile/320px/200%/forced-colors
   - exact scenario API request, unexpected feature network·WebSocket 0
 ```
+
+## 2026-07-13 Cluster summary 부분 usage API 보정 완료
+
+API 완성: getClusterSummary (ef7d3a1e9)
+
+- `usage.pods_total` 누락만 transport에서 `undefined`로 보존한다. workload, warning event,
+  incident 계층은 계속 strict하게 검증하며 기본 합계나 synthetic 값을 만들지 않는다.
+- 실제 endpoint 함수와 Home adapter를 결합한 회귀 테스트에서 `pods_running: 5`와
+  `pods_total` 누락 응답이 resolve되고, 클러스터 상태·workload·warning·incident는 유지한 채
+  usage만 `null`과 `usage-unavailable` structured warning으로 강등됨을 확인했다.
+- 코드 커밋 `ef7d3a1e9`가 `origin/woonyong/ui-layer-lab`의 ancestor임을 확인했다.
+
+```text
+명령: npm run test -- src/product/api/cluster-summary.test.ts --reporter=verbose
+결과: PASS — 1 file, 9 tests
+
+명령: npm run check
+결과: PASS
+  - TypeScript / ESLint: PASS
+  - Vitest: 91 files, 635 tests PASS
+  - product design guard: 268 files PASS
+  - shadcn source audit: 482 previews PASS, upstream 21e4ceb
+  - Vite production build: PASS
+
+명령: npm run visual-product
+결과: PASS — 33 isolated scenarios, exact API request contract, unexpected network 0
+```
