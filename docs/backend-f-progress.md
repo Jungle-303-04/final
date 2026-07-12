@@ -11,8 +11,8 @@ governing: docs/f-coordination-plan.md · docs/backend-f-workqueue.md
 
 ## Delta-green baseline
 
-- 측정 기준 commit: `c704729c1b16a6fd397e1c7285249f80517a01a8`
-- pytest: `uv run python -m pytest -q` → `6 failed, 1626 passed, 3 skipped`
+- 측정 기준 commit: `e3c1de4a8eeb49a4630bab816d2bbd18444c80a5`
+- pytest: `uv run python -m pytest -q` → `6 failed, 1630 passed, 3 skipped`
 - Ruff lint: `uv run ruff check src scripts tests` → PASS
 - Ruff format: `uv run ruff format --check src scripts tests` → 기존 대상 2개
 - import-linter: `PYTHONPATH=src uv run lint-imports --config .importlinter` → 기존 위반 계약 1개
