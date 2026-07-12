@@ -40,11 +40,17 @@ describe("ResourcesPage scope and collection semantics", () => {
     expect(port.loadCatalog).not.toHaveBeenCalled();
     expect(screen.getByTestId("resources-location").textContent).toBe("/product/resources");
 
-    act(() => clusters.resolve(CLUSTERS));
+    await act(async () => {
+      clusters.resolve(CLUSTERS);
+      await clusters.promise;
+    });
     await waitFor(() => expect(port.loadCatalog).toHaveBeenCalledOnce());
     expect(screen.getByRole("status", { name: "불러오는 중" })).toBeTruthy();
     expect(port.listResources).not.toHaveBeenCalled();
-    act(() => catalog.resolve(CATALOG));
+    await act(async () => {
+      catalog.resolve(CATALOG);
+      await catalog.promise;
+    });
     await waitFor(() => expect(port.listResources).toHaveBeenCalledOnce());
   });
 
