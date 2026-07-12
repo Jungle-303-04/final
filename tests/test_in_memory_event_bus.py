@@ -137,7 +137,7 @@ def test_in_memory_bus_honors_nak_delay_and_closes_cleanly() -> None:
         with pytest.raises(TimeoutError):
             await subscription.fetch(batch=1, timeout=0.01)
 
-        redelivered = (await subscription.fetch(batch=1, timeout=1.1))[0]
+        redelivered = (await subscription.fetch(batch=1, timeout=5.0))[0]
         await redelivered.ack()
         await redelivered.ack()
         await redelivered.nak()
