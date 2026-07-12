@@ -101,7 +101,7 @@ export function ResourcesPage({
           >
             <SelectTrigger
               aria-label={t("resources.cluster.select")}
-              className="min-w-0 flex-1 xl:w-96 xl:flex-none"
+              className="min-w-0 flex-1 xl:w-(--product-cluster-select-width) xl:flex-none"
             >
               <Server aria-hidden="true" />
               <SelectValue placeholder={t("resources.cluster.select")} />

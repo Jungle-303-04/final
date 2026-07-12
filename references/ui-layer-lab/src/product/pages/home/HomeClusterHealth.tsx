@@ -13,6 +13,14 @@ import { Skeleton } from "../../shared/ui/primitives/skeleton";
 import { HomeRefreshFailure, HomeSectionFailure } from "./HomeSectionFeedback";
 import type { HomeResourceState } from "./useHomePageState";
 
+const HEALTH_BODY_CLASS_NAME =
+  "grid min-h-[20.75rem] min-w-0 divide-y sm:min-h-[17.75rem] lg:min-h-[12.75rem]";
+const HEALTH_METRICS_CLASS_NAME =
+  "grid min-w-0 grid-cols-2 divide-x lg:grid-cols-4";
+const HEALTH_USAGE_CLASS_NAME = "grid gap-4 p-4 sm:grid-cols-2";
+const HEALTH_META_CLASS_NAME =
+  "flex flex-wrap items-center gap-x-5 gap-y-2 px-4 py-3 text-xs text-muted-foreground";
+
 export function HomeClusterHealth({
   cluster,
   overview,
@@ -76,8 +84,14 @@ function HealthContent({
   const { formatNumber, t } = useI18n();
   const usage = overview.usage;
   return (
-    <div className="grid min-w-0 divide-y">
-      <div className="grid min-w-0 grid-cols-2 divide-x lg:grid-cols-4">
+    <div
+      className={HEALTH_BODY_CLASS_NAME}
+      data-slot="home-cluster-health-body"
+    >
+      <div
+        className={HEALTH_METRICS_CLASS_NAME}
+        data-slot="home-cluster-health-metrics"
+      >
         <Metric
           label={t("home.metric.pods")}
           unavailableLabel={t("common.value.unavailable")}
@@ -119,7 +133,7 @@ function HealthContent({
             : formatNumber(cluster.incidentCount)}
         />
       </div>
-      <div className="grid gap-4 p-4 sm:grid-cols-2">
+      <div className={HEALTH_USAGE_CLASS_NAME} data-slot="home-cluster-health-usage">
         <UsageProgress
           icon={<Cpu aria-hidden="true" />}
           label={t("home.metric.cpuUsage")}
@@ -131,7 +145,7 @@ function HealthContent({
           value={usage?.memoryPercent ?? null}
         />
       </div>
-      <div className="flex flex-wrap items-center gap-x-5 gap-y-2 px-4 py-3 text-xs text-muted-foreground">
+      <div className={HEALTH_META_CLASS_NAME} data-slot="home-cluster-health-meta">
         <span className="inline-flex items-center gap-1.5">
           <Boxes aria-hidden="true" className="size-3.5" />
           {t("home.metric.workloads", { count: formatNumber(overview.workloads.length) })}
@@ -185,16 +199,53 @@ function UsageProgress({
 function HealthSkeleton() {
   const { t } = useI18n();
   return (
-    <div aria-atomic="true" aria-live="polite" className="grid gap-4 p-4" role="status">
-      <span className="sr-only">
-        {t("home.section.loading", { label: t("home.section.clusterSummary") })}
-      </span>
-      <div aria-hidden="true" className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+    <div
+      aria-atomic="true"
+      aria-live="polite"
+      className={HEALTH_BODY_CLASS_NAME}
+      data-slot="home-cluster-health-body"
+      role="status"
+    >
+      <div
+        className={HEALTH_METRICS_CLASS_NAME}
+        data-slot="home-cluster-health-metrics"
+      >
+        <span className="sr-only">
+          {t("home.section.loading", { label: t("home.section.clusterSummary") })}
+        </span>
         {Array.from({ length: 4 }, (_, index) => (
-          <Skeleton className="h-16" key={index} />
+          <MetricSkeleton key={index} note={index === 3} />
         ))}
       </div>
-      <Skeleton aria-hidden="true" className="h-10" />
+      <div className={HEALTH_USAGE_CLASS_NAME} data-slot="home-cluster-health-usage">
+        <UsageProgressSkeleton />
+        <UsageProgressSkeleton />
+      </div>
+      <div className={HEALTH_META_CLASS_NAME} data-slot="home-cluster-health-meta">
+        <Skeleton aria-hidden="true" className="h-4 w-24" />
+      </div>
+    </div>
+  );
+}
+
+function MetricSkeleton({ note }: { note: boolean }) {
+  return (
+    <div className="grid min-w-0 gap-1 p-4">
+      <Skeleton aria-hidden="true" className="h-4 w-16 max-w-full" />
+      <Skeleton aria-hidden="true" className="h-7 w-24 max-w-full" />
+      {note ? <Skeleton aria-hidden="true" className="h-4 w-20 max-w-full" /> : null}
+    </div>
+  );
+}
+
+function UsageProgressSkeleton() {
+  return (
+    <div className="grid min-w-0 gap-2">
+      <div className="flex items-center justify-between gap-3">
+        <Skeleton aria-hidden="true" className="h-4 w-24 max-w-[70%]" />
+        <Skeleton aria-hidden="true" className="h-4 w-10" />
+      </div>
+      <Skeleton aria-hidden="true" className="h-2 w-full rounded-full" />
     </div>
   );
 }

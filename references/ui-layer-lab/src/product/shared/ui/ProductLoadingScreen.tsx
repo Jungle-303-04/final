@@ -58,8 +58,14 @@ function ContentLoadingGeometry() {
     <ProductPageFrame>
       <div className="flex min-w-0 justify-end">
         <div className="flex w-full min-w-0 items-center justify-end gap-2 xl:w-auto">
-          <Skeleton aria-hidden="true" className="h-7 w-24 shrink-0" />
-          <Skeleton aria-hidden="true" className="h-8 min-w-0 flex-1 xl:w-96 xl:flex-none" />
+          <Skeleton
+            aria-hidden="true"
+            className="h-7 w-(--product-toolbar-compact-control-width) shrink-0"
+          />
+          <Skeleton
+            aria-hidden="true"
+            className="h-8 min-w-0 flex-1 xl:w-(--product-cluster-select-width) xl:flex-none"
+          />
           <Skeleton aria-hidden="true" className="size-8 shrink-0" />
         </div>
       </div>
@@ -115,9 +121,19 @@ function ProductShellLoadingGeometry() {
           <Skeleton aria-hidden="true" className="h-5 w-28 md:hidden" />
           <span className="hidden md:block" />
           <div className="flex items-center gap-1">
+            <div
+              className="hidden content-center justify-items-end gap-1 lg:grid lg:w-(--product-toolbar-identity-width)"
+              data-slot="loading-session-identity"
+            >
+              <Skeleton aria-hidden="true" className="h-3 w-full" />
+              <Skeleton aria-hidden="true" className="h-3 w-3/4" />
+            </div>
             <Skeleton aria-hidden="true" className="size-8" />
             <Skeleton aria-hidden="true" className="size-8" />
-            <Skeleton aria-hidden="true" className="h-7 w-24" />
+            <Skeleton
+              aria-hidden="true"
+              className="h-7 w-(--product-toolbar-compact-control-width)"
+            />
             <Skeleton aria-hidden="true" className="size-8" />
           </div>
         </header>

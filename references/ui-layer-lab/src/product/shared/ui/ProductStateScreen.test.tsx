@@ -27,6 +27,9 @@ describe("ProductStateScreen", () => {
     expect(
       container.querySelector('[data-slot="product-shell-loading"]')?.className,
     ).toContain("md:grid-cols-[var(--product-sidebar-width)_minmax(0,1fr)]");
+    const identity = container.querySelector('[data-slot="loading-session-identity"]');
+    expect(identity).toBeTruthy();
+    expect(identity?.className).toContain("lg:w-(--product-toolbar-identity-width)");
     expect(container.querySelectorAll('[data-slot="skeleton"]').length).toBeGreaterThan(0);
     for (const skeleton of container.querySelectorAll('[data-slot="skeleton"]')) {
       expect(skeleton.getAttribute("aria-hidden")).toBe("true");

@@ -21,7 +21,7 @@ describe("ClusterConnectionStatus", () => {
     const control = screen.getByRole("button", {
       name: `Connected · last observed ${expectedTime}`,
     });
-    expect(control.className).toContain("w-24");
+    expect(control.className).toContain("w-(--product-toolbar-compact-control-width)");
     expect(control.className).toContain("min-w-0");
     expect(screen.getByText("Connected")).toBeTruthy();
   });
@@ -32,7 +32,7 @@ describe("ClusterConnectionStatus", () => {
     const control = screen.getByRole("button", {
       name: "연결 상태 미확인 · 마지막 관측 알 수 없음",
     });
-    expect(control.className).toContain("w-24");
+    expect(control.className).toContain("w-(--product-toolbar-compact-control-width)");
     expect(screen.getByText("연결 상태 미확인").className).toContain("truncate");
   });
 });
