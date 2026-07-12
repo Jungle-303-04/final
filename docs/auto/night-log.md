@@ -489,3 +489,41 @@ ruff/import-linter PASS. 질문: B-트랙에 `docs/README.md` 링크 1줄 수정
 
 [2026-07-13 08:11 KST] [백엔드] B merge 완결·push — 0d0f92cca, 976282faa
 ancestor exit 0, 사람 위임 GO [B]
+
+[2026-07-13 08:37 KST] [OSS] 공개 준비 초안 9개 해소 — `7c1966a6e` / Apache-2.0
+공식 원문 byte 일치, 내부 실명·조직·이메일·도메인·AWS 식별자·비밀 값·클러스터 식별자
+자체 스캔 PASS(허용 URL은 Apache 공식 원문 2개뿐) / 전체 게이트: Ruff lint PASS,
+format `470 files already formatted`, import-linter `2 kept, 0 broken`, pytest
+`1646 passed, 3 skipped`.
+
+## GO-REQUEST [OSS] — 공개 위생 드래프트 lane 통합 승인 요청
+
+- 대상: `codex/oss-hygiene` (산출물 HEAD `7c1966a6e`; 이 블록은 별도 docs 증거 커밋).
+- 완료 범위: [D-015] — `docs/oss/**` 신규 초안 9파일과 `docs/README.md` 자기 산출물
+  링크 9줄. 저장소 공개·프로젝트명·상표·Apache-2.0 채택·거버넌스·maintainer 지정은
+  모두 사람 결정으로 명시했고 실제 공개·정책 채택은 수행하지 않음.
+- 산출물: 영문 포지셔닝/3장면 데모 README, Apache-2.0 `LICENSE.draft`, 시나리오 1개
+  단위 CONTRIBUTING, SECURITY, CODE_OF_CONDUCT, GOVERNANCE, MAINTAINERS, CHANGELOG,
+  사람용 publication checklist.
+- 위생 증거: Apache 공식 `LICENSE-2.0.txt`와 `LICENSE.draft` byte 일치. `docs/oss/**`에서
+  한글 실명, 이메일, IPv4, AWS key/account/ARN, private-key marker, password/secret/token
+  할당값, UUID, 알려진 내부명·내부 도메인 후보 0건. URL 2개는 라이선스 본문의
+  `apache.org` 공식 URL만 존재.
+- 최종 게이트: `bash scripts/test.sh` → Ruff lint PASS / format
+  `470 files already formatted` / import-linter `2 kept, 0 broken` / pytest
+  `1646 passed, 3 skipped`.
+- 범위 증거: `src/**` 및 타 트랙 경로 변경 0건. 변경은 `docs/oss/**`, 자기 링크만
+  추가한 `docs/README.md`, 요구된 `docs/auto/night-log.md` 기록뿐.
+- 사람 검증 명령(복사 가능):
+
+  ```bash
+  git -C /private/tmp/sw-ai-oss-hygiene status --short
+  git -C /private/tmp/sw-ai-oss-hygiene diff --name-only origin/dev...codex/oss-hygiene
+  git -C /private/tmp/sw-ai-oss-hygiene diff --name-only origin/dev...codex/oss-hygiene -- 'src/**'
+  diff -q <(curl -fsSL https://www.apache.org/licenses/LICENSE-2.0.txt) /private/tmp/sw-ai-oss-hygiene/docs/oss/LICENSE.draft
+  bash /private/tmp/sw-ai-oss-hygiene/scripts/test.sh
+  ```
+
+- 예상 결과: 첫 명령 0줄, 변경은 위 허용 경로뿐, `src/**` 명령 0줄, license diff 0줄,
+  전체 gate PASS.
+- 사람 GO 전에는 merge/push·공개 저장소 생성·라이선스 채택을 수행하지 않고 대기한다.
