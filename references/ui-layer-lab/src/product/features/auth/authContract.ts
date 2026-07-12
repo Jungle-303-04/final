@@ -15,6 +15,8 @@ export type AuthSessionResult =
 
 export type AuthFailureCode =
   | "invalid-credentials"
+  | "email-unverified"
+  | "approval-pending"
   | "forbidden"
   | "rate-limited"
   | "network"

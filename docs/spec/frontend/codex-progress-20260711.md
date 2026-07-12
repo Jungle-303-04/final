@@ -1168,3 +1168,40 @@ API 완성: listInventoryResourcesByType (6aaf19fea)
 - Auth 기반 구현은 `features/auth/AuthBarrier.tsx`, `authContract.ts`, `createAuthAdapter.ts`와
   form primitive `Field`, `Input`, `Label`로 분리했다. 이 단계는 실제 session port와 form semantics
   테스트를 추가하지만, 제품 route에 아직 Home·cluster selector를 소비시키지 않는다.
+
+## 2026-07-12 인증 세션 권위 재수렴 보강
+
+- 로그인 403의 백엔드 코드는 허용 목록으로만 canonical 변환한다.
+  `email_unverified`는 `email-unverified`, `approval_pending`은 `approval-pending`이며,
+  알 수 없는 provider 세부 코드는 제품 상태로 유출하지 않고 `forbidden`으로 닫는다.
+- 로그인·로그아웃 POST가 `network`, `server`, `invalid-response`로 끝나 응답 유실 가능성이 있으면
+  mutation을 재전송하지 않는다. 동일 `AuthPort.loadSession` GET을 한 번 호출해 authoritative
+  authenticated/unauthenticated 상태로 수렴한다. 확인 GET도 실패하면 기존 인증 surface를 즉시
+  숨기고 session error로 fail-closed 처리한다.
+- 인증된 feature가 받은 401은 `AuthSessionGate.reportUnauthorized()` 단일 semantic event로
+  세션 barrier에 전달한다. 동시에 여러 feature가 보고해도 ref 기반 single-flight로 세션 GET은
+  한 번만 실행하며, provider 밖의 소비는 개발 오류로 차단한다.
+- `AuthBarrier.tsx`에서 요청 공유와 안전 문구를 `authSessionRequest.ts`, `authIssues.ts`로 분리해
+  제품 파일 300줄 제한과 adapter/view 경계를 유지했다.
+- 이 변경은 새 endpoint 완료가 아니다. 기존 exact anchor인 `getSession`, `login`, `logout`만
+  사용하며 `src/product/api/**`, `client.ts`, `url.ts`를 수정하지 않았다.
+
+```text
+명령: cd references/ui-layer-lab && npm run check
+결과: PASS
+  - TypeScript / ESLint: PASS
+  - Vitest: 43 files, 295 tests PASS
+  - product design guard: 120 files PASS
+  - shadcn source audit: 482 previews PASS, upstream 21e4ceb
+  - Vite production build: PASS, ProductApp 101.96 kB (gzip 33.37 kB)
+
+명령: npm run visual-product
+결과: PASS — 16 scenarios
+  - unauthenticated desktop/mobile/320px/200%/forced-colors
+  - authenticated release, session error, session loading
+  - shared state와 shell desktop/mobile/forced-colors
+  - scenario별 GET /api/auth/session 정확히 1회, feature API·WebSocket 0회
+
+브라우저 검증: http://127.0.0.1:5180/product
+결과: 실제 session API 실패를 synthetic fallback 없이 session error 화면으로 표시
+```
