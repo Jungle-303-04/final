@@ -92,6 +92,7 @@ HTTP_UNPROCESSABLE_ENTITY = 422
 RELEASE_PLAN_NOT_FOUND = "release plan not found"
 EXPLICIT_RELEASE_PLAN_ID_NOT_ALLOWED = "plan_id must not be provided when creating a release plan"
 EMPTY_RELEASE_PLAN_NOT_ALLOWED = "release plan must contain at least one application step"
+RELEASE_PLAN_WORKSPACE_MUTATION_LOCK = "\x00workspace-mutation"
 RELEASE_RUN_NOT_FOUND = "release run not found"
 RELEASE_PLAN_BLOCKED = "release plan has blockers"
 RELEASE_RUN_BLOCKED = "release run cannot advance"
@@ -1051,6 +1052,7 @@ async def create_release_plan(
         lock_identity = getattr(db, "lock_release_plan_identity", None)
         if not callable(lock_identity):
             raise HTTPException(status_code=503, detail="release plan storage unavailable")
+        lock_identity(workspace_id, RELEASE_PLAN_WORKSPACE_MUTATION_LOCK)
         lock_identity(workspace_id, str(body["name"]))
         get_by_name = getattr(db, "get_release_plan_by_name", None)
         if callable(get_by_name):
@@ -1090,6 +1092,10 @@ async def update_release_plan(
 ) -> ReleasePlanResponse:
     workspace_id = getattr(current, "workspace_id", DEFAULT_WORKSPACE_ID)
     with unit_of_work_or_null(db):
+        lock_identity = getattr(db, "lock_release_plan_identity", None)
+        if not callable(lock_identity):
+            raise HTTPException(status_code=503, detail="release plan storage unavailable")
+        lock_identity(workspace_id, RELEASE_PLAN_WORKSPACE_MUTATION_LOCK)
         existing = db.get_release_plan(workspace_id, plan_id, for_update=True)
         if existing is None:
             raise HTTPException(status_code=HTTP_NOT_FOUND, detail=RELEASE_PLAN_NOT_FOUND)
@@ -1101,9 +1107,8 @@ async def update_release_plan(
         )
         body = {**payload.model_dump(), "plan_id": plan_id, "workspace_id": workspace_id}
         if str(body["name"]) != str(existing.get("name") or ""):
-            lock_identity = getattr(db, "lock_release_plan_identity", None)
             get_by_name = getattr(db, "get_release_plan_by_name", None)
-            if not callable(lock_identity) or not callable(get_by_name):
+            if not callable(get_by_name):
                 raise HTTPException(status_code=503, detail="release plan storage unavailable")
             lock_identity(workspace_id, str(body["name"]))
             name_owner = get_by_name(
