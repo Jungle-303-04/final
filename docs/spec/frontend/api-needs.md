@@ -4,7 +4,7 @@ status: active-coordination-queue
 date: 2026-07-13
 owners: Codex 요청 / API 연결 작업자 claim·처리 / F 트랙 행(APIQ-029)·계약 갱신(APIQ-012)은 검토자 기록
 workorder: api-integration-workorder-20260711.md
-snapshot: 14행·28함수 / requested 13 / in_progress 1 / blocked 0 / valid completion anchors 22
+snapshot: 13행·27함수 / requested 13 / in_progress 0 / blocked 0 / valid completion anchors 23
 ---
 
 # 프론트 API 요청 큐
@@ -17,7 +17,7 @@ snapshot: 14행·28함수 / requested 13 / in_progress 1 / blocked 0 / valid com
 `api-integration-workorder-20260711.md`가 정본이다.
 
 > **다음 claim 고정 순서 (2026-07-13 파이프라인 A단계 갱신):**
-> `APIQ-012` → `APIQ-027` → `APIQ-005` → `APIQ-016` → `APIQ-017` → `APIQ-018` →
+> `APIQ-027` → `APIQ-005` → `APIQ-016` → `APIQ-017` → `APIQ-018` →
 > `APIQ-019` → `APIQ-013` → `APIQ-006` → `APIQ-009` → `APIQ-010` → (`APIQ-011`은 027 완료
 > 앵커 후) → `APIQ-014` → `APIQ-015`.
 > BQ-001·BQ-003의 `origin/dev` 착륙은 파이프라인 A단계 명령으로 재검증했다.
@@ -72,7 +72,6 @@ claim·heartbeat: YYYY-MM-DD HH:mm KST
 | `APIQ-009` | P2 | `getClusterResourceUsageSeries` | `CLUSTER_USAGE_PATH` | `usage-series.ts`, `usage-series-schemas.ts`, test | Pod·Node history / top metrics | 2026-07-11 16:19 KST | requested | — | — | limit 1..2000; `samples[].usage` JsonMap 보존; rollup으로 대체 금지 |
 | `APIQ-010` | P2 | `listMetricQueryPresets`, `runMetricQueryPreset` | `CLUSTER_METRIC_QUERY_PRESETS_PATH`, `CLUSTER_METRIC_QUERY_PRESET_RUN_PATH` | `metric-presets.ts`, `metric-presets-schemas.ts`, test | resource·PVC Metrics | 2026-07-11 16:19 KST | requested | — | — | run body 없음; `AgentDebugQueryResponse`, HTTP 200 receipt |
 | `APIQ-011` | P2 | `runTelemetryQuery` | `AGENT_DEBUG_QUERY_PATH`, `COMMAND_STATUS_PATH` | `telemetry.ts`, `telemetry-schemas.ts`, test | Pod log snapshot | 2026-07-11 16:19 KST | requested | — | — | `APIQ-027` 완료 앵커 의존; 완료 전 claim 금지. 명시적 AGENT_* browser 예외; POST 1회; source literal 보존 |
-| `APIQ-012` | P3 | `submitCommand` | `COMMANDS_PATH` | `commands.ts`, `commands-schemas.ts`, test | Resources apply / remediation | 2026-07-11 16:19 KST | in_progress | `Codex-API@woonyong/ui-layer-lab` | 2026-07-13 06:31 KST | `AcceptedResponse` 200 + `command_id: string \| null` (BQ-001 앵커 `4e6216052`, `origin/dev` 착륙 확인, `Cross-Gap-001` 해소). non-null=승인 불필요 경로 → `GET /commands/{id}` 상태 추적. null=승인 필요 경로(백엔드가 제출 시점에 구조적으로 파생 불가) — **프론트에서 command_id 계산·추측 금지, null이면 null**. null 분기의 폴링·"추적 지연" 표시는 adapter 소유(Codex), 이 함수는 receipt 반환까지만. optimistic 완료 표시 금지 |
 | `APIQ-013` | P2 | `grantApproval`, `rejectApproval` | `APPROVAL_GRANT_PATH`, `APPROVAL_REJECT_PATH` | `approvals.ts`, `approvals-schemas.ts`, test | Applications / GitOps approval | 2026-07-11 17:17 KST | requested | — | — | body absent/null/`{}` 허용; reason nullable; 404/409; POST 재전송 금지 |
 | `APIQ-014` | P3 | `restartDeployment`, `scaleDeployment` | `CLUSTER_DEPLOYMENT_RESTART_PATH`, `CLUSTER_DEPLOYMENT_SCALE_PATH` | `deployments.ts`, `deployments-schemas.ts`, test | Resources workload actions | 2026-07-11 16:19 KST | requested | — | — | body·path strict; accepted 200에 command_id 없음; live mutation 승인 필요 |
 | `APIQ-015` | P3 | `listCatalogItems`, `getCatalogItem` | `CATALOG_ITEMS_PATH`, `CATALOG_ITEM_PATH` | `catalog.ts`, `catalog-schemas.ts`, test | provider-neutral Catalog | 2026-07-11 16:19 KST | requested | — | — | item JsonMap 보존; pagination/filter 발명 금지; install 제외 |
