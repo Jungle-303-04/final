@@ -1,4 +1,4 @@
-import { apiRequest, type ApiPath } from "./client";
+import { apiRequest, apiRequestNoContent, type ApiPath } from "./client";
 import {
   aiConversationAcceptedSchema,
   aiConversationDetailSchema,
@@ -44,6 +44,18 @@ export function getAiConversation(
 ): Promise<AiConversationDetail> {
   const path = `/api/ai/conversations/${encodePathSegment(conversationId)}` as ApiPath;
   return apiRequest(path, aiConversationDetailSchema, { signal });
+}
+
+/** Deletes one conversation and its stored messages for the signed-in user. */
+export function deleteAiConversation(
+  conversationId: string,
+  signal?: AbortSignal,
+): Promise<void> {
+  if (!conversationId.trim()) {
+    throw new TypeError("conversationId must not be empty");
+  }
+  const path = `/api/ai/conversations/${encodePathSegment(conversationId)}` as ApiPath;
+  return apiRequestNoContent(path, { method: "DELETE", signal });
 }
 
 /** Creates a conversation and queues its first user message. */
