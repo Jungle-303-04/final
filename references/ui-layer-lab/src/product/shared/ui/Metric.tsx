@@ -1,4 +1,5 @@
 import { cn } from "./primitives/cn";
+import { useI18n } from "../i18n";
 
 export type MetricTone = "neutral" | "critical" | "warning";
 export type MetricValue = string | number | null;
@@ -20,7 +21,8 @@ export function Metric({
   unit,
   unavailableLabel,
 }: MetricProps) {
-  const unavailable = unavailableLabel?.trim() || "사용할 수 없음";
+  const { t } = useI18n();
+  const unavailable = unavailableLabel?.trim() || t("common.state.unavailable");
 
   return (
     <dl className="grid min-w-0 gap-1 p-4" data-slot="metric" data-tone={tone}>

@@ -11,6 +11,8 @@ import {
 } from "lucide-react";
 import { useCallback, useState } from "react";
 import { Outlet, useLocation } from "react-router-dom";
+import { useI18n, type MessageKey } from "../shared/i18n";
+import { LocaleToggle } from "../shared/ui/LocaleToggle";
 import { ThemeToggle } from "../shared/ui/ThemeToggle";
 import {
   SidebarMenu,
@@ -59,6 +61,16 @@ const routeIcons: Record<ProductRouteIcon, LucideIcon> = {
   gitops: GitBranch,
 };
 
+const navLabelKeys = {
+  applications: "shell.nav.applications",
+  gitops: "shell.nav.gitops",
+  home: "shell.nav.home",
+  issues: "shell.nav.issues",
+  resources: "shell.nav.resources",
+  timeline: "shell.nav.timeline",
+  topology: "shell.nav.topology",
+} satisfies Record<ProductSurfaceId, MessageKey>;
+
 export function ProductShell({
   auth,
   releasedSurfaceIds,
@@ -80,6 +92,7 @@ function ProductShellFrame({
   const [isShortcutHelpOpen, setShortcutHelpOpen] = useState(false);
   const location = useLocation();
   const { isMobile } = useSidebar();
+  const { t } = useI18n();
   const themeController = useProductTheme();
   const navigationRoutes = productNavigationForReleasedSurfaces(releasedSurfaceIds);
   const matchedRoute = productRouteForPath(location.pathname);
@@ -100,6 +113,7 @@ function ProductShellFrame({
   if (!currentRoute) {
     throw new Error("ProductShell requires at least one released surface");
   }
+  const currentRouteLabel = t(navLabelKeys[currentRoute.id]);
 
   return (
     <>
@@ -107,15 +121,15 @@ function ProductShellFrame({
         className="fixed left-3 top-3 z-50 -translate-y-20 rounded-md bg-primary px-3 py-2 text-sm font-medium text-primary-foreground transition-transform focus:translate-y-0 motion-reduce:transition-none"
         href="#product-main"
       >
-        본문으로 건너뛰기
+        {t("shell.skipToContent")}
       </a>
 
       <Sidebar
-        aria-label="제품 메뉴"
+        aria-label={t("shell.menu.label")}
         id="product-sidebar"
-        mobileCloseLabel="모바일 사이드바 닫기"
-        mobileDescription="현재 사용할 수 있는 제품 화면으로 이동합니다."
-        mobileTitle="제품 탐색"
+        mobileCloseLabel={t("shell.menu.mobileClose")}
+        mobileDescription={t("shell.menu.mobileDescription")}
+        mobileTitle={t("shell.menu.mobileTitle")}
       >
         <SidebarHeader className="h-14 flex-row items-center gap-2 px-3 py-0">
           <span className="grid size-8 shrink-0 place-items-center rounded-lg border border-sidebar-border bg-sidebar-primary text-sidebar-primary-foreground">
@@ -127,19 +141,20 @@ function ProductShellFrame({
         </SidebarHeader>
 
         <SidebarContent className="p-0">
-          <SidebarNavigation aria-label="주요 메뉴" id="product-primary-navigation">
+          <SidebarNavigation aria-label={t("shell.menu.primary")} id="product-primary-navigation">
             <SidebarMenu>
               {navigationRoutes.map((routeDefinition) => {
                 const Icon = routeIcons[routeDefinition.icon];
+                const label = t(navLabelKeys[routeDefinition.id]);
                 return (
                   <SidebarMenuItem key={routeDefinition.id}>
                     <SidebarMenuLink
                       isActive={currentRoute.id === routeDefinition.id}
                       to={routeDefinition.path}
-                      tooltip={routeDefinition.label}
+                      tooltip={label}
                     >
                       <Icon aria-hidden="true" className="size-4 shrink-0" />
-                      <SidebarText>{routeDefinition.label}</SidebarText>
+                      <SidebarText>{label}</SidebarText>
                     </SidebarMenuLink>
                   </SidebarMenuItem>
                 );
@@ -157,7 +172,7 @@ function ProductShellFrame({
         <header className="sticky top-0 z-30 flex min-h-14 items-center justify-between gap-4 border-b bg-background/95 px-4 py-2 backdrop-blur supports-[backdrop-filter]:bg-background/75">
           <div className="flex min-w-0 items-center gap-2">
             {isMobile ? <ProductSidebarTrigger labelMode="sr-only" /> : null}
-            <h1 className="sr-only">{currentRoute.label}</h1>
+            <h1 className="sr-only">{currentRouteLabel}</h1>
           </div>
           <div className="flex items-center gap-1">
             <AuthSessionControl auth={auth} mode="toolbar" />
@@ -166,6 +181,7 @@ function ProductShellFrame({
               onOpenChange={setShortcutHelpOpen}
               open={isShortcutHelpOpen}
             />
+            <LocaleToggle />
             <ThemeToggle controller={themeController} />
           </div>
         </header>
@@ -187,14 +203,15 @@ function ProductSidebarTrigger({
 }: {
   labelMode?: "responsive" | "sr-only";
 }) {
+  const { t } = useI18n();
   return (
     <SidebarTrigger
-      collapseLabel="사이드바 접기"
+      collapseLabel={t("shell.sidebar.collapse")}
       controls="product-primary-navigation"
-      expandLabel="사이드바 펼치기"
+      expandLabel={t("shell.sidebar.expand")}
       labelMode={labelMode}
-      mobileCloseLabel="모바일 사이드바 닫기"
-      mobileOpenLabel="모바일 사이드바 열기"
+      mobileCloseLabel={t("shell.menu.mobileClose")}
+      mobileOpenLabel={t("shell.menu.mobileOpen")}
       size={labelMode === "sr-only" ? "icon-sm" : "default"}
       variant="ghost"
     />

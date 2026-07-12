@@ -45,6 +45,23 @@ exact 완료 앵커가 있는 API로 만들 수 있는 section만 release하고,
   임의 데이터로 성공 상태를 만들지 않는다.
 - provider 이름으로 화면을 분기하지 않는다. 기능 노출은 canonical capability와 권한으로 결정한다.
 
+### 1.1 실측 백엔드 정본과 로컬 폴백
+
+- 화면 실측, 시각 회귀, 인수 스크린샷의 기본 백엔드는 AWS 배포
+  `https://k8s.woonyong.org`다. 개발자는 `npm run dev:aws`로 origin을 환경변수에 주입한다.
+- AWS 착수 게이트는 `GET /api/auth/session`의 HTTP 200 또는 정상적인 비로그인 401이다.
+  연결 실패나 비계약 응답은 mock, fake session, synthetic data로 우회하지 않는다.
+- AWS가 게이트를 통과하지 못할 때만 로컬 `http://127.0.0.1:8000`을 폴백으로 사용한다.
+  로컬 폴백으로 만든 검증 증거에는 시각, 원인, 재검증 필요 여부를 progress에 기록한다.
+- Vite 기본값은 오픈소스 개발용 로컬 origin을 유지한다. AWS 개인 도메인은 `dev:aws`와
+  `.env.example`의 예시 외에 `vite.config.ts` 기본값이나 제품 TypeScript 코드에 넣지 않는다.
+- HTTPS upstream은 Vite proxy의 `changeOrigin`, 인증서 검증, cookie domain rewrite를 사용한다.
+  프론트 코드에서 `service_session` 또는 `Secure`·`Domain` 속성을 조작하지 않는다. 실제 로그인
+  응답에서 쿠키 유실이 관측될 때만 proxy 설정으로 교정하고 관측 근거를 함께 남긴다.
+- 자격증명, session cookie, CSRF 값, kubeconfig, Cloudflare·AWS token은 문서, fixture,
+  screenshot metadata, `.env.example`, 커밋에 저장하지 않는다. 실제 `.env*`는 root `.gitignore`로
+  제외한다.
+
 ## 2. 보존된 인벤토리 소비 계약
 
 다음 D1~D5는 현재 구현된 인벤토리 live adapter의 보존 대상이다. 이 표는 특정 화면 배치를
@@ -195,6 +212,41 @@ HTTP 200이어도 JSON parse 또는 Zod 검증이 실패하면 성공으로 처�
    `18 · 17 running`, `재시작 3`, `인시던트 2`처럼 짧고 일관된 형태를 사용한다.
 8. visual gate는 상주 중복 문구와 금지 배지의 부재, 320px·200% text reflow, tooltip keyboard 접근을
    화면별로 검증한다. 스크린샷 재생성만으로 통과 처리하지 않는다.
+
+### 7.2 번역 경계와 locale 규칙
+
+제품 UI 문자열의 정본은 `references/ui-layer-lab/src/product/shared/i18n/`의 typed message
+catalog다. `MessageKey` literal union과 `en.ts`, `ko.ts`의
+`satisfies Record<MessageKey, string>` 검증을 함께 유지해 어느 locale에서도 키 누락을 빌드 전에
+차단한다. 외부 i18n 런타임 의존성은 추가하지 않는다.
+
+1. **기본 locale은 영어(`en`)다.** 저장된 사용자 선택이 있으면 이를 가장 먼저 적용하고, 선택이
+   없을 때만 `navigator.language`가 `ko` 계열인지 감지한다. 지원하지 않는 locale은 영어로 수렴한다.
+   사용자가 toolbar의 언어 설정을 바꾸면 선택을 저장하고 `<html lang>`도 같은 값으로 갱신한다.
+2. **서버·Kubernetes 사실은 번역하지 않는다.** resource name, namespace, cluster name, label,
+   annotation, probe/event message, status 원문, reason, command output은 plain text 데이터로 그대로
+   표시한다. 이 값을 `MessageKey`로 해석하거나 catalog lookup에 사용하지 않는다.
+3. **Kubernetes 도메인 명사는 locale과 무관하게 영어를 유지한다.** `Pod`, `Node`, `Container`,
+   `Service`, `Deployment`, `Namespace`, `Ready`, `Running`과 Kubernetes Kind는 한국어 catalog에서도
+   번역하거나 음역하지 않는다. 주변 UI 문장만 locale에 맞춘다.
+4. **오류는 structured code를 먼저 번역한다.** 프론트가 소유한 error/status/detail code는 catalog의
+   정확한 키에 매핑한다. 알려진 code가 없을 때는 서버 계약이 사용자 노출을 허용한 plain-text
+   detail을 원문으로 표시한다. raw stack, HTML, secret, annotation 전체를 fallback 문구로 노출하지
+   않는다.
+5. **날짜와 숫자는 활성 locale의 `Intl`을 사용한다.** 화면별 formatter가 `ko-KR` 또는 `en-US`를
+   하드코딩하지 않고 i18n controller의 `Intl.DateTimeFormat`·`Intl.NumberFormat` helper를 사용한다.
+   API 시간은 ISO-8601 instant로 받고, 단위와 정확도는 canonical DTO 의미를 변경하지 않는다.
+6. **문장 조합을 JSX에서 만들지 않는다.** 조사, 복수형, 순서가 locale마다 달라지는 문구는 완전한
+   catalog template과 named parameter로 표현한다. backend 값은 parameter로만 넣고 번역 키에
+   합성하지 않는다.
+7. **접근성 문자열도 catalog 경계에 포함한다.** `aria-label`, tooltip, dialog close label, empty/error
+   설명, keyboard shortcut 설명은 보이는 문자열과 같은 locale을 사용한다. 아이콘·색상만 바뀌고
+   접근 가능한 이름이 이전 locale에 남는 상태를 금지한다.
+8. design guard는 test·catalog 파일과 데이터 바인딩을 제외하고 제품 JSX의 literal 한글 및 catalog
+   밖 영문 문장을 실패 처리한다. Kubernetes 단일 도메인 명사와 `className`, route, id, data attribute
+   같은 구조 문자열은 사용자 문구로 오인하지 않는다.
+9. visual gate는 최소한 동일한 대표 Home·Resources 흐름을 `en`, `ko` 각각 캡처하고, locale 전환 뒤
+   URL·선택 범위·서버 데이터 identity가 변하지 않으며 overflow가 새로 생기지 않는지 검증한다.
 
 ## 8. 외부 기준 저장소 포팅과 라이선스
 

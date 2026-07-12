@@ -8,6 +8,7 @@ import {
   type HomePodCollection,
   type HomePort,
 } from "../../features/home/homeContract";
+import { selectInitialClusterChoice } from "../../features/home/homeSelection";
 import { acquireHomeRequest } from "./homeRequest";
 import {
   HOME_LOADING,
@@ -81,14 +82,14 @@ export function useHomePageState(port: HomePort): HomePageState {
 
   useEffect(() => {
     if (choices.phase !== "ready" || selectedClusterId !== null) return;
-    const firstCluster = choices.data.clusters[0];
-    if (!firstCluster) return;
+    const initialCluster = selectInitialClusterChoice(choices.data.clusters);
+    if (!initialCluster) return;
     const next = new URLSearchParams(searchParams);
-    next.set("cluster", firstCluster.id);
+    next.set("cluster", initialCluster.id);
     next.delete("node");
     setSearchParams(next, {
       replace: true,
-      state: homeLocationState(firstCluster.id, `${location.key}:${firstCluster.id}`),
+      state: homeLocationState(initialCluster.id, `${location.key}:${initialCluster.id}`),
     });
   }, [choices, location.key, searchParams, selectedClusterId, setSearchParams]);
 

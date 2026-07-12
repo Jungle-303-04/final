@@ -1,15 +1,17 @@
 // @vitest-environment jsdom
 
-import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, render as renderBase, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { createRef } from "react";
+import { createRef, type ReactElement } from "react";
 import { afterEach, describe, expect, it } from "vitest";
+import { I18nProvider } from "../../i18n";
 import { Button } from "./button";
 import { Alert, AlertDescription, AlertTitle } from "./alert";
 import {
   Dialog,
   DialogContent,
   DialogDescription,
+  DialogFooter,
   DialogTitle,
   DialogTrigger,
 } from "./dialog";
@@ -47,6 +49,7 @@ describe("product-owned primitive accessibility", () => {
           <DialogTitle>클러스터 정보</DialogTitle>
           <DialogDescription>현재 선택한 클러스터의 상태입니다.</DialogDescription>
           <input aria-label="클러스터 별칭" />
+          <DialogFooter showCloseButton />
         </DialogContent>
       </Dialog>,
     );
@@ -57,6 +60,7 @@ describe("product-owned primitive accessibility", () => {
     const dialog = screen.getByRole("dialog", { name: "클러스터 정보" });
     expect(dialog.getAttribute("aria-describedby")).toBeTruthy();
     expect(screen.getByText("현재 선택한 클러스터의 상태입니다.")).toBeTruthy();
+    expect(screen.getAllByRole("button", { name: "닫기" })).toHaveLength(2);
     await waitFor(() => {
       expect(document.activeElement).toBe(screen.getByRole("textbox", { name: "클러스터 별칭" }));
     });
@@ -140,12 +144,22 @@ describe("product-owned primitive accessibility", () => {
   });
 
   it("gives the spinner a localized status name", () => {
-    const { rerender } = render(<Spinner aria-label="클러스터 로딩 중" />);
+    const { rerender } = render(<Spinner />);
 
-    const spinner = screen.getByRole("status", { name: "클러스터 로딩 중" });
+    const spinner = screen.getByRole("status", { name: "불러오는 중" });
     expect(spinner.classList.contains("motion-reduce:animate-none")).toBe(true);
     rerender(<Spinner decorative data-icon="inline-start" />);
     expect(screen.queryByRole("status")).toBeNull();
     expect(document.querySelector('[data-slot="spinner"]')?.getAttribute("aria-hidden")).toBe("true");
   });
 });
+
+function render(element: ReactElement) {
+  return renderBase(element, {
+    wrapper: ({ children }) => (
+      <I18nProvider navigatorLanguage="ko-KR" storage={null}>
+        {children}
+      </I18nProvider>
+    ),
+  });
+}

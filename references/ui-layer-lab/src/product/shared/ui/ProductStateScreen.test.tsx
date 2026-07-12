@@ -1,8 +1,15 @@
 // @vitest-environment jsdom
 
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import {
+  cleanup,
+  fireEvent,
+  render as renderBase,
+  screen,
+} from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import type { ReactElement } from "react";
+import { I18nProvider } from "../i18n";
 import { ProductStateScreen } from "./ProductStateScreen";
 
 afterEach(cleanup);
@@ -13,8 +20,9 @@ describe("ProductStateScreen", () => {
     const main = screen.getByRole("main");
 
     expect(main.getAttribute("aria-busy")).toBe("true");
-    expect(screen.getByRole("heading", { name: "운영 상태를 확인하는 중입니다" })).toBeTruthy();
-    expect(screen.getByRole("status", { name: "로딩 중" })).toBeTruthy();
+    expect(main.getAttribute("aria-label")).toBe("세션 확인 중");
+    expect(screen.getByRole("status", { name: "세션 확인 중" })).toBeTruthy();
+    expect(screen.queryByRole("heading")).toBeNull();
     expect(container.querySelectorAll('[data-slot="skeleton"]').length).toBeGreaterThan(0);
     for (const skeleton of container.querySelectorAll('[data-slot="skeleton"]')) {
       expect(skeleton.getAttribute("aria-hidden")).toBe("true");
@@ -27,6 +35,7 @@ describe("ProductStateScreen", () => {
 
     expect(main.getAttribute("aria-busy")).toBeNull();
     expect(container.querySelector("[aria-live]")).toBeNull();
+    expect(container.querySelector('[data-slot="badge"]')).toBeNull();
     expect(screen.getByRole("heading", { name: "API 연결 계층을 검증하고 있습니다" })).toBeTruthy();
     expect(screen.queryByRole("status")).toBeNull();
     expect(screen.queryByRole("alert")).toBeNull();
@@ -155,6 +164,22 @@ describe("ProductStateScreen", () => {
     expect(screen.getByRole("alert").textContent).toContain("forbidden");
   });
 
+  it("renders state and retry copy from the English catalog", () => {
+    renderWithLocale(
+      <ProductStateScreen
+        kind="offline"
+        issue={{ code: "network" }}
+        retry={{ pending: false, onRetry: vi.fn() }}
+      />,
+      "en-US",
+    );
+
+    expect(screen.getByRole("heading", { name: "Unable to reach the control plane" }))
+      .toBeTruthy();
+    expect(screen.getByRole("button", { name: "Retry" })).toBeTruthy();
+    expect(screen.getByRole("alert").textContent).toContain("Connection error");
+  });
+
   it("uses a named section instead of nesting main landmarks for content placement", () => {
     render(
       <main>
@@ -163,11 +188,26 @@ describe("ProductStateScreen", () => {
     );
 
     expect(screen.getAllByRole("main")).toHaveLength(1);
-    const region = screen.getByRole("region", { name: "운영 상태를 확인하는 중입니다" });
+    const region = screen.getByRole("region", { name: "불러오는 중" });
     expect(region).toBeTruthy();
-    expect(screen.getByRole("heading", { name: "운영 상태를 확인하는 중입니다" }).tagName).toBe("H2");
+    expect(screen.queryByRole("heading")).toBeNull();
+    expect(screen.getByRole("status", { name: "불러오는 중" })).toBeTruthy();
   });
 });
+
+function render(element: ReactElement) {
+  return renderWithLocale(element, "ko-KR");
+}
+
+function renderWithLocale(element: ReactElement, navigatorLanguage: string) {
+  return renderBase(element, {
+    wrapper: ({ children }) => (
+      <I18nProvider navigatorLanguage={navigatorLanguage} storage={null}>
+        {children}
+      </I18nProvider>
+    ),
+  });
+}
 
 function assertProductStateTypeContracts() {
   // @ts-expect-error loading states never expose retry actions

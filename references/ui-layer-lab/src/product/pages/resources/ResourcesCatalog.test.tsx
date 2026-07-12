@@ -3,6 +3,7 @@
 import { cleanup, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { ResourceCatalogItem } from "../../features/resources/resourcesContract";
+import { I18nProvider } from "../../shared/i18n";
 import { ResourcesCatalog } from "./ResourcesCatalog";
 
 afterEach(cleanup);
@@ -24,11 +25,13 @@ const ITEMS: ResourceCatalogItem[] = [
 describe("ResourcesCatalog responsive disclosure", () => {
   it("uses distinct landmark names and initially expands only the selected category", () => {
     const { rerender } = render(
-      <ResourcesCatalog
-        items={ITEMS}
-        onSelect={vi.fn()}
-        selectedResourceType="service"
-      />,
+      <I18nProvider navigatorLanguage="ko-KR" storage={null}>
+        <ResourcesCatalog
+          items={ITEMS}
+          onSelect={vi.fn()}
+          selectedResourceType="service"
+        />
+      </I18nProvider>,
     );
 
     expect(screen.getByRole("region", { name: "Resource types" })).toBeTruthy();
@@ -41,15 +44,33 @@ describe("ResourcesCatalog responsive disclosure", () => {
       .toBe("false");
 
     rerender(
-      <ResourcesCatalog
-        items={ITEMS}
-        onSelect={vi.fn()}
-        selectedResourceType="pod"
-      />,
+      <I18nProvider navigatorLanguage="ko-KR" storage={null}>
+        <ResourcesCatalog
+          items={ITEMS}
+          onSelect={vi.fn()}
+          selectedResourceType="pod"
+        />
+      </I18nProvider>,
     );
     expect(screen.getByRole("button", { name: "Workloads" }).getAttribute("aria-expanded"))
       .toBe("true");
     expect(screen.getByRole("button", { name: "Networking" }).getAttribute("aria-expanded"))
       .toBe("false");
+  });
+
+  it("renders product-owned catalog copy in English without translating resource facts", () => {
+    render(
+      <I18nProvider navigatorLanguage="en-US" storage={null}>
+        <ResourcesCatalog
+          items={ITEMS}
+          onSelect={vi.fn()}
+          selectedResourceType="service"
+        />
+      </I18nProvider>,
+    );
+
+    expect(screen.getByText("Types observed in the inventory snapshot")).toBeTruthy();
+    expect(screen.getByRole("region", { name: "Resource type list" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Services 3" })).toBeTruthy();
   });
 });

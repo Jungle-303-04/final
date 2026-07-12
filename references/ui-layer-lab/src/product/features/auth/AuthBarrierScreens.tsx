@@ -17,6 +17,7 @@ import { Input } from "../../shared/ui/primitives/input";
 import { Spinner } from "../../shared/ui/primitives/spinner";
 import { TooltipProvider } from "../../shared/ui/primitives/tooltip";
 import { useProductTheme } from "../../shared/ui/useProductTheme";
+import { useI18n } from "../../shared/i18n";
 import type { AuthActionIssue, AuthCredentials } from "./authContract";
 
 function AuthLoginScreen({
@@ -38,6 +39,8 @@ function AuthLoginScreen({
   const emailErrorId = useId();
   const passwordErrorId = useId();
   const themeController = useProductTheme();
+  const { t } = useI18n();
+  const issueMessage = issue ? t(issue.messageKey, issue.messageParams) : null;
 
   useEffect(() => {
     const activeElement = document.activeElement;
@@ -85,11 +88,11 @@ function AuthLoginScreen({
             </div>
             <CardTitle>
               <h1 className="text-xl font-semibold tracking-tight" id={titleId}>
-                KubeHeal에 로그인
+                {t("auth.login.title")}
               </h1>
             </CardTitle>
             <CardDescription>
-              운영 콘솔을 계속하려면 계정 정보를 입력하세요.
+              {t("auth.login.subtitle")}
             </CardDescription>
             <CardAction>
               <ThemeToggle controller={themeController} />
@@ -101,12 +104,12 @@ function AuthLoginScreen({
                 {issue ? (
                   <Alert className="[overflow-wrap:anywhere]" id={issueId} variant="destructive">
                     <CircleAlert aria-hidden="true" />
-                    <AlertTitle>로그인 오류</AlertTitle>
-                    <AlertDescription>{issue.message}</AlertDescription>
+                    <AlertTitle>{t("auth.login.error.title")}</AlertTitle>
+                    <AlertDescription>{issueMessage}</AlertDescription>
                   </Alert>
                 ) : null}
                 <Field data-disabled={pending || undefined} data-invalid={validation.email || undefined}>
-                  <FieldLabel htmlFor="product-auth-email">이메일</FieldLabel>
+                  <FieldLabel htmlFor="product-auth-email">{t("auth.email.label")}</FieldLabel>
                   <Input
                     aria-describedby={validation.email ? emailErrorId : undefined}
                     aria-invalid={validation.email || undefined}
@@ -126,11 +129,11 @@ function AuthLoginScreen({
                     value={email}
                   />
                   <FieldError id={emailErrorId}>
-                    {validation.email ? "유효한 이메일을 입력하세요." : null}
+                    {validation.email ? t("auth.email.error.invalid") : null}
                   </FieldError>
                 </Field>
                 <Field data-disabled={pending || undefined} data-invalid={validation.password || undefined}>
-                  <FieldLabel htmlFor="product-auth-password">비밀번호</FieldLabel>
+                  <FieldLabel htmlFor="product-auth-password">{t("auth.password.label")}</FieldLabel>
                   <Input
                     aria-describedby={validation.password ? passwordErrorId : issue ? issueId : undefined}
                     aria-invalid={validation.password || undefined}
@@ -148,7 +151,7 @@ function AuthLoginScreen({
                     value={password}
                   />
                   <FieldError id={passwordErrorId}>
-                    {validation.password ? "비밀번호를 입력하세요." : null}
+                    {validation.password ? t("auth.password.error.required") : null}
                   </FieldError>
                 </Field>
                 <Button
@@ -159,7 +162,7 @@ function AuthLoginScreen({
                   type="submit"
                 >
                   {pending ? <Spinner data-icon="inline-start" decorative /> : null}
-                  {pending ? "로그인 중" : "로그인"}
+                  {pending ? t("auth.login.pending") : t("auth.login.submit")}
                 </Button>
               </FieldGroup>
             </form>
@@ -177,19 +180,21 @@ function SessionFailureScreen({
   issue: AuthActionIssue;
   onRetry: () => void;
 }) {
+  const { t } = useI18n();
+  const safeDetail = issue.safeDetail ?? t(issue.messageKey, issue.messageParams);
   if (issue.code === "forbidden") {
     return (
       <ProductStateScreen
-        issue={{ code: "forbidden", safeDetail: issue.message }}
+        issue={{ code: "forbidden", safeDetail }}
         kind="forbidden"
       />
     );
   }
-  const retry = { label: "세션 다시 확인", onRetry, pending: false };
+  const retry = { label: t("auth.session.retry"), onRetry, pending: false };
   if (issue.code === "network") {
     return (
       <ProductStateScreen
-        issue={{ code: "network", safeDetail: issue.message }}
+        issue={{ code: "network", safeDetail }}
         kind="offline"
         retry={retry}
       />
@@ -199,7 +204,7 @@ function SessionFailureScreen({
     <ProductStateScreen
       issue={{
         code: issue.code === "invalid-response" ? "invalid-response" : "server",
-        safeDetail: issue.message,
+        safeDetail,
       }}
       kind="error"
       retry={retry}

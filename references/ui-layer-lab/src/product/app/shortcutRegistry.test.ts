@@ -26,6 +26,12 @@ describe("shell shortcut registry", () => {
       "t",
       "?",
     ]);
+    expect(definitions.map((definition) => definition.labelKey)).toEqual([
+      "shell.shortcut.route.home",
+      "shell.shortcut.route.issues",
+      "shell.shortcut.theme",
+      "shell.shortcut.help",
+    ]);
     expect(definitions.map((definition) => definition.id)).not.toEqual(
       expect.arrayContaining(["context", "namespace", "command", "diagnostics"]),
     );
@@ -93,7 +99,7 @@ describe("shell shortcut registry", () => {
       ...shellShortcutDefinitions(new Set(["home"])),
       {
         id: "command",
-        label: "명령 열기",
+        labelKey: "common.action.open",
         group: "global",
         sequence: ["k"],
         allowInInputs: true,
@@ -191,8 +197,8 @@ describe("shell shortcut registry", () => {
 
   it("rejects duplicate shortcut sequences instead of choosing by registration order", () => {
     const duplicate: readonly ShortcutDefinition[] = [
-      { id: "first", label: "첫 번째", group: "global", sequence: ["t"] },
-      { id: "second", label: "두 번째", group: "global", sequence: ["t"] },
+      { id: "first", labelKey: "common.action.open", group: "global", sequence: ["t"] },
+      { id: "second", labelKey: "common.action.close", group: "global", sequence: ["t"] },
     ];
 
     expect(() => createShortcutMatcher(duplicate)).toThrow(/duplicate shortcut sequence: t/u);
@@ -200,13 +206,13 @@ describe("shell shortcut registry", () => {
 
   it("rejects duplicate identifiers and direct actions that shadow a chord prefix", () => {
     expect(() => createShortcutMatcher([
-      { id: "same", label: "첫 번째", group: "global", sequence: ["t"] },
-      { id: "same", label: "두 번째", group: "global", sequence: ["?"] },
+      { id: "same", labelKey: "common.action.open", group: "global", sequence: ["t"] },
+      { id: "same", labelKey: "common.action.close", group: "global", sequence: ["?"] },
     ])).toThrow(/duplicate shortcut id: same/u);
 
     expect(() => createShortcutMatcher([
-      { id: "direct", label: "직접", group: "global", sequence: ["g"] },
-      { id: "chord", label: "연속", group: "navigation", sequence: ["g", "h"] },
+      { id: "direct", labelKey: "common.action.open", group: "global", sequence: ["g"] },
+      { id: "chord", labelKey: "common.action.close", group: "navigation", sequence: ["g", "h"] },
     ])).toThrow(/ambiguous shortcut prefix: g/u);
   });
 });

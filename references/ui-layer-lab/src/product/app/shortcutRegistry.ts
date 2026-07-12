@@ -2,6 +2,7 @@ import {
   productNavigationForReleasedSurfaces,
   type ProductSurfaceId,
 } from "./productRoutes";
+import type { MessageKey, TranslationParameters } from "../shared/i18n";
 
 export type ShortcutGroup = "navigation" | "global" | "context";
 
@@ -20,7 +21,8 @@ export interface ProductShortcutEventDetail {
 
 export interface ShortcutDefinition {
   id: string;
-  label: string;
+  labelKey: MessageKey;
+  labelParams?: TranslationParameters;
   group: ShortcutGroup;
   sequence: readonly string[];
   allowInInputs?: boolean;
@@ -51,6 +53,15 @@ export interface ShortcutMatcher {
 }
 
 const CHORD_TIMEOUT_MS = 1_000;
+const shortcutRouteLabelKeys = {
+  applications: "shell.shortcut.route.applications",
+  gitops: "shell.shortcut.route.gitops",
+  home: "shell.shortcut.route.home",
+  issues: "shell.shortcut.route.issues",
+  resources: "shell.shortcut.route.resources",
+  timeline: "shell.shortcut.route.timeline",
+  topology: "shell.shortcut.route.topology",
+} satisfies Record<ProductSurfaceId, MessageKey>;
 
 export function shellShortcutDefinitions(
   releasedSurfaceIds: ReadonlySet<ProductSurfaceId>,
@@ -58,7 +69,7 @@ export function shellShortcutDefinitions(
 ): readonly ShortcutDefinition[] {
   const navigation = productNavigationForReleasedSurfaces(releasedSurfaceIds).map((routeDefinition) => ({
     id: `route:${routeDefinition.id}`,
-    label: `${routeDefinition.label} 화면 열기`,
+    labelKey: shortcutRouteLabelKeys[routeDefinition.id],
     group: "navigation" as const,
     sequence: routeDefinition.shortcut.split(" "),
     targetPath: routeDefinition.path,
@@ -73,13 +84,13 @@ export function shellShortcutDefinitions(
     ...context,
     {
       id: "theme",
-      label: "테마 전환",
+      labelKey: "shell.shortcut.theme",
       group: "global",
       sequence: ["t"],
     },
     {
       id: "help",
-      label: "키보드 단축키 열기",
+      labelKey: "shell.shortcut.help",
       group: "global",
       sequence: ["?"],
     },
@@ -89,31 +100,31 @@ export function shellShortcutDefinitions(
 const resourcesShortcutDefinitions: readonly ShortcutDefinition[] = [
   {
     id: "resources:next-row",
-    label: "다음 리소스",
+    labelKey: "shell.shortcut.resources.nextRow",
     group: "context",
     sequence: ["j"],
   },
   {
     id: "resources:previous-row",
-    label: "이전 리소스",
+    labelKey: "shell.shortcut.resources.previousRow",
     group: "context",
     sequence: ["k"],
   },
   {
     id: "resources:first-row",
-    label: "첫 리소스",
+    labelKey: "shell.shortcut.resources.firstRow",
     group: "context",
     sequence: ["g", "g"],
   },
   {
     id: "resources:last-row",
-    label: "마지막 리소스",
+    labelKey: "shell.shortcut.resources.lastRow",
     group: "context",
     sequence: ["shift+g"],
   },
   {
     id: "resources:open-row",
-    label: "리소스 상세 열기",
+    labelKey: "shell.shortcut.resources.openRow",
     group: "context",
     sequence: ["d"],
   },
@@ -284,7 +295,6 @@ function normalizeEventKey(key: string, shiftKey: boolean): string | null {
   const isShiftedLetter = /^[A-Z]$/u.test(key);
   return shiftKey || isShiftedLetter ? `shift+${normalized}` : normalized;
 }
-
 function serializeSequence(sequence: readonly string[]): string {
   return sequence.join("\u0000");
 }

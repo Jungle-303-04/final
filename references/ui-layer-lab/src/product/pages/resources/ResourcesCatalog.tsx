@@ -1,4 +1,5 @@
 import type { ResourceCatalogItem } from "../../features/resources/resourcesContract";
+import { useI18n } from "../../shared/i18n";
 import { Badge } from "../../shared/ui/primitives/badge";
 import { Button } from "../../shared/ui/primitives/button";
 import {
@@ -28,6 +29,7 @@ export function ResourcesCatalog({
   onSelect: (resourceType: string) => void;
   selectedResourceType: string | null;
 }) {
+  const { formatNumber, t } = useI18n();
   const groups = groupCatalog(items);
   const selectedCategory = groups.find((group) => group.items.some(
     (item) => item.resourceType === selectedResourceType,
@@ -35,11 +37,15 @@ export function ResourcesCatalog({
   return (
     <Surface aria-labelledby="resource-catalog-title" className="min-w-0 overflow-hidden">
       <div className="border-b px-4 py-3">
-        <h3 className="text-sm font-medium" id="resource-catalog-title">Resource types</h3>
-        <p className="mt-1 text-xs text-muted-foreground">실제 inventory snapshot에서 관측된 종류</p>
+        <h3 className="text-sm font-medium" id="resource-catalog-title">
+          {t("resources.catalog.title")}
+        </h3>
+        <p className="mt-1 text-xs text-muted-foreground">
+          {t("resources.catalog.description")}
+        </p>
       </div>
       <ScrollArea
-        aria-label="리소스 유형 목록"
+        aria-label={t("resources.catalog.aria")}
         className="max-h-[calc(100svh-13rem)]"
         orientation="vertical"
       >
@@ -56,16 +62,21 @@ export function ResourcesCatalog({
                 <AccordionTrigger className="px-2">
                   <span className="flex items-center gap-2">
                     <Icon aria-hidden="true" className="size-4 text-muted-foreground" />
-                    {category.label}
+                    {t(category.labelKey)}
                   </span>
                 </AccordionTrigger>
                 <AccordionContent className="grid gap-1 px-1">
                   {groupItems.map((item) => {
                     const presentation = resourceTypePresentation(item.resourceType);
+                    const label = presentation.labelKey
+                      ? t(presentation.labelKey)
+                      : presentation.fallbackLabel;
+                    const countLabel = formatNumber(item.count);
                     const selected = item.resourceType === selectedResourceType;
                     return (
                       <Button
                         aria-current={selected ? "page" : undefined}
+                        aria-label={`${label} ${countLabel}`}
                         className="w-full justify-between"
                         key={item.resourceType}
                         onClick={() => onSelect(item.resourceType)}
@@ -73,8 +84,8 @@ export function ResourcesCatalog({
                         type="button"
                         variant={selected ? "secondary" : "ghost"}
                       >
-                        <span className="truncate">{presentation.label}</span>
-                        <Badge variant="secondary">{item.count.toLocaleString()}</Badge>
+                        <span className="truncate">{label}</span>
+                        <Badge variant="secondary">{countLabel}</Badge>
                       </Button>
                     );
                   })}

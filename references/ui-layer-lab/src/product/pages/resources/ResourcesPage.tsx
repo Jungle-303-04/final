@@ -5,6 +5,7 @@ import type {
   ResourceList,
   ResourcesPort,
 } from "../../features/resources/resourcesContract";
+import { useI18n } from "../../shared/i18n";
 import {
   ClusterConnectionStatus,
   clusterDisplayLabel,
@@ -36,7 +37,6 @@ import { ResourcesToolbar } from "./ResourcesToolbar";
 import { useResourcesPageState } from "./useResourcesPageState";
 
 type ClusterPort = Pick<HomePort, "listClusterChoices">;
-
 export function ResourcesPage({
   clusterPort,
   port,
@@ -44,9 +44,9 @@ export function ResourcesPage({
   clusterPort: ClusterPort;
   port: ResourcesPort;
 }) {
+  const { t } = useI18n();
   const state = useResourcesPageState(port, clusterPort);
   useResourceTypeShortcuts(state.cycleResourceType);
-
   if (state.choices.phase === "idle" || state.choices.phase === "loading") {
     return <ProductStateScreen kind="loading" placement="content" />;
   }
@@ -72,13 +72,12 @@ export function ResourcesPage({
   const refreshing = [state.choices, state.catalog, state.list, state.detail].some(
     (resource) => resource.phase === "ready" && resource.refreshing,
   );
-
   return (
     <div className="mx-auto grid w-full max-w-[100rem] gap-4 p-4 sm:p-6">
       <header className="flex min-w-0 justify-end">
         <div className="flex w-full min-w-0 items-center justify-end gap-2 xl:w-auto">
           {state.automaticRefreshPaused ? (
-            <Badge variant="outline">자동 갱신 일시 중지</Badge>
+            <Badge variant="outline">{t("resources.refresh.paused")}</Badge>
           ) : null}
           {selectedCluster ? (
             <ClusterConnectionStatus
@@ -94,13 +93,16 @@ export function ResourcesPage({
             onValueChange={(value) => { if (value) state.selectCluster(value); }}
             value={selectedCluster?.id ?? null}
           >
-            <SelectTrigger aria-label="클러스터 선택" className="min-w-0 flex-1 xl:w-80 xl:flex-none">
+            <SelectTrigger
+              aria-label={t("resources.cluster.select")}
+              className="min-w-0 flex-1 xl:w-80 xl:flex-none"
+            >
               <Server aria-hidden="true" />
-              <SelectValue placeholder="클러스터 선택" />
+              <SelectValue placeholder={t("resources.cluster.select")} />
             </SelectTrigger>
             <SelectContent alignItemWithTrigger={false}>
               <SelectGroup>
-                <SelectLabel>조회 가능한 클러스터</SelectLabel>
+                <SelectLabel>{t("resources.cluster.available")}</SelectLabel>
                 {state.choices.data.clusters.map((cluster) => (
                   <SelectItem key={cluster.id} value={cluster.id}>
                     {clusterDisplayLabel(cluster)}
@@ -110,7 +112,7 @@ export function ResourcesPage({
             </SelectContent>
           </Select>
           <Button
-            aria-label="새로 고침"
+            aria-label={t("common.action.refresh")}
             disabled={refreshing || (state.retryWaitSeconds ?? 0) > 0}
             onClick={state.refresh}
             size="icon"
@@ -197,6 +199,7 @@ function ResourcesListSurface({ state }: { state: ReturnType<typeof useResources
 }
 
 function ResourcesListBody({ state }: { state: ReturnType<typeof useResourcesPageState> }) {
+  const { t } = useI18n();
   if (state.list.phase === "idle" || state.list.phase === "loading") {
     return <ProductStateScreen kind="loading" placement="content" />;
   }
@@ -218,7 +221,7 @@ function ResourcesListBody({ state }: { state: ReturnType<typeof useResourcesPag
       <ListScopeStatus filtered={filtered.length} list={state.list.data} />
       {filtered.length === 0 ? (
         <div className="grid min-h-48 place-items-center p-6 text-sm text-muted-foreground">
-          표시된 응답 범위에서 검색 결과가 없습니다.
+          {t("resources.list.emptySearch")}
         </div>
       ) : (
         <ResourcesTable
@@ -232,34 +235,45 @@ function ResourcesListBody({ state }: { state: ReturnType<typeof useResourcesPag
 }
 
 function ListScopeStatus({ filtered, list }: { filtered: number; list: ResourceList }) {
-  const filteredText = filtered === list.returned ? "" : ` · 검색 ${filtered}`;
+  const { formatNumber, t } = useI18n();
+  const filteredText = filtered === list.returned
+    ? ""
+    : ` · ${t("resources.list.scope.filtered", { count: formatNumber(filtered) })}`;
   const excludedText = (list.excludedCount ?? 0) > 0
-    ? ` · 검증 실패 제외 ${list.excludedCount}`
+    ? ` · ${t("resources.list.scope.excluded", {
+      count: formatNumber(list.excludedCount ?? 0),
+    })}`
     : "";
   return (
     <div
-      aria-label="목록 범위"
+      aria-label={t("resources.list.scope.aria")}
       className="border-b bg-muted/30 px-3 py-2 text-xs text-muted-foreground"
       role="status"
     >
-      표시 {list.returned}{filteredText}{excludedText} · 전체 수 미확인 · 최대 {list.limit}
-      {list.limitReached ? " · 조회 한도 도달" : ""}
+      {t("resources.list.scope.shown", { count: formatNumber(list.returned) })}
+      {filteredText}{excludedText} · {t("resources.list.unknownTotal")} · {t(
+        "resources.list.scope.limit",
+        { count: formatNumber(list.limit) },
+      )}
+      {list.limitReached ? ` · ${t("resources.list.scope.limitReached")}` : ""}
     </div>
   );
 }
 
 function UnknownSelection({ value, variant }: { value: string | null; variant: "cluster" | "resource" }) {
+  const { t } = useI18n();
   const title = variant === "cluster"
-    ? "현재 조회 목록에서 확인할 수 없습니다"
-    : "관측된 리소스 종류가 아닙니다";
+    ? t("resources.selection.cluster.title")
+    : t("resources.selection.resource.title");
   return (
     <Surface aria-labelledby="unknown-selection-title" className="grid min-h-72 place-items-center p-6">
       <div className="grid max-w-md justify-items-center gap-3 text-center">
         <CircleAlert aria-hidden="true" className="size-8 text-muted-foreground" />
         <h3 className="text-lg font-semibold" id="unknown-selection-title">{title}</h3>
         <p className="text-sm text-muted-foreground">
-          {value ? <code className="font-mono">{value}</code> : "URL 범위"}를 자동으로 다른 값으로
-          바꾸지 않았습니다. 실제 API에서 확인 가능한 항목을 선택하세요.
+          {t("resources.selection.description", {
+            value: value ?? t("resources.selection.urlScope"),
+          })}
         </p>
       </div>
     </Surface>

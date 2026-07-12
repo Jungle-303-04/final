@@ -1,6 +1,12 @@
 import { Dialog as DialogPrimitive } from "@base-ui/react/dialog";
 import { XIcon } from "lucide-react";
 import type { ComponentProps } from "react";
+import {
+  DEFAULT_LOCALE,
+  translate,
+  useOptionalI18n,
+  type TranslationFunction,
+} from "../../i18n";
 import { Button } from "./button";
 import { cn } from "./cn";
 
@@ -37,12 +43,14 @@ function DialogContent({
   className,
   children,
   showCloseButton = true,
-  closeLabel = "닫기",
+  closeLabel,
   ...props
 }: DialogPrimitive.Popup.Props & {
   showCloseButton?: boolean;
   closeLabel?: string;
 }) {
+  const t = usePrimitiveTranslation();
+  const resolvedCloseLabel = closeLabel?.trim() || t("common.action.close");
   return (
     <DialogPortal>
       <DialogOverlay />
@@ -67,7 +75,7 @@ function DialogContent({
             )}
           >
             <XIcon aria-hidden="true" data-icon="inline-start" />
-            <span className="sr-only">{closeLabel}</span>
+            <span className="sr-only">{resolvedCloseLabel}</span>
           </DialogPrimitive.Close>
         ) : null}
       </DialogPrimitive.Popup>
@@ -91,6 +99,7 @@ function DialogFooter({
   children,
   ...props
 }: ComponentProps<"div"> & { showCloseButton?: boolean }) {
+  const t = usePrimitiveTranslation();
   return (
     <div
       data-slot="dialog-footer"
@@ -103,12 +112,19 @@ function DialogFooter({
       {children}
       {showCloseButton ? (
         <DialogPrimitive.Close render={<Button variant="outline" />}>
-          Close
+          {t("common.action.close")}
         </DialogPrimitive.Close>
       ) : null}
     </div>
   );
 }
+
+function usePrimitiveTranslation(): TranslationFunction {
+  return useOptionalI18n()?.t ?? fallbackTranslate;
+}
+
+const fallbackTranslate: TranslationFunction = (key, params) =>
+  translate(DEFAULT_LOCALE, key, params);
 
 function DialogTitle({ className, ...props }: DialogPrimitive.Title.Props) {
   return (

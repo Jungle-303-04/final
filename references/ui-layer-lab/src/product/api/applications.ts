@@ -25,7 +25,7 @@ export interface ApplicationHistoryOptions {
 }
 
 /** Lists Applications visible to the signed-in user. */
-export function listApplications(
+export async function listApplications(
   options: ApplicationListOptions = {},
 ): Promise<ApplicationList> {
   const limit = options.limit ?? APPLICATIONS_DEFAULT_LIMIT;
@@ -44,7 +44,7 @@ export function getApplication(
 }
 
 /** Lists the deployment bindings/environments configured for an Application. */
-export function listApplicationDeployments(
+export async function listApplicationDeployments(
   applicationId: string,
   options: ApplicationHistoryOptions = {},
 ): Promise<DeploymentBindingList> {
@@ -57,7 +57,7 @@ export function listApplicationDeployments(
 }
 
 /** Lists GitOps workflow runs for an Application. */
-export function listApplicationRuns(
+export async function listApplicationRuns(
   applicationId: string,
   options: ApplicationHistoryOptions = {},
 ): Promise<WorkflowRunList> {

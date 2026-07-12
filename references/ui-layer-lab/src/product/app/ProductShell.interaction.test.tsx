@@ -11,6 +11,7 @@ import { createApiComposition } from "./apiComposition";
 import { createProductComposition } from "./productComposition";
 import { ProductRouter } from "./ProductRouter";
 import type { AuthenticatedAuthState } from "../features/auth/authContract";
+import { I18nProvider } from "../shared/i18n";
 import {
   PRODUCT_SHORTCUT_EVENT,
   type ProductShortcutEventDetail,
@@ -58,9 +59,9 @@ describe("ProductShell keyboard and help interaction", () => {
 
     const dialog = screen.getByRole("dialog", { name: "키보드 단축키" });
     expect(dialog.getAttribute("aria-describedby")).toBeTruthy();
-    expect(dialog.textContent).toContain("Home 화면 열기");
-    expect(dialog.textContent).toContain("Issues 화면 열기");
-    expect(dialog.textContent).not.toContain("Topology 화면 열기");
+    expect(dialog.textContent).toContain("홈 화면 열기");
+    expect(dialog.textContent).toContain("인시던트 화면 열기");
+    expect(dialog.textContent).not.toContain("토폴로지 화면 열기");
     expect(screen.getByRole("button", { name: "단축키 도움말 닫기" })).toBeTruthy();
     await waitFor(() => expect(dialog.contains(document.activeElement)).toBe(true));
     await user.keyboard("{Escape}");
@@ -75,8 +76,8 @@ describe("ProductShell keyboard and help interaction", () => {
     await user.keyboard("g");
     await user.keyboard("i");
     expect(screen.getByText("Issue content")).toBeTruthy();
-    expect(screen.getByRole("heading", { name: "Issues", level: 1 })).toBeTruthy();
-    expect(screen.getByRole("link", { name: "Issues" }).getAttribute("aria-current")).toBe("page");
+    expect(screen.getByRole("heading", { name: "인시던트", level: 1 })).toBeTruthy();
+    expect(screen.getByRole("link", { name: "인시던트" }).getAttribute("aria-current")).toBe("page");
     await waitFor(() => expect(document.activeElement?.id).toBe("product-main"));
 
     await user.keyboard("?");
@@ -123,7 +124,7 @@ describe("ProductShell keyboard and help interaction", () => {
     const user = userEvent.setup();
     const { container } = renderShell();
     const sidebar = screen.getByRole("complementary", { name: "제품 메뉴" });
-    const home = screen.getByRole("link", { name: "Home" });
+    const home = screen.getByRole("link", { name: "홈" });
     const collapse = screen.getByRole("button", { name: "사이드바 접기" });
 
     expect(sidebar.getAttribute("data-state")).toBe("expanded");
@@ -136,11 +137,11 @@ describe("ProductShell keyboard and help interaction", () => {
     expect(document.activeElement).toBe(expand);
     expect(expand.getAttribute("aria-expanded")).toBe("false");
     expect(sidebar.getAttribute("data-state")).toBe("collapsed");
-    expect(screen.getByRole("link", { name: "Home" })).toBe(home);
+    expect(screen.getByRole("link", { name: "홈" })).toBe(home);
     expect(container.querySelectorAll("[data-slot='sidebar-menu-link']")).toHaveLength(2);
 
     home.focus();
-    await waitFor(() => expect(screen.getByRole("tooltip").textContent).toBe("Home"));
+    await waitFor(() => expect(screen.getByRole("tooltip").textContent).toBe("홈"));
   });
 
   it("uses a modal mobile drawer with Escape focus return and closes it after navigation", async () => {
@@ -158,10 +159,26 @@ describe("ProductShell keyboard and help interaction", () => {
     expect(document.activeElement).toBe(open);
 
     await user.click(open);
-    await user.click(await screen.findByRole("link", { name: "Issues" }));
+    await user.click(await screen.findByRole("link", { name: "인시던트" }));
     await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
     expect(screen.getByText("Issue content")).toBeTruthy();
-    expect(screen.getByRole("heading", { name: "Issues", level: 1 })).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "인시던트", level: 1 })).toBeTruthy();
+  });
+
+  it("switches every shell label immediately from the locale control", async () => {
+    const user = userEvent.setup();
+    renderShell();
+
+    const locale = screen.getByRole("combobox", { name: "언어: 한국어" });
+    await user.click(locale);
+    await user.click(await screen.findByRole("option", { name: "영어" }));
+
+    expect(screen.getByRole("combobox", { name: "Language: English" })).toBeTruthy();
+    expect(screen.getByRole("link", { name: "Home" })).toBeTruthy();
+    expect(screen.getByRole("link", { name: "Issues" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Keyboard shortcuts" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Switch to dark mode" })).toBeTruthy();
+    expect(window.localStorage.getItem("kubeheal.locale")).toBe("en");
   });
 
   it("keeps the production release gate shell-free and network-silent without API approvals", async () => {
@@ -193,9 +210,11 @@ describe("ProductShell keyboard and help interaction", () => {
         createApiComposition().auth,
       );
       render(
-        <MemoryRouter initialEntries={["/product"]}>
-          <ProductRouter auth={testAuth} composition={releaseGateComposition} />
-        </MemoryRouter>,
+        <I18nProvider navigatorLanguage="ko-KR" storage={null}>
+          <MemoryRouter initialEntries={["/product"]}>
+            <ProductRouter auth={testAuth} composition={releaseGateComposition} />
+          </MemoryRouter>
+        </I18nProvider>,
       );
       expect(screen.getByRole("heading", { name: "API 연결 계층을 검증하고 있습니다" })).toBeTruthy();
       expect(screen.queryByRole("navigation")).toBeNull();
@@ -228,24 +247,26 @@ function renderShell({
 } = {}) {
   return render(
     <StrictMode>
-      <ThemeProvider
-        attribute="class"
-        defaultTheme="light"
-        enableSystem={false}
-        themes={["light", "dark"]}
-      >
-        <MemoryRouter initialEntries={[initialEntry]}>
-          <Routes>
-            <Route element={(
-              <ProductShell auth={testAuth} releasedSurfaceIds={releasedSurfaceIds} />
-            )}>
-              <Route path="/product" element={<><p>Home content</p><input aria-label="화면 입력" /></>} />
-              <Route path="/product/resources" element={<ResourcesShortcutProbe />} />
-              <Route path="/product/issues" element={<p>Issue content</p>} />
-            </Route>
-          </Routes>
-        </MemoryRouter>
-      </ThemeProvider>
+      <I18nProvider navigatorLanguage="ko-KR" storage={window.localStorage}>
+        <ThemeProvider
+          attribute="class"
+          defaultTheme="light"
+          enableSystem={false}
+          themes={["light", "dark"]}
+        >
+          <MemoryRouter initialEntries={[initialEntry]}>
+            <Routes>
+              <Route element={(
+                <ProductShell auth={testAuth} releasedSurfaceIds={releasedSurfaceIds} />
+              )}>
+                <Route path="/product" element={<><p>Home content</p><input aria-label="화면 입력" /></>} />
+                <Route path="/product/resources" element={<ResourcesShortcutProbe />} />
+                <Route path="/product/issues" element={<p>Issue content</p>} />
+              </Route>
+            </Routes>
+          </MemoryRouter>
+        </ThemeProvider>
+      </I18nProvider>
     </StrictMode>,
   );
 }
@@ -272,7 +293,6 @@ function replaceProperty(target: object, property: PropertyKey, value: unknown) 
     writable: true,
     value,
   });
-
   return () => {
     if (descriptor) Object.defineProperty(target, property, descriptor);
     else Reflect.deleteProperty(target, property);

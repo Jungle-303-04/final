@@ -3,6 +3,7 @@ import {
   type AuthActionIssue,
   type AuthFailureCode,
 } from "./authContract";
+import type { MessageKey } from "../../shared/i18n";
 
 export function toAuthActionIssue(error: unknown): AuthActionIssue {
   const failure = error instanceof AuthPortFailure
@@ -10,7 +11,10 @@ export function toAuthActionIssue(error: unknown): AuthActionIssue {
     : new AuthPortFailure("server");
   return {
     code: failure.code,
-    message: messageForFailure(failure.code, failure.retryAfterSeconds),
+    messageKey: messageKeyForFailure(failure.code, failure.retryAfterSeconds),
+    messageParams: failure.code === "rate-limited" && failure.retryAfterSeconds !== null
+      ? { seconds: failure.retryAfterSeconds }
+      : undefined,
     retryAfterSeconds: failure.retryAfterSeconds,
   };
 }
@@ -18,7 +22,8 @@ export function toAuthActionIssue(error: unknown): AuthActionIssue {
 export function logoutIssue(error: unknown): AuthActionIssue {
   return {
     ...toAuthActionIssue(error),
-    message: "로그아웃 요청을 완료하지 못했습니다. 연결을 확인한 뒤 다시 시도하세요.",
+    messageKey: "auth.logout.error.message",
+    messageParams: undefined,
   };
 }
 
@@ -31,20 +36,18 @@ export function isAbortError(error: unknown): boolean {
     error.name === "AbortError";
 }
 
-function messageForFailure(
+function messageKeyForFailure(
   code: AuthFailureCode,
   retryAfterSeconds: number | null,
-): string {
-  if (code === "invalid-credentials") return "이메일 또는 비밀번호를 확인하세요.";
-  if (code === "email-unverified") return "이메일 인증을 완료한 뒤 다시 로그인하세요.";
-  if (code === "approval-pending") return "관리자 승인이 완료될 때까지 기다려 주세요.";
-  if (code === "forbidden") return "이 계정에는 제품 접근 권한이 없습니다.";
+): MessageKey {
+  if (code === "invalid-credentials") return "auth.login.error.invalidCredentials";
+  if (code === "email-unverified") return "auth.login.error.emailUnverified";
+  if (code === "approval-pending") return "auth.login.error.approvalPending";
+  if (code === "forbidden") return "auth.failure.forbidden";
   if (code === "rate-limited") {
-    return retryAfterSeconds === null
-      ? "요청이 너무 많습니다. 잠시 후 다시 시도하세요."
-      : `요청이 너무 많습니다. ${retryAfterSeconds}초 후 다시 시도하세요.`;
+    return retryAfterSeconds === null ? "auth.failure.rateLimited" : "auth.failure.rateLimitedAfter";
   }
-  if (code === "network") return "인증 서버에 연결할 수 없습니다.";
-  if (code === "invalid-response") return "인증 응답이 제품 계약과 일치하지 않습니다.";
-  return "인증 요청을 완료하지 못했습니다.";
+  if (code === "network") return "auth.failure.network";
+  if (code === "invalid-response") return "auth.failure.invalidResponse";
+  return "auth.failure.server";
 }

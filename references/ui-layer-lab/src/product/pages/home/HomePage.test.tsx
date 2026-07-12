@@ -9,6 +9,19 @@ import { homePort, renderHome } from "./HomePage.testSupport";
 afterEach(cleanup);
 
 describe("HomePage", () => {
+  it("renders English by default without translating Kubernetes nouns or backend values", async () => {
+    renderHome(homePort(), ["/product"], vi.fn(), null);
+
+    expect(await screen.findByRole("heading", { name: "Cluster status" }, { timeout: 5_000 }))
+      .toBeTruthy();
+    expect(screen.getByRole("combobox", { name: "Select cluster" }).textContent)
+      .toContain("cluster-1");
+    expect(screen.getByRole("complementary", { name: "Active issues" })).toBeTruthy();
+    expect(screen.getByRole("region", { name: "Node and Pod" })).toBeTruthy();
+    expect(screen.getByText("Restart loop")).toBeTruthy();
+    expect(screen.getByText("Running", { exact: false })).toBeTruthy();
+  }, 15_000);
+
   it("loads the first real cluster and renders the health and Node bands", async () => {
     const port = homePort();
     renderHome(port);
@@ -84,7 +97,7 @@ describe("HomePage", () => {
       expect.any(AbortSignal),
     );
 
-    await user.click(screen.getByRole("button", { name: "노드 목록으로" }));
+    await user.click(screen.getByRole("button", { name: "Node 목록으로" }));
     expect(await screen.findByRole("button", { name: /worker-b/u })).toBe(document.activeElement);
   }, 15_000);
 

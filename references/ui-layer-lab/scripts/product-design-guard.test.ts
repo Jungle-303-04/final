@@ -2,6 +2,7 @@ import { execFile } from "node:child_process";
 import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { resolve } from "node:path";
+import { pathToFileURL } from "node:url";
 import { promisify } from "node:util";
 import { afterEach, describe, expect, it } from "vitest";
 
@@ -69,7 +70,133 @@ describe("product design guard network boundary", () => {
   });
 });
 
-async function runGuard(files: Record<string, string>) {
+describe("product design guard i18n JSX boundary", () => {
+  it("exports a pure scanner for migration tooling", async () => {
+    const scannerModule = await import(pathToFileURL(guardPath).href) as {
+      scanJsxUserFacingLiterals: (
+        filePath: string,
+        source: string,
+      ) => Array<{ position: number; text: string }>;
+    };
+
+    expect(scannerModule.scanJsxUserFacingLiterals(
+      "/tmp/product/Surface.tsx",
+      "export const Surface = () => <p>카탈로그로 이동할 문장</p>;",
+    )).toEqual([
+      expect.objectContaining({ text: "카탈로그로 이동할 문장" }),
+    ]);
+  });
+
+  it("rejects literal Korean and catalog-free English copy in user-facing JSX", async () => {
+    const result = await runGuard({
+      "Surface.tsx": [
+        "const Copy = (props: { description: string }) => <p>{props.description}</p>;",
+        "export function Surface() {",
+        "  return <main>",
+        "    <h2>인시던트 목록</h2>",
+        "    <button aria-label=\"새로 고침\">Refresh incidents</button>",
+        "    <Copy description=\"Always visible helper copy\" />",
+        "  </main>;",
+        "}",
+      ].join("\n"),
+    }, { enforceI18nLiterals: true });
+
+    expect(result.exitCode).toBe(1);
+    expect(result.output).toContain("[i18n-ui-literal]");
+    expect(result.output).toContain("Surface.tsx");
+    expect(result.output).toContain("인시던트 목록");
+    expect(result.output).toContain("새로 고침");
+    expect(result.output).toContain("Refresh incidents");
+    expect(result.output).toContain("Always visible helper copy");
+  });
+
+  it("rejects static copy fragments while ignoring the dynamic binding", async () => {
+    const result = await runGuard({
+      "MixedCopy.tsx": [
+        "export function MixedCopy({ subject }: { subject: string }) {",
+        "  return <section>",
+        "    <p>{`상태 접두어 ${subject}`}</p>",
+        "    <button aria-label={`Open selected incident ${subject}`} />",
+        "  </section>;",
+        "}",
+      ].join("\n"),
+    }, { enforceI18nLiterals: true });
+
+    expect(result.exitCode).toBe(1);
+    expect(result.output).toContain("상태 접두어");
+    expect(result.output).toContain("Open selected incident");
+    expect(result.output).not.toContain("subject}");
+  });
+
+  it("allows catalog bindings, dynamic data, domain terms, and structural props", async () => {
+    const result = await runGuard({
+      "Surface.tsx": [
+        "interface Props { title: string; status: string }",
+        "export function Surface({ title, status }: Props) {",
+        "  const route = '/product/issues';",
+        "  return <main className=\"grid gap-2\" id=\"issues-main\" data-slot=\"surface\">",
+        "    <h2>{title}</h2>",
+        "    <span>{status}</span>",
+        "    <span>Pod</span><span>Node</span><span>Ready</span><span>Running</span>",
+        "    <span>KubeHeal</span><span>m</span><span>MiB</span>",
+        "    <a aria-labelledby=\"issues-title\" href={route} labelMode=\"sr-only\">Service</a>",
+        "    <section titleId=\"issues-panel-title\" statusMode=\"literal\" />",
+        "  </main>;",
+        "}",
+      ].join("\n"),
+    }, { enforceI18nLiterals: true });
+
+    expect(result).toMatchObject({ exitCode: 0 });
+    expect(result.output).toContain("Product design guard passed");
+  });
+
+  it("excludes test files and shared i18n catalog modules", async () => {
+    const result = await runGuard({
+      "Feature.test.tsx": "export const Example = () => <p>테스트 전용 문장</p>;",
+      "shared/i18n/catalog.tsx": "export const Korean = <span>카탈로그 문장</span>;",
+    }, { enforceI18nLiterals: true });
+
+    expect(result).toMatchObject({ exitCode: 0 });
+  });
+
+  it("allows an explicit opt-out only for migration tooling", async () => {
+    const result = await runGuard({
+      "LegacySurface.tsx": "export const Legacy = () => <p>아직 이관되지 않은 문장</p>;",
+    }, { disableI18nLiterals: true });
+
+    expect(result).toMatchObject({ exitCode: 0 });
+  });
+});
+
+describe("product design guard file length boundary", () => {
+  it("allows a declarative pure re-export barrel beyond 300 lines", async () => {
+    const barrel = Array.from(
+      { length: 301 },
+      (_, index) => `export { value${index} } from './module-${index}';`,
+    ).join("\n");
+
+    const result = await runGuard({ "index.ts": barrel });
+
+    expect(result).toMatchObject({ exitCode: 0 });
+  });
+
+  it("still rejects executable TypeScript beyond 300 lines", async () => {
+    const executable = Array.from(
+      { length: 301 },
+      (_, index) => `export const value${index} = ${index};`,
+    ).join("\n");
+
+    const result = await runGuard({ "surface.ts": executable });
+
+    expect(result.exitCode).toBe(1);
+    expect(result.output).toContain("[max-file-lines]");
+  });
+});
+
+async function runGuard(
+  files: Record<string, string>,
+  options: { disableI18nLiterals?: boolean; enforceI18nLiterals?: boolean } = {},
+) {
   const directory = await mkdtemp(resolve(tmpdir(), "product-design-guard-"));
   const productRoot = resolve(directory, "product");
   temporaryRoots.push(directory);
@@ -82,7 +209,11 @@ async function runGuard(files: Record<string, string>) {
 
   try {
     const { stdout, stderr } = await execFileAsync(process.execPath, [guardPath], {
-      env: { ...process.env, PRODUCT_DESIGN_GUARD_ROOT: productRoot },
+      env: {
+        ...process.env,
+        PRODUCT_DESIGN_GUARD_ROOT: productRoot,
+        PRODUCT_I18N_LITERAL_ENFORCEMENT: options.disableI18nLiterals ? "0" : "1",
+      },
     });
     return { exitCode: 0, output: `${stdout}${stderr}` };
   } catch (error) {

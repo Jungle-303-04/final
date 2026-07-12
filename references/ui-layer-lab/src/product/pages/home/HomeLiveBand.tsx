@@ -4,6 +4,7 @@ import type {
   HomePodCollection,
   HomePodSummary,
 } from "../../features/home/homeContract";
+import { useI18n } from "../../shared/i18n/I18nProvider";
 import { StatusMark } from "../../shared/ui/StatusMark";
 import { Surface } from "../../shared/ui/Surface";
 import { Button } from "../../shared/ui/primitives/button";
@@ -19,6 +20,7 @@ import { HomeRefreshFailure, HomeSectionFailure, HomeSectionLoading } from "./Ho
 import type { HomePageState, HomeResourceState } from "./useHomePageState";
 
 export function HomeLiveBand({ state }: { state: HomePageState }) {
+  const { t } = useI18n();
   const resource = state.selectedNodeName ? state.pods : state.nodes;
   const busy = resource.phase === "loading" || resource.phase === "idle" ||
     (resource.phase === "ready" && resource.refreshing);
@@ -29,7 +31,9 @@ export function HomeLiveBand({ state }: { state: HomePageState }) {
       className="grid min-w-0 overflow-hidden"
     >
       <div className="border-b p-4">
-        <h2 className="text-base font-semibold" id="home-live-title">Node와 Pod</h2>
+        <h2 className="text-base font-semibold" id="home-live-title">
+          {t("home.section.nodeAndPod")}
+        </h2>
       </div>
       {state.selectedNodeName ? (
         <PodPanel state={state} />
@@ -41,34 +45,35 @@ export function HomeLiveBand({ state }: { state: HomePageState }) {
 }
 
 function NodePanel({ state }: { state: HomePageState }) {
+  const { formatNumber, t } = useI18n();
   const { nodes } = state;
   if (nodes.phase === "loading" || nodes.phase === "idle") {
-    return <HomeSectionLoading label="Node 목록" />;
+    return <HomeSectionLoading label={t("home.node.list")} />;
   }
   if (nodes.phase === "failed") {
-    return <HomeSectionFailure failure={nodes.failure} label="Node 목록" onRetry={state.refresh} />;
+    return <HomeSectionFailure failure={nodes.failure} label={t("home.node.list")} onRetry={state.refresh} />;
   }
   if (nodes.data.nodes.length === 0) {
     return (
       <>
-        <HomeRefreshFailure failure={nodes.refreshFailure} label="Node 목록" onRetry={state.refresh} />
+        <HomeRefreshFailure failure={nodes.refreshFailure} label={t("home.node.list")} onRetry={state.refresh} />
         <div className="grid min-h-48 place-items-center p-6 text-sm text-muted-foreground">
-          현재 응답에 표시된 Node가 없습니다. 전체 수 미확인.
+          {t("home.node.empty")}
         </div>
       </>
     );
   }
   return (
     <section aria-labelledby="node-list-title" className="grid gap-3 p-4">
-      <HomeRefreshFailure failure={nodes.refreshFailure} label="Node 목록" onRetry={state.refresh} />
+      <HomeRefreshFailure failure={nodes.refreshFailure} label={t("home.node.list")} onRetry={state.refresh} />
       <div className="flex flex-wrap items-end justify-between gap-2">
-        <h3 className="text-sm font-medium" id="node-list-title">Node</h3>
+        <h3 className="text-sm font-medium" id="node-list-title">{t("home.node.label")}</h3>
         <span className="text-xs text-muted-foreground">
-          표시 {nodes.data.nodes.length} · 전체 수 미확인
+          {t("home.node.count", { count: formatNumber(nodes.data.nodes.length) })}
         </span>
       </div>
       <ul
-        aria-label="Node 목록"
+        aria-label={t("home.node.list")}
         className="grid min-w-0 list-none gap-2 md:grid-cols-2 2xl:grid-cols-3"
         data-render-strategy="content-visibility"
       >
@@ -86,6 +91,7 @@ function NodePanel({ state }: { state: HomePageState }) {
 }
 
 function NodeItem({ node, state }: { node: HomeNodeSummary; state: HomePageState }) {
+  const { formatNumber, t } = useI18n();
   return (
     <Item
       as="button"
@@ -100,24 +106,28 @@ function NodeItem({ node, state }: { node: HomeNodeSummary; state: HomePageState
       <ItemContent>
         <ItemTitle className="max-w-full break-all">{node.name}</ItemTitle>
         <ItemDescription>
-          Pod {node.podsRunning}/{node.podsCapacity} · 재시작 {node.restartCount}
+          {t("home.node.description", {
+            capacity: formatNumber(node.podsCapacity),
+            restarts: formatNumber(node.restartCount),
+            running: formatNumber(node.podsRunning),
+          })}
         </ItemDescription>
         <div className="mt-2 flex flex-wrap gap-3 text-xs text-muted-foreground">
           <span className="inline-flex items-center gap-1">
             <Cpu aria-hidden="true" className="size-3" />
-            <span className="sr-only">CPU </span>
-            {formatPercent(node.cpuPercent)}
+            <span className="sr-only">{t("home.metric.cpu")} </span>
+            {formatPercent(node.cpuPercent, formatNumber, t("common.state.unavailable"))}
           </span>
           <span className="inline-flex items-center gap-1">
             <MemoryStick aria-hidden="true" className="size-3" />
-            <span className="sr-only">메모리 </span>
-            {formatPercent(node.memoryPercent)}
+            <span className="sr-only">{t("home.metric.memory")} </span>
+            {formatPercent(node.memoryPercent, formatNumber, t("common.state.unavailable"))}
           </span>
         </div>
       </ItemContent>
       <ItemActions>
         <StatusMark
-          label={node.ready ? "Ready" : "Not ready"}
+          label={node.ready ? t("home.node.ready") : t("home.node.notReady")}
           tone={node.ready || node.health === "critical" ? node.health : "warning"}
         />
       </ItemActions>
@@ -126,11 +136,12 @@ function NodeItem({ node, state }: { node: HomeNodeSummary; state: HomePageState
 }
 
 function PodPanel({ state }: { state: HomePageState }) {
+  const { t } = useI18n();
   return (
     <section aria-labelledby="pod-list-title" className="grid gap-3 p-4">
       <div className="flex min-w-0 flex-wrap items-center gap-3">
         <Button onClick={state.closeNode} size="sm" type="button" variant="outline">
-          <ArrowLeft aria-hidden="true" />노드 목록으로
+          <ArrowLeft aria-hidden="true" />{t("home.node.back")}
         </Button>
         <div className="min-w-0">
           <h3
@@ -138,7 +149,7 @@ function PodPanel({ state }: { state: HomePageState }) {
             id="pod-list-title"
             tabIndex={-1}
           >
-            {state.selectedNodeName}의 Pod
+            {t("home.pod.heading", { node: state.selectedNodeName ?? "" })}
           </h3>
         </div>
       </div>
@@ -154,27 +165,28 @@ function PodState({
   onRefresh: () => void;
   state: HomeResourceState<HomePodCollection>;
 }) {
+  const { formatNumber, t } = useI18n();
   if (state.phase === "loading" || state.phase === "idle") {
-    return <HomeSectionLoading label="Pod 목록" />;
+    return <HomeSectionLoading label={t("home.pod.list")} />;
   }
   if (state.phase === "failed") {
-    return <HomeSectionFailure failure={state.failure} label="Pod 목록" onRetry={onRefresh} />;
+    return <HomeSectionFailure failure={state.failure} label={t("home.pod.list")} onRetry={onRefresh} />;
   }
   if (state.data.pods.length === 0) {
     return (
       <>
-        <HomeRefreshFailure failure={state.refreshFailure} label="Pod 목록" onRetry={onRefresh} />
+        <HomeRefreshFailure failure={state.refreshFailure} label={t("home.pod.list")} onRetry={onRefresh} />
         <div className="grid min-h-40 place-items-center p-6 text-sm text-muted-foreground">
-          현재 응답에 표시된 워크로드 Pod가 없습니다. 전체 수 미확인.
+          {t("home.pod.empty")}
         </div>
       </>
     );
   }
   return (
     <>
-      <HomeRefreshFailure failure={state.refreshFailure} label="Pod 목록" onRetry={onRefresh} />
+      <HomeRefreshFailure failure={state.refreshFailure} label={t("home.pod.list")} onRetry={onRefresh} />
       <p className="text-xs text-muted-foreground">
-        표시 {state.data.pods.length} · 전체 수 미확인
+        {t("home.pod.count", { count: formatNumber(state.data.pods.length) })}
       </p>
       <div className="grid min-w-0 gap-2 md:grid-cols-2">
         {state.data.pods.map((pod) => <PodItem key={pod.id} pod={pod} />)}
@@ -184,19 +196,35 @@ function PodState({
 }
 
 function PodItem({ pod }: { pod: HomePodSummary }) {
+  const { formatNumber, t } = useI18n();
   return (
     <Item variant="outline">
       <ItemMedia variant="icon"><Boxes aria-hidden="true" /></ItemMedia>
       <ItemContent>
         <ItemTitle className="max-w-full break-all">{pod.name}</ItemTitle>
         <ItemDescription>
-          {pod.namespace} · {pod.phase} · Ready {pod.readiness.ready}/{pod.readiness.total}
+          {t("home.pod.description", {
+            namespace: pod.namespace,
+            phase: pod.phase,
+            ready: formatNumber(pod.readiness.ready),
+            total: formatNumber(pod.readiness.total),
+          })}
         </ItemDescription>
         <div className="mt-2 flex flex-wrap gap-3 text-xs text-muted-foreground">
-          <span>CPU {pod.cpuMillicores === null ? "—" : `${pod.cpuMillicores}m`}</span>
-          <span>메모리 {pod.memoryMebibytes === null ? "—" : `${pod.memoryMebibytes} MiB`}</span>
+          <span>
+            {t("home.metric.cpu")} {pod.cpuMillicores === null
+              ? t("common.value.unavailable")
+              : `${formatNumber(pod.cpuMillicores, { maximumFractionDigits: 2 })}m`}
+          </span>
+          <span>
+            {t("home.metric.memory")} {pod.memoryMebibytes === null
+              ? t("common.value.unavailable")
+              : `${formatNumber(pod.memoryMebibytes, { maximumFractionDigits: 2 })} MiB`}
+          </span>
           <span className="inline-flex items-center gap-1">
-            <RotateCcw aria-hidden="true" className="size-3" />{pod.restartCount}
+            <RotateCcw aria-hidden="true" className="size-3" />
+            <span className="sr-only">{t("home.metric.restarts")} </span>
+            {formatNumber(pod.restartCount)}
           </span>
         </div>
       </ItemContent>
@@ -205,6 +233,12 @@ function PodItem({ pod }: { pod: HomePodSummary }) {
   );
 }
 
-function formatPercent(value: number | null) {
-  return value === null ? "사용할 수 없음" : `${value}%`;
+function formatPercent(
+  value: number | null,
+  formatNumber: (value: number, options?: Intl.NumberFormatOptions) => string,
+  unavailable: string,
+) {
+  return value === null
+    ? unavailable
+    : `${formatNumber(value, { maximumFractionDigits: 2 })}%`;
 }

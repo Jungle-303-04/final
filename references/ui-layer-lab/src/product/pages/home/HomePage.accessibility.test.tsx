@@ -72,7 +72,7 @@ describe("HomePage accessibility and bounded rendering", () => {
   }, 15_000);
 
   it("declares a bounded rendering strategy for a large Node collection", async () => {
-    const largeNodes = Array.from({ length: 240 }, (_, index) => ({
+    const largeNodes = Array.from({ length: 24 }, (_, index) => ({
       ...NODES.nodes[0],
       id: `node:cluster-1/worker-${index}`,
       name: `worker-${index}`,

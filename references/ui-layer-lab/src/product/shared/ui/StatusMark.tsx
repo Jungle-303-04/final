@@ -1,13 +1,14 @@
 import { cn } from "./primitives/cn";
+import { useI18n, type MessageKey } from "../i18n";
 
 export type StatusTone = "healthy" | "warning" | "critical" | "stale" | "unknown";
 
-const defaultStatusLabel: Record<StatusTone, string> = {
-  healthy: "정상",
-  warning: "주의",
-  critical: "위험",
-  stale: "오래된 데이터",
-  unknown: "알 수 없음",
+const defaultStatusLabelKeys: Record<StatusTone, MessageKey> = {
+  healthy: "status.tone.healthy",
+  warning: "status.tone.warning",
+  critical: "status.tone.critical",
+  stale: "status.tone.stale",
+  unknown: "status.tone.unknown",
 };
 
 export interface StatusMarkProps {
@@ -17,7 +18,8 @@ export interface StatusMarkProps {
 }
 
 export function StatusMark({ tone, label, live = false }: StatusMarkProps) {
-  const visibleLabel = label?.trim() || defaultStatusLabel[tone];
+  const { t } = useI18n();
+  const visibleLabel = label?.trim() || t(defaultStatusLabelKeys[tone]);
 
   return (
     <span

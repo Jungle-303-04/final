@@ -1,10 +1,13 @@
 import { CircleAlert, RefreshCw } from "lucide-react";
 import type { HomePortFailure } from "../../features/home/homeContract";
+import { useI18n } from "../../shared/i18n/I18nProvider";
+import type { TranslationFunction } from "../../shared/i18n/types";
 import { Alert, AlertAction, AlertDescription, AlertTitle } from "../../shared/ui/primitives/alert";
 import { Button } from "../../shared/ui/primitives/button";
 import { Skeleton } from "../../shared/ui/primitives/skeleton";
 
 export function HomeSectionLoading({ label }: { label: string }) {
+  const { t } = useI18n();
   return (
     <div
       aria-atomic="true"
@@ -12,7 +15,7 @@ export function HomeSectionLoading({ label }: { label: string }) {
       className="grid gap-2 p-4 md:grid-cols-2"
       role="status"
     >
-      <span className="sr-only">{label}을 불러오는 중입니다.</span>
+      <span className="sr-only">{t("home.section.loading", { label })}</span>
       <Skeleton aria-hidden="true" className="h-28" />
       <Skeleton aria-hidden="true" className="h-28" />
     </div>
@@ -28,7 +31,8 @@ export function HomeSectionFailure({
   label: string;
   onRetry: () => void;
 }) {
-  const copy = failureCopy(failure, label);
+  const { formatNumber, t } = useI18n();
+  const copy = failureCopy(failure, label, t, formatNumber);
   return (
     <Alert className="m-4 w-auto" variant={failure.code === "forbidden" ? "default" : "destructive"}>
       <CircleAlert aria-hidden="true" />
@@ -36,7 +40,7 @@ export function HomeSectionFailure({
       <AlertDescription>{copy.description}</AlertDescription>
       <AlertAction>
         <Button onClick={onRetry} size="sm" type="button" variant="outline">
-          <RefreshCw aria-hidden="true" />새로 고침
+          <RefreshCw aria-hidden="true" />{t("common.action.refresh")}
         </Button>
       </AlertAction>
     </Alert>
@@ -52,43 +56,66 @@ export function HomeRefreshFailure({
   label: string;
   onRetry: () => void;
 }) {
+  const { formatNumber, t } = useI18n();
   if (!failure) return null;
-  const copy = failureCopy(failure, label);
+  const copy = failureCopy(failure, label, t, formatNumber);
   return (
     <Alert className="m-4 mb-0 w-auto">
       <CircleAlert aria-hidden="true" />
-      <AlertTitle>마지막 성공 응답을 표시합니다</AlertTitle>
+      <AlertTitle>{t("home.refresh.lastSuccess")}</AlertTitle>
       <AlertDescription>{copy.description}</AlertDescription>
       <AlertAction>
         <Button onClick={onRetry} size="sm" type="button" variant="outline">
-          <RefreshCw aria-hidden="true" />새로 고침
+          <RefreshCw aria-hidden="true" />{t("common.action.refresh")}
         </Button>
       </AlertAction>
     </Alert>
   );
 }
 
-function failureCopy(failure: HomePortFailure, label: string) {
+function failureCopy(
+  failure: HomePortFailure,
+  label: string,
+  t: TranslationFunction,
+  formatNumber: (value: number) => string,
+) {
   if (failure.code === "forbidden") {
-    return { title: "조회 권한이 없습니다", description: `${label}을 볼 권한이 없습니다.` };
+    return {
+      title: t("home.failure.forbidden.title"),
+      description: t("home.failure.forbidden.description", { label }),
+    };
   }
   if (failure.code === "rate-limited") {
     const retry = failure.retryAfterSeconds === null
-      ? "잠시 후 다시 시도하세요."
-      : `${failure.retryAfterSeconds}초 후 다시 시도하세요.`;
-    return { title: "요청이 제한되었습니다", description: `${label} 요청이 제한되었습니다. ${retry}` };
+      ? t("home.failure.rateLimited.retryLater")
+      : t("home.failure.rateLimited.retryAfter", {
+        seconds: formatNumber(failure.retryAfterSeconds),
+      });
+    return {
+      title: t("home.failure.rateLimited.title"),
+      description: t("home.failure.rateLimited.description", { label, retry }),
+    };
   }
   if (failure.code === "not-found") {
     return {
-      title: "조회 대상을 찾을 수 없습니다",
-      description: `${label}을 현재 조회 범위에서 찾을 수 없습니다.`,
+      title: t("home.failure.notFound.title"),
+      description: t("home.failure.notFound.description", { label }),
     };
   }
   if (failure.code === "offline") {
-    return { title: "연결이 끊겼습니다", description: `${label}을 불러오는 동안 연결이 끊겼습니다.` };
+    return {
+      title: t("home.failure.offline.title"),
+      description: t("home.failure.offline.description", { label }),
+    };
   }
   if (failure.code === "invalid-response") {
-    return { title: "응답을 해석할 수 없습니다", description: `${label} 응답 형식을 확인할 수 없습니다.` };
+    return {
+      title: t("home.failure.invalidResponse.title"),
+      description: t("home.failure.invalidResponse.description", { label }),
+    };
   }
-  return { title: "정보를 불러오지 못했습니다", description: `${label}을 불러오지 못했습니다.` };
+  return {
+    title: t("home.failure.generic.title"),
+    description: t("home.failure.generic.description", { label }),
+  };
 }

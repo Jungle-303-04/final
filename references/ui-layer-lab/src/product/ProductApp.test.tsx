@@ -4,9 +4,12 @@ import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { StrictMode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi, type MockInstance } from "vitest";
+import { PRODUCT_LOCALE_STORAGE_KEY } from "./shared/i18n/locale";
 import ProductApp from "./ProductApp";
 
 beforeEach(() => {
+  vi.useRealTimers();
+  Object.defineProperty(document, "visibilityState", { configurable: true, value: "visible" });
   Object.defineProperty(window, "matchMedia", {
     configurable: true,
     value: vi.fn(() => ({
@@ -22,12 +25,29 @@ beforeEach(() => {
 afterEach(() => {
   cleanup();
   document.documentElement.className = "";
+  document.documentElement.removeAttribute("lang");
+  Object.defineProperty(document, "visibilityState", { configurable: true, value: "visible" });
+  vi.useRealTimers();
   window.localStorage.clear();
   window.history.replaceState({}, "", "/");
   vi.restoreAllMocks();
 });
 
 describe("ProductApp root recovery", () => {
+  it("owns locale resolution at the application root", () => {
+    const language = vi.spyOn(window.navigator, "language", "get").mockReturnValue("ko-KR");
+    vi.spyOn(globalThis, "fetch").mockReturnValue(new Promise(() => undefined));
+
+    const first = render(<ProductApp />);
+    expect(document.documentElement.lang).toBe("ko");
+    first.unmount();
+
+    window.localStorage.setItem(PRODUCT_LOCALE_STORAGE_KEY, "en");
+    language.mockReturnValue("ko-KR");
+    render(<ProductApp />);
+    expect(document.documentElement.lang).toBe("en");
+  });
+
   it("loads exactly one session in StrictMode and keeps unauthenticated navigation hidden", async () => {
     const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(
       new Response(JSON.stringify({ detail: "Not authenticated" }), {
@@ -41,7 +61,7 @@ describe("ProductApp root recovery", () => {
       </StrictMode>,
     );
 
-    expect(await screen.findByRole("heading", { name: "KubeHeal에 로그인" })).toBeTruthy();
+    expect(await screen.findByRole("heading", { name: "Sign in to KubeHeal" })).toBeTruthy();
     expect(fetchMock).toHaveBeenCalledOnce();
     expect(fetchMock).toHaveBeenCalledWith(
       "/api/auth/session",
@@ -60,10 +80,10 @@ describe("ProductApp root recovery", () => {
 
     render(<StrictMode><ProductApp /></StrictMode>);
 
-    expect(await screen.findByRole("heading", { name: "클러스터 상태" }, { timeout: 5_000 }))
+    expect(await screen.findByRole("heading", { name: "Cluster status" }, { timeout: 5_000 }))
       .toBeTruthy();
     await screen.findByRole("button", { name: /worker-b/u }, { timeout: 5_000 });
-    expect(screen.getByRole("navigation", { name: "주요 메뉴" })).toBeTruthy();
+    expect(screen.getByRole("navigation", { name: "Primary navigation" })).toBeTruthy();
     expect(screen.getByRole("link", { name: "Home" })).toBeTruthy();
     expect(requestCount(fetchMock, "/api/auth/session")).toBe(1);
     expect(requestCount(fetchMock, "/api/clusters?limit=100")).toBe(1);
@@ -87,17 +107,26 @@ describe("ProductApp root recovery", () => {
 
     render(<StrictMode><ProductApp /></StrictMode>);
 
-    expect(await screen.findByRole("table", { name: "리소스 목록" })).toBeTruthy();
+    expect(await screen.findByRole("table", { name: "Resource list" }, { timeout: 5_000 }))
+      .toBeTruthy();
     expect(screen.getByRole("link", { name: "Resources" }).getAttribute("aria-current"))
       .toBe("page");
-    const resource = await screen.findByRole("button", { name: "checkout-api-0 상세 열기" });
+    const resource = await screen.findByRole(
+      "button",
+      { name: "Open details for checkout-api-0" },
+      { timeout: 5_000 },
+    );
     expect(requestCount(
       fetchMock,
       "/api/clusters/cluster-1/inventory/resources?resource_type=pod&include_deleted=false&limit=200",
     )).toBe(1);
 
     await userEvent.setup().click(resource);
-    const dialog = await screen.findByRole("dialog", { name: "checkout-api-0 상세" });
+    const dialog = await screen.findByRole(
+      "dialog",
+      { name: "checkout-api-0 details" },
+      { timeout: 5_000 },
+    );
     expect(dialog.textContent).toContain("Running");
     expect(window.location.pathname).toBe("/product/resources/pod");
     expect(window.location.search).toContain("resource=shop%2Fcheckout-api-0");

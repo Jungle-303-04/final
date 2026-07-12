@@ -2,7 +2,7 @@
 
 import { cleanup, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ResourcesPortFailure } from "../../features/resources/resourcesContract";
 import {
   deferred,
@@ -11,7 +11,12 @@ import {
   resourcesPort,
 } from "./ResourcesPage.testSupport";
 
-afterEach(cleanup);
+beforeEach(resetDocumentTestClock);
+
+afterEach(() => {
+  cleanup();
+  resetDocumentTestClock();
+});
 
 describe("ResourcesPage URL-backed detail", () => {
   it("resolves a direct same-route detail deep link from canonical identity", async () => {
@@ -70,3 +75,8 @@ describe("ResourcesPage URL-backed detail", () => {
     await waitFor(() => expect(document.activeElement).toBe(row));
   }, 15_000);
 });
+
+function resetDocumentTestClock() {
+  vi.useRealTimers();
+  Object.defineProperty(document, "visibilityState", { configurable: true, value: "visible" });
+}

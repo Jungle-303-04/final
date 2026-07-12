@@ -5,6 +5,7 @@ import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { StrictMode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { I18nProvider, useI18n } from "../../shared/i18n";
 import { AuthBarrier } from "./AuthBarrier";
 import { useAuthSessionGate } from "./AuthSessionGate";
 import {
@@ -152,10 +153,15 @@ describe("AuthBarrier mutation reconciliation", () => {
 
 function AuthenticatedProduct({ auth }: { auth: AuthenticatedAuthState }) {
   const { reportUnauthorized } = useAuthSessionGate();
+  const { t } = useI18n();
   return (
     <main>
       <p>인증된 제품</p>
-      <p>{auth.signOutPending ? "로그아웃 처리 중" : auth.signOutIssue?.message}</p>
+      <p>{auth.signOutPending
+        ? "로그아웃 처리 중"
+        : auth.signOutIssue
+          ? t(auth.signOutIssue.messageKey, auth.signOutIssue.messageParams)
+          : null}</p>
       <button onClick={auth.onSignOut} type="button">테스트 로그아웃</button>
       <button onClick={reportUnauthorized} type="button">테스트 401 전달</button>
     </main>
@@ -165,11 +171,13 @@ function AuthenticatedProduct({ auth }: { auth: AuthenticatedAuthState }) {
 function renderBarrier(port: AuthPort) {
   return render(
     <StrictMode>
-      <ThemeProvider attribute="class" defaultTheme="light" enableSystem={false}>
-        <AuthBarrier port={port}>
-          {(auth) => <AuthenticatedProduct auth={auth} />}
-        </AuthBarrier>
-      </ThemeProvider>
+      <I18nProvider navigatorLanguage="ko-KR" storage={null}>
+        <ThemeProvider attribute="class" defaultTheme="light" enableSystem={false}>
+          <AuthBarrier port={port}>
+            {(auth) => <AuthenticatedProduct auth={auth} />}
+          </AuthBarrier>
+        </ThemeProvider>
+      </I18nProvider>
     </StrictMode>,
   );
 }

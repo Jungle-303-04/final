@@ -20,6 +20,10 @@ const productRoot = process.env.PRODUCT_DESIGN_GUARD_ROOT
 const apiRoot = resolve(productRoot, 'api')
 const tokenFile = resolve(productRoot, 'styles', 'tokens.css')
 
+export const I18N_LITERAL_ENFORCEMENT_ENV = 'PRODUCT_I18N_LITERAL_ENFORCEMENT'
+
+const enforceI18nUiLiterals = process.env[I18N_LITERAL_ENFORCEMENT_ENV] !== '0'
+
 const checkedExtensions = new Set([
   '.cjs',
   '.cts',
@@ -67,6 +71,111 @@ const networkCapableGlobals = new Set([
   'navigator',
   'self',
   'window',
+])
+
+const allowedStandaloneUiTerms = new Set([
+  'API',
+  'CPU',
+  'ConfigMap',
+  'Container',
+  'CronJob',
+  'DaemonSet',
+  'Deployment',
+  'Endpoint',
+  'EndpointSlice',
+  'Event',
+  'Failed',
+  'GitOps',
+  'GPU',
+  'HPA',
+  'HTTP',
+  'HTTPS',
+  'Ingress',
+  'Job',
+  'JSON',
+  'KubeHeal',
+  'Kubernetes',
+  'KiB',
+  'MiB',
+  'GiB',
+  'Namespace',
+  'Node',
+  'Pending',
+  'PersistentVolume',
+  'PersistentVolumeClaim',
+  'Pod',
+  'PVC',
+  'RCA',
+  'Ready',
+  'ReplicaSet',
+  'Running',
+  'Secret',
+  'Service',
+  'SSE',
+  'StatefulSet',
+  'Succeeded',
+  'UID',
+  'URL',
+  'WebSocket',
+  'Workload',
+  'WS',
+  'YAML',
+  'm',
+  'ms',
+  's',
+])
+
+const structuralJsxAttributes = new Set([
+  'action',
+  'align',
+  'aria-activedescendant',
+  'aria-atomic',
+  'aria-busy',
+  'aria-controls',
+  'aria-current',
+  'aria-describedby',
+  'aria-details',
+  'aria-expanded',
+  'aria-haspopup',
+  'aria-hidden',
+  'aria-invalid',
+  'aria-labelledby',
+  'aria-live',
+  'aria-owns',
+  'aria-pressed',
+  'aria-sort',
+  'as',
+  'className',
+  'data-slot',
+  'defaultValue',
+  'dir',
+  'form',
+  'href',
+  'htmlFor',
+  'icon',
+  'id',
+  'key',
+  'kind',
+  'method',
+  'mode',
+  'name',
+  'orientation',
+  'path',
+  'placement',
+  'rel',
+  'role',
+  'route',
+  'side',
+  'size',
+  'slot',
+  'status',
+  'tabIndex',
+  'target',
+  'to',
+  'tone',
+  'type',
+  'value',
+  'variant',
 ])
 
 const violations = []
@@ -198,6 +307,18 @@ function staticStringValue(node) {
     return node.text
   }
 
+  if (ts.isNoSubstitutionTemplateLiteral(node)) {
+    return node.text
+  }
+
+  if (ts.isTemplateExpression(node)) {
+    const value = [
+      node.head.text,
+      ...node.templateSpans.map((span) => span.literal.text),
+    ].join('')
+    return normalizedUiLiteral(value) === '' ? null : value
+  }
+
   if (ts.isParenthesizedExpression(node)) {
     return staticStringValue(node.expression)
   }
@@ -212,6 +333,169 @@ function staticStringValue(node) {
   }
 
   return null
+}
+
+function isI18nLiteralScanExcluded(filePath) {
+  const normalized = filePath.split(sep).join('/')
+  return (
+    /(?:^|\/)(?:__tests__)(?:\/|$)/u.test(normalized) ||
+    /\.(?:test|spec)\.[cm]?tsx$/u.test(normalized) ||
+    /(?:^|\/)shared\/i18n(?:\/|$)/u.test(normalized)
+  )
+}
+
+function normalizedUiLiteral(value) {
+  return value.replace(/\s+/gu, ' ').trim()
+}
+
+function isAllowedStandaloneUiTerm(value) {
+  const term = value.replace(/[:：]$/u, '')
+  return allowedStandaloneUiTerms.has(term)
+}
+
+function isUserFacingLiteral(value) {
+  const normalized = normalizedUiLiteral(value)
+  if (normalized === '' || isAllowedStandaloneUiTerm(normalized)) {
+    return false
+  }
+
+  return /[\u1100-\u11ff\u3130-\u318f\uac00-\ud7a3]/u.test(normalized) ||
+    /[a-z]/iu.test(normalized)
+}
+
+function jsxAttributeName(node) {
+  return ts.isIdentifier(node.name)
+    ? node.name.text
+    : node.name.getText()
+}
+
+function isUserFacingJsxAttribute(name) {
+  if (
+    name.startsWith('data-') ||
+    structuralJsxAttributes.has(name) ||
+    /(?:Id|Ids|Key|Keys|Kind|Mode|Placement|Side|State|Strategy|Tone|Type|Variant)$/u.test(name)
+  ) {
+    return false
+  }
+  if (name === 'alt' || name === 'aria-label' || name === 'aria-description') {
+    return true
+  }
+  return /(?:caption|close|collapse|description|empty|expand|helper|label|message|placeholder|text|title|tooltip)/iu
+    .test(name)
+}
+
+function staticJsxLiteralFragments(node) {
+  const expression = unwrapExpression(node)
+  if (ts.isStringLiteralLike(expression)) {
+    return [{ node: expression, text: expression.text }]
+  }
+  if (ts.isTemplateExpression(expression)) {
+    return [
+      { node: expression.head, text: expression.head.text },
+      ...expression.templateSpans.map((span) => ({
+        node: span.literal,
+        text: span.literal.text,
+      })),
+    ]
+  }
+  if (
+    ts.isBinaryExpression(expression) &&
+    expression.operatorToken.kind === ts.SyntaxKind.PlusToken
+  ) {
+    return [
+      ...staticJsxLiteralFragments(expression.left),
+      ...staticJsxLiteralFragments(expression.right),
+    ]
+  }
+  if (ts.isConditionalExpression(expression)) {
+    return [
+      ...staticJsxLiteralFragments(expression.whenTrue),
+      ...staticJsxLiteralFragments(expression.whenFalse),
+    ]
+  }
+  return []
+}
+
+function jsxAttributeLiteralFragments(node) {
+  const initializer = node.initializer
+  if (!initializer) return []
+  if (ts.isStringLiteralLike(initializer)) {
+    return [{ node: initializer, text: initializer.text }]
+  }
+  if (ts.isJsxExpression(initializer) && initializer.expression) {
+    return staticJsxLiteralFragments(initializer.expression)
+  }
+  return []
+}
+
+/**
+ * Finds static, user-visible JSX copy that must move to the shared i18n
+ * catalog. This scanner is pure so migration tooling can run it before the
+ * product-wide enforcement switch is enabled.
+ */
+export function scanJsxUserFacingLiterals(filePath, source) {
+  if (extname(filePath).toLowerCase() !== '.tsx' || isI18nLiteralScanExcluded(filePath)) {
+    return []
+  }
+
+  const sourceFile = ts.createSourceFile(
+    filePath,
+    source,
+    ts.ScriptTarget.Latest,
+    true,
+    ts.ScriptKind.TSX,
+  )
+  const matches = []
+
+  function record(node, value) {
+    const normalized = normalizedUiLiteral(value)
+    if (!isUserFacingLiteral(normalized)) return
+    matches.push({
+      position: node.getStart(sourceFile),
+      text: normalized,
+    })
+  }
+
+  function visit(node) {
+    if (ts.isJsxText(node)) {
+      record(node, node.text)
+    } else if (ts.isJsxAttribute(node)) {
+      const name = jsxAttributeName(node)
+      if (isUserFacingJsxAttribute(name)) {
+        for (const fragment of jsxAttributeLiteralFragments(node)) {
+          record(fragment.node, fragment.text)
+        }
+      }
+    } else if (
+      ts.isJsxExpression(node) &&
+      !ts.isJsxAttribute(node.parent) &&
+      node.expression
+    ) {
+      for (const fragment of staticJsxLiteralFragments(node.expression)) {
+        record(fragment.node, fragment.text)
+      }
+    }
+
+    ts.forEachChild(node, visit)
+  }
+
+  visit(sourceFile)
+  return matches
+}
+
+function inspectI18nUiLiterals(filePath, source, sourceFile) {
+  for (const match of scanJsxUserFacingLiterals(filePath, source)) {
+    const preview = match.text.length > 80
+      ? `${match.text.slice(0, 77)}...`
+      : match.text
+    addViolation(
+      filePath,
+      sourceFile,
+      match.position,
+      'i18n-ui-literal',
+      `User-facing JSX literal must come from shared/i18n: ${preview}`,
+    )
+  }
 }
 
 function unwrapExpression(node) {
@@ -421,6 +705,10 @@ function inspectScript(filePath, source, extension) {
 
   collectBindings(sourceFile)
 
+  if (enforceI18nUiLiterals) {
+    inspectI18nUiLiterals(filePath, source, sourceFile)
+  }
+
   function visit(node) {
     if (
       (ts.isImportDeclaration(node) || ts.isExportDeclaration(node)) &&
@@ -553,13 +841,29 @@ function lineCount(source) {
   return lines.at(-1) === '' ? lines.length - 1 : lines.length
 }
 
+function isPureTypeScriptBarrel(filePath, source, extension) {
+  const sourceFile = ts.createSourceFile(
+    filePath,
+    source,
+    ts.ScriptTarget.Latest,
+    false,
+    scriptKindFor(extension),
+  )
+
+  return sourceFile.statements.length > 0 && sourceFile.statements.every((statement) =>
+    ts.isExportDeclaration(statement) &&
+    statement.moduleSpecifier !== undefined &&
+    ts.isStringLiteralLike(statement.moduleSpecifier),
+  )
+}
+
 function inspectFileLength(filePath, source, extension) {
   if (!typeScriptExtensions.has(extension)) {
     return
   }
 
   const totalLines = lineCount(source)
-  if (totalLines > 300) {
+  if (totalLines > 300 && !isPureTypeScriptBarrel(filePath, source, extension)) {
     violations.push({
       column: 1,
       file: projectPath(filePath),
@@ -621,4 +925,9 @@ async function run() {
   console.log(`Product design guard passed (${files.length} files checked).`)
 }
 
-await run()
+const invokedAsScript = process.argv[1] &&
+  resolve(process.argv[1]) === fileURLToPath(import.meta.url)
+
+if (invokedAsScript) {
+  await run()
+}
