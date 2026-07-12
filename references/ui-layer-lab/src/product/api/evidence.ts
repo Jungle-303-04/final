@@ -34,7 +34,7 @@ export interface RcaReportListOptions {
 }
 
 /** Lists safe, stored Evidence summaries for an Incident or workspace. */
-export function listEvidence(
+export async function listEvidence(
   options: EvidenceListOptions = {},
 ): Promise<EvidenceList> {
   const limit = options.limit ?? EVIDENCE_DEFAULT_LIMIT;
@@ -54,7 +54,7 @@ export function listEvidence(
 }
 
 /** Lists stored RCA report summaries, optionally scoped to one Incident. */
-export function listRcaReports(
+export async function listRcaReports(
   options: RcaReportListOptions = {},
 ): Promise<RcaReportList> {
   const limit = options.limit ?? RCA_REPORT_DEFAULT_LIMIT;

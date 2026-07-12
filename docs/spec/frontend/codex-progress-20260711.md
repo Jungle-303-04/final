@@ -1324,7 +1324,7 @@ API 완성: listClusters (257581398)
 
 ## 2026-07-13 Home·Resources 텍스트 밀도와 시각 회귀
 
-- 코드 커밋: `f4abc423b`.
+- 코드 커밋: `c9856c9b9`.
 - 전 화면 규칙은 `reference-porting-contract.md` §7.1 `텍스트 밀도 규칙`이 정본이다.
 - visible route 이름은 데스크톱 sidebar에서만 한 번 표시한다. 상단바 route 설명과 Home/Resources
   본문 제목, 정상 상태 상주 설명, eyebrow, `LIVE API`·`실 API` 배지를 제거했다.
