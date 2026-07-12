@@ -4,7 +4,7 @@ status: active-coordination-queue
 date: 2026-07-12
 owners: Codex 요청 / API 연결 작업자 claim·처리
 workorder: api-integration-workorder-20260711.md
-snapshot: 16행·31함수 / requested 15 / in_progress 1 / blocked 0 / valid completion anchors 18
+snapshot: 15행·30함수 / requested 15 / in_progress 0 / blocked 0 / valid completion anchors 19
 ---
 
 # 프론트 API 요청 큐
@@ -16,7 +16,7 @@ snapshot: 16행·31함수 / requested 15 / in_progress 1 / blocked 0 / valid com
 상세한 경로, 소유권, schema, test, mutation 안전, 2커밋 완료 절차는
 `api-integration-workorder-20260711.md`가 정본이다.
 
-> **다음 claim 권장 순서:** `APIQ-022` → `APIQ-020` → 이후 P2 순서. 이미 원격에서 유효하게
+> **다음 claim 권장 순서:** `APIQ-020` → 이후 P2 순서. 이미 원격에서 유효하게
 > `in_progress`인 행이 있으면 그 행의 lease를 우선하며, 권장 순서는 다음 claim부터 적용한다.
 
 ## 1. 상태와 claim 규칙
@@ -38,7 +38,7 @@ snapshot: 16행·31함수 / requested 15 / in_progress 1 / blocked 0 / valid com
 10. canonical branch force-push 금지. feature branch를 썼다면 merge/cherry-pick 후의 최종 hash만
     앵커로 기록하고, squash/rebase로 이미 기록한 hash를 제거하지 않는다.
 11. 24시간 대행도 `in_progress` 1행 lock과 코드·조율 2커밋 절차를 그대로 지킨다. `APIQ-001`,
-    `APIQ-002`, `APIQ-003`, `APIQ-004`, `APIQ-007`, `APIQ-008`, `APIQ-023`, `APIQ-024`, `APIQ-025`, `APIQ-026`은 완료 앵커가 있으므로
+    `APIQ-002`, `APIQ-003`, `APIQ-004`, `APIQ-007`, `APIQ-008`, `APIQ-022`, `APIQ-023`, `APIQ-024`, `APIQ-025`, `APIQ-026`은 완료 앵커가 있으므로
     다음 대행은 queue의 P0·P1·P2 순서를 따른다. 원 요청 시각·대행
     시작 시각·경과 시간·사유를 progress EOF에 남긴다.
 12. API 작업자가 복귀하면 대행자가 이미 claim한 행만 완료하고 다음 행부터 양보한다.
@@ -83,7 +83,6 @@ AbortSignal contract test를 추가하고, 필요한 경우 claim 범위 안에�
 
 | ID | 우선 | 함수명 | routes.py 상수 | 대상 파일 | 필요한 화면 | 요청 시각 | 상태 | 담당/브랜치 | claim·heartbeat | 완료 조건·주의 |
 |---|---:|---|---|---|---|---|---|---|---|---|
-| `APIQ-022` | P0 | `listClusters` | `CLUSTERS_PATH` | `clusters.ts`, `cluster-schemas.ts`, `clusters.test.ts` | cluster selector | 2026-07-11 16:19 KST | in_progress | `/root@woonyong/ui-layer-lab` | 2026-07-12 20:21 KST | limit default 100, signal, strict 실응답; 24시간 대행 |
 | `APIQ-027` | P2 | `submitPrometheusQuery`, `getCommandStatus`, `pollCommand`, `runPrometheusQuery` | `AGENT_DEBUG_QUERY_PATH`, `COMMAND_STATUS_PATH` | `metrics.ts`, `metrics-schemas.ts`, `metrics.test.ts` | Metrics / operation progress | 2026-07-11 16:19 KST | requested | — | — | possibly-sent POST 재전송 0, polling GET만, terminal/timeout/abort, API-owned fixture |
 
 ## 4. 큐 밖 Backend gap과 realtime

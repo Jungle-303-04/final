@@ -1223,3 +1223,23 @@ API 완성: listInventoryResourcesByType (6aaf19fea)
 - `pollCommand` 구현은 바꾸지 않고 rejection matcher를 `AbortController.abort()` 전에 연결해
   거절 관찰 공백만 제거했다. 이 hotfix는 APIQ-027 완료 앵커가 아니며 해당 queue 행은 계속
   `requested`다. APIQ-022 단일 `in_progress` lock도 유지한다.
+
+## 2026-07-12 APIQ-022 클러스터 목록 계약 완료
+
+API 완성: listClusters (257581398)
+
+- `GET /api/clusters?limit=100` 기본 경로, 명시 limit, cookie credentials, Accept header,
+  GET 무본문·CSRF 미부착, AbortSignal을 고정했다.
+- strict 성공/빈 목록, 401, structured 403, 503, invalid JSON, known-field type mismatch,
+  uncontracted top-level/row field를 9개 contract test로 검증했다.
+- 실제 프록시 `http://127.0.0.1:5180/api/clusters?limit=100`는 비인증 세션에서 HTTP 401을
+  반환해 synthetic session 없이 gateway 도달을 확인했다. 인증된 실 cluster payload 검증은
+  사용자 세션 확보 뒤 Home 브라우저 gate에서 계속한다.
+- 코드 커밋 `257581398`은 canonical 원격 조상이며 API barrel의 `listClusters` named export와
+  같은 커밋의 contract test 식별자 근거를 충족한다. APIQ-022 queue 행을 제거했다.
+
+```text
+명령: cd references/ui-layer-lab && npm run check
+결과: PASS — TypeScript, ESLint, 43 files/301 tests, design guard 120 files,
+      shadcn audit 482 previews, production build
+```
