@@ -156,3 +156,22 @@ $ git cat-file -e origin/dev:src/domains/rca_bundle/router.py; echo $?
 - 현재 조치: merge·push·배포 실행 없음. B단계는 정본의 병행 허용 규칙에 따라 진행한다.
 
 [2026-07-13 06:15:14 KST] [프론트] B in_progress — APIQ-029 착륙본 schema·progress·Bruno와 동결 Zod diff 대조 착수
+
+## 2026-07-13 06:27 KST — [프론트] B 완료 증거
+
+- 대상: APIQ-029 `getRemediationBundle`, VP-001 public API anchor.
+- 조율 커밋: `3fd4225a8` (B in_progress, 기존 APIQ-029 lease 유지).
+- 코드 커밋: `97c862da1` (public endpoint/schema/type barrel export + 회귀 테스트).
+- 착륙본 diff: `origin/dev:docs/spec/remediation-bundle.schema.json`, BQ-003 progress 인계,
+  Bruno, router/serializer와 필드·required·nullable·strict/open 경계가 **일치**했다.
+  유일한 불일치는 동결 시 제거된 public barrel export였으며 코드 커밋에서 복원했다.
+- full gate: `npm run check` PASS — TypeScript/ESLint PASS, 94 files / 662 tests,
+  design guard 275 files, shadcn audit 482 previews, Vite production build PASS.
+- canonical anchor 검증:
+
+```text
+$ git merge-base --is-ancestor 97c862da1 origin/woonyong/ui-layer-lab; echo $?
+0
+```
+
+- 제품 화면·adapter 소비는 이 앵커 전까지 0건이었고, 완료 조율 커밋 이후에만 허용한다.
