@@ -1107,6 +1107,7 @@ def _capture_workflow_statements() -> tuple[Any, list[Any]]:
 
     repository = object.__new__(RepoChangeRepository)
     repository.connection = stub_connection  # type: ignore[method-assign]
+    repository.unit_of_work = stub_connection  # type: ignore[method-assign]
     return repository, recorded
 
 
@@ -1127,7 +1128,7 @@ def _capture_application_statements(
             recorded.append(statement)
             if len(recorded) == 1:
                 return StubResult(existing_application_id)
-            return StubResult()
+            return StubResult("app-persisted")
 
     @contextmanager
     def stub_connection():
@@ -1135,6 +1136,7 @@ def _capture_application_statements(
 
     repository = object.__new__(RepoChangeRepository)
     repository.connection = stub_connection  # type: ignore[method-assign]
+    repository.unit_of_work = stub_connection  # type: ignore[method-assign]
     return repository, recorded
 
 

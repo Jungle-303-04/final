@@ -235,7 +235,11 @@ def test_upsert_application_registers_repository_when_repo_ref_is_present() -> N
                 repo_ref="org/checkout",
                 metadata={"team": "payments"},
             ),
-            current=current_session(),
+            current=SimpleNamespace(
+                user_id="admin-1",
+                roles=("service_admin",),
+                workspace_id="ws-1",
+            ),
             db=db,
         )
 
@@ -243,7 +247,7 @@ def test_upsert_application_registers_repository_when_repo_ref_is_present() -> N
 
     assert response.application["application_id"] == "app-1"
     assert db.registered_repositories[0]["repo_ref"] == "org/checkout"
-    assert db.registered_repositories[0]["user_id"] == "user-1"
+    assert db.registered_repositories[0]["user_id"] == "admin-1"
 
 
 def test_create_application_rejects_explicit_repository_id_before_writes() -> None:

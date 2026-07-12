@@ -603,6 +603,9 @@ class _InterleavingPlanDb:
         self.lookup_lock_modes: list[bool] = []
         self.upserts: list[dict[str, object]] = []
 
+    def lock_release_plan_identity(self, _workspace_id: str, _name: str) -> None:
+        return None
+
     def get_release_plan(
         self,
         _workspace_id: str,
