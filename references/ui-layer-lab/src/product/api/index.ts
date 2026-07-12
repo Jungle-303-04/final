@@ -40,6 +40,16 @@ export {
   type RecoveryRequestOptions,
   type SelectRecoveryActionInput,
 } from "./recovery";
+export {
+  getApplication,
+  listApplicationDeployments,
+  listApplicationRuns,
+  listApplications,
+  APPLICATIONS_DEFAULT_LIMIT,
+  APPLICATIONS_MAX_LIMIT,
+  type ApplicationHistoryOptions,
+  type ApplicationListOptions,
+} from "./applications";
 export { listClusters, type ListClustersOptions } from "./clusters";
 export { getCluster } from "./cluster-detail";
 export { getClusterConnectionStatus } from "./cluster-connection";
@@ -240,3 +250,15 @@ export {
   type RecoveryActionCandidate,
   type RecoveryPlan,
 } from "./recovery-schemas";
+export {
+  applicationListSchema,
+  applicationResponseSchema,
+  applicationSchema,
+  deploymentBindingListSchema,
+  workflowRunListSchema,
+  type Application,
+  type ApplicationList,
+  type ApplicationResponse,
+  type DeploymentBindingList,
+  type WorkflowRunList,
+} from "./applications-schemas";
