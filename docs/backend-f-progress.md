@@ -7,7 +7,7 @@ governing: docs/f-coordination-plan.md · docs/backend-f-workqueue.md
 
 # 백엔드 F 진행 현황
 
-현재 상태: **앵커 0건**
+현재 상태: **앵커 1건**
 
 ## Delta-green baseline
 
@@ -27,4 +27,12 @@ governing: docs/f-coordination-plan.md · docs/backend-f-workqueue.md
 
 ## 완료 앵커
 
-앵커 0건
+### BQ-001
+
+- 완료 후 측정: `6 failed, 1626 passed, 3 skipped`
+- delta-green 판정: baseline 실패 node 6개 동일, 신규 실패 0건
+- `command_id` non-null: recorded approval이 필요하지 않은 command 제출 경로
+- `command_id` null: recorded approval이 필요한 경로. 제출 시점에는 worker가 확정하는
+  `approval_decided_by`와 `approval_expires_at`가 없어 정확한 ID를 파생할 수 없다.
+
+계약 완성: AcceptedResponse.command_id receipt (4e6216052f4505fa247d9ed8be033477447696d7) [delta-green]
