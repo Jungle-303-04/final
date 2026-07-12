@@ -303,6 +303,13 @@ def test_repo_validate_uses_existing_legacy_repository_id_for_credential_scope(
     assert db.saved[0]["metadata"]["repository_id"] == "repo-legacy-client-id"
 
 
+def test_normalize_github_repo_ref_casefolds_identity_aliases() -> None:
+    assert normalize_github_repo_ref("HTTPS://GITHUB.COM/Acme/Private-API.git") == (
+        "acme/private-api"
+    )
+    assert normalize_github_repo_ref("ACME/PRIVATE-API") == "acme/private-api"
+
+
 def test_manifest_validation_counts_static_yaml_resources() -> None:
     manifest = b"""
 apiVersion: apps/v1
