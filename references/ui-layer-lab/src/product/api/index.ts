@@ -24,6 +24,16 @@ export {
   getRcaIncident,
   type GetRcaIncidentOptions,
 } from "./rca-detail";
+export {
+  listEvidence,
+  listRcaReports,
+  EVIDENCE_DEFAULT_LIMIT,
+  EVIDENCE_MAX_LIMIT,
+  RCA_REPORT_DEFAULT_LIMIT,
+  RCA_REPORT_MAX_LIMIT,
+  type EvidenceListOptions,
+  type RcaReportListOptions,
+} from "./evidence";
 export { listClusters, type ListClustersOptions } from "./clusters";
 export { getCluster } from "./cluster-detail";
 export { getClusterConnectionStatus } from "./cluster-connection";
@@ -206,3 +216,13 @@ export {
   type RcaIncident,
   type RcaIncidentItem,
 } from "./rca-detail-schemas";
+export {
+  evidenceListSchema,
+  evidenceRecordSchema,
+  rcaReportListSchema,
+  rcaReportSchema,
+  type EvidenceList,
+  type EvidenceRecord,
+  type RcaReport,
+  type RcaReportList,
+} from "./evidence-schemas";
