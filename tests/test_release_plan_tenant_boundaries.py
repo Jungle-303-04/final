@@ -11,6 +11,7 @@ from typing import Any
 import pytest
 from fastapi import HTTPException
 from sqlalchemy.dialects import postgresql
+from sqlalchemy.exc import IntegrityError
 
 from domains.release_flow import router as release_router
 from domains.release_flow.repository import (
@@ -26,9 +27,11 @@ class _Result:
         self,
         *,
         first: dict[str, object] | None = None,
+        all_rows: list[dict[str, object]] | None = None,
         rowcount: int = 0,
     ) -> None:
         self._first = first
+        self._all_rows = all_rows or []
         self.rowcount = rowcount
 
     def mappings(self) -> _Result:
@@ -36,6 +39,9 @@ class _Result:
 
     def first(self) -> dict[str, object] | None:
         return self._first
+
+    def all(self) -> list[dict[str, object]]:
+        return self._all_rows
 
     def scalar_one_or_none(self) -> object | None:
         if self._first is None:
@@ -51,7 +57,7 @@ class _StatementCaptureConnection:
     def __init__(self) -> None:
         self.statements: list[Any] = []
 
-    def execute(self, statement: Any) -> _Result:
+    def execute(self, statement: Any, *_args: object, **_kwargs: object) -> _Result:
         self.statements.append(statement)
         return _Result(first={"plan_id": "shared-plan-id"}, rowcount=1)
 
@@ -111,6 +117,56 @@ def test_release_plan_step_replacement_delete_is_workspace_scoped() -> None:
     delete_sql = _postgres_sql(delete_statement)
     assert "release_plan_steps.plan_id =" in delete_sql
     assert "release_plan_steps.workspace_id =" in delete_sql
+
+
+class _PlanLookupConnection:
+    def __init__(self) -> None:
+        self.statements: list[Any] = []
+
+    def execute(self, statement: Any) -> _Result:
+        self.statements.append(statement)
+        if len(self.statements) == 1:
+            return _Result(
+                first={
+                    "plan_id": "plan-a",
+                    "workspace_id": "workspace-a",
+                    "name": "Shared release",
+                    "description": "",
+                    "status": "draft",
+                    "settings": {},
+                    "created_at": None,
+                    "updated_at": None,
+                }
+            )
+        return _Result(all_rows=[])
+
+
+def test_release_plan_mutation_lookup_locks_plan_row() -> None:
+    connection = _PlanLookupConnection()
+
+    @contextmanager
+    def fake_connection() -> Iterator[Any]:
+        yield connection
+
+    repository = object.__new__(ReleaseFlowRepository)
+    repository.connection = fake_connection  # type: ignore[method-assign]
+
+    plan = repository.get_release_plan("workspace-a", "plan-a", for_update=True)
+
+    assert plan is not None
+    assert "FOR UPDATE" in _postgres_sql(connection.statements[0])
+
+
+def test_release_plan_identity_lock_uses_transaction_advisory_lock() -> None:
+    connection = _StatementCaptureConnection()
+    repository = _release_repository(connection)
+    lock_identity = getattr(repository, "lock_release_plan_identity", None)
+
+    assert callable(lock_identity)
+    lock_identity("workspace-a", "Shared release")
+
+    assert len(connection.statements) == 1
+    assert "pg_advisory_xact_lock" in _postgres_sql(connection.statements[0]).lower()
 
 
 class _CrossWorkspaceConnection:
@@ -184,8 +240,21 @@ class _PlanAuthorizationDb:
         self.collision = collision
         self.access_checks: list[tuple[str, str, str, str, str]] = []
         self.upserts: list[dict[str, object]] = []
+        self.events: list[tuple[str, str, str]] = []
 
-    def get_release_plan(self, workspace_id: str, plan_id: str) -> dict[str, object] | None:
+    def lock_release_plan_identity(self, workspace_id: str, name: str) -> None:
+        self.events.append(("lock_identity", workspace_id, name))
+
+    def get_release_plan(
+        self,
+        workspace_id: str,
+        plan_id: str,
+        *,
+        for_update: bool = False,
+    ) -> dict[str, object] | None:
+        self.events.append(
+            ("get_by_id_for_update" if for_update else "get_by_id", workspace_id, plan_id)
+        )
         if self.plan is None:
             return None
         if self.plan["workspace_id"] != workspace_id or self.plan["plan_id"] != plan_id:
@@ -198,12 +267,25 @@ class _PlanAuthorizationDb:
         )
         return {**self.plan, "steps": steps}
 
-    def get_release_plan_by_name(self, workspace_id: str, name: str) -> dict[str, object] | None:
+    def get_release_plan_by_name(
+        self,
+        workspace_id: str,
+        name: str,
+        *,
+        for_update: bool = False,
+    ) -> dict[str, object] | None:
+        self.events.append(
+            ("get_by_name_for_update" if for_update else "get_by_name", workspace_id, name)
+        )
         if self.plan is None:
             return None
         if self.plan["workspace_id"] != workspace_id or self.plan["name"] != name:
             return None
-        return self.get_release_plan(workspace_id, str(self.plan["plan_id"]))
+        return self.get_release_plan(
+            workspace_id,
+            str(self.plan["plan_id"]),
+            for_update=for_update,
+        )
 
     def can_access(
         self,
@@ -218,6 +300,7 @@ class _PlanAuthorizationDb:
 
     def upsert_release_plan(self, payload: dict[str, object]) -> dict[str, object]:
         self.upserts.append(payload)
+        self.events.append(("upsert", str(payload["workspace_id"]), str(payload["name"])))
         if self.collision:
             raise ReleasePlanWorkspaceMismatchError("foreign workspace plan")
         plan_id = str(payload.get("plan_id") or derive_release_plan_id(payload))
@@ -302,6 +385,46 @@ def test_update_checks_persisted_plan_scope_before_empty_replacement() -> None:
     _assert_existing_application_manage_check(db)
 
 
+def test_authorized_create_same_name_allows_empty_replacement() -> None:
+    db = _PlanAuthorizationDb(existing_plan=_existing_plan(), allow_access=True)
+
+    response = asyncio.run(
+        release_router.create_release_plan(
+            release_router.ReleasePlanUpsertRequest(
+                name="Shared release",
+                steps=[],
+            ),
+            current=_member(),
+            db=db,
+        )
+    )
+
+    assert response.plan["steps"] == []
+    assert len(db.upserts) == 1
+    _assert_existing_application_manage_check(db)
+
+
+def test_authorized_update_allows_empty_replacement() -> None:
+    victim = _existing_plan()
+    db = _PlanAuthorizationDb(existing_plan=victim, allow_access=True)
+
+    response = asyncio.run(
+        release_router.update_release_plan(
+            str(victim["plan_id"]),
+            release_router.ReleasePlanUpsertRequest(
+                name="Shared release",
+                steps=[],
+            ),
+            current=_member(),
+            db=db,
+        )
+    )
+
+    assert response.plan["steps"] == []
+    assert len(db.upserts) == 1
+    _assert_existing_application_manage_check(db)
+
+
 def test_brand_new_empty_plan_is_rejected_before_write() -> None:
     db = _PlanAuthorizationDb()
 
@@ -320,6 +443,49 @@ def test_brand_new_empty_plan_is_rejected_before_write() -> None:
     assert exc.value.status_code == 422
     assert db.upserts == []
     assert db.access_checks == []
+
+
+def test_create_rejects_whitespace_only_explicit_plan_id_before_write() -> None:
+    db = _PlanAuthorizationDb(allow_access=True)
+
+    with pytest.raises(HTTPException) as exc:
+        asyncio.run(
+            release_router.create_release_plan(
+                release_router.ReleasePlanUpsertRequest(
+                    plan_id=" \t ",
+                    name="Whitespace id",
+                    steps=[{"application_id": "app-a", "position": 0}],
+                ),
+                current=_member(),
+                db=db,
+            )
+        )
+
+    assert exc.value.status_code == 422
+    assert db.upserts == []
+    assert db.access_checks == []
+
+
+def test_create_acquires_name_identity_lock_before_lookup_and_write() -> None:
+    db = _PlanAuthorizationDb(allow_access=True)
+
+    response = asyncio.run(
+        release_router.create_release_plan(
+            release_router.ReleasePlanUpsertRequest(
+                name="New release",
+                steps=[{"application_id": "app-a", "position": 0}],
+            ),
+            current=_member(),
+            db=db,
+        )
+    )
+
+    assert response.plan["name"] == "New release"
+    assert db.events[:2] == [
+        ("lock_identity", "workspace-a", "New release"),
+        ("get_by_name_for_update", "workspace-a", "New release"),
+    ]
+    assert db.events[-1] == ("upsert", "workspace-a", "New release")
 
 
 def test_server_derived_plan_collision_maps_to_generic_client_error() -> None:
@@ -393,3 +559,159 @@ def test_authorized_legacy_plan_reuses_stored_id_instead_of_unique_name_conflict
     assert response.plan["plan_id"] == "legacy-client-selected-plan-id"
     assert db.upserts[0]["plan_id"] == "legacy-client-selected-plan-id"
     assert [check[3] for check in db.access_checks] == ["app-b", "app-a"]
+
+
+class _InterleavingPlanDb:
+    def __init__(self) -> None:
+        self.plan = {
+            "workspace_id": "workspace-a",
+            "plan_id": "plan-a",
+            "name": "Shared release",
+            "steps": [{"application_id": "app-a", "position": 0}],
+        }
+        self.access_checks: list[str] = []
+        self.lookup_lock_modes: list[bool] = []
+        self.upserts: list[dict[str, object]] = []
+
+    def get_release_plan(
+        self,
+        _workspace_id: str,
+        _plan_id: str,
+        *,
+        for_update: bool = False,
+    ) -> dict[str, object]:
+        self.lookup_lock_modes.append(for_update)
+        before_interleave = {
+            **self.plan,
+            "steps": [dict(step) for step in self.plan["steps"]],
+        }
+        self.plan["steps"] = [{"application_id": "app-b", "position": 0}]
+        if for_update:
+            return {
+                **self.plan,
+                "steps": [dict(step) for step in self.plan["steps"]],
+            }
+        return before_interleave
+
+    def can_access(
+        self,
+        _user_id: str,
+        _workspace_id: str,
+        _resource_type: str,
+        resource_id: str,
+        _permission: str,
+    ) -> bool:
+        self.access_checks.append(resource_id)
+        return resource_id == "app-a"
+
+    def upsert_release_plan(self, payload: dict[str, object]) -> dict[str, object]:
+        self.upserts.append(payload)
+        self.plan = {**payload}
+        return self.plan
+
+
+def test_update_locks_before_scope_check_and_rejects_interleaved_scope() -> None:
+    db = _InterleavingPlanDb()
+
+    with pytest.raises(HTTPException) as exc:
+        asyncio.run(
+            release_router.update_release_plan(
+                "plan-a",
+                release_router.ReleasePlanUpsertRequest(
+                    name="Shared release",
+                    steps=[{"application_id": "app-a", "position": 0}],
+                ),
+                current=_member(),
+                db=db,
+            )
+        )
+
+    assert exc.value.status_code == 403
+    assert db.lookup_lock_modes == [True]
+    assert db.access_checks == ["app-b"]
+    assert db.upserts == []
+    assert db.plan["steps"] == [{"application_id": "app-b", "position": 0}]
+
+
+class _RenameConflictDb:
+    def __init__(self) -> None:
+        self.plan_a = {
+            "workspace_id": "workspace-a",
+            "plan_id": "plan-a",
+            "name": "Plan A",
+            "steps": [{"application_id": "app-a", "position": 0}],
+        }
+        self.plan_b = {
+            "workspace_id": "workspace-a",
+            "plan_id": "plan-b",
+            "name": "Plan B",
+            "steps": [{"application_id": "app-b", "position": 0}],
+        }
+        self.upsert_attempts = 0
+
+    def lock_release_plan_identity(self, _workspace_id: str, _name: str) -> None:
+        return None
+
+    def get_release_plan(
+        self,
+        workspace_id: str,
+        plan_id: str,
+        *,
+        for_update: bool = False,
+    ) -> dict[str, object] | None:
+        del for_update
+        for plan in (self.plan_a, self.plan_b):
+            if plan["workspace_id"] == workspace_id and plan["plan_id"] == plan_id:
+                return {**plan, "steps": [dict(step) for step in plan["steps"]]}
+        return None
+
+    def get_release_plan_by_name(
+        self,
+        workspace_id: str,
+        name: str,
+        *,
+        for_update: bool = False,
+    ) -> dict[str, object] | None:
+        del for_update
+        for plan in (self.plan_a, self.plan_b):
+            if plan["workspace_id"] == workspace_id and plan["name"] == name:
+                return {**plan, "steps": [dict(step) for step in plan["steps"]]}
+        return None
+
+    def can_access(
+        self,
+        _user_id: str,
+        _workspace_id: str,
+        _resource_type: str,
+        resource_id: str,
+        _permission: str,
+    ) -> bool:
+        return resource_id == "app-a"
+
+    def upsert_release_plan(self, _payload: dict[str, object]) -> dict[str, object]:
+        self.upsert_attempts += 1
+        raise IntegrityError("update release_plans", {}, Exception("unique workspace/name"))
+
+
+def test_update_name_conflict_maps_to_generic_409_without_mutation() -> None:
+    db = _RenameConflictDb()
+    before_a = {**db.plan_a, "steps": [dict(step) for step in db.plan_a["steps"]]}
+    before_b = {**db.plan_b, "steps": [dict(step) for step in db.plan_b["steps"]]}
+
+    with pytest.raises(HTTPException) as exc:
+        asyncio.run(
+            release_router.update_release_plan(
+                "plan-a",
+                release_router.ReleasePlanUpsertRequest(
+                    name="Plan B",
+                    steps=[{"application_id": "app-a", "position": 0}],
+                ),
+                current=_member(),
+                db=db,
+            )
+        )
+
+    assert exc.value.status_code == 409
+    assert "plan-b" not in str(exc.value.detail).lower()
+    assert db.plan_a == before_a
+    assert db.plan_b == before_b
