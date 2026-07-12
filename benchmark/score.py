@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import sys
 from collections import Counter
@@ -43,6 +44,17 @@ def load_json(path: Path) -> Any:
 def require(condition: bool, message: str, errors: list[str]) -> None:
     if not condition:
         errors.append(message)
+
+
+def validate_catalog_sources(catalog: dict[str, Any], errors: list[str]) -> None:
+    """Prove the checked-in snapshot still matches this repository's live catalog."""
+    repository = ROOT.parent
+    for relative, expected in catalog.get("source_sha256", {}).items():
+        source = repository / relative
+        require(source.is_file(), f"catalog: missing live source {relative}", errors)
+        if source.is_file():
+            actual = hashlib.sha256(source.read_bytes()).hexdigest()
+            require(actual == expected, f"catalog: snapshot drift for {relative}", errors)
 
 
 def validate_scenario(path: Path, data: Any, catalog: dict[str, Any]) -> list[str]:
@@ -187,6 +199,7 @@ def main() -> int:
     pattern = f"{args.category}/*/scenario.json" if args.category else "*/*/scenario.json"
     paths = sorted((ROOT / "scenarios").glob(pattern))
     errors: list[str] = []
+    validate_catalog_sources(catalog, errors)
     scenarios: list[dict[str, Any]] = []
     for path in paths:
         data = load_json(path)

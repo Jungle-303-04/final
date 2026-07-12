@@ -412,3 +412,5 @@ format: "[시각] [트랙] 한 줄 상태 + 커밋 hash (있으면)"
 [2026-07-13 07:47 KST] [벤치] imagepull 2개 + 281c636b4
 
 [2026-07-13 07:50 KST] [벤치] probe 2개 + cc0b91ce7
+
+[2026-07-13 07:53 KST] [벤치] service-selector 2개 + dd601b3f8
