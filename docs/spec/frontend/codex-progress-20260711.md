@@ -1442,3 +1442,24 @@ API 완성: getRemediationBundle (97c862da1)
   - shadcn source audit: 482 previews PASS, upstream 21e4ceb
   - Vite production build: PASS
 ```
+
+## 2026-07-13 Generic command receipt API 완료
+
+API 완성: submitCommand (d763ab682)
+
+- `AcceptedResponse.command_id`를 required `string | null`로 검증한다.
+- non-null 값은 서버 receipt 그대로 유지하고, recorded approval 때문에 제출 시점 파생이
+  불가능한 경로의 null은 계산·추측·fallback 없이 그대로 유지한다.
+- command_id 키 누락, 잘못된 correlation type, backend structured error는 공용 API 오류 경계로
+  거부·보존한다. 상태 추적 adapter는 APIQ-027 앵커 전 소비하지 않는다.
+- 코드 커밋 `d763ab682`는 `origin/woonyong/ui-layer-lab`의 ancestor다.
+
+```text
+명령: npm run check
+결과: PASS
+  - TypeScript / ESLint: PASS
+  - Vitest: 94 files, 663 tests PASS
+  - product design guard: 275 files PASS
+  - shadcn source audit: 482 previews PASS, upstream 21e4ceb
+  - Vite production build: PASS
+```
