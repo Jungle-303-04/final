@@ -1467,3 +1467,21 @@ API 완성: submitCommand (d763ab682)
   - `src/product/pages/resources/ResourcesPage.test.tsx` 표 조회 assertion 실패
   - `submitCommand` targeted test는 PASS였으므로 이 실패를 APIQ-012 완료 PASS 증거로 쓰지 않음
 ```
+
+### 2026-07-13 full gate 재검증과 command polling claim
+
+- 06:37 KST의 간헐 실패 후 동일 full gate를 재실행해 전체 통과를 확인했다. 별도 재현에서는
+  `apiBoundary`의 반복 Git 증거 조회와 Resources의 다단계 로딩을 1초로 가정한 테스트 경합을
+  확인했으며, 제품 응답을 가짜로 대체하지 않고 테스트 수명주기만 안정화한다.
+- queue의 다음 고정 순서인 APIQ-027을 `Codex-API@woonyong/ui-layer-lab`이 claim했다.
+  completion anchor 전까지 제품 adapter는 command status API를 소비하지 않는다.
+
+```text
+명령: npm run check
+결과: PASS (2026-07-13 06:50~06:57 KST)
+  - TypeScript / ESLint: PASS
+  - Vitest: 94 files, 663 tests PASS
+  - product design guard: 275 files PASS
+  - shadcn source audit: 482 previews PASS, upstream 21e4ceb
+  - Vite production build: PASS
+```
