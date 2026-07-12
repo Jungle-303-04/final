@@ -45,6 +45,9 @@ export {
   type SubmittedPrometheusQuery,
 } from "./metrics";
 export {
+  listMetricQueryPresets,
+} from "./metric-query-presets";
+export {
   getClusterResourceUsageSeries,
   type ResourceUsageTarget,
   type UsageSeriesOptions,
@@ -131,6 +134,12 @@ export {
   type PrometheusQueryDefinition,
   type PrometheusRangeResult,
 } from "./metrics-schemas";
+export {
+  metricQueryPresetListSchema,
+  metricQueryPresetSchema,
+  type MetricQueryPreset,
+  type MetricQueryPresetList,
+} from "./metric-query-presets-schemas";
 export {
   usageSeriesResponseSchema,
   type ClusterResourceUsageSeries,
