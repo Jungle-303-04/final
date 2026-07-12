@@ -1,12 +1,15 @@
 <!doctype html>
-<html lang="ko">
+<html lang="en">
   <head>
     <meta charset="UTF-8" />
     <script>
       (() => {
         let storedTheme = null;
+        let locale = navigator.language?.toLowerCase().startsWith("ko") ? "ko" : "en";
         try {
           storedTheme = window.localStorage.getItem("kubeheal-theme");
+          const storedLocale = window.localStorage.getItem("kubeheal.locale");
+          if (storedLocale === "en" || storedLocale === "ko") locale = storedLocale;
         } catch {
           storedTheme = null;
         }
@@ -14,6 +17,7 @@
         const isDark = storedTheme === "dark" || (storedTheme !== "light" && systemDark);
         document.documentElement.classList.toggle("dark", isDark);
         document.documentElement.style.colorScheme = isDark ? "dark" : "light";
+        document.documentElement.lang = locale;
       })();
     </script>
     <style>
@@ -36,10 +40,10 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta
       name="description"
-      content="Pinned, source-complete shadcn/ui component, chart, and block reference lab."
+      content="Provider-neutral Kubernetes operations and GitOps control plane."
     />
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
-    <title>shadcn/ui Official Lab</title>
+    <title>KubeHeal</title>
   </head>
   <body>
     <div id="root"></div>
