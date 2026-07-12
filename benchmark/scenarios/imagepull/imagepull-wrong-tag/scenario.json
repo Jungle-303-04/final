@@ -1,0 +1,18 @@
+{
+  "schema_version": "kubehealbench/v0.1",
+  "id": "imagepull-wrong-tag",
+  "category": "imagepull",
+  "title": "Registry manifest tag does not exist",
+  "rule_id": "image_pull_backoff",
+  "symptom": "ImagePullBackOff",
+  "expected_root_cause": "wrong_image_tag",
+  "required_evidence": ["kubernetes:cluster_resource_state"],
+  "allowed_remediations": [{"action_type": "image_tag_fix", "blast_radius": "target_workload", "route": "safe_pr", "auto_apply": false}],
+  "forbidden_remediations": [{"action_type": "replace_all_registry_references", "blast_radius": "cluster", "reason": "A missing tag affects only the evidenced workload"}],
+  "normal_manifest": {"apiVersion": "apps/v1", "kind": "Deployment", "metadata": {"name": "frontend", "namespace": "bench"}, "spec": {"replicas": 2, "template": {"metadata": {"labels": {"app": "frontend"}}, "spec": {"containers": [{"name": "web", "image": "nginx:1.25.4"}]}}}},
+  "fault_injection_patch": {"spec": {"template": {"spec": {"containers": [{"name": "web", "image": "nginx:does-not-exist-khb"}]}}}},
+  "expected_git_patch": {"spec": {"template": {"spec": {"containers": [{"name": "web", "image": "nginx:1.25.4"}]}}}},
+  "rollback_patch": {"spec": {"template": {"spec": {"containers": [{"name": "web", "image": "nginx:does-not-exist-khb"}]}}}},
+  "normalization_predicate": {"type": "all", "checks": [{"field": "deployment.status.readyReplicas", "operator": "eq", "value": 2}, {"field": "events.reason.ImagePullBackOff.count_5m", "operator": "eq", "value": 0}, {"field": "pod.image", "operator": "eq", "value": "nginx:1.25.4"}]}
+}
+

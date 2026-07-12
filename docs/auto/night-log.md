@@ -405,6 +405,23 @@ format: "[시각] [트랙] 한 줄 상태 + 커밋 hash (있으면)"
 - [B] 활성 lane 5개·보호 6개는 유지했다.
 - [C] 166개는 사람 판단 대기로 유지했다.
 
+[2026-07-13 07:40 KST] [벤치] oom 2개 + 7da4d6ba7
+
+[2026-07-13 07:40 KST] [벤치] crashloop 2개 + 7ab0d447b
+
+[2026-07-13 07:41 KST] [벤치] imagepull 2개 + 281c636b4
+
+[2026-07-13 07:42 KST] [벤치] probe 2개 + cc0b91ce7
+
+[2026-07-13 07:43 KST] [벤치] service-selector 2개 + dd601b3f8
+
+[2026-07-13 07:46 KST] [벤치] BLOCKED — `bash scripts/test.sh`: 1 failed, 1645 passed,
+3 skipped. `tests/test_docs_index.py::test_all_markdown_docs_are_linked_from_docs_root`가 신규
+`docs/spec/remediation-bundle-v1alpha1.md`의 `docs/README.md` 링크를 요구함. 해결 파일
+`docs/README.md`는 [D-013] 소유 경로 밖이므로 수정 금지. 자체 채점은 10개 전부 PASS,
+ruff/import-linter PASS. 질문: B-트랙에 `docs/README.md` 링크 1줄 수정 권한을 추가할지,
+백엔드 문서 소유자가 링크를 착륙시킬지 결정 요청.
+
 ## 2026-07-13 07:46 KST — C0 완료 증거
 
 - branch: `codex/f-audit-timeline`
@@ -420,3 +437,52 @@ format: "[시각] [트랙] 한 줄 상태 + 커밋 hash (있으면)"
 [2026-07-13 07:46 KST] [백엔드] C in_progress — C0 완료 후 workspace-scoped audit timeline 계약 lock 확보
 
 [2026-07-13 07:46 KST] [백엔드] BLOCKED P — 사유: 실제 런타임 GitOps 권위 port 주입에는 frozen `src/services/ai/dispatch-worker/app.py` handler의 `EventContext` 배선이 필수이나 [D-012] 예외는 `src/services/ai/agent/recovery/**`만 허용 / 재현: 무인자 `RecoveryDispatcher()` 운영 경로는 DB authority를 받을 수 없어 모든 실제 patch가 `unsupported` / 질문: `dispatch-worker/app.py`의 handler `(evt, ctx)`·`RecoveryDispatcher(authority=ctx.db)` 최소 배선 예외 승인 여부 / 재개 조건: 해당 파일 3개 논리 변경 승인
+
+## 2026-07-13 08:02 KST — C 완료 증거
+
+- branch: `codex/f-audit-timeline`
+- HEAD: `d6ee319e5`
+- commits: `8f5f314c7 fix: webhook 상관관계 / poller 계약 / 이벤트 연속성`, `d6ee319e5 feat: 감사 타임라인 / 클러스터 권한 / keyset 커서`.
+- stat: C route 12 files changed, 800 insertions(+), 2 deletions(-); 신규 route·Bruno·migration·테스트 포함.
+- 인가: session workspace → RCA report/evidence 권위 cluster 단일성 → `RCA_READ`; 미존재·NULL·충돌·거부는 404. 실제 timeline SELECT가 ownership을 동일 snapshot에서 재검증.
+- 데이터 경계: raw JSONB 미선택, 알려진 subject의 허용 scalar 21개만 SQL에서 최대 500자 projection; 기본 50/최대 200 keyset 페이지.
+- 신규/관련 테스트: 139 passed; 전체 pytest `1675 passed, 3 skipped`.
+- 전체 게이트: Ruff lint/format PASS, import-linter 2 kept/0 broken, compileall PASS, manifest PASS(management 68, target 20), Alembic 단일 head `20260713_0750`.
+- 독립 감사: 계약·보안 최종 P0 0건/P1 0건.
+- frozen path 변경 0건: `src/domains/rca/**`, `src/services/ai/**`, `src/packages/runtime/worker.py`.
+
+[2026-07-13 08:02 KST] [백엔드] D in_progress — 신규 `src/domains/rca_changes/` 도메인으로 frozen RCA와 분리; projection·조회 계약 lock 확보
+
+## GO-REQUEST [B] — KubeHealBench v0.1 lane 통합 승인 요청
+
+- 대상: `codex/bench-scenarios` (산출물 HEAD `221207fe0`; 이 블록은 별도 docs 증거 커밋).
+- 완료 범위: [D-013]/[D-014] — 실제 cause/recovery 카탈로그 기반 정답 시나리오 10개
+  (oom/crashloop/imagepull/probe/service-selector 각 2개), 자기완결 정적 채점기, 공개 지표
+  6개 정의, RemediationBundle v1alpha1 공개 규격, docs 색인 링크.
+- 커밋: `7da4d6ba7`, `7ab0d447b`, `281c636b4`, `cc0b91ce7`, `dd601b3f8`,
+  `8d5442985`, `0ccddaf3f`, `221207fe0`.
+- 자체 채점: `python3 benchmark/score.py` → `RESULT PASS (10 scenarios;
+  crashloop=2, imagepull=2, oom=2, probe=2, service-selector=2)`; live catalog/recovery 원본
+  SHA-256 일치, schema/candidate/named evidence/recovery action/forbidden blast-radius 검증.
+- 최종 전체 게이트: `bash scripts/test.sh` → Ruff lint PASS / format
+  `470 files already formatted` / import-linter `2 kept, 0 broken` / pytest
+  `1646 passed, 3 skipped`.
+- 범위 증거: `src/**` 변경 0건. [D-014] 예외 `docs/README.md`는 자기 산출물 링크 1줄
+  추가만 존재하며 기존 줄 수정·삭제 0건. 그 외 변경은 `benchmark/**`,
+  `docs/spec/remediation-bundle-v1alpha1.md`, 요구된 `docs/auto/night-log.md` 기록뿐.
+- 사람 검증 명령(복사 가능):
+
+  ```bash
+  git -C /private/tmp/sw-ai-bench-scenarios status --short
+  git -C /private/tmp/sw-ai-bench-scenarios diff --name-only f086be51c...codex/bench-scenarios
+  git -C /private/tmp/sw-ai-bench-scenarios diff --name-only f086be51c...codex/bench-scenarios -- 'src/**'
+  python3 /private/tmp/sw-ai-bench-scenarios/benchmark/score.py
+  bash /private/tmp/sw-ai-bench-scenarios/scripts/test.sh
+  ```
+
+- 예상 결과: 첫 명령 0줄, 변경은 B-트랙 소유 경로·night-log·[D-014] 색인 1줄뿐,
+  `src/**` 명령 0줄, scorer 10개 PASS, 전체 gate PASS.
+- 사람 GO 후 통합: dev worktree를 clean 상태로 만든 뒤 `--no-ff` merge와 `origin dev` push.
+  이 세션은 merge/push하지 않고 대기한다.
+- 실패 시 롤백: push 전 충돌/검증 실패는 merge를 완료하거나 push하지 말고 사람 판단;
+  push 후에는 이력 보존형 `git revert -m 1 <merge_commit>` 후 전체 gate 재검증.

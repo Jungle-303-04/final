@@ -1,0 +1,63 @@
+{
+  "snapshot_version": "2026-07-13",
+  "source_sha256": {
+    "src/services/ai/agent/causes/catalog/crashloop.yaml": "3ec75199452721f68ea637b4e3a4db603627a1192de93fc6411d30c3bd3f1921",
+    "src/services/ai/agent/causes/catalog/image_pull.yaml": "cefa73c713b86a44303f0bc881dc2fb119e1ddd1790961cbc37088367c9fb772",
+    "src/services/ai/agent/causes/catalog/readiness.yaml": "e09f2afd27bcbab5a88a7908067d245a469a2ec9b4167aa0450cd18bf1742cf3",
+    "src/services/ai/agent/recovery/builtin.py": "224cf33455fc3885e0900f8cd0b6face5f7bdf02124f13c0e54a269596de2077"
+  },
+  "fallback_actions": ["manual_analysis"],
+  "rules": {
+    "crashloop_backoff": {
+      "symptoms": ["CrashLoopBackOff", "pod_restart_loop"],
+      "candidates": {
+        "oom_killed": ["kubernetes:cluster_resource_state", "metrics:telemetry_metrics", "logs:related_logs"],
+        "bad_image_rollout": ["kubernetes:cluster_resource_state", "logs:related_logs", "metadata:current_workload_snapshots"],
+        "config_env_error": ["kubernetes:cluster_resource_state", "logs:related_logs"],
+        "app_port_bind_failed": ["kubernetes:cluster_resource_state", "logs:related_logs"],
+        "permission_denied_startup": ["kubernetes:cluster_resource_state", "logs:related_logs"],
+        "app_startup_failure": ["kubernetes:cluster_resource_state", "logs:related_logs"],
+        "dependency_connection_failure": ["kubernetes:cluster_resource_state", "logs:related_logs", "traces:related_traces"]
+      }
+    },
+    "image_pull_backoff": {
+      "symptoms": ["ImagePullBackOff", "ErrImagePull"],
+      "candidates": {
+        "wrong_image_tag": ["kubernetes:cluster_resource_state"],
+        "missing_image_pull_secret": ["kubernetes:cluster_resource_state"],
+        "registry_unavailable": ["kubernetes:cluster_resource_state"],
+        "registry_rate_limited": ["kubernetes:cluster_resource_state"],
+        "image_platform_mismatch": ["kubernetes:cluster_resource_state"]
+      }
+    },
+    "probe_failure": {
+      "symptoms": ["Probe failure", "ProbeFailed", "ReadinessProbeFailed", "LivenessProbeFailed", "PodNotReady"],
+      "candidates": {
+        "probe_path_wrong": ["kubernetes:cluster_resource_state", "logs:related_logs", "metadata:current_workload_snapshots"],
+        "probe_port_wrong": ["kubernetes:cluster_resource_state", "logs:related_logs", "metadata:current_workload_snapshots"],
+        "timeout_too_short": ["kubernetes:cluster_resource_state", "metrics:telemetry_metrics", "logs:related_logs", "metadata:current_workload_snapshots"],
+        "startup_window_too_short": ["kubernetes:cluster_resource_state", "metrics:telemetry_metrics", "logs:related_logs", "metadata:current_workload_snapshots"],
+        "app_real_health_failure": ["kubernetes:cluster_resource_state", "metrics:telemetry_metrics", "logs:related_logs", "traces:related_traces"]
+      }
+    },
+    "service_no_ready_endpoints": {
+      "symptoms": ["Service has no ready endpoints", "ServiceEndpointsEmpty"],
+      "candidates": {
+        "selector_label_mismatch": ["kubernetes:cluster_resource_state", "metadata:service_selector_matches", "metadata:endpoint_slice_ready_endpoints"],
+        "pods_not_ready": ["kubernetes:cluster_resource_state", "metadata:endpoint_slice_ready_endpoints"],
+        "rollout_unavailable": ["kubernetes:cluster_resource_state", "metrics:telemetry_metrics", "metadata:current_workload_snapshots"],
+        "wrong_service_port": ["kubernetes:cluster_resource_state", "metadata:service_selector_matches"],
+        "endpoint_slice_delay": ["kubernetes:cluster_resource_state", "metadata:endpoint_slice_ready_endpoints"]
+      }
+    }
+  },
+  "recovery_actions": {
+    "oom_killed": ["rollout_restart", "scale"],
+    "bad_image_rollout": ["rollback"],
+    "app_startup_failure": ["rollback"],
+    "config_env_error": ["config_fix"],
+    "wrong_image_tag": ["image_tag_fix"],
+    "missing_image_pull_secret": ["image_pull_secret_fix"],
+    "registry_unavailable": ["registry_recovery"]
+  }
+}
