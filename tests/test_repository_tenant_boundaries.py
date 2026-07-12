@@ -212,6 +212,70 @@ def test_legacy_repository_id_is_resolved_by_workspace_ref_before_manage_check()
     )
 
 
+def test_authorized_legacy_repository_upsert_reuses_stored_id_without_owner_regrant() -> None:
+    victim_row = {
+        "repository_id": "repo-legacy-client-selected",
+        "workspace_id": "workspace-a",
+        "provider": "github",
+        "repo_ref": "acme/checkout",
+        "default_branch": "main",
+        "credential_ref": "db:github:legacy-token",
+        "status": "active",
+        "access_policy": {"visibility": "private"},
+    }
+    statements: list[Any] = []
+    grants: list[tuple[object, ...]] = []
+
+    class LegacyConnection:
+        def execute(self, statement: Any) -> _MappedResult:
+            statements.append(statement)
+            if getattr(statement, "is_select", False):
+                return _MappedResult(dict(victim_row))
+            return _MappedResult(
+                {
+                    **victim_row,
+                    "default_branch": "release",
+                    "credential_ref": "db:github:rotated-token",
+                }
+            )
+
+    @contextmanager
+    def legacy_connection():
+        yield LegacyConnection()
+
+    @contextmanager
+    def fake_unit_of_work():
+        yield object()
+
+    repository = object.__new__(RepoChangeRepository)
+    repository.connection = legacy_connection  # type: ignore[method-assign]
+    repository.unit_of_work = fake_unit_of_work  # type: ignore[method-assign]
+    repository.can_access = lambda *_args: True  # type: ignore[attr-defined]
+    repository._grant_owner_if_present = lambda *args: grants.append(args)  # type: ignore[method-assign]
+
+    stored = repository.register_repository(
+        {
+            "workspace_id": "workspace-a",
+            "repo_ref": "acme/checkout",
+            "default_branch": "release",
+            "credential_ref": "db:github:rotated-token",
+            "user_id": "repository-manager",
+        }
+    )
+
+    assert getattr(statements[0], "is_select", False)
+    select_sql, select_params = _compiled(statements[0])
+    assert "git_repositories.workspace_id =" in select_sql
+    assert "git_repositories.repo_ref =" in select_sql
+    assert {"workspace-a", "acme/checkout"}.issubset(set(select_params.values()))
+
+    insert_sql, insert_params = _compiled(statements[1])
+    assert "ON CONFLICT (repository_id) DO UPDATE" in insert_sql
+    assert insert_params["repository_id"] == victim_row["repository_id"]
+    assert stored["repository_id"] == victim_row["repository_id"]
+    assert grants == []
+
+
 def test_application_create_with_foreign_repository_id_is_rejected_before_victim_write() -> None:
     victim_row = {
         "repository_id": "repo-owned-by-workspace-b",
