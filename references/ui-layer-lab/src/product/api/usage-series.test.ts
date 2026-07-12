@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+import { ApiError } from "./client";
 import { getClusterResourceUsageSeries } from "./usage-series";
 
 function jsonResponse(payload: unknown, status = 200): Response {
@@ -123,5 +124,55 @@ describe("resource usage series API", () => {
         memPct: null,
       },
     ]);
+  });
+
+  it("rejects an out-of-range limit before opening the transport", async () => {
+    const fetchMock = vi.spyOn(globalThis, "fetch");
+
+    await expect(
+      getClusterResourceUsageSeries(
+        "cluster-1",
+        { resourceType: "node", name: "worker-1" },
+        { limit: 2_001 },
+      ),
+    ).rejects.toBeInstanceOf(RangeError);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("rejects top-level response drift while preserving the open usage map", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      jsonResponse({
+        cluster_id: "cluster-1",
+        samples: [{ sampled_at: null, usage: { future_metric: 1 } }],
+        unexpected: true,
+      }),
+    );
+
+    await expect(
+      getClusterResourceUsageSeries("cluster-1", {
+        resourceType: "node",
+        name: "worker-1",
+      }),
+    ).rejects.toMatchObject({
+      kind: "invalid-payload",
+      status: 200,
+    } satisfies Partial<ApiError>);
+  });
+
+  it("preserves a cluster permission denial instead of returning no-data", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      jsonResponse({ detail: "cluster access denied" }, 403),
+    );
+
+    await expect(
+      getClusterResourceUsageSeries("cluster-1", {
+        resourceType: "node",
+        name: "worker-1",
+      }),
+    ).rejects.toMatchObject({
+      detail: "cluster access denied",
+      kind: "forbidden",
+      status: 403,
+    } satisfies Partial<ApiError>);
   });
 });

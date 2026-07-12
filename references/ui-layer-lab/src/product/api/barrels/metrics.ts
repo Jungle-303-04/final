@@ -11,7 +11,10 @@ export {
   type PrometheusQueryRun,
   type SubmittedPrometheusQuery,
 } from "../metrics";
-export { listMetricQueryPresets } from "../metric-query-presets";
+export {
+  listMetricQueryPresets,
+  runMetricQueryPreset,
+} from "../metric-query-presets";
 export {
   getClusterResourceUsageSeries,
   type ResourceUsageTarget,

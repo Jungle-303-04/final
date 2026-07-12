@@ -1,7 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { ApiError } from "./client";
-import { listMetricQueryPresets } from "./metric-query-presets";
+import {
+  listMetricQueryPresets,
+  runMetricQueryPreset,
+} from "./metric-query-presets";
+import { runMetricQueryPreset as publicRunMetricQueryPreset } from "./index";
 
 const QUERY_PRESETS = {
   items: [
@@ -95,6 +99,57 @@ describe("saved metric query API", () => {
       kind: "unauthorized",
       status: 401,
       detail: "Not authenticated",
+    } satisfies Partial<ApiError>);
+  });
+
+  it("runs one backend-owned preset without sending a request body", async () => {
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      jsonResponse({
+        accepted: true,
+        command_id: "cmd-preset-1",
+        correlation_id: "corr-preset-1",
+      }),
+    );
+
+    await expect(
+      runMetricQueryPreset("prod/seoul", "preset cpu/5m"),
+    ).resolves.toEqual({
+      accepted: true,
+      command_id: "cmd-preset-1",
+      correlation_id: "corr-preset-1",
+    });
+    expect(fetchMock).toHaveBeenCalledOnce();
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/clusters/prod%2Fseoul/metric-query-presets/preset%20cpu%2F5m/run",
+      expect.objectContaining({
+        method: "POST",
+      }),
+    );
+    expect(fetchMock.mock.calls[0]?.[1]).not.toHaveProperty("body");
+    expect(fetchMock.mock.calls[0]?.[1]?.headers).toBeInstanceOf(Headers);
+    expect((fetchMock.mock.calls[0]?.[1]?.headers as Headers).get("x-service-csrf"))
+      .toBe("same-origin");
+  });
+
+  it("exports the preset runner through the public API barrel", () => {
+    expect(publicRunMetricQueryPreset).toBe(runMetricQueryPreset);
+  });
+
+  it("rejects contract drift in a preset run receipt", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      jsonResponse({
+        accepted: true,
+        command_id: "cmd-preset-1",
+        correlation_id: "corr-preset-1",
+        status: "queued",
+      }),
+    );
+
+    await expect(
+      runMetricQueryPreset("cluster-1", "preset-1"),
+    ).rejects.toMatchObject({
+      kind: "invalid-payload",
+      status: 200,
     } satisfies Partial<ApiError>);
   });
 });
