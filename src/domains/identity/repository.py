@@ -1072,7 +1072,11 @@ class IdentityAccessRepository(DatabaseConnection):
             for r in rows
         ]
 
-    def list_access_grants(self, resource_id: str | None = None) -> list[JsonObject]:
+    def list_access_grants(
+        self,
+        organization_id: str,
+        resource_id: str | None = None,
+    ) -> list[JsonObject]:
         assignment = self.resource_assignment_table
         role = self.member_resource_role_table
         user = self.user_table
@@ -1092,7 +1096,10 @@ class IdentityAccessRepository(DatabaseConnection):
                     role.c.resource_assignment_id == assignment.c.resource_assignment_id,
                 ).join(user, role.c.user_id == user.c.user_id, isouter=True)
             )
-            .where(role.c.status == AccessStatus.ACTIVE.value)
+            .where(
+                role.c.status == AccessStatus.ACTIVE.value,
+                assignment.c.organization_id == organization_id,
+            )
             .order_by(role.c.created_at)
         )
         if resource_id:
