@@ -4,7 +4,7 @@ status: active-coordination-queue
 date: 2026-07-13
 owners: Codex 요청 / API 연결 작업자 claim·처리 / F 트랙 행(APIQ-029)·계약 갱신(APIQ-012)은 검토자 기록
 workorder: api-integration-workorder-20260711.md
-snapshot: 16행·30함수 / requested 16 / in_progress 0 / blocked 0 / valid completion anchors 20
+snapshot: 16행·30함수 / requested 15 / in_progress 1 / blocked 0 / valid completion anchors 20
 ---
 
 # 프론트 API 요청 큐
@@ -75,7 +75,7 @@ claim·heartbeat: YYYY-MM-DD HH:mm KST
 | `APIQ-018` | P2 | `listEvidence`, `listRcaReports` | `EVIDENCE_QUERY_PATH`, `RCA_REPORTS_PATH` | `evidence.ts`, `evidence-schemas.ts`, test | evidence trail / AI 분석 | 2026-07-11 16:19 KST | requested | — | — | ISO time, limit/offset/cursor, next_cursor 보존; correlation 없으면 호출 안 함 |
 | `APIQ-019` | P2 | `listAiConversations`, `getAiConversation`, `createAiConversation`, `appendAiMessage` | `AI_CONVERSATIONS_PATH`, `AI_CONVERSATION_PATH`, `AI_CONVERSATION_MESSAGES_PATH` | `conversations.ts`, `conversations-schemas.ts`, test | global AI conversation drawer | 2026-07-11 16:19 KST | requested | — | — | 내부 JsonMap·status string 보존; create/append 200 receipt; POST 재전송 금지 |
 | `APIQ-020` | P1 | `deleteAiConversation` | `AI_CONVERSATION_PATH` | `conversations.ts`, `conversations-schemas.ts`, test | AI conversation 삭제 | 2026-07-11 21:55 KST | requested | — | — | `BLOCK-204-001` 해소: `af03639ee`. raw body가 정확히 빈 204/205만 `apiRequestNoContent`로 처리; 직접 fetch·가짜 JSON 금지 |
-| `APIQ-029` | P2 | `getRemediationBundle` | `RCA_BUNDLE_PATH` | `rca-bundle.ts`, `rca-bundle-schemas.ts`, test | incident 상세 RemediationBundle 뷰 (VP-001) | 2026-07-13 | requested | — | — | 계약 완성 앵커 `44f35234e` [delta-green]. 3계층 meta/diagnosis/remediation 전부 strictObject close — 유일한 open record는 `draft.params`(action_type별 가변). `remediation: null` = plan 미생성 정상 상태(HTTP 200), 가짜 값 대체 금지. `diagnosis.selected_candidate_id`와 `remediation.selected_action_id`는 다른 계층 — 병합·상호 대체 금지. zod 검증 실패 시 fallback·부분 렌더 금지(오류 그대로 반환, 표시 정책은 adapter/화면 소유). 필드 정본: dev repo `docs/backend-f-progress.md` BQ-003 프론트 인계 절 + `docs/spec/remediation-bundle.schema.json` + Bruno `docs/api/05-rca-dashboard/13-remediation-bundle.bru` |
+| `APIQ-029` | P2 | `getRemediationBundle` | `RCA_BUNDLE_PATH` | `rca-bundle.ts`, `rca-bundle-schemas.ts`, test | incident 상세 RemediationBundle 뷰 (VP-001) | 2026-07-13 | in_progress | `Codex-API@woonyong/ui-layer-lab` | 2026-07-13 03:59 KST | 계약 완성 앵커 `44f35234e` [delta-green]. 3계층 meta/diagnosis/remediation 전부 strictObject close — 유일한 open record는 `draft.params`(action_type별 가변). `remediation: null` = plan 미생성 정상 상태(HTTP 200), 가짜 값 대체 금지. `diagnosis.selected_candidate_id`와 `remediation.selected_action_id`는 다른 계층 — 병합·상호 대체 금지. zod 검증 실패 시 fallback·부분 렌더 금지(오류 그대로 반환, 표시 정책은 adapter/화면 소유). 필드 정본: dev repo `docs/backend-f-progress.md` BQ-003 프론트 인계 절 + `docs/spec/remediation-bundle.schema.json` + Bruno `docs/api/05-rca-dashboard/13-remediation-bundle.bru` |
 
 ## 3. 기존 구현 검증·승인
 
