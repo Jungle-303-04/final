@@ -1243,3 +1243,59 @@ API 완성: listClusters (257581398)
 결과: PASS — TypeScript, ESLint, 43 files/301 tests, design guard 120 files,
       shadcn audit 482 previews, production build
 ```
+
+## 2026-07-12 Home 실 API 탐색 화면 1차 릴리스
+
+- 제품 코드 커밋: `8dbec35aa`.
+- Home은 완료 앵커가 있는 `listClusters`, `getClusterSummary`, `getClusterNodesSummary`,
+  `getNodePodsSummary`만 composition root에서 import한다. API module import는
+  `src/product/app/apiComposition.ts` 한 곳에만 존재하고 mount 전 feature 요청은 0개다.
+- cluster selector와 URL `cluster` query는 같은 canonical ID를 사용한다. URL의 ID가 현재
+  `limit=100` 목록에 없으면 다른 cluster로 자동 대체하지 않고 “현재 조회 목록에서 확인할 수 없음”으로
+  표시한다. 목록 완전성이 unknown이므로 존재하지 않는다고 단정하지 않는다.
+- Node 선택은 같은 Home surface에서 URL `node` query와 Pod panel로 전환한다. Node 목록은
+  completeness unknown이므로 목록 불일치만으로 deep link를 거부하지 않고, Pod endpoint의 404를
+  authoritative unknown-node로 사용한다. Kubernetes Node 이름은 DNS subdomain 형식과 253자 상한을
+  먼저 검증한다.
+- 선택 cluster의 overview, nodes, pods는 같은 `cluster.read` 권한 authority다. 어느 요청이든 403이면
+  cluster frame 전체와 마지막 성공 cache를 원자적으로 폐기하고 global forbidden surface로 전환한다.
+  401은 `AuthSessionGate.reportUnauthorized()` 단일 이벤트로 session authority에 수렴한다.
+- 30초 visible polling, visibility 복귀 즉시 갱신, 수동 새로 고침을 지원한다. background 실패는
+  403을 제외하고 마지막 성공 데이터를 유지하며 `refreshFailure`와 `retryAfterSeconds`를 별도로
+  표시한다. 빠른 A→B→A 전환과 StrictMode 중복 mount에서도 구세대 응답과 중복 GET을 차단한다.
+- collection 길이는 총수로 사용하지 않는다. Node, Pod, workload, warning, incident slice는
+  “표시 N개 · 전체 수 미확인”으로 표기하고, catalog의 `incidentCount`와 표시 warning 수를 분리한다.
+  CPU·memory 100% 초과 값은 실제 text로 보존하고 progress geometry만 100으로 clamp한다.
+- 실제 API 브라우저 검증은 `http://127.0.0.1:5180/product`에서 수행했다. 인증된
+  `kubernetes-ops` 응답으로 Pod 52, Node 2, cluster incident 2가 표시됐고, 실제 Node 선택과
+  Pod summary request, URL drill-down, Node focus return을 확인했다. synthetic fallback은 없다.
+- 실제 응답에서 cluster 총 Pod는 52인데 두 Node의 `podsRunning`은 각각 0으로 관측됐다. 프론트는
+  값을 발명하거나 cluster 총수로 역산하지 않는다. 이 불일치는 backend 관측 데이터 품질 항목으로
+  남기며 Home adapter 계약을 우회하지 않는다.
+- API 작업자 커밋 `6d36ad582`는 API 소유 파일만 수정했고 전체 gate는 통과하지만, `APIQ-009`의
+  선행 claim·heartbeat와 완료 조율 커밋, `API 완성:` 앵커가 없다. 따라서
+  `getClusterResourceUsageSeries`는 계속 requested이며 제품 composition에서 소비하지 않는다.
+- 최종 질문 기본 결정은 독립 구현을 유지한다. graph는 xyflow+ELK, 대규모 목록은 TanStack Virtual을
+  기본 후보로 두고, editor·diff·terminal 의존성은 실제 화면 착수 전까지 추가하지 않는다.
+
+```text
+명령: cd references/ui-layer-lab && npm run check
+결과: PASS
+  - TypeScript / ESLint: PASS
+  - Vitest: 54 files, 377 tests PASS
+  - product design guard: 153 files PASS
+  - shadcn source audit: 482 previews PASS, upstream 21e4ceb
+  - Vite production build: PASS
+
+명령: npm run visual-product
+결과: PASS — 22 isolated scenarios
+  - Home Node 기본 frame / Pod drill-down frame
+  - desktop, mobile dark, 320px, 200% text, forced-colors
+  - cluster 403 cache purge, exact GET count, unexpected network·WebSocket 0
+
+스크린샷:
+  - references/ui-layer-lab/output/playwright/product-home-authenticated-node-desktop-light.png
+  - references/ui-layer-lab/output/playwright/product-home-authenticated-pod-desktop-light.png
+  - references/ui-layer-lab/output/playwright/product-home-authenticated-node-mobile-dark.png
+  - references/ui-layer-lab/output/playwright/product-home-authenticated-node-reflow-320-light.png
+```
