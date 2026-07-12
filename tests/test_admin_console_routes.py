@@ -7,9 +7,11 @@ from types import SimpleNamespace
 
 import pytest
 from fastapi import HTTPException, Response
+from fastapi.routing import APIRoute
 
 from domains.identity.admin_router import remove_group_member
 from domains.identity.admin_router import router as admin_router
+from domains.identity.dependencies import require_admin_session
 from packages.contracts.gateway import routes as gateway_routes
 
 
@@ -44,6 +46,20 @@ def test_gap_paths_do_not_collide_with_existing() -> None:
         gateway_routes.AI_CONVERSATIONS_PATH,
     }
     assert new.isdisjoint(existing)
+
+
+def test_list_access_requires_admin_session() -> None:
+    route = next(
+        route
+        for route in admin_router.routes
+        if isinstance(route, APIRoute)
+        and route.path == gateway_routes.ACCESS_PATH
+        and "GET" in route.methods
+    )
+
+    assert any(
+        dependency.call is require_admin_session for dependency in route.dependant.dependencies
+    )
 
 
 class LastAdminDb:

@@ -117,6 +117,48 @@ def test_gateway_request_logging_records_status_and_path(monkeypatch, caplog) ->
     assert context["duration_ms"] >= 0
 
 
+@pytest.mark.parametrize(
+    ("fail_request", "expected_status", "expected_log_message"),
+    [
+        (False, 404, "gateway_request_completed"),
+        (True, 500, "gateway_request_failed"),
+    ],
+)
+def test_gateway_request_logging_redacts_install_token(
+    monkeypatch,
+    caplog,
+    fail_request: bool,
+    expected_status: int,
+    expected_log_message: str,
+) -> None:
+    monkeypatch.setenv("DATABASE_URL", "postgresql://user:pass@postgresql:5432/service")
+    gateway = load_gateway_module()
+    agent_token = "install-super-secret-token"
+
+    class UnknownInstallTokenDb:
+        def authenticate_cluster_agent(self, _token_hash: str) -> None:
+            if fail_request:
+                raise RuntimeError("install token lookup failed")
+            return None
+
+    monkeypatch.setattr(gateway, "Database", UnknownInstallTokenDb)
+    app = gateway.create_app()
+    caplog.set_level(logging.INFO)
+
+    response = TestClient(app, raise_server_exceptions=False).get(f"/install/{agent_token}")
+
+    assert response.status_code == expected_status
+    contexts = [
+        record.context
+        for record in caplog.records
+        if record.getMessage() == expected_log_message
+        and isinstance(getattr(record, "context", None), dict)
+    ]
+    assert contexts
+    assert contexts[-1]["path"] == "/install/[REDACTED]"
+    assert agent_token not in repr(contexts)
+
+
 def test_gateway_readyz_checks_database_readiness(monkeypatch) -> None:
     monkeypatch.setenv("DATABASE_URL", "postgresql://user:pass@postgresql:5432/service")
     gateway = load_gateway_module()

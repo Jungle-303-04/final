@@ -1694,6 +1694,7 @@ def test_install_manifest_by_token_serves_same_manifest_as_registration() -> Non
     response = asyncio.run(install_manifest_by_token(token, db=db))
 
     assert response.media_type == "text/yaml"
+    assert response.headers.get("cache-control") == "no-store"
     body = response.body.decode()
     assert 'AGENT_TOKEN: "install-token-1"' in body
     assert "name: cluster-agent" in body
