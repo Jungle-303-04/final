@@ -175,3 +175,5 @@ $ git merge-base --is-ancestor 97c862da1 origin/woonyong/ui-layer-lab; echo $?
 ```
 
 - 제품 화면·adapter 소비는 이 앵커 전까지 0건이었고, 완료 조율 커밋 이후에만 허용한다.
+
+[2026-07-13 06:31:17 KST] [프론트] C in_progress — APIQ-012 receipt claim; APIQ-027 앵커 전 getCommandStatus 소비는 보류
