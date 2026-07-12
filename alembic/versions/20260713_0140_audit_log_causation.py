@@ -4,6 +4,8 @@ Revision ID: 20260713_0140
 Revises: 20260710_0900
 Create Date: 2026-07-13 01:40:00
 
+주의: CONCURRENTLY 빌드 실패 시 INVALID 인덱스가 남을 수 있어 재시도 전에 수동 정리가 필요하다.
+
 """
 
 from __future__ import annotations
