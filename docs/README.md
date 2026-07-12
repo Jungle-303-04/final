@@ -68,6 +68,7 @@
 5. [RCA 데이터 스키마](rca-production-onboarding/04-rca-data-schema.md)
 6. [벤치마크 최소선 기준 프로덕션 완성 설계](rca-production-onboarding/05-production-completion-scope.md)
 7. [Bruno API 테스트](api/README.md)
+8. [Raw Evidence cluster 권한 연결 인수인계](team/gain-evidence-query-access-handoff-20260712.md)
 
 가인은 먼저 `cluster.evidence.received`가 RCA worker chain을 어떻게 통과하는지 본다.
 그다음 `safe_pr.requested`와 `safe_pr.created`의 경계를 분리해서 익힌다.
@@ -165,6 +166,7 @@ secret 이름과 주입 경계는 [Secrets](secrets.md)를 본다.
 - [cloudflare-waf-and-login](cloudflare-waf-and-login.md)
 - [continuation-execution-plan-2026-07-07](continuation-execution-plan-2026-07-07.md)
 - [codex-work-order-20260712](codex-work-order-20260712.md)
+- [team/gain-evidence-query-access-handoff-20260712](team/gain-evidence-query-access-handoff-20260712.md)
 - [current-service-state](current-service-state.md)
 - [security-review-20260710](security-review-20260710.md)
 - [unimplemented-review-20260711](unimplemented-review-20260711.md)
