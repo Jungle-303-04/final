@@ -59,6 +59,11 @@ export {
   type ScaleDeploymentOptions,
 } from "./deployments";
 export {
+  submitCommand,
+  type SubmitCommandInput,
+  type SubmitCommandOptions,
+} from "./commands";
+export {
   grantApproval,
   rejectApproval,
   type ApprovalDecisionOptions,
@@ -289,6 +294,10 @@ export {
   deploymentActionAcceptedSchema,
   type DeploymentActionAccepted,
 } from "./deployments-schemas";
+export {
+  commandAcceptedSchema,
+  type CommandAccepted,
+} from "./commands-schemas";
 export {
   approvalDecisionResponseSchema,
   type ApprovalDecisionResponse,
