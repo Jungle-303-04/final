@@ -1,5 +1,6 @@
 import { useCallback } from "react";
 import { useTheme } from "next-themes";
+import { useI18n } from "../i18n";
 
 export interface ProductThemeController {
   isDark: boolean;
@@ -9,8 +10,9 @@ export interface ProductThemeController {
 
 export function useProductTheme(): ProductThemeController {
   const { resolvedTheme, setTheme } = useTheme();
+  const { t } = useI18n();
   const isDark = resolvedTheme === "dark";
-  const label = isDark ? "라이트 모드로 전환" : "다크 모드로 전환";
+  const label = isDark ? t("shell.theme.switchToLight") : t("shell.theme.switchToDark");
   const toggle = useCallback(() => {
     setTheme(isDark ? "light" : "dark");
   }, [isDark, setTheme]);

@@ -1,6 +1,7 @@
 import { StatusMark, type StatusTone } from "./StatusMark";
 import { Button } from "./primitives/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "./primitives/tooltip";
+import { useI18n, type MessageKey } from "../i18n";
 
 export type ClusterConnectionState = "online" | "stale" | "pending" | "offline" | "unknown";
 
@@ -11,14 +12,15 @@ export function ClusterConnectionStatus({
   connectionState: ClusterConnectionState;
   lastObservedAt: string | null;
 }) {
-  const label = connectionLabel(connectionState);
-  const observation = formatObservation(lastObservedAt);
+  const { formatDate, t } = useI18n();
+  const label = t(connectionLabelKeys[connectionState]);
+  const observation = formatObservation(lastObservedAt, formatDate, t("common.state.unknown"));
   return (
     <Tooltip>
       <TooltipTrigger
         render={(
           <Button
-            aria-label={`${label} · 마지막 관측 ${observation}`}
+            aria-label={t("home.connection.aria", { status: label, time: observation })}
             size="sm"
             type="button"
             variant="ghost"
@@ -27,7 +29,7 @@ export function ClusterConnectionStatus({
       >
         <StatusMark label={label} tone={connectionTone(connectionState)} />
       </TooltipTrigger>
-      <TooltipContent side="bottom">마지막 관측 {observation}</TooltipContent>
+      <TooltipContent side="bottom">{t("home.lastObserved", { time: observation })}</TooltipContent>
     </Tooltip>
   );
 }
@@ -51,21 +53,24 @@ function connectionTone(state: ClusterConnectionState): StatusTone {
   return tones[state];
 }
 
-function connectionLabel(state: ClusterConnectionState) {
-  const labels: Record<ClusterConnectionState, string> = {
-    online: "연결됨",
-    stale: "관측 지연",
-    pending: "연결 확인 중",
-    offline: "연결 끊김",
-    unknown: "연결 상태 미확인",
-  };
-  return labels[state];
-}
+const connectionLabelKeys: Record<ClusterConnectionState, MessageKey> = {
+  online: "home.connection.online",
+  stale: "home.connection.stale",
+  pending: "home.connection.pending",
+  offline: "home.connection.offline",
+  unknown: "home.connection.unknown",
+};
 
-function formatObservation(value: string | null) {
-  if (!value) return "알 수 없음";
-  return new Intl.DateTimeFormat("ko-KR", {
+function formatObservation(
+  value: string | null,
+  formatDate: (value: Date | number, options?: Intl.DateTimeFormatOptions) => string,
+  unknownLabel: string,
+) {
+  if (!value) return unknownLabel;
+  const timestamp = Date.parse(value);
+  if (!Number.isFinite(timestamp)) return unknownLabel;
+  return formatDate(timestamp, {
     dateStyle: "medium",
     timeStyle: "short",
-  }).format(new Date(value));
+  });
 }

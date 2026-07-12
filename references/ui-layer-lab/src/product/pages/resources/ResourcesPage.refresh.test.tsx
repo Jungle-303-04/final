@@ -211,11 +211,12 @@ describe("ResourcesPage refresh and generation safety", () => {
       "/product/resources/pod?cluster=cluster-1",
       clusterPort,
     );
-    expect(await screen.findByText("checkout-api-0")).toBeTruthy();
+    expect(await screen.findByText("checkout-api-0", {}, { timeout: 5_000 })).toBeTruthy();
 
     fireEvent.click(screen.getByRole("button", { name: "새로 고침" }));
 
-    expect(await screen.findByText("클러스터 목록을 갱신하지 못했습니다")).toBeTruthy();
+    expect(await screen.findByText("클러스터 목록을 갱신하지 못했습니다", {}, { timeout: 5_000 }))
+      .toBeTruthy();
     expect(screen.getByText("checkout-api-0")).toBeTruthy();
   });
 

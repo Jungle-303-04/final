@@ -1,4 +1,10 @@
 import { Progress as ProgressPrimitive } from "@base-ui/react/progress";
+import {
+  DEFAULT_LOCALE,
+  formatNumberForLocale,
+  translate,
+  useOptionalI18n,
+} from "../../i18n";
 import { cn } from "./cn";
 
 type ProgressAccessibleName =
@@ -37,7 +43,6 @@ type ProgressBaseProps = ProgressPassthroughProps & {
 
 export type ProgressProps = ProgressBaseProps & ProgressAccessibleName;
 
-const INDETERMINATE_VALUE_TEXT = "진행 상태를 확인하는 중";
 const RUNTIME_PROTECTED_PROGRESS_PROPS = [
   "aria-hidden",
   "aria-valuemax",
@@ -65,6 +70,7 @@ export function Progress({
   valueText,
   ...rootProps
 }: ProgressProps) {
+  const i18n = useOptionalI18n();
   const sanitizedRootProps = sanitizeRootProps(rootProps);
   const normalizedValue = normalizeProgressValue(value);
   const normalizedLabel = normalizeRequiredText(
@@ -72,7 +78,12 @@ export function Progress({
     "Progress requires a non-empty accessible name",
   );
   const normalizedValueText = valueText === undefined
-    ? defaultValueText(normalizedValue)
+    ? defaultValueText(
+        normalizedValue,
+        i18n?.t("common.progress.indeterminate")
+          ?? translate(DEFAULT_LOCALE, "common.progress.indeterminate"),
+        i18n?.formatNumber ?? fallbackFormatNumber,
+      )
     : normalizeRequiredText(
         valueText,
         "Progress valueText must be non-empty when provided",
@@ -132,10 +143,19 @@ function normalizeRequiredText(value: string, message: string): string {
   return normalized;
 }
 
-function defaultValueText(value: number | null): string {
-  if (value === null) return INDETERMINATE_VALUE_TEXT;
-  return new Intl.NumberFormat(undefined, {
+function defaultValueText(
+  value: number | null,
+  indeterminateLabel: string,
+  formatNumber: (value: number | bigint, options?: Intl.NumberFormatOptions) => string,
+): string {
+  if (value === null) return indeterminateLabel;
+  return formatNumber(value / 100, {
     maximumFractionDigits: 2,
     style: "percent",
-  }).format(value / 100);
+  });
 }
+
+const fallbackFormatNumber = (
+  value: number | bigint,
+  options?: Intl.NumberFormatOptions,
+) => formatNumberForLocale(DEFAULT_LOCALE, value, options);

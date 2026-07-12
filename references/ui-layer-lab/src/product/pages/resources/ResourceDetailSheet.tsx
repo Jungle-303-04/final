@@ -1,9 +1,13 @@
 import { CircleAlert, Link2, ListTree } from "lucide-react";
 import type {
   ResourceDetail,
-  ResourceFacts,
   ResourceIdentity,
 } from "../../features/resources/resourcesContract";
+import {
+  useI18n,
+  type I18nController,
+  type TranslationFunction,
+} from "../../shared/i18n";
 import { ProductStateScreen } from "../../shared/ui/ProductStateScreen";
 import { StatusMark } from "../../shared/ui/StatusMark";
 import { Alert, AlertDescription, AlertTitle } from "../../shared/ui/primitives/alert";
@@ -20,6 +24,7 @@ import {
   TabsList,
   TabsTrigger,
 } from "../../shared/ui/primitives/tabs";
+import { DefinitionGrid, ResourceFactsPanel } from "./ResourceFactsPanel";
 import type { ResourcesResourceState } from "./resourcesPageStateModel";
 
 export function ResourceDetailSheet({
@@ -39,20 +44,23 @@ export function ResourceDetailSheet({
   open: boolean;
   tab: string;
 }) {
-  const title = identity ? `${identity.name} 상세` : "리소스 상세 정보 오류";
+  const { t } = useI18n();
+  const title = identity
+    ? t("resources.detail.title", { name: identity.name })
+    : t("resources.detail.errorTitle");
   return (
     <Sheet onOpenChange={(nextOpen) => { if (!nextOpen) onClose(); }} open={open}>
       <SheetContent
         className={full ? "w-full max-w-none sm:max-w-none" : "w-full sm:max-w-2xl"}
-        closeLabel="상세 닫기"
+        closeLabel={t("resources.detail.close")}
         side="right"
       >
         <SheetHeader className="border-b pr-12">
           <SheetTitle>{title}</SheetTitle>
           <SheetDescription>
             {identity
-              ? `${identity.kind} · ${identity.namespace ?? "클러스터 범위"}`
-              : "URL의 리소스 identity를 해석할 수 없습니다."}
+              ? `${identity.kind} · ${identity.namespace ?? t("resources.detail.clusterScope")}`
+              : t("resources.detail.identityDescription")}
           </SheetDescription>
         </SheetHeader>
         <div className="min-h-0 flex-1 overflow-y-auto px-4 pb-6">
@@ -74,20 +82,33 @@ function DetailBody({
   onTabChange: (tab: string) => void;
   tab: string;
 }) {
+  const { formatDate, t } = useI18n();
   if (!identity) {
-    return <DetailAlert title="잘못된 상세 주소">kind와 namespace/name identity를 확인하세요.</DetailAlert>;
+    return (
+      <DetailAlert title={t("resources.detail.invalid.title")}>
+        {t("resources.detail.invalid.description")}
+      </DetailAlert>
+    );
   }
   if (detail.phase === "idle" || detail.phase === "loading") {
     return <ProductStateScreen kind="loading" placement="content" />;
   }
   if (detail.phase === "failed") {
     if (detail.failure.code === "not-found") {
-      return <DetailAlert title="리소스를 찾을 수 없습니다">삭제됐거나 현재 scope에서 사라졌습니다.</DetailAlert>;
+      return (
+        <DetailAlert title={t("resources.detail.notFound.title")}>
+          {t("resources.detail.notFound.description")}
+        </DetailAlert>
+      );
     }
     if (detail.failure.code === "forbidden") {
       return <ProductStateScreen issue={{ code: "forbidden" }} kind="forbidden" placement="content" />;
     }
-    return <DetailAlert title="상세 정보를 불러오지 못했습니다">목록은 그대로 유지했습니다.</DetailAlert>;
+    return (
+      <DetailAlert title={t("resources.detail.failed.title")}>
+        {t("resources.detail.failed.description")}
+      </DetailAlert>
+    );
   }
   const resource = detail.data.resource;
   const selectedTab = ["overview", "relations", "events"].includes(tab) ? tab : "overview";
@@ -97,39 +118,54 @@ function DetailBody({
       onValueChange={(value) => { if (value) onTabChange(value); }}
       value={selectedTab}
     >
-      <TabsList aria-label="리소스 상세 섹션" className="w-full" variant="line">
-        <TabsTrigger value="overview">개요</TabsTrigger>
-        <TabsTrigger value="relations">관계 {detail.data.related.length}</TabsTrigger>
-        <TabsTrigger value="events">이벤트 {detail.data.events.length}</TabsTrigger>
+      <TabsList aria-label={t("resources.detail.tabs.aria")} className="w-full" variant="line">
+        <TabsTrigger value="overview">{t("resources.detail.overview")}</TabsTrigger>
+        <TabsTrigger value="relations">
+          {t("resources.detail.relatedCount", { count: detail.data.related.length })}
+        </TabsTrigger>
+        <TabsTrigger value="events">
+          {t("resources.detail.eventsCount", { count: detail.data.events.length })}
+        </TabsTrigger>
       </TabsList>
       <TabsContent className="grid gap-5 py-4" value="overview">
         {detail.refreshFailure ? (
-          <DetailAlert title="상세 정보를 갱신하지 못했습니다">마지막 성공 응답을 표시합니다.</DetailAlert>
+          <DetailAlert title={t("resources.detail.refreshFailed.title")}>
+            {t("resources.detail.refreshFailed.description")}
+          </DetailAlert>
         ) : null}
         <section aria-labelledby="resource-status-title" className="grid gap-3 rounded-lg border p-4">
           <div className="flex flex-wrap items-center justify-between gap-2">
-            <h3 className="font-medium" id="resource-status-title">상태</h3>
+            <h3 className="font-medium" id="resource-status-title">
+              {t("resources.detail.status")}
+            </h3>
             <StatusMark label={resource.healthStatus} tone={resource.health} />
           </div>
           <DefinitionGrid entries={[
-            ["Status", resource.status || "알 수 없음"],
-            ["API version", resource.apiVersion || "미제공"],
-            ["관측 시각", resource.observedAt ?? "미관측"],
-            ["Identity", resource.identityStability === "uid" ? "UID 기반" : "이름 fallback"],
+            [t("resources.detail.status"), resource.status || t("common.state.unknown")],
+            [t("resources.detail.apiVersion"), resource.apiVersion || t("resources.detail.notProvided")],
+            [t("resources.detail.observedAt"), formatObservedAt(resource.observedAt, formatDate, t)],
+            [
+              t("resources.detail.identity"),
+              resource.identityStability === "uid"
+                ? t("resources.detail.identity.uid")
+                : t("resources.detail.identity.nameFallback"),
+            ],
           ]} />
         </section>
-        <Facts facts={resource.facts} />
+        <ResourceFactsPanel facts={resource.facts} />
       </TabsContent>
       <TabsContent className="grid gap-3 py-4" value="relations">
         {detail.data.related.length === 0 ? (
-          <EmptySection icon={Link2} text="서버가 계산한 관련 리소스가 없습니다." />
+          <EmptySection icon={Link2} text={t("resources.detail.relatedEmpty")} />
         ) : detail.data.related.map((group) => (
           <section className="rounded-lg border p-4" key={group.name}>
             <h3 className="mb-3 font-medium">{group.name}</h3>
             <ul className="grid gap-2">
               {group.items.map((item) => (
                 <li className="flex items-center justify-between gap-3 text-sm" key={item.id}>
-                  <span className="truncate">{item.kind} · {item.namespace ?? "cluster"}/{item.name}</span>
+                  <span className="truncate">
+                    {item.kind} · {item.namespace ?? t("resources.detail.clusterScope")}/{item.name}
+                  </span>
                   <StatusMark label={item.healthStatus} tone={item.health} />
                 </li>
               ))}
@@ -140,7 +176,7 @@ function DetailBody({
       </TabsContent>
       <TabsContent className="grid gap-3 py-4" value="events">
         {detail.data.events.length === 0 ? (
-          <EmptySection icon={ListTree} text="이 리소스에 연결된 이벤트가 없습니다." />
+          <EmptySection icon={ListTree} text={t("resources.detail.eventsEmpty")} />
         ) : detail.data.events.map((event) => (
           <section className="grid gap-2 rounded-lg border p-4" key={event.id}>
             <div className="flex flex-wrap items-center justify-between gap-2">
@@ -152,77 +188,15 @@ function DetailBody({
             {event.facts.type === "event" && event.facts.message ? (
               <p className="text-sm text-muted-foreground">{event.facts.message}</p>
             ) : null}
-            <p className="text-xs text-muted-foreground">{event.observedAt ?? "관측 시각 미제공"}</p>
+            <p className="text-xs text-muted-foreground">
+              {formatObservedAt(event.observedAt, formatDate, t)}
+            </p>
           </section>
         ))}
         <CompletenessNote />
       </TabsContent>
     </Tabs>
   );
-}
-
-function Facts({ facts }: { facts: ResourceFacts }) {
-  const entries = factsEntries(facts);
-  if (entries.length === 0) return null;
-  return (
-    <section aria-labelledby="resource-facts-title" className="grid gap-3 rounded-lg border p-4">
-      <h3 className="font-medium" id="resource-facts-title">관측 요약</h3>
-      <DefinitionGrid entries={entries} />
-    </section>
-  );
-}
-
-function DefinitionGrid({ entries }: { entries: Array<[string, string]> }) {
-  return (
-    <dl className="grid gap-x-4 gap-y-2 text-sm sm:grid-cols-2">
-      {entries.map(([label, value]) => (
-        <div className="min-w-0" key={label}>
-          <dt className="text-xs text-muted-foreground">{label}</dt>
-          <dd className="truncate font-medium" title={value}>{value}</dd>
-        </div>
-      ))}
-    </dl>
-  );
-}
-
-function factsEntries(facts: ResourceFacts): Array<[string, string]> {
-  if (facts.type === "pod") return compact([
-    ["Phase", facts.phase], ["Node", facts.nodeName],
-    ["Owner", facts.owner ? `${facts.owner.kind}/${facts.owner.name}` : null],
-    ["Restarts", numberText(facts.restartCount)],
-    ["CPU", unitText(facts.cpuMillicores, "m")],
-    ["Memory", unitText(facts.memoryMebibytes, "MiB")],
-  ]);
-  if (facts.type === "node") return compact([
-    ["Ready", facts.ready === null ? null : facts.ready ? "Yes" : "No"],
-    ["Pod capacity", numberText(facts.podCapacity)],
-    ["CPU", unitText(facts.cpuMillicores, "m")],
-    ["Memory", unitText(facts.memoryMebibytes, "MiB")],
-  ]);
-  if (facts.type === "workload") return compact([
-    ["Desired", numberText(facts.desiredReplicas)], ["Ready", numberText(facts.readyReplicas)],
-    ["Available", numberText(facts.availableReplicas)], ["Updated", numberText(facts.updatedReplicas)],
-  ]);
-  if (facts.type === "service") return compact([
-    ["Type", facts.serviceType], ["Cluster IP", facts.clusterIp], ["External URL", facts.externalUrl],
-  ]);
-  if (facts.type === "event") return compact([
-    ["Type", facts.eventType], ["Reason", facts.reason],
-    ["Count", numberText(facts.occurrenceCount)], ["Reporter", facts.reportingComponent],
-  ]);
-  return [];
-}
-
-function compact(entries: Array<[string, string | null]>): Array<[string, string]> {
-  return entries.filter((entry): entry is [string, string] => entry[1] !== null);
-}
-
-function numberText(value: number | null): string | null {
-  return value === null ? null : value.toLocaleString();
-}
-
-function unitText(value: number | null, unit: string): string | null {
-  return value === null ? null : `${value.toLocaleString()} ${unit}`;
 }
 
 function EmptySection({ icon: Icon, text }: { icon: typeof Link2; text: string }) {
@@ -237,7 +211,8 @@ function EmptySection({ icon: Icon, text }: { icon: typeof Link2; text: string }
 }
 
 function CompletenessNote() {
-  return <p className="text-xs text-muted-foreground">서버 조회 한도 내 결과이며 전체 수는 확인할 수 없습니다.</p>;
+  const { t } = useI18n();
+  return <p className="text-xs text-muted-foreground">{t("resources.detail.completeness")}</p>;
 }
 
 function DetailAlert({ children, title }: { children: string; title: string }) {
@@ -248,4 +223,13 @@ function DetailAlert({ children, title }: { children: string; title: string }) {
       <AlertDescription>{children}</AlertDescription>
     </Alert>
   );
+}
+
+function formatObservedAt(
+  value: string | null,
+  formatDate: I18nController["formatDate"],
+  t: TranslationFunction,
+): string {
+  if (!value) return t("resources.detail.observedAtMissing");
+  return formatDate(new Date(value), { dateStyle: "short", timeStyle: "short" });
 }

@@ -1,7 +1,9 @@
 // @vitest-environment jsdom
 
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, render as renderBase, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
+import type { ReactElement } from "react";
+import { I18nProvider } from "../../i18n";
 import { Progress } from "./progress";
 
 afterEach(cleanup);
@@ -122,6 +124,16 @@ describe("product Progress primitive", () => {
     expect(container.querySelector('[data-slot="progress-track"]')).toBeTruthy();
   });
 });
+
+function render(element: ReactElement) {
+  return renderBase(element, {
+    wrapper: ({ children }) => (
+      <I18nProvider navigatorLanguage="ko-KR" storage={null}>
+        {children}
+      </I18nProvider>
+    ),
+  });
+}
 
 function assertProgressTypeContracts() {
   // @ts-expect-error progress bars require an accessible name

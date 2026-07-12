@@ -46,7 +46,6 @@ const authLoginSelectors = [
 ];
 const authStateSelectors = [
   "[data-slot='empty']",
-  "[data-slot='badge']",
   "h1",
   "p",
 ];
@@ -113,7 +112,6 @@ const homeForbiddenSelectors = [
   "[data-slot='sidebar-inset']",
   "[data-slot='sidebar-trigger']",
   "[data-slot='empty']",
-  "[data-slot='badge']",
   "[role='alert']",
   "header",
   "main",
@@ -146,9 +144,43 @@ const resourcesDetailSelectors = [
   "[data-slot='tabs-list']",
   "[data-slot='tabs-trigger']",
 ];
+const productLocaleStorageKey = "product.locale";
+const browserLocales = {
+  en: "en-US",
+  ko: "ko-KR",
+};
+const localeSmokeCopy = {
+  en: {
+    home: {
+      clusterSelect: "Select cluster",
+      heading: "Cluster status",
+      navigation: "Primary navigation",
+      route: "Home",
+    },
+    resources: {
+      heading: "Resources",
+      navigation: "Primary navigation",
+      route: "Resources",
+    },
+  },
+  ko: {
+    home: {
+      clusterSelect: "클러스터 선택",
+      heading: "클러스터 상태",
+      navigation: "주요 메뉴",
+      route: "홈",
+    },
+    resources: {
+      heading: "리소스",
+      navigation: "주요 메뉴",
+      route: "리소스",
+    },
+  },
+};
 const visualScenarios = [
   {
     id: "auth-unauthenticated-desktop-light",
+    locale: "ko",
     url: productUrl,
     authSession: "unauthenticated",
     heading: "KubeHeal에 로그인",
@@ -160,6 +192,7 @@ const visualScenarios = [
   },
   {
     id: "auth-unauthenticated-mobile-dark",
+    locale: "ko",
     url: productUrl,
     authSession: "unauthenticated",
     heading: "KubeHeal에 로그인",
@@ -171,6 +204,7 @@ const visualScenarios = [
   },
   {
     id: "auth-unauthenticated-reflow-320-light",
+    locale: "ko",
     url: productUrl,
     authSession: "unauthenticated",
     heading: "KubeHeal에 로그인",
@@ -182,6 +216,7 @@ const visualScenarios = [
   },
   {
     id: "auth-unauthenticated-text-resize-200-light",
+    locale: "ko",
     url: productUrl,
     authSession: "unauthenticated",
     heading: "KubeHeal에 로그인",
@@ -194,6 +229,7 @@ const visualScenarios = [
   },
   {
     id: "auth-unauthenticated-forced-colors",
+    locale: "ko",
     url: productUrl,
     authSession: "unauthenticated",
     heading: "KubeHeal에 로그인",
@@ -205,6 +241,7 @@ const visualScenarios = [
   },
   {
     id: "home-authenticated-node-desktop-light-text-diet",
+    locale: "ko",
     url: productHomeUrl,
     authSession: "authenticated",
     homeScenario: true,
@@ -223,6 +260,7 @@ const visualScenarios = [
   },
   {
     id: "home-authenticated-pod-desktop-light",
+    locale: "ko",
     url: productHomeUrl,
     authSession: "authenticated",
     homeScenario: true,
@@ -241,6 +279,7 @@ const visualScenarios = [
   },
   {
     id: "home-authenticated-node-mobile-dark",
+    locale: "ko",
     url: productHomeUrl,
     authSession: "authenticated",
     homeScenario: true,
@@ -254,6 +293,7 @@ const visualScenarios = [
   },
   {
     id: "home-authenticated-node-reflow-320-light",
+    locale: "ko",
     url: productHomeUrl,
     authSession: "authenticated",
     homeScenario: true,
@@ -267,6 +307,7 @@ const visualScenarios = [
   },
   {
     id: "home-authenticated-node-text-resize-200-light",
+    locale: "ko",
     url: productHomeUrl,
     authSession: "authenticated",
     homeScenario: true,
@@ -281,6 +322,7 @@ const visualScenarios = [
   },
   {
     id: "home-authenticated-node-forced-colors",
+    locale: "ko",
     url: productHomeUrl,
     authSession: "authenticated",
     homeScenario: true,
@@ -293,11 +335,52 @@ const visualScenarios = [
     forcedColors: "active",
   },
   {
+    id: "home-locale-smoke-ko",
+    locale: "ko",
+    url: productHomeUrl,
+    authSession: "authenticated",
+    homeScenario: true,
+    homeFrame: "nodes",
+    localeSmoke: "home",
+    heading: localeSmokeCopy.ko.home.heading,
+    requiredSelectors: [
+      ...homeSelectors,
+      "[data-slot='sidebar']",
+      "[data-slot='sidebar-navigation']",
+      "[data-slot='sidebar-menu']",
+    ],
+    viewport: { width: 1440, height: 1000 },
+    theme: "light",
+    colorScheme: "light",
+    forcedColors: "none",
+  },
+  {
+    id: "home-locale-smoke-en",
+    locale: "en",
+    url: productHomeUrl,
+    authSession: "authenticated",
+    homeScenario: true,
+    homeFrame: "nodes",
+    localeSmoke: "home",
+    heading: localeSmokeCopy.en.home.heading,
+    requiredSelectors: [
+      ...homeSelectors,
+      "[data-slot='sidebar']",
+      "[data-slot='sidebar-navigation']",
+      "[data-slot='sidebar-menu']",
+    ],
+    viewport: { width: 1440, height: 1000 },
+    theme: "light",
+    colorScheme: "light",
+    forcedColors: "none",
+  },
+  {
     id: "resources-authenticated-desktop-light",
+    locale: "ko",
     url: productResourcesUrl,
     authSession: "authenticated",
     resourcesScenario: true,
-    heading: "Resources",
+    heading: "리소스",
     requiredSelectors: resourcesSelectors,
     viewport: { width: 1440, height: 1000 },
     theme: "light",
@@ -306,10 +389,11 @@ const visualScenarios = [
   },
   {
     id: "resources-authenticated-mobile-dark",
+    locale: "ko",
     url: productResourcesUrl,
     authSession: "authenticated",
     resourcesScenario: true,
-    heading: "Resources",
+    heading: "리소스",
     requiredSelectors: resourcesSelectors,
     viewport: { width: 390, height: 844 },
     theme: "dark",
@@ -318,10 +402,11 @@ const visualScenarios = [
   },
   {
     id: "resources-authenticated-reflow-320-light",
+    locale: "ko",
     url: productResourcesUrl,
     authSession: "authenticated",
     resourcesScenario: true,
-    heading: "Resources",
+    heading: "리소스",
     requiredSelectors: resourcesSelectors,
     viewport: { width: 320, height: 900 },
     theme: "light",
@@ -330,10 +415,11 @@ const visualScenarios = [
   },
   {
     id: "resources-authenticated-text-resize-200-light",
+    locale: "ko",
     url: productResourcesUrl,
     authSession: "authenticated",
     resourcesScenario: true,
-    heading: "Resources",
+    heading: "리소스",
     requiredSelectors: resourcesSelectors,
     viewport: { width: 640, height: 1000 },
     theme: "light",
@@ -343,10 +429,11 @@ const visualScenarios = [
   },
   {
     id: "resources-authenticated-forced-colors",
+    locale: "ko",
     url: productResourcesUrl,
     authSession: "authenticated",
     resourcesScenario: true,
-    heading: "Resources",
+    heading: "리소스",
     requiredSelectors: resourcesSelectors,
     viewport: { width: 1024, height: 900 },
     theme: "light",
@@ -354,7 +441,36 @@ const visualScenarios = [
     forcedColors: "active",
   },
   {
+    id: "resources-locale-smoke-ko",
+    locale: "ko",
+    url: productResourcesUrl,
+    authSession: "authenticated",
+    resourcesScenario: true,
+    localeSmoke: "resources",
+    heading: localeSmokeCopy.ko.resources.heading,
+    requiredSelectors: resourcesSelectors,
+    viewport: { width: 1440, height: 1000 },
+    theme: "light",
+    colorScheme: "light",
+    forcedColors: "none",
+  },
+  {
+    id: "resources-locale-smoke-en",
+    locale: "en",
+    url: productResourcesUrl,
+    authSession: "authenticated",
+    resourcesScenario: true,
+    localeSmoke: "resources",
+    heading: localeSmokeCopy.en.resources.heading,
+    requiredSelectors: resourcesSelectors,
+    viewport: { width: 1440, height: 1000 },
+    theme: "light",
+    colorScheme: "light",
+    forcedColors: "none",
+  },
+  {
     id: "resources-detail-reflow-320-dark",
+    locale: "ko",
     url: `${productResourcesUrl}&resource=shop%2F${homePodName}&kind=Pod`,
     authSession: "authenticated",
     resourcesScenario: true,
@@ -368,6 +484,7 @@ const visualScenarios = [
   },
   {
     id: "resources-detail-full-reflow-320-light",
+    locale: "ko",
     url: `${productResourcesUrl}&resource=shop%2F${homePodName}&kind=Pod&full=1`,
     authSession: "authenticated",
     resourcesScenario: true,
@@ -382,6 +499,7 @@ const visualScenarios = [
   },
   {
     id: "home-cluster-forbidden-light",
+    locale: "ko",
     url: productHomeUrl,
     authSession: "authenticated",
     homeScenario: true,
@@ -396,6 +514,7 @@ const visualScenarios = [
   },
   {
     id: "auth-session-error-light",
+    locale: "ko",
     url: productUrl,
     authSession: "error",
     heading: "검증된 응답을 읽지 못했습니다",
@@ -407,9 +526,10 @@ const visualScenarios = [
   },
   {
     id: "auth-session-loading-light",
+    locale: "ko",
     url: productUrl,
     authSession: "loading",
-    heading: "운영 상태를 확인하는 중입니다",
+    status: "세션 확인 중",
     requiredSelectors: [...authStateSelectors, "[data-slot='loading-preview']"],
     viewport: { width: 1024, height: 900 },
     theme: "light",
@@ -418,6 +538,7 @@ const visualScenarios = [
   },
   {
     id: "state-reflow-320-light",
+    locale: "ko",
     url: stateHarnessUrl,
     heading: "공통 상태·작업 접근성 검증",
     requiredSelectors: stateSelectors,
@@ -429,6 +550,7 @@ const visualScenarios = [
   },
   {
     id: "state-text-resize-200-light",
+    locale: "ko",
     url: stateHarnessUrl,
     heading: "공통 상태·작업 접근성 검증",
     requiredSelectors: stateSelectors,
@@ -441,6 +563,7 @@ const visualScenarios = [
   },
   {
     id: "state-forced-colors",
+    locale: "ko",
     url: stateHarnessUrl,
     heading: "공통 상태·작업 접근성 검증",
     requiredSelectors: stateSelectors,
@@ -452,8 +575,9 @@ const visualScenarios = [
   },
   {
     id: "shell-desktop-expanded-light",
+    locale: "ko",
     url: shellHarnessUrl,
-    heading: "Home",
+    heading: "홈",
     requiredSelectors: [...shellSelectors, "[data-slot='sidebar']"],
     viewport: { width: 1440, height: 900 },
     theme: "light",
@@ -463,8 +587,9 @@ const visualScenarios = [
   },
   {
     id: "shell-desktop-collapsed-forced-colors",
+    locale: "ko",
     url: shellHarnessUrl,
-    heading: "Home",
+    heading: "홈",
     requiredSelectors: [...shellSelectors, "[data-slot='sidebar']"],
     viewport: { width: 1440, height: 900 },
     theme: "light",
@@ -474,8 +599,9 @@ const visualScenarios = [
   },
   {
     id: "shell-mobile-drawer-dark-390",
+    locale: "ko",
     url: shellHarnessUrl,
-    heading: "Home",
+    heading: "홈",
     requiredSelectors: [
       ...shellSelectors,
       "[data-slot='sidebar-mobile']",
@@ -490,8 +616,9 @@ const visualScenarios = [
   },
   {
     id: "shell-mobile-drawer-dark-320",
+    locale: "ko",
     url: shellHarnessUrl,
-    heading: "Home",
+    heading: "홈",
     requiredSelectors: [
       ...shellSelectors,
       "[data-slot='sidebar-mobile']",
@@ -506,8 +633,9 @@ const visualScenarios = [
   },
   {
     id: "shell-text-resize-200-light",
+    locale: "ko",
     url: shellHarnessUrl,
-    heading: "Home",
+    heading: "홈",
     requiredSelectors: [
       ...shellSelectors,
       "[data-slot='sidebar-mobile']",
@@ -821,15 +949,25 @@ try {
 }
 
 async function runVisualScenario(browserInstance, scenario) {
+  const browserLocale = browserLocales[scenario.locale];
+  if (!browserLocale) {
+    throw new Error(`${scenario.id}: unsupported or missing locale ${scenario.locale}`);
+  }
   const context = await browserInstance.newContext({
     colorScheme: scenario.colorScheme,
     forcedColors: scenario.forcedColors,
+    locale: browserLocale,
     reducedMotion: "reduce",
     viewport: scenario.viewport,
   });
-  await context.addInitScript((theme) => {
+  await context.addInitScript(({ locale, localeStorageKey, theme }) => {
     localStorage.setItem("kubeheal-theme", theme);
-  }, scenario.theme);
+    localStorage.setItem(localeStorageKey, locale);
+  }, {
+    locale: scenario.locale,
+    localeStorageKey: productLocaleStorageKey,
+    theme: scenario.theme,
+  });
 
   const page = await context.newPage();
   const errors = [];
@@ -1086,7 +1224,9 @@ async function captureScenario(page, scenario) {
     await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => resolve())));
   }
 
-  if (scenario.resourcesDetail) {
+  if (scenario.status) {
+    await page.getByRole("status", { name: scenario.status }).waitFor();
+  } else if (scenario.resourcesDetail) {
     await page.getByRole("dialog", { name: scenario.heading }).waitFor();
   } else {
     await page.getByRole("heading", { name: scenario.heading }).waitFor();
@@ -1094,6 +1234,8 @@ async function captureScenario(page, scenario) {
   await assertScenarioEnvironment(page, scenario, baselineRootFontSize);
   if (scenario.shellMode) {
     await prepareProductShellScenario(page, scenario);
+  } else if (scenario.localeSmoke) {
+    await prepareProductLocaleSmokeScenario(page, scenario);
   } else if (scenario.homeScenario) {
     await prepareProductHomeScenario(page, scenario);
   } else if (scenario.resourcesScenario) {
@@ -1134,6 +1276,56 @@ async function captureScenario(page, scenario) {
   });
 }
 
+async function prepareProductLocaleSmokeScenario(page, scenario) {
+  const copy = localeSmokeCopy[scenario.locale]?.[scenario.localeSmoke];
+  if (!copy) {
+    throw new Error(
+      `${scenario.id}: locale smoke copy is missing for ${scenario.locale}/${scenario.localeSmoke}`,
+    );
+  }
+  await page.waitForFunction(() => document.title === "KubeHeal");
+  const localeState = await page.evaluate((localeStorageKey) => ({
+    documentLocale: document.documentElement.lang,
+    persistedLocale: localStorage.getItem(localeStorageKey),
+  }), productLocaleStorageKey);
+  if (localeState.documentLocale !== scenario.locale
+    || localeState.persistedLocale !== scenario.locale) {
+    throw new Error(
+      `${scenario.id}: locale state does not match the scenario ${JSON.stringify(localeState)}`,
+    );
+  }
+
+  const navigation = page.getByRole("navigation", { name: copy.navigation });
+  await navigation.waitFor();
+  const activeRoute = navigation.getByRole("link", { name: copy.route, exact: true });
+  if (await activeRoute.getAttribute("aria-current") !== "page") {
+    throw new Error(`${scenario.id}: localized ${copy.route} route must be current`);
+  }
+
+  await page.getByText("KubeHeal", { exact: true }).waitFor();
+  if (scenario.localeSmoke === "home") {
+    await page.getByRole("combobox", { name: copy.clusterSelect }).waitFor();
+    await page.getByRole("button", { name: new RegExp(`^${homeNodeName}(?:\\s|$)`, "u") }).waitFor();
+  } else if (scenario.localeSmoke === "resources") {
+    await page.locator("table[data-slot='table']").waitFor();
+    await page.getByText(homePodName, { exact: true }).first().waitFor();
+  } else {
+    throw new Error(`${scenario.id}: unsupported locale smoke surface ${scenario.localeSmoke}`);
+  }
+
+  // Brand and Kubernetes fixture identities are source data, not translation targets.
+  const immutableText = await page.locator("body").innerText();
+  const requiredSourceText = scenario.localeSmoke === "home"
+    ? ["KubeHeal", homeClusterId, homeNodeName]
+    : ["KubeHeal", homeClusterId, homePodName];
+  const missingSourceText = requiredSourceText.filter((value) => !immutableText.includes(value));
+  if (missingSourceText.length) {
+    throw new Error(
+      `${scenario.id}: locale smoke changed or omitted source text ${missingSourceText.join(", ")}`,
+    );
+  }
+}
+
 async function prepareProductHomeScenario(page, scenario) {
   await page.waitForFunction(() => document.title === "KubeHeal");
   if (scenario.homeFeatureState === "cluster-forbidden") {
@@ -1152,11 +1344,11 @@ async function prepareProductHomeScenario(page, scenario) {
     if (await navigation.count() !== 1) {
       throw new Error(`${scenario.id}: desktop Home must expose one primary navigation`);
     }
-    const homeLink = page.getByRole("link", { name: "Home", exact: true });
+    const homeLink = page.getByRole("link", { name: "홈", exact: true });
     if (await homeLink.getAttribute("aria-current") !== "page") {
       throw new Error(`${scenario.id}: desktop Home link must be current`);
     }
-    const visibleHomeLabels = await visibleExactTextCount(page, "Home");
+    const visibleHomeLabels = await visibleExactTextCount(page, "홈");
     if (visibleHomeLabels !== 1) {
       throw new Error(
         `${scenario.id}: visible Home location label must appear only in the sidebar; `
@@ -1170,7 +1362,7 @@ async function prepareProductHomeScenario(page, scenario) {
     if (await page.getByRole("button", { name: "모바일 사이드바 열기" }).count() !== 1) {
       throw new Error(`${scenario.id}: mobile Home must expose its sidebar trigger`);
     }
-    if (await visibleExactTextCount(page, "Home") !== 0) {
+    if (await visibleExactTextCount(page, "홈") !== 0) {
       throw new Error(`${scenario.id}: closed mobile sidebar must not duplicate the Home label`);
     }
   }
@@ -1271,11 +1463,11 @@ async function prepareProductResourcesScenario(page, scenario) {
   const desktop = scenario.viewport.width >= 768;
   const navigation = page.getByRole("navigation", { name: "주요 메뉴" });
   if (desktop) {
-    const resourcesLink = page.getByRole("link", { name: "Resources", exact: true });
+    const resourcesLink = page.getByRole("link", { name: "리소스", exact: true });
     if (await resourcesLink.getAttribute("aria-current") !== "page") {
       throw new Error(`${scenario.id}: desktop Resources link must be current`);
     }
-    const visibleResourcesLabels = await visibleExactTextCount(page, "Resources");
+    const visibleResourcesLabels = await visibleExactTextCount(page, "리소스");
     if (visibleResourcesLabels !== 1) {
       throw new Error(
         `${scenario.id}: visible Resources location label must appear only in the sidebar; `
@@ -1286,7 +1478,7 @@ async function prepareProductResourcesScenario(page, scenario) {
     if (await navigation.count() !== 0) {
       throw new Error(`${scenario.id}: closed mobile Resources must not mount drawer navigation`);
     }
-    if (await visibleExactTextCount(page, "Resources") !== 0) {
+    if (await visibleExactTextCount(page, "리소스") !== 0) {
       throw new Error(`${scenario.id}: closed mobile sidebar must not duplicate the Resources label`);
     }
   }
@@ -1590,9 +1782,9 @@ async function assertProductShellContracts(page, scenario) {
   if (result.navigationRole !== "nav" || result.navigationLabel !== "주요 메뉴"
     || result.itemCount !== 3 || result.linkCount !== 3
     || result.currentLinks !== 1 || result.currentHref !== "/product"
-    || result.currentLabel !== "Home"
+    || result.currentLabel !== "홈"
     || result.itemTags.some((tag) => tag !== "LI")
-    || result.linkLabels.join("|") !== "Home|Issues|Timeline") {
+    || result.linkLabels.join("|") !== "홈|인시던트|타임라인") {
     throw new Error(`${scenario.id}: navigation/list/current semantics failed ${JSON.stringify(result)}`);
   }
   if (result.sidebarWidthExpanded !== "11rem"
@@ -2177,19 +2369,35 @@ function maxCssTimeMilliseconds(value) {
 }
 
 async function assertScenarioEnvironment(page, scenario, baselineRootFontSize) {
-  const result = await page.evaluate(() => ({
+  const result = await page.evaluate((localeStorageKey) => ({
+    browserLocale: navigator.language,
+    documentLocale: document.documentElement.lang,
     viewportWidth: window.innerWidth,
     light: matchMedia("(prefers-color-scheme: light)").matches,
     dark: matchMedia("(prefers-color-scheme: dark)").matches,
     reducedMotion: matchMedia("(prefers-reduced-motion: reduce)").matches,
     forcedColors: matchMedia("(forced-colors: active)").matches,
     rootFontSize: Number.parseFloat(getComputedStyle(document.documentElement).fontSize),
+    persistedLocale: localStorage.getItem(localeStorageKey),
     themeClasses: [...document.documentElement.classList],
-  }));
+  }), productLocaleStorageKey);
   const expectedRootFontSize = baselineRootFontSize * (scenario.rootFontScale ?? 1);
+  const expectedBrowserLocale = browserLocales[scenario.locale];
 
   if (result.viewportWidth !== scenario.viewport.width) {
     throw new Error(`${scenario.id}: viewport ${result.viewportWidth}px != ${scenario.viewport.width}px`);
+  }
+  if (result.browserLocale !== expectedBrowserLocale
+    || result.documentLocale !== scenario.locale
+    || result.persistedLocale !== scenario.locale) {
+    throw new Error(
+      `${scenario.id}: locale environment does not match ${scenario.locale} `
+      + JSON.stringify({
+        browserLocale: result.browserLocale,
+        documentLocale: result.documentLocale,
+        persistedLocale: result.persistedLocale,
+      }),
+    );
   }
   if (!result.reducedMotion) throw new Error(`${scenario.id}: reduced-motion is not active`);
   if ((scenario.forcedColors === "active") !== result.forcedColors) {

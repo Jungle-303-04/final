@@ -7,6 +7,7 @@ import {
 } from "react-router-dom";
 import { useAuthSessionGate } from "../../features/auth/AuthSessionGate";
 import type { HomeClusterChoices, HomePort } from "../../features/home/homeContract";
+import { selectInitialClusterChoice } from "../../features/home/homeSelection";
 import type { ResourceIdentity, ResourcesPort } from "../../features/resources/resourcesContract";
 import { acquireSharedRequest } from "../../shared/data/sharedRequest";
 import { useVisibleRefreshClock } from "../../shared/data/useVisibleRefreshClock";
@@ -115,10 +116,10 @@ export function useResourcesPageState(port: ResourcesPort, clusterPort: ClusterP
 
   useEffect(() => {
     if (choices.phase !== "ready" || selectedClusterId !== null) return;
-    const first = choices.data.clusters[0];
-    if (!first) return;
+    const initialCluster = selectInitialClusterChoice(choices.data.clusters);
+    if (!initialCluster) return;
     const next = new URLSearchParams(searchParams);
-    next.set("cluster", first.id);
+    next.set("cluster", initialCluster.id);
     setSearchParams(next, { replace: true });
   }, [choices, searchParams, selectedClusterId, setSearchParams]);
 

@@ -2,7 +2,7 @@
 
 import { act, cleanup, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { HomePortFailure } from "../../features/home/homeContract";
 import { ResourcesPortFailure } from "../../features/resources/resourcesContract";
 import {
@@ -16,7 +16,12 @@ import {
   resourcesPort,
 } from "./ResourcesPage.testSupport";
 
-afterEach(cleanup);
+beforeEach(resetDocumentTestClock);
+
+afterEach(() => {
+  cleanup();
+  resetDocumentTestClock();
+});
 
 describe("ResourcesPage scope and collection semantics", () => {
   it("exposes progressive cluster and catalog loading without fabricating a resource type", async () => {
@@ -28,17 +33,16 @@ describe("ResourcesPage scope and collection semantics", () => {
     });
     renderResources(port, "/product/resources", clusterPort);
 
-    const initialHeading = await screen.findByRole("heading", {
-      name: "운영 상태를 확인하는 중입니다",
+    const initialStatus = await screen.findByRole("status", {
+      name: "불러오는 중",
     });
-    expect(initialHeading.closest("section")?.getAttribute("aria-busy")).toBe("true");
+    expect(initialStatus.closest("section")?.getAttribute("aria-busy")).toBe("true");
     expect(port.loadCatalog).not.toHaveBeenCalled();
     expect(screen.getByTestId("resources-location").textContent).toBe("/product/resources");
 
     act(() => clusters.resolve(CLUSTERS));
     await waitFor(() => expect(port.loadCatalog).toHaveBeenCalledOnce());
-    expect(screen.getByRole("heading", { name: "운영 상태를 확인하는 중입니다" }))
-      .toBeTruthy();
+    expect(screen.getByRole("status", { name: "불러오는 중" })).toBeTruthy();
     expect(port.listResources).not.toHaveBeenCalled();
     act(() => catalog.resolve(CATALOG));
     await waitFor(() => expect(port.listResources).toHaveBeenCalledOnce());
@@ -143,6 +147,22 @@ describe("ResourcesPage scope and collection semantics", () => {
     expect(scope.textContent).toMatch(/최대 3/u);
   });
 
+  it("renders product-owned collection copy in English while preserving Kubernetes facts", async () => {
+    renderResources(
+      resourcesPort(),
+      "/product/resources/pod?cluster=cluster-1",
+      resourcesClusterPort(),
+      vi.fn(),
+      "en",
+    );
+
+    const table = await screen.findByRole("table", { name: "Resource list" });
+    expect(screen.getByRole("searchbox", { name: "Search displayed results" })).toBeTruthy();
+    expect(screen.getByText("Types observed in the inventory snapshot")).toBeTruthy();
+    expect(within(table).getAllByText("Running").length).toBeGreaterThan(0);
+    expect(within(table).getAllByText("Pod").length).toBeGreaterThan(0);
+  });
+
   it("filters only the loaded rows and labels the search scope honestly", async () => {
     const user = userEvent.setup();
     renderResources(resourcesPort(), "/product/resources/pod?cluster=cluster-1");
@@ -209,3 +229,8 @@ describe("ResourcesPage scope and collection semantics", () => {
     expect(scope.textContent).toContain("검증 실패 제외 2");
   });
 });
+
+function resetDocumentTestClock() {
+  vi.useRealTimers();
+  Object.defineProperty(document, "visibilityState", { configurable: true, value: "visible" });
+}

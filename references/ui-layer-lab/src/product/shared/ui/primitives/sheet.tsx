@@ -1,6 +1,12 @@
 import { Dialog as SheetPrimitive } from "@base-ui/react/dialog";
 import { XIcon } from "lucide-react";
 import type { ComponentProps } from "react";
+import {
+  DEFAULT_LOCALE,
+  translate,
+  useOptionalI18n,
+  type TranslationFunction,
+} from "../../i18n";
 import { Button } from "./button";
 import { cn } from "./cn";
 
@@ -64,11 +70,13 @@ function SheetOverlay({
 function SheetContent({
   children,
   className,
-  closeLabel = "닫기",
+  closeLabel,
   showCloseButton = true,
   side = "right",
   ...props
 }: SheetContentProps) {
+  const t = usePrimitiveTranslation();
+  const resolvedCloseLabel = closeLabel?.trim() || t("common.action.close");
   return (
     <SheetPortal>
       <SheetOverlay />
@@ -95,13 +103,20 @@ function SheetContent({
             )}
           >
             <XIcon aria-hidden="true" data-icon="inline-start" />
-            <span className="sr-only">{closeLabel}</span>
+            <span className="sr-only">{resolvedCloseLabel}</span>
           </SheetPrimitive.Close>
         ) : null}
       </SheetPrimitive.Popup>
     </SheetPortal>
   );
 }
+
+function usePrimitiveTranslation(): TranslationFunction {
+  return useOptionalI18n()?.t ?? fallbackTranslate;
+}
+
+const fallbackTranslate: TranslationFunction = (key, params) =>
+  translate(DEFAULT_LOCALE, key, params);
 
 function SheetHeader({
   className,

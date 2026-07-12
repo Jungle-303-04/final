@@ -34,6 +34,8 @@ import ProductApp from "./ProductApp";
 beforeEach(() => {
   compositionMock.attempts = 0;
   compositionMock.shouldFail = true;
+  vi.useRealTimers();
+  Object.defineProperty(document, "visibilityState", { configurable: true, value: "visible" });
   Object.defineProperty(window, "matchMedia", {
     configurable: true,
     value: vi.fn(() => ({
@@ -50,6 +52,8 @@ beforeEach(() => {
 afterEach(() => {
   cleanup();
   document.documentElement.className = "";
+  Object.defineProperty(document, "visibilityState", { configurable: true, value: "visible" });
+  vi.useRealTimers();
   window.localStorage.clear();
   vi.restoreAllMocks();
 });
@@ -62,16 +66,17 @@ describe("ProductApp composition failure", () => {
       </StrictMode>,
     );
 
-    expect(screen.getByRole("heading", { name: "검증된 응답을 읽지 못했습니다" })).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "Unable to read the verified response" }))
+      .toBeTruthy();
     expect(document.body.textContent).not.toContain("private-composition-stack-token");
     const attemptsBeforeRetry = compositionMock.attempts;
     expect(attemptsBeforeRetry).toBeGreaterThan(0);
 
     compositionMock.shouldFail = false;
-    await userEvent.setup().click(screen.getByRole("button", { name: "화면 다시 열기" }));
+    await userEvent.setup().click(screen.getByRole("button", { name: "Reopen screen" }));
 
     expect(compositionMock.attempts).toBeGreaterThan(attemptsBeforeRetry);
-    expect(await screen.findByRole("heading", { name: "KubeHeal에 로그인" })).toBeTruthy();
+    expect(await screen.findByRole("heading", { name: "Sign in to KubeHeal" })).toBeTruthy();
     expect(screen.queryByRole("alert")).toBeNull();
   }, 15_000);
 });

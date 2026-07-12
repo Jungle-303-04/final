@@ -9,6 +9,8 @@ import type {
   HomePodCollection,
   HomePort,
 } from "../../features/home/homeContract";
+import { I18nProvider } from "../../shared/i18n/I18nProvider";
+import type { SupportedLocale } from "../../shared/i18n/types";
 import { HomePage } from "./HomePage";
 
 export const CLUSTERS: HomeClusterChoices = {
@@ -140,11 +142,17 @@ export function renderHome(
   port: HomePort,
   initialEntries = ["/product"],
   reportUnauthorized = vi.fn(),
+  locale: SupportedLocale | null = "ko",
 ) {
   return render(
     <MemoryRouter initialEntries={initialEntries}>
       <AuthSessionGateProvider reportUnauthorized={reportUnauthorized}>
-        <HomePage port={port} />
+        <I18nProvider
+          navigatorLanguage={locale === "ko" ? "ko-KR" : locale === "en" ? "en-US" : null}
+          storage={null}
+        >
+          <HomePage port={port} />
+        </I18nProvider>
       </AuthSessionGateProvider>
     </MemoryRouter>,
   );

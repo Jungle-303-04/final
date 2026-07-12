@@ -1,9 +1,10 @@
 // @vitest-environment jsdom
 
-import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { act, cleanup, fireEvent, render as renderBase, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { useState } from "react";
+import { useState, type ReactElement } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { I18nProvider } from "../shared/i18n";
 import { ProductErrorBoundary } from "./ProductErrorBoundary";
 
 const RAW_ERROR_TOKEN = "secret-render-stack-token";
@@ -168,6 +169,16 @@ describe("ProductErrorBoundary", () => {
     }
   });
 });
+
+function render(element: ReactElement) {
+  return renderBase(element, {
+    wrapper: ({ children }) => (
+      <I18nProvider navigatorLanguage="ko-KR" storage={null}>
+        {children}
+      </I18nProvider>
+    ),
+  });
+}
 
 function ImmediateCrash(): never {
   throw new Error(`${RAW_ERROR_TOKEN}\n    at ImmediateCrash (ProductErrorBoundary.test.tsx:1:1)`);

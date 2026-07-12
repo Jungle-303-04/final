@@ -1,11 +1,14 @@
 import { CircleAlert, RefreshCw, Server } from "lucide-react";
-import type { HomePort, HomePortFailure } from "../../features/home/homeContract";
+import type {
+  HomeConnectionState,
+  HomePort,
+  HomePortFailure,
+} from "../../features/home/homeContract";
+import { useI18n } from "../../shared/i18n/I18nProvider";
+import { StatusMark, type StatusTone } from "../../shared/ui/StatusMark";
 import { ProductStateScreen } from "../../shared/ui/ProductStateScreen";
 import { Surface } from "../../shared/ui/Surface";
-import {
-  ClusterConnectionStatus,
-  clusterDisplayLabel,
-} from "../../shared/ui/ClusterConnectionStatus";
+import { clusterDisplayLabel } from "../../shared/ui/ClusterConnectionStatus";
 import { Alert, AlertDescription, AlertTitle } from "../../shared/ui/primitives/alert";
 import { Button } from "../../shared/ui/primitives/button";
 import {
@@ -17,12 +20,14 @@ import {
   SelectTrigger,
   SelectValue,
 } from "../../shared/ui/primitives/select";
+import { Tooltip, TooltipContent, TooltipTrigger } from "../../shared/ui/primitives/tooltip";
 import { HomeClusterHealth } from "./HomeClusterHealth";
 import { HomeIssuesRail } from "./HomeIssuesRail";
 import { HomeLiveBand } from "./HomeLiveBand";
 import { useHomePageState } from "./useHomePageState";
 
 export function HomePage({ port }: { port: HomePort }) {
+  const { t } = useI18n();
   const state = useHomePageState(port);
 
   if (state.choices.phase === "loading" || state.choices.phase === "idle") {
@@ -55,7 +60,7 @@ export function HomePage({ port }: { port: HomePort }) {
       <header className="flex min-w-0 justify-end">
         <div className="flex w-full min-w-0 items-center justify-end gap-2 xl:w-auto">
           {selectedCluster ? (
-            <ClusterConnectionStatus
+            <HomeClusterConnectionStatus
               connectionState={selectedCluster.connectionState}
               lastObservedAt={selectedCluster.lastObservedAt}
             />
@@ -66,15 +71,15 @@ export function HomePage({ port }: { port: HomePort }) {
             value={selectedCluster?.id ?? null}
           >
             <SelectTrigger
-              aria-label="클러스터 선택"
+              aria-label={t("home.cluster.select")}
               className="w-full min-w-0 flex-1 xl:w-96 xl:flex-none"
             >
               <Server aria-hidden="true" />
-              <SelectValue placeholder="클러스터 선택" />
+              <SelectValue placeholder={t("home.cluster.select")} />
             </SelectTrigger>
             <SelectContent alignItemWithTrigger={false}>
               <SelectGroup>
-                <SelectLabel>조회 가능한 클러스터</SelectLabel>
+                <SelectLabel>{t("home.cluster.available")}</SelectLabel>
                 {selectItems.map((item) => (
                   <SelectItem key={item.value} value={item.value}>{item.label}</SelectItem>
                 ))}
@@ -82,7 +87,7 @@ export function HomePage({ port }: { port: HomePort }) {
             </SelectContent>
           </Select>
           <Button
-            aria-label="새로 고침"
+            aria-label={t("common.action.refresh")}
             disabled={refreshing}
             onClick={state.refresh}
             size="icon"
@@ -125,17 +130,18 @@ export function HomePage({ port }: { port: HomePort }) {
 }
 
 function UnknownCluster({ clusterId }: { clusterId: string | null }) {
+  const { t } = useI18n();
   return (
     <Surface aria-labelledby="unknown-cluster-title" className="grid min-h-72 place-items-center p-6">
       <div className="grid max-w-md justify-items-center gap-3 text-center">
         <CircleAlert aria-hidden="true" className="size-8 text-muted-foreground" />
         <h2 className="text-lg font-semibold" id="unknown-cluster-title">
-          현재 조회 목록에서 확인할 수 없습니다
+          {t("home.cluster.unknown.title")}
         </h2>
         <p className="text-sm text-muted-foreground">
-          URL의 {clusterId ? <code className="font-mono">{clusterId}</code> : "클러스터"} 범위를
-          현재 조회 목록에서 확인할 수 없습니다. 자동으로 다른 클러스터로 바꾸지 않았습니다.
-          위 선택기에서 접근 가능한 대상을 고르세요.
+          {t("home.cluster.unknown.description", {
+            cluster: clusterId ?? t("home.cluster.label"),
+          })}
         </p>
       </div>
     </Surface>
@@ -143,6 +149,7 @@ function UnknownCluster({ clusterId }: { clusterId: string | null }) {
 }
 
 function PartialFailureBanner({ state }: { state: ReturnType<typeof useHomePageState> }) {
+  const { t } = useI18n();
   const failures = [state.overview, state.nodes].filter(
     (section) => section.phase === "failed" ||
       (section.phase === "ready" && section.refreshFailure !== null),
@@ -151,9 +158,9 @@ function PartialFailureBanner({ state }: { state: ReturnType<typeof useHomePageS
   return (
     <Alert>
       <CircleAlert aria-hidden="true" />
-      <AlertTitle>일부 정보를 불러오지 못했습니다</AlertTitle>
+      <AlertTitle>{t("home.partial.title")}</AlertTitle>
       <AlertDescription>
-        마지막으로 검증된 응답만 유지했습니다. 누락 영역은 값을 0으로 대체하지 않습니다.
+        {t("home.partial.description")}
       </AlertDescription>
     </Alert>
   );
@@ -166,6 +173,7 @@ function HomeFailureScreen({
   failure: HomePortFailure;
   onRetry: () => void;
 }) {
+  const { t } = useI18n();
   if (failure.code === "forbidden") {
     return (
       <ProductStateScreen
@@ -181,7 +189,7 @@ function HomeFailureScreen({
         issue={{ code: "network" }}
         kind="offline"
         placement="content"
-        retry={{ label: "다시 연결", onRetry, pending: false }}
+        retry={{ label: t("home.action.reconnect"), onRetry, pending: false }}
       />
     );
   }
@@ -191,13 +199,62 @@ function HomeFailureScreen({
       kind="error"
       placement="content"
       retry={{
-        label: "다시 불러오기",
+        label: t("home.action.reload"),
         onRetry,
         pending: false,
       }}
     />
   );
 }
+
+function HomeClusterConnectionStatus({
+  connectionState,
+  lastObservedAt,
+}: {
+  connectionState: HomeConnectionState;
+  lastObservedAt: string | null;
+}) {
+  const { formatDate, t } = useI18n();
+  const label = t(connectionMessageKeys[connectionState]);
+  const observation = lastObservedAt === null
+    ? t("common.state.unknown")
+    : formatDate(new Date(lastObservedAt), { dateStyle: "medium", timeStyle: "short" });
+  return (
+    <Tooltip>
+      <TooltipTrigger
+        render={(
+          <Button
+            aria-label={t("home.connection.aria", { status: label, time: observation })}
+            size="sm"
+            type="button"
+            variant="ghost"
+          />
+        )}
+      >
+        <StatusMark label={label} tone={connectionTones[connectionState]} />
+      </TooltipTrigger>
+      <TooltipContent side="bottom">
+        {t("home.lastObserved", { time: observation })}
+      </TooltipContent>
+    </Tooltip>
+  );
+}
+
+const connectionMessageKeys = {
+  online: "home.connection.online",
+  stale: "home.connection.stale",
+  pending: "home.connection.pending",
+  offline: "home.connection.offline",
+  unknown: "home.connection.unknown",
+} as const;
+
+const connectionTones: Record<HomeConnectionState, StatusTone> = {
+  online: "healthy",
+  stale: "stale",
+  pending: "warning",
+  offline: "critical",
+  unknown: "unknown",
+};
 
 function clusterOptionLabel(cluster: {
   environment: string;

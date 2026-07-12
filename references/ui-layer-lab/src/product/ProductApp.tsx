@@ -5,6 +5,7 @@ import { createApiComposition } from "./app/apiComposition";
 import { ProductErrorBoundary } from "./app/ProductErrorBoundary";
 import { ProductRouter } from "./app/ProductRouter";
 import { AuthBarrier } from "./features/auth/AuthBarrier";
+import { I18nProvider } from "./shared/i18n";
 import "./styles/tokens.css";
 import "./styles/foundation.css";
 
@@ -14,17 +15,19 @@ export default function ProductApp() {
   }, []);
 
   return (
-    <ProductErrorBoundary>
-      <ThemeProvider
-        attribute="class"
-        defaultTheme="light"
-        enableSystem={false}
-        storageKey="kubeheal-theme"
-        themes={["light", "dark"]}
-      >
-        <ProductRuntime />
-      </ThemeProvider>
-    </ProductErrorBoundary>
+    <I18nProvider>
+      <ProductErrorBoundary>
+        <ThemeProvider
+          attribute="class"
+          defaultTheme="light"
+          enableSystem={false}
+          storageKey="kubeheal-theme"
+          themes={["light", "dark"]}
+        >
+          <ProductRuntime />
+        </ThemeProvider>
+      </ProductErrorBoundary>
+    </I18nProvider>
   );
 }
 

@@ -1,7 +1,9 @@
 // @vitest-environment jsdom
 
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, render as renderBase, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
+import type { ReactElement } from "react";
+import { I18nProvider } from "../i18n";
 import { Metric } from "./Metric";
 import { StatusMark } from "./StatusMark";
 import { Surface } from "./Surface";
@@ -63,6 +65,16 @@ describe("product display primitives", () => {
     expect(status.querySelector('[aria-hidden="true"]')?.className).toContain("forced-colors:border");
   });
 });
+
+function render(element: ReactElement) {
+  return renderBase(element, {
+    wrapper: ({ children }) => (
+      <I18nProvider navigatorLanguage="ko-KR" storage={null}>
+        {children}
+      </I18nProvider>
+    ),
+  });
+}
 
 function assertDisplayPrimitiveTypeContracts() {
   // @ts-expect-error semantic section surfaces require an accessible name

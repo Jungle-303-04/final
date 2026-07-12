@@ -6,6 +6,7 @@ import {
 } from "react-router-dom";
 import { vi } from "vitest";
 import { AuthSessionGateProvider } from "../../features/auth/AuthSessionGate";
+import { I18nProvider, type SupportedLocale } from "../../shared/i18n";
 import type {
   HomeClusterChoices,
   HomePort,
@@ -185,14 +186,17 @@ export function renderResources(
   initialEntry = "/product/resources",
   clusterPort: ClusterPort = resourcesClusterPort(),
   reportUnauthorized = vi.fn(),
+  locale: SupportedLocale = "ko",
 ) {
   const router = createMemoryRouter([{
     path: "/product/resources/*",
     element: (
-      <AuthSessionGateProvider reportUnauthorized={reportUnauthorized}>
-        <ResourcesPage clusterPort={clusterPort} port={port} />
-        <LocationProbe />
-      </AuthSessionGateProvider>
+      <I18nProvider navigatorLanguage={locale === "ko" ? "ko-KR" : "en-US"} storage={null}>
+        <AuthSessionGateProvider reportUnauthorized={reportUnauthorized}>
+          <ResourcesPage clusterPort={clusterPort} port={port} />
+          <LocationProbe />
+        </AuthSessionGateProvider>
+      </I18nProvider>
     ),
   }], { initialEntries: [initialEntry] });
 

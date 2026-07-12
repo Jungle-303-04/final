@@ -4,6 +4,7 @@ import type {
   HomeClusterChoice,
   HomeClusterOverview,
 } from "../../features/home/homeContract";
+import { useI18n } from "../../shared/i18n/I18nProvider";
 import { Metric } from "../../shared/ui/Metric";
 import { StatusMark } from "../../shared/ui/StatusMark";
 import { Surface } from "../../shared/ui/Surface";
@@ -21,6 +22,7 @@ export function HomeClusterHealth({
   overview: HomeResourceState<HomeClusterOverview>;
   onRefresh: () => void;
 }) {
+  const { t } = useI18n();
   const busy = overview.phase === "loading" || overview.phase === "idle" ||
     (overview.phase === "ready" && overview.refreshing);
   return (
@@ -31,14 +33,14 @@ export function HomeClusterHealth({
     >
       <div className="flex min-w-0 flex-wrap items-center justify-between gap-3 border-b p-4">
         <h2 className="truncate text-base font-semibold" id="cluster-health-title">
-          클러스터 상태
+          {t("home.section.clusterStatus")}
         </h2>
         {overview.phase === "ready" ? (
           <StatusMark tone={overview.data.health} />
         ) : overview.phase === "failed" ? (
-          <StatusMark label="클러스터 요약 오류" tone="critical" />
+          <StatusMark label={t("home.section.clusterSummaryError")} tone="critical" />
         ) : cluster ? (
-          <StatusMark label="상태 확인 중" tone="unknown" />
+          <StatusMark label={t("home.section.statusChecking")} tone="unknown" />
         ) : null}
       </div>
 
@@ -47,14 +49,14 @@ export function HomeClusterHealth({
       ) : overview.phase === "failed" ? (
         <HomeSectionFailure
           failure={overview.failure}
-          label="클러스터 요약"
+          label={t("home.section.clusterSummary")}
           onRetry={onRefresh}
         />
       ) : (
         <>
           <HomeRefreshFailure
             failure={overview.refreshFailure}
-            label="클러스터 요약"
+            label={t("home.section.clusterSummary")}
             onRetry={onRefresh}
           />
           <HealthContent cluster={cluster} overview={overview.data} />
@@ -71,50 +73,68 @@ function HealthContent({
   cluster: HomeClusterChoice | null;
   overview: HomeClusterOverview;
 }) {
+  const { formatNumber, t } = useI18n();
   const usage = overview.usage;
   return (
     <div className="grid min-w-0 divide-y">
       <div className="grid min-w-0 grid-cols-2 divide-x lg:grid-cols-4">
         <Metric
-          label="Pod"
+          label={t("home.metric.pods")}
+          unavailableLabel={t("common.value.unavailable")}
           value={usage
-            ? `${usage.podsTotal} · ${usage.podsRunning} running`
-            : cluster?.podCount ?? null}
+            ? t("home.metric.podValue", {
+              running: formatNumber(usage.podsRunning),
+              total: formatNumber(usage.podsTotal),
+            })
+            : cluster?.podCount === undefined
+              ? null
+              : formatNumber(cluster.podCount)}
         />
         <Metric
-          label="Node"
+          label={t("home.metric.nodes")}
+          unavailableLabel={t("common.value.unavailable")}
           value={usage
-            ? `${usage.nodesTotal} · ${usage.nodesReady} ready`
-            : cluster?.nodeCount ?? null}
+            ? t("home.metric.nodeValue", {
+              ready: formatNumber(usage.nodesReady),
+              total: formatNumber(usage.nodesTotal),
+            })
+            : cluster?.nodeCount === undefined
+              ? null
+              : formatNumber(cluster.nodeCount)}
         />
         <Metric
-          label="최근 재시작"
-          unavailableLabel="—"
-          value={usage?.restartCount ?? null}
+          label={t("home.metric.recentRestarts")}
+          unavailableLabel={t("common.value.unavailable")}
+          value={usage === null ? null : formatNumber(usage.restartCount)}
         />
         <Metric
-          label="활성 인시던트"
-          note={`표시 경고 ${overview.warnings.length} · 전체 수 미확인`}
+          label={t("home.metric.activeIncidents")}
+          note={t("home.metric.displayedWarnings", {
+            warnings: formatNumber(overview.warnings.length),
+          })}
           tone={(cluster?.incidentCount ?? 0) > 0 ? "critical" : "neutral"}
-          value={cluster?.incidentCount ?? null}
+          unavailableLabel={t("common.value.unavailable")}
+          value={cluster?.incidentCount === undefined
+            ? null
+            : formatNumber(cluster.incidentCount)}
         />
       </div>
       <div className="grid gap-4 p-4 sm:grid-cols-2">
         <UsageProgress
           icon={<Cpu aria-hidden="true" />}
-          label="CPU 사용률"
+          label={t("home.metric.cpuUsage")}
           value={usage?.cpuPercent ?? null}
         />
         <UsageProgress
           icon={<MemoryStick aria-hidden="true" />}
-          label="메모리 사용률"
+          label={t("home.metric.memoryUsage")}
           value={usage?.memoryPercent ?? null}
         />
       </div>
       <div className="flex flex-wrap items-center gap-x-5 gap-y-2 px-4 py-3 text-xs text-muted-foreground">
         <span className="inline-flex items-center gap-1.5">
           <Boxes aria-hidden="true" className="size-3.5" />
-          표시 워크로드 {overview.workloads.length} · 전체 수 미확인
+          {t("home.metric.workloads", { count: formatNumber(overview.workloads.length) })}
         </span>
       </div>
     </div>
@@ -130,6 +150,8 @@ function UsageProgress({
   label: string;
   value: number | null;
 }) {
+  const { formatNumber, t } = useI18n();
+  const formattedValue = value === null ? null : formatNumber(value, { maximumFractionDigits: 2 });
   return (
     <div className="grid min-w-0 gap-2">
       <div className="flex items-center justify-between gap-3 text-xs">
@@ -140,9 +162,9 @@ function UsageProgress({
           {value === null ? (
             <>
               <span aria-hidden="true">—</span>
-              <span className="sr-only">사용할 수 없음</span>
+              <span className="sr-only">{t("common.state.unavailable")}</span>
             </>
-          ) : `${value}%`}
+          ) : `${formattedValue}%`}
         </span>
       </div>
       {value === null ? (
@@ -151,7 +173,9 @@ function UsageProgress({
         <Progress
           aria-label={label}
           value={Math.max(0, Math.min(value, 100))}
-          valueText={value > 100 ? `${value}% (표시 상한 100%)` : `${value}%`}
+          valueText={value > 100
+            ? t("home.metric.progressCapped", { value: formattedValue ?? "" })
+            : `${formattedValue}%`}
         />
       )}
     </div>
@@ -159,9 +183,12 @@ function UsageProgress({
 }
 
 function HealthSkeleton() {
+  const { t } = useI18n();
   return (
     <div aria-atomic="true" aria-live="polite" className="grid gap-4 p-4" role="status">
-      <span className="sr-only">클러스터 요약을 불러오는 중입니다.</span>
+      <span className="sr-only">
+        {t("home.section.loading", { label: t("home.section.clusterSummary") })}
+      </span>
       <div aria-hidden="true" className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         {Array.from({ length: 4 }, (_, index) => (
           <Skeleton className="h-16" key={index} />

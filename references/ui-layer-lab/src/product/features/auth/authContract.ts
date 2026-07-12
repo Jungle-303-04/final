@@ -1,3 +1,5 @@
+import type { MessageKey, TranslationParameters } from "../../shared/i18n";
+
 export interface ProductSession {
   userId: string;
   roles: readonly string[];
@@ -43,8 +45,10 @@ export interface AuthPort {
 
 export interface AuthActionIssue {
   code: AuthFailureCode;
-  message: string;
+  messageKey: MessageKey;
+  messageParams?: TranslationParameters;
   retryAfterSeconds: number | null;
+  safeDetail?: string;
 }
 
 export interface AuthenticatedAuthState {

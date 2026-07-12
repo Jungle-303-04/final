@@ -1,4 +1,5 @@
 import { Component, Fragment, type ReactNode } from "react";
+import { useI18n } from "../shared/i18n";
 import { ProductStateScreen } from "../shared/ui/ProductStateScreen";
 
 export interface ProductErrorBoundaryProps {
@@ -49,20 +50,7 @@ export class ProductErrorBoundary extends Component<
 
   render() {
     if (this.state.failed) {
-      return (
-        <ProductStateScreen
-          issue={{
-            code: "unknown",
-            safeDetail: "화면을 표시하는 중 예기치 않은 오류가 발생했습니다.",
-          }}
-          kind="error"
-          retry={{
-            label: "화면 다시 열기",
-            pending: false,
-            onRetry: this.retry,
-          }}
-        />
-      );
+      return <ProductErrorFallback onRetry={this.retry} />;
     }
 
     return (
@@ -71,4 +59,20 @@ export class ProductErrorBoundary extends Component<
       </Fragment>
     );
   }
+}
+
+function ProductErrorFallback({ onRetry }: { onRetry: () => void }) {
+  const { t } = useI18n();
+
+  return (
+    <ProductStateScreen
+      issue={{ code: "unknown" }}
+      kind="error"
+      retry={{
+        label: t("common.action.reopen"),
+        pending: false,
+        onRetry,
+      }}
+    />
+  );
 }

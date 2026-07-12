@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite --host 0.0.0.0",
+    "dev:aws": "VITE_BACKEND_ORIGIN=https://k8s.woonyong.org vite --host 0.0.0.0",
     "build": "tsc -b && vite build",
     "typecheck": "tsc -b",
     "test": "vitest run",

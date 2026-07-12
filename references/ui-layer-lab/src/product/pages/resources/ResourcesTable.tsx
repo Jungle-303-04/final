@@ -9,6 +9,7 @@ import type {
   ResourceIdentity,
   ResourceSummary,
 } from "../../features/resources/resourcesContract";
+import { useI18n } from "../../shared/i18n";
 import { StatusMark } from "../../shared/ui/StatusMark";
 import { Button } from "../../shared/ui/primitives/button";
 import {
@@ -32,6 +33,7 @@ export function ResourcesTable({
   onOpen: (identity: ResourceIdentity) => void;
   registerRowButton: (identity: ResourceIdentity, element: HTMLButtonElement | null) => void;
 }) {
+  const { formatDate, t } = useI18n();
   const [sort, setSort] = useState<{ key: SortKey; direction: "asc" | "desc" }>({
     key: "name",
     direction: "asc",
@@ -82,18 +84,21 @@ export function ResourcesTable({
   }
 
   return (
-    <Table aria-label="리소스 목록" scrollAreaLabel="리소스 표 가로 스크롤">
+    <Table
+      aria-label={t("resources.table.aria")}
+      scrollAreaLabel={t("resources.table.scrollArea")}
+    >
       <TableCaption className="sr-only">
-        현재 API 응답 범위에서 표시하는 Kubernetes 리소스 목록
+        {t("resources.table.caption")}
       </TableCaption>
       <TableHeader>
         <TableRow>
-          <SortableHead label="이름" onSort={() => updateSort("name")} sort={sort} sortKey="name" />
-          <SortableHead label="Namespace" onSort={() => updateSort("namespace")} sort={sort} sortKey="namespace" />
-          <SortableHead label="종류" onSort={() => updateSort("kind")} sort={sort} sortKey="kind" />
-          <SortableHead label="상태" onSort={() => updateSort("status")} sort={sort} sortKey="status" />
-          <SortableHead label="Health" onSort={() => updateSort("health")} sort={sort} sortKey="health" />
-          <SortableHead label="관측" onSort={() => updateSort("observed")} sort={sort} sortKey="observed" />
+          <SortableHead label={t("resources.table.name")} onSort={() => updateSort("name")} sort={sort} sortKey="name" />
+          <SortableHead label={t("resources.table.namespace")} onSort={() => updateSort("namespace")} sort={sort} sortKey="namespace" />
+          <SortableHead label={t("resources.table.kind")} onSort={() => updateSort("kind")} sort={sort} sortKey="kind" />
+          <SortableHead label={t("resources.table.status")} onSort={() => updateSort("status")} sort={sort} sortKey="status" />
+          <SortableHead label={t("resources.table.health")} onSort={() => updateSort("health")} sort={sort} sortKey="health" />
+          <SortableHead label={t("resources.table.observedAt")} onSort={() => updateSort("observed")} sort={sort} sortKey="observed" />
         </TableRow>
       </TableHeader>
       <TableBody>
@@ -103,7 +108,7 @@ export function ResourcesTable({
             <TableRow key={item.id}>
               <TableCell className="max-w-72 font-medium">
                 <Button
-                  aria-label={`${item.name} 상세 열기`}
+                  aria-label={t("resources.table.openDetail", { name: item.name })}
                   className="h-auto max-w-full justify-start px-0 text-left"
                   onClick={() => onOpen(identity)}
                   ref={(element) => {
@@ -115,17 +120,17 @@ export function ResourcesTable({
                   variant="link"
                 >
                   <span className="truncate">{item.name}</span>
-                  <span className="sr-only"> 상세 열기</span>
+                  <span className="sr-only"> {t("resources.table.openDetail.sr")}</span>
                 </Button>
               </TableCell>
               <TableCell>{item.namespace ?? "—"}</TableCell>
               <TableCell>{item.kind}</TableCell>
-              <TableCell>{item.status || "알 수 없음"}</TableCell>
+              <TableCell>{item.status || t("common.state.unknown")}</TableCell>
               <TableCell>
                 <StatusMark label={item.healthStatus || undefined} tone={item.health} />
               </TableCell>
               <TableCell className="text-muted-foreground">
-                {formatTimestamp(item.observedAt)}
+                {formatTimestamp(item.observedAt, formatDate, t("resources.table.unobserved"))}
               </TableCell>
             </TableRow>
           );
@@ -188,12 +193,16 @@ function identityOf(item: ResourceSummary): ResourceIdentity {
   };
 }
 
-function formatTimestamp(value: string | null): string {
-  if (!value) return "미관측";
-  return new Intl.DateTimeFormat("ko-KR", {
+function formatTimestamp(
+  value: string | null,
+  formatDate: ReturnType<typeof useI18n>["formatDate"],
+  unavailable: string,
+): string {
+  if (!value) return unavailable;
+  return formatDate(new Date(value), {
     dateStyle: "short",
     timeStyle: "short",
-  }).format(new Date(value));
+  });
 }
 
 function isButton(value: HTMLButtonElement | undefined): value is HTMLButtonElement {

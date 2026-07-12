@@ -5,6 +5,7 @@ import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { StrictMode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { I18nProvider, useI18n, type SupportedLocale } from "../../shared/i18n";
 import { AuthBarrier } from "./AuthBarrier";
 import {
   AuthPortFailure,
@@ -48,7 +49,8 @@ describe("AuthBarrier", () => {
     renderBarrier(port);
 
     expect(port.loadSession).toHaveBeenCalledOnce();
-    expect(screen.getByRole("heading", { name: "운영 상태를 확인하는 중입니다" })).toBeTruthy();
+    expect(screen.getByRole("status", { name: "세션 확인 중" })).toBeTruthy();
+    expect(screen.queryByRole("heading")).toBeNull();
     expect(screen.getByRole("main").getAttribute("aria-busy")).toBe("true");
     expect(screen.queryByRole("form")).toBeNull();
   });
@@ -70,6 +72,20 @@ describe("AuthBarrier", () => {
     expect(password.getAttribute("autocomplete")).toBe("current-password");
     expect(screen.queryByText(/OIDC|provider|callback/iu)).toBeNull();
     await waitFor(() => expect(document.activeElement).toBe(email));
+  });
+
+  it("renders the complete login contract in English", async () => {
+    const port = authPort({
+      loadSession: vi.fn().mockResolvedValue({ status: "unauthenticated" }),
+    });
+
+    renderBarrier(port, "en");
+
+    expect(await screen.findByRole("heading", { name: "Sign in to KubeHeal" })).toBeTruthy();
+    expect(screen.getByRole("textbox", { name: "Email" })).toBeTruthy();
+    expect(screen.getByLabelText("Password")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Sign in" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Switch to dark mode" })).toBeTruthy();
   });
 
   it("submits exact credentials once, clears the password, and waits for authority", async () => {
@@ -125,7 +141,7 @@ describe("AuthBarrier", () => {
 
   it.each([
     ["email-unverified", "이메일 인증을 완료한 뒤 다시 로그인하세요."],
-    ["approval-pending", "관리자 승인이 완료될 때까지 기다려 주세요."],
+    ["approval-pending", "계정 승인을 기다리고 있습니다."],
   ] as const)("shows the canonical %s guidance without another session read", async (code, message) => {
     const loadSession = vi.fn().mockResolvedValue({ status: "unauthenticated" });
     const port = authPort({
@@ -200,28 +216,35 @@ describe("AuthBarrier", () => {
 });
 
 function AuthenticatedProduct({ auth }: { auth: AuthenticatedAuthState }) {
+  const { t } = useI18n();
   return (
     <main>
       <p>인증된 제품</p>
-      <p>{auth.signOutPending ? "로그아웃 처리 중" : auth.signOutIssue?.message}</p>
+      <p>{auth.signOutPending
+        ? "로그아웃 처리 중"
+        : auth.signOutIssue
+          ? t(auth.signOutIssue.messageKey, auth.signOutIssue.messageParams)
+          : null}</p>
       <button onClick={auth.onSignOut} type="button">테스트 로그아웃</button>
     </main>
   );
 }
 
-function renderBarrier(port: AuthPort) {
+function renderBarrier(port: AuthPort, locale: SupportedLocale = "ko") {
   return render(
     <StrictMode>
-      <ThemeProvider
-        attribute="class"
-        defaultTheme="light"
-        enableSystem={false}
-        themes={["light", "dark"]}
-      >
-        <AuthBarrier port={port}>
-          {(auth) => <AuthenticatedProduct auth={auth} />}
-        </AuthBarrier>
-      </ThemeProvider>
+      <I18nProvider navigatorLanguage={locale} storage={null}>
+        <ThemeProvider
+          attribute="class"
+          defaultTheme="light"
+          enableSystem={false}
+          themes={["light", "dark"]}
+        >
+          <AuthBarrier port={port}>
+            {(auth) => <AuthenticatedProduct auth={auth} />}
+          </AuthBarrier>
+        </ThemeProvider>
+      </I18nProvider>
     </StrictMode>,
   );
 }

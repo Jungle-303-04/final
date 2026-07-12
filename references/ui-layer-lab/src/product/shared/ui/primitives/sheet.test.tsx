@@ -1,8 +1,10 @@
 // @vitest-environment jsdom
 
-import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, render as renderBase, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it } from "vitest";
+import type { ReactElement } from "react";
+import { I18nProvider } from "../../i18n";
 import {
   Sheet,
   SheetContent,
@@ -149,6 +151,16 @@ describe("product-owned Sheet", () => {
     expect(dialog.getAttribute("data-side")).toBe("left");
   });
 });
+
+function render(element: ReactElement) {
+  return renderBase(element, {
+    wrapper: ({ children }) => (
+      <I18nProvider navigatorLanguage="ko-KR" storage={null}>
+        {children}
+      </I18nProvider>
+    ),
+  });
+}
 
 function assertSheetTypeContracts() {
   // @ts-expect-error only the four canonical sheet sides are supported

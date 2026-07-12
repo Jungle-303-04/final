@@ -59,7 +59,7 @@ export function deleteAiConversation(
 }
 
 /** Creates a conversation and queues its first user message. */
-export function createAiConversation(
+export async function createAiConversation(
   input: AiConversationCreateInput,
   signal?: AbortSignal,
 ): Promise<AiConversationAccepted> {
@@ -78,7 +78,7 @@ export function createAiConversation(
 }
 
 /** Adds a user message and queues AI processing for an existing conversation. */
-export function appendAiMessage(
+export async function appendAiMessage(
   conversationId: string,
   input: AiMessageInput,
   signal?: AbortSignal,

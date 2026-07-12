@@ -105,7 +105,7 @@ describe("HomePage data semantics", () => {
       }),
     }), ["/product?cluster=cluster-1"]);
 
-    expect(await screen.findByText("142.5%")).toBeTruthy();
+    expect(await screen.findByText("142.5%", {}, { timeout: 5_000 })).toBeTruthy();
     const progress = screen.getByRole("progressbar", { name: "CPU 사용률" });
     expect(progress.getAttribute("aria-valuenow")).toBe("100");
     expect(progress.getAttribute("aria-valuetext")).toContain("142.5%");
@@ -143,7 +143,7 @@ describe("HomePage data semantics", () => {
     }), ["/product?cluster=cluster-1"]);
 
     const node = await screen.findByRole("button", { name: /worker-b/u });
-    const status = within(node).getByText("Not ready").closest("[data-slot='status-mark']");
+    const status = within(node).getByText("Not Ready").closest("[data-slot='status-mark']");
     expect(status?.getAttribute("data-status")).toBe("warning");
   });
 

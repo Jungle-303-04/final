@@ -8,60 +8,62 @@ import {
   Settings2,
   type LucideIcon,
 } from "lucide-react";
+import type { MessageKey } from "../../shared/i18n";
 
 export interface ResourceCategoryPresentation {
   id: string;
-  label: string;
+  labelKey: MessageKey;
   icon: LucideIcon;
   order: number;
 }
 
 export interface ResourceTypePresentation {
-  label: string;
+  fallbackLabel: string;
+  labelKey: MessageKey | null;
   category: ResourceCategoryPresentation;
 }
 
 const CATEGORIES = {
-  workloads: category("workloads", "Workloads", Boxes, 10),
-  cluster: category("cluster", "Cluster", Server, 20),
-  networking: category("networking", "Networking", Network, 30),
-  configuration: category("configuration", "Configuration", Settings2, 40),
-  storage: category("storage", "Storage", Database, 50),
-  activity: category("activity", "Activity", Activity, 60),
-  other: category("other", "Other", Package, 90),
+  workloads: category("workloads", "resources.category.workloads", Boxes, 10),
+  cluster: category("cluster", "resources.category.cluster", Server, 20),
+  networking: category("networking", "resources.category.networking", Network, 30),
+  configuration: category("configuration", "resources.category.configuration", Settings2, 40),
+  storage: category("storage", "resources.category.storage", Database, 50),
+  activity: category("activity", "resources.category.activity", Activity, 60),
+  other: category("other", "resources.category.other", Package, 90),
 } as const;
 
-const PRESENTATIONS: Record<string, { label: string; category: keyof typeof CATEGORIES }> = {
-  pod: { label: "Pods", category: "workloads" },
-  workload: { label: "Workloads", category: "workloads" },
-  job: { label: "Jobs", category: "workloads" },
-  cronjob: { label: "CronJobs", category: "workloads" },
-  node: { label: "Nodes", category: "cluster" },
-  namespace: { label: "Namespaces", category: "cluster" },
-  service: { label: "Services", category: "networking" },
-  endpoint: { label: "EndpointSlices", category: "networking" },
-  ingress: { label: "Ingresses", category: "networking" },
-  configmap: { label: "ConfigMaps", category: "configuration" },
-  secret: { label: "Secrets", category: "configuration" },
-  pvc: { label: "PersistentVolumeClaims", category: "storage" },
-  persistentvolume: { label: "PersistentVolumes", category: "storage" },
-  event: { label: "Events", category: "activity" },
-  health: { label: "Cluster Health", category: "activity" },
-  usage: { label: "Cluster Usage", category: "activity" },
+const PRESENTATIONS: Record<string, { labelKey: MessageKey; category: keyof typeof CATEGORIES }> = {
+  pod: { labelKey: "resources.type.pod", category: "workloads" },
+  workload: { labelKey: "resources.type.workload", category: "workloads" },
+  job: { labelKey: "resources.type.job", category: "workloads" },
+  cronjob: { labelKey: "resources.type.cronjob", category: "workloads" },
+  node: { labelKey: "resources.type.node", category: "cluster" },
+  namespace: { labelKey: "resources.type.namespace", category: "cluster" },
+  service: { labelKey: "resources.type.service", category: "networking" },
+  endpoint: { labelKey: "resources.type.endpoint", category: "networking" },
+  ingress: { labelKey: "resources.type.ingress", category: "networking" },
+  configmap: { labelKey: "resources.type.configmap", category: "configuration" },
+  secret: { labelKey: "resources.type.secret", category: "configuration" },
+  pvc: { labelKey: "resources.type.pvc", category: "storage" },
+  persistentvolume: { labelKey: "resources.type.persistentvolume", category: "storage" },
+  event: { labelKey: "resources.type.event", category: "activity" },
+  health: { labelKey: "resources.type.health", category: "activity" },
+  usage: { labelKey: "resources.type.usage", category: "activity" },
 };
 
 export function resourceTypePresentation(resourceType: string): ResourceTypePresentation {
   const known = PRESENTATIONS[resourceType];
   return known
-    ? { label: known.label, category: CATEGORIES[known.category] }
-    : { label: resourceType, category: CATEGORIES.other };
+    ? { fallbackLabel: resourceType, labelKey: known.labelKey, category: CATEGORIES[known.category] }
+    : { fallbackLabel: resourceType, labelKey: null, category: CATEGORIES.other };
 }
 
 function category(
   id: string,
-  label: string,
+  labelKey: MessageKey,
   icon: LucideIcon,
   order: number,
 ): ResourceCategoryPresentation {
-  return { id, label, icon, order };
+  return { id, labelKey, icon, order };
 }
