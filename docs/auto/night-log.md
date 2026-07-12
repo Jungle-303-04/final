@@ -181,3 +181,7 @@ $ git merge-base --is-ancestor 97c862da1 origin/woonyong/ui-layer-lab; echo $?
 [2026-07-13 06:44 KST] [프론트] APIQ-012 receipt 완료 — `submitCommand` nullable ID 계약 `d763ab682`; C는 APIQ-027 선행 앵커 대기
 
 [2026-07-13 06:46 KST] [문서] APIQ-012 완료 문서 재검증 — `commands.test.ts` targeted PASS, root `make check` PASS(838 passed, 3 skipped + manifest-check). 별도 UI `npm run check` 재실행은 `apiBoundary` timeout과 `ResourcesPage` 표 조회 실패로 FAIL이므로 full UI PASS로 기록하지 않는다.
+
+[2026-07-13 06:57 KST] [프론트] C 후속 full gate 재검증 PASS — TypeScript·ESLint, 94 files / 663 tests, design guard 275, shadcn 482, production build 전부 통과. 앞선 두 실패는 재현·격리 후 안정화 트랙으로 분리했다.
+
+[2026-07-13 06:57 KST] [프론트] D in_progress — APIQ-027 command polling 계약 claim; API-owned fixture와 failure·terminal·abort·barrel 회귀를 앵커 전에 보강한다.

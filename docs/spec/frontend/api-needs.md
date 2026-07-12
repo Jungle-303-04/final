@@ -4,7 +4,7 @@ status: active-coordination-queue
 date: 2026-07-13
 owners: Codex 요청 / API 연결 작업자 claim·처리 / F 트랙 행(APIQ-029)·계약 갱신(APIQ-012)은 검토자 기록
 workorder: api-integration-workorder-20260711.md
-snapshot: 13행·27함수 / requested 13 / in_progress 0 / blocked 0 / valid completion anchors 23
+snapshot: 13행·27함수 / requested 12 / in_progress 1 / blocked 0 / valid completion anchors 23
 ---
 
 # 프론트 API 요청 큐
@@ -88,7 +88,7 @@ AbortSignal contract test를 추가하고, 필요한 경우 claim 범위 안에�
 
 | ID | 우선 | 함수명 | routes.py 상수 | 대상 파일 | 필요한 화면 | 요청 시각 | 상태 | 담당/브랜치 | claim·heartbeat | 완료 조건·주의 |
 |---|---:|---|---|---|---|---|---|---|---|---|
-| `APIQ-027` | P2 | `submitPrometheusQuery`, `getCommandStatus`, `pollCommand`, `runPrometheusQuery` | `AGENT_DEBUG_QUERY_PATH`, `COMMAND_STATUS_PATH` | `metrics.ts`, `metrics-schemas.ts`, `metrics.test.ts` | Metrics / operation progress | 2026-07-11 16:19 KST | requested | — | — | possibly-sent POST 재전송 0, polling GET만, terminal/timeout/abort, API-owned fixture |
+| `APIQ-027` | P2 | `submitPrometheusQuery`, `getCommandStatus`, `pollCommand`, `runPrometheusQuery` | `AGENT_DEBUG_QUERY_PATH`, `COMMAND_STATUS_PATH` | `metrics.ts`, `metrics-schemas.ts`, `metrics.test.ts` | Metrics / operation progress | 2026-07-11 16:19 KST | in_progress | Codex-API@woonyong/ui-layer-lab | 2026-07-13 06:57 KST | possibly-sent POST 재전송 0, polling GET만, terminal/timeout/abort, API-owned fixture |
 
 ## 4. 큐 밖 Backend gap과 realtime
 
