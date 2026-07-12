@@ -14,6 +14,7 @@ from domains.applications.router import (
     upsert_application,
     upsert_application_deployment,
 )
+from domains.gitops.repository import derive_repository_id
 from packages.contracts.gateway.requests import (
     ApplicationConnectRequest,
     ApplicationUpsertRequest,
@@ -328,11 +329,13 @@ def test_connect_application_stores_github_token_as_credential_ref(monkeypatch) 
 
     asyncio.run(run())
 
+    repository_id = derive_repository_id({"workspace_id": "ws-1", "repo_ref": "org/checkout"})
+    expected_scope = f"repository:{repository_id}"
     assert db.credentials
     assert db.credentials[0]["provider"] == "github"
-    assert db.credentials[0]["scope"] == "github"
+    assert db.credentials[0]["scope"] == expected_scope
     assert db.credentials[0]["encrypted_value"] != "ghp_secret-token"
-    assert db.registered_repositories[0]["credential_ref"] == "db:github:github"
+    assert db.registered_repositories[0]["credential_ref"] == f"db:github:{expected_scope}"
 
 
 def test_connect_application_rejects_disconnected_cluster_before_write() -> None:

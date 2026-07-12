@@ -10,6 +10,7 @@ import httpx
 import pytest
 
 import domains.gitops.repository_discovery as repository_discovery
+from domains.gitops.repository import derive_repository_id
 from domains.gitops.repository_discovery import (
     GitHubRepositoryClient,
     RepositoryDiscoveryError,
@@ -238,10 +239,16 @@ def test_repo_validate_stores_token_as_encrypted_workspace_credential(monkeypatc
 
     response = asyncio.run(run())
 
+    repository_id = derive_repository_id(
+        {"workspace_id": "workspace-1", "repo_ref": "owner/service"}
+    )
+    expected_scope = f"repository:{repository_id}"
     assert response.accessible is True
     assert response.normalized == "owner/service"
-    assert response.credential_ref == "db:github:github"
+    assert response.credential_ref == f"db:github:{expected_scope}"
     assert db.saved[0]["workspace_id"] == "workspace-1"
+    assert db.saved[0]["scope"] == expected_scope
+    assert db.saved[0]["metadata"]["repository_id"] == repository_id
     assert "ghp_secret" not in str(db.saved[0]["encrypted_value"])
 
 
