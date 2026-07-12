@@ -4,7 +4,7 @@ status: active-coordination-queue
 date: 2026-07-12
 owners: Codex 요청 / API 연결 작업자 claim·처리
 workorder: api-integration-workorder-20260711.md
-snapshot: 16행·31함수 / requested 16 / in_progress 0 / blocked 0 / valid completion anchors 18
+snapshot: 16행·31함수 / requested 15 / in_progress 1 / blocked 0 / valid completion anchors 18
 ---
 
 # 프론트 API 요청 큐
@@ -83,7 +83,7 @@ AbortSignal contract test를 추가하고, 필요한 경우 claim 범위 안에�
 
 | ID | 우선 | 함수명 | routes.py 상수 | 대상 파일 | 필요한 화면 | 요청 시각 | 상태 | 담당/브랜치 | claim·heartbeat | 완료 조건·주의 |
 |---|---:|---|---|---|---|---|---|---|---|---|
-| `APIQ-022` | P0 | `listClusters` | `CLUSTERS_PATH` | `clusters.ts`, `cluster-schemas.ts`, `clusters.test.ts` | cluster selector | 2026-07-11 16:19 KST | requested | — | — | limit default 100, signal, strict 실응답 |
+| `APIQ-022` | P0 | `listClusters` | `CLUSTERS_PATH` | `clusters.ts`, `cluster-schemas.ts`, `clusters.test.ts` | cluster selector | 2026-07-11 16:19 KST | in_progress | `/root@woonyong/ui-layer-lab` | 2026-07-12 20:21 KST | limit default 100, signal, strict 실응답; 24시간 대행 |
 | `APIQ-027` | P2 | `submitPrometheusQuery`, `getCommandStatus`, `pollCommand`, `runPrometheusQuery` | `AGENT_DEBUG_QUERY_PATH`, `COMMAND_STATUS_PATH` | `metrics.ts`, `metrics-schemas.ts`, `metrics.test.ts` | Metrics / operation progress | 2026-07-11 16:19 KST | requested | — | — | possibly-sent POST 재전송 0, polling GET만, terminal/timeout/abort, API-owned fixture |
 
 ## 4. 큐 밖 Backend gap과 realtime
