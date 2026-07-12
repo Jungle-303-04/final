@@ -43,6 +43,10 @@ from domains.release_flow.execution import (
 from domains.release_flow.manifest import render_release_step_manifest
 from domains.release_flow.preview import build_release_plan_preview
 from domains.release_flow.redaction import redact_release_value
+from domains.release_flow.repository import (
+    ReleasePlanWorkspaceMismatchError,
+    derive_release_plan_id,
+)
 from domains.scm.events import SafePrFilePatch, SafePrRequestedBody
 from domains.scm.pipeline import safe_pr_patch_sha256
 from packages.config.constants import GitHub, Sandbox, Target
@@ -75,6 +79,7 @@ from packages.contracts.identity import (
     DEFAULT_WORKSPACE_ID,
     AccessResourceType,
     Permission,
+    ServiceRole,
 )
 from packages.runtime.dependencies import get_db, get_events
 from packages.storage.engine import unit_of_work_or_null
@@ -85,6 +90,7 @@ HTTP_CONFLICT = 409
 HTTP_UNPROCESSABLE_ENTITY = 422
 RELEASE_PLAN_NOT_FOUND = "release plan not found"
 EXPLICIT_RELEASE_PLAN_ID_NOT_ALLOWED = "plan_id must not be provided when creating a release plan"
+EMPTY_RELEASE_PLAN_NOT_ALLOWED = "release plan must contain at least one application step"
 RELEASE_RUN_NOT_FOUND = "release run not found"
 RELEASE_PLAN_BLOCKED = "release plan has blockers"
 RELEASE_RUN_BLOCKED = "release run cannot advance"
@@ -1039,12 +1045,24 @@ async def create_release_plan(
             detail=EXPLICIT_RELEASE_PLAN_ID_NOT_ALLOWED,
         )
     workspace_id = getattr(current, "workspace_id", DEFAULT_WORKSPACE_ID)
-    require_plan_application_plan_manage_access(
-        db, current, workspace_id, payload.model_dump()["steps"]
-    )
     body = {**payload.model_dump(), "workspace_id": workspace_id, "user_id": current.user_id}
+    existing_plan_id = derive_release_plan_id(body)
+    existing = db.get_release_plan(workspace_id, existing_plan_id)
+    if existing is not None:
+        require_plan_application_plan_manage_access(
+            db,
+            current,
+            workspace_id,
+            existing.get("steps", []),
+        )
+    elif not body["steps"]:
+        raise HTTPException(
+            status_code=HTTP_UNPROCESSABLE_ENTITY,
+            detail=EMPTY_RELEASE_PLAN_NOT_ALLOWED,
+        )
+    require_plan_application_plan_manage_access(db, current, workspace_id, body["steps"])
     with unit_of_work_or_null(db):
-        plan = db.upsert_release_plan(body)
+        plan = upsert_release_plan_or_404(db, body)
     return ReleasePlanResponse(plan=plan)
 
 
@@ -1059,10 +1077,16 @@ async def update_release_plan(
     existing = db.get_release_plan(workspace_id, plan_id)
     if existing is None:
         raise HTTPException(status_code=HTTP_NOT_FOUND, detail=RELEASE_PLAN_NOT_FOUND)
+    require_plan_application_plan_manage_access(
+        db,
+        current,
+        workspace_id,
+        existing.get("steps", []),
+    )
     body = {**payload.model_dump(), "plan_id": plan_id, "workspace_id": workspace_id}
     require_plan_application_plan_manage_access(db, current, workspace_id, body["steps"])
     with unit_of_work_or_null(db):
-        plan = db.upsert_release_plan(body)
+        plan = upsert_release_plan_or_404(db, body)
     return ReleasePlanResponse(plan=plan)
 
 
@@ -3540,6 +3564,12 @@ def require_plan_application_plan_manage_access(
     workspace_id: str,
     steps: list[dict[str, Any]],
 ) -> None:
+    has_application_scope = any(str(step.get("application_id") or "").strip() for step in steps)
+    if not has_application_scope:
+        roles = tuple(getattr(current, "roles", ()) or ())
+        if ServiceRole.SERVICE_ADMIN.value in roles:
+            return
+        raise HTTPException(status_code=403, detail="resource access denied")
     require_plan_application_permission_access(
         db,
         current,
@@ -3547,6 +3577,13 @@ def require_plan_application_plan_manage_access(
         steps,
         Permission.APPLICATION_MANAGE.value,
     )
+
+
+def upsert_release_plan_or_404(db: Any, body: dict[str, Any]) -> dict[str, Any]:
+    try:
+        return db.upsert_release_plan(body)
+    except ReleasePlanWorkspaceMismatchError as exc:
+        raise HTTPException(status_code=HTTP_NOT_FOUND, detail=RELEASE_PLAN_NOT_FOUND) from exc
 
 
 def require_plan_application_rollback_access(

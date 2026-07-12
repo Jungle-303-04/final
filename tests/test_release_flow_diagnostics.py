@@ -82,8 +82,26 @@ class ReleasePlanWriteDb:
 
     def get_release_plan(self, workspace_id: str, plan_id: str) -> dict[str, object] | None:
         if workspace_id == "workspace-a" and plan_id == "path-plan":
-            return {"workspace_id": workspace_id, "plan_id": plan_id, "steps": []}
+            return {
+                "workspace_id": workspace_id,
+                "plan_id": plan_id,
+                "steps": [{"application_id": "app-a", "position": 0}],
+            }
         return None
+
+    def can_access(
+        self,
+        _user_id: str,
+        _workspace_id: str,
+        resource_type: str,
+        resource_id: str,
+        permission: str,
+    ) -> bool:
+        return (
+            resource_type == "application"
+            and resource_id == "app-a"
+            and permission == "application.manage"
+        )
 
     def upsert_release_plan(self, payload: dict[str, object]) -> dict[str, object]:
         self.upserts.append(payload)
@@ -103,7 +121,7 @@ def test_create_release_plan_without_explicit_id_still_writes() -> None:
 
     response = asyncio.run(
         release_router.create_release_plan(
-            release_router.ReleasePlanUpsertRequest(name="Checkout release"),
+            release_plan_request(),
             current=release_operator(),
             db=db,
         )
@@ -141,6 +159,7 @@ def test_update_release_plan_keeps_using_path_id() -> None:
             release_router.ReleasePlanUpsertRequest(
                 plan_id="ignored-body-plan",
                 name="Updated release",
+                steps=[{"application_id": "app-a", "position": 0}],
             ),
             current=release_operator(),
             db=db,
