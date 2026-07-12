@@ -1,5 +1,5 @@
 import { ThemeProvider } from "next-themes";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { BrowserRouter } from "react-router-dom";
 import { createApiComposition } from "./app/apiComposition";
 import { ProductErrorBoundary } from "./app/ProductErrorBoundary";
@@ -10,17 +10,14 @@ import "./styles/tokens.css";
 import "./styles/foundation.css";
 
 export default function ProductApp() {
-  useEffect(() => {
-    document.title = "KubeHeal";
-  }, []);
-
   return (
     <I18nProvider>
       <ProductErrorBoundary>
         <ThemeProvider
           attribute="class"
-          defaultTheme="light"
-          enableSystem={false}
+          defaultTheme="system"
+          disableTransitionOnChange
+          enableSystem
           storageKey="kubeheal-theme"
           themes={["light", "dark"]}
         >
