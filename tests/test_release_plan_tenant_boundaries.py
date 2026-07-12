@@ -13,7 +13,10 @@ from fastapi import HTTPException
 from sqlalchemy.dialects import postgresql
 
 from domains.release_flow import router as release_router
-from domains.release_flow.repository import ReleaseFlowRepository
+from domains.release_flow.repository import (
+    ReleaseFlowRepository,
+    ReleasePlanWorkspaceMismatchError,
+)
 from packages.contracts.identity import Permission
 
 
@@ -49,7 +52,7 @@ class _StatementCaptureConnection:
 
     def execute(self, statement: Any) -> _Result:
         self.statements.append(statement)
-        return _Result(rowcount=1)
+        return _Result(first={"plan_id": "shared-plan-id"}, rowcount=1)
 
 
 def _release_repository(connection: Any) -> ReleaseFlowRepository:
@@ -146,25 +149,20 @@ class _CrossWorkspaceConnection:
 def test_cross_workspace_empty_plan_is_rejected_and_victim_steps_survive() -> None:
     connection = _CrossWorkspaceConnection()
     repository = _release_repository(connection)
-    rejected = False
 
-    try:
+    with pytest.raises(ReleasePlanWorkspaceMismatchError):
         repository.upsert_release_plan(
             {
                 **_release_payload(workspace_id="workspace-a", plan_id="plan-b"),
                 "name": "Attacker replacement",
             }
         )
-    except Exception:  # noqa: BLE001 - repository may expose 404 or 409 as directed
-        rejected = True
 
     assert (
-        rejected,
         connection.plan["workspace_id"],
         connection.plan["name"],
         [step["step_id"] for step in connection.steps],
     ) == (
-        True,
         "workspace-b",
         "Workspace B release",
         ["step-b"],
