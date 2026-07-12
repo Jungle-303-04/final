@@ -24,13 +24,16 @@ describe("LocaleToggle", () => {
 
     const trigger = screen.getByRole("combobox", { name: "Language: English" });
     expect(trigger.textContent).toContain("English");
+    expect(trigger.className).toContain("w-24");
 
     trigger.focus();
     await user.keyboard("{ArrowDown}");
     await user.click(await screen.findByRole("option", { name: "Korean" }));
 
     await waitFor(() => {
-      expect(screen.getByRole("combobox", { name: "언어: 한국어" })).toBeTruthy();
+      const localizedTrigger = screen.getByRole("combobox", { name: "언어: 한국어" });
+      expect(localizedTrigger).toBe(trigger);
+      expect(localizedTrigger.className).toContain("w-24");
     });
     expect(document.documentElement.lang).toBe("ko");
     expect(window.localStorage.getItem(PRODUCT_LOCALE_STORAGE_KEY)).toBe("ko");

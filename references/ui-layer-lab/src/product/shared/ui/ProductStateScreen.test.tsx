@@ -23,6 +23,10 @@ describe("ProductStateScreen", () => {
     expect(main.getAttribute("aria-label")).toBe("세션 확인 중");
     expect(screen.getByRole("status", { name: "세션 확인 중" })).toBeTruthy();
     expect(screen.queryByRole("heading")).toBeNull();
+    expect(container.querySelector('[data-slot="product-page-frame"]')).toBeTruthy();
+    expect(
+      container.querySelector('[data-slot="product-shell-loading"]')?.className,
+    ).toContain("md:grid-cols-[var(--product-sidebar-width)_minmax(0,1fr)]");
     expect(container.querySelectorAll('[data-slot="skeleton"]').length).toBeGreaterThan(0);
     for (const skeleton of container.querySelectorAll('[data-slot="skeleton"]')) {
       expect(skeleton.getAttribute("aria-hidden")).toBe("true");
