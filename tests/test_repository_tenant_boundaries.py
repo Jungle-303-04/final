@@ -11,6 +11,7 @@ from __future__ import annotations
 import asyncio
 from contextlib import contextmanager
 from copy import deepcopy
+from datetime import UTC, datetime
 from types import SimpleNamespace
 from typing import Any
 
@@ -18,9 +19,10 @@ import pytest
 from fastapi import HTTPException
 from sqlalchemy.dialects import postgresql
 
-from domains.applications.router import upsert_application
+from domains.applications.router import connect_application, upsert_application
 from domains.gitops.repository import RepoChangeRepository, derive_repository_id
-from packages.contracts.gateway.requests import ApplicationUpsertRequest
+from packages.contracts.gateway.requests import ApplicationConnectRequest, ApplicationUpsertRequest
+from packages.contracts.gateway.responses import RepositoryManifestValidationResponse
 
 
 class _MappedResult:
@@ -37,6 +39,80 @@ class _MappedResult:
 def _compiled(statement: Any) -> tuple[str, dict[str, object]]:
     compiled = statement.compile(dialect=postgresql.dialect())
     return " ".join(str(compiled).split()), dict(compiled.params)
+
+
+class _ExistingRepositoryRouteDb:
+    """Models the destructive path if a create route skips manage authorization."""
+
+    def __init__(self, repository: dict[str, object]) -> None:
+        self.repository = deepcopy(repository)
+        self.lookup_calls: list[tuple[str, str]] = []
+        self.access_checks: list[tuple[str, str, str, str, str]] = []
+        self.repository_writes = 0
+        self.owner_grants: list[tuple[str, str]] = []
+
+    def get_repository_by_ref(self, workspace_id: str, repo_ref: str) -> dict[str, object] | None:
+        self.lookup_calls.append((workspace_id, repo_ref))
+        if (
+            self.repository["workspace_id"] == workspace_id
+            and self.repository["repo_ref"] == repo_ref
+        ):
+            return dict(self.repository)
+        return None
+
+    def can_access(
+        self,
+        user_id: str,
+        workspace_id: str,
+        resource_type: str,
+        resource_id: str,
+        permission: str,
+    ) -> bool:
+        self.access_checks.append((user_id, workspace_id, resource_type, resource_id, permission))
+        return False
+
+    def register_repository(self, payload: dict[str, object]) -> dict[str, object]:
+        self.repository_writes += 1
+        self.repository.update(
+            {
+                "default_branch": payload["default_branch"],
+                "credential_ref": payload.get("credential_ref"),
+                "access_policy": payload.get("access_policy", {}),
+            }
+        )
+        self.owner_grants.append((str(payload["user_id"]), str(self.repository["repository_id"])))
+        return dict(self.repository)
+
+    def upsert_application(self, payload: dict[str, object]) -> dict[str, object]:
+        return {**payload, "application_id": "app-existing"}
+
+    def get_application(self, _workspace_id: str, _application_id: str) -> dict[str, object] | None:
+        return None
+
+
+def _attempt_existing_repository_create(db: _ExistingRepositoryRouteDb) -> HTTPException | None:
+    session = SimpleNamespace(
+        user_id="unauthorized-member",
+        roles=("user",),
+        workspace_id="workspace-a",
+    )
+
+    async def run() -> object:
+        return await upsert_application(
+            ApplicationUpsertRequest(
+                name="attacker-app",
+                repo_ref="acme/checkout",
+                default_branch="attacker-branch",
+            ),
+            current=session,
+            db=db,
+        )
+
+    try:
+        asyncio.run(run())
+    except HTTPException as exc:
+        return exc
+    return None
 
 
 def test_repository_create_ignores_client_controlled_repository_id() -> None:
@@ -73,6 +149,67 @@ def test_repository_create_ignores_client_controlled_repository_id() -> None:
     assert params["repository_id"] == expected_repository_id
     assert stored["repository_id"] == expected_repository_id
     assert stored["repository_id"] != payload["repository_id"]
+
+
+def test_same_workspace_existing_repository_requires_manage_before_create_upsert() -> None:
+    repository_id = derive_repository_id(
+        {"workspace_id": "workspace-a", "repo_ref": "acme/checkout"}
+    )
+    victim_row = {
+        "repository_id": repository_id,
+        "workspace_id": "workspace-a",
+        "repo_ref": "acme/checkout",
+        "default_branch": "main",
+        "credential_ref": "db:github:victim-token",
+        "access_policy": {"visibility": "private"},
+    }
+    db = _ExistingRepositoryRouteDb(victim_row)
+
+    error = _attempt_existing_repository_create(db)
+
+    assert error is not None
+    assert error.status_code in {403, 404}
+    assert db.repository == victim_row
+    assert db.repository_writes == 0
+    assert db.owner_grants == []
+    assert db.lookup_calls == [("workspace-a", "acme/checkout")]
+    assert any(
+        resource_type == "repository"
+        and resource_id == repository_id
+        and permission.endswith(".manage")
+        for _user, _workspace, resource_type, resource_id, permission in db.access_checks
+    )
+
+
+def test_legacy_repository_id_is_resolved_by_workspace_ref_before_manage_check() -> None:
+    canonical_id = derive_repository_id(
+        {"workspace_id": "workspace-a", "repo_ref": "acme/checkout"}
+    )
+    victim_row = {
+        "repository_id": "repo-legacy-client-selected",
+        "workspace_id": "workspace-a",
+        "repo_ref": "acme/checkout",
+        "default_branch": "main",
+        "credential_ref": "db:github:legacy-token",
+        "access_policy": {"visibility": "private"},
+    }
+    assert victim_row["repository_id"] != canonical_id
+    db = _ExistingRepositoryRouteDb(victim_row)
+
+    error = _attempt_existing_repository_create(db)
+
+    assert error is not None
+    assert error.status_code in {403, 404}
+    assert db.lookup_calls == [("workspace-a", "acme/checkout")]
+    assert db.repository == victim_row
+    assert db.repository_writes == 0
+    assert db.owner_grants == []
+    assert any(
+        resource_type == "repository"
+        and resource_id == victim_row["repository_id"]
+        and permission.endswith(".manage")
+        for _user, _workspace, resource_type, resource_id, permission in db.access_checks
+    )
 
 
 def test_application_create_with_foreign_repository_id_is_rejected_before_victim_write() -> None:
@@ -157,6 +294,127 @@ def test_server_generated_repository_collision_maps_to_non_disclosing_404() -> N
     assert exc.value.status_code == 404
     assert exc.value.detail == "repository not found"
     assert "repo-secret" not in str(exc.value.detail)
+
+
+def test_connect_credential_write_joins_uow_and_rolls_back_on_repository_conflict(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("CREDENTIAL_ENCRYPTION_KEY", "repository-boundary-test-key")
+
+    class ValidDiscovery:
+        async def validate_manifest(self, payload: Any) -> RepositoryManifestValidationResponse:
+            return RepositoryManifestValidationResponse(
+                repo_ref=str(payload.repo_ref),
+                branch=str(payload.branch),
+                manifest_path=str(payload.manifest_path),
+                valid=True,
+                status="valid",
+                validation_mode="static-parse",
+                resource_count=1,
+                resources=[],
+                warnings=[],
+                errors=[],
+            )
+
+    class TransactionalConnectDb:
+        def __init__(self) -> None:
+            self.in_uow = False
+            self.events: list[tuple[str, bool]] = []
+            self.credential: dict[str, object] | None = None
+
+        @contextmanager
+        def unit_of_work(self):
+            previous_credential = deepcopy(self.credential)
+            self.in_uow = True
+            self.events.append(("uow_enter", self.in_uow))
+            try:
+                yield object()
+            except BaseException:
+                self.credential = previous_credential
+                self.events.append(("uow_rollback", self.in_uow))
+                raise
+            finally:
+                self.in_uow = False
+
+        def get_cluster_registration(self, workspace_id: str, cluster_id: str) -> dict[str, object]:
+            return {
+                "workspace_id": workspace_id,
+                "cluster_id": cluster_id,
+                "settings": {"cluster_role": "target"},
+            }
+
+        def can_access(
+            self,
+            _user_id: str,
+            _workspace_id: str,
+            resource_type: str,
+            _resource_id: str,
+            permission: str,
+        ) -> bool:
+            return resource_type == "cluster" and permission == "deploy.run"
+
+        def latest_cluster_agent_statuses(
+            self, workspace_id: str, cluster_ids: set[str]
+        ) -> dict[str, dict[str, object]]:
+            return {
+                cluster_id: {
+                    "workspace_id": workspace_id,
+                    "cluster_id": cluster_id,
+                    "last_seen_at": datetime.now(UTC).isoformat(),
+                }
+                for cluster_id in cluster_ids
+            }
+
+        def get_repository_by_ref(
+            self, _workspace_id: str, _repo_ref: str
+        ) -> dict[str, object] | None:
+            return None
+
+        def upsert_workspace_credential(self, payload: dict[str, object]) -> None:
+            self.events.append(("credential_write", self.in_uow))
+            self.credential = dict(payload)
+
+        def register_repository(self, _payload: dict[str, object]) -> dict[str, object]:
+            self.events.append(("repository_conflict", self.in_uow))
+            raise LookupError("foreign workspace repository exists")
+
+        def upsert_application(self, payload: dict[str, object]) -> dict[str, object]:
+            pytest.fail(f"application write must not run after conflict: {payload}")
+
+    db = TransactionalConnectDb()
+    session = SimpleNamespace(
+        user_id="user-a",
+        roles=("user",),
+        workspace_id="workspace-a",
+    )
+
+    async def run() -> object:
+        return await connect_application(
+            ApplicationConnectRequest(
+                name="checkout",
+                repo_ref="acme/checkout",
+                token="ghp_attacker-token",
+                branch="main",
+                manifest_path="deploy/app.yaml",
+                source_type="raw-yaml",
+                cluster_id="cluster-1",
+            ),
+            current=session,
+            db=db,
+            discovery=ValidDiscovery(),
+        )
+
+    with pytest.raises(HTTPException) as exc:
+        asyncio.run(run())
+
+    assert exc.value.status_code == 404
+    assert db.events == [
+        ("uow_enter", True),
+        ("credential_write", True),
+        ("repository_conflict", True),
+        ("uow_rollback", True),
+    ]
+    assert db.credential is None
 
 
 def test_repository_conflict_update_is_workspace_fenced_in_postgresql() -> None:
