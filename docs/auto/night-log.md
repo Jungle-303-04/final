@@ -958,3 +958,16 @@ strict envelope·open JsonMap·AbortSignal·possibly-sent POST 단일 호출 계
 - targeted 2 files / 20 tests PASS. `npm run check` PASS: 104 files / 750 tests,
   design guard 312 files, shadcn 482 previews, Vite production build.
 - 화면·adapter 신규 소비는 이 API 단위에 포함하지 않았다.
+
+## 2026-07-13 12:29 KST — [프론트-D] VP-007 ProviderIcon 완료 증거
+
+- BQ-017 백엔드 코드 `db4798d4e`와 canonical merge `d507ca6d4`의 `origin/dev`
+  ancestor exit 0 및 response 계약 실물을 확인했다.
+- 코드 커밋 `b4d1af3cd`: optional wire provider를 canonical `unknown`으로 정규화하고 단일
+  `ClusterProviderIcon`을 전역 selector에 연결했다. EKS/GKE/AKS만 검증된 브랜드 아이콘을,
+  on-prem/kind/unknown은 일반 Kubernetes 계열 아이콘을 사용한다. provider 기반 화면 분기 0.
+- full `npm run check` PASS: 105 files / 756 tests, design guard 314 files,
+  shadcn 482 previews, Vite production build.
+- `npm run visual-product` 1·2차는 200% text resize에서 icon 추가로 생긴 42px overflow를
+  검출했다. connection label을 시각적으로 compact화하고 셸의 2행 전환점을 `lg`로 올린 뒤
+  3차 35 scenarios PASS, unexpected API/network/WebSocket 요청 0.
