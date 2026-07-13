@@ -504,10 +504,44 @@ def materialize_scalar_patch(source: str, plan: ManifestScalarPatchPlan) -> str:
     """승인 원문에서 allowlist scalar span만 바꾸고 나머지 byte는 보존한다."""
 
     validate_scalar_patch_plan(plan)
-    original = parse_single_manifest(source, plan.source_type)
+    return _materialize_scalar_replacements(
+        source,
+        source_type=plan.source_type,
+        expected_source_sha256=plan.source_manifest_sha256,
+        replacements=plan.replacements,
+    )
+
+
+def materialize_scalar_rollback(
+    source: str,
+    plan: ManifestScalarPatchPlan,
+    *,
+    expected_source_sha256: str,
+) -> str:
+    """검증된 forward plan의 exact inverse를 현재 patched 원문에 적용한다."""
+
+    validate_scalar_patch_plan(plan)
+    if not re.fullmatch(r"sha256:[0-9a-f]{64}", expected_source_sha256):
+        raise ManifestSourcePatchError("rollback source digest is invalid")
+    return _materialize_scalar_replacements(
+        source,
+        source_type=plan.source_type,
+        expected_source_sha256=expected_source_sha256,
+        replacements=plan.rollback_replacements,
+    )
+
+
+def _materialize_scalar_replacements(
+    source: str,
+    *,
+    source_type: str,
+    expected_source_sha256: str,
+    replacements: tuple[ScalarFieldReplacement, ...],
+) -> str:
+    original = parse_single_manifest(source, source_type)
     if original.get("kind") != "Deployment":
         raise ManifestSourcePatchError("manifest source must be a Deployment")
-    if canonical_manifest_digest(original) != plan.source_manifest_sha256:
+    if canonical_manifest_digest(original) != expected_source_sha256:
         raise ManifestSourcePatchError("manifest source digest does not match approved artifact")
     try:
         if any(isinstance(token, AnchorToken | AliasToken) for token in yaml.scan(source)):
@@ -520,7 +554,7 @@ def materialize_scalar_patch(source: str, plan: ManifestScalarPatchPlan) -> str:
 
     expected = deepcopy(original)
     spans: list[tuple[int, int, str]] = []
-    for replacement in plan.replacements:
+    for replacement in replacements:
         segments = field_path_segments(replacement.field_path)
         current = object_value_at(original, segments)
         if not same_scalar(current, replacement.current_value):
@@ -542,7 +576,7 @@ def materialize_scalar_patch(source: str, plan: ManifestScalarPatchPlan) -> str:
     patched = source
     for start, end, encoded in sorted(spans, reverse=True):
         patched = f"{patched[:start]}{encoded}{patched[end:]}"
-    if parse_single_manifest(patched, plan.source_type) != expected:
+    if parse_single_manifest(patched, source_type) != expected:
         raise ManifestSourcePatchError("manifest patch changed fields outside approved scalars")
     return patched
 
