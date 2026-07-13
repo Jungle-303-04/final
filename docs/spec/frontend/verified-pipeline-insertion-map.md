@@ -23,7 +23,7 @@ api-needs.md에 APIQ 행을 추가하지 않고 화면도 렌더하지 않는다
 | VP-002 | correlation 감사 타임라인 — 인시던트의 전체 이벤트 체인을 시간순 표시 | BQ-002+004 | `AUDIT_TIMELINE_PATH` (예정 — BQ-002 배관 앵커 `1080363a7` 존재(미착륙), 조회 route는 BQ-004 대기) | backend 선행 | `UI-021 Item`·`Collapsible`·`Badge`, 커서 페이지네이션 | 미요청 |
 | VP-003 | 이벤트 여정 뷰 — VP-002 데이터를 워커 흐름(alert→evidence→rca→recovery→PR)으로 렌더 | BQ-004 | VP-002와 동일 route 소비 | backend 선행 | `UI-056 TimelineSwimlane` 선례의 custom. causation_id 있으면 트리, 없으면 시간순으로 강등 표시 | 미요청 |
 | VP-004 | 인시던트 상세 "최근 변경" 섹션 — "이 장애 N분 전 PR #x로 image y 배포됨" | BQ-005 | `RCA_RECENT_CHANGES_PATH` (예정) | backend 선행 | `RCA-002 IncidentWorkspace`에 섹션 추가. 변경 없으면 섹션 미렌더(빈 카드 금지) | 미요청 |
-| VP-005 | 승격 게이트 표시 — release flow에서 "rollout health 통과로 승격됨" 근거 표시 | BQ-006 | 기존 workflow run 응답의 `promotion_gate` 필드(additive) | backend 선행 | 기존 release(flow) 화면 + `UI-020 StatusMark` | 미요청 |
+| VP-005 | 승격 게이트 표시 — release flow에서 "rollout health 통과로 승격됨" 근거 표시 | BQ-006 | workflow run의 optional `promotion_gate: PromotionGateResponse \| null` · 앵커 `8cd0b18e96f1266873d1632486472d0d22c18477` (`origin/dev` ancestor exit 0) | 직결 | 기존 release(flow) 화면 + `UI-020 StatusMark` | 미요청 |
 | VP-006 | revert PR 상태 — 검증 실패로 자동 생성된 revert PR을 인시던트·release 화면에 표시 | BQ-007 | 기존 safe_pr 이벤트/조회 재사용 (신규 route 없음) | backend 선행 | 기존 repo approval card 패턴. **flag off 환경에서는 이 표면 전체 미렌더** | 미요청 |
 | VP-007 | 클러스터-최상위 IA — 전역 클러스터 selector가 전 화면 스코프 결정 + 연결된 클러스터 목록(이름·env·health·connection·provider 아이콘) | 부분 무의존 / 아이콘만 BQ-017 | 기존 `CLUSTERS_PATH`·`CLUSTER_CONNECTION_STATUS_PATH`(착륙 완료) + BQ-017 `provider` 필드(대기) | 목록·selector: 어댑터(즉시 가능) / 아이콘: backend 선행 | REF-API-011/013 어댑터 선례 + `UI-004 ScopePicker`. 아이콘 규칙: 확인된 provider만 브랜드 아이콘, unknown은 일반 K8s 아이콘(추측 배지 금지). 단일 ProviderIcon 컴포넌트 | 미요청 |
 | VP-008 | 클러스터 연결 위자드 고도화 — provider 선택→사전 명령→설치 원커맨드(만료 카운트다운)→연결 단계 실시간(token_issued→…→ready)→완료 | BQ-017 | 기존 install 토큰·위자드 경로 + providers catalog + BQ-017 `connection_stage`(대기) | backend 선행(단계 표시) / 그 외 기존 계약 | 기존 resources cluster wizard 확장. `UI-057 Custom wizard` 선례 + `Progress`·`Steps`. 미지원 provider는 generic으로 정직 표기 | 미요청 |
@@ -48,6 +48,21 @@ api-needs.md에 APIQ 행을 추가하지 않고 화면도 렌더하지 않는다
 - **계층 분리**: `diagnosis.selected_candidate_id`(RCA 진단 후보 선택)와
   `remediation.selected_action_id`(복구 실행 후보 선택)는 서로 다른 계층이다.
   병합·상호 대체 금지.
+
+## 1c. VP-005 `promotion_gate` 인계 비고 (2026-07-13, PROMOTE 후 이식)
+
+- `promotion_gate`는 workflow run의 optional 구조화 read model이며, 값이 없으면 프론트가
+  승격 가능 여부를 추측하거나 다른 필드로 보정하지 않는다.
+- `PromotionGateResponse`는 `eligible`, `command_status`, `command_completed`, `applied`,
+  `applied_not_false`, `failed_resources`, `failed_resource_count`, `rollout_ready`,
+  `rollout_ready_not_false`를 제공한다.
+- 백엔드의 단일 판정 원천 `promotion_gate_from_command_result`와 동일하게
+  `command_completed=true`, `applied_not_false=true`, `failed_resource_count=0`,
+  `rollout_ready_not_false=true`를 모두 만족할 때만 `eligible=true`다. 관측 윈도우는 이
+  판정에 포함하지 않는다.
+- 기존 `repo.md` 인계의 조회 규칙을 보존한다. run 목록은 재시도 없이 조회하고, 원본 run의
+  동적 필드를 축소하지 않은 채 `promotion_gate`만 구조화해 소비한다. 활성 run이 하나라도
+  있으면 10초, 그 외에는 60초 간격으로 폴링한다.
 
 ## 2. 작업 절차 (행 단위)
 

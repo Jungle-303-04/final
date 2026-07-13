@@ -870,3 +870,57 @@ npm run visual-product
 - BQ-016은 `origin/dev`에 완료 착륙했고, 다음 큐인 BQ-009는
   `codex/f-auto-revert-pr`에서 진행 중이다. 같은 worktree가 감사 중에도 전진했으므로
   조율 세션은 해당 lane에 동시 수정·rebase·테스트를 수행하지 않는다.
+
+## 2026-07-13 11:10 KST — [프론트] PROMOTE 동기화·BQ-006 인계 이식
+
+- `origin/dev` `a65c66c7102fb453e583ed4ec44f1950a9df9ba2`, 팀 통합 merge
+  `0eaaa6637ca46bf29b073bd0dbe274719ffd5ee3`, FE-A2 lab HEAD
+  `977329121056ebd583481f127a3c0a64f86182fb`의 ancestor 검증은 모두 exit 0이다.
+- canonical `woonyong/ui-layer-lab`을 `origin/dev`로 fast-forward하고 동일 HEAD를 원격 lab에
+  push했다.
+- 847행의 `[이식 대기]` 원문은
+  `docs/spec/frontend/verified-pipeline-insertion-map.md`의 VP-005 행과 §1c로 이식했다.
+  optional `promotion_gate`, `PromotionGateResponse` 전 필드, 단일 eligible 판정,
+  동적 run 필드 보존, 활성 10초/비활성 60초 폴링 규칙을 보존했다.
+- VP-005는 BQ-006 앵커 `8cd0b18e96f1266873d1632486472d0d22c18477`의
+  `origin/dev` 착륙을 근거로 `backend 선행`에서 `직결`로 갱신했다.
+
+## 2026-07-13 11:10 KST — [프론트] 브랜치·worktree·stash 전수 감사
+
+- frontend 소유 canonical은 `woonyong/ui-layer-lab` 하나다. 기존
+  `codex/ui-layer-lab-references`는 2026-07-09 canonical 이름으로 이미 rename되어 잔존 ref가
+  없고, 현재 frontend 소유 임시 branch/worktree는 0개다. 따라서 삭제는 0건이다.
+- `git worktree prune --dry-run --verbose`는 출력 0줄, exit 0이다. 아래 Codex ref는 frontend
+  소유가 아니거나 활성·미착륙 변경이 있어 유지했다.
+  - `codex/f-auto-revert-pr` `bce0ce2f6a91513e3f202dead5498af1a980f5f2`: 감사 중에도
+    HEAD가 전진한 활성 backend P lane.
+  - `codex/rca-log-evidence-scope-20260710`
+    `a5ac062fb53752ec64a7ac37e38611ed0f3454d5`: backend RCA worktree.
+  - `codex/runtime-hardening-20260710`
+    `ae3ee71a229af78f804f88e16ecdc466443bf5f9`: backend runtime worktree, 미착륙 2커밋.
+  - `codex/cloudflare-token-normalization`
+    `83864abdf0b677660d35d78a1f05d930acb6854a`: infra/backend 이력.
+  - `codex/platform-foundation` `63618a4fb81c4acda22ec125fa7934d9ef9d0204`:
+    platform/backend 이력.
+- 감사 직후 반영 완료 stash 3건과 빈 stash 1건이 다른 세션에서 동시 제거된 것을 감지했다.
+  제거 전·후 hash로 대조했으며 이어진 `git stash drop stash@{9}`는 대상 부재로 실패해 남은
+  stash에는 변경이 없었다.
+  - `26ea8593e090cf20a14ed3538ecac9ea62dace11`: visual gate·no-content export가 후속
+    `6a40a5d01` 및 현행 코드에 반영됨.
+  - `5932d438212a273fe8f409a6199050edc9157cc8`: no-content 계약 문서·queue·visual 변경이
+    `8ef2338c2`, `6a40a5d01` 및 후속 커밋에 반영됨.
+  - `51e64ba44982ba07f41e1962d715a7bc4ae79651`: Sidebar 계약이 `6a40a5d01`에 반영됨.
+  - `8fd3b12d2677e52a342c6e66d98589ff75fafcff`: 추적 diff가 없는 빈 stash.
+- 유지 stash는 다음 8건이다.
+  - `a6c68efbea026595a4c6732a5b4173025a8650ce`
+    (`wip-pre-fe-a2-20260713`): APIQ-019 conversation ID 검증과 catalog strict-envelope 회귀
+    테스트가 아직 canonical에 미반영이며, forward patch check exit 0.
+  - `bc2be0b379ab89e30b3a79647b1fc0516a639705`: legacy `frontend/**` 삭제와 lab dependency
+    delta가 FE-A2의 legacy 복원 정책과 달라 미반영; 임의 폐기 없이 보존.
+  - `de98fea5d5861aaae0180b66a347392d41e76f27`,
+    `e28c22ceb9afa3c4ee0e40d95d2570cb0751f42d`: backend provider/event 작업 소유이며 미반영.
+  - `556980eeb427040d1bd39354cf2b02477eb6c7a2`,
+    `5c00fb04eb117a556c01c2517ae45f553e65c570`,
+    `9b121a137bd91d2d8c93a753bd02fdcd6a52cace`,
+    `c764ce58b6dddff4cb58067bbf56a99739de0364`: 과거 demo/rename 작업의 미반영 보존분으로,
+    현재 frontend canonical과 소유·경로가 달라 유지.
