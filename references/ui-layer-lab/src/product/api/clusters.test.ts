@@ -73,6 +73,26 @@ describe("clusters API", () => {
     await expect(listClusters()).resolves.toEqual({ clusters: [cluster] });
   });
 
+  it("accepts the additive connection stage without opening the strict row", async () => {
+    const cluster = { ...CLUSTER, connection_stage: "ready" };
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      jsonResponse({ clusters: [cluster] }),
+    );
+
+    await expect(listClusters()).resolves.toEqual({ clusters: [cluster] });
+  });
+
+  it("rejects a connection stage outside the canonical stage enum", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      jsonResponse({ clusters: [{ ...CLUSTER, connection_stage: "invented" }] }),
+    );
+
+    await expect(listClusters()).rejects.toMatchObject({
+      kind: "invalid-payload",
+      status: 200,
+    } satisfies Partial<ApiError>);
+  });
+
   it("rejects a provider outside the canonical provider enum", async () => {
     vi.spyOn(globalThis, "fetch").mockResolvedValue(
       jsonResponse({ clusters: [{ ...CLUSTER, provider: "custom-cloud" }] }),
