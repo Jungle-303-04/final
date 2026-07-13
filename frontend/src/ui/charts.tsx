@@ -1,35 +1,32 @@
-import { ResponsiveLine } from '@nivo/line';
 import { useReducedMotion } from 'motion/react';
 import type { CSSProperties } from 'react';
+import {
+  Area,
+  AreaChart,
+  CartesianGrid,
+  Line,
+  LineChart,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from 'recharts';
 import { cx } from '@/ui';
 
-const theme = {
-  text: { fill: 'var(--ui-text-secondary)', fontSize: 11 },
-  grid: { line: { stroke: 'var(--ui-border)', strokeWidth: 1 } },
-  tooltip: {
-    container: {
-      background: 'var(--ui-surface)',
-      color: 'var(--ui-text-primary)',
-      fontSize: 12,
-      borderRadius: 'var(--radius-control)',
-    },
-  },
-} as const;
-
 const LINE_COLORS = [
-  'var(--ui-info)',
-  'var(--ui-success)',
-  'var(--ui-warning)',
-  'color-mix(in oklab, var(--ui-accent) 72%, var(--ui-info))',
-  'color-mix(in oklab, var(--ui-danger) 72%, var(--ui-warning))',
+  'var(--chart-1)',
+  'var(--chart-2)',
+  'var(--chart-3)',
+  'var(--chart-4)',
+  'var(--chart-5)',
 ];
 
 const tooltipStyle: CSSProperties = {
-  background: 'var(--ui-surface)',
-  border: '1px solid var(--ui-border)',
-  borderRadius: 'var(--radius-control)',
+  background: 'var(--popover)',
+  border: '1px solid var(--border)',
+  borderRadius: 'var(--radius)',
   boxShadow: 'var(--ui-shadow-elevated)',
-  color: 'var(--ui-text-primary)',
+  color: 'var(--popover-foreground)',
   fontSize: '0.75rem',
   padding: '0.5rem 0.75rem',
 };
@@ -38,6 +35,13 @@ export interface Series {
   id: string;
   data: { x: number | string; y: number }[];
 }
+
+interface RechartsLine {
+  dataKey: string;
+  id: string;
+}
+
+type RechartsRow = { x: number | string } & Record<string, number | string | undefined>;
 
 const MAX_X_AXIS_TICKS = 5;
 type SparklineTone = 'neutral' | 'success' | 'warning' | 'danger' | 'info';
@@ -61,30 +65,55 @@ export function Sparkline({
   ariaLabel?: string;
   className?: string;
 }) {
+  const reduced = useReducedMotion();
   const values = normalizeSparkPoints(points);
   const drawable = values.length === 1 ? [values[0], values[0]] : values;
-  const path = drawable.length > 0 ? sparkPath(drawable) : '';
-  const areaPath = path ? `${path} L 92 28 L 8 28 Z` : '';
 
-  if (!path) {
+  if (drawable.length === 0) {
     return (
-      <svg className={cx('h-full w-full text-text-muted', className)} viewBox="0 0 100 32" role="img" aria-label={`${ariaLabel} 없음`} preserveAspectRatio="none">
-        <path d="M8 16 H92" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" vectorEffect="non-scaling-stroke" className="opacity-40" />
-      </svg>
+      <span
+        className={cx('grid h-full w-full place-items-center text-text-muted', className)}
+        role="img"
+        aria-label={`${ariaLabel} 없음`}
+      >
+        <span className="h-0.5 w-[84%] rounded-full bg-current opacity-40" aria-hidden="true" />
+      </span>
     );
   }
 
+  const data = drawable.map((value, index) => ({ index, value }));
   return (
-    <svg className={cx('h-full w-full', sparklineToneClass(tone), className)} viewBox="0 0 100 32" role="img" aria-label={ariaLabel} preserveAspectRatio="none">
-      <path d={areaPath} fill="currentColor" className="opacity-10" />
-      <path d={path} fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" vectorEffect="non-scaling-stroke" />
-    </svg>
+    <span
+      className={cx('block h-full w-full', sparklineToneClass(tone), className)}
+      role="img"
+      aria-label={ariaLabel}
+    >
+      <ResponsiveContainer width="100%" height="100%">
+        <AreaChart data={data} margin={{ top: 4, right: 8, bottom: 4, left: 8 }}>
+          <Area
+            type="monotone"
+            dataKey="value"
+            stroke="currentColor"
+            strokeWidth={2}
+            fill="currentColor"
+            fillOpacity={0.1}
+            dot={false}
+            isAnimationActive={!reduced}
+          />
+        </AreaChart>
+      </ResponsiveContainer>
+    </span>
   );
 }
 
 export function TimeSeriesChart({ series, className }: { series: Series[]; className?: string }) {
   const reduced = useReducedMotion();
-  const drawable = series.filter((item) => item.data.length > 0);
+  const drawable = series
+    .map((item) => ({
+      ...item,
+      data: item.data.filter((point) => Number.isFinite(Number(point.y))),
+    }))
+    .filter((item) => item.data.length > 0);
 
   if (drawable.length === 0) {
     return (
@@ -96,12 +125,13 @@ export function TimeSeriesChart({ series, className }: { series: Series[]; class
 
   const usesLinearTime = drawable.every((item) => item.data.every((point) => typeof point.x === 'number'));
   const xTickValues = sampleAxisTicks(drawable, MAX_X_AXIS_TICKS);
+  const { rows, lines } = buildTimeSeriesRows(drawable, usesLinearTime);
 
   return (
     <div className={cx('flex h-64 min-h-64 min-w-0 flex-col', className)}>
       <div className="mb-3 flex min-w-0 flex-wrap items-center gap-3 text-caption text-text-secondary">
-        {drawable.map((item, index) => (
-          <span key={item.id} className="inline-flex min-w-0 items-center gap-2">
+        {lines.map((item, index) => (
+          <span key={item.dataKey} className="inline-flex min-w-0 items-center gap-2">
             <span
               className="h-2 w-2 shrink-0 rounded-control"
               aria-hidden="true"
@@ -112,46 +142,75 @@ export function TimeSeriesChart({ series, className }: { series: Series[]; class
         ))}
       </div>
       <div className="min-h-0 flex-1">
-        <ResponsiveLine
-          data={drawable}
-          theme={theme}
-          margin={{ top: 8, right: 18, bottom: 34, left: 42 }}
-          xScale={usesLinearTime ? { type: 'linear', min: 'auto', max: 'auto' } : { type: 'point' }}
-          yScale={{ type: 'linear', min: 0, max: 'auto' }}
-          axisBottom={{ tickValues: xTickValues, tickSize: 0, tickPadding: 8, format: formatAxisTick }}
-          enablePoints={false}
-          enableGridX={false}
-          colors={LINE_COLORS}
-          lineWidth={2}
-          animate={!reduced}
-          motionConfig="gentle"
-          isInteractive
-          enableSlices="x"
-          crosshairType="x"
-          sliceTooltip={({ slice }) => (
-            <div style={tooltipStyle}>
-              <div className="mb-1 text-caption tabular-nums text-text-muted">
-                {formatAxisTick(slice.points[0]?.data.x as number | string)}
-              </div>
-              <div className="grid gap-1">
-                {slice.points.map((point) => (
-                  <div key={point.id} className="grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2 text-caption text-text-primary">
-                    <span
-                      className="h-2 w-2 rounded-control"
-                      aria-hidden="true"
-                      style={{ background: point.serieColor }}
-                    />
-                    <span className="truncate text-text-secondary">{String(point.serieId)}</span>
-                    <b className="tabular-nums">{String(point.data.yFormatted)}</b>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-        />
+        <ResponsiveContainer width="100%" height="100%">
+          <LineChart data={rows} margin={{ top: 8, right: 18, bottom: 8, left: 0 }}>
+            <CartesianGrid vertical={false} stroke="var(--border)" strokeOpacity={0.7} />
+            <XAxis
+              dataKey="x"
+              type={usesLinearTime ? 'number' : 'category'}
+              domain={usesLinearTime ? ['dataMin', 'dataMax'] : undefined}
+              ticks={xTickValues}
+              tickFormatter={formatAxisTick}
+              tick={{ fill: 'var(--muted-foreground)', fontSize: 11 }}
+              tickLine={false}
+              axisLine={false}
+              tickMargin={8}
+            />
+            <YAxis
+              domain={[0, 'auto']}
+              tick={{ fill: 'var(--muted-foreground)', fontSize: 11 }}
+              tickLine={false}
+              axisLine={false}
+              width={42}
+            />
+            <Tooltip
+              contentStyle={tooltipStyle}
+              cursor={{ stroke: 'var(--border)' }}
+              labelFormatter={(label) => formatAxisTick(label as number | string)}
+              formatter={(value, name) => [String(value), String(name)]}
+            />
+            {lines.map((item, index) => (
+              <Line
+                key={item.dataKey}
+                type="monotone"
+                dataKey={item.dataKey}
+                name={item.id}
+                stroke={LINE_COLORS[index % LINE_COLORS.length]}
+                strokeWidth={2}
+                dot={false}
+                connectNulls={false}
+                isAnimationActive={!reduced}
+              />
+            ))}
+          </LineChart>
+        </ResponsiveContainer>
       </div>
     </div>
   );
+}
+
+export function buildTimeSeriesRows(series: Series[], sortNumericX = false): {
+  rows: RechartsRow[];
+  lines: RechartsLine[];
+} {
+  const rowsByX = new Map<string, RechartsRow>();
+  const lines = series.map((item, index) => ({ id: item.id, dataKey: `series-${index}` }));
+
+  series.forEach((item, index) => {
+    const dataKey = lines[index].dataKey;
+    item.data.forEach((point) => {
+      const value = Number(point.y);
+      if (!Number.isFinite(value)) return;
+      const identity = `${typeof point.x}:${String(point.x)}`;
+      const row = rowsByX.get(identity) ?? { x: point.x };
+      row[dataKey] = value;
+      rowsByX.set(identity, row);
+    });
+  });
+
+  const rows = Array.from(rowsByX.values());
+  if (sortNumericX) rows.sort((left, right) => Number(left.x) - Number(right.x));
+  return { rows, lines };
 }
 
 function normalizeSparkPoints(points: Array<number | null | undefined>): number[] {
@@ -162,23 +221,6 @@ function normalizeSparkPoints(points: Array<number | null | undefined>): number[
     if (Number.isFinite(value) && value >= 0) values.push(value);
   }
   return values;
-}
-
-function sparkPath(values: number[]): string {
-  if (values.length === 0) return '';
-  const min = Math.min(...values);
-  const max = Math.max(...values);
-  const range = max - min || Math.max(max, 1);
-  const flat = max === min;
-  return values.map((value, index) => {
-    const x = values.length === 1 ? 50 : 8 + (index / (values.length - 1)) * 84;
-    const y = flat ? 16 : 28 - ((value - min) / range) * 24;
-    return `${index === 0 ? 'M' : 'L'} ${roundCoord(x)} ${roundCoord(y)}`;
-  }).join(' ');
-}
-
-function roundCoord(value: number): number {
-  return Math.round(value * 10) / 10;
 }
 
 function sparklineToneClass(tone: SparklineTone): string {

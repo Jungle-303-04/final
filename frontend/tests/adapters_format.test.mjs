@@ -122,13 +122,27 @@ test('ai message payload keeps title out of existing conversation sends', async 
 });
 
 test('sparkline presence requires measured numeric points', async () => {
-  const { hasSparklinePoints } = await vite.ssrLoadModule('/src/ui/charts.tsx');
+  const { buildTimeSeriesRows, hasSparklinePoints } = await vite.ssrLoadModule('/src/ui/charts.tsx');
 
   assert.equal(hasSparklinePoints([null, undefined]), false);
   assert.equal(hasSparklinePoints([null, undefined, Number.NaN]), false);
+  assert.equal(hasSparklinePoints([Number.POSITIVE_INFINITY]), false);
   assert.equal(hasSparklinePoints([-1, null]), false);
   assert.equal(hasSparklinePoints([null, 0]), true);
   assert.equal(hasSparklinePoints([undefined, 42]), true);
+
+  const chart = buildTimeSeriesRows([
+    { id: 'ready', data: [{ x: 2, y: 3 }, { x: 1, y: 2 }] },
+    { id: 'missing-at-1', data: [{ x: 2, y: 8 }, { x: 3, y: Number.NaN }] },
+  ], true);
+  assert.deepEqual(chart.lines, [
+    { id: 'ready', dataKey: 'series-0' },
+    { id: 'missing-at-1', dataKey: 'series-1' },
+  ]);
+  assert.deepEqual(chart.rows, [
+    { x: 1, 'series-0': 2 },
+    { x: 2, 'series-0': 3, 'series-1': 8 },
+  ]);
 });
 
 test('live stream applies initial snapshot summaries to chart history', async () => {
