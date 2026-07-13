@@ -23,6 +23,18 @@ FIRST_CANDIDATE_BATCH = (
     "app_startup_failure",
     "dependency_connection_failure",
 )
+SECOND_CANDIDATE_BATCH = (
+    "database_connectivity_failure",
+    "database_credential_or_config_error",
+    "database_connection_pool_exhausted",
+    "deployment_progress_deadline_exceeded",
+    "replica_unavailable_after_rollout",
+    "gitops_sync_failed",
+    "manifest_validation_failed",
+    "redis_dependency_unavailable",
+    "consumer_lag_backlog",
+    "external_api_timeout",
+)
 
 
 def _score(*args: str) -> subprocess.CompletedProcess[str]:
@@ -100,6 +112,30 @@ def test_first_candidate_contract_batch_is_machine_verified_in_catalog_order() -
             contract["missing_evidence_policy"]
             == "all_required_evidence_and_supporting_signal_groups"
         )
+
+
+def test_second_candidate_contract_batch_is_machine_verified_in_catalog_order() -> None:
+    result = _score("--candidate-contracts")
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "RESULT PASS (20 candidate contracts; ordinals=1..20)" in result.stdout
+
+    document = json.loads(CONTRACTS.read_text(encoding="utf-8"))
+    second_batch = document["contracts"][10:20]
+    assert document["next_ordinal"] == 21
+    assert tuple(item["candidate_id"] for item in second_batch) == SECOND_CANDIDATE_BATCH
+    assert all(item["patch_capabilities"] == [] for item in second_batch)
+    assert all(item["benchmark_fixtures"] == [] for item in second_batch)
+    assert all(
+        [action["action_type"] for action in item["allowed_remediations"]] == ["manual_analysis"]
+        for item in second_batch
+    )
+    forbidden_actions = [item["forbidden_remediations"][0]["action_type"] for item in second_batch]
+    assert len(forbidden_actions) == len(set(forbidden_actions)) == 10
+    assert all(
+        item["forbidden_remediations"][0]["blast_radius"] in {"cluster", "fleet"}
+        for item in second_batch
+    )
 
 
 def test_public_candidate_contract_scorer_needs_no_site_packages() -> None:
