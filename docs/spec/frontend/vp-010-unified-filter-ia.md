@@ -371,6 +371,23 @@ night-log에 요청한다.
 
 Live Traffic은 이번 범위에서 **변경하지 않는다**(현행 유지).
 
+### 8.1 구현 현황 (2026-07-13)
+
+- 1단계의 URL codec, passive Provider, production composition mount, Cluster scope writer,
+  shell navigation, shortcut, Home·Resources read/write 전환은 완료했다.
+- URL이 유일한 filter 권위다. mount 또는 catalog 수신으로 query를 자동 변경하지 않으며,
+  같은 task의 filter/detail write도 순서대로 합성한다.
+- Resources detail은 기존 `resource` key 안에 `v1/{clusterId}/{resourceType}/{namespace|~}/{name}`
+  identity를 저장한다. 따라서 list filter의 Cluster·kind가 바뀌어도 열린 detail target은
+  재지정되지 않는다. legacy `namespace/name + resourceKind`는 읽은 뒤 명시적 detail migration
+  write에서만 `v1`으로 바뀐다.
+- 현재 단일-cluster backend list 계약으로 표현할 수 없는 다중 Cluster·다중 Namespace,
+  Application, Label, health, server search, graph projection은 요청하지 않고 fail-closed한다.
+  detail read는 이 list 차단과 독립적이며 해당 identity만 조회한다.
+- GAP 착륙 우선순위는 Resources core `002 → 003 → 004`, graph `010`, 타 화면 `005 → 006`,
+  wizard `007 → 008`, repository `009`, workspace `001`이다. 앵커 없는 데이터 표면은 계속
+  미렌더한다.
+
 ## 9. 계약 갭 기록
 
 이 문서 작업 중 발견되는 백엔드 계약 갭은 여기에 누적하고 night-log로 요청한다.
@@ -387,7 +404,7 @@ Live Traffic은 이번 범위에서 **변경하지 않는다**(현행 유지).
 | GAP-007 | registration preflight/register 동일 validation, 발급 전 command preview 또는 명시적 순서, resume/reissue, structured `connection_stage` reason/error code | Cluster 연결 위자드 완성형 | VP-008 blocker 유지 · 미렌더 |
 | GAP-008 | capability/permission, confirmation, operation receipt와 terminal status를 포함한 Cluster 연결 해제 계약 | Cluster 행 메뉴·상세 | backend 요청 필요 · 삭제 UI 미렌더 |
 | GAP-009 | repository URL recognition result, access check, credential challenge, branch cursor/default, manifest/remediation candidate path cursor, background operation receipt/status | Git 저장소 등록 위자드 | backend 요청 필요 · 수동값 추측 금지 |
-| GAP-010 | Resources filter와 동일 scope/revision을 소비하는 single-cluster graph snapshot, partial/restricted/completeness와 drill-down identity | Resources graph mode·Topology 메뉴 제거 | backend 요청 필요 · 기존 Topology menu 유지 |
+| GAP-010 | Resources filter와 동일 scope/revision을 소비하는 single-cluster graph snapshot, partial/restricted/completeness와 drill-down identity | Resources graph mode·Topology 메뉴 제거 | backend 요청 필요 · Topology 메뉴 제거와 데이터 없는 전환 shell만 선행 가능 · graph data 미렌더 |
 
 ### 9.1 GAP-004 최소 소비 계약
 
