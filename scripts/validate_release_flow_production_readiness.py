@@ -863,7 +863,7 @@ def check_safe_pr_patch_contract() -> list[ReadinessCheck]:
         ReadinessCheck(
             "safe_pr.generated_manifest_rollback_patch",
             source_contains(
-                Path("src/domains/release_flow/router.py"),
+                Path("src/domains/release_flow/policy.py"),
                 "generated_manifest_rollback_patches",
                 "Generated rollback manifest from current application state",
                 ".gitops/rollback/",
@@ -874,7 +874,7 @@ def check_safe_pr_patch_contract() -> list[ReadinessCheck]:
         ReadinessCheck(
             "safe_pr.production_generated_manifest_rollback_required",
             source_contains(
-                Path("src/domains/release_flow/router.py"),
+                Path("src/domains/release_flow/policy.py"),
                 "generated_manifest_safe_pr_blockers",
                 "release_step_targets_production",
                 "production generated Safe PR requires rollback_image",
@@ -885,7 +885,7 @@ def check_safe_pr_patch_contract() -> list[ReadinessCheck]:
         ReadinessCheck(
             "safe_pr.production_evidence_rollback_required",
             source_contains(
-                Path("src/domains/release_flow/router.py"),
+                Path("src/domains/release_flow/policy.py"),
                 '"rollback_required": rollback_required',
                 "generated_safe_pr_rollback_patch_available",
                 'expected.get("rollback_required")',
@@ -896,7 +896,7 @@ def check_safe_pr_patch_contract() -> list[ReadinessCheck]:
         ReadinessCheck(
             "safe_pr.evidence_candidate_matching",
             source_contains(
-                Path("src/domains/release_flow/router.py"),
+                Path("src/domains/release_flow/policy.py"),
                 "SAFE_PR_EVIDENCE_LOOKUP_LIMIT",
                 "list_release_safe_pr_evidence",
                 "safe_pr_evidence_candidates",
@@ -913,7 +913,7 @@ def check_safe_pr_patch_contract() -> list[ReadinessCheck]:
         ReadinessCheck(
             "safe_pr.evidence_mismatch_diagnostics",
             source_contains(
-                Path("src/domains/release_flow/router.py"),
+                Path("src/domains/release_flow/policy.py"),
                 "release_safe_pr_evidence_blockers",
                 "safe_pr_evidence_mismatch_reasons",
                 "safe_pr_evidence_field_reason",
