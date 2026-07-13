@@ -2658,3 +2658,20 @@ target preflight·register 네 함수와 strict Zod 계약을 claim했다. 1회�
   승격 직후 이 단위 전용 `codex/vp010-filter-provider-20260713`과
   `/private/tmp/opsia-vp010-filter-provider`를 제거하고 prune한다. 신규 stash는 0개이며,
   기존 8개와 다른 작업자의 branch·worktree는 증명 없이 변경하지 않는다.
+
+## 2026-07-13 22:14 KST — [프론트] VP-010 canonical writer cutover GREEN
+
+- GREEN `d2f7448b6`에서 `UnifiedFilterProvider`를 production composition 최상위 권위로
+  mount하고 Cluster scope, shell link, shortcut, Home, Resources writer를 canonical URL로
+  일괄 전환했다. mount/catalog 응답 자동 선택·자동 rewrite는 0건이다.
+- 같은 task의 filter/detail mutation은 commit된 URL과 handler-local 최신 값을 직렬화한다.
+  Resources detail은 self-contained `v1` identity로 list Cluster/type filter와 분리했으며,
+  cross-Cluster forbidden은 detail에만 실패로 기록해 선택된 list를 blank하지 않는다.
+- backend가 아직 증명하지 않은 multi-cluster/namespace, Application, Label, health, server q,
+  graph list projection은 API 요청 없이 fail-closed한다. filter control은 남겨 사용자가 스스로
+  해제할 수 있고, explicit detail read는 차단된 list projection과 독립적으로 동작한다.
+- `npm run check` PASS: TypeScript·ESLint, Vitest 126 files / 907 tests, design guard 360 files,
+  shadcn source audit 482 previews, Vite production build 14,543 modules다.
+- GAP-001~010 착륙 앵커를 재확인했으나 0건이다. 다음 순서는 `002/003/004 → 010 → 005/006
+  → 007/008 → 009 → 001`이며, 대기 중 Topology menu 제거·Resources graph shell, 공용 filter
+  bar shell, wizard progressive shell, a11y/i18n/visual을 계약 데이터 없이 준비한다.
