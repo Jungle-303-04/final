@@ -404,8 +404,12 @@ def test_candidate_contract_validator_accepts_full_live_catalog_terminal_shape()
     catalog = json.loads((ROOT / "benchmark/catalog-snapshot.json").read_text(encoding="utf-8"))
     recovery, fallback = scorer["load_recovery_contracts"]()
     command_actions, safe_pr_actions = scorer["load_dispatch_capabilities"]()
+    completed_prefix = _candidate_contracts()["contracts"]
     contracts = []
     for entry in candidate_index["candidates"]:
+        if entry["ordinal"] <= len(completed_prefix):
+            contracts.append(completed_prefix[entry["ordinal"] - 1])
+            continue
         allowed = [*recovery.get(entry["candidate_id"], []), *fallback]
         capabilities = [
             capability
