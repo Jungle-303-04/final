@@ -29,6 +29,10 @@ import {
   readStableText,
   type StrictQuery,
 } from "./filterUrlSyntax";
+import {
+  parseBooleanQuery,
+  parseResourceView,
+} from "./filterUrlScalars";
 
 const LEGACY_CLUSTER_QUERY_KEY = "cluster";
 const LEGACY_RESOURCE_KIND_QUERY_KEY = "kind";
@@ -56,11 +60,13 @@ export function parseProductFilterUrl(search: string): FilterUrlParseResult {
     "resources.health",
     invalid.resourcesHealth,
   );
-  state.resources.includeDeleted = readQueryValue(params, "resources.includeDeleted") === "true";
+  state.resources.includeDeleted = parseBooleanQuery(
+    params,
+    "resources.includeDeleted",
+    invalid.resourcesIncludeDeleted,
+  );
   state.resources.query = readQueryValue(params, "resources.q") ?? "";
-  state.resources.view = readQueryValue(params, "resources.view") === "graph"
-    ? "graph"
-    : "table";
+  state.resources.view = parseResourceView(params, invalid.resourcesView);
 
   state.issues.severity = parseStableList(
     params,
@@ -85,8 +91,11 @@ export function parseProductFilterUrl(search: string): FilterUrlParseResult {
     "applications.status",
     invalid.applicationsStatus,
   );
-  state.applicationSurface.pendingPromotion =
-    readQueryValue(params, "applications.pendingPromotion") === "true";
+  state.applicationSurface.pendingPromotion = parseBooleanQuery(
+    params,
+    "applications.pendingPromotion",
+    invalid.applicationsPendingPromotion,
+  );
   state.applicationSurface.query = readQueryValue(params, "applications.q") ?? "";
 
   state.gitops.environment = parseStableList(
@@ -118,7 +127,7 @@ export function parseProductFilterUrl(search: string): FilterUrlParseResult {
   );
   state.checks.query = readQueryValue(params, "checks.q") ?? "";
 
-  const detail = parseProductDetailQuery(params);
+  const detail = parseProductDetailQuery(params, invalid.detailFull);
   return {
     state,
     detail,
@@ -261,7 +270,10 @@ function parseLabelList(
   return normalizeLabels(accepted);
 }
 
-function parseProductDetailQuery(params: StrictQuery): ProductDetailQuery {
+function parseProductDetailQuery(
+  params: StrictQuery,
+  invalidFull: string[],
+): ProductDetailQuery {
   const detail = createEmptyProductDetailQuery();
   detail.resource = readStableText(params, "resource");
   detail.resourceKind = readStableText(params, "resourceKind");
@@ -269,7 +281,7 @@ function parseProductDetailQuery(params: StrictQuery): ProductDetailQuery {
     detail.resourceKind = readStableText(params, LEGACY_RESOURCE_KIND_QUERY_KEY);
   }
   detail.tab = readStableText(params, "tab");
-  detail.full = readQueryValue(params, "full") === "true";
+  detail.full = parseBooleanQuery(params, "full", invalidFull, ["1"], ["0"]);
   detail.node = readStableText(params, "node");
   return detail;
 }
@@ -277,9 +289,11 @@ function parseProductDetailQuery(params: StrictQuery): ProductDetailQuery {
 function createInvalidFilterValues(): MutableInvalidFilterValues {
   return {
     clusters: [], namespaces: [], applications: [], labels: [],
-    resourcesTypes: [], resourcesHealth: [], issuesSeverity: [], issuesStatus: [],
+    resourcesTypes: [], resourcesHealth: [], resourcesIncludeDeleted: [], resourcesView: [],
+    issuesSeverity: [], issuesStatus: [],
     issuesEnvironment: [], applicationsEnvironment: [], applicationsStatus: [],
+    applicationsPendingPromotion: [],
     gitopsEnvironment: [], gitopsApproval: [], gitopsChangeType: [],
-    checksSeverity: [], checksCategory: [],
+    checksSeverity: [], checksCategory: [], detailFull: [],
   };
 }

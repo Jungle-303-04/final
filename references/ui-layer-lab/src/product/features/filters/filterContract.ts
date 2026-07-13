@@ -73,16 +73,20 @@ export interface InvalidFilterValues {
   labels: readonly string[];
   resourcesTypes: readonly string[];
   resourcesHealth: readonly string[];
+  resourcesIncludeDeleted: readonly string[];
+  resourcesView: readonly string[];
   issuesSeverity: readonly string[];
   issuesStatus: readonly string[];
   issuesEnvironment: readonly string[];
   applicationsEnvironment: readonly string[];
   applicationsStatus: readonly string[];
+  applicationsPendingPromotion: readonly string[];
   gitopsEnvironment: readonly string[];
   gitopsApproval: readonly string[];
   gitopsChangeType: readonly string[];
   checksSeverity: readonly string[];
   checksCategory: readonly string[];
+  detailFull: readonly string[];
 }
 
 export interface FilterUrlParseResult {
@@ -96,11 +100,22 @@ export type FilterMutationIntent =
   | "canonicalize"
   | "chip-add"
   | "chip-remove"
+  | "clear-labels"
   | "clear-filters"
   | "legacy-migration"
   | "typing";
 
 export type FilterHistoryMode = "push" | "replace";
+
+export type UnifiedFilterUpdater =
+  | UnifiedFilterState
+  | ((current: UnifiedFilterState) => UnifiedFilterState);
+
+export interface UnifiedFilterController extends FilterUrlParseResult {
+  canonicalize(): void;
+  navigationHref(path: `/product${string}`): string;
+  updateFilters(update: UnifiedFilterUpdater, intent: FilterMutationIntent): void;
+}
 
 export function createEmptyUnifiedFilterState(): UnifiedFilterState {
   return {

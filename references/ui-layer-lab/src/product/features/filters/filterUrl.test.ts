@@ -145,7 +145,7 @@ describe("VP-010 unified filter URL", () => {
 
   it("migrates legacy cluster and resource kind without choosing a default Cluster", () => {
     const legacy = parseProductFilterUrl(
-      "?cluster=unknown%2Fcluster&resource=shop%2Fapi&kind=Pod&tab=events&full=true&node=worker-a",
+      "?cluster=unknown%2Fcluster&resource=shop%2Fapi&kind=Pod&tab=events&full=1&node=worker-a",
     );
 
     expect(legacy.needsCanonicalWrite).toBe(true);
@@ -158,7 +158,7 @@ describe("VP-010 unified filter URL", () => {
       node: "worker-a",
     });
     expect(canonicalizeProductFilterUrl(
-      "?cluster=unknown%2Fcluster&resource=shop%2Fapi&kind=Pod&tab=events&full=true&node=worker-a",
+      "?cluster=unknown%2Fcluster&resource=shop%2Fapi&kind=Pod&tab=events&full=1&node=worker-a",
     )).toBe(
       "?clusters=unknown%2Fcluster&resource=shop%2Fapi&resourceKind=Pod" +
       "&tab=events&full=true&node=worker-a",
@@ -282,6 +282,7 @@ describe("VP-010 unified filter URL", () => {
   it("uses push for explicit filter changes and replace for typing or migration", () => {
     expect(filterHistoryMode("chip-add")).toBe("push");
     expect(filterHistoryMode("chip-remove")).toBe("push");
+    expect(filterHistoryMode("clear-labels")).toBe("push");
     expect(filterHistoryMode("clear-filters")).toBe("push");
     expect(filterHistoryMode("typing")).toBe("replace");
     expect(filterHistoryMode("canonicalize")).toBe("replace");
