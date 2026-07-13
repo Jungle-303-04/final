@@ -45,7 +45,8 @@ status: synced
 `AUDIT_JOURNEY_STAGE_BY_SUBJECT`는 현재 `EventSubject` 65개를 exact key로 전부 분류한다.
 새 enum subject가 분류 없이 추가되면 모듈 로딩과 계약 테스트가 실패한다. 외부 확장처럼 enum에
 없는 subject만 `unknown`으로 반환하고 payload 요약은 비운다. 프론트는 subject prefix를 다시
-해석하지 않고 응답의 `journey_stage`를 사용한다.
+해석하지 않고 응답의 `journey_stage`를 사용한다. 이 값은 시간 순서를 다시 매기는 phase가 아니라
+표시 lane 분류다. 응답의 `(created_at, id)` 순서를 유지하고 stage별로 재정렬하지 않는다.
 
 - `alert`: incident 탐지와 alert 요청·발송·거부
 - `evidence`: evidence 수신·job·bundle 생성
