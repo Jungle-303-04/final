@@ -1598,3 +1598,17 @@ API 완성: listAiConversations (84dc48a68)
 API 완성: getAiConversation (84dc48a68)
 API 완성: createAiConversation (84dc48a68)
 API 완성: appendAiMessage (84dc48a68)
+
+## 2026-07-13 APIQ-015 Catalog 조회 계약 완료
+
+- 코드 커밋 `1ad595b42`는 `origin/woonyong/ui-layer-lab` ancestor exit 0이다.
+- `origin/dev`의 `CatalogItemListResponse(items: list[JsonMap])`와
+  `CatalogItemResponse(item: JsonMap)`을 대조해 외피는 strict close, item은 open JsonMap으로
+  유지했다. pagination·filter·install 계약은 추가하지 않았다.
+- 목록·상세의 AbortSignal, ID 선검증, 경로 인코딩, 404, malformed payload, open item 확장
+  필드 보존, list/detail 외피의 미정의 필드 거부를 5개 계약 테스트로 검증했다.
+- full `npm run check` PASS: 105 files / 757 tests, design guard 314 files, shadcn 482 previews,
+  Vite production build.
+
+API 완성: listCatalogItems (1ad595b42)
+API 완성: getCatalogItem (1ad595b42)
