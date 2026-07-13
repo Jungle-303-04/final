@@ -85,7 +85,7 @@ R-트랙([D-011])은 dev merge `257f91846`으로 landed/closed 되었고, 전용
 
 | 단계 | 상태 | 범위 | 안전 경계 |
 |---|---|---|---|
-| P0-0 | in_progress | dev 전체 gate 단일 진입점 + 로컬 pre-push + dev push CI. target preflight 회귀는 `4ea76988d`, gate 계약은 `753558ef2`, CI·hook은 `acaadc485`, 격리는 `5c5ea9481`로 착륙 | 로컬 pre-push 전체 gate는 PASS. GitHub Actions run `29271435680`은 runner 시작 전 결제·spending limit로 실패해 서버 강제는 미완료. 결제 복구 또는 CodeBuild 대체 gate 실증 전 배포 금지 |
+| P0-0 | in_progress | dev 전체 gate 단일 진입점 + 로컬 pre-push + dev push CI. target preflight 회귀는 `4ea76988d`, gate 계약은 `753558ef2`, CI·hook은 `acaadc485`, 격리는 `5c5ea9481`, 20.44초 fast gate와 전체 pre-push 유지 가드는 `37dbd9673`로 착륙 | 로컬 pre-push 전체 gate는 PASS. GitHub Actions run `29271435680`은 runner 시작 전 결제·spending limit로 실패해 서버 강제는 미완료. 서버 gate가 실제로 복구되기 전에는 pre-push를 fast gate로 강등하거나 배포를 켜지 않음 |
 | P0-1a | in_progress | service image Alembic runtime + direct PostgreSQL migration Job + versioned-only runner | unversioned/create-all DB 거부, AWS 경로 미배선. legacy baseline·fresh DB 경로는 다음 단위 |
 | P0-1b | in_progress | immutable pre-Alembic snapshot bootstrap `b2786060d`와 create-all data-only 이관·metric lineage·cutover 불변식 `c8b75c2c6`, 회귀 `a94b64e25` 착륙 | 임의 stamp·기존 revision 수정·live 쓰기 금지. 로컬 코드·테스트는 착륙했지만 AWS catalog/data invariant, restore rehearsal, DBA 확인, connection cutover는 미실증이므로 완료 아님 |
 | P0-2 | in_progress | `DEV_AUTH_BYPASS=0` base 강제 + rendered/live 공통 fail-closed 검증기 `7d4e6750f` 착륙 | 렌더 검증은 gate 편입 완료. 만료된 AWS 세션 복구 후 live Deployment가 0임을 실증하고 배포 파이프라인에 live 모드를 배선하기 전까지 배포 중단 |
