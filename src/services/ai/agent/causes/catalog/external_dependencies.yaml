@@ -119,6 +119,7 @@ rules:
           - "logs:related_logs"
           - "traces:related_traces"
           - "metadata:current_workload_snapshots"
+          - "metadata:referenced_config_objects"
         checks:
           - "로그에 unknown host, no such host, invalid endpoint가 있는지 확인"
           - "metadata snapshot의 env/config reference를 확인"
@@ -136,6 +137,7 @@ rules:
           - "logs:related_logs"
           - "traces:related_traces"
           - "metadata:current_workload_snapshots"
+          - "metadata:referenced_config_objects"
         checks:
           - "로그에 authentication failed, invalid credentials, permission denied가 있는지 확인"
           - "Secret reference와 rollout/restart 시점을 비교"
