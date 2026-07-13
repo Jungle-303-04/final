@@ -140,6 +140,7 @@ def build_plan(
     namespace: str,
     previous_release_sha: str,
     verified_live_images: Mapping[str, str] | None = None,
+    allow_missing_live: bool = False,
 ) -> RollbackPlan:
     if not KUBERNETES_NAME.fullmatch(namespace):
         raise ValueError("namespace is not a Kubernetes name")
@@ -153,6 +154,8 @@ def build_plan(
     for deployment, container in expected:
         image = live_images.get((deployment, container))
         if image is None:
+            if allow_missing_live:
+                continue
             raise ValueError(f"live deployment container is missing: {deployment}/{container}")
         if not IMAGE_DIGEST.fullmatch(image):
             live_tag = image
@@ -173,6 +176,8 @@ def build_plan(
     unused_attestations = sorted(set(verified) - used_attestations)
     if unused_attestations:
         raise ValueError(f"verified live image was not observed: {unused_attestations[0]}")
+    if not targets:
+        raise ValueError("no existing managed deployment container was captured")
     return RollbackPlan(previous_release_sha=previous_release_sha, targets=tuple(targets))
 
 
@@ -200,6 +205,7 @@ def capture(
     previous_release_sha: str,
     output: Path,
     verified_live_images: Mapping[str, str] | None = None,
+    allow_missing_live: bool = False,
 ) -> RollbackPlan:
     if not context or any(character.isspace() for character in context):
         raise ValueError("context must be a non-empty name without whitespace")
@@ -233,6 +239,7 @@ def capture(
         namespace=namespace,
         previous_release_sha=previous_release_sha,
         verified_live_images=verified_live_images,
+        allow_missing_live=allow_missing_live,
     )
     write_plan(output, plan)
     return plan
@@ -254,6 +261,11 @@ def parse_args() -> argparse.Namespace:
         metavar="TAG=DIGEST",
         help="Allow one exact observed mutable tag after attesting its immutable digest.",
     )
+    parser.add_argument(
+        "--allow-missing-live",
+        action="store_true",
+        help="First-deploy only: capture existing managed workloads without creating missing ones.",
+    )
     parser.add_argument("--output", type=Path, required=True)
     return parser.parse_args()
 
@@ -268,6 +280,7 @@ def main() -> int:
         previous_release_sha=args.previous_release_sha,
         output=args.output,
         verified_live_images=parse_verified_live_images(args.verified_live_image),
+        allow_missing_live=args.allow_missing_live,
     )
     print(f"captured {len(plan.targets)} digest-pinned deployment container(s)")
     return 0
