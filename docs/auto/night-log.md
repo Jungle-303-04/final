@@ -1313,3 +1313,22 @@ npm run visual-product
 - 4조건: merge-tree exit 0/tree `780b1e170691d3af359059fe08aba67e9840a85e`;
   삭제·소유권 밖 변경·frozen 경로 변경 0건; feature와 merge commit의 `origin/dev`
   ancestor exit 0.
+
+## 2026-07-13 14:52 KST — [백엔드] OpsiaBench scheduling·PVC 착륙
+
+- lane `codex/benchmark-scheduling-pvc`, RED `fe08b641e`, feature HEAD
+  `075926e4d5da6dc59e67e865e293efdf00fb1d6c`, canonical no-ff merge
+  `43867308ac4e0e38b57cf7d10c2aa5b4856e47fd`.
+- stat: 15 files, 179 insertions / 27 deletions. scheduling과 PVC 각 2개를 추가하고
+  `score.py`를 7개 category·14~28개 범위로 확장했다. 현재 source hash와 함께 scheduling
+  6개, volume mount 4개, volume attach 2개 후보 전체를 snapshot에 고정했다.
+- 기존 builtin recovery drift에 맞춰 image rollback, replica scale, probe fix, selector fix의
+  gold action 5건을 정합화했다. 공개명은 OpsiaBench로 통일하되 안정적인 scenario schema ID는
+  `kubehealbench/v0.1`로 유지한다.
+- 고유 검증: 전체 scorer `14 scenarios` PASS, scheduling 2 PASS, PVC 2 PASS, source YAML과
+  snapshot candidate/evidence 완전 일치(`6/4/2`) PASS.
+- gate: Ruff lint/format PASS, import-linter 8 kept/0 broken, pytest
+  `1872 passed, 3 skipped`; manifest management 69 / target 20.
+- 4조건: merge-tree exit 0/tree `0ff6d94d6c17b65bc40d05a9fa1965b79ff1061b`;
+  삭제·소유권 밖 변경·frozen 경로 변경 0건; feature와 merge commit의 `origin/dev`
+  ancestor exit 0.
