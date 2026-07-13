@@ -1,14 +1,14 @@
 from __future__ import annotations
 
+from sqlalchemy import BigInteger
+
+from domains.inventory.kubernetes_snapshot import kubernetes_evidence_to_inventory_snapshot
 from domains.inventory_filter.models import (
     InventoryFilterRevision,
     InventoryResourceApplicationVersion,
     InventoryResourceLabelVersion,
     InventoryResourceVersion,
 )
-from sqlalchemy import BigInteger
-
-from domains.inventory.kubernetes_snapshot import kubernetes_evidence_to_inventory_snapshot
 
 
 def test_kubernetes_inventory_translation_promotes_bounded_labels_and_completeness() -> None:
@@ -76,6 +76,18 @@ def test_filter_projection_models_preserve_temporal_snapshot_and_index_contract(
     )
     assert "valid_to_revision IS NULL" in str(
         version_indexes["ux_inventory_versions_active_key"].dialect_options["postgresql"]["where"]
+    )
+    assert tuple(
+        str(expression)
+        for expression in version_indexes["ix_inventory_versions_page_sort"].expressions
+    ) == (
+        "inventory_resource_versions.workspace_id",
+        "inventory_resource_versions.cluster_id",
+        "COALESCE(namespace, '')",
+        "inventory_resource_versions.resource_type",
+        "inventory_resource_versions.kind",
+        "inventory_resource_versions.name",
+        "inventory_resource_versions.inventory_key",
     )
 
 

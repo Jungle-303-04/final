@@ -15,6 +15,10 @@ from domains.inventory.models import (
     ClusterInventorySnapshotRecord,
     ClusterUsageSampleRecord,
 )
+from domains.inventory_filter.repository import (
+    inventory_snapshot_lock_key,
+    sync_inventory_filter_projection,
+)
 from packages.contracts.event_bus.interfaces import JsonObject
 from packages.storage.engine import DatabaseConnection, iso_or_none
 
@@ -217,11 +221,61 @@ class InventoryRepository(DatabaseConnection):
         resource_table = ClusterInventoryResourceRecord.__table__
         usage_table = ClusterUsageSampleRecord.__table__
         summary = snapshot_summary(payload)
-        seen_keys = {resource["inventory_key"] for resource in normalized}
         seen_types = {resource["resource_type"] for resource in normalized}
         marked_deleted = 0
+        source_summary = dict(summary.get("summary") or {})
+        collection_limits = source_summary.get("collection_limits")
+        source_truncated = (
+            isinstance(collection_limits, dict) and collection_limits.get("truncated") is True
+        )
+        declared_resources_complete = source_summary.get("resources_complete") is True
+        resources_complete = bool(payload.get("replace")) and declared_resources_complete
+        resources_complete = resources_complete and not source_truncated
+        labels_complete = resources_complete and source_summary.get("labels_complete") is True
+        partial_reason_codes: list[str] = []
+        if not labels_complete:
+            partial_reason_codes.append("source_labels_truncated")
+        if source_truncated:
+            partial_reason_codes.append("source_resources_truncated")
+        elif not resources_complete:
+            partial_reason_codes.append("source_resources_incomplete")
 
         with self.connection() as conn:
+            conn.execute(
+                select(
+                    func.pg_advisory_xact_lock(
+                        inventory_snapshot_lock_key(workspace_id, cluster_id)
+                    )
+                )
+            )
+            latest_observed_at = conn.execute(
+                select(func.max(snapshot_table.c.collected_at)).where(
+                    snapshot_table.c.workspace_id == workspace_id,
+                    snapshot_table.c.cluster_id == cluster_id,
+                )
+            ).scalar_one_or_none()
+            if latest_observed_at is not None and observed_at < latest_observed_at:
+                conn.execute(
+                    pg_insert(snapshot_table).values(
+                        snapshot_id=snapshot_id,
+                        workspace_id=workspace_id,
+                        cluster_id=cluster_id,
+                        agent_id=agent_id,
+                        source=str(payload.get("source") or "cluster-agent"),
+                        status="ignored_stale",
+                        collected_at=observed_at,
+                        resource_count=len(normalized),
+                        summary=summary,
+                    )
+                )
+                return {
+                    "accepted": False,
+                    "snapshot_id": snapshot_id,
+                    "cluster_id": cluster_id,
+                    "resource_count": len(normalized),
+                    "marked_deleted": 0,
+                    "resource_types": sorted(seen_types),
+                }
             conn.execute(
                 pg_insert(snapshot_table).values(
                     snapshot_id=snapshot_id,
@@ -278,19 +332,29 @@ class InventoryRepository(DatabaseConnection):
                         usage=summary["usage"],
                     )
                 )
-            if payload.get("replace") and seen_keys and seen_types:
+            if resources_complete:
                 result = conn.execute(
                     update(resource_table)
                     .where(
                         resource_table.c.workspace_id == workspace_id,
                         resource_table.c.cluster_id == cluster_id,
-                        resource_table.c.resource_type.in_(seen_types),
-                        resource_table.c.inventory_key.notin_(seen_keys),
+                        resource_table.c.snapshot_id != snapshot_id,
                         resource_table.c.deleted_at.is_(None),
                     )
                     .values(deleted_at=func.now(), updated_at=func.now())
                 )
                 marked_deleted = int(result.rowcount or 0)
+
+            sync_inventory_filter_projection(
+                conn,
+                workspace_id=workspace_id,
+                cluster_id=cluster_id,
+                snapshot_id=snapshot_id,
+                observed_at=observed_at,
+                labels_complete=labels_complete,
+                resources_complete=resources_complete,
+                partial_reason_codes=partial_reason_codes,
+            )
 
         return {
             "accepted": True,
