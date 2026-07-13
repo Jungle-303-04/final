@@ -7,7 +7,7 @@ governing: docs/f-coordination-plan.md · docs/backend-f-workqueue.md
 
 # 백엔드 F 진행 현황
 
-현재 상태: **앵커 33건**
+현재 상태: **앵커 34건**
 
 ## 역사적 Delta-green baseline (BQ-001~003)
 
@@ -831,3 +831,24 @@ Bundle route는 200을 반환한다.
   삭제·frozen 경로 변경 0건; 교정 feature·merge commit의 `origin/dev` ancestor exit 0.
 
 계약 완성: OpsiaBench startup window fixture + producer-aware manual boundary (94c419a80601303e9a76b1b2ba42efd44e610d3d) [green]
+
+### 보조 대기열 S18 — outbound deliver 직접 테스트
+
+- 상태: landed
+- 담당 lane: `codex/runtime-outbound-tests`
+- 기본 경계 테스트: `06cae9347a2faff2b64a7d4367f44277da1bc2db`
+- identity·호출 횟수 보강: `52ad0d4db8f7513b855e0c8680ad228a2f5fb843`
+- 문서와 feature HEAD: `e43920262b530937cee83432f2eaf38727333b5b`
+- canonical no-ff merge: `784996ce76d963704118267952b326c1665726b4`
+- `src/packages/runtime/outbound.py` 소스 변경 없이 외부 호출 1회, 성공 결과의 원형 전달,
+  일반 예외의 동일 인스턴스 전달과 실패 body 1건을 직접 검증했다.
+- `CancelledError`는 실패로 변환하지 않고 동일 인스턴스를 전파하며, 성공·실패 mapper 오류도
+  숨기지 않고 각 mapper를 정확히 한 번 호출함을 고정했다.
+- stale runtime 문서의 존재하지 않는 `Outbound`/`HttpOutbound` API를 제거하고 실제 `deliver`
+  계약과 서비스별 I/O 주입 경계를 정합화했다.
+- 전체 게이트: Ruff lint/format PASS, import-linter 8 kept/0 broken,
+  pytest `1948 passed, 3 skipped`; manifest management 69 / target 20.
+- 4조건: merge-tree exit 0/tree `1b237c85086a83fbb53f315644899075db2610fa`;
+  source·삭제·frozen 경로 변경 0건; feature·merge commit의 `origin/dev` ancestor exit 0.
+
+계약 완성: outbound deliver success, failure, cancellation and mapper propagation tests (e43920262b530937cee83432f2eaf38727333b5b) [green]

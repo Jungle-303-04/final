@@ -2191,3 +2191,17 @@ target preflight·register 네 함수와 strict Zod 계약을 claim했다. 1회�
 - `codex/startup-probe-safe-pr@962abca9b`는 downstream contract/allowlist만 확장해 실제
   frozen producer 부재를 해결하지 못한 미착륙 local lane이다. merge·push하지 않고 보존하며,
   producer 확장에 대한 명시적 frozen 예외가 없는 한 착륙 대상이 아니다.
+
+## 2026-07-13 17:46 KST — [백엔드] outbound deliver 직접 테스트 착륙
+
+- lane `codex/runtime-outbound-tests`, 기본 test `06cae9347`, identity·호출 횟수 보강
+  `52ad0d4db`, feature HEAD `e43920262`, canonical no-ff merge `784996ce7`이다.
+- `src/packages/runtime/outbound.py` 소스 변경 0건으로 call 1회, 성공 결과와 일반 예외의
+  동일 인스턴스 전달, 성공/실패 body 1건을 고정했다. `CancelledError`는 실패 이벤트로
+  변환하지 않고 동일 인스턴스를 전파하며 양 mapper 오류도 숨기지 않는다.
+- stale runtime 문서의 실재하지 않는 `Outbound`/`HttpOutbound` 설명을 제거했다.
+- 전체 게이트는 Ruff lint/format PASS, import-linter 8 kept/0 broken,
+  pytest `1948 passed, 3 skipped`; manifest management 69 / target 20이다.
+- 4조건: merge-tree clean/tree `1b237c85086a83fbb53f315644899075db2610fa`, source·삭제·
+  frozen 변경 0건, `e43920262`·`784996ce7`의 `origin/dev` ancestor exit 0.
+  J 배포 실행은 0건이다.
