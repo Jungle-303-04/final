@@ -59,6 +59,8 @@ MAX_EVIDENCE_LOG_ENTRIES = 2000
 MAX_EVIDENCE_PAYLOAD_BYTES = 1_048_576  # 직렬화 1MiB 상한(초과 시 422)
 EVIDENCE_PAYLOAD_TOO_LARGE_MESSAGE = "evidence payload exceeds size limit"
 MAX_INVENTORY_RESOURCES = 5000
+MAX_INVENTORY_PAYLOAD_BYTES = 16 * 1024 * 1024
+INVENTORY_PAYLOAD_TOO_LARGE_MESSAGE = "inventory payload exceeds size limit"
 MAX_DEPLOYMENT_REPLICAS = 100
 
 
@@ -198,6 +200,20 @@ class InventorySnapshotRequest(StrictModel):
     summary: dict[str, Any] = Field(default_factory=dict)
     health: dict[str, Any] = Field(default_factory=dict)
     usage: dict[str, Any] = Field(default_factory=dict)
+
+    @model_validator(mode="after")
+    def _bound_payload_size(self) -> InventorySnapshotRequest:
+        # 리소스 raw/annotations는 중첩 구조이므로 항목 수와 직렬화 바이트를 함께 제한한다.
+        size = len(
+            json.dumps(
+                self.model_dump(mode="json"),
+                ensure_ascii=False,
+                separators=(",", ":"),
+            ).encode("utf-8")
+        )
+        if size > MAX_INVENTORY_PAYLOAD_BYTES:
+            raise ValueError(INVENTORY_PAYLOAD_TOO_LARGE_MESSAGE)
+        return self
 
 
 class TargetProviderSelectionRequest(StrictModel):

@@ -1,0 +1,77 @@
+{
+  "$schema": "https://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "properties": {
+    "access": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "mode": {
+          "type": "string",
+          "enum": ["auto", "portforward", "loadbalancer", "ingress", "nodeport"]
+        },
+        "externalUrl": {
+          "type": "string",
+          "pattern": "^(|https?://[^/@\\s?#]+/?)$"
+        },
+        "host": {
+          "type": "string"
+        },
+        "nodePort": {
+          "type": "integer",
+          "minimum": 30000,
+          "maximum": 32767
+        },
+        "ingress": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "className": {"type": "string"},
+            "annotations": {"type": "object"},
+            "tls": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "enabled": {"type": "boolean"},
+                "secretName": {"type": "string"}
+              },
+              "required": ["enabled", "secretName"]
+            }
+          },
+          "required": ["className", "annotations", "tls"]
+        }
+      },
+      "required": ["mode", "externalUrl", "host", "nodePort", "ingress"],
+      "allOf": [
+        {
+          "if": {"properties": {"mode": {"const": "ingress"}}},
+          "then": {"properties": {"host": {"minLength": 1}}}
+        },
+        {
+          "if": {
+            "properties": {
+              "ingress": {
+                "properties": {
+                  "tls": {
+                    "properties": {"enabled": {"const": true}}
+                  }
+                }
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "ingress": {
+                "properties": {
+                  "tls": {
+                    "properties": {"secretName": {"minLength": 1}}
+                  }
+                }
+              }
+            }
+          }
+        }
+      ]
+    }
+  }
+}
