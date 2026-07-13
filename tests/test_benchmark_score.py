@@ -108,6 +108,15 @@ EIGHTH_CANDIDATE_BATCH = (
     "missing_secret_reference",
     "secret_key_missing",
 )
+TERMINAL_CANDIDATE_BATCH = (
+    "external_secret_sync_failed",
+    "pvc_not_bound",
+    "csi_driver_unavailable",
+    "volume_attach_timeout",
+    "storage_class_mismatch",
+    "volume_multi_attach_conflict",
+    "volume_attachment_orphaned",
+)
 
 
 def _score(*args: str) -> subprocess.CompletedProcess[str]:
@@ -406,6 +415,35 @@ def test_eighth_candidate_contract_batch_is_machine_verified_in_catalog_order() 
     assert all(
         item["forbidden_remediations"][0]["blast_radius"] in {"cluster", "fleet"}
         for item in eighth_batch
+    )
+
+
+def test_terminal_candidate_contract_batch_is_machine_verified_in_catalog_order() -> None:
+    result = _score("--candidate-contracts")
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "RESULT PASS (87 candidate contracts; ordinals=1..87)" in result.stdout
+
+    document = json.loads(CONTRACTS.read_text(encoding="utf-8"))
+    terminal_batch = document["contracts"][80:87]
+    assert document["next_ordinal"] is None
+    assert tuple(item["candidate_id"] for item in terminal_batch) == TERMINAL_CANDIDATE_BATCH
+    assert all(item["patch_capabilities"] == [] for item in terminal_batch)
+    assert all(
+        [action["action_type"] for action in item["allowed_remediations"]] == ["manual_analysis"]
+        for item in terminal_batch
+    )
+    assert {item["candidate_id"]: item["benchmark_fixtures"] for item in terminal_batch} == {
+        **{candidate_id: [] for candidate_id in TERMINAL_CANDIDATE_BATCH},
+        "pvc_not_bound": ["benchmark/scenarios/pvc/pvc-mount-unbound/scenario.json"],
+    }
+    forbidden_actions = [
+        item["forbidden_remediations"][0]["action_type"] for item in terminal_batch
+    ]
+    assert len(forbidden_actions) == len(set(forbidden_actions)) == 7
+    assert all(
+        item["forbidden_remediations"][0]["blast_radius"] in {"cluster", "fleet"}
+        for item in terminal_batch
     )
 
 
