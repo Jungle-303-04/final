@@ -186,6 +186,7 @@ def test_public_benchmark_full_suite_includes_scheduling_and_pvc() -> None:
 
     assert result.returncode == 0, result.stdout + result.stderr
     assert "pvc=2" in result.stdout
+    assert "probe=3" in result.stdout
     assert "scheduling=3" in result.stdout
 
 
@@ -417,6 +418,7 @@ def test_sixth_candidate_contract_batch_is_machine_verified_in_catalog_order() -
     assert {item["candidate_id"]: item["benchmark_fixtures"] for item in sixth_batch} == {
         **{candidate_id: [] for candidate_id in SIXTH_CANDIDATE_BATCH},
         "probe_port_wrong": ["benchmark/scenarios/probe/probe-wrong-port/scenario.json"],
+        "timeout_too_short": ["benchmark/scenarios/probe/probe-timeout-too-short/scenario.json"],
         "selector_label_mismatch": [
             "benchmark/scenarios/service-selector/service-selector-label-mismatch/scenario.json"
         ],
