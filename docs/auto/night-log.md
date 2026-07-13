@@ -3066,3 +3066,17 @@ target preflight·register 네 함수와 strict Zod 계약을 claim했다. 1회�
   맞춘 commit `07944c2d9`와 누락된 VP-012 문서 색인 commit `e33469442`를 분리했다.
 - 전체 게이트 Ruff lint/format PASS, import-linter 8/8, pytest `2121 passed, 3 skipped`다.
   복구 lane은 최신 `origin/dev@13b2fd1ea` 기준 ahead 2/behind 0, merge-tree clean이다.
+
+## 2026-07-14 01:20 KST — [백엔드] migration 실행 기반 안전 격리
+
+- RED `0c7638a7b`, GREEN `287ef8521`. service image Alembic runtime·revision asset, direct
+  PostgreSQL migration Job, 단일 head/기존 version 경계를 추가했다.
+- 실 PostgreSQL 17: unversioned DB `blocked_unversioned`, `alembic_version` 생성 0건. pre-0405
+  canonical schema에 migration 0405→0900을 적용한 DB는 runner로 0900→2350과 반복 current를
+  통과했다. 신규 테스트 `9 passed`, Ruff 대상 파일 PASS, Alembic head `20260713_2350` 단일이다.
+- 격리 착륙 — Job은 AWS 배포 경로에 미배선이다. legacy `create_all` DB는 migration-only index와
+  0610 data backfill 동등성이 증명되지 않아 artifact tag로 revision을 추정하지 않는다. 해제 조건은
+  versioned baseline DB·data-only 이관·catalog/data invariant·restore rehearsal·DBA 확인이다.
+- 운영 안전조치: repository 변수 `AWS_AUTO_DEPLOY`를 `1→0`으로 변경해 legacy main AWS CD를
+  닫았다. secret 값은 조회·기록하지 않았다. `AWS_DEV_DEPLOY_ENABLED`는 P0-1·P0-2 live 검증 전
+  생성·활성화하지 않는다.

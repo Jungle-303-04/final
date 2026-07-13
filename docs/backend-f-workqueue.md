@@ -69,6 +69,20 @@ R-트랙([D-011])은 dev merge `257f91846`으로 landed/closed 되었고, 전용
 
 상세 의미는 `docs/spec/frontend/vp-010-unified-filter-ia.md` §9·§9.1을 따른다.
 
+## AWS dev 배포 P0
+
+| 단계 | 상태 | 범위 | 안전 경계 |
+|---|---|---|---|
+| P0-1a | in_progress | service image Alembic runtime + direct PostgreSQL migration Job + versioned-only runner | unversioned/create-all DB 거부, AWS 경로 미배선. legacy baseline·fresh DB 경로는 다음 단위 |
+| P0-1b | requested | 완전한 baseline DB 생성 + 기존 create-all DB data-only 이관·검증·cutover rehearsal | 임의 stamp·기존 revision 수정·live 쓰기 금지 |
+| P0-2 | requested | `DEV_AUTH_BYPASS=0` base/overlay 강제 + rendered/live fail-closed 검증 | 렌더와 live 둘 다 0이기 전 배포 중단 |
+| P0-3 | requested | dev gate → digest build/ECR → migration → 단계적 rollout | `AWS_DEV_DEPLOY_ENABLED=1` exact opt-in, P0-1/P0-2 선행 |
+| P0-4 | requested | smoke 기본 활성 + Bundle/audit/recent-changes strict 200 | 인증된 fixture 부재를 skip하지 않음 |
+| P0-5 | requested | 배포 SHA·digest·URL `deploy-status.md` 갱신 | secret 값 기록 금지, status commit 재귀 방지 |
+
+레거시 `main` AWS CD 변수 `AWS_AUTO_DEPLOY`는 2026-07-14에 `1→0`으로 닫았다. 새 dev
+배포 스위치는 P0-1·P0-2의 live 증명이 끝나기 전에는 만들거나 켜지 않는다.
+
 ## 보조 대기열 착륙 현황
 
 | ID | 상태 | 기능 | 착륙 증거 | 완료 기준 |

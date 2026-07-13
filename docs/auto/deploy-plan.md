@@ -1,7 +1,7 @@
 ---
 title: Opsia 백엔드 배포 계획 — migration-first 단계적 절차
-status: prepared-not-authorized
-date: 2026-07-13
+status: p0-foundation-in-progress
+date: 2026-07-14
 owner: 백엔드 운영자
 canonical: origin/dev
 ---
@@ -52,7 +52,7 @@ J단계 승인자는 §3의 blocker와 §13의 단일 replica 위험을 명시�
 Redis, MinIO는 backend service image 대상이 아니다. 이 release에서 해당 image나 stateful
 manifest를 함께 변경하지 않는다. frontend image는 검증된 기존 digest를 유지한다.
 
-DB revision 적용 범위는 단일 head `20260713_0820`까지다.
+DB revision 적용 범위는 단일 head `20260713_2350`까지다.
 
 - `20260713_0140`: `audit_log.causation_id`,
   `ix_audit_log_correlation_id_created_at`.
@@ -60,6 +60,27 @@ DB revision 적용 범위는 단일 head `20260713_0820`까지다.
   `ix_audit_log_workspace_id_correlation_id_created_at`.
 - `20260713_0750`: evidence workspace/correlation/cluster index.
 - `20260713_0820`: change projection tables, `audit_log.event_created_at`, incident index.
+- `20260713_2215`: inventory filter projection tables와 조회 인덱스.
+- `20260713_2340`: Issues filter nullable projection columns.
+- `20260713_2350`: Issues filter concurrent 조회·GIN 인덱스.
+
+### 2.1 versioned migration 실행 기반의 안전 경계
+
+서비스 이미지에는 Alembic runtime·`alembic.ini`·revision directory를 포함하고, image build가
+단일 head `20260713_2350`을 검증한다. `deploy/management/migration-job.yaml`은 PgBouncer가
+아닌 direct PostgreSQL URL을 사용하며, schema bootstrap과 같은 advisory lock을 session 범위로
+획득한다.
+
+이 Job은 `alembic_version`이 없거나 비어 있는 DB를 **절대 채택하지 않는다**. 현재 legacy AWS
+DB처럼 `create_all`로 만들어진 unversioned schema는 Job을 AWS 적용 경로에 연결하기 전에 별도
+baseline 전환을 완료해야 한다. `c704729c1b` 이미지가 당시 revision 파일을 포함했다는 사실은
+DB가 해당 revision과 동등하다는 증거가 아니다. `create_all`은 migration-only index와 data
+backfill을 보장하지 않기 때문이다.
+
+문자 그대로 version marker 기록이 금지되는 정책에서는 기존 DB를 현재 lineage에 직접 연결하지
+않는다. 완전한 versioned schema를 가진 새 DB를 만들고 data-only 이관·catalog/data invariant·
+복구 rehearsal을 통과한 뒤 connection cutover한다. 임의 `alembic stamp`나 수동
+`alembic_version` INSERT로 이 단계를 우회하지 않는다.
 
 ## 3. J단계 진입 blocker
 
@@ -73,9 +94,9 @@ DB revision 적용 범위는 단일 head `20260713_0820`까지다.
 4. DB의 `alembic_version`이 없거나 revision이 repository history와 일치하지 않는다.
    기존 AWS bootstrap은 `Database.init(); verify_schema()`이고 Alembic baseline을 만들지
    않으므로 이 경우 임의 stamp로 우회하지 않는다.
-5. production service image에는 `alembic/`, `alembic.ini`, Alembic 실행 의존성이 포함되지
-   않는다. 따라서 migration Job을 그 이미지로 실행할 수 없다. §7처럼 canonical checkout을
-   가진 승인된 operator runner에서 PostgreSQL에 직접 연결해야 한다.
+5. service image와 versioned-only migration Job은 준비됐지만 legacy DB의 안전한 baseline
+   전환과 live rehearsal이 끝나지 않았다. Job은 이 조건에서 fail-closed하며 AWS 경로에 아직
+   배선하지 않는다.
 6. backup artifact와 이전 immutable image digest를 확보하지 못했다.
 7. §13의 1-replica 위험에 대한 운영자 승인과 low-traffic window가 없다.
 8. `deploy/management/services.yaml`의 base manifest는 `DEV_AUTH_BYPASS=1`이다.

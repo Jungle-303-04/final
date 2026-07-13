@@ -1304,3 +1304,19 @@ Bundle route는 200을 반환한다.
 - 격리 착륙 — 잔여 결함/해제 조건: GitOps·Checks route는 미노출이며 다음 안전 착륙 단위다.
   Applications Label은 동일 revision live-resource binding projection, pagination은 immutable revision,
   대규모 성능은 WorkflowRun/DeploymentBinding EXPLAIN과 검증된 복합 인덱스 migration 후 해제한다.
+
+### AWS dev 배포 — versioned migration 기반
+
+- RED `0c7638a7b`, GREEN `287ef8521`. service image에 Alembic runtime·ini·revision을 포함하고
+  build 시 단일 head `20260713_2350`을 검증한다.
+- `management-database-migration` Job은 PgBouncer 대신 direct PostgreSQL secret key를 사용하고,
+  schema bootstrap과 같은 advisory key를 session lock으로 획득한다. service-account token은
+  mount하지 않는다.
+- runner는 unversioned/빈 version/unknown/multiple revision을 모두 거부한다. 실 PostgreSQL 17에서
+  unversioned DB는 version table 생성 0건으로 거부됐고, canonical pre-0405 schema에서 0900까지
+  정상 적용한 DB는 runner가 `0900→2350` upgrade 및 반복 no-op을 통과했다.
+- 격리 착륙 — migration Job은 아직 `aws-up.sh`와 dev CI에 배선하지 않는다. legacy DB baseline과
+  live catalog가 증명되지 않았기 때문이다. AWS session은 만료돼 live 읽기 검증도 보류 상태다.
+- `create_all`을 0900과 동등하다고 추정하지 않는다. 무표식 전환 정책을 지키기 위해 다음 단위는
+  새 versioned baseline DB 생성 → data-only 이관 → catalog/data invariant → 복구 rehearsal →
+  DBA 확인 → connection cutover로 진행한다.
