@@ -29,6 +29,7 @@ export function filterHistoryMode(intent: FilterMutationIntent): FilterHistoryMo
   switch (intent) {
     case "chip-add":
     case "chip-remove":
+    case "clear-labels":
     case "clear-filters":
       return "push";
     case "canonicalize":
