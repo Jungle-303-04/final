@@ -1247,3 +1247,24 @@ Bundle route는 200을 반환한다.
 - Bruno `docs/api/17-resources-filter/04-resource-graph.bru`와 기존 contract/router/builder 회귀를
   재사용한다. source·gateway 계약 변경은 0건이며 프론트는 GAP-010의 stale 문구를 기존 GREEN
   앵커 기준으로 갱신할 수 있다.
+
+### 프론트 Issues 계약 번호 매핑 — claim
+
+- 상태: `in_progress`; 신규 구현이 아니라 이미 canonical에 착륙한 GAP-005의
+  `ISSUES_FILTER_RESULTS_PATH`, `ISSUES_FILTER_FACETS_PATH`, `ISSUES_LABEL_FACETS_PATH`를
+  BQ-023에 연결한다.
+- 기존 code `d63498d5f`, canonical merge `e2504278d`, Bruno
+  `docs/api/18-issues-filter/`와 전체 Issues filter 회귀를 재사용한다.
+- 추가 gateway 계약·source 변경은 0건이며 workqueue 번호만 정합화한다.
+
+### 프론트 Issues 계약 번호 매핑 — canonical 증거
+
+- BQ-023은 기존 GAP-005와 같은 계약이다. 새 구현 없이 code `d63498d5f`, canonical merge
+  `e2504278d`, 기존 완료 앵커 세 개에 연결했다.
+- `GET /api/issues`, `/api/issues/filter-facets`, `/api/issues/label-facets`는 common scope와
+  severity/status/environment, application/cluster/namespace facet, stable detail ID, opaque cursor,
+  N/M과 completeness를 제공한다.
+- session workspace와 구체 `RCA_READ` cluster 범위를 SQL에 강제하고, 비인가 scope는 404,
+  권위 source가 없는 축은 `unavailable`, mutable projection은 `partial`로 반환한다.
+- Bruno `docs/api/18-issues-filter/`와 기존 contract/router/projection/migration 회귀를 재사용한다.
+  source·gateway 계약 변경은 0건이다.

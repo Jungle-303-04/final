@@ -60,7 +60,7 @@ R-트랙([D-011])은 dev merge `257f91846`으로 landed/closed 되었고, 전용
 | ID | 상태 | GAP | 계약 내용 | 해제되는 프론트 단계 |
 |---|---|---|---|---|
 | BQ-022 | landed | GAP-010 | Resources filter와 동일 scope/revision의 single-cluster graph snapshot, 노드·검증된 edge, partial/restricted/completeness, drill-down identity.<br>기존 code: `914d34ff6`<br>canonical merge: `95ff11cc6` | 표/그래프 모드 — 기존 GAP-010 앵커 연결, 추가 source·gateway 계약 변경 0건 |
-| BQ-023 | requested | GAP-005 | Issues common 3축 + severity/status/environment, facet payload, stable detail ID, cursor/total/completeness | Issues 필터 |
+| BQ-023 | landed | GAP-005 | Issues common 3축 + severity/status/environment, facet payload, stable detail ID, cursor/total/completeness.<br>기존 code: `d63498d5f`<br>canonical merge: `e2504278d` | Issues 필터 — 기존 GAP-005 앵커 연결, 추가 source·gateway 계약 변경 0건 |
 | BQ-024 | requested | GAP-006 | Applications/GitOps/Checks provider-neutral canonical list DTO + common/surface axes + cursor/facet/completeness | 세 화면 필터 |
 | BQ-025 | requested | GAP-007 | Cluster 등록 preflight/register validation, command preview, resume/reissue, structured stage reason/error | 연결 위자드 |
 | BQ-026 | requested | GAP-008 | Cluster 연결 해제 capability/permission, confirmation, operation receipt, terminal status | 클러스터 상세 삭제 |
