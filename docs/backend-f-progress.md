@@ -1307,7 +1307,7 @@ Bundle route는 200을 반환한다.
 
 ### AWS dev 배포 — versioned migration 기반
 
-- RED `0c7638a7b`, GREEN `287ef8521`. service image에 Alembic runtime·ini·revision을 포함하고
+- RED `ab1360017`, GREEN `3696d044a`. service image에 Alembic runtime·ini·revision을 포함하고
   build 시 단일 head `20260713_2350`을 검증한다.
 - `management-database-migration` Job은 PgBouncer 대신 direct PostgreSQL secret key를 사용하고,
   schema bootstrap과 같은 advisory key를 session lock으로 획득한다. service-account token은
