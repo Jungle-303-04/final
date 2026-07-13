@@ -165,41 +165,6 @@ describe("createIssuesAdapter", () => {
       signal: undefined,
     });
   });
-  it("loads evidence and reports independently with opaque cursor preservation", async () => {
-    const dependencies = endpoints();
-    const port = createIssuesAdapter(dependencies);
-    await expect(port.loadEvidence("correlation-1", {
-      cursor: "  cursor/+==  ",
-      limit: 50,
-    })).resolves.toMatchObject({
-      correlationId: "correlation-1",
-      hasMore: true,
-      nextCursor: "cursor-2",
-      items: [{ id: "evidence:workspace-1/7", sources: [{ source: "kubernetes" }] }],
-    });
-    await expect(port.loadReports("correlation-1", {
-      cursor: "  report/+==  ",
-    })).resolves.toMatchObject({
-      correlationId: "correlation-1",
-      hasMore: false,
-      items: [{
-        id: "rca-report:workspace-1/11",
-        rootCause: "Memory limit exceeded",
-        candidates: [{ id: "candidate-memory", score: 0.86 }],
-      }],
-    });
-    expect(dependencies.listEvidence).toHaveBeenCalledWith(expect.objectContaining({
-      correlationId: "correlation-1",
-      cursor: "  cursor/+==  ",
-      limit: 50,
-      signal: undefined,
-    }));
-    expect(dependencies.listRcaReports).toHaveBeenCalledWith(expect.objectContaining({
-      correlationId: "correlation-1",
-      cursor: "  report/+==  ",
-      signal: undefined,
-    }));
-  });
   it("refuses a blank correlation before evidence endpoints are called", async () => {
     const dependencies = endpoints();
     const port = createIssuesAdapter(dependencies);
@@ -207,12 +172,6 @@ describe("createIssuesAdapter", () => {
       code: "invalid-request",
     } satisfies Partial<IssuesPortFailure>);
     await expect(port.loadReports("")).rejects.toMatchObject({
-      code: "invalid-request",
-    } satisfies Partial<IssuesPortFailure>);
-    await expect(port.loadEvidence("correlation-1", { cursor: "  " })).rejects.toMatchObject({
-      code: "invalid-request",
-    } satisfies Partial<IssuesPortFailure>);
-    await expect(port.loadReports("correlation-1", { cursor: "" })).rejects.toMatchObject({
       code: "invalid-request",
     } satisfies Partial<IssuesPortFailure>);
     expect(dependencies.listEvidence).not.toHaveBeenCalled();

@@ -206,7 +206,7 @@ function pageQuery(query: {
     until: optionalIdentity(query.until, "until"),
     limit,
     offset,
-    cursor: optionalIdentity(query.cursor, "cursor"),
+    cursor: optionalOpaqueIdentity(query.cursor, "cursor"),
   };
 }
 
@@ -226,6 +226,14 @@ function opaqueIdentity(value: string, field: string): string {
 function optionalIdentity(value: string | undefined, field: string): string | undefined {
   if (value === undefined) return undefined;
   return identity(value, field);
+}
+
+function optionalOpaqueIdentity(
+  value: string | undefined,
+  field: string,
+): string | undefined {
+  if (value === undefined) return undefined;
+  return opaqueIdentity(value, field);
 }
 
 function selectionReason(value: string | null | undefined): string | null | undefined {
