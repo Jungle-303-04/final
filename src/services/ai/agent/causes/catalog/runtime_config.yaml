@@ -17,6 +17,7 @@ rules:
           - "kubernetes:cluster_resource_state"
           - "logs:related_logs"
           - "metadata:current_workload_snapshots"
+          - "metadata:referenced_config_objects"
         checks:
           - "Pod.spec.envFrom.configMapRef 또는 volume.configMap 참조 확인"
           - "event에 configmap not found 또는 CreateContainerConfigError 확인"
@@ -36,6 +37,7 @@ rules:
           - "kubernetes:cluster_resource_state"
           - "logs:related_logs"
           - "metadata:current_workload_snapshots"
+          - "metadata:referenced_config_objects"
         checks:
           - "env.valueFrom.configMapKeyRef key와 ConfigMap data key 비교"
           - "event에 couldn't find key 또는 optional=false 오류 확인"
@@ -55,6 +57,7 @@ rules:
           - "kubernetes:cluster_resource_state"
           - "logs:related_logs"
           - "metadata:current_workload_snapshots"
+          - "metadata:referenced_config_objects"
         checks:
           - "앱 로그에 invalid env, missing required config, parse error 확인"
           - "ConfigMap/Secret reference와 실제 runtime env 이름 비교"
@@ -75,6 +78,7 @@ rules:
           - "kubernetes:cluster_resource_state"
           - "logs:related_logs"
           - "metadata:current_workload_snapshots"
+          - "metadata:referenced_config_objects"
         checks:
           - "event에 MountVolume.SetUp failed for volume과 configmap 관련 문구 확인"
           - "volumeMounts.mountPath/subPath와 ConfigMap key 이름 비교"

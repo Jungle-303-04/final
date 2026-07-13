@@ -25,6 +25,7 @@ rules:
         description: "Private registry 인증 Secret 누락 또는 잘못된 참조로 image pull이 실패했을 가능성이 있습니다."
         expected_evidence:
           - "kubernetes:cluster_resource_state"
+          - "metadata:referenced_config_objects"
         checks:
           - "imagePullSecrets 참조가 같은 namespace에 존재하는지 확인"
           - "events.reason/message에 unauthorized 또는 authentication required 확인"
