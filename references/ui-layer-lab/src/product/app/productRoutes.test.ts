@@ -16,7 +16,6 @@ describe("product route release registry", () => {
       "issues",
       "metrics",
       "applications",
-      "timeline",
       "gitops",
       "catalog",
     ]);
@@ -26,7 +25,6 @@ describe("product route release registry", () => {
       "Issues",
       "Metrics",
       "Applications",
-      "Timeline",
       "GitOps",
       "Catalog",
     ]);
@@ -43,12 +41,12 @@ describe("product route release registry", () => {
   });
 
   it("shows only surfaces released by the composition root", () => {
-    const released = new Set<ProductSurfaceId>(["home", "issues", "timeline"]);
+    const released = new Set<ProductSurfaceId>(["home", "issues", "catalog"]);
 
     expect(productNavigationForReleasedSurfaces(released).map((route) => route.id)).toEqual([
       "home",
       "issues",
-      "timeline",
+      "catalog",
     ]);
   });
 
@@ -65,12 +63,22 @@ describe("product route release registry", () => {
   it("falls unknown and retired demo routes back to Home", () => {
     expect(resolveProductRoute("/product/not-a-route").id).toBe("home");
     expect(resolveProductRoute("/product/topology").id).toBe("home");
+    expect(resolveProductRoute("/product/timeline").id).toBe("home");
+    expect(resolveProductRoute("/product/traffic").id).toBe("home");
     expect(resolveProductRoute("/metrics").id).toBe("home");
   });
 
   it("keeps backend-gap screens and Settings out of the primary route catalog", () => {
     expect(PRODUCT_ROUTE_CATALOG.map((route) => route.id)).not.toEqual(
-      expect.arrayContaining(["topology", "traffic", "helm", "checks", "cost", "settings"]),
+      expect.arrayContaining([
+        "topology",
+        "timeline",
+        "traffic",
+        "helm",
+        "checks",
+        "cost",
+        "settings",
+      ]),
     );
   });
 });
