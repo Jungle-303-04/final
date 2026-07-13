@@ -7,7 +7,7 @@ governing: docs/f-coordination-plan.md · docs/backend-f-workqueue.md
 
 # 백엔드 F 진행 현황
 
-현재 상태: **앵커 19건**
+현재 상태: **앵커 20건**
 
 ## 역사적 Delta-green baseline (BQ-001~003)
 
@@ -470,3 +470,22 @@ Bundle route는 200을 반환한다.
   canonical command 추출, CRLF checkout의 byte SHA 이식성은 다음 배치에서 보강 후보로 남긴다.
 
 계약 완성: OpsiaBench candidate contracts 1..10 (0a1a0b99a482d9bfbcaf394a32ec2ca392cd6611) [green]
+
+### 보조 대기열 S4 — 아침 요약·완료 상태 문서 정합
+
+- 상태: landed
+- 담당 lane: `codex/morning-summary-consistency`
+- 상태 어휘 RED: `c29f4d3b5`; 앵커 수 RED: `c000af818`
+- feature HEAD: `356bef2e29255fe5f8305fa61522865fb63bf3fc`
+- canonical no-ff merge: `5aa8fa006280e7b6191832d0f5fea6d9108438f6`
+- 작업 큐의 착륙 완료 BQ 5건을 선언된 `landed` 어휘로 정규화하고, 진행 문서의 선언
+  앵커 수를 실물 20줄과 기계 대조한다.
+- pipeline §3은 04:30 시작 snapshot, 현재 상태는 §4와 night-log 아침 요약이라는
+  우선순위를 명시했다. A~I는 done, J는 사람 전용 `🔒waiting`, K는 pending이다.
+- 전체 게이트: Ruff lint/format PASS, import-linter 8 kept/0 broken,
+  pytest `1901 passed, 3 skipped`; manifest management 69 / target 20.
+- 4조건: merge-tree exit 0/tree `ab67562c43f4c808674b59ff2c8a2393c52e03f2`;
+  삭제·소유권 밖 코드·frozen 경로 변경 0건; feature와 merge commit의
+  `origin/dev` ancestor exit 0.
+
+계약 완성: backend coordination status vocabulary + morning summary (356bef2e29255fe5f8305fa61522865fb63bf3fc) [green]
