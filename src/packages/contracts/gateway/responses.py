@@ -867,6 +867,122 @@ class LabelFacetPageResponse(StrictModel):
     snapshot: FilterSnapshotMeta
 
 
+ApplicationFilterAxis = Literal[
+    "clusters",
+    "namespaces",
+    "applications",
+    "environment",
+    "status",
+    "pending_promotion",
+]
+ApplicationFilterAvailability = Literal["available", "partial", "unavailable"]
+
+
+class ApplicationFilterItem(StrictModel):
+    """Applications 목록 전용 provider-neutral DTO."""
+
+    application_id: str = Field(min_length=1)
+    display_name: str = Field(min_length=1)
+    repository_ids: list[str] = Field(default_factory=list)
+    cluster_ids: list[str] = Field(default_factory=list)
+    namespace_refs: list[str] = Field(default_factory=list)
+    environments: list[str] = Field(default_factory=list)
+    lifecycle_status: str = Field(min_length=1)
+    pending_promotion: bool
+    binding_count: int = Field(ge=0)
+    updated_at: str
+    binding_completeness: FilterCountCompleteness
+    label_projection_completeness: FilterCountCompleteness
+
+
+class ApplicationSurfaceFilterFacetItem(StrictModel):
+    """Applications surface facet; common catalog ApplicationFilterFacetItem과 별도다."""
+
+    axis: ApplicationFilterAxis
+    value: str = Field(min_length=1)
+    label: str = Field(min_length=1)
+    match_count: int | None = Field(default=None, ge=0)
+    count_completeness: FilterCountCompleteness
+    availability: ApplicationFilterAvailability
+
+    @model_validator(mode="after")
+    def validate_count_availability(self) -> Self:
+        if self.availability == "unavailable" and self.match_count is not None:
+            raise ValueError("unavailable application facet cannot expose a match count")
+        if self.count_completeness == "unavailable" and self.match_count is not None:
+            raise ValueError("unavailable application facet count must be null")
+        return self
+
+
+class ApplicationFilterCapability(StrictModel):
+    axis: Literal[
+        "clusters",
+        "namespaces",
+        "applications",
+        "environment",
+        "status",
+        "pending_promotion",
+        "labels",
+    ]
+    availability: ApplicationFilterAvailability
+    reason_code: str | None = None
+    source_semantics: str = Field(min_length=1)
+
+    @model_validator(mode="after")
+    def validate_reason(self) -> Self:
+        if self.availability != "available" and not self.reason_code:
+            raise ValueError("partial or unavailable application capability requires a reason")
+        return self
+
+
+class ApplicationSelectedFacetResolution(StrictModel):
+    axis: Literal[
+        "cluster",
+        "namespace",
+        "application",
+        "environment",
+        "status",
+        "pending_promotion",
+    ]
+    value: str = Field(min_length=1)
+    status: Literal["resolved", "zero", "restricted", "unavailable"]
+    display_label: str | None = None
+
+
+class ApplicationFilterResultsResponse(StrictModel):
+    items: list[ApplicationFilterItem] = Field(default_factory=list)
+    next_cursor: str | None = None
+    has_more: bool
+    counts: FilterResultCounts
+    snapshot: FilterSnapshotMeta
+    facets: list[ApplicationSurfaceFilterFacetItem] = Field(default_factory=list)
+    capabilities: list[ApplicationFilterCapability] = Field(default_factory=list)
+    selected_labels: list[SelectedLabelResolution] = Field(default_factory=list)
+
+
+class ApplicationFilterFacetPageResponse(StrictModel):
+    surface: Literal["applications"] = "applications"
+    axis: ApplicationFilterAxis
+    items: list[ApplicationSurfaceFilterFacetItem] = Field(default_factory=list)
+    selected_resolutions: list[ApplicationSelectedFacetResolution] = Field(default_factory=list)
+    next_cursor: str | None = None
+    has_more: bool
+    counts: FilterResultCounts
+    snapshot: FilterSnapshotMeta
+    capabilities: list[ApplicationFilterCapability] = Field(default_factory=list)
+
+
+class ApplicationLabelFacetPageResponse(StrictModel):
+    surface: Literal["applications"] = "applications"
+    items: list[LabelFacetItem] = Field(default_factory=list)
+    selected_resolutions: list[SelectedLabelResolution] = Field(default_factory=list)
+    next_cursor: str | None = None
+    has_more: bool
+    counts: FilterResultCounts
+    snapshot: FilterSnapshotMeta
+    capabilities: list[ApplicationFilterCapability] = Field(default_factory=list)
+
+
 IssueFilterAxis = Literal[
     "clusters",
     "namespaces",

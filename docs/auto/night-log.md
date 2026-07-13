@@ -2955,6 +2955,13 @@ target preflight·register 네 함수와 strict Zod 계약을 claim했다. 1회�
   소비했다. GAP-010 backend `914d34ff6`도 ancestor지만 frontend API/Zod/adapter/renderer는 다음
   안전 착륙 단위로 분리했다.
 
+## 2026-07-14 00:36 KST — [백엔드] Applications 필터 계약 claim
+
+- BQ-024를 Applications/GitOps/Checks 한 묶음으로 구현하지 않고 Applications strict list/facet
+  한 단위만 claim했다. GitOps/Checks route는 미노출 상태로 다음 사이클 첫 작업에 둔다.
+- legacy `/applications` 무변경, tenant·app·cluster 권한 fail-closed, server filter/facet/count,
+  opaque cursor와 정직한 completeness를 RED부터 고정한다.
+
 ## 2026-07-14 00:41 KST — [프론트] Resources 필터 adapter 승격·lane 회수
 
 - 원자 PROMOTE 완료 — `dev`와 `woonyong/ui-layer-lab`은 동일 `08ec584a894813c00d6e16dac617b1e5667d941a`이며

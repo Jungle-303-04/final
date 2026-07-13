@@ -1268,3 +1268,16 @@ Bundle route는 200을 반환한다.
   권위 source가 없는 축은 `unavailable`, mutable projection은 `partial`로 반환한다.
 - Bruno `docs/api/18-issues-filter/`와 기존 contract/router/projection/migration 회귀를 재사용한다.
   source·gateway 계약 변경은 0건이다.
+
+### Applications 필터 계약 — claim
+
+- 상태: `in_progress`; BQ-024를 2시간 내 안전 착륙 단위로 분해해 Applications strict
+  list/facet만 먼저 구현한다. GitOps/Checks 신규 route는 이번 lane에서 만들지 않는다.
+- baseline: `origin/dev@887d31e78`, 전체 `2100 passed, 3 skipped`, Ruff lint/format PASS,
+  import-linter 8 kept/0 broken이다.
+- legacy `GET /api/applications`와 detail 응답은 변경하지 않는다. 신규 route는 session workspace,
+  구체 `APPLICATION_READ` app set과 authorized cluster set을 강제한다.
+- common cluster/namespace/application과 Applications environment/status/pending-promotion,
+  server search, opaque cursor, N/M, facet/count/completeness를 strict DTO로 제공한다.
+- live binding resource Label source를 증명하지 못한 항목은 다른 snapshot에서 추측하지 않고
+  capability `unavailable`로 격리한다. GitOps/Checks 잔여는 다음 사이클 첫 작업이다.

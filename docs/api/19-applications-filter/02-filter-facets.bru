@@ -1,0 +1,24 @@
+meta {
+  name: 02 Applications 필터 facet 집계
+  type: http
+  seq: 2
+  tags: [applications, filters, facets, read]
+}
+get {
+  url: {{base_url}}applications/filter-facets?axis=environment&clusters={{cluster_id}}&limit=50
+}
+
+tests {
+  test("200 or validated access failure", function () {
+    expect([200, 400, 401, 403, 404, 409, 422]).to.include(res.status);
+  });
+
+  test("200 response exposes server-side partial counts", function () {
+    if (res.status !== 200) return;
+    const body = res.getBody();
+    expect(body.surface).to.equal("applications");
+    expect(body.items).to.be.an("array");
+    expect(body).to.have.property("counts");
+    expect(body).to.have.property("capabilities");
+  });
+}
