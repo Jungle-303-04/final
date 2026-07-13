@@ -924,3 +924,19 @@ npm run visual-product
     `9b121a137bd91d2d8c93a753bd02fdcd6a52cace`,
     `c764ce58b6dddff4cb58067bbf56a99739de0364`: 과거 demo/rename 작업의 미반영 보존분으로,
     현재 frontend canonical과 소유·경로가 달라 유지.
+
+[2026-07-13 11:56 KST] [프론트] D in_progress — VP-007 provider-free 전역 Cluster selector를 URL 단일 권위·셸 단일 목록 요청·화면 로컬 쿼리 격리 기준으로 구현 및 full gate 검증 중.
+
+## 2026-07-13 12:08 KST — [프론트] VP-007 provider-free slice 완료 증거
+
+- 코드 커밋·push: `2c4487d7b` (`feat: 전역 클러스터 범위 선택기 통합`). 이 단위는
+  조율 문서 커밋과 분리했다.
+- 전역 셸의 `ClusterScopeProvider`가 목록 요청·URL `cluster`·30초 visible polling의 단일
+  권위가 됐다. Home·Resources의 중복 selector와 목록 요청은 제거했으며 surface 이동은
+  Cluster만 보존하고 `node`·`namespace`·`resource` 등 화면 로컬 query를 제거한다.
+- 명시적 unknown·`cluster=`는 자동 fallback하지 않는다. 401은 auth gate로 승격하고, 403은
+  검증된 목록 캐시를 제거하며, background offline은 마지막 검증 목록을 유지한다.
+- BQ-017 착륙 전 provider·health 필드는 읽거나 추측하지 않고 일반 Server 아이콘만 쓴다.
+- `npm run check` PASS: TypeScript·ESLint, Vitest 103 files / 741 tests, design guard 311 files,
+  shadcn 482 previews, Vite production build.
+- `npm run visual-product` PASS: 35 scenarios, unexpected API/network/WebSocket 요청 0.
