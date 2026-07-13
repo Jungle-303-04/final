@@ -217,3 +217,15 @@ Bundle route는 200을 반환한다.
   `1735 passed, 3 skipped`.
 
 계약 완성: OSS PR-only profile + ControllerRuntime + make demo (f0c3b4e42f29c4f011d4d70910b083f7acc031e0) [green]
+
+### BQ-017 — provider 1급화와 연결 단계
+
+- 상태: in_progress, gateway 계약 lock 보유
+- 담당 lane: `codex/f-provider-connection-stage`
+- 착수 기준: `origin/dev@a65c66c7102fb453e583ed4ec44f1950a9df9ba2`
+- 전체 게이트 baseline: Ruff lint/format PASS, import-linter 2 kept/0 broken,
+  pytest `1735 passed, 3 skipped`
+- manifest baseline: management 68, target 20
+- 계약 범위: 기존 응답에 optional `provider`·`connection_stage`만 추가하며 기존
+  `connection_status`와 기존 소비자 계약은 보존한다.
+- 앵커: 감독 검증·GO 후 기록

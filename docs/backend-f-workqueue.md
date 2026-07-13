@@ -45,7 +45,7 @@ R-트랙([D-011])은 dev merge `257f91846`으로 landed/closed 되었고, 전용
 | BQ-014 | requested | Argo observer 어댑터 ([D-017], BQ-013 이후) | Application repo/revision/path·sync/health, Rollouts stable revision 읽기 전용. Argo 리소스 변경 금지. 사후 검증 연계 | (읽기 전용 어댑터) | 읽기 전용 증명(쓰기 호출 0) + 전체 그린 |
 | BQ-015 | requested | `.remediation.yaml` 소스 계약 ([D-017], P 이후 같은 lane) | 저장소 소유자 선언 필드만 patch(helm-values/kustomize/raw/replica/probe). 추측 금지, 미선언 = unsupported | (신규 계약 파일 파서) | 선언 외 필드 수정 불가 테스트 + 전체 그린 |
 | BQ-016 | done | OSS 프로파일 ([D-017]) | PR-only 기본(agent read-only, direct command off), controller+PG+agent 3컴포넌트 설치, 40 entrypoint를 controller 38/agent 2로 단일 배정. `make demo`가 Kind→bad rollout→로컬 mock rollback PR/Bundle→정상화를 재현 | `f0c3b4e42` (조립 기능 `6abbbc8f4`, 데모/문서 `241ca7350`) | 실제 controller+PostgreSQL 기동 및 health/ready 4개 200, graceful shutdown, 실제 `make demo` 성공, NATS/in-process service plan 동등성, 전체 `1735 passed, 3 skipped` |
-| BQ-017 | requested | provider 1급화 + 연결 단계 ([D-018]) | `ClusterSummary.provider` optional(eks/gke/aks/onprem/kind/unknown; 등록값>providerID 자동감지>unknown) + `connection_stage` optional(token_issued→awaiting_install→agent_connected→snapshot_received→ready, +expired/error). 전부 additive | (기존 응답 확장) | 기존 소비자 회귀 + providerID 3사 감지 테스트 + 전체 그린 |
+| BQ-017 | in_progress | provider 1급화 + 연결 단계 ([D-018]) | `ClusterSummary.provider` optional(eks/gke/aks/onprem/kind/unknown; 등록값>providerID 자동감지>unknown) + `connection_stage` optional(token_issued→awaiting_install→agent_connected→snapshot_received→ready, +expired/error). 전부 additive<br>담당: Codex 백엔드 세션<br>브랜치: `codex/f-provider-connection-stage` | (기존 응답 확장; gateway 계약 lock 보유) | 기존 소비자 회귀 + providerID 3사 감지 테스트 + 전체 그린 |
 
 ## claim 규칙
 
