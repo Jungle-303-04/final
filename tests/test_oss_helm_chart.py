@@ -159,6 +159,9 @@ def test_default_access_is_self_only_same_origin_with_console_and_realtime() -> 
     assert "proxy_pass http://127.0.0.1:8001/live/;" in config
     assert "location ^~ /api/install/" in config
     assert "proxy_pass http://127.0.0.1:8000/install/;" in config
+    assert "location = /api/agent/inventory/snapshots" in config
+    assert "client_max_body_size 16m;" in config
+    assert "proxy_pass http://127.0.0.1:8000/agent/inventory/snapshots;" in config
     assert "access_log off;" in config
     assert "location = /api/metrics" in config
     assert 'proxy_set_header X-Kubeheal-Internal-Auth "";' in config
