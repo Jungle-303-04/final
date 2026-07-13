@@ -2644,3 +2644,17 @@ target preflight·register 네 함수와 strict Zod 계약을 claim했다. 1회�
 - production mount는 의도적으로 보류한다. 기존 ClusterScope의 첫 Cluster 자동 선택과 셸·shortcut·
   fallback의 legacy navigation이 canonical query를 지우므로, 다음 단위에서 이 writer들을 한 번에
   전환하는 RED 통합 테스트가 선행되어야 한다. GAP-004 전 Label UI/count 미렌더는 유지한다.
+
+## 2026-07-13 21:10 KST — [프론트] VP-010 passive filter Provider 승격 준비
+
+- 공동 lab 변경 `0b5db31c8`을 merge `4fed11a13`에서 충돌 없이 보존했다. 최신
+  `origin/dev@b4f0d72e7`와 `origin/woonyong/ui-layer-lab@0b5db31c8`은 모두 merge HEAD의
+  ancestor exit 0이며, 삭제·`frontend/**`·backend source·frozen client 변경은 0건이다.
+- merge HEAD에서 `npm run check` PASS: TypeScript·ESLint, Vitest 124 files / 875 tests,
+  design guard 358 files, shadcn source audit 482 previews, Vite production build 14,539 modules다.
+  `npm run visual-product`도 46 scenarios PASS이며 초기 CLS는 Home 0.004188, Resources
+  0.004167, Issues 0.004202로 모두 0.1 미만이다.
+- 이 기록을 포함한 최종 commit을 lab과 dev에 같은 SHA로 fast-forward한 뒤 ancestor를 재증명한다.
+  승격 직후 이 단위 전용 `codex/vp010-filter-provider-20260713`과
+  `/private/tmp/opsia-vp010-filter-provider`를 제거하고 prune한다. 신규 stash는 0개이며,
+  기존 8개와 다른 작업자의 branch·worktree는 증명 없이 변경하지 않는다.
