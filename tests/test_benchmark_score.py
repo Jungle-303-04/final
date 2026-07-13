@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 import runpy
 import subprocess
@@ -276,6 +277,42 @@ def test_candidate_contract_rejects_completed_batch_annotation_drift(
     errors = _contract_validation_errors(document)
 
     assert any(f"completed batch {batch_number} digest mismatch" in error for error in errors)
+
+
+def test_candidate_contract_terminal_digest_uses_only_ordinals_81_through_87() -> None:
+    scorer = runpy.run_path(str(SCORER))
+    contracts = [{"ordinal": ordinal} for ordinal in range(1, 88)]
+    expected = hashlib.sha256(
+        json.dumps(
+            contracts[80:87],
+            ensure_ascii=False,
+            sort_keys=True,
+            separators=(",", ":"),
+        ).encode("utf-8")
+    ).hexdigest()
+
+    assert scorer["candidate_contract_batch_ranges"](87)[-1] == (81, 87)
+    assert scorer["candidate_contract_batch_digest"](contracts, 81, 87) == expected
+
+
+def test_candidate_contract_batch_commitments_reject_unlocked_complete_batch(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    scorer = runpy.run_path(str(SCORER))
+    contracts = [{"ordinal": ordinal} for ordinal in range(1, 31)]
+    locks = {
+        batch_range: scorer["candidate_contract_batch_digest"](contracts, *batch_range)
+        for batch_range in ((1, 10), (11, 20))
+    }
+    monkeypatch.setitem(
+        scorer["validate_candidate_batch_commitments"].__globals__,
+        "CANDIDATE_BATCH_SHA256",
+        locks,
+    )
+
+    errors = scorer["validate_candidate_batch_commitments"](contracts)
+
+    assert any("completed batch digest coverage mismatch" in error for error in errors)
 
 
 def test_candidate_contract_rejects_supporting_signal_drift() -> None:
