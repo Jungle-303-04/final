@@ -19,6 +19,7 @@ export const resourcesEn = {
   "resources.catalog.title": "Resource types",
   "resources.catalog.description": "Types observed in the inventory snapshot",
   "resources.catalog.aria": "Resource type list",
+  "resources.catalog.itemAria": "{label}, {count} resources",
   "resources.category.workloads": "Workloads",
   "resources.category.cluster": "Cluster",
   "resources.category.networking": "Networking",

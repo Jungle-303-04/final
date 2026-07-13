@@ -19,6 +19,7 @@ export const resourcesKo = {
   "resources.catalog.title": "Resource types",
   "resources.catalog.description": "inventory snapshot에서 관측된 종류",
   "resources.catalog.aria": "리소스 유형 목록",
+  "resources.catalog.itemAria": "{label}, {count}개",
   "resources.category.workloads": "Workloads",
   "resources.category.cluster": "Cluster",
   "resources.category.networking": "Networking",

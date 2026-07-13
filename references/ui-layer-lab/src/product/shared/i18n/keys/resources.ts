@@ -17,6 +17,7 @@ export type ResourcesMessageKey =
   | "resources.catalog.title"
   | "resources.catalog.description"
   | "resources.catalog.aria"
+  | "resources.catalog.itemAria"
   | "resources.category.workloads"
   | "resources.category.cluster"
   | "resources.category.networking"
