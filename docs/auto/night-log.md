@@ -2972,6 +2972,21 @@ target preflight·register 네 함수와 strict Zod 계약을 claim했다. 1회�
   사이클에서 완료했다. 신규 stash 0건, 기존 미증명 stash 8개는 유지했고 사람/백엔드 worktree와
   untracked `vp-012-timeline-graph-table.md`·`outputs/`는 건드리지 않았다.
 
+## 2026-07-14 01:02 KST — [프론트] D-027 Live Traffic 런타임 실측
+
+- 현재 제품에는 Live Traffic surface·route·menu·adapter가 없다. `apiComposition.ts:1-69`가 배선하는
+  실 API surface는 Home·Resources·Issues뿐이고 traffic endpoint import/call은 0건이다.
+  `productRoutes.test.ts:71-74`도 `traffic`을 backend-gap 화면으로 분류해 primary catalog에서 배제한다.
+- `reference-contract-map.md:157-160,353`의 정본상 traffic source/connect/flow API는 모두
+  `BE-Gap-060~063`이며, Service inventory를 observed flow로 대체할 수 없고 menu·graph·action 전체가
+  미노출이다. 따라서 현재 관계 뷰로 이전할 유의미한 실측 edge 계약도 없다.
+- repo의 Caretta/Prometheus 설명은 `docs/argocd-radar-learning-lab.md`와 `deploy/oss`의 외부 Radar
+  학습 환경이다. 제품 런타임 source가 아니며 `product-state-visual-harness.tsx`의 `traffic` 탭도
+  primitive 시각 검증 fixture일 뿐 화면 데이터가 아니다.
+- 결론: mock·synthetic·하드코딩 Live Traffic 제품 화면은 존재하지 않아 제거 대상 0건이다.
+  D-028 관계 뷰는 BQ-034가 제공할 provider-neutral observed edge 계약과 앵커 전까지 빈 슬롯으로
+  유지하며, inventory/Prometheus 추측 집계나 Radar 경로 재사용을 금지한다.
+
 ## 2026-07-14 00:57 KST — [백엔드] Applications 필터 계약 canonical 착륙
 
 - code `e7196ea7f`, canonical merge `cbba9d28e`가 `origin/dev` ancestor exit 0이다.
