@@ -1727,3 +1727,19 @@ API 완성: registerTarget (8678d63b0)
   auto-revert request의 유일한 흔적은 worker 내부 title prefix이며 공개 DTO가 아니다.
 - 일반 Safe PR을 revert PR로 오표시하지 않도록 APIQ와 제품 표면을 만들지 않았다.
   재개 조건은 stable auto-revert discriminator와 incident/run exact scope를 포함한 canonical 계약·앵커다.
+
+## 2026-07-13 VP-009 provider 표시 일관화 부분 완료
+
+- unknown glyph RED `a0e124b92`, Home 단일 표시 RED `4a0937c54`, GREEN
+  `3fe308f95` 순서로 분리해 push했다. GREEN은 `origin/woonyong/ui-layer-lab` ancestor exit 0이다.
+- Home 상태 카드 헤더는 선택된 canonical provider를 `ClusterProviderIcon`으로 정확히 1회 표시하고,
+  cluster 미선택에서는 아이콘을 렌더하지 않는다. unknown은 일반 Kubernetes glyph다.
+- Issues는 모든 released route에 상주하는 전역 `ClusterScopePicker`가 이미 동일 컴포넌트로 provider를
+  1회 표시하므로 목록·행·상세에 중복하지 않았다.
+- Fleet는 제품 surface와 provider-bearing fleet contract가 모두 없어 BE-Gap으로 분리했다. 제한된
+  클러스터 목록과의 client join, inferred provider, placeholder UI는 만들지 않았다.
+- targeted 2 files / 10 tests PASS. full `npm run check` PASS: TypeScript·ESLint,
+  Vitest 113 files / 824 tests, product design guard 340 files, shadcn source audit 482 previews,
+  Vite production build 14,538 modules.
+- `npm run visual-product` PASS: 36 isolated scenarios, light/dark·320px·200% text·forced colors·
+  en/ko 포함, exact scenario API requests, unexpected feature network/WebSocket 0건.

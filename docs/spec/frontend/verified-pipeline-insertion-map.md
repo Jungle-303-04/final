@@ -27,7 +27,7 @@ api-needs.md에 APIQ 행을 추가하지 않고 화면도 렌더하지 않는다
 | VP-006 | revert PR 상태 — 검증 실패로 생성된 revert PR을 인시던트·release 화면에 표시 | BQ-007 착륙 | auto-revert worker·권위 patch canonical merge `6d68325bf1cc47f55810e5dc2189e51a6fe916c0` (`origin/dev` ancestor exit 0). 공개 projection은 generic Safe PR lifecycle만 제공하며 auto-revert discriminator를 누락한다 | BE-Gap | 공용 revert PR status card. structured auto-revert event가 없으면 제목·카드·empty state까지 전부 미렌더 | blocked — stable `trigger_kind=auto_revert`와 incident/run exact scope 계약 필요 |
 | VP-007 | 클러스터-최상위 IA — 전역 Cluster selector가 URL 단일 권위로 전 화면 스코프 결정 + 연결된 Cluster 목록(이름·environment·connection·provider) | BQ-017 완료 | 기존 `CLUSTERS_PATH` + optional `provider` enum · 백엔드 코드 `db4798d4e`, canonical merge `d507ca6d4` (`origin/dev` ancestor exit 0) | 어댑터 | 셸 단일 `ClusterScopeProvider` + `UI-004 ScopePicker` + 단일 `ClusterProviderIcon`; 페이지별 목록 요청·selector 제거. provider는 표시 metadata로만 사용하고 화면·동작 분기 금지 | selector `2c4487d7b`; ProviderIcon `b4d1af3cd` |
 | VP-008 | 클러스터 연결 위자드 고도화 — provider 선택→사전 명령→설치 원커맨드(연결 윈도우 카운트다운)→연결 단계 실시간(token_issued→…→ready)→완료 | BQ-017 완료 | `GET /providers/catalog`, `GET /providers/cluster-discovery`, `POST /targets/preflight`, `POST /targets`, `GET /clusters/{cluster_id}/connection-status` · wizard 기반 `65a71c7c`, timeout/bootstrap `101bc4a2`, one-line installer `98efb993`, preflight `26b9e2a9`, BQ-017 merge `d507ca6d4`(전부 `origin/dev` ancestor exit 0) | 어댑터 · 완성형 UI는 §1f 계약 갭으로 주차 | provider catalog의 `config_fields`와 discovery flow를 key로 결합하고 서버 명령만 표시한다. 등록 receipt의 token·manifest·commands는 메모리에만 보유한다. 5초 polling은 서버 stage를 권위로 사용하며 stage 회귀를 허용한다 | API 4함수 `8678d63b0` · 기존 `getClusterConnectionStatus` 앵커 `3d99514d6` · UI blocked (§1f) |
-| VP-009 | provider 표시 일관화 — fleet heatmap·홈 카드·인시던트의 클러스터 표기에 동일 ProviderIcon 재사용 | BQ-017 | VP-007과 동일 필드 소비 | backend 선행 | 단일 컴포넌트 재사용, 중복 구현 금지 | 미요청 |
+| VP-009 | provider 표시 일관화 — fleet heatmap·홈 카드·인시던트의 클러스터 표기에 동일 ProviderIcon 재사용 | BQ-017 완료 | VP-007의 optional `ClusterSummary.provider` 소비 | 어댑터 · Fleet BE-Gap (§1g) | 단일 `ClusterProviderIcon` 재사용. 전역 selector가 route scope를 1회 표시하고 Home 카드만 문맥 아이콘 1개를 추가한다. `unknown`은 일반 Kubernetes glyph이며 provider별 화면 분기 금지 | Home RED `a0e124b92`·`4a0937c54` → GREEN `3fe308f95`; Issues는 전역 selector `b4d1af3cd`; Fleet blocked (§1g) |
 
 ## 1b. VP-001 판정 비고 (2026-07-13, 검토자 확정)
 
@@ -106,6 +106,22 @@ api-needs.md에 APIQ 행을 추가하지 않고 화면도 렌더하지 않는다
   structured stage reason/error code 계약이다.
 - `connect_expires_at`은 agent credential 만료가 아니라 연결 대기 윈도우 종료 시각이다. UI에서
   "토큰 만료"로 번역하거나 자동 삭제·인증 폐기를 추측하지 않는다.
+
+## 1g. VP-009 provider 표시 판정 (2026-07-13)
+
+- Home은 선택된 `HomeClusterChoice.provider`를 상태 카드 헤더의 단일
+  `ClusterProviderIcon`으로 표시한다. cluster가 없으면 아이콘도 렌더하지 않으며 provider를
+  이름·environment·클러스터 ID에서 추측하지 않는다. `unknown`은 브랜드가 아닌 일반
+  Kubernetes glyph다.
+- Issues를 포함한 released route의 클러스터 문맥은 셸 상단의 전역 `ClusterScopePicker`가
+  단일 권위로 이미 표시한다. 같은 provider를 Issues 목록·행·상세에 반복하면 위치 라벨 1회와
+  텍스트 밀도 규칙을 위반하므로 로컬 아이콘을 중복 추가하지 않는다.
+- 현재 제품 composition에는 Fleet surface나 fleet heatmap이 없고 `FleetClusterSummaryItem`에도
+  provider가 없다. `/clusters`의 제한 목록을 fleet 응답에 클라이언트 join하면 전체 fleet의
+  완전성을 증명할 수 없으므로 해당 부분은 BE-Gap이다. 재개 조건은 Fleet IA의 명시적 복원과
+  `FleetClusterSummaryItem.provider` additive 계약 또는 completeness가 증명되는 서버 결합 응답이다.
+- Fleet blocker를 Home·Issues 완료로 위장하지 않는다. surface·계약이 착륙하기 전에는 빈 카드,
+  disabled placeholder, provider 추론, synthetic join을 만들지 않는다.
 
 ## 2. 작업 절차 (행 단위)
 
