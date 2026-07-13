@@ -10,7 +10,7 @@ from dataclasses import replace
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import Select, and_, func, literal, or_, select, tuple_, update
+from sqlalchemy import Select, and_, case, func, literal, or_, select, tuple_, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from domains.gitops.models import Application, DeploymentBinding, ManifestArtifact, WorkflowRun
@@ -707,6 +707,7 @@ class InventoryFilterRepository(DatabaseConnection):
         snapshot_revision: int,
         position: Mapping[str, Any] | None,
         limit: int,
+        graph_priority: bool = False,
     ) -> JsonObject:
         cluster_ids = _ids(allowed_cluster_ids)
         application_ids = _ids(allowed_application_ids)
@@ -733,9 +734,25 @@ class InventoryFilterRepository(DatabaseConnection):
             filtered_count.label("filtered_count"),
             unfiltered_count.label("unfiltered_count"),
         )
+        if graph_priority and position:
+            raise ValueError("graph-priority resource pages do not support a cursor position")
         if position:
             page = page.where(_sort_tuple(filtered) > _position_tuple(position))
-        page = page.order_by(*_sort_columns(filtered)).limit(effective_limit + 1)
+        order = _sort_columns(filtered)
+        if graph_priority:
+            order = (
+                case(
+                    (
+                        filtered.c.resource_type.in_(
+                            ("workload", "pod", "node", "service", "endpoint")
+                        ),
+                        0,
+                    ),
+                    else_=1,
+                ),
+                *order,
+            )
+        page = page.order_by(*order).limit(effective_limit + 1)
         with self.connection() as conn:
             rows = [dict(row) for row in conn.execute(page).mappings().all()]
             has_more = len(rows) > effective_limit
