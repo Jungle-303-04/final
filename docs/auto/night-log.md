@@ -3304,3 +3304,22 @@ index 591d560bc..5f1879a74 100644
   변경 전 백엔드 실패 집합 = `{}`; 변경 후 실패 집합 = `{}`. 전체
   `bash scripts/test.sh`는 Ruff lint/format·compileall·import-linter `8 kept/0 broken`,
   pytest `2154 passed, 3 skipped`로 초록이다.
+
+## 2026-07-14 02:43 KST — [프론트 정리] S2 shadcn primitive 완본 이식
+
+- 코드 commit `fc9962ecc`. `frontend/src/components/ui/` 파일 목록:
+  `alert-dialog`, `alert`, `avatar`, `badge`, `breadcrumb`, `button`, `card`, `chart`,
+  `checkbox`, `collapsible`, `command`, `dialog`, `dropdown-menu`, `input`, `label`,
+  `popover`, `radio-group`, `scroll-area`, `select`, `separator`, `sheet`, `skeleton`,
+  `sonner`, `switch`, `table`, `tabs`, `textarea`, `toggle-group`, `tooltip`와 기술 의존
+  `toggle`, `input-group` — 총 31개 `.tsx`다.
+- reference 완본의 Base UI 구현에 맞춰 `@base-ui/react@^1.6.0`을 설치했다. 모든 파일은
+  S1의 shadcn semantic token을 사용하고 `var(--ui-*)` 직접 참조와 신규 색상 literal은
+  0건이다. Sonner는 별도 theme provider 없이 기존 `data-theme-mode`를 구독한다.
+- `shadcn_primitives.test.mjs`가 필수/지원 파일, 의존성, semantic token 경계를 검증한다.
+  app legacy token 검사는 `components/ui`의 올바른 shadcn `text-primary` 의미와 구분해 기존
+  app 소비자에 계속 적용한다.
+- 프론트 게이트: ESLint warning/error 0, node tests `20/20`, TypeScript·Vite build PASS.
+  변경 전 백엔드 실패 집합 = `{}`; 변경 후 실패 집합 = `{}`. 전체
+  `bash scripts/test.sh`는 import-linter `8 kept/0 broken`, pytest
+  `2154 passed, 3 skipped`로 초록이다.
