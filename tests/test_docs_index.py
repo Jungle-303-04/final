@@ -84,6 +84,40 @@ def test_docs_and_api_do_not_use_retired_scope_or_stale_language() -> None:
         text = path.read_text(encoding="utf-8")
         found = [term for term in blocked_terms if term in text]
         if found:
+            rel_path = path.relative_to(ROOT_DIR).as_posix()
+            offenders.append(f"{rel_path}: {', '.join(found)}")
+
+    assert offenders == []
+
+
+def test_docs_do_not_use_forbidden_external_product_names() -> None:
+    blocked_terms = (
+        "Slack",
+        "PagerDuty",
+        "Datadog",
+        "New Relic",
+        "Honeycomb",
+        "Sentry",
+        "GitLab",
+        "Bitbucket",
+        "ArgoCD",
+        "Argo CD",
+        "Flux",
+        "Jenkins",
+        "GitHub App",
+        "GHCR",
+        "Vercel",
+    )
+
+    checked_paths = list(DOCS_DIR.rglob("*.md"))
+    checked_paths.extend((DOCS_DIR / "api").rglob("*.bru"))
+    checked_paths.extend((DOCS_DIR / "api").rglob("*.json"))
+
+    offenders = []
+    for path in sorted(checked_paths):
+        text = path.read_text(encoding="utf-8")
+        found = [term for term in blocked_terms if term in text]
+        if found:
             offenders.append(f"{path.relative_to(ROOT_DIR).as_posix()}: {', '.join(found)}")
 
     assert offenders == []
