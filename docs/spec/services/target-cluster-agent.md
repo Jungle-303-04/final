@@ -728,7 +728,7 @@ Tempo 트레이스 정규화(`normalize_payload`): query별 결과를 `traces.re
 11. **catalog Helm fail-closed**: management role은 top guard와 handler에서 이중 차단한다. target도 sandbox 및 서버 recipe/value 재검증을 통과해야 하며 binary 부재/timeout/non-zero exit는 `failed` command result로 남는다. 사용자 chart URL/shell/manifest는 payload 모델에 없다.
 12. **k8s API 미구성 시 dry-run**: 쓰기 경로들은 실패 메시지(`"... dry-run only"`)를 반환할 뿐 예외를 던지지 않는다.
 13. **live summary는 bounded**: hot_pods ≤ 20, pod 조회 limit 200/네임스페이스, `LiveSummary`는 raw metric·전체 목록을 싣지 않는다(계약이 강제). 끄면(no-op) 기존 evidence/command 경로에 영향 없음.
-14. **SQLite store 사용 규칙**: `close()` 이후 접근은 `RuntimeError("... is closed")`. WAL + busy_timeout으로 단일 프로세스 내 동시 접근 견딤.
+14. **SQLite store 사용 규칙**: `close()` 이후 접근은 `RuntimeError("... is closed")`. WAL + busy_timeout으로 단일 프로세스 내 동시 접근을 견딘다. `TargetClusterAgent.run()`은 `finally`에서 두 store를 닫으며, 직접 생성한 호출자는 생성 thread에서 `close()`를 명시적으로 호출해야 한다. 테스트 factory는 모든 full-agent 인스턴스를 같은 thread에서 정리한 뒤 worker-thread cyclic GC를 실행해 thread-affine SQLite destructor 오류가 없음을 강제한다.
 
 ## 설정 (Settings)
 
