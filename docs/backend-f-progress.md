@@ -230,6 +230,20 @@ Bundle route는 200을 반환한다.
 
 계약 완성: OSS PR-only profile + ControllerRuntime + make demo (f0c3b4e42f29c4f011d4d70910b083f7acc031e0) [green]
 
+### OSS Helm 설치 재검증 — 완료 판정 정정
+
+- 코드 `7bb74d71fad1101b8818b07c1dfb6797f28141d5`는 로컬 Helm chart를 추가하고 fresh
+  Kind에서 controller 1/1, PostgreSQL 1/1, agent 1/1 Ready를 실증했다. controller는
+  PostgreSQL readiness를 기다린 뒤 관리자·self-agent를 bootstrap하며 공개 프로파일은
+  NATS/Redis/MinIO 없이 in-process bus와 `DEV_AUTH_BYPASS=0`을 사용한다.
+- 실제 `make demo`는 Helm install 이후 bad rollout과 정상화까지 종료 코드 0으로 끝났고,
+  전체 게이트는 `1968 passed, 3 skipped`, import-linter 8 kept/0 broken이었다.
+- 기존 완료 판정은 철회한다. `oci://ghcr.io/opsia/charts/opsia`는 anonymous pull에서 403이고,
+  현재 데모는 rollback PR 문서를 로컬에서 만들고 `kubectl set image`로 직접 정상화한다.
+  동일 artifact의 공개 OCI 설치, 실제 safe-pr 여정, NATS/in-process 결과 동등성까지 남아 있다.
+- 이 기록은 완료 앵커가 아니다. 외부 GHCR namespace/package 권한이 확보되고 남은 제품 여정이
+  실증된 뒤 canonical hash로 새 앵커를 기록한다.
+
 ### H3 — BQ-007/009/010 권위 patch 엔진
 
 - canonical merge: `6d68325bf1cc47f55810e5dc2189e51a6fe916c0`
