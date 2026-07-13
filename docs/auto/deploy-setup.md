@@ -513,16 +513,27 @@ revision marker를 기록하거나 `alembic stamp`를 실행하지 않는다. �
 DB로의 blue/green cutover다.
 
 1. PostgreSQL snapshot과 restore 리허설을 완료한다.
-2. DBA가 같은 PostgreSQL instance에 격리된 빈 target DB를 만든다. application과 migration
-   Job은 이 DB를 참조하지 않는다.
+2. 첫 수동 배포 workflow가 같은 PostgreSQL instance에 run ID와 attempt가 포함된 격리 target
+   DB를 만든다. 이전 attempt의 orphan target과 이름이 겹치지 않으며 검증 전 application은 이
+   DB를 참조하지 않는다.
 3. immutable pre-Alembic schema snapshot의 SHA-256과 source commit을 확인한 뒤 빈 target에만
    `packages.storage.baseline bootstrap`을 실행한다. table이 하나라도 있으면 실행이 거부된다.
 4. legacy DB에서 target DB로 data-only 이관한다. schema object를 복사하지 않는다.
 5. 공통 table의 row count와 checksum, FK, sequence, catalog fingerprint를 대조한다. 차이가
    하나라도 있으면 cutover하지 않는다.
 6. target DB에 대해 `alembic current`와 `alembic heads`가 같은 단일 revision인지 확인한다.
-7. smoke와 DBA 승인을 받은 뒤 application secret을 target DB로 한 번에 전환한다. legacy DB는
-   rollback 보존 기간 동안 read-only로 유지한다.
+7. workflow는 `management-runtime-secret`을 참조하는 모든 Deployment와 live-only
+   `cluster-agent`, `pgbouncer`의 replica를 private plan에 기록한 뒤 0으로 만든다. HPA가 하나라도
+   연결돼 있거나 `api-gateway`/`pgbouncer`를 찾지 못하면 중단한다.
+8. source table SHARE lock과 read-only snapshot 아래에서 copy가 끝난 뒤에만 direct notify URL과
+   PgBouncer mapping을 target으로 전환한다. image rollout 뒤 원 replica를 복원한다.
+9. 실패하면 source routing, 이전 image digest, 원 replica를 각각 끝까지 복구한다. 한 복구 명령의
+   실패가 다음 복구 시도를 건너뛰지 않으며 DB downgrade는 실행하지 않는다.
+
+live create-all DB에만 남은 `workspace_members` 1행과 `resource_access_grants` table은 현재 ORM 권한
+원천이 아니다. 그러나 역할 의미를 canonical 조직 권한과 동일하다고 단정할 수 없어 버리지 않는다.
+revision `20260714_0345`가 두 table의 마지막 활성 ORM shape를 migration-only 보존 table로 만들고,
+data-only copy가 row count/checksum을 그대로 검증한다. runtime ORM metadata에는 다시 등록하지 않는다.
 
 ```bash
 export BASELINE_TARGET_DATABASE_URL='<isolated-empty-target-url>'
@@ -533,8 +544,9 @@ uv run python -m packages.storage.baseline verify
 uv run python -m packages.storage.baseline bootstrap
 ```
 
-URL 값은 shell 출력이나 문서에 복사하지 않는다. data-only 이관과 catalog/data 대조를 수행하는
-cutover 도구가 착륙하기 전 첫 배포는 차단 상태다.
+URL 값은 shell 출력이나 문서에 복사하지 않는다. 실제 snapshot clone에서 새 head까지 bootstrap한
+뒤 62개 source table의 row count/checksum·FK·sequence·catalog 검증이 모두 통과하기 전까지
+`FIRST_DEPLOY`는 차단 상태다. workflow 배선만 존재한다는 이유로 이 검증을 생략하지 않는다.
 
 ## 9. 첫 수동 배포
 

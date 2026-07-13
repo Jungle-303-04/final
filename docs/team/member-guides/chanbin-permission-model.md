@@ -59,7 +59,9 @@
 
 - `viewer/developer/deployer/maintainer` 같은 구 리소스 역할명은 runtime 권한 원천이 아니다.
 - compatibility migration이 기존 DB row를 canonical 역할(`observer`, `release_operator`, `incident_operator`, `cluster_steward`)과 permission(`cluster.read`, `config.update`, `deploy.run`, `cluster.role.manage`)으로 변환한 뒤 코드 fallback은 사용하지 않는다.
-- 구 테이블 `workspace_members`, `resource_access_grants`는 ORM metadata와 required table 목록에서 빠졌다.
+- 구 테이블 `workspace_members`, `resource_access_grants`는 ORM metadata와 required table 목록에서
+  빠졌다. 기존 live row를 첫 versioned cutover에서 버리지 않기 위해 Alembic target에는 migration-only
+  보존 table로만 남으며 runtime 권한 원천으로 조회하지 않는다.
 - 세션 역할은 서비스 레벨인 `service_admin` 또는 `user`다.
 - 조직/그룹 관리 권한과 클러스터 작업 권한은 분리되어 있다.
 - 기본 조직 구성원은 클러스터를 제어할 수 없다.
