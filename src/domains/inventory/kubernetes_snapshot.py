@@ -6,6 +6,7 @@ from collections import Counter
 from typing import Any
 
 from packages.contracts.event_bus.interfaces import JsonObject
+from packages.kubernetes_provider import normalized_detected_provider
 
 
 def kubernetes_evidence_to_inventory_snapshot(
@@ -282,7 +283,7 @@ def _summary(kubernetes: JsonObject) -> JsonObject:
             if item.get("namespace")
         }
     )
-    return {
+    summary: JsonObject = {
         "namespaces": namespaces,
         "nodes": [
             {
@@ -296,3 +297,7 @@ def _summary(kubernetes: JsonObject) -> JsonObject:
         "pod_phases": dict(phases),
         "services": len(services),
     }
+    detected_provider = normalized_detected_provider(kubernetes.get("detected_provider"))
+    if detected_provider is not None:
+        summary["detected_provider"] = detected_provider
+    return summary

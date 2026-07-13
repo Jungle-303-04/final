@@ -142,6 +142,10 @@ CLUSTER_ID_PATTERN = re.compile(r"^[a-z0-9]([-a-z0-9]*[a-z0-9])?$")
 AGENT_STATUS_NOT_REGISTERED = "not_registered"
 AGENT_STATUS_PENDING_INSTALL = ClusterRegistrationStatus.PENDING_INSTALL.value
 AGENT_STATUS_INSTALL_EXPIRED = ClusterRegistrationStatus.INSTALL_EXPIRED.value
+CONCRETE_CLUSTER_PROVIDERS = frozenset({"eks", "gke", "aks", "kind"})
+GENERIC_ONPREM_PROVIDERS = frozenset({"existing-k8s", "minikube", "onprem"})
+DETECTED_CLUSTER_PROVIDERS = frozenset({"eks", "gke", "aks"})
+AGENT_ERROR_STATUSES = frozenset({"error", "failed"})
 TARGET_AGENT_IMAGE_NOT_CONFIGURED = "target agent image is not configured"
 MANAGEMENT_BASE_URL_NOT_CONFIGURED = "management base URL is not configured"
 TARGET_REGISTRATION_CONNECT_TIMEOUT_SECONDS_ENV = "TARGET_REGISTRATION_CONNECT_TIMEOUT_SECONDS"
@@ -633,6 +637,7 @@ def install_response(
         bootstrap_steps=bootstrap_steps_for(payload, bootstrap_command),
         connect_timeout_seconds=connect_timeout_seconds,
         connect_expires_at=connect_expires_at,
+        connection_stage="token_issued",
     )
 
 
@@ -712,6 +717,75 @@ def registration_connection_status(
     return agent_status
 
 
+def resolved_cluster_provider(
+    registration: dict[str, Any],
+    latest_snapshot: dict[str, Any] | None,
+) -> str:
+    settings = registration.get("settings") or {}
+    selected = str(settings.get("cloud_provider") or "").strip().lower()
+    if selected in CONCRETE_CLUSTER_PROVIDERS:
+        return selected
+
+    snapshot_summary = (latest_snapshot or {}).get("summary") or {}
+    detected = str(snapshot_summary.get("detected_provider") or "").strip().lower()
+    if detected in DETECTED_CLUSTER_PROVIDERS:
+        return detected
+    if selected in GENERIC_ONPREM_PROVIDERS:
+        return "onprem"
+    return "unknown"
+
+
+def current_connection_snapshot(
+    registration: dict[str, Any] | None,
+    latest_agent: dict[str, Any],
+    latest_snapshot: dict[str, Any] | None,
+) -> tuple[dict[str, Any] | None, datetime | None]:
+    if latest_snapshot is None:
+        return None, None
+    if str(latest_snapshot.get("agent_id") or "") != str(latest_agent.get("agent_id") or ""):
+        return None, None
+    snapshot_at = parse_timestamp(latest_snapshot.get("created_at"))
+    if snapshot_at is None:
+        return None, None
+    registration_updated_at = parse_timestamp((registration or {}).get("updated_at"))
+    if registration_updated_at is not None and snapshot_at < registration_updated_at:
+        return None, None
+    return latest_snapshot, snapshot_at
+
+
+def cluster_connection_stage(
+    registration: dict[str, Any] | None,
+    latest_agent: dict[str, Any] | None,
+    latest_snapshot: dict[str, Any] | None,
+) -> str:
+    if latest_agent is not None:
+        agent_status = str(latest_agent.get("status") or "").strip().lower()
+        if agent_status in AGENT_ERROR_STATUSES:
+            return "error"
+        if cluster_connection_status(latest_agent) != AGENT_STATUS_ONLINE:
+            return "error"
+        current_snapshot, snapshot_at = current_connection_snapshot(
+            registration,
+            latest_agent,
+            latest_snapshot,
+        )
+        if current_snapshot is None or snapshot_at is None:
+            return "agent_connected"
+        last_seen_at = parse_timestamp(latest_agent.get("last_seen_at"))
+        return (
+            "ready"
+            if last_seen_at is not None and last_seen_at > snapshot_at
+            else "snapshot_received"
+        )
+
+    connection_status = registration_connection_status(registration, None)
+    if connection_status == AGENT_STATUS_INSTALL_EXPIRED:
+        return "expired"
+    if connection_status == AGENT_STATUS_PENDING_INSTALL:
+        return "awaiting_install"
+    return "error"
+
+
 def require_test_fixture_purge_environment(registration: dict[str, Any]) -> None:
     registration_environment = str(registration.get("environment") or "")
     if test_fixture_purge_enabled() and registration_environment == TEST_FIXTURE_ENVIRONMENT:
@@ -737,7 +811,12 @@ def unregisterable_registration(db: Any, workspace_id: str, cluster_id: str) -> 
     return registration
 
 
-def cluster_summary(cluster: dict[str, Any], latest_agent: dict[str, Any] | None) -> ClusterSummary:
+def cluster_summary(
+    cluster: dict[str, Any],
+    latest_agent: dict[str, Any] | None,
+    *,
+    latest_snapshot: dict[str, Any] | None = None,
+) -> ClusterSummary:
     connection_status = registration_connection_status(cluster, latest_agent)
     status = (
         ClusterRegistrationStatus.INSTALL_EXPIRED.value
@@ -752,6 +831,8 @@ def cluster_summary(cluster: dict[str, Any], latest_agent: dict[str, Any] | None
         status=status,
         settings=cluster.get("settings") or {},
         connection_status=connection_status,
+        provider=resolved_cluster_provider(cluster, latest_snapshot),
+        connection_stage=cluster_connection_stage(cluster, latest_agent, latest_snapshot),
         last_agent_id=latest_agent.get("agent_id") if latest_agent else None,
         last_agent_seen_at=latest_agent.get("last_seen_at") if latest_agent else None,
         created_at=cluster.get("created_at"),
@@ -995,13 +1076,22 @@ async def list_clusters(
         workspace_id,
         {cluster["cluster_id"] for cluster in clusters},
     )
+    cluster_ids = {cluster["cluster_id"] for cluster in clusters}
+    snapshot_getter = getattr(db, "latest_inventory_snapshots", None)
+    latest_snapshots = (
+        snapshot_getter(workspace_id, cluster_ids) if callable(snapshot_getter) else {}
+    )
     open_incident_counts = (
         db.count_open_rca_incidents(workspace_id, {cluster["cluster_id"] for cluster in clusters})
         if hasattr(db, "count_open_rca_incidents")
         else {}
     )
     summaries = [
-        cluster_summary(cluster, latest_agents.get(cluster["cluster_id"]))
+        cluster_summary(
+            cluster,
+            latest_agents.get(cluster["cluster_id"]),
+            latest_snapshot=latest_snapshots.get(cluster["cluster_id"]),
+        )
         for cluster in clusters
         if cluster["cluster_id"] not in BLOCKED_TEST_CLUSTER_IDS
         and not any(
@@ -1040,7 +1130,14 @@ async def get_cluster(
         db.list_cluster_agent_statuses(workspace_id, cluster_id)
     )
     latest_agent = agents[0] if agents else None
-    return ClusterResponse(cluster=cluster_summary(cluster, latest_agent), agents=agents)
+    snapshot_getter = getattr(db, "latest_inventory_snapshot", None)
+    latest_snapshot = (
+        snapshot_getter(workspace_id, cluster_id) if callable(snapshot_getter) else None
+    )
+    return ClusterResponse(
+        cluster=cluster_summary(cluster, latest_agent, latest_snapshot=latest_snapshot),
+        agents=agents,
+    )
 
 
 @router.get(
@@ -1068,9 +1165,14 @@ async def get_cluster_connection_status(
         db.list_cluster_agent_statuses(workspace_id, cluster_id)
     )
     latest_agent = agents[0] if agents else None
+    snapshot_getter = getattr(db, "latest_inventory_snapshot", None)
+    latest_snapshot = (
+        snapshot_getter(workspace_id, cluster_id) if callable(snapshot_getter) else None
+    )
     return ClusterConnectionStatusResponse(
         cluster_id=cluster_id,
         connection_status=registration_connection_status(registration, latest_agent),
+        connection_stage=cluster_connection_stage(registration, latest_agent, latest_snapshot),
         last_agent_id=latest_agent.get("agent_id") if latest_agent else None,
         last_seen_at=latest_agent.get("last_seen_at") if latest_agent else None,
         agents=agents,
