@@ -162,6 +162,16 @@ describe("Resources filter response schemas", () => {
     expect(labelFacetPageSchema.safeParse(labelPage).success).toBe(false);
     expect(labelFacetPageSchema.safeParse({
       ...labelPage,
+      items: [{
+        key: "UPPER.PREFIX/name",
+        value: "checkout",
+        selector: "UPPER.PREFIX/name=checkout",
+        match_count: 1,
+        count_completeness: "exact",
+      }],
+    }).success).toBe(false);
+    expect(labelFacetPageSchema.safeParse({
+      ...labelPage,
       items: [],
       counts: {
         ...COUNTS,
