@@ -1,7 +1,13 @@
 import { type ReactNode } from 'react';
-import { motion, useReducedMotion } from 'motion/react';
-import { Badge, Button, EmptyState, Skeleton, cx } from '@/ui';
-import { AnimatePresence, listItem, listStagger, transitions } from '@/ui/motion';
+import { AnimatePresence, motion, useReducedMotion } from 'motion/react';
+import { Alert, AlertAction, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent } from '@/components/ui/card';
+import { Skeleton } from '@/components/ui/skeleton';
+import { cn } from '@/lib/utils';
+
+const MotionButton = motion.create(Button);
 
 export type DrilldownHealth = 'healthy' | 'warning' | 'critical' | 'unknown' | string;
 
@@ -52,7 +58,6 @@ export function DrilldownHeatmap({
   const max = Math.max(1, ...tiles.map((tile) => safeSize(tile.size)));
   const reducedMotion = useReducedMotion();
   const motionLayout = !reducedMotion;
-  const motionTransition = reducedMotion ? transitions.reduced : transitions.spring;
   const presenceMode = reducedMotion ? 'sync' : 'popLayout';
   return (
     <div className="grid gap-4">
@@ -65,9 +70,15 @@ export function DrilldownHeatmap({
               {last || !item.onClick ? (
                 <span className="min-w-0 truncate text-text-secondary">{item.label}</span>
               ) : (
-                <button type="button" className="min-w-0 truncate font-semibold text-brand hover:text-brand-hover" onClick={item.onClick}>
+                <Button
+                  type="button"
+                  variant="link"
+                  size="sm"
+                  className="h-auto min-w-0 px-0 py-0 text-label font-semibold text-brand hover:text-brand-hover"
+                  onClick={item.onClick}
+                >
                   {item.label}
-                </button>
+                </Button>
               )}
             </span>
           );
@@ -77,37 +88,62 @@ export function DrilldownHeatmap({
       {loading ? (
         <div className="grid min-h-56 grid-cols-1 gap-2 sm:grid-cols-6 xl:grid-cols-12">
           {Array.from({ length: 8 }).map((_, index) => (
-            <div key={index} className={cx('rounded-panel border border-border bg-raised p-4', index < 2 ? 'sm:col-span-3 xl:col-span-3' : 'sm:col-span-2 xl:col-span-2')}>
-              <Skeleton lines={3} />
-            </div>
+            <Card
+              key={index}
+              size="sm"
+              className={cn(
+                'min-h-24 rounded-panel border border-border bg-raised py-0 ring-0',
+                index < 2 ? 'sm:col-span-3 xl:col-span-3' : 'sm:col-span-2 xl:col-span-2',
+              )}
+            >
+              <CardContent className="grid gap-3 p-4">
+                <Skeleton className="h-4 w-2/3" />
+                <Skeleton className="h-3 w-1/2" />
+                <Skeleton className="h-3 w-1/3" />
+              </CardContent>
+            </Card>
           ))}
         </div>
       ) : error ? (
-        <EmptyState title="히트맵 조회 실패" description={error.message} action={onRetry ? <Button size="sm" onClick={onRetry}>다시 시도</Button> : undefined} />
+        <Alert variant="destructive">
+          <AlertTitle>히트맵 조회 실패</AlertTitle>
+          <AlertDescription>{error.message}</AlertDescription>
+          {onRetry && (
+            <AlertAction>
+              <Button type="button" variant="outline" size="sm" onClick={onRetry}>
+                다시 시도
+              </Button>
+            </AlertAction>
+          )}
+        </Alert>
       ) : tiles.length === 0 ? (
-        empty ?? <EmptyState title="타일 없음" />
+        empty ?? (
+          <Alert>
+            <AlertTitle>타일 없음</AlertTitle>
+          </Alert>
+        )
       ) : zoomContext ? (
         <motion.div
           layout={motionLayout}
-          transition={motionTransition}
           className="grid gap-3"
         >
-          <span className="flex min-w-0 flex-wrap items-center justify-between gap-3 rounded-control border border-border bg-raised px-3 py-2">
-            <span className="grid min-w-0 gap-1">
-              <span className="min-w-0 truncate text-body font-semibold text-text-primary">{zoomContext.label}</span>
-              {zoomContext.meta && <span className="flex min-w-0 flex-wrap gap-x-3 gap-y-1 text-caption text-text-secondary">{zoomContext.meta}</span>}
-            </span>
-            <span className="flex shrink-0 items-center gap-1">
-              {zoomContext.badge}
-              <HealthBadge health={zoomContext.health} />
-            </span>
-          </span>
+          <Card size="sm" className="rounded-control border border-border bg-raised py-0 ring-0">
+            <CardContent className="flex min-w-0 flex-wrap items-center justify-between gap-3 px-3 py-2">
+              <span className="grid min-w-0 gap-1">
+                <span className="min-w-0 truncate text-body font-semibold text-text-primary">{zoomContext.label}</span>
+                {zoomContext.meta && <span className="flex min-w-0 flex-wrap gap-x-3 gap-y-1 text-caption text-text-secondary">{zoomContext.meta}</span>}
+              </span>
+              <span className="flex shrink-0 items-center gap-1">
+                {zoomContext.badge}
+                <HealthBadge health={zoomContext.health} />
+              </span>
+            </CardContent>
+          </Card>
           <TileGrid
             tiles={tiles}
             max={max}
             onTileClick={onTileClick}
             motionLayout={motionLayout}
-            motionTransition={motionTransition}
             presenceMode={presenceMode}
             compact
           />
@@ -118,7 +154,6 @@ export function DrilldownHeatmap({
           max={max}
           onTileClick={onTileClick}
           motionLayout={motionLayout}
-          motionTransition={motionTransition}
           presenceMode={presenceMode}
         />
       )}
@@ -131,7 +166,6 @@ function TileGrid({
   max,
   onTileClick,
   motionLayout,
-  motionTransition,
   presenceMode,
   compact = false,
 }: {
@@ -139,38 +173,34 @@ function TileGrid({
   max: number;
   onTileClick: (tile: DrilldownTile) => void;
   motionLayout: boolean;
-  motionTransition: typeof transitions.spring | typeof transitions.reduced;
   presenceMode: 'sync' | 'popLayout';
   compact?: boolean;
 }) {
   return (
     <motion.div
       layout={motionLayout}
-      variants={motionLayout ? listStagger : undefined}
-      initial={motionLayout ? 'initial' : false}
-      animate={motionLayout ? 'animate' : undefined}
-      className={cx(
+      className={cn(
         'grid grid-cols-1 gap-2',
         compact ? 'min-h-32 sm:grid-cols-6 xl:grid-cols-12' : 'min-h-48 sm:grid-cols-6 xl:grid-cols-12',
       )}
     >
-      <AnimatePresence mode={presenceMode}>
+      <AnimatePresence initial={false} mode={presenceMode}>
         {tiles.map((tile) => (
-          <motion.button
+          <MotionButton
             key={tile.id}
             type="button"
+            variant="outline"
             layout={motionLayout}
-            variants={motionLayout ? listItem : undefined}
-            transition={motionTransition}
-            className={cx(
-              'group relative grid min-h-24 content-between overflow-hidden rounded-panel border bg-surface p-4 pl-5 text-left shadow-soft transition-colors motion-reduce:transition-none hover:border-border-strong hover:bg-raised focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring',
+            exit={motionLayout ? { opacity: 0 } : undefined}
+            className={cn(
+              'group relative grid h-auto min-h-24 content-between overflow-hidden rounded-panel border bg-surface p-4 pl-5 text-left whitespace-normal shadow-soft transition-colors motion-reduce:transition-none hover:border-border-strong hover:bg-raised focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring',
               healthBorderClass(tile.health),
               compact ? compactSizeClass(safeSize(tile.size), max) : sizeClass(safeSize(tile.size), max),
               tile.pulse && 'ring-1 ring-danger/60',
             )}
             onClick={() => onTileClick(tile)}
           >
-            <span aria-hidden className={cx('absolute inset-y-0 left-0 w-1', healthBarClass(tile.health, tile.pulse))} />
+            <span aria-hidden className={cn('absolute inset-y-0 left-0 w-1', healthBarClass(tile.health, tile.pulse))} />
             <span className="flex min-w-0 items-start justify-between gap-3">
               <span className="min-w-0 truncate text-body font-semibold text-text-primary">{tile.label}</span>
               <span className="flex shrink-0 items-center gap-1">
@@ -186,7 +216,7 @@ function TileGrid({
                 </span>
               )}
             </span>
-          </motion.button>
+          </MotionButton>
         ))}
       </AnimatePresence>
     </motion.div>
@@ -195,10 +225,10 @@ function TileGrid({
 
 function HealthBadge({ health }: { health: DrilldownHealth }) {
   const key = healthKey(health);
-  if (key === 'critical') return <Badge tone="danger">위험</Badge>;
-  if (key === 'warning') return <Badge tone="warning">주의</Badge>;
-  if (key === 'healthy') return <Badge tone="success">정상</Badge>;
-  return <Badge>미확인</Badge>;
+  if (key === 'critical') return <Badge variant="destructive" className="border-danger/40 bg-danger/10 text-danger">위험</Badge>;
+  if (key === 'warning') return <Badge variant="outline" className="border-warning/40 bg-warning/10 text-warning">주의</Badge>;
+  if (key === 'healthy') return <Badge variant="outline" className="border-success/40 bg-success/10 text-success">정상</Badge>;
+  return <Badge variant="outline" className="border-border bg-raised text-text-muted">미확인</Badge>;
 }
 
 function safeSize(size: number) {
