@@ -232,12 +232,20 @@ describe("VP-010 unified filter URL", () => {
   });
 
   it("validates Kubernetes namespace and apimachinery Label prefix boundaries", () => {
-    const acceptedPrefix = "a".repeat(64);
-    const rejectedPrefix = "a".repeat(254);
+    const acceptedSegmentPrefix = "a".repeat(63);
+    const acceptedTotalPrefix = [63, 63, 63, 61]
+      .map((length) => "a".repeat(length))
+      .join(".");
+    const rejectedSegmentPrefix = "a".repeat(64);
+    const rejectedTotalPrefix = [63, 63, 63, 62]
+      .map((length) => "a".repeat(length))
+      .join(".");
     const result = parseProductFilterUrl(
       `?namespaces=cluster-a%2Fshop,cluster-a%2Fbad%20namespace` +
-      `&labels=${encodeURIComponent(`${acceptedPrefix}/name=value`)},` +
-      encodeURIComponent(`${rejectedPrefix}/name=value`),
+      `&labels=${encodeURIComponent(`${acceptedSegmentPrefix}/name=value`)},` +
+      `${encodeURIComponent(`${acceptedTotalPrefix}/name=value`)},` +
+      `${encodeURIComponent(`${rejectedSegmentPrefix}/name=value`)},` +
+      encodeURIComponent(`${rejectedTotalPrefix}/name=value`),
     );
 
     expect(result.state.common.namespaces).toEqual([
@@ -245,10 +253,12 @@ describe("VP-010 unified filter URL", () => {
     ]);
     expect(result.invalidValues.namespaces).toEqual(["cluster-a/bad namespace"]);
     expect(result.state.common.labels).toEqual([
-      { key: `${acceptedPrefix}/name`, value: "value" },
+      { key: `${acceptedTotalPrefix}/name`, value: "value" },
+      { key: `${acceptedSegmentPrefix}/name`, value: "value" },
     ]);
     expect(result.invalidValues.labels).toEqual([
-      `${rejectedPrefix}/name=value`,
+      `${rejectedSegmentPrefix}/name=value`,
+      `${rejectedTotalPrefix}/name=value`,
     ]);
   });
 
