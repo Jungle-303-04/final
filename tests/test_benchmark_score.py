@@ -236,7 +236,7 @@ def test_candidate_contract_rejects_supporting_signal_drift() -> None:
 
     errors = _contract_validation_errors(document)
 
-    assert any("supporting_signals must match the loader-order index" in error for error in errors)
+    assert any("supporting_signals" in error and "loader-order index" in error for error in errors)
 
 
 def test_candidate_contract_rejects_unhashable_identity_without_crashing() -> None:
