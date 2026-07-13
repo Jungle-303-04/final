@@ -387,6 +387,51 @@ def test_recent_query_rechecks_unique_incident_scope_and_cutoff() -> None:
     assert 5 in compiled.params.values()
 
 
+def test_evidence_join_query_uses_workload_and_time_without_incident_projection() -> None:
+    statements: list[Any] = []
+
+    class Result:
+        def mappings(self) -> Result:
+            return self
+
+        def all(self) -> list[dict[str, object]]:
+            return []
+
+    class Connection:
+        def execute(self, statement: Any) -> Result:
+            statements.append(statement)
+            return Result()
+
+    @contextmanager
+    def connection():
+        yield Connection()
+
+    repository = object.__new__(RcaChangesRepository)
+    repository.connection = connection  # type: ignore[method-assign]
+    assert (
+        repository.list_recent_workload_changes_for_evidence(
+            "workspace-a",
+            "cluster-1",
+            "shop",
+            "Deployment",
+            "checkout-api",
+            "2026-07-13T02:33:30+00:00",
+            limit=5,
+        )
+        == []
+    )
+    compiled = statements[0].compile(dialect=postgresql.dialect())
+    sql = str(compiled)
+    assert "authorized_incident_scope" not in sql
+    assert "workflow_pr_references" in sql
+    assert "workload_changes.changed_at <=" in sql
+    assert "ORDER BY workload_changes.changed_at DESC, workload_changes.event_id DESC" in sql
+    assert {"workspace-a", "cluster-1", "shop", "deployment", "checkout-api"} <= set(
+        compiled.params.values()
+    )
+    assert 5 in compiled.params.values()
+
+
 def _projected_row() -> dict[str, object]:
     row = workload_change_row(_completed(), _context(), _authority())
     assert row is not None
