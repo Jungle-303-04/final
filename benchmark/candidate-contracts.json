@@ -3177,7 +3177,9 @@
           "reason": "단일 workload의 짧은 timeout으로 fleet 전체 probe timeout을 늘릴 수 없습니다."
         }
       ],
-      "benchmark_fixtures": []
+      "benchmark_fixtures": [
+        "benchmark/scenarios/probe/probe-timeout-too-short/scenario.json"
+      ]
     },
     {
       "ordinal": 53,
