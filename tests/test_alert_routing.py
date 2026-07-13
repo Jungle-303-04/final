@@ -6,6 +6,8 @@ import asyncio
 from types import SimpleNamespace
 
 import httpx
+import pytest
+
 from conftest import ROOT, load_file
 from fastapi import HTTPException
 
@@ -172,8 +174,28 @@ class StubChannelDb:
     def list_alert_channels(self, workspace_id: str, *, only_enabled: bool = False):
         return [dict(row) for row in self.rows.values() if row["workspace_id"] == workspace_id]
 
+    def get_alert_channel(self, workspace_id: str, channel_id: str) -> dict | None:
+        row = self.rows.get(channel_id)
+        if row is None or row["workspace_id"] != workspace_id:
+            return None
+        return dict(row)
+
     def upsert_alert_channel(self, payload: dict) -> dict:
         channel_id = payload.get("channel_id") or f"chan-{len(self.rows) + 1}"
+        previous = self.rows.get(channel_id, {})
+        test_result = {
+            "last_tested_at": previous.get("last_tested_at"),
+            "last_test_status": previous.get("last_test_status"),
+            "last_test_detail": previous.get("last_test_detail"),
+            "last_test_status_code": previous.get("last_test_status_code"),
+        }
+        if previous and previous.get("url") != payload["url"]:
+            test_result = {
+                "last_tested_at": None,
+                "last_test_status": None,
+                "last_test_detail": None,
+                "last_test_status_code": None,
+            }
         row = {
             "channel_id": channel_id,
             "workspace_id": payload["workspace_id"],
@@ -182,10 +204,7 @@ class StubChannelDb:
             "url": payload["url"],
             "min_severity": payload.get("min_severity", "warning"),
             "enabled": payload.get("enabled", True),
-            "last_tested_at": None,
-            "last_test_status": None,
-            "last_test_detail": None,
-            "last_test_status_code": None,
+            **test_result,
             "created_at": None,
             "updated_at": None,
         }
@@ -229,7 +248,18 @@ def test_alert_channel_admin_crud_roundtrip() -> None:
     async def run() -> None:
         db = StubChannelDb()
         created = await upsert_alert_channel(
-            AlertChannelUpsertRequest(name="ops", url="https://hooks.example/x"), ADMIN, db
+            AlertChannelUpsertRequest(name="ops", url="https://hooks.example/x", enabled=False), ADMIN, db
+        )
+        db.record_alert_channel_test("workspace-1", created.channel_id, status="passed", detail="delivered")
+        created = await upsert_alert_channel(
+            AlertChannelUpsertRequest(
+                channel_id=created.channel_id,
+                name="ops",
+                url="https://hooks.example/x",
+                enabled=True,
+            ),
+            ADMIN,
+            db,
         )
         assert created.min_severity == "warning"
         assert created.workspace_id == "workspace-1"
@@ -421,7 +451,7 @@ def test_alert_channel_test_records_saved_channel_status(monkeypatch) -> None:
     async def run() -> None:
         db = StubChannelDb()
         created = await upsert_alert_channel(
-            AlertChannelUpsertRequest(name="ops", url="https://hooks.example/x"), ADMIN, db
+            AlertChannelUpsertRequest(name="ops", url="https://hooks.example/x", enabled=False), ADMIN, db
         )
         response = await send_alert_channel_test(
             AlertChannelTestRequest(
@@ -438,6 +468,53 @@ def test_alert_channel_test_records_saved_channel_status(monkeypatch) -> None:
         assert response.channel.last_test_status == "passed"
         assert response.channel.last_test_status_code == 204
         assert response.channel.last_tested_at == "2026-07-10T09:00:00Z"
+
+    asyncio.run(run())
+
+
+def test_alert_channel_cannot_be_enabled_before_a_saved_delivery_test() -> None:
+    async def run() -> None:
+        with pytest.raises(HTTPException) as exc:
+            await upsert_alert_channel(
+                AlertChannelUpsertRequest(name="ops", url="https://hooks.example/x", enabled=True),
+                ADMIN,
+                StubChannelDb(),
+            )
+        assert exc.value.status_code == 409
+
+    asyncio.run(run())
+
+
+def test_alert_channel_url_change_clears_prior_delivery_test() -> None:
+    async def run() -> None:
+        db = StubChannelDb()
+        created = await upsert_alert_channel(
+            AlertChannelUpsertRequest(name="ops", url="https://hooks.example/old", enabled=False), ADMIN, db
+        )
+        db.record_alert_channel_test("workspace-1", created.channel_id, status="passed", detail="delivered")
+        changed = await upsert_alert_channel(
+            AlertChannelUpsertRequest(
+                channel_id=created.channel_id,
+                name="ops",
+                url="https://hooks.example/new",
+                enabled=False,
+            ),
+            ADMIN,
+            db,
+        )
+        assert changed.last_test_status is None
+        with pytest.raises(HTTPException) as exc:
+            await upsert_alert_channel(
+                AlertChannelUpsertRequest(
+                    channel_id=changed.channel_id,
+                    name="ops",
+                    url="https://hooks.example/new",
+                    enabled=True,
+                ),
+                ADMIN,
+                db,
+            )
+        assert exc.value.status_code == 409
 
     asyncio.run(run())
 

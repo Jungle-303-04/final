@@ -214,6 +214,20 @@ export function adaptDeployment(raw: Record<string, unknown>): Deployment {
     manifest_path: raw.manifest_path ? String(raw.manifest_path) : undefined,
     branch: raw.branch ? String(raw.branch) : undefined,
     repo_ref: raw.repo_ref ? String(raw.repo_ref) : undefined,
+    gitops_poll: adaptGitOpsPoll(raw.gitops_poll),
+  };
+}
+
+function adaptGitOpsPoll(raw: unknown): Deployment['gitops_poll'] {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return undefined;
+  const poll = raw as Record<string, unknown>;
+  return {
+    status: String(poll.status ?? 'unknown'),
+    status_code: typeof poll.status_code === 'number' ? poll.status_code : undefined,
+    error_kind: poll.error_kind ? String(poll.error_kind) : undefined,
+    error: poll.error ? String(poll.error) : undefined,
+    last_seen_commit_sha: poll.last_seen_commit_sha ? String(poll.last_seen_commit_sha) : undefined,
+    last_polled_at: poll.last_polled_at ? String(poll.last_polled_at) : undefined,
   };
 }
 

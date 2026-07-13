@@ -455,6 +455,10 @@ class ReleasePlanArchiveRequest(StrictModel):
     reason: str | None = Field(default=None, max_length=500)
 
 
+class ReleasePlanRestoreRequest(StrictModel):
+    reason: str | None = Field(default=None, max_length=500)
+
+
 class DiagnosticsRequest(StrictModel):
     mode: Literal["yaml", "settings", "release_plan"] = "yaml"
     content: str = Field(default="", max_length=1_000_000)

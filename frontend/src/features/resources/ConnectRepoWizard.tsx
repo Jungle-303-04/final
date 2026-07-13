@@ -12,11 +12,12 @@ import { useClusters } from '@/features/cluster/api';
 import { useIsAdmin } from '@/features/auth/api';
 import { RegisterClusterWizard } from '@/features/resources/RegisterClusterWizard';
 import { useConsolePath } from '@/features/console/ui';
-import type { Cluster } from '@/shared/lib/types';
+import type { Application, Cluster } from '@/shared/lib/types';
 import {
   Badge,
   Button,
   Card,
+  Checkbox,
   EmptyState,
   Field,
   Input,
@@ -32,12 +33,23 @@ const STEPS = ['레포', '배포 대상', '확인'];
 const PROBEABLE_REPO = /^([\w.-]+\/[\w.-]+|https?:\/\/[^/\s]+\/[^/\s]+\/[^/\s]+|git@[^:\s]+:[^/\s]+\/[^/\s]+(?:\.git)?)$/;
 const CONNECTED_STATUSES = new Set<Cluster['connection_status']>(['connected', 'online']);
 
-export function ConnectRepoWizard({ open, onClose }: { open: boolean; onClose: () => void }) {
+export function ConnectRepoWizard({
+  open,
+  onClose,
+  onCreated,
+  navigateAfterCreate = true,
+}: {
+  open: boolean;
+  onClose: () => void;
+  onCreated?: (applications: Application[]) => void;
+  navigateAfterCreate?: boolean;
+}) {
   const [step, setStep] = useState(0);
   const [repoRef, setRepoRef] = useState('');
   const [branch, setBranch] = useState('');
   const [manifestSelection, setManifestSelection] = useState('');
   const [selectedClusterIds, setSelectedClusterIds] = useState<string[]>([]);
+  const [creationConfirmed, setCreationConfirmed] = useState(false);
   const [clusterWizardOpen, setClusterWizardOpen] = useState(false);
   const [submitError, setSubmitError] = useState('');
   const clustersQ = useClusters();
@@ -83,6 +95,7 @@ export function ConnectRepoWizard({ open, onClose }: { open: boolean; onClose: (
     setBranch('');
     setManifestSelection('');
     setSelectedClusterIds([]);
+    setCreationConfirmed(false);
     setSubmitError('');
     setClusterWizardOpen(false);
     create.reset();
@@ -118,6 +131,10 @@ export function ConnectRepoWizard({ open, onClose }: { open: boolean; onClose: (
     const connectedIds = new Set(deployableClusters.map((cluster) => cluster.cluster_id));
     setSelectedClusterIds((ids) => ids.filter((id) => connectedIds.has(id)));
   }, [deployableClusters]);
+
+  useEffect(() => {
+    setCreationConfirmed(false);
+  }, [manifestPath, normalizedRepoRef, selectedBranch, selectedClusterIds]);
 
   const toggleCluster = (cluster: Cluster) => {
     if (!isDeployableCluster(cluster)) return;
@@ -155,8 +172,9 @@ export function ConnectRepoWizard({ open, onClose }: { open: boolean; onClose: (
         title: '배포 정의 생성 완료',
         description: deploymentSummary(selectedClusters),
       });
+      onCreated?.(results);
       reset();
-      nav(pathFor(`/repos/${results[0]?.application_id ?? ''}`));
+      if (navigateAfterCreate) nav(pathFor(`/repos/${results[0]?.application_id ?? ''}`));
     } catch (error) {
       setSubmitError(connectErrorMessage(error));
     }
@@ -336,6 +354,14 @@ export function ConnectRepoWizard({ open, onClose }: { open: boolean; onClose: (
           {step === 2 && (
             <>
               <Card title="확인" description="선택한 연결 클러스터에만 배포 정의를 생성합니다">
+                <GitOpsConnectionPreview
+                  repoRef={normalizedRepoRef}
+                  branch={selectedBranch}
+                  candidate={selectedCandidate}
+                  validation={validation}
+                  clusters={selectedClusters}
+                  namespace={manifestNamespace}
+                />
                 <KeyValueList
                   items={[
                     { label: '앱 이름', value: name },
@@ -352,13 +378,21 @@ export function ConnectRepoWizard({ open, onClose }: { open: boolean; onClose: (
                     </Link>
                   ))}
                 </div>
+                <div className="mt-4">
+                  <Checkbox
+                    checked={creationConfirmed}
+                    onChange={(event) => setCreationConfirmed(event.target.checked)}
+                    label="검증된 source와 target 연결을 확인했습니다"
+                    description="이 작업은 즉시 배포가 아니라, 이후 GitOps 검토와 릴리스 플랜에서 사용할 배포 정의를 생성합니다."
+                  />
+                </div>
               </Card>
               {submitError && (
                 <p className="text-caption font-medium text-danger" role="alert">{submitError}</p>
               )}
               <div className="flex justify-between border-t border-border pt-4">
                 <Button onClick={() => setStep(1)}>이전</Button>
-                <Button variant="primary" loading={create.isPending} disabled={selectedClusters.length === 0} onClick={() => void submit()}>배포 정의 생성</Button>
+                <Button variant="primary" loading={create.isPending} disabled={selectedClusters.length === 0 || !creationConfirmed} onClick={() => void submit()}>배포 정의 생성</Button>
               </div>
             </>
           )}
@@ -373,6 +407,52 @@ export function ConnectRepoWizard({ open, onClose }: { open: boolean; onClose: (
         }}
       />
     </>
+  );
+}
+
+function GitOpsConnectionPreview({
+  repoRef,
+  branch,
+  candidate,
+  validation,
+  clusters,
+  namespace,
+}: {
+  repoRef: string;
+  branch: string;
+  candidate?: RepositoryManifestCandidate;
+  validation: ReturnType<typeof useRepositoryManifestValidation>['data'];
+  clusters: Cluster[];
+  namespace?: string;
+}) {
+  const resources = validation?.resources ?? [];
+  return (
+    <div className="mb-4 grid gap-3 border-y border-border py-4" aria-label="GitOps source and target mapping">
+      <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] md:items-stretch">
+        <section className="grid gap-1 rounded-panel border border-border bg-bg p-3">
+          <span className="text-caption font-semibold text-muted">Git source</span>
+          <strong className="truncate text-body text-primary" title={repoRef}>{repoRef}</strong>
+          <span className="truncate text-caption text-secondary">{branch} / {candidate?.path ?? 'manifest 미선택'}</span>
+          <span className="text-caption text-muted">{candidate?.source_type ?? 'source type 미확인'}</span>
+        </section>
+        <div className="hidden items-center justify-center text-caption font-bold text-muted md:flex" aria-hidden="true">-&gt;</div>
+        <section className="grid gap-2 rounded-panel border border-border bg-bg p-3">
+          <span className="text-caption font-semibold text-muted">Deployment targets</span>
+          <strong className="text-body text-primary">{clusters.length.toLocaleString()}개 연결 클러스터</strong>
+          <div className="flex flex-wrap gap-1.5">
+            {clusters.map((cluster) => (
+              <Badge key={cluster.cluster_id} tone="success">{cluster.name || cluster.cluster_id}{cluster.environment ? ` / ${cluster.environment}` : ''}</Badge>
+            ))}
+          </div>
+        </section>
+      </div>
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-caption text-secondary">
+        <span>서버 검증 {validation?.valid ? '통과' : '확인 필요'}</span>
+        <span>리소스 {resources.length.toLocaleString()}개</span>
+        <span>네임스페이스 {namespace || '서버 정책'}</span>
+        {resources.slice(0, 3).map((resource) => <span key={`${resource.kind}-${resource.name}`}>{resource.kind}/{resource.name}</span>)}
+      </div>
+    </div>
   );
 }
 

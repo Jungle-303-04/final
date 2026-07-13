@@ -3,10 +3,11 @@ import Editor, { type Monaco, type OnMount } from '@monaco-editor/react';
 import { Handle, Position, type Edge, type Node, type NodeProps } from '@xyflow/react';
 import type { editor as MonacoEditor } from 'monaco-editor/esm/vs/editor/editor.api';
 import { motion } from 'motion/react';
-import { Link, useSearchParams } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { useConsolePath } from '@/features/console/ui';
 import { useApplications } from '@/features/repo/api';
 import { ApprovalCard } from '@/features/repo/ApprovalCard';
+import { ConnectRepoWizard } from '@/features/resources/ConnectRepoWizard';
 import { type AlertChannel, useAlertChannels } from '@/features/notifications/api';
 import {
   type ReleaseRunFilter,
@@ -28,6 +29,7 @@ import {
   useReleaseRunSummary,
   useDeleteReleasePlan,
   useArchiveReleasePlan,
+  useRestoreReleasePlan,
   useDeleteReleaseRun,
   useReleaseRuns,
   useResumeReleaseRun,
@@ -37,7 +39,7 @@ import {
   useSaveReleasePlan,
   useStartReleasePlan,
 } from '@/features/release/api';
-import { Badge, Breadcrumb, Button, Card, EmptyState, Field } from '@/ui';
+import { Badge, Breadcrumb, Button, Card, Checkbox, EmptyState, Field, Modal, useToast } from '@/ui';
 import { FlowCanvas, useAutoLayout, type FlowEdgeData } from '@/shared/flow';
 import type {
   Application,
@@ -230,18 +232,43 @@ function ReleaseStepNode({ data }: NodeProps<Node<ReleaseNodeData>>) {
   const borderClass = data.tone === 'danger' ? 'release-node--error' : data.tone === 'warn' ? 'release-node--warn' : '';
   const isApplication = data.nodeType === 'application';
   const attentionText = data.failureReason || (data.warningCount > 0 ? `${data.warningCount}개 경고` : '');
+
+  if (!isApplication) {
+    return (
+      <div className={`release-node release-node--checkpoint release-node--${data.nodeType} release-node--${data.relation} ${data.selected ? 'release-node--selected' : ''} ${borderClass}`} title={releaseNodeTooltip(data)}>
+        <Handle type="target" position={Position.Left} className="release-node__handle release-node__handle--target" />
+        <span className={`release-node__checkpoint-icon release-node__checkpoint-icon--${statusClass(data.executionStatus)}`} aria-hidden="true" />
+        <span className="release-node__checkpoint-copy">
+          <small>{data.nodeType === 'approval' ? 'GATE' : data.nodeType === 'precheck' ? 'PRE-FLIGHT' : 'POST-DEPLOY'}</small>
+          <strong>{data.step.name || data.step.application_id}</strong>
+          <span>{data.nodeType === 'approval' ? valueLabel(data.gate) : statusLabel(data.executionStatus)}</span>
+        </span>
+        {data.nodeType === 'approval' && <span className="release-node__gate-state">{data.executionStatus === 'blocked' ? '대기' : '준비'}</span>}
+        <Handle type="source" position={Position.Right} className="release-node__handle release-node__handle--source" />
+      </div>
+    );
+  }
+
   return (
     <div className={`release-node release-node--${data.nodeType} release-node--${data.relation} ${data.selected ? 'release-node--selected' : ''} ${borderClass}`} title={releaseNodeTooltip(data)}>
       <Handle type="target" position={Position.Left} className="release-node__handle release-node__handle--target" />
+      <div className="release-node__stage-head">
+        <span className="release-node__wave">{data.wave != null ? `WAVE ${data.wave}` : 'WAVE 대기'}</span>
+        <span className={`release-node__status release-node__status--${statusClass(data.executionStatus)}`}>{statusLabel(data.executionStatus)}</span>
+      </div>
       <div className="release-node__main-row">
         <span className={`release-node__state-dot release-node__state-dot--${statusClass(data.executionStatus)}`} aria-hidden="true" />
         <span className="release-node__name">{data.step.name || data.app?.name || data.step.application_id}</span>
-        {isApplication ? <span className="release-node__duration">{valueLabel(data.duration)}</span> : <span className="release-node__kind">{releaseNodeTypeLabel(data.nodeType)}</span>}
+        <span className="release-node__duration">{valueLabel(data.duration)}</span>
         {data.diagnostics > 0 && <Badge tone={toUiTone(data.tone)}>{data.diagnostics}</Badge>}
       </div>
-      <div className="release-node__meta-line">
-        <span>{statusLabel(data.executionStatus)}</span>
-        <span>{data.wave != null ? `Wave ${data.wave}` : 'Wave 대기'}</span>
+      <div className="release-node__target-line">
+        <span>{data.cluster || '대상 클러스터'}</span>
+        <span>{data.namespace || data.environment || 'namespace'}</span>
+      </div>
+      <div className="release-node__stage-footer">
+        <span>{valueLabel(data.strategy)}</span>
+        <strong>{data.version || '버전 대기'}</strong>
       </div>
       {attentionText && <p className="release-node__attention">{attentionText}</p>}
       <Handle type="source" position={Position.Right} className="release-node__handle release-node__handle--source" />
@@ -253,48 +280,99 @@ const nodeTypes = { release_step: ReleaseStepNode };
 type ReleaseEdge = Edge<FlowEdgeData>;
 type GraphMode = 'plan' | 'demo';
 type ReleaseTab = 'overview' | 'edit' | 'run' | 'yaml';
+type ReleaseDetailTab = 'summary' | 'sequence' | 'policy' | 'diagnostics';
+type ReleaseRunFocus = 'start' | 'recovery' | 'history';
+type ReleaseEditModal = 'plan' | 'policy' | 'step' | null;
 type NewPlanStage = 'basics' | 'apps' | 'global' | 'steps' | 'review';
-const RELEASE_NODE_WIDTH = 270;
-const RELEASE_NODE_HEIGHT = 82;
+type ReleaseDispatchIntent = { action: 'wave' | 'run'; wave: number };
+type PlanDeletionMode = 'normal' | 'force';
+type RunActionIntent = {
+  title: string;
+  description: string;
+  confirmLabel: string;
+  runId: string;
+  status: string;
+  wave: number;
+  defaultReason?: string;
+  requiresAcknowledgement?: boolean;
+  requiresForce?: boolean;
+  destructive?: boolean;
+  onConfirm: (reason: string, force: boolean) => void;
+};
+const RELEASE_APP_NODE_WIDTH = 286;
+const RELEASE_APP_NODE_HEIGHT = 138;
+const RELEASE_CHECKPOINT_NODE_WIDTH = 176;
+const RELEASE_CHECKPOINT_NODE_HEIGHT = 72;
+const RELEASE_GATE_NODE_WIDTH = 164;
+const RELEASE_GATE_NODE_HEIGHT = 64;
 const LAST_VIEWED_RELEASE_PLAN_KEY = 'myjob.releaseFlow.lastViewedPlanId';
+const DEMO_RELEASE_PLAN_PICKER_ID = '__feature_demo__';
+const RELEASE_DETAIL_TABS: Array<{ value: ReleaseDetailTab; label: string; help: string }> = [
+  { value: 'summary', label: '요약', help: '현재 상태와 다음 작업' },
+  { value: 'sequence', label: '배포 순서', help: '단계와 의존성' },
+  { value: 'policy', label: '정책', help: '승인과 실행 기준' },
+  { value: 'diagnostics', label: '진단', help: '막힘과 경고' },
+];
+const RELEASE_WORKSPACE_TABS: ReleaseTab[] = ['overview', 'edit', 'run', 'yaml'];
+const READINESS_POLICY_CHECKS = new Set([
+  'live.dispatch_gate',
+  'release.window',
+  'change.freeze',
+  'plan.diagnostics',
+  'rollback.policy',
+]);
 
 export default function ReleaseFlowView() {
   const pathFor = useConsolePath();
+  const navigate = useNavigate();
+  const { push } = useToast();
   const [sp, setSp] = useSearchParams();
   const runIdParam = sp.get('run_id') ?? '';
+  const planIdParam = sp.get('plan_id') ?? '';
+  const nodeIdParam = sp.get('node') ?? '';
   const appsQ = useApplications();
   const plansQ = useReleasePlans();
   const alertChannelsQ = useAlertChannels();
   const [plan, setPlan] = useState<ReleasePlan | null>(null);
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [tab, setTab] = useState<ReleaseTab>(runIdParam ? 'run' : 'overview');
-  const [planPickerOpen, setPlanPickerOpen] = useState(!runIdParam);
+  const [detailTab, setDetailTab] = useState<ReleaseDetailTab>('summary');
+  const [editModal, setEditModal] = useState<ReleaseEditModal>(null);
+  const [planPickerOpen, setPlanPickerOpen] = useState(!runIdParam && !planIdParam);
   const [creatingPlan, setCreatingPlan] = useState(false);
   const [newPlan, setNewPlan] = useState<ReleasePlan | null>(null);
   const [newPlanStage, setNewPlanStage] = useState<NewPlanStage>('basics');
   const [newPlanSelectedIndex, setNewPlanSelectedIndex] = useState(0);
   const [runFilter, setRunFilter] = useState<ReleaseRunFilter>('all');
   const [selectedRunId, setSelectedRunId] = useState(runIdParam);
+  const [runFocus, setRunFocus] = useState<ReleaseRunFocus>(runIdParam ? 'history' : 'start');
   const [auditEventType, setAuditEventType] = useState('');
-  const [selectedNodeId, setSelectedNodeId] = useState('');
+  const [selectedNodeId, setSelectedNodeId] = useState(nodeIdParam);
+  const [demoSafePr, setDemoSafePr] = useState<ReleaseManifestSafePr>();
   const [graphMode] = useState<GraphMode>('plan');
   const [collapsedWaveIds] = useState<Set<number>>(() => new Set());
-  const [graphSearch] = useState('');
-  const [graphStatusFilter] = useState('all');
-  const [graphClusterFilter] = useState('all');
-  const [graphNamespaceFilter] = useState('all');
-  const [, setInspectorTab] = useState('overview');
+  const [graphSearch, setGraphSearch] = useState(sp.get('q') ?? '');
+  const [graphStatusFilter, setGraphStatusFilter] = useState(sp.get('status') ?? 'all');
+  const [graphClusterFilter, setGraphClusterFilter] = useState(sp.get('cluster') ?? 'all');
+  const [graphNamespaceFilter, setGraphNamespaceFilter] = useState(sp.get('namespace') ?? 'all');
+  const [inspectorTab, setInspectorTab] = useState('overview');
+  const [dispatchIntent, setDispatchIntent] = useState<ReleaseDispatchIntent | null>(null);
+  const [planDeletionMode, setPlanDeletionMode] = useState<PlanDeletionMode | null>(null);
+  const [archivePlanOpen, setArchivePlanOpen] = useState(false);
+  const [restorePlanOpen, setRestorePlanOpen] = useState(false);
   const { data: planDiagnosticsData, mutate: diagnosePlan } = useDiagnostics();
   const { data: releasePreviewData, isPending: releasePreviewPending, mutate: previewRelease } = useReleasePreview();
   const {
     data: generatedManifestData,
     isPending: generatedManifestPending,
+    error: generatedManifestError,
     mutate: generateManifest,
     reset: resetGeneratedManifest,
   } = useReleaseGeneratedManifest();
   const {
     data: generatedManifestSafePrData,
     isPending: generatedManifestSafePrPending,
+    error: generatedManifestSafePrError,
     mutate: submitGeneratedManifestSafePr,
     reset: resetGeneratedManifestSafePr,
   } = useSubmitReleaseGeneratedManifestSafePr();
@@ -315,6 +393,7 @@ export default function ReleaseFlowView() {
   const save = useSaveReleasePlan(plan?.plan_id);
   const createPlan = useSaveReleasePlan();
   const archivePlan = useArchiveReleasePlan(plan?.plan_id ?? '');
+  const restorePlan = useRestoreReleasePlan(plan?.plan_id ?? '');
   const deletePlan = useDeleteReleasePlan(plan?.plan_id ?? '');
   const deleteRun = useDeleteReleaseRun();
   const editorRef = useRef<MonacoEditor.IStandaloneCodeEditor | null>(null);
@@ -323,22 +402,69 @@ export default function ReleaseFlowView() {
 
   const selectRunId = useCallback((runId: string) => {
     setSelectedRunId(runId);
+    previousRunIdParamRef.current = runId;
     const next = new URLSearchParams(sp);
     if (runId) next.set('run_id', runId);
     else next.delete('run_id');
     setSp(next, { replace: true, preventScrollReset: true });
   }, [setSp, sp]);
 
+  const openRunWorkspace = useCallback((focus: ReleaseRunFocus = 'start') => {
+    setRunFocus(focus);
+    setTab('run');
+  }, []);
+
   const apps = useMemo(() => appsQ.data ?? [], [appsQ.data]);
-  const appById = useMemo(() => new Map(apps.map(app => [app.application_id, app])), [apps]);
+  const isDemoPlan = isFeatureDemoPlan(plan);
+  const effectiveApps = useMemo(() => {
+    if (!isDemoPlan) return apps;
+    const demoApps = demoReleaseApplications();
+    const demoIds = new Set(demoApps.map(app => app.application_id));
+    return [...apps.filter(app => !demoIds.has(app.application_id)), ...demoApps];
+  }, [apps, isDemoPlan]);
+  const appById = useMemo(() => new Map(effectiveApps.map(app => [app.application_id, app])), [effectiveApps]);
   const pickerPlans = useMemo(() => {
     const persisted = (plansQ.data ?? []).map(item => normalizePlan(item));
-    if (persisted.length > 0) return persisted;
-    return [plan ? normalizePlan(plan) : draftPlan(apps)];
-  }, [apps, plan, plansQ.data]);
+    return [featureDemoReleasePlan(), ...persisted];
+  }, [plansQ.data]);
+  const persistedExecutionPlan = useMemo(() => {
+    if (!plan?.plan_id) return null;
+    const persisted = (plansQ.data ?? []).find(item => item.plan_id === plan.plan_id);
+    return persisted ? normalizePlan(persisted) : null;
+  }, [plan?.plan_id, plansQ.data]);
+  const executionPlanHasUnsavedChanges = useMemo(() => {
+    if (!plan || isDemoPlan) return false;
+    if (!persistedExecutionPlan) return true;
+    return releasePlanExecutionFingerprint(plan) !== releasePlanExecutionFingerprint(persistedExecutionPlan);
+  }, [isDemoPlan, persistedExecutionPlan, plan]);
   const selected = selectedStep(plan, selectedIndex);
-  const diagnosticPlan = useMemo(() => withDiagnosticDefaults(plan, apps), [apps, plan]);
-  const settingsBaselines = useMemo(() => settingsBaselinesFor(apps), [apps]);
+  const diagnosticPlan = useMemo(() => withDiagnosticDefaults(plan, effectiveApps), [effectiveApps, plan]);
+  const settingsBaselines = useMemo(() => settingsBaselinesFor(effectiveApps), [effectiveApps]);
+  const diagnostics = useMemo(
+    () => isDemoPlan ? demoReleaseDiagnostics() : planDiagnosticsData?.diagnostics ?? [],
+    [isDemoPlan, planDiagnosticsData],
+  );
+  const preview = useMemo(
+    () => isDemoPlan && plan ? demoReleasePreview(plan) : releasePreviewData?.preview,
+    [isDemoPlan, plan, releasePreviewData],
+  );
+  const readiness = useMemo(
+    () => isDemoPlan && plan ? demoReleaseReadiness(plan) : releaseReadinessData,
+    [isDemoPlan, plan, releaseReadinessData],
+  );
+  const runSummary = useMemo(
+    () => isDemoPlan && plan ? demoReleaseRunSummary(plan) : summaryQ.data,
+    [isDemoPlan, plan, summaryQ.data],
+  );
+  const auditEvents = useMemo(
+    () => isDemoPlan && plan ? demoReleaseAuditEvents(plan) : auditQ.data ?? [],
+    [auditQ.data, isDemoPlan, plan],
+  );
+  const generatedManifest = useMemo(
+    () => isDemoPlan && plan ? demoReleaseGeneratedManifest(plan, selectedIndex) : generatedManifestData,
+    [generatedManifestData, isDemoPlan, plan, selectedIndex],
+  );
+  const safePr = isDemoPlan ? demoSafePr : generatedManifestSafePrData;
 
   useEffect(() => {
     if (previousRunIdParamRef.current === runIdParam) return;
@@ -346,6 +472,7 @@ export default function ReleaseFlowView() {
     setSelectedRunId(runIdParam);
     if (runIdParam) {
       setRunFilter('all');
+      setRunFocus('history');
       setTab('run');
       setPlanPickerOpen(false);
     }
@@ -353,13 +480,28 @@ export default function ReleaseFlowView() {
 
   useEffect(() => {
     if (plan || plansQ.isPending || appsQ.isPending) return;
+    if (planIdParam === DEMO_RELEASE_PLAN_PICKER_ID) {
+      setPlan(featureDemoReleasePlan());
+      setPlanPickerOpen(false);
+      return;
+    }
+    const requestedPlan = plansQ.data?.find(item => item.plan_id === planIdParam);
+    if (requestedPlan) {
+      setPlan(normalizePlan(requestedPlan));
+      setPlanPickerOpen(false);
+      return;
+    }
     const lastViewedPlanId = readLastViewedReleasePlanId();
+    if (lastViewedPlanId === DEMO_RELEASE_PLAN_PICKER_ID) {
+      setPlan(featureDemoReleasePlan());
+      return;
+    }
     const existing = plansQ.data?.find(item => item.plan_id === lastViewedPlanId) ?? plansQ.data?.[0];
-    setPlan(existing ? normalizePlan(existing) : draftPlan(apps));
-  }, [apps, appsQ.isPending, plan, plansQ.data, plansQ.isPending]);
+    setPlan(existing ? normalizePlan(existing) : featureDemoReleasePlan());
+  }, [apps, appsQ.isPending, plan, planIdParam, plansQ.data, plansQ.isPending]);
 
   useEffect(() => {
-    if (!diagnosticPlan) return;
+    if (!diagnosticPlan || isDemoPlan) return;
     const timer = window.setTimeout(() => {
       diagnosePlan({
         mode: 'release_plan',
@@ -370,49 +512,143 @@ export default function ReleaseFlowView() {
       checkReadiness(diagnosticPlan);
     }, 250);
     return () => window.clearTimeout(timer);
-  }, [checkReadiness, diagnosePlan, diagnosticPlan, previewRelease, settingsBaselines]);
+  }, [checkReadiness, diagnosePlan, diagnosticPlan, isDemoPlan, previewRelease, settingsBaselines]);
 
   useEffect(() => {
+    setDemoSafePr(undefined);
     resetGeneratedManifestSafePr();
     resetGeneratedManifest();
-    if (!diagnosticPlan || !selected) return;
+    if (!diagnosticPlan || !selected || isDemoPlan) return;
     const timer = window.setTimeout(() => {
       generateManifest({ plan: diagnosticPlan, stepIndex: selectedIndex });
     }, 250);
     return () => window.clearTimeout(timer);
-  }, [diagnosticPlan, generateManifest, resetGeneratedManifest, resetGeneratedManifestSafePr, selected, selectedIndex]);
+  }, [diagnosticPlan, generateManifest, isDemoPlan, resetGeneratedManifest, resetGeneratedManifestSafePr, selected, selectedIndex]);
 
   useEffect(() => {
     const editor = editorRef.current;
     const monaco = monacoRef.current;
     const model = editor?.getModel();
     if (!editor || !monaco || !model) return;
-    monaco.editor.setModelMarkers(model, 'myjob-yaml', markersFor(monaco, generatedManifestData?.diagnostics ?? []));
-  }, [generatedManifestData]);
+    monaco.editor.setModelMarkers(model, 'myjob-yaml', markersFor(monaco, generatedManifest?.diagnostics ?? []));
+  }, [generatedManifest]);
 
-  const preview = releasePreviewData?.preview;
   const planLiveSideEffects = releasePlanHasLiveSideEffects(plan);
+  const requestReleaseExecution = useCallback((intent: ReleaseDispatchIntent) => {
+    if (!plan) return;
+    if (isDemoPlan) {
+      openRunWorkspace('recovery');
+      return;
+    }
+    if (executionPlanHasUnsavedChanges) {
+      setTab('edit');
+      push({
+        tone: 'warning',
+        title: '저장되지 않은 플랜 변경',
+        description: '실행은 저장된 플랜 스냅샷만 사용합니다. 변경을 저장하고 준비 상태를 다시 확인하세요.',
+      });
+      return;
+    }
+    if (planLiveSideEffects) {
+      checkReadiness(normalizePlan(plan), {
+        onSuccess: () => setDispatchIntent(intent),
+        onError: (error) => push({
+          tone: 'danger',
+          title: '라이브 실행 전 점검 실패',
+          description: (error as Error).message || '준비 상태를 다시 확인한 뒤 실행하세요.',
+        }),
+      });
+      return;
+    }
+    if (intent.action === 'wave') {
+      dispatchRelease.mutate({ plan: normalizePlan(plan), wave: intent.wave });
+      return;
+    }
+    startRelease.mutate(normalizePlan(plan));
+  }, [checkReadiness, dispatchRelease, executionPlanHasUnsavedChanges, isDemoPlan, openRunWorkspace, plan, planLiveSideEffects, push, startRelease]);
+  const confirmReleaseExecution = useCallback(() => {
+    if (!plan || !dispatchIntent) return;
+    if (executionPlanHasUnsavedChanges) {
+      setDispatchIntent(null);
+      setTab('edit');
+      push({
+        tone: 'warning',
+        title: '저장되지 않은 플랜 변경',
+        description: '확인 중 플랜이 변경되었습니다. 저장한 뒤 준비 상태를 다시 확인하세요.',
+      });
+      return;
+    }
+    const intent = dispatchIntent;
+    setDispatchIntent(null);
+    if (intent.action === 'wave') {
+      dispatchRelease.mutate({ plan: normalizePlan(plan), wave: intent.wave });
+      return;
+    }
+    startRelease.mutate(normalizePlan(plan));
+  }, [dispatchIntent, dispatchRelease, executionPlanHasUnsavedChanges, plan, push, startRelease]);
+  const resolveReadinessAction = useCallback((checkId: string) => {
+    if (checkId === 'alerts.enabled_channels') {
+      navigate(pathFor('/settings/alerts'));
+      return;
+    }
+    if (checkId === 'plan.active_run_lock') {
+      openRunWorkspace('recovery');
+      return;
+    }
+    if (READINESS_POLICY_CHECKS.has(checkId)) {
+      setDetailTab('policy');
+      setEditModal('policy');
+      setTab('edit');
+      return;
+    }
+    setDetailTab('sequence');
+    setTab('edit');
+  }, [navigate, openRunWorkspace, pathFor]);
   const raw = useMemo(
     () => graphMode === 'demo'
       ? buildMockFlow(selectedNodeId, collapsedWaveIds)
-      : buildFlow(plan, apps, selectedNodeId, planDiagnosticsData?.diagnostics ?? [], preview),
-    [apps, collapsedWaveIds, graphMode, plan, planDiagnosticsData, preview, selectedNodeId],
+      : buildFlow(plan, effectiveApps, selectedNodeId, diagnostics, preview),
+    [collapsedWaveIds, diagnostics, effectiveApps, graphMode, plan, preview, selectedNodeId],
   );
   const filteredRaw = useMemo(
     () => filterFlow(raw, graphSearch, graphStatusFilter, graphClusterFilter, graphNamespaceFilter),
     [graphClusterFilter, graphNamespaceFilter, graphSearch, graphStatusFilter, raw],
   );
   const { nodes, edges } = useAutoLayout(filteredRaw.nodes, filteredRaw.edges, 'LR');
+  const selectedGraphNode = useMemo(() => {
+    const match = raw.nodes.find(node => node.id === selectedNodeId);
+    return match ? match.data as ReleaseNodeData : null;
+  }, [raw.nodes, selectedNodeId]);
   const selectGraphNode = useCallback((id: string) => {
     setSelectedNodeId(id);
     setInspectorTab('overview');
     const match = /^step-(\d+)$/.exec(id);
     if (match) setSelectedIndex(Number(match[1]));
-  }, []);
+    setSp(previous => {
+      const next = new URLSearchParams(previous);
+      next.set('node', id);
+      return next;
+    }, { replace: true, preventScrollReset: true });
+  }, [setSp]);
 
   const clearGraphSelection = useCallback(() => {
     setSelectedNodeId('');
-  }, []);
+    setSp(previous => {
+      const next = new URLSearchParams(previous);
+      next.delete('node');
+      return next;
+    }, { replace: true, preventScrollReset: true });
+  }, [setSp]);
+
+  const updateGraphFilter = useCallback((key: string, value: string, emptyValue: string, update: (next: string) => void) => {
+    update(value);
+    setSp(previous => {
+      const next = new URLSearchParams(previous);
+      if (value && value !== emptyValue) next.set(key, value);
+      else next.delete(key);
+      return next;
+    }, { replace: true, preventScrollReset: true });
+  }, [setSp]);
 
   useEffect(() => {
     if (tab !== 'overview') return;
@@ -430,18 +666,24 @@ export default function ReleaseFlowView() {
     setSelectedIndex(0);
     setSelectedNodeId('');
     setInspectorTab('overview');
-    setTab('edit');
+    setDetailTab('sequence');
+    setEditModal(null);
+    setTab('overview');
     setPlanPickerOpen(false);
-  }, []);
+    setSp(previous => {
+      const next = new URLSearchParams(previous);
+      next.set('plan_id', releasePlanPickerId(normalized));
+      next.delete('node');
+      next.delete('run_id');
+      return next;
+    }, { replace: true, preventScrollReset: true });
+  }, [setSp]);
 
   const setPlanValue = (patch: Partial<ReleasePlan>) => setPlan(current => current ? { ...current, ...patch } : current);
   const setPolicy = (patch: Record<string, unknown>) =>
-    setPlan(current => current ? { ...current, settings: { ...DEFAULT_POLICY, ...current.settings, ...patch } } : current);
+    setPlan(current => current ? applyPolicyPatch(current, patch) : current);
   const setStep = (index: number, patch: Partial<ReleasePlanStep>) =>
-    setPlan(current => current ? {
-      ...current,
-      steps: normalizeSteps(current.steps.map((step, i) => i === index ? { ...step, ...patch } : step)),
-    } : current);
+    setPlan(current => current ? applyStepPatch(current, index, patch) : current);
   const openNewPlanBuilder = () => {
     setNewPlan(current => current ?? emptyDraftPlan(apps));
     setNewPlanStage('basics');
@@ -451,14 +693,16 @@ export default function ReleaseFlowView() {
   };
   const setNewPlanValue = (patch: Partial<ReleasePlan>) => setNewPlan(current => current ? { ...current, ...patch } : current);
   const setNewPlanPolicy = (patch: Record<string, unknown>) =>
-    setNewPlan(current => current ? { ...current, settings: { ...DEFAULT_POLICY, ...current.settings, ...patch } } : current);
+    setNewPlan(current => current ? applyPolicyPatch(current, patch) : current);
   const setNewPlanStep = (index: number, patch: Partial<ReleasePlanStep>) =>
-    setNewPlan(current => current ? {
-      ...current,
-      steps: normalizeSteps(current.steps.map((step, i) => i === index ? { ...step, ...patch } : step)),
-    } : current);
+    setNewPlan(current => current ? applyStepPatch(current, index, patch) : current);
   const saveCurrentPlan = () => {
     if (!plan) return;
+    if (isDemoPlan) {
+      setPlan(normalizePlan(plan));
+      window.alert('데모 플랜 변경은 현재 화면에만 반영됩니다. 실제 플랜과 레포에는 저장되지 않습니다.');
+      return;
+    }
     save.mutate(normalizePlan(plan), {
       onSuccess: d => {
         const saved = normalizePlan(d.plan);
@@ -478,7 +722,9 @@ export default function ReleaseFlowView() {
         setCreatingPlan(false);
         setSelectedIndex(0);
         setSelectedNodeId('sys-precheck');
-        setTab('edit');
+        setDetailTab('sequence');
+        setEditModal(null);
+        setTab('overview');
       },
     });
   };
@@ -531,72 +777,64 @@ export default function ReleaseFlowView() {
 
   return (
     <motion.div variants={fadeInUp} initial="initial" animate="animate">
-      {tab !== 'overview' && (
-        <div className="release-flow__workspace-header">
-          <div className="release-flow__workspace-title">
-            <Button size="sm" variant="ghost" title="릴리즈 플랜 선택 화면으로 돌아갑니다" onClick={() => { setPlanPickerOpen(true); setTab('overview'); }}>플랜 선택</Button>
-            <div>
-              <span>Release Flow</span>
-              <h1>{releaseWorkspaceTitle(tab)}</h1>
-              <p className="release-flow__hint">{releaseWorkspaceDescription(tab)}</p>
-            </div>
+      {tab !== 'overview' && !planPickerOpen && (
+        <div className="release-flow__workspace-bar">
+          <div className="release-flow__workspace-bar-title">
+            <span>{plan?.name || '릴리즈 플랜'}</span>
+            <strong>{releaseWorkspaceTitle(tab)}</strong>
+            {!isDemoPlan && executionPlanHasUnsavedChanges && <Badge tone="warning">저장 필요</Badge>}
           </div>
-          <div className="release-flow__toolbar release-flow__toolbar--header">
-            <label className="release-flow__control">
-              <span>플랜</span>
-              <select
-                className="input"
-                value={plan?.plan_id ?? '__draft__'}
-                onChange={e => {
-                  const next = plansQ.data?.find(item => item.plan_id === e.target.value);
-                  const selectedPlan = next ? normalizePlan(next) : draftPlan(apps);
-                  setPlan(selectedPlan);
-                  rememberLastViewedReleasePlan(selectedPlan);
-                  setSelectedIndex(0);
-                  setSelectedNodeId('sys-precheck');
-                  setTab('edit');
-                }}
-              >
-                <option value="__draft__">임시 플랜</option>
-                {(plansQ.data ?? []).map(item => <option key={item.plan_id} value={item.plan_id}>{item.name}</option>)}
-              </select>
-            </label>
-            <Button title="현재 선택한 플랜과 별개로 새 릴리즈 플랜을 만듭니다" onClick={openNewPlanBuilder}><IconPlus size={14} />새 플랜</Button>
-            {tab === 'edit' && (
-              <Button title="선택한 릴리즈 플랜을 저장합니다" variant="primary" loading={save.isPending} disabled={!plan} onClick={saveCurrentPlan}><IconSave size={14} />플랜 저장</Button>
-            )}
+          <ReleaseWorkspaceNav
+            active={tab}
+            onChange={(item) => {
+              if (item === 'overview') {
+                setPlanPickerOpen(false);
+                setTab('overview');
+              } else if (item === 'edit') {
+                setDetailTab('sequence');
+                setTab('edit');
+              } else if (item === 'run') {
+                openRunWorkspace('start');
+              } else {
+                setTab('yaml');
+              }
+            }}
+          />
+          <div className="release-flow__workspace-bar-actions">
+            {tab === 'edit' && <Button size="sm" variant="primary" loading={!isDemoPlan && save.isPending} disabled={!plan} onClick={saveCurrentPlan}><IconSave size={14} />{isDemoPlan ? '데모 반영' : '저장'}</Button>}
             <details className="release-flow__more-menu">
-              <summary>관리</summary>
+              <summary>더보기</summary>
               <div>
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  title="기록은 남기고 플랜만 보관 처리합니다"
-                  disabled={!plan?.plan_id || archivePlan.isPending}
-                  onClick={() => plan?.plan_id && archivePlan.mutate('Archived manually')}
-                >
-                  플랜 보관
-                </Button>
+                <Button size="sm" variant="ghost" onClick={() => { setPlanPickerOpen(true); setTab('overview'); }}>플랜 선택</Button>
+                {tab === 'edit' && <Button size="sm" variant="ghost" onClick={() => setEditModal('plan')}>플랜 정보 수정</Button>}
+                <Button size="sm" variant="ghost" onClick={openNewPlanBuilder}><IconPlus size={13} />새 플랜</Button>
+                {plan?.status === 'archived' ? (
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    title="보관된 플랜을 이전 상태로 복구합니다"
+                    disabled={!plan?.plan_id || restorePlan.isPending}
+                    onClick={() => setRestorePlanOpen(true)}
+                  >
+                    플랜 복구
+                  </Button>
+                ) : (
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    title={(runSummary?.active_runs ?? 0) > 0 ? '진행 중인 릴리즈를 먼저 종료하거나 취소하세요' : '기록은 남기고 플랜만 보관 처리합니다'}
+                    disabled={!plan?.plan_id || archivePlan.isPending || (runSummary?.active_runs ?? 0) > 0}
+                    onClick={() => setArchivePlanOpen(true)}
+                  >
+                    플랜 보관
+                  </Button>
+                )}
                 <Button
                   size="sm"
                   variant="danger"
                   title="이 플랜을 삭제합니다"
                   disabled={!plan?.plan_id || deletePlan.isPending}
-                  onClick={() => {
-                    if (!plan?.plan_id) return;
-                    if (!window.confirm(`"${plan.name}" 플랜을 삭제할까요?`)) return;
-                    deletePlan.mutate(false, {
-                      onSuccess: () => {
-                        const nextPlan = draftPlan(apps);
-                        setPlan(nextPlan);
-                        rememberLastViewedReleasePlan(nextPlan);
-                        setSelectedIndex(0);
-                        setSelectedNodeId('sys-precheck');
-                        setPlanPickerOpen(true);
-                        setTab('overview');
-                      },
-                    });
-                  }}
+                  onClick={() => setPlanDeletionMode('normal')}
                 >
                   플랜 삭제
                 </Button>
@@ -605,35 +843,13 @@ export default function ReleaseFlowView() {
                   variant="danger"
                   title="이 플랜과 연결된 릴리즈 실행 기록을 모두 삭제합니다"
                   disabled={!plan?.plan_id || deletePlan.isPending}
-                  onClick={() => {
-                    if (!plan?.plan_id) return;
-                    if (!window.confirm(`"${plan.name}" 플랜을 강제 삭제할까요? 연결된 릴리즈 실행 기록도 함께 삭제됩니다.`)) return;
-                    deletePlan.mutate(true, {
-                      onSuccess: () => {
-                        const nextPlan = draftPlan(apps);
-                        setPlan(nextPlan);
-                        rememberLastViewedReleasePlan(nextPlan);
-                        setSelectedIndex(0);
-                        setSelectedNodeId('sys-precheck');
-                        setPlanPickerOpen(true);
-                        setTab('overview');
-                      },
-                    });
-                  }}
+                  onClick={() => setPlanDeletionMode('force')}
                 >
                   강제 삭제
                 </Button>
               </div>
             </details>
           </div>
-          <nav className="release-flow__workspace-nav" aria-label="Release Flow 작업 이동">
-            {(['edit', 'run', 'yaml'] as const).map(item => (
-              <button key={item} type="button" aria-current={tab === item ? 'page' : undefined} onClick={() => setTab(item)}>
-                <strong>{releaseWorkspaceTitle(item)}</strong>
-                <span>{releaseWorkspaceShortDescription(item)}</span>
-              </button>
-            ))}
-          </nav>
         </div>
       )}
 
@@ -644,246 +860,646 @@ export default function ReleaseFlowView() {
       ) : appsQ.error ? (
         <EmptyState title="릴리즈 플랜 정보를 불러오지 못했습니다" description={(appsQ.error as Error).message ?? '잠시 후 다시 시도해주세요.'} />
       ) : plan ? (
-        tab === 'overview' || planPickerOpen ? (
+        planPickerOpen ? (
           <ReleasePlanPickerScreen
             plans={pickerPlans}
-            currentPlanId={plan.plan_id ?? '__draft__'}
+            currentPlanId={releasePlanPickerId(plan)}
             onSelect={selectPlanFromPicker}
             onCreate={openNewPlanBuilder}
           />
         ) : (
           <>
-          {tab === 'edit' && (
-            <div className="release-flow__builder-shell">
-              <div className="release-flow__builder-hero">
-                <div>
-                  <span className="release-flow__builder-kicker">현재 플랜 수정</span>
-                  <h2>{plan.name}</h2>
-                  <div className="release-flow__builder-meta">
-                    <span>{statusLabel(plan.status)}</span>
-                    <span>{plan.steps.length}개 단계</span>
-                    <span>{selected ? `선택: ${selected.name || selected.application_id}` : '단계 선택 대기'}</span>
-                  </div>
-                </div>
-                <div className="release-flow__builder-actions">
-                  <Button title="릴리즈 플랜 선택 화면으로 이동합니다" onClick={() => { setPlanPickerOpen(true); setTab('overview'); }}>플랜 선택</Button>
-                  <Button title="선택한 릴리즈 플랜을 저장합니다" variant="primary" loading={save.isPending} disabled={!plan} onClick={saveCurrentPlan}><IconSave size={14} />플랜 저장</Button>
-                </div>
-              </div>
-
-              <div className="release-flow__builder-steps">
-                <span className="release-flow__builder-step release-flow__builder-step--active">1 현재 플랜</span>
-                <span className="release-flow__builder-step release-flow__builder-step--active">2 전체 정책</span>
-                <span className="release-flow__builder-step release-flow__builder-step--active">3 앱별 설정</span>
-                <span className="release-flow__builder-step">4 저장 후 실행</span>
-              </div>
-
-              <div className="release-flow release-flow--builder">
-                <Card title="플랜 기본 정보">
-                  <Field label="이름"><input className="input" value={plan.name} onChange={e => setPlanValue({ name: e.target.value })} /></Field>
-                  <Field label="설명"><textarea className="input" rows={3} value={plan.description} onChange={e => setPlanValue({ description: e.target.value })} /></Field>
-                  <Field label="상태">
-                    <select className="input" value={plan.status} onChange={e => setPlanValue({ status: e.target.value as ReleasePlan['status'] })}>
-                      <option value="draft">초안</option>
-                      <option value="active">활성</option>
-                      <option value="paused">일시정지</option>
-                      <option value="archived">보관됨</option>
-                    </select>
-                  </Field>
-                  <div className="release-flow__toolbar">
-                    <Button size="sm" title="이 플랜에 애플리케이션 단계를 추가합니다" onClick={() => addStep(plan, apps, setPlan)} disabled={apps.length === 0}><IconPlus size={13} />단계 추가</Button>
-                  </div>
-                  <div className="release-flow__step-list">
-                    {plan.steps.map((step, i) => (
-                      <div key={`${step.application_id}-${i}`} className={`release-flow__step-row ${i === selectedIndex ? 'release-flow__step-row--selected' : ''}`}>
-                        <button
-                          className="btn btn--ghost btn--sm"
-                          title={`${step.name || appById.get(step.application_id)?.name || step.application_id} 수정`}
-                          aria-pressed={i === selectedIndex}
-                          onClick={() => { setSelectedIndex(i); setSelectedNodeId(`step-${i}`); }}
-                        >
-                          {i + 1}. {step.name || appById.get(step.application_id)?.name || step.application_id}
-                        </button>
-                        <div className="release-flow__step-actions">
-                          <Button size="sm" variant="ghost" title="단계를 앞으로 이동" disabled={i === 0} onClick={() => moveStep(plan, i, -1, setPlan, setSelectedIndex)} aria-label="단계를 앞으로 이동"><IconArrowUp size={13} /></Button>
-                          <Button size="sm" variant="ghost" title="단계를 뒤로 이동" disabled={i === plan.steps.length - 1} onClick={() => moveStep(plan, i, 1, setPlan, setSelectedIndex)} aria-label="단계를 뒤로 이동"><IconArrowDown size={13} /></Button>
-                          <Button size="sm" variant="ghost" title="단계 삭제" onClick={() => removeStep(plan, i, setPlan, setSelectedIndex)} aria-label="단계 삭제"><IconTrash size={13} /></Button>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </Card>
-
-                <div className="release-flow__stack">
-                  <PlanGlobalSettingsCard plan={plan} setPolicy={setPolicy} />
-                  <OverviewDisclosure title="고급 전역 설정" hint="릴리즈 시간, 온콜, 예외 사유">
-                    <PolicyEditor plan={plan} setPolicy={setPolicy} />
-                  </OverviewDisclosure>
-                  <Card title="릴리즈 순서" className="p-0">
-                    <div className="release-flow__canvas">
-                      <FlowCanvas nodes={nodes} edges={edges} nodeTypes={nodeTypes} interactive scrollBehavior="zoom" onNodeClick={selectGraphNode} onPaneClick={clearGraphSelection} />
-                    </div>
-                  </Card>
-                </div>
-
-                <div className="release-flow__stack">
-                  <StepEditor
-                    title="앱별 설정"
-                    plan={plan}
-                    selected={selected}
-                    selectedIndex={selectedIndex}
-                    apps={apps}
-                    appById={appById}
-                    setStep={setStep}
-                    setPlan={setPlan}
-                  />
-                  <DiagnosticsPanel diagnostics={planDiagnosticsData?.diagnostics ?? []} />
-                </div>
-              </div>
-            </div>
+          {tab === 'overview' && (
+            <ReleaseCanvasWorkspace
+              plan={plan}
+              nodes={nodes}
+              edges={edges}
+              selectedNode={selectedGraphNode}
+              diagnostics={diagnostics}
+              preview={preview}
+              summary={runSummary}
+              isDemo={isDemoPlan}
+              inspectorTab={inspectorTab}
+              graphSearch={graphSearch}
+              graphStatusFilter={graphStatusFilter}
+              graphClusterFilter={graphClusterFilter}
+              graphNamespaceFilter={graphNamespaceFilter}
+              clusters={graphFilterOptions(raw.nodes, 'cluster')}
+              namespaces={graphFilterOptions(raw.nodes, 'namespace')}
+              clusterHref={selectedGraphNode?.cluster ? pathFor(`/clusters/${encodeURIComponent(selectedGraphNode.cluster)}`) : ''}
+              applicationHref={selectedGraphNode?.nodeType === 'application' ? pathFor(`/repos/${encodeURIComponent(selectedGraphNode.step.application_id)}`) : ''}
+              onInspectorTab={setInspectorTab}
+              onGraphNodeClick={selectGraphNode}
+              onGraphPaneClick={clearGraphSelection}
+              onSearch={(value) => updateGraphFilter('q', value, '', setGraphSearch)}
+              onStatus={(value) => updateGraphFilter('status', value, 'all', setGraphStatusFilter)}
+              onCluster={(value) => updateGraphFilter('cluster', value, 'all', setGraphClusterFilter)}
+              onNamespace={(value) => updateGraphFilter('namespace', value, 'all', setGraphNamespaceFilter)}
+              onOpenPicker={() => { setPlanPickerOpen(true); setTab('overview'); }}
+              onOpenEdit={(nextTab = 'sequence') => { setDetailTab(nextTab); setTab('edit'); }}
+              onOpenRun={() => openRunWorkspace('start')}
+              onOpenYaml={() => setTab('yaml')}
+              onCreate={openNewPlanBuilder}
+            />
           )}
-
+          {tab === 'edit' && (
+            <ReleasePlanDetailWorkspace
+              plan={plan}
+              selected={selected}
+              selectedNode={selectedGraphNode}
+              selectedIndex={selectedIndex}
+              apps={effectiveApps}
+              appById={appById}
+              nodes={nodes}
+              edges={edges}
+              diagnostics={diagnostics}
+              preview={preview}
+              readiness={readiness}
+              summary={runSummary}
+              detailTab={detailTab}
+              editModal={editModal}
+              saving={!isDemoPlan && save.isPending}
+              onDetailTab={setDetailTab}
+              onEditModal={setEditModal}
+              onPlanValue={setPlanValue}
+              onPolicy={setPolicy}
+              onStep={setStep}
+              onPlan={setPlan}
+              onSave={saveCurrentPlan}
+              onSelectStep={(index) => { setSelectedIndex(index); setSelectedNodeId(`step-${index}`); }}
+              onGraphNodeClick={selectGraphNode}
+              onGraphPaneClick={clearGraphSelection}
+              onAddStep={() => addStep(plan, effectiveApps, setPlan)}
+              onMoveStep={(index, delta) => moveStep(plan, index, delta, setPlan, setSelectedIndex)}
+              onRemoveStep={(index) => removeStep(plan, index, setPlan, setSelectedIndex)}
+              onOpenRun={openRunWorkspace}
+            />
+          )}
           {tab === 'run' && (
-            <div className="release-flow__policy">
-              <ReleasePlanSettingsSummary plan={plan} onEdit={() => setTab('edit')} />
-              <PreviewPanel
-                preview={preview}
-                loading={releasePreviewPending}
-                dispatching={dispatchRelease.isPending || startRelease.isPending}
-                liveSideEffects={planLiveSideEffects}
-                onDispatch={wave => dispatchRelease.mutate({ plan: normalizePlan(plan), wave })}
-                onStart={() => startRelease.mutate(normalizePlan(plan))}
-              />
-              <ReadinessPanel readiness={releaseReadinessData} loading={releaseReadinessPending} />
-              <AlertChannelsPanel
-                channels={alertChannelsQ.data ?? []}
-                loading={alertChannelsQ.isPending}
-                error={alertChannelsQ.isError ? alertChannelsQ.error : null}
-                settingsHref={pathFor('/settings/alerts')}
-              />
-              <RunPanel
-                plan={plan}
-                runs={runsQ.data ?? []}
-                summary={summaryQ.data}
-                runFilter={runFilter}
-                onRunFilterChange={setRunFilter}
-                selectedRunId={selectedRunId}
-                onSelectedRunIdChange={selectRunId}
-                loading={runsQ.isPending}
-                busy={advanceRun.isPending || pauseRun.isPending || resumeRun.isPending || retryRun.isPending || rollbackRun.isPending || cancelRun.isPending || notifyRun.isPending || deleteRun.isPending}
-                onAdvance={runId => advanceRun.mutate({ runId })}
-                onPause={(runId, reason) => pauseRun.mutate({ runId, reason })}
-                onResume={(runId, reason) => resumeRun.mutate({ runId, reason })}
-                onRetry={(runId, reason) => retryRun.mutate({ runId, reason })}
-                onRollback={(runId, reason) => rollbackRun.mutate({ runId, reason })}
-                onCancel={(runId, reason) => cancelRun.mutate({ runId, reason })}
-                onNotify={(runId, reason) => notifyRun.mutate({ runId, reason })}
-                onDelete={(runId, force) => deleteRun.mutate({ runId, force })}
-              />
-              <AuditPanel
-                events={auditQ.data ?? []}
-                loading={auditQ.isPending}
-                exporting={exportAudit.isPending}
-                scopedRunId={selectedRunId}
-                eventType={auditEventType}
-                onEventTypeChange={setAuditEventType}
-                onExport={() => exportAudit.mutate()}
-              />
-              <DiagnosticsPanel diagnostics={planDiagnosticsData?.diagnostics ?? []} />
+            <div className="release-flow__run-workspace">
+              <nav className="release-flow__run-shortcuts" aria-label="실행 작업 바로가기">
+                {([
+                  ['start', '실행 시작', '미리보기와 준비 상태'],
+                  ['recovery', '재시도/롤백', '실패 복구와 실행 제어'],
+                  ['history', '실행 기록', '최근 실행과 감사 로그'],
+                ] as const).map(([value, label, help]) => (
+                  <button key={value} type="button" aria-current={runFocus === value ? 'page' : undefined} onClick={() => setRunFocus(value)}>
+                    <strong>{label}</strong>
+                    <span>{help}</span>
+                  </button>
+                ))}
+              </nav>
+
+              {runFocus === 'start' && (
+                <section id="release-flow-run-start" className="release-flow__run-section release-flow__run-section--start" aria-label="실행 시작">
+                  <ReleasePlanSettingsSummary
+                    plan={plan}
+                    onEdit={() => { setTab('edit'); setDetailTab('policy'); setEditModal('policy'); }}
+                  />
+                  <PreviewPanel
+                    preview={preview}
+                    loading={!isDemoPlan && releasePreviewPending}
+                    dispatching={!isDemoPlan && (dispatchRelease.isPending || startRelease.isPending || releaseReadinessPending)}
+                    liveSideEffects={planLiveSideEffects}
+                    onDispatch={wave => requestReleaseExecution({ action: 'wave', wave })}
+                    onStart={() => requestReleaseExecution({ action: 'run', wave: preview?.waves[0]?.wave ?? 1 })}
+                  />
+                  <ReadinessPanel
+                    readiness={readiness}
+                    loading={!isDemoPlan && releaseReadinessPending}
+                    onRefresh={() => !isDemoPlan && diagnosticPlan && checkReadiness(diagnosticPlan)}
+                    onResolve={resolveReadinessAction}
+                  />
+                  <AlertChannelsPanel
+                    channels={alertChannelsQ.data ?? []}
+                    loading={alertChannelsQ.isPending}
+                    error={alertChannelsQ.isError ? alertChannelsQ.error : null}
+                    readiness={readiness}
+                    settingsHref={pathFor('/settings/alerts')}
+                  />
+                </section>
+              )}
+
+              {runFocus === 'recovery' && (
+                <section id="release-flow-run-recovery" className="release-flow__run-section" aria-label="재시도와 롤백">
+                  <RunPanel
+                    plan={plan}
+                    runs={isDemoPlan ? [] : runsQ.data ?? []}
+                    summary={runSummary}
+                    runFilter={runFilter}
+                    onRunFilterChange={setRunFilter}
+                    selectedRunId={selectedRunId}
+                    onSelectedRunIdChange={selectRunId}
+                    loading={!isDemoPlan && runsQ.isPending}
+                    busy={!isDemoPlan && (advanceRun.isPending || pauseRun.isPending || resumeRun.isPending || retryRun.isPending || rollbackRun.isPending || cancelRun.isPending || notifyRun.isPending || deleteRun.isPending)}
+                    onAdvance={runId => advanceRun.mutate({ runId })}
+                    onPause={(runId, reason) => pauseRun.mutate({ runId, reason })}
+                    onResume={(runId, reason) => resumeRun.mutate({ runId, reason })}
+                    onRetry={(runId, reason) => retryRun.mutate({ runId, reason })}
+                    onRollback={(runId, reason) => rollbackRun.mutate({ runId, reason })}
+                    onCancel={(runId, reason) => cancelRun.mutate({ runId, reason })}
+                    onNotify={(runId, reason) => notifyRun.mutate({ runId, reason })}
+                    onDelete={(runId, force) => deleteRun.mutate({ runId, force })}
+                  />
+                </section>
+              )}
+
+              {runFocus === 'history' && (
+                <section id="release-flow-run-history" className="release-flow__run-section" aria-label="실행 기록과 감사 로그">
+                  <AuditPanel
+                    events={auditEvents}
+                    loading={!isDemoPlan && auditQ.isPending}
+                    exporting={!isDemoPlan && exportAudit.isPending}
+                    scopedRunId={selectedRunId}
+                    eventType={auditEventType}
+                    onEventTypeChange={setAuditEventType}
+                    onExport={() => isDemoPlan
+                      ? downloadTextFile('demo-release-audit.csv', releaseAuditCsv(auditEvents))
+                      : exportAudit.mutate()}
+                  />
+                  <DiagnosticsPanel diagnostics={diagnostics} />
+                </section>
+              )}
             </div>
           )}
 
           {tab === 'yaml' && (
-            <div className="release-flow__yaml">
-              <GeneratedManifestSummary
-                generated={generatedManifestData}
-                safePr={generatedManifestSafePrData}
-                loading={generatedManifestPending}
-                creatingSafePr={generatedManifestSafePrPending}
-                onCreateSafePr={() => diagnosticPlan && submitGeneratedManifestSafePr({ plan: diagnosticPlan, stepIndex: selectedIndex })}
-              />
-              <Card title="YAML 편집기" className="p-0">
-                <div className="release-flow__editor">
-                  <Editor
-                    height="460px"
-                    language="yaml"
-                    theme="vs-dark"
-                    value={generatedManifestData?.manifest ?? '# 릴리즈 단계를 선택하면 생성된 매니페스트가 여기에 표시됩니다.\n'}
-                    onMount={onMount}
-                    options={{ readOnly: true, minimap: { enabled: false }, fontSize: 13, lineNumbersMinChars: 3, scrollBeyondLastLine: false, wordWrap: 'on', tabSize: 2 }}
-                  />
-                </div>
-              </Card>
-              <DiagnosticsPanel diagnostics={generatedManifestData?.diagnostics ?? []} />
-            </div>
+            <ReleaseYamlPrWorkspace
+              plan={plan}
+              selected={selected}
+              selectedIndex={selectedIndex}
+              appById={appById}
+              generated={generatedManifest}
+              safePr={safePr}
+              isDemo={isDemoPlan}
+              generatedError={isDemoPlan ? null : generatedManifestError}
+              safePrError={isDemoPlan ? null : generatedManifestSafePrError}
+              loading={!isDemoPlan && generatedManifestPending}
+              creatingSafePr={!isDemoPlan && generatedManifestSafePrPending}
+              onMount={onMount}
+              onSelectStep={(index) => { setSelectedIndex(index); setSelectedNodeId(`step-${index}`); }}
+              onEditSteps={() => { setDetailTab('sequence'); setTab('edit'); }}
+              onOpenRun={() => openRunWorkspace('history')}
+              onRetryGenerate={() => !isDemoPlan && diagnosticPlan && selected && generateManifest({ plan: diagnosticPlan, stepIndex: selectedIndex })}
+              onCreateSafePr={(title, body) => {
+                if (!diagnosticPlan || !selected) return;
+                if (isDemoPlan && generatedManifest) {
+                  setDemoSafePr(demoReleaseSafePr(diagnosticPlan, selectedIndex, generatedManifest, title, body));
+                  return;
+                }
+                submitGeneratedManifestSafePr({ plan: diagnosticPlan, stepIndex: selectedIndex, title, body });
+              }}
+            />
           )}
           </>
         )
       ) : <EmptyState title="릴리즈 플랜 준비 중" />}
+      <ReleaseDispatchConfirmation
+        open={dispatchIntent !== null}
+        intent={dispatchIntent}
+        plan={plan}
+        preview={preview}
+        readiness={readiness}
+        pending={dispatchRelease.isPending || startRelease.isPending}
+        onConfirm={confirmReleaseExecution}
+        onOpenChange={(open) => {
+          if (!open && !dispatchRelease.isPending && !startRelease.isPending) setDispatchIntent(null);
+        }}
+      />
+      <PlanDeletionConfirmation
+        plan={plan}
+        mode={planDeletionMode}
+        pending={deletePlan.isPending}
+        onConfirm={(mode) => {
+          if (!plan?.plan_id) return;
+          deletePlan.mutate(mode === 'force', {
+            onSuccess: () => {
+              const nextPlan = draftPlan(apps);
+              setPlan(nextPlan);
+              rememberLastViewedReleasePlan(nextPlan);
+              setSelectedIndex(0);
+              setSelectedNodeId('sys-precheck');
+              setPlanPickerOpen(true);
+              setTab('overview');
+              setPlanDeletionMode(null);
+            },
+          });
+        }}
+        onOpenChange={(open) => {
+          if (!open && !deletePlan.isPending) setPlanDeletionMode(null);
+        }}
+      />
+      <PlanArchiveConfirmation
+        plan={plan}
+        open={archivePlanOpen}
+        pending={archivePlan.isPending}
+        onConfirm={(reason) => {
+          archivePlan.mutate(reason, {
+            onSuccess: data => {
+              const archived = normalizePlan(data.plan);
+              setPlan(archived);
+              rememberLastViewedReleasePlan(archived);
+              setArchivePlanOpen(false);
+              setPlanPickerOpen(true);
+              setTab('overview');
+            },
+          });
+        }}
+        onOpenChange={(open) => {
+          if (!open && !archivePlan.isPending) setArchivePlanOpen(false);
+        }}
+      />
+      <PlanRestoreConfirmation
+        plan={plan}
+        open={restorePlanOpen}
+        pending={restorePlan.isPending}
+        onConfirm={(reason) => {
+          restorePlan.mutate(reason, {
+            onSuccess: data => {
+              const restored = normalizePlan(data.plan);
+              setPlan(restored);
+              rememberLastViewedReleasePlan(restored);
+              setRestorePlanOpen(false);
+              setPlanPickerOpen(false);
+              setTab('overview');
+            },
+          });
+        }}
+        onOpenChange={(open) => {
+          if (!open && !restorePlan.isPending) setRestorePlanOpen(false);
+        }}
+      />
     </motion.div>
   );
 }
 
-function GeneratedManifestSummary({
+function ReleaseCanvasWorkspace({
+  plan,
+  nodes,
+  edges,
+  selectedNode,
+  diagnostics,
+  preview,
+  summary,
+  isDemo,
+  inspectorTab,
+  graphSearch,
+  graphStatusFilter,
+  graphClusterFilter,
+  graphNamespaceFilter,
+  clusters,
+  namespaces,
+  clusterHref,
+  applicationHref,
+  onInspectorTab,
+  onGraphNodeClick,
+  onGraphPaneClick,
+  onSearch,
+  onStatus,
+  onCluster,
+  onNamespace,
+  onOpenPicker,
+  onOpenEdit,
+  onOpenRun,
+  onOpenYaml,
+  onCreate,
+}: {
+  plan: ReleasePlan;
+  nodes: Node[];
+  edges: ReleaseEdge[];
+  selectedNode: ReleaseNodeData | null;
+  diagnostics: Diagnostic[];
+  preview?: ReleasePlanPreview;
+  summary?: ReleaseRunSummary;
+  isDemo: boolean;
+  inspectorTab: string;
+  graphSearch: string;
+  graphStatusFilter: string;
+  graphClusterFilter: string;
+  graphNamespaceFilter: string;
+  clusters: string[];
+  namespaces: string[];
+  clusterHref: string;
+  applicationHref: string;
+  onInspectorTab: (value: string) => void;
+  onGraphNodeClick: (id: string) => void;
+  onGraphPaneClick: () => void;
+  onSearch: (value: string) => void;
+  onStatus: (value: string) => void;
+  onCluster: (value: string) => void;
+  onNamespace: (value: string) => void;
+  onOpenPicker: () => void;
+  onOpenEdit: (tab?: ReleaseDetailTab) => void;
+  onOpenRun: () => void;
+  onOpenYaml: () => void;
+  onCreate: () => void;
+}) {
+  const errors = diagnostics.filter(item => item.severity === 'error').length;
+  const warnings = diagnostics.filter(item => item.severity === 'warning').length;
+  const activeRuns = summary?.active_runs ?? 0;
+  const activeFilters = [graphSearch.trim(), graphStatusFilter !== 'all', graphClusterFilter !== 'all', graphNamespaceFilter !== 'all'].filter(Boolean).length;
+  return (
+    <section className="release-flow__overview-shell release-flow__overview-shell--studio" aria-label="릴리즈 흐름 캔버스">
+      <div className="release-flow__studio-workbench">
+        <div className={`release-flow__dag-card release-flow__dag-card--studio ${selectedNode ? 'release-flow__dag-card--inspecting' : ''}`}>
+          <div className="release-flow__canvas release-flow__canvas--studio">
+            <FlowCanvas
+              nodes={nodes}
+              edges={edges}
+              nodeTypes={nodeTypes}
+              interactive
+              scrollBehavior="zoom"
+              fitViewPadding={0.07}
+              fitViewMinZoom={0.72}
+              onNodeClick={onGraphNodeClick}
+              onPaneClick={onGraphPaneClick}
+            />
+          </div>
+
+          <div className="release-flow__canvas-overlay release-flow__canvas-overlay--header">
+            <header className="release-flow__canvas-topbar">
+              <div className="release-flow__canvas-title">
+                <span>릴리즈 흐름</span>
+                <h1>{plan.name || '이름 없는 릴리즈 플랜'}</h1>
+              </div>
+              <div className="release-flow__canvas-status" aria-label="릴리즈 상태 요약">
+                {isDemo && <span className="is-active is-demo">기능 데모</span>}
+                <span className="is-count">{plan.steps.length}개 단계</span>
+                <span className={errors > 0 ? 'is-danger' : warnings > 0 ? 'is-warning' : 'is-ok'}>
+                  {errors > 0 ? `오류 ${errors}` : warnings > 0 ? `경고 ${warnings}` : '진단 정상'}
+                </span>
+                {activeRuns > 0 && <span className="is-active">실행 중 {activeRuns}</span>}
+                {preview?.executable && <span className="is-ok">실행 가능</span>}
+              </div>
+              <ReleaseWorkspaceNav
+                active="overview"
+                className="release-flow__canvas-nav"
+                onChange={(item) => {
+                  if (item === 'edit') onOpenEdit('sequence');
+                  else if (item === 'run') onOpenRun();
+                  else if (item === 'yaml') onOpenYaml();
+                }}
+              />
+              <div className="release-flow__canvas-actions">
+                <Button size="sm" variant="ghost" onClick={onOpenPicker}>플랜 선택</Button>
+                <details className="release-flow__canvas-more">
+                  <summary>더보기</summary>
+                  <div>
+                    <button type="button" onClick={() => onOpenEdit('diagnostics')}>실행 전 진단</button>
+                    <button type="button" onClick={() => onOpenEdit('policy')}>승인·정책</button>
+                    <button type="button" onClick={onCreate}>새 플랜 만들기</button>
+                  </div>
+                </details>
+              </div>
+            </header>
+          </div>
+
+          <div className="release-flow__canvas-overlay release-flow__canvas-overlay--tools">
+            <details className="release-flow__canvas-view-menu">
+              <summary>보기 설정{activeFilters > 0 ? ` ${activeFilters}` : ''}</summary>
+              <div>
+                <Field label="앱 또는 레포 찾기">
+                  <input className="input" value={graphSearch} placeholder="이름으로 필터" onChange={event => onSearch(event.target.value)} />
+                </Field>
+                <SelectField label="배포 상태" value={graphStatusFilter} options={[['all', '모든 상태'], ['queued', '대기'], ['running', '진행 중'], ['succeeded', '성공'], ['blocked', '막힘'], ['failed', '실패']]} onChange={onStatus} />
+                <SelectField label="클러스터" value={graphClusterFilter} options={[['all', '모든 클러스터'], ...clusters.map(value => [value, value])]} onChange={onCluster} />
+                <SelectField label="네임스페이스" value={graphNamespaceFilter} options={[['all', '모든 네임스페이스'], ...namespaces.map(value => [value, value])]} onChange={onNamespace} />
+              </div>
+            </details>
+          </div>
+
+          {selectedNode && (
+            <div className="release-flow__canvas-overlay release-flow__canvas-overlay--dock">
+              <ReleaseNodeSidePanel
+                node={selectedNode}
+                tab={inspectorTab}
+                clusterHref={clusterHref}
+                applicationHref={applicationHref}
+                onTab={onInspectorTab}
+                onClose={onGraphPaneClick}
+                onOpenRuns={onOpenRun}
+                onOpenYaml={onOpenYaml}
+              />
+            </div>
+          )}
+
+          {!selectedNode && (
+            <div className="release-flow__canvas-overlay release-flow__canvas-overlay--legend">
+              <ReleaseFlowLegend />
+            </div>
+          )}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function ReleaseYamlPrWorkspace({
+  plan,
+  selected,
+  selectedIndex,
+  appById,
   generated,
   safePr,
+  isDemo,
+  generatedError,
+  safePrError,
   loading,
   creatingSafePr,
+  onMount,
+  onSelectStep,
+  onEditSteps,
+  onOpenRun,
+  onRetryGenerate,
   onCreateSafePr,
 }: {
+  plan: ReleasePlan;
+  selected?: ReleasePlanStep;
+  selectedIndex: number;
+  appById: Map<string, Application>;
   generated?: ReleaseGeneratedManifest;
   safePr?: ReleaseManifestSafePr;
+  isDemo: boolean;
+  generatedError?: Error | null;
+  safePrError?: Error | null;
   loading: boolean;
   creatingSafePr: boolean;
-  onCreateSafePr: () => void;
+  onMount: OnMount;
+  onSelectStep: (index: number) => void;
+  onEditSteps: () => void;
+  onOpenRun: () => void;
+  onRetryGenerate: () => void;
+  onCreateSafePr: (title: string, body: string) => void;
 }) {
-  if (loading && !generated) {
-    return <Card title="생성된 매니페스트" loading><p className="release-flow__hint">릴리즈 옵션으로 매니페스트를 생성하는 중입니다...</p></Card>;
-  }
-  if (!generated) {
-    return <Card title="생성된 매니페스트"><p className="release-flow__hint">매니페스트를 생성할 릴리즈 단계를 선택하세요.</p></Card>;
-  }
-  const file = generated.files[0];
-  const blocking = generated.diagnostics.filter(diag => diag.severity === 'error').length;
-  const canCreateSafePr = blocking === 0 && generated.files.length > 0;
+  const [fileIndex, setFileIndex] = useState(0);
+  const [prTitle, setPrTitle] = useState('');
+  const [prBody, setPrBody] = useState('');
+  useEffect(() => setFileIndex(0), [generated?.manifest, selectedIndex]);
+  useEffect(() => {
+    const stepName = selected?.name || selected?.application_id || 'release manifest';
+    setPrTitle(`${plan.name}: ${stepName}`);
+    setPrBody('');
+  }, [plan.name, selected?.application_id, selected?.name, selectedIndex]);
+  const app = selected ? appById.get(selected.application_id) : undefined;
+  const files = generated?.files ?? [];
+  const file = files[Math.min(fileIndex, Math.max(files.length - 1, 0))];
+  const manifest = file?.content || generated?.manifest || '# 검토할 릴리즈 단계를 선택하세요.\n';
+  const errors = generated?.diagnostics.filter(item => item.severity === 'error').length ?? 0;
+  const warnings = generated?.diagnostics.filter(item => item.severity === 'warning').length ?? 0;
+  const repoRef = safePr?.repo_ref || getString(selected?.config.repo_ref, app?.repo_ref ?? '');
+  const branch = safePr?.base_branch || getString(selected?.config.branch, app?.branch ?? '');
+  const manifestPath = safePr?.manifest_path || file?.path || getString(selected?.config.manifest_path, app?.manifest_path ?? '');
+  const commitSha = safePr?.commit_sha || getString(selected?.config.commit_sha);
+  const reviewChecks = [
+    { label: '검토 단계 선택', ok: Boolean(selected) },
+    { label: '생성 파일 존재', ok: files.length > 0 },
+    { label: '차단 오류 없음', ok: Boolean(generated) && !generatedError && errors === 0 },
+    { label: '레포와 기준 브랜치 확인', ok: Boolean(repoRef && branch) },
+    { label: '매니페스트 경로 확인', ok: Boolean(manifestPath) },
+  ];
+  const canCreateSafePr = reviewChecks.every(item => item.ok) && !loading;
   return (
-    <Card
-      title="생성된 매니페스트"
-      actions={
-        <>
-          <Badge tone={blocking > 0 ? 'danger' : generated.diagnostics.length > 0 ? 'warning' : 'success'}>{blocking > 0 ? '막힘' : '준비됨'}</Badge>
-          <Button size="sm" variant="primary" loading={creatingSafePr} disabled={!canCreateSafePr} onClick={onCreateSafePr}>Safe PR</Button>
-        </>
-      }
-    >
-      <p className="release-flow__hint">{generated.summary}</p>
-      {file && <p className="release-flow__hint">파일: <code>{file.path}</code></p>}
-      {safePr?.workflow_run_id && (
-        <div className="release-flow__field-section">
-          <span className="release-flow__field-section-title">Safe PR 증거</span>
-          <div className="release-flow__field-grid">
-            <FieldValue label="레포" value={safePr.repo_ref || '-'} />
-            <FieldValue label="기준 브랜치" value={safePr.base_branch || '-'} />
-            <FieldValue label="실행" value={safePr.workflow_run_id} mono />
-            <FieldValue label="패치" value={safePr.patch_sha256 ? safePr.patch_sha256.slice(0, 12) : '-'} mono />
+    <section className="release-flow__yaml-review" aria-labelledby="release-yaml-review-title">
+      <header className="release-flow__yaml-review-head">
+        <div>
+          <span>Generated manifest review</span>
+          <h1 id="release-yaml-review-title">YAML / PR 검토</h1>
+          <p>{isDemo ? '샘플 YAML과 PR 접수 결과로 실제 검토 화면의 구성과 상태를 확인합니다.' : '단계별 생성 YAML을 확인하고 진단을 통과한 변경만 Safe PR로 요청합니다.'}</p>
+        </div>
+        <div className="release-flow__yaml-review-status">
+          {isDemo && <Badge tone="info">기능 데모</Badge>}
+          <Badge tone={generatedError || errors > 0 ? 'danger' : warnings > 0 ? 'warning' : generated ? 'success' : 'neutral'}>
+            {loading ? 'YAML 생성 중' : generatedError ? '생성 실패' : errors > 0 ? `오류 ${errors}` : warnings > 0 ? `경고 ${warnings}` : generated ? '검토 가능' : '단계 필요'}
+          </Badge>
+          {generated && <span>{generated.resource_count}개 리소스</span>}
+          {safePr?.accepted && <Badge tone="success">PR 요청 접수</Badge>}
+        </div>
+        <div className="release-flow__yaml-review-actions">
+          <Button size="sm" variant="ghost" disabled={!generated} onClick={() => copyText(manifest, 'YAML을 복사했습니다.', 'YAML 복사')}>YAML 복사</Button>
+          <Button size="sm" disabled={!generated} onClick={() => downloadTextFile(file?.path || 'release-manifest.yaml', manifest)}>파일 저장</Button>
+          <Button size="sm" variant="primary" loading={creatingSafePr} disabled={!canCreateSafePr || creatingSafePr} onClick={() => onCreateSafePr(prTitle, prBody)}>Safe PR 요청</Button>
+        </div>
+      </header>
+
+      <div className="release-flow__yaml-review-layout">
+        <aside className="release-flow__yaml-step-panel" aria-label="검토할 릴리즈 단계">
+          <div className="release-flow__yaml-panel-head">
+            <strong>검토 단계</strong>
+            <span>{plan.steps.length}개</span>
           </div>
-        </div>
-      )}
-      {generated.resources.length > 0 && (
-        <div className="release-flow__preview-list">
-          {generated.resources.map(resource => (
-            <div key={`${resource.kind}-${resource.namespace}-${resource.name}`} className="release-flow__preview-row">
-              <FieldValue label="종류" value={resource.kind} />
-              <FieldValue label="네임스페이스" value={resource.namespace || '-'} />
-              <FieldValue label="이름" value={resource.name} />
+          {plan.steps.length > 0 ? (
+            <div className="release-flow__yaml-step-list">
+              {plan.steps.map((step, index) => (
+                <button key={step.step_id || `${step.application_id}-${index}`} type="button" aria-pressed={selectedIndex === index} onClick={() => onSelectStep(index)}>
+                  <i>{index + 1}</i>
+                  <span><strong>{step.name || step.application_id}</strong><small>{getString(step.config.manifest_path, appById.get(step.application_id)?.manifest_path ?? '경로 미정')}</small></span>
+                </button>
+              ))}
             </div>
-          ))}
+          ) : (
+            <div className="release-flow__yaml-step-empty">
+              <p>검토할 단계가 없습니다.</p>
+              <Button size="sm" variant="primary" onClick={onEditSteps}>단계 추가</Button>
+            </div>
+          )}
+        </aside>
+
+        <div className="release-flow__yaml-review-main">
+          <div className="release-flow__yaml-filebar">
+            <div className="release-flow__yaml-file-tabs" aria-label="생성 파일">
+              {files.length > 0 ? files.map((item, index) => (
+                <button key={`${item.path}-${index}`} type="button" aria-pressed={fileIndex === index} onClick={() => setFileIndex(index)}>{item.path}</button>
+              )) : <span>생성된 파일 없음</span>}
+            </div>
+            {file && <span>{file.action || 'review'}</span>}
+          </div>
+          <div className="release-flow__editor release-flow__editor--review">
+            <Editor
+              height="560px"
+              language="yaml"
+              theme="vs-dark"
+              value={manifest}
+              onMount={onMount}
+              options={{ readOnly: true, minimap: { enabled: false }, fontSize: 13, lineNumbersMinChars: 3, scrollBeyondLastLine: false, wordWrap: 'on', tabSize: 2, folding: true }}
+            />
+          </div>
+
+          {generatedError && (
+            <div className="release-flow__yaml-error" role="alert">
+              <div>
+                <strong>YAML을 생성하지 못했습니다.</strong>
+                <span>{generatedError.message || '단계 설정과 레포 정보를 확인한 뒤 다시 시도하세요.'}</span>
+              </div>
+              <Button size="sm" variant="ghost" onClick={onRetryGenerate}>다시 생성</Button>
+            </div>
+          )}
+
+          <div className="release-flow__yaml-review-lower">
+            <section className="release-flow__yaml-review-panel" aria-label="PR 제출 점검">
+              <div className="release-flow__yaml-panel-head"><strong>PR 제출 점검</strong><span>{reviewChecks.filter(item => item.ok).length}/{reviewChecks.length}</span></div>
+              <div className="release-flow__yaml-checklist">
+                {reviewChecks.map(item => <div key={item.label} data-state={item.ok ? 'passed' : 'blocked'}><span>{item.ok ? '통과' : '필요'}</span><strong>{item.label}</strong></div>)}
+              </div>
+              <div className="release-flow__yaml-pr-compose">
+                <Field label="PR 제목">
+                  <input className="input" value={prTitle} maxLength={180} placeholder="생성 매니페스트 변경 제목" onChange={event => setPrTitle(event.target.value)} />
+                </Field>
+                <Field label="검토 메모">
+                  <textarea value={prBody} maxLength={4000} rows={4} placeholder="검토자에게 전달할 변경 이유와 확인 사항" onChange={event => setPrBody(event.target.value)} />
+                </Field>
+              </div>
+              <div className="release-flow__field-grid">
+                <FieldValue label="레포" value={repoRef || '-'} wrap wide />
+                <FieldValue label="기준 브랜치" value={branch || '-'} />
+                <FieldValue label="경로" value={manifestPath || '-'} mono wrap wide />
+                <FieldValue label="커밋" value={commitSha ? commitSha.slice(0, 12) : '-'} mono />
+              </div>
+              {safePr?.accepted && (
+                <div className="release-flow__yaml-pr-result">
+                  <strong>{isDemo ? 'Safe PR 샘플 요청이 접수되었습니다.' : 'Safe PR 워크플로가 접수되었습니다.'}</strong>
+                  <span>실행 {safePr.workflow_run_id}</span>
+                  <span>패치 {safePr.patch_sha256.slice(0, 16)}</span>
+                  <span>상관 ID {safePr.correlation_id}</span>
+                  <div className="release-flow__yaml-pr-result-actions">
+                    <Button size="sm" variant="ghost" onClick={() => copyText(safePr.correlation_id, '상관 ID를 복사했습니다.', '상관 ID 복사')}>ID 복사</Button>
+                    <Button size="sm" onClick={onOpenRun}>실행 기록 열기</Button>
+                  </div>
+                </div>
+              )}
+              {safePrError && (
+                <div className="release-flow__yaml-error release-flow__yaml-error--safe-pr" role="alert">
+                  <div>
+                    <strong>Safe PR 요청이 차단되었습니다.</strong>
+                    <span>{safePrError.message || '제출 조건을 다시 확인하세요.'}</span>
+                  </div>
+                  <Button size="sm" variant="ghost" onClick={onEditSteps}>설정 수정</Button>
+                </div>
+              )}
+              {!safePr?.accepted && !safePrError && reviewChecks.some(item => !item.ok) && (
+                <div className="release-flow__yaml-review-next">
+                  <span>필요 항목을 수정하면 Safe PR 요청이 활성화됩니다.</span>
+                  <Button size="sm" variant="ghost" onClick={onEditSteps}>단계 설정 수정</Button>
+                </div>
+              )}
+            </section>
+
+            <section className="release-flow__yaml-review-panel" aria-label="생성 리소스">
+              <div className="release-flow__yaml-panel-head"><strong>생성 리소스</strong><span>{generated?.resources.length ?? 0}개</span></div>
+              <div className="release-flow__yaml-resource-list">
+                {(generated?.resources ?? []).map(resource => (
+                  <div key={`${resource.kind}-${resource.namespace}-${resource.name}`}><strong>{resource.kind}</strong><span>{resource.namespace || 'default'} / {resource.name}</span></div>
+                ))}
+                {generated && generated.resources.length === 0 && <p>생성된 Kubernetes 리소스가 없습니다.</p>}
+                {!generated && <p>단계를 선택하면 생성 리소스가 표시됩니다.</p>}
+              </div>
+              {(generated?.warnings ?? []).map(warning => <div key={warning} className="release-flow__diag release-flow__diag--warning">{warning}</div>)}
+            </section>
+          </div>
+
+          <DiagnosticsPanel diagnostics={generated?.diagnostics ?? []} />
         </div>
-      )}
-      {generated.warnings.map(warning => (
-        <div key={warning} className="release-flow__diag release-flow__diag--warning">{warning}</div>
-      ))}
-    </Card>
+      </div>
+    </section>
   );
 }
 
@@ -925,52 +1541,26 @@ function FieldSection({ title, children }: { title: string; children: ReactNode 
   );
 }
 
+function ReleaseWorkspaceNav({ active, onChange, className = '' }: { active: ReleaseTab; onChange: (tab: ReleaseTab) => void; className?: string }) {
+  return (
+    <nav className={`release-flow__workspace-tabs ${className}`.trim()} aria-label="릴리즈 작업 화면">
+      {RELEASE_WORKSPACE_TABS.map(item => (
+        <button key={item} type="button" aria-current={active === item ? 'page' : undefined} onClick={() => onChange(item)}>
+          {releaseWorkspaceTitle(item)}
+        </button>
+      ))}
+    </nav>
+  );
+}
+
 function releaseWorkspaceTitle(tab: ReleaseTab): string {
   const labels: Record<ReleaseTab, string> = {
     overview: '현재 상황',
     edit: '플랜 편집',
     run: '실행 관리',
-    yaml: 'YAML/PR 검토',
+    yaml: 'YAML/PR',
   };
   return labels[tab];
-  return {
-    overview: '현재 상황',
-    edit: '현재 플랜 수정',
-    run: '미리보기와 실행',
-    yaml: 'YAML과 PR',
-  }[tab];
-}
-
-function releaseWorkspaceDescription(tab: ReleaseTab): string {
-  const descriptions: Record<ReleaseTab, string> = {
-    overview: 'Release DAG에서 wave, 의존성, 실행 상태를 확인합니다.',
-    edit: '플랜 이름, 정책, 단계, 브랜치, 매니페스트 경로를 수정합니다.',
-    run: '릴리즈 실행 기록, 승인 상태, 재시도와 롤백 작업을 관리합니다.',
-    yaml: '생성된 매니페스트와 Safe PR 요청 결과를 검토합니다.',
-  };
-  return descriptions[tab];
-  return {
-    overview: '자동 정렬 Release DAG에서 wave, 의존성, 실행 상태를 확인합니다.',
-    edit: '플랜 이름, 정책, 앱별 브랜치와 매니페스트 경로를 수정합니다.',
-    run: '릴리즈 실행 전 검증 결과를 보고 실행, 승인, 재시도 흐름을 관리합니다.',
-    yaml: '생성된 매니페스트와 Safe PR 제출 결과를 확인합니다.',
-  }[tab];
-}
-
-function releaseWorkspaceShortDescription(tab: ReleaseTab): string {
-  const descriptions: Record<ReleaseTab, string> = {
-    overview: 'DAG',
-    edit: '정책과 단계 편집',
-    run: '실행 기록과 승인',
-    yaml: '생성물과 PR',
-  };
-  return descriptions[tab];
-  return {
-    overview: 'DAG',
-    edit: '정책과 단계 편집',
-    run: '검증 및 실행',
-    yaml: '생성물과 PR',
-  }[tab];
 }
 
 function ReleaseDagContext({ plan, selected, graphMode }: { plan: ReleasePlan; selected: ReleaseNodeData | null; graphMode: GraphMode }) {
@@ -1042,12 +1632,12 @@ function ReleaseStudioHeader({
         {summary?.active_runs ? <span>실행 중</span> : null}
       </div>
       <div className="release-flow__studio-actions">
-        <Button size="sm" title="생성된 매니페스트와 Safe PR 요청 상태를 검토합니다" onClick={onYaml}>YAML/PR 검토</Button>
+        <Button size="sm" title="생성된 매니페스트와 Safe PR 요청 상태를 검토합니다" onClick={onYaml}>YAML/PR</Button>
         <Button size="sm" variant="primary" title="릴리즈 실행 기록과 승인 상태를 확인합니다" onClick={onRun}>실행 관리</Button>
         <Button size="sm" onClick={onCreate}><IconPlus size={13} />새 플랜</Button>
-        <Button size="sm" onClick={onEdit}>현재 플랜 수정</Button>
-        <Button size="sm" onClick={onYaml}>YAML과 PR</Button>
-        <Button size="sm" variant="primary" onClick={onRun}>미리보기와 실행</Button>
+        <Button size="sm" onClick={onEdit}>플랜 편집</Button>
+        <Button size="sm" onClick={onYaml}>YAML/PR</Button>
+        <Button size="sm" variant="primary" onClick={onRun}>실행 관리</Button>
       </div>
       <ReleasePlanTiles
         currentPlan={plan}
@@ -1134,10 +1724,10 @@ function ReleasePlanPickerScreen({
       <div className="release-flow__plan-card-grid">
         {plans.map((item, index) => (
           <ReleasePlanPickerCard
-            key={item.plan_id ?? `${item.name}-${index}`}
+            key={releasePlanPickerId(item)}
             plan={item}
             index={index}
-            selected={(item.plan_id ?? '__draft__') === currentPlanId}
+            selected={releasePlanPickerId(item) === currentPlanId}
             onSelect={onSelect}
           />
         ))}
@@ -1163,41 +1753,48 @@ function ReleasePlanPickerCard({
   onSelect: (plan: ReleasePlan) => void;
 }) {
   const steps = plan.steps ?? [];
-  const previewSteps = steps.length ? steps.slice(0, 4) : demoReleasePlanSteps().slice(0, 3);
+  const previewSteps = steps.slice(0, 4);
   const environments = Array.from(new Set(steps.map(step => getString(step.config.environment)).filter(Boolean)));
   const namespaces = Array.from(new Set(steps.map(step => getString(step.config.namespace)).filter(Boolean)));
   const strategy = valueLabel(getString(plan.settings.default_strategy, 'rolling'));
   const approval = valueLabel(getString(plan.settings.approval_policy, 'manual_each_step'));
   const runtime = valueLabel(getString(plan.settings.runtime_mode, 'demo'));
   const target = environments[0] || namespaces[0] || firstEnvironment(plan);
-  const updated = plan.updated_at ? plan.updated_at.slice(0, 10) : '저장 전';
+  const isDemo = isFeatureDemoPlan(plan);
+  const updated = isDemo ? '샘플 데이터' : plan.updated_at ? plan.updated_at.slice(0, 10) : '저장 전';
 
   return (
     <button
       type="button"
       className={`release-flow__plan-card ${selected ? 'release-flow__plan-card--selected' : ''}`}
+      data-demo={isDemo ? 'true' : undefined}
       aria-pressed={selected}
       onClick={() => onSelect(plan)}
     >
       <div className="release-flow__plan-card-preview" aria-hidden="true">
         <span className="release-flow__plan-card-rank">{index + 1}</span>
         <div className="release-flow__plan-mini-flow">
-          {previewSteps.map((step, stepIndex) => (
-            <span key={step.step_id || `${step.name}-${stepIndex}`} className="release-flow__plan-mini-node">
-              <i>{stepIndex + 1}</i>
-              <b>{step.name || step.application_id || `Step ${stepIndex + 1}`}</b>
-            </span>
-          ))}
+          {previewSteps.length > 0 ? previewSteps.map((step, stepIndex) => (
+              <span key={step.step_id || `${step.name}-${stepIndex}`} className="release-flow__plan-mini-node">
+                <i>{stepIndex + 1}</i>
+                <b>{step.name || step.application_id || `Step ${stepIndex + 1}`}</b>
+              </span>
+            )) : (
+              <span className="release-flow__plan-mini-empty">아직 등록된 단계가 없습니다.</span>
+            )}
         </div>
       </div>
       <div className="release-flow__plan-card-body">
         <div className="release-flow__plan-card-title-row">
           <h3>{plan.name || '이름 없는 릴리즈 플랜'}</h3>
-          <Badge tone={toneForStatus(plan.status)}>{statusLabel(plan.status)}</Badge>
+          <div className="release-flow__plan-card-badges">
+            {isDemo && <Badge tone="info">기능 데모</Badge>}
+            <Badge tone={toneForStatus(plan.status)}>{statusLabel(plan.status)}</Badge>
+          </div>
         </div>
-        <p>{plan.description || `${steps.length || previewSteps.length}개 단계로 구성된 릴리즈 워크플로우입니다.`}</p>
+        <p>{plan.description || `${steps.length}개 단계로 구성된 릴리즈 워크플로우입니다.`}</p>
         <div className="release-flow__plan-card-meta">
-          <span>{steps.length || previewSteps.length} 단계</span>
+          <span>{steps.length} 단계</span>
           <span>{target || '대상 미정'}</span>
           <span>{runtime}</span>
         </div>
@@ -1211,18 +1808,6 @@ function ReleasePlanPickerCard({
   );
 }
 
-function OverviewDisclosure({ title, hint, children }: { title: string; hint: string; children: ReactNode }) {
-  return (
-    <details className="release-flow__overview-disclosure">
-      <summary>
-        <span>{title}</span>
-        <small>{hint}</small>
-      </summary>
-      <div className="release-flow__overview-disclosure-body">{children}</div>
-    </details>
-  );
-}
-
 function StatusValue({ label, value, kind }: { label: string; value: string; kind: 'deploy' | 'health' }) {
   const className = kind === 'deploy' ? statusClass(value) : healthClass(value);
   const displayValue = kind === 'deploy' ? statusLabel(value) : healthLabel(value);
@@ -1231,6 +1816,417 @@ function StatusValue({ label, value, kind }: { label: string; value: string; kin
       <span className="release-flow__field-label">{label}</span>
       <strong className={`release-node__status release-node__status--${className}`}>{displayValue}</strong>
     </div>
+  );
+}
+
+function ReleasePlanDetailWorkspace({
+  plan,
+  selected,
+  selectedNode,
+  selectedIndex,
+  apps,
+  appById,
+  nodes,
+  edges,
+  diagnostics,
+  preview,
+  readiness,
+  summary,
+  detailTab,
+  editModal,
+  saving,
+  onDetailTab,
+  onEditModal,
+  onPlanValue,
+  onPolicy,
+  onStep,
+  onPlan,
+  onSave,
+  onSelectStep,
+  onGraphNodeClick,
+  onGraphPaneClick,
+  onAddStep,
+  onMoveStep,
+  onRemoveStep,
+  onOpenRun,
+}: {
+  plan: ReleasePlan;
+  selected?: ReleasePlanStep;
+  selectedNode: ReleaseNodeData | null;
+  selectedIndex: number;
+  apps: Application[];
+  appById: Map<string, Application>;
+  nodes: Node[];
+  edges: ReleaseEdge[];
+  diagnostics: Diagnostic[];
+  preview?: ReleasePlanPreview;
+  readiness?: ReleaseReadiness;
+  summary?: ReleaseRunSummary;
+  detailTab: ReleaseDetailTab;
+  editModal: ReleaseEditModal;
+  saving: boolean;
+  onDetailTab: (tab: ReleaseDetailTab) => void;
+  onEditModal: (modal: ReleaseEditModal) => void;
+  onPlanValue: (patch: Partial<ReleasePlan>) => void;
+  onPolicy: (patch: Record<string, unknown>) => void;
+  onStep: (index: number, patch: Partial<ReleasePlanStep>) => void;
+  onPlan: Dispatch<SetStateAction<ReleasePlan | null>>;
+  onSave: () => void;
+  onSelectStep: (index: number) => void;
+  onGraphNodeClick: (id: string) => void;
+  onGraphPaneClick: () => void;
+  onAddStep: () => void;
+  onMoveStep: (index: number, delta: number) => void;
+  onRemoveStep: (index: number) => void;
+  onOpenRun: (focus?: ReleaseRunFocus) => void;
+}) {
+  const saveLabel = isFeatureDemoPlan(plan) ? '데모 반영' : '저장';
+  const settings = { ...DEFAULT_POLICY, ...plan.settings };
+  const errors = diagnostics.filter(item => item.severity === 'error').length;
+  const warnings = diagnostics.filter(item => item.severity === 'warning').length;
+  const readyLabel = preview?.executable ? '실행 가능' : errors > 0 ? '수정 필요' : '검토 필요';
+  const activeRuns = summary?.active_runs ?? 0;
+  const selectedLabel = selected?.name || selected?.application_id || selectedNode?.step.name || '선택된 단계 없음';
+  const nextAction = firstReason(
+    errors > 0 ? '진단 탭에서 막힌 항목을 먼저 해결하세요.' : '',
+    !preview?.executable ? '실행 전에 정책과 단계 설정을 검토하세요.' : '',
+    activeRuns > 0 ? '실행 관리에서 진행 중인 릴리즈를 확인하세요.' : '',
+    '변경 내용을 저장한 뒤 실행 관리에서 미리보기와 실행을 진행하세요.',
+  ) ?? '변경 내용을 저장한 뒤 실행 관리에서 미리보기와 실행을 진행하세요.';
+  return (
+    <div className="release-flow__detail-shell">
+      <section className="release-flow__detail-hero" aria-label="선택한 릴리즈 플랜">
+        <div className="release-flow__detail-title">
+          <span className="release-flow__builder-kicker">Release plan detail</span>
+          <h2>{plan.name || '이름 없는 릴리즈 플랜'}</h2>
+          <p>{plan.description || '플랜 설명을 추가하면 팀원이 릴리즈 목적과 범위를 빠르게 이해할 수 있습니다.'}</p>
+          <div className="release-flow__builder-meta">
+            <Badge tone={toneForStatus(plan.status)}>{statusLabel(plan.status)}</Badge>
+            <span>{plan.steps.length}개 단계</span>
+            <span>{valueLabel(getString(settings.runtime_mode, 'demo'))}</span>
+            <span>{readyLabel}</span>
+          </div>
+        </div>
+      </section>
+
+      <nav className="release-flow__detail-tabs" aria-label="릴리즈 플랜 상세 탭">
+        {RELEASE_DETAIL_TABS.map(item => (
+          <button key={item.value} type="button" aria-pressed={detailTab === item.value} onClick={() => onDetailTab(item.value)}>
+            <strong>{item.label}</strong>
+            <span>{item.help}</span>
+          </button>
+        ))}
+      </nav>
+
+      {detailTab === 'summary' && (
+        <div id="release-flow-detail-summary" className="release-flow__detail-grid release-flow__detail-grid--summary">
+          <Card
+            title="릴리즈 흐름"
+            description="단계를 누르면 오른쪽 요약이 선택한 앱 기준으로 바뀝니다."
+            actions={<Button size="sm" onClick={() => onDetailTab('sequence')}>순서 편집</Button>}
+            className="release-flow__detail-graph-card"
+          >
+            <div className="release-flow__canvas release-flow__canvas--detail">
+              <FlowCanvas nodes={nodes} edges={edges} nodeTypes={nodeTypes} interactive scrollBehavior="zoom" onNodeClick={onGraphNodeClick} onPaneClick={onGraphPaneClick} />
+            </div>
+          </Card>
+
+          <aside className="release-flow__detail-rail" aria-label="릴리즈 플랜 요약">
+            <ReleaseDetailStatusPanel
+              plan={plan}
+              errors={errors}
+              warnings={warnings}
+              activeRuns={activeRuns}
+              nextAction={nextAction}
+              onRun={onOpenRun}
+              onDiagnostics={() => onDetailTab('diagnostics')}
+            />
+            <ReleaseSelectedStepSummary
+              selected={selected}
+              selectedNode={selectedNode}
+              selectedIndex={selectedIndex}
+              appById={appById}
+              onEdit={() => onEditModal('step')}
+              onSequence={() => onDetailTab('sequence')}
+            />
+          </aside>
+        </div>
+      )}
+
+      {detailTab === 'sequence' && (
+        <div id="release-flow-detail-sequence" className="release-flow__detail-grid release-flow__detail-grid--sequence">
+          <Card
+            title="배포 단계"
+            description="단계를 고르면 그래프와 단계 상세 모달이 같은 대상을 봅니다."
+            actions={<Button size="sm" onClick={onAddStep} disabled={apps.length === 0}><IconPlus size={13} />단계 추가</Button>}
+          >
+            <ReleaseStepList
+              plan={plan}
+              selectedIndex={selectedIndex}
+              appById={appById}
+              onSelect={onSelectStep}
+              onEdit={(index) => { onSelectStep(index); onEditModal('step'); }}
+              onMove={onMoveStep}
+              onRemove={onRemoveStep}
+            />
+          </Card>
+          <Card title="흐름 미리보기" className="release-flow__detail-graph-card">
+            <div className="release-flow__canvas release-flow__canvas--detail">
+              <FlowCanvas nodes={nodes} edges={edges} nodeTypes={nodeTypes} interactive scrollBehavior="zoom" onNodeClick={onGraphNodeClick} onPaneClick={onGraphPaneClick} />
+            </div>
+          </Card>
+        </div>
+      )}
+
+      {detailTab === 'policy' && (
+        <div id="release-flow-detail-policy" className="release-flow__detail-grid release-flow__detail-grid--policy">
+          <ReleasePolicySummaryPanel plan={plan} onEdit={() => onEditModal('policy')} />
+          <ReleasePlanSettingsSummary plan={plan} onEdit={() => onEditModal('policy')} />
+        </div>
+      )}
+
+      {detailTab === 'diagnostics' && (
+        <div id="release-flow-detail-diagnostics" className="release-flow__detail-grid release-flow__detail-grid--diagnostics">
+          <ReleaseDiagnosticsSummary diagnostics={diagnostics} readiness={readiness} onPolicy={() => onDetailTab('policy')} />
+          <DiagnosticsPanel diagnostics={diagnostics} />
+        </div>
+      )}
+
+      <Modal
+        open={editModal === 'plan'}
+        title="플랜 기본 정보"
+        description="목록과 실행 화면에 보이는 이름, 설명, 상태만 빠르게 수정합니다."
+        onOpenChange={(open) => onEditModal(open ? 'plan' : null)}
+        actions={<Button variant="primary" loading={saving} onClick={() => { onSave(); onEditModal(null); }}><IconSave size={14} />{saveLabel}</Button>}
+      >
+        <ReleasePlanBasicsForm plan={plan} onPlanValue={onPlanValue} />
+      </Modal>
+
+      <Modal
+        open={editModal === 'policy'}
+        title="전체 정책 상세 설정"
+        description="실행 모드, 승인, 롤백, 운영 예외 같은 고급 항목은 필요할 때만 열어 수정합니다."
+        onOpenChange={(open) => onEditModal(open ? 'policy' : null)}
+        actions={<Button variant="primary" loading={saving} onClick={() => { onSave(); onEditModal(null); }}><IconSave size={14} />{saveLabel}</Button>}
+      >
+        <PolicyEditor plan={plan} setPolicy={onPolicy} readiness={readiness} />
+      </Modal>
+
+      <Modal
+        open={editModal === 'step'}
+        title={`단계 설정: ${selectedLabel}`}
+        description="브랜치, manifest 경로, 승인 게이트, 롤백 기준처럼 앱별로 달라지는 값을 수정합니다."
+        onOpenChange={(open) => onEditModal(open ? 'step' : null)}
+        actions={<Button variant="primary" loading={saving} onClick={() => { onSave(); onEditModal(null); }}><IconSave size={14} />{saveLabel}</Button>}
+      >
+        <StepEditor
+          title="선택한 단계"
+          plan={plan}
+          selected={selected}
+          selectedIndex={selectedIndex}
+          apps={apps}
+          appById={appById}
+          setStep={onStep}
+          setPlan={onPlan}
+        />
+      </Modal>
+    </div>
+  );
+}
+
+function ReleasePlanBasicsForm({ plan, onPlanValue }: { plan: ReleasePlan; onPlanValue: (patch: Partial<ReleasePlan>) => void }) {
+  return (
+    <div className="release-flow__modal-form">
+      <Field label="이름"><input className="input" value={plan.name} onChange={event => onPlanValue({ name: event.target.value })} /></Field>
+      <Field label="설명"><textarea className="input" rows={4} value={plan.description} onChange={event => onPlanValue({ description: event.target.value })} /></Field>
+      <Field label="상태">
+        <select className="input" disabled={plan.status === 'archived'} value={plan.status} onChange={event => onPlanValue({ status: event.target.value as ReleasePlan['status'] })}>
+          <option value="draft">초안</option>
+          <option value="active">활성</option>
+          <option value="paused">일시정지</option>
+          {plan.status === 'archived' && <option value="archived">보관됨</option>}
+        </select>
+      </Field>
+    </div>
+  );
+}
+
+function ReleaseDetailStatusPanel({
+  plan,
+  errors,
+  warnings,
+  activeRuns,
+  nextAction,
+  onRun,
+  onDiagnostics,
+}: {
+  plan: ReleasePlan;
+  errors: number;
+  warnings: number;
+  activeRuns: number;
+  nextAction: string;
+  onRun: () => void;
+  onDiagnostics: () => void;
+}) {
+  return (
+    <section className="release-flow__detail-panel">
+      <div className="release-flow__detail-panel-head">
+        <span>현재 상태</span>
+        <Badge tone={errors > 0 ? 'danger' : warnings > 0 ? 'warning' : 'success'}>{errors > 0 ? '막힘' : warnings > 0 ? '주의' : '정상'}</Badge>
+      </div>
+      <div className="release-flow__metric-grid">
+        <FieldValue label="단계" value={`${plan.steps.length}개`} />
+        <FieldValue label="실행 중" value={`${activeRuns}개`} />
+        <FieldValue label="오류" value={`${errors}개`} />
+        <FieldValue label="경고" value={`${warnings}개`} />
+      </div>
+      <div className="release-flow__next-action release-flow__next-action--compact">
+        <span>다음 작업</span>
+        <strong>{nextAction}</strong>
+      </div>
+      <div className="release-flow__detail-button-row">
+        <Button size="sm" variant={activeRuns > 0 ? 'primary' : 'secondary'} onClick={onRun}>실행 보기</Button>
+        <Button size="sm" variant={errors + warnings > 0 ? 'primary' : 'ghost'} onClick={onDiagnostics}>진단 보기</Button>
+      </div>
+    </section>
+  );
+}
+
+function ReleaseSelectedStepSummary({
+  selected,
+  selectedNode,
+  selectedIndex,
+  appById,
+  onEdit,
+  onSequence,
+}: {
+  selected?: ReleasePlanStep;
+  selectedNode: ReleaseNodeData | null;
+  selectedIndex: number;
+  appById: Map<string, Application>;
+  onEdit: () => void;
+  onSequence: () => void;
+}) {
+  if (!selected) {
+    return (
+      <section className="release-flow__detail-panel">
+        <div className="release-flow__detail-panel-head"><span>선택 단계</span></div>
+        <p className="release-flow__hint">그래프나 배포 순서 탭에서 단계를 선택하면 상세 작업이 여기에 표시됩니다.</p>
+        <Button size="sm" onClick={onSequence}>단계 선택</Button>
+      </section>
+    );
+  }
+  const app = appById.get(selected.application_id);
+  const config = selected.config;
+  return (
+    <section className="release-flow__detail-panel">
+      <div className="release-flow__detail-panel-head">
+        <span>선택 단계</span>
+        <Badge tone={toUiTone(selectedNode?.tone ?? 'neutral')}>{selectedIndex + 1}</Badge>
+      </div>
+      <strong className="release-flow__detail-panel-title">{selected.name || app?.name || selected.application_id}</strong>
+      <div className="release-flow__metric-grid release-flow__metric-grid--single">
+        <FieldValue label="레포" value={app?.repo_ref || getString(config.repo_ref) || '-'} />
+        <FieldValue label="브랜치" value={getString(config.branch, app?.branch || 'main')} />
+        <FieldValue label="환경" value={getString(config.environment, '-')} />
+        <FieldValue label="전략" value={valueLabel(getString(config.strategy, 'rolling'))} />
+      </div>
+      <div className="release-flow__detail-button-row">
+        <Button size="sm" variant="primary" onClick={onEdit}>단계 설정</Button>
+        <Button size="sm" onClick={onSequence}>순서 보기</Button>
+      </div>
+    </section>
+  );
+}
+
+function ReleaseStepList({
+  plan,
+  selectedIndex,
+  appById,
+  onSelect,
+  onEdit,
+  onMove,
+  onRemove,
+}: {
+  plan: ReleasePlan;
+  selectedIndex: number;
+  appById: Map<string, Application>;
+  onSelect: (index: number) => void;
+  onEdit: (index: number) => void;
+  onMove: (index: number, delta: number) => void;
+  onRemove: (index: number) => void;
+}) {
+  if (plan.steps.length === 0) {
+    return (
+      <EmptyState
+        icon={<IconAlertTriangle size={24} />}
+        title="아직 배포 단계가 없습니다"
+        description="단계 추가를 눌러 이 플랜에 포함할 애플리케이션을 먼저 넣어주세요."
+      />
+    );
+  }
+  return (
+    <div className="release-flow__step-card-list">
+      {plan.steps.map((step, index) => {
+        const app = appById.get(step.application_id);
+        const config = step.config;
+        return (
+          <div key={`${step.application_id}-${index}`} className={`release-flow__step-card ${index === selectedIndex ? 'release-flow__step-card--selected' : ''}`}>
+            <button type="button" className="release-flow__step-card-main" aria-pressed={index === selectedIndex} onClick={() => onSelect(index)}>
+              <span>{index + 1}</span>
+              <strong>{step.name || app?.name || step.application_id}</strong>
+              <small>{app?.repo_ref || getString(config.repo_ref) || 'repo 미지정'} · {getString(config.branch, app?.branch || 'main')}</small>
+            </button>
+            <div className="release-flow__step-card-actions">
+              <Button size="sm" variant="primary" onClick={() => onEdit(index)}>설정</Button>
+              <Button size="sm" variant="ghost" title="앞으로 이동" disabled={index === 0} onClick={() => onMove(index, -1)} aria-label="앞으로 이동"><IconArrowUp size={13} /></Button>
+              <Button size="sm" variant="ghost" title="뒤로 이동" disabled={index === plan.steps.length - 1} onClick={() => onMove(index, 1)} aria-label="뒤로 이동"><IconArrowDown size={13} /></Button>
+              <Button size="sm" variant="ghost" title="단계 삭제" onClick={() => onRemove(index)} aria-label="단계 삭제"><IconTrash size={13} /></Button>
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function ReleasePolicySummaryPanel({ plan, onEdit }: { plan: ReleasePlan; onEdit: () => void }) {
+  const settings = { ...DEFAULT_POLICY, ...plan.settings };
+  return (
+    <Card
+      title="운영 정책"
+      description="상세 값은 모달에서 수정하고, 여기서는 실행 전에 확인해야 할 핵심 기준만 보여줍니다."
+      actions={<Button size="sm" variant="primary" onClick={onEdit}>정책 상세 수정</Button>}
+    >
+      <div className="release-flow__review-grid">
+        <FieldValue label="런타임" value={valueLabel(getString(settings.runtime_mode, 'demo'))} />
+        <FieldValue label="실행" value={valueLabel(getString(settings.execution_mode))} />
+        <FieldValue label="승인" value={valueLabel(getString(settings.approval_policy))} />
+        <FieldValue label="실패" value={valueLabel(getString(settings.failure_policy))} />
+        <FieldValue label="롤백" value={valueLabel(getString(settings.rollback_policy))} />
+        <FieldValue label="동시 실행" value={`${getNumber(settings.concurrency, 1)}개`} />
+      </div>
+    </Card>
+  );
+}
+
+function ReleaseDiagnosticsSummary({ diagnostics, readiness, onPolicy }: { diagnostics: Diagnostic[]; readiness?: ReleaseReadiness; onPolicy: () => void }) {
+  const errors = diagnostics.filter(item => item.severity === 'error').length;
+  const warnings = diagnostics.filter(item => item.severity === 'warning').length;
+  const status = readiness?.ready ? '준비됨' : errors > 0 ? '수정 필요' : warnings > 0 ? '검토 필요' : '대기';
+  return (
+    <Card
+      title="진단 요약"
+      description="실행 전에 막히는 항목을 먼저 보고, 정책 수정이 필요한 경우 바로 이동합니다."
+      actions={<Button size="sm" onClick={onPolicy}>정책 보기</Button>}
+    >
+      <div className="release-flow__review-grid">
+        <FieldValue label="상태" value={status} emphasis />
+        <FieldValue label="오류" value={`${errors}개`} />
+        <FieldValue label="경고" value={`${warnings}개`} />
+        <FieldValue label="준비성" value={readiness?.ready ? '통과' : '확인 필요'} />
+      </div>
+    </Card>
   );
 }
 
@@ -1253,7 +2249,8 @@ function readLastViewedReleasePlanId(): string {
 function rememberLastViewedReleasePlan(plan: ReleasePlan): void {
   try {
     if (typeof window === 'undefined') return;
-    if (plan.plan_id) window.localStorage.setItem(LAST_VIEWED_RELEASE_PLAN_KEY, plan.plan_id);
+    if (isFeatureDemoPlan(plan)) window.localStorage.setItem(LAST_VIEWED_RELEASE_PLAN_KEY, DEMO_RELEASE_PLAN_PICKER_ID);
+    else if (plan.plan_id) window.localStorage.setItem(LAST_VIEWED_RELEASE_PLAN_KEY, plan.plan_id);
     else window.localStorage.removeItem(LAST_VIEWED_RELEASE_PLAN_KEY);
   } catch {
     // Best-effort UI memory; storage failures should not block release work.
@@ -1341,54 +2338,364 @@ function demoReleaseRun(plan: ReleasePlan): ReleaseRun {
   };
 }
 
+function demoReleaseRunHandoff(run: ReleaseRun): ReleaseRunHandoff {
+  return {
+    run_id: run.run_id,
+    plan_id: run.plan_id,
+    plan_name: run.plan_name,
+    status: run.derived_status ?? run.status,
+    headline: 'Storefront 배포 진행 중, 다음 운영 Wave 승인 준비',
+    severity: 'warning',
+    current_wave: run.current_wave,
+    total_waves: run.total_waves,
+    live_side_effects: false,
+    attention_reasons: ['운영 매니페스트 Wave의 수동 승인이 필요합니다.'],
+    verification: {
+      status: 'warning',
+      message: 'Storefront 스모크 테스트가 진행 중입니다.',
+      evidence: ['Orders API /readyz 정상', 'Storefront rollout 2/3 replicas'],
+      job_count: 1,
+      production_targets: ['Release Manifests'],
+    },
+    abort_criteria: {
+      status: 'passed',
+      message: '자동 중단 기준이 설정되어 있습니다.',
+      criteria: ['카나리 오류율이 5분 동안 5%를 넘으면 중단'],
+      override_reason: null,
+      production_targets: ['Release Manifests'],
+    },
+    change_freeze: {
+      status: 'passed',
+      message: '현재 변경 동결 기간이 아닙니다.',
+      active: false,
+      production_targets: ['Release Manifests'],
+    },
+    policy_overrides: [],
+    next_actions: [
+      { action: 'review_verification', label: 'Storefront 검증 결과 확인', enabled: true },
+      { action: 'approve', label: '운영 Wave 승인', enabled: false, reason: '현재 Wave 완료 후 활성화됩니다.' },
+      { action: 'notify', label: '릴리즈 담당자 알림', enabled: true },
+    ],
+    checks: [
+      { name: '레포 변경', status: 'passed', message: '세 레포 커밋이 고정되었습니다.' },
+      { name: '배포 검증', status: 'warning', message: 'Storefront rollout 진행 중입니다.' },
+      { name: '운영 승인', status: 'blocked', message: '현재 Wave 완료를 기다립니다.' },
+    ],
+    last_event: { event_type: 'wave.dispatched', message: 'Wave 2 Storefront Web 배포를 시작했습니다.' },
+  };
+}
+
 function demoReleasePlanSteps(): ReleasePlanStep[] {
   return [
-    {
-      step_id: 'demo-step-storefront',
-      application_id: 'demo-storefront',
-      name: 'Storefront Web',
-      position: 0,
-      depends_on: [],
-      config: {
-        environment: 'staging',
-        namespace: 'demo-prod',
-        strategy: 'rolling',
-        approval_gate: 'auto',
-        image: 'ghcr.io/myjob/storefront:1.4.2',
-        commit_sha: 'demo1c0ffee',
-      },
-    },
     {
       step_id: 'demo-step-orders',
       application_id: 'demo-orders-api',
       name: 'Orders API',
-      position: 1,
-      depends_on: ['demo-storefront'],
+      position: 0,
+      depends_on: [],
       config: {
+        repo_ref: 'JEONWOOHYUN-hydromel/demo-orders-api',
+        branch: 'main',
+        manifest_path: 'deploy/charts/orders',
+        source_type: 'helm',
         environment: 'staging',
-        namespace: 'demo-prod',
+        namespace: 'demo-shop',
+        replicas: 3,
         strategy: 'canary',
+        canary_percent: 20,
         approval_gate: 'auto',
         image: 'ghcr.io/myjob/orders-api:2.1.0',
-        commit_sha: 'demo2c0ffee',
+        commit_sha: '7db13ea4f21c',
+        service_name: 'orders-api',
+        health_check_path: '/readyz',
+        post_deploy_verification_url: 'https://staging.example.com/api/orders/health',
+        rollback_trigger: '5xx 오류율이 5분 동안 5%를 넘으면 롤백',
       },
     },
     {
-      step_id: 'demo-step-approval',
-      application_id: 'demo-payment-api',
-      name: 'Payment API',
-      position: 2,
+      step_id: 'demo-step-storefront',
+      application_id: 'demo-storefront-web',
+      name: 'Storefront Web',
+      position: 1,
       depends_on: ['demo-orders-api'],
       config: {
+        repo_ref: 'JEONWOOHYUN-hydromel/demo-storefront-web',
+        branch: 'main',
+        manifest_path: 'k8s/overlays/staging',
+        source_type: 'kustomize',
+        environment: 'staging',
+        namespace: 'demo-shop',
+        replicas: 3,
+        strategy: 'rolling',
+        approval_gate: 'auto',
+        image: 'ghcr.io/myjob/storefront-web:1.4.2',
+        commit_sha: '2a981cd716fb',
+        service_name: 'storefront-web',
+        health_check_path: '/healthz',
+        post_deploy_verification_url: 'https://staging.example.com/healthz',
+      },
+    },
+    {
+      step_id: 'demo-step-manifests',
+      application_id: 'demo-release-manifests',
+      name: 'Release Manifests',
+      position: 2,
+      depends_on: ['demo-orders-api', 'demo-storefront-web'],
+      config: {
+        repo_ref: 'JEONWOOHYUN-hydromel/demo-release-manifests',
+        branch: 'main',
+        manifest_path: 'environments/production/release-plan.yaml',
+        source_type: 'raw-yaml',
         environment: 'production',
-        namespace: 'demo-prod',
+        namespace: 'demo-shop',
+        replicas: 1,
         strategy: 'rolling',
         approval_gate: 'manual',
-        image: 'ghcr.io/myjob/payment-api:3.0.0',
-        commit_sha: 'demo3c0ffee',
+        image: 'ghcr.io/myjob/release-observer:1.0.0',
+        commit_sha: 'b41fa095ce20',
+        service_name: 'release-observer',
+        health_check_path: '/readyz',
+        change_ticket: 'CHG-DEMO-1042',
       },
     },
   ];
+}
+
+function demoReleaseDiagnostics(): Diagnostic[] {
+  return [
+    {
+      source: 'release-plan-demo',
+      severity: 'warning',
+      message: '운영 매니페스트 단계는 수동 승인 후 진행됩니다.',
+      code: 'DEMO_MANUAL_APPROVAL',
+      line: 18,
+      column: 3,
+      end_line: 18,
+      end_column: 28,
+      path: 'steps[2].config.approval_gate',
+      action: '승인 게이트 검토',
+    },
+  ];
+}
+
+function demoReleasePreview(plan: ReleasePlan): ReleasePlanPreview {
+  const steps = plan.steps.map((step, index) => ({
+    step_id: step.step_id || `demo-step-${index + 1}`,
+    application_id: step.application_id,
+    name: step.name,
+    position: index,
+    wave: index + 1,
+    blocked_by: [],
+    gate: getString(step.config.approval_gate, 'inherit'),
+    strategy: getString(step.config.strategy, getString(plan.settings.default_strategy, 'rolling')),
+    environment: getString(step.config.environment, firstEnvironment(plan)),
+    action: getString(step.config.approval_gate) === 'manual' ? 'approval_required' : 'dispatch',
+  }));
+  return {
+    executable: true,
+    summary: '세 레포를 3개 Wave로 순차 배포하고 운영 반영 전에 수동 승인을 기다립니다.',
+    waves: steps.map(step => ({ wave: step.wave ?? 1, step_ids: [step.step_id], applications: [step.name] })),
+    steps,
+    blockers: [],
+  };
+}
+
+function demoReleaseReadiness(plan: ReleasePlan): ReleaseReadiness {
+  const preview = demoReleasePreview(plan);
+  return {
+    ready: true,
+    mode: 'demo',
+    summary: '실행 전 필수 정보는 준비됐으며 운영 Wave의 수동 승인 흐름도 미리 확인할 수 있습니다.',
+    checks: [
+      { check_id: 'demo-repositories', name: '레포와 기준 브랜치', status: 'passed', message: '세 레포 모두 main 브랜치와 매니페스트 경로가 지정되었습니다.', blockers: [] },
+      { check_id: 'demo-dependencies', name: '배포 의존성', status: 'passed', message: 'Orders API 이후 Storefront와 운영 매니페스트 순서가 계산되었습니다.', blockers: [] },
+      { check_id: 'demo-diagnostics', name: '진단', status: 'passed', message: '차단 오류 없이 실행 미리보기를 만들었습니다.', blockers: [] },
+      { check_id: 'demo-approval', name: '운영 승인', status: 'warning', message: '마지막 Wave는 운영자 수동 승인을 기다립니다.', blockers: [] },
+    ],
+    impact: {
+      summary: 'staging 2개 앱과 production 매니페스트 1개를 순서대로 검토합니다.',
+      runtime_mode: 'demo',
+      live_side_effects: false,
+      total_steps: plan.steps.length,
+      total_waves: preview.waves.length,
+      first_wave: 1,
+      applications: plan.steps.map(step => step.name),
+      environments: ['staging', 'production'],
+      production_targets: ['Release Manifests'],
+      production_target_count: 1,
+      first_wave_steps: preview.steps.slice(0, 1).map(step => ({
+        step_id: step.step_id,
+        application_id: step.application_id,
+        name: step.name,
+        environment: step.environment,
+        action: step.action,
+        strategy: step.strategy,
+        wave: step.wave,
+      })),
+    },
+    next_actions: [
+      { action_id: 'demo-review-approval', check_id: 'demo-approval', label: '운영 승인 조건 확인', severity: 'warning', message: '실행 중 마지막 Wave에서 승인 요청이 표시됩니다.', blockers: [] },
+    ],
+    blockers: [],
+    warnings: ['운영 반영 전에 수동 승인이 필요합니다.'],
+  };
+}
+
+function demoReleaseRunSummary(plan: ReleasePlan): ReleaseRunSummary {
+  const run = demoReleaseRun(plan);
+  return {
+    total_runs: 1,
+    status_breakdown: { waiting_for_approval: 1 },
+    plan_breakdown: { [plan.name]: 1 },
+    active_runs: 1,
+    succeeded_runs: 0,
+    cancelled_runs: 0,
+    attention_required_runs: 1,
+    failed_runs: 0,
+    paused_runs: 0,
+    rollback_requested_runs: 0,
+    waiting_for_approval_runs: 1,
+    live_runs: 0,
+    unhealthy_runs: 0,
+    verification_failed_runs: 0,
+    verification_pending_timeout_runs: 0,
+    policy_override_runs: 0,
+    policy_override_breakdown: {},
+    active_change_freeze_runs: 0,
+    change_freeze_override_runs: 0,
+    stale_runs: 0,
+    last_run_status: 'waiting_for_approval',
+    recent_runs: [{ run_id: run.run_id, plan_id: run.plan_id, status: 'waiting_for_approval', attention_reasons: ['운영 Wave 수동 승인 대기'] }],
+  };
+}
+
+function demoReleaseAuditEvents(plan: ReleasePlan): ReleaseAuditEvent[] {
+  const run = demoReleaseRun(plan);
+  return run.events.map(event => ({
+    ...event,
+    run_id: run.run_id,
+    plan_id: run.plan_id,
+    plan_name: run.plan_name,
+    run_status: run.derived_status ?? run.status,
+    application_ids: run.steps.map(step => step.application_id),
+  }));
+}
+
+function releaseAuditCsv(events: ReleaseAuditEvent[]): string {
+  const rows = [
+    ['created_at', 'event_type', 'message', 'actor', 'run_id', 'run_status', 'applications'],
+    ...events.map(event => [
+      event.created_at ?? '',
+      event.event_type,
+      event.message,
+      event.actor ?? '',
+      event.run_id,
+      event.run_status,
+      event.application_ids.join('|'),
+    ]),
+  ];
+  return rows.map(row => row.map(value => `"${String(value).replaceAll('"', '""')}"`).join(',')).join('\n');
+}
+
+function demoReleaseGeneratedManifest(plan: ReleasePlan, selectedIndex: number): ReleaseGeneratedManifest {
+  const step = selectedStep(plan, selectedIndex) ?? plan.steps[0];
+  if (!step) return { manifest: '', files: [], resources: [], resource_count: 0, diagnostics: [], warnings: [], summary: '선택된 단계가 없습니다.' };
+  const name = safeId(getString(step.config.service_name, step.application_id)) || 'release-app';
+  const namespace = getString(step.config.namespace, 'demo-shop');
+  const image = getString(step.config.image, `ghcr.io/myjob/${name}:demo`);
+  const replicas = getNumber(step.config.replicas, 2);
+  const manifestPath = getString(step.config.manifest_path, `${name}/deployment.yaml`);
+  const manifest = [
+    'apiVersion: apps/v1',
+    'kind: Deployment',
+    'metadata:',
+    `  name: ${name}`,
+    `  namespace: ${namespace}`,
+    '  labels:',
+    `    app.kubernetes.io/name: ${name}`,
+    'spec:',
+    `  replicas: ${replicas}`,
+    '  selector:',
+    '    matchLabels:',
+    `      app.kubernetes.io/name: ${name}`,
+    '  template:',
+    '    metadata:',
+    '      labels:',
+    `        app.kubernetes.io/name: ${name}`,
+    '    spec:',
+    '      containers:',
+    `        - name: ${name}`,
+    `          image: ${image}`,
+    '          ports:',
+    '            - containerPort: 8080',
+    '          readinessProbe:',
+    '            httpGet:',
+    `              path: ${getString(step.config.health_check_path, '/readyz')}`,
+    '              port: 8080',
+    '---',
+    'apiVersion: v1',
+    'kind: Service',
+    'metadata:',
+    `  name: ${name}`,
+    `  namespace: ${namespace}`,
+    'spec:',
+    '  selector:',
+    `    app.kubernetes.io/name: ${name}`,
+    '  ports:',
+    '    - port: 80',
+    '      targetPort: 8080',
+    '',
+  ].join('\n');
+  const manualApproval = getString(step.config.approval_gate) === 'manual';
+  const diagnostics: Diagnostic[] = manualApproval ? [{
+    source: 'generated-manifest-demo',
+    severity: 'warning',
+    message: '이 단계의 Safe PR은 운영자 승인 후 병합합니다.',
+    code: 'DEMO_PR_APPROVAL',
+    line: 1,
+    column: 1,
+    end_line: 1,
+    end_column: 20,
+    path: `steps[${selectedIndex}].config.approval_gate`,
+    action: '승인자 확인',
+  }] : [];
+  return {
+    manifest,
+    files: [{ path: manifestPath, content: manifest, action: 'update', description: `${step.name} 생성 매니페스트` }],
+    resources: [
+      { api_version: 'apps/v1', kind: 'Deployment', namespace, name },
+      { api_version: 'v1', kind: 'Service', namespace, name },
+    ],
+    resource_count: 2,
+    diagnostics,
+    warnings: manualApproval ? ['운영 매니페스트는 수동 승인 이후 병합됩니다.'] : [],
+    summary: `${step.name} 단계의 Deployment와 Service를 생성했습니다.`,
+  };
+}
+
+function demoReleaseSafePr(
+  plan: ReleasePlan,
+  selectedIndex: number,
+  generated: ReleaseGeneratedManifest,
+  title: string,
+  body: string,
+): ReleaseManifestSafePr {
+  const step = selectedStep(plan, selectedIndex) ?? plan.steps[0];
+  const requestSummary = [title.trim(), body.trim()].filter(Boolean).join(' / ');
+  return {
+    ...generated,
+    summary: requestSummary ? `${generated.summary} 요청: ${requestSummary}` : generated.summary,
+    accepted: true,
+    event_id: `evt-demo-safe-pr-${selectedIndex + 1}`,
+    correlation_id: `corr-demo-safe-pr-${selectedIndex + 1}`,
+    workflow_run_id: `wf-demo-safe-pr-${selectedIndex + 1}`,
+    application_id: step?.application_id ?? 'demo-application',
+    repo_ref: getString(step?.config.repo_ref, demoReleaseApplications()[selectedIndex]?.repo_ref ?? 'demo/release-manifests'),
+    base_branch: getString(step?.config.branch, 'main'),
+    manifest_path: generated.files[0]?.path ?? getString(step?.config.manifest_path, 'release.yaml'),
+    commit_sha: getString(step?.config.commit_sha, `demo${selectedIndex + 1}c0ffee`),
+    patch_sha256: `${selectedIndex + 1}`.repeat(64),
+  };
 }
 
 function LogRow({ time, source, message, tone = 'default' }: { time: string; source: string; message: string; tone?: 'default' | 'warning' }) {
@@ -1504,13 +2811,19 @@ function ReleaseFlowLegend() {
 function ReleaseNodeSidePanel({
   node,
   tab,
+  clusterHref,
+  applicationHref,
   onTab,
+  onClose,
   onOpenRuns,
   onOpenYaml,
 }: {
   node: ReleaseNodeData | null;
   tab: string;
+  clusterHref: string;
+  applicationHref: string;
   onTab: (value: string) => void;
+  onClose: () => void;
   onOpenRuns: () => void;
   onOpenYaml: () => void;
 }) {
@@ -1525,13 +2838,16 @@ function ReleaseNodeSidePanel({
 
   const isApplication = node.nodeType === 'application';
   return (
-    <aside className="release-flow__side-panel" aria-label="Selected node details">
+    <aside className="release-flow__side-panel" aria-label="선택 노드 상세">
       <div className="release-flow__side-panel-head">
         <div>
           <span>{node.wave != null ? `Wave ${node.wave}` : '대기'}</span>
           <h3>{node.step.name || node.step.application_id}</h3>
         </div>
-        <Badge tone={toUiTone(node.tone)}>{releaseNodeTypeLabel(node.nodeType)}</Badge>
+        <div className="release-flow__side-panel-head-actions">
+          <Badge tone={toUiTone(node.tone)}>{releaseNodeTypeLabel(node.nodeType)}</Badge>
+          <button className="release-flow__inspector-close" type="button" aria-label="상세 닫기" title="상세 닫기" onClick={onClose}>×</button>
+        </div>
       </div>
       <div className="release-flow__side-panel-status">
         <span className={`release-node__status release-node__status--${statusClass(node.executionStatus)}`}>배포 {statusLabel(node.executionStatus)}</span>
@@ -1539,10 +2855,10 @@ function ReleaseNodeSidePanel({
       </div>
       <div className="release-flow__inspector-tabs">
         {[
-          ['overview', '개요'],
-          ['kubernetes', 'Kubernetes'],
-          ['logs', '로그'],
-          ['yaml', 'YAML'],
+          ['overview', '요약'],
+          ['kubernetes', '리소스'],
+          ['logs', '이벤트'],
+          ['yaml', '매니페스트'],
           ['actions', '작업'],
         ].map(([value, label]) => (
           <button key={value} type="button" aria-pressed={tab === value} onClick={() => onTab(value)}>{label}</button>
@@ -1571,22 +2887,35 @@ function ReleaseNodeSidePanel({
               <FieldValue label="주의 사항" value={node.failureReason || '없음'} wrap wide />
             </div>
           </FieldSection>
+          {(clusterHref || applicationHref) && (
+            <div className="release-flow__inspector-links">
+              {applicationHref && <Link to={applicationHref}>애플리케이션 열기</Link>}
+              {clusterHref && <Link to={clusterHref}>클러스터 열기</Link>}
+            </div>
+          )}
         </div>
       )}
 
       {tab === 'kubernetes' && (
-        <FieldSection title="Kubernetes 리소스">
-          <div className="release-flow__field-grid">
-            <FieldValue label="Kind" value={isApplication ? 'Deployment' : releaseNodeTypeLabel(node.nodeType)} />
-            <FieldValue label="Name" value={node.step.application_id || node.id} mono />
-            <FieldValue label="Namespace" value={node.namespace || '-'} />
-            <FieldValue label="Cluster" value={node.cluster || '-'} />
-            <FieldValue label="Sync" value={node.executionStatus === 'succeeded' ? 'Synced' : 'Pending'} />
-            <FieldValue label="Health" value={healthLabel(node.healthStatus)} />
-            <FieldValue label="Events" value={`${node.evidenceCount}개`} />
-            <FieldValue label="Warnings" value={`${node.warningCount}개`} />
+        <div className="release-flow__resource-tree">
+          <div className="release-flow__resource-tree-head">
+            <span>종류 / 이름</span><span>동기화</span><span>상태</span>
           </div>
-        </FieldSection>
+          {isApplication ? (
+            <>
+              <ResourceTreeRow kind="Deployment" name={node.step.application_id || node.id} sync={node.executionStatus === 'succeeded' ? 'Synced' : 'Pending'} health={node.healthStatus} />
+              <ResourceTreeRow kind="Service" name={`${node.step.application_id || node.id}-svc`} sync="Synced" health="healthy" child />
+              <ResourceTreeRow kind="ReplicaSet" name={`${node.step.application_id || node.id}-${(node.commitSha || 'current').slice(0, 7)}`} sync={node.executionStatus === 'succeeded' ? 'Synced' : 'Pending'} health={node.healthStatus} child />
+              <ResourceTreeRow kind="Pod" name={`${node.step.application_id || node.id}-pod`} sync="Live" health={node.healthStatus} child />
+            </>
+          ) : (
+            <ResourceTreeRow kind={releaseNodeTypeLabel(node.nodeType)} name={node.id} sync={statusLabel(node.executionStatus)} health={node.healthStatus} />
+          )}
+          <div className="release-flow__resource-tree-footer">
+            <span>{node.namespace || 'default'} · {node.cluster || 'target cluster'}</span>
+            {clusterHref && <Link to={clusterHref}>클러스터에서 보기</Link>}
+          </div>
+        </div>
       )}
 
       {tab === 'logs' && (
@@ -1598,7 +2927,7 @@ function ReleaseNodeSidePanel({
       )}
 
       {tab === 'yaml' && (
-        <FieldSection title="YAML Preview">
+        <FieldSection title="Live Manifest">
           <pre className="release-flow__side-panel-yaml">{yamlPreviewForNode(node)}</pre>
         </FieldSection>
       )}
@@ -1613,6 +2942,16 @@ function ReleaseNodeSidePanel({
         </div>
       )}
     </aside>
+  );
+}
+
+function ResourceTreeRow({ kind, name, sync, health, child = false }: { kind: string; name: string; sync: string; health: string; child?: boolean }) {
+  return (
+    <div className={`release-flow__resource-tree-row ${child ? 'is-child' : ''}`}>
+      <span><small>{kind}</small><strong>{name}</strong></span>
+      <span>{sync}</span>
+      <span className={`release-node__status release-node__status--${healthClass(health)}`}>{healthLabel(health)}</span>
+    </div>
   );
 }
 
@@ -1797,16 +3136,10 @@ function NewPlanWizard({
 }) {
   useEffect(() => onEnsureDraft(), [onEnsureDraft]);
   const [extraApps, setExtraApps] = useState<Application[]>([]);
-  const [repoDraft, setRepoDraft] = useState({
-    name: 'Demo Payments API',
-    repo_ref: 'JEONWOOHYUN-hydromel/demo-payments-api',
-    branch: 'main',
-    manifest_path: 'k8s/deployment.yaml',
-    cluster_id: 'demo-target-cluster',
-  });
+  const [connectRepoOpen, setConnectRepoOpen] = useState(false);
+  const reviewReadiness = useReleaseReadiness();
   const stageIndex = NEW_PLAN_STAGES.findIndex(item => item.value === stage);
-  const demoApps = useMemo(() => apps.length > 0 ? [] : demoReleaseApplications(), [apps.length]);
-  const availableApps = useMemo(() => [...apps, ...demoApps, ...extraApps], [apps, demoApps, extraApps]);
+  const availableApps = useMemo(() => [...apps, ...extraApps], [apps, extraApps]);
   const availableAppById = useMemo(() => new Map([...appById, ...availableApps.map(app => [app.application_id, app] as const)]), [appById, availableApps]);
   const selected = selectedStep(draft, selectedIndex);
   const selectedApplicationIds = new Set(draft.steps.map(step => step.application_id));
@@ -1814,34 +3147,25 @@ function NewPlanWizard({
   const previousStage = NEW_PLAN_STAGES[Math.max(0, stageIndex - 1)]?.value ?? 'basics';
   const nextStage = NEW_PLAN_STAGES[Math.min(NEW_PLAN_STAGES.length - 1, stageIndex + 1)]?.value ?? 'review';
 
+  useEffect(() => {
+    if (stage !== 'review' || draft.steps.length === 0) return;
+    const timer = window.setTimeout(() => reviewReadiness.mutate(normalizePlan(draft)), 180);
+    return () => window.clearTimeout(timer);
+  }, [draft, reviewReadiness.mutate, stage]);
+
   const toggleApp = (app: Application) => {
     const selectedNow = selectedApplicationIds.has(app.application_id);
     onPlan(current => current ? setPlanApplicationSelected(current, app, !selectedNow) : current);
     if (!selectedNow) onSelectedIndex(draft.steps.length);
     else onSelectedIndex(index => Math.max(0, Math.min(index, draft.steps.length - 2)));
   };
-  const registerRepo = () => {
-    const repoRef = repoDraft.repo_ref.trim();
-    if (!repoRef) return;
-    const app: Application = {
-      application_id: uniqueApplicationId(repoRef, [...availableApps, ...draft.steps.map(step => availableAppById.get(step.application_id)).filter((item): item is Application => Boolean(item))]),
-      name: repoDraft.name.trim() || repoRef.split('/').pop() || repoRef,
-      repo_ref: repoRef,
-      branch: repoDraft.branch.trim() || 'main',
-      manifest_path: repoDraft.manifest_path.trim() || 'k8s/deployment.yaml',
-      cluster_id: repoDraft.cluster_id.trim() || 'demo-target-cluster',
-      last_run_status: 'registered',
-    };
-    setExtraApps(current => [...current, app]);
-    onPlan(current => current ? setPlanApplicationSelected(current, app, true) : current);
+  const addCreatedApplications = (created: Application[]) => {
+    const existingIds = new Set([...availableApps, ...draft.steps.map(step => availableAppById.get(step.application_id)).filter((item): item is Application => Boolean(item))].map(app => app.application_id));
+    const additions = created.filter(app => !existingIds.has(app.application_id));
+    if (additions.length === 0) return;
+    setExtraApps(current => [...current, ...additions]);
+    onPlan(current => current ? additions.reduce((next, app) => setPlanApplicationSelected(next, app, true), current) : current);
     onSelectedIndex(draft.steps.length);
-    setRepoDraft({
-      name: '',
-      repo_ref: '',
-      branch: 'main',
-      manifest_path: 'k8s/deployment.yaml',
-      cluster_id: app.cluster_id,
-    });
   };
 
   return (
@@ -1901,21 +3225,14 @@ function NewPlanWizard({
           <Card title="앱/레포 선택">
             <div className="release-flow__scope-note">
               <strong>플랜에 들어갈 레포를 선택합니다</strong>
-              <span>선택한 앱은 아래 순서대로 릴리즈 단계가 됩니다. 브랜치와 매니페스트 경로는 다음 단계에서 앱별로 조정합니다.</span>
+              <span>선택한 배포 정의만 릴리즈 단계가 됩니다. 레포, 브랜치, manifest와 대상 클러스터는 서버 검증을 거친 뒤에만 추가할 수 있습니다.</span>
             </div>
-            <div className="release-flow__repo-register">
-              <Field label="레포 이름"><input className="input" value={repoDraft.name} onChange={e => setRepoDraft(current => ({ ...current, name: e.target.value }))} /></Field>
-              <Field label="GitHub 레포"><input className="input" placeholder="owner/repo" value={repoDraft.repo_ref} onChange={e => setRepoDraft(current => ({ ...current, repo_ref: e.target.value }))} /></Field>
-              <Field label="브랜치"><input className="input" value={repoDraft.branch} onChange={e => setRepoDraft(current => ({ ...current, branch: e.target.value }))} /></Field>
-              <Field label="매니페스트 경로"><input className="input" value={repoDraft.manifest_path} onChange={e => setRepoDraft(current => ({ ...current, manifest_path: e.target.value }))} /></Field>
-              <Field label="클러스터"><input className="input" value={repoDraft.cluster_id} onChange={e => setRepoDraft(current => ({ ...current, cluster_id: e.target.value }))} /></Field>
-              <Button type="button" size="sm" disabled={!repoDraft.repo_ref.trim()} onClick={registerRepo}><IconPlus size={13} />레포 등록</Button>
+            <div className="release-flow__scope-note release-flow__scope-note--action">
+              <span>새 레포가 필요하면 배포 정의 검증 절차를 여기서 바로 시작할 수 있습니다.</span>
+              <Button type="button" size="sm" onClick={() => setConnectRepoOpen(true)}><IconPlus size={13} />배포 정의 추가</Button>
             </div>
-            {apps.length === 0 && extraApps.length === 0 && (
-              <p className="release-flow__hint">등록된 레포가 없어 예시 레포를 먼저 보여줍니다. 그대로 선택해도 다음 단계로 진행할 수 있습니다.</p>
-            )}
             {availableApps.length === 0 ? (
-              <EmptyState title="선택할 앱/레포가 없습니다" description="위 등록 폼에서 레포를 추가하면 바로 플랜에 포함할 수 있습니다." />
+              <EmptyState title="선택할 배포 정의가 없습니다" description="레포와 manifest, 대상 클러스터를 검증해 배포 정의를 만든 뒤 플랜에 포함하세요." action={<Button size="sm" variant="primary" onClick={() => setConnectRepoOpen(true)}>배포 정의 추가</Button>} />
             ) : (
               <div className="release-flow__repo-picker">
                 {availableApps.map(app => {
@@ -1998,6 +3315,12 @@ function NewPlanWizard({
               })}
             </div>
           </Card>
+          <ReadinessPanel
+            readiness={reviewReadiness.data}
+            loading={reviewReadiness.isPending}
+            error={reviewReadiness.error}
+            onRefresh={() => reviewReadiness.mutate(normalizePlan(draft))}
+          />
         </div>
       )}
 
@@ -2009,25 +3332,114 @@ function NewPlanWizard({
           <Button variant="primary" disabled={!canGoNext} onClick={() => onStage(nextStage)}>다음</Button>
         )}
       </div>
+
+      <ConnectRepoWizard
+        open={connectRepoOpen}
+        onClose={() => setConnectRepoOpen(false)}
+        onCreated={addCreatedApplications}
+        navigateAfterCreate={false}
+      />
     </div>
   );
 }
 
-function PolicyEditor({ plan, setPolicy }: { plan: ReleasePlan; setPolicy: (patch: Record<string, unknown>) => void }) {
+function PolicyReadinessGuide({ readiness, settings }: { readiness?: ReleaseReadiness; settings: Record<string, unknown> }) {
+  const pathFor = useConsolePath();
+  const runtimeMode = getString(settings.runtime_mode, 'demo');
+  const operationalChecks = ['live.mode', 'change.ticket', 'release.window', 'change.freeze', 'runbook.sop', 'owner.contact', 'verification.plan', 'rollback.abort_criteria', 'plan.diagnostics', 'rollback.policy', 'alerts.enabled_channels'];
+  const checks = readiness?.checks.filter(check => runtimeMode === 'live' ? operationalChecks.includes(check.check_id) : ['plan.diagnostics', 'rollback.policy'].includes(check.check_id)) ?? [];
+  const blocked = checks.filter(check => check.status === 'blocked').length;
+  const warning = checks.filter(check => check.status === 'warning').length;
+  const status = blocked > 0 ? 'blocked' : warning > 0 ? 'warning' : 'passed';
+
+  return (
+    <section className={`release-flow__policy-readiness release-flow__policy-readiness--${status}`} aria-label="실행 전 확인 사항">
+      <div className="release-flow__policy-readiness-head">
+        <div>
+          <span>실행 전 확인</span>
+          <strong>{runtimeMode === 'live' ? '라이브 릴리즈 준비 상태' : '데모 플랜 검토 상태'}</strong>
+          <p>{readiness?.summary ?? '플랜 변경 후 준비 상태를 계산하고 있습니다.'}</p>
+        </div>
+        <Badge tone={readiness ? readiness.ready ? (warning ? 'warning' : 'success') : 'danger' : 'neutral'}>
+          {readiness ? readiness.ready ? warning ? `검토 ${warning}` : '준비됨' : `해결 ${blocked || readiness.blockers.length}` : '확인 중'}
+        </Badge>
+      </div>
+      {checks.length > 0 && (
+        <div className="release-flow__policy-checks">
+          {checks.map(check => (
+            <div key={check.check_id} className={`release-flow__policy-check release-flow__policy-check--${readinessStatusClass(check.status)}`}>
+              <span>{readinessStatusLabel(check.status)}</span>
+              <div>
+                <strong>{check.name}</strong>
+                <p>{check.blockers[0] ?? check.message}</p>
+              </div>
+              {check.check_id === 'alerts.enabled_channels' && (
+                <Link to={pathFor('/settings/alerts')} className="release-flow__policy-check-link">알림 설정</Link>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+      {runtimeMode === 'live' && (
+        <p className="release-flow__policy-footnote">아래 입력은 실행 조건을 설명하고 증빙을 연결합니다. 실제 GitOps 이벤트 발행은 서버의 라이브 워크스페이스 허용, 권한, 준비성 검사를 모두 통과해야 합니다.</p>
+      )}
+    </section>
+  );
+}
+
+function ReleaseScheduleGuide({ settings }: { settings: Record<string, unknown> }) {
+  const now = new Date();
+  const releaseStart = parseReleaseDate(getString(settings.release_window_start));
+  const releaseEnd = parseReleaseDate(getString(settings.release_window_end));
+  const freezeStart = parseReleaseDate(getString(settings.change_freeze_start));
+  const freezeEnd = parseReleaseDate(getString(settings.change_freeze_end));
+  const releaseWindow = scheduleWindowStatus(releaseStart, releaseEnd, now, 'release');
+  const freezeWindow = scheduleWindowStatus(freezeStart, freezeEnd, now, 'freeze');
+
+  return (
+    <div className="release-flow__schedule-guide" aria-live="polite">
+      <div className={`release-flow__schedule-tile release-flow__schedule-tile--${releaseWindow.tone}`}>
+        <span>릴리즈 가능 시간</span>
+        <strong>{releaseWindow.label}</strong>
+        <p>{formatReleaseWindow(releaseStart, releaseEnd)}</p>
+      </div>
+      <div className={`release-flow__schedule-tile release-flow__schedule-tile--${freezeWindow.tone}`}>
+        <span>변경 동결</span>
+        <strong>{freezeWindow.label}</strong>
+        <p>{formatReleaseWindow(freezeStart, freezeEnd)}</p>
+      </div>
+    </div>
+  );
+}
+
+function PolicySection({ title, description, children, open = false }: { title: string; description: string; children: ReactNode; open?: boolean }) {
+  return (
+    <details className="release-flow__policy-section" open={open}>
+      <summary>
+        <span>
+          <strong>{title}</strong>
+          <small>{description}</small>
+        </span>
+        <span aria-hidden="true">+</span>
+      </summary>
+      <div className="release-flow__policy-section-body">{children}</div>
+    </details>
+  );
+}
+
+function PolicyEditor({ plan, setPolicy, readiness }: { plan: ReleasePlan; setPolicy: (patch: Record<string, unknown>) => void; readiness?: ReleaseReadiness }) {
   const settings = { ...DEFAULT_POLICY, ...plan.settings };
+  const isLive = getString(settings.runtime_mode, 'demo') === 'live';
   return (
     <Card title="실행 정책">
+      <PolicyReadinessGuide readiness={readiness} settings={settings} />
+      <PolicySection title="기본 실행 방식" description="어떤 순서와 방식으로 변경을 진행할지 정합니다." open>
       <div className="release-flow__form-grid">
         <SelectField label="런타임 모드" value={getString(settings.runtime_mode, 'demo')} options={RUNTIME_MODES} onChange={value => setPolicy({ runtime_mode: value, provider_mode: value === 'live' ? 'live' : 'dry_run' })} />
         <SelectField label="실행 모드" value={getString(settings.execution_mode)} options={EXECUTION_MODES} onChange={value => setPolicy({ execution_mode: value })} />
         <SelectField label="승인 정책" value={getString(settings.approval_policy)} options={APPROVAL_POLICIES} onChange={value => setPolicy({ approval_policy: value })} />
         <SelectField label="실패 정책" value={getString(settings.failure_policy)} options={FAILURE_POLICIES} onChange={value => setPolicy({ failure_policy: value })} />
         <SelectField label="롤백 정책" value={getString(settings.rollback_policy)} options={ROLLBACK_POLICIES} onChange={value => setPolicy({ rollback_policy: value })} />
-        {getString(settings.rollback_policy) === 'disabled' && (
-          <Field label="롤백 예외 사유">
-            <input className="input" value={getString(settings.rollback_override_reason)} onChange={e => setPolicy({ rollback_override_reason: e.target.value })} />
-          </Field>
-        )}
         <SelectField label="기본 전략" value={getString(settings.default_strategy)} options={STRATEGIES} onChange={value => setPolicy({ default_strategy: value })} />
         <Field label="동시 실행 수"><input className="input" type="number" min={1} max={20} value={getNumber(settings.concurrency, 1)} onChange={e => setPolicy({ concurrency: Number(e.target.value) })} /></Field>
         <Field label="헬스 타임아웃 초"><input className="input" type="number" min={30} max={3600} value={getNumber(settings.health_timeout_seconds, 600)} onChange={e => setPolicy({ health_timeout_seconds: Number(e.target.value) })} /></Field>
@@ -2035,28 +3447,53 @@ function PolicyEditor({ plan, setPolicy }: { plan: ReleasePlan; setPolicy: (patc
         <Field label="승격 경로">
           <input className="input" value={getStringArray(settings.environment_order).join(', ')} onChange={e => setPolicy({ environment_order: splitList(e.target.value) })} />
         </Field>
+      </div>
+      </PolicySection>
+
+      <PolicySection title="변경 검토와 복구" description="Safe PR, 진단, 롤백처럼 변경 자체의 안전성을 확인합니다." open>
+      <div className="release-flow__form-grid">
+        <Field label="Safe PR URL"><input className="input" value={getString(settings.safe_pr_url)} onChange={e => setPolicy({ safe_pr_url: e.target.value })} /></Field>
+        <label className="release-flow__check">
+          <input type="checkbox" checked={Boolean(settings.require_diagnostics_pass)} onChange={e => setPolicy({ require_diagnostics_pass: e.target.checked })} />
+          실행 전에 진단 통과 필요
+        </label>
+        {!settings.require_diagnostics_pass && (
+          <Field label="진단 예외 사유">
+            <input className="input" value={getString(settings.diagnostics_override_reason)} onChange={e => setPolicy({ diagnostics_override_reason: e.target.value })} />
+          </Field>
+        )}
+        {getString(settings.rollback_policy) === 'disabled' && (
+          <Field label="롤백 예외 사유">
+            <input className="input" value={getString(settings.rollback_override_reason)} onChange={e => setPolicy({ rollback_override_reason: e.target.value })} />
+          </Field>
+        )}
+      </div>
+      </PolicySection>
+
+      {isLive && (
+        <PolicySection title="운영 증빙과 시간 제어" description="실서비스 변경에 필요한 책임자, 시간, 검증 기준을 연결합니다." open>
+        <ReleaseScheduleGuide settings={settings} />
+        <div className="release-flow__form-grid">
         <Field label="변경 티켓"><input className="input" value={getString(settings.change_ticket)} onChange={e => setPolicy({ change_ticket: e.target.value })} /></Field>
-        {getString(settings.runtime_mode, 'demo') === 'live' && !getString(settings.change_ticket).trim() && (
+        {!getString(settings.change_ticket).trim() && (
           <Field label="운영 변경 예외 사유">
             <input className="input" value={getString(settings.production_change_override_reason)} onChange={e => setPolicy({ production_change_override_reason: e.target.value })} />
           </Field>
         )}
-        {getString(settings.runtime_mode, 'demo') === 'live' && (
-          <>
             <Field label="릴리즈 가능 시간 시작">
-              <input className="input" placeholder="2026-07-10T09:00:00Z" value={getString(settings.release_window_start)} onChange={e => setPolicy({ release_window_start: e.target.value })} />
+              <input className="input" type="datetime-local" value={toDateTimeLocalValue(getString(settings.release_window_start))} onChange={e => setPolicy({ release_window_start: fromDateTimeLocalValue(e.target.value) })} />
             </Field>
             <Field label="릴리즈 가능 시간 종료">
-              <input className="input" placeholder="2026-07-10T11:00:00Z" value={getString(settings.release_window_end)} onChange={e => setPolicy({ release_window_end: e.target.value })} />
+              <input className="input" type="datetime-local" value={toDateTimeLocalValue(getString(settings.release_window_end))} onChange={e => setPolicy({ release_window_end: fromDateTimeLocalValue(e.target.value) })} />
             </Field>
             <Field label="릴리즈 시간 예외 사유">
               <input className="input" value={getString(settings.release_window_override_reason)} onChange={e => setPolicy({ release_window_override_reason: e.target.value })} />
             </Field>
             <Field label="변경 동결 시작">
-              <input className="input" placeholder="2026-07-10T18:00:00Z" value={getString(settings.change_freeze_start)} onChange={e => setPolicy({ change_freeze_start: e.target.value })} />
+              <input className="input" type="datetime-local" value={toDateTimeLocalValue(getString(settings.change_freeze_start))} onChange={e => setPolicy({ change_freeze_start: fromDateTimeLocalValue(e.target.value) })} />
             </Field>
             <Field label="변경 동결 종료">
-              <input className="input" placeholder="2026-07-11T02:00:00Z" value={getString(settings.change_freeze_end)} onChange={e => setPolicy({ change_freeze_end: e.target.value })} />
+              <input className="input" type="datetime-local" value={toDateTimeLocalValue(getString(settings.change_freeze_end))} onChange={e => setPolicy({ change_freeze_end: fromDateTimeLocalValue(e.target.value) })} />
             </Field>
             {(getString(settings.change_freeze_start).trim() || getString(settings.change_freeze_end).trim()) && (
               <Field label="변경 동결 예외 사유">
@@ -2088,18 +3525,12 @@ function PolicyEditor({ plan, setPolicy }: { plan: ReleasePlan; setPolicy: (patc
                 <input className="input" value={getString(settings.abort_criteria_override_reason)} onChange={e => setPolicy({ abort_criteria_override_reason: e.target.value })} />
               </Field>
             )}
-          </>
-        )}
-        <Field label="Safe PR URL"><input className="input" value={getString(settings.safe_pr_url)} onChange={e => setPolicy({ safe_pr_url: e.target.value })} /></Field>
-        <label className="release-flow__check">
-          <input type="checkbox" checked={Boolean(settings.require_diagnostics_pass)} onChange={e => setPolicy({ require_diagnostics_pass: e.target.checked })} />
-          실행 전에 진단 통과 필요
-        </label>
-        {!settings.require_diagnostics_pass && (
-          <Field label="진단 예외 사유">
-            <input className="input" value={getString(settings.diagnostics_override_reason)} onChange={e => setPolicy({ diagnostics_override_reason: e.target.value })} />
-          </Field>
-        )}
+        </div>
+        </PolicySection>
+      )}
+
+      <PolicySection title="승인 기록" description="승인 정책이 요구될 때 승인자와 근거를 남깁니다.">
+      <div className="release-flow__form-grid">
         <label className="release-flow__check">
           <input type="checkbox" checked={Boolean(settings.approval_granted)} onChange={e => setPolicy({ approval_granted: e.target.checked })} />
           이 플랜 승인 완료
@@ -2118,6 +3549,7 @@ function PolicyEditor({ plan, setPolicy }: { plan: ReleasePlan; setPolicy: (patc
           </>
         )}
       </div>
+      </PolicySection>
     </Card>
   );
 }
@@ -2146,8 +3578,22 @@ function StepEditor({
   }
   const config = selected.config;
   const strategy = getString(config.strategy, getString(plan.settings.default_strategy, 'rolling'));
+  const environment = getString(config.environment, firstEnvironment(plan));
+  const application = appById.get(selected.application_id);
   return (
     <Card title={title}>
+      <StepTargetSummary
+        application={application}
+        config={config}
+        strategy={strategy}
+        approvalGate={effectiveApprovalGate(
+          getString(config.approval_gate, 'inherit'),
+          getString(plan.settings.approval_policy, 'auto_safe'),
+          environment,
+        )}
+        approvalRecorded={Boolean(config.approval_granted || plan.settings.approval_granted)}
+        environment={environment}
+      />
       <Field label="애플리케이션">
         <select className="input" value={selected.application_id} onChange={e => setStep(selectedIndex, { application_id: e.target.value, name: appById.get(e.target.value)?.name ?? e.target.value })}>
           {apps.map(app => <option key={app.application_id} value={app.application_id}>{app.name} / {app.repo_ref}</option>)}
@@ -2168,8 +3614,21 @@ function StepEditor({
         <Field label="Safe PR URL"><input className="input" value={getString(config.safe_pr_url)} onChange={e => setStepConfig(selectedIndex, { safe_pr_url: e.target.value }, setPlan)} /></Field>
         <label className="release-flow__check">
           <input type="checkbox" checked={Boolean(config.approval_granted)} onChange={e => setStepConfig(selectedIndex, { approval_granted: e.target.checked }, setPlan)} />
-          이 단계 승인 완료
+          이 단계 승인 완료 (근거 기록)
         </label>
+        {Boolean(config.approval_granted) && (
+          <div className="release-flow__approval-evidence">
+            <Field label="단계 승인자">
+              <input className="input" value={getString(config.approval_granted_by)} onChange={e => setStepConfig(selectedIndex, { approval_granted_by: e.target.value }, setPlan)} />
+            </Field>
+            <Field label="단계 승인 사유">
+              <input className="input" value={getString(config.approval_reason)} onChange={e => setStepConfig(selectedIndex, { approval_reason: e.target.value }, setPlan)} />
+            </Field>
+            <Field label="단계 승인 시각 (UTC)">
+              <input className="input" type="datetime-local" value={toDateTimeLocalValue(getString(config.approval_granted_at))} onChange={e => setStepConfig(selectedIndex, { approval_granted_at: fromDateTimeLocalValue(e.target.value) }, setPlan)} />
+            </Field>
+          </div>
+        )}
         <Field label="카나리 비율"><input className="input" type="number" min={1} max={99} value={getNumber(config.canary_percent, strategy === 'canary' ? 20 : 0)} onChange={e => setStepConfig(selectedIndex, { canary_percent: Number(e.target.value) }, setPlan)} /></Field>
         <Field label="서비스 이름"><input className="input" value={getString(config.service_name)} onChange={e => setStepConfig(selectedIndex, { service_name: e.target.value }, setPlan)} /></Field>
         <Field label="헬스 체크 경로"><input className="input" value={getString(config.health_check_path, '/readyz')} onChange={e => setStepConfig(selectedIndex, { health_check_path: e.target.value }, setPlan)} /></Field>
@@ -2189,6 +3648,55 @@ function StepEditor({
         </div>
       </Field>
     </Card>
+  );
+}
+
+function StepTargetSummary({
+  application,
+  config,
+  strategy,
+  approvalGate,
+  approvalRecorded,
+  environment,
+}: {
+  application?: Application;
+  config: Record<string, unknown>;
+  strategy: string;
+  approvalGate: string;
+  approvalRecorded: boolean;
+  environment: string;
+}) {
+  const branch = getString(config.branch, application?.branch ?? '미확인');
+  const manifestPath = getString(config.manifest_path, application?.manifest_path ?? '미확인');
+  const commitSha = getString(config.commit_sha, '미지정');
+  const image = getString(config.image, '미지정');
+  const cluster = getString(config.cluster_id, application?.cluster_id ?? '미확인');
+  const namespace = getString(config.namespace, '미지정');
+  const replicas = getNumber(config.replicas, 2);
+  return (
+    <section className="release-flow__step-target-summary" aria-label="배포 단계 source와 target 요약">
+      <div className="release-flow__step-target-map">
+        <div className="release-flow__step-target-surface">
+          <span>Git source</span>
+          <strong className="truncate" title={application?.repo_ref}>{application?.repo_ref || '연결된 레포 없음'}</strong>
+          <small>{branch} / {manifestPath}</small>
+        </div>
+        <span className="release-flow__step-target-arrow" aria-hidden="true">-&gt;</span>
+        <div className="release-flow__step-target-surface">
+          <span>Deployment target</span>
+          <strong className="truncate" title={cluster}>{cluster}</strong>
+          <small>{environment} / {namespace}</small>
+        </div>
+      </div>
+      <div className="release-flow__step-target-meta">
+        <span>커밋 {commitSha}</span>
+        <span>이미지 {image}</span>
+        <span>{valueLabel(strategy)}</span>
+        <span>게이트 {valueLabel(approvalGate)}</span>
+        {approvalGateRequiresEvidence(approvalGate) && <span>{approvalRecorded ? '승인 기록 입력됨' : '승인 기록 필요'}</span>}
+        <span>레플리카 {replicas}</span>
+      </div>
+    </section>
   );
 }
 
@@ -2245,7 +3753,7 @@ function PreviewPanel({
     preview.waves.length === 0 ? '실행 가능한 wave가 없습니다.' : '',
     !preview.executable ? `실행 전에 막힌 항목을 해결하세요: ${preview.blockers[0] ?? '미리보기가 막혀 있습니다'}` : '',
   );
-  const liveActionHint = liveSideEffects ? '이 플랜은 실제 GitOps 이벤트를 발행할 수 있어 확인창이 표시됩니다.' : undefined;
+  const liveActionHint = liveSideEffects ? '라이브 실행 전 대상과 준비 상태를 다시 확인하는 패널이 표시됩니다.' : undefined;
   const previewActionHint = previewBlockedReason ?? liveActionHint;
   return (
     <Card
@@ -2265,10 +3773,7 @@ function PreviewPanel({
           loading={dispatching}
           disabled={!preview.executable || preview.waves.length === 0}
           title={previewActionHint}
-          onClick={() => {
-            if (liveSideEffects && !window.confirm(`라이브 릴리즈 Wave ${firstWave}를 실행할까요? 실제 GitOps 이벤트가 발행될 수 있습니다.`)) return;
-            onDispatch(firstWave);
-          }}
+          onClick={() => onDispatch(firstWave)}
         >
           Wave {firstWave} 실행
         </Button>
@@ -2277,10 +3782,7 @@ function PreviewPanel({
           loading={dispatching}
           disabled={!preview.executable || preview.waves.length === 0}
           title={previewActionHint}
-          onClick={() => {
-            if (liveSideEffects && !window.confirm('추적 가능한 라이브 릴리즈 실행을 시작할까요? 이 플랜의 실제 GitOps 실행이 시작될 수 있습니다.')) return;
-            onStart();
-          }}
+          onClick={onStart}
         >
           추적 실행 시작
         </Button>
@@ -2312,12 +3814,291 @@ function PreviewPanel({
   );
 }
 
-function ReadinessPanel({ readiness, loading }: { readiness?: ReleaseReadiness; loading: boolean }) {
+function PlanArchiveConfirmation({
+  plan,
+  open,
+  pending,
+  onConfirm,
+  onOpenChange,
+}: {
+  plan: ReleasePlan | null;
+  open: boolean;
+  pending: boolean;
+  onConfirm: (reason: string) => void;
+  onOpenChange: (open: boolean) => void;
+}) {
+  const [reason, setReason] = useState('');
+  const [confirmed, setConfirmed] = useState(false);
+  useEffect(() => {
+    if (!open) return;
+    setReason('');
+    setConfirmed(false);
+  }, [open, plan?.plan_id]);
+  if (!plan || !open) return null;
+  const canConfirm = reason.trim().length > 0 && confirmed && !pending;
+  return (
+    <Modal
+      open
+      title="릴리즈 플랜 보관"
+      description="플랜 상태를 보관됨으로 바꾸고, 이후 실행 대상에서 제외합니다. 기존 실행과 감사 기록은 유지됩니다."
+      onOpenChange={onOpenChange}
+      actions={(
+        <>
+          <Button variant="ghost" disabled={pending} onClick={() => onOpenChange(false)}>취소</Button>
+          <Button variant="primary" loading={pending} disabled={!canConfirm} onClick={() => onConfirm(reason.trim())}>플랜 보관</Button>
+        </>
+      )}
+    >
+      <div className="release-flow__dispatch-confirm">
+        <div className="release-flow__impact-grid">
+          <div><span>플랜</span><strong title={plan.name}>{plan.name}</strong></div>
+          <div><span>현재 상태</span><strong>{statusLabel(plan.status)}</strong></div>
+          <div><span>포함 단계</span><strong>{plan.steps.length}개</strong></div>
+          <div><span>기록</span><strong>유지</strong></div>
+        </div>
+        <Field label="보관 사유">
+          <textarea className="input" rows={3} value={reason} onChange={event => setReason(event.target.value)} />
+        </Field>
+        <Checkbox
+          checked={confirmed}
+          onChange={event => setConfirmed(event.target.checked)}
+          label="이 플랜이 이후 릴리즈 실행 대상에서 제외되는 것을 확인했습니다"
+        />
+      </div>
+    </Modal>
+  );
+}
+
+function PlanRestoreConfirmation({
+  plan,
+  open,
+  pending,
+  onConfirm,
+  onOpenChange,
+}: {
+  plan: ReleasePlan | null;
+  open: boolean;
+  pending: boolean;
+  onConfirm: (reason: string) => void;
+  onOpenChange: (open: boolean) => void;
+}) {
+  const [reason, setReason] = useState('');
+  const [confirmed, setConfirmed] = useState(false);
+  useEffect(() => {
+    if (!open) return;
+    setReason('');
+    setConfirmed(false);
+  }, [open, plan?.plan_id]);
+  if (!plan || !open) return null;
+  const archive = recordValue(plan.settings.archive);
+  const archivedReason = getString(archive.reason, '기록 없음');
+  const archivedBy = getString(archive.archived_by, '기록 없음');
+  const canConfirm = reason.trim().length > 0 && confirmed && !pending;
+  return (
+    <Modal
+      open
+      title="릴리즈 플랜 복구"
+      description="보관 전 상태로 되돌리고, 다시 릴리즈 실행 후보로 포함합니다. 실행 전 준비 상태와 정책 검증은 다시 통과해야 합니다."
+      onOpenChange={onOpenChange}
+      actions={(
+        <>
+          <Button variant="ghost" disabled={pending} onClick={() => onOpenChange(false)}>취소</Button>
+          <Button variant="primary" loading={pending} disabled={!canConfirm} onClick={() => onConfirm(reason.trim())}>플랜 복구</Button>
+        </>
+      )}
+    >
+      <div className="release-flow__dispatch-confirm">
+        <div className="release-flow__impact-grid">
+          <div><span>플랜</span><strong title={plan.name}>{plan.name}</strong></div>
+          <div><span>현재 상태</span><strong>{statusLabel(plan.status)}</strong></div>
+          <div><span>복구 후</span><strong>보관 전 상태</strong></div>
+          <div><span>실행</span><strong>준비 상태 재검증</strong></div>
+        </div>
+        <div className="release-flow__form-grid">
+          <FieldValue label="보관 사유" value={archivedReason} />
+          <FieldValue label="보관 수행자" value={archivedBy} />
+        </div>
+        <Field label="복구 사유">
+          <textarea className="input" rows={3} value={reason} onChange={event => setReason(event.target.value)} />
+        </Field>
+        <Checkbox
+          checked={confirmed}
+          onChange={event => setConfirmed(event.target.checked)}
+          label="복구 후에도 배포 전에 준비 상태와 승인 게이트를 다시 확인하는 것을 알고 있습니다"
+        />
+      </div>
+    </Modal>
+  );
+}
+
+function PlanDeletionConfirmation({
+  plan,
+  mode,
+  pending,
+  onConfirm,
+  onOpenChange,
+}: {
+  plan: ReleasePlan | null;
+  mode: PlanDeletionMode | null;
+  pending: boolean;
+  onConfirm: (mode: PlanDeletionMode) => void;
+  onOpenChange: (open: boolean) => void;
+}) {
+  const [confirmed, setConfirmed] = useState(false);
+  useEffect(() => setConfirmed(false), [mode, plan?.plan_id]);
+  if (!plan || !mode) return null;
+  const force = mode === 'force';
+  const actionLabel = force ? '강제 삭제' : '플랜 삭제';
+  return (
+    <Modal
+      open
+      title={`릴리즈 플랜 ${actionLabel}`}
+      description={force
+        ? '플랜과 연결된 릴리즈 실행 기록을 모두 삭제합니다. 이 작업은 되돌릴 수 없습니다.'
+        : '플랜을 삭제합니다. 연결된 실행 기록이 있으면 서버 정책에 따라 삭제가 거부될 수 있습니다.'}
+      onOpenChange={onOpenChange}
+      actions={(
+        <>
+          <Button variant="ghost" disabled={pending} onClick={() => onOpenChange(false)}>취소</Button>
+          <Button variant="danger" loading={pending} disabled={!confirmed || pending} onClick={() => onConfirm(mode)}>{actionLabel}</Button>
+        </>
+      )}
+    >
+      <div className="release-flow__dispatch-confirm">
+        <div className="release-flow__impact-grid">
+          <div><span>플랜</span><strong title={plan.name}>{plan.name}</strong></div>
+          <div><span>상태</span><strong>{statusLabel(plan.status)}</strong></div>
+          <div><span>포함 단계</span><strong>{plan.steps.length}개</strong></div>
+          <div><span>삭제 범위</span><strong>{force ? '플랜 + 실행 기록' : '플랜만'}</strong></div>
+        </div>
+        <Checkbox
+          checked={confirmed}
+          onChange={event => setConfirmed(event.target.checked)}
+          label={force ? '실행 기록까지 영구 삭제하는 것을 확인했습니다' : '삭제할 플랜과 영향 범위를 확인했습니다'}
+          description={force ? '강제 삭제 후에는 감사와 실행 이력을 복구할 수 없습니다.' : undefined}
+        />
+      </div>
+    </Modal>
+  );
+}
+
+function ReleaseDispatchConfirmation({
+  open,
+  intent,
+  plan,
+  preview,
+  readiness,
+  pending,
+  onConfirm,
+  onOpenChange,
+}: {
+  open: boolean;
+  intent: ReleaseDispatchIntent | null;
+  plan: ReleasePlan | null;
+  preview?: ReleasePlanPreview;
+  readiness?: ReleaseReadiness;
+  pending: boolean;
+  onConfirm: () => void;
+  onOpenChange: (open: boolean) => void;
+}) {
+  const [confirmed, setConfirmed] = useState(false);
+  useEffect(() => setConfirmed(false), [intent?.action, intent?.wave, open]);
+  if (!open || !intent || !plan) return null;
+
+  const steps = (preview?.steps ?? []).filter((step) => intent.action === 'run' || step.wave === intent.wave);
+  const environments = [...new Set(steps.map((step) => step.environment).filter(Boolean))];
+  const productionSteps = steps.filter((step) => ['prod', 'production'].includes(step.environment.toLowerCase()));
+  const actionLabel = intent.action === 'wave' ? `Wave ${intent.wave} 실행` : '추적 실행 시작';
+  const blockers = readiness?.blockers ?? [];
+  const warnings = readiness?.warnings ?? [];
+  const readinessSummary = readiness?.ready
+    ? warnings.length ? `${warnings.length}개 운영 경고` : '준비 상태 통과'
+    : blockers[0] ?? '준비 상태를 다시 확인하세요';
+
+  return (
+    <Modal
+      open={open}
+      title={`라이브 릴리즈 확인: ${actionLabel}`}
+      description="GitOps 이벤트를 발행하기 전에 이번 실행의 대상과 운영 조건을 다시 확인합니다."
+      onOpenChange={onOpenChange}
+    >
+      <div className="release-flow__dispatch-confirm">
+        <div className="release-flow__impact">
+          <div className="release-flow__impact-grid">
+            <div><span>플랜</span><strong title={plan.name}>{plan.name}</strong></div>
+            <div><span>실행 범위</span><strong>{intent.action === 'wave' ? `Wave ${intent.wave}` : '전체 플랜'}</strong></div>
+            <div><span>대상 단계</span><strong>{steps.length}개</strong></div>
+            <div><span>운영 환경</span><strong>{productionSteps.length}개</strong></div>
+          </div>
+          <p>{environments.join(', ') || '환경 정보 없음'} / {readinessSummary}</p>
+        </div>
+
+        <section className="release-flow__dispatch-targets" aria-label="실행 대상">
+          <div className="release-flow__dispatch-targets-head">
+            <strong>이번 실행 대상</strong>
+            <Badge tone={productionSteps.length > 0 ? 'warning' : 'info'}>{productionSteps.length > 0 ? '운영 대상 포함' : '비운영 대상'}</Badge>
+          </div>
+          {steps.length > 0 ? (
+            <div className="release-flow__dispatch-target-list">
+              {steps.map((step) => (
+                <div key={step.step_id} className="release-flow__dispatch-target">
+                  <strong>{step.name || step.application_id}</strong>
+                  <span>{step.environment} / {valueLabel(step.strategy)} / {valueLabel(step.gate)}</span>
+                </div>
+              ))}
+            </div>
+          ) : <p className="release-flow__hint">미리보기에서 실행 대상을 확인하지 못했습니다. 실행을 취소하고 준비 상태를 다시 점검하세요.</p>}
+        </section>
+
+        {(blockers.length || warnings.length) ? (
+          <section className="release-flow__dispatch-notices" aria-label="운영 확인 사항">
+            {blockers.slice(0, 3).map((item) => <p key={item} className="text-danger">{item}</p>)}
+            {warnings.slice(0, 3).map((item) => <p key={item} className="text-warning">{item}</p>)}
+          </section>
+        ) : null}
+
+        <Checkbox
+          checked={confirmed}
+          onChange={(event) => setConfirmed(event.target.checked)}
+          label="실행 대상과 준비 상태를 확인했습니다"
+          description={readiness?.ready === false
+            ? '최신 준비 상태에 blocker가 있어 실행할 수 없습니다. 아래 확인 사항을 먼저 해결하세요.'
+            : '확인 후에만 실제 GitOps 이벤트가 발행됩니다. 서버의 릴리즈 정책과 권한 검증은 별도로 다시 적용됩니다.'}
+        />
+        <div className="flex justify-end gap-2">
+          <Button variant="ghost" disabled={pending} onClick={() => onOpenChange(false)}>취소</Button>
+          <Button variant="primary" loading={pending} disabled={!confirmed || steps.length === 0 || readiness?.ready === false} onClick={onConfirm}>{actionLabel}</Button>
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
+function ReadinessPanel({
+  readiness,
+  loading,
+  error,
+  onRefresh,
+  onResolve,
+}: {
+  readiness?: ReleaseReadiness;
+  loading: boolean;
+  error?: Error | null;
+  onRefresh?: () => void;
+  onResolve?: (checkId: string) => void;
+}) {
   if (loading && !readiness) {
     return <Card title="준비 상태"><p className="release-flow__hint">릴리즈 준비 상태를 확인하는 중입니다...</p></Card>;
   }
+  if (error && !readiness) {
+    return (
+      <Card title="준비 상태" actions={onRefresh ? <Button size="sm" variant="ghost" onClick={onRefresh}>다시 점검</Button> : undefined}>
+        <p className="release-flow__hint text-danger">준비 상태를 계산하지 못했습니다. {error.message || '잠시 후 다시 점검해주세요.'}</p>
+      </Card>
+    );
+  }
   if (!readiness) {
-    return <Card title="준비 상태"><p className="release-flow__hint">아직 준비 상태 확인 결과가 없습니다.</p></Card>;
+    return <Card title="준비 상태" actions={onRefresh ? <Button size="sm" variant="ghost" onClick={onRefresh}>점검 시작</Button> : undefined}><p className="release-flow__hint">아직 준비 상태 확인 결과가 없습니다.</p></Card>;
   }
   const badgeTone = readiness.ready ? (readiness.warnings.length ? 'warning' : 'success') : 'danger';
   const impact = readiness.impact;
@@ -2328,6 +4109,7 @@ function ReadinessPanel({ readiness, loading }: { readiness?: ReleaseReadiness; 
       actions={
         <>
           <Button size="sm" variant="ghost" onClick={() => copyReadinessMarkdown(readiness)}>준비 상태 복사</Button>
+          {onRefresh && <Button size="sm" variant="ghost" onClick={onRefresh}>다시 점검</Button>}
           <Badge tone={readiness.mode === 'live' ? 'danger' : 'info'}>{readiness.mode}</Badge>
           <Badge tone={badgeTone}>{readiness.ready ? '준비됨' : '막힘'}</Badge>
         </>
@@ -2372,7 +4154,10 @@ function ReadinessPanel({ readiness, loading }: { readiness?: ReleaseReadiness; 
                 <strong>{action.label}</strong>
                 <p>{action.blockers[0] ?? action.message}</p>
               </div>
-              <Badge tone={readinessStatusTone(action.severity)}>{readinessStatusLabel(action.severity)}</Badge>
+              <div className="release-flow__next-action-actions">
+                <Badge tone={readinessStatusTone(action.severity)}>{readinessStatusLabel(action.severity)}</Badge>
+                {onResolve && <Button size="sm" variant="ghost" onClick={() => onResolve(action.check_id)}>수정 열기</Button>}
+              </div>
             </div>
           ))}
         </div>
@@ -2401,11 +4186,13 @@ function AlertChannelsPanel({
   channels,
   loading,
   error,
+  readiness,
   settingsHref,
 }: {
   channels: AlertChannel[];
   loading: boolean;
   error: Error | null;
+  readiness?: ReleaseReadiness;
   settingsHref: string;
 }) {
   if (loading && channels.length === 0) {
@@ -2414,11 +4201,21 @@ function AlertChannelsPanel({
   const enabled = channels.filter(channel => channel.enabled);
   const critical = enabled.filter(channel => channel.min_severity === 'critical');
   const warningOrLower = enabled.filter(channel => channel.min_severity !== 'critical');
-  const summaryTone = error ? 'warning' : enabled.length > 0 ? 'success' : 'warning';
+  const validation = readiness?.checks.find(check => check.check_id === 'alerts.enabled_channels');
+  const summaryTone = error
+    ? 'warning'
+    : validation
+      ? readinessStatusTone(validation.status)
+      : enabled.length > 0 ? 'success' : 'warning';
+  const summaryLabel = error
+    ? '사용 불가'
+    : validation
+      ? `검증 ${readinessStatusLabel(validation.status)}`
+      : enabled.length > 0 ? `${enabled.length}개 활성` : '설정 안 됨';
   return (
     <Card
       title="릴리즈 알림"
-      actions={<Badge tone={summaryTone}>{error ? '사용 불가' : enabled.length > 0 ? `${enabled.length}개 활성` : '설정 안 됨'}</Badge>}
+      actions={<Badge tone={summaryTone}>{summaryLabel}</Badge>}
     >
       {error ? (
         <p className="release-flow__hint">알림 채널 설정은 관리자 권한이 필요하거나 일시적으로 사용할 수 없습니다.</p>
@@ -2442,6 +4239,18 @@ function AlertChannelsPanel({
               <strong>{warningOrLower.length}</strong>
             </div>
           </div>
+          {validation && (
+            <div className={`release-flow__readiness-row release-flow__readiness-row--${readinessStatusClass(validation.status)}`}>
+              <div>
+                <strong>라이브 알림 검증</strong>
+                <p>{validation.message}</p>
+              </div>
+              <Badge tone={readinessStatusTone(validation.status)}>{readinessStatusLabel(validation.status)}</Badge>
+              {validation.blockers.length > 0 && (
+                <ul>{validation.blockers.slice(0, 2).map(blocker => <li key={blocker}>{blocker}</li>)}</ul>
+              )}
+            </div>
+          )}
           {enabled.length > 0 ? (
             <div className="release-flow__alert-list">
               {enabled.slice(0, 4).map(channel => (
@@ -2503,32 +4312,38 @@ function RunPanel({
   onNotify: (runId: string, reason: string) => void;
   onDelete: (runId: string, force?: boolean) => void;
 }) {
-  const demoRuns = useMemo(() => (runs.length === 0 && runFilter === 'all' ? [demoReleaseRun(plan)] : runs), [plan, runFilter, runs]);
+  const isFeatureDemo = isFeatureDemoPlan(plan);
+  const displayRuns = useMemo(
+    () => (isFeatureDemo && runs.length === 0 && runFilter === 'all' ? [demoReleaseRun(plan)] : runs),
+    [isFeatureDemo, plan, runFilter, runs],
+  );
   const recentRunIds = useMemo(() => new Set((summary?.recent_runs ?? []).map(run => run.run_id)), [summary?.recent_runs]);
   useEffect(() => {
-    if (loading && demoRuns.length === 0) return;
-    if (demoRuns.length === 0) {
+    if (loading && displayRuns.length === 0) return;
+    if (displayRuns.length === 0) {
       if (selectedRunId && runFilter === 'all' && !recentRunIds.has(selectedRunId)) onSelectedRunIdChange('');
       return;
     }
     if (!selectedRunId) {
-      onSelectedRunIdChange(demoRuns[0].run_id);
+      onSelectedRunIdChange(displayRuns[0].run_id);
       return;
     }
-    if (runFilter === 'all' && !demoRuns.some(run => run.run_id === selectedRunId) && !recentRunIds.has(selectedRunId)) {
-      onSelectedRunIdChange(demoRuns[0].run_id);
+    if (runFilter === 'all' && !displayRuns.some(run => run.run_id === selectedRunId) && !recentRunIds.has(selectedRunId)) {
+      onSelectedRunIdChange(displayRuns[0].run_id);
     }
-  }, [demoRuns, loading, onSelectedRunIdChange, recentRunIds, runFilter, selectedRunId]);
+  }, [displayRuns, loading, onSelectedRunIdChange, recentRunIds, runFilter, selectedRunId]);
   const selectRecentRun = (runId: string) => {
     onRunFilterChange('all');
     onSelectedRunIdChange(runId);
   };
-  const selectedRun = selectedRunId ? demoRuns.find(run => run.run_id === selectedRunId) : undefined;
-  const run = selectedRun ?? demoRuns[0];
+  const selectedRun = selectedRunId ? displayRuns.find(run => run.run_id === selectedRunId) : undefined;
+  const run = selectedRun ?? displayRuns[0];
   const isDemoRun = run?.run_id === demoReleaseRunId(plan);
   const handoffQ = useReleaseRunHandoff(isDemoRun ? undefined : run?.run_id);
+  const handoff = isDemoRun ? demoReleaseRunHandoff(run) : handoffQ.data;
   const reportM = useReleaseRunReport();
   const reportExportM = useReleaseRunReportExport();
+  const [actionIntent, setActionIntent] = useState<RunActionIntent | null>(null);
   if (loading && !run) return <Card title="릴리즈 실행"><p className="release-flow__hint">릴리즈 실행 기록을 불러오는 중입니다...</p></Card>;
   if (!run) {
     return (
@@ -2556,7 +4371,7 @@ function RunPanel({
   const attentionRequired = Boolean(attention.required) || attentionReasons.length > 0;
   const stale = Boolean(attention.stale);
   const alertable = attentionRequired || stale;
-  const notifyAction = handoffQ.data?.next_actions.find(action => action.action === 'notify');
+  const notifyAction = handoff?.next_actions.find(action => action.action === 'notify');
   const notifyBlockedReason = notifyAction?.enabled === false ? getString(notifyAction.reason) : '';
   const busyReason = busy ? '다른 릴리즈 작업이 이미 진행 중입니다.' : '';
   const terminalReason = isTerminal ? `이미 ${statusLabel(status)} 상태인 실행입니다.` : '';
@@ -2597,10 +4412,10 @@ function RunPanel({
           <span>아직 실제 워크플로우 실행이 없어, 첫 커밋 감지 후 표시될 실행 카드 형태를 미리 보여줍니다.</span>
         </div>
       )}
-      {demoRuns.length > 1 && (
+      {displayRuns.length > 1 && (
         <Field label="실행 선택">
           <select className="input" value={run.run_id} onChange={e => onSelectedRunIdChange(e.target.value)}>
-            {demoRuns.map(item => (
+            {displayRuns.map(item => (
               <option key={item.run_id} value={item.run_id}>
                 {shortId(item.run_id)} / {statusLabel(item.derived_status ?? item.status)} / Wave {item.current_wave}{recordValue(item.attention).required ? ' / 확인 필요' : ''}
               </option>
@@ -2617,7 +4432,7 @@ function RunPanel({
           ))}
         </div>
       )}
-      <RunHandoffPanel handoff={handoffQ.data} loading={handoffQ.isPending} />
+      <RunHandoffPanel handoff={handoff} loading={!isDemoRun && handoffQ.isPending} />
       <div className="release-flow__run-head">
         <div>
           <strong>{run.plan_name}</strong>
@@ -2634,11 +4449,11 @@ function RunPanel({
             loading={reportM.isPending}
             disabled={reportM.isPending}
             onClick={() => {
-              if (isDemoRun) copyReleaseRunReport(run, handoffQ.data);
+              if (isDemoRun) copyReleaseRunReport(run, handoff);
               else {
                 reportM.mutate(run.run_id, {
-                  onSuccess: data => copyReleaseRunReport(run, handoffQ.data, data.report.markdown),
-                  onError: () => copyReleaseRunReport(run, handoffQ.data),
+                  onSuccess: data => copyReleaseRunReport(run, handoff, data.report.markdown),
+                  onError: () => copyReleaseRunReport(run, handoff),
                 });
               }
             }}
@@ -2661,8 +4476,20 @@ function RunPanel({
             disabled={busy || isDemoRun || status === 'paused' || isTerminal}
             title={sampleRunReason || advanceBlockedReason}
             onClick={() => {
-              if (sideEffects && !window.confirm(`라이브 릴리즈 실행 ${shortId(run.run_id)}을 다음 단계로 진행할까요? 다음 GitOps wave가 실행될 수 있습니다.`)) return;
-              onAdvance(run.run_id);
+              if (!sideEffects) {
+                onAdvance(run.run_id);
+                return;
+              }
+              setActionIntent({
+                title: '다음 Wave 진행',
+                description: '다음 GitOps wave를 실행합니다. 현재 실행 상태와 대상 단계를 확인한 뒤 진행하세요.',
+                confirmLabel: '다음 Wave 진행',
+                runId: run.run_id,
+                status,
+                wave: run.current_wave,
+                requiresAcknowledgement: true,
+                onConfirm: () => onAdvance(run.run_id),
+              });
             }}
           >
             진행
@@ -2673,12 +4500,19 @@ function RunPanel({
             disabled={busy || isDemoRun || !canRetry}
             title={sampleRunReason || retryBlockedReason}
             onClick={() => {
-              const confirmation = sideEffects
-                ? `라이브 릴리즈 실행 ${shortId(run.run_id)}을 재시도할까요? 실패했거나 비정상인 GitOps 단계를 다시 실행할 수 있습니다.`
-                : '';
-              const submit = (reason: string) => onRetry(run.run_id, reason);
-              if (confirmation) withConfirmedOperatorReason('릴리즈 wave 재시도', operatorActionReason('retry', run, status, attentionReasons), confirmation, submit);
-              else withOperatorReason('릴리즈 wave 재시도', operatorActionReason('retry', run, status, attentionReasons), submit);
+              setActionIntent({
+                title: '릴리즈 Wave 재시도',
+                description: sideEffects
+                  ? '실패했거나 비정상인 GitOps 단계를 다시 실행합니다. 영향과 복구 기준을 확인하세요.'
+                  : 'dry-run 실행에서 실패했거나 비정상인 단계를 다시 계산합니다.',
+                confirmLabel: '재시도 요청',
+                runId: run.run_id,
+                status,
+                wave: run.current_wave,
+                defaultReason: operatorActionReason('retry', run, status, attentionReasons),
+                requiresAcknowledgement: sideEffects,
+                onConfirm: reason => onRetry(run.run_id, reason),
+              });
             }}
           >
             재시도
@@ -2690,7 +4524,16 @@ function RunPanel({
                 loading={busy}
                 disabled={isDemoRun}
                 title={sampleRunReason || busyReason || undefined}
-                onClick={() => withOperatorReason('릴리즈 실행 재개', operatorActionReason('resume', run, status, attentionReasons), reason => onResume(run.run_id, reason))}
+                onClick={() => setActionIntent({
+                  title: '릴리즈 실행 재개',
+                  description: '일시정지된 릴리즈 실행을 다시 진행합니다.',
+                  confirmLabel: '실행 재개',
+                  runId: run.run_id,
+                  status,
+                  wave: run.current_wave,
+                  defaultReason: operatorActionReason('resume', run, status, attentionReasons),
+                  onConfirm: reason => onResume(run.run_id, reason),
+                })}
               >
                 재개
               </Button>
@@ -2701,7 +4544,16 @@ function RunPanel({
                 loading={busy}
                 disabled={busy || isDemoRun || isTerminal}
                 title={sampleRunReason || pauseBlockedReason}
-                onClick={() => withOperatorReason('릴리즈 실행 일시정지', operatorActionReason('pause', run, status, attentionReasons), reason => onPause(run.run_id, reason))}
+                onClick={() => setActionIntent({
+                  title: '릴리즈 실행 일시정지',
+                  description: '현재 Wave 이후의 릴리즈 진행을 멈춥니다. 재개 전까지 새 GitOps 작업이 진행되지 않습니다.',
+                  confirmLabel: '일시정지',
+                  runId: run.run_id,
+                  status,
+                  wave: run.current_wave,
+                  defaultReason: operatorActionReason('pause', run, status, attentionReasons),
+                  onConfirm: reason => onPause(run.run_id, reason),
+                })}
               >
                 일시정지
               </Button>
@@ -2712,12 +4564,18 @@ function RunPanel({
             loading={busy}
             disabled={busy || isDemoRun || isTerminal || rollbackPolicy === 'disabled'}
             title={sampleRunReason || rollbackBlockedReason}
-            onClick={() => withConfirmedOperatorReason(
-              '롤백 요청',
-              operatorActionReason('rollback', run, status, attentionReasons),
-              `실행 ${shortId(run.run_id)}에 롤백을 요청할까요? 사용자 영향이나 롤백 기준이 확인된 경우에만 사용해야 합니다.`,
-              reason => onRollback(run.run_id, reason),
-            )}
+            onClick={() => setActionIntent({
+              title: '롤백 요청',
+              description: '현재 릴리즈의 롤백을 요청합니다. 사용자 영향과 롤백 기준을 확인한 경우에만 진행하세요.',
+              confirmLabel: '롤백 요청',
+              runId: run.run_id,
+              status,
+              wave: run.current_wave,
+              defaultReason: operatorActionReason('rollback', run, status, attentionReasons),
+              requiresAcknowledgement: true,
+              destructive: true,
+              onConfirm: reason => onRollback(run.run_id, reason),
+            })}
           >
             롤백
           </Button>
@@ -2727,12 +4585,18 @@ function RunPanel({
             loading={busy}
             disabled={busy || isDemoRun || isTerminal}
             title={sampleRunReason || cancelBlockedReason}
-            onClick={() => withConfirmedOperatorReason(
-              '릴리즈 실행 취소',
-              operatorActionReason('cancel', run, status, attentionReasons),
-              `실행 ${shortId(run.run_id)}을 취소할까요? 이 실행의 추가 릴리즈 진행이 중단됩니다.`,
-              reason => onCancel(run.run_id, reason),
-            )}
+            onClick={() => setActionIntent({
+              title: '릴리즈 실행 취소',
+              description: '이 실행의 이후 릴리즈 진행을 중단합니다. 이미 적용된 변경은 자동으로 되돌아가지 않습니다.',
+              confirmLabel: '실행 취소',
+              runId: run.run_id,
+              status,
+              wave: run.current_wave,
+              defaultReason: operatorActionReason('cancel', run, status, attentionReasons),
+              requiresAcknowledgement: true,
+              destructive: true,
+              onConfirm: reason => onCancel(run.run_id, reason),
+            })}
           >
             취소
           </Button>
@@ -2742,7 +4606,16 @@ function RunPanel({
             loading={busy}
             disabled={busy || isDemoRun || !alertable || Boolean(notifyBlockedReason)}
             title={sampleRunReason || notifyDisabledReason}
-            onClick={() => withOperatorReason('릴리즈 담당자 알림', operatorActionReason('notify', run, status, attentionReasons), reason => onNotify(run.run_id, reason))}
+            onClick={() => setActionIntent({
+              title: '릴리즈 담당자 알림',
+              description: '현재 실행의 상태와 사유를 활성 알림 채널로 전달합니다.',
+              confirmLabel: '알림 발송',
+              runId: run.run_id,
+              status,
+              wave: run.current_wave,
+              defaultReason: operatorActionReason('notify', run, status, attentionReasons),
+              onConfirm: reason => onNotify(run.run_id, reason),
+            })}
           >
             알림
           </Button>
@@ -2752,10 +4625,20 @@ function RunPanel({
             loading={busy}
             disabled={busy || isDemoRun}
             title={sampleRunReason || deleteBlockedReason}
-            onClick={() => {
-              if (!window.confirm(`실행 ${shortId(run.run_id)}을 삭제할까요?`)) return;
-              onDelete(run.run_id, canForceDelete ? window.confirm('실행이 아직 활성 상태입니다. 강제로 삭제할까요?') : false);
-            }}
+            onClick={() => setActionIntent({
+              title: '릴리즈 실행 삭제',
+              description: canForceDelete
+                ? '활성 상태의 실행입니다. 강제 삭제하면 이후 상태 추적과 운영 이력이 사라집니다.'
+                : '실행 이력과 관련 화면의 상태를 삭제합니다.',
+              confirmLabel: canForceDelete ? '강제 삭제' : '실행 삭제',
+              runId: run.run_id,
+              status,
+              wave: run.current_wave,
+              requiresAcknowledgement: true,
+              requiresForce: canForceDelete,
+              destructive: true,
+              onConfirm: (_reason, force) => onDelete(run.run_id, force),
+            })}
           >
             삭제
           </Button>
@@ -2804,7 +4687,91 @@ function RunPanel({
           );
         })}
       </div>
+      <RunActionConfirmation
+        intent={actionIntent}
+        pending={busy}
+        onOpenChange={open => {
+          if (!open) setActionIntent(null);
+        }}
+      />
     </Card>
+  );
+}
+
+function RunActionConfirmation({
+  intent,
+  pending,
+  onOpenChange,
+}: {
+  intent: RunActionIntent | null;
+  pending: boolean;
+  onOpenChange: (open: boolean) => void;
+}) {
+  const [reason, setReason] = useState('');
+  const [acknowledged, setAcknowledged] = useState(false);
+  const [force, setForce] = useState(false);
+  useEffect(() => {
+    setReason(intent?.defaultReason ?? '');
+    setAcknowledged(false);
+    setForce(false);
+  }, [intent]);
+  if (!intent) return null;
+  const normalizedReason = reason.trim() || intent.defaultReason || '';
+  const disabled = pending
+    || (Boolean(intent.defaultReason) && !normalizedReason)
+    || (Boolean(intent.requiresAcknowledgement) && !acknowledged)
+    || (Boolean(intent.requiresForce) && !force);
+  return (
+    <Modal
+      open
+      title={intent.title}
+      description={intent.description}
+      onOpenChange={onOpenChange}
+      actions={(
+        <>
+          <Button variant="ghost" disabled={pending} onClick={() => onOpenChange(false)}>취소</Button>
+          <Button
+            variant={intent.destructive ? 'danger' : 'primary'}
+            loading={pending}
+            disabled={disabled}
+            onClick={() => {
+              intent.onConfirm(normalizedReason, force);
+              onOpenChange(false);
+            }}
+          >
+            {intent.confirmLabel}
+          </Button>
+        </>
+      )}
+    >
+      <div className="release-flow__dispatch-confirm">
+        <div className="release-flow__impact-grid">
+          <div><span>실행</span><strong>{shortId(intent.runId)}</strong></div>
+          <div><span>현재 상태</span><strong>{statusLabel(intent.status)}</strong></div>
+          <div><span>현재 Wave</span><strong>{intent.wave}</strong></div>
+        </div>
+        {intent.defaultReason && (
+          <Field label="작업 사유">
+            <textarea className="input" rows={3} value={reason} onChange={event => setReason(event.target.value)} />
+          </Field>
+        )}
+        {intent.requiresAcknowledgement && (
+          <Checkbox
+            checked={acknowledged}
+            onChange={event => setAcknowledged(event.target.checked)}
+            label="실행 대상과 영향을 확인했습니다"
+          />
+        )}
+        {intent.requiresForce && (
+          <Checkbox
+            checked={force}
+            onChange={event => setForce(event.target.checked)}
+            label="활성 실행을 강제로 삭제하는 것을 확인했습니다"
+            description="강제 삭제 후에는 실행 상태와 이력을 복구할 수 없습니다."
+          />
+        )}
+      </div>
+    </Modal>
   );
 }
 
@@ -3230,6 +5197,18 @@ function copyText(value: string, successMessage: string, fallbackTitle: string) 
   window.prompt(fallbackTitle, value);
 }
 
+function downloadTextFile(filename: string, content: string) {
+  const blob = new Blob([content], { type: 'text/yaml;charset=utf-8' });
+  const url = window.URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = filename.split(/[\\/]/).pop() || 'release-manifest.yaml';
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  window.URL.revokeObjectURL(url);
+}
+
 function RecentRunShortcuts({
   summary,
   selectedRunId,
@@ -3533,6 +5512,39 @@ function draftPlan(apps: Application[]): ReleasePlan {
   };
 }
 
+function isFeatureDemoPlan(plan: ReleasePlan | null | undefined): boolean {
+  return plan?.settings.feature_demo === true;
+}
+
+function releasePlanPickerId(plan: ReleasePlan): string {
+  if (isFeatureDemoPlan(plan)) return DEMO_RELEASE_PLAN_PICKER_ID;
+  return plan.plan_id ?? `draft-${safeId(plan.name) || 'plan'}`;
+}
+
+function featureDemoReleasePlan(): ReleasePlan {
+  return normalizePlan({
+    name: '멀티 레포 출시 기능 데모',
+    description: '세 레포의 의존성, 승인, 실행 복구, 생성 YAML과 Safe PR 검토 화면을 한 플랜에서 확인합니다.',
+    status: 'active',
+    settings: {
+      ...DEFAULT_POLICY,
+      feature_demo: true,
+      runtime_mode: 'demo',
+      execution_mode: 'sequential_apply',
+      approval_policy: 'production_only',
+      failure_policy: 'pause_for_operator',
+      rollback_policy: 'safe_pr',
+      environment_order: ['staging', 'production'],
+      release_owner: 'Platform Release Team',
+      oncall_contact: '#release-oncall',
+      runbook_url: 'https://docs.example.com/runbooks/multi-repo-release',
+      abort_criteria: '카나리 오류율이 5분 동안 5%를 넘으면 중단',
+      require_diagnostics_pass: true,
+    },
+    steps: demoReleasePlanSteps(),
+  });
+}
+
 function emptyDraftPlan(apps: Application[]): ReleasePlan {
   return {
     name: '새 릴리즈 플랜',
@@ -3552,7 +5564,7 @@ function demoReleaseApplications(): Application[] {
       branch: 'main',
       cluster_id: 'demo-target-cluster',
       manifest_path: 'k8s/storefront/deployment.yaml',
-      last_run_status: 'succeeded',
+      last_run_status: 'running',
     },
     {
       application_id: 'demo-orders-api',
@@ -3561,7 +5573,7 @@ function demoReleaseApplications(): Application[] {
       branch: 'main',
       cluster_id: 'demo-target-cluster',
       manifest_path: 'k8s/orders/deployment.yaml',
-      last_run_status: 'running',
+      last_run_status: 'succeeded',
     },
     {
       application_id: 'demo-release-manifests',
@@ -3573,18 +5585,6 @@ function demoReleaseApplications(): Application[] {
       last_run_status: 'waiting_for_approval',
     },
   ];
-}
-
-function uniqueApplicationId(repoRef: string, apps: Application[]): string {
-  const base = (repoRef.split('/').pop() || repoRef || 'repo')
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '') || 'repo';
-  const existing = new Set(apps.map(app => app.application_id));
-  if (!existing.has(base)) return base;
-  let index = 2;
-  while (existing.has(`${base}-${index}`)) index += 1;
-  return `${base}-${index}`;
 }
 
 function releaseStepFromApp(app: Application, index: number, dependsOn: string[] = []): ReleasePlanStep {
@@ -3702,10 +5702,89 @@ function moveStep(plan: ReleasePlan, index: number, delta: number, setPlan: Disp
 }
 
 function setStepConfig(index: number, patch: Record<string, unknown>, setPlan: Dispatch<SetStateAction<ReleasePlan | null>>) {
-  setPlan(current => current ? {
-    ...current,
-    steps: current.steps.map((step, i) => i === index ? { ...step, config: { ...step.config, ...patch } } : step),
-  } : current);
+  setPlan(current => current ? applyStepConfigPatch(current, index, patch) : current);
+}
+
+const APPROVAL_EVIDENCE_FIELDS = new Set([
+  'approval_granted',
+  'approval_granted_by',
+  'approval_reason',
+  'approval_granted_at',
+]);
+
+function applyPolicyPatch(plan: ReleasePlan, patch: Record<string, unknown>): ReleasePlan {
+  const settings = { ...DEFAULT_POLICY, ...plan.settings, ...patch };
+  if (!patchChangesReleaseScope(plan.settings, patch)) return { ...plan, settings };
+  return {
+    ...plan,
+    settings: clearApprovalEvidence(settings),
+    steps: plan.steps.map(step => ({ ...step, config: clearApprovalEvidence(step.config) })),
+  };
+}
+
+function applyStepPatch(plan: ReleasePlan, index: number, patch: Partial<ReleasePlanStep>): ReleasePlan {
+  const currentStep = plan.steps[index];
+  if (!currentStep) return plan;
+  const applicationChanged = typeof patch.application_id === 'string' && patch.application_id !== currentStep.application_id;
+  const nextStep = applicationChanged
+    ? { ...currentStep, ...patch, config: clearApprovalEvidence(currentStep.config) }
+    : { ...currentStep, ...patch };
+  return {
+    ...plan,
+    settings: applicationChanged ? clearApprovalEvidence(plan.settings) : plan.settings,
+    steps: normalizeSteps(plan.steps.map((step, stepIndex) => stepIndex === index ? nextStep : step)),
+  };
+}
+
+function applyStepConfigPatch(plan: ReleasePlan, index: number, patch: Record<string, unknown>): ReleasePlan {
+  const currentStep = plan.steps[index];
+  if (!currentStep) return plan;
+  const config = { ...currentStep.config, ...patch };
+  const scopeChanged = patchChangesReleaseScope(currentStep.config, patch);
+  return {
+    ...plan,
+    settings: scopeChanged ? clearApprovalEvidence(plan.settings) : plan.settings,
+    steps: plan.steps.map((step, stepIndex) => stepIndex === index
+      ? { ...step, config: scopeChanged ? clearApprovalEvidence(config) : config }
+      : step),
+  };
+}
+
+function patchChangesReleaseScope(current: Record<string, unknown>, patch: Record<string, unknown>): boolean {
+  return Object.entries(patch).some(([key, value]) => (
+    !APPROVAL_EVIDENCE_FIELDS.has(key) && !releaseSettingValueEqual(current[key], value)
+  ));
+}
+
+function clearApprovalEvidence<T extends Record<string, unknown>>(values: T): T {
+  return {
+    ...values,
+    approval_granted: false,
+    approval_granted_by: '',
+    approval_reason: '',
+    approval_granted_at: '',
+  } as T;
+}
+
+function releaseSettingValueEqual(left: unknown, right: unknown): boolean {
+  if (Object.is(left, right)) return true;
+  return JSON.stringify(left) === JSON.stringify(right);
+}
+
+function releasePlanExecutionFingerprint(plan: ReleasePlan): string {
+  return JSON.stringify({
+    name: plan.name,
+    description: plan.description,
+    status: plan.status,
+    settings: plan.settings,
+    steps: plan.steps.map(step => ({
+      application_id: step.application_id,
+      name: step.name,
+      position: step.position,
+      depends_on: step.depends_on,
+      config: step.config,
+    })),
+  });
 }
 
 function toggleDependency(index: number, dependency: string, checked: boolean, setPlan: Dispatch<SetStateAction<ReleasePlan | null>>) {
@@ -3841,25 +5920,50 @@ function valueLabel(value: string): string {
   return {
     all_upstream_complete: '상위 단계 완료',
     auto: '자동',
+    auto_safe: '안전한 변경 자동',
     blocked: '막힘',
     canary: '카나리',
     demo: '데모',
     dry_run: 'dry-run',
+    external_change_ticket: '변경 티켓 필요',
     inherit: '플랜 정책 따르기',
     live: '라이브',
     low: '낮음',
     manual: '수동',
     manual_each_step: '단계별 수동 승인',
     manual_approved: '수동 승인 완료',
+    manual_production: '운영 수동 승인',
     medium: '중간',
     pending: '대기',
     policy: '정책',
     post_deploy: '배포 후',
+    production_only: '운영 환경 수동 승인',
     queued: '대기',
     rolling: '롤링',
+    safe_pr: 'Safe PR 검토',
     sequential: '순차',
     waiting: '대기 중',
   }[normalized] ?? value;
+}
+
+function releaseEdgeGateLabel(value: string): string {
+  const normalized = value.toLowerCase();
+  if (normalized === 'manual' || normalized.includes('manual')) return '수동 승인';
+  if (normalized === 'dependency' || normalized === 'all_upstream_complete') return '의존성 통과';
+  if (normalized === 'inherit') return '플랜 정책';
+  return valueLabel(value) || '자동 진행';
+}
+
+function effectiveApprovalGate(configuredGate: string, policy: string, environment: string): string {
+  if (configuredGate && configuredGate !== 'inherit') return configuredGate;
+  if (policy === 'production_only') {
+    return ['prod', 'production'].includes(environment.toLowerCase()) ? 'manual_production' : 'auto';
+  }
+  return policy || 'auto_safe';
+}
+
+function approvalGateRequiresEvidence(gate: string): boolean {
+  return ['manual', 'manual_each_step', 'manual_production'].includes(gate);
 }
 
 function shortId(value: string): string {
@@ -3907,26 +6011,6 @@ function operatorActionReason(action: ReleaseOperatorAction, run: ReleaseRun, st
     default:
       return `${runLabel}: operator action requested`;
   }
-}
-
-function withOperatorReason(title: string, fallback: string, submit: (reason: string) => void) {
-  const reason = promptOperatorReason(title, fallback);
-  if (reason === null) return;
-  submit(reason);
-}
-
-function withConfirmedOperatorReason(title: string, fallback: string, confirmation: string, submit: (reason: string) => void) {
-  const reason = promptOperatorReason(title, fallback);
-  if (reason === null) return;
-  if (!window.confirm(`${confirmation}\n\nReason:\n${reason}`)) return;
-  submit(reason);
-}
-
-function promptOperatorReason(title: string, fallback: string): string | null {
-  const reason = window.prompt(`${title} reason`, fallback);
-  if (reason === null) return null;
-  const normalized = reason.trim();
-  return normalized || fallback;
 }
 
 function releaseStepMeta(step: ReleaseRun['steps'][number]): string[] {
@@ -4092,8 +6176,8 @@ function buildFlow(
       id: `step-${index}`,
       type: 'release_step',
       position: { x: 0, y: 0 },
-      width: RELEASE_NODE_WIDTH,
-      height: RELEASE_NODE_HEIGHT,
+      width: RELEASE_APP_NODE_WIDTH,
+      height: RELEASE_APP_NODE_HEIGHT,
       data: {
         step,
         app: appById.get(step.application_id),
@@ -4188,7 +6272,12 @@ function buildFlow(
       source: stepByApp.get(dep) ?? `step-${Math.max(0, index - 1)}`,
       target: `step-${index}`,
       type: 'animated',
-      data: { tone: 'info' as const, active: true },
+      data: {
+        tone: 'info' as const,
+        active: true,
+        label: releaseEdgeGateLabel(getString(step.config.approval_gate, 'dependency')),
+        detail: '상위 단계 완료',
+      },
     }))
   );
   const dependentSources = new Set(plan.steps.flatMap(step => step.depends_on));
@@ -4200,14 +6289,17 @@ function buildFlow(
       source: 'sys-precheck',
       target: `step-${index}`,
       type: 'animated',
-      data: { tone: 'ok' as const, active: false },
+      data: { tone: 'ok' as const, active: false, label: '진단 통과' },
     }));
-  const sequenceEdges: ReleaseEdge[] = dependencyEdges.length ? [] : plan.steps.slice(1).map((_, index) => ({
+  const sequenceEdges: ReleaseEdge[] = dependencyEdges.length ? [] : plan.steps.slice(1).map((step, index) => ({
     id: `seq-${index}`,
     source: `step-${index}`,
     target: `step-${index + 1}`,
     type: 'animated',
-    data: { tone: 'neutral' as const },
+    data: {
+      tone: 'neutral' as const,
+      label: releaseEdgeGateLabel(getString(step.config.approval_gate, 'auto')),
+    },
   }));
   const terminalEdges: ReleaseEdge[] = plan.steps
     .map((step, index) => ({ step, index }))
@@ -4217,7 +6309,13 @@ function buildFlow(
       source: `step-${index}`,
       target: 'sys-approval',
       type: 'animated',
-      data: { tone: hasBlockedApplication ? 'warn' as const : 'info' as const, active: hasIncompleteApplication },
+      data: {
+        tone: hasBlockedApplication ? 'warn' as const : 'info' as const,
+        active: hasIncompleteApplication,
+        label: '승인 요청',
+        detail: 'manual gate',
+        gate: true,
+      },
     }));
   const systemEdges: ReleaseEdge[] = [
     {
@@ -4225,7 +6323,7 @@ function buildFlow(
       source: 'sys-approval',
       target: 'sys-verification',
       type: 'animated',
-      data: { tone: 'neutral' as const, active: false },
+      data: { tone: 'neutral' as const, active: false, label: '승인 후 검증' },
     },
   ];
   const allEdges = [...rootStepEdges, ...dependencyEdges, ...sequenceEdges, ...terminalEdges, ...systemEdges];
@@ -4413,12 +6511,22 @@ function systemReleaseNode({
     },
   };
   const tone: ReleaseFlowTone = executionStatus === 'failed' ? 'danger' : executionStatus === 'blocked' ? 'warn' : nodeType === 'precheck' ? 'ok' : 'neutral';
+  const nodeWidth = nodeType === 'application'
+    ? RELEASE_APP_NODE_WIDTH
+    : nodeType === 'approval'
+      ? RELEASE_GATE_NODE_WIDTH
+      : RELEASE_CHECKPOINT_NODE_WIDTH;
+  const nodeHeight = nodeType === 'application'
+    ? RELEASE_APP_NODE_HEIGHT
+    : nodeType === 'approval'
+      ? RELEASE_GATE_NODE_HEIGHT
+      : RELEASE_CHECKPOINT_NODE_HEIGHT;
   return {
     id,
     type: 'release_step',
     position: { x: 0, y: 0 },
-    width: RELEASE_NODE_WIDTH,
-    height: RELEASE_NODE_HEIGHT,
+    width: nodeWidth,
+    height: nodeHeight,
     data: {
       id,
       step,
@@ -4667,12 +6775,52 @@ function getString(value: unknown, fallback = ''): string {
 
 function toDateTimeLocalValue(value: string): string {
   if (!value) return '';
-  return value.replace(/Z$/, '').slice(0, 16);
+  const date = parseReleaseDate(value);
+  if (!date) return value.replace(/Z$/, '').slice(0, 16);
+  const local = new Date(date.getTime() - date.getTimezoneOffset() * 60_000);
+  return local.toISOString().slice(0, 16);
 }
 
 function fromDateTimeLocalValue(value: string): string {
   if (!value) return '';
-  return `${value.length === 16 ? `${value}:00` : value}Z`;
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? value : date.toISOString();
+}
+
+function parseReleaseDate(value: string): Date | null {
+  if (!value) return null;
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
+function formatReleaseWindow(start: Date | null, end: Date | null): string {
+  if (!start && !end) return '설정되지 않음';
+  if (!start || !end) return '시작과 종료를 모두 입력하세요';
+  const formatter = new Intl.DateTimeFormat('ko-KR', {
+    month: 'numeric',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  });
+  return `${formatter.format(start)} - ${formatter.format(end)}`;
+}
+
+function scheduleWindowStatus(
+  start: Date | null,
+  end: Date | null,
+  now: Date,
+  kind: 'release' | 'freeze',
+): { tone: 'neutral' | 'success' | 'warning' | 'danger'; label: string } {
+  if (!start && !end) return { tone: 'neutral', label: kind === 'release' ? '시간 미설정' : '동결 미설정' };
+  if (!start || !end || end <= start) return { tone: 'danger', label: '시간 확인 필요' };
+  if (kind === 'release') {
+    if (now < start) return { tone: 'warning', label: '아직 시작 전' };
+    if (now > end) return { tone: 'danger', label: '가능 시간 종료' };
+    return { tone: 'success', label: '지금 배포 가능' };
+  }
+  if (now < start || now > end) return { tone: 'success', label: '동결 아님' };
+  return { tone: 'danger', label: '현재 동결 중' };
 }
 
 function getNumber(value: unknown, fallback: number): number {

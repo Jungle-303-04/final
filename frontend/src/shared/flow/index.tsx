@@ -4,7 +4,7 @@ import ELK from 'elkjs/lib/elk.bundled.js';
 import type { ElkNode } from 'elkjs/lib/elk-api';
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import {
-  Background, Controls, Handle, MiniMap, Position, ReactFlow, ReactFlowProvider,
+  Background, Controls, EdgeLabelRenderer, Handle, MiniMap, Position, ReactFlow, ReactFlowProvider,
   getSmoothStepPath, useReactFlow,
   type Edge, type EdgeProps, type EdgeTypes, type Node, type NodeProps, type NodeTypes,
 } from '@xyflow/react';
@@ -83,25 +83,44 @@ export function useAutoLayout(nodes: Node[], edges: Edge[], direction: FlowDirec
   return layout;
 }
 
-export type FlowEdgeData = { active?: boolean; tone?: Tone };
+export type FlowEdgeData = {
+  active?: boolean;
+  tone?: Tone;
+  label?: string;
+  detail?: string;
+  gate?: boolean;
+};
 export type AnimatedFlowEdge = Edge<FlowEdgeData>;
 
 /** 커스텀 edge — active 면 dash-flow + 이동 패킷 애니메이션, 아니면 정적. 색은 tone → 토큰 변수 */
 export function AnimatedEdge(props: EdgeProps<AnimatedFlowEdge>) {
   const { id, sourceX, sourceY, targetX, targetY, sourcePosition, targetPosition, data } = props;
-  const [path] = getSmoothStepPath({ sourceX, sourceY, sourcePosition, targetX, targetY, targetPosition, borderRadius: 8 });
+  const [path, labelX, labelY] = getSmoothStepPath({ sourceX, sourceY, sourcePosition, targetX, targetY, targetPosition, borderRadius: 8 });
   const active = data?.active === true;
   return (
-    <path
-      id={id}
-      d={path}
-      fill="none"
-      className={cx(
-        'react-flow__edge-path flow-edge-path',
-        active && 'flow-edge-path--active',
-        flowToneEdgeClass(data?.tone ?? (active ? 'info' : 'neutral')),
+    <>
+      <path
+        id={id}
+        d={path}
+        fill="none"
+        className={cx(
+          'react-flow__edge-path flow-edge-path',
+          active && 'flow-edge-path--active',
+          flowToneEdgeClass(data?.tone ?? (active ? 'info' : 'neutral')),
+        )}
+      />
+      {data?.label && (
+        <EdgeLabelRenderer>
+          <div
+            className={cx('flow-edge-label', data.gate && 'flow-edge-label--gate')}
+            style={{ transform: `translate(-50%, -50%) translate(${labelX}px, ${labelY}px)` }}
+          >
+            <strong>{data.label}</strong>
+            {data.detail && <span>{data.detail}</span>}
+          </div>
+        </EdgeLabelRenderer>
       )}
-    />
+    </>
   );
 }
 
@@ -152,21 +171,21 @@ function useDocThemeMode(): 'dark' | 'light' {
 }
 
 /* 레이아웃(노드 구성)이 바뀔 때 다시 fitView — 접기/펼치기·데이터 갱신 대응 */
-function FitOnChange({ signature }: { signature: string }) {
+function FitOnChange({ signature, padding, minZoom }: { signature: string; padding: number; minZoom: number }) {
   const { fitView } = useReactFlow();
   useEffect(() => {
-    const raf = requestAnimationFrame(() => { fitView({ duration: Math.round(durations.slow * 1000), padding: 0.15 }); });
+    const raf = requestAnimationFrame(() => { fitView({ duration: Math.round(durations.slow * 1000), padding, minZoom }); });
     return () => cancelAnimationFrame(raf);
-  }, [signature, fitView]);
+  }, [signature, fitView, minZoom, padding]);
   return null;
 }
 
 type FlowScrollBehavior = 'pan' | 'zoom';
 
 /** ReactFlow 공통 래퍼 — grid 배경/fitView/zoom 범위/panOnScroll/테마 토큰 */
-export function FlowCanvas({ nodes, edges, nodeTypes, onNodeClick, onPaneClick, interactive = true, scrollBehavior = 'pan', children }: {
+export function FlowCanvas({ nodes, edges, nodeTypes, onNodeClick, onPaneClick, interactive = true, scrollBehavior = 'pan', fitViewPadding = 0.15, fitViewMinZoom = 0.12, children }: {
   nodes: Node[]; edges: Edge[]; nodeTypes?: NodeTypes;
-  onNodeClick?: (id: string) => void; onPaneClick?: () => void; interactive?: boolean; scrollBehavior?: FlowScrollBehavior; children?: ReactNode;
+  onNodeClick?: (id: string) => void; onPaneClick?: () => void; interactive?: boolean; scrollBehavior?: FlowScrollBehavior; fitViewPadding?: number; fitViewMinZoom?: number; children?: ReactNode;
 }) {
   const types = useMemo(() => ({ ...BASE_NODE_TYPES, ...nodeTypes }), [nodeTypes]);
   const colorMode = useDocThemeMode();
@@ -177,7 +196,7 @@ export function FlowCanvas({ nodes, edges, nodeTypes, onNodeClick, onPaneClick, 
       <div className="h-full w-full">
         <ReactFlow
           nodes={nodes} edges={edges} nodeTypes={types} edgeTypes={EDGE_TYPES}
-          fitView fitViewOptions={{ padding: 0.15 }} minZoom={0.12} maxZoom={1.6}
+          fitView fitViewOptions={{ padding: fitViewPadding, minZoom: fitViewMinZoom }} minZoom={0.12} maxZoom={1.6}
           panOnScroll={panWithWheel} panOnDrag={interactive}
           zoomOnScroll={zoomWithWheel} zoomOnPinch={interactive} zoomOnDoubleClick={interactive}
           nodesDraggable={false} nodesConnectable={false} colorMode={colorMode}
@@ -188,7 +207,7 @@ export function FlowCanvas({ nodes, edges, nodeTypes, onNodeClick, onPaneClick, 
           <Background gap={20} color="var(--ui-raised)" />
           <Controls position="bottom-left" showInteractive={false} />
           {nodes.length >= 8 && <MiniMap pannable zoomable position="bottom-right" />}
-          <FitOnChange signature={nodes.map(n => `${n.id}:${Math.round(n.position.x)},${Math.round(n.position.y)}:${n.width ?? n.measured?.width ?? ''}x${n.height ?? n.measured?.height ?? ''}`).join('|')} />
+          <FitOnChange padding={fitViewPadding} minZoom={fitViewMinZoom} signature={nodes.map(n => `${n.id}:${Math.round(n.position.x)},${Math.round(n.position.y)}:${n.width ?? n.measured?.width ?? ''}x${n.height ?? n.measured?.height ?? ''}`).join('|')} />
           {children}
         </ReactFlow>
       </div>

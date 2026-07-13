@@ -941,6 +941,25 @@ def target_register_payload_from_settings(settings: dict[str, Any]) -> TargetReg
     )
 
 
+def require_target_registration_preflight(
+    payload: TargetRegisterRequest,
+    workspace_id: str,
+    db: Any,
+) -> None:
+    getter = getattr(db, "get_cluster_registration", None)
+    if callable(getter) and getter(workspace_id, payload.cluster_id or "") is not None:
+        raise HTTPException(status_code=409, detail="cluster_id is already registered")
+    allowed = set(TargetPreflightRequest.model_fields)
+    preflight_payload = TargetPreflightRequest(
+        **{key: value for key, value in payload.model_dump().items() if key in allowed}
+    )
+    provider_ready, errors, _warnings, _selected, _kube_context_allowed = target_preflight_provider_checks(
+        preflight_payload
+    )
+    if not provider_ready or errors:
+        raise HTTPException(status_code=422, detail={"message": "target preflight failed", "errors": errors})
+
+
 # require_admin_session 이 세션을 검증 → base router 에 둠.
 # (라우터 단위 require_session + require_admin_session = 이중 검증/레이트리밋 2배 회피)
 @router.post(gateway_routes.TARGETS_PREFLIGHT_PATH, response_model=TargetPreflightResponse)
@@ -1023,6 +1042,7 @@ async def register_target(
         and access.reachability == "self_only"
     ):
         raise HTTPException(status_code=422, detail=EXTERNAL_ACCESS_REQUIRED)
+    require_target_registration_preflight(scoped_payload, workspace_id, db)
     validate_target_install_providers(scoped_payload)
     validate_target_bootstrap_config(scoped_payload)
     components = target_desired_components(scoped_payload)

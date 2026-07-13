@@ -556,16 +556,61 @@ class ReleaseFlowRepository(DatabaseConnection):
         workspace_id: str,
         plan_id: str,
         *,
-        reason: str | None = None,
+        reason: str,
+        actor: str,
     ) -> JsonObject | None:
+        plan = self.get_release_plan(workspace_id, plan_id)
+        if plan is None:
+            return None
         table = ReleasePlan.__table__
-        values = {"status": "archived"}
-        if reason:
-            values["settings"] = table.c.settings.op("||")({"archive": {"reason": reason}})
+        archive = {
+            "reason": reason,
+            "archived_by": actor,
+            "archived_at": datetime.now(UTC).isoformat(),
+            "previous_status": str(plan.get("status") or DEFAULT_RELEASE_PLAN_STATUS),
+        }
+        values = {"status": "archived", "settings": table.c.settings.op("||")({"archive": archive})}
         statement = (
             table.update()
             .where(table.c.workspace_id == workspace_id, table.c.plan_id == plan_id)
             .values(**values, updated_at=func.now())
+        )
+        with self.connection() as conn:
+            conn.execute(statement)
+        return self.get_release_plan(workspace_id, plan_id)
+
+    def restore_release_plan(
+        self,
+        workspace_id: str,
+        plan_id: str,
+        *,
+        reason: str,
+        actor: str,
+    ) -> JsonObject | None:
+        plan = self.get_release_plan(workspace_id, plan_id)
+        if plan is None:
+            return None
+        settings = dict(plan.get("settings") or {})
+        archive = dict(settings.get("archive") or {})
+        previous_status = str(archive.get("previous_status") or DEFAULT_RELEASE_PLAN_STATUS)
+        if previous_status not in {"draft", "active", "paused"}:
+            previous_status = DEFAULT_RELEASE_PLAN_STATUS
+        archive.update(
+            {
+                "restore_reason": reason,
+                "restored_by": actor,
+                "restored_at": datetime.now(UTC).isoformat(),
+            }
+        )
+        table = ReleasePlan.__table__
+        statement = (
+            table.update()
+            .where(table.c.workspace_id == workspace_id, table.c.plan_id == plan_id)
+            .values(
+                status=previous_status,
+                settings=table.c.settings.op("||")({"archive": archive}),
+                updated_at=func.now(),
+            )
         )
         with self.connection() as conn:
             conn.execute(statement)

@@ -117,7 +117,7 @@ export default function AlertChannelsView() {
       test_message: '알림 채널 테스트',
     };
     setForm(next);
-    setTestedSignature(formSignature(next));
+    setTestedSignature(channel.last_test_status === 'passed' ? formSignature(next) : '');
     setTestError('');
   }
 
@@ -127,39 +127,54 @@ export default function AlertChannelsView() {
     setTestError('');
   }
 
-  function runTest() {
+  async function runTest() {
     if (!validation.valid) return;
-    testChannel.mutate(
-      {
-        channel_id: form.channel_id,
+    setTestedSignature('');
+    setTestError('');
+    try {
+      const draft = await saveChannel.mutateAsync({
+        ...(form.channel_id ? { channel_id: form.channel_id } : {}),
         name: form.name.trim(),
         kind: 'webhook',
         url: form.url.trim(),
         min_severity: form.min_severity,
-        enabled: form.enabled,
-        severity: form.test_severity,
-        message: form.test_message.trim() || '알림 채널 테스트',
-      },
-      {
-        onSuccess: result => {
-          if (result.valid && result.delivered) {
-            setTestedSignature(signature);
-            setTestError('');
-            push({ tone: 'success', title: '테스트 발송 완료', description: result.detail || '알림 채널이 응답했습니다' });
-            return;
-          }
-          setTestedSignature('');
-          setTestError(testResultMessage(result.detail, result.code, result.status_code));
-          push({ tone: 'danger', title: '테스트 발송 실패', description: testResultMessage(result.detail, result.code, result.status_code) });
+        enabled: false,
+      });
+      const nextForm = { ...form, channel_id: draft.channel_id };
+      setForm(nextForm);
+      testChannel.mutate(
+        {
+          channel_id: draft.channel_id,
+          name: nextForm.name.trim(),
+          kind: 'webhook',
+          url: nextForm.url.trim(),
+          min_severity: nextForm.min_severity,
+          enabled: false,
+          severity: nextForm.test_severity,
+          message: nextForm.test_message.trim() || '알림 채널 테스트',
         },
-        onError: error => {
-          const message = (error as Error).message || '테스트 발송에 실패했습니다';
-          setTestedSignature('');
-          setTestError(message);
-          push({ tone: 'danger', title: '테스트 발송 실패', description: message });
+        {
+          onSuccess: result => {
+            if (result.valid && result.delivered) {
+              setTestedSignature(formSignature(nextForm));
+              push({ tone: 'success', title: '테스트 발송 완료', description: result.detail || '알림 채널이 응답했습니다' });
+              return;
+            }
+            setTestError(testResultMessage(result.detail, result.code, result.status_code));
+            push({ tone: 'danger', title: '테스트 발송 실패', description: testResultMessage(result.detail, result.code, result.status_code) });
+          },
+          onError: error => {
+            const message = (error as Error).message || '테스트 발송에 실패했습니다';
+            setTestError(message);
+            push({ tone: 'danger', title: '테스트 발송 실패', description: message });
+          },
         },
-      },
-    );
+      );
+    } catch (error) {
+      const message = (error as Error).message || '검증용 채널 초안 저장에 실패했습니다';
+      setTestError(message);
+      push({ tone: 'danger', title: '테스트 준비 실패', description: message });
+    }
   }
 
   function save() {
@@ -247,7 +262,12 @@ export default function AlertChannelsView() {
               </Field>
               {testError && <p className="text-caption font-medium text-danger" role="alert">{testError}</p>}
               {tested && <p className="text-caption font-medium text-success">현재 입력값의 테스트 발송이 성공했습니다. 값을 바꾸면 다시 테스트해야 합니다.</p>}
-              <Button type="button" loading={testChannel.isPending} disabled={!validation.valid || testChannel.isPending} onClick={runTest}>
+              <Button
+                type="button"
+                loading={saveChannel.isPending || testChannel.isPending}
+                disabled={!validation.valid || saveChannel.isPending || testChannel.isPending}
+                onClick={runTest}
+              >
                 테스트 발송
               </Button>
             </div>

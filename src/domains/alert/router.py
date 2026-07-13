@@ -53,6 +53,7 @@ async def upsert_alert_channel(
             status_code=422,
             detail={"code": UNSAFE_WEBHOOK_URL_CODE, "detail": UNSAFE_WEBHOOK_URL_DETAIL},
         ) from exc
+    require_alert_channel_activation_test(payload, workspace_id, db)
     try:
         saved = db.upsert_alert_channel(
             {
@@ -64,6 +65,34 @@ async def upsert_alert_channel(
     except LookupError as exc:
         raise HTTPException(status_code=NOT_FOUND_CODE, detail=CHANNEL_NOT_FOUND) from exc
     return AlertChannelResponse(**saved)
+
+
+def require_alert_channel_activation_test(
+    payload: AlertChannelUpsertRequest,
+    workspace_id: str,
+    db: Any,
+) -> None:
+    if not payload.enabled:
+        return
+    if not payload.channel_id:
+        raise HTTPException(
+            status_code=409,
+            detail="save the alert channel disabled, test delivery, then enable it",
+        )
+    getter = getattr(db, "get_alert_channel", None)
+    existing = getter(workspace_id, payload.channel_id) if callable(getter) else None
+    if existing is None:
+        raise HTTPException(status_code=NOT_FOUND_CODE, detail=CHANNEL_NOT_FOUND)
+    if str(existing.get("url") or "") != payload.url:
+        raise HTTPException(
+            status_code=409,
+            detail="test the updated webhook URL before enabling the alert channel",
+        )
+    if str(existing.get("last_test_status") or "").lower() != "passed":
+        raise HTTPException(
+            status_code=409,
+            detail="a successful alert channel delivery test is required before enabling it",
+        )
 
 
 @router.post(gateway_routes.ALERT_CHANNEL_TEST_PATH, response_model=AlertChannelTestResponse)

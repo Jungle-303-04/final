@@ -225,10 +225,12 @@ export function useSubmitReleaseGeneratedManifestSafePr() {
   const qc = useQueryClient();
   const { push } = useToast();
   return useMutation({
-    mutationFn: ({ plan, stepIndex }: { plan: ReleasePlan; stepIndex: number }) =>
+    mutationFn: ({ plan, stepIndex, title, body }: { plan: ReleasePlan; stepIndex: number; title?: string; body?: string }) =>
       post<ReleaseManifestSafePr>('/release-plans/render-manifest/safe-pr', {
         plan,
         step_index: stepIndex,
+        title: title?.trim() || undefined,
+        body: body?.trim() || undefined,
       }),
     onSuccess: data => {
       push({
@@ -286,6 +288,7 @@ export function useDispatchReleasePlan() {
 
 export function useArchiveReleasePlan(planId: string) {
   const qc = useQueryClient();
+  const { push } = useToast();
   return useMutation({
     mutationFn: (reason?: string) =>
       post<{ plan: ReleasePlan }>(`/release-plans/${planId}/archive`, { reason }),
@@ -293,7 +296,33 @@ export function useArchiveReleasePlan(planId: string) {
       qc.invalidateQueries({ queryKey: releaseKeys.plans() });
       qc.invalidateQueries({ queryKey: releaseKeys.plan(data.plan.plan_id || planId) });
       qc.invalidateQueries({ predicate: isReleaseRunQuery });
+      push({
+        tone: 'success',
+        title: '플랜 보관 완료',
+        description: data.plan.name ? `"${data.plan.name}" 플랜을 보관했습니다.` : '릴리즈 플랜을 보관했습니다.',
+      });
     },
+    onError: err => push({ tone: 'danger', title: '플랜 보관 실패', description: (err as Error).message || '잠시 후 다시 시도해주세요.' }),
+  });
+}
+
+export function useRestoreReleasePlan(planId: string) {
+  const qc = useQueryClient();
+  const { push } = useToast();
+  return useMutation({
+    mutationFn: (reason: string) =>
+      post<{ plan: ReleasePlan }>(`/release-plans/${planId}/restore`, { reason }),
+    onSuccess: data => {
+      qc.invalidateQueries({ queryKey: releaseKeys.plans() });
+      qc.invalidateQueries({ queryKey: releaseKeys.plan(data.plan.plan_id || planId) });
+      qc.invalidateQueries({ predicate: isReleaseRunQuery });
+      push({
+        tone: 'success',
+        title: '플랜 복구 완료',
+        description: data.plan.name ? `"${data.plan.name}" 플랜을 다시 사용할 수 있습니다.` : '릴리즈 플랜을 다시 사용할 수 있습니다.',
+      });
+    },
+    onError: err => push({ tone: 'danger', title: '플랜 복구 실패', description: (err as Error).message || '잠시 후 다시 시도해주세요.' }),
   });
 }
 

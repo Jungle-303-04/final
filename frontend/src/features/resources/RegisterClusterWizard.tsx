@@ -5,6 +5,7 @@ import {
   Badge,
   Button,
   Card,
+  Checkbox,
   CodeBlock,
   Collapsible,
   ConfirmDialog,
@@ -218,6 +219,7 @@ export function RegisterClusterWizard({ open, onClose }: { open: boolean; onClos
   const [issued, setIssued] = useState<TargetInstallResponse | null>(null);
   const [closeGuard, setCloseGuard] = useState(false);
   const [copyTokenState, setCopyTokenState] = useState<'idle' | 'failed'>('idle');
+  const [registrationConfirmed, setRegistrationConfirmed] = useState(false);
 
   const discovery = useQuery({
     queryKey: ['providers', 'cluster-discovery'],
@@ -252,7 +254,12 @@ export function RegisterClusterWizard({ open, onClose }: { open: boolean; onClos
         });
         return;
       }
-      register.mutate();
+      setRegistrationConfirmed(false);
+      toast.push({
+        tone: 'success',
+        title: '서버 검증 통과',
+        description: '등록 대상과 연결 방식을 확인한 뒤 설치 명령을 발급하세요',
+      });
     },
     onError: (error) => {
       toast.push({
@@ -301,7 +308,8 @@ export function RegisterClusterWizard({ open, onClose }: { open: boolean; onClos
   });
   const connectionStatus = connectionState(connQ.data, issued);
   const connected = connectionStatus.kind === 'connected';
-  const canConfirm = validation.valid && !preflight.isPending && !register.isPending && !issued;
+  const canRunPreflight = validation.valid && !preflight.isPending && !register.isPending && !issued;
+  const canIssueInstall = Boolean(preflight.data?.valid) && registrationConfirmed && !register.isPending && !issued;
 
   useEffect(() => {
     if (!open) return;
@@ -324,6 +332,7 @@ export function RegisterClusterWizard({ open, onClose }: { open: boolean; onClos
     setIssued(null);
     setCloseGuard(false);
     setCopyTokenState('idle');
+    setRegistrationConfirmed(false);
     preflight.reset();
     register.reset();
     onClose();
@@ -343,6 +352,7 @@ export function RegisterClusterWizard({ open, onClose }: { open: boolean; onClos
     register.reset();
     setIssued(null);
     setCopyTokenState('idle');
+    setRegistrationConfirmed(false);
   };
 
   const chooseProvider = (nextProvider: ProviderKind | 'local') => {
@@ -352,6 +362,7 @@ export function RegisterClusterWizard({ open, onClose }: { open: boolean; onClos
     preflight.reset();
     register.reset();
     setIssued(null);
+    setRegistrationConfirmed(false);
   };
 
   const chooseLocalProvider = (nextProvider: 'kind' | 'minikube') => {
@@ -360,11 +371,17 @@ export function RegisterClusterWizard({ open, onClose }: { open: boolean; onClos
     preflight.reset();
     register.reset();
     setIssued(null);
+    setRegistrationConfirmed(false);
   };
 
-  const runConfirm = () => {
+  const runPreflight = () => {
     if (!validation.valid) return;
     preflight.mutate();
+  };
+
+  const issueInstall = () => {
+    if (!preflight.data?.valid || !registrationConfirmed) return;
+    register.mutate();
   };
 
   const reissue = () => {
@@ -487,19 +504,45 @@ export function RegisterClusterWizard({ open, onClose }: { open: boolean; onClos
 
               <ValidationPanel preflight={preflight.data} pending={preflight.isPending || register.isPending} error={preflight.error ?? register.error} />
 
+              {preflight.data?.valid && (
+                <div className="grid gap-3 border-y border-border py-4">
+                  <RegistrationTargetPreview
+                    clusterId={form.cluster_id}
+                    name={form.name}
+                    environment={form.environment}
+                    provider={activeCloudProvider}
+                    managementBaseUrl={form.management_base_url}
+                    kubeContext={providerConfig(form, activeCloudProvider).context_alias ?? providerConfig(form, activeCloudProvider).context_name}
+                  />
+                  <Checkbox
+                    checked={registrationConfirmed}
+                    onChange={(event) => setRegistrationConfirmed(event.target.checked)}
+                    label="검증 결과와 설치 대상이 맞는지 확인했습니다"
+                    description="설치 명령은 짧은 유효 기간의 agent token을 포함하며, 대상 클러스터에서만 실행해야 합니다."
+                  />
+                </div>
+              )}
+
               <div className="flex flex-col gap-3 border-t border-border pt-4 sm:flex-row sm:items-center sm:justify-between">
                 <p className="text-caption text-muted">
-                  필수값이 유효하고 서버 preflight가 통과해야 등록이 실행됩니다
+                  서버 검증과 설치 명령 발급은 별도 단계입니다
                 </p>
-                <Button
-                  variant="primary"
-                  disabled={!canConfirm}
-                  loading={preflight.isPending || register.isPending}
-                  onClick={runConfirm}
-                  data-testid="cluster-register-confirm"
-                >
-                  확인
-                </Button>
+                <div className="flex flex-wrap gap-2">
+                  {preflight.data?.valid && (
+                    <Button variant="secondary" disabled={!canRunPreflight} loading={preflight.isPending} onClick={runPreflight}>
+                      다시 검증
+                    </Button>
+                  )}
+                  <Button
+                    variant="primary"
+                    disabled={preflight.data?.valid ? !canIssueInstall : !canRunPreflight}
+                    loading={preflight.isPending || register.isPending}
+                    onClick={preflight.data?.valid ? issueInstall : runPreflight}
+                    data-testid="cluster-register-confirm"
+                  >
+                    {preflight.data?.valid ? '설치 명령 발급' : '서버 검증 실행'}
+                  </Button>
+                </div>
               </div>
             </>
           ) : (
@@ -802,6 +845,43 @@ function ProviderFields({
         <Input value={form.context_name} onChange={(event) => onFieldChange('context_name', event.target.value)} placeholder="arn:aws:eks:ap-northeast-2:123456789012:cluster/prod" />
       </Field>
     </Card>
+  );
+}
+
+function RegistrationTargetPreview({
+  clusterId,
+  name,
+  environment,
+  provider,
+  managementBaseUrl,
+  kubeContext,
+}: {
+  clusterId: string;
+  name: string;
+  environment: string;
+  provider: ProviderKind;
+  managementBaseUrl: string;
+  kubeContext?: string;
+}) {
+  return (
+    <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] md:items-stretch" aria-label="클러스터 등록 대상 확인">
+      <section className="grid gap-1 rounded-panel border border-border bg-bg p-3">
+        <span className="text-caption font-semibold text-muted">Management plane</span>
+        <strong className="truncate text-body text-primary" title={managementBaseUrl || undefined}>
+          {managementBaseUrl || '서버 기본 공개 URL'}
+        </strong>
+        <span className="text-caption text-secondary">target agent 설치 명령을 발급합니다</span>
+      </section>
+      <div className="hidden items-center justify-center text-caption font-bold text-muted md:flex" aria-hidden="true">-&gt;</div>
+      <section className="grid gap-1 rounded-panel border border-border bg-bg p-3">
+        <span className="text-caption font-semibold text-muted">Target cluster</span>
+        <strong className="truncate text-body text-primary" title={name || clusterId}>{name || clusterId}</strong>
+        <span className="text-caption text-secondary">
+          {clusterId} / {environment} / {provider}
+          {kubeContext ? ` / ${kubeContext}` : ''}
+        </span>
+      </section>
+    </div>
   );
 }
 
