@@ -527,3 +527,11 @@ format `470 files already formatted`, import-linter `2 kept, 0 broken`, pytest
 - 예상 결과: 첫 명령 0줄, 변경은 위 허용 경로뿐, `src/**` 명령 0줄, license diff 0줄,
   전체 gate PASS.
 - 사람 GO 전에는 merge/push·공개 저장소 생성·라이선스 채택을 수행하지 않고 대기한다.
+
+[2026-07-13 09:07 KST] [백엔드] OSS merge 완결·push — 2acd5ccbd, ac2bb5234
+ancestor exit 0, 사람 위임 GO [OSS]
+
+[2026-07-13 09:07 KST] [백엔드] [D-016]/BQ-012 우선 계획 — P(BQ-009/010)와
+파일 비중첩 병렬 착수; (a)+(b) 조합으로 LLM 제안은 catalog cause ID hypothesis에 한정하고
+결정론적 catalog signal 1개 이상 검증 전 `rca.completed`를 차단하며, source-name-only
+조작 회귀 테스트를 선행한 뒤 양쪽 전체 게이트로 합류.
