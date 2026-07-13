@@ -10,8 +10,12 @@ name: Dev Deploy
         description: Full dev SHA with a successful Dev Gate run
         required: true
         type: string
-      backup_snapshot_id:
-        description: Completed encrypted EBS snapshot with restore rehearsal tags
+      postgres_snapshot_id:
+        description: Completed recent PostgreSQL EBS snapshot with restore rehearsal tags
+        required: true
+        type: string
+      nats_snapshot_id:
+        description: Completed recent NATS EBS snapshot with restore rehearsal tags
         required: true
         type: string
       previous_release_sha:
@@ -46,7 +50,7 @@ jobs:
        inputs.confirmation == 'FIRST_DEPLOY')
     runs-on: ubuntu-latest
     timeout-minutes: 45
-    environment: dev
+    environment: dev-deploy
     env:
       AWS_REGION: ${{ vars.AWS_DEV_REGION }}
       ECR_REPOSITORY: ${{ vars.AWS_DEV_ECR_REPOSITORY }}
@@ -56,7 +60,8 @@ jobs:
       MGMT_CONTEXT: opsia-dev
       MGMT_NS: management
       SOURCE_SHA: ${{ github.event_name == 'workflow_dispatch' && inputs.source_sha || github.event.workflow_run.head_sha }}
-      FIRST_DEPLOY_SNAPSHOT_ID: ${{ inputs.backup_snapshot_id }}
+      FIRST_DEPLOY_POSTGRES_SNAPSHOT_ID: ${{ inputs.postgres_snapshot_id }}
+      FIRST_DEPLOY_NATS_SNAPSHOT_ID: ${{ inputs.nats_snapshot_id }}
       FIRST_DEPLOY_PREVIOUS_SHA: ${{ inputs.previous_release_sha }}
       AUTH_EMAIL: ${{ secrets.AWS_DEV_AUTH_EMAIL }}
       AUTH_PASSWORD: ${{ secrets.AWS_DEV_AUTH_PASSWORD }}
@@ -101,7 +106,8 @@ jobs:
           [[ "${EKS_CLUSTER}" =~ ^[A-Za-z0-9][A-Za-z0-9_-]{0,99}$ ]]
           [[ "${BASE_URL}" =~ ^https://[^[:space:]]+$ ]]
           if [[ "${GITHUB_EVENT_NAME}" == "workflow_dispatch" ]]; then
-            [[ "${FIRST_DEPLOY_SNAPSHOT_ID}" =~ ^snap-[0-9a-f]{17}$ ]]
+            [[ "${FIRST_DEPLOY_POSTGRES_SNAPSHOT_ID}" =~ ^snap-[0-9a-f]{17}$ ]]
+            [[ "${FIRST_DEPLOY_NATS_SNAPSHOT_ID}" =~ ^snap-[0-9a-f]{17}$ ]]
             [[ "${FIRST_DEPLOY_PREVIOUS_SHA}" =~ ^[0-9a-f]{40}$ ]]
           fi
 
@@ -180,7 +186,8 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          test -n "${FIRST_DEPLOY_SNAPSHOT_ID}"
+          test -n "${FIRST_DEPLOY_POSTGRES_SNAPSHOT_ID}"
+          test -n "${FIRST_DEPLOY_NATS_SNAPSHOT_ID}"
           if kubectl --context "${MGMT_CONTEXT}" -n "${MGMT_NS}" \
             get configmap opsia-deploy-status >/dev/null 2>&1; then
             echo "manual first deployment is forbidden after deploy status is seeded" >&2
@@ -190,8 +197,18 @@ jobs:
             --context "${MGMT_CONTEXT}" \
             --namespace "${MGMT_NS}" \
             --region "${AWS_REGION}" \
-            --snapshot-id "${FIRST_DEPLOY_SNAPSHOT_ID}" \
-            --source-sha "${SOURCE_SHA}"
+            --pvc-name "data-postgresql-0" \
+            --snapshot-id "${FIRST_DEPLOY_POSTGRES_SNAPSHOT_ID}" \
+            --source-sha "${SOURCE_SHA}" \
+            --max-age-hours 24
+          uv run python scripts/verify_first_deploy_backup.py \
+            --context "${MGMT_CONTEXT}" \
+            --namespace "${MGMT_NS}" \
+            --region "${AWS_REGION}" \
+            --pvc-name "data-nats-0" \
+            --snapshot-id "${FIRST_DEPLOY_NATS_SNAPSHOT_ID}" \
+            --source-sha "${SOURCE_SHA}" \
+            --max-age-hours 24
 
       - name: Render and verify auth bypass policy
         shell: bash
@@ -221,14 +238,14 @@ jobs:
             --context "${MGMT_CONTEXT}" \
             --namespace "${MGMT_NS}" \
             --manifest "${RUNNER_TEMP}/management.yaml" \
-            --managed-image kubeheal-service:latest \
+            --managed-image "183548421506.dkr.ecr.ap-northeast-2.amazonaws.com/kubernetes-ops-service@sha256:132cbc945004812ae3367c21a3408da8f3c9ab1a01b5870ffdea1157c83f5d0a" \
             --previous-release-sha "${previous_sha}" \
             --output "${RUNNER_TEMP}/service-rollback-plan.json"
           uv run python scripts/capture_image_digests.py \
             --context "${MGMT_CONTEXT}" \
             --namespace "${MGMT_NS}" \
             --manifest "${RUNNER_TEMP}/management.yaml" \
-            --managed-image "kubeheal-console@sha256:0000000000000000000000000000000000000000000000000000000000000000" \
+            --managed-image "183548421506.dkr.ecr.ap-northeast-2.amazonaws.com/kubernetes-ops-console@sha256:8c49f7bf8a10f5b9edb8de798cbe94d78ca29d03699bc2f3686c1636ec397978" \
             --previous-release-sha "${previous_sha}" \
             --output "${RUNNER_TEMP}/console-rollback-plan.json"
 
