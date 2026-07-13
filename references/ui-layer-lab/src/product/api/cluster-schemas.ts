@@ -1,5 +1,7 @@
 import { z } from "zod";
 
+import { connectionStageSchema } from "./cluster-stage-schemas";
+
 const nullableStringSchema = z.string().nullable();
 const integerSchema = z.number().int();
 const unknownRecordSchema = z.record(z.string(), z.unknown());
@@ -18,6 +20,7 @@ export const clusterSummarySchema = z.strictObject({
   status: z.string(),
   settings: unknownRecordSchema,
   connection_status: z.string(),
+  connection_stage: connectionStageSchema.optional(),
   last_agent_id: nullableStringSchema,
   last_agent_seen_at: nullableStringSchema,
   node_count: integerSchema,
