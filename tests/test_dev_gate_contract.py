@@ -38,6 +38,22 @@ def test_make_gate_is_the_single_full_gate_entrypoint() -> None:
     assert "npm run build" in recipe
 
 
+def test_make_gate_fast_keeps_static_checks_and_explicit_changed_tests() -> None:
+    makefile = (ROOT / "Makefile").read_text()
+    recipe = make_recipe("gate-fast")
+
+    assert "FAST_TESTS ?= tests/test_dev_gate_contract.py" in makefile
+    assert "uv run ruff check ." in recipe
+    assert "uv run ruff format --check ." in recipe
+    assert "uv run lint-imports --config .importlinter" in recipe
+    assert "uv run python -m compileall -q src scripts" in recipe
+    assert "uv run pytest -q $(FAST_TESTS)" in recipe
+    assert "npm run typecheck" in recipe
+    assert "npm run lint" in recipe
+    assert "npm test" in recipe
+    assert "npm run build" not in recipe
+
+
 def test_python_quality_gate_matches_pre_commit_repository_scope() -> None:
     script = (ROOT / "scripts/test.sh").read_text()
     lint_recipe = make_recipe("lint")
@@ -59,6 +75,10 @@ def test_pre_push_hook_calls_the_canonical_gate() -> None:
     assert hook_by_id["dev-full-gate"]["entry"] == "bash scripts/pre-push-gate.sh"
     assert hook_by_id["dev-full-gate"]["stages"] == ["pre-push"]
     assert hook_by_id["dev-full-gate"]["pass_filenames"] is False
+
+    wrapper = (ROOT / "scripts/pre-push-gate.sh").read_text()
+    assert "set -- make gate" in wrapper
+    assert "set -- make gate-fast" not in wrapper
 
     hooks_recipe = make_recipe("hooks")
     assert "--hook-type pre-commit" in hooks_recipe

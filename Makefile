@@ -7,12 +7,13 @@ MGMT_CLUSTER ?=
 TARGET_CLUSTER ?=
 ENV_TEMPLATE ?= config/env/app.env.example
 LOCAL_TEST_ENV ?= .env.local-test
+FAST_TESTS ?= tests/test_dev_gate_contract.py
 
 export IMAGE_NAME
 export MGMT_CLUSTER
 export TARGET_CLUSTER
 
-.PHONY: help setup env local-test-env local-up local-smoke sync hooks doctor lint format test manifest-check gate events event-bus-equivalence crash-test check build-image up install-telemetry down status smoke demo scale kill-pod external-instances external-kubeconfig cluster-interactions aws-up aws-down clean
+.PHONY: help setup env local-test-env local-up local-smoke sync hooks doctor lint format test manifest-check gate gate-fast events event-bus-equivalence crash-test check build-image up install-telemetry down status smoke demo scale kill-pod external-instances external-kubeconfig cluster-interactions aws-up aws-down clean
 
 help: ## 사용 가능한 명령어 출력
 	@awk 'BEGIN {FS = ":.*##"; printf "\nUsage:\n  make <target>\n\nTargets:\n"} /^[a-zA-Z0-9_-]+:.*##/ {printf "  %-14s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -66,6 +67,17 @@ gate: ## dev push 전 백엔드·manifest·프론트 전체 게이트
 	cd frontend && npm run build
 	test -s frontend/dist/index.html
 	ls frontend/dist/assets/*.js >/dev/null
+
+gate-fast: ## 빠른 정적 검사와 지정 변경 영역 테스트(FAST_TESTS로 선택)
+	uv run ruff check .
+	uv run ruff format --check .
+	PYTHONPATH=src uv run lint-imports --config .importlinter
+	uv run python -m compileall -q src scripts
+	uv run pytest -q $(FAST_TESTS)
+	cd frontend && npm ci --include=dev --no-audit --no-fund
+	cd frontend && npm run typecheck
+	cd frontend && npm run lint
+	cd frontend && npm test
 
 events: ## 등록된 이벤트/구독자 한눈에 보기
 	uv run python scripts/events.py
