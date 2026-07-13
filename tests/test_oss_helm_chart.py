@@ -411,6 +411,6 @@ def test_controller_rolls_when_the_injected_scm_credentials_rotate() -> None:
         if item["kind"] == "Deployment" and item["metadata"]["name"] == "opsia-controller"
     )
 
-    assert deployment["spec"]["template"]["metadata"]["annotations"] == {
-        "opsia.io/scm-credential-version": "credential-hash"
-    }
+    annotations = deployment["spec"]["template"]["metadata"]["annotations"]
+    assert annotations["opsia.io/scm-credential-version"] == "credential-hash"
+    assert annotations["checksum/console-config"]
