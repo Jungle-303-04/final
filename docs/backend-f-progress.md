@@ -307,3 +307,16 @@ Bundle route는 200을 반환한다.
   pytest `1838 passed, 3 skipped`; manifest management 69, target 20.
 
 계약 완성: Opsia public docs + Helm OCI example (46ea10f8f0648dd7c29be984b9845ae57938fb5e) [green]
+
+### BQ-015 — `.remediation.yaml` 소스 계약
+
+- 상태: in_progress, gateway 계약 lock 비대상
+- 담당 lane: `codex/remediation-source-contract`
+- 착수 기준: `origin/dev@d385ae81f915e200fa6256789461ce268a431291`
+- 전체 게이트 baseline: Ruff lint/format PASS, import-linter 2 kept/0 broken,
+  pytest `1838 passed, 3 skipped`
+- manifest baseline: management 69, target 20
+- 범위: 저장소 소유자가 선언한 helm-values `imageTagPath`, kustomize
+  `images[].newTag`, raw image scalar, replica, 제한된 probe 필드만 patch하며 미선언 필드는
+  `unsupported`로 종료한다. 파일·필드 추측은 금지한다.
+- 앵커: canonical 착륙·4조건 재증명 후 기록
