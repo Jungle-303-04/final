@@ -7,6 +7,20 @@ from pydantic import BaseModel, ConfigDict, Field
 from packages.contracts.gateway.base import StrictModel
 
 JsonMap = dict[str, Any]
+AuditJourneyStage = Literal[
+    "alert",
+    "evidence",
+    "rca",
+    "recovery",
+    "command",
+    "pr",
+    "workflow",
+    "cluster",
+    "ai",
+    "notification",
+    "system",
+    "unknown",
+]
 
 
 class HealthResponse(StrictModel):
@@ -175,10 +189,12 @@ class RcaTimelineResponse(StrictModel):
 
 
 class AuditTimelineItem(StrictModel):
+    event_id: str = Field(min_length=1)
     subject: str
     source: str
     created_at: str
     causation_id: str | None = None
+    journey_stage: AuditJourneyStage
     payload_summary: JsonMap = Field(default_factory=dict)
 
 

@@ -111,6 +111,7 @@ class AuditLogRepository(DatabaseConnection):
         ).cte("audit_correlation_clusters")
         statement = select(
             table.c.id,
+            table.c.event_id,
             table.c.subject,
             table.c.source,
             table.c.causation_id,
