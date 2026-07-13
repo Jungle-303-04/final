@@ -1,9 +1,13 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-CLUSTER_NAME="${DEMO_CLUSTER_NAME:-kubeheal-demo}"
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+CLUSTER_NAME="${DEMO_CLUSTER_NAME:-opsia-demo}"
 KIND_NODE_IMAGE="${DEMO_KIND_NODE_IMAGE:-kindest/node:v1.32.2}"
-NAMESPACE="${DEMO_NAMESPACE:-kubeheal-demo}"
+NAMESPACE="${DEMO_NAMESPACE:-opsia-demo}"
+OPSIA_NAMESPACE="${DEMO_OPSIA_NAMESPACE:-opsia-system}"
+OPSIA_RELEASE="${DEMO_OPSIA_RELEASE:-opsia}"
+OPSIA_IMAGE="${DEMO_OPSIA_IMAGE:-service:local}"
 WORKLOAD="${DEMO_WORKLOAD:-checkout-api}"
 GOOD_IMAGE="${DEMO_GOOD_IMAGE:-nginx:1.27-alpine}"
 BAD_IMAGE="${DEMO_BAD_IMAGE:-nginx:0.0.0-kubeheal-demo-missing}"
@@ -23,7 +27,7 @@ if [[ "${DRY_RUN}" == "1" ]]; then
   exit 0
 fi
 
-for command in kind kubectl docker; do
+for command in kind kubectl docker helm; do
   command -v "${command}" >/dev/null || {
     echo "missing required command: ${command}" >&2
     exit 1
@@ -43,6 +47,26 @@ if ! kind get clusters | grep -Fxq "${CLUSTER_NAME}"; then
 fi
 kubectl config use-context "kind-${CLUSTER_NAME}" >/dev/null
 scene "kind-cluster-ready"
+
+if ! docker image inspect "${OPSIA_IMAGE}" >/dev/null 2>&1; then
+  docker build -f "${ROOT_DIR}/src/services/Dockerfile" -t "${OPSIA_IMAGE}" "${ROOT_DIR}"
+fi
+kind load docker-image "${OPSIA_IMAGE}" --name "${CLUSTER_NAME}" >/dev/null
+IMAGE_REPOSITORY="${OPSIA_IMAGE%:*}"
+IMAGE_TAG="${OPSIA_IMAGE##*:}"
+helm upgrade --install "${OPSIA_RELEASE}" "${ROOT_DIR}/charts/opsia" \
+  --namespace "${OPSIA_NAMESPACE}" \
+  --create-namespace \
+  --set "image.repository=${IMAGE_REPOSITORY}" \
+  --set "image.tag=${IMAGE_TAG}" \
+  --set image.pullPolicy=IfNotPresent \
+  --set postgresql.persistence.enabled=false \
+  --wait \
+  --timeout 5m
+kubectl -n "${OPSIA_NAMESPACE}" rollout status deployment/opsia-controller --timeout=180s
+kubectl -n "${OPSIA_NAMESPACE}" rollout status statefulset/opsia-postgresql --timeout=180s
+kubectl -n "${OPSIA_NAMESPACE}" rollout status daemonset/opsia-agent --timeout=180s
+scene "opsia-installed"
 
 kubectl create namespace "${NAMESPACE}" --dry-run=client -o yaml | kubectl apply -f - >/dev/null
 kubectl -n "${NAMESPACE}" create deployment "${WORKLOAD}" \
