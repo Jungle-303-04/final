@@ -282,7 +282,7 @@ def test_aws_image_supports_remote_git_manifest_reads() -> None:
 def test_aws_deploy_builds_and_patches_console_frontend_image() -> None:
     script = read("scripts/aws-up.sh")
     down_script = read("scripts/aws-down.sh")
-    console_manifest = read("deploy/management/console.yaml")
+    console_manifest = read("deploy/management/console-dev.yaml")
     frontend_dockerfile = read("frontend/Dockerfile")
     runbook = read("docs/aws-testing-runbook.md")
 
