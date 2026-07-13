@@ -29,7 +29,7 @@ def test_removed_legacy_github_actions_have_no_active_repository_entrypoints() -
     }
 
     assert active_workflows.isdisjoint(removed_workflows)
-    assert "check: test manifest-check" in makefile
+    assert "check: gate" in makefile
     assert "aws-smoke:" not in makefile
     assert "gh workflow run" not in makefile
     assert 'key="github-actions"' not in catalog

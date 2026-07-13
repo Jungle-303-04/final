@@ -12,7 +12,7 @@ export IMAGE_NAME
 export MGMT_CLUSTER
 export TARGET_CLUSTER
 
-.PHONY: help setup env local-test-env local-up local-smoke sync hooks doctor lint format test manifest-check events event-bus-equivalence crash-test check build-image up install-telemetry down status smoke demo scale kill-pod external-instances external-kubeconfig cluster-interactions aws-up aws-down clean
+.PHONY: help setup env local-test-env local-up local-smoke sync hooks doctor lint format test manifest-check gate events event-bus-equivalence crash-test check build-image up install-telemetry down status smoke demo scale kill-pod external-instances external-kubeconfig cluster-interactions aws-up aws-down clean
 
 help: ## 사용 가능한 명령어 출력
 	@awk 'BEGIN {FS = ":.*##"; printf "\nUsage:\n  make <target>\n\nTargets:\n"} /^[a-zA-Z0-9_-]+:.*##/ {printf "  %-14s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -47,14 +47,25 @@ lint: ## Ruff 린트 검사
 format: ## Ruff 포맷 적용
 	uv run ruff format src scripts tests
 
-hooks: ## git 커밋 훅 설치(pre-commit, 팀 공통 포맷 강제)
-	uv run pre-commit install
+hooks: ## git 훅 설치(pre-commit 포맷 + pre-push 전체 게이트)
+	uv run pre-commit install --hook-type pre-commit --hook-type pre-push
 
 test: ## 린트와 테스트 실행
 	bash scripts/test.sh
 
 manifest-check: ## Kubernetes manifest 렌더/파싱 확인
 	bash scripts/manifest-check.sh
+
+gate: ## dev push 전 백엔드·manifest·프론트 전체 게이트
+	bash scripts/test.sh
+	bash scripts/manifest-check.sh
+	cd frontend && npm ci --include=dev --no-audit --no-fund
+	cd frontend && npm run typecheck
+	cd frontend && npm run lint
+	cd frontend && npm test
+	cd frontend && npm run build
+	test -s frontend/dist/index.html
+	ls frontend/dist/assets/*.js >/dev/null
 
 events: ## 등록된 이벤트/구독자 한눈에 보기
 	uv run python scripts/events.py
@@ -65,7 +76,7 @@ event-bus-equivalence: ## in-process/NATS 전송 결과 동등성 실측
 services: ## 서비스 명부 한눈에 보기(src/services 자동 발견)
 	uv run python scripts/services.py
 
-check: test manifest-check ## 개발 전/커밋 전 전체 점검
+check: gate ## 개발자·CI·pre-push 공통 전체 점검
 
 build-image: ## 로컬 container image 빌드(수동 디버그용)
 	bash scripts/build-image.sh
