@@ -74,7 +74,9 @@ flowchart LR
   MJ["민정<br/>command + target + evidence"] -->|"cluster.evidence.received"| GI["가인<br/>evidence + RCA"]
   GI -->|"rca.completed / rca.action_required"| CB["찬빈<br/>frontend"]
   GI -->|"command.requested"| CMD["command-worker"]
-  GI -->|"safe_pr.requested"| SCM["scm-worker"]
+  GI -->|"safe_pr.requested"| SPW["safe-pr-worker"]
+  SPW -->|"safe_pr.patch_prepared"| AID["ai-diff-worker"]
+  AID -->|"safe_pr.ready_for_creation"| SCM["scm-worker"]
   CMD -->|"command.completed"| CB
   SCM -->|"safe_pr.created / safe_pr.failed"| CB
 ```
@@ -95,7 +97,7 @@ flowchart LR
 | Prometheus range query | `PrometheusRangeQuery`가 `/api/v1/query_range`를 호출한다 |
 | Kubernetes snapshot provider | `KubernetesSnapshotProvider`가 `kubernetes` bucket을 채운다 |
 | RCA split workers | evidence, incident, plan, analyze, rca, recovery, select, dispatch worker로 나뉘어 있다 |
-| Safe PR write boundary | `safe_pr.requested`는 scm-worker가 받아 GitHub PR 생성 또는 실패 이벤트로 끝낸다 |
+| Safe PR write boundary | `safe_pr.requested`는 safe-pr-worker와 ai-diff-worker 게이트를 거쳐 `safe_pr.ready_for_creation`이 된 뒤 scm-worker가 GitHub PR 생성 또는 실패 이벤트로 끝낸다 |
 | audit projection | `audit-worker`가 `@app.on_any`로 전체 이벤트를 audit log에 남긴다 |
 | realtime gateway | 별도 realtime 서비스가 있고 target live summary를 받을 수 있다 |
 
@@ -530,7 +532,7 @@ RCA worker가 직접 GitHub API를 호출하면 역할이 섞인다.
 3. `src/services/ai/agent/causes`에서 증상별 rule을 하나 고른다.
 4. 해당 rule이 어떤 evidence item을 기대하는지 적는다.
 5. 근거가 부족한 case를 추가해 `rca.action_required`로 끝나는지 확인한다.
-6. Safe PR route로 가는 case는 `safe_pr.requested`까지만 검증하고, 실제 PR write는 `scm-worker` 테스트로 본다.
+6. Safe PR route로 가는 case는 `safe_pr.requested`까지만 검증하고, 준비 게이트는 `safe-pr-worker`/`ai-diff-worker`, 실제 PR write는 `scm-worker` 테스트로 본다.
 
 가인 파트에서 바로 돌릴 테스트:
 

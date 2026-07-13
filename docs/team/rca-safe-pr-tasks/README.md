@@ -20,8 +20,13 @@
 ```text
 cluster.evidence.received
   -> evidence.built
-  -> rca.completed 또는 rca.insufficient
-  -> safe_pr.requested 또는 approval_required
+  -> evidence.bundle.built
+  -> rca.candidates.planned
+  -> rca.candidates.evaluated
+  -> rca.completed 또는 rca.action_required 또는 rca.analysis_blocked
+  -> command.requested 또는 safe_pr.requested
+  -> safe_pr.patch_prepared 또는 safe_pr.failed
+  -> safe_pr.ready_for_creation 또는 safe_pr.failed
   -> safe_pr.created 또는 safe_pr.failed
   -> audit timeline
 ```
@@ -34,7 +39,7 @@ cluster.evidence.received
 | 1 | [Evidence 입력 계약](01-evidence-input-contract.md) | RCA가 받는 evidence shape와 거부 기준이 고정됨 |
 | 2 | [Evidence Builder](02-evidence-builder.md) | raw evidence가 RCA용 Evidence DTO로 정규화됨 |
 | 3 | [RCA Result와 Deterministic Analyzer](03-rca-result-deterministic-analyzer.md) | AI 없이도 deterministic RCA 결과를 만들 수 있음 |
-| 4 | [RCA Completed Event](04-rca-completed-event.md) | `rca.completed`와 insufficient 상태가 event로 표현됨 |
+| 4 | [RCA Completed Event](04-rca-completed-event.md) | `rca.completed`와 `rca.action_required`/`rca.analysis_blocked` 상태가 event로 표현됨 |
 | 5 | [Safe PR Proposal](05-safe-pr-proposal.md) | 실제 PR write 전 proposal payload가 고정됨 |
 | 6 | [Guarded GitHub PR Adapter](06-guarded-github-pr-adapter.md) | `GithubScmProvider`와 feature-flag-off fail-closed가 있음 |
 | 7 | [Audit Timeline Projection](07-audit-timeline-projection.md) | command/RCA/PR event가 correlation timeline에 남음 |

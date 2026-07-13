@@ -10,7 +10,7 @@ status: synced
 ## 책임 (Responsibility)
 
 - `desired.diff.detected`를 구독해 diff의 위험도를 정책으로 판정하고, 그 결과를 `diff.analyzed`로 발행한다.
-- 안전(`sandbox-only`) 판정 시에만 `safe_pr.requested`를 추가 발행해 PR 생성 흐름([scm-worker](gitops-scm-worker.md)/[safe-pr-worker](gitops-safe-pr-worker.md))으로 넘긴다. diff를 실행 명령(`command.requested`)으로 직접 발행하지 않는다 — apply 명령은 `safe_pr.requested`의 `next_alert.next_command`에 payload로만 실어 보낸다.
+- 안전(`sandbox-only`) 판정 시에만 `safe_pr.requested`를 추가 발행해 PR 준비/생성 흐름([safe-pr-worker](gitops-safe-pr-worker.md) → [scm-worker](gitops-scm-worker.md))으로 넘긴다. diff를 실행 명령(`command.requested`)으로 직접 발행하지 않는다 — apply 명령은 `safe_pr.requested`의 `next_alert.next_command`에 payload로만 실어 보낸다.
 - 정책 판정 결과를 승인(Approval) 레코드로 영속화한다(`request_workflow_approval` / safe 경로는 `resolve_workflow_approval`로 자동 승인).
 - 모듈 docstring 명시: 원본 `GitOpsSyncWorkflow.handle()`의 COMMAND_REQUESTED 직접 발행 블록을 대체한 워커다.
 - 하지 않는 것: manifest 렌더링, diff 계산(→ [diff-worker](gitops-diff-worker.md)), PR 생성 자체, 클러스터 적용.

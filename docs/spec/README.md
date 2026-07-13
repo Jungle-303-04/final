@@ -89,18 +89,27 @@
 
 ## frontend
 
-- [frontend/app](frontend/app.md)
-- [frontend/auth](frontend/auth.md)
-- [frontend/chat](frontend/chat.md)
-- [frontend/cluster](frontend/cluster.md)
-- [frontend/fleet](frontend/fleet.md)
-- [frontend/metrics](frontend/metrics.md)
-- [frontend/notifications](frontend/notifications.md)
-- [frontend/org](frontend/org.md)
-- [frontend/repo](frontend/repo.md)
-- [frontend/resources](frontend/resources.md)
-- [frontend/shared](frontend/shared.md)
-- [frontend/workflow](frontend/workflow.md)
+- [frontend/api-integration-workorder-20260711](frontend/api-integration-workorder-20260711.md)
+- [frontend/api-needs](frontend/api-needs.md)
+- [frontend/codex-directive-goalmode-20260711](frontend/codex-directive-goalmode-20260711.md)
+- [frontend/codex-progress-20260711](frontend/codex-progress-20260711.md)
+- [frontend/final-questions](frontend/final-questions.md)
+- [frontend/product-data-contract](frontend/product-data-contract.md)
+- [frontend/reference-feature-inventory](frontend/reference-feature-inventory.md)
+- [frontend/reference-contract-map](frontend/reference-contract-map.md)
+- [frontend/reference-porting-contract](frontend/reference-porting-contract.md)
+
+위 목록만 현재 frontend 구현의 활성 문서다. 같은 디렉터리의 `status: archived` 문서는 현재 작업에
+참조하지 않는다.
+
+### frontend 보존 링크
+
+- [frontend/CODEX-BRIEFING-20260711](frontend/CODEX-BRIEFING-20260711.md) — archived, 현재 구현 참조 금지
+- [frontend/codex-directive-24h-20260711](frontend/codex-directive-24h-20260711.md) — archived, 현재 구현 참조 금지
+- [frontend/codex-directive-reference-pivot-20260711](frontend/codex-directive-reference-pivot-20260711.md) — archived, 현재 구현 참조 금지
+- [frontend/topology-engine](frontend/topology-engine.md) — archived, 현재 구현 참조 금지
+- [frontend/topology-message-action-schema](frontend/topology-message-action-schema.md) — archived, 현재 구현 참조 금지
+- [frontend/topology-visual-motion-tokens](frontend/topology-visual-motion-tokens.md) — archived, 현재 구현 참조 금지
 
 ## 유지 규칙
 

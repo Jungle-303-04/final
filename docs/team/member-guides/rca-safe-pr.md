@@ -31,8 +31,12 @@ recovery-worker / select-worker / dispatch-worker
   -> recovery.action_selected
   -> command.requested 또는 safe_pr.requested
 
-scm-worker
+safe-pr-worker
   -> safe_pr.patch_prepared
+
+ai-diff-worker
+  -> diff.explained
+  -> safe_pr.ready_for_creation
 
 scm-worker / GithubScmProvider
   -> safe_pr.created 또는 safe_pr.failed
@@ -73,7 +77,8 @@ Audit Timeline Service
 ## 현재 책임
 
 - RCA 계열 worker는 직접 PR을 생성하지 않고 `safe_pr.requested`까지만 만든다.
-- `scm-worker`가 `safe_pr.requested`를 받아 `safe_pr.patch_prepared`를 발행한 뒤 `GithubScmProvider`로 GitHub branch/commit/PR을 처리하고, 자격 증명/설정 누락은 `safe_pr.failed`로 남긴다.
+- `safe-pr-worker`가 `safe_pr.requested`를 받아 `safe_pr.patch_prepared`를 발행하고, `ai-diff-worker`가 통과한 요청만 `safe_pr.ready_for_creation`으로 넘긴다.
+- `scm-worker`는 `safe_pr.ready_for_creation`을 받아 `GithubScmProvider`로 GitHub branch/commit/PR을 처리하고, 자격 증명/설정 누락은 `safe_pr.failed`로 남긴다.
 - RCA 결과는 evidence 기반으로만 생성한다.
 - Safe PR side effect는 token/ref 확인과 feature flag로 보호한다.
 - audit timeline이 command, RCA, PR 상태를 추적하게 한다.

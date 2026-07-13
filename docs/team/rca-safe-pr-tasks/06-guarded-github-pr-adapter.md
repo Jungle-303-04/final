@@ -2,13 +2,16 @@
 
 ## 목표
 
-`scm-worker`가 `safe_pr.requested`를 받아 `GithubScmProvider`로 실제 GitHub branch,
-commit, PR 생성을 처리하게 한다. 외부 호출은 token reference, repo allowlist,
-provider 설정 검증 뒤에만 실행한다.
+`safe-pr-worker`와 `ai-diff-worker`가 `safe_pr.requested`를 `safe_pr.ready_for_creation`까지
+검증해 넘기고, `scm-worker`가 `GithubScmProvider`로 실제 GitHub branch, commit,
+PR 생성을 처리하게 한다. 외부 호출은 token reference, repo allowlist, provider 설정
+검증 뒤에만 실행한다.
 
 ## 먼저 읽을 파일
 
 - `src/services/gitops/scm-worker/app.py`
+- `src/services/gitops/safe-pr-worker/app.py`
+- `src/services/ai/diff-worker/app.py`
 - `src/domains/scm`
 - `src/packages/contracts/auth.py`
 - `docs/secrets.md`
@@ -19,22 +22,25 @@ provider 설정 검증 뒤에만 실행한다.
 
 - `src/domains/scm/repository.py`
 - `src/services/gitops/scm-worker/app.py`
+- `src/services/gitops/safe-pr-worker/app.py`
+- `src/services/ai/diff-worker/app.py`
 - `src/packages/contracts/scm/`
 - `tests/test_repo_gateway_worker.py`
 - `tests/test_webhook_signature.py`가 아니라 SCM worker 관련 테스트
 
 ## 선형 절차
 
-1. `PullRequestClient` Protocol을 정의한다.
-2. 현재 구현 기준에서는 `packages.contracts.scm.provider.ScmProvider`와
+1. `safe_pr.requested -> safe_pr.patch_prepared -> safe_pr.ready_for_creation` 게이트가 통과해야 실제 write가 가능하다는 것을 먼저 확인한다.
+2. `PullRequestClient` Protocol을 정의한다.
+3. 현재 구현 기준에서는 `packages.contracts.scm.provider.ScmProvider`와
    `GithubScmProvider.create_pull_request()`를 먼저 확인한다.
-3. `SCM_PROVIDER=github`, `SCM_REPO`, `GITHUB_TOKEN_REF` 또는 `GITHUB_TOKEN` 설정을 정한다.
-4. provider 이름이 registry에 없으면 worker가 fail-fast해야 한다.
-5. token/repo가 없으면 worker 부팅 실패가 아니라 요청별 `safe_pr.failed`로 남긴다.
-6. 실제 write 경로는 token 원문이 아니라 `TokenVaultPort`/`SecretRef`를 통해 읽는다.
-7. PR 생성 결과 event에는 PR URL, provider, mode 같은 reference만 남긴다.
-8. 같은 proposal 재처리 시 branch/contents/PR 422를 멱등 성공으로 처리한다.
-9. missing credential, unsafe path, provider mismatch, injected transport success 테스트를 추가한다.
+4. `SCM_PROVIDER=github`, `SCM_REPO`, `GITHUB_TOKEN_REF` 또는 `GITHUB_TOKEN` 설정을 정한다.
+5. provider 이름이 registry에 없으면 worker가 fail-fast해야 한다.
+6. token/repo가 없으면 worker 부팅 실패가 아니라 요청별 `safe_pr.failed`로 남긴다.
+7. 실제 write 경로는 token 원문이 아니라 `TokenVaultPort`/`SecretRef`를 통해 읽는다.
+8. PR 생성 결과 event에는 PR URL, provider, mode 같은 reference만 남긴다.
+9. 같은 proposal 재처리 시 branch/contents/PR 422를 멱등 성공으로 처리한다.
+10. missing credential, unsafe path, provider mismatch, injected transport success 테스트를 추가한다.
 
 ## 예시 인터페이스
 
