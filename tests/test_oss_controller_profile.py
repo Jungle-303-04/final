@@ -191,6 +191,7 @@ def test_controller_injects_borrowed_bus_and_memory_sessions_into_gateway(
 
     assert app.state.events.events.publisher is borrowed
     assert app.state.auth.sessions is sessions
+    assert server.config.access_log is False
 
 
 def test_controller_shutdown_lets_http_servers_finish_gracefully() -> None:
