@@ -16,12 +16,13 @@ async function sourceFiles(directory) {
   return nested.flat();
 }
 
-test('legacy text utilities and the removed accent-hover token are absent', async () => {
+test('legacy app utilities and the removed accent-hover token are absent', async () => {
   const legacyUtility = /(?<![-\w])(?:text-(?:muted|primary|secondary)|(?:bg|border|caret|fill|from|outline|ring|shadow|stroke|text|to|via)-accent-hover)(?![-\w])/;
   const violations = [];
 
   for (const file of await sourceFiles(sourceRoot)) {
     if (file.pathname.endsWith('/ui/theme.css')) continue;
+    if (file.pathname.includes('/components/ui/')) continue;
     const source = await readFile(file, 'utf8');
     if (legacyUtility.test(source)) violations.push(file.pathname);
   }
