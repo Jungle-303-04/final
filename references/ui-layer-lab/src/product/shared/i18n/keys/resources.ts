@@ -89,6 +89,7 @@ export type ResourcesMessageKey =
   | "resources.detail.observedAt"
   | "resources.detail.notProvided"
   | "resources.detail.identity"
+  | "resources.detail.uid"
   | "resources.detail.identity.uid"
   | "resources.detail.identity.nameFallback"
   | "resources.detail.relatedEmpty"

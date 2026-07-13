@@ -21,11 +21,16 @@ export function ResourceFactsPanel({ facts }: { facts: ResourceFacts }) {
 
 export function DefinitionGrid({ entries }: { entries: Array<[string, string]> }) {
   return (
-    <dl className="grid gap-x-4 gap-y-2 text-sm sm:grid-cols-2">
+    <dl className="grid min-w-0 gap-x-4 gap-y-2 text-sm sm:grid-cols-2">
       {entries.map(([label, value]) => (
         <div className="min-w-0" key={label}>
           <dt className="text-xs text-muted-foreground">{label}</dt>
-          <dd className="truncate font-medium" title={value}>{value}</dd>
+          <dd
+            className="min-w-0 font-medium [overflow-wrap:anywhere]"
+            data-slot="resource-definition-value"
+          >
+            {value}
+          </dd>
         </div>
       ))}
     </dl>
