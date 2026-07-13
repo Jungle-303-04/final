@@ -590,6 +590,12 @@ docs-only 2파일, BQ-009 `requested` + BQ-012~017 등록, origin/dev push 확�
 - 회귀 경계: NATS 기본값 유지, 명시 주입 시에만 in-memory bus 사용; gateway 계약,
   `src/domains/rca/**`, `src/services/ai/**`, `src/packages/runtime/worker.py` 변경 0건
 
+[2026-07-13 09:59 KST] [백엔드] H2 lane 회수·PROMOTE 대기 — worktree 제거 성공,
+로컬 branch `git branch -d`는 stale upstream `origin/codex/f-inprocess-event-bus` 기준
+미병합 판정으로 거부되어 `-D` 없이 [D-021] 2차 정리 단계로 보류했다. 원격 lab은
+`ef9706aca`, dev는 `40d1ed67b`, 앞뒤 `533/236`이며 FE-A2 완료·lab full gate 증거가
+아직 없어 GO [PROMOTE]는 실행하지 않는다.
+
 [2026-07-13 10:00 KST] [백엔드] BQ-013 완료 — RED `c89ad5a96`, GREEN
 `50df7fe10`, canonical origin/dev `27cb1d95f`; `RECONCILER_MODE=builtin` 기본은 기존
 apply를 유지하고 `argocd`는 observer-only로 apply 0건(`StubApplier.applied == []`,
