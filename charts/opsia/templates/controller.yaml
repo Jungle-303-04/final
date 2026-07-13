@@ -15,6 +15,10 @@ spec:
       app.kubernetes.io/component: controller
   template:
     metadata:
+      {{- with .Values.scm.credentialVersion }}
+      annotations:
+        opsia.io/scm-credential-version: {{ . | quote }}
+      {{- end }}
       labels:
         {{- include "opsia.selectorLabels" . | nindent 8 }}
         app.kubernetes.io/component: controller
@@ -120,6 +124,23 @@ spec:
               value: "false"
             - name: RECOVERY_ENABLE_AUTO_REVERT_PR
               value: "false"
+            - name: SCM_PROVIDER
+              value: {{ .Values.scm.provider | quote }}
+            - name: SCM_REPO
+              value: {{ .Values.scm.repository | quote }}
+            - name: SCM_BASE_BRANCH
+              value: {{ .Values.scm.baseBranch | quote }}
+            {{- with .Values.scm.github.apiBase }}
+            - name: GITHUB_API_BASE
+              value: {{ . | quote }}
+            {{- end }}
+            {{- with .Values.scm.github.tokenSecretName }}
+            - name: GITHUB_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ . | quote }}
+                  key: {{ $.Values.scm.github.tokenSecretKey | quote }}
+            {{- end }}
             - name: COOKIE_SECURE
               value: "0"
             - name: LLM_PROVIDER
@@ -143,11 +164,17 @@ spec:
             periodSeconds: 3
             timeoutSeconds: 5
             failureThreshold: 20
+          startupProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            periodSeconds: 3
+            timeoutSeconds: 5
+            failureThreshold: 60
           livenessProbe:
             httpGet:
               path: /healthz
               port: http
-            initialDelaySeconds: 15
             periodSeconds: 10
             timeoutSeconds: 5
           resources:
