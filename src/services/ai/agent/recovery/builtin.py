@@ -25,7 +25,28 @@ routes = ActionRoutes()
             params={"command": "rollout_restart"},
         ),
         RecoveryActionSpec(
-            action_type="scale",
+            action_type="oom_memory",
+            title="메모리 request/limit 조정 PR",
+            description=(
+                "관측 working set과 승인 manifest의 현재 request/limit을 기준으로 "
+                "정책 상한 안의 메모리 headroom 패치를 제안합니다."
+            ),
+            route=routes.safe_pr,
+            risk_level="medium",
+            score=0.56,
+            blast_radius="target_workload",
+            approval_required=True,
+            prerequisites=("수치형 container memory working set 근거", "GitOps 승인 snapshot"),
+            validation_checks=("OOM 재발 없음", "메모리 사용률 안정", "pod ready 상태 유지"),
+            rollback_plan="동반된 inverse patch로 이전 request/limit을 복원합니다.",
+            params={
+                "strategy": "usage_headroom",
+                "headroom_ratio": 1.25,
+                "max_memory": "4Gi",
+            },
+        ),
+        RecoveryActionSpec(
+            action_type="replica_scale",
             title="임시 replica 증설 PR",
             description="메모리 압박 완화를 위해 replica 증설 패치를 Safe PR로 제안합니다.",
             route=routes.safe_pr,
@@ -35,8 +56,8 @@ routes = ActionRoutes()
             approval_required=True,
             prerequisites=("HPA 또는 수동 replica 정책 확인",),
             validation_checks=("에러율 감소", "메모리 사용률 하락", "pod ready 상태 유지"),
-            rollback_plan="replica 수를 이전 값으로 되돌립니다.",
-            params={"scale": "increase_replicas"},
+            rollback_plan="동반된 inverse patch로 replica 수를 이전 값으로 되돌립니다.",
+            params={"strategy": "increment_one", "max_replicas": 10},
         ),
     ),
 )
@@ -48,6 +69,20 @@ class OomKilledRecoveryActions:
     root_causes=("application_5xx_spike",),
     actions=(
         RecoveryActionSpec(
+            action_type="replica_scale",
+            title="GitOps replica 증설 PR",
+            description="승인 manifest의 현재 replica를 1개 늘리는 제한된 패치를 제안합니다.",
+            route=routes.safe_pr,
+            risk_level="medium",
+            score=0.62,
+            blast_radius="target_workload",
+            approval_required=True,
+            prerequisites=("GitOps 승인 snapshot", "replica 상한 10"),
+            validation_checks=("Ready replica 증가", "5xx/timeout 감소", "리소스 여유 유지"),
+            rollback_plan="동반된 inverse patch로 이전 replica 수를 복원합니다.",
+            params={"strategy": "increment_one", "max_replicas": 10},
+        ),
+        RecoveryActionSpec(
             action_type="gitops_recovery_review",
             title="GitOps 복구 검토 PR",
             description=(
@@ -56,7 +91,7 @@ class OomKilledRecoveryActions:
             ),
             route=routes.safe_pr,
             risk_level="medium",
-            score=0.56,
+            score=0.35,
             blast_radius="target_workload",
             approval_required=True,
             prerequisites=(
@@ -69,7 +104,7 @@ class OomKilledRecoveryActions:
                 "5xx 로그 감소",
             ),
             rollback_plan="생성된 PR 또는 merge commit을 revert합니다.",
-            params={"patch": "recovery_review"},
+            params={"document_type": "recovery_review"},
         ),
         RecoveryActionSpec(
             action_type="deployment_scale",
@@ -146,7 +181,7 @@ class NetworkRecoveryActions:
     root_causes=("bad_image_rollout", "app_startup_failure"),
     actions=(
         RecoveryActionSpec(
-            action_type="rollback",
+            action_type="image_rollback",
             title="이전 이미지 rollback PR",
             description="최근 이미지 변경이 원인일 가능성이 높아 이전 태그로 되돌리는 PR을 제안합니다.",
             route=routes.safe_pr,
@@ -157,7 +192,7 @@ class NetworkRecoveryActions:
             prerequisites=("이전 정상 revision 확인", "rollback 이미지 digest 확인"),
             validation_checks=("새 pod ready", "startup error 소멸", "5xx 감소"),
             rollback_plan="rollback PR revert 또는 원래 이미지 tag 재적용",
-            params={"patch": "previous_image"},
+            params={"strategy": "last_approved_snapshot"},
         ),
     ),
 )
@@ -180,7 +215,7 @@ class RolloutRecoveryActions:
             prerequisites=("누락 key와 기대 value 확인",),
             validation_checks=("config load error 소멸", "pod ready", "재시작 루프 중단"),
             rollback_plan="설정 보정 commit revert",
-            params={"patch": "config"},
+            params={"strategy": "operator_supplied_config_value"},
         ),
     ),
 )
@@ -207,7 +242,7 @@ class ConfigRecoveryActions:
                 "ImagePullBackOff 이벤트 소멸",
             ),
             rollback_plan="이미지 태그 보정 commit revert",
-            params={"patch": "image_tag"},
+            params={"strategy": "last_approved_snapshot"},
         ),
     ),
 )
@@ -280,7 +315,7 @@ class RegistryRecoveryActions:
                 "FailedScheduling 이벤트 소멸",
             ),
             rollback_plan="리소스 request 조정 commit revert",
-            params={"patch": "resource_requests"},
+            params={"strategy": "fit_node_allocatable"},
         ),
     ),
 )
@@ -307,7 +342,7 @@ class SchedulingCapacityRecoveryActions:
                 "affinity/taint 이벤트 소멸",
             ),
             rollback_plan="스케줄링 조건 보정 commit revert",
-            params={"patch": "scheduling_constraints"},
+            params={"strategy": "match_approved_node_policy"},
         ),
     ),
 )
@@ -339,6 +374,63 @@ class SchedulingConstraintRecoveryActions:
     ),
 )
 class PvcBindingRecoveryActions:
+    pass
+
+
+@rca.recovery(
+    root_causes=(
+        "probe_path_wrong",
+        "probe_port_wrong",
+        "timeout_too_short",
+        "startup_window_too_short",
+    ),
+    actions=(
+        RecoveryActionSpec(
+            action_type="probe_fix",
+            title="Probe 설정 보정 PR",
+            description=(
+                "승인 snapshot의 probe scalar와 검증된 이전 값 또는 bounded timeout 정책을 "
+                "사용해 path/port/timeout 패치를 제안합니다."
+            ),
+            route=routes.safe_pr,
+            risk_level="medium",
+            score=0.66,
+            blast_radius="target_workload",
+            approval_required=True,
+            prerequisites=("GitOps 승인 snapshot", "probe 실패 근거"),
+            validation_checks=("Probe 성공", "Pod Ready 전환", "실제 health 실패 은폐 없음"),
+            rollback_plan="동반된 inverse patch로 이전 probe scalar를 복원합니다.",
+            params={"strategy": "approved_value_or_bounded_timeout"},
+        ),
+    ),
+)
+class ProbeRecoveryActions:
+    pass
+
+
+@rca.recovery(
+    root_causes=("selector_label_mismatch",),
+    actions=(
+        RecoveryActionSpec(
+            action_type="selector_fix",
+            title="Deployment selector 최소 보정 PR",
+            description=(
+                "승인 Deployment snapshot에서 template label과 불일치한 단일 selector scalar만 "
+                "보정하는 PR을 제안합니다."
+            ),
+            route=routes.safe_pr,
+            risk_level="medium",
+            score=0.68,
+            blast_radius="target_workload",
+            approval_required=True,
+            prerequisites=("단일 selector 불일치", "GitOps 승인 snapshot"),
+            validation_checks=("selector-template 일치", "Ready endpoint 회복"),
+            rollback_plan="동반된 inverse patch로 이전 selector를 복원합니다.",
+            params={"strategy": "match_template_label", "max_fields": 1},
+        ),
+    ),
+)
+class SelectorRecoveryActions:
     pass
 
 

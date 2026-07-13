@@ -1,5 +1,5 @@
 ---
-source_commit: 6abbbc8f4
+source_commit: e14390882
 status: synced
 ---
 
@@ -35,8 +35,9 @@ process-local session store는 단일 controller용이며 restart 때 세션이 
 
 서비스 명부는 `src/services/*/*/app.py` 정적 발견 결과가 단일 원천이다. 지시 작성 당시
 39개였지만 `change-correlation-worker` 착륙 후 현재 40개다. 숫자를 고정 목록으로 복제하지
-않고 현재 실물을 매번 전수 배정한다: controller 38개, agent image 영역 2개
-(`cluster-agent`, `node-collector`). controller 38개는 worker 32, async 4, HTTP 2다.
+않고 현재 실물을 매번 전수 배정한다: controller 39개, agent image 영역 2개
+(`cluster-agent`, `node-collector`). controller 39개는 worker 33, async 4, HTTP 2다.
+H3의 `auto-revert-worker` 합류로 BQ-016 착륙 시점보다 worker가 1개 늘었다.
 
 ```bash
 uv run python src/controller/app.py --check

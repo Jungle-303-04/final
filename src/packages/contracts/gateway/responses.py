@@ -778,6 +778,7 @@ class TargetInstallResponse(StrictModel):
     bootstrap_steps: list[BootstrapStep] = Field(default_factory=list)
     connect_timeout_seconds: int | None = None
     connect_expires_at: str | None = None
+    connection_stage: str | None = None
 
 
 class ClusterAgentStatus(StrictModel):
@@ -800,6 +801,8 @@ class ClusterSummary(StrictModel):
     status: str
     settings: JsonMap = Field(default_factory=dict)
     connection_status: str
+    provider: str | None = None
+    connection_stage: str | None = None
     last_agent_id: str | None = None
     last_agent_seen_at: str | None = None
     node_count: int = 0
@@ -821,6 +824,7 @@ class ClusterResponse(StrictModel):
 class ClusterConnectionStatusResponse(StrictModel):
     cluster_id: str
     connection_status: str
+    connection_stage: str | None = None
     last_agent_id: str | None = None
     last_seen_at: str | None = None
     agents: list[ClusterAgentStatus] = Field(default_factory=list)

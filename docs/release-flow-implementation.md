@@ -24,6 +24,38 @@
 - DB migration: `alembic/versions/20260706_0001_release_flow_tables.py`
 - Deployment manifest: `deploy/management/services.yaml`
 
+## 내부 모듈 분해 준비
+
+`src/domains/release_flow/router.py`의 HTTP 동작을 바꾸지 않고 내부 모듈만 분리할 때의
+의존 방향은 다음으로 고정한다. 이 절은 BQ-011 착수 전 조사 결과이며 코드 claim이나
+구현 완료를 뜻하지 않는다.
+
+```text
+router → readiness → policy
+                   → verification
+router → policy
+router → verification
+router → report → verification
+각 모듈 → _support
+```
+
+- `policy.py`: Safe PR 증거, 실행 blocker, required input, diagnostics, rollback, approval,
+  change ticket/window/freeze/runbook/owner/abort, 활성 실행 잠금과 policy snapshot을 맡는다.
+- `readiness.py`: readiness check/impact/next action과 dispatch readiness·warning을 맡고,
+  policy와 verification을 함께 조립하는 `release_dispatch_guard_snapshot`도 여기에 둔다.
+- `verification.py`: verification URL/evidence 검증, job spec·결정론 ID·timeout,
+  advance blocker와 pending timeout 판정을 맡는다.
+- `report.py`: run filter/summary/handoff/report/Markdown/audit 직렬화를 맡는다. DB 조회·인가와
+  상태 변경은 계속 router에 남긴다.
+- `_support.py`: `step_config`, `plan_settings_value`, 정수·UTC 파싱 등 shape 정규화만 두며
+  업무 규칙을 넣지 않는다.
+
+분해 과정에서는 blocker 순서·문구·check ID, `release_guard` 중첩 key, verification job ID
+hash 입력, timeout fallback 순서를 관찰 가능한 계약으로 보존한다. 기존 테스트가
+`domains.release_flow.router` 심볼과 module-global monkeypatch를 사용하므로 router의 호환
+re-export와 patch 대상 정합을 함께 검증한다. import-linter에는 위 화살표만 허용하고
+`policy/readiness/verification/report → router` 역방향을 금지한다.
+
 ## API 범위
 - `POST /release-plans`
 - `PUT /release-plans/{plan_id}`

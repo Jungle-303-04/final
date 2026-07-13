@@ -18,7 +18,12 @@ from commands import (
     command,
 )
 from commands.helm import run_catalog_helm_install
-from control import AgentControlStore, AgentPolicySync, DesiredStateReconciler
+from control import (
+    AgentControlStore,
+    AgentPolicySync,
+    DesiredStateReconciler,
+    KubernetesArgoObserver,
+)
 from evidence import EvidenceCollector, EvidenceJobScheduler
 from kubernetes_api import (
     kubernetes_api_base_url,
@@ -78,6 +83,7 @@ from config import (
     POLICY_SYNC_INTERVAL_ENV,
     QUERY_RUN_ACTION,
     RECONCILE_INTERVAL_ENV,
+    RECONCILER_MODE_ARGOCD,
     RECONCILER_MODE_ENV,
 )
 from config import (
@@ -537,6 +543,11 @@ class TargetClusterAgent:
             store=self.control_store,
             interval_seconds=self.reconcile_interval_seconds,
             reconciler_mode=self.reconciler_mode,
+            argo_observer=(
+                KubernetesArgoObserver(transport=kubernetes_transport)
+                if self.reconciler_mode == RECONCILER_MODE_ARGOCD
+                else None
+            ),
         )
         self.kubernetes = KubernetesApiClient()
         self.command_registry = AgentCommandRegistry.from_instance(

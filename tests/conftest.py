@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import base64
 import importlib.util
 import inspect
 import json
@@ -136,6 +137,12 @@ def github_scm_transport(
     fail_pr_status: int | None = None,
     calls: list[tuple[str, str]] | None = None,
     contents: list[dict[str, object]] | None = None,
+    base_sha: str = "base-sha",
+    source_contents: dict[str, str] | None = None,
+    existing_pr: dict[str, object] | None = None,
+    ref_contents: dict[tuple[str, str], str] | None = None,
+    compare_result: dict[str, object] | None = None,
+    compare_results: dict[str, dict[str, object]] | None = None,
 ) -> Any:
     """GithubScmProvider 용 GitHub REST 흐름(base ref → branch → contents → pulls) stub."""
     import httpx
@@ -147,7 +154,7 @@ def github_scm_transport(
         if contents is not None and request.method == "PUT" and request.content:
             contents.append(json.loads(request.content))
         if request.method == "GET" and "/git/ref/heads/" in path:
-            return httpx.Response(200, json={"object": {"sha": "base-sha"}})
+            return httpx.Response(200, json={"object": {"sha": base_sha}})
         if request.method == "POST" and path.endswith("/git/refs"):
             if branch_exists:
                 return httpx.Response(422, json={"message": "Reference already exists"})
@@ -157,7 +164,24 @@ def github_scm_transport(
                 return httpx.Response(422, json={"message": "sha required for update"})
             return httpx.Response(201, json={"content": {"sha": "blob-sha"}})
         if request.method == "GET" and "/contents/" in path:
+            ref = str(request.url.params.get("ref") or "")
+            if ref_contents and (path, ref) in ref_contents:
+                encoded = base64.b64encode(ref_contents[(path, ref)].encode()).decode()
+                return httpx.Response(
+                    200,
+                    json={"sha": "ref-blob-sha", "encoding": "base64", "content": encoded},
+                )
+            if ref == base_sha and source_contents and path in source_contents:
+                encoded = base64.b64encode(source_contents[path].encode()).decode()
+                return httpx.Response(
+                    200,
+                    json={"sha": "source-blob-sha", "encoding": "base64", "content": encoded},
+                )
             return httpx.Response(200, json={"sha": "blob-sha"})
+        if request.method == "GET" and "/compare/" in path:
+            if compare_results and path in compare_results:
+                return httpx.Response(200, json=compare_results[path])
+            return httpx.Response(200, json=compare_result or {})
         if request.method == "POST" and path.endswith("/pulls"):
             if fail_pr_status is not None:
                 return httpx.Response(fail_pr_status, json={"message": "server error"})
@@ -165,7 +189,9 @@ def github_scm_transport(
                 return httpx.Response(422, json={"message": "A pull request already exists"})
             return httpx.Response(201, json={"html_url": pr_html_url})
         if request.method == "GET" and path.endswith("/pulls"):
-            return httpx.Response(200, json=[{"html_url": pr_html_url}])
+            if existing_pr is not None:
+                return httpx.Response(200, json=[existing_pr])
+            return httpx.Response(200, json=[{"html_url": pr_html_url}] if pr_exists else [])
         return httpx.Response(404, json={"message": f"unexpected {request.method} {path}"})
 
     return getattr(httpx, "Mo" + "ckTransport")(handler)

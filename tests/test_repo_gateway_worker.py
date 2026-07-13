@@ -4,13 +4,243 @@ import asyncio
 import base64
 import logging
 
+import pytest
 from conftest import SpyDb, github_scm_transport, load_service, run_handler, subjects_of
 
 from domains.alert.events import AlertRequestedBody
-from domains.scm.events import SafePrFilePatch, SafePrReadyForCreationBody, SafePrRequestedBody
-from domains.scm.pipeline import safe_pr_patch_sha256
+from domains.gitops.source_patch import (
+    ImageScalarReplacement,
+    ManifestImagePatchPlan,
+    ManifestScalarPatchPlan,
+    ScalarFieldReplacement,
+    canonical_manifest_digest,
+    image_patch_content,
+    parse_image_patch_plan,
+    parse_single_manifest,
+    scalar_patch_content,
+)
+from domains.scm.events import (
+    SafePrFilePatch,
+    SafePrReadyForCreationBody,
+    SafePrRequestedBody,
+)
+from domains.scm.pipeline import normalize_safe_pr_request, safe_pr_patch_sha256
 
 PR_HTML_URL = "https://github.test.local/project/repo/pull/7"
+APPROVED_SHA = "a" * 40
+NEW_BASE_SHA = "b" * 40
+
+
+def _structured_patch(source: str) -> SafePrFilePatch:
+    plan = ManifestImagePatchPlan(
+        source_type="raw-yaml",
+        source_manifest_sha256=canonical_manifest_digest(parse_single_manifest(source, "raw-yaml")),
+        expected_base_sha=APPROVED_SHA,
+        manifest_path="deploy/app.yaml",
+        replacements=(
+            ImageScalarReplacement(
+                container_name="checkout-api",
+                current_image="ghcr.io/project/checkout-api:v2",
+                previous_image="ghcr.io/project/checkout-api:v1",
+            ),
+        ),
+    )
+    return SafePrFilePatch(
+        path=".gitops/safe-pr/patches/test-plan.yaml",
+        content=image_patch_content(plan),
+        description="restore approved image",
+    )
+
+
+def _structured_case(source: str) -> tuple[SafePrReadyForCreationBody, SpyDb, SafePrRequestedBody]:
+    request = normalize_safe_pr_request(
+        _request(
+            workspace_id="workspace-1",
+            repository_id="repo-1",
+            binding_id="binding-1",
+            application_id="app-1",
+            workflow_run_id="workflow-1",
+            environment="sandbox",
+            manifest_path="deploy/app.yaml",
+            repo_ref="project/repo",
+            base_branch="main",
+            commit_sha=APPROVED_SHA,
+            patches=[_structured_patch(source)],
+        )
+    )
+    desired_manifest = parse_single_manifest(source, "raw-yaml")
+    artifact_digest = canonical_manifest_digest(desired_manifest)
+    db = SpyDb(
+        get_workflow_run={
+            "workflow_run_id": request.workflow_run_id,
+            "workspace_id": request.workspace_id,
+            "application_id": request.application_id,
+            "binding_id": request.binding_id,
+            "environment": request.environment,
+            "commit_sha": request.commit_sha,
+        },
+        get_workflow_step_details={
+            "resource": "deployment/checkout-api",
+            "workspace_id": request.workspace_id,
+            "repository_id": request.repository_id,
+            "binding_id": request.binding_id,
+            "application_id": request.application_id,
+            "workflow_run_id": request.workflow_run_id,
+            "environment": request.environment,
+            "manifest_path": request.manifest_path,
+            "desired_manifest": desired_manifest,
+            "basis": {
+                "old_desired_source": "last_approved_snapshot",
+                "artifact_digest": artifact_digest,
+            },
+            "changes": [
+                {
+                    "field_path": ("spec.template.spec.containers[name=checkout-api].image"),
+                    "old_desired": "ghcr.io/project/checkout-api:v1",
+                    "new_desired": "ghcr.io/project/checkout-api:v2",
+                }
+            ],
+        },
+        get_manifest_artifact_provenance={
+            "workspace_id": request.workspace_id,
+            "repository_id": request.repository_id,
+            "binding_id": request.binding_id,
+            "commit_sha": request.commit_sha,
+            "manifest_path": request.manifest_path,
+            "artifact_digest": artifact_digest,
+            "source_manifest_sha256": canonical_manifest_digest(desired_manifest),
+            "repo_ref": request.repo_ref,
+            "branch": request.base_branch,
+        },
+    )
+    ready = SafePrReadyForCreationBody(
+        request=request,
+        summary="safe pr ready",
+        risk="low",
+        workspace_id=request.workspace_id,
+    )
+    return ready, db, request
+
+
+def _scalar_structured_case(
+    source: str,
+) -> tuple[SafePrReadyForCreationBody, SpyDb, SafePrRequestedBody]:
+    plan = ManifestScalarPatchPlan(
+        action_type="replica_scale",
+        source_type="raw-yaml",
+        source_manifest_sha256=canonical_manifest_digest(parse_single_manifest(source, "raw-yaml")),
+        expected_base_sha=APPROVED_SHA,
+        manifest_path="deploy/app.yaml",
+        replacements=(ScalarFieldReplacement("spec.replicas", 2, 3),),
+        rollback_replacements=(ScalarFieldReplacement("spec.replicas", 3, 2),),
+    )
+    request = normalize_safe_pr_request(
+        _request(
+            workspace_id="workspace-1",
+            repository_id="repo-1",
+            binding_id="binding-1",
+            application_id="app-1",
+            workflow_run_id="workflow-1",
+            environment="sandbox",
+            manifest_path="deploy/app.yaml",
+            repo_ref="project/repo",
+            base_branch="main",
+            commit_sha=APPROVED_SHA,
+            patches=[
+                SafePrFilePatch(
+                    path=".gitops/safe-pr/patches/scalar-plan.yaml",
+                    content=scalar_patch_content(plan),
+                    description="increase replicas with inverse rollback",
+                )
+            ],
+        )
+    )
+    desired_manifest = parse_single_manifest(source, "raw-yaml")
+    artifact_digest = canonical_manifest_digest(desired_manifest)
+    db = SpyDb(
+        get_workflow_run={
+            "workflow_run_id": request.workflow_run_id,
+            "workspace_id": request.workspace_id,
+            "application_id": request.application_id,
+            "binding_id": request.binding_id,
+            "environment": request.environment,
+            "commit_sha": request.commit_sha,
+        },
+        get_workflow_step_details={
+            "resource": "deployment/checkout-api",
+            "workspace_id": request.workspace_id,
+            "repository_id": request.repository_id,
+            "binding_id": request.binding_id,
+            "application_id": request.application_id,
+            "workflow_run_id": request.workflow_run_id,
+            "environment": request.environment,
+            "manifest_path": request.manifest_path,
+            "desired_manifest": desired_manifest,
+            "basis": {
+                "old_desired_source": "last_approved_snapshot",
+                "artifact_digest": artifact_digest,
+            },
+            "changes": [],
+        },
+        get_manifest_artifact_provenance={
+            "workspace_id": request.workspace_id,
+            "repository_id": request.repository_id,
+            "binding_id": request.binding_id,
+            "commit_sha": request.commit_sha,
+            "manifest_path": request.manifest_path,
+            "artifact_digest": artifact_digest,
+            "source_manifest_sha256": plan.source_manifest_sha256,
+            "repo_ref": request.repo_ref,
+            "branch": request.base_branch,
+        },
+    )
+    return (
+        SafePrReadyForCreationBody(
+            request=request,
+            summary="safe pr ready",
+            risk="low",
+            workspace_id=request.workspace_id,
+        ),
+        db,
+        request,
+    )
+
+
+def _change_document_text(request: SafePrRequestedBody) -> str:
+    patch_rows = "\n".join(
+        f"- `{patch.path}`: {patch.description or 'manifest patch'}" for patch in request.patches
+    )
+    approval_rows = []
+    if request.approval_ref:
+        approval_rows.append(f"- approval_ref: `{request.approval_ref}`")
+    if request.policy_decision_ref:
+        approval_rows.append(f"- policy_decision_ref: `{request.policy_decision_ref}`")
+    approval_section = "\n".join(approval_rows) if approval_rows else "- approval_ref: 없음"
+    structured_plans = [
+        patch.content.rstrip()
+        for patch in request.patches
+        if patch.path.startswith(".gitops/safe-pr/patches/")
+    ]
+    structured_section = (
+        "\n\n## Structured Patch Plan\n\n"
+        + "\n\n".join(f"```yaml\n{content}\n```" for content in structured_plans)
+        if structured_plans
+        else ""
+    )
+    return (
+        f"# {request.title}\n\n{request.body}\n\n"
+        f"- manifest_path: `{request.manifest_path}`\n"
+        f"- workflow_run_id: `{request.workflow_run_id}`\n"
+        f"- environment: `{request.environment}`\n\n"
+        "## Evidence\n\n"
+        f"- commit_sha: `{request.commit_sha}`\n"
+        f"- patch_sha256: `{request.patch_sha256}`\n\n"
+        "## Approval\n\n"
+        f"{approval_section}\n\n"
+        "## Files\n\n"
+        f"{patch_rows}\n"
+        f"{structured_section}"
+    )
 
 
 def _alert() -> AlertRequestedBody:
@@ -153,6 +383,23 @@ def test_safe_pr_patch_digest_ignores_description_metadata() -> None:
     assert safe_pr_patch_sha256([patch]) == safe_pr_patch_sha256([same_patch_different_description])
 
 
+def test_structured_image_patch_is_stable_after_wire_roundtrip() -> None:
+    source = (
+        "apiVersion: apps/v1\nkind: Deployment\nmetadata: {name: checkout-api}\n"
+        "spec: {template: {spec: {containers: [{name: checkout-api, "
+        "image: 'ghcr.io/project/checkout-api:v2'}]}}}\n"
+    )
+    request = _request(commit_sha=APPROVED_SHA, patches=[_structured_patch(source)])
+
+    decoded = SafePrRequestedBody.from_body(request.to_body())
+    plan = parse_image_patch_plan(decoded.patches[0].content)
+
+    assert plan is not None
+    assert plan.expected_base_sha == APPROVED_SHA
+    assert plan.replacements[0].container_name == "checkout-api"
+    assert safe_pr_patch_sha256(decoded.patches) == safe_pr_patch_sha256(request.patches)
+
+
 def test_repo_gateway_logs_provider_steps_with_correlation(monkeypatch, caplog) -> None:
     _github_env(monkeypatch)
     repo = _load_with_transport(monkeypatch)
@@ -224,6 +471,395 @@ def test_repo_gateway_uses_request_repo_ref_and_base_branch(monkeypatch) -> None
         ("POST", "/repos/org/checkout/pulls"),
     ]
     assert db.called("save_pull_request")
+
+
+def test_repo_gateway_preserves_opaque_legacy_template_content(monkeypatch) -> None:
+    _github_env(monkeypatch)
+    template = "{{ if .Values.enabled }}\nkind: Deployment\n{{ end }}\n"
+    contents: list[dict[str, object]] = []
+    repo = _load_with_transport(monkeypatch, contents=contents)
+
+    outs = run_handler(
+        repo.on_safe_pr_ready_for_creation,
+        _ready(
+            manifest_path="charts/templates/deployment.yaml",
+            patches=[
+                SafePrFilePatch(
+                    path="charts/templates/deployment.yaml",
+                    content=template,
+                )
+            ],
+        ),
+        db=SpyDb(),
+    )
+
+    assert subjects_of(outs) == ["safe_pr.created"]
+    assert base64.b64decode(str(contents[-1]["content"])).decode() == template
+
+
+def test_repo_gateway_rejects_stale_expected_base_before_any_github_write(monkeypatch) -> None:
+    _github_env(monkeypatch)
+    source = (
+        "apiVersion: apps/v1\nkind: Deployment\nmetadata: {name: checkout-api}\n"
+        "spec: {template: {spec: {containers: [{name: checkout-api, "
+        "image: 'ghcr.io/project/checkout-api:v2'}]}}}\n"
+    )
+    calls: list[tuple[str, str]] = []
+    repo = _load_with_transport(monkeypatch, calls=calls, base_sha=NEW_BASE_SHA)
+    ready, db, _ = _structured_case(source)
+
+    outs = run_handler(
+        repo.on_safe_pr_ready_for_creation,
+        ready,
+        db=db,
+    )
+
+    assert subjects_of(outs) == ["safe_pr.failed"]
+    assert outs[0].reason_code == "provider_error"
+    assert outs[0].details["exception_type"] == "RuntimeError"
+    assert calls == [
+        ("GET", "/repos/project/repo/git/ref/heads/main"),
+        ("GET", "/repos/project/repo/pulls"),
+    ]
+    assert not db.called("save_pull_request")
+
+
+def test_repo_gateway_rejects_structured_patch_not_matching_approved_diff(monkeypatch) -> None:
+    _github_env(monkeypatch)
+    source = (
+        "apiVersion: apps/v1\nkind: Deployment\nmetadata: {name: checkout-api}\n"
+        "spec: {template: {spec: {containers: [{name: checkout-api, "
+        "image: 'ghcr.io/project/checkout-api:v2'}]}}}\n"
+    )
+    ready, db, _ = _structured_case(source)
+    db._returns["get_workflow_step_details"]["changes"][0]["old_desired"] = (
+        "ghcr.io/project/checkout-api:tampered"
+    )
+    calls: list[tuple[str, str]] = []
+    repo = _load_with_transport(monkeypatch, calls=calls, base_sha=APPROVED_SHA)
+
+    outs = run_handler(repo.on_safe_pr_ready_for_creation, ready, db=db)
+
+    assert subjects_of(outs) == ["safe_pr.failed"]
+    assert calls == []
+    assert not db.called("save_pull_request")
+
+
+def test_repo_gateway_rejects_structured_repo_or_branch_not_matching_provenance(
+    monkeypatch,
+) -> None:
+    _github_env(monkeypatch)
+    source = (
+        "apiVersion: apps/v1\nkind: Deployment\nmetadata: {name: checkout-api}\n"
+        "spec: {template: {spec: {containers: [{name: checkout-api, "
+        "image: 'ghcr.io/project/checkout-api:v2'}]}}}\n"
+    )
+    ready, db, _ = _structured_case(source)
+    db._returns["get_manifest_artifact_provenance"]["repo_ref"] = "other/fork"
+    calls: list[tuple[str, str]] = []
+    repo = _load_with_transport(monkeypatch, calls=calls, base_sha=APPROVED_SHA)
+
+    outs = run_handler(repo.on_safe_pr_ready_for_creation, ready, db=db)
+
+    assert subjects_of(outs) == ["safe_pr.failed"]
+    assert calls == []
+    assert not db.called("save_pull_request")
+
+
+def test_repo_gateway_materializes_image_patch_from_exact_base_source(monkeypatch) -> None:
+    _github_env(monkeypatch)
+    source = (
+        "apiVersion: apps/v1\n"
+        "kind: Deployment\n"
+        "metadata:\n"
+        "  name: checkout-api\n"
+        "spec:\n"
+        "  template:\n"
+        "    spec:\n"
+        "      containers:\n"
+        "        - name: checkout-api\n"
+        '          image: "ghcr.io/project/checkout-api:v2" # keep this comment\n'
+    )
+    expected = source.replace("checkout-api:v2", "checkout-api:v1", 1)
+    source_path = "/repos/project/repo/contents/deploy/app.yaml"
+    calls: list[tuple[str, str]] = []
+    contents: list[dict[str, object]] = []
+    repo = _load_with_transport(
+        monkeypatch,
+        calls=calls,
+        contents=contents,
+        base_sha=APPROVED_SHA,
+        source_contents={source_path: source},
+    )
+    ready, db, _ = _structured_case(source)
+
+    outs = run_handler(
+        repo.on_safe_pr_ready_for_creation,
+        ready,
+        db=db,
+    )
+
+    assert subjects_of(outs) == ["safe_pr.created"]
+    assert calls == [
+        ("GET", "/repos/project/repo/git/ref/heads/main"),
+        ("GET", "/repos/project/repo/pulls"),
+        ("GET", source_path),
+        ("POST", "/repos/project/repo/git/refs"),
+        ("PUT", f"/repos/project/repo/contents/.gitops/safe-pr/{outs[0].workflow_run_id}.md"),
+        ("PUT", source_path),
+        ("POST", "/repos/project/repo/pulls"),
+    ]
+    assert base64.b64decode(str(contents[-1]["content"])).decode() == expected
+    assert "namespace:" not in expected
+
+
+def test_repo_gateway_materializes_scalar_patch_from_exact_base_source(monkeypatch) -> None:
+    _github_env(monkeypatch)
+    source = (
+        "apiVersion: apps/v1\n"
+        "kind: Deployment\n"
+        "metadata: {name: checkout-api}\n"
+        "spec:\n"
+        "  replicas: 2 # approved replica count\n"
+        "  template:\n"
+        "    spec:\n"
+        "      containers:\n"
+        "        - name: checkout-api\n"
+        "          image: ghcr.io/project/checkout-api:v2\n"
+    )
+    expected = source.replace("replicas: 2", "replicas: 3", 1)
+    source_path = "/repos/project/repo/contents/deploy/app.yaml"
+    contents: list[dict[str, object]] = []
+    repo = _load_with_transport(
+        monkeypatch,
+        contents=contents,
+        base_sha=APPROVED_SHA,
+        source_contents={source_path: source},
+    )
+    ready, db, _request_body = _scalar_structured_case(source)
+
+    outs = run_handler(repo.on_safe_pr_ready_for_creation, ready, db=db)
+
+    assert subjects_of(outs) == ["safe_pr.created"]
+    change_document = base64.b64decode(str(contents[0]["content"])).decode()
+    assert "## Structured Patch Plan" in change_document
+    assert "rollbackReplacements:" in change_document
+    assert "fieldPath: spec.replicas" in change_document
+    assert base64.b64decode(str(contents[-1]["content"])).decode() == expected
+
+
+def test_repo_gateway_reuses_matching_structured_pr_after_base_advances(monkeypatch) -> None:
+    _github_env(monkeypatch)
+    source = (
+        "apiVersion: apps/v1\nkind: Deployment\nmetadata: {name: checkout-api}\n"
+        "spec: {template: {spec: {containers: [{name: checkout-api, "
+        "image: 'ghcr.io/project/checkout-api:v2'}]}}}\n"
+    )
+    ready, db, request = _structured_case(source)
+    head_sha = "c" * 40
+    manifest_api_path = "/repos/project/repo/contents/deploy/app.yaml"
+    change_path = f".gitops/safe-pr/{request.workflow_run_id}.md"
+    change_api_path = f"/repos/project/repo/contents/{change_path}"
+    expected_manifest = source.replace("checkout-api:v2", "checkout-api:v1", 1)
+    existing_pr = {
+        "html_url": PR_HTML_URL,
+        "title": request.title,
+        "body": (f"{request.body}\n\n<!-- safe-pr-patch-sha256: {request.patch_sha256} -->"),
+        "base": {"ref": "main"},
+        "head": {"ref": f"gitops/{request.workflow_run_id}", "sha": head_sha},
+    }
+    calls: list[tuple[str, str]] = []
+    repo = _load_with_transport(
+        monkeypatch,
+        calls=calls,
+        base_sha=NEW_BASE_SHA,
+        existing_pr=existing_pr,
+        compare_results={
+            f"/repos/project/repo/compare/{APPROVED_SHA}...{NEW_BASE_SHA}": {
+                "status": "ahead",
+                "merge_base_commit": {"sha": APPROVED_SHA},
+                "files": [{"status": "modified", "filename": "README.md"}],
+            },
+            f"/repos/project/repo/compare/{APPROVED_SHA}...{head_sha}": {
+                "status": "ahead",
+                "merge_base_commit": {"sha": APPROVED_SHA},
+                "files": [
+                    {"status": "modified", "filename": "deploy/app.yaml"},
+                    {"status": "added", "filename": change_path},
+                ],
+            },
+        },
+        ref_contents={
+            (manifest_api_path, APPROVED_SHA): source,
+            (manifest_api_path, head_sha): expected_manifest,
+            (change_api_path, head_sha): _change_document_text(request),
+        },
+    )
+    outs = run_handler(
+        repo.on_safe_pr_ready_for_creation,
+        ready,
+        db=db,
+    )
+
+    assert subjects_of(outs) == ["safe_pr.created"]
+    assert outs[0].pr_url == PR_HTML_URL
+    assert calls == [
+        ("GET", "/repos/project/repo/git/ref/heads/main"),
+        ("GET", "/repos/project/repo/pulls"),
+        ("GET", f"/repos/project/repo/compare/{APPROVED_SHA}...{NEW_BASE_SHA}"),
+        ("GET", f"/repos/project/repo/compare/{APPROVED_SHA}...{head_sha}"),
+        ("GET", manifest_api_path),
+        ("GET", manifest_api_path),
+        ("GET", change_api_path),
+    ]
+    assert db.called("save_pull_request")
+
+
+def test_repo_gateway_rejects_structured_head_branch_collision_before_content_write(
+    monkeypatch,
+) -> None:
+    _github_env(monkeypatch)
+    source = (
+        "apiVersion: apps/v1\nkind: Deployment\nmetadata: {name: checkout-api}\n"
+        "spec: {template: {spec: {containers: [{name: checkout-api, "
+        "image: 'ghcr.io/project/checkout-api:v2'}]}}}\n"
+    )
+    source_path = "/repos/project/repo/contents/deploy/app.yaml"
+    calls: list[tuple[str, str]] = []
+    repo = _load_with_transport(
+        monkeypatch,
+        calls=calls,
+        branch_exists=True,
+        base_sha=APPROVED_SHA,
+        source_contents={source_path: source},
+    )
+    ready, db, _ = _structured_case(source)
+
+    outs = run_handler(
+        repo.on_safe_pr_ready_for_creation,
+        ready,
+        db=db,
+    )
+
+    assert subjects_of(outs) == ["safe_pr.failed"]
+    assert calls == [
+        ("GET", "/repos/project/repo/git/ref/heads/main"),
+        ("GET", "/repos/project/repo/pulls"),
+        ("GET", source_path),
+        ("POST", "/repos/project/repo/git/refs"),
+    ]
+    assert not db.called("save_pull_request")
+
+
+def test_repo_gateway_rejects_existing_structured_pr_with_renamed_file(monkeypatch) -> None:
+    _github_env(monkeypatch)
+    source = (
+        "apiVersion: apps/v1\nkind: Deployment\nmetadata: {name: checkout-api}\n"
+        "spec: {template: {spec: {containers: [{name: checkout-api, "
+        "image: 'ghcr.io/project/checkout-api:v2'}]}}}\n"
+    )
+    ready, db, request = _structured_case(source)
+    head_sha = "c" * 40
+    existing_pr = {
+        "html_url": PR_HTML_URL,
+        "title": request.title,
+        "body": f"{request.body}\n\n<!-- safe-pr-patch-sha256: {request.patch_sha256} -->",
+        "base": {"ref": "main"},
+        "head": {"ref": f"gitops/{request.workflow_run_id}", "sha": head_sha},
+    }
+    calls: list[tuple[str, str]] = []
+    repo = _load_with_transport(
+        monkeypatch,
+        calls=calls,
+        base_sha=NEW_BASE_SHA,
+        existing_pr=existing_pr,
+        compare_results={
+            f"/repos/project/repo/compare/{APPROVED_SHA}...{NEW_BASE_SHA}": {
+                "status": "ahead",
+                "merge_base_commit": {"sha": APPROVED_SHA},
+                "files": [{"status": "modified", "filename": "README.md"}],
+            },
+            f"/repos/project/repo/compare/{APPROVED_SHA}...{head_sha}": {
+                "status": "ahead",
+                "merge_base_commit": {"sha": APPROVED_SHA},
+                "files": [
+                    {
+                        "status": "renamed",
+                        "filename": "deploy/app.yaml",
+                        "previous_filename": "deploy/unrelated.yaml",
+                    },
+                    {
+                        "status": "added",
+                        "filename": f".gitops/safe-pr/{request.workflow_run_id}.md",
+                    },
+                ],
+            },
+        },
+    )
+
+    outs = run_handler(repo.on_safe_pr_ready_for_creation, ready, db=db)
+
+    assert subjects_of(outs) == ["safe_pr.failed"]
+    assert calls == [
+        ("GET", "/repos/project/repo/git/ref/heads/main"),
+        ("GET", "/repos/project/repo/pulls"),
+        ("GET", f"/repos/project/repo/compare/{APPROVED_SHA}...{NEW_BASE_SHA}"),
+        ("GET", f"/repos/project/repo/compare/{APPROVED_SHA}...{head_sha}"),
+    ]
+    assert not db.called("save_pull_request")
+
+
+@pytest.mark.parametrize(
+    "base_files",
+    [
+        [{"status": "modified", "filename": "deploy/app.yaml"}],
+        [{"status": "modified", "filename": f"docs/generated-{index}.md"} for index in range(300)],
+    ],
+    ids=["protected-path-changed", "compare-file-list-truncated"],
+)
+def test_repo_gateway_rejects_unsafe_or_truncated_base_advance(
+    monkeypatch,
+    base_files,
+) -> None:
+    _github_env(monkeypatch)
+    source = (
+        "apiVersion: apps/v1\nkind: Deployment\nmetadata: {name: checkout-api}\n"
+        "spec: {template: {spec: {containers: [{name: checkout-api, "
+        "image: 'ghcr.io/project/checkout-api:v2'}]}}}\n"
+    )
+    ready, db, request = _structured_case(source)
+    head_sha = "c" * 40
+    existing_pr = {
+        "html_url": PR_HTML_URL,
+        "title": request.title,
+        "body": f"{request.body}\n\n<!-- safe-pr-patch-sha256: {request.patch_sha256} -->",
+        "base": {"ref": "main"},
+        "head": {"ref": f"gitops/{request.workflow_run_id}", "sha": head_sha},
+    }
+    calls: list[tuple[str, str]] = []
+    repo = _load_with_transport(
+        monkeypatch,
+        calls=calls,
+        base_sha=NEW_BASE_SHA,
+        existing_pr=existing_pr,
+        compare_results={
+            f"/repos/project/repo/compare/{APPROVED_SHA}...{NEW_BASE_SHA}": {
+                "status": "ahead",
+                "merge_base_commit": {"sha": APPROVED_SHA},
+                "files": base_files,
+            }
+        },
+    )
+
+    outs = run_handler(repo.on_safe_pr_ready_for_creation, ready, db=db)
+
+    assert subjects_of(outs) == ["safe_pr.failed"]
+    assert calls == [
+        ("GET", "/repos/project/repo/git/ref/heads/main"),
+        ("GET", "/repos/project/repo/pulls"),
+        ("GET", f"/repos/project/repo/compare/{APPROVED_SHA}...{NEW_BASE_SHA}"),
+    ]
+    assert not db.called("save_pull_request")
 
 
 def test_repo_gateway_falls_back_to_env_base_branch(monkeypatch) -> None:

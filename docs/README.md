@@ -407,6 +407,7 @@ Target / Telemetry 선형 작업 문서는 아래에 있다.
 - [spec/services/ai-chat-worker](spec/services/ai-chat-worker.md)
 - [spec/services/ai-diff-worker](spec/services/ai-diff-worker.md)
 - [spec/services/ai-dispatch-worker](spec/services/ai-dispatch-worker.md)
+- [spec/recovery-authority-patches](spec/recovery-authority-patches.md)
 - [spec/services/ai-evidence-worker](spec/services/ai-evidence-worker.md)
 - [spec/services/ai-incident-worker](spec/services/ai-incident-worker.md)
 - [spec/services/ai-plan-worker](spec/services/ai-plan-worker.md)
