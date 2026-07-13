@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { ApiError } from "./client";
 import {
+  APPLICATION_RUNS_PATH,
   getApplication,
   listApplicationDeployments,
   listApplicationRuns,
@@ -94,6 +95,9 @@ describe("Application deployment history API", () => {
     expect(fetchMock).toHaveBeenCalledWith(
       "/api/applications/app-payment/runs?limit=100",
       expect.objectContaining({ signal: controller.signal }),
+    );
+    expect(APPLICATION_RUNS_PATH).toBe(
+      "/api/applications/{application_id}/runs",
     );
   });
 
@@ -195,6 +199,15 @@ describe("Application deployment history API", () => {
         eligible: false,
         applied: false,
         applied_not_false: true,
+      },
+    ],
+    [
+      "a rollout not-false flag that contradicts the tri-state value",
+      {
+        ...PROMOTION_GATE,
+        eligible: false,
+        rollout_ready: false,
+        rollout_ready_not_false: true,
       },
     ],
   ])("rejects %s", async (_caseName, promotionGate) => {
