@@ -156,6 +156,7 @@ def test_default_access_is_self_only_same_origin_with_console_and_realtime() -> 
     assert "proxy_pass http://127.0.0.1:8000/;" in config
     assert "proxy_pass http://127.0.0.1:8001/live/;" in config
     assert "location ^~ /api/install/" in config
+    assert "proxy_pass http://127.0.0.1:8000/install/;" in config
     assert "access_log off;" in config
     assert "location = /api/metrics" in config
     assert 'proxy_set_header X-Kubeheal-Internal-Auth "";' in config
@@ -289,6 +290,14 @@ def test_access_values_reject_unknown_mode_and_unsafe_external_url() -> None:
         ("--set-string", "access.externalUrl=https://user@opsia.example.com"),
         ("--set-string", "access.externalUrl=https://opsia.example.com/path"),
         ("--set-string", "access.externalUrl=https://opsia.example.com?next=evil"),
+        (
+            "--set",
+            "access.mode=ingress",
+            "--set-string",
+            "access.host=opsia.example.com",
+            "--set",
+            "access.ingress.tls.enabled=true",
+        ),
     ):
         result = subprocess.run(
             ["helm", "template", "opsia", str(CHART), *args],
