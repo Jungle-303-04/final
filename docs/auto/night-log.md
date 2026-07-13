@@ -3491,3 +3491,5 @@ gone branch 0, `(prunable)` worktree 0이다.
 [사이클] 2026-07-14 03:56 KST / `DEV_AUTH_BYPASS=0` base 고정과 렌더·live 공통 fail-closed 검증기 착륙 / `7d4e6750f` / 다음 한 걸음: smoke 기본 활성과 배포 후 live 검증 배선
 [사람 게이트] GitHub Actions `Dev Gate`는 최신 dev push도 runner 시작 전 결제·spending limit로 실패한다. 저장소 결제 복구 또는 비용 승인을 받은 AWS 대체 실행기가 필요하며, 그 전에는 서버 gate 완료로 판정하지 않는다.
 [사람 게이트] `aws sts get-caller-identity`가 만료 세션으로 실패했다. 계정 재인증 뒤 `verify_dev_auth_bypass.py live --context <management>` 실증이 필요하며, secret 값은 기록하지 않는다.
+
+[사이클] 2026-07-14 04:20 KST / smoke 기본 실행과 boolean 입력 정규화로 `RUN_SMOKE=true`가 조용히 skip되던 모순을 차단 / `ba46caf49` (전체 gate: 백엔드 2166 passed·3 skipped, 프론트 24 passed, manifest·build PASS, T1=T2, origin/dev 착륙 확인) / 다음 한 걸음: digest rollback과 신규 API strict smoke 배선
