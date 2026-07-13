@@ -2705,3 +2705,14 @@ target preflight·register 네 함수와 strict Zod 계약을 claim했다. 1회�
 - AWS live 상태는 `docs/auto/deploy-status.md`에 digest를 권위값으로 기록했다. secret 값과
   확인되지 않은 로그인 성공은 문서에 노출하거나 주장하지 않았다.
 - 현재는 canonical 착륙 전이므로 완료 앵커를 기록하지 않았다.
+
+## 2026-07-13 22:00 KST — [백엔드] OSS 접속 계약 canonical 착륙
+
+- feature `cf69ffb5b`, canonical merge `e8fc3c878`; 둘 다 `origin/dev` ancestor exit 0이다.
+- 전체 게이트는 Ruff lint/format PASS, import-linter 8 kept/0 broken, pytest
+  `2006 passed, 3 skipped`; manifest management 69/target 20, Helm lint PASS다.
+- merge-tree `9853698702e72a1b384d3ae6b68c28447905caf0`가 실제 merge tree와 같고 파일 삭제,
+  RCA/AI/runtime worker 변경, 정책 밖 충돌은 0건이다.
+- BQ-021 접속 계약은 착륙했으며 gateway 계약 lock을 해제했다. 공개 OCI 403은 BQ-016의
+  완료 블로커로 유지하고 GHCR publish·anonymous pull 허용 뒤 fresh Kind에서 재실증한다.
+- 계약 앵커: `ManagementAccessResponse + Helm access modes` / `cf69ffb5b` / `[green]`.

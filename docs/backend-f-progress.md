@@ -7,7 +7,7 @@ governing: docs/f-coordination-plan.md · docs/backend-f-workqueue.md
 
 # 백엔드 F 진행 현황
 
-현재 상태: **앵커 39건**
+현재 상태: **앵커 40건**
 
 ## 역사적 Delta-green baseline (BQ-001~003)
 
@@ -1041,9 +1041,9 @@ Bundle route는 200을 반환한다.
 
 계약 완성: AuditTimelineItem.event_id + journey_stage (b729ee6e49963c0e0d4599744fd7d63a2e0b8104) [green]
 
-### OSS 접속 계약 — canonical 착륙 전 증거
+### OSS 접속 계약 — canonical 착륙 증거
 
-- 상태: `done-pending-merge`; gateway 계약 lock은 이 행이 보유한다.
+- 상태: `landed`; gateway 계약 lock을 해제했다.
 - RED: `894874e67`부터 `2d4cf3f71`까지 11개 경계 테스트, 보안 보완 RED `8051342a5`.
 - GREEN: 동일 origin·self-only `ae9bc8d63`, URL/TLS/CSP 교정 `e480b3246`.
 - 응답 계약: preflight/install의 optional `management_access`는 mode, external URL,
@@ -1055,4 +1055,9 @@ Bundle route는 200을 반환한다.
 - 공개 OCI는 chart/controller/console anonymous pull이 403이므로 BQ-016과 이 행의 공개 설치
   완료 조건은 충족되지 않았다. GHCR publish와 package visibility 변경은 사람 권한 작업이다.
 - 후속 보안: URL에 포함되는 install token을 단기 1회용 receipt로 분리해야 한다.
-- canonical ancestor가 되기 전이므로 이 절에는 계약 완성 앵커를 쓰지 않는다.
+- 전체 게이트: Ruff lint/format PASS, import-linter 8 kept/0 broken, pytest
+  `2006 passed, 3 skipped`; manifest management 69/target 20, Helm lint PASS.
+- D-024: merge-tree `9853698702e72a1b384d3ae6b68c28447905caf0`, 삭제·frozen 변경 0건.
+  feature `cf69ffb5b`와 canonical merge `e8fc3c878`은 모두 `origin/dev` ancestor exit 0이다.
+
+계약 완성: ManagementAccessResponse + Helm access modes (cf69ffb5bc9b98b3da1c0b221b6c9cd5b8c21872) [green]
