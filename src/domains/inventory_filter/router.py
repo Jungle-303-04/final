@@ -19,6 +19,7 @@ from domains.inventory_filter.cursor import (
     FilterCursorCodec,
     authorization_revision,
 )
+from domains.inventory_filter.graph import build_resource_graph
 from domains.inventory_filter.query import (
     ResourceFilters,
     filter_fingerprint,
@@ -33,6 +34,7 @@ from packages.contracts.gateway.responses import (
     FilterSnapshotMeta,
     LabelFacetPageResponse,
     ResourceFilterFacetPageResponse,
+    ResourceGraphSnapshotResponse,
 )
 from packages.contracts.identity import Permission
 from packages.runtime.dependencies import get_db
@@ -40,6 +42,10 @@ from packages.runtime.dependencies import get_db
 DEFAULT_PAGE_LIMIT = 50
 MAX_PAGE_LIMIT = 200
 MAX_CURSOR_LENGTH = 8192
+DEFAULT_GRAPH_NODE_LIMIT = 200
+MAX_GRAPH_NODE_LIMIT = 200
+DEFAULT_GRAPH_EDGE_LIMIT = 1000
+MAX_GRAPH_EDGE_LIMIT = 2000
 FILTER_CURSOR_SIGNING_KEY_ENV = "FILTER_CURSOR_SIGNING_KEY"
 INVALID_REQUEST_DETAIL = "resource filter request is invalid"
 SCOPE_NOT_FOUND_DETAIL = "resource filter scope not found"
@@ -66,6 +72,123 @@ class PageState:
     latest_context: dict[str, Any]
     position: dict[str, Any] | None
     scope: CursorScope
+
+
+@router.get(
+    gateway_routes.RESOURCES_GRAPH_PATH,
+    response_model=ResourceGraphSnapshotResponse,
+)
+async def get_resource_graph(
+    clusters: str | None = Query(default=None),
+    namespaces: str | None = Query(default=None),
+    applications: str | None = Query(default=None),
+    resources_types: str | None = Query(default=None, alias="resources.types"),
+    resource_types: str | None = Query(default=None, include_in_schema=False),
+    resources_health: str | None = Query(default=None, alias="resources.health"),
+    health: str | None = Query(default=None, include_in_schema=False),
+    labels: str | None = Query(default=None),
+    resources_q: str | None = Query(default=None, alias="resources.q"),
+    q: str | None = Query(default=None, include_in_schema=False),
+    resources_include_deleted: bool | None = Query(
+        default=None,
+        alias="resources.includeDeleted",
+    ),
+    include_deleted: bool | None = Query(default=None, include_in_schema=False),
+    snapshot_revision: int | None = Query(default=None, ge=1),
+    max_nodes: int = Query(default=DEFAULT_GRAPH_NODE_LIMIT, ge=1, le=MAX_GRAPH_NODE_LIMIT),
+    max_edges: int = Query(default=DEFAULT_GRAPH_EDGE_LIMIT, ge=1, le=MAX_GRAPH_EDGE_LIMIT),
+    current: Any = Depends(require_session),
+    db: Any = Depends(get_db),
+) -> ResourceGraphSnapshotResponse:
+    filters = _parse_filters(
+        clusters=clusters,
+        namespaces=namespaces,
+        applications=applications,
+        resource_types=_coalesce_text(resources_types, resource_types),
+        health=_coalesce_text(resources_health, health),
+        labels=labels,
+        query=_coalesce_text(resources_q, q),
+        include_deleted=_coalesce_bool(resources_include_deleted, include_deleted),
+    )
+    cluster_id = _single_graph_cluster(filters)
+    authorized = await _authorized_scope(db, current)
+    _require_requested_scope(authorized, filters)
+
+    latest_global = await _snapshot_context(db, authorized)
+    latest_revision = int(latest_global.get("snapshot_revision") or 0)
+    target_revision = snapshot_revision if snapshot_revision is not None else latest_revision
+    if target_revision > latest_revision:
+        raise HTTPException(status_code=422, detail=INVALID_REQUEST_DETAIL)
+    if snapshot_revision is not None:
+        pinned_global = await _snapshot_context(
+            db,
+            authorized,
+            at_revision=target_revision,
+        )
+        if int(pinned_global.get("snapshot_revision") or 0) != target_revision:
+            raise HTTPException(status_code=422, detail=INVALID_REQUEST_DETAIL)
+
+    cluster_context = await asyncio.to_thread(
+        db.filter_snapshot_context,
+        authorized.workspace_id,
+        {cluster_id},
+        at_revision=target_revision,
+    )
+    result = await asyncio.to_thread(
+        db.list_filtered_resources,
+        workspace_id=authorized.workspace_id,
+        allowed_cluster_ids={cluster_id},
+        allowed_application_ids=set(authorized.application_ids),
+        filters=filters,
+        snapshot_revision=target_revision,
+        position=None,
+        limit=max_nodes,
+        graph_priority=True,
+    )
+    items = list(result.get("items") or [])
+    filtered_count = int(result.get("filtered_count") or 0)
+    omitted_node_count = max(0, filtered_count - len(items))
+    fingerprint = filter_fingerprint(filters)
+    reasons = list(cluster_context.get("partial_reason_codes") or [])
+    if any(item.get("application_binding_completeness") != "exact" for item in items):
+        reasons.append("restricted_application_bindings")
+    cluster_identity = (
+        dict(items[0].get("cluster") or {})
+        if items
+        else {"cluster_id": cluster_id, "name": None, "provider": None}
+    )
+    graph = build_resource_graph(
+        items,
+        snapshot_revision=target_revision,
+        filter_fingerprint=fingerprint,
+        source_complete=bool(cluster_context.get("resources_complete")),
+        labels_complete=bool(cluster_context.get("labels_complete")),
+        truncated=bool(result.get("has_more")),
+        node_limit=max_nodes,
+        edge_limit=max_edges,
+        omitted_node_count=omitted_node_count,
+        partial_reason_codes=reasons,
+        cluster=cluster_identity,
+        authorization_revision=authorized.authorization_revision,
+    )
+    return ResourceGraphSnapshotResponse(
+        **graph,
+        cluster_projection_revision=int(cluster_context.get("snapshot_revision") or 0),
+        counts=_counts(
+            result,
+            context=cluster_context,
+            filters=filters,
+            require_labels=bool(filters.labels),
+        ),
+        snapshot=FilterSnapshotMeta(
+            snapshot_revision=target_revision,
+            authorization_revision=authorized.authorization_revision,
+            filter_fingerprint=fingerprint,
+            observed_at=cluster_context.get("observed_at"),
+            stale=target_revision < latest_revision,
+            partial_reason_codes=sorted(set(reasons)),
+        ),
+    )
 
 
 @router.get(
@@ -569,6 +692,15 @@ def _require_requested_scope(
         raise HTTPException(status_code=404, detail=SCOPE_NOT_FOUND_DETAIL)
     if not set(filters.applications).issubset(authorized.application_ids):
         raise HTTPException(status_code=404, detail=SCOPE_NOT_FOUND_DETAIL)
+
+
+def _single_graph_cluster(filters: ResourceFilters) -> str:
+    if len(filters.clusters) != 1:
+        raise HTTPException(status_code=422, detail=INVALID_REQUEST_DETAIL)
+    cluster_id = filters.clusters[0]
+    if any(namespace_cluster != cluster_id for namespace_cluster, _ in filters.namespaces):
+        raise HTTPException(status_code=422, detail=INVALID_REQUEST_DETAIL)
+    return cluster_id
 
 
 def _filters_for_selected(axis: FacetAxis, selected: tuple[str, ...]) -> ResourceFilters:

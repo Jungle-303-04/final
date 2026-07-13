@@ -170,6 +170,7 @@ def test_every_gateway_route_has_a_bruno_request() -> None:
         routes.RESOURCES_FILTER_FACETS_PATH,
         routes.FILTERED_RESOURCES_PATH,
         routes.RESOURCE_LABEL_FACETS_PATH,
+        routes.RESOURCES_GRAPH_PATH,
         "/clusters/{{cluster_id}}/summary",
         "/clusters/{{cluster_id}}/nodes/summary",
         "/clusters/{{cluster_id}}/nodes/{{node_name}}/pods/summary",

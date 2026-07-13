@@ -2798,6 +2798,15 @@ target preflight·register 네 함수와 strict Zod 계약을 claim했다. 1회�
 - [백엔드] lane 회수 — `codex/resources-filter-contract` / `87c0606e0` /
   `origin/dev` ancestor exit 0; 로컬 branch와 worktree를 같은 사이클에서 삭제했다.
 
+## 2026-07-13 23:02 KST — [백엔드] Resources 그래프 계약 claim
+
+- `origin/dev@e47b0e984`에서 single-cluster graph snapshot만 claim하고 gateway 계약 lock을
+  획득했다. Resources 필터와 같은 권한·revision을 사용하며 cross-cluster edge는 만들지 않는다.
+- node는 stable inventory identity와 drill-down target을, edge는 실제 owner reference·node
+  assignment·selector 등 보존된 근거만 반환한다. raw payload와 이름 유사도 추론은 금지한다.
+- budget/source/relation이 불완전하면 partial reason을 반환하고, 검증되지 않은 관계를 exact로
+  가장하지 않는 RED를 먼저 고정한다.
+
 ## 2026-07-13 23:12 KST — [프론트] Resources Graph shell 승격 준비
 
 - Graph GREEN `f944e4c5b`와 문서 `52df0c2f2`를 최신 `origin/dev@d6cee2813`에 병합했다.

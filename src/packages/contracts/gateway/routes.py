@@ -113,6 +113,7 @@ CLUSTER_INVENTORY_EVENTS_PATH = "/clusters/{cluster_id}/inventory/events"
 RESOURCES_FILTER_FACETS_PATH = "/resources/filter-facets"
 FILTERED_RESOURCES_PATH = "/resources"
 RESOURCE_LABEL_FACETS_PATH = "/resources/label-facets"
+RESOURCES_GRAPH_PATH = "/resources/graph"
 # 스냅샷 기반 실측 활용 시계열(usage rollup) — 콘솔 추이 차트용.
 CLUSTER_USAGE_PATH = "/clusters/{cluster_id}/usage"
 CLUSTER_METRIC_QUERY_PRESETS_PATH = "/clusters/{cluster_id}/metric-query-presets"
