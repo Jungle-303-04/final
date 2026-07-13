@@ -176,3 +176,81 @@ test('Issues operations queue is composed only from accessible shadcn primitives
   assert.match(source, /aria-busy=/);
   assert.match(source, /role=['"]status['"]/);
 });
+
+test('Alert channels is composed only from accessible shadcn primitives and preserves the tested-draft gate', async () => {
+  const source = await readFile(
+    new URL('src/features/notifications/AlertChannelsView.tsx', frontendRoot),
+    'utf8',
+  );
+
+  assert.doesNotMatch(source, /from ['"]@\/ui(?:['"/])/);
+  assert.doesNotMatch(source, /\b(?:ConfirmDialog|EmptyState|Field|TableColumn|useToast)\b/);
+  assert.doesNotMatch(source, /\btone=/);
+
+  for (const primitive of [
+    'alert-dialog',
+    'alert',
+    'badge',
+    'button',
+    'card',
+    'checkbox',
+    'input',
+    'label',
+    'select',
+    'skeleton',
+    'table',
+    'textarea',
+  ]) {
+    assert.match(
+      source,
+      new RegExp(`from ['"]@/components/ui/${primitive}['"]`),
+      `AlertChannelsView must import the ${primitive} shadcn primitive`,
+    );
+  }
+
+  assert.match(source, /from ['"]sonner['"]/);
+  assert.match(source, /\btoast\.success\s*\(/);
+  assert.match(source, /\btoast\.error\s*\(/);
+  assert.doesNotMatch(source, /=>\s*toast\.(?:success|error)\s*\(/);
+  assert.match(source, /<SelectItem\b/);
+  assert.match(source, /\bonValueChange=/);
+  assert.match(source, /\bonCheckedChange=/);
+  assert.match(source, /<AlertDialogTitle\b/);
+  assert.match(source, /<AlertDialogDescription\b/);
+  assert.match(
+    source,
+    /onOpenChange=\{\(open\) => \{[\s\S]*?if \(!open && !deleteChannel\.isPending\) setDeleting\(null\);/,
+  );
+  assert.match(
+    source,
+    /<AlertDialogAction[\s\S]*?onClick=\{\(event\) => \{[\s\S]*?event\.preventDefault\(\);[\s\S]*?confirmDelete\(\);/,
+  );
+  assert.match(source, /<TableHeader\b/);
+  assert.match(source, /<Skeleton\b/);
+  assert.match(source, /<Alert\b/);
+
+  for (const id of [
+    'alert-channel-name',
+    'alert-channel-url',
+    'alert-channel-min-severity',
+    'alert-channel-enabled',
+    'alert-channel-test-severity',
+    'alert-channel-test-message',
+  ]) {
+    assert.match(source, new RegExp(`(?:id|htmlFor)=["']${id}["']`));
+  }
+
+  assert.match(source, /aria-describedby=/);
+  assert.match(source, /aria-invalid=/);
+  assert.match(
+    source,
+    /function update[\s\S]*?setTestedSignature\(['"]['"]\);[\s\S]*?setTestError\(['"]['"]\);/,
+  );
+  assert.ok(
+    (source.match(/enabled:\s*false/g) ?? []).length >= 2,
+    'the pre-test draft and real Webhook test payload must both remain disabled',
+  );
+  assert.match(source, /testedSignature\s*===\s*signature/);
+  assert.doesNotMatch(source, /#[\da-f]{3,8}\b/i);
+  assert.doesNotMatch(source, /\b\d+(?:\.\d+)?(?:ms|px)\b/i);
+});
