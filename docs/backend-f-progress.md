@@ -7,7 +7,7 @@ governing: docs/f-coordination-plan.md · docs/backend-f-workqueue.md
 
 # 백엔드 F 진행 현황
 
-현재 상태: **앵커 5건**
+현재 상태: **앵커 6건**
 
 ## Delta-green baseline
 
@@ -217,6 +217,31 @@ Bundle route는 200을 반환한다.
   `1735 passed, 3 skipped`.
 
 계약 완성: OSS PR-only profile + ControllerRuntime + make demo (f0c3b4e42f29c4f011d4d70910b083f7acc031e0) [green]
+
+### H3 — BQ-007/009/010 권위 patch 엔진
+
+- canonical merge: `6d68325bf1cc47f55810e5dc2189e51a6fe916c0`
+- 전체 게이트: Ruff lint/format PASS(499 files), import-linter 2 kept/0 broken,
+  pytest `1820 passed, 3 skipped`; recovery patch scorer 6/6, compileall PASS,
+  manifest management 69 / target 20.
+- 권위 계약: patch 시점에 workflow/diff/active binding/repository/provenance를 다시 읽고,
+  exact base 원문의 scalar span만 수정한다. 모든 forward patch는 exact inverse rollback을
+  포함한다.
+- 프론트 unsupported 조건: 권위 correlation 또는 현재 snapshot이 없으면
+  `gitops_authority_unavailable`, workspace/cluster/kind/name이 다르면
+  `gitops_authority_mismatch`, action이 미지원이거나 snapshot에서 안전하게 patch할 수 없으면
+  `safe_pr_patch_unsupported`다. 세 경우 모두 가짜 document PR 대신
+  `rca.action_required`를 발행한다.
+- 프론트 action 파라미터:
+  - `oom_memory`: `strategy=usage_headroom`, `headroom_ratio=1.25`, `max_memory=4Gi`
+  - `replica_scale`: `strategy=increment_one`, `max_replicas=10`
+  - `image_rollback`, `image_tag_fix`: `strategy=last_approved_snapshot`
+  - `probe_fix`: `strategy=approved_value_or_bounded_timeout`
+  - `selector_fix`: `strategy=match_template_label`, `max_fields=1`
+  - `gitops_recovery_review`: `document_type=recovery_review`인 검토 전용 action이며 실제
+    patch action보다 score가 낮다.
+
+계약 완성: BQ-009/010 권위 patch 엔진 6종 (6d68325bf1cc47f55810e5dc2189e51a6fe916c0) [green]
 
 ### BQ-017 — provider 1급화와 연결 단계
 
