@@ -266,13 +266,16 @@ def test_candidate_contract_rejects_fixture_path_traversal() -> None:
     assert any("fixture path must remain under benchmark/scenarios" in error for error in errors)
 
 
-def test_candidate_contract_rejects_completed_batch_annotation_drift() -> None:
+@pytest.mark.parametrize(("contract_index", "batch_number"), ((3, 1), (10, 2)))
+def test_candidate_contract_rejects_completed_batch_annotation_drift(
+    contract_index: int, batch_number: int
+) -> None:
     document = _candidate_contracts()
-    document["contracts"][3]["benchmark_fixtures"] = []
+    document["contracts"][contract_index]["forbidden_remediations"][0]["reason"] += " drift"
 
     errors = _contract_validation_errors(document)
 
-    assert any("completed batch 1 digest mismatch" in error for error in errors)
+    assert any(f"completed batch {batch_number} digest mismatch" in error for error in errors)
 
 
 def test_candidate_contract_rejects_supporting_signal_drift() -> None:
