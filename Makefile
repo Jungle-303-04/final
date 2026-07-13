@@ -42,10 +42,10 @@ doctor: ## 로컬 필수 도구 점검
 	bash scripts/doctor.sh
 
 lint: ## Ruff 린트 검사
-	uv run ruff check src scripts tests
+	uv run ruff check .
 
 format: ## Ruff 포맷 적용
-	uv run ruff format src scripts tests
+	uv run ruff format .
 
 hooks: ## git 훅 설치(pre-commit 포맷 + pre-push 전체 게이트)
 	uv run pre-commit install --hook-type pre-commit --hook-type pre-push

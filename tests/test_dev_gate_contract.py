@@ -38,6 +38,17 @@ def test_make_gate_is_the_single_full_gate_entrypoint() -> None:
     assert "npm run build" in recipe
 
 
+def test_python_quality_gate_matches_pre_commit_repository_scope() -> None:
+    script = (ROOT / "scripts/test.sh").read_text()
+    lint_recipe = make_recipe("lint")
+    format_recipe = make_recipe("format")
+
+    assert "uv run ruff check ." in script
+    assert "uv run ruff format --check ." in script
+    assert "uv run ruff check ." in lint_recipe
+    assert "uv run ruff format ." in format_recipe
+
+
 def test_pre_push_hook_calls_the_canonical_gate() -> None:
     config = yaml.safe_load((ROOT / ".pre-commit-config.yaml").read_text())
     assert set(config["default_install_hook_types"]) == {"pre-commit", "pre-push"}
