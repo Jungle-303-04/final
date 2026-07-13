@@ -1392,3 +1392,13 @@ JsonMap, AbortSignal, ID 검증을 완료 앵커 전까지 제품 화면에서 �
   `correlation_id`, 선택 `cursor`, `limit` 1~200을 받는다.
 - VP-002를 `직결`로 전환하고 `APIQ-030 getAuditTimeline`을 단독 claim했다.
   workspace/cluster 접근 제어와 시간순 keyset 정렬은 서버 권위이며 프론트 재필터·재정렬은 금지한다.
+
+## 2026-07-13 13:29 KST — [프론트] APIQ-030 완료 증거
+
+- RED `6700875a6` → GREEN `9841a5d95`; 두 hash 모두
+  `origin/woonyong/ui-layer-lab` ancestor exit 0이다.
+- targeted Vitest 1 file / 11 tests PASS. `npm run check` PASS — TypeScript·ESLint,
+  Vitest 106 files / 768 tests, design guard 317 files, shadcn 482 previews,
+  Vite production build 14,512 modules.
+- `API 완성: getAuditTimeline (9841a5d95)`를 기록하고 APIQ-030 행을 제거했다.
+  다음 단계는 이 앵커를 소비하는 VP-002 Issues 상세의 독립 감사 섹션이다.
