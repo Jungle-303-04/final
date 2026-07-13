@@ -1332,3 +1332,25 @@ Bundle route는 200을 반환한다.
   PASS, import-linter 8/8, pytest `2137 passed, 3 skipped`, manifest 69/20이다.
 - 격리 착륙: AWS 경로·application secret에는 미배선이다. data-only 이관·catalog/data invariant·
   restore rehearsal·DBA 승인 전에는 P0-1b 완료나 cutover로 판정하지 않는다.
+
+## 2026-07-14 — dev push gate 구조 강제
+
+- target direct-apply 테스트는 connectivity probe만 격리하고 실제 apply 호출을 유지한다.
+  실패 경로는 의도한 502 `apply failed`, apply 1회, DB·이벤트 무변경을 직접 단언한다.
+  시정 commit `4ea76988d`는 `origin/dev` ancestor exit 0이고 관련 2개 테스트와 전체
+  `2154 passed, 3 skipped`를 통과했다.
+- canonical gate는 `make gate` 하나다. 백엔드 Ruff lint/format·import contract·pytest,
+  manifest, 프론트 dependency install·typecheck·lint·test·build·dist 산출물을 순서대로 검증한다.
+  CI·사람·pre-push가 같은 target을 호출한다.
+- `.pre-commit-config.yaml`은 Ruff fix→Ruff format을 pre-commit에, `make gate` wrapper를
+  pre-push에 설치한다. `make hooks`가 두 hook을 함께 설치하며 현재 공유 Git 저장소의
+  pre-push hook으로 실제 전체 gate PASS를 확인했다.
+- pre-commit이 주입한 `GIT_INDEX_FILE` 등 Git 로컬 환경이 pytest의 임시 저장소로 새는 문제는
+  `scripts/pre-push-gate.sh`에서 `git rev-parse --local-env-vars` 전부를 제거해 차단했다.
+  hostile index 환경의 계약 테스트, 임시 Git 저장소 회귀 6건, 부모 tree 불변을 통과했다.
+- 코드 증거: RED `753558ef2`, CI·hook `acaadc485`, 격리 `5c5ea9481`. 모두
+  `origin/dev` ancestor exit 0이다.
+- 서버 측 `Dev Gate` run `29271435680`은 commit `5c5ea9481`에서 생성됐지만 runner가 배정되기
+  전에 GitHub Actions 결제 실패 또는 spending limit로 종료됐다. workflow 배선은 확인됐으나
+  서버 실행 증거가 없으므로 P0-0은 `in_progress`다. 결제 복구 또는 CodeBuild 대체 gate가
+  dev push에서 실제 실행될 때까지 AWS 배포 스위치를 켜지 않는다.

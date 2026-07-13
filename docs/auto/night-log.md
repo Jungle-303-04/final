@@ -3324,3 +3324,29 @@ index 591d560bc..5f1879a74 100644
   `bash scripts/test.sh`는 import-linter `8 kept/0 broken`, pytest
   `2158 passed, 3 skipped`로 초록이다. 최신 dev의 push-gate 격리/CI 커밋을 rebase한 정확한
   HEAD에서 다시 검증했으며 S2 commit의 origin/dev ancestor 확인을 push 뒤 수행한다.
+## 2026-07-14 02:44 KST — [백엔드] 게이트 우회 분석·target false-positive 시정
+
+- 최초 RED 기원은 `2e6e53f5ae8e5d25c98ee202572036d6ac72a30f`다. 직전
+  `ee56f26b1`의 네 파일은 Ruff lint/format PASS였고, `2e6e53f5a`부터
+  `tests/test_alert_routing.py` I001·format과 `src/domains/alert/repository.py`,
+  `src/domains/release_flow/router.py`, `src/domains/target/router.py` format이 실패한다.
+- GitHub PushEvent 증거상 actor `JEONWOOHYUN-hydromel`이 2026-07-14 01:56 KST에
+  `ee56f26b1→2e6e53f5a`를 `refs/heads/dev`로 직접 push했다. 해당 SHA의 check-run은 0건이다.
+  Git object와 서버 event만으로 push한 개발자 장비의 hook 설치·실행 여부는 증명할 수 없다.
+- 당시 `.pre-commit-config.yaml`에는 Ruff format이 있었지만 설치가 선택사항이었고 pre-push는
+  없었다. dev push 전체 gate workflow도 없었으며 private/free 저장소의 branch protection API는
+  required check 설정을 허용하지 않았다. 따라서 로컬 hook, 서버 CI, branch required check의
+  세 층 모두 구조적으로 강제되지 않았다. 이 세 층 중 적어도 로컬 pre-push와 dev push CI에서
+  RED가 차단됐어야 한다.
+- 같은 commit의 kubectl connectivity preflight가 direct-apply 테스트보다 먼저 실패해 성공
+  테스트를 RED로 만들고 실패 테스트를 엉뚱한 예외로 통과시켰다. `4ea76988d`에서 connectivity만
+  stub하고 실제 apply는 유지했다. 실패 테스트는 502 `apply failed`, apply 호출 1회,
+  target·install token·event 무변경을 단언한다. 관련 2건과 전체 `2154 passed, 3 skipped` PASS다.
+- `make gate`를 단일 정의로 두고 `acaadc485`에서 dev push CI와 pre-push를 배선했다.
+  `.pre-commit-config.yaml`은 Ruff fix→format과 pre-push 전체 gate를 함께 설치한다.
+  `5c5ea9481`은 pre-commit의 Git 로컬 환경을 wrapper에서 제거해 임시 Git 저장소와 부모 index
+  오염을 차단했다. 실제 pre-push 전체 gate PASS 후 push했고 세 commit 모두 canonical ancestor다.
+- GitHub Actions `Dev Gate` run `29271435680`은 `5c5ea9481` push로 생성됐으나 runner ID 0,
+  step 0 상태에서 최근 결제 실패 또는 spending limit 증가 필요 사유로 종료됐다. 즉 workflow는
+  연결됐지만 서버 gate는 실행되지 않았다. Actions 결제 복구 또는 CodeBuild 대체 gate의 실제
+  dev push 실행 증거가 재개 조건이며, 그 전까지 AWS 배포 스위치는 꺼진 상태를 유지한다.

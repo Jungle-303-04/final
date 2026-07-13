@@ -691,3 +691,25 @@ Ingress↔Service edge만 사용한다. canonical observed edge 계약과 프론
 migration→rollout→strict smoke, ④ 배포 SHA·URL의 `deploy-status.md` 갱신이다. ①·②의 실제
 검증 전 AWS dev 배포 스위치를 켜지 않는다. 이후 BQ-022~034 계약을 작은 단위로 순차
 착륙한다. token·secret 값은 문서·커밋·로그에 기록하지 않는다.
+
+### [D-038] 2026-07-14 — 프론트 동결·백엔드 허용 범위 (작성: 우녕)
+
+백엔드는 `src/**`, `alembic/**`, `.github/**`, 백엔드 `tests/**`, `docs/**`만 수정한다.
+`frontend/**`와 `references/**`는 정리 세션 단독 소유이므로 한 줄도 수정하지 않는다.
+배포 P0를 계약 트랙보다 먼저 처리하며, migration·인증 우회 차단·dev gate·smoke·배포 상태
+증거가 모두 갖춰지기 전에는 배포 스위치를 켜지 않는다.
+
+### [D-040] 2026-07-14 — RED dev 기원 조사·push gate 강제 (작성: 우녕)
+
+clean `origin/dev`에서 재현된 Ruff lint/format RED는 기원 커밋과 push 경로를 증거로 남긴다.
+dev push CI는 Ruff check·format, 타입, 백엔드 테스트, 프론트 lint/test/build를 모두 통과해야
+후속 배포 단계로 진행한다. 로컬 pre-push도 같은 단일 Makefile gate를 호출하며,
+`.pre-commit-config.yaml`의 Ruff format 설치·실행 경로를 검증한다. 이 구조가 착륙하기 전에는
+AWS 배포 스위치를 켜지 않는다.
+
+### [D-041] 2026-07-14 — target preflight 회귀 시정·게이트 선행 승격 (작성: 우녕)
+
+`2e6e53f5a`가 추가한 target direct-apply preflight로 기존 테스트가 의도와 다른 예외를 잡은
+회귀를 즉시 시정한다. 성공·실패 테스트는 connectivity만 격리하고 실제 apply 계약은 유지하며,
+실패 테스트는 502 `apply failed`, apply 호출, DB·이벤트 무변경을 직접 단언한다. 이후 dev push
+CI, 로컬 pre-push, Ruff format hook, 단일 Makefile gate를 배포 P0의 최우선 선행조건으로 둔다.
