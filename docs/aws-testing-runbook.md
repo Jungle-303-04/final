@@ -1,8 +1,8 @@
 # AWS 테스트 실행 기준
 
-실제 서비스 통합 기준은 AWS EKS의 management/target 클러스터다. 외부 GitHub Actions
-workflow는 사용하지 않는다. 배포는 운영자가 `scripts/aws-up.sh`로 수행하고, 검증은
-`scripts/smoke.sh`로 실행한다.
+실제 서비스 통합 기준은 AWS EKS의 management/target 클러스터다. live 제품 배포의 유일한
+진입점은 `.github/workflows/dev-deploy.yml`이다. 이 workflow는 Dev Gate 성공 SHA만 받아
+service와 console을 같은 SHA의 immutable digest로 배포하고 `scripts/smoke.sh`를 실행한다.
 
 이 변경은 제품 내부 자동화를 제거한다는 뜻이 아니다. `workflow-controller`와 GitOps 이벤트
 체인은 계속 배포 정의, 승인, 적용, 롤아웃을 자동으로 처리한다. 여기서 없앤 것은 저장소 밖의
@@ -16,7 +16,7 @@ CI runner가 배포를 대신 시작하던 진입점뿐이다.
 | Kubernetes manifest | `make manifest-check` | management/target 렌더와 client dry-run |
 | 커밋 전 기본 게이트 | `make check` | 코드 정합성과 manifest |
 | 기존 AWS 환경 smoke | `make smoke` | health, 로그인, webhook, 내부 workflow, target 명령 |
-| AWS 앱 재배포 | `bash scripts/aws-up.sh` | 이미지, management rollout, target 등록, 선택적 smoke |
+| AWS 앱 재배포 | `Dev Deploy` workflow | image build, migration, digest rollout, 필수 smoke |
 
 ## 기존 AWS 환경에서 smoke
 
@@ -42,9 +42,11 @@ LoadBalancer DNS가 늦게 전파될 수 있으므로 `SMOKE_GATEWAY_ATTEMPTS` �
 간격은 5초다. rollout 직후 로그인 연결이 잠깐 끊길 수 있어 `AUTH_LOGIN_ATTEMPTS` 기본값은
 12다. 재시도 횟수를 늘리기 전에 pod Ready, ingress와 DNS를 먼저 확인한다.
 
-## AWS 앱 수동 배포
+## 로컬 인프라 bootstrap
 
-기존 EKS 클러스터에 새 이미지를 배포할 때는 인프라 생성을 명시적으로 끈다.
+`scripts/aws-up.sh`는 새 sandbox 인프라 bootstrap과 복구 도구다. 기존 live
+`kubernetes-ops` workload의 제품 release에는 실행하지 않는다. live 배포는 `Dev Deploy`
+workflow만 사용한다.
 
 ```bash
 export AWS_REGION="<region>"
