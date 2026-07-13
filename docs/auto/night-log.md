@@ -2685,3 +2685,6 @@ target preflight·register 네 함수와 strict Zod 계약을 claim했다. 1회�
   최종 차이는 13파일, 삭제·gateway/RCA/AI/runtime worker 변경 0건이다.
 - BQ-016은 공개 OCI·console/access·hosted SCM·실제 Argo continuous reconcile이 남아
   `in_progress`를 유지한다. lane 회수 전 복구 hash는 `16aad904c`로 고정했다.
+- [백엔드] lane 회수 — `codex/oss-safe-pr-demo` / `16aad904c` / ancestor exit 0.
+  feature worktree와 로컬 branch를 `-d`로 제거했고 원격 branch는 없었다. 실증 Kind
+  `opsia-demo` cluster도 삭제했으며 다른 활성 lane·보호 worktree는 건드리지 않았다.
