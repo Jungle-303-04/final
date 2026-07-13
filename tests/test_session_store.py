@@ -3,7 +3,14 @@ from __future__ import annotations
 import asyncio
 import json
 
-from packages.storage.sessions import RedisSessionStore, RedisSessionStoreConfig
+import pytest
+
+from packages.storage.sessions import (
+    MemorySessionStore,
+    RateLimitExceeded,
+    RedisSessionStore,
+    RedisSessionStoreConfig,
+)
 
 
 class StubRedisClient:
@@ -44,6 +51,32 @@ def session_config() -> RedisSessionStoreConfig:
         email_verification_ttl_seconds=3600,
         email_verification_token_bytes=32,
     )
+
+
+def test_memory_session_store_supports_oss_single_controller_contract() -> None:
+    async def run() -> None:
+        store = MemorySessionStore(session_config())
+        await store.connect()
+        session = await store.create_session("user-1", ["user"], "ws-1")
+        assert await store.get_session(session.token) == session
+        assert await store.touch_session(session.token) is True
+
+        token = await store.create_email_verification_token("user-1", "user@example.com")
+        assert await store.consume_email_verification_token(token) == {
+            "user_id": "user-1",
+            "email": "user@example.com",
+        }
+        assert await store.consume_email_verification_token(token) is None
+
+        await store.check_rate_limit("login", limit=1, window_seconds=60)
+        with pytest.raises(RateLimitExceeded):
+            await store.check_rate_limit("login", limit=1, window_seconds=60)
+
+        await store.delete_session(session.token)
+        assert await store.get_session(session.token) is None
+        await store.close()
+
+    asyncio.run(run())
 
 
 def test_email_verification_token_is_consumed_once() -> None:

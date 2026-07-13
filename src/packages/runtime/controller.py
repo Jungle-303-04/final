@@ -2,17 +2,36 @@
 
 from __future__ import annotations
 
+import asyncio
 import importlib.util
 import os
+import signal
 import sys
 from dataclasses import dataclass
 from pathlib import Path
 from types import ModuleType
+from typing import Any
 
+from uvicorn import Config, Server
+
+from packages.config.constants import Auth
+from packages.config.settings import env
+from packages.contracts.event_bus.interfaces import (
+    EventConsumerMetrics,
+    EventEnvelope,
+    EventSubscription,
+    JsonObject,
+)
+from packages.contracts.identity import DEFAULT_WORKSPACE_ID, ServiceRole
 from packages.events.bus import NatsEventBus
 from packages.events.in_memory import InMemoryEventBus
 from packages.runtime.app import App
 from packages.runtime.discovery import DiscoveredService, discover_services
+from packages.runtime.worker import WorkerRuntime
+from packages.storage.sessions import (
+    MemorySessionStore,
+    RedisSessionStoreConfig,
+)
 
 CONTROLLER_EVENT_BUS_MODE_ENV = "CONTROLLER_EVENT_BUS_MODE"
 AGENT_ACCESS_MODE_ENV = "AGENT_ACCESS_MODE"
@@ -24,6 +43,11 @@ EVENT_BUS_MODES = frozenset({"inprocess", "nats"})
 AGENT_ACCESS_MODES = frozenset({"read_only", "read_write"})
 REMEDIATION_DELIVERY_MODES = frozenset({"pull_request", "direct"})
 AGENT_SERVICE_NAMES = frozenset({"cluster-agent", "node-collector"})
+API_GATEWAY_SERVICE_NAME = "api-gateway"
+REALTIME_GATEWAY_SERVICE_NAME = "realtime-gateway"
+BUS_INJECTABLE_ASYNC_SERVICES = frozenset({"command-janitor", "outbox-relay"})
+REALTIME_GATEWAY_PORT_ENV = "REALTIME_GATEWAY_PORT"
+DEFAULT_REALTIME_GATEWAY_PORT = "8001"
 
 
 def _bool_env(name: str, default: str) -> bool:
@@ -49,6 +73,18 @@ class ControllerProfile:
     direct_commands_enabled: bool = False
     remediation_delivery_mode: str = "pull_request"
     production_auto_merge_enabled: bool = False
+
+    def __post_init__(self) -> None:
+        if self.event_bus_mode not in EVENT_BUS_MODES:
+            raise ValueError(f"invalid controller event bus mode: {self.event_bus_mode!r}")
+        if self.agent_access_mode not in AGENT_ACCESS_MODES:
+            raise ValueError(f"invalid agent access mode: {self.agent_access_mode!r}")
+        if self.remediation_delivery_mode not in REMEDIATION_DELIVERY_MODES:
+            raise ValueError(
+                f"invalid remediation delivery mode: {self.remediation_delivery_mode!r}"
+            )
+        if self.production_auto_merge_enabled:
+            raise ValueError("production auto-merge is forbidden by the OSS profile")
 
     @classmethod
     def from_env(cls) -> ControllerProfile:
@@ -143,6 +179,180 @@ def load_worker_apps(
             )
         apps.append(app)
     return tuple(apps)
+
+
+@dataclass(frozen=True)
+class LoadedControllerService:
+    service: DiscoveredService
+    module: ModuleType
+
+
+class BorrowedEventBus:
+    """Delegate to a root-owned bus without letting child runtimes close it."""
+
+    def __init__(self, bus: InMemoryEventBus | NatsEventBus) -> None:
+        self.bus = bus
+
+    async def connect(self) -> None:
+        return None
+
+    async def close(self) -> None:
+        return None
+
+    async def emit(
+        self,
+        subject: str,
+        source: str,
+        payload: JsonObject,
+        correlation_id: str | None = None,
+        causation_id: str | None = None,
+    ) -> EventEnvelope:
+        return await self.bus.emit(subject, source, payload, correlation_id, causation_id)
+
+    async def publish_envelope(self, evt: EventEnvelope) -> EventEnvelope:
+        return await self.bus.publish_envelope(evt)
+
+    async def subscribe(self, subject: str, durable: str) -> EventSubscription:
+        return await self.bus.subscribe(subject, durable)
+
+    async def consumer_metrics(self, subject: str, durable: str) -> EventConsumerMetrics:
+        return await self.bus.consumer_metrics(subject, durable)
+
+
+class ControllerRuntime:
+    def __init__(self, root: Path, profile: ControllerProfile | None = None) -> None:
+        self.root = root
+        self.profile = profile or ControllerProfile.from_env()
+        self.plan = build_composition_plan(root, event_bus_mode=self.profile.event_bus_mode)
+        self.loaded = tuple(
+            LoadedControllerService(service, load_service_entrypoint(root, service))
+            for service in self.plan.controller_services
+        )
+
+    def check_report(self) -> dict[str, Any]:
+        counts = {kind: 0 for kind in ("worker", "async", "http")}
+        for loaded in self.loaded:
+            counts[loaded.service.kind] += 1
+            self._validate_entrypoint(loaded)
+        return {
+            "event_bus_mode": self.profile.event_bus_mode,
+            "discovered_services": len(self.plan.controller_services + self.plan.agent_services),
+            "controller_services": len(self.plan.controller_services),
+            "agent_services": len(self.plan.agent_services),
+            "worker_services": counts["worker"],
+            "async_services": counts["async"],
+            "http_services": counts["http"],
+        }
+
+    async def serve(self) -> None:
+        self.check_report()
+        bus = event_bus_for_mode(self.profile.event_bus_mode)
+        borrowed = BorrowedEventBus(bus)
+        sessions = self._memory_sessions()
+        await bus.connect()
+        await sessions.connect()
+        servers: list[Server] = []
+        tasks: list[asyncio.Task[Any]] = []
+        waiter: asyncio.Task[bool] | None = None
+        stopping = asyncio.Event()
+        try:
+            for loaded in self.loaded:
+                if loaded.service.kind == "worker":
+                    app = loaded.module.app
+                    tasks.append(
+                        asyncio.create_task(
+                            WorkerRuntime(app.handler_spec(), bus=borrowed).run(),
+                            name=loaded.service.name,
+                        )
+                    )
+                elif loaded.service.kind == "async":
+                    runner = loaded.module.run
+                    args = (
+                        (borrowed,) if loaded.service.name in BUS_INJECTABLE_ASYNC_SERVICES else ()
+                    )
+                    tasks.append(asyncio.create_task(runner(*args), name=loaded.service.name))
+                else:
+                    server = self._http_server(loaded, borrowed, sessions)
+                    servers.append(server)
+                    tasks.append(asyncio.create_task(server.serve(), name=loaded.service.name))
+            await asyncio.sleep(0)
+            loop = asyncio.get_running_loop()
+            for item in (signal.SIGTERM, signal.SIGINT):
+                loop.add_signal_handler(item, stopping.set)
+            waiter = asyncio.create_task(stopping.wait(), name="controller-stop")
+            done, _pending = await asyncio.wait(
+                [*tasks, waiter],
+                return_when=asyncio.FIRST_COMPLETED,
+            )
+            if waiter not in done:
+                stopped = next(task for task in done if task is not waiter)
+                error = stopped.exception()
+                if error is not None:
+                    raise error
+                raise RuntimeError(f"controller service stopped unexpectedly: {stopped.get_name()}")
+        finally:
+            for server in servers:
+                server.should_exit = True
+            if waiter is not None:
+                waiter.cancel()
+            for task in tasks:
+                task.cancel()
+            cleanup_tasks = [*tasks]
+            if waiter is not None:
+                cleanup_tasks.append(waiter)
+            await asyncio.gather(*cleanup_tasks, return_exceptions=True)
+            await sessions.close()
+            await bus.close()
+
+    @staticmethod
+    def _validate_entrypoint(loaded: LoadedControllerService) -> None:
+        if loaded.service.kind == "worker":
+            app = getattr(loaded.module, "app", None)
+            if not isinstance(app, App) or app.name != loaded.service.name:
+                raise TypeError(f"{loaded.service.path}: invalid worker App")
+            app.handler_spec()
+            return
+        symbol = "run" if loaded.service.kind == "async" else "create_app"
+        value = getattr(loaded.module, symbol, None)
+        if not callable(value):
+            raise TypeError(f"{loaded.service.path}: missing callable {symbol}")
+
+    @staticmethod
+    def _memory_sessions() -> MemorySessionStore:
+        return MemorySessionStore(
+            RedisSessionStoreConfig(
+                url="memory://",
+                ttl_seconds=int(env(Auth.SESSION_TTL_ENV, Auth.DEFAULT_SESSION_TTL_SECONDS)),
+                key_prefix="session",
+                token_bytes=32,
+                default_roles=(ServiceRole.USER.value,),
+                default_workspace_id=DEFAULT_WORKSPACE_ID,
+                rate_limit_key_prefix="rate",
+                rate_limit=120,
+                rate_limit_window_seconds=60,
+                email_verification_key_prefix="email_verify",
+                email_verification_ttl_seconds=3600,
+                email_verification_token_bytes=32,
+            )
+        )
+
+    @staticmethod
+    def _http_server(
+        loaded: LoadedControllerService,
+        bus: BorrowedEventBus,
+        sessions: MemorySessionStore,
+    ) -> Server:
+        if loaded.service.name == API_GATEWAY_SERVICE_NAME:
+            app = loaded.module.create_app(event_bus=bus, session_store=sessions)
+            port = int(env("PORT", "8000"))
+        elif loaded.service.name == REALTIME_GATEWAY_SERVICE_NAME:
+            app = loaded.module.create_app(authenticate_browser=sessions.get_session)
+            port = int(env(REALTIME_GATEWAY_PORT_ENV, DEFAULT_REALTIME_GATEWAY_PORT))
+        else:
+            raise ValueError(f"unsupported controller HTTP service: {loaded.service.name}")
+        server = Server(Config(app, host="0.0.0.0", port=port, log_level="info"))
+        server.install_signal_handlers = lambda: None
+        return server
 
 
 def load_service_entrypoint(root: Path, service: DiscoveredService) -> ModuleType:
