@@ -4,7 +4,7 @@ status: active-coordination-queue
 date: 2026-07-13
 owners: Codex 요청 / API 연결 작업자 claim·처리 / F 트랙 행(APIQ-029)·계약 갱신(APIQ-012)은 검토자 기록
 workorder: api-integration-workorder-20260711.md
-snapshot: 0행·0함수 / requested 0 / in_progress 0 / blocked 0 / valid completion anchors 53
+snapshot: 1행·1함수 / requested 0 / in_progress 1 / blocked 0 / valid completion anchors 53
 ---
 
 # 프론트 API 요청 큐
@@ -16,8 +16,9 @@ snapshot: 0행·0함수 / requested 0 / in_progress 0 / blocked 0 / valid comple
 상세한 경로, 소유권, schema, test, mutation 안전, 2커밋 완료 절차는
 `api-integration-workorder-20260711.md`가 정본이다.
 
-> **현재 claim:** 없음. `APIQ-031 getIncidentRecentChanges`는 코드 커밋
-> `4f602cc86660a7f8a12583cffc44a53e220d9dbf`와 전체 게이트를 통과하고 완료됐다.
+> **현재 claim:** `APIQ-032 listApplicationRuns` — `Codex-API@woonyong/ui-layer-lab`,
+> heartbeat `2026-07-13 14:44 KST`. 기존 함수의 동적 run은 보존하고 optional
+> `promotion_gate`만 strict 계약으로 재검증한다.
 
 ## 1. 상태와 claim 규칙
 
@@ -69,6 +70,7 @@ claim·heartbeat: YYYY-MM-DD HH:mm KST
 
 | ID | 우선 | 함수명 | routes.py 상수 | 대상 파일 | 필요한 화면 | 요청 시각 | 상태 | 담당/브랜치 | claim·heartbeat | 완료 조건·주의 |
 |---|---:|---|---|---|---|---|---|---|---|---|
+| APIQ-032 | P0 | `listApplicationRuns` | `APPLICATION_RUNS_PATH` | `applications.ts` / `applications-schemas.ts` / `applications.test.ts` / `barrels/gitops.ts` | VP-005 승격 가능성 근거 | 2026-07-13 14:44 KST | in_progress | `Codex-API@woonyong/ui-layer-lab` | 2026-07-13 14:44 KST | `GET /api/applications/{application_id}/runs?limit=`. 외피 strict, run 본문은 확장 필드를 보존하고 optional nullable `promotion_gate`만 9필드 strict close한다. `eligible` 4조건, count/list 길이, `*_not_false` 불변식을 검증한다. 서버 순서·workspace 판정을 신뢰하고 클라이언트 재정렬·필터 금지. 기존 `56c689e61` 앵커는 구조화 gate 이전 계약이므로 새 exact 앵커가 필요하다. |
 
 ## 3. 기존 구현 검증·승인
 
