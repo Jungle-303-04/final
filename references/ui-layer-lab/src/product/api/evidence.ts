@@ -48,7 +48,7 @@ export async function listEvidence(
     ["until", optionalQueryString(options.until)],
     ["limit", limit],
     ["offset", offset === 0 ? undefined : offset],
-    ["cursor", optionalQueryString(options.cursor)],
+    ["cursor", optionalOpaqueCursor(options.cursor)],
   ]);
   return apiRequest(path, evidenceListSchema, { signal: options.signal });
 }
@@ -67,7 +67,7 @@ export async function listRcaReports(
     ["until", optionalQueryString(options.until)],
     ["limit", limit],
     ["offset", offset === 0 ? undefined : offset],
-    ["cursor", optionalQueryString(options.cursor)],
+    ["cursor", optionalOpaqueCursor(options.cursor)],
   ]);
   return apiRequest(path, rcaReportListSchema, { signal: options.signal });
 }
@@ -82,4 +82,10 @@ function assertOffset(offset: number): void {
   if (!Number.isInteger(offset) || offset < 0) {
     throw new RangeError("Evidence/RCA report offset must be a non-negative integer");
   }
+}
+
+function optionalOpaqueCursor(value: string | undefined): string | undefined {
+  if (value === undefined) return undefined;
+  if (value.trim() === "") throw new TypeError("cursor must not be blank");
+  return value;
 }
