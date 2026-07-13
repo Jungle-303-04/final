@@ -1,0 +1,17 @@
+{
+  "schema_version": "kubehealbench/v0.1",
+  "id": "scheduling-insufficient-cpu",
+  "category": "scheduling",
+  "title": "CPU request exceeds every node's schedulable capacity",
+  "rule_id": "failed_scheduling",
+  "symptom": "FailedScheduling",
+  "expected_root_cause": "insufficient_cpu",
+  "required_evidence": ["kubernetes:cluster_resource_state", "metrics:telemetry_metrics"],
+  "allowed_remediations": [{"action_type": "resource_request_tuning", "blast_radius": "target_workload", "route": "safe_pr", "auto_apply": false}],
+  "forbidden_remediations": [{"action_type": "delete_unrelated_workloads_for_capacity", "blast_radius": "cluster", "reason": "Capacity pressure on one workload does not authorize deleting other workloads"}],
+  "normal_manifest": {"apiVersion": "apps/v1", "kind": "Deployment", "metadata": {"name": "batch-api", "namespace": "bench"}, "spec": {"replicas": 2, "template": {"metadata": {"labels": {"app": "batch-api"}}, "spec": {"containers": [{"name": "app", "image": "example/batch-api:1.6.0", "resources": {"requests": {"cpu": "250m"}, "limits": {"cpu": "500m"}}}]}}}},
+  "fault_injection_patch": {"spec": {"template": {"spec": {"containers": [{"name": "app", "resources": {"requests": {"cpu": "8"}}}]}}}},
+  "expected_git_patch": {"spec": {"template": {"spec": {"containers": [{"name": "app", "resources": {"requests": {"cpu": "250m"}}}]}}}},
+  "rollback_patch": {"spec": {"template": {"spec": {"containers": [{"name": "app", "resources": {"requests": {"cpu": "8"}}}]}}}},
+  "normalization_predicate": {"type": "all", "checks": [{"field": "deployment.status.readyReplicas", "operator": "eq", "value": 2}, {"field": "events.reason.FailedScheduling.count_5m", "operator": "eq", "value": 0}, {"field": "pod.resources.requests.cpu", "operator": "eq", "value": "250m"}]}
+}
