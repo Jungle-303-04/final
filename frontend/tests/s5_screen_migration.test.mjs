@@ -81,3 +81,17 @@ test('Resources cluster registration wizard is composed only from accessible sha
   assert.match(mainSource, /from ['"]@\/components\/ui\/sonner['"]/);
   assert.match(mainSource, /<Toaster\b/);
 });
+
+test('Resources mutations publish feedback through the canonical Sonner boundary', async () => {
+  const source = await readFile(
+    new URL('src/features/cluster/api.ts', frontendRoot),
+    'utf8',
+  );
+
+  assert.doesNotMatch(source, /from ['"]@\/ui(?:['"/])/);
+  assert.doesNotMatch(source, /\buseToast\b/);
+  assert.match(source, /from ['"]sonner['"]/);
+  assert.match(source, /\btoast\.info\s*\(/);
+  assert.match(source, /\btoast\.success\s*\(/);
+  assert.match(source, /\btoast\.error\s*\(/);
+});
