@@ -1549,6 +1549,69 @@ class RepoChangeRepository(DatabaseConnection):
             artifacts.append(artifact)
         return artifacts
 
+    def get_manifest_artifact_provenance(
+        self,
+        workspace_id: str,
+        binding_id: str,
+        commit_sha: str,
+        manifest_path: str,
+        resource: str,
+        artifact_digest: str,
+    ) -> JsonObject | None:
+        """워크플로 diff와 정확히 결합된 manifest source provenance만 반환한다."""
+
+        table = ManifestArtifact.__table__
+        prefix = f"{manifest_path}#"
+        statement = (
+            select(table)
+            .where(
+                table.c.workspace_id == workspace_id,
+                table.c.binding_id == binding_id,
+                table.c.commit_sha == commit_sha,
+                table.c.status == ManifestArtifactStatus.RENDERED.value,
+                table.c.rendered_manifest.is_not(None),
+                table.c.manifest_path.like(f"{prefix}%"),
+            )
+            .order_by(table.c.manifest_path.asc())
+        )
+        with self.connection() as conn:
+            rows = [row_dict(row) for row in conn.execute(statement).mappings().all()]
+        if not rows:
+            return None
+
+        expected_path = f"{manifest_path}#{resource}"
+        target = next((row for row in rows if row.get("manifest_path") == expected_path), None)
+        if target is None:
+            return None
+        rendered = target.get("rendered_manifest")
+        if not isinstance(rendered, dict) or rendered.get("artifact_digest") != artifact_digest:
+            return None
+
+        summaries = [row.get("source_summary") for row in rows]
+        if any(not isinstance(summary, dict) for summary in summaries):
+            return None
+        source_summary = dict(summaries[0])
+        source_document_count = source_summary.get("source_document_count")
+        if (
+            isinstance(source_document_count, bool)
+            or not isinstance(source_document_count, int)
+            or source_document_count != len(rows)
+            or any(dict(summary) != source_summary for summary in summaries[1:])
+        ):
+            return None
+
+        return {
+            **source_summary,
+            "workspace_id": workspace_id,
+            "repository_id": str(target.get("repository_id") or ""),
+            "binding_id": binding_id,
+            "commit_sha": commit_sha,
+            "manifest_path": manifest_path,
+            "artifact_manifest_path": expected_path,
+            "artifact_digest": artifact_digest,
+            "artifact_count": len(rows),
+        }
+
     def mark_watch_observed(
         self,
         watch_target_id: str,

@@ -64,10 +64,11 @@ def test_render_reads_manifest_from_git_commit(monkeypatch, tmp_path) -> None:
     monkeypatch.setenv("GIT_MANIFEST_PATH", "deploy.yaml")
 
     render = load_service("gitops/manifest-render-worker")
+    db = SpyDb()
     outs = run_handler(
         render.on_git_changed,
         GitChangedBody(commit_sha=sha, image="ignored", replicas=1),
-        db=SpyDb(),
+        db=db,
     )
 
     manifest = outs[0].rendered_manifest
@@ -77,6 +78,11 @@ def test_render_reads_manifest_from_git_commit(monkeypatch, tmp_path) -> None:
     assert manifest.spec.image == "ghcr.io/project/pulled-api:1"
     assert manifest.artifact_digest.startswith("sha256:")
     assert len(manifest.artifact_digest) == len("sha256:") + 64
+    artifact = next(call[1][0] for call in db.calls if call[0] == "record_manifest_artifact")
+    assert artifact["source_summary"]["source_type"] == "raw-yaml"
+    assert artifact["source_summary"]["source_is_file"] is True
+    assert artifact["source_summary"]["source_document_count"] == 1
+    assert artifact["source_summary"]["source_manifest_sha256"].startswith("sha256:")
 
 
 def test_render_reads_manifest_from_checkout_cache(monkeypatch, tmp_path) -> None:
@@ -441,6 +447,11 @@ def test_render_emits_each_kubernetes_object_from_multi_document_yaml(
         call[1][0]["artifact_digest"] for call in db.calls if call[0] == "record_manifest_artifact"
     ]
     assert artifact_digests == [out.rendered_manifest.artifact_digest for out in outs]
+    source_summaries = [
+        call[1][0]["source_summary"] for call in db.calls if call[0] == "record_manifest_artifact"
+    ]
+    assert {summary["source_is_file"] for summary in source_summaries} == {True}
+    assert {summary["source_document_count"] for summary in source_summaries} == {3}
 
 
 def test_render_uses_kubernetes_default_replicas_when_deployment_omits_it(
@@ -582,14 +593,20 @@ def test_render_reads_raw_manifest_directory(monkeypatch, tmp_path) -> None:
     monkeypatch.setenv("GIT_MANIFEST_PATH", str(directory))
 
     render = load_service("gitops/manifest-render-worker")
+    db = SpyDb()
     outs = run_handler(
         render.on_git_changed,
         GitChangedBody(commit_sha="dir123", image="ignored", replicas=1),
-        db=SpyDb(),
+        db=db,
     )
 
     assert subjects_of(outs) == ["manifest.rendered", "manifest.rendered"]
     assert [out.rendered_manifest.kind for out in outs] == ["ConfigMap", "Service"]
+    source_summaries = [
+        call[1][0]["source_summary"] for call in db.calls if call[0] == "record_manifest_artifact"
+    ]
+    assert {summary["source_is_file"] for summary in source_summaries} == {False}
+    assert {summary["source_document_count"] for summary in source_summaries} == {2}
 
 
 def test_render_respects_event_raw_json_source_type(monkeypatch, tmp_path) -> None:
@@ -719,6 +736,7 @@ def test_render_exports_kustomize_source_from_github_tree(monkeypatch) -> None:
     monkeypatch.setattr(render.request, "urlopen", stub_urlopen)
     monkeypatch.setattr(render, "run_render_command", stub_run_render_command)
 
+    db = SpyDb()
     outs = run_handler(
         render.on_git_changed,
         GitChangedBody(
@@ -729,13 +747,17 @@ def test_render_exports_kustomize_source_from_github_tree(monkeypatch) -> None:
             manifest_path="deploy/k8s",
             source_type="kustomize",
         ),
-        db=SpyDb(),
+        db=db,
     )
 
     assert subjects_of(outs) == ["manifest.rendered"]
     assert outs[0].rendered_manifest.metadata.name == "checkout-api"
     assert outs[0].rendered_manifest.spec.image == "ghcr.io/project/checkout-api:kustomize"
     assert rendered_paths
+    artifact = next(call[1][0] for call in db.calls if call[0] == "record_manifest_artifact")
+    assert artifact["source_summary"]["source_type"] == "kustomize"
+    assert artifact["source_summary"]["source_is_file"] is False
+    assert artifact["source_summary"]["source_document_count"] == 1
     assert calls == [
         "https://api.github.test/repos/owner/demo/commits/kustomize123",
         "https://api.github.test/repos/owner/demo/git/trees/tree123?recursive=1",
@@ -765,7 +787,14 @@ def test_render_reuses_cached_manifest_artifact_without_rerendering() -> None:
                 "artifact_id": "artifact-1",
                 "manifest_path": "deploy.yaml#deployment/cached-api",
                 "rendered_manifest": rendered.to_body(),
-                "source_summary": {"renderer_version": render.RENDERER_VERSION},
+                "source_summary": {
+                    "renderer_version": render.RENDERER_VERSION,
+                    "source_type": "raw-yaml",
+                    "source_origin": "github_contents",
+                    "source_is_file": True,
+                    "source_document_count": 1,
+                    "source_manifest_sha256": rendered.artifact_digest,
+                },
             }
         ]
     )
@@ -788,6 +817,43 @@ def test_render_reuses_cached_manifest_artifact_without_rerendering() -> None:
     assert db.called("save_repo_change")
     assert db.called("mark_watch_observed")
     assert not db.called("record_manifest_artifact")
+
+
+def test_render_rejects_legacy_cached_artifact_without_source_provenance() -> None:
+    render = load_service("gitops/manifest-render-worker")
+    rendered = RenderedManifest(
+        api_version="apps/v1",
+        kind="Deployment",
+        metadata=RenderedMetadata(name="cached-api", namespace="sandbox"),
+        spec=RenderedSpec(replicas=2, image="cached:image"),
+        manifest={"apiVersion": "apps/v1", "kind": "Deployment"},
+    )
+    db = SpyDb(
+        find_rendered_manifest_artifacts=[
+            {
+                "artifact_id": "artifact-legacy",
+                "manifest_path": "deploy.yaml#deployment/cached-api",
+                "rendered_manifest": rendered.to_body(),
+                "source_summary": {"renderer_version": render.RENDERER_VERSION},
+            }
+        ]
+    )
+
+    outs = run_handler(
+        render.on_git_changed,
+        GitChangedBody(
+            commit_sha="cached123",
+            image="ignored",
+            replicas=1,
+            binding_id="binding-1",
+            manifest_path="deploy.yaml",
+        ),
+        db=db,
+    )
+
+    assert subjects_of(outs) == ["manifest.invalid"]
+    assert outs[0].reason == "manifest source unavailable"
+    assert db.called("find_rendered_manifest_artifacts")
 
 
 def test_render_rejects_boolean_deployment_replicas(monkeypatch, tmp_path) -> None:

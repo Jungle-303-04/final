@@ -871,6 +871,32 @@ npm run visual-product
   `codex/f-auto-revert-pr`에서 진행 중이다. 같은 worktree가 감사 중에도 전진했으므로
   조율 세션은 해당 lane에 동시 수정·rebase·테스트를 수행하지 않는다.
 
+## 2026-07-13 11:22 KST — GO-REQUEST [H3]
+
+- lane: `codex/f-auto-revert-pr`, HEAD `b8188ad38`; 최신 origin/dev
+  `95a281e3b`로 18개 고유 commit을 충돌 없이 rebase, behind/ahead `0/18`.
+- BQ-007: flag 기본 false의 rollout 실패 auto-revert, 권위 snapshot/원문 image patch,
+  rebase fix `87eb0eb88`.
+- BQ-009: `GitOpsAuthorityReadPort` 주입, patch 시점 workflow/diff/active binding/repository/
+  provenance 교차 검증, exact-base 원문 scalar span patch. `oom_memory`, `image_rollback`,
+  `image_tag_fix`, `replica_scale`, `probe_fix`(path/port/timeout), `selector_fix` 6종과
+  exact inverse rollback. 권위 부재/불일치/미지원은 `rca.action_required` fail-closed.
+- BQ-010: 실제 patch action을 선언 파라미터화하고 `gitops_recovery_review` 문서 action을
+  분리·score 하향. 일반 action의 markdown fallback 제거.
+- 실측: `uv run python scripts/verify-recovery-patches.py` 6/6 PASS, forward 후 inverse가
+  원문 byte 복원. compileall PASS, manifest management 69/target 20.
+- 전체 게이트: Ruff lint PASS, format 499 files, import-linter 2 kept/0 broken,
+  pytest `1820 passed, 3 skipped`.
+- 시험 merge: `git merge-tree --write-tree origin/dev b8188ad38` exit 0, tree
+  `f16e81b5df4ccc303f96ab3e6344df5e132c129d`; 예상 충돌 0건.
+- merge 명령: dev 통합 worktree에서 `git fetch origin dev` →
+  `git merge --no-ff codex/f-auto-revert-pr` → `bash scripts/test.sh` → scorer/compileall/
+  manifest 재실행 → merge commit push → `git merge-base --is-ancestor b8188ad38 origin/dev`.
+- 범위: gateway 계약 변경 0건. [D-019] 예외인 contracts 신규 read port,
+  dispatch-worker 최소 주입, recovery 경로와 기존 F lane의 gitops source/scm/auto-revert만 수정.
+- 요청: 사람 GO [H3] 및 merge·push 실행 위임. origin 착륙 전 BQ-007/009/010은
+  `done-pending-merge`이며 [D-019] DoD상 완료가 아니다.
+
 ## 2026-07-13 11:28 KST — [백엔드] provider 계약 구현·통합 대기
 
 - lane: `codex/f-provider-connection-stage`, HEAD `305ed2b71`.
