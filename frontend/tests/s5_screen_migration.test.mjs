@@ -96,6 +96,41 @@ test('Resources mutations publish feedback through the canonical Sonner boundary
   assert.match(source, /\btoast\.error\s*\(/);
 });
 
+test('Applications list is composed only from accessible shadcn primitives', async () => {
+  const source = await readFile(
+    new URL('src/features/repo/RepoListView.tsx', frontendRoot),
+    'utf8',
+  );
+
+  assert.doesNotMatch(source, /from ['"]@\/ui(?:['"/])/);
+  assert.doesNotMatch(source, /\b(?:EmptyState|PageHeader|useNavigate)\b/);
+  assert.doesNotMatch(source, /\btone=/);
+
+  for (const primitive of ['alert', 'badge', 'button', 'card', 'skeleton']) {
+    assert.match(
+      source,
+      new RegExp(`from ['"]@/components/ui/${primitive}['"]`),
+      `RepoListView must import the ${primitive} shadcn primitive`,
+    );
+  }
+
+  assert.match(source, /<AlertAction\b/);
+  assert.match(source, /<CardTitle><h2\b/);
+  assert.match(source, /<Link\b/);
+  assert.match(source, /aria-busy=/);
+  assert.match(source, /role=['"]status['"]/);
+  assert.match(source, /aria-live=['"]polite['"]/);
+  assert.match(source, /aria-label=\{`\$\{app\.name\} 배포 정의 열기`\}/);
+  assert.ok(
+    (source.match(/focus-visible:ring-2/g) ?? []).length >= 2,
+    'the application and cluster links must both expose a visible keyboard focus ring',
+  );
+  assert.doesNotMatch(source, /role=['"]button['"]/);
+  assert.doesNotMatch(source, /tabIndex=\{0\}/);
+  assert.doesNotMatch(source, /#[\da-f]{3,8}\b/i);
+  assert.doesNotMatch(source, /\b\d+(?:\.\d+)?(?:ms|px)\b/i);
+});
+
 test('Issues list is composed only from accessible shadcn primitives', async () => {
   const source = await readFile(
     new URL('src/features/notifications/NotificationsView.tsx', frontendRoot),
