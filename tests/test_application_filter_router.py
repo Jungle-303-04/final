@@ -19,9 +19,16 @@ APPLICATION_ID = "app-a"
 
 
 class ApplicationFilterDb:
-    def __init__(self, *, applications: set[str], clusters: set[str]) -> None:
+    def __init__(
+        self,
+        *,
+        applications: set[str],
+        clusters: set[str],
+        paginated: bool = False,
+    ) -> None:
         self.applications = applications
         self.clusters = clusters
+        self.paginated = paginated
         self.data_calls: list[dict[str, Any]] = []
 
     def accessible_resource_ids(
@@ -59,7 +66,9 @@ class ApplicationFilterDb:
             ],
             "filtered_count": 1,
             "unfiltered_count": 1,
-            "next_position": None,
+            "next_position": (
+                {"name": "checkout", "application_id": APPLICATION_ID} if self.paginated else None
+            ),
             "observed_at": "2026-07-14T00:30:00Z",
             "partial_reason_codes": ["application_label_projection_unavailable"],
         }
@@ -175,6 +184,19 @@ def test_application_cursor_is_bound_to_filter_scope() -> None:
 
     assert response.status_code == 422
     assert db.data_calls == []
+
+
+def test_application_live_projection_refuses_unpinned_next_page() -> None:
+    db = ApplicationFilterDb(
+        applications={APPLICATION_ID},
+        clusters={CLUSTER_ID},
+        paginated=True,
+    )
+
+    response = _client(db).get("/applications/filter-results", params={"limit": 1})
+
+    assert response.status_code == 503
+    assert response.json() == {"detail": "application filter pagination is unavailable"}
 
 
 def test_gateway_registers_static_application_filters_before_dynamic_detail(monkeypatch) -> None:
