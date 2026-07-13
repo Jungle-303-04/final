@@ -1966,3 +1966,16 @@ target preflight·register 네 함수와 strict Zod 계약을 claim했다. 1회�
   design guard 343 files, shadcn source audit 482 previews, Vite build 14,539 modules.
   `npm run visual-product` PASS: 38 isolated scenarios, exact API request counts,
   unexpected feature network/WebSocket 0건.
+
+## 2026-07-13 16:52 KST — [프론트] Issues 요청 cursor 불투명 경계 완료 증거
+
+- RED `a869c79fc07c8d2e42d401e45390dbf384d8e884`는 Evidence·RCA report의 요청
+  cursor가 adapter와 API query 경계에서 trim·누락되는 문제를 exact byte 회귀로 고정했다.
+- GREEN `b251147162b719798590239d367bdfa1985896ba`는 nonblank cursor의 선행·후행
+  공백과 URL-safe 문자 원문을 그대로 전달하고, `undefined`와 명시적 빈 문자열·공백 문자열을
+  구분해 후자만 요청 오류로 거부한다. 동결된 `client.ts`·`url.ts`는 수정하지 않았다.
+- 전용 cursor 계약 테스트를 분리해 기존 adapter 책임을 300줄 설계 상한 안에 유지했다.
+  `npm run check` PASS: TypeScript·ESLint, Vitest 116 files / 834 tests,
+  design guard 344 files, shadcn source audit 482 previews, Vite build 14,539 modules.
+- 응답 `next_cursor`의 nonblank 원문 보존과 `null` 단일 부재 표현은 별도 TDD 단위로
+  이어서 검증한다. 이 후속 범위는 현재 요청 cursor 커밋에 섞지 않았다.
