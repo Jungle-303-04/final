@@ -2598,3 +2598,6 @@ target preflight·register 네 함수와 strict Zod 계약을 claim했다. 1회�
   import-linter 8 kept/0 broken, pytest `1970 passed, 3 skipped`; 실제 JetStream 결과
   `equivalent=true`다.
 - merge-tree clean, 삭제 0건, frozen 경로 변경 0건이다. lane 삭제 전 복구 hash를 기록했다.
+
+- [백엔드] lane 회수 — `codex/event-bus-mode-equivalence` / `02773227c` /
+  ancestor exit 0. 로컬 branch와 worktree를 제거했고 원격 branch는 존재하지 않았다.
