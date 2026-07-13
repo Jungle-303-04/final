@@ -1758,3 +1758,17 @@ target preflight·register 네 함수와 strict Zod 계약을 claim했다. 1회�
 - 잔여 범위: 전체 87개 중 10개만 작성 완료했으며 다음 cursor는 11이다. 나머지 77개는
   후속 배치로 계약화하고, malformed snapshot 구조화 오류·복수 fallback·canonical command·
   CRLF SHA 이식성은 비차단 hardening 후보로 함께 추적한다.
+
+## 2026-07-13 15:41 KST — [프론트] dev 흡수·PROMOTE 완료 증거
+
+- 흡수 직전 divergence는 dev-only 22 / lab-only 60이었다. 최신 dev 변경은 benchmark·backend
+  문서·테스트에 한정됐고, 예측·실제 충돌은 append-only `docs/auto/night-log.md` 한 파일뿐이었다.
+  양측 기록을 모두 보존했으며 제품·계약 파일 충돌은 0건이다.
+- staged merge와 승격 diff의 `frontend/**` 삭제 0건, `src/**` 삭제 0건이다. 두 경로에 대한
+  프론트 세션의 수동 수정도 0건이다.
+- 통합 상태 `npm run check` PASS: 113 files / 824 tests, design guard 340 files,
+  shadcn 482 previews, Vite build 14,538 modules. `npm run visual-product` PASS:
+  38 isolated scenarios, exact scenario API requests, unexpected network/WebSocket 0건.
+- dev 흡수 merge `a1e37d34308192a6d5c363983a370209ab4813be`를 lab에 push한 뒤 비강제
+  fast-forward로 dev에 승격했다. `origin/dev`와 `origin/woonyong/ui-layer-lab`은 모두
+  `a1e37d343`이고 양방향 ancestor exit 0, divergence 0/0이다.
