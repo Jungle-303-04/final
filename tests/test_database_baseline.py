@@ -6,11 +6,16 @@ import hashlib
 from pathlib import Path
 
 import pytest
+
 from packages.storage.baseline import (
+    BASELINE_CONFIRM_EMPTY_TARGET_ENV,
+    BASELINE_CONFIRM_SOURCE_COMMIT_ENV,
+    BASELINE_EMPTY_TARGET_CONFIRMATION,
     BASELINE_SOURCE_COMMIT,
     BASELINE_SQL_PATH,
     BASELINE_SQL_SHA256,
     BaselineDecision,
+    _validate_operator_confirmation,
     decide_bootstrap,
     load_baseline_sql,
 )
@@ -50,3 +55,22 @@ def test_baseline_runner_never_uses_alembic_stamp() -> None:
     assert "command.upgrade" in source
     assert "command.stamp" not in source
     assert "alembic stamp" not in source
+
+
+@pytest.mark.parametrize(
+    ("source_commit", "empty_target"),
+    [
+        ("wrong", BASELINE_EMPTY_TARGET_CONFIRMATION),
+        (BASELINE_SOURCE_COMMIT, "wrong"),
+    ],
+)
+def test_operator_must_confirm_the_pinned_source_and_isolated_target(
+    monkeypatch: pytest.MonkeyPatch,
+    source_commit: str,
+    empty_target: str,
+) -> None:
+    monkeypatch.setenv(BASELINE_CONFIRM_SOURCE_COMMIT_ENV, source_commit)
+    monkeypatch.setenv(BASELINE_CONFIRM_EMPTY_TARGET_ENV, empty_target)
+
+    with pytest.raises(RuntimeError):
+        _validate_operator_confirmation()
