@@ -1158,3 +1158,12 @@ npm run visual-product
 - gateway 계약, `src/domains/rca/**`, `src/services/ai/**`,
   `src/packages/runtime/worker.py` 변경은 0건이다. 원격 feature branch에 push했으며
   canonical merge·앵커는 사람 GO를 대기한다.
+
+## 2026-07-13 12:29 KST — [백엔드] release flow 분해 사전 조사
+
+- Argo observer 착륙 GO 대기 중 가용한 읽기 전용 작업으로 5,297줄 router의 내부 경계를
+  policy/readiness/verification/report/_support로 분류했다. 코드·claim 변경은 없다.
+- 허용 의존 방향과 이동 대상, blocker 순서·guard snapshot·verification ID·monkeypatch
+  호환 위험을 `docs/release-flow-implementation.md`에 기록했다.
+- 신규 microservice나 route 변경은 제안하지 않았고, 실제 분해는 별도 착수·RED/green
+  검증 전에는 진행하지 않는다.
