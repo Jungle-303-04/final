@@ -3248,7 +3248,9 @@
           "reason": "단일 workload의 짧은 startup window로 fleet 전체 startup probe를 비활성화할 수 없습니다."
         }
       ],
-      "benchmark_fixtures": []
+      "benchmark_fixtures": [
+        "benchmark/scenarios/probe/probe-startup-window-too-short/scenario.json"
+      ]
     },
     {
       "ordinal": 54,

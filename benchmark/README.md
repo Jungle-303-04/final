@@ -73,8 +73,10 @@ capability와 기존 exact fixture도 없다. 21~30번 중
 `application_5xx_spike`는 command와 Safe PR 양쪽을 지원한다. 31~40번에 exact fixture는 없다.
 41~49번은 `manual_analysis` fallback-only이고, 50번 `probe_path_wrong`만 `safe_pr` capability와
 exact probe fixture를 가진다. 51~53번과 55번도 `safe_pr` capability가 있고, exact fixture는
-51·52·55·56번에만 연결한다. 52번 timeout fixture 추가는 여섯 번째 batch 전체를 재감사하고
-canonical digest를 갱신한 명시적 coverage 보강이다. 54번은 실제 health 실패라 probe 수정
+51·52·53·55·56번에 연결한다. 52번 timeout과 53번 startup window fixture 추가는 각각 여섯 번째
+batch 전체를 재감사하고 canonical digest를 갱신한 명시적 coverage 보강이다. startup fixture는
+5초 초기화에 정상 8초·장애 4초 window를 사용해 외부 인프라 없이 실패 경계를 고정한다.
+54번은 실제 health 실패라 probe 수정
 대상이 아니며, 56번은 fixture가
 있어도 fallback-only, 60번은 OOM 계열 이름이어도 live `oom_memory` recovery가 없다. 61~70번도
 resource pressure·runtime config 이름과 무관하게 전부 fallback-only이며 exact fixture가 없다.
