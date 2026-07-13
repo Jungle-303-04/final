@@ -3492,6 +3492,10 @@ gone branch 0, `(prunable)` worktree 0이다.
 [사람 게이트] GitHub Actions `Dev Gate`는 최신 dev push도 runner 시작 전 결제·spending limit로 실패한다. 저장소 결제 복구 또는 비용 승인을 받은 AWS 대체 실행기가 필요하며, 그 전에는 서버 gate 완료로 판정하지 않는다.
 [사람 게이트] `aws sts get-caller-identity`가 만료 세션으로 실패했다. 계정 재인증 뒤 `verify_dev_auth_bypass.py live --context <management>` 실증이 필요하며, secret 값은 기록하지 않는다.
 
+[사이클] 2026-07-14 04:04 KST / Resources 클러스터 목록을 shadcn primitive로 전면 이관하고 정렬·키보드 링크·동형 스켈레톤 회귀 가드 착륙(`make gate`: backend 2165 passed·3 skipped, frontend 24/24, typecheck·lint·build PASS; 동시 dev push로 pre-push ref lock 2회 발생 후 최신 dev rebase·동일 full gate 재통과, 중복 hook만 생략) / `a8fde3956` / 다음 한 걸음: RegisterClusterWizard를 dialog·form·progress 단위로 분해해 shadcn 이관
+
+[경합] 2026-07-14 04:15 KST / Resources 이관 증거 docs 커밋이 전체 gate와 `T1==T2` 확인 뒤에도 상대 세션의 연속 dev push(04:07·04:09·04:12 착륙)와 겹쳐 3회 연속 non-fast-forward로 거절됨 / 안전 게이트 생략 없이 프론트 사이클을 5분 어긋나게 한 뒤 최신 dev에서 재시도
+
 [사이클] 2026-07-14 04:20 KST / smoke 기본 실행과 boolean 입력 정규화로 `RUN_SMOKE=true`가 조용히 skip되던 모순을 차단 / `ba46caf49` (전체 gate: 백엔드 2166 passed·3 skipped, 프론트 24 passed, manifest·build PASS, T1=T2, origin/dev 착륙 확인) / 다음 한 걸음: digest rollback과 신규 API strict smoke 배선
 
 [사이클] 2026-07-14 04:27 KST / `make gate-fast`를 20.44초 정적·변경영역 게이트로 추가하고 Actions 복구 전 pre-push 전체 gate 유지 가드를 고정 / `37dbd9673` (전체 gate: 백엔드 2167 passed·3 skipped, 프론트 27 passed, manifest·build PASS, T1=T2, origin/dev 착륙 확인) / 다음 한 걸음: 이미지 digest rollback과 신규 API strict smoke 배선
