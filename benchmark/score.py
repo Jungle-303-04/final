@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Static, dependency-free KubeHealBench v0.1 contract grader."""
+"""Static, dependency-free OpsiaBench v0.1 contract grader."""
 
 from __future__ import annotations
 
