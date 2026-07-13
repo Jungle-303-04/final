@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from sqlalchemy import BigInteger, Float, ForeignKey, Index, Text, UniqueConstraint, text
+from sqlalchemy import BigInteger, Boolean, Float, ForeignKey, Index, Text, UniqueConstraint, text
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -72,6 +72,39 @@ class RcaTimeline(Base):
             "incident_id",
             postgresql_where=text("incident_id is not null"),
         ),
+        Index("ix_rca_timeline_issue_page", "workspace_id", "updated_at", "id"),
+        Index(
+            "ix_rca_timeline_issue_identity_latest",
+            "workspace_id",
+            "cluster_id",
+            "incident_id",
+            "updated_at",
+            "id",
+        ),
+        Index(
+            "ix_rca_timeline_issue_severity",
+            "workspace_id",
+            "severity",
+            "updated_at",
+            "id",
+        ),
+        Index(
+            "ix_rca_timeline_issue_environment",
+            "workspace_id",
+            "environment",
+            "updated_at",
+            "id",
+        ),
+        Index(
+            "ix_rca_timeline_issue_applications",
+            "application_ids",
+            postgresql_using="gin",
+        ),
+        Index(
+            "ix_rca_timeline_issue_labels",
+            "labels",
+            postgresql_using="gin",
+        ),
     )
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
@@ -84,6 +117,30 @@ class RcaTimeline(Base):
     incident_resource_name: Mapped[str | None] = mapped_column(Text, nullable=True)
     incident_symptom: Mapped[str | None] = mapped_column(Text, nullable=True)
     incident_logical_key: Mapped[str | None] = mapped_column(Text, nullable=True)
+    severity: Mapped[str | None] = mapped_column(Text, nullable=True)
+    environment: Mapped[str | None] = mapped_column(Text, nullable=True)
+    application_ids: Mapped[list[str] | None] = mapped_column(JSONB, nullable=True)
+    labels: Mapped[dict[str, str] | None] = mapped_column(JSONB, nullable=True)
+    severity_complete: Mapped[bool] = mapped_column(
+        Boolean,
+        nullable=False,
+        server_default=text("false"),
+    )
+    environment_complete: Mapped[bool] = mapped_column(
+        Boolean,
+        nullable=False,
+        server_default=text("false"),
+    )
+    application_ids_complete: Mapped[bool] = mapped_column(
+        Boolean,
+        nullable=False,
+        server_default=text("false"),
+    )
+    labels_complete: Mapped[bool] = mapped_column(
+        Boolean,
+        nullable=False,
+        server_default=text("false"),
+    )
     evidence_ref: Mapped[str | None] = mapped_column(Text, nullable=True)
     current_subject: Mapped[str] = text_column()
     status: Mapped[str] = text_column()
