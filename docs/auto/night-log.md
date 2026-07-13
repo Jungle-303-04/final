@@ -2926,3 +2926,10 @@ target preflight·register 네 함수와 strict Zod 계약을 claim했다. 1회�
 
 - BQ-023만 claim했다. 이미 착륙한 GAP-005 Issues 계약을 중복 구현하지 않고 기존 code
   `d63498d5f`·merge `e2504278d`에 연결한다. source·gateway 계약 변경은 0건이다.
+
+## 2026-07-14 00:31 KST — [백엔드] 프론트 Issues 계약 번호 매핑 완료
+
+- BQ-023을 기존 GAP-005 code `d63498d5f`·canonical merge `e2504278d`에 연결했다.
+  세 Issues filter route의 완료 앵커를 그대로 재사용하며 신규 source·gateway 변경은 0건이다.
+- 계약 앵커: `ISSUES_FILTER_RESULTS_PATH + ISSUES_FILTER_FACETS_PATH + ISSUES_LABEL_FACETS_PATH` /
+  `d63498d5f` / `[green]`.
