@@ -1992,3 +1992,21 @@ target preflight·register 네 함수와 strict Zod 계약을 claim했다. 1회�
   간헐 실패했으나 해당 파일 단독 15/15 PASS, 변경 없는 두 번째 전체 실행 PASS로 분류했다.
   최종 `npm run check` PASS: TypeScript·ESLint, Vitest 117 files / 841 tests,
   design guard 345 files, shadcn source audit 482 previews, Vite build 14,539 modules.
+
+## 2026-07-13 17:15 KST — [프론트] Resources 장문 상세·200% 확대 완료 증거
+
+- RED `11f6d0f87d2d2439a2ca87895b35bcb6f3e35f65`는 실제 UID 미노출, 관계
+  identity의 `truncate`, Event reason/message의 무공백 장문 줄바꿈 누락을 3개 실패로 고정했다.
+- GREEN `06cb48853ece13bbdd119751ff9892d004e82f47`은 API·canonical 계약을
+  변경하지 않고 상세 header·DefinitionGrid·관계·Event 표현 경계에 `min-w-0`과
+  `overflow-wrap:anywhere`를 적용한다. UID 원문은 en/ko catalog의 단일 `UID` 라벨로 노출하고,
+  owner·node·URL 등 fact의 hover-only truncate를 제거했다.
+- 200% text resize 시각 장면을 overview·relations·events 세 탭에 각각 추가했다.
+  증거는 `references/ui-layer-lab/output/playwright/product-resources-detail-long-overview-text-resize-200-light.png`,
+  `product-resources-detail-long-relations-text-resize-200-light.png`,
+  `product-resources-detail-long-events-text-resize-200-light.png`이며 모두 exact fixture 원문과
+  수평 overflow 0을 확인한다.
+- 최종 `npm run check` PASS: TypeScript·ESLint, Vitest 117 files / 844 tests,
+  design guard 345 files, shadcn source audit 482 previews, Vite build 14,539 modules.
+  `npm run visual-product` PASS: 41 isolated scenarios, exact API request counts,
+  unexpected feature network/WebSocket 0건.
