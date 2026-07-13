@@ -3103,3 +3103,15 @@ target preflight·register 네 함수와 strict Zod 계약을 claim했다. 1회�
   노출하지 않는다.
 - push 전 게이트: docs index `11 passed`; Ruff lint/format PASS; import-linter 8 kept/0 broken;
   pytest `2130 passed, 3 skipped`. AWS dev 배포 스위치는 계속 비활성 상태다.
+
+## 2026-07-14 01:45 KST — [프론트] VP-013 S0 shadcn 초기화 검토 요청
+
+- 단계: `S0`; origin/dev SHA: `8e2d40ef0cca912add0fbf83058c7fc10fb1c60e`.
+- `frontend/components.json`, canonical `cn()` 유틸리티, Radix/cva/clsx/tailwind-merge,
+  lucide, recharts, sonner 등 VP-013 기반 의존성을 추가했다. 기존 UI 사용처는 변경하지 않아
+  S0 자체의 시각 변화는 없다.
+- 로컬 게이트: `npm test` 19/19, `npm run typecheck`, `npm run lint`,
+  `npm run build` 모두 exit 0. 삭제 파일 및 프론트 소유 밖 변경은 0건이다.
+- 검토 요청: S0 구성·alias·의존성 계약과 기존 빌드 무회귀를 origin 기준으로 확인한다.
+- 배포 대상 dev SHA: `8e2d40ef0`. AWS 자동 배포 스위치는 현재 비활성 상태이므로
+  `deploy-status.md`의 수동 관측 artifact와 혼동하지 않는다.
