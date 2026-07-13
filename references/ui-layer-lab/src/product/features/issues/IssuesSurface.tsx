@@ -23,6 +23,7 @@ import type {
   SectionState,
 } from "./issuesSurfaceContract";
 import { useIssueAuditPagination } from "./useIssueAuditPagination";
+import { useIssueDetailFocus } from "./useIssueDetailFocus";
 
 export function IssuesSurface({
   clusterId,
@@ -51,6 +52,8 @@ export function IssuesSurface({
   const auditScope = selected === null
     ? null
     : `${clusterId ?? ""}\u0000${selected.correlationId}`;
+  const { detailRegionId, detailRegionRef, requestDetailFocus } =
+    useIssueDetailFocus(selected?.id ?? null);
 
   const { abortAuditPage, loadMoreAudit } = useIssueAuditPagination({
     auditScope,
@@ -173,9 +176,10 @@ export function IssuesSurface({
 
   const selectIssue = useCallback((issue: IssueSummary) => {
     abortAuditPage();
+    requestDetailFocus(issue.id);
     setPanels(loadingPanels(issue.incidentId !== null));
     setSelectedRecord({ scope: clusterId, issue });
-  }, [abortAuditPage, clusterId]);
+  }, [abortAuditPage, clusterId, requestDetailFocus]);
 
   const refreshList = useCallback(() => {
     setListRecord((current) => ({
@@ -206,7 +210,13 @@ export function IssuesSurface({
           </Button>
         </CardHeader>
         <CardContent className="lg:min-h-96">
-          <IssuesListPanel copy={copy} list={list} onSelect={selectIssue} selected={selected} />
+          <IssuesListPanel
+            copy={copy}
+            detailRegionId={detailRegionId}
+            list={list}
+            onSelect={selectIssue}
+            selected={selected}
+          />
         </CardContent>
       </Card>
       {selected === null ? (
@@ -219,6 +229,8 @@ export function IssuesSurface({
         <IssuesPanels
           capability={recoverySelection}
           copy={copy}
+          detailRegionId={detailRegionId}
+          detailRegionRef={detailRegionRef}
           onLoadMoreAudit={loadMoreAudit}
           onSelectRecovery={selectRecovery}
           selected={selected}
