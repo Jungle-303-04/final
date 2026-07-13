@@ -53,6 +53,8 @@ MISSING_EVIDENCE_LABELS = {
     "metadata": "metadata 근거",
     "metadata:current_workload_snapshot": "대상 Workload 상세 snapshot",
     "metadata:current_workload_snapshots": "Workload snapshot 목록",
+    "metadata:referenced_config_objects": "ConfigMap/Secret reference 상태",
+    "metadata:resource_quotas": "Namespace ResourceQuota 상태",
     "metadata:change_context": "최근 변경 이력",
     "matching_cause_rule": "대표 증상에 맞는 RCA rule",
     "gitops_authority_context": "GitOps 권위 context",
