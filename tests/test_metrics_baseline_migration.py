@@ -50,9 +50,11 @@ def test_metrics_migration_upgrade_and_downgrade_cover_both_tables_and_index() -
     downgrade = render("downgrade")
 
     assert "create table event_consumer_metrics" in upgrade
+    assert "add column processing_duration_ms" in upgrade
     assert "primary key (consumer, subject)" in upgrade
     assert "create table ai_llm_invocation_metrics" in upgrade
     assert "ix_ai_llm_invocation_correlation_created" in upgrade
     assert "drop index ix_ai_llm_invocation_correlation_created" in downgrade
     assert "drop table ai_llm_invocation_metrics" in downgrade
     assert "drop table event_consumer_metrics" in downgrade
+    assert "drop column processing_duration_ms" in downgrade
