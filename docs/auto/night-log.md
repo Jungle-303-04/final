@@ -2617,3 +2617,14 @@ target preflight·register 네 함수와 strict Zod 계약을 claim했다. 1회�
 - GAP-004의 server Label facet/count/snapshot/completeness 계약 전에는 `[Labels]` popover,
   후보 개수와 `Showing N of M`을 렌더하지 않는다. 다음 안전 단위는 URL을 자동 변경하지 않는
   side-effect-free filter provider이며, legacy selector의 자동 선택 제거와 함께 전환한다.
+
+## 2026-07-13 20:41 KST — [프론트] VP-010 filter engine 승격·lane 회수
+
+- D-024 4조건은 `npm run check` PASS, 최신 `origin/dev@d75f5fdf7`의 ancestor exit 0,
+  정책 밖 충돌 0건, 최종 차이 7개 파일·삭제 0건·backend/source/frozen 변경 0건으로
+  확인했다. lab과 dev는 동일 SHA `2ee8f0e74`로 fast-forward 되었고 ancestor exit 0이다.
+  이 변경은 dev SHA `2ee8f0e74`로 배포 대상이다.
+- 회수: 이 통합에만 만든 `codex/vp010-filter-sync-20260713` / `2ee8f0e74`와
+  `/private/tmp/opsia-vp010-filter-sync`는 이 기록 착륙 직후 제거하고 `worktree prune`한다.
+  신규 stash는 0개다. 기존 stash 8개는 반영 여부가 증명되지 않아 유지하며, 다른 작업자의
+  `codex/oss-safe-pr-demo`와 보호 worktree·branch는 건드리지 않는다.
