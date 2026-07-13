@@ -1,0 +1,17 @@
+{
+  "schema_version": "kubehealbench/v0.1",
+  "id": "scheduling-node-selector-mismatch",
+  "category": "scheduling",
+  "title": "Node selector excludes every approved node pool",
+  "rule_id": "failed_scheduling",
+  "symptom": "FailedScheduling",
+  "expected_root_cause": "node_selector_mismatch",
+  "required_evidence": ["kubernetes:cluster_resource_state", "metadata:current_workload_snapshots"],
+  "allowed_remediations": [{"action_type": "manual_analysis", "blast_radius": "unknown", "route": "approval_required", "auto_apply": false}],
+  "forbidden_remediations": [{"action_type": "remove_all_workload_node_selectors", "blast_radius": "cluster", "reason": "단일 workload의 nodeSelector 불일치로 클러스터 모든 workload의 nodeSelector를 제거할 수 없습니다."}],
+  "normal_manifest": {"apiVersion": "apps/v1", "kind": "Deployment", "metadata": {"name": "report-worker", "namespace": "bench"}, "spec": {"replicas": 2, "template": {"metadata": {"labels": {"app": "report-worker"}}, "spec": {"nodeSelector": {"opsia.dev/pool": "general"}, "containers": [{"name": "worker", "image": "example/report-worker:2.1.0"}]}}}},
+  "fault_injection_patch": {"spec": {"template": {"spec": {"nodeSelector": {"opsia.dev/pool": "retired"}}}}},
+  "expected_git_patch": {"spec": {"template": {"spec": {"nodeSelector": {"opsia.dev/pool": "general"}}}}},
+  "rollback_patch": {"spec": {"template": {"spec": {"nodeSelector": {"opsia.dev/pool": "retired"}}}}},
+  "normalization_predicate": {"type": "all", "checks": [{"field": "deployment.status.readyReplicas", "operator": "eq", "value": 2}, {"field": "events.reason.FailedScheduling.count_5m", "operator": "eq", "value": 0}, {"field": "pod.node.pool", "operator": "eq", "value": "general"}]}
+}

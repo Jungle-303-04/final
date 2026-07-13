@@ -1937,6 +1937,24 @@ target preflight·register 네 함수와 strict Zod 계약을 claim했다. 1회�
   `npm run visual-product` PASS: 38 isolated scenarios, exact API request counts,
   unexpected feature network/WebSocket 0건.
 
+## 2026-07-13 16:23 KST — [백엔드] rule candidate 41~50 안전 계약 착륙
+
+- lane `codex/candidate-contract-batch-five`, RED `0a86981fd`, 구현·데이터
+  `1b4bfa779`, feature HEAD `5995350c4d95eccade8f24a31870a6a9d2d0fc5d`, canonical no-ff merge
+  `910825ec4a90be0403bae7c41d8bc0f09a23e7ee`.
+- loader 순서 41~50의 exact evidence·signal·recovery를 투영했다. 41~49는 fallback-only,
+  50번 `probe_path_wrong`만 `safe_pr`와 exact probe fixture를 가진다.
+- forbidden 의미 감사에서 ordinal 44의 node-wide 조치를 실제 reboot로, ordinal 46의
+  manifest 교체 action과 blast radius를 fleet로 정합화했다. 이중 독립 감사 P0/P1 0건이다.
+- append-only: 다섯 번째 batch digest `f125aff8…e5fb`를 `(41, 50)`에 고정하고
+  누락 lock·batch 5 변조 회귀를 추가했다. 누적 범위는 50/87, 다음 cursor는 51이다.
+- 고유 검증: candidate scorer 50/50 PASS, 후보 계약 테스트 46 passed. 전체 게이트는
+  Ruff lint/format PASS, import-linter 8 kept/0 broken, pytest `1917 passed, 3 skipped`;
+  manifest management 69 / target 20.
+- 4조건: merge-tree clean/tree `77dbb5e47763f69b28893631b09d7415464bcdc4`, 파일 삭제·
+  소유권 밖 변경·frozen 경로 변경 0건, RED·구현·문서·merge commit의 `origin/dev`
+  ancestor exit 0. J 배포 실행은 0건이다.
+
 ## 2026-07-13 16:27 KST — [프론트] dev→lab 정기 흡수 완료 증거
 
 - 흡수 기준은 `origin/dev@9811cd5f4`이며 직전 divergence는 dev-only 33 / lab-only 11이었다.
@@ -1951,6 +1969,42 @@ target preflight·register 네 함수와 strict Zod 계약을 claim했다. 1회�
 - merge `453d0843d8b8fca1cf798b61309ba3c5da1067f4`를
   `origin/woonyong/ui-layer-lab`에 비강제 push했다. 검증 중 `origin/dev`는 후보 계약 41~50
   배치 `ce50d0fb6`까지 5커밋 전진했으며, 자동 재흡수 임계값 미만이라 다음 주기에 보존한다.
+
+## 2026-07-13 16:30 KST — [백엔드] rule candidate 51~60 안전 계약 착륙
+
+- lane `codex/candidate-contract-batch-six`, RED `defe3751d`, 구현·데이터
+  `65f487ea9`, feature HEAD `5ce8132b0598797e73bb675a2ff49c66eef72167`, canonical no-ff merge
+  `66115a2d7312ae09e9cf8a06b1369ddf051e7cd2`.
+- loader 순서 51~60의 exact evidence·signal·recovery를 투영했다. 51~53번 probe 후보와
+  55번 selector 후보만 `safe_pr`다. fixture는 51·55·56번에만 exact 연결했다.
+- 54번 실제 health 실패에 probe fix를 추론하지 않고, fixture가 있는 56번도 fallback-only,
+  60번도 live OOM recovery 부재를 그대로 보존했다. 독립 의미 감사 P0/P1 0건이다.
+- append-only: 여섯 번째 batch digest `cc5f1422…b0ae`를 `(51, 60)`에 고정하고
+  누락 lock·batch 6 변조 회귀를 추가했다. 누적 범위는 60/87, 다음 cursor는 61이다.
+- 고유 검증: candidate scorer 60/60 PASS, 후보 계약 테스트 49 passed. 전체 게이트는
+  Ruff lint/format PASS, import-linter 8 kept/0 broken, pytest `1920 passed, 3 skipped`;
+  manifest management 69 / target 20.
+- 4조건: merge-tree clean/tree `113e4e5166691df6ab5c2bd940a2b9e86487fb25`, 파일 삭제·
+  소유권 밖 변경·frozen 경로 변경 0건, RED·구현·문서·merge commit의 `origin/dev`
+  ancestor exit 0. J 배포 실행은 0건이다.
+
+## 2026-07-13 16:37 KST — [백엔드] rule candidate 61~70 안전 계약 착륙
+
+- lane `codex/candidate-contract-batch-seven`, RED `5c0d04120`, 구현·데이터
+  `95afd8163`, feature HEAD `aed4bf78b4e640af0b5ac55017f6a445b0a5013b`, canonical no-ff merge
+  `de0b2760951bd654b597bbfc36ce0004b26bc5fb`.
+- loader 순서 61~70의 exact evidence·signal을 투영했다. 전부 fallback-only이며 capability와
+  fixture가 없다. 이름만 보고 OOM·rollback·config patch를 추론하지 않았다.
+- forbidden은 fleet memory 증설, node data purge, cluster-wide ConfigMap 복제·변조처럼
+  기술적으로 성립하는 과잉 대응으로 독립 의미 감사 P0/P1 0건이다.
+- append-only: 일곱 번째 batch digest `56882298…8590`를 `(61, 70)`에 고정하고
+  누락 lock·batch 7 변조 회귀를 추가했다. 누적 범위는 70/87, 다음 cursor는 71이다.
+- 고유 검증: candidate scorer 70/70 PASS, 후보 계약 테스트 52 passed. 전체 게이트는
+  Ruff lint/format PASS, import-linter 8 kept/0 broken, pytest `1923 passed, 3 skipped`;
+  manifest management 69 / target 20.
+- 4조건: merge-tree clean/tree `df15a4c59d352feeab141aa9bc36034e501fea44`, 파일 삭제·
+  소유권 밖 변경·frozen 경로 변경 0건, RED·구현·문서·merge commit의 `origin/dev`
+  ancestor exit 0. J 배포 실행은 0건이다.
 
 ## 2026-07-13 16:40 KST — [프론트] Cluster 연결 단계 읽기 전용 전달 완료 증거
 
@@ -2010,3 +2064,100 @@ target preflight·register 네 함수와 strict Zod 계약을 claim했다. 1회�
   design guard 345 files, shadcn source audit 482 previews, Vite build 14,539 modules.
   `npm run visual-product` PASS: 41 isolated scenarios, exact API request counts,
   unexpected feature network/WebSocket 0건.
+## 2026-07-13 16:46 KST — [백엔드] rule candidate 71~80 안전 계약 착륙
+
+- lane `codex/candidate-contract-batch-eight`, RED `3060b5f60`, 구현·데이터
+  `895f4185f`, feature HEAD `dd2006904491f22113d4e84329f681a227e85d2e`, canonical no-ff merge
+  `cb099e5eb161d740710c2b276b52bc85dc2006d9`.
+- loader 순서 71~80의 exact evidence·signal·recovery를 투영했다. 73~75의 `draft_pr`
+  선언은 dispatcher allowlist 밖이어서 capability가 없고, 78번도 승인형 수동 action이다.
+  fixture는 73·75·78번에만 exact 연결했다.
+- forbidden은 fleet node pool 증설, cluster scheduling 제약 제거, PVC 전체 삭제, Secret 전역
+  복제·변조처럼 기술적으로 성립하는 과잉 대응으로 독립 의미 감사 P0/P1 0건이다.
+- append-only: 여덟 번째 batch digest `7ebd96e2…51d6`를 `(71, 80)`에 고정하고
+  누락 lock·batch 8 변조 회귀를 추가했다. 누적 범위는 80/87, 다음 cursor는 81이다.
+- 고유 검증: candidate scorer 80/80 PASS, 후보 계약 테스트 54 passed. 전체 게이트는
+  Ruff lint/format PASS, import-linter 8 kept/0 broken, pytest `1925 passed, 3 skipped`;
+  manifest management 69 / target 20.
+- 4조건: merge-tree clean/tree `61250ee0eacdee280fd73e6f223a9273cb994f70`, 파일 삭제·
+  소유권 밖 변경·frozen 경로 변경 0건, RED·구현·문서·merge commit의 `origin/dev`
+  ancestor exit 0. J 배포 실행은 0건이다.
+
+## 2026-07-13 16:54 KST — [백엔드] rule candidate 81~87 terminal 안전 계약 착륙
+
+- lane `codex/candidate-contract-terminal`, RED `564deb9a3`, 구현·데이터 `bd7585427`,
+  feature HEAD `aafc4a956bc03b85133cb6b46f3ba889dde532dc`, canonical no-ff merge
+  `dc0b775ff0b4813e2599ea0c15f7bf574d830b0d`.
+- loader 순서 81~87의 exact evidence·signal·fallback을 투영해 87/87 전체를 완결했다.
+  7개 모두 capability가 비어 있고, fixture는 82번 `pvc_not_bound`에만 exact 연결했다.
+- forbidden은 controller fleet 재시작, cluster volume 강제 detach, RWO 소비자 전역 삭제,
+  VolumeAttachment finalizer 전역 제거처럼 기술적으로 성립하는 과잉 대응으로 독립 의미 감사
+  P0/P1 0건이다.
+- append-only: terminal batch digest `e3f38634…fe22`를 `(81, 87)`에 고정하고 누락 lock·
+  batch 9 변조 회귀를 추가했다. 누적 범위는 87/87, cursor는 `null`이다.
+- 고유 검증: candidate scorer 87/87 PASS, 후보 계약 테스트 56 passed. 전체 게이트는
+  Ruff lint/format PASS, import-linter 8 kept/0 broken, pytest `1927 passed, 3 skipped`;
+  manifest management 69 / target 20.
+- 4조건: merge-tree clean/tree `b2693f8c4aedb9d5004fd178c4435f10e492525f`, 파일 삭제·
+  소유권 밖 변경·frozen 경로 변경 0건, RED·구현·문서·merge commit의 `origin/dev`
+  ancestor exit 0. J 배포 실행은 0건이다.
+
+## 2026-07-13 17:02 KST — [백엔드] scheduling node selector 시나리오 착륙
+
+- lane `codex/benchmark-scheduling-memory`, 초기 RED `b07dcbb16`, 독립 감사 교정
+  `3d9899564`, 구현·데이터 `70d3478ef`, feature HEAD
+  `dea2d4babb6882c2cf6b5ff8354060f8472bf6f7`, canonical no-ff merge
+  `584e2eda0af8d0d6d862fffe6be836a1c925fbae`.
+- 독립 감사에서 memory request보다 외부 용량 가정이 없는 `node_selector_mismatch`를 선택했다.
+  정상 `general` ↔ 장애 `retired` selector와 gold·rollback을 결정적으로 고정했다.
+- fallback-only라 `manual_analysis`만 허용하고 cluster-wide nodeSelector 제거를 금지했다.
+  ordinal 76 exact fixture 연결로 batch 8을 재감사했고 digest는 `8d19d8d9…5521`이다.
+- 고유 검증: scheduling 3/3, 전체 scenario 15/15, candidate 87/87, 후보 계약 테스트
+  57 passed. 전체 게이트는 Ruff lint/format PASS, import-linter 8 kept/0 broken,
+  pytest `1928 passed, 3 skipped`; manifest management 69 / target 20.
+- 4조건: merge-tree clean/tree `9cb957b643ac84ccc8dffca6b9151a1569606698`, 파일 삭제·
+  소유권 밖 변경·frozen 경로 변경 0건, RED·교정·구현·문서·merge commit의 `origin/dev`
+  ancestor exit 0. J 배포 실행은 0건이다.
+
+## 2026-07-13 17:06 KST — [백엔드] AsyncDb 호출 경계 직접 테스트 착륙
+
+- lane `codex/runtime-async-db-tests`, test-only feature HEAD
+  `effec9f6d98c0e56fc6bf10e5860b626e5d01077`, canonical no-ff merge
+  `b37a94d958b7c56a8df8c8780bc1ff30a63b3d63`.
+- 소스 변경 0건으로 async/non-callable passthrough, sync `to_thread`, active connection의
+  동일-thread 재사용, 인자·결과·예외·`AttributeError` 전파를 5개 직접 테스트로 고정했다.
+- 고유 검증: `tests/test_async_db.py` 5 passed. 전체 게이트는 Ruff lint/format PASS,
+  import-linter 8 kept/0 broken, pytest `1933 passed, 3 skipped`; manifest management 69 / target 20.
+- 4조건: merge-tree clean/tree `41ae92a7d037bccfab7950b8d5ee70162ce0a39e`, 파일 삭제·
+  소유권 밖 변경·frozen 경로 변경 0건, test·merge commit의 `origin/dev` ancestor exit 0.
+  J 배포 실행은 0건이다.
+
+## 2026-07-13 17:11 KST — [백엔드] probe timeout 시나리오 착륙
+
+- lane `codex/benchmark-probe-timeout`, RED `bd864494d`, 구현·데이터 `9171d6005`,
+  feature HEAD `b96a6981079a4a144921d391f443d43e4306a05d`, canonical no-ff merge
+  `2d9ef3fc2ddb17970d863dcadc995a7d6a6dfe3e`.
+- `timeoutSeconds` 5→1→5의 결정적 fault·gold·rollback으로 target workload Safe PR만
+  허용하고 fleet 전체 timeout 증가는 금지했다.
+- ordinal 52 exact fixture 연결로 batch 6을 재감사했고 digest는 `7920067d…54d3`이다.
+- 고유 검증: probe 3/3, 전체 scenario 16/16, candidate 87/87, 후보 계약 테스트 58 passed.
+  전체 게이트는 Ruff lint/format PASS, import-linter 8 kept/0 broken,
+  pytest `1934 passed, 3 skipped`; manifest management 69 / target 20.
+- 4조건: merge-tree clean/tree `3716fbc40341c0cb55b34669634e2d6c0418b90e`, 파일 삭제·
+  소유권 밖 변경·frozen 경로 변경 0건, RED·구현·문서·merge commit의 `origin/dev`
+  ancestor exit 0. J 배포 실행은 0건이다.
+
+## 2026-07-13 17:15 KST — [백엔드] kubectl server dry-run adapter 직접 테스트 착륙
+
+- lane `codex/kubernetes-dry-run-tests`, test-only feature HEAD
+  `ccdcc1a08aef4d1aa30929dea717f455ea0a447e`, canonical no-ff merge
+  `01dc635583f45d058d0d324d70b0c02a42d66889`.
+- 소스 변경 0건으로 임시 manifest 내용·정리, SSA apply→live get argv, custom binary·
+  field manager·timeout, apply 조기 실패, get 실패의 predicted 보존을 검증했다.
+- kubectl 부재·timeout·stderr/stdout·invalid JSON과 import-time timeout binding까지
+  직접 테스트 8개로 고정했다.
+- 전체 게이트는 Ruff lint/format PASS, import-linter 8 kept/0 broken,
+  pytest `1942 passed, 3 skipped`; manifest management 69 / target 20.
+- 4조건: merge-tree clean/tree `68cb35ca8dc94ec15299e23824edd86d85e5ead4`, 파일 삭제·
+  소유권 밖 변경·frozen 경로 변경 0건, test·merge commit의 `origin/dev` ancestor exit 0.
+  J 배포 실행은 0건이다.

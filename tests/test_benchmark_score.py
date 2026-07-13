@@ -12,6 +12,17 @@ from conftest import ROOT
 
 SCORER = ROOT / "benchmark" / "score.py"
 CONTRACTS = ROOT / "benchmark" / "candidate-contracts.json"
+SCHEDULING_SELECTOR_SCENARIO = (
+    ROOT
+    / "benchmark"
+    / "scenarios"
+    / "scheduling"
+    / "scheduling-node-selector-mismatch"
+    / "scenario.json"
+)
+PROBE_TIMEOUT_SCENARIO = (
+    ROOT / "benchmark" / "scenarios" / "probe" / "probe-timeout-too-short" / "scenario.json"
+)
 FIRST_CANDIDATE_BATCH = (
     "metrics_server_unavailable",
     "missing_resource_requests",
@@ -60,6 +71,63 @@ FOURTH_CANDIDATE_BATCH = (
     "kubelet_unavailable",
     "container_runtime_unavailable",
 )
+FIFTH_CANDIDATE_BATCH = (
+    "node_network_unavailable",
+    "pod_evicted_memory_pressure",
+    "pod_evicted_disk_pressure",
+    "pod_evicted_pid_pressure",
+    "policy_violation",
+    "invalid_manifest",
+    "image_vulnerability_block",
+    "service_account_permission_denied",
+    "certificate_expired_or_invalid",
+    "probe_path_wrong",
+)
+SIXTH_CANDIDATE_BATCH = (
+    "probe_port_wrong",
+    "timeout_too_short",
+    "startup_window_too_short",
+    "app_real_health_failure",
+    "selector_label_mismatch",
+    "pods_not_ready",
+    "rollout_unavailable",
+    "wrong_service_port",
+    "endpoint_slice_delay",
+    "memory_limit_too_low",
+)
+SEVENTH_CANDIDATE_BATCH = (
+    "memory_leak",
+    "traffic_spike",
+    "node_memory_pressure",
+    "bad_release_memory_regression",
+    "cpu_limit_or_throttling",
+    "node_disk_pressure",
+    "ephemeral_storage_exhausted",
+    "process_id_exhaustion",
+    "missing_configmap_reference",
+    "config_key_missing",
+)
+EIGHTH_CANDIDATE_BATCH = (
+    "invalid_env_value",
+    "config_volume_mount_failed",
+    "insufficient_cpu",
+    "insufficient_memory",
+    "node_affinity_or_taint_mismatch",
+    "node_selector_mismatch",
+    "untolerated_taint",
+    "pvc_pending",
+    "missing_secret_reference",
+    "secret_key_missing",
+)
+TERMINAL_CANDIDATE_BATCH = (
+    "external_secret_sync_failed",
+    "pvc_not_bound",
+    "csi_driver_unavailable",
+    "volume_attach_timeout",
+    "storage_class_mismatch",
+    "volume_multi_attach_conflict",
+    "volume_attachment_orphaned",
+)
 
 
 def _score(*args: str) -> subprocess.CompletedProcess[str]:
@@ -103,12 +171,14 @@ def _live_candidate_index() -> list[dict[str, object]]:
     return candidates
 
 
-@pytest.mark.parametrize("category", ("scheduling", "pvc"))
-def test_public_benchmark_scores_two_scenarios_per_new_category(category: str) -> None:
+@pytest.mark.parametrize(("category", "count"), (("scheduling", 3), ("pvc", 2)))
+def test_public_benchmark_scores_completed_scenarios_per_new_category(
+    category: str, count: int
+) -> None:
     result = _score("--category", category)
 
     assert result.returncode == 0, result.stdout + result.stderr
-    assert f"RESULT PASS (2 scenarios; {category}=2)" in result.stdout
+    assert f"RESULT PASS ({count} scenarios; {category}={count})" in result.stdout
 
 
 def test_public_benchmark_full_suite_includes_scheduling_and_pvc() -> None:
@@ -116,14 +186,75 @@ def test_public_benchmark_full_suite_includes_scheduling_and_pvc() -> None:
 
     assert result.returncode == 0, result.stdout + result.stderr
     assert "pvc=2" in result.stdout
-    assert "scheduling=2" in result.stdout
+    assert "probe=3" in result.stdout
+    assert "scheduling=3" in result.stdout
+
+
+def test_public_benchmark_scores_node_selector_mismatch_without_cluster_wide_removal() -> None:
+    result = _score("--category", "scheduling")
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "RESULT PASS (3 scenarios; scheduling=3)" in result.stdout
+
+    scenario = json.loads(SCHEDULING_SELECTOR_SCENARIO.read_text(encoding="utf-8"))
+    assert scenario["expected_root_cause"] == "node_selector_mismatch"
+    assert scenario["required_evidence"] == [
+        "kubernetes:cluster_resource_state",
+        "metadata:current_workload_snapshots",
+    ]
+    assert scenario["allowed_remediations"] == [
+        {
+            "action_type": "manual_analysis",
+            "blast_radius": "unknown",
+            "route": "approval_required",
+            "auto_apply": False,
+        }
+    ]
+    assert scenario["forbidden_remediations"] == [
+        {
+            "action_type": "remove_all_workload_node_selectors",
+            "blast_radius": "cluster",
+            "reason": "단일 workload의 nodeSelector 불일치로 클러스터 모든 workload의 nodeSelector를 제거할 수 없습니다.",
+        }
+    ]
+
+
+def test_public_benchmark_scores_probe_timeout_without_fleet_wide_increase() -> None:
+    result = _score("--category", "probe")
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "RESULT PASS (3 scenarios; probe=3)" in result.stdout
+
+    scenario = json.loads(PROBE_TIMEOUT_SCENARIO.read_text(encoding="utf-8"))
+    assert scenario["expected_root_cause"] == "timeout_too_short"
+    assert scenario["required_evidence"] == [
+        "kubernetes:cluster_resource_state",
+        "metrics:telemetry_metrics",
+        "logs:related_logs",
+        "metadata:current_workload_snapshots",
+    ]
+    assert scenario["allowed_remediations"] == [
+        {
+            "action_type": "probe_fix",
+            "blast_radius": "target_workload",
+            "route": "safe_pr",
+            "auto_apply": False,
+        }
+    ]
+    assert scenario["forbidden_remediations"] == [
+        {
+            "action_type": "increase_all_probe_timeouts",
+            "blast_radius": "fleet",
+            "reason": "단일 workload의 짧은 timeout으로 fleet 전체 probe timeout을 늘릴 수 없습니다.",
+        }
+    ]
 
 
 def test_first_candidate_contract_batch_is_machine_verified_in_catalog_order() -> None:
     result = _score("--candidate-contracts")
 
     assert result.returncode == 0, result.stdout + result.stderr
-    assert "RESULT PASS (40 candidate contracts; ordinals=1..40)" in result.stdout
+    assert "RESULT PASS (87 candidate contracts; ordinals=1..87)" in result.stdout
 
     document = json.loads(CONTRACTS.read_text(encoding="utf-8"))
     assert tuple(item["candidate_id"] for item in document["contracts"][:10]) == (
@@ -145,7 +276,7 @@ def test_second_candidate_contract_batch_is_machine_verified_in_catalog_order() 
     result = _score("--candidate-contracts")
 
     assert result.returncode == 0, result.stdout + result.stderr
-    assert "RESULT PASS (40 candidate contracts; ordinals=1..40)" in result.stdout
+    assert "RESULT PASS (87 candidate contracts; ordinals=1..87)" in result.stdout
 
     document = json.loads(CONTRACTS.read_text(encoding="utf-8"))
     second_batch = document["contracts"][10:20]
@@ -168,7 +299,7 @@ def test_third_candidate_contract_batch_is_machine_verified_in_catalog_order() -
     result = _score("--candidate-contracts")
 
     assert result.returncode == 0, result.stdout + result.stderr
-    assert "RESULT PASS (40 candidate contracts; ordinals=1..40)" in result.stdout
+    assert "RESULT PASS (87 candidate contracts; ordinals=1..87)" in result.stdout
 
     document = json.loads(CONTRACTS.read_text(encoding="utf-8"))
     third_batch = document["contracts"][20:30]
@@ -199,11 +330,10 @@ def test_fourth_candidate_contract_batch_is_machine_verified_in_catalog_order() 
     result = _score("--candidate-contracts")
 
     assert result.returncode == 0, result.stdout + result.stderr
-    assert "RESULT PASS (40 candidate contracts; ordinals=1..40)" in result.stdout
+    assert "RESULT PASS (87 candidate contracts; ordinals=1..87)" in result.stdout
 
     document = json.loads(CONTRACTS.read_text(encoding="utf-8"))
     fourth_batch = document["contracts"][30:40]
-    assert document["next_ordinal"] == 41
     assert tuple(item["candidate_id"] for item in fourth_batch) == FOURTH_CANDIDATE_BATCH
     assert {item["candidate_id"]: item["patch_capabilities"] for item in fourth_batch} == {
         **{candidate_id: [] for candidate_id in FOURTH_CANDIDATE_BATCH},
@@ -233,11 +363,172 @@ def test_fourth_candidate_contract_batch_is_machine_verified_in_catalog_order() 
     assert all(item["benchmark_fixtures"] == [] for item in fourth_batch)
 
 
+def test_fifth_candidate_contract_batch_is_machine_verified_in_catalog_order() -> None:
+    result = _score("--candidate-contracts")
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "RESULT PASS (87 candidate contracts; ordinals=1..87)" in result.stdout
+
+    document = json.loads(CONTRACTS.read_text(encoding="utf-8"))
+    fifth_batch = document["contracts"][40:50]
+    assert tuple(item["candidate_id"] for item in fifth_batch) == FIFTH_CANDIDATE_BATCH
+    assert {item["candidate_id"]: item["patch_capabilities"] for item in fifth_batch} == {
+        **{candidate_id: [] for candidate_id in FIFTH_CANDIDATE_BATCH},
+        "probe_path_wrong": ["safe_pr"],
+    }
+    assert {
+        item["candidate_id"]: [action["action_type"] for action in item["allowed_remediations"]]
+        for item in fifth_batch
+    } == {
+        **{candidate_id: ["manual_analysis"] for candidate_id in FIFTH_CANDIDATE_BATCH},
+        "probe_path_wrong": ["probe_fix", "manual_analysis"],
+    }
+    assert {item["candidate_id"]: item["benchmark_fixtures"] for item in fifth_batch} == {
+        **{candidate_id: [] for candidate_id in FIFTH_CANDIDATE_BATCH},
+        "probe_path_wrong": ["benchmark/scenarios/probe/probe-wrong-path/scenario.json"],
+    }
+
+
+def test_sixth_candidate_contract_batch_is_machine_verified_in_catalog_order() -> None:
+    result = _score("--candidate-contracts")
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "RESULT PASS (87 candidate contracts; ordinals=1..87)" in result.stdout
+
+    document = json.loads(CONTRACTS.read_text(encoding="utf-8"))
+    sixth_batch = document["contracts"][50:60]
+    assert tuple(item["candidate_id"] for item in sixth_batch) == SIXTH_CANDIDATE_BATCH
+    assert {item["candidate_id"]: item["patch_capabilities"] for item in sixth_batch} == {
+        **{candidate_id: [] for candidate_id in SIXTH_CANDIDATE_BATCH},
+        "probe_port_wrong": ["safe_pr"],
+        "timeout_too_short": ["safe_pr"],
+        "startup_window_too_short": ["safe_pr"],
+        "selector_label_mismatch": ["safe_pr"],
+    }
+    assert {
+        item["candidate_id"]: [action["action_type"] for action in item["allowed_remediations"]]
+        for item in sixth_batch
+    } == {
+        **{candidate_id: ["manual_analysis"] for candidate_id in SIXTH_CANDIDATE_BATCH},
+        "probe_port_wrong": ["probe_fix", "manual_analysis"],
+        "timeout_too_short": ["probe_fix", "manual_analysis"],
+        "startup_window_too_short": ["probe_fix", "manual_analysis"],
+        "selector_label_mismatch": ["selector_fix", "manual_analysis"],
+    }
+    assert {item["candidate_id"]: item["benchmark_fixtures"] for item in sixth_batch} == {
+        **{candidate_id: [] for candidate_id in SIXTH_CANDIDATE_BATCH},
+        "probe_port_wrong": ["benchmark/scenarios/probe/probe-wrong-port/scenario.json"],
+        "timeout_too_short": ["benchmark/scenarios/probe/probe-timeout-too-short/scenario.json"],
+        "selector_label_mismatch": [
+            "benchmark/scenarios/service-selector/service-selector-label-mismatch/scenario.json"
+        ],
+        "pods_not_ready": [
+            "benchmark/scenarios/service-selector/service-selector-pods-not-ready/scenario.json"
+        ],
+    }
+
+
+def test_seventh_candidate_contract_batch_is_machine_verified_in_catalog_order() -> None:
+    result = _score("--candidate-contracts")
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "RESULT PASS (87 candidate contracts; ordinals=1..87)" in result.stdout
+
+    document = json.loads(CONTRACTS.read_text(encoding="utf-8"))
+    seventh_batch = document["contracts"][60:70]
+    assert tuple(item["candidate_id"] for item in seventh_batch) == SEVENTH_CANDIDATE_BATCH
+    assert all(item["patch_capabilities"] == [] for item in seventh_batch)
+    assert all(item["benchmark_fixtures"] == [] for item in seventh_batch)
+    assert all(
+        [action["action_type"] for action in item["allowed_remediations"]] == ["manual_analysis"]
+        for item in seventh_batch
+    )
+    forbidden_actions = [item["forbidden_remediations"][0]["action_type"] for item in seventh_batch]
+    assert len(forbidden_actions) == len(set(forbidden_actions)) == 10
+    assert all(
+        item["forbidden_remediations"][0]["blast_radius"] in {"cluster", "fleet"}
+        for item in seventh_batch
+    )
+
+
+def test_eighth_candidate_contract_batch_is_machine_verified_in_catalog_order() -> None:
+    result = _score("--candidate-contracts")
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "RESULT PASS (87 candidate contracts; ordinals=1..87)" in result.stdout
+
+    document = json.loads(CONTRACTS.read_text(encoding="utf-8"))
+    eighth_batch = document["contracts"][70:80]
+    assert tuple(item["candidate_id"] for item in eighth_batch) == EIGHTH_CANDIDATE_BATCH
+    assert all(item["patch_capabilities"] == [] for item in eighth_batch)
+    assert {
+        item["candidate_id"]: [action["action_type"] for action in item["allowed_remediations"]]
+        for item in eighth_batch
+    } == {
+        **{candidate_id: ["manual_analysis"] for candidate_id in EIGHTH_CANDIDATE_BATCH},
+        "insufficient_cpu": ["resource_request_tuning", "manual_analysis"],
+        "insufficient_memory": ["resource_request_tuning", "manual_analysis"],
+        "node_affinity_or_taint_mismatch": [
+            "scheduling_constraint_fix",
+            "manual_analysis",
+        ],
+        "pvc_pending": ["pvc_binding_fix", "manual_analysis"],
+    }
+    assert {item["candidate_id"]: item["benchmark_fixtures"] for item in eighth_batch} == {
+        **{candidate_id: [] for candidate_id in EIGHTH_CANDIDATE_BATCH},
+        "insufficient_cpu": [
+            "benchmark/scenarios/scheduling/scheduling-insufficient-cpu/scenario.json"
+        ],
+        "node_selector_mismatch": [
+            "benchmark/scenarios/scheduling/scheduling-node-selector-mismatch/scenario.json"
+        ],
+        "node_affinity_or_taint_mismatch": [
+            "benchmark/scenarios/scheduling/scheduling-affinity-mismatch/scenario.json"
+        ],
+        "pvc_pending": ["benchmark/scenarios/pvc/pvc-pending-claim/scenario.json"],
+    }
+    forbidden_actions = [item["forbidden_remediations"][0]["action_type"] for item in eighth_batch]
+    assert len(forbidden_actions) == len(set(forbidden_actions)) == 10
+    assert all(
+        item["forbidden_remediations"][0]["blast_radius"] in {"cluster", "fleet"}
+        for item in eighth_batch
+    )
+
+
+def test_terminal_candidate_contract_batch_is_machine_verified_in_catalog_order() -> None:
+    result = _score("--candidate-contracts")
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "RESULT PASS (87 candidate contracts; ordinals=1..87)" in result.stdout
+
+    document = json.loads(CONTRACTS.read_text(encoding="utf-8"))
+    terminal_batch = document["contracts"][80:87]
+    assert document["next_ordinal"] is None
+    assert tuple(item["candidate_id"] for item in terminal_batch) == TERMINAL_CANDIDATE_BATCH
+    assert all(item["patch_capabilities"] == [] for item in terminal_batch)
+    assert all(
+        [action["action_type"] for action in item["allowed_remediations"]] == ["manual_analysis"]
+        for item in terminal_batch
+    )
+    assert {item["candidate_id"]: item["benchmark_fixtures"] for item in terminal_batch} == {
+        **{candidate_id: [] for candidate_id in TERMINAL_CANDIDATE_BATCH},
+        "pvc_not_bound": ["benchmark/scenarios/pvc/pvc-mount-unbound/scenario.json"],
+    }
+    forbidden_actions = [
+        item["forbidden_remediations"][0]["action_type"] for item in terminal_batch
+    ]
+    assert len(forbidden_actions) == len(set(forbidden_actions)) == 7
+    assert all(
+        item["forbidden_remediations"][0]["blast_radius"] in {"cluster", "fleet"}
+        for item in terminal_batch
+    )
+
+
 def test_public_candidate_contract_scorer_needs_no_site_packages() -> None:
     result = _score_without_site_packages("--candidate-contracts")
 
     assert result.returncode == 0, result.stdout + result.stderr
-    assert "RESULT PASS (40 candidate contracts; ordinals=1..40)" in result.stdout
+    assert "RESULT PASS (87 candidate contracts; ordinals=1..87)" in result.stdout
 
 
 def _contract_validation_errors(document: dict[str, object]) -> list[str]:
@@ -359,7 +650,20 @@ def test_candidate_contract_rejects_fixture_path_traversal() -> None:
     assert any("fixture path must remain under benchmark/scenarios" in error for error in errors)
 
 
-@pytest.mark.parametrize(("contract_index", "batch_number"), ((3, 1), (10, 2), (20, 3), (30, 4)))
+@pytest.mark.parametrize(
+    ("contract_index", "batch_number"),
+    (
+        (3, 1),
+        (10, 2),
+        (20, 3),
+        (30, 4),
+        (40, 5),
+        (50, 6),
+        (60, 7),
+        (70, 8),
+        (80, 9),
+    ),
+)
 def test_candidate_contract_rejects_completed_batch_annotation_drift(
     contract_index: int, batch_number: int
 ) -> None:
@@ -391,10 +695,19 @@ def test_candidate_contract_batch_commitments_reject_unlocked_complete_batch(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     scorer = runpy.run_path(str(SCORER))
-    contracts = [{"ordinal": ordinal} for ordinal in range(1, 41)]
+    contracts = [{"ordinal": ordinal} for ordinal in range(1, 88)]
     locks = {
         batch_range: scorer["candidate_contract_batch_digest"](contracts, *batch_range)
-        for batch_range in ((1, 10), (11, 20), (21, 30))
+        for batch_range in (
+            (1, 10),
+            (11, 20),
+            (21, 30),
+            (31, 40),
+            (41, 50),
+            (51, 60),
+            (61, 70),
+            (71, 80),
+        )
     }
     monkeypatch.setitem(
         scorer["validate_candidate_batch_commitments"].__globals__,
@@ -438,7 +751,17 @@ def test_candidate_contract_rejects_non_string_capability_without_crashing() -> 
 
 @pytest.mark.parametrize(
     ("contract_count", "next_ordinal"),
-    ((10, 11), (20, 21), (30, 31), (40, 41), (80, 81), (87, None)),
+    (
+        (10, 11),
+        (20, 21),
+        (30, 31),
+        (40, 41),
+        (50, 51),
+        (60, 61),
+        (70, 71),
+        (80, 81),
+        (87, None),
+    ),
 )
 def test_candidate_contract_progress_accepts_complete_batches_and_terminal_catalog(
     contract_count: int, next_ordinal: int | None
