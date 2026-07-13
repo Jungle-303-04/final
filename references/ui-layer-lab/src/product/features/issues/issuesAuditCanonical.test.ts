@@ -22,7 +22,7 @@ const RESPONSE = {
   ],
   limit: 2,
   has_more: true,
-  next_cursor: "opaque-cursor-2",
+  next_cursor: "  opaque-cursor/+==  ",
 };
 
 describe("Issues audit timeline canonical mapping", () => {
@@ -49,7 +49,7 @@ describe("Issues audit timeline canonical mapping", () => {
       ],
       limit: 2,
       hasMore: true,
-      nextCursor: "opaque-cursor-2",
+      nextCursor: "  opaque-cursor/+==  ",
     });
   });
 
@@ -67,5 +67,24 @@ describe("Issues audit timeline canonical mapping", () => {
       ...RESPONSE,
       next_cursor: null,
     })).toThrow(IssuesCanonicalError);
+  });
+
+  it.each([true, false])(
+    "rejects a blank next cursor when has_more is %s",
+    (hasMore) => {
+      expect(() => toIssueAuditTimelinePage("correlation-1", {
+        ...RESPONSE,
+        has_more: hasMore,
+        next_cursor: "  ",
+      })).toThrow(IssuesCanonicalError);
+    },
+  );
+
+  it("uses null as the only absent cursor representation", () => {
+    expect(toIssueAuditTimelinePage("correlation-1", {
+      ...RESPONSE,
+      has_more: false,
+      next_cursor: null,
+    }).nextCursor).toBeNull();
   });
 });
