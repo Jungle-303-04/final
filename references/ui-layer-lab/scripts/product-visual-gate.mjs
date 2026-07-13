@@ -247,6 +247,14 @@ const localeSmokeCopy = {
       navigation: "Primary navigation",
       route: "Resources",
     },
+    issues: {
+      detail: "Issue details",
+      navigation: "Primary navigation",
+      payload: "Payload summary",
+      pullRequest: "Open pull request",
+      recentChanges: "Recent changes",
+      route: "Issues",
+    },
   },
   ko: {
     home: {
@@ -258,6 +266,14 @@ const localeSmokeCopy = {
       heading: "리소스",
       navigation: "주요 메뉴",
       route: "리소스",
+    },
+    issues: {
+      detail: "이슈 상세",
+      navigation: "주요 메뉴",
+      payload: "페이로드 요약",
+      pullRequest: "Pull request 열기",
+      recentChanges: "최근 변경",
+      route: "인시던트",
     },
   },
 };
@@ -785,6 +801,22 @@ const visualScenarios = [
     theme: "light",
     colorScheme: "light",
     forcedColors: "active",
+  },
+  {
+    id: "issues-locale-smoke-ko",
+    locale: "ko",
+    url: productIssuesUrl,
+    authSession: "authenticated",
+    issuesScenario: true,
+    issuesLocaleSmoke: true,
+    issuesExpandAuditPayload: true,
+    accessibleTarget: "이슈",
+    expectedApiRequestCounts: { [issuesListApiPath]: 2 },
+    requiredSelectors: issuesAuditPayloadSelectors,
+    viewport: { width: 1440, height: 1100 },
+    theme: "light",
+    colorScheme: "light",
+    forcedColors: "none",
   },
   {
     id: "home-cluster-forbidden-light",
@@ -2642,12 +2674,16 @@ async function prepareLongResourceDetailTab(page, scenario, dialog) {
 }
 
 async function prepareProductIssuesScenario(page, scenario) {
+  const copy = localeSmokeCopy[scenario.locale]?.issues;
+  if (!copy) {
+    throw new Error(`${scenario.id}: Issues copy is missing for ${scenario.locale}`);
+  }
   await page.waitForFunction(() => document.title === "Opsia");
   await assertGlobalClusterScopePicker(page, scenario.id, scenario.locale);
 
   const listRegion = page.getByRole("region", { name: scenario.accessibleTarget });
   await listRegion.waitFor();
-  const issuesLink = page.getByRole("link", { name: "Issues", exact: true });
+  const issuesLink = page.getByRole("link", { name: copy.route, exact: true });
   if (scenario.viewport.width >= 768) {
     if (await issuesLink.getAttribute("aria-current") !== "page") {
       throw new Error(`${scenario.id}: desktop Issues link must be current`);
@@ -2666,7 +2702,7 @@ async function prepareProductIssuesScenario(page, scenario) {
   }
   await firstIssue.click();
 
-  const detailRegion = page.getByRole("region", { name: "Issue details" });
+  const detailRegion = page.getByRole("region", { name: copy.detail });
   await detailRegion.waitFor();
   const controlledId = await firstIssue.getAttribute("aria-controls");
   if (!controlledId
@@ -2683,7 +2719,7 @@ async function prepareProductIssuesScenario(page, scenario) {
   await page.getByText("Kubernetes evidence collected", { exact: true }).waitFor();
   await page.getByText("Increase memory limit after approval", { exact: true }).waitFor();
   await page.getByText("Increase memory limit", { exact: true }).waitFor();
-  const recentChangesRegion = page.getByRole("region", { name: "Recent changes" });
+  const recentChangesRegion = page.getByRole("region", { name: copy.recentChanges });
   await recentChangesRegion.waitFor();
   await recentChangesRegion.locator("time[datetime='2026-07-13T09:55:00Z']").waitFor();
   const recentChangeItem = recentChangesRegion.getByRole("listitem");
@@ -2703,7 +2739,7 @@ async function prepareProductIssuesScenario(page, scenario) {
     }
   }
   const pullRequest = recentChangesRegion.getByRole("link", {
-    name: "Open pull request",
+    name: copy.pullRequest,
     exact: true,
   });
   await pullRequest.waitFor();
@@ -2718,7 +2754,7 @@ async function prepareProductIssuesScenario(page, scenario) {
 
   if (scenario.issuesExpandAuditPayload) {
     const trigger = detailRegion.getByRole("button", {
-      name: "Payload summary",
+      name: copy.payload,
       exact: true,
     });
     await trigger.waitFor();
@@ -2762,6 +2798,36 @@ async function prepareProductIssuesScenario(page, scenario) {
     || currentUrl.searchParams.size !== 1
     || currentUrl.searchParams.get("cluster") !== homeClusterId) {
     throw new Error(`${scenario.id}: Issues route URL is not exact: ${currentUrl.href}`);
+  }
+
+  if (scenario.issuesLocaleSmoke) {
+    await assertPageLocaleState(page, scenario, scenario.locale, scenario.locale, "initial");
+    await assertLocalizedRouteCurrent(page, "issues", scenario.locale, scenario.id);
+    for (const localizedText of [
+      "감사 타임라인",
+      "근거",
+      "RCA 보고서",
+      "복구 계획",
+      "최근 변경",
+    ]) {
+      await page.getByText(localizedText, { exact: true }).first().waitFor();
+    }
+    const immutableText = await page.locator("body").innerText();
+    for (const sourceText of [
+      "Opsia",
+      homeClusterId,
+      issuesSymptom,
+      issuesAuditSubject,
+      "Deployment",
+      "checkout-api",
+      "incident_id",
+      issuesIncidentId,
+      "warning",
+    ]) {
+      if (!immutableText.includes(sourceText)) {
+        throw new Error(`${scenario.id}: locale smoke changed or omitted source text ${sourceText}`);
+      }
+    }
   }
 }
 
