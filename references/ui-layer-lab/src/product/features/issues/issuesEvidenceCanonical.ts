@@ -159,7 +159,10 @@ function validatePage(
   if (!Number.isInteger(limit) || limit < 1 || !Number.isInteger(offset) || offset < 0) {
     throw new IssuesCanonicalError("Invalid Issues page metadata");
   }
-  if (hasMore && optional(nextCursor) === null) {
+  if (nextCursor !== null) {
+    requireOpaqueResponseValue(nextCursor, "Issues next_cursor");
+  }
+  if (hasMore && nextCursor === null) {
     throw new IssuesCanonicalError("Issues page has_more requires next_cursor");
   }
 }
@@ -187,6 +190,10 @@ function optional(value: string | null): string | null {
   if (value === null) return null;
   const normalized = value.trim();
   return normalized || null;
+}
+
+function requireOpaqueResponseValue(value: string, field: string): void {
+  if (value.trim() === "") throw new IssuesCanonicalError(`${field} is required`);
 }
 
 function finiteOrNull(value: number | null, field: string): number | null {

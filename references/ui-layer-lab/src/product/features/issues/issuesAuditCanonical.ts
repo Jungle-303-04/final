@@ -54,13 +54,13 @@ function validatePage(response: IssuesEndpointAuditTimelineResponse): void {
   ) {
     throw new IssuesCanonicalError("Invalid audit timeline page limit");
   }
-  if (response.has_more) {
-    if (response.next_cursor === null) {
-      throw new IssuesCanonicalError(
-        "Audit timeline has_more requires next_cursor",
-      );
-    }
+  if (response.next_cursor !== null) {
     requireOpaqueResponseValue(response.next_cursor, "audit next_cursor");
+  }
+  if (response.has_more && response.next_cursor === null) {
+    throw new IssuesCanonicalError(
+      "Audit timeline has_more requires next_cursor",
+    );
   }
 }
 
