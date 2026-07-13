@@ -7,7 +7,7 @@ governing: docs/f-coordination-plan.md · docs/backend-f-workqueue.md
 
 # 백엔드 F 진행 현황
 
-현재 상태: **앵커 21건**
+현재 상태: **앵커 22건**
 
 ## 역사적 Delta-green baseline (BQ-001~003)
 
@@ -519,3 +519,31 @@ Bundle route는 200을 반환한다.
   `origin/dev` ancestor exit 0.
 
 계약 완성: OpsiaBench candidate contracts 11..20 + batch digest coverage (b2b6baeb036fc251d7e9ca1d8dd204dd928878db) [green]
+
+### 보조 대기열 S6 — rule candidate 21~30 안전 계약
+
+- 상태: landed
+- 담당 lane: `codex/candidate-contract-batch-three`
+- RED: `3d39b3cf67579ecd0eeb823d29d9e1dd1a6e6c87`
+- 구현·데이터: `9df3551d8dfdb9b18bb15c7d0c4364d83f2aad4f`
+- 문서와 feature HEAD: `8f0ee335f1ba947d077c3b16b17267afde123de3`
+- canonical no-ff merge: `efdde0a31fb1986c3d30083bf3dc895fd256aafd`
+- 범위: loader 순서 21~30을 추가해 누적 30/87, `next_ordinal=31`이다. 21~24와
+  28~30은 live `manual_analysis` fallback만 허용한다.
+- 실제 실행 경계: 25번 `wrong_image_tag`만 dispatcher Safe PR allowlist와 교차해
+  `safe_pr` capability가 있다. 26번 `missing_image_pull_secret`과 27번
+  `registry_unavailable`은 승인형 recovery만 있고 실행 capability는 비어 있다.
+- fixture는 실존하는 image pull scenario와 exact candidate가 일치하는 25·26번에만 연결했다.
+  빈 capability·fixture를 추측으로 채우지 않는다.
+- append-only 경계: 세 번째 canonical JSON digest
+  `ba7e92d1b4468fa7a96d7e0256dab39509c8bd859114e52fd83967c394f7ac79`를 `(21, 30)`에
+  고정하고 batch 3 변조 회귀를 추가했다.
+- 고유 검증: `python3 -S benchmark/score.py --candidate-contracts` 30/30 PASS,
+  `tests/test_benchmark_score.py` 40 passed. 독립 감사 P0/P1 0건.
+- 전체 게이트: Ruff lint/format PASS, import-linter 8 kept/0 broken,
+  pytest `1911 passed, 3 skipped`; manifest management 69 / target 20.
+- 4조건: merge-tree exit 0/tree `c6d98ec1167434a3a51f3bb0cc77cb5c13350b8e`;
+  파일 삭제·소유권 밖 변경·frozen 경로 변경 0건; RED·feature·문서·merge commit의
+  `origin/dev` ancestor exit 0.
+
+계약 완성: OpsiaBench candidate contracts 21..30 + image pull capability boundary (8f0ee335f1ba947d077c3b16b17267afde123de3) [green]
