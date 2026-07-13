@@ -1585,3 +1585,16 @@ API 완성: runTelemetryQuery (004f23d52)
   `class=dark`, `colorScheme=dark`, `oklch(0.145 0 0)`이었다. 투명 또는 반대 테마 프레임은 0개다.
 - 상세 결과와 10개 스크린샷은 `theme-first-paint-evidence-20260713.md` 및
   `theme-flash-{light,dark}-{1..5}.png`에 기록했다.
+
+## 2026-07-13 APIQ-019 AI conversation 계약 완료
+
+- 코드 커밋 `84dc48a68`은 `origin/woonyong/ui-layer-lab` ancestor exit 0이다.
+- strict list/detail/accepted envelope와 open conversation/message JsonMap을 함께 검증했다.
+  ID·AbortSignal·200 receipt를 고정했고 POST는 transport 실패 시 자동 재전송하지 않는다.
+- targeted 2 files / 20 tests와 full `npm run check`가 통과했다. full gate는 104 files /
+  750 tests, design guard 312 files, shadcn 482 previews, production build PASS다.
+
+API 완성: listAiConversations (84dc48a68)
+API 완성: getAiConversation (84dc48a68)
+API 완성: createAiConversation (84dc48a68)
+API 완성: appendAiMessage (84dc48a68)

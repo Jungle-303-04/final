@@ -949,3 +949,12 @@ full `npm run check` PASS(103 files / 745 tests, design 311 files, shadcn 482 pr
 [2026-07-13 12:12 KST] [프론트-D/API] APIQ-019 in_progress — AI conversation 4함수의
 strict envelope·open JsonMap·AbortSignal·possibly-sent POST 단일 호출 계약을 재claim했다.
 코드 커밋과 exact `API 완성:` 앵커 전 제품 화면 소비는 0으로 유지한다.
+
+## 2026-07-13 12:17 KST — [프론트-D/API] APIQ-019 완료 증거
+
+- claim 조율 커밋 `151d1bc4d`와 코드 커밋 `84dc48a68`을 분리해 push했다.
+- exact anchors: `listAiConversations`, `getAiConversation`, `createAiConversation`,
+  `appendAiMessage` → `84dc48a68`; canonical ancestor exit 0.
+- targeted 2 files / 20 tests PASS. `npm run check` PASS: 104 files / 750 tests,
+  design guard 312 files, shadcn 482 previews, Vite production build.
+- 화면·adapter 신규 소비는 이 API 단위에 포함하지 않았다.
