@@ -1,0 +1,31 @@
+/* React Flow shared motion hooks. Durations mirror src/ui/motion.ts via theme variables. */
+@keyframes flow-dash { to { stroke-dashoffset: -20; } }
+@keyframes flow-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.55; } }
+
+.flow-node--pulse { animation: flow-pulse calc(var(--ui-duration-slow) * 4) var(--ease-standard) infinite; }
+
+.flow-edge-path {
+  stroke-width: 1.5;
+  stroke: var(--ui-border);
+}
+
+.flow-edge-path--active {
+  stroke-width: 2;
+  stroke-dasharray: 6 4;
+  animation: flow-dash calc(var(--ui-duration-slow) * 2) linear infinite;
+}
+
+.flow-edge-path--success { stroke: var(--ui-success); }
+.flow-edge-path--warning { stroke: var(--ui-warning); }
+.flow-edge-path--danger { stroke: var(--ui-danger); }
+.flow-edge-path--info { stroke: var(--ui-info); }
+.flow-edge-path--neutral { stroke: var(--ui-border); }
+
+.react-flow__node { transition: transform var(--ui-duration-slow) var(--ease-decelerate); }
+.react-flow__node.dragging { transition: none; }
+
+@media (prefers-reduced-motion: reduce) {
+  .flow-node--pulse { animation: none; }
+  .react-flow__edge-path { animation: none !important; }
+  .react-flow__node { transition: none; }
+}
