@@ -2,6 +2,7 @@ import {
   useCallback,
   useEffect,
   useEffectEvent,
+  useMemo,
   useState,
   type Dispatch,
   type SetStateAction,
@@ -45,9 +46,8 @@ interface ScopedPage<T> {
 
 interface AppendRequest {
   cursor: string;
+  lifetime: object;
   nonce: number;
-  revision: number;
-  scope: string;
 }
 
 export function useResourcesFilterPageChannel<T extends PageableData>(
@@ -68,7 +68,11 @@ export function useResourcesFilterPageChannel<T extends PageableData>(
     state: FILTER_PAGE_IDLE,
   });
   const [appendRequest, setAppendRequest] = useState<AppendRequest | null>(null);
-  const append = appendRequest?.scope === scope && appendRequest.revision === revision
+  const lifetime = useMemo(
+    () => ({ active, owner, revision, scope }),
+    [active, owner, revision, scope],
+  );
+  const append = appendRequest?.lifetime === lifetime
     ? appendRequest
     : null;
   const reportUnauthorizedEvent = useEffectEvent(reportUnauthorized);
@@ -123,14 +127,14 @@ export function useResourcesFilterPageChannel<T extends PageableData>(
     : record.scope === scope ? record.state : filterPageLoading<T>();
   const loadMore = useCallback(() => {
     if (scope === null || state.phase !== "ready" || state.data === null ||
-      state.appending || !state.data.hasMore || state.data.nextCursor === null) return;
+      state.refreshing || state.appending || !state.data.hasMore ||
+      state.data.nextCursor === null) return;
     setAppendRequest((current) => ({
       cursor: state.data!.nextCursor!,
+      lifetime,
       nonce: (current?.nonce ?? 0) + 1,
-      revision,
-      scope,
     }));
-  }, [revision, scope, state]);
+  }, [lifetime, scope, state]);
   return { loadMore, state };
 }
 
