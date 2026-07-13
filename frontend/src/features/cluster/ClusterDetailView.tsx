@@ -683,7 +683,8 @@ function ClusterUnregisterModal({
   pathFor: (to: string) => string;
 }) {
   const [typed, setTyped] = useState('');
-  const [removeCommand, setRemoveCommand] = useState('');
+  const [completed, setCompleted] = useState(false);
+  const [removeCommand, setRemoveCommand] = useState<string | null>(null);
   const [blocked, setBlocked] = useState<ClusterDeploymentRow[]>([]);
   const expected = clusterName || clusterId;
   const ready = typed === expected;
@@ -691,7 +692,8 @@ function ClusterUnregisterModal({
     onOpenChange(nextOpen);
     if (!nextOpen) {
       setTyped('');
-      setRemoveCommand('');
+      setCompleted(false);
+      setRemoveCommand(null);
       setBlocked([]);
     }
   };
@@ -702,10 +704,22 @@ function ClusterUnregisterModal({
       description="클러스터 등록만 해제합니다. 이력은 보존되며 에이전트는 클러스터에서 직접 제거해야 합니다."
       onOpenChange={reset}
     >
-      {removeCommand ? (
+      {completed ? (
         <div className="grid gap-4">
-          <EmptyState title="등록 해제 완료" description="아래 명령을 대상 클러스터에서 실행해 agent 리소스를 제거하세요" />
-          <CodeBlock label="에이전트 제거 명령" code={removeCommand} />
+          <EmptyState
+            title="등록 해제 완료"
+            description={removeCommand
+              ? '아래 명령을 대상 클러스터에서 실행해 agent 리소스를 제거하세요'
+              : '서버가 에이전트 제거 명령을 제공하지 않았습니다'}
+          />
+          {removeCommand ? (
+            <CodeBlock label="에이전트 제거 명령" code={removeCommand} />
+          ) : (
+            <div className="rounded-panel border border-warning/40 bg-warning/10 p-4" role="status">
+              <p className="text-body font-semibold text-warning">에이전트 제거 명령 없음</p>
+              <p className="mt-2 text-body text-text-secondary">대상 클러스터의 에이전트 상태를 직접 확인하세요.</p>
+            </div>
+          )}
           <div className="flex justify-end">
             <Button variant="primary" onClick={onDone}>클러스터 목록</Button>
           </div>
@@ -738,7 +752,8 @@ function ClusterUnregisterModal({
               loading={pending}
               onClick={() => onConfirm({
                 onSuccess: (response) => {
-                  setRemoveCommand(clusterRemoveCommand(response, clusterId));
+                  setCompleted(true);
+                  setRemoveCommand(clusterRemoveCommand(response));
                   setBlocked([]);
                 },
                 onError: (error) => setBlocked(clusterUnregisterBlockedRows(error, deployments)),
@@ -1396,11 +1411,11 @@ function MetricPill({ label, value, tone = 'neutral' }: { label: string; value: 
   );
 }
 
-function statValue(query: { isPending: boolean; isError: boolean }, value: number | undefined) {
+export function statValue(query: { isPending: boolean; isError: boolean }, value: number | undefined) {
   if (value !== undefined) return value.toLocaleString();
   if (query.isPending) return '확인 중';
   if (query.isError) return '오류';
-  return '0';
+  return '—';
 }
 
 function StatusBadge({ status, label }: { status: string; label?: string }) {
@@ -1420,11 +1435,11 @@ function nodeTiles(nodes: NodeHeatmapSummary[]): DrilldownTile[] {
   }));
 }
 
-function podTiles(pods: PodHeatmapSummary[]): DrilldownTile[] {
+export function podTiles(pods: PodHeatmapSummary[]): DrilldownTile[] {
   return pods.map((pod) => ({
     id: pod.id,
     label: pod.name,
-    size: pod.cpu_pct ?? pod.mem_pct ?? pod.cpu_mcores ?? pod.mem_mib ?? 1,
+    size: 1,
     health: pod.incident_correlation_id ? 'critical' : pod.health,
     pulse: Boolean(pod.incident_correlation_id),
     badge: pod.restarts > 0 ? <Badge tone="warning">재시작 {pod.restarts}</Badge> : undefined,
@@ -1538,14 +1553,9 @@ function clusterDeploymentRows(apps: Application[], items: Array<{ appId: string
     });
 }
 
-function clusterRemoveCommand(response: ClusterUnregisterResponse | undefined, clusterId: string) {
-  return response?.agent_remove_command || response?.remove_command || [
-    'kubectl delete deploy/cluster-agent -n target --ignore-not-found',
-    'kubectl delete serviceaccount/cluster-agent -n target --ignore-not-found',
-    'kubectl delete clusterrolebinding cluster-agent-read cluster-agent-self-manage cluster-agent-target-manage cluster-agent-sandbox-write --ignore-not-found',
-    'kubectl delete clusterrole cluster-agent-read cluster-agent-self-manage cluster-agent-target-manage cluster-agent-sandbox-write --ignore-not-found',
-    `# ${clusterId} 등록 이력은 콘솔에 보존됩니다`,
-  ].join('\n');
+export function clusterRemoveCommand(response: ClusterUnregisterResponse | undefined): string | null {
+  const command = response?.agent_remove_command?.trim() || response?.remove_command?.trim();
+  return command || null;
 }
 
 function clusterUnregisterBlockedRows(error: unknown, fallback: ClusterDeploymentRow[]) {
