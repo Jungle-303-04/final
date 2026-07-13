@@ -186,11 +186,29 @@ describe("product design guard i18n JSX boundary", () => {
 
   it("excludes test files and shared i18n catalog modules", async () => {
     const result = await runGuard({
+      "Feature.test.ts": "export const label = '테스트 전용 문자열';",
       "Feature.test.tsx": "export const Example = () => <p>테스트 전용 문장</p>;",
+      "shared/i18n/catalog.ts": "export const korean = '카탈로그 문자열';",
       "shared/i18n/catalog.tsx": "export const Korean = <span>카탈로그 문장</span>;",
     }, { enforceI18nLiterals: true });
 
     expect(result).toMatchObject({ exitCode: 0 });
+  });
+
+  it("rejects Korean string literals outside tests and shared i18n", async () => {
+    const result = await runGuard({
+      "presets.ts": [
+        "export const preset = {",
+        "  label: '노드 CPU 사용률',",
+        "  description: `노드별 5분 평균 CPU 사용 비율`,",
+        "};",
+      ].join("\n"),
+    }, { enforceI18nLiterals: true });
+
+    expect(result.exitCode).toBe(1);
+    expect(result.output).toContain("[i18n-korean-literal]");
+    expect(result.output).toContain("노드 CPU 사용률");
+    expect(result.output).toContain("노드별 5분 평균 CPU 사용 비율");
   });
 
   it("allows an explicit opt-out only for migration tooling", async () => {

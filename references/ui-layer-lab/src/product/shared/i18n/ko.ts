@@ -1,5 +1,6 @@
 import type { MessageKey } from "./types";
 import { issuesKo } from "./catalogs/ko/issues";
+import { metricsKo } from "./catalogs/ko/metrics";
 import { resourcesKo } from "./catalogs/ko/resources";
 
 export const ko = {
@@ -208,4 +209,5 @@ export const ko = {
   "home.status.connected": "연결됨",
   ...resourcesKo,
   ...issuesKo,
+  ...metricsKo,
 } satisfies Record<MessageKey, string>;

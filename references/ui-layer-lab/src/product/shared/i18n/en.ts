@@ -1,5 +1,6 @@
 import type { MessageKey } from "./types";
 import { issuesEn } from "./catalogs/en/issues";
+import { metricsEn } from "./catalogs/en/metrics";
 import { resourcesEn } from "./catalogs/en/resources";
 
 export const en = {
@@ -208,4 +209,5 @@ export const en = {
   "home.status.connected": "Connected",
   ...resourcesEn,
   ...issuesEn,
+  ...metricsEn,
 } satisfies Record<MessageKey, string>;

@@ -1,4 +1,5 @@
 import type { IssuesMessageKey } from "./keys/issues";
+import type { MetricsMessageKey } from "./keys/metrics";
 import type { ResourcesMessageKey } from "./keys/resources";
 
 export type SupportedLocale = "en" | "ko";
@@ -216,6 +217,7 @@ type CoreMessageKey =
 export type MessageKey =
   | CoreMessageKey
   | IssuesMessageKey
+  | MetricsMessageKey
   | ResourcesMessageKey;
 
 export type TranslationParameter = string | number | bigint;
