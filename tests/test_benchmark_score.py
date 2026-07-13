@@ -58,6 +58,7 @@ def test_first_candidate_contract_batch_is_machine_verified_in_catalog_order() -
 
     document = json.loads(CONTRACTS.read_text(encoding="utf-8"))
     assert tuple(item["candidate_id"] for item in document["contracts"]) == (FIRST_CANDIDATE_BATCH)
+    assert document["contracts"][5]["patch_capabilities"] == []
 
 
 def _contract_validation_errors(document: dict[str, object]) -> list[str]:
@@ -158,3 +159,31 @@ def test_candidate_contract_rejects_fixture_outside_scenario_tree() -> None:
     errors = _contract_validation_errors(document)
 
     assert any("fixture must exist under benchmark/scenarios" in error for error in errors)
+
+
+@pytest.mark.parametrize(
+    ("contract_count", "next_ordinal"),
+    ((10, 11), (80, 81), (87, None)),
+)
+def test_candidate_contract_progress_accepts_complete_batches_and_terminal_catalog(
+    contract_count: int, next_ordinal: int | None
+) -> None:
+    scorer = runpy.run_path(str(SCORER))
+
+    errors = scorer["validate_candidate_contract_progress"](contract_count, next_ordinal)
+
+    assert errors == []
+
+
+@pytest.mark.parametrize(
+    ("contract_count", "next_ordinal"),
+    ((9, 10), (81, 82), (87, 88), (88, None)),
+)
+def test_candidate_contract_progress_rejects_partial_or_past_terminal_batches(
+    contract_count: int, next_ordinal: int | None
+) -> None:
+    scorer = runpy.run_path(str(SCORER))
+
+    errors = scorer["validate_candidate_contract_progress"](contract_count, next_ordinal)
+
+    assert errors
