@@ -7,7 +7,7 @@ governing: docs/f-coordination-plan.md · docs/backend-f-workqueue.md
 
 # 백엔드 F 진행 현황
 
-현재 상태: **앵커 36건**
+현재 상태: **앵커 37건**
 
 ## 역사적 Delta-green baseline (BQ-001~003)
 
@@ -907,3 +907,34 @@ Bundle route는 200을 반환한다.
   `origin/dev` ancestor exit 0.
 
 계약 완성: TargetClusterAgent same-thread SQLite lifecycle tests (720dd55c0d00ec79b61a19bdd5682a2f553c5a96) [green]
+
+### 보조 대기열 S21 — crashloop 시작 권한 오류 시나리오
+
+- 상태: landed
+- 담당 lane: `codex/benchmark-permission-startup`
+- 초기 RED: `958baa3687fc7be1235233adb5724dbed9444be2`
+- crashloop 수량 RED: `be9a6da0a116aa769eca1b250deb02b9e75c6100`
+- 시나리오·후보·digest: `85dae710b70169159329bf7a2bd5bd8738699e91`
+- 문서와 feature HEAD: `268ca859e7266ec72780b2080904b5d8ba37c247`
+- canonical no-ff merge: `de9e600c7a554b12208b46b022d3ca4b29601ce1`
+- `permission_denied_startup`을 crashloop 네 번째 시나리오로 추가했다. 임시 script의
+  실행 bit를 `0700`에서 `0600`으로 바꿔 실제 POSIX `PermissionError [Errno 13]`과
+  exit code 1을 외부 인프라 없이 재현하고, 정상 경로 exit 0도 검증했다.
+- last exit code 1로 generic `app_startup_failure`도 1.0인 동점 상황을 만든 뒤,
+  catalog에서 먼저 선언된 구체 권한 후보가 최종 선택되는 계약을 고정했다.
+- partial array 파괴를 막기 위해 fault·gold·rollback에 full container 객체를 사용했다.
+  실제 JSON Merge Patch로 fault runnable 보존 → gold=normal → rollback=fault 왕복을
+  검증했다.
+- ordinal 8의 `patch_capabilities=[]`를 보존하고 승인형 `manual_analysis`,
+  `auto_apply=false`만 허용했다. cluster-admin 권한 확대는 금지했다.
+- 첫 batch digest는
+  `316a78f9231269c189367ac9c7084e29abf87d7b0b30fc722d40fcc5b39c0ad1`로 재감사했다.
+- 고유 검증: crashloop 4/4, 전체 scenario 19/19, candidate scorer 87/87,
+  `tests/test_benchmark_score.py` 66 passed. 두 독립 재감사 PASS.
+- 전체 게이트: Ruff lint/format PASS, import-linter 8 kept/0 broken,
+  pytest `1957 passed, 3 skipped`; manifest management 69 / target 20.
+- 4조건: merge-tree exit 0/tree `428481b5a7d0bfcd0dc54c1a604c99fb2ca1ed34`;
+  파일 삭제·소유권 밖 변경·frozen·gateway 계약 변경 0건; feature·merge commit의
+  `origin/dev` ancestor exit 0.
+
+계약 완성: OpsiaBench crashloop permission-denied startup fixture + concrete-candidate tie boundary (268ca859e7266ec72780b2080904b5d8ba37c247) [green]

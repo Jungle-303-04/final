@@ -72,6 +72,7 @@ R-트랙([D-011])은 dev merge `257f91846`으로 landed/closed 되었고, 전용
 | S18 | landed | outbound deliver 직접 테스트 | feature `e43920262`, canonical `784996ce7` | test-only 5개, 성공·실패·취소·mapper 오류 원형 전파, source 0건, 전체 `1948 passed, 3 skipped`, manifest 69/20 |
 | S19 | landed | OpsiaBench crashloop 포트 bind 충돌 시나리오 | feature `ff3b52812`, canonical `0dd8a200f` | crashloop 3개·전체 18개, ordinal 7 manual-only fixture, runnable JSON merge-patch 왕복, 전체 `1951 passed, 3 skipped`, manifest 69/20 |
 | S20 | landed | target-agent SQLite 수명주기 테스트 | feature `720dd55c0`, canonical `13c30723a` | test-only, full-agent factory same-thread close·target-only GC guard·unrelated hook 전달, warning-strict 28 passed, 전체 `1953 passed, 3 skipped`, manifest 69/20 |
+| S21 | landed | OpsiaBench crashloop 시작 권한 오류 시나리오 | feature `268ca859e`, canonical `de9e600c7` | crashloop 4개·전체 19개, ordinal 8 manual-only fixture, 실제 POSIX EACCES·generic 동점 선택·full-container merge-patch 왕복, 전체 `1957 passed, 3 skipped`, manifest 69/20 |
 
 ## claim 규칙
 
