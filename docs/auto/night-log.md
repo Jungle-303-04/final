@@ -2494,3 +2494,21 @@ target preflight·register 네 함수와 strict Zod 계약을 claim했다. 1회�
   design guard 348 files, shadcn source audit 482 previews, Vite build 14,539 modules.
   시각 증거는 `references/ui-layer-lab/output/playwright/product-issues-authenticated-recent-changes-unavailable-mobile-dark.png`이며,
   커밋 push 후 `origin/woonyong/ui-layer-lab` ancestor exit 0을 확인했다.
+
+## 2026-07-13 19:44 KST — [프론트] Resources 관측 요약 테스트·dev 즉시 승격
+
+- RED/GREEN `d6447962f`는 `ResourceFactsPanel`의 Pod 관측 whitelist·Intl 단위·nullable
+  생략, Node Ready 삼상태, 한국어 제품 문구와 Kubernetes 원문 경계를 직접 테스트 3개로
+  고정했다. 최신 `origin/dev@ea6e2b85e`는 `0beb8c02b`에서 즉시 흡수했다.
+- `npm run check` PASS: TypeScript·ESLint, Vitest 121 files / 856 tests,
+  design guard 349 files, shadcn source audit 482 previews, Vite build 14,539 modules.
+  `npm run visual-product` PASS: 46 isolated scenarios, exact API request counts,
+  unexpected feature network/WebSocket 0건. CLS는 Home `0.004188`, Resources
+  `0.004167`, Issues `0.004202`로 모두 0.1 예산 이하다.
+- D-024 4조건: merge-tree clean, 정책상 단일 `night-log` 충돌은 양측 기록을 시간순으로
+  보존, 삭제·소유권 밖 최종 차이·frozen 변경 0건, lab push와 `origin/dev` 승격 후
+  `0beb8c02b` ancestor exit 0을 확인했다. 이 변경은 dev SHA `0beb8c02b`로 배포 대상이다.
+- 회수: clean detached worktree `3d1493f8b`, `03e90ddb6`, `dcd330481`, `ea6e2b85e`
+  4개를 제거하고 prune했다. 삭제 가능한 임시 브랜치는 0개다. 고유 커밋 또는 활성
+  worktree가 있는 codex 브랜치는 보존했고, stash 8개는 반영 여부가 증명되지 않아
+  사유와 함께 유지했다.
