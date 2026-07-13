@@ -240,6 +240,24 @@ test('cluster drilldown uses deterministic namespace color and real service sele
   assert.equal(textMatches('READY', 'NotReady'), true);
 });
 
+test('cluster detail never invents unavailable values, commands, or pod weights', async () => {
+  const { clusterRemoveCommand, podTiles, statValue } = await vite.ssrLoadModule('/src/features/cluster/ClusterDetailView.tsx');
+
+  assert.equal(statValue({ isPending: false, isError: false }, undefined), '—');
+  assert.equal(clusterRemoveCommand(undefined), null);
+  assert.equal(clusterRemoveCommand({ agent_remove_command: '' }), null);
+  assert.equal(
+    clusterRemoveCommand({ agent_remove_command: 'kubectl delete deployment/cluster-agent' }),
+    'kubectl delete deployment/cluster-agent',
+  );
+
+  const tiles = podTiles([
+    { id: 'prod/api-1', name: 'api-1', namespace: 'prod', phase: 'Running', ready: '1/1', owner: 'api', owner_kind: 'Deployment', restarts: 0, cpu_pct: 91, mem_pct: 20, cpu_mcores: 600, mem_mib: 512, health: 'healthy' },
+    { id: 'prod/api-2', name: 'api-2', namespace: 'prod', phase: 'Running', ready: '1/1', owner: 'api', owner_kind: 'Deployment', restarts: 0, cpu_pct: 3, mem_pct: 80, cpu_mcores: 10, mem_mib: 2048, health: 'healthy' },
+  ]);
+  assert.deepEqual(tiles.map((tile) => tile.size), [1, 1]);
+});
+
 test('resource wizards keep exact real discovery selections', async () => {
   const { repositoryManifestCandidateValue } = await vite.ssrLoadModule('/src/features/resources/ConnectRepoWizard.tsx');
   const { clusterImportCandidateMatches, preferredDeployProvider, registrationStatusTone } = await vite.ssrLoadModule('/src/features/resources/RegisterClusterWizard.tsx');
