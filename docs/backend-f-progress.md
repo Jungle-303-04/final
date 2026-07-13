@@ -50,7 +50,7 @@ governing: docs/f-coordination-plan.md · docs/backend-f-workqueue.md
 - 측정 기준: `origin/dev@54a3c707108752383956d68599b2b261ff566767` 기반 S4 lane
 - Ruff lint/format: PASS
 - import-linter: 8 kept, 0 broken
-- pytest: `1900 passed, 3 skipped`
+- pytest: `1901 passed, 3 skipped`
 - manifest: management 69, target 20
 - 판정 규칙: 실패 허용 목록은 공집합이다. 신규 실패가 있으면 착륙하지 않는다.
 
