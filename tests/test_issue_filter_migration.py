@@ -20,6 +20,7 @@ INDEXES = {
     "ix_rca_timeline_issue_severity",
     "ix_rca_timeline_issue_environment",
     "ix_rca_timeline_issue_applications",
+    "ix_rca_timeline_issue_labels",
 }
 LEGACY_INDEXES = {
     "ix_rca_timeline_scope_updated",
@@ -67,6 +68,9 @@ def test_issue_filter_model_indexes_are_additive_and_query_shaped() -> None:
     applications = indexes["ix_rca_timeline_issue_applications"]
     assert tuple(column.name for column in applications.columns) == ("application_ids",)
     assert applications.dialect_options["postgresql"]["using"] == "gin"
+    labels = indexes["ix_rca_timeline_issue_labels"]
+    assert tuple(column.name for column in labels.columns) == ("labels",)
+    assert labels.dialect_options["postgresql"]["using"] == "gin"
 
 
 def test_issue_filter_upgrade_adds_columns_and_concurrent_indexes(monkeypatch) -> None:
@@ -103,6 +107,7 @@ def test_issue_filter_upgrade_adds_columns_and_concurrent_indexes(monkeypatch) -
             "on rca_timeline (workspace_id, environment, updated_at desc, id desc)"
         ),
         "ix_rca_timeline_issue_applications": ("on rca_timeline using gin (application_ids)"),
+        "ix_rca_timeline_issue_labels": ("on rca_timeline using gin (labels)"),
     }
     assert "commit;" in sql
     for name, definition in expected_indexes.items():
