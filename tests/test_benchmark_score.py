@@ -26,6 +26,14 @@ PROBE_TIMEOUT_SCENARIO = (
 PROBE_STARTUP_WINDOW_SCENARIO = (
     ROOT / "benchmark" / "scenarios" / "probe" / "probe-startup-window-too-short" / "scenario.json"
 )
+CRASHLOOP_PORT_BIND_SCENARIO = (
+    ROOT
+    / "benchmark"
+    / "scenarios"
+    / "crashloop"
+    / "crashloop-port-bind-conflict"
+    / "scenario.json"
+)
 FIRST_CANDIDATE_BATCH = (
     "metrics_server_unavailable",
     "missing_resource_requests",
@@ -191,6 +199,48 @@ def test_public_benchmark_full_suite_includes_scheduling_and_pvc() -> None:
     assert "pvc=2" in result.stdout
     assert "probe=4" in result.stdout
     assert "scheduling=3" in result.stdout
+
+
+def test_public_benchmark_scores_port_bind_conflict_as_manual_only() -> None:
+    result = _score("--category", "crashloop")
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "RESULT PASS (3 scenarios; crashloop=3)" in result.stdout
+
+    scenario = json.loads(CRASHLOOP_PORT_BIND_SCENARIO.read_text(encoding="utf-8"))
+    assert scenario["expected_root_cause"] == "app_port_bind_failed"
+    assert scenario["required_evidence"] == [
+        "kubernetes:cluster_resource_state",
+        "logs:related_logs",
+    ]
+    assert scenario["allowed_remediations"] == [
+        {
+            "action_type": "manual_analysis",
+            "blast_radius": "unknown",
+            "route": "approval_required",
+            "auto_apply": False,
+        }
+    ]
+    assert scenario["forbidden_remediations"] == [
+        {
+            "action_type": "open_all_container_ports",
+            "blast_radius": "cluster",
+            "reason": "단일 workload의 포트 bind 실패로 클러스터 전체 container port를 열 수 없습니다.",
+        }
+    ]
+    normal_env = scenario["normal_manifest"]["spec"]["template"]["spec"]["containers"][0]["env"]
+    fault_env = scenario["fault_injection_patch"]["spec"]["template"]["spec"]["containers"][0][
+        "env"
+    ]
+    assert normal_env == [{"name": "BIND_SECOND", "value": "false"}]
+    assert fault_env == [{"name": "BIND_SECOND", "value": "true"}]
+
+    contracts = json.loads(CONTRACTS.read_text(encoding="utf-8"))["contracts"]
+    assert contracts[6]["candidate_id"] == "app_port_bind_failed"
+    assert contracts[6]["patch_capabilities"] == []
+    assert contracts[6]["benchmark_fixtures"] == [
+        "benchmark/scenarios/crashloop/crashloop-port-bind-conflict/scenario.json"
+    ]
 
 
 def test_public_benchmark_scores_node_selector_mismatch_without_cluster_wide_removal() -> None:
