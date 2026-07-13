@@ -33,6 +33,7 @@ rules:
           - "kubernetes:cluster_resource_state"
           - "logs:related_logs"
           - "metadata:current_workload_snapshots"
+          - "metadata:referenced_config_objects"
         checks:
           - "Secret/ConfigMap 참조와 실제 key 존재 여부 확인"
           - "로그에 password authentication failed, unknown host, database not found 확인"

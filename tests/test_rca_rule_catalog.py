@@ -697,16 +697,31 @@ def test_secret_not_found_uses_named_evidence_and_event_signal() -> None:
                 value={"entries": [{"line": "secret not found: api-secret"}]},
                 summary="Secret logs",
             ),
-            EvidenceItem(
-                source="metadata",
-                name="current_workload_snapshots",
-                value={"items": [{"name": "checkout-api"}]},
-                summary="Workload snapshots",
-            ),
-        ],
-        missing_evidence=[],
-        complete=True,
-    )
+                EvidenceItem(
+                    source="metadata",
+                    name="current_workload_snapshots",
+                    value={"items": [{"name": "checkout-api"}]},
+                    summary="Workload snapshots",
+                ),
+                EvidenceItem(
+                    source="metadata",
+                    name="referenced_config_objects",
+                    value={
+                        "items": [
+                            {
+                                "kind": "Secret",
+                                "namespace": "sandbox",
+                                "name": "api-secret",
+                                "found": False,
+                            }
+                        ]
+                    },
+                    summary="Secret reference snapshot",
+                ),
+            ],
+            missing_evidence=[],
+            complete=True,
+        )
 
     by_id = evaluations_for("Secret not found", bundle)
 
@@ -1035,11 +1050,13 @@ def test_storage_and_runtime_config_rules_use_schema_v1_evidence_keys() -> None:
         "kubernetes:cluster_resource_state",
         "logs:related_logs",
         "metadata:current_workload_snapshots",
+        "metadata:referenced_config_objects",
     ]
     assert config_by_id["invalid_env_value"].expected_evidence == [
         "kubernetes:cluster_resource_state",
         "logs:related_logs",
         "metadata:current_workload_snapshots",
+        "metadata:referenced_config_objects",
     ]
 
 
@@ -1216,6 +1233,21 @@ def test_database_config_error_evaluates_with_named_evidence_and_log_signal() ->
                 {"entries": [{"line": "password authentication failed for user checkout"}]},
             ),
             evidence_item("metadata", {"items": [{"name": "checkout-api", "secretRefs": ["db"]}]}),
+            EvidenceItem(
+                source="metadata",
+                name="referenced_config_objects",
+                value={
+                    "items": [
+                        {
+                            "kind": "Secret",
+                            "namespace": "sandbox",
+                            "name": "db-credentials",
+                            "found": True,
+                        }
+                    ]
+                },
+                summary="DB Secret reference snapshot",
+            ),
         ],
         missing_evidence=[],
         complete=True,
