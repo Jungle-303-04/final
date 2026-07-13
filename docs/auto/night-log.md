@@ -2954,3 +2954,13 @@ target preflight·register 네 함수와 strict Zod 계약을 claim했다. 1회�
 - D-026 계약 상태: GAP-002/003/004 backend `87c0606e0`과 frontend API/Zod `a9febb22b`를
   소비했다. GAP-010 backend `914d34ff6`도 ancestor지만 frontend API/Zod/adapter/renderer는 다음
   안전 착륙 단위로 분리했다.
+
+## 2026-07-14 00:41 KST — [프론트] Resources 필터 adapter 승격·lane 회수
+
+- 원자 PROMOTE 완료 — `dev`와 `woonyong/ui-layer-lab`은 동일 `08ec584a894813c00d6e16dac617b1e5667d941a`이며
+  양쪽 ancestor exit 0이다. 첫 push는 동시 dev 갱신으로 전체 거부됐고 원격 일부 반영 0건, 최신 RCA
+  backend merge 흡수와 full gate 재증명 뒤 두 번째 원자 push가 성공했다.
+- lane 회수 — `codex/vp010-resources-filter-adapter-20260713` / `08ec584a8` / worktree
+  `/private/tmp/opsia-vp010-resources-filter-adapter`. 비강제 worktree remove·branch delete·prune를 같은
+  사이클에서 완료했다. 신규 stash 0건, 기존 미증명 stash 8개는 유지했고 사람/백엔드 worktree와
+  untracked `vp-012-timeline-graph-table.md`·`outputs/`는 건드리지 않았다.
