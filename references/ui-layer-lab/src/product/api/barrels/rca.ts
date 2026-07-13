@@ -37,6 +37,13 @@ export {
   type GetAuditTimelineOptions,
 } from "../audit-timeline";
 export {
+  getIncidentRecentChanges,
+  RCA_RECENT_CHANGES_DEFAULT_LIMIT,
+  RCA_RECENT_CHANGES_MAX_LIMIT,
+  RCA_RECENT_CHANGES_PATH,
+  type GetIncidentRecentChangesOptions,
+} from "../recent-changes";
+export {
   rcaTimelineItemSchema,
   rcaTimelineSchema,
   type RcaTimeline,
@@ -94,3 +101,9 @@ export {
   type AuditTimelineItem,
   type AuditTimelineResponse,
 } from "../audit-timeline-schemas";
+export {
+  recentChangeItemSchema,
+  recentChangeListResponseSchema,
+  type RecentChangeItem,
+  type RecentChangeListResponse,
+} from "../recent-changes-schemas";

@@ -106,6 +106,19 @@ describe("incident recent changes API", () => {
     );
   });
 
+  it("normalizes surrounding whitespace before substituting the path template", async () => {
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      jsonResponse(RECENT_CHANGES),
+    );
+
+    await getIncidentRecentChanges("  incident-1  ");
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/rca/incidents/incident-1/recent-changes?limit=5",
+      expect.objectContaining({ method: "GET" }),
+    );
+  });
+
   it.each([
     ["response", { ...RECENT_CHANGES, total: 2 }],
     ["item", {
