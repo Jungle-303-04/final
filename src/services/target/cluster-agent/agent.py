@@ -941,7 +941,7 @@ class TargetClusterAgent:
         payload = self.command_payload(command)
         if action in RCA_TEST_COMMAND_ACTIONS and not rca_test_runs_enabled():
             return self.command_result(False, RCA_TEST_RUNS_DISABLED_MESSAGE)
-        if not self.direct_commands_enabled and action != QUERY_RUN_ACTION:
+        if not getattr(self, "direct_commands_enabled", True) and action != QUERY_RUN_ACTION:
             return self.command_result(False, AgentConfig.DIRECT_COMMANDS_DISABLED_MESSAGE)
         if self.management_write_blocked(action):
             LOGGER.warning(
