@@ -296,6 +296,10 @@ def test_service_and_console_images_share_the_gated_source_sha_and_digest_releas
         in steps["Build and push immutable console image"]["run"]
     )
     assert (
+        '--build-arg "SOURCE_SHA=${SOURCE_SHA}"'
+        in steps["Build and push immutable console image"]["run"]
+    )
+    assert (
         'tagged_image="${registry}/${CONSOLE_ECR_REPOSITORY}:${SOURCE_SHA}"'
         in steps["Build and push immutable console image"]["run"]
     )
@@ -305,6 +309,16 @@ def test_service_and_console_images_share_the_gated_source_sha_and_digest_releas
     assert "--verified-live-image" not in capture
     assert source.count("rollout_image_digest.py") == 2
     assert source.count("revert_image_digests.py") == 2
+
+
+def test_console_bundle_embeds_the_gated_source_sha() -> None:
+    dockerfile = (ROOT / "frontend/Dockerfile").read_text(encoding="utf-8")
+    main = (ROOT / "frontend/src/main.tsx").read_text(encoding="utf-8")
+
+    assert "ARG SOURCE_SHA" in dockerfile
+    assert "ENV VITE_SOURCE_SHA=${SOURCE_SHA}" in dockerfile
+    assert "import.meta.env.VITE_SOURCE_SHA" in main
+    assert "document.documentElement.dataset.sourceSha" in main
 
 
 def test_console_manifests_pin_the_observed_ecr_digest_instead_of_latest() -> None:
