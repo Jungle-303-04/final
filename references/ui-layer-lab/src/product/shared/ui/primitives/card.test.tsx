@@ -79,6 +79,15 @@ describe("product-owned Card", () => {
     expect(card.getAttribute("data-slot")).toBe("card");
     expect(card.getAttribute("data-size")).toBe("sm");
   });
+
+  it("keeps a system-color boundary when author colors are unavailable", () => {
+    render(<Card data-testid="forced-colors-card" />);
+
+    const card = screen.getByTestId("forced-colors-card");
+    expect(card.className).toContain("forced-colors:border");
+    expect(card.className).toContain("forced-colors:border-[CanvasText]");
+    expect(card.className).toContain("forced-colors:ring-0");
+  });
 });
 
 function assertCardTypeContracts() {
