@@ -13,6 +13,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.testclient import TestClient
 from sqlalchemy.dialects import postgresql
 
+import domains.audit.router as audit_router
 from domains.audit.repository import AuditLogRepository
 from domains.audit.router import (
     audit_timeline,
@@ -21,6 +22,7 @@ from domains.audit.router import (
     summarize_payload,
 )
 from domains.identity.dependencies import require_session
+from packages.contracts.event_bus.subjects import EventSubject
 from packages.runtime.dependencies import get_db
 
 
@@ -34,6 +36,7 @@ def _row(
 ) -> dict[str, object]:
     return {
         "id": row_id,
+        "event_id": f"event-{row_id}",
         "subject": subject,
         "source": "incident-worker",
         "causation_id": causation_id,
@@ -105,6 +108,7 @@ def test_repository_filters_workspace_and_correlation_with_keyset_order() -> Non
     sql = str(compiled)
     assert "audit_log.workspace_id" in sql
     assert "audit_log.correlation_id" in sql
+    assert "audit_log.event_id" in sql
     assert "audit_log.created_at >" in sql
     assert "audit_log.id >" in sql
     assert "ORDER BY audit_log.created_at ASC, audit_log.id ASC" in sql
@@ -201,6 +205,8 @@ def test_route_orders_page_and_emits_opaque_cursor_without_raw_payload() -> None
         (started_at + timedelta(seconds=1)).isoformat(),
     ]
     assert response.items[0].payload_summary == {"cluster_id": "cluster-1"}
+    assert response.items[0].event_id == "event-1"
+    assert response.items[0].journey_stage == "alert"
     assert "payload" not in response.items[0].model_dump()
     assert response.items[1].causation_id is None
     assert response.has_more is True
@@ -296,6 +302,22 @@ def test_unknown_subject_and_nested_payload_are_not_exposed() -> None:
     ) == {"cluster_id": "cluster-1"}
 
 
+def test_every_known_subject_has_an_explicit_canonical_journey_stage() -> None:
+    assert set(audit_router.AUDIT_JOURNEY_STAGE_BY_SUBJECT) == {
+        subject.value for subject in EventSubject
+    }
+    assert audit_router.audit_journey_stage(EventSubject.INCIDENT_DETECTED.value) == "alert"
+    assert (
+        audit_router.audit_journey_stage(EventSubject.CLUSTER_EVIDENCE_RECEIVED.value) == "evidence"
+    )
+    assert audit_router.audit_journey_stage(EventSubject.RCA_COMPLETED.value) == "rca"
+    assert audit_router.audit_journey_stage(EventSubject.RECOVERY_PLANNED.value) == "recovery"
+    assert audit_router.audit_journey_stage(EventSubject.COMMAND_COMPLETED.value) == "command"
+    assert audit_router.audit_journey_stage(EventSubject.SAFE_PR_CREATED.value) == "pr"
+    assert audit_router.audit_journey_stage(EventSubject.WORKFLOW_RUN_COMPLETED.value) == "workflow"
+    assert audit_router.audit_journey_stage("extension.secret") == "unknown"
+
+
 def test_invalid_cursor_is_rejected() -> None:
     with pytest.raises(HTTPException) as exc:
         parse_audit_cursor("not-a-valid-cursor")
@@ -332,8 +354,10 @@ def test_http_route_returns_response_schema() -> None:
             {
                 "subject": "incident.detected",
                 "source": "incident-worker",
+                "event_id": "event-1",
                 "created_at": "2026-07-13T00:00:00+00:00",
                 "causation_id": None,
+                "journey_stage": "alert",
                 "payload_summary": {"incident_id": "incident-1"},
             }
         ],

@@ -7,7 +7,7 @@ governing: docs/f-coordination-plan.md · docs/backend-f-workqueue.md
 
 # 백엔드 F 진행 현황
 
-현재 상태: **앵커 37건**
+현재 상태: **앵커 39건**
 
 ## 역사적 Delta-green baseline (BQ-001~003)
 
@@ -283,15 +283,15 @@ Bundle route는 200을 반환한다.
 
 계약 완성: ClusterSummary.provider + connection_stage (db4798d4e4973ec3d384d71eca08aba6d4e9f6b7) [green]
 
-### BQ-014 — 외부 GitOps observer 어댑터
+### BQ-014 — Argo observer 어댑터
 
 - 상태: landed
 - 담당 lane: `codex/f-argocd-observer`
 - 착수 기준: `origin/dev@621a60a1c83bf12b2cb93fc50439f5a7fc4df00d`
 - 전체 게이트 baseline: Ruff lint/format PASS, import-linter 2 kept/0 broken,
   pytest `1735 passed, 3 skipped`
-- 범위: `reconciler_mode=argocd`에서 외부 GitOps Application과 Rollout stable revision을
-  읽기만 하며 Kubernetes/외부 GitOps 쓰기 호출은 0건으로 고정한다.
+- 범위: `reconciler_mode=argocd`에서 Argo CD Application과 Rollout stable revision을
+  읽기만 하며 Kubernetes/Argo 쓰기 호출은 0건으로 고정한다.
 - canonical merge: `0b4298c4e2dbc57815a4c484ac7efa3491ed01db`
 - 코드: `16c58de5634b2ee49a93c884e73bebb2348b04f3`
 - 전체 게이트: Ruff lint/format PASS, import-linter 2 kept/0 broken,
@@ -938,3 +938,56 @@ Bundle route는 200을 반환한다.
   `origin/dev` ancestor exit 0.
 
 계약 완성: OpsiaBench crashloop permission-denied startup fixture + concrete-candidate tie boundary (268ca859e7266ec72780b2080904b5d8ba37c247) [green]
+
+### 보조 대기열 S22 — 의존성 기동 재시도 직접 테스트
+
+- 상태: landed
+- 담당 lane: `codex/config-retry-tests`
+- 테스트: `82c07b920a4192e332794346107671292b7be5db`
+- 문서와 feature HEAD: `80edc84495468440960f0590b7ca5eb7c5232e67`
+- canonical no-ff merge: `d0953f2c6566c5761c5158e5a7a14ef7a54292b5`
+- NATS와 PostgreSQL 기동이 공유하는 48줄 `retry_dependency()`의 직접 테스트 5개를
+  추가했다. 첫 성공은 attempt 1회·sleep 0회, N-1 실패 후 성공은 정확한
+  sleep 횟수와 dependency/attempt/limit/exception context를 검증한다.
+- 한도 소진은 정확한 attempt 수와 `[event-system] <label> 연결 실패`를 고정하고,
+  `limit=0`은 attempt·sleep 0회로 즉시 실패한다. 현행 구현의 마지막 실패 후
+  sleep 횟수는 불필요하게 계약화하지 않았다.
+- 실제 task cancellation은 `CancelledError`를 그대로 전파하고 추가 attempt·sleep·warning이
+  없으며, cancel된 task를 await해 pending task를 남기지 않는지 검증했다.
+- 성공 `return`을 제거한 비커밋 mutation probe에서 신규 테스트 2건이 실패했고,
+  원복 후 focused 5 passed, warning-error·asyncio debug 및 10회 반복을 모두 통과했다.
+- 프로덕션 source 변경 0건. 두 독립 재감사 PASS.
+- 전체 게이트: Ruff lint/format PASS, import-linter 8 kept/0 broken,
+  pytest `1962 passed, 3 skipped`; manifest management 69 / target 20.
+- 4조건: merge-tree exit 0/tree `70599e747873268d57d70886d98618cfdffc3cd6`;
+  source·파일 삭제·소유권 밖·frozen·gateway 계약 변경 0건; feature·merge commit의
+  `origin/dev` ancestor exit 0.
+
+계약 완성: dependency startup retry limit, structured warning and cancellation propagation tests (80edc84495468440960f0590b7ca5eb7c5232e67) [green]
+
+### BQ-019 — 감사 이벤트 여정 식별·분류 계약
+
+- 상태: landed, gateway 계약 lock 해제
+- 담당 lane: `codex/audit-journey-contract`
+- RED: `1d0be030eff6661e2fbad46668f535be259a880d`
+- 코드: `b729ee6e49963c0e0d4599744fd7d63a2e0b8104`
+- 문서와 feature HEAD: `4432e3ca55ed0026dcc9c17a3b6a48b2555603c2`
+- canonical no-ff merge: `29403eb8381280ddb75f3045118794d99b1d9eee`
+- 기존 `audit_log.event_id` 전용 컬럼을 조회해 `AuditTimelineItem.event_id`로 non-empty
+  자기 ID를 반환한다. `causation_id`는 직접 부모 ID이며 두 값을 합성·대체하지 않는다.
+- `journey_stage` 허용값은 `alert/evidence/rca/recovery/command/pr/workflow/cluster/ai/`
+  `notification/system/unknown`이다. 현재 `EventSubject` 65개를 exact key로 정확히 한 lane에
+  배치하며 duplicate·미분류는 로딩과 테스트를 실패시킨다. enum 밖 subject만 `unknown`이다.
+- stage는 시간 phase가 아닌 표시 lane이다. 서버의 `(created_at, id)` 순서를 유지하며
+  클라이언트가 stage별로 재정렬하거나 subject prefix를 다시 해석하지 않는다.
+- 프론트 인계: `references/ui-layer-lab/src/product/api/audit-timeline-schemas.ts`와
+  `issuesEndpointContract.ts`의 strict item에 required non-empty `event_id`와 위 enum의
+  `journey_stage`를 추가해야 한다. 이 소비자 호환 변경 전에는 새 백엔드 응답과 결합 배포하지 않는다.
+- 고유 검증: `tests/test_audit_timeline.py` 10 passed, 알려진 subject 65/65 분류,
+  `docs/api/05-rca-dashboard/14-audit-timeline.bru`가 새 필드와 enum을 검산한다.
+- 전체 게이트: Ruff lint/format PASS, import-linter 8 kept/0 broken,
+  pytest `1963 passed, 3 skipped`; manifest management 69 / target 20.
+- 4조건: merge-tree clean/tree `46b4497f79d6b400003d669aef5779e5b49a45d6`,
+  삭제·소유권 밖·frozen 변경 0건, feature·merge commit의 `origin/dev` ancestor exit 0.
+
+계약 완성: AuditTimelineItem.event_id + journey_stage (b729ee6e49963c0e0d4599744fd7d63a2e0b8104) [green]

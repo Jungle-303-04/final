@@ -47,6 +47,7 @@ R-트랙([D-011])은 dev merge `257f91846`으로 landed/closed 되었고, 전용
 | BQ-016 | landed | OSS 프로파일 ([D-017]) | PR-only 기본(agent read-only, direct command off), controller+PG+agent 3컴포넌트 설치. BQ-016 착륙 당시 40개였고 H3 auto-revert 합류 후 현재 41 entrypoint(controller 39/agent 2). `make demo`가 Kind→bad rollout→로컬 mock rollback PR/Bundle→정상화를 재현 | `f0c3b4e42` (조립 기능 `6abbbc8f4`, H3 정합 `f4b02ee95`) | 실제 controller+PostgreSQL 기동 및 health/ready 4개 200, graceful shutdown, 실제 `make demo` 성공, NATS/in-process service plan 동등성 |
 | BQ-017 | landed | provider 1급화 + 연결 단계 ([D-018]) | `ClusterSummary.provider` optional(eks/gke/aks/onprem/kind/unknown; 등록값>providerID 자동감지>unknown) + `connection_stage` optional(token_issued→awaiting_install→agent_connected→snapshot_received→ready, +expired/error). 전부 additive<br>담당: Codex 백엔드 세션<br>착륙 merge: `d507ca6d4`<br>코드: `db4798d4e` | (기존 응답 확장; gateway 계약 lock 해제) | 프론트 호환 `bfaf03901`, 기존 소비자 회귀 + providerID 3사 감지, 전체 `1831 passed, 3 skipped` |
 | BQ-018 | landed | Opsia 이름 전파 ([D-023]) | `docs/oss/**` 공개 제품명을 Opsia/opsia로 정리하고 roadmap·README 표기와 Helm OCI 예시를 정합화.<br>담당: Codex 백엔드 세션<br>착륙 merge: `ad28cc945`<br>문서: `46ea10f8f` | (docs-only; 코드 식별자·event subject·DB schema 변경 없음) | 전체 `1838 passed, 3 skipped`, manifest 69/20, 삭제·금지 rename 0건 |
+| BQ-019 | landed | VP-003 이벤트 여정 계약 | `AuditTimelineItem`에 자기 `event_id`와 서버 권위의 `journey_stage`를 additive로 노출한다. 현재 `EventSubject` 65개는 exact map으로 전부 분류하며 미지 subject만 `unknown`으로 강등한다.<br>담당: Codex 백엔드 세션<br>착륙 merge: `29403eb83`<br>코드: `b729ee6e4` | 기존 `AUDIT_TIMELINE_PATH` 응답 확장(additive) | 부모 `causation_id`와 자기 `event_id` 구분, 65/65 subject 분류, Bruno, 전체 `1963 passed, 3 skipped`; 프론트 strict schema 인계 필요 |
 
 ## 보조 대기열 착륙 현황
 
@@ -73,6 +74,7 @@ R-트랙([D-011])은 dev merge `257f91846`으로 landed/closed 되었고, 전용
 | S19 | landed | OpsiaBench crashloop 포트 bind 충돌 시나리오 | feature `ff3b52812`, canonical `0dd8a200f` | crashloop 3개·전체 18개, ordinal 7 manual-only fixture, runnable JSON merge-patch 왕복, 전체 `1951 passed, 3 skipped`, manifest 69/20 |
 | S20 | landed | target-agent SQLite 수명주기 테스트 | feature `720dd55c0`, canonical `13c30723a` | test-only, full-agent factory same-thread close·target-only GC guard·unrelated hook 전달, warning-strict 28 passed, 전체 `1953 passed, 3 skipped`, manifest 69/20 |
 | S21 | landed | OpsiaBench crashloop 시작 권한 오류 시나리오 | feature `268ca859e`, canonical `de9e600c7` | crashloop 4개·전체 19개, ordinal 8 manual-only fixture, 실제 POSIX EACCES·generic 동점 선택·full-container merge-patch 왕복, 전체 `1957 passed, 3 skipped`, manifest 69/20 |
+| S22 | landed | 의존성 기동 재시도 직접 테스트 | feature `80edc8449`, canonical `d0953f2c6` | test-only 5개, 첫 성공·N-1 재시도·한도·zero limit·task cancel, source 0건, 전체 `1962 passed, 3 skipped`, manifest 69/20 |
 
 ## claim 규칙
 
