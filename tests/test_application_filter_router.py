@@ -184,9 +184,20 @@ def test_gateway_registers_static_application_filters_before_dynamic_detail(monk
         "test_application_filter_gateway_module",
     )
     app = gateway.create_app()
-    paths = [getattr(route, "path", "") for route in app.router.routes]
-
-    assert "/applications/filter-results" in paths
-    assert paths.index("/applications/filter-results") < paths.index(
-        "/applications/{application_id}"
+    included_paths = [
+        [getattr(item, "path", "") for item in route.original_router.routes]
+        for route in app.router.routes
+        if getattr(route, "original_router", None) is not None
+    ]
+    filter_group = next(
+        index
+        for index, paths in enumerate(included_paths)
+        if "/applications/filter-results" in paths
     )
+    legacy_group = next(
+        index
+        for index, paths in enumerate(included_paths)
+        if "/applications/{application_id}" in paths
+    )
+
+    assert filter_group < legacy_group
