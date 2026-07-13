@@ -97,11 +97,16 @@ def test_demo_scm_exercises_the_production_github_provider(tmp_path, monkeypatch
     )
 
     assert pr_url.endswith("/demo/pulls/1")
-    assert repository.pull_request(1)["state"] == "open"
+    pull = repository.pull_request(1)
+    assert pull["state"] == "open"
     assert repository.file_content("gitops/workflow-demo", "deploy/checkout.yaml") == (
         "image: nginx:1.27-alpine\n"
     )
-    merge_sha = repository.merge_pull_request(1)
+    merge_sha = repository.merge_pull_request(
+        1,
+        expected_base_sha=pull["base"]["sha"],
+        expected_head_sha=pull["head"]["sha"],
+    )
     assert merge_sha
     assert repository.file_content("main", "deploy/checkout.yaml") == ("image: nginx:1.27-alpine\n")
     assert store.saved == [
@@ -127,12 +132,13 @@ def test_demo_scm_requires_a_separate_reviewer_token_to_merge(tmp_path) -> None:
         message="Restore verified image",
         expected_blob_sha=current["sha"],
     )
-    repository.create_pull_request(
+    pull = repository.create_pull_request(
         title="Restore verified image",
         body="Rule-verified rollback candidate",
         head="gitops/recovery",
         base="main",
     )
+    assert pull is not None
     fixture = create_app(
         repository,
         token="writer-token",
@@ -148,10 +154,18 @@ def test_demo_scm_requires_a_separate_reviewer_token_to_merge(tmp_path) -> None:
             writer = await client.post(
                 "/demo/pulls/1/merge",
                 headers={"authorization": "Bearer writer-token"},
+                json={
+                    "expected_base_sha": pull["base"]["sha"],
+                    "expected_head_sha": pull["head"]["sha"],
+                },
             )
             reviewer = await client.post(
                 "/demo/pulls/1/merge",
                 headers={"authorization": "Bearer reviewer-token"},
+                json={
+                    "expected_base_sha": pull["base"]["sha"],
+                    "expected_head_sha": pull["head"]["sha"],
+                },
             )
             return writer, reviewer
 
@@ -276,6 +290,8 @@ def test_make_demo_uses_safe_pr_and_never_directly_normalizes_the_workload() -> 
     assert "gitops-sync-applied" in script
     assert "select payload->>'pr_url'" in script
     assert "kubectl set image" not in script
+    assert "--show-managed-fields" in script
+    assert "unexpected desired-state writers" in script
 
 
 def test_make_demo_dry_run_exposes_the_reviewed_gitops_story() -> None:
