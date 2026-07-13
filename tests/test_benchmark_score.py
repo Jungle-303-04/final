@@ -72,6 +72,18 @@ FIFTH_CANDIDATE_BATCH = (
     "certificate_expired_or_invalid",
     "probe_path_wrong",
 )
+SIXTH_CANDIDATE_BATCH = (
+    "probe_port_wrong",
+    "timeout_too_short",
+    "startup_window_too_short",
+    "app_real_health_failure",
+    "selector_label_mismatch",
+    "pods_not_ready",
+    "rollout_unavailable",
+    "wrong_service_port",
+    "endpoint_slice_delay",
+    "memory_limit_too_low",
+)
 
 
 def _score(*args: str) -> subprocess.CompletedProcess[str]:
@@ -268,6 +280,45 @@ def test_fifth_candidate_contract_batch_is_machine_verified_in_catalog_order() -
     assert {item["candidate_id"]: item["benchmark_fixtures"] for item in fifth_batch} == {
         **{candidate_id: [] for candidate_id in FIFTH_CANDIDATE_BATCH},
         "probe_path_wrong": ["benchmark/scenarios/probe/probe-wrong-path/scenario.json"],
+    }
+
+
+def test_sixth_candidate_contract_batch_is_machine_verified_in_catalog_order() -> None:
+    result = _score("--candidate-contracts")
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "RESULT PASS (60 candidate contracts; ordinals=1..60)" in result.stdout
+
+    document = json.loads(CONTRACTS.read_text(encoding="utf-8"))
+    sixth_batch = document["contracts"][50:60]
+    assert document["next_ordinal"] == 61
+    assert tuple(item["candidate_id"] for item in sixth_batch) == SIXTH_CANDIDATE_BATCH
+    assert {item["candidate_id"]: item["patch_capabilities"] for item in sixth_batch} == {
+        **{candidate_id: [] for candidate_id in SIXTH_CANDIDATE_BATCH},
+        "probe_port_wrong": ["safe_pr"],
+        "timeout_too_short": ["safe_pr"],
+        "startup_window_too_short": ["safe_pr"],
+        "selector_label_mismatch": ["safe_pr"],
+    }
+    assert {
+        item["candidate_id"]: [action["action_type"] for action in item["allowed_remediations"]]
+        for item in sixth_batch
+    } == {
+        **{candidate_id: ["manual_analysis"] for candidate_id in SIXTH_CANDIDATE_BATCH},
+        "probe_port_wrong": ["probe_fix", "manual_analysis"],
+        "timeout_too_short": ["probe_fix", "manual_analysis"],
+        "startup_window_too_short": ["probe_fix", "manual_analysis"],
+        "selector_label_mismatch": ["selector_fix", "manual_analysis"],
+    }
+    assert {item["candidate_id"]: item["benchmark_fixtures"] for item in sixth_batch} == {
+        **{candidate_id: [] for candidate_id in SIXTH_CANDIDATE_BATCH},
+        "probe_port_wrong": ["benchmark/scenarios/probe/probe-wrong-port/scenario.json"],
+        "selector_label_mismatch": [
+            "benchmark/scenarios/service-selector/service-selector-label-mismatch/scenario.json"
+        ],
+        "pods_not_ready": [
+            "benchmark/scenarios/service-selector/service-selector-pods-not-ready/scenario.json"
+        ],
     }
 
 
