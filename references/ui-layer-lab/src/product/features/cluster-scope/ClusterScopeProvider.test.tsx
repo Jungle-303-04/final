@@ -245,6 +245,7 @@ function cluster(
     name: id,
     environment,
     provider: "unknown",
+    connectionStage: null,
     registrationState: "active",
     connectionState,
     lastObservedAt: "2026-07-13T00:00:00.000Z",

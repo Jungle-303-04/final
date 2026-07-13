@@ -44,6 +44,7 @@ function cluster(overrides: Partial<HomeClusterChoice>): HomeClusterChoice {
     name: "cluster",
     environment: "unknown",
     provider: "unknown",
+    connectionStage: null,
     registrationState: "active",
     connectionState: "online",
     lastObservedAt: null,

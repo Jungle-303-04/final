@@ -58,6 +58,7 @@ export function clusterChoices(): HomeClusterChoices {
       name: id,
       environment: "production",
       provider: "unknown",
+      connectionStage: null,
       registrationState: "active",
       connectionState: "online",
       lastObservedAt: "2026-07-12T10:00:00.000Z",

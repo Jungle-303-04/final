@@ -2336,7 +2336,7 @@ async function assertProductHomeFreshnessContract(page, label) {
   const tooltip = page.locator("[data-slot='tooltip-content']");
   await tooltip.waitFor();
   const tooltipText = await tooltip.textContent() ?? "";
-  if (!/연결 단계\s*Ready/u.test(tooltipText)) {
+  if (!/연결 단계:\s*Ready/u.test(tooltipText)) {
     throw new Error(`${label}: cluster freshness Tooltip omitted the canonical connection stage`);
   }
   const motion = await tooltip.evaluate((element) => {

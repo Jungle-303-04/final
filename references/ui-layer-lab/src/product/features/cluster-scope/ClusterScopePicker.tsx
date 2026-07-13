@@ -1,5 +1,5 @@
 import { Server } from "lucide-react";
-import { useI18n } from "../../shared/i18n";
+import { useI18n, type MessageKey } from "../../shared/i18n";
 import {
   ClusterConnectionMark,
   clusterDisplayLabel,
@@ -19,6 +19,7 @@ import {
 } from "../../shared/ui/primitives/select";
 import { useClusterScope } from "./ClusterScopeProvider";
 import { ClusterProviderIcon } from "./ClusterProviderIcon";
+import type { HomeConnectionStage } from "../home/homeContract";
 
 export function ClusterScopePicker() {
   const { formatDate, t } = useI18n();
@@ -66,6 +67,9 @@ export function ClusterScopePicker() {
   const selectedConnection = selected
     ? t(connectionLabelKey(selected.connectionState))
     : t("common.state.unknown");
+  const selectedStage = selected?.connectionStage
+    ? t(connectionStageLabelKey(selected.connectionStage))
+    : null;
   const selectedObservation = formatClusterObservation(
     selected?.lastObservedAt ?? null,
     formatDate,
@@ -74,6 +78,16 @@ export function ClusterScopePicker() {
   const selectedLabel = selected
     ? clusterDisplayLabel(selected)
     : t("clusterScope.currentUnavailable", { cluster: scope.requestedClusterId ?? "" });
+  const selectedAccessibleLabel = selectedStage
+    ? t("clusterScope.ariaWithStage", {
+        cluster: selectedLabel,
+        connection: selectedConnection,
+        stage: selectedStage,
+      })
+    : t("clusterScope.aria", {
+        cluster: selectedLabel,
+        connection: selectedConnection,
+      });
 
   return (
     <div className={fixedGeometry} data-slot="cluster-scope-picker">
@@ -87,10 +101,7 @@ export function ClusterScopePicker() {
             render={(
               <SelectTrigger
                 aria-invalid={scope.selection.kind === "unknown" || undefined}
-                aria-label={t("clusterScope.aria", {
-                  cluster: selectedLabel,
-                  connection: selectedConnection,
-                })}
+                aria-label={selectedAccessibleLabel}
                 className="size-full min-w-0"
                 title={selectedLabel}
               />
@@ -107,7 +118,12 @@ export function ClusterScopePicker() {
             <SelectValue className="truncate" placeholder={selectedLabel} />
           </TooltipTrigger>
           <TooltipContent side="bottom">
-            {t("home.lastObserved", { time: selectedObservation })}
+            <span className="flex flex-col gap-1">
+              {selectedStage ? (
+                <span>{t("clusterScope.stage.summary", { stage: selectedStage })}</span>
+              ) : null}
+              <span>{t("home.lastObserved", { time: selectedObservation })}</span>
+            </span>
           </TooltipContent>
         </Tooltip>
         <SelectContent align="start" alignItemWithTrigger={false} className="max-w-[min(32rem,calc(100vw-2rem))]">
@@ -131,4 +147,18 @@ export function ClusterScopePicker() {
       </Select>
     </div>
   );
+}
+
+const connectionStageLabelKeys: Record<HomeConnectionStage, MessageKey> = {
+  token_issued: "clusterScope.stage.tokenIssued",
+  awaiting_install: "clusterScope.stage.awaitingInstall",
+  agent_connected: "clusterScope.stage.agentConnected",
+  snapshot_received: "clusterScope.stage.snapshotReceived",
+  ready: "clusterScope.stage.ready",
+  expired: "clusterScope.stage.expired",
+  error: "clusterScope.stage.error",
+};
+
+function connectionStageLabelKey(stage: HomeConnectionStage): MessageKey {
+  return connectionStageLabelKeys[stage];
 }

@@ -8,6 +8,14 @@ export type HomeHealthTone =
 export type HomeConnectionState = "online" | "stale" | "pending" | "offline" | "unknown";
 export type HomeRegistrationState = "active" | "pending" | "expired" | "unknown";
 export type HomeClusterProvider = "eks" | "gke" | "aks" | "onprem" | "kind" | "unknown";
+export type HomeConnectionStage =
+  | "token_issued"
+  | "awaiting_install"
+  | "agent_connected"
+  | "snapshot_received"
+  | "ready"
+  | "expired"
+  | "error";
 export type HomeCollectionCompleteness = "unknown";
 export type HomeIdentityStability = "ephemeral";
 
@@ -17,6 +25,7 @@ export interface HomeClusterChoice {
   name: string;
   environment: string;
   provider: HomeClusterProvider;
+  connectionStage: HomeConnectionStage | null;
   registrationState: HomeRegistrationState;
   connectionState: HomeConnectionState;
   lastObservedAt: string | null;

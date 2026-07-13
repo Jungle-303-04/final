@@ -123,7 +123,7 @@ function cluster(
   provider: HomeClusterChoice["provider"],
   connectionStage: "ready" | null,
 ): HomeClusterChoice {
-  const choice = {
+  return {
     id,
     workspaceId: "workspace-a",
     name,
@@ -137,5 +137,4 @@ function cluster(
     incidentCount: 0,
     connectionStage,
   };
-  return choice;
 }
