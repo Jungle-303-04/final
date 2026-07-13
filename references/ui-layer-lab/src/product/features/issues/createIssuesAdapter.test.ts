@@ -169,7 +169,7 @@ describe("createIssuesAdapter", () => {
     const dependencies = endpoints();
     const port = createIssuesAdapter(dependencies);
     await expect(port.loadEvidence("correlation-1", {
-      cursor: "cursor-1",
+      cursor: "  cursor/+==  ",
       limit: 50,
     })).resolves.toMatchObject({
       correlationId: "correlation-1",
@@ -177,7 +177,9 @@ describe("createIssuesAdapter", () => {
       nextCursor: "cursor-2",
       items: [{ id: "evidence:workspace-1/7", sources: [{ source: "kubernetes" }] }],
     });
-    await expect(port.loadReports("correlation-1")).resolves.toMatchObject({
+    await expect(port.loadReports("correlation-1", {
+      cursor: "  report/+==  ",
+    })).resolves.toMatchObject({
       correlationId: "correlation-1",
       hasMore: false,
       items: [{
@@ -188,12 +190,13 @@ describe("createIssuesAdapter", () => {
     });
     expect(dependencies.listEvidence).toHaveBeenCalledWith(expect.objectContaining({
       correlationId: "correlation-1",
-      cursor: "cursor-1",
+      cursor: "  cursor/+==  ",
       limit: 50,
       signal: undefined,
     }));
     expect(dependencies.listRcaReports).toHaveBeenCalledWith(expect.objectContaining({
       correlationId: "correlation-1",
+      cursor: "  report/+==  ",
       signal: undefined,
     }));
   });
@@ -204,6 +207,12 @@ describe("createIssuesAdapter", () => {
       code: "invalid-request",
     } satisfies Partial<IssuesPortFailure>);
     await expect(port.loadReports("")).rejects.toMatchObject({
+      code: "invalid-request",
+    } satisfies Partial<IssuesPortFailure>);
+    await expect(port.loadEvidence("correlation-1", { cursor: "  " })).rejects.toMatchObject({
+      code: "invalid-request",
+    } satisfies Partial<IssuesPortFailure>);
+    await expect(port.loadReports("correlation-1", { cursor: "" })).rejects.toMatchObject({
       code: "invalid-request",
     } satisfies Partial<IssuesPortFailure>);
     expect(dependencies.listEvidence).not.toHaveBeenCalled();
