@@ -1040,3 +1040,19 @@ Bundle route는 200을 반환한다.
   삭제·소유권 밖·frozen 변경 0건, feature·merge commit의 `origin/dev` ancestor exit 0.
 
 계약 완성: AuditTimelineItem.event_id + journey_stage (b729ee6e49963c0e0d4599744fd7d63a2e0b8104) [green]
+
+### OSS 접속 계약 — canonical 착륙 전 증거
+
+- 상태: `done-pending-merge`; gateway 계약 lock은 이 행이 보유한다.
+- RED: `894874e67`부터 `2d4cf3f71`까지 11개 경계 테스트, 보안 보완 RED `8051342a5`.
+- GREEN: 동일 origin·self-only `ae9bc8d63`, URL/TLS/CSP 교정 `e480b3246`.
+- 응답 계약: preflight/install의 optional `management_access`는 mode, external URL,
+  agent server URL, `external|self_only` reachability와 제한 사유를 반환한다.
+- Helm 계약: `auto|portforward|loadbalancer|ingress|nodeport`, 외부 TLS 종단 명시,
+  provider annotation 전달, 내부 metrics/PostgreSQL, bootstrap Secret 조회 NOTES.
+- 로컬 실측: fresh Kind에서 설치, controller/agent, bad rollout, safe PR, reviewer merge,
+  GitOps sync, workload 정상화가 exit 0으로 끝났다.
+- 공개 OCI는 chart/controller/console anonymous pull이 403이므로 BQ-016과 이 행의 공개 설치
+  완료 조건은 충족되지 않았다. GHCR publish와 package visibility 변경은 사람 권한 작업이다.
+- 후속 보안: URL에 포함되는 install token을 단기 1회용 receipt로 분리해야 한다.
+- canonical ancestor가 되기 전이므로 이 절에는 계약 완성 앵커를 쓰지 않는다.

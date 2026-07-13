@@ -1,5 +1,5 @@
 ---
-source_commit: 9b107d8e9
+source_commit: e480b3246
 status: synced
 ---
 
@@ -48,6 +48,37 @@ uv run python src/controller/app.py --check
 in-process와 NATS 모드는 동일한 service signature와 handler spec을 사용하고 bus adapter만
 바뀐다.
 
+## 접속 계약
+
+UI, REST API, agent HTTP/WebSocket은 하나의 Service 80/443 origin을 사용한다. Console의
+Nginx가 `/api/`와 `/api/live/`를 controller의 내부 8000/8001 포트로 전달한다. metrics 9090과
+PostgreSQL 5432는 별도 ClusterIP Service로만 제공한다. 기본 edge 요청 상한은 2MiB이고 inventory
+snapshot 경로만 agent와 동일한 16MiB 상한을 사용한다.
+
+| `access.mode` | 외부 노출 | 주소 계약 |
+|---|---|---|
+| `auto` | IngressClass+host면 ingress, cloud providerID면 LoadBalancer, 그 외 port-forward | 판정 결과를 NOTES에 출력 |
+| `portforward` | ClusterIP | 외부 URL이 없으므로 management self cluster만 등록 가능 |
+| `loadbalancer` | LoadBalancer Service | `access.externalUrl` 필요. HTTPS는 `access.loadBalancer.tlsTermination=external` 명시 필수 |
+| `ingress` | Ingress + ClusterIP | `access.host` 필수. TLS 사용 시 secret 이름 필수 |
+| `nodeport` | NodePort Service | `access.nodePort`는 Kubernetes NodePort 범위만 허용 |
+
+`access.externalUrl`은 userinfo, path, query, fragment, 빈 host, 문자열 포트, 0 또는 65535 초과
+포트를 거부한다. LoadBalancer의 external TLS는 provider-neutral 운영자 계약이다. 차트가 인증서를
+만들지 않으며, `access.loadBalancer.annotations`로 cloud LB 설정을 전달하고 HTTPS를 Service 80의
+plain HTTP로 종료했다는 사실을 명시해야 렌더가 진행된다. Console CSP의 연결 출처는 `'self'`만
+허용한다.
+
+외부 URL이 없는 기본 설치는 `http://opsia.<namespace>.svc`를 self-agent 주소로 사용한다.
+preflight와 등록 응답의 `management_access.reachability`는 `self_only`이고 target role의 다른
+클러스터 등록은 422로 거부된다. Ingress 또는 LoadBalancer 주소가 있으면 서버가 확정한 주소를
+요청 body보다 우선하며 설치 명령의 server URL에 사용한다. localhost를 추측하지 않는다.
+
+초기 관리자 이메일과 무작위 비밀번호는 `<release>-bootstrap` Secret에 생성되며 NOTES는 값을
+직접 출력하지 않고 조회 명령만 제공한다. `DEV_AUTH_BYPASS`는 이 프로파일에서 항상 `0`이다.
+`/api/install/<token>`은 URL 자체가 자격증명이므로 Nginx와 Uvicorn access log에 원문을 남기지
+않는다. 현재 토큰 수명 계약은 별도 단기 receipt로 교체할 후속 보안 항목이다.
+
 ## 원커맨드 데모
 
 ```bash
@@ -78,6 +109,8 @@ password와 session cookie, SCM capability token은 증거에 저장하지 않�
 성공 증거를 재사용하지 않고 실패한다. 데모는 종료 시 Kind 클러스터를 삭제한다. 유지하려면
 `DEMO_KEEP_CLUSTER=1`, 명령만 확인하려면 `DEMO_DRY_RUN=1`을 사용한다.
 
-아직 공개 `oci://ghcr.io/opsia/charts/opsia`와 controller/console artifact의 anonymous pull,
+공개 `oci://ghcr.io/opsia/charts/opsia`와 controller/console artifact의 anonymous pull은
+2026-07-13 실측에서 403이었다. GHCR chart publish와 세 image package의 anonymous pull 허용 뒤
+fresh Kind에서 공개 명령을 다시 실행해야 한다. 현재 로컬 chart 실증은
 hosted SCM review, 실제 Argo 계열 reconcile은 확인되지 않았다. 그러므로 이 로컬 실증은
 공개 배포 완료 판정이나 BQ-016 완료 앵커가 아니다.

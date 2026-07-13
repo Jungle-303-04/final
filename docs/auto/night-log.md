@@ -2688,3 +2688,20 @@ target preflight·register 네 함수와 strict Zod 계약을 claim했다. 1회�
 - [백엔드] lane 회수 — `codex/oss-safe-pr-demo` / `16aad904c` / ancestor exit 0.
   feature worktree와 로컬 branch를 `-d`로 제거했고 원격 branch는 없었다. 실증 Kind
   `opsia-demo` cluster도 삭제했으며 다른 활성 lane·보호 worktree는 건드리지 않았다.
+
+## 2026-07-13 21:57 KST — [백엔드] OSS 접속 계약 로컬 실증
+
+- RED `8051342a5`, GREEN `ae9bc8d63`·`e480b3246`. UI/API/agent는 Service 80의 동일
+  origin을 쓰고 metrics 9090·PostgreSQL 5432는 내부 Service로 분리했다.
+- access 5모드, server-authoritative external URL, self-only 제한, bootstrap Secret NOTES,
+  엄격 URL/port 검증, external TLS 종단 확인, same-origin CSP를 검증했다. Helm 표적 테스트
+  18건과 lint가 통과했다.
+- fresh Kind `make demo`는 `opsia-installed` → `bad-rollout-observed` → `safe-pr-created` →
+  `review-merged` → `gitops-sync-applied` → `workload-normalized` 순서로 exit 0이었다.
+  bad revision `6ee9084dfe931f7c70c712b8fc95c32bbfd57ee7`, merge revision
+  `39dc05478ddc1ad997296939c654d35485eee945`를 관측했다.
+- 공개 `oci://ghcr.io/opsia/charts/opsia`와 controller/console package는 anonymous pull 403이다.
+  GHCR chart publish와 package visibility 변경 후 fresh Kind 공개 명령 재실증이 필요하다.
+- AWS live 상태는 `docs/auto/deploy-status.md`에 digest를 권위값으로 기록했다. secret 값과
+  확인되지 않은 로그인 성공은 문서에 노출하거나 주장하지 않았다.
+- 현재는 canonical 착륙 전이므로 완료 앵커를 기록하지 않았다.
