@@ -7,7 +7,7 @@ governing: docs/f-coordination-plan.md · docs/backend-f-workqueue.md
 
 # 백엔드 F 진행 현황
 
-현재 상태: **앵커 26건**
+현재 상태: **앵커 27건**
 
 ## 역사적 Delta-green baseline (BQ-001~003)
 
@@ -659,3 +659,31 @@ Bundle route는 200을 반환한다.
   `origin/dev` ancestor exit 0.
 
 계약 완성: OpsiaBench candidate contracts 61..70 + fallback-only inference boundary (aed4bf78b4e640af0b5ac55017f6a445b0a5013b) [green]
+
+### 보조 대기열 S11 — rule candidate 71~80 안전 계약
+
+- 상태: landed
+- 담당 lane: `codex/candidate-contract-batch-eight`
+- RED: `3060b5f603280534b84723183dd4fa264ab413a8`
+- 구현·데이터: `895f4185f3a1eda384d8fe20730b03170e0c9070`
+- 문서와 feature HEAD: `dd2006904491f22113d4e84329f681a227e85d2e`
+- canonical no-ff merge: `cb099e5eb161d740710c2b276b52bc85dc2006d9`
+- 범위: loader 순서 71~80을 추가해 누적 80/87, `next_ordinal=81`이다.
+- 71~72·76~77·79~80은 fallback-only다. 73~74의 `resource_request_tuning`과
+  75의 `scheduling_constraint_fix`는 `draft_pr` route여도 dispatcher allowlist 밖이므로
+  실제 capability가 없고, 78의 `pvc_binding_fix`도 승인형 수동 action이다.
+- exact fixture는 73번 CPU 부족, 75번 affinity 불일치, 78번 PVC pending에만 연결했다.
+- forbidden remediation은 fleet node pool 일괄 증설·변경, cluster-wide scheduling 제약 제거,
+  PVC 전체 삭제, Secret 전역 복제·변조처럼 실제 실행 가능한 과잉 대응으로 의미 감사를 통과했다.
+- append-only 경계: 여덟 번째 canonical JSON digest
+  `7ebd96e2c186abd5d7093472a17ca06f6269a999ee6621e3b22864486fb351d6`를 `(71, 80)`에
+  고정하고 누락 lock·batch 8 변조 회귀를 추가했다.
+- 고유 검증: `python3 -S benchmark/score.py --candidate-contracts` 80/80 PASS,
+  `tests/test_benchmark_score.py` 54 passed. 독립 감사 P0/P1 0건.
+- 전체 게이트: Ruff lint/format PASS, import-linter 8 kept/0 broken,
+  pytest `1925 passed, 3 skipped`; manifest management 69 / target 20.
+- 4조건: merge-tree exit 0/tree `61250ee0eacdee280fd73e6f223a9273cb994f70`;
+  파일 삭제·소유권 밖 변경·frozen 경로 변경 0건; RED·구현·문서·merge commit의
+  `origin/dev` ancestor exit 0.
+
+계약 완성: OpsiaBench candidate contracts 71..80 + scheduling and secret inference boundary (dd2006904491f22113d4e84329f681a227e85d2e) [green]
