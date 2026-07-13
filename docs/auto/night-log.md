@@ -3263,3 +3263,24 @@ index 591d560bc..5f1879a74 100644
   production build PASS.
 - 따라서 D-041 착륙 기준인 프론트 초록 + 백엔드 RED 무증가를 충족했다. D-039/D-040
   두 예외 commit과 이 증거 문서만 최신 dev rebase 후 push한다.
+
+## 2026-07-14 02:25 KST — [프론트 정리] S1 shadcn 토큰 보완
+
+- 원자적 코드 commit `7ce7e4e2e`: `--chart-1..5`와 `--sidebar-*` 전 항목을
+  `--ui-accent/info/success/warning/danger/surface/text/raised/border/ring` 원본에만
+  연결했다. 신규 색상 literal은 0건이며 token contract test가 이 매핑을 고정한다.
+- 실브라우저 1440×913 전체 화면 증거:
+  `frontend/output/s1/dark.png`, `frontend/output/s1/light.png`(gitignore된 로컬 QA 산출물).
+  변경 전/후 계산값은 dark 배경·본문색 `rgb(14,16,21)` / `rgb(238,240,241)`, light
+  `rgb(247,248,250)` / `rgb(31,36,48)`로 완전히 동일하다. 신규 chart/sidebar 계산값도
+  양 테마의 기존 `--ui-*` 팔레트 값과 일치한다. pre-paint bootstrap과
+  `@custom-variant dark`는 수정하지 않았다.
+- 프론트 게이트: ESLint 오류 0(삭제 예정 release 화면의 선행 hook warning 1), node tests
+  `22/22`, TypeScript·Vite production build PASS.
+- 변경 전 백엔드 실패 집합 =
+  `{pytest tests/test_target_registration.py::test_target_registration_apply_defaults_to_kube_context_provider}`.
+  변경 후 실패 집합 =
+  `{pytest tests/test_target_registration.py::test_target_registration_apply_defaults_to_kube_context_provider}`.
+  Ruff lint/format·compileall·import-linter `8 kept/0 broken`, pytest
+  `1 failed, 2138 passed, 3 skipped`; 신규 RED 0. 선행 RED 원인 `2e6e53f5a`는 백엔드 이관
+  상태를 유지한다([D-041]).
