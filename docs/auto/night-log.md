@@ -3044,3 +3044,18 @@ target preflight·register 네 함수와 strict Zod 계약을 claim했다. 1회�
   1회 생성됐으나 원격 push 0건이었다. commit을 `codex/applications-merge-recovery`로 보존하고
   `woonyong/ui-layer-lab`을 원격 `08a7dd16e`에서 비파괴 재생성한 뒤, 별도 detached dev worktree에서
   올바른 merge `cbba9d28e`를 생성·push했다. reset/revert/force는 사용하지 않았다.
+
+### 2026-07-14 01:22 KST — D-027/D-028 안전 승격·lane 회수
+
+- 제품 변경 배포 대상 dev SHA는 `6fd733020`이다. `origin/dev`와
+  `origin/woonyong/ui-layer-lab`에 atomic push했고 두 remote가 같은 SHA로 수렴했다.
+- 승격 직전 `origin/dev=a610aa0c8`의 RCA backend 변경을 흡수했으며 frontend/spec 충돌은 0건이다.
+  lab 전용 `08a7dd16e`에서는 `docs/spec/frontend/vp-012-timeline-graph-table.md`만 보존하고,
+  backend progress·OSS profile·공통 테스트는 dev 트리를 유지했다.
+- 최종 흡수 후 `npm run check`는 134 files/954 tests, design guard 381 files,
+  shadcn audit 482 previews, production build 14,551 modules로 exit 0이다.
+  `npm run visual-product`는 47 scenarios, unexpected network/WebSocket 0, CLS Home 0.004188 /
+  Resources 0.004167 / Issues 0.004202로 exit 0이다.
+- 회수 대상은 `codex/d027-live-traffic-audit-20260714` / `6fd733020`과
+  `/private/tmp/opsia-d027-live-traffic-audit`이다. 이 로그 커밋 승격 직후 worktree remove,
+  branch delete, worktree prune을 같은 사이클에서 수행한다. 새 stash는 만들지 않았다.
