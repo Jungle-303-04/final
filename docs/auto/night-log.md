@@ -2542,6 +2542,17 @@ target preflight·register 네 함수와 strict Zod 계약을 claim했다. 1회�
   GAP-006 Applications·GitOps·Checks canonical list, GAP-007 registration resume/error,
   GAP-008 disconnect operation, GAP-009 Git repository wizard, GAP-010 graph snapshot이다.
   각 계약 착륙 전에는 해당 표면만 주차하고 기존 검증된 화면을 유지한다.
+## 2026-07-13 20:07 KST — [백엔드] OSS Helm 로컬 설치 기반 실증·완료 판정 정정
+
+- RED `cc367c387`, GREEN `7bb74d71f`: `charts/opsia`와 idempotent bootstrap을 추가하고
+  `make demo`가 Opsia chart를 먼저 설치하도록 변경했다. fresh Kind의 Helm release
+  `opsia-0.1.0`은 deployed이며 controller/PostgreSQL/agent가 각각 1/1 Ready다.
+- 실측은 `kind-cluster-ready → opsia-installed → bad-rollout-observed →
+  mock-rollback-pr-created → workload-normalized`를 종료 코드 0으로 통과했다. 전체 게이트는
+  Ruff lint/format PASS, import-linter 8 kept/0 broken, pytest `1968 passed, 3 skipped`다.
+- 완료 판정은 정정한다. GHCR exact OCI는 403이고 GitHub `opsia` namespace 권위도 확인되지
+  않았으며, 데모 후반은 mock PR와 직접 이미지 복구다. 따라서 이 hash는 설치 기반 증거이지
+  BQ-016 완료 앵커가 아니다. 공개 OCI·실제 safe-pr·모드별 동일 결과가 남아 있다.
 
 ## 2026-07-13 20:12 KST — [프론트] VP-010 Label 정본 승격·회수
 
