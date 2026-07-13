@@ -3507,3 +3507,5 @@ gone branch 0, `(prunable)` worktree 0이다.
 [사이클] 2026-07-14 04:38 KST / 인증 fixture를 필수화하고 Bundle·audit timeline·recent changes의 HTTP 200·상관관계·응답 shape를 검증하는 read-only strict smoke 추가 / `6cd751688` (전체 gate: 백엔드 2177 passed·3 skipped, 프론트 28 passed, manifest·build PASS, T1=T2, 최신 dev rebase 뒤 origin/dev 착륙 확인) / 다음 한 걸음: opt-in dev 배포 workflow에 migration→rollout→smoke→digest rollback 순서 배선
 
 [사이클] 2026-07-14 04:38 KST / Resources 클러스터 등록 위자드를 shadcn Dialog·AlertDialog·Select·Checkbox·Sonner로 전면 이관하고 token 발급 후 닫기 보호·실 API·polling 계약을 보존 / `ca9ed1edf` (전체 gate: 백엔드 2174 passed·3 skipped, 프론트 28 passed, typecheck·lint·manifest·production build PASS, T1=T2, origin/dev 착륙 확인) / 다음 한 걸음: ClusterDetailView를 화면 단위 shadcn 경계로 이관
+
+[사이클] 2026-07-14 04:50 KST / manifest에서 관리 서비스 이미지와 정확히 일치하는 container만 선별하고 같은 immutable digest로 순차 rollout해 console·인프라 image 오염을 차단 / `a7b35ac90` (전체 gate: 백엔드 2180 passed·3 skipped, 프론트 28 passed, manifest·build PASS, T1=T2, 최신 dev rebase 뒤 origin/dev 착륙 확인) / 다음 한 걸음: opt-in dev 배포 workflow에 gate 성공 SHA 고정→ECR digest→migration→rollout→strict smoke→실패 시 digest 복원 순서 배선
