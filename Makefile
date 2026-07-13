@@ -12,7 +12,7 @@ export IMAGE_NAME
 export MGMT_CLUSTER
 export TARGET_CLUSTER
 
-.PHONY: help setup env local-test-env local-up local-smoke sync hooks doctor lint format test manifest-check events crash-test check build-image up install-telemetry down status smoke demo scale kill-pod external-instances external-kubeconfig cluster-interactions aws-up aws-down clean
+.PHONY: help setup env local-test-env local-up local-smoke sync hooks doctor lint format test manifest-check events event-bus-equivalence crash-test check build-image up install-telemetry down status smoke demo scale kill-pod external-instances external-kubeconfig cluster-interactions aws-up aws-down clean
 
 help: ## 사용 가능한 명령어 출력
 	@awk 'BEGIN {FS = ":.*##"; printf "\nUsage:\n  make <target>\n\nTargets:\n"} /^[a-zA-Z0-9_-]+:.*##/ {printf "  %-14s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -58,6 +58,9 @@ manifest-check: ## Kubernetes manifest 렌더/파싱 확인
 
 events: ## 등록된 이벤트/구독자 한눈에 보기
 	uv run python scripts/events.py
+
+event-bus-equivalence: ## in-process/NATS 전송 결과 동등성 실측
+	bash scripts/test-event-bus-equivalence.sh
 
 services: ## 서비스 명부 한눈에 보기(src/services 자동 발견)
 	uv run python scripts/services.py

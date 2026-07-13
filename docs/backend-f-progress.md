@@ -245,6 +245,12 @@ Bundle route는 200을 반환한다.
   실증된 뒤 canonical hash로 새 앵커를 기록한다.
 - 로컬 Helm 설치 기반 canonical merge는 `d86117efc8d00c09e7f75ca01f2b51cb95465a7b`이며
   `origin/dev` ancestor exit 0을 확인했다.
+- `82a7f29f29c9ce38aa5d8b196449f2e53182bd71`는 격리된 실제 NATS JetStream 컨테이너와
+  in-process bus에 동일한 publish→NAK→redelivery→child publish→ACK 시나리오를 실행한다.
+  payload·correlation·causation·workspace와 재전달 원문 보존 결과는 양쪽이 동일했다.
+- 재현 명령은 `make event-bus-equivalence`다. 이 검증은 clean-run outcome 동등성이다.
+  in-process bus는 프로세스 메모리, JetStream은 영속 broker이므로 controller crash 시
+  내구성까지 동등하다고 주장하지 않는다.
 
 ### H3 — BQ-007/009/010 권위 patch 엔진
 

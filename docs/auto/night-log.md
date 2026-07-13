@@ -2579,3 +2579,14 @@ target preflight·register 네 함수와 strict Zod 계약을 claim했다. 1회�
 - [백엔드] lane 회수 — `codex/oss-install-gate` / `1fae98ea0` / ancestor exit 0.
   로컬 branch와 worktree를 제거했고 원격 branch는 존재하지 않았다. 실증 Kind cluster도
   삭제했으며 다른 작업자의 detached AWS worktree와 보호 branch는 건드리지 않았다.
+
+## 2026-07-13 20:20 KST — [백엔드] 이벤트 버스 clean-run 결과 동등성 실측
+
+- RED `0b05061b8`, GREEN `82a7f29f2`: `make event-bus-equivalence`가 격리된 실제
+  `nats:2.10-alpine` JetStream과 `InMemoryEventBus`에 동일한 publish→NAK→redelivery→
+  child publish→ACK 흐름을 실행한다.
+- 양 모드 모두 payload, correlation, causation, workspace, redelivery 원문 보존이 true이고
+  결과 JSON의 `equivalent`가 true였다. unit gate 2 passed이며 전체 게이트는 착륙 직전에
+  최신 dev 기준으로 다시 실행한다.
+- 범위는 clean-run outcome이다. in-process mode는 controller process crash에서 broker
+  durability를 제공하지 않으므로 JetStream과 내구성까지 동등하다고 표현하지 않는다.
