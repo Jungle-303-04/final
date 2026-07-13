@@ -1688,3 +1688,18 @@ target preflight·register 네 함수와 strict Zod 계약을 claim했다. 1회�
   assets 26 MiB, 2,675 files. 제품 entry는 `ProductApp-C79itfkb.js` 319 KiB와
   `ProductApp-Dh-KDTNp.css` 77 KiB다.
 - backend pipeline I는 `done`, frontend H는 사람 전용 `🔒waiting`이다. 배포는 수행하지 않았다.
+
+## GO-REQUEST [FE-H] — 2026-07-13 15:25 KST 갱신
+
+- frontend branch / evidence snapshot: `woonyong/ui-layer-lab` / `5a463f845`
+  (제품 코드 `3fe308f95`, VP-009 판정 `33279272c`).
+- build command: `cd references/ui-layer-lab && npm ci && npm run check && npm run visual-product && npm run build`.
+- artifact: `references/ui-layer-lab/dist` (26 MiB, 2,675 files).
+- image build 제안: `docker build --platform linux/amd64 -f references/ui-layer-lab/Dockerfile -t <immutable-console-image> references/ui-layer-lab`.
+- 배포 제안: image push 후 management namespace의 `deployment/console` image를 immutable tag로
+  교체하고 rollout 완료·`/`·`/api/auth/session`·`/api/healthz`를 확인한다.
+- rollback: 직전 immutable console image tag 복원 또는 Kubernetes rollout undo 후 같은 endpoint와
+  인증 쿠키·WebSocket upgrade를 재확인한다.
+- gate: `npm run check` PASS(113 files / 824 tests), `npm run visual-product` PASS(36 scenarios,
+  unexpected network/WebSocket 0), standalone production build PASS(14,538 modules).
+- backend pipeline I는 `done`이다. frontend H 실행은 사람 GO 전용이며 이 세션은 배포를 실행하지 않는다.
