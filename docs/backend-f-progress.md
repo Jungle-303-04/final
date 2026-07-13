@@ -7,7 +7,7 @@ governing: docs/f-coordination-plan.md · docs/backend-f-workqueue.md
 
 # 백엔드 F 진행 현황
 
-현재 상태: **앵커 24건**
+현재 상태: **앵커 25건**
 
 ## 역사적 Delta-green baseline (BQ-001~003)
 
@@ -604,3 +604,31 @@ Bundle route는 200을 반환한다.
   `origin/dev` ancestor exit 0.
 
 계약 완성: OpsiaBench candidate contracts 41..50 + probe safe-pr boundary (5995350c4d95eccade8f24a31870a6a9d2d0fc5d) [green]
+
+### 보조 대기열 S9 — rule candidate 51~60 안전 계약
+
+- 상태: landed
+- 담당 lane: `codex/candidate-contract-batch-six`
+- RED: `defe3751db251469f01b5e9899bab45f3c92bdca`
+- 구현·데이터: `65f487ea96dfc08860e7749e212262954e7ec427`
+- 문서와 feature HEAD: `5ce8132b0598797e73bb675a2ff49c66eef72167`
+- canonical no-ff merge: `66115a2d7312ae09e9cf8a06b1369ddf051e7cd2`
+- 범위: loader 순서 51~60을 추가해 누적 60/87, `next_ordinal=61`이다.
+- 실제 실행 경계: 51~53번 probe 후보와 55번 selector 후보만 `safe_pr` capability가 있다.
+  54번 실제 health 실패는 probe 수정 대상이 아니고, 56번은 fixture가 있어도 fallback-only,
+  60번은 OOM 계열 이름이어도 live `oom_memory` recovery가 없다.
+- exact fixture는 51번 probe port, 55번 selector mismatch, 56번 pods-not-ready에만 연결했다.
+- forbidden remediation은 health gate 우회, cluster-wide EndpointSlice 삭제, fleet memory limit
+  제거를 포함한 실제 실행 가능한 과잉 대응으로 독립 의미 감사를 통과했다.
+- append-only 경계: 여섯 번째 canonical JSON digest
+  `cc5f142232579553a3f6a7f0efd9fde1c0cca27dd1a3fba718a2eb68b706b0ae`를 `(51, 60)`에
+  고정하고 누락 lock·batch 6 변조 회귀를 추가했다.
+- 고유 검증: `python3 -S benchmark/score.py --candidate-contracts` 60/60 PASS,
+  `tests/test_benchmark_score.py` 49 passed. 독립 감사 P0/P1 0건.
+- 전체 게이트: Ruff lint/format PASS, import-linter 8 kept/0 broken,
+  pytest `1920 passed, 3 skipped`; manifest management 69 / target 20.
+- 4조건: merge-tree exit 0/tree `113e4e5166691df6ab5c2bd940a2b9e86487fb25`;
+  파일 삭제·소유권 밖 변경·frozen 경로 변경 0건; RED·구현·문서·merge commit의
+  `origin/dev` ancestor exit 0.
+
+계약 완성: OpsiaBench candidate contracts 51..60 + probe and selector inference boundary (5ce8132b0598797e73bb675a2ff49c66eef72167) [green]

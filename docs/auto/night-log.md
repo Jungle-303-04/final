@@ -1885,3 +1885,21 @@ target preflight·register 네 함수와 strict Zod 계약을 claim했다. 1회�
 - 4조건: merge-tree clean/tree `77dbb5e47763f69b28893631b09d7415464bcdc4`, 파일 삭제·
   소유권 밖 변경·frozen 경로 변경 0건, RED·구현·문서·merge commit의 `origin/dev`
   ancestor exit 0. J 배포 실행은 0건이다.
+
+## 2026-07-13 16:30 KST — [백엔드] rule candidate 51~60 안전 계약 착륙
+
+- lane `codex/candidate-contract-batch-six`, RED `defe3751d`, 구현·데이터
+  `65f487ea9`, feature HEAD `5ce8132b0598797e73bb675a2ff49c66eef72167`, canonical no-ff merge
+  `66115a2d7312ae09e9cf8a06b1369ddf051e7cd2`.
+- loader 순서 51~60의 exact evidence·signal·recovery를 투영했다. 51~53번 probe 후보와
+  55번 selector 후보만 `safe_pr`다. fixture는 51·55·56번에만 exact 연결했다.
+- 54번 실제 health 실패에 probe fix를 추론하지 않고, fixture가 있는 56번도 fallback-only,
+  60번도 live OOM recovery 부재를 그대로 보존했다. 독립 의미 감사 P0/P1 0건이다.
+- append-only: 여섯 번째 batch digest `cc5f1422…b0ae`를 `(51, 60)`에 고정하고
+  누락 lock·batch 6 변조 회귀를 추가했다. 누적 범위는 60/87, 다음 cursor는 61이다.
+- 고유 검증: candidate scorer 60/60 PASS, 후보 계약 테스트 49 passed. 전체 게이트는
+  Ruff lint/format PASS, import-linter 8 kept/0 broken, pytest `1920 passed, 3 skipped`;
+  manifest management 69 / target 20.
+- 4조건: merge-tree clean/tree `113e4e5166691df6ab5c2bd940a2b9e86487fb25`, 파일 삭제·
+  소유권 밖 변경·frozen 경로 변경 0건, RED·구현·문서·merge commit의 `origin/dev`
+  ancestor exit 0. J 배포 실행은 0건이다.
