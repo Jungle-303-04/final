@@ -4,18 +4,19 @@ import test from 'node:test';
 
 const root = new URL('../', import.meta.url);
 
-test('removed legacy screens have no route or entry-link references', async () => {
+test('removed legacy screens stay removed while the new workflow workspace is canonical', async () => {
   const deleted = [
     'src/features/console/pages/HomePage.tsx',
     'src/features/console/pages/homeCharts.ts',
     'src/features/metrics/MetricsView.tsx',
     'src/features/workflow/WorkflowListView.tsx',
-    'src/features/release/ReleaseFlowView.tsx',
   ];
 
   for (const path of deleted) {
     await assert.rejects(access(new URL(path, root)));
   }
+
+  await access(new URL('src/features/release/ReleaseFlowView.tsx', root));
 
   const entryPoints = await Promise.all([
     'src/app/router.tsx',
@@ -26,6 +27,9 @@ test('removed legacy screens have no route or entry-link references', async () =
   ].map((path) => readFile(new URL(path, root), 'utf8')));
   const source = entryPoints.join('\n');
 
-  assert.doesNotMatch(source, /['"]\/(?:metrics|workflows|release-flows)(?:[/?'"]|$)/);
+  assert.doesNotMatch(source, /['"]\/metrics(?:[/?'"]|$)/);
+  assert.match(entryPoints[0], /path:\s*'workflows'/);
+  assert.match(entryPoints[1], /to:\s*'\/workflows',\s*label:\s*'워크플로우'/);
+  assert.match(entryPoints[0], /path:\s*'release-flows',\s*element:\s*<Navigate to=\{`\$\{basePath\}\/workflows`\}/);
   assert.match(entryPoints[0], /index:\s*true,\s*element:\s*<Navigate to=\{`\$\{basePath\}\/clusters`\}/);
 });
