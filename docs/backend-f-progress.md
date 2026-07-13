@@ -230,6 +230,31 @@ Bundle route는 200을 반환한다.
 
 계약 완성: OSS PR-only profile + ControllerRuntime + make demo (f0c3b4e42f29c4f011d4d70910b083f7acc031e0) [green]
 
+### OSS Helm 설치 재검증 — 완료 판정 정정
+
+- 코드 `7bb74d71fad1101b8818b07c1dfb6797f28141d5`는 로컬 Helm chart를 추가하고 fresh
+  Kind에서 controller 1/1, PostgreSQL 1/1, agent 1/1 Ready를 실증했다. controller는
+  PostgreSQL readiness를 기다린 뒤 관리자·self-agent를 bootstrap하며 공개 프로파일은
+  NATS/Redis/MinIO 없이 in-process bus와 `DEV_AUTH_BYPASS=0`을 사용한다.
+- 실제 `make demo`는 Helm install 이후 bad rollout과 정상화까지 종료 코드 0으로 끝났고,
+  전체 게이트는 `1968 passed, 3 skipped`, import-linter 8 kept/0 broken이었다.
+- 기존 완료 판정은 철회한다. `oci://ghcr.io/opsia/charts/opsia`는 anonymous pull에서 403이고,
+  현재 데모는 rollback PR 문서를 로컬에서 만들고 `kubectl set image`로 직접 정상화한다.
+  동일 artifact의 공개 OCI 설치, 실제 safe-pr 여정, NATS/in-process 결과 동등성까지 남아 있다.
+- 이 기록은 완료 앵커가 아니다. 외부 GHCR namespace/package 권한이 확보되고 남은 제품 여정이
+  실증된 뒤 canonical hash로 새 앵커를 기록한다.
+- 로컬 Helm 설치 기반 canonical merge는 `d86117efc8d00c09e7f75ca01f2b51cb95465a7b`이며
+  `origin/dev` ancestor exit 0을 확인했다.
+- `82a7f29f29c9ce38aa5d8b196449f2e53182bd71`는 격리된 실제 NATS JetStream 컨테이너와
+  in-process bus에 동일한 publish→NAK→redelivery→child publish→ACK 시나리오를 실행한다.
+  payload·correlation·causation·workspace와 재전달 원문 보존 결과는 양쪽이 동일했다.
+- 재현 명령은 `make event-bus-equivalence`다. 이 검증은 clean-run outcome 동등성이다.
+  in-process bus는 프로세스 메모리, JetStream은 영속 broker이므로 controller crash 시
+  내구성까지 동등하다고 주장하지 않는다.
+- canonical merge `66e8c08e688658e3c41034b6fd8c7e5068edf084`와 GREEN `82a7f29f2`의
+  `origin/dev` ancestor exit 0을 확인했다. BQ-016은 남은 OCI·실제 safe-pr·lifecycle 때문에
+  계속 `in_progress`다.
+
 ### H3 — BQ-007/009/010 권위 patch 엔진
 
 - canonical merge: `6d68325bf1cc47f55810e5dc2189e51a6fe916c0`
