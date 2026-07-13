@@ -49,9 +49,12 @@ RUN kubectl version --client=true \
 COPY src/services/requirements.txt ./requirements.txt
 RUN pip install --no-cache-dir -r requirements.txt
 
+COPY --chown=appuser:appuser alembic ./alembic
+COPY --chown=appuser:appuser alembic.ini ./alembic.ini
 COPY --chown=appuser:appuser src ./src
 RUN find /app/src -type d -exec chmod 755 {} + \
-    && find /app/src -type f -exec chmod 644 {} +
+    && find /app/src -type f -exec chmod 644 {} + \
+    && test "$(alembic heads)" = "20260713_2350 (head)"
 
 # 비루트 실행 — 매니페스트 securityContext(runAsUser: 10001)와 UID 정렬.
 # (root 로 의존성 설치/소스 복사 후 비특권 사용자로 전환; 8000/9100 은 비특권 포트)
