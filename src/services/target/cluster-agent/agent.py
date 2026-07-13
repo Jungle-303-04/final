@@ -48,12 +48,14 @@ from telemetry_registry import telemetry
 import config as agent_config
 from config import (
     AGENT_CONTROL_DB_PATH_ENV,
+    AGENT_DIRECT_COMMANDS_ENABLED_ENV,
     BOOTSTRAP_MODE_ENV,
     CLUSTER_ROLE_ENV,
     COMMAND_OUTBOX_DB_PATH_ENV,
     COMMAND_OUTBOX_FLUSH_INTERVAL_SECONDS,
     COMMAND_OUTBOX_MAX_ATTEMPTS,
     DEFAULT_AGENT_CONTROL_DB_PATH,
+    DEFAULT_AGENT_DIRECT_COMMANDS_ENABLED,
     DEFAULT_BOOTSTRAP_MODE,
     DEFAULT_CLUSTER_ROLE,
     DEFAULT_COMMAND_OUTBOX_DB_PATH,
@@ -238,6 +240,7 @@ class AgentConfig:
     )
     INVALID_APPROVAL_EVIDENCE_MESSAGE = "write command approval_expires_at is invalid"
     EXPIRED_APPROVAL_EVIDENCE_MESSAGE = "write command approval_expires_at is expired"
+    DIRECT_COMMANDS_DISABLED_MESSAGE = "direct commands are disabled by agent profile"
     KUBERNETES_ROLLOUT_TIMEOUT_SECONDS = CONFIG_KUBERNETES_ROLLOUT_TIMEOUT_SECONDS
     KUBERNETES_ROLLOUT_POLL_INTERVAL_SECONDS = CONFIG_KUBERNETES_ROLLOUT_POLL_INTERVAL_SECONDS
 
@@ -481,6 +484,10 @@ class TargetClusterAgent:
             env(RECONCILE_INTERVAL_ENV, DEFAULT_RECONCILE_INTERVAL_SECONDS)
         )
         self.reconciler_mode = env(RECONCILER_MODE_ENV, DEFAULT_RECONCILER_MODE).strip().lower()
+        self.direct_commands_enabled = env(
+            AGENT_DIRECT_COMMANDS_ENABLED_ENV,
+            DEFAULT_AGENT_DIRECT_COMMANDS_ENABLED,
+        ).strip().lower() in {"1", "true", "yes", "on"}
         self.client = client
         self.telemetry_transport = telemetry_transport
         self.kubernetes_transport = kubernetes_transport
@@ -934,6 +941,8 @@ class TargetClusterAgent:
         payload = self.command_payload(command)
         if action in RCA_TEST_COMMAND_ACTIONS and not rca_test_runs_enabled():
             return self.command_result(False, RCA_TEST_RUNS_DISABLED_MESSAGE)
+        if not self.direct_commands_enabled and action != QUERY_RUN_ACTION:
+            return self.command_result(False, AgentConfig.DIRECT_COMMANDS_DISABLED_MESSAGE)
         if self.management_write_blocked(action):
             LOGGER.warning(
                 "management_agent_ignored_write_command",
