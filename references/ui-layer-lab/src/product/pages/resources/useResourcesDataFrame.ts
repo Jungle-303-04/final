@@ -34,8 +34,10 @@ interface ScopedState<T> {
 }
 
 interface ResourcesDataFrameInput {
+  detailClusterId: string | null;
   detailIdentity: ResourceIdentity | null;
   includeDeleted: boolean;
+  listQuerySupported: boolean;
   namespace: string | null;
   onRequestFailure: (target: ResourcesRequestTarget, failure: ResourcesPortFailure) => void;
   onRequestSuccess: (target: ResourcesRequestTarget) => void;
@@ -49,8 +51,10 @@ interface ResourcesDataFrameInput {
 
 export function useResourcesDataFrame(input: ResourcesDataFrameInput) {
   const {
+    detailClusterId,
     detailIdentity,
     includeDeleted,
+    listQuerySupported,
     namespace,
     onRequestFailure,
     onRequestSuccess,
@@ -110,9 +114,8 @@ export function useResourcesDataFrame(input: ResourcesDataFrameInput) {
       return;
     }
     onRequestFailure(target, failure);
-    if (failure.code === "forbidden") {
+    if (failure.code === "forbidden" && target !== "detail") {
       denyTarget(clusterId, target);
-      return;
     }
     const fail = <T,>(current: ScopedState<T>): ScopedState<T> => current.scope === scope
       ? { ...current, state: resourcesFailure(current.state, failure) }
@@ -162,7 +165,7 @@ export function useResourcesDataFrame(input: ResourcesDataFrameInput) {
 
   const selectedTypeExists = catalog.phase === "ready" && selectedResourceType !== null &&
     catalog.data.items.some((item) => item.resourceType === selectedResourceType);
-  const listScope = selectedTypeExists && selectedClusterId && selectedResourceType
+  const listScope = listQuerySupported && selectedTypeExists && selectedClusterId && selectedResourceType
     ? [selectedClusterId, selectedResourceType, namespace ?? "", includeDeleted ? "deleted" : "active"].join(":")
     : null;
   const list = scopedValue(listRecord, listScope);
@@ -202,39 +205,39 @@ export function useResourcesDataFrame(input: ResourcesDataFrameInput) {
     recoverDeniedTarget, revision, selectedClusterId, selectedResourceType,
   ]);
 
-  const detailScope = detailIdentity && selectedClusterId
-    ? `${selectedClusterId}:${detailIdentity.resourceType}:${detailIdentity.kind}:${detailIdentity.namespace ?? ""}:${detailIdentity.name}`
+  const detailScope = detailIdentity && detailClusterId
+    ? `${detailClusterId}:${detailIdentity.resourceType}:${detailIdentity.kind}:${detailIdentity.namespace ?? ""}:${detailIdentity.name}`
     : null;
   const detail = scopedValue(detailRecord, detailScope);
   useEffect(() => {
-    if (!detailScope || !detailIdentity || !selectedClusterId || !selectedTypeExists) return;
+    if (!detailScope || !detailIdentity || !detailClusterId) return;
     let active = true;
     queueStart(
       setDetailRecord,
       detailScope,
       () => active,
-      deniedRef.current?.clusterId === selectedClusterId,
+      deniedRef.current?.clusterId === detailClusterId,
     );
     const request = acquireSharedRequest(
       port,
       `resources:detail:${detailScope}:r${revision}`,
-      (signal) => port.loadResourceDetail(selectedClusterId, detailIdentity, signal),
+      (signal) => port.loadResourceDetail(detailClusterId, detailIdentity, signal),
     );
     void request.promise.then(
       (data) => {
         if (!active) return;
         setDetailRecord({ scope: detailScope, state: resourcesSuccess(data) });
         onRequestSuccess("detail");
-        recoverDeniedTarget(selectedClusterId, "detail");
+        recoverDeniedTarget(detailClusterId, "detail");
       },
       (error: unknown) => {
-        if (active && !isAbort(error)) handleFailure(error, selectedClusterId, detailScope, "detail");
+        if (active && !isAbort(error)) handleFailure(error, detailClusterId, detailScope, "detail");
       },
     );
     return () => { active = false; request.release(); };
   }, [
-    detailIdentity, detailScope, handleFailure, onRequestSuccess, port,
-    recoverDeniedTarget, revision, selectedClusterId, selectedTypeExists,
+    detailClusterId, detailIdentity, detailScope, handleFailure, onRequestSuccess, port,
+    recoverDeniedTarget, revision,
   ]);
 
   return {

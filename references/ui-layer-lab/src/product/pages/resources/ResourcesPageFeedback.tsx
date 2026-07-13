@@ -61,6 +61,69 @@ export function UnknownSelection({
   );
 }
 
+export function UnsupportedFilterProjection({ embedded = false }: { embedded?: boolean }) {
+  const { t } = useI18n();
+  const content = (
+    <div className="grid max-w-md justify-items-center gap-3 text-center">
+      <CircleAlert aria-hidden="true" className="size-8 text-muted-foreground" />
+      <h3
+        className="text-lg font-semibold"
+        id="resources-filter-unsupported-title"
+      >
+        {t("resources.filter.unsupported.title")}
+      </h3>
+      <p className="text-sm text-muted-foreground">
+        {t("resources.filter.unsupported.description")}
+      </p>
+    </div>
+  );
+  if (embedded) {
+    return (
+      <section
+        aria-labelledby="resources-filter-unsupported-title"
+        className="grid min-h-72 place-items-center p-6"
+      >
+        {content}
+      </section>
+    );
+  }
+  return (
+    <Surface
+      aria-labelledby="resources-filter-unsupported-title"
+      className="grid min-h-72 place-items-center p-6"
+    >
+      {content}
+    </Surface>
+  );
+}
+
+export function ResourcesClusterBoundary({
+  variant,
+}: {
+  variant: "catalog-unconfirmed" | "multiple" | "required";
+}) {
+  const { t } = useI18n();
+  const key = variant === "catalog-unconfirmed"
+    ? "catalogUnconfirmed"
+    : variant;
+  return (
+    <Surface
+      aria-labelledby="resources-cluster-boundary-title"
+      className="grid min-h-72 place-items-center p-6"
+    >
+      <div className="grid max-w-md justify-items-center gap-3 text-center">
+        <CircleAlert aria-hidden="true" className="size-8 text-muted-foreground" />
+        <h2 className="text-lg font-semibold" id="resources-cluster-boundary-title">
+          {t(`resources.selection.${key}.title`)}
+        </h2>
+        <p className="text-sm text-muted-foreground">
+          {t(`resources.selection.${key}.description`)}
+        </p>
+      </div>
+    </Surface>
+  );
+}
+
 export function ResourcesDenied({ onRetry }: { onRetry: () => void }) {
   const { t } = useI18n();
   return (

@@ -45,7 +45,7 @@ afterEach(() => {
 describe("ResourcesPage keyboard navigation", () => {
   it("supports j/k, gg/G, Enter, and d without moving focus into hidden rows", async () => {
     const user = userEvent.setup();
-    renderResources(resourcesPort(), "/product/resources/pod?cluster=cluster-1");
+    renderResources(resourcesPort(), "/product/resources?clusters=cluster-1&resources.types=pod");
     const checkout = await screen.findByRole("button", { name: /checkout-api-0/u }, { timeout: 10_000 });
     const orders = screen.getByRole("button", { name: /orders-api-0/u });
     const telemetry = screen.getByRole("button", { name: /telemetry-0/u });
@@ -72,20 +72,20 @@ describe("ResourcesPage keyboard navigation", () => {
   }, 30_000);
 
   it("cycles API-discovered resource types with [ and ] while focus is outside an editor", async () => {
-    renderResources(resourcesPort(), "/product/resources/pod?cluster=cluster-1");
+    renderResources(resourcesPort(), "/product/resources?clusters=cluster-1&resources.types=pod");
     await screen.findByRole("table", { name: "리소스 목록" }, { timeout: 5_000 });
 
     fireEvent.keyDown(document, { key: "]" });
     await waitFor(() => expect(screen.getByTestId("resources-location").textContent)
-      .toContain("/product/resources/node?cluster=cluster-1"));
+      .toContain("clusters=cluster-1&resources.types=node"));
     fireEvent.keyDown(document, { key: "[" });
     await waitFor(() => expect(screen.getByTestId("resources-location").textContent)
-      .toContain("/product/resources/pod?cluster=cluster-1"));
+      .toContain("clusters=cluster-1&resources.types=pod"));
   }, 15_000);
 
   it("does not run collection shortcuts while the loaded-results search owns focus", async () => {
     const user = userEvent.setup();
-    renderResources(resourcesPort(), "/product/resources/pod?cluster=cluster-1");
+    renderResources(resourcesPort(), "/product/resources?clusters=cluster-1&resources.types=pod");
     const search = await screen.findByRole("searchbox", { name: "표시된 결과 검색" }, { timeout: 5_000 });
 
     await user.click(search);
@@ -95,11 +95,11 @@ describe("ResourcesPage keyboard navigation", () => {
     expect((search as HTMLInputElement).value).toBe("jGd");
     expect(screen.queryByRole("dialog")).toBeNull();
     expect(screen.getByTestId("resources-location").textContent)
-      .toContain("/product/resources/pod?cluster=cluster-1");
+      .toContain("clusters=cluster-1&resources.types=pod&resources.q=jGd");
   }, 15_000);
 
   it("keeps global g chords available while reserving gg for the first resource row", async () => {
-    renderResources(resourcesPort(), "/product/resources/pod?cluster=cluster-1");
+    renderResources(resourcesPort(), "/product/resources?clusters=cluster-1&resources.types=pod");
     const checkout = await screen.findByRole(
       "button",
       { name: /checkout-api-0/u },

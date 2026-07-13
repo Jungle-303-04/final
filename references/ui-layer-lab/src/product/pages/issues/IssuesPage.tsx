@@ -38,6 +38,9 @@ export function IssuesPage({ port }: { port: IssuesPort }) {
   if (scope.selection.kind === "empty") {
     return <ProductStateScreen kind="empty" placement="content" />;
   }
+  if (scope.selection.kind === "unfiltered" || scope.selection.kind === "multiple") {
+    return <ProductStateScreen kind="empty" placement="content" />;
+  }
   if (scope.selection.kind === "unavailable") {
     return (
       <ClusterScopeFailureScreen

@@ -22,7 +22,7 @@ export function HomePage({ port }: { port: HomePort }) {
     return <HomeFailureScreen failure={state.choices.failure} onRetry={state.refresh} />;
   }
   if (state.choices.data.clusters.length === 0) {
-    return <ProductStateScreen kind="empty" placement="content" />;
+    return <HomeClusterBoundary variant="catalog-unconfirmed" />;
   }
 
   const selectedCluster = state.choices.data.clusters.find(
@@ -53,7 +53,13 @@ export function HomePage({ port }: { port: HomePort }) {
         </Button>
       </header>
       {!state.selectedClusterExists ? (
-        <UnknownCluster clusterId={state.selectedClusterId} />
+        state.clusterSelection.kind === "unfiltered" ? (
+          <HomeClusterBoundary variant="required" />
+        ) : state.clusterSelection.kind === "multiple" ? (
+          <HomeClusterBoundary variant="multiple" />
+        ) : (
+          <UnknownCluster clusterId={state.selectedClusterId} />
+        )
       ) : (
         <>
           <PartialFailureBanner state={state} />
@@ -75,6 +81,28 @@ export function HomePage({ port }: { port: HomePort }) {
         </>
       )}
     </ProductPageFrame>
+  );
+}
+
+function HomeClusterBoundary({
+  variant,
+}: {
+  variant: "catalog-unconfirmed" | "multiple" | "required";
+}) {
+  const { t } = useI18n();
+  const key = variant === "catalog-unconfirmed" ? "catalogUnconfirmed" : variant;
+  return (
+    <Surface aria-labelledby="home-cluster-boundary-title" className="grid min-h-72 place-items-center p-6">
+      <div className="grid max-w-md justify-items-center gap-3 text-center">
+        <CircleAlert aria-hidden="true" className="size-8 text-muted-foreground" />
+        <h2 className="text-lg font-semibold" id="home-cluster-boundary-title">
+          {t(`home.cluster.${key}.title`)}
+        </h2>
+        <p className="text-sm text-muted-foreground">
+          {t(`home.cluster.${key}.description`)}
+        </p>
+      </div>
+    </Surface>
   );
 }
 

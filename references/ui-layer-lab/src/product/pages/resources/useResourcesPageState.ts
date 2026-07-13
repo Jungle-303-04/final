@@ -1,12 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import {
-  useLocation,
-  useNavigate,
-  useParams,
-  useSearchParams,
-} from "react-router-dom";
+import { useParams } from "react-router-dom";
 import { useAuthSessionGate } from "../../features/auth/AuthSessionGate";
 import { useClusterScope } from "../../features/cluster-scope/ClusterScopeProvider";
+import { useUnifiedFilter } from "../../features/filters/UnifiedFilterProvider";
 import type { ResourceIdentity, ResourcesPort } from "../../features/resources/resourcesContract";
 import { useVisibleRefreshClock } from "../../shared/data/useVisibleRefreshClock";
 import {
@@ -21,10 +17,10 @@ import {
   type ResourcesRetryBlocks,
 } from "./resourcesPageStateModel";
 import {
-  decodeResourceSelection,
-  encodeResourceSelection,
+  decodeResourceTarget,
+  encodeResourceTarget,
+  isCanonicalResourceTarget,
   resolveResourceType,
-  resourceTypePath,
 } from "./resourcesUrlState";
 import { useResourcesDataFrame } from "./useResourcesDataFrame";
 
@@ -32,22 +28,47 @@ const RESOURCES_POLL_INTERVAL_MS = 30_000;
 export function useResourcesPageState(port: ResourcesPort) {
   const { reportUnauthorized } = useAuthSessionGate();
   const clusterScope = useClusterScope();
+  const filter = useUnifiedFilter();
   const refreshClusterScope = clusterScope.refresh;
-  const location = useLocation();
-  const navigate = useNavigate();
   const params = useParams<"*">();
-  const [searchParams, setSearchParams] = useSearchParams();
   const selectedClusterId = clusterScope.requestedClusterId;
-  const typeResolution = resolveResourceType(params["*"]);
-  const selectedResourceType = typeResolution.kind === "valid" ? typeResolution.value : null;
-  const namespace = normalizedOptionalQuery(searchParams.get("namespace"));
-  const includeDeleted = searchParams.get("showInactive") === "1";
-  const detailRequested = searchParams.has("resource") || searchParams.has("kind");
-  const detailIdentity = decodeResourceSelection(
-    selectedResourceType,
-    searchParams.get("kind"),
-    searchParams.get("resource"),
+  const legacyTypeResolution = resolveResourceType(params["*"]);
+  const canonicalTypes = filter.state.resources.types;
+  const selectedResourceType = canonicalTypes.length === 1
+    ? canonicalTypes[0] ?? null
+    : canonicalTypes.length === 0 && legacyTypeResolution.kind === "valid"
+      ? legacyTypeResolution.value
+      : null;
+  const namespaceRefs = filter.state.common.namespaces;
+  const selectedNamespaces = selectedClusterId
+    ? namespaceRefs.filter((candidate) => candidate.clusterId === selectedClusterId)
+    : [];
+  const namespace = namespaceRefs.length === 1 && selectedNamespaces.length === 1
+    ? selectedNamespaces[0]?.namespace ?? null
+    : null;
+  const listQuerySupported = (
+    namespaceRefs.length === selectedNamespaces.length &&
+    namespaceRefs.length <= 1 &&
+    filter.state.common.applications.length === 0 &&
+    filter.state.common.labels.length === 0 &&
+    filter.state.resources.health.length === 0 &&
+    filter.state.resources.query.length === 0 &&
+    filter.state.resources.view === "table"
   );
+  const includeDeleted = filter.state.resources.includeDeleted;
+  const detailRequested = filter.detail.resource !== null || filter.detail.resourceKind !== null;
+  const detailTarget = useMemo(() => decodeResourceTarget(
+    selectedClusterId,
+    selectedResourceType,
+    filter.detail.resourceKind,
+    filter.detail.resource,
+  ), [
+    filter.detail.resource,
+    filter.detail.resourceKind,
+    selectedClusterId,
+    selectedResourceType,
+  ]);
+  const detailIdentity = detailTarget?.identity ?? null;
   const choices = clusterScope.collection;
   const [retryBlocks, setRetryBlocks] = useState<ResourcesRetryBlocks>({});
   const rowButtons = useRef(new Map<string, HTMLButtonElement>());
@@ -83,8 +104,10 @@ export function useResourcesPageState(port: ResourcesPort) {
 
   const selectedClusterExists = clusterScope.selectedClusterExists;
   const frame = useResourcesDataFrame({
+    detailClusterId: detailTarget?.clusterId ?? null,
     detailIdentity,
     includeDeleted,
+    listQuerySupported,
     namespace,
     port,
     onRequestFailure: recordFailure,
@@ -96,51 +119,61 @@ export function useResourcesPageState(port: ResourcesPort) {
     selectedResourceType,
   });
 
-  useEffect(() => {
-    if (frame.catalog.phase !== "ready" || typeResolution.kind !== "none") return;
-    const first = frame.catalog.data.items[0];
-    if (!first) return;
-    navigate({ pathname: resourceTypePath(first.resourceType), search: location.search }, { replace: true });
-  }, [frame.catalog, location.search, navigate, typeResolution.kind]);
-
-  const updateQuery = useCallback((mutate: (next: URLSearchParams) => void, replace = true) => {
-    const next = new URLSearchParams(searchParams);
-    mutate(next);
-    setSearchParams(next, { replace });
-  }, [searchParams, setSearchParams]);
   const selectResourceType = useCallback((resourceType: string) => {
     setRetryBlocks((current) => withoutRetryBlock(
       withoutRetryBlock(current, "list"),
       "detail",
     ));
-    const next = new URLSearchParams(searchParams);
-    clearDetail(next);
-    navigate({ pathname: resourceTypePath(resourceType), search: next.toString() });
-  }, [navigate, searchParams]);
+    filter.updateFilters((current) => ({
+      ...current,
+      resources: { ...current.resources, types: [resourceType] },
+    }), "chip-add");
+  }, [filter]);
+
+  useEffect(() => {
+    if (
+      detailTarget === null ||
+      isCanonicalResourceTarget(filter.detail.resource)
+    ) return;
+    const selection = encodeResourceTarget(detailTarget.clusterId, detailTarget.identity);
+    filter.updateDetail((current) => ({
+      ...current,
+      resource: selection.resource,
+      resourceKind: selection.kind,
+    }), "detail-expand");
+  }, [detailTarget, filter]);
   const closeDetail = useCallback(() => {
     setRetryBlocks((current) => withoutRetryBlock(current, "detail"));
     const key = restoreRowKey.current;
     restoreRowKey.current = null;
-    const next = new URLSearchParams(searchParams);
-    clearDetail(next);
-    navigate({ pathname: location.pathname, search: next.toString() }, { replace: true });
+    filter.updateDetail((current) => ({
+      ...current,
+      full: false,
+      resource: null,
+      resourceKind: null,
+      tab: null,
+    }), "detail-close");
     requestAnimationFrame(() => { if (key) rowButtons.current.get(key)?.focus(); });
-  }, [location.pathname, navigate, searchParams]);
+  }, [filter]);
 
   return useMemo(() => ({
     choices,
+    clusterSelection: clusterScope.selection,
     ...frame,
     selectedClusterId,
     selectedClusterExists,
     selectedResourceType,
-    resourceTypeInvalid: typeResolution.kind === "invalid",
+    resourceTypeInvalid: canonicalTypes.length > 1 || (
+      canonicalTypes.length === 0 && legacyTypeResolution.kind === "invalid"
+    ),
     detailIdentity,
     detailRequested,
-    search: searchParams.get("search") ?? "",
+    filterProjectionUnsupported: !listQuerySupported || canonicalTypes.length > 1,
+    search: filter.state.resources.query,
     namespace,
     includeDeleted,
-    detailTab: searchParams.get("tab") ?? "overview",
-    fullDetail: searchParams.get("full") === "1",
+    detailTab: filter.detail.tab ?? "overview",
+    fullDetail: filter.detail.full,
     automaticRefreshPaused,
     retryWaitSeconds: retryWaitSeconds(retryBlocks),
     refresh,
@@ -157,42 +190,52 @@ export function useResourcesPageState(port: ResourcesPort) {
       if (nextItem) selectResourceType(nextItem.resourceType);
     },
     setSearch(value: string) {
-      updateQuery((next) => {
-        if (value) next.set("search", value);
-        else next.delete("search");
-      });
+      filter.updateFilters((current) => ({
+        ...current,
+        resources: { ...current.resources, query: value },
+      }), "typing");
     },
     setNamespace(value: string | null) {
       setRetryBlocks((current) => withoutRetryBlock(
         withoutRetryBlock(current, "list"),
         "detail",
       ));
-      updateQuery((next) => {
-        if (value) next.set("namespace", value);
-        else next.delete("namespace");
-        clearDetail(next);
-      }, false);
+      if (!selectedClusterId) return;
+      filter.updateFilters((current) => ({
+        ...current,
+        common: {
+          ...current.common,
+          namespaces: [
+            ...current.common.namespaces.filter((item) => item.clusterId !== selectedClusterId),
+            ...(value ? [{ clusterId: selectedClusterId, namespace: value }] : []),
+          ],
+        },
+      }), value ? "chip-add" : "chip-remove");
     },
     setIncludeDeleted(value: boolean) {
       setRetryBlocks((current) => withoutRetryBlock(
         withoutRetryBlock(current, "list"),
         "detail",
       ));
-      updateQuery((next) => {
-        if (value) next.set("showInactive", "1");
-        else next.delete("showInactive");
-        clearDetail(next);
-      }, false);
+      filter.updateFilters((current) => ({
+        ...current,
+        resources: { ...current.resources, includeDeleted: value },
+      }), value ? "chip-add" : "chip-remove");
     },
-    setDetailTab(value: string) { updateQuery((next) => next.set("tab", value)); },
+    setDetailTab(value: string) {
+      filter.updateDetail((current) => ({ ...current, tab: value }), "detail-tab");
+    },
     openDetail(identity: ResourceIdentity) {
-      const selection = encodeResourceSelection(identity);
+      if (selectedClusterId === null) return;
+      const selection = encodeResourceTarget(selectedClusterId, identity);
       restoreRowKey.current = identityKey(identity);
-      updateQuery((next) => {
-        next.set("resource", selection.resource);
-        next.set("kind", selection.kind);
-        next.delete("tab");
-      }, false);
+      filter.updateDetail((current) => ({
+        ...current,
+        full: false,
+        resource: selection.resource,
+        resourceKind: selection.kind,
+        tab: null,
+      }), "detail-open");
     },
     closeDetail,
     registerRowButton(identity: ResourceIdentity, element: HTMLButtonElement | null) {
@@ -202,19 +245,11 @@ export function useResourcesPageState(port: ResourcesPort) {
     },
   }), [
     automaticRefreshPaused, choices, closeDetail, detailIdentity, detailRequested, frame, includeDeleted,
-    namespace, refresh, searchParams, selectedClusterExists, selectedClusterId,
-    retryBlocks, selectedResourceType, selectResourceType, typeResolution.kind, updateQuery,
+    namespace, refresh, filter, selectedClusterExists, selectedClusterId,
+    retryBlocks, selectedResourceType, selectResourceType, canonicalTypes.length,
+    listQuerySupported, clusterScope.selection,
+    legacyTypeResolution.kind,
   ]);
-}
-
-function normalizedOptionalQuery(value: string | null): string | null {
-  if (value === null) return null;
-  const normalized = value.trim();
-  return normalized === "" ? null : normalized;
-}
-
-function clearDetail(params: URLSearchParams) {
-  for (const key of ["resource", "kind", "tab", "full"]) params.delete(key);
 }
 
 function identityKey(identity: ResourceIdentity): string {

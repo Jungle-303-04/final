@@ -10,7 +10,7 @@ afterEach(cleanup);
 
 describe("HomePage", () => {
   it("renders English by default without translating Kubernetes nouns or backend values", async () => {
-    renderHome(homePort(), ["/product"], vi.fn(), null);
+    renderHome(homePort(), ["/product?clusters=cluster-1"], vi.fn(), null);
 
     expect(await screen.findByRole("heading", { name: "Cluster status" }, { timeout: 5_000 }))
       .toBeTruthy();
@@ -46,7 +46,7 @@ describe("HomePage", () => {
 
   it("keeps an unknown URL cluster explicit instead of selecting the first cluster", async () => {
     const port = homePort();
-    renderHome(port, ["/product?cluster=missing"]);
+    renderHome(port, ["/product?clusters=missing"]);
 
     expect(await screen.findByRole("heading", { name: "현재 조회 목록에서 확인할 수 없습니다" }))
       .toBeTruthy();
@@ -60,7 +60,7 @@ describe("HomePage", () => {
     });
     renderHome(port);
 
-    expect(await screen.findByRole("heading", { name: "표시할 데이터가 없습니다" }))
+    expect(await screen.findByRole("heading", { name: "관측된 Cluster가 없습니다" }))
       .toBeTruthy();
     expect(screen.queryByRole("heading", { name: "이 범위에 접근할 수 없습니다" }))
       .toBeNull();
@@ -116,7 +116,7 @@ describe("HomePage", () => {
     const port = homePort({
       listClusterChoices: vi.fn().mockRejectedValue(new HomePortFailure("unauthorized")),
     });
-    renderHome(port, ["/product"], reportUnauthorized);
+    renderHome(port, ["/product?clusters=cluster-1"], reportUnauthorized);
 
     await waitFor(() => expect(reportUnauthorized).toHaveBeenCalledOnce());
     expect(screen.queryByRole("heading", { name: "검증된 응답을 읽지 못했습니다" }))

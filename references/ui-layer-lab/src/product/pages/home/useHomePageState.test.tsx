@@ -44,7 +44,7 @@ describe("useHomePageState refresh authority", () => {
 
       const { result } = renderHomeState(
         api.port,
-        "/product?cluster=cluster-a&node=worker-a",
+        "/product?clusters=cluster-a&node=worker-a",
       );
       await waitFor(() => expect(result.current.pods.phase).toBe("ready"));
 
@@ -64,7 +64,7 @@ describe("useHomePageState refresh authority", () => {
     vi.useFakeTimers();
     setVisibility("visible");
     const api = homeApi();
-    const { result } = renderHomeState(api.port, "/product?cluster=cluster-a");
+    const { result } = renderHomeState(api.port, "/product?clusters=cluster-a");
     await flushEffects();
     expect(api.list).toHaveBeenCalledTimes(1);
     expect(api.overview).toHaveBeenCalledTimes(1);
@@ -109,7 +109,7 @@ describe("useHomePageState refresh authority", () => {
     api.overview
       .mockResolvedValueOnce(overview("cluster-a", "last-success"))
       .mockImplementationOnce(() => nextOverview.promise);
-    const { result } = renderHomeState(api.port, "/product?cluster=cluster-a");
+    const { result } = renderHomeState(api.port, "/product?clusters=cluster-a");
     await waitFor(() => expect(result.current.overview.phase).toBe("ready"));
 
     act(() => result.current.refresh());
@@ -144,7 +144,7 @@ describe("useHomePageState deep-link and generation safety", () => {
     api.pods.mockImplementationOnce(() => nextPods.promise);
     const { result } = renderHomeState(
       api.port,
-      "/product?cluster=cluster-a&node=external-node",
+      "/product?clusters=cluster-a&node=external-node",
     );
 
     await waitFor(() => expect(api.nodes).toHaveBeenCalledOnce());
@@ -172,7 +172,7 @@ describe("useHomePageState deep-link and generation safety", () => {
         ? firstA.promise
         : secondA.promise;
     });
-    const { result } = renderHomeState(api.port, "/product?cluster=cluster-a");
+    const { result } = renderHomeState(api.port, "/product?clusters=cluster-a");
     await waitFor(() => expect(api.overview).toHaveBeenCalledWith(
       "cluster-a",
       expect.any(AbortSignal),

@@ -2,16 +2,13 @@
 
 import { cleanup, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { StrictMode } from "react";
 import { afterEach, describe, expect, it } from "vitest";
+import { MemoryRouter } from "react-router-dom";
 import {
-  MemoryRouter,
-  useLocation,
-  useNavigate,
-  useNavigationType,
-} from "react-router-dom";
-import type { UnifiedFilterState } from "./filterContract";
-import { UnifiedFilterProvider, useUnifiedFilter } from "./UnifiedFilterProvider";
+  FilterProbe,
+  readState,
+  renderProvider,
+} from "./__tests__/UnifiedFilterProviderTestSupport";
 
 afterEach(cleanup);
 
@@ -126,106 +123,87 @@ describe("UnifiedFilterProvider", () => {
     );
   });
 
+  it("updates detail through the URL authority without changing any filter axis", async () => {
+    const user = userEvent.setup();
+    renderProvider(
+      "/product/resources?clusters=cluster-a&namespaces=cluster-a%2Fshop" +
+      "&applications=app-a&labels=team%3Dcheckout&resources.types=pod" +
+      "&resources.health=warning&resources.q=api#results",
+    );
+
+    await user.click(screen.getByRole("button", { name: "open detail" }));
+    expect(readState()).toMatchObject({
+      location: "/product/resources?clusters=cluster-a&namespaces=cluster-a%2Fshop" +
+        "&applications=app-a&labels=team%3Dcheckout&resources.types=pod" +
+        "&resources.health=warning&resources.q=api&resource=shop%2Fapi" +
+        "&resourceKind=Pod#results",
+      navigationType: "PUSH",
+    });
+
+    await user.click(screen.getByRole("button", { name: "select detail tab" }));
+    expect(readState()).toMatchObject({
+      location: "/product/resources?clusters=cluster-a&namespaces=cluster-a%2Fshop" +
+        "&applications=app-a&labels=team%3Dcheckout&resources.types=pod" +
+        "&resources.health=warning&resources.q=api&resource=shop%2Fapi" +
+        "&resourceKind=Pod&tab=events#results",
+      navigationType: "REPLACE",
+    });
+
+    await user.click(screen.getByRole("button", { name: "close detail" }));
+    expect(readState()).toMatchObject({
+      location: "/product/resources?clusters=cluster-a&namespaces=cluster-a%2Fshop" +
+        "&applications=app-a&labels=team%3Dcheckout&resources.types=pod" +
+        "&resources.health=warning&resources.q=api#results",
+      navigationType: "REPLACE",
+    });
+  });
+
+  it("updates Home drill-in without deleting filters", async () => {
+    const user = userEvent.setup();
+    renderProvider(
+      "/product/home?clusters=cluster-a&labels=team%3Dcheckout&issues.status=open",
+    );
+
+    await user.click(screen.getByRole("button", { name: "select node" }));
+
+    expect(readState()).toMatchObject({
+      location: "/product/home?clusters=cluster-a&labels=team%3Dcheckout" +
+        "&issues.status=open&node=worker-a",
+      navigationType: "PUSH",
+    });
+  });
+
+  it("serializes same-task filter and detail mutations without losing either update", async () => {
+    const user = userEvent.setup();
+    renderProvider("/product/resources?clusters=cluster-a&resources.types=pod");
+
+    await user.click(screen.getByRole("button", { name: "filter and open detail" }));
+
+    expect(readState()).toMatchObject({
+      labels: ["team=checkout"],
+      location: "/product/resources?clusters=cluster-a&labels=team%3Dcheckout" +
+        "&resources.types=pod&resource=shop%2Fapi&resourceKind=Pod",
+    });
+  });
+
+  it("dual-reads a legacy Resources path into navigation and the first write", async () => {
+    const user = userEvent.setup();
+    renderProvider("/product/resources/pod?clusters=cluster-a");
+
+    expect(readState().resourceTypes).toEqual(["pod"]);
+    expect(screen.getByTestId("issues-href").textContent).toBe(
+      "/product/issues?clusters=cluster-a&resources.types=pod",
+    );
+
+    await user.click(screen.getByRole("button", { name: "add label" }));
+    expect(readState().location).toBe(
+      "/product/resources/pod?clusters=cluster-a&labels=team%3Dcheckout&resources.types=pod",
+    );
+  });
+
   it("fails loudly when the hook is used outside its provider", () => {
     expect(() => render(
       <MemoryRouter><FilterProbe /></MemoryRouter>,
     )).toThrow("useUnifiedFilter must be used within UnifiedFilterProvider");
   });
 });
-
-function FilterProbe() {
-  const filter = useUnifiedFilter();
-  const location = useLocation();
-  const navigate = useNavigate();
-  const navigationType = useNavigationType();
-  const state = {
-    clusters: filter.state.common.clusters,
-    detail: filter.detail,
-    labels: filter.state.common.labels.map(({ key, value }) => `${key}=${value}`),
-    location: `${location.pathname}${location.search}${location.hash}`,
-    navigationType,
-    needsCanonicalWrite: filter.needsCanonicalWrite,
-  };
-
-  return (
-    <>
-      <output data-testid="filter-state">{JSON.stringify(state)}</output>
-      <output data-testid="issues-href">{filter.navigationHref("/product/issues")}</output>
-      <button onClick={filter.canonicalize} type="button">canonicalize</button>
-      <button onClick={() => filter.updateFilters(addLabel, "chip-add")} type="button">
-        add label
-      </button>
-      <button onClick={() => filter.updateFilters(addCluster, "chip-add")} type="button">
-        add cluster
-      </button>
-      <button onClick={() => filter.updateFilters(addQuery, "typing")} type="button">
-        type query
-      </button>
-      <button
-        onClick={() => filter.updateFilters(mutateQuery, "typing")}
-        type="button"
-      >
-        mutate query
-      </button>
-      <button onClick={() => filter.updateFilters((current) => current, "chip-add")} type="button">
-        same filters
-      </button>
-      <button onClick={() => navigate(-1)} type="button">back</button>
-      <button onClick={() => navigate(1)} type="button">forward</button>
-    </>
-  );
-}
-
-function addLabel(current: UnifiedFilterState): UnifiedFilterState {
-  return {
-    ...current,
-    common: {
-      ...current.common,
-      labels: [...current.common.labels, { key: "team", value: "checkout" }],
-    },
-  };
-}
-
-function addCluster(current: UnifiedFilterState): UnifiedFilterState {
-  return {
-    ...current,
-    common: {
-      ...current.common,
-      clusters: [...current.common.clusters, "cluster-b"],
-    },
-  };
-}
-
-function addQuery(current: UnifiedFilterState): UnifiedFilterState {
-  return {
-    ...current,
-    resources: { ...current.resources, query: "checkout" },
-  };
-}
-
-function mutateQuery(current: UnifiedFilterState): UnifiedFilterState {
-  current.resources.query = "mutated";
-  return current;
-}
-
-function renderProvider(entry: string, strict = false) {
-  const tree = (
-    <MemoryRouter initialEntries={[entry]}>
-      <UnifiedFilterProvider><FilterProbe /></UnifiedFilterProvider>
-    </MemoryRouter>
-  );
-  return render(strict ? <StrictMode>{tree}</StrictMode> : tree);
-}
-
-function readState(): {
-  clusters: readonly string[];
-  detail: { resource: string | null; resourceKind: string | null };
-  labels: readonly string[];
-  location: string;
-  navigationType: string;
-  needsCanonicalWrite: boolean;
-} {
-  return JSON.parse(screen.getByTestId("filter-state").textContent ?? "{}") as ReturnType<
-    typeof readState
-  >;
-}

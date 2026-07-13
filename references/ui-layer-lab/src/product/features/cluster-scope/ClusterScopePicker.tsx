@@ -21,8 +21,10 @@ import { useClusterScope } from "./ClusterScopeProvider";
 import { ClusterProviderIcon } from "./ClusterProviderIcon";
 import type { HomeConnectionStage } from "../home/homeContract";
 
+const ALL_CLUSTERS_VALUE = "__all_clusters__";
+
 export function ClusterScopePicker() {
-  const { formatDate, t } = useI18n();
+  const { formatDate, formatNumber, t } = useI18n();
   const scope = useClusterScope();
   const fixedGeometry = "h-8 w-full min-w-0 max-w-(--product-cluster-select-width)";
 
@@ -60,10 +62,13 @@ export function ClusterScopePicker() {
   }
 
   const selected = scope.selectedCluster;
-  const items = scope.collection.data.clusters.map((cluster) => ({
-    label: clusterDisplayLabel(cluster),
-    value: cluster.id,
-  }));
+  const items = [
+    { label: t("clusterScope.all"), value: ALL_CLUSTERS_VALUE },
+    ...scope.collection.data.clusters.map((cluster) => ({
+      label: clusterDisplayLabel(cluster),
+      value: cluster.id,
+    })),
+  ];
   const selectedConnection = selected
     ? t(connectionLabelKey(selected.connectionState))
     : t("common.state.unknown");
@@ -77,30 +82,37 @@ export function ClusterScopePicker() {
   );
   const selectedLabel = selected
     ? clusterDisplayLabel(selected)
-    : t("clusterScope.currentUnavailable", { cluster: scope.requestedClusterId ?? "" });
-  const selectedAccessibleLabel = selectedStage
-    ? t("clusterScope.ariaWithStage", {
-        cluster: selectedLabel,
-        connection: selectedConnection,
-        stage: selectedStage,
-      })
-    : t("clusterScope.aria", {
-        cluster: selectedLabel,
-        connection: selectedConnection,
-      });
+    : selectionLabel(scope, formatNumber, t);
+  const selectedAccessibleLabel = !selected
+    ? selectedLabel
+    : selectedStage
+      ? t("clusterScope.ariaWithStage", {
+          cluster: selectedLabel,
+          connection: selectedConnection,
+          stage: selectedStage,
+        })
+      : t("clusterScope.aria", {
+          cluster: selectedLabel,
+          connection: selectedConnection,
+        });
 
   return (
     <div className={fixedGeometry} data-slot="cluster-scope-picker">
       <Select
         items={items}
-        onValueChange={(value) => { if (value) scope.selectCluster(value); }}
+        onValueChange={(value) => {
+          if (value === ALL_CLUSTERS_VALUE) scope.clearClusters();
+          else if (value) scope.toggleCluster(value);
+        }}
         value={selected?.id ?? null}
       >
         <Tooltip>
           <TooltipTrigger
             render={(
               <SelectTrigger
-                aria-invalid={scope.selection.kind === "unknown" || undefined}
+                aria-invalid={scope.selection.kind === "unknown" || (
+                  scope.selection.kind === "multiple" && scope.selection.unresolvedIds.length > 0
+                ) || undefined}
                 aria-label={selectedAccessibleLabel}
                 className="size-full min-w-0"
                 title={selectedLabel}
@@ -118,17 +130,23 @@ export function ClusterScopePicker() {
             <SelectValue className="truncate" placeholder={selectedLabel} />
           </TooltipTrigger>
           <TooltipContent side="bottom">
-            <span className="flex flex-col gap-1">
+            {selected ? <span className="flex flex-col gap-1">
               {selectedStage ? (
                 <span>{t("clusterScope.stage.summary", { stage: selectedStage })}</span>
               ) : null}
               <span>{t("home.lastObserved", { time: selectedObservation })}</span>
-            </span>
+            </span> : <span>{selectedLabel}</span>}
           </TooltipContent>
         </Tooltip>
         <SelectContent align="start" alignItemWithTrigger={false} className="max-w-[min(32rem,calc(100vw-2rem))]">
           <SelectGroup>
             <SelectLabel>{t("clusterScope.available")}</SelectLabel>
+            <SelectItem value={ALL_CLUSTERS_VALUE}>
+              <span className="flex min-w-0 items-center gap-2">
+                <Server aria-hidden="true" className="size-4 shrink-0" />
+                <span className="truncate">{t("clusterScope.all")}</span>
+              </span>
+            </SelectItem>
             {scope.collection.data.clusters.map((cluster) => (
               <SelectItem key={cluster.id} value={cluster.id}>
                 <span className="flex min-w-0 flex-1 items-center justify-between gap-3 overflow-hidden">
@@ -147,6 +165,29 @@ export function ClusterScopePicker() {
       </Select>
     </div>
   );
+}
+
+function selectionLabel(
+  scope: ReturnType<typeof useClusterScope>,
+  formatNumber: (value: number | bigint) => string,
+  t: ReturnType<typeof useI18n>["t"],
+): string {
+  if (scope.selection.kind === "unfiltered") return t("clusterScope.all");
+  if (scope.selection.kind === "multiple") {
+    if (scope.selection.unresolvedIds.length > 0) {
+      return t("clusterScope.multiplePartial", {
+        count: formatNumber(scope.selection.requestedIds.length),
+        resolved: formatNumber(scope.selection.clusters.length),
+      });
+    }
+    return t("clusterScope.multiple", {
+      count: formatNumber(scope.selection.requestedIds.length),
+    });
+  }
+  if (scope.selection.kind === "unknown") {
+    return t("clusterScope.currentUnavailable", { cluster: scope.selection.requestedId });
+  }
+  return t("clusterScope.select");
 }
 
 const connectionStageLabelKeys: Record<HomeConnectionStage, MessageKey> = {

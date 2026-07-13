@@ -1,23 +1,18 @@
 // @vitest-environment jsdom
 
-import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { StrictMode } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import {
-  MemoryRouter,
-  useLocation,
-  useNavigationType,
-} from "react-router-dom";
-import { AuthSessionGateProvider } from "../auth/AuthSessionGate";
-import { HomePortFailure, type HomeClusterChoice } from "../home/homeContract";
+import { HomePortFailure } from "../home/homeContract";
 import type { ClusterScopePort } from "./clusterScopeContract";
-import { ClusterScopeProvider, useClusterScope } from "./ClusterScopeProvider";
-
-const CLUSTERS = [
-  cluster("cluster-a", "production", "online"),
-  cluster("cluster-b", "staging", "stale"),
-] as const;
+import {
+  collection,
+  deferred,
+  portOf,
+  readState,
+  renderScope,
+  scopeTree,
+} from "./__tests__/ClusterScopeProviderTestSupport";
 
 afterEach(() => {
   cleanup();
@@ -28,46 +23,119 @@ describe("ClusterScopeProvider", () => {
   it("shares one cluster collection request across a StrictMode remount", async () => {
     const listClusterChoices = vi.fn(async () => collection());
 
-    renderScope({ listClusterChoices }, "/product?cluster=cluster-a", true);
+    renderScope({ listClusterChoices }, "/product?clusters=cluster-a", true);
 
     await waitFor(() => expect(readState().selection).toBe("selected"));
     expect(listClusterChoices).toHaveBeenCalledTimes(1);
   });
 
-  it("defaults only an absent scope with replace navigation and clears route-local queries", async () => {
-    renderScope(portOf(collection()), "/product/resources?namespace=default&resource=pod");
+  it("keeps a zero-cluster canonical filter passive instead of selecting the first Cluster", async () => {
+    const entry = "/product/resources?labels=team%3Dcheckout&resources.types=Pod" +
+      "&resource=default%2Fapi&resourceKind=Pod&tab=events&full=true&node=worker-a#panel";
+    renderScope(portOf(collection()), entry);
 
     await waitFor(() => {
       expect(readState()).toMatchObject({
-        location: "/product/resources?cluster=cluster-a",
-        navigationType: "REPLACE",
-        requestedClusterId: "cluster-a",
-        selectedClusterId: "cluster-a",
-        selection: "selected",
+        filterClusters: [],
+        location: entry,
+        navigationType: "POP",
+        requestedClusterId: null,
+        selectedClusterId: null,
+        selection: "unfiltered",
       });
     });
   });
 
   it.each([
-    ["unknown", "/product?cluster=missing&node=worker-a", "missing"],
-    ["explicit empty", "/product?cluster=&node=worker-a", ""],
-  ])("preserves an %s URL scope without silently falling back", async (_case, entry, expectedId) => {
+    [
+      "single resolved",
+      "/product/resources?clusters=cluster-a&labels=team%3Dcheckout",
+      ["cluster-a"],
+      "cluster-a",
+      "cluster-a",
+      "selected",
+    ],
+    [
+      "multiple resolved",
+      "/product/resources?clusters=cluster-a,cluster-b&labels=team%3Dcheckout",
+      ["cluster-a", "cluster-b"],
+      null,
+      null,
+      "multiple",
+    ],
+    [
+      "single unresolved",
+      "/product/resources?clusters=missing&labels=team%3Dcheckout",
+      ["missing"],
+      "missing",
+      null,
+      "unknown",
+    ],
+  ])("projects a %s canonical cluster filter without rewriting the URL", async (
+    _case,
+    entry,
+    filterClusters,
+    requestedClusterId,
+    selectedClusterId,
+    selection,
+  ) => {
     renderScope(portOf(collection()), entry);
 
-    await waitFor(() => expect(readState().phase).toBe("ready"));
-    expect(readState()).toMatchObject({
-      location: entry,
-      requestedClusterId: expectedId,
-      selectedClusterId: null,
-      selection: "unknown",
+    await waitFor(() => {
+      expect(readState()).toMatchObject({
+        filterClusters,
+        location: entry,
+        navigationType: "POP",
+        requestedClusterId,
+        selectedClusterId,
+        selection,
+      });
     });
   });
 
-  it("keeps the pathname and removes every route-local query when the user selects a cluster", async () => {
+  it("dual-reads a legacy cluster without migrating it during mount", async () => {
+    const entry = "/product/resources?cluster=cluster-a&labels=team%3Dcheckout" +
+      "&resource=default%2Fapi&kind=Pod#panel";
+    renderScope(portOf(collection()), entry);
+
+    await waitFor(() => expect(readState().selection).toBe("selected"));
+    expect(readState()).toMatchObject({
+      filterClusters: ["cluster-a"],
+      location: entry,
+      navigationType: "POP",
+      needsCanonicalWrite: true,
+      requestedClusterId: "cluster-a",
+      selectedClusterId: "cluster-a",
+    });
+  });
+
+  it("gives canonical clusters authority over a coexisting legacy cluster", async () => {
+    const entry = "/product/resources?clusters=cluster-b&cluster=cluster-a" +
+      "&labels=team%3Dcheckout&resource=default%2Fapi&resourceKind=Pod#panel";
+    renderScope(portOf(collection()), entry);
+
+    await waitFor(() => {
+      expect(readState()).toMatchObject({
+        filterClusters: ["cluster-b"],
+        location: entry,
+        navigationType: "POP",
+        needsCanonicalWrite: true,
+        requestedClusterId: "cluster-b",
+        selectedClusterId: "cluster-b",
+        selection: "selected",
+      });
+    });
+  });
+
+  it("changes only the canonical cluster axis and preserves filters plus detail identity", async () => {
     const user = userEvent.setup();
+    const entry = "/product/resources?clusters=cluster-a" +
+      "&namespaces=cluster-a%2Fdefault&applications=app-a&labels=team%3Dcheckout" +
+      "&resources.types=Pod&issues.status=open&resource=default%2Fapi" +
+      "&resourceKind=Pod&tab=events&full=true&node=worker-a#panel";
     renderScope(
       portOf(collection()),
-      "/product/resources?cluster=cluster-a&namespace=default&resource=pod",
+      entry,
     );
 
     await waitFor(() => expect(readState().selection).toBe("selected"));
@@ -75,7 +143,11 @@ describe("ClusterScopeProvider", () => {
 
     await waitFor(() => {
       expect(readState()).toMatchObject({
-        location: "/product/resources?cluster=cluster-b",
+        filterClusters: ["cluster-b"],
+        location: "/product/resources?clusters=cluster-b" +
+          "&namespaces=cluster-a%2Fdefault&applications=app-a&labels=team%3Dcheckout" +
+          "&resources.types=Pod&issues.status=open&resource=default%2Fapi" +
+          "&resourceKind=Pod&tab=events&full=true&node=worker-a#panel",
         requestedClusterId: "cluster-b",
         selectedClusterId: "cluster-b",
       });
@@ -90,7 +162,7 @@ describe("ClusterScopeProvider", () => {
       }),
     };
 
-    renderScope(port, "/product?cluster=cluster-a", false, reportUnauthorized);
+    renderScope(port, "/product?clusters=cluster-a", false, reportUnauthorized);
 
     await waitFor(() => expect(reportUnauthorized).toHaveBeenCalledTimes(1));
     expect(readState()).toMatchObject({ phase: "loading", selection: "resolving" });
@@ -101,7 +173,7 @@ describe("ClusterScopeProvider", () => {
     const listClusterChoices = vi.fn()
       .mockResolvedValueOnce(collection())
       .mockRejectedValueOnce(new HomePortFailure("forbidden"));
-    renderScope({ listClusterChoices }, "/product?cluster=cluster-a");
+    renderScope({ listClusterChoices }, "/product?clusters=cluster-a");
 
     await waitFor(() => expect(readState().selection).toBe("selected"));
     await user.click(screen.getByRole("button", { name: "refresh scope" }));
@@ -116,12 +188,40 @@ describe("ClusterScopeProvider", () => {
     });
   });
 
+  it("clears the previous authority collection before the replacement request settles", async () => {
+    const next = deferred<ReturnType<typeof collection>>();
+    const listClusterChoices = vi.fn()
+      .mockResolvedValueOnce(collection())
+      .mockReturnValueOnce(next.promise);
+    const port = { listClusterChoices };
+    const view = renderScope(port, "/product?clusters=cluster-a");
+
+    await waitFor(() => expect(readState().selection).toBe("selected"));
+    view.rerender(scopeTree(port, "/product?clusters=cluster-a", "workspace-b:user-a"));
+
+    expect(readState()).toMatchObject({
+      phase: "loading",
+      selectedClusterId: null,
+      selection: "resolving",
+    });
+    await act(async () => {
+      next.reject(new HomePortFailure("offline"));
+      await Promise.resolve();
+    });
+    await waitFor(() => expect(readState()).toMatchObject({
+      failure: "offline",
+      phase: "failed",
+      selectedClusterId: null,
+      selection: "unavailable",
+    }));
+  });
+
   it("retains the last verified collection when a background refresh fails", async () => {
     const user = userEvent.setup();
     const listClusterChoices = vi.fn()
       .mockResolvedValueOnce(collection())
       .mockRejectedValueOnce(new HomePortFailure("offline"));
-    renderScope({ listClusterChoices }, "/product?cluster=cluster-a");
+    renderScope({ listClusterChoices }, "/product?clusters=cluster-a");
 
     await waitFor(() => expect(readState().selection).toBe("selected"));
     await user.click(screen.getByRole("button", { name: "refresh scope" }));
@@ -138,7 +238,7 @@ describe("ClusterScopeProvider", () => {
 
   it("rotates the selection scope key for A to B to A without reusing stale state", async () => {
     const user = userEvent.setup();
-    renderScope(portOf(collection()), "/product?cluster=cluster-a");
+    renderScope(portOf(collection()), "/product?clusters=cluster-a");
 
     await waitFor(() => expect(readState().selection).toBe("selected"));
     const firstA = readState().scopeKey;
@@ -157,100 +257,3 @@ describe("ClusterScopeProvider", () => {
     expect(new Set([firstA, clusterB, secondA])).toHaveLength(3);
   });
 });
-
-function ScopeProbe() {
-  const scope = useClusterScope();
-  const location = useLocation();
-  const navigationType = useNavigationType();
-  const refreshFailure = scope.collection.phase === "ready"
-    ? scope.collection.refreshFailure?.code ?? null
-    : null;
-  const failure = scope.collection.phase === "failed" ? scope.collection.failure.code : null;
-  const state = {
-    failure,
-    location: `${location.pathname}${location.search}`,
-    navigationType,
-    phase: scope.collection.phase,
-    refreshFailure,
-    requestedClusterId: scope.requestedClusterId,
-    scopeKey: scope.scopeKey,
-    selectedClusterId: scope.selectedCluster?.id ?? null,
-    selection: scope.selection.kind,
-  };
-
-  return (
-    <>
-      <output data-testid="cluster-scope-state">{JSON.stringify(state)}</output>
-      <button onClick={scope.refresh} type="button">refresh scope</button>
-      <button onClick={() => scope.selectCluster("cluster-a")} type="button">
-        select cluster-a
-      </button>
-      <button onClick={() => scope.selectCluster("cluster-b")} type="button">
-        select cluster-b
-      </button>
-    </>
-  );
-}
-
-function renderScope(
-  port: ClusterScopePort,
-  entry: string,
-  strict = false,
-  reportUnauthorized = vi.fn(),
-) {
-  const tree = (
-    <MemoryRouter initialEntries={[entry]}>
-      <AuthSessionGateProvider reportUnauthorized={reportUnauthorized}>
-        <ClusterScopeProvider authorityKey="workspace-a:user-a" port={port}>
-          <ScopeProbe />
-        </ClusterScopeProvider>
-      </AuthSessionGateProvider>
-    </MemoryRouter>
-  );
-  return render(strict ? <StrictMode>{tree}</StrictMode> : tree);
-}
-
-function readState(): {
-  failure: string | null;
-  location: string;
-  navigationType: string;
-  phase: string;
-  refreshFailure: string | null;
-  requestedClusterId: string | null;
-  scopeKey: string | null;
-  selectedClusterId: string | null;
-  selection: string;
-} {
-  return JSON.parse(screen.getByTestId("cluster-scope-state").textContent ?? "{}") as ReturnType<
-    typeof readState
-  >;
-}
-
-function collection(clusters: readonly HomeClusterChoice[] = CLUSTERS) {
-  return { completeness: "unknown" as const, clusters: [...clusters] };
-}
-
-function portOf(value: ReturnType<typeof collection>): ClusterScopePort {
-  return { listClusterChoices: vi.fn(async () => value) };
-}
-
-function cluster(
-  id: string,
-  environment: string,
-  connectionState: HomeClusterChoice["connectionState"],
-): HomeClusterChoice {
-  return {
-    id,
-    workspaceId: "workspace-a",
-    name: id,
-    environment,
-    provider: "unknown",
-    connectionStage: null,
-    registrationState: "active",
-    connectionState,
-    lastObservedAt: "2026-07-13T00:00:00.000Z",
-    nodeCount: 2,
-    podCount: 6,
-    incidentCount: 0,
-  };
-}

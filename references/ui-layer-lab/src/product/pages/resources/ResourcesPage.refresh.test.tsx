@@ -31,7 +31,7 @@ describe("ResourcesPage refresh and generation safety", () => {
       .mockRejectedValueOnce(new ResourcesPortFailure("offline"));
     renderResources(
       resourcesPort({ listResources }),
-      "/product/resources/pod?cluster=cluster-1",
+      "/product/resources?clusters=cluster-1&resources.types=pod",
     );
     expect(await screen.findByText("checkout-api-0", {}, { timeout: 5_000 })).toBeTruthy();
 
@@ -61,12 +61,14 @@ describe("ResourcesPage refresh and generation safety", () => {
     });
     const { router } = renderResources(
       port,
-      "/product/resources/pod?cluster=cluster-1",
+      "/product/resources?clusters=cluster-1&resources.types=pod",
     );
     await waitFor(() => expect(listResources).toHaveBeenCalledOnce());
 
     await act(async () => {
-      await router.navigate("/product/resources/node?cluster=kubernetes-ops");
+      await router.navigate(
+        "/product/resources?clusters=kubernetes-ops&resources.types=node",
+      );
     });
     await waitFor(() => expect(listResources).toHaveBeenCalledTimes(2));
     expect(signals[0]?.aborted).toBe(true);
@@ -83,7 +85,10 @@ describe("ResourcesPage refresh and generation safety", () => {
     vi.useFakeTimers();
     setVisibility("visible");
     const port = resourcesPort();
-    const rendered = renderResources(port, "/product/resources/pod?cluster=cluster-1");
+    const rendered = renderResources(
+      port,
+      "/product/resources?clusters=cluster-1&resources.types=pod",
+    );
     await flushPromises();
     expect(port.listResources).toHaveBeenCalledOnce();
 
@@ -124,7 +129,7 @@ describe("ResourcesPage refresh and generation safety", () => {
       .mockReturnValueOnce(recovery.promise);
     renderResources(
       resourcesPort({ listResources }),
-      "/product/resources/pod?cluster=cluster-1",
+      "/product/resources?clusters=cluster-1&resources.types=pod",
     );
     await flushPromises();
     expect(screen.getByText("checkout-api-0")).toBeTruthy();
@@ -161,7 +166,7 @@ describe("ResourcesPage refresh and generation safety", () => {
       .mockResolvedValueOnce(POD_LIST);
     renderResources(
       resourcesPort({ listResources }),
-      "/product/resources/pod?cluster=cluster-1",
+      "/product/resources?clusters=cluster-1&resources.types=pod",
     );
     await flushPromises();
 
@@ -185,7 +190,7 @@ describe("ResourcesPage refresh and generation safety", () => {
       .mockResolvedValueOnce(POD_LIST);
     renderResources(
       resourcesPort({ listResources }),
-      "/product/resources/pod?cluster=cluster-1",
+      "/product/resources?clusters=cluster-1&resources.types=pod",
     );
     await flushPromises();
 
@@ -208,7 +213,7 @@ describe("ResourcesPage refresh and generation safety", () => {
     });
     renderResources(
       resourcesPort(),
-      "/product/resources/pod?cluster=cluster-1",
+      "/product/resources?clusters=cluster-1&resources.types=pod",
       clusterPort,
     );
     expect(await screen.findByText("checkout-api-0", {}, { timeout: 5_000 })).toBeTruthy();
@@ -226,7 +231,7 @@ describe("ResourcesPage refresh and generation safety", () => {
     setVisibility("visible");
     renderResources(
       resourcesPort(),
-      "/product/resources/pod?cluster=cluster-1",
+      "/product/resources?clusters=cluster-1&resources.types=pod",
     );
     await flushPromises();
 

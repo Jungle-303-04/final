@@ -1,12 +1,12 @@
 import { render } from "@testing-library/react";
-import {
-  createMemoryRouter,
-  RouterProvider,
-  useLocation,
-} from "react-router-dom";
+import { createMemoryRouter, RouterProvider, useLocation } from "react-router-dom";
 import { vi } from "vitest";
 import { AuthSessionGateProvider } from "../../features/auth/AuthSessionGate";
-import { ClusterScopeProvider } from "../../features/cluster-scope/ClusterScopeProvider";
+import {
+  ClusterScopeProvider,
+  useClusterScope,
+} from "../../features/cluster-scope/ClusterScopeProvider";
+import { UnifiedFilterProvider } from "../../features/filters/UnifiedFilterProvider";
 import { I18nProvider, type SupportedLocale } from "../../shared/i18n";
 import type {
   HomeClusterChoices,
@@ -188,7 +188,7 @@ export const POD_DETAIL: ResourceDetail = {
 
 export function renderResources(
   port: ResourcesPort,
-  initialEntry = "/product/resources",
+  initialEntry = "/product/resources?clusters=cluster-1&resources.types=pod",
   clusterPort: ClusterPort = resourcesClusterPort(),
   reportUnauthorized = vi.fn(),
   locale: SupportedLocale = "ko",
@@ -198,10 +198,13 @@ export function renderResources(
     element: (
       <I18nProvider navigatorLanguage={locale === "ko" ? "ko-KR" : "en-US"} storage={null}>
         <AuthSessionGateProvider reportUnauthorized={reportUnauthorized}>
-          <ClusterScopeProvider authorityKey="test-workspace:test-user" port={clusterPort}>
-            <ResourcesPage port={port} />
-            <LocationProbe />
-          </ClusterScopeProvider>
+          <UnifiedFilterProvider>
+            <ClusterScopeProvider authorityKey="test-workspace:test-user" port={clusterPort}>
+              <ResourcesPage port={port} />
+              <LocationProbe />
+              <ClusterScopeProbe />
+            </ClusterScopeProvider>
+          </UnifiedFilterProvider>
         </AuthSessionGateProvider>
       </I18nProvider>
     ),
@@ -282,5 +285,14 @@ function LocationProbe() {
     <output data-testid="resources-location">
       {location.pathname}{location.search}
     </output>
+  );
+}
+
+function ClusterScopeProbe() {
+  const scope = useClusterScope();
+  return (
+    <output data-testid="resources-cluster-scope">{scope.collection.phase}:{
+      scope.requestedClusterId ?? "-"
+    }</output>
   );
 }

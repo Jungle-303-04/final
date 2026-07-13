@@ -7,7 +7,7 @@ import {
   type ProductShortcutEventDetail,
   type ShortcutDefinition,
 } from "./shortcutRegistry";
-import { productNavigationHref } from "../features/cluster-scope/clusterScopeUrl";
+import { useUnifiedFilter } from "../features/filters/UnifiedFilterProvider";
 
 interface ProductShortcutOptions {
   definitions: readonly ShortcutDefinition[];
@@ -24,6 +24,7 @@ export function useProductShortcuts({
 }: ProductShortcutOptions) {
   const location = useLocation();
   const navigate = useNavigate();
+  const filter = useUnifiedFilter();
 
   useEffect(() => {
     const matcher = createShortcutMatcher(definitions);
@@ -46,8 +47,15 @@ export function useProductShortcuts({
       if (!definition) return;
 
       if (definition.id.startsWith("route:") && definition.targetPath) {
-        const target = productNavigationHref(definition.targetPath, location.search);
-        if (`${location.pathname}${location.search}` !== target) navigate(target);
+        const target = filter.navigationHref(definition.targetPath);
+        if (
+          location.pathname !== definition.targetPath ||
+          location.hash !== "" ||
+          filter.needsCanonicalWrite ||
+          hasProductDetail(filter.detail)
+        ) {
+          navigate(target);
+        }
         focusMain();
         return;
       }
@@ -86,9 +94,15 @@ export function useProductShortcuts({
     definitions,
     isHelpOpen,
     location.pathname,
-    location.search,
+    location.hash,
+    filter,
     navigate,
     onHelpToggle,
     onThemeToggle,
   ]);
+}
+
+function hasProductDetail(detail: ReturnType<typeof useUnifiedFilter>["detail"]): boolean {
+  return detail.resource !== null || detail.resourceKind !== null || detail.tab !== null ||
+    detail.full || detail.node !== null;
 }

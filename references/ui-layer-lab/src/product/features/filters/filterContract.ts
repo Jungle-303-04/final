@@ -107,13 +107,25 @@ export type FilterMutationIntent =
 
 export type FilterHistoryMode = "push" | "replace";
 
+export type DetailMutationIntent =
+  | "detail-open"
+  | "detail-close"
+  | "detail-tab"
+  | "detail-expand"
+  | "drill-in";
+
 export type UnifiedFilterUpdater =
   | UnifiedFilterState
   | ((current: UnifiedFilterState) => UnifiedFilterState);
 
+export type ProductDetailUpdater =
+  | ProductDetailQuery
+  | ((current: ProductDetailQuery) => ProductDetailQuery);
+
 export interface UnifiedFilterController extends FilterUrlParseResult {
   canonicalize(): void;
   navigationHref(path: `/product${string}`): string;
+  updateDetail(update: ProductDetailUpdater, intent: DetailMutationIntent): void;
   updateFilters(update: UnifiedFilterUpdater, intent: FilterMutationIntent): void;
 }
 

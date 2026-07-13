@@ -10,6 +10,7 @@ import { I18nProvider } from "../../shared/i18n";
 import type { ClusterScopePort } from "./clusterScopeContract";
 import { ClusterScopePicker } from "./ClusterScopePicker";
 import { ClusterScopeProvider } from "./ClusterScopeProvider";
+import { UnifiedFilterProvider } from "../filters/UnifiedFilterProvider";
 
 afterEach(cleanup);
 
@@ -41,10 +42,10 @@ describe("ClusterScopePicker", () => {
   });
 
   it("shows explicit unknown scope honestly instead of selecting a fallback", async () => {
-    renderPicker("en-US", "/product?cluster=missing");
+    renderPicker("en-US", "/product?clusters=missing");
 
     const trigger = await screen.findByRole("combobox", {
-      name: "Cluster Current scope unavailable: missing · Unknown",
+      name: "Current scope unavailable: missing",
     });
     await waitFor(() => expect(trigger.getAttribute("aria-invalid")).toBe("true"));
     expect(trigger.textContent).toContain("Current scope unavailable: missing");
@@ -64,8 +65,37 @@ describe("ClusterScopePicker", () => {
     });
   });
 
+  it("keeps an unfiltered scope explicit without fabricating connection metadata", async () => {
+    renderPicker("en-US", "/product");
+
+    const trigger = await screen.findByRole("combobox", { name: "All clusters" });
+    trigger.focus();
+
+    await waitFor(() => {
+      const tooltip = document.querySelector("[data-slot='tooltip-content']")?.textContent ?? "";
+      expect(tooltip).toBe("All clusters");
+      expect(tooltip).not.toMatch(/Unknown|Last observed/u);
+    });
+  });
+
+  it("adds a Cluster to the existing OR selection and can clear the axis", async () => {
+    const user = userEvent.setup();
+    renderPicker("en-US");
+
+    const trigger = await screen.findByRole("combobox", {
+      name: "Cluster prod-cluster · Production · cluster-a · Connected · Ready",
+    });
+    await user.click(trigger);
+    await user.click(await screen.findByRole("option", { name: /edge-cluster/u }));
+    expect(await screen.findByRole("combobox", { name: "2 clusters selected" })).toBeTruthy();
+
+    await user.click(screen.getByRole("combobox", { name: "2 clusters selected" }));
+    await user.click(await screen.findByRole("option", { name: "All clusters" }));
+    expect(await screen.findByRole("combobox", { name: "All clusters" })).toBeTruthy();
+  });
+
   it("omits connection-stage copy when the optional field is absent", async () => {
-    renderPicker("en-US", "/product?cluster=cluster-a", null);
+    renderPicker("en-US", "/product?clusters=cluster-a", null);
 
     const trigger = await screen.findByRole("combobox", {
       name: "Cluster prod-cluster · Production · cluster-a · Connected",
@@ -82,7 +112,7 @@ describe("ClusterScopePicker", () => {
 
 function renderPicker(
   language: string,
-  entry = "/product?cluster=cluster-a",
+  entry = "/product?clusters=cluster-a",
   connectionStage: "ready" | null = "ready",
 ) {
   const canonicalClusters = [
@@ -106,9 +136,11 @@ function renderPicker(
     <I18nProvider navigatorLanguage={language} storage={null}>
       <MemoryRouter initialEntries={[entry]}>
         <AuthSessionGateProvider reportUnauthorized={() => undefined}>
-          <ClusterScopeProvider authorityKey="workspace-a:user-a" port={port}>
-            <ClusterScopePicker />
-          </ClusterScopeProvider>
+          <UnifiedFilterProvider>
+            <ClusterScopeProvider authorityKey="workspace-a:user-a" port={port}>
+              <ClusterScopePicker />
+            </ClusterScopeProvider>
+          </UnifiedFilterProvider>
         </AuthSessionGateProvider>
       </MemoryRouter>
     </I18nProvider>,

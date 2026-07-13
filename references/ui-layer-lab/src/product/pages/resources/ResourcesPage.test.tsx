@@ -24,7 +24,7 @@ afterEach(() => {
 });
 
 describe("ResourcesPage scope and collection semantics", () => {
-  it("exposes progressive cluster and catalog loading without fabricating a resource type", async () => {
+  it("exposes progressive cluster, catalog, and list loading for an explicit selection", async () => {
     const clusters = deferred<typeof CLUSTERS>();
     const catalog = deferred<typeof CATALOG>();
     const list = deferred<typeof POD_LIST>();
@@ -35,14 +35,19 @@ describe("ResourcesPage scope and collection semantics", () => {
     const clusterPort = resourcesClusterPort({
       listClusterChoices: vi.fn().mockReturnValue(clusters.promise),
     });
-    renderResources(port, "/product/resources", clusterPort);
+    renderResources(
+      port,
+      "/product/resources?clusters=cluster-1&resources.types=pod",
+      clusterPort,
+    );
 
     const initialStatus = await screen.findByRole("status", {
       name: "불러오는 중",
     });
     expect(initialStatus.closest("section")?.getAttribute("aria-busy")).toBe("true");
     expect(port.loadCatalog).not.toHaveBeenCalled();
-    expect(screen.getByTestId("resources-location").textContent).toBe("/product/resources");
+    expect(screen.getByTestId("resources-location").textContent)
+      .toBe("/product/resources?clusters=cluster-1&resources.types=pod");
 
     await act(async () => {
       clusters.resolve(CLUSTERS);
@@ -66,7 +71,7 @@ describe("ResourcesPage scope and collection semantics", () => {
     });
   });
 
-  it("selects the first real cluster and redirects to an API-discovered resource type", async () => {
+  it("does not automatically select an API-discovered resource type", async () => {
     const port = resourcesPort({
       loadCatalog: vi.fn().mockResolvedValue(DISCOVERED_CATALOG),
       listResources: vi.fn().mockResolvedValue({
@@ -74,21 +79,20 @@ describe("ResourcesPage scope and collection semantics", () => {
         resourceType: "widget",
       }),
     });
-    renderResources(port);
+    renderResources(port, "/product/resources?clusters=cluster-1");
 
-    await waitFor(() => expect(screen.getByTestId("resources-location").textContent)
-      .toContain("/product/resources/widget?cluster=cluster-1"), { timeout: 5_000 });
-    expect(port.loadCatalog).toHaveBeenCalledWith("cluster-1", expect.any(AbortSignal));
-    expect(port.listResources).toHaveBeenCalledWith(
+    await waitFor(() => expect(port.loadCatalog).toHaveBeenCalledWith(
       "cluster-1",
-      expect.objectContaining({ resourceType: "widget" }),
       expect.any(AbortSignal),
-    );
+    ), { timeout: 5_000 });
+    expect(port.listResources).not.toHaveBeenCalled();
+    expect(screen.getByTestId("resources-location").textContent)
+      .toBe("/product/resources?clusters=cluster-1");
   }, 15_000);
 
   it("keeps an unknown URL cluster explicit instead of selecting another cluster", async () => {
     const port = resourcesPort();
-    renderResources(port, "/product/resources/pod?cluster=missing");
+    renderResources(port, "/product/resources?clusters=missing&resources.types=pod");
 
     expect(await screen.findByRole("heading", { name: "현재 조회 목록에서 확인할 수 없습니다" }))
       .toBeTruthy();
@@ -117,7 +121,7 @@ describe("ResourcesPage scope and collection semantics", () => {
     });
     renderResources(
       port,
-      "/product/resources/pod?cluster=cluster-1",
+      "/product/resources?clusters=cluster-1&resources.types=pod",
       resourcesClusterPort(),
       reportUnauthorized,
     );
@@ -131,7 +135,7 @@ describe("ResourcesPage scope and collection semantics", () => {
     const port = resourcesPort({
       loadCatalog: vi.fn().mockRejectedValue(new ResourcesPortFailure("forbidden")),
     });
-    renderResources(port, "/product/resources/pod?cluster=cluster-1");
+    renderResources(port, "/product/resources?clusters=cluster-1&resources.types=pod");
 
     expect(await screen.findByRole("heading", { name: "이 범위에 접근할 수 없습니다" }))
       .toBeTruthy();
@@ -143,7 +147,7 @@ describe("ResourcesPage scope and collection semantics", () => {
     const port = resourcesPort({
       listResources: vi.fn().mockRejectedValue(new ResourcesPortFailure("forbidden")),
     });
-    renderResources(port, "/product/resources/pod?cluster=cluster-1");
+    renderResources(port, "/product/resources?clusters=cluster-1&resources.types=pod");
 
     await waitFor(() => expect(port.listResources).toHaveBeenCalledOnce(), { timeout: 5_000 });
     expect(await screen.findByRole(
@@ -157,7 +161,7 @@ describe("ResourcesPage scope and collection semantics", () => {
 
   it("states that search and counts are bounded to the loaded result window", async () => {
     const port = resourcesPort();
-    renderResources(port, "/product/resources/pod?cluster=cluster-1");
+    renderResources(port, "/product/resources?clusters=cluster-1&resources.types=pod");
 
     await waitFor(() => expect(port.listResources).toHaveBeenCalledOnce(), { timeout: 5_000 });
     const table = await screen.findByRole(
@@ -178,7 +182,7 @@ describe("ResourcesPage scope and collection semantics", () => {
   it("renders product-owned collection copy in English while preserving Kubernetes facts", async () => {
     renderResources(
       resourcesPort(),
-      "/product/resources/pod?cluster=cluster-1",
+      "/product/resources?clusters=cluster-1&resources.types=pod",
       resourcesClusterPort(),
       vi.fn(),
       "en",
@@ -194,24 +198,30 @@ describe("ResourcesPage scope and collection semantics", () => {
     expect(within(table).getAllByText("Pod").length).toBeGreaterThan(0);
   });
 
-  it("filters only the loaded rows and labels the search scope honestly", async () => {
+  it("keeps the filter control available while an unsupported server query fails closed", async () => {
     const user = userEvent.setup();
-    renderResources(resourcesPort(), "/product/resources/pod?cluster=cluster-1");
+    renderResources(
+      resourcesPort(),
+      "/product/resources?clusters=cluster-1&resources.types=pod",
+    );
 
     const search = await screen.findByRole("searchbox", { name: "표시된 결과 검색" });
     expect(search.getAttribute("placeholder")).toMatch(/표시된 결과/u);
     await user.type(search, "checkout");
 
-    const table = screen.getByRole("table", { name: "리소스 목록" });
-    expect(within(table).getByText("checkout-api-0")).toBeTruthy();
-    expect(within(table).queryByText("orders-api-0")).toBeNull();
-    expect(within(table).queryByText("telemetry-0")).toBeNull();
+    expect(await screen.findByRole("heading", { name: "이 필터는 서버 지원이 필요합니다" }))
+      .toBeTruthy();
+    expect(screen.queryByRole("table", { name: "리소스 목록" })).toBeNull();
+    expect(screen.getByRole("searchbox", { name: "표시된 결과 검색" })).toBe(search);
+
+    await user.clear(search);
+    expect(await screen.findByRole("table", { name: "리소스 목록" })).toBeTruthy();
   });
 
   it("does not present an unknown-completeness empty catalog as a confirmed empty scope", async () => {
     renderResources(resourcesPort({
       loadCatalog: vi.fn().mockResolvedValue({ ...CATALOG, items: [] }),
-    }), "/product/resources?cluster=cluster-1");
+    }), "/product/resources?clusters=cluster-1");
 
     expect(await screen.findByRole("heading", { name: "관측된 리소스 종류가 없습니다" }))
       .toBeTruthy();
@@ -227,7 +237,7 @@ describe("ResourcesPage scope and collection semantics", () => {
         limitReached: false,
         returned: 0,
       }),
-    }), "/product/resources/pod?cluster=cluster-1");
+    }), "/product/resources?clusters=cluster-1&resources.types=pod");
 
     expect(await screen.findByRole("heading", { name: "현재 응답에서 관측된 리소스가 없습니다" }))
       .toBeTruthy();
@@ -236,12 +246,12 @@ describe("ResourcesPage scope and collection semantics", () => {
   });
 
   it.each([
-    "namespace=shop",
-    "showInactive=1",
+    "namespaces=cluster-1%2Fshop",
+    "resources.includeDeleted=true",
   ])("does not mix a cluster-active aggregate into the scoped list for %s", async (query) => {
     renderResources(
       resourcesPort(),
-      `/product/resources/pod?cluster=cluster-1&${query}`,
+      `/product/resources?clusters=cluster-1&resources.types=pod&${query}`,
     );
 
     expect(await screen.findByRole("table", { name: "리소스 목록" })).toBeTruthy();
@@ -254,7 +264,7 @@ describe("ResourcesPage scope and collection semantics", () => {
         ...POD_LIST,
         excludedCount: 2,
       }),
-    }), "/product/resources/pod?cluster=cluster-1");
+    }), "/product/resources?clusters=cluster-1&resources.types=pod");
 
     const scope = await screen.findByRole(
       "status",

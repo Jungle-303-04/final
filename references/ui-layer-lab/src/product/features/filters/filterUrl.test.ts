@@ -6,6 +6,7 @@ import {
 } from "./filterContract";
 import {
   canonicalizeProductFilterUrl,
+  detailHistoryMode,
   filterHistoryMode,
   parseProductFilterUrl,
   productFilterNavigationHref,
@@ -287,5 +288,13 @@ describe("VP-010 unified filter URL", () => {
     expect(filterHistoryMode("typing")).toBe("replace");
     expect(filterHistoryMode("canonicalize")).toBe("replace");
     expect(filterHistoryMode("legacy-migration")).toBe("replace");
+  });
+
+  it("uses explicit history policies for detail navigation", () => {
+    expect(detailHistoryMode("detail-open")).toBe("push");
+    expect(detailHistoryMode("drill-in")).toBe("push");
+    expect(detailHistoryMode("detail-close")).toBe("replace");
+    expect(detailHistoryMode("detail-tab")).toBe("replace");
+    expect(detailHistoryMode("detail-expand")).toBe("replace");
   });
 });

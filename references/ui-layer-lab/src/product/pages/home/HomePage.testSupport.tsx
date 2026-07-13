@@ -1,8 +1,9 @@
 import { render } from "@testing-library/react";
-import { MemoryRouter } from "react-router-dom";
+import { MemoryRouter, useLocation } from "react-router-dom";
 import { vi } from "vitest";
 import { AuthSessionGateProvider } from "../../features/auth/AuthSessionGate";
 import { ClusterScopeProvider } from "../../features/cluster-scope/ClusterScopeProvider";
+import { UnifiedFilterProvider } from "../../features/filters/UnifiedFilterProvider";
 import type {
   HomeClusterChoices,
   HomeClusterOverview,
@@ -145,7 +146,7 @@ export const PODS: HomePodCollection = {
 
 export function renderHome(
   port: HomePort,
-  initialEntries = ["/product"],
+  initialEntries = ["/product?clusters=cluster-1"],
   reportUnauthorized = vi.fn(),
   locale: SupportedLocale | null = "ko",
 ) {
@@ -156,9 +157,12 @@ export function renderHome(
           navigatorLanguage={locale === "ko" ? "ko-KR" : locale === "en" ? "en-US" : null}
           storage={null}
         >
-          <ClusterScopeProvider authorityKey="test-workspace:test-user" port={port}>
-            <HomePage port={port} />
-          </ClusterScopeProvider>
+          <UnifiedFilterProvider>
+            <ClusterScopeProvider authorityKey="test-workspace:test-user" port={port}>
+              <HomePage port={port} />
+              <LocationProbe />
+            </ClusterScopeProvider>
+          </UnifiedFilterProvider>
         </I18nProvider>
       </AuthSessionGateProvider>
     </MemoryRouter>,
@@ -179,4 +183,13 @@ export function deferred<T>() {
   let resolve!: (value: T) => void;
   const promise = new Promise<T>((next) => { resolve = next; });
   return { promise, resolve };
+}
+
+function LocationProbe() {
+  const location = useLocation();
+  return (
+    <output data-testid="home-location">
+      {location.pathname}{location.search}
+    </output>
+  );
 }

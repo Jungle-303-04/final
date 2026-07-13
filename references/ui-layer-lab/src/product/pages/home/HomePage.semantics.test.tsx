@@ -31,7 +31,7 @@ describe("HomePage data semantics", () => {
         ...CLUSTER_OVERVIEW,
         usage,
       }),
-    })), ["/product?cluster=cluster-1"]);
+    })), ["/product?clusters=cluster-1"]);
 
     const clusterStatus = await screen.findByRole("region", {
       name: "클러스터 상태",
@@ -51,7 +51,7 @@ describe("HomePage data semantics", () => {
         ...CLUSTER_OVERVIEW,
         open_incidents: incident ? [{ ...incident, incident_id: "" }] : [],
       }),
-    })), ["/product?cluster=cluster-1"]);
+    })), ["/product?clusters=cluster-1"]);
 
     const symptom = await screen.findByText("Restart loop", {}, { timeout: 5_000 });
     expect(symptom.closest("a")).toBeNull();
@@ -67,7 +67,7 @@ describe("HomePage data semantics", () => {
         incidents: [],
       }),
       loadNodes: vi.fn().mockResolvedValue({ ...NODES, nodes: [] }),
-    }), ["/product?cluster=cluster-1"]);
+    }), ["/product?clusters=cluster-1"]);
 
     await screen.findAllByText(/전체 수 미확인/u, {}, { timeout: 5_000 });
     expect(screen.queryByText("현재 활성 이슈가 없습니다.")).toBeNull();
@@ -87,7 +87,7 @@ describe("HomePage data semantics", () => {
           { ...OVERVIEW.warnings[0], id: "warning:second", name: "second-warning" },
         ],
       }),
-    }), ["/product?cluster=cluster-1"]);
+    }), ["/product?clusters=cluster-1"]);
 
     const incidentLabel = await screen.findByText("활성 인시던트");
     expect(incidentLabel.closest("[data-slot='metric']")?.textContent).toContain("7");
@@ -102,7 +102,7 @@ describe("HomePage data semantics", () => {
         ...OVERVIEW,
         usage: { ...OVERVIEW.usage!, cpuPercent: 142.5 },
       }),
-    }), ["/product?cluster=cluster-1"]);
+    }), ["/product?clusters=cluster-1"]);
 
     expect(await screen.findByText("142.5%", {}, { timeout: 5_000 })).toBeTruthy();
     const progress = screen.getByRole("progressbar", { name: "CPU 사용률" });
@@ -116,7 +116,7 @@ describe("HomePage data semantics", () => {
         ...OVERVIEW,
         usage: { ...OVERVIEW.usage!, cpuPercent: null },
       }),
-    }), ["/product?cluster=cluster-1"]);
+    }), ["/product?clusters=cluster-1"]);
 
     await screen.findAllByText("—", {}, { timeout: 5_000 });
     expect(screen.queryByRole("progressbar", { name: "CPU 사용률" })).toBeNull();
@@ -126,7 +126,7 @@ describe("HomePage data semantics", () => {
   it("marks an unavailable overview as an error instead of an in-progress state", async () => {
     renderHome(homePort({
       loadClusterOverview: vi.fn().mockRejectedValue(new HomePortFailure("offline")),
-    }), ["/product?cluster=cluster-1"]);
+    }), ["/product?clusters=cluster-1"]);
 
     const errorLabel = await screen.findByText(/클러스터 요약 (?:오류|실패)/u);
     expect(errorLabel.closest("[data-slot='status-mark']")?.getAttribute("data-status"))
@@ -139,7 +139,7 @@ describe("HomePage data semantics", () => {
         ...NODES,
         nodes: [{ ...NODES.nodes[1], health: "healthy" }],
       }),
-    }), ["/product?cluster=cluster-1"]);
+    }), ["/product?clusters=cluster-1"]);
 
     const node = await screen.findByRole("button", { name: /worker-b/u });
     const status = within(node).getByText("Not Ready").closest("[data-slot='status-mark']");
@@ -162,7 +162,7 @@ describe("HomePage data semantics", () => {
       : section === "nodes"
         ? { loadNodes: vi.fn().mockRejectedValue(failure) }
         : { loadNodePods: vi.fn().mockRejectedValue(failure) };
-    renderHome(homePort(overrides), ["/product?cluster=cluster-1"]);
+    renderHome(homePort(overrides), ["/product?clusters=cluster-1"]);
     if (section === "pods") {
       await user.click(await screen.findByRole("button", { name: /worker-b/u }));
     }
@@ -178,7 +178,7 @@ describe("HomePage data semantics", () => {
   it("promotes a cluster-read 403 to the global forbidden surface without cached content", async () => {
     renderHome(homePort({
       loadNodes: vi.fn().mockRejectedValue(new HomePortFailure("forbidden")),
-    }), ["/product?cluster=cluster-1"]);
+    }), ["/product?clusters=cluster-1"]);
 
     expect(await screen.findByRole("heading", { name: "이 범위에 접근할 수 없습니다" }))
       .toBeTruthy();

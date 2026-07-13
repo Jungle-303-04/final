@@ -3,6 +3,14 @@ import type { ResourceIdentity } from "../../features/resources/resourcesContrac
 const RESOURCE_TYPE_MAX_LENGTH = 80;
 const KIND_MAX_LENGTH = 120;
 const RESOURCE_NAME_MAX_LENGTH = 253;
+const CLUSTER_ID_MAX_LENGTH = 512;
+const CANONICAL_TARGET_PREFIX = "v1";
+const CLUSTER_SCOPED_NAMESPACE = "~";
+
+export interface ResourceDetailTarget {
+  clusterId: string;
+  identity: ResourceIdentity;
+}
 
 export type ResourceTypeResolution =
   | { kind: "none"; value: null }
@@ -35,6 +43,65 @@ export function encodeResourceSelection(identity: ResourceIdentity): {
     kind: identity.kind,
     resource: `${identity.namespace ?? "_"}/${identity.name}`,
   };
+}
+
+export function encodeResourceTarget(
+  clusterId: string,
+  identity: ResourceIdentity,
+): { kind: string; resource: string } {
+  assertDetailPart(clusterId, CLUSTER_ID_MAX_LENGTH, "cluster");
+  if (!isResourceType(identity.resourceType)) throw new TypeError("invalid resource type");
+  const selection = encodeResourceSelection(identity);
+  return {
+    kind: selection.kind,
+    resource: [
+      CANONICAL_TARGET_PREFIX,
+      encodeURIComponent(clusterId),
+      encodeURIComponent(identity.resourceType),
+      identity.namespace === null
+        ? CLUSTER_SCOPED_NAMESPACE
+        : encodeURIComponent(identity.namespace),
+      encodeURIComponent(identity.name),
+    ].join("/"),
+  };
+}
+
+export function decodeResourceTarget(
+  fallbackClusterId: string | null,
+  fallbackResourceType: string | null,
+  kind: string | null,
+  resource: string | null,
+): ResourceDetailTarget | null {
+  if (kind === null || resource === null) return null;
+  if (!isCanonicalResourceTarget(resource)) {
+    if (fallbackClusterId === null) return null;
+    const identity = decodeResourceSelection(fallbackResourceType, kind, resource);
+    return identity ? { clusterId: fallbackClusterId, identity } : null;
+  }
+  const parts = resource.split("/");
+  if (parts.length !== 5) return null;
+  try {
+    const clusterId = decodeURIComponent(parts[1] ?? "");
+    const resourceType = decodeURIComponent(parts[2] ?? "");
+    const namespaceToken = parts[3] ?? "";
+    const namespace = namespaceToken === CLUSTER_SCOPED_NAMESPACE
+      ? null
+      : decodeURIComponent(namespaceToken);
+    const name = decodeURIComponent(parts[4] ?? "");
+    if (!isDetailPart(clusterId, CLUSTER_ID_MAX_LENGTH)) return null;
+    const identity = decodeResourceSelection(
+      resourceType,
+      kind,
+      `${namespace ?? "_"}/${name}`,
+    );
+    return identity ? { clusterId, identity } : null;
+  } catch {
+    return null;
+  }
+}
+
+export function isCanonicalResourceTarget(resource: string | null): boolean {
+  return resource?.startsWith(`${CANONICAL_TARGET_PREFIX}/`) ?? false;
 }
 
 export function decodeResourceSelection(
