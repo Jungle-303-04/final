@@ -1303,6 +1303,34 @@ def test_target_registration_preflight_accepts_new_ready_provider(monkeypatch) -
     assert response.errors == []
 
 
+def test_target_registration_preflight_reports_self_only_access_contract(monkeypatch) -> None:
+    monkeypatch.setenv("TARGET_AGENT_IMAGE", "ghcr.io/acme/kubeheal-agent:test")
+    monkeypatch.setenv("PUBLIC_MANAGEMENT_BASE_URL", "http://opsia.opsia-system.svc")
+    monkeypatch.setenv("OPSIA_ACCESS_MODE", "portforward")
+    monkeypatch.setenv("OPSIA_EXTERNAL_URL", "")
+
+    async def run():
+        return await target_registration_preflight(
+            TargetPreflightRequest(
+                cluster_id="self-cluster",
+                cloud_provider="existing-k8s",
+                deploy_provider="manual-manifest",
+            ),
+            current=SimpleNamespace(user_id="user-1", workspace_id="default"),
+            db=StubPreflightDb(),
+        )
+
+    response = asyncio.run(run())
+
+    assert response.management_access.model_dump() == {
+        "mode": "portforward",
+        "external_url": None,
+        "agent_server_url": "http://opsia.opsia-system.svc",
+        "reachability": "self_only",
+        "limitation_reason": "external_url_not_configured",
+    }
+
+
 def test_target_registration_preflight_tolerates_display_fields(monkeypatch) -> None:
     monkeypatch.setenv("TARGET_AGENT_IMAGE", "ghcr.io/acme/kubeheal-agent:test")
     monkeypatch.setenv("PUBLIC_BASE_URL", "https://k8s.woonyong.org")
@@ -1944,6 +1972,36 @@ def test_target_registration_uses_public_base_url_when_request_omits_management_
 
     assert response.install_command.startswith("curl -fsSL https://k8s.woonyong.org/api/install/")
     assert db.registered[0]["settings"]["management_base_url"] == "https://k8s.woonyong.org/api"
+
+
+def test_deployment_external_url_overrides_untrusted_registration_url(monkeypatch) -> None:
+    monkeypatch.setenv("PUBLIC_MANAGEMENT_BASE_URL", "https://opsia.example.com")
+    monkeypatch.setenv("OPSIA_ACCESS_MODE", "ingress")
+    monkeypatch.setenv("OPSIA_EXTERNAL_URL", "https://opsia.example.com")
+    db = StubDb()
+    events = StubEvents()
+    request = target_request().model_copy(update={"management_base_url": "http://localhost:8080"})
+
+    async def run():
+        return await register_target(
+            request,
+            current=SimpleNamespace(user_id="local-user", workspace_id="default"),
+            db=db,
+            events=events,
+        )
+
+    response = asyncio.run(run())
+
+    assert response.install_command.startswith("curl -fsSL https://opsia.example.com/api/install/")
+    assert "localhost" not in response.install_command
+    assert db.registered[0]["settings"]["management_base_url"] == "https://opsia.example.com/api"
+    assert response.management_access.model_dump() == {
+        "mode": "ingress",
+        "external_url": "https://opsia.example.com",
+        "agent_server_url": "https://opsia.example.com",
+        "reachability": "external",
+        "limitation_reason": None,
+    }
 
 
 def test_target_registration_rejects_missing_management_url(monkeypatch) -> None:
