@@ -1227,3 +1227,11 @@ Bundle route는 200을 반환한다.
   `origin/dev` ancestor exit 0이다.
 
 계약 완성: ISSUES_FILTER_RESULTS_PATH + ISSUES_FILTER_FACETS_PATH + ISSUES_LABEL_FACETS_PATH (d63498d5fd84a02d109b68e39f2112d177a5fa92) [green]
+
+### 프론트 그래프 계약 번호 매핑 — claim
+
+- 상태: `in_progress`; 신규 구현이 아니라 이미 canonical에 착륙한 GAP-010의
+  `RESOURCES_GRAPH_PATH + ResourceGraphSnapshotResponse`를 BQ-022에 연결한다.
+- 기존 code `914d34ff6`, canonical merge `95ff11cc6`, Bruno
+  `docs/api/17-resources-filter/04-resource-graph.bru`와 전체 graph 회귀 테스트를 재사용한다.
+- 추가 gateway 계약·source 변경은 0건이며, §9의 stale 상태와 workqueue 번호만 정합화한다.
