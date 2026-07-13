@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-PROJECT_SLUG="${PROJECT_SLUG:-kubeheal}"
+PROJECT_SLUG="${PROJECT_SLUG:-kubernetes-ops}"
 AWS_REGION="${AWS_REGION:-us-east-1}"
 MGMT_CLUSTER="${MGMT_CLUSTER:-${PROJECT_SLUG}-mgmt}"
 TARGET_CLUSTER_1="${TARGET_CLUSTER_1:-${PROJECT_SLUG}-target-a}"
