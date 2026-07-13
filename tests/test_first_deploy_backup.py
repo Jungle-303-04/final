@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import importlib.util
 import sys
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from types import ModuleType
 from typing import Any
@@ -26,6 +27,7 @@ SOURCE_SHA = "a" * 40
 SNAPSHOT_ID = "snap-0123456789abcdef0"
 VOLUME_ID = "vol-0123456789abcdef0"
 PVC_NAME = "data-postgresql-0"
+NOW = datetime(2026, 7, 14, 6, 0, tzinfo=UTC)
 
 
 def pod_document() -> dict[str, Any]:
@@ -62,9 +64,10 @@ def snapshot_document(**overrides: Any) -> dict[str, Any]:
         "VolumeId": VOLUME_ID,
         "State": "completed",
         "Encrypted": True,
+        "StartTime": "2026-07-14T05:00:00+00:00",
         "Tags": [
             {"Key": "opsia:source-sha", "Value": SOURCE_SHA},
-            {"Key": "opsia:postgres-pvc", "Value": PVC_NAME},
+            {"Key": "opsia:source-pvc", "Value": PVC_NAME},
             {"Key": "opsia:restore-rehearsal", "Value": "passed"},
             {"Key": "opsia:backup-kind", "Value": "pre-first-deploy"},
         ],
@@ -88,6 +91,8 @@ def test_completed_encrypted_snapshot_with_restore_rehearsal_is_accepted() -> No
         snapshot_id=SNAPSHOT_ID,
         live_volume=LiveVolume(PVC_NAME, "pvc-volume", VOLUME_ID),
         source_sha=SOURCE_SHA,
+        now=NOW,
+        max_age=timedelta(hours=24),
     )
 
     assert evidence.snapshot_id == SNAPSHOT_ID
@@ -102,6 +107,8 @@ def test_completed_encrypted_snapshot_with_restore_rehearsal_is_accepted() -> No
         snapshot_document(Encrypted=False),
         snapshot_document(VolumeId="vol-fffffffffffffffff"),
         snapshot_document(Tags=[]),
+        snapshot_document(StartTime="2026-07-13T05:59:59+00:00"),
+        snapshot_document(StartTime="2026-07-14T06:05:01+00:00"),
         {"Snapshots": []},
     ],
 )
@@ -112,6 +119,8 @@ def test_unproven_or_mismatched_snapshot_is_rejected(snapshot: dict[str, Any]) -
             snapshot_id=SNAPSHOT_ID,
             live_volume=LiveVolume(PVC_NAME, "pvc-volume", VOLUME_ID),
             source_sha=SOURCE_SHA,
+            now=NOW,
+            max_age=timedelta(hours=24),
         )
 
 

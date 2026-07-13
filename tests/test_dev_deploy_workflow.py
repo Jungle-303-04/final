@@ -8,7 +8,16 @@ import yaml
 
 ROOT = Path(__file__).resolve().parents[1]
 WORKFLOW_PATH = ROOT / ".github/workflows/dev-deploy.yml"
-CONSOLE_IMAGE_PLACEHOLDER = "kubeheal-console@sha256:" + ("0" * 64)
+SERVICE_IMAGE_BASELINE = (
+    "183548421506.dkr.ecr.ap-northeast-2.amazonaws.com/"
+    "kubernetes-ops-service@sha256:"
+    "132cbc945004812ae3367c21a3408da8f3c9ab1a01b5870ffdea1157c83f5d0a"
+)
+CONSOLE_IMAGE_BASELINE = (
+    "183548421506.dkr.ecr.ap-northeast-2.amazonaws.com/"
+    "kubernetes-ops-console@sha256:"
+    "8c49f7bf8a10f5b9edb8de798cbe94d78ca29d03699bc2f3686c1636ec397978"
+)
 
 
 def workflow() -> dict:
@@ -29,10 +38,12 @@ def test_deploy_only_follows_a_successful_dev_push_gate_with_exact_opt_in() -> N
     assert triggers["workflow_run"] == {"workflows": ["Dev Gate"], "types": ["completed"]}
     assert set(triggers["workflow_dispatch"]["inputs"]) == {
         "source_sha",
-        "backup_snapshot_id",
+        "postgres_snapshot_id",
+        "nats_snapshot_id",
         "previous_release_sha",
         "confirmation",
     }
+    assert deploy_job()["environment"] == "dev-deploy"
     condition = deploy_job()["if"]
     assert "workflow_run.conclusion == 'success'" in condition
     assert "workflow_run.event == 'push'" in condition
@@ -76,11 +87,16 @@ def test_manual_first_deploy_requires_exact_gate_backup_and_previous_release_pro
     assert "select(.head_sha == env.SOURCE_SHA)" in gate_proof
     backup_proof = steps["Verify manual first-deploy backup"]["run"]
     assert "verify_first_deploy_backup.py" in backup_proof
-    assert 'test -n "${FIRST_DEPLOY_SNAPSHOT_ID}"' in backup_proof
+    assert 'test -n "${FIRST_DEPLOY_POSTGRES_SNAPSHOT_ID}"' in backup_proof
+    assert 'test -n "${FIRST_DEPLOY_NATS_SNAPSHOT_ID}"' in backup_proof
+    assert '--pvc-name "data-postgresql-0"' in backup_proof
+    assert '--pvc-name "data-nats-0"' in backup_proof
+    assert backup_proof.count("--max-age-hours 24") == 2
     assert "get configmap opsia-deploy-status" in backup_proof
     capture = steps["Capture current digest rollback plan"]["run"]
     assert 'previous_sha="${FIRST_DEPLOY_PREVIOUS_SHA}"' in capture
-    assert job["env"]["FIRST_DEPLOY_SNAPSHOT_ID"] == "${{ inputs.backup_snapshot_id }}"
+    assert job["env"]["FIRST_DEPLOY_POSTGRES_SNAPSHOT_ID"] == ("${{ inputs.postgres_snapshot_id }}")
+    assert job["env"]["FIRST_DEPLOY_NATS_SNAPSHOT_ID"] == "${{ inputs.nats_snapshot_id }}"
     assert job["env"]["FIRST_DEPLOY_PREVIOUS_SHA"] == "${{ inputs.previous_release_sha }}"
 
 
@@ -144,25 +160,35 @@ def test_service_and_console_images_share_the_gated_source_sha_and_digest_releas
         in steps["Build and push immutable console image"]["run"]
     )
     assert (
-        "--managed-image kubeheal-service:latest"
+        f'--managed-image "{SERVICE_IMAGE_BASELINE}"'
         in steps["Capture current digest rollback plan"]["run"]
     )
     assert (
-        f'--managed-image "{CONSOLE_IMAGE_PLACEHOLDER}"'
+        f'--managed-image "{CONSOLE_IMAGE_BASELINE}"'
         in steps["Capture current digest rollback plan"]["run"]
     )
     assert source.count("rollout_image_digest.py") == 2
     assert source.count("revert_image_digests.py") == 2
 
 
-def test_console_manifests_use_a_fail_closed_digest_placeholder_instead_of_latest() -> None:
+def test_console_manifests_pin_the_observed_ecr_digest_instead_of_latest() -> None:
     for relative_path in (
         "deploy/management/console.yaml",
         "deploy/management/console-dev.yaml",
     ):
         source = (ROOT / relative_path).read_text(encoding="utf-8")
-        assert CONSOLE_IMAGE_PLACEHOLDER in source
-        assert "kubeheal-console:latest" not in source
+        assert CONSOLE_IMAGE_BASELINE in source
+        assert ":latest" not in source
+
+
+def test_management_manifests_do_not_reference_retired_ecr_names_or_mutable_images() -> None:
+    for path in (ROOT / "deploy/management").glob("*.yaml"):
+        source = path.read_text(encoding="utf-8")
+        assert "kubeheal-service" not in source, path
+        assert "kubeheal-console" not in source, path
+        for line in source.splitlines():
+            if line.lstrip().startswith("image:") and "kubernetes-ops-" in line:
+                assert "@sha256:" in line, (path, line)
 
 
 def test_deploy_keeps_credentials_out_of_source_and_requires_explicit_context() -> None:
