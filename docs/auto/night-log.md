@@ -2628,3 +2628,19 @@ target preflight·register 네 함수와 strict Zod 계약을 claim했다. 1회�
   `/private/tmp/opsia-vp010-filter-sync`는 이 기록 착륙 직후 제거하고 `worktree prune`한다.
   신규 stash는 0개다. 기존 stash 8개는 반영 여부가 증명되지 않아 유지하며, 다른 작업자의
   `codex/oss-safe-pr-demo`와 보호 worktree·branch는 건드리지 않는다.
+
+## 2026-07-13 21:02 KST — [프론트] VP-010 passive filter Provider GREEN
+
+- RED는 미구현 Provider와 `clear-labels` history intent로 시작했다. GREEN `168b26e50`은
+  URL을 유일한 권위로 읽는 `UnifiedFilterProvider`를 추가했다. mount-time effect·자동 write·
+  API·로컬 복제 state는 0건이며, 명시적 canonicalize와 atomic updater만 push/replace를 쓴다.
+- StrictMode 무기록, legacy·unresolved 보존, explicit replace migration, chip push, typing replace,
+  detail/path/hash 보존, history back/forward 권위, cross-surface detail 제거, no-op 무기록,
+  Provider 밖 hook 실패를 검증했다. 독립 리뷰가 찾은 mutable updater 유실도 현재 URL을 updater
+  호출 전에 직렬화하는 회귀 테스트로 닫았다.
+- Resources legacy `full=1|0`은 canonical boolean으로 dual-read하고, 정의되지 않은 boolean/view는
+  structured invalid 값으로 격리한다. focused tests 19/19, 전체 `npm run check`는 TypeScript·ESLint,
+  Vitest 124 files / 875 tests, design guard 358 files, shadcn 482 previews, Vite 14,539 modules PASS다.
+- production mount는 의도적으로 보류한다. 기존 ClusterScope의 첫 Cluster 자동 선택과 셸·shortcut·
+  fallback의 legacy navigation이 canonical query를 지우므로, 다음 단위에서 이 writer들을 한 번에
+  전환하는 RED 통합 테스트가 선행되어야 한다. GAP-004 전 Label UI/count 미렌더는 유지한다.
