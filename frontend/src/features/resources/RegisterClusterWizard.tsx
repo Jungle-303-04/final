@@ -1,25 +1,48 @@
 import { useEffect, useMemo, useState } from 'react';
-import { CheckIcon as LucideCheckIcon } from 'lucide-react';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { get, post } from '@/shared/lib/api';
 import {
-  Badge,
-  Button,
-  Card,
-  Checkbox,
-  CodeBlock,
-  Collapsible,
-  ConfirmDialog,
-  EmptyState,
-  Field,
-  Input,
-  KeyValueList,
-  Modal,
+  CheckIcon as LucideCheckIcon,
+  ClipboardIcon,
+  LoaderCircleIcon,
+  RefreshCwIcon,
+  TriangleAlertIcon,
+} from 'lucide-react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { toast } from 'sonner';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Checkbox } from '@/components/ui/checkbox';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import {
   Select,
-  Skeleton,
-  cx,
-  useToast,
-} from '@/ui';
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import { Skeleton } from '@/components/ui/skeleton';
+import { cn } from '@/lib/utils';
+import { get, post } from '@/shared/lib/api';
 import { fmtAbs } from '@/shared/lib/format';
 
 const DEFAULT_DEPLOY_PROVIDER = 'manual-manifest';
@@ -139,6 +162,18 @@ type Validation = {
   errors: Partial<Record<keyof FormState | 'provider', string>>;
 };
 
+type ProviderFieldSpec = {
+  id: string;
+  label: string;
+  value: string;
+  key?: keyof FormState;
+  placeholder?: string;
+  help?: string;
+  error?: string;
+  readOnly?: boolean;
+  options?: string[];
+};
+
 type TargetPayload = {
   cluster_id: string;
   name: string;
@@ -212,7 +247,6 @@ const initialForm: FormState = {
 
 export function RegisterClusterWizard({ open, onClose }: { open: boolean; onClose: () => void }) {
   const queryClient = useQueryClient();
-  const toast = useToast();
   const [provider, setProvider] = useState<ProviderKind | 'local'>('eks');
   const [localProvider, setLocalProvider] = useState<'kind' | 'minikube'>('kind');
   const [form, setForm] = useState<FormState>(initialForm);
@@ -248,24 +282,18 @@ export function RegisterClusterWizard({ open, onClose }: { open: boolean; onClos
     }),
     onSuccess: (data) => {
       if (!data.valid) {
-        toast.push({
-          tone: 'danger',
-          title: '사전 검증 실패',
+        toast.error('사전 검증 실패', {
           description: firstMessage(data.errors) ?? '입력값을 확인해주세요',
         });
         return;
       }
       setRegistrationConfirmed(false);
-      toast.push({
-        tone: 'success',
-        title: '서버 검증 통과',
+      toast.success('서버 검증 통과', {
         description: '등록 대상과 연결 방식을 확인한 뒤 설치 명령을 발급하세요',
       });
     },
     onError: (error) => {
-      toast.push({
-        tone: 'danger',
-        title: '사전 검증 실패',
+      toast.error('사전 검증 실패', {
         description: errorMessage(error),
       });
     },
@@ -277,17 +305,13 @@ export function RegisterClusterWizard({ open, onClose }: { open: boolean; onClos
     }),
     onSuccess: (data) => {
       setIssued(data);
-      toast.push({
-        tone: 'success',
-        title: '클러스터 등록 완료',
+      toast.success('클러스터 등록 완료', {
         description: '설치 명령을 복사해 대상 클러스터에서 실행하세요',
       });
       void queryClient.invalidateQueries({ queryKey: ['clusters'] });
     },
     onError: (error) => {
-      toast.push({
-        tone: 'danger',
-        title: '등록 실패',
+      toast.error('등록 실패', {
         description: errorMessage(error),
       });
     },
@@ -395,256 +419,359 @@ export function RegisterClusterWizard({ open, onClose }: { open: boolean; onClos
     try {
       await navigator.clipboard.writeText(issued.agent_token);
       setCopyTokenState('idle');
-      toast.push({ tone: 'success', title: '복사 완료', description: 'agent token을 클립보드에 복사했습니다' });
+      toast.success('복사 완료', { description: 'agent token을 클립보드에 복사했습니다' });
     } catch {
       setCopyTokenState('failed');
-      toast.push({ tone: 'danger', title: '복사 실패', description: '토큰 값을 직접 선택해 복사해주세요' });
+      toast.error('복사 실패', { description: '토큰 값을 직접 선택해 복사해주세요' });
+    }
+  };
+
+  const copyInstallStep = async (label: string, command: string) => {
+    try {
+      await navigator.clipboard.writeText(command);
+      toast.success('복사 완료', { description: `${label}을 클립보드에 복사했습니다` });
+    } catch {
+      toast.error('복사 실패', { description: '명령을 직접 선택해 복사해주세요' });
     }
   };
 
   return (
     <>
-      <Modal
+      <Dialog
         open={open}
-        title="클러스터 등록"
-        description="provider를 선택하고 사전 검증을 통과하면 설치 명령이 발급됩니다"
         onOpenChange={(nextOpen) => {
           if (!nextOpen) requestClose();
         }}
       >
-        <div className="grid gap-5">
-          <StepRail issued={Boolean(issued)} connected={connected} verifying={preflight.isPending || register.isPending} />
+        <DialogContent className="max-h-[calc(100dvh-var(--spacing)*8)] overflow-y-auto sm:max-w-3xl">
+          <DialogHeader>
+            <DialogTitle>클러스터 등록</DialogTitle>
+            <DialogDescription>
+              provider를 선택하고 사전 검증을 통과하면 설치 명령이 발급됩니다
+            </DialogDescription>
+          </DialogHeader>
 
-          {!issued ? (
-            <>
-              <ProviderSection
-                provider={provider}
-                localProvider={localProvider}
-                activeCloudProvider={activeCloudProvider}
-                discovery={discovery}
-                selectedFlow={selectedFlow}
-                onProviderChange={chooseProvider}
-                onLocalProviderChange={chooseLocalProvider}
-              />
+          <div className="grid gap-5">
+            <StepRail issued={Boolean(issued)} connected={connected} verifying={preflight.isPending || register.isPending} />
 
-              <Card title="등록 정보" description="cluster_id는 내부 식별자이며 설치 context 기본값으로 사용됩니다">
-                <div className="grid gap-4 md:grid-cols-2">
-                  <Field label="cluster_id" error={validation.errors.cluster_id} help="소문자, 숫자, 하이픈만 입력">
-                    <Input
-                      value={form.cluster_id}
-                      onChange={(event) => setField('cluster_id', event.target.value)}
-                      placeholder="prod-seoul-01"
-                      data-testid="cluster-id"
-                    />
-                  </Field>
-                  <Field label="표시 이름" error={validation.errors.name}>
-                    <Input
-                      value={form.name}
-                      onChange={(event) => setField('name', event.target.value)}
-                      placeholder={form.cluster_id || '운영 클러스터'}
-                    />
-                  </Field>
-                  <Field
-                    label="운영 구분"
-                    error={validation.errors.environment}
-                    help={localInstall ? '로컬 클러스터는 dev로 기록됩니다' : '목록과 배포 필터에 쓰는 환경 라벨입니다'}
-                  >
-                    <Select
-                      value={form.environment}
-                      onChange={(event) => setField('environment', event.target.value)}
-                      disabled={localInstall}
-                    >
-                      <option value="dev">dev</option>
-                      <option value="stage">stage</option>
-                      <option value="prod">prod</option>
-                    </Select>
-                  </Field>
-                  <Field label="설치 방식" help="수동 manifest 설치 흐름으로 고정됩니다">
-                    <Input value="수동 manifest" readOnly />
-                  </Field>
-                </div>
-              </Card>
+            {!issued ? (
+              <>
+                <ProviderSection
+                  provider={provider}
+                  localProvider={localProvider}
+                  activeCloudProvider={activeCloudProvider}
+                  discovery={discovery}
+                  selectedFlow={selectedFlow}
+                  onProviderChange={chooseProvider}
+                  onLocalProviderChange={chooseLocalProvider}
+                />
 
-              <ProviderFields
-                provider={activeCloudProvider}
-                form={form}
-                errors={validation.errors}
-                onFieldChange={setField}
-              />
-
-              <Card
-                title="사전 요구사항"
-                description="터미널에서 설치 명령을 실행하기 전에 준비되어야 합니다"
-              >
-                <ul className="grid gap-2 text-body text-text-secondary">
-                  {prerequisites.map((item) => (
-                    <li key={item} className="flex min-w-0 items-start gap-2">
-                      <CheckIcon className="mt-0.5 text-success" />
-                      <span className="min-w-0">{item}</span>
-                    </li>
-                  ))}
-                </ul>
-              </Card>
-
-              <div>
-                <Button variant="ghost" size="sm" onClick={() => setAdvancedOpen((value) => !value)}>
-                  고급 설정
-                </Button>
-                <Collapsible open={advancedOpen}>
-                  <div className="mt-3">
-                    <Field label="management_base_url" help="비워두면 서버 기본 공개 URL을 사용합니다">
+                <Card className="rounded-panel border border-border bg-surface shadow-soft ring-0">
+                  <CardHeader>
+                    <CardTitle className="text-title text-text-primary">등록 정보</CardTitle>
+                    <CardDescription className="text-text-secondary">
+                      cluster_id는 내부 식별자이며 설치 context 기본값으로 사용됩니다
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent className="grid gap-4 md:grid-cols-2">
+                    <div className="grid gap-2">
+                      <Label htmlFor="cluster-id">cluster_id</Label>
                       <Input
+                        id="cluster-id"
+                        value={form.cluster_id}
+                        onChange={(event) => setField('cluster_id', event.target.value)}
+                        placeholder="prod-seoul-01"
+                        data-testid="cluster-id"
+                        aria-invalid={Boolean(validation.errors.cluster_id)}
+                        aria-describedby="cluster-id-message"
+                      />
+                      <p id="cluster-id-message" className={cn('text-caption', validation.errors.cluster_id ? 'text-danger' : 'text-text-muted')} role={validation.errors.cluster_id ? 'alert' : undefined}>
+                        {validation.errors.cluster_id ?? '소문자, 숫자, 하이픈만 입력'}
+                      </p>
+                    </div>
+                    <div className="grid gap-2">
+                      <Label htmlFor="cluster-name">표시 이름</Label>
+                      <Input
+                        id="cluster-name"
+                        value={form.name}
+                        onChange={(event) => setField('name', event.target.value)}
+                        placeholder={form.cluster_id || '운영 클러스터'}
+                        aria-invalid={Boolean(validation.errors.name)}
+                        aria-describedby={validation.errors.name ? 'cluster-name-error' : undefined}
+                      />
+                      {validation.errors.name && <p id="cluster-name-error" className="text-caption text-danger" role="alert">{validation.errors.name}</p>}
+                    </div>
+                    <div className="grid gap-2">
+                      <Label htmlFor="cluster-environment">운영 구분</Label>
+                      <Select
+                        value={form.environment}
+                        onValueChange={(value) => {
+                          if (value !== null) setField('environment', value);
+                        }}
+                        disabled={localInstall}
+                      >
+                        <SelectTrigger
+                          id="cluster-environment"
+                          className="w-full"
+                          aria-invalid={Boolean(validation.errors.environment)}
+                          aria-describedby="cluster-environment-message"
+                        >
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="dev">dev</SelectItem>
+                          <SelectItem value="stage">stage</SelectItem>
+                          <SelectItem value="prod">prod</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <p id="cluster-environment-message" className={cn('text-caption', validation.errors.environment ? 'text-danger' : 'text-text-muted')} role={validation.errors.environment ? 'alert' : undefined}>
+                        {validation.errors.environment ?? (localInstall ? '로컬 클러스터는 dev로 기록됩니다' : '목록과 배포 필터에 쓰는 환경 라벨입니다')}
+                      </p>
+                    </div>
+                    <div className="grid gap-2">
+                      <Label htmlFor="cluster-install-method">설치 방식</Label>
+                      <Input id="cluster-install-method" value="수동 manifest" readOnly aria-describedby="cluster-install-method-help" />
+                      <p id="cluster-install-method-help" className="text-caption text-text-muted">수동 manifest 설치 흐름으로 고정됩니다</p>
+                    </div>
+                  </CardContent>
+                </Card>
+
+                <ProviderFields
+                  provider={activeCloudProvider}
+                  form={form}
+                  errors={validation.errors}
+                  onFieldChange={setField}
+                />
+
+                <Card className="rounded-panel border border-border bg-surface shadow-soft ring-0">
+                  <CardHeader>
+                    <CardTitle className="text-title text-text-primary">사전 요구사항</CardTitle>
+                    <CardDescription className="text-text-secondary">터미널에서 설치 명령을 실행하기 전에 준비되어야 합니다</CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <ul className="grid gap-2 text-body text-text-secondary">
+                      {prerequisites.map((item) => (
+                        <li key={item} className="flex min-w-0 items-start gap-2">
+                          <CheckIcon className="mt-0.5 text-success" />
+                          <span className="min-w-0">{item}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </CardContent>
+                </Card>
+
+                <Collapsible open={advancedOpen} onOpenChange={setAdvancedOpen}>
+                  <CollapsibleTrigger render={<Button type="button" variant="ghost" size="sm" />}>
+                    고급 설정
+                  </CollapsibleTrigger>
+                  <CollapsibleContent className="h-(--collapsible-panel-height) overflow-hidden transition-[height] duration-[var(--motion-base)] ease-[var(--ease-out)] data-ending-style:h-0 data-starting-style:h-0 motion-reduce:h-auto motion-reduce:transition-none">
+                    <div className="mt-3 grid gap-2">
+                      <Label htmlFor="management-base-url">management_base_url</Label>
+                      <Input
+                        id="management-base-url"
                         value={form.management_base_url}
                         onChange={(event) => setField('management_base_url', event.target.value)}
                         placeholder="https://k8s.example.com"
+                        aria-describedby="management-base-url-help"
                       />
-                    </Field>
-                  </div>
+                      <p id="management-base-url-help" className="text-caption text-text-muted">비워두면 서버 기본 공개 URL을 사용합니다</p>
+                    </div>
+                  </CollapsibleContent>
                 </Collapsible>
-              </div>
 
-              <ValidationPanel preflight={preflight.data} pending={preflight.isPending || register.isPending} error={preflight.error ?? register.error} />
+                <ValidationPanel preflight={preflight.data} pending={preflight.isPending || register.isPending} error={preflight.error ?? register.error} />
 
-              {preflight.data?.valid && (
-                <div className="grid gap-3 border-y border-border py-4">
-                  <RegistrationTargetPreview
-                    clusterId={form.cluster_id}
-                    name={form.name}
-                    environment={form.environment}
-                    provider={activeCloudProvider}
-                    managementBaseUrl={form.management_base_url}
-                    kubeContext={providerConfig(form, activeCloudProvider).context_alias ?? providerConfig(form, activeCloudProvider).context_name}
-                  />
-                  <Checkbox
-                    checked={registrationConfirmed}
-                    onChange={(event) => setRegistrationConfirmed(event.target.checked)}
-                    label="검증 결과와 설치 대상이 맞는지 확인했습니다"
-                    description="설치 명령은 짧은 유효 기간의 agent token을 포함하며, 대상 클러스터에서만 실행해야 합니다."
-                  />
-                </div>
-              )}
-
-              <div className="flex flex-col gap-3 border-t border-border pt-4 sm:flex-row sm:items-center sm:justify-between">
-                <p className="text-caption text-text-muted">
-                  서버 검증과 설치 명령 발급은 별도 단계입니다
-                </p>
-                <div className="flex flex-wrap gap-2">
-                  {preflight.data?.valid && (
-                    <Button variant="secondary" disabled={!canRunPreflight} loading={preflight.isPending} onClick={runPreflight}>
-                      다시 검증
-                    </Button>
-                  )}
-                  <Button
-                    variant="primary"
-                    disabled={preflight.data?.valid ? !canIssueInstall : !canRunPreflight}
-                    loading={preflight.isPending || register.isPending}
-                    onClick={preflight.data?.valid ? issueInstall : runPreflight}
-                    data-testid="cluster-register-confirm"
-                  >
-                    {preflight.data?.valid ? '설치 명령 발급' : '서버 검증 실행'}
-                  </Button>
-                </div>
-              </div>
-            </>
-          ) : (
-            <>
-              <Card
-                title="설치 명령"
-                description="대상 클러스터에 접근 가능한 터미널에서 실행하세요"
-              >
-                <div className="grid gap-4">
-                  <div className="rounded-control border border-warning bg-bg px-3 py-2 text-caption font-semibold text-warning">
-                    이 명령은 agent 자격증명을 포함합니다. 한 번만 안전하게 보관하세요.
-                  </div>
-                  <div className="grid gap-3 rounded-panel border border-border bg-bg p-4 text-body text-text-secondary">
-                    <p>클러스터에서 아웃바운드 HTTPS만 가능하면 management API와 연결할 수 있습니다.</p>
-                    {issued.connect_expires_at && (
-                      <p className="text-caption text-text-muted">연결 대기 만료: {fmtAbs(issued.connect_expires_at)} · {remainingLabel(issued.connect_expires_at)}</p>
-                    )}
-                  </div>
-                  {installSteps.length > 0 ? (
-                    <div className="grid gap-3">
-                      {installSteps.map((step, index) => (
-                        <CodeBlock key={`${step.label}-${index}`} label={step.label} code={step.command} />
-                      ))}
-                    </div>
-                  ) : (
-                    <EmptyState
-                      title="설치 명령 없음"
-                      description="서버가 설치 명령을 아직 반환하지 않았습니다. manifest를 수동으로 저장해 kubectl apply -f로 적용하세요"
-                      action={<CodeBlock label="install manifest" code={issued.install_manifest} />}
+                {preflight.data?.valid && (
+                  <div className="grid gap-3 border-y border-border py-4">
+                    <RegistrationTargetPreview
+                      clusterId={form.cluster_id}
+                      name={form.name}
+                      environment={form.environment}
+                      provider={activeCloudProvider}
+                      managementBaseUrl={form.management_base_url}
+                      kubeContext={providerConfig(form, activeCloudProvider).context_alias ?? providerConfig(form, activeCloudProvider).context_name}
                     />
-                  )}
-                  <Field label="agent token" help={copyTokenState === 'failed' ? '복사 권한이 없으면 값을 직접 선택해 복사하세요' : '토큰 원문은 현재 화면에서만 확인할 수 있습니다'}>
-                    <div className="flex min-w-0 flex-col gap-2 sm:flex-row">
-                      <Input value={issued.agent_token} readOnly className="font-mono text-caption" data-testid="agent-token" />
-                      <Button onClick={copyToken}>토큰 복사</Button>
+                    <div className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-1">
+                      <Checkbox
+                        id="cluster-register-confirmation"
+                        checked={registrationConfirmed}
+                        onCheckedChange={(checked) => setRegistrationConfirmed(checked === true)}
+                        aria-describedby="cluster-register-confirmation-help"
+                      />
+                      <Label htmlFor="cluster-register-confirmation">검증 결과와 설치 대상이 맞는지 확인했습니다</Label>
+                      <p id="cluster-register-confirmation-help" className="col-start-2 text-caption text-text-muted">
+                        설치 명령은 짧은 유효 기간의 agent token을 포함하며, 대상 클러스터에서만 실행해야 합니다.
+                      </p>
                     </div>
-                  </Field>
-                </div>
-              </Card>
+                  </div>
+                )}
 
-              <Card
-                title="연결 대기"
-                description="명령 실행 후 보통 30초~1분 내 연결됩니다"
-                error={connQ.isError ? connQ.error : null}
-                onRetry={() => void connQ.refetch()}
-              >
-                <div className="grid gap-4">
-                  <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                    <Badge tone={connectionStatus.tone}>{connectionStatus.label}</Badge>
-                    <Button size="sm" onClick={() => void connQ.refetch()} loading={connQ.isFetching}>
-                      지금 확인
+                <div className="flex flex-col gap-3 border-t border-border pt-4 sm:flex-row sm:items-center sm:justify-between">
+                  <p className="text-caption text-text-muted">서버 검증과 설치 명령 발급은 별도 단계입니다</p>
+                  <div className="flex flex-wrap gap-2">
+                    {preflight.data?.valid && (
+                      <Button type="button" variant="secondary" disabled={!canRunPreflight} aria-busy={preflight.isPending} onClick={runPreflight}>
+                        {preflight.isPending && <LoaderCircleIcon className="animate-spin" aria-hidden="true" />}
+                        다시 검증
+                      </Button>
+                    )}
+                    <Button
+                      type="button"
+                      disabled={preflight.data?.valid ? !canIssueInstall : !canRunPreflight}
+                      aria-busy={preflight.isPending || register.isPending}
+                      onClick={preflight.data?.valid ? issueInstall : runPreflight}
+                      data-testid="cluster-register-confirm"
+                    >
+                      {(preflight.isPending || register.isPending) && <LoaderCircleIcon className="animate-spin" aria-hidden="true" />}
+                      {preflight.data?.valid ? '설치 명령 발급' : '서버 검증 실행'}
                     </Button>
                   </div>
-                  <KeyValueList
-                    items={[
-                      { label: 'cluster_id', value: issued.cluster_id },
-                      { label: '상태', value: connectionStatus.raw },
-                      { label: '설치 만료', value: issued.connect_expires_at ? `${fmtAbs(issued.connect_expires_at)} · ${remainingLabel(issued.connect_expires_at)}` : '서버 기본 정책' },
-                    ]}
-                  />
-                  {connectionStatus.kind === 'pending' && (
-                    <p className="text-body text-text-secondary">터미널에서 명령을 실행하면 5초 간격으로 연결 상태를 확인합니다.</p>
-                  )}
-                  {(connectionStatus.kind === 'expired' || connectionStatus.kind === 'error') && (
-                    <div className="grid gap-3 rounded-panel border border-border bg-bg p-4">
-                      <p className="text-body text-text-secondary">
-                        설치 토큰이 만료되었거나 연결 확인 중 오류가 발생했습니다. 새 명령을 재발급하거나 목록에서 등록 항목을 정리한 뒤 다시 등록하세요.
-                      </p>
-                      <div className="flex flex-wrap gap-2">
-                        <Button variant="primary" loading={preflight.isPending || register.isPending} onClick={reissue} disabled={!validation.valid}>
-                          재발급
-                        </Button>
-                        <Button variant="secondary" onClick={resetForClose}>
-                          목록으로 이동
+                </div>
+              </>
+            ) : (
+              <>
+                <Card className="rounded-panel border border-border bg-surface shadow-soft ring-0">
+                  <CardHeader>
+                    <CardTitle className="text-title text-text-primary">설치 명령</CardTitle>
+                    <CardDescription className="text-text-secondary">대상 클러스터에 접근 가능한 터미널에서 실행하세요</CardDescription>
+                  </CardHeader>
+                  <CardContent className="grid gap-4">
+                    <Alert className="border-warning text-warning">
+                      <TriangleAlertIcon aria-hidden="true" />
+                      <AlertTitle>agent 자격증명 포함</AlertTitle>
+                      <AlertDescription className="text-text-secondary">이 명령은 한 번만 안전하게 보관하세요.</AlertDescription>
+                    </Alert>
+                    <div className="grid gap-3 rounded-panel border border-border bg-bg p-4 text-body text-text-secondary">
+                      <p>클러스터에서 아웃바운드 HTTPS만 가능하면 management API와 연결할 수 있습니다.</p>
+                      {issued.connect_expires_at && (
+                        <p className="text-caption text-text-muted">연결 대기 만료: {fmtAbs(issued.connect_expires_at)} · {remainingLabel(issued.connect_expires_at)}</p>
+                      )}
+                    </div>
+                    {installSteps.length > 0 ? (
+                      <div className="grid gap-3">
+                        {installSteps.map((step, index) => (
+                          <Card key={`${step.label}-${index}`} size="sm" className="rounded-panel border border-border bg-bg ring-0">
+                            <CardHeader className="flex-row items-center justify-between">
+                              <CardTitle className="text-label text-text-primary">{step.label}</CardTitle>
+                              <Button type="button" variant="ghost" size="icon-sm" aria-label={`${step.label} 복사`} onClick={() => void copyInstallStep(step.label, step.command)}>
+                                <ClipboardIcon aria-hidden="true" />
+                              </Button>
+                            </CardHeader>
+                            <CardContent>
+                              <pre className="max-h-64 overflow-auto whitespace-pre-wrap break-words rounded-control bg-raised p-3 font-mono text-caption text-text-secondary" tabIndex={0}><code>{step.command}</code></pre>
+                            </CardContent>
+                          </Card>
+                        ))}
+                      </div>
+                    ) : (
+                      <Card className="rounded-panel border border-dashed border-border bg-bg text-center ring-0">
+                        <CardHeader>
+                          <CardTitle className="text-title text-text-primary">설치 명령 없음</CardTitle>
+                          <CardDescription className="text-text-secondary">서버가 설치 명령을 아직 반환하지 않았습니다. manifest를 수동으로 저장해 kubectl apply -f로 적용하세요</CardDescription>
+                        </CardHeader>
+                      </Card>
+                    )}
+                    <div className="grid gap-2">
+                      <Label htmlFor="agent-token">agent token</Label>
+                      <div className="flex min-w-0 flex-col gap-2 sm:flex-row">
+                        <Input id="agent-token" value={issued.agent_token} readOnly className="font-mono text-caption" data-testid="agent-token" aria-describedby="agent-token-help" />
+                        <Button type="button" variant="outline" onClick={() => void copyToken()}>
+                          <ClipboardIcon aria-hidden="true" />
+                          토큰 복사
                         </Button>
                       </div>
+                      <p id="agent-token-help" className={cn('text-caption', copyTokenState === 'failed' ? 'text-danger' : 'text-text-muted')}>
+                        {copyTokenState === 'failed' ? '복사 권한이 없으면 값을 직접 선택해 복사하세요' : '토큰 원문은 현재 화면에서만 확인할 수 있습니다'}
+                      </p>
                     </div>
-                  )}
-                  {connected && (
-                    <EmptyState
-                      title="클러스터 연결 완료"
-                      description="이제 evidence 정책과 인벤토리 수집 상태를 확인할 수 있습니다"
-                      action={<Button variant="primary" onClick={resetForClose}>evidence 정책 보기</Button>}
-                    />
-                  )}
-                </div>
-              </Card>
-            </>
-          )}
-        </div>
-      </Modal>
+                  </CardContent>
+                </Card>
 
-      <ConfirmDialog
-        open={closeGuard}
-        title="설치 흐름 닫기"
-        description="아직 연결되지 않았습니다. agent token은 다시 볼 수 없으므로 설치 명령을 복사했는지 확인해주세요."
-        confirmLabel="닫기"
-        cancelLabel="계속 보기"
-        onConfirm={resetForClose}
-        onOpenChange={setCloseGuard}
-      />
+                <Card className="rounded-panel border border-border bg-surface shadow-soft ring-0">
+                  <CardHeader>
+                    <CardTitle className="text-title text-text-primary">연결 대기</CardTitle>
+                    <CardDescription className="text-text-secondary">명령 실행 후 보통 30초~1분 내 연결됩니다</CardDescription>
+                  </CardHeader>
+                  <CardContent className="grid gap-4">
+                    {connQ.isError && (
+                      <Alert variant="destructive">
+                        <TriangleAlertIcon aria-hidden="true" />
+                        <AlertTitle>연결 상태 조회 실패</AlertTitle>
+                        <AlertDescription>{errorMessage(connQ.error)}</AlertDescription>
+                        <Button type="button" variant="outline" size="sm" onClick={() => void connQ.refetch()}>다시 시도</Button>
+                      </Alert>
+                    )}
+                    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                      <Badge variant="outline" className={statusBadgeClass(connectionStatus.tone)}>{connectionStatus.label}</Badge>
+                      <Button type="button" size="sm" variant="outline" onClick={() => void connQ.refetch()} disabled={connQ.isFetching} aria-busy={connQ.isFetching}>
+                        <RefreshCwIcon className={cn(connQ.isFetching && 'animate-spin')} aria-hidden="true" />
+                        지금 확인
+                      </Button>
+                    </div>
+                    <dl className="grid gap-3 rounded-panel border border-border bg-bg p-4">
+                      {[
+                        { label: 'cluster_id', value: issued.cluster_id },
+                        { label: '상태', value: connectionStatus.raw },
+                        { label: '설치 만료', value: issued.connect_expires_at ? `${fmtAbs(issued.connect_expires_at)} · ${remainingLabel(issued.connect_expires_at)}` : '서버 기본 정책' },
+                      ].map((item) => (
+                        <div key={item.label} className="grid gap-1 sm:grid-cols-[minmax(0,10rem)_minmax(0,1fr)]">
+                          <dt className="text-label font-semibold text-text-muted">{item.label}</dt>
+                          <dd className="break-words text-body text-text-primary">{item.value}</dd>
+                        </div>
+                      ))}
+                    </dl>
+                    {connectionStatus.kind === 'pending' && (
+                      <p className="text-body text-text-secondary">터미널에서 명령을 실행하면 5초 간격으로 연결 상태를 확인합니다.</p>
+                    )}
+                    {(connectionStatus.kind === 'expired' || connectionStatus.kind === 'error') && (
+                      <Alert className="border-warning">
+                        <TriangleAlertIcon className="text-warning" aria-hidden="true" />
+                        <AlertTitle>새 설치 명령 필요</AlertTitle>
+                        <AlertDescription className="text-text-secondary">
+                          설치 토큰이 만료되었거나 연결 확인 중 오류가 발생했습니다. 새 명령을 재발급하거나 목록에서 등록 항목을 정리한 뒤 다시 등록하세요.
+                        </AlertDescription>
+                        <div className="col-start-2 mt-3 flex flex-wrap gap-2">
+                          <Button type="button" disabled={!validation.valid || preflight.isPending || register.isPending} aria-busy={preflight.isPending || register.isPending} onClick={reissue}>
+                            {(preflight.isPending || register.isPending) && <LoaderCircleIcon className="animate-spin" aria-hidden="true" />}
+                            재발급
+                          </Button>
+                          <Button type="button" variant="secondary" onClick={resetForClose}>목록으로 이동</Button>
+                        </div>
+                      </Alert>
+                    )}
+                    {connected && (
+                      <Card className="rounded-panel border border-success bg-bg text-center ring-0" role="status" aria-live="polite">
+                        <CardHeader>
+                          <CardTitle className="text-title text-success">클러스터 연결 완료</CardTitle>
+                          <CardDescription className="text-text-secondary">이제 evidence 정책과 인벤토리 수집 상태를 확인할 수 있습니다</CardDescription>
+                        </CardHeader>
+                        <CardContent>
+                          <Button type="button" onClick={resetForClose}>evidence 정책 보기</Button>
+                        </CardContent>
+                      </Card>
+                    )}
+                  </CardContent>
+                </Card>
+              </>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <AlertDialog open={closeGuard} onOpenChange={setCloseGuard}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>설치 흐름 닫기</AlertDialogTitle>
+            <AlertDialogDescription>
+              아직 연결되지 않았습니다. agent token은 다시 볼 수 없으므로 설치 명령을 복사했는지 확인해주세요.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => setCloseGuard(false)}>계속 보기</AlertDialogCancel>
+            <AlertDialogAction variant="destructive" onClick={resetForClose}>닫기</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </>
   );
 }
@@ -667,71 +794,94 @@ function ProviderSection({
   onLocalProviderChange: (provider: 'kind' | 'minikube') => void;
 }) {
   return (
-    <Card
-      title="Provider"
-      description="설치 명령을 생성할 클러스터 provider를 선택합니다"
-      loading={discovery.isPending}
-      error={discovery.isError ? discovery.error : null}
-      onRetry={() => void discovery.refetch()}
-    >
-      <div className="grid gap-3 md:grid-cols-2">
-        {providerOptions.map((option) => {
-          const selected = provider === option.key;
-          const flow = option.key === 'local'
-            ? findFlow(discovery.data?.flows ?? [], localProvider)
-            : findFlow(discovery.data?.flows ?? [], option.key);
-          return (
-            <button
-              key={option.key}
-              type="button"
-              aria-pressed={selected}
-              className={cx(
-                'grid min-h-28 gap-3 rounded-panel border bg-surface p-4 text-left transition-colors',
-                selected ? 'border-brand shadow-soft' : 'border-border hover:border-border-strong hover:bg-raised',
-              )}
-              onClick={() => onProviderChange(option.key)}
-            >
-              <span className="flex min-w-0 items-start justify-between gap-3">
-                <span className="min-w-0">
-                  <span className="block truncate text-title font-semibold text-text-primary">{option.label}</span>
-                  <span className="mt-1 block text-body text-text-secondary">{option.description}</span>
-                </span>
-                <Badge tone={flow ? toneForStatus(flow.status) : 'neutral'}>{flow ? registrationStatusLabel(flow.status) : option.badge}</Badge>
-              </span>
-              {flow?.unavailable_reason && <span className="text-caption text-warning">{flow.unavailable_reason}</span>}
-            </button>
-          );
-        })}
-      </div>
+    <Card className="rounded-panel border border-border bg-surface shadow-soft ring-0">
+      <CardHeader>
+        <CardTitle className="text-title text-text-primary">Provider</CardTitle>
+        <CardDescription className="text-text-secondary">설치 명령을 생성할 클러스터 provider를 선택합니다</CardDescription>
+      </CardHeader>
+      <CardContent className="grid gap-4">
+        {discovery.isPending && (
+          <div className="grid gap-3 md:grid-cols-2" aria-label="Provider 불러오는 중">
+            {Array.from({ length: 4 }, (_, index) => <Skeleton key={index} className="h-28 w-full rounded-panel" />)}
+          </div>
+        )}
 
-      {provider === 'local' && (
-        <div className="mt-4 grid grid-cols-2 gap-2 rounded-panel border border-border bg-bg p-1">
-          {(['kind', 'minikube'] as const).map((value) => (
-            <button
-              key={value}
-              type="button"
-              aria-pressed={localProvider === value}
-              className={cx(
-                'h-9 rounded-control px-3 text-body font-semibold transition-colors',
-                localProvider === value ? 'bg-brand text-on-accent' : 'text-text-secondary hover:bg-raised hover:text-text-primary',
-              )}
-              onClick={() => onLocalProviderChange(value)}
-            >
-              {value}
-            </button>
-          ))}
-        </div>
-      )}
+        {discovery.isError && (
+          <Alert variant="destructive">
+            <TriangleAlertIcon aria-hidden="true" />
+            <AlertTitle>Provider 조회 실패</AlertTitle>
+            <AlertDescription>{errorMessage(discovery.error)}</AlertDescription>
+            <Button type="button" variant="outline" size="sm" onClick={() => void discovery.refetch()}>다시 시도</Button>
+          </Alert>
+        )}
 
-      <div className="mt-4">
-        <KeyValueList
-          items={[
+        {!discovery.isPending && !discovery.isError && (
+          <div className="grid gap-3 md:grid-cols-2">
+            {providerOptions.map((option) => {
+              const selected = provider === option.key;
+              const flow = option.key === 'local'
+                ? findFlow(discovery.data?.flows ?? [], localProvider)
+                : findFlow(discovery.data?.flows ?? [], option.key);
+              const tone = flow ? toneForStatus(flow.status) : 'neutral';
+              return (
+                <Button
+                  key={option.key}
+                  type="button"
+                  variant="outline"
+                  aria-pressed={selected}
+                  className={cn(
+                    'h-auto min-h-28 items-start justify-start whitespace-normal rounded-panel border bg-surface p-4 text-left',
+                    selected ? 'border-brand bg-raised shadow-soft' : 'border-border hover:border-border-strong hover:bg-raised',
+                  )}
+                  onClick={() => onProviderChange(option.key)}
+                >
+                  <span className="grid w-full min-w-0 gap-3">
+                    <span className="flex min-w-0 items-start justify-between gap-3">
+                      <span className="min-w-0">
+                        <span className="block truncate text-title font-semibold text-text-primary">{option.label}</span>
+                        <span className="mt-1 block text-body font-normal text-text-secondary">{option.description}</span>
+                      </span>
+                      <Badge variant="outline" className={statusBadgeClass(tone)}>
+                        {flow ? registrationStatusLabel(flow.status) : option.badge}
+                      </Badge>
+                    </span>
+                    {flow?.unavailable_reason && <span className="text-caption font-normal text-warning">{flow.unavailable_reason}</span>}
+                  </span>
+                </Button>
+              );
+            })}
+          </div>
+        )}
+
+        {provider === 'local' && !discovery.isPending && !discovery.isError && (
+          <div className="grid grid-cols-2 gap-2 rounded-panel border border-border bg-bg p-1">
+            {(['kind', 'minikube'] as const).map((value) => (
+              <Button
+                key={value}
+                type="button"
+                variant={localProvider === value ? 'default' : 'ghost'}
+                aria-pressed={localProvider === value}
+                onClick={() => onLocalProviderChange(value)}
+              >
+                {value}
+              </Button>
+            ))}
+          </div>
+        )}
+
+        <dl className="grid gap-3 rounded-panel border border-border bg-bg p-4">
+          {[
             { label: '선택 provider', value: activeCloudProvider },
             { label: '서버 discovery', value: selectedFlow ? registrationStatusLabel(selectedFlow.status) : 'preflight에서 확인' },
             { label: '설치 방식', value: '수동 manifest' },
-          ]}
-        />
-      </div>
+          ].map((item) => (
+            <div key={item.label} className="grid gap-1 sm:grid-cols-[minmax(0,10rem)_minmax(0,1fr)]">
+              <dt className="text-label font-semibold text-text-muted">{item.label}</dt>
+              <dd className="break-words text-body text-text-primary">{item.value}</dd>
+            </div>
+          ))}
+        </dl>
+      </CardContent>
     </Card>
   );
 }
@@ -747,106 +897,152 @@ function ProviderFields({
   errors: Validation['errors'];
   onFieldChange: (key: keyof FormState, value: string) => void;
 }) {
+  const content = providerFieldContent(provider, form, errors);
+
+  return (
+    <Card className="rounded-panel border border-border bg-surface shadow-soft ring-0">
+      <CardHeader>
+        <CardTitle className="text-title text-text-primary">{content.title}</CardTitle>
+        <CardDescription className="text-text-secondary">{content.description}</CardDescription>
+      </CardHeader>
+      <CardContent className="grid gap-4 md:grid-cols-2">
+        {content.fields.map((field) => {
+          const messageId = `${field.id}-message`;
+          return (
+            <div key={field.id} className="grid gap-2">
+              <Label htmlFor={field.id}>{field.label}</Label>
+              {field.options ? (
+                <Select
+                  value={field.value}
+                  onValueChange={(value) => {
+                    if (value !== null && field.key) onFieldChange(field.key, value);
+                  }}
+                >
+                  <SelectTrigger id={field.id} className="w-full" aria-describedby={field.help || field.error ? messageId : undefined} aria-invalid={Boolean(field.error)}>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {field.options.map((option) => <SelectItem key={option} value={option}>{option}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              ) : (
+                <Input
+                  id={field.id}
+                  value={field.value}
+                  readOnly={field.readOnly}
+                  onChange={field.key ? (event) => onFieldChange(field.key!, event.target.value) : undefined}
+                  placeholder={field.placeholder}
+                  aria-describedby={field.help || field.error ? messageId : undefined}
+                  aria-invalid={Boolean(field.error)}
+                />
+              )}
+              {(field.error || field.help) && (
+                <p id={messageId} className={cn('text-caption', field.error ? 'text-danger' : 'text-text-muted')} role={field.error ? 'alert' : undefined}>
+                  {field.error ?? field.help}
+                </p>
+              )}
+            </div>
+          );
+        })}
+      </CardContent>
+    </Card>
+  );
+}
+
+function providerFieldContent(
+  provider: ProviderKind,
+  form: FormState,
+  errors: Validation['errors'],
+): { title: string; description: string; fields: ProviderFieldSpec[] } {
+  const editable = (
+    key: keyof FormState,
+    label: string,
+    value: string,
+    placeholder?: string,
+    help?: string,
+  ): ProviderFieldSpec => ({
+    id: `provider-${String(key).replaceAll('_', '-')}`,
+    key,
+    label,
+    value,
+    placeholder,
+    help,
+    error: errors[key],
+  });
+
   if (provider === 'eks') {
-    return (
-      <Card title="EKS 설정" description="aws CLI가 생성한 kubeconfig context에 agent를 설치합니다">
-        <div className="grid gap-4 md:grid-cols-2">
-          <Field label="region" error={errors.region}>
-            <Input value={form.region} onChange={(event) => onFieldChange('region', event.target.value)} placeholder="ap-northeast-2" />
-          </Field>
-          <Field label="eks_cluster_name" error={errors.eks_cluster_name}>
-            <Input value={form.eks_cluster_name} onChange={(event) => onFieldChange('eks_cluster_name', event.target.value)} placeholder="production-eks" />
-          </Field>
-          <Field label="context_alias" error={errors.context_alias} help="기본값은 cluster_id입니다">
-            <Input value={form.context_alias} onChange={(event) => onFieldChange('context_alias', event.target.value)} placeholder={form.cluster_id || 'prod-seoul-01'} />
-          </Field>
-        </div>
-      </Card>
-    );
+    return {
+      title: 'EKS 설정',
+      description: 'aws CLI가 생성한 kubeconfig context에 agent를 설치합니다',
+      fields: [
+        editable('region', 'region', form.region, 'ap-northeast-2'),
+        editable('eks_cluster_name', 'eks_cluster_name', form.eks_cluster_name, 'production-eks'),
+        editable('context_alias', 'context_alias', form.context_alias, form.cluster_id || 'prod-seoul-01', '기본값은 cluster_id입니다'),
+      ],
+    };
   }
 
   if (provider === 'gke') {
-    return (
-      <Card title="GKE 설정" description="gcloud get-credentials 후 target agent를 설치합니다">
-        <div className="grid gap-4 md:grid-cols-2">
-          <Field label="project_id" error={errors.project_id}>
-            <Input value={form.project_id} onChange={(event) => onFieldChange('project_id', event.target.value)} placeholder="platform-prod" />
-          </Field>
-          <Field label="location_type">
-            <Select value={form.location_type} onChange={(event) => onFieldChange('location_type', event.target.value)}>
-              <option value="region">region</option>
-              <option value="zone">zone</option>
-            </Select>
-          </Field>
-          <Field label="location" error={errors.location}>
-            <Input value={form.location} onChange={(event) => onFieldChange('location', event.target.value)} placeholder="asia-northeast3" />
-          </Field>
-          <Field label="gke_cluster_name" error={errors.gke_cluster_name}>
-            <Input value={form.gke_cluster_name} onChange={(event) => onFieldChange('gke_cluster_name', event.target.value)} placeholder="production-gke" />
-          </Field>
-          <Field label="context_alias" error={errors.context_alias} help="기본값은 cluster_id입니다">
-            <Input value={form.context_alias} onChange={(event) => onFieldChange('context_alias', event.target.value)} placeholder={form.cluster_id || 'prod-seoul-01'} />
-          </Field>
-        </div>
-      </Card>
-    );
+    return {
+      title: 'GKE 설정',
+      description: 'gcloud get-credentials 후 target agent를 설치합니다',
+      fields: [
+        editable('project_id', 'project_id', form.project_id, 'platform-prod'),
+        {
+          id: 'provider-location-type',
+          key: 'location_type',
+          label: 'location_type',
+          value: form.location_type,
+          options: ['region', 'zone'],
+        },
+        editable('location', 'location', form.location, 'asia-northeast3'),
+        editable('gke_cluster_name', 'gke_cluster_name', form.gke_cluster_name, 'production-gke'),
+        editable('context_alias', 'context_alias', form.context_alias, form.cluster_id || 'prod-seoul-01', '기본값은 cluster_id입니다'),
+      ],
+    };
   }
 
   if (provider === 'aks') {
-    return (
-      <Card title="AKS 설정" description="az CLI credential 로드 후 target agent를 설치합니다">
-        <div className="grid gap-4 md:grid-cols-2">
-          <Field label="resource_group" error={errors.resource_group}>
-            <Input value={form.resource_group} onChange={(event) => onFieldChange('resource_group', event.target.value)} placeholder="rg-platform-prod" />
-          </Field>
-          <Field label="aks_cluster_name" error={errors.aks_cluster_name}>
-            <Input value={form.aks_cluster_name} onChange={(event) => onFieldChange('aks_cluster_name', event.target.value)} placeholder="production-aks" />
-          </Field>
-          <Field label="context_alias" error={errors.context_alias} help="기본값은 cluster_id입니다">
-            <Input value={form.context_alias} onChange={(event) => onFieldChange('context_alias', event.target.value)} placeholder={form.cluster_id || 'prod-seoul-01'} />
-          </Field>
-        </div>
-      </Card>
-    );
+    return {
+      title: 'AKS 설정',
+      description: 'az CLI credential 로드 후 target agent를 설치합니다',
+      fields: [
+        editable('resource_group', 'resource_group', form.resource_group, 'rg-platform-prod'),
+        editable('aks_cluster_name', 'aks_cluster_name', form.aks_cluster_name, 'production-aks'),
+        editable('context_alias', 'context_alias', form.context_alias, form.cluster_id || 'prod-seoul-01', '기본값은 cluster_id입니다'),
+      ],
+    };
   }
 
   if (provider === 'kind') {
-    return (
-      <Card title="kind 설정" description="kind context에 target agent를 설치합니다">
-        <div className="grid gap-4 md:grid-cols-2">
-          <Field label="kind_cluster_name" error={errors.kind_cluster_name}>
-            <Input value={form.kind_cluster_name} onChange={(event) => onFieldChange('kind_cluster_name', event.target.value)} placeholder={form.cluster_id || 'jungle-dev'} />
-          </Field>
-          <Field label="context" help="kind-<name> 형식으로 사용됩니다">
-            <Input value={kindContext(form)} readOnly />
-          </Field>
-        </div>
-      </Card>
-    );
+    return {
+      title: 'kind 설정',
+      description: 'kind context에 target agent를 설치합니다',
+      fields: [
+        editable('kind_cluster_name', 'kind_cluster_name', form.kind_cluster_name, form.cluster_id || 'jungle-dev'),
+        { id: 'provider-kind-context', label: 'context', value: kindContext(form), readOnly: true, help: 'kind-<name> 형식으로 사용됩니다' },
+      ],
+    };
   }
 
   if (provider === 'minikube') {
-    return (
-      <Card title="minikube 설정" description="minikube profile context에 target agent를 설치합니다">
-        <div className="grid gap-4 md:grid-cols-2">
-          <Field label="profile" error={errors.minikube_profile}>
-            <Input value={form.minikube_profile} onChange={(event) => onFieldChange('minikube_profile', event.target.value)} placeholder="minikube" />
-          </Field>
-          <Field label="context" help="profile 이름을 context로 사용합니다">
-            <Input value={form.minikube_profile || 'minikube'} readOnly />
-          </Field>
-        </div>
-      </Card>
-    );
+    return {
+      title: 'minikube 설정',
+      description: 'minikube profile context에 target agent를 설치합니다',
+      fields: [
+        editable('minikube_profile', 'profile', form.minikube_profile, 'minikube'),
+        { id: 'provider-minikube-context', label: 'context', value: form.minikube_profile || 'minikube', readOnly: true, help: 'profile 이름을 context로 사용합니다' },
+      ],
+    };
   }
 
-  return (
-    <Card title="Existing Kubernetes 설정" description="이미 준비된 kubeconfig context에 target agent를 설치합니다">
-      <Field label="context_name" error={errors.context_name}>
-        <Input value={form.context_name} onChange={(event) => onFieldChange('context_name', event.target.value)} placeholder="arn:aws:eks:ap-northeast-2:123456789012:cluster/prod" />
-      </Field>
-    </Card>
-  );
+  return {
+    title: 'Existing Kubernetes 설정',
+    description: '이미 준비된 kubeconfig context에 target agent를 설치합니다',
+    fields: [
+      editable('context_name', 'context_name', form.context_name, 'arn:aws:eks:ap-northeast-2:123456789012:cluster/prod'),
+    ],
+  };
 }
 
 function RegistrationTargetPreview({
@@ -897,38 +1093,57 @@ function ValidationPanel({
 }) {
   if (pending) {
     return (
-      <Card title="서버 검증" description="중복, provider 준비 상태, 설치 설정을 확인 중입니다">
-        <Skeleton lines={3} />
+      <Card className="rounded-panel border border-border bg-surface shadow-soft ring-0" aria-busy="true">
+        <CardHeader>
+          <CardTitle className="text-title text-text-primary">서버 검증</CardTitle>
+          <CardDescription className="text-text-secondary">중복, provider 준비 상태, 설치 설정을 확인 중입니다</CardDescription>
+        </CardHeader>
+        <CardContent className="grid gap-2">
+          <Skeleton className="h-5 w-full" />
+          <Skeleton className="h-5 w-4/5" />
+          <Skeleton className="h-5 w-3/5" />
+        </CardContent>
       </Card>
     );
   }
 
   if (error) {
     return (
-      <EmptyState
-        title="서버 검증 실패"
-        description={errorMessage(error)}
-      />
+      <Alert variant="destructive">
+        <TriangleAlertIcon aria-hidden="true" />
+        <AlertTitle>서버 검증 실패</AlertTitle>
+        <AlertDescription>{errorMessage(error)}</AlertDescription>
+      </Alert>
     );
   }
 
   if (!preflight) {
     return (
-      <Card title="서버 검증" description="확인을 누르면 등록 전에 서버 검증을 먼저 실행합니다">
-        <p className="text-body text-text-secondary">중복 cluster_id, provider 지원 여부, management URL 설정을 검증합니다.</p>
+      <Card className="rounded-panel border border-border bg-surface shadow-soft ring-0">
+        <CardHeader>
+          <CardTitle className="text-title text-text-primary">서버 검증</CardTitle>
+          <CardDescription className="text-text-secondary">확인을 누르면 등록 전에 서버 검증을 먼저 실행합니다</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <p className="text-body text-text-secondary">중복 cluster_id, provider 지원 여부, management URL 설정을 검증합니다.</p>
+        </CardContent>
       </Card>
     );
   }
 
   return (
-    <Card title="서버 검증 결과" description={preflight.valid ? '등록 가능한 상태입니다' : '아래 항목을 수정해야 합니다'}>
-      <div className="grid gap-4">
+    <Card className="rounded-panel border border-border bg-surface shadow-soft ring-0">
+      <CardHeader>
+        <CardTitle className="text-title text-text-primary">서버 검증 결과</CardTitle>
+        <CardDescription className="text-text-secondary">{preflight.valid ? '등록 가능한 상태입니다' : '아래 항목을 수정해야 합니다'}</CardDescription>
+      </CardHeader>
+      <CardContent className="grid gap-4">
         <div className="grid gap-3 md:grid-cols-2">
           {preflightItems(preflight).map((item) => (
             <div key={item.label} className="grid gap-2 rounded-panel border border-border bg-bg p-3">
               <div className="flex items-center justify-between gap-3">
                 <span className="text-label font-semibold text-text-muted">{item.label}</span>
-                <Badge tone={item.tone}>{item.badge}</Badge>
+                <Badge variant="outline" className={statusBadgeClass(item.tone)}>{item.badge}</Badge>
               </div>
               <span className="truncate text-body text-text-secondary">{item.value}</span>
             </div>
@@ -948,7 +1163,7 @@ function ValidationPanel({
             ))}
           </div>
         )}
-      </div>
+      </CardContent>
     </Card>
   );
 }
@@ -964,11 +1179,11 @@ function StepRail({ issued, connected, verifying }: { issued: boolean; connected
     <ol className="grid grid-cols-4 gap-2" aria-label="등록 단계">
       {steps.map((step) => (
         <li key={step.label} className="min-w-0">
-          <div className={cx(
+          <div className={cn(
             'h-2 rounded-control',
             step.done ? 'bg-success' : step.active ? 'bg-brand' : 'bg-raised',
           )} />
-          <p className={cx('mt-2 truncate text-caption font-semibold', step.active || step.done ? 'text-text-primary' : 'text-text-muted')}>{step.label}</p>
+          <p className={cn('mt-2 truncate text-caption font-semibold', step.active || step.done ? 'text-text-primary' : 'text-text-muted')}>{step.label}</p>
         </li>
       ))}
     </ol>
@@ -1245,6 +1460,14 @@ function toneForStatus(status: string): 'neutral' | 'success' | 'warning' | 'dan
   return 'neutral';
 }
 
+function statusBadgeClass(tone: 'neutral' | 'success' | 'warning' | 'danger' | 'info'): string {
+  if (tone === 'success') return 'border-success/40 bg-success/10 text-success';
+  if (tone === 'warning') return 'border-warning/40 bg-warning/10 text-warning';
+  if (tone === 'danger') return 'border-danger/40 bg-danger/10 text-danger';
+  if (tone === 'info') return 'border-info/40 bg-info/10 text-info';
+  return 'border-border bg-raised text-text-secondary';
+}
+
 function firstMessage(messages: string[] | undefined): string | undefined {
   return messages?.find((message) => message.trim());
 }
@@ -1255,7 +1478,7 @@ function errorMessage(error: unknown): string {
 }
 
 function CheckIcon({ className }: { className?: string }) {
-  return <LucideCheckIcon className={cx('h-4 w-4 shrink-0', className)} aria-hidden="true" />;
+  return <LucideCheckIcon className={cn('h-4 w-4 shrink-0', className)} aria-hidden="true" />;
 }
 
 export function clusterImportCandidateMatches(candidate: ImportCandidate, query: string): boolean {
