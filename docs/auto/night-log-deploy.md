@@ -59,3 +59,19 @@
   desired worker의 rollback capture 거부가 남아 있다. 검증을 완화하지 않고 workflow
   내부의 명시적 `0` 주입과 existing workload digest 경계로 해소하도록 백엔드 세션에
   재요청했다.
+- [06:36 KST] [게이트] `origin/dev@6d5e941516f8a8375b09969bfabe6c0c49c74b3b`의
+  `Dev Gate` run `29286627642`는 성공했다. 같은 SHA의 `Dev Deploy` run
+  `29286725557`은 `AWS_DEV_DEPLOY_ENABLED`가 아직 없으므로 실패가 아니라 의도된
+  `skipped`다. 수동 첫 배포는 아래 DB cutover 차단이 해소될 때까지 실행하지 않는다.
+- [06:40 KST] [격리 DB 리허설] PostgreSQL snapshot `snap-0bebb31ef7c909f9c`을
+  `ap-northeast-2b`의 별도 임시 EBS로 복원했다. 첫 시도는 Pod Ready 직후에도 PostgreSQL
+  crash recovery가 끝나지 않아 `the database system is not yet accepting connections`로
+  종료됐다. 두 번째 시도는 `pg_isready`를 추가했고, empty target DB의 immutable baseline과
+  Alembic upgrade가 head `20260714_0200`까지 성공했다.
+- [06:41 KST] [BLOCKED] frozen snapshot clone에서 이어 수행한 data-only cutover는
+  `target is missing source tables: resource_access_grants,workspace_members`로 fail-closed했다.
+  live create-all catalog의 두 테이블이 immutable baseline/Alembic history에 없으므로 현재
+  첫 배포 workflow를 실행하면 데이터 보존 계약을 만족할 수 없다. 두 시도에서 만든 임시
+  Pod·PVC·PV·EBS 볼륨은 모두 삭제했고 운영 DB는 변경하지 않았다. baseline/schema 수렴과
+  isolated target cutover·writer freeze·DB URL 전환/복구 배선을 백엔드 세션에 재요청했다.
+- [06:41 KST] [키 보존] 사람의 최신 지시에 따라 기존 키는 삭제·교체·회전하지 않는다.
