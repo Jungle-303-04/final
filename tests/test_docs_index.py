@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 ROOT_DIR = Path(__file__).resolve().parents[1]
@@ -205,3 +206,41 @@ def test_docs_root_keeps_keyword_wiki_entrypoints() -> None:
     missing = [keyword for keyword in required_keywords if keyword not in index]
 
     assert missing == []
+
+
+def test_backend_coordination_docs_use_declared_states_and_keep_morning_summary() -> None:
+    workqueue = read("docs/backend-f-workqueue.md")
+    allowed_states = {
+        "requested",
+        "in_progress",
+        "completed",
+        "blocked",
+        "landed",
+        "done-pending-merge",
+    }
+    invalid_states = []
+    for line in workqueue.splitlines():
+        if not line.startswith("| BQ-"):
+            continue
+        columns = [column.strip() for column in line.strip("|").split("|")]
+        if columns[1] not in allowed_states:
+            invalid_states.append(f"{columns[0]}={columns[1]}")
+
+    night_log = read("docs/auto/night-log.md")
+    morning_summaries = re.findall(
+        r"^## \d{4}-\d{2}-\d{2} \d{2}:\d{2} KST — \[백엔드\] 아침 요약$",
+        night_log,
+        flags=re.MULTILINE,
+    )
+
+    assert invalid_states == []
+    assert morning_summaries
+
+
+def test_backend_progress_anchor_count_matches_anchor_lines() -> None:
+    progress = read("docs/backend-f-progress.md")
+    declared_count = re.search(r"현재 상태: \*\*앵커 (\d+)건\*\*", progress)
+    anchor_lines = [line for line in progress.splitlines() if line.startswith("계약 완성:")]
+
+    assert declared_count is not None
+    assert int(declared_count.group(1)) == len(anchor_lines)

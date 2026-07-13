@@ -1758,3 +1758,42 @@ target preflight·register 네 함수와 strict Zod 계약을 claim했다. 1회�
 - 잔여 범위: 전체 87개 중 10개만 작성 완료했으며 다음 cursor는 11이다. 나머지 77개는
   후속 배치로 계약화하고, malformed snapshot 구조화 오류·복수 fallback·canonical command·
   CRLF SHA 이식성은 비차단 hardening 후보로 함께 추적한다.
+
+## 2026-07-13 15:37 KST — [백엔드] 아침 요약
+
+- canonical 기준점: `origin/dev@54a3c707108752383956d68599b2b261ff566767`.
+- 파이프라인: A·B·C0·C·D·E·F·P·G·H·I는 `done`, J는 사람 GO와 실환경 권위
+  증거를 기다리는 `🔒waiting`, K는 J 이후 `pending`이다. `backend-pipeline.md` §3의
+  04:30 lane 목록은 역사적 시작점이며 현재 상태 판정은 §4와 이 요약을 따른다.
+- 작업 큐: BQ-001~018은 모두 canonical 착륙이 증명되어 `landed`로 정규화했다.
+  보조 대기열 S1 Bruno 실행 경로, S2 scheduling·PVC 시나리오, S3 후보 계약 1~10도
+  각각 canonical merge와 앵커를 보유한다.
+- 최신 전체 게이트: Ruff lint/format PASS, import-linter 8 kept/0 broken,
+  pytest `1899 passed, 3 skipped`; manifest management 69 / target 20.
+- 사람 전용 잔여: J의 GitHub Actions, 실제 smoke credential·fixture, live DB Alembic baseline·
+  index 상태, backup·이전 image digest, target context, 1-replica 위험 수용은 미해소다.
+  증거 없이 배포나 K 검증으로 전이하지 않는다.
+- 백엔드 후속: OpsiaBench 후보 계약은 87개 중 10개만 작성했다. 다음 작업 cursor는 11이며,
+  full catalog 계약·fixture 확대를 순차 배치로 계속한다.
+
+## 2026-07-13 15:40 KST — [백엔드] 아침 요약 정합 보충
+
+- `backend-pipeline.md` §3의 BQ-008 미착륙·활성 lane 목록은 04:30 시작 snapshot임을
+  명시했다. 현재 판정은 §4의 A~I done, J `🔒waiting`, K pending을 따른다.
+- `backend-f-progress.md`의 선언 앵커 수를 실물 19줄과 맞추고, BQ-001~003의 과거
+  delta-green 기준과 현재 실패 허용 0건의 full-green 기준을 분리했다.
+- 지시 실물 감사: `night-directives.md`에는 D-021 이후 원문이 없고 EOF 번호 순서도
+  역전돼 있다. 현재 세션에 직접 전달된 후속 지시는 적용하되, 원문을 추측해 파일에
+  만들지 않는다. J 배포는 기존 사람 전용 게이트를 계속 유지한다.
+- J 전 사전 hardening 후보: Bruno 13/14/15의 실제 200 강제, management cluster-agent
+  scope, smoke image digest 전달, 실행 가능한 rollback 명령을 배포 정본에서 추가 검산한다.
+  이는 배포 GO를 대신하지 않으며 현재 배포 실행은 0건이다.
+
+## 2026-07-13 15:43 KST — [백엔드] 아침 요약 lane 최신화
+
+- 작업 중 `origin/dev`가 `a1e37d34308192a6d5c363983a370209ab4813be`까지 전진해 S4 lane에
+  merge했다. `docs/auto/night-log.md`는 양측 append를 모두 보존했고 충돌은 0건이다.
+- 최신 기준 전체 게이트: Ruff lint/format PASS, import-linter 8 kept/0 broken,
+  pytest `1901 passed, 3 skipped`; manifest management 69 / target 20.
+- S4 자체 변경 경로는 조율 문서 4개와 `tests/test_docs_index.py`뿐이며, canonical에서
+  합류한 프론트 파일은 S4 소유 변경으로 재분류하지 않는다.

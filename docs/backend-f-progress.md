@@ -7,9 +7,12 @@ governing: docs/f-coordination-plan.md · docs/backend-f-workqueue.md
 
 # 백엔드 F 진행 현황
 
-현재 상태: **앵커 6건**
+현재 상태: **앵커 19건**
 
-## Delta-green baseline
+## 역사적 Delta-green baseline (BQ-001~003)
+
+이 기준은 BQ-001~003 수행 당시의 회귀 허용 목록이며 [D-012]의 baseline 공집합 전환으로
+만료됐다. 신규 작업의 완료 판정에 재사용하지 않는다.
 
 - 측정 기준 commit: `e3c1de4a8eeb49a4630bab816d2bbd18444c80a5`
 - pytest: `uv run python -m pytest -q` → `6 failed, 1630 passed, 3 skipped`
@@ -41,6 +44,15 @@ governing: docs/f-coordination-plan.md · docs/backend-f-workqueue.md
 ### Manifest baseline
 
 - `scripts/manifest-check.sh` PASS — 배포 manifest 작업열, 실패 0건
+
+## 현재 full-green baseline
+
+- 측정 기준: `origin/dev@a1e37d34308192a6d5c363983a370209ab4813be`를 합친 S4 lane
+- Ruff lint/format: PASS
+- import-linter: 8 kept, 0 broken
+- pytest: `1901 passed, 3 skipped`
+- manifest: management 69, target 20
+- 판정 규칙: 실패 허용 목록은 공집합이다. 신규 실패가 있으면 착륙하지 않는다.
 
 ## 완료 앵커
 
@@ -245,7 +257,7 @@ Bundle route는 200을 반환한다.
 
 ### BQ-017 — provider 1급화와 연결 단계
 
-- 상태: done, gateway 계약 lock 해제
+- 상태: landed, gateway 계약 lock 해제
 - 담당 lane: `codex/f-provider-connection-stage`
 - 착수 기준: `origin/dev@a65c66c7102fb453e583ed4ec44f1950a9df9ba2`
 - 전체 게이트 baseline: Ruff lint/format PASS, import-linter 2 kept/0 broken,
