@@ -149,7 +149,7 @@ class IssueFilterDb:
             "next_position": (
                 {
                     "updated_at": "2026-07-13T20:20:00Z",
-                    "issue_id": "issue-a",
+                    "row_id": "42",
                 }
                 if self.paginated
                 else None
@@ -379,6 +379,21 @@ def test_issues_cursor_is_bound_to_filter_and_authorization_scope() -> None:
     cursor = first.json()["next_cursor"]
     assert isinstance(cursor, str) and cursor
     assert "issue-a" not in cursor
+
+    same_scope = client.get(
+        "/issues",
+        params={
+            "clusters": CLUSTER_ID,
+            "issues.severity": "critical",
+            "limit": 1,
+            "cursor": cursor,
+        },
+    )
+    assert same_scope.status_code == 200
+    assert db.data_calls[-1]["position"] == {
+        "updated_at": "2026-07-13T20:20:00Z",
+        "row_id": "42",
+    }
 
     changed_filter = client.get(
         "/issues",
