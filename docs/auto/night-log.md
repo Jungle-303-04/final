@@ -2867,3 +2867,19 @@ target preflight·register 네 함수와 strict Zod 계약을 claim했다. 1회�
   GAP-010 전 graph data·TopologyCanvas·WebSocket 미렌더도 유지한다.
 - 이 문서 커밋과 visual-product를 통과한 동일 HEAD를 lab/dev에 승격한 뒤 현재 lane/worktree를
   같은 사이클에서 회수한다. 신규 stash 0건, 기존 미증명 stash 8개 유지가 정리 기준이다.
+
+## 2026-07-14 00:30 KST — [프론트] Resources 필터 소비 adapter 안전 착륙 준비
+
+- D-025의 안전 착륙 기준을 적용했다. RED `b4a806f34`, GREEN `ab5f56714`, feature 경계 보정
+  `77984549d`로 세 endpoint의 단일 호출·canonical request·server snapshot/count 보존·invalid 행
+  격리·fallback/fan-out 금지를 고정했다. `client.ts`·`url.ts`, backend source, synthetic 수정은 0건이다.
+- full `npm run check` PASS: 134 files / 954 tests, design guard 381 files, shadcn 482 previews,
+  production build. `npm run visual-product` PASS: 47 scenarios, unexpected feature network/WebSocket
+  0건, CLS Home `0.004188` / Resources `0.004167` / Issues `0.004202`다.
+- **격리 착륙 — 잔여 결함/해제 조건:** adapter는 composition/UI 미마운트다. 다음 사이클에서
+  요청 취소·late response rejection·cursor reset·snapshot/authorization/fingerprint page consistency·
+  background refresh를 RED→GREEN으로 검증한 뒤에만 기존 Resources data surface를 교체한다.
+  type·health facet과 GAP-010 graph renderer는 각각 추가 계약/프론트 소비 구현 전까지 미렌더한다.
+- D-026 계약 상태: GAP-002/003/004 backend `87c0606e0`과 frontend API/Zod `a9febb22b`를
+  소비했다. GAP-010 backend `914d34ff6`도 ancestor지만 frontend API/Zod/adapter/renderer는 다음
+  안전 착륙 단위로 분리했다.
