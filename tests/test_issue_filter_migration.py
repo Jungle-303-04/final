@@ -13,7 +13,8 @@ from alembic import command
 from domains.dashboard.models import RcaTimeline
 
 ROOT = Path(__file__).resolve().parents[1]
-REVISION = "20260713_2340"
+REVISION = "20260713_2350"
+COLUMN_REVISION = "20260713_2340"
 DOWN_REVISION = "20260713_2215"
 INDEXES = {
     "ix_rca_timeline_issue_page",
@@ -82,7 +83,8 @@ def test_issue_filter_upgrade_adds_columns_and_concurrent_indexes(monkeypatch) -
     script = ScriptDirectory.from_config(config)
 
     assert script.get_heads() == [REVISION]
-    assert script.get_revision(REVISION).down_revision == DOWN_REVISION
+    assert script.get_revision(REVISION).down_revision == COLUMN_REVISION
+    assert script.get_revision(COLUMN_REVISION).down_revision == DOWN_REVISION
 
     sql = _render(config, "upgrade", f"{DOWN_REVISION}:{REVISION}")
     for name, sql_type in (
