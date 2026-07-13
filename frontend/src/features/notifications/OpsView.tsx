@@ -7,7 +7,7 @@ import {
   InboxIcon,
   LoaderCircleIcon,
 } from 'lucide-react';
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import { Alert, AlertAction, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
@@ -29,6 +29,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import {
   Table,
   TableBody,
+  TableCaption,
   TableCell,
   TableHead,
   TableHeader,
@@ -90,7 +91,9 @@ export default function OpsView() {
     <SettingsNav title="운영 DLQ">
       <Card className="rounded-panel border border-border bg-surface shadow-soft ring-0">
         <CardHeader className="border-b border-border">
-          <CardTitle className="text-title font-semibold text-text-primary">Dead Letter</CardTitle>
+          <CardTitle className="text-title font-semibold text-text-primary">
+            <h2 id="dead-letter-heading">Dead Letter</h2>
+          </CardTitle>
           <CardDescription className="text-body text-text-muted">
             처리에 실패한 이벤트를 확인하고 원인 조치 후 재처리합니다
           </CardDescription>
@@ -103,9 +106,11 @@ export default function OpsView() {
                 <AlertCircleIcon aria-hidden="true" />
                 <AlertTitle>목록 조회 실패</AlertTitle>
                 <AlertDescription>{errorMessage(deadLettersQ.error)}</AlertDescription>
-                <Button type="button" size="sm" variant="outline" onClick={() => void deadLettersQ.refetch()}>
-                  다시 시도
-                </Button>
+                <AlertAction>
+                  <Button type="button" size="sm" variant="outline" onClick={() => void deadLettersQ.refetch()}>
+                    다시 시도
+                  </Button>
+                </AlertAction>
               </Alert>
             </div>
           )}
@@ -115,91 +120,99 @@ export default function OpsView() {
                 <InboxIcon className="size-5" aria-hidden="true" />
               </span>
               <div className="grid gap-1">
-                <h2 className="text-title font-semibold text-text-primary">Dead Letter 없음</h2>
+                <h3 className="text-title font-semibold text-text-primary">Dead Letter 없음</h3>
                 <p className="text-body text-text-muted">재처리가 필요한 실패 이벤트가 없습니다</p>
               </div>
             </div>
           )}
           {!deadLettersQ.isPending && !deadLettersQ.isError && visibleRows.length > 0 && (
-            <Table className="table-fixed bg-surface">
-              <TableHeader className="bg-raised text-label text-text-muted">
-                <TableRow className="hover:bg-raised">
-                  {COLUMNS.map((column, index) => {
-                    const active = column.key != null && sort?.key === column.key;
-                    const ariaSort = active
-                      ? sort.direction === 'asc' ? 'ascending' : 'descending'
-                      : column.key ? 'none' : undefined;
-                    const SortIcon = active
-                      ? sort.direction === 'asc' ? ArrowUpIcon : ArrowDownIcon
-                      : ArrowUpDownIcon;
+            <div
+              role="region"
+              aria-labelledby="dead-letter-heading"
+              tabIndex={0}
+              className="overflow-x-auto focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring [&_[data-slot=table-container]]:overflow-visible"
+            >
+              <Table className="min-w-max table-fixed bg-surface">
+                <TableCaption className="sr-only">Dead Letter 이벤트 목록</TableCaption>
+                <TableHeader className="bg-raised text-label text-text-muted">
+                  <TableRow className="hover:bg-raised">
+                    {COLUMNS.map((column, index) => {
+                      const active = column.key != null && sort?.key === column.key;
+                      const ariaSort = active
+                        ? sort.direction === 'asc' ? 'ascending' : 'descending'
+                        : column.key ? 'none' : undefined;
+                      const SortIcon = active
+                        ? sort.direction === 'asc' ? ArrowUpIcon : ArrowDownIcon
+                        : ArrowUpDownIcon;
+                      return (
+                        <TableHead
+                          key={column.key ?? 'static-' + index}
+                          aria-sort={ariaSort}
+                          className={cn(column.className, column.align === 'right' && 'text-right')}
+                        >
+                          {column.key ? (
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="ghost"
+                              className={cn('-mx-2 text-text-muted', column.align === 'right' && 'ml-auto')}
+                              onClick={() => updateSort(column.key!)}
+                            >
+                              {column.label}
+                              <SortIcon data-icon="inline-end" aria-hidden="true" />
+                            </Button>
+                          ) : (
+                            column.align === 'right'
+                              ? <span className="sr-only">작업</span>
+                              : column.label
+                          )}
+                        </TableHead>
+                      );
+                    })}
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {visibleRows.map((item) => {
+                    const rowPending = replay.isPending && replay.variables === item.id;
                     return (
-                      <TableHead
-                        key={column.key ?? 'static-' + index}
-                        aria-sort={ariaSort}
-                        className={cn(column.className, column.align === 'right' && 'text-right')}
-                      >
-                        {column.key ? (
-                          <Button
-                            type="button"
-                            size="sm"
-                            variant="ghost"
-                            className={cn('-mx-2 text-text-muted', column.align === 'right' && 'ml-auto')}
-                            onClick={() => updateSort(column.key!)}
-                          >
-                            {column.label}
-                            <SortIcon data-icon="inline-end" aria-hidden="true" />
-                          </Button>
-                        ) : (
-                          column.align === 'right'
-                            ? <span className="sr-only">작업</span>
-                            : column.label
-                        )}
-                      </TableHead>
+                      <TableRow key={item.id}>
+                        <TableCell className="tabular-nums text-text-secondary">{item.id}</TableCell>
+                        <TableCell>
+                          <code className="block truncate font-mono text-caption text-text-secondary">
+                            {item.original_subject}
+                          </code>
+                        </TableCell>
+                        <TableCell className="truncate text-text-secondary">{item.consumer}</TableCell>
+                        <TableCell>
+                          <span className="block truncate text-danger" title={item.error}>{item.error}</span>
+                        </TableCell>
+                        <TableCell><StatusBadge status={item.status} /></TableCell>
+                        <TableCell>
+                          <time dateTime={item.created_at} className="text-text-muted">
+                            {timeAgo(item.created_at) || '시간 없음'}
+                          </time>
+                        </TableCell>
+                        <TableCell className="text-right">
+                          {item.status === 'open' && (
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="outline"
+                              disabled={replay.isPending}
+                              aria-busy={rowPending}
+                              onClick={() => setConfirming(item)}
+                            >
+                              {rowPending && <LoaderCircleIcon className="animate-spin" aria-hidden="true" />}
+                              재처리
+                            </Button>
+                          )}
+                        </TableCell>
+                      </TableRow>
                     );
                   })}
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {visibleRows.map((item) => {
-                  const rowPending = replay.isPending && replay.variables === item.id;
-                  return (
-                    <TableRow key={item.id}>
-                      <TableCell className="tabular-nums text-text-secondary">{item.id}</TableCell>
-                      <TableCell>
-                        <code className="block truncate font-mono text-caption text-text-secondary">
-                          {item.original_subject}
-                        </code>
-                      </TableCell>
-                      <TableCell className="truncate text-text-secondary">{item.consumer}</TableCell>
-                      <TableCell>
-                        <span className="block truncate text-danger" title={item.error}>{item.error}</span>
-                      </TableCell>
-                      <TableCell><StatusBadge status={item.status} /></TableCell>
-                      <TableCell>
-                        <time dateTime={item.created_at} className="text-text-muted">
-                          {timeAgo(item.created_at) || '시간 없음'}
-                        </time>
-                      </TableCell>
-                      <TableCell className="text-right">
-                        {item.status === 'open' && (
-                          <Button
-                            type="button"
-                            size="sm"
-                            variant="outline"
-                            disabled={replay.isPending}
-                            aria-busy={rowPending}
-                            onClick={() => setConfirming(item)}
-                          >
-                            {rowPending && <LoaderCircleIcon className="animate-spin" aria-hidden="true" />}
-                            재처리
-                          </Button>
-                        )}
-                      </TableCell>
-                    </TableRow>
-                  );
-                })}
-              </TableBody>
-            </Table>
+                </TableBody>
+              </Table>
+            </div>
           )}
         </CardContent>
       </Card>
