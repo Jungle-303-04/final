@@ -915,3 +915,172 @@ npm run visual-product
   같은 통합점으로 착륙해야 한다.
 - 처리: feature branch push 완료, backend 코드의 origin/dev merge·앵커·completed 표시는
   보류했다. gateway 계약 lock은 유지하고 해당 frontend 소유 파일은 수정하지 않았다.
+
+## 2026-07-13 12:13 KST — [백엔드] H3 완결
+
+- [백엔드] H3 완결 — patch 엔진 canonical 착륙 `6d68325bf1cc47f55810e5dc2189e51a6fe916c0`.
+- 사람 위임 GO [H3], 승인 HEAD `33fd5f21c`의 `origin/dev` ancestor exit 0 및
+  `git ls-remote` 원격/로컬 hash 일치를 확인했다.
+- 전체 게이트: Ruff lint/format PASS(499 files), import-linter 2 kept/0 broken,
+  pytest `1820 passed, 3 skipped`; recovery patch scorer 6/6, compileall PASS,
+  manifest management 69 / target 20.
+- progress 앵커와 프론트 인계(unsupported 3조건, action_type별 파라미터)를
+  `docs/backend-f-progress.md`에 기록했다.
+
+## 2026-07-13 12:13 KST — Codex 브랜치 전면 정리 삭제 전 복구 보험
+
+- 기준 canonical: `origin/dev@d507ca6d47a0e953f6d1a0ad6931d576738c18cc`.
+- 로컬 `codex/*` 7개, 원격 `codex/*` 140개를 전수 판정했다.
+- 아래 hash·ancestor exit를 삭제 전에 영속화한다. exit 1인 Codex 작업 브랜치는 사람의
+  1회성 과감 모드 위임에 따라 `-D`/원격 delete 대상이다.
+- 사람 소유 가능성이 명시적인 4개 원격 ref는 삭제하지 않는다.
+
+| ref | hash | origin/dev ancestor exit | 예정 |
+|---|---|---:|---|
+| `codex/cloudflare-token-normalization` | `83864abdf0b677660d35d78a1f05d930acb6854a` | 1 | local -D |
+| `codex/f-argocd-observer` | `f5461aa8070a7ba9b088410d0ae5ebe89b8b4e86` | 1 | local -D |
+| `codex/f-auto-revert-pr` | `8e28b471172dd9f288bcb8290dd799c7e8309dce` | 1 | local -D |
+| `codex/f-provider-connection-stage` | `10e85d9925bd0818ef14ec696d4feabb6f517fe2` | 0 | local -d |
+| `codex/platform-foundation` | `63618a4fb81c4acda22ec125fa7934d9ef9d0204` | 1 | local -D |
+| `codex/rca-log-evidence-scope-20260710` | `a5ac062fb53752ec64a7ac37e38611ed0f3454d5` | 1 | local -D |
+| `codex/runtime-hardening-20260710` | `ae3ee71a229af78f804f88e16ecdc466443bf5f9` | 1 | local -D |
+| `origin/codex/chanbin-dev-infra-base` | `f1f4e15a8e22cd48987231f224c67cd5c3a1d6ed` | 1 | 보존(사람 소유 가능) |
+| `origin/codex/data-dashboard-variants` | `d21874c42418769c7d7bd05b83ebd235723633fd` | 1 | remote --delete |
+| `origin/codex/f-argocd-observer` | `f5461aa8070a7ba9b088410d0ae5ebe89b8b4e86` | 1 | remote --delete |
+| `origin/codex/f-auto-revert-pr` | `e6d4df1dc74162925e23048abb00d9a87738a1c6` | 1 | remote --delete |
+| `origin/codex/f-provider-connection-stage` | `305ed2b71818aede709af4b474b11e361e01a829` | 1 | remote --delete |
+| `origin/codex/frontt` | `6e5b9d42a303b784ce5f58dd358ae38f0cef4c8d` | 1 | 보존(사람 소유 가능) |
+| `origin/codex/gitops-cache-db-crd` | `6912e35d0657815a9934f2769f2474e7f93fd2ea` | 1 | remote --delete |
+| `origin/codex/headlamptest` | `11d7c879e039243321ce146d7f2124e71f826ae8` | 1 | 보존(사람 소유 가능) |
+| `origin/codex/platform-foundation` | `63618a4fb81c4acda22ec125fa7934d9ef9d0204` | 1 | remote --delete |
+| `origin/codex/rca-log-evidence-scope-20260710` | `a5ac062fb53752ec64a7ac37e38611ed0f3454d5` | 1 | remote --delete |
+| `origin/codex/release-flow-frontend-safe-pr-144` | `ccb27df95ba8d586d01d5b676964b606c57be3e4` | 1 | remote --delete |
+| `origin/codex/release-flow-prod-abort-criteria-52` | `3f1b0e67b0567f240d095f9b0e65076ba71afaf4` | 1 | remote --delete |
+| `origin/codex/release-flow-prod-action-disabled-hints-83` | `a86e3e9a1977ce63c4ae15c25b2cf4312c8cddff` | 1 | remote --delete |
+| `origin/codex/release-flow-prod-action-reason-presets-81` | `0c259d0398f11cd3b03f500d25611bdca80bb758` | 1 | remote --delete |
+| `origin/codex/release-flow-prod-active-freeze-filter-103` | `4b6ab7bfffe42acd2d4d67c12e23a9dcd519d1b0` | 1 | remote --delete |
+| `origin/codex/release-flow-prod-active-run-filter-74` | `5628961ef03471d16935c2ffb6c3705069e2d39e` | 1 | remote --delete |
+| `origin/codex/release-flow-prod-advance-verification-gate-58` | `64a6da31dc01051b819bed6440f2831f74607e62` | 1 | remote --delete |
+| `origin/codex/release-flow-prod-alert-coverage-30` | `a9a11f75d311873e3f38c5ba05e5525394913e1c` | 1 | remote --delete |
+| `origin/codex/release-flow-prod-alert-ops-13` | `c4e9b46cfd917066da8880b107e9ab9165e19609` | 1 | remote --delete |
+| `origin/codex/release-flow-prod-alert-recency-33` | `29c9e01d71e123c8b5b4022830ff6c9b54216364` | 1 | remote --delete |
+| `origin/codex/release-flow-prod-alert-smoke-45` | `e2a1c831e16b0f1b6ffd82023fc6df8fcb570ca6` | 1 | remote --delete |
+| `origin/codex/release-flow-prod-alert-validation-31` | `13c1d36885cefe3f8de633850097bc5d755b5cd3` | 1 | remote --delete |
+| `origin/codex/release-flow-prod-alerts-08` | `825d5530cc7d04b086b6c8643084d098af0dc366` | 1 | remote --delete |
+| `origin/codex/release-flow-prod-app-context-15` | `7a440941a3701fa89319bcfb27c859c0b5d661f6` | 1 | remote --delete |
+| `origin/codex/release-flow-prod-approval-card-16` | `bcf3c01e6b0f6f4f1164a71256a6bb2343d490f7` | 1 | remote --delete |
+| `origin/codex/release-flow-prod-approval-evidence-40` | `98f894a86ab59840a89e124f14cbb76c28b4d020` | 1 | remote --delete |
+| `origin/codex/release-flow-prod-approval-recency-43` | `9c403c2eb432252026c0f4a3efb8234c354afbbf` | 1 | remote --delete |
+| `origin/codex/release-flow-prod-attention-alert-26` | `a45ee7aa9b35e4dd1c28f18e91a74c4e516a5526` | 1 | remote --delete |
+| `origin/codex/release-flow-prod-attention-reasons-21` | `b37da7a4b22987558c3ebe364f6ea1c64ec04e28` | 1 | remote --delete |
+| `origin/codex/release-flow-prod-audit-09` | `f73ba420c4f18978899b7f8e9ffcc389c72623ed` | 1 | remote --delete |
+| `origin/codex/release-flow-prod-audit-copy-91` | `f109fb2f48ff4a2ecccdbe7715bdee6783bf55bd` | 1 | remote --delete |
+| `origin/codex/release-flow-prod-audit-event-filter-25` | `97b61e547437f193ebd0691204c96ec07e1faf69` | 1 | remote --delete |
+| `origin/codex/release-flow-prod-audit-export-ui-14` | `f71bbac7eb82a50327b71c3c81e94062c5b27d07` | 1 | remote --delete |
+| `origin/codex/release-flow-prod-audit-operator-filters-69` | `5866baaf56e6901ac1b14653b4ee6ba86ed56719` | 1 | remote --delete |
+| `origin/codex/release-flow-prod-audit-prefix-filter-67` | `838707682ac9c6186756ede7e71e70ce4825ca24` | 1 | remote --delete |
+| `origin/codex/release-flow-prod-audit-row-meta-68` | `09ce0d4434c21923766c6f8afac23765881161b5` | 1 | remote --delete |
+| `origin/codex/release-flow-prod-change-freeze-smoke-108` | `8f5c2e115deb639e2a3f64890da816407ec6ed7f` | 1 | remote --delete |
+| `origin/codex/release-flow-prod-change-ticket-gate-38` | `a351a48a7f9c269b31d01103eeab19bd2d04f28a` | 1 | remote --delete |
+| `origin/codex/release-flow-prod-destructive-action-confirm-84` | `951912a36a9931e484dbcea01278402978f84fa9` | 1 | remote --delete |
+| `origin/codex/release-flow-prod-diagnostics-gate-34` | `b2e89cd96bc567b79e16d5e8158d51496030a461` | 1 | remote --delete |
+| `origin/codex/release-flow-prod-diagnostics-override-35` | `4233e52ad600f2995033fbf0e9808503b97bc904` | 1 | remote --delete |
+| `origin/codex/release-flow-prod-freeze-handoff-101` | `47011d34dd2a69aa3b9d0d753f201f068af53e18` | 1 | remote --delete |
+| `origin/codex/release-flow-prod-freeze-run-filter-102` | `26e67cb2ad614a40dd140a6146ce19facf0126b5` | 1 | remote --delete |
+| `origin/codex/release-flow-prod-freeze-window-100` | `f26f5ae5e0fc1be3b196272a16997eafcb30aa94` | 1 | remote --delete |
+| `origin/codex/release-flow-prod-gate-inputs-12` | `93d988473a2c3ddc85fcd9a9f259660a14ee41e1` | 1 | remote --delete |
+| `origin/codex/release-flow-prod-guard-snapshot-36` | `34aa5c2d112080d6136a7e973fe5d781a425b567` | 1 | remote --delete |
+| `origin/codex/release-flow-prod-handoff-28` | `c16365765418fe7a155f7cecd4adbd4a597b77ce` | 1 | remote --delete |
+| `origin/codex/release-flow-prod-handoff-abort-criteria-53` | `9dd0129cebdc6ef1a54ccce7b7c717d031967210` | 1 | remote --delete |
+| `origin/codex/release-flow-prod-handoff-copy-80` | `20ab2dfd6621e4c61443190746575fc9bea36e21` | 1 | remote --delete |
+| `origin/codex/release-flow-prod-handoff-verification-51` | `36134309d586b4240c1da8a5611df43462cb93da` | 1 | remote --delete |
+| `origin/codex/release-flow-prod-hardening-04` | `2abb1436df06247e8e8e415bdaa7bc7d51bf1e1d` | 1 | remote --delete |
+| `origin/codex/release-flow-prod-impact-summary-48` | `080fa305c25b723cf89ed020a3a9eed7c461b4a3` | 1 | remote --delete |
+| `origin/codex/release-flow-prod-live-action-confirm-85` | `d75f2e893beeb08a86836f6c67c20126c81e9ad2` | 1 | remote --delete |
+| `origin/codex/release-flow-prod-live-alert-gate-29` | `290a129173b96562d95d530e930b021d923d7172` | 1 | remote --delete |
+| `origin/codex/release-flow-prod-live-preflight-smoke-41` | `93788e918a7e5933fc5a32c66bda9a8bf9e06f4a` | 1 | remote --delete |
+| `origin/codex/release-flow-prod-live-start-confirm-87` | `1494d13c19ff5fa6b8dcd05b5b1bf5ddd1e928e8` | 1 | remote --delete |
+| `origin/codex/release-flow-prod-notify-audit-meta-66` | `55b6c970a1f8d411ec8aa00ec362387f137ee6ea` | 1 | remote --delete |
+| `origin/codex/release-flow-prod-notify-cooldown-63` | `a34b21ba8f1217db17eb593e3b3205ae02b9710b` | 1 | remote --delete |
+| `origin/codex/release-flow-prod-notify-cooldown-handoff-65` | `bb9ac32f109a44802a310c21962e24c9c57f5ca5` | 1 | remote --delete |
+| `origin/codex/release-flow-prod-operator-controls-19` | `f934a682294e3243724209491f32bf28bd5a4985` | 1 | remote --delete |
+| `origin/codex/release-flow-prod-ops-observability-06` | `d89dcad5a4be6bc043742613439747d8f413655f` | 1 | remote --delete |
+| `origin/codex/release-flow-prod-ops-rehearsal-27` | `4d1041ba22679905901038795029ba027d5e19c8` | 1 | remote --delete |
+| `origin/codex/release-flow-prod-ops-smoke-05` | `3f07f71cb620952d00c36a48bb1f031eab950e61` | 1 | remote --delete |
+| `origin/codex/release-flow-prod-owner-gate-46` | `f0745371373088e03871aba5e02ea324a2bb5cc6` | 1 | remote --delete |
+| `origin/codex/release-flow-prod-paused-run-summary-76` | `04833adc9a9071ae4dfe470e753eaad4bf47bb0a` | 1 | remote --delete |
+| `origin/codex/release-flow-prod-permission-gates-42` | `b3da258a293d1b681886350b6c711b0920944129` | 1 | remote --delete |
+| `origin/codex/release-flow-prod-policy-override-filter-104` | `b1307a501894ca8d9f50bc0d70db3c08b0e82545` | 1 | remote --delete |
+| `origin/codex/release-flow-prod-policy-override-handoff-105` | `c57a1535dc2ac2cefea36c1b3f0ae83eb39d934b` | 1 | remote --delete |
+| `origin/codex/release-flow-prod-policy-override-smoke-107` | `d985199fe776f8d8e094167aeb8aab435fd23f7f` | 1 | remote --delete |
+| `origin/codex/release-flow-prod-policy-override-source-106` | `30fae23144149d7f51955c452cb3058eefab575c` | 1 | remote --delete |
+| `origin/codex/release-flow-prod-preview-action-hints-88` | `68902e9b5975ab743507f16e2b1cf5d7d65ea8f7` | 1 | remote --delete |
+| `origin/codex/release-flow-prod-preview-copy-90` | `656721285b455f5888d5936e608b31168a505cb8` | 1 | remote --delete |
+| `origin/codex/release-flow-prod-production-preflight-109` | `200ba74ff022d27b6cf66e0bfd6c1cfba37d245c` | 1 | remote --delete |
+| `origin/codex/release-flow-prod-production-preflight-scope-110` | `62b4968c31fe5246a6440bade921829f950a75f0` | 1 | remote --delete |
+| `origin/codex/release-flow-prod-readiness-11` | `043b7171f8ebfa4d54524bc911a8be3ac62d5d62` | 1 | remote --delete |
+| `origin/codex/release-flow-prod-readiness-actions-47` | `55257537a7cdf0866feccd218b9f49b985f6eaba` | 1 | remote --delete |
+| `origin/codex/release-flow-prod-readiness-copy-89` | `1adf34eaffe1906530b68e71a40bcd614291b521` | 1 | remote --delete |
+| `origin/codex/release-flow-prod-readiness-lock-18` | `4ed43c8083464cc8058ef1f0a136770f68110554` | 1 | remote --delete |
+| `origin/codex/release-flow-prod-readiness-snapshot-49` | `47fcb520414fa5e85753feaa0c79b31b9d60d426` | 1 | remote --delete |
+| `origin/codex/release-flow-prod-recent-run-shortcuts-78` | `699ef1dbc310a091c62e662d06f46945040c419b` | 1 | remote --delete |
+| `origin/codex/release-flow-prod-redaction-10` | `9847f73c3a394d38e13d4bab01fe1b38cb3400ca` | 1 | remote --delete |
+| `origin/codex/release-flow-prod-release-window-39` | `c85e82f74906c283b4057cf6ef2f5ca5ce615d5d` | 1 | remote --delete |
+| `origin/codex/release-flow-prod-retry-07` | `02e512621ecdf9c2e32f91807e674a07fbbbbe03` | 1 | remote --delete |
+| `origin/codex/release-flow-prod-rollback-handoff-reason-82` | `bf37e5229c1de881d3091b9905acb39d8517b027` | 1 | remote --delete |
+| `origin/codex/release-flow-prod-rollback-override-37` | `5be7fd2c939ee67c5e8c4938665c991490cb66d4` | 1 | remote --delete |
+| `origin/codex/release-flow-prod-run-deeplink-79` | `e943e075017c1f5bffedf777c79619b95ac285d4` | 1 | remote --delete |
+| `origin/codex/release-flow-prod-run-filters-23` | `d3553bf8b388bcaa3659dca90488a99f58ae162b` | 1 | remote --delete |
+| `origin/codex/release-flow-prod-run-health-smoke-71` | `9643ecd22e398f34b9278a9e60930743a8f7403d` | 1 | remote --delete |
+| `origin/codex/release-flow-prod-run-history-20` | `210ff85d898621b1c8096d43064ffed423bdfde4` | 1 | remote --delete |
+| `origin/codex/release-flow-prod-run-lock-17` | `4da3b8e8931af9aabe56b583ea5ae80657e4e421` | 1 | remote --delete |
+| `origin/codex/release-flow-prod-run-report-92` | `ee1cca7110604f41f7878445e56bab68dea9ab52` | 1 | remote --delete |
+| `origin/codex/release-flow-prod-run-report-api-93` | `00cfa083a248e75bee936401d38c01804ae24e29` | 1 | remote --delete |
+| `origin/codex/release-flow-prod-run-report-approvals-99` | `229ea664f567436a98b84f0d26b2a88dd3b736f7` | 1 | remote --delete |
+| `origin/codex/release-flow-prod-run-report-audit-summary-98` | `702e515f5bd000e4de6c5f5a6d4c3b3ff06bdf9f` | 1 | remote --delete |
+| `origin/codex/release-flow-prod-run-report-checks-95` | `07ab0b497678233340a95ace33013dbe375df842` | 1 | remote --delete |
+| `origin/codex/release-flow-prod-run-report-context-97` | `44f79583e890131ecfda63be198470eeec933611` | 1 | remote --delete |
+| `origin/codex/release-flow-prod-run-report-evidence-96` | `26c41d9aa1b048fcd8f31dcae59a4334314c1fd6` | 1 | remote --delete |
+| `origin/codex/release-flow-prod-run-report-export-94` | `1ba9f47ac5cd872dadb279d6183c1d82e50d1772` | 1 | remote --delete |
+| `origin/codex/release-flow-prod-run-scoped-audit-24` | `9661ccd6d0aff79e6a532a6e3f5a4f59075d9167` | 1 | remote --delete |
+| `origin/codex/release-flow-prod-runbook-gate-44` | `128f156b055bb2b139f6e5b13ee27aeaee110d38` | 1 | remote --delete |
+| `origin/codex/release-flow-prod-smoke-annotations-118` | `500091122d6ba8c5fa428a6b96424c6294b37d48` | 1 | remote --delete |
+| `origin/codex/release-flow-prod-smoke-ci-bundle-119` | `39fc6e8c49a05b2ba10ed3b75352dbef47bb3536` | 1 | remote --delete |
+| `origin/codex/release-flow-prod-smoke-gh-summary-114` | `c2f3e0747ee73267b95e05323f5123b7969f2310` | 1 | remote --delete |
+| `origin/codex/release-flow-prod-smoke-github-output-117` | `594532d192a2d4546abc1b46ad7659d8724363c2` | 1 | remote --delete |
+| `origin/codex/release-flow-prod-smoke-junit-artifact-112` | `37d2c6b08cadcdadb4a1823590d1d34e109d374a` | 1 | remote --delete |
+| `origin/codex/release-flow-prod-smoke-markdown-artifact-113` | `cf7d1453ecbf1129101215db0f917077acbbe788` | 1 | remote --delete |
+| `origin/codex/release-flow-prod-smoke-redaction-116` | `fb2ee8eff09b3e4c7c1445ab82fe13d0bd352be8` | 1 | remote --delete |
+| `origin/codex/release-flow-prod-smoke-report-artifact-111` | `a777e032bfb8771d271f891d019ff441dc38b853` | 1 | remote --delete |
+| `origin/codex/release-flow-prod-smoke-safe-retry-115` | `110bc0cc21dc0c178d6e17cce91bbdc1c8f11759` | 1 | remote --delete |
+| `origin/codex/release-flow-prod-smoke-workflow-120` | `1dc83dacc532aa31fd1c54a626c04dc2f7b4115b` | 1 | remote --delete |
+| `origin/codex/release-flow-prod-stale-run-22` | `437f633f1b79652044236c3d20e674fc5a93723d` | 1 | remote --delete |
+| `origin/codex/release-flow-prod-status-summary-shortcuts-75` | `ec63f2f5f1041afe811c5c6173144f36c29d2464` | 1 | remote --delete |
+| `origin/codex/release-flow-prod-summary-filter-shortcuts-73` | `728ad1dfff0a2c4248f059a786b50af9326dc514` | 1 | remote --delete |
+| `origin/codex/release-flow-prod-terminal-run-summary-77` | `f44bdad543fa839ee4c5dfc6d458503fbf625f50` | 1 | remote --delete |
+| `origin/codex/release-flow-prod-unhealthy-run-filter-72` | `e91c53552f3fbcb3fb9845741d7d4fbd027c43bc` | 1 | remote --delete |
+| `origin/codex/release-flow-prod-validated-alert-gate-32` | `05778dba0e18216c8c0659672f1b28cabdd78206` | 1 | remote --delete |
+| `origin/codex/release-flow-prod-verification-alert-56` | `bd7f1b64f6cf26ff1384cd858de69b47860af5d3` | 1 | remote --delete |
+| `origin/codex/release-flow-prod-verification-filter-60` | `971b71592bc0177b129bd766a3334fdd600a4e59` | 1 | remote --delete |
+| `origin/codex/release-flow-prod-verification-gate-50` | `da3317366366395aa2a4a5fd2308bbfde29af7b6` | 1 | remote --delete |
+| `origin/codex/release-flow-prod-verification-jobs-54` | `684410e49b6780d103fd3160c5bf696d6b812493` | 1 | remote --delete |
+| `origin/codex/release-flow-prod-verification-pending-timeout-61` | `d5a7bd8aa1472ec520003175b8313efed9be7716` | 1 | remote --delete |
+| `origin/codex/release-flow-prod-verification-result-55` | `c22178c800cffd77a040d7b62626840df125b3ac` | 1 | remote --delete |
+| `origin/codex/release-flow-prod-verification-result-ui-57` | `edc53c8f5deb10a28dda5569e83d73a25de0f9b3` | 1 | remote --delete |
+| `origin/codex/release-flow-prod-verification-summary-59` | `a25ed23a3b2aff30ac1b664b64c1902385435b50` | 1 | remote --delete |
+| `origin/codex/release-flow-prod-verification-timeout-alert-62` | `346ce6a9a54cacc38ed83f2b28e0c8659ece2358` | 1 | remote --delete |
+| `origin/codex/release-flow-prod-verification-timeout-smoke-70` | `587ac3b4cd7e19594ecd44791479b2fda0332663` | 1 | remote --delete |
+| `origin/codex/release-flow-prod-verification-timeout-status-64` | `486aac2ad51215e25455cdf10d8a8994eb83fada` | 1 | remote --delete |
+| `origin/codex/release-flow-smoke-alert-preflight-126` | `755a822f5346eba4002e8e71ebfaf3f154910c7f` | 1 | remote --delete |
+| `origin/codex/release-flow-smoke-artifact-retention-124` | `5937f34633646b4f8ca78f42316142a93ded5324` | 1 | remote --delete |
+| `origin/codex/release-flow-smoke-concurrency-123` | `db80ad04932df6820dfb838033896af4e1813ee7` | 1 | remote --delete |
+| `origin/codex/release-flow-smoke-environment-gate-122` | `0b4de28d54721f44e272b5b22a1c65de80ddcfe0` | 1 | remote --delete |
+| `origin/codex/release-flow-smoke-expanded-outputs-128` | `e34636e1309d68ef4d6f7e6a61893bdb73b84776` | 1 | remote --delete |
+| `origin/codex/release-flow-smoke-identity-129` | `8def85608e7b1ebf14d3032d4117727948f29279` | 1 | remote --delete |
+| `origin/codex/release-flow-smoke-input-validation-125` | `3ed05004b0e1141722c42d5ed25b0722171d06d1` | 1 | remote --delete |
+| `origin/codex/release-flow-smoke-live-preflight-127` | `a06c8c12fad25e03610f9efd73806ce087e8fa1e` | 1 | remote --delete |
+| `origin/codex/release-flow-smoke-request-timeout-130` | `0398e5153a418d7aca8b847c760b77aae3a5fa20` | 1 | remote --delete |
+| `origin/codex/release-flow-smoke-retry-policy-131` | `41e63b87c65a03720d586ebaf9daf0e55caeb64f` | 1 | remote --delete |
+| `origin/codex/release-flow-smoke-reusable-workflow-121` | `8019b27f56add3ab64af46b1399c9d06bb195a35` | 1 | remote --delete |
+| `origin/codex/ui-layer-lab-references` | `d18e136937525b13e21a56c7e6814f9c7e67e6d0` | 1 | 보존(사람 소유 가능) |
+| `origin/codex/yaml-editor` | `79914c1e91e42f193c007c1652ec2f0c44d3061c` | 1 | remote --delete |
