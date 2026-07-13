@@ -7,7 +7,7 @@ governing: docs/f-coordination-plan.md · docs/backend-f-workqueue.md
 
 # 백엔드 F 진행 현황
 
-현재 상태: **앵커 28건**
+현재 상태: **앵커 29건**
 
 ## 역사적 Delta-green baseline (BQ-001~003)
 
@@ -715,3 +715,29 @@ Bundle route는 200을 반환한다.
   `origin/dev` ancestor exit 0.
 
 계약 완성: OpsiaBench candidate contracts 81..87 + terminal storage inference boundary (aafc4a956bc03b85133cb6b46f3ba889dde532dc) [green]
+
+### 보조 대기열 S13 — scheduling node selector 시나리오
+
+- 상태: landed
+- 담당 lane: `codex/benchmark-scheduling-memory`
+- 초기 RED: `b07dcbb16fe8258a520d97737e54b63564446109`
+- 독립 감사 후 selector RED 교정: `3d9899564f2f50dc7505b159cdf1ece0b21f8dab`
+- 구현·데이터: `70d3478efb3a966a7f3f4c45d47c07972810444f`
+- 문서와 feature HEAD: `dea2d4babb6882c2cf6b5ff8354060f8472bf6f7`
+- canonical no-ff merge: `584e2eda0af8d0d6d862fffe6be836a1c925fbae`
+- `node_selector_mismatch`를 scheduling 세 번째 시나리오로 추가했다. 정상 `general` pool,
+  장애 `retired` pool, gold·rollback selector를 정적으로 고정해 외부 용량 가정이 없다.
+- live recovery가 없는 후보이므로 `manual_analysis`와 `auto_apply=false`만 허용하고,
+  cluster 전체 workload의 nodeSelector 제거를 금지했다.
+- ordinal 76에 exact fixture를 연결하고 여덟 번째 batch 전체를 재감사해 digest를
+  `8d19d8d9f67dfe24c700e3dd782f19290719c3f46bc154e4f9bb81f5d7125521`로 갱신했다.
+  기존 후보 identity·evidence·signal·recovery·forbidden은 변경하지 않았다.
+- 고유 검증: scheduling 3/3, 전체 scenario 15/15, candidate scorer 87/87,
+  `tests/test_benchmark_score.py` 57 passed.
+- 전체 게이트: Ruff lint/format PASS, import-linter 8 kept/0 broken,
+  pytest `1928 passed, 3 skipped`; manifest management 69 / target 20.
+- 4조건: merge-tree exit 0/tree `9cb957b643ac84ccc8dffca6b9151a1569606698`;
+  파일 삭제·소유권 밖 변경·frozen 경로 변경 0건; RED·교정·구현·문서·merge commit의
+  `origin/dev` ancestor exit 0.
+
+계약 완성: OpsiaBench scheduling node selector mismatch fixture + fallback boundary (dea2d4babb6882c2cf6b5ff8354060f8472bf6f7) [green]
