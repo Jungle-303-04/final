@@ -178,4 +178,56 @@ describe("Resources filter response schemas", () => {
       snapshot: SNAPSHOT,
     }).success).toBe(false);
   });
+
+  it("rejects blank cursors and timestamps without an RFC 3339 offset", () => {
+    const base = {
+      items: [],
+      next_cursor: null,
+      has_more: false,
+      counts: COUNTS,
+      snapshot: SNAPSHOT,
+    };
+
+    expect(filteredInventoryResourceListSchema.safeParse({
+      ...base,
+      next_cursor: "",
+      has_more: true,
+    }).success).toBe(false);
+    expect(filteredInventoryResourceListSchema.safeParse({
+      ...base,
+      snapshot: { ...SNAPSHOT, observed_at: "2026-07-13T20:20:00" },
+    }).success).toBe(false);
+    expect(filteredInventoryResourceListSchema.safeParse({
+      ...base,
+      items: [{
+        resource: { ...RESOURCE, observed_at: "not-a-timestamp" },
+        cluster: { cluster_id: "cluster-a", name: null, provider: null },
+        application_ids: [],
+        application_binding_completeness: "exact",
+      }],
+    }).success).toBe(false);
+  });
+
+  it("rejects duplicate or empty application binding identities", () => {
+    const base = {
+      next_cursor: null,
+      has_more: false,
+      counts: COUNTS,
+      snapshot: SNAPSHOT,
+    };
+    const item = {
+      resource: RESOURCE,
+      cluster: { cluster_id: "cluster-a", name: null, provider: null },
+      application_binding_completeness: "exact",
+    };
+
+    expect(filteredInventoryResourceListSchema.safeParse({
+      ...base,
+      items: [{ ...item, application_ids: ["app-a", "app-a"] }],
+    }).success).toBe(false);
+    expect(filteredInventoryResourceListSchema.safeParse({
+      ...base,
+      items: [{ ...item, application_ids: [""] }],
+    }).success).toBe(false);
+  });
 });
