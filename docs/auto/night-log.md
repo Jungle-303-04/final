@@ -3289,3 +3289,18 @@ index 591d560bc..5f1879a74 100644
   tests `22/22`, build PASS이고 전체 `bash scripts/test.sh`도 `2154 passed, 3 skipped`,
   import-linter `8 kept/0 broken`으로 완전 초록이다. 최종 백엔드 실패 집합은 `{}`로
   줄었으며 S1 code `48bf680c4`의 origin/dev ancestor exit은 0이다.
+
+## 2026-07-14 02:37 KST — [프론트 정리] 레거시 화면·라우트 제거
+
+- 코드 commit `6ac4d11a8`. 삭제 파일: `frontend/AUDIT.md`,
+  `frontend/docs/screenshots/real-{01-overview,02-members,03-org-created,04-ai}.png`,
+  `features/console/pages/{HomePage.tsx,homeCharts.ts}`, `features/metrics/` 3파일,
+  `features/workflow/` 2파일, `features/release/` 3파일(전용 CSS 포함).
+- 라우트·진입 링크 정리: `/` index는 `/clusters`로 연결한다. `/metrics`, `/workflows`,
+  `/release-flows` route와 메뉴를 제거하고 cluster의 메트릭 버튼·repo run의 그래프 버튼도
+  제거했다. 승인 알림은 삭제 화면 대신 실제 repo 실행 탭으로 연결한다. source/test/docs에서
+  삭제 route·feature import grep 0건이며 `legacy_route_cleanup.test.mjs`가 이를 고정한다.
+- 프론트 게이트: ESLint warning/error 0, node tests `19/19`, TypeScript·Vite build PASS.
+  변경 전 백엔드 실패 집합 = `{}`; 변경 후 실패 집합 = `{}`. 전체
+  `bash scripts/test.sh`는 Ruff lint/format·compileall·import-linter `8 kept/0 broken`,
+  pytest `2154 passed, 3 skipped`로 초록이다.
