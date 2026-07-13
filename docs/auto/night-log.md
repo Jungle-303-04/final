@@ -2916,3 +2916,8 @@ target preflight·register 네 함수와 strict Zod 계약을 claim했다. 1회�
 - 신규 source·gateway 계약 변경은 0건이다. single-cluster·snapshot pin·권한 404·stable identity·
   검증된 relation·partial reason·Bruno의 기존 증거를 중복 구현 없이 프론트 차단 해제 기준으로 삼는다.
 - 계약 앵커: `RESOURCES_GRAPH_PATH + ResourceGraphSnapshotResponse` / `914d34ff6` / `[green]`.
+
+## 2026-07-14 00:28 KST — [백엔드] 프론트 그래프 계약 lane 회수
+
+- lane 회수 — `codex/frontend-contract-graph` / `e027e9113` / `origin/dev` ancestor exit 0.
+  canonical merge `00539bd6b`, 기존 graph code `914d34ff6`도 ancestor exit 0이다.
