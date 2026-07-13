@@ -20,8 +20,13 @@ RAW_YAML = "raw-yaml"
 SUPPORTED_SOURCE_TYPES = frozenset({RAW_JSON, RAW_YAML})
 IMAGE_PATCH_API_VERSION = "gitops.krafton.dev/v1alpha1"
 IMAGE_PATCH_KIND = "GitOpsImagePatch"
+SCALAR_PATCH_API_VERSION = "gitops.krafton.dev/v1alpha1"
+SCALAR_PATCH_KIND = "GitOpsScalarPatch"
 CONTAINER_LIST_KEYS = ("containers", "initContainers", "ephemeralContainers")
 PLAIN_IMAGE_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._/@:+-]*$")
+FIELD_PATH_SEGMENT_PATTERN = re.compile(r"^([A-Za-z0-9_-]+)(?:\[name=([^\]]+)\])?$")
+MEMORY_QUANTITY_PATTERN = re.compile(r"^(\d+)(Ki|Mi|Gi)$")
+ScalarValue = str | int | float | bool | None
 
 
 class ManifestSourcePatchError(ValueError):
@@ -42,6 +47,30 @@ class ManifestImagePatchPlan:
     expected_base_sha: str
     manifest_path: str
     replacements: tuple[ImageScalarReplacement, ...]
+
+
+@dataclass(frozen=True)
+class ScalarFieldReplacement:
+    field_path: str
+    current_value: ScalarValue
+    desired_value: ScalarValue
+
+
+@dataclass(frozen=True)
+class ManifestScalarPatchPlan:
+    action_type: str
+    source_type: str
+    source_manifest_sha256: str
+    expected_base_sha: str
+    manifest_path: str
+    replacements: tuple[ScalarFieldReplacement, ...]
+    rollback_replacements: tuple[ScalarFieldReplacement, ...]
+
+
+@dataclass(frozen=True)
+class _FieldPathSegment:
+    key: str
+    selected_name: str | None = None
 
 
 def image_patch_content(plan: ManifestImagePatchPlan) -> str:
@@ -70,6 +99,39 @@ def image_patch_content(plan: ManifestImagePatchPlan) -> str:
         sort_keys=False,
         allow_unicode=True,
     )
+
+
+def scalar_patch_content(plan: ManifestScalarPatchPlan) -> str:
+    """권위 snapshot의 기존 scalar만 바꾸는 forward+rollback 계획을 직렬화한다."""
+
+    validate_scalar_patch_plan(plan)
+    return yaml.safe_dump(
+        {
+            "apiVersion": SCALAR_PATCH_API_VERSION,
+            "kind": SCALAR_PATCH_KIND,
+            "spec": {
+                "actionType": plan.action_type,
+                "sourceType": plan.source_type,
+                "sourceManifestSha256": plan.source_manifest_sha256,
+                "expectedBaseSha": plan.expected_base_sha,
+                "manifestPath": plan.manifest_path,
+                "replacements": [scalar_replacement_body(item) for item in plan.replacements],
+                "rollbackReplacements": [
+                    scalar_replacement_body(item) for item in plan.rollback_replacements
+                ],
+            },
+        },
+        sort_keys=False,
+        allow_unicode=True,
+    )
+
+
+def scalar_replacement_body(item: ScalarFieldReplacement) -> dict[str, ScalarValue]:
+    return {
+        "fieldPath": item.field_path,
+        "currentValue": item.current_value,
+        "desiredValue": item.desired_value,
+    }
 
 
 def parse_image_patch_plan(content: str) -> ManifestImagePatchPlan | None:
@@ -129,6 +191,83 @@ def parse_image_patch_plan(content: str) -> ManifestImagePatchPlan | None:
     return plan
 
 
+def parse_scalar_patch_plan(content: str) -> ManifestScalarPatchPlan | None:
+    try:
+        payload = yaml.safe_load(content)
+    except yaml.YAMLError as exc:
+        raise ManifestSourcePatchError("structured scalar patch document is invalid") from exc
+    if not isinstance(payload, dict) or payload.get("kind") != SCALAR_PATCH_KIND:
+        return None
+    if payload.get("apiVersion") != SCALAR_PATCH_API_VERSION or set(payload) != {
+        "apiVersion",
+        "kind",
+        "spec",
+    }:
+        raise ManifestSourcePatchError("structured scalar patch document is invalid")
+    spec = payload.get("spec")
+    expected_keys = {
+        "actionType",
+        "sourceType",
+        "sourceManifestSha256",
+        "expectedBaseSha",
+        "manifestPath",
+        "replacements",
+        "rollbackReplacements",
+    }
+    if not isinstance(spec, dict) or set(spec) != expected_keys:
+        raise ManifestSourcePatchError("structured scalar patch document is invalid")
+    replacements = parse_scalar_replacements(spec["replacements"])
+    rollback = parse_scalar_replacements(spec["rollbackReplacements"])
+    text_keys = (
+        "actionType",
+        "sourceType",
+        "sourceManifestSha256",
+        "expectedBaseSha",
+        "manifestPath",
+    )
+    plan = ManifestScalarPatchPlan(
+        action_type=spec["actionType"] if isinstance(spec["actionType"], str) else "",
+        source_type=spec["sourceType"] if isinstance(spec["sourceType"], str) else "",
+        source_manifest_sha256=(
+            spec["sourceManifestSha256"] if isinstance(spec["sourceManifestSha256"], str) else ""
+        ),
+        expected_base_sha=(
+            spec["expectedBaseSha"] if isinstance(spec["expectedBaseSha"], str) else ""
+        ),
+        manifest_path=spec["manifestPath"] if isinstance(spec["manifestPath"], str) else "",
+        replacements=replacements,
+        rollback_replacements=rollback,
+    )
+    if any(not isinstance(spec[key], str) for key in text_keys):
+        raise ManifestSourcePatchError("structured scalar patch document is invalid")
+    validate_scalar_patch_plan(plan)
+    return plan
+
+
+def parse_scalar_replacements(value: object) -> tuple[ScalarFieldReplacement, ...]:
+    if not isinstance(value, list):
+        raise ManifestSourcePatchError("structured scalar patch document is invalid")
+    replacements: list[ScalarFieldReplacement] = []
+    for raw in value:
+        if not isinstance(raw, dict) or set(raw) != {
+            "fieldPath",
+            "currentValue",
+            "desiredValue",
+        }:
+            raise ManifestSourcePatchError("structured scalar patch document is invalid")
+        field_path = raw["fieldPath"]
+        current = raw["currentValue"]
+        desired = raw["desiredValue"]
+        if (
+            not isinstance(field_path, str)
+            or not scalar_value(current)
+            or not scalar_value(desired)
+        ):
+            raise ManifestSourcePatchError("structured scalar patch document is invalid")
+        replacements.append(ScalarFieldReplacement(field_path, current, desired))
+    return tuple(replacements)
+
+
 def validate_image_patch_plan(plan: ManifestImagePatchPlan) -> None:
     if (
         plan.source_type != RAW_YAML
@@ -146,6 +285,115 @@ def validate_image_patch_plan(plan: ManifestImagePatchPlan) -> None:
         or replacement.current_image == replacement.previous_image
     ):
         raise ManifestSourcePatchError("structured image patch metadata is incomplete")
+
+
+def validate_scalar_patch_plan(plan: ManifestScalarPatchPlan) -> None:
+    if (
+        plan.action_type
+        not in {
+            "oom_memory",
+            "image_rollback",
+            "image_tag_fix",
+            "replica_scale",
+            "probe_fix",
+            "selector_fix",
+        }
+        or plan.source_type != RAW_YAML
+        or not re.fullmatch(r"sha256:[0-9a-f]{64}", plan.source_manifest_sha256)
+        or not re.fullmatch(r"[0-9a-f]{40,64}", plan.expected_base_sha)
+        or not safe_manifest_path(plan.manifest_path)
+        or not 1 <= len(plan.replacements) <= 4
+        or len(plan.rollback_replacements) != len(plan.replacements)
+    ):
+        raise ManifestSourcePatchError("structured scalar patch metadata is incomplete")
+    paths = [item.field_path for item in plan.replacements]
+    if len(set(paths)) != len(paths):
+        raise ManifestSourcePatchError("structured scalar patch target is duplicated")
+    rollback_by_path = {item.field_path: item for item in plan.rollback_replacements}
+    if len(rollback_by_path) != len(plan.rollback_replacements):
+        raise ManifestSourcePatchError("structured scalar rollback is not an exact inverse")
+    for item in plan.replacements:
+        rollback = rollback_by_path.get(item.field_path)
+        if (
+            not field_path_segments(item.field_path)
+            or not scalar_value(item.current_value)
+            or not scalar_value(item.desired_value)
+            or same_scalar(item.current_value, item.desired_value)
+            or rollback is None
+            or not same_scalar(rollback.current_value, item.desired_value)
+            or not same_scalar(rollback.desired_value, item.current_value)
+            or not action_allows_replacement(plan.action_type, item)
+        ):
+            raise ManifestSourcePatchError("structured scalar rollback is not an exact inverse")
+
+
+def scalar_value(value: object) -> bool:
+    return value is None or isinstance(value, str | int | float | bool)
+
+
+def same_scalar(left: object, right: object) -> bool:
+    return type(left) is type(right) and left == right
+
+
+def action_allows_replacement(action_type: str, item: ScalarFieldReplacement) -> bool:
+    path = item.field_path
+    if action_type in {"image_rollback", "image_tag_fix"}:
+        return path.endswith(".image") and all(
+            isinstance(value, str) and bool(value.strip())
+            for value in (item.current_value, item.desired_value)
+        )
+    if action_type == "replica_scale":
+        return (
+            path == "spec.replicas"
+            and type(item.current_value) is int
+            and type(item.desired_value) is int
+            and 1 <= item.current_value < item.desired_value <= 10
+        )
+    if action_type == "oom_memory":
+        return (
+            path.endswith(".resources.requests.memory") or path.endswith(".resources.limits.memory")
+        ) and memory_increases_within_cap(item.current_value, item.desired_value)
+    if action_type == "probe_fix":
+        if path.endswith(".timeoutSeconds"):
+            return (
+                type(item.current_value) is int
+                and type(item.desired_value) is int
+                and 1 <= item.current_value < item.desired_value <= 30
+            )
+        if path.endswith(".httpGet.port"):
+            return type(item.desired_value) is int and 1 <= item.desired_value <= 65535
+        if path.endswith(".httpGet.path"):
+            return isinstance(item.desired_value, str) and item.desired_value.startswith("/")
+        return False
+    if action_type == "selector_fix":
+        return (
+            path.startswith("spec.selector.matchLabels.")
+            or path.startswith("spec.template.metadata.labels.")
+        ) and all(
+            isinstance(value, str) and bool(value.strip())
+            for value in (item.current_value, item.desired_value)
+        )
+    return False
+
+
+def memory_increases_within_cap(current: object, desired: object) -> bool:
+    current_bytes = memory_quantity_bytes(current)
+    desired_bytes = memory_quantity_bytes(desired)
+    return (
+        current_bytes is not None
+        and desired_bytes is not None
+        and (current_bytes < desired_bytes <= 4 * 1024**3)
+    )
+
+
+def memory_quantity_bytes(value: object) -> int | None:
+    if not isinstance(value, str):
+        return None
+    match = MEMORY_QUANTITY_PATTERN.fullmatch(value)
+    if match is None:
+        return None
+    factor = {"Ki": 1024, "Mi": 1024**2, "Gi": 1024**3}[match.group(2)]
+    return int(match.group(1)) * factor
 
 
 def safe_manifest_path(value: str) -> bool:
@@ -250,6 +498,155 @@ def materialize_image_patch(
     if parse_single_manifest(patched, source_type) != expected:
         raise ManifestSourcePatchError("manifest patch changed fields outside approved images")
     return patched
+
+
+def materialize_scalar_patch(source: str, plan: ManifestScalarPatchPlan) -> str:
+    """승인 원문에서 allowlist scalar span만 바꾸고 나머지 byte는 보존한다."""
+
+    validate_scalar_patch_plan(plan)
+    original = parse_single_manifest(source, plan.source_type)
+    if original.get("kind") != "Deployment":
+        raise ManifestSourcePatchError("manifest source must be a Deployment")
+    if canonical_manifest_digest(original) != plan.source_manifest_sha256:
+        raise ManifestSourcePatchError("manifest source digest does not match approved artifact")
+    try:
+        if any(isinstance(token, AnchorToken | AliasToken) for token in yaml.scan(source)):
+            raise ManifestSourcePatchError("manifest anchors and aliases are not patchable")
+        nodes = list(yaml.compose_all(source))
+    except yaml.YAMLError as exc:
+        raise ManifestSourcePatchError("manifest source is invalid") from exc
+    if len(nodes) != 1 or not isinstance(nodes[0], MappingNode):
+        raise ManifestSourcePatchError("manifest source must contain one object")
+
+    expected = deepcopy(original)
+    spans: list[tuple[int, int, str]] = []
+    for replacement in plan.replacements:
+        segments = field_path_segments(replacement.field_path)
+        current = object_value_at(original, segments)
+        if not same_scalar(current, replacement.current_value):
+            raise ManifestSourcePatchError("manifest scalar does not match approved artifact")
+        node = node_value_at(nodes[0], segments)
+        if not isinstance(node, ScalarNode):
+            raise ManifestSourcePatchError("manifest scalar target is not unique")
+        spans.append(
+            (
+                node.start_mark.index,
+                node.end_mark.index,
+                encoded_scalar_value(node, replacement.desired_value),
+            )
+        )
+        set_object_value(expected, segments, replacement.desired_value)
+
+    if len({(start, end) for start, end, _ in spans}) != len(spans):
+        raise ManifestSourcePatchError("manifest scalar target overlaps")
+    patched = source
+    for start, end, encoded in sorted(spans, reverse=True):
+        patched = f"{patched[:start]}{encoded}{patched[end:]}"
+    if parse_single_manifest(patched, plan.source_type) != expected:
+        raise ManifestSourcePatchError("manifest patch changed fields outside approved scalars")
+    return patched
+
+
+def field_path_segments(value: str) -> tuple[_FieldPathSegment, ...]:
+    segments: list[_FieldPathSegment] = []
+    for raw in value.split("."):
+        match = FIELD_PATH_SEGMENT_PATTERN.fullmatch(raw)
+        if match is None:
+            return ()
+        selected_name = match.group(2)
+        if selected_name is not None and not selected_name.strip():
+            return ()
+        segments.append(_FieldPathSegment(match.group(1), selected_name))
+    return tuple(segments)
+
+
+def object_value_at(root: object, segments: tuple[_FieldPathSegment, ...]) -> object:
+    current = root
+    for segment in segments:
+        if not isinstance(current, Mapping) or segment.key not in current:
+            raise ManifestSourcePatchError("manifest scalar target is missing")
+        current = current[segment.key]
+        if segment.selected_name is not None:
+            if not isinstance(current, list):
+                raise ManifestSourcePatchError("manifest scalar target is missing")
+            matches = [
+                item
+                for item in current
+                if isinstance(item, Mapping) and item.get("name") == segment.selected_name
+            ]
+            if len(matches) != 1:
+                raise ManifestSourcePatchError("manifest scalar target is not unique")
+            current = matches[0]
+    return current
+
+
+def set_object_value(
+    root: dict[str, Any],
+    segments: tuple[_FieldPathSegment, ...],
+    value: ScalarValue,
+) -> None:
+    current: object = root
+    for segment in segments[:-1]:
+        if not isinstance(current, dict):
+            raise ManifestSourcePatchError("manifest scalar target is missing")
+        current = current[segment.key]
+        if segment.selected_name is not None:
+            matches = [
+                item
+                for item in current
+                if isinstance(item, dict) and item.get("name") == segment.selected_name
+            ]
+            if len(matches) != 1:
+                raise ManifestSourcePatchError("manifest scalar target is not unique")
+            current = matches[0]
+    final = segments[-1]
+    if final.selected_name is not None or not isinstance(current, dict):
+        raise ManifestSourcePatchError("manifest scalar target is missing")
+    current[final.key] = value
+
+
+def node_value_at(root: Node, segments: tuple[_FieldPathSegment, ...]) -> Node:
+    current = root
+    for segment in segments:
+        if not isinstance(current, MappingNode):
+            raise ManifestSourcePatchError("manifest scalar target is missing")
+        value = mapping_value(current, segment.key)
+        if value is None:
+            raise ManifestSourcePatchError("manifest scalar target is missing")
+        current = value
+        if segment.selected_name is not None:
+            if not isinstance(current, SequenceNode):
+                raise ManifestSourcePatchError("manifest scalar target is missing")
+            matches = [
+                item
+                for item in current.value
+                if isinstance(item, MappingNode)
+                and isinstance(mapping_value(item, "name"), ScalarNode)
+                and mapping_value(item, "name").value == segment.selected_name
+            ]
+            if len(matches) != 1:
+                raise ManifestSourcePatchError("manifest scalar target is not unique")
+            current = matches[0]
+    return current
+
+
+def encoded_scalar_value(node: ScalarNode, value: ScalarValue) -> str:
+    if isinstance(value, str):
+        if node.style == "'":
+            return f"'{value.replace(chr(39), chr(39) * 2)}'"
+        if node.style == '"':
+            return json.dumps(value, ensure_ascii=False)
+        if node.style is None and "\n" not in value:
+            encoded = value
+            try:
+                if yaml.safe_load(encoded) == value:
+                    return encoded
+            except yaml.YAMLError:
+                pass
+        return json.dumps(value, ensure_ascii=False)
+    if node.style is not None:
+        raise ManifestSourcePatchError("manifest scalar style is not patchable")
+    return json.dumps(value, ensure_ascii=False, allow_nan=False)
 
 
 def mapping_value(node: MappingNode, key: str) -> Node | None:
