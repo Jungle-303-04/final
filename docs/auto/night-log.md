@@ -2971,3 +2971,26 @@ target preflight·register 네 함수와 strict Zod 계약을 claim했다. 1회�
   `/private/tmp/opsia-vp010-resources-filter-adapter`. 비강제 worktree remove·branch delete·prune를 같은
   사이클에서 완료했다. 신규 stash 0건, 기존 미증명 stash 8개는 유지했고 사람/백엔드 worktree와
   untracked `vp-012-timeline-graph-table.md`·`outputs/`는 건드리지 않았다.
+
+## 2026-07-14 00:57 KST — [백엔드] Applications 필터 계약 canonical 착륙
+
+- code `e7196ea7f`, canonical merge `cbba9d28e`가 `origin/dev` ancestor exit 0이다.
+  merge-tree `a52c7cea75404a1dcb4857e278650d83026c2b9c`, 삭제·RCA/AI/runtime worker·프론트
+  소유 경로 변경 0건이다. 전체 게이트는 Ruff lint/format, import-linter 8/8,
+  pytest `2121 passed, 3 skipped`다.
+- 프론트 인계: `GET /api/applications/filter-results`, `/api/applications/filter-facets`,
+  `/api/applications/label-facets`; common query는 `clusters`, `namespaces`, `applications`, `labels`,
+  surface query는 `applications.environment`, `applications.status`,
+  `applications.pendingPromotion`, `applications.q`다. strict item은 application ID/name,
+  repository IDs, authorized cluster/namespace/environment, lifecycle status, pending promotion,
+  binding count·completeness·updated_at만 노출한다.
+- 격리 착륙 — 잔여 결함/해제 조건: GitOps·Checks route는 미노출로 다음 사이클에 둔다.
+  Applications Label은 동일 revision live-resource binding projection 전까지 `unavailable`, immutable
+  revision이 없어 다음 page가 필요한 요청은 503이다. WorkflowRun/DeploymentBinding 복합 인덱스는
+  실제 EXPLAIN과 migration 왕복 검증 뒤 활성화한다.
+- 계약 앵커: `APPLICATION_FILTER_RESULTS_PATH + APPLICATION_FILTER_FACETS_PATH +
+  APPLICATION_LABEL_FACETS_PATH` / `e7196ea7f` / `[green]`.
+- 착륙 조작 감사: 첫 merge 명령의 cwd 오류로 보호된 로컬 UI 브랜치에 merge commit이 1회
+  생성됐으나 원격 push 0건이었다. commit을 `codex/applications-merge-recovery`로 보존하고
+  `woonyong/ui-layer-lab`을 원격 `08a7dd16e`에서 비파괴 재생성한 뒤, 별도 detached dev worktree에서
+  올바른 merge `cbba9d28e`를 생성·push했다. reset/revert/force는 사용하지 않았다.

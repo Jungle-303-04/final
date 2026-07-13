@@ -7,7 +7,7 @@ governing: docs/f-coordination-plan.md · docs/backend-f-workqueue.md
 
 # 백엔드 F 진행 현황
 
-현재 상태: **앵커 45건**
+현재 상태: **앵커 46건**
 
 ## 역사적 Delta-green baseline (BQ-001~003)
 
@@ -1281,3 +1281,26 @@ Bundle route는 200을 반환한다.
   server search, opaque cursor, N/M, facet/count/completeness를 strict DTO로 제공한다.
 - live binding resource Label source를 증명하지 못한 항목은 다른 snapshot에서 추측하지 않고
   capability `unavailable`로 격리한다. GitOps/Checks 잔여는 다음 사이클 첫 작업이다.
+
+### Applications 필터 계약 — canonical 증거
+
+- Applications 하위 계약 code `e7196ea7f`, canonical merge `cbba9d28e`가 `origin/dev`
+  ancestor exit 0이다. 기존 `GET /api/applications`와 detail 응답은 변경하지 않았다.
+- 신규 `GET /api/applications/filter-results`, `/api/applications/filter-facets`,
+  `/api/applications/label-facets`는 session workspace와 concrete `APPLICATION_READ` app 집합,
+  `INVENTORY_READ` cluster 집합을 강제한다. 비인가 application/cluster/namespace는 404로 닫는다.
+- 응답은 provider-neutral allowlist DTO만 사용한다. repository credential·access policy·metadata,
+  binding policy, workflow payload는 SQL select와 응답에서 제외했다.
+- application status와 허용된 cluster의 최신 workflow run으로 pending promotion을 계산하고,
+  active binding의 cluster/namespace/environment만 partial projection으로 반환한다. mutable source라
+  count는 `partial`, 같은 revision의 live label source가 없어 Label은 `unavailable`이다.
+- revision-pinned read model이 없으므로 다음 page가 필요한 list/facet은 503으로 fail-closed한다.
+  cursor 해제 조건은 immutable projection revision과 page 간 snapshot pin을 도입하는 것이다.
+- 전체 게이트 Ruff lint/format PASS, import-linter 8/8, pytest `2121 passed, 3 skipped`.
+  merge-tree `a52c7cea75404a1dcb4857e278650d83026c2b9c`, 삭제·RCA/AI/runtime worker·프론트
+  소유 경로 변경 0건이다. Bruno는 `docs/api/19-applications-filter/`다.
+계약 완성: `APPLICATION_FILTER_RESULTS_PATH + APPLICATION_FILTER_FACETS_PATH +
+  APPLICATION_LABEL_FACETS_PATH` (`e7196ea7f`) [green].
+- 격리 착륙 — 잔여 결함/해제 조건: GitOps·Checks route는 미노출이며 다음 안전 착륙 단위다.
+  Applications Label은 동일 revision live-resource binding projection, pagination은 immutable revision,
+  대규모 성능은 WorkflowRun/DeploymentBinding EXPLAIN과 검증된 복합 인덱스 migration 후 해제한다.
