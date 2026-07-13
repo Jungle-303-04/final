@@ -157,14 +157,26 @@ export function CollapsibleGroupNode({ data }: NodeProps<Node<CollapsibleGroupDa
 
 const BASE_NODE_TYPES: NodeTypes = { group_collapsible: CollapsibleGroupNode };
 const EDGE_TYPES: EdgeTypes = { animated: AnimatedEdge };
+const MERGED_NODE_TYPES = new WeakMap<NodeTypes, NodeTypes>();
+
+function mergeNodeTypes(nodeTypes?: NodeTypes) {
+  if (!nodeTypes) return BASE_NODE_TYPES;
+  const cached = MERGED_NODE_TYPES.get(nodeTypes);
+  if (cached) return cached;
+  const merged = { ...BASE_NODE_TYPES, ...nodeTypes };
+  MERGED_NODE_TYPES.set(nodeTypes, merged);
+  return merged;
+}
 
 /* 콘솔 테마(data-theme-mode)를 따라가는 colorMode — 토글 시 즉시 반영(MutationObserver) */
 function useDocThemeMode(): 'dark' | 'light' {
-  const read = () => (document.documentElement.getAttribute('data-theme-mode') === 'light' ? 'light' as const : 'dark' as const);
+  const read = () => (document.documentElement?.getAttribute('data-theme-mode') === 'light' ? 'light' as const : 'dark' as const);
   const [mode, setMode] = useState<'dark' | 'light'>(read);
   useEffect(() => {
+    const root = document.documentElement;
+    if (!root) return undefined;
     const obs = new MutationObserver(() => setMode(read()));
-    obs.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme-mode'] });
+    obs.observe(root, { attributes: true, attributeFilter: ['data-theme-mode'] });
     return () => obs.disconnect();
   }, []);
   return mode;
@@ -187,7 +199,7 @@ export function FlowCanvas({ nodes, edges, nodeTypes, onNodeClick, onPaneClick, 
   nodes: Node[]; edges: Edge[]; nodeTypes?: NodeTypes;
   onNodeClick?: (id: string) => void; onPaneClick?: () => void; interactive?: boolean; scrollBehavior?: FlowScrollBehavior; fitViewPadding?: number; fitViewMinZoom?: number; children?: ReactNode;
 }) {
-  const types = useMemo(() => ({ ...BASE_NODE_TYPES, ...nodeTypes }), [nodeTypes]);
+  const types = mergeNodeTypes(nodeTypes);
   const colorMode = useDocThemeMode();
   const zoomWithWheel = interactive && scrollBehavior === 'zoom';
   const panWithWheel = interactive && scrollBehavior === 'pan';
