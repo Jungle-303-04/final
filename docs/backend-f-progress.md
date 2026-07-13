@@ -1164,3 +1164,19 @@ Bundle route는 200을 반환한다.
   code `914d34ff6`과 merge `95ff11cc6`은 모두 `origin/dev` ancestor exit 0이다.
 
 계약 완성: RESOURCES_GRAPH_PATH + ResourceGraphSnapshotResponse (914d34ff699a71d5b09039b42388ff62aebc8d12) [green]
+
+### Issues 필터 계약 — claim
+
+- 상태: `in_progress`; gateway 계약 lock은 이 행 하나가 보유한다. 기준점은
+  `origin/dev@cf688f65b`이며 baseline은 전체 `2064 passed, 3 skipped`, Ruff lint/format PASS,
+  import-linter 8 kept/0 broken, manifest management 69/target 20이다.
+- 기존 `/dashboard/rca/timeline`과 detail route는 변경하지 않는다. 신규 strict route는 session
+  workspace와 `RCA_READ`의 구체 cluster ID 집합을 SQL에 강제하고, 빈 집합은 결과 0건,
+  비인가 selected scope는 데이터 조회 전에 404로 닫는다.
+- `severity`는 incident event의 실제 필드만 투영한다. environment/application/Label처럼 구형
+  row 또는 권위 snapshot에 없는 값은 가짜 기본값·현재 inventory 대체 없이 nullable과 구조화
+  `unavailable` reason으로 반환한다. mutable in-place timeline에는 temporal history가 없으므로
+  cursor·count를 immutable exact snapshot으로 과장하지 않고 partial completeness를 명시한다.
+- RED 범위: stable issue/detail identity 분리, 같은 축 OR·축간 AND, exact cluster/namespace pair,
+  HMAC cursor의 workspace/user/auth/filter binding, N/M·facet payload, raw payload 비노출,
+  legacy projection의 unavailable 처리다.

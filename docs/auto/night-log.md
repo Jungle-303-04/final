@@ -2849,6 +2849,16 @@ target preflight·register 네 함수와 strict Zod 계약을 claim했다. 1회�
   force/reset/revert 없이 branch를 비강제 삭제·원격 `4f07c0c21`에서 재생성해 local/remote HEAD
   일치를 확인했다. canonical `dev@b538528be` 착륙 후 임시 ref도 비강제 삭제했다.
 
+## 2026-07-13 23:38 KST — [백엔드] Issues 필터 계약 claim
+
+- `origin/dev@cf688f65b`에서 GAP-005만 claim하고 gateway 계약 lock을 획득했다. 기존 RCA
+  timeline/list/detail 응답은 그대로 보존하고 별도 strict canonical list를 추가한다.
+- 실제 정규 source는 cluster·namespace·pipeline status·incident identity이며 severity만 incident
+  event에서 추가 투영할 수 있다. environment/application/Label이 보존되지 않은 row는 다른
+  시간축의 inventory로 추측하지 않고 `unavailable`로 표시한다.
+- temporal history가 없는 mutable timeline을 exact snapshot으로 가장하지 않는다. concrete
+  `RCA_READ` scope, server filter/facet/count, keyset cursor, raw payload 비노출을 RED로 먼저 고정한다.
+
 ## 2026-07-13 23:49 KST — [프론트] Resources 필터 API·strict Zod GREEN
 
 - 직전 Graph shell은 최종 `ce104ef1fd2a2045cc4496414c0d9c277618a054`로 lab/dev 양쪽에
