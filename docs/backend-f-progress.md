@@ -7,7 +7,7 @@ governing: docs/f-coordination-plan.md · docs/backend-f-workqueue.md
 
 # 백엔드 F 진행 현황
 
-현재 상태: **앵커 44건**
+현재 상태: **앵커 45건**
 
 ## 역사적 Delta-green baseline (BQ-001~003)
 
@@ -1164,3 +1164,107 @@ Bundle route는 200을 반환한다.
   code `914d34ff6`과 merge `95ff11cc6`은 모두 `origin/dev` ancestor exit 0이다.
 
 계약 완성: RESOURCES_GRAPH_PATH + ResourceGraphSnapshotResponse (914d34ff699a71d5b09039b42388ff62aebc8d12) [green]
+
+### Issues 필터 계약 — claim
+
+- 상태: `in_progress`; gateway 계약 lock은 이 행 하나가 보유한다. 기준점은
+  `origin/dev@cf688f65b`이며 baseline은 전체 `2064 passed, 3 skipped`, Ruff lint/format PASS,
+  import-linter 8 kept/0 broken, manifest management 69/target 20이다.
+- 기존 `/dashboard/rca/timeline`과 detail route는 변경하지 않는다. 신규 strict route는 session
+  workspace와 `RCA_READ`의 구체 cluster ID 집합을 SQL에 강제하고, 빈 집합은 결과 0건,
+  비인가 selected scope는 데이터 조회 전에 404로 닫는다.
+- `severity`는 incident event의 실제 필드만 투영한다. environment/application/Label처럼 구형
+  row 또는 권위 snapshot에 없는 값은 가짜 기본값·현재 inventory 대체 없이 nullable과 구조화
+  `unavailable` reason으로 반환한다. mutable in-place timeline에는 temporal history가 없으므로
+  cursor·count를 immutable exact snapshot으로 과장하지 않고 partial completeness를 명시한다.
+- RED 범위: stable issue/detail identity 분리, 같은 축 OR·축간 AND, exact cluster/namespace pair,
+  HMAC cursor의 workspace/user/auth/filter binding, N/M·facet payload, raw payload 비노출,
+  legacy projection의 unavailable 처리다.
+
+### Issues 필터 계약 — 착륙 준비
+
+- 상태: `ready_to_land`; canonical 착륙 전이므로 완료 앵커를 기록하지 않고 gateway 계약 lock을
+  유지한다.
+- route: `GET /api/issues`, `GET /api/issues/filter-facets`,
+  `GET /api/issues/label-facets`. 기존 RCA timeline/list/detail 계약은 변경하지 않았다.
+- 목록은 stable `issue_id`와 optional `detail_id`, correlation/cluster/namespace/resource identity,
+  symptom/severity/state/pipeline status, environment/application/Label 완전성, root cause/confidence,
+  `updated_at`을 반환한다. 같은 축은 OR, 서로 다른 축과 Kubernetes Label은 AND다.
+- session workspace와 구체 `RCA_READ` cluster 집합을 SQL에 강제한다. event envelope의 tenant만
+  권위값으로 사용하며 payload workspace 위조·누락은 fail-closed다.
+- event-time evidence snapshot에서만 Label을 보존한다. environment/application은 권위 source가
+  없으면 `unavailable`, mutable timeline count/cursor는 `partial`로 정직하게 표시한다.
+- migration은 projection column과 concurrent index revision을 분리했다. 실 PostgreSQL에서
+  `upgrade → downgrade → upgrade`, 신규 column 8개와 index 6개의 생성·제거·재생성을 확인했다.
+- Bruno: `docs/api/18-issues-filter/01-list-issues.bru`,
+  `02-filter-facets.bru`, `03-label-facets.bru`.
+- 전체 게이트: Ruff lint/format PASS, import-linter 8 kept/0 broken, pytest
+  `2099 passed, 3 skipped`; 착륙 직전 최신 `origin/dev` rebase 후 같은 게이트를 재증명한다.
+
+### Issues 필터 계약 — canonical 착륙 증거
+
+- 상태: `landed`; gateway 계약 lock을 해제했다. GREEN `d63498d5f`, 최종 feature HEAD
+  `e00cb9b3e`, canonical no-ff merge `e2504278d`다.
+- route: `GET /api/issues`, `GET /api/issues/filter-facets`,
+  `GET /api/issues/label-facets`. query는 `clusters`, `namespaces`, `applications`,
+  `severities`, `statuses`, `environments`, `labels`, `q`와 opaque cursor를 지원한다.
+- 프론트는 `IssueFilterResultsResponse.items[]`의 stable `issue_id`, optional `detail_id`,
+  correlation/cluster/namespace/resource identity, symptom/severity/state/pipeline status,
+  environment/application/Label 완전성, root cause/confidence, `updated_at`을 사용한다.
+  facet·Label 응답은 value/count와 `exact|partial|unavailable`, 선택값 resolution, N/M,
+  capability·snapshot partial reason을 함께 제공한다.
+- event envelope tenant만 권위값으로 사용하고 payload tenant 위조·누락은 fail-closed다.
+  session workspace와 구체 `RCA_READ` cluster scope를 SQL에 강제하며 raw payload는 반환하지 않는다.
+- Label은 incident event-time evidence snapshot에서만 투영한다. 권위 source가 없는
+  environment/application은 `unavailable`, mutable timeline count/cursor는 `partial`이다.
+- migration `20260713_2340`은 nullable projection column 8개를, `20260713_2350`은 concurrent
+  index 6개를 분리 적용한다. 실 PostgreSQL `upgrade → downgrade → upgrade`를 통과했다.
+- Bruno: `docs/api/18-issues-filter/01-list-issues.bru`,
+  `02-filter-facets.bru`, `03-label-facets.bru`.
+- 전체 게이트: Ruff lint/format PASS, import-linter 8 kept/0 broken, pytest
+  `2100 passed, 3 skipped`. merge-tree `43dafb04baa8d9bbd6f04ec356e4ef48647f7399`,
+  삭제·frozen source·프론트 소유 경로 변경 0건이다. GREEN·feature·merge는 모두
+  `origin/dev` ancestor exit 0이다.
+
+계약 완성: ISSUES_FILTER_RESULTS_PATH + ISSUES_FILTER_FACETS_PATH + ISSUES_LABEL_FACETS_PATH (d63498d5fd84a02d109b68e39f2112d177a5fa92) [green]
+
+### 프론트 그래프 계약 번호 매핑 — claim
+
+- 상태: `in_progress`; 신규 구현이 아니라 이미 canonical에 착륙한 GAP-010의
+  `RESOURCES_GRAPH_PATH + ResourceGraphSnapshotResponse`를 BQ-022에 연결한다.
+- 기존 code `914d34ff6`, canonical merge `95ff11cc6`, Bruno
+  `docs/api/17-resources-filter/04-resource-graph.bru`와 전체 graph 회귀 테스트를 재사용한다.
+- 추가 gateway 계약·source 변경은 0건이며, §9의 stale 상태와 workqueue 번호만 정합화한다.
+
+### 프론트 그래프 계약 번호 매핑 — canonical 증거
+
+- BQ-022는 기존 GAP-010과 같은 계약이다. 새 구현 없이 code `914d34ff6`, canonical merge
+  `95ff11cc6`, 기존 완료 앵커 `RESOURCES_GRAPH_PATH + ResourceGraphSnapshotResponse`에 연결했다.
+- `GET /api/resources/graph`는 Resources 표와 같은 filter/snapshot revision을 사용하고 정확히
+  한 authorized cluster만 허용한다. stable drill-down identity와 근거가 검증된 edge만 반환한다.
+- unauthorized cluster는 data query 전 404, cross-cluster node는 strict DTO에서 거부한다.
+  budget/source/relation 불완전은 count·snapshot·relation completeness와 reason code로 노출한다.
+- Bruno `docs/api/17-resources-filter/04-resource-graph.bru`와 기존 contract/router/builder 회귀를
+  재사용한다. source·gateway 계약 변경은 0건이며 프론트는 GAP-010의 stale 문구를 기존 GREEN
+  앵커 기준으로 갱신할 수 있다.
+
+### 프론트 Issues 계약 번호 매핑 — claim
+
+- 상태: `in_progress`; 신규 구현이 아니라 이미 canonical에 착륙한 GAP-005의
+  `ISSUES_FILTER_RESULTS_PATH`, `ISSUES_FILTER_FACETS_PATH`, `ISSUES_LABEL_FACETS_PATH`를
+  BQ-023에 연결한다.
+- 기존 code `d63498d5f`, canonical merge `e2504278d`, Bruno
+  `docs/api/18-issues-filter/`와 전체 Issues filter 회귀를 재사용한다.
+- 추가 gateway 계약·source 변경은 0건이며 workqueue 번호만 정합화한다.
+
+### 프론트 Issues 계약 번호 매핑 — canonical 증거
+
+- BQ-023은 기존 GAP-005와 같은 계약이다. 새 구현 없이 code `d63498d5f`, canonical merge
+  `e2504278d`, 기존 완료 앵커 세 개에 연결했다.
+- `GET /api/issues`, `/api/issues/filter-facets`, `/api/issues/label-facets`는 common scope와
+  severity/status/environment, application/cluster/namespace facet, stable detail ID, opaque cursor,
+  N/M과 completeness를 제공한다.
+- session workspace와 구체 `RCA_READ` cluster 범위를 SQL에 강제하고, 비인가 scope는 404,
+  권위 source가 없는 축은 `unavailable`, mutable projection은 `partial`로 반환한다.
+- Bruno `docs/api/18-issues-filter/`와 기존 contract/router/projection/migration 회귀를 재사용한다.
+  source·gateway 계약 변경은 0건이다.

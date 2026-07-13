@@ -78,6 +78,10 @@ def test_context_contract_failure_becomes_followup_required() -> None:
     assert analyze_outs[0].contract == "RcaCandidatesPlannedBody.evidence_bundle"
     assert subjects_of(feedback_outs) == ["rca.followup.required"]
     assert feedback_outs[0].reason_code == "context_missing"
+    assert (
+        feedback_outs[0].summary
+        == "worker 간 이벤트 payload에 필수 RCA context가 없어 분석을 진행하지 못했습니다."
+    )
     assert feedback_outs[0].severity == "warning"
     assert feedback_outs[0].next_actions[0]["action_type"] == "fix_pipeline_contract"
 
@@ -117,8 +121,16 @@ def test_insufficient_candidate_evidence_is_blocked_not_completed() -> None:
     assert rca_outs[0].rca_detail.missing_evidence == ["logs"]
     assert rca_outs[0].rca_detail.missing_evidence_checks[0].check_id
     assert subjects_of(feedback_outs) == ["rca.followup.required", "recovery.planned"]
+    assert (
+        feedback_outs[0].summary
+        == "원인 후보는 있지만 필요한 근거가 부족해 자동 RCA 확정을 중단했습니다."
+    )
     assert feedback_outs[0].missing_evidence == ["logs"]
     assert feedback_outs[0].next_actions[0]["action_type"] == "collect_evidence"
+    assert (
+        feedback_outs[0].next_actions[0]["description"]
+        == "관련 Pod 로그를 수집한 뒤 RCA 평가를 재실행합니다."
+    )
     assert feedback_outs[1].plan.selection_required is True
     assert feedback_outs[1].plan.candidates[0].approval_required is True
     assert feedback_outs[1].plan.candidates[0].draft.params["analysis_blocked_fallback"] is True
@@ -156,3 +168,6 @@ def test_no_candidate_analysis_is_blocked_and_does_not_save_report() -> None:
     assert rca_outs[0].reason_code == "no_evaluation"
     assert not db.called("save_rca_report")
     assert subjects_of(feedback_outs) == ["rca.followup.required"]
+    assert (
+        feedback_outs[0].summary == "평가 가능한 원인 후보가 없어 root cause를 선택하지 못했습니다."
+    )

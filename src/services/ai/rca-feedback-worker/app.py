@@ -28,8 +28,57 @@ NON_ACTIONABLE_ROOT_CAUSES = {
     "none",
     "분석 가능한 원인 후보 없음",
 }
+FOLLOWUP_SUMMARIES = {
+    "rule_missing": "대표 증상에 맞는 RCA rule이 없어 자동 원인 확정을 중단했습니다.",
+    "insufficient_evidence": "원인 후보는 있지만 필요한 근거가 부족해 자동 RCA 확정을 중단했습니다.",
+    "evidence_missing": "원인 후보는 있지만 필요한 근거가 부족해 자동 RCA 확정을 중단했습니다.",
+    "no_evaluation": "평가 가능한 원인 후보가 없어 root cause를 선택하지 못했습니다.",
+    "context_missing": "worker 간 이벤트 payload에 필수 RCA context가 없어 분석을 진행하지 못했습니다.",
+    "action_required": "자동 진행이 차단되어 운영자 조치가 필요합니다.",
+    "ai_fallback_required": "대표 증상에 맞는 RCA rule이 없어 AI fallback 검토가 필요합니다.",
+    "gitops_authority_unavailable": "Safe PR 생성을 위한 GitOps 권위 context가 없어 운영자 조치가 필요합니다.",
+    "gitops_authority_mismatch": "Safe PR 대상과 GitOps 권위 context가 일치하지 않아 운영자 확인이 필요합니다.",
+    "safe_pr_patch_missing": "Safe PR에 적용할 구체적인 manifest patch가 없어 운영자 조치가 필요합니다.",
+    "safe_pr_patch_unsupported": "선택한 복구 조치를 현재 Safe PR patch로 변환할 수 없습니다.",
+}
+MISSING_EVIDENCE_LABELS = {
+    "kubernetes": "Kubernetes 상태 근거",
+    "kubernetes:cluster_resource_state": "Kubernetes 상태 근거",
+    "metrics": "메트릭 근거",
+    "metrics:telemetry_metrics": "메트릭 근거",
+    "logs": "관련 Pod 로그",
+    "logs:related_logs": "관련 Pod 로그",
+    "traces": "trace 근거",
+    "traces:related_traces": "trace 근거",
+    "metadata": "metadata 근거",
+    "metadata:current_workload_snapshot": "대상 Workload 상세 snapshot",
+    "metadata:current_workload_snapshots": "Workload snapshot 목록",
+    "metadata:change_context": "최근 변경 이력",
+    "matching_cause_rule": "대표 증상에 맞는 RCA rule",
+    "gitops_authority_context": "GitOps 권위 context",
+    "matching_gitops_authority_context": "대상과 일치하는 GitOps 권위 context",
+    "patchable_authority_snapshot": "patch 생성 가능한 GitOps snapshot",
+    "supported_patch_action": "지원 가능한 Safe PR patch action",
+    "manifest_patch": "구체적인 manifest patch",
+}
 
 planner = RecoveryPlanner()
+
+
+def followup_summary(reason_code: str, fallback: str) -> str:
+    return FOLLOWUP_SUMMARIES.get(reason_code, fallback)
+
+
+def missing_evidence_label(source: str) -> str:
+    if source in MISSING_EVIDENCE_LABELS:
+        return MISSING_EVIDENCE_LABELS[source]
+    if source.startswith("signal:"):
+        signal_id = source.removeprefix("signal:").replace("_", " ")
+        return f"판별 신호({signal_id})"
+    if ":" in source:
+        evidence_source, evidence_name = source.split(":", 1)
+        return f"{evidence_source} {evidence_name.replace('_', ' ')} 근거"
+    return source
 
 
 def collect_actions_for_missing(missing_evidence: list[str]) -> list[JsonObject]:
@@ -38,7 +87,9 @@ def collect_actions_for_missing(missing_evidence: list[str]) -> list[JsonObject]
             "action_type": "collect_evidence",
             "source": source,
             "query_id": f"collect_{source}",
-            "description": f"{source} 근거를 수집한 뒤 RCA 평가를 재실행합니다.",
+            "description": (
+                f"{missing_evidence_label(source)}를 수집한 뒤 RCA 평가를 재실행합니다."
+            ),
         }
         for source in missing_evidence
     ]
@@ -63,7 +114,7 @@ def normalize_next_actions(
 async def on_rca_analysis_blocked(evt: RcaAnalysisBlockedBody) -> AsyncIterator[EventBody]:
     yield RcaFollowupRequiredBody(
         reason_code=evt.reason_code,
-        summary=evt.reason,
+        summary=followup_summary(evt.reason_code, evt.reason),
         evidence_ref=evt.evidence_ref,
         workspace_id=evt.workspace_id,
         severity=evt.severity,
@@ -140,7 +191,7 @@ def blocked_recovery_plan(evt: RcaAnalysisBlockedBody) -> RecoveryPlannedBody | 
 async def on_rca_action_required(evt: RcaActionRequiredBody) -> AsyncIterator[EventBody]:
     yield RcaFollowupRequiredBody(
         reason_code=evt.reason_code,
-        summary=evt.reason,
+        summary=followup_summary(evt.reason_code, evt.reason),
         evidence_ref=evt.evidence_ref,
         workspace_id=evt.workspace_id,
         severity=evt.severity,
@@ -157,9 +208,10 @@ async def on_rca_action_required(evt: RcaActionRequiredBody) -> AsyncIterator[Ev
 @app.on(PipelineContractFailedBody)
 async def on_pipeline_contract_failed(evt: PipelineContractFailedBody) -> AsyncIterator[EventBody]:
     diagnostics = evt.diagnostics or {}
+    reason_code = str(diagnostics.get("reason_code") or "context_missing")
     yield RcaFollowupRequiredBody(
-        reason_code=str(diagnostics.get("reason_code") or "context_missing"),
-        summary=evt.reason,
+        reason_code=reason_code,
+        summary=followup_summary(reason_code, evt.reason),
         evidence_ref=evt.evidence_ref or "unknown",
         workspace_id=evt.workspace_id,
         severity=evt.severity,
@@ -185,7 +237,7 @@ async def on_pipeline_contract_failed(evt: PipelineContractFailedBody) -> AsyncI
 async def on_ai_fallback_requested(evt: RcaAiFallbackRequestedBody) -> AsyncIterator[EventBody]:
     yield RcaFollowupRequiredBody(
         reason_code="ai_fallback_required",
-        summary=f"AI fallback required: {evt.reason}",
+        summary=followup_summary("ai_fallback_required", evt.reason),
         evidence_ref=evt.evidence_ref,
         workspace_id=evt.workspace_id,
         severity=SEVERITY_WARNING,

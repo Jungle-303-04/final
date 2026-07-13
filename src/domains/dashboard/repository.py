@@ -16,7 +16,6 @@ from domains.dashboard.models import MetricQueryPreset, MetricWidget, RcaTimelin
 from domains.inventory.models import ClusterInventoryResourceRecord
 from packages.contracts.event_bus.interfaces import EventEnvelope, JsonObject
 from packages.contracts.event_bus.subjects import EventSubject
-from packages.contracts.identity import DEFAULT_WORKSPACE_ID
 from packages.storage.engine import DatabaseConnection
 
 Path = tuple[str, ...]
@@ -302,27 +301,47 @@ class DashboardRepository(DatabaseConnection):
             key: func.coalesce(getattr(insert.excluded, key), getattr(table.c, key))
             for key in preserve_when_missing
         }
-        newer_or_equal_event = insert.excluded.last_event_at >= table.c.last_event_at
+        for value_name in ("severity", "environment", "application_ids", "labels"):
+            complete_name = f"{value_name}_complete"
+            existing_value = getattr(table.c, value_name)
+            incoming_value = getattr(insert.excluded, value_name)
+            existing_complete = getattr(table.c, complete_name)
+            incoming_complete = getattr(insert.excluded, complete_name)
+            updates[value_name] = case(
+                (existing_complete.is_(True), existing_value),
+                (incoming_complete.is_(True), incoming_value),
+                (existing_value.is_(None), incoming_value),
+                else_=existing_value,
+            )
+            updates[complete_name] = existing_complete | incoming_complete
+
+        newer_event = or_(
+            insert.excluded.last_event_at > table.c.last_event_at,
+            and_(
+                insert.excluded.last_event_at == table.c.last_event_at,
+                insert.excluded.last_event_id > table.c.last_event_id,
+            ),
+        )
         updates.update(
             current_subject=case(
-                (newer_or_equal_event, insert.excluded.current_subject),
+                (newer_event, insert.excluded.current_subject),
                 else_=table.c.current_subject,
             ),
-            status=case((newer_or_equal_event, insert.excluded.status), else_=table.c.status),
+            status=case((newer_event, insert.excluded.status), else_=table.c.status),
             error_reason=case(
-                (newer_or_equal_event, insert.excluded.error_reason),
+                (newer_event, insert.excluded.error_reason),
                 else_=table.c.error_reason,
             ),
             last_event_id=case(
-                (newer_or_equal_event, insert.excluded.last_event_id),
+                (newer_event, insert.excluded.last_event_id),
                 else_=table.c.last_event_id,
             ),
             last_event_at=case(
-                (newer_or_equal_event, insert.excluded.last_event_at),
+                (newer_event, insert.excluded.last_event_at),
                 else_=table.c.last_event_at,
             ),
-            payload=case((newer_or_equal_event, insert.excluded.payload), else_=table.c.payload),
-            updated_at=func.now(),
+            payload=case((newer_event, insert.excluded.payload), else_=table.c.payload),
+            updated_at=case((newer_event, func.now()), else_=table.c.updated_at),
         )
         statement = insert.on_conflict_do_update(
             index_elements=[table.c.workspace_id, table.c.correlation_id],
@@ -731,17 +750,31 @@ def timeline_update_from_event(evt: EventEnvelope) -> JsonObject | None:
     payload = evt.payload if isinstance(evt.payload, dict) else {}
     if _is_non_incident_detection(str(evt.subject), payload):
         return None
+    workspace_id = _trusted_workspace_id(evt, payload)
+    if workspace_id is None:
+        return None
 
     correlation_id = evt.correlation_id or evt.event_id
     cluster_id = _cluster_id(payload)
     incident_id = _incident_id(payload)
     projection = _incident_projection(payload, cluster_id, incident_id, correlation_id)
+    raw_severity = _first_string(payload, ("severity",))
+    severity = raw_severity.casefold() if raw_severity is not None else None
+    is_incident_detection = str(evt.subject) == EventSubject.INCIDENT_DETECTED.value
     row: JsonObject = {
-        "workspace_id": _workspace_id(payload),
+        "workspace_id": workspace_id,
         "correlation_id": correlation_id,
         "cluster_id": cluster_id,
         "incident_id": incident_id,
         **projection,
+        "severity": severity if is_incident_detection else None,
+        "severity_complete": is_incident_detection and severity is not None,
+        "environment": None,
+        "environment_complete": False,
+        "application_ids": None,
+        "application_ids_complete": False,
+        "labels": None,
+        "labels_complete": False,
         "evidence_ref": _evidence_ref(payload),
         "current_subject": str(evt.subject),
         "status": status,
@@ -841,24 +874,28 @@ def _is_non_incident_detection(subject: str, payload: JsonObject) -> bool:
     return subject == EventSubject.INCIDENT_DETECTED.value and payload.get("detected") is not True
 
 
-def _workspace_id(payload: JsonObject) -> str:
-    return (
-        _first_string(
-            payload,
-            ("workspace_id",),
-            ("evidence", "workspace_id"),
-            ("incident", "workspace_id"),
-            ("rule_missing", "workspace_id"),
-            ("plan", "target", "workspace_id"),
-            ("plan", "workspace_id"),
-            ("selected", "draft", "params", "workspace_id"),
-            ("diff", "workspace_id"),
-            ("requested", "workspace_id"),
-            ("requested", "diff", "workspace_id"),
-            ("result", "workspace_id"),
-        )
-        or DEFAULT_WORKSPACE_ID
+def _trusted_workspace_id(evt: EventEnvelope, payload: JsonObject) -> str | None:
+    """Use authenticated envelope tenancy; payload may only corroborate it."""
+    envelope_workspace_id = str(evt.workspace_id or "").strip()
+    if not envelope_workspace_id:
+        return None
+    payload_workspace_id = _first_string(
+        payload,
+        ("workspace_id",),
+        ("evidence", "workspace_id"),
+        ("incident", "workspace_id"),
+        ("rule_missing", "workspace_id"),
+        ("plan", "target", "workspace_id"),
+        ("plan", "workspace_id"),
+        ("selected", "draft", "params", "workspace_id"),
+        ("diff", "workspace_id"),
+        ("requested", "workspace_id"),
+        ("requested", "diff", "workspace_id"),
+        ("result", "workspace_id"),
     )
+    if payload_workspace_id and payload_workspace_id != envelope_workspace_id:
+        return None
+    return envelope_workspace_id
 
 
 def _cluster_id(payload: JsonObject) -> str | None:
