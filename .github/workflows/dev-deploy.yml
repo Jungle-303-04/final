@@ -119,7 +119,13 @@ jobs:
         run: |
           set -euo pipefail
           remote_dev="$(gh api "repos/${GITHUB_REPOSITORY}/git/ref/heads/dev" --jq '.object.sha')"
-          test "${remote_dev}" = "${SOURCE_SHA}"
+          comparison="$(gh api \
+            "repos/${GITHUB_REPOSITORY}/compare/${SOURCE_SHA}...${remote_dev}" \
+            --jq '.status')"
+          case "${comparison}" in
+            "ahead"|"identical") ;;
+            *) echo "source SHA is not an ancestor of dev: ${comparison}" >&2; exit 1 ;;
+          esac
           gh api \
             "repos/${GITHUB_REPOSITORY}/actions/workflows/dev-gate.yml/runs?branch=dev&event=push&status=success&per_page=100" \
             | jq -e '.workflow_runs[] | select(.head_sha == env.SOURCE_SHA) | select(.conclusion == "success")' \
@@ -229,15 +235,23 @@ jobs:
           [[ "${frontend_bundle}" =~ ^index-[A-Za-z0-9_-]+\.js$ ]]
           echo "frontend_bundle=${frontend_bundle}" >>"${GITHUB_OUTPUT}"
 
-      - name: Capture current digest rollback plan
-        id: capture
+      - name: Retire legacy console deployment
         shell: bash
         run: |
           set -euo pipefail
-          capture_missing_args=()
+          kubectl --context "${MGMT_CONTEXT}" -n "${MGMT_NS}" \
+            delete deployment/console service/console --ignore-not-found --wait=true
+
+      - name: Capture current digest rollback plan
+        id: capture
+        shell: bash
+        env:
+          SERVICE_DEPLOY_IMAGE: ${{ steps.image.outputs.image }}
+          CONSOLE_DEPLOY_IMAGE: ${{ steps.console_image.outputs.image }}
+        run: |
+          set -euo pipefail
           if [[ "${GITHUB_EVENT_NAME}" == "workflow_dispatch" ]]; then
             previous_sha="${FIRST_DEPLOY_PREVIOUS_SHA}"
-            capture_missing_args+=(--allow-missing-live)
           else
             previous_sha="$(kubectl --context "${MGMT_CONTEXT}" -n "${MGMT_NS}" \
               get configmap opsia-deploy-status \
@@ -247,19 +261,13 @@ jobs:
           uv run python scripts/capture_image_digests.py \
             --context "${MGMT_CONTEXT}" \
             --namespace "${MGMT_NS}" \
-            --manifest "${RUNNER_TEMP}/management.yaml" \
-            --managed-image "183548421506.dkr.ecr.ap-northeast-2.amazonaws.com/kubernetes-ops-service@sha256:132cbc945004812ae3367c21a3408da8f3c9ab1a01b5870ffdea1157c83f5d0a" \
-            --verified-live-image "183548421506.dkr.ecr.ap-northeast-2.amazonaws.com/kubernetes-ops-service:c704729c1b=183548421506.dkr.ecr.ap-northeast-2.amazonaws.com/kubernetes-ops-service@sha256:132cbc945004812ae3367c21a3408da8f3c9ab1a01b5870ffdea1157c83f5d0a" \
-            "${capture_missing_args[@]}" \
+            --managed-repository "${SERVICE_DEPLOY_IMAGE%@*}" \
             --previous-release-sha "${previous_sha}" \
             --output "${RUNNER_TEMP}/service-rollback-plan.json"
           uv run python scripts/capture_image_digests.py \
             --context "${MGMT_CONTEXT}" \
             --namespace "${MGMT_NS}" \
-            --manifest "${RUNNER_TEMP}/management.yaml" \
-            --managed-image "183548421506.dkr.ecr.ap-northeast-2.amazonaws.com/kubernetes-ops-console@sha256:8c49f7bf8a10f5b9edb8de798cbe94d78ca29d03699bc2f3686c1636ec397978" \
-            --verified-live-image "183548421506.dkr.ecr.ap-northeast-2.amazonaws.com/kubernetes-ops-console:c704729c1b=183548421506.dkr.ecr.ap-northeast-2.amazonaws.com/kubernetes-ops-console@sha256:8c49f7bf8a10f5b9edb8de798cbe94d78ca29d03699bc2f3686c1636ec397978" \
-            "${capture_missing_args[@]}" \
+            --managed-repository "${CONSOLE_DEPLOY_IMAGE%@*}" \
             --previous-release-sha "${previous_sha}" \
             --output "${RUNNER_TEMP}/console-rollback-plan.json"
 
@@ -268,7 +276,7 @@ jobs:
         run: |
           set -euo pipefail
           kubectl --context "${MGMT_CONTEXT}" -n "${MGMT_NS}" \
-            set env deployment/api-gateway DEV_AUTH_BYPASS=0
+            set env deployment/api-gateway DEV_AUTH_BYPASS=0 CONSOLE_ORIGIN=http://console-dev.management.svc.cluster.local:80
           kubectl --context "${MGMT_CONTEXT}" -n "${MGMT_NS}" \
             rollout status deployment/api-gateway --timeout=300s
           uv run python scripts/verify_dev_auth_bypass.py live \

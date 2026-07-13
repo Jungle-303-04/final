@@ -11,7 +11,7 @@ PRE_DEPLOY_HEALTH_MAX_ATTEMPTS="${PRE_DEPLOY_HEALTH_MAX_ATTEMPTS:-7}"
 PRE_DEPLOY_HEALTH_BACKOFF_MAX_SECONDS="${PRE_DEPLOY_HEALTH_BACKOFF_MAX_SECONDS:-30}"
 SMOKE_CURL_IMAGE="${SMOKE_CURL_IMAGE:-curlimages/curl:8.11.1}"
 IN_CLUSTER_API_URL="http://api-gateway.${MGMT_NS}.svc.cluster.local"
-IN_CLUSTER_CONSOLE_URL="http://console.${MGMT_NS}.svc.cluster.local"
+IN_CLUSTER_CONSOLE_URL="http://console-dev.${MGMT_NS}.svc.cluster.local"
 
 require_env BASE_URL
 require_env MGMT_CONTEXT

@@ -98,8 +98,8 @@ def test_manual_first_deploy_requires_exact_gate_backup_and_previous_release_pro
     capture = steps["Capture current digest rollback plan"]["run"]
     assert 'previous_sha="${FIRST_DEPLOY_PREVIOUS_SHA}"' in capture
     assert 'if [[ "${GITHUB_EVENT_NAME}" == "workflow_dispatch" ]]' in capture
-    assert "capture_missing_args+=(--allow-missing-live)" in capture
-    assert capture.count('"${capture_missing_args[@]}"') == 2
+    assert capture.count("--managed-repository") == 2
+    assert "--allow-missing-live" not in capture
     assert job["env"]["FIRST_DEPLOY_POSTGRES_SNAPSHOT_ID"] == ("${{ inputs.postgres_snapshot_id }}")
     assert job["env"]["FIRST_DEPLOY_NATS_SNAPSHOT_ID"] == "${{ inputs.nats_snapshot_id }}"
     assert job["env"]["FIRST_DEPLOY_PREVIOUS_SHA"] == "${{ inputs.previous_release_sha }}"
@@ -208,7 +208,7 @@ def test_first_deploy_does_not_mutate_source_schema_or_create_missing_workloads(
     source = WORKFLOW_PATH.read_text(encoding="utf-8")
 
     assert "database_writer_freeze.py" in source
-    assert "--allow-missing-live" in source
+    assert source.count("--managed-repository") == 2
     assert "kubectl apply --filename deploy/management" not in source
     assert "alembic stamp" not in source
     assert "alembic downgrade" not in source
@@ -264,16 +264,7 @@ def test_service_and_console_images_share_the_gated_source_sha_and_digest_releas
     capture = steps["Capture current digest rollback plan"]["run"]
     assert '--managed-repository "${SERVICE_DEPLOY_IMAGE%@*}"' in capture
     assert '--managed-repository "${CONSOLE_DEPLOY_IMAGE%@*}"' in capture
-    assert (
-        '--verified-live-image "183548421506.dkr.ecr.ap-northeast-2.amazonaws.com/'
-        f'kubernetes-ops-service:c704729c1b={SERVICE_IMAGE_BASELINE}"'
-        in steps["Capture current digest rollback plan"]["run"]
-    )
-    assert (
-        '--verified-live-image "183548421506.dkr.ecr.ap-northeast-2.amazonaws.com/'
-        f'kubernetes-ops-console:c704729c1b={CONSOLE_IMAGE_BASELINE}"'
-        in steps["Capture current digest rollback plan"]["run"]
-    )
+    assert "--verified-live-image" not in capture
     assert source.count("rollout_image_digest.py") == 2
     assert source.count("revert_image_digests.py") == 2
 

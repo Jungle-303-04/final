@@ -396,7 +396,32 @@ def test_rollout_updates_only_captured_targets_to_one_digest(
 
     def fake_run(command: tuple[str, ...], **kwargs: object) -> subprocess.CompletedProcess[str]:
         calls.append(tuple(command))
-        stdout = "opsia-dev\n" if command[1:3] == ("config", "get-contexts") else ""
+        if command[1:3] == ("config", "get-contexts"):
+            stdout = "opsia-dev\n"
+        elif command[-4:] == ("get", "deployments", "-o", "json"):
+            stdout = json.dumps(
+                {
+                    "items": [
+                        {
+                            "metadata": {"name": "api-gateway"},
+                            "spec": {
+                                "template": {
+                                    "spec": {
+                                        "containers": [
+                                            {
+                                                "name": "api-gateway",
+                                                "image": next_digest,
+                                            }
+                                        ]
+                                    }
+                                }
+                            },
+                        }
+                    ]
+                }
+            )
+        else:
+            stdout = ""
         return subprocess.CompletedProcess(command, 0, stdout=stdout)
 
     monkeypatch.setattr(rollout_image_digest.subprocess, "run", fake_run)
@@ -408,8 +433,10 @@ def test_rollout_updates_only_captured_targets_to_one_digest(
         timeout="300s",
     )
 
-    assert calls[1][-1] == f"api-gateway={next_digest}"
-    assert calls[2][-2:] == ("deployment/api-gateway", "--timeout=300s")
+    assert calls[2][-1] == f"api-gateway={next_digest}"
+    assert calls[3][-2:] == ("deployment/api-gateway", "--timeout=300s")
+    assert calls[1][-4:] == ("get", "deployments", "-o", "json")
+    assert calls[4][-4:] == ("get", "deployments", "-o", "json")
 
 
 def test_rollout_rejects_mutable_image_before_kubectl(tmp_path: Path) -> None:
