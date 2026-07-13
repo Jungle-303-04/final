@@ -589,3 +589,11 @@ docs-only 2파일, BQ-009 `requested` + BQ-012~017 등록, origin/dev push 확�
 - ancestor: lane HEAD `6ec2553b7`, 기능 commit `b6fac1dd7` 모두 origin/dev 기준 exit 0
 - 회귀 경계: NATS 기본값 유지, 명시 주입 시에만 in-memory bus 사용; gateway 계약,
   `src/domains/rca/**`, `src/services/ai/**`, `src/packages/runtime/worker.py` 변경 0건
+
+[2026-07-13 10:00 KST] [백엔드] BQ-013 완료 — RED `c89ad5a96`, GREEN
+`50df7fe10`, canonical origin/dev `27cb1d95f`; `RECONCILER_MODE=builtin` 기본은 기존
+apply를 유지하고 `argocd`는 observer-only로 apply 0건(`StubApplier.applied == []`,
+observe 1건)을 증명. 재현: `uv run python -m pytest -q
+tests/test_target_policy_control.py -k argocd`; 최신 origin 병합 상태 전체 Ruff·format·
+import-linter PASS(2 kept, 0 broken), pytest `1711 passed, 3 skipped`; 서비스 계약 문서와
+큐 상태 착륙으로 [D-019] DoD 4조건 충족.
