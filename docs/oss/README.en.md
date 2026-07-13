@@ -1,10 +1,10 @@
-# Kubernetes Remediation Verification Engine
+# Opsia
 
 > **Publication draft - not an adopted public project document.** The repository remains private.
-> Public release, project naming, trademark use, licensing, and governance require explicit human
+> Public release, Opsia trademark use, licensing, and governance require explicit human
 > approval.
 
-This project is a proposed open source Kubernetes verification pipeline and remediation engine in
+Opsia is a proposed open source Kubernetes verification pipeline and remediation engine in
 which every production change - whether initiated by a person or triggered by an incident - passes
 through the same evidence, policy, approval, and post-deployment verification path.
 
@@ -52,7 +52,7 @@ mutate the cluster.
 
 ## Public evaluation assets
 
-KubeHealBench is the proposed contribution and evaluation surface. Its v0.1 dataset contains static,
+OpsiaBench is the proposed contribution and evaluation surface. Its v0.1 dataset contains static,
 ground-truth Kubernetes failure scenarios tied to the actual cause and recovery catalogs. Each
 scenario includes a normal manifest, fault injection, expected root cause, required evidence, allowed
 and forbidden remediation, expected patch, rollback, and normalization predicate.

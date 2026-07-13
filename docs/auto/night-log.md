@@ -1492,3 +1492,143 @@ JsonMap, AbortSignal, ID 검증을 완료 앵커 전까지 제품 화면에서 �
   명시되지 않았다는 뜻이며 성공으로 번역하지 않는다.
 - Applications와 Runs API에 서버측 `cluster_id` 필터·cursor가 없어 전역 selector와 본문
   completeness를 일치시킬 수 없다. VP-005 UI만 재개 조건과 함께 주차하고 P6으로 계속한다.
+## 2026-07-13 13:14 KST — BQ-018 완료 증거
+
+- lane `codex/opsia-docs-name-propagation`, HEAD
+  `46ea10f8f0648dd7c29be984b9845ae57938fb5e`, canonical merge
+  `ad28cc9457a094dda7ef8ce53d2184845bb25eb1`.
+- stat: README와 OSS 문서 12 files, 28 insertions, 26 deletions. 파일 삭제 0건,
+  `src/`, `alembic/`, `deploy/`, `tests/`, `frontend/` 변경 0건.
+- 제품 표기: Opsia/opsia, OpsiaBench, `oci://ghcr.io/opsia/charts/opsia`.
+  코드 식별자·event subject·DB schema와 `~/.radar/kubeheal-timeline.db` 저장 경로는 보존했다.
+- gate: docs index 9 passed; Ruff lint/format PASS, import-linter 2 kept/0 broken,
+  pytest `1838 passed, 3 skipped`; manifest management 69, target 20.
+- 4조건: 전체 그린; merge-tree exit 0/tree `4c354fd97af928d7de65d881dc74540517c9cb6a`;
+  삭제·비문서 변경 0건; no-ff merge·push 후 feature와 merge commit의
+  `origin/dev` ancestor exit 0.
+
+## 2026-07-13 13:43 KST — BQ-015 완료 증거
+
+- lane `codex/remediation-source-contract`, HEAD
+  `1300a5fe64c03aa05fe1f8d9cb94a92c2b254962`, canonical merge
+  `130e6755dcd4912c0d2e43ffdcc32b4082c74b7c`.
+- commits: `bba4170e3` RED → `099b75a34` 계약·adapter GREEN → `4fc82ad46` container
+  binding 보강 → `30e0f8c20` exact-base SCM 배선 → `1300a5fe6` 계약 문서.
+- stat: 10 files, 1,581 insertions, 41 deletions. 파일 삭제·rename 0건이며 gateway 계약,
+  `src/domains/rca/**`, `src/services/ai/**`, `src/packages/runtime/worker.py` 변경 0건.
+- gate: Ruff lint/format PASS, import-linter 2 kept/0 broken,
+  pytest `1865 passed, 3 skipped`; manifest management 69, target 20.
+- 실측: 기존 recovery patch scorer 6/6, 신규 source-contract scorer 6/6. raw image/replica/
+  probe, Helm values image tag, Kustomize named image tag와 미선언 selector no-write를 검증했다.
+- 4조건: 전체 그린; merge-tree exit 0/tree `b106cd2887d70042983db7c8d54d92b7c40ba8ae`;
+  삭제 0건; no-ff merge·push 후 feature와 merge commit의 `origin/dev` ancestor exit 0.
+
+## 2026-07-13 14:11 KST — BQ-011 완료 증거
+
+- lane `codex/release-flow-modules`, HEAD
+  `bd4730d850d21528a161b9f60e8da2905e4b56f8`, canonical no-ff merge
+  `37498fc7115b430c86730847d1213affeed6c61d`.
+- router의 HTTP route·인가·DB mutation은 유지하고 `_support`/policy/readiness/verification/report를
+  내부 모듈로 추출했다. 기존 router helper 208개와 이동 helper object identity는 호환 export로
+  유지하며 공개 route·response·DB schema 변경은 없다.
+- 줄수: router 5,297→1,821; `_support` 120, policy 1,348, readiness 937,
+  verification 297, report 1,110.
+- gate: Ruff lint/format PASS, import-linter 8 kept/0 broken,
+  pytest `1868 passed, 3 skipped`; manifest management 69, target 20.
+- 4조건: merge-tree exit 0/tree `7ca5eda67e1666744f2a5d0f96f4585d2f7cc29e`;
+  삭제 0건; gateway 계약·RCA·AI·runtime worker 변경 0건; feature와 merge commit의
+  `origin/dev` ancestor exit 0.
+
+## 2026-07-13 14:14 KST — G·H 통합 단계 완료 증거
+
+- canonical `origin/dev@4731369d6b6739953b917aaf0cd04e0543f7a91d`에서 Ruff lint/format
+  PASS, import-linter 8 kept/0 broken, pytest `1868 passed, 3 skipped`, compileall PASS,
+  `make manifest-check` management 69/target 20을 재증명했다. BLOCKED 항목은 0건이다.
+- 단계적 H 착륙: H1 `17ac2b7a3`, H2 `5f2393667`, H3 `6d68325bf`; PROMOTE 통합점
+  `0eaaa6637`; 이후 BQ-014 `0b4298c4e`, BQ-015 `130e6755d`, BQ-011 `37498fc71`도
+  각각 canonical ancestor exit 0이다. D-020의 단계적 H가 과거 일괄 H를 대체하므로 G/H를
+  실물 기준 done으로 정합화했다.
+- 프론트 인계 초안: `AUDIT_TIMELINE_PATH`는 workspace-scoped correlation timeline과 nullable
+  `causation_id`; `RCA_RECENT_CHANGES_PATH`는 incident event-time 이전 성공 변경 목록;
+  workflow run의 `promotion_gate`는 optional; `provider`와 `connection_stage`도 optional이다.
+  auto-revert·권위 patch·source contract·release-flow 내부 분해는 신규 gateway 계약이 없다.
+
+## 2026-07-13 14:32 KST — I단계 배포 준비 완료 증거
+
+- lane `codex/deploy-plan`, HEAD `0cc6af58c90140123dabd943c55b72b7b4b3bed9`,
+  canonical no-ff merge `c2e2b552377ba508a535c9bd1b69c9e60fec522a`.
+- stat: `docs/auto/deploy-plan.md` 신규 + `docs/README.md` 색인, 2 files,
+  737 insertions. 코드·gateway 계약·frozen path 변경 0건, 파일 삭제 0건.
+- plan은 backend 공용 image workload 39개를 같은 digest로 수렴하고 migration →
+  consumer/worker → target agent → realtime/API gateway 순서를 고정한다. raw
+  `scripts/aws-up.sh`의 create-all bootstrap·전체 restart 결합은 incremental production
+  rollout에 쓰지 않는다.
+- DB 안전 경계: live `alembic_version`이 없거나 repository history와 다르면 stamp 없이
+  중단한다. 0140 partial DDL과 네 concurrent index의 valid/ready/live를 검사하고,
+  production image에 Alembic asset이 없는 현실을 canonical operator runner 절차로 명시했다.
+- 보안·rollback: rendered/live `DEV_AUTH_BYPASS=0`, auto-revert flag false, target 재등록 없는
+  read-only Argo RBAC, 이전 immutable digest 복원, production schema downgrade 금지를 명시했다.
+- gate: docs index `9 passed`; Ruff lint/format PASS, import-linter 8 kept/0 broken,
+  pytest `1868 passed, 3 skipped`; manifest management 69 / target 20.
+- 4조건: merge-tree exit 0/tree `62178b35594cff170766c2f307d54ec50da9621d`;
+  삭제·소유권 밖 변경 0건; feature와 merge commit의 `origin/dev` ancestor exit 0.
+
+## GO-REQUEST [J] — Opsia backend production 배포
+
+- 상태: `🔒waiting`; 실제 실행은 사람 전용이다. 아래 blocker 증거가 모두 해소되기 전에는
+  GO를 발행하지 않는다.
+- 대상: `origin/dev@c2e2b552377ba508a535c9bd1b69c9e60fec522a`, 실행 정본
+  `docs/auto/deploy-plan.md`.
+- 선행 blocker: 최신 SHA GitHub Actions green, `scripts/smoke.sh` credential,
+  RemediationBundle/audit timeline/recent changes의 실제 fixture, live DB Alembic baseline,
+  네 concurrent index 정상 상태, DB backup, 이전 immutable image digest, 등록 target 전체
+  context, 1-replica 위험 수용.
+- 실행 명령 골격:
+
+  ```bash
+  git fetch origin
+  export DEPLOY_SHA="$(git rev-parse origin/dev)"
+  test "$DEPLOY_SHA" = "c2e2b552377ba508a535c9bd1b69c9e60fec522a"
+  bash scripts/test.sh
+  make manifest-check
+  uv run alembic heads
+  # 이후 docs/auto/deploy-plan.md §5~§11을 순서대로 실행한다.
+  ```
+
+- 예상 결과: DB revision `20260713_0820`, 네 concurrent index가 valid/ready/live,
+  service-image Deployment 39개가 같은 digest, gateway ready `2/2`, auth bypass `0`,
+  auto-revert flag `false`, 모든 target가 snapshot 수신 후 ready.
+- 실패 시 rollback: 신규 write worker를 먼저 scale 0하고 `deployment-images.before.tsv`의
+  이전 digest를 gateway부터 명시적으로 복원한다. target agent도 context별 이전 digest로
+  복원한다. `alembic downgrade`와 DB restore는 기본 rollback에서 실행하지 않는다.
+- 검증: `scripts/smoke.sh` PASS, Bruno 13/14/15의 실제 200 응답과 schema,
+  cross-workspace 404, outbox/NATS/DLQ·API 5xx·latency 15분 관찰.
+- 재개 조건: 위 blocker별 권위 증거와 사람 GO [J].
+
+## 2026-07-13 14:41 KST — [백엔드] RCA 읽기 Bruno 기본 경로 착륙
+
+- lane `codex/bruno-route-runner`, RED `f3d2b4f92`, Runner `31b93edad`, 문서·feature
+  HEAD `6d29a87021c9163c659bda548108576c8358e952`, canonical no-ff merge
+  `6ea12f2635bf6b49879f93baeed4fa101c2b4bb4`.
+- stat: `tests/test_bruno_collection.py` 18줄, `scripts/run-bruno-aws.sh` 3줄,
+  `docs/api/README.md` 20줄 추가. 기본 AWS Runner가 Bruno 13→14→15를 실행하고,
+  문서는 RemediationBundle·audit timeline·recent changes의 의미와 production 실제 200
+  판정 경계를 구분한다.
+- gate: `bash -n scripts/run-bruno-aws.sh`, Bruno collection 18 passed, docs index 9 passed,
+  Ruff lint/format PASS, import-linter 8 kept/0 broken, pytest `1869 passed, 3 skipped`;
+  manifest management 69 / target 20.
+- 4조건: merge-tree exit 0/tree `780b1e170691d3af359059fe08aba67e9840a85e`;
+  삭제·소유권 밖 변경·frozen 경로 변경 0건; feature와 merge commit의 `origin/dev`
+  ancestor exit 0.
+
+## 2026-07-13 14:54 KST — [프론트] dev→lab 동기화 증거
+
+- 동기화 전 `origin/dev...HEAD` divergence는 dev-only 32 / lab-only 43으로 30커밋
+  선흡수 임계값을 초과했다. merge base는 `d1342f8f793f9e05ea617930dbe6ccd1115756f6`다.
+- `git merge-tree --write-tree HEAD origin/dev`의 유일한 충돌은 append-only
+  `docs/auto/night-log.md`였다. 양쪽 기록을 모두 보존했고 제품·계약 파일 충돌은 0건이다.
+- staged merge delta에서 `frontend/**` 삭제 0건, `src/**` 삭제 0건이다. backend `src/**`는
+  `origin/dev` 내용을 그대로 흡수했으며 프론트 세션의 수동 수정은 0건이다.
+- `cd references/ui-layer-lab && npm run check` PASS: TypeScript·ESLint,
+  Vitest 112 files / 808 tests, design guard 336 files, shadcn 482 previews,
+  Vite production build 14,535 modules.

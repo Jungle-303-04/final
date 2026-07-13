@@ -1,4 +1,4 @@
-# Public Repository Publication Checklist (Human Approval Required)
+# Opsia Public Repository Publication Checklist (Human Approval Required)
 
 > This checklist does not authorize publication. Every approval box must be completed by accountable
 > humans in the clean publication repository. The private development repository must remain private
@@ -6,7 +6,7 @@
 
 ## 1. Legal, license, name, and trademark
 
-- [ ] Select and approve the project name after collision and trademark review.
+- [ ] Complete collision and trademark review for the Opsia name.
 - [ ] Decide whether to adopt Apache License 2.0; obtain legal approval where required.
 - [ ] If approved, copy the unmodified license text from `LICENSE.draft` to the public repository's
       `LICENSE` and add only approved copyright notices.
@@ -69,7 +69,7 @@
 
 - [ ] Two independent reviewers confirm the public tree and full history contain no restricted data.
 - [ ] Legal/license, security, release, governance, and maintainer owners record approval.
-- [ ] The release candidate passes public CI and KubeHealBench from a clean clone.
+- [ ] The release candidate passes public CI and OpsiaBench from a clean clone.
 - [ ] All draft-only filenames and notices are either deliberately retained or replaced by approved text.
 - [ ] A rollback plan exists for accidental disclosure, vulnerable artifacts, and publication mistakes.
 - [ ] An accountable human gives the explicit publication GO.
