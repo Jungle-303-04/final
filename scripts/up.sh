@@ -123,6 +123,7 @@ APP_WORKER_DEPLOYMENTS=(
   rollout-worker
   approval-worker
   audit-worker
+  change-correlation-worker
   dashboard-worker
   realtime-gateway
   dead-letter-monitor
@@ -138,6 +139,7 @@ SMOKE_WORKER_DEPLOYMENTS=(
   release-flow-worker
   outbox-relay
   audit-worker
+  change-correlation-worker
   dashboard-worker
   dead-letter-monitor
 )
@@ -167,6 +169,7 @@ RCA_WORKER_DEPLOYMENTS=(
   dispatch-worker
   backlog-worker
   audit-worker
+  change-correlation-worker
   dashboard-worker
   dead-letter-monitor
 )

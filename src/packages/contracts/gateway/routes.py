@@ -143,6 +143,7 @@ RCA_TEST_SCENARIOS_PATH = "/rca/test-scenarios"
 RCA_TEST_RUNS_PATH = "/rca/test-runs"
 RCA_TEST_RUN_PATH = "/rca/test-runs/{run_id}"
 RCA_BUNDLE_PATH = "/rca/bundles/{correlation_id}"
+RCA_RECENT_CHANGES_PATH = "/rca/incidents/{incident_id}/recent-changes"
 RCA_RECOVERY_PLAN_BY_CORRELATION_PATH = "/rca/recovery-plans/by-correlation/{correlation_id}"
 RCA_RECOVERY_ACTION_SELECT_BY_CORRELATION_PATH = (
     "/rca/recovery-plans/by-correlation/{correlation_id}/actions/select"

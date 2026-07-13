@@ -164,6 +164,7 @@ def test_every_gateway_route_has_a_bruno_request() -> None:
         routes.METRICS_VALIDATE_PATH,
         routes.DASHBOARD_RCA_TIMELINE_PATH,
         f"{routes.AUDIT_TIMELINE_PATH}?correlation_id=",
+        "/rca/incidents/{{incident_id}}/recent-changes",
         "/dashboard/rca/incidents/{{incident_id}}",
         routes.FLEET_SUMMARY_PATH,
         "/clusters/{{cluster_id}}/summary",

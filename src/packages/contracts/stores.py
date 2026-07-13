@@ -91,6 +91,28 @@ class ReleaseFlowStore(Protocol):
     async def queue_evidence_jobs(self, **payload: object) -> JsonObject: ...
 
 
+class RcaChangesStore(Protocol):
+    async def get_completed_workload_change_context(
+        self,
+        workspace_id: str,
+        workflow_run_id: str,
+        application_id: str,
+        binding_id: str,
+    ) -> JsonObject | None: ...
+
+    async def get_workflow_pr_identity_context(
+        self,
+        workspace_id: str,
+        workflow_run_id: str,
+        application_id: str,
+        binding_id: str,
+    ) -> JsonObject | None: ...
+
+    async def record_workload_change(self, row: JsonObject) -> None: ...
+
+    async def record_workflow_pr_reference(self, row: JsonObject) -> None: ...
+
+
 class WorkflowStore(Protocol):
     async def get_cluster_registration(
         self, workspace_id: str, cluster_id: str
