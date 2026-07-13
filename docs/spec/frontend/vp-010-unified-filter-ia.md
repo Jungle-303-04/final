@@ -142,6 +142,9 @@ URL에 남아 복원되지만 해당 화면 adapter만 읽는다. 상세 identit
 정규화 규칙:
 - canonical serializer는 multi-value 구분자 comma를 literal로 남기고 각 값만 percent-encode한다.
   따라서 Label 예시는 정확히 `labels=team%3Dcheckout,tier%3Dcritical`이다.
+- boolean `true`만 `key=true`로 직렬화하고 `false`는 key를 생략한다. `resources.view=table`도
+  기본값이므로 생략하며 `graph`만 직렬화한다. 정의되지 않은 boolean·view 값은 기본값처럼
+  조용히 수용하지 않고 해당 값만 invalid 진단으로 격리한 뒤 canonical write에서 제거한다.
 - multi value는 stable ID의 Unicode code-point 오름차순으로 정렬하고 중복·빈 값을 제거한다.
   ID와 Kubernetes label key/value는 comma를 허용하지 않는 canonical 계약이어야 한다.
 - `namespaces`는 단순 이름이 아니라 exact cluster/namespace pair다. application chip은 표시명이
@@ -155,8 +158,11 @@ URL에 남아 복원되지만 해당 화면 adapter만 읽는다. 상세 identit
   `clusters`로 교체한다. legacy `cluster`와 canonical `clusters`가 함께 있으면 canonical 값만
   권위다. 첫 Cluster 자동 선택은 금지한다.
 - legacy Resources detail `resource + kind`는 `resourceKind`가 없을 때만 detail identity로 읽고
-  첫 canonical write에서 `resourceKind`로 교체한다. 이후 `kind`는 사용하지 않는다.
-- chip 추가·삭제·전체 해제는 browser history에 새 항목을 만들고, typing 중 검색과 URL
+  첫 canonical write에서 `resourceKind`로 교체한다. legacy `full=1|0`은 각각 boolean
+  `true|false`로 읽고 첫 canonical write에서 `full=true` 또는 key 생략으로 바꾼다. 이후
+  `kind`와 숫자형 `full`은 사용하지 않는다.
+- chip 추가·삭제·Label만 전체 해제·모든 filter 전체 해제는 browser history에 새 항목을
+  만들고, typing 중 검색과 URL
   정규화·legacy migration은 replace한다. back/forward로 돌아온 URL이 언제나 권위다.
 - 화면 이동은 common과 모든 화면별 filter key를 보존하지만 `resource`, `resourceKind`, `tab`,
   `full`, Home의 `node` 같은 detail/drill-in key는 버린다.
@@ -167,6 +173,18 @@ URL에 남아 복원되지만 해당 화면 adapter만 읽는다. 상세 identit
 - 화면별 추가 축은 해당 화면을 떠나면 보존하되 다른 화면에 적용하지 않는다
   (돌아오면 복원).
 - URL 공유 = 필터 상태 공유. 새로고침에도 복원.
+
+Provider 규칙:
+- `UnifiedFilterProvider`는 `location.search`를 매 render 파싱하며 별도 filter state를 복제하지
+  않는다. mount effect, 첫 Cluster 자동 선택, 자동 canonical write, API 호출이 없어야 한다.
+- canonical write는 사용자가 filter를 바꾸거나 명시적으로 migration을 요청할 때만 수행한다.
+  같은 의미의 상태는 history를 쓰지 않으며 한 사용자 이벤트는 updater 한 번으로 원자적으로
+  제출한다. 같은 이벤트에서 updater를 연속 호출해 중간 URL을 합성하지 않는다.
+- 동일 화면의 filter 변경은 pathname·hash와 detail identity를 보존한다. 화면 이동 helper만
+  모든 common/surface filter를 보존하고 detail/drill-in key를 제거한다.
+- legacy `ClusterScopeProvider`·Resources query·셸 navigation이 canonical key로 함께 전환되기
+  전에는 이 Provider를 production composition root에 mount하지 않는다. 부분 mount는 첫 Cluster
+  자동 선택이나 legacy helper가 새 filter query를 지우는 오류를 만든다.
 
 ### 2.5 필터와 상세의 경계 (모순 해소 규칙 — 반드시 준수)
 
