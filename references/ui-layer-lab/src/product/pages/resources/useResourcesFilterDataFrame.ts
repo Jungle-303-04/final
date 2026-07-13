@@ -43,6 +43,7 @@ export interface ResourcesFilterDataFrame {
 export function useResourcesFilterDataFrame(
   input: ResourcesFilterDataFrameInput,
 ): ResourcesFilterDataFrame {
+  const facetQuery = input.facetQuery.trim();
   const filterKey = useMemo(
     () => serializeProductFilterUrl(input.filterState),
     [input.filterState],
@@ -99,18 +100,18 @@ export function useResourcesFilterDataFrame(
       (cursor: string | undefined, signal: AbortSignal) => input.port.listLabelFacetPage(
         requestState,
         {
-          ...(input.facetQuery.trim() === "" ? {} : { facetQuery: input.facetQuery }),
+          ...(facetQuery === "" ? {} : { facetQuery }),
           ...(cursor === undefined ? {} : { cursor }),
         },
         signal,
       ),
-      [input.facetQuery, input.port, requestState],
+      [facetQuery, input.port, requestState],
     ),
     merge: mergeLabelFilterPages,
     owner: input.port,
     reportUnauthorized: input.reportUnauthorized,
     revision: input.revision,
-    scope: `${sharedScope}:labels:${input.facetQuery.trim()}`,
+    scope: `${sharedScope}:labels:${facetQuery}`,
   });
 
   return {
