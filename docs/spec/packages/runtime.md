@@ -45,11 +45,29 @@ class App:
         # 전체(>) 구독: 모든 이벤트를 EventEnvelope 그대로 받음. 구독은 하나만(기존 on/on_any 있으면 TypeError).
     @property
     def subscriptions(self) -> tuple[Subscription, ...]
-    def run(self) -> None
+    @property
+    def raw_subscription(self) -> tuple[Callable[..., Any], bool] | None
+    def handler_spec(self) -> EventHandlerSpec
+        # 외부 composition root가 동일 subject/factory로 WorkerRuntime을 만들 때 사용
+    def run(self, bus: EventConsumerBus | None = None) -> None
         # _resolve() 로 (subjects, handler factory) 구성 후 WorkerService(name, subjects, factory).run()
-        # (런타임은 지연 import)
+        # bus 미주입은 NATS 기본, 명시 주입은 해당 adapter 사용
 ```
 내부 `_resolve()`: 전체구독이면 `([">"], raw_factory)`(factory 는 `make_raw_handler`), 타입구독이면 핸들러 존재 확인 후 subject 별 `make_event_handler` 를 `make_router` 로 묶는 factory.
+
+### `controller.py` — OSS 단일 composition root
+
+- `ControllerProfile.from_env()` — in-process bus, agent read-only, direct command off,
+  PR-only remediation, production auto-merge off를 기본값으로 읽고 알 수 없는 값은 거부한다.
+- `build_composition_plan(root)` — `discover_services` 전수를 controller와 agent 영역에 정확히
+  한 번씩 배정한다. `cluster-agent`/`node-collector`만 agent 영역이고 나머지는 controller다.
+- `load_service_entrypoint`/`load_worker_apps` — 서비스 로컬 모듈 이름을 격리해 hyphen 경로의
+  entrypoint를 import하고 worker `App` 이름/handler를 검증한다.
+- `BorrowedEventBus` — root 소유 bus를 child runtime에 위임하되 child `close()`가 shared bus를
+  닫지 못하게 한다.
+- `ControllerRuntime` — worker 32개, async 4개, HTTP 2개를 동일 event loop에서 기동한다.
+  API gateway에는 shared bus와 `MemorySessionStore`를 주입한다. `check_report()`는 DB 연결 없이
+  모든 entrypoint와 runner shape를 검증한다.
 
 - 등록 확인 헬퍼(공개 함수):
 ```python

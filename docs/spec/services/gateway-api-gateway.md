@@ -64,7 +64,7 @@ status: synced
 
 ### gateway.py
 
-- `src/services/gateway/api-gateway/gateway.py :: ApiGateway` — 생성자에서 `Database()`, `NatsEventBus()`, `ApiEventGateway(bus, db, "api-gateway")`, `RedisSessionStore`, `SessionAuthService`, `PasswordAuthService`, `FastAPI(title, version, lifespan)` 를 만들고 CORS 설정 후 라우트 등록. 공유 객체는 `app.state.db / app.state.events / app.state.auth / app.state.password_auth` 에 DI.
+- `src/services/gateway/api-gateway/gateway.py :: ApiGateway` — 생성자에서 `Database()`, event bus, `ApiEventGateway(bus, db, "api-gateway")`, session store, `SessionAuthService`, `PasswordAuthService`, `FastAPI(title, version, lifespan)` 를 만들고 CORS 설정 후 라우트 등록. bus/session 미주입 시 기존 `NatsEventBus`/`RedisSessionStore`, OSS composition root에서는 shared bus/`MemorySessionStore`를 명시 주입한다. 공유 객체는 `app.state.db / app.state.events / app.state.auth / app.state.password_auth` 에 DI.
   - `ApiGateway._configure_cors(app)` — `CORS_ALLOW_ORIGINS`(콤마 구분, 기본 로컬 dev origin 4종) 파싱 후 `CORSMiddleware(allow_credentials=True, allow_methods=["*"], allow_headers=["*"])` 추가. origin 목록이 비면 미들웨어 자체를 추가하지 않음.
   - `ApiGateway._session_store_config()` — `RedisSessionStoreConfig` 구성(아래 [설정](#설정-settings)의 세션 항목 참조).
   - `ApiGateway.lifespan(_app)` — `wait_for_database(db)` → `sessions.connect()` → `bus.connect()`. `COMMAND_NOTIFY_DATABASE_URL`이 있으면 `WAKEUP.start(url)`로 command long-poll 전용 LISTEN 연결을 연다. 종료 시 `WAKEUP.stop()` → `bus.close()` → `sessions.close()` → `db.dispose_async()` → `db.dispose()`.
@@ -72,7 +72,7 @@ status: synced
   - `ApiGateway._register_frontend_proxy(app)` — `@app.middleware("http")`: 경로가 `/api` 또는 `/api/*` 면 prefix 를 벗겨(`request.scope["path"]` 재작성) 인프로세스 라우터로 통과, `_is_frontend_request`(GET/HEAD 이면서 `/assets/*`·`/favicon.ico`·`/manifest.webmanifest` 또는 `Accept: text/html`)면 `_proxy_console` 로 콘솔 정적 자산을 프록시(httpx, hop-by-hop 헤더 제거, 실패 시 502 `"frontend unavailable"` + `frontend_proxy_error` 로그). 그 외는 그대로 통과.
   - `ApiGateway._register_live_proxy_routes(app)` — `@app.websocket("/api/live/{path:path}")`: `REALTIME_ORIGIN` 의 `/live/{path}` 로 접속(구독 query string 그대로 전달 — 유실 시 기본 workspace 로만 붙어 이벤트가 비어 보임), `cookie`/`authorization`/`x-session-token` 헤더 승계 후 `_bridge_websocket` 로 양방향 중계. 업스트림 실패는 `live_proxy_error` 로그 후 1011 종료.
 - `src/services/gateway/api-gateway/gateway.py :: agent_connected_body_from_request(payload, identity)` — `AgentConnectRequest` 의 `cluster_id` 를 버리고 인증 identity 의 `cluster_id`/`workspace_id` 를 권위값으로 채운 `AgentConnectedBody` 생성.
-- `src/services/gateway/api-gateway/gateway.py :: create_app` — `ApiGateway().app` 반환(테스트·uvicorn factory 공용).
+- `src/services/gateway/api-gateway/gateway.py :: create_app` — optional `event_bus`/`session_store`를 `ApiGateway`에 전달하고 `.app` 반환(테스트·uvicorn factory·OSS composition 공용).
 
 ### auth.py
 

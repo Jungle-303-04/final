@@ -32,7 +32,7 @@ status: synced
 - `src/services/command/command-janitor/app.py :: RETENTION_SWEEP_INTERVAL_SECONDS_ENV` = `"DB_RETENTION_SWEEP_INTERVAL_SECONDS"`, `DEFAULT_RETENTION_SWEEP_INTERVAL_SECONDS` = `"3600"`.
 - `src/services/command/command-janitor/app.py :: emit_expired_command_completions(db, events, service_name="command-janitor") -> int` — `db.fail_expired_agent_commands()` 가 반환한 각 행에 대해 `CommandCompletedBody(command_id, result)` 를 발행한다. `correlation_id`는 RETURNING row의 값을 우선하고 없으면 `command-janitor:<command_id>`를 쓴다. 종결 건수 반환.
 - `src/services/command/command-janitor/app.py :: sweep_database_retention(db) -> int` — `packages.storage.retention.sweep_storage_retention(db)`를 호출해 `RetentionSweepResult.total`을 반환. 예외가 나면 `database_retention_sweep_failed`를 로그로 남기고 `0`을 반환해 command sweep 루프를 계속한다.
-- `src/services/command/command-janitor/app.py :: run() -> None` — 메인 루프(async).
+- `src/services/command/command-janitor/app.py :: run(event_bus: EventConsumerBus | None = None) -> None` — 메인 루프(async). 미주입은 NATS, OSS composition root는 shared bus를 주입한다.
 
 ## 데이터 모델 (Data Model)
 
@@ -47,7 +47,7 @@ status: synced
 
 `run()`:
 
-1. `Database()`, `AsyncDb(db)`, `NatsEventBus()` 생성. `SIGTERM`/`SIGINT` → `stopping` 이벤트 set.
+1. `Database()`, `AsyncDb(db)`, event bus 생성. 미주입 시 `NatsEventBus()`. `SIGTERM`/`SIGINT` → `stopping` 이벤트 set.
 2. `wait_for_database(db)` → `bus.connect()` → `RecordedEventClient(bus, db)`.
 3. 루프(`stopping` 전까지):
    - `Path(HEARTBEAT_PATH).touch()` — liveness 하트비트(기본 `/tmp/heartbeat`).
