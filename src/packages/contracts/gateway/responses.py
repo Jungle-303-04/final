@@ -867,6 +867,121 @@ class LabelFacetPageResponse(StrictModel):
     snapshot: FilterSnapshotMeta
 
 
+IssueFilterAxis = Literal[
+    "clusters",
+    "namespaces",
+    "applications",
+    "severity",
+    "status",
+    "environment",
+]
+IssueFilterAvailability = Literal["available", "partial", "unavailable"]
+
+
+class IssueFilterItem(StrictModel):
+    """Issues 목록 전용 DTO — 저장 payload와 detail identity를 의도적으로 분리한다."""
+
+    issue_id: str = Field(min_length=1)
+    detail_id: str | None = None
+    correlation_id: str = Field(min_length=1)
+    cluster_id: str = Field(min_length=1)
+    namespace: str | None = None
+    resource_kind: str | None = None
+    resource_name: str | None = None
+    symptom: str | None = None
+    severity: str | None = None
+    issue_state: Literal["open", "resolved", "unknown"]
+    current_subject: str = Field(min_length=1)
+    pipeline_status: str = Field(min_length=1)
+    environment: str | None = None
+    environment_completeness: FilterCountCompleteness
+    application_ids: list[str] = Field(default_factory=list)
+    application_binding_completeness: FilterCountCompleteness
+    label_projection_completeness: FilterCountCompleteness
+    root_cause: str | None = None
+    confidence: float | None = Field(default=None, ge=0, le=1)
+    updated_at: str
+
+
+class IssueFilterFacetItem(StrictModel):
+    axis: IssueFilterAxis
+    value: str = Field(min_length=1)
+    label: str = Field(min_length=1)
+    match_count: int | None = Field(default=None, ge=0)
+    count_completeness: FilterCountCompleteness
+    availability: IssueFilterAvailability
+
+    @model_validator(mode="after")
+    def validate_count_availability(self) -> Self:
+        if self.availability == "unavailable" and self.match_count is not None:
+            raise ValueError("unavailable issue facet cannot expose a match count")
+        if self.count_completeness == "unavailable" and self.match_count is not None:
+            raise ValueError("unavailable issue facet count must be null")
+        return self
+
+
+class IssueFilterCapability(StrictModel):
+    axis: Literal[
+        "clusters",
+        "namespaces",
+        "applications",
+        "severity",
+        "status",
+        "environment",
+        "labels",
+    ]
+    availability: IssueFilterAvailability
+    reason_code: str | None = None
+    source_semantics: str = Field(min_length=1)
+
+    @model_validator(mode="after")
+    def validate_reason(self) -> Self:
+        if self.availability != "available" and not self.reason_code:
+            raise ValueError("partial or unavailable issue capability requires a reason")
+        return self
+
+
+class IssueSelectedFacetResolution(StrictModel):
+    axis: Literal["cluster", "namespace", "application", "severity", "status", "environment"]
+    value: str = Field(min_length=1)
+    status: Literal["resolved", "zero", "restricted", "unavailable"]
+    display_label: str | None = None
+
+
+class IssueFilterResultsResponse(StrictModel):
+    items: list[IssueFilterItem] = Field(default_factory=list)
+    next_cursor: str | None = None
+    has_more: bool
+    counts: FilterResultCounts
+    snapshot: FilterSnapshotMeta
+    facets: list[IssueFilterFacetItem] = Field(default_factory=list)
+    capabilities: list[IssueFilterCapability] = Field(default_factory=list)
+    selected_labels: list[SelectedLabelResolution] = Field(default_factory=list)
+
+
+class IssueFilterFacetPageResponse(StrictModel):
+    surface: Literal["issues"] = "issues"
+    axis: IssueFilterAxis
+    items: list[IssueFilterFacetItem] = Field(default_factory=list)
+    selected_resolutions: list[IssueSelectedFacetResolution] = Field(default_factory=list)
+    next_cursor: str | None = None
+    has_more: bool
+    counts: FilterResultCounts
+    snapshot: FilterSnapshotMeta
+    capabilities: list[IssueFilterCapability] = Field(default_factory=list)
+
+
+class IssueLabelFacetPageResponse(StrictModel):
+    surface: Literal["issues"] = "issues"
+    items: list[LabelFacetItem] = Field(default_factory=list)
+    selected_resolutions: list[SelectedLabelResolution] = Field(default_factory=list)
+    next_cursor: str | None = None
+    has_more: bool
+    counts: FilterResultCounts
+    snapshot: FilterSnapshotMeta
+    capabilities: list[IssueFilterCapability] = Field(default_factory=list)
+
+
 class ClusterUsageSample(StrictModel):
     sampled_at: str | None = None
     usage: JsonMap = Field(default_factory=dict)

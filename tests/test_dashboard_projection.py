@@ -24,6 +24,7 @@ def _evt(
     event_id: str = "evt-1",
     correlation_id: str = "corr-1",
 ) -> EventEnvelope:
+    body = payload or {}
     return EventEnvelope(
         event_id=event_id,
         subject=subject,
@@ -31,7 +32,8 @@ def _evt(
         correlation_id=correlation_id,
         causation_id=None,
         created_at="2026-07-05T10:00:00Z",
-        payload=payload or {},
+        payload=body,
+        workspace_id=str(body.get("workspace_id") or "workspace-1"),
     )
 
 

@@ -169,6 +169,5 @@ def test_no_candidate_analysis_is_blocked_and_does_not_save_report() -> None:
     assert not db.called("save_rca_report")
     assert subjects_of(feedback_outs) == ["rca.followup.required"]
     assert (
-        feedback_outs[0].summary
-        == "평가 가능한 원인 후보가 없어 root cause를 선택하지 못했습니다."
+        feedback_outs[0].summary == "평가 가능한 원인 후보가 없어 root cause를 선택하지 못했습니다."
     )

@@ -67,4 +67,4 @@ def test_rca_fallback_requests_followup_action() -> None:
     assert outs[0].evidence_ref == "evidence-1"
     assert outs[0].workspace_id == "workspace-1"
     assert outs[0].reason_code == "ai_fallback_required"
-    assert "AI fallback required" in outs[0].summary
+    assert outs[0].summary == "대표 증상에 맞는 RCA rule이 없어 AI fallback 검토가 필요합니다."
