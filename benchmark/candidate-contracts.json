@@ -4520,7 +4520,9 @@
           "reason": "단일 workload의 nodeSelector 불일치로 클러스터 모든 workload의 nodeSelector를 제거할 수 없습니다."
         }
       ],
-      "benchmark_fixtures": []
+      "benchmark_fixtures": [
+        "benchmark/scenarios/scheduling/scheduling-node-selector-mismatch/scenario.json"
+      ]
     },
     {
       "ordinal": 77,
