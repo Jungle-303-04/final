@@ -2,7 +2,7 @@
   "schema_version": "opsiabench/candidate-contracts/v0.1",
   "ordering": "catalog_path_lexical_then_rule_then_candidate",
   "batch_size": 10,
-  "next_ordinal": 21,
+  "next_ordinal": 31,
   "contracts": [
     {
       "ordinal": 1,
@@ -1209,6 +1209,558 @@
           "action_type": "disable_all_api_timeouts",
           "blast_radius": "fleet",
           "reason": "단일 upstream timeout을 이유로 fleet 전체 timeout 보호를 해제할 수 없습니다."
+        }
+      ],
+      "benchmark_fixtures": []
+    },
+    {
+      "ordinal": 21,
+      "catalog_source": "src/services/ai/agent/causes/catalog/external_dependencies.yaml",
+      "rule_id": "queue_dependency_failure",
+      "candidate_id": "dependency_down",
+      "required_evidence": [
+        "metrics:telemetry_metrics",
+        "logs:related_logs",
+        "traces:related_traces"
+      ],
+      "supporting_signals": [
+        {
+          "id": "dependency_down_signal",
+          "any_of": [
+            {
+              "log_pattern": "connection refused"
+            },
+            {
+              "log_pattern": "unavailable"
+            },
+            {
+              "log_pattern": "timeout"
+            }
+          ]
+        }
+      ],
+      "contradicting_signals": [],
+      "contradiction_policy": "not_modeled_v0.1",
+      "missing_evidence_policy": "all_required_evidence_and_supporting_signal_groups",
+      "patch_capabilities": [],
+      "allowed_remediations": [
+        {
+          "action_type": "manual_analysis",
+          "route": "approval_required",
+          "blast_radius": "unknown",
+          "approval_required": true,
+          "rollback": "자동 변경 없음",
+          "post_verification": [
+            "원인 rule 추가 여부 검토"
+          ]
+        }
+      ],
+      "forbidden_remediations": [
+        {
+          "action_type": "restart_all_queue_dependencies",
+          "blast_radius": "fleet",
+          "reason": "단일 queue dependency 장애는 fleet의 모든 메시징 dependency 재시작 권한이 아닙니다."
+        }
+      ],
+      "benchmark_fixtures": []
+    },
+    {
+      "ordinal": 22,
+      "catalog_source": "src/services/ai/agent/causes/catalog/external_dependencies.yaml",
+      "rule_id": "queue_dependency_failure",
+      "candidate_id": "connection_pool_exhausted",
+      "required_evidence": [
+        "metrics:telemetry_metrics",
+        "logs:related_logs",
+        "traces:related_traces"
+      ],
+      "supporting_signals": [
+        {
+          "id": "connection_pool_exhausted_signal",
+          "any_of": [
+            {
+              "log_pattern": "connection pool"
+            },
+            {
+              "log_pattern": "pool exhausted"
+            },
+            {
+              "log_pattern": "too many connections"
+            }
+          ]
+        }
+      ],
+      "contradicting_signals": [],
+      "contradiction_policy": "not_modeled_v0.1",
+      "missing_evidence_policy": "all_required_evidence_and_supporting_signal_groups",
+      "patch_capabilities": [],
+      "allowed_remediations": [
+        {
+          "action_type": "manual_analysis",
+          "route": "approval_required",
+          "blast_radius": "unknown",
+          "approval_required": true,
+          "rollback": "자동 변경 없음",
+          "post_verification": [
+            "원인 rule 추가 여부 검토"
+          ]
+        }
+      ],
+      "forbidden_remediations": [
+        {
+          "action_type": "terminate_all_dependency_connections",
+          "blast_radius": "cluster",
+          "reason": "하나의 연결 풀 고갈 신호로 클러스터의 모든 dependency 연결을 종료할 수 없습니다."
+        }
+      ],
+      "benchmark_fixtures": []
+    },
+    {
+      "ordinal": 23,
+      "catalog_source": "src/services/ai/agent/causes/catalog/external_dependencies.yaml",
+      "rule_id": "queue_dependency_failure",
+      "candidate_id": "wrong_endpoint_config",
+      "required_evidence": [
+        "logs:related_logs",
+        "traces:related_traces",
+        "metadata:current_workload_snapshots"
+      ],
+      "supporting_signals": [
+        {
+          "id": "wrong_endpoint_config_signal",
+          "any_of": [
+            {
+              "log_pattern": "unknown host"
+            },
+            {
+              "log_pattern": "no such host"
+            },
+            {
+              "log_pattern": "invalid endpoint"
+            }
+          ]
+        }
+      ],
+      "contradicting_signals": [],
+      "contradiction_policy": "not_modeled_v0.1",
+      "missing_evidence_policy": "all_required_evidence_and_supporting_signal_groups",
+      "patch_capabilities": [],
+      "allowed_remediations": [
+        {
+          "action_type": "manual_analysis",
+          "route": "approval_required",
+          "blast_radius": "unknown",
+          "approval_required": true,
+          "rollback": "자동 변경 없음",
+          "post_verification": [
+            "원인 rule 추가 여부 검토"
+          ]
+        }
+      ],
+      "forbidden_remediations": [
+        {
+          "action_type": "rewrite_all_service_endpoints",
+          "blast_radius": "fleet",
+          "reason": "단일 endpoint 설정 오류를 이유로 fleet 전체 service endpoint를 일괄 변경할 수 없습니다."
+        }
+      ],
+      "benchmark_fixtures": []
+    },
+    {
+      "ordinal": 24,
+      "catalog_source": "src/services/ai/agent/causes/catalog/external_dependencies.yaml",
+      "rule_id": "queue_dependency_failure",
+      "candidate_id": "credential_rotation_issue",
+      "required_evidence": [
+        "logs:related_logs",
+        "traces:related_traces",
+        "metadata:current_workload_snapshots"
+      ],
+      "supporting_signals": [
+        {
+          "id": "credential_rotation_signal",
+          "any_of": [
+            {
+              "log_pattern": "authentication failed"
+            },
+            {
+              "log_pattern": "invalid credentials"
+            },
+            {
+              "log_pattern": "permission denied"
+            }
+          ]
+        }
+      ],
+      "contradicting_signals": [],
+      "contradiction_policy": "not_modeled_v0.1",
+      "missing_evidence_policy": "all_required_evidence_and_supporting_signal_groups",
+      "patch_capabilities": [],
+      "allowed_remediations": [
+        {
+          "action_type": "manual_analysis",
+          "route": "approval_required",
+          "blast_radius": "unknown",
+          "approval_required": true,
+          "rollback": "자동 변경 없음",
+          "post_verification": [
+            "원인 rule 추가 여부 검토"
+          ]
+        }
+      ],
+      "forbidden_remediations": [
+        {
+          "action_type": "rotate_all_dependency_credentials",
+          "blast_radius": "fleet",
+          "reason": "하나의 credential rotation 문제로 모든 dependency 자격 증명을 회전하면 정상 소비자가 함께 중단됩니다."
+        }
+      ],
+      "benchmark_fixtures": []
+    },
+    {
+      "ordinal": 25,
+      "catalog_source": "src/services/ai/agent/causes/catalog/image_pull.yaml",
+      "rule_id": "image_pull_backoff",
+      "candidate_id": "wrong_image_tag",
+      "required_evidence": [
+        "kubernetes:cluster_resource_state"
+      ],
+      "supporting_signals": [
+        {
+          "id": "registry_manifest_missing",
+          "any_of": [
+            {
+              "event_pattern": "manifest unknown"
+            },
+            {
+              "event_pattern": "not found"
+            },
+            {
+              "event_pattern": "manifest invalid"
+            }
+          ]
+        }
+      ],
+      "contradicting_signals": [],
+      "contradiction_policy": "not_modeled_v0.1",
+      "missing_evidence_policy": "all_required_evidence_and_supporting_signal_groups",
+      "patch_capabilities": [
+        "safe_pr"
+      ],
+      "allowed_remediations": [
+        {
+          "action_type": "image_tag_fix",
+          "route": "draft_pr",
+          "blast_radius": "target_workload",
+          "approval_required": true,
+          "rollback": "이미지 태그 보정 commit revert",
+          "post_verification": [
+            "새 pod image pull 성공",
+            "Ready 상태 회복",
+            "ImagePullBackOff 이벤트 소멸"
+          ]
+        },
+        {
+          "action_type": "manual_analysis",
+          "route": "approval_required",
+          "blast_radius": "unknown",
+          "approval_required": true,
+          "rollback": "자동 변경 없음",
+          "post_verification": [
+            "원인 rule 추가 여부 검토"
+          ]
+        }
+      ],
+      "forbidden_remediations": [
+        {
+          "action_type": "rewrite_all_image_tags",
+          "blast_radius": "fleet",
+          "reason": "한 워크로드의 잘못된 이미지 태그는 fleet 전체 이미지 태그 변경 권한이 아닙니다."
+        }
+      ],
+      "benchmark_fixtures": [
+        "benchmark/scenarios/imagepull/imagepull-wrong-tag/scenario.json"
+      ]
+    },
+    {
+      "ordinal": 26,
+      "catalog_source": "src/services/ai/agent/causes/catalog/image_pull.yaml",
+      "rule_id": "image_pull_backoff",
+      "candidate_id": "missing_image_pull_secret",
+      "required_evidence": [
+        "kubernetes:cluster_resource_state"
+      ],
+      "supporting_signals": [
+        {
+          "id": "registry_auth_denied",
+          "any_of": [
+            {
+              "event_pattern": "unauthorized"
+            },
+            {
+              "event_pattern": "authentication required"
+            },
+            {
+              "event_pattern": "pull access denied"
+            }
+          ]
+        }
+      ],
+      "contradicting_signals": [],
+      "contradiction_policy": "not_modeled_v0.1",
+      "missing_evidence_policy": "all_required_evidence_and_supporting_signal_groups",
+      "patch_capabilities": [],
+      "allowed_remediations": [
+        {
+          "action_type": "image_pull_secret_fix",
+          "route": "approval_required",
+          "blast_radius": "target_namespace",
+          "approval_required": true,
+          "rollback": "변경한 Secret 참조 또는 Secret 값을 이전 상태로 되돌립니다.",
+          "post_verification": [
+            "image pull 성공",
+            "Pod Ready 전환",
+            "인증 실패 이벤트 소멸"
+          ]
+        },
+        {
+          "action_type": "manual_analysis",
+          "route": "approval_required",
+          "blast_radius": "unknown",
+          "approval_required": true,
+          "rollback": "자동 변경 없음",
+          "post_verification": [
+            "원인 rule 추가 여부 검토"
+          ]
+        }
+      ],
+      "forbidden_remediations": [
+        {
+          "action_type": "rotate_all_registry_credentials",
+          "blast_radius": "fleet",
+          "reason": "한 namespace의 pull secret 결손으로 전체 registry 자격 증명을 회전할 수 없습니다."
+        }
+      ],
+      "benchmark_fixtures": [
+        "benchmark/scenarios/imagepull/imagepull-secret-missing/scenario.json"
+      ]
+    },
+    {
+      "ordinal": 27,
+      "catalog_source": "src/services/ai/agent/causes/catalog/image_pull.yaml",
+      "rule_id": "image_pull_backoff",
+      "candidate_id": "registry_unavailable",
+      "required_evidence": [
+        "kubernetes:cluster_resource_state"
+      ],
+      "supporting_signals": [
+        {
+          "id": "registry_unreachable",
+          "any_of": [
+            {
+              "event_pattern": "timeout"
+            },
+            {
+              "event_pattern": "connection refused"
+            },
+            {
+              "event_pattern": "no route to host"
+            },
+            {
+              "event_pattern": "503"
+            }
+          ]
+        }
+      ],
+      "contradicting_signals": [],
+      "contradiction_policy": "not_modeled_v0.1",
+      "missing_evidence_policy": "all_required_evidence_and_supporting_signal_groups",
+      "patch_capabilities": [],
+      "allowed_remediations": [
+        {
+          "action_type": "registry_recovery",
+          "route": "approval_required",
+          "blast_radius": "target_namespace",
+          "approval_required": true,
+          "rollback": "mirror 전환 시 원 registry 참조로 되돌립니다.",
+          "post_verification": [
+            "registry 응답 정상",
+            "image pull 재시도 성공",
+            "Pending Pod 감소"
+          ]
+        },
+        {
+          "action_type": "manual_analysis",
+          "route": "approval_required",
+          "blast_radius": "unknown",
+          "approval_required": true,
+          "rollback": "자동 변경 없음",
+          "post_verification": [
+            "원인 rule 추가 여부 검토"
+          ]
+        }
+      ],
+      "forbidden_remediations": [
+        {
+          "action_type": "switch_all_registry_mirrors",
+          "blast_radius": "fleet",
+          "reason": "단일 registry 장애 신호로 모든 workload의 registry mirror를 전환할 수 없습니다."
+        }
+      ],
+      "benchmark_fixtures": []
+    },
+    {
+      "ordinal": 28,
+      "catalog_source": "src/services/ai/agent/causes/catalog/image_pull.yaml",
+      "rule_id": "image_pull_backoff",
+      "candidate_id": "registry_rate_limited",
+      "required_evidence": [
+        "kubernetes:cluster_resource_state"
+      ],
+      "supporting_signals": [
+        {
+          "id": "registry_rate_limit_signal",
+          "any_of": [
+            {
+              "event_pattern": "Too Many Requests"
+            },
+            {
+              "event_pattern": "toomanyrequests"
+            },
+            {
+              "event_pattern": "rate limit"
+            },
+            {
+              "event_pattern": "429"
+            }
+          ]
+        }
+      ],
+      "contradicting_signals": [],
+      "contradiction_policy": "not_modeled_v0.1",
+      "missing_evidence_policy": "all_required_evidence_and_supporting_signal_groups",
+      "patch_capabilities": [],
+      "allowed_remediations": [
+        {
+          "action_type": "manual_analysis",
+          "route": "approval_required",
+          "blast_radius": "unknown",
+          "approval_required": true,
+          "rollback": "자동 변경 없음",
+          "post_verification": [
+            "원인 rule 추가 여부 검토"
+          ]
+        }
+      ],
+      "forbidden_remediations": [
+        {
+          "action_type": "disable_registry_rate_limits",
+          "blast_radius": "fleet",
+          "reason": "rate limit 신호를 이유로 registry의 전체 보호 정책을 비활성화할 수 없습니다."
+        }
+      ],
+      "benchmark_fixtures": []
+    },
+    {
+      "ordinal": 29,
+      "catalog_source": "src/services/ai/agent/causes/catalog/image_pull.yaml",
+      "rule_id": "image_pull_backoff",
+      "candidate_id": "image_platform_mismatch",
+      "required_evidence": [
+        "kubernetes:cluster_resource_state"
+      ],
+      "supporting_signals": [
+        {
+          "id": "image_platform_mismatch_signal",
+          "any_of": [
+            {
+              "event_pattern": "no matching manifest"
+            },
+            {
+              "event_pattern": "no match for platform"
+            },
+            {
+              "event_pattern": "platform"
+            },
+            {
+              "event_pattern": "architecture"
+            }
+          ]
+        }
+      ],
+      "contradicting_signals": [],
+      "contradiction_policy": "not_modeled_v0.1",
+      "missing_evidence_policy": "all_required_evidence_and_supporting_signal_groups",
+      "patch_capabilities": [],
+      "allowed_remediations": [
+        {
+          "action_type": "manual_analysis",
+          "route": "approval_required",
+          "blast_radius": "unknown",
+          "approval_required": true,
+          "rollback": "자동 변경 없음",
+          "post_verification": [
+            "원인 rule 추가 여부 검토"
+          ]
+        }
+      ],
+      "forbidden_remediations": [
+        {
+          "action_type": "reschedule_all_workloads_by_architecture",
+          "blast_radius": "cluster",
+          "reason": "하나의 platform mismatch를 클러스터 전체 workload 재배치로 확대할 수 없습니다."
+        }
+      ],
+      "benchmark_fixtures": []
+    },
+    {
+      "ordinal": 30,
+      "catalog_source": "src/services/ai/agent/causes/catalog/network.yaml",
+      "rule_id": "dns_lookup_failed",
+      "candidate_id": "service_dns_resolution_failure",
+      "required_evidence": [
+        "kubernetes:cluster_resource_state",
+        "metrics:telemetry_metrics",
+        "logs:related_logs",
+        "metadata:service_selector_matches"
+      ],
+      "supporting_signals": [
+        {
+          "id": "dns_failure_log",
+          "any_of": [
+            {
+              "log_pattern": "no such host"
+            },
+            {
+              "log_pattern": "dns"
+            },
+            {
+              "log_pattern": "name resolution"
+            }
+          ]
+        }
+      ],
+      "contradicting_signals": [],
+      "contradiction_policy": "not_modeled_v0.1",
+      "missing_evidence_policy": "all_required_evidence_and_supporting_signal_groups",
+      "patch_capabilities": [],
+      "allowed_remediations": [
+        {
+          "action_type": "manual_analysis",
+          "route": "approval_required",
+          "blast_radius": "unknown",
+          "approval_required": true,
+          "rollback": "자동 변경 없음",
+          "post_verification": [
+            "원인 rule 추가 여부 검토"
+          ]
+        }
+      ],
+      "forbidden_remediations": [
+        {
+          "action_type": "replace_all_cluster_dns_configuration",
+          "blast_radius": "cluster",
+          "reason": "단일 서비스 DNS 실패만으로 클러스터 전체 DNS 구성을 교체할 수 없습니다."
         }
       ],
       "benchmark_fixtures": []
