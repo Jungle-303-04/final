@@ -1,0 +1,25 @@
+meta {
+  name: 03 라벨 facet 집계
+  type: http
+  seq: 3
+  tags: [resources, filters, labels, read]
+}
+
+get {
+  url: {{base_url}}resources/label-facets?facet_q=team&limit=50
+}
+
+tests {
+  test("200 or validated access failure", function () {
+    expect([200, 400, 401, 403, 409, 422]).to.include(res.status);
+  });
+
+  test("200 response exposes server label counts and resolutions", function () {
+    if (res.status !== 200) return;
+    const body = res.getBody();
+    expect(body.items).to.be.an("array");
+    expect(body.selected_resolutions).to.be.an("array");
+    expect(body).to.have.property("counts");
+    expect(body).to.have.property("snapshot");
+  });
+}

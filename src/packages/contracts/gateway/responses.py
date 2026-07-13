@@ -623,6 +623,118 @@ class InventoryResourceDetailResponse(StrictModel):
     events: list[InventoryResourceResponse] = Field(default_factory=list)
 
 
+FilterCountCompleteness = Literal["exact", "partial", "unavailable"]
+FilterFacetAvailability = Literal["available", "restricted", "unresolved"]
+FilterFacetAxis = Literal["clusters", "namespaces", "applications"]
+FilterSurface = Literal["resources", "issues", "applications", "gitops", "checks"]
+
+
+class ClusterFilterFacetItem(StrictModel):
+    axis: Literal["cluster"] = "cluster"
+    value: str = Field(min_length=1)
+    cluster_id: str = Field(min_length=1)
+    name: str | None = None
+    provider: str | None = None
+    availability: FilterFacetAvailability
+
+
+class NamespaceFilterFacetItem(StrictModel):
+    axis: Literal["namespace"] = "namespace"
+    value: str = Field(min_length=1)
+    cluster_id: str = Field(min_length=1)
+    namespace: str = Field(min_length=1)
+    availability: FilterFacetAvailability
+
+
+class ApplicationFilterFacetItem(StrictModel):
+    axis: Literal["application"] = "application"
+    value: str = Field(min_length=1)
+    application_id: str = Field(min_length=1)
+    name: str | None = None
+    environment: str | None = None
+    availability: FilterFacetAvailability
+
+
+class SelectedFilterFacetResolution(StrictModel):
+    axis: Literal["cluster", "namespace", "application"]
+    value: str = Field(min_length=1)
+    status: Literal["resolved", "restricted", "unresolved", "unavailable"]
+    display_label: str | None = None
+
+
+class FilterResultCounts(StrictModel):
+    filtered_count: int | None = Field(default=None, ge=0)
+    unfiltered_count: int | None = Field(default=None, ge=0)
+    filtered_count_completeness: FilterCountCompleteness
+    unfiltered_count_completeness: FilterCountCompleteness
+
+
+class FilterSnapshotMeta(StrictModel):
+    snapshot_revision: int = Field(ge=0)
+    authorization_revision: str = Field(min_length=1)
+    filter_fingerprint: str = Field(min_length=1)
+    observed_at: str | None = None
+    stale: bool
+    partial_reason_codes: list[str] = Field(default_factory=list)
+
+
+class ResourceFilterFacetPageResponse(StrictModel):
+    axis: FilterFacetAxis
+    items: list[ClusterFilterFacetItem | NamespaceFilterFacetItem | ApplicationFilterFacetItem] = (
+        Field(default_factory=list)
+    )
+    selected_resolutions: list[SelectedFilterFacetResolution] = Field(default_factory=list)
+    next_cursor: str | None = None
+    has_more: bool
+    snapshot: FilterSnapshotMeta
+
+
+class InventoryResourceClusterIdentity(StrictModel):
+    cluster_id: str = Field(min_length=1)
+    name: str | None = None
+    provider: str | None = None
+
+
+class FilteredInventoryResourceItem(StrictModel):
+    resource: InventoryResourceResponse
+    cluster: InventoryResourceClusterIdentity
+    application_ids: list[str] = Field(default_factory=list)
+    application_binding_completeness: FilterCountCompleteness
+
+
+class FilteredInventoryResourceListResponse(StrictModel):
+    items: list[FilteredInventoryResourceItem] = Field(default_factory=list)
+    next_cursor: str | None = None
+    has_more: bool
+    counts: FilterResultCounts
+    snapshot: FilterSnapshotMeta
+
+
+class LabelSelector(StrictModel):
+    key: str = Field(min_length=1)
+    value: str
+    selector: str = Field(min_length=2)
+
+
+class LabelFacetItem(LabelSelector):
+    match_count: int | None = Field(default=None, ge=0)
+    count_completeness: FilterCountCompleteness
+
+
+class SelectedLabelResolution(LabelSelector):
+    status: Literal["resolved", "zero", "restricted", "unavailable"]
+
+
+class LabelFacetPageResponse(StrictModel):
+    surface: FilterSurface
+    items: list[LabelFacetItem] = Field(default_factory=list)
+    selected_resolutions: list[SelectedLabelResolution] = Field(default_factory=list)
+    next_cursor: str | None = None
+    has_more: bool
+    counts: FilterResultCounts
+    snapshot: FilterSnapshotMeta
+
+
 class ClusterUsageSample(StrictModel):
     sampled_at: str | None = None
     usage: JsonMap = Field(default_factory=dict)
