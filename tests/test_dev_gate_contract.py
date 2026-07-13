@@ -108,6 +108,9 @@ def test_dev_push_ci_calls_the_canonical_gate_before_any_deploy_job() -> None:
     assert triggers["push"]["branches"] == ["dev"]
     assert triggers["pull_request"]["branches"] == ["dev"]
     jobs = workflow["jobs"]
+    helm_step = next(step for step in jobs["gate"]["steps"] if step.get("name") == "Set up Helm")
+    assert helm_step["uses"] == "Azure/setup-helm@9bc31f4ebc9c6b171d7bfbaa5d006ae7abdb4310"
+    assert helm_step["with"]["version"] == "v4.2.2"
     assert any(
         step.get("run") == "make gate" for step in jobs["gate"]["steps"] if isinstance(step, dict)
     )
