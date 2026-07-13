@@ -534,7 +534,9 @@
           "reason": "startup 권한 오류는 대상 capability보다 넓은 cluster-admin 권한 부여를 정당화하지 않습니다."
         }
       ],
-      "benchmark_fixtures": []
+      "benchmark_fixtures": [
+        "benchmark/scenarios/crashloop/crashloop-permission-denied-startup/scenario.json"
+      ]
     },
     {
       "ordinal": 9,

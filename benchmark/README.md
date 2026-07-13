@@ -68,7 +68,14 @@ recovery 선언은 소스 선언 순서대로 모두 누적한다.
 `address already in use` 신호와 CrashLoopBackOff를 만드는 exact fixture를 연결한다. 임의 가용
 포트로 같은 명령을 실행하는 테스트가 외부 인프라 없이 실패 로그와 exit code 1을 검증한다.
 실제 patch capability는 비어 있으므로 허용 경로는 승인형 `manual_analysis`뿐이고, gold patch는
-운영자 검토용 정답이지 Safe PR 실행 가능성의 주장이 아니다. 11~20번은 모두 명시 recovery가 없는
+운영자 검토용 정답이지 Safe PR 실행 가능성의 주장이 아니다. 8번
+`permission_denied_startup`은 임시 startup script의 실행 bit를 제거해 실제 POSIX
+`PermissionError: [Errno 13] Permission denied`와 exit code 1을 외부 인프라 없이
+재현한다. full container merge patch 왕복으로 fault·gold·rollback이 image·command·
+security context를 유지하는지 검증한다. exit 1이 generic `app_startup_failure`도 지지하는
+경우에는 catalog 순서상 더 구체적인 권한 후보가 선택되는 현행 계약을 테스트로
+고정한다. 이 후보도 patch capability가 비어 있으므로 승인형 `manual_analysis`만
+허용한다. 11~20번은 모두 명시 recovery가 없는
 `manual_analysis` fallback이며 실제 patch
 capability와 기존 exact fixture도 없다. 21~30번 중
 25번 `wrong_image_tag`만 `safe_pr` capability가 있고, 26번 `missing_image_pull_secret`과 27번
