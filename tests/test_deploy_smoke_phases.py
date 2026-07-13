@@ -119,7 +119,8 @@ def test_post_deploy_smoke_enforces_new_release_contracts() -> None:
     assert "PRE_DEPLOY_FRONTEND_BUNDLE" in source
     assert "REQUIRE_FRONTEND_BUNDLE_CHANGE" in source
     assert 'test "${post_bundle}" != "${PRE_DEPLOY_FRONTEND_BUNDLE}"' in source
-    assert 'bash "${SCRIPT_DIR}/smoke.sh"' in source
+    assert 'bash "${SCRIPT_DIR}/post_deploy_read_smoke.sh"' in source
+    assert 'bash "${SCRIPT_DIR}/smoke.sh"' not in source
     assert "SELECT version_num FROM alembic_version" in source
     assert "EXPECTED_ALEMBIC_HEAD" in source
     assert 'verify_dev_auth_bypass.py" live' in source
@@ -130,3 +131,74 @@ def test_post_deploy_smoke_enforces_new_release_contracts() -> None:
     assert "@sha256:" in source
     assert "post-deploy public edge reachability (non-blocking)" in source
     assert "in-cluster smoke remains authoritative" in source
+
+
+def _write_post_deploy_read_fakes(
+    tmp_path: Path, *, login_ok: bool, strict_ok: bool
+) -> dict[str, str]:
+    fake_curl = tmp_path / "curl"
+    fake_curl.write_text(
+        "#!/usr/bin/env bash\n" + ("exit 0\n" if login_ok else "echo login-denied >&2\nexit 22\n"),
+        encoding="utf-8",
+    )
+    fake_curl.chmod(0o755)
+    strict_log = tmp_path / "strict.log"
+    fake_strict = tmp_path / "strict.py"
+    fake_strict.write_text(
+        "import os, sys\n"
+        "open(os.environ['STRICT_LOG'], 'w', encoding='utf-8').write(' '.join(sys.argv[1:]))\n"
+        + ("raise SystemExit(0)\n" if strict_ok else "raise SystemExit(17)\n"),
+        encoding="utf-8",
+    )
+    return {
+        **os.environ,
+        "PATH": f"{tmp_path}:{os.environ['PATH']}",
+        "API_BASE_URL": "http://127.0.0.1:18000",
+        "AUTH_EMAIL": "operator@example.invalid",
+        "AUTH_PASSWORD": "not-a-real-secret",
+        "AUTH_LOGIN_ATTEMPTS": "1",
+        "AUTH_LOGIN_RETRY_INTERVAL_SECONDS": "0",
+        "SMOKE_RCA_CORRELATION_ID": "correlation-fixture",
+        "SMOKE_RCA_INCIDENT_ID": "incident-fixture",
+        "STRICT_API_SMOKE_SCRIPT": str(fake_strict),
+        "STRICT_LOG": str(strict_log),
+    }
+
+
+def _run_post_deploy_read_smoke(
+    tmp_path: Path, *, login_ok: bool, strict_ok: bool
+) -> tuple[subprocess.CompletedProcess[str], Path]:
+    env = _write_post_deploy_read_fakes(tmp_path, login_ok=login_ok, strict_ok=strict_ok)
+    result = subprocess.run(
+        ["bash", str(ROOT / "scripts/post_deploy_read_smoke.sh")],
+        env=env,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    return result, Path(env["STRICT_LOG"])
+
+
+def test_post_deploy_read_smoke_logs_in_and_runs_strict_reads(tmp_path: Path) -> None:
+    result, strict_log = _run_post_deploy_read_smoke(tmp_path, login_ok=True, strict_ok=True)
+
+    assert result.returncode == 0, result.stderr
+    assert "post-deploy operator login" in result.stdout
+    assert "post-deploy strict RCA reads" in result.stdout
+    assert "--correlation-id correlation-fixture" in strict_log.read_text(encoding="utf-8")
+    assert "--incident-id incident-fixture" in strict_log.read_text(encoding="utf-8")
+
+
+def test_post_deploy_read_smoke_stops_when_login_fails(tmp_path: Path) -> None:
+    result, strict_log = _run_post_deploy_read_smoke(tmp_path, login_ok=False, strict_ok=True)
+
+    assert result.returncode != 0
+    assert "login failed after 1 attempts" in result.stderr
+    assert not strict_log.exists()
+
+
+def test_post_deploy_read_smoke_propagates_strict_read_failure(tmp_path: Path) -> None:
+    result, strict_log = _run_post_deploy_read_smoke(tmp_path, login_ok=True, strict_ok=False)
+
+    assert result.returncode == 17
+    assert strict_log.exists()
