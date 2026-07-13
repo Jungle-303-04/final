@@ -95,10 +95,36 @@ def test_helm_chart_uses_one_public_origin_and_keeps_postgres_internal() -> None
     assert [item["port"] for item in postgres["spec"]["ports"]] == [5432]
 
 
+def test_helm_chart_orders_database_readiness_before_bootstrap() -> None:
+    documents = _render_chart("--set", "postgresql.persistence.enabled=false")
+    workloads = {
+        item["metadata"]["name"]: item
+        for item in documents
+        if item["kind"] in {"Deployment", "StatefulSet"}
+    }
+    init_names = [
+        container["name"]
+        for container in workloads["opsia-controller"]["spec"]["template"]["spec"]["initContainers"]
+    ]
+    assert init_names == ["wait-for-database", "bootstrap"]
+
+    capabilities = workloads["opsia-postgresql"]["spec"]["template"]["spec"]["containers"][0][
+        "securityContext"
+    ]["capabilities"]
+    assert capabilities["drop"] == ["ALL"]
+    assert set(capabilities["add"]) == {
+        "CHOWN",
+        "DAC_OVERRIDE",
+        "FOWNER",
+        "SETGID",
+        "SETUID",
+    }
+
+
 def test_make_demo_installs_the_chart_before_injecting_the_bad_rollout() -> None:
     script = (ROOT / "scripts" / "oss-demo.sh").read_text(encoding="utf-8")
 
     assert "helm upgrade --install" in script
     assert '"${ROOT_DIR}/charts/opsia"' in script
     assert "rollout status deployment/opsia-controller" in script
-    assert script.index("helm upgrade --install") < script.index("bad-rollout-observed")
+    assert script.index("helm upgrade --install") < script.rindex('scene "bad-rollout-observed"')
