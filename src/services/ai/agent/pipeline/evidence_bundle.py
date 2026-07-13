@@ -31,6 +31,7 @@ MAX_KUBERNETES_NODES = 12
 MAX_LOG_ENTRIES = 8
 MAX_LOG_STREAMS = 4
 MAX_LOG_VALUES = 20
+MAX_LOG_TRACE_IDS = 20
 MAX_TEXT_LENGTH = 1600
 MAX_METRIC_RESULTS = 12
 MAX_METRIC_SERIES = 8
@@ -291,8 +292,67 @@ def select_incident_log_entries(
         }
         if matched_entries is not None:
             selected_entry["matched_entries"] = matched_entries
+        apply_scoped_log_summaries(selected_entry, kept)
         selected.append(selected_entry)
     return selected
+
+
+def apply_scoped_log_summaries(entry: dict, streams: list[dict]) -> None:
+    """Use selected stream summaries for RCA related log counts."""
+    pattern_counts = summed_stream_counts(streams, "pattern_counts", entry.get("pattern_counts"))
+    if pattern_counts is not None:
+        entry["pattern_counts"] = pattern_counts
+    severity_counts = summed_stream_counts(streams, "severity_counts", entry.get("severity_counts"))
+    if severity_counts is not None:
+        entry["severity_counts"] = severity_counts
+    trace_ids = selected_stream_trace_ids(streams)
+    if trace_ids is not None:
+        entry["trace_ids"] = trace_ids
+
+
+def summed_stream_counts(
+    streams: list[dict],
+    key: str,
+    base_counts: object,
+) -> dict[str, int] | None:
+    """Sum one count object from selected log streams."""
+    counts: dict[str, int] = {}
+    if isinstance(base_counts, dict):
+        counts.update(
+            {
+                str(count_key): 0
+                for count_key, count in base_counts.items()
+                if isinstance(count, int)
+            }
+        )
+    found = False
+    for stream in streams:
+        value = stream.get(key)
+        if not isinstance(value, dict):
+            continue
+        found = True
+        for count_key, count in value.items():
+            if isinstance(count, int):
+                counts[str(count_key)] = counts.get(str(count_key), 0) + count
+    return counts if found else None
+
+
+def selected_stream_trace_ids(streams: list[dict]) -> list[str] | None:
+    """Return trace IDs from selected log streams, or None for legacy streams."""
+    trace_ids: list[str] = []
+    seen: set[str] = set()
+    found = False
+    for stream in streams:
+        raw_trace_ids = stream.get("trace_ids")
+        if not isinstance(raw_trace_ids, list):
+            continue
+        found = True
+        for value in raw_trace_ids:
+            trace_id = str(value)
+            if trace_id and trace_id not in seen and len(trace_ids) < MAX_LOG_TRACE_IDS:
+                seen.add(trace_id)
+                trace_ids.append(trace_id)
+    return trace_ids if found else None
 
 
 def select_incident_matched_entries(

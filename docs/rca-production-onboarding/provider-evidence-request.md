@@ -223,8 +223,9 @@ RCA는 provider가 보내준 evidence만 보고 symptom, root cause candidate, c
 RCA EvidenceBundle에서는 `logs:related_logs`를 만들 때 `streams`와 `matched_entries`를 같은
 incident scope로 필터링한다. 일반 incident는 namespace를 맞추고, RCA test run은 현재 test Pod 이름까지
 맞춘다. 따라서 provider result에 query 전체의 matched entry가 있어도 RCA 분석에는 선택된 namespace/Pod의
-matched entry만 올라간다. `collection_limit.matched_entries`는 provider result 기준의 제한 정보라서,
-bundle scope 필터링 후의 최종 항목 수와 항상 같지는 않다.
+matched entry만 올라간다. `pattern_counts`, `severity_counts`, `trace_ids`도 선택된 stream summary 기준으로
+다시 합산된다. `collection_limit.matched_entries`와 `redaction_summary`는 provider result 기준의 제한/마스킹
+정보라서, bundle scope 필터링 후의 최종 항목 수와 항상 같지는 않다.
 
 주의:
 
@@ -315,6 +316,7 @@ summary snapshot에는 아래 필드만 남긴다.
 - change_context.current_workload_snapshots[].pod_status_count(잘렸을 때만 존재)
 - change_context.current_workload_snapshots[].pod_statuses_truncated(잘렸을 때만 존재)
 - change_context.current_workload_snapshots[].containers[].name/image
+- change_context.current_workload_snapshots[].containers[].ports[].name/container_port/protocol
 - change_context.current_workload_snapshots[].containers[].readiness_probe
 - change_context.current_workload_snapshots[].containers[].liveness_probe
 - change_context.current_workload_snapshots[].containers[].startup_probe
@@ -394,6 +396,7 @@ Secret 객체의 `data`, `binaryData`, `stringData` 값은 읽거나 보내지 �
 
 `current_workload_snapshot`은 특정 Deployment 1개를 위한 detail snapshot이다.
 detail snapshot은 summary 필드에 아래 필드를 추가로 담는다.
+summary와 마찬가지로 containers[].ports는 포함되며, hostPort/hostIP는 보내지 않는다.
 
 - change_context.current_workload_snapshot.deployment_annotations
 - change_context.current_workload_snapshot.pod_template_annotations
