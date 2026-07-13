@@ -845,3 +845,7 @@ npm run visual-product
 실제 patch 6종/unsupported/rollback을 TDD로 수렴한다. BQ-010은 BQ-009 직후 같은 lane.
 
 [이식 대기] BQ-006 promotion_gate 인계 문구: | `useRuns` | `frontend/src/features/repo/api.ts :: useRuns` | GET `/applications/${appId}/runs` with `{timeoutMs: 8_000}` | `retry:false`, select `d.runs.map(adaptRun)`. raw run의 optional `promotion_gate`는 백엔드 자동 승격 조건의 구조화된 read model이다. **적응 폴링**: raw runs 중 상태(대문자화)가 ACTIVE 집합에 있으면 10s, 아니면 60s |
+
+[2026-07-13 10:54 KST] [백엔드] PROMOTE 완결 — 팀 통합점 `0eaaa6637ca46bf29b073bd0dbe274719ffd5ee3`; lab `977329121`, FE-A2 `9b9a81d8b`·`4422a6800` 모두 origin/dev ancestor exit 0. Ruff lint/format PASS, import-linter 2 kept/0 broken, pytest `1735 passed, 3 skipped`, `tests/test_env_defaults.py` `8 passed`.
+
+[교훈] merge에서 한쪽 삭제 + 한쪽 존재는 무충돌 삭제가 된다 — 대량 동기화 merge 후에는 반드시 소유권 밖 경로의 삭제 감사(`diff --stat -- <경로>`)를 exit criteria에 포함할 것.
