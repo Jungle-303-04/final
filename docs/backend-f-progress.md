@@ -359,3 +359,25 @@ Bundle route는 200을 반환한다.
   필요하지 않다.
 
 계약 완성: release_flow internal module boundaries (bd4730d850d21528a161b9f60e8da2905e4b56f8) [green]
+
+### I단계 — production 배포 계획
+
+- 상태: 계획 착륙 완료, 실제 배포는 사람 전용 J단계 대기
+- canonical merge: `c2e2b552377ba508a535c9bd1b69c9e60fec522a`
+- 문서: `docs/auto/deploy-plan.md`
+- 적용 경계: migration-first → consumer/worker → target agent → realtime gateway →
+  API gateway. backend 공용 image workload 39개를 동일 immutable digest로 수렴한다.
+- DB fail-closed: `alembic_version` 부재·불일치, 0140 partial DDL, concurrent index
+  INVALID, 단일 head 불일치 시 workload rollout 전에 중단한다. production image에는
+  Alembic asset이 없어 승인된 canonical operator runner와 direct PostgreSQL 연결을 쓴다.
+- 보안 경계: raw management manifest의 `DEV_AUTH_BYPASS=1`을 production overlay에서
+  `0`으로 강제하고 rendered/live 값을 모두 검사한다. target agent는 재등록·credential
+  회전 없이 read-only Argo RBAC와 image만 target별 순차 갱신한다.
+- rollback: DB schema는 additive로 유지하고 이전 workload digest로 복원한다.
+  projection table 데이터를 지우는 production downgrade는 기본 rollback에 포함하지 않는다.
+- 전체 게이트: Ruff lint/format PASS, import-linter 8 kept/0 broken,
+  pytest `1868 passed, 3 skipped`; manifest management 69 / target 20.
+- J단계 blocker: GitHub Actions green 미증명, integration smoke off, 신규 3 route live
+  200 미증명, live DB Alembic baseline 미확인, 이전 digest·backup·1-replica 위험 승인 미확보.
+
+계약 완성: migration-first deploy plan + immutable rollback (0cc6af58c90140123dabd943c55b72b7b4b3bed9) [green]
