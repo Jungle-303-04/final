@@ -14,6 +14,7 @@
 ## 시스템 개요
 
 - [architecture](architecture.md) — 스펙 레벨 토폴로지·핵심 이벤트 플로우·신뢰성 불변식
+- [oss-profile](oss-profile.md) — PR-only 안전 기본값, 3컴포넌트 설치, composition root, `make demo`
 
 ## packages
 

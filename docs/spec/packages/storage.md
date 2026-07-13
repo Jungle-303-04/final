@@ -211,7 +211,7 @@ async def sweep_storage_retention(db: Any, *, now: datetime | None = None) -> Re
     # delete_events_older_than, delete_audit_logs_older_than 을 각 1 batch 호출
 ```
 
-### `sessions.py` — Redis 세션·레이트리밋·이메일 인증 토큰
+### `sessions.py` — 세션·레이트리밋·이메일 인증 토큰
 
 - `src/packages/storage/sessions.py :: AuthSession` — `@dataclass(frozen=True)`: `token: str`, `user_id: str`, `roles: list[str]`, `workspace_id: str`.
 - `src/packages/storage/sessions.py :: RedisSessionStoreConfig` — `@dataclass(frozen=True)`:
@@ -233,6 +233,10 @@ async def sweep_storage_retention(db: Any, *, now: datetime | None = None) -> Re
 
 - `src/packages/storage/sessions.py :: RateLimitExceeded` — `Exception`: `__init__(retry_after_seconds: int | None = None)`, 속성 `retry_after_seconds`.
 - `src/packages/storage/sessions.py :: RedisSessionStoreNotConnected` — `RuntimeError`.
+- `src/packages/storage/sessions.py :: SessionStore` — gateway가 소비하는 async Protocol.
+- `src/packages/storage/sessions.py :: MemorySessionStore` — OSS 단일 controller용 process-local
+  구현. Redis 구현과 같은 session/touch/delete, rate limit, escalating lock, 1회성 이메일
+  token 계약을 제공하지만 restart 시 상태가 사라지고 다중 replica 간 공유되지 않는다.
 - `src/packages/storage/sessions.py :: RedisSessionStore` — [contracts — SessionStore](contracts.md#모듈-interfacespy) 구현.
 
 ```python

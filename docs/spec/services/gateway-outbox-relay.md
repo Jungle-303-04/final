@@ -43,7 +43,7 @@ status: synced
 
 ## 동작 (Behavior)
 
-1. `Database()`, `NatsEventBus()`, `stopping` 이벤트를 만든다.
+1. `Database()`, event bus, `stopping` 이벤트를 만든다. `run(event_bus=None)` 미주입은 `NatsEventBus()`, OSS composition root는 shared bus를 주입한다.
 2. `Path(HEARTBEAT_PATH).touch()` → `wait_for_database(db)` → `bus.connect()` → `OutboxRelay(db, bus, relay_source_filter(OUTBOX_RELAY_SOURCE))`.
 3. 루프:
    - heartbeat 파일을 갱신한다.

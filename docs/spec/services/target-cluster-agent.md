@@ -738,6 +738,7 @@ Tempo 트레이스 정규화(`normalize_payload`): query별 결과를 `traces.re
 | `POLICY_SYNC_INTERVAL_SECONDS` | int | `15` | 정책 fetch 주기 | `config.py` |
 | `RECONCILE_INTERVAL_SECONDS` | int | `30` | desired state reconcile 주기 | `config.py` |
 | `RECONCILER_MODE` | str | `builtin` | desired state writer 선택. `builtin`은 기존 apply 경로, `argocd`는 observer-only이며 built-in apply를 호출하지 않음 | `config.py` / `control/reconciler.py` |
+| `AGENT_DIRECT_COMMANDS_ENABLED` | str(bool) | `true` | `false`면 telemetry query 외 command를 Kubernetes 호출 전에 실패 처리. OSS profile은 `false` | `config.py` / `agent.py` |
 | `PROMETHEUS_BASE_URL` | str | `http://prometheus.target.svc:9090` | Prometheus 주소 (contracts re-export) | `config.py` |
 | `LOKI_BASE_URL` | str | `http://loki-gateway.target.svc` | Loki 주소 | `config.py` |
 | `TEMPO_BASE_URL` | str | `http://tempo.target.svc:3200` | Tempo 주소 | `config.py` |
