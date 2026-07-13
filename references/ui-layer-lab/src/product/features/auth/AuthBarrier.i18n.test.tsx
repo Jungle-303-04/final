@@ -48,15 +48,15 @@ describe("localized authentication boundary", () => {
   it("renders the complete login contract in English", async () => {
     renderBarrier(unauthenticatedPort(), "en");
 
-    expect(await screen.findByRole("heading", { name: "Sign in to KubeHeal" })).toBeTruthy();
+    expect(await screen.findByRole("heading", { name: "Sign in to Opsia" })).toBeTruthy();
     expect(screen.getByRole("textbox", { name: "Email" })).toBeTruthy();
     expect(screen.getByLabelText("Password")).toBeTruthy();
     expect(screen.getByRole("button", { name: "Sign in" })).toBeTruthy();
     expect(screen.getByRole("button", { name: "Switch to dark mode" })).toBeTruthy();
     const publicHeader = screen.getByRole("banner");
-    const loginCard = screen.getByRole("heading", { name: "Sign in to KubeHeal" })
+    const loginCard = screen.getByRole("heading", { name: "Sign in to Opsia" })
       .closest('[data-slot="card"]');
-    expect(publicHeader.textContent).toContain("KubeHeal");
+    expect(publicHeader.textContent).toContain("Opsia");
     expect(publicHeader.querySelector('[aria-label="Language: English"]')).toBeTruthy();
     expect(loginCard?.querySelector('[aria-label="Language: English"]')).toBeNull();
   });
@@ -65,18 +65,18 @@ describe("localized authentication boundary", () => {
     const user = userEvent.setup();
     const view = renderBarrier(unauthenticatedPort(), "ko", window.localStorage);
 
-    await screen.findByRole("heading", { name: "KubeHeal에 로그인" });
+    await screen.findByRole("heading", { name: "Opsia에 로그인" });
     await user.click(screen.getByRole("combobox", { name: "언어: 한국어" }));
     await user.click(await screen.findByRole("option", { name: "영어" }));
 
-    expect(screen.getByRole("heading", { name: "Sign in to KubeHeal" })).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "Sign in to Opsia" })).toBeTruthy();
     expect(screen.getByRole("combobox", { name: "Language: English" })).toBeTruthy();
     expect(window.localStorage.getItem("kubeheal.locale")).toBe("en");
 
     view.unmount();
     await Promise.resolve();
     renderBarrier(unauthenticatedPort(), "ko", window.localStorage);
-    expect(await screen.findByRole("heading", { name: "Sign in to KubeHeal" })).toBeTruthy();
+    expect(await screen.findByRole("heading", { name: "Sign in to Opsia" })).toBeTruthy();
   });
 
   it.each([

@@ -61,7 +61,7 @@ describe("ProductApp root recovery", () => {
       </StrictMode>,
     );
 
-    expect(await screen.findByRole("heading", { name: "Sign in to KubeHeal" })).toBeTruthy();
+    expect(await screen.findByRole("heading", { name: "Sign in to Opsia" })).toBeTruthy();
     expect(fetchMock).toHaveBeenCalledOnce();
     expect(fetchMock).toHaveBeenCalledWith(
       "/api/auth/session",
