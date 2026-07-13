@@ -4,6 +4,7 @@ import { ApiError } from "./client";
 import {
   AUDIT_TIMELINE_DEFAULT_LIMIT,
   AUDIT_TIMELINE_MAX_LIMIT,
+  AUDIT_TIMELINE_PATH,
   auditTimelineResponseSchema as publicAuditTimelineResponseSchema,
   getAuditTimeline as publicGetAuditTimeline,
 } from "./index";
@@ -57,6 +58,7 @@ describe("audit timeline API", () => {
     expect(publicAuditTimelineResponseSchema).toBe(auditTimelineResponseSchema);
     expect(AUDIT_TIMELINE_DEFAULT_LIMIT).toBe(50);
     expect(AUDIT_TIMELINE_MAX_LIMIT).toBe(200);
+    expect(AUDIT_TIMELINE_PATH).toBe("/api/audit/timeline");
   });
 
   it("preserves server order, nullable causation, and allowlisted summary values", async () => {

@@ -7,6 +7,7 @@ import { withQuery } from "./url";
 
 export const AUDIT_TIMELINE_DEFAULT_LIMIT = 50;
 export const AUDIT_TIMELINE_MAX_LIMIT = 200;
+export const AUDIT_TIMELINE_PATH = "/api/audit/timeline" as ApiPath;
 
 export interface GetAuditTimelineOptions {
   cursor?: string;
@@ -26,7 +27,7 @@ export async function getAuditTimeline(
 
   const limit = options.limit ?? AUDIT_TIMELINE_DEFAULT_LIMIT;
   assertAuditTimelineLimit(limit);
-  const path = withQuery("/api/audit/timeline" as ApiPath, [
+  const path = withQuery(AUDIT_TIMELINE_PATH, [
     ["correlation_id", correlationId],
     ["cursor", options.cursor],
     ["limit", limit],
