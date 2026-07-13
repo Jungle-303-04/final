@@ -1,8 +1,8 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { toast } from 'sonner';
 import { del, get, post } from '@/shared/lib/api';
 import { adaptCluster, adaptInventoryResource, adaptInventoryResourceDetail, adaptInventorySummary, adaptK8sEventResource, adaptPodResource, adaptServiceResource, adaptWorkloadResource } from '@/shared/lib/adapt';
 import type { Workload } from '@/shared/lib/types';
-import { useToast } from '@/ui';
 
 const CLUSTER_QUERY_TIMEOUT_MS = 8_000;
 const OBSERVABILITY_SYSTEM_NAMESPACES = new Set([
@@ -187,28 +187,30 @@ export const useInventoryResourceDetail = (id: string, identity: InventoryResour
 
 export function useScale(clusterId: string) {
   const qc = useQueryClient();
-  const { push } = useToast();
   return useMutation({
     mutationFn: ({ ns, name, replicas }: { ns: string; name: string; replicas: number }) =>
       post(`/clusters/${clusterId}/namespaces/${ns}/deployments/${name}/scale`, { replicas }),
     onSuccess: () => {
-      push({ tone: 'info', title: '스케일 명령 등록', description: '명령 상태는 워크로드 상태에서 이어서 확인됩니다' });
+      toast.info('스케일 명령 등록', { description: '명령 상태는 워크로드 상태에서 이어서 확인됩니다' });
       invalidateClusterRuntime(qc, clusterId);
     },
-    onError: err => push({ tone: 'danger', title: '스케일 실패', description: commandFailureMessage('스케일', err) }),
+    onError: (err) => {
+      toast.error('스케일 실패', { description: commandFailureMessage('스케일', err) });
+    },
   });
 }
 export function useRestart(clusterId: string) {
   const qc = useQueryClient();
-  const { push } = useToast();
   return useMutation({
     mutationFn: ({ ns, name }: { ns: string; name: string }) =>
       post(`/clusters/${clusterId}/namespaces/${ns}/deployments/${name}/restart`, {}),
     onSuccess: () => {
-      push({ tone: 'info', title: '재시작 명령 등록', description: '대상 행의 상태가 갱신되면 목록에 반영됩니다' });
+      toast.info('재시작 명령 등록', { description: '대상 행의 상태가 갱신되면 목록에 반영됩니다' });
       invalidateClusterRuntime(qc, clusterId);
     },
-    onError: err => push({ tone: 'danger', title: '재시작 실패', description: commandFailureMessage('재시작', err) }),
+    onError: (err) => {
+      toast.error('재시작 실패', { description: commandFailureMessage('재시작', err) });
+    },
   });
 }
 
@@ -219,14 +221,15 @@ function invalidateClusterRuntime(qc: ReturnType<typeof useQueryClient>, cluster
 
 export function useUnregisterCluster(clusterId: string) {
   const qc = useQueryClient();
-  const { push } = useToast();
   return useMutation({
     mutationFn: () => del<ClusterUnregisterResponse | undefined>(`/clusters/${clusterId}`),
     onSuccess: () => {
-      push({ tone: 'success', title: '클러스터 등록 해제 완료', description: '에이전트 제거 명령을 대상 클러스터에서 실행하세요' });
+      toast.success('클러스터 등록 해제 완료', { description: '에이전트 제거 명령을 대상 클러스터에서 실행하세요' });
       qc.invalidateQueries({ queryKey: clusterKeys.list() });
     },
-    onError: err => push({ tone: 'danger', title: '등록 해제 실패', description: clusterUnregisterFailureMessage(err) }),
+    onError: (err) => {
+      toast.error('등록 해제 실패', { description: clusterUnregisterFailureMessage(err) });
+    },
   });
 }
 
