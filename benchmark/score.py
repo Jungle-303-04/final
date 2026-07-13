@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Static, dependency-free KubeHealBench v0.1 contract grader."""
+"""Static, dependency-free OpsiaBench v0.1 contract grader."""
 
 from __future__ import annotations
 
@@ -12,7 +12,15 @@ from pathlib import Path
 from typing import Any
 
 ROOT = Path(__file__).resolve().parent
-REQUIRED_CATEGORIES = {"oom", "crashloop", "imagepull", "probe", "service-selector"}
+REQUIRED_CATEGORIES = {
+    "oom",
+    "crashloop",
+    "imagepull",
+    "probe",
+    "pvc",
+    "scheduling",
+    "service-selector",
+}
 REQUIRED_FIELDS = {
     "schema_version",
     "id",
@@ -214,9 +222,11 @@ def main() -> int:
             errors,
         )
     else:
+        minimum = 2 * len(REQUIRED_CATEGORIES)
+        maximum = 4 * len(REQUIRED_CATEGORIES)
         require(
-            10 <= len(scenarios) <= 20,
-            f"suite: expected 10..20 scenarios, got {len(scenarios)}",
+            minimum <= len(scenarios) <= maximum,
+            f"suite: expected {minimum}..{maximum} scenarios, got {len(scenarios)}",
             errors,
         )
         require(

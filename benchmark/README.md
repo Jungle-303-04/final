@@ -1,8 +1,10 @@
-# KubeHealBench v0.1
+# OpsiaBench v0.1
 
-KubeHealBench는 실제 RCA cause/recovery 카탈로그에 고정된 정답 장애 시나리오다. v0.1은
+OpsiaBench는 실제 RCA cause/recovery 카탈로그에 고정된 정답 장애 시나리오다. v0.1은
 클러스터 실행기가 아니라 정적 계약과 gold patch를 공개한다. 모든 파일은 표준 JSON이며
 `python3 benchmark/score.py`만으로 외부 패키지 없이 검증할 수 있다.
+기존 소비자 호환을 위해 scenario의 안정적인 `schema_version`은 `kubehealbench/v0.1`을
+유지한다. 공개 제품명 변경과 저장 계약 변경을 섞지 않는다.
 
 ## 시나리오 계약
 
@@ -24,9 +26,10 @@ KubeHealBench는 실제 RCA cause/recovery 카탈로그에 고정된 정답 장�
 위 표의 마지막 아홉 의미 필드가 [D-013]의 9항목이다. `expected_root_cause`는 문자열 하나이며
 Top-1 정답으로 사용한다. evidence는 source 존재만이 아니라 이름까지 일치해야 한다.
 
-probe와 service-selector의 후보에는 현재 전용 recovery action이 없다. 이 경우 공식 recovery
-fallback인 `manual_analysis`만 허용하며 `auto_apply`는 `false`다. gold patch는 운영자 검토가
-끝났을 때의 정답이지 자동 실행 허가가 아니다.
+probe path/port와 selector mismatch는 각각 catalog의 `probe_fix`, `selector_fix`만 허용한다.
+`pvc_not_bound`와 `pods_not_ready`처럼 전용 recovery action이 없는 후보는 공식 fallback인
+`manual_analysis`만 허용하며 `auto_apply`는 `false`다. gold patch는 운영자 검토가 끝났을
+때의 정답이지 실행 허가가 아니다.
 
 ## 검증
 
@@ -35,15 +38,16 @@ python3 benchmark/score.py
 ```
 
 채점기는 `benchmark/catalog-snapshot.json`과 모든 시나리오를 읽어 필수 필드와 타입, 카테고리별
-2~4개/전체 10~20개, rule/symptom/candidate/evidence의 정확한 일치, recovery action 일치,
+2~4개/전체 14~28개, rule/symptom/candidate/evidence의 정확한 일치, recovery action 일치,
 금지 remediation의 위험 blast-radius 태그, Kubernetes 객체와 normalization 조건을 검사한다.
 snapshot은 아래 원본을 2026-07-13에 실측한 공개 고정점이다.
 
 - `src/services/ai/agent/causes/catalog/crashloop.yaml`
 - `src/services/ai/agent/causes/catalog/image_pull.yaml`
 - `src/services/ai/agent/causes/catalog/readiness.yaml`
+- `src/services/ai/agent/causes/catalog/scheduling.yaml`
+- `src/services/ai/agent/causes/catalog/storage_volume.yaml`
 - `src/services/ai/agent/recovery/builtin.py`
 
 카탈로그가 바뀌면 snapshot과 해당 gold 정답을 함께 재검토해야 한다. scorer를 느슨하게 만들어
 불일치를 숨기면 안 된다.
-

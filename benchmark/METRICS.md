@@ -1,4 +1,4 @@
-# KubeHealBench v0.1 공개 지표
+# OpsiaBench v0.1 공개 지표
 
 모든 비율은 `분자 / 평가 가능한 전체 시나리오 수`로 보고하고, 분모가 0이면 `N/A`로 표기한다.
 동일 입력·카탈로그 snapshot·모델 설정·seed를 고정하며 시나리오별 원시 판정을 함께 공개한다.
@@ -38,4 +38,3 @@
 v0.2 실행기에서 remediation 적용 후 제한 시간 안에 `normalization_predicate.checks`가 모두 참이
 되고 관찰 안정 구간 동안 유지된 시나리오 수를 실제 remediation을 실행한 시나리오 수로 나눈다.
 rollback이 필요했거나 금지 action으로 우연히 정상화된 경우 실패다.
-
