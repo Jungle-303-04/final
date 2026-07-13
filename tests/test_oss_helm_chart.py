@@ -121,6 +121,24 @@ def test_helm_chart_orders_database_readiness_before_bootstrap() -> None:
     }
 
 
+def test_controller_uses_a_startup_probe_before_liveness_can_restart_it() -> None:
+    documents = _render_chart("--set", "postgresql.persistence.enabled=false")
+    deployment = next(
+        item
+        for item in documents
+        if item["kind"] == "Deployment" and item["metadata"]["name"] == "opsia-controller"
+    )
+    controller = next(
+        item
+        for item in deployment["spec"]["template"]["spec"]["containers"]
+        if item["name"] == "controller"
+    )
+
+    assert controller["startupProbe"]["httpGet"] == {"path": "/healthz", "port": "http"}
+    assert controller["startupProbe"]["failureThreshold"] >= 60
+    assert "initialDelaySeconds" not in controller["livenessProbe"]
+
+
 def test_make_demo_installs_the_chart_before_injecting_the_bad_rollout() -> None:
     script = (ROOT / "scripts" / "oss-demo.sh").read_text(encoding="utf-8")
 
