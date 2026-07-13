@@ -63,6 +63,7 @@ R-트랙([D-011])은 dev merge `257f91846`으로 landed/closed 되었고, 전용
 | S9 | landed | rule candidate 51~60 안전 계약 | feature `5ce8132b0`, canonical merge `66115a2d7` | 51~53·55 `safe_pr`, fixture 51·55·56, 추론 금지 경계와 여섯 번째 digest, 전체 `1920 passed, 3 skipped`, manifest 69/20 |
 | S10 | landed | rule candidate 61~70 안전 계약 | feature `aed4bf78b`, canonical merge `de0b27609` | 10개 fallback-only, resource/config 추론 금지와 일곱 번째 digest, 전체 `1923 passed, 3 skipped`, manifest 69/20 |
 | S11 | landed | rule candidate 71~80 안전 계약 | feature `dd2006904`, canonical merge `cb099e5eb` | scheduling 선언과 dispatcher 경계, fixture 73·75·78, 여덟 번째 digest, 전체 `1925 passed, 3 skipped`, manifest 69/20 |
+| S12 | landed | rule candidate 81~87 terminal 안전 계약 | feature `aafc4a956`, canonical merge `dc0b775ff` | 87/87 완결, 7개 fallback-only, fixture 82번, terminal digest, 전체 `1927 passed, 3 skipped`, manifest 69/20 |
 
 ## claim 규칙
 
