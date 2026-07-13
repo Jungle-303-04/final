@@ -3128,3 +3128,28 @@ target preflight·register 네 함수와 strict Zod 계약을 claim했다. 1회�
 - 격리 착륙 — data-only 이관·checksum/row count·FK/sequence·catalog fingerprint·restore rehearsal·
   DBA 승인과 connection cutover는 다음 단위다. AWS dev 배포 스위치와 migration Job 배선은 계속
   비활성 상태다.
+
+## 2026-07-14 02:04 KST — [프론트][동결 보고] VP-013 S1 안전 착륙
+
+- 착륙 origin/dev SHA: `dd0983408098ca2bab1667bb3ff335c94ff69d5f`.
+- 완료 범위: `frontend/src/ui/theme.css`의 legacy text/brand 이름 분리와 shadcn semantic
+  alias 매핑, 35개 소비 파일의 경계 기반 359개 utility 이관, `frontend/index.html`의
+  pre-paint theme bootstrap, `frontend/tests/theme_token_contract.test.mjs` 회귀 계약이다.
+- push 전 최신 dev rebase에서 `RepoDetailView.tsx`, `RegisterClusterWizard.tsx` 충돌 두 건은
+  원격 기능 로직을 보존하고 토큰 이름만 이관했다. 최종 게이트는 test `22/22`, typecheck,
+  lint 오류 0(원격 `ReleaseFlowView.tsx` hook 경고 1), production build 모두 exit 0이다.
+- 미완 위치: 시각 증거는 `output/playwright/vp-013-s1/{before,after}-{light,dark}.png`까지
+  캡처했으나 회전 spinner 74~183px 때문에 안정화 재캡처·첫 5 frame 계측·S1 검토 요청 기록이
+  미완이다. 코드 쪽 S2 primitive 설치, S3 charts 전환, S4 icon 전환, S5 화면 이관,
+  S6 `frontend/src/ui/index.tsx`/`cx()` 제거는 착수하지 않았다.
+- 재개 조건과 첫 작업: 정리 세션의 `[정리 완료]`와 조율 세션 검토 통과가 이 로그에 모두
+  기록된 뒤 최신 origin/dev를 흡수한다. 그 다음 `frontend/index.html` bootstrap과
+  `frontend/src/ui/theme.css` 매핑이 정리 결과에 보존됐는지 먼저 감사하고, `/dev/ui`의
+  light/dark 안정화 스크린샷 및 first-frame 계측부터 완료한다. 신규 UI는
+  `@/components/ui`만 사용한다.
+- 그래프 엔진 부수 실측: `@dagrejs/dagre` import/call은 0건인 dead dependency다.
+  `elkjs`만 `frontend/src/shared/flow/index.tsx`의 `useAutoLayout`에서 실행되어 Workflow,
+  Incident, Release 세 뷰를 배치한다. 의미 보존 통합안은 S5 이후 Dagre 의존성 제거이며,
+  ELK→Dagre 교체는 좌표·교차·성능 기준선 없이는 안전하지 않다.
+- D-038에 따라 이 기록 이후 `[정리 완료]`+검토 통과 전까지 `frontend/**`,
+  `references/**` 코드 커밋을 중단한다.
