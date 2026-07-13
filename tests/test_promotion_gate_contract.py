@@ -116,3 +116,18 @@ def test_workflow_run_response_keeps_existing_dynamic_fields() -> None:
 
     assert payload["runs"][0]["future_additive_field"] == "kept"
     assert payload["runs"][0]["promotion_gate"] is None
+
+
+def test_workflow_run_schema_links_structured_promotion_gate() -> None:
+    schema = WorkflowRunListResponse.model_json_schema()
+
+    run_schema = schema["$defs"]["WorkflowRunItemResponse"]
+    gate_schema = schema["$defs"]["PromotionGateResponse"]
+    assert "promotion_gate" in run_schema["properties"]
+    assert set(gate_schema["required"]) >= {
+        "eligible",
+        "command_status",
+        "command_completed",
+        "applied_not_false",
+        "rollout_ready_not_false",
+    }

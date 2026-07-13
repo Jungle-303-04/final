@@ -534,7 +534,9 @@ def merge_provider_policy(base: EvidenceProviderPolicy, incoming: EvidenceProvid
 | `AiConversationListResponse` | `conversations: list[JsonMap]` |
 | `ApplicationResponse` / `ApplicationListResponse` | `application: JsonMap` / `applications: list[JsonMap]` |
 | `DeploymentBindingResponse` / `DeploymentBindingListResponse` | `deployment: JsonMap` / `deployments: list[JsonMap]` |
-| `WorkflowRunListResponse` | `runs: list[JsonMap]` |
+| `PromotionGateResponse` | `eligible`, `command_completed`, `applied_not_false`, `rollout_ready_not_false: bool`; `command_status: str`; `applied/rollout_ready: bool \| None`; `failed_resources: list[JsonMap]`; `failed_resource_count: int` |
+| `WorkflowRunItemResponse` | 기존 run의 동적 필드를 `extra="allow"`로 보존하고 `promotion_gate: PromotionGateResponse \| None`를 구조화 |
+| `WorkflowRunListResponse` | `runs: list[WorkflowRunItemResponse]` |
 | `CatalogItemListResponse` / `CatalogItemResponse` / `CatalogInstallAcceptedResponse` | `items: list[JsonMap]` / `item: JsonMap` / `accepted: bool`, `command_id/correlation_id/status: str` |
 | `ProviderCatalogResponse` | `providers: dict[str, list[JsonMap]]` |
 | `ProviderValidationResponse` | `valid: bool`, `errors: list[str]`, `warnings: list[str]`, `selected: dict[str, JsonMap]` |
@@ -589,6 +591,8 @@ Enum (`StrEnum`, 앵커 `src/packages/contracts/gitops/__init__.py :: <이름>`)
 def supported_kubernetes_resource(api_version: str, kind: str) -> KubernetesResourceContract
 ```
 미지원 조합이면 `ValueError(f"unsupported manifest kind: {api_version}/{kind}")`.
+
+- `src/packages/contracts/gitops/__init__.py :: promotion_gate_from_command_result(result)` — 자동 승격과 API 투영이 함께 쓰는 단일 판정 계약. `status == "completed"`, `applied is not False`, 실패 resource 0건, `rollout.ready is not False`를 모두 만족할 때만 `eligible=true`. `applied`·`rollout.ready` 미제공은 현행 worker 의미를 보존해 각각 `*_not_false=true`, 공개 값은 `null`이다.
 
 상수: `DEFAULT_REPOSITORY_ID=""`, `DEFAULT_WATCH_TARGET_ID=""`, `DEFAULT_DEPLOYMENT_BINDING_ID=""`, `DEFAULT_APPLICATION_ID=""`, `DEFAULT_WORKFLOW_RUN_ID=""`, `DEFAULT_ENVIRONMENT="sandbox"`, `DEFAULT_REPO_REF=""`, `DEFAULT_REPO_BRANCH="main"`, `DEFAULT_MANIFEST_PATH="deploy.yaml"`, `GITHUB_TOKEN_ENV="GITHUB_TOKEN"`, `GITHUB_TOKEN_REF_ENV="GITHUB_TOKEN_REF"`, `GITHUB_API_BASE_ENV="GITHUB_API_BASE"`, `DEFAULT_GITHUB_API_BASE="https://api.github.com"`, `GITHUB_WEB_BASE_ENV="GITHUB_WEB_BASE"`(owner/name 축약 repo_ref 의 clone URL 웹 호스트, GitHub Enterprise 는 이 env 로 교체), `DEFAULT_GITHUB_WEB_BASE="https://github.com"`.
 

@@ -42,7 +42,7 @@ from domains.gitops.repository import (
 from domains.scm.events import SafePrCreatedBody, SafePrFailedBody
 from domains.target.events import ClusterDesiredStateChangedBody
 from domains.target.management_guard import is_management_registration
-from packages.config.constants import CommandStatus, Sandbox, Target
+from packages.config.constants import Sandbox, Target
 from packages.config.logs import get_logger
 from packages.contracts.event_bus.bodies import EventBody
 from packages.contracts.event_bus.interfaces import JsonObject
@@ -52,6 +52,7 @@ from packages.contracts.gitops import (
     WorkflowRunStatus,
     WorkflowStepName,
     WorkflowStepStatus,
+    promotion_gate_from_command_result,
 )
 from packages.contracts.identity import DEFAULT_WORKSPACE_ID, ResourceRole
 from packages.contracts.stores import WorkflowStore
@@ -244,19 +245,7 @@ def policy_decision_ref(approval_id: str, route: str) -> str:
 
 
 def command_result_succeeded(result: JsonObject) -> bool:
-    if result.get("status") != CommandStatus.COMPLETED or result.get("applied") is False:
-        return False
-    resources = result.get("resources")
-    if isinstance(resources, list):
-        for item in resources:
-            if not isinstance(item, Mapping):
-                continue
-            if item.get("applied") is False or str(item.get("status", "")).lower() == "failed":
-                return False
-    rollout = result.get("rollout")
-    if isinstance(rollout, Mapping) and rollout.get("ready") is False:
-        return False
-    return True
+    return bool(promotion_gate_from_command_result(result)["eligible"])
 
 
 @app.on(GitWebhookReceivedBody)
