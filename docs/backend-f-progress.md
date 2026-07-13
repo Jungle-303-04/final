@@ -7,7 +7,7 @@ governing: docs/f-coordination-plan.md · docs/backend-f-workqueue.md
 
 # 백엔드 F 진행 현황
 
-현재 상태: **앵커 25건**
+현재 상태: **앵커 26건**
 
 ## 역사적 Delta-green baseline (BQ-001~003)
 
@@ -632,3 +632,30 @@ Bundle route는 200을 반환한다.
   `origin/dev` ancestor exit 0.
 
 계약 완성: OpsiaBench candidate contracts 51..60 + probe and selector inference boundary (5ce8132b0598797e73bb675a2ff49c66eef72167) [green]
+
+### 보조 대기열 S10 — rule candidate 61~70 안전 계약
+
+- 상태: landed
+- 담당 lane: `codex/candidate-contract-batch-seven`
+- RED: `5c0d04120d443570e386c644ef3bf2f14aa9ab13`
+- 구현·데이터: `95afd816309d3e0de73bedabd1b20af0d6078a5e`
+- 문서와 feature HEAD: `aed4bf78b4e640af0b5ac55017f6a445b0a5013b`
+- canonical no-ff merge: `de0b2760951bd654b597bbfc36ce0004b26bc5fb`
+- 범위: loader 순서 61~70을 추가해 누적 70/87, `next_ordinal=71`이다.
+- 10개 모두 exact `manual_analysis` fallback-only이고 capability·fixture가 비어 있다.
+  resource pressure·bad release·runtime config 이름만 보고 `oom_memory`, `image_rollback`,
+  `config_fix`를 추론하지 않는다.
+- forbidden remediation은 leak 은폐용 fleet memory 증설, node data purge, cluster-wide
+  ConfigMap 복제·변조처럼 실제 실행 가능한 과잉 대응으로 의미 감사를 통과했다.
+- append-only 경계: 일곱 번째 canonical JSON digest
+  `56882298c112280ea41f4346170ee0336b207797a1df15a0acac6bdc42378590`를 `(61, 70)`에
+  고정하고 누락 lock·batch 7 변조 회귀를 추가했다.
+- 고유 검증: `python3 -S benchmark/score.py --candidate-contracts` 70/70 PASS,
+  `tests/test_benchmark_score.py` 52 passed. 독립 감사 P0/P1 0건.
+- 전체 게이트: Ruff lint/format PASS, import-linter 8 kept/0 broken,
+  pytest `1923 passed, 3 skipped`; manifest management 69 / target 20.
+- 4조건: merge-tree exit 0/tree `df15a4c59d352feeab141aa9bc36034e501fea44`;
+  파일 삭제·소유권 밖 변경·frozen 경로 변경 0건; RED·구현·문서·merge commit의
+  `origin/dev` ancestor exit 0.
+
+계약 완성: OpsiaBench candidate contracts 61..70 + fallback-only inference boundary (aed4bf78b4e640af0b5ac55017f6a445b0a5013b) [green]
