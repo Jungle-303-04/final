@@ -185,3 +185,21 @@ def test_helm_chart_can_inject_a_demo_scm_without_changing_the_default_provider(
         "name": "opsia-demo-scm",
         "key": "token",
     }
+
+
+def test_controller_rolls_when_the_injected_scm_credentials_rotate() -> None:
+    documents = _render_chart(
+        "--set",
+        "postgresql.persistence.enabled=false",
+        "--set-string",
+        "scm.credentialVersion=credential-hash",
+    )
+    deployment = next(
+        item
+        for item in documents
+        if item["kind"] == "Deployment" and item["metadata"]["name"] == "opsia-controller"
+    )
+
+    assert deployment["spec"]["template"]["metadata"]["annotations"] == {
+        "opsia.io/scm-credential-version": "credential-hash"
+    }
