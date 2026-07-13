@@ -3307,7 +3307,7 @@ index 591d560bc..5f1879a74 100644
 
 ## 2026-07-14 02:43 KST — [프론트 정리] S2 shadcn primitive 완본 이식
 
-- 코드 commit `fc9962ecc`. `frontend/src/components/ui/` 파일 목록:
+- 코드 commit `62147e310`. `frontend/src/components/ui/` 파일 목록:
   `alert-dialog`, `alert`, `avatar`, `badge`, `breadcrumb`, `button`, `card`, `chart`,
   `checkbox`, `collapsible`, `command`, `dialog`, `dropdown-menu`, `input`, `label`,
   `popover`, `radio-group`, `scroll-area`, `select`, `separator`, `sheet`, `skeleton`,
@@ -3322,4 +3322,5 @@ index 591d560bc..5f1879a74 100644
 - 프론트 게이트: ESLint warning/error 0, node tests `20/20`, TypeScript·Vite build PASS.
   변경 전 백엔드 실패 집합 = `{}`; 변경 후 실패 집합 = `{}`. 전체
   `bash scripts/test.sh`는 import-linter `8 kept/0 broken`, pytest
-  `2154 passed, 3 skipped`로 초록이다.
+  `2158 passed, 3 skipped`로 초록이다. 최신 dev의 push-gate 격리/CI 커밋을 rebase한 정확한
+  HEAD에서 다시 검증했으며 S2 commit의 origin/dev ancestor 확인을 push 뒤 수행한다.
