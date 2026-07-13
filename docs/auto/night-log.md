@@ -2734,3 +2734,21 @@ target preflight·register 네 함수와 strict Zod 계약을 claim했다. 1회�
 - GAP-001~010 착륙 앵커를 재확인했으나 0건이다. 다음 순서는 `002/003/004 → 010 → 005/006
   → 007/008 → 009 → 001`이며, 대기 중 Topology menu 제거·Resources graph shell, 공용 filter
   bar shell, wizard progressive shell, a11y/i18n/visual을 계약 데이터 없이 준비한다.
+
+## 2026-07-13 22:28 KST — [프론트] VP-010 writer cutover 승격 게이트
+
+- source HEAD `040f72b2c`는 최신 `origin/dev@b8bc27988`과
+  `origin/woonyong/ui-layer-lab@561ce4e67`을 모두 조상으로 포함한다. dev 병합의 유일한
+  충돌은 append-only `night-log.md`였고, 양쪽 기록을 시각 비감소 순서로 한 번씩 보존했다.
+  lab의 고유 patch는 `--cherry-pick` 기준 0건이라 현재 트리를 보존한 이력 병합으로 연결했다.
+- canonical URL로 전환되지 않았던 visual gate와 ProductShell visual harness를 `040f72b2c`에서
+  교정했다. legacy `cluster`·detail identity 기대를 `clusters`·self-contained `v1` identity로
+  바꾸고 shell harness에도 production과 같은 `UnifiedFilterProvider`를 배선했다.
+- 최종 `npm run check` PASS: TypeScript·ESLint, Vitest 126 files / 907 tests,
+  design guard 360 files, shadcn source audit 482 previews, Vite build 14,543 modules다.
+  `npm run visual-product`도 46 scenarios, exact API request counts, unexpected network/WebSocket
+  0건으로 PASS했다. CLS는 Home 0.004188, Resources 0.004167, Issues 0.004202다.
+- 이 기록 커밋까지 동일 HEAD로 lab과 dev에 fast-forward 승격하고, 배포 대상 SHA를 재기록한다.
+  승격 후 lane `codex/vp010-filter-cutover-20260713`과 worktree
+  `/private/tmp/opsia-vp010-filter-cutover`를 같은 사이클에서 회수한다. 신규 stash는 0건이며
+  기존 8개와 사람 소유 branch·worktree는 변경하지 않는다.
