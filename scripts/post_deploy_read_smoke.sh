@@ -10,7 +10,6 @@ AUTH_EMAIL="${AUTH_EMAIL:-}"
 AUTH_PASSWORD="${AUTH_PASSWORD:-}"
 SMOKE_RCA_CORRELATION_ID="${SMOKE_RCA_CORRELATION_ID:-}"
 SMOKE_RCA_INCIDENT_ID="${SMOKE_RCA_INCIDENT_ID:-}"
-STRICT_API_SMOKE_SCRIPT="${STRICT_API_SMOKE_SCRIPT:-${SCRIPT_DIR}/strict_api_smoke.py}"
 COOKIE_JAR="$(mktemp)"
 trap 'rm -f "${COOKIE_JAR}"' EXIT
 
@@ -27,7 +26,7 @@ echo "==> post-deploy operator login"
 login_with_password "${API_BASE_URL}" "${COOKIE_JAR}"
 
 echo "==> post-deploy strict RCA reads"
-python3 "${STRICT_API_SMOKE_SCRIPT}" \
+python3 "${SCRIPT_DIR}/strict_api_smoke.py" \
   --base-url "${API_BASE_URL}" \
   --cookie-jar "${COOKIE_JAR}" \
   --correlation-id "${SMOKE_RCA_CORRELATION_ID}" \
