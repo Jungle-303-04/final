@@ -90,7 +90,7 @@ R-트랙([D-011])은 dev merge `257f91846`으로 landed/closed 되었고, 전용
 | P0-1b | in_progress | immutable pre-Alembic snapshot bootstrap `b2786060d`와 create-all data-only 이관·metric lineage·cutover 불변식 `c8b75c2c6`, 회귀 `a94b64e25` 착륙 | 임의 stamp·기존 revision 수정·live 쓰기 금지. 로컬 코드·테스트는 착륙했지만 AWS catalog/data invariant, restore rehearsal, DBA 확인, connection cutover는 미실증이므로 완료 아님 |
 | P0-2 | in_progress | `DEV_AUTH_BYPASS=0` base 강제 + rendered/live 공통 fail-closed 검증기 `7d4e6750f` 착륙 | 렌더 검증은 gate 편입 완료. 만료된 AWS 세션 복구 후 live Deployment가 0임을 실증하고 배포 파이프라인에 live 모드를 배선하기 전까지 배포 중단 |
 | P0-3 | in_progress | dev gate → digest build/ECR → migration → 단계적 rollout. 명시 context·immutable digest만 허용하고 DB downgrade 없이 이전 이미지를 복원하는 경계 `3cf0b694a`, manifest 전체 기대 집합과 live digest를 대조해 private plan을 만드는 capture `b22edd791` 착륙 | `AWS_DEV_DEPLOY_ENABLED=1` exact opt-in, P0-1/P0-2 선행. migration Job·단계적 rollout·strict smoke workflow 배선은 잔여 |
-| P0-4 | in_progress | smoke 기본 활성과 boolean 입력 정규화 `ba46caf49` 착륙 + Bundle/audit/recent-changes strict 200 | 기본 smoke는 활성화됐으며, 인증된 fixture 부재를 skip하지 않는 신규 API 실측과 실패 시 digest rollback 배선은 다음 단위 |
+| P0-4 | in_progress | smoke 기본 활성과 boolean 입력 정규화 `ba46caf49`, 인증된 RCA fixture를 강제하고 Bundle/audit timeline/recent changes의 HTTP 200·상관관계·shape를 검사하는 strict smoke `6cd751688` 착륙 | 정적·계약 검증은 완료. AWS fixture·live 실행과 실패 시 `3cf0b694a` digest rollback 배선 전까지 완료 아님 |
 | P0-5 | requested | 배포 SHA·digest·URL `deploy-status.md` 갱신 | secret 값 기록 금지, status commit 재귀 방지 |
 
 레거시 `main` AWS CD 변수 `AWS_AUTO_DEPLOY`는 2026-07-14에 `1→0`으로 닫았다. 새 dev
