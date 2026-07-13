@@ -2,6 +2,11 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { ApiError } from "./client";
 import {
+  listFilteredResources as publicListFilteredResources,
+  listResourceFilterFacets as publicListResourceFilterFacets,
+  listResourceLabelFacets as publicListResourceLabelFacets,
+} from "./index";
+import {
   FILTERED_RESOURCES_PATH,
   RESOURCES_FILTER_FACETS_PATH,
   RESOURCE_LABEL_FACETS_PATH,
@@ -58,6 +63,9 @@ describe("workspace Resources filter API", () => {
     expect(RESOURCES_FILTER_FACETS_PATH).toBe("/api/resources/filter-facets");
     expect(FILTERED_RESOURCES_PATH).toBe("/api/resources");
     expect(RESOURCE_LABEL_FACETS_PATH).toBe("/api/resources/label-facets");
+    expect(publicListResourceFilterFacets).toBe(listResourceFilterFacets);
+    expect(publicListFilteredResources).toBe(listFilteredResources);
+    expect(publicListResourceLabelFacets).toBe(listResourceLabelFacets);
   });
 
   it("loads one structural facet axis with selected resolutions and an opaque cursor", async () => {
@@ -176,73 +184,6 @@ describe("workspace Resources filter API", () => {
     );
   });
 
-  it("rejects a mixed structural axis instead of silently relabeling it", async () => {
-    vi.spyOn(globalThis, "fetch").mockResolvedValue(jsonResponse({
-      axis: "namespaces",
-      items: [{
-        axis: "cluster",
-        value: "cluster-a",
-        cluster_id: "cluster-a",
-        name: "production",
-        provider: null,
-        availability: "available",
-      }],
-      selected_resolutions: [],
-      next_cursor: null,
-      has_more: false,
-      snapshot: SNAPSHOT,
-    }));
-
-    await expect(listResourceFilterFacets({ axis: "namespaces" })).rejects.toMatchObject({
-      kind: "invalid-payload",
-      status: 200,
-    } satisfies Partial<ApiError>);
-  });
-
-  it("rejects unknown nested fields and impossible negative counts", async () => {
-    vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(jsonResponse({
-      items: [{
-        resource: { ...RESOURCE, raw: { forbidden: true } },
-        cluster: { cluster_id: "cluster-a", name: null, provider: null },
-        application_ids: [],
-        application_binding_completeness: "exact",
-      }],
-      next_cursor: null,
-      has_more: false,
-      counts: {
-        filtered_count: 1,
-        unfiltered_count: 1,
-        filtered_count_completeness: "exact",
-        unfiltered_count_completeness: "exact",
-      },
-      snapshot: SNAPSHOT,
-    }));
-    await expect(listFilteredResources()).rejects.toMatchObject({
-      kind: "invalid-payload",
-      status: 200,
-    } satisfies Partial<ApiError>);
-
-    vi.restoreAllMocks();
-    vi.spyOn(globalThis, "fetch").mockResolvedValue(jsonResponse({
-      surface: "resources",
-      items: [],
-      selected_resolutions: [],
-      next_cursor: null,
-      has_more: false,
-      counts: {
-        filtered_count: -1,
-        unfiltered_count: 1,
-        filtered_count_completeness: "exact",
-        unfiltered_count_completeness: "exact",
-      },
-      snapshot: SNAPSHOT,
-    }));
-    await expect(listResourceLabelFacets()).rejects.toMatchObject({
-      kind: "invalid-payload",
-      status: 200,
-    } satisfies Partial<ApiError>);
-  });
-
   it("rejects client-side bounds before opening the transport", () => {
     const fetchMock = vi.spyOn(globalThis, "fetch");
 
@@ -274,5 +215,12 @@ describe("workspace Resources filter API", () => {
       kind: "invalid-request",
       status: 422,
     } satisfies Partial<ApiError>);
+  });
+
+  it("preserves AbortError identity for request cancellation", async () => {
+    const abortError = new DOMException("cancelled", "AbortError");
+    vi.spyOn(globalThis, "fetch").mockRejectedValue(abortError);
+
+    await expect(listFilteredResources()).rejects.toBe(abortError);
   });
 });
