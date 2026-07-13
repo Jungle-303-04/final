@@ -11,6 +11,7 @@ rules:
           - "kubernetes:cluster_resource_state"
           - "logs:related_logs"
           - "metadata:current_workload_snapshots"
+          - "metadata:referenced_config_objects"
         checks:
           - "Pod.spec.envFrom.secretRef 또는 volume.secret 참조 확인"
           - "events.reason/message에 secret not found, FailedMount, CreateContainerConfigError 확인"
@@ -30,6 +31,7 @@ rules:
           - "kubernetes:cluster_resource_state"
           - "logs:related_logs"
           - "metadata:current_workload_snapshots"
+          - "metadata:referenced_config_objects"
         checks:
           - "env.valueFrom.secretKeyRef key와 Secret data key 비교"
           - "events.reason/message에 couldn't find key 또는 optional=false 오류 확인"
@@ -48,6 +50,7 @@ rules:
           - "kubernetes:cluster_resource_state"
           - "logs:related_logs"
           - "metadata:current_workload_snapshots"
+          - "metadata:referenced_config_objects"
         checks:
           - "ExternalSecret/SecretProviderClass/SealedSecret 상태와 sync condition을 확인"
           - "event/log에 SecretSynced=False, provider auth error, secret sync failed 문구가 있는지 확인"
