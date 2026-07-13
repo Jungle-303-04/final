@@ -274,6 +274,21 @@ const visualScenarios = [
     forcedColors: "none",
   },
   {
+    id: "auth-unauthenticated-desktop-light-en",
+    locale: "en",
+    navigatorLocale: "ko",
+    persistedLocale: "en",
+    url: productUrl,
+    authSession: "unauthenticated",
+    authLocaleSmoke: true,
+    heading: "Sign in to Opsia",
+    requiredSelectors: authLoginSelectors,
+    viewport: { width: 1440, height: 1000 },
+    theme: "light",
+    colorScheme: "light",
+    forcedColors: "none",
+  },
+  {
     id: "auth-unauthenticated-mobile-dark",
     locale: "ko",
     url: productUrl,
@@ -1820,6 +1835,8 @@ async function captureScenario(page, scenario) {
     await prepareProductResourcesScenario(page, scenario);
   } else if (scenario.issuesScenario) {
     await prepareProductIssuesScenario(page, scenario);
+  } else if (scenario.authLocaleSmoke) {
+    await assertAuthLocaleSmoke(page, scenario);
   } else if (!scenario.authSession || scenario.authSession === "authenticated") {
     await page.keyboard.press("?");
     if (await page.getByRole("dialog").count()) {
@@ -1858,6 +1875,31 @@ async function captureScenario(page, scenario) {
     path: `${outputDir}product-${scenario.id}.png`,
     fullPage: true,
   });
+}
+
+async function assertAuthLocaleSmoke(page, scenario) {
+  if (scenario.locale !== "en"
+    || scenario.persistedLocale !== "en"
+    || scenario.navigatorLocale !== "ko") {
+    throw new Error(
+      `${scenario.id}: English auth fixture must prove en storage over a ko navigator`,
+    );
+  }
+
+  await page.getByText("Enter your account details to continue.", { exact: true }).waitFor();
+  await page.getByRole("textbox", { name: "Email", exact: true }).waitFor();
+  await page.getByLabel("Password", { exact: true }).waitFor();
+  await page.getByRole("button", { name: "Sign in", exact: true }).waitFor();
+  await page.getByRole("combobox", { name: "Language: English", exact: true }).waitFor();
+
+  const authText = await page.getByRole("main").innerText();
+  for (const unexpected of ["이메일", "비밀번호", "로그인"]) {
+    if (authText.includes(unexpected)) {
+      throw new Error(
+        `${scenario.id}: English auth surface leaked Korean UI copy ${JSON.stringify(unexpected)}`,
+      );
+    }
+  }
 }
 
 async function assertInitialLoadingPreview(page, scenario) {
