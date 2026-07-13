@@ -1703,3 +1703,18 @@ target preflight·register 네 함수와 strict Zod 계약을 claim했다. 1회�
 - gate: `npm run check` PASS(113 files / 824 tests), `npm run visual-product` PASS(36 scenarios,
   unexpected network/WebSocket 0), standalone production build PASS(14,538 modules).
 - backend pipeline I는 `done`이다. frontend H 실행은 사람 GO 전용이며 이 세션은 배포를 실행하지 않는다.
+
+## 2026-07-13 15:36 KST — [프론트] S1 Issues 확대·강제색 접근성 게이트 완료
+
+- visual RED `f5413960a`는 Issues 상세의 200% text resize와 forced-colors 시나리오를
+  추가하고, 공용 상태 harness가 Issues 화면 계약을 검증하지 못하는 실패를 고정했다.
+- GREEN `2693c5c8b`는 Issues 전용 강제색 assertion, Card의 system-color 경계,
+  Button의 keyboard focus·disabled·reduced-motion 규칙을 연결했다. GREEN은
+  `origin/woonyong/ui-layer-lab` ancestor exit 0이다.
+- `npm run check` PASS: TypeScript·ESLint, Vitest 113 files / 824 tests,
+  product design guard 340 files, shadcn source audit 482 previews,
+  Vite production build 14,538 modules.
+- `npm run visual-product` PASS: 38 isolated scenarios, exact scenario API requests,
+  unexpected feature network/WebSocket 0건. 신규 증거는
+  `output/playwright/product-issues-authenticated-detail-text-resize-200-light.png`와
+  `output/playwright/product-issues-authenticated-detail-forced-colors.png`다.
