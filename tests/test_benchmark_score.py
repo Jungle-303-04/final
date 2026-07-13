@@ -96,6 +96,18 @@ SEVENTH_CANDIDATE_BATCH = (
     "missing_configmap_reference",
     "config_key_missing",
 )
+EIGHTH_CANDIDATE_BATCH = (
+    "invalid_env_value",
+    "config_volume_mount_failed",
+    "insufficient_cpu",
+    "insufficient_memory",
+    "node_affinity_or_taint_mismatch",
+    "node_selector_mismatch",
+    "untolerated_taint",
+    "pvc_pending",
+    "missing_secret_reference",
+    "secret_key_missing",
+)
 
 
 def _score(*args: str) -> subprocess.CompletedProcess[str]:
@@ -353,6 +365,48 @@ def test_seventh_candidate_contract_batch_is_machine_verified_in_catalog_order()
     assert all(
         item["forbidden_remediations"][0]["blast_radius"] in {"cluster", "fleet"}
         for item in seventh_batch
+    )
+
+
+def test_eighth_candidate_contract_batch_is_machine_verified_in_catalog_order() -> None:
+    result = _score("--candidate-contracts")
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "RESULT PASS (80 candidate contracts; ordinals=1..80)" in result.stdout
+
+    document = json.loads(CONTRACTS.read_text(encoding="utf-8"))
+    eighth_batch = document["contracts"][70:80]
+    assert document["next_ordinal"] == 81
+    assert tuple(item["candidate_id"] for item in eighth_batch) == EIGHTH_CANDIDATE_BATCH
+    assert all(item["patch_capabilities"] == [] for item in eighth_batch)
+    assert {
+        item["candidate_id"]: [action["action_type"] for action in item["allowed_remediations"]]
+        for item in eighth_batch
+    } == {
+        **{candidate_id: ["manual_analysis"] for candidate_id in EIGHTH_CANDIDATE_BATCH},
+        "insufficient_cpu": ["resource_request_tuning", "manual_analysis"],
+        "insufficient_memory": ["resource_request_tuning", "manual_analysis"],
+        "node_affinity_or_taint_mismatch": [
+            "scheduling_constraint_fix",
+            "manual_analysis",
+        ],
+        "pvc_pending": ["pvc_binding_fix", "manual_analysis"],
+    }
+    assert {item["candidate_id"]: item["benchmark_fixtures"] for item in eighth_batch} == {
+        **{candidate_id: [] for candidate_id in EIGHTH_CANDIDATE_BATCH},
+        "insufficient_cpu": [
+            "benchmark/scenarios/scheduling/scheduling-insufficient-cpu/scenario.json"
+        ],
+        "node_affinity_or_taint_mismatch": [
+            "benchmark/scenarios/scheduling/scheduling-affinity-mismatch/scenario.json"
+        ],
+        "pvc_pending": ["benchmark/scenarios/pvc/pvc-pending-claim/scenario.json"],
+    }
+    forbidden_actions = [item["forbidden_remediations"][0]["action_type"] for item in eighth_batch]
+    assert len(forbidden_actions) == len(set(forbidden_actions)) == 10
+    assert all(
+        item["forbidden_remediations"][0]["blast_radius"] in {"cluster", "fleet"}
+        for item in eighth_batch
     )
 
 
