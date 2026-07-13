@@ -2987,6 +2987,41 @@ target preflight·register 네 함수와 strict Zod 계약을 claim했다. 1회�
   D-028 관계 뷰는 BQ-034가 제공할 provider-neutral observed edge 계약과 앵커 전까지 빈 슬롯으로
   유지하며, inventory/Prometheus 추측 집계나 Radar 경로 재사용을 금지한다.
 
+### 2026-07-14 01:11 KST — D-027 외부 Radar 실측 보강·BQ-034 입력 정정
+
+- 위 결론의 "제품 런타임 source 없음"은 Opsia 코드 경계에 한정한다. 사용자가 보고 있던 현행 화면은
+  `scripts/radar.sh:11-15,70-73,121-132`가 실행한 외부 Radar v1.8.1(`127.0.0.1:9280`)이다.
+  `GET /api/traffic/flows?since=5m` 실측은 HTTP 200, `source=caretta`, 원본 233건·집계 146건이었다.
+  즉 화면 데이터는 mock이 아니라 Caretta eBPF→Prometheus 관측값이다.
+- 실측 응답에서 관계 뷰로 이전 가능한 후보는 source/destination의 name·namespace·kind·workload·port,
+  protocol, connections, source, timestamp/lastSeen이다. 그러나 stable resource ID·connections의
+  unit/temporality/window가 없으므로 프론트 name join이나 유속 환산을 금지한다. backend가 stable
+  ResourceNode ID로 resolve하고 unresolved/restricted edge를 명시해야 한다.
+- `bytesSent/bytesRecv=0`은 Caretta의 현재 capability 결과이지 "트래픽 0" 증거가 아니다. bytes,
+  request/error rate, latency, L7, verdict/drop은 source capability가 확인된 경우에만 nullable 필드로
+  노출한다. UI는 provider/source 이름 분기가 아니라 capability로 표현을 결정한다.
+- BQ-034 필수 계약 입력: stable source/destination node ID, metric unit·temporality·window,
+  source capabilities, observedAt/freshness/stale/partial/warning, snapshot revision,
+  authorization revision, filter fingerprint, completeness와 unresolved/restricted 사유다.
+  `reference-feature-inventory.md:193-194,494,497-498`에 따라 현행은 REST 수동 snapshot이며,
+  resume cursor·ordering·idempotency가 없는 stream을 추측 도입하지 않는다.
+- Radar의 virtual Internet/Addon edge, client heuristic grouping, animation threshold는 presentation
+  파생이므로 canonical edge로 이전하지 않는다. BQ-034 착륙 전 Opsia 관계 뷰는 계속 빈 슬롯이다.
+
+### 2026-07-14 01:15 KST — D-028 독립 메뉴 통합·검증 완료
+
+- RED `972b58064`, GREEN `8c9614f2d`에서 Timeline 독립 surface·route·shortcut·i18n을
+  제거하고 `/product/timeline`, `/product/traffic` 직접 접근은 Home으로 수렴시켰다. Topology는
+  이전 사이클에서 이미 Resources graph slot으로 통합되어 독립 surface가 없다.
+- D-028 정본에 따라 Resources가 필터·시간·그래프·표 4층을 소유한다. 그러나 BQ-034 stable
+  observed edge 계약과 프론트 API·strict Zod·adapter 앵커 전에는 관계 뷰를 렌더하지 않는다.
+  물리 뷰도 별도 기획·계약 전에는 빈 슬롯이며 Radar DTO·heuristic을 재사용하지 않는다.
+- targeted route/shell/composition 회귀는 17/17 PASS다. `npm run check`는 typecheck·lint,
+  134 files/954 tests, design guard 381 files, shadcn audit 482 previews, production build
+  14,551 modules까지 exit 0이다.
+- `npm run visual-product`는 47 scenarios, unexpected feature network/WebSocket 0, CLS
+  Home 0.004188 / Resources 0.004167 / Issues 0.004202로 exit 0이다.
+
 ## 2026-07-14 00:57 KST — [백엔드] Applications 필터 계약 canonical 착륙
 
 - code `e7196ea7f`, canonical merge `cbba9d28e`가 `origin/dev` ancestor exit 0이다.
