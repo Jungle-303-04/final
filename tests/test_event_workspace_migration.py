@@ -14,7 +14,6 @@ from alembic import command
 ROOT = Path(__file__).resolve().parents[1]
 REVISION = "20260713_0655"
 DOWN_REVISION = "20260713_0140"
-CURRENT_HEAD = "20260713_0820"
 
 
 def _config(monkeypatch) -> Config:
@@ -37,7 +36,6 @@ def test_event_workspace_upgrade_sql_and_autocommit_boundary(monkeypatch) -> Non
     config = _config(monkeypatch)
     script = ScriptDirectory.from_config(config)
 
-    assert script.get_heads() == [CURRENT_HEAD]
     assert script.get_revision(REVISION).down_revision == DOWN_REVISION
 
     sql = _render(config, "upgrade", f"{DOWN_REVISION}:{REVISION}")

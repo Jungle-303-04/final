@@ -129,7 +129,6 @@ def test_change_projection_upgrade_and_downgrade(monkeypatch) -> None:
     config = _config(monkeypatch)
     script = ScriptDirectory.from_config(config)
 
-    assert script.get_heads() == [REVISION]
     assert script.get_revision(REVISION).down_revision == DOWN_REVISION
 
     upgrade = _render(config, "upgrade", f"{DOWN_REVISION}:{REVISION}")

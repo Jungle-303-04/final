@@ -55,6 +55,7 @@ MINIO_ROOT_USER="${MINIO_ROOT_USER:-minioadmin}"
 MINIO_ROOT_PASSWORD="${MINIO_ROOT_PASSWORD:-}"
 
 GITHUB_WEBHOOK_SECRET="${GITHUB_WEBHOOK_SECRET:-}"
+FILTER_CURSOR_SIGNING_KEY="${FILTER_CURSOR_SIGNING_KEY:-}"
 RCA_TEST_RUNS_ENABLED="${RCA_TEST_RUNS_ENABLED:-1}"
 RCA_TEST_RUNS_TOKEN="${RCA_TEST_RUNS_TOKEN:-}"
 TEST_FIXTURE_PURGE_ENABLED="${TEST_FIXTURE_PURGE_ENABLED:-1}"
@@ -530,6 +531,12 @@ create_management_runtime() {
   if [[ -z "${GITHUB_WEBHOOK_SECRET}" ]]; then
     GITHUB_WEBHOOK_SECRET="$(openssl rand -hex 32)"
   fi
+  if [[ -z "${FILTER_CURSOR_SIGNING_KEY}" ]]; then
+    FILTER_CURSOR_SIGNING_KEY="$(existing_secret_value "${context}" management-runtime-secret FILTER_CURSOR_SIGNING_KEY)"
+  fi
+  if [[ ${#FILTER_CURSOR_SIGNING_KEY} -lt 32 ]]; then
+    FILTER_CURSOR_SIGNING_KEY="$(openssl rand -hex 32)"
+  fi
   if [[ -z "${RCA_TEST_RUNS_TOKEN}" ]]; then
     RCA_TEST_RUNS_TOKEN="$(existing_secret_value "${context}" management-runtime-secret RCA_TEST_RUNS_TOKEN)"
   fi
@@ -689,6 +696,7 @@ EOF
     # 경유로는 LISTEN 이 불가해 postgres 에 직접 붙는다(게이트웨이당 커넥션 1개).
     --from-literal=COMMAND_NOTIFY_DATABASE_URL="postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgresql:5432/${POSTGRES_DB}"
     --from-literal=GITHUB_WEBHOOK_SECRET="${GITHUB_WEBHOOK_SECRET}"
+    --from-literal=FILTER_CURSOR_SIGNING_KEY="${FILTER_CURSOR_SIGNING_KEY}"
     --from-literal=RCA_TEST_RUNS_TOKEN="${RCA_TEST_RUNS_TOKEN}"
     --from-literal=TRUSTED_PROXY_AUTH_SECRET="${TRUSTED_PROXY_AUTH_SECRET}"
     --from-literal=METRICS_TOKEN="${METRICS_TOKEN}"

@@ -1061,3 +1061,15 @@ Bundle route는 200을 반환한다.
   feature `cf69ffb5b`와 canonical merge `e8fc3c878`은 모두 `origin/dev` ancestor exit 0이다.
 
 계약 완성: ManagementAccessResponse + Helm access modes (cf69ffb5bc9b98b3da1c0b221b6c9cd5b8c21872) [green]
+
+### GAP-002/003/004 — Resources 필터 코어 claim
+
+- 상태: `in_progress`; gateway 계약 lock은 이 행 하나가 보유한다.
+- baseline: `origin/dev@b8bc27988`, 전체 `2006 passed, 3 skipped`, Ruff lint/format PASS,
+  import-linter 8 kept/0 broken, manifest management 69/target 20.
+- 범위: workspace filter facet catalog, multi-cluster resource list, Resources Label facet/count,
+  snapshot-bound opaque cursor와 total/completeness. GAP-010 이후 항목은 건드리지 않는다.
+- 권한: session workspace만 사용하고 `resolve_allowed_cluster_ids()`의 구체 set을 SQL에 강제한다.
+  `None`이나 빈 권한을 wildcard로 전달하지 않는다.
+- 성능: client fan-out과 JSONB Label 전수 집계를 금지한다. ingestion에서 정규화한 Label projection과
+  복합 인덱스를 사용하고 projection 불완전은 exact 0으로 가장하지 않는다.

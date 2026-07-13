@@ -103,6 +103,39 @@ def test_helm_chart_keeps_the_public_profile_fail_closed() -> None:
     assert agent_env["RECONCILER_MODE"] == "argocd"
 
 
+def test_helm_chart_persists_and_injects_the_filter_cursor_signing_key() -> None:
+    documents = _render_chart()
+    secret = next(
+        item
+        for item in documents
+        if item["kind"] == "Secret" and item["metadata"]["name"] == "opsia-bootstrap"
+    )
+    deployment = next(
+        item
+        for item in documents
+        if item["kind"] == "Deployment" and item["metadata"]["name"] == "opsia-controller"
+    )
+    controller = _container(deployment, "controller")
+    cursor_env = next(
+        item for item in controller["env"] if item["name"] == "FILTER_CURSOR_SIGNING_KEY"
+    )
+
+    assert len(secret["stringData"]["FILTER_CURSOR_SIGNING_KEY"]) >= 32
+    assert cursor_env["valueFrom"]["secretKeyRef"] == {
+        "name": "opsia-bootstrap",
+        "key": "FILTER_CURSOR_SIGNING_KEY",
+    }
+
+
+def test_cluster_installers_reuse_or_generate_the_filter_cursor_signing_key() -> None:
+    for relative_path in ("scripts/up.sh", "scripts/aws-up.sh"):
+        source = (ROOT / relative_path).read_text(encoding="utf-8")
+        assert "existing_secret_value" in source
+        assert "management-runtime-secret FILTER_CURSOR_SIGNING_KEY" in source
+        assert '--from-literal=FILTER_CURSOR_SIGNING_KEY="${FILTER_CURSOR_SIGNING_KEY}"' in source
+        assert "openssl rand -hex 32" in source
+
+
 def test_helm_chart_uses_one_public_origin_and_keeps_postgres_internal() -> None:
     documents = _render_chart()
     services = {item["metadata"]["name"]: item for item in documents if item["kind"] == "Service"}
