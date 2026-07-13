@@ -9,7 +9,6 @@ from __future__ import annotations
 
 import base64
 import binascii
-import hashlib
 import json
 import subprocess
 from collections.abc import AsyncIterator, Mapping
@@ -32,6 +31,7 @@ from domains.gitops.events import (
     RenderedMetadata,
     RenderedSpec,
 )
+from domains.gitops.source_patch import canonical_manifest_digest
 from packages.config.constants import Sandbox
 from packages.config.settings import env
 from packages.contracts.event_bus.bodies import EventBody
@@ -143,6 +143,9 @@ class RenderResult:
     rendered_manifests: list[RenderedManifest]
     source_type: str
     source_origin: str
+    source_is_file: bool
+    source_document_count: int
+    source_manifest_sha256: list[str]
 
 
 @dataclass(frozen=True)
@@ -786,13 +789,7 @@ def default_namespace_for_kind(kind: str) -> str:
 
 
 def manifest_artifact_digest(payload: dict[str, Any]) -> str:
-    canonical = json.dumps(
-        payload,
-        sort_keys=True,
-        separators=(",", ":"),
-        ensure_ascii=False,
-    )
-    return f"sha256:{hashlib.sha256(canonical.encode()).hexdigest()}"
+    return canonical_manifest_digest(payload)
 
 
 def rendered_spec_from_payload(kind: str, payload: dict[str, Any]) -> RenderedSpec:
@@ -837,17 +834,25 @@ def deployment_image(spec: dict[str, Any]) -> str:
 def build_rendered_manifest_result(evt: GitChangedBody) -> RenderResult:
     with manifest_render_source(evt) as source:
         if source is not None:
+            documents = render_source_documents(source)
+            manifest_documents = [
+                document for document in documents if isinstance(document, dict) and document
+            ]
             return RenderResult(
-                rendered_manifests=parse_rendered_manifest_source_documents(source),
+                rendered_manifests=parse_rendered_manifest_payloads(manifest_documents),
                 source_type=source.source_type,
                 source_origin=source.origin,
+                source_is_file=(
+                    source.source_text is not None
+                    or bool(source.local_path is not None and source.local_path.is_file())
+                ),
+                source_document_count=len(documents),
+                source_manifest_sha256=[
+                    canonical_manifest_digest(document) for document in manifest_documents
+                ],
             )
     # 소스 없이 Deployment 를 합성하지 않음 — 정직한 실패 경로(manifest.invalid)로 보냄.
     raise ManifestSourceError(MANIFEST_SOURCE_UNAVAILABLE_REASON)
-
-
-def parse_rendered_manifest_source_documents(source: RenderSource) -> list[RenderedManifest]:
-    return parse_rendered_manifest_payloads(render_source_documents(source))
 
 
 def parse_rendered_manifest_payloads(payloads: list[Any]) -> list[RenderedManifest]:
@@ -878,6 +883,7 @@ def artifact_payload(
     rendered: RenderedManifest | None = None,
     reason: str | None = None,
     source: RenderResult | None = None,
+    source_manifest_sha256: str | None = None,
 ) -> dict[str, object]:
     return {
         "workspace_id": evt.workspace_id,
@@ -897,6 +903,9 @@ def artifact_payload(
             "resource": rendered_resource_suffix(rendered) if rendered is not None else None,
             "source_type": source.source_type if source is not None else None,
             "source_origin": source.source_origin if source is not None else None,
+            "source_is_file": source.source_is_file if source is not None else None,
+            "source_document_count": (source.source_document_count if source is not None else None),
+            "source_manifest_sha256": source_manifest_sha256,
             "renderer_version": RENDERER_VERSION,
             "cluster_id": evt.cluster_id,
             "application_id": evt.application_id,
@@ -920,6 +929,7 @@ async def cached_rendered_manifests(
         RENDERER_VERSION,
     )
     rendered: list[CachedRenderedManifest] = []
+    source_signatures: set[tuple[str, str, bool, int]] = set()
     prefix = f"{manifest_path}#"
     for artifact in artifacts or []:
         artifact_path = str(artifact.get("manifest_path", ""))
@@ -929,17 +939,38 @@ async def cached_rendered_manifests(
         if (
             not isinstance(source_summary, dict)
             or source_summary.get("renderer_version") != RENDERER_VERSION
+            or not isinstance(source_summary.get("source_type"), str)
+            or not source_summary.get("source_type")
+            or not isinstance(source_summary.get("source_origin"), str)
+            or not source_summary.get("source_origin")
+            or not isinstance(source_summary.get("source_is_file"), bool)
+            or isinstance(source_summary.get("source_document_count"), bool)
+            or not isinstance(source_summary.get("source_document_count"), int)
+            or int(source_summary["source_document_count"]) < 1
+            or not isinstance(source_summary.get("source_manifest_sha256"), str)
+            or not str(source_summary["source_manifest_sha256"]).startswith("sha256:")
         ):
             continue
         raw = artifact.get("rendered_manifest")
         if isinstance(raw, dict):
+            source_signatures.add(
+                (
+                    str(source_summary["source_type"]),
+                    str(source_summary["source_origin"]),
+                    bool(source_summary["source_is_file"]),
+                    int(source_summary["source_document_count"]),
+                )
+            )
             rendered.append(
                 CachedRenderedManifest(
                     rendered=RenderedManifest.from_body(raw),
                     artifact_id=str(artifact.get("artifact_id") or ""),
                 )
             )
-    return rendered
+    if len(source_signatures) != 1:
+        return []
+    (_, _, _, source_document_count) = next(iter(source_signatures))
+    return rendered if source_document_count == len(rendered) else []
 
 
 @app.on(GitChangedBody)
@@ -1026,7 +1057,7 @@ async def on_git_changed(
         )
         return
 
-    for rendered in result.rendered_manifests:
+    for index, rendered in enumerate(result.rendered_manifests):
         await ctx.db.save_repo_change(
             ctx.correlation_id,
             evt.commit_sha,
@@ -1043,6 +1074,7 @@ async def on_git_changed(
                 ManifestArtifactStatus.RENDERED.value,
                 rendered=rendered,
                 source=result,
+                source_manifest_sha256=result.source_manifest_sha256[index],
             )
         )
         yield ManifestRenderedBody(

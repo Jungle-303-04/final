@@ -1040,3 +1040,313 @@ JsonMap, AbortSignal, ID 검증을 완료 앵커 전까지 제품 화면에서 �
   unexpected network/WebSocket 0), standalone production build PASS.
 - 대기 조건: 백엔드 pipeline I는 `origin/dev`에서 아직 `pending`이다. FE-H 실행은 백엔드 I
   완료와 사람 GO가 모두 확인된 뒤에만 가능하다.
+## 2026-07-13 11:22 KST — GO-REQUEST [H3]
+
+- lane: `codex/f-auto-revert-pr`, HEAD `b8188ad38`; 최신 origin/dev
+  `95a281e3b`로 18개 고유 commit을 충돌 없이 rebase, behind/ahead `0/18`.
+- BQ-007: flag 기본 false의 rollout 실패 auto-revert, 권위 snapshot/원문 image patch,
+  rebase fix `87eb0eb88`.
+- BQ-009: `GitOpsAuthorityReadPort` 주입, patch 시점 workflow/diff/active binding/repository/
+  provenance 교차 검증, exact-base 원문 scalar span patch. `oom_memory`, `image_rollback`,
+  `image_tag_fix`, `replica_scale`, `probe_fix`(path/port/timeout), `selector_fix` 6종과
+  exact inverse rollback. 권위 부재/불일치/미지원은 `rca.action_required` fail-closed.
+- BQ-010: 실제 patch action을 선언 파라미터화하고 `gitops_recovery_review` 문서 action을
+  분리·score 하향. 일반 action의 markdown fallback 제거.
+- 실측: `uv run python scripts/verify-recovery-patches.py` 6/6 PASS, forward 후 inverse가
+  원문 byte 복원. compileall PASS, manifest management 69/target 20.
+- 전체 게이트: Ruff lint PASS, format 499 files, import-linter 2 kept/0 broken,
+  pytest `1820 passed, 3 skipped`.
+- 시험 merge: `git merge-tree --write-tree origin/dev b8188ad38` exit 0, tree
+  `f16e81b5df4ccc303f96ab3e6344df5e132c129d`; 예상 충돌 0건.
+- merge 명령: dev 통합 worktree에서 `git fetch origin dev` →
+  `git merge --no-ff codex/f-auto-revert-pr` → `bash scripts/test.sh` → scorer/compileall/
+  manifest 재실행 → merge commit push → `git merge-base --is-ancestor b8188ad38 origin/dev`.
+- 범위: gateway 계약 변경 0건. [D-019] 예외인 contracts 신규 read port,
+  dispatch-worker 최소 주입, recovery 경로와 기존 F lane의 gitops source/scm/auto-revert만 수정.
+- 요청: 사람 GO [H3] 및 merge·push 실행 위임. origin 착륙 전 BQ-007/009/010은
+  `done-pending-merge`이며 [D-019] DoD상 완료가 아니다.
+
+## 2026-07-13 11:28 KST — [백엔드] provider 계약 구현·통합 대기
+
+- lane: `codex/f-provider-connection-stage`, HEAD `305ed2b71`.
+- TDD: RED `f3428cf90` → GREEN `c5447cafb`; providerID 3사·vendor label 보조,
+  구체 등록값 우선, generic 등록 감지 후 `onprem` fallback, 연결 epoch별
+  `token_issued/awaiting_install/agent_connected/snapshot_received/ready/expired/error`를 고정했다.
+- 성능: 목록의 최신 inventory snapshot을 cluster별 N+1 대신 단일 window query로 조회한다.
+- 실측 계약: `docs/api/11-clusters/01-list-clusters.bru`, `02-get-cluster.bru`,
+  `03-connection-status.bru`가 provider/stage 허용값을 검산한다.
+- 전체 게이트: Ruff lint/format PASS(492 files), import-linter 2 kept/0 broken,
+  pytest `1746 passed, 3 skipped`; manifest management 68 / target 20.
+- 대기 사유: 최신 lab `37d754cae`의 `clusterSummarySchema`와
+  `clusterConnectionStatusSchema`가 `z.strictObject` 상태이며 provider/stage 키가 없다.
+  Zod 실측에서 추가 키는 `unrecognized_keys`로 거부돼 backend 단독 착륙 시 기존 UI가
+  `invalid-payload`가 된다. 프론트/API 소유자가 두 optional 필드를 허용하거나 양측을
+  같은 통합점으로 착륙해야 한다.
+- 처리: feature branch push 완료, backend 코드의 origin/dev merge·앵커·completed 표시는
+  보류했다. gateway 계약 lock은 유지하고 해당 frontend 소유 파일은 수정하지 않았다.
+
+## 2026-07-13 12:13 KST — [백엔드] H3 완결
+
+- [백엔드] H3 완결 — patch 엔진 canonical 착륙 `6d68325bf1cc47f55810e5dc2189e51a6fe916c0`.
+- 사람 위임 GO [H3], 승인 HEAD `33fd5f21c`의 `origin/dev` ancestor exit 0 및
+  `git ls-remote` 원격/로컬 hash 일치를 확인했다.
+- 전체 게이트: Ruff lint/format PASS(499 files), import-linter 2 kept/0 broken,
+  pytest `1820 passed, 3 skipped`; recovery patch scorer 6/6, compileall PASS,
+  manifest management 69 / target 20.
+- progress 앵커와 프론트 인계(unsupported 3조건, action_type별 파라미터)를
+  `docs/backend-f-progress.md`에 기록했다.
+
+## 2026-07-13 12:13 KST — Codex 브랜치 전면 정리 삭제 전 복구 보험
+
+- 기준 canonical: `origin/dev@d507ca6d47a0e953f6d1a0ad6931d576738c18cc`.
+- 로컬 `codex/*` 7개, 원격 `codex/*` 140개를 전수 판정했다.
+- 아래 hash·ancestor exit를 삭제 전에 영속화한다. exit 1인 Codex 작업 브랜치는 사람의
+  1회성 과감 모드 위임에 따라 `-D`/원격 delete 대상이다.
+- 사람 소유 가능성이 명시적인 4개 원격 ref는 삭제하지 않는다.
+
+| ref | hash | origin/dev ancestor exit | 예정 |
+|---|---|---:|---|
+| `codex/cloudflare-token-normalization` | `83864abdf0b677660d35d78a1f05d930acb6854a` | 1 | local -D |
+| `codex/f-argocd-observer` | `f5461aa8070a7ba9b088410d0ae5ebe89b8b4e86` | 1 | local -D |
+| `codex/f-auto-revert-pr` | `8e28b471172dd9f288bcb8290dd799c7e8309dce` | 1 | local -D |
+| `codex/f-provider-connection-stage` | `10e85d9925bd0818ef14ec696d4feabb6f517fe2` | 0 | local -d |
+| `codex/platform-foundation` | `63618a4fb81c4acda22ec125fa7934d9ef9d0204` | 1 | local -D |
+| `codex/rca-log-evidence-scope-20260710` | `a5ac062fb53752ec64a7ac37e38611ed0f3454d5` | 1 | local -D |
+| `codex/runtime-hardening-20260710` | `ae3ee71a229af78f804f88e16ecdc466443bf5f9` | 1 | local -D |
+| `origin/codex/chanbin-dev-infra-base` | `f1f4e15a8e22cd48987231f224c67cd5c3a1d6ed` | 1 | 보존(사람 소유 가능) |
+| `origin/codex/data-dashboard-variants` | `d21874c42418769c7d7bd05b83ebd235723633fd` | 1 | remote --delete |
+| `origin/codex/f-argocd-observer` | `f5461aa8070a7ba9b088410d0ae5ebe89b8b4e86` | 1 | remote --delete |
+| `origin/codex/f-auto-revert-pr` | `e6d4df1dc74162925e23048abb00d9a87738a1c6` | 1 | remote --delete |
+| `origin/codex/f-provider-connection-stage` | `305ed2b71818aede709af4b474b11e361e01a829` | 1 | remote --delete |
+| `origin/codex/frontt` | `6e5b9d42a303b784ce5f58dd358ae38f0cef4c8d` | 1 | 보존(사람 소유 가능) |
+| `origin/codex/gitops-cache-db-crd` | `6912e35d0657815a9934f2769f2474e7f93fd2ea` | 1 | remote --delete |
+| `origin/codex/headlamptest` | `11d7c879e039243321ce146d7f2124e71f826ae8` | 1 | 보존(사람 소유 가능) |
+| `origin/codex/platform-foundation` | `63618a4fb81c4acda22ec125fa7934d9ef9d0204` | 1 | remote --delete |
+| `origin/codex/rca-log-evidence-scope-20260710` | `a5ac062fb53752ec64a7ac37e38611ed0f3454d5` | 1 | remote --delete |
+| `origin/codex/release-flow-frontend-safe-pr-144` | `ccb27df95ba8d586d01d5b676964b606c57be3e4` | 1 | remote --delete |
+| `origin/codex/release-flow-prod-abort-criteria-52` | `3f1b0e67b0567f240d095f9b0e65076ba71afaf4` | 1 | remote --delete |
+| `origin/codex/release-flow-prod-action-disabled-hints-83` | `a86e3e9a1977ce63c4ae15c25b2cf4312c8cddff` | 1 | remote --delete |
+| `origin/codex/release-flow-prod-action-reason-presets-81` | `0c259d0398f11cd3b03f500d25611bdca80bb758` | 1 | remote --delete |
+| `origin/codex/release-flow-prod-active-freeze-filter-103` | `4b6ab7bfffe42acd2d4d67c12e23a9dcd519d1b0` | 1 | remote --delete |
+| `origin/codex/release-flow-prod-active-run-filter-74` | `5628961ef03471d16935c2ffb6c3705069e2d39e` | 1 | remote --delete |
+| `origin/codex/release-flow-prod-advance-verification-gate-58` | `64a6da31dc01051b819bed6440f2831f74607e62` | 1 | remote --delete |
+| `origin/codex/release-flow-prod-alert-coverage-30` | `a9a11f75d311873e3f38c5ba05e5525394913e1c` | 1 | remote --delete |
+| `origin/codex/release-flow-prod-alert-ops-13` | `c4e9b46cfd917066da8880b107e9ab9165e19609` | 1 | remote --delete |
+| `origin/codex/release-flow-prod-alert-recency-33` | `29c9e01d71e123c8b5b4022830ff6c9b54216364` | 1 | remote --delete |
+| `origin/codex/release-flow-prod-alert-smoke-45` | `e2a1c831e16b0f1b6ffd82023fc6df8fcb570ca6` | 1 | remote --delete |
+| `origin/codex/release-flow-prod-alert-validation-31` | `13c1d36885cefe3f8de633850097bc5d755b5cd3` | 1 | remote --delete |
+| `origin/codex/release-flow-prod-alerts-08` | `825d5530cc7d04b086b6c8643084d098af0dc366` | 1 | remote --delete |
+| `origin/codex/release-flow-prod-app-context-15` | `7a440941a3701fa89319bcfb27c859c0b5d661f6` | 1 | remote --delete |
+| `origin/codex/release-flow-prod-approval-card-16` | `bcf3c01e6b0f6f4f1164a71256a6bb2343d490f7` | 1 | remote --delete |
+| `origin/codex/release-flow-prod-approval-evidence-40` | `98f894a86ab59840a89e124f14cbb76c28b4d020` | 1 | remote --delete |
+| `origin/codex/release-flow-prod-approval-recency-43` | `9c403c2eb432252026c0f4a3efb8234c354afbbf` | 1 | remote --delete |
+| `origin/codex/release-flow-prod-attention-alert-26` | `a45ee7aa9b35e4dd1c28f18e91a74c4e516a5526` | 1 | remote --delete |
+| `origin/codex/release-flow-prod-attention-reasons-21` | `b37da7a4b22987558c3ebe364f6ea1c64ec04e28` | 1 | remote --delete |
+| `origin/codex/release-flow-prod-audit-09` | `f73ba420c4f18978899b7f8e9ffcc389c72623ed` | 1 | remote --delete |
+| `origin/codex/release-flow-prod-audit-copy-91` | `f109fb2f48ff4a2ecccdbe7715bdee6783bf55bd` | 1 | remote --delete |
+| `origin/codex/release-flow-prod-audit-event-filter-25` | `97b61e547437f193ebd0691204c96ec07e1faf69` | 1 | remote --delete |
+| `origin/codex/release-flow-prod-audit-export-ui-14` | `f71bbac7eb82a50327b71c3c81e94062c5b27d07` | 1 | remote --delete |
+| `origin/codex/release-flow-prod-audit-operator-filters-69` | `5866baaf56e6901ac1b14653b4ee6ba86ed56719` | 1 | remote --delete |
+| `origin/codex/release-flow-prod-audit-prefix-filter-67` | `838707682ac9c6186756ede7e71e70ce4825ca24` | 1 | remote --delete |
+| `origin/codex/release-flow-prod-audit-row-meta-68` | `09ce0d4434c21923766c6f8afac23765881161b5` | 1 | remote --delete |
+| `origin/codex/release-flow-prod-change-freeze-smoke-108` | `8f5c2e115deb639e2a3f64890da816407ec6ed7f` | 1 | remote --delete |
+| `origin/codex/release-flow-prod-change-ticket-gate-38` | `a351a48a7f9c269b31d01103eeab19bd2d04f28a` | 1 | remote --delete |
+| `origin/codex/release-flow-prod-destructive-action-confirm-84` | `951912a36a9931e484dbcea01278402978f84fa9` | 1 | remote --delete |
+| `origin/codex/release-flow-prod-diagnostics-gate-34` | `b2e89cd96bc567b79e16d5e8158d51496030a461` | 1 | remote --delete |
+| `origin/codex/release-flow-prod-diagnostics-override-35` | `4233e52ad600f2995033fbf0e9808503b97bc904` | 1 | remote --delete |
+| `origin/codex/release-flow-prod-freeze-handoff-101` | `47011d34dd2a69aa3b9d0d753f201f068af53e18` | 1 | remote --delete |
+| `origin/codex/release-flow-prod-freeze-run-filter-102` | `26e67cb2ad614a40dd140a6146ce19facf0126b5` | 1 | remote --delete |
+| `origin/codex/release-flow-prod-freeze-window-100` | `f26f5ae5e0fc1be3b196272a16997eafcb30aa94` | 1 | remote --delete |
+| `origin/codex/release-flow-prod-gate-inputs-12` | `93d988473a2c3ddc85fcd9a9f259660a14ee41e1` | 1 | remote --delete |
+| `origin/codex/release-flow-prod-guard-snapshot-36` | `34aa5c2d112080d6136a7e973fe5d781a425b567` | 1 | remote --delete |
+| `origin/codex/release-flow-prod-handoff-28` | `c16365765418fe7a155f7cecd4adbd4a597b77ce` | 1 | remote --delete |
+| `origin/codex/release-flow-prod-handoff-abort-criteria-53` | `9dd0129cebdc6ef1a54ccce7b7c717d031967210` | 1 | remote --delete |
+| `origin/codex/release-flow-prod-handoff-copy-80` | `20ab2dfd6621e4c61443190746575fc9bea36e21` | 1 | remote --delete |
+| `origin/codex/release-flow-prod-handoff-verification-51` | `36134309d586b4240c1da8a5611df43462cb93da` | 1 | remote --delete |
+| `origin/codex/release-flow-prod-hardening-04` | `2abb1436df06247e8e8e415bdaa7bc7d51bf1e1d` | 1 | remote --delete |
+| `origin/codex/release-flow-prod-impact-summary-48` | `080fa305c25b723cf89ed020a3a9eed7c461b4a3` | 1 | remote --delete |
+| `origin/codex/release-flow-prod-live-action-confirm-85` | `d75f2e893beeb08a86836f6c67c20126c81e9ad2` | 1 | remote --delete |
+| `origin/codex/release-flow-prod-live-alert-gate-29` | `290a129173b96562d95d530e930b021d923d7172` | 1 | remote --delete |
+| `origin/codex/release-flow-prod-live-preflight-smoke-41` | `93788e918a7e5933fc5a32c66bda9a8bf9e06f4a` | 1 | remote --delete |
+| `origin/codex/release-flow-prod-live-start-confirm-87` | `1494d13c19ff5fa6b8dcd05b5b1bf5ddd1e928e8` | 1 | remote --delete |
+| `origin/codex/release-flow-prod-notify-audit-meta-66` | `55b6c970a1f8d411ec8aa00ec362387f137ee6ea` | 1 | remote --delete |
+| `origin/codex/release-flow-prod-notify-cooldown-63` | `a34b21ba8f1217db17eb593e3b3205ae02b9710b` | 1 | remote --delete |
+| `origin/codex/release-flow-prod-notify-cooldown-handoff-65` | `bb9ac32f109a44802a310c21962e24c9c57f5ca5` | 1 | remote --delete |
+| `origin/codex/release-flow-prod-operator-controls-19` | `f934a682294e3243724209491f32bf28bd5a4985` | 1 | remote --delete |
+| `origin/codex/release-flow-prod-ops-observability-06` | `d89dcad5a4be6bc043742613439747d8f413655f` | 1 | remote --delete |
+| `origin/codex/release-flow-prod-ops-rehearsal-27` | `4d1041ba22679905901038795029ba027d5e19c8` | 1 | remote --delete |
+| `origin/codex/release-flow-prod-ops-smoke-05` | `3f07f71cb620952d00c36a48bb1f031eab950e61` | 1 | remote --delete |
+| `origin/codex/release-flow-prod-owner-gate-46` | `f0745371373088e03871aba5e02ea324a2bb5cc6` | 1 | remote --delete |
+| `origin/codex/release-flow-prod-paused-run-summary-76` | `04833adc9a9071ae4dfe470e753eaad4bf47bb0a` | 1 | remote --delete |
+| `origin/codex/release-flow-prod-permission-gates-42` | `b3da258a293d1b681886350b6c711b0920944129` | 1 | remote --delete |
+| `origin/codex/release-flow-prod-policy-override-filter-104` | `b1307a501894ca8d9f50bc0d70db3c08b0e82545` | 1 | remote --delete |
+| `origin/codex/release-flow-prod-policy-override-handoff-105` | `c57a1535dc2ac2cefea36c1b3f0ae83eb39d934b` | 1 | remote --delete |
+| `origin/codex/release-flow-prod-policy-override-smoke-107` | `d985199fe776f8d8e094167aeb8aab435fd23f7f` | 1 | remote --delete |
+| `origin/codex/release-flow-prod-policy-override-source-106` | `30fae23144149d7f51955c452cb3058eefab575c` | 1 | remote --delete |
+| `origin/codex/release-flow-prod-preview-action-hints-88` | `68902e9b5975ab743507f16e2b1cf5d7d65ea8f7` | 1 | remote --delete |
+| `origin/codex/release-flow-prod-preview-copy-90` | `656721285b455f5888d5936e608b31168a505cb8` | 1 | remote --delete |
+| `origin/codex/release-flow-prod-production-preflight-109` | `200ba74ff022d27b6cf66e0bfd6c1cfba37d245c` | 1 | remote --delete |
+| `origin/codex/release-flow-prod-production-preflight-scope-110` | `62b4968c31fe5246a6440bade921829f950a75f0` | 1 | remote --delete |
+| `origin/codex/release-flow-prod-readiness-11` | `043b7171f8ebfa4d54524bc911a8be3ac62d5d62` | 1 | remote --delete |
+| `origin/codex/release-flow-prod-readiness-actions-47` | `55257537a7cdf0866feccd218b9f49b985f6eaba` | 1 | remote --delete |
+| `origin/codex/release-flow-prod-readiness-copy-89` | `1adf34eaffe1906530b68e71a40bcd614291b521` | 1 | remote --delete |
+| `origin/codex/release-flow-prod-readiness-lock-18` | `4ed43c8083464cc8058ef1f0a136770f68110554` | 1 | remote --delete |
+| `origin/codex/release-flow-prod-readiness-snapshot-49` | `47fcb520414fa5e85753feaa0c79b31b9d60d426` | 1 | remote --delete |
+| `origin/codex/release-flow-prod-recent-run-shortcuts-78` | `699ef1dbc310a091c62e662d06f46945040c419b` | 1 | remote --delete |
+| `origin/codex/release-flow-prod-redaction-10` | `9847f73c3a394d38e13d4bab01fe1b38cb3400ca` | 1 | remote --delete |
+| `origin/codex/release-flow-prod-release-window-39` | `c85e82f74906c283b4057cf6ef2f5ca5ce615d5d` | 1 | remote --delete |
+| `origin/codex/release-flow-prod-retry-07` | `02e512621ecdf9c2e32f91807e674a07fbbbbe03` | 1 | remote --delete |
+| `origin/codex/release-flow-prod-rollback-handoff-reason-82` | `bf37e5229c1de881d3091b9905acb39d8517b027` | 1 | remote --delete |
+| `origin/codex/release-flow-prod-rollback-override-37` | `5be7fd2c939ee67c5e8c4938665c991490cb66d4` | 1 | remote --delete |
+| `origin/codex/release-flow-prod-run-deeplink-79` | `e943e075017c1f5bffedf777c79619b95ac285d4` | 1 | remote --delete |
+| `origin/codex/release-flow-prod-run-filters-23` | `d3553bf8b388bcaa3659dca90488a99f58ae162b` | 1 | remote --delete |
+| `origin/codex/release-flow-prod-run-health-smoke-71` | `9643ecd22e398f34b9278a9e60930743a8f7403d` | 1 | remote --delete |
+| `origin/codex/release-flow-prod-run-history-20` | `210ff85d898621b1c8096d43064ffed423bdfde4` | 1 | remote --delete |
+| `origin/codex/release-flow-prod-run-lock-17` | `4da3b8e8931af9aabe56b583ea5ae80657e4e421` | 1 | remote --delete |
+| `origin/codex/release-flow-prod-run-report-92` | `ee1cca7110604f41f7878445e56bab68dea9ab52` | 1 | remote --delete |
+| `origin/codex/release-flow-prod-run-report-api-93` | `00cfa083a248e75bee936401d38c01804ae24e29` | 1 | remote --delete |
+| `origin/codex/release-flow-prod-run-report-approvals-99` | `229ea664f567436a98b84f0d26b2a88dd3b736f7` | 1 | remote --delete |
+| `origin/codex/release-flow-prod-run-report-audit-summary-98` | `702e515f5bd000e4de6c5f5a6d4c3b3ff06bdf9f` | 1 | remote --delete |
+| `origin/codex/release-flow-prod-run-report-checks-95` | `07ab0b497678233340a95ace33013dbe375df842` | 1 | remote --delete |
+| `origin/codex/release-flow-prod-run-report-context-97` | `44f79583e890131ecfda63be198470eeec933611` | 1 | remote --delete |
+| `origin/codex/release-flow-prod-run-report-evidence-96` | `26c41d9aa1b048fcd8f31dcae59a4334314c1fd6` | 1 | remote --delete |
+| `origin/codex/release-flow-prod-run-report-export-94` | `1ba9f47ac5cd872dadb279d6183c1d82e50d1772` | 1 | remote --delete |
+| `origin/codex/release-flow-prod-run-scoped-audit-24` | `9661ccd6d0aff79e6a532a6e3f5a4f59075d9167` | 1 | remote --delete |
+| `origin/codex/release-flow-prod-runbook-gate-44` | `128f156b055bb2b139f6e5b13ee27aeaee110d38` | 1 | remote --delete |
+| `origin/codex/release-flow-prod-smoke-annotations-118` | `500091122d6ba8c5fa428a6b96424c6294b37d48` | 1 | remote --delete |
+| `origin/codex/release-flow-prod-smoke-ci-bundle-119` | `39fc6e8c49a05b2ba10ed3b75352dbef47bb3536` | 1 | remote --delete |
+| `origin/codex/release-flow-prod-smoke-gh-summary-114` | `c2f3e0747ee73267b95e05323f5123b7969f2310` | 1 | remote --delete |
+| `origin/codex/release-flow-prod-smoke-github-output-117` | `594532d192a2d4546abc1b46ad7659d8724363c2` | 1 | remote --delete |
+| `origin/codex/release-flow-prod-smoke-junit-artifact-112` | `37d2c6b08cadcdadb4a1823590d1d34e109d374a` | 1 | remote --delete |
+| `origin/codex/release-flow-prod-smoke-markdown-artifact-113` | `cf7d1453ecbf1129101215db0f917077acbbe788` | 1 | remote --delete |
+| `origin/codex/release-flow-prod-smoke-redaction-116` | `fb2ee8eff09b3e4c7c1445ab82fe13d0bd352be8` | 1 | remote --delete |
+| `origin/codex/release-flow-prod-smoke-report-artifact-111` | `a777e032bfb8771d271f891d019ff441dc38b853` | 1 | remote --delete |
+| `origin/codex/release-flow-prod-smoke-safe-retry-115` | `110bc0cc21dc0c178d6e17cce91bbdc1c8f11759` | 1 | remote --delete |
+| `origin/codex/release-flow-prod-smoke-workflow-120` | `1dc83dacc532aa31fd1c54a626c04dc2f7b4115b` | 1 | remote --delete |
+| `origin/codex/release-flow-prod-stale-run-22` | `437f633f1b79652044236c3d20e674fc5a93723d` | 1 | remote --delete |
+| `origin/codex/release-flow-prod-status-summary-shortcuts-75` | `ec63f2f5f1041afe811c5c6173144f36c29d2464` | 1 | remote --delete |
+| `origin/codex/release-flow-prod-summary-filter-shortcuts-73` | `728ad1dfff0a2c4248f059a786b50af9326dc514` | 1 | remote --delete |
+| `origin/codex/release-flow-prod-terminal-run-summary-77` | `f44bdad543fa839ee4c5dfc6d458503fbf625f50` | 1 | remote --delete |
+| `origin/codex/release-flow-prod-unhealthy-run-filter-72` | `e91c53552f3fbcb3fb9845741d7d4fbd027c43bc` | 1 | remote --delete |
+| `origin/codex/release-flow-prod-validated-alert-gate-32` | `05778dba0e18216c8c0659672f1b28cabdd78206` | 1 | remote --delete |
+| `origin/codex/release-flow-prod-verification-alert-56` | `bd7f1b64f6cf26ff1384cd858de69b47860af5d3` | 1 | remote --delete |
+| `origin/codex/release-flow-prod-verification-filter-60` | `971b71592bc0177b129bd766a3334fdd600a4e59` | 1 | remote --delete |
+| `origin/codex/release-flow-prod-verification-gate-50` | `da3317366366395aa2a4a5fd2308bbfde29af7b6` | 1 | remote --delete |
+| `origin/codex/release-flow-prod-verification-jobs-54` | `684410e49b6780d103fd3160c5bf696d6b812493` | 1 | remote --delete |
+| `origin/codex/release-flow-prod-verification-pending-timeout-61` | `d5a7bd8aa1472ec520003175b8313efed9be7716` | 1 | remote --delete |
+| `origin/codex/release-flow-prod-verification-result-55` | `c22178c800cffd77a040d7b62626840df125b3ac` | 1 | remote --delete |
+| `origin/codex/release-flow-prod-verification-result-ui-57` | `edc53c8f5deb10a28dda5569e83d73a25de0f9b3` | 1 | remote --delete |
+| `origin/codex/release-flow-prod-verification-summary-59` | `a25ed23a3b2aff30ac1b664b64c1902385435b50` | 1 | remote --delete |
+| `origin/codex/release-flow-prod-verification-timeout-alert-62` | `346ce6a9a54cacc38ed83f2b28e0c8659ece2358` | 1 | remote --delete |
+| `origin/codex/release-flow-prod-verification-timeout-smoke-70` | `587ac3b4cd7e19594ecd44791479b2fda0332663` | 1 | remote --delete |
+| `origin/codex/release-flow-prod-verification-timeout-status-64` | `486aac2ad51215e25455cdf10d8a8994eb83fada` | 1 | remote --delete |
+| `origin/codex/release-flow-smoke-alert-preflight-126` | `755a822f5346eba4002e8e71ebfaf3f154910c7f` | 1 | remote --delete |
+| `origin/codex/release-flow-smoke-artifact-retention-124` | `5937f34633646b4f8ca78f42316142a93ded5324` | 1 | remote --delete |
+| `origin/codex/release-flow-smoke-concurrency-123` | `db80ad04932df6820dfb838033896af4e1813ee7` | 1 | remote --delete |
+| `origin/codex/release-flow-smoke-environment-gate-122` | `0b4de28d54721f44e272b5b22a1c65de80ddcfe0` | 1 | remote --delete |
+| `origin/codex/release-flow-smoke-expanded-outputs-128` | `e34636e1309d68ef4d6f7e6a61893bdb73b84776` | 1 | remote --delete |
+| `origin/codex/release-flow-smoke-identity-129` | `8def85608e7b1ebf14d3032d4117727948f29279` | 1 | remote --delete |
+| `origin/codex/release-flow-smoke-input-validation-125` | `3ed05004b0e1141722c42d5ed25b0722171d06d1` | 1 | remote --delete |
+| `origin/codex/release-flow-smoke-live-preflight-127` | `a06c8c12fad25e03610f9efd73806ce087e8fa1e` | 1 | remote --delete |
+| `origin/codex/release-flow-smoke-request-timeout-130` | `0398e5153a418d7aca8b847c760b77aae3a5fa20` | 1 | remote --delete |
+| `origin/codex/release-flow-smoke-retry-policy-131` | `41e63b87c65a03720d586ebaf9daf0e55caeb64f` | 1 | remote --delete |
+| `origin/codex/release-flow-smoke-reusable-workflow-121` | `8019b27f56add3ab64af46b1399c9d06bb195a35` | 1 | remote --delete |
+| `origin/codex/ui-layer-lab-references` | `d18e136937525b13e21a56c7e6814f9c7e67e6d0` | 1 | 보존(사람 소유 가능) |
+| `origin/codex/yaml-editor` | `79914c1e91e42f193c007c1652ec2f0c44d3061c` | 1 | remote --delete |
+
+## 2026-07-13 12:15 KST — [백엔드] provider 계약 착륙·잠금 해제
+
+- 프론트 호환 조건: `origin/woonyong/ui-layer-lab@bfaf03901`에서 provider와
+  connection_stage optional 스키마 수용을 기록했고 ancestor exit 0을 확인했다.
+- 선행 H3: `origin/dev@6d68325bf1cc47f55810e5dc2189e51a6fe916c0` 착륙을 확인했다.
+- 코드 `db4798d4e4973ec3d384d71eca08aba6d4e9f6b7`, feature HEAD `10e85d992`,
+  canonical merge `d507ca6d47a0e953f6d1a0ad6931d576738c18cc`.
+- 재배치 후 전체 게이트: Ruff lint/format PASS, import-linter 2 kept/0 broken,
+  pytest `1831 passed, 3 skipped`; manifest management 69, target 20.
+- `db4798d4e`와 `10e85d992`의 `origin/dev` ancestor exit 0을 확인했다.
+  기존 응답은 additive-only로 보존했고 gateway 계약 lock을 해제한다.
+- 일시 저장한 Argo observer lane `codex/f-argocd-observer@f5461aa80`은 최신
+  canonical로 재배치한 뒤 전체 게이트를 다시 증명한다.
+
+## 2026-07-13 12:17 KST — Codex 브랜치 전면 정리 완결
+
+- 삭제 전 위 복구 보험 표가 `origin/dev`에 착륙한 뒤 실행했다.
+- 로컬: `codex/*` 7개 삭제(ancestor 0인 provider lane은 stale upstream 해제 후 정상
+  `-d`, 나머지 6개는 승인된 `-D`), 잔존 0개.
+- 원격: 자동 작업 `codex/*` 136개를 `git push origin --delete`로 삭제했다.
+  Codex 관련 worktree 5개를 clean 확인 후 정상 remove했고 `git worktree prune`을 완료했다.
+- 사람 소유 가능성이 있어 보존한 원격 ref:
+  - `codex/chanbin-dev-infra-base@f1f4e15a8e22cd48987231f224c67cd5c3a1d6ed`
+  - `codex/frontt@6e5b9d42a303b784ce5f58dd358ae38f0cef4c8d`
+  - `codex/headlamptest@11d7c879e039243321ce146d7f2124e71f826ae8`
+  - `codex/ui-layer-lab-references@d18e136937525b13e21a56c7e6814f9c7e67e6d0`
+- 보존한 로컬 비-Codex branch: `dev`, `main`, `demo/v1`,
+  `woonyong/ui-layer-lab`, `woonyong-kr/frontend`, `feat/jcbbbbbb/api-gateway`,
+  `feat/jeonwoohyun-hydromel/command-worker`,
+  `feat/jeonwoohyun-hydromel/gitops-sync-worker`,
+  `feat/minmings111/node-collector`, `feat/minmings111/target-cluster-agent`,
+  `feat/ummfieg/audit-timeline-service`, `feat/ummfieg/dashboard-projection-service`,
+  `feat/ummfieg/rca-worker`.
+- BQ-014는 삭제 전 hash `f5461aa8070a7ba9b088410d0ae5ebe89b8b4e86`을 복구점으로
+  남기고 `requested`로 되돌렸다. H3 merge `6d68325bf`와 승인 HEAD `33fd5f21c`는
+  계속 `origin/dev` ancestor exit 0이다.
+
+## 2026-07-13 12:19 KST — Codex 브랜치 정리 델타 복구 보험
+
+- 첫 회수 직후 별도 세션이 진행 중 작업 단위를 마치며 로컬
+  `codex/f-argocd-observer`를 다시 생성한 것을 최종 검증에서 감지했다.
+- 새 HEAD `8127cc973bdf759cfb373c3b50feb3fbfe14656f`, `origin/dev` ancestor exit 1,
+  worktree clean. 앞선 복구점 `f5461aa80`을 포함하는 후속 3커밋 작업 단위다.
+- 사람의 전면 정리 위임에 따라 이 hash를 최종 복구 보험으로 영속화한 뒤 로컬 `-D`와
+  clean worktree remove를 재수행한다. 원격 ref가 생기면 같은 hash를 확인한 뒤 delete한다.
+
+## 2026-07-13 12:19 KST — [백엔드] Argo observer lane 복구·재개
+
+- 최신 사용자 지시가 BQ-014 병행 착수와 BQ-017 선착륙 후 재개를 명시하므로,
+  전면 브랜치 정리에서 보존한 `8127cc973bdf759cfb373c3b50feb3fbfe14656f`을 복구점으로
+  `codex/f-argocd-observer` worktree를 다시 만들었다.
+- 복구점의 3개 커밋은 Application/Rollout 읽기, 읽기 전용 RBAC, 사후 검증 상태 연계만
+  포함한다. gateway 계약·Argo 쓰기 경로는 변경하지 않는다.
+- 조율 상태를 in_progress로 되돌리고 최신 canonical 위에서 전체 게이트와 manifest를
+  다시 증명한다. 앵커는 감독 검증·GO 전에는 기록하지 않는다.
+
+## 2026-07-13 12:27 KST — GO-REQUEST [Argo observer]
+
+- lane `codex/f-argocd-observer`, HEAD
+  `eb435b4bd2143c6814e4ede744c2371648f73a94`; `origin/dev@d8b28f76f` 대비
+  behind/ahead `0/6`, 시험 merge exit 0, tree `c210a9ab78257e8522a66d80ff64235f17e7ff63`.
+- Application repo/revision/path·sync/health와 Rollout `stableRS`를 Kubernetes GET으로만
+  읽는다. manifest RBAC도 `applications/rollouts`의 `get/list`만 허용하며 쓰기 호출은 0건이다.
+- 독립 리뷰에서 발견한 Application 관측 fail-open, 진행 중 operation ready 판정,
+  credential 포함 repository URL 노출을 RED `8afd9ab99` → GREEN `5881bdad8`로 막았다.
+  Application unavailable은 종합 `failed`, Rollout CRD unavailable은 선택 상태로 구분한다.
+- 관련 회귀 `13 passed`, 전체 게이트 Ruff lint/format PASS, import-linter 2 kept/0 broken,
+  pytest `1838 passed, 3 skipped`; manifest management 69, target 20.
+- 전체 pytest에서 기존 SQLite finalizer의 thread-affinity warning 2건이 노출됐으나 실패는
+  0건이며 이번 observer 변경 경로의 동작·게이트 결과에는 영향이 없다.
+- gateway 계약, `src/domains/rca/**`, `src/services/ai/**`,
+  `src/packages/runtime/worker.py` 변경은 0건이다. 원격 feature branch에 push했으며
+  canonical merge·앵커는 사람 GO를 대기한다.
+
+## 2026-07-13 12:29 KST — [백엔드] release flow 분해 사전 조사
+
+- Argo observer 착륙 GO 대기 중 가용한 읽기 전용 작업으로 5,297줄 router의 내부 경계를
+  policy/readiness/verification/report/_support로 분류했다. 코드·claim 변경은 없다.
+- 허용 의존 방향과 이동 대상, blocker 순서·guard snapshot·verification ID·monkeypatch
+  호환 위험을 `docs/release-flow-implementation.md`에 기록했다.
+- 신규 microservice나 route 변경은 제안하지 않았고, 실제 분해는 별도 착수·RED/green
+  검증 전에는 진행하지 않는다.
+
+## 2026-07-13 13:10 KST — [프론트] dev→lab 동기화 증거
+
+- 동기화 전 `origin/dev...woonyong/ui-layer-lab` divergence는 dev-only 36 / lab-only 16으로
+  30커밋 임계값을 초과했다. merge base는 `a65c66c7102fb453e583ed4ec44f1950a9df9ba2`다.
+- `git merge-tree --write-tree HEAD origin/dev`의 유일한 충돌은 append-only
+  `docs/auto/night-log.md`였다. 양쪽 기록을 모두 보존했고 제품/계약 파일 충돌은 0건이다.
+- 삭제 감사: staged merge delta에서 `frontend/**` 삭제 0건, `src/**` 삭제 0건.
+  backend `src/**`는 `origin/dev` 내용을 그대로 흡수했으며 프론트 세션의 수동 수정은 0건이다.
+- `cd references/ui-layer-lab && npm run check` PASS: TypeScript·ESLint, Vitest 105 files /
+  757 tests, design guard 314 files, shadcn 482 previews, Vite production build 14,512 modules.
+- 현재 canonical `origin/dev`에는 `[D-024]` 제목 본문이 없음을 확인했다. 본 작업은 사용자가
+  제공한 `[D-024]` 4조건(전체 게이트·정책 충돌만 해소·삭제 감사·push/ancestor 증명)을
+  직접 정본으로 적용했다.

@@ -1072,6 +1072,102 @@ def test_find_rendered_manifest_artifacts_scopes_cache_lookup_by_renderer_versio
     assert [artifact["artifact_id"] for artifact in result] == ["artifact-current"]
 
 
+def test_manifest_artifact_provenance_requires_exact_tenant_resource_and_digest() -> None:
+    recorded: list[Any] = []
+    digest = "sha256:" + "a" * 64
+    rows = [
+        {
+            "artifact_id": "artifact-current",
+            "workspace_id": "workspace-a",
+            "repository_id": "repo-1",
+            "binding_id": "binding-1",
+            "commit_sha": "abc123",
+            "manifest_path": "deploy/app.yaml#deployment/api",
+            "status": "rendered",
+            "rendered_manifest": {
+                "kind": "Deployment",
+                "artifact_digest": digest,
+                "sensitive": "must-not-be-returned",
+            },
+            "source_summary": {
+                "source_type": "raw-yaml",
+                "source_origin": "github_contents",
+                "source_is_file": True,
+                "source_document_count": 1,
+                "source_manifest_sha256": digest,
+                "repo_ref": "owner/repo",
+                "branch": "main",
+                "application_id": "app-1",
+                "workflow_run_id": "workflow-1",
+            },
+        }
+    ]
+
+    class StubResult:
+        def mappings(self) -> StubResult:
+            return self
+
+        def all(self) -> list[dict[str, object]]:
+            return rows
+
+    class StubConnection:
+        def execute(self, statement: Any) -> StubResult:
+            recorded.append(statement)
+            return StubResult()
+
+    @contextmanager
+    def stub_connection():
+        yield StubConnection()
+
+    repository = object.__new__(RepoChangeRepository)
+    repository.connection = stub_connection  # type: ignore[method-assign]
+
+    result = repository.get_manifest_artifact_provenance(
+        workspace_id="workspace-a",
+        binding_id="binding-1",
+        commit_sha="abc123",
+        manifest_path="deploy/app.yaml",
+        resource="deployment/api",
+        artifact_digest=digest,
+    )
+    mismatched = repository.get_manifest_artifact_provenance(
+        workspace_id="workspace-a",
+        binding_id="binding-1",
+        commit_sha="abc123",
+        manifest_path="deploy/app.yaml",
+        resource="deployment/api",
+        artifact_digest="sha256:wrong",
+    )
+
+    compiled = recorded[0].compile(dialect=postgresql.dialect())
+    sql = str(compiled)
+    assert "manifest_artifacts.workspace_id" in sql
+    assert "manifest_artifacts.binding_id" in sql
+    assert "manifest_artifacts.commit_sha" in sql
+    assert "manifest_artifacts.manifest_path LIKE" in sql
+    assert result == {
+        "source_type": "raw-yaml",
+        "source_origin": "github_contents",
+        "source_is_file": True,
+        "source_document_count": 1,
+        "source_manifest_sha256": digest,
+        "repo_ref": "owner/repo",
+        "branch": "main",
+        "application_id": "app-1",
+        "workflow_run_id": "workflow-1",
+        "workspace_id": "workspace-a",
+        "repository_id": "repo-1",
+        "binding_id": "binding-1",
+        "commit_sha": "abc123",
+        "manifest_path": "deploy/app.yaml",
+        "artifact_manifest_path": "deploy/app.yaml#deployment/api",
+        "artifact_digest": digest,
+        "artifact_count": 1,
+    }
+    assert "rendered_manifest" not in result
+    assert mismatched is None
+
+
 def test_workflow_status_ranks_never_allow_terminal_regression() -> None:
     from domains.gitops.repository import TERMINAL_WORKFLOW_STATUSES, WORKFLOW_STATUS_RANKS
 

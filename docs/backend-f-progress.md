@@ -7,7 +7,7 @@ governing: docs/f-coordination-plan.md · docs/backend-f-workqueue.md
 
 # 백엔드 F 진행 현황
 
-현재 상태: **앵커 5건**
+현재 상태: **앵커 6건**
 
 ## Delta-green baseline
 
@@ -217,3 +217,75 @@ Bundle route는 200을 반환한다.
   `1735 passed, 3 skipped`.
 
 계약 완성: OSS PR-only profile + ControllerRuntime + make demo (f0c3b4e42f29c4f011d4d70910b083f7acc031e0) [green]
+
+### H3 — BQ-007/009/010 권위 patch 엔진
+
+- canonical merge: `6d68325bf1cc47f55810e5dc2189e51a6fe916c0`
+- 전체 게이트: Ruff lint/format PASS(499 files), import-linter 2 kept/0 broken,
+  pytest `1820 passed, 3 skipped`; recovery patch scorer 6/6, compileall PASS,
+  manifest management 69 / target 20.
+- 권위 계약: patch 시점에 workflow/diff/active binding/repository/provenance를 다시 읽고,
+  exact base 원문의 scalar span만 수정한다. 모든 forward patch는 exact inverse rollback을
+  포함한다.
+- 프론트 unsupported 조건: 권위 correlation 또는 현재 snapshot이 없으면
+  `gitops_authority_unavailable`, workspace/cluster/kind/name이 다르면
+  `gitops_authority_mismatch`, action이 미지원이거나 snapshot에서 안전하게 patch할 수 없으면
+  `safe_pr_patch_unsupported`다. 세 경우 모두 가짜 document PR 대신
+  `rca.action_required`를 발행한다.
+- 프론트 action 파라미터:
+  - `oom_memory`: `strategy=usage_headroom`, `headroom_ratio=1.25`, `max_memory=4Gi`
+  - `replica_scale`: `strategy=increment_one`, `max_replicas=10`
+  - `image_rollback`, `image_tag_fix`: `strategy=last_approved_snapshot`
+  - `probe_fix`: `strategy=approved_value_or_bounded_timeout`
+  - `selector_fix`: `strategy=match_template_label`, `max_fields=1`
+  - `gitops_recovery_review`: `document_type=recovery_review`인 검토 전용 action이며 실제
+    patch action보다 score가 낮다.
+
+계약 완성: BQ-009/010 권위 patch 엔진 6종 (6d68325bf1cc47f55810e5dc2189e51a6fe916c0) [green]
+
+### BQ-017 — provider 1급화와 연결 단계
+
+- 상태: done, gateway 계약 lock 해제
+- 담당 lane: `codex/f-provider-connection-stage`
+- 착수 기준: `origin/dev@a65c66c7102fb453e583ed4ec44f1950a9df9ba2`
+- 전체 게이트 baseline: Ruff lint/format PASS, import-linter 2 kept/0 broken,
+  pytest `1735 passed, 3 skipped`
+- manifest baseline: management 68, target 20
+- canonical merge: `d507ca6d47a0e953f6d1a0ad6931d576738c18cc`
+- 코드: `db4798d4e4973ec3d384d71eca08aba6d4e9f6b7`
+- 전체 게이트: Ruff lint/format PASS, import-linter 2 kept/0 broken,
+  pytest `1831 passed, 3 skipped`; manifest management 69, target 20
+- 프론트 호환 증거: `origin/woonyong/ui-layer-lab@bfaf03901`에서
+  `ClusterSummary.provider`·`ClusterSummary.connection_stage`·
+  `ClusterConnectionStatusResponse.connection_stage`를 optional로 수용한다.
+- `provider` 허용값은 `eks/gke/aks/onprem/kind/unknown`이다. 구체적인 등록값을
+  agent의 providerID·vendor label 감지보다 우선하고, 일반 클러스터는 `onprem`,
+  판정할 수 없는 경우는 `unknown`으로 투영한다.
+- `connection_stage` 허용값은 `token_issued/awaiting_install/agent_connected/`
+  `snapshot_received/ready/expired/error`다. 기존 `connection_status`는 보존한다.
+  `token_issued`는 등록 직후 응답에만 사용하고, `ready`는 현재 연결 epoch의 snapshot과
+  후속 heartbeat가 모두 확인된 상태다. `expired`는 UX 상태이며 인증 만료 경계가 아니다.
+- 신규 route·DB 변경은 없다. 기존 Bruno
+  `docs/api/11-clusters/01-list-clusters.bru`, `02-get-cluster.bru`,
+  `03-connection-status.bru`에서 additive 응답을 검산한다.
+
+계약 완성: ClusterSummary.provider + connection_stage (db4798d4e4973ec3d384d71eca08aba6d4e9f6b7) [green]
+
+### BQ-014 — Argo observer 어댑터
+
+- 상태: in_progress. 최신 사용자 지시에 따라 전면 branch 정리에서 보존한 최종 복구 hash
+  `8127cc973bdf759cfb373c3b50feb3fbfe14656f`에서 lane을 복원한다.
+- 담당 lane: `codex/f-argocd-observer`
+- 착수 기준: `origin/dev@621a60a1c83bf12b2cb93fc50439f5a7fc4df00d`
+- 전체 게이트 baseline: Ruff lint/format PASS, import-linter 2 kept/0 broken,
+  pytest `1735 passed, 3 skipped`
+- 범위: `reconciler_mode=argocd`에서 Argo CD Application과 Rollout stable revision을
+  읽기만 하며 Kubernetes/Argo 쓰기 호출은 0건으로 고정한다.
+- GO-REQUEST HEAD: `eb435b4bd2143c6814e4ede744c2371648f73a94`,
+  `origin/dev@d8b28f76f8065b72197ca4640757341f01127c34` 대비 behind/ahead `0/6`.
+- 전체 게이트: Ruff lint/format PASS, import-linter 2 kept/0 broken,
+  pytest `1838 passed, 3 skipped`; manifest management 69, target 20.
+- Application 관측 불가는 fail-closed `failed`, 선택적인 Rollout CRD 부재는
+  `available=false`로 유지한다. operation phase가 비어 있거나 `Succeeded`일 때만 ready이며,
+  repository URL userinfo는 상태 보고 전에 제거한다.
+- 시험 merge clean, gateway·RCA·AI·runtime worker 변경 0건. 앵커는 감독 검증·GO 후 기록한다.

@@ -69,6 +69,7 @@ def test_central_role_dispatcher_is_removed() -> None:
 MANIFEST_FILES = (
     "deploy/management/services.yaml",
     "deploy/management/ai-workers.yaml",
+    "deploy/management/auto-revert-worker.yaml",
     "deploy/management/github-poll-worker.yaml",
     "deploy/target/target.yaml",
 )

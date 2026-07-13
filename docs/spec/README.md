@@ -55,6 +55,7 @@
 - [services/ai-chat-worker](services/ai-chat-worker.md)
 - [services/ai-diff-worker](services/ai-diff-worker.md)
 - [services/ai-dispatch-worker](services/ai-dispatch-worker.md)
+- [recovery-authority-patches](recovery-authority-patches.md)
 - [services/ai-evidence-worker](services/ai-evidence-worker.md)
 - [services/ai-incident-worker](services/ai-incident-worker.md)
 - [services/ai-plan-worker](services/ai-plan-worker.md)
