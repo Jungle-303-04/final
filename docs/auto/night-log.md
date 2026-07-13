@@ -544,3 +544,8 @@ docs-only 2파일, BQ-009 `requested` + BQ-012~017 등록, origin/dev push 확�
 `signal:oom_evidence` 누락·`rca.analysis_blocked`, 실제 signal만 completed, catalog 밖 ID
 무발행. 관련 56 passed / 전체 Ruff·format·import-linter PASS, pytest
 `1647 passed, 3 skipped` / worker·agent·공개 설명 문서 착륙 — DoD 4조건 충족.
+
+[2026-07-13 09:54 KST] [백엔드] D-020~021 조율 분리 — commit 전
+`git diff --name-only`은 `docs/auto/night-directives.md`, `docs/auto/night-log.md` 2파일.
+`docs/backend-f-workqueue.md`의 BQ-009 `requested`와 BQ-012~017 행은 `01a3a2e97`
+정본에 이미 존재해 중복 편집하지 않았고, 공유 dev worktree의 벤치·기타 변경은 혼입 0건.
