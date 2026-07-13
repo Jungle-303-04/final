@@ -2188,3 +2188,6 @@ target preflight·register 네 함수와 strict Zod 계약을 claim했다. 1회�
   `+1107/-153`, 삭제 0건을 포함한다. force/reset/revert나 추가 역변환은 수행하지 않았다.
 - 이 UI 변경의 채택 여부는 사람 판단 대기다. 재개 조건은 (a) 현 tree 승인 또는
   (b) 명시적 tree 복원 지시다. 백엔드 보충 작업은 해당 경로를 건드리지 않고 계속한다.
+- `codex/startup-probe-safe-pr@962abca9b`는 downstream contract/allowlist만 확장해 실제
+  frozen producer 부재를 해결하지 못한 미착륙 local lane이다. merge·push하지 않고 보존하며,
+  producer 확장에 대한 명시적 frozen 예외가 없는 한 착륙 대상이 아니다.
