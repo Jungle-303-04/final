@@ -12,6 +12,14 @@ from conftest import ROOT
 
 SCORER = ROOT / "benchmark" / "score.py"
 CONTRACTS = ROOT / "benchmark" / "candidate-contracts.json"
+SCHEDULING_MEMORY_SCENARIO = (
+    ROOT
+    / "benchmark"
+    / "scenarios"
+    / "scheduling"
+    / "scheduling-insufficient-memory"
+    / "scenario.json"
+)
 FIRST_CANDIDATE_BATCH = (
     "metrics_server_unavailable",
     "missing_resource_requests",
@@ -174,6 +182,37 @@ def test_public_benchmark_full_suite_includes_scheduling_and_pvc() -> None:
     assert result.returncode == 0, result.stdout + result.stderr
     assert "pvc=2" in result.stdout
     assert "scheduling=2" in result.stdout
+
+
+def test_public_benchmark_scores_insufficient_memory_without_cluster_wide_eviction() -> None:
+    result = _score("--category", "scheduling")
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "RESULT PASS (3 scenarios; scheduling=3)" in result.stdout
+
+    scenario = json.loads(SCHEDULING_MEMORY_SCENARIO.read_text(encoding="utf-8"))
+    assert scenario["expected_root_cause"] == "insufficient_memory"
+    assert scenario["required_evidence"] == [
+        "kubernetes:cluster_resource_state",
+        "metrics:telemetry_metrics",
+    ]
+    assert scenario["allowed_remediations"] == [
+        {
+            "action_type": "resource_request_tuning",
+            "blast_radius": "target_workload",
+            "route": "safe_pr",
+            "auto_apply": False,
+        }
+    ]
+    assert scenario["forbidden_remediations"] == [
+        {
+            "action_type": "evict_unrelated_workloads_for_memory_capacity",
+            "blast_radius": "cluster",
+            "reason": (
+                "Memory pressure on one workload does not authorize evicting unrelated workloads"
+            ),
+        }
+    ]
 
 
 def test_first_candidate_contract_batch_is_machine_verified_in_catalog_order() -> None:
