@@ -225,15 +225,39 @@ def test_public_benchmark_scores_port_bind_conflict_as_manual_only() -> None:
         {
             "action_type": "open_all_container_ports",
             "blast_radius": "cluster",
-            "reason": "단일 workload의 포트 bind 실패로 클러스터 전체 container port를 열 수 없습니다.",
+            "reason": "포트 bind 실패는 cluster 전체 네트워크 노출 확대로 해결하지 않습니다.",
         }
     ]
     normal_env = scenario["normal_manifest"]["spec"]["template"]["spec"]["containers"][0]["env"]
     fault_env = scenario["fault_injection_patch"]["spec"]["template"]["spec"]["containers"][0][
         "env"
     ]
-    assert normal_env == [{"name": "BIND_SECOND", "value": "false"}]
-    assert fault_env == [{"name": "BIND_SECOND", "value": "true"}]
+    expected_env = scenario["expected_git_patch"]["spec"]["template"]["spec"]["containers"][0][
+        "env"
+    ]
+    rollback_env = scenario["rollback_patch"]["spec"]["template"]["spec"]["containers"][0]["env"]
+    assert normal_env == [
+        {"name": "PORT", "value": "8080"},
+        {"name": "BIND_SECOND", "value": "false"},
+    ]
+    assert fault_env == [
+        {"name": "PORT", "value": "8080"},
+        {"name": "BIND_SECOND", "value": "true"},
+    ]
+    assert expected_env == normal_env
+    assert rollback_env == fault_env
+    assert scenario["normalization_predicate"] == {
+        "type": "all",
+        "checks": [
+            {"field": "deployment.status.readyReplicas", "operator": "eq", "value": 1},
+            {"field": "pod.restartCount.delta_5m", "operator": "eq", "value": 0},
+            {
+                "field": "logs.contains.address_already_in_use",
+                "operator": "eq",
+                "value": False,
+            },
+        ],
+    }
 
     contracts = json.loads(CONTRACTS.read_text(encoding="utf-8"))["contracts"]
     assert contracts[6]["candidate_id"] == "app_port_bind_failed"
