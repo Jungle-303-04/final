@@ -1367,3 +1367,18 @@ JsonMap, AbortSignal, ID 검증을 완료 앵커 전까지 제품 화면에서 �
 - 현재 canonical `origin/dev`에는 `[D-024]` 제목 본문이 없음을 확인했다. 본 작업은 사용자가
   제공한 `[D-024]` 4조건(전체 게이트·정책 충돌만 해소·삭제 감사·push/ancestor 증명)을
   직접 정본으로 적용했다.
+
+## 2026-07-13 13:20 KST — [프론트] P1 Opsia 표시 계약 완료
+
+- RED `bdc4721a6`: 브라우저 제목·셸·인증 헤더·영문/한글 로그인·시각 게이트의 기대값을
+  `Opsia`로 먼저 고정했다. 런타임이 여전히 `KubeHeal`을 반환해 대상 테스트 7파일이
+  실패하고 1파일만 통과하는 RED를 확인했다(11 failed / 38 passed).
+- GREEN `4ac637323`: `product.name` 카탈로그 키를 en/ko에 추가하고, 셸과 인증 헤더가
+  카탈로그를 소비하도록 연결했다. 문서 title과 로그인 문자열도 `Opsia`로 변경했다.
+  대상 회귀는 8 files / 49 tests PASS다.
+- 식별자 보존: 대문자 `KubeHeal`은 vendor/dist/output 제외 0건이다. 저장 키
+  `kubeheal-theme`, `kubeheal.locale`과 이벤트 `kubeheal:product-shortcut`은 변경하지 않았다.
+- 전체 게이트: `npm run check` PASS — TypeScript·ESLint, Vitest 105 files / 757 tests,
+  design guard 314 files, shadcn 482 previews, Vite production build 14,512 modules.
+- 시각 게이트: `npm run visual-product` PASS — 인증·Home·Resources·셸·상태 화면의
+  light/dark, 320px reflow, 200% text resize, forced-colors, en/ko를 포함한 34 scenarios.
