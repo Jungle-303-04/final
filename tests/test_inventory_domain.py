@@ -554,3 +554,13 @@ def test_kubernetes_evidence_snapshot_usage_empty_when_nothing_observed() -> Non
         {}, cluster_id="cluster-1", agent_id="agent-1"
     )
     assert snapshot["usage"] == {}
+
+
+def test_kubernetes_evidence_snapshot_preserves_detected_provider() -> None:
+    snapshot = kubernetes_evidence_to_inventory_snapshot(
+        {"detected_provider": "gke", "nodes": [{"name": "node-1", "ready": True}]},
+        cluster_id="cluster-1",
+        agent_id="agent-1",
+    )
+
+    assert snapshot["summary"]["detected_provider"] == "gke"

@@ -13,4 +13,9 @@ tests {
   test("200 or auth/not-found", function () {
     expect([200, 401, 403, 404]).to.include(res.status);
   });
+  test("success exposes a structured connection stage", function () {
+    if (res.status !== 200) { return; }
+    const stages = ["awaiting_install", "agent_connected", "snapshot_received", "ready", "expired", "error"];
+    expect(stages).to.include(res.getBody().connection_stage);
+  });
 }

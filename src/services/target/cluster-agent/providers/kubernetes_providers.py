@@ -17,6 +17,7 @@ from config import KUBERNETES_API_TIMEOUT_SECONDS, TARGET_CLUSTER_ID_ENV
 from packages.config.constants import Target
 from packages.contracts.event_bus.interfaces import JsonObject
 from packages.contracts.target import TARGET_NAMESPACE
+from packages.kubernetes_provider import detect_kubernetes_provider
 from providers.base import ConfigReader
 from providers.collection_limits import (
     attach_collection_limits,
@@ -297,6 +298,10 @@ class KubernetesSnapshotProvider:
         }
         pod_metrics = pod_metrics_by_key(items(payload.get("pod_metrics")))
         node_metrics = node_metrics_by_name(items(payload.get("node_metrics")))
+        raw_nodes = items(payload.get(K8S_SNAPSHOT_NODES_KEY))
+        detected_provider = detect_kubernetes_provider(raw_nodes)
+        if detected_provider is not None:
+            snapshot["detected_provider"] = detected_provider
         raw_pods = scoped_items(payload.get(K8S_RESOURCE_PODS), telemetry_query.label_selector)
         raw_workloads = {
             K8S_KIND_DEPLOYMENT: scoped_items(
@@ -346,7 +351,7 @@ class KubernetesSnapshotProvider:
         ]
         snapshot[K8S_SNAPSHOT_NODES_KEY] = [
             node_summary(item, node_metrics.get(str(metadata(item).get("name") or "")))
-            for item in items(payload.get(K8S_SNAPSHOT_NODES_KEY))
+            for item in raw_nodes
         ]
         snapshot[K8S_SNAPSHOT_WORKLOADS_KEY] = [
             *(
@@ -402,6 +407,8 @@ def empty_snapshot(cluster_id: str) -> JsonObject:
 def merge_snapshot(target: JsonObject, source: JsonObject) -> None:
     """Add one normalized snapshot into another snapshot."""
     target["cluster"] = {**dict(target.get("cluster", {})), **dict(source.get("cluster", {}))}
+    if "detected_provider" not in target and source.get("detected_provider"):
+        target["detected_provider"] = source["detected_provider"]
     for key in (
         K8S_SNAPSHOT_WORKLOADS_KEY,
         K8S_RESOURCE_PODS,

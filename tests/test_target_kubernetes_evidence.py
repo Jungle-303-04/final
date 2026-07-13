@@ -6,8 +6,10 @@ import sys
 from pathlib import Path
 
 import httpx
+import pytest
 
 from packages.contracts.gateway.requests import AgentEvidenceRequest, EvidenceJobResultRequest
+from packages.kubernetes_provider import detect_kubernetes_provider
 
 ROOT_DIR = Path(__file__).resolve().parents[1]
 TARGET_AGENT_DIR = ROOT_DIR / "src" / "services" / "target" / "cluster-agent"
@@ -71,6 +73,23 @@ def test_endpoint_slice_summary_normalizes_null_collections() -> None:
 
     assert summary["endpoint_count"] == 0
     assert summary["ports"] == []
+
+
+@pytest.mark.parametrize(
+    ("node", "expected"),
+    [
+        ({"spec": {"providerID": "aws:///ap-northeast-2a/i-123"}}, "eks"),
+        ({"spec": {"providerID": "azure:///subscriptions/sub/vm"}}, "aks"),
+        ({"spec": {"providerID": "gce://project/zone/node"}}, "gke"),
+        ({"metadata": {"labels": {"eks.amazonaws.com/nodegroup": "workers"}}}, "eks"),
+        ({"metadata": {"labels": {"topology.kubernetes.io/region": "test"}}}, None),
+    ],
+)
+def test_detect_kubernetes_provider_uses_provider_id_then_vendor_labels(
+    node: dict[str, object],
+    expected: str | None,
+) -> None:
+    assert detect_kubernetes_provider([node]) == expected
 
 
 def test_kubernetes_snapshot_provider_collects_namespace_state(monkeypatch) -> None:
@@ -188,7 +207,10 @@ def test_kubernetes_snapshot_provider_collects_namespace_state(monkeypatch) -> N
                 "items": [
                     {
                         "metadata": {"name": "node-a"},
-                        "spec": {"taints": []},
+                        "spec": {
+                            "taints": [],
+                            "providerID": "aws:///ap-northeast-2a/i-123",
+                        },
                         "status": {
                             "conditions": [{"type": "Ready", "status": "True"}],
                             "capacity": {"cpu": "4"},
@@ -304,6 +326,7 @@ def test_kubernetes_snapshot_provider_collects_namespace_state(monkeypatch) -> N
     assert [request.headers["authorization"] for request in requests] == ["Bearer token-1"] * 11
     assert validated.kubernetes["cluster"]["cluster_id"] == "cluster-1"
     assert validated.kubernetes["cluster"]["namespace"] == "target"
+    assert validated.kubernetes["detected_provider"] == "eks"
     assert validated.kubernetes["pods"][0]["name"] == "checkout-api-7f5c"
     assert (
         validated.kubernetes["pods"][0]["containers"][0]["image_id"]
