@@ -1,3 +1,16 @@
+import type {
+  IssueEvidencePage,
+  IssueEvidenceQuery,
+  IssuePageQuery,
+  IssueRcaReportPage,
+} from "./issuesEvidenceContract";
+import type {
+  IssueRecoveryPlan,
+  IssueRecoveryReceipt,
+  IssueRecoverySelection,
+  IssueRecoverySelectionResult,
+} from "./issuesRecoveryContract";
+
 export interface IssuesEndpointTimelineItem {
   workspace_id: unknown;
   correlation_id: unknown;
@@ -88,13 +101,16 @@ export interface IssueList {
   returned: number;
 }
 
-export type IssuesPortFailureCode =
+export type IssuesFailureCode =
+  | "unauthorized"
   | "forbidden"
+  | "invalid-request"
   | "invalid-response"
-  | "network"
   | "not-found"
   | "offline"
-  | "rate-limited";
+  | "rate-limited"
+  | "unavailable"
+  | "error";
 
 export class IssuesRequestError extends Error {
   constructor(message: string) {
@@ -111,13 +127,55 @@ export class IssuesCanonicalError extends Error {
 }
 
 export class IssuesPortFailure extends Error {
-  readonly code: IssuesPortFailureCode;
+  readonly code: IssuesFailureCode;
   readonly retryAfterSeconds: number | null;
 
-  constructor(code: IssuesPortFailureCode, retryAfterSeconds: number | null = null) {
+  constructor(code: IssuesFailureCode, retryAfterSeconds: number | null = null) {
     super(`Issues port failed: ${code}`);
     this.name = "IssuesPortFailure";
     this.code = code;
     this.retryAfterSeconds = retryAfterSeconds;
   }
 }
+
+export interface IssuesPort {
+  listIssues(
+    clusterId: string | null,
+    limit?: number,
+    signal?: AbortSignal,
+  ): Promise<IssueList>;
+  loadIssue(
+    incidentId: string,
+    clusterId: string | null,
+    signal?: AbortSignal,
+  ): Promise<IssueDetail>;
+  loadEvidence(
+    correlationId: string,
+    query?: IssueEvidenceQuery,
+    signal?: AbortSignal,
+  ): Promise<IssueEvidencePage>;
+  loadReports(
+    correlationId: string,
+    query?: IssuePageQuery,
+    signal?: AbortSignal,
+  ): Promise<IssueRcaReportPage>;
+  loadRecoveryPlan(
+    correlationId: string,
+    signal?: AbortSignal,
+  ): Promise<IssueRecoveryPlan>;
+  selectRecoveryAction(
+    selection: IssueRecoverySelection,
+    signal?: AbortSignal,
+  ): Promise<IssueRecoverySelectionResult>;
+}
+
+export type {
+  IssueEvidencePage,
+  IssueEvidenceQuery,
+  IssuePageQuery,
+  IssueRcaReportPage,
+  IssueRecoveryPlan,
+  IssueRecoveryReceipt,
+  IssueRecoverySelection,
+  IssueRecoverySelectionResult,
+};
