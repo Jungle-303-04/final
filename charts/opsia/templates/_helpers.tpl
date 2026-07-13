@@ -88,3 +88,11 @@ http://{{ include "opsia.fullname" . }}.{{ .Release.Namespace }}.svc
 {{- define "opsia.cookieSecure" -}}
 {{- if hasPrefix "https://" (include "opsia.externalUrl" . | trim) -}}1{{- else -}}0{{- end -}}
 {{- end -}}
+
+{{- define "opsia.validateAccess" -}}
+{{- $mode := include "opsia.accessMode" . | trim -}}
+{{- $externalUrl := include "opsia.externalUrl" . | trim -}}
+{{- if and (eq $mode "loadbalancer") (hasPrefix "https://" $externalUrl) (ne .Values.access.loadBalancer.tlsTermination "external") -}}
+{{- fail "HTTPS load-balancer access requires access.loadBalancer.tlsTermination=external to acknowledge external TLS termination" -}}
+{{- end -}}
+{{- end -}}

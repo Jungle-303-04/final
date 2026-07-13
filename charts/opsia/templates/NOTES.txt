@@ -15,6 +15,9 @@ Wait for the load balancer address:
   kubectl get service {{ include "opsia.fullname" . }} -n {{ .Release.Namespace }} --watch
 {{- if $externalUrl }}
 Open {{ $externalUrl }}
+{{- if eq .Values.access.loadBalancer.tlsTermination "external" }}
+The external TLS termination must terminate HTTPS before forwarding plain HTTP to service port {{ .Values.service.port }}.
+{{- end }}
 {{- else }}
 Set access.externalUrl to the reachable http(s) URL before enrolling another cluster.
 {{- end }}
