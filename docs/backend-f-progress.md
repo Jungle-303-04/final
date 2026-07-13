@@ -401,3 +401,60 @@ Bundle route는 200을 반환한다.
   `origin/dev` ancestor exit 0.
 
 계약 완성: RCA read-route Bruno runner coverage (6d29a87021c9163c659bda548108576c8358e952) [green]
+
+### 보조 대기열 S2 — OpsiaBench scheduling·PVC 시나리오
+
+- 상태: landed
+- 담당 lane: `codex/benchmark-scheduling-pvc`
+- RED: `fe08b641e9feab86b6a8e0ca207c56b2477876d3`
+- 시나리오·채점기: `d6a3624a609fbf7d0eb8e775981483b54ec7334d`
+- 공개명 정합: `3c80d57af52242c86b684a3b800d095897c06bf5`
+- 문서: `949bcd6b17bcd483cbeedfd044c0d7b675eb1e68`
+- feature HEAD: `075926e4d5da6dc59e67e865e293efdf00fb1d6c`
+- canonical no-ff merge: `43867308ac4e0e38b57cf7d10c2aa5b4856e47fd`
+- `failed_scheduling/insufficient_cpu`, `failed_scheduling/node_affinity_or_taint_mismatch`,
+  `failed_scheduling/pvc_pending`, `volume_mount_failed/pvc_not_bound`의 실존 rule·candidate만
+  사용해 scheduling과 PVC를 각각 2개씩 추가했다.
+- snapshot은 scheduling 6개, volume mount 4개, volume attach 2개 후보 전체와 현재 recovery
+  action을 고정한다. 기존 gold action drift 5건도 실제 catalog 값으로 정합화했다.
+- 공개 scorer: 전체 `14 scenarios`, category별 scheduling 2 / PVC 2 PASS.
+- 전체 게이트: Ruff lint/format PASS, import-linter 8 kept/0 broken,
+  pytest `1872 passed, 3 skipped`; manifest management 69 / target 20.
+- 4조건: merge-tree exit 0/tree `0ff6d94d6c17b65bc40d05a9fa1965b79ff1061b`,
+  파일 삭제·gateway 계약·RCA·AI·runtime worker 변경 0건, feature와 merge commit의
+  `origin/dev` ancestor exit 0.
+
+계약 완성: OpsiaBench scheduling + pvc scenarios (075926e4d5da6dc59e67e865e293efdf00fb1d6c) [green]
+
+### 보조 대기열 S3 — rule candidate 상위 10개 안전 계약
+
+- 상태: landed
+- 담당 lane: `codex/candidate-contract-batch-one`
+- RED·경계 테스트: `765c108c4`, `1fc338b46`, `818af89ea`, `1e61abbec`,
+  `338dbc811`, `ca8f1c543`, `fa89c035a`, `4b60511f7`, `6b34e6f94`
+- 구현·정합: `cdc577d56`, `3f5ea3a64`, `bc0c841be`
+- 문서와 feature HEAD: `0a1a0b99a482d9bfbcaf394a32ec2ca392cd6611`
+- canonical no-ff merge: `a77115d411bbc1de03304f190f124f8fbcfc14f2`
+- 범위: 실제 catalog loader 순서의 후보 1~10만 계약화했다. 전체 후보는 87개이며 다음
+  cursor는 `next_ordinal=11`이다. 87개 전체 계약 완료로 해석하지 않는다.
+- `benchmark/candidate-contract-index.json`은 catalog 15개 원본 SHA와 rule·candidate 87개의
+  정확한 순서·required evidence·supporting signal을 고정한다. 작성된 계약 10개는 live
+  recovery의 허용 action, rollback, post-verification과 dispatcher의 실제 실행 capability를
+  함께 검산한다.
+- `config_fix`는 recovery route가 `draft_pr`이지만 현재 dispatcher가 patch를 지원하지 않아
+  capability를 빈 값으로 둔다. 선언 route를 실제 실행 가능성으로 오인하지 않는다.
+- contradicting signal은 runtime에 아직 모델링되지 않아
+  `contradiction_policy=not_modeled_v0.1`로 명시했다. 빈 배열을 반증 부재의 증거로 과장하거나
+  가짜 반증을 만들지 않는다.
+- 고유 검증: `python3 -S benchmark/score.py --candidate-contracts` PASS
+  (`10 candidate contracts; ordinals=1..10`), 전체 scenario scorer `14 scenarios` PASS,
+  `tests/test_benchmark_score.py` 30 passed.
+- 전체 게이트: Ruff lint/format PASS, import-linter 8 kept/0 broken,
+  pytest `1899 passed, 3 skipped`; manifest management 69 / target 20.
+- 4조건: merge-tree exit 0/tree `b5e31047498a18c660a51e184d13b1d25862a5b0`;
+  파일 삭제·소유권 밖 변경·RCA/AI/runtime worker 변경 0건; feature와 merge commit의
+  `origin/dev` ancestor exit 0.
+- 후속 hardening: malformed snapshot의 구조화 오류, 미래 복수 fallback 누적, alias 없는
+  canonical command 추출, CRLF checkout의 byte SHA 이식성은 다음 배치에서 보강 후보로 남긴다.
+
+계약 완성: OpsiaBench candidate contracts 1..10 (0a1a0b99a482d9bfbcaf394a32ec2ca392cd6611) [green]

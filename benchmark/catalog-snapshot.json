@@ -1,13 +1,24 @@
 {
   "snapshot_version": "2026-07-13",
   "source_sha256": {
+    "src/services/ai/agent/causes/catalog/autoscaling.yaml": "de552ee7a6fbf63082a3bd21b134d4f896a00858aa9da52a547c9437f7f44d6a",
     "src/services/ai/agent/causes/catalog/crashloop.yaml": "3ec75199452721f68ea637b4e3a4db603627a1192de93fc6411d30c3bd3f1921",
     "src/services/ai/agent/causes/catalog/image_pull.yaml": "cefa73c713b86a44303f0bc881dc2fb119e1ddd1790961cbc37088367c9fb772",
     "src/services/ai/agent/causes/catalog/readiness.yaml": "e09f2afd27bcbab5a88a7908067d245a469a2ec9b4167aa0450cd18bf1742cf3",
-    "src/services/ai/agent/recovery/builtin.py": "224cf33455fc3885e0900f8cd0b6face5f7bdf02124f13c0e54a269596de2077"
+    "src/services/ai/agent/causes/catalog/scheduling.yaml": "8f9b6bfd18ebc1b9d5b3cc14eb90a1146563ce1ae65a885f5666981623f24d28",
+    "src/services/ai/agent/causes/catalog/storage_volume.yaml": "312d3de23652bf2f73008482f8947512df026bfb92e7c47f3cf408b8ba5f2334",
+    "src/services/ai/agent/recovery/builtin.py": "b6ad835f87e602995ec3a8656d41484303c0c57eb0ca1046d1bd407216a05c56"
   },
   "fallback_actions": ["manual_analysis"],
   "rules": {
+    "hpa_scaling_failed": {
+      "symptoms": ["HPA scaling failed", "FailedGetResourceMetric", "FailedComputeMetricsReplicas"],
+      "candidates": {
+        "metrics_server_unavailable": ["kubernetes:cluster_resource_state", "metrics:telemetry_metrics", "logs:related_logs"],
+        "missing_resource_requests": ["kubernetes:cluster_resource_state", "logs:related_logs", "metadata:current_workload_snapshots"],
+        "max_replica_limit_reached": ["kubernetes:cluster_resource_state", "metrics:telemetry_metrics", "logs:related_logs"]
+      }
+    },
     "crashloop_backoff": {
       "symptoms": ["CrashLoopBackOff", "pod_restart_loop"],
       "candidates": {
@@ -30,6 +41,17 @@
         "image_platform_mismatch": ["kubernetes:cluster_resource_state"]
       }
     },
+    "failed_scheduling": {
+      "symptoms": ["FailedScheduling", "Pending"],
+      "candidates": {
+        "insufficient_cpu": ["kubernetes:cluster_resource_state", "metrics:telemetry_metrics"],
+        "insufficient_memory": ["kubernetes:cluster_resource_state", "metrics:telemetry_metrics"],
+        "node_affinity_or_taint_mismatch": ["kubernetes:cluster_resource_state"],
+        "node_selector_mismatch": ["kubernetes:cluster_resource_state", "metadata:current_workload_snapshots"],
+        "untolerated_taint": ["kubernetes:cluster_resource_state", "metadata:current_workload_snapshots"],
+        "pvc_pending": ["kubernetes:cluster_resource_state"]
+      }
+    },
     "probe_failure": {
       "symptoms": ["Probe failure", "ProbeFailed", "ReadinessProbeFailed", "LivenessProbeFailed", "PodNotReady"],
       "candidates": {
@@ -49,15 +71,40 @@
         "wrong_service_port": ["kubernetes:cluster_resource_state", "metadata:service_selector_matches"],
         "endpoint_slice_delay": ["kubernetes:cluster_resource_state", "metadata:endpoint_slice_ready_endpoints"]
       }
+    },
+    "volume_mount_failed": {
+      "symptoms": ["FailedMount", "VolumeMountFailed", "MountVolume.SetUp failed"],
+      "candidates": {
+        "pvc_not_bound": ["kubernetes:cluster_resource_state", "logs:related_logs", "metadata:current_workload_snapshots"],
+        "csi_driver_unavailable": ["kubernetes:cluster_resource_state", "logs:related_logs", "metrics:telemetry_metrics"],
+        "volume_attach_timeout": ["kubernetes:cluster_resource_state", "logs:related_logs"],
+        "storage_class_mismatch": ["kubernetes:cluster_resource_state", "metadata:current_workload_snapshots"]
+      }
+    },
+    "volume_attach_failed": {
+      "symptoms": ["FailedAttachVolume", "VolumeAttachFailed"],
+      "candidates": {
+        "volume_multi_attach_conflict": ["kubernetes:cluster_resource_state", "logs:related_logs", "metadata:current_workload_snapshots"],
+        "volume_attachment_orphaned": ["kubernetes:cluster_resource_state", "logs:related_logs"]
+      }
     }
   },
   "recovery_actions": {
-    "oom_killed": ["rollout_restart", "scale"],
-    "bad_image_rollout": ["rollback"],
-    "app_startup_failure": ["rollback"],
+    "oom_killed": ["rollout_restart", "oom_memory", "replica_scale"],
+    "bad_image_rollout": ["image_rollback"],
+    "app_startup_failure": ["image_rollback"],
     "config_env_error": ["config_fix"],
     "wrong_image_tag": ["image_tag_fix"],
     "missing_image_pull_secret": ["image_pull_secret_fix"],
-    "registry_unavailable": ["registry_recovery"]
+    "registry_unavailable": ["registry_recovery"],
+    "insufficient_cpu": ["resource_request_tuning"],
+    "insufficient_memory": ["resource_request_tuning"],
+    "node_affinity_or_taint_mismatch": ["scheduling_constraint_fix"],
+    "pvc_pending": ["pvc_binding_fix"],
+    "probe_path_wrong": ["probe_fix"],
+    "probe_port_wrong": ["probe_fix"],
+    "timeout_too_short": ["probe_fix"],
+    "startup_window_too_short": ["probe_fix"],
+    "selector_label_mismatch": ["selector_fix"]
   }
 }

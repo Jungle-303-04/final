@@ -53,6 +53,8 @@ R-트랙([D-011])은 dev merge `257f91846`으로 landed/closed 되었고, 전용
 | ID | 상태 | 기능 | 착륙 증거 | 완료 기준 |
 |---|---|---|---|---|
 | S1 | landed | RCA 읽기 route의 Bruno 기본 실행 경로 | feature `6d29a8702`, canonical merge `6ea12f263` | Runner 13→14→15 순서, 의미·실제 200 기준 문서화, 전체 `1869 passed, 3 skipped`, manifest 69/20 |
+| S2 | landed | OpsiaBench scheduling·PVC 시나리오 | feature `075926e4d`, canonical merge `43867308a` | 각 2개, 전체 14개 scorer PASS, 실제 catalog snapshot 정합, 전체 `1872 passed, 3 skipped`, manifest 69/20 |
+| S3 | landed | rule candidate 상위 10개 안전 계약 | feature `0a1a0b99a`, canonical merge `a77115d41` | 10/87 후보의 required evidence·실제 signal·실행 capability·허용/금지 remediation·rollback·사후 검증을 공개 scorer로 검산, 전체 `1899 passed, 3 skipped`, manifest 69/20 |
 
 ## claim 규칙
 
