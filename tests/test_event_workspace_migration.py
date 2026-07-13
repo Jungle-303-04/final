@@ -14,7 +14,7 @@ from alembic import command
 ROOT = Path(__file__).resolve().parents[1]
 REVISION = "20260713_0655"
 DOWN_REVISION = "20260713_0140"
-CURRENT_HEAD = "20260713_0750"
+CURRENT_HEAD = "20260713_0820"
 
 
 def _config(monkeypatch) -> Config:
