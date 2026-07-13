@@ -66,6 +66,7 @@ R-트랙([D-011])은 dev merge `257f91846`으로 landed/closed 되었고, 전용
 | S12 | landed | rule candidate 81~87 terminal 안전 계약 | feature `aafc4a956`, canonical merge `dc0b775ff` | 87/87 완결, 7개 fallback-only, fixture 82번, terminal digest, 전체 `1927 passed, 3 skipped`, manifest 69/20 |
 | S13 | landed | scheduling node selector 시나리오 | feature `dea2d4bab`, canonical merge `584e2eda0` | scheduling 3개·전체 15개, ordinal 76 fallback fixture, 여덟 번째 digest 재감사, 전체 `1928 passed, 3 skipped`, manifest 69/20 |
 | S14 | landed | AsyncDb 호출 경계 직접 테스트 | feature `effec9f6d`, canonical merge `b37a94d95` | test-only 5개, thread hop·active connection 재사용·예외 전파, 전체 `1933 passed, 3 skipped`, manifest 69/20 |
+| S15 | landed | probe timeout 시나리오 | feature `b96a69810`, canonical merge `2d9ef3fc2` | probe 3개·전체 16개, ordinal 52 safe-pr fixture, 여섯 번째 digest 재감사, 전체 `1934 passed, 3 skipped`, manifest 69/20 |
 
 ## claim 규칙
 
