@@ -38,7 +38,7 @@ def render(function_name: str) -> str:
     return buffer.getvalue().lower()
 
 
-def test_legacy_access_retention_follows_the_metrics_revision() -> None:
+def test_legacy_access_retention_is_the_single_additive_successor() -> None:
     module = load_migration()
 
     assert module.revision == "20260714_0345"
