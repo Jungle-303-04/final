@@ -7,7 +7,7 @@ governing: docs/f-coordination-plan.md · docs/backend-f-workqueue.md
 
 # 백엔드 F 진행 현황
 
-현재 상태: **앵커 43건**
+현재 상태: **앵커 44건**
 
 ## 역사적 Delta-green baseline (BQ-001~003)
 
@@ -1126,3 +1126,41 @@ Bundle route는 200을 반환한다.
   raw Kubernetes payload·cross-cluster edge·이름 유사도 추론은 금지한다.
 - 완전성: filtered node budget, source resource/Label/application completeness, 관계 endpoint
   누락을 구조화 reason으로 반환한다. 증명되지 않은 관계를 합성하지 않는다.
+
+### Resources 단일 cluster 그래프 — canonical 착륙 증거
+
+- 상태: `landed`; gateway 계약 lock을 해제했다. RED `86ed85a06`, 계약 보강 RED
+  `721604356`, GREEN `914d34ff6`, canonical no-ff merge `95ff11cc6`이다.
+- route: `GET /api/resources/graph`. `clusters`는 정확히 1개가 필수이며 기존 Resources와
+  같은 `namespaces`, `applications`, `resources.types`, `resources.health`, `labels`,
+  `resources.q`, `resources.includeDeleted`를 사용한다. session workspace와 현재
+  `inventory.read`/`application.read`의 구체 ID set을 강제하고, 비인가 cluster/application은
+  data query 전 일반 404로 차단한다.
+- 표 응답의 `snapshot.snapshot_revision`을 graph의 optional `snapshot_revision`으로 전달하면
+  같은 global temporal cut을 고정한다. 존재하지 않거나 미래인 revision은 422다.
+  `cluster_projection_revision`은 그 cut 이하에서 선택 cluster가 실제로 투영된 revision이라
+  두 값을 합치거나 최신값으로 추측하면 안 된다.
+- `ResourceGraphSnapshotResponse` 전체 필드: `graph_revision`, `cluster_projection_revision`,
+  `cluster`, `nodes`, `edges`, `root_node_ids`, `counts`, `node_count`, `edge_count`,
+  `omitted_node_count`, `omitted_edge_count`, `node_limit`, `edge_limit`, `truncated`,
+  `relation_completeness`, `partial_reason_codes`, `snapshot`.
+- node는 `node_id`, `category`, `identity{version,cluster_id,resource_type,api_version,kind,
+  namespace,name,uid}`, `status`, `health`, `observed_at`, `deleted_at`, `application_ids`,
+  `application_binding_completeness`만 제공한다. labels/annotations/summary/raw object는 graph에
+  노출하지 않고 기존 detail route의 v1 identity로 drill-down한다.
+- edge는 `edge_id`, `from_node_id`, `to_node_id`, `kind`, `plane`, `direction`, `state`,
+  `evidence{type,authority,observed_at}`를 제공한다. 합법 관계는 owner UID 기반 `owns`, Pod의
+  명시 node assignment 기반 `runs_on`, Kubernetes selector 전체를 3-state로 검증한 `selects`,
+  EndpointSlice의 보존된 service-name label 기반 `routes_to`뿐이다. 이름 prefix·label 유사도·
+  cross-namespace/cluster 추론은 하지 않는다. 삭제된 endpoint가 포함되면 `state=historical`이다.
+- 기본 node 선택은 workload/pod/node/service/endpoint를 event보다 우선하되 필터 결과의 N/M은
+  바꾸지 않는다. node/edge limit 초과는 dangling edge 없이 생략 수와 partial reason을 반환한다.
+  현재 namespace/label-scoped evidence는 full-cluster sweep가 아니므로 실제 relation completeness가
+  partial일 수 있으며 프론트는 이를 exact 0이나 관계 부재로 해석하면 안 된다.
+- Bruno: `docs/api/17-resources-filter/04-resource-graph.bru`. 신규 DB schema와 migration은 없다.
+- 전체 게이트: Ruff lint/format PASS, import-linter 8 kept/0 broken, pytest
+  `2064 passed, 3 skipped`; manifest management 69/target 20. merge-tree
+  `9a055ca263e9c215800531d239d1378037054fac`, 삭제·프론트 소유·RCA/AI/runtime worker 변경 0건.
+  code `914d34ff6`과 merge `95ff11cc6`은 모두 `origin/dev` ancestor exit 0이다.
+
+계약 완성: RESOURCES_GRAPH_PATH + ResourceGraphSnapshotResponse (914d34ff699a71d5b09039b42388ff62aebc8d12) [green]

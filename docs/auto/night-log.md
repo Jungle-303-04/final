@@ -2823,3 +2823,18 @@ target preflight·register 네 함수와 strict Zod 계약을 claim했다. 1회�
 - 이 기록을 포함한 동일 HEAD를 lab과 dev에 non-force push하고 두 ref의 동일 SHA와 ancestor
   exit 0을 재확인한다. 이후 lane `codex/vp010-graph-shell-20260713`과 worktree를 같은 사이클에서
   회수하며, 신규 stash 0건과 기존 미증명 stash 유지 사유를 기록한다.
+
+## 2026-07-13 23:29 KST — [백엔드] Resources 그래프 계약 canonical 착륙
+
+- RED `86ed85a06`·`721604356`, GREEN `914d34ff6`, canonical merge `95ff11cc6`.
+  `RESOURCES_GRAPH_PATH`와 `ResourceGraphSnapshotResponse`가 `origin/dev`에 착륙했고 gateway
+  계약 lock을 해제했다. code/merge 모두 ancestor exit 0이다.
+- 단일 authorized cluster와 session workspace만 조회한다. table의 global snapshot revision을
+  pin할 수 있고 선택 cluster의 실제 cut은 `cluster_projection_revision`으로 분리한다.
+  owner UID·node assignment·전체 Kubernetes selector·service-name label 근거만 edge로 만든다.
+- compact node/edge, active/historical state, N/M, node/edge budget, partial reason을 제공한다.
+  raw labels/annotations/summary, cross-cluster/name-prefix 추론은 0건이다. Bruno는
+  `docs/api/17-resources-filter/04-resource-graph.bru`다.
+- 전체 게이트 `2064 passed, 3 skipped`, Ruff/import contract 8/8, manifest 69/20,
+  merge-tree `9a055ca263e9c215800531d239d1378037054fac`, 삭제·frozen·프론트 소유 변경 0건.
+- 계약 앵커: `RESOURCES_GRAPH_PATH + ResourceGraphSnapshotResponse` / `914d34ff6` / `[green]`.
