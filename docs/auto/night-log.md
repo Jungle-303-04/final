@@ -849,3 +849,24 @@ npm run visual-product
 [2026-07-13 10:54 KST] [백엔드] PROMOTE 완결 — 팀 통합점 `0eaaa6637ca46bf29b073bd0dbe274719ffd5ee3`; lab `977329121`, FE-A2 `9b9a81d8b`·`4422a6800` 모두 origin/dev ancestor exit 0. Ruff lint/format PASS, import-linter 2 kept/0 broken, pytest `1735 passed, 3 skipped`, `tests/test_env_defaults.py` `8 passed`.
 
 [교훈] merge에서 한쪽 삭제 + 한쪽 존재는 무충돌 삭제가 된다 — 대량 동기화 merge 후에는 반드시 소유권 밖 경로의 삭제 감사(`diff --stat -- <경로>`)를 exit criteria에 포함할 것.
+
+## 2026-07-13 11:02 KST — PROMOTE 후 브랜치 정리 2차
+
+- canonical `origin/dev`: `75b99d30ff01dd4d509318ad56d62ae8d44bd703`.
+- 실브랜치 175개(`origin/HEAD` 별칭 제외): 보호 6 / 활성 보존 2 / literal ancestor 삭제 대상 0 / 사람 판단 대기 167.
+- 착륙 lane 회수: 로컬 `codex/f-audit-timeline`은 이미 부재했고, 로컬
+  `codex/f-inprocess-event-bus`는 stale upstream을 해제한 뒤 `git branch -d`로 삭제했다.
+- 07:32 KST 전수 감사표의 [C]는 모두 보존했다. 아래 표는 PROMOTE 이후 상태가 달라진
+  lane만 재판정한 델타이며, force 삭제·원격 삭제는 수행하지 않았다.
+
+| 브랜치 | 분류 | ancestor exit | 처리 | 근거 |
+|---|---:|---:|---|---|
+| `codex/f-auto-revert-pr` | B | 1 | 보존 | 활성 P lane; 감사 시점 `07cfa1f154`, origin/dev 대비 behind 244 / ahead 6 |
+| `origin/codex/f-auto-revert-pr` | B | 1 | 보존 | 활성 P lane 원격; `e6d4df1dc7`, origin/dev 대비 behind 334 / ahead 1 |
+| `origin/codex/f-inprocess-event-bus` | C | 1 | 사람 판단 대기 | `88740e523c`; 패치 동등 5커밋은 dev에 있으나 브랜치 자체는 literal ancestor가 아니므로 엄격 삭제 규칙상 보존 |
+
+- `origin/codex/f-inprocess-event-bus`는 `git cherry origin/dev`에서 5개 모두 `-`로
+  패치 동등성이 확인됐지만, `git merge-base --is-ancestor` exit 1이므로 원격 삭제하지 않았다.
+- BQ-016은 `origin/dev`에 완료 착륙했고, 다음 큐인 BQ-009는
+  `codex/f-auto-revert-pr`에서 진행 중이다. 같은 worktree가 감사 중에도 전진했으므로
+  조율 세션은 해당 lane에 동시 수정·rebase·테스트를 수행하지 않는다.
