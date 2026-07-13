@@ -1184,3 +1184,18 @@ npm run visual-product
   삭제 0건; no-ff merge·push 후 feature와 merge commit의 `origin/dev` ancestor exit 0.
 - 실물 `docs/auto/night-directives.md`의 최신 번호는 D-021이고 D-024 본문은 아직 없지만,
   활성 목표에 제공된 D-024 상시 착륙 승인·4조건 전체를 적용했다. 배포 실행은 하지 않았다.
+
+## 2026-07-13 13:14 KST — BQ-018 완료 증거
+
+- lane `codex/opsia-docs-name-propagation`, HEAD
+  `46ea10f8f0648dd7c29be984b9845ae57938fb5e`, canonical merge
+  `ad28cc9457a094dda7ef8ce53d2184845bb25eb1`.
+- stat: README와 OSS 문서 12 files, 28 insertions, 26 deletions. 파일 삭제 0건,
+  `src/`, `alembic/`, `deploy/`, `tests/`, `frontend/` 변경 0건.
+- 제품 표기: Opsia/opsia, OpsiaBench, `oci://ghcr.io/opsia/charts/opsia`.
+  코드 식별자·event subject·DB schema와 `~/.radar/kubeheal-timeline.db` 저장 경로는 보존했다.
+- gate: docs index 9 passed; Ruff lint/format PASS, import-linter 2 kept/0 broken,
+  pytest `1838 passed, 3 skipped`; manifest management 69, target 20.
+- 4조건: 전체 그린; merge-tree exit 0/tree `4c354fd97af928d7de65d881dc74540517c9cb6a`;
+  삭제·비문서 변경 0건; no-ff merge·push 후 feature와 merge commit의
+  `origin/dev` ancestor exit 0.
