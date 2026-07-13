@@ -79,6 +79,12 @@ CANDIDATE_INDEX_ENTRY_FIELDS = {
 }
 CANDIDATE_INDEX_SOURCE_COUNT = 15
 CANDIDATE_INDEX_COUNT = 87
+CANDIDATE_BATCH_SHA256 = {
+    (1, 10): "8af3efce17c994f3ac0e97a5864ddbf9ea2b28ab0050be0a9cd201b58aca4476",
+    (11, 20): "3ffa57f4abe30241469185e6d3c182605157cf7a42facf678128016184f43bb0",
+    (21, 30): "ba7e92d1b4468fa7a96d7e0256dab39509c8bd859114e52fd83967c394f7ac79",
+    (31, 40): "32d4a8b485fa73c2dbba420e4fefdc4c56ca82d712e6bbe92954516a79aab73d",
+}
 CONTRADICTION_POLICY = "not_modeled_v0.1"
 MISSING_EVIDENCE_POLICY = "all_required_evidence_and_supporting_signal_groups"
 SIGNAL_MATCHER_KEYS = {"fact", "log_pattern", "event_pattern"}
@@ -165,7 +171,7 @@ def load_recovery_contracts() -> tuple[dict[str, list[dict[str, Any]]], list[dic
             if len(actions) != len(actions_node.elts):
                 raise ValueError(f"{RECOVERY_SOURCE}: actions must contain static calls")
             if decorator.func.attr == "fallback":
-                fallback = actions
+                fallback.extend(actions)
                 continue
             root_causes = ast.literal_eval(_call_keyword(decorator, "root_causes"))
             for candidate_id in root_causes:
@@ -569,6 +575,62 @@ def validate_candidate_contract_progress(contract_count: int, next_ordinal: Any)
     return errors
 
 
+def candidate_contract_batch_ranges(contract_count: int) -> tuple[tuple[int, int], ...]:
+    """Return completed 10-item ranges plus the terminal 81..87 tail."""
+    if not is_strict_int(contract_count) or contract_count <= 0:
+        return ()
+    full_batch_limit = min(contract_count, 80)
+    ranges = [
+        (start_ordinal, start_ordinal + 9)
+        for start_ordinal in range(1, full_batch_limit + 1, 10)
+        if start_ordinal + 9 <= contract_count
+    ]
+    if contract_count == CANDIDATE_INDEX_COUNT:
+        ranges.append((81, CANDIDATE_INDEX_COUNT))
+    return tuple(ranges)
+
+
+def candidate_contract_batch_digest(
+    contracts: list[Any], start_ordinal: int, end_ordinal: int
+) -> str:
+    """Hash one completed batch range using canonical JSON."""
+    encoded = json.dumps(
+        contracts[start_ordinal - 1 : end_ordinal],
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+        allow_nan=False,
+    ).encode("utf-8")
+    return hashlib.sha256(encoded).hexdigest()
+
+
+def validate_candidate_batch_commitments(contracts: list[Any]) -> list[str]:
+    """Require one immutable digest lock for every completed contract batch."""
+    errors: list[str] = []
+    prefix = "candidate-contracts.json"
+    expected_ranges = set(candidate_contract_batch_ranges(len(contracts)))
+    configured_ranges = set(CANDIDATE_BATCH_SHA256)
+    require(
+        configured_ranges == expected_ranges,
+        f"{prefix}: completed batch digest coverage mismatch",
+        errors,
+    )
+    for batch_range in sorted(expected_ranges & configured_ranges):
+        start_ordinal, end_ordinal = batch_range
+        batch_number = (start_ordinal - 1) // 10 + 1
+        try:
+            actual_digest = candidate_contract_batch_digest(contracts, start_ordinal, end_ordinal)
+        except (TypeError, ValueError) as exc:
+            errors.append(f"{prefix}: completed batch {batch_number} is not canonical JSON: {exc}")
+            continue
+        require(
+            actual_digest == CANDIDATE_BATCH_SHA256[batch_range],
+            f"{prefix}: completed batch {batch_number} digest mismatch",
+            errors,
+        )
+    return errors
+
+
 def validate_candidate_contracts(
     data: Any,
     catalog: dict[str, Any],
@@ -607,6 +669,7 @@ def validate_candidate_contracts(
     if not isinstance(contracts, list):
         return errors
     errors.extend(validate_candidate_contract_progress(len(contracts), data.get("next_ordinal")))
+    errors.extend(validate_candidate_batch_commitments(contracts))
 
     index_document = candidate_index if isinstance(candidate_index, dict) else {}
     require(

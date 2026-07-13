@@ -1759,6 +1759,36 @@ target preflight·register 네 함수와 strict Zod 계약을 claim했다. 1회�
   후속 배치로 계약화하고, malformed snapshot 구조화 오류·복수 fallback·canonical command·
   CRLF SHA 이식성은 비차단 hardening 후보로 함께 추적한다.
 
+## 2026-07-13 15:37 KST — [백엔드] 아침 요약
+
+- canonical 기준점: `origin/dev@54a3c707108752383956d68599b2b261ff566767`.
+- 파이프라인: A·B·C0·C·D·E·F·P·G·H·I는 `done`, J는 사람 GO와 실환경 권위
+  증거를 기다리는 `🔒waiting`, K는 J 이후 `pending`이다. `backend-pipeline.md` §3의
+  04:30 lane 목록은 역사적 시작점이며 현재 상태 판정은 §4와 이 요약을 따른다.
+- 작업 큐: BQ-001~018은 모두 canonical 착륙이 증명되어 `landed`로 정규화했다.
+  보조 대기열 S1 Bruno 실행 경로, S2 scheduling·PVC 시나리오, S3 후보 계약 1~10도
+  각각 canonical merge와 앵커를 보유한다.
+- 최신 전체 게이트: Ruff lint/format PASS, import-linter 8 kept/0 broken,
+  pytest `1899 passed, 3 skipped`; manifest management 69 / target 20.
+- 사람 전용 잔여: J의 GitHub Actions, 실제 smoke credential·fixture, live DB Alembic baseline·
+  index 상태, backup·이전 image digest, target context, 1-replica 위험 수용은 미해소다.
+  증거 없이 배포나 K 검증으로 전이하지 않는다.
+- 백엔드 후속: OpsiaBench 후보 계약은 87개 중 10개만 작성했다. 다음 작업 cursor는 11이며,
+  full catalog 계약·fixture 확대를 순차 배치로 계속한다.
+
+## 2026-07-13 15:40 KST — [백엔드] 아침 요약 정합 보충
+
+- `backend-pipeline.md` §3의 BQ-008 미착륙·활성 lane 목록은 04:30 시작 snapshot임을
+  명시했다. 현재 판정은 §4의 A~I done, J `🔒waiting`, K pending을 따른다.
+- `backend-f-progress.md`의 선언 앵커 수를 실물 19줄과 맞추고, BQ-001~003의 과거
+  delta-green 기준과 현재 실패 허용 0건의 full-green 기준을 분리했다.
+- 지시 실물 감사: `night-directives.md`에는 D-021 이후 원문이 없고 EOF 번호 순서도
+  역전돼 있다. 현재 세션에 직접 전달된 후속 지시는 적용하되, 원문을 추측해 파일에
+  만들지 않는다. J 배포는 기존 사람 전용 게이트를 계속 유지한다.
+- J 전 사전 hardening 후보: Bruno 13/14/15의 실제 200 강제, management cluster-agent
+  scope, smoke image digest 전달, 실행 가능한 rollback 명령을 배포 정본에서 추가 검산한다.
+  이는 배포 GO를 대신하지 않으며 현재 배포 실행은 0건이다.
+
 ## 2026-07-13 15:41 KST — [프론트] dev 흡수·PROMOTE 완료 증거
 
 - 흡수 직전 divergence는 dev-only 22 / lab-only 60이었다. 최신 dev 변경은 benchmark·backend
@@ -1773,6 +1803,30 @@ target preflight·register 네 함수와 strict Zod 계약을 claim했다. 1회�
   fast-forward로 dev에 승격했다. `origin/dev`와 `origin/woonyong/ui-layer-lab`은 모두
   `a1e37d343`이고 양방향 ancestor exit 0, divergence 0/0이다.
 
+## 2026-07-13 15:43 KST — [백엔드] 아침 요약 lane 최신화
+
+- 작업 중 `origin/dev`가 `a1e37d34308192a6d5c363983a370209ab4813be`까지 전진해 S4 lane에
+  merge했다. `docs/auto/night-log.md`는 양측 append를 모두 보존했고 충돌은 0건이다.
+- 최신 기준 전체 게이트: Ruff lint/format PASS, import-linter 8 kept/0 broken,
+  pytest `1901 passed, 3 skipped`; manifest management 69 / target 20.
+- S4 자체 변경 경로는 조율 문서 4개와 `tests/test_docs_index.py`뿐이며, canonical에서
+  합류한 프론트 파일은 S4 소유 변경으로 재분류하지 않는다.
+
+## 2026-07-13 15:45 KST — [백엔드] 아침 요약·완료 상태 정합 착륙
+
+- lane `codex/morning-summary-consistency`, feature HEAD
+  `356bef2e29255fe5f8305fa61522865fb63bf3fc`, canonical no-ff merge
+  `5aa8fa006280e7b6191832d0f5fea6d9108438f6`.
+- RED `c29f4d3b5`가 미정의 작업 큐 상태 5건을, RED `c000af818`이 선언 앵커 6건과
+  실물 19건의 차이를 잡았다. 수정 후 큐는 BQ-001~018과 S1~S4를 `landed`로 구분하고
+  앵커 선언은 새 S4 앵커를 포함한 20건과 일치한다.
+- gate: Ruff lint/format PASS, import-linter 8 kept/0 broken, pytest
+  `1901 passed, 3 skipped`; manifest management 69 / target 20.
+- 4조건: merge-tree exit 0/tree `ab67562c43f4c808674b59ff2c8a2393c52e03f2`;
+  파일 삭제·소유권 밖 코드·frozen 경로 변경 0건; feature와 merge commit의
+  `origin/dev` ancestor exit 0.
+- 배포는 실행하지 않았다. J는 실환경 권위 증거와 사람 GO를 기다리는 상태를 유지한다.
+
 ## 2026-07-13 15:48 KST — [프론트] Button·Card 접근성 계약 테스트 보강
 
 - 테스트 기준점 `684a9e091`에서 Button slot을 봉인해야 한다는 가정을 먼저 검증했으나,
@@ -1784,6 +1838,25 @@ target preflight·register 네 함수와 strict Zod 계약을 claim했다. 1회�
 - targeted 3 files / 14 tests, typecheck, lint PASS. full `npm run check` PASS:
   114 files / 827 tests, design guard 341 files, shadcn 482 previews, Vite 14,538 modules.
   `npm run visual-product` PASS: 38 isolated scenarios, unexpected network/WebSocket 0건.
+
+## 2026-07-13 15:59 KST — [백엔드] rule candidate 11~20 안전 계약 착륙
+
+- 데이터 lane `codex/candidate-contract-batch-two@d90ccac03`, canonical no-ff merge
+  `59a9c460b01e56d03e0f21da0e40999e2d078a36`; terminal hardening lane
+  `codex/candidate-contract-terminal-digest@b2b6baeb0`, canonical no-ff merge
+  `5bc68f5cd7b6287e499c669c0c507912920debec`.
+- index 11~20의 evidence·signal을 exact 투영했다. 모두 live `manual_analysis` fallback만
+  허용하고 patch capability와 exact fixture는 빈 배열이다. 후보별 forbidden action은
+  cluster/fleet 확장을 차단하며 allowed action과 중복되지 않는다.
+- append-only: batch 1·2 canonical JSON digest를 고정하고, 새 완료 배치의 digest 누락을
+  거부한다. terminal 배치는 78~87이 아니라 정확히 81~87로 계산한다. 복수 fallback은
+  선언 순서대로 누적한다.
+- 고유 검증: candidate scorer 20/20 PASS, 전체 scenario 14 PASS, 후보 계약 테스트
+  37 passed. 전체 게이트는 Ruff lint/format PASS, import-linter 8 kept/0 broken,
+  pytest `1908 passed, 3 skipped`; manifest management 69 / target 20.
+- 4조건: merge-tree 두 건 clean(`b46ca873…`, `78592de2…`), 파일 삭제·소유권 밖 변경·
+  frozen 경로 변경 0건, 두 feature와 merge commit의 `origin/dev` ancestor exit 0.
+- 잔여 범위: 전체 87개 중 20개 완료, 다음 cursor 21. J 배포 실행은 0건이다.
 
 ## 2026-07-13 16:02 KST — [프론트] BQ-017 스키마 호환 완료 + `bfaf03901`
 
@@ -1798,6 +1871,23 @@ target preflight·register 네 함수와 strict Zod 계약을 claim했다. 1회�
   TypeScript·ESLint, Vitest 114 files / 827 tests, design guard 341 files,
   shadcn source audit 482 previews, Vite production build 14,538 modules.
 
+## 2026-07-13 16:06 KST — [백엔드] rule candidate 21~30 안전 계약 착륙
+
+- lane `codex/candidate-contract-batch-three`, RED `3d39b3cf6`, 구현·데이터
+  `9df3551d8`, feature HEAD `8f0ee335f1ba947d077c3b16b17267afde123de3`, canonical no-ff merge
+  `efdde0a31fb1986c3d30083bf3dc895fd256aafd`.
+- loader 순서 21~30의 evidence·signal·recovery를 exact 투영했다. 25번
+  `wrong_image_tag`만 실제 `safe_pr` capability가 있고, 26·27번은 approval-only,
+  나머지는 `manual_analysis` fallback-only다. fixture는 실존 계약과 일치하는 25·26번뿐이다.
+- append-only: 세 번째 batch digest `ba7e92d1…f7ac79`를 `(21, 30)`에 고정하고
+  batch 3 변조 회귀를 추가했다. 누적 범위는 30/87, 다음 cursor는 31이다.
+- 고유 검증: candidate scorer 30/30 PASS, 후보 계약 테스트 40 passed, 독립 감사
+  P0/P1 0건. 전체 게이트는 Ruff lint/format PASS, import-linter 8 kept/0 broken,
+  pytest `1911 passed, 3 skipped`; manifest management 69 / target 20.
+- 4조건: merge-tree clean/tree `c6d98ec1167434a3a51f3bb0cc77cb5c13350b8e`, 파일 삭제·
+  소유권 밖 변경·frozen 경로 변경 0건, RED·feature·문서·merge commit의 `origin/dev`
+  ancestor exit 0. J 배포 실행은 0건이다.
+
 ## 2026-07-13 16:11 KST — [프론트] Issues 선택 의미·포커스 계약 완료 증거
 
 - RED `60abe061b`는 선택된 Issue가 상세 region을 소유한다는 `aria-current`·`aria-controls`
@@ -1811,6 +1901,25 @@ target preflight·register 네 함수와 strict Zod 계약을 claim했다. 1회�
   design guard 342 files, shadcn source audit 482 previews, Vite build 14,539 modules.
   `npm run visual-product` PASS: 38 isolated scenarios, exact API request counts,
   unexpected feature network/WebSocket 0건.
+
+## 2026-07-13 16:15 KST — [백엔드] rule candidate 31~40 안전 계약 착륙
+
+- lane `codex/candidate-contract-batch-four`, RED `85f9447c9`, 구현·데이터
+  `1497b9bb3`, 의미 교정과 feature HEAD `296e14c383ae949573f2ad5216af8874b1a923b8`,
+  canonical no-ff merge `6ebd0f6bd7882bbed2b173d100fb6a26ebe4e0e5`.
+- loader 순서 31~40의 exact evidence·signal·recovery를 투영했다. 36·37번은 `command`,
+  38번은 `command+safe_pr`, 나머지는 fallback-only다. exact fixture는 0개이며 유사 fixture를
+  만들지 않았다.
+- forbidden remediation 의미 감사에서 ordinal 35의 재시작 불가능한 Endpoint 표현을 잡아
+  cluster 전체 backend workload 재시작 금지로 교정했다. 최종 독립 재감사 P0/P1 0건이다.
+- append-only: 네 번째 batch digest `32d4a8b4…ab73d`를 `(31, 40)`에 고정하고
+  누락 lock·batch 4 변조 회귀를 추가했다. 누적 범위는 40/87, 다음 cursor는 41이다.
+- 고유 검증: candidate scorer 40/40 PASS, 후보 계약 테스트 43 passed. 전체 게이트는
+  Ruff lint/format PASS, import-linter 8 kept/0 broken, pytest `1914 passed, 3 skipped`;
+  manifest management 69 / target 20.
+- 4조건: merge-tree clean/tree `a9c271adfbed401a3dd8f04887c9a9cc765d5185`, 파일 삭제·
+  소유권 밖 변경·frozen 경로 변경 0건, RED·구현·문서·수정·merge commit의 `origin/dev`
+  ancestor exit 0. J 배포 실행은 0건이다.
 
 ## 2026-07-13 16:21 KST — [프론트] 공용 primitive 모션 감소 계약 완료 증거
 

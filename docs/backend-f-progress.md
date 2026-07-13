@@ -7,9 +7,12 @@ governing: docs/f-coordination-plan.md · docs/backend-f-workqueue.md
 
 # 백엔드 F 진행 현황
 
-현재 상태: **앵커 6건**
+현재 상태: **앵커 23건**
 
-## Delta-green baseline
+## 역사적 Delta-green baseline (BQ-001~003)
+
+이 기준은 BQ-001~003 수행 당시의 회귀 허용 목록이며 [D-012]의 baseline 공집합 전환으로
+만료됐다. 신규 작업의 완료 판정에 재사용하지 않는다.
 
 - 측정 기준 commit: `e3c1de4a8eeb49a4630bab816d2bbd18444c80a5`
 - pytest: `uv run python -m pytest -q` → `6 failed, 1630 passed, 3 skipped`
@@ -41,6 +44,15 @@ governing: docs/f-coordination-plan.md · docs/backend-f-workqueue.md
 ### Manifest baseline
 
 - `scripts/manifest-check.sh` PASS — 배포 manifest 작업열, 실패 0건
+
+## 현재 full-green baseline
+
+- 측정 기준: `origin/dev@a1e37d34308192a6d5c363983a370209ab4813be`를 합친 S4 lane
+- Ruff lint/format: PASS
+- import-linter: 8 kept, 0 broken
+- pytest: `1901 passed, 3 skipped`
+- manifest: management 69, target 20
+- 판정 규칙: 실패 허용 목록은 공집합이다. 신규 실패가 있으면 착륙하지 않는다.
 
 ## 완료 앵커
 
@@ -245,7 +257,7 @@ Bundle route는 200을 반환한다.
 
 ### BQ-017 — provider 1급화와 연결 단계
 
-- 상태: done, gateway 계약 lock 해제
+- 상태: landed, gateway 계약 lock 해제
 - 담당 lane: `codex/f-provider-connection-stage`
 - 착수 기준: `origin/dev@a65c66c7102fb453e583ed4ec44f1950a9df9ba2`
 - 전체 게이트 baseline: Ruff lint/format PASS, import-linter 2 kept/0 broken,
@@ -458,3 +470,110 @@ Bundle route는 200을 반환한다.
   canonical command 추출, CRLF checkout의 byte SHA 이식성은 다음 배치에서 보강 후보로 남긴다.
 
 계약 완성: OpsiaBench candidate contracts 1..10 (0a1a0b99a482d9bfbcaf394a32ec2ca392cd6611) [green]
+
+### 보조 대기열 S4 — 아침 요약·완료 상태 문서 정합
+
+- 상태: landed
+- 담당 lane: `codex/morning-summary-consistency`
+- 상태 어휘 RED: `c29f4d3b5`; 앵커 수 RED: `c000af818`
+- feature HEAD: `356bef2e29255fe5f8305fa61522865fb63bf3fc`
+- canonical no-ff merge: `5aa8fa006280e7b6191832d0f5fea6d9108438f6`
+- 작업 큐의 착륙 완료 BQ 5건을 선언된 `landed` 어휘로 정규화하고, 진행 문서의 선언
+  앵커 수를 실물 20줄과 기계 대조한다.
+- pipeline §3은 04:30 시작 snapshot, 현재 상태는 §4와 night-log 아침 요약이라는
+  우선순위를 명시했다. A~I는 done, J는 사람 전용 `🔒waiting`, K는 pending이다.
+- 전체 게이트: Ruff lint/format PASS, import-linter 8 kept/0 broken,
+  pytest `1901 passed, 3 skipped`; manifest management 69 / target 20.
+- 4조건: merge-tree exit 0/tree `ab67562c43f4c808674b59ff2c8a2393c52e03f2`;
+  삭제·소유권 밖 코드·frozen 경로 변경 0건; feature와 merge commit의
+  `origin/dev` ancestor exit 0.
+
+계약 완성: backend coordination status vocabulary + morning summary (356bef2e29255fe5f8305fa61522865fb63bf3fc) [green]
+
+### 보조 대기열 S5 — rule candidate 11~20 안전 계약
+
+- 상태: landed
+- 계약 lane: `codex/candidate-contract-batch-two`; terminal hardening lane:
+  `codex/candidate-contract-terminal-digest`
+- RED: 두 번째 배치 `ddec4a7bb`, 완료 배치 변조 `b147ba64f`, 복수 fallback
+  `8da455794`, terminal·잠금 누락 `9ec3fc14e`
+- 데이터 feature HEAD: `d90ccac03f33dd2be7d21a01fd026849be63ea10`
+- 최종 hardening HEAD: `b2b6baeb036fc251d7e9ca1d8dd204dd928878db`
+- canonical no-ff merge: 데이터 `59a9c460b01e56d03e0f21da0e40999e2d078a36`,
+  terminal hardening `5bc68f5cd7b6287e499c669c0c507912920debec`
+- 범위: loader 순서 11~20을 추가해 누적 20/87, `next_ordinal=21`이다. 10개 모두
+  명시 recovery가 없어 live `manual_analysis` fallback만 허용하며, 실제 command/Safe PR
+  capability와 exact benchmark fixture는 없다. 빈 값으로 coverage gap을 숨기지 않는다.
+- append-only 경계: 1~10 digest `8af3efce…4476`, 11~20 digest
+  `3ffa57f4…bb0`을 canonical JSON으로 고정한다. 계약 수에서 필수 digest range를 계산해
+  누락 lock을 거부하고 최종 tail은 정확히 81~87만 해시한다.
+- 복수 fallback decorator는 선언 순서대로 누적한다. malformed snapshot 구조화 오류,
+  alias 없는 canonical command 추출, CRLF checkout SHA 이식성은 별도 비차단 hardening으로 남긴다.
+- 고유 검증: `python3 -S benchmark/score.py --candidate-contracts` 20/20 PASS,
+  전체 scenario scorer 14 PASS, `tests/test_benchmark_score.py` 37 passed.
+- 전체 게이트: Ruff lint/format PASS, import-linter 8 kept/0 broken,
+  pytest `1908 passed, 3 skipped`; manifest management 69 / target 20.
+- 4조건: 데이터 merge-tree exit 0/tree `b46ca873badcbb8bc64c99027cee4ac852aad470`,
+  hardening merge-tree exit 0/tree `78592de21d75cc6c51a20c26c51c5f5d59b2e641`;
+  파일 삭제·소유권 밖 변경·frozen 경로 변경 0건; 두 feature와 두 merge commit의
+  `origin/dev` ancestor exit 0.
+
+계약 완성: OpsiaBench candidate contracts 11..20 + batch digest coverage (b2b6baeb036fc251d7e9ca1d8dd204dd928878db) [green]
+
+### 보조 대기열 S6 — rule candidate 21~30 안전 계약
+
+- 상태: landed
+- 담당 lane: `codex/candidate-contract-batch-three`
+- RED: `3d39b3cf67579ecd0eeb823d29d9e1dd1a6e6c87`
+- 구현·데이터: `9df3551d8dfdb9b18bb15c7d0c4364d83f2aad4f`
+- 문서와 feature HEAD: `8f0ee335f1ba947d077c3b16b17267afde123de3`
+- canonical no-ff merge: `efdde0a31fb1986c3d30083bf3dc895fd256aafd`
+- 범위: loader 순서 21~30을 추가해 누적 30/87, `next_ordinal=31`이다. 21~24와
+  28~30은 live `manual_analysis` fallback만 허용한다.
+- 실제 실행 경계: 25번 `wrong_image_tag`만 dispatcher Safe PR allowlist와 교차해
+  `safe_pr` capability가 있다. 26번 `missing_image_pull_secret`과 27번
+  `registry_unavailable`은 승인형 recovery만 있고 실행 capability는 비어 있다.
+- fixture는 실존하는 image pull scenario와 exact candidate가 일치하는 25·26번에만 연결했다.
+  빈 capability·fixture를 추측으로 채우지 않는다.
+- append-only 경계: 세 번째 canonical JSON digest
+  `ba7e92d1b4468fa7a96d7e0256dab39509c8bd859114e52fd83967c394f7ac79`를 `(21, 30)`에
+  고정하고 batch 3 변조 회귀를 추가했다.
+- 고유 검증: `python3 -S benchmark/score.py --candidate-contracts` 30/30 PASS,
+  `tests/test_benchmark_score.py` 40 passed. 독립 감사 P0/P1 0건.
+- 전체 게이트: Ruff lint/format PASS, import-linter 8 kept/0 broken,
+  pytest `1911 passed, 3 skipped`; manifest management 69 / target 20.
+- 4조건: merge-tree exit 0/tree `c6d98ec1167434a3a51f3bb0cc77cb5c13350b8e`;
+  파일 삭제·소유권 밖 변경·frozen 경로 변경 0건; RED·feature·문서·merge commit의
+  `origin/dev` ancestor exit 0.
+
+계약 완성: OpsiaBench candidate contracts 21..30 + image pull capability boundary (8f0ee335f1ba947d077c3b16b17267afde123de3) [green]
+
+### 보조 대기열 S7 — rule candidate 31~40 안전 계약
+
+- 상태: landed
+- 담당 lane: `codex/candidate-contract-batch-four`
+- RED: `85f9447c9ae1657f9a4f3013d8bb9420be3da14e`
+- 구현·데이터: `1497b9bb3e3aa2819904c9e3636d21eb35c9da7c`
+- 문서: `9afa9ce542abf5f2039a0609707188f8fb52d747`
+- 최종 feature HEAD: `296e14c383ae949573f2ad5216af8874b1a923b8`
+- canonical no-ff merge: `6ebd0f6bd7882bbed2b173d100fb6a26ebe4e0e5`
+- 범위: loader 순서 31~40을 추가해 누적 40/87, `next_ordinal=41`이다. 31~35와
+  39~40은 live `manual_analysis` fallback만 허용한다.
+- 실제 실행 경계: 36번 `upstream_unavailable`과 37번 `backend_readiness_failure`는
+  `command`, 38번 `application_5xx_spike`는 `command`와 `safe_pr` capability가 있다.
+  `deployment_scale`의 `route=auto`, `approval_required=true` 원문도 그대로 보존한다.
+- 31~40과 exact rule/candidate가 일치하는 기존 fixture는 0개다. 유사 시나리오를 추측 연결하지 않는다.
+- 인간 검토 경계인 forbidden remediation도 후보별 실행 가능한 과잉 대응으로 감사했다.
+  ordinal 35는 재시작 불가능한 Endpoint 대신 cluster 전체 backend workload 재시작 금지로 교정했다.
+- append-only 경계: 네 번째 canonical JSON digest
+  `32d4a8b485fa73c2dbba420e4fefdc4c56ca82d712e6bbe92954516a79aab73d`를 `(31, 40)`에
+  고정하고 누락 lock·batch 4 변조 회귀를 추가했다.
+- 고유 검증: `python3 -S benchmark/score.py --candidate-contracts` 40/40 PASS,
+  `tests/test_benchmark_score.py` 43 passed. 독립 재감사 P0/P1 0건.
+- 전체 게이트: Ruff lint/format PASS, import-linter 8 kept/0 broken,
+  pytest `1914 passed, 3 skipped`; manifest management 69 / target 20.
+- 4조건: merge-tree exit 0/tree `a9c271adfbed401a3dd8f04887c9a9cc765d5185`;
+  파일 삭제·소유권 밖 변경·frozen 경로 변경 0건; RED·구현·문서·수정·merge commit의
+  `origin/dev` ancestor exit 0.
+
+계약 완성: OpsiaBench candidate contracts 31..40 + network execution boundary (296e14c383ae949573f2ad5216af8874b1a923b8) [green]
