@@ -965,6 +965,7 @@ logs를 읽을 때는 `logs[].query_name`으로 어떤 로그 query 결과인지
 | `logs[].trace_ids` | list<string> | 로그에서 찾은 안전한 trace id 목록이다. 32자리 hex trace id만 최대 20개까지 담는다. |
 | `logs[].matched_entries` | list<object> | RCA가 바로 읽을 수 있는 매칭 로그 요약이다. 매칭된 line만 최대 20개까지 담는다. |
 | `logs[].matched_entries[].message` | string | 민감정보 마스킹과 4096자 제한이 적용된 판단용 log line이다. Loki 원문 전체가 아니다. |
+| `logs[].matched_entries[].trace_id` | string 또는 null | 해당 line에서 추출한 32자리 hex trace id다. 없으면 null이다. |
 | `logs[].matched_entries[].matched_patterns` | list<string> | 해당 line이 매칭한 RCA diagnostic pattern 이름이다. 예: `app_port_bind_failed`, `permission_denied_startup`, `missing_env`, `dependency_timeout`, `dependency_error`, `config_error`, `probe_failed`, `oom_or_memory`. |
 | `logs[].collection_limit.matched_entries` | object | `matched_entries`의 최대 반환 수, 실제 매칭 수, 반환 수, 잘림 여부를 나타낸다. |
 | `logs[].redaction_summary` | object | provider가 로그 마스킹을 적용했는지, 실제로 값이 바뀐 line 개수, 길이 제한으로 잘린 line 개수를 나타낸다. |
@@ -1022,8 +1023,8 @@ Kubernetes event/reason, metrics threshold, metadata snapshot과 같이 본다.
 | `line_truncated` | boolean | line이 길이 제한으로 잘렸을 때만 true다. |
 | `original_line_length` | number | line이 잘렸을 때만 있는 제한 전 마스킹된 line 길이다. |
 
-마스킹 기준은 보수적으로 잡는다. `password`, `token`, `secret`, `api_key`, `client_secret`,
-`credential`, `private_key`, `Authorization`, `Bearer`, `Cookie`, JWT, AWS access key, URL 안의
+마스킹 기준은 보수적으로 잡는다. `password`, `token`, `secret`, `api_key`/`api-key`, `client_secret`/`client-secret`,
+`credential`, `private_key`/`private-key`, `Authorization`, `Bearer`, `Cookie`, JWT, AWS access key, URL 안의
 계정정보, email은 `[REDACTED]` 계열 값으로 바꾼다. 반대로 `trace_id`, `span_id`, `request_id`,
 namespace, pod name, `ERROR`, `timeout`, `probe failed`, `ImagePullBackOff`, `OOMKilled` 같은 RCA 판단
 키워드는 유지한다.
@@ -1496,8 +1497,8 @@ detail snapshot인 `current_workload_snapshot` 단수 값으로 보낸다.
 | `change_context.collection_limits.lists.<field>.original_count` | number | 제한 전 전체 항목 수다. |
 | `change_context.collection_limits.lists.<field>.returned_count` | number | 최종 payload에 담긴 항목 수다. |
 | `change_context.current_workload_snapshots[].workload` | object | workload kind, namespace, name이다. 현재 kind는 `Deployment`다. |
-| `change_context.current_workload_snapshots[].deployment_labels` | object | Deployment metadata labels다. |
-| `change_context.current_workload_snapshots[].pod_template_labels` | object | Pod template metadata labels다. |
+| `change_context.current_workload_snapshots[].deployment_labels` | object | Deployment metadata labels 중 안전한 subset이다. `app`, `app.kubernetes.io/name` 같은 식별 label을 먼저 남기고 최대 12개까지 담는다. 민감 단어가 key/value에 있으면 제외한다. |
+| `change_context.current_workload_snapshots[].pod_template_labels` | object | Pod template metadata labels 중 안전한 subset이다. `app`, `app.kubernetes.io/name` 같은 식별 label을 먼저 남기고 최대 12개까지 담는다. 민감 단어가 key/value에 있으면 제외한다. |
 | `change_context.current_workload_snapshots[].pod_template_auth` | object | Pod template의 service account와 image pull secret name 요약이다. private image pull 실패와 권한 문제 후보를 보기 위한 값이다. 값이 없으면 생략될 수 있고, Secret 값은 담지 않는다. |
 | `change_context.current_workload_snapshots[].pod_template_auth.service_account_name` | string | Pod template `serviceAccountName` 값이다. |
 | `change_context.current_workload_snapshots[].pod_template_auth.automount_service_account_token` | boolean | Pod template `automountServiceAccountToken` 값이다. `false`도 의미가 있으므로 보존한다. |

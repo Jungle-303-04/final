@@ -164,6 +164,13 @@ def test_loki_logs_redact_sensitive_values_and_add_rca_summaries() -> None:
                                 'INFO login password="hello world"',
                             ],
                             [
+                                "1782822589745500000",
+                                (
+                                    "INFO credentials api-key=raw-key "
+                                    "client-secret=raw-client private-key=raw-private"
+                                ),
+                            ],
+                            [
                                 "1782822589746000000",
                                 "ERROR server failed: address already in use",
                             ],
@@ -189,13 +196,17 @@ def test_loki_logs_redact_sensitive_values_and_add_rca_summaries() -> None:
         "WARN upstream dependency timed out Authorization: Bearer [REDACTED]",
         "ErrImagePull secret=[REDACTED]",
         "INFO login password=[REDACTED]",
+        (
+            "INFO credentials api-key=[REDACTED] "
+            "client-secret=[REDACTED] private-key=[REDACTED]"
+        ),
         "ERROR server failed: address already in use",
         "FATAL permission denied opening /data",
         "ERROR missing required env DATABASE_URL",
     ]
-    assert normalized["line_count"] == 7
+    assert normalized["line_count"] == 8
     stream_summary = normalized["streams"][0]
-    assert stream_summary["line_count"] == 7
+    assert stream_summary["line_count"] == 8
     assert stream_summary["pattern_counts"]["probe_failed"] == 1
     assert stream_summary["pattern_counts"]["missing_env"] == 1
     assert stream_summary["severity_counts"]["critical"] == 1
@@ -210,7 +221,7 @@ def test_loki_logs_redact_sensitive_values_and_add_rca_summaries() -> None:
     assert normalized["severity_counts"]["critical"] == 1
     assert normalized["severity_counts"]["error"] == 3
     assert normalized["severity_counts"]["warn"] == 1
-    assert normalized["severity_counts"]["info"] == 1
+    assert normalized["severity_counts"]["info"] == 2
     assert normalized["severity_counts"]["unknown"] == 1
     assert normalized["trace_ids"] == [trace_id]
     assert normalized["matched_entries"] == [
@@ -233,6 +244,7 @@ def test_loki_logs_redact_sensitive_values_and_add_rca_summaries() -> None:
             "severity": "warn",
             "message": "WARN upstream dependency timed out Authorization: Bearer [REDACTED]",
             "matched_patterns": ["dependency_timeout"],
+            "trace_id": None,
             "line_truncated": False,
         },
         {
@@ -243,6 +255,7 @@ def test_loki_logs_redact_sensitive_values_and_add_rca_summaries() -> None:
             "severity": "unknown",
             "message": "ErrImagePull secret=[REDACTED]",
             "matched_patterns": ["image_pull_error"],
+            "trace_id": None,
             "line_truncated": False,
         },
         {
@@ -253,6 +266,7 @@ def test_loki_logs_redact_sensitive_values_and_add_rca_summaries() -> None:
             "severity": "error",
             "message": "ERROR server failed: address already in use",
             "matched_patterns": ["app_port_bind_failed"],
+            "trace_id": None,
             "line_truncated": False,
         },
         {
@@ -263,6 +277,7 @@ def test_loki_logs_redact_sensitive_values_and_add_rca_summaries() -> None:
             "severity": "critical",
             "message": "FATAL permission denied opening /data",
             "matched_patterns": ["permission_denied_startup"],
+            "trace_id": None,
             "line_truncated": False,
         },
         {
@@ -273,6 +288,7 @@ def test_loki_logs_redact_sensitive_values_and_add_rca_summaries() -> None:
             "severity": "error",
             "message": "ERROR missing required env DATABASE_URL",
             "matched_patterns": ["missing_env"],
+            "trace_id": None,
             "line_truncated": False,
         },
     ]
@@ -284,7 +300,7 @@ def test_loki_logs_redact_sensitive_values_and_add_rca_summaries() -> None:
     }
     assert normalized["redaction_summary"] == {
         "applied": True,
-        "redacted_line_count": 4,
+        "redacted_line_count": 5,
         "truncated_line_count": 0,
     }
 

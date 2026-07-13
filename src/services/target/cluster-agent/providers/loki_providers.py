@@ -136,16 +136,23 @@ SENSITIVE_KEY_PATTERN = "|".join(
         "pwd",
         "token",
         "access_token",
+        "access-token",
         "refresh_token",
+        "refresh-token",
         "id_token",
+        "id-token",
         "secret",
         "api_key",
+        "api-key",
         "apikey",
         "client_secret",
+        "client-secret",
         "credential",
         "credentials",
         "private_key",
+        "private-key",
         "ssh_key",
+        "ssh-key",
     )
 )
 SENSITIVE_KEY_VALUE_RE = re.compile(
@@ -301,6 +308,7 @@ def matched_entry(
         "severity": severity,
         "message": message,
         "matched_patterns": patterns,
+        "trace_id": None,
         "line_truncated": line_truncated,
     }
     trace_ids = trace_ids_from_line(message)

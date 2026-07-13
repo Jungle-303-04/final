@@ -382,7 +382,7 @@ RCA evidence item:
 | `entries[].redaction_summary` | object | provider redaction 적용 여부, redacted line 개수, truncated line 개수다. namespace 필터 후 다시 계산하지 않는다. |
 
 Loki provider는 RCA가 로그 문맥을 읽을 수 있도록 `line` 필드는 유지한다.
-하지만 원문 그대로 보내지 않고 `password`, `token`, `secret`, `Authorization`, `Cookie`, JWT 같은
+하지만 원문 그대로 보내지 않고 `password`, `token`, `secret`, `api_key`/`api-key`, `client_secret`/`client-secret`, `private_key`/`private-key`, `Authorization`, `Cookie`, JWT 같은
 민감값을 `[REDACTED]` 계열 문자열로 바꾼 뒤 전달한다.
 provider는 evidence job result 크기 보호를 위해 line을 최대 4096자로 먼저 제한하고,
 RCA bundle compact 단계는 다시 최대 1600자로 줄인다.
@@ -476,8 +476,8 @@ RCA evidence item:
 | `workload.kind` | string | 현재는 `Deployment` 중심이다. |
 | `workload.namespace` | string | workload namespace다. |
 | `workload.name` | string | workload 이름이다. |
-| `deployment_labels` | object | Deployment labels다. |
-| `pod_template_labels` | object | Pod template labels다. |
+| `deployment_labels` | object | Deployment labels 중 안전한 subset이다. `app`, `app.kubernetes.io/name` 같은 식별 label을 먼저 남기고 최대 12개까지 담는다. 민감 단어가 key/value에 있으면 제외한다. |
+| `pod_template_labels` | object | Pod template labels 중 안전한 subset이다. `app`, `app.kubernetes.io/name` 같은 식별 label을 먼저 남기고 최대 12개까지 담는다. 민감 단어가 key/value에 있으면 제외한다. |
 | `pod_template_auth` | object | serviceAccountName, automountServiceAccountToken, imagePullSecrets name 요약이다. |
 | `persistent_volume_claim_refs` | list<object> | Pod template volume이 참조하는 PVC claim name 요약이다. |
 | `deployment_status` | object | Deployment replica count와 condition 요약이다. |

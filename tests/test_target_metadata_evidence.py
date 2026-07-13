@@ -376,7 +376,14 @@ def test_metadata_provider_collects_one_deployment_snapshot(monkeypatch) -> None
                         "uid": "deployment-1",
                         "namespace": "sandbox",
                         "name": "checkout-api",
-                        "labels": {"app": "checkout-api"},
+                        "labels": {
+                            **{
+                                f"aaa-label-{index:02d}": f"value-{index:02d}"
+                                for index in range(13)
+                            },
+                            "app": "checkout-api",
+                            "example.com/token": "do-not-include",
+                        },
                         "annotations": {
                             "ops.service/restarted-at": "2026-07-10T11:12:13Z",
                             "example.com/token": "secret-value",
@@ -393,7 +400,14 @@ def test_metadata_provider_collects_one_deployment_snapshot(monkeypatch) -> None
                         "replicas": 3,
                         "template": {
                             "metadata": {
-                                "labels": {"app": "checkout-api"},
+                                "labels": {
+                                    **{
+                                        f"aaa-template-label-{index:02d}": f"value-{index:02d}"
+                                        for index in range(13)
+                                    },
+                                    "app": "checkout-api",
+                                    "secret.example.com/name": "do-not-include",
+                                },
                                 "annotations": {
                                     "prometheus.io/path": "/metrics",
                                     "prometheus.io/scrape": "true",
@@ -1159,7 +1173,9 @@ def test_metadata_provider_collects_one_deployment_snapshot(monkeypatch) -> None
         "namespace": "sandbox",
         "name": "checkout-api",
     }
-    assert snapshot["deployment_labels"] == {"app": "checkout-api"}
+    assert snapshot["deployment_labels"]["app"] == "checkout-api"
+    assert len(snapshot["deployment_labels"]) <= 12
+    assert "do-not-include" not in str(snapshot["deployment_labels"])
     assert snapshot["deployment_annotations"] == {
         "ops.service/restarted-at": "2026-07-10T11:12:13Z"
     }
@@ -1167,7 +1183,9 @@ def test_metadata_provider_collects_one_deployment_snapshot(monkeypatch) -> None
     assert (
         "kubectl.kubernetes.io/last-applied-configuration" not in snapshot["deployment_annotations"]
     )
-    assert snapshot["pod_template_labels"] == {"app": "checkout-api"}
+    assert snapshot["pod_template_labels"]["app"] == "checkout-api"
+    assert len(snapshot["pod_template_labels"]) <= 12
+    assert "do-not-include" not in str(snapshot["pod_template_labels"])
     assert snapshot["pod_template_auth"] == {
         "service_account_name": "checkout-api-sa",
         "automount_service_account_token": False,
@@ -1588,7 +1606,14 @@ def test_metadata_provider_collects_namespace_deployment_snapshots(monkeypatch) 
                                 "uid": "deployment-3",
                                 "namespace": "target",
                                 "name": "shop-api",
-                                "labels": {"app": "shop-api"},
+                                "labels": {
+                                    **{
+                                        f"aaa-label-{index:02d}": f"value-{index:02d}"
+                                        for index in range(13)
+                                    },
+                                    "app": "shop-api",
+                                    "private-token": "do-not-include",
+                                },
                                 "annotations": {
                                     "ops.service/apply-at": "1783612345",
                                     "private.example.com/value": "hidden",
@@ -1601,7 +1626,14 @@ def test_metadata_provider_collects_namespace_deployment_snapshots(monkeypatch) 
                                 "replicas": 1,
                                 "template": {
                                     "metadata": {
-                                        "labels": {"app": "shop-api"},
+                                        "labels": {
+                                            **{
+                                                f"aaa-template-label-{index:02d}": f"value-{index:02d}"
+                                                for index in range(13)
+                                            },
+                                            "app": "shop-api",
+                                            "example.com/secret": "do-not-include",
+                                        },
                                         "annotations": {
                                             "prometheus.io/port": "8080",
                                             "token.example.com/value": "hidden",
@@ -1888,8 +1920,12 @@ def test_metadata_provider_collects_namespace_deployment_snapshots(monkeypatch) 
         "namespace": "target",
         "name": "shop-api",
     }
-    assert snapshot["deployment_labels"] == {"app": "shop-api"}
-    assert snapshot["pod_template_labels"] == {"app": "shop-api"}
+    assert snapshot["deployment_labels"]["app"] == "shop-api"
+    assert len(snapshot["deployment_labels"]) <= 12
+    assert snapshot["pod_template_labels"]["app"] == "shop-api"
+    assert len(snapshot["pod_template_labels"]) <= 12
+    assert "do-not-include" not in str(snapshot["deployment_labels"])
+    assert "do-not-include" not in str(snapshot["pod_template_labels"])
     assert snapshot["pod_template_auth"] == {
         "service_account_name": "shop-api-sa",
         "automount_service_account_token": True,

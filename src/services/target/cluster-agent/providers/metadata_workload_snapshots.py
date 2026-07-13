@@ -10,6 +10,7 @@ from providers.kubernetes_utils import (
     list_items,
     metadata,
     object_or_empty,
+    safe_metadata_labels,
     spec,
     status,
 )
@@ -76,8 +77,8 @@ def current_workload_base_snapshot(
             "namespace": meta.get("namespace"),
             "name": meta.get("name"),
         },
-        "deployment_labels": object_or_empty(meta.get("labels")),
-        "pod_template_labels": object_or_empty(template_meta.get("labels")),
+        "deployment_labels": safe_metadata_labels(meta.get("labels")),
+        "pod_template_labels": safe_metadata_labels(template_meta.get("labels")),
         "persistent_volume_claim_refs": persistent_volume_claim_refs(template_spec),
         "deployment_status": deployment_status_snapshot(deployment),
         "pod_statuses": [pod_status_snapshot(pod) for pod in owned_pods[:MAX_POD_STATUS_SUMMARIES]],

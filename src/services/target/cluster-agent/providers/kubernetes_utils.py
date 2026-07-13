@@ -18,6 +18,29 @@ K8S_RESOURCE_REPLICASETS = "replicasets"
 K8S_RESOURCE_RESOURCE_QUOTAS = "resourcequotas"
 K8S_RESOURCE_SECRETS = "secrets"
 K8S_RESOURCE_SERVICES = "services"
+SENSITIVE_METADATA_TOKENS = (
+    "authorization",
+    "credential",
+    "password",
+    "private",
+    "secret",
+    "token",
+)
+DEFAULT_SAFE_METADATA_LABEL_LIMIT = 12
+DEFAULT_SAFE_METADATA_LABEL_VALUE_LENGTH = 120
+PREFERRED_METADATA_LABEL_KEYS = (
+    "app",
+    "app.kubernetes.io/name",
+    "app.kubernetes.io/instance",
+    "app.kubernetes.io/component",
+    "app.kubernetes.io/part-of",
+    "app.kubernetes.io/version",
+    "component",
+    "service",
+    "tier",
+    "version",
+    "release",
+)
 
 
 def items(payload: Any) -> list[JsonObject]:
@@ -63,6 +86,43 @@ def object_or_empty(value: Any) -> JsonObject:
 def compact_dict(value: JsonObject) -> JsonObject:
     """Drop empty values while keeping false boolean values."""
     return {key: item for key, item in value.items() if item not in (None, "", [], {})}
+
+
+def safe_metadata_labels(
+    value: Any,
+    *,
+    limit: int = DEFAULT_SAFE_METADATA_LABEL_LIMIT,
+    max_value_length: int = DEFAULT_SAFE_METADATA_LABEL_VALUE_LENGTH,
+) -> JsonObject:
+    """Return bounded labels without sensitive key or value text."""
+    labels = object_or_empty(value)
+    safe: JsonObject = {}
+    for key in ordered_metadata_label_keys(labels):
+        item = labels[key]
+        key_text = str(key)
+        value_text = str(item)
+        if not safe_metadata_text(key_text) or not safe_metadata_text(value_text):
+            continue
+        safe[key_text] = value_text[:max_value_length]
+        if len(safe) >= limit:
+            break
+    return safe
+
+
+def ordered_metadata_label_keys(labels: JsonObject) -> list[object]:
+    """Keep common identity labels before stable sorted labels."""
+    preferred = [key for key in PREFERRED_METADATA_LABEL_KEYS if key in labels]
+    remaining = sorted(
+        (key for key in labels if key not in PREFERRED_METADATA_LABEL_KEYS),
+        key=str,
+    )
+    return [*preferred, *remaining]
+
+
+def safe_metadata_text(value: str) -> bool:
+    """Return whether metadata text is safe to expose."""
+    lowered = value.casefold()
+    return not any(token in lowered for token in SENSITIVE_METADATA_TOKENS)
 
 
 def resource_identity_snapshot(resource: JsonObject) -> JsonObject:
