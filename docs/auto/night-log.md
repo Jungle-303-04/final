@@ -1297,3 +1297,19 @@ npm run visual-product
 - 검증: `scripts/smoke.sh` PASS, Bruno 13/14/15의 실제 200 응답과 schema,
   cross-workspace 404, outbox/NATS/DLQ·API 5xx·latency 15분 관찰.
 - 재개 조건: 위 blocker별 권위 증거와 사람 GO [J].
+
+## 2026-07-13 14:41 KST — [백엔드] RCA 읽기 Bruno 기본 경로 착륙
+
+- lane `codex/bruno-route-runner`, RED `f3d2b4f92`, Runner `31b93edad`, 문서·feature
+  HEAD `6d29a87021c9163c659bda548108576c8358e952`, canonical no-ff merge
+  `6ea12f2635bf6b49879f93baeed4fa101c2b4bb4`.
+- stat: `tests/test_bruno_collection.py` 18줄, `scripts/run-bruno-aws.sh` 3줄,
+  `docs/api/README.md` 20줄 추가. 기본 AWS Runner가 Bruno 13→14→15를 실행하고,
+  문서는 RemediationBundle·audit timeline·recent changes의 의미와 production 실제 200
+  판정 경계를 구분한다.
+- gate: `bash -n scripts/run-bruno-aws.sh`, Bruno collection 18 passed, docs index 9 passed,
+  Ruff lint/format PASS, import-linter 8 kept/0 broken, pytest `1869 passed, 3 skipped`;
+  manifest management 69 / target 20.
+- 4조건: merge-tree exit 0/tree `780b1e170691d3af359059fe08aba67e9840a85e`;
+  삭제·소유권 밖 변경·frozen 경로 변경 0건; feature와 merge commit의 `origin/dev`
+  ancestor exit 0.
