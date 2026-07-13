@@ -7,7 +7,6 @@ from types import SimpleNamespace
 
 import httpx
 import pytest
-
 from conftest import ROOT, load_file
 from fastapi import HTTPException
 
