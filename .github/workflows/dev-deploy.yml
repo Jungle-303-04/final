@@ -239,6 +239,7 @@ jobs:
             --namespace "${MGMT_NS}" \
             --manifest "${RUNNER_TEMP}/management.yaml" \
             --managed-image "183548421506.dkr.ecr.ap-northeast-2.amazonaws.com/kubernetes-ops-service@sha256:132cbc945004812ae3367c21a3408da8f3c9ab1a01b5870ffdea1157c83f5d0a" \
+            --verified-live-image "183548421506.dkr.ecr.ap-northeast-2.amazonaws.com/kubernetes-ops-service:c704729c1b=183548421506.dkr.ecr.ap-northeast-2.amazonaws.com/kubernetes-ops-service@sha256:132cbc945004812ae3367c21a3408da8f3c9ab1a01b5870ffdea1157c83f5d0a" \
             --previous-release-sha "${previous_sha}" \
             --output "${RUNNER_TEMP}/service-rollback-plan.json"
           uv run python scripts/capture_image_digests.py \
@@ -246,6 +247,7 @@ jobs:
             --namespace "${MGMT_NS}" \
             --manifest "${RUNNER_TEMP}/management.yaml" \
             --managed-image "183548421506.dkr.ecr.ap-northeast-2.amazonaws.com/kubernetes-ops-console@sha256:8c49f7bf8a10f5b9edb8de798cbe94d78ca29d03699bc2f3686c1636ec397978" \
+            --verified-live-image "183548421506.dkr.ecr.ap-northeast-2.amazonaws.com/kubernetes-ops-console:c704729c1b=183548421506.dkr.ecr.ap-northeast-2.amazonaws.com/kubernetes-ops-console@sha256:8c49f7bf8a10f5b9edb8de798cbe94d78ca29d03699bc2f3686c1636ec397978" \
             --previous-release-sha "${previous_sha}" \
             --output "${RUNNER_TEMP}/console-rollback-plan.json"
 
