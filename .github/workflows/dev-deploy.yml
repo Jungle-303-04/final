@@ -1,0 +1,206 @@
+name: Dev Deploy
+
+"on":
+  workflow_run:
+    workflows: [Dev Gate]
+    types: [completed]
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: dev-deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Deploy gated dev SHA
+    if: >-
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.event == 'push' &&
+      github.event.workflow_run.head_branch == 'dev' &&
+      vars.AWS_DEV_DEPLOY_ENABLED == '1'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    environment: dev
+    env:
+      AWS_REGION: ${{ vars.AWS_DEV_REGION }}
+      ECR_REPOSITORY: ${{ vars.AWS_DEV_ECR_REPOSITORY }}
+      EKS_CLUSTER: ${{ vars.AWS_DEV_EKS_CLUSTER }}
+      BASE_URL: ${{ vars.AWS_DEV_BASE_URL }}
+      MGMT_CONTEXT: opsia-dev
+      MGMT_NS: management
+      SOURCE_SHA: ${{ github.event.workflow_run.head_sha }}
+      AUTH_EMAIL: ${{ secrets.AWS_DEV_AUTH_EMAIL }}
+      AUTH_PASSWORD: ${{ secrets.AWS_DEV_AUTH_PASSWORD }}
+      SMOKE_CLUSTER_ID: ${{ secrets.AWS_DEV_SMOKE_CLUSTER_ID }}
+      SMOKE_RCA_CORRELATION_ID: ${{ secrets.AWS_DEV_SMOKE_RCA_CORRELATION_ID }}
+      SMOKE_RCA_INCIDENT_ID: ${{ secrets.AWS_DEV_SMOKE_RCA_INCIDENT_ID }}
+    steps:
+      - name: Check out gated dev SHA
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+          cache-dependency-glob: uv.lock
+
+      - name: Install deployment dependencies
+        run: uv sync --frozen
+
+      - name: Set up kubectl
+        uses: azure/setup-kubectl@v4
+        with:
+          version: v1.36.2
+
+      - name: Validate non-secret deployment inputs
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "${SOURCE_SHA}" =~ ^[0-9a-f]{40}$ ]]
+          test "$(git rev-parse HEAD)" = "${SOURCE_SHA}"
+          [[ "${AWS_REGION}" =~ ^[a-z]{2}(-gov)?-[a-z]+-[0-9]$ ]]
+          [[ "${ECR_REPOSITORY}" =~ ^[a-z0-9]+([._/-][a-z0-9]+)*$ ]]
+          [[ "${EKS_CLUSTER}" =~ ^[A-Za-z0-9][A-Za-z0-9_-]{0,99}$ ]]
+          [[ "${BASE_URL}" =~ ^https://[^[:space:]]+$ ]]
+
+      - name: Configure AWS identity
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_DEV_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_DEV_REGION }}
+
+      - name: Build and push immutable service image
+        id: image
+        shell: bash
+        run: |
+          set -euo pipefail
+          account_id="$(aws sts get-caller-identity --query Account --output text)"
+          registry="${account_id}.dkr.ecr.${AWS_REGION}.amazonaws.com"
+          aws ecr describe-repositories --repository-names "${ECR_REPOSITORY}" >/dev/null
+          aws ecr get-login-password \
+            | docker login --username AWS --password-stdin "${registry}"
+          tagged_image="${registry}/${ECR_REPOSITORY}:${SOURCE_SHA}"
+          docker build --file src/services/Dockerfile --tag "${tagged_image}" .
+          docker push "${tagged_image}"
+          digest="$(aws ecr describe-images \
+            --repository-name "${ECR_REPOSITORY}" \
+            --image-ids "imageTag=${SOURCE_SHA}" \
+            --query 'imageDetails[0].imageDigest' \
+            --output text)"
+          [[ "${digest}" =~ ^sha256:[0-9a-f]{64}$ ]]
+          echo "image=${registry}/${ECR_REPOSITORY}@${digest}" >>"${GITHUB_OUTPUT}"
+
+      - name: Configure explicit dev cluster context
+        shell: bash
+        run: |
+          set -euo pipefail
+          aws eks update-kubeconfig \
+            --region "${AWS_REGION}" \
+            --name "${EKS_CLUSTER}" \
+            --alias "${MGMT_CONTEXT}"
+          test "$(kubectl config current-context)" = "${MGMT_CONTEXT}"
+
+      - name: Render and verify auth bypass policy
+        shell: bash
+        run: |
+          set -euo pipefail
+          kubectl kustomize deploy/management >"${RUNNER_TEMP}/management.yaml"
+          uv run python scripts/verify_dev_auth_bypass.py rendered \
+            --manifest "${RUNNER_TEMP}/management.yaml"
+          uv run python scripts/verify_dev_auth_bypass.py live \
+            --context "${MGMT_CONTEXT}" \
+            --namespace "${MGMT_NS}"
+
+      - name: Capture current digest rollback plan
+        id: capture
+        shell: bash
+        run: |
+          set -euo pipefail
+          previous_sha="$(kubectl --context "${MGMT_CONTEXT}" -n "${MGMT_NS}" \
+            get configmap opsia-deploy-status \
+            -o jsonpath='{.data.dev_sha}')"
+          [[ "${previous_sha}" =~ ^[0-9a-f]{40}$ ]]
+          uv run python scripts/capture_image_digests.py \
+            --context "${MGMT_CONTEXT}" \
+            --namespace "${MGMT_NS}" \
+            --manifest "${RUNNER_TEMP}/management.yaml" \
+            --managed-image kubeheal-service:latest \
+            --previous-release-sha "${previous_sha}" \
+            --output "${RUNNER_TEMP}/rollback-plan.json"
+
+      - name: Run fail-closed database migration
+        shell: bash
+        env:
+          DEPLOY_IMAGE: ${{ steps.image.outputs.image }}
+        run: |
+          set -euo pipefail
+          kubectl set image \
+            --filename deploy/management/migration-job.yaml \
+            migration="${DEPLOY_IMAGE}" \
+            --local \
+            --output yaml >"${RUNNER_TEMP}/migration-job.yaml"
+          kubectl --context "${MGMT_CONTEXT}" -n "${MGMT_NS}" \
+            delete job management-database-migration --ignore-not-found --wait=true
+          kubectl --context "${MGMT_CONTEXT}" apply \
+            --filename "${RUNNER_TEMP}/migration-job.yaml"
+          kubectl --context "${MGMT_CONTEXT}" -n "${MGMT_NS}" \
+            wait --for=condition=complete job/management-database-migration --timeout=900s
+
+      - name: Roll out immutable service digest
+        shell: bash
+        env:
+          DEPLOY_IMAGE: ${{ steps.image.outputs.image }}
+        run: |
+          set -euo pipefail
+          uv run python scripts/rollout_image_digest.py \
+            --plan "${RUNNER_TEMP}/rollback-plan.json" \
+            --context "${MGMT_CONTEXT}" \
+            --image "${DEPLOY_IMAGE}" \
+            --timeout 600s
+
+      - name: Verify live auth bypass policy after rollout
+        shell: bash
+        run: |
+          set -euo pipefail
+          uv run python scripts/verify_dev_auth_bypass.py live \
+            --context "${MGMT_CONTEXT}" \
+            --namespace "${MGMT_NS}"
+
+      - name: Run strict deployment smoke
+        shell: bash
+        run: |
+          set -euo pipefail
+          RUN_SMOKE=1 SMOKE_COMMIT_SHA="${SOURCE_SHA}" bash scripts/smoke.sh
+
+      - name: Record successful dev SHA in cluster
+        shell: bash
+        run: |
+          set -euo pipefail
+          kubectl --context "${MGMT_CONTEXT}" -n "${MGMT_NS}" \
+            create configmap opsia-deploy-status \
+            --from-literal="dev_sha=${SOURCE_SHA}" \
+            --dry-run=client \
+            --output yaml \
+            | kubectl --context "${MGMT_CONTEXT}" apply --filename -
+
+      - name: Restore previous image digests after failure
+        if: failure() && steps.capture.outcome == 'success'
+        shell: bash
+        run: |
+          set -euo pipefail
+          uv run python scripts/revert_image_digests.py \
+            --plan "${RUNNER_TEMP}/rollback-plan.json" \
+            --context "${MGMT_CONTEXT}" \
+            --timeout 600s \
+            --apply
