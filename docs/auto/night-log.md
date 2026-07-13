@@ -1632,3 +1632,8 @@ JsonMap, AbortSignal, ID 검증을 완료 앵커 전까지 제품 화면에서 �
 - `cd references/ui-layer-lab && npm run check` PASS: TypeScript·ESLint,
   Vitest 112 files / 808 tests, design guard 336 files, shadcn 482 previews,
   Vite production build 14,535 modules.
+- 흡수 기준점 `4328384a64307388284afb8c92f73df5c232f730`은 merge commit
+  `0344d9d2f3441898725416d468c4c97d9860ef06`의 ancestor(exit 0)이고, merge commit은
+  `origin/woonyong/ui-layer-lab`의 ancestor(exit 0)다. push 직후 병렬 backend가
+  `origin/dev`를 `3d1493f8bbce36d9741ea978b57b0c7d20614ab6`까지 7커밋 더 전진시켰으며,
+  새 차이는 30커밋 선흡수 임계값 미만이다.
