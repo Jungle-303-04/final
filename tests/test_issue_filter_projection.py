@@ -231,6 +231,35 @@ def test_evidence_labels_are_bounded_and_propagate_source_incompleteness() -> No
     assert result["reason_code"] == "source_labels_incomplete"
 
 
+def test_evidence_labels_preserve_valid_empty_kubernetes_values() -> None:
+    result = _extract_issue_evidence_labels(
+        {
+            "cluster_id": "cluster-1",
+            "kubernetes": {
+                "workloads": [
+                    {
+                        "kind": "Deployment",
+                        "namespace": "shop",
+                        "name": "checkout-api",
+                        "labels": {"feature-flag": "", "team": "payments"},
+                        "labels_complete": True,
+                    }
+                ]
+            },
+        },
+        cluster_id="cluster-1",
+        namespace="shop",
+        resource_kind="Deployment",
+        resource_name="checkout-api",
+    )
+
+    assert result == {
+        "labels": {"feature-flag": "", "team": "payments"},
+        "labels_complete": True,
+        "reason_code": None,
+    }
+
+
 def test_evidence_labels_fail_closed_for_ambiguous_or_legacy_snapshots() -> None:
     exact = {
         "kind": "Deployment",
