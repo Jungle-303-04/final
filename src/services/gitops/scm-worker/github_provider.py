@@ -18,10 +18,14 @@ import httpx
 from domains.gitops.source_patch import (
     ImageScalarReplacement,
     ManifestImagePatchPlan,
+    ManifestScalarPatchPlan,
     ManifestSourcePatchError,
     canonical_manifest_digest,
     materialize_image_patch,
+    materialize_scalar_patch,
     parse_image_patch_plan,
+    parse_scalar_patch_plan,
+    scalar_patch_matches_manifest,
 )
 from domains.scm.events import SafePrRequestedBody
 from domains.scm.policy import (
@@ -75,6 +79,7 @@ MISSING_EXISTING_PR_MESSAGE = (
 
 
 LOGGER = get_logger(__name__)
+StructuredPatchPlan = ManifestImagePatchPlan | ManifestScalarPatchPlan
 
 
 def normalize_branch_ref(branch: str) -> str:
@@ -429,7 +434,7 @@ class GithubScmProvider:
         repo: str,
         base_sha: str,
         request: SafePrRequestedBody,
-        patch_plans: list[ManifestImagePatchPlan | None],
+        patch_plans: list[StructuredPatchPlan | None],
         context: dict[str, object] | None = None,
     ) -> list[tuple[str, str]]:
         if len(patch_plans) != len(request.patches):
@@ -447,24 +452,23 @@ class GithubScmProvider:
                 context,
             )
             try:
-                contents.append(
-                    (
-                        plan.manifest_path,
-                        materialize_image_patch(
-                            source,
-                            source_type=plan.source_type,
-                            expected_source_sha256=plan.source_manifest_sha256,
-                            replacements=[
-                                ImageScalarReplacement(
-                                    container_name=item.container_name,
-                                    current_image=item.current_image,
-                                    previous_image=item.previous_image,
-                                )
-                                for item in plan.replacements
-                            ],
-                        ),
+                if isinstance(plan, ManifestScalarPatchPlan):
+                    content = materialize_scalar_patch(source, plan)
+                else:
+                    content = materialize_image_patch(
+                        source,
+                        source_type=plan.source_type,
+                        expected_source_sha256=plan.source_manifest_sha256,
+                        replacements=[
+                            ImageScalarReplacement(
+                                container_name=item.container_name,
+                                current_image=item.current_image,
+                                previous_image=item.previous_image,
+                            )
+                            for item in plan.replacements
+                        ],
                     )
-                )
+                contents.append((plan.manifest_path, content))
             except ManifestSourcePatchError as exc:
                 raise RuntimeError(str(exc)) from exc
         return contents
@@ -490,16 +494,18 @@ class GithubScmProvider:
         except (ValueError, UnicodeDecodeError) as exc:
             raise RuntimeError(INVALID_SOURCE_RESPONSE_MESSAGE) from exc
 
-    def patch_plans(self, request: SafePrRequestedBody) -> list[ManifestImagePatchPlan | None]:
+    def patch_plans(self, request: SafePrRequestedBody) -> list[StructuredPatchPlan | None]:
         try:
-            plans: list[ManifestImagePatchPlan | None] = []
+            plans: list[StructuredPatchPlan | None] = []
             for patch in request.patches:
                 if not patch.path.startswith(".gitops/safe-pr/patches/"):
                     plans.append(None)
                     continue
                 plan = parse_image_patch_plan(patch.content)
                 if plan is None:
-                    raise ManifestSourcePatchError("structured image patch document is invalid")
+                    plan = parse_scalar_patch_plan(patch.content)
+                if plan is None:
+                    raise ManifestSourcePatchError("structured manifest patch document is invalid")
                 plans.append(plan)
             return plans
         except ManifestSourcePatchError as exc:
@@ -508,7 +514,7 @@ class GithubScmProvider:
     async def validate_structured_patch_authority(
         self,
         request: SafePrRequestedBody,
-        patch_plans: list[ManifestImagePatchPlan | None],
+        patch_plans: list[StructuredPatchPlan | None],
         ctx: EventContext[PullRequestStore],
     ) -> None:
         load_run = getattr(ctx.db, "get_workflow_run", None)
@@ -581,15 +587,18 @@ class GithubScmProvider:
             != plans[0].source_manifest_sha256
             or str(provenance.get("repo_ref") or "") != request.repo_ref
             or str(provenance.get("branch") or "") != request.base_branch
-            or not self.replacements_match_approved_diff(plans[0], changes)
+            or not self.replacements_match_authority(plans[0], changes, desired_manifest)
         ):
             raise RuntimeError(AUTHORITY_MISMATCH_MESSAGE)
 
     @staticmethod
-    def replacements_match_approved_diff(
-        plan: ManifestImagePatchPlan,
+    def replacements_match_authority(
+        plan: StructuredPatchPlan,
         changes: list[object],
+        desired_manifest: Mapping[str, object],
     ) -> bool:
+        if isinstance(plan, ManifestScalarPatchPlan):
+            return scalar_patch_matches_manifest(plan, desired_manifest)
         replacement = plan.replacements[0]
         expected_suffix = f"[name={replacement.container_name}].image"
         matches = [
@@ -714,7 +723,7 @@ class GithubScmProvider:
         client: httpx.AsyncClient,
         repo: str,
         request: SafePrRequestedBody,
-        patch_plans: list[ManifestImagePatchPlan | None],
+        patch_plans: list[StructuredPatchPlan | None],
         pull: Mapping[str, object],
         current_base_sha: str,
         context: dict[str, object] | None = None,
