@@ -1812,3 +1812,22 @@ target preflight·register 네 함수와 strict Zod 계약을 claim했다. 1회�
   파일 삭제·소유권 밖 코드·frozen 경로 변경 0건; feature와 merge commit의
   `origin/dev` ancestor exit 0.
 - 배포는 실행하지 않았다. J는 실환경 권위 증거와 사람 GO를 기다리는 상태를 유지한다.
+
+## 2026-07-13 15:59 KST — [백엔드] rule candidate 11~20 안전 계약 착륙
+
+- 데이터 lane `codex/candidate-contract-batch-two@d90ccac03`, canonical no-ff merge
+  `59a9c460b01e56d03e0f21da0e40999e2d078a36`; terminal hardening lane
+  `codex/candidate-contract-terminal-digest@b2b6baeb0`, canonical no-ff merge
+  `5bc68f5cd7b6287e499c669c0c507912920debec`.
+- index 11~20의 evidence·signal을 exact 투영했다. 모두 live `manual_analysis` fallback만
+  허용하고 patch capability와 exact fixture는 빈 배열이다. 후보별 forbidden action은
+  cluster/fleet 확장을 차단하며 allowed action과 중복되지 않는다.
+- append-only: batch 1·2 canonical JSON digest를 고정하고, 새 완료 배치의 digest 누락을
+  거부한다. terminal 배치는 78~87이 아니라 정확히 81~87로 계산한다. 복수 fallback은
+  선언 순서대로 누적한다.
+- 고유 검증: candidate scorer 20/20 PASS, 전체 scenario 14 PASS, 후보 계약 테스트
+  37 passed. 전체 게이트는 Ruff lint/format PASS, import-linter 8 kept/0 broken,
+  pytest `1908 passed, 3 skipped`; manifest management 69 / target 20.
+- 4조건: merge-tree 두 건 clean(`b46ca873…`, `78592de2…`), 파일 삭제·소유권 밖 변경·
+  frozen 경로 변경 0건, 두 feature와 merge commit의 `origin/dev` ancestor exit 0.
+- 잔여 범위: 전체 87개 중 20개 완료, 다음 cursor 21. J 배포 실행은 0건이다.
