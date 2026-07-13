@@ -36,7 +36,10 @@
       "symptoms": ["FailedScheduling", "Pending"],
       "candidates": {
         "insufficient_cpu": ["kubernetes:cluster_resource_state", "metrics:telemetry_metrics"],
+        "insufficient_memory": ["kubernetes:cluster_resource_state", "metrics:telemetry_metrics"],
         "node_affinity_or_taint_mismatch": ["kubernetes:cluster_resource_state"],
+        "node_selector_mismatch": ["kubernetes:cluster_resource_state", "metadata:current_workload_snapshots"],
+        "untolerated_taint": ["kubernetes:cluster_resource_state", "metadata:current_workload_snapshots"],
         "pvc_pending": ["kubernetes:cluster_resource_state"]
       }
     },
@@ -63,7 +66,17 @@
     "volume_mount_failed": {
       "symptoms": ["FailedMount", "VolumeMountFailed", "MountVolume.SetUp failed"],
       "candidates": {
-        "pvc_not_bound": ["kubernetes:cluster_resource_state", "logs:related_logs", "metadata:current_workload_snapshots"]
+        "pvc_not_bound": ["kubernetes:cluster_resource_state", "logs:related_logs", "metadata:current_workload_snapshots"],
+        "csi_driver_unavailable": ["kubernetes:cluster_resource_state", "logs:related_logs", "metrics:telemetry_metrics"],
+        "volume_attach_timeout": ["kubernetes:cluster_resource_state", "logs:related_logs"],
+        "storage_class_mismatch": ["kubernetes:cluster_resource_state", "metadata:current_workload_snapshots"]
+      }
+    },
+    "volume_attach_failed": {
+      "symptoms": ["FailedAttachVolume", "VolumeAttachFailed"],
+      "candidates": {
+        "volume_multi_attach_conflict": ["kubernetes:cluster_resource_state", "logs:related_logs", "metadata:current_workload_snapshots"],
+        "volume_attachment_orphaned": ["kubernetes:cluster_resource_state", "logs:related_logs"]
       }
     }
   },
@@ -76,10 +89,13 @@
     "missing_image_pull_secret": ["image_pull_secret_fix"],
     "registry_unavailable": ["registry_recovery"],
     "insufficient_cpu": ["resource_request_tuning"],
+    "insufficient_memory": ["resource_request_tuning"],
     "node_affinity_or_taint_mismatch": ["scheduling_constraint_fix"],
     "pvc_pending": ["pvc_binding_fix"],
     "probe_path_wrong": ["probe_fix"],
     "probe_port_wrong": ["probe_fix"],
+    "timeout_too_short": ["probe_fix"],
+    "startup_window_too_short": ["probe_fix"],
     "selector_label_mismatch": ["selector_fix"]
   }
 }
