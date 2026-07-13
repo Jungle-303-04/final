@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import copy
 import hashlib
 import json
 import runpy
@@ -161,6 +162,18 @@ def _score_without_site_packages(*args: str) -> subprocess.CompletedProcess[str]
     )
 
 
+def _apply_json_merge_patch(document: object, patch: object) -> object:
+    if not isinstance(patch, dict):
+        return copy.deepcopy(patch)
+    result = copy.deepcopy(document) if isinstance(document, dict) else {}
+    for key, value in patch.items():
+        if value is None:
+            result.pop(key, None)
+        else:
+            result[key] = _apply_json_merge_patch(result.get(key), value)
+    return result
+
+
 def _live_candidate_index() -> list[dict[str, object]]:
     catalog_dir = ROOT / "src/services/ai/agent/causes/catalog"
     paths = sorted(path for pattern in ("*.yaml", "*.yml") for path in catalog_dir.glob(pattern))
@@ -284,6 +297,25 @@ def test_port_bind_fixture_emits_catalog_signal_without_external_infrastructure(
 
     assert result.returncode == 1
     assert "address already in use" in result.stdout
+
+
+def test_port_bind_fixture_merge_patches_preserve_a_runnable_manifest_round_trip() -> None:
+    scenario = json.loads(CRASHLOOP_PORT_BIND_SCENARIO.read_text(encoding="utf-8"))
+    normal = scenario["normal_manifest"]
+
+    fault = _apply_json_merge_patch(normal, scenario["fault_injection_patch"])
+    fault_container = fault["spec"]["template"]["spec"]["containers"][0]
+    assert fault_container["image"] == "python:3.12-alpine"
+    assert (
+        fault_container["command"] == normal["spec"]["template"]["spec"]["containers"][0]["command"]
+    )
+    assert fault_container["ports"] == [{"containerPort": 8080}]
+
+    gold = _apply_json_merge_patch(fault, scenario["expected_git_patch"])
+    assert gold == normal
+
+    rollback = _apply_json_merge_patch(gold, scenario["rollback_patch"])
+    assert rollback == fault
 
 
 def test_public_benchmark_scores_node_selector_mismatch_without_cluster_wide_removal() -> None:
