@@ -1,6 +1,6 @@
 import { spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
-import { mkdir } from "node:fs/promises";
+import { mkdir, readdir, unlink } from "node:fs/promises";
 import { createServer } from "node:net";
 import { chromium } from "playwright";
 
@@ -66,6 +66,7 @@ const issuesDetailApiPaths = [
 const stateHarnessUrl = `${baseUrl}/scripts/fixtures/product-state-visual-harness.html`;
 const shellHarnessUrl = `${baseUrl}/scripts/fixtures/product-shell-visual-harness.html?cluster=cluster-1`;
 const outputDir = new URL("../output/playwright/", import.meta.url).pathname;
+const productVisualArtifactPattern = /^product-.+\.png$/u;
 const shellHeaderSelector = "[data-slot='sidebar-inset'] > header";
 const clusterScopePickerSelector = `${shellHeaderSelector} [data-slot='cluster-scope-picker']`;
 const clusterScopeTriggerSelector = `${clusterScopePickerSelector} [data-slot='select-trigger']`;
@@ -1389,6 +1390,7 @@ server.on("exit", (code, signal) => {
 
 try {
   await mkdir(outputDir, { recursive: true });
+  await clearProductVisualArtifacts();
   await Promise.race([waitForOwnedServer(stateHarnessUrl, runNonce), startupFailure]);
   serverReady = true;
   assertServerAlive();
@@ -1407,6 +1409,7 @@ try {
       + `received ${layoutShiftMeasurements.length}`,
     );
   }
+  await assertProductVisualArtifacts();
 
   console.log(
     `product visual gate passed (${visualScenarios.map(({ id }) => id).join(", ")}; isolated contexts; exact scenario API requests; unexpected feature-network/websocket-silent; initial CLS ${formatLayoutShiftMeasurements()})`,
@@ -1420,6 +1423,28 @@ try {
     } finally {
       if (output.includes("error")) process.stderr.write(output);
     }
+  }
+}
+
+async function clearProductVisualArtifacts() {
+  const entries = await readdir(outputDir, { withFileTypes: true });
+  await Promise.all(entries
+    .filter((entry) => entry.isFile() && productVisualArtifactPattern.test(entry.name))
+    .map((entry) => unlink(`${outputDir}${entry.name}`)));
+}
+
+async function assertProductVisualArtifacts() {
+  const expected = new Set(visualScenarios.map(({ id }) => `product-${id}.png`));
+  const entries = await readdir(outputDir, { withFileTypes: true });
+  const actual = new Set(entries
+    .filter((entry) => entry.isFile() && productVisualArtifactPattern.test(entry.name))
+    .map((entry) => entry.name));
+  const missing = [...expected].filter((name) => !actual.has(name)).sort();
+  const unexpected = [...actual].filter((name) => !expected.has(name)).sort();
+  if (missing.length > 0 || unexpected.length > 0) {
+    throw new Error(
+      `product visual artifact manifest mismatch ${JSON.stringify({ missing, unexpected })}`,
+    );
   }
 }
 
