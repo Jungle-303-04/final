@@ -86,14 +86,24 @@ class FailsOnceApplier(StubApplier):
 
 
 class StubArgoObserver:
-    def __init__(self) -> None:
+    def __init__(
+        self,
+        *,
+        applications_available: bool = True,
+        rollouts_available: bool = True,
+    ) -> None:
         self.calls = 0
+        self.applications_available = applications_available
+        self.rollouts_available = rollouts_available
 
     async def snapshot(self) -> dict[str, object]:
         self.calls += 1
         return {
-            "applications": {"available": True, "items": [{"name": "checkout"}]},
-            "rollouts": {"available": True, "items": []},
+            "applications": {
+                "available": self.applications_available,
+                "items": [{"name": "checkout"}] if self.applications_available else [],
+            },
+            "rollouts": {"available": self.rollouts_available, "items": []},
         }
 
 
@@ -299,6 +309,55 @@ def test_argocd_reconciler_observes_apply_without_emitting_apply(tmp_path: Path)
     assert report["details"]["resources"][0]["message"] == ("observed (argocd single-writer mode)")
     assert observer.calls == 1
     assert report["details"]["argocd"]["applications"]["items"] == [{"name": "checkout"}]
+
+
+def test_argocd_reconciler_fails_closed_when_application_observation_is_unavailable(
+    tmp_path: Path,
+) -> None:
+    control = load_control_module()
+    store = control.AgentControlStore(str(tmp_path / "agent-control.db"))
+    store.save_policy(AgentPolicy(cluster_id="cluster-1"))
+    applier = StubApplier()
+    observer = StubArgoObserver(applications_available=False, rollouts_available=False)
+    reconciler = control.DesiredStateReconciler(
+        cluster_id="cluster-1",
+        cluster_role="target",
+        store=store,
+        interval_seconds=30,
+        resource_applier=applier,
+        reconciler_mode="argocd",
+        argo_observer=observer,
+    )
+
+    report = asyncio.run(reconciler.reconcile_once())
+
+    assert report["status"] == "failed"
+    assert report["details"]["argocd"]["error"] == ("Argo CD Application observation unavailable")
+    assert applier.applied == []
+    assert observer.calls == 1
+
+
+def test_argocd_reconciler_allows_optional_rollout_observation_to_be_unavailable(
+    tmp_path: Path,
+) -> None:
+    control = load_control_module()
+    store = control.AgentControlStore(str(tmp_path / "agent-control.db"))
+    store.save_policy(AgentPolicy(cluster_id="cluster-1"))
+    observer = StubArgoObserver(rollouts_available=False)
+    reconciler = control.DesiredStateReconciler(
+        cluster_id="cluster-1",
+        cluster_role="target",
+        store=store,
+        interval_seconds=30,
+        reconciler_mode="argocd",
+        argo_observer=observer,
+    )
+
+    report = asyncio.run(reconciler.reconcile_once())
+
+    assert report["status"] == "unchanged"
+    assert report["details"]["argocd"]["applications"]["available"] is True
+    assert report["details"]["argocd"]["rollouts"]["available"] is False
 
 
 def test_reconciler_rejects_unknown_mode(tmp_path: Path) -> None:
