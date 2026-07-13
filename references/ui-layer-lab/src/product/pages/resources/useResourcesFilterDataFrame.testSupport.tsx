@@ -93,6 +93,7 @@ export function facetPage(
   snapshot: Partial<ResourcesFilterSnapshot> = {},
 ): ResourcesFilterFacetPage {
   const first = CANONICAL_FACET_PAGE.items[0]!;
+  if (first.axis !== "cluster") throw new TypeError("Expected a cluster facet fixture");
   return {
     ...CANONICAL_FACET_PAGE,
     items: [{ ...first, value, clusterId: value, name: value }],

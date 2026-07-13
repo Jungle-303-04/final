@@ -32,15 +32,21 @@ describe("useResourcesFilterDataFrame lifecycle", () => {
     const port = resourcesFilterPort({
       listResourcePage: vi.fn((state, _options, signal) => {
         signals.push(signal!);
-        return state === FILTER_STATE_A ? oldList.promise : Promise.resolve(resourcePage("orders-api-0"));
+        return state.resources.query === "checkout"
+          ? oldList.promise
+          : Promise.resolve(resourcePage("orders-api-0"));
       }),
       listFacetPage: vi.fn((state, _options, signal) => {
         signals.push(signal!);
-        return state === FILTER_STATE_A ? oldFacet.promise : Promise.resolve(facetPage("cluster-c"));
+        return state.resources.query === "checkout"
+          ? oldFacet.promise
+          : Promise.resolve(facetPage("cluster-c"));
       }),
       listLabelFacetPage: vi.fn((state, _options, signal) => {
         signals.push(signal!);
-        return state === FILTER_STATE_A ? oldLabels.promise : Promise.resolve(labelPage("team=orders"));
+        return state.resources.query === "checkout"
+          ? oldLabels.promise
+          : Promise.resolve(labelPage("team=orders"));
       }),
     });
     const rendered = renderResourcesFilterFrame({ port });
@@ -107,9 +113,9 @@ describe("useResourcesFilterDataFrame lifecycle", () => {
 
     rendered.rerender({ current: { ...rendered.input, revision: 1 } });
     await waitFor(() => expect(listResourcePage).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(rendered.result.current.list.refreshing).toBe(true));
     expect(rendered.result.current.list.phase).toBe("ready");
     expect(rendered.result.current.list.data?.items[0]?.resource.name).toBe("checkout-api-0");
-    expect(rendered.result.current.list.refreshing).toBe(true);
 
     act(() => refresh.reject(new ResourcesPortFailure("offline")));
     await act(flushEffects);
@@ -145,6 +151,12 @@ describe("useResourcesFilterDataFrame lifecycle", () => {
     await waitFor(() => expect(port.listResourcePage).toHaveBeenCalledOnce());
     expect(port.listFacetPage).toHaveBeenCalledOnce();
     expect(port.listLabelFacetPage).toHaveBeenCalledOnce();
-    expect(port.listResourcePage).toHaveBeenCalledWith(FILTER_STATE_A, {}, expect.any(AbortSignal));
+    const [state, options, signal] = vi.mocked(port.listResourcePage).mock.calls[0]!;
+    expect(state.common.clusters).toEqual(["cluster-a", "cluster-b"]);
+    expect(state.common.namespaces).toEqual(FILTER_STATE_A.common.namespaces);
+    expect(state.common.applications).toEqual(["app-checkout"]);
+    expect(state.common.labels).toEqual(FILTER_STATE_A.common.labels);
+    expect(options).toEqual({});
+    expect(signal).toBeInstanceOf(AbortSignal);
   });
 });
