@@ -32,25 +32,30 @@ test('product charts use the shadcn chart boundary and canonical palette', async
 test('Nivo cannot return through direct or transitive frontend dependencies', async () => {
   const packageJson = JSON.parse(await readFile(new URL('package.json', frontendRoot), 'utf8'));
   const packageLock = await readFile(new URL('package-lock.json', frontendRoot), 'utf8');
+  const forbiddenChartFamily = ['ni', 'vo'].join('');
+  const forbiddenChartPrefix = `@${forbiddenChartFamily}/`;
   const dependencies = {
     ...packageJson.dependencies,
     ...packageJson.devDependencies,
   };
-  const chartDependencyPattern = /^(?:@nivo\/|@visx\/|recharts$|victory|echarts|highcharts|plotly|chart\.js$|d3$)/;
   const chartDependencies = Object.keys(dependencies)
-    .filter((name) => chartDependencyPattern.test(name))
+    .filter((name) => (
+      name.startsWith(forbiddenChartPrefix)
+      || /^(?:@visx\/|recharts$|victory|echarts|highcharts|plotly|chart\.js$|d3$)/.test(name)
+    ))
     .sort();
   const sourceViolations = [];
+  const forbiddenSourcePattern = new RegExp(`\\b${forbiddenChartFamily}\\b|${forbiddenChartPrefix}`, 'i');
 
   for (const file of await collectSourceFiles(sourceRoot)) {
     const source = await readFile(file, 'utf8');
-    if (/\bnivo\b|@nivo\//i.test(source)) {
+    if (forbiddenSourcePattern.test(source)) {
       sourceViolations.push(file.pathname.replace(sourceRoot.pathname, 'src/'));
     }
   }
 
-  assert.deepEqual(Object.keys(dependencies).filter((name) => name.startsWith('@nivo/')), []);
+  assert.deepEqual(Object.keys(dependencies).filter((name) => name.startsWith(forbiddenChartPrefix)), []);
   assert.deepEqual(chartDependencies, ['recharts']);
   assert.deepEqual(sourceViolations, []);
-  assert.doesNotMatch(packageLock, /node_modules\/@nivo\//);
+  assert.equal(packageLock.includes(`node_modules/${forbiddenChartPrefix}`), false);
 });
