@@ -1663,3 +1663,16 @@ target preflight·register 네 함수와 strict Zod 계약을 claim했다. 1회�
   design guard 340 files, shadcn 482 previews, production build 14,538 modules.
 - 완성형 VP-008 표면은 validation·preview/resume·structured error 계약 결손으로 주차했다.
   transport와 기존 Cluster 목록의 `connection_stage` strict 호환만 release했다.
+
+## 2026-07-13 15:22 KST — [프론트] VP-009 provider 표시 판정 증거
+
+- RED `a0e124b92`·`4a0937c54`, GREEN `3fe308f95`을 분리해 push했다.
+  `git merge-base --is-ancestor 3fe308f95 origin/woonyong/ui-layer-lab` 결과 exit 0이다.
+- Home은 canonical provider를 카드 헤더에 정확히 1회 표시하고 unknown은 일반 Kubernetes glyph를
+  사용한다. Issues는 전역 `ClusterScopePicker`의 기존 단일 표시를 권위로 유지해 중복하지 않았다.
+- Fleet는 surface·provider contract·완전성 증거가 없어 BE-Gap으로 분리했다. 제한 목록 client join과
+  provider 추론은 수행하지 않았다.
+- targeted 2 files / 10 tests PASS. `npm run check` PASS: 113 files / 824 tests,
+  design guard 340 files, shadcn 482 previews, Vite build 14,538 modules.
+- `npm run visual-product` PASS: 36 isolated scenarios, exact scenario API requests,
+  unexpected feature network/WebSocket 0건.
