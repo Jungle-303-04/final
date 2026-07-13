@@ -1164,3 +1164,39 @@ Bundle route는 200을 반환한다.
   code `914d34ff6`과 merge `95ff11cc6`은 모두 `origin/dev` ancestor exit 0이다.
 
 계약 완성: RESOURCES_GRAPH_PATH + ResourceGraphSnapshotResponse (914d34ff699a71d5b09039b42388ff62aebc8d12) [green]
+
+### Issues 필터 계약 — claim
+
+- 상태: `in_progress`; gateway 계약 lock은 이 행 하나가 보유한다. 기준점은
+  `origin/dev@cf688f65b`이며 baseline은 전체 `2064 passed, 3 skipped`, Ruff lint/format PASS,
+  import-linter 8 kept/0 broken, manifest management 69/target 20이다.
+- 기존 `/dashboard/rca/timeline`과 detail route는 변경하지 않는다. 신규 strict route는 session
+  workspace와 `RCA_READ`의 구체 cluster ID 집합을 SQL에 강제하고, 빈 집합은 결과 0건,
+  비인가 selected scope는 데이터 조회 전에 404로 닫는다.
+- `severity`는 incident event의 실제 필드만 투영한다. environment/application/Label처럼 구형
+  row 또는 권위 snapshot에 없는 값은 가짜 기본값·현재 inventory 대체 없이 nullable과 구조화
+  `unavailable` reason으로 반환한다. mutable in-place timeline에는 temporal history가 없으므로
+  cursor·count를 immutable exact snapshot으로 과장하지 않고 partial completeness를 명시한다.
+- RED 범위: stable issue/detail identity 분리, 같은 축 OR·축간 AND, exact cluster/namespace pair,
+  HMAC cursor의 workspace/user/auth/filter binding, N/M·facet payload, raw payload 비노출,
+  legacy projection의 unavailable 처리다.
+
+### Issues 필터 계약 — 착륙 준비
+
+- 상태: `ready_to_land`; canonical 착륙 전이므로 완료 앵커를 기록하지 않고 gateway 계약 lock을
+  유지한다.
+- route: `GET /api/issues`, `GET /api/issues/filter-facets`,
+  `GET /api/issues/label-facets`. 기존 RCA timeline/list/detail 계약은 변경하지 않았다.
+- 목록은 stable `issue_id`와 optional `detail_id`, correlation/cluster/namespace/resource identity,
+  symptom/severity/state/pipeline status, environment/application/Label 완전성, root cause/confidence,
+  `updated_at`을 반환한다. 같은 축은 OR, 서로 다른 축과 Kubernetes Label은 AND다.
+- session workspace와 구체 `RCA_READ` cluster 집합을 SQL에 강제한다. event envelope의 tenant만
+  권위값으로 사용하며 payload workspace 위조·누락은 fail-closed다.
+- event-time evidence snapshot에서만 Label을 보존한다. environment/application은 권위 source가
+  없으면 `unavailable`, mutable timeline count/cursor는 `partial`로 정직하게 표시한다.
+- migration은 projection column과 concurrent index revision을 분리했다. 실 PostgreSQL에서
+  `upgrade → downgrade → upgrade`, 신규 column 8개와 index 6개의 생성·제거·재생성을 확인했다.
+- Bruno: `docs/api/18-issues-filter/01-list-issues.bru`,
+  `02-filter-facets.bru`, `03-label-facets.bru`.
+- 전체 게이트: Ruff lint/format PASS, import-linter 8 kept/0 broken, pytest
+  `2099 passed, 3 skipped`; 착륙 직전 최신 `origin/dev` rebase 후 같은 게이트를 재증명한다.

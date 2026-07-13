@@ -178,6 +178,10 @@ class AuditStore(Protocol):
 
 
 class DashboardStore(Protocol):
+    async def get_evidence_payload(
+        self, workspace_id: str, correlation_id: str, kind: str
+    ) -> JsonObject | None: ...
+
     async def upsert_rca_timeline(self, row: JsonObject) -> None: ...
 
 
