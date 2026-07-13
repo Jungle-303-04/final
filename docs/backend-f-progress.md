@@ -7,7 +7,7 @@ governing: docs/f-coordination-plan.md · docs/backend-f-workqueue.md
 
 # 백엔드 F 진행 현황
 
-현재 상태: **앵커 23건**
+현재 상태: **앵커 24건**
 
 ## 역사적 Delta-green baseline (BQ-001~003)
 
@@ -577,3 +577,30 @@ Bundle route는 200을 반환한다.
   `origin/dev` ancestor exit 0.
 
 계약 완성: OpsiaBench candidate contracts 31..40 + network execution boundary (296e14c383ae949573f2ad5216af8874b1a923b8) [green]
+
+### 보조 대기열 S8 — rule candidate 41~50 안전 계약
+
+- 상태: landed
+- 담당 lane: `codex/candidate-contract-batch-five`
+- RED: `0a86981fd9c37c22e4a6f04ea30034b564c8bce0`
+- 구현·데이터: `1b4bfa7791ddb789b6c683ede8823619d2f56b73`
+- 문서와 feature HEAD: `5995350c4d95eccade8f24a31870a6a9d2d0fc5d`
+- canonical no-ff merge: `910825ec4a90be0403bae7c41d8bc0f09a23e7ee`
+- 범위: loader 순서 41~50을 추가해 누적 50/87, `next_ordinal=51`이다. 41~49는
+  live `manual_analysis` fallback만 허용한다.
+- 실제 실행 경계: 50번 `probe_path_wrong`만 `probe_fix` Safe PR capability와
+  `benchmark/scenarios/probe/probe-wrong-path/scenario.json` exact fixture를 가진다.
+- forbidden remediation 의미 감사에서 ordinal 44를 실제 node reboot로, ordinal 46을
+  action·reason·blast radius가 모두 fleet인 manifest 교체 금지로 정합화했다.
+- append-only 경계: 다섯 번째 canonical JSON digest
+  `f125aff8e7a7d72922f93ad60b542b9131ecccd279d8d8dc7b0c5f886a66e5fb`를 `(41, 50)`에
+  고정하고 누락 lock·batch 5 변조 회귀를 추가했다.
+- 고유 검증: `python3 -S benchmark/score.py --candidate-contracts` 50/50 PASS,
+  `tests/test_benchmark_score.py` 46 passed. 이중 독립 감사 P0/P1 0건.
+- 전체 게이트: Ruff lint/format PASS, import-linter 8 kept/0 broken,
+  pytest `1917 passed, 3 skipped`; manifest management 69 / target 20.
+- 4조건: merge-tree exit 0/tree `77dbb5e47763f69b28893631b09d7415464bcdc4`;
+  파일 삭제·소유권 밖 변경·frozen 경로 변경 0건; RED·구현·문서·merge commit의
+  `origin/dev` ancestor exit 0.
+
+계약 완성: OpsiaBench candidate contracts 41..50 + probe safe-pr boundary (5995350c4d95eccade8f24a31870a6a9d2d0fc5d) [green]

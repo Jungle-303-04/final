@@ -1867,3 +1867,21 @@ target preflight·register 네 함수와 strict Zod 계약을 claim했다. 1회�
 - 4조건: merge-tree clean/tree `a9c271adfbed401a3dd8f04887c9a9cc765d5185`, 파일 삭제·
   소유권 밖 변경·frozen 경로 변경 0건, RED·구현·문서·수정·merge commit의 `origin/dev`
   ancestor exit 0. J 배포 실행은 0건이다.
+
+## 2026-07-13 16:23 KST — [백엔드] rule candidate 41~50 안전 계약 착륙
+
+- lane `codex/candidate-contract-batch-five`, RED `0a86981fd`, 구현·데이터
+  `1b4bfa779`, feature HEAD `5995350c4d95eccade8f24a31870a6a9d2d0fc5d`, canonical no-ff merge
+  `910825ec4a90be0403bae7c41d8bc0f09a23e7ee`.
+- loader 순서 41~50의 exact evidence·signal·recovery를 투영했다. 41~49는 fallback-only,
+  50번 `probe_path_wrong`만 `safe_pr`와 exact probe fixture를 가진다.
+- forbidden 의미 감사에서 ordinal 44의 node-wide 조치를 실제 reboot로, ordinal 46의
+  manifest 교체 action과 blast radius를 fleet로 정합화했다. 이중 독립 감사 P0/P1 0건이다.
+- append-only: 다섯 번째 batch digest `f125aff8…e5fb`를 `(41, 50)`에 고정하고
+  누락 lock·batch 5 변조 회귀를 추가했다. 누적 범위는 50/87, 다음 cursor는 51이다.
+- 고유 검증: candidate scorer 50/50 PASS, 후보 계약 테스트 46 passed. 전체 게이트는
+  Ruff lint/format PASS, import-linter 8 kept/0 broken, pytest `1917 passed, 3 skipped`;
+  manifest management 69 / target 20.
+- 4조건: merge-tree clean/tree `77dbb5e47763f69b28893631b09d7415464bcdc4`, 파일 삭제·
+  소유권 밖 변경·frozen 경로 변경 0건, RED·구현·문서·merge commit의 `origin/dev`
+  ancestor exit 0. J 배포 실행은 0건이다.
