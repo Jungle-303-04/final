@@ -238,10 +238,10 @@ Bundle route는 200을 반환한다.
   NATS/Redis/MinIO 없이 in-process bus와 `DEV_AUTH_BYPASS=0`을 사용한다.
 - 실제 `make demo`는 Helm install 이후 bad rollout과 정상화까지 종료 코드 0으로 끝났고,
   전체 게이트는 `1968 passed, 3 skipped`, import-linter 8 kept/0 broken이었다.
-- 기존 완료 판정은 철회한다. `oci://ghcr.io/opsia/charts/opsia`는 anonymous pull에서 403이고,
+- 기존 완료 판정은 철회한다. 공개 OCI chart URL은 anonymous pull에서 403이고,
   현재 데모는 rollback PR 문서를 로컬에서 만들고 `kubectl set image`로 직접 정상화한다.
   동일 artifact의 공개 OCI 설치, 실제 safe-pr 여정, NATS/in-process 결과 동등성까지 남아 있다.
-- 이 기록은 완료 앵커가 아니다. 외부 GHCR namespace/package 권한이 확보되고 남은 제품 여정이
+- 이 기록은 완료 앵커가 아니다. 외부 container registry namespace/package 권한이 확보되고 남은 제품 여정이
   실증된 뒤 canonical hash로 새 앵커를 기록한다.
 - 로컬 Helm 설치 기반 canonical merge는 `d86117efc8d00c09e7f75ca01f2b51cb95465a7b`이며
   `origin/dev` ancestor exit 0을 확인했다.
@@ -308,15 +308,15 @@ Bundle route는 200을 반환한다.
 
 계약 완성: ClusterSummary.provider + connection_stage (db4798d4e4973ec3d384d71eca08aba6d4e9f6b7) [green]
 
-### BQ-014 — Argo observer 어댑터
+### BQ-014 — 외부 GitOps observer 어댑터
 
 - 상태: landed
 - 담당 lane: `codex/f-argocd-observer`
 - 착수 기준: `origin/dev@621a60a1c83bf12b2cb93fc50439f5a7fc4df00d`
 - 전체 게이트 baseline: Ruff lint/format PASS, import-linter 2 kept/0 broken,
   pytest `1735 passed, 3 skipped`
-- 범위: `reconciler_mode=argocd`에서 Argo CD Application과 Rollout stable revision을
-  읽기만 하며 Kubernetes/Argo 쓰기 호출은 0건으로 고정한다.
+- 범위: `reconciler_mode=argocd`에서 외부 GitOps Application과 Rollout stable revision을
+  읽기만 하며 Kubernetes/외부 GitOps 쓰기 호출은 0건으로 고정한다.
 - canonical merge: `0b4298c4e2dbc57815a4c484ac7efa3491ed01db`
 - 코드: `16c58de5634b2ee49a93c884e73bebb2348b04f3`
 - 전체 게이트: Ruff lint/format PASS, import-linter 2 kept/0 broken,

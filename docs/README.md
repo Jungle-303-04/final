@@ -162,6 +162,7 @@ secret 이름과 주입 경계는 [Secrets](secrets.md)를 본다.
 - [architecture](architecture.md)
 - [architecture-diagram](architecture-diagram.md)
 - [architecture/service-consolidation-plan](architecture/service-consolidation-plan.md)
+- [argocd-radar-learning-lab](argocd-radar-learning-lab.md)
 - [aws-testing-runbook](aws-testing-runbook.md)
 - [backend-f-progress](backend-f-progress.md)
 - [backend-f-workqueue](backend-f-workqueue.md)
