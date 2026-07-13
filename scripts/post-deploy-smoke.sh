@@ -75,9 +75,26 @@ echo "==> post-deploy login, workflow, and strict RCA reads"
 bash "${SCRIPT_DIR}/smoke.sh"
 
 echo "==> post-deploy Alembic head"
+runtime_database="$({
+  kubectl --context "${MGMT_CONTEXT}" -n "${MGMT_NS}" \
+    get secret management-runtime-secret \
+    -o jsonpath='{.data.COMMAND_NOTIFY_DATABASE_URL}'
+} | python3 -c '
+import base64
+import sys
+from urllib.parse import urlsplit
+
+value = base64.b64decode(sys.stdin.buffer.read(), validate=True).decode()
+parsed = urlsplit(value)
+if parsed.scheme not in {"postgres", "postgresql"} or parsed.path.count("/") != 1:
+    raise SystemExit("runtime database URL is invalid")
+print(parsed.path[1:])
+')"
+test -n "${runtime_database}"
 database_head="$(
   kubectl --context "${MGMT_CONTEXT}" -n "${MGMT_NS}" exec statefulset/postgresql -- \
-    sh -ec 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -v ON_ERROR_STOP=1 -Atc "SELECT version_num FROM alembic_version"'
+    env OPSIA_RUNTIME_DATABASE="${runtime_database}" \
+    sh -ec 'psql -U "$POSTGRES_USER" -d "$OPSIA_RUNTIME_DATABASE" -v ON_ERROR_STOP=1 -Atc "SELECT version_num FROM alembic_version"'
 )"
 test "${database_head}" = "${EXPECTED_ALEMBIC_HEAD}"
 

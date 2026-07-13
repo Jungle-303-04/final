@@ -98,6 +98,17 @@ def test_database_target_url_preserves_credentials_and_changes_only_database() -
     assert cutover_config.database_name(target) == "opsia_abcdef123456"
 
 
+def test_each_workflow_attempt_gets_a_distinct_retryable_target_database() -> None:
+    source_sha = "a" * 40
+
+    first = cutover_config.target_database_name(source_sha, "29286725557", "1")
+    retry = cutover_config.target_database_name(source_sha, "29286725557", "2")
+
+    assert first == "opsia_aaaaaaaaaaaa_29286725557_1"
+    assert retry == "opsia_aaaaaaaaaaaa_29286725557_2"
+    assert first != retry
+
+
 def test_pgbouncer_switch_changes_only_the_verified_database_mapping() -> None:
     config = """[databases]
 service = host=postgresql port=5432 dbname=service user=service password=secret

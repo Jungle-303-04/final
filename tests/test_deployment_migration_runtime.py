@@ -39,7 +39,7 @@ def test_migration_job_uses_direct_postgres_and_expected_head_guard() -> None:
     assert "upgrade" in manifest
     assert "key: COMMAND_NOTIFY_DATABASE_URL" in manifest
     assert "name: MIGRATION_EXPECTED_HEAD" in manifest
-    assert 'value: "20260714_0200"' in manifest
+    assert 'value: "20260714_0345"' in manifest
     assert "MIGRATION_BASELINE" not in manifest
     assert "automountServiceAccountToken: false" in manifest
     assert "DEV_AUTH_BYPASS" not in manifest

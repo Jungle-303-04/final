@@ -14,7 +14,7 @@ from domains.dashboard.models import RcaTimeline
 
 ROOT = Path(__file__).resolve().parents[1]
 REVISION = "20260713_2350"
-HEAD_REVISION = "20260714_0200"
+HEAD_REVISION = "20260714_0345"
 COLUMN_REVISION = "20260713_2340"
 DOWN_REVISION = "20260713_2215"
 INDEXES = {
