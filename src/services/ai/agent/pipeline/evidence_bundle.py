@@ -683,6 +683,28 @@ def collect_evidence_items(evt: EvidenceSource) -> list[EvidenceItem]:
                 summary=f"{target_summary} EndpointSlice ready endpoint 근거입니다.",
             )
         )
+    referenced_config_objects = metadata_list_payload(evt.metadata, "referenced_config_objects")
+    if referenced_config_objects:
+        items.append(
+            evidence_item(
+                evt,
+                source="metadata",
+                name="referenced_config_objects",
+                value=referenced_config_objects,
+                summary=f"{target_summary} ConfigMap/Secret reference 근거입니다.",
+            )
+        )
+    resource_quotas = metadata_list_payload(evt.metadata, "resource_quotas")
+    if resource_quotas:
+        items.append(
+            evidence_item(
+                evt,
+                source="metadata",
+                name="resource_quotas",
+                value=resource_quotas,
+                summary=f"{target_summary} ResourceQuota 근거입니다.",
+            )
+        )
     change_context = collect_change_context(
         evt,
         resource_kind=resource_kind,

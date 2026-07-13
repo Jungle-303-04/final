@@ -815,6 +815,19 @@ def test_rca_test_bundle_filters_matched_entries_to_current_pod() -> None:
                     "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
                     "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
                 ],
+                "collection_limit": {
+                    "matched_entries": {
+                        "max_items": 20,
+                        "original_count": 2,
+                        "returned_count": 2,
+                        "truncated": False,
+                    }
+                },
+                "redaction_summary": {
+                    "applied": True,
+                    "redacted_line_count": 0,
+                    "truncated_line_count": 0,
+                },
                 "matched_entries": [
                     {
                         "timestamp": "1751871600000000000",
@@ -873,6 +886,19 @@ def test_rca_test_bundle_filters_matched_entries_to_current_pod() -> None:
     }
     assert entries[0]["severity_counts"] == {"critical": 1}
     assert entries[0]["trace_ids"] == ["bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"]
+    assert entries[0]["collection_limit"] == {
+        "matched_entries": {
+            "max_items": 20,
+            "original_count": 2,
+            "returned_count": 2,
+            "truncated": False,
+        }
+    }
+    assert entries[0]["redaction_summary"] == {
+        "applied": True,
+        "redacted_line_count": 0,
+        "truncated_line_count": 0,
+    }
 
 
 def test_rca_test_bundle_rejects_log_stream_without_pod_identity() -> None:
@@ -1096,6 +1122,29 @@ def test_evidence_bundle_attaches_metadata_collection_limits() -> None:
                         "ready_endpoint_count": 1,
                     }
                 ],
+                "referenced_config_objects": [
+                    {
+                        "kind": "ConfigMap",
+                        "namespace": "sandbox",
+                        "name": "checkout-config",
+                        "found": False,
+                        "referenced_by": [
+                            {
+                                "kind": "Deployment",
+                                "namespace": "sandbox",
+                                "name": "checkout-api",
+                            }
+                        ],
+                    }
+                ],
+                "resource_quotas": [
+                    {
+                        "namespace": "sandbox",
+                        "name": "sandbox-quota",
+                        "hard": {"limits.cpu": "2"},
+                        "used": {"limits.cpu": "2"},
+                    }
+                ],
                 "collection_limits": {
                     "truncated": True,
                     "lists": {
@@ -1113,6 +1162,16 @@ def test_evidence_bundle_attaches_metadata_collection_limits() -> None:
                             "truncated": True,
                             "original_count": 250,
                             "returned_count": 200,
+                        },
+                        "referenced_config_objects": {
+                            "truncated": False,
+                            "original_count": 1,
+                            "returned_count": 1,
+                        },
+                        "resource_quotas": {
+                            "truncated": False,
+                            "original_count": 1,
+                            "returned_count": 1,
                         },
                     },
                 },
@@ -1138,6 +1197,20 @@ def test_evidence_bundle_attaches_metadata_collection_limits() -> None:
         "truncated": True,
         "original_count": 250,
         "returned_count": 200,
+    }
+    assert metadata_items["referenced_config_objects"].value["items"][0]["name"] == (
+        "checkout-config"
+    )
+    assert metadata_items["referenced_config_objects"].value["collection_limit"] == {
+        "truncated": False,
+        "original_count": 1,
+        "returned_count": 1,
+    }
+    assert metadata_items["resource_quotas"].value["items"][0]["name"] == "sandbox-quota"
+    assert metadata_items["resource_quotas"].value["collection_limit"] == {
+        "truncated": False,
+        "original_count": 1,
+        "returned_count": 1,
     }
     assert "change_context" not in metadata_items
 
