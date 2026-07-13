@@ -6,6 +6,31 @@ import { IssuesPortFailure } from "./issuesContract";
 import { COPY, issuesPort, renderSurface } from "./IssuesSurface.testSupport";
 afterEach(cleanup);
 describe("IssuesSurface", () => {
+  it("exposes selection semantics and moves focus to the controlled detail region", async () => {
+    const port = issuesPort();
+    renderSurface(
+      <IssuesSurface
+        clusterId="cluster-1"
+        copy={COPY}
+        port={port}
+        recoverySelection={{ state: "enabled" }}
+      />,
+    );
+
+    const issue = await screen.findByRole("button", { name: "Elevated response latency" });
+    expect(issue.getAttribute("aria-current")).toBeNull();
+    expect(issue.getAttribute("aria-controls")).toBeNull();
+
+    fireEvent.click(issue);
+
+    const detail = await screen.findByRole("region", { name: "Incident detail" });
+    const controlledId = issue.getAttribute("aria-controls");
+    expect(controlledId).not.toBeNull();
+    expect(detail.id).toBe(controlledId);
+    expect(issue.getAttribute("aria-current")).toBe("true");
+    await waitFor(() => expect(document.activeElement).toBe(detail));
+  });
+
   it("keeps incident, evidence, analysis, and recovery loads independently observable", async () => {
     const port = issuesPort();
     renderSurface(

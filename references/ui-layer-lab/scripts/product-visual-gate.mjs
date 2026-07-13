@@ -2192,7 +2192,15 @@ async function prepareProductIssuesScenario(page, scenario) {
   }
   await firstIssue.click();
 
-  await page.getByRole("region", { name: "Issue details" }).waitFor();
+  const detailRegion = page.getByRole("region", { name: "Issue details" });
+  await detailRegion.waitFor();
+  const controlledId = await firstIssue.getAttribute("aria-controls");
+  if (!controlledId
+    || await firstIssue.getAttribute("aria-current") !== "true"
+    || await detailRegion.getAttribute("id") !== controlledId) {
+    throw new Error(`${scenario.id}: selected Issue control does not own its detail region`);
+  }
+  await page.waitForFunction((detailId) => document.activeElement?.id === detailId, controlledId);
   const auditSubject = page.getByTestId("audit-event-subject");
   await auditSubject.waitFor();
   if (await auditSubject.innerText() !== issuesAuditSubject) {
