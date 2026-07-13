@@ -2877,3 +2877,11 @@ target preflight·register 네 함수와 strict Zod 계약을 claim했다. 1회�
   GAP-010 전 graph data·TopologyCanvas·WebSocket 미렌더도 유지한다.
 - 이 문서 커밋과 visual-product를 통과한 동일 HEAD를 lab/dev에 승격한 뒤 현재 lane/worktree를
   같은 사이클에서 회수한다. 신규 stash 0건, 기존 미증명 stash 8개 유지가 정리 기준이다.
+
+## 2026-07-14 00:13 KST — [백엔드] Issues 필터 계약 착륙 준비
+
+- 신규 `GET /api/issues`, `/api/issues/filter-facets`, `/api/issues/label-facets`와 event-time
+  projection, tenant-safe server facet/count, 분리 migration을 GREEN으로 만들었다.
+- 전체 게이트는 Ruff lint/format, import-linter 8 kept/0 broken, pytest
+  `2099 passed, 3 skipped`다. 실 PostgreSQL `upgrade → downgrade → upgrade`도 통과했다.
+- canonical 착륙 전이므로 완료 앵커를 기록하지 않았고 gateway 계약 lock을 유지한다.

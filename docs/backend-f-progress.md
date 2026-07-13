@@ -1180,3 +1180,23 @@ Bundle route는 200을 반환한다.
 - RED 범위: stable issue/detail identity 분리, 같은 축 OR·축간 AND, exact cluster/namespace pair,
   HMAC cursor의 workspace/user/auth/filter binding, N/M·facet payload, raw payload 비노출,
   legacy projection의 unavailable 처리다.
+
+### Issues 필터 계약 — 착륙 준비
+
+- 상태: `ready_to_land`; canonical 착륙 전이므로 완료 앵커를 기록하지 않고 gateway 계약 lock을
+  유지한다.
+- route: `GET /api/issues`, `GET /api/issues/filter-facets`,
+  `GET /api/issues/label-facets`. 기존 RCA timeline/list/detail 계약은 변경하지 않았다.
+- 목록은 stable `issue_id`와 optional `detail_id`, correlation/cluster/namespace/resource identity,
+  symptom/severity/state/pipeline status, environment/application/Label 완전성, root cause/confidence,
+  `updated_at`을 반환한다. 같은 축은 OR, 서로 다른 축과 Kubernetes Label은 AND다.
+- session workspace와 구체 `RCA_READ` cluster 집합을 SQL에 강제한다. event envelope의 tenant만
+  권위값으로 사용하며 payload workspace 위조·누락은 fail-closed다.
+- event-time evidence snapshot에서만 Label을 보존한다. environment/application은 권위 source가
+  없으면 `unavailable`, mutable timeline count/cursor는 `partial`로 정직하게 표시한다.
+- migration은 projection column과 concurrent index revision을 분리했다. 실 PostgreSQL에서
+  `upgrade → downgrade → upgrade`, 신규 column 8개와 index 6개의 생성·제거·재생성을 확인했다.
+- Bruno: `docs/api/18-issues-filter/01-list-issues.bru`,
+  `02-filter-facets.bru`, `03-label-facets.bru`.
+- 전체 게이트: Ruff lint/format PASS, import-linter 8 kept/0 broken, pytest
+  `2099 passed, 3 skipped`; 착륙 직전 최신 `origin/dev` rebase 후 같은 게이트를 재증명한다.
