@@ -102,6 +102,7 @@ export type FilterMutationIntent =
   | "chip-remove"
   | "clear-labels"
   | "clear-filters"
+  | "view-change"
   | "legacy-migration"
   | "typing";
 

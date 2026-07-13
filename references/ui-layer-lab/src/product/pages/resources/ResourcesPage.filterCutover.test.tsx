@@ -99,7 +99,6 @@ describe("ResourcesPage unified-filter cutover", () => {
     ["label filter", "&labels=team%3Dcheckout"],
     ["health filter", "&resources.health=warning"],
     ["server search", "&resources.q=checkout"],
-    ["graph view", "&resources.view=graph"],
     [
       "multiple Namespace filters",
       "&namespaces=cluster-1%2Fshop,cluster-1%2Fops",

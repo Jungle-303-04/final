@@ -19,6 +19,7 @@ const resourcesLongEventMessage = `ContainerRestart${"M".repeat(440)}`;
 const productHomeUrl = `${productUrl}?clusters=${homeClusterId}`;
 const productResourcesUrl =
   `${productUrl}/resources/pod?clusters=${homeClusterId}&resources.types=pod`;
+const productResourcesGraphUrl = `${productResourcesUrl}&resources.view=graph`;
 const productResourceDetailQuery =
   `resource=v1%2F${homeClusterId}%2Fpod%2Fshop%2F${homePodName}&resourceKind=Pod`;
 const authSessionPath = "/api/auth/session";
@@ -202,6 +203,21 @@ const resourcesDetailSelectors = [
   "[data-slot='tabs']",
   "[data-slot='tabs-list']",
   "[data-slot='tabs-trigger']",
+];
+const resourcesGraphSelectors = [
+  "[data-slot='sidebar-provider']",
+  "[data-slot='sidebar-inset']",
+  "[data-slot='sidebar-trigger']",
+  "[data-slot='surface']",
+  "#resources-view-toggle",
+  "[data-slot='resources-graph-shell']",
+  clusterScopePickerSelector,
+  clusterScopeTriggerSelector,
+  clusterProviderIconSelector,
+  "header",
+  "main",
+  "h2",
+  "p",
 ];
 const issuesSelectors = [
   "[data-slot='sidebar-provider']",
@@ -577,6 +593,20 @@ const visualScenarios = [
     theme: "dark",
     colorScheme: "dark",
     forcedColors: "none",
+  },
+  {
+    id: "resources-graph-shell-en-forced-colors",
+    locale: "en",
+    url: productResourcesGraphUrl,
+    authSession: "authenticated",
+    resourcesScenario: true,
+    resourcesGraphShell: true,
+    heading: "Graph data is not available yet",
+    requiredSelectors: resourcesGraphSelectors,
+    viewport: { width: 1024, height: 900 },
+    theme: "light",
+    colorScheme: "light",
+    forcedColors: "active",
   },
   {
     id: "resources-authenticated-reflow-320-light",
@@ -1889,7 +1919,11 @@ function expectedScenarioApiPaths(scenario) {
     ...(scenario.authSession ? [authSessionPath] : []),
     ...(scenario.homeScenario ? homeBaseApiPaths : []),
     ...(scenario.homeFrame === "pods" ? [homePodApiPath] : []),
-    ...(scenario.resourcesScenario ? resourcesBaseApiPaths : []),
+    ...(scenario.resourcesScenario
+      ? scenario.resourcesGraphShell
+        ? [homeBaseApiPaths[0]]
+        : resourcesBaseApiPaths
+      : []),
     ...(scenario.resourcesDetail ? [resourcesDetailApiPath] : []),
     ...(scenario.issuesScenario ? [...issuesBaseApiPaths, ...issuesDetailApiPaths] : []),
   ];
@@ -2372,12 +2406,17 @@ async function captureLocalizedGeometry(page, locale) {
     const clusterTrigger = clusterPicker?.querySelector("[data-slot='select-trigger']");
     const localeTrigger = [...document.querySelectorAll("[data-slot='select-trigger']")]
       .find((element) => element.getAttribute("aria-label") === controlLabel);
-    return {
+    const geometry = {
       clusterPicker: rect(clusterPicker),
       clusterTrigger: rect(clusterTrigger),
       localeTrigger: rect(localeTrigger),
       shellHeader: rect(shellHeader),
     };
+    const resourcesViewToggle = document.querySelector(
+      "#resources-view-toggle",
+    );
+    if (resourcesViewToggle) geometry.resourcesViewToggle = rect(resourcesViewToggle);
+    return geometry;
   }, control.control);
 }
 
@@ -2592,6 +2631,29 @@ async function visibleExactTextCount(page, text) {
 
 async function prepareProductResourcesScenario(page, scenario) {
   await page.waitForFunction(() => document.title === "Opsia");
+  if (scenario.resourcesGraphShell) {
+    await assertGlobalClusterScopePicker(page, scenario.id, scenario.locale);
+    const graph = page.getByRole("button", { name: "Graph" });
+    const table = page.getByRole("button", { name: "Table" });
+    if (await graph.getAttribute("aria-pressed") !== "true"
+      || await table.getAttribute("aria-pressed") !== "false") {
+      throw new Error(`${scenario.id}: Graph view state is not exposed with aria-pressed`);
+    }
+    if (await page.getByRole("table").count() !== 0
+      || await page.locator("[data-slot='topology-canvas']").count() !== 0) {
+      throw new Error(`${scenario.id}: contractless Graph rendered table or topology data`);
+    }
+    const url = new URL(page.url());
+    if (url.pathname !== "/product/resources/pod"
+      || url.searchParams.get("clusters") !== homeClusterId
+      || url.searchParams.get("resources.types") !== "pod"
+      || url.searchParams.get("resources.view") !== "graph"
+      || url.searchParams.has("resource")) {
+      throw new Error(`${scenario.id}: Graph shell URL is not exact: ${url.href}`);
+    }
+    await assertProductResourcesGraphReducedMotion(page, scenario.id);
+    return;
+  }
   const table = scenario.resourcesDetail
     ? page.locator("table[data-slot='table'][aria-label='리소스 목록']")
     : page.getByRole("table", { name: "리소스 목록" });
@@ -2666,6 +2728,30 @@ async function prepareProductResourcesScenario(page, scenario) {
   }
 
   await assertProductResourcesReducedMotion(page, scenario.id);
+}
+
+async function assertProductResourcesGraphReducedMotion(page, label) {
+  const result = await page.evaluate(() => {
+    const shell = document.querySelector("[data-slot='resources-graph-shell']");
+    const buttons = [...document.querySelectorAll(
+      "#resources-view-toggle [data-slot='button']",
+    )];
+    if (!(shell instanceof HTMLElement) || buttons.length !== 2) return { missing: true };
+    const shellStyle = getComputedStyle(shell);
+    return {
+      missing: false,
+      active: matchMedia("(prefers-reduced-motion: reduce)").matches,
+      shellAnimationDuration: shellStyle.animationDuration,
+      shellAnimationName: shellStyle.animationName,
+      buttonTransitions: buttons.map((button) => getComputedStyle(button).transitionDuration),
+    };
+  });
+  if (result.missing || !result.active
+    || (result.shellAnimationName !== "none"
+      && maxCssTimeMilliseconds(result.shellAnimationDuration) > 1)
+    || result.buttonTransitions.some((duration) => maxCssTimeMilliseconds(duration) > 1)) {
+    throw new Error(`${label}: Graph shell retained reduced-motion timing ${JSON.stringify(result)}`);
+  }
 }
 
 async function prepareLongResourceDetailTab(page, scenario, dialog) {
@@ -3992,6 +4078,10 @@ async function assertNoOverflow(page, label, requiredSelectors) {
 }
 
 async function assertProductResourcesForcedColors(page, label) {
+  if (await page.locator("[data-slot='resources-graph-shell']").count() === 1) {
+    await assertProductResourcesGraphForcedColors(page, label);
+    return;
+  }
   const result = await page.evaluate(() => {
     const select = document.querySelector(
       "[data-slot='sidebar-inset'] > header [data-slot='cluster-scope-picker'] [data-slot='select-trigger']",
@@ -4030,6 +4120,29 @@ async function assertProductResourcesForcedColors(page, label) {
     || result.actionOutlineStyle === "none" || result.actionOutlineWidth < 2) {
     throw new Error(
       `${label}: forced-colors Resources state is not preserved ${JSON.stringify(result)}`,
+    );
+  }
+}
+
+async function assertProductResourcesGraphForcedColors(page, label) {
+  const graph = page.getByRole("button", { name: "Graph" });
+  await graph.focus();
+  const result = await graph.evaluate((element) => {
+    const style = getComputedStyle(element);
+    return {
+      active: matchMedia("(forced-colors: active)").matches,
+      focused: document.activeElement === element,
+      borderStyle: style.borderTopStyle,
+      borderWidth: Number.parseFloat(style.borderTopWidth),
+      outlineStyle: style.outlineStyle,
+      outlineWidth: Number.parseFloat(style.outlineWidth),
+    };
+  });
+  if (!result.active || !result.focused
+    || result.borderStyle === "none" || result.borderWidth < 1
+    || result.outlineStyle === "none" || result.outlineWidth < 2) {
+    throw new Error(
+      `${label}: forced-colors Graph selection is not preserved ${JSON.stringify(result)}`,
     );
   }
 }

@@ -14,7 +14,6 @@ describe("product route release registry", () => {
       "home",
       "resources",
       "issues",
-      "topology",
       "metrics",
       "applications",
       "timeline",
@@ -25,7 +24,6 @@ describe("product route release registry", () => {
       "Home",
       "Resources",
       "Issues",
-      "Topology",
       "Metrics",
       "Applications",
       "Timeline",
@@ -57,7 +55,6 @@ describe("product route release registry", () => {
   it.each([
     ["/product", "home"],
     ["/product/resources/pods", "resources"],
-    ["/product/topology", "topology"],
     ["/product/metrics", "metrics"],
     ["/product/gitops/detail/application/default/storefront", "gitops"],
     ["/product/catalog/items/prometheus", "catalog"],
@@ -67,12 +64,13 @@ describe("product route release registry", () => {
 
   it("falls unknown and retired demo routes back to Home", () => {
     expect(resolveProductRoute("/product/not-a-route").id).toBe("home");
+    expect(resolveProductRoute("/product/topology").id).toBe("home");
     expect(resolveProductRoute("/metrics").id).toBe("home");
   });
 
   it("keeps backend-gap screens and Settings out of the primary route catalog", () => {
     expect(PRODUCT_ROUTE_CATALOG.map((route) => route.id)).not.toEqual(
-      expect.arrayContaining(["traffic", "helm", "checks", "cost", "settings"]),
+      expect.arrayContaining(["topology", "traffic", "helm", "checks", "cost", "settings"]),
     );
   });
 });

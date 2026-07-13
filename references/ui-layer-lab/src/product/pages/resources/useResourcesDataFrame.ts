@@ -34,6 +34,7 @@ interface ScopedState<T> {
 }
 
 interface ResourcesDataFrameInput {
+  catalogQuerySupported: boolean;
   detailClusterId: string | null;
   detailIdentity: ResourceIdentity | null;
   includeDeleted: boolean;
@@ -51,6 +52,7 @@ interface ResourcesDataFrameInput {
 
 export function useResourcesDataFrame(input: ResourcesDataFrameInput) {
   const {
+    catalogQuerySupported,
     detailClusterId,
     detailIdentity,
     includeDeleted,
@@ -125,7 +127,7 @@ export function useResourcesDataFrame(input: ResourcesDataFrameInput) {
     if (target === "detail") setDetailRecord(fail);
   }, [denyTarget, onRequestFailure, reportUnauthorized]);
 
-  const catalogScope = selectedClusterExists ? selectedClusterId : null;
+  const catalogScope = catalogQuerySupported && selectedClusterExists ? selectedClusterId : null;
   const catalog = scopedValue(catalogRecord, catalogScope);
   useEffect(() => {
     if (!catalogScope || !selectedClusterId) return;
@@ -159,7 +161,7 @@ export function useResourcesDataFrame(input: ResourcesDataFrameInput) {
     );
     return () => { active = false; request.release(); };
   }, [
-    catalogScope, handleFailure, onRequestSuccess, port, recoverDeniedTarget,
+    catalogQuerySupported, catalogScope, handleFailure, onRequestSuccess, port, recoverDeniedTarget,
     revision, selectedClusterId,
   ]);
 
