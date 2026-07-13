@@ -822,6 +822,7 @@ const homeFeatureApiFixtures = new Map([
       status: "active",
       settings: {},
       connection_status: "online",
+      connection_stage: "ready",
       last_agent_id: "visual-agent",
       last_agent_seen_at: "2026-07-12T10:00:00Z",
       node_count: 2,
@@ -2334,6 +2335,10 @@ async function assertProductHomeFreshnessContract(page, label) {
   await clusterTrigger.focus();
   const tooltip = page.locator("[data-slot='tooltip-content']");
   await tooltip.waitFor();
+  const tooltipText = await tooltip.textContent() ?? "";
+  if (!/연결 단계\s*Ready/u.test(tooltipText)) {
+    throw new Error(`${label}: cluster freshness Tooltip omitted the canonical connection stage`);
+  }
   const motion = await tooltip.evaluate((element) => {
     const style = getComputedStyle(element);
     return {
@@ -2422,11 +2427,13 @@ async function assertGlobalClusterScopePicker(page, label, locale, options = {})
   const text = await trigger.textContent() ?? "";
   const accessibleName = await trigger.getAttribute("aria-label") ?? "";
   const connection = locale === "en" ? "Connected" : "연결됨";
+  const stage = "Ready";
   if (!text.includes(homeClusterId)
     || !accessibleName.includes(homeClusterId)
-    || !accessibleName.includes(connection)) {
+    || !accessibleName.includes(connection)
+    || !accessibleName.includes(stage)) {
     throw new Error(
-      `${label}: global cluster scope omitted canonical identity or localized connection `
+      `${label}: global cluster scope omitted canonical identity, connection, or stage `
       + `${JSON.stringify({ accessibleName, text })}`,
     );
   }

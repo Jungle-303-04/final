@@ -15,8 +15,8 @@ afterEach(cleanup);
 
 describe("ClusterScopePicker", () => {
   it.each([
-    ["en-US", "Cluster prod-cluster · Production · cluster-a · Connected", "Available clusters"],
-    ["ko-KR", "Cluster prod-cluster · Production · cluster-a · 연결됨", "조회 가능한 Cluster"],
+    ["en-US", "Cluster prod-cluster · Production · cluster-a · Connected · Ready", "Available clusters"],
+    ["ko-KR", "Cluster prod-cluster · Production · cluster-a · 연결됨 · Ready", "조회 가능한 Cluster"],
   ])("localizes picker chrome for %s without translating canonical cluster data", async (
     language,
     accessibleName,
@@ -60,19 +60,38 @@ describe("ClusterScopePicker", () => {
 
     await waitFor(() => {
       expect(document.querySelector("[data-slot='tooltip-content']")?.textContent)
-        .toMatch(/마지막 관측/u);
+        .toMatch(/연결 단계.*Ready.*마지막 관측/u);
+    });
+  });
+
+  it("omits connection-stage copy when the optional field is absent", async () => {
+    renderPicker("en-US", "/product?cluster=cluster-a", null);
+
+    const trigger = await screen.findByRole("combobox", {
+      name: "Cluster prod-cluster · Production · cluster-a · Connected",
+    });
+    trigger.focus();
+
+    await waitFor(() => {
+      const tooltip = document.querySelector("[data-slot='tooltip-content']")?.textContent ?? "";
+      expect(tooltip).toMatch(/Last observed/u);
+      expect(tooltip).not.toMatch(/Connection stage|Ready/u);
     });
   });
 });
 
-function renderPicker(language: string, entry = "/product?cluster=cluster-a") {
+function renderPicker(
+  language: string,
+  entry = "/product?cluster=cluster-a",
+  connectionStage: "ready" | null = "ready",
+) {
   const canonicalClusters = [
     {
-      ...cluster("cluster-a", "prod-cluster", "Production", "online", "eks"),
+      ...cluster("cluster-a", "prod-cluster", "Production", "online", "eks", connectionStage),
       health: "Critical",
     },
     {
-      ...cluster("cluster-b", "edge-cluster", "Edge", "offline", "onprem"),
+      ...cluster("cluster-b", "edge-cluster", "Edge", "offline", "onprem", connectionStage),
       health: "Healthy",
     },
   ];
@@ -102,8 +121,9 @@ function cluster(
   environment: string,
   connectionState: HomeClusterChoice["connectionState"],
   provider: HomeClusterChoice["provider"],
+  connectionStage: "ready" | null,
 ): HomeClusterChoice {
-  return {
+  const choice = {
     id,
     workspaceId: "workspace-a",
     name,
@@ -115,5 +135,7 @@ function cluster(
     nodeCount: 2,
     podCount: 6,
     incidentCount: 0,
+    connectionStage,
   };
+  return choice;
 }
