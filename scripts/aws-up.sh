@@ -15,7 +15,7 @@ default_github_repo() {
   esac
 }
 
-PROJECT_SLUG="${PROJECT_SLUG:-kubeheal}"
+PROJECT_SLUG="${PROJECT_SLUG:-kubernetes-ops}"
 AWS_REGION="${AWS_REGION:-us-east-1}"
 MGMT_CLUSTER="${MGMT_CLUSTER:-${PROJECT_SLUG}-mgmt}"
 TARGET_CLUSTER_1="${TARGET_CLUSTER_1:-${PROJECT_SLUG}-target-a}"
@@ -849,10 +849,10 @@ kind: Kustomization
 resources:
   - ../../deploy/management
 images:
-  - name: kubeheal-service
+  - name: 183548421506.dkr.ecr.ap-northeast-2.amazonaws.com/kubernetes-ops-service
     newName: ${service_image_repo}
     newTag: ${service_image_tag}
-  - name: kubeheal-console
+  - name: 183548421506.dkr.ecr.ap-northeast-2.amazonaws.com/kubernetes-ops-console
     newName: ${console_image_repo}
     newTag: ${console_image_tag}
 EOF
