@@ -52,7 +52,7 @@ spec:
             - name: BASELINE_CONFIRM_TARGET_ISOLATED
               value: isolated-versioned-target
             - name: MIGRATION_EXPECTED_HEAD
-              value: "20260714_0345"
+              value: "20260714_0415"
           resources:
             requests:
               cpu: 250m
