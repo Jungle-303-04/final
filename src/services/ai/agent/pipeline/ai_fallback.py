@@ -1,9 +1,8 @@
 """AI fallback 원인 계획 — rule 미매칭 incident 를 LLM 후보로 바꿔 같은 평가 경로에 태움.
 
 plan-worker 가 rule 미매칭 시 발행하는 `rca.ai_fallback.requested` 를 받아,
-LLM 이 제안한 원인 후보를 rule 경로와 동일한 `rca.candidates.planned` 로 되돌린다.
-이후 평가/점수/확정은 analyze-worker → rca-worker 의 기존 근거 기반 판정을 그대로 지나므로,
-LLM 이 확정 root cause 를 지어내는 일은 구조적으로 불가능하다(근거 없는 후보는 blocked).
+LLM 은 실제 catalog cause ID만 hypothesis로 제안한다. title/evidence/check/signal 계약은
+catalog에서 복원하고 analyze-worker의 내용 기반 signal 평가를 통과하지 못하면 blocked 된다.
 """
 
 from __future__ import annotations
@@ -18,6 +17,7 @@ from domains.rca.events import (
     RcaCandidatesPlannedBody,
 )
 from packages.ai.llm import LlmClient
+from services.ai.agent.playbooks.cause import registered_cause_profiles
 
 MAX_FALLBACK_CANDIDATES = 5
 MAX_PROMPT_EVIDENCE_ITEMS = 20
@@ -35,13 +35,10 @@ FALLBACK_CANDIDATES_SCHEMA: dict[str, Any] = {
                 "type": "object",
                 "properties": {
                     "cause_id": {"type": "string"},
-                    "title": {"type": "string"},
-                    "reason": {"type": "string"},
-                    "expected_evidence": {"type": "array", "items": {"type": "string"}},
-                    "checks": {"type": "array", "items": {"type": "string"}},
                     "confidence": {"type": "number", "minimum": 0, "maximum": 1},
                 },
-                "required": ["cause_id", "title", "reason"],
+                "required": ["cause_id"],
+                "additionalProperties": False,
             },
         }
     },
@@ -81,11 +78,12 @@ def build_fallback_prompt(evt: RcaAiFallbackRequestedBody) -> str:
     lines.extend(
         [
             "",
+            "Choose hypotheses only from these catalog cause IDs:",
+            ", ".join(_catalog_candidates()),
+            "",
             f"Return at most {MAX_FALLBACK_CANDIDATES} candidates as JSON:",
-            '{"candidates": [{"cause_id", "title", "reason",'
-            ' "expected_evidence": [...], "checks": [...], "confidence"}]}',
-            "expected_evidence must use evidence source names"
-            " (e.g. kubernetes, metrics, logs, traces).",
+            '{"candidates": [{"cause_id", "confidence"}]}',
+            "Do not invent cause IDs or evidence requirements.",
         ]
     )
     return "\n".join(lines)
@@ -96,21 +94,22 @@ def parse_fallback_candidates(
 ) -> list[CauseCandidate]:
     """LLM JSON 응답 → CauseCandidate 목록.
 
-    비정형 응답은 예외 대신 빈 목록으로 수렴시킨다(항목 단위 방어).
-    confidence 내림차순으로 정렬해 상위 max_candidates 개만 남긴다.
+    비정형·catalog 밖 응답은 예외 대신 빈 목록으로 수렴시킨다(항목 단위 방어).
+    LLM 텍스트는 버리고 catalog의 evidence/check/signal 계약을 복원한다. 내용 기반 signal이
+    없는 catalog 후보도 fallback 확정 경로에 태우지 않는다. confidence는 정렬에만 쓴다.
     """
     entries = raw.get("candidates") if isinstance(raw, dict) else raw
     if not isinstance(entries, list):
         return []
+    catalog = _catalog_candidates()
     scored: list[tuple[float, CauseCandidate]] = []
     seen_ids: set[str] = set()
     for entry in entries:
         if not isinstance(entry, dict):
             continue
         candidate_id = _clean_text(entry.get("cause_id") or entry.get("candidate_id"))
-        title = _clean_text(entry.get("title"))
-        reason = _clean_text(entry.get("reason") or entry.get("description"))
-        if not candidate_id or not title or not reason or candidate_id in seen_ids:
+        candidate = catalog.get(candidate_id)
+        if candidate is None or candidate_id in seen_ids:
             continue
         seen_ids.add(candidate_id)
         scored.append(
@@ -118,10 +117,11 @@ def parse_fallback_candidates(
                 _clamped_confidence(entry.get("confidence")),
                 CauseCandidate(
                     candidate_id=candidate_id,
-                    title=title,
-                    description=reason,
-                    expected_evidence=_clean_texts(entry.get("expected_evidence")),
-                    checks=_clean_texts(entry.get("checks")),
+                    title=candidate.title,
+                    description=candidate.description,
+                    expected_evidence=list(candidate.expected_evidence),
+                    checks=list(candidate.checks),
+                    signals=[dict(group) for group in candidate.signals],
                     source=CAUSE_CANDIDATE_SOURCE_AI_FALLBACK,
                 ),
             )
@@ -168,10 +168,15 @@ def _clean_text(value: Any) -> str:
     return value.strip() if isinstance(value, str) else ""
 
 
-def _clean_texts(value: Any) -> list[str]:
-    if not isinstance(value, list):
-        return []
-    return [item.strip() for item in value if isinstance(item, str) and item.strip()]
+def _catalog_candidates() -> dict[str, CauseCandidate]:
+    """내용 signal을 가진 실제 catalog 후보만 ID로 색인한다."""
+    candidates: dict[str, CauseCandidate] = {}
+    for profile in registered_cause_profiles():
+        for spec in profile.candidate_specs:
+            if not spec.signals:
+                continue
+            candidates.setdefault(spec.candidate_id, spec.to_candidate())
+    return candidates
 
 
 def _clamped_confidence(value: Any) -> float:

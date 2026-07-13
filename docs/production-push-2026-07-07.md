@@ -38,7 +38,7 @@
 ### 2. LLM fallback RCA 완성 (핵심 차별점)
 
 - 현재: plan-worker가 룰 미매칭 시 `RcaAiFallbackRequestedBody` 이벤트를 발행하지만 소비자가 없어 이벤트가 죽는다.
-- 설계: `ai-fallback-worker` 신설. 이벤트 소비 → evidence bundle을 LLM에 구조화 프롬프트로 전달 → 후보 원인(JSON, expected_evidence/checks 포함) 생성 → 기존 `rca.candidates.planned` 흐름에 합류시켜 analyze-worker의 동일한 평가·점수 경로를 태운다. LLM 산출물도 룰 후보와 같은 검증을 받으므로 환각이 확정 원인으로 직행하지 못한다.
+- 설계: `ai-fallback-worker` 신설. 이벤트 소비 → evidence bundle 요약과 실제 catalog cause ID를 LLM에 구조화 프롬프트로 전달 → catalog ID hypothesis 선택 → catalog의 evidence/check/signal 계약 복원 → 기존 `rca.candidates.planned` 흐름에 합류시켜 analyze-worker의 결정론적 내용 signal 평가를 태운다. signal 미검증 hypothesis는 `insufficient_evidence`로 차단한다.
 - 완료 기준: 테스트 전용 대역 LLM 단위 테스트(이벤트 in → 후보 out), 실키 opt-in 테스트, 룰 미매칭 인시던트가 backlog가 아닌 LLM 후보 경로로 RCA 완료되는 골든패스 테스트.
 
 ### 3. 범용 조회 API (새 프론트 대비)
