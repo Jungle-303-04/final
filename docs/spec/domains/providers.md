@@ -144,19 +144,18 @@ DB 테이블 없음. 카탈로그는 코드 상수 `CATALOG` (frozen dataclass �
 | 4 | source | `bitbucket` | Bitbucket | unavailable | None | — | — | — | "Bitbucket webhook, contents, and pull request adapters are unavailable" |
 | 5 | deploy | `manual-manifest` | Manual Manifest Export | available | `POST /targets apply=false` | `preview`, `download_manifest` | — | — | — |
 | 6 | deploy | `kube-context` | Kubernetes Context Apply | available | `kubectl apply with KUBE_CONTEXT_ALLOWLIST` | `preview`, `server_apply` | — | `KUBE_CONTEXT_ALLOWLIST` | — |
-| 7 | deploy | `github-actions` | GitHub Actions | available | `.github/workflows/promote-dev.yml + .github/workflows/aws-cd.yml` | `ci`, `build`, `promote`, `deploy` | `scm_write` / `github-actions-permissions` / `promote` — "Repository workflow permission that allows the runner to push to main." | `AUTO_PROMOTE_DEV_TO_MAIN`, `AWS_AUTO_DEPLOY` | — |
-| 8 | deploy | `gitops-controller` | GitOps Controller | unavailable | None | — | — | — | "GitOps controller adapter is unavailable" |
-| 9 | deploy | `jenkins` | Jenkins | unavailable | None | — | — | — | "Jenkins job trigger/status adapter is unavailable" |
-| 10 | cloud | `existing-k8s` | Existing Kubernetes | available | `kubeconfig context or target agent bootstrap` | `install_target_agent`, `apply_manifest` | — | `KUBE_CONTEXT_ALLOWLIST` | — |
-| 11 | cloud | `local` | Local Kubernetes | available | `scripts/up.sh` | `kind`, `minikube`, `developer_loop` | — | — | — |
-| 12 | cloud | `aws` | AWS | available | `scripts/aws-up.sh + GitHub OIDC workflow` | `eks`, `ecr`, `oidc_deploy` | `aws_role` / `github-oidc:`, `env:` / `deploy` — "OIDC role ARN or environment credential chain for AWS deployments." | `AWS_REGION`, `AWS_ROLE_ARN`, `ECR_REPO` | — |
-| 13 | cloud | `gcp` | Google Cloud | unavailable | None | — | — | — | "GKE, Artifact Registry, and workload identity adapters are unavailable" |
-| 14 | cloud | `azure` | Azure | unavailable | None | — | — | — | "AKS, ACR, and workload identity adapters are unavailable" |
-| 15 | secret | `env` | Environment Variable | available | `EnvSecretVault` | `local`, `ci` | — | `SECRET_VAULT_PROVIDER`, `TOKEN_VAULT_PROVIDER` | — |
-| 16 | secret | `k8s-secret` | Kubernetes Secret | available | `KubernetesSecretVault` | `in_cluster`, `namespaced_secret` | — | `KUBERNETES_SERVICE_HOST`, `KUBEHEAL_K8S_API_BASE` | — |
-| 17 | secret | `aws-sm` | AWS Secrets Manager | available | `AwsSecretsManagerSecretVault` | `managed_secret`, `rotation_stage` | — | `SECRET_VAULT_AWS_REGION` | — |
-| 18 | secret | `vault` | HashiCorp Vault | unavailable | None | — | — | — | "HashiCorp Vault adapter is unavailable" |
-| 19 | secret | `gcp-sm` | Google Secret Manager | unavailable | None | — | — | — | "Google Secret Manager adapter is unavailable" |
+| 7 | deploy | `gitops-controller` | External GitOps Controller | unavailable | None | — | — | — | "External Argo CD or Flux adapter is unavailable; the built-in workflow-controller remains active" |
+| 8 | deploy | `jenkins` | Jenkins | unavailable | None | — | — | — | "Jenkins job trigger/status adapter is unavailable" |
+| 9 | cloud | `existing-k8s` | Existing Kubernetes | available | `kubeconfig context or target agent bootstrap` | `install_target_agent`, `apply_manifest` | — | `KUBE_CONTEXT_ALLOWLIST` | — |
+| 10 | cloud | `local` | Local Kubernetes | available | `scripts/up.sh` | `kind`, `minikube`, `developer_loop` | — | — | — |
+| 11 | cloud | `aws` | AWS | available | `scripts/aws-up.sh + AWS credential chain` | `eks`, `ecr`, `manual_deploy` | `aws_credentials` / `aws-profile:`, `env:` / `deploy` — "AWS profile or environment credential chain for manual deployments." | `AWS_REGION`, `AWS_PROFILE`, `ECR_REPO` | — |
+| 12 | cloud | `gcp` | Google Cloud | unavailable | None | — | — | — | "GKE, Artifact Registry, and workload identity adapters are unavailable" |
+| 13 | cloud | `azure` | Azure | unavailable | None | — | — | — | "AKS, ACR, and workload identity adapters are unavailable" |
+| 14 | secret | `env` | Environment Variable | available | `EnvSecretVault` | `local`, `ci` | — | `SECRET_VAULT_PROVIDER`, `TOKEN_VAULT_PROVIDER` | — |
+| 15 | secret | `k8s-secret` | Kubernetes Secret | available | `KubernetesSecretVault` | `in_cluster`, `namespaced_secret` | — | `KUBERNETES_SERVICE_HOST`, `KUBEHEAL_K8S_API_BASE` | — |
+| 16 | secret | `aws-sm` | AWS Secrets Manager | available | `AwsSecretsManagerSecretVault` | `managed_secret`, `rotation_stage` | — | `SECRET_VAULT_AWS_REGION` | — |
+| 17 | secret | `vault` | HashiCorp Vault | unavailable | None | — | — | — | "HashiCorp Vault adapter is unavailable" |
+| 18 | secret | `gcp-sm` | Google Secret Manager | unavailable | None | — | — | — | "Google Secret Manager adapter is unavailable" |
 
 ## 이벤트 (Events)
 

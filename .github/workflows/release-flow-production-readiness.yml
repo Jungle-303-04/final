@@ -1,0 +1,129 @@
+name: Release Flow Production Readiness
+
+"on":
+  workflow_dispatch:
+    inputs:
+      github_environment:
+        description: GitHub Environment whose secrets should satisfy production readiness.
+        required: false
+        default: production
+        type: string
+      github_access_preflight:
+        description: Also verify the GitHub token can read SCM_REPO and SCM_BASE_BRANCH.
+        required: false
+        default: true
+        type: boolean
+      github_environment_preflight:
+        description: Also verify production GitHub Environment release-flow secrets and variables.
+        required: false
+        default: true
+        type: boolean
+      api_smoke_preflight:
+        description: Also run the live release-flow API smoke without dispatching a release.
+        required: false
+        default: true
+        type: boolean
+      production_deploy_required:
+        description: Fail readiness when no production deploy workflow is gated by release-flow-production-gate.
+        required: false
+        default: true
+        type: boolean
+
+permissions:
+  contents: read
+
+jobs:
+  release_flow_production_readiness:
+    name: Validate release-flow production readiness
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.github_environment || 'production' }}
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Install readiness dependencies
+        run: python -m pip install pyyaml
+
+      - name: Validate production readiness
+        env:
+          RELEASE_FLOW_API_BASE_URL: ${{ secrets.RELEASE_FLOW_API_BASE_URL }}
+          RELEASE_FLOW_AUTH_EMAIL: ${{ secrets.RELEASE_FLOW_AUTH_EMAIL }}
+          RELEASE_FLOW_AUTH_PASSWORD: ${{ secrets.RELEASE_FLOW_AUTH_PASSWORD }}
+          RELEASE_FLOW_LIVE_ENABLED: ${{ vars.RELEASE_FLOW_LIVE_ENABLED || secrets.RELEASE_FLOW_LIVE_ENABLED }}
+          RELEASE_FLOW_LIVE_WORKSPACES: ${{ vars.RELEASE_FLOW_LIVE_WORKSPACES || secrets.RELEASE_FLOW_LIVE_WORKSPACES }}
+          GITHUB_TOKEN_REF: ${{ secrets.RELEASE_FLOW_GITHUB_TOKEN_REF }}
+          GITHUB_TOKEN: ${{ secrets.RELEASE_FLOW_GITHUB_TOKEN }}
+          RELEASE_FLOW_GITHUB_ENVIRONMENT_TOKEN: ${{ secrets.RELEASE_FLOW_GITHUB_ENVIRONMENT_TOKEN || secrets.RELEASE_FLOW_GITHUB_TOKEN }}
+          SCM_REPO: ${{ vars.RELEASE_FLOW_SCM_REPO || secrets.RELEASE_FLOW_SCM_REPO }}
+          SCM_BASE_BRANCH: ${{ vars.RELEASE_FLOW_SCM_BASE_BRANCH || secrets.RELEASE_FLOW_SCM_BASE_BRANCH }}
+          GITHUB_API_BASE: ${{ vars.RELEASE_FLOW_GITHUB_API_BASE || secrets.RELEASE_FLOW_GITHUB_API_BASE }}
+          GITHUB_ACCESS_PREFLIGHT: ${{ inputs.github_access_preflight }}
+          GITHUB_ENVIRONMENT_PREFLIGHT: ${{ inputs.github_environment_preflight }}
+          GITHUB_ENVIRONMENT_NAME: ${{ inputs.github_environment || 'production' }}
+          GITHUB_ENVIRONMENT_REPO: ${{ github.repository }}
+          API_SMOKE_PREFLIGHT: ${{ inputs.api_smoke_preflight }}
+          PRODUCTION_DEPLOY_REQUIRED: ${{ inputs.production_deploy_required }}
+        run: |
+          set +e
+          environment_status=0
+          if [ "$GITHUB_ENVIRONMENT_PREFLIGHT" = "true" ]; then
+            python scripts/verify_release_flow_github_environment.py \
+              --github-repo "$GITHUB_ENVIRONMENT_REPO" \
+              --environment "$GITHUB_ENVIRONMENT_NAME" \
+              --github-token-env RELEASE_FLOW_GITHUB_ENVIRONMENT_TOKEN \
+              --report-path artifacts/release-flow-github-environment.json
+            environment_status=$?
+          fi
+          github_access_args=""
+          if [ "$GITHUB_ACCESS_PREFLIGHT" = "true" ]; then
+            github_access_args="--check-github-access"
+          fi
+          production_deploy_args=""
+          if [ "$PRODUCTION_DEPLOY_REQUIRED" = "true" ]; then
+            production_deploy_args="--require-production-deploy"
+          fi
+          python scripts/validate_release_flow_production_readiness.py \
+            --require-runtime-config \
+            $github_access_args \
+            $production_deploy_args \
+            --report-path artifacts/release-flow-readiness.json \
+            --markdown-path artifacts/release-flow-readiness.md
+          readiness_status=$?
+          if [ -f artifacts/release-flow-readiness.md ]; then
+            cat artifacts/release-flow-readiness.md >> "$GITHUB_STEP_SUMMARY"
+          fi
+          if [ "$environment_status" -ne 0 ]; then
+            exit "$environment_status"
+          fi
+          smoke_status=0
+          if [ "$API_SMOKE_PREFLIGHT" = "true" ] && [ "$readiness_status" -eq 0 ]; then
+            API_BASE_URL="$RELEASE_FLOW_API_BASE_URL" \
+            AUTH_EMAIL="$RELEASE_FLOW_AUTH_EMAIL" \
+            AUTH_PASSWORD="$RELEASE_FLOW_AUTH_PASSWORD" \
+            python scripts/release_flow_smoke.py \
+              --ci \
+              --production-preflight \
+              --ci-artifacts-dir artifacts
+            smoke_status=$?
+          fi
+          if [ "$readiness_status" -ne 0 ]; then
+            exit "$readiness_status"
+          fi
+          if [ "$smoke_status" -ne 0 ]; then
+            exit "$smoke_status"
+          fi
+          exit "$readiness_status"
+
+      - name: Upload readiness artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-flow-production-readiness
+          path: artifacts/release-flow-*.*
+          if-no-files-found: warn
+          retention-days: 30

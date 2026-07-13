@@ -7,9 +7,11 @@ from types import SimpleNamespace
 
 import pytest
 from fastapi import HTTPException, Response
+from fastapi.routing import APIRoute
 
-from domains.identity.admin_router import remove_group_member
+from domains.identity.admin_router import list_access, remove_group_member
 from domains.identity.admin_router import router as admin_router
+from domains.identity.dependencies import require_admin_session
 from packages.contracts.gateway import routes as gateway_routes
 
 
@@ -44,6 +46,90 @@ def test_gap_paths_do_not_collide_with_existing() -> None:
         gateway_routes.AI_CONVERSATIONS_PATH,
     }
     assert new.isdisjoint(existing)
+
+
+def test_list_access_requires_admin_session() -> None:
+    route = next(
+        route
+        for route in admin_router.routes
+        if isinstance(route, APIRoute)
+        and route.path == gateway_routes.ACCESS_PATH
+        and "GET" in route.methods
+    )
+
+    assert any(
+        dependency.call is require_admin_session for dependency in route.dependant.dependencies
+    )
+
+
+def test_list_access_does_not_accept_workspace_scope_from_query() -> None:
+    route = next(
+        route
+        for route in admin_router.routes
+        if isinstance(route, APIRoute)
+        and route.path == gateway_routes.ACCESS_PATH
+        and "GET" in route.methods
+    )
+
+    assert {parameter.name for parameter in route.dependant.query_params} == {"resource_id"}
+
+
+class WorkspaceScopedAccessDb:
+    def __init__(self) -> None:
+        self.calls: list[tuple[str, str | None]] = []
+        self.grants = [
+            {
+                "access_id": "grant-a",
+                "subject_id": "user-a",
+                "subject_type": "user",
+                "subject_label": "user-a@example.com",
+                "resource_type": "cluster",
+                "resource_id": "cluster-a",
+                "role": "observer",
+                "granted_at": None,
+                "organization_id": "workspace-a",
+            },
+            {
+                "access_id": "grant-b",
+                "subject_id": "user-b",
+                "subject_type": "user",
+                "subject_label": "private-b@example.com",
+                "resource_type": "cluster",
+                "resource_id": "cluster-b",
+                "role": "observer",
+                "granted_at": None,
+                "organization_id": "workspace-b",
+            },
+        ]
+
+    def list_access_grants(
+        self,
+        organization_id: str,
+        resource_id: str | None = None,
+    ) -> list[dict[str, object]]:
+        self.calls.append((organization_id, resource_id))
+        return [
+            {key: value for key, value in grant.items() if key != "organization_id"}
+            for grant in self.grants
+            if grant["organization_id"] == organization_id
+            and (resource_id is None or grant["resource_id"] == resource_id)
+        ]
+
+
+def test_list_access_uses_session_workspace_and_excludes_other_workspace_email() -> None:
+    db = WorkspaceScopedAccessDb()
+
+    response = asyncio.run(
+        list_access(
+            resource_id=None,
+            current=SimpleNamespace(workspace_id="workspace-a"),
+            db=db,
+        )
+    )
+
+    assert db.calls == [("workspace-a", None)]
+    assert [grant["access_id"] for grant in response.grants] == ["grant-a"]
+    assert all(grant["subject_label"] != "private-b@example.com" for grant in response.grants)
 
 
 class LastAdminDb:

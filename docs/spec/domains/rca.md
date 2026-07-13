@@ -14,6 +14,11 @@ status: synced
 - RCA 파이프라인 전 구간(증거 정규화 → 장애 감지 → 근거 번들 → 원인 후보 생성/평가 → 완료/차단/후속조치 → 복구 계획/선택 → Safe PR 패치)의 **이벤트 body 계약을 정의**한다.
 - 증거·RCA 리포트·RCA backlog·복구 계획을 **DB에 영속**한다(`RcaRepository`).
 - 사람이 복구 후보를 **선택하는 HTTP 엔드포인트**를 제공하고, 선택 시 승인 레코드 생성 + `recovery.action_selected` 이벤트를 발행한다.
+- test 환경에서만 열리는 실제 장애 시나리오 API를 제공한다. 모든 operation은 OpenAPI에
+  `x-rca-test-token` 헤더를 노출하고, 같은 cluster/fixture(kind·namespace·name) 실행은 DB 원자 가드로
+  catalog의 `max_concurrent_runs`를 강제한다.
+- `verification_pending` 시나리오는 `x-rca-test-verification: true`, 전용 test token,
+  service admin 세 조건이 모두 있어야 실행된다. 일반 실행 요청과 섞지 않는다.
 - **하지 않는 것**: 실제 RCA 분석/AI 추론(services 계층의 워커 담당), 이벤트 버스 구독 루프 실행, 복구 조치 실행.
 
 ## 의존성 (Dependencies)
@@ -44,6 +49,32 @@ status: synced
 - `src/domains/rca/report_projection.py` — RCA report 목록 응답용 projection/summary 규칙.
 - `src/domains/rca/router.py` — FastAPI 라우터(agent evidence 수신, 복구 후보 선택).
 - `src/domains/rca/query_router.py` — FastAPI 라우터(세션 워크스페이스 범위 evidence/RCA report 조회).
+- `src/domains/rca/test_scenarios.py` — RCA test scenario Pydantic schema와 YAML loader. `scenario_id` 중복을 거부하고 모든 canonical root cause가 최소 한 시나리오로 표현되는지 검사한다. 한 root cause에 여러 시나리오를 둘 수 있다.
+- `src/domains/rca/test_scenario_adapters.py` — trigger/fault/observation/cleanup capability와 실행 함수를 묶는 adapter registry.
+- `src/domains/rca/test_scenario_kubernetes.py` — Kubernetes manifest 생성, run-scoped observation matcher, `kubernetes.manifest_delete` cleanup resource plan의 단일 구현.
+- `src/domains/rca/test_scenario_contract.py` — schema/adapter 및 cause candidate/evidence/recovery cross-contract validator. cause catalog 위치는 domain에 하드코딩하지 않고 합성 루트가 spec을 주입한다.
+- `src/domains/rca/test_runtime.py` — run identity, agent command, 상태 projection. 기존 Kubernetes helper 이름은 registry dispatch facade로만 유지하며 Kubernetes 구현을 소유하지 않는다.
+
+### RCA test scenario SDK 운영 계약
+
+`availability: ready`는 API에서 곧바로 실행할 수 있다는 하나의 의미만 가진다. registry에 해당 trigger와 fault mode, 모든 observation predicate, cleanup adapter가 실제 함수로 등록되어 있어야 하고, 격리된 target cluster에서 실제 evidence 수집 → 기대 root cause 선택 → recovery plan 생성 → cleanup 잔여 0까지 완주한 증적이 있어야 한다. 코드나 YAML에 `live_verified` 같은 값을 하드코딩해 이 과정을 대신하지 않는다. 현재 이 계약을 충족해 `ready`인 시나리오는 `image.wrong-tag` 하나다.
+
+RCA 담당자의 추가 절차:
+
+1. `uv run python scripts/rca_scenario.py scaffold <scenario_id> --root-cause <candidate_id> --symptom <symptom> --fault-mode <mode>`로 `verification_pending` YAML과 fixture test 골격을 만든다. 기존 파일은 덮어쓰지 않는다.
+2. `src/domains/rca/test_scenario_catalog/*.yaml`의 repository-owned typed params와 observation predicate를 구체화하고 생성된 fixture test에 결정적 manifest/matcher 기대값을 작성한다.
+3. `uv run python scripts/rca_scenario.py validate`를 실행한다. 이 명령은 scenario schema·중복·canonical coverage, adapter capability, symptom별 cause candidate, candidate `expected_evidence` 포함 관계, 명시적 recovery coverage를 함께 검사하며 오류 시 nonzero로 끝난다.
+4. 관련 unit/Agent/API 계약 테스트를 통과시킨 뒤 전용 token + service admin + `x-rca-test-verification: true`로 test target의 `sandbox`에서 live run을 수행한다. 실제 provider 결과, RCA root, recovery plan, UID/resourceVersion CAS cleanup과 Pod/Endpoint 잔여 0을 확인한다.
+5. live 완주 증적을 확인한 후에만 `availability`를 `ready`로 승격한다. 외부 DB/GitOps처럼 실행 adapter가 없으면 `fixture_required`, 감지·근거·RCA 연결이 미완성이면 `detector_gap`을 유지한다.
+
+`expected.root_cause`는 `expected.symptom`을 처리하는 cause catalog rule의 candidate로 존재해야 한다. 시나리오 `evidence_sources`는 그 candidate의 `expected_evidence`를 모두 포함해야 하며, 해당 root cause에 명시적 recovery rule이 있어야 한다. 실제 수집되지 않은 synthetic evidence로 이 계약을 충족시켜서는 안 된다.
+
+금지사항:
+
+- API/YAML/CLI에 raw Kubernetes manifest나 shell command 입력 surface를 추가하지 않는다.
+- management cluster 실행을 허용하거나 `sandbox` 밖 namespace를 선택하게 하지 않는다.
+- matcher가 지원하지 않는 predicate를 무시하거나 `ready`로 등록하지 않는다.
+- 외부 fixture가 없는데 `ready`로 표시하거나 live 완주 전 상태를 `ready`로 승격하지 않는다.
 
 ### repository 상수 — `src/domains/rca/repository.py`
 
@@ -118,6 +149,8 @@ dedup 리소스 키의 단일 출처(rca-worker 와 repository 가 공유).
 | `candidate_with_approval` | `(candidate: RecoveryActionCandidate, *, approval_ref: str, policy_decision_ref: str) -> RecoveryActionCandidate` — `dataclasses.replace`로 `draft.params`에 `approval_ref`/`policy_decision_ref` 주입한 새 후보 반환 | `src/domains/rca/router.py :: candidate_with_approval` |
 | `recovery_approval_payload` | `(plan: RecoveryPlan, selected: RecoveryActionCandidate, *, workspace_id: str, approval_ref: str, policy_decision_ref: str, selected_by: str, reason: str) -> dict[str, Any]` — 워크플로 승인 레코드 payload 구성(아래 동작 참조) | `src/domains/rca/router.py :: recovery_approval_payload` |
 | `select_recovery_action` | `async (plan_id: str, action_id: str, payload: RecoveryActionSelectRequest, current: Any = Depends(require_session), db: Any = Depends(get_db), events: Any = Depends(get_events)) -> AcceptedResponse` | `src/domains/rca/router.py :: select_recovery_action` |
+| `require_rca_test_api` | `x-rca-test-token` Header dependency. test 환경+enable flag를 먼저 확인해 비활성이면 404, 토큰 누락/불일치는 `compare_digest` 비교 후 401 | `src/domains/rca/router.py :: require_rca_test_api` |
+| `create_test_run` | catalog scenario와 test target을 검증한 뒤 `queue_rca_test_command_if_available`로 실행 예약+inject command를 원자 저장. 동시 한도 초과 시 `409`, code `rca_test_run_conflict` | `src/domains/rca/router.py :: create_test_run` |
 | `db_call` | `async (func: Any, *args: Any, **kwargs: Any) -> Any` — `asyncio.to_thread(func, *args, **kwargs)` 로 동기 DB 호출을 스레드로 위임 | `src/domains/rca/router.py :: db_call` |
 
 ### 조회 라우터 심볼 — `src/domains/rca/query_router.py`
@@ -147,6 +180,7 @@ dedup 리소스 키의 단일 출처(rca-worker 와 repository 가 공유).
 |---|---|---|---|---|
 | `POST /agent/evidence` (`gateway_routes.AGENT_EVIDENCE_PATH`) | `AgentEvidenceRequest` ([contracts](../packages/contracts.md)) | `AcceptedResponse` | `Depends(require_cluster_agent)` — `x-agent-token` 헤더 per-cluster 토큰, 실패 시 401. `get_events`, `get_db` | `src/domains/rca/router.py :: agent_evidence` |
 | `POST /webhooks/alertmanager?cluster_id=` (`gateway_routes.ALERTMANAGER_WEBHOOK_PATH`) | query: `cluster_id: str`(필수), `workspace_id: str = "default"` + body: `AlertmanagerWebhookRequest`(Alertmanager v4 webhook, `groupKey`/`receiver`/`alerts[]`) | `AcceptedResponse` | `require_alertmanager_token` — `Authorization: Bearer` 토큰(핸들러 내부 호출). 미설정 503, 불일치 401 | `src/domains/rca/router.py :: alertmanager_webhook` |
+| `GET /rca/rules` (`gateway_routes.RCA_RULES_PATH`) | 없음 | `RcaRuleCatalogResponse` | `Depends(require_session)` — 현재 API 프로세스가 로딩한 RCA rule id/symptoms/candidates를 read-only로 조회 | `src/domains/rca/router.py :: list_rca_rule_catalog` |
 | `POST /rca/rules/validate` (`gateway_routes.RCA_RULES_VALIDATE_PATH`) | `RcaRuleValidateRequest(yaml_text)` | `RcaRuleValidateResponse` | `Depends(require_session)` — 저장 없이 `packages.ai.rule_catalog.validate_catalog_yaml`로 schema/파일 내부 중복 id만 검증 | `src/domains/rca/router.py :: validate_rca_rule_catalog` |
 | `POST /rca/recovery-plans/{plan_id}/actions/{action_id}/select` (`gateway_routes.RCA_RECOVERY_ACTION_SELECT_PATH`) | path: `plan_id: str`, `action_id: str` + body: `RecoveryActionSelectRequest` (`reason: str | None`, max 500자) | `AcceptedResponse` | `Depends(require_session)` (유효 세션 401 가드) + 핸들러 내부에서 `require_cluster_access(..., Permission.DEPLOY_RUN.value)` (실패 시 `RECOVERY_SELECTION_ACCESS_DENIED`). `get_db`, `get_events` | `src/domains/rca/router.py :: select_recovery_action` |
 

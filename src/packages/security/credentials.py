@@ -11,6 +11,7 @@ from packages.config.settings import env
 
 CREDENTIAL_ENCRYPTION_KEY_ENV = "CREDENTIAL_ENCRYPTION_KEY"
 TOKEN_PREFIX = "fernet:v1:"
+DB_CREDENTIAL_REF_PREFIX = "db:"
 
 
 class CredentialEncryptionError(RuntimeError):
@@ -19,6 +20,15 @@ class CredentialEncryptionError(RuntimeError):
 
 def credential_ref(provider: str, scope: str) -> str:
     return f"db:{provider}:{scope}"
+
+
+def parse_credential_ref(ref: str) -> tuple[str, str]:
+    if not ref.startswith(DB_CREDENTIAL_REF_PREFIX):
+        raise CredentialEncryptionError("unsupported credential_ref format")
+    parts = ref.removeprefix(DB_CREDENTIAL_REF_PREFIX).split(":", 1)
+    if len(parts) != 2 or not parts[0].strip() or not parts[1].strip():
+        raise CredentialEncryptionError("credential_ref must be db:<provider>:<scope>")
+    return parts[0].strip(), parts[1].strip()
 
 
 def encrypt_credential(value: str) -> str:

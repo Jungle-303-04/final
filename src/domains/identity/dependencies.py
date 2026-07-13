@@ -2,13 +2,19 @@
 
 from __future__ import annotations
 
+import asyncio
 import hashlib
 from dataclasses import dataclass
 from typing import Any, Protocol
 
 from fastapi import HTTPException, Request
 
-from packages.contracts.identity import AccessResourceType, ResourceAccessRequest, ServiceRole
+from packages.contracts.identity import (
+    AccessResourceType,
+    ResourceAccessRequest,
+    ServiceRole,
+)
+from packages.events.context import set_event_workspace
 
 AGENT_TOKEN_HEADER = "x-agent-token"
 AGENT_AUTH_REQUIRED_MESSAGE = "agent authentication required"
@@ -90,7 +96,9 @@ def get_password_auth(request: Request) -> Any:
 
 async def require_session(request: Request) -> Any:
     """사용자 세션 가드 — 유효 세션 필요(없으면 401)."""
-    return await request.app.state.auth.require_session(request)
+    current = await request.app.state.auth.require_session(request)
+    set_event_workspace(getattr(current, "workspace_id", None))
+    return current
 
 
 async def require_admin_session(request: Request) -> Any:
@@ -146,7 +154,58 @@ def require_cluster_access(
     )
 
 
-def require_cluster_agent(request: Request) -> ClusterAgentIdentity:
+def resolve_allowed_cluster_ids(
+    db: Any,
+    current: Any,
+    workspace_id: str,
+    permission: str,
+) -> set[str]:
+    """Cluster 목록 인가를 구체적인 ID 집합으로 물질화한다.
+
+    ``accessible_resource_ids``의 legacy 관리자 sentinel인 ``None``을 저장소
+    wildcard로 전달하지 않는다. 서비스 관리자일 때만 workspace cluster를
+    별도 조회하고, 그 외 ``None``/누락/빈 입력은 항상 빈 집합으로 닫는다.
+    """
+    user_id = getattr(current, "user_id", None)
+    session_workspace_id = getattr(current, "workspace_id", None)
+    if (
+        not workspace_id
+        or workspace_id != session_workspace_id
+        or not isinstance(user_id, str)
+        or not user_id
+    ):
+        return set()
+    accessible = getattr(db, "accessible_resource_ids", None)
+    if not callable(accessible):
+        return set()
+
+    cluster_ids = accessible(
+        user_id,
+        workspace_id,
+        AccessResourceType.CLUSTER.value,
+        permission,
+    )
+    if cluster_ids is not None:
+        return {
+            cluster_id.strip()
+            for cluster_id in cluster_ids
+            if isinstance(cluster_id, str) and cluster_id.strip()
+        }
+
+    roles = tuple(getattr(current, "roles", ()) or ())
+    if ServiceRole.SERVICE_ADMIN.value not in roles:
+        return set()
+    list_cluster_ids = getattr(db, "list_workspace_cluster_ids", None)
+    if not callable(list_cluster_ids):
+        return set()
+    return {
+        cluster_id.strip()
+        for cluster_id in list_cluster_ids(workspace_id)
+        if isinstance(cluster_id, str) and cluster_id.strip()
+    }
+
+
+async def require_cluster_agent(request: Request) -> ClusterAgentIdentity:
     """per-cluster agent 토큰 가드 — fail-closed.
 
     x-agent-token 을 해시해 등록 레지스트리에서 클러스터를 찾고, 그 클러스터의
@@ -154,13 +213,18 @@ def require_cluster_agent(request: Request) -> ClusterAgentIdentity:
     요청 body 의 workspace_id/cluster_id 는 신뢰하지 않음(크로스 테넌트 차단).
     토큰 없음/미등록/미인증(해시 불일치)은 모두 401.
     """
+    db = request.app.state.db
     token = request.headers.get(AGENT_TOKEN_HEADER, "")
-    if not token:
-        raise HTTPException(status_code=401, detail=AGENT_AUTH_REQUIRED_MESSAGE)
-    identity = request.app.state.db.authenticate_cluster_agent(hash_agent_token(token))
-    if identity is None:
-        raise HTTPException(status_code=401, detail=AGENT_AUTH_REQUIRED_MESSAGE)
-    return ClusterAgentIdentity(
-        workspace_id=identity["workspace_id"],
-        cluster_id=identity["cluster_id"],
-    )
+    if token:
+        identity = await asyncio.to_thread(
+            db.authenticate_cluster_agent,
+            hash_agent_token(token),
+        )
+        if identity is not None:
+            authenticated = ClusterAgentIdentity(
+                workspace_id=identity["workspace_id"],
+                cluster_id=identity["cluster_id"],
+            )
+            set_event_workspace(authenticated.workspace_id)
+            return authenticated
+    raise HTTPException(status_code=401, detail=AGENT_AUTH_REQUIRED_MESSAGE)

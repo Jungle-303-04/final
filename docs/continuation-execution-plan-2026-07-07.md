@@ -259,7 +259,7 @@
   - DB reset 금지. Cloudflare origin, console nginx `/api` proxy, api-gateway service/endpoints/rollout부터 확인한다.
 - 정리:
   - collection/aws-test Bruno 인증값은 placeholder + `auto_login: false`.
-  - 실제 AWS 계정은 gitignore된 `*.local.bru` 또는 Bruno UI override에만 둔다.
+  - Bruno 환경은 `aws-test` 하나만 유지하고 실제 계정은 팀 Secret으로 받은 로컬 환경에서 요청 시점에만 주입한다.
   - `frontend/docs` stale 검증용 응답 설명과 삭제된 검증용 응답 import script를 정리했다.
   - `tests/test_docs_index.py`가 `frontend/docs`와 `frontend/scripts`도 stale language scan에 포함한다.
 

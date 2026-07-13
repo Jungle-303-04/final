@@ -12,6 +12,7 @@ import logging
 from packages.config.settings import env
 from packages.contracts.event_bus.interfaces import EnvelopePublisher
 from packages.contracts.interfaces import OutboxReader
+from packages.events.bus import event_context
 
 LOGGER = logging.getLogger(__name__)
 
@@ -67,6 +68,7 @@ class OutboxRelay:
                             "outbox_event_dead_lettered",
                             extra={
                                 "context": {
+                                    **event_context(evt),
                                     "event_id": evt.event_id,
                                     "subject": evt.subject,
                                     "source": evt.source,

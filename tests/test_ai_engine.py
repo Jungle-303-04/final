@@ -40,7 +40,13 @@ def make_registry() -> ToolRegistry:
 
 
 def make_context() -> ToolContext:
-    return ToolContext(db=None, workspace_id="ws-1", cluster_id=None, locale="ko")
+    return ToolContext(
+        db=None,
+        workspace_id="ws-1",
+        user_id="user-1",
+        cluster_id=None,
+        locale="ko",
+    )
 
 
 def respond(engine: ConversationEngine, message: str = "질문") -> EngineResult:

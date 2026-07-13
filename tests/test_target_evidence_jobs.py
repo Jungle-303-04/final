@@ -8,17 +8,22 @@ from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
 
+import httpx
 import pytest
 from sqlalchemy.exc import OperationalError
 
 from domains.identity.dependencies import ClusterAgentIdentity
-from domains.target.evidence_jobs import PENDING_EVIDENCE_EVENT_ID_PREFIX
+from domains.target.evidence_jobs import (
+    PENDING_EVIDENCE_EVENT_ID_PREFIX,
+    aggregate_evidence_payload,
+)
 from domains.target.router import (
     complete_evidence_payload,
     db_call,
     evidence_job_result,
     poll_evidence_job,
     schedule_evidence_jobs,
+    touch_agent_seen,
 )
 from packages.contracts.gateway.requests import (
     EvidenceJobResultRequest,
@@ -28,6 +33,27 @@ from packages.contracts.gateway.requests import (
 ROOT_DIR = Path(__file__).resolve().parents[1]
 TARGET_AGENT_DIR = ROOT_DIR / "src" / "services" / "target" / "cluster-agent"
 IDENTITY = ClusterAgentIdentity(workspace_id="workspace-1", cluster_id="cluster-1")
+
+
+def test_agent_heartbeat_preserves_capabilities_registered_by_connect() -> None:
+    recorded: list[dict[str, Any]] = []
+
+    class HeartbeatDb:
+        def save_cluster_agent_status(self, **kwargs: Any) -> None:
+            recorded.append(kwargs)
+
+    touch_agent_seen(HeartbeatDb(), IDENTITY, "agent-1")
+
+    assert recorded == [
+        {
+            "workspace_id": "workspace-1",
+            "cluster_id": "cluster-1",
+            "agent_id": "agent-1",
+            "capabilities": None,
+            "status": "connected",
+            "details": {"heartbeat_source": "agent_api"},
+        }
+    ]
 
 
 class DeadlockOrig(Exception):
@@ -45,9 +71,21 @@ def load_evidence_module():
         "span.otel",
         "providers",
         "providers.base",
+        "providers.collection_limits",
+        "providers.kubernetes_utils",
         "providers.kubernetes_providers",
         "providers.loki_providers",
+        "providers.metadata_config_objects",
+        "providers.metadata_config_refs",
+        "providers.metadata_endpoint_slices",
+        "providers.metadata_ownership",
+        "providers.metadata_resource_quotas",
+        "providers.metadata_providers",
+        "providers.metadata_service_selectors",
+        "providers.metadata_workload_snapshots",
+        "providers.prometheus_analysis",
         "providers.prometheus_providers",
+        "providers.tempo_analysis",
         "providers.tempo_providers",
         "kubernetes_api",
         "evidence",
@@ -88,7 +126,10 @@ class InMemoryEvidenceCollector:
         self,
         evidence_key: str,
         definitions: tuple[object, ...],
+        *,
+        failure_policy: str = "allow_partial",
     ) -> dict[str, Any]:
+        del failure_policy
         if not definitions:
             raise RuntimeError(f"{evidence_key} missing query policy")
         return await self.collect(evidence_key)
@@ -256,6 +297,309 @@ def test_central_worker_reports_provider_failure_for_retry_budget() -> None:
     assert client.completed[0]["error"] == "traces failed"
 
 
+def test_strict_job_reports_provider_transport_failure_for_server_retry() -> None:
+    module = load_evidence_module()
+    provider = module.PrometheusMetricsProvider("https://prometheus.test")
+
+    async def fail_query(_client: object, _query: object) -> dict[str, Any]:
+        raise httpx.ConnectError("prometheus unavailable")
+
+    provider.query = fail_query
+    client = StubEvidenceJobClient()
+    client.jobs.append(
+        {
+            "job_id": "job-metrics",
+            "provider_key": "metrics",
+            "lease_id": "lease-1",
+            "failure_policy": "strict",
+            "provider_policy": {"queries": [{"name": "up", "query": "up"}]},
+        }
+    )
+    scheduler = make_scheduler(module, module.EvidenceCollector([provider]))
+
+    assert asyncio.run(scheduler.work_once(client, "metrics", "metrics-worker")) is True
+
+    assert client.completed[0]["status"] == "failed"
+    assert client.completed[0]["result"] == {}
+    assert client.completed[0]["error"] == "prometheus unavailable"
+
+
+def test_allow_partial_job_keeps_empty_fallback_after_provider_transport_failure() -> None:
+    module = load_evidence_module()
+    provider = module.PrometheusMetricsProvider("https://prometheus.test")
+
+    async def fail_query(_client: object, _query: object) -> dict[str, Any]:
+        raise httpx.ConnectError("prometheus unavailable")
+
+    provider.query = fail_query
+    client = StubEvidenceJobClient()
+    client.jobs.append(
+        {
+            "job_id": "job-metrics",
+            "provider_key": "metrics",
+            "lease_id": "lease-1",
+            "failure_policy": "allow_partial",
+            "provider_policy": {"queries": [{"name": "up", "query": "up"}]},
+        }
+    )
+    scheduler = make_scheduler(module, module.EvidenceCollector([provider]))
+
+    assert asyncio.run(scheduler.work_once(client, "metrics", "metrics-worker")) is True
+
+    assert client.completed[0]["status"] == "completed"
+    assert client.completed[0]["result"] == {"metrics": {"source": "prometheus", "results": {}}}
+    assert client.completed[0]["error"] == ""
+
+
+class StaticEvidenceCollector:
+    def __init__(self, result: dict[str, Any]) -> None:
+        self.result = result
+
+    async def collect_query_policy(
+        self,
+        _evidence_key: str,
+        _definitions: tuple[object, ...],
+        *,
+        failure_policy: str = "allow_partial",
+    ) -> dict[str, Any]:
+        del failure_policy
+        return self.result
+
+
+def run_scoped_job(
+    provider_key: str,
+    *,
+    namespace: str = "sandbox",
+    pod_names: list[str] | None = None,
+    resource_kind: str = "Deployment",
+    resource_name: str = "",
+) -> dict[str, Any]:
+    query_by_provider = {
+        "kubernetes": "sandbox",
+        "metrics": "up",
+        "logs": '{} |= "ERROR"',
+        "traces": "{ status = error }",
+        "metadata": "change_context",
+    }
+    release_context: dict[str, Any] = {
+        "evidence_scope": "rca_test_run",
+        "namespace": namespace,
+        "resource_kind": resource_kind,
+        "resource_name": resource_name,
+    }
+    if pod_names is not None:
+        release_context["pod_names"] = pod_names
+    return {
+        "job_id": f"job-{provider_key}",
+        "provider_key": provider_key,
+        "lease_id": "lease-1",
+        "failure_policy": "strict",
+        "provider_policy": {
+            "queries": [{"name": f"run_{provider_key}", "query": query_by_provider[provider_key]}],
+            "release_context": release_context,
+        },
+    }
+
+
+@pytest.mark.parametrize(
+    ("provider_key", "provider_payload"),
+    [
+        (
+            "kubernetes",
+            {
+                "cluster": {"cluster_id": "cluster-1", "namespace": "sandbox"},
+                "pods": [],
+                "events": [],
+                "provider_status": {"run_kubernetes": {"status": "success"}},
+            },
+        ),
+        (
+            "metrics",
+            {
+                "source": "prometheus",
+                "results": {"run_metrics": {"result_type": "vector", "samples": []}},
+            },
+        ),
+        (
+            "logs",
+            [
+                {
+                    "source": "loki",
+                    "query_name": "run_logs",
+                    "streams": [],
+                    "line_count": 0,
+                }
+            ],
+        ),
+        (
+            "traces",
+            {
+                "source": "tempo",
+                "results": {"run_traces": {"traces": [], "trace_count": 0}},
+            },
+        ),
+        (
+            "metadata",
+            {"change_context": {"current_workload_snapshots": []}},
+        ),
+    ],
+)
+def test_run_scoped_strict_job_rejects_provider_result_without_actual_evidence(
+    provider_key: str,
+    provider_payload: object,
+) -> None:
+    module = load_evidence_module()
+    client = StubEvidenceJobClient()
+    client.jobs.append(run_scoped_job(provider_key, pod_names=["run-pod-1"]))
+    collector = StaticEvidenceCollector({provider_key: provider_payload})
+    scheduler = make_scheduler(module, collector)
+
+    assert asyncio.run(scheduler.work_once(client, provider_key, f"{provider_key}-worker")) is True
+
+    assert client.completed[0]["status"] == "failed"
+    assert client.completed[0]["result"] == {}
+    assert client.completed[0]["error"] == (
+        f"{provider_key} provider returned no evidence for strict run-scoped job"
+    )
+
+
+def test_run_scoped_strict_kubernetes_job_requires_an_observed_run_pod() -> None:
+    module = load_evidence_module()
+    client = StubEvidenceJobClient()
+    client.jobs.append(run_scoped_job("kubernetes", pod_names=["run-pod-1"]))
+    collector = StaticEvidenceCollector(
+        {
+            "kubernetes": {
+                "cluster": {"cluster_id": "cluster-1", "namespace": "sandbox"},
+                "pods": [{"name": "unrelated-pod"}],
+            }
+        }
+    )
+    scheduler = make_scheduler(module, collector)
+
+    assert asyncio.run(scheduler.work_once(client, "kubernetes", "kubernetes-worker")) is True
+
+    assert client.completed[0]["status"] == "failed"
+    assert client.completed[0]["result"] == {}
+
+
+def test_run_scoped_strict_kubernetes_job_keeps_actual_run_pod_evidence() -> None:
+    module = load_evidence_module()
+    client = StubEvidenceJobClient()
+    client.jobs.append(run_scoped_job("kubernetes", pod_names=["run-pod-1"]))
+    result = {
+        "kubernetes": {
+            "cluster": {"cluster_id": "cluster-1", "namespace": "sandbox"},
+            "pods": [{"name": "run-pod-1", "phase": "Pending"}],
+        }
+    }
+    scheduler = make_scheduler(module, StaticEvidenceCollector(result))
+
+    assert asyncio.run(scheduler.work_once(client, "kubernetes", "kubernetes-worker")) is True
+
+    assert client.completed[0]["status"] == "completed"
+    assert client.completed[0]["result"] == result
+
+
+def test_run_scoped_strict_metadata_job_rejects_wrong_namespace_evidence() -> None:
+    module = load_evidence_module()
+    client = StubEvidenceJobClient()
+    client.jobs.append(run_scoped_job("metadata", namespace="sandbox", resource_name="sandbox-api"))
+    result = {
+        "metadata": {
+            "change_context": {
+                "current_workload_snapshots": [
+                    {
+                        "workload": {
+                            "kind": "Deployment",
+                            "namespace": "target",
+                            "name": "target-api",
+                        }
+                    }
+                ],
+                "service_selector_matches": [
+                    {
+                        "service": {"namespace": "sandbox", "name": "sandbox-api"},
+                        "match_status": "matched",
+                        "matched_pod_count": 1,
+                    }
+                ],
+            }
+        }
+    }
+    scheduler = make_scheduler(module, StaticEvidenceCollector(result))
+
+    assert asyncio.run(scheduler.work_once(client, "metadata", "metadata-worker")) is True
+
+    assert client.completed[0]["status"] == "failed"
+    assert client.completed[0]["result"] == {}
+    assert client.completed[0]["error"] == (
+        "metadata provider returned no evidence for strict run-scoped job"
+    )
+
+
+def test_run_scoped_strict_metadata_job_accepts_matching_namespace_evidence() -> None:
+    module = load_evidence_module()
+    client = StubEvidenceJobClient()
+    client.jobs.append(run_scoped_job("metadata", namespace="sandbox", resource_name="sandbox-api"))
+    result = {
+        "metadata": {
+            "change_context": {
+                "current_workload_snapshot": {
+                    "workload": {
+                        "kind": "Deployment",
+                        "namespace": "sandbox",
+                        "name": "sandbox-api",
+                    }
+                }
+            }
+        }
+    }
+    scheduler = make_scheduler(module, StaticEvidenceCollector(result))
+
+    assert asyncio.run(scheduler.work_once(client, "metadata", "metadata-worker")) is True
+
+    assert client.completed[0]["status"] == "completed"
+    assert client.completed[0]["result"] == result
+
+
+def test_run_scoped_strict_metadata_job_rejects_wrong_workload_in_same_namespace() -> None:
+    module = load_evidence_module()
+    client = StubEvidenceJobClient()
+    client.jobs.append(run_scoped_job("metadata", namespace="sandbox", resource_name="sandbox-api"))
+    result = {
+        "metadata": {
+            "change_context": {
+                "current_workload_snapshots": [
+                    {
+                        "workload": {
+                            "kind": "Deployment",
+                            "namespace": "sandbox",
+                            "name": "sandbox-api",
+                        }
+                    },
+                    {
+                        "workload": {
+                            "kind": "Deployment",
+                            "namespace": "sandbox",
+                            "name": "old-sandbox-api",
+                        }
+                    },
+                ]
+            }
+        }
+    }
+    scheduler = make_scheduler(module, StaticEvidenceCollector(result))
+
+    assert asyncio.run(scheduler.work_once(client, "metadata", "metadata-worker")) is True
+
+    assert client.completed[0]["status"] == "failed"
+    assert client.completed[0]["result"] == {}
+    assert client.completed[0]["error"] == (
+        "metadata provider returned no evidence for strict run-scoped job"
+    )
+
+
 def test_scheduler_loop_survives_management_schedule_errors() -> None:
     module = load_evidence_module()
     scheduler = make_scheduler(module)
@@ -397,9 +741,6 @@ class StubEvidenceJobDb:
             "correlation_id": event_envelope.correlation_id,
         }
 
-    def release_pending_evidence_window(self, _evidence_key: str) -> None:
-        raise AssertionError("release should not be called")
-
     def release_stale_pending_evidence_window(
         self,
         _evidence_key: str,
@@ -431,7 +772,10 @@ class BulkEvidenceCollector:
         self,
         evidence_key: str,
         definitions: tuple[object, ...],
+        *,
+        failure_policy: str = "allow_partial",
     ) -> dict[str, Any]:
+        del failure_policy
         if len(definitions) != 1:
             raise RuntimeError(f"expected one query for {evidence_key}, got {len(definitions)}")
         definition = definitions[0]
@@ -640,6 +984,53 @@ def test_complete_evidence_payload_defaults_missing_provider_bodies() -> None:
     assert payload["metrics"] == {}
     assert payload["logs"] == []
     assert payload["traces"] == {}
+
+
+def test_complete_evidence_payload_drops_provider_transport_metadata() -> None:
+    payload = complete_evidence_payload(
+        {
+            "workspace_id": "workspace-1",
+            "cluster_id": "cluster-1",
+            "source_id": "cluster-snapshot",
+            "source": "kubernetes",
+            "provider_status": "ok",
+            "kubernetes": {"pods": []},
+        }
+    )
+
+    assert payload["kubernetes"] == {"pods": []}
+    assert "source" not in payload
+    assert "provider_status" not in payload
+
+
+def test_evidence_aggregation_keeps_only_the_leased_provider_bucket() -> None:
+    payload = aggregate_evidence_payload(
+        [
+            {
+                "workspace_id": "workspace-1",
+                "cluster_id": "cluster-1",
+                "source_id": "cluster-snapshot",
+                "window_start": "window-1",
+                "evidence_key": "workspace-1:cluster-1:cluster-snapshot:window-1",
+                "agent_id": "agent-1",
+                "provider_key": "kubernetes",
+                "status": "completed",
+                "failure_policy": "allow_partial",
+                "result": {
+                    "source": "kubernetes",
+                    "provider_status": "ok",
+                    "kubernetes": {"pods": []},
+                    "metrics": {"unexpected": True},
+                },
+            }
+        ]
+    )
+
+    assert payload is not None
+    assert payload["kubernetes"] == {"pods": []}
+    assert "metrics" not in payload
+    assert "source" not in payload
+    assert "provider_status" not in payload
 
 
 def test_evidence_job_result_rejects_oversized_provider_result() -> None:

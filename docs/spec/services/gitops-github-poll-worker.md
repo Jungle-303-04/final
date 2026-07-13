@@ -130,7 +130,7 @@ class Settings:
 
 ## 데이터 모델 (Data Model)
 
-자체 소유 테이블 없음. DB target 조회는 gitops 도메인의 `git_repositories`, `applications`, `deployment_bindings`, `git_watch_targets`를 `RepoChangeRepository.list_active_github_poll_targets()`로 읽는다. 상태는 프로세스 메모리의 `_last_sha_by_target`, `_etag_by_target` 뿐이다.
+자체 소유 테이블 없음. DB target 조회는 gitops 도메인의 `git_repositories`, `applications`, `deployment_bindings`, `git_watch_targets`를 `RepoChangeRepository.list_active_github_poll_targets()`로 읽는다. 프로세스 메모리 상태는 `_last_sha_by_target`, `_etag_by_target`이고, 운영 관측 상태는 `RepoChangeRepository.record_watch_poll_result()`가 `git_watch_targets.settings.poll_status`, `poll_status_code`, `poll_error_kind`, `poll_error`, `last_polled_at`에 저장한다.
 
 ## 이벤트 (Events)
 
@@ -193,7 +193,8 @@ webhook POST body(JSON, 코드 그대로의 키 순서):
 1. `poll_targets()`로 DB target 목록을 읽는다. DB target이 있으면 그 목록을 사용하고, 없으면 `GITHUB_REPO`가 설정된 env fallback target 1개를 사용한다.
 2. target마다 `commit_sha = await latest_commit_sha(client, target)`.
 3. `commit_sha is None` 또는 target key 기준 `== self._last_sha_by_target[target.key]` → 아무것도 안 함(새 커밋 없음, dedup은 ledger가 최종 보장).
-4. 아니면 `await emit_webhook(client, target, commit_sha)` → `_last_sha_by_target[target.key] = commit_sha` → `github_change_detected` info 로그(repo, branch, watch_target_id, binding_id, application_id, commit_sha).
+4. 아니면 `await emit_webhook(client, target, commit_sha)` → `record_poll_result(..., ok=True)` → `_last_sha_by_target[target.key] = commit_sha` → `github_change_detected` info 로그(repo, branch, watch_target_id, binding_id, application_id, commit_sha).
+5. GitHub API가 target 단위로 `401/403/404/429` 또는 transport failure를 반환하면 `record_poll_result(..., ok=False)`로 실패 상태를 저장하고 `github_poll_target_unavailable` 로그를 남긴다. `POLL_ONCE`에서는 모든 target 처리를 마친 뒤 target error를 다시 올려 CronJob 실패로 노출한다.
 
 ### `latest_commit_sha` — GitHub API 호출 명세
 

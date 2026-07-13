@@ -10,6 +10,8 @@ import httpx
 import pytest
 
 import domains.gitops.repository_discovery as repository_discovery
+import domains.gitops.repository_discovery_router as repository_discovery_router
+from domains.gitops.repository import derive_repository_id
 from domains.gitops.repository_discovery import (
     GitHubRepositoryClient,
     RepositoryDiscoveryError,
@@ -17,7 +19,7 @@ from domains.gitops.repository_discovery import (
     manifest_candidates_from_tree,
     normalize_github_repo_ref,
 )
-from domains.gitops.repository_discovery_router import validate_repo_for_wizard
+from domains.gitops.repository_discovery_router import discovery_service, validate_repo_for_wizard
 from packages.contracts.gateway.requests import (
     RepositoryManifestValidationRequest,
     RepositoryProbeRequest,
@@ -165,6 +167,49 @@ metadata:
     ]
 
 
+def test_attachable_manifest_scan_uses_bounded_concurrency(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(repository_discovery, "MANIFEST_SCAN_CONCURRENCY", 2)
+
+    class ConcurrentClient(StubGitHubClient):
+        def __init__(self) -> None:
+            contents = {
+                f"deploy-{index}.yaml": (
+                    f"apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: config-{index}\n"
+                ).encode()
+                for index in range(4)
+            }
+            super().__init__(
+                contents=contents,
+                tree_items=[{"type": "blob", "path": path} for path in sorted(contents)],
+            )
+            self.active = 0
+            self.max_active = 0
+
+        async def content(self, repo_ref: str, branch: str, path: str) -> bytes:
+            self.active += 1
+            self.max_active = max(self.max_active, self.active)
+            try:
+                await asyncio.sleep(0.01)
+                return await super().content(repo_ref, branch, path)
+            finally:
+                self.active -= 1
+
+    client = ConcurrentClient()
+    response = asyncio.run(
+        RepositoryDiscoveryService(client).list_attachable_manifest_files("owner/service", "trunk")
+    )
+
+    assert client.max_active == 2
+    assert [item.path for item in response.manifests] == [
+        "deploy-0.yaml",
+        "deploy-1.yaml",
+        "deploy-2.yaml",
+        "deploy-3.yaml",
+    ]
+
+
 def test_repo_validate_stores_token_as_encrypted_workspace_credential(monkeypatch) -> None:
     monkeypatch.setenv("CREDENTIAL_ENCRYPTION_KEY", "local-test-key")
 
@@ -195,11 +240,134 @@ def test_repo_validate_stores_token_as_encrypted_workspace_credential(monkeypatc
 
     response = asyncio.run(run())
 
+    repository_id = derive_repository_id(
+        {"workspace_id": "workspace-1", "repo_ref": "owner/service"}
+    )
+    expected_scope = f"repository:{repository_id}"
     assert response.accessible is True
     assert response.normalized == "owner/service"
-    assert response.credential_ref == "db:github:github"
+    assert response.credential_ref == f"db:github:{expected_scope}"
     assert db.saved[0]["workspace_id"] == "workspace-1"
+    assert db.saved[0]["scope"] == expected_scope
+    assert db.saved[0]["metadata"]["repository_id"] == repository_id
     assert "ghp_secret" not in str(db.saved[0]["encrypted_value"])
+
+
+def test_repo_validate_uses_existing_legacy_repository_id_for_credential_scope(
+    monkeypatch,
+) -> None:
+    monkeypatch.setenv("CREDENTIAL_ENCRYPTION_KEY", "local-test-key")
+
+    class StubClient(StubGitHubClient):
+        def __init__(self, *, token=None, **_kwargs):
+            super().__init__()
+            self.token = token
+
+    class StubDb:
+        def __init__(self) -> None:
+            self.saved: list[dict[str, object]] = []
+
+        def get_repository_by_ref(
+            self,
+            workspace_id: str,
+            repo_ref: str,
+        ) -> dict[str, object] | None:
+            assert workspace_id == "workspace-1"
+            assert repo_ref == "owner/service"
+            return {
+                "workspace_id": workspace_id,
+                "repository_id": "repo-legacy-client-id",
+                "repo_ref": repo_ref,
+            }
+
+        def upsert_workspace_credential(self, payload: dict[str, object]) -> dict[str, object]:
+            self.saved.append(payload)
+            return {**payload, "credential_id": "cred-legacy"}
+
+    monkeypatch.setattr(
+        "domains.gitops.repository_discovery_router.GitHubRepositoryClient", StubClient
+    )
+    db = StubDb()
+
+    async def run():
+        return await validate_repo_for_wizard(
+            RepoValidateRequest(url="owner/service", token="ghp_rotated"),
+            current=type("Session", (), {"workspace_id": "workspace-1"})(),
+            db=db,
+        )
+
+    response = asyncio.run(run())
+
+    expected_scope = "repository:repo-legacy-client-id"
+    assert response.credential_ref == f"db:github:{expected_scope}"
+    assert db.saved[0]["scope"] == expected_scope
+    assert db.saved[0]["metadata"]["repository_id"] == "repo-legacy-client-id"
+
+
+def test_normalize_github_repo_ref_casefolds_identity_aliases() -> None:
+    assert normalize_github_repo_ref("HTTPS://GITHUB.COM/Acme/Private-API.git") == (
+        "acme/private-api"
+    )
+    assert normalize_github_repo_ref("ACME/PRIVATE-API") == "acme/private-api"
+
+
+def test_session_discovery_service_does_not_inherit_ambient_github_token(monkeypatch) -> None:
+    monkeypatch.setenv("GITHUB_TOKEN", "ambient-privileged-token")
+
+    service = discovery_service()
+
+    assert isinstance(service.client, GitHubRepositoryClient)
+    assert service.client.token == ""
+
+
+def test_admin_wizard_reuses_scoped_token_for_followup_discovery(monkeypatch) -> None:
+    monkeypatch.setenv("CREDENTIAL_ENCRYPTION_KEY", "wizard-followup-key")
+    from packages.security.credentials import encrypt_credential
+
+    class StubDb:
+        def get_repository_by_ref(
+            self,
+            workspace_id: str,
+            repo_ref: str,
+        ) -> dict[str, object] | None:
+            assert workspace_id == "workspace-1"
+            assert repo_ref == "owner/service"
+            return {
+                "workspace_id": workspace_id,
+                "repository_id": "repo-legacy-client-id",
+                "repo_ref": repo_ref,
+            }
+
+        def get_workspace_credential(
+            self,
+            workspace_id: str,
+            provider: str,
+            scope: str,
+        ) -> dict[str, object] | None:
+            assert (workspace_id, provider, scope) == (
+                "workspace-1",
+                "github",
+                "repository:repo-legacy-client-id",
+            )
+            return {
+                "workspace_id": workspace_id,
+                "provider": provider,
+                "scope": scope,
+                "encrypted_value": encrypt_credential("ghp_wizard-followup"),
+            }
+
+    fallback = RepositoryDiscoveryService(GitHubRepositoryClient(token=""))
+    current = type("Session", (), {"workspace_id": "workspace-1"})()
+
+    scoped = repository_discovery_router.wizard_discovery_service(
+        StubDb(),
+        current,
+        "OWNER/SERVICE.git",
+        fallback,
+    )
+
+    assert isinstance(scoped.client, GitHubRepositoryClient)
+    assert scoped.client.token == "ghp_wizard-followup"
 
 
 def test_manifest_validation_counts_static_yaml_resources() -> None:

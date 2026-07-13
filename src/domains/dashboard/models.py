@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from sqlalchemy import BigInteger, Float, ForeignKey, Index, Text, UniqueConstraint
+from sqlalchemy import BigInteger, Float, ForeignKey, Index, Text, UniqueConstraint, text
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -65,6 +65,12 @@ class RcaTimeline(Base):
         Index("ix_rca_timeline_scope_updated", "workspace_id", "updated_at"),
         Index(
             "ix_rca_timeline_open_cluster", "workspace_id", "cluster_id", "status", "incident_id"
+        ),
+        Index(
+            "ix_rca_timeline_workspace_incident",
+            "workspace_id",
+            "incident_id",
+            postgresql_where=text("incident_id is not null"),
         ),
     )
 

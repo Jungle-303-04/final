@@ -7,7 +7,12 @@ from sqlalchemy import and_, func, or_, select, text, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.engine import Connection
 
-from packages.contracts.event_bus.interfaces import EventEnvelope, JsonObject
+from packages.config.logs import CONTEXT_KEY, get_logger
+from packages.contracts.event_bus.interfaces import (
+    EventConsumerMetrics,
+    EventEnvelope,
+    JsonObject,
+)
 from packages.contracts.event_bus.processing import (
     CLAIM_BLOCKED,
     TERMINAL_STATUSES,
@@ -20,6 +25,7 @@ from packages.storage.engine import (
     row_dict,
 )
 from packages.storage.schema import (
+    EventConsumerMetric,
     EventModel,
     EventProcessing,
 )
@@ -28,6 +34,17 @@ from packages.storage.schema import (
 # 실제 처리 중인 것으로 간주해 재클레임 거절(JetStream 재배달과의 동시 중복 처리 방지).
 # ack_wait(60s) 뒤 재배달이 와도 원 claim 이 이 창을 넘길 때까지는 획득 불가함.
 PROCESSING_STALE_SECONDS = 90
+LOGGER = get_logger(__name__)
+
+
+def event_log_context(evt: EventEnvelope) -> JsonObject:
+    return {
+        "event_id": evt.event_id,
+        "subject": evt.subject,
+        "source": evt.source,
+        "correlation_id": evt.correlation_id,
+        "causation_id": evt.causation_id,
+    }
 
 
 class EventRepository(DatabaseConnection):
@@ -48,12 +65,24 @@ class EventRepository(DatabaseConnection):
         )
         with self.connection() as conn:
             conn.execute(statement)
+        LOGGER.info("db_event_recorded", extra={CONTEXT_KEY: event_log_context(evt)})
 
     def begin_event_processing(self, evt: EventEnvelope, consumer: str) -> EventProcessingRecord:
         table = EventProcessing.__table__
         with self.connection() as conn:
             row = self.claim_event_processing(conn, table, evt, consumer)
             if row:
+                LOGGER.info(
+                    "db_event_processing_claimed",
+                    extra={
+                        CONTEXT_KEY: {
+                            **event_log_context(evt),
+                            "consumer": consumer,
+                            "status": row["status"],
+                            "attempts": row["attempts"],
+                        }
+                    },
+                )
                 return EventProcessingRecord(status=row["status"], attempts=row["attempts"])
 
             existing = self.get_event_processing(conn, table, evt, consumer)
@@ -114,27 +143,71 @@ class EventRepository(DatabaseConnection):
         row = conn.execute(statement).mappings().first()
         return row_dict(row) if row else None
 
-    def finish_event_processing(self, evt: EventEnvelope, consumer: str) -> None:
-        table = EventProcessing.__table__
-        statement = (
-            update(table)
-            .where(table.c.event_id == evt.event_id, table.c.consumer == consumer)
-            .values(status=EventProcessingStatus.PROCESSED, last_error=None, updated_at=func.now())
-        )
-        with self.connection() as conn:
-            conn.execute(statement)
-
-    def fail_event_processing(
-        self, evt: EventEnvelope, consumer: str, error: str, status: str
+    def finish_event_processing(
+        self, evt: EventEnvelope, consumer: str, duration_ms: int | None = None
     ) -> None:
         table = EventProcessing.__table__
+        values: JsonObject = {
+            "status": EventProcessingStatus.PROCESSED,
+            "last_error": None,
+            "updated_at": func.now(),
+        }
+        if duration_ms is not None:
+            values["processing_duration_ms"] = max(0, int(duration_ms))
         statement = (
             update(table)
             .where(table.c.event_id == evt.event_id, table.c.consumer == consumer)
-            .values(status=status, last_error=compact_error(error), updated_at=func.now())
+            .values(**values)
         )
         with self.connection() as conn:
             conn.execute(statement)
+        LOGGER.info("db_event_recorded", extra={CONTEXT_KEY: event_log_context(evt)})
+        LOGGER.info(
+            "db_event_processing_finished",
+            extra={
+                CONTEXT_KEY: {
+                    **event_log_context(evt),
+                    "consumer": consumer,
+                    "status": EventProcessingStatus.PROCESSED,
+                    "processing_duration_ms": duration_ms,
+                }
+            },
+        )
+
+    def fail_event_processing(
+        self,
+        evt: EventEnvelope,
+        consumer: str,
+        error: str,
+        status: str,
+        duration_ms: int | None = None,
+    ) -> None:
+        table = EventProcessing.__table__
+        values: JsonObject = {
+            "status": status,
+            "last_error": compact_error(error),
+            "updated_at": func.now(),
+        }
+        if duration_ms is not None:
+            values["processing_duration_ms"] = max(0, int(duration_ms))
+        statement = (
+            update(table)
+            .where(table.c.event_id == evt.event_id, table.c.consumer == consumer)
+            .values(**values)
+        )
+        with self.connection() as conn:
+            conn.execute(statement)
+        LOGGER.info(
+            "db_event_processing_failed",
+            extra={
+                CONTEXT_KEY: {
+                    **event_log_context(evt),
+                    "consumer": consumer,
+                    "status": status,
+                    "processing_duration_ms": duration_ms,
+                }
+            },
+        )
 
     def event_processing_status_counts(self) -> dict[str, int]:
         table = EventProcessing.__table__
@@ -142,6 +215,71 @@ class EventRepository(DatabaseConnection):
         with self.connection() as conn:
             rows = conn.execute(statement).mappings().all()
         return {row["status"]: int(row["count"]) for row in rows}
+
+    def event_processing_duration_avg_ms_by_consumer(self) -> dict[str, float]:
+        table = EventProcessing.__table__
+        statement = (
+            select(table.c.consumer, func.avg(table.c.processing_duration_ms).label("duration"))
+            .where(table.c.processing_duration_ms.is_not(None))
+            .group_by(table.c.consumer)
+        )
+        with self.connection() as conn:
+            rows = conn.execute(statement).mappings().all()
+        return {str(row["consumer"]): float(row["duration"] or 0) for row in rows}
+
+    def event_processing_duration_max_ms_by_consumer(self) -> dict[str, int]:
+        table = EventProcessing.__table__
+        statement = (
+            select(table.c.consumer, func.max(table.c.processing_duration_ms).label("duration"))
+            .where(table.c.processing_duration_ms.is_not(None))
+            .group_by(table.c.consumer)
+        )
+        with self.connection() as conn:
+            rows = conn.execute(statement).mappings().all()
+        return {str(row["consumer"]): int(row["duration"] or 0) for row in rows}
+
+    def record_event_consumer_metrics(self, sample: EventConsumerMetrics) -> None:
+        table = EventConsumerMetric.__table__
+        insert = pg_insert(table).values(
+            consumer=sample.durable,
+            subject=sample.subject,
+            stream=sample.stream,
+            pending_events=max(0, int(sample.pending)),
+            ack_pending_events=max(0, int(sample.ack_pending)),
+            redelivered_events=max(0, int(sample.redelivered)),
+            observed_at=func.now(),
+        )
+        statement = insert.on_conflict_do_update(
+            index_elements=[table.c.consumer, table.c.subject],
+            set_={
+                "stream": insert.excluded.stream,
+                "pending_events": insert.excluded.pending_events,
+                "ack_pending_events": insert.excluded.ack_pending_events,
+                "redelivered_events": insert.excluded.redelivered_events,
+                "observed_at": func.now(),
+            },
+        )
+        with self.connection() as conn:
+            conn.execute(statement)
+
+    def event_consumer_pending_by_consumer_subject(self) -> dict[tuple[str, str], int]:
+        return self._event_consumer_metric_values("pending_events")
+
+    def event_consumer_ack_pending_by_consumer_subject(self) -> dict[tuple[str, str], int]:
+        return self._event_consumer_metric_values("ack_pending_events")
+
+    def event_consumer_redelivered_by_consumer_subject(self) -> dict[tuple[str, str], int]:
+        return self._event_consumer_metric_values("redelivered_events")
+
+    def _event_consumer_metric_values(self, column_name: str) -> dict[tuple[str, str], int]:
+        table = EventConsumerMetric.__table__
+        column = getattr(table.c, column_name)
+        statement = select(table.c.consumer, table.c.subject, column)
+        with self.connection() as conn:
+            rows = conn.execute(statement).mappings().all()
+        return {
+            (str(row["consumer"]), str(row["subject"])): int(row[column_name] or 0) for row in rows
+        }
 
     def delete_events_older_than(self, cutoff: datetime, *, limit: int = 1000) -> int:
         """이벤트 원장을 보존 기간 이후 배치 삭제한다."""

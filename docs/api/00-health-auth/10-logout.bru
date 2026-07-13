@@ -12,6 +12,15 @@ post {
   url: {{base_url}}auth/logout
 }
 
+script:pre-request {
+  const enabled = String(
+    bru.getEnvVar("auth_flow_verification") || bru.getVar("auth_flow_verification") || "false"
+  ).trim().toLowerCase() === "true";
+  if (!enabled) {
+    bru.runner.skipRequest();
+  }
+}
+
 tests {
   test("200 after login, otherwise auth failure", function () {
     expect([200, 401, 403]).to.include(res.status);

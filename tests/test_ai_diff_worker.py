@@ -4,6 +4,7 @@ from conftest import load_service, run_handler, subjects_of
 
 from domains.rca.events import SafePrPatchPreparedBody
 from domains.scm.events import SafePrFilePatch, SafePrRequestedBody
+from domains.scm.pipeline import safe_pr_patch_sha256
 
 
 def _request(**kwargs) -> SafePrRequestedBody:
@@ -55,13 +56,16 @@ def test_ai_diff_worker_emits_ready_after_allowed_diff() -> None:
 
 def test_ai_diff_worker_emits_failed_event_after_blocked_diff() -> None:
     ai_diff = load_service("ai/diff-worker")
+    request = _request(patches=[], commit_sha="abc123", patch_sha256="empty-patch")
 
     outs = run_handler(
         ai_diff.on_safe_pr_patch_prepared,
-        _prepared(_request(patches=[])),
+        _prepared(request),
     )
 
     assert subjects_of(outs) == ["diff.explained", "safe_pr.failed"]
     assert outs[0].ready_for_creation is False
     assert outs[1].stage == "diff"
     assert outs[1].reason_code == "missing_patches"
+    assert outs[1].commit_sha == "abc123"
+    assert outs[1].patch_sha256 == safe_pr_patch_sha256([])

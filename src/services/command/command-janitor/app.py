@@ -6,9 +6,11 @@ from pathlib import Path
 from typing import Any
 
 from domains.command.events import CommandCompletedBody
+from domains.command.repository import QUEUED_COMMAND_TTL_SECONDS
 from packages.config.logs import get_logger
 from packages.config.settings import env
 from packages.events.bus import NatsEventBus, RecordedEventClient
+from packages.events.context import event_workspace
 from packages.runtime.async_db import AsyncDb
 from packages.runtime.service import AsyncService
 from packages.runtime.worker import HEARTBEAT_PATH
@@ -17,6 +19,7 @@ from packages.storage.retention import sweep_storage_retention
 
 COMMAND_JANITOR = "command-janitor"
 SWEEP_INTERVAL_SECONDS_ENV = "COMMAND_JANITOR_INTERVAL_SECONDS"
+QUEUE_TTL_SECONDS_ENV = "COMMAND_QUEUE_TTL_SECONDS"
 RETENTION_SWEEP_INTERVAL_SECONDS_ENV = "DB_RETENTION_SWEEP_INTERVAL_SECONDS"
 DEFAULT_SWEEP_INTERVAL_SECONDS = "15"
 DEFAULT_RETENTION_SWEEP_INTERVAL_SECONDS = "3600"
@@ -26,17 +29,24 @@ LOGGER = get_logger(__name__)
 async def emit_expired_command_completions(
     db: Any, events: Any, service_name: str = COMMAND_JANITOR
 ) -> int:
-    expired = await db.fail_expired_agent_commands() or []
+    try:
+        queue_ttl_seconds = int(env(QUEUE_TTL_SECONDS_ENV, str(QUEUED_COMMAND_TTL_SECONDS)))
+        expired = await db.fail_expired_agent_commands(queue_ttl_seconds=queue_ttl_seconds) or []
+    except Exception:
+        # rollout 시 schema lock 같은 일시 DB 경합은 다음 주기에 재시도한다.
+        LOGGER.exception("expired_command_sweep_failed")
+        return 0
     for row in expired:
         command_id = str(row["command_id"])
         body = CommandCompletedBody(command_id=command_id, result=dict(row["result"]))
         correlation_id = str(row.get("correlation_id") or f"{COMMAND_JANITOR}:{command_id}")
-        await events.emit(
-            body.__subject__,
-            service_name,
-            body.to_body(),
-            correlation_id=correlation_id,
-        )
+        with event_workspace(row.get("workspace_id")):
+            await events.emit(
+                body.__subject__,
+                service_name,
+                body.to_body(),
+                correlation_id=correlation_id,
+            )
     return len(expired)
 
 

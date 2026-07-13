@@ -59,7 +59,6 @@ async def validate_metrics_query(
 ) -> MetricsValidateResponse:
     result = await validate_promql_query(
         payload.query,
-        base_url=payload.base_url,
         range_seconds=payload.range_seconds,
         step_seconds=payload.step_seconds,
     )

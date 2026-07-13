@@ -190,7 +190,7 @@ class ConversationEngine:
 `@ai.tool` 이 "LLM 이 호출 가능한 플랫폼 능력"의 단일 출처. 대화 엔진은 레지스트리만 읽음 — 새 도구 추가 = 도구 파일 1개(엔진 수정 없음). `__all__ = ["ToolContext", "ToolHandler", "ToolRegistry", "ToolSpec", "ai", "registered_ai_tools"]`.
 
 - `src/packages/ai/tools.py :: ToolHandler` — `Callable[..., Awaitable[Any]]`. 시그니처 규약: `(context: ToolContext, **검증된 kwargs) -> JSON 직렬화 가능 값`.
-- `src/packages/ai/tools.py :: ToolContext` — `@dataclass(frozen=True)`: `db: Any`, `workspace_id: str`, `cluster_id: str | None = None`, `resource_type: str | None = None`, `kind: str | None = None`, `namespace: str | None = None`, `name: str | None = None`, `uid: str | None = None`, `resource_context: dict[str, Any] | None = None`, `locale: str | None = None`. 도구는 이 외의 전역에 의존하지 않음.
+- `src/packages/ai/tools.py :: ToolContext` — `@dataclass(frozen=True)`: `db: Any`, `workspace_id: str`, `user_id: str`, `cluster_id: str | None = None`, `resource_type: str | None = None`, `kind: str | None = None`, `namespace: str | None = None`, `name: str | None = None`, `uid: str | None = None`, `incident_id: str | None = None`, `correlation_id: str | None = None`, `symptom: str | None = None`, `root_cause: str | None = None`, `resource_context: dict[str, Any] | None = None`, `locale: str | None = None`. 도구는 이 외의 전역에 의존하지 않음.
 - `src/packages/ai/tools.py :: ToolSpec` — `@dataclass(frozen=True)`
 
 | 필드 | 타입 | 기본값 | 설명 |

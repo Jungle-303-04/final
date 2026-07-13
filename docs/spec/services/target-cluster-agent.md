@@ -1,11 +1,11 @@
 ---
-source_commit: 664925a6
+source_commit: 30465d0c4
 status: synced
 ---
 
 # cluster-agent — target 클러스터 상주 에이전트 (증거 수집 · 커맨드 실행 · 정책 동기화 · 실시간 요약)
 
-> 소스: `src/services/target/cluster-agent/` · 테스트: `tests/test_target_agent_client.py`, `tests/test_target_agent_commands.py`, `tests/test_target_evidence_jobs.py`, `tests/test_target_policy_control.py`, `tests/test_target_reconciler.py`, `tests/test_live_summary.py`, `tests/test_telemetry_registry.py`, `tests/test_target_kubernetes_evidence.py`, `tests/test_target_metric_evidence.py`, `tests/test_target_telemetry_evidence.py`
+> 소스: `src/services/target/cluster-agent/` · 테스트: `tests/test_target_agent_client.py`, `tests/test_target_agent_commands.py`, `tests/test_target_evidence_jobs.py`, `tests/test_target_policy_control.py`, `tests/test_target_reconciler.py`, `tests/test_live_summary.py`, `tests/test_telemetry_registry.py`, `tests/test_target_kubernetes_evidence.py`, `tests/test_target_metadata_evidence.py`, `tests/test_target_metric_evidence.py`, `tests/test_target_telemetry_evidence.py`
 
 ## 책임 (Responsibility)
 
@@ -152,6 +152,7 @@ def command_metadata_value(self, command: CommandRecord, field: str) -> str
 def approval_exempt_for_environment(self, action: str, command: CommandRecord) -> bool
 def has_approval_evidence(self, command: CommandRecord) -> bool
 async def run_query_command(self, ctx: CommandContext[TelemetryQueryCommandPayload]) -> JsonObject      # @command.handler(QUERY_RUN_ACTION, payload_model=TelemetryQueryCommandPayload)
+async def catalog_helm_install_command(self, ctx: CommandContext[CatalogHelmInstallPayload]) -> JsonObject  # @command.handler(Command.CATALOG_HELM_INSTALL_ACTION, ...)
 async def patch_deployment_command(self, ctx: CommandContext[KubernetesPatchPayload]) -> JsonObject      # @command.k8s(KUBERNETES_DEPLOYMENT_PATCH_ACTION, api_group="apps", version="v1", resource="deployments", verb="patch", payload_model=KubernetesPatchPayload)
 async def scale_deployment_command(self, ctx: CommandContext[KubernetesScalePayload]) -> JsonObject      # @command.k8s(KUBERNETES_DEPLOYMENT_SCALE_ACTION, ..., resource="deployments", verb="patch", payload_model=KubernetesScalePayload)
 async def patch_configmap_command(self, ctx: CommandContext[KubernetesPatchPayload]) -> JsonObject       # @command.k8s(KUBERNETES_CONFIGMAP_PATCH_ACTION, api_group="core", version="v1", resource="configmaps", verb="patch", payload_model=KubernetesPatchPayload)
@@ -222,6 +223,10 @@ manifest 고정 내용: `apiVersion: apps/v1`, `kind: DaemonSet`, labels `{app: 
 ### `commands/` — 커맨드 디스패치·k8s 클라이언트·결과 outbox
 
 `commands/__init__.py`가 재노출: `AgentCommandRegistry`, `CommandContext`, `CommandResult`, `CommandResultOutbox`, `CommandResultRecord`, `KubernetesApiClient`, `KubernetesGetPayload`, `KubernetesPatchPayload`, `KubernetesScalePayload`, `command`, `command_handler`, `kubernetes_command`.
+
+`commands/helm.py`는 catalog 전용 leaf runner다. `run_catalog_helm_install`은 서버 동봉 item/version을 digest-qualified OCI ref로 다시 해석하고 sandbox 이름/values를 재검증한다. values는 dotted key를 중첩 YAML로 바꿔 `0600` 임시 파일에 기록한다. 실행은 `helm upgrade --install ... --wait --atomic --timeout 300s`, 명시 argv, `shell=False`, subprocess timeout 330초다. 자식 환경은 Kubernetes/CA/proxy allowlist와 임시 `HELM_*_HOME`만 전달하며 stdout/stderr는 결과에 보존하지 않는다. 결과는 `HelmRunResult(succeeded, error_code, returncode)`로만 반환한다.
+
+Agent heartbeat capability는 `collector`, `command_receiver`, `catalog_helm_install`이다. gateway는 마지막 capability까지 확인하므로 runner가 없는 구버전 Agent에는 install command를 queue하지 않는다.
 
 #### `commands/context.py`
 
@@ -300,7 +305,7 @@ manifest 고정 내용: `apiVersion: apps/v1`, `kind: DaemonSet`, labels `{app: 
 |---|---|---|
 | `ResourceApplier` | Protocol — `async def observe(self, resource: DesiredResource) -> None`, `async def apply(self, resource: DesiredResource) -> None` | `src/services/target/cluster-agent/control/reconciler.py :: ResourceApplier` |
 | `KubernetesResourceClient` | `def base_url(self) -> str`; `def auth_headers(self) -> dict[str, str]`; `async def apply(self, resource: DesiredResource) -> None`(merge-patch → 404면 POST 생성); `async def observe(self, resource: DesiredResource) -> None`(GET); `def resource_path(self, resource) -> str`; `def collection_path(self, resource) -> str`; `def default_manifest(self, resource) -> dict[str, object]` | `src/services/target/cluster-agent/control/reconciler.py :: KubernetesResourceClient` |
-| `DesiredStateReconciler` | `def __init__(self, *, cluster_id: str, cluster_role: str, store: AgentControlStore, interval_seconds: int, resource_applier: ResourceApplier | None = None) -> None`; `async def run(self, client: ManagementPlaneClient) -> None`; `async def reconcile_once(self, policy: AgentPolicy | None = None) -> dict[str, object]`; `async def reconcile_resource(self, resource: DesiredResource) -> ReconcileResult`; `def ensure_allowed(self, resource: DesiredResource) -> None`; `def policy_resources(self, policy: AgentPolicy) -> Iterable[DesiredResource]`(`bootstrap.resources` + `desired_state.resources` 순서); `def result(self, resource, desired_hash, status, message) -> ReconcileResult` | `src/services/target/cluster-agent/control/reconciler.py :: DesiredStateReconciler` |
+| `DesiredStateReconciler` | `def __init__(self, *, cluster_id: str, cluster_role: str, store: AgentControlStore, interval_seconds: int, resource_applier: ResourceApplier | None = None, reconciler_mode: str = "builtin") -> None`; `async def run(self, client: ManagementPlaneClient) -> None`; `async def reconcile_once(self, policy: AgentPolicy | None = None) -> dict[str, object]`; `async def reconcile_resource(self, resource: DesiredResource) -> ReconcileResult`; `def ensure_allowed(self, resource: DesiredResource) -> None`; `def policy_resources(self, policy: AgentPolicy) -> Iterable[DesiredResource]`(`bootstrap.resources` + `desired_state.resources` 순서); `def result(self, resource, desired_hash, status, message) -> ReconcileResult` | `src/services/target/cluster-agent/control/reconciler.py :: DesiredStateReconciler` |
 
 `KubernetesResourceClient` 경로 규칙: `ConfigMap` → `/api/v1/namespaces/{ns}/configmaps[/{name}]`, 그 외(`Deployment`) → `/apis/apps/v1/namespaces/{ns}/deployments[/{name}]`. `default_manifest`는 `resource.state`가 비었을 때 `{apiVersion, kind, metadata{name, namespace}}` 뼈대를 만든다(`ConfigMap`→`v1`, 그 외→`apps/v1`).
 
@@ -316,7 +321,7 @@ manifest 고정 내용: `apiVersion: apps/v1`, `kind: DaemonSet`, labels `{app: 
 
 ### `evidence/` — 수집 오케스트레이션·잡 스케줄러
 
-`evidence/__init__.py` 재노출: `EvidenceCollector`, `EvidenceJobScheduler`, `KubernetesSnapshotProvider`, `LokiLogsProvider`, `PrometheusMetricsProvider`, `TelemetryProvider`, `TelemetryQueryDefinition`, `TelemetryQueryRegistry`, `TempoTracesProvider`.
+`evidence/__init__.py` 재노출: `EvidenceCollector`, `EvidenceJobScheduler`, `KubernetesSnapshotProvider`, `LokiLogsProvider`, `MetadataProvider`, `PrometheusMetricsProvider`, `TelemetryProvider`, `TelemetryQueryDefinition`, `TelemetryQueryRegistry`, `TempoTracesProvider`.
 
 #### `evidence/collector.py`
 
@@ -337,7 +342,7 @@ manifest 고정 내용: `apiVersion: apps/v1`, `kind: DaemonSet`, labels `{app: 
 
 ### `providers/` — 텔레메트리 소스별 수집기
 
-`providers/__init__.py`는 `pkgutil.iter_modules`로 `*_providers` 모듈을 자동 import한다(import 시 `@telemetry.source` 데코레이터가 레지스트리에 등록됨 — 새 소스 추가는 파일 1개 추가). 재노출: `ConfigReader`, `KubernetesSnapshotProvider`, `LokiLogsProvider`, `PrometheusMetricsProvider`, `ProviderResult`, `TelemetryProvider`, `TempoTracesProvider`.
+`providers/__init__.py`는 `pkgutil.iter_modules`로 `*_providers` 모듈을 자동 import한다(import 시 `@telemetry.source` 데코레이터가 레지스트리에 등록됨 — 새 소스 추가는 파일 1개 추가). 재노출: `ConfigReader`, `KubernetesSnapshotProvider`, `LokiLogsProvider`, `MetadataProvider`, `PrometheusMetricsProvider`, `ProviderResult`, `TelemetryProvider`, `TempoTracesProvider`.
 
 #### `providers/base.py`
 
@@ -348,7 +353,7 @@ manifest 고정 내용: `apiVersion: apps/v1`, `kind: DaemonSet`, labels `{app: 
 | `ConfigReader` | Protocol — `def __call__(self, name: str, default: str) -> str` | `src/services/target/cluster-agent/providers/base.py :: ConfigReader` |
 | `TelemetryProvider` | Protocol — 속성 `evidence_key: str`, `source: str`, `span_name: str`, `query_count_attribute: str`, `result_count_attribute: str`, `timeout_seconds: int`, `failure_message: str`, `queries: tuple[Any, ...]`; `@classmethod def from_config(cls, read_config: ConfigReader) -> TelemetryProvider`; `async def query(self, client: httpx.AsyncClient, telemetry_query: Any) -> JsonObject`; `def empty_results(self) -> Any`; `def append_result(self, results, telemetry_query, payload) -> None`; `def build_response(self, results) -> ProviderResult` | `src/services/target/cluster-agent/providers/base.py :: TelemetryProvider` |
 
-#### 등록된 소스 계약 (4종)
+#### 등록된 소스 계약 (5종)
 
 | source | evidence_key | query_type | range_query_type | empty_payload | 클래스 앵커 |
 |---|---|---|---|---|---|
@@ -356,6 +361,7 @@ manifest 고정 내용: `apiVersion: apps/v1`, `kind: DaemonSet`, labels `{app: 
 | `prometheus` | `metrics` | `PrometheusInstantQuery` | `PrometheusRangeQuery` | `dict` | `src/services/target/cluster-agent/providers/prometheus_providers.py :: PrometheusMetricsProvider` |
 | `loki` | `logs` | `LokiLogQuery` | — | `list` | `src/services/target/cluster-agent/providers/loki_providers.py :: LokiLogsProvider` |
 | `tempo` | `traces` | `OpenTelemetrySpanQuery` | — | `dict` | `src/services/target/cluster-agent/providers/tempo_providers.py :: TempoTracesProvider` |
+| `metadata` | `metadata` | `MetadataSnapshotQuery` | — | `dict` | `src/services/target/cluster-agent/providers/metadata_providers.py :: MetadataProvider` |
 
 #### `providers/kubernetes_providers.py`
 
@@ -373,7 +379,13 @@ def build_response(self, results: JsonObject) -> JsonObject
 def normalize_payload(self, payload: JsonObject, telemetry_query) -> JsonObject
 ```
 
-모듈 함수(전부 public): `empty_snapshot(cluster_id) -> JsonObject`, `merge_snapshot(target, source) -> None`, `items(payload) -> list[JsonObject]`, `metadata(item)`, `status(item)`, `spec(item)`, `safe_labels(item, limit=12)`, `owner_ref(item) -> tuple[str | None, str | None]`, `as_text(value)`, `pod_summary(item)`, `container_summary(item)`, `event_summary(item)`, `node_summary(item)`, `workload_summaries(kind, rows)`, `workload_summary(kind, item)`, `service_summary(item)`, `endpoint_slice_summary(item)`, `workload_key(namespace, kind, name) -> str | None`(`"{ns}/{kind}/{name}"`). 앵커: `src/services/target/cluster-agent/providers/kubernetes_providers.py :: <함수명>`.
+#### `providers/kubernetes_utils.py`
+
+공용 Kubernetes helper와 상수: `K8S_KIND_CONFIG_MAP`, `K8S_KIND_DEPLOYMENT`, `K8S_KIND_REPLICA_SET`, `K8S_KIND_SECRET`, `K8S_DEPLOYMENT_REVISION_ANNOTATION`, `K8S_ENDPOINT_SLICE_SERVICE_NAME_LABEL`, `K8S_RESOURCE_CONFIG_MAPS`, `K8S_RESOURCE_DEPLOYMENTS`, `K8S_RESOURCE_ENDPOINT_SLICES`, `K8S_RESOURCE_PODS`, `K8S_RESOURCE_REPLICASETS`, `K8S_RESOURCE_RESOURCE_QUOTAS`, `K8S_RESOURCE_SECRETS`, `K8S_RESOURCE_SERVICES`, `items(payload) -> list[JsonObject]`, `metadata(item)`, `status(item)`, `spec(item)`, `list_items(value)`, `object_or_empty(value)`, `compact_dict(value)`, `resource_identity_snapshot(resource)`, `resource_identity_key(identity)`, `resource_sort_key(resource)`. `kubernetes_providers.py`와 `metadata_*` 모듈이 같은 helper를 import해 Kubernetes list response와 object section을 같은 방식으로 다룬다.
+
+`providers/collection_limits.py`는 provider payload가 `EvidenceJobResultRequest`의 1MiB JSON 제한을 넘길 위험을 줄이기 위해 큰 list를 자르고, 잘린 경우 `collection_limits{truncated,lists}`를 붙이는 공통 helper다. 먼저 list별 개수 상한을 적용하고, 그 뒤 JSON byte 크기가 여전히 크면 JSON byte 크기가 가장 큰 list부터 추가로 줄인다. 단일 항목만으로도 너무 크면 해당 list는 0개까지 줄어들 수 있다. `collection_limits.lists.<field>.original_count`는 제한 전 전체 개수, `returned_count`는 최종 payload에 담긴 개수다. 기존 list field 이름은 유지하고, `collection_limits`는 잘린 경우에만 추가한다.
+
+`kubernetes_providers.py`의 provider 전용 함수: `empty_snapshot(cluster_id) -> JsonObject`, `merge_snapshot(target, source) -> None`, `merge_cluster_scoped_nodes(target, source) -> None`, `limit_kubernetes_snapshot(snapshot) -> JsonObject`, `active_replicasets(rows)`, `safe_labels(item, limit=12)`, `owner_ref(item) -> tuple[str | None, str | None]`, `as_text(value)`, `pod_summary(item)`, `container_summary(item)`, `event_summary(item)`, `event_reason_summary(item)`, `node_summary(item)`, `workload_summaries(kind, rows)`, `workload_summary(kind, item)`, `service_summary(item)`, `endpoint_slice_summary(item)`, `workload_key(namespace, kind, name) -> str | None`(`"{ns}/{kind}/{name}"`). `container_summary`는 Kubernetes `containerStatuses[]`에서 `containerID`, `image`, `imageID`, 현재 state 요약, 직전 lastState의 reason/message/exit code/time을 작은 필드로 남긴다. `event_summary`는 `reason_summary{category,signal,symptom,scheduling_causes}`를 추가해 `FailedScheduling`, `Unhealthy`, `BackOff` 같은 Event를 RCA가 바로 읽을 수 있게 한다. `limit_kubernetes_snapshot`은 `pods`, `events`, `nodes`, `workloads`, `services`, `endpoints` 같은 큰 list가 너무 길면 일부만 전송하고 `collection_limits`에 원래 개수와 최종 반환 개수를 남긴다. 앵커: `src/services/target/cluster-agent/providers/kubernetes_providers.py :: <함수명>`.
 
 #### `providers/prometheus_providers.py`
 
@@ -387,25 +399,49 @@ async def query(self, client, telemetry_query: PrometheusInstantQuery | Promethe
 async def query_instant(self, client, telemetry_query: PrometheusInstantQuery) -> JsonObject
 async def query_range(self, client, telemetry_query: PrometheusRangeQuery) -> JsonObject
 def empty_results(self) -> JsonObject
-def append_result(self, results, telemetry_query, payload) -> None     # results[metric_name] = {query, ...metadata, ...normalized}
+def append_result(self, results, telemetry_query, payload) -> None     # results[metric_name] = {query, ...metadata, ...normalized, analysis}
 def build_response(self, results) -> JsonObject                        # {"source": "prometheus", "results": results}
 def normalize_payload(self, payload: JsonObject) -> JsonObject
 def query_metadata(self, telemetry_query) -> JsonObject                # instant: {query_mode}, range: {query_mode, range_seconds, step_seconds}
 ```
 
-`normalize_payload`: `resultType == "vector"` → `{result_type, samples: [{metric, timestamp, value(float)}]}`; `"matrix"` → `{result_type, series: [{metric, values: [{timestamp, value}]}], point_count}`; 그 외 → `{result_type, result}` 원본.
+`normalize_payload`: `resultType == "vector"` → `{result_type, samples: [{metric, timestamp, value(float)}]}`; `"matrix"` → `{result_type, series: [{metric, values: [{timestamp, value}]}], point_count}`; 그 외 → `{result_type, result}` 원본. `append_result`는 여기에 `providers/prometheus_analysis.py::build_metric_analysis()` 결과를 추가해 `analysis`를 담는다. `analysis`는 항상 `{metric_kind, unit, signals}`를 포함하고, 숫자 point가 있으면 `value_summary`, known metric이면 `threshold`, range query에서 비교 가능한 series가 있으면 `baseline_comparison`을 추가한다. 큰 vector/matrix 결과는 전송 전에 `samples`, `series`, `series[].values`, `result`를 제한하고, 잘린 경우 query 결과 object 안에 `collection_limits`를 추가한다. matrix의 `series.values` 제한 정보는 byte 제한으로 최종 `series` 목록이 다시 줄어든 뒤 재계산한다. `analysis`는 제한 전 normalized payload를 기준으로 계산해 sample/series/point count 해석이 줄어든 샘플 때문에 바뀌지 않게 한다.
+
+`providers/prometheus_analysis.py`: Prometheus sample/series 숫자만 보고 RCA용 작은 해석 필드를 만든다. 새 query를 추가하거나 외부 baseline을 조회하지 않는다. ratio 계열은 0.8 warning/0.9 critical, `up < 1`은 critical, restart/not ready/scrape error/throttling 계열은 `> 0`이면 warning으로 표시한다. range query의 baseline은 같은 window의 첫 point다.
 
 #### `providers/loki_providers.py`
 
-`LokiLogsProvider`: `span_name="loki.collect"`, `timeout_seconds=LOKI_TIMEOUT_SECONDS`, `failure_message="loki log collection failed"`. `__init__(self, base_url: str)`, `from_config`은 `read_config("LOKI_BASE_URL", DEFAULT_LOKI_BASE_URL)`. `empty_results() -> list[JsonObject]` = `[]`. `append_result`는 `{"source": "loki", "query_name", "query": logql, result_type, streams, line_count}`를 리스트에 append. `normalize_payload`: `data.result[*]` → `streams: [{stream, values: [{timestamp, line}]}]`, `line_count = Σ len(values)`.
+`LokiLogsProvider`: `span_name="loki.collect"`, `timeout_seconds=LOKI_TIMEOUT_SECONDS`, `failure_message="loki log collection failed"`. `__init__(self, base_url: str)`, `from_config`은 `read_config("LOKI_BASE_URL", DEFAULT_LOKI_BASE_URL)`. `empty_results() -> list[JsonObject]` = `[]`. `append_result`는 `{"source": "loki", "query_name", "query": logql, result_type, streams, line_count, pattern_counts, severity_counts, trace_ids, redaction_summary}`를 리스트에 append. `normalize_payload`: `data.result[*]` → `streams: [{stream, values: [{timestamp, line, line_truncated?, original_line_length?}]}]`, `line_count = Σ len(values)`. `line` 값은 provider에서 민감정보를 마스킹한 뒤 최대 4096자로 제한한 문자열이고, `pattern_counts`/`severity_counts`/`trace_ids`는 마스킹된 line 기준으로 계산한다.
 
 #### `providers/tempo_providers.py`
 
-`TempoTracesProvider`: `span_name="tempo.collect"`, `timeout_seconds=TEMPO_TIMEOUT_SECONDS`, `failure_message="tempo trace collection failed"`. `__init__(self, base_url: str)`, `from_config`은 `read_config("TEMPO_BASE_URL", DEFAULT_TEMPO_BASE_URL)`. `append_result`: `results[query_name] = {"query": traceql, "traces": [...], "trace_count": n}`. `build_response`: `{"source": "tempo", "results": results}`.
+`TempoTracesProvider`: `span_name="tempo.collect"`, `timeout_seconds=TEMPO_TIMEOUT_SECONDS`, `failure_message="tempo trace collection failed"`. `__init__(self, base_url: str)`, `from_config`은 `read_config("TEMPO_BASE_URL", DEFAULT_TEMPO_BASE_URL)`. `append_result`: `results[query_name] = {"query": traceql, "traces": [...], "trace_count": n, "analysis": {...}}`. `normalize_payload`는 trace 내부 긴 문자열을 최대 1024자로 제한하고, 중첩 list는 최대 20개로 제한한다. 그래도 한 trace가 크면 RCA용 trace summary와 `trace_truncated/original_trace_bytes`만 남기고, 전체 result가 크면 `collection_limits`로 `traces` list를 추가 제한한다. `analysis`는 `providers/tempo_analysis.py`가 Tempo search 결과에서 `trace_summaries`, `trace_ids`, `services`, `operations`, `status_counts`, `error_count`, `dependency_count`, `duration_ms`를 만든다. span summary가 있으면 `span_count`, `error_span_count`, `dependency_span_count`도 추가한다. trace summary는 최대 20개, trace당 span summary는 최대 8개만 만든다. `build_response`: `{"source": "tempo", "results": results}`.
+
+#### `providers/metadata_providers.py`
+
+`MetadataProvider`: `source="metadata"`, `evidence_key="metadata"`, `span_name="metadata.collect"`, `timeout_seconds=KUBERNETES_API_TIMEOUT_SECONDS`, `failure_message="metadata collection failed"`. `__init__(self, *, cluster_id: str, transport: httpx.AsyncBaseTransport | None = None)`, `from_config`은 `read_config("TARGET_CLUSTER_ID", Target.DEFAULT_CLUSTER_ID)`.
+
+Metadata helper 모듈(module, 파이썬 코드 파일):
+
+- `providers/metadata_workload_snapshots.py`: summary/detail Deployment snapshot, container image/probe/resources/PVC refs/auth 요약, 단건 detail scheduling constraints 요약, Deployment/Pod/ReplicaSet status 요약, 안전한 annotation 요약을 만든다. 큰 Deployment에서는 `pod_statuses`와 `replicaset_revisions`를 샘플로 제한하고 count/truncated flag를 남긴다.
+- `providers/metadata_config_refs.py`: env/envFrom/volume의 ConfigMap/Secret reference 요약을 만든다. 같은 분석 결과를 단건 detail의 referenced ConfigMap/Secret 객체 조회에도 재사용한다. reference name/key/path만 남기고 secret 값은 읽지 않는다.
+- `providers/metadata_config_objects.py`: 단건 detail에서 참조된 ConfigMap/Secret 객체의 안전한 metadata 요약과 명시 key 존재 여부를 만든다. 객체 값, raw object, annotations, 전체 key 목록은 남기지 않는다.
+- `providers/metadata_endpoint_slices.py`: EndpointSlice ready endpoint 요약을 만든다. Service 이름, EndpointSlice 이름, ready/not ready count, ready target Pod namespace/name만 남기고 endpoint IP address는 남기지 않는다. EndpointSlice condition 기본값은 Kubernetes API 해석을 따른다. `ready`와 `serving` 생략/null은 true, `terminating` 생략/null은 false로 본다. ports와 ready target 목록은 샘플로 제한하고 truncated flag를 남긴다.
+- `providers/metadata_service_selectors.py`: Service selector와 Pod labels를 비교하고, 단건 Deployment detail query에서는 관련 Service만 남긴다. matched Pod 목록은 샘플로 제한하고 `matched_pod_count`에는 전체 수를 남긴다.
+- `providers/metadata_resource_quotas.py`: ResourceQuota status.hard/status.used 요약을 만든다. raw spec/status, annotations, managedFields는 남기지 않는다.
+- `providers/metadata_ownership.py`: Deployment -> ReplicaSet -> Pod 소유 관계를 찾고 ReplicaSet을 revision 기준으로 정렬한다. 기준 Deployment/ReplicaSet UID를 알고 있으면 UID match만 인정하고, 기준 UID 자체를 알 수 없을 때만 이름을 fallback으로 쓴다.
+
+이 helper 모듈들은 event를 발행하지 않고 telemetry source도 등록하지 않는다. `@telemetry.source`로 등록되는 metadata telemetry source는 `providers/metadata_providers.py`의 `MetadataProvider` 하나뿐이다.
+
+현재 `query()`는 `MetadataSnapshotQuery.query` 값으로 scope를 고른다. `change_context`, `current_workload_snapshots`, `deployments`는 `TARGET_NAMESPACE`의 `/apis/apps/v1/namespaces/{namespace}/deployments`, `/apis/apps/v1/namespaces/{namespace}/replicasets`, `/api/v1/namespaces/{namespace}/pods`, `/api/v1/namespaces/{namespace}/services`, `/api/v1/namespaces/{namespace}/resourcequotas`, `/apis/discovery.k8s.io/v1/namespaces/{namespace}/endpointslices`를 조회하고 `change_context.current_workload_snapshots[]`에 Deployment별 요약을 담는다. `<namespace>`는 해당 namespace의 전체 summary query로 처리한다. RCA test run에서 `metadata` provider가 요청되고 target resource가 Deployment이면 release-flow-worker가 `deployment/<namespace>/<resource_name>` detail query를 넣어 같은 namespace 안의 다른 RCA test resource와 섞이지 않게 한다. Deployment name이 없으면 `<namespace>` summary query로 fallback한다. `deployment/<name>`, `deployment/<namespace>/<name>`, `<namespace>/<name>`은 `/apis/apps/v1/namespaces/{namespace}/deployments/{name}` 단건과 같은 namespace의 ReplicaSet/Pod/Service/ResourceQuota/EndpointSlice 목록을 조회하고, Deployment가 참조하는 ConfigMap/Secret 객체를 `/api/v1/namespaces/{namespace}/configmaps/{name}` 또는 `/api/v1/namespaces/{namespace}/secrets/{name}`로 개별 조회한다. 단건 결과는 `change_context.current_workload_snapshot`과 `change_context.referenced_config_objects[]`에 담는다.
+
+전체 조회 summary snapshot 필드: `workload{kind,namespace,name}`, `deployment_labels`, `pod_template_labels`, `pod_template_auth{service_account_name,automount_service_account_token,image_pull_secret_refs[{name}]}`, `persistent_volume_claim_refs[{volume_name,claim_name}]`, `deployment_status{observed_generation,desired_replicas,replicas,updated_replicas,ready_replicas,available_replicas,unavailable_replicas,conditions}`, `pod_statuses[{name,phase,ready,reason,message,start_time,conditions}]`, `containers[{name,image,readiness_probe,liveness_probe,startup_probe,resources}]`, `replicaset_revisions[{name,revision,desired_replicas,replicas,ready_replicas,available_replicas,fully_labeled_replicas}]`. `change_context.service_selector_matches[]`는 namespace Service selector와 Pod labels 비교 결과이며 `{service{namespace,name},selector,match_status,matched_pod_count,matched_pods[{namespace,name}]}`를 담는다. Service에 selector가 없으면 `selector`는 생략될 수 있고, matched Pod가 없으면 `matched_pods`는 생략될 수 있다. `match_status`는 `matched`, `no_matching_pods`, `selector_missing` 중 하나다. `change_context.endpoint_slice_ready_endpoints[]`는 Service에 연결된 EndpointSlice readiness 요약이며 `{service{namespace,name},endpoint_slice{namespace,name},address_type,ports,endpoint_count,ready_endpoint_count,not_ready_endpoint_count,unknown_ready_endpoint_count,serving_endpoint_count,terminating_endpoint_count,ready_targets[{kind,namespace,name}]}`를 담는다. EndpointSlice condition은 Kubernetes API 해석을 따라 `ready`/`serving` 생략 또는 null을 true로, `terminating` 생략 또는 null을 false로 본다. `change_context.resource_quotas[]`는 namespace ResourceQuota 요약이며 `{name,namespace,hard,used}`를 담는다. ResourceQuota 조회가 403 Forbidden 또는 404 Not Found이면 빈 목록으로 처리한다. 전체 summary query는 namespace의 모든 Service/EndpointSlice 비교 결과를 담고, 단건 detail query는 target Deployment와 관련 있는 Service 및 그 Service의 EndpointSlice만 담는다. ResourceQuota는 workload 하나의 속성이 아니라 namespace 제한 정보라 summary/detail 모두 `change_context.resource_quotas[]`에 둔다. 단건 detail의 `target_relation`은 `exact_selector_match`, `live_pod_match`, `selector_key_overlap` 중 하나다. 단건 detail snapshot은 summary 필드에 `deployment_annotations`, `pod_template_annotations`, `managed_fields_managers`, `scheduling_constraints{node_selector,tolerations,affinity_summary}`, `containers[{env_refs,env_from_refs,volume_mount_refs}]`, `replicaset_revisions[{created_at,conditions}]`를 추가한다. 단건 detail의 `change_context.referenced_config_objects[]`는 참조된 ConfigMap/Secret 객체의 `{kind,namespace,name,exists,access,created_at,labels,referenced_by,referenced_key_checks}` 요약을 담는다. 객체가 없으면 `exists=false, access=not_found`, 권한이 없으면 `exists=null, access=forbidden`을 담는다. `referenced_key_checks[]`는 조회 성공 시 env keyRef와 volume items에서 명시한 key 존재 여부만 담고, `envFrom`은 key를 명시하지 않으므로 제외한다. `scheduling_constraints`는 단건 detail에만 있으며 `nodeSelector`는 그대로, tolerations는 작은 필드만, affinity는 boolean summary만 남긴다. annotation 요약은 `ops.service/*`, `prometheus.io/*`, `deployment.kubernetes.io/*`, `kubectl.kubernetes.io/*` 중 안전한 key만 남기고 `last-applied-configuration`과 민감 key는 제외한다. resources 요약은 requests/limits를 Kubernetes quantity 문자열 그대로 남긴다. PVC refs는 Pod template volume의 `persistentVolumeClaim.claimName`만 요약하고 PVC object 자체는 담지 않는다. Pod template auth 요약은 값이 있을 때 `serviceAccountName`, `automountServiceAccountToken`, `imagePullSecrets[].name`만 담고 Secret 값은 읽거나 보내지 않는다. env/envFrom/volume 요약은 ConfigMap/Secret reference name/key/path만 남기고 값 자체는 남기지 않는다. EndpointSlice 요약은 endpoint IP address를 남기지 않는다. ResourceQuota 요약은 raw spec/status, annotations, managedFields를 남기지 않는다. Referenced ConfigMap/Secret object 요약은 Secret `data`, `binaryData`, `stringData`, ConfigMap `data`, `binaryData`, raw object, annotations, 전체 key 목록을 남기지 않는다. Deployment/Pod status condition은 summary에도 있고 ReplicaSet condition은 단건 detail에만 있다. raw Service/Pod object와 containerStatuses는 남기지 않는다. probe 요약은 `path`, `port`, `timeout_seconds`, `period_seconds`, `failure_threshold` 중 존재하는 값만 남긴다. collect fallback 또는 k8s API 미구성 시 `{"change_context": {"current_workload_snapshots": []}}`를 반환한다.
+
+metadata provider는 evidence job result의 1MiB JSON 제한을 넘길 위험을 줄이기 위해 큰 목록을 제한한다. 먼저 `current_workload_snapshots`, `service_selector_matches`, `endpoint_slice_ready_endpoints`, `referenced_config_objects`, `resource_quotas` 같은 top-level list의 개수를 제한하고, 그래도 JSON byte 크기가 크면 JSON byte 크기가 가장 큰 list부터 추가로 줄인다. 단일 항목이 너무 크면 해당 top-level list는 0개까지 줄어들 수 있다. top-level list가 잘리면 `change_context.collection_limits`에 원래 개수와 최종 반환 개수를 남긴다. RCA evidence bundle에서는 승격된 metadata item의 `value.collection_limit`에도 같은 제한 정보가 붙는다. 항목 내부의 `matched_pods`, `ready_targets`, `pod_statuses`, `replicaset_revisions`도 샘플로 제한하고 count와 `*_truncated` flag를 남긴다. 이 제한은 provider payload를 버리는 실패보다 작은 샘플과 truncation metadata를 RCA에 전달하는 쪽이 더 안전하기 때문에 둔다.
 
 ### `queries/` — 쿼리 정의·레지스트리·커맨드 페이로드
 
-`queries/__init__.py` 재노출: `KubernetesSnapshotQuery`, `LokiLogQuery`, `OpenTelemetrySpanQuery`, `PrometheusInstantQuery`, `PrometheusRangeQuery`, `TelemetryQueryCommandPayload`, `TelemetryQueryDefinition`, `TelemetryQueryRegistry`, `TelemetrySource`.
+`queries/__init__.py` 재노출: `KubernetesSnapshotQuery`, `LokiLogQuery`, `MetadataSnapshotQuery`, `OpenTelemetrySpanQuery`, `PrometheusInstantQuery`, `PrometheusRangeQuery`, `TelemetryQueryCommandPayload`, `TelemetryQueryDefinition`, `TelemetryQueryRegistry`, `TelemetrySource`.
 
 #### `queries/payloads.py`
 
@@ -426,6 +462,7 @@ def query_metadata(self, telemetry_query) -> JsonObject                # instant
 | `LokiLogQuery` | `@dataclass(frozen=True)` — `query_name: str`, `description: str`, `logql: str` | `src/services/target/cluster-agent/queries/registry.py :: LokiLogQuery` |
 | `OpenTelemetrySpanQuery` | `@dataclass(frozen=True)` — `query_name: str`, `description: str`, `traceql: str` | `src/services/target/cluster-agent/queries/registry.py :: OpenTelemetrySpanQuery` |
 | `KubernetesSnapshotQuery` | `@dataclass(frozen=True)` — `query_name: str`, `description: str`, `namespace: str` | `src/services/target/cluster-agent/queries/registry.py :: KubernetesSnapshotQuery` |
+| `MetadataSnapshotQuery` | `@dataclass(frozen=True)` — `query_name: str`, `description: str`, `query: str` | `src/services/target/cluster-agent/queries/registry.py :: MetadataSnapshotQuery` |
 
 `from_mapping` 검증: `source`/`name`/`query`는 비어 있지 않은 str 필수(`ValueError("telemetry query field must be a non-empty string: {key}")`), `range_seconds`/`step_seconds`는 선택적 양의 정수(`ValueError("telemetry query field must be a positive integer: {key}")`), `source`는 `telemetry.spec(source)`로 등록 여부 즉시 검증. `to_provider_query`: `range_seconds`가 있으면 `telemetry.range_query_type_for(source)` 사용(미지원 소스면 `ValueError("telemetry source does not support range query: ...")` — 현재 prometheus만 지원), 없으면 `telemetry.query_type_for(source)(name, description, query)`.
 
@@ -539,12 +576,12 @@ def query_metadata(self, telemetry_query) -> JsonObject                # instant
 
 1. `main()` → `AsyncService("cluster-agent", run).run()` — `SERVICE_NAME` env 기본 설정, 로깅 구성, `asyncio.run`.
 2. `TargetClusterAgent.__init__`:
-   - env 로드: `MANAGEMENT_BASE_URL`(빈 값이면 `RuntimeError("MANAGEMENT_BASE_URL is required")`), `TARGET_CLUSTER_ID`, `WORKSPACE_ID`, `HOSTNAME`(agent_id), `EVIDENCE_INTERVAL_SECONDS`, `CLUSTER_ROLE`, `BOOTSTRAP_MODE`, OTEL 2종, worker counts 2종(`parse_provider_worker_counts`), failure policy, DB 경로 2종, sync/reconcile interval.
+   - env 로드: `MANAGEMENT_BASE_URL`(빈 값이면 `RuntimeError("MANAGEMENT_BASE_URL is required")`), `TARGET_CLUSTER_ID`, `WORKSPACE_ID`, `HOSTNAME`(agent_id), `EVIDENCE_INTERVAL_SECONDS`, `CLUSTER_ROLE`, `BOOTSTRAP_MODE`, OTEL 2종, worker counts 2종(`parse_provider_worker_counts`), failure policy, DB 경로 2종, sync/reconcile interval, `RECONCILER_MODE`.
    - `configure_tracing(otel_service_name, otel_traces_endpoint)` → `self.tracer`.
    - `NodeCollectorManager.from_env`, `LiveSummaryPublisher.from_env` 생성.
-   - `providers` 미주입 시 기본 4종: `KubernetesSnapshotProvider(cluster_id, transport)`, `PrometheusMetricsProvider.from_config(env)`, `LokiLogsProvider.from_config(env)`, `TempoTracesProvider.from_config(env)`.
+   - `providers` 미주입 시 기본 5종: `KubernetesSnapshotProvider(cluster_id, transport)`, `PrometheusMetricsProvider.from_config(env)`, `LokiLogsProvider.from_config(env)`, `TempoTracesProvider.from_config(env)`, `MetadataProvider.from_config(env)`.
    - `TelemetryQueryRegistry`, `EvidenceCollector(providers, registry)`, `AgentControlStore`, `CommandResultOutbox`, `EvidenceJobScheduler`(source_id=`"cluster-snapshot"`, provider_keys=collector의 evidence_key들) 생성.
-   - `build_default_policy()` — provider마다 `EvidenceProviderPolicy(interval_seconds=self.interval, min_workers=EVIDENCE_PROVIDER_WORKERS값(기본 1), max_workers=EVIDENCE_PROVIDER_MAX_WORKERS값(기본 2), queue_age_target_seconds=15)`, `EvidenceRuntimePolicy(failure_policy=...)`, `BootstrapPolicy(mode=...)`, 빈 `DesiredStatePolicy`. target role은 모든 provider를 기본 enabled로 시작하고, management role은 Kubernetes provider만 enabled로 시작한다.
+   - `build_default_policy()` — provider마다 `EvidenceProviderPolicy(interval_seconds=self.interval, min_workers=EVIDENCE_PROVIDER_WORKERS값 또는 fallback 1, max_workers=EVIDENCE_PROVIDER_MAX_WORKERS값 또는 fallback 3, queue_age_target_seconds=15)`, `EvidenceRuntimePolicy(failure_policy=...)`, `BootstrapPolicy(mode=...)`, 빈 `DesiredStatePolicy`. target role은 모든 provider를 기본 enabled로 시작하고, management role은 Kubernetes provider만 enabled로 시작한다.
    - `AgentPolicySync`, `DesiredStateReconciler`, `KubernetesApiClient`, `AgentCommandRegistry.from_instance(self, ..., default_handler=self.apply_default_command)` 생성 — 데코레이트된 6개 핸들러 자동 등록.
 3. `run()`: 주입된 client가 있으면 그대로, 없으면 `HttpManagementPlaneClient(base_url)`를 async context로 열어 `run_with_client`. finally에서 `close()`(두 SQLite store를 `suppress(Exception)`으로 닫음).
 4. `run_with_client(client)`:
@@ -560,7 +597,7 @@ def query_metadata(self, telemetry_query) -> JsonObject                # instant
    - 백그라운드 태스크로 `heartbeat_command_until_done`(20초마다 heartbeat, 실패해도 경고만) 실행, 완료 시 cancel.
    - `execute_command(command)`:
      a. `action`, `command_payload(command)` 추출.
-     b. **승인 게이트**: `action ∈ {apply_manifest, k8s.apps.v1.deployments.scale}`(`write_action_requires_approval` — `rollout_restart`는 spec 변경이 없는 비파괴 조치라 제외)이고 `approval_ref`·`policy_decision_ref`(top-level 또는 payload 내부)가 둘 다 없고 `approval_exempt_for_environment(action, command)`도 아니면 즉시 실패 결과(`MISSING_APPROVAL_EVIDENCE_MESSAGE`). 면제 rule: `AGENT_AUTO_APPROVE_ACTIONS`(기본 `k8s.apps.v1.deployments.scale`) × `AGENT_AUTO_APPROVE_ENVIRONMENTS`(기본 `sandbox`) — plan 메타데이터의 `environment`가 매칭되면 승인 증적 없이 허용(command-worker의 `COMMAND_AUTO_APPROVE_*` rule과 대칭).
+     b. **승인 게이트**: `action ∈ {apply_manifest, k8s.apps.v1.deployments.scale}`(`write_action_requires_approval` — catalog install은 전용 `DEPLOY_RUN` route가 검증해 직접 queue, `rollout_restart`는 비파괴 조치라 제외)이고 승인 증적도 sandbox 면제도 없으면 즉시 실패한다.
      c. `command_registry.execute(action, payload, metadata={command_id, approval_ref, policy_decision_ref})`. 레지스트리는: 핸들러 조회(없으면 default) → `payload_model` 있으면 `model_validate`(pydantic `extra="forbid"`) → k8s spec 있으면 `KubernetesCommandPolicy.ensure_allowed` → `CommandContext` 구성 후 핸들러 호출.
      d. 예외는 전부 `command_result(False, str(exc))`로 흡수(폴링 루프는 죽지 않음).
 3. 결과는 `command_outbox.enqueue_result(...)`로 SQLite에 먼저 기록 후 `flush_command_results_once` 즉시 시도.
@@ -593,10 +630,13 @@ def query_metadata(self, telemetry_query) -> JsonObject                # instant
 1. `store.load_policy()` — 없으면 `{status: "unchanged", message: "no policy available"}` 보고.
 2. `bootstrap.resources` + `desired_state.resources` 순회, 리소스마다 `reconcile_resource`:
    - `desired_resource_hash` 계산 → `ensure_allowed` 검사(아래 불변식).
+   - `RECONCILER_MODE=argocd`이고 `action == "apply"`면 Kubernetes GET만 수행하고 `unchanged("observed (argocd single-writer mode)")`로 기록한다. 이 모드에서는 built-in apply 경로를 호출하지 않는다.
    - `action == "apply"`이고 마지막 성공 해시와 같으면 `unchanged("already applied")` (멱등 스킵).
    - `apply` → `resource_applier.apply`(merge-patch, 404시 POST) 후 `applied`; `observe` → GET 후 `unchanged("observed")`.
    - 예외 → `failed(str(exc))`. 어떤 경우든 `save_reconcile_result`로 SQLite 기록.
 3. 종합 status: 하나라도 `failed`면 `failed`, 아니면 `applied`가 있으면 `applied`, 아니면 `unchanged`. `report_reconcile_status`로 보고. 루프 예외는 `desired_state_reconcile_failed` 경고.
+
+`RECONCILER_MODE`의 기본값은 `builtin`이며 기존 동작처럼 built-in reconciler가 writer다. GitOps controller를 writer로 운영하는 배포만 `argocd`로 설정한다. 지원하지 않는 값은 에이전트 기동 시 `ValueError`로 거부한다. 무발화 계약은 `uv run python -m pytest -q tests/test_target_policy_control.py -k argocd`로 재현할 수 있으며, `StubApplier.applied == []`와 observe 1건을 함께 검증한다.
 
 ### evidence 수집 잡 흐름
 
@@ -612,7 +652,7 @@ def query_metadata(self, telemetry_query) -> JsonObject                # instant
 
 **worker pool 조절**: `set_worker_counts`(정책 적용 시 호출) → `reconcile_worker_pool` — 완료 태스크 정리 후 desired count까지 태스크 생성/초과분 cancel. `run` 종료 시 `stop_workers`로 전부 cancel + gather.
 
-**`EvidenceCollector` 수집 파이프라인** (`_collect_with_queries`): provider의 span(`{source}.collect`)을 열고 `span.count(query_count_attribute)` → `httpx.AsyncClient(timeout=provider.timeout_seconds)`로 각 쿼리를 `provider.query` 실행, `provider.append_result`로 누적 → `build_response`. **어떤 예외든** `span.error` + `{source}.fallback_used=true` flag + `failure_message` 경고 후 `provider.build_response(provider.empty_results())` 반환 (부분 실패 허용 — 프로세스는 죽지 않음). 전체 수집(`collect`)은 `start_payload_span("evidence.collect", namespace="evidence", expected_fields=선택 키들)`로 감싼다.
+**`EvidenceCollector` 수집 파이프라인** (`_collect_with_queries`): provider의 span(`{source}.collect`)을 열고 `span.count(query_count_attribute)` → `httpx.AsyncClient(timeout=provider.timeout_seconds)`로 각 쿼리를 `provider.query` 실행, `provider.append_result`로 누적 → `build_response`. `allow_partial`에서는 쿼리 하나가 실패해도 이미 성공한 쿼리 결과를 유지하고, 실패한 쿼리만 `span.error` + `{source}.fallback_used=true` flag + `failure_message` 경고(`query_name` 포함)로 기록한다. 모든 쿼리가 실패하거나 provider 수집 자체가 예외로 끝나면 해당 provider의 `empty_results()` 모양으로 완료된다. `strict`에서는 쿼리 실패를 전파해 job을 `failed`로 보고한다. 전체 수집(`collect`)은 `start_payload_span("evidence.collect", namespace="evidence", expected_fields=선택 키들)`로 감싼다.
 
 ### providers — 외부 텔레메트리 호출
 
@@ -624,7 +664,13 @@ def query_metadata(self, telemetry_query) -> JsonObject                # instant
 | `LokiLogsProvider.query` | `GET {LOKI_BASE_URL}/loki/api/v1/query_range` | `query=<logql>`, `limit=LOKI_QUERY_LIMIT(20)` (span `loki.query_range`) |
 | `TempoTracesProvider.query` | `GET {TEMPO_BASE_URL}/api/search` | `q=<traceql>`, `limit=TEMPO_QUERY_LIMIT(20)` (span `tempo.search`) |
 
-Kubernetes 스냅샷 정규화(`normalize_payload`): raw 응답을 `{cluster{cluster_id, namespace, collected_at}, pods[], events[], nodes[], workloads[](Deployment/StatefulSet/DaemonSet/ReplicaSet 요약 통합), services[], endpoints[], provider_status{query_name: {status, namespace, reason, counts}}}` 요약으로 변환. pod 요약에는 `workload_key`(`"{ns}/{kind}/{name}"`), 컨테이너별 상태/restart(+ `last_state`/`last_state_reason`/`last_exit_code` — crashloop 중 waiting 이어도 직전 크래시의 종료 사유/exit code 보존), `waiting_reasons`/`terminated_reasons`(현재 terminated 와 lastState terminated 사유를 함께 승격 — OOMKilled/exit 137 판별 근거) 포함. 복수 쿼리 결과는 `merge_snapshot`으로 목록 concat + provider_status 병합.
+Kubernetes 스냅샷 정규화(`normalize_payload`): raw 응답을 `{cluster{cluster_id, namespace, collected_at}, pods[], events[], nodes[], workloads[](Deployment/StatefulSet/DaemonSet/ReplicaSet 요약 통합), services[], endpoints[], provider_status{query_name: {status, namespace, reason, counts}}}` 요약으로 변환. 일반 RCA snapshot의 ReplicaSet은 desired/status replica가 하나라도 남은 현재·종료 중 리소스만 포함하고, 0 replica 롤아웃 이력은 metadata evidence의 `replicaset_revisions`에서 조회한다. pod 요약에는 `workload_key`(`"{ns}/{kind}/{name}"`), 컨테이너별 상태/restart(+ `container_id`, `image_id`, `last_state`/`last_state_reason`/`last_state_message`/`last_exit_code`/`last_started_at`/`last_finished_at` — crashloop 중 waiting 이어도 직전 크래시의 종료 사유/시간 보존), `waiting_reasons`/`terminated_reasons`(현재 terminated 와 lastState terminated 사유를 함께 승격 — OOMKilled/exit 137 판별 근거) 포함. event 요약에는 알려진 reason일 때 `reason_summary`가 포함되며 `FailedScheduling`은 `scheduling_causes`로 `insufficient_cpu`, `insufficient_memory`, `node_selector_mismatch`, `taint_toleration_mismatch`, `pod_count_limit`, `volume_node_affinity_conflict` 같은 작은 label을 제공한다. 복수 쿼리 결과는 `merge_snapshot`으로 목록 concat + provider_status 병합. `build_response`는 전송 직전에 큰 list를 제한하고 `collection_limits`를 붙인다. namespace가 있는 list는 한 namespace가 다른 namespace를 전부 가리지 않도록 namespace별 round-robin 방식으로 샘플을 고른다.
+
+Prometheus 메트릭 정규화(`normalize_payload` + `build_metric_analysis`): query별 결과를 `metrics.results.<metric_name>` object로 만들고, 기존 `samples`/`series`/`result`에 `analysis`를 추가한다. `analysis`는 `metric_kind`, `unit`, `signals`를 기본으로 담고, 가능한 경우 `value_summary`, `threshold`, range query의 `baseline_comparison`을 담는다. 새 PromQL query를 자동 추가하지 않고, 이미 policy가 요청한 결과만 해석한다. high cardinality metric처럼 `samples`/`series`가 커질 수 있는 결과는 제한 후 전송하고, 잘린 경우 `metrics.results.<metric_name>.collection_limits`에 원래 개수와 최종 반환 개수를 남긴다. matrix의 `series.values` 제한 정보는 최종 `series` 목록 기준으로 다시 계산한다.
+
+Loki 로그 정규화(`normalize_payload`): query별 결과를 `logs[]` object로 만들고, 각 object에 `result_type`, `streams`, `line_count`, `pattern_counts`, `severity_counts`, `trace_ids`, `redaction_summary`를 담는다. `streams[].values[].line` 필드는 유지하지만 Loki 원문 그대로가 아니라 provider가 `password`/`token`/`secret`/`Authorization`/`Cookie`/JWT/URL 계정정보/email 같은 민감값을 `[REDACTED]` 계열 값으로 바꾼 뒤 최대 4096자로 제한한 문자열이다. 잘린 line에는 `line_truncated=true`, `original_line_length`가 붙고, `redaction_summary.truncated_line_count`가 증가한다. query policy에 `range_seconds`가 있으면 Loki query_range에 `start`, `end`, `direction=backward`를 붙이고 result에도 `range_seconds`를 남긴다. pattern count는 probe 실패, health endpoint 오류, dependency timeout/error, image pull 오류, OOM/memory, config/env/volume 오류를 line 단위로 센다. trace id는 32자리 hex 값만 최대 20개까지 유지한다.
+
+Tempo 트레이스 정규화(`normalize_payload`): query별 결과를 `traces.results.<query_name>` object로 만들고 `traces`, `trace_count`, `analysis`를 담는다. `trace_count`는 Tempo가 반환한 trace 수이고, 실제 `traces` list는 전송 크기 보호 때문에 줄어들 수 있다. 각 trace object의 긴 문자열은 최대 1024자로 제한하고, 중첩 list는 최대 20개로 제한한다. 한 trace가 계속 너무 크면 trace_id/service/operation/status/duration/error/dependency 같은 RCA용 summary와 `trace_truncated/original_trace_bytes`만 남긴다. `analysis`는 `traces` list를 최종 제한하기 전 compact trace 기준으로 만든다. 따라서 `traces`가 잘려도 RCA용 trace id/service/status 요약은 남을 수 있다. 전체 query result가 크면 `collection_limits.lists.traces`에 원래 trace 수와 최종 반환 trace 수를 남긴다.
 
 ### span / otel
 
@@ -639,8 +685,9 @@ Kubernetes 스냅샷 정규화(`normalize_payload`): raw 응답을 `{cluster{clu
 
 ### live summary
 
-- `LiveSummaryPublisher.run`: `enabled=false`거나 gateway_url이 비면 `live_summary_disabled` info 후 즉시 반환(no-op). gateway_url은 `REALTIME_GATEWAY_URL` env, 미설정 시 `derive_gateway_url(MANAGEMENT_BASE_URL)`(같은 호스트 + NodePort 30090, http→ws/https→wss).
+- `LiveSummaryPublisher.run`: `enabled=false`거나 gateway_url이 비면 `live_summary_disabled` info 후 즉시 반환(no-op). gateway_url은 설치 ConfigMap의 `REALTIME_GATEWAY_URL`이 우선이다. management role은 내부 `realtime-gateway` Service를 사용하고, target role은 공개 관리 주소에서 계산한다. fallback은 HTTPS면 같은 호스트의 표준 WSS 포트(443), HTTP 로컬 환경이면 NodePort 30090을 사용한다.
 - 연결: `websockets.connect(endpoint, additional_headers={"x-agent-token": token})` (지연 import). endpoint = `{gateway_url}/live/agent?cluster_id={cluster_id}`.
+- 공개 agent endpoint는 nginx에서 `/live/agent`만 realtime-gateway로 WebSocket proxy한다. `/live/browser`와 일반 관리 API는 이 endpoint에서 404로 닫혀 있다.
 - `_stream`: interval(기본 1.0s, 0.25~60 clamp)마다 `collector()` 호출 → `LiveSummary`가 나오면 `LiveSummaryMessage` JSON send. collector가 `drain_deltas()`를 제공하면 직전 호출 대비 pod `ResourceDelta`를 이어 보낸다. 연결/전송 예외 시 `live_summary_stream_retry` 경고 후 `LIVE_SUMMARY_RETRY_DELAY_SECONDS`(3s) 백오프 재접속. `CancelledError`는 그대로 전파.
 - `KubernetesPodSummaryCollector.__call__`: k8s API 미구성이면 `None`. `target`·`sandbox` 두 네임스페이스에서 `GET /api/v1/namespaces/{ns}/pods?limit=200`(`LIVE_SUMMARY_POD_LIST_LIMIT`) 후 `summarize`:
   - pod마다 containerStatuses로 ready(전 컨테이너 ready)·restart 합·CrashLoopBackOff 여부 계산.
@@ -658,12 +705,13 @@ Kubernetes 스냅샷 정규화(`normalize_payload`): raw 응답을 `{cluster{clu
 5. **정책 정합성**: `apply_policy`는 정책의 `cluster_id`/`cluster_role`이 에이전트와 다르면 `ValueError`. `AgentPolicy` 등 요청 모델은 전부 `StrictModel(extra="forbid")` — 계약 밖 필드는 검증 실패.
 6. **커맨드 결과는 반드시 outbox 경유**: 실행 결과는 SQLite에 먼저 기록되고 전송 성공 시에만 삭제된다(재시작에도 결과 보존). 전송 5회 실패 시 `abandoned`로 봉인되어 무한 재시도를 막는다. `enqueue_result`는 `command_id` UPSERT라 중복 실행에 멱등.
 7. **루프는 죽지 않는다**: 등록/폴링/정책/스케줄/워커/reconcile/live summary 루프는 예외를 잡아 경고 로그 + 백오프로 계속 돈다. 커맨드 실행 예외는 실패 결과로 변환된다.
-8. **evidence 수집은 부분 실패 허용**: provider 하나의 실패는 해당 provider의 `empty_results()` 응답으로 대체되고 span에 `{source}.fallback_used=true`가 남는다(전체 잡은 성공으로 완료; 수집 자체가 예외로 끝난 경우에만 job을 `failed`로 보고).
+8. **evidence 수집은 부분 실패 허용**: `allow_partial`에서는 같은 provider 안의 일부 쿼리가 실패해도 성공한 쿼리 결과를 버리지 않는다. 실패한 쿼리는 `{source}.fallback_used=true`와 `query_name`이 포함된 경고로 남고, 성공 결과가 없을 때만 해당 provider의 `empty_results()` 응답이 전송된다. `strict`에서는 쿼리 실패를 전파해 job을 `failed`로 보고한다.
 9. **레지스트리 fail-fast**: 커맨드 action 중복 등록·텔레메트리 소스 상이 계약 재등록·미등록 소스/쿼리 참조는 즉시 `ValueError`.
 10. **출력 위생**: 커맨드 결과 stdout/stderr는 `sanitize_command_output`으로 민감어 라인 마스킹(`[redacted]`) + 2000자 절단 후 전송된다.
-11. **k8s API 미구성 시 dry-run**: 쓰기 경로들은 실패 메시지(`"... dry-run only"`)를 반환할 뿐 예외를 던지지 않는다.
-12. **live summary는 bounded**: hot_pods ≤ 20, pod 조회 limit 200/네임스페이스, `LiveSummary`는 raw metric·전체 목록을 싣지 않는다(계약이 강제). 끄면(no-op) 기존 evidence/command 경로에 영향 없음.
-13. **SQLite store 사용 규칙**: `close()` 이후 접근은 `RuntimeError("... is closed")`. WAL + busy_timeout으로 단일 프로세스 내 동시 접근 견딤.
+11. **catalog Helm fail-closed**: management role은 top guard와 handler에서 이중 차단한다. target도 sandbox 및 서버 recipe/value 재검증을 통과해야 하며 binary 부재/timeout/non-zero exit는 `failed` command result로 남는다. 사용자 chart URL/shell/manifest는 payload 모델에 없다.
+12. **k8s API 미구성 시 dry-run**: 쓰기 경로들은 실패 메시지(`"... dry-run only"`)를 반환할 뿐 예외를 던지지 않는다.
+13. **live summary는 bounded**: hot_pods ≤ 20, pod 조회 limit 200/네임스페이스, `LiveSummary`는 raw metric·전체 목록을 싣지 않는다(계약이 강제). 끄면(no-op) 기존 evidence/command 경로에 영향 없음.
+14. **SQLite store 사용 규칙**: `close()` 이후 접근은 `RuntimeError("... is closed")`. WAL + busy_timeout으로 단일 프로세스 내 동시 접근 견딤.
 
 ## 설정 (Settings)
 
@@ -684,11 +732,12 @@ Kubernetes 스냅샷 정규화(`normalize_payload`): raw 응답을 `{cluster{clu
 | `EVIDENCE_INTERVAL_SECONDS` | int | `30` | provider 기본 수집 주기·윈도 크기 | `config.py` |
 | `AGENT_CONTROL_DB_PATH` | str | `/tmp/target-agent/agent-control.db` | 정책/reconcile SQLite 경로 | `config.py` |
 | `COMMAND_OUTBOX_DB_PATH` | str | `/tmp/target-agent/command-outbox.db` | 커맨드 결과 outbox SQLite 경로 | `config.py` |
-| `EVIDENCE_PROVIDER_WORKERS` | str | `kubernetes=1,metrics=1,logs=1,traces=1` | provider별 최소 워커 수 (`k=v,` 목록) | `config.py` |
-| `EVIDENCE_PROVIDER_MAX_WORKERS` | str | `kubernetes=2,metrics=2,logs=2,traces=2` | provider별 최대 워커 수(기본 정책의 max_workers) | `config.py` |
+| `EVIDENCE_PROVIDER_WORKERS` | str | `kubernetes=1,metrics=1,logs=1,traces=1` | provider별 최소 워커 수 (`k=v,` 목록). `metadata`가 없으면 scheduler fallback 1을 쓴다. | `config.py` / `evidence/jobs.py` |
+| `EVIDENCE_PROVIDER_MAX_WORKERS` | str | `kubernetes=2,metrics=2,logs=2,traces=2` | provider별 최대 워커 수(기본 정책의 max_workers). `metadata`가 없으면 `build_default_policy()` fallback 3을 쓴다. | `config.py` / `agent.py` |
 | `EVIDENCE_FAILURE_POLICY` | str | `allow_partial` | 기본 정책의 `evidence.failure_policy` (`allow_partial`\|`strict`) | `config.py` |
 | `POLICY_SYNC_INTERVAL_SECONDS` | int | `15` | 정책 fetch 주기 | `config.py` |
 | `RECONCILE_INTERVAL_SECONDS` | int | `30` | desired state reconcile 주기 | `config.py` |
+| `RECONCILER_MODE` | str | `builtin` | desired state writer 선택. `builtin`은 기존 apply 경로, `argocd`는 observer-only이며 built-in apply를 호출하지 않음 | `config.py` / `control/reconciler.py` |
 | `PROMETHEUS_BASE_URL` | str | `http://prometheus.target.svc:9090` | Prometheus 주소 (contracts re-export) | `config.py` |
 | `LOKI_BASE_URL` | str | `http://loki-gateway.target.svc` | Loki 주소 | `config.py` |
 | `TEMPO_BASE_URL` | str | `http://tempo.target.svc:3200` | Tempo 주소 | `config.py` |
@@ -715,7 +764,7 @@ Kubernetes 스냅샷 정규화(`normalize_payload`): raw 응답을 `{cluster{clu
 | `LIVE_SUMMARY_ENABLED` | str(bool) | `true` | live summary on/off (`"true"` 비교, 소문자화) | `config.py` |
 | `LIVE_SUMMARY_INTERVAL_SECONDS` | float | `1.0` (clamp 0.25~60) | 요약 송신 주기 | `config.py` |
 | `LIVE_SUMMARY_RETRY_DELAY_SECONDS` | float | `3` | WS 재접속 백오프 | `config.py` |
-| `REALTIME_GATEWAY_URL` | str | (미설정 시 `MANAGEMENT_BASE_URL` 호스트 + `ws(s)://…:30090` 유도) | realtime-gateway WS base URL | `config.py` |
+| `REALTIME_GATEWAY_URL` | str | 설치 manifest가 role/관리 주소에 맞게 주입. 미설정 fallback: HTTPS 동일 호스트 443, HTTP NodePort 30090 | realtime-gateway WS base URL | `config.py`, `packages.config.realtime` |
 | `NODE_COLLECTOR_ENABLED` | str(bool) | `true` | node-collector reconcile on/off (`truthy`) | `node_collector_manager.py` |
 | `NODE_COLLECTOR_IMAGE` | str | `""` (비면 reconcile 스킵) | node-collector 이미지 | `node_collector_manager.py` |
 | `NODE_COLLECTOR_NAMESPACE` | str | `target` | DaemonSet 네임스페이스 | `node_collector_manager.py` |

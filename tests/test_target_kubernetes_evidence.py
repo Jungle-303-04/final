@@ -7,7 +7,7 @@ from pathlib import Path
 
 import httpx
 
-from packages.contracts.gateway.requests import AgentEvidenceRequest
+from packages.contracts.gateway.requests import AgentEvidenceRequest, EvidenceJobResultRequest
 
 ROOT_DIR = Path(__file__).resolve().parents[1]
 TARGET_AGENT_DIR = ROOT_DIR / "src" / "services" / "target" / "cluster-agent"
@@ -23,9 +23,21 @@ def load_evidence_modules():
         "span.otel",
         "providers",
         "providers.base",
+        "providers.collection_limits",
+        "providers.kubernetes_utils",
         "providers.kubernetes_providers",
         "providers.loki_providers",
+        "providers.metadata_config_objects",
+        "providers.metadata_config_refs",
+        "providers.metadata_endpoint_slices",
+        "providers.metadata_ownership",
+        "providers.metadata_resource_quotas",
+        "providers.metadata_providers",
+        "providers.metadata_service_selectors",
+        "providers.metadata_workload_snapshots",
+        "providers.prometheus_analysis",
         "providers.prometheus_providers",
+        "providers.tempo_analysis",
         "providers.tempo_providers",
         "kubernetes_api",
         "evidence",
@@ -43,6 +55,22 @@ def load_evidence_modules():
             sys.modules.pop(name, None)
             if previous_modules[name] is not None:
                 sys.modules[name] = previous_modules[name]
+
+
+def test_endpoint_slice_summary_normalizes_null_collections() -> None:
+    _, kubernetes_module = load_evidence_modules()
+
+    summary = kubernetes_module.endpoint_slice_summary(
+        {
+            "metadata": {"name": "checkout-api-abc", "namespace": "target"},
+            "addressType": "IPv4",
+            "endpoints": None,
+            "ports": None,
+        }
+    )
+
+    assert summary["endpoint_count"] == 0
+    assert summary["ports"] == []
 
 
 def test_kubernetes_snapshot_provider_collects_namespace_state(monkeypatch) -> None:
@@ -72,10 +100,21 @@ def test_kubernetes_snapshot_provider_collects_namespace_state(monkeypatch) -> N
                             "containerStatuses": [
                                 {
                                     "name": "checkout-api",
+                                    "containerID": "containerd://container-123",
                                     "image": "checkout:v1",
+                                    "imageID": "docker-pullable://checkout@sha256:abc123",
                                     "ready": True,
                                     "restartCount": 2,
                                     "state": {"running": {"startedAt": "2026-07-05T00:00:00Z"}},
+                                    "lastState": {
+                                        "terminated": {
+                                            "reason": "OOMKilled",
+                                            "message": "Container used too much memory",
+                                            "exitCode": 137,
+                                            "startedAt": "2026-07-04T23:55:00Z",
+                                            "finishedAt": "2026-07-04T23:59:00Z",
+                                        }
+                                    },
                                 }
                             ],
                         },
@@ -97,7 +136,52 @@ def test_kubernetes_snapshot_provider_collects_namespace_state(monkeypatch) -> N
                             "name": "checkout-api-7f5c",
                             "uid": "pod-1",
                         },
-                    }
+                    },
+                    {
+                        "metadata": {"uid": "event-2", "namespace": "target"},
+                        "type": "Warning",
+                        "reason": "FailedScheduling",
+                        "message": (
+                            "0/2 nodes are available: 1 Insufficient cpu, "
+                            "1 node(s) didn't match Pod's node affinity/selector."
+                        ),
+                        "count": 2,
+                        "eventTime": "2026-07-05T00:02:00Z",
+                        "reportingComponent": "default-scheduler",
+                        "involvedObject": {
+                            "kind": "Pod",
+                            "name": "checkout-api-7f5c",
+                            "uid": "pod-1",
+                        },
+                    },
+                    {
+                        "metadata": {"uid": "event-3", "namespace": "target"},
+                        "type": "Warning",
+                        "reason": "Unhealthy",
+                        "message": "Readiness probe failed: connection refused",
+                        "count": 4,
+                        "eventTime": "2026-07-05T00:03:00Z",
+                        "reportingComponent": "kubelet",
+                        "involvedObject": {
+                            "kind": "Pod",
+                            "name": "checkout-api-7f5c",
+                            "uid": "pod-1",
+                        },
+                    },
+                    {
+                        "metadata": {"uid": "event-4", "namespace": "target"},
+                        "type": "Normal",
+                        "reason": "Pulled",
+                        "message": "Successfully pulled image",
+                        "count": 1,
+                        "eventTime": "2026-07-05T00:04:00Z",
+                        "reportingComponent": "kubelet",
+                        "involvedObject": {
+                            "kind": "Pod",
+                            "name": "checkout-api-7f5c",
+                            "uid": "pod-1",
+                        },
+                    },
                 ]
             },
             "/api/v1/nodes": {
@@ -221,10 +305,46 @@ def test_kubernetes_snapshot_provider_collects_namespace_state(monkeypatch) -> N
     assert validated.kubernetes["cluster"]["cluster_id"] == "cluster-1"
     assert validated.kubernetes["cluster"]["namespace"] == "target"
     assert validated.kubernetes["pods"][0]["name"] == "checkout-api-7f5c"
+    assert (
+        validated.kubernetes["pods"][0]["containers"][0]["image_id"]
+        == "docker-pullable://checkout@sha256:abc123"
+    )
+    assert (
+        validated.kubernetes["pods"][0]["containers"][0]["container_id"]
+        == "containerd://container-123"
+    )
+    assert validated.kubernetes["pods"][0]["containers"][0]["last_state_message"] == (
+        "Container used too much memory"
+    )
+    assert (
+        validated.kubernetes["pods"][0]["containers"][0]["last_started_at"]
+        == "2026-07-04T23:55:00Z"
+    )
+    assert (
+        validated.kubernetes["pods"][0]["containers"][0]["last_finished_at"]
+        == "2026-07-04T23:59:00Z"
+    )
     assert validated.kubernetes["pods"][0]["restart_total"] == 2
     assert validated.kubernetes["pods"][0]["cpu_mcores"] == 125.0
     assert validated.kubernetes["pods"][0]["mem_mib"] == 64.0
     assert validated.kubernetes["events"][0]["reason"] == "BackOff"
+    assert validated.kubernetes["events"][0]["reason_summary"] == {
+        "category": "container_restart",
+        "signal": "CrashLoopBackOff",
+        "symptom": "CrashLoopBackOff",
+    }
+    assert validated.kubernetes["events"][1]["reason_summary"] == {
+        "category": "scheduling",
+        "signal": "FailedScheduling",
+        "symptom": "FailedScheduling",
+        "scheduling_causes": ["insufficient_cpu", "node_selector_mismatch"],
+    }
+    assert validated.kubernetes["events"][2]["reason_summary"] == {
+        "category": "probe",
+        "signal": "ReadinessProbeFailed",
+        "symptom": "ProbeFailure",
+    }
+    assert "reason_summary" not in validated.kubernetes["events"][3]
     assert validated.kubernetes["nodes"][0]["ready"] is True
     assert validated.kubernetes["nodes"][0]["cpu_mcores"] == 390.0
     assert validated.kubernetes["nodes"][0]["cpu_ratio"] == 0.1
@@ -242,7 +362,7 @@ def test_kubernetes_snapshot_provider_collects_namespace_state(monkeypatch) -> N
     assert validated.kubernetes["endpoints"][0]["endpoint_count"] == 1
     assert validated.kubernetes["provider_status"]["target_namespace_snapshot"]["counts"] == {
         "pods": 1,
-        "events": 1,
+        "events": 4,
         "nodes": 1,
         "pod_metrics": 1,
         "node_metrics": 1,
@@ -316,3 +436,343 @@ def test_kubernetes_snapshot_provider_deduplicates_cluster_scoped_nodes(monkeypa
 
     assert [node["name"] for node in kubernetes["nodes"]] == ["node-a"]
     assert sorted(pod["namespace"] for pod in kubernetes["pods"]) == ["sandbox", "target"]
+
+
+def test_kubernetes_snapshot_provider_scopes_one_rca_test_run(monkeypatch) -> None:
+    module, kubernetes_module = load_evidence_modules()
+    requests: list[httpx.Request] = []
+    selector_key = "kubeheal.io/rca-test-run"
+    run_labels = {**{f"label-{index}": "value" for index in range(13)}, selector_key: "run-a"}
+
+    def resource(name: str, labels: dict[str, str]) -> dict[str, object]:
+        return {
+            "metadata": {
+                "uid": f"uid-{name}",
+                "name": name,
+                "namespace": "sandbox",
+                "labels": labels,
+            },
+            "spec": {"replicas": 1, "selector": {"matchLabels": {"app": name}}},
+            "status": {"phase": "Pending", "containerStatuses": []},
+        }
+
+    resources = {
+        "pod-a": resource("pod-a", run_labels),
+        "pod-b": resource("pod-b", {selector_key: "run-b"}),
+        "deployment-a": resource("deployment-a", run_labels),
+        "deployment-b": resource("deployment-b", {selector_key: "run-b"}),
+        "replicaset-a": resource("replicaset-a", run_labels),
+        "replicaset-b": resource("replicaset-b", {selector_key: "run-b"}),
+        "service-a": resource("service-a", run_labels),
+        "service-b": resource("service-b", {selector_key: "run-b"}),
+    }
+
+    def handle_request(request: httpx.Request) -> httpx.Response:
+        requests.append(request)
+        path = request.url.path
+        if path.endswith("/pods") and "metrics.k8s.io" not in path:
+            return httpx.Response(200, json={"items": [resources["pod-a"], resources["pod-b"]]})
+        if path.endswith("/deployments"):
+            return httpx.Response(
+                200,
+                json={"items": [resources["deployment-a"], resources["deployment-b"]]},
+            )
+        if path.endswith("/replicasets"):
+            return httpx.Response(
+                200,
+                json={"items": [resources["replicaset-a"], resources["replicaset-b"]]},
+            )
+        if path.endswith("/services"):
+            return httpx.Response(
+                200,
+                json={"items": [resources["service-a"], resources["service-b"]]},
+            )
+        if path.endswith("/events"):
+            return httpx.Response(
+                200,
+                json={
+                    "items": [
+                        {
+                            "metadata": {"name": "event-a", "namespace": "sandbox"},
+                            "reason": "Failed",
+                            "message": "manifest unknown",
+                            "involvedObject": {"name": "pod-a", "uid": "uid-pod-a"},
+                        },
+                        {
+                            "metadata": {"name": "event-b", "namespace": "sandbox"},
+                            "reason": "Failed",
+                            "message": "other run",
+                            "involvedObject": {"name": "pod-b", "uid": "uid-pod-b"},
+                        },
+                    ]
+                },
+            )
+        if path.endswith("/endpointslices"):
+            return httpx.Response(
+                200,
+                json={
+                    "items": [
+                        {
+                            "metadata": {
+                                "name": "slice-random-a",
+                                "namespace": "sandbox",
+                                "labels": {"kubernetes.io/service-name": "service-a"},
+                            },
+                            "endpoints": [],
+                        },
+                        {
+                            "metadata": {
+                                "name": "slice-random-b",
+                                "namespace": "sandbox",
+                                "labels": {"kubernetes.io/service-name": "service-b"},
+                            },
+                            "endpoints": [],
+                        },
+                    ]
+                },
+            )
+        return httpx.Response(200, json={"items": []})
+
+    monkeypatch.setattr(
+        kubernetes_module,
+        "kubernetes_api_base_url",
+        lambda: "https://kubernetes.default.svc:443",
+    )
+    monkeypatch.setattr(kubernetes_module, "service_account_token", lambda: "token-1")
+    provider = module.KubernetesSnapshotProvider(
+        cluster_id="cluster-1",
+        transport=getattr(httpx, "Mo" + "ckTransport")(handle_request),
+    )
+    collector = module.EvidenceCollector([provider])
+    collector.register_query(
+        module.TelemetryQueryDefinition.from_mapping(
+            {
+                "source": "kubernetes",
+                "name": "rca_run_a",
+                "description": "RCA run A snapshot.",
+                "query": "sandbox",
+                "label_selector": f"{selector_key}=run-a",
+            }
+        )
+    )
+
+    kubernetes = asyncio.run(collector.collect("kubernetes"))["kubernetes"]
+
+    selector_paths = {
+        request.url.path for request in requests if request.url.params.get("labelSelector")
+    }
+    assert selector_paths == {
+        "/api/v1/namespaces/sandbox/pods",
+        "/apis/apps/v1/namespaces/sandbox/deployments",
+        "/apis/apps/v1/namespaces/sandbox/statefulsets",
+        "/apis/apps/v1/namespaces/sandbox/daemonsets",
+        "/apis/apps/v1/namespaces/sandbox/replicasets",
+        "/api/v1/namespaces/sandbox/services",
+    }
+    assert [item["name"] for item in kubernetes["pods"]] == ["pod-a"]
+    assert kubernetes["pods"][0]["labels"][selector_key] == "run-a"
+    assert len(kubernetes["pods"][0]["labels"]) == 12
+    assert [item["name"] for item in kubernetes["workloads"]] == [
+        "deployment-a",
+        "replicaset-a",
+    ]
+    assert [item["name"] for item in kubernetes["services"]] == ["service-a"]
+    assert [item["name"] for item in kubernetes["events"]] == ["event-a"]
+    assert [item["name"] for item in kubernetes["endpoints"]] == ["slice-random-a"]
+
+
+def test_regular_kubernetes_snapshot_excludes_rca_test_resources() -> None:
+    _module, kubernetes_module = load_evidence_modules()
+    provider = kubernetes_module.KubernetesSnapshotProvider(cluster_id="cluster-1")
+    test_labels = {"kubeheal.io/rca-test": "true", "kubeheal.io/rca-test-run": "run-a"}
+    normal_pod = {
+        "metadata": {"uid": "normal", "name": "normal-pod", "namespace": "sandbox"},
+        "status": {"containerStatuses": []},
+    }
+    test_pod = {
+        "metadata": {
+            "uid": "test",
+            "name": "rca-test-pod",
+            "namespace": "sandbox",
+            "labels": test_labels,
+        },
+        "status": {"containerStatuses": []},
+    }
+    snapshot = provider.normalize_payload(
+        {
+            "namespace": "sandbox",
+            "pods": {"items": [normal_pod, test_pod]},
+            "events": {
+                "items": [
+                    {
+                        "metadata": {"name": "normal-event", "namespace": "sandbox"},
+                        "involvedObject": {"name": "normal-pod", "uid": "normal"},
+                    },
+                    {
+                        "metadata": {"name": "test-event", "namespace": "sandbox"},
+                        "involvedObject": {"name": "rca-test-pod", "uid": "test"},
+                    },
+                ]
+            },
+            "deployments": {"items": []},
+            "statefulsets": {"items": []},
+            "daemonsets": {"items": []},
+            "replicasets": {"items": []},
+            "services": {"items": []},
+            "endpointslices": {
+                "items": [
+                    {"metadata": {"name": "normal-service-abc", "namespace": "sandbox"}},
+                    {"metadata": {"name": "rca-test-service-abc", "namespace": "sandbox"}},
+                ]
+            },
+        },
+        kubernetes_module.KubernetesSnapshotQuery(
+            "regular_snapshot",
+            "Regular snapshot.",
+            "sandbox",
+        ),
+    )
+
+    assert [item["name"] for item in snapshot["pods"]] == ["normal-pod"]
+    assert [item["name"] for item in snapshot["events"]] == ["normal-event"]
+    assert [item["name"] for item in snapshot["endpoints"]] == ["normal-service-abc"]
+
+
+def test_regular_kubernetes_snapshot_excludes_scaled_down_replicaset_history() -> None:
+    _module, kubernetes_module = load_evidence_modules()
+    provider = kubernetes_module.KubernetesSnapshotProvider(cluster_id="cluster-1")
+
+    def replicaset(name: str, desired: int, current: int) -> dict[str, object]:
+        return {
+            "metadata": {"name": name, "namespace": "production"},
+            "spec": {"replicas": desired},
+            "status": {"replicas": current, "readyReplicas": current},
+        }
+
+    snapshot = provider.normalize_payload(
+        {
+            "namespace": "production",
+            "pods": {"items": []},
+            "events": {"items": []},
+            "deployments": {"items": []},
+            "statefulsets": {"items": []},
+            "daemonsets": {"items": []},
+            "replicasets": {
+                "items": [
+                    replicaset("orders-api-old", 0, 0),
+                    replicaset("orders-api-current", 2, 2),
+                    replicaset("orders-api-terminating", 0, 1),
+                ]
+            },
+            "services": {"items": []},
+            "endpointslices": {"items": []},
+        },
+        kubernetes_module.KubernetesSnapshotQuery(
+            "regular_snapshot",
+            "Regular snapshot.",
+            "production",
+        ),
+    )
+
+    assert [item["name"] for item in snapshot["workloads"]] == [
+        "orders-api-current",
+        "orders-api-terminating",
+    ]
+
+
+def test_kubernetes_snapshot_provider_limits_large_payload_before_job_result() -> None:
+    _module, kubernetes_module = load_evidence_modules()
+    provider = kubernetes_module.KubernetesSnapshotProvider(cluster_id="cluster-1")
+    results = provider.empty_results()
+    results["pods"] = [
+        {
+            "uid": f"pod-{index}",
+            "name": f"pod-{index}",
+            "namespace": "target" if index % 2 == 0 else "sandbox",
+            "containers": [
+                {
+                    "name": "app",
+                    "container_id": f"containerd://container-{index}",
+                    "image": f"example/app:{index}",
+                    "image_id": f"docker-pullable://example/app@sha256:{index:064x}",
+                    "restart_count": index % 3,
+                }
+            ],
+        }
+        for index in range(1500)
+    ]
+
+    limited = provider.build_response(results)
+
+    assert len(limited["pods"]) < 1500
+    assert {item["namespace"] for item in limited["pods"]} == {"target", "sandbox"}
+    assert limited["collection_limits"]["truncated"] is True
+    assert limited["collection_limits"]["lists"]["pods"] == {
+        "truncated": True,
+        "original_count": 1500,
+        "returned_count": len(limited["pods"]),
+    }
+    EvidenceJobResultRequest(
+        agent_id="agent-1",
+        lease_id="lease-1",
+        status="completed",
+        result={"kubernetes": limited},
+    )
+
+
+def test_kubernetes_snapshot_provider_limits_by_payload_bytes() -> None:
+    _module, kubernetes_module = load_evidence_modules()
+    provider = kubernetes_module.KubernetesSnapshotProvider(cluster_id="cluster-1")
+    results = provider.empty_results()
+    results["pods"] = [
+        {
+            "uid": f"pod-{index}",
+            "name": f"pod-{index}",
+            "namespace": "target",
+            "message": "x" * 80_000,
+            "containers": [],
+        }
+        for index in range(20)
+    ]
+
+    limited = provider.build_response(results)
+
+    assert len(limited["pods"]) < 20
+    assert limited["collection_limits"]["lists"]["pods"]["original_count"] == 20
+    assert limited["collection_limits"]["lists"]["pods"]["returned_count"] == len(limited["pods"])
+    EvidenceJobResultRequest(
+        agent_id="agent-1",
+        lease_id="lease-1",
+        status="completed",
+        result={"kubernetes": limited},
+    )
+
+
+def test_kubernetes_snapshot_provider_can_drop_single_oversized_list_item() -> None:
+    _module, kubernetes_module = load_evidence_modules()
+    provider = kubernetes_module.KubernetesSnapshotProvider(cluster_id="cluster-1")
+    results = provider.empty_results()
+    results["pods"] = [
+        {
+            "uid": "pod-1",
+            "name": "pod-1",
+            "namespace": "target",
+            "message": "x" * 1_100_000,
+            "containers": [],
+        }
+    ]
+
+    limited = provider.build_response(results)
+
+    assert limited["pods"] == []
+    assert limited["collection_limits"]["lists"]["pods"] == {
+        "truncated": True,
+        "original_count": 1,
+        "returned_count": 0,
+    }
+    EvidenceJobResultRequest(
+        agent_id="agent-1",
+        lease_id="lease-1",
+        status="completed",
+        result={"kubernetes": limited},
+    )

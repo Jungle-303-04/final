@@ -11,6 +11,7 @@ from typing import Any, cast
 from fastapi import APIRouter, Depends, HTTPException
 
 from domains.command.events import CommandRequestedBody
+from domains.command.handler import build_plan, command_requires_recorded_approval
 from domains.command.policy import (
     DEFAULT_COMMAND_HEARTBEAT_INTERVAL_SECONDS,
     DEFAULT_COMMAND_LEASE_SECONDS,
@@ -31,7 +32,7 @@ from domains.target.management_guard import (
     is_management_role,
     management_readonly_detail,
 )
-from packages.config.constants import Command, CommandStatus, Sandbox
+from packages.config.constants import RCA_TEST_COMMAND_ACTIONS, Command, CommandStatus, Sandbox
 from packages.config.control import (
     CONTROL_NAMESPACE_DENIED_MESSAGE,
     control_namespace_allowed,
@@ -77,11 +78,28 @@ RESOURCE_ACCESS_DENIED = RESOURCE_ACCESS_DENIED_MESSAGE
 # 수동 명령도 대상(diff)은 클라이언트가 명시해야 함 — 서버가 임의 리소스를 합성하지 않음.
 UNPROCESSABLE_CODE = 422
 MANUAL_DIFF_REQUIRED_MESSAGE = "diff is required for manual command requests"
+RCA_TEST_ACTION_DEDICATED_API_REQUIRED = (
+    "RCA test actions are reserved; use the dedicated /rca/test-runs API"
+)
 # 제어 허용 네임스페이스는 packages.config.control 단일 기준(기본 sandbox 만).
 CONTROL_NAMESPACE_NOT_ALLOWED = CONTROL_NAMESPACE_DENIED_MESSAGE
 COMMAND_PRIORITY_HIGH = 100
 
 router = APIRouter()
+
+
+def command_accepted_response(command: CommandRequestedBody, accepted: Any) -> AcceptedResponse:
+    command_id = (
+        None
+        if command_requires_recorded_approval(command)
+        else build_plan(command, accepted.event.correlation_id).command_id
+    )
+    return AcceptedResponse(
+        accepted=True,
+        event_id=accepted.event.event_id,
+        correlation_id=accepted.event.correlation_id,
+        command_id=command_id,
+    )
 
 
 def command_diff(payload: CommandRequest, workspace_id: str) -> Diff:
@@ -170,27 +188,24 @@ async def accept_deployment_control(
         action=action,
         basis=payload,
     )
+    command = CommandRequestedBody(
+        cluster_id=cluster_id,
+        action=action,
+        namespace=namespace,
+        reason=reason,
+        diff=diff,
+        payload=payload,
+        workspace_id=workspace_id,
+        priority=COMMAND_PRIORITY_HIGH,
+        requested_by=current.user_id,
+        approval_ref=approval_ref,
+        policy_decision_ref=policy_decision_ref,
+    )
     accepted = await events.accept_body(
-        CommandRequestedBody(
-            cluster_id=cluster_id,
-            action=action,
-            namespace=namespace,
-            reason=reason,
-            diff=diff,
-            payload=payload,
-            workspace_id=workspace_id,
-            priority=COMMAND_PRIORITY_HIGH,
-            requested_by=current.user_id,
-            approval_ref=approval_ref,
-            policy_decision_ref=policy_decision_ref,
-        ),
+        command,
         actor=Actor(current.user_id, tuple(current.roles)),
     )
-    return AcceptedResponse(
-        accepted=True,
-        event_id=accepted.event.event_id,
-        correlation_id=accepted.event.correlation_id,
-    )
+    return command_accepted_response(command, accepted)
 
 
 def require_cluster_read_access(db: Any, current: Any, workspace_id: str, cluster_id: str) -> None:
@@ -289,29 +304,31 @@ async def commands(
     db: Any = Depends(get_db),
     events: Any = Depends(get_events),
 ) -> AcceptedResponse:
+    if payload.action in RCA_TEST_COMMAND_ACTIONS:
+        raise HTTPException(
+            status_code=UNPROCESSABLE_CODE,
+            detail=RCA_TEST_ACTION_DEDICATED_API_REQUIRED,
+        )
     workspace_id = getattr(current, "workspace_id", DEFAULT_WORKSPACE_ID)
     require_cluster_deploy_access(db, current, workspace_id, payload.cluster_id)
     require_not_management_cluster(db, workspace_id, payload.cluster_id)
+    command = CommandRequestedBody(
+        cluster_id=payload.cluster_id,
+        action=payload.action,
+        namespace=payload.namespace,
+        reason=payload.reason or "manual command request",
+        diff=command_diff(payload, workspace_id),
+        workspace_id=workspace_id,
+        priority=COMMAND_PRIORITY_HIGH,
+        requested_by=current.user_id,
+        approval_ref=payload.approval_ref,
+        policy_decision_ref=payload.policy_decision_ref,
+    )
     accepted = await events.accept_body(
-        CommandRequestedBody(
-            cluster_id=payload.cluster_id,
-            action=payload.action,
-            namespace=payload.namespace,
-            reason=payload.reason or "manual command request",
-            diff=command_diff(payload, workspace_id),
-            workspace_id=workspace_id,
-            priority=COMMAND_PRIORITY_HIGH,
-            requested_by=current.user_id,
-            approval_ref=payload.approval_ref,
-            policy_decision_ref=payload.policy_decision_ref,
-        ),
+        command,
         actor=Actor(current.user_id, tuple(current.roles)),
     )
-    return AcceptedResponse(
-        accepted=True,
-        event_id=accepted.event.event_id,
-        correlation_id=accepted.event.correlation_id,
-    )
+    return command_accepted_response(command, accepted)
 
 
 @router.post(gateway_routes.CLUSTER_DEPLOYMENT_SCALE_PATH, response_model=AcceptedResponse)

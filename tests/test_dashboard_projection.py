@@ -113,6 +113,28 @@ def test_dashboard_worker_ignores_unmapped_subjects() -> None:
     assert db.calls == []
 
 
+def test_dashboard_worker_ignores_pre_incident_evidence_events() -> None:
+    dashboard = load_service("projection/dashboard-worker")
+    for subject in ("cluster.evidence.received", "evidence.built"):
+        db = SpyDb()
+
+        outs = run_handler(
+            dashboard.on_event,
+            _evt(
+                subject,
+                {
+                    "workspace_id": "workspace-1",
+                    "cluster_id": "cluster-1",
+                    "evidence_key": "evidence-1",
+                },
+            ),
+            db=db,
+        )
+
+        assert outs == []
+        assert db.calls == []
+
+
 def test_dashboard_worker_ignores_non_incident_detection() -> None:
     dashboard = load_service("projection/dashboard-worker")
     db = SpyDb()
@@ -180,6 +202,23 @@ def test_incident_projection_logical_key_falls_back_to_incident_id() -> None:
     )
 
 
+def test_incident_projection_rebuilds_legacy_correlation_key_from_dimensions() -> None:
+    assert (
+        incident_logical_key_from_projection(
+            {
+                "incident_id": "incident-1",
+                "incident_logical_key": "legacy-correlation-uuid",
+                "cluster_id": "cluster-1",
+                "incident_namespace": "sandbox",
+                "incident_resource_kind": "Deployment",
+                "incident_resource_name": "orders-api",
+                "incident_symptom": "Ingress 502/503",
+            }
+        )
+        == "cluster-1|sandbox|Deployment|orders-api|Ingress 502/503"
+    )
+
+
 def test_timeline_update_preserves_command_and_pr_status_inputs() -> None:
     command = timeline_update_from_event(
         _evt(
@@ -205,10 +244,12 @@ def test_timeline_update_preserves_command_and_pr_status_inputs() -> None:
     assert command["status"] == "command_queued"
     assert command["command_id"] == "cmd-1"
     assert command["action_route"] == "command"
+    assert command["incident_logical_key"] is None
     assert pr is not None
     assert pr["status"] == "pr_created"
     assert pr["pr_url"] == "https://github.example/pull/1"
     assert pr["action_route"] == "safe_pr"
+    assert pr["incident_logical_key"] is None
 
 
 class _RecordingConnection:
@@ -284,7 +325,12 @@ def test_open_incident_query_excludes_non_incident_detection_rows() -> None:
     assert "GROUP BY" in sql
     assert "count(distinct" in sql.lower()
     assert "incident_logical_key" in sql
+    assert "concat_ws" in sql.lower()
     assert "#>>" not in sql
+    assert "status IN" in sql
+    assert "evidence_received" not in sql
+    assert "evidence_built" not in sql
+    assert "incident_detected" in sql
 
 
 def test_open_incident_query_returns_sql_aggregate_rows() -> None:

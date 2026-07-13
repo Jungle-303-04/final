@@ -27,7 +27,13 @@ def make_registry() -> ToolRegistry:
 
 
 def make_context() -> ToolContext:
-    return ToolContext(db=None, workspace_id="ws-1", cluster_id="c-1", locale="ko")
+    return ToolContext(
+        db=None,
+        workspace_id="ws-1",
+        user_id="user-1",
+        cluster_id="c-1",
+        locale="ko",
+    )
 
 
 def test_tool_decorator_registers_spec_and_reader() -> None:

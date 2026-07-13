@@ -259,6 +259,30 @@ def test_session_refresh_touches_store_and_resets_httponly_cookie(monkeypatch) -
     assert "max-age=7200" in cookie
 
 
+def test_mtls_proxy_session_refresh_does_not_create_redis_session_or_cookie() -> None:
+    response = Response()
+    password_auth = StubPasswordAuth()
+    current = SimpleNamespace(
+        token="mtls-dev-console",
+        user_id="operator-dev",
+        roles=["service_admin"],
+        workspace_id="default",
+    )
+
+    body = asyncio.run(
+        identity_router.refresh_session(
+            response=response,
+            current=current,
+            password_auth=password_auth,
+        )
+    )
+
+    assert body.authenticated is True
+    assert body.user_id == "operator-dev"
+    assert password_auth.sessions.touched == []
+    assert "set-cookie" not in response.headers
+
+
 def test_verify_email_redirects_and_sets_httponly_session_cookie(monkeypatch) -> None:
     monkeypatch.setenv("COOKIE_SECURE", "0")
     password_auth = StubPasswordAuth()

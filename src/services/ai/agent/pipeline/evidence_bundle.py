@@ -15,6 +15,15 @@ from services.ai.agent.pipeline.evidence import EVIDENCE_LINEAGE_KEY, EVIDENCE_S
 from services.ai.agent.pipeline.symptom import derive_symptom, resolve_resource
 
 EvidenceSource = ClusterEvidenceReceivedBody | Evidence
+SENSITIVE_CHANGE_TOKENS = (
+    "secret",
+    "token",
+    "password",
+    "credential",
+    "private",
+    "key",
+)
+REDACTED_CHANGE_VALUE = "redacted"
 
 MAX_KUBERNETES_PODS = 16
 MAX_KUBERNETES_EVENTS = 24
@@ -64,6 +73,7 @@ def compact_evidence_reference(evidence: Evidence) -> Evidence:
         logs=[],
         traces=compact_reference_payload(evidence.traces),
         object_ref=evidence.object_ref,
+        metadata=compact_reference_payload(evidence.metadata),
         workspace_id=evidence.workspace_id,
     )
 
@@ -177,6 +187,8 @@ def source_payload(evt: EvidenceSource, source: str) -> object:
         return evt.logs
     if source == "traces":
         return evt.traces
+    if source == "metadata":
+        return evt.metadata
     return {}
 
 
@@ -226,11 +238,13 @@ def missing_source_checks(missing_evidence: list[str]) -> list[MissingEvidenceCh
 
 # Loki 정규화 payload 의 stream 라벨 중 네임스페이스로 인정하는 키.
 LOG_STREAM_NAMESPACE_LABELS = ("k8s_namespace_name", "namespace")
+LOG_STREAM_POD_LABELS = ("k8s_pod_name", "pod", "pod_name", "kubernetes_pod_name")
 
 
 def select_incident_log_entries(
     logs: list[dict],
     namespace: str | None,
+    pod_names: set[str] | None = None,
 ) -> list[dict]:
     """incident 네임스페이스의 로그만 근거로 채택한다(다른 네임스페이스 노이즈 제외).
 
@@ -248,7 +262,7 @@ def select_incident_log_entries(
     남는다. 리포트가 소비하는 근거 번들(evidence_bundle)만 정제하는 최소 수정이며,
     수집 시점 분리(incident 별 로그 쿼리 실행)는 evidence 수집 파이프라인 후속 과제다.
     """
-    if not namespace:
+    if not namespace and pod_names is None:
         return list(logs)
     selected: list[dict] = []
     for entry in logs:
@@ -256,12 +270,14 @@ def select_incident_log_entries(
             continue
         streams = entry.get("streams")
         if not isinstance(streams, list):
-            selected.append(entry)
+            if pod_names is None:
+                selected.append(entry)
             continue
         kept = [
             stream
             for stream in streams
-            if isinstance(stream, dict) and stream_matches_namespace(stream, namespace)
+            if isinstance(stream, dict)
+            and stream_matches_incident_scope(stream, namespace, pod_names)
         ]
         if not kept:
             continue
@@ -275,6 +291,30 @@ def select_incident_log_entries(
     return selected
 
 
+def stream_matches_incident_scope(
+    stream: dict,
+    namespace: str | None,
+    pod_names: set[str] | None,
+) -> bool:
+    """일반 incident는 기존 규칙, RCA test는 namespace와 Pod를 모두 엄격히 확인한다."""
+    if pod_names is None:
+        return not namespace or stream_matches_namespace(stream, namespace)
+    if not namespace or not pod_names:
+        return False
+    labels = stream.get("stream")
+    if not isinstance(labels, dict):
+        return False
+    namespace_value = next(
+        (str(labels[key]) for key in LOG_STREAM_NAMESPACE_LABELS if labels.get(key) is not None),
+        None,
+    )
+    pod_value = next(
+        (str(labels[key]) for key in LOG_STREAM_POD_LABELS if labels.get(key) is not None),
+        None,
+    )
+    return namespace_value == namespace and pod_value in pod_names
+
+
 def stream_matches_namespace(stream: dict, namespace: str) -> bool:
     labels = stream.get("stream")
     if not isinstance(labels, dict):
@@ -284,6 +324,152 @@ def stream_matches_namespace(stream: dict, namespace: str) -> bool:
         if value is not None:
             return str(value) == namespace
     return True
+
+
+def rca_test_pod_names(metadata: dict) -> set[str] | None:
+    """RCA test metadata가 있으면 Pod 귀속을 필수화하고, 일반 incident면 None을 반환한다."""
+    test_context = metadata.get("rca_test")
+    if not isinstance(test_context, dict):
+        return None
+    raw_names = test_context.get("pod_names")
+    if not isinstance(raw_names, list):
+        return set()
+    return {str(name).strip() for name in raw_names if str(name).strip()}
+
+
+def change_context_payload(metadata: dict) -> dict:
+    raw = metadata.get("change_context")
+    if isinstance(raw, dict):
+        return dict(raw)
+    known_keys = {"recent_changes", "gitops", "image", "rollout", "config", "risk"}
+    if any(key in metadata for key in known_keys):
+        return dict(metadata)
+    return {}
+
+
+def sanitize_change_context(value: dict) -> dict:
+    sanitized = dict(value)
+    recent_changes = sanitized.get("recent_changes")
+    if isinstance(recent_changes, list):
+        sanitized["recent_changes"] = [
+            sanitize_recent_change(change) for change in recent_changes if isinstance(change, dict)
+        ]
+    return sanitized
+
+
+def sanitize_recent_change(change: dict) -> dict:
+    sanitized = dict(change)
+    if is_sensitive_change(sanitized):
+        for key in ("before", "after"):
+            if key in sanitized and sanitized[key] not in (None, ""):
+                sanitized[key] = REDACTED_CHANGE_VALUE
+    return sanitized
+
+
+def is_sensitive_change(change: dict) -> bool:
+    text = " ".join(
+        str(change.get(key) or "") for key in ("change_type", "target_resource", "field", "source")
+    ).casefold()
+    return any(token in text for token in SENSITIVE_CHANGE_TOKENS)
+
+
+def has_change_context(value: dict) -> bool:
+    for key in ("recent_changes", "gitops", "image", "rollout", "config", "risk"):
+        section = value.get(key)
+        if isinstance(section, list) and section:
+            return True
+        if isinstance(section, dict) and section:
+            return True
+    return False
+
+
+def current_workload_snapshot_payload(metadata: dict) -> dict:
+    raw = metadata.get("current_workload_snapshot")
+    if isinstance(raw, dict) and raw:
+        return dict(raw)
+    change_context = metadata.get("change_context")
+    if isinstance(change_context, dict):
+        raw = change_context.get("current_workload_snapshot")
+        if isinstance(raw, dict) and raw:
+            return dict(raw)
+    return {}
+
+
+def current_workload_snapshots_payload(metadata: dict) -> dict:
+    raw = metadata.get("current_workload_snapshots")
+    if not isinstance(raw, list):
+        change_context = metadata.get("change_context")
+        if isinstance(change_context, dict):
+            raw = change_context.get("current_workload_snapshots")
+    if not isinstance(raw, list):
+        return {}
+    snapshots = [dict(item) for item in raw if isinstance(item, dict) and item]
+    if not snapshots:
+        return {}
+    payload = {"items": snapshots}
+    attach_collection_limit(payload, metadata, "current_workload_snapshots")
+    return payload
+
+
+def metadata_list_payload(metadata: dict, key: str) -> dict:
+    raw = metadata.get(key)
+    if not isinstance(raw, list):
+        change_context = metadata.get("change_context")
+        if isinstance(change_context, dict):
+            raw = change_context.get(key)
+    if not isinstance(raw, list):
+        return {}
+    items = [dict(item) for item in raw if isinstance(item, dict) and item]
+    if not items:
+        return {}
+    payload = {"items": items}
+    attach_collection_limit(payload, metadata, key)
+    return payload
+
+
+def attach_collection_limit(payload: dict, metadata: dict, key: str) -> None:
+    """Attach truncation metadata for one promoted metadata list."""
+    limit = metadata_collection_limit(metadata, key)
+    if limit:
+        payload["collection_limit"] = limit
+
+
+def metadata_collection_limit(metadata: dict, key: str) -> dict:
+    """Return collection limit details for one metadata list."""
+    limits = metadata.get("collection_limits")
+    if not isinstance(limits, dict):
+        change_context = metadata.get("change_context")
+        if isinstance(change_context, dict):
+            limits = change_context.get("collection_limits")
+    if not isinstance(limits, dict):
+        return {}
+    lists = limits.get("lists")
+    if not isinstance(lists, dict):
+        return {}
+    limit = lists.get(key)
+    return dict(limit) if isinstance(limit, dict) and limit else {}
+
+
+def collect_change_context(
+    evt: EvidenceSource,
+    *,
+    resource_kind: str,
+    resource_name: str,
+    namespace: str | None,
+) -> dict | None:
+    payload = change_context_payload(evt.metadata)
+    if not payload:
+        return None
+    value = sanitize_change_context(payload)
+    value.setdefault(
+        "resource",
+        {
+            "namespace": namespace,
+            "workload_kind": resource_kind,
+            "workload_name": resource_name,
+        },
+    )
+    return value if has_change_context(value) else None
 
 
 def collect_evidence_items(evt: EvidenceSource) -> list[EvidenceItem]:
@@ -320,7 +506,11 @@ def collect_evidence_items(evt: EvidenceSource) -> list[EvidenceItem]:
                 summary=f"{target_summary} Metric snapshot 근거입니다.",
             )
         )
-    log_entries = select_incident_log_entries(evt.logs, namespace)
+    log_entries = select_incident_log_entries(
+        evt.logs,
+        namespace,
+        pod_names=rca_test_pod_names(evt.metadata),
+    )
     if log_entries:
         items.append(
             evidence_item(
@@ -339,6 +529,69 @@ def collect_evidence_items(evt: EvidenceSource) -> list[EvidenceItem]:
                 name="related_traces",
                 value=compact_traces_value(evt.traces),
                 summary=f"{target_summary} Trace 근거입니다.",
+            )
+        )
+    workload_snapshots = current_workload_snapshots_payload(evt.metadata)
+    if workload_snapshots:
+        items.append(
+            evidence_item(
+                evt,
+                source="metadata",
+                name="current_workload_snapshots",
+                value=workload_snapshots,
+                summary=f"{target_summary} Workload snapshot 목록 근거입니다.",
+            )
+        )
+    workload_snapshot = current_workload_snapshot_payload(evt.metadata)
+    if workload_snapshot:
+        items.append(
+            evidence_item(
+                evt,
+                source="metadata",
+                name="current_workload_snapshot",
+                value=workload_snapshot,
+                summary=f"{target_summary} Workload snapshot 상세 근거입니다.",
+            )
+        )
+    service_selector_matches = metadata_list_payload(evt.metadata, "service_selector_matches")
+    if service_selector_matches:
+        items.append(
+            evidence_item(
+                evt,
+                source="metadata",
+                name="service_selector_matches",
+                value=service_selector_matches,
+                summary=f"{target_summary} Service selector와 Pod labels 매칭 근거입니다.",
+            )
+        )
+    endpoint_slice_ready_endpoints = metadata_list_payload(
+        evt.metadata,
+        "endpoint_slice_ready_endpoints",
+    )
+    if endpoint_slice_ready_endpoints:
+        items.append(
+            evidence_item(
+                evt,
+                source="metadata",
+                name="endpoint_slice_ready_endpoints",
+                value=endpoint_slice_ready_endpoints,
+                summary=f"{target_summary} EndpointSlice ready endpoint 근거입니다.",
+            )
+        )
+    change_context = collect_change_context(
+        evt,
+        resource_kind=resource_kind,
+        resource_name=resource_name,
+        namespace=namespace,
+    )
+    if change_context:
+        items.append(
+            evidence_item(
+                evt,
+                source="metadata",
+                name="change_context",
+                value=change_context,
+                summary=f"{target_summary} Change context 근거입니다.",
             )
         )
     return items

@@ -6,6 +6,7 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 
+from domains.gitops.repository import derive_repository_id, repository_credential_scope
 from domains.gitops.repository_discovery import (
     GitHubRepositoryClient,
     RepositoryDiscoveryError,
@@ -32,15 +33,55 @@ from packages.runtime.dependencies import get_db
 from packages.security.credentials import (
     CredentialEncryptionError,
     credential_ref,
+    decrypt_credential,
     encrypt_credential,
 )
+from packages.storage.engine import unit_of_work_or_null
 
 router = APIRouter()
-GITHUB_CREDENTIAL_SCOPE = "github"
 
 
 def discovery_service() -> RepositoryDiscoveryService:
-    return RepositoryDiscoveryService()
+    # Session-scoped discovery must never borrow the process-wide GitHub token.
+    return RepositoryDiscoveryService(GitHubRepositoryClient(token=""))
+
+
+def wizard_discovery_service(
+    db: Any,
+    current: Any,
+    repo_ref: str,
+    fallback: RepositoryDiscoveryService,
+) -> RepositoryDiscoveryService:
+    """Reuse only the admin wizard credential scoped to this repository."""
+    normalized = normalize_github_repo_ref(repo_ref)
+    workspace_id = getattr(current, "workspace_id", DEFAULT_WORKSPACE_ID)
+    get_repository = getattr(db, "get_repository_by_ref", None)
+    existing_repository = (
+        get_repository(workspace_id, normalized) if callable(get_repository) else None
+    )
+    repository_id = str(
+        (existing_repository or {}).get("repository_id")
+        or derive_repository_id({"workspace_id": workspace_id, "repo_ref": normalized})
+    )
+    scope = repository_credential_scope(repository_id)
+    get_credential = getattr(db, "get_workspace_credential", None)
+    stored = get_credential(workspace_id, "github", scope) if callable(get_credential) else None
+    if stored is None:
+        return fallback
+    try:
+        if (
+            str(stored.get("workspace_id") or "") != workspace_id
+            or str(stored.get("provider") or "") != "github"
+            or str(stored.get("scope") or "") != scope
+        ):
+            raise CredentialEncryptionError("credential scope mismatch")
+        token = decrypt_credential(str(stored.get("encrypted_value") or ""))
+    except CredentialEncryptionError as exc:
+        raise RepositoryDiscoveryError(422, "credential_unavailable") from exc
+    return RepositoryDiscoveryService(
+        GitHubRepositoryClient(token=token),
+        render_executor=fallback.render_executor,
+    )
 
 
 def discovery_http_error(exc: Exception) -> HTTPException:
@@ -64,19 +105,29 @@ def repo_validate_failure(normalized: str, code: str, detail: str) -> RepoValida
     )
 
 
-def store_github_token(db: Any, workspace_id: str, token: str) -> str:
+def store_github_token(
+    db: Any,
+    workspace_id: str,
+    repository_id: str,
+    token: str,
+) -> str:
     encrypted = encrypt_credential(token)
-    ref = credential_ref("github", GITHUB_CREDENTIAL_SCOPE)
-    if hasattr(db, "upsert_workspace_credential"):
-        db.upsert_workspace_credential(
-            {
-                "workspace_id": workspace_id,
-                "provider": "github",
-                "scope": GITHUB_CREDENTIAL_SCOPE,
-                "encrypted_value": encrypted,
-                "metadata": {"credential_ref": ref},
-            }
-        )
+    scope = repository_credential_scope(repository_id)
+    ref = credential_ref("github", scope)
+    with unit_of_work_or_null(db):
+        locker = getattr(db, "lock_workspace_credential_scope", None)
+        if callable(locker):
+            locker(workspace_id, "github", scope)
+        if hasattr(db, "upsert_workspace_credential"):
+            db.upsert_workspace_credential(
+                {
+                    "workspace_id": workspace_id,
+                    "provider": "github",
+                    "scope": scope,
+                    "encrypted_value": encrypted,
+                    "metadata": {"credential_ref": ref, "repository_id": repository_id},
+                }
+            )
     return ref
 
 
@@ -107,8 +158,16 @@ async def validate_repo_for_wizard(
     credential = None
     if payload.token:
         workspace_id = getattr(current, "workspace_id", DEFAULT_WORKSPACE_ID)
+        get_repository = getattr(db, "get_repository_by_ref", None)
+        existing_repository = (
+            get_repository(workspace_id, normalized) if callable(get_repository) else None
+        )
+        repository_id = str(
+            (existing_repository or {}).get("repository_id")
+            or derive_repository_id({"workspace_id": workspace_id, "repo_ref": normalized})
+        )
         try:
-            credential = store_github_token(db, workspace_id, payload.token)
+            credential = store_github_token(db, workspace_id, repository_id, payload.token)
         except CredentialEncryptionError as exc:
             return repo_validate_failure(normalized, "credential_store_failed", str(exc))
 
@@ -124,11 +183,14 @@ async def validate_repo_for_wizard(
 @router.get(gateway_routes.REPOS_BRANCHES_PATH, response_model=RepositoryBranchListResponse)
 async def list_repo_branches_for_wizard(
     repo: str = Query(min_length=1, max_length=240),
-    _current: Any = Depends(require_admin_session),
+    current: Any = Depends(require_admin_session),
+    db: Any = Depends(get_db),
     service: RepositoryDiscoveryService = Depends(discovery_service),
 ) -> RepositoryBranchListResponse:
     try:
-        return await service.list_branches(normalize_github_repo_ref(repo))
+        normalized = normalize_github_repo_ref(repo)
+        scoped_service = wizard_discovery_service(db, current, normalized, service)
+        return await scoped_service.list_branches(normalized)
     except RepositoryDiscoveryError as exc:
         raise wizard_http_error(
             str(exc.detail), "브랜치 목록을 가져올 수 없습니다.", exc.status_code
@@ -141,11 +203,14 @@ async def list_repo_branches_for_wizard(
 async def list_repo_manifests_for_wizard(
     repo: str = Query(min_length=1, max_length=240),
     branch: str = Query(default="main", min_length=1, max_length=200),
-    _current: Any = Depends(require_admin_session),
+    current: Any = Depends(require_admin_session),
+    db: Any = Depends(get_db),
     service: RepositoryDiscoveryService = Depends(discovery_service),
 ) -> RepoManifestFileListResponse:
     try:
-        return await service.list_attachable_manifest_files(repo, branch)
+        normalized = normalize_github_repo_ref(repo)
+        scoped_service = wizard_discovery_service(db, current, normalized, service)
+        return await scoped_service.list_attachable_manifest_files(normalized, branch)
     except RepositoryDiscoveryError as exc:
         raise wizard_http_error(
             str(exc.detail), "매니페스트 목록을 가져올 수 없습니다.", exc.status_code

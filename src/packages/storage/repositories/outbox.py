@@ -3,10 +3,12 @@ from __future__ import annotations
 import uuid
 from datetime import UTC, datetime, timedelta
 
-from sqlalchemy import func, or_, select, update
+from sqlalchemy import cast, func, or_, select, update
+from sqlalchemy.dialects.postgresql import TIMESTAMP
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.engine import Connection
 
+from packages.config.logs import CONTEXT_KEY, get_logger
 from packages.contracts.event_bus.interfaces import EventEnvelope
 from packages.storage.engine import (
     DEAD_LETTER_STATUS_OPEN,
@@ -20,6 +22,18 @@ from packages.storage.schema import (
 )
 
 DEFAULT_OUTBOX_LEASE_SECONDS = 60
+LOGGER = get_logger(__name__)
+
+
+def event_log_context(evt: EventEnvelope) -> dict[str, object]:
+    return {
+        "event_id": evt.event_id,
+        "subject": evt.subject,
+        "source": evt.source,
+        "correlation_id": evt.correlation_id,
+        "causation_id": evt.causation_id,
+        "workspace_id": evt.workspace_id,
+    }
 
 
 class OutboxRepository(DatabaseConnection):
@@ -35,6 +49,7 @@ class OutboxRepository(DatabaseConnection):
                     source=evt.source,
                     correlation_id=evt.correlation_id,
                     causation_id=evt.causation_id,
+                    workspace_id=evt.workspace_id,
                     occurred_at=evt.created_at,
                     payload=evt.payload,
                     schema_version=evt.schema_version,
@@ -43,6 +58,7 @@ class OutboxRepository(DatabaseConnection):
                 )
                 .on_conflict_do_nothing(index_elements=[table.c.event_id])
             )
+            LOGGER.info("db_outbox_event_staged", extra={CONTEXT_KEY: event_log_context(evt)})
 
     async def unsent_events(self, limit: int, source: str | None) -> list[EventEnvelope]:
         table = OutboxModel.__table__
@@ -80,6 +96,7 @@ class OutboxRepository(DatabaseConnection):
                     "source": r["source"],
                     "correlation_id": r["correlation_id"],
                     "causation_id": r["causation_id"],
+                    "workspace_id": r["workspace_id"],
                     "created_at": r["occurred_at"],
                     "payload": r["payload"],
                     "schema_version": r["schema_version"],
@@ -97,6 +114,10 @@ class OutboxRepository(DatabaseConnection):
         )
         async with self.async_connection() as conn:
             await conn.execute(stmt)
+        LOGGER.info(
+            "db_outbox_events_sent",
+            extra={CONTEXT_KEY: {"event_ids": list(event_ids), "event_count": len(event_ids)}},
+        )
 
     async def mark_events_dead_lettered(
         self, events: list[EventEnvelope], consumer: str, error: str
@@ -126,12 +147,34 @@ class OutboxRepository(DatabaseConnection):
                 .where(outbox_table.c.event_id.in_([evt.event_id for evt in events]))
                 .values(sent_at=func.now(), lease_id=None, leased_until=None)
             )
+        for evt in events:
+            LOGGER.info(
+                "db_outbox_event_dead_lettered",
+                extra={
+                    CONTEXT_KEY: {
+                        **event_log_context(evt),
+                        "consumer": consumer,
+                    }
+                },
+            )
 
     def outbox_pending_count(self) -> int:
         table = OutboxModel.__table__
         statement = select(func.count()).where(table.c.sent_at.is_(None))
         with self.connection() as conn:
             return int(conn.execute(statement).scalar() or 0)
+
+    def outbox_oldest_age_seconds(self) -> float:
+        table = OutboxModel.__table__
+        oldest_occurred_at = func.min(cast(table.c.occurred_at, TIMESTAMP(timezone=True)))
+        statement = select(
+            func.coalesce(
+                func.extract("epoch", func.now() - oldest_occurred_at),
+                0,
+            )
+        ).where(table.c.sent_at.is_(None))
+        with self.connection() as conn:
+            return float(conn.execute(statement).scalar() or 0)
 
     def delete_sent_outbox_older_than(self, cutoff: datetime, *, limit: int = 1000) -> int:
         """발행 완료 outbox 를 보존 기간 이후 배치 삭제한다."""

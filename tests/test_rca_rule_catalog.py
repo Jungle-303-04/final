@@ -15,7 +15,7 @@ from domains.rca.events import (
     EvidenceItem,
     IncidentRecord,
 )
-from domains.rca.router import validate_rca_rule_catalog
+from domains.rca.router import list_rca_rule_catalog, validate_rca_rule_catalog
 from packages.contracts.gateway.requests import RcaRuleValidateRequest
 from services.ai.agent.causes.engine import evaluate_causes, plan_causes, required_evidence_sources
 from services.ai.agent.causes.loader import (
@@ -67,6 +67,8 @@ EXPECTED_RULE_SNAPSHOT: dict[str, tuple[list[str], list[str]]] = {
             "oom_killed",
             "bad_image_rollout",
             "config_env_error",
+            "app_port_bind_failed",
+            "permission_denied_startup",
             "app_startup_failure",
             "dependency_connection_failure",
         ],
@@ -77,13 +79,19 @@ EXPECTED_RULE_SNAPSHOT: dict[str, tuple[list[str], list[str]]] = {
             "oom_killed",
             "bad_image_rollout",
             "config_env_error",
+            "app_port_bind_failed",
+            "permission_denied_startup",
             "app_startup_failure",
             "dependency_connection_failure",
         ],
         ["kubernetes", "metrics", "logs"],
     ),
     "DB connection failed": (
-        ["database_connectivity_failure", "database_credential_or_config_error"],
+        [
+            "database_connectivity_failure",
+            "database_credential_or_config_error",
+            "database_connection_pool_exhausted",
+        ],
         ["kubernetes", "metrics", "logs", "traces", "metadata"],
     ),
     "ProgressDeadlineExceeded": (
@@ -103,19 +111,39 @@ EXPECTED_RULE_SNAPSHOT: dict[str, tuple[list[str], list[str]]] = {
         ["kubernetes", "metrics", "logs", "metadata"],
     ),
     "ImagePullBackOff": (
-        ["wrong_image_tag", "missing_image_pull_secret", "registry_unavailable"],
+        [
+            "wrong_image_tag",
+            "missing_image_pull_secret",
+            "registry_unavailable",
+            "registry_rate_limited",
+            "image_platform_mismatch",
+        ],
         ["kubernetes"],
     ),
     "ErrImagePull": (
-        ["wrong_image_tag", "missing_image_pull_secret", "registry_unavailable"],
+        [
+            "wrong_image_tag",
+            "missing_image_pull_secret",
+            "registry_unavailable",
+            "registry_rate_limited",
+            "image_platform_mismatch",
+        ],
         ["kubernetes"],
     ),
     "DNS lookup failed": (
-        ["service_dns_resolution_failure"],
+        [
+            "service_dns_resolution_failure",
+            "service_name_or_namespace_mismatch",
+            "coredns_unavailable",
+        ],
         ["kubernetes", "metrics", "logs", "metadata"],
     ),
     "Connection timeout": (
-        ["network_path_timeout"],
+        [
+            "network_path_timeout",
+            "network_policy_denied",
+            "endpoint_unavailable_timeout",
+        ],
         ["kubernetes", "metrics", "logs", "traces", "metadata"],
     ),
     "Ingress 502/503": (
@@ -127,6 +155,8 @@ EXPECTED_RULE_SNAPSHOT: dict[str, tuple[list[str], list[str]]] = {
             "insufficient_cpu",
             "insufficient_memory",
             "node_affinity_or_taint_mismatch",
+            "node_selector_mismatch",
+            "untolerated_taint",
             "pvc_pending",
         ],
         ["kubernetes"],
@@ -136,12 +166,187 @@ EXPECTED_RULE_SNAPSHOT: dict[str, tuple[list[str], list[str]]] = {
             "insufficient_cpu",
             "insufficient_memory",
             "node_affinity_or_taint_mismatch",
+            "node_selector_mismatch",
+            "untolerated_taint",
             "pvc_pending",
         ],
         ["kubernetes"],
     ),
     "Secret not found": (
-        ["missing_secret_reference", "secret_key_missing"],
+        ["missing_secret_reference", "secret_key_missing", "external_secret_sync_failed"],
+        ["kubernetes", "logs", "metadata"],
+    ),
+    "Probe failure": (
+        [
+            "probe_path_wrong",
+            "probe_port_wrong",
+            "timeout_too_short",
+            "startup_window_too_short",
+            "app_real_health_failure",
+        ],
+        ["kubernetes", "metrics", "logs", "metadata"],
+    ),
+    "ReadinessProbeFailed": (
+        [
+            "probe_path_wrong",
+            "probe_port_wrong",
+            "timeout_too_short",
+            "startup_window_too_short",
+            "app_real_health_failure",
+        ],
+        ["kubernetes", "metrics", "logs", "metadata"],
+    ),
+    "Service has no ready endpoints": (
+        [
+            "selector_label_mismatch",
+            "pods_not_ready",
+            "rollout_unavailable",
+            "wrong_service_port",
+            "endpoint_slice_delay",
+        ],
+        ["kubernetes", "metadata"],
+    ),
+    "ServiceEndpointsEmpty": (
+        [
+            "selector_label_mismatch",
+            "pods_not_ready",
+            "rollout_unavailable",
+            "wrong_service_port",
+            "endpoint_slice_delay",
+        ],
+        ["kubernetes", "metadata"],
+    ),
+    "OOMKilled": (
+        [
+            "memory_limit_too_low",
+            "memory_leak",
+            "traffic_spike",
+            "node_memory_pressure",
+            "bad_release_memory_regression",
+        ],
+        ["kubernetes", "metrics", "logs"],
+    ),
+    "CPU Saturation": (
+        ["cpu_limit_or_throttling"],
+        ["kubernetes", "metrics", "logs"],
+    ),
+    "Disk Pressure": (
+        ["node_disk_pressure", "ephemeral_storage_exhausted"],
+        ["kubernetes", "metrics", "logs"],
+    ),
+    "Admission webhook denied": (
+        ["policy_violation", "invalid_manifest", "image_vulnerability_block"],
+        ["kubernetes", "logs", "metadata"],
+    ),
+    "RBAC denied": (
+        ["service_account_permission_denied"],
+        ["kubernetes", "logs", "metadata"],
+    ),
+    "Certificate expired": (
+        ["certificate_expired_or_invalid"],
+        ["kubernetes", "logs", "traces", "metadata"],
+    ),
+    "Redis unavailable": (
+        ["redis_dependency_unavailable"],
+        ["metrics", "logs", "traces"],
+    ),
+    "Kafka consumer lag": (
+        ["consumer_lag_backlog"],
+        ["metrics", "logs"],
+    ),
+    "External API timeout": (
+        ["external_api_timeout"],
+        ["metrics", "logs", "traces"],
+    ),
+    "DB/cache/queue dependency failure": (
+        [
+            "dependency_down",
+            "connection_pool_exhausted",
+            "wrong_endpoint_config",
+            "credential_rotation_issue",
+        ],
+        ["metrics", "logs", "traces", "metadata"],
+    ),
+    "HPA scaling failed": (
+        [
+            "metrics_server_unavailable",
+            "missing_resource_requests",
+            "max_replica_limit_reached",
+        ],
+        ["kubernetes", "metrics", "logs"],
+    ),
+    "FailedGetResourceMetric": (
+        [
+            "metrics_server_unavailable",
+            "missing_resource_requests",
+            "max_replica_limit_reached",
+        ],
+        ["kubernetes", "metrics", "logs"],
+    ),
+    "NodeNotReady": (
+        [
+            "kubelet_unavailable",
+            "container_runtime_unavailable",
+            "node_network_unavailable",
+        ],
+        ["kubernetes", "metrics", "logs"],
+    ),
+    "KubeletNotReady": (
+        [
+            "kubelet_unavailable",
+            "container_runtime_unavailable",
+            "node_network_unavailable",
+        ],
+        ["kubernetes", "metrics", "logs"],
+    ),
+    "Pod evicted": (
+        [
+            "pod_evicted_memory_pressure",
+            "pod_evicted_disk_pressure",
+            "pod_evicted_pid_pressure",
+        ],
+        ["kubernetes", "metrics", "logs"],
+    ),
+    "Evicted": (
+        [
+            "pod_evicted_memory_pressure",
+            "pod_evicted_disk_pressure",
+            "pod_evicted_pid_pressure",
+        ],
+        ["kubernetes", "metrics", "logs"],
+    ),
+    "ConfigMap not found": (
+        [
+            "missing_configmap_reference",
+            "config_key_missing",
+            "invalid_env_value",
+            "config_volume_mount_failed",
+        ],
+        ["kubernetes", "logs", "metadata"],
+    ),
+    "CreateContainerConfigError": (
+        [
+            "missing_configmap_reference",
+            "config_key_missing",
+            "invalid_env_value",
+            "config_volume_mount_failed",
+        ],
+        ["kubernetes", "logs", "metadata"],
+    ),
+    "FailedMount": (
+        [
+            "pvc_not_bound",
+            "csi_driver_unavailable",
+            "volume_attach_timeout",
+            "storage_class_mismatch",
+        ],
+        ["kubernetes", "logs", "metadata"],
+    ),
+    "FailedAttachVolume": (
+        [
+            "volume_multi_attach_conflict",
+            "volume_attachment_orphaned",
+        ],
         ["kubernetes", "logs", "metadata"],
     ),
 }
@@ -199,6 +404,28 @@ def test_rca_rule_validate_route_reports_schema_errors() -> None:
     assert response.errors[0].code == "schema_error"
 
 
+def test_rca_rule_catalog_route_lists_loaded_rules() -> None:
+    response = asyncio.run(
+        list_rca_rule_catalog(
+            SimpleNamespace(user_id="user-1", workspace_id="workspace-1"),
+            registered_cause_profiles(),
+        )
+    )
+
+    by_id = {item.rule_id: item for item in response.items}
+
+    assert response.rules_count == len(response.items)
+    assert response.candidates_count == sum(len(item.candidates) for item in response.items)
+    assert by_id["runtime_config_error"].symptoms == [
+        "ConfigMap not found",
+        "CreateContainerConfigError",
+        "Invalid environment config",
+    ]
+    assert [candidate.candidate_id for candidate in by_id["runtime_config_error"].candidates][
+        0
+    ] == "missing_configmap_reference"
+
+
 def test_catalog_oom_killed_candidate_keeps_full_field_parity() -> None:
     """대표 후보(oom_killed)의 전체 필드가 고정값 사용 시절 원문과 동일해야 한다."""
     plan = plan_for("CrashLoopBackOff")
@@ -207,7 +434,11 @@ def test_catalog_oom_killed_candidate_keeps_full_field_parity() -> None:
     assert oom.candidate_id == "oom_killed"
     assert oom.title == "컨테이너 OOMKilled"
     assert oom.description == "컨테이너가 메모리 제한을 초과해 재시작됐을 가능성이 있습니다."
-    assert oom.expected_evidence == ["kubernetes", "metrics", "logs"]
+    assert oom.expected_evidence == [
+        "kubernetes:cluster_resource_state",
+        "metrics:telemetry_metrics",
+        "logs:related_logs",
+    ]
     assert oom.checks == [
         "containerStatuses.lastState.terminated.reason == OOMKilled 확인",
         "restartCount 증가와 memory usage가 limit 근처인지 확인",
@@ -215,8 +446,22 @@ def test_catalog_oom_killed_candidate_keeps_full_field_parity() -> None:
     ]
 
 
+EVIDENCE_ITEM_NAMES = {
+    "kubernetes": "cluster_resource_state",
+    "metrics": "telemetry_metrics",
+    "logs": "related_logs",
+    "traces": "related_traces",
+    "metadata": "current_workload_snapshots",
+}
+
+
 def evidence_item(source: str, value: dict) -> EvidenceItem:
-    return EvidenceItem(source=source, name=f"{source}_item", value=value, summary=f"{source} 근거")
+    return EvidenceItem(
+        source=source,
+        name=EVIDENCE_ITEM_NAMES.get(source, f"{source}_item"),
+        value=value,
+        summary=f"{source} 근거",
+    )
 
 
 def crashloop_bundle(*, log_lines: list[str], pods: list[dict]) -> EvidenceBundle:
@@ -247,6 +492,29 @@ def crashloop_pod(**overrides: object) -> dict:
 def evaluations_by_id(bundle: EvidenceBundle) -> dict:
     plan = plan_for("CrashLoopBackOff")
     return {e.candidate_id: e for e in evaluate_causes(plan.candidates, bundle)}
+
+
+def evaluations_for(symptom: str, bundle: EvidenceBundle) -> dict:
+    plan = plan_for(symptom)
+    return {e.candidate_id: e for e in evaluate_causes(plan.candidates, bundle)}
+
+
+def resource_pressure_bundle(
+    *,
+    log_lines: list[str],
+    events: list[dict] | None = None,
+    pods: list[dict] | None = None,
+) -> EvidenceBundle:
+    return EvidenceBundle(
+        incident_id="inc-resource-pressure",
+        items=[
+            evidence_item("kubernetes", {"pods": pods or [], "events": events or []}),
+            evidence_item("metrics", {"results": [{"query": "resource pressure"}]}),
+            evidence_item("logs", {"entries": [{"line": line} for line in log_lines]}),
+        ],
+        missing_evidence=[],
+        complete=True,
+    )
 
 
 def test_oom_killed_requires_positive_oom_evidence_for_full_score() -> None:
@@ -310,6 +578,34 @@ def test_non_oom_exit_code_supports_app_startup_failure() -> None:
     assert by_id["oom_killed"].score < 1.0
 
 
+def test_port_bind_failure_reaches_full_score_with_startup_log() -> None:
+    """포트 bind 실패 로그가 있으면 일반 startup failure보다 구체 후보가 완결된다."""
+    bundle = crashloop_bundle(
+        log_lines=["listen tcp :8080: bind: address already in use"],
+        pods=[crashloop_pod()],
+    )
+
+    by_id = evaluations_by_id(bundle)
+
+    assert by_id["app_port_bind_failed"].score == 1.0
+    assert by_id["app_port_bind_failed"].missing_evidence == []
+    assert by_id["app_startup_failure"].score < 1.0
+
+
+def test_permission_denied_startup_reaches_full_score_with_startup_log() -> None:
+    """권한 오류 로그가 있으면 permission_denied_startup 후보가 완결된다."""
+    bundle = crashloop_bundle(
+        log_lines=["permission denied opening /app/config/config.yaml"],
+        pods=[crashloop_pod()],
+    )
+
+    by_id = evaluations_by_id(bundle)
+
+    assert by_id["permission_denied_startup"].score == 1.0
+    assert by_id["permission_denied_startup"].missing_evidence == []
+    assert by_id["app_startup_failure"].score < 1.0
+
+
 def test_no_candidate_gets_full_score_without_distinguishing_evidence() -> None:
     """판별 신호가 전혀 없는 근거(소스만 존재)로는 어떤 crashloop 후보도 1.0 이 될 수 없다."""
     bundle = crashloop_bundle(log_lines=["container restarted"], pods=[crashloop_pod()])
@@ -318,6 +614,639 @@ def test_no_candidate_gets_full_score_without_distinguishing_evidence() -> None:
 
     assert all(evaluation.score < 1.0 for evaluation in by_id.values())
     assert all(evaluation.missing_evidence for evaluation in by_id.values())
+
+
+def test_traffic_spike_reaches_full_score_with_request_spike_log() -> None:
+    """트래픽 급증/큐 포화 로그가 있으면 traffic_spike 후보가 완결된다."""
+    bundle = resource_pressure_bundle(
+        log_lines=["request rate spike caused queue full and server overloaded"],
+        pods=[crashloop_pod(terminated_reasons=["OOMKilled"])],
+    )
+
+    by_id = evaluations_for("OOMKilled", bundle)
+
+    assert by_id["traffic_spike"].score == 1.0
+    assert by_id["traffic_spike"].missing_evidence == []
+
+
+def test_cpu_throttling_reaches_full_score_with_cfs_quota_log() -> None:
+    """CPU quota/throttling 로그가 있으면 cpu_limit_or_throttling 후보가 완결된다."""
+    bundle = resource_pressure_bundle(
+        log_lines=["container was cpu throttled by cfs quota; context deadline exceeded"],
+    )
+
+    by_id = evaluations_for("CPU Saturation", bundle)
+
+    assert by_id["cpu_limit_or_throttling"].score == 1.0
+    assert by_id["cpu_limit_or_throttling"].missing_evidence == []
+
+
+def test_image_pull_rate_limit_uses_named_evidence_and_event_signal() -> None:
+    bundle = EvidenceBundle(
+        incident_id="inc-image",
+        items=[
+            EvidenceItem(
+                source="kubernetes",
+                name="cluster_resource_state",
+                value={
+                    "pods": [{"name": "checkout-api-1", "waiting_reasons": ["ImagePullBackOff"]}],
+                    "events": [
+                        {
+                            "reason": "Failed",
+                            "message": "Failed to pull image: toomanyrequests: rate limit exceeded",
+                        }
+                    ],
+                },
+                summary="Kubernetes image pull event",
+            ),
+        ],
+        missing_evidence=[],
+        complete=True,
+    )
+
+    by_id = evaluations_for("ImagePullBackOff", bundle)
+
+    assert by_id["registry_rate_limited"].score == 1.0
+    assert by_id["registry_rate_limited"].missing_evidence == []
+
+
+def test_secret_not_found_uses_named_evidence_and_event_signal() -> None:
+    bundle = EvidenceBundle(
+        incident_id="inc-secret",
+        items=[
+            EvidenceItem(
+                source="kubernetes",
+                name="cluster_resource_state",
+                value={
+                    "pods": [{"name": "checkout-api-1", "namespace": "sandbox"}],
+                    "events": [
+                        {
+                            "reason": "FailedMount",
+                            "message": (
+                                'MountVolume.SetUp failed for volume "api-secret": '
+                                'secret "api-secret" not found'
+                            ),
+                        }
+                    ],
+                },
+                summary="Kubernetes secret event",
+            ),
+            EvidenceItem(
+                source="logs",
+                name="related_logs",
+                value={"entries": [{"line": "secret not found: api-secret"}]},
+                summary="Secret logs",
+            ),
+            EvidenceItem(
+                source="metadata",
+                name="current_workload_snapshots",
+                value={"items": [{"name": "checkout-api"}]},
+                summary="Workload snapshots",
+            ),
+        ],
+        missing_evidence=[],
+        complete=True,
+    )
+
+    by_id = evaluations_for("Secret not found", bundle)
+
+    assert by_id["missing_secret_reference"].score == 1.0
+    assert by_id["missing_secret_reference"].missing_evidence == []
+
+
+def test_dns_lookup_failed_service_name_mismatch_uses_named_evidence_and_log_signal() -> None:
+    bundle = EvidenceBundle(
+        incident_id="inc-dns",
+        items=[
+            EvidenceItem(
+                source="kubernetes",
+                name="cluster_resource_state",
+                value={"services": [], "events": []},
+                summary="Kubernetes service state",
+            ),
+            EvidenceItem(
+                source="logs",
+                name="related_logs",
+                value={
+                    "entries": [
+                        {"line": ("lookup checkout-api.sanbbox.svc.cluster.local: no such host")}
+                    ]
+                },
+                summary="DNS logs",
+            ),
+            EvidenceItem(
+                source="metadata",
+                name="service_selector_matches",
+                value={"items": [{"service": "checkout-api", "match_status": "not_found"}]},
+                summary="Service selector metadata",
+            ),
+        ],
+        missing_evidence=[],
+        complete=True,
+    )
+
+    by_id = evaluations_for("DNS lookup failed", bundle)
+
+    assert by_id["service_name_or_namespace_mismatch"].score == 1.0
+    assert by_id["service_name_or_namespace_mismatch"].missing_evidence == []
+
+
+def test_connection_timeout_network_policy_uses_named_evidence_and_log_signal() -> None:
+    bundle = EvidenceBundle(
+        incident_id="inc-timeout",
+        items=[
+            EvidenceItem(
+                source="kubernetes",
+                name="cluster_resource_state",
+                value={"network_policies": [{"name": "deny-egress"}], "events": []},
+                summary="Kubernetes network policy state",
+            ),
+            EvidenceItem(
+                source="logs",
+                name="related_logs",
+                value={"entries": [{"line": "request failed: network policy egress denied"}]},
+                summary="Timeout logs",
+            ),
+            EvidenceItem(
+                source="metadata",
+                name="network_policy_allows",
+                value={"allowed": False, "reason": "egress denied"},
+                summary="Network policy metadata",
+            ),
+        ],
+        missing_evidence=[],
+        complete=True,
+    )
+
+    by_id = evaluations_for("Connection timeout", bundle)
+
+    assert by_id["network_policy_denied"].score == 1.0
+    assert by_id["network_policy_denied"].missing_evidence == []
+
+
+def test_failed_scheduling_taint_uses_named_evidence_and_event_signal() -> None:
+    bundle = EvidenceBundle(
+        incident_id="inc-scheduling",
+        items=[
+            EvidenceItem(
+                source="kubernetes",
+                name="cluster_resource_state",
+                value={
+                    "pods": [{"name": "checkout-api-1", "namespace": "sandbox"}],
+                    "events": [
+                        {
+                            "reason": "FailedScheduling",
+                            "message": (
+                                "0/3 nodes are available: 3 node(s) had untolerated "
+                                "taint {dedicated: gpu}."
+                            ),
+                        }
+                    ],
+                },
+                summary="Kubernetes scheduling event",
+            ),
+            EvidenceItem(
+                source="metadata",
+                name="current_workload_snapshots",
+                value={"items": [{"name": "checkout-api", "tolerations": []}]},
+                summary="Workload snapshots",
+            ),
+        ],
+        missing_evidence=[],
+        complete=True,
+    )
+
+    by_id = evaluations_for("FailedScheduling", bundle)
+
+    assert by_id["untolerated_taint"].score == 1.0
+    assert by_id["untolerated_taint"].missing_evidence == []
+
+
+def test_probe_failure_rule_uses_schema_v1_evidence_keys() -> None:
+    plan = plan_for("Probe failure")
+    by_id = {candidate.candidate_id: candidate for candidate in plan.candidates}
+
+    assert by_id["probe_path_wrong"].expected_evidence == [
+        "kubernetes:cluster_resource_state",
+        "logs:related_logs",
+        "metadata:current_workload_snapshots",
+    ]
+    assert by_id["app_real_health_failure"].expected_evidence == [
+        "kubernetes:cluster_resource_state",
+        "metrics:telemetry_metrics",
+        "logs:related_logs",
+        "traces:related_traces",
+    ]
+
+
+def test_service_endpoint_rule_uses_metadata_endpoint_evidence_keys() -> None:
+    plan = plan_for("Service has no ready endpoints")
+    by_id = {candidate.candidate_id: candidate for candidate in plan.candidates}
+
+    assert by_id["selector_label_mismatch"].expected_evidence == [
+        "kubernetes:cluster_resource_state",
+        "metadata:service_selector_matches",
+        "metadata:endpoint_slice_ready_endpoints",
+    ]
+    assert by_id["wrong_service_port"].expected_evidence == [
+        "kubernetes:cluster_resource_state",
+        "metadata:service_selector_matches",
+    ]
+
+
+def test_resource_pressure_rule_uses_schema_v1_evidence_keys() -> None:
+    plan = plan_for("OOMKilled")
+    by_id = {candidate.candidate_id: candidate for candidate in plan.candidates}
+    cpu_plan = plan_for("CPU Saturation")
+    cpu_by_id = {candidate.candidate_id: candidate for candidate in cpu_plan.candidates}
+
+    assert by_id["memory_limit_too_low"].expected_evidence == [
+        "kubernetes:cluster_resource_state",
+        "metrics:telemetry_metrics",
+        "logs:related_logs",
+    ]
+    assert by_id["bad_release_memory_regression"].expected_evidence == [
+        "kubernetes:cluster_resource_state",
+        "metrics:telemetry_metrics",
+        "logs:related_logs",
+        "metadata:current_workload_snapshots",
+    ]
+    assert cpu_by_id["cpu_limit_or_throttling"].expected_evidence == [
+        "kubernetes:cluster_resource_state",
+        "metrics:telemetry_metrics",
+        "logs:related_logs",
+    ]
+
+
+def test_policy_and_dependency_rules_use_schema_v1_evidence_keys() -> None:
+    policy_plan = plan_for("Admission webhook denied")
+    policy_by_id = {candidate.candidate_id: candidate for candidate in policy_plan.candidates}
+    dependency_plan = plan_for("External API timeout")
+    dependency_by_id = {
+        candidate.candidate_id: candidate for candidate in dependency_plan.candidates
+    }
+
+    assert policy_by_id["policy_violation"].expected_evidence == [
+        "kubernetes:cluster_resource_state",
+        "logs:related_logs",
+        "metadata:current_workload_snapshots",
+    ]
+    assert dependency_by_id["external_api_timeout"].expected_evidence == [
+        "metrics:telemetry_metrics",
+        "logs:related_logs",
+        "traces:related_traces",
+    ]
+
+
+def test_network_rules_use_schema_v1_evidence_keys() -> None:
+    dns_plan = plan_for("DNS lookup failed")
+    dns_by_id = {candidate.candidate_id: candidate for candidate in dns_plan.candidates}
+    timeout_plan = plan_for("Connection timeout")
+    timeout_by_id = {candidate.candidate_id: candidate for candidate in timeout_plan.candidates}
+    ingress_plan = plan_for("Ingress 502/503")
+    ingress_by_id = {candidate.candidate_id: candidate for candidate in ingress_plan.candidates}
+
+    assert dns_by_id["service_dns_resolution_failure"].expected_evidence == [
+        "kubernetes:cluster_resource_state",
+        "metrics:telemetry_metrics",
+        "logs:related_logs",
+        "metadata:service_selector_matches",
+    ]
+    assert timeout_by_id["network_policy_denied"].expected_evidence == [
+        "kubernetes:cluster_resource_state",
+        "logs:related_logs",
+        "metadata:network_policy_allows",
+    ]
+    assert ingress_by_id["upstream_unavailable"].expected_evidence == [
+        "kubernetes:cluster_resource_state",
+        "metrics:telemetry_metrics",
+        "logs:related_logs",
+    ]
+
+
+def test_rollout_and_db_rules_use_schema_v1_evidence_keys() -> None:
+    rollout_plan = plan_for("ProgressDeadlineExceeded")
+    rollout_by_id = {candidate.candidate_id: candidate for candidate in rollout_plan.candidates}
+    gitops_plan = plan_for("GitOps Sync Failed")
+    gitops_by_id = {candidate.candidate_id: candidate for candidate in gitops_plan.candidates}
+    db_plan = plan_for("DB connection failed")
+    db_by_id = {candidate.candidate_id: candidate for candidate in db_plan.candidates}
+
+    assert rollout_by_id["deployment_progress_deadline_exceeded"].expected_evidence == [
+        "kubernetes:cluster_resource_state",
+        "metrics:telemetry_metrics",
+        "logs:related_logs",
+        "metadata:current_workload_snapshots",
+    ]
+    assert gitops_by_id["manifest_validation_failed"].expected_evidence == [
+        "kubernetes:cluster_resource_state",
+        "logs:related_logs",
+        "metadata:current_workload_snapshots",
+    ]
+    assert db_by_id["database_connectivity_failure"].expected_evidence == [
+        "kubernetes:cluster_resource_state",
+        "metrics:telemetry_metrics",
+        "logs:related_logs",
+        "traces:related_traces",
+        "metadata:current_workload_snapshots",
+    ]
+    assert db_by_id["database_connection_pool_exhausted"].expected_evidence == [
+        "metrics:telemetry_metrics",
+        "logs:related_logs",
+        "traces:related_traces",
+    ]
+
+
+def test_scheduling_rules_use_schema_v1_evidence_keys() -> None:
+    plan = plan_for("FailedScheduling")
+    by_id = {candidate.candidate_id: candidate for candidate in plan.candidates}
+
+    assert by_id["insufficient_cpu"].expected_evidence == [
+        "kubernetes:cluster_resource_state",
+        "metrics:telemetry_metrics",
+    ]
+    assert by_id["node_selector_mismatch"].expected_evidence == [
+        "kubernetes:cluster_resource_state",
+        "metadata:current_workload_snapshots",
+    ]
+    assert by_id["untolerated_taint"].expected_evidence == [
+        "kubernetes:cluster_resource_state",
+        "metadata:current_workload_snapshots",
+    ]
+    assert by_id["pvc_pending"].expected_evidence == [
+        "kubernetes:cluster_resource_state",
+    ]
+
+
+def test_autoscaling_and_node_health_rules_use_schema_v1_evidence_keys() -> None:
+    hpa_plan = plan_for("HPA scaling failed")
+    hpa_by_id = {candidate.candidate_id: candidate for candidate in hpa_plan.candidates}
+    node_plan = plan_for("NodeNotReady")
+    node_by_id = {candidate.candidate_id: candidate for candidate in node_plan.candidates}
+    eviction_plan = plan_for("Pod evicted")
+    eviction_by_id = {candidate.candidate_id: candidate for candidate in eviction_plan.candidates}
+
+    assert hpa_by_id["metrics_server_unavailable"].expected_evidence == [
+        "kubernetes:cluster_resource_state",
+        "metrics:telemetry_metrics",
+        "logs:related_logs",
+    ]
+    assert hpa_by_id["missing_resource_requests"].expected_evidence == [
+        "kubernetes:cluster_resource_state",
+        "logs:related_logs",
+        "metadata:current_workload_snapshots",
+    ]
+    assert node_by_id["kubelet_unavailable"].expected_evidence == [
+        "kubernetes:cluster_resource_state",
+        "metrics:telemetry_metrics",
+        "logs:related_logs",
+    ]
+    assert eviction_by_id["pod_evicted_disk_pressure"].expected_evidence == [
+        "kubernetes:cluster_resource_state",
+        "metrics:telemetry_metrics",
+        "logs:related_logs",
+    ]
+
+
+def test_storage_and_runtime_config_rules_use_schema_v1_evidence_keys() -> None:
+    mount_plan = plan_for("FailedMount")
+    mount_by_id = {candidate.candidate_id: candidate for candidate in mount_plan.candidates}
+    attach_plan = plan_for("FailedAttachVolume")
+    attach_by_id = {candidate.candidate_id: candidate for candidate in attach_plan.candidates}
+    config_plan = plan_for("ConfigMap not found")
+    config_by_id = {candidate.candidate_id: candidate for candidate in config_plan.candidates}
+
+    assert mount_by_id["pvc_not_bound"].expected_evidence == [
+        "kubernetes:cluster_resource_state",
+        "logs:related_logs",
+        "metadata:current_workload_snapshots",
+    ]
+    assert mount_by_id["csi_driver_unavailable"].expected_evidence == [
+        "kubernetes:cluster_resource_state",
+        "logs:related_logs",
+        "metrics:telemetry_metrics",
+    ]
+    assert attach_by_id["volume_multi_attach_conflict"].expected_evidence == [
+        "kubernetes:cluster_resource_state",
+        "logs:related_logs",
+        "metadata:current_workload_snapshots",
+    ]
+    assert config_by_id["missing_configmap_reference"].expected_evidence == [
+        "kubernetes:cluster_resource_state",
+        "logs:related_logs",
+        "metadata:current_workload_snapshots",
+    ]
+    assert config_by_id["invalid_env_value"].expected_evidence == [
+        "kubernetes:cluster_resource_state",
+        "logs:related_logs",
+        "metadata:current_workload_snapshots",
+    ]
+
+
+def test_probe_path_wrong_evaluates_with_named_evidence_and_event_signal() -> None:
+    plan = plan_for("Probe failure")
+    bundle = EvidenceBundle(
+        incident_id="inc-probe",
+        items=[
+            EvidenceItem(
+                source="kubernetes",
+                name="cluster_resource_state",
+                value={
+                    "pods": [],
+                    "events": [
+                        {
+                            "reason": "Unhealthy",
+                            "message": "Readiness probe failed: HTTP probe failed with statuscode: 404",
+                        }
+                    ],
+                },
+                summary="Kubernetes probe event",
+            ),
+            EvidenceItem(
+                source="logs",
+                name="related_logs",
+                value={"entries": [{"line": "GET /healthz returned 404 not found"}]},
+                summary="Probe logs",
+            ),
+            EvidenceItem(
+                source="metadata",
+                name="current_workload_snapshots",
+                value={"items": [{"name": "checkout-api"}]},
+                summary="Workload snapshots",
+            ),
+        ],
+        missing_evidence=[],
+        complete=True,
+    )
+
+    by_id = {e.candidate_id: e for e in evaluate_causes(plan.candidates, bundle)}
+
+    assert by_id["probe_path_wrong"].score == 1.0
+    assert by_id["probe_path_wrong"].missing_evidence == []
+
+
+def test_node_not_ready_evaluates_with_named_evidence_and_event_signal() -> None:
+    plan = plan_for("NodeNotReady")
+    bundle = EvidenceBundle(
+        incident_id="inc-node",
+        items=[
+            EvidenceItem(
+                source="kubernetes",
+                name="cluster_resource_state",
+                value={
+                    "nodes": [{"name": "worker-1", "conditions": [{"type": "Ready"}]}],
+                    "events": [
+                        {
+                            "reason": "KubeletNotReady",
+                            "message": "node is not ready: kubelet stopped posting node status",
+                        }
+                    ],
+                },
+                summary="Kubernetes node event",
+            ),
+            EvidenceItem(
+                source="metrics",
+                name="telemetry_metrics",
+                value={"results": {"node_up": {"value": 0}}},
+                summary="Node metric",
+            ),
+            EvidenceItem(
+                source="logs",
+                name="related_logs",
+                value={"entries": [{"line": "node status update failed"}]},
+                summary="Node logs",
+            ),
+        ],
+        missing_evidence=[],
+        complete=True,
+    )
+
+    by_id = {e.candidate_id: e for e in evaluate_causes(plan.candidates, bundle)}
+
+    assert by_id["kubelet_unavailable"].score == 1.0
+    assert by_id["kubelet_unavailable"].missing_evidence == []
+
+
+def test_failed_mount_pvc_rule_evaluates_with_named_evidence_and_event_signal() -> None:
+    plan = plan_for("FailedMount")
+    bundle = EvidenceBundle(
+        incident_id="inc-volume",
+        items=[
+            EvidenceItem(
+                source="kubernetes",
+                name="cluster_resource_state",
+                value={
+                    "pods": [{"name": "checkout-api-0", "namespace": "sandbox"}],
+                    "events": [
+                        {
+                            "reason": "FailedMount",
+                            "message": (
+                                "pod has unbound immediate PersistentVolumeClaims: "
+                                "claim checkout-data is not bound"
+                            ),
+                        }
+                    ],
+                },
+                summary="Kubernetes volume event",
+            ),
+            EvidenceItem(
+                source="logs",
+                name="related_logs",
+                value={"entries": [{"line": "persistentvolumeclaim checkout-data not bound"}]},
+                summary="Volume logs",
+            ),
+            EvidenceItem(
+                source="metadata",
+                name="current_workload_snapshots",
+                value={"items": [{"name": "checkout-api"}]},
+                summary="Workload snapshots",
+            ),
+        ],
+        missing_evidence=[],
+        complete=True,
+    )
+
+    by_id = {e.candidate_id: e for e in evaluate_causes(plan.candidates, bundle)}
+
+    assert by_id["pvc_not_bound"].score == 1.0
+    assert by_id["pvc_not_bound"].missing_evidence == []
+
+
+def test_rollout_progress_deadline_evaluates_with_named_evidence_and_event_signal() -> None:
+    plan = plan_for("ProgressDeadlineExceeded")
+    bundle = EvidenceBundle(
+        incident_id="inc-rollout",
+        items=[
+            evidence_item(
+                "kubernetes",
+                {
+                    "events": [
+                        {
+                            "reason": "ProgressDeadlineExceeded",
+                            "message": "Deployment exceeded its progress deadline",
+                        }
+                    ]
+                },
+            ),
+            evidence_item("metrics", {"results": {"unavailable_replicas": {"value": 2}}}),
+            evidence_item(
+                "logs",
+                {"entries": [{"line": "rollout exceeded progress deadline for checkout-api"}]},
+            ),
+            evidence_item("metadata", {"items": [{"name": "checkout-api", "revision": "7"}]}),
+        ],
+        missing_evidence=[],
+        complete=True,
+    )
+
+    by_id = {e.candidate_id: e for e in evaluate_causes(plan.candidates, bundle)}
+
+    assert by_id["deployment_progress_deadline_exceeded"].score == 1.0
+    assert by_id["deployment_progress_deadline_exceeded"].missing_evidence == []
+
+
+def test_database_config_error_evaluates_with_named_evidence_and_log_signal() -> None:
+    plan = plan_for("DB connection failed")
+    bundle = EvidenceBundle(
+        incident_id="inc-db",
+        items=[
+            evidence_item("kubernetes", {"pods": [{"name": "checkout-api-1"}], "events": []}),
+            evidence_item(
+                "logs",
+                {"entries": [{"line": "password authentication failed for user checkout"}]},
+            ),
+            evidence_item("metadata", {"items": [{"name": "checkout-api", "secretRefs": ["db"]}]}),
+        ],
+        missing_evidence=[],
+        complete=True,
+    )
+
+    by_id = {e.candidate_id: e for e in evaluate_causes(plan.candidates, bundle)}
+
+    assert by_id["database_credential_or_config_error"].score == 1.0
+    assert by_id["database_credential_or_config_error"].missing_evidence == []
+
+
+def test_database_pool_exhausted_evaluates_with_named_evidence_and_log_signal() -> None:
+    plan = plan_for("DB connection failed")
+    bundle = EvidenceBundle(
+        incident_id="inc-db-pool",
+        items=[
+            evidence_item("metrics", {"results": {"db_pool_usage": {"value": 1.0}}}),
+            evidence_item(
+                "logs",
+                {"entries": [{"line": "connection pool exhausted while acquiring DB client"}]},
+            ),
+            evidence_item("traces", {"results": {"db_spans": {"error_count": 12}}}),
+        ],
+        missing_evidence=[],
+        complete=True,
+    )
+
+    by_id = {e.candidate_id: e for e in evaluate_causes(plan.candidates, bundle)}
+
+    assert by_id["database_connection_pool_exhausted"].score == 1.0
+    assert by_id["database_connection_pool_exhausted"].missing_evidence == []
 
 
 def test_unmatched_symptom_still_reports_rule_missing() -> None:

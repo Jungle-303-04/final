@@ -72,11 +72,39 @@ EVENT_COMPAT_COLUMNS = {
         "alter table events add column if not exists schema_version integer not null default 1"
     ),
 }
+EVENT_PROCESSING_COMPAT_COLUMNS = {
+    "processing_duration_ms": (
+        "alter table event_processing add column if not exists processing_duration_ms integer"
+    ),
+}
+AI_LLM_INVOCATION_METRIC_COMPAT_COLUMNS = {
+    "event_id": "alter table ai_llm_invocation_metrics add column if not exists event_id text",
+    "correlation_id": (
+        "alter table ai_llm_invocation_metrics add column if not exists correlation_id text"
+    ),
+    "causation_id": (
+        "alter table ai_llm_invocation_metrics add column if not exists causation_id text"
+    ),
+}
 OUTBOX_COMPAT_COLUMNS = {
     "lease_id": "alter table outbox add column if not exists lease_id text",
     "leased_until": "alter table outbox add column if not exists leased_until timestamptz",
     "schema_version": (
         "alter table outbox add column if not exists schema_version integer not null default 1"
+    ),
+}
+ALERT_CHANNEL_COMPAT_COLUMNS = {
+    "last_tested_at": (
+        "alter table alert_channels add column if not exists last_tested_at timestamptz"
+    ),
+    "last_test_status": (
+        "alter table alert_channels add column if not exists last_test_status text"
+    ),
+    "last_test_detail": (
+        "alter table alert_channels add column if not exists last_test_detail text"
+    ),
+    "last_test_status_code": (
+        "alter table alert_channels add column if not exists last_test_status_code integer"
     ),
 }
 OUTBOX_CLAIM_INDEX = (
@@ -156,6 +184,11 @@ OPERATIONAL_INDEXES = (
     (
         "create index if not exists ix_events_correlation_created "
         "on events (correlation_id, created_at)"
+    ),
+    (
+        "create index if not exists ix_ai_llm_invocation_correlation_created "
+        "on ai_llm_invocation_metrics (correlation_id, created_at) "
+        "where correlation_id is not null"
     ),
 )
 REPO_CHANGE_COMPAT_COLUMNS = {
@@ -421,6 +454,21 @@ def acquire_schema_init_lock(conn: Connection) -> None:
     )
 
 
+def schema_compatibility_issues(
+    expected: dict[str, set[str]],
+    actual: dict[str, set[str]],
+) -> list[str]:
+    """읽기 전용 schema 검증 결과 — 누락 table/column을 결정적으로 정렬한다."""
+    issues: list[str] = []
+    for table_name in sorted(expected):
+        if table_name not in actual:
+            issues.append(f"table:{table_name}")
+            continue
+        for column_name in sorted(expected[table_name] - actual[table_name]):
+            issues.append(f"column:{table_name}.{column_name}")
+    return issues
+
+
 async def configure_async_transaction(conn: Any) -> None:
     await conn.execute(text(f"set local lock_timeout = '{DB_LOCK_TIMEOUT}'"))
     await conn.execute(text(f"set local statement_timeout = '{DB_STATEMENT_TIMEOUT}'"))
@@ -484,6 +532,33 @@ class DatabaseConnection:
         with self.connection() as conn:
             conn.execute(text("SELECT 1"))
 
+    def verify_schema(self) -> None:
+        """현재 metadata의 table/column이 모두 있는지 읽기 전용으로 검증한다."""
+        from domains.registry import load_domain_tables
+
+        load_domain_tables()
+        expected = {
+            table.name: {column.name for column in table.columns}
+            for table in metadata.sorted_tables
+        }
+        with self.connection() as conn:
+            rows = conn.execute(
+                text(
+                    "select table_name, column_name "
+                    "from information_schema.columns "
+                    "where table_schema = current_schema()"
+                )
+            ).mappings()
+            actual: dict[str, set[str]] = {}
+            for row in rows:
+                actual.setdefault(str(row["table_name"]), set()).add(str(row["column_name"]))
+        issues = schema_compatibility_issues(expected, actual)
+        if not issues:
+            return
+        preview = ", ".join(issues[:20])
+        suffix = f" (+{len(issues) - 20} more)" if len(issues) > 20 else ""
+        raise RuntimeError(f"database schema verification failed: {preview}{suffix}")
+
     def init(self) -> None:
         from domains.registry import load_domain_tables
 
@@ -524,7 +599,14 @@ class DatabaseConnection:
 
     def _apply_compatible_schema(self, conn: Connection) -> None:
         self._add_missing_columns(conn, "events", EVENT_COMPAT_COLUMNS)
+        self._add_missing_columns(conn, "event_processing", EVENT_PROCESSING_COMPAT_COLUMNS)
+        self._add_missing_columns(
+            conn,
+            "ai_llm_invocation_metrics",
+            AI_LLM_INVOCATION_METRIC_COMPAT_COLUMNS,
+        )
         self._add_missing_columns(conn, "outbox", OUTBOX_COMPAT_COLUMNS)
+        self._add_missing_columns(conn, "alert_channels", ALERT_CHANNEL_COMPAT_COLUMNS)
         conn.execute(text(OUTBOX_CLAIM_INDEX))
         conn.execute(text(OUTBOX_CLAIM_ALL_SOURCES_INDEX))
 

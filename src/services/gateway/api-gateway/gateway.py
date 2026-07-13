@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import secrets
+import time
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager, suppress
 from urllib.parse import urlsplit
@@ -18,10 +19,12 @@ from settings import Settings
 from domains.ai.router import router as ai_router
 from domains.alert.router import router as alert_router
 from domains.applications.router import router as applications_router
+from domains.audit.router import router as audit_router
 from domains.catalog.router import router as catalog_router
 from domains.command.router import router as command_router
 from domains.dashboard.fleet_router import router as fleet_router
 from domains.dashboard.router import router as dashboard_router
+from domains.diagnostics.router import router as diagnostics_router
 from domains.gitops.repository_discovery_router import router as repository_discovery_router
 from domains.gitops.router import approval_router
 from domains.gitops.router import router as gitops_router
@@ -36,6 +39,10 @@ from domains.inventory.router import router as inventory_router
 from domains.providers.router import router as providers_router
 from domains.rca.query_router import router as rca_query_router
 from domains.rca.router import router as rca_router
+from domains.rca.test_scenario_contract import validate_test_scenario_catalog
+from domains.rca_bundle.router import router as rca_bundle_router
+from domains.rca_changes.router import router as rca_changes_router
+from domains.release_flow.router import router as release_flow_router
 from domains.target.events import AgentConnectedBody
 from domains.target.evidence_jobs import EVIDENCE_JOB_STATUS_LEASED, EVIDENCE_JOB_STATUS_QUEUED
 from domains.target.router import router as target_router
@@ -56,13 +63,32 @@ from packages.contracts.identity import DEFAULT_WORKSPACE_ID, ClusterRegistratio
 from packages.events.bus import NatsEventBus
 from packages.runtime.command_wakeup import COMMAND_NOTIFY_DATABASE_URL_ENV, WAKEUP
 from packages.runtime.gateway import ApiEventGateway
-from packages.runtime.metrics import render_labeled_counter, render_prometheus_metrics
+from packages.runtime.metrics import (
+    render_labeled_counter,
+    render_labeled_gauge,
+    render_multi_labeled_gauge,
+    render_prometheus_metrics,
+)
+from packages.security.trusted_proxy import assert_trusted_proxy_config_safe
 from packages.storage.database import Database, wait_for_database
 from packages.storage.engine import unit_of_work_or_null
 from packages.storage.sessions import RedisSessionStore, RedisSessionStoreConfig
+from services.ai.agent.playbooks.cause import registered_cause_profiles
 
 LOGGER = get_logger(__name__)
 STATE_CHANGING_METHODS = {"POST", "PUT", "PATCH", "DELETE"}
+INSTALL_LOG_PATH_PREFIX = gateway_routes.INSTALL_MANIFEST_PATH.partition("{")[0]
+INSTALL_LOG_REDACTED_PATH = f"{INSTALL_LOG_PATH_PREFIX}[REDACTED]"
+
+
+def elapsed_ms(started_at: float) -> int:
+    return max(0, int((time.perf_counter() - started_at) * 1000))
+
+
+def sanitize_request_log_path(path: str) -> str:
+    if path.startswith(INSTALL_LOG_PATH_PREFIX) and len(path) > len(INSTALL_LOG_PATH_PREFIX):
+        return INSTALL_LOG_REDACTED_PATH
+    return path
 
 
 def agent_connected_body_from_request(
@@ -87,15 +113,20 @@ class ApiGateway:
         self.auth = SessionAuthService(self.sessions)
         self.password_auth = PasswordAuthService(self.db, self.sessions)
         self.app = FastAPI(
-            title=Settings.APP_TITLE, version=Settings.APP_VERSION, lifespan=self.lifespan
+            title=Settings.APP_TITLE,
+            version=Settings.APP_VERSION,
+            root_path=env(Settings.ROOT_PATH_ENV, Settings.DEFAULT_ROOT_PATH).strip(),
+            lifespan=self.lifespan,
         )
         self._configure_cors(self.app)
         self._configure_session_origin_guard(self.app)
+        self._configure_request_logging(self.app)
         # 도메인 router 가 Depends 로 가져갈 공유 객체(클로저 대신 DI).
         self.app.state.db = self.db
         self.app.state.events = self.events
         self.app.state.auth = self.auth
         self.app.state.password_auth = self.password_auth
+        self.app.state.rca_rule_profiles = registered_cause_profiles()
         self.configure_routes()
 
     @staticmethod
@@ -125,6 +156,44 @@ class ApiGateway:
                     content={"detail": Settings.CSRF_REJECT_MESSAGE},
                 )
             return await call_next(request)
+
+    @staticmethod
+    def _configure_request_logging(app: FastAPI) -> None:
+        @app.middleware("http")
+        async def request_logging(request: Request, call_next):
+            started_at = time.perf_counter()
+            context = {
+                "method": request.method,
+                "path": sanitize_request_log_path(request.url.path),
+                "client_host": request.client.host if request.client else None,
+                "request_correlation_id": request.headers.get(Gateway.CORRELATION_ID),
+            }
+            try:
+                response = await call_next(request)
+            except Exception as exc:
+                LOGGER.error(
+                    "gateway_request_failed",
+                    extra={
+                        CONTEXT_KEY: {
+                            **context,
+                            "duration_ms": elapsed_ms(started_at),
+                            "exception_type": type(exc).__name__,
+                        }
+                    },
+                    exc_info=exc,
+                )
+                raise
+            LOGGER.info(
+                "gateway_request_completed",
+                extra={
+                    CONTEXT_KEY: {
+                        **context,
+                        "status_code": response.status_code,
+                        "duration_ms": elapsed_ms(started_at),
+                    }
+                },
+            )
+            return response
 
     @staticmethod
     def _session_origin_guard_rejects(request: Request) -> bool:
@@ -181,6 +250,8 @@ class ApiGateway:
 
     @asynccontextmanager
     async def lifespan(self, _app: FastAPI) -> AsyncIterator[None]:
+        assert_trusted_proxy_config_safe()
+        validate_test_scenario_catalog()
         await wait_for_database(self.db)
         await self.sessions.connect()
         await self.bus.connect()
@@ -222,9 +293,14 @@ class ApiGateway:
         app.include_router(
             rca_query_router
         )  # evidence/RCA report 범용 조회(세션 워크스페이스 범위)
+        app.include_router(rca_bundle_router)  # RCA/recovery read projection bundle
+        app.include_router(rca_changes_router)  # incident workload 최근 GitOps 변경
         app.include_router(command_router)  # command 도메인 라우터(+agent 가드 필터)
+        app.include_router(audit_router)  # workspace-scoped correlation 감사 타임라인
         app.include_router(dashboard_router)  # dashboard read model 조회(+cluster read 필터)
         app.include_router(fleet_router)  # fleet 롤업 + 클러스터 드릴다운(콘솔 루트 화면)
+        app.include_router(diagnostics_router)  # release flow preflight + YAML/설정 진단
+        app.include_router(release_flow_router)  # release plan/flow run 관리
         self._register_live_proxy_routes(app)
         self._register_dead_letter_routes(app)
         self._register_metrics_routes(app)
@@ -476,10 +552,12 @@ class ApiGateway:
     def _register_metrics_routes(self, app: FastAPI) -> None:
         @app.get("/metrics")
         async def metrics(request: Request) -> PlainTextResponse:
-            # METRICS_TOKEN 설정 시에만 Bearer 강제(설정 안 하면 클러스터 내부 스크레이핑 허용 —
-            # 외부 노출은 NetworkPolicy/별도 포트로 막아야 함). 토큰 불일치는 거부.
-            # 비교는 timing-safe(compare_digest)로 수행.
             metrics_token = env(Settings.METRICS_TOKEN_ENV, "")
+            if not metrics_token:
+                raise HTTPException(
+                    status_code=503,
+                    detail=Settings.METRICS_TOKEN_NOT_CONFIGURED_MESSAGE,
+                )
             if metrics_token:
                 header = request.headers.get(Settings.AUTHORIZATION_HEADER, "")
                 if not secrets.compare_digest(header, f"Bearer {metrics_token}"):
@@ -487,6 +565,7 @@ class ApiGateway:
             scalar_metrics = {
                 "event_dead_letters_open_total": self.db.open_dead_letter_count(),
                 "outbox_pending_total": self.db.outbox_pending_count(),
+                "outbox_oldest_age_seconds": self.db.outbox_oldest_age_seconds(),
                 "command_queue_oldest_age_seconds": self.db.oldest_command_age_seconds(
                     CommandStatus.QUEUED
                 ),
@@ -499,12 +578,63 @@ class ApiGateway:
                 "evidence_job_leased_oldest_age_seconds": (
                     self.db.oldest_evidence_job_age_seconds(EVIDENCE_JOB_STATUS_LEASED)
                 ),
+                "gitops_workflow_running_total": self.db.count_running_workflow_runs(
+                    DEFAULT_WORKSPACE_ID
+                ),
+                "gitops_approvals_open_total": self.db.count_open_workflow_approvals(
+                    DEFAULT_WORKSPACE_ID
+                ),
             }
             body = render_prometheus_metrics(scalar_metrics)
             body += render_labeled_counter(
                 "event_processing_status_total",
                 self.db.event_processing_status_counts(),
                 "status",
+            )
+            body += render_labeled_gauge(
+                "event_processing_duration_avg_ms",
+                self.db.event_processing_duration_avg_ms_by_consumer(),
+                "consumer",
+            )
+            body += render_labeled_gauge(
+                "event_processing_duration_max_ms",
+                self.db.event_processing_duration_max_ms_by_consumer(),
+                "consumer",
+            )
+            body += render_multi_labeled_gauge(
+                "nats_consumer_pending_events",
+                self.db.event_consumer_pending_by_consumer_subject(),
+                ("consumer", "subject"),
+            )
+            body += render_multi_labeled_gauge(
+                "nats_consumer_ack_pending_events",
+                self.db.event_consumer_ack_pending_by_consumer_subject(),
+                ("consumer", "subject"),
+            )
+            body += render_multi_labeled_gauge(
+                "nats_consumer_redelivered_events",
+                self.db.event_consumer_redelivered_by_consumer_subject(),
+                ("consumer", "subject"),
+            )
+            body += render_multi_labeled_gauge(
+                "llm_invocation_latency_avg_ms",
+                self.db.llm_invocation_latency_avg_ms_by_provider_model_operation_status(),
+                ("provider", "model", "operation", "status"),
+            )
+            body += render_multi_labeled_gauge(
+                "llm_invocation_latency_max_ms",
+                self.db.llm_invocation_latency_max_ms_by_provider_model_operation_status(),
+                ("provider", "model", "operation", "status"),
+            )
+            body += render_multi_labeled_gauge(
+                "llm_invocation_total_tokens",
+                self.db.llm_invocation_total_tokens_by_provider_model_operation_status(),
+                ("provider", "model", "operation", "status"),
+            )
+            body += render_multi_labeled_gauge(
+                "llm_invocation_estimated_cost_micros",
+                self.db.llm_invocation_estimated_cost_micros_by_provider_model_operation_status(),
+                ("provider", "model", "operation", "status"),
             )
             body += render_labeled_counter(
                 "command_status_total", self.db.command_status_counts(), "status"
@@ -513,6 +643,16 @@ class ApiGateway:
                 "evidence_job_status_total",
                 self.db.evidence_job_status_counts(),
                 "status",
+            )
+            body += render_labeled_counter(
+                "gitops_workflow_status_total",
+                self.db.workflow_run_status_counts(DEFAULT_WORKSPACE_ID),
+                "status",
+            )
+            body += render_labeled_counter(
+                "gitops_workflow_current_step_total",
+                self.db.workflow_run_current_step_counts(DEFAULT_WORKSPACE_ID),
+                "step",
             )
             return PlainTextResponse(body, media_type="text/plain; version=0.0.4")
 

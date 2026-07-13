@@ -48,12 +48,14 @@ def event(subject: str, source: str, payload: JsonObject,
 | `DEFAULT_MAX_DELIVER` | `"4"` | 워커 재시도 상한(기본 3) + 1 — 소진 후 DLQ 종결 |
 | `MAX_ACK_PENDING_ENV` | `"NATS_MAX_ACK_PENDING"` | in-flight 상한 env |
 | `DEFAULT_MAX_ACK_PENDING` | `"100"` | 컨슈머당 미확인 in-flight 상한(폭주 억제) |
+| `DELIVER_POLICY_ENV` | `"NATS_DELIVER_POLICY"` | 새 durable consumer의 최초 전달 위치 |
+| `DEFAULT_DELIVER_POLICY` | `"all"` | 기존 worker의 전체 보존 이벤트 처리 유지 |
 | `CURRENT_CAUSATION_ID` | `ContextVar[str | None]("current_event_causation_id", default=None)` | 현재 처리 중 이벤트 ID(자식 이벤트의 causation 자동 연결) |
 
 ```python
 def nats_client() -> Any                       # import nats (지연 import)
 def nats_not_found_error() -> type[Exception]  # nats.js.errors.NotFoundError (지연 import)
-def consumer_config() -> Any                   # ConsumerConfig(ack_wait, max_deliver, max_ack_pending) — env 값으로 구성
+def consumer_config() -> Any                   # ConsumerConfig(ack_wait, max_deliver, max_ack_pending, deliver_policy) — env 값으로 구성
 def event_context(evt: EventEnvelope) -> dict[str, str | None]
     # 로그 표준 이벤트 식별 필드: subject, event_id, correlation_id, causation_id, source
 @contextmanager
@@ -167,4 +169,5 @@ class DeadLetterSink:
 | `NATS_ACK_WAIT_SECONDS` | int | `60` | 컨슈머 ack 대기(재배달 창) |
 | `NATS_MAX_DELIVER` | int | `4` | 재배달 상한 |
 | `NATS_MAX_ACK_PENDING` | int | `100` | 컨슈머당 미확인 in-flight 상한 |
+| `NATS_DELIVER_POLICY` | str | `all` | 새 durable consumer의 전달 정책. 과거 이벤트 재실행이 부작용을 만드는 신규 projection은 배포에서 `new` 사용 |
 | `SERVICE_NAME` | str | `service` | NATS 연결 이름(`Runtime.SERVICE_NAME_ENV`) |

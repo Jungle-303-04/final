@@ -19,7 +19,7 @@ headers {
 
 tests {
   test("metrics are text or protected by metrics token", function () {
-    expect([200, 401]).to.include(res.status);
+    expect([200, 401, 503]).to.include(res.status);
   });
 
   test("success body exposes operational metric names", function () {

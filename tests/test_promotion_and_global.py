@@ -27,6 +27,11 @@ class StubGitopsDb:
         self.step_details: dict[tuple[str, str], dict] = {}
         self.applications: dict[str, dict] = {}
         self.registered: list[dict] = []
+        self.registrations: dict[str, dict] = {}
+
+    async def get_cluster_registration(self, workspace_id: str, cluster_id: str):
+        row = self.registrations.get(cluster_id)
+        return dict(row) if row and row["workspace_id"] == workspace_id else None
 
     async def get_deployment_binding(self, workspace_id: str, binding_id: str):
         row = self.bindings.get(binding_id)
@@ -224,6 +229,45 @@ def test_webhook_fans_out_to_global_bindings_once() -> None:
     assert again == []
 
 
+def test_webhook_global_fanout_skips_existing_management_binding() -> None:
+    module = load_controller()
+    db = StubGitopsDb()
+    db.bindings["bind-main"] = binding("bind-main", "cluster-a")
+    db.bindings["bind-target"] = binding("bind-target", "cluster-b", deploy_policy={"global": True})
+    db.bindings["bind-management"] = binding(
+        "bind-management", "kubernetes-ops", deploy_policy={"global": True}
+    )
+    db.registrations["cluster-b"] = {
+        "workspace_id": "ws-1",
+        "cluster_id": "cluster-b",
+        "settings": {"cluster_role": "target"},
+    }
+    db.registrations["kubernetes-ops"] = {
+        "workspace_id": "ws-1",
+        "cluster_id": "kubernetes-ops",
+        "settings": {"cluster_role": "management"},
+    }
+    evt = GitWebhookReceivedBody(
+        commit_sha="sha-1",
+        image="ghcr.io/acme/agent:v1",
+        replicas=2,
+        workspace_id="ws-1",
+        repository_id="repo-1",
+        repo_ref="acme/final",
+        branch="main",
+        binding_id="bind-main",
+        application_id="app-1",
+        cluster_id="cluster-a",
+        manifest_path="deploy.yaml",
+    )
+
+    bodies = collect(
+        module.fanout_global_bindings(evt, SimpleNamespace(db=db, correlation_id="corr-1"))
+    )
+
+    assert [body.binding_id for body in bodies] == ["bind-target"]
+
+
 def test_new_cluster_attaches_global_bindings_and_triggers_initial_deploy() -> None:
     module = load_controller()
     db = StubGitopsDb()
@@ -276,5 +320,32 @@ def test_cluster_event_with_other_reason_is_ignored() -> None:
             evt, SimpleNamespace(db=db, correlation_id="corr-1")
         )
     )
+    assert bodies == []
+    assert db.registered == []
+
+
+def test_management_cluster_event_does_not_attach_global_bindings() -> None:
+    module = load_controller()
+    db = StubGitopsDb()
+    db.bindings["bind-g1"] = binding("bind-g1", "cluster-a", deploy_policy={"global": True})
+    db.registrations["kubernetes-ops"] = {
+        "workspace_id": "ws-1",
+        "cluster_id": "kubernetes-ops",
+        "settings": {"cluster_role": "management"},
+    }
+    evt = ClusterDesiredStateChangedBody(
+        cluster_id="kubernetes-ops",
+        desired_state_version="v1",
+        components=[],
+        reason="target registered",
+        workspace_id="ws-1",
+    )
+
+    bodies = collect(
+        module.on_cluster_registered_attach_globals(
+            evt, SimpleNamespace(db=db, correlation_id="corr-management")
+        )
+    )
+
     assert bodies == []
     assert db.registered == []

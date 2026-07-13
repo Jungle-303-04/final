@@ -53,6 +53,16 @@ MAX_BRANCHES = 100
 MAX_TREE_ITEMS = 5000
 MAX_CANDIDATES = 150
 MAX_MANIFEST_BYTES = 1_048_576
+MANIFEST_SCAN_CONCURRENCY_ENV = "GITHUB_MANIFEST_SCAN_CONCURRENCY"
+MANIFEST_SCAN_TIMEOUT_SECONDS_ENV = "GITHUB_MANIFEST_SCAN_TIMEOUT_SECONDS"
+MANIFEST_SCAN_CONCURRENCY = max(
+    1,
+    min(32, int(env(MANIFEST_SCAN_CONCURRENCY_ENV, "8"))),
+)
+MANIFEST_SCAN_TIMEOUT_SECONDS = max(
+    1.0,
+    min(60.0, float(env(MANIFEST_SCAN_TIMEOUT_SECONDS_ENV, "20"))),
+)
 MAX_RENDER_SOURCE_FILES = 500
 MAX_RENDER_SOURCE_BYTES = 5 * 1_048_576
 MAX_RENDER_ERROR_LENGTH = 2000
@@ -301,16 +311,28 @@ class RepositoryDiscoveryService:
             for path in [normalize_tree_path(str(item.get("path") or ""))]
             if manifest_extension(path) in {".yaml", ".yml"}
         ][:MAX_CANDIDATES]
-        manifests: list[RepoManifestFile] = []
-        for path in paths:
-            try:
-                content = await self.client.content(normalized, normalized_branch, path)
-                text = content.decode("utf-8")
-                kinds = manifest_kinds(text, "raw-yaml")
-            except (RepositoryDiscoveryError, UnicodeDecodeError, ValueError, yaml.YAMLError):
-                continue
-            if kinds:
-                manifests.append(RepoManifestFile(path=path, kinds=kinds))
+        semaphore = asyncio.Semaphore(MANIFEST_SCAN_CONCURRENCY)
+
+        async def inspect(index: int, path: str) -> tuple[int, RepoManifestFile | None]:
+            async with semaphore:
+                try:
+                    content = await self.client.content(normalized, normalized_branch, path)
+                    text = content.decode("utf-8")
+                    kinds = manifest_kinds(text, "raw-yaml")
+                except (RepositoryDiscoveryError, UnicodeDecodeError, ValueError, yaml.YAMLError):
+                    return index, None
+                manifest = RepoManifestFile(path=path, kinds=kinds) if kinds else None
+                return index, manifest
+
+        tasks = [asyncio.create_task(inspect(index, path)) for index, path in enumerate(paths)]
+        done, pending = await asyncio.wait(tasks, timeout=MANIFEST_SCAN_TIMEOUT_SECONDS)
+        for task in pending:
+            task.cancel()
+        if pending:
+            await asyncio.gather(*pending, return_exceptions=True)
+            warnings.append("매니페스트 스캔 제한시간 내 확인된 파일만 표시합니다.")
+        inspected = sorted((task.result() for task in done), key=lambda item: item[0])
+        manifests = [manifest for _, manifest in inspected if manifest is not None]
         if len(paths) >= MAX_CANDIDATES:
             warnings.append("manifest scan was limited; narrow the repository layout if needed")
         if not manifests:
@@ -693,7 +715,7 @@ def normalize_github_repo_ref(value: str) -> str:
     if host and host != GITHUB_HOST:
         raise RepositoryDiscoveryError(422, "unsupported_host")
     try:
-        return normalize_repo_ref(repo)
+        return normalize_repo_ref(repo).casefold()
     except ValueError as exc:
         raise ValueError("GitHub 저장소는 owner/repo 형식이어야 합니다.") from exc
 

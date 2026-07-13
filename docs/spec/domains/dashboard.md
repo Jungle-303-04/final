@@ -1,5 +1,5 @@
 ---
-source_commit: e7e4caab
+source_commit: 243e7fc0
 status: synced
 ---
 
@@ -74,14 +74,16 @@ status: synced
 
 | 메서드 | 시그니처 | 쿼리 의미 |
 |---|---|---|
-| `upsert_rca_timeline` | `(self, row: JsonObject) -> None` | `INSERT ... ON CONFLICT (workspace_id, correlation_id) DO UPDATE`. 갱신 규칙: ① `preserve_when_missing` 컬럼(cluster_id, incident_id, evidence_ref, root_cause, confidence, supporting_evidence, missing_evidence, action_route, command_id, pr_url)은 `coalesce(EXCLUDED.<col>, 기존값)` — 새 값이 NULL이면 기존값 보존. ② `newer_or_equal_event = EXCLUDED.last_event_at >= 기존 last_event_at`일 때만 current_subject/status/error_reason/last_event_id/last_event_at/payload 교체(CASE), 아니면 기존값 유지. ③ `updated_at=now()` 항상 갱신 |
+| `upsert_rca_timeline` | `(self, row: JsonObject) -> None` | `INSERT ... ON CONFLICT (workspace_id, correlation_id) DO UPDATE`. 갱신 규칙: ① cluster/incident 차원과 evidence/RCA/action 필드는 `coalesce(EXCLUDED.<col>, 기존값)`으로 보존한다. 차원을 싣지 않는 approval/dispatch 후속 이벤트의 `incident_logical_key`는 NULL이므로 앞서 투영한 정규화 key를 correlation ID로 덮어쓰지 않는다. ② `newer_or_equal_event = EXCLUDED.last_event_at >= 기존 last_event_at`일 때만 current_subject/status/error_reason/last_event_id/last_event_at/payload 교체(CASE), 아니면 기존값 유지. ③ `updated_at=now()` 항상 갱신 |
 | `list_rca_timeline` | `(self, workspace_id: str, allowed_cluster_ids: set[str] \| None, limit: int = 50) -> list[JsonObject]` | `allowed_cluster_ids == set()`이면 빈 리스트 즉시 반환(권한 0). `WHERE workspace_id=? [AND cluster_id IN allowed] ORDER BY updated_at DESC LIMIT ?` 후 `serialize_timeline_row`. `None`은 필터 없음(전체 허용) |
 | `get_rca_timeline_item` | `(self, workspace_id: str, incident_id: str, allowed_cluster_ids: set[str] \| None) -> JsonObject \| None` | `WHERE workspace_id=? AND incident_id=? [AND cluster_id IN allowed] ORDER BY updated_at DESC LIMIT 1` |
-| `count_open_rca_incidents` | `(self, workspace_id: str, allowed_cluster_ids: set[str] \| None = None) -> dict[str, int]` | fleet 롤업용 클러스터별 열린 logical incident 수. `WHERE workspace_id=? AND incident_id IS NOT NULL AND cluster_id IS NOT NULL AND status NOT IN CLOSED_INCIDENT_STATUSES [AND cluster_id IN allowed]` 후 `incident_logical_key` projection 컬럼을 SQL `COUNT(DISTINCT ...) GROUP BY cluster_id`로 집계한다. 큰 `payload` JSON을 다시 파싱하지 않고, Python으로 row 전체를 풀스캔하지 않는다. 빈 허용 집합이면 `{}` |
+| `count_open_rca_incidents` | `(self, workspace_id: str, allowed_cluster_ids: set[str] \| None = None) -> dict[str, int]` | fleet 롤업용 클러스터별 열린 logical incident 수. `status IN OPEN_INCIDENT_STATUSES` 양수 allowlist로 실제 탐지 이후 상태만 집계해 `evidence_received/evidence_built`가 인시던트로 승격되지 않게 한다. 정규화 projection(namespace/kind/name/symptom)이 있으면 구버전 correlation 기반 key보다 우선해 SQL `COUNT(DISTINCT ...) GROUP BY cluster_id`로 집계한다. 큰 `payload` JSON을 읽거나 Python으로 전체 row를 풀스캔하지 않는다 |
 | `list_open_rca_incidents` | `(self, workspace_id: str, cluster_id: str, *, limit: int = 20) -> list[JsonObject]` | 드릴다운용 — 같은 open 판정으로 `updated_at DESC LIMIT`(1..100 clamp) 후 `open_incident_summary` 적용 |
 | `expire_stale_open_rca_incidents` | `(self, max_age_days: int = 3, limit: int = 500) -> list[JsonObject]` | 오래 열린 incident row를 CTE `stale_open_incidents`로 `FOR UPDATE SKIP LOCKED` 선점 후 `status="incident_expired"`로 원자 UPDATE. `error_reason`이 비어 있으면 retention window 초과 메시지를 채운다. [rca-timeline-janitor](../services/projection-rca-timeline-janitor.md)가 호출한다 |
+| `resolve_recovered_ephemeral_incidents` | `(self, grace_minutes: int = 5, limit: int = 500) -> list[JsonObject]` | grace가 지난 open Pod/ReplicaSet incident 중 최신 inventory에 비정상 리소스가 없는 row를 CTE `recovered_ephemeral_incidents`로 선점해 `incident_resolved`로 원자 UPDATE. 사라졌거나 healthy인 ephemeral 리소스만 대상으로 한다 |
+| `delete_stale_pre_incident_timeline` | `(self, retention_hours: int = 24, limit: int = 1000) -> int` | 원본 evidence/event는 보존하고 `evidence_received/evidence_built` timeline projection만 보존시간 이후 CTE + `FOR UPDATE SKIP LOCKED` 배치로 삭제한다 |
 
-열린 인시던트 판정 상수 `CLOSED_INCIDENT_STATUSES`(앵커: `src/domains/dashboard/repository.py :: CLOSED_INCIDENT_STATUSES`) = `("command_completed", "command_rejected", "pr_created", "pr_failed", "incident_expired")` — 이 종결 status 에 도달하지 않았고 `incident_id`가 있는 row 가 open. `timeline_update_from_event`는 `incident_namespace`, `incident_resource_kind`, `incident_resource_name`, `incident_symptom`, `incident_logical_key`를 함께 투영해 fleet/드릴다운 조회가 큰 payload 를 반복 파싱하지 않게 한다. 모듈 함수 `open_incident_summary`(앵커: `src/domains/dashboard/repository.py :: open_incident_summary`)는 timeline row 를 `{incident_id, correlation_id, symptom(우선순위: `incident_symptom` → payload fallback), root_cause, status, created_at}` 화이트리스트 요약으로 변환한다(payload 원문 비노출).
+열린 인시던트는 `OPEN_INCIDENT_STATUSES` 양수 allowlist로만 판정한다. `PRE_INCIDENT_STATUSES=("evidence_received", "evidence_built")`는 절대 open count에 들어가지 않으며 24시간 뒤 projection janitor가 삭제한다. `CLOSED_INCIDENT_STATUSES`는 `incident_resolved`를 포함해 종결 이력을 구분한다. `timeline_update_from_event`는 `incident_namespace`, `incident_resource_kind`, `incident_resource_name`, `incident_symptom`, `incident_logical_key`를 함께 투영하며, 집계는 정규화 필드가 존재하면 구버전 correlation key를 무시하고 동일 리소스·증상을 하나로 묶는다. 원본 payload/evidence/audit는 projection 삭제와 무관하게 보존된다.
 
 #### `timeline_update_from_event(evt)` 투영 규칙
 
@@ -147,7 +149,7 @@ health 롤업 규칙 — `rollup_health`(앵커: `src/domains/dashboard/fleet_ro
 
 `__table_args__ = (UniqueConstraint("workspace_id", "correlation_id"), Index("ix_rca_timeline_scope_updated", "workspace_id", "updated_at"), Index("ix_rca_timeline_open_cluster", "workspace_id", "cluster_id", "status", "incident_id"))`
 
-추가 운영 인덱스: Alembic revision `20260708_0405`가 `ix_rca_timeline_fleet_open_logical` partial expression index를 `CONCURRENTLY`로 만든다. 라이브 실측에서 expression index 만으로는 기존 큰 payload JSON 경로 추출 비용이 남아, revision `20260708_0435`가 projection 컬럼과 `ix_rca_timeline_fleet_open_projection` partial index를 추가했다. 대상은 열린 incident row(`incident_id`/`cluster_id` 존재, closed status 제외, `incident.detected`의 `detected=false` 제외)이며 신규 집계 key는 `(workspace_id, cluster_id, incident_logical_key)`이다.
+추가 운영 인덱스: Alembic revision `20260708_0405`가 `ix_rca_timeline_fleet_open_logical` partial expression index를 `CONCURRENTLY`로 만들고, revision `20260708_0435`가 projection 컬럼과 `ix_rca_timeline_fleet_open_projection` partial index를 추가했다. 현재 쿼리는 더 강한 `OPEN_INCIDENT_STATUSES` 조건으로 후보를 먼저 줄이고, 정규화 projection 필드로 구버전 logical key도 조회 시점에 호환 보정한다.
 
 | 필드 | 타입 | 제약 | 설명 |
 |---|---|---|---|

@@ -24,41 +24,68 @@ def request_files() -> list[Path]:
     ]
 
 
-def test_bruno_collection_has_expected_root_and_profiles() -> None:
+def test_bruno_collection_has_only_aws_test_profile() -> None:
     assert (API_DIR / "bruno.json").is_file()
     assert (API_DIR / "README.md").is_file()
     collection = (API_DIR / "collection.bru").read_text(encoding="utf-8")
 
-    local = (API_DIR / "environments" / "local.bru").read_text(encoding="utf-8")
+    environment_files = sorted(
+        path.name for path in (API_DIR / "environments").iterdir() if path.is_file()
+    )
     aws = (API_DIR / "environments" / "aws-test.bru").read_text(encoding="utf-8")
 
-    assert "base_url: https://k8s.woonyong.org/api/" in collection
+    assert "base_url: https://dev-k8s.woonyong.org/api/" in collection
     assert "auto_login: false" in collection
     assert "auth_email: replace-with-auth-email" in collection
     assert "auth_password: replace-with-auth-password" in collection
-    assert "cluster_id: cluster-1" in collection
+    assert "\n  cluster_id: api-verification-target\n" in collection
 
-    assert "base_url: http://localhost:18080/" in local
-    assert "auto_login: true" in local
-    assert "auth_email: admin.local@example.com" in local
-    assert "auth_password: local-test-password-1234" in local
-    assert "cluster_id: target" in local
-    assert "base_url: https://k8s.woonyong.org/api/" in aws
-    assert "management_base_url: https://k8s.woonyong.org/api/" in aws
+    assert environment_files == ["aws-test.bru"]
+    assert "base_url: https://dev-k8s.woonyong.org/api/" in aws
+    assert "management_base_url: https://dev-k8s.woonyong.org/api/" in aws
     assert "auto_login: false" in aws
     assert "auth_email: replace-with-auth-email" in aws
     assert "auth_password: replace-with-auth-password" in aws
-    assert "cluster_id: cluster-1" in aws
+    assert "\n  cluster_id: api-verification-target\n" in aws
 
-    for env_text in (local, aws):
-        assert "base_url:" in env_text
-        assert "auto_login:" in env_text
-        assert "auth_email:" in env_text
-        assert "agent_token:" in env_text
-        assert "cluster_id:" in env_text
-        assert "alert_channel_id:" in env_text
-        assert "alertmanager_token:" in env_text
-        assert "github_webhook_signature:" in env_text
+    assert "base_url:" in aws
+    assert "auto_login:" in aws
+    assert "dev_security_bypass:" not in aws
+    assert "dev_cluster_id:" not in aws
+    assert "auth_email:" in aws
+    assert "agent_token:" in aws
+    assert "cluster_id:" in aws
+    assert "alert_channel_id:" in aws
+    assert "alertmanager_token:" in aws
+    assert "github_webhook_signature:" in aws
+    assert "rca_test_token:" not in aws
+    assert "vars:secret [\n  rca_test_token\n]" in aws
+    assert "rca_test_token:" not in collection
+
+
+def test_rca_test_token_is_local_bruno_secret_without_tracked_placeholder() -> None:
+    environment = (API_DIR / "environments" / "aws-test.bru").read_text(encoding="utf-8")
+    collection = (API_DIR / "collection.bru").read_text(encoding="utf-8")
+    workflow = "\n".join(
+        path.read_text(encoding="utf-8")
+        for path in sorted((API_DIR / "16-rca-debug").glob("*.bru"))
+    )
+
+    assert "vars:secret [\n  rca_test_token\n]" in environment
+    assert "replace-with-RCA_TEST_RUNS_TOKEN" not in environment
+    assert "replace-with-RCA_TEST_RUNS_TOKEN" not in collection
+    assert "x-rca-test-token: {{rca_test_token}}" in workflow
+    assert "x-rca-test-verification: {{rca_test_verification}}" in workflow
+    assert "rca_test_verification: false" in environment
+
+
+def test_aws_session_request_fails_closed_without_mtls_development_identity() -> None:
+    request = (API_DIR / "00-health-auth" / "07-session.bru").read_text(encoding="utf-8")
+
+    assert 'baseUrl.includes("dev-k8s.woonyong.org")' in request
+    assert "expect(res.status).to.equal(200)" in request
+    assert 'expect(body).to.have.property("workspace_id", "default")' in request
+    assert 'expect(body.roles).to.include("service_admin")' in request
 
 
 def test_every_gateway_route_has_a_bruno_request() -> None:
@@ -129,9 +156,15 @@ def test_every_gateway_route_has_a_bruno_request() -> None:
         routes.PROVIDERS_CATALOG_PATH,
         routes.PROVIDERS_CLUSTER_DISCOVERY_PATH,
         routes.PROVIDERS_VALIDATE_PATH,
+        routes.RCA_RULES_PATH,
         routes.RCA_RULES_VALIDATE_PATH,
+        routes.RCA_TEST_SCENARIOS_PATH,
+        routes.RCA_TEST_RUNS_PATH,
+        "/rca/test-runs/{{rca_test_run_id}}",
         routes.METRICS_VALIDATE_PATH,
         routes.DASHBOARD_RCA_TIMELINE_PATH,
+        f"{routes.AUDIT_TIMELINE_PATH}?correlation_id=",
+        "/rca/incidents/{{incident_id}}/recent-changes",
         "/dashboard/rca/incidents/{{incident_id}}",
         routes.FLEET_SUMMARY_PATH,
         "/clusters/{{cluster_id}}/summary",
@@ -153,6 +186,17 @@ def test_every_bruno_request_has_expected_output_assertions() -> None:
     ]
 
     assert without_tests == []
+
+
+def test_catalog_install_bruno_uses_idempotent_real_command_contract() -> None:
+    request = (API_DIR / "12-catalog" / "03-install-item.bru").read_text(encoding="utf-8")
+
+    assert "Idempotency-Key:" in request
+    assert '"auth.database": "demo"' in request
+    assert "res.status === 202 && body && body.command_id" in request
+    assert 'bru.setVar("command_id", body.command_id)' in request
+    assert "[202, 400, 401, 403, 404, 409, 422]" in request
+    assert "501" not in request
 
 
 def test_bruno_files_use_importable_v3_syntax() -> None:
@@ -191,6 +235,140 @@ def test_bruno_collection_auto_login_is_request_scoped() -> None:
     assert '"/auth/logout"' in collection
 
 
+def test_bruno_default_runner_skips_explicit_auth_and_rca_mutations() -> None:
+    collection = (API_DIR / "collection.bru").read_text(encoding="utf-8")
+    environment = (API_DIR / "environments" / "aws-test.bru").read_text(encoding="utf-8")
+    rca_folder = (API_DIR / "16-rca-debug" / "folder.bru").read_text(encoding="utf-8")
+    rca_selection = (API_DIR / "16-rca-debug" / "07-select-recovery-action.bru").read_text(
+        encoding="utf-8"
+    )
+
+    assert "auth_flow_verification: false" in collection
+    assert "auth_flow_verification: false" in environment
+    assert 'bru.getEnvVar("rca_test_verification")' in rca_folder
+    assert "bru.runner.skipRequest()" in rca_folder
+    assert 'bru.getEnvVar("rca_test_verification")' in rca_selection
+    assert "if (!enabled)" in rca_selection
+    for request_name in (
+        "04-signup.bru",
+        "05-resend-verification.bru",
+        "06-login.bru",
+        "08-approve-user.bru",
+        "09-verify-email.bru",
+        "10-logout.bru",
+    ):
+        request = (API_DIR / "00-health-auth" / request_name).read_text(encoding="utf-8")
+        assert 'bru.getEnvVar("auth_flow_verification")' in request
+        assert "bru.runner.skipRequest()" in request
+
+
+def test_bruno_default_runner_handles_optional_operational_inputs() -> None:
+    collection = (API_DIR / "collection.bru").read_text(encoding="utf-8")
+    environment = (API_DIR / "environments" / "aws-test.bru").read_text(encoding="utf-8")
+    email_check = (API_DIR / "15-wizard-validation" / "01-check-email.bru").read_text(
+        encoding="utf-8"
+    )
+    replay = (API_DIR / "08-ops-dlq" / "02-replay-dead-letter.bru").read_text(encoding="utf-8")
+    metrics = (API_DIR / "08-ops-dlq" / "03-metrics.bru").read_text(encoding="utf-8")
+
+    assert "check_email: bruno-validation@example.invalid" in collection
+    assert "check_email: bruno-validation@example.invalid" in environment
+    assert '"email": "{{check_email}}"' in email_check
+    assert "!/^\\d+$/.test(deadLetterId)" in replay
+    assert "bru.runner.skipRequest()" in replay
+    assert "[200, 401, 503]" in metrics
+
+
+def test_bruno_client_certificate_uses_ignored_portable_paths() -> None:
+    config = (API_DIR / "bruno.json").read_text(encoding="utf-8")
+    gitignore = (ROOT_DIR / ".gitignore").read_text(encoding="utf-8")
+
+    assert '"certFilePath": ".certs/dev-console.pem"' in config
+    assert '"keyFilePath": ".certs/dev-console.key"' in config
+    assert "docs/api/.certs/" in gitignore
+
+
+def test_github_webhook_signature_uses_bruno_safe_crypto_bundle() -> None:
+    request = (API_DIR / "06-gitops-approval" / "01-github-webhook.bru").read_text(encoding="utf-8")
+
+    assert 'require("crypto")' not in request
+    assert 'require("crypto-js")' in request
+    assert "CryptoJS.HmacSHA256(body, secret)" in request
+
+
+def test_bruno_collection_never_strips_authentication_credentials() -> None:
+    collection = (API_DIR / "collection.bru").read_text(encoding="utf-8")
+
+    assert "dev_security_bypass" not in collection
+    assert "x-dev-cluster-id" not in collection
+    assert 'req.deleteHeader("authorization")' not in collection
+    assert 'req.deleteHeader("x-session-token")' not in collection
+    assert 'req.deleteHeader("x-agent-token")' not in collection
+    assert "agentRequest;" in collection
+
+
+def test_bruno_cli_runner_uses_isolated_profile_and_cleans_up_last() -> None:
+    runner = (ROOT_DIR / "scripts" / "run-bruno-aws.sh").read_text(encoding="utf-8")
+    register_request = (API_DIR / "02-target-admin" / "01-register-target-dry-run.bru").read_text(
+        encoding="utf-8"
+    )
+    cleanup_request = (API_DIR / "11-clusters" / "12-unregister-cluster.bru").read_text(
+        encoding="utf-8"
+    )
+
+    assert "environments/aws-test.bru" in runner
+    assert "BRUNO_ENV_FILE" not in runner
+    assert "--env-file" in runner
+    assert 'CLIENT_CERT_CONFIG="${BRUNO_CLIENT_CERT_CONFIG:-' in runner
+    assert "--client-cert-config" in runner
+    assert "@usebruno/cli@3.5.1" in runner
+    assert "--dns-result-order=ipv4first" in runner
+    assert "--cache-ssl-session" in runner
+    assert '--env-var "cluster_id=${RUN_ID}"' in runner
+    assert '--env-var "cluster_purge=true"' in runner
+    assert '--env-var "signup_email=${RUN_ID}@example.com"' in runner
+    assert runner.index("02-target-admin/01-register-target-dry-run.bru") < runner.index(
+        "03-agent-runtime"
+    )
+    assert runner.count("11-clusters/12-unregister-cluster.bru") == 1
+    assert "trap cleanup EXIT" in runner
+    assert runner.rstrip().endswith("cleanup")
+    assert "16-rca-debug" not in runner
+    assert '"environment": "test"' in register_request
+    assert "purge={{cluster_purge}}" in cleanup_request
+
+
+def test_rca_e2e_workflow_is_thin_separate_and_explicitly_selected() -> None:
+    workflow_dir = API_DIR / "16-rca-debug"
+    requests = sorted(workflow_dir.glob("*.bru"))
+    names = [path.name for path in requests if path.name != "folder.bru"]
+    assert names == [
+        "01-list-scenarios.bru",
+        "02-start-test-run.bru",
+        "03-check-test-run.bru",
+        "04-check-built-evidence.bru",
+        "05-check-rca-report.bru",
+        "06-check-recovery-plan.bru",
+        "07-select-recovery-action.bru",
+        "08-check-selected-plan.bru",
+        "09-cleanup-test-run.bru",
+        "10-check-cleanup.bru",
+    ]
+
+    start = (workflow_dir / "02-start-test-run.bru").read_text(encoding="utf-8")
+    assert '"cluster_id": "{{dev_cluster_id}}"' in start
+    assert '"scenario_id": "{{rca_scenario_id}}"' in start
+    assert '"kubernetes"' not in start
+    assert '"evidence"' not in start
+    assert '"manifest"' not in start
+
+    selection = (workflow_dir / "07-select-recovery-action.bru").read_text(encoding="utf-8")
+    assert 'SELECT:${bru.getVar("rca_correlation_id")}' in selection
+    assert '"expected_plan_id": "{{rca_plan_id}}"' in selection
+    assert '"action_id": "{{rca_action_id}}"' in selection
+    assert (workflow_dir / "README.md").is_file()
+
+
 def test_bruno_readme_explains_each_work_type() -> None:
     readme = (API_DIR / "README.md").read_text(encoding="utf-8")
     expected_sections = [
@@ -209,7 +387,7 @@ def test_bruno_readme_explains_each_work_type() -> None:
         "15-wizard-validation",
         "정상 출력",
         "GitHub webhook signature",
-        "https://k8s.woonyong.org/api/",
+        "https://dev-k8s.woonyong.org/api/",
         "auto_login",
         "replace-with-auth-email",
         "BRUNO_CLUSTER_ID",
@@ -218,18 +396,6 @@ def test_bruno_readme_explains_each_work_type() -> None:
     missing = [section for section in expected_sections if section not in readme]
 
     assert missing == []
-
-
-def test_github_webhook_signature_fixture_matches_bruno_body() -> None:
-    body_fixture = (API_DIR / "06-gitops-approval" / "github-webhook-body.json").read_text(
-        encoding="utf-8"
-    )
-    request = (API_DIR / "06-gitops-approval" / "01-github-webhook.bru").read_text(encoding="utf-8")
-
-    assert '"workspace_id": "default"' in body_fixture
-    assert '"workspace_id": "default"' in request
-    assert '"cluster_id": "{{cluster_id}}"' in body_fixture
-    assert '"cluster_id": "{{cluster_id}}"' in request
 
 
 def test_bruno_display_names_are_korean() -> None:

@@ -1,7 +1,7 @@
 # infra — Terraform 1단계 (기반 인프라)
 
-이 디렉토리는 **1층(기반 시설)만** 코드화한다: VPC, EKS 클러스터 3개(mgmt·target-a·target-b), ECR 저장소 2개, GitHub Actions OIDC 배포 role.
-**2층(앱 배포)** — 이미지 빌드와 kubectl/helm 적용 — 은 여기서 하지 않는다. `scripts/aws-up.sh` 와 `.github/workflows/aws-cd.yml` 이 담당한다.
+이 디렉토리는 **1층(기반 시설)만** 코드화한다: VPC, EKS 클러스터 3개(mgmt·target-a·target-b), ECR 저장소 2개.
+**2층(앱 배포)** — 이미지 빌드와 kubectl/helm 적용 — 은 여기서 하지 않는다. 운영자가 AWS credential chain으로 `scripts/aws-up.sh`를 실행한다.
 
 기본값(`variables.tf`)은 `scripts/aws-up.sh` 의 현행 이름과 동일하다: `kubeheal-mgmt`, `kubeheal-target-a`, `kubeheal-target-b`, `kubeheal-service`, `kubeheal-console`, `us-east-1`.
 
@@ -12,7 +12,7 @@ cd infra
 terraform init
 terraform plan    # 디프 미리보기 — 뭐가 만들어지는지 적용 전에 보여줌
 terraform apply   # 승인 입력 후 생성 (EKS 3개 ≈ 15~20분, AWS 자체 소요시간)
-terraform output  # kubeconfig 연결 명령·ECR 주소·CI role ARN 출력
+terraform output  # kubeconfig 연결 명령·ECR 주소 출력
 ```
 
 전부 정리(비용 차단):
@@ -35,6 +35,5 @@ terraform destroy
 
 ## aws-up.sh 와의 관계
 
-Terraform 적용 후 `aws-up.sh` 는 `CREATE_CLUSTERS=0` (기본값) 으로 실행하면 된다 —
+Terraform 적용 후 `aws-up.sh`는 `CREATE_CLUSTERS=0`을 명시해 실행한다.
 클러스터 생성 단계를 건너뛰고 이미지 빌드·매니페스트 적용·타겟 등록만 수행한다.
-CI(aws-cd.yml)는 이미 이 모드가 기본이라 변경 불필요.

@@ -2,7 +2,11 @@
 
 from __future__ import annotations
 
+import hashlib
+import json
+from collections.abc import Mapping
 from dataclasses import replace
+from typing import Any
 
 from domains.gitops.repository import (
     derive_application_id,
@@ -12,6 +16,26 @@ from domains.gitops.repository import (
 )
 from domains.rca.events import SafePrPatchPreparedBody
 from domains.scm.events import SafePrRequestedBody
+
+
+def safe_pr_patch_sha256(patches: list[Any]) -> str:
+    payload = [
+        {
+            "path": safe_pr_patch_field(patch, "path"),
+            "content": safe_pr_patch_field(patch, "content"),
+        }
+        for patch in patches
+    ]
+    encoded = json.dumps(
+        payload, ensure_ascii=False, sort_keys=True, separators=(",", ":")
+    ).encode()
+    return hashlib.sha256(encoded).hexdigest()
+
+
+def safe_pr_patch_field(patch: Any, field: str) -> str:
+    if isinstance(patch, Mapping):
+        return str(patch.get(field) or "")
+    return str(getattr(patch, field, "") or "")
 
 
 def normalize_safe_pr_request(evt: SafePrRequestedBody) -> SafePrRequestedBody:
@@ -35,6 +59,7 @@ def normalize_safe_pr_request(evt: SafePrRequestedBody) -> SafePrRequestedBody:
         binding_id=binding_id,
         application_id=application_id,
         workflow_run_id=workflow_run_id,
+        patch_sha256=safe_pr_patch_sha256(evt.patches),
     )
 
 
@@ -45,7 +70,11 @@ def patch_prepared_body(request: SafePrRequestedBody) -> SafePrPatchPreparedBody
         patch={
             "provider": request.provider,
             "repository_id": request.repository_id,
+            "repo_ref": request.repo_ref,
+            "base_branch": request.base_branch,
             "manifest_path": request.manifest_path,
+            "commit_sha": request.commit_sha,
+            "patch_sha256": request.patch_sha256,
             "approval_ref": request.approval_ref,
             "policy_decision_ref": request.policy_decision_ref,
             "patches": [patch.to_body() for patch in request.patches],

@@ -23,6 +23,9 @@ from packages.contracts.gateway import routes as gateway_routes
 from packages.contracts.gateway.responses import (
     EvidenceQueryResponse,
     EvidenceRecordItem,
+    EvidenceWindowListResponse,
+    EvidenceWindowPayloadResponse,
+    EvidenceWindowSummaryItem,
     RcaReportListResponse,
     RcaReportSummaryItem,
 )
@@ -31,6 +34,7 @@ from packages.runtime.dependencies import get_db
 
 DEFAULT_QUERY_LIMIT = 50
 MAX_QUERY_LIMIT = 200
+HTTP_NOT_FOUND = 404
 HTTP_UNPROCESSABLE = 422
 INVALID_TIMESTAMP_DETAIL = "must be an ISO-8601 timestamp"
 INVALID_CURSOR_DETAIL = "cursor is invalid"
@@ -71,6 +75,71 @@ async def list_evidence(
         offset=offset,
         has_more=len(rows) > limit,
         next_cursor=next_page_cursor(items, has_more=len(rows) > limit),
+    )
+
+
+@router.get(
+    gateway_routes.EVIDENCE_WINDOWS_PATH,
+    response_model=EvidenceWindowListResponse,
+)
+async def list_evidence_windows(
+    limit: int = Query(default=DEFAULT_QUERY_LIMIT, ge=1, le=MAX_QUERY_LIMIT),
+    offset: int = Query(default=0, ge=0),
+    current: Any = Depends(require_session),
+    db: Any = Depends(get_db),
+) -> EvidenceWindowListResponse:
+    rows = await asyncio.to_thread(
+        db.list_evidence_windows_for_workspace,
+        _workspace_id(current),
+        limit=limit + 1,
+        offset=offset,
+    )
+    items = rows[:limit]
+    return EvidenceWindowListResponse(
+        items=[EvidenceWindowSummaryItem(**evidence_window_summary(row)) for row in items],
+        limit=limit,
+        offset=offset,
+        has_more=len(rows) > limit,
+    )
+
+
+@router.get(
+    gateway_routes.EVIDENCE_WINDOW_PATH,
+    response_model=EvidenceWindowPayloadResponse,
+)
+async def get_evidence_window_payload(
+    evidence_key: str,
+    source: str | None = None,
+    current: Any = Depends(require_session),
+    db: Any = Depends(get_db),
+) -> EvidenceWindowPayloadResponse:
+    workspace_id = _workspace_id(current)
+    payload = await asyncio.to_thread(
+        db.get_evidence_window_payload_for_workspace,
+        workspace_id,
+        evidence_key,
+    )
+    if payload is None:
+        raise HTTPException(status_code=HTTP_NOT_FOUND, detail="Evidence window not found")
+
+    selected_payload = payload
+    selected_source = None
+    if source not in (None, ""):
+        selected_source = str(source)
+        value = payload.get(selected_source)
+        if value in (None, {}, []):
+            raise HTTPException(
+                status_code=HTTP_NOT_FOUND,
+                detail=f"Evidence source not found: {selected_source}",
+            )
+        selected_payload = {selected_source: value}
+
+    return EvidenceWindowPayloadResponse(
+        evidence_key=evidence_key,
+        workspace_id=workspace_id,
+        cluster_id=str(payload["cluster_id"]) if payload.get("cluster_id") else None,
+        source=selected_source,
+        payload=selected_payload,
     )
 
 
@@ -182,6 +251,22 @@ def evidence_record(row: JsonObject) -> JsonObject:
     }
 
 
+def evidence_window_summary(row: JsonObject) -> JsonObject:
+    payload = row.get("payload") or {}
+    return {
+        "evidence_key": row["evidence_key"],
+        "workspace_id": row["workspace_id"],
+        "cluster_id": row.get("cluster_id") or None,
+        "source_id": row.get("source_id") or None,
+        "window_start": row.get("window_start") or None,
+        "agent_id": row.get("agent_id") or None,
+        "correlation_id": row.get("correlation_id") or None,
+        "sources": _evidence_window_sources(payload),
+        "created_at": _string_or_none(row.get("created_at")),
+        "updated_at": _string_or_none(row.get("updated_at")),
+    }
+
+
 def _evidence_summary(payload: JsonObject, sources: list[JsonObject]) -> str:
     cluster_id = payload.get("cluster_id")
     labels = [str(item["source"]) for item in sources if item.get("source")]
@@ -192,6 +277,13 @@ def _evidence_summary(payload: JsonObject, sources: list[JsonObject]) -> str:
     if labels:
         return ", ".join(labels)
     return "evidence"
+
+
+def _evidence_window_sources(payload: JsonObject) -> list[str]:
+    if not isinstance(payload, dict):
+        return []
+    known_sources = ("kubernetes", "metrics", "logs", "traces", "metadata")
+    return [source for source in known_sources if payload.get(source) not in (None, {}, [])]
 
 
 def _evidence_source_summaries(payload: JsonObject) -> list[JsonObject]:
@@ -244,6 +336,12 @@ def _source_summary(source: str, value: Any) -> str:
 
 def _len(value: Any) -> int | None:
     return len(value) if isinstance(value, list) else None
+
+
+def _string_or_none(value: Any) -> str | None:
+    if value in (None, ""):
+        return None
+    return value.isoformat() if hasattr(value, "isoformat") else str(value)
 
 
 def _lineage_from_source_value(value: Any) -> JsonObject:

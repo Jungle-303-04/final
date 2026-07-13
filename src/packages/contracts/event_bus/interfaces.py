@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Awaitable, Callable, Mapping, Sequence
 from dataclasses import dataclass, fields
-from typing import Any, Protocol, TypedDict, cast
+from typing import Any, NotRequired, Protocol, TypedDict, cast
 
 JsonObject = dict[str, Any]
 
@@ -23,6 +23,7 @@ class Event(TypedDict):
     created_at: str
     payload: JsonObject
     schema_version: int
+    workspace_id: NotRequired[str | None]
 
 
 @dataclass(frozen=True)
@@ -37,6 +38,7 @@ class EventEnvelope:
     created_at: str  # 생성 시각(ISO 문자열)
     payload: JsonObject  # 본문 데이터(dict)
     schema_version: int = ENVELOPE_SCHEMA_VERSION  # 봉투 스키마 버전(구버전 메시지=1)
+    workspace_id: str | None = None  # 인증·registry 경계에서 확정한 tenant 귀속
 
     # 필드 이름 단일 출처 = 이 dataclass. 직렬화도 여기서 파생.
     @classmethod
@@ -67,6 +69,16 @@ class EventSubscription(Protocol):
     """pull 구독. fetch로 메시지를 배치로 당겨옴."""
 
     async def fetch(self, batch: int, timeout: float | None = None) -> Sequence[EventMessage]: ...
+
+
+@dataclass(frozen=True)
+class EventConsumerMetrics:
+    stream: str
+    subject: str
+    durable: str
+    pending: int
+    ack_pending: int
+    redelivered: int
 
 
 class EventPublisher(Protocol):
@@ -107,6 +119,8 @@ class EventConsumerBus(EventPublisher, EnvelopePublisher, Protocol):
     async def connect(self) -> None: ...
 
     async def subscribe(self, subject: str, durable: str) -> EventSubscription: ...
+
+    async def consumer_metrics(self, subject: str, durable: str) -> EventConsumerMetrics: ...
 
     async def close(self) -> None: ...
 

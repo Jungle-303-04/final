@@ -5,6 +5,7 @@ from dataclasses import dataclass, fields, is_dataclass
 from typing import cast
 
 from packages.config.errors import require
+from packages.config.logs import CONTEXT_KEY, get_logger
 from packages.contracts.auth import Actor
 from packages.contracts.event_bus.bodies import EventBody
 from packages.contracts.event_bus.interfaces import (
@@ -18,6 +19,8 @@ from packages.events.bus import RecordedEventClient
 from packages.events.envelope import event
 from packages.storage.engine import has_active_connection
 from packages.storage.retry import to_thread_db_retry
+
+LOGGER = get_logger(__name__)
 
 
 @dataclass(frozen=True)
@@ -63,10 +66,12 @@ class ApiEventGateway:
             causation_id,
         )
         if durable is not None:
+            self._log_accepted_event(durable.event, actor=actor, durable=True)
             return durable
         evt = await self.events.emit(
             subject, self.source, event_payload, correlation_id, causation_id
         )
+        self._log_accepted_event(evt, actor=actor, durable=False)
         return AcceptedEvent(evt)
 
     async def accept_via_outbox_if_supported(
@@ -110,6 +115,29 @@ class ApiEventGateway:
             correlation_id,
             causation_id,
         )
+
+    def _log_accepted_event(
+        self,
+        evt: EventEnvelope,
+        *,
+        actor: Actor | None = None,
+        durable: bool,
+    ) -> None:
+        context: JsonObject = {
+            "subject": evt.subject,
+            "source": evt.source,
+            "event_id": evt.event_id,
+            "correlation_id": evt.correlation_id,
+            "causation_id": evt.causation_id,
+            "workspace_id": evt.workspace_id,
+            "durable_outbox": durable,
+        }
+        if actor is not None:
+            context["actor_user_id"] = actor.user_id
+        requested_by = evt.payload.get(Gateway.REQUESTED_BY)
+        if requested_by:
+            context[Gateway.REQUESTED_BY] = requested_by
+        LOGGER.info("gateway_event_accepted", extra={CONTEXT_KEY: context})
 
 
 def _body_payload_with_actor(body: EventBody, actor: Actor | None = None) -> JsonObject:

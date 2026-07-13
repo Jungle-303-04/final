@@ -65,19 +65,92 @@ status: synced
 
 ### LLM 도구 — `src/domains/ai/tools.py`
 
-모듈 상수: `DEFAULT_INCIDENT_LIMIT = 5`, `DEFAULT_MESSAGE_LIMIT = 10`, `MAX_ROWS = 20`, `CONTENT_PREVIEW_CHARS = 300`, `INVENTORY_PUBLIC_FIELDS = ("inventory_key", "workspace_id", "cluster_id", "resource_type", "api_version", "kind", "namespace", "name", "uid", "status", "health", "labels", "annotations", "summary", "observed_at", "last_seen_at")`. 내부 `_clamp(value, default)`는 `int(value)`를 `[1, MAX_ROWS]`로 클램프, 변환 실패(`TypeError`/`ValueError`) 시 default 반환.
+모듈 상수: `DEFAULT_INCIDENT_LIMIT = 5`, `DEFAULT_MESSAGE_LIMIT = 10`, `MAX_ROWS = 20`, `CONTENT_PREVIEW_CHARS = 300`, `RISK_ORDER`, `ROUTE_ORDER`, `RECOMMENDABLE_RISKS={"low","medium"}`, `AUTOMATION_ROUTES={"auto","command"}`, `INVENTORY_PUBLIC_FIELDS = ("inventory_key", "workspace_id", "cluster_id", "resource_type", "api_version", "kind", "namespace", "name", "uid", "status", "health", "labels", "annotations", "summary", "observed_at", "last_seen_at")`. 내부 `_clamp(value, default)`는 `int(value)`를 `[1, MAX_ROWS]`로 클램프, 변환 실패(`TypeError`/`ValueError`) 시 default 반환.
 
 | 도구명 | 함수 | 앵커 |
 |---|---|---|
 | `list_recent_incidents` | `async def list_recent_incidents(context: ToolContext, limit: int = DEFAULT_INCIDENT_LIMIT) -> dict[str, Any]` | `src/domains/ai/tools.py :: list_recent_incidents` |
 | `get_inventory_resource_detail` | `async def get_inventory_resource_detail(context: ToolContext, cluster_id: str = "", resource_type: str = "", kind: str = "", name: str = "", namespace: str = "") -> dict[str, Any]` | `src/domains/ai/tools.py :: get_inventory_resource_detail` |
 | `list_resource_rca_reports` | `async def list_resource_rca_reports(context: ToolContext, limit: int = DEFAULT_INCIDENT_LIMIT) -> dict[str, Any]` | `src/domains/ai/tools.py :: list_resource_rca_reports` |
+| `get_incident_rca_context` | `async def get_incident_rca_context(context: ToolContext, correlation_id: str = "") -> dict[str, Any]` | `src/domains/ai/tools.py :: get_incident_rca_context` |
 | `get_conversation_summary` | `async def get_conversation_summary(context: ToolContext, conversation_id: str, limit: int = DEFAULT_MESSAGE_LIMIT) -> dict[str, Any]` | `src/domains/ai/tools.py :: get_conversation_summary` |
+| `recommend_recovery_action` | `async def recommend_recovery_action(context: ToolContext, correlation_id: str = "", plan_id: str = "", exclude_action_ids: list[str] \| None = None, exclude_action_types: list[str] \| None = None) -> dict[str, Any]` | `src/domains/ai/tools.py :: recommend_recovery_action` |
+| `explain_diff_risk` | `async def explain_diff_risk(context: ToolContext, diff_source: str = "", workflow_run_id: str = "", approval_id: str = "") -> dict[str, Any]` | `src/domains/ai/tools.py :: explain_diff_risk` |
 | `list_command_actions` | `async def list_command_actions(context: ToolContext) -> dict[str, Any]` | `src/domains/ai/tools.py :: list_command_actions` |
 
 - `list_recent_incidents`: `@ai.tool(name="list_recent_incidents", description="Recent RCA reports (root cause, recommended action) for this workspace.", parameters={"limit": {"type": "integer", "description": "max rows (1-20, default 5)"}})`. `context.db.list_rca_reports(context.workspace_id, limit=_clamp(limit, 5))` 호출, 반환 `{"incidents": [{"root_cause", "action", "correlation_id", "created_at"(str)} ...]}`.
 - `get_inventory_resource_detail`: parameters `cluster_id`, `resource_type`, `kind`, `name`, `namespace`(모두 선택, 비면 `ToolContext`의 같은 필드 사용). `cluster_id/resource_type/kind/name`을 모두 해석하지 못하면 `{"found": False, "error": "cluster_id, resource_type, kind and name are required"}`. 있으면 `context.db.get_inventory_resource(...)` 조회 후, 없으면 `{"found": False, "identity": {...}}`; 있으면 `list_related_inventory_resources(...)`, `list_resource_events(...)`를 함께 조회해 `{"found": True, "resource": <INVENTORY_PUBLIC_FIELDS>, "related": {group: [...]}, "events": [...]}` 반환.
 - `list_resource_rca_reports`: `context.db.list_rca_reports(context.workspace_id, limit=_clamp(limit, 5))` 결과를 `ToolContext.cluster_id`/`ToolContext.name`으로 가능한 만큼 필터한다. 반환 `{"reports": [{"root_cause", "action", "correlation_id", "created_at"(str), "cluster_id"} ...]}`.
+- `get_incident_rca_context`: parameters `correlation_id`(선택, 비면 `ToolContext.correlation_id`/`resource_context["correlation_id"]` 사용). `context.db.list_rca_reports(context.workspace_id, limit=20)`에서 같은 `correlation_id`의 RCA report를 `rca_report_summary()`로 요약하고, `context.db.get_recovery_plan_by_correlation(correlation_id, context.workspace_id)`로 recovery plan을 함께 조회한다. 반환 `{"found", "correlation_id", "reports", "recovery_plan"}`. `recovery_plan`은 `plan_id/status/recommended_action_id/selection_required/target/candidates[]`만 공개한다.
+- `recommend_recovery_action`: recovery plan 후보 중 Chat AI가 사용자에게 설명할 추천 조치를 고르는 읽기 전용 도구다. parameters:
+  - `plan_id`: recovery plan id. 있으면 `context.db.get_recovery_plan(plan_id, context.workspace_id)`로 직접 조회한다.
+  - `correlation_id`: incident correlation id. `plan_id`가 없거나 plan 조회 실패 시 `context.db.get_recovery_plan_by_correlation(correlation_id, context.workspace_id)`로 조회한다. 입력이 비면 `ToolContext.correlation_id`/`resource_context["correlation_id"]`를 사용한다.
+  - `exclude_action_ids`: 사용자가 제외하고 싶은 recovery action id 목록.
+  - `exclude_action_types`: 사용자가 제외하고 싶은 `draft.action_type` 목록(예: `rollout_restart`).
+
+  이 도구는 요청/이벤트/command를 만들지 않는다. recovery plan의 `payload.candidates[]`만 평가해 추천 JSON을 반환한다. 추천 후보는 `low`/`medium` risk만 대상으로 삼고, `high` 또는 알 수 없는 risk는 `possible_actions.not_recommended[]`에 수동 검토 사유와 함께 넣는다. `payload.recommended_action_id`가 아직 제외되지 않았고 추천 가능한 risk이면 우선 사용하며, 없으면 risk 낮음 → approval 불필요 → route 우선순위(`auto`, `command`, `draft_pr`, `approval_required`) → rank/score 기준으로 고른다.
+
+  자동 실행 후보(`caution.automatic_candidate=true`)는 다음 조건을 모두 만족할 때만 표시한다: `risk_level=="low"`, `approval_required==false`, `route in {"auto","command"}`, command action catalog의 허용 namespace 안, 대상 리소스가 명확함, validation check 또는 rollback/recovery 경로 존재. 자동 후보여도 실제 실행은 하지 않고, `caution.automation.handoff.next_step="create_command_request"`와 `requires_user_confirmation=true`만 반환해 다음 단계 가드레일용 메타데이터로 남긴다.
+
+  기본 응답 구조는 Chat AI 최종 답변 포맷과 맞춘다:
+
+  ```json
+  {
+    "found": true,
+    "plan_id": "plan-...",
+    "correlation_id": "corr-...",
+    "status": "selection_requested",
+    "target": {"cluster_id": "...", "namespace": "..."},
+    "summary": "추천 조치는 ...입니다. 자동 실행 후보입니다.",
+    "reasoning": {
+      "current_context": "recovery plan summary",
+      "evidence": ["evidence://..."],
+      "why_recommended": ["추천 이유", "자동 후보 안전 근거"],
+      "risk_notes": ["영향 범위", "후보 설명"]
+    },
+    "next_checks": ["실행 전 확인할 항목"],
+    "possible_actions": {
+      "recommended": {"action_id": "...", "title": "...", "route": "auto", "risk_level": "low", "approval_required": false, "automatic_candidate": true},
+      "alternatives": [{"action_id": "..."}],
+      "not_recommended": [{"action_id": "...", "reason": "수동 검토 필요"}]
+    },
+    "caution": {
+      "risk_level": "low",
+      "approval_required": false,
+      "automatic_candidate": true,
+      "expected_impact": ["예상 영향"],
+      "automation": {
+        "eligible": true,
+        "why_safe": ["자동 후보로 볼 수 있는 근거"],
+        "blocking_reasons": [],
+        "handoff": {"next_step": "create_command_request", "requires_user_confirmation": true}
+      }
+    }
+  }
+  ```
+- `explain_diff_risk`: 현재 화면에서 선택된 diff를 설명하는 읽기 전용 도구다. 홈 화면에서 diff를 검색하는 도구가 아니라, 프론트가 넘긴 `diff_source`와 식별자 힌트를 바탕으로 이미 존재하는 GitOps diff 또는 Safe PR patch 설명 이벤트를 조회한다. 이 도구가 필요한 이유는 “이 diff 위험해?” 같은 질문이 사용자 문장만으로는 GitOps apply diff인지 Safe PR patch 초안인지 구분되지 않기 때문이다. 화면은 전체 YAML/patch를 보내지 않고 작은 조회 힌트만 보낸다.
+
+  parameters:
+  - `diff_source`: `"gitops"` 또는 `"safe_pr"`. 비면 `ToolContext.resource_context["diff_source"]`를 사용한다.
+  - `workflow_run_id`: workflow/run 화면의 실행 id. 비면 `resource_context["workflow_run_id"]`를 사용한다.
+  - `approval_id`: GitOps 승인 화면의 승인 id. 비면 `resource_context["approval_id"]`를 사용한다.
+
+  GitOps 분기:
+  1. `approval_id`가 있으면 `context.db.get_workflow_approval(approval_id, workspace_id)`를 먼저 조회한다.
+  2. approval `details.diff`가 있으면 그것을 설명한다.
+  3. 없고 `workflow_run_id`가 있으면 `context.db.get_workflow_step_details(workflow_run_id, "diff")`를 조회한다.
+  4. diff가 없으면 `{"found": false, "source": "gitops", "missing_context": [...]}`를 반환한다.
+
+  GitOps 응답은 `summary`, `reasoning.current_context`, `reasoning.evidence.diff`, `reasoning.risk_notes`, `next_checks`, `possible_actions`, `caution`으로 구성된다. `caution.applies_to_cluster=true`이며, 승인 시 `command.requested`를 거쳐 target agent apply로 이어질 수 있음을 `risk_notes`에 남긴다. 단, 이 도구는 승인·거절·command 생성을 하지 않는다.
+
+  Safe PR 분기:
+  1. `workflow_run_id`가 없으면 `missing_context=["workflow_run_id"]`를 반환한다.
+  2. `context.db.list_release_safe_pr_diff_events(workspace_id, workflow_run_id, application_id?, limit=20)`를 조회한다.
+  3. `safe_pr.patch_prepared`, `diff.explained`, `safe_pr.ready_for_creation` 중 하나도 없으면 설명하지 않고 `missing_context=["safe_pr.patch_prepared", "diff.explained"]`를 반환한다.
+  4. 이벤트가 있으면 patch 경로, `patch_sha256`, `diff.explained.risk`, PR 생성 가능 여부를 설명한다.
+
+  Safe PR 응답은 PR 생성 전 patch 초안 기준이다. `caution.applies_to_cluster=false`이며, 아직 target cluster apply가 아니라는 점을 `reasoning.risk_notes`에 남긴다. PR 생성/머지는 `scm-worker`와 Git provider 리뷰 흐름에서 진행해야 한다.
+
 - `get_conversation_summary`: parameters에 `conversation_id`(string, required=True)·`limit`(integer). `context.db.list_ai_messages(context.workspace_id, str(conversation_id), newest=_clamp(limit, 10))` 호출, 반환 `{"conversation_id", "messages": [{"role", "content"(300자 절단), "created_at"(str)} ...]}`.
 - `list_command_actions`: parameters 없음. [command 카탈로그](./command.md)의 `registered_command_actions()` 순회, 반환 `{"actions": [{"action", "recovery_aliases"(list), "allowed_namespaces"(list), "requires_approval"(bool)} ...]}`.
 - 모든 도구는 읽기 전용, JSON 직렬화 가능한 dict 반환. DB 접근은 `ToolContext.db`(AsyncDb)로만.

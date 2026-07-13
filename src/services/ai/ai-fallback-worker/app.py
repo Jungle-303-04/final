@@ -15,9 +15,10 @@ from collections.abc import AsyncIterator
 
 from domains.rca.events import RcaAiFallbackRequestedBody
 from packages.ai.llm import build_llm_client
+from packages.ai.metrics import metered_llm_client
 from packages.config.logs import CONTEXT_KEY, get_logger
 from packages.contracts.event_bus.bodies import EventBody
-from packages.runtime.app import App
+from packages.runtime.app import App, EventContext
 from services.ai.agent.pipeline import AiFallbackPlanner
 
 app = App("ai-fallback-worker")
@@ -29,9 +30,20 @@ LOGGER = get_logger(__name__)
 @app.on(RcaAiFallbackRequestedBody)
 async def on_ai_fallback_requested(
     evt: RcaAiFallbackRequestedBody,
+    ctx: EventContext[object],
 ) -> AsyncIterator[EventBody]:
     try:
-        planned = await planner.plan_body(evt, llm_client)
+        planned = await planner.plan_body(
+            evt,
+            metered_llm_client(
+                llm_client,
+                ctx.db,
+                workspace_id=evt.workspace_id,
+                event_id=ctx.event_id,
+                correlation_id=ctx.correlation_id,
+                causation_id=ctx.causation_id,
+            ),
+        )
     except Exception as exc:
         LOGGER.warning(
             "ai_fallback_llm_failed",

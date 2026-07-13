@@ -8,6 +8,8 @@ class Settings:
     SERVICE_NAME = "api-gateway"
     APP_TITLE = "API Gateway"
     APP_VERSION = "0.1.0"
+    ROOT_PATH_ENV = "API_ROOT_PATH"
+    DEFAULT_ROOT_PATH = ""
     CONSOLE_ORIGIN_ENV = "CONSOLE_ORIGIN"
     DEFAULT_CONSOLE_ORIGIN = "http://console.management.svc.cluster.local:80"
     FRONTEND_PROXY_TIMEOUT_SECONDS = 10.0
@@ -86,14 +88,8 @@ class Settings:
     AUTHORIZATION_HEADER = "authorization"
     BEARER_PREFIX = "bearer "
     SESSION_TOKEN_HEADER = "x-session-token"
-    DEV_AUTH_BYPASS_ENV = "DEV_AUTH_BYPASS"
-    DEV_AUTH_BYPASS_USER_ID_ENV = "DEV_AUTH_BYPASS_USER_ID"
-    DEV_AUTH_BYPASS_WORKSPACE_ID_ENV = "DEV_AUTH_BYPASS_WORKSPACE_ID"
-    DEV_AUTH_BYPASS_TOKEN = "dev-auth-bypass"
-    DEV_AUTH_BYPASS_USER_ID = "dev-auth-bypass"
-    METRICS_TOKEN_ENV = (
-        "METRICS_TOKEN"  # 설정 시 /metrics 에 Bearer 강제(미설정=내부 스크레이핑 허용)
-    )
+    METRICS_TOKEN_ENV = "METRICS_TOKEN"  # 설정 시 /metrics 에 Bearer 강제
+    METRICS_TOKEN_NOT_CONFIGURED_MESSAGE = "metrics token is not configured"
     RATE_LIMIT_EXCEEDED_MESSAGE = "rate limit exceeded"
     AUTHENTICATION_REQUIRED_MESSAGE = "authentication required"
     REDIS_NOT_CONNECTED_MESSAGE = "Redis session store is not connected"

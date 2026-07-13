@@ -2,7 +2,9 @@ from __future__ import annotations
 
 import asyncio
 import json
+import math
 import signal
+import time
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
@@ -16,6 +18,7 @@ from packages.contracts.event_bus.interfaces import (
     EventEnvelope,
     EventHandler,
     EventMessage,
+    EventSubscription,
 )
 from packages.contracts.event_bus.processing import TERMINAL_STATUSES, EventProcessingStatus
 from packages.contracts.event_bus.subscriptions import durable_name
@@ -48,16 +51,42 @@ WORKER_DEAD_LETTER_TIMEOUT_ENV = (
     "WORKER_DEAD_LETTER_TIMEOUT_SECONDS"  # DLQ 기록 대기 한도 초(기본 10)
 )
 WORKER_HEARTBEAT_PATH_ENV = "WORKER_HEARTBEAT_PATH"  # liveness 하트비트 파일 경로
+WORKER_CONSUMER_METRICS_INTERVAL_ENV = "WORKER_CONSUMER_METRICS_INTERVAL_SECONDS"
+WORKER_MAX_CONCURRENCY_ENV = "WORKER_MAX_CONCURRENCY"  # 서로 다른 subject 동시 처리 상한
+
+
+def _positive_float_env(name: str, fallback: float) -> float:
+    try:
+        value = float(env(name, str(fallback)))
+    except (TypeError, ValueError):
+        return fallback
+    return value if math.isfinite(value) and value > 0 else fallback
+
+
+def _positive_int_env(name: str, fallback: int) -> int:
+    try:
+        value = int(env(name, str(fallback)))
+    except (TypeError, ValueError):
+        return fallback
+    return value if value > 0 else fallback
+
+
 DEFAULT_MAX_ATTEMPTS = int(env(WORKER_MAX_ATTEMPTS_ENV, "3"))
 DEFAULT_RETRY_DELAY_SECONDS = int(env(WORKER_RETRY_DELAY_ENV, "2"))
 DEFAULT_FETCH_BATCH_SIZE = int(env(WORKER_FETCH_BATCH_SIZE_ENV, "1"))
-DEFAULT_FETCH_TIMEOUT_SECONDS = int(env(WORKER_FETCH_TIMEOUT_ENV, "1"))
+DEFAULT_FETCH_TIMEOUT_SECONDS = _positive_float_env(WORKER_FETCH_TIMEOUT_ENV, 1.0)
 DEFAULT_IDLE_SLEEP_SECONDS = float(env(WORKER_IDLE_SLEEP_ENV, "0.25"))
 # 핸들러 hang 상한(안전망). 정상 최악 처리시간보다 넉넉히
 DEFAULT_HANDLER_TIMEOUT_SECONDS = int(env(WORKER_HANDLER_TIMEOUT_ENV, "30"))
 DEFAULT_DEAD_LETTER_TIMEOUT_SECONDS = int(env(WORKER_DEAD_LETTER_TIMEOUT_ENV, "10"))
+DEFAULT_CONSUMER_METRICS_INTERVAL_SECONDS = float(env(WORKER_CONSUMER_METRICS_INTERVAL_ENV, "15"))
+DEFAULT_MAX_CONCURRENCY = _positive_int_env(WORKER_MAX_CONCURRENCY_ENV, 8)
 # liveness exec probe 가 mtime 신선도 검사 — 컨테이너 파일시스템 정책에 따라 경로 오버라이드 가능
 HEARTBEAT_PATH = env(WORKER_HEARTBEAT_PATH_ENV, "/tmp/heartbeat")
+
+
+def elapsed_ms(start: float) -> int:
+    return max(0, int((time.perf_counter() - start) * 1000))
 
 
 @dataclass(frozen=True)
@@ -65,10 +94,11 @@ class EventRetryPolicy:
     max_attempts: int = DEFAULT_MAX_ATTEMPTS
     retry_delay_seconds: int = DEFAULT_RETRY_DELAY_SECONDS
     fetch_batch_size: int = DEFAULT_FETCH_BATCH_SIZE
-    fetch_timeout_seconds: int = DEFAULT_FETCH_TIMEOUT_SECONDS
+    fetch_timeout_seconds: float = DEFAULT_FETCH_TIMEOUT_SECONDS
     idle_sleep_seconds: float = DEFAULT_IDLE_SLEEP_SECONDS
     handler_timeout_seconds: int = DEFAULT_HANDLER_TIMEOUT_SECONDS
     dead_letter_timeout_seconds: int = DEFAULT_DEAD_LETTER_TIMEOUT_SECONDS
+    max_concurrency: int = DEFAULT_MAX_CONCURRENCY
 
 
 @dataclass(frozen=True)
@@ -89,6 +119,28 @@ class EventHandlerSpec:
             return self.durable
         slug = subject.replace(".", "-").replace(">", "all").replace("*", "any")
         return f"{self.durable}-{slug}"
+
+
+async def record_consumer_lag_metrics(
+    bus: EventConsumerBus,
+    store: object,
+    spec: EventHandlerSpec,
+) -> None:
+    consumer_metrics = getattr(bus, "consumer_metrics", None)
+    record_metrics = getattr(store, "record_event_consumer_metrics", None)
+    if not callable(consumer_metrics) or not callable(record_metrics):
+        return
+    for subject in spec.subjects:
+        durable = spec.durable_for(subject)
+        try:
+            sample = await consumer_metrics(subject, durable)
+            record_metrics(sample)
+        except Exception as exc:
+            LOGGER.warning(
+                "consumer_metrics_error",
+                extra={"context": {"consumer": durable, "subject": subject}},
+                exc_info=exc,
+            )
 
 
 class Codec(Protocol):
@@ -142,6 +194,8 @@ class EventProcessor:
                     extra={"context": {"consumer": self.service_name}},
                     exc_info=capture_error,
                 )
+                await message.nak(delay=self.retry_policy.retry_delay_seconds)
+                return
             LOGGER.error(
                 "decode_dead_letter",
                 extra={"context": {"consumer": self.service_name}},
@@ -162,6 +216,7 @@ class EventProcessor:
             await message.nak(delay=self.retry_policy.retry_delay_seconds)
             return
         attempts = processing.attempts  # 지금까지 시도 횟수(커밋되어 누적)
+        started_at = time.perf_counter()
         # 2) 업무쓰기 + outbox 적재 + ledger 완료를 한 트랜잭션으로(원자성).
         try:
             with self.store.unit_of_work() as conn:
@@ -174,15 +229,24 @@ class EventProcessor:
                         self.handler(evt), timeout=self.retry_policy.handler_timeout_seconds
                     )  # 핸들러 실행 → 다음 이벤트 봉투들 수집
                 self.store.stage_events(conn, outbox_events)  # 다음 이벤트들을 outbox 에 적재
-                self.ledger.finish(evt)  # 처리대장에 "완료" 기록
+                self.ledger.finish(evt, elapsed_ms(started_at))  # 처리대장에 "완료" 기록
             # with 끝 = 트랜잭션 커밋(업무 + outbox 함께 저장)
-            await message.ack()  # NATS 에 "처리 완료" 통보 → 재배달 안 함
         except Exception as exc:
             # claim 이 이미 커밋되어 attempt 가 누적된 상태 → fail 이 그 row 를 갱신(재시도/DLQ).
-            await self.fail(message, evt, exc, attempts)
+            await self.fail(message, evt, exc, attempts, elapsed_ms(started_at))
+            return
+
+        # commit 이후 ack 실패는 WorkerRuntime 으로 전파해 nak/redelivery 하되,
+        # PROCESSED ledger 는 유지하여 중복 업무 실행을 막는다.
+        await message.ack()
 
     async def fail(
-        self, message: EventMessage, evt: EventEnvelope, error: Exception, attempts: int
+        self,
+        message: EventMessage,
+        evt: EventEnvelope,
+        error: Exception,
+        attempts: int,
+        duration_ms: int | None = None,
     ) -> None:
         context = {**event_context(evt), "consumer": self.service_name, "attempts": attempts}
         if attempts >= self.retry_policy.max_attempts:
@@ -195,7 +259,7 @@ class EventProcessor:
                     timeout=self.retry_policy.dead_letter_timeout_seconds,
                 )
             except Exception as capture_error:
-                self.ledger.retry(evt, error)
+                self.ledger.retry(evt, error, duration_ms)
                 LOGGER.error(
                     "dead_letter_capture_failed",
                     extra={"context": context},
@@ -203,12 +267,12 @@ class EventProcessor:
                 )
                 await message.nak(delay=self.retry_policy.retry_delay_seconds)
                 return
-            self.ledger.dead_letter(evt, error)
+            self.ledger.dead_letter(evt, error, duration_ms)
             LOGGER.error("dead_letter", extra={"context": context}, exc_info=error)
             await message.ack()
             return
 
-        self.ledger.retry(evt, error)
+        self.ledger.retry(evt, error, duration_ms)
         LOGGER.warning("retry", extra={"context": context}, exc_info=error)
         await message.nak(delay=self.retry_policy.retry_delay_seconds)
 
@@ -228,13 +292,63 @@ class WorkerRuntime:
         self.bus = bus if bus is not None else NatsEventBus()
         self.db = db
 
+    async def consume_subject(
+        self,
+        subject: str,
+        subscription: EventSubscription,
+        processor: EventProcessor,
+        stopping: asyncio.Event,
+        semaphore: asyncio.Semaphore,
+    ) -> None:
+        """subject 하나를 순서대로 처리하고 다른 subject와만 병렬 실행한다."""
+        context = {
+            "consumer": self.spec.service_name,
+            "durable": self.spec.durable_for(subject),
+            "subject": subject,
+        }
+        while not stopping.is_set():
+            try:
+                messages = await subscription.fetch(
+                    self.spec.retry_policy.fetch_batch_size,
+                    timeout=self.spec.retry_policy.fetch_timeout_seconds,
+                )
+            except TimeoutError:
+                continue
+            except Exception as exc:
+                LOGGER.warning("fetch_error", extra={"context": context}, exc_info=exc)
+                await self.wait_or_stop(stopping, 1.0)
+                continue
+
+            if not messages:
+                await self.wait_or_stop(stopping, self.spec.retry_policy.idle_sleep_seconds)
+                continue
+
+            for message in messages:
+                if stopping.is_set():
+                    await message.nak(delay=self.spec.retry_policy.retry_delay_seconds)
+                    continue
+                try:
+                    async with semaphore:
+                        await processor.process(message)
+                except Exception as exc:
+                    LOGGER.error("processor_error", extra={"context": context}, exc_info=exc)
+                    await message.nak(delay=self.spec.retry_policy.retry_delay_seconds)
+
+    @staticmethod
+    async def wait_or_stop(stopping: asyncio.Event, timeout: float) -> None:
+        try:
+            await asyncio.wait_for(stopping.wait(), timeout=max(0.0, timeout))
+        except TimeoutError:
+            pass
+
     async def run(self) -> None:
         from packages.storage.database import wait_for_database
 
         Path(HEARTBEAT_PATH).touch()  # 시작 즉시 생존 표시(DB 대기 중 liveness 오살 방지)
         await wait_for_database(self.db)
         await self.bus.connect()
-        # subject 마다 별도 컨슈머(줄) — 한 줄이 막혀도 다른 subject 는 계속 흐름.
+        # subject마다 별도 컨슈머와 fetch task를 둔다. 같은 subject는 선언 순서를
+        # 보존하고, 서로 다른 subject만 semaphore 상한 안에서 병렬 처리한다.
         subs = [
             (subject, await self.bus.subscribe(subject, durable=self.spec.durable_for(subject)))
             for subject in self.spec.subjects
@@ -254,38 +368,38 @@ class WorkerRuntime:
         signal.signal(signal.SIGINT, lambda *_: stopping.set())
         lifecycle = {"consumer": self.spec.service_name, "subjects": list(self.spec.subjects)}
         LOGGER.info("subscribed", extra={"context": lifecycle})
+        last_consumer_metrics_at = 0.0
+        semaphore = asyncio.Semaphore(self.spec.retry_policy.max_concurrency)
+        consumer_tasks = [
+            asyncio.create_task(
+                self.consume_subject(subject, sub, processor, stopping, semaphore),
+                name=f"{self.spec.service_name}:{subject}",
+            )
+            for subject, sub in subs
+        ]
 
-        while not stopping.is_set():
-            Path(HEARTBEAT_PATH).touch()  # liveness 하트비트(루프 생존 신호)
-            idle = True
-            try:
-                relayed = await relay.run_once()  # outbox → NATS 발행
-                idle = idle and relayed == 0
-            except Exception as exc:
-                LOGGER.warning("relay_error", extra={"context": lifecycle}, exc_info=exc)
-            for _subject, sub in subs:
+        try:
+            while not stopping.is_set():
+                for task in consumer_tasks:
+                    if not task.done():
+                        continue
+                    error = task.exception()
+                    if error is not None:
+                        raise error
+                    raise RuntimeError(f"consumer task stopped unexpectedly: {task.get_name()}")
+                Path(HEARTBEAT_PATH).touch()  # liveness 하트비트(루프 생존 신호)
+                now = time.monotonic()
+                if now - last_consumer_metrics_at >= DEFAULT_CONSUMER_METRICS_INTERVAL_SECONDS:
+                    await record_consumer_lag_metrics(self.bus, self.db, self.spec)
+                    last_consumer_metrics_at = now
                 try:
-                    messages = await sub.fetch(
-                        self.spec.retry_policy.fetch_batch_size,
-                        timeout=self.spec.retry_policy.fetch_timeout_seconds,
-                    )
-                except TimeoutError:
-                    continue
+                    await relay.run_once()  # outbox → NATS 발행
                 except Exception as exc:
-                    LOGGER.warning("fetch_error", extra={"context": lifecycle}, exc_info=exc)
-                    await asyncio.sleep(1)
-                    continue
-
-                if messages:
-                    idle = False
-                for message in messages:
-                    try:
-                        await processor.process(message)
-                    except Exception as exc:
-                        LOGGER.error("processor_error", extra={"context": lifecycle}, exc_info=exc)
-                        await message.nak(delay=self.spec.retry_policy.retry_delay_seconds)
-            if idle:
-                await asyncio.sleep(self.spec.retry_policy.idle_sleep_seconds)
+                    LOGGER.warning("relay_error", extra={"context": lifecycle}, exc_info=exc)
+                await self.wait_or_stop(stopping, self.spec.retry_policy.idle_sleep_seconds)
+        finally:
+            stopping.set()
+            await asyncio.gather(*consumer_tasks, return_exceptions=True)
 
         await self.bus.close()
         dispose_async = getattr(self.db, "dispose_async", None)

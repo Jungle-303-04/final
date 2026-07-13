@@ -4,6 +4,8 @@ import hashlib
 import inspect
 import json
 from collections.abc import AsyncIterator
+from dataclasses import dataclass
+from datetime import UTC, datetime, timedelta
 
 from domains.command.actions import allowed_command_actions, command_action_spec
 from domains.command.events import (
@@ -39,8 +41,10 @@ from domains.target.management_guard import (
 from packages.config.constants import Command, CommandStatus, Sandbox, Target
 from packages.config.control import CONTROL_NAMESPACE_DENIED_MESSAGE
 from packages.config.logs import CONTEXT_KEY, get_logger
+from packages.config.security import env_enabled
 from packages.config.settings import env
 from packages.contracts.event_bus.bodies import EventBody
+from packages.contracts.event_bus.interfaces import JsonObject
 from packages.contracts.gateway.fields import Gateway
 from packages.contracts.gitops import ApprovalStatus
 from packages.contracts.stores import AgentCommandStore
@@ -88,10 +92,29 @@ MISSING_APPROVAL_REF_REASON = "write command requires approval_ref"
 MISSING_POLICY_DECISION_REF_REASON = "write command requires policy_decision_ref"
 APPROVAL_RECORD_MISSING_REASON = "write command approval_ref is not recorded"
 APPROVAL_NOT_GRANTED_REASON = "write command approval_ref is not granted"
+APPROVAL_NOT_REQUIRED_SCOPE_REASON = (
+    "write command not-required approval is limited to sandbox safe_pr policy"
+)
 APPROVAL_POLICY_DECISION_MISMATCH_REASON = "write command policy_decision_ref mismatch"
 APPROVAL_WORKFLOW_MISMATCH_REASON = "write command approval workflow mismatch"
+APPROVAL_DECIDED_BY_MISSING_REASON = "write command approval_decided_by is missing"
+APPROVAL_DECIDED_BY_MISMATCH_REASON = "write command approval_decided_by mismatch"
+APPROVAL_EXPIRED_REASON = "write command approval is expired"
+APPROVAL_EXPIRES_AT_INVALID_REASON = "write command approval_expires_at is invalid"
 MANAGEMENT_READONLY_REASON = management_readonly_detail()["code"]
+COMMAND_APPROVAL_EVIDENCE_TTL_SECONDS_ENV = "COMMAND_APPROVAL_EVIDENCE_TTL_SECONDS"
+DEFAULT_COMMAND_APPROVAL_EVIDENCE_TTL_SECONDS = "3600"
+AUTO_COMMANDS_ENABLED_ENV = "AUTO_COMMANDS_ENABLED"
+AUTO_COMMANDS_DISABLED_REASON = f"AI automatic commands require {AUTO_COMMANDS_ENABLED_ENV}=1"
 LOGGER = get_logger(__name__)
+
+
+@dataclass(frozen=True)
+class ApprovalEvidence:
+    approval_ref: str
+    policy_decision_ref: str
+    decided_by: str
+    expires_at: str
 
 
 def desired_manifest_namespace(command: CommandRequestedBody) -> str | None:
@@ -163,40 +186,127 @@ def command_requires_recorded_approval(command: CommandRequestedBody) -> bool:
     return not approval_exempt_for_environment(command)
 
 
+def utc_now() -> datetime:
+    return datetime.now(UTC)
+
+
+def approval_evidence_ttl_seconds() -> int:
+    raw = env(
+        COMMAND_APPROVAL_EVIDENCE_TTL_SECONDS_ENV,
+        DEFAULT_COMMAND_APPROVAL_EVIDENCE_TTL_SECONDS,
+    )
+    try:
+        value = int(raw)
+    except ValueError:
+        return int(DEFAULT_COMMAND_APPROVAL_EVIDENCE_TTL_SECONDS)
+    return max(1, value)
+
+
+def parse_approval_timestamp(value: object) -> datetime | None:
+    if isinstance(value, datetime):
+        parsed = value
+    elif isinstance(value, str) and value.strip():
+        try:
+            parsed = datetime.fromisoformat(value.strip().replace("Z", "+00:00"))
+        except ValueError:
+            return None
+    else:
+        return None
+    if parsed.tzinfo is None:
+        return parsed.replace(tzinfo=UTC)
+    return parsed.astimezone(UTC)
+
+
+def approval_timestamp_body(value: datetime) -> str:
+    return value.astimezone(UTC).isoformat().replace("+00:00", "Z")
+
+
+def approval_expires_at_from_record(record: JsonObject) -> tuple[PolicyResult, str | None]:
+    raw = record.get("expires_at")
+    if raw in (None, ""):
+        return PolicyResult.allow(), approval_timestamp_body(
+            utc_now() + timedelta(seconds=approval_evidence_ttl_seconds())
+        )
+    parsed = parse_approval_timestamp(raw)
+    if parsed is None:
+        return PolicyResult.reject(APPROVAL_EXPIRES_AT_INVALID_REASON), None
+    if parsed <= utc_now():
+        return PolicyResult.reject(APPROVAL_EXPIRED_REASON), None
+    return PolicyResult.allow(), approval_timestamp_body(parsed)
+
+
+def approval_status_result(command: CommandRequestedBody, record: JsonObject) -> PolicyResult:
+    status = str(record.get("status", ""))
+    if status == ApprovalStatus.GRANTED.value:
+        return PolicyResult.allow()
+    if status != ApprovalStatus.NOT_REQUIRED.value:
+        return PolicyResult.reject(APPROVAL_NOT_GRANTED_REASON)
+
+    details = record.get("details")
+    policy_route = str(details.get("policy_route", "")) if isinstance(details, dict) else ""
+    if command.environment.strip().lower() == "sandbox" and policy_route == "safe_pr":
+        return PolicyResult.allow()
+    return PolicyResult.reject(APPROVAL_NOT_REQUIRED_SCOPE_REASON)
+
+
 async def evaluate_recorded_approval(
     command: CommandRequestedBody, db: AgentCommandStore
-) -> PolicyResult:
+) -> tuple[PolicyResult, ApprovalEvidence | None]:
     if not command_requires_recorded_approval(command):
-        return PolicyResult.allow()
+        return PolicyResult.allow(), None
     if not command.approval_ref:
-        return PolicyResult.reject(MISSING_APPROVAL_REF_REASON)
+        return PolicyResult.reject(MISSING_APPROVAL_REF_REASON), None
     if not command.policy_decision_ref:
-        return PolicyResult.reject(MISSING_POLICY_DECISION_REF_REASON)
+        return PolicyResult.reject(MISSING_POLICY_DECISION_REF_REASON), None
 
     getter = getattr(db, "get_workflow_approval", None)
     if getter is None:
-        return PolicyResult.reject(APPROVAL_RECORD_MISSING_REASON)
+        return PolicyResult.reject(APPROVAL_RECORD_MISSING_REASON), None
     record = await getter(command.approval_ref, command.workspace_id)
     if not isinstance(record, dict):
-        return PolicyResult.reject(APPROVAL_RECORD_MISSING_REASON)
+        return PolicyResult.reject(APPROVAL_RECORD_MISSING_REASON), None
 
     if str(record.get("workflow_run_id", "")) != command.workflow_run_id:
-        return PolicyResult.reject(APPROVAL_WORKFLOW_MISMATCH_REASON)
-    if str(record.get("status", "")) not in {
-        ApprovalStatus.GRANTED.value,
-        ApprovalStatus.NOT_REQUIRED.value,
-    }:
-        return PolicyResult.reject(APPROVAL_NOT_GRANTED_REASON)
+        return PolicyResult.reject(APPROVAL_WORKFLOW_MISMATCH_REASON), None
+    status_result = approval_status_result(command, record)
+    if not status_result.allowed:
+        return status_result, None
 
     details = record.get("details")
     if isinstance(details, dict):
         recorded_ref = details.get("policy_decision_ref")
         if recorded_ref and str(recorded_ref) != command.policy_decision_ref:
-            return PolicyResult.reject(APPROVAL_POLICY_DECISION_MISMATCH_REASON)
+            return PolicyResult.reject(APPROVAL_POLICY_DECISION_MISMATCH_REASON), None
         recorded_approval = details.get("approval_ref")
         if recorded_approval and str(recorded_approval) != command.approval_ref:
-            return PolicyResult.reject(APPROVAL_POLICY_DECISION_MISMATCH_REASON)
-    return PolicyResult.allow()
+            return PolicyResult.reject(APPROVAL_POLICY_DECISION_MISMATCH_REASON), None
+
+    decided_by = str(record.get("decided_by") or "")
+    if not decided_by:
+        return PolicyResult.reject(APPROVAL_DECIDED_BY_MISSING_REASON), None
+    if command.approval_decided_by and command.approval_decided_by != decided_by:
+        return PolicyResult.reject(APPROVAL_DECIDED_BY_MISMATCH_REASON), None
+
+    expires_result, expires_at = approval_expires_at_from_record(record)
+    if not expires_result.allowed:
+        return expires_result, None
+    assert expires_at is not None
+    if command.approval_expires_at:
+        requested_expires_at = parse_approval_timestamp(command.approval_expires_at)
+        if requested_expires_at is None:
+            return PolicyResult.reject(APPROVAL_EXPIRES_AT_INVALID_REASON), None
+        if approval_timestamp_body(requested_expires_at) != expires_at:
+            return PolicyResult.reject(APPROVAL_EXPIRES_AT_INVALID_REASON), None
+
+    return (
+        PolicyResult.allow(),
+        ApprovalEvidence(
+            approval_ref=command.approval_ref,
+            policy_decision_ref=command.policy_decision_ref,
+            decided_by=decided_by,
+            expires_at=expires_at,
+        ),
+    )
 
 
 async def _maybe_await(value: object) -> object:
@@ -235,7 +345,11 @@ async def evaluate_management_guard(
     return PolicyResult.allow()
 
 
-def idempotency_key(command: CommandRequestedBody, correlation_id: str) -> str:
+def idempotency_key(
+    command: CommandRequestedBody,
+    correlation_id: str,
+    approval_evidence: ApprovalEvidence | None = None,
+) -> str:
     payload = {
         "correlation_id": correlation_id,
         "workspace_id": command.workspace_id,
@@ -248,6 +362,12 @@ def idempotency_key(command: CommandRequestedBody, correlation_id: str) -> str:
         "namespace": command.namespace,
         "approval_ref": command.approval_ref,
         "policy_decision_ref": command.policy_decision_ref,
+        "approval_decided_by": (
+            approval_evidence.decided_by if approval_evidence else command.approval_decided_by
+        ),
+        "approval_expires_at": (
+            approval_evidence.expires_at if approval_evidence else command.approval_expires_at
+        ),
         "diff": command.diff.to_body(),
         "payload": command.payload,
     }
@@ -255,8 +375,12 @@ def idempotency_key(command: CommandRequestedBody, correlation_id: str) -> str:
     return hashlib.sha256(encoded.encode()).hexdigest()
 
 
-def build_plan(command: CommandRequestedBody, correlation_id: str) -> Plan:
-    key = idempotency_key(command, correlation_id)
+def build_plan(
+    command: CommandRequestedBody,
+    correlation_id: str,
+    approval_evidence: ApprovalEvidence | None = None,
+) -> Plan:
+    key = idempotency_key(command, correlation_id, approval_evidence)
     cluster_id = command.cluster_id or COMMAND_CONFIG.default_cluster_id
     workspace_id = command.workspace_id
     return Plan(
@@ -290,6 +414,12 @@ def build_plan(command: CommandRequestedBody, correlation_id: str) -> Plan:
         priority=max(COMMAND_PRIORITY_HIGH, int(command.priority or COMMAND_PRIORITY_HIGH)),
         approval_ref=command.approval_ref,
         policy_decision_ref=command.policy_decision_ref,
+        approval_decided_by=(
+            approval_evidence.decided_by if approval_evidence else command.approval_decided_by
+        ),
+        approval_expires_at=(
+            approval_evidence.expires_at if approval_evidence else command.approval_expires_at
+        ),
     )
 
 
@@ -319,6 +449,13 @@ async def sweep_expired_agent_commands(
 async def handle_command_requested(
     evt: CommandRequestedBody, ctx: EventContext[AgentCommandStore]
 ) -> AsyncIterator[EventBody]:
+    if (
+        isinstance(evt.actor, dict)
+        and evt.actor.get("auto_selected") is True
+        and not env_enabled(AUTO_COMMANDS_ENABLED_ENV)
+    ):
+        yield CommandRejectedBody(reason=AUTO_COMMANDS_DISABLED_REASON, requested=evt.to_body())
+        return
     management_result = await evaluate_management_guard(evt, ctx.db)
     if not management_result.allowed:
         yield CommandRejectedBody(
@@ -329,12 +466,12 @@ async def handle_command_requested(
     if not result.allowed:
         yield CommandRejectedBody(reason=result.require_reason(), requested=evt.to_body())
         return
-    approval_result = await evaluate_recorded_approval(evt, ctx.db)
+    approval_result, approval_evidence = await evaluate_recorded_approval(evt, ctx.db)
     if not approval_result.allowed:
         yield CommandRejectedBody(reason=approval_result.require_reason(), requested=evt.to_body())
         return
 
-    plan = build_plan(evt, ctx.correlation_id)
+    plan = build_plan(evt, ctx.correlation_id, approval_evidence)
     yield CommandDispatchedBody(plan=plan, route=route_for_plan(plan))
     await queue_plan_for_agent(ctx, plan)
     yield CommandQueuedForAgentBody(
@@ -348,4 +485,6 @@ async def handle_command_requested(
         priority=plan.priority,
         approval_ref=plan.approval_ref,
         policy_decision_ref=plan.policy_decision_ref,
+        approval_decided_by=plan.approval_decided_by,
+        approval_expires_at=plan.approval_expires_at,
     )

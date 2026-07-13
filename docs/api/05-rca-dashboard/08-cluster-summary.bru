@@ -24,7 +24,7 @@ tests {
       expect(body.workloads).to.be.an("object");
       expect(body.warning_events).to.be.an("array");
       expect(body.open_incidents).to.be.an("array");
-      expect(["healthy", "warning", "critical"]).to.include(body.health);
+      expect(["healthy", "warning", "critical", "unknown"]).to.include(body.health);
     }
   });
 }

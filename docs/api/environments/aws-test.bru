@@ -1,20 +1,23 @@
 vars {
-  base_url: https://k8s.woonyong.org/api/
+  base_url: https://dev-k8s.woonyong.org/api/
   auto_login: false
+  auth_flow_verification: false
   auth_email: replace-with-auth-email
   auth_password: replace-with-auth-password
   signup_email: replace-with-signup-email
   signup_password: replace-with-signup-password
+  check_email: bruno-validation@example.invalid
   email_verification_token: replace-with-token-from-mail-event
   user_id: auto-set-after-login
   workspace_id: default
-  cluster_id: cluster-1
-  cluster_id_2: cluster-2
-  agent_cluster_id: bruno-api-test
-  target_name: cluster-1
-  agent_target_name: Bruno API Test Target
-  management_base_url: https://k8s.woonyong.org/api/
-  service_image: 183548421506.dkr.ecr.ap-northeast-2.amazonaws.com/kubernetes-ops-service:4cb1f247eebec806e1191e72c9763557b55b027d
+  cluster_id: api-verification-target
+  cluster_id_2: api-verification-target
+  agent_cluster_id: api-verification-target
+  cluster_purge: false
+  target_name: API Verification Target
+  agent_target_name: API Verification Target
+  management_base_url: https://dev-k8s.woonyong.org/api/
+  service_image: 183548421506.dkr.ecr.ap-northeast-2.amazonaws.com/kubernetes-ops-service@sha256:5f02d9694e812c594b28aebb3b5c8989afecb94a7b48109b9a8c5e0088a472b8
   namespace: sandbox
   deployment_name: checkout-api
   node_name: replace-with-node-name
@@ -28,9 +31,16 @@ vars {
   command_id: auto-set-after-debug-query-or-poll
   lease_id: lease-manual-001
   evidence_key: aws-window-001
+  rca_correlation_id: run-16-rca-debug-01-first
+  rca_scenario_id: image.wrong-tag
+  rca_test_verification: false
+  rca_test_run_id: run-02-start-test-run-first
+  rca_select_confirmation: CONFIRM_ONLY_BEFORE_STEP_07
+  rca_event_id: run-16-rca-debug-01-first
   evidence_job_id: auto-set-after-evidence-job-poll
   provider_key: kubernetes
   catalog_item_id: auto-set-after-catalog-list
+  catalog_storage_class: gp2
   plan_id: replace-with-recovery-plan-id
   action_id: replace-with-recovery-action-id
   approval_id: replace-with-approval-id
@@ -48,3 +58,7 @@ vars {
   github_webhook_secret: replace-with-GITHUB_WEBHOOK_SECRET
   github_webhook_signature: auto-set-when-secret-is-filled
 }
+
+vars:secret [
+  rca_test_token
+]

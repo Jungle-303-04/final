@@ -5,7 +5,7 @@ from __future__ import annotations
 import hashlib
 from typing import Any
 
-from sqlalchemy import and_, case, func, or_, select
+from sqlalchemy import and_, bindparam, case, func, or_, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from domains.command.models import AgentCommand
@@ -20,6 +20,10 @@ from domains.gitops.models import (
     WorkflowRun,
     WorkflowRunStep,
     WorkspaceCredential,
+)
+from domains.gitops.repository_discovery import (
+    RepositoryDiscoveryError,
+    normalize_github_repo_ref,
 )
 from packages.config.constants import Target
 from packages.config.logs import get_logger
@@ -49,11 +53,13 @@ from packages.contracts.gitops import (
 from packages.contracts.identity import (
     DEFAULT_WORKSPACE_ID,
     AccessResourceType,
+    Permission,
     ResourceRole,
 )
 from packages.storage.engine import DatabaseConnection, iso_or_none, row_dict
 
 LOGGER = get_logger(__name__)
+GITHUB_REPOSITORY_CREDENTIAL_SCOPE_PREFIX = "repository"
 
 # 원자 해결 대상으로 열림으로 간주하는 승인 상태 — 라우터의 open 판정과 동일해야 함
 OPEN_APPROVAL_STATUSES = (
@@ -78,6 +84,20 @@ WORKFLOW_STATUS_RANKS: dict[str, int] = {
 TERMINAL_WORKFLOW_STATUSES = (
     WorkflowRunStatus.SUCCEEDED.value,
     WorkflowRunStatus.FAILED.value,
+)
+
+# 단계 상태도 같은 원칙으로 단조 증가한다. 종결 상태는 늦은 재배달로 덮지 않는다.
+WORKFLOW_STEP_STATUS_RANKS: dict[str, int] = {
+    WorkflowStepStatus.PENDING.value: 1,
+    WorkflowStepStatus.RUNNING.value: 2,
+    WorkflowStepStatus.SUCCEEDED.value: 3,
+    WorkflowStepStatus.FAILED.value: 3,
+    WorkflowStepStatus.SKIPPED.value: 3,
+}
+TERMINAL_WORKFLOW_STEP_STATUSES = (
+    WorkflowStepStatus.SUCCEEDED.value,
+    WorkflowStepStatus.FAILED.value,
+    WorkflowStepStatus.SKIPPED.value,
 )
 
 
@@ -105,6 +125,27 @@ def workflow_transition_guard(table: Any, new_status: Any) -> Any:
     )
 
 
+def workflow_step_status_rank(column: Any) -> Any:
+    """단계 상태 컬럼을 전이 순위로 바꾸는 CASE 식."""
+    return case(
+        *[(column == status, rank) for status, rank in WORKFLOW_STEP_STATUS_RANKS.items()],
+        else_=0,
+    )
+
+
+def workflow_step_transition_guard(table: Any, new_status: Any) -> Any:
+    """종결 단계 고정과 pending/running 역행 방지를 한 SQL 조건으로 보장한다."""
+    new_rank = (
+        WORKFLOW_STEP_STATUS_RANKS.get(str(new_status), 0)
+        if isinstance(new_status, str)
+        else workflow_step_status_rank(new_status)
+    )
+    return and_(
+        table.c.status.not_in(TERMINAL_WORKFLOW_STEP_STATUSES),
+        workflow_step_status_rank(table.c.status) <= new_rank,
+    )
+
+
 def watch_target_settings(payload: JsonObject) -> JsonObject:
     settings = dict(payload.get("settings", {}))
     deploy_policy = dict(payload.get("deploy_policy", {}))
@@ -120,6 +161,21 @@ def watch_target_settings(payload: JsonObject) -> JsonObject:
 
 
 class RepoChangeRepository(DatabaseConnection):
+    def lock_repository_identity(self, workspace_id: str, repo_ref: str) -> None:
+        lock_key = repository_identity_lock_key(workspace_id, repo_ref)
+        with self.connection() as conn:
+            conn.execute(select(func.pg_advisory_xact_lock(lock_key)))
+
+    def lock_workspace_credential_scope(
+        self,
+        workspace_id: str,
+        provider: str,
+        scope: str,
+    ) -> None:
+        lock_key = workspace_credential_lock_key(workspace_id, provider, scope)
+        with self.connection() as conn:
+            conn.execute(select(func.pg_advisory_xact_lock(lock_key)))
+
     def upsert_workspace_credential(self, payload: JsonObject) -> JsonObject:
         workspace_id = str(payload.get("workspace_id", DEFAULT_WORKSPACE_ID))
         provider = str(payload["provider"])
@@ -165,40 +221,164 @@ class RepoChangeRepository(DatabaseConnection):
             row = conn.execute(statement).mappings().first()
         return row_dict(row) if row is not None else None
 
-    def register_repository(self, payload: JsonObject) -> JsonObject:
-        workspace_id = str(payload.get("workspace_id", DEFAULT_WORKSPACE_ID))
-        repository_id = derive_repository_id(payload)
-        user_id = payload.get("user_id")
+    def get_repository_by_ref(self, workspace_id: str, repo_ref: str) -> JsonObject | None:
+        if not workspace_id or not repo_ref:
+            return None
+        try:
+            canonical_repo_ref = normalize_github_repo_ref(repo_ref)
+        except (RepositoryDiscoveryError, ValueError):
+            return None
         table = GitRepository.__table__
-        insert = pg_insert(table).values(
-            repository_id=repository_id,
-            workspace_id=workspace_id,
-            provider=str(payload.get("provider", GitProvider.GITHUB.value)),
-            repo_ref=str(payload.get("repo_ref", DEFAULT_REPO_REF)),
-            default_branch=str(payload.get("default_branch", DEFAULT_REPO_BRANCH)),
-            credential_ref=payload.get("credential_ref"),
-            status=str(payload.get("status", RepositoryStatus.ACTIVE.value)),
-            access_policy=dict(payload.get("access_policy", {})),
-            updated_at=func.now(),
+        exact_statement = (
+            select(table)
+            .where(
+                table.c.workspace_id == workspace_id,
+                table.c.repo_ref == canonical_repo_ref,
+            )
+            .limit(1)
         )
-        statement = insert.on_conflict_do_update(
-            index_elements=[table.c.repository_id],
-            set_={
-                "provider": insert.excluded.provider,
-                "repo_ref": insert.excluded.repo_ref,
-                "default_branch": insert.excluded.default_branch,
-                "credential_ref": insert.excluded.credential_ref,
-                "status": insert.excluded.status,
-                "access_policy": insert.excluded.access_policy,
-                "updated_at": func.now(),
-            },
+        legacy_statement = (
+            select(table)
+            .where(
+                table.c.workspace_id == workspace_id,
+                func.lower(table.c.repo_ref) == canonical_repo_ref,
+            )
+            .limit(1)
         )
         with self.connection() as conn:
-            conn.execute(statement)
-        self._grant_owner_if_present(
-            workspace_id, user_id, AccessResourceType.REPOSITORY.value, repository_id
+            row = conn.execute(exact_statement).mappings().first()
+            if row is None:
+                row = conn.execute(legacy_statement).mappings().first()
+        return row_dict(row) if row is not None else None
+
+    def list_repository_applications(
+        self,
+        workspace_id: str,
+        repository_id: str,
+    ) -> list[JsonObject]:
+        table = Application.__table__
+        statement = (
+            select(table.c.application_id)
+            .where(
+                table.c.workspace_id == workspace_id,
+                table.c.repository_id == repository_id,
+            )
+            .order_by(table.c.application_id)
         )
-        return {**payload, "workspace_id": workspace_id, "repository_id": repository_id}
+        with self.connection() as conn:
+            rows = conn.execute(statement).mappings().all()
+        return [dict(row) for row in rows]
+
+    def can_manage_repository(
+        self,
+        user_id: str,
+        workspace_id: str,
+        repository_id: str,
+    ) -> bool:
+        is_service_admin = getattr(self, "is_service_admin", None)
+        if callable(is_service_admin) and is_service_admin(user_id):
+            return True
+        applications = self.list_repository_applications(workspace_id, repository_id)
+        if not applications:
+            return False
+        can_access = getattr(self, "can_access", None)
+        if not callable(can_access):
+            return False
+        decisions = [
+            bool(
+                can_access(
+                    user_id,
+                    workspace_id,
+                    AccessResourceType.APPLICATION.value,
+                    str(application["application_id"]),
+                    Permission.APPLICATION_MANAGE.value,
+                )
+            )
+            for application in applications
+        ]
+        return all(decisions)
+
+    def register_repository(self, payload: JsonObject) -> JsonObject:
+        workspace_id = str(payload.get("workspace_id", DEFAULT_WORKSPACE_ID))
+        payload = {
+            **payload,
+            "repo_ref": normalize_github_repo_ref(str(payload.get("repo_ref", DEFAULT_REPO_REF))),
+        }
+        # Create IDs are always server-derived.  ``derive_repository_id`` must
+        # keep accepting explicit IDs for event/worker identity normalization,
+        # so remove the untrusted create field only at this storage boundary.
+        create_identity = {**payload}
+        create_identity.pop("repository_id", None)
+        derived_repository_id = derive_repository_id(create_identity)
+        user_id = payload.get("user_id")
+        table = GitRepository.__table__
+        with self.unit_of_work():
+            if user_id:
+                self.lock_repository_identity(workspace_id, str(payload["repo_ref"]))
+            existing = self.get_repository_by_ref(
+                workspace_id,
+                str(payload.get("repo_ref", DEFAULT_REPO_REF)),
+            )
+            if existing is not None:
+                repository_id = str(existing["repository_id"])
+                if not user_id or not self.can_manage_repository(
+                    str(user_id),
+                    workspace_id,
+                    repository_id,
+                ):
+                    raise LookupError("repository not found in workspace")
+                authorized_repository_id: str | None = repository_id
+            else:
+                repository_id = derived_repository_id
+                # A row appearing after the authoritative lookup must not be
+                # updated by this create attempt. The caller can retry and go
+                # through the existing-row manage check.
+                authorized_repository_id = None
+
+            insert = pg_insert(table).values(
+                repository_id=repository_id,
+                workspace_id=workspace_id,
+                provider=str(payload.get("provider", GitProvider.GITHUB.value)),
+                repo_ref=str(payload.get("repo_ref", DEFAULT_REPO_REF)),
+                default_branch=str(payload.get("default_branch", DEFAULT_REPO_BRANCH)),
+                credential_ref=payload.get("credential_ref"),
+                status=str(payload.get("status", RepositoryStatus.ACTIVE.value)),
+                access_policy=dict(payload.get("access_policy", {})),
+                updated_at=func.now(),
+            )
+            statement = insert.on_conflict_do_update(
+                index_elements=[table.c.repository_id],
+                set_={
+                    "provider": insert.excluded.provider,
+                    "repo_ref": insert.excluded.repo_ref,
+                    "default_branch": insert.excluded.default_branch,
+                    "credential_ref": (
+                        insert.excluded.credential_ref
+                        if "credential_ref" in payload
+                        else table.c.credential_ref
+                    ),
+                    "status": insert.excluded.status,
+                    "access_policy": insert.excluded.access_policy,
+                    "updated_at": func.now(),
+                },
+                where=and_(
+                    table.c.workspace_id == insert.excluded.workspace_id,
+                    table.c.repository_id
+                    == bindparam("authorized_repository_id", authorized_repository_id),
+                ),
+            ).returning(table)
+            with self.connection() as conn:
+                row = conn.execute(statement).mappings().first()
+            if row is None:
+                # Conditional conflict updates deliberately return no row for
+                # foreign ownership, unapproved races, or stale identities.
+                raise LookupError("repository not found in workspace")
+        return {
+            **payload,
+            **row_dict(row),
+            "workspace_id": workspace_id,
+            "repository_id": repository_id,
+        }
 
     def register_watch_target(self, payload: JsonObject) -> JsonObject:
         workspace_id = str(payload.get("workspace_id", DEFAULT_WORKSPACE_ID))
@@ -308,6 +488,7 @@ class RepoChangeRepository(DatabaseConnection):
                 table.c.name == name,
             )
             .limit(1)
+            .with_for_update()
         )
         update_values = {
             "repository_id": repository_id,
@@ -327,52 +508,100 @@ class RepoChangeRepository(DatabaseConnection):
             metadata=dict(payload.get("metadata", {})),
             updated_at=func.now(),
         )
-        statement = insert.on_conflict_do_update(
-            index_elements=[table.c.application_id],
-            set_={
-                "repository_id": insert.excluded.repository_id,
-                "name": insert.excluded.name,
-                "manifest_path": insert.excluded.manifest_path,
-                "status": insert.excluded.status,
-                "metadata": insert.excluded.metadata,
-                "updated_at": func.now(),
-            },
-        )
-        with self.connection() as conn:
-            existing_application_id = conn.execute(
-                existing_application_id_statement
-            ).scalar_one_or_none()
-            if existing_application_id and str(existing_application_id) != application_id:
-                # 같은 workspace+repo+name 은 같은 application 으로 흡수(dedup).
-                # 서로 다른 앱이 동명일 가능성이 있어 silent merge 대신 경고를 남김.
-                resolved_application_id = str(existing_application_id)
-                LOGGER.warning(
-                    "application_id_merged_by_name",
-                    extra={
-                        "context": {
-                            "workspace_id": workspace_id,
-                            "repository_id": repository_id,
-                            "name": name,
-                            "incoming_application_id": application_id,
-                            "resolved_application_id": resolved_application_id,
-                        }
-                    },
-                )
-                conn.execute(
-                    table.update()
-                    .where(table.c.application_id == resolved_application_id)
-                    .values(**update_values)
-                )
-            else:
-                conn.execute(statement)
-                resolved_application_id = application_id
-        self._grant_owner_if_present(
-            workspace_id,
-            payload.get("user_id"),
-            AccessResourceType.APPLICATION.value,
-            resolved_application_id,
-        )
+        user_id = str(payload.get("user_id") or "")
+        with self.unit_of_work():
+            repo_ref = str(payload.get("repo_ref") or "").strip()
+            if repo_ref:
+                self.lock_repository_identity(workspace_id, repo_ref)
+            if user_id:
+                self.lock_application_identity(workspace_id, repository_id, name)
+            with self.connection() as conn:
+                existing_application_id = conn.execute(
+                    existing_application_id_statement
+                ).scalar_one_or_none()
+            if existing_application_id is not None and user_id:
+                can_access = getattr(self, "can_access", None)
+                if not callable(can_access) or not can_access(
+                    user_id,
+                    workspace_id,
+                    AccessResourceType.APPLICATION.value,
+                    str(existing_application_id),
+                    Permission.APPLICATION_MANAGE.value,
+                ):
+                    raise LookupError("application not found in workspace")
+
+            authorized_application_id = (
+                str(existing_application_id)
+                if user_id and existing_application_id is not None
+                else application_id
+                if not user_id
+                else None
+            )
+            statement = insert.on_conflict_do_update(
+                index_elements=[table.c.application_id],
+                set_={
+                    "repository_id": insert.excluded.repository_id,
+                    "name": insert.excluded.name,
+                    "manifest_path": insert.excluded.manifest_path,
+                    "status": insert.excluded.status,
+                    "metadata": insert.excluded.metadata,
+                    "updated_at": func.now(),
+                },
+                where=and_(
+                    table.c.workspace_id == insert.excluded.workspace_id,
+                    table.c.application_id
+                    == bindparam("authorized_application_id", authorized_application_id),
+                ),
+            ).returning(table.c.application_id)
+            with self.connection() as conn:
+                if existing_application_id and str(existing_application_id) != application_id:
+                    # 같은 workspace+repo+name 은 같은 application 으로 흡수(dedup).
+                    # 서로 다른 앱이 동명일 가능성이 있어 silent merge 대신 경고를 남김.
+                    resolved_application_id = str(existing_application_id)
+                    LOGGER.warning(
+                        "application_id_merged_by_name",
+                        extra={
+                            "context": {
+                                "workspace_id": workspace_id,
+                                "repository_id": repository_id,
+                                "name": name,
+                                "incoming_application_id": application_id,
+                                "resolved_application_id": resolved_application_id,
+                            }
+                        },
+                    )
+                    conn.execute(
+                        table.update()
+                        .where(
+                            table.c.workspace_id == workspace_id,
+                            table.c.application_id == resolved_application_id,
+                        )
+                        .values(**update_values)
+                    )
+                else:
+                    persisted_application_id = conn.execute(statement).scalar_one_or_none()
+                    if persisted_application_id is None:
+                        raise LookupError("application not found in workspace")
+                    resolved_application_id = str(persisted_application_id)
+        if existing_application_id is None:
+            self._grant_owner_if_present(
+                workspace_id,
+                payload.get("user_id"),
+                AccessResourceType.APPLICATION.value,
+                resolved_application_id,
+            )
         return {**payload, "workspace_id": workspace_id, "application_id": resolved_application_id}
+
+    def lock_application_identity(
+        self,
+        workspace_id: str,
+        repository_id: str,
+        name: str,
+    ) -> None:
+        """Serialize user-originated create/update authorization for one app identity."""
+        lock_key = application_identity_lock_key(workspace_id, repository_id, name)
+        with self.connection() as conn:
+            conn.execute(select(func.pg_advisory_xact_lock(lock_key)))
 
     def list_applications(
         self,
@@ -447,6 +676,28 @@ class RepoChangeRepository(DatabaseConnection):
             row = conn.execute(statement).mappings().first()
         return serialize_application(row) if row else None
 
+    def get_application_by_identity(
+        self,
+        workspace_id: str,
+        repository_id: str,
+        name: str,
+    ) -> JsonObject | None:
+        table = Application.__table__
+        statement = (
+            select(table.c.application_id)
+            .where(
+                table.c.workspace_id == workspace_id,
+                table.c.repository_id == repository_id,
+                table.c.name == name,
+            )
+            .limit(1)
+        )
+        with self.connection() as conn:
+            application_id = conn.execute(statement).scalar_one_or_none()
+        if application_id is None:
+            return None
+        return self.get_application(workspace_id, str(application_id))
+
     def list_application_deployment_bindings(
         self,
         workspace_id: str,
@@ -462,6 +713,10 @@ class RepoChangeRepository(DatabaseConnection):
         manifest_path = str(application.get("manifest_path") or "").strip()
         if manifest_path:
             binding_identity.append(table.c.manifest_path == manifest_path)
+        watch_table = GitWatchTarget.__table__
+        watch_by_id = watch_table.alias("binding_watch_by_id")
+        watch_by_source = watch_table.alias("binding_watch_by_source")
+        default_branch = str(application.get("default_branch") or DEFAULT_REPO_BRANCH)
         statement = (
             select(
                 table.c.binding_id,
@@ -479,6 +734,35 @@ class RepoChangeRepository(DatabaseConnection):
                 table.c.access_policy,
                 table.c.created_at,
                 table.c.updated_at,
+                func.coalesce(
+                    watch_by_id.c.last_seen_commit_sha,
+                    watch_by_source.c.last_seen_commit_sha,
+                ).label("watch_last_seen_commit_sha"),
+                func.coalesce(
+                    watch_by_id.c.last_polled_at,
+                    watch_by_source.c.last_polled_at,
+                ).label("watch_last_polled_at"),
+                func.coalesce(watch_by_id.c.settings, watch_by_source.c.settings).label(
+                    "watch_settings"
+                ),
+            )
+            .outerjoin(
+                watch_by_id,
+                and_(
+                    watch_by_id.c.workspace_id == table.c.workspace_id,
+                    watch_by_id.c.repository_id == table.c.repository_id,
+                    watch_by_id.c.watch_target_id == table.c.watch_target_id,
+                ),
+            )
+            .outerjoin(
+                watch_by_source,
+                and_(
+                    watch_by_id.c.watch_target_id.is_(None),
+                    watch_by_source.c.workspace_id == table.c.workspace_id,
+                    watch_by_source.c.repository_id == table.c.repository_id,
+                    watch_by_source.c.branch == default_branch,
+                    watch_by_source.c.manifest_path == table.c.manifest_path,
+                ),
             )
             .where(
                 table.c.workspace_id == workspace_id,
@@ -668,25 +952,38 @@ class RepoChangeRepository(DatabaseConnection):
         """
         repo_table = GitRepository.__table__
         watch_table = GitWatchTarget.__table__
+        watch_by_id = watch_table.alias("watch_by_id")
+        watch_by_source = watch_table.alias("watch_by_source")
         binding_table = DeploymentBinding.__table__
         app_table = Application.__table__
-        branch = func.coalesce(watch_table.c.branch, repo_table.c.default_branch).label("branch")
-        manifest_path = func.coalesce(
-            watch_table.c.manifest_path,
+        binding_manifest_path = func.coalesce(
             binding_table.c.manifest_path,
             app_table.c.manifest_path,
+        )
+        branch = func.coalesce(
+            watch_by_id.c.branch,
+            watch_by_source.c.branch,
+            repo_table.c.default_branch,
+        ).label("branch")
+        manifest_path = func.coalesce(
+            watch_by_id.c.manifest_path,
+            watch_by_source.c.manifest_path,
+            binding_manifest_path,
         ).label("manifest_path")
         source_type = func.coalesce(
-            watch_table.c.settings["source_type"].astext,
+            watch_by_id.c.settings["source_type"].astext,
+            watch_by_source.c.settings["source_type"].astext,
             binding_table.c.deploy_policy["manifest_source"].astext,
             binding_table.c.deploy_policy["source_type"].astext,
             app_table.c.metadata["source_type"].astext,
             "",
         ).label("source_type")
         watch_target_id = func.coalesce(
-            watch_table.c.watch_target_id,
+            watch_by_id.c.watch_target_id,
+            watch_by_source.c.watch_target_id,
             binding_table.c.watch_target_id,
         ).label("watch_target_id")
+        watch_status = func.coalesce(watch_by_id.c.status, watch_by_source.c.status)
         statement = (
             select(
                 binding_table.c.workspace_id,
@@ -701,7 +998,10 @@ class RepoChangeRepository(DatabaseConnection):
                 binding_table.c.cluster_id,
                 manifest_path,
                 source_type,
-                watch_table.c.last_seen_commit_sha,
+                func.coalesce(
+                    watch_by_id.c.last_seen_commit_sha,
+                    watch_by_source.c.last_seen_commit_sha,
+                ).label("last_seen_commit_sha"),
             )
             .select_from(binding_table)
             .join(
@@ -720,11 +1020,21 @@ class RepoChangeRepository(DatabaseConnection):
                 ),
             )
             .outerjoin(
-                watch_table,
+                watch_by_id,
                 and_(
-                    watch_table.c.workspace_id == binding_table.c.workspace_id,
-                    watch_table.c.repository_id == binding_table.c.repository_id,
-                    watch_table.c.watch_target_id == binding_table.c.watch_target_id,
+                    watch_by_id.c.workspace_id == binding_table.c.workspace_id,
+                    watch_by_id.c.repository_id == binding_table.c.repository_id,
+                    watch_by_id.c.watch_target_id == binding_table.c.watch_target_id,
+                ),
+            )
+            .outerjoin(
+                watch_by_source,
+                and_(
+                    watch_by_id.c.watch_target_id.is_(None),
+                    watch_by_source.c.workspace_id == binding_table.c.workspace_id,
+                    watch_by_source.c.repository_id == binding_table.c.repository_id,
+                    watch_by_source.c.branch == repo_table.c.default_branch,
+                    watch_by_source.c.manifest_path == binding_manifest_path,
                 ),
             )
             .where(
@@ -733,8 +1043,8 @@ class RepoChangeRepository(DatabaseConnection):
                 app_table.c.status == ApplicationStatus.ACTIVE.value,
                 binding_table.c.status == DeploymentBindingStatus.ACTIVE.value,
                 or_(
-                    watch_table.c.watch_target_id.is_(None),
-                    watch_table.c.status == WatchTargetStatus.ACTIVE.value,
+                    watch_status.is_(None),
+                    watch_status == WatchTargetStatus.ACTIVE.value,
                 ),
             )
             .order_by(repo_table.c.repo_ref, branch, binding_table.c.cluster_id)
@@ -871,6 +1181,7 @@ class RepoChangeRepository(DatabaseConnection):
                 "details": insert.excluded.details,
                 "updated_at": func.now(),
             },
+            where=workflow_step_transition_guard(table, insert.excluded.status),
         )
         with self.connection() as conn:
             conn.execute(statement)
@@ -990,7 +1301,11 @@ class RepoChangeRepository(DatabaseConnection):
                 table.c.status,
                 table.c.reason,
                 table.c.requested_role,
+                table.c.requested_by,
+                table.c.decided_by,
+                table.c.decision,
                 table.c.details,
+                table.c.expires_at,
             )
             .where(table.c.approval_id == approval_id, table.c.workspace_id == workspace_id)
             .limit(1)
@@ -1021,6 +1336,35 @@ class RepoChangeRepository(DatabaseConnection):
         )
         with self.connection() as conn:
             return int(conn.execute(statement).scalar() or 0)
+
+    def workflow_run_status_counts(
+        self, workspace_id: str = DEFAULT_WORKSPACE_ID
+    ) -> dict[str, int]:
+        table = WorkflowRun.__table__
+        statement = (
+            select(table.c.status, func.count().label("count"))
+            .where(table.c.workspace_id == workspace_id)
+            .group_by(table.c.status)
+        )
+        with self.connection() as conn:
+            rows = conn.execute(statement).all()
+        return {str(row[0]): int(row[1] or 0) for row in rows}
+
+    def workflow_run_current_step_counts(
+        self, workspace_id: str = DEFAULT_WORKSPACE_ID
+    ) -> dict[str, int]:
+        table = WorkflowRun.__table__
+        statement = (
+            select(table.c.current_step, func.count().label("count"))
+            .where(
+                table.c.workspace_id == workspace_id,
+                table.c.status.not_in(TERMINAL_WORKFLOW_STATUSES),
+            )
+            .group_by(table.c.current_step)
+        )
+        with self.connection() as conn:
+            rows = conn.execute(statement).all()
+        return {str(row[0]): int(row[1] or 0) for row in rows}
 
     def attach_workflow_command(self, workflow_run_id: str, command_id: str) -> None:
         table = WorkflowRun.__table__
@@ -1228,10 +1572,63 @@ class RepoChangeRepository(DatabaseConnection):
             updated_at=func.now(),
         )
         statement = insert.on_conflict_do_update(
-            index_elements=[table.c.watch_target_id],
+            index_elements=[
+                table.c.workspace_id,
+                table.c.repository_id,
+                table.c.branch,
+                table.c.manifest_path,
+            ],
             set_={
                 "last_seen_commit_sha": insert.excluded.last_seen_commit_sha,
                 "last_polled_at": func.now(),
+                "updated_at": func.now(),
+            },
+        )
+        with self.connection() as conn:
+            conn.execute(statement)
+
+    def record_watch_poll_result(
+        self,
+        watch_target_id: str,
+        *,
+        workspace_id: str = DEFAULT_WORKSPACE_ID,
+        repository_id: str = DEFAULT_REPOSITORY_ID,
+        branch: str = DEFAULT_REPO_BRANCH,
+        manifest_path: str = DEFAULT_MANIFEST_PATH,
+        ok: bool = True,
+        status_code: int | None = None,
+        error_kind: str = "",
+        error: str = "",
+    ) -> None:
+        table = GitWatchTarget.__table__
+        settings = {
+            "poll_status": "ok" if ok else "failed",
+            "poll_status_code": status_code,
+            "poll_error_kind": "" if ok else error_kind,
+            "poll_error": "" if ok else error[:500],
+        }
+        insert = pg_insert(table).values(
+            watch_target_id=watch_target_id,
+            workspace_id=workspace_id,
+            repository_id=repository_id,
+            branch=branch,
+            manifest_path=manifest_path,
+            interval_seconds=30,
+            last_polled_at=func.now(),
+            status=WatchTargetStatus.ACTIVE.value,
+            settings=settings,
+            updated_at=func.now(),
+        )
+        statement = insert.on_conflict_do_update(
+            index_elements=[
+                table.c.workspace_id,
+                table.c.repository_id,
+                table.c.branch,
+                table.c.manifest_path,
+            ],
+            set_={
+                "last_polled_at": func.now(),
+                "settings": table.c.settings.op("||")(insert.excluded.settings),
                 "updated_at": func.now(),
             },
         )
@@ -1303,6 +1700,11 @@ def stable_credential_id(workspace_id: str, provider: str, scope: str) -> str:
     return f"cred-{hashlib.sha256(raw.encode()).hexdigest()[:32]}"
 
 
+def repository_credential_scope(repository_id: str) -> str:
+    """Return the canonical vault scope for one GitHub repository."""
+    return f"{GITHUB_REPOSITORY_CREDENTIAL_SCOPE_PREFIX}:{repository_id}"
+
+
 def derive_watch_target_id(payload: JsonObject) -> str:
     explicit = payload.get("watch_target_id")
     if explicit and explicit != DEFAULT_WATCH_TARGET_ID:
@@ -1348,6 +1750,22 @@ def derive_application_id(payload: JsonObject) -> str:
         ]
     )
     return f"app-{hashlib.sha256(raw.encode()).hexdigest()[:32]}"
+
+
+def application_identity_lock_key(workspace_id: str, repository_id: str, name: str) -> int:
+    raw = f"application\0{workspace_id}\0{repository_id}\0{name}".encode()
+    return int.from_bytes(hashlib.sha256(raw).digest()[:8], byteorder="big", signed=True)
+
+
+def repository_identity_lock_key(workspace_id: str, repo_ref: str) -> int:
+    canonical_repo_ref = normalize_github_repo_ref(repo_ref)
+    raw = f"repository\0{workspace_id}\0{canonical_repo_ref}".encode()
+    return int.from_bytes(hashlib.sha256(raw).digest()[:8], byteorder="big", signed=True)
+
+
+def workspace_credential_lock_key(workspace_id: str, provider: str, scope: str) -> int:
+    raw = f"workspace-credential\0{workspace_id}\0{provider}\0{scope}".encode()
+    return int.from_bytes(hashlib.sha256(raw).digest()[:8], byteorder="big", signed=True)
 
 
 def derive_application_name(payload: JsonObject) -> str:
@@ -1402,6 +1820,23 @@ def serialize_deployment_binding(row: Any) -> JsonObject:
     item = dict(row)
     item["deploy_policy"] = dict(item.get("deploy_policy") or {})
     item["access_policy"] = dict(item.get("access_policy") or {})
+    watch_settings = item.pop("watch_settings", None)
+    watch_last_seen_commit_sha = item.pop("watch_last_seen_commit_sha", None)
+    watch_last_polled_at = item.pop("watch_last_polled_at", None)
+    if (
+        watch_settings is not None
+        or watch_last_seen_commit_sha is not None
+        or watch_last_polled_at is not None
+    ):
+        settings = dict(watch_settings or {})
+        item["gitops_poll"] = {
+            "status": str(settings.get("poll_status") or "unknown"),
+            "status_code": settings.get("poll_status_code"),
+            "error_kind": str(settings.get("poll_error_kind") or ""),
+            "error": str(settings.get("poll_error") or ""),
+            "last_seen_commit_sha": str(watch_last_seen_commit_sha or ""),
+            "last_polled_at": iso_or_none(watch_last_polled_at),
+        }
     item["created_at"] = iso_or_none(item.get("created_at"))
     item["updated_at"] = iso_or_none(item.get("updated_at"))
     return item

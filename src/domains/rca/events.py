@@ -36,6 +36,9 @@ class ClusterEvidenceReceivedBody(EventBody):
     source_id: str | None = None
     window_start: str | None = None
     evidence_key: str | None = None
+    workflow_run_id: str | None = None
+    release_context: JsonObject = field(default_factory=dict)
+    collection_status: JsonObject = field(default_factory=dict)
     metadata: JsonObject = field(default_factory=dict)
     correlation_id: str | None = None
     kind: str | None = None
@@ -56,6 +59,9 @@ def compact_cluster_evidence_payload(
         "source_id": evidence_body.source_id,
         "window_start": evidence_body.window_start,
         "evidence_key": evidence_body.evidence_key,
+        "workflow_run_id": evidence_body.workflow_run_id,
+        "release_context": evidence_body.release_context,
+        "collection_status": evidence_body.collection_status,
         "correlation_id": correlation_id or evidence_body.correlation_id,
         "kind": "cluster_evidence",
         "payload_size": evidence_payload_size(payload),
@@ -114,6 +120,7 @@ class Evidence(EventBody):
     logs: list[JsonObject]
     traces: JsonObject
     object_ref: str
+    metadata: JsonObject = field(default_factory=dict)
     workspace_id: str = DEFAULT_WORKSPACE_ID
 
 
@@ -132,6 +139,7 @@ def compact_evidence_built_body(
             logs=[],
             traces={},
             object_ref=evidence.object_ref,
+            metadata={},
             workspace_id=evidence.workspace_id,
         ),
         correlation_id=correlation_id,

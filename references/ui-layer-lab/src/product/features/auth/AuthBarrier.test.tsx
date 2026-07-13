@@ -158,6 +158,7 @@ describe("AuthBarrier", () => {
     renderBarrier(port);
 
     expect(await screen.findByRole("heading", {
+      level: 1,
       name: "컨트롤 플레인에 연결할 수 없습니다",
     })).toBeTruthy();
     window.dispatchEvent(new Event("focus"));

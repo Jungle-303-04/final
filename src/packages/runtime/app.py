@@ -21,6 +21,7 @@ from collections.abc import Callable
 from typing import Any
 
 from packages.config.errors import fail, require
+from packages.contracts.event_bus.interfaces import EventConsumerBus
 from packages.contracts.event_bus.registry import Subscription, events
 from packages.contracts.event_bus.subjects import EventSubject
 from packages.contracts.event_bus.subscriptions import ALL_EVENTS_SUBJECT
@@ -72,14 +73,14 @@ class App:
     def subscriptions(self) -> tuple[Subscription, ...]:
         return tuple(self._handlers.values())
 
-    def run(self) -> None:
+    def run(self, bus: EventConsumerBus | None = None) -> None:
         """
-        등록된 구독자를 NATS 에 붙여 실행. (런타임은 지연 import)
+        등록된 구독자를 이벤트 버스에 붙여 실행. 기본값은 NATS. (런타임은 지연 import)
         """
         from packages.runtime.service import WorkerService
 
         subjects, factory = self._resolve()
-        WorkerService(self.name, tuple(subjects), factory).run()
+        WorkerService(self.name, tuple(subjects), factory, bus=bus).run()
 
     def _resolve(self) -> tuple[list[str], Callable[..., Any]]:
         """구독 방식별 (subject 목록, 핸들러 factory) 구성 — 전체구독은 '>' 하나, 타입구독은 subject별 라우터."""

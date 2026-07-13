@@ -1,0 +1,322 @@
+"""변경↔장애 상관 projection 저장소."""
+
+from __future__ import annotations
+
+from sqlalchemy import and_, func, or_, select
+from sqlalchemy.dialects.postgresql import insert as pg_insert
+
+from domains.audit.models import AuditLog
+from domains.dashboard.models import RcaTimeline
+from domains.gitops.models import DeploymentBinding, GitRepository, WorkflowRun, WorkflowRunStep
+from domains.rca_changes.models import WorkflowPrReference, WorkloadChange
+from packages.contracts.event_bus.interfaces import JsonObject
+from packages.contracts.event_bus.subjects import EventSubject
+from packages.contracts.gitops import (
+    DeploymentBindingStatus,
+    RepositoryStatus,
+    WorkflowRunStatus,
+    WorkflowStepName,
+    WorkflowStepStatus,
+)
+from packages.storage.engine import DatabaseConnection
+
+
+class RcaChangesRepository(DatabaseConnection):
+    def get_workflow_pr_identity_context(
+        self,
+        workspace_id: str,
+        workflow_run_id: str,
+        application_id: str,
+        binding_id: str,
+    ) -> JsonObject | None:
+        run = WorkflowRun.__table__
+        binding = DeploymentBinding.__table__
+        repository = GitRepository.__table__
+        statement = (
+            select(
+                run.c.workspace_id,
+                run.c.workflow_run_id,
+                run.c.application_id,
+                run.c.binding_id,
+                run.c.commit_sha,
+                binding.c.repository_id,
+                binding.c.manifest_path,
+                repository.c.repo_ref,
+            )
+            .select_from(
+                run.join(
+                    binding,
+                    and_(
+                        binding.c.workspace_id == run.c.workspace_id,
+                        binding.c.binding_id == run.c.binding_id,
+                        binding.c.cluster_id == run.c.cluster_id,
+                        binding.c.environment == run.c.environment,
+                    ),
+                ).join(
+                    repository,
+                    and_(
+                        repository.c.workspace_id == binding.c.workspace_id,
+                        repository.c.repository_id == binding.c.repository_id,
+                    ),
+                )
+            )
+            .where(
+                run.c.workspace_id == workspace_id,
+                run.c.workflow_run_id == workflow_run_id,
+                run.c.application_id == application_id,
+                run.c.binding_id == binding_id,
+                binding.c.status == DeploymentBindingStatus.ACTIVE.value,
+                repository.c.status == RepositoryStatus.ACTIVE.value,
+            )
+            .limit(1)
+        )
+        with self.connection() as conn:
+            row = conn.execute(statement).mappings().first()
+        return dict(row) if row else None
+
+    def get_completed_workload_change_context(
+        self,
+        workspace_id: str,
+        workflow_run_id: str,
+        application_id: str,
+        binding_id: str,
+    ) -> JsonObject | None:
+        """성공 배포의 workload key/diff를 권위 read model에서 한 번에 읽는다."""
+
+        run = WorkflowRun.__table__
+        binding = DeploymentBinding.__table__
+        repository = GitRepository.__table__
+        step = WorkflowRunStep.__table__
+        diff_step = step.alias("change_diff_step")
+        apply_step = step.alias("change_apply_step")
+        statement = (
+            select(
+                run.c.workspace_id,
+                run.c.workflow_run_id,
+                run.c.application_id,
+                run.c.binding_id,
+                run.c.cluster_id,
+                run.c.commit_sha,
+                run.c.command_id,
+                run.c.metadata.label("run_metadata"),
+                binding.c.repository_id,
+                binding.c.namespace,
+                binding.c.manifest_path,
+                repository.c.repo_ref,
+                diff_step.c.details.label("diff_details"),
+                apply_step.c.details.label("apply_details"),
+            )
+            .select_from(
+                run.join(
+                    binding,
+                    and_(
+                        binding.c.workspace_id == run.c.workspace_id,
+                        binding.c.binding_id == run.c.binding_id,
+                        binding.c.cluster_id == run.c.cluster_id,
+                    ),
+                )
+                .join(
+                    repository,
+                    and_(
+                        repository.c.workspace_id == binding.c.workspace_id,
+                        repository.c.repository_id == binding.c.repository_id,
+                    ),
+                )
+                .join(
+                    diff_step,
+                    and_(
+                        diff_step.c.workspace_id == run.c.workspace_id,
+                        diff_step.c.workflow_run_id == run.c.workflow_run_id,
+                        diff_step.c.application_id == run.c.application_id,
+                        diff_step.c.binding_id == run.c.binding_id,
+                        diff_step.c.environment == run.c.environment,
+                        diff_step.c.name == WorkflowStepName.DIFF.value,
+                        diff_step.c.status == WorkflowStepStatus.SUCCEEDED.value,
+                    ),
+                )
+                .join(
+                    apply_step,
+                    and_(
+                        apply_step.c.workspace_id == run.c.workspace_id,
+                        apply_step.c.workflow_run_id == run.c.workflow_run_id,
+                        apply_step.c.application_id == run.c.application_id,
+                        apply_step.c.binding_id == run.c.binding_id,
+                        apply_step.c.environment == run.c.environment,
+                        apply_step.c.name == WorkflowStepName.APPLY.value,
+                        apply_step.c.status == WorkflowStepStatus.SUCCEEDED.value,
+                    ),
+                )
+            )
+            .where(
+                run.c.workspace_id == workspace_id,
+                run.c.workflow_run_id == workflow_run_id,
+                run.c.application_id == application_id,
+                run.c.binding_id == binding_id,
+                run.c.status == WorkflowRunStatus.SUCCEEDED.value,
+                run.c.command_id.is_not(None),
+                binding.c.status == DeploymentBindingStatus.ACTIVE.value,
+                binding.c.environment == run.c.environment,
+                repository.c.status == RepositoryStatus.ACTIVE.value,
+            )
+            .limit(1)
+        )
+        with self.connection() as conn:
+            row = conn.execute(statement).mappings().first()
+        return dict(row) if row else None
+
+    def record_workload_change(self, row: JsonObject) -> None:
+        change = WorkloadChange.__table__
+        with self.connection() as conn:
+            statement = pg_insert(change).values(**row)
+            conn.execute(statement.on_conflict_do_nothing())
+
+    def record_workflow_pr_reference(self, row: JsonObject) -> None:
+        reference = WorkflowPrReference.__table__
+        with self.connection() as conn:
+            statement = pg_insert(reference).values(**row)
+            saved = conn.execute(
+                statement.on_conflict_do_update(
+                    index_elements=[
+                        reference.c.workspace_id,
+                        reference.c.repository_id,
+                        reference.c.binding_id,
+                        reference.c.workflow_run_id,
+                        reference.c.commit_sha,
+                        reference.c.manifest_path,
+                    ],
+                    set_={
+                        "source_event_id": statement.excluded.source_event_id,
+                        "pr_url": statement.excluded.pr_url,
+                        "observed_at": statement.excluded.observed_at,
+                        "updated_at": func.now(),
+                    },
+                    where=or_(
+                        statement.excluded.observed_at > reference.c.observed_at,
+                        and_(
+                            statement.excluded.observed_at == reference.c.observed_at,
+                            statement.excluded.source_event_id > reference.c.source_event_id,
+                        ),
+                    ),
+                ).returning(reference.c.workspace_id)
+            ).first()
+            if saved is None:
+                return
+
+    def list_incident_workload_scopes(
+        self,
+        workspace_id: str,
+        incident_id: str,
+    ) -> list[JsonObject]:
+        statement = _incident_scope_statement(workspace_id, incident_id).limit(2)
+        with self.connection() as conn:
+            return [dict(row) for row in conn.execute(statement).mappings().all()]
+
+    def list_recent_workload_changes(
+        self,
+        workspace_id: str,
+        cluster_id: str,
+        namespace: str,
+        resource_kind: str,
+        resource_name: str,
+        incident_id: str,
+        *,
+        limit: int = 5,
+    ) -> list[JsonObject]:
+        change = WorkloadChange.__table__
+        reference = WorkflowPrReference.__table__
+        scope = _incident_scope_statement(workspace_id, incident_id).cte(
+            "authorized_incident_scope"
+        )
+        scope_count = select(func.count()).select_from(scope).scalar_subquery()
+        incident_at = (
+            select(scope.c.incident_at)
+            .where(
+                scope.c.cluster_id == cluster_id,
+                scope.c.namespace == namespace,
+                scope.c.resource_kind == resource_kind.casefold(),
+                scope.c.resource_name == resource_name,
+            )
+            .scalar_subquery()
+        )
+        statement = (
+            select(
+                change.c.event_id,
+                change.c.changed_at,
+                change.c.image_before,
+                change.c.image_after,
+                reference.c.pr_url,
+                change.c.commit_sha,
+                change.c.repository_id,
+                change.c.repo_ref,
+                change.c.workflow_run_id,
+                change.c.namespace,
+                change.c.resource_kind,
+                change.c.resource_name,
+            )
+            .select_from(
+                change.outerjoin(
+                    reference,
+                    and_(
+                        reference.c.workspace_id == change.c.workspace_id,
+                        reference.c.repository_id == change.c.repository_id,
+                        reference.c.binding_id == change.c.binding_id,
+                        reference.c.workflow_run_id == change.c.workflow_run_id,
+                        reference.c.commit_sha == change.c.commit_sha,
+                        reference.c.manifest_path == change.c.manifest_path,
+                    ),
+                )
+            )
+            .where(
+                change.c.workspace_id == workspace_id,
+                change.c.cluster_id == cluster_id,
+                change.c.namespace == namespace,
+                change.c.resource_kind == resource_kind.casefold(),
+                change.c.resource_name == resource_name,
+                scope_count == 1,
+                change.c.changed_at <= incident_at,
+            )
+            .order_by(change.c.changed_at.desc(), change.c.event_id.desc())
+            .limit(limit)
+        )
+        with self.connection() as conn:
+            return [dict(row) for row in conn.execute(statement).mappings().all()]
+
+
+def _incident_scope_statement(workspace_id: str, incident_id: str) -> object:
+    timeline = RcaTimeline.__table__
+    audit = AuditLog.__table__
+    resource_kind = func.lower(timeline.c.incident_resource_kind).label("resource_kind")
+    return (
+        select(
+            timeline.c.cluster_id,
+            timeline.c.incident_namespace.label("namespace"),
+            resource_kind,
+            timeline.c.incident_resource_name.label("resource_name"),
+            func.min(audit.c.event_created_at).label("incident_at"),
+        )
+        .select_from(
+            timeline.join(
+                audit,
+                and_(
+                    audit.c.workspace_id == timeline.c.workspace_id,
+                    audit.c.correlation_id == timeline.c.correlation_id,
+                    audit.c.subject == EventSubject.INCIDENT_DETECTED.value,
+                    audit.c.event_created_at.is_not(None),
+                ),
+            )
+        )
+        .where(
+            timeline.c.workspace_id == workspace_id,
+            timeline.c.incident_id == incident_id,
+            timeline.c.cluster_id.is_not(None),
+            timeline.c.incident_namespace.is_not(None),
+            timeline.c.incident_resource_kind.is_not(None),
+            timeline.c.incident_resource_name.is_not(None),
+        )
+        .group_by(
+            timeline.c.cluster_id,
+            timeline.c.incident_namespace,
+            resource_kind,
+            timeline.c.incident_resource_name,
+        )
+    )

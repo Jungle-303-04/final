@@ -45,6 +45,7 @@ class StubConversationStore:
     def __init__(self) -> None:
         self.responses: list[dict[str, Any]] = []
         self.failures: list[dict[str, Any]] = []
+        self.llm_samples: list[Any] = []
 
     async def list_ai_messages(
         self, workspace_id: str, conversation_id: str, *, newest: int | None = None
@@ -58,6 +59,9 @@ class StubConversationStore:
     async def record_ai_failure(self, payload: dict[str, Any]) -> bool:
         self.failures.append(payload)
         return True
+
+    async def record_llm_invocation_metric(self, sample: Any) -> None:
+        self.llm_samples.append(sample)
 
 
 class DeletedConversationStore(StubConversationStore):
@@ -112,6 +116,10 @@ def test_chat_worker_answers_via_engine_with_tool_loop() -> None:
     assert "target-cluster-01" in scripted.prompts[0]
     assert "[user] earlier question" in scripted.prompts[0]
     assert store.responses and store.responses[0]["content"] == "restart is allowed"
+    assert [sample.operation for sample in store.llm_samples] == ["complete", "complete"]
+    assert {sample.status for sample in store.llm_samples} == {"succeeded"}
+    assert {sample.event_id for sample in store.llm_samples} == {"evt-1"}
+    assert {sample.correlation_id for sample in store.llm_samples} == {"corr-1"}
 
 
 def test_chat_worker_promotes_resource_context_to_tool_context() -> None:
@@ -136,6 +144,10 @@ def test_chat_worker_promotes_resource_context_to_tool_context() -> None:
                 "namespace": "prod",
                 "name": "checkout-abc",
                 "uid": "pod-uid-1",
+                "application_id": "app-1",
+                "diff_source": "gitops",
+                "workflow_run_id": "workflow-1",
+                "approval_id": "approval-1",
             },
         ),
         db=store,
@@ -148,6 +160,10 @@ def test_chat_worker_promotes_resource_context_to_tool_context() -> None:
     assert capture.context.namespace == "prod"
     assert capture.context.name == "checkout-abc"
     assert capture.context.uid == "pod-uid-1"
+    assert capture.context.resource_context["application_id"] == "app-1"
+    assert capture.context.resource_context["diff_source"] == "gitops"
+    assert capture.context.resource_context["workflow_run_id"] == "workflow-1"
+    assert capture.context.resource_context["approval_id"] == "approval-1"
 
 
 def test_chat_worker_drops_late_response_for_deleted_conversation() -> None:

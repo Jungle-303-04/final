@@ -78,7 +78,7 @@ tests        단위 테스트
 make setup
 bash scripts/test.sh
 make manifest-check
-make aws-smoke
+make smoke
 ```
 
 로컬에서는 코드/manifest 검증까지만 하고, 실제 서비스 smoke는 AWS EKS에서 확인한다.
@@ -184,7 +184,7 @@ reconcile-worker             target 상태 reconcile
 ```bash
 make test
 make manifest-check
-make aws-smoke
+make smoke
 ```
 
 scale/recovery 확인:

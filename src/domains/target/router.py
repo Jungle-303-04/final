@@ -9,6 +9,7 @@ import shlex
 import shutil
 import subprocess
 import time
+from dataclasses import fields
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
@@ -26,7 +27,11 @@ from domains.identity.dependencies import (
 from domains.inventory.kubernetes_snapshot import kubernetes_evidence_to_inventory_snapshot
 from domains.providers.catalog import ProviderCategory, require_available_provider
 from domains.rca.events import ClusterEvidenceReceivedBody, compact_cluster_evidence_payload
-from domains.target.events import ClusterDesiredStateChangedBody, TargetDesiredComponent
+from domains.target.events import (
+    ClusterDesiredStateChangedBody,
+    EvidenceJobUpdatedBody,
+    TargetDesiredComponent,
+)
 from domains.target.evidence_jobs import (
     DEFAULT_EVIDENCE_JOB_LEASE_SECONDS,
     DEFAULT_EVIDENCE_SOURCE_ID,
@@ -48,6 +53,10 @@ from domains.target.management_guard import (
     management_readonly_detail,
 )
 from domains.target.reconciler import desired_state_version
+from packages.config.security import (
+    TEST_FIXTURE_ENVIRONMENT,
+    test_fixture_purge_enabled,
+)
 from packages.config.settings import env
 from packages.contracts.gateway import routes as gateway_routes
 from packages.contracts.gateway.policy_merge import merge_agent_policy
@@ -115,12 +124,12 @@ EVIDENCE_JOB_POLL_SLEEP_SECONDS_ENV = (
 EVIDENCE_JOB_POLL_SLEEP_SECONDS = int(env(EVIDENCE_JOB_POLL_SLEEP_SECONDS_ENV, "1"))
 NOT_FOUND_CODE = 404
 EVIDENCE_JOB_NOT_FOUND = "evidence job not found"
+RELEASE_WORKFLOW_FAILURE_SOURCE_ID = "release-workflow-failure"
 AGENT_ONLINE_WINDOW_SECONDS_ENV = "AGENT_ONLINE_WINDOW_SECONDS"
 DEFAULT_AGENT_ONLINE_WINDOW_SECONDS = 120
 AGENT_STATUS_NEVER_CONNECTED = "never_connected"
 AGENT_STATUS_ONLINE = "online"
 AGENT_STATUS_STALE = "stale"
-AGENT_HEARTBEAT_CAPABILITIES = ["evidence", "commands", "inventory"]
 TARGET_AGENT_IMAGE_ENV = "TARGET_AGENT_IMAGE"
 GITOPS_WEBHOOK_IMAGE_ENV = "GITOPS_WEBHOOK_IMAGE"
 PUBLIC_MANAGEMENT_BASE_URL_ENV = "PUBLIC_MANAGEMENT_BASE_URL"
@@ -139,6 +148,8 @@ TARGET_REGISTRATION_CONNECT_TIMEOUT_SECONDS_ENV = "TARGET_REGISTRATION_CONNECT_T
 TARGET_REGISTRATION_AUTO_DELETE_EXPIRED_ENV = "TARGET_REGISTRATION_AUTO_DELETE_EXPIRED"
 DEFAULT_TARGET_REGISTRATION_CONNECT_TIMEOUT_SECONDS = 1800
 CLUSTER_NOT_FOUND = "cluster not found"
+TEST_FIXTURE_PURGE_FORBIDDEN_CODE = "test_fixture_purge_forbidden"
+TEST_FIXTURE_PURGE_UNSUPPORTED_CODE = "test_fixture_purge_unsupported"
 
 router = APIRouter()
 # per-cluster 토큰 인증 — lease 의 workspace/cluster 는 토큰 identity 에서만 취함.
@@ -658,6 +669,14 @@ def cluster_connection_status(agent: dict[str, Any] | None) -> str:
     )
 
 
+def visible_cluster_agent_statuses(agents: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """활성 agent만 노출하고, 모두 오래됐으면 최근 상태 한 건을 보존한다."""
+    online_agents = [
+        agent for agent in agents if cluster_connection_status(agent) == AGENT_STATUS_ONLINE
+    ]
+    return online_agents or agents[:1]
+
+
 def registration_connect_timeout(registration: dict[str, Any] | None) -> int | None:
     settings = (registration or {}).get("settings") or {}
     value = settings.get("connect_timeout_seconds")
@@ -691,6 +710,31 @@ def registration_connection_status(
     if status == ClusterRegistrationStatus.INSTALL_EXPIRED.value:
         return AGENT_STATUS_INSTALL_EXPIRED
     return agent_status
+
+
+def require_test_fixture_purge_environment(registration: dict[str, Any]) -> None:
+    registration_environment = str(registration.get("environment") or "")
+    if test_fixture_purge_enabled() and registration_environment == TEST_FIXTURE_ENVIRONMENT:
+        return
+    raise HTTPException(
+        status_code=403,
+        detail={
+            "code": TEST_FIXTURE_PURGE_FORBIDDEN_CODE,
+            "detail": (
+                "테스트 fixture purge는 TEST_FIXTURE_PURGE_ENABLED=1 및 "
+                "environment=test에서만 허용됩니다"
+            ),
+        },
+    )
+
+
+def unregisterable_registration(db: Any, workspace_id: str, cluster_id: str) -> dict[str, Any]:
+    registration = db.get_cluster_registration(workspace_id, cluster_id)
+    if registration is None:
+        raise HTTPException(status_code=NOT_FOUND_CODE, detail=CLUSTER_NOT_FOUND)
+    if is_management_registration(registration):
+        raise HTTPException(status_code=400, detail=management_readonly_detail())
+    return registration
 
 
 def cluster_summary(cluster: dict[str, Any], latest_agent: dict[str, Any] | None) -> ClusterSummary:
@@ -732,7 +776,7 @@ def touch_agent_seen(
         workspace_id=identity.workspace_id,
         cluster_id=identity.cluster_id,
         agent_id=agent_id,
-        capabilities=AGENT_HEARTBEAT_CAPABILITIES,
+        capabilities=None,
         status=status,
         details={"heartbeat_source": "agent_api"},
     )
@@ -790,7 +834,7 @@ async def target_registration_preflight(
     agents: list[dict[str, Any]] = []
     lister = getattr(db, "list_cluster_agent_statuses", None)
     if cluster_id and callable(lister):
-        agents = lister(workspace_id, cluster_id)
+        agents = visible_cluster_agent_statuses(lister(workspace_id, cluster_id))
     latest_agent = agents[0] if agents else None
     connection_status = (
         cluster_connection_status(latest_agent)
@@ -922,7 +966,11 @@ async def install_manifest_by_token(
         raise HTTPException(status_code=NOT_FOUND_CODE, detail="install link not found")
     payload = target_register_payload_from_settings(registration.get("settings") or {})
     manifest = target_install_manifest(payload, agent_token)
-    return PlainTextResponse(manifest, media_type="text/yaml")
+    return PlainTextResponse(
+        manifest,
+        media_type="text/yaml",
+        headers={"Cache-Control": "no-store"},
+    )
 
 
 @router.get(gateway_routes.CLUSTERS_PATH, response_model=ClusterListResponse)
@@ -988,7 +1036,9 @@ async def get_cluster(
     cluster = db.get_cluster_registration(workspace_id, cluster_id)
     if cluster is None:
         raise HTTPException(status_code=404, detail=CLUSTER_NOT_FOUND)
-    agents = db.list_cluster_agent_statuses(workspace_id, cluster_id)
+    agents = visible_cluster_agent_statuses(
+        db.list_cluster_agent_statuses(workspace_id, cluster_id)
+    )
     latest_agent = agents[0] if agents else None
     return ClusterResponse(cluster=cluster_summary(cluster, latest_agent), agents=agents)
 
@@ -1014,7 +1064,9 @@ async def get_cluster_connection_status(
     registration = (
         registration_getter(workspace_id, cluster_id) if callable(registration_getter) else None
     )
-    agents = db.list_cluster_agent_statuses(workspace_id, cluster_id)
+    agents = visible_cluster_agent_statuses(
+        db.list_cluster_agent_statuses(workspace_id, cluster_id)
+    )
     latest_agent = agents[0] if agents else None
     return ClusterConnectionStatusResponse(
         cluster_id=cluster_id,
@@ -1154,15 +1206,30 @@ async def update_cluster_scheduling_profiles(
 @router.delete(gateway_routes.CLUSTER_PATH, status_code=204)
 async def unregister_cluster(
     cluster_id: str,
+    purge: bool = False,
     current: Any = Depends(require_admin_session),
     db: Any = Depends(get_db),
 ) -> None:
     workspace_id = getattr(current, "workspace_id", DEFAULT_WORKSPACE_ID)
-    registration = db.get_cluster_registration(workspace_id, cluster_id)
-    if registration is None:
-        raise HTTPException(status_code=NOT_FOUND_CODE, detail=CLUSTER_NOT_FOUND)
-    if is_management_registration(registration):
-        raise HTTPException(status_code=400, detail=management_readonly_detail())
+    if purge:
+        # 테스트 fixture 물리 삭제만 별도 UoW로 묶고 운영 soft-delete 경로는 그대로 둔다.
+        with unit_of_work_or_null(db):
+            registration = unregisterable_registration(db, workspace_id, cluster_id)
+            require_test_fixture_purge_environment(registration)
+            purge_registration = getattr(db, "purge_test_target_cluster_registration", None)
+            if not callable(purge_registration):
+                raise HTTPException(
+                    status_code=500,
+                    detail={
+                        "code": TEST_FIXTURE_PURGE_UNSUPPORTED_CODE,
+                        "detail": "테스트 fixture purge를 처리할 수 없습니다",
+                    },
+                )
+            if not purge_registration(workspace_id, cluster_id):
+                raise HTTPException(status_code=NOT_FOUND_CODE, detail=CLUSTER_NOT_FOUND)
+        return
+
+    unregisterable_registration(db, workspace_id, cluster_id)
     unregister = getattr(db, "unregister_target_cluster", None)
     if callable(unregister):
         if not unregister(workspace_id, cluster_id):
@@ -1357,8 +1424,9 @@ async def emit_evidence_if_ready(
 
 
 def complete_evidence_payload(payload: dict[str, Any]) -> dict[str, Any]:
+    allowed_fields = {item.name for item in fields(ClusterEvidenceReceivedBody)}
     return {
-        **payload,
+        **{key: value for key, value in payload.items() if key in allowed_fields},
         "kubernetes": payload.get("kubernetes")
         if isinstance(payload.get("kubernetes"), dict)
         else {},
@@ -1394,6 +1462,25 @@ async def evidence_job_result(
         raise HTTPException(status_code=NOT_FOUND_CODE, detail=EVIDENCE_JOB_NOT_FOUND)
 
     await db_call(touch_agent_seen, db, identity, payload.agent_id)
+    source_id = str(result.get("source_id") or "")
+    if source_id == RELEASE_WORKFLOW_FAILURE_SOURCE_ID:
+        await events.accept_body(
+            EvidenceJobUpdatedBody(
+                provider_key=str(result.get("provider_key") or ""),
+                status=str(result.get("status") or payload.status),
+                evidence_key=str(result["evidence_key"]),
+                workspace_id=identity.workspace_id,
+                cluster_id=identity.cluster_id,
+                source_id=source_id,
+                window_start=str(result.get("window_start") or "") or None,
+                evidence_emitted=False,
+                collection_status={
+                    "job_id": job_id,
+                    "reported_status": payload.status,
+                    "stored_status": str(result.get("status") or payload.status),
+                },
+            )
+        )
     kubernetes = payload.result.get("kubernetes")
     if payload.status == "completed" and isinstance(kubernetes, dict):
         await db_call(

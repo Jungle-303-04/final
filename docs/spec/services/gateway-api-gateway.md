@@ -1,5 +1,5 @@
 ---
-source_commit: 664925a6
+source_commit: d4b003525
 status: synced
 ---
 
@@ -166,7 +166,7 @@ status: synced
 | GET | `/providers/cluster-discovery` | admin | — |
 | POST | `/providers/validate` | admin | — |
 | GET | `/catalog/items` · `/catalog/items/{item_id}` | 세션 | — |
-| POST | `/catalog/items/{item_id}/installs` | 세션 | `require_cluster_access` |
+| POST | `/catalog/items/{item_id}/installs` (202) | 세션 | `DEPLOY_RUN`; 필수 idempotency key, online target Agent, management readonly |
 | POST | `/repos/validate` | 세션 | admin |
 | GET | `/repos/branches` | 세션 | admin |
 | GET | `/repos/manifests` | 세션 | admin |
@@ -218,6 +218,7 @@ status: synced
 | POST | `/webhooks/alertmanager` | Bearer `ALERTMANAGER_WEBHOOK_TOKEN` | `cluster_id` 등록 확인 후 evidence 입구 |
 | GET | `/evidence` | 세션 | 세션 workspace 범위 evidence query(`limit`/`offset`/`cursor`) |
 | GET | `/rca-reports` | 세션 | 세션 workspace 범위 RCA report query(`limit`/`offset`/`cursor`) |
+| GET | `/rca/rules` | 세션 | 현재 로딩된 RCA rule catalog 확인 |
 | POST | `/rca/rules/validate` | 세션 | RCA 룰 YAML 저장 전 검증 |
 | POST | `/rca/recovery-plans/{plan_id}/actions/{action_id}/select` | 세션 | `require_cluster_access` |
 

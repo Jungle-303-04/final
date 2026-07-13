@@ -6,6 +6,8 @@ import sys
 from pathlib import Path
 from typing import Any
 
+import pytest
+
 from packages.contracts.gateway.requests import (
     AgentPolicy,
     DesiredResource,
@@ -240,6 +242,56 @@ def test_reconciler_applies_target_agent_owned_configmap(tmp_path: Path) -> None
 
     assert report["status"] == "applied"
     assert applier.applied == ["target-agent-policy"]
+
+
+def test_argocd_reconciler_observes_apply_without_emitting_apply(tmp_path: Path) -> None:
+    control = load_control_module()
+    store = control.AgentControlStore(str(tmp_path / "agent-control.db"))
+    resource = DesiredResource(
+        resource_id="target-agent-policy",
+        scope="target-agent",
+        kind="ConfigMap",
+        namespace="target",
+        name="target-agent-policy",
+        action="apply",
+        state={"data": {"owner": "cluster-agent"}},
+    )
+    store.save_policy(
+        AgentPolicy(
+            cluster_id="cluster-1",
+            desired_state=DesiredStatePolicy(resources=[resource]),
+        )
+    )
+    applier = StubApplier()
+    reconciler = control.DesiredStateReconciler(
+        cluster_id="cluster-1",
+        cluster_role="target",
+        store=store,
+        interval_seconds=30,
+        resource_applier=applier,
+        reconciler_mode="argocd",
+    )
+
+    report = asyncio.run(reconciler.reconcile_once())
+
+    assert report["status"] == "unchanged"
+    assert applier.applied == []
+    assert applier.observed == ["target-agent-policy"]
+    assert report["details"]["resources"][0]["message"] == ("observed (argocd single-writer mode)")
+
+
+def test_reconciler_rejects_unknown_mode(tmp_path: Path) -> None:
+    control = load_control_module()
+    store = control.AgentControlStore(str(tmp_path / "agent-control.db"))
+
+    with pytest.raises(ValueError, match="reconciler_mode"):
+        control.DesiredStateReconciler(
+            cluster_id="cluster-1",
+            cluster_role="target",
+            store=store,
+            interval_seconds=30,
+            reconciler_mode="unknown",
+        )
 
 
 def test_reconciler_retries_failed_apply_for_same_hash(tmp_path: Path) -> None:

@@ -17,13 +17,21 @@ from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.responses import PlainTextResponse
 from hub import BrowserClient, RealtimeHub
 
-from domains.identity.dependencies import AGENT_TOKEN_HEADER, hash_agent_token
+from domains.identity.dependencies import (
+    AGENT_TOKEN_HEADER,
+    hash_agent_token,
+)
 from packages.config.constants import Auth
 from packages.config.constants import Redis as RedisConfig
 from packages.config.logs import CONTEXT_KEY, get_logger
 from packages.config.settings import env
 from packages.contracts.gateway.fields import Gateway
-from packages.contracts.identity import DEFAULT_WORKSPACE_ID, ServiceRole
+from packages.contracts.identity import (
+    DEFAULT_WORKSPACE_ID,
+    AccessResourceType,
+    Permission,
+    ServiceRole,
+)
 from packages.contracts.realtime import (
     AGENT_LIVE_PATH,
     BROWSER_LIVE_PATH,
@@ -36,6 +44,10 @@ from packages.contracts.realtime import (
     parse_realtime_message,
 )
 from packages.runtime.service import FastApiService
+from packages.security.trusted_proxy import (
+    assert_trusted_proxy_config_safe,
+    trusted_proxy_identity,
+)
 from packages.storage.database import Database, wait_for_database
 from packages.storage.sessions import RedisSessionStore, RedisSessionStoreConfig
 
@@ -54,6 +66,7 @@ CLOSE_PROTOCOL_VIOLATION = 1008
 # authenticate: 원문 토큰 → {"workspace_id", "cluster_id"} | None (fail-closed)
 AgentAuthenticator = Callable[[str], Any]
 BrowserSessionAuthenticator = Callable[[str | None], Awaitable[Any]]
+BrowserClusterAuthorizer = Callable[[Any, str, str], Awaitable[bool]]
 
 REDIS_URL_ENV = "REDIS_URL"
 SESSION_KEY_PREFIX = "session"
@@ -104,11 +117,55 @@ def redis_session_authenticator(session_store: RedisSessionStore) -> BrowserSess
     return authenticate
 
 
+def database_browser_cluster_authorizer(db: Database) -> BrowserClusterAuthorizer:
+    """세션 사용자의 workspace-scoped cluster.read 권한을 fail-closed로 확인한다."""
+
+    async def authorize(session: Any, workspace_id: str, cluster_id: str) -> bool:
+        user_id = session_user_id(session)
+        if not user_id or not workspace_id or not cluster_id:
+            return False
+        try:
+            registration = await asyncio.to_thread(
+                db.get_cluster_registration, workspace_id, cluster_id
+            )
+            if registration is None:
+                return False
+            if ServiceRole.SERVICE_ADMIN.value in session_roles(session):
+                return True
+            return bool(
+                await asyncio.to_thread(
+                    db.can_access,
+                    user_id,
+                    workspace_id,
+                    AccessResourceType.CLUSTER.value,
+                    cluster_id,
+                    Permission.CLUSTER_READ.value,
+                )
+            )
+        except Exception as exc:
+            LOGGER.warning(
+                "browser_cluster_authorization_failed",
+                extra={
+                    CONTEXT_KEY: {
+                        Gateway.WORKSPACE_ID: workspace_id,
+                        Gateway.CLUSTER_ID: cluster_id,
+                        "exception_type": type(exc).__name__,
+                    }
+                },
+            )
+            return False
+
+    return authorize
+
+
 def create_app(
     db: Database | None = None,
     authenticate_agent: AgentAuthenticator | None = None,
     authenticate_browser: BrowserSessionAuthenticator | None = None,
+    authorize_browser_cluster: BrowserClusterAuthorizer | None = None,
 ) -> FastAPI:
+    if db is None and (authenticate_agent is None or authorize_browser_cluster is None):
+        db = Database()
     if authenticate_agent is None:
         db = db or Database()
         authenticate_agent = database_authenticator(db)
@@ -116,11 +173,16 @@ def create_app(
     if authenticate_browser is None:
         browser_session_store = RedisSessionStore(session_store_config())
         authenticate_browser = redis_session_authenticator(browser_session_store)
+    if authorize_browser_cluster is None:
+        if db is None:  # pragma: no cover - create_app 위의 DB 생성 불변식 방어
+            raise RuntimeError("database is required for browser cluster authorization")
+        authorize_browser_cluster = database_browser_cluster_authorizer(db)
 
     hub = RealtimeHub()
 
     @asynccontextmanager
     async def lifespan(_app: FastAPI):
+        assert_trusted_proxy_config_safe()
         if db is not None:
             await wait_for_database(db)
         if browser_session_store is not None:
@@ -147,11 +209,12 @@ def create_app(
         await websocket.accept()
         token = websocket.headers.get(AGENT_TOKEN_HEADER, "")
         identity = authenticate_agent(token)
+        requested_cluster = websocket.query_params.get(Gateway.CLUSTER_ID, "")
         if identity is None:
             await websocket.close(code=CLOSE_UNAUTHORIZED)
             return
         cluster_id = str(identity[Gateway.CLUSTER_ID])
-        requested_cluster = websocket.query_params.get(Gateway.CLUSTER_ID, cluster_id)
+        requested_cluster = requested_cluster or cluster_id
         if requested_cluster != cluster_id:
             # 토큰의 클러스터가 권위 — 다른 클러스터로의 발행 시도는 차단(크로스 테넌트 금지).
             await websocket.close(code=CLOSE_UNAUTHORIZED)
@@ -175,12 +238,42 @@ def create_app(
         await websocket.accept()
         # query param 이름은 Subscription 계약 필드가 단일 출처(별도 리터럴 금지).
         params = {name: websocket.query_params.get(name, "") for name in Subscription.model_fields}
-        if not params[Gateway.WORKSPACE_ID]:
+        if not params[Gateway.WORKSPACE_ID] or not params[Gateway.CLUSTER_ID]:
             await websocket.close(code=CLOSE_BAD_REQUEST)
             return
-        session = await authenticate_browser(browser_session_token(websocket))
+        proxy_identity = trusted_proxy_identity(websocket.headers)
+        session = (
+            {
+                Gateway.WORKSPACE_ID: proxy_identity.workspace_id,
+                "user_id": proxy_identity.user_id,
+                "roles": [ServiceRole.SERVICE_ADMIN.value],
+            }
+            if proxy_identity is not None
+            else await authenticate_browser(browser_session_token(websocket))
+        )
         session_workspace = session_workspace_id(session)
         if not session_workspace or params[Gateway.WORKSPACE_ID] != session_workspace:
+            await websocket.close(code=CLOSE_UNAUTHORIZED)
+            return
+        try:
+            cluster_allowed = await authorize_browser_cluster(
+                session,
+                session_workspace,
+                params[Gateway.CLUSTER_ID],
+            )
+        except Exception as exc:
+            LOGGER.warning(
+                "browser_cluster_authorization_failed",
+                extra={
+                    CONTEXT_KEY: {
+                        Gateway.WORKSPACE_ID: session_workspace,
+                        Gateway.CLUSTER_ID: params[Gateway.CLUSTER_ID],
+                        "exception_type": type(exc).__name__,
+                    }
+                },
+            )
+            cluster_allowed = False
+        if not cluster_allowed:
             await websocket.close(code=CLOSE_UNAUTHORIZED)
             return
         subscription = Subscription(**params)
@@ -216,6 +309,25 @@ def session_workspace_id(session: Any) -> str:
     if isinstance(session, dict):
         return str(session.get(Gateway.WORKSPACE_ID, ""))
     return str(getattr(session, Gateway.WORKSPACE_ID, ""))
+
+
+def session_user_id(session: Any) -> str:
+    if session is None:
+        return ""
+    if isinstance(session, dict):
+        return str(session.get("user_id", ""))
+    return str(getattr(session, "user_id", ""))
+
+
+def session_roles(session: Any) -> set[str]:
+    if session is None:
+        return set()
+    raw_roles = (
+        session.get("roles", []) if isinstance(session, dict) else getattr(session, "roles", [])
+    )
+    if not isinstance(raw_roles, list | tuple | set):
+        return set()
+    return {str(role) for role in raw_roles}
 
 
 def _ingest(hub: RealtimeHub, cluster_id: str, payload: Any) -> bool:

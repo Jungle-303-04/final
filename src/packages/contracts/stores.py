@@ -85,7 +85,39 @@ class RepoChangeStore(Protocol):
     ) -> list[JsonObject]: ...
 
 
+class ReleaseFlowStore(Protocol):
+    async def project_release_workflow_event(self, payload: JsonObject) -> JsonObject | None: ...
+
+    async def queue_evidence_jobs(self, **payload: object) -> JsonObject: ...
+
+
+class RcaChangesStore(Protocol):
+    async def get_completed_workload_change_context(
+        self,
+        workspace_id: str,
+        workflow_run_id: str,
+        application_id: str,
+        binding_id: str,
+    ) -> JsonObject | None: ...
+
+    async def get_workflow_pr_identity_context(
+        self,
+        workspace_id: str,
+        workflow_run_id: str,
+        application_id: str,
+        binding_id: str,
+    ) -> JsonObject | None: ...
+
+    async def record_workload_change(self, row: JsonObject) -> None: ...
+
+    async def record_workflow_pr_reference(self, row: JsonObject) -> None: ...
+
+
 class WorkflowStore(Protocol):
+    async def get_cluster_registration(
+        self, workspace_id: str, cluster_id: str
+    ) -> JsonObject | None: ...
+
     async def upsert_application(self, payload: JsonObject) -> JsonObject: ...
 
     async def start_workflow_run(self, payload: JsonObject) -> JsonObject: ...
@@ -124,9 +156,11 @@ class AgentCommandStore(Protocol):
 
     async def queue_agent_command(
         self, correlation_id: str, plan: JsonObject, status: str
-    ) -> None: ...
+    ) -> bool: ...
 
-    async def fail_expired_agent_commands(self) -> list[JsonObject]: ...
+    async def fail_expired_agent_commands(
+        self, *, queue_ttl_seconds: int = 1800
+    ) -> list[JsonObject]: ...
 
 
 class TargetReconcileStore(Protocol):

@@ -441,6 +441,31 @@ def test_inventory_summary_route_returns_latest_snapshot_and_counts() -> None:
     assert response.counts == [{"resource_type": "workload", "health": "healthy", "count": 1}]
 
 
+def test_management_cluster_inventory_read_remains_available() -> None:
+    class ManagementInventoryDb(StubInventoryDb):
+        def can_access(
+            self,
+            _user_id: str,
+            _workspace_id: str,
+            _resource_type: str,
+            resource_id: str,
+            permission: str,
+        ) -> bool:
+            return resource_id == "kubernetes-ops" and permission == "inventory.read"
+
+    async def run():
+        return await get_inventory_summary(
+            "kubernetes-ops",
+            current=type("Current", (), {"user_id": "user-1", "workspace_id": "ws-1"})(),
+            db=ManagementInventoryDb(),
+        )
+
+    response = asyncio.run(run())
+
+    assert response.cluster_id == "kubernetes-ops"
+    assert response.latest_snapshot == {"snapshot_id": "snapshot-1", "resource_count": 1}
+
+
 def test_first_container_image_extracts_workload_pod_then_summary() -> None:
     # diff-worker actual-state 조회용 — workload spec 우선, 그 다음 pod spec, 마지막 summary
     workload = {

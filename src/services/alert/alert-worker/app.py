@@ -20,7 +20,6 @@ from packages.runtime.app import App, EventContext
 app = App("alert-worker")
 LOGGER = get_logger(__name__)
 
-ALERT_GATE_BLOCKED_REASON = "pre-deploy alert gate blocked"
 ALERT_DISPATCH_FAILED_REASON = "alert dispatch failed"
 ALERT_PROVIDER_ENV = "ALERT_PROVIDER"
 LOG_PROVIDER_NAME = "log"

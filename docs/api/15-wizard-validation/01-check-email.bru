@@ -16,13 +16,13 @@ headers {
 
 body:json {
   {
-    "email": "{{signup_email}}"
+    "email": "{{check_email}}"
   }
 }
 
 tests {
-  test("email check returns availability or rate limit", function () {
-    expect([200, 422, 429]).to.include(res.status);
+  test("valid email check succeeds", function () {
+    expect(res.status).to.equal(200);
   });
 
   test("success body has machine-readable reason code", function () {

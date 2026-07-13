@@ -12,7 +12,8 @@ get {
 script:post-response {
   const b = res.getBody();
   if (res.status === 200 && b && Array.isArray(b.items) && b.items.length) {
-    bru.setVar("catalog_item_id", b.items[0].item_id);
+    const executable = b.items.find((item) => item.item_id === "catalog-postgresql");
+    bru.setVar("catalog_item_id", executable ? executable.item_id : b.items[0].item_id);
   }
 }
 

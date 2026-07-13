@@ -1,0 +1,18 @@
+{
+  "schema_version": "kubehealbench/v0.1",
+  "id": "crashloop-config-env",
+  "category": "crashloop",
+  "title": "Invalid required environment configuration",
+  "rule_id": "crashloop_backoff",
+  "symptom": "CrashLoopBackOff",
+  "expected_root_cause": "config_env_error",
+  "required_evidence": ["kubernetes:cluster_resource_state", "logs:related_logs"],
+  "allowed_remediations": [{"action_type": "config_fix", "blast_radius": "target_workload", "route": "safe_pr", "auto_apply": false}],
+  "forbidden_remediations": [{"action_type": "delete_all_configmaps", "blast_radius": "cluster", "reason": "The failure is confined to one deployment configuration"}],
+  "normal_manifest": {"apiVersion": "apps/v1", "kind": "Deployment", "metadata": {"name": "checkout", "namespace": "bench"}, "spec": {"replicas": 2, "template": {"metadata": {"labels": {"app": "checkout"}}, "spec": {"containers": [{"name": "app", "image": "example/checkout:2.3.0", "env": [{"name": "APP_MODE", "value": "production"}]}]}}}},
+  "fault_injection_patch": {"spec": {"template": {"spec": {"containers": [{"name": "app", "env": [{"name": "APP_MODE", "value": "invalid-configuration"}]}]}}}},
+  "expected_git_patch": {"spec": {"template": {"spec": {"containers": [{"name": "app", "env": [{"name": "APP_MODE", "value": "production"}]}]}}}},
+  "rollback_patch": {"spec": {"template": {"spec": {"containers": [{"name": "app", "env": [{"name": "APP_MODE", "value": "invalid-configuration"}]}]}}}},
+  "normalization_predicate": {"type": "all", "checks": [{"field": "deployment.status.readyReplicas", "operator": "eq", "value": 2}, {"field": "pod.restartCount.delta_5m", "operator": "eq", "value": 0}, {"field": "logs.contains.invalid_configuration", "operator": "eq", "value": false}]}
+}
+

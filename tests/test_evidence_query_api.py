@@ -35,10 +35,16 @@ class QueryApiDb:
     """호출 인자를 기록하고 대본 row 를 돌려주는 테스트용 저장소."""
 
     def __init__(
-        self, evidence_rows: list[dict] | None = None, report_rows: list[dict] | None = None
+        self,
+        evidence_rows: list[dict] | None = None,
+        report_rows: list[dict] | None = None,
+        evidence_window_rows: list[dict] | None = None,
+        evidence_window_payload: dict | None = None,
     ) -> None:
         self.evidence_rows = evidence_rows or []
         self.report_rows = report_rows or []
+        self.evidence_window_rows = evidence_window_rows or []
+        self.evidence_window_payload = evidence_window_payload
         self.calls: list[tuple[str, dict[str, Any]]] = []
 
     def list_evidence_records(self, workspace_id: str, **filters: Any) -> list[dict]:
@@ -48,6 +54,28 @@ class QueryApiDb:
     def list_rca_report_records(self, workspace_id: str, **filters: Any) -> list[dict]:
         self.calls.append(("reports", {"workspace_id": workspace_id, **filters}))
         return self.report_rows
+
+    def get_evidence_window_payload_for_workspace(
+        self, workspace_id: str, evidence_key: str
+    ) -> dict | None:
+        self.calls.append(
+            (
+                "evidence_window",
+                {"workspace_id": workspace_id, "evidence_key": evidence_key},
+            )
+        )
+        return self.evidence_window_payload
+
+    def list_evidence_windows_for_workspace(
+        self, workspace_id: str, *, limit: int, offset: int = 0
+    ) -> list[dict]:
+        self.calls.append(
+            (
+                "evidence_windows",
+                {"workspace_id": workspace_id, "limit": limit, "offset": offset},
+            )
+        )
+        return self.evidence_window_rows[offset : offset + limit]
 
 
 def evidence_row(row_id: int = 1, kind: str = "evidence.built") -> dict:
@@ -99,6 +127,21 @@ def evidence_row(row_id: int = 1, kind: str = "evidence.built") -> dict:
             ],
         },
         "created_at": "2026-07-07T10:00:00+00:00",
+    }
+
+
+def evidence_window_row(row_id: int = 1, payload: dict | None = None) -> dict:
+    return {
+        "evidence_key": f"evidence-key-{row_id}",
+        "workspace_id": WORKSPACE_ID,
+        "cluster_id": "cluster-1",
+        "source_id": "cluster-snapshot",
+        "window_start": "2026-07-07T10:00:00+00:00",
+        "agent_id": "agent-1",
+        "correlation_id": f"corr-{row_id}",
+        "payload": payload if payload is not None else evidence_row(row_id)["payload"],
+        "created_at": "2026-07-07T10:00:00+00:00",
+        "updated_at": "2026-07-07T10:00:10+00:00",
     }
 
 
@@ -217,6 +260,8 @@ def _session() -> SimpleNamespace:
 def test_both_endpoints_require_session() -> None:
     client = make_client(QueryApiDb(), session=None)
     assert client.get("/evidence").status_code == 401
+    assert client.get("/evidence/windows").status_code == 401
+    assert client.get("/evidence/windows/evidence-key-1").status_code == 401
     assert client.get("/rca-reports").status_code == 401
 
 
@@ -341,6 +386,108 @@ def test_evidence_empty_result() -> None:
     body = client.get("/evidence").json()
 
     assert body == {"items": [], "limit": 50, "offset": 0, "has_more": False, "next_cursor": None}
+
+
+def test_evidence_windows_list_summarizes_recent_windows_without_payload() -> None:
+    payload = {**evidence_row(1)["payload"], "metadata": {"current_workload_snapshots": [{}]}}
+    db = QueryApiDb(evidence_window_rows=[evidence_window_row(1, payload=payload)])
+    client = make_client(db, session=_session())
+
+    response = client.get("/evidence/windows", params={"limit": 10, "offset": 0})
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["limit"] == 10
+    assert body["offset"] == 0
+    assert body["has_more"] is False
+    item = body["items"][0]
+    assert item["evidence_key"] == "evidence-key-1"
+    assert item["workspace_id"] == WORKSPACE_ID
+    assert item["cluster_id"] == "cluster-1"
+    assert item["source_id"] == "cluster-snapshot"
+    assert item["agent_id"] == "agent-1"
+    assert item["correlation_id"] == "corr-1"
+    assert item["sources"] == ["kubernetes", "metrics", "logs", "metadata"]
+    assert item["updated_at"] == "2026-07-07T10:00:10+00:00"
+    assert "payload" not in item
+    name, kwargs = db.calls[0]
+    assert name == "evidence_windows"
+    assert kwargs == {"workspace_id": WORKSPACE_ID, "limit": 11, "offset": 0}
+
+
+def test_evidence_windows_list_reports_has_more() -> None:
+    rows = [evidence_window_row(row_id) for row_id in range(1, 4)]
+    db = QueryApiDb(evidence_window_rows=rows)
+    client = make_client(db, session=_session())
+
+    response = client.get("/evidence/windows", params={"limit": 2})
+
+    body = response.json()
+    assert [item["evidence_key"] for item in body["items"]] == [
+        "evidence-key-1",
+        "evidence-key-2",
+    ]
+    assert body["has_more"] is True
+    assert db.calls[0][1]["limit"] == 3
+
+
+def test_evidence_windows_list_validation() -> None:
+    client = make_client(QueryApiDb(), session=_session())
+    assert client.get("/evidence/windows", params={"limit": 0}).status_code == 422
+    assert client.get("/evidence/windows", params={"limit": 201}).status_code == 422
+    assert client.get("/evidence/windows", params={"offset": -1}).status_code == 422
+
+
+def test_evidence_window_payload_scoped_to_session_workspace() -> None:
+    payload = evidence_row(1)["payload"]
+    db = QueryApiDb(evidence_window_payload=payload)
+    client = make_client(db, session=_session())
+
+    response = client.get("/evidence/windows/evidence-key-1")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["evidence_key"] == "evidence-key-1"
+    assert body["workspace_id"] == WORKSPACE_ID
+    assert body["cluster_id"] == "cluster-1"
+    assert body["source"] is None
+    assert body["payload"] == payload
+    name, kwargs = db.calls[0]
+    assert name == "evidence_window"
+    assert kwargs == {"workspace_id": WORKSPACE_ID, "evidence_key": "evidence-key-1"}
+
+
+def test_evidence_window_payload_can_select_one_source() -> None:
+    payload = evidence_row(1)["payload"]
+    db = QueryApiDb(evidence_window_payload=payload)
+    client = make_client(db, session=_session())
+
+    response = client.get("/evidence/windows/evidence-key-1", params={"source": "metrics"})
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["source"] == "metrics"
+    assert body["payload"] == {"metrics": payload["metrics"]}
+    assert "kubernetes" not in body["payload"]
+
+
+def test_evidence_window_payload_not_found() -> None:
+    client = make_client(QueryApiDb(evidence_window_payload=None), session=_session())
+
+    response = client.get("/evidence/windows/missing-key")
+
+    assert response.status_code == 404
+    assert response.json()["detail"] == "Evidence window not found"
+
+
+def test_evidence_window_payload_source_not_found() -> None:
+    payload = evidence_row(1)["payload"]
+    client = make_client(QueryApiDb(evidence_window_payload=payload), session=_session())
+
+    response = client.get("/evidence/windows/evidence-key-1", params={"source": "metadata"})
+
+    assert response.status_code == 404
+    assert response.json()["detail"] == "Evidence source not found: metadata"
 
 
 def test_rca_reports_return_summary_without_raw_payload() -> None:

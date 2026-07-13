@@ -1,0 +1,148 @@
+name: Release Flow Production Deploy
+run-name: Release Flow Deploy / production / ${{ inputs.release_plan_id }}
+
+"on":
+  workflow_dispatch:
+    inputs:
+      api_base_url:
+        description: API base URL. Falls back to RELEASE_FLOW_API_BASE_URL secret.
+        required: false
+        type: string
+      release_plan_id:
+        description: Saved release plan id to start after the production gate passes.
+        required: true
+        type: string
+      live_change_ticket:
+        description: Production change ticket.
+        required: true
+        type: string
+      live_runbook_url:
+        description: Production runbook URL.
+        required: true
+        type: string
+      live_release_owner:
+        description: Production release owner.
+        required: false
+        type: string
+      live_oncall_contact:
+        description: Production on-call contact.
+        required: false
+        type: string
+      live_image:
+        description: Production image expected by the release.
+        required: true
+        type: string
+      live_verification_url:
+        description: Post-deploy verification URL.
+        required: true
+        type: string
+      live_safe_pr_workflow_run_id:
+        description: Existing Safe PR workflow_run_id evidence.
+        required: true
+        type: string
+      live_safe_pr_url:
+        description: Existing Safe PR URL evidence.
+        required: true
+        type: string
+      production_preflight_run_limit:
+        description: Maximum release runs to inspect for each guardrail.
+        required: false
+        default: "20"
+        type: string
+      request_timeout_seconds:
+        description: Per-request API timeout.
+        required: false
+        default: "30"
+        type: string
+      retry_attempts:
+        description: Retry attempts for safe read-only preflight requests.
+        required: false
+        default: "3"
+        type: string
+      retry_delay_seconds:
+        description: Delay between retry attempts.
+        required: false
+        default: "1"
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-flow-production-deploy
+  cancel-in-progress: false
+
+jobs:
+  release_flow_production_gate:
+    name: Release Flow Production Gate
+    uses: ./.github/workflows/release-flow-production-gate.yml
+    with:
+      api_base_url: ${{ inputs.api_base_url }}
+      release_plan_id: ${{ inputs.release_plan_id }}
+      github_environment: production
+      production_preflight_run_limit: ${{ inputs.production_preflight_run_limit || '20' }}
+      request_timeout_seconds: ${{ inputs.request_timeout_seconds || '30' }}
+      retry_attempts: ${{ inputs.retry_attempts || '3' }}
+      retry_delay_seconds: ${{ inputs.retry_delay_seconds || '1' }}
+      live_preflight: true
+      live_approval_gate: safe_pr
+      live_environment: production
+      live_namespace: production
+      live_change_ticket: ${{ inputs.live_change_ticket }}
+      live_runbook_url: ${{ inputs.live_runbook_url }}
+      live_release_owner: ${{ inputs.live_release_owner }}
+      live_oncall_contact: ${{ inputs.live_oncall_contact }}
+      live_image: ${{ inputs.live_image }}
+      live_verification_url: ${{ inputs.live_verification_url }}
+      live_safe_pr_workflow_run_id: ${{ inputs.live_safe_pr_workflow_run_id }}
+      live_safe_pr_url: ${{ inputs.live_safe_pr_url }}
+    secrets: inherit
+
+  deploy-production:
+    name: Deploy production release
+    runs-on: ubuntu-latest
+    environment: production
+    needs: release_flow_production_gate
+    if: needs.release_flow_production_gate.outputs.release_gate_ok == 'true'
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Start release-flow production run
+        id: release_flow_deploy
+        env:
+          RELEASE_FLOW_API_BASE_URL: ${{ inputs.api_base_url || secrets.RELEASE_FLOW_API_BASE_URL }}
+          RELEASE_FLOW_AUTH_EMAIL: ${{ secrets.RELEASE_FLOW_AUTH_EMAIL }}
+          RELEASE_FLOW_AUTH_PASSWORD: ${{ secrets.RELEASE_FLOW_AUTH_PASSWORD }}
+          RELEASE_FLOW_DEPLOY_PLAN_ID: ${{ inputs.release_plan_id }}
+          RELEASE_FLOW_DEPLOY_TIMEOUT_SECONDS: ${{ inputs.request_timeout_seconds || '30' }}
+          RELEASE_FLOW_DEPLOY_RETRY_ATTEMPTS: ${{ inputs.retry_attempts || '3' }}
+          RELEASE_FLOW_DEPLOY_RETRY_DELAY_SECONDS: ${{ inputs.retry_delay_seconds || '1' }}
+          RELEASE_FLOW_DEPLOY_CHANGE_TICKET: ${{ inputs.live_change_ticket }}
+          RELEASE_FLOW_DEPLOY_RUNBOOK_URL: ${{ inputs.live_runbook_url }}
+          RELEASE_FLOW_DEPLOY_IMAGE: ${{ inputs.live_image }}
+          RELEASE_FLOW_DEPLOY_VERIFICATION_URL: ${{ inputs.live_verification_url }}
+          RELEASE_FLOW_DEPLOY_SAFE_PR_WORKFLOW_RUN_ID: ${{ inputs.live_safe_pr_workflow_run_id }}
+          RELEASE_FLOW_DEPLOY_SAFE_PR_URL: ${{ inputs.live_safe_pr_url }}
+          RELEASE_FLOW_DEPLOY_CI: "1"
+          RELEASE_FLOW_DEPLOY_GITHUB_OUTPUT: "1"
+          RELEASE_FLOW_DEPLOY_GITHUB_STEP_SUMMARY: "1"
+          RELEASE_FLOW_DEPLOY_GITHUB_ANNOTATIONS: "1"
+        run: |
+          python scripts/release_flow_deploy.py \
+            --plan-id "$RELEASE_FLOW_DEPLOY_PLAN_ID" \
+            --ci \
+            --ci-artifacts-dir artifacts/release-flow-deploy
+
+      - name: Upload release-flow deploy artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-flow-production-deploy
+          path: artifacts/release-flow-deploy
+          retention-days: 90

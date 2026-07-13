@@ -27,6 +27,7 @@ def severity_matches(min_severity: str, severity: str) -> bool:
 
 def serialize_alert_channel(row: JsonObject) -> JsonObject:
     item = dict(row)
+    item["last_tested_at"] = iso_or_none(item.get("last_tested_at"))
     item["created_at"] = iso_or_none(item.get("created_at"))
     item["updated_at"] = iso_or_none(item.get("updated_at"))
     return item
@@ -89,3 +90,31 @@ class AlertChannelRepository(DatabaseConnection):
         with self.connection() as conn:
             row = conn.execute(statement).first()
         return row is not None
+
+    def record_alert_channel_test(
+        self,
+        workspace_id: str,
+        channel_id: str,
+        *,
+        status: str,
+        detail: str,
+        status_code: int | None = None,
+    ) -> JsonObject:
+        table = AlertChannel.__table__
+        statement = (
+            table.update()
+            .where(table.c.workspace_id == workspace_id, table.c.channel_id == channel_id)
+            .values(
+                last_tested_at=func.now(),
+                last_test_status=status,
+                last_test_detail=detail,
+                last_test_status_code=status_code,
+                updated_at=func.now(),
+            )
+            .returning(table)
+        )
+        with self.connection() as conn:
+            row = conn.execute(statement).mappings().first()
+        if row:
+            return serialize_alert_channel(dict(row))
+        raise LookupError("alert channel not found in workspace")

@@ -13,6 +13,7 @@ from packages.contracts.gitops import (
     DEFAULT_DEPLOYMENT_BINDING_ID,
     DEFAULT_ENVIRONMENT,
     DEFAULT_MANIFEST_PATH,
+    DEFAULT_REPO_REF,
     DEFAULT_REPOSITORY_ID,
     DEFAULT_WORKFLOW_RUN_ID,
 )
@@ -44,6 +45,10 @@ class SafePrRequestedBody(EventBody):
     workflow_run_id: str = DEFAULT_WORKFLOW_RUN_ID
     environment: str = DEFAULT_ENVIRONMENT
     manifest_path: str = DEFAULT_MANIFEST_PATH
+    repo_ref: str = DEFAULT_REPO_REF
+    base_branch: str = ""
+    commit_sha: str = ""
+    patch_sha256: str = ""
     approval_ref: str | None = None
     policy_decision_ref: str | None = None
     next_alert: AlertRequestedBody | None = None
@@ -63,6 +68,11 @@ class SafePrCreatedBody(EventBody):
     application_id: str = DEFAULT_APPLICATION_ID
     workflow_run_id: str = DEFAULT_WORKFLOW_RUN_ID
     environment: str = DEFAULT_ENVIRONMENT
+    manifest_path: str = DEFAULT_MANIFEST_PATH
+    repo_ref: str = DEFAULT_REPO_REF
+    base_branch: str = ""
+    commit_sha: str = ""
+    patch_sha256: str = ""
 
 
 @event(EventSubject.SAFE_PR_READY_FOR_CREATION)
@@ -91,6 +101,11 @@ class SafePrFailedBody(EventBody):
     application_id: str = DEFAULT_APPLICATION_ID
     workflow_run_id: str = DEFAULT_WORKFLOW_RUN_ID
     environment: str = DEFAULT_ENVIRONMENT
+    manifest_path: str = DEFAULT_MANIFEST_PATH
+    repo_ref: str = DEFAULT_REPO_REF
+    base_branch: str = ""
+    commit_sha: str = ""
+    patch_sha256: str = ""
     reason_code: str = "safe_pr_failed"
     stage: str = "scm"
     details: dict[str, object] = field(default_factory=dict)

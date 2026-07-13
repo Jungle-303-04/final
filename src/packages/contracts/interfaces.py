@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+from collections.abc import Collection
 from contextlib import AbstractContextManager
 from dataclasses import dataclass
+from datetime import datetime
 from typing import Any, Protocol
 
 from packages.contracts.event_bus.interfaces import EventEnvelope, EventRecorder, JsonObject
@@ -18,16 +20,25 @@ class EventProcessingRecord:
 class InitializableStore(Protocol):
     def init(self) -> None: ...
 
+    def verify_schema(self) -> None: ...
+
 
 class EventProcessingStore(EventRecorder, Protocol):
     def begin_event_processing(
         self, evt: EventEnvelope, consumer: str
     ) -> EventProcessingRecord: ...
 
-    def finish_event_processing(self, evt: EventEnvelope, consumer: str) -> None: ...
+    def finish_event_processing(
+        self, evt: EventEnvelope, consumer: str, duration_ms: int | None = None
+    ) -> None: ...
 
     def fail_event_processing(
-        self, evt: EventEnvelope, consumer: str, error: str, status: str
+        self,
+        evt: EventEnvelope,
+        consumer: str,
+        error: str,
+        status: str,
+        duration_ms: int | None = None,
     ) -> None: ...
 
     def unit_of_work(self) -> AbstractContextManager[Any]: ...  # 트랜잭션 컨텍스트
@@ -95,6 +106,40 @@ class UserStore(Protocol):
         resource_type: str,
         action: str,
     ) -> set[str] | None: ...
+
+
+class EvidenceQueryStore(Protocol):
+    """인가된 cluster 집합 밖의 raw evidence를 읽지 않는 동기 저장소 계약."""
+
+    def list_evidence(
+        self,
+        workspace_id: str,
+        allowed_cluster_ids: Collection[str] | None,
+        *,
+        correlation_id: str | None = None,
+        kind: str | None = None,
+        since: datetime | None = None,
+        until: datetime | None = None,
+        limit: int = 50,
+        offset: int = 0,
+        cursor: tuple[datetime, int] | None = None,
+    ) -> list[JsonObject]: ...
+
+    def list_evidence_windows(
+        self,
+        workspace_id: str,
+        allowed_cluster_ids: Collection[str] | None,
+        *,
+        limit: int,
+        offset: int = 0,
+    ) -> list[JsonObject]: ...
+
+    def get_evidence(
+        self,
+        workspace_id: str,
+        evidence_key: str,
+        allowed_cluster_ids: Collection[str] | None,
+    ) -> JsonObject | None: ...
 
 
 class SessionStore(Protocol):

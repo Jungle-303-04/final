@@ -35,3 +35,21 @@ class ApplyManifestCommand:
 )
 class ScaleDeploymentCommand:
     pass
+
+
+@command.action(
+    Command.RCA_TEST_SCENARIO_INJECT_ACTION,
+    allowed_namespaces=(Sandbox.NAMESPACE,),
+    requires_approval=False,
+)
+class RcaTestScenarioInjectCommand:
+    """test-only API가 만든 allowlisted 장애 시나리오 주입 명령."""
+
+
+@command.action(
+    Command.RCA_TEST_SCENARIO_CLEANUP_ACTION,
+    allowed_namespaces=(Sandbox.NAMESPACE,),
+    requires_approval=False,
+)
+class RcaTestScenarioCleanupCommand:
+    """현재 run label이 일치하는 RCA 테스트 fixture 정리 명령."""

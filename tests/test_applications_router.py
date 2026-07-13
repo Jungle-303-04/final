@@ -5,13 +5,16 @@ from datetime import UTC, datetime
 from types import SimpleNamespace
 
 import pytest
+from fastapi import HTTPException
 
 from domains.applications.router import (
     connect_application,
+    list_application_deployments,
     list_applications,
     upsert_application,
     upsert_application_deployment,
 )
+from domains.gitops.repository import derive_repository_id
 from packages.contracts.gateway.requests import (
     ApplicationConnectRequest,
     ApplicationUpsertRequest,
@@ -30,6 +33,7 @@ class StubApplicationsDb:
         self.registered_repositories: list[dict[str, object]] = []
         self.registered_watch_targets: list[dict[str, object]] = []
         self.registered_bindings: list[dict[str, object]] = []
+        self.upserted_applications: list[dict[str, object]] = []
         self.credentials: list[dict[str, object]] = []
         self.registration_calls: list[str] = []
         self.access_checks: list[tuple[str, str, str, str, str]] = []
@@ -81,10 +85,14 @@ class StubApplicationsDb:
         self.registered_repositories.append(payload)
         return {**payload, "repository_id": "repo-1"}
 
+    def get_repository_by_ref(self, _workspace_id: str, _repo_ref: str) -> dict[str, object] | None:
+        return None
+
     def upsert_workspace_credential(self, payload: dict[str, object]) -> None:
         self.credentials.append(payload)
 
     def upsert_application(self, payload: dict[str, object]) -> dict[str, object]:
+        self.upserted_applications.append(payload)
         return {**payload, "application_id": "app-1", "repository_id": "repo-1"}
 
     def get_application(
@@ -132,6 +140,47 @@ class StubApplicationsDb:
     def list_cluster_registrations(self, workspace_id: str) -> list[dict[str, object]]:
         assert workspace_id == "ws-1"
         return self.clusters
+
+    def get_cluster_registration(
+        self, workspace_id: str, cluster_id: str
+    ) -> dict[str, object] | None:
+        assert workspace_id == "ws-1"
+        return next(
+            (cluster for cluster in self.clusters if cluster["cluster_id"] == cluster_id),
+            None,
+        )
+
+    def list_application_deployment_bindings(
+        self,
+        workspace_id: str,
+        application_id: str,
+        *,
+        limit: int,
+    ) -> list[dict[str, object]]:
+        assert workspace_id == "ws-1"
+        assert application_id == "app-1"
+        assert limit == 25
+        return [
+            {
+                "binding_id": "binding-1",
+                "workspace_id": "ws-1",
+                "repository_id": "repo-1",
+                "watch_target_id": "watch-1",
+                "cluster_id": "cluster-1",
+                "namespace": "prod",
+                "app_name": "checkout-api",
+                "manifest_path": "deploy.yaml",
+                "environment": "prod",
+                "gitops_poll": {
+                    "status": "failed",
+                    "status_code": 403,
+                    "error_kind": "access_denied",
+                    "error": "GitHub token cannot read repository",
+                    "last_seen_commit_sha": "sha-1",
+                    "last_polled_at": "2026-07-10T10:00:00+00:00",
+                },
+            }
+        ]
 
     def register_watch_target(self, payload: dict[str, object]) -> dict[str, object]:
         self.registration_calls.append("watch")
@@ -186,7 +235,11 @@ def test_upsert_application_registers_repository_when_repo_ref_is_present() -> N
                 repo_ref="org/checkout",
                 metadata={"team": "payments"},
             ),
-            current=current_session(),
+            current=SimpleNamespace(
+                user_id="admin-1",
+                roles=("service_admin",),
+                workspace_id="ws-1",
+            ),
             db=db,
         )
 
@@ -194,7 +247,29 @@ def test_upsert_application_registers_repository_when_repo_ref_is_present() -> N
 
     assert response.application["application_id"] == "app-1"
     assert db.registered_repositories[0]["repo_ref"] == "org/checkout"
-    assert db.registered_repositories[0]["user_id"] == "user-1"
+    assert db.registered_repositories[0]["user_id"] == "admin-1"
+
+
+def test_create_application_rejects_explicit_repository_id_before_writes() -> None:
+    db = StubApplicationsDb()
+
+    async def run():
+        return await upsert_application(
+            ApplicationUpsertRequest(
+                name="checkout-api",
+                repo_ref="org/checkout",
+                repository_id="client-controlled-repository",
+            ),
+            current=current_session(),
+            db=db,
+        )
+
+    with pytest.raises(HTTPException) as exc:
+        asyncio.run(run())
+
+    assert exc.value.status_code == 422
+    assert db.registered_repositories == []
+    assert db.upserted_applications == []
 
 
 def test_connect_application_registers_repo_watch_binding_atomically() -> None:
@@ -258,11 +333,13 @@ def test_connect_application_stores_github_token_as_credential_ref(monkeypatch) 
 
     asyncio.run(run())
 
+    repository_id = derive_repository_id({"workspace_id": "ws-1", "repo_ref": "org/checkout"})
+    expected_scope = f"repository:{repository_id}"
     assert db.credentials
     assert db.credentials[0]["provider"] == "github"
-    assert db.credentials[0]["scope"] == "github"
+    assert db.credentials[0]["scope"] == expected_scope
     assert db.credentials[0]["encrypted_value"] != "ghp_secret-token"
-    assert db.registered_repositories[0]["credential_ref"] == "db:github:github"
+    assert db.registered_repositories[0]["credential_ref"] == f"db:github:{expected_scope}"
 
 
 def test_connect_application_rejects_disconnected_cluster_before_write() -> None:
@@ -348,6 +425,33 @@ def test_upsert_application_deployment_requires_app_and_cluster_access() -> None
     ]
 
 
+def test_list_application_deployments_includes_gitops_poll_status() -> None:
+    db = StubApplicationsDb()
+
+    async def run():
+        return await list_application_deployments(
+            "app-1",
+            limit=25,
+            current=current_session(),
+            db=db,
+        )
+
+    response = asyncio.run(run())
+
+    assert response.deployments[0]["binding_id"] == "binding-1"
+    assert response.deployments[0]["gitops_poll"] == {
+        "status": "failed",
+        "status_code": 403,
+        "error_kind": "access_denied",
+        "error": "GitHub token cannot read repository",
+        "last_seen_commit_sha": "sha-1",
+        "last_polled_at": "2026-07-10T10:00:00+00:00",
+    }
+    assert db.access_checks == [
+        ("user-1", "ws-1", "application", "app-1", "deployment.read"),
+    ]
+
+
 def test_upsert_application_deployment_rejects_disconnected_cluster() -> None:
     db = StubApplicationsDb(connected_cluster_ids=set())
 
@@ -393,5 +497,86 @@ def test_global_application_deployment_reports_mixed_disconnected_targets() -> N
         "code": "cluster_not_connected",
         "detail": "에이전트가 연결되지 않은 클러스터입니다",
         "clusters": ["cluster-2"],
+    }
+    assert db.registration_calls == []
+
+
+def test_global_application_deployment_excludes_management_cluster() -> None:
+    db = StubApplicationsDb(
+        connected_cluster_ids={"cluster-1"},
+        clusters=[
+            {
+                "workspace_id": "ws-1",
+                "cluster_id": "cluster-1",
+                "name": "cluster-1",
+                "settings": {"cluster_role": "target"},
+            },
+            {
+                "workspace_id": "ws-1",
+                "cluster_id": "kubernetes-ops",
+                "name": "kubernetes-ops",
+                "settings": {"cluster_role": "management"},
+            },
+        ],
+    )
+
+    async def run():
+        return await upsert_application_deployment(
+            "app-1",
+            DeploymentBindingUpsertRequest(cluster_id="*", namespace="sandbox"),
+            current=current_session(),
+            db=db,
+        )
+
+    response = asyncio.run(run())
+
+    assert response.deployment["cluster_id"] == "cluster-1"
+    assert [binding["cluster_id"] for binding in db.registered_bindings] == ["cluster-1"]
+    assert all(check[3] != "kubernetes-ops" for check in db.access_checks)
+
+
+@pytest.mark.parametrize("connect_route", [False, True])
+def test_explicit_management_binding_is_rejected(connect_route: bool) -> None:
+    db = StubApplicationsDb(
+        connected_cluster_ids={"kubernetes-ops"},
+        clusters=[
+            {
+                "workspace_id": "ws-1",
+                "cluster_id": "kubernetes-ops",
+                "name": "kubernetes-ops",
+                "settings": {"cluster_role": "management"},
+            }
+        ],
+    )
+
+    async def run():
+        if connect_route:
+            return await connect_application(
+                ApplicationConnectRequest(
+                    name="checkout-api",
+                    repo_ref="org/checkout",
+                    branch="release",
+                    manifest_path="deploy/kustomization.yaml",
+                    source_type="kustomize",
+                    cluster_id="kubernetes-ops",
+                ),
+                current=current_session(),
+                db=db,
+                discovery=StubRepositoryDiscovery(),
+            )
+        return await upsert_application_deployment(
+            "app-1",
+            DeploymentBindingUpsertRequest(cluster_id="kubernetes-ops", namespace="management"),
+            current=current_session(),
+            db=db,
+        )
+
+    with pytest.raises(Exception) as exc:
+        asyncio.run(run())
+
+    assert getattr(exc.value, "status_code", None) == 400
+    assert exc.value.detail == {
+        "code": "management_readonly",
+        "detail": "management 클러스터는 읽기 전용입니다",
     }
     assert db.registration_calls == []
