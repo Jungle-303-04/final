@@ -7,6 +7,7 @@ export type HomeHealthTone =
 
 export type HomeConnectionState = "online" | "stale" | "pending" | "offline" | "unknown";
 export type HomeRegistrationState = "active" | "pending" | "expired" | "unknown";
+export type HomeClusterProvider = "eks" | "gke" | "aks" | "onprem" | "kind" | "unknown";
 export type HomeCollectionCompleteness = "unknown";
 export type HomeIdentityStability = "ephemeral";
 
@@ -15,6 +16,7 @@ export interface HomeClusterChoice {
   workspaceId: string;
   name: string;
   environment: string;
+  provider: HomeClusterProvider;
   registrationState: HomeRegistrationState;
   connectionState: HomeConnectionState;
   lastObservedAt: string | null;

@@ -18,6 +18,7 @@ import {
   SelectValue,
 } from "../../shared/ui/primitives/select";
 import { useClusterScope } from "./ClusterScopeProvider";
+import { ClusterProviderIcon } from "./ClusterProviderIcon";
 
 export function ClusterScopePicker() {
   const { formatDate, t } = useI18n();
@@ -96,7 +97,10 @@ export function ClusterScopePicker() {
             )}
           >
             {selected ? (
-              <ClusterConnectionMark connectionState={selected.connectionState} />
+              <>
+                <ClusterProviderIcon provider={selected.provider} />
+                <ClusterConnectionMark compact connectionState={selected.connectionState} />
+              </>
             ) : (
               <Server aria-hidden="true" />
             )}
@@ -112,10 +116,13 @@ export function ClusterScopePicker() {
             {scope.collection.data.clusters.map((cluster) => (
               <SelectItem key={cluster.id} value={cluster.id}>
                 <span className="flex min-w-0 flex-1 items-center justify-between gap-3 overflow-hidden">
-                  <span className="truncate" title={clusterDisplayLabel(cluster)}>
-                    {clusterDisplayLabel(cluster)}
+                  <span className="flex min-w-0 items-center gap-2">
+                    <ClusterProviderIcon provider={cluster.provider} />
+                    <span className="truncate" title={clusterDisplayLabel(cluster)}>
+                      {clusterDisplayLabel(cluster)}
+                    </span>
                   </span>
-                  <ClusterConnectionMark connectionState={cluster.connectionState} />
+                  <ClusterConnectionMark compact connectionState={cluster.connectionState} />
                 </span>
               </SelectItem>
             ))}
