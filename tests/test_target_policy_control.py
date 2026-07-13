@@ -27,6 +27,7 @@ def load_control_module():
         "control.policy",
         "control.reconciler",
         "control.store",
+        "kubernetes_api",
         "config",
         "span",
         "span.base",

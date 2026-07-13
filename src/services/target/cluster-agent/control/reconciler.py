@@ -20,6 +20,7 @@ from config import (
     RECONCILER_MODE_ARGOCD,
     RECONCILER_MODES,
 )
+from control.argocd_observer import ArgoObserver, unavailable_collection
 from control.store import (
     AgentControlStore,
     ReconcileResult,
@@ -120,6 +121,7 @@ class DesiredStateReconciler:
         interval_seconds: int,
         resource_applier: ResourceApplier | None = None,
         reconciler_mode: str = DEFAULT_RECONCILER_MODE,
+        argo_observer: ArgoObserver | None = None,
     ) -> None:
         if reconciler_mode not in RECONCILER_MODES:
             raise ValueError(
@@ -131,6 +133,7 @@ class DesiredStateReconciler:
         self.interval_seconds = interval_seconds
         self.resource_applier = resource_applier or KubernetesResourceClient()
         self.reconciler_mode = reconciler_mode
+        self.argo_observer = argo_observer
 
     async def run(self, client: ManagementPlaneClient) -> None:
         while True:
@@ -168,12 +171,24 @@ class DesiredStateReconciler:
                 elif result.status == RECONCILE_APPLIED and status != RECONCILE_FAILED:
                     status = RECONCILE_APPLIED
 
+        details: dict[str, object] = {"resources": results}
+        if self.reconciler_mode == RECONCILER_MODE_ARGOCD and self.argo_observer is not None:
+            try:
+                details["argocd"] = await self.argo_observer.snapshot()
+            except Exception as exc:
+                status = RECONCILE_FAILED
+                details["argocd"] = {
+                    "applications": unavailable_collection(),
+                    "rollouts": unavailable_collection(),
+                    "error": str(exc),
+                }
+
         return {
             "cluster_id": self.cluster_id,
             "generation": policy.generation,
             "status": status,
             "message": f"reconciled {len(results)} resources",
-            "details": {"resources": results},
+            "details": details,
         }
 
     async def reconcile_resource(self, resource: DesiredResource) -> ReconcileResult:
