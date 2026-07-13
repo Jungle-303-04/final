@@ -3059,3 +3059,10 @@ target preflight·register 네 함수와 strict Zod 계약을 claim했다. 1회�
 - 회수 대상은 `codex/d027-live-traffic-audit-20260714` / `6fd733020`과
   `/private/tmp/opsia-d027-live-traffic-audit`이다. 이 로그 커밋 승격 직후 worktree remove,
   branch delete, worktree prune을 같은 사이클에서 수행한다. 새 stash는 만들지 않았다.
+
+## 2026-07-14 01:27 KST — [백엔드] 최신 dev 게이트 복구
+
+- RCA 동작·기대값은 변경하지 않고 `tests/test_rca_rule_catalog.py`의 indentation만 Ruff 정본으로
+  맞춘 commit `07944c2d9`와 누락된 VP-012 문서 색인 commit `e33469442`를 분리했다.
+- 전체 게이트 Ruff lint/format PASS, import-linter 8/8, pytest `2121 passed, 3 skipped`다.
+  복구 lane은 최신 `origin/dev@13b2fd1ea` 기준 ahead 2/behind 0, merge-tree clean이다.
