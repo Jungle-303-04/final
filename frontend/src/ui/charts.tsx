@@ -1,16 +1,19 @@
 import { useReducedMotion } from 'motion/react';
-import type { CSSProperties } from 'react';
 import {
   Area,
   AreaChart,
   CartesianGrid,
   Line,
   LineChart,
-  ResponsiveContainer,
-  Tooltip,
   XAxis,
   YAxis,
 } from 'recharts';
+import {
+  ChartContainer,
+  ChartTooltip,
+  ChartTooltipContent,
+  type ChartConfig,
+} from '@/components/ui/chart';
 import { cx } from '@/ui';
 
 const LINE_COLORS = [
@@ -21,15 +24,9 @@ const LINE_COLORS = [
   'var(--chart-5)',
 ];
 
-const tooltipStyle: CSSProperties = {
-  background: 'var(--popover)',
-  border: '1px solid var(--border)',
-  borderRadius: 'var(--radius)',
-  boxShadow: 'var(--ui-shadow-elevated)',
-  color: 'var(--popover-foreground)',
-  fontSize: '0.75rem',
-  padding: '0.5rem 0.75rem',
-};
+const SPARKLINE_CONFIG = {
+  value: { color: 'currentColor' },
+} satisfies ChartConfig;
 
 export interface Series {
   id: string;
@@ -88,20 +85,24 @@ export function Sparkline({
       role="img"
       aria-label={ariaLabel}
     >
-      <ResponsiveContainer width="100%" height="100%">
+      <ChartContainer
+        config={SPARKLINE_CONFIG}
+        initialDimension={{ width: 100, height: 32 }}
+        className="h-full w-full aspect-auto"
+      >
         <AreaChart data={data} margin={{ top: 4, right: 8, bottom: 4, left: 8 }}>
           <Area
             type="monotone"
             dataKey="value"
-            stroke="currentColor"
+            stroke="var(--color-value)"
             strokeWidth={2}
-            fill="currentColor"
+            fill="var(--color-value)"
             fillOpacity={0.1}
             dot={false}
             isAnimationActive={!reduced}
           />
         </AreaChart>
-      </ResponsiveContainer>
+      </ChartContainer>
     </span>
   );
 }
@@ -126,6 +127,15 @@ export function TimeSeriesChart({ series, className }: { series: Series[]; class
   const usesLinearTime = drawable.every((item) => item.data.every((point) => typeof point.x === 'number'));
   const xTickValues = sampleAxisTicks(drawable, MAX_X_AXIS_TICKS);
   const { rows, lines } = buildTimeSeriesRows(drawable, usesLinearTime);
+  const chartConfig = Object.fromEntries(
+    lines.map((item, index) => [
+      item.dataKey,
+      {
+        label: item.id,
+        color: LINE_COLORS[index % LINE_COLORS.length],
+      },
+    ]),
+  ) satisfies ChartConfig;
 
   return (
     <div className={cx('flex h-64 min-h-64 min-w-0 flex-col', className)}>
@@ -142,7 +152,7 @@ export function TimeSeriesChart({ series, className }: { series: Series[]; class
         ))}
       </div>
       <div className="min-h-0 flex-1">
-        <ResponsiveContainer width="100%" height="100%">
+        <ChartContainer config={chartConfig} className="h-full min-h-0 w-full aspect-auto">
           <LineChart data={rows} margin={{ top: 8, right: 18, bottom: 8, left: 0 }}>
             <CartesianGrid vertical={false} stroke="var(--border)" strokeOpacity={0.7} />
             <XAxis
@@ -163,19 +173,21 @@ export function TimeSeriesChart({ series, className }: { series: Series[]; class
               axisLine={false}
               width={42}
             />
-            <Tooltip
-              contentStyle={tooltipStyle}
+            <ChartTooltip
               cursor={{ stroke: 'var(--border)' }}
-              labelFormatter={(label) => formatAxisTick(label as number | string)}
-              formatter={(value, name) => [String(value), String(name)]}
+              content={(
+                <ChartTooltipContent
+                  labelFormatter={(label) => formatAxisTick(label as number | string)}
+                />
+              )}
             />
-            {lines.map((item, index) => (
+            {lines.map((item) => (
               <Line
                 key={item.dataKey}
                 type="monotone"
                 dataKey={item.dataKey}
                 name={item.id}
-                stroke={LINE_COLORS[index % LINE_COLORS.length]}
+                stroke={`var(--color-${item.dataKey})`}
                 strokeWidth={2}
                 dot={false}
                 connectNulls={false}
@@ -183,7 +195,7 @@ export function TimeSeriesChart({ series, className }: { series: Series[]; class
               />
             ))}
           </LineChart>
-        </ResponsiveContainer>
+        </ChartContainer>
       </div>
     </div>
   );
