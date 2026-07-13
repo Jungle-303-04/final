@@ -124,3 +124,25 @@ def test_candidate_contract_index_rejects_source_hash_drift() -> None:
     errors = scorer["validate_candidate_index"](candidate_index)
 
     assert any(f"source drift for {source}" in error for error in errors)
+
+
+def test_candidate_contract_index_rejects_invalid_hash_type_without_crashing() -> None:
+    scorer = runpy.run_path(str(SCORER))
+    candidate_index = json.loads(
+        (ROOT / "benchmark/candidate-contract-index.json").read_text(encoding="utf-8")
+    )
+    source = next(iter(candidate_index["source_sha256"]))
+    candidate_index["source_sha256"][source] = 123
+
+    errors = scorer["validate_candidate_index"](candidate_index)
+
+    assert any("source hash entry is invalid" in error for error in errors)
+
+
+def test_candidate_contract_rejects_fixture_outside_scenario_tree() -> None:
+    document = _candidate_contracts()
+    document["contracts"][0]["benchmark_fixtures"] = ["benchmark/catalog-snapshot.json"]
+
+    errors = _contract_validation_errors(document)
+
+    assert any("fixture must exist under benchmark/scenarios" in error for error in errors)
