@@ -146,11 +146,11 @@ docstring만 있는 패키지 마커("target cluster 등록 도메인"). public 
 | `src/domains/target/router.py :: validate_target_install_providers` | `(payload: TargetRegisterRequest) -> None` | `require_available_provider(CLOUD, cloud_provider)`·`(DEPLOY, deploy_provider)` 검증(`ValueError` → 422). `apply=true`인데 deploy_provider≠`kube-context` → 422. `kube_context` 지정인데 deploy_provider≠`kube-context` → 422 |
 | `src/domains/target/router.py :: kube_context_connectivity_error` | `(kube_context: str \| None) -> str \| None` | direct apply preflight 전용 non-mutating 연결성 검사. `kubectl [--context <ctx>] get --raw=/version --request-timeout=5s`를 실행한다. `kubectl` 없음 → `"kubectl is not available to api-gateway"`, timeout → `"kubernetes preflight connection timed out"`, returncode≠0 → `"kubernetes preflight connection failed: <첫 줄>"`, 성공 → `None` |
 | `src/domains/target/router.py :: apply_manifest_with_kubectl` | `(manifest: str, kube_context: str \| None) -> str` | allowlist 검증(아래 불변식) → `kubectl [--context <ctx>] apply -f -`에 manifest를 stdin으로 전달. `shutil.which("kubectl")` 없음 → 503, `TimeoutExpired` → 504, returncode≠0 → 502. 성공 시 stdout 반환 |
-| `src/domains/target/router.py :: install_response` | `(payload: TargetRegisterRequest, manifest: str, apply_output: str \| None, agent_token: str, connect_timeout_seconds, connect_expires_at) -> TargetInstallResponse` | `registered=True`, `status="pending_install"`, `applied=apply_output is not None`, `install_command`, `bootstrap_command`, `bootstrap_steps`, 연결 만료 정보를 응답 조립 |
+| `src/domains/target/router.py :: install_response` | `(payload: TargetRegisterRequest, manifest: str, apply_output: str \| None, agent_token: str, connect_timeout_seconds, connect_expires_at) -> TargetInstallResponse` | `registered=True`, `status="pending_install"`, `connection_stage="token_issued"`, `applied=apply_output is not None`, `install_command`, `bootstrap_command`, `bootstrap_steps`, 연결 만료 정보를 응답 조립 |
 | `src/domains/target/router.py :: agent_online_window_seconds` | `() -> int` | `max(1, int(env(AGENT_ONLINE_WINDOW_SECONDS, "120")))` |
 | `src/domains/target/router.py :: parse_timestamp` | `(value: str \| None) -> datetime \| None` | ISO 파싱, 실패 시 `None`, naive면 UTC 부여 |
 | `src/domains/target/router.py :: cluster_connection_status` | `(agent: dict[str, Any] \| None) -> str` | `None` → `never_connected`; `last_seen_at` 파싱 불가 → `stale`; `now-last_seen_at <= window` → `online`, 아니면 `stale` |
-| `src/domains/target/router.py :: cluster_summary` | `(cluster: dict[str, Any], latest_agent: dict[str, Any] \| None) -> ClusterSummary` | 클러스터 레지스트리 행 + 최신 agent 상태를 `ClusterSummary`로 조립 |
+| `src/domains/target/router.py :: cluster_summary` | `(cluster: dict[str, Any], latest_agent: dict[str, Any] \| None, latest_snapshot: dict[str, Any] \| None = None) -> ClusterSummary` | 클러스터 레지스트리·최신 agent·현재 연결 epoch의 inventory snapshot으로 provider와 연결 단계를 조립 |
 | `src/domains/target/router.py :: lease_next_evidence_job` | `async (db: Any, cluster_id: str, workspace_id: str, provider_key: str, agent_id: str, timeout: int) -> dict[str, Any] \| None` | `deadline = now + min(timeout, MAX_EVIDENCE_JOB_POLL_SECONDS)`까지 `db.lease_evidence_job(...)`을 `EVIDENCE_JOB_POLL_SLEEP_SECONDS` 간격으로 반복. 리스 성공 시 즉시 반환, 데드라인 초과 시 `None` |
 | `src/domains/target/router.py :: emit_evidence_if_ready` | `async (evidence_key: str, events: Any, db: Any) -> EvidenceJobResultResponse \| None` | [동작 4단계](#3-evidence-job-파이프라인) 참조 |
 | `src/domains/target/router.py :: db_call` | `async (func: Any, *args: Any, **kwargs: Any) -> Any` | 동기 repository 호출을 `asyncio.to_thread`로 오프로드 |
@@ -189,7 +189,7 @@ HTTP 엔드포인트(핸들러 함수도 public 심볼):
 - `SchedulingProfile`: `profile_id`, `enabled`, `selector`, `priority_class_name`, `priority_value`, `preemption_policy`, `placement_mode("preferred"|"required")`, `node_selector`, `preferred_node_labels`, `tolerations`, `pre_pull_images`, `termination_grace_period_seconds`, `scheduler_name`. `scheduler_name` 기본값은 `null`이며, 별도 scheduler가 내려갔을 때 Pending 고착을 막기 위해 명시 선택일 때만 사용한다.
 - `EvidenceJobScheduleRequest`: `source_id: str = "cluster-snapshot"`, `window_start: str`, `provider_keys: list[str]`(min_length=1).
 - `EvidenceJobResultRequest`: `agent_id: str`, `lease_id: str`, `status: Literal["completed","failed"]`, `result: dict = {}`, `error: str = ""`. `{"result": result}` 직렬화 크기가 `MAX_EVIDENCE_PAYLOAD_BYTES`(1MiB)를 넘으면 `evidence payload exceeds size limit` 검증 오류가 난다.
-- `TargetInstallResponse`: `registered: bool`, `cluster_id: str`, `status: str`(`pending_install`), `applied: bool`, `apply_output: str | None`, `install_manifest: str`, `agent_token: str`(원문 1회 반환, 서버는 해시만 저장), `install_command: str = ""`, `bootstrap_command: str = ""`, `bootstrap_steps: list[{label, command}] = []`, `connect_timeout_seconds`, `connect_expires_at`.
+- `TargetInstallResponse`: `registered: bool`, `cluster_id: str`, `status: str`(`pending_install`), `applied: bool`, `apply_output: str | None`, `install_manifest: str`, `agent_token: str`(원문 1회 반환, 서버는 해시만 저장), `install_command: str = ""`, `bootstrap_command: str = ""`, `bootstrap_steps: list[{label, command}] = []`, `connect_timeout_seconds`, `connect_expires_at`, `connection_stage="token_issued"`.
 - `EvidenceJobScheduleResponse`: `accepted: bool`, `evidence_key: str`, `queued: int`, `job_ids: list[str]`. / `EvidenceJobPollResponse`: `job: JsonMap | None`. / `EvidenceJobResultResponse`: `accepted: bool`, `evidence_key/event_id/correlation_id: str | None`.
 
 ### 리콘실러 — `src/domains/target/reconciler.py`
@@ -557,7 +557,23 @@ Scheduling profile 응답 예시:
 ```
 
 ### 5. 클러스터 연결 상태·목록
-`GET /clusters`는 `BLOCKED_TEST_CLUSTER_IDS`/`BLOCKED_TEST_CLUSTER_NAME_PARTS`에 걸리는 테스트 클러스터를 목록에서 제외하고, db가 `inventory_resource_counts`를 제공하면 `inventory_counts`로 합산한 `node_count`/`pod_count`(+`incident_count=0`)를 각 `ClusterSummary`에 채운다. `GET /clusters`·`GET /clusters/{id}`·`GET /clusters/{id}/connection-status`가 `cluster_agent_status`의 최신 행으로 판정:
+`GET /clusters`는 `BLOCKED_TEST_CLUSTER_IDS`/`BLOCKED_TEST_CLUSTER_NAME_PARTS`에 걸리는 테스트 클러스터를 목록에서 제외하고, db가 `inventory_resource_counts`를 제공하면 `inventory_counts`로 합산한 `node_count`/`pod_count`(+`incident_count=0`)를 각 `ClusterSummary`에 채운다. provider는 구체 등록값(`eks/gke/aks/kind`)을 최우선으로 사용하고, generic 등록(`existing-k8s/minikube`)은 agent가 Node `spec.providerID` 또는 vendor 전용 label로 감지한 3사 값을 우선한 뒤 `onprem`으로 fallback한다. 어느 근거도 없으면 `unknown`이다. 목록의 최신 inventory snapshot은 cluster별 N+1 조회 대신 단일 window query로 읽는다.
+
+`GET /clusters`·`GET /clusters/{id}`·`GET /clusters/{id}/connection-status`는 기존 `connection_status`를 보존하면서 다음 `connection_stage`를 함께 반환한다. `token_issued`는 등록 직후 응답에서만 관측 가능하며, 설치 manifest fetch를 별도로 영속하지 않으므로 이후 polling에서 추론하지 않는다.
+
+| 연결 단계 | 권위 조건 |
+|---|---|
+| `token_issued` | `POST /targets`가 per-cluster token을 발급한 즉시의 응답 |
+| `awaiting_install` | registration=`pending_install`, agent 행 없음, 연결 만료 전 |
+| `agent_connected` | agent가 online이지만 현재 connect epoch의 inventory snapshot 없음 |
+| `snapshot_received` | 현재 agent/registration epoch의 snapshot 수신, 후속 heartbeat 전 |
+| `ready` | 현재 epoch snapshot 수신 후 같은 agent의 후속 heartbeat 확인 |
+| `expired` | agent 행 없이 연결 TTL 만료 또는 registration=`install_expired` |
+| `error` | agent 오류 상태, stale/잘못된 heartbeat 시각, 또는 등록 상태 불변식 불일치 |
+
+현재 epoch 판정은 snapshot `agent_id` 일치와 snapshot 생성 시각이 registration 갱신 시각 이후인지 함께 검사한다. 이전 연결의 snapshot으로 재연결 직후 `ready`가 되는 것을 막는다. `expired`는 현재 연결 UX 단계이며 agent 인증 만료 경계라는 의미는 아니다.
+
+기존 `connection_status` 판정:
 
 등록 직후 registration status는 `pending_install`이며, `TARGET_REGISTRATION_CONNECT_TIMEOUT_SECONDS`(기본 1800초)로 `connect_expires_at`을 계산해 registration settings와 응답에 같이 담는다. `TARGET_REGISTRATION_AUTO_DELETE_EXPIRED`는 문서화된 운영 옵션이지만 기본은 `false`다. 기본 정책은 hard delete가 아니라 `install_expired` 상태 노출 + UI 삭제/재시도 흐름이다. 원본 agent token은 등록 응답/manifest Secret에만 1회 노출되고 DB에는 hash만 저장한다. `/agent/connect`가 최초 연결되면 cluster registration status는 `registered`로 승격된다.
 

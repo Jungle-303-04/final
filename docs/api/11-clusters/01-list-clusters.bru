@@ -16,4 +16,13 @@ tests {
   test("success has clusters array", function () {
     if (res.status === 200) { expect(res.getBody().clusters).to.be.an("array"); }
   });
+  test("success exposes provider and connection stage", function () {
+    if (res.status !== 200) { return; }
+    const providers = ["eks", "gke", "aks", "onprem", "kind", "unknown"];
+    const stages = ["awaiting_install", "agent_connected", "snapshot_received", "ready", "expired", "error"];
+    res.getBody().clusters.forEach(function (cluster) {
+      expect(providers).to.include(cluster.provider);
+      expect(stages).to.include(cluster.connection_stage);
+    });
+  });
 }

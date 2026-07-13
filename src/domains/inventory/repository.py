@@ -691,6 +691,50 @@ class InventoryRepository(DatabaseConnection):
             row = conn.execute(statement).mappings().first()
         return self.serialize_inventory_snapshot(dict(row)) if row else None
 
+    def latest_inventory_snapshots(
+        self,
+        workspace_id: str,
+        cluster_ids: set[str],
+    ) -> dict[str, JsonObject]:
+        """클러스터별 최신 snapshot을 한 번의 window query로 반환한다."""
+        if not cluster_ids:
+            return {}
+        table = ClusterInventorySnapshotRecord.__table__
+        ranked = (
+            select(
+                table.c.snapshot_id,
+                table.c.workspace_id,
+                table.c.cluster_id,
+                table.c.agent_id,
+                table.c.source,
+                table.c.status,
+                table.c.collected_at,
+                table.c.resource_count,
+                table.c.summary,
+                table.c.created_at,
+                func.row_number()
+                .over(
+                    partition_by=table.c.cluster_id,
+                    order_by=(table.c.created_at.desc(), table.c.snapshot_id.desc()),
+                )
+                .label("snapshot_rank"),
+            )
+            .where(
+                table.c.workspace_id == workspace_id,
+                table.c.cluster_id.in_(cluster_ids),
+            )
+            .subquery()
+        )
+        statement = select(ranked).where(ranked.c.snapshot_rank == 1)
+        with self.connection() as conn:
+            rows = conn.execute(statement).mappings().all()
+        return {
+            str(row["cluster_id"]): self.serialize_inventory_snapshot(
+                {key: value for key, value in dict(row).items() if key != "snapshot_rank"}
+            )
+            for row in rows
+        }
+
     def inventory_resource_counts(self, workspace_id: str, cluster_id: str) -> list[JsonObject]:
         table = ClusterInventoryResourceRecord.__table__
         statement = (
