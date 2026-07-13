@@ -42,7 +42,8 @@ export function getAiConversation(
   conversationId: string,
   signal?: AbortSignal,
 ): Promise<AiConversationDetail> {
-  const path = `/api/ai/conversations/${encodePathSegment(conversationId)}` as ApiPath;
+  const path =
+    `/api/ai/conversations/${encodePathSegment(assertConversationId(conversationId))}` as ApiPath;
   return apiRequest(path, aiConversationDetailSchema, { signal });
 }
 
@@ -84,7 +85,7 @@ export async function appendAiMessage(
   signal?: AbortSignal,
 ): Promise<AiConversationAccepted> {
   const path =
-    `/api/ai/conversations/${encodePathSegment(conversationId)}/messages` as ApiPath;
+    `/api/ai/conversations/${encodePathSegment(assertConversationId(conversationId))}/messages` as ApiPath;
   const payload = {
     message: validateMessage(input.message),
     ...(input.agent === undefined ? {} : { agent: input.agent }),
@@ -107,4 +108,11 @@ function validateMessage(message: string): string {
     );
   }
   return normalized;
+}
+
+function assertConversationId(conversationId: string): string {
+  if (!conversationId.trim()) {
+    throw new TypeError("conversationId must not be empty");
+  }
+  return conversationId;
 }
