@@ -75,6 +75,9 @@ npx --yes @usebruno/cli@3.5.1 run \
   05-rca-dashboard/08-cluster-summary.bru \
   05-rca-dashboard/09-node-summary.bru \
   05-rca-dashboard/10-node-pods-summary.bru \
+  05-rca-dashboard/13-remediation-bundle.bru \
+  05-rca-dashboard/14-audit-timeline.bru \
+  05-rca-dashboard/15-recent-changes.bru \
   07-ai/01-create-conversation.bru \
   07-ai/02-get-conversation.bru \
   07-ai/03-append-message.bru \
