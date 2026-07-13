@@ -2177,3 +2177,19 @@ target preflight·register 네 함수와 strict Zod 계약을 claim했다. 1회�
   unexpected feature network/WebSocket 0건.
 - 로그 무결성 커밋·push는 `40fda210a64a6f29d76aaabde719672724099c28`이며,
   `origin/woonyong/ui-layer-lab` exact 일치와 `origin/dev` ancestor exit 0을 재확인했다.
+
+## 2026-07-13 17:48 KST — [프론트] 초기 로딩 CLS 실측·게이트 완료 증거
+
+- 코드 `a46a4d4ad8f224be6261711a838b2f2145ed03be`는 Home·Resources·Issues에 결정적
+  지연 응답과 로딩 skeleton bounds 검증을 추가했다. navigation 전 observer, pending record flush,
+  strict `<1초`·`<5초` session window, recent-input 제외, 세 장면 coverage assert를 사용한다.
+- CSS 전 `body` 기본 여백 source를 `references/ui-layer-lab/index.html:32`에서 제거해
+  Home `0.009743→0.004188`, Resources `0.009722→0.004167`, Issues
+  `0.009758→0.004202`로 낮췄다. 모두 release budget `0.1` 미만이다.
+- 잔여 source는 Home `HomeClusterHealth.tsx:50`의 StatusMark `0.000021`, Issues
+  `IssuesSurface.tsx:212`의 CardContent `0.000035`이며 추가 눈짐작 수정은 하지 않았다.
+  navigation 전 200% root font 적용으로 확대 장면의 비결정적 재설정도 제거했다.
+- `npm run check` PASS: TypeScript·ESLint, Vitest 117 files / 844 tests,
+  design guard 345 files, shadcn source audit 482 previews, Vite build 14,539 modules.
+  `npm run visual-product` PASS: 41 isolated scenarios, exact API request counts,
+  unexpected feature network/WebSocket 0건.

@@ -1776,3 +1776,33 @@ API 완성: registerTarget (8678d63b0)
 - Button native/disabled/focus/reduced-motion/forced-colors 클래스 13개와 Card system-color 경계를
   단위 테스트로 검증한다. full gate는 114 files / 827 tests, design guard 341 files,
   shadcn 482 previews, Vite 14,538 modules로 PASS했고 visual-product 38 scenarios도 PASS했다.
+
+## 2026-07-13 초기 로딩 CLS 실측·게이트 완료
+
+- `a46a4d4ad8f224be6261711a838b2f2145ed03be`는 Home·Resources·Issues의 canonical desktop
+  장면에 300~450ms 결정적 API 지연을 적용하고, 응답 전 `loading-preview`의 `aria-hidden`·
+  `inert`와 모든 skeleton의 양수 bounds를 먼저 확인한다. 테스트 fixture는 Playwright 시각
+  게이트에만 존재하며 제품 runtime에는 유입되지 않는다.
+- navigation 전 `layout-shift` observer를 설치해 `hadRecentInput` entry를 제외하고, entry 간
+  `<1초`·session `<5초`인 표준 최대 session window를 계산한다. 측정 직전 `takeRecords()`를
+  flush하며 Chromium이 entry type을 지원하지 않거나 세 화면 중 하나라도 계측되지 않으면 실패한다.
+  각 장면은 CLS `0.1` 미만이어야 하고, 실패 시 selector·startTime·이전/현재 rect를 출력한다.
+- 첫 계측은 Home `0.009743`, Resources `0.009722`, Issues `0.009758`이었다. 공통 주원인은
+  CSS 전 `body` 기본 여백이었다. `references/ui-layer-lab/index.html:32`의 first-paint 토큰에
+  `body { margin: 0 }`을 추가해 최종 Home `0.004188`, Resources `0.004167`, Issues
+  `0.004202`로 낮췄다.
+- 잔여 데이터 전환 source는 Home `references/ui-layer-lab/src/product/pages/home/HomeClusterHealth.tsx:50`
+  의 `[data-slot="status-mark"]` `0.000021`, Issues
+  `references/ui-layer-lab/src/product/features/issues/IssuesSurface.tsx:212`의
+  `[data-slot="card-content"]` `0.000035`이다. 둘 다 예산 대비 미미해 계측 근거 없는 지오메트리
+  변경을 추가하지 않았다. Resources의 데이터 전환 source는 별도로 발생하지 않았다.
+- 200% text resize는 navigation 후 스타일 변경 경합을 제거하고 document root가 생성되는 첫
+  mutation에서 기준 글꼴과 scale을 고정한다. 최종 실행에서 모든 확대 장면의 `16px → 32px`
+  환경 검증이 결정적으로 통과했다.
+- `npm run check` PASS: TypeScript·ESLint, Vitest 117 files / 844 tests,
+  design guard 345 files, shadcn source audit 482 previews, Vite build 14,539 modules.
+  `npm run visual-product` PASS: 41 isolated scenarios, exact API request counts,
+  unexpected feature network/WebSocket 0건.
+- 화면 증거: `references/ui-layer-lab/output/playwright/product-home-authenticated-node-desktop-light-text-diet.png`,
+  `product-resources-authenticated-desktop-light.png`,
+  `product-issues-authenticated-detail-desktop-light.png`.
