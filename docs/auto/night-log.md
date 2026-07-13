@@ -2567,3 +2567,11 @@ target preflight·register 네 함수와 strict Zod 계약을 claim했다. 1회�
 - 회수: 이 사이클에서 만든 임시 branch/worktree/stash는 0개다. 다른 작업자의 활성 OSS
   통합 worktree `d176012cf`, `adce319ed`, 보호 대상 `demo/v1`, dirty legacy `dev` worktree는
   건드리지 않았다. stash 8개는 반영 여부가 증명되지 않아 유지했다.
+
+## 2026-07-13 20:15 KST — [백엔드] OSS Helm 로컬 설치 기반 canonical 착륙
+
+- merge `d86117efc8d00c09e7f75ca01f2b51cb95465a7b`, GREEN `7bb74d71f`, 문서
+  `33b0fc9f4`가 모두 `origin/dev` ancestor exit 0이다. 전체 게이트는 Ruff lint/format PASS,
+  import-linter 8 kept/0 broken, pytest `1968 passed, 3 skipped`다.
+- merge-tree clean, 삭제 0건, gateway/RCA/AI/runtime worker 변경 0건이며 신규 dev 문서의
+  누락 색인은 `1fae98ea0`에서 보완했다. lane 삭제 전 복구 hash를 이 기록으로 고정한다.

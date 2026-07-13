@@ -243,6 +243,8 @@ Bundle route는 200을 반환한다.
   동일 artifact의 공개 OCI 설치, 실제 safe-pr 여정, NATS/in-process 결과 동등성까지 남아 있다.
 - 이 기록은 완료 앵커가 아니다. 외부 GHCR namespace/package 권한이 확보되고 남은 제품 여정이
   실증된 뒤 canonical hash로 새 앵커를 기록한다.
+- 로컬 Helm 설치 기반 canonical merge는 `d86117efc8d00c09e7f75ca01f2b51cb95465a7b`이며
+  `origin/dev` ancestor exit 0을 확인했다.
 
 ### H3 — BQ-007/009/010 권위 patch 엔진
 
