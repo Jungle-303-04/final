@@ -333,3 +333,16 @@ Bundle route는 200을 반환한다.
 - 기존 권위 patch scorer 6/6, source-contract scorer 6/6. 신규 route·DB 변경은 없다.
 
 계약 완성: RemediationSourceContract + declared source adapters (1300a5fe64c03aa05fe1f8d9cb94a92c2b254962) [green]
+
+### BQ-011 — release flow 내부 모듈 분해
+
+- 상태: in_progress, gateway 계약 lock 비대상
+- 담당 lane: `codex/release-flow-modules`
+- 착수 기준: `origin/dev@6714fd3fb6946b36a1c793e402df2347cea65543`
+- 전체 게이트 baseline: Ruff lint/format PASS, import-linter 2 kept/0 broken,
+  pytest `1865 passed, 3 skipped`
+- 분해 전 기준: `src/domains/release_flow/router.py` 5,297줄
+- 범위: HTTP route·DB 조회·인가·상태 변경은 router에 남기고 policy/readiness/
+  verification/report/_support를 내부 모듈로 behavior-preserving 추출한다. 기존 router 심볼
+  re-export와 monkeypatch 관측점, blocker 순서·문구·ID·timeout fallback을 보존한다.
+- 앵커: canonical 착륙·4조건 재증명 후 기록
