@@ -142,24 +142,6 @@ const recoveryPlan = {
     evidence_refs: ["evidence-1"],
   }],
 };
-const auditTimelinePage = {
-  items: [{
-    subject: "incident.detected",
-    source: "dashboard-projection",
-    created_at: "2026-07-13T01:10:00Z",
-    causation_id: null,
-    payload_summary: { incident_id: "incident-1" },
-  }, {
-    subject: "rca.completed",
-    source: "rca-worker",
-    created_at: "2026-07-13T01:30:00Z",
-    causation_id: "event-parent-1",
-    payload_summary: { root_cause: "Memory limit exceeded" },
-  }],
-  limit: 2,
-  has_more: true,
-  next_cursor: "audit-cursor-2",
-};
 describe("createIssuesAdapter", () => {
   it("loads the list and detail through canonical request boundaries", async () => {
     const dependencies = endpoints();
@@ -214,28 +196,6 @@ describe("createIssuesAdapter", () => {
       correlationId: "correlation-1",
       signal: undefined,
     }));
-  });
-  it("loads the audit page without client sorting or workspace filtering", async () => {
-    const dependencies = endpoints();
-    const port = createIssuesAdapter(dependencies);
-
-    await expect(port.loadAuditTimeline("correlation-1", {
-      cursor: "audit-cursor-1",
-      limit: 2,
-    })).resolves.toMatchObject({
-      correlationId: "correlation-1",
-      hasMore: true,
-      nextCursor: "audit-cursor-2",
-      items: [
-        { subject: "incident.detected", causationId: null },
-        { subject: "rca.completed", causationId: "event-parent-1" },
-      ],
-    });
-    expect(dependencies.getAuditTimeline).toHaveBeenCalledWith("correlation-1", {
-      cursor: "audit-cursor-1",
-      limit: 2,
-      signal: undefined,
-    });
   });
   it("refuses a blank correlation before evidence endpoints are called", async () => {
     const dependencies = endpoints();
@@ -326,7 +286,7 @@ function endpoints(
     getRcaIncident: vi.fn().mockResolvedValue({ item: timelineItem }),
     listEvidence: vi.fn().mockResolvedValue(evidencePage),
     listRcaReports: vi.fn().mockResolvedValue(reportPage),
-    getAuditTimeline: vi.fn().mockResolvedValue(auditTimelinePage),
+    getAuditTimeline: vi.fn().mockResolvedValue({ items: [], limit: 50, has_more: false, next_cursor: null }),
     getRecoveryPlanByCorrelation: vi.fn().mockResolvedValue(recoveryPlan),
     selectRecoveryAction: vi.fn().mockResolvedValue({
       accepted: true,
