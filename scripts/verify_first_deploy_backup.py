@@ -6,6 +6,7 @@ import re
 import subprocess
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 GIT_SHA = re.compile(r"[0-9a-f]{40}")
@@ -74,10 +75,10 @@ def live_volume_from_documents(
     pv_spec = require_mapping(pv.get("spec"), "pv.spec")
     csi = require_mapping(pv_spec.get("csi"), "pv.spec.csi")
     if csi.get("driver") != "ebs.csi.aws.com":
-        raise RuntimeError("PostgreSQL volume must use the EBS CSI driver")
+        raise RuntimeError("backup source volume must use the EBS CSI driver")
     volume_id = csi.get("volumeHandle")
     if not isinstance(volume_id, str) or not VOLUME_ID.fullmatch(volume_id):
-        raise RuntimeError("PostgreSQL EBS volume handle is invalid")
+        raise RuntimeError("backup source EBS volume handle is invalid")
     return LiveVolume(pvc_name=pvc_name, pv_name=pv_name, volume_id=volume_id)
 
 
@@ -101,6 +102,8 @@ def verify_snapshot_document(
     snapshot_id: str,
     live_volume: LiveVolume,
     source_sha: str,
+    now: datetime,
+    max_age: timedelta,
 ) -> BackupEvidence:
     if not SNAPSHOT_ID.fullmatch(snapshot_id):
         raise ValueError("snapshot_id must be a full EBS snapshot ID")
@@ -117,13 +120,29 @@ def verify_snapshot_document(
     if snapshot.get("Encrypted") is not True:
         raise RuntimeError("snapshot must be encrypted")
     if snapshot.get("VolumeId") != live_volume.volume_id:
-        raise RuntimeError("snapshot does not belong to the live PostgreSQL volume")
+        raise RuntimeError("snapshot does not belong to the live source volume")
+
+    raw_started_at = snapshot.get("StartTime")
+    if not isinstance(raw_started_at, str):
+        raise RuntimeError("snapshot StartTime must be an ISO-8601 timestamp")
+    try:
+        started_at = datetime.fromisoformat(raw_started_at.replace("Z", "+00:00"))
+    except ValueError as exc:
+        raise RuntimeError("snapshot StartTime must be an ISO-8601 timestamp") from exc
+    if started_at.tzinfo is None or now.tzinfo is None:
+        raise RuntimeError("snapshot and verifier timestamps must include timezones")
+    if max_age <= timedelta(0):
+        raise ValueError("max_age must be positive")
+    if started_at > now + timedelta(minutes=5):
+        raise RuntimeError("snapshot StartTime is in the future")
+    if started_at < now - max_age:
+        raise RuntimeError("snapshot is older than the allowed deployment window")
 
     tags = snapshot_tags(snapshot.get("Tags"))
     expected_tags = {
         **REQUIRED_TAGS,
         "opsia:source-sha": source_sha,
-        "opsia:postgres-pvc": live_volume.pvc_name,
+        "opsia:source-pvc": live_volume.pvc_name,
     }
     for key, expected in expected_tags.items():
         if tags.get(key) != expected:
@@ -141,7 +160,7 @@ def run_json(command: Sequence[str]) -> Mapping[str, Any]:
         raise RuntimeError("command returned invalid JSON") from exc
 
 
-def resolve_live_volume(*, context: str, namespace: str) -> LiveVolume:
+def resolve_live_volume(*, context: str, namespace: str, pvc_name: str) -> LiveVolume:
     context_result = subprocess.run(
         ("kubectl", "config", "get-contexts", context, "-o", "name"),
         check=True,
@@ -150,37 +169,32 @@ def resolve_live_volume(*, context: str, namespace: str) -> LiveVolume:
     )
     if context_result.stdout.strip() != context:
         raise RuntimeError(f"kubectl context was not found: {context}")
-    pod = run_json(
-        (
-            "kubectl",
-            "--context",
-            context,
-            "-n",
-            namespace,
-            "get",
-            "pod",
-            "postgresql-0",
-            "-o",
-            "json",
-        )
-    )
-    pvc_name = claim_name_from_pod(pod, volume_name="data")
+    pvc_name = require_name(pvc_name, "pvc_name")
     pvc = run_json(
         ("kubectl", "--context", context, "-n", namespace, "get", "pvc", pvc_name, "-o", "json")
     )
     pvc_spec = require_mapping(pvc.get("spec"), "pvc.spec")
     pv_name = require_name(pvc_spec.get("volumeName"), "pvc.spec.volumeName")
     pv = run_json(("kubectl", "--context", context, "get", "pv", pv_name, "-o", "json"))
-    return live_volume_from_documents(pod, pvc, pv, volume_name="data")
+    pv_spec = require_mapping(pv.get("spec"), "pv.spec")
+    csi = require_mapping(pv_spec.get("csi"), "pv.spec.csi")
+    if csi.get("driver") != "ebs.csi.aws.com":
+        raise RuntimeError("backup source volume must use the EBS CSI driver")
+    volume_id = csi.get("volumeHandle")
+    if not isinstance(volume_id, str) or not VOLUME_ID.fullmatch(volume_id):
+        raise RuntimeError("backup source EBS volume handle is invalid")
+    return LiveVolume(pvc_name=pvc_name, pv_name=pv_name, volume_id=volume_id)
 
 
 def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Verify first-deploy PostgreSQL backup evidence")
+    parser = argparse.ArgumentParser(description="Verify first-deploy EBS backup evidence")
     parser.add_argument("--context", required=True)
     parser.add_argument("--namespace", default="management")
     parser.add_argument("--region", required=True)
+    parser.add_argument("--pvc-name", required=True)
     parser.add_argument("--snapshot-id", required=True)
     parser.add_argument("--source-sha", required=True)
+    parser.add_argument("--max-age-hours", type=int, default=24)
     return parser.parse_args(argv)
 
 
@@ -191,7 +205,11 @@ def main(argv: Sequence[str] | None = None) -> int:
     namespace = require_name(args.namespace, "namespace")
     if not REGION.fullmatch(args.region):
         raise ValueError("region must be an AWS region name")
-    live_volume = resolve_live_volume(context=args.context, namespace=namespace)
+    if not 1 <= args.max_age_hours <= 168:
+        raise ValueError("max_age_hours must be between 1 and 168")
+    live_volume = resolve_live_volume(
+        context=args.context, namespace=namespace, pvc_name=args.pvc_name
+    )
     snapshot = run_json(
         (
             "aws",
@@ -212,6 +230,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         snapshot_id=args.snapshot_id,
         live_volume=live_volume,
         source_sha=args.source_sha,
+        now=datetime.now(UTC),
+        max_age=timedelta(hours=args.max_age_hours),
     )
     print(
         "first-deploy backup verified: "

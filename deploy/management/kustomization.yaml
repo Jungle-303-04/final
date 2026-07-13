@@ -13,5 +13,6 @@ resources:
   - github-poll-worker.yaml
   - console.yaml
   - console-dev.yaml
+  - target-agent.yaml
   - agent-api-proxy.yaml
   - cloudflared.yaml
