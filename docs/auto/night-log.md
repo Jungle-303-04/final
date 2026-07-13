@@ -577,3 +577,15 @@ docs-only 2파일, BQ-009 `requested` + BQ-012~017 등록, origin/dev push 확�
   현행 동등 C 커밋 `66cbe8dec`를 canonical 증거로 갱신
 - 경계: frozen `src/domains/rca/**`, `src/services/ai/**`, `src/packages/runtime/worker.py`
   변경 0건; Bruno 14/15로 타임라인·최근 변경 route 재현 가능
+
+## 2026-07-13 09:58 KST — H2 착륙 증거
+
+- lane: `codex/f-inprocess-event-bus`, rebase HEAD `6ec2553b7`
+- canonical merge: `5f2393667ece3607e75674fcf8c9be9d9c1773b9` (`--no-ff`)
+- rebase: dev 대비 61커밋 낙후 상태에서 src/docs 충돌 0건, 재배치 후 `0/5`
+- 시험 merge: `git merge-tree --write-tree origin/dev codex/f-inprocess-event-bus` exit 0
+- 전체 게이트: Ruff lint PASS, format `486 files already formatted`, import-linter
+  `2 kept, 0 broken`, pytest `1708 passed, 3 skipped`
+- ancestor: lane HEAD `6ec2553b7`, 기능 commit `b6fac1dd7` 모두 origin/dev 기준 exit 0
+- 회귀 경계: NATS 기본값 유지, 명시 주입 시에만 in-memory bus 사용; gateway 계약,
+  `src/domains/rca/**`, `src/services/ai/**`, `src/packages/runtime/worker.py` 변경 0건
