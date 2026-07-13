@@ -1,5 +1,6 @@
 // RCA 인시던트 파이프라인 그래프 + 저장된 증거/RCA 리포트 실데이터 패널.
 import { useCallback, useMemo, useRef, useState, type ReactNode } from 'react';
+import { FileTextIcon, TriangleAlertIcon } from 'lucide-react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { Handle, Position, type Edge, type Node, type NodeProps } from '@xyflow/react';
 import { useEvidence, useIncident, useRcaReports, useRecoveryPlan, useSelectRecoveryAction } from '@/features/notifications/api';
@@ -936,17 +937,9 @@ function CodeText({ children }: { children: ReactNode }) {
 }
 
 function AlertIcon() {
-  return (
-    <svg viewBox="0 0 16 16" className="h-5 w-5" aria-hidden="true">
-      <path d="M8 2.5 14 13H2zM8 6v3M8 11.5h.01" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.4" />
-    </svg>
-  );
+  return <TriangleAlertIcon className="h-5 w-5" aria-hidden="true" />;
 }
 
 function FileIcon() {
-  return (
-    <svg viewBox="0 0 16 16" className="h-5 w-5" aria-hidden="true">
-      <path d="M4 2.5h5L12.5 6v7.5H4zM9 2.8V6h3.2" fill="none" stroke="currentColor" strokeLinejoin="round" strokeWidth="1.4" />
-    </svg>
-  );
+  return <FileTextIcon className="h-5 w-5" aria-hidden="true" />;
 }

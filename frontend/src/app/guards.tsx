@@ -1,5 +1,6 @@
 import { Navigate, Outlet, useLocation } from 'react-router-dom';
 import { useEffect, useState } from 'react';
+import { LockKeyholeIcon as LockGlyph, TriangleAlertIcon as AlertGlyph } from 'lucide-react';
 import { clearSessionHint, hasRecentSessionHint, markSessionSeen, useIsAdmin, useSession } from '@/features/auth/api';
 import { Button, EmptyState, Skeleton } from '@/ui';
 
@@ -66,22 +67,4 @@ export function RequireAdmin() {
 function safeReturnTo(value: string | null): string {
   if (!value || !value.startsWith('/') || value.startsWith('//') || value.includes('://')) return '/';
   return value;
-}
-
-function AlertGlyph() {
-  return (
-    <svg viewBox="0 0 24 24" className="h-5 w-5" aria-hidden="true">
-      <path d="M12 4 3.5 19h17z" fill="none" stroke="currentColor" strokeLinejoin="round" strokeWidth="1.8" />
-      <path d="M12 9v4.5M12 16.5h.01" fill="none" stroke="currentColor" strokeLinecap="round" strokeWidth="1.8" />
-    </svg>
-  );
-}
-
-function LockGlyph() {
-  return (
-    <svg viewBox="0 0 24 24" className="h-5 w-5" aria-hidden="true">
-      <rect x="5.5" y="10" width="13" height="9" rx="2" fill="none" stroke="currentColor" strokeWidth="1.8" />
-      <path d="M8.5 10V7.8a3.5 3.5 0 0 1 7 0V10" fill="none" stroke="currentColor" strokeLinecap="round" strokeWidth="1.8" />
-    </svg>
-  );
 }

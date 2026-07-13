@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { CircleCheckIcon, TriangleAlertIcon } from 'lucide-react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { Badge, Button, EmptyState, Field, InlineSpinner, Input, useToast } from '@/ui';
 import { AuthLayout } from '@/features/auth/AuthLayout';
@@ -138,19 +139,9 @@ function isEmail(value: string): boolean {
 }
 
 function CheckGlyph() {
-  return (
-    <svg viewBox="0 0 24 24" className="h-5 w-5" aria-hidden="true">
-      <circle cx="12" cy="12" r="8.5" fill="none" stroke="currentColor" strokeWidth="1.8" />
-      <path d="m8.5 12.2 2.4 2.4 4.8-5.2" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" />
-    </svg>
-  );
+  return <CircleCheckIcon className="h-5 w-5" aria-hidden="true" />;
 }
 
 function AlertGlyph() {
-  return (
-    <svg viewBox="0 0 24 24" className="h-5 w-5" aria-hidden="true">
-      <path d="M12 4 3.5 19h17z" fill="none" stroke="currentColor" strokeLinejoin="round" strokeWidth="1.8" />
-      <path d="M12 9v4.5M12 16.5h.01" fill="none" stroke="currentColor" strokeLinecap="round" strokeWidth="1.8" />
-    </svg>
-  );
+  return <TriangleAlertIcon className="h-5 w-5" aria-hidden="true" />;
 }

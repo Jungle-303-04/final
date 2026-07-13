@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { Clock3Icon } from 'lucide-react';
 import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { useLogin } from '@/features/auth/api';
 import { ApiError } from '@/shared/lib/api';
@@ -99,10 +100,5 @@ function safeReturnTo(value: string | null): string {
 }
 
 function ClockGlyph() {
-  return (
-    <svg viewBox="0 0 24 24" className="h-5 w-5" aria-hidden="true">
-      <circle cx="12" cy="12" r="8.5" fill="none" stroke="currentColor" strokeWidth="1.8" />
-      <path d="M12 7.5V12l3 1.8" fill="none" stroke="currentColor" strokeLinecap="round" strokeWidth="1.8" />
-    </svg>
-  );
+  return <Clock3Icon className="h-5 w-5" aria-hidden="true" />;
 }

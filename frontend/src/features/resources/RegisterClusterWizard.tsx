@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { CheckIcon as LucideCheckIcon } from 'lucide-react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { get, post } from '@/shared/lib/api';
 import {
@@ -1254,11 +1255,7 @@ function errorMessage(error: unknown): string {
 }
 
 function CheckIcon({ className }: { className?: string }) {
-  return (
-    <svg viewBox="0 0 16 16" className={cx('h-4 w-4 shrink-0', className)} aria-hidden="true">
-      <path d="M3.2 8.4 6.4 11.6 12.8 4.4" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" />
-    </svg>
-  );
+  return <LucideCheckIcon className={cx('h-4 w-4 shrink-0', className)} aria-hidden="true" />;
 }
 
 export function clusterImportCandidateMatches(candidate: ImportCandidate, query: string): boolean {

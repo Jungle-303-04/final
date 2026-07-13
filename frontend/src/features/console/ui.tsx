@@ -1,8 +1,22 @@
 // 운영 콘솔 셸 — 사이드바/헤더/브레드크럼/알림. 모든 표시는 실데이터(세션·알림)만 사용
-import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ComponentProps, type SVGProps } from 'react';
+import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ComponentProps } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { motion } from 'motion/react';
+import {
+  ArrowLeftIcon as LucideArrowLeftIcon,
+  BellIcon as LucideBellIcon,
+  Globe2Icon as LucideGlobeIcon,
+  InboxIcon as LucideInboxIcon,
+  MoonIcon as LucideMoonIcon,
+  PackageIcon as LucidePackageIcon,
+  SendIcon as LucideSendIcon,
+  SettingsIcon as LucideGearIcon,
+  ShieldCheckIcon as LucideShieldIcon,
+  SunIcon as LucideSunIcon,
+  TerminalIcon as LucideTerminalIcon,
+  type LucideProps,
+} from 'lucide-react';
 import { bindLiveQueryClient, startLive } from '@/shared/lib/live';
 import { useIsAdmin, useLogout, useSession } from '@/features/auth/api';
 import { timeAgo, useNotices } from '@/features/notifications/api';
@@ -281,63 +295,50 @@ function BrandMark() {
   );
 }
 
-type IconProps = SVGProps<SVGSVGElement>;
+type IconProps = LucideProps;
 
-function iconProps(props: IconProps = {}): IconProps {
-  return {
-    width: 18,
-    height: 18,
-    viewBox: '0 0 24 24',
-    fill: 'none',
-    stroke: 'currentColor',
-    strokeWidth: 1.8,
-    strokeLinecap: 'round',
-    strokeLinejoin: 'round',
-    'aria-hidden': true,
-    ...props,
-  };
-}
+const shellIconProps = { size: 18, strokeWidth: 1.8, 'aria-hidden': true } as const;
 
 function SendIcon(props: IconProps) {
-  return <svg {...iconProps(props)}><path d="M21 3 10.5 13.5" /><path d="m21 3-6.5 18-4-7.5L3 9.5 21 3Z" /></svg>;
+  return <LucideSendIcon {...shellIconProps} {...props} />;
 }
 
 function GlobeIcon(props: IconProps) {
-  return <svg {...iconProps(props)}><circle cx="12" cy="12" r="9" /><path d="M3 12h18" /><path d="M12 3c2.2 2.3 3.2 5.3 3.2 9S14.2 18.7 12 21" /><path d="M12 3c-2.2 2.3-3.2 5.3-3.2 9s1 6.7 3.2 9" /></svg>;
+  return <LucideGlobeIcon {...shellIconProps} {...props} />;
 }
 
 function ShieldIcon(props: IconProps) {
-  return <svg {...iconProps(props)}><path d="M12 3.5 5 6v5.7c0 4.2 2.8 7.1 7 8.8 4.2-1.7 7-4.6 7-8.8V6z" /><path d="m9 12 2 2 4-4" /></svg>;
+  return <LucideShieldIcon {...shellIconProps} {...props} />;
 }
 
 function TerminalIcon(props: IconProps) {
-  return <svg {...iconProps(props)}><path d="m5 8 4 4-4 4" /><path d="M11 17h8" /><rect x="3" y="4" width="18" height="16" rx="2" /></svg>;
+  return <LucideTerminalIcon {...shellIconProps} {...props} />;
 }
 
 function PackageIcon(props: IconProps) {
-  return <svg {...iconProps(props)}><path d="m12 3 8 4.5v9L12 21l-8-4.5v-9z" /><path d="M4.5 7.8 12 12l7.5-4.2" /><path d="M12 12v8.5" /></svg>;
+  return <LucidePackageIcon {...shellIconProps} {...props} />;
 }
 
 function GearIcon(props: IconProps) {
-  return <svg {...iconProps(props)}><circle cx="12" cy="12" r="3" /><path d="M19 12a7 7 0 0 0-.1-1l2-1.5-2-3.4-2.4 1a7 7 0 0 0-1.8-1L14.4 3h-4.8L9.3 6.1a7 7 0 0 0-1.8 1l-2.4-1-2 3.4L5.1 11a7 7 0 0 0 0 2l-2 1.5 2 3.4 2.4-1a7 7 0 0 0 1.8 1l.3 3.1h4.8l.3-3.1a7 7 0 0 0 1.8-1l2.4 1 2-3.4-2-1.5q.1-.5.1-1Z" /></svg>;
+  return <LucideGearIcon {...shellIconProps} {...props} />;
 }
 
 function BellIcon(props: IconProps) {
-  return <svg {...iconProps(props)}><path d="M18 9a6 6 0 1 0-12 0c0 6-2.4 7-2.4 7h16.8S18 15 18 9Z" /><path d="M10.2 20a2 2 0 0 0 3.6 0" /></svg>;
+  return <LucideBellIcon {...shellIconProps} {...props} />;
 }
 
 function InboxIcon(props: IconProps) {
-  return <svg {...iconProps(props)}><path d="M5 5h14v14H5z" /><path d="M5 14h4l1.5 2h3L15 14h4" /><path d="M8 9h8" /><path d="M8 12h8" /></svg>;
+  return <LucideInboxIcon {...shellIconProps} {...props} />;
 }
 
 function SunIcon(props: IconProps) {
-  return <svg {...iconProps(props)}><circle cx="12" cy="12" r="3.5" /><path d="M12 2.5v2" /><path d="M12 19.5v2" /><path d="m4.7 4.7 1.4 1.4" /><path d="m17.9 17.9 1.4 1.4" /><path d="M2.5 12h2" /><path d="M19.5 12h2" /><path d="m4.7 19.3 1.4-1.4" /><path d="m17.9 6.1 1.4-1.4" /></svg>;
+  return <LucideSunIcon {...shellIconProps} {...props} />;
 }
 
 function MoonIcon(props: IconProps) {
-  return <svg {...iconProps(props)}><path d="M20 15.5A8.3 8.3 0 0 1 8.5 4 7.5 7.5 0 1 0 20 15.5Z" /></svg>;
+  return <LucideMoonIcon {...shellIconProps} {...props} />;
 }
 
 function ArrowLeftIcon(props: IconProps) {
-  return <svg {...iconProps(props)}><path d="M19 12H5" /><path d="m12 5-7 7 7 7" /></svg>;
+  return <LucideArrowLeftIcon {...shellIconProps} {...props} />;
 }

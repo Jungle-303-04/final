@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react';
+import { Globe2Icon, PlusIcon as LucidePlusIcon, SearchIcon as LucideSearchIcon } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useClusters } from '@/features/cluster/api';
 import { clusterConnectionMeta, connectedStatuses } from '@/features/cluster/status';
@@ -170,26 +171,13 @@ function environmentLabel(value: string) {
 }
 
 function PlusIcon() {
-  return (
-    <svg viewBox="0 0 16 16" className="h-4 w-4" aria-hidden="true">
-      <path d="M8 3v10M3 8h10" fill="none" stroke="currentColor" strokeLinecap="round" strokeWidth="1.8" />
-    </svg>
-  );
+  return <LucidePlusIcon className="h-4 w-4" aria-hidden="true" />;
 }
 
 function GlobeIcon() {
-  return (
-    <svg viewBox="0 0 16 16" className="h-5 w-5" aria-hidden="true">
-      <circle cx="8" cy="8" r="5.5" fill="none" stroke="currentColor" strokeWidth="1.4" />
-      <path d="M2.7 8h10.6M8 2.5c1.7 1.5 2.5 3.3 2.5 5.5S9.7 12 8 13.5C6.3 12 5.5 10.2 5.5 8S6.3 4 8 2.5z" fill="none" stroke="currentColor" strokeLinecap="round" strokeWidth="1.2" />
-    </svg>
-  );
+  return <Globe2Icon className="h-5 w-5" aria-hidden="true" />;
 }
 
 function SearchIcon({ className = 'h-5 w-5' }: { className?: string }) {
-  return (
-    <svg viewBox="0 0 16 16" className={cx('h-5 w-5', className)} aria-hidden="true">
-      <path d="M7 11.5a4.5 4.5 0 1 1 0-9 4.5 4.5 0 0 1 0 9zM10.5 10.5 14 14" fill="none" stroke="currentColor" strokeLinecap="round" strokeWidth="1.6" />
-    </svg>
-  );
+  return <LucideSearchIcon className={cx('h-5 w-5', className)} aria-hidden="true" />;
 }
