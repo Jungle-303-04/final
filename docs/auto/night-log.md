@@ -2368,6 +2368,22 @@ target preflight·register 네 함수와 strict Zod 계약을 claim했다. 1회�
   파일 삭제·소유권 밖·frozen·gateway 계약 변경 0건, `85dae710b`·`de9e600c7`의
   `origin/dev` ancestor exit 0. J 배포 실행은 0건이다.
 
+## 2026-07-13 18:46 KST — [백엔드] 의존성 기동 재시도 직접 테스트 착륙
+
+- lane `codex/config-retry-tests`, test `82c07b920`, feature HEAD
+  `80edc84495468440960f0590b7ca5eb7c5232e67`, canonical no-ff merge
+  `d0953f2c6566c5761c5158e5a7a14ef7a54292b5`.
+- NATS/PostgreSQL 공용 `retry_dependency()`의 첫 성공, N-1 일시 실패 후 성공,
+  정확한 attempt 한도·구조화 warning context, `limit=0`, task cancellation을 직접
+  테스트 5개로 고정했다. 소진 경로의 마지막 sleep 횟수는 계약화하지 않았다.
+- 성공 종료를 제거한 비커밋 mutation에서 2건 실패를 확인했다. 원복 후 focused
+  5 passed, asyncio debug·warning-error, 10회 반복 모두 PASS이고 독립 재감사 2건도 PASS다.
+- 프로덕션 source 변경 0건. 전체 게이트는 Ruff lint/format PASS, import-linter
+  8 kept/0 broken, pytest `1962 passed, 3 skipped`; manifest 69/20이다.
+- 4조건: merge-tree clean/tree `70599e747873268d57d70886d98618cfdffc3cd6`,
+  source·파일 삭제·소유권 밖·frozen·gateway 계약 변경 0건, `80edc8449`·`d0953f2c6`의
+  `origin/dev` ancestor exit 0. J 배포 실행은 0건이다.
+
 ## 2026-07-13 18:48 KST — [프론트] dev 정기 흡수·감사 payload 강제색 보강
 
 - `4a8264081`은 프론트 HEAD와 `origin/dev@de9e600c7`을 no-ff로 통합했다.
@@ -2423,6 +2439,26 @@ target preflight·register 네 함수와 strict Zod 계약을 claim했다. 1회�
   design guard 347 files, shadcn source audit 482 previews, Vite build 14,539 modules.
   시각 증거는 `references/ui-layer-lab/output/playwright/product-issues-locale-smoke-ko.png`이며,
   커밋 push 후 `origin/woonyong/ui-layer-lab` ancestor exit 0을 확인했다.
+
+## 2026-07-13 19:11 KST — [백엔드] 감사 이벤트 여정 계약 착륙
+
+- lane `codex/audit-journey-contract`, RED `1d0be030e`, 코드 `b729ee6e4`, 문서와
+  feature HEAD `4432e3ca55ed0026dcc9c17a3b6a48b2555603c2`, canonical no-ff merge
+  `29403eb8381280ddb75f3045118794d99b1d9eee`다.
+- `AuditTimelineItem`은 required non-empty 자기 `event_id`와 직접 부모 `causation_id`를
+  분리 반환한다. `journey_stage`는 exact subject 기반
+  `alert/evidence/rca/recovery/command/pr/workflow/cluster/ai/notification/system/unknown`
+  중 하나이며 현재 `EventSubject` 65개는 65/65 분류됐다.
+- stage는 재정렬 phase가 아닌 표시 lane이다. 프론트는 서버 `(created_at, id)` 순서를 유지하고
+  subject prefix를 추측하지 않는다. 미지 subject만 `unknown`이고 raw payload는 계속 비공개다.
+- 프론트 폴링 인계: `audit-timeline-schemas.ts`와 `issuesEndpointContract.ts` strict item에
+  `event_id`·`journey_stage`를 추가한 뒤 새 백엔드 응답과 결합 배포한다. 그 전에는 strict Zod가
+  additive 필드를 거부하므로 backend/frontend 배포를 함께 진행하지 않는다.
+- focused 10 passed, 전체 게이트 Ruff lint/format PASS, import-linter 8 kept/0 broken,
+  pytest `1963 passed, 3 skipped`; manifest 69/20, Bruno 새 필드 검산 PASS다.
+- 4조건: merge-tree clean/tree `46b4497f79d6b400003d669aef5779e5b49a45d6`,
+  삭제·소유권 밖·frozen 변경 0건, `4432e3ca5`·`29403eb83`의 `origin/dev`
+  ancestor exit 0. J 배포 실행은 0건이다.
 
 ## 2026-07-13 19:12 KST — [프론트] Resources namespace 폼 직접 테스트
 

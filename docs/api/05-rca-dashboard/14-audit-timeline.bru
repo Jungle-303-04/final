@@ -21,9 +21,15 @@ tests {
       expect(body).to.have.property("has_more");
       expect(body).to.have.property("next_cursor");
       body.items.forEach(function (item) {
+        expect(item).to.have.property("event_id").that.is.a("string").and.is.not.empty;
         expect(item).to.have.property("subject");
         expect(item).to.have.property("source");
         expect(item).to.have.property("created_at");
+        expect(item).to.have.property("journey_stage");
+        expect([
+          "alert", "evidence", "rca", "recovery", "command", "pr",
+          "workflow", "cluster", "ai", "notification", "system", "unknown"
+        ]).to.include(item.journey_stage);
         expect(item).to.have.property("payload_summary");
         expect(item).not.to.have.property("payload");
       });

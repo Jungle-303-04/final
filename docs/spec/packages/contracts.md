@@ -468,6 +468,8 @@ def merge_provider_policy(base: EvidenceProviderPolicy, incoming: EvidenceProvid
 ### `gateway/responses.py`
 
 - `src/packages/contracts/gateway/responses.py :: JsonMap` — `dict[str, Any]` 별칭.
+- `src/packages/contracts/gateway/responses.py :: AuditJourneyStage` — 감사 이벤트의 서버 권위
+  여정 단계. `alert|evidence|rca|recovery|command|pr|workflow|cluster|ai|notification|system|unknown`.
 
 응답 모델(모두 `StrictModel`, 앵커 `src/packages/contracts/gateway/responses.py :: <이름>`):
 
@@ -488,6 +490,8 @@ def merge_provider_policy(base: EvidenceProviderPolicy, incoming: EvidenceProvid
 | `CommandStatusResponse` | `command_id/cluster_id/correlation_id/action/status: str`, `result: dict[str, Any] = {}`, `completed_at: str \| None = None` — 콘솔이 명령 진행 상태·agent 실측 결과를 폴링(임의 완료 표시 금지 계약) |
 | `RcaTimelineItem` | `workspace_id: str`, `correlation_id: str`, `cluster_id/incident_id/evidence_ref: str \| None = None`, `current_subject: str`, `status: str`, `root_cause: str \| None = None`, `confidence: float \| None = None`, `supporting_evidence/missing_evidence: list[str] = []`, `action_route/command_id/pr_url/error_reason/updated_at: str \| None = None` |
 | `RcaTimelineResponse` | `items: list[RcaTimelineItem]` |
+| `AuditTimelineItem` | `event_id: str`(non-empty 자기 ID), `subject/source/created_at: str`, `causation_id: str \| None = None`(직접 부모 ID), `journey_stage: AuditJourneyStage`, `payload_summary: JsonMap = {}` |
+| `AuditTimelineResponse` | `items: list[AuditTimelineItem] = []`, `limit: int`, `has_more: bool`, `next_cursor: str \| None = None` |
 | `RcaIncidentResponse` | `item: RcaTimelineItem` |
 | `EvidenceSourceSummaryItem` / `EvidenceRecordItem` / `EvidenceQueryResponse` | evidence query 응답. `EvidenceQueryResponse`는 `items`, `limit`, `offset`, `has_more`, `next_cursor: str \| None = None`을 포함한다. `next_cursor`가 있으면 다음 페이지 요청의 `cursor`로 넘긴다 |
 | `RcaCandidateScoreItem` / `RcaEvidenceRefItem` / `RcaMissingCheckItem` / `RcaReportSummaryItem` / `RcaReportListResponse` | RCA report query 응답. `RcaReportListResponse`는 `items`, `limit`, `offset`, `has_more`, `next_cursor: str \| None = None`을 포함한다 |
