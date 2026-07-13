@@ -26,6 +26,7 @@ def test_service_image_contains_alembic_runtime_and_revision_assets() -> None:
     assert "COPY --chown=appuser:appuser alembic ./alembic" in dockerfile
     assert "COPY --chown=appuser:appuser alembic.ini ./alembic.ini" in dockerfile
     assert "alembic heads" in dockerfile
+    assert "python -m packages.storage.baseline verify" in dockerfile
 
 
 def test_migration_job_uses_direct_postgres_and_expected_head_guard() -> None:
