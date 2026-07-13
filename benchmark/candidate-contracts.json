@@ -3214,9 +3214,7 @@
       "contradicting_signals": [],
       "contradiction_policy": "not_modeled_v0.1",
       "missing_evidence_policy": "all_required_evidence_and_supporting_signal_groups",
-      "patch_capabilities": [
-        "safe_pr"
-      ],
+      "patch_capabilities": [],
       "allowed_remediations": [
         {
           "action_type": "probe_fix",
