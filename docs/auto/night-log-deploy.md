@@ -49,3 +49,13 @@
   태그를 기록하고 임시 Pod·PVC·PV·EBS 볼륨을 모두 삭제했다. 운영 DB는 변경하지 않았다.
   최종 배포 SHA가 아직 이동 중이므로 `opsia:source-sha` 태그는 첫 수동 배포 대상 SHA를
   확정할 때 기록한다.
+- [06:27 KST] [NATS 복구 리허설] `snap-0cd67361e50445185`에서 5GiB 임시 EBS
+  볼륨을 복원하고 live와 같은 `nats:2.10-alpine`·JetStream 설정으로 기동했다.
+  복원본 `/jsz`는 `streams=1`, `messages=44134`, `bytes=77025734`를 반환했다.
+  snapshot에 restore rehearsal·backup kind·`data-nats-0` source PVC 증거 태그를
+  기록한 뒤 임시 Pod·PVC·PV·EBS 볼륨을 모두 삭제했다. PostgreSQL snapshot의
+  source PVC 태그도 정본 키 `opsia:source-pvc=data-postgresql-0`으로 확인했다.
+- [06:27 KST] [BLOCKED] 첫 배포 전 live `DEV_AUTH_BYPASS` 미설정과 live에 없는
+  desired worker의 rollback capture 거부가 남아 있다. 검증을 완화하지 않고 workflow
+  내부의 명시적 `0` 주입과 existing workload digest 경계로 해소하도록 백엔드 세션에
+  재요청했다.
