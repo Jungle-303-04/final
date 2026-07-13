@@ -114,6 +114,15 @@ def test_deploy_orders_auth_migration_rollout_smoke_and_status_recording() -> No
         "Enforce live auth bypass zero"
     )
     assert names.index("Enforce live auth bypass zero") < names.index(
+        "Freeze first-deploy database writers"
+    )
+    assert names.index("Freeze first-deploy database writers") < names.index(
+        "Bootstrap and copy first-deploy database"
+    )
+    assert names.index("Bootstrap and copy first-deploy database") < names.index(
+        "Switch first-deploy database target"
+    )
+    assert names.index("Switch first-deploy database target") < names.index(
         "Run fail-closed database migration"
     )
     assert names.index("Run fail-closed database migration") < names.index(
@@ -143,7 +152,7 @@ def test_smoke_failure_restores_both_previous_image_sets() -> None:
     steps = steps_by_name()
     pre = steps["Run pre-deploy smoke"]
     post = steps["Run post-deploy smoke"]
-    rollback = steps["Restore previous image digests after failure"]
+    rollback = steps["Restore previous release after failure"]
 
     assert pre["id"] == "pre_smoke"
     assert "scripts/pre-deploy-smoke.sh" in pre["run"]
@@ -152,6 +161,8 @@ def test_smoke_failure_restores_both_previous_image_sets() -> None:
     assert "steps.pre_smoke.outputs.frontend_bundle" in post["env"]["PRE_DEPLOY_FRONTEND_BUNDLE"]
     assert rollback["if"] == "failure() && steps.capture.outcome == 'success'"
     assert rollback["run"].count("revert_image_digests.py") == 2
+    assert "database_cutover_config.py switch --direction source" in rollback["run"]
+    assert "database_writer_freeze.py restore" in rollback["run"]
 
 
 def test_deploy_uses_immutable_digest_and_image_only_rollback_without_db_downgrade() -> None:
@@ -162,7 +173,39 @@ def test_deploy_uses_immutable_digest_and_image_only_rollback_without_db_downgra
     assert "steps.capture.outcome == 'success'" in source
     assert "kubectl rollout undo" not in source
     assert "alembic downgrade" not in source
-    assert "packages.storage.baseline bootstrap" not in source
+    assert "packages.storage.baseline bootstrap" in source
+    assert "packages.storage.data_cutover copy" in source
+
+
+def test_first_deploy_freezes_writers_before_copy_and_restores_exact_replicas() -> None:
+    steps = steps_by_name()
+    freeze = steps["Freeze first-deploy database writers"]
+    cutover = steps["Bootstrap and copy first-deploy database"]
+    switch = steps["Switch first-deploy database target"]
+    restore = steps["Restore first-deploy database writers"]
+
+    assert freeze["if"] == "github.event_name == 'workflow_dispatch'"
+    assert "database_writer_freeze.py capture" in freeze["run"]
+    assert "database_writer_freeze.py freeze" in freeze["run"]
+    assert "cluster-agent" in (ROOT / "scripts/database_writer_freeze.py").read_text()
+    assert cutover["if"] == "github.event_name == 'workflow_dispatch'"
+    assert "database-cutover-job.yaml" in cutover["run"]
+    assert "packages.storage.baseline" not in cutover["run"]
+    assert switch["if"] == "github.event_name == 'workflow_dispatch'"
+    assert "database_cutover_config.py switch --direction target" in switch["run"]
+    assert restore["if"] == "github.event_name == 'workflow_dispatch'"
+    assert "database_writer_freeze.py restore" in restore["run"]
+
+
+def test_first_deploy_does_not_mutate_source_schema_or_create_missing_workloads() -> None:
+    source = WORKFLOW_PATH.read_text(encoding="utf-8")
+
+    assert "database_writer_freeze.py" in source
+    assert "--allow-missing-live" in source
+    assert "kubectl apply --filename deploy/management" not in source
+    assert "alembic stamp" not in source
+    assert "alembic downgrade" not in source
+    assert "DROP DATABASE" not in source
 
 
 def test_service_and_console_images_share_the_gated_source_sha_and_digest_release() -> None:
