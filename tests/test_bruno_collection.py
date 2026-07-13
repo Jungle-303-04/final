@@ -338,6 +338,24 @@ def test_bruno_cli_runner_uses_isolated_profile_and_cleans_up_last() -> None:
     assert "purge={{cluster_purge}}" in cleanup_request
 
 
+def test_bruno_cli_runner_includes_operational_rca_reads_and_readme_handoff() -> None:
+    runner = (ROOT_DIR / "scripts" / "run-bruno-aws.sh").read_text(encoding="utf-8")
+    readme = (API_DIR / "README.md").read_text(encoding="utf-8")
+    requests = (
+        "05-rca-dashboard/13-remediation-bundle.bru",
+        "05-rca-dashboard/14-audit-timeline.bru",
+        "05-rca-dashboard/15-recent-changes.bru",
+    )
+
+    positions = [runner.index(request) for request in requests]
+
+    assert positions == sorted(positions)
+    assert "`13-remediation-bundle`" in readme
+    assert "`14-audit-timeline`" in readme
+    assert "`15-recent-changes`" in readme
+    assert "실제 200" in readme
+
+
 def test_rca_e2e_workflow_is_thin_separate_and_explicitly_selected() -> None:
     workflow_dir = API_DIR / "16-rca-debug"
     requests = sorted(workflow_dir.glob("*.bru"))
