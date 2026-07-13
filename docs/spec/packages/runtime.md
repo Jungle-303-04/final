@@ -309,11 +309,12 @@ async def deliver(call: Callable[[], Awaitable[Any]], ok: Callable[[Any], Any],
                   fail: Callable[[Exception], Any]) -> AsyncIterator[Any]
 ```
 외부 호출 1회 — 성공 시 `ok(결과)` body 1건, 예외 시 `fail(예외)` body 1건을 yield(try/except 를 한 곳에 모아 게이트웨이 핸들러는 선언만).
-- `src/packages/runtime/outbound.py :: Outbound` — `Protocol`: `async def post(self, path: str, body: dict[str, Any]) -> int` (테스트는 테스트용 대역으로 교체).
-- `src/packages/runtime/outbound.py :: HttpOutbound` — stdlib `urllib` 기반 기본 어댑터.
-  - 클래스 상수: `BASE_URL_ENV = "OUTBOUND_CALLBACK_BASE_URL"`, `DEFAULT_BASE_URL = "http://api-gateway:8000"`, `TIMEOUT_SECONDS_ENV = "OUTBOUND_HTTP_TIMEOUT_SECONDS"`, `TIMEOUT_SECONDS = int(env(..., "5"))`.
-  - `__init__(base_url: str | None = None)` — 인자 우선, 없으면 env.
-  - `async def post(path, body) -> int` — `base_url + path` 로 JSON POST(`asyncio.to_thread`), 응답 status 반환.
+
+`deliver`는 async iterator를 순회할 때 `call()`을 정확히 한 번 실행한다. `Exception`은 원본
+인스턴스 그대로 `fail`에 전달하지만 `CancelledError`처럼 `BaseException` 계열인 취소 신호는
+실패 이벤트로 바꾸지 않는다. `ok`·`fail` mapper 자체의 오류도 숨기지 않고 호출자에게 전파한다.
+이 모듈에는 별도 HTTP client protocol이나 기본 HTTP adapter가 없으며, 외부 I/O 구현은 각
+서비스가 주입한다.
 
 `src/packages/runtime/__init__.py` 는 빈 모듈.
 
