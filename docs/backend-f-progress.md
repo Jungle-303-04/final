@@ -245,15 +245,31 @@ Bundle route는 200을 반환한다.
 
 ### BQ-017 — provider 1급화와 연결 단계
 
-- 상태: in_progress, gateway 계약 lock 보유
+- 상태: done, gateway 계약 lock 해제
 - 담당 lane: `codex/f-provider-connection-stage`
 - 착수 기준: `origin/dev@a65c66c7102fb453e583ed4ec44f1950a9df9ba2`
 - 전체 게이트 baseline: Ruff lint/format PASS, import-linter 2 kept/0 broken,
   pytest `1735 passed, 3 skipped`
 - manifest baseline: management 68, target 20
-- 계약 범위: 기존 응답에 optional `provider`·`connection_stage`만 추가하며 기존
-  `connection_status`와 기존 소비자 계약은 보존한다.
-- 앵커: 감독 검증·GO 후 기록
+- canonical merge: `d507ca6d47a0e953f6d1a0ad6931d576738c18cc`
+- 코드: `db4798d4e4973ec3d384d71eca08aba6d4e9f6b7`
+- 전체 게이트: Ruff lint/format PASS, import-linter 2 kept/0 broken,
+  pytest `1831 passed, 3 skipped`; manifest management 69, target 20
+- 프론트 호환 증거: `origin/woonyong/ui-layer-lab@bfaf03901`에서
+  `ClusterSummary.provider`·`ClusterSummary.connection_stage`·
+  `ClusterConnectionStatusResponse.connection_stage`를 optional로 수용한다.
+- `provider` 허용값은 `eks/gke/aks/onprem/kind/unknown`이다. 구체적인 등록값을
+  agent의 providerID·vendor label 감지보다 우선하고, 일반 클러스터는 `onprem`,
+  판정할 수 없는 경우는 `unknown`으로 투영한다.
+- `connection_stage` 허용값은 `token_issued/awaiting_install/agent_connected/`
+  `snapshot_received/ready/expired/error`다. 기존 `connection_status`는 보존한다.
+  `token_issued`는 등록 직후 응답에만 사용하고, `ready`는 현재 연결 epoch의 snapshot과
+  후속 heartbeat가 모두 확인된 상태다. `expired`는 UX 상태이며 인증 만료 경계가 아니다.
+- 신규 route·DB 변경은 없다. 기존 Bruno
+  `docs/api/11-clusters/01-list-clusters.bru`, `02-get-cluster.bru`,
+  `03-connection-status.bru`에서 additive 응답을 검산한다.
+
+계약 완성: ClusterSummary.provider + connection_stage (db4798d4e4973ec3d384d71eca08aba6d4e9f6b7) [green]
 
 ### BQ-014 — Argo observer 어댑터
 
