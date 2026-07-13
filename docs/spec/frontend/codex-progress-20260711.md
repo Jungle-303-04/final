@@ -1696,6 +1696,29 @@ API 완성: getIncidentRecentChanges (4f602cc86660a7f8a12583cffc44a53e220d9dbf)
 
 API 완성: listApplicationRuns (429fb1d9122c6bf264f5ee1beef948107bb5161e)
 
+## 2026-07-13 APIQ-033 클러스터 등록 전송 계약 완료
+
+- claim `3adb92bdd`, API RED `065f84ab1`, ClusterSummary stage RED `482009c1f`,
+  GREEN `8678d63b0`을 순서대로 분리했다. GREEN은
+  `origin/woonyong/ui-layer-lab` ancestor exit 0이다.
+- provider catalog·registration discovery·target preflight·target register의 외피와 typed row를
+  strict close했다. backend가 JsonMap으로 선언한 category record·deploy provider·labels·selected와
+  요청 `provider_config`만 open으로 유지했다.
+- 등록 요청은 `workspace_id`를 받거나 전송하지 않는다. one-time agent token·manifest·bootstrap
+  command는 응답 계약에서만 검증하며 자동 재전송·로그·URL·storage·query cache 소비를 금지한다.
+- `ClusterSummary.connection_stage`를 canonical 7단계 optional enum으로 열고 기존 connection 응답과
+  install receipt도 단일 `connectionStageSchema`를 재사용한다. strict row와 enum 밖 값 거부는 유지된다.
+- targeted 3 files / 30 tests PASS. full `npm run check` PASS: TypeScript·ESLint,
+  Vitest 113 files / 821 tests, product design guard 340 files, shadcn source audit 482 previews,
+  Vite production build 14,538 modules.
+- VP-008 UI는 preflight/register validation 정합, 발급 전 command preview 또는 정본 순서 변경,
+  명시적 receipt resume/reissue, structured stage error 계약이 착륙할 때까지 주차한다.
+
+API 완성: getProviderCatalog (8678d63b0)
+API 완성: getProviderClusterDiscovery (8678d63b0)
+API 완성: preflightTargetRegistration (8678d63b0)
+API 완성: registerTarget (8678d63b0)
+
 ## 2026-07-13 VP-006 BLOCKED — auto-revert 식별 계약 결손
 
 - BQ-007 canonical merge `6d68325bf1cc47f55810e5dc2189e51a6fe916c0`은 `origin/dev`
