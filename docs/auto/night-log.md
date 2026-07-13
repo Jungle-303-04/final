@@ -2990,7 +2990,7 @@ target preflight·register 네 함수와 strict Zod 계약을 claim했다. 1회�
   실제 EXPLAIN과 migration 왕복 검증 뒤 활성화한다.
 - 계약 앵커: `APPLICATION_FILTER_RESULTS_PATH + APPLICATION_FILTER_FACETS_PATH +
   APPLICATION_LABEL_FACETS_PATH` / `e7196ea7f` / `[green]`.
-- 착륙 조작 감사: 첫 merge 명령의 cwd 오류로 보호된 로컬 UI 브랜치에 merge commit이 1회
-  생성됐으나 원격 push 0건이었다. commit을 `codex/applications-merge-recovery`로 보존하고
+- 착륙 조작 감사: 첫 merge 명령의 cwd 오류로 보호된 로컬 UI 브랜치에 merge `832855c4f`가
+  1회 생성됐으나 원격 push 0건이었다. commit을 `codex/applications-merge-recovery`로 보존하고
   `woonyong/ui-layer-lab`을 원격 `08a7dd16e`에서 비파괴 재생성한 뒤, 별도 detached dev worktree에서
   올바른 merge `cbba9d28e`를 생성·push했다. reset/revert/force는 사용하지 않았다.
