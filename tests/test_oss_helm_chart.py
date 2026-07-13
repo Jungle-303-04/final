@@ -240,7 +240,7 @@ def test_external_access_drives_secure_cookie_and_authoritative_agent_url() -> N
         "--set",
         "access.mode=loadbalancer",
         "--set-string",
-        "access.externalUrl=https://opsia.example.com/base",
+        "access.externalUrl=https://opsia.example.com",
     )
     deployment = next(
         item
@@ -250,8 +250,8 @@ def test_external_access_drives_secure_cookie_and_authoritative_agent_url() -> N
     controller = _container(deployment, "controller")
     controller_env = {item["name"]: item.get("value") for item in controller["env"]}
 
-    assert controller_env["PUBLIC_MANAGEMENT_BASE_URL"] == "https://opsia.example.com/base"
-    assert controller_env["OPSIA_EXTERNAL_URL"] == "https://opsia.example.com/base"
+    assert controller_env["PUBLIC_MANAGEMENT_BASE_URL"] == "https://opsia.example.com"
+    assert controller_env["OPSIA_EXTERNAL_URL"] == "https://opsia.example.com"
     assert controller_env["COOKIE_SECURE"] == "1"
     assert controller_env["DEV_AUTH_BYPASS"] == "0"
     assert controller_env["TARGET_AGENT_IMAGE"] == "ghcr.io/opsia/opsia:0.1.0"
@@ -286,6 +286,9 @@ def test_access_values_reject_unknown_mode_and_unsafe_external_url() -> None:
     for args in (
         ("--set", "access.mode=public"),
         ("--set-string", "access.externalUrl=javascript:alert(1)"),
+        ("--set-string", "access.externalUrl=https://user@opsia.example.com"),
+        ("--set-string", "access.externalUrl=https://opsia.example.com/path"),
+        ("--set-string", "access.externalUrl=https://opsia.example.com?next=evil"),
     ):
         result = subprocess.run(
             ["helm", "template", "opsia", str(CHART), *args],

@@ -1333,6 +1333,8 @@ def test_target_registration_preflight_reports_self_only_access_contract(monkeyp
 
     response = asyncio.run(run())
 
+    assert response.valid is False
+    assert "external access URL is required to enroll another cluster" in response.errors
     assert response.management_access.model_dump() == {
         "mode": "portforward",
         "external_url": None,
@@ -2013,6 +2015,53 @@ def test_deployment_external_url_overrides_untrusted_registration_url(monkeypatc
         "reachability": "external",
         "limitation_reason": None,
     }
+
+
+def test_self_only_deployment_rejects_remote_cluster_registration(monkeypatch) -> None:
+    monkeypatch.setenv("PUBLIC_MANAGEMENT_BASE_URL", "http://opsia.opsia-system.svc")
+    monkeypatch.setenv("OPSIA_ACCESS_MODE", "portforward")
+    monkeypatch.setenv("OPSIA_EXTERNAL_URL", "")
+
+    with pytest.raises(HTTPException) as exc:
+        asyncio.run(
+            register_target(
+                target_request(),
+                current=SimpleNamespace(user_id="local-user", workspace_id="default"),
+                db=StubDb(),
+                events=StubEvents(),
+            )
+        )
+
+    assert exc.value.status_code == 422
+    assert exc.value.detail == "external access URL is required to enroll another cluster"
+
+
+@pytest.mark.parametrize(
+    "unsafe_url",
+    [
+        "file:///etc/passwd",
+        "https://user@opsia.example.com",
+        "https://opsia.example.com/path",
+        "https://opsia.example.com?next=evil",
+    ],
+)
+def test_target_registration_rejects_unsafe_management_url(monkeypatch, unsafe_url: str) -> None:
+    monkeypatch.delenv("PUBLIC_MANAGEMENT_BASE_URL", raising=False)
+    monkeypatch.delenv("PUBLIC_API_BASE_URL", raising=False)
+    monkeypatch.delenv("PUBLIC_BASE_URL", raising=False)
+
+    with pytest.raises(HTTPException) as exc:
+        asyncio.run(
+            register_target(
+                target_request().model_copy(update={"management_base_url": unsafe_url}),
+                current=SimpleNamespace(user_id="local-user", workspace_id="default"),
+                db=StubDb(),
+                events=StubEvents(),
+            )
+        )
+
+    assert exc.value.status_code == 422
+    assert exc.value.detail == MANAGEMENT_BASE_URL_NOT_CONFIGURED
 
 
 def test_target_registration_rejects_missing_management_url(monkeypatch) -> None:
