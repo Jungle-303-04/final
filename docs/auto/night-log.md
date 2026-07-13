@@ -3405,3 +3405,83 @@ index 591d560bc..5f1879a74 100644
 - 정리 코드 착륙 origin SHA `3cca846fef1cb7a92d2348230836804386c8c95c`,
   `git merge-base --is-ancestor 3cca846fe origin/dev` exit 0. 소유 범위 밖 변경은 승인된
   D-039/D-040 formatter 복구와 이 night-log 기록뿐이다.
+
+[2026-07-14 03:25 KST] [판단자] 판정: 정상 — 착륙 다수(계약 BQ-022/023/024-Applications, 배포 P0 게이트 3커밋, 프론트 정리 S0~S4; 전부 ancestor exit 0), codex/* 정체 lane 0, AcceptedResponse 무결, 배포 스위치 off 유지, HOLD 0. 단 [D-025] 위반 1건: VP-011/013 기획 정본·조율 문서(D-044~046, BQ-035~038 행)가 dev worktree에 30분 초과 미커밋/미추적 + lab 전용 커밋 `88cca9b8f` 잔여 조각 미이관 — 착륙 촉구 지시 [D-047] 발행. 프론트에 BQ-023/024 계약 착륙 소비 알림 포함.
+
+## 2026-07-14 03:30 KST — [문서 착륙 완료] 기획 정본·결정·작업 큐
+
+- 공유 dev worktree의 기존 조율 세션 미커밋 2파일은 사람 승인에 따라 버리고
+  `origin/dev@57ebeb452`로 hard reset했다. 이후 동시 착륙한 프론트·PR 커밋을 rebase해
+  최종 문서 commit `c96ce735f7665af86dbd3e923fcb238a7b905884`을 origin/dev에 push했다.
+- commit 제목은 컨벤션에 따라 `docs: 대시보드 기획 / shadcn 전환 / 서버 계약`, author와
+  committer는 모두 `choi woo-nyong <woonyong.kr@gmail.com>`이다.
+- `vp-011-home-widget-dashboard.md` 22,931B(SHA-256
+  `6fb0b42f599a2d19b6f76d806a540b1538ab3cde59407b4b7e8e09ced54e51ce`)와
+  `vp-013-shadcn-migration.md` 12,513B(SHA-256
+  `b47ec235b4312a386031638393e802cfd537720459ff1a56762f00d703f48c83`)는 final repo 원본과
+  각각 `cmp` exit 0이다. D-044~046, BQ-035~038, README 색인을 함께 착륙했다.
+- 게이트: 문서 색인 `11 passed`; 전체 backend `2158 passed, 3 skipped`, import-linter
+  `8 kept/0 broken`, manifest `69/20`; frontend typecheck·lint·tests `23/23`·build PASS.
+- D-047의 lab 잔여 조각은 이식하지 않았다. `docs/backend-f-progress.md`와
+  `docs/spec/oss-profile.md`는 현재 dev 정본보다 오래된 부분 덮어쓰기이고,
+  `tests/test_docs_index.py`·`tests/test_rca_rule_catalog.py`는 이번 docs-only 범위 밖이며 현재
+  canonical 테스트가 초록이다. VP-011/013 정본과 필요한 색인만 원본 그대로 이식했다.
+
+### 브랜치 정리·복구 보험
+
+- archive 후 원격 삭제: `feat/ummfieg/rca-workers`, `feat/ummfieg/rca-worker`,
+  `feat/ummfieg/dashboard-projection-service`, `feat/ummfieg/audit-timeline-service`,
+  `feat/minmings111/node-collector`, `practice/ummfieg-event-system-rca-safe-pr`.
+- gone 로컬 branch 10개를 `-D`로 삭제하고 worktree prune을 실행했다. final worktree의
+  `outputs/`는 보존하고 `woonyong/ui-layer-lab`만 detached로 전환했다. 같은 UI ref가 작업 중
+  두 번 재등장했으나 동일 SHA를 확인한 뒤 로컬·원격을 다시 삭제했다.
+- 오늘 사용 중인 `feat/minmings111/cluster-infra-map-ui`와 방금 생성된 `codex/picture`는 추가
+  보존 조건에 따라 삭제하지 않았다. `dev`·`main`도 보존했다.
+- 아래 archive 출력의 `refs/archive/dev-stale-20260714-0248`은 이번 작업 전부터 있던 별도
+  보험 ref이며, 이번 삭제 6개의 archive ref와 구분한다.
+
+`git ls-remote --heads origin`:
+
+```text
+daf83b36313093d4f91ef2cc113915cd0a00a46f	refs/heads/codex/picture
+c96ce735f7665af86dbd3e923fcb238a7b905884	refs/heads/dev
+daf83b36313093d4f91ef2cc113915cd0a00a46f	refs/heads/feat/minmings111/cluster-infra-map-ui
+59c837078e9738bc04f4d7147512a47b4228efbe	refs/heads/main
+```
+
+`git branch -vv`:
+
+```text
++ demo/v1 496eda7cf (/Users/woonyong/workspace/Krafton-Jungle/SW_AI_W17-21-final-demo-v1) docs: PR 체크리스트 / worker 계약 / runtime 책임
+* dev     c96ce735f [origin/dev] docs: 대시보드 기획 / shadcn 전환 / 서버 계약
+  main    8799e7748 [origin/main: ahead 34, behind 1531] refactor: 이벤트 계약 / 구독 선언 / Gateway 계약
+```
+
+`git for-each-ref refs/archive/ --format='%(refname) %(objectname)'`:
+
+```text
+refs/archive/2026-07-14/feat/minmings111/node-collector 88e0866c4d7e89be44437937b6c34fac8ff91388
+refs/archive/2026-07-14/feat/ummfieg/audit-timeline-service b44dff4648a1fd683cf2ab24277e098cd74abd4d
+refs/archive/2026-07-14/feat/ummfieg/dashboard-projection-service b8d47df513bb6745d7531942f90f8c581f423307
+refs/archive/2026-07-14/feat/ummfieg/rca-worker 1b475c02b7cd5772a842d425505d332b728aae1f
+refs/archive/2026-07-14/feat/ummfieg/rca-workers ef1f990748a59e7e0b16ae08f684839f6f5cacc3
+refs/archive/2026-07-14/practice/ummfieg-event-system-rca-safe-pr 9f6846ea0dba6470a11f443c94f226e4f3aba4a6
+refs/archive/dev-stale-20260714-0248 55c0d270d6188cedb04bd9fd46a4d63b0197b987
+```
+
+`git worktree list`:
+
+```text
+/Users/woonyong/workspace/Krafton-Jungle/SW_AI_W17-21-final          88cca9b8f (detached HEAD)
+/private/tmp/dev-aws-worktree.ljDDFh                                 e9b6da698 (detached HEAD)
+/private/tmp/opsia-artifact.diSgNM                                   c704729c1 (detached HEAD)
+/private/tmp/opsia-dev-direct                                        28699d1af (detached HEAD)
+/private/tmp/opsia-dev-trunk                                         cd8394e02 (detached HEAD)
+/private/tmp/opsia-frontend-cleanup                                  57ebeb452 (detached HEAD)
+/Users/woonyong/workspace/Krafton-Jungle/SW_AI_W17-21-final-demo-v1  496eda7cf [demo/v1]
+/Users/woonyong/workspace/Krafton-Jungle/SW_AI_W17-21-final-dev      c96ce735f [dev]
+```
+
+gone branch 0, `(prunable)` worktree 0이다.
+
+[2026-07-14 03:26 KST] [판단자] 판정: 정상 — 착륙 2건(프론트 shadcn 차트 경계 3커밋 + PR #599 Windows selector fix, 전부 ancestor exit 0), 정체 lane 0(PR #599는 생성 2분 내 착륙 — D-025 모범), [D-047] 촉구 이행 진행(VP-011/013 정본 docs 커밋 `151dd8b18` 최신 dev rebase 완료·push 대기 — 다음 사이클 착륙 확인), AcceptedResponse 무결, 배포 스위치 off 유지, HOLD 0. [D-048] 발행.

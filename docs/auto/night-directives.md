@@ -743,3 +743,59 @@ CI, 로컬 pre-push, Ruff format hook, 단일 Makefile gate를 배포 P0의 최�
 
 - `docs/backend-f-workqueue.md`에 BQ-035~038을 `requested`로 등록한다.
 - 우선순위는 배포 P0 → 기존 계약(BQ-022~034) → BQ-035~038이다.
+
+### [D-047] 2026-07-14 03:25 KST 판정 — 정상 + 착륙 촉구 1건 (작성: 자동 판단자)
+
+**점검 결과 (origin 기준, fetch 2026-07-14 03:17 KST, origin/dev=`57ebeb452`).**
+- 마지막 판정(07-13 04:50) 이후 착륙 다수 — 전부 ancestor exit 0 재확인:
+  계약 트랙 BQ-022(`95ff11cc6`)·BQ-023(`e2504278d`)·BQ-024 Applications(`cbba9d28e`),
+  배포 P0 게이트(`4ea76988d`/`acaadc485`/`5c5ea9481`), 프론트 정리 S0~S4(`3cca846fe`, `57ebeb452`).
+  night-log의 [D-024] 4조건 증거(전체 그린·정책 충돌 해소·소유권 밖 삭제 0·ancestor 0) 일관.
+- **정체 lane 0**: 원격 `codex/*` lane 0개 — [D-035] dev trunk 체제 이행 실물 확인. HOLD 대상 없음.
+- fail-closed: `AcceptedResponse` = accepted/event_id/correlation_id + optional `command_id`,
+  worktree·origin/dev 동일 — 무결. 배포 J 실행 흔적 0(AWS 배포 스위치 off 유지 확인 —
+  Actions `Dev Gate`는 결제 실패로 서버 게이트 미실행, [D-040] 재개 조건 그대로). force 흔적 미발견.
+- 백엔드 우선순위: 배포 P0(게이트 CI·D-041 회귀 시정) 수행 중 — [D-038] 순서(배포 P0 → 계약)와 일치, [D-026] 위반 아님.
+
+**[착륙 촉구] 조율 문서·VP-011/013 기획 정본: [D-025]에 따라 지금 착륙하라. 미완성은 flag off·미노출·미배선으로
+격리하면 착륙 가능하다. 게이트 그린과 [D-024] 4조건만 충족하면 결함이 남아도 올려라. 잔여 결함은 다음 사이클
+첫 작업으로 등록하고 night-log에 '격리 착륙 — 잔여 결함/해제 조건'을 남겨라. 미착륙 유지가 위반이다.**
+- 근거: dev worktree에 `docs/spec/frontend/vp-011-home-widget-dashboard.md`(01:38부터)·
+  `vp-013-shadcn-migration.md`(01:31부터)가 미추적 상태로 30분 초과([D-025] §2), night-directives(D-044~046)·
+  backend-f-workqueue(BQ-035~038 행)·README 색인도 미커밋. [D-044]·[D-045]가 이 두 문서를 "기획 정본"으로
+  지정했는데 origin/dev에 없다 — 다른 세션이 정본을 참조할 수 없다. docs 커밋은 [D-035] 예외로 즉시 push 가능하다.
+- 잔여 이관 확인: lab 전용 커밋 `88cca9b8f`(origin 미착륙, 원격 lab 삭제됨)의 나머지 조각 —
+  `docs/backend-f-progress.md`(±6), `docs/spec/oss-profile.md`(±8), `tests/test_docs_index.py`(+34),
+  `tests/test_rca_rule_catalog.py`(50±) — 를 이식하거나 이식하지 않는 사유를 night-log에 기록하라.
+  보호 로컬 ref 보존만으로는 착륙이 아니다.
+
+**[알림] 프론트(정리 세션): BQ-023(Issues)·BQ-024 Applications 계약이 canonical에 착륙해 있다.**
+vp-010 §9의 GAP-005 행("backend 요청 필요")은 낡았다. S5 화면 이관 사이클에서 소비 연결 시 §9 행을 실측으로 갱신하라.
+
+**기록 공백 노트(사람 확인용).** 지시 로그에 [D-029]~[D-034]·[D-036]·[D-037]·[D-039]·[D-042]·[D-043]이
+없다(일부는 "복원: 우녕 지시"로 재구성된 파일로 보임). night-log가 D-039를 승인 근거로 인용하므로
+우녕이 복원 여부를 확인해 보완하라. 판정 근거로는 실물 파일·origin 검증만 사용했다.
+
+### [D-048] 2026-07-14 03:26 KST 판정 — 정상: 착륙 2건, 정체 0 (작성: 자동 판단자)
+
+**점검 결과 (origin 기준, origin/dev=`daf83b363`).**
+- [D-047](03:25) 이후 착륙 2건 — 전부 `merge-base --is-ancestor` exit 0 재확인:
+  ① 프론트 정리 후속 3커밋 `6c0d62ad6`/`78a62de63`/`28699d1af`(shadcn 차트 경계·결측 판정·재유입 차단),
+  ② PR #599 `78c12e88c` → merge `daf83b363`(Windows selector event loop fix).
+- **[D-025] 모범 사례 기록**: lane `codex/fix-windows-selector-event-loop`는 03:20 생성 → 03:22
+  PR merge — 2분 내 착륙. 원격 branch ref가 남아 있으나 전량 착륙 상태(ancestor 0)이므로
+  정체 아님. 다음 정리 사이클에서 원격 branch 삭제만 하면 된다.
+- **[D-047] 착륙 촉구 이행 진행 중 — 정상 궤도**: VP-011/013 기획 정본 + [D-044]~[D-046] +
+  BQ-035~038 행 + README 색인이 docs 커밋으로 추적 개시되었고, 03:24 최신 origin/dev 위로
+  rebase 완료(`151dd8b18`, 로컬 dev ahead 1/behind 0). **push만 남았다 — [D-035] 절차대로 즉시
+  push하라.** 다음 사이클에서 origin 착륙(ancestor 0)을 확인하며, 미push 방치 시 촉구를 재발행한다.
+- fail-closed: `AcceptedResponse` = accepted/event_id/correlation_id + optional `command_id` — 무결.
+  배포 J 실행 흔적 0(AWS 배포 스위치 off 유지, [D-040]·[D-041] 재개 조건 그대로). force 흔적 미발견.
+  frozen paths 침범 흔적 없음. 정체 lane 0, HOLD 대상 없음.
+- 계약 진행: BQ-022/023 landed, BQ-024 in_progress(Applications 착륙 `cbba9d28e`, GitOps/Checks 잔여),
+  BQ-025~028 requested, BQ-030~038 requested. 백엔드는 배포 P0 우선 수행 중 — [D-038](우녕)이
+  배포 P0 > 계약 순서를 명시하므로 [D-026] 위반 아님. vp-010 §9 GAP-005/006 행의 낡은
+  "backend 요청 필요" 표기는 [D-047] 알림 유효 — 프론트 S5 사이클에서 실측 갱신 대상 유지.
+- 검증 한계 기록: 판단자 샌드박스에서 `git fetch`/`ls-remote` 인증 불가. 단 host 세션들이
+  origin refs를 실시간 갱신함을 실측으로 확인(03:22 PR merge ref, 03:24 rebase 반영 관찰) —
+  본 판정의 origin refs는 03:22~03:25 KST 사이 상태 기준이다.
