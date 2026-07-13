@@ -7,7 +7,7 @@ governing: docs/f-coordination-plan.md · docs/backend-f-workqueue.md
 
 # 백엔드 F 진행 현황
 
-현재 상태: **앵커 35건**
+현재 상태: **앵커 36건**
 
 ## 역사적 Delta-green baseline (BQ-001~003)
 
@@ -881,3 +881,29 @@ Bundle route는 200을 반환한다.
   ancestor exit 0.
 
 계약 완성: OpsiaBench crashloop port bind fixture + runnable merge-patch round trip (ff3b52812905f09242ab05e2704f816ede52845f) [green]
+
+### 보조 대기열 S20 — target-agent SQLite 수명주기 테스트
+
+- 상태: landed
+- 담당 lane: `codex/target-agent-sqlite-lifecycle`
+- 결정적 RED: `4a2ef92292a0e818f61ddb51ec3d0b916e891540`
+- factory·idempotent close: `d05bc826e8254f7b85cc5f75c0b15e266a825854`
+- 수명주기 문서: `ef2757edac3feb09244da04fdfc115f13c881d66`
+- hook 격리 교정과 feature HEAD: `720dd55c0d00ec79b61a19bdd5682a2f553c5a96`
+- canonical no-ff merge: `13c30723adaf025fd616c166a2507d03f90fef24`
+- full `TargetClusterAgent` 생성 12곳을 factory 내부 단일 생성점으로 수렴하고, 테스트 teardown이
+  생성 thread에서 두 SQLite store를 닫은 뒤 강한 참조를 제거하도록 고정했다.
+- worker thread cyclic GC에서 두 target destructor의 thread-affinity `ProgrammingError`만 수집한다.
+  unrelated unraisable은 기존 pytest hook으로 전달하고 `finally`에서 전역 hook을 복원한다.
+- 독립 감사가 module autouse 전역 GC의 순서 의존·오귀속 위험을 차단했다. factory 사용 테스트에만
+  guard를 한정하고 unrelated `ValueError` 전달 회귀를 추가한 뒤 재감사 PASS다.
+- `close()` 두 번 호출 후 `AgentControlStore.conn`과 `CommandResultOutbox.conn`이 모두 `None`임을
+  검증한다. 프로덕션 source 변경은 0건이며 `run()`의 기존 finally-close 계약은 보존했다.
+- 고유 검증: warning-strict `tests/test_target_agent_client.py` 28 passed.
+- 전체 게이트: Ruff lint/format PASS, import-linter 8 kept/0 broken,
+  pytest `1953 passed, 3 skipped`; manifest management 69 / target 20.
+- 4조건: merge-tree exit 0/tree `857ee57075e2260222d78350e5d25eb839579bf6`;
+  source·파일 삭제·소유권 밖 변경·frozen 경로 변경 0건; feature·merge commit의
+  `origin/dev` ancestor exit 0.
+
+계약 완성: TargetClusterAgent same-thread SQLite lifecycle tests (720dd55c0d00ec79b61a19bdd5682a2f553c5a96) [green]
