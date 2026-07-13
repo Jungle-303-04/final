@@ -1618,6 +1618,7 @@ async function captureScenario(page, scenario) {
     if (scenario.shellMode) await assertProductShellForcedColors(page, scenario.id);
     else if (scenario.homeScenario) await assertProductHomeForcedColors(page, scenario.id);
     else if (scenario.resourcesScenario) await assertProductResourcesForcedColors(page, scenario.id);
+    else if (scenario.issuesScenario) await assertProductIssuesForcedColors(page, scenario.id);
     else if (scenario.authSession === "unauthenticated") {
       await assertAuthForcedColors(page, scenario.id);
     }
@@ -3324,6 +3325,79 @@ async function assertProductResourcesForcedColors(page, label) {
     throw new Error(
       `${label}: forced-colors Resources state is not preserved ${JSON.stringify(result)}`,
     );
+  }
+}
+
+async function assertProductIssuesForcedColors(page, label) {
+  await page.keyboard.press("Tab");
+  const result = await page.evaluate(() => {
+    const select = document.querySelector(
+      "[data-slot='sidebar-inset'] > header [data-slot='cluster-scope-picker'] [data-slot='select-trigger']",
+    );
+    const list = document.querySelector("[role='region'][aria-label='Issues']");
+    const issue = list?.querySelector("button");
+    const detail = document.querySelector("[role='region'][aria-label='Issue details']");
+    const recentChanges = document.querySelector("[data-testid='issue-recent-changes']");
+    const pullRequest = recentChanges?.querySelector("a[target='_blank']");
+    const required = [select, list, issue, detail, recentChanges, pullRequest];
+    if (required.some((element) => !(element instanceof HTMLElement))) {
+      return { missing: true };
+    }
+
+    issue.focus();
+    const selectStyle = getComputedStyle(select);
+    const listStyle = getComputedStyle(list);
+    const issueStyle = getComputedStyle(issue);
+    const detailStyle = getComputedStyle(detail);
+    const recentChangesStyle = getComputedStyle(recentChanges);
+    const pullRequestStyle = getComputedStyle(pullRequest);
+    const visible = (element) => {
+      const rect = element.getBoundingClientRect();
+      return rect.width > 0 && rect.height > 0;
+    };
+
+    return {
+      missing: false,
+      active: matchMedia("(forced-colors: active)").matches,
+      detailVisible: visible(detail),
+      issueFocused: document.activeElement === issue,
+      issueOpacity: Number.parseFloat(issueStyle.opacity),
+      issueOutlineStyle: issueStyle.outlineStyle,
+      issueOutlineWidth: Number.parseFloat(issueStyle.outlineWidth),
+      listBorderStyle: listStyle.borderTopStyle,
+      listBorderWidth: Number.parseFloat(listStyle.borderTopWidth),
+      pullRequestOpacity: Number.parseFloat(pullRequestStyle.opacity),
+      pullRequestVisible: visible(pullRequest),
+      recentChangesBorderStyle: recentChangesStyle.borderTopStyle,
+      recentChangesBorderWidth: Number.parseFloat(recentChangesStyle.borderTopWidth),
+      recentChangesOpacity: Number.parseFloat(recentChangesStyle.opacity),
+      selectBorderStyle: selectStyle.borderTopStyle,
+      selectBorderWidth: Number.parseFloat(selectStyle.borderTopWidth),
+      selectOpacity: Number.parseFloat(selectStyle.opacity),
+      detailOpacity: Number.parseFloat(detailStyle.opacity),
+    };
+  });
+
+  if (result.missing || !result.active || !result.detailVisible
+    || !result.pullRequestVisible || !result.issueFocused
+    || result.selectBorderStyle === "none" || result.selectBorderWidth < 1
+    || result.listBorderStyle === "none" || result.listBorderWidth < 1
+    || result.recentChangesBorderStyle === "none" || result.recentChangesBorderWidth < 1
+    || result.issueOutlineStyle === "none" || result.issueOutlineWidth < 2) {
+    throw new Error(
+      `${label}: forced-colors Issues state is not preserved ${JSON.stringify(result)}`,
+    );
+  }
+  for (const [name, opacity] of Object.entries({
+    detail: result.detailOpacity,
+    issue: result.issueOpacity,
+    pullRequest: result.pullRequestOpacity,
+    recentChanges: result.recentChangesOpacity,
+    select: result.selectOpacity,
+  })) {
+    if (Math.abs(opacity - 1) > 0.001) {
+      throw new Error(`${label}: forced-colors Issues ${name} uses group opacity ${opacity}`);
+    }
   }
 }
 
