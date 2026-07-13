@@ -2718,6 +2718,14 @@ target preflight·register 네 함수와 strict Zod 계약을 claim했다. 1회�
 - 계약 앵커: `ManagementAccessResponse + Helm access modes` / `cf69ffb5b` / `[green]`.
 - [백엔드] lane 회수 — `codex/oss-access-contract` / `cf69ffb5b` / ancestor exit 0.
 
+## 2026-07-13 22:02 KST — [백엔드] Resources 필터 코어 claim
+
+- `origin/dev@b8bc27988`에서 GAP-002/003/004만 claim하고 gateway 계약 lock을 획득했다.
+- 기존 `/clusters/{cluster_id}/inventory/resources`는 단일 cluster·limit 방식이라 그대로 보존한다.
+  새 workspace route만 추가해 기존 소비자 응답을 바꾸지 않는다.
+- 빈 권한은 빈 set, 같은 축 OR·축 간 AND·Label 간 AND, 서버 count, snapshot-bound cursor,
+  restricted/partial 정직성을 RED에서 먼저 고정한다.
+
 ## 2026-07-13 22:14 KST — [프론트] VP-010 canonical writer cutover GREEN
 
 - GREEN `d2f7448b6`에서 `UnifiedFilterProvider`를 production composition 최상위 권위로
@@ -2769,3 +2777,23 @@ target preflight·register 네 함수와 strict Zod 계약을 claim했다. 1회�
   Graph `aria-pressed`, forced-colors, reduced-motion, exact URL과 graph data 미렌더를 검증한다.
 - CLS는 Home `0.004188`, Resources `0.004167`, Issues `0.004202`로 모두 0.1 미만이다.
   GAP-002/003/004/010 완료 앵커는 여전히 0건이며 graph snapshot 착륙 전 data 배선은 주차한다.
+
+## 2026-07-13 22:57 KST — [백엔드] Resources 필터 코어 canonical 착륙
+
+- RED `22c9e5d0a`, GREEN `cbf94623c`, 교정 `87c0606e0`, canonical merge
+  `d5517ec14`. `RESOURCES_FILTER_FACETS_PATH`, `FILTERED_RESOURCES_PATH`,
+  `RESOURCE_LABEL_FACETS_PATH` 세 계약 앵커가 `origin/dev`에 착륙했고 gateway lock을 해제했다.
+- workspace fail-closed 인가, same-axis OR/cross-axis AND/Label AND, 동일 snapshot N/M,
+  selector별 resolution, HMAC cursor, partial completeness를 제공한다. Label facet은 현재
+  Resources만 지원하며 나머지 surface는 후속 투영 전까지 fail-closed다.
+- 실 PostgreSQL에서 migration online upgrade/downgrade/upgrade, `pg_trgm`·GIN·keyset index,
+  다중 cluster N/M, scoped evidence 비삭제, 과거 cursor 불변을 확인했다. namespace/label 범위
+  evidence는 authoritative sweep가 아니므로 completeness를 partial로 유지한다.
+- 전체 게이트 `2051 passed, 3 skipped`, Ruff/import contract 8/8, manifest 69/20,
+  Helm lint·shell syntax PASS. merge-tree `e0230e10dc598e5f2d6cebf3e6c0579994d13307`,
+  삭제·frozen 변경 0건, code/merge 모두 `origin/dev` ancestor exit 0이다.
+- 계약 앵커: `RESOURCES_FILTER_FACETS_PATH` / `87c0606e0` / `[green]`.
+- 계약 앵커: `FILTERED_RESOURCES_PATH` / `87c0606e0` / `[green]`.
+- 계약 앵커: `RESOURCE_LABEL_FACETS_PATH` / `87c0606e0` / `[green]`.
+- [백엔드] lane 회수 — `codex/resources-filter-contract` / `87c0606e0` /
+  `origin/dev` ancestor exit 0; 로컬 branch와 worktree를 같은 사이클에서 삭제했다.

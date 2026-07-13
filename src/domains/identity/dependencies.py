@@ -205,6 +205,50 @@ def resolve_allowed_cluster_ids(
     }
 
 
+def resolve_allowed_application_ids(
+    db: Any,
+    current: Any,
+    workspace_id: str,
+    permission: str,
+) -> set[str]:
+    """Application 목록 인가도 concrete ID 집합으로 물질화해 wildcard를 차단한다."""
+    user_id = getattr(current, "user_id", None)
+    session_workspace_id = getattr(current, "workspace_id", None)
+    if (
+        not workspace_id
+        or workspace_id != session_workspace_id
+        or not isinstance(user_id, str)
+        or not user_id
+    ):
+        return set()
+    accessible = getattr(db, "accessible_resource_ids", None)
+    if not callable(accessible):
+        return set()
+    application_ids = accessible(
+        user_id,
+        workspace_id,
+        AccessResourceType.APPLICATION.value,
+        permission,
+    )
+    if application_ids is not None:
+        return {
+            application_id.strip()
+            for application_id in application_ids
+            if isinstance(application_id, str) and application_id.strip()
+        }
+    roles = tuple(getattr(current, "roles", ()) or ())
+    if ServiceRole.SERVICE_ADMIN.value not in roles:
+        return set()
+    list_application_ids = getattr(db, "list_workspace_application_ids", None)
+    if not callable(list_application_ids):
+        return set()
+    return {
+        application_id.strip()
+        for application_id in list_application_ids(workspace_id)
+        if isinstance(application_id, str) and application_id.strip()
+    }
+
+
 async def require_cluster_agent(request: Request) -> ClusterAgentIdentity:
     """per-cluster agent 토큰 가드 — fail-closed.
 

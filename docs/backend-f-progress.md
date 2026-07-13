@@ -7,7 +7,7 @@ governing: docs/f-coordination-plan.md · docs/backend-f-workqueue.md
 
 # 백엔드 F 진행 현황
 
-현재 상태: **앵커 40건**
+현재 상태: **앵커 43건**
 
 ## 역사적 Delta-green baseline (BQ-001~003)
 
@@ -1061,3 +1061,57 @@ Bundle route는 200을 반환한다.
   feature `cf69ffb5b`와 canonical merge `e8fc3c878`은 모두 `origin/dev` ancestor exit 0이다.
 
 계약 완성: ManagementAccessResponse + Helm access modes (cf69ffb5bc9b98b3da1c0b221b6c9cd5b8c21872) [green]
+
+### GAP-002/003/004 — Resources 필터 코어 claim
+
+- 상태: `in_progress`; gateway 계약 lock은 이 행 하나가 보유한다.
+- baseline: `origin/dev@b8bc27988`, 전체 `2006 passed, 3 skipped`, Ruff lint/format PASS,
+  import-linter 8 kept/0 broken, manifest management 69/target 20.
+- 범위: workspace filter facet catalog, multi-cluster resource list, Resources Label facet/count,
+  snapshot-bound opaque cursor와 total/completeness. GAP-010 이후 항목은 건드리지 않는다.
+- 권한: session workspace만 사용하고 `resolve_allowed_cluster_ids()`의 구체 set을 SQL에 강제한다.
+  `None`이나 빈 권한을 wildcard로 전달하지 않는다.
+- 성능: client fan-out과 JSONB Label 전수 집계를 금지한다. ingestion에서 정규화한 Label projection과
+  복합 인덱스를 사용하고 projection 불완전은 exact 0으로 가장하지 않는다.
+
+### Resources 필터 코어 — canonical 착륙 증거
+
+- 상태: `landed`; gateway 계약 lock을 해제했다. RED `22c9e5d0a`, GREEN `cbf94623c`,
+  snapshot·migration 교정 `87c0606e0`, canonical no-ff merge `d5517ec14`다.
+- route: `GET /api/resources/filter-facets`, `GET /api/resources`,
+  `GET /api/resources/label-facets`. 기존 단일 cluster inventory route와 응답은 바꾸지 않았다.
+- 구조 축은 같은 축 OR·축 간 AND다. namespace는 `<cluster_id>/<namespace>`, application은
+  stable ID다. Kubernetes equality Label은 전부 AND이며 `resources.types`,
+  `resources.health`, `resources.q`, `resources.includeDeleted`를 canonical query로 쓴다.
+- 모든 조회는 session workspace와 `inventory.read`/`application.read`의 구체 ID set을 SQL에
+  강제한다. 빈 권한은 정확한 빈 결과이고, 요청한 비인가 cluster/application은 존재를
+  노출하지 않는 404다. cursor는 workspace·user·권한 revision·surface·filter fingerprint·
+  facet query·snapshot revision에 HMAC으로 결합하며 10분 뒤 만료된다.
+- `counts.filtered_count`는 N, `counts.unfiltered_count`는 같은 권한·snapshot에서 cluster
+  선택 전 전체 M이다. 각 count는 `exact|partial|unavailable`을 동반한다. 선택 Label은
+  selector별로 `resolved|zero|unavailable`을 독립 판정한다.
+- 응답의 `snapshot`은 `snapshot_revision`, `authorization_revision`, `filter_fingerprint`,
+  `observed_at`, `stale`, `partial_reason_codes`를 제공한다. 부분 snapshot에서 보존된 row는
+  실제 source snapshot/관측시각을 유지하고, 과거 cursor에는 미래 삭제시각을 노출하지 않는다.
+- projection은 정규화 Label/application mapping과 temporal version을 사용한다. `pg_trgm`
+  GIN substring index, validity·keyset B-tree, workspace별 revision lock으로 client 전수 수집과
+  tenant 간 쓰기 직렬화를 피한다. migration `20260713_2215`는 신규 테이블·baseline·index를
+  한 transaction으로 적용해 실패 시 전체 rollback되며 실 PostgreSQL online
+  `upgrade → downgrade → upgrade`와 head `20260713_2215`를 확인했다.
+- namespace/label 범위의 evidence query 성공은 full-cluster coverage가 아니므로 destructive
+  replace를 금지한다. dedicated authoritative sweep가 생길 때까지 이 경로의 resource/Label
+  completeness는 partial이며 프론트는 이를 exact 0으로 해석하면 안 된다.
+- Bruno: `docs/api/17-resources-filter/01-filter-facets.bru`,
+  `02-list-resources.bru`, `03-label-facets.bru`. GAP-004의 이번 착륙은 `surface=resources`만
+  지원하며 Issues/Applications/GitOps/Checks 투영은 후속 GAP-005/006 소관이다.
+- 전체 게이트: Ruff lint/format PASS, import-linter 8 kept/0 broken, pytest
+  `2051 passed, 3 skipped`; manifest management 69/target 20, Helm lint와 shell syntax PASS.
+- D-024: merge-tree/tree `e0230e10dc598e5f2d6cebf3e6c0579994d13307`, 파일 삭제·
+  RCA/AI/runtime worker 변경·정책 밖 충돌 0건. code `87c0606e0`과 merge `d5517ec14`는
+  모두 `origin/dev` ancestor exit 0이다.
+
+계약 완성: RESOURCES_FILTER_FACETS_PATH (87c0606e0) [green]
+
+계약 완성: FILTERED_RESOURCES_PATH (87c0606e0) [green]
+
+계약 완성: RESOURCE_LABEL_FACETS_PATH (87c0606e0) [green]
