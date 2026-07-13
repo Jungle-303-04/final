@@ -3365,3 +3365,43 @@ index 591d560bc..5f1879a74 100644
   변경 전 백엔드 실패 집합 = `{}`; 변경 후 실패 집합 = `{}`. 전체
   `bash scripts/test.sh`는 import-linter `8 kept/0 broken`, pytest
   `2158 passed, 3 skipped`로 초록이다.
+
+## 2026-07-14 03:09 KST — [프론트 정리 완료] D-038 S0~S4 수렴
+
+- S4 코드 commit `3cca846fef1cb7a92d2348230836804386c8c95c`: 제품 소스의 손그림
+  inline SVG 57개를 `lucide-react`로 이관하고, 재유입 방지
+  `lucide_icon_contract.test.mjs`를 추가했다. `git grep '<svg' -- frontend/src` 결과는
+  제품 로고 예외조차 필요 없는 0건이다.
+- 브랜치 삭제 증거: `origin/codex/-stardemo@cf713404a`(ancestor exit 0),
+  `origin/woonyong/ui-layer-lab@88cca9b8f`(ancestor exit 1, final repo와 보호 로컬 ref에
+  VP-011/013 정본 보존), `origin/codex/ui-layer-lab-references@d18e13693`(ancestor exit 1,
+  owned-path 이식 대상 0), `origin/woonyong-kr/frontend@fcfec9504`(ancestor exit 1,
+  dev 미존재 owned-path 63개 감사 후 현행 계약에 유용한 이식 대상 0)를 삭제했다.
+  최종 감사 중 `woonyong/ui-layer-lab`가 같은 SHA로 한 번 재등장해 hash/ancestor를 재확인한
+  뒤 다시 삭제했으며, 네 ref의 `git ls-remote --heads origin` 결과는 모두 0건이다.
+- 삭제 파일: `frontend/AUDIT.md`, `frontend/docs/screenshots/real-*.png` 4개,
+  `features/console/pages/{HomePage.tsx,homeCharts.ts}`, `features/metrics/**` 3개,
+  `features/workflow/**` 2개, `features/release/**` 3개(전용 CSS 포함). `/metrics`,
+  `/workflows`, `/release-flows`와 모든 진입 링크를 제거하고 `/`는 `/clusters`로 연결했다.
+  삭제 route/import grep 0건이며 회귀 테스트가 빈 화면·깨진 링크 재유입을 막는다.
+- S1 시각 증거: `frontend/output/s1/{light,dark}.png`와 최종
+  `frontend/output/final/{light,dark}.png`(gitignore 로컬 QA 산출물). 변경 전/후 계산값은
+  light 배경/본문 `rgb(247,248,250)` / `rgb(31,36,48)`, dark
+  `rgb(14,16,21)` / `rgb(238,240,241)`로 동일하다. 최종 `/dev/ui` 1440×1000 실브라우저는
+  두 테마 모두 정상 렌더링, console error 0이며 `--primary`, `--chart-1`, `--sidebar`는
+  각각 기존 `--ui-*` 팔레트 값으로 계산됐다. pre-paint bootstrap은 유지됐다.
+- S2 `frontend/src/components/ui/` 목록(31개): `alert`, `alert-dialog`, `avatar`, `badge`,
+  `breadcrumb`, `button`, `card`, `chart`, `checkbox`, `collapsible`, `command`, `dialog`,
+  `dropdown-menu`, `input`, `input-group`, `label`, `popover`, `radio-group`, `scroll-area`,
+  `select`, `separator`, `sheet`, `skeleton`, `sonner`, `switch`, `table`, `tabs`, `textarea`,
+  `toggle`, `toggle-group`, `tooltip`.
+- S3 증거: `git grep -i nivo -- frontend` 0건. Sparkline/TimeSeriesChart는 Recharts로
+  단일화했고 `DrilldownHeatmap`의 CSS-grid 구현과 데이터 없음/실측 0/sparse row 계약을
+  보존했다.
+- 최종 프론트 게이트: ESLint warning/error 0, node tests `21/21`, TypeScript·Vite build
+  PASS. D-041 백엔드 실패 집합은 변경 전 `{}` / 변경 후 `{}`로 동일하다. 전체
+  `bash scripts/test.sh`와 dev pre-push gate는 import-linter `8 kept/0 broken`, pytest
+  `2158 passed, 3 skipped`로 초록이다.
+- 정리 코드 착륙 origin SHA `3cca846fef1cb7a92d2348230836804386c8c95c`,
+  `git merge-base --is-ancestor 3cca846fe origin/dev` exit 0. 소유 범위 밖 변경은 승인된
+  D-039/D-040 formatter 복구와 이 night-log 기록뿐이다.
