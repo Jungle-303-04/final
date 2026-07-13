@@ -52,7 +52,12 @@ def test_demo_scm_exercises_the_production_github_provider(tmp_path, monkeypatch
     base_sha = repository.reset(
         {"deploy/checkout.yaml": "image: nginx:missing\n"},
     )
-    fixture = create_app(repository, token="demo-token", reviewer_token="reviewer-token")
+    fixture = create_app(
+        repository,
+        token="demo-token",
+        admin_token="harness-admin-token",
+        reviewer_token="reviewer-token",
+    )
     scm_worker = load_service("gitops/scm-worker")
     monkeypatch.setenv("GITHUB_API_BASE", "http://demo-scm.local")
 
@@ -128,7 +133,12 @@ def test_demo_scm_requires_a_separate_reviewer_token_to_merge(tmp_path) -> None:
         head="gitops/recovery",
         base="main",
     )
-    fixture = create_app(repository, token="writer-token", reviewer_token="reviewer-token")
+    fixture = create_app(
+        repository,
+        token="writer-token",
+        admin_token="harness-admin-token",
+        reviewer_token="reviewer-token",
+    )
 
     async def scenario() -> tuple[httpx.Response, httpx.Response]:
         async with httpx.AsyncClient(
@@ -150,6 +160,57 @@ def test_demo_scm_requires_a_separate_reviewer_token_to_merge(tmp_path) -> None:
     assert writer.status_code == 401
     assert reviewer.status_code == 200
     assert reviewer.json()["merge_commit_sha"] == repository.branch_sha("main")
+
+
+def test_demo_scm_rejects_merge_after_the_reviewed_base_changes(tmp_path) -> None:
+    repository = DemoScmRepository(tmp_path / "repository", repo_ref="opsia/demo")
+    base_sha = repository.reset({"deploy/checkout.yaml": "image: nginx:missing\n"})
+    assert repository.create_branch("gitops/recovery", base_sha)
+    current = repository.file_metadata("gitops/recovery", "deploy/checkout.yaml")
+    repository.put_file(
+        "gitops/recovery",
+        "deploy/checkout.yaml",
+        "image: nginx:1.27-alpine\n",
+        message="Restore verified image",
+        expected_blob_sha=current["sha"],
+    )
+    pull = repository.create_pull_request(
+        title="Restore verified image",
+        body="Rule-verified rollback candidate",
+        head="gitops/recovery",
+        base="main",
+    )
+    assert pull is not None
+    repository.commit_files(
+        "main",
+        {"README.md": "concurrent main update\n"},
+        message="Concurrent main update",
+    )
+    fixture = create_app(
+        repository,
+        token="writer-token",
+        admin_token="harness-admin-token",
+        reviewer_token="reviewer-token",
+    )
+
+    async def scenario() -> httpx.Response:
+        async with httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=fixture),
+            base_url="http://demo-scm.local",
+        ) as client:
+            return await client.post(
+                "/demo/pulls/1/merge",
+                headers={"authorization": "Bearer reviewer-token"},
+                json={
+                    "expected_base_sha": pull["base"]["sha"],
+                    "expected_head_sha": pull["head"]["sha"],
+                },
+            )
+
+    response = asyncio.run(scenario())
+
+    assert response.status_code == 409
+    assert repository.pull_request(1)["state"] == "open"
 
 
 def test_demo_scm_writer_cannot_reset_or_commit_to_main(tmp_path) -> None:
@@ -191,6 +252,18 @@ def test_demo_scm_writer_cannot_reset_or_commit_to_main(tmp_path) -> None:
     assert denied_reset.status_code == 401
     assert denied_commit.status_code == 401
     assert admin_reset.status_code == 200
+
+
+def test_demo_scm_requires_three_distinct_capability_tokens(tmp_path) -> None:
+    repository = DemoScmRepository(tmp_path / "repository", repo_ref="opsia/demo")
+
+    with pytest.raises(ValueError, match="must differ"):
+        create_app(
+            repository,
+            token="shared-token",
+            admin_token="shared-token",
+            reviewer_token="reviewer-token",
+        )
 
 
 def test_make_demo_uses_safe_pr_and_never_directly_normalizes_the_workload() -> None:
