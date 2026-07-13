@@ -1936,3 +1936,18 @@ target preflight·register 네 함수와 strict Zod 계약을 claim했다. 1회�
   design guard 343 files, shadcn source audit 482 previews, Vite build 14,539 modules.
   `npm run visual-product` PASS: 38 isolated scenarios, exact API request counts,
   unexpected feature network/WebSocket 0건.
+
+## 2026-07-13 16:27 KST — [프론트] dev→lab 정기 흡수 완료 증거
+
+- 흡수 기준은 `origin/dev@9811cd5f4`이며 직전 divergence는 dev-only 33 / lab-only 11이었다.
+  dev-only 변경은 benchmark·backend 조율 문서·테스트에 한정됐고, 프론트 제품 경로 삭제는
+  0건이었다.
+- append-only `docs/auto/night-log.md` 한 파일만 충돌했으며, 프론트 5개와 백엔드 7개 기록을
+  누락 없이 15:37~16:21 시간순으로 병합했다. 제품·계약 파일 충돌은 0건이다.
+- 병합 상태 `npm run check` PASS: TypeScript·ESLint, Vitest 115 files / 830 tests,
+  design guard 343 files, shadcn source audit 482 previews, Vite build 14,539 modules.
+  `npm run visual-product` PASS: 38 isolated scenarios, exact API request counts,
+  unexpected feature network/WebSocket 0건.
+- merge `453d0843d8b8fca1cf798b61309ba3c5da1067f4`를
+  `origin/woonyong/ui-layer-lab`에 비강제 push했다. 검증 중 `origin/dev`는 후보 계약 41~50
+  배치 `ce50d0fb6`까지 5커밋 전진했으며, 자동 재흡수 임계값 미만이라 다음 주기에 보존한다.
