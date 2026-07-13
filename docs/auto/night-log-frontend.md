@@ -14,3 +14,7 @@
 [사이클] 2026-07-14 06:02 KST / Settings 내비게이션을 shadcn Button 기반 실제 NavLink로 전면 이관하고 `aria-current`·canonical motion token을 보존; `@/ui` 사용 파일 상한 33 → 32 / `868cf8982` (`make gate-fast`: frontend 35 PASS, T1=T2; CI Dev Gate run `29284628180` SUCCESS, 1분 46초) / 다음 한 걸음: 운영 DLQ 화면의 table·dialog·상태 표면을 화면 단위로 shadcn 이관
 
 [사이클] 2026-07-14 06:09 KST / 운영 DLQ 화면을 shadcn Alert·Badge·Button·Card·Dialog·Skeleton·Table로 전면 이관하고 정렬 접근성·재처리 pending lock·성공 시에만 닫히는 mutation 의미를 보존; `@/ui` 사용 파일 상한 32 → 31 / `c18800228` (`make gate-fast`: frontend 36 PASS, T1=T2; CI Dev Gate run `29285055146` SUCCESS, 2분 9초) / 다음 한 걸음: 알림 채널 화면의 폼·Webhook 검증·삭제 확인 흐름을 shadcn으로 전면 이관
+
+[사이클] 2026-07-14 06:18 KST / 알림 채널 화면을 shadcn 폼·표·AlertDialog와 Sonner로 전면 이관하고 disabled draft → 실제 Webhook 검증 → signature 일치 저장 게이트, 성공 시에만 삭제 다이얼로그 닫힘을 보존; `@/ui` 사용 파일 상한 31 → 30 / `1ff0855d5` (`make gate-fast`: frontend 37 PASS, T1=T2; 직접 run `29285805388`은 후속 push로 취소됐으나 `3c907192d`를 포함한 최종 run `29286225820` SUCCESS, 2분 12초) / 다음 한 걸음: 운영 DLQ 사후 감사에서 발견된 heading·넓은 표 스크롤·Alert 액션 접근성 보정
+
+[사이클] 2026-07-14 06:24 KST / 운영 DLQ 카드의 실제 h2/h3 계층, 명명된 focusable 가로 스크롤 region과 table caption, 오류 AlertAction 배치를 보정 / `3c907192d` (`make gate-fast`: frontend 37 PASS, T1=T2; 직접 run `29286090143`은 후속 push로 취소됐으나 ancestor를 포함한 run `29286225820` SUCCESS, 실패 0) / 다음 한 걸음: 인시던트 상세의 전체 shadcn 이관과 가짜 대상 fallback·복구 선택 의미 보정
