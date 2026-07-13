@@ -3486,6 +3486,8 @@ gone branch 0, `(prunable)` worktree 0이다.
 
 [2026-07-14 03:26 KST] [판단자] 판정: 정상 — 착륙 2건(프론트 shadcn 차트 경계 3커밋 + PR #599 Windows selector fix, 전부 ancestor exit 0), 정체 lane 0(PR #599는 생성 2분 내 착륙 — D-025 모범), [D-047] 촉구 이행 진행(VP-011/013 정본 docs 커밋 `151dd8b18` 최신 dev rebase 완료·push 대기 — 다음 사이클 착륙 확인), AcceptedResponse 무결, 배포 스위치 off 유지, HOLD 0. [D-048] 발행.
 
+[2026-07-14 03:40 KST] [판단자] 판정: 정상 — 착륙 2건(`c96ce735f` 기획 정본·D-044~046·BQ-035~038 색인, `6bb84845a` 판단 기록·브랜치 보험; 전부 ancestor exit 0), [D-047] 착륙 촉구 이행 완료(lab 잔여 조각 미이식 사유 기록 확인), 정체 lane 0(codex/picture ahead 0, dev worktree 미커밋 0), AcceptedResponse 무결, 배포 스위치 off 유지, HOLD 0. 알림 1건: vp-010 §9.2 type·health facet의 BQ 미등록 — [D-049] 발행.
+
 [사이클] 2026-07-14 03:44 KST / Ruff 검사 범위를 저장소 전체로 통일하고 Alembic 포맷 누락을 차단 / `e4a924e5d` / 다음 한 걸음: dev 서버 게이트 실행 차단의 AWS 대체 경로 확정
 
 [사이클] 2026-07-14 03:56 KST / `DEV_AUTH_BYPASS=0` base 고정과 렌더·live 공통 fail-closed 검증기 착륙 / `7d4e6750f` / 다음 한 걸음: smoke 기본 활성과 배포 후 live 검증 배선
@@ -3514,3 +3516,117 @@ gone branch 0, `(prunable)` worktree 0이다.
 [사람 게이트] `Dev Deploy` 해제 조건: Actions 결제·권한 복구, AWS dev OIDC role·변수·smoke fixture를 CI secret/variable로 설정, live `DEV_AUTH_BYPASS=0`, versioned DB, 현재 배포 SHA `opsia-deploy-status` ConfigMap을 사람이 검증해야 한다. secret 값은 기록하지 않으며, 충족 전 `AWS_DEV_DEPLOY_ENABLED`를 `1`로 바꾸지 않는다.
 [규율] 팀원 브랜치 통합 전 `git diff --stat origin/dev...<branch>`로 dev 삭제 경로 부활을 감사하고, 통합 후 전체 `make gate`를 통과시킨다. 이 백엔드 사이클은 merge 없이 최신 dev에 rebase했으며 `frontend/**`·`references/**` 변경 0건을 유지했다.
 [사이클] 2026-07-14 05:09 KST / `d17c8ab23`에서 부활한 `features/release/**` 9파일·Workflows 라우트/사이드바/전용 테스트를 제거하고 금지 경로·별도 CSS·Nivo·인라인 SVG·`@/ui` 상한 43을 구조 가드로 고정; 공용 flow CSS는 theme 정본으로 손실 없이 이관, 실제 `@/ui` import 파일 43 → 36 / `39a66002a` (전체 gate: 백엔드 2185 passed·3 skipped, 프론트 30 passed, typecheck·lint·manifest·production build PASS, T1=T2, origin/dev ancestor·원격 HEAD 일치) / 다음 한 걸음: 다음 S5 화면 이관에서 실제 사용량에 맞춰 `@/ui` 상한을 36 이하로 단조 감소
+[2026-07-14 03:45 KST] [판단자] 판정: 정상 — 신규 착륙 0(origin/dev=`6bb84845a` 불변, [D-049] 이후 15분 경과·신규 보고 0), 정체 lane 0(codex/picture ahead 0, feat/minmings111 ahead 0·보존 조건 기록됨), AcceptedResponse 무결, 배포 스위치 off 유지, HOLD 0. 유지 알림 2건([D-049] §9.2 GAP→BQ 공백, vp-010 §9 낡은 행 갱신). [D-050] 발행.
+
+## 2026-07-14 03:47 KST — cluster-infra-map-ui 동기화·삭제 감사·배포 차단
+
+- `git fetch origin --prune` 후 실측한 현재 원격 브랜치는
+  `origin/dev...origin/feat/minmings111/cluster-infra-map-ui = 2 0`, HEAD
+  `daf83b363`으로 dev의 조상이었다. 요청에 적힌 `+2`는 03:27 KST force-update 전
+  `d6192b44c` 상태였다. 그 두 커밋은 Windows selector 수정과 VP 문서/회귀 가드였고,
+  이름과 달리 cluster infra map UI 소스는 없었다. Windows 수정은 PR #599 merge
+  `daf83b363`, 기획 문서는 `c96ce735f`로 이미 dev에 별도 착륙했다.
+- 삭제 감사: 현재 브랜치 고유 파일 0개, 고유 diff 0개, 인라인 SVG 0개,
+  legacy chart import 0개, 삭제된 `features/{metrics,workflow,release}` 재도입 0개다.
+  `@nivo` 문자열은 차트 회귀 가드의 테스트 제목 1건뿐이고, 삭제 feature 문자열도
+  cleanup 회귀 가드의 금지 목록뿐이다. 기존 `@/ui` import 38건은 모두 dev와 동일한
+  S5 이전 잔여이며 이 브랜치가 되살린 변경이 아니다. 소유 영역 밖 재도입도 0개다.
+- VP-012 판단: 흡수할 물리 뷰 그래프 자산이 실물에 없으므로 버린 UI는 없다. 브랜치명과
+  과거 작업 내용이 불일치한 정체 ref로 판정했다.
+- 임시 worktree에서 `git rebase origin/dev` 결과 HEAD `6bb84845a`, dev 대비 `0 0`.
+  요청된 회귀 가드 4종(`lucide_icon_contract`, `theme_token_contract`,
+  `shadcn_primitives`, `legacy_route_cleanup`)은 6/6 PASS. `make gate`는 Ruff/format,
+  import-linter `8 kept/0 broken`, pytest `2160 passed, 3 skipped`, manifest `69/20`,
+  frontend typecheck/lint/tests `23/23`/production build까지 전부 PASS했다.
+- dev 병합은 `Already up to date`로 새 merge commit이 필요하지 않았다. 빈 커밋은 만들지
+  않았다. 복구 ref는
+  `refs/archive/2026-07-14/feat/minmings111/cluster-infra-map-ui-pre-sync=d6192b44c`와
+  `refs/archive/2026-07-14/feat/minmings111/cluster-infra-map-ui=6bb84845a`다. archive 후
+  원격 branch 삭제, 로컬 branch `-d`, 임시 worktree remove/prune을 완료했고
+  `git ls-remote`에서 해당 원격 ref가 0건임을 재확인했다.
+- **[BLOCKED] AWS 배포/CI**: 최신 dev `feaba56c4`의 Dev Gate run
+  `29275892829`은 4초 만에 step 0개로 실패했다. annotation은 최근 결제 실패 또는
+  spending limit 증액 필요로 job이 시작되지 않았음을 명시한다. 직전 `e4a924e5d` run
+  `29275682297`과 `6bb84845a` run `29274881834` 재실행도 같은 사유로 step 0개
+  실패했다. `aws sts get-caller-identity`는
+  세션 만료(exit 255), `kubectl config current-context`는 context 없음(exit 1)이다.
+  따라서 CI 초록 선행 원칙과 배포 권한을 모두 충족하지 못해 AWS rollout은 실행하지
+  않았다. 해제 조건은 GitHub Billing/spending 복구 후 Dev Gate 초록, AWS 재로그인 및
+  승인된 kubectl context 복구다.
+- 최신 원격 dev `feaba56c4` 위에서 기록 커밋까지 포함해 `make gate`를 다시 실행했다.
+  Ruff/format PASS, import-linter `8 kept/0 broken`, pytest `2161 passed, 3 skipped`,
+  manifest `69/20`, frontend typecheck/lint/tests `23/23`/production build가 모두 PASS했다.
+  따라서 현재 RED는 저장소 코드 실패가 아니라 서버 측 CI 결제 차단으로 분리된다.
+- 공개 URL의 **배포 전 기준선**은 `https://k8s.woonyong.org/` HTTP 200,
+  `/api/healthz` HTTP 200(`api-gateway`)이며 로그인 화면이 렌더됐다. 브라우저 console
+  error 0건, unauthenticated `/api/auth/session` 401 2건만 관측했다. 증거 스크린샷은
+  `frontend/output/branch-sync-live-baseline/current.png`다. 이 화면은 신규 배포 증명이
+  아니라 현재 운영 기준선이며, 배포 후 검증은 위 차단 해소 뒤 다시 수행해야 한다.
+
+[2026-07-14 03:58 KST] [판단자] 판정: 정상 — 착륙 3건(`e4a924e5d` Ruff 전역 게이트, `feaba56c4` 게이트 기록, `7d4e6750f` DEV_AUTH_BYPASS fail-closed 검증; 전부 ancestor exit 0), 정체 lane 0(codex/picture·firework ahead 0, cluster-infra-map-ui 감사 후 회수 완료), BLOCKED 1건(AWS 배포/CI — GitHub 결제 차단, 코드 실패 아님·로컬 gate 전체 그린, 사람 조치 대기), AcceptedResponse 무결, 배포 스위치 off 유지, HOLD 0. [D-051] 발행.
+
+[2026-07-14 04:12 KST] [판단자] 판정: 정상 — 착륙 3건(`9d8b2cedf` 인증 우회 상태 기록, `a8fde3956` S5 Resources shadcn 이관, `ba46caf49` P0-4 smoke 기본 실행 코드; 전부 origin/dev 이력 실물), 정체 lane 0(picture·firework ahead 0, 신규 lane 0), BLOCKED 1건 유지(AWS 배포/CI — GitHub 결제 차단, 사람 조치 대기), AcceptedResponse 무결, 배포 스위치 off·배포 J 미실행 유지, HOLD 0. 유지 알림 2건(§9.2 GAP→BQ 공백, vp-010 §9 GAP-005/006 낡은 행). [D-052] 발행.
+
+[2026-07-14 04:22 KST] [판단자] 판정: 정상 — 착륙 4건(`d17c8ab23` 팀원 workflow workspace 재구축, `390bf375e` smoke 증거, `37dbd9673` gate-fast+전체 pre-push 유지 가드, `f5a0ff8e5` 게이트 증거; 전부 ancestor exit 0·force 0, 프론트 27 passed·build PASS가 팀원 커밋 트리 커버), 코드 lane 정체 0(picture·firework ahead 0), 착륙 촉구 1건(판단 기록 [D-049]~[D-052] origin 미착륙 — `95d4db0cd` rebase 후 docs push, [D-025] §2), 알림 1건(`d17c8ab23` 수제 CSS 1,951줄 [D-044] shadcn 정합 확인 — 정리 세션 S5 판정·사람 아침 확인), BLOCKED 1건 유지(AWS 배포/CI — GitHub 결제, 사람 조치), AcceptedResponse 무결, 배포 스위치 off 유지, HOLD 0. [D-053] 발행.
+
+[2026-07-14 04:24 KST] [판단자] 판정: 정상 — 착륙 1건(`d962b6ebc` 프론트 정리 [사이클]·[경합] 기록, ancestor exit 0·force 0; 경합은 rebase·full gate 재증명 준수의 정상 마찰), 정체 lane 0(picture·firework ahead 0, 신규 0), [D-053] 착륙 촉구 이행 대기 유지(발행 후 1사이클 미경과 — origin night-directives 여전히 [D-048]까지, 미이행 시 다음 판정 재발행), BLOCKED 1건 유지(AWS 배포/CI — GitHub 결제, 사람 조치), AcceptedResponse 무결, 배포 스위치 off 유지, HOLD 0. [D-054] 발행.
+
+[2026-07-14 04:39 KST] [판단자] 판정: 정상 — 착륙 4건(`3cf0b694a`/`a8669c0ef`/`b22edd791`/`85876fb69` P0-3 digest 복원·수집 경계 + 증거, 전부 origin/dev 실물·force 0; revert `--apply`는 exact opt-in 기본 plan 출력만 = 배포 실행 아님), 코드 lane 정체 0(picture·firework ahead 0, 신규 0), [D-053] 착륙 촉구 재발행(판단 기록 [D-049]~ origin 미착륙 — 촉구 후 4커밋 push하면서도 미포함, `95d4db0cd` 50분 초과; 다음 push 전 첫 작업으로 docs 단독 커밋 push하라), BLOCKED 1건 유지(AWS 배포/CI — GitHub 결제, 사람 조치), AcceptedResponse 무결, 배포 스위치 off 유지, HOLD 0. [D-055] 발행.
+
+[2026-07-14 04:47 KST] [판단자] 판정: 정상 — 착륙 4건(`ca9ed1edf` S5 Resources 위자드 shadcn 이관, `6cd751688` P0-4 strict API smoke 코드, `7d3816a72` smoke 증거·P0 상태 갱신, `dc029fd0d` 위자드 게이트 증거; 전부 origin/dev 실물·force 0, frozen·gateway 무접촉), 코드 lane 정체 0(picture·firework ahead 0, 신규 0), [D-053]·[D-055] 착륙 촉구 재재발행(판단 기록 [D-049]~ origin 미착륙 지속 — `95d4db0cd` 55분 초과·behind 17, 단 [D-055]와 push가 사실상 동시라 HOLD 아님·다음 판정 미이행 시 이행 누락 판정), BLOCKED 1건 유지(AWS 배포/CI — GitHub 결제, 사람 조치), AcceptedResponse 무결, 배포 스위치 off·배포 J 미실행 유지, HOLD 0. [D-056] 발행.
+
+[2026-07-14 04:55 KST] [판단자] 판정: 정상 — 착륙 1건(`a7b35ac90` P0-3 digest rollout 스크립트+테스트, ancestor exit 0·force 0·frozen 무접촉; 수동 도구·워크플로 미배선 = 배포 실행 아님), 코드 lane 정체 0(picture·firework ahead 0, 신규 0), 판단 기록 채널 **이행 누락 판정**([D-055] 촉구 후 push 3건 전부 미포함, origin night-directives 여전히 [D-048]까지, `95d4db0cd` 60분 초과) + 착륙 촉구 재발행 — 다음 push는 [D-049]~[D-057] docs 커밋 선행 필수, 재차 미이행 시 사람 상신, BLOCKED 1건 유지(AWS 배포/CI — GitHub 결제, 사람 조치), AcceptedResponse 무결, 배포 스위치 off 유지, HOLD 0. [D-057] 발행.
+
+[2026-07-14 05:12 KST] [판단자] 판정: 정상 — 착륙 3건(`885bc1aee` digest 증거, `e9a28baa2` S5 드릴다운 히트맵 shadcn 이관, `9d78b4567` P0-3 opt-in 배포 workflow — `vars.AWS_DEV_DEPLOY_ENABLED == '1'` exact opt-in 조건+계약 테스트 실물 확인, 배포 실행 아님; 전부 origin/dev 실물·force 0·frozen 무접촉), 코드 lane 정체 0(picture·firework ahead 0), 판단 기록 채널 **2회 연속 이행 누락 → 사람 상신**([D-057] 예고 기준 충족 — origin night-directives 여전히 [D-048]까지, `95d4db0cd` 75분 초과, 촉구 후 push 약 8건 전부 미포함) + 촉구 재발행, 알림 1건(삭제된 원격 ref `woonyong/ui-layer-lab`·`feat/minmings111/cluster-infra-map-ui` live ls-remote 실측 재출현 — 내용 위험 0, 재push 주체 확인·재삭제 필요), BLOCKED 1건 유지(AWS 배포/CI — GitHub 결제, 사람 조치), AcceptedResponse 무결, 배포 스위치 off 유지, HOLD 0. [D-058] 발행.
+
+[2026-07-14 05:14 KST] [판단자] 판정: 정상 — 착륙 2건(`39a66002a` 프론트 레거시 release 표면 −4,150줄 제거 = [D-053] 알림 ③ 수제 CSS 1,951줄 해소 실물, `6d4ad648f` docs 격리 배포 상태·해제 조건; 전부 ancestor exit 0·force 0, frozen·gateway 무접촉, 배포 실행 아님·switch OFF 문서 실물), 코드 lane 정체 0(picture·firework ahead 0), 판단 기록 채널 **3회 연속 이행 누락 — 상신 유지**(origin night-directives 여전히 [D-048]까지; 단 `6d4ad648f`로 docs push 경로 동작은 확인 — 판단 기록 pickup만 누락, [D-035] 미커밋 혼입 금지와의 충돌 가능성 상신 보강) + 촉구 재발행, 좀비 ref 2건 여전히 실존(내용 위험 0), BLOCKED 1건 유지(AWS 배포/CI — GitHub 결제, 사람 조치), AcceptedResponse 무결, HOLD 0. [D-059] 발행.
+
+[2026-07-14 05:30 KST] [판단자] 판정: **HOLD [백엔드 — push 게이트 구조]** — `75c992e94`가 pre-push를 `make gate`→`gate-fast`로 강등하며 강등 방지 가드 테스트(`37dbd9673`)를 반전 교체. origin workqueue P0-0 비고("서버 gate 실제 복구 전 강등 금지")·[D-040] 정면 충돌 + 결제 복구·Dev Gate 초록 증거 0 = 전체 게이트 강제층이 서버(결제 차단)·로컬(강등) 동시 부재(안전 문제, 속도 문제 아님). 허용 push는 게이트 복원 커밋과 판단 기록 docs 커밋뿐, 해제는 사람/조율 세션 서명. 그 외 착륙 5건 정상(`114680e90` CI Helm 고정, `036553bdd` docs 증거, `7443a161f` deploy-status 원자 갱신 스크립트, `fec70983d` 프론트 Sonner 이관, `bda18fa12` 세션 로그 분리 — 전부 force 0·ancestor 0·소유권 내), 코드 lane 정체 0(picture·firework ahead 0), 판단 기록 채널 **4회 연속 이행 누락 — 촉구 재발행·상신 유지**(origin night-directives 여전히 [D-048]까지, 촉구 후 push 14건 미포함; 로그 분리는 채널 인지 방증으로 참작), 좀비 ref 2건 실존(내용 위험 0), BLOCKED 1건 유지(AWS 배포/CI — 결제, 사람 조치), AcceptedResponse 무결. [D-060] 발행.
+
+[2026-07-14 05:36 KST] [판단자] 판정: **HOLD [백엔드 — push 게이트 구조] 유지** — 복원 커밋 미착륙(origin/dev HEAD `c0635b007`에서 `pre-push-gate.sh` 여전히 `gate-fast`·가드 테스트 여전히 반전 상태, 05:41 실물). [D-060] 이후 push 5건은 전부 frozen·gateway 무접촉이며 타이밍·소유권·in-flight로 참작(⑤ `c0635b007` 5줄 테스트가 마지막 참작) — 다음 백엔드 push가 복원 커밋도 판단 기록 docs도 아니면 HOLD 위반 확정·상신 격상. 판단 기록 채널 **5회 연속 이행 누락 — 촉구 재발행·상신 유지**(origin night-directives 여전히 [D-048]까지, `95d4db0cd` 110분 초과 — HOLD 허용 push ②가 바로 이 docs 커밋이다). 코드 lane 정체 0(picture·firework ahead 0), 좀비 ref 2건 실존(내용 위험 0), BLOCKED 1건 유지(AWS 배포/CI — GitHub 결제, 사람 조치), AcceptedResponse 무결, 배포 스위치 off·배포 J 미실행 유지. [D-061] 발행.
+
+[2026-07-14 05:52 KST] [판단자] 판정: **HOLD [백엔드 — push 게이트 구조] 사유 축소 유지(안전→절차 재분류)** — `33cb6e271`이 서버 Dev Gate run `29282410523`·`29282934238` SUCCESS 증거를 착륙시켜 [D-060] 사유 3(강제층 동시 부재) 소멸, dev-gate.yml L53 전체 `make gate` 실물 확인; 잔여는 사유 4(서명 없는 [D-040] 개정 — pre-push fast 강등+가드 반전, 사람 서명 [D-###] 또는 복원으로 종결). [D-061] 경계 기준 백엔드 push 4건(②~⑤) 형식 위반 성립하나 사유-소멸 증거 동시 착륙으로 격상 대신 서명 상신. 착륙 6건 정상(첫 배포 backup/snapshot 코드 4건 + 프론트 shadcn 1건, 전부 force 0·frozen·gateway 무접촉, 배포 J 실행 0·스위치 OFF), 코드 lane 정체 0(picture·firework ahead 0), 판단 기록 채널 **6회 연속 이행 누락 — 촉구 재발행·상신 유지**(origin night-directives 여전히 [D-048]까지, `95d4db0cd` 120분 초과), BLOCKED 재정의(GitHub 결제 해소 판정, AWS 세션 재로그인·live 실측·수동 첫 배포만 잔여), 좀비 ref 2건 실존(내용 위험 0), AcceptedResponse 무결. [D-062] 발행.
+
+[2026-07-14 05:57 KST] [판단자] 판정: **HOLD [백엔드 — push 게이트 구조] 유지([D-062] 축소 사유 그대로)** — origin/dev HEAD `4e42bb8af`에서 `pre-push-gate.sh` 여전히 `gate-fast`·가드 테스트 여전히 반전 상태(05:57 실물), 복원 커밋·사람 서명 [D-###] 모두 미착륙 — 해제는 우녕 서명 또는 원복 착륙. [D-062] 이후 착륙 2건 정상(`e05734f4a` 프론트 S5 증거 docs, `4e42bb8af` 인시던트 알림 Sonner 이관 — 전부 프론트 소유·ancestor 0·frozen/gateway 무접촉), 백엔드 신규 push 0건 = [D-061] 경계 위반 미발생, 판단 기록 채널 촉구 재발행(origin night-directives 여전히 [D-048]까지·`95d4db0cd` 125분 초과, 단 신규 push 부재로 미이행 카운트 6회 불변), 코드 lane 정체 0(picture·firework ahead 0), 좀비 ref 2건 실존(내용 위험 0), BLOCKED 1건 유지(AWS 세션 재로그인·live 실측·수동 첫 배포 — 사람 조치), AcceptedResponse 무결, 배포 스위치 OFF·배포 J 실행 흔적 0. [D-063] 발행.
+
+[2026-07-14 06:08 KST] [판단자] 판정: **HOLD [백엔드 — push 게이트 구조] 유지([D-062] 축소 사유 그대로)** — origin/dev HEAD `c18800228`에서 `pre-push-gate.sh` 여전히 `gate-fast`·가드 테스트 여전히 반전(06:08 실물), 복원 커밋·사람 서명 모두 미착륙. [D-063] 이후 착륙 3건 정상(`e98635956` 인시던트 API 증거 docs, `868cf8982` 설정 내비 shadcn, `c18800228` 운영 DLQ shadcn — 전부 프론트 정리 세션 소유·ancestor exit 0·frozen/gateway 무접촉), 백엔드 신규 push 0건 = [D-061] 경계 위반 미발생, 판단 기록 채널 촉구 재발행(origin 여전히 [D-048]까지·`95d4db0cd` 139분 초과, 미이행 카운트 6회 불변), 코드 lane 정체 0(picture·firework ahead 0), 좀비 ref 2건 실존 + `cluster-infra-map-ui` SHA 이동 재관측(`daf83b363`→`9d78b4567`, 둘 다 ancestor 0·내용 위험 0 — 재push 주체 확인 필요), BLOCKED 1건 유지(AWS 세션 — 사람 조치), AcceptedResponse 무결, 배포 스위치 OFF·배포 J 실행 흔적 0. [D-064] 발행.
+
+[2026-07-14 06:20 KST] [판단자] 판정: **HOLD [백엔드 — push 게이트 구조] 유지 + [D-061] 경계 위반 확정·상신 격상** — origin/dev HEAD `20ea6fbc4`에서 `pre-push-gate.sh` 여전히 `gate-fast`·가드 테스트 여전히 반전(06:18 실물), 복원·서명 모두 미착륙. [D-064] 이후 착륙 10건(백엔드 8 + 프론트 2) 전부 정상 경로(force 0·frozen/gateway 무접촉·배포 J 실행 0 — `AWS_DEV_DEPLOY_ENABLED` 미설정 명시·Dev Deploy run `29285201878` 의도된 skipped)이나, 백엔드 push 8건이 [D-061] 허용 push(복원/판단 기록) 어느 것도 아님 → 예고대로 형식 위반 확정·사람 상신 격상(안전 재분류 없음 — night-log-deploy에 "사람 지시" 개입 정황 실물, 일 멈춤 없음). 판단 기록 채널 **7회 연속 이행 누락**(origin 여전히 [D-048]까지·`95d4db0cd` 150분 초과) — 촉구 재발행. BLOCKED [AWS] 대폭 진전: Environment `dev-deploy`·IAM OIDC·EKS access entry·vars/시크릿 설정 착륙, Dev Gate run `29285055146` SUCCESS, snapshot `snap-0bebb31ef7c909f9c` pending 72% — 잔여는 snapshot 검증·수동 첫 배포·switch 미설정 재확인. 기본 브랜치 main→dev 변경 관측(추인 권고). 코드 lane 정체 0(picture·firework ahead 0), 좀비 ref 2건 불변(내용 위험 0), AcceptedResponse 무결. [D-065] 발행.
+
+[2026-07-14 06:24 KST] [판단자] 판정: **HOLD [백엔드 — push 게이트 구조] 유지([D-062] 축소 사유 그대로)** — origin/dev HEAD `3c907192d`에서 `pre-push-gate.sh` 여전히 `gate-fast`·가드 테스트 여전히 반전(06:23 실물), 복원 커밋·사람 서명 [D-###] 모두 미착륙. [D-065] 이후 착륙 1건 정상(`3c907192d` 운영 DLQ 접근성 보정 — frontend/** 2파일, 정리 세션 소유·frozen/gateway 무접촉), 백엔드 신규 push 0건 = [D-061] 경계 신규 위반 없음([D-065] 상신 격상 유효), 판단 기록 채널 촉구 재발행(origin night-directives 여전히 [D-048]까지·`95d4db0cd` 155분 초과, 미이행 카운트 7회 불변), 코드 lane 정체 0(picture·firework ahead 0), 좀비 ref 2건 실존(내용 위험 0), BLOCKED 1건 유지(AWS 세션·snapshot 검증·수동 첫 배포 — 사람 조치), AcceptedResponse 무결, 배포 스위치 OFF·배포 J 실행 흔적 0. [D-066] 발행.
+
+[2026-07-14 06:40 KST] [판단자] 판정: **HOLD [백엔드 — push 게이트 구조] 유지([D-062] 축소 사유 그대로)** — origin/dev HEAD `6d5e94151`에서 `pre-push-gate.sh` 여전히 `gate-fast`(L14)·가드 테스트 여전히 반전(L68, 06:37 실물), 복원 커밋·사람 서명 [D-###] 모두 미착륙. [D-066] 이후 착륙 9건 정상(배포 P0 코드 6+증거 docs 2+smoke 1 — 전부 force 0·ancestor 0·frozen/gateway 무접촉, PostgreSQL·NATS 복구 리허설 완료·임시 자원 전량 회수·운영 DB 무변경), 단 9건 전부 [D-061] 허용 push(복원/판단 기록) 아님 = 경계 위반 지속([D-065] 상신 격상 유효, 수위 추가 상향 없음 — 사람 개입 정황 지속·일 멈춤 없음). 판단 기록 채널 **8회 연속 이행 누락 — 촉구 재발행·상신 유지**(origin night-directives 여전히 [D-048]까지·`95d4db0cd` 170분 초과). BLOCKED [AWS] 추가 축소(복구 리허설 완료 — live DEV_AUTH_BYPASS·rollback capture 경계·수동 첫 배포·switch 재확인만 잔여), 코드 lane 정체 0(picture·firework ahead 0), 좀비 ref 2건 실존(내용 위험 0), AcceptedResponse 무결, 배포 스위치 OFF·배포 J 실행 흔적 0(dev-deploy.yml L47 exact opt-in 실물). [D-067] 발행.
+
+[2026-07-14 06:49 KST] [판단자] 판정: **HOLD [백엔드 — push 게이트 구조] 유지([D-062] 축소 사유 그대로)** — origin/dev HEAD `3af9fe9a4`에서 `pre-push-gate.sh` 여전히 `gate-fast`·가드 테스트 여전히 반전(06:47 실물), 복원 커밋·사람 서명 [D-###] 모두 미착륙. [D-067] 이후 착륙 4건 정상(격리 DB cutover·writer 동결 코드 2+증거 docs 2 — 전부 fast-forward·frozen/gateway 무접촉; dev-deploy 신규 step 4개는 `workflow_dispatch` 수동 first-deploy 한정, auto 경로 `AWS_DEV_DEPLOY_ENABLED == '1'` exact opt-in 불변 = 게이트 약화 아님), 단 4건 전부 [D-061] 허용 push 아님 = 경계 위반 지속([D-065] 상신 격상 유효·수위 상향 없음). 판단 기록 채널 **9회 연속 이행 누락 — 촉구 재발행·상신 유지**(origin 여전히 [D-048]까지·`95d4db0cd` 약 180분 초과). BLOCKED [AWS] 유지(live 인증·rollback capture·수동 첫 배포 — 사람 조치), 코드 lane 정체 0(picture·firework ahead 0), AcceptedResponse 무결, 배포 J 실행 흔적 0. 알림 3건(§9.2 GAP→BQ 공백, vp-010 GAP-005/006 낡은 행, workqueue P0 상태 칸 낡음). [D-068] 발행.
+
+[2026-07-14 06:59 KST] [판단자] 판정: **HOLD [백엔드 — push 게이트 구조] 유지([D-062] 축소 사유 그대로)** — origin/dev HEAD `01bbb6301`에서 `pre-push-gate.sh` 여전히 `gate-fast`·가드 테스트 여전히 반전(L68, 06:56 실물), 복원 커밋·사람 서명 [D-###] 모두 미착륙. [D-068] 이후 착륙 5건 정상(프론트 인시던트 상세 shadcn+증거 2, 백엔드 배포 P0 smoke ci+증거 docs 3 — 전부 force 0·ancestor 0·frozen/gateway 무접촉, dev-deploy.yml L47 exact opt-in 불변), 단 백엔드 3건 전부 [D-061] 허용 push 아님 = 경계 위반 지속([D-065] 상신 격상 유효·수위 상향 없음). 판단 기록 채널 **10회 연속 이행 누락 — 촉구 재발행·상신 유지**(origin 여전히 [D-048]까지·`95d4db0cd` 약 190분 초과). BLOCKED [AWS] 유지(live 인증·rollback capture·수동 첫 배포 — 사람 조치), 코드 lane 정체 0(picture·firework ahead 0), 좀비 ref 2건 실존(내용 위험 0), AcceptedResponse 무결, 배포 J 실행 흔적 0. [D-069] 발행.
+
+## 아침 요약 (2026-07-14 07:00 KST — 자동 판단자)
+
+**밤새 착륙 (origin/dev 기준, 전부 force 0·frozen/gateway 무접촉·배포 J 실행 0):**
+- 백엔드 배포 P0 트랙: 서버 Dev Gate 복구 증거(`33cb6e271`, run `29282410523`·`29282934238` SUCCESS), 첫 배포 backup/snapshot·restore rehearsal(PostgreSQL `snap-0bebb31ef7c909f9c`·NATS `snap-0cd67361e50445185` — 복원본 row count 실측·임시 자원 전량 회수·운영 DB 무변경), 격리 DB cutover·writer 동결, digest 정본·ECR·OIDC 신뢰 경계·EKS access entry·GitHub Environment `dev-deploy`, 첫 배포 smoke 축소·rollback 예산(`01bbb6301`). deploy-setup.md +698 신설.
+- 프론트 정리 세션(S5): Resources·설정 내비·운영 DLQ·알림 채널·인시던트 목록·인시던트 상세 shadcn 이관 연속 착륙 + 레거시 release 표면 −4,150줄 — 사이클당 1착륙 리듬([D-025] 모범).
+- 현재 origin/dev = `01bbb6301` (07:00 기준).
+
+**HOLD·정체:**
+- **HOLD [백엔드 — push 게이트 구조] 유지** ([D-060] 발행 → [D-062] 축소: 안전→절차/서명 문제로 재분류). 잔여 사유: pre-push `make gate`→`gate-fast` 강등 + 가드 테스트 반전이 [D-040](우녕 작성) 사실상 개정인데 서명 [D-###] 없음. **해제 경로(사람)**: ① Dev Gate run SUCCESS 직접 확인, ② 강등 재승인 서명 [D-###] 발행 또는 원복 지시 택1, ③ repo vars `AWS_DEV_DEPLOY_ENABLED` 미설정/0 재확인.
+- **[D-061] 경계 위반 누적**: HOLD 이후 백엔드 push 24건이 허용 push(게이트 복원/판단 기록 docs) 어느 것도 아님 → [D-065]에서 사람 상신 격상. 내용은 전부 정상 경로(배포 P0)라 일은 멈추지 않았다.
+- **판단 기록 채널 10회 연속 이행 누락**: 로컬 night-directives는 [D-069]까지인데 origin은 [D-048]까지. `95d4db0cd`(03:49) 미push 약 190분 — 백엔드 세션의 night-directives 폴링이 죽어 있을 개연성 높음. 사람 직접 지시 필요.
+- 코드 lane 정체 0: `codex/picture`·`codex/firework` ahead 0(삭제 후보), 신규 lane 0.
+
+**계약 진행률 (프론트 계약 트랙):** BQ-022 landed(`95ff11cc6`), BQ-023 landed(`e2504278d`), BQ-024 in_progress(Applications 착륙 `cbba9d28e` — GitOps strict list/facet 다음, Checks 잔여), BQ-025~028 requested. 백엔드는 [D-038] 순서(배포 P0 → 계약)대로 P0 수행 중 — [D-026] 위반 없음. 프론트 신규 계약 데드락 없음(GAP-002/003/004 소비 준비 완료·adapter 검증 후 노출 원칙 유지).
+
+**사람(우녕) 할 일:**
+1. [HOLD 해제] pre-push 강등 재승인 서명 또는 원복 지시 — 위 해제 경로 ①~③.
+2. [상신] 백엔드 세션의 [D-060]~ HOLD·경계 인지 여부 직접 확인(폴링 사멸 의심) + 판단 기록 docs push 직접 지시([D-049]~[D-069] rebase 후 docs 단독 커밋 — [D-035] 예외 경로).
+3. [BLOCKED 해소] AWS 재로그인·kubectl context 복구 → live `DEV_AUTH_BYPASS=0` 실측·rollback capture 경계 해소 → P0-1/2 live 실증 → deploy-status ConfigMap seed → 수동 첫 배포(`FIRST_DEPLOY` 확인 입력).
+4. [추인] 저장소 기본 브랜치 main→dev 변경(06:05)·workqueue P0-0 "강등 금지" 문장 제거 — 서명 [D-###]에 포함 권고.
+5. [정리] 좀비 ref 2건(`woonyong/ui-layer-lab` ahead 1, `feat/minmings111/cluster-infra-map-ui`) 재push 주체 확인·재삭제, vp-010 §9 GAP-005/006 낡은 행·§9.2 GAP→BQ 등록 공백 조율.
+
+[2026-07-14 07:02 KST] [판단자] 판정: **HOLD [백엔드 — push 게이트 구조] 유지([D-062] 축소 사유 그대로)** — origin/dev HEAD `75a571fdf`에서 `pre-push-gate.sh` 여전히 `gate-fast`(L14)·가드 테스트 여전히 반전(L68, 07:01 실물), 복원 커밋·사람 서명 [D-###] 모두 미착륙. [D-069] 이후 착륙 1건 정상(`75a571fdf` Applications 목록 shadcn 이관 — frontend 3파일뿐, 정리 세션 소유·frozen/gateway 무접촉·force 0·ancestor 0), 백엔드 신규 push 0건 = [D-061] 경계 신규 위반 없음([D-065] 상신 격상 유효), 판단 기록 채널 촉구 재발행(origin night-directives 여전히 [D-048]까지·`95d4db0cd` 약 193분 초과, 미이행 카운트 10회 불변), 코드 lane 정체 0(picture·firework ahead 0), 좀비 ref 2건 실존(내용 위험 0), BLOCKED 1건 유지(AWS live 인증·rollback capture·수동 첫 배포 — 사람 조치), AcceptedResponse 무결, 배포 스위치 OFF·배포 J 실행 흔적 0. 아침 요약은 07:00 실행이 기작성 — 생략. [D-070] 발행.
+
+[2026-07-14 07:17 KST] [판단자] 판정: **HOLD [백엔드 — push 게이트 구조] 유지([D-062] 축소 사유 그대로)** — origin/dev HEAD `7c1b8c2c4`에서 `pre-push-gate.sh` 여전히 `gate-fast`(L14)·가드 테스트 여전히 반전(L68, 07:16 실물), 복원 커밋·사람 서명 [D-###] 모두 미착륙. [D-070] 이후 착륙 3건 정상(`70a3f5dff` pre-smoke 재시도 ci, `bf7d36529` 레거시 권한 이관 fix, `7c1b8c2c4` 그 3분 내 자가 revert = fail-closed 자기 교정 — 전부 배포 P0·ancestor 0·force 0·frozen/gateway 무접촉), 단 백엔드 3건 전부 [D-061] 허용 push 아님 = 경계 위반 지속([D-065] 상신 격상 유효·수위 상향 없음). 판단 기록 채널 **11회 연속 이행 누락 — 촉구 재발행·상신 유지**(origin 여전히 [D-048]까지·`95d4db0cd` 약 208분 초과). BLOCKED [AWS] 유지(live 인증·rollback capture·수동 첫 배포 — 사람 조치), 코드 lane 정체 0(picture·firework ahead 0), AcceptedResponse 무결, 배포 스위치 OFF·배포 J 실행 흔적 0. 아침 요약은 07:00 실행이 기작성 — 생략. [D-071] 발행.
+
+[2026-07-14 07:29 KST] [판단자] 판정: **HOLD [백엔드 — push 게이트 구조] 유지([D-062] 축소 사유 그대로)** — origin/dev HEAD `e5856e188`에서 `pre-push-gate.sh` 여전히 `gate-fast`(L14)·가드 테스트 여전히 반전(07:27 실물), 복원 커밋·사람 서명 [D-###] 모두 미착륙. [D-071] 이후 착륙 2건 정상(`22d0e020b` 첫 배포 pre-smoke 일회 우회 → `e5856e188`이 6분 내 우회 스텝·hardcode 전부 제거·pre-smoke 무조건 실행 복원 = 자가 교정, 최종 트리 게이트 약화 0; 전부 ancestor 0·force 0·frozen/gateway 무접촉), 단 백엔드 2건 전부 [D-061] 허용 push 아님 = 경계 위반 지속([D-065] 상신 격상 유효·수위 상향 없음, 누적 29건). 판단 기록 채널 **12회 연속 이행 누락 — 촉구 재발행·상신 유지**(origin 여전히 [D-048]까지·`95d4db0cd` 약 220분 초과). BLOCKED [AWS] 유지(live 인증·rollback capture·수동 첫 배포 — 사람 조치), 코드 lane 정체 0(picture·firework ahead 0), 좀비 ref 2건 실존(내용 위험 0), AcceptedResponse 무결, 배포 스위치 OFF·배포 J 실행 흔적 0(L47 exact opt-in 실물 불변). 아침 요약 기작성 — 생략. [D-072] 발행.
+
+[2026-07-14 07:37 KST] [판단자] 판정: **HOLD [백엔드 — push 게이트 구조] 유지([D-062] 축소 사유 그대로)** — origin/dev HEAD `e5856e188` 불변(07:34~07:37 실측, [D-072] 이후 착륙 0건·양 트랙 push 0건 = 조용한 window), `pre-push-gate.sh` 여전히 `gate-fast`·가드 테스트 여전히 반전(L68 실물), 복원 커밋·사람 서명 [D-###] 모두 미착륙. 백엔드 신규 push 0건 = [D-061] 경계 신규 위반 없음([D-065] 상신 격상 유효·누적 29건). 판단 기록 채널 촉구 재발행(origin 여전히 [D-048]까지·`95d4db0cd` 약 228분 초과, 미이행 카운트 12회 불변 — push 부재로 가산 없음). BLOCKED [AWS] 유지(live 인증·rollback capture·수동 첫 배포 — 사람 조치), 코드 lane 정체 0(picture ahead 0/behind 84·firework ahead 0/behind 82), 좀비 ref 2건 실존(내용 위험 0), AcceptedResponse 무결(origin/dev L31~35), 배포 스위치 OFF·배포 J 실행 흔적 0(L47 exact opt-in 실물 불변), 계약 진행 불변(BQ-022/023 landed·BQ-024 in_progress·BQ-025~028 requested). 아침 요약 기작성 — 생략. [D-073] 발행.
