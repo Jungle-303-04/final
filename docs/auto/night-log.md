@@ -2276,3 +2276,23 @@ target preflight·register 네 함수와 strict Zod 계약을 claim했다. 1회�
 - 4조건: merge-tree clean/tree `70599e747873268d57d70886d98618cfdffc3cd6`,
   source·파일 삭제·소유권 밖·frozen·gateway 계약 변경 0건, `80edc8449`·`d0953f2c6`의
   `origin/dev` ancestor exit 0. J 배포 실행은 0건이다.
+
+## 2026-07-13 19:11 KST — [백엔드] 감사 이벤트 여정 계약 착륙
+
+- lane `codex/audit-journey-contract`, RED `1d0be030e`, 코드 `b729ee6e4`, 문서와
+  feature HEAD `4432e3ca55ed0026dcc9c17a3b6a48b2555603c2`, canonical no-ff merge
+  `29403eb8381280ddb75f3045118794d99b1d9eee`다.
+- `AuditTimelineItem`은 required non-empty 자기 `event_id`와 직접 부모 `causation_id`를
+  분리 반환한다. `journey_stage`는 exact subject 기반
+  `alert/evidence/rca/recovery/command/pr/workflow/cluster/ai/notification/system/unknown`
+  중 하나이며 현재 `EventSubject` 65개는 65/65 분류됐다.
+- stage는 재정렬 phase가 아닌 표시 lane이다. 프론트는 서버 `(created_at, id)` 순서를 유지하고
+  subject prefix를 추측하지 않는다. 미지 subject만 `unknown`이고 raw payload는 계속 비공개다.
+- 프론트 폴링 인계: `audit-timeline-schemas.ts`와 `issuesEndpointContract.ts` strict item에
+  `event_id`·`journey_stage`를 추가한 뒤 새 백엔드 응답과 결합 배포한다. 그 전에는 strict Zod가
+  additive 필드를 거부하므로 backend/frontend 배포를 함께 진행하지 않는다.
+- focused 10 passed, 전체 게이트 Ruff lint/format PASS, import-linter 8 kept/0 broken,
+  pytest `1963 passed, 3 skipped`; manifest 69/20, Bruno 새 필드 검산 PASS다.
+- 4조건: merge-tree clean/tree `46b4497f79d6b400003d669aef5779e5b49a45d6`,
+  삭제·소유권 밖·frozen 변경 0건, `4432e3ca5`·`29403eb83`의 `origin/dev`
+  ancestor exit 0. J 배포 실행은 0건이다.

@@ -964,3 +964,30 @@ Bundle route는 200을 반환한다.
   `origin/dev` ancestor exit 0.
 
 계약 완성: dependency startup retry limit, structured warning and cancellation propagation tests (80edc84495468440960f0590b7ca5eb7c5232e67) [green]
+
+### BQ-019 — 감사 이벤트 여정 식별·분류 계약
+
+- 상태: landed, gateway 계약 lock 해제
+- 담당 lane: `codex/audit-journey-contract`
+- RED: `1d0be030eff6661e2fbad46668f535be259a880d`
+- 코드: `b729ee6e49963c0e0d4599744fd7d63a2e0b8104`
+- 문서와 feature HEAD: `4432e3ca55ed0026dcc9c17a3b6a48b2555603c2`
+- canonical no-ff merge: `29403eb8381280ddb75f3045118794d99b1d9eee`
+- 기존 `audit_log.event_id` 전용 컬럼을 조회해 `AuditTimelineItem.event_id`로 non-empty
+  자기 ID를 반환한다. `causation_id`는 직접 부모 ID이며 두 값을 합성·대체하지 않는다.
+- `journey_stage` 허용값은 `alert/evidence/rca/recovery/command/pr/workflow/cluster/ai/`
+  `notification/system/unknown`이다. 현재 `EventSubject` 65개를 exact key로 정확히 한 lane에
+  배치하며 duplicate·미분류는 로딩과 테스트를 실패시킨다. enum 밖 subject만 `unknown`이다.
+- stage는 시간 phase가 아닌 표시 lane이다. 서버의 `(created_at, id)` 순서를 유지하며
+  클라이언트가 stage별로 재정렬하거나 subject prefix를 다시 해석하지 않는다.
+- 프론트 인계: `references/ui-layer-lab/src/product/api/audit-timeline-schemas.ts`와
+  `issuesEndpointContract.ts`의 strict item에 required non-empty `event_id`와 위 enum의
+  `journey_stage`를 추가해야 한다. 이 소비자 호환 변경 전에는 새 백엔드 응답과 결합 배포하지 않는다.
+- 고유 검증: `tests/test_audit_timeline.py` 10 passed, 알려진 subject 65/65 분류,
+  `docs/api/05-rca-dashboard/14-audit-timeline.bru`가 새 필드와 enum을 검산한다.
+- 전체 게이트: Ruff lint/format PASS, import-linter 8 kept/0 broken,
+  pytest `1963 passed, 3 skipped`; manifest management 69 / target 20.
+- 4조건: merge-tree clean/tree `46b4497f79d6b400003d669aef5779e5b49a45d6`,
+  삭제·소유권 밖·frozen 변경 0건, feature·merge commit의 `origin/dev` ancestor exit 0.
+
+계약 완성: AuditTimelineItem.event_id + journey_stage (b729ee6e49963c0e0d4599744fd7d63a2e0b8104) [green]
