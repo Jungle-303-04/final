@@ -48,6 +48,7 @@ REALTIME_GATEWAY_SERVICE_NAME = "realtime-gateway"
 BUS_INJECTABLE_ASYNC_SERVICES = frozenset({"command-janitor", "outbox-relay"})
 REALTIME_GATEWAY_PORT_ENV = "REALTIME_GATEWAY_PORT"
 DEFAULT_REALTIME_GATEWAY_PORT = "8001"
+HTTP_SHUTDOWN_TIMEOUT_SECONDS = 10.0
 
 
 def _bool_env(name: str, default: str) -> bool:
@@ -252,14 +253,15 @@ class ControllerRuntime:
         await bus.connect()
         await sessions.connect()
         servers: list[Server] = []
-        tasks: list[asyncio.Task[Any]] = []
+        service_tasks: list[asyncio.Task[Any]] = []
+        server_tasks: list[asyncio.Task[Any]] = []
         waiter: asyncio.Task[bool] | None = None
         stopping = asyncio.Event()
         try:
             for loaded in self.loaded:
                 if loaded.service.kind == "worker":
                     app = loaded.module.app
-                    tasks.append(
+                    service_tasks.append(
                         asyncio.create_task(
                             WorkerRuntime(app.handler_spec(), bus=borrowed).run(),
                             name=loaded.service.name,
@@ -270,18 +272,22 @@ class ControllerRuntime:
                     args = (
                         (borrowed,) if loaded.service.name in BUS_INJECTABLE_ASYNC_SERVICES else ()
                     )
-                    tasks.append(asyncio.create_task(runner(*args), name=loaded.service.name))
+                    service_tasks.append(
+                        asyncio.create_task(runner(*args), name=loaded.service.name)
+                    )
                 else:
                     server = self._http_server(loaded, borrowed, sessions)
                     servers.append(server)
-                    tasks.append(asyncio.create_task(server.serve(), name=loaded.service.name))
+                    server_tasks.append(
+                        asyncio.create_task(server.serve(), name=loaded.service.name)
+                    )
             await asyncio.sleep(0)
             loop = asyncio.get_running_loop()
             for item in (signal.SIGTERM, signal.SIGINT):
                 loop.add_signal_handler(item, stopping.set)
             waiter = asyncio.create_task(stopping.wait(), name="controller-stop")
             done, _pending = await asyncio.wait(
-                [*tasks, waiter],
+                [*service_tasks, *server_tasks, waiter],
                 return_when=asyncio.FIRST_COMPLETED,
             )
             if waiter not in done:
@@ -291,18 +297,38 @@ class ControllerRuntime:
                     raise error
                 raise RuntimeError(f"controller service stopped unexpectedly: {stopped.get_name()}")
         finally:
-            for server in servers:
-                server.should_exit = True
-            if waiter is not None:
-                waiter.cancel()
-            for task in tasks:
-                task.cancel()
-            cleanup_tasks = [*tasks]
-            if waiter is not None:
-                cleanup_tasks.append(waiter)
-            await asyncio.gather(*cleanup_tasks, return_exceptions=True)
+            await self._shutdown(servers, service_tasks, server_tasks, waiter)
             await sessions.close()
             await bus.close()
+
+    @staticmethod
+    async def _shutdown(
+        servers: list[Server],
+        service_tasks: list[asyncio.Task[Any]],
+        server_tasks: list[asyncio.Task[Any]],
+        waiter: asyncio.Task[bool] | None,
+    ) -> None:
+        for server in servers:
+            server.should_exit = True
+        if waiter is not None:
+            waiter.cancel()
+        for task in service_tasks:
+            task.cancel()
+        cleanup_tasks: list[asyncio.Task[Any]] = [*service_tasks]
+        if waiter is not None:
+            cleanup_tasks.append(waiter)
+        await asyncio.gather(*cleanup_tasks, return_exceptions=True)
+        if not server_tasks:
+            return
+        try:
+            await asyncio.wait_for(
+                asyncio.gather(*server_tasks, return_exceptions=True),
+                timeout=HTTP_SHUTDOWN_TIMEOUT_SECONDS,
+            )
+        except TimeoutError:
+            for task in server_tasks:
+                task.cancel()
+            await asyncio.gather(*server_tasks, return_exceptions=True)
 
     @staticmethod
     def _validate_entrypoint(loaded: LoadedControllerService) -> None:
