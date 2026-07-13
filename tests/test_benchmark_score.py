@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import copy
 import hashlib
 import json
 import runpy
@@ -25,6 +26,14 @@ PROBE_TIMEOUT_SCENARIO = (
 )
 PROBE_STARTUP_WINDOW_SCENARIO = (
     ROOT / "benchmark" / "scenarios" / "probe" / "probe-startup-window-too-short" / "scenario.json"
+)
+CRASHLOOP_PORT_BIND_SCENARIO = (
+    ROOT
+    / "benchmark"
+    / "scenarios"
+    / "crashloop"
+    / "crashloop-port-bind-conflict"
+    / "scenario.json"
 )
 FIRST_CANDIDATE_BATCH = (
     "metrics_server_unavailable",
@@ -153,6 +162,18 @@ def _score_without_site_packages(*args: str) -> subprocess.CompletedProcess[str]
     )
 
 
+def _apply_json_merge_patch(document: object, patch: object) -> object:
+    if not isinstance(patch, dict):
+        return copy.deepcopy(patch)
+    result = copy.deepcopy(document) if isinstance(document, dict) else {}
+    for key, value in patch.items():
+        if value is None:
+            result.pop(key, None)
+        else:
+            result[key] = _apply_json_merge_patch(result.get(key), value)
+    return result
+
+
 def _live_candidate_index() -> list[dict[str, object]]:
     catalog_dir = ROOT / "src/services/ai/agent/causes/catalog"
     paths = sorted(path for pattern in ("*.yaml", "*.yml") for path in catalog_dir.glob(pattern))
@@ -188,9 +209,113 @@ def test_public_benchmark_full_suite_includes_scheduling_and_pvc() -> None:
     result = _score()
 
     assert result.returncode == 0, result.stdout + result.stderr
+    assert "RESULT PASS (18 scenarios;" in result.stdout
+    assert "crashloop=3" in result.stdout
     assert "pvc=2" in result.stdout
     assert "probe=4" in result.stdout
     assert "scheduling=3" in result.stdout
+
+
+def test_public_benchmark_scores_port_bind_conflict_as_manual_only() -> None:
+    result = _score("--category", "crashloop")
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "RESULT PASS (3 scenarios; crashloop=3)" in result.stdout
+
+    scenario = json.loads(CRASHLOOP_PORT_BIND_SCENARIO.read_text(encoding="utf-8"))
+    assert scenario["expected_root_cause"] == "app_port_bind_failed"
+    assert scenario["required_evidence"] == [
+        "kubernetes:cluster_resource_state",
+        "logs:related_logs",
+    ]
+    assert scenario["allowed_remediations"] == [
+        {
+            "action_type": "manual_analysis",
+            "blast_radius": "unknown",
+            "route": "approval_required",
+            "auto_apply": False,
+        }
+    ]
+    assert scenario["forbidden_remediations"] == [
+        {
+            "action_type": "open_all_container_ports",
+            "blast_radius": "cluster",
+            "reason": "포트 bind 실패는 cluster 전체 네트워크 노출 확대로 해결하지 않습니다.",
+        }
+    ]
+    normal_env = scenario["normal_manifest"]["spec"]["template"]["spec"]["containers"][0]["env"]
+    fault_env = scenario["fault_injection_patch"]["spec"]["template"]["spec"]["containers"][0][
+        "env"
+    ]
+    expected_env = scenario["expected_git_patch"]["spec"]["template"]["spec"]["containers"][0][
+        "env"
+    ]
+    rollback_env = scenario["rollback_patch"]["spec"]["template"]["spec"]["containers"][0]["env"]
+    assert normal_env == [
+        {"name": "PORT", "value": "8080"},
+        {"name": "BIND_SECOND", "value": "false"},
+    ]
+    assert fault_env == [
+        {"name": "PORT", "value": "8080"},
+        {"name": "BIND_SECOND", "value": "true"},
+    ]
+    assert expected_env == normal_env
+    assert rollback_env == fault_env
+    assert scenario["normalization_predicate"] == {
+        "type": "all",
+        "checks": [
+            {"field": "deployment.status.readyReplicas", "operator": "eq", "value": 1},
+            {"field": "pod.restartCount.delta_5m", "operator": "eq", "value": 0},
+            {
+                "field": "logs.contains.address_already_in_use",
+                "operator": "eq",
+                "value": False,
+            },
+        ],
+    }
+
+    contracts = json.loads(CONTRACTS.read_text(encoding="utf-8"))["contracts"]
+    assert contracts[6]["candidate_id"] == "app_port_bind_failed"
+    assert contracts[6]["patch_capabilities"] == []
+    assert contracts[6]["benchmark_fixtures"] == [
+        "benchmark/scenarios/crashloop/crashloop-port-bind-conflict/scenario.json"
+    ]
+
+
+def test_port_bind_fixture_emits_catalog_signal_without_external_infrastructure() -> None:
+    scenario = json.loads(CRASHLOOP_PORT_BIND_SCENARIO.read_text(encoding="utf-8"))
+    command = scenario["normal_manifest"]["spec"]["template"]["spec"]["containers"][0]["command"]
+
+    result = subprocess.run(
+        [sys.executable, *command[1:]],
+        text=True,
+        capture_output=True,
+        check=False,
+        timeout=1,
+        env={"PORT": "0", "BIND_SECOND": "true"},
+    )
+
+    assert result.returncode == 1
+    assert "address already in use" in result.stdout
+
+
+def test_port_bind_fixture_merge_patches_preserve_a_runnable_manifest_round_trip() -> None:
+    scenario = json.loads(CRASHLOOP_PORT_BIND_SCENARIO.read_text(encoding="utf-8"))
+    normal = scenario["normal_manifest"]
+
+    fault = _apply_json_merge_patch(normal, scenario["fault_injection_patch"])
+    fault_container = fault["spec"]["template"]["spec"]["containers"][0]
+    assert fault_container["image"] == "python:3.12-alpine"
+    assert (
+        fault_container["command"] == normal["spec"]["template"]["spec"]["containers"][0]["command"]
+    )
+    assert fault_container["ports"] == [{"containerPort": 8080}]
+
+    gold = _apply_json_merge_patch(fault, scenario["expected_git_patch"])
+    assert gold == normal
+
+    rollback = _apply_json_merge_patch(gold, scenario["rollback_patch"])
+    assert rollback == fault
 
 
 def test_public_benchmark_scores_node_selector_mismatch_without_cluster_wide_removal() -> None:
