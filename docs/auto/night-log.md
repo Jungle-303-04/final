@@ -2902,3 +2902,9 @@ target preflight·register 네 함수와 strict Zod 계약을 claim했다. 1회�
 
 - lane 회수 — `codex/surface-filter-contracts` / `e00cb9b3e` / `origin/dev` ancestor exit 0.
   canonical 복구 지점은 merge `e2504278d`, 앵커 문서 `ae4357a8c`다.
+
+## 2026-07-14 00:24 KST — [백엔드] 프론트 그래프 계약 번호 매핑 claim
+
+- [D-025]/[D-026]을 canonical 문서에 반영하고 BQ-022만 claim했다. 이미 착륙한 GAP-010
+  graph 계약을 중복 구현하지 않고 기존 code `914d34ff6`·merge `95ff11cc6`에 연결한다.
+- source·gateway 계약 변경은 0건이며 BQ-023 이후는 이 착륙이 끝날 때까지 시작하지 않는다.
