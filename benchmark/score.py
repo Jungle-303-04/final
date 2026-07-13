@@ -83,6 +83,7 @@ CANDIDATE_BATCH_SHA256 = {
     (1, 10): "8af3efce17c994f3ac0e97a5864ddbf9ea2b28ab0050be0a9cd201b58aca4476",
     (11, 20): "3ffa57f4abe30241469185e6d3c182605157cf7a42facf678128016184f43bb0",
     (21, 30): "ba7e92d1b4468fa7a96d7e0256dab39509c8bd859114e52fd83967c394f7ac79",
+    (31, 40): "32d4a8b485fa73c2dbba420e4fefdc4c56ca82d712e6bbe92954516a79aab73d",
 }
 CONTRADICTION_POLICY = "not_modeled_v0.1"
 MISSING_EVIDENCE_POLICY = "all_required_evidence_and_supporting_signal_groups"
