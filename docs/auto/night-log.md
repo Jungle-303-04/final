@@ -2590,3 +2590,11 @@ target preflight·register 네 함수와 strict Zod 계약을 claim했다. 1회�
   최신 dev 기준으로 다시 실행한다.
 - 범위는 clean-run outcome이다. in-process mode는 controller process crash에서 broker
   durability를 제공하지 않으므로 JetStream과 내구성까지 동등하다고 표현하지 않는다.
+
+## 2026-07-13 20:25 KST — [백엔드] 이벤트 버스 결과 동등성 canonical 착륙
+
+- merge `66e8c08e688658e3c41034b6fd8c7e5068edf084`, GREEN `82a7f29f2`, 문서
+  `02773227c`가 모두 `origin/dev` ancestor exit 0이다. 전체 게이트는 Ruff lint/format PASS,
+  import-linter 8 kept/0 broken, pytest `1970 passed, 3 skipped`; 실제 JetStream 결과
+  `equivalent=true`다.
+- merge-tree clean, 삭제 0건, frozen 경로 변경 0건이다. lane 삭제 전 복구 hash를 기록했다.

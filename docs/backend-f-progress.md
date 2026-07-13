@@ -251,6 +251,9 @@ Bundle route는 200을 반환한다.
 - 재현 명령은 `make event-bus-equivalence`다. 이 검증은 clean-run outcome 동등성이다.
   in-process bus는 프로세스 메모리, JetStream은 영속 broker이므로 controller crash 시
   내구성까지 동등하다고 주장하지 않는다.
+- canonical merge `66e8c08e688658e3c41034b6fd8c7e5068edf084`와 GREEN `82a7f29f2`의
+  `origin/dev` ancestor exit 0을 확인했다. BQ-016은 남은 OCI·실제 safe-pr·lifecycle 때문에
+  계속 `in_progress`다.
 
 ### H3 — BQ-007/009/010 권위 patch 엔진
 
