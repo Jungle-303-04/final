@@ -1460,3 +1460,15 @@ JsonMap, AbortSignal, ID 검증을 완료 앵커 전까지 제품 화면에서 �
   design guard 329 files, shadcn 482 previews, production build 14,531 modules.
 - `API 완성: getIncidentRecentChanges (4f602cc86660a7f8a12583cffc44a53e220d9dbf)`를 기록하고
   APIQ-031 행을 제거했다. 다음 단계는 이 앵커를 소비하는 VP-004 UI RED다.
+
+## 2026-07-13 14:40 KST — [프론트] P4 VP-004 완료 증거
+
+- API RED `c6bd3babe` → API GREEN `4f602cc86660a7f8a12583cffc44a53e220d9dbf` →
+  UI RED `f9a982f4f` → UI GREEN `78668b32204e3b30d5c50b9338c3593bdebe852a`.
+  두 GREEN hash 모두 `origin/woonyong/ui-layer-lab` ancestor exit 0이다.
+- `npm run check` PASS: Vitest 112 files / 802 tests, design guard 336 files,
+  shadcn 482 previews, production build 14,535 modules.
+- `npm run visual-product` PASS. 영어 desktop과 320px에서 exact Recent Changes API 1회,
+  긴 image·commit·workflow reflow, 외부 PR 링크 격리, unexpected feature network 0을 검증했다.
+- 증거: `references/ui-layer-lab/output/playwright/product-issues-authenticated-detail-desktop-light.png`,
+  `references/ui-layer-lab/output/playwright/product-issues-authenticated-detail-reflow-320-light.png`.

@@ -1662,3 +1662,21 @@ API 완성: getAuditTimeline (4c2598c4a)
   UI는 절대 시각과 일반 Pull request 링크만 소비한다.
 
 API 완성: getIncidentRecentChanges (4f602cc86660a7f8a12583cffc44a53e220d9dbf)
+
+## 2026-07-13 VP-004 인시던트 최근 변경 화면 완료
+
+- UI RED `f9a982f4f`는 empty 성공에서 region·card·제목이 전부 없어야 하는 불변식,
+  서버 순서·native list·절대 시각, nullable PR 링크, 실패 격리와 incident ID 없는 행의
+  endpoint 미호출을 먼저 고정했다.
+- UI GREEN `78668b32204e3b30d5c50b9338c3593bdebe852a`는 canonical·adapter·독립 panel·i18n·
+  composition root·browser fixture를 연결했다. 이 커밋은
+  `origin/woonyong/ui-layer-lab` ancestor exit 0이다.
+- 빈 성공은 카드 자체를 렌더하지 않고 404·invalid-response·unavailable은 최근 변경 panel에만
+  격리한다. 서버 순서와 원문 workload·image·commit·repository·workflow를 보존하며,
+  안전한 HTTP(S) PR URL만 외부 링크로 렌더한다.
+- `npm run check` PASS: TypeScript·ESLint, Vitest 112 files / 802 tests,
+  product design guard 336 files, shadcn source audit 482 previews,
+  Vite production build 14,535 modules.
+- `npm run visual-product` PASS: 기존 전 시나리오와 영어 Issues desktop·320px reflow를 통과했다.
+  증거는 `output/playwright/product-issues-authenticated-detail-desktop-light.png`와
+  `output/playwright/product-issues-authenticated-detail-reflow-320-light.png`다.
