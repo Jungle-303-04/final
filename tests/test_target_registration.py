@@ -22,7 +22,9 @@ from domains.target.router import (
     KUBE_CONTEXT_NOT_ALLOWED,
     MANAGEMENT_BASE_URL_NOT_CONFIGURED,
     apply_manifest_with_kubectl,
+    cluster_connection_stage,
     cluster_connection_status,
+    cluster_summary,
     get_cluster_connection_status,
     get_cluster_scheduling_profiles,
     install_manifest_by_token,
@@ -52,6 +54,7 @@ from packages.contracts.gateway.requests import (
     TargetPreflightRequest,
     TargetRegisterRequest,
 )
+from packages.contracts.gateway.responses import ClusterSummary
 
 
 class StubDb:
@@ -295,6 +298,27 @@ class StubClusterDb:
             {"resource_type": "node", "health": "healthy", "count": 2},
             {"resource_type": "pod", "health": "healthy", "count": 9},
         ]
+
+    def latest_inventory_snapshots(
+        self,
+        _workspace_id: str,
+        cluster_ids: set[str],
+    ) -> dict[str, dict[str, object]]:
+        assert cluster_ids == {"cluster-1"}
+        return {"cluster-1": self.latest_inventory_snapshot("default", "cluster-1")}
+
+    def latest_inventory_snapshot(
+        self,
+        _workspace_id: str,
+        cluster_id: str,
+    ) -> dict[str, object]:
+        assert cluster_id == "cluster-1"
+        return {
+            "snapshot_id": "snapshot-1",
+            "agent_id": "agent-1",
+            "summary": {"detected_provider": "eks"},
+            "created_at": (datetime.now(UTC) - timedelta(seconds=30)).isoformat(),
+        }
 
     def get_cluster_registration(
         self,
@@ -687,6 +711,7 @@ def test_target_registration_records_cluster_and_returns_install_manifest() -> N
     # 응답의 agent_token 은 매니페스트에 주입된 원문과 동일(대시보드가 x-agent-token 으로 사용)
     assert response.agent_token == match.group(1)
     assert response.status == "pending_install"
+    assert response.connection_stage == "token_issued"
     assert response.connect_timeout_seconds == 1800
     assert response.connect_expires_at is not None
     assert db.registered[0]["status"] == "pending_install"
@@ -1010,6 +1035,8 @@ def test_cluster_list_uses_access_filter_and_agent_status() -> None:
     assert len(response.clusters) == 1
     assert response.clusters[0].cluster_id == "cluster-1"
     assert response.clusters[0].connection_status == "online"
+    assert response.clusters[0].provider == "eks"
+    assert response.clusters[0].connection_stage == "ready"
     assert response.clusters[0].last_agent_id == "agent-1"
     assert response.clusters[0].node_count == 2
     assert response.clusters[0].pod_count == 9
@@ -1028,6 +1055,7 @@ def test_cluster_connection_status_route_returns_agent_details() -> None:
 
     assert response.cluster_id == "cluster-1"
     assert response.connection_status == "online"
+    assert response.connection_stage == "ready"
     assert response.last_agent_id == "agent-1"
     assert response.agents[0].capabilities == ["inventory", "commands"]
 
@@ -1045,6 +1073,7 @@ def test_cluster_connection_status_reports_pending_install_before_ttl() -> None:
     response = asyncio.run(run())
 
     assert response.connection_status == "pending_install"
+    assert response.connection_stage == "awaiting_install"
     assert response.connect_timeout_seconds == 1800
     assert response.connect_expires_at == expires_at
 
@@ -1062,6 +1091,134 @@ def test_cluster_connection_status_reports_install_expired_after_ttl() -> None:
     response = asyncio.run(run())
 
     assert response.connection_status == "install_expired"
+    assert response.connection_stage == "expired"
+
+
+def test_cluster_summary_registered_provider_overrides_detected_provider() -> None:
+    now = datetime.now(UTC)
+    summary = cluster_summary(
+        {
+            "workspace_id": "default",
+            "cluster_id": "cluster-1",
+            "name": "prod",
+            "environment": "production",
+            "status": "registered",
+            "settings": {"cloud_provider": "gke"},
+            "updated_at": (now - timedelta(minutes=5)).isoformat(),
+        },
+        {
+            "agent_id": "agent-1",
+            "status": "connected",
+            "last_seen_at": now.isoformat(),
+        },
+        latest_snapshot={
+            "agent_id": "agent-1",
+            "summary": {"detected_provider": "eks"},
+            "created_at": (now - timedelta(minutes=1)).isoformat(),
+        },
+    )
+
+    assert summary.provider == "gke"
+    assert summary.connection_stage == "ready"
+
+
+def test_cluster_summary_generic_registration_falls_back_to_onprem() -> None:
+    summary = cluster_summary(
+        {
+            "workspace_id": "default",
+            "cluster_id": "cluster-1",
+            "name": "local",
+            "environment": "development",
+            "status": "pending_install",
+            "settings": {"cloud_provider": "existing-k8s"},
+        },
+        None,
+        latest_snapshot=None,
+    )
+
+    assert summary.provider == "onprem"
+    assert summary.connection_stage == "awaiting_install"
+
+
+def test_cluster_connection_stage_uses_current_snapshot_and_later_heartbeat() -> None:
+    now = datetime.now(UTC)
+    registration = {
+        "status": "registered",
+        "updated_at": (now - timedelta(minutes=5)).isoformat(),
+    }
+    agent = {
+        "agent_id": "agent-1",
+        "status": "connected",
+        "last_seen_at": (now - timedelta(seconds=20)).isoformat(),
+    }
+
+    assert cluster_connection_stage(registration, agent, None) == "agent_connected"
+    assert (
+        cluster_connection_stage(
+            registration,
+            agent,
+            {
+                "agent_id": "agent-1",
+                "created_at": (now - timedelta(seconds=10)).isoformat(),
+            },
+        )
+        == "snapshot_received"
+    )
+    assert (
+        cluster_connection_stage(
+            registration,
+            {**agent, "last_seen_at": now.isoformat()},
+            {
+                "agent_id": "agent-1",
+                "created_at": (now - timedelta(seconds=10)).isoformat(),
+            },
+        )
+        == "ready"
+    )
+
+
+def test_cluster_connection_stage_rejects_old_epoch_snapshot_and_stale_agent() -> None:
+    now = datetime.now(UTC)
+    registration = {
+        "status": "registered",
+        "updated_at": (now - timedelta(minutes=2)).isoformat(),
+    }
+    current_agent = {
+        "agent_id": "agent-1",
+        "status": "connected",
+        "last_seen_at": now.isoformat(),
+    }
+    old_snapshot = {
+        "agent_id": "agent-1",
+        "created_at": (now - timedelta(minutes=3)).isoformat(),
+    }
+
+    assert cluster_connection_stage(registration, current_agent, old_snapshot) == "agent_connected"
+    assert (
+        cluster_connection_stage(
+            registration,
+            {**current_agent, "last_seen_at": (now - timedelta(hours=1)).isoformat()},
+            None,
+        )
+        == "error"
+    )
+
+
+def test_cluster_summary_additive_fields_accept_legacy_payload() -> None:
+    legacy = ClusterSummary.model_validate(
+        {
+            "workspace_id": "default",
+            "cluster_id": "cluster-1",
+            "name": "legacy",
+            "environment": "production",
+            "status": "registered",
+            "settings": {},
+            "connection_status": "online",
+        }
+    )
+
+    assert legacy.provider is None
+    assert legacy.connection_stage is None
 
 
 def test_target_registration_preflight_reports_duplicate_and_agent_status(monkeypatch) -> None:
