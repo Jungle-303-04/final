@@ -12,7 +12,7 @@ export IMAGE_NAME
 export MGMT_CLUSTER
 export TARGET_CLUSTER
 
-.PHONY: help setup env local-test-env local-up local-smoke sync hooks doctor lint format test manifest-check events crash-test check build-image up install-telemetry down status smoke scale kill-pod external-instances external-kubeconfig cluster-interactions aws-up aws-down clean
+.PHONY: help setup env local-test-env local-up local-smoke sync hooks doctor lint format test manifest-check events crash-test check build-image up install-telemetry down status smoke demo scale kill-pod external-instances external-kubeconfig cluster-interactions aws-up aws-down clean
 
 help: ## 사용 가능한 명령어 출력
 	@awk 'BEGIN {FS = ":.*##"; printf "\nUsage:\n  make <target>\n\nTargets:\n"} /^[a-zA-Z0-9_-]+:.*##/ {printf "  %-14s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -85,6 +85,9 @@ status: ## AWS management/target 리소스 상태 확인
 
 smoke: ## 현재 환경변수로 배포된 서비스 smoke 실행
 	bash scripts/smoke.sh
+
+demo: ## Kind에서 bad rollout → mock rollback PR → 정상화 원커맨드 데모
+	bash scripts/oss-demo.sh
 
 local-smoke: ## .env.local-test를 source해서 로컬 smoke 실행
 	@test -f "$(LOCAL_TEST_ENV)" || { echo "missing $(LOCAL_TEST_ENV); run make local-test-env"; exit 1; }

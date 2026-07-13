@@ -73,6 +73,10 @@ class App:
     def subscriptions(self) -> tuple[Subscription, ...]:
         return tuple(self._handlers.values())
 
+    @property
+    def raw_subscription(self) -> tuple[Callable[..., Any], bool] | None:
+        return self._raw
+
     def run(self, bus: EventConsumerBus | None = None) -> None:
         """
         등록된 구독자를 이벤트 버스에 붙여 실행. 기본값은 NATS. (런타임은 지연 import)

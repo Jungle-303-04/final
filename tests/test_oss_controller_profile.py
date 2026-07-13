@@ -5,6 +5,9 @@ import subprocess
 from pathlib import Path
 
 import pytest
+
+from packages.events.bus import NatsEventBus
+from packages.events.in_memory import InMemoryEventBus
 from packages.runtime.controller import (
     AGENT_SERVICE_NAMES,
     ControllerProfile,
@@ -12,9 +15,6 @@ from packages.runtime.controller import (
     event_bus_for_mode,
     load_worker_apps,
 )
-
-from packages.events.bus import NatsEventBus
-from packages.events.in_memory import InMemoryEventBus
 from packages.runtime.discovery import discover_services
 
 ROOT = Path(__file__).resolve().parents[1]
