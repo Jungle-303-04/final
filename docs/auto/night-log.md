@@ -693,7 +693,8 @@ import-linter PASS(2 kept, 0 broken), pytest `1711 passed, 3 skipped`; 서비스
 - target parent: lab `f1eb1b5094c5cd3ac897f9d4bef30a5153afb6cf`
 - source parent: dev `91633c14e028e48c557eb9a66407e7d4630432f6`
 - 충돌 38건 해소: dev 정책 24건, lab 정책 13건, `docs/auto/night-log.md` 양측 보존 1건.
-  night-log는 lab 39블록·dev 64블록 누락 0, conflict marker 0으로 KST 순 합성했다.
+  night-log는 공통 prefix 117행, lab 고유 16블록, dev 고유 40블록 누락 0,
+  conflict marker 0으로 KST 순 합성했다.
 - broad lab 소유권 적용: 비충돌로 유입된 dev-only `references/ui-layer-lab/**` 예제·style
   26파일을 제거해 lab HEAD subtree를 유지했다. 사전 예외 후보 4건은 적용 0건이다.
 - 게이트 수정: 첫 `npm run check`는 dev-only 예제의 미선언 `@xyflow/react` 의존으로 실패해
@@ -784,3 +785,20 @@ npm run visual-product
 `git merge --abort`; push 후 롤백은 merge commit을 보존하는 `git revert -m 1 <merge_commit>` 후
 전체 게이트 재실행이다. full gate와 visual-product가 모두 PASS하기 전에는 A2 완료·PROMOTE 인계를
 기록하지 않는다.
+
+## 2026-07-13 10:31 KST — [프론트] FE-A2 subtree 완전성 보정
+
+- 보정 commit: `2b66dee9c` (`fix: legacy 프론트 전체 복원 / 문서 색인 정합`).
+- 원인: symlink-directory 충돌을 파일 충돌 14건만 해소해 source parent
+  `91633c14e`의 legacy `frontend/**` 중 71파일이 병합 결과에서 누락됐다.
+- 해소: `frontend/**` 전체를 source parent와 byte 동일하게 복원했다. `git diff --quiet
+  91633c14e -- frontend` exit 0, symlink 0, 실제 directory 유지.
+- 문서: lab 삭제 정본과 충돌한 `docs/README.md`의 존재하지 않는 frontend spec 링크
+  12개를 제거했고, 로컬 Markdown target 검사에서 누락 0을 확인했다.
+- UI lab full gate: TypeScript·ESLint PASS, Vitest 100 files / 727 tests,
+  design guard 303 files, shadcn audit 482 previews, Vite production build PASS.
+- UI lab visual gate: 34 isolated scenarios 연속 2회 PASS, unexpected feature network 0,
+  websocket 0, 320px reflow·200% text resize·forced-colors·ko/en 포함.
+- legacy frontend: `npm ci` 취약점 0, TypeScript+Vite production build PASS,
+  ESLint PASS, Node tests 17/17 PASS.
+- `outputs/` untracked는 사용자 소유 산출물로 판단해 stage·수정·삭제 0건.
