@@ -60,6 +60,18 @@ FOURTH_CANDIDATE_BATCH = (
     "kubelet_unavailable",
     "container_runtime_unavailable",
 )
+FIFTH_CANDIDATE_BATCH = (
+    "node_network_unavailable",
+    "pod_evicted_memory_pressure",
+    "pod_evicted_disk_pressure",
+    "pod_evicted_pid_pressure",
+    "policy_violation",
+    "invalid_manifest",
+    "image_vulnerability_block",
+    "service_account_permission_denied",
+    "certificate_expired_or_invalid",
+    "probe_path_wrong",
+)
 
 
 def _score(*args: str) -> subprocess.CompletedProcess[str]:
@@ -231,6 +243,33 @@ def test_fourth_candidate_contract_batch_is_machine_verified_in_catalog_order() 
         ],
     }
     assert all(item["benchmark_fixtures"] == [] for item in fourth_batch)
+
+
+def test_fifth_candidate_contract_batch_is_machine_verified_in_catalog_order() -> None:
+    result = _score("--candidate-contracts")
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "RESULT PASS (50 candidate contracts; ordinals=1..50)" in result.stdout
+
+    document = json.loads(CONTRACTS.read_text(encoding="utf-8"))
+    fifth_batch = document["contracts"][40:50]
+    assert document["next_ordinal"] == 51
+    assert tuple(item["candidate_id"] for item in fifth_batch) == FIFTH_CANDIDATE_BATCH
+    assert {item["candidate_id"]: item["patch_capabilities"] for item in fifth_batch} == {
+        **{candidate_id: [] for candidate_id in FIFTH_CANDIDATE_BATCH},
+        "probe_path_wrong": ["safe_pr"],
+    }
+    assert {
+        item["candidate_id"]: [action["action_type"] for action in item["allowed_remediations"]]
+        for item in fifth_batch
+    } == {
+        **{candidate_id: ["manual_analysis"] for candidate_id in FIFTH_CANDIDATE_BATCH},
+        "probe_path_wrong": ["probe_fix", "manual_analysis"],
+    }
+    assert {item["candidate_id"]: item["benchmark_fixtures"] for item in fifth_batch} == {
+        **{candidate_id: [] for candidate_id in FIFTH_CANDIDATE_BATCH},
+        "probe_path_wrong": ["benchmark/scenarios/probe/probe-wrong-path/scenario.json"],
+    }
 
 
 def test_public_candidate_contract_scorer_needs_no_site_packages() -> None:
