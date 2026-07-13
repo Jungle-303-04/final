@@ -777,6 +777,14 @@ class BootstrapStep(StrictModel):
     command: str
 
 
+class ManagementAccessResponse(StrictModel):
+    mode: Literal["portforward", "loadbalancer", "ingress", "nodeport", "unknown"] = "unknown"
+    external_url: str | None = None
+    agent_server_url: str = ""
+    reachability: Literal["external", "self_only"] = "self_only"
+    limitation_reason: Literal["external_url_not_configured"] | None = None
+
+
 class TargetInstallResponse(StrictModel):
     registered: bool
     cluster_id: str
@@ -795,6 +803,7 @@ class TargetInstallResponse(StrictModel):
     connect_timeout_seconds: int | None = None
     connect_expires_at: str | None = None
     connection_stage: str | None = None
+    management_access: ManagementAccessResponse | None = None
 
 
 class ClusterAgentStatus(StrictModel):
@@ -1271,3 +1280,4 @@ class TargetPreflightResponse(StrictModel):
     selected: dict[str, JsonMap] = Field(default_factory=dict)
     last_agent_id: str | None = None
     last_seen_at: str | None = None
+    management_access: ManagementAccessResponse | None = None

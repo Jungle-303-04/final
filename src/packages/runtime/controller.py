@@ -376,7 +376,9 @@ class ControllerRuntime:
             port = int(env(REALTIME_GATEWAY_PORT_ENV, DEFAULT_REALTIME_GATEWAY_PORT))
         else:
             raise ValueError(f"unsupported controller HTTP service: {loaded.service.name}")
-        server = Server(Config(app, host="0.0.0.0", port=port, log_level="info"))
+        # API gateway가 경로를 redaction한 구조화 요청 로그를 남긴다. Uvicorn의 원문
+        # access log를 함께 켜면 /install/<credential> request line이 다시 노출된다.
+        server = Server(Config(app, host="0.0.0.0", port=port, log_level="info", access_log=False))
         server.install_signal_handlers = lambda: None
         return server
 

@@ -7,6 +7,13 @@ controller:
   replicas: 1
   resources: {}
 
+console:
+  image:
+    repository: ghcr.io/opsia/opsia-console
+    tag: ""
+    pullPolicy: IfNotPresent
+  resources: {}
+
 postgresql:
   image: postgres:17-alpine
   auth:
@@ -46,6 +53,18 @@ scm:
 service:
   type: ClusterIP
   port: 80
+
+access:
+  mode: auto
+  externalUrl: ""
+  host: ""
+  nodePort: 30080
+  ingress:
+    className: ""
+    annotations: {}
+    tls:
+      enabled: false
+      secretName: ""
 
 nameOverride: ""
 fullnameOverride: ""

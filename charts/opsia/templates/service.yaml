@@ -6,11 +6,31 @@ metadata:
     {{- include "opsia.labels" . | nindent 4 }}
     app.kubernetes.io/component: controller
 spec:
-  type: {{ .Values.service.type }}
+  type: {{ include "opsia.serviceType" . | trim }}
   selector:
     {{- include "opsia.selectorLabels" . | nindent 4 }}
     app.kubernetes.io/component: controller
   ports:
     - name: http
       port: {{ .Values.service.port }}
+      targetPort: console
+      {{- if eq (include "opsia.accessMode" . | trim) "nodeport" }}
+      nodePort: {{ .Values.access.nodePort }}
+      {{- end }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "opsia.fullname" . }}-metrics
+  labels:
+    {{- include "opsia.labels" . | nindent 4 }}
+    app.kubernetes.io/component: controller
+spec:
+  type: ClusterIP
+  selector:
+    {{- include "opsia.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: controller
+  ports:
+    - name: metrics
+      port: 9090
       targetPort: http
