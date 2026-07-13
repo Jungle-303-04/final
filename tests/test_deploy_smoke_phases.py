@@ -12,8 +12,11 @@ def read(path: str) -> str:
 def test_pre_deploy_smoke_uses_only_legacy_safe_health_frontend_and_database_checks() -> None:
     source = read("scripts/pre-deploy-smoke.sh")
 
-    assert 'curl -fsS "${BASE_URL}/api/healthz"' in source
-    assert 'curl -fsS "${BASE_URL}/"' in source
+    assert '"${BASE_URL}/api/healthz"' in source
+    assert '"${BASE_URL}/"' in source
+    assert source.count("--write-out '%{http_code}'") == 2
+    assert 'test "${health_status}" = "200"' in source
+    assert 'test "${frontend_status}" = "200"' in source
     assert "SELECT 1" in source
     assert "frontend_bundle=" in source
     for forbidden in (
@@ -29,6 +32,9 @@ def test_pre_deploy_smoke_uses_only_legacy_safe_health_frontend_and_database_che
 def test_post_deploy_smoke_enforces_new_release_contracts() -> None:
     source = read("scripts/post-deploy-smoke.sh")
 
+    assert source.count("--write-out '%{http_code}'") == 2
+    assert 'test "${health_status}" = "200"' in source
+    assert 'test "${frontend_status}" = "200"' in source
     assert "PRE_DEPLOY_FRONTEND_BUNDLE" in source
     assert "REQUIRE_FRONTEND_BUNDLE_CHANGE" in source
     assert 'test "${post_bundle}" != "${PRE_DEPLOY_FRONTEND_BUNDLE}"' in source

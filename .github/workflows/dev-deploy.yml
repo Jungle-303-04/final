@@ -49,7 +49,7 @@ jobs:
        github.ref == 'refs/heads/dev' &&
        inputs.confirmation == 'FIRST_DEPLOY')
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 180
     environment: dev-deploy
     env:
       AWS_REGION: ${{ vars.AWS_DEV_REGION }}
