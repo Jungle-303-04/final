@@ -1332,3 +1332,25 @@ npm run visual-product
 - 4조건: merge-tree exit 0/tree `0ff6d94d6c17b65bc40d05a9fa1965b79ff1061b`;
   삭제·소유권 밖 변경·frozen 경로 변경 0건; feature와 merge commit의 `origin/dev`
   ancestor exit 0.
+
+## 2026-07-13 15:34 KST — [백엔드] rule candidate 상위 10개 안전 계약 착륙
+
+- lane `codex/candidate-contract-batch-one`, feature HEAD
+  `0a1a0b99a482d9bfbcaf394a32ec2ca392cd6611`, canonical no-ff merge
+  `a77115d411bbc1de03304f190f124f8fbcfc14f2`.
+- stat: 6 files, 4,516 insertions / 4 deletions. `candidate-contract-index.json`은 15개
+  catalog의 source SHA와 87개 후보 순서를 고정하고, `candidate-contracts.json`은 loader 순서
+  1~10의 공개 안전 계약을 담는다. 파일 삭제·소유권 밖 변경·frozen 경로 변경은 0건이다.
+- 계약은 required evidence와 live supporting signal, 실제 dispatcher capability, 허용·금지
+  remediation, rollback, post-verification을 분리한다. `config_fix`의 `draft_pr` 선언은 실제
+  patch capability로 승격하지 않았고, runtime 반증 미모델링은
+  `contradiction_policy=not_modeled_v0.1`로 명시했다.
+- 고유 검증: `python3 -S benchmark/score.py --candidate-contracts` 10/10 PASS,
+  전체 scenario scorer 14 PASS, `tests/test_benchmark_score.py` 30 passed.
+- gate: Ruff lint/format PASS, import-linter 8 kept/0 broken, pytest
+  `1899 passed, 3 skipped`; manifest management 69 / target 20.
+- 4조건: merge-tree exit 0/tree `b5e31047498a18c660a51e184d13b1d25862a5b0`;
+  삭제·소유권 밖 변경 0건; feature와 merge commit의 `origin/dev` ancestor exit 0.
+- 잔여 범위: 전체 87개 중 10개만 작성 완료했으며 다음 cursor는 11이다. 나머지 77개는
+  후속 배치로 계약화하고, malformed snapshot 구조화 오류·복수 fallback·canonical command·
+  CRLF SHA 이식성은 비차단 hardening 후보로 함께 추적한다.

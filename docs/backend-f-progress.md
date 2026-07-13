@@ -425,3 +425,36 @@ Bundle route는 200을 반환한다.
   `origin/dev` ancestor exit 0.
 
 계약 완성: OpsiaBench scheduling + pvc scenarios (075926e4d5da6dc59e67e865e293efdf00fb1d6c) [green]
+
+### 보조 대기열 S3 — rule candidate 상위 10개 안전 계약
+
+- 상태: landed
+- 담당 lane: `codex/candidate-contract-batch-one`
+- RED·경계 테스트: `765c108c4`, `1fc338b46`, `818af89ea`, `1e61abbec`,
+  `338dbc811`, `ca8f1c543`, `fa89c035a`, `4b60511f7`, `6b34e6f94`
+- 구현·정합: `cdc577d56`, `3f5ea3a64`, `bc0c841be`
+- 문서와 feature HEAD: `0a1a0b99a482d9bfbcaf394a32ec2ca392cd6611`
+- canonical no-ff merge: `a77115d411bbc1de03304f190f124f8fbcfc14f2`
+- 범위: 실제 catalog loader 순서의 후보 1~10만 계약화했다. 전체 후보는 87개이며 다음
+  cursor는 `next_ordinal=11`이다. 87개 전체 계약 완료로 해석하지 않는다.
+- `benchmark/candidate-contract-index.json`은 catalog 15개 원본 SHA와 rule·candidate 87개의
+  정확한 순서·required evidence·supporting signal을 고정한다. 작성된 계약 10개는 live
+  recovery의 허용 action, rollback, post-verification과 dispatcher의 실제 실행 capability를
+  함께 검산한다.
+- `config_fix`는 recovery route가 `draft_pr`이지만 현재 dispatcher가 patch를 지원하지 않아
+  capability를 빈 값으로 둔다. 선언 route를 실제 실행 가능성으로 오인하지 않는다.
+- contradicting signal은 runtime에 아직 모델링되지 않아
+  `contradiction_policy=not_modeled_v0.1`로 명시했다. 빈 배열을 반증 부재의 증거로 과장하거나
+  가짜 반증을 만들지 않는다.
+- 고유 검증: `python3 -S benchmark/score.py --candidate-contracts` PASS
+  (`10 candidate contracts; ordinals=1..10`), 전체 scenario scorer `14 scenarios` PASS,
+  `tests/test_benchmark_score.py` 30 passed.
+- 전체 게이트: Ruff lint/format PASS, import-linter 8 kept/0 broken,
+  pytest `1899 passed, 3 skipped`; manifest management 69 / target 20.
+- 4조건: merge-tree exit 0/tree `b5e31047498a18c660a51e184d13b1d25862a5b0`;
+  파일 삭제·소유권 밖 변경·RCA/AI/runtime worker 변경 0건; feature와 merge commit의
+  `origin/dev` ancestor exit 0.
+- 후속 hardening: malformed snapshot의 구조화 오류, 미래 복수 fallback 누적, alias 없는
+  canonical command 추출, CRLF checkout의 byte SHA 이식성은 다음 배치에서 보강 후보로 남긴다.
+
+계약 완성: OpsiaBench candidate contracts 1..10 (0a1a0b99a482d9bfbcaf394a32ec2ca392cd6611) [green]
