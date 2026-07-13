@@ -1,7 +1,10 @@
 import { z } from "zod";
 
+import { parseKubernetesLabelSelector } from "../shared/data/kubernetesLabel";
 import { inventoryResourceSchema } from "./inventory-schemas";
 
+export const rfc3339TimestampSchema = z.iso.datetime({ offset: true });
+const nullableRfc3339TimestampSchema = rfc3339TimestampSchema.nullable();
 export const filterCountCompletenessSchema = z.enum([
   "exact",
   "partial",
@@ -44,7 +47,7 @@ export const filterSnapshotMetaSchema = z.strictObject({
   snapshot_revision: z.number().int().nonnegative(),
   authorization_revision: z.string().min(1),
   filter_fingerprint: z.string().min(1),
-  observed_at: z.string().nullable(),
+  observed_at: nullableRfc3339TimestampSchema,
   stale: z.boolean(),
   partial_reason_codes: z.array(z.string()),
 });
@@ -119,7 +122,7 @@ export const resourceFilterFacetPageSchema = z.strictObject({
   axis: resourceFilterFacetAxisSchema,
   items: z.array(resourceFilterFacetItemSchema),
   selected_resolutions: z.array(selectedFilterFacetResolutionSchema),
-  next_cursor: z.string().nullable(),
+  next_cursor: z.string().min(1).nullable(),
   has_more: z.boolean(),
   snapshot: filterSnapshotMetaSchema,
 }).superRefine((page, context) => {
@@ -149,23 +152,40 @@ export const inventoryResourceClusterIdentitySchema = z.strictObject({
   provider: z.string().nullable(),
 });
 
+const filteredInventoryResourceSchema = inventoryResourceSchema.extend({
+  observed_at: nullableRfc3339TimestampSchema,
+  first_seen_at: nullableRfc3339TimestampSchema,
+  last_seen_at: nullableRfc3339TimestampSchema,
+  deleted_at: nullableRfc3339TimestampSchema,
+  created_at: nullableRfc3339TimestampSchema,
+  updated_at: nullableRfc3339TimestampSchema,
+});
+
 export const filteredInventoryResourceItemSchema = z.strictObject({
-  resource: inventoryResourceSchema,
+  resource: filteredInventoryResourceSchema,
   cluster: inventoryResourceClusterIdentitySchema,
-  application_ids: z.array(z.string()),
+  application_ids: z.array(z.string().min(1)),
   application_binding_completeness: filterCountCompletenessSchema,
 }).superRefine((item, context) => {
-  if (item.resource.cluster_id === item.cluster.cluster_id) return;
-  context.addIssue({
-    code: "custom",
-    message: "resource cluster_id must equal cluster identity",
-    path: ["cluster", "cluster_id"],
-  });
+  if (item.resource.cluster_id !== item.cluster.cluster_id) {
+    context.addIssue({
+      code: "custom",
+      message: "resource cluster_id must equal cluster identity",
+      path: ["cluster", "cluster_id"],
+    });
+  }
+  if (new Set(item.application_ids).size !== item.application_ids.length) {
+    context.addIssue({
+      code: "custom",
+      message: "application_ids must not contain duplicates",
+      path: ["application_ids"],
+    });
+  }
 });
 
 export const filteredInventoryResourceListSchema = z.strictObject({
   items: z.array(filteredInventoryResourceItemSchema),
-  next_cursor: z.string().nullable(),
+  next_cursor: z.string().min(1).nullable(),
   has_more: z.boolean(),
   counts: filterResultCountsSchema,
   snapshot: filterSnapshotMetaSchema,
@@ -208,7 +228,7 @@ export const labelFacetPageSchema = z.strictObject({
   surface: z.literal("resources"),
   items: z.array(labelFacetItemSchema),
   selected_resolutions: z.array(selectedLabelResolutionSchema),
-  next_cursor: z.string().nullable(),
+  next_cursor: z.string().min(1).nullable(),
   has_more: z.boolean(),
   counts: filterResultCountsSchema,
   snapshot: filterSnapshotMetaSchema,
@@ -248,10 +268,14 @@ function validateLabelSelector(
   selector: { key: string; value: string; selector: string },
   context: z.RefinementCtx,
 ): void {
-  if (selector.selector === `${selector.key}=${selector.value}`) return;
+  const canonical = `${selector.key}=${selector.value}`;
+  if (
+    selector.selector === canonical &&
+    parseKubernetesLabelSelector(canonical) !== null
+  ) return;
   context.addIssue({
     code: "custom",
-    message: "selector must equal key=value",
+    message: "selector must equal a canonical Kubernetes key=value selector",
     path: ["selector"],
   });
 }

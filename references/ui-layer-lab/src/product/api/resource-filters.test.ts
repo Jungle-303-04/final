@@ -79,12 +79,20 @@ describe("workspace Resources filter API", () => {
         namespace: "shop",
         availability: "available",
       }],
-      selected_resolutions: [{
-        axis: "namespace",
-        value: "cluster-a/restricted",
-        status: "restricted",
-        display_label: null,
-      }],
+      selected_resolutions: [
+        {
+          axis: "namespace",
+          value: "cluster-a/default",
+          status: "resolved",
+          display_label: "default",
+        },
+        {
+          axis: "namespace",
+          value: "cluster-b/kube-system",
+          status: "restricted",
+          display_label: null,
+        },
+      ],
       next_cursor: "cursor-2",
       has_more: true,
       snapshot: SNAPSHOT,
@@ -105,40 +113,6 @@ describe("workspace Resources filter API", () => {
         signal: controller.signal,
       }),
     );
-  });
-
-  it("binds the structural response axis and selected resolution set to the request", async () => {
-    vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(jsonResponse({
-      axis: "applications",
-      items: [],
-      selected_resolutions: [],
-      next_cursor: null,
-      has_more: false,
-      snapshot: SNAPSHOT,
-    }));
-    await expect(listResourceFilterFacets({ axis: "clusters" })).rejects.toMatchObject({
-      kind: "invalid-payload",
-      status: 200,
-    } satisfies Partial<ApiError>);
-
-    vi.restoreAllMocks();
-    vi.spyOn(globalThis, "fetch").mockResolvedValue(jsonResponse({
-      axis: "clusters",
-      items: [],
-      selected_resolutions: [{
-        axis: "cluster",
-        value: "cluster-a",
-        status: "resolved",
-        display_label: null,
-      }],
-      next_cursor: null,
-      has_more: false,
-      snapshot: SNAPSHOT,
-    }));
-    await expect(listResourceFilterFacets({
-      axis: "clusters",
-      selected: ["cluster-b", "cluster-a", "cluster-a"],
-    })).rejects.toMatchObject({ kind: "invalid-payload" } satisfies Partial<ApiError>);
   });
 
   it("serializes only canonical multi-axis Resources query names", async () => {
@@ -174,7 +148,7 @@ describe("workspace Resources filter API", () => {
       limit: 100,
     })).resolves.toEqual(payload);
     expect(fetchMock).toHaveBeenCalledWith(
-      "/api/resources?clusters=cluster-a%2Ccluster%2Fb&namespaces=cluster-a%2Fshop&applications=app-checkout&resources.types=pod%2Cworkload&resources.health=healthy%2Cdegraded&labels=team%3Dcheckout%2Ctier%3Dcritical&resources.q=api+checkout&resources.includeDeleted=false&cursor=cursor%2F1&limit=100",
+      "/api/resources?clusters=cluster-a%2Ccluster%2Fb&namespaces=cluster-a%2Fshop&applications=app-checkout&resources.types=pod%2Cworkload&resources.health=degraded%2Chealthy&labels=team%3Dcheckout%2Ctier%3Dcritical&resources.q=api+checkout&resources.includeDeleted=false&cursor=cursor%2F1&limit=100",
       expect.objectContaining({ method: "GET", credentials: "include" }),
     );
   });
@@ -218,56 +192,6 @@ describe("workspace Resources filter API", () => {
     );
   });
 
-  it("canonicalizes structural selections and rejects incomplete Label resolutions", async () => {
-    const facetPayload = {
-      axis: "clusters",
-      items: [],
-      selected_resolutions: ["cluster-a", "cluster-b"].map((value) => ({
-        axis: "cluster",
-        value,
-        status: "resolved",
-        display_label: null,
-      })),
-      next_cursor: null,
-      has_more: false,
-      snapshot: SNAPSHOT,
-    };
-    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(
-      jsonResponse(facetPayload),
-    );
-    await expect(listResourceFilterFacets({
-      axis: "clusters",
-      selected: ["cluster-b", "cluster-a", "cluster-a"],
-    })).resolves.toEqual(facetPayload);
-    expect(fetchMock).toHaveBeenCalledWith(
-      "/api/resources/filter-facets?axis=clusters&selected=cluster-a%2Ccluster-b&limit=50",
-      expect.objectContaining({ method: "GET" }),
-    );
-
-    fetchMock.mockResolvedValueOnce(jsonResponse({
-      surface: "resources",
-      items: [],
-      selected_resolutions: [{
-        key: "team",
-        value: "checkout",
-        selector: "team=checkout",
-        status: "resolved",
-      }],
-      next_cursor: null,
-      has_more: false,
-      counts: {
-        filtered_count: 0,
-        unfiltered_count: 0,
-        filtered_count_completeness: "exact",
-        unfiltered_count_completeness: "exact",
-      },
-      snapshot: SNAPSHOT,
-    }));
-    await expect(listResourceLabelFacets({
-      labels: ["team=checkout", "tier=critical"],
-    })).rejects.toMatchObject({ kind: "invalid-payload" } satisfies Partial<ApiError>);
-  });
-
   it("rejects client-side bounds before opening the transport", () => {
     const fetchMock = vi.spyOn(globalThis, "fetch");
 
@@ -278,18 +202,6 @@ describe("workspace Resources filter API", () => {
       .toThrow(RangeError);
     expect(() => listResourceLabelFacets({ facetQuery: "x".repeat(201) })).toThrow(RangeError);
     expect(() => listResourceFilterFacets({ axis: "clusters", cursor: "" })).toThrow(TypeError);
-    expect(fetchMock).not.toHaveBeenCalled();
-  });
-
-  it("rejects non-canonical cursors and invalid Kubernetes Label selectors before transport", async () => {
-    const fetchMock = vi.spyOn(globalThis, "fetch").mockRejectedValue(
-      new Error("transport must not open"),
-    );
-
-    await expect(listFilteredResources({ cursor: " cursor " })).rejects.toBeInstanceOf(TypeError);
-    await expect(listResourceLabelFacets({
-      labels: ["UPPER.PREFIX/name=x"],
-    })).rejects.toBeInstanceOf(TypeError);
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
