@@ -607,6 +607,38 @@ effectively-once", "policy-scoped 3-way semantic diff",
 "tenant·cluster·namespace·capability 단계 제한". BQ-012 완료 전까지 fail-closed
 주장은 rule 경로에 한정해서만 말한다.
 
+### [D-025] 2026-07-13 — 착륙 기준 재정의: "완성"이 아니라 "안전" (작성: 우녕 위임 조율 세션)
+
+**1. 착륙의 기준은 완성이 아니라 안전이다.** 미완성 코드는 기본 비활성 flag,
+미노출, 미배선 중 하나로 격리해 전체 게이트와 착륙 4조건을 만족하면 즉시 착륙할 수 있다.
+
+**2. 미착륙도 위반이다.** dev 대비 10커밋 초과 lane, 30분 초과 미커밋 변경,
+생성 후 2시간 초과 lane, "완성 후 착륙" 계획은 착륙 지연으로 본다.
+
+**3. 작업 단위 분해 의무.** 2시간 안에 안전 착륙할 수 없는 작업은 더 작은 단위로 쪼갠다.
+lane 10커밋 초과는 분해 실패 신호다.
+
+**4. 게이트는 절대적이다.** 전체 그린과 [D-024] 4조건은 유지한다. 격리된 미완성의
+잔여 결함과 해제 조건은 night-log에 기록하고 다음 사이클 첫 작업으로 처리한다.
+
+### [D-026] 2026-07-13 — GAP → BQ 정식 등록 + 계약 우선순위 (작성: 우녕 위임 조율 세션)
+
+**우선순위는 계약 > 배포 > OSS 공개다.** 프론트 계약을 아래 순서로 처리하고 각 계약을
+개별 착륙한 즉시 night-log에 앵커를 남긴다. 여러 계약을 한 번에 모아 전달하지 않는다.
+
+| BQ | GAP | 계약 | 해제되는 프론트 |
+|---|---|---|---|
+| BQ-022 | GAP-010 | Resources filter와 동일 scope/revision의 single-cluster graph snapshot | 표/그래프 모드 |
+| BQ-023 | GAP-005 | Issues common/surface filter, facet, stable detail ID, cursor/total/completeness | Issues 필터 |
+| BQ-024 | GAP-006 | Applications/GitOps/Checks provider-neutral list·facet 계약 | 세 화면 필터 |
+| BQ-025 | GAP-007 | Cluster 등록 validation·preview·resume/reissue·structured stage error | 연결 위자드 |
+| BQ-026 | GAP-008 | Cluster 연결 해제 capability·confirmation·receipt·terminal status | 클러스터 상세 삭제 |
+| BQ-027 | GAP-009 | 저장소 recognition·access·credential·branch/path cursor·operation status | 저장소 위자드 |
+| BQ-028 | GAP-001 | workspace catalog/current/switch/session refresh/forbidden·deleted | workspace selector |
+
+상세 의미는 `docs/spec/frontend/vp-010-unified-filter-ia.md` §9·§9.1을 따른다. 기존
+GAP-002/003/004와 이미 착륙한 계약은 중복 구현하지 않고 새 BQ 번호를 canonical 앵커에 연결한다.
+
 ### [D-008] 2026-07-13 04:50 KST 기록 정합 (작성: 자동 판단자)
 
 [D-007](판단자)과 [D-006](조율 세션)이 04:47경 동시 기록되어 파일 내 순서가 ID 순서와 어긋났다.
