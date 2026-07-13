@@ -4,7 +4,7 @@ status: active-coordination-queue
 date: 2026-07-13
 owners: Codex 요청 / API 연결 작업자 claim·처리 / F 트랙 행(APIQ-029)·계약 갱신(APIQ-012)은 검토자 기록
 workorder: api-integration-workorder-20260711.md
-snapshot: 1행·1함수 / requested 0 / in_progress 1 / blocked 0 / valid completion anchors 52
+snapshot: 0행·0함수 / requested 0 / in_progress 0 / blocked 0 / valid completion anchors 53
 ---
 
 # 프론트 API 요청 큐
@@ -16,8 +16,8 @@ snapshot: 1행·1함수 / requested 0 / in_progress 1 / blocked 0 / valid comple
 상세한 경로, 소유권, schema, test, mutation 안전, 2커밋 완료 절차는
 `api-integration-workorder-20260711.md`가 정본이다.
 
-> **현재 claim (2026-07-13 P4):** `APIQ-031 getIncidentRecentChanges`를
-> `Codex-API@woonyong/ui-layer-lab`이 claim했다. 완료 앵커 전 제품 adapter·화면 소비 금지.
+> **현재 claim:** 없음. `APIQ-031 getIncidentRecentChanges`는 코드 커밋
+> `4f602cc86660a7f8a12583cffc44a53e220d9dbf`와 전체 게이트를 통과하고 완료됐다.
 
 ## 1. 상태와 claim 규칙
 
@@ -69,7 +69,6 @@ claim·heartbeat: YYYY-MM-DD HH:mm KST
 
 | ID | 우선 | 함수명 | routes.py 상수 | 대상 파일 | 필요한 화면 | 요청 시각 | 상태 | 담당/브랜치 | claim·heartbeat | 완료 조건·주의 |
 |---|---:|---|---|---|---|---|---|---|---|---|
-| APIQ-031 | P0 | `getIncidentRecentChanges` | `RCA_RECENT_CHANGES_PATH` | `recent-changes.ts` / `recent-changes-schemas.ts` / `recent-changes.test.ts` / `barrels/rca.ts` | VP-004 Issues 최근 변경 | 2026-07-13 14:12 KST | in_progress | `Codex-API@woonyong/ui-layer-lab` | 2026-07-13 14:12 KST | `GET /api/rca/incidents/{incident_id}/recent-changes?limit=`. `RecentChangeListResponse`와 item 전 계층 strict close, `image_before/image_after/pr_url`만 nullable. limit 1~50, 기본 5, incident ID 선검증·인코딩, AbortSignal, 404·422·malformed payload 계약. 빈 items는 정상 성공이며 클라이언트 재정렬·필터 금지. |
 
 ## 3. 기존 구현 검증·승인
 
