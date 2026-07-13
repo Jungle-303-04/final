@@ -1745,3 +1745,16 @@ API 완성: registerTarget (8678d63b0)
   en/ko 포함, exact scenario API requests, unexpected feature network/WebSocket 0건.
 - standalone `npm run build` PASS: 14,538 modules, `dist` 26 MiB / 2,675 files,
   `ProductApp-C79itfkb.js` 319 KiB, `ProductApp-Dh-KDTNp.css` 77 KiB.
+
+## 2026-07-13 S1 Issues 확대·강제색 회귀 게이트 완료
+
+- RED `f5413960a`에서 Issues 상세의 200% text resize와 forced-colors 시나리오를
+  먼저 추가해 화면 전용 강제색 검증 결손을 재현했다.
+- GREEN `2693c5c8bc8c698b8535aec9574d82904fa4b6a5`에서 Issues 상세·최근 변경·PR 링크,
+  전역 Cluster selector, 선택 Issue의 keyboard focus를 system colors로 검증한다.
+  공용 Card와 Button은 forced-colors 경계·focus·disabled 상태와 reduced-motion 전환을 보존한다.
+- full `npm run check` PASS: Vitest 113 files / 824 tests, design guard 340 files,
+  shadcn 482 previews, Vite build 14,538 modules. `npm run visual-product`는 38개 격리
+  시나리오와 unexpected network/WebSocket 0건으로 PASS했다.
+- 증거: `output/playwright/product-issues-authenticated-detail-text-resize-200-light.png`,
+  `output/playwright/product-issues-authenticated-detail-forced-colors.png`.
