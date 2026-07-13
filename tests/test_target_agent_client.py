@@ -683,3 +683,34 @@ def test_target_agent_wires_argocd_reconciler_mode(monkeypatch: pytest.MonkeyPat
         assert agent.reconciler.reconciler_mode == "argocd"
     finally:
         agent.close()
+
+
+def test_oss_profile_blocks_direct_write_commands_before_kubernetes_call(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("AGENT_DIRECT_COMMANDS_ENABLED", "false")
+    agent_module = load_agent_module()
+    agent = agent_module.TargetClusterAgent()
+
+    try:
+        result = asyncio.run(
+            agent.execute_command(
+                {
+                    "action": "apply_manifest",
+                    **approval_evidence(),
+                    "payload": {
+                        "diff": {
+                            "namespace": "sandbox",
+                            "resource": "deployment/checkout-api",
+                            "desired_image": "img:new",
+                        }
+                    },
+                }
+            )
+        )
+    finally:
+        agent.close()
+
+    assert result["status"] == "failed"
+    assert result["applied"] is False
+    assert result["message"] == "direct commands are disabled by agent profile"
