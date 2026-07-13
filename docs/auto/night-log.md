@@ -2162,3 +2162,18 @@ target preflight·register 네 함수와 strict Zod 계약을 claim했다. 1회�
 - 4조건: merge-tree clean/tree `68cb35ca8dc94ec15299e23824edd86d85e5ead4`, 파일 삭제·
   소유권 밖 변경·frozen 경로 변경 0건, test·merge commit의 `origin/dev` ancestor exit 0.
   J 배포 실행은 0건이다.
+
+## 2026-07-13 17:29 KST — [프론트] dev→lab 정기 흡수·게이트 완료 증거
+
+- `aef9cda375682742fd909cd2479bb04df5bac58b`에서 프론트 HEAD `531a89bde`와
+  당시 canonical `7216f2d2a`를 no-ff로 통합했고, 후속 canonical merge
+  `da5330778443902009d45154214ab692da08cb7c`까지 흡수했다.
+- `references/ui-layer-lab/**`와 `docs/spec/frontend/**`의 dev측 변경은 0건이었다.
+  공유 충돌은 append-only `docs/auto/night-log.md` 1개뿐이며, FE·BE 15개 섹션을 실제
+  커밋 시각의 비감소 순서로 배치했다. 각 섹션 1회, conflict marker 0건, 본문 유실 0건이다.
+- `npm run check` PASS: TypeScript·ESLint, Vitest 117 files / 844 tests,
+  design guard 345 files, shadcn source audit 482 previews, Vite build 14,539 modules.
+  `npm run visual-product` PASS: 41 isolated scenarios, exact API request counts,
+  unexpected feature network/WebSocket 0건.
+- 로그 무결성 커밋·push는 `40fda210a64a6f29d76aaabde719672724099c28`이며,
+  `origin/woonyong/ui-layer-lab` exact 일치와 `origin/dev` ancestor exit 0을 재확인했다.
