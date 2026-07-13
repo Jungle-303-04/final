@@ -1,4 +1,4 @@
-# Code of Conduct (Publication Draft)
+# Opsia Code of Conduct (Publication Draft)
 
 > This draft describes the intended community standard. It is not adopted until human owners approve
 > the public project, enforcement team, reporting channel, and final policy text.

@@ -1,4 +1,4 @@
-# Contributing (Publication Draft)
+# Contributing to Opsia (Publication Draft)
 
 > This guide is a draft for a possible future public repository. It is not an invitation to submit
 > public contributions yet, and it does not adopt a CLA, DCO, license, or governance policy. Human
@@ -6,7 +6,7 @@
 
 ## One scenario is one contribution
 
-The default contribution unit is **one KubeHealBench scenario**. A focused scenario is reviewable,
+The default contribution unit is **one OpsiaBench scenario**. A focused scenario is reviewable,
 reproducible, and independently attributable. Do not combine unrelated failure modes, catalog changes,
 runtime features, or broad refactors with a scenario contribution.
 
@@ -17,7 +17,7 @@ benchmark/scenarios/<category>/<scenario-id>/scenario.json
 ```
 
 The canonical field contract is documented in the
-[KubeHealBench README](../../benchmark/README.md). Each scenario must include all nine semantic items:
+[OpsiaBench README](../../benchmark/README.md). Each scenario must include all nine semantic items:
 
 1. normal Kubernetes manifest;
 2. fault-injection patch;

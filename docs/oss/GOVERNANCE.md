@@ -1,4 +1,4 @@
-# Governance (Publication Draft)
+# Opsia Governance (Publication Draft)
 
 > This governance model is a proposal, not an adopted delegation of authority. Human owners retain all
 > decisions while the repository is private and must approve the public model before launch.
@@ -16,7 +16,7 @@
 ### Contributor
 
 Anyone whose accepted work improves code, documentation, scenarios, testing, design, or community
-operations. The preferred first contribution is one KubeHealBench scenario.
+operations. The preferred first contribution is one OpsiaBench scenario.
 
 ### Reviewer
 

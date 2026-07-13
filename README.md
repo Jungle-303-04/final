@@ -1,6 +1,7 @@
-# 서비스
+# Opsia
 
-Kubernetes 운영 자동화를 위한 이벤트 드리븐 마이크로서비스 구현입니다.
+Opsia는 Kubernetes 운영 변경을 증거·정책·승인·사후 검증으로 연결하는 이벤트 드리븐
+remediation 플랫폼입니다.
 
 이 repository의 실행 기준은 `app/` 단일 FastAPI 앱이 아니라 `src/services/<service-name>`입니다. 처음부터 완전 분리 마이크로서비스로 만들며, Kubernetes Deployment/DaemonSet은 각 서비스 폴더의 entrypoint를 직접 실행해 서로 다른 서비스 인스턴스로 분리합니다.
 
