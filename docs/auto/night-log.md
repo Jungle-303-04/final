@@ -993,3 +993,21 @@ JsonMap, AbortSignal, ID 검증을 완료 앵커 전까지 제품 화면에서 �
   exact anchor를 기록했다. `api-needs.md`는 0행·0함수, requested/in_progress/blocked 모두 0이다.
 - 각 단위 full `npm run check`가 통과했고 마지막 결과는 105 files / 757 tests,
   design guard 314 files, shadcn 482 previews, production build PASS다.
+
+## 2026-07-13 12:37 KST — [프론트] F 완료 증거
+
+```text
+명령: cd references/ui-layer-lab && npm run check
+결과: PASS
+- TypeScript / ESLint: PASS
+- Vitest: 105 files, 757 tests PASS
+- product design guard: 314 files PASS
+- shadcn source audit: 482 previews PASS, upstream 21e4ceb
+- Vite production build: PASS, 14,512 modules transformed
+
+명령: cd references/ui-layer-lab && npm run visual-product
+결과: PASS
+- isolated product scenarios: 35/35 PASS
+- light/dark, mobile, 320px reflow, 200% text, forced-colors, en/ko 포함
+- exact scenario API requests, unexpected feature network/WebSocket: 0
+```
