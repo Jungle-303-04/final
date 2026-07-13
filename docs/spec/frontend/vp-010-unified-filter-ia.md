@@ -388,9 +388,10 @@ Live Traffic은 이번 범위에서 **변경하지 않는다**(현행 유지).
   `f944e4c5b`에서 완료했다. Graph는 URL history를 보존하지만 GAP-010 전에는 catalog/list/graph
   API·TopologyCanvas·WebSocket을 모두 호출하거나 렌더하지 않는다. 단일 Cluster가 아니면
   선택 경계를 표시하고, unknown Cluster identity는 선택 안내로 뭉개지 않고 그대로 보존한다.
-- Resources core `GAP-002/003/004` 계약은 `87c0606e0`으로 착륙했고 frontend API·Zod·adapter
-  배선은 다음 작업 단위다. 이후 우선순위는 graph `010`, 타 화면 `005 → 006`, wizard
-  `007 → 008`, repository `009`, workspace `001`이다. 앵커 없는 데이터 표면은 계속 미렌더한다.
+- Resources core `GAP-002/003/004` 계약은 `87c0606e0`으로 착륙했고 frontend API·strict Zod는
+  `a9febb22b`에서 완료했다. 제품 adapter·UI 배선은 별도 작업 단위다. 이후 우선순위는 graph
+  `010`, 타 화면 `005 → 006`, wizard `007 → 008`, repository `009`, workspace `001`이다.
+  앵커 없는 데이터 표면은 계속 미렌더한다.
 
 ## 9. 계약 갭 기록
 
@@ -400,9 +401,9 @@ Live Traffic은 이번 범위에서 **변경하지 않는다**(현행 유지).
 | ID | 필요한 계약 | 막힌 화면 | 상태 |
 |---|---|---|---|
 | GAP-001 | 현재 actor가 접근 가능한 workspace cursor catalog, current workspace, switch mutation receipt, session refresh, forbidden/deleted 상태 | 상단 workspace selector | backend 요청 필요 · 미렌더 |
-| GAP-002 | workspace-scoped filter facet catalog: stable cluster/application IDs, exact namespace refs, restricted/unresolved 상태, revision, opaque cursor | 공용 filter option과 chip 해석 | backend GREEN `RESOURCES_FILTER_FACETS_PATH` / `87c0606e0` · frontend API·Zod·adapter 대기 |
-| GAP-003 | Resources multi-cluster·multi-namespace·applicationIds·resourceTypes·health·server search query, stable sort, opaque cursor, total/completeness, row cluster identity와 application binding | Resources filter 결과·Showing N of M·다중 Cluster 표 | backend GREEN `FILTERED_RESOURCES_PATH` / `87c0606e0` · frontend API·Zod·adapter 대기 · client fan-out 금지 |
-| GAP-004 | workspace/권한/common·surface filter/snapshot을 받는 surface별 label facet search: `key=value` 부분 검색, 후보를 AND 추가했을 때의 count, selected label 재해석, opaque cursor, result total·unfiltered total·completeness, restricted/redacted 정책 | Labels popover·label chip·Showing N of M | backend GREEN `RESOURCE_LABEL_FACETS_PATH` / `87c0606e0` · frontend API·Zod·adapter 대기 · collection 전수 수집 금지 |
+| GAP-002 | workspace-scoped filter facet catalog: stable cluster/application IDs, exact namespace refs, restricted/unresolved 상태, revision, opaque cursor | 공용 filter option과 chip 해석 | backend GREEN `RESOURCES_FILTER_FACETS_PATH` / `87c0606e0` · frontend `listResourceFilterFacets` + strict Zod GREEN `a9febb22b` · adapter 대기 |
+| GAP-003 | Resources multi-cluster·multi-namespace·applicationIds·resourceTypes·health·server search query, stable sort, opaque cursor, total/completeness, row cluster identity와 application binding | Resources filter 결과·Showing N of M·다중 Cluster 표 | backend GREEN `FILTERED_RESOURCES_PATH` / `87c0606e0` · frontend `listFilteredResources` + strict Zod GREEN `a9febb22b` · adapter 대기 · client fan-out 금지 |
+| GAP-004 | workspace/권한/common·surface filter/snapshot을 받는 surface별 label facet search: `key=value` 부분 검색, 후보를 AND 추가했을 때의 count, selected label 재해석, opaque cursor, result total·unfiltered total·completeness, restricted/redacted 정책 | Labels popover·label chip·Showing N of M | backend GREEN `RESOURCE_LABEL_FACETS_PATH` / `87c0606e0` · frontend `listResourceLabelFacets` + strict Zod GREEN `a9febb22b` · adapter 대기 · collection 전수 수집 금지 |
 | GAP-005 | Issues의 common axes + severity/status/environment server filter, application/cluster/namespace facet payload, stable detail ID, cursor/total/completeness | Issues filter·filter 밖 detail 판정 | backend 요청 필요 · 미렌더 |
 | GAP-006 | provider-neutral Applications/GitOps/Checks canonical list DTO, common/surface axes, cursor/facet counts/completeness | 세 화면 filter와 목록 | backend 요청 필요 · 기존 검증된 read만 유지 |
 | GAP-007 | registration preflight/register 동일 validation, 발급 전 command preview 또는 명시적 순서, resume/reissue, structured `connection_stage` reason/error code | Cluster 연결 위자드 완성형 | VP-008 blocker 유지 · 미렌더 |
@@ -438,3 +439,14 @@ endpoint 경로와 저장 구조는 백엔드 소유지만 다음 의미는 필�
   결합한다. filter가 바뀌면 기존 cursor는 재사용할 수 없다.
 - list와 facet의 snapshot이 다르면 프론트는 count를 섞지 않고 background refreshing으로
   전환한다. restricted source가 포함되면 exact count로 가장하지 않는다.
+
+### 9.2 GAP-003 보강 요청 — Resource type·health facet
+
+- `FILTERED_RESOURCES_PATH`는 이미 선택된 `resources.types`와 `resources.health`를 서버에서
+  정확히 적용하지만, workspace 범위의 사용 가능한 type·health 후보와 각 count를 반환하지 않는다.
+- 기존 단일 Cluster inventory catalog나 현재 page를 합쳐 후보를 만들지 않는다. 다중 Cluster·권한·
+  cursor 범위에서 완전성을 증명할 수 없고 client fan-out 금지와 충돌한다.
+- 따라서 list·검색·URL 보존은 adapter 착륙 뒤 연결할 수 있지만, type·health picker의 완전한 후보
+  목록과 count는 server-counted facet 계약이 추가될 때까지 미렌더한다. 필요한 최소 필드는
+  stable value, display label 또는 canonical Kubernetes kind, nullable count, completeness,
+  selected resolution, snapshot/authorization revision, opaque cursor다.

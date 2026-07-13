@@ -1806,3 +1806,27 @@ API 완성: registerTarget (8678d63b0)
 - 화면 증거: `references/ui-layer-lab/output/playwright/product-home-authenticated-node-desktop-light-text-diet.png`,
   `product-resources-authenticated-desktop-light.png`,
   `product-issues-authenticated-detail-desktop-light.png`.
+
+## 2026-07-13 Resources 필터 API·strict Zod 계약 완료
+
+- 최초 RED `904ec0e51`, GREEN `1ebc9e5cb` 뒤 적대적 계약 감사에서 요청-응답 축 결합,
+  selected resolution 완전성, RFC 3339 timestamp, 빈 cursor, Kubernetes Label 문법 결손을 찾았다.
+  하드닝 RED `e2c26fdf1`이 5개 실패를 재현했고 최종 GREEN은
+  `a9febb22bfcfc004ddaba73a345e2c1daa0da96a`이다.
+- 최종 GREEN은 `listResourceFilterFacets`, `listFilteredResources`,
+  `listResourceLabelFacets`와 모든 closed 계층의 strict Zod schema를 구현했다. provider는
+  nullable metadata일 뿐 화면 분기 입력이 아니다.
+- 같은 축 OR·축 간 AND·Label AND를 canonical query로만 전송하고 selection을 정렬·중복 제거한다.
+  workspace ID를 query로 받지 않으며 collection 전수 수집, client count, fallback, synthetic,
+  frozen `client.ts`/`url.ts` 수정은 0건이다.
+- response axis와 resolution 집합을 원 요청에 결합한다. exact/partial/unavailable count-nullability,
+  Label `key=value`, RFC 3339 offset, resource/cluster identity, cursor/has-more 모순은 payload를
+  invalid로 거부한다. 404/422·AbortError는 기존 transport 의미를 보존한다.
+- `npm run check` PASS: TypeScript·ESLint, Vitest 130 files / 927 tests, design guard 371 files,
+  shadcn source audit 482 previews, Vite production build 14,551 modules다.
+- 제품 adapter·UI는 이 앵커 뒤 별도 작업 단위로 시작한다. type·health 후보/count facet은 아직
+  backend 계약이 없어 기존 단일 Cluster catalog나 현재 page를 합성하지 않고 미렌더한다.
+
+API 완성: listResourceFilterFacets (a9febb22bfcfc004ddaba73a345e2c1daa0da96a)
+API 완성: listFilteredResources (a9febb22bfcfc004ddaba73a345e2c1daa0da96a)
+API 완성: listResourceLabelFacets (a9febb22bfcfc004ddaba73a345e2c1daa0da96a)

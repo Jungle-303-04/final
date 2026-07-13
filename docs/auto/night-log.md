@@ -2814,3 +2814,22 @@ target preflight·register 네 함수와 strict Zod 계약을 claim했다. 1회�
 - 이 기록을 포함한 동일 HEAD를 lab과 dev에 non-force push하고 두 ref의 동일 SHA와 ancestor
   exit 0을 재확인한다. 이후 lane `codex/vp010-graph-shell-20260713`과 worktree를 같은 사이클에서
   회수하며, 신규 stash 0건과 기존 미증명 stash 유지 사유를 기록한다.
+
+## 2026-07-13 23:49 KST — [프론트] Resources 필터 API·strict Zod GREEN
+
+- 직전 Graph shell은 최종 `ce104ef1fd2a2045cc4496414c0d9c277618a054`로 lab/dev 양쪽에
+  동일 착륙했고 ancestor exit 0을 확인했다. 임시 lane `codex/vp010-graph-shell-20260713`과
+  `/private/tmp/opsia-vp010-graph-shell`은 같은 사이클에서 제거·prune했다. 기존 stash 8개는
+  반영 여부를 증명하지 못해 유지했고 사람/백엔드 소유 worktree는 건드리지 않았다.
+- Resources API 최초 RED `904ec0e51`, GREEN `1ebc9e5cb`, 하드닝 RED `e2c26fdf1`, 최종 GREEN
+  `a9febb22bfcfc004ddaba73a345e2c1daa0da96a`. backend anchor `87c0606e0`의 세 경로를
+  `listResourceFilterFacets`, `listFilteredResources`, `listResourceLabelFacets`와 strict Zod로 연결했다.
+- 요청 axis·selection과 응답을 결합하고 RFC 3339 offset, nonblank cursor, Kubernetes Label grammar,
+  count/completeness·identity 불변식을 fail-closed한다. `client.ts`·`url.ts`, backend source,
+  synthetic, provider 분기는 0건이다.
+- full `npm run check` PASS: 130 files / 927 tests, design guard 371 files, shadcn 482 previews,
+  Vite 14,551 modules. 제품 adapter·UI는 API 완성 앵커 뒤 별도 작업 단위로 유지한다.
+- type·health facet 후보/count는 backend 계약이 없어 VP-010 §9.2 보강 요청으로 남겼다.
+  GAP-010 전 graph data·TopologyCanvas·WebSocket 미렌더도 유지한다.
+- 이 문서 커밋과 visual-product를 통과한 동일 HEAD를 lab/dev에 승격한 뒤 현재 lane/worktree를
+  같은 사이클에서 회수한다. 신규 stash 0건, 기존 미증명 stash 8개 유지가 정리 기준이다.
