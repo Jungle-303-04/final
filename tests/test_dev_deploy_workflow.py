@@ -38,10 +38,17 @@ def test_deploy_only_follows_a_successful_dev_push_gate_with_exact_opt_in() -> N
     assert triggers["workflow_run"] == {"workflows": ["Dev Gate"], "types": ["completed"]}
     assert set(triggers["workflow_dispatch"]["inputs"]) == {
         "source_sha",
+        "deployment_mode",
         "postgres_snapshot_id",
         "nats_snapshot_id",
         "previous_release_sha",
-        "confirmation",
+    }
+    assert triggers["workflow_dispatch"]["inputs"]["deployment_mode"] == {
+        "description": "DEPLOY is the normal path; FIRST_DEPLOY is the retired one-time cutover path",
+        "required": True,
+        "default": "DEPLOY",
+        "type": "choice",
+        "options": ["DEPLOY", "FIRST_DEPLOY"],
     }
     assert deploy_job()["environment"] == "dev-deploy"
     condition = deploy_job()["if"]
@@ -51,7 +58,8 @@ def test_deploy_only_follows_a_successful_dev_push_gate_with_exact_opt_in() -> N
     assert "vars.AWS_DEV_DEPLOY_ENABLED == '1'" in condition
     assert "github.event_name == 'workflow_dispatch'" in condition
     assert "github.ref == 'refs/heads/dev'" in condition
-    assert "inputs.confirmation == 'FIRST_DEPLOY'" in condition
+    assert "inputs.deployment_mode == 'DEPLOY'" in condition
+    assert "inputs.deployment_mode == 'FIRST_DEPLOY'" in condition
     assert workflow()["concurrency"] == {
         "group": "dev-deploy",
         "cancel-in-progress": False,
@@ -88,6 +96,9 @@ def test_manual_first_deploy_requires_exact_gate_backup_and_previous_release_pro
     assert "/actions/workflows/dev-gate.yml/runs" in gate_proof
     assert "select(.head_sha == env.SOURCE_SHA)" in gate_proof
     backup_proof = steps["Verify manual first-deploy backup"]["run"]
+    assert steps["Verify manual first-deploy backup"]["if"] == (
+        "github.event_name == 'workflow_dispatch' && inputs.deployment_mode == 'FIRST_DEPLOY'"
+    )
     assert "verify_first_deploy_backup.py" in backup_proof
     assert 'test -n "${FIRST_DEPLOY_POSTGRES_SNAPSHOT_ID}"' in backup_proof
     assert 'test -n "${FIRST_DEPLOY_NATS_SNAPSHOT_ID}"' in backup_proof
@@ -189,18 +200,21 @@ def test_first_deploy_freezes_writers_before_copy_and_restores_exact_replicas() 
     switch = steps["Switch first-deploy database target"]
     restore = steps["Restore first-deploy database writers"]
 
-    assert freeze["if"] == "github.event_name == 'workflow_dispatch'"
+    first_deploy_only = (
+        "github.event_name == 'workflow_dispatch' && inputs.deployment_mode == 'FIRST_DEPLOY'"
+    )
+    assert freeze["if"] == first_deploy_only
     assert "database_writer_freeze.py capture" in freeze["run"]
     assert "database_writer_freeze.py freeze" in freeze["run"]
     assert "cluster-agent" in (ROOT / "scripts/database_writer_freeze.py").read_text()
-    assert cutover["if"] == "github.event_name == 'workflow_dispatch'"
+    assert cutover["if"] == first_deploy_only
     assert "database-cutover-job.yaml" in cutover["run"]
     assert '--run-id "${GITHUB_RUN_ID}"' in cutover["run"]
     assert '--run-attempt "${GITHUB_RUN_ATTEMPT}"' in cutover["run"]
     assert "packages.storage.baseline" not in cutover["run"]
-    assert switch["if"] == "github.event_name == 'workflow_dispatch'"
+    assert switch["if"] == first_deploy_only
     assert "database_cutover_config.py switch --direction target" in switch["run"]
-    assert restore["if"] == "github.event_name == 'workflow_dispatch'"
+    assert restore["if"] == first_deploy_only
     assert "database_writer_freeze.py restore" in restore["run"]
 
 
@@ -213,6 +227,30 @@ def test_first_deploy_does_not_mutate_source_schema_or_create_missing_workloads(
     assert "alembic stamp" not in source
     assert "alembic downgrade" not in source
     assert "DROP DATABASE" not in source
+
+
+def test_normal_manual_deploy_skips_cutover_but_keeps_migration_rollout_and_smoke() -> None:
+    steps = steps_by_name()
+    first_deploy_steps = (
+        "Verify manual first-deploy backup",
+        "Freeze first-deploy database writers",
+        "Bootstrap and copy first-deploy database",
+        "Switch first-deploy database target",
+        "Restore first-deploy database writers",
+    )
+
+    for name in first_deploy_steps:
+        assert "inputs.deployment_mode == 'FIRST_DEPLOY'" in steps[name]["if"]
+    for name in (
+        "Run fail-closed database migration",
+        "Roll out immutable service digest",
+        "Run post-deploy smoke",
+        "Record successful dev SHA in cluster",
+    ):
+        assert "if" not in steps[name]
+    assert deploy_job()["env"]["DEPLOYMENT_MODE"] == (
+        "${{ github.event_name == 'workflow_dispatch' && inputs.deployment_mode || 'DEPLOY' }}"
+    )
 
 
 def test_failure_recovery_always_attempts_image_and_replica_restore() -> None:
