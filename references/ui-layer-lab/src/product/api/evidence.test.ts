@@ -130,12 +130,12 @@ describe("Evidence and RCA report API", () => {
       correlationId: "corr/123",
       since: "2026-07-13T00:00:00+09:00",
       until: "2026-07-14T00:00:00Z",
-      cursor: "cursor/+==",
+      cursor: "  cursor/+==  ",
     });
 
     expect(result.next_cursor).toBe("eyJ2IjoxLCJpZCI6N30");
     expect(fetchMock).toHaveBeenCalledWith(
-      "/api/evidence?correlation_id=corr%2F123&since=2026-07-13T00%3A00%3A00%2B09%3A00&until=2026-07-14T00%3A00%3A00Z&limit=50&cursor=cursor%2F%2B%3D%3D",
+      "/api/evidence?correlation_id=corr%2F123&since=2026-07-13T00%3A00%3A00%2B09%3A00&until=2026-07-14T00%3A00%3A00Z&limit=50&cursor=++cursor%2F%2B%3D%3D++",
       expect.objectContaining({ method: "GET" }),
     );
   });
@@ -160,6 +160,12 @@ describe("Evidence and RCA report API", () => {
     );
     await expect(listRcaReports({ offset: -1 })).rejects.toThrow(
       "Evidence/RCA report offset must be a non-negative integer",
+    );
+    await expect(listEvidence({ cursor: "  " })).rejects.toThrow(
+      "cursor must not be blank",
+    );
+    await expect(listRcaReports({ cursor: "" })).rejects.toThrow(
+      "cursor must not be blank",
     );
     expect(fetchMock).not.toHaveBeenCalled();
   });
