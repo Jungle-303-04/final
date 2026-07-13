@@ -247,9 +247,13 @@ def test_alert_channel_admin_crud_roundtrip() -> None:
     async def run() -> None:
         db = StubChannelDb()
         created = await upsert_alert_channel(
-            AlertChannelUpsertRequest(name="ops", url="https://hooks.example/x", enabled=False), ADMIN, db
+            AlertChannelUpsertRequest(name="ops", url="https://hooks.example/x", enabled=False),
+            ADMIN,
+            db,
         )
-        db.record_alert_channel_test("workspace-1", created.channel_id, status="passed", detail="delivered")
+        db.record_alert_channel_test(
+            "workspace-1", created.channel_id, status="passed", detail="delivered"
+        )
         created = await upsert_alert_channel(
             AlertChannelUpsertRequest(
                 channel_id=created.channel_id,
@@ -450,7 +454,9 @@ def test_alert_channel_test_records_saved_channel_status(monkeypatch) -> None:
     async def run() -> None:
         db = StubChannelDb()
         created = await upsert_alert_channel(
-            AlertChannelUpsertRequest(name="ops", url="https://hooks.example/x", enabled=False), ADMIN, db
+            AlertChannelUpsertRequest(name="ops", url="https://hooks.example/x", enabled=False),
+            ADMIN,
+            db,
         )
         response = await send_alert_channel_test(
             AlertChannelTestRequest(
@@ -488,9 +494,13 @@ def test_alert_channel_url_change_clears_prior_delivery_test() -> None:
     async def run() -> None:
         db = StubChannelDb()
         created = await upsert_alert_channel(
-            AlertChannelUpsertRequest(name="ops", url="https://hooks.example/old", enabled=False), ADMIN, db
+            AlertChannelUpsertRequest(name="ops", url="https://hooks.example/old", enabled=False),
+            ADMIN,
+            db,
         )
-        db.record_alert_channel_test("workspace-1", created.channel_id, status="passed", detail="delivered")
+        db.record_alert_channel_test(
+            "workspace-1", created.channel_id, status="passed", detail="delivered"
+        )
         changed = await upsert_alert_channel(
             AlertChannelUpsertRequest(
                 channel_id=created.channel_id,
