@@ -1811,3 +1811,19 @@ target preflight·register 네 함수와 strict Zod 계약을 claim했다. 1회�
   design guard 342 files, shadcn source audit 482 previews, Vite build 14,539 modules.
   `npm run visual-product` PASS: 38 isolated scenarios, exact API request counts,
   unexpected feature network/WebSocket 0건.
+
+## 2026-07-13 16:21 KST — [프론트] 공용 primitive 모션 감소 계약 완료 증거
+
+- RED `c9cfbf7ef`는 Input·Toggle·TableRow 전환과 Dialog overlay/content·Tooltip의
+  open/closed 애니메이션이 primitive 자체 계약에서 누락된 사실을 5개 실패로 고정했다.
+- GREEN `9d59a5fd2`는 일반 환경의 기존 모션은 유지하고 `prefers-reduced-motion`일 때만
+  transition을 제거하며 popup 양방향 animation과 duration을 0으로 만든다. Base UI의
+  Toggle pressed 상태, Dialog focus trap·Escape·focus return, Tooltip hover/focus 생명주기,
+  native table 의미는 변경하지 않는다.
+- Resources 브라우저 검증은 Input·Toggle·TableRow를 required slot으로 강제하고,
+  Home은 실제로 열린 freshness Tooltip의 computed animation/transition 시간이 1ms 이하인지
+  확인한다. 모바일 Dialog content/overlay는 기존 shell 계산 검증을 계속 사용한다.
+- 최종 `npm run check` PASS: TypeScript·ESLint, Vitest 115 files / 830 tests,
+  design guard 343 files, shadcn source audit 482 previews, Vite build 14,539 modules.
+  `npm run visual-product` PASS: 38 isolated scenarios, exact API request counts,
+  unexpected feature network/WebSocket 0건.
