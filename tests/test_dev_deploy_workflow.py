@@ -95,6 +95,9 @@ def test_manual_first_deploy_requires_exact_gate_backup_and_previous_release_pro
     assert "get configmap opsia-deploy-status" in backup_proof
     capture = steps["Capture current digest rollback plan"]["run"]
     assert 'previous_sha="${FIRST_DEPLOY_PREVIOUS_SHA}"' in capture
+    assert 'if [[ "${GITHUB_EVENT_NAME}" == "workflow_dispatch" ]]' in capture
+    assert "capture_missing_args+=(--allow-missing-live)" in capture
+    assert capture.count('"${capture_missing_args[@]}"') == 2
     assert job["env"]["FIRST_DEPLOY_POSTGRES_SNAPSHOT_ID"] == ("${{ inputs.postgres_snapshot_id }}")
     assert job["env"]["FIRST_DEPLOY_NATS_SNAPSHOT_ID"] == "${{ inputs.nats_snapshot_id }}"
     assert job["env"]["FIRST_DEPLOY_PREVIOUS_SHA"] == "${{ inputs.previous_release_sha }}"
@@ -108,6 +111,9 @@ def test_deploy_orders_auth_migration_rollout_smoke_and_status_recording() -> No
     assert names.index("Render and verify auth bypass policy") < names.index("Run pre-deploy smoke")
     assert names.index("Run pre-deploy smoke") < names.index("Capture current digest rollback plan")
     assert names.index("Capture current digest rollback plan") < names.index(
+        "Enforce live auth bypass zero"
+    )
+    assert names.index("Enforce live auth bypass zero") < names.index(
         "Run fail-closed database migration"
     )
     assert names.index("Run fail-closed database migration") < names.index(
@@ -122,6 +128,15 @@ def test_deploy_orders_auth_migration_rollout_smoke_and_status_recording() -> No
     assert names.index("Run post-deploy smoke") < names.index(
         "Record successful dev SHA in cluster"
     )
+
+
+def test_workflow_sets_and_verifies_live_auth_bypass_without_manual_mutation() -> None:
+    step = steps_by_name()["Enforce live auth bypass zero"]["run"]
+
+    assert "set env deployment/api-gateway DEV_AUTH_BYPASS=0" in step
+    assert "rollout status deployment/api-gateway" in step
+    assert "verify_dev_auth_bypass.py live" in step
+    assert "DEV_AUTH_BYPASS-" not in step
 
 
 def test_smoke_failure_restores_both_previous_image_sets() -> None:
