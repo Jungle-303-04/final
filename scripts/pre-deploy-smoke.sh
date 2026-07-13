@@ -7,10 +7,14 @@ source "${SCRIPT_DIR}/lib/env.sh"
 BASE_URL="${BASE_URL:-}"
 MGMT_CONTEXT="${MGMT_CONTEXT:-}"
 MGMT_NS="${MGMT_NS:-management}"
+PRE_DEPLOY_HEALTH_MAX_ATTEMPTS="${PRE_DEPLOY_HEALTH_MAX_ATTEMPTS:-7}"
+PRE_DEPLOY_HEALTH_BACKOFF_MAX_SECONDS="${PRE_DEPLOY_HEALTH_BACKOFF_MAX_SECONDS:-30}"
 
 require_env BASE_URL
 require_env MGMT_CONTEXT
 BASE_URL="${BASE_URL%/}"
+[[ "${PRE_DEPLOY_HEALTH_MAX_ATTEMPTS}" =~ ^[1-9][0-9]*$ ]]
+[[ "${PRE_DEPLOY_HEALTH_BACKOFF_MAX_SECONDS}" =~ ^[0-9]+$ ]]
 
 for command in curl kubectl python3; do
   if ! command -v "${command}" >/dev/null 2>&1; then
@@ -24,14 +28,24 @@ health_file="$(mktemp)"
 trap 'rm -f "${index_file}" "${health_file}"' EXIT
 
 echo "==> pre-deploy gateway health" >&2
-health_status="$(
-  curl --silent --show-error \
-    --output "${health_file}" \
-    --write-out '%{http_code}' \
-    "${BASE_URL}/api/healthz"
-)"
-test "${health_status}" = "200"
-python3 - "${health_file}" <<'PY'
+health_ready=0
+for attempt in $(seq 1 "${PRE_DEPLOY_HEALTH_MAX_ATTEMPTS}"); do
+  if health_status="$(
+    curl --silent --show-error \
+      --connect-timeout 5 \
+      --max-time 15 \
+      --output "${health_file}" \
+      --write-out '%{http_code}' \
+      "${BASE_URL}/api/healthz"
+  )"; then
+    :
+  else
+    health_status="000"
+  fi
+  printf 'pre-deploy health attempt=%s/%s status=%s\n' \
+    "${attempt}" "${PRE_DEPLOY_HEALTH_MAX_ATTEMPTS}" "${health_status}" >&2
+
+  if [ "${health_status}" = "200" ] && python3 - "${health_file}" <<'PY'
 import json
 import sys
 
@@ -40,6 +54,21 @@ with open(sys.argv[1], encoding="utf-8") as handle:
 if document.get("status") != "ok":
     raise SystemExit("pre-deploy gateway health is not ok")
 PY
+  then
+    health_ready=1
+    break
+  fi
+
+  if [ "${attempt}" -lt "${PRE_DEPLOY_HEALTH_MAX_ATTEMPTS}" ]; then
+    backoff_seconds=$((1 << (attempt - 1)))
+    if [ "${backoff_seconds}" -gt "${PRE_DEPLOY_HEALTH_BACKOFF_MAX_SECONDS}" ]; then
+      backoff_seconds="${PRE_DEPLOY_HEALTH_BACKOFF_MAX_SECONDS}"
+    fi
+    printf 'pre-deploy health retry_in_seconds=%s\n' "${backoff_seconds}" >&2
+    sleep "${backoff_seconds}"
+  fi
+done
+test "${health_ready}" = "1"
 
 echo "==> pre-deploy frontend" >&2
 frontend_status="$(
