@@ -4,6 +4,7 @@ import { metricsEn } from "./catalogs/en/metrics";
 import { resourcesEn } from "./catalogs/en/resources";
 
 export const en = {
+  "product.name": "Opsia",
   "common.action.back": "Back",
   "common.action.cancel": "Cancel",
   "common.action.clear": "Clear",
@@ -136,7 +137,7 @@ export const en = {
   "auth.login.pending": "Signing in",
   "auth.login.submit": "Sign in",
   "auth.login.subtitle": "Enter your account details to continue.",
-  "auth.login.title": "Sign in to KubeHeal",
+  "auth.login.title": "Sign in to Opsia",
   "auth.logout.action": "Sign out",
   "auth.logout.error.message": "We could not complete the sign-out request. Check the connection and try again.",
   "auth.logout.error.title": "Session sign-out error",

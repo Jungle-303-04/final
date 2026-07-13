@@ -231,6 +231,7 @@ function AuthPublicStateFrame({ children }: { children: ReactNode }) {
 
 function AuthPublicFrame({ children }: { children: ReactNode }) {
   const themeController = useProductTheme();
+  const { t } = useI18n();
   return (
     <TooltipProvider>
       <div className="grid min-h-svh grid-rows-[3.5rem_minmax(0,1fr)] bg-background text-foreground">
@@ -242,7 +243,9 @@ function AuthPublicFrame({ children }: { children: ReactNode }) {
             <span className="grid size-8 shrink-0 place-items-center rounded-lg border bg-primary text-primary-foreground">
               <Activity aria-hidden="true" className="size-4" />
             </span>
-            <span className="truncate text-sm font-semibold tracking-tight">KubeHeal</span>
+            <span className="truncate text-sm font-semibold tracking-tight">
+              {t("product.name")}
+            </span>
           </div>
           <div className="flex shrink-0 items-center gap-1">
             <LocaleToggle />
