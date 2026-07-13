@@ -67,6 +67,24 @@ describe("cluster connection API", () => {
     );
   });
 
+  it("accepts an explicitly contracted optional connection stage", async () => {
+    const payload = { ...CONNECTION_STATUS, connection_stage: "ready" };
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(jsonResponse(payload));
+
+    await expect(getClusterConnectionStatus("cluster-1")).resolves.toEqual(payload);
+  });
+
+  it("rejects a connection stage outside the canonical lifecycle enum", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      jsonResponse({ ...CONNECTION_STATUS, connection_stage: "connected-ish" }),
+    );
+
+    await expect(getClusterConnectionStatus("cluster-1")).rejects.toMatchObject({
+      kind: "invalid-payload",
+      status: 200,
+    } satisfies Partial<ApiError>);
+  });
+
   it("rejects an invalid connection status payload", async () => {
     vi.spyOn(globalThis, "fetch").mockResolvedValue(
       jsonResponse({ ...CONNECTION_STATUS, connect_timeout_seconds: "300" }),
