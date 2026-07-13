@@ -148,11 +148,13 @@ def test_default_access_is_self_only_same_origin_with_console_and_realtime() -> 
     assert controller_env["OPSIA_EXTERNAL_URL"] == ""
     assert controller_env["COOKIE_SECURE"] == "0"
 
-    config = next(
+    config_map = next(
         item
         for item in documents
         if item["kind"] == "ConfigMap" and item["metadata"]["name"] == "opsia-console"
-    )["data"]["default.conf"]
+    )["data"]
+    config = config_map["default.conf"]
+    security_headers = config_map["security-headers.inc"]
     assert "proxy_pass http://127.0.0.1:8000/;" in config
     assert "proxy_pass http://127.0.0.1:8001/live/;" in config
     assert "location ^~ /api/install/" in config
@@ -160,7 +162,12 @@ def test_default_access_is_self_only_same_origin_with_console_and_realtime() -> 
     assert "access_log off;" in config
     assert "location = /api/metrics" in config
     assert 'proxy_set_header X-Kubeheal-Internal-Auth "";' in config
-    assert 'X-Content-Type-Options "nosniff"' in config
+    assert 'X-Content-Type-Options "nosniff"' in security_headers
+    assert config.count("include /etc/nginx/conf.d/security-headers.inc;") >= 3
+    assets_location = config.split("location /assets/", maxsplit=1)[1].split("}", maxsplit=1)[0]
+    root_location = config.split("location / {", maxsplit=1)[1].split("}", maxsplit=1)[0]
+    assert "security-headers.inc" in assets_location
+    assert "security-headers.inc" in root_location
 
     mounts = containers["console"]["volumeMounts"]
     assert {item["mountPath"] for item in mounts} == {"/etc/nginx/conf.d", "/tmp"}
