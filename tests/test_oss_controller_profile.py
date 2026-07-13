@@ -63,7 +63,8 @@ def test_composition_plan_assigns_every_discovered_entrypoint_once() -> None:
     plan = build_composition_plan(ROOT)
     assigned = (*plan.controller_services, *plan.agent_services)
 
-    assert len(discovered) == 40  # 39-entrypoint 지시 이후 change-correlation-worker 추가
+    # BQ-007 auto-revert-worker까지 H3 lane에서 합류한 현재 조립 정본.
+    assert len(discovered) == 41
     assert len(assigned) == len(discovered)
     assert {service.name for service in assigned} == {service.name for service in discovered}
     assert len({service.name for service in assigned}) == len(assigned)
@@ -122,10 +123,10 @@ def test_controller_check_loads_every_management_entrypoint() -> None:
     )
 
     assert result.returncode == 0, result.stderr
-    assert '"discovered_services": 40' in result.stdout
-    assert '"controller_services": 38' in result.stdout
+    assert '"discovered_services": 41' in result.stdout
+    assert '"controller_services": 39' in result.stdout
     assert '"agent_services": 2' in result.stdout
-    assert '"worker_services": 32' in result.stdout
+    assert '"worker_services": 33' in result.stdout
     assert '"async_services": 4' in result.stdout
     assert '"http_services": 2' in result.stdout
 
