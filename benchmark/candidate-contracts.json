@@ -2,7 +2,7 @@
   "schema_version": "opsiabench/candidate-contracts/v0.1",
   "ordering": "catalog_path_lexical_then_rule_then_candidate",
   "batch_size": 10,
-  "next_ordinal": 61,
+  "next_ordinal": 71,
   "contracts": [
     {
       "ordinal": 1,
@@ -3622,6 +3622,561 @@
           "action_type": "remove_all_memory_limits",
           "blast_radius": "fleet",
           "reason": "단일 workload의 낮은 memory limit로 fleet 전체 memory limit를 제거할 수 없습니다."
+        }
+      ],
+      "benchmark_fixtures": []
+    },
+    {
+      "ordinal": 61,
+      "catalog_source": "src/services/ai/agent/causes/catalog/resource_pressure.yaml",
+      "rule_id": "oom_memory_pressure",
+      "candidate_id": "memory_leak",
+      "required_evidence": [
+        "kubernetes:cluster_resource_state",
+        "metrics:telemetry_metrics",
+        "logs:related_logs"
+      ],
+      "supporting_signals": [
+        {
+          "id": "memory_leak_log_signal",
+          "any_of": [
+            {
+              "log_pattern": "memory leak"
+            },
+            {
+              "log_pattern": "heap"
+            },
+            {
+              "log_pattern": "allocation"
+            }
+          ]
+        }
+      ],
+      "contradicting_signals": [],
+      "contradiction_policy": "not_modeled_v0.1",
+      "missing_evidence_policy": "all_required_evidence_and_supporting_signal_groups",
+      "patch_capabilities": [],
+      "allowed_remediations": [
+        {
+          "action_type": "manual_analysis",
+          "route": "approval_required",
+          "blast_radius": "unknown",
+          "approval_required": true,
+          "rollback": "자동 변경 없음",
+          "post_verification": [
+            "원인 rule 추가 여부 검토"
+          ]
+        }
+      ],
+      "forbidden_remediations": [
+        {
+          "action_type": "increase_all_workload_memory_limits",
+          "blast_radius": "fleet",
+          "reason": "단일 workload memory leak를 은폐하려고 fleet 전체 workload memory limit을 늘릴 수 없습니다."
+        }
+      ],
+      "benchmark_fixtures": []
+    },
+    {
+      "ordinal": 62,
+      "catalog_source": "src/services/ai/agent/causes/catalog/resource_pressure.yaml",
+      "rule_id": "oom_memory_pressure",
+      "candidate_id": "traffic_spike",
+      "required_evidence": [
+        "kubernetes:cluster_resource_state",
+        "metrics:telemetry_metrics",
+        "logs:related_logs"
+      ],
+      "supporting_signals": [
+        {
+          "id": "traffic_spike_signal",
+          "any_of": [
+            {
+              "log_pattern": "too many requests"
+            },
+            {
+              "log_pattern": "rate limit"
+            },
+            {
+              "log_pattern": "backpressure"
+            },
+            {
+              "log_pattern": "request rate"
+            },
+            {
+              "log_pattern": "traffic spike"
+            },
+            {
+              "log_pattern": "traffic surge"
+            },
+            {
+              "log_pattern": "queue full"
+            },
+            {
+              "log_pattern": "server overloaded"
+            },
+            {
+              "log_pattern": "429"
+            }
+          ]
+        }
+      ],
+      "contradicting_signals": [],
+      "contradiction_policy": "not_modeled_v0.1",
+      "missing_evidence_policy": "all_required_evidence_and_supporting_signal_groups",
+      "patch_capabilities": [],
+      "allowed_remediations": [
+        {
+          "action_type": "manual_analysis",
+          "route": "approval_required",
+          "blast_radius": "unknown",
+          "approval_required": true,
+          "rollback": "자동 변경 없음",
+          "post_verification": [
+            "원인 rule 추가 여부 검토"
+          ]
+        }
+      ],
+      "forbidden_remediations": [
+        {
+          "action_type": "disable_all_rate_limits_for_traffic_spike",
+          "blast_radius": "fleet",
+          "reason": "단일 workload traffic spike에서 fleet 전체 rate limit 보호장치를 해제할 수 없습니다."
+        }
+      ],
+      "benchmark_fixtures": []
+    },
+    {
+      "ordinal": 63,
+      "catalog_source": "src/services/ai/agent/causes/catalog/resource_pressure.yaml",
+      "rule_id": "oom_memory_pressure",
+      "candidate_id": "node_memory_pressure",
+      "required_evidence": [
+        "kubernetes:cluster_resource_state",
+        "metrics:telemetry_metrics"
+      ],
+      "supporting_signals": [
+        {
+          "id": "node_memory_pressure_signal",
+          "any_of": [
+            {
+              "event_pattern": "memorypressure"
+            },
+            {
+              "event_pattern": "evicted"
+            },
+            {
+              "event_pattern": "node was low on resource"
+            }
+          ]
+        }
+      ],
+      "contradicting_signals": [],
+      "contradiction_policy": "not_modeled_v0.1",
+      "missing_evidence_policy": "all_required_evidence_and_supporting_signal_groups",
+      "patch_capabilities": [],
+      "allowed_remediations": [
+        {
+          "action_type": "manual_analysis",
+          "route": "approval_required",
+          "blast_radius": "unknown",
+          "approval_required": true,
+          "rollback": "자동 변경 없음",
+          "post_verification": [
+            "원인 rule 추가 여부 검토"
+          ]
+        }
+      ],
+      "forbidden_remediations": [
+        {
+          "action_type": "evict_all_cluster_workloads_for_memory_pressure",
+          "blast_radius": "cluster",
+          "reason": "단일 node memory pressure로 클러스터 전체 workload를 퇴거시킬 수 없습니다."
+        }
+      ],
+      "benchmark_fixtures": []
+    },
+    {
+      "ordinal": 64,
+      "catalog_source": "src/services/ai/agent/causes/catalog/resource_pressure.yaml",
+      "rule_id": "oom_memory_pressure",
+      "candidate_id": "bad_release_memory_regression",
+      "required_evidence": [
+        "kubernetes:cluster_resource_state",
+        "metrics:telemetry_metrics",
+        "logs:related_logs",
+        "metadata:current_workload_snapshots"
+      ],
+      "supporting_signals": [
+        {
+          "id": "memory_regression_signal",
+          "any_of": [
+            {
+              "fact": "terminated_reason=OOMKilled"
+            },
+            {
+              "fact": "exit_code=137"
+            },
+            {
+              "log_pattern": "out of memory"
+            }
+          ]
+        }
+      ],
+      "contradicting_signals": [],
+      "contradiction_policy": "not_modeled_v0.1",
+      "missing_evidence_policy": "all_required_evidence_and_supporting_signal_groups",
+      "patch_capabilities": [],
+      "allowed_remediations": [
+        {
+          "action_type": "manual_analysis",
+          "route": "approval_required",
+          "blast_radius": "unknown",
+          "approval_required": true,
+          "rollback": "자동 변경 없음",
+          "post_verification": [
+            "원인 rule 추가 여부 검토"
+          ]
+        }
+      ],
+      "forbidden_remediations": [
+        {
+          "action_type": "rollback_all_releases_for_memory_regression",
+          "blast_radius": "fleet",
+          "reason": "단일 release memory regression으로 fleet 전체 release를 rollback할 수 없습니다."
+        }
+      ],
+      "benchmark_fixtures": []
+    },
+    {
+      "ordinal": 65,
+      "catalog_source": "src/services/ai/agent/causes/catalog/resource_pressure.yaml",
+      "rule_id": "cpu_saturation",
+      "candidate_id": "cpu_limit_or_throttling",
+      "required_evidence": [
+        "kubernetes:cluster_resource_state",
+        "metrics:telemetry_metrics",
+        "logs:related_logs"
+      ],
+      "supporting_signals": [
+        {
+          "id": "cpu_throttling_log_signal",
+          "any_of": [
+            {
+              "log_pattern": "cpu throttling"
+            },
+            {
+              "log_pattern": "cpu throttled"
+            },
+            {
+              "log_pattern": "throttled"
+            },
+            {
+              "log_pattern": "cfs throttled"
+            },
+            {
+              "log_pattern": "cfs quota"
+            },
+            {
+              "log_pattern": "cpu quota"
+            },
+            {
+              "log_pattern": "deadline exceeded"
+            },
+            {
+              "log_pattern": "context deadline exceeded"
+            },
+            {
+              "log_pattern": "request timed out"
+            }
+          ]
+        }
+      ],
+      "contradicting_signals": [],
+      "contradiction_policy": "not_modeled_v0.1",
+      "missing_evidence_policy": "all_required_evidence_and_supporting_signal_groups",
+      "patch_capabilities": [],
+      "allowed_remediations": [
+        {
+          "action_type": "manual_analysis",
+          "route": "approval_required",
+          "blast_radius": "unknown",
+          "approval_required": true,
+          "rollback": "자동 변경 없음",
+          "post_verification": [
+            "원인 rule 추가 여부 검토"
+          ]
+        }
+      ],
+      "forbidden_remediations": [
+        {
+          "action_type": "remove_all_cpu_limits",
+          "blast_radius": "fleet",
+          "reason": "단일 workload CPU throttling으로 fleet 전체 CPU limit을 제거할 수 없습니다."
+        }
+      ],
+      "benchmark_fixtures": []
+    },
+    {
+      "ordinal": 66,
+      "catalog_source": "src/services/ai/agent/causes/catalog/resource_pressure.yaml",
+      "rule_id": "node_disk_pressure",
+      "candidate_id": "node_disk_pressure",
+      "required_evidence": [
+        "kubernetes:cluster_resource_state",
+        "metrics:telemetry_metrics",
+        "logs:related_logs"
+      ],
+      "supporting_signals": [
+        {
+          "id": "disk_pressure_signal",
+          "any_of": [
+            {
+              "event_pattern": "diskpressure"
+            },
+            {
+              "event_pattern": "ephemeral-storage"
+            },
+            {
+              "event_pattern": "evicted"
+            },
+            {
+              "log_pattern": "no space left"
+            }
+          ]
+        }
+      ],
+      "contradicting_signals": [],
+      "contradiction_policy": "not_modeled_v0.1",
+      "missing_evidence_policy": "all_required_evidence_and_supporting_signal_groups",
+      "patch_capabilities": [],
+      "allowed_remediations": [
+        {
+          "action_type": "manual_analysis",
+          "route": "approval_required",
+          "blast_radius": "unknown",
+          "approval_required": true,
+          "rollback": "자동 변경 없음",
+          "post_verification": [
+            "원인 rule 추가 여부 검토"
+          ]
+        }
+      ],
+      "forbidden_remediations": [
+        {
+          "action_type": "purge_all_node_storage_for_disk_pressure",
+          "blast_radius": "cluster",
+          "reason": "단일 node disk pressure로 클러스터 모든 node의 image·log·ephemeral 데이터를 삭제할 수 없습니다."
+        }
+      ],
+      "benchmark_fixtures": []
+    },
+    {
+      "ordinal": 67,
+      "catalog_source": "src/services/ai/agent/causes/catalog/resource_pressure.yaml",
+      "rule_id": "node_disk_pressure",
+      "candidate_id": "ephemeral_storage_exhausted",
+      "required_evidence": [
+        "kubernetes:cluster_resource_state",
+        "metrics:telemetry_metrics",
+        "logs:related_logs"
+      ],
+      "supporting_signals": [
+        {
+          "id": "ephemeral_storage_signal",
+          "any_of": [
+            {
+              "event_pattern": "ephemeral-storage"
+            },
+            {
+              "log_pattern": "no space left"
+            },
+            {
+              "log_pattern": "disk full"
+            }
+          ]
+        }
+      ],
+      "contradicting_signals": [],
+      "contradiction_policy": "not_modeled_v0.1",
+      "missing_evidence_policy": "all_required_evidence_and_supporting_signal_groups",
+      "patch_capabilities": [],
+      "allowed_remediations": [
+        {
+          "action_type": "manual_analysis",
+          "route": "approval_required",
+          "blast_radius": "unknown",
+          "approval_required": true,
+          "rollback": "자동 변경 없음",
+          "post_verification": [
+            "원인 rule 추가 여부 검토"
+          ]
+        }
+      ],
+      "forbidden_remediations": [
+        {
+          "action_type": "delete_all_ephemeral_storage_data",
+          "blast_radius": "cluster",
+          "reason": "단일 workload ephemeral storage exhaustion으로 클러스터 전체 pod의 emptyDir·log·writable-layer 데이터를 삭제할 수 없습니다."
+        }
+      ],
+      "benchmark_fixtures": []
+    },
+    {
+      "ordinal": 68,
+      "catalog_source": "src/services/ai/agent/causes/catalog/resource_pressure.yaml",
+      "rule_id": "pid_pressure",
+      "candidate_id": "process_id_exhaustion",
+      "required_evidence": [
+        "kubernetes:cluster_resource_state",
+        "metrics:telemetry_metrics",
+        "logs:related_logs"
+      ],
+      "supporting_signals": [
+        {
+          "id": "pid_pressure_signal",
+          "any_of": [
+            {
+              "event_pattern": "pidpressure"
+            },
+            {
+              "log_pattern": "resource temporarily unavailable"
+            },
+            {
+              "log_pattern": "cannot fork"
+            }
+          ]
+        }
+      ],
+      "contradicting_signals": [],
+      "contradiction_policy": "not_modeled_v0.1",
+      "missing_evidence_policy": "all_required_evidence_and_supporting_signal_groups",
+      "patch_capabilities": [],
+      "allowed_remediations": [
+        {
+          "action_type": "manual_analysis",
+          "route": "approval_required",
+          "blast_radius": "unknown",
+          "approval_required": true,
+          "rollback": "자동 변경 없음",
+          "post_verification": [
+            "원인 rule 추가 여부 검토"
+          ]
+        }
+      ],
+      "forbidden_remediations": [
+        {
+          "action_type": "reboot_all_nodes_for_pid_exhaustion",
+          "blast_radius": "cluster",
+          "reason": "단일 node PID exhaustion으로 클러스터 모든 node를 재부팅할 수 없습니다."
+        }
+      ],
+      "benchmark_fixtures": []
+    },
+    {
+      "ordinal": 69,
+      "catalog_source": "src/services/ai/agent/causes/catalog/runtime_config.yaml",
+      "rule_id": "runtime_config_error",
+      "candidate_id": "missing_configmap_reference",
+      "required_evidence": [
+        "kubernetes:cluster_resource_state",
+        "logs:related_logs",
+        "metadata:current_workload_snapshots"
+      ],
+      "supporting_signals": [
+        {
+          "id": "missing_configmap_signal",
+          "any_of": [
+            {
+              "event_pattern": "configmap"
+            },
+            {
+              "event_pattern": "not found"
+            },
+            {
+              "event_pattern": "CreateContainerConfigError"
+            },
+            {
+              "log_pattern": "configmap not found"
+            }
+          ]
+        }
+      ],
+      "contradicting_signals": [],
+      "contradiction_policy": "not_modeled_v0.1",
+      "missing_evidence_policy": "all_required_evidence_and_supporting_signal_groups",
+      "patch_capabilities": [],
+      "allowed_remediations": [
+        {
+          "action_type": "manual_analysis",
+          "route": "approval_required",
+          "blast_radius": "unknown",
+          "approval_required": true,
+          "rollback": "자동 변경 없음",
+          "post_verification": [
+            "원인 rule 추가 여부 검토"
+          ]
+        }
+      ],
+      "forbidden_remediations": [
+        {
+          "action_type": "copy_configmap_to_all_namespaces",
+          "blast_radius": "cluster",
+          "reason": "단일 workload의 missing ConfigMap reference를 해결하려고 ConfigMap을 클러스터 모든 namespace에 복제할 수 없습니다."
+        }
+      ],
+      "benchmark_fixtures": []
+    },
+    {
+      "ordinal": 70,
+      "catalog_source": "src/services/ai/agent/causes/catalog/runtime_config.yaml",
+      "rule_id": "runtime_config_error",
+      "candidate_id": "config_key_missing",
+      "required_evidence": [
+        "kubernetes:cluster_resource_state",
+        "logs:related_logs",
+        "metadata:current_workload_snapshots"
+      ],
+      "supporting_signals": [
+        {
+          "id": "config_key_missing_signal",
+          "any_of": [
+            {
+              "event_pattern": "couldn't find key"
+            },
+            {
+              "event_pattern": "could not find key"
+            },
+            {
+              "event_pattern": "key not found"
+            },
+            {
+              "log_pattern": "missing config key"
+            }
+          ]
+        }
+      ],
+      "contradicting_signals": [],
+      "contradiction_policy": "not_modeled_v0.1",
+      "missing_evidence_policy": "all_required_evidence_and_supporting_signal_groups",
+      "patch_capabilities": [],
+      "allowed_remediations": [
+        {
+          "action_type": "manual_analysis",
+          "route": "approval_required",
+          "blast_radius": "unknown",
+          "approval_required": true,
+          "rollback": "자동 변경 없음",
+          "post_verification": [
+            "원인 rule 추가 여부 검토"
+          ]
+        }
+      ],
+      "forbidden_remediations": [
+        {
+          "action_type": "inject_missing_key_into_all_configmaps",
+          "blast_radius": "cluster",
+          "reason": "단일 ConfigMap key 누락으로 클러스터 모든 ConfigMap에 임의 key를 주입할 수 없습니다."
         }
       ],
       "benchmark_fixtures": []
