@@ -376,6 +376,26 @@ CPU/MEM 실측이 없는 노드는 값을 합성하지 않고 `null`로 둔다.
 `node_name`에 배치된 pod만 내려주며 namespace, phase, ready 문자열, owner, 재시작 수, 열린 incident correlation, 실측 CPU/MEM이 있으면 해당 값을 포함한다.
 존재하는 노드에 pod가 없으면 `pods: []`, 존재하지 않는 노드는 `404`가 정상이다.
 
+`13-remediation-bundle`은 correlation 하나의 RCA 결과를 `meta`, `diagnosis`, `remediation`의
+세 계층으로 조회한다. 복구 계획이 아직 생성되지 않은 정상 상태에서는 `remediation`이
+`null`일 수 있다. `diagnosis.selected_candidate_id`는 진단 후보 선택이고
+`remediation.selected_action_id`는 복구 실행 후보 선택이므로 서로 병합하거나 대체하지 않는다.
+
+`14-audit-timeline`은 같은 `rca_correlation_id`에 속한 허용된 감사 이벤트를 시간순으로
+조회한다. 응답은 화이트리스트 기반 `payload_summary`만 제공하고 원문 `payload`는 노출하지
+않는다. `next_cursor`가 있으면 같은 `correlation_id`와 `limit`에 cursor를 이어서 보낸다.
+
+`15-recent-changes`는 `incident_id` 직전에 관찰된 GitOps 변경을 최신순으로 조회한다.
+각 항목에는 commit, workflow run, image 전후, PR 참조가 포함될 수 있으며 값이 확인되지
+않은 필드는 합성하지 않고 `null`로 둔다.
+
+CLI Runner는 `01-dashboard-timeline`과 `05-evidence-query`가 저장한 최신 식별자를 사용해
+`13-remediation-bundle` → `14-audit-timeline` → `15-recent-changes`를 순서대로 실행한다.
+저장된 실데이터가 없을 때 401/404를 계약상 허용하는 것은 응답 경계 회귀를 위한 것이다.
+운영 배포 승인에서는 이 실행의 종료 코드만으로 성공을 판정하지 않고, 실재 correlation과
+incident를 넣어 세 요청 모두 **실제 200**인지 별도로 확인한다. 구체적인 중단 조건과
+검증 명령은 [배포 계획](../auto/deploy-plan.md)의 RCA 읽기 API 절차를 따른다.
+
 ### 06-gitops-approval
 
 `01-github-webhook`은 외부 Git webhook을 받아 workflow event로 바꾸는 API다.
