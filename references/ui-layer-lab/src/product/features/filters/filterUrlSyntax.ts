@@ -182,7 +182,7 @@ function isKubernetesLabelName(value: string): boolean {
 function isDnsSubdomain(value: string): boolean {
   if (value.length === 0 || value.length > 253) return false;
   return value.split(".").every((part) =>
-    part.length > 0 &&
+    part.length > 0 && part.length <= 63 &&
     /^[a-z0-9](?:[-a-z0-9]*[a-z0-9])?$/.test(part));
 }
 
