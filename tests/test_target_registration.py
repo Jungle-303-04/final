@@ -445,7 +445,7 @@ def test_target_install_manifest_sets_agent_and_telemetry_config() -> None:
         '"http://opentelemetry-collector.target.svc:4318/v1/traces"'
     ) in manifest
     assert 'NODE_COLLECTOR_ENABLED: "true"' in manifest
-    assert 'REALTIME_GATEWAY_URL: "ws://management.local:30090"' in manifest
+    assert 'REALTIME_GATEWAY_URL: "ws://management.local:30080"' in manifest
     assert 'NODE_COLLECTOR_IMAGE: "ghcr.io/acme/kubeheal-agent:test"' in manifest
     assert 'AGENT_TOKEN: "agent-secret"' in manifest
     assert 'apiGroups: ["metrics.k8s.io"]' in manifest
@@ -454,6 +454,17 @@ def test_target_install_manifest_sets_agent_and_telemetry_config() -> None:
     assert 'resources: ["configmaps"]' in manifest
     assert 'verbs: ["get", "list", "create", "update", "patch"]' in manifest
     assert 'verbs: ["get", "list", "create", "update", "patch", "delete"]' in manifest
+
+
+def test_target_install_manifest_keeps_same_origin_api_path_for_secure_realtime() -> None:
+    request = target_request().model_copy(
+        update={"management_base_url": "https://opsia.example.com/api"}
+    )
+
+    manifest = target_install_manifest(request, "agent-secret")
+
+    assert 'REALTIME_GATEWAY_URL: "wss://opsia.example.com/api"' in manifest
+    assert ":30090" not in manifest
 
 
 def test_target_rca_cleanup_delete_permission_is_limited_to_owned_manifest_kinds() -> None:
