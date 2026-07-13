@@ -70,7 +70,7 @@ def test_manual_first_deploy_requires_exact_gate_backup_and_previous_release_pro
 
     assert document["permissions"]["actions"] == "read"
     gate_proof = steps["Verify manual gated SHA"]["run"]
-    assert "git ls-remote origin refs/heads/dev" in gate_proof
+    assert 'gh api "repos/${GITHUB_REPOSITORY}/git/ref/heads/dev"' in gate_proof
     assert 'test "${remote_dev}" = "${SOURCE_SHA}"' in gate_proof
     assert "/actions/workflows/dev-gate.yml/runs" in gate_proof
     assert "select(.head_sha == env.SOURCE_SHA)" in gate_proof
