@@ -20,6 +20,9 @@ SCHEDULING_SELECTOR_SCENARIO = (
     / "scheduling-node-selector-mismatch"
     / "scenario.json"
 )
+PROBE_TIMEOUT_SCENARIO = (
+    ROOT / "benchmark" / "scenarios" / "probe" / "probe-timeout-too-short" / "scenario.json"
+)
 FIRST_CANDIDATE_BATCH = (
     "metrics_server_unavailable",
     "missing_resource_requests",
@@ -211,6 +214,37 @@ def test_public_benchmark_scores_node_selector_mismatch_without_cluster_wide_rem
             "action_type": "remove_all_workload_node_selectors",
             "blast_radius": "cluster",
             "reason": "단일 workload의 nodeSelector 불일치로 클러스터 모든 workload의 nodeSelector를 제거할 수 없습니다.",
+        }
+    ]
+
+
+def test_public_benchmark_scores_probe_timeout_without_fleet_wide_increase() -> None:
+    result = _score("--category", "probe")
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "RESULT PASS (3 scenarios; probe=3)" in result.stdout
+
+    scenario = json.loads(PROBE_TIMEOUT_SCENARIO.read_text(encoding="utf-8"))
+    assert scenario["expected_root_cause"] == "timeout_too_short"
+    assert scenario["required_evidence"] == [
+        "kubernetes:cluster_resource_state",
+        "metrics:telemetry_metrics",
+        "logs:related_logs",
+        "metadata:current_workload_snapshots",
+    ]
+    assert scenario["allowed_remediations"] == [
+        {
+            "action_type": "probe_fix",
+            "blast_radius": "target_workload",
+            "route": "safe_pr",
+            "auto_apply": False,
+        }
+    ]
+    assert scenario["forbidden_remediations"] == [
+        {
+            "action_type": "increase_all_probe_timeouts",
+            "blast_radius": "fleet",
+            "reason": "단일 workload의 짧은 timeout으로 fleet 전체 probe timeout을 늘릴 수 없습니다.",
         }
     ]
 
