@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { CheckIcon as LucideCheckIcon } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
 import {
   useCreateApplication,
@@ -540,11 +541,7 @@ function connectErrorMessage(error: unknown): string {
 }
 
 function CheckIcon() {
-  return (
-    <svg viewBox="0 0 16 16" className="h-3.5 w-3.5" aria-hidden="true">
-      <path d="M3.4 8.4 6.5 11.3 12.6 4.7" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" />
-    </svg>
-  );
+  return <LucideCheckIcon className="h-3.5 w-3.5" aria-hidden="true" />;
 }
 
 export function repositoryManifestCandidateValue(candidate: RepositoryManifestCandidate): string {

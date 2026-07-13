@@ -1,5 +1,6 @@
 // 알 수 없는 경로 — 몰래 홈으로 보내지 않고 정직한 404 를 보여준다
 import { Link, useLocation } from 'react-router-dom';
+import { TriangleAlertIcon } from 'lucide-react';
 import { Button, EmptyState } from '@/ui';
 
 export default function NotFoundPage() {
@@ -18,10 +19,5 @@ export default function NotFoundPage() {
 }
 
 function AlertIcon() {
-  return (
-    <svg viewBox="0 0 24 24" className="h-5 w-5" aria-hidden="true">
-      <path d="M12 4 3.5 19h17z" fill="none" stroke="currentColor" strokeLinejoin="round" strokeWidth="1.8" />
-      <path d="M12 9v4.5M12 16.5h.01" fill="none" stroke="currentColor" strokeLinecap="round" strokeWidth="1.8" />
-    </svg>
-  );
+  return <TriangleAlertIcon className="h-5 w-5" aria-hidden="true" />;
 }

@@ -1,4 +1,5 @@
 import { useMutation, useQuery } from '@tanstack/react-query';
+import { PackageIcon } from 'lucide-react';
 import { motion } from 'motion/react';
 import { get, post } from '@/shared/lib/api';
 import type { CatalogItem } from '@/shared/lib/types';
@@ -180,9 +181,5 @@ function categoryTone(category: string): 'neutral' | 'success' | 'warning' | 'da
 }
 
 function CatalogIcon() {
-  return (
-    <svg viewBox="0 0 16 16" className="h-5 w-5" aria-hidden="true">
-      <path d="M3 4.5 8 2l5 2.5v7L8 14l-5-2.5v-7Zm5 2.4 5-2.4M8 6.9 3 4.5m5 2.4V14" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.4" />
-    </svg>
-  );
+  return <PackageIcon className="h-5 w-5" aria-hidden="true" />;
 }

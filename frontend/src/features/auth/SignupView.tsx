@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { MailIcon } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { useEmailAvailability, useResendVerification, useSignup } from '@/features/auth/api';
 import { ApiError } from '@/shared/lib/api';
@@ -216,10 +217,5 @@ function isEmail(value: string): boolean {
 }
 
 function MailGlyph() {
-  return (
-    <svg viewBox="0 0 24 24" className="h-5 w-5" aria-hidden="true">
-      <path d="M4 6.5h16v11H4z" fill="none" stroke="currentColor" strokeLinejoin="round" strokeWidth="1.8" />
-      <path d="m4.5 7 7.5 6 7.5-6" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" />
-    </svg>
-  );
+  return <MailIcon className="h-5 w-5" aria-hidden="true" />;
 }

@@ -1,4 +1,5 @@
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
+import { Clock3Icon, FileTextIcon, GitBranchIcon, SendIcon as LucideSendIcon } from 'lucide-react';
 import { motion } from 'motion/react';
 import { useApplication, useDeployments, useRuns } from '@/features/repo/api';
 import { ApprovalCard } from '@/features/repo/ApprovalCard';
@@ -448,33 +449,17 @@ function openExternal(url: string) {
 }
 
 function ClockIcon() {
-  return (
-    <svg viewBox="0 0 16 16" className="h-5 w-5" aria-hidden="true">
-      <path d="M8 3.2a4.8 4.8 0 1 1 0 9.6 4.8 4.8 0 0 1 0-9.6Zm0 2.2v3l2 1.2" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.4" />
-    </svg>
-  );
+  return <Clock3Icon className="h-5 w-5" aria-hidden="true" />;
 }
 
 function FileIcon() {
-  return (
-    <svg viewBox="0 0 16 16" className="h-5 w-5" aria-hidden="true">
-      <path d="M4.5 2.5h4.2l2.8 2.8v8.2h-7a1 1 0 0 1-1-1v-9a1 1 0 0 1 1-1Zm4 0v3h3" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.4" />
-    </svg>
-  );
+  return <FileTextIcon className="h-5 w-5" aria-hidden="true" />;
 }
 
 function RepoIcon() {
-  return (
-    <svg viewBox="0 0 16 16" className="h-5 w-5" aria-hidden="true">
-      <path d="M4 3.5h8A1.5 1.5 0 0 1 13.5 5v8H4A1.5 1.5 0 0 1 2.5 11.5v-7A1 1 0 0 1 3.5 3.5H4zM4 3.5v8M5 6h5" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.4" />
-    </svg>
-  );
+  return <GitBranchIcon className="h-5 w-5" aria-hidden="true" />;
 }
 
 function SendIcon() {
-  return (
-    <svg viewBox="0 0 16 16" className="h-4 w-4" aria-hidden="true">
-      <path d="M2.5 8 13 3.5 10.2 13 7.5 9.2 2.5 8Zm5 1.2L13 3.5" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.4" />
-    </svg>
-  );
+  return <LucideSendIcon className="h-4 w-4" aria-hidden="true" />;
 }

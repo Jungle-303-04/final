@@ -14,6 +14,7 @@ import {
   type ReactNode,
 } from 'react';
 import { motion } from 'motion/react';
+import { ChevronDownIcon as ChevronDownGlyph, CopyIcon as CopyGlyph, XIcon as CloseGlyph } from 'lucide-react';
 import {
   AnimatePresence,
   collapse,
@@ -944,28 +945,4 @@ function trapTab(event: KeyboardEvent, container: HTMLElement) {
     event.preventDefault();
     first.focus();
   }
-}
-
-function CloseGlyph() {
-  return (
-    <svg viewBox="0 0 16 16" className="h-4 w-4" aria-hidden="true">
-      <path d="M4 4l8 8M12 4l-8 8" fill="none" stroke="currentColor" strokeLinecap="round" strokeWidth="1.8" />
-    </svg>
-  );
-}
-
-function ChevronDownGlyph() {
-  return (
-    <svg viewBox="0 0 16 16" className="h-4 w-4" aria-hidden="true">
-      <path d="M4 6l4 4 4-4" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" />
-    </svg>
-  );
-}
-
-function CopyGlyph() {
-  return (
-    <svg viewBox="0 0 16 16" className="h-4 w-4" aria-hidden="true">
-      <path d="M6 5.5h6.5v7H6zM3.5 10.5v-7H10" fill="none" stroke="currentColor" strokeLinejoin="round" strokeWidth="1.5" />
-    </svg>
-  );
 }

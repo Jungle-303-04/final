@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react';
+import { GitBranchIcon, PlusIcon as LucidePlusIcon } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useClusters } from '@/features/cluster/api';
 import { useApplications, useDeploymentsAll } from '@/features/repo/api';
@@ -6,7 +7,7 @@ import { ConnectRepoWizard } from '@/features/resources/ConnectRepoWizard';
 import { useConsolePath } from '@/features/console/ui';
 import { timeAgo } from '@/shared/lib/format';
 import type { Application, Cluster, Deployment } from '@/shared/lib/types';
-import { Badge, Button, Card, EmptyState, PageHeader, Skeleton, cx } from '@/ui';
+import { Badge, Button, Card, EmptyState, PageHeader, Skeleton } from '@/ui';
 
 export default function RepoListView() {
   const appsQ = useApplications();
@@ -139,17 +140,9 @@ function StatusBadge({ status }: { status: string }) {
 }
 
 function PlusIcon() {
-  return (
-    <svg viewBox="0 0 16 16" className="h-4 w-4" aria-hidden="true">
-      <path d="M8 3v10M3 8h10" fill="none" stroke="currentColor" strokeLinecap="round" strokeWidth="1.8" />
-    </svg>
-  );
+  return <LucidePlusIcon className="h-4 w-4" aria-hidden="true" />;
 }
 
 function RepoIcon() {
-  return (
-    <svg viewBox="0 0 16 16" className={cx('h-5 w-5')} aria-hidden="true">
-      <path d="M4 3.5h8A1.5 1.5 0 0 1 13.5 5v8H4A1.5 1.5 0 0 1 2.5 11.5v-7A1 1 0 0 1 3.5 3.5H4zM4 3.5v8M5 6h5" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.4" />
-    </svg>
-  );
+  return <GitBranchIcon className="h-5 w-5" aria-hidden="true" />;
 }

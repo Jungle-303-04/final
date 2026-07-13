@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { BellIcon as LucideBellIcon } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useNotices } from '@/features/notifications/api';
 import { Badge, Button, Card, EmptyState, PageHeader, Tabs } from '@/ui';
@@ -72,9 +73,5 @@ function toneSeverity(tone: Tone) {
 }
 
 function BellIcon() {
-  return (
-    <svg viewBox="0 0 16 16" className="h-5 w-5" aria-hidden="true">
-      <path d="M4.5 6.8a3.5 3.5 0 0 1 7 0v2.6l1 1.8h-9l1-1.8V6.8zM6.5 13h3" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.4" />
-    </svg>
-  );
+  return <LucideBellIcon className="h-5 w-5" aria-hidden="true" />;
 }

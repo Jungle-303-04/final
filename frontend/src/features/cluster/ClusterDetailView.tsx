@@ -1,4 +1,14 @@
 import { useMemo, useState, type ReactNode } from 'react';
+import {
+  BoxIcon as LucideBoxIcon,
+  FileTextIcon,
+  FlameIcon as LucideFlameIcon,
+  GitBranchIcon,
+  RouteIcon as LucideRouteIcon,
+  SearchIcon as LucideSearchIcon,
+  ServerIcon as LucideServerIcon,
+  ShieldIcon as LucideShieldIcon,
+} from 'lucide-react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import {
   useClusterEvents,
@@ -1621,65 +1631,33 @@ function clearDetailParams(params: URLSearchParams) {
 }
 
 function SearchIcon({ className = 'h-5 w-5' }: { className?: string }) {
-  return (
-    <svg viewBox="0 0 16 16" className={cx('h-5 w-5', className)} aria-hidden="true">
-      <path d="M7 11.5a4.5 4.5 0 1 1 0-9 4.5 4.5 0 0 1 0 9zM10.5 10.5 14 14" fill="none" stroke="currentColor" strokeLinecap="round" strokeWidth="1.6" />
-    </svg>
-  );
+  return <LucideSearchIcon className={cx('h-5 w-5', className)} aria-hidden="true" />;
 }
 
 function FlameIcon() {
-  return (
-    <svg viewBox="0 0 16 16" className="h-4 w-4 shrink-0 text-warning" aria-hidden="true">
-      <path d="M8.3 2.4c.5 2-.8 2.8-1.6 4 .8-.4 1.5-.9 2-1.8 1.8 1.3 2.8 2.9 2.8 4.7a3.6 3.6 0 0 1-7.2 0c0-1.5.9-2.7 2.1-4 .5-.6 1.1-1.5 1.9-2.9z" fill="currentColor" />
-    </svg>
-  );
+  return <LucideFlameIcon className="h-4 w-4 shrink-0 text-warning" aria-hidden="true" />;
 }
 
 function BoxIcon() {
-  return (
-    <svg viewBox="0 0 16 16" className="h-5 w-5" aria-hidden="true">
-      <path d="m2.5 5 5.5-3 5.5 3v6L8 14l-5.5-3V5zM2.8 5.2 8 8.1l5.2-2.9M8 8.1v5.5" fill="none" stroke="currentColor" strokeLinejoin="round" strokeWidth="1.3" />
-    </svg>
-  );
+  return <LucideBoxIcon className="h-5 w-5" aria-hidden="true" />;
 }
 
 function ServerIcon() {
-  return (
-    <svg viewBox="0 0 16 16" className="h-5 w-5" aria-hidden="true">
-      <path d="M3 3.5h10v3H3zM3 9.5h10v3H3zM5 5h.5M5 11h.5" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.4" />
-    </svg>
-  );
+  return <LucideServerIcon className="h-5 w-5" aria-hidden="true" />;
 }
 
 function RouteIcon() {
-  return (
-    <svg viewBox="0 0 16 16" className="h-5 w-5" aria-hidden="true">
-      <path d="M4 4h3a3 3 0 0 1 0 6H4M12 12H9a3 3 0 0 1 0-6h3" fill="none" stroke="currentColor" strokeLinecap="round" strokeWidth="1.5" />
-    </svg>
-  );
+  return <LucideRouteIcon className="h-5 w-5" aria-hidden="true" />;
 }
 
 function FileIcon() {
-  return (
-    <svg viewBox="0 0 16 16" className="h-5 w-5" aria-hidden="true">
-      <path d="M4 2.5h5L12.5 6v7.5H4zM9 2.8V6h3.2" fill="none" stroke="currentColor" strokeLinejoin="round" strokeWidth="1.4" />
-    </svg>
-  );
+  return <FileTextIcon className="h-5 w-5" aria-hidden="true" />;
 }
 
 function RepoIcon() {
-  return (
-    <svg viewBox="0 0 16 16" className="h-5 w-5" aria-hidden="true">
-      <path d="M4 3.5h8A1.5 1.5 0 0 1 13.5 5v8H4A1.5 1.5 0 0 1 2.5 11.5v-7A1 1 0 0 1 3.5 3.5H4zM4 3.5v8M5 6h5" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.4" />
-    </svg>
-  );
+  return <GitBranchIcon className="h-5 w-5" aria-hidden="true" />;
 }
 
 function ShieldIcon() {
-  return (
-    <svg viewBox="0 0 16 16" className="h-5 w-5" aria-hidden="true">
-      <path d="M8 2.5 12.5 4v3.4c0 2.8-1.7 5-4.5 6.1-2.8-1.1-4.5-3.3-4.5-6.1V4z" fill="none" stroke="currentColor" strokeLinejoin="round" strokeWidth="1.4" />
-    </svg>
-  );
+  return <LucideShieldIcon className="h-5 w-5" aria-hidden="true" />;
 }
