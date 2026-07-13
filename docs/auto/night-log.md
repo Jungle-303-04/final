@@ -2004,3 +2004,18 @@ target preflight·register 네 함수와 strict Zod 계약을 claim했다. 1회�
 - 4조건: merge-tree clean/tree `3716fbc40341c0cb55b34669634e2d6c0418b90e`, 파일 삭제·
   소유권 밖 변경·frozen 경로 변경 0건, RED·구현·문서·merge commit의 `origin/dev`
   ancestor exit 0. J 배포 실행은 0건이다.
+
+## 2026-07-13 17:15 KST — [백엔드] kubectl server dry-run adapter 직접 테스트 착륙
+
+- lane `codex/kubernetes-dry-run-tests`, test-only feature HEAD
+  `ccdcc1a08aef4d1aa30929dea717f455ea0a447e`, canonical no-ff merge
+  `01dc635583f45d058d0d324d70b0c02a42d66889`.
+- 소스 변경 0건으로 임시 manifest 내용·정리, SSA apply→live get argv, custom binary·
+  field manager·timeout, apply 조기 실패, get 실패의 predicted 보존을 검증했다.
+- kubectl 부재·timeout·stderr/stdout·invalid JSON과 import-time timeout binding까지
+  직접 테스트 8개로 고정했다.
+- 전체 게이트는 Ruff lint/format PASS, import-linter 8 kept/0 broken,
+  pytest `1942 passed, 3 skipped`; manifest management 69 / target 20.
+- 4조건: merge-tree clean/tree `68cb35ca8dc94ec15299e23824edd86d85e5ead4`, 파일 삭제·
+  소유권 밖 변경·frozen 경로 변경 0건, test·merge commit의 `origin/dev` ancestor exit 0.
+  J 배포 실행은 0건이다.
