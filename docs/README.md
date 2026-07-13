@@ -209,6 +209,8 @@ secret 이름과 주입 경계는 [Secrets](secrets.md)를 본다.
 
 - [auto/backend-pipeline](auto/backend-pipeline.md)
 - [auto/deploy-plan](auto/deploy-plan.md)
+- [auto/deploy-drift-audit](auto/deploy-drift-audit.md)
+- [auto/deploy-setup](auto/deploy-setup.md)
 - [auto/deploy-status](auto/deploy-status.md)
 - [auto/frontend-pipeline](auto/frontend-pipeline.md)
 - [auto/night-directives](auto/night-directives.md)
