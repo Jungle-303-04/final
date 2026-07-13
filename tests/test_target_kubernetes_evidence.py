@@ -75,6 +75,41 @@ def test_endpoint_slice_summary_normalizes_null_collections() -> None:
     assert summary["ports"] == []
 
 
+def test_relationship_summaries_preserve_authoritative_graph_evidence() -> None:
+    _, kubernetes_module = load_evidence_modules()
+    labels = {f"example.com/key-{index:02d}": str(index) for index in range(13)}
+    labels["kubernetes.io/service-name"] = "checkout-api"
+
+    workload = kubernetes_module.workload_summary(
+        "ReplicaSet",
+        {
+            "metadata": {
+                "name": "checkout-api-abc",
+                "namespace": "target",
+                "ownerReferences": [{"kind": "Deployment", "name": "checkout-api"}],
+            },
+            "spec": {"selector": {"matchLabels": {"app": "checkout-api"}}},
+        },
+    )
+    endpoint_slice = kubernetes_module.endpoint_slice_summary(
+        {
+            "metadata": {
+                "name": "checkout-api-abc",
+                "namespace": "target",
+                "labels": labels,
+            },
+            "addressType": "IPv4",
+            "endpoints": [],
+            "ports": [],
+        }
+    )
+
+    assert workload["owner_kind"] == "Deployment"
+    assert workload["owner_name"] == "checkout-api"
+    assert endpoint_slice["service_name"] == "checkout-api"
+    assert endpoint_slice["labels_complete"] is False
+
+
 @pytest.mark.parametrize(
     ("node", "expected"),
     [
