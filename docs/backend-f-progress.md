@@ -281,4 +281,11 @@ Bundle route는 200을 반환한다.
   pytest `1735 passed, 3 skipped`
 - 범위: `reconciler_mode=argocd`에서 Argo CD Application과 Rollout stable revision을
   읽기만 하며 Kubernetes/Argo 쓰기 호출은 0건으로 고정한다.
-- 최신 canonical 재배치와 전체 게이트를 다시 증명한다. 앵커는 감독 검증·GO 후 기록한다.
+- GO-REQUEST HEAD: `eb435b4bd2143c6814e4ede744c2371648f73a94`,
+  `origin/dev@d8b28f76f8065b72197ca4640757341f01127c34` 대비 behind/ahead `0/6`.
+- 전체 게이트: Ruff lint/format PASS, import-linter 2 kept/0 broken,
+  pytest `1838 passed, 3 skipped`; manifest management 69, target 20.
+- Application 관측 불가는 fail-closed `failed`, 선택적인 Rollout CRD 부재는
+  `available=false`로 유지한다. operation phase가 비어 있거나 `Succeeded`일 때만 ready이며,
+  repository URL userinfo는 상태 보고 전에 제거한다.
+- 시험 merge clean, gateway·RCA·AI·runtime worker 변경 0건. 앵커는 감독 검증·GO 후 기록한다.
