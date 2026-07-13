@@ -1,8 +1,3 @@
-import type {
-  ListResourceFilterFacetsOptions,
-  ListResourceLabelFacetsOptions,
-  ResourceFilterQuery,
-} from "../../api/resource-filters";
 import type { UnifiedFilterState } from "../filters/filterContract";
 import {
   isKubernetesNamespace,
@@ -19,11 +14,16 @@ import type {
   ResourcesLabelFacetPageOptions,
   ResourcesResourcePageOptions,
 } from "./resourcesFilterContract";
+import type {
+  ResourcesFilterEndpointFacetRequest,
+  ResourcesFilterEndpointLabelRequest,
+  ResourcesFilterEndpointQuery,
+} from "./resourcesFilterEndpointContract";
 
 export function createResourceFacetRequest(
   state: UnifiedFilterState,
   options: ResourcesFacetPageOptions,
-): ListResourceFilterFacetsOptions {
+): ResourcesFilterEndpointFacetRequest {
   const selected = selectedFacetValues(state, options.axis);
   return {
     axis: options.axis,
@@ -36,7 +36,7 @@ export function createResourceFacetRequest(
 export function createFilteredResourcesRequest(
   state: UnifiedFilterState,
   options: ResourcesResourcePageOptions,
-): ResourceFilterQuery {
+): ResourcesFilterEndpointQuery {
   return {
     ...baseFilterQuery(state),
     ...(options.cursor === undefined ? {} : { cursor: options.cursor }),
@@ -47,7 +47,7 @@ export function createFilteredResourcesRequest(
 export function createResourceLabelFacetRequest(
   state: UnifiedFilterState,
   options: ResourcesLabelFacetPageOptions,
-): ListResourceLabelFacetsOptions {
+): ResourcesFilterEndpointLabelRequest {
   const facetQuery = options.facetQuery?.trim();
   return {
     ...baseFilterQuery(state),
@@ -57,7 +57,7 @@ export function createResourceLabelFacetRequest(
   };
 }
 
-function baseFilterQuery(state: UnifiedFilterState): ResourceFilterQuery {
+function baseFilterQuery(state: UnifiedFilterState): ResourcesFilterEndpointQuery {
   assertStableValues(state.common.clusters);
   assertStableValues(state.common.applications);
   assertStableValues(state.resources.types);
