@@ -75,3 +75,17 @@
   Pod·PVC·PV·EBS 볼륨은 모두 삭제했고 운영 DB는 변경하지 않았다. baseline/schema 수렴과
   isolated target cutover·writer freeze·DB URL 전환/복구 배선을 백엔드 세션에 재요청했다.
 - [06:41 KST] [키 보존] 사람의 최신 지시에 따라 기존 키는 삭제·교체·회전하지 않는다.
+- [06:53 KST] [레거시 권한 판정] live read-only 집계는
+  `resource_access_grants=0`, `workspace_members=1`이다. 남은 1행은 default workspace의
+  `owner/active`, 권한은 target register/install이다. 같은 사용자의 canonical 상태는 default
+  organization `member/active`, default group `member/active`, resource role
+  `cluster_steward/disabled`이며 user account도 구 `admin/active`다. 따라서 단순 제외만으로는
+  권한 의미 보존이 증명되지 않았고, 새 target에 유령 테이블을 재생성하는 것도 사람 결정으로
+  금지됐다. 보존이 아니라 canonical identity 모델로의 명시적 이관이 필요하다.
+- [06:53 KST] [격리 DB 리허설 중단] `origin/dev@3af9fe9a449d`의 보존-table revision으로
+  empty target bootstrap은 head `20260714_0345`까지 성공했다. data copy 도중 위 사람 결정이
+  도착해 즉시 중단했다. 중단 시 종료 trap이 완료되지 않아 남은 임시 Pod·PVC·PV·EBS를
+  명시적으로 삭제했고, 부재를 확인했다. 운영 DB와 workload는 변경하지 않았다.
+- [06:53 KST] [BLOCKED] first deploy는 retired table 제외 + nonzero legacy row의 canonical
+  이관을 같은 cutover transaction에서 검증하는 백엔드 수정과 snapshot clone 전체
+  row/checksum PASS 전까지 실행하지 않는다. 키 삭제·회전·교체 금지는 계속 유효하다.
