@@ -1371,3 +1371,16 @@ npm run visual-product
   증거 없이 배포나 K 검증으로 전이하지 않는다.
 - 백엔드 후속: OpsiaBench 후보 계약은 87개 중 10개만 작성했다. 다음 작업 cursor는 11이며,
   full catalog 계약·fixture 확대를 순차 배치로 계속한다.
+
+## 2026-07-13 15:40 KST — [백엔드] 아침 요약 정합 보충
+
+- `backend-pipeline.md` §3의 BQ-008 미착륙·활성 lane 목록은 04:30 시작 snapshot임을
+  명시했다. 현재 판정은 §4의 A~I done, J `🔒waiting`, K pending을 따른다.
+- `backend-f-progress.md`의 선언 앵커 수를 실물 19줄과 맞추고, BQ-001~003의 과거
+  delta-green 기준과 현재 실패 허용 0건의 full-green 기준을 분리했다.
+- 지시 실물 감사: `night-directives.md`에는 D-021 이후 원문이 없고 EOF 번호 순서도
+  역전돼 있다. 현재 세션에 직접 전달된 후속 지시는 적용하되, 원문을 추측해 파일에
+  만들지 않는다. J 배포는 기존 사람 전용 게이트를 계속 유지한다.
+- J 전 사전 hardening 후보: Bruno 13/14/15의 실제 200 강제, management cluster-agent
+  scope, smoke image digest 전달, 실행 가능한 rollback 명령을 배포 정본에서 추가 검산한다.
+  이는 배포 GO를 대신하지 않으며 현재 배포 실행은 0건이다.
