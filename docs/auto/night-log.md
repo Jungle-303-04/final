@@ -538,3 +538,9 @@ ancestor exit 0, 사람 위임 GO [OSS]
 
 [2026-07-13 09:46 KST] [백엔드] D-017~019 기준점 영속화 — `4ac003c97`,
 docs-only 2파일, BQ-009 `requested` + BQ-012~017 등록, origin/dev push 확인.
+
+[2026-07-13 09:53 KST] [백엔드] BQ-012 완료 — RED `c882010de`, GREEN/origin
+`ea5b3ed20`; (a)+(b) catalog hypothesis 계약으로 source-name-only 조작은
+`signal:oom_evidence` 누락·`rca.analysis_blocked`, 실제 signal만 completed, catalog 밖 ID
+무발행. 관련 56 passed / 전체 Ruff·format·import-linter PASS, pytest
+`1647 passed, 3 skipped` / worker·agent·공개 설명 문서 착륙 — DoD 4조건 충족.
