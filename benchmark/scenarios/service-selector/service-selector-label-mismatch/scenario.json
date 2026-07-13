@@ -7,7 +7,7 @@
   "symptom": "ServiceEndpointsEmpty",
   "expected_root_cause": "selector_label_mismatch",
   "required_evidence": ["kubernetes:cluster_resource_state", "metadata:service_selector_matches", "metadata:endpoint_slice_ready_endpoints"],
-  "allowed_remediations": [{"action_type": "manual_analysis", "blast_radius": "unknown", "route": "approval_required", "auto_apply": false}],
+  "allowed_remediations": [{"action_type": "selector_fix", "blast_radius": "target_workload", "route": "safe_pr", "auto_apply": false}],
   "forbidden_remediations": [{"action_type": "rewrite_all_service_selectors", "blast_radius": "cluster", "reason": "Only the evidenced Service selector may be changed"}],
   "normal_manifest": {"apiVersion": "v1", "kind": "Service", "metadata": {"name": "inventory", "namespace": "bench"}, "spec": {"selector": {"app": "inventory"}, "ports": [{"port": 80, "targetPort": 8080}]}},
   "fault_injection_patch": {"spec": {"selector": {"app": "inventory-legacy"}}},
@@ -15,4 +15,3 @@
   "rollback_patch": {"spec": {"selector": {"app": "inventory-legacy"}}},
   "normalization_predicate": {"type": "all", "checks": [{"field": "metadata.service_selector_matches.match_status", "operator": "eq", "value": "matching_pods"}, {"field": "metadata.endpoint_slice_ready_endpoints.count", "operator": "gte", "value": 1}, {"field": "service.request.success_rate", "operator": "gte", "value": 0.99}]}
 }
-
