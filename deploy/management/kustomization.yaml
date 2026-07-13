@@ -11,3 +11,6 @@ resources:
   - ai-workers.yaml
   - github-poll-worker.yaml
   - console.yaml
+  - console-dev.yaml
+  - agent-api-proxy.yaml
+  - cloudflared.yaml

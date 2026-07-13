@@ -13,6 +13,23 @@ from config import (
 )
 from packages.contracts.event_bus.interfaces import JsonObject
 from providers.base import TRACER, ConfigReader
+from providers.collection_limits import (
+    attach_collection_limits,
+    collection_limit,
+    limit_payload_list,
+    limit_payload_size,
+)
+from providers.prometheus_analysis import build_metric_analysis
+
+PROMETHEUS_RESULT_KEY = "result"
+PROMETHEUS_SAMPLES_KEY = "samples"
+PROMETHEUS_SERIES_KEY = "series"
+PROMETHEUS_SERIES_VALUES_KEY = "series.values"
+
+MAX_PROMETHEUS_SAMPLES = 250
+MAX_PROMETHEUS_SERIES = 100
+MAX_PROMETHEUS_SERIES_VALUES = 40
+MAX_PROMETHEUS_RESULT_ITEMS = 250
 
 
 @telemetry.source(
@@ -104,10 +121,18 @@ class PrometheusMetricsProvider:
         payload: JsonObject,
     ) -> None:
         """Normalize one metric result and save it by metric name."""
+        normalized = self.normalize_payload(payload)
+        analysis = build_metric_analysis(
+            telemetry_query.metric_name,
+            telemetry_query.promql,
+            normalized,
+        )
+        limited = limit_prometheus_payload(normalized)
         results[telemetry_query.metric_name] = {
             "query": telemetry_query.promql,
             **self.query_metadata(telemetry_query),
-            **self.normalize_payload(payload),
+            **limited,
+            **analysis,
         }
 
     def build_response(self, results: JsonObject) -> JsonObject:
@@ -137,7 +162,7 @@ class PrometheusMetricsProvider:
 
             return {
                 "result_type": result_type,
-                "samples": samples,
+                PROMETHEUS_SAMPLES_KEY: samples,
             }
 
         if result_type == "matrix":  # range query 시계열 값
@@ -160,13 +185,13 @@ class PrometheusMetricsProvider:
 
             return {
                 "result_type": result_type,
-                "series": series,
+                PROMETHEUS_SERIES_KEY: series,
                 "point_count": sum(len(item["values"]) for item in series),
             }
 
         return {  # 그 외 result type(vector/matrix 아님)
             "result_type": result_type,
-            "result": result,
+            PROMETHEUS_RESULT_KEY: result,
         }
 
     def query_metadata(
@@ -181,3 +206,97 @@ class PrometheusMetricsProvider:
             "range_seconds": telemetry_query.range_seconds,
             "step_seconds": telemetry_query.step_seconds,
         }
+
+
+def limit_prometheus_payload(payload: JsonObject) -> JsonObject:
+    """Limit large Prometheus result lists while keeping analysis intact."""
+    limits: JsonObject = {}
+    result_type = payload.get("result_type")
+    if result_type == "vector":
+        limit_payload_list(payload, PROMETHEUS_SAMPLES_KEY, MAX_PROMETHEUS_SAMPLES, limits)
+    elif result_type == "matrix":
+        limit_payload_list(payload, PROMETHEUS_SERIES_KEY, MAX_PROMETHEUS_SERIES, limits)
+        limit_matrix_series_values(payload, limits)
+    else:
+        limit_payload_list(payload, PROMETHEUS_RESULT_KEY, MAX_PROMETHEUS_RESULT_ITEMS, limits)
+    limit_payload_size(
+        payload,
+        list_keys=(
+            PROMETHEUS_SAMPLES_KEY,
+            PROMETHEUS_SERIES_KEY,
+            PROMETHEUS_RESULT_KEY,
+        ),
+        limits=limits,
+    )
+    if result_type == "matrix":
+        sync_matrix_series_value_limit(payload, limits)
+    attach_collection_limits(payload, limits)
+    return payload
+
+
+def limit_matrix_series_values(payload: JsonObject, limits: JsonObject) -> None:
+    """Limit points inside matrix series and record how much was kept."""
+    series = payload.get(PROMETHEUS_SERIES_KEY)
+    if not isinstance(series, list):
+        return
+    original_count = 0
+    returned_count = 0
+    truncated_series_count = 0
+    for item in series:
+        if not isinstance(item, dict):
+            continue
+        values = item.get("values")
+        if not isinstance(values, list) or len(values) <= MAX_PROMETHEUS_SERIES_VALUES:
+            continue
+        limited_values = edge_sample(values, MAX_PROMETHEUS_SERIES_VALUES)
+        item["values"] = limited_values
+        item["values_truncated"] = True
+        item["value_count"] = len(values)
+        original_count += len(values)
+        returned_count += len(limited_values)
+        truncated_series_count += 1
+    if truncated_series_count:
+        limit = collection_limit(original_count, returned_count)
+        limit["series_count"] = truncated_series_count
+        limits[PROMETHEUS_SERIES_VALUES_KEY] = limit
+
+
+def sync_matrix_series_value_limit(payload: JsonObject, limits: JsonObject) -> None:
+    """Keep nested matrix value counts aligned with the final series payload."""
+    if PROMETHEUS_SERIES_VALUES_KEY not in limits:
+        return
+    series = payload.get(PROMETHEUS_SERIES_KEY)
+    if not isinstance(series, list):
+        limits.pop(PROMETHEUS_SERIES_VALUES_KEY, None)
+        return
+    original_count = 0
+    returned_count = 0
+    series_count = 0
+    for item in series:
+        if not isinstance(item, dict):
+            continue
+        values = item.get("values")
+        if not isinstance(values, list):
+            continue
+        series_count += 1
+        returned_count += len(values)
+        value_count = item.get("value_count")
+        if isinstance(value_count, int) and value_count >= len(values):
+            original_count += value_count
+        else:
+            original_count += len(values)
+    if original_count <= returned_count:
+        limits.pop(PROMETHEUS_SERIES_VALUES_KEY, None)
+        return
+    limit = collection_limit(original_count, returned_count)
+    limit["series_count"] = series_count
+    limits[PROMETHEUS_SERIES_VALUES_KEY] = limit
+
+
+def edge_sample(values: list[object], max_items: int) -> list[object]:
+    """Keep the first and last points from a long time series."""
+    if len(values) <= max_items:
+        return values
+    head_count = max_items // 2
+    tail_count = max_items - head_count
+    return [*values[:head_count], *values[-tail_count:]]

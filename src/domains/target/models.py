@@ -19,6 +19,14 @@ from packages.storage.base import (
 
 class EvidenceWindow(Base):
     __tablename__ = "evidence_windows"
+    __table_args__ = (
+        Index(
+            "ix_evidence_windows_workspace_correlation_cluster",
+            "workspace_id",
+            "correlation_id",
+            "cluster_id",
+        ),
+    )
 
     evidence_key: Mapped[str] = mapped_column(Text, primary_key=True)
     workspace_id: Mapped[str] = text_column()

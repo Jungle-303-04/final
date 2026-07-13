@@ -17,9 +17,17 @@ RCA_TIMELINE_JANITOR = "rca-timeline-janitor"
 SWEEP_INTERVAL_SECONDS_ENV = "RCA_TIMELINE_JANITOR_INTERVAL_SECONDS"
 EXPIRE_DAYS_ENV = "RCA_OPEN_INCIDENT_EXPIRE_DAYS"
 EXPIRE_LIMIT_ENV = "RCA_OPEN_INCIDENT_EXPIRE_LIMIT"
-DEFAULT_SWEEP_INTERVAL_SECONDS = "900"
+PRE_INCIDENT_RETENTION_HOURS_ENV = "RCA_PRE_INCIDENT_RETENTION_HOURS"
+PRE_INCIDENT_RETENTION_LIMIT_ENV = "RCA_PRE_INCIDENT_RETENTION_LIMIT"
+EPHEMERAL_RESOLVE_MINUTES_ENV = "RCA_EPHEMERAL_INCIDENT_RESOLVE_MINUTES"
+EPHEMERAL_RESOLVE_LIMIT_ENV = "RCA_EPHEMERAL_INCIDENT_RESOLVE_LIMIT"
+DEFAULT_SWEEP_INTERVAL_SECONDS = "60"
 DEFAULT_EXPIRE_DAYS = "3"
 DEFAULT_EXPIRE_LIMIT = "500"
+DEFAULT_PRE_INCIDENT_RETENTION_HOURS = "24"
+DEFAULT_PRE_INCIDENT_RETENTION_LIMIT = "1000"
+DEFAULT_EPHEMERAL_RESOLVE_MINUTES = "5"
+DEFAULT_EPHEMERAL_RESOLVE_LIMIT = "500"
 HEARTBEAT_REFRESH_SECONDS = 30.0
 LOGGER = get_logger(__name__)
 
@@ -30,6 +38,25 @@ async def expire_stale_open_incidents(db: Any) -> int:
         limit=int(env(EXPIRE_LIMIT_ENV, DEFAULT_EXPIRE_LIMIT)),
     )
     return len(expired or [])
+
+
+async def delete_stale_pre_incident_timeline(db: Any) -> int:
+    return int(
+        await db.delete_stale_pre_incident_timeline(
+            retention_hours=int(
+                env(PRE_INCIDENT_RETENTION_HOURS_ENV, DEFAULT_PRE_INCIDENT_RETENTION_HOURS)
+            ),
+            limit=int(env(PRE_INCIDENT_RETENTION_LIMIT_ENV, DEFAULT_PRE_INCIDENT_RETENTION_LIMIT)),
+        )
+    )
+
+
+async def resolve_recovered_ephemeral_incidents(db: Any) -> int:
+    resolved = await db.resolve_recovered_ephemeral_incidents(
+        grace_minutes=int(env(EPHEMERAL_RESOLVE_MINUTES_ENV, DEFAULT_EPHEMERAL_RESOLVE_MINUTES)),
+        limit=int(env(EPHEMERAL_RESOLVE_LIMIT_ENV, DEFAULT_EPHEMERAL_RESOLVE_LIMIT)),
+    )
+    return len(resolved or [])
 
 
 def touch_heartbeat() -> None:
@@ -74,6 +101,18 @@ async def run() -> None:
             count = await expire_stale_open_incidents(async_db)
             if count:
                 LOGGER.warning("stale_open_incidents_expired", extra={"context": {"count": count}})
+            resolved = await resolve_recovered_ephemeral_incidents(async_db)
+            if resolved:
+                LOGGER.info(
+                    "recovered_ephemeral_incidents_resolved",
+                    extra={"context": {"count": resolved}},
+                )
+            deleted = await delete_stale_pre_incident_timeline(async_db)
+            if deleted:
+                LOGGER.info(
+                    "stale_pre_incident_timeline_deleted",
+                    extra={"context": {"count": deleted}},
+                )
             await wait_for_next_sweep(stopping, interval)
     finally:
         dispose = getattr(db, "dispose", None)

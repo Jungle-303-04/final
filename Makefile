@@ -12,7 +12,7 @@ export IMAGE_NAME
 export MGMT_CLUSTER
 export TARGET_CLUSTER
 
-.PHONY: help setup env local-test-env local-up local-smoke sync hooks doctor lint format test manifest-check events crash-test check build-image up install-telemetry down status smoke scale kill-pod external-instances external-kubeconfig cluster-interactions radar aws-smoke aws-up aws-down clean
+.PHONY: help setup env local-test-env local-up local-smoke sync hooks doctor lint format test manifest-check events crash-test check build-image up install-telemetry down status smoke scale kill-pod external-instances external-kubeconfig cluster-interactions aws-up aws-down clean
 
 help: ## 사용 가능한 명령어 출력
 	@awk 'BEGIN {FS = ":.*##"; printf "\nUsage:\n  make <target>\n\nTargets:\n"} /^[a-zA-Z0-9_-]+:.*##/ {printf "  %-14s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -83,7 +83,8 @@ down: ## legacy local management/target cluster 삭제
 status: ## AWS management/target 리소스 상태 확인
 	bash scripts/status.sh
 
-smoke: aws-smoke ## AWS smoke 별칭
+smoke: ## 현재 환경변수로 배포된 서비스 smoke 실행
+	bash scripts/smoke.sh
 
 local-smoke: ## .env.local-test를 source해서 로컬 smoke 실행
 	@test -f "$(LOCAL_TEST_ENV)" || { echo "missing $(LOCAL_TEST_ENV); run make local-test-env"; exit 1; }
@@ -109,21 +110,8 @@ external-kubeconfig: ## 외부 콘솔 클러스터 kubeconfig 동기화/검증
 cluster-interactions: ## 두 클러스터 read-only 상태/서비스/Helm/event 확인
 	bash scripts/cluster-interactions.sh
 
-radar: ## cluster-1과 mgmt를 Radar UI로 열기
-	bash scripts/radar.sh
-
 aws-up: ## AWS EKS management + target 2개 테스트 환경 생성
 	bash scripts/aws-up.sh
-
-aws-smoke: ## GitHub Actions AWS CD smoke 실행
-	gh workflow run aws-cd.yml \
-		--repo "$${GITHUB_REPOSITORY:-Jungle-303-04/final}" \
-		--ref "$${AWS_SMOKE_REF:-main}" \
-		-f create_clusters=false \
-		-f ensure_ebs_csi=false \
-		-f bootstrap_admin=false \
-		-f register_targets=false \
-		-f run_smoke=true
 
 aws-down: ## AWS EKS 테스트 환경 삭제
 	bash scripts/aws-down.sh

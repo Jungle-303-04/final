@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 from contextlib import contextmanager
+from types import SimpleNamespace
 from typing import Any
 
 from sqlalchemy.exc import OperationalError
@@ -77,6 +79,39 @@ def test_api_event_gateway_attaches_actor_and_records_event() -> None:
     asyncio.run(run())
 
 
+def test_api_event_gateway_logs_accepted_event_context(caplog) -> None:
+    async def run() -> None:
+        publisher = MemoryPublisher()
+        recorder = MemoryRecorder()
+        gateway = ApiEventGateway(publisher, recorder, "api-gateway")
+        actor = Actor("user-1", roles=("operator",))
+
+        await gateway.accept(
+            EventSubject.COMMAND_REQUESTED,
+            {"action": "rollout_restart"},
+            correlation_id="corr-request",
+            actor=actor,
+        )
+
+    caplog.set_level(logging.INFO)
+    asyncio.run(run())
+
+    accepted = [
+        record.context
+        for record in caplog.records
+        if record.getMessage() == "gateway_event_accepted"
+        and isinstance(getattr(record, "context", None), dict)
+    ]
+    assert len(accepted) == 1
+    context = accepted[0]
+    assert context["subject"] == EventSubject.COMMAND_REQUESTED
+    assert context["source"] == "api-gateway"
+    assert context["correlation_id"] == "corr-request"
+    assert context["actor_user_id"] == "user-1"
+    assert context["requested_by"] == "user-1"
+    assert context["durable_outbox"] is False
+
+
 def test_api_event_gateway_stages_supported_recorder_without_direct_publish() -> None:
     async def run() -> None:
         publisher = MemoryPublisher()
@@ -147,30 +182,34 @@ def test_nats_publish_uses_event_id_as_message_id_header() -> None:
     asyncio.run(run())
 
 
-def test_consumer_config_defaults_bound_redelivery(monkeypatch) -> None:
+def test_consumer_config_delegates_redelivery_limit_to_application_ledger(monkeypatch) -> None:
     # ack_wait > 핸들러 타임아웃(30s) → 처리 중 재배달 중복 방지,
-    # max_deliver = 재시도 상한 + 1, max_ack_pending 은 in-flight 폭주 억제.
+    # JetStream 전달 횟수는 무제한이고 application ledger가 재시도/DLQ를 종결한다.
     monkeypatch.delenv("NATS_ACK_WAIT_SECONDS", raising=False)
     monkeypatch.delenv("NATS_MAX_DELIVER", raising=False)
     monkeypatch.delenv("NATS_MAX_ACK_PENDING", raising=False)
+    monkeypatch.delenv("NATS_DELIVER_POLICY", raising=False)
 
     config = consumer_config()
 
     assert config.ack_wait == 60
-    assert config.max_deliver == 4
+    assert config.max_deliver == -1
     assert config.max_ack_pending == 100
+    assert config.deliver_policy.value == "all"
 
 
 def test_consumer_config_reads_env_overrides(monkeypatch) -> None:
     monkeypatch.setenv("NATS_ACK_WAIT_SECONDS", "120")
     monkeypatch.setenv("NATS_MAX_DELIVER", "6")
     monkeypatch.setenv("NATS_MAX_ACK_PENDING", "50")
+    monkeypatch.setenv("NATS_DELIVER_POLICY", "new")
 
     config = consumer_config()
 
     assert config.ack_wait == 120
     assert config.max_deliver == 6
     assert config.max_ack_pending == 50
+    assert config.deliver_policy.value == "new"
 
 
 def test_subscribe_applies_consumer_config_to_pull_consumer() -> None:
@@ -203,7 +242,37 @@ def test_subscribe_applies_consumer_config_to_pull_consumer() -> None:
         config = call["config"]
         assert config is not None
         assert config.ack_wait == 60
-        assert config.max_deliver == 4
+        assert config.max_deliver == -1
         assert config.max_ack_pending == 100
+
+    asyncio.run(run())
+
+
+def test_nats_consumer_metrics_reads_jetstream_consumer_info() -> None:
+    async def run() -> None:
+        class StubJetStream:
+            def __init__(self) -> None:
+                self.calls: list[tuple[str, str]] = []
+
+            async def consumer_info(self, stream: str, durable: str) -> object:
+                self.calls.append((stream, durable))
+                return SimpleNamespace(
+                    num_pending=7,
+                    num_ack_pending=2,
+                    num_redelivered=1,
+                )
+
+        bus = NatsEventBus()
+        stub_js = StubJetStream()
+        bus.js = stub_js
+
+        sample = await bus.consumer_metrics("command.requested", "command-worker")
+
+        assert stub_js.calls == [("SERVICE_EVENTS", "command-worker")]
+        assert sample.subject == "command.requested"
+        assert sample.durable == "command-worker"
+        assert sample.pending == 7
+        assert sample.ack_pending == 2
+        assert sample.redelivered == 1
 
     asyncio.run(run())

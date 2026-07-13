@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import Field
 
@@ -18,6 +18,7 @@ class AcceptedResponse(StrictModel):
     accepted: bool
     event_id: str
     correlation_id: str
+    command_id: str | None = None
 
 
 class AcceptedEventResponse(AcceptedResponse):
@@ -173,6 +174,42 @@ class RcaTimelineResponse(StrictModel):
     items: list[RcaTimelineItem]
 
 
+class AuditTimelineItem(StrictModel):
+    subject: str
+    source: str
+    created_at: str
+    causation_id: str | None = None
+    payload_summary: JsonMap = Field(default_factory=dict)
+
+
+class AuditTimelineResponse(StrictModel):
+    items: list[AuditTimelineItem] = Field(default_factory=list)
+    limit: int
+    has_more: bool
+    next_cursor: str | None = None
+
+
+class RecentChangeItem(StrictModel):
+    event_id: str
+    changed_at: str
+    namespace: str
+    resource_kind: str
+    resource_name: str
+    image_before: str | None = None
+    image_after: str | None = None
+    pr_url: str | None = None
+    commit_sha: str
+    repository_id: str
+    repo_ref: str
+    workflow_run_id: str
+
+
+class RecentChangeListResponse(StrictModel):
+    incident_id: str
+    items: list[RecentChangeItem] = Field(default_factory=list)
+    limit: int
+
+
 class RcaIncidentResponse(StrictModel):
     item: RcaTimelineItem
 
@@ -214,6 +251,38 @@ class EvidenceQueryResponse(StrictModel):
     offset: int
     has_more: bool
     next_cursor: str | None = None
+
+
+class EvidenceWindowSummaryItem(StrictModel):
+    """저장된 evidence window 목록 — 원문 payload 없이 source 존재 여부만 노출."""
+
+    evidence_key: str
+    workspace_id: str
+    cluster_id: str | None = None
+    source_id: str | None = None
+    window_start: str | None = None
+    agent_id: str | None = None
+    correlation_id: str | None = None
+    sources: list[str] = Field(default_factory=list)
+    created_at: str | None = None
+    updated_at: str | None = None
+
+
+class EvidenceWindowListResponse(StrictModel):
+    items: list[EvidenceWindowSummaryItem]
+    limit: int
+    offset: int
+    has_more: bool
+
+
+class EvidenceWindowPayloadResponse(StrictModel):
+    """저장된 evidence window 원문 조회 — RCA 스키마 확정용 read-only debug 응답."""
+
+    evidence_key: str
+    workspace_id: str
+    cluster_id: str | None = None
+    source: str | None = None
+    payload: JsonMap
 
 
 class RcaCandidateScoreItem(StrictModel):
@@ -326,6 +395,148 @@ class RecoveryPlanStatusResponse(StrictModel):
     selected_by: str | None = None
     selected_action: RecoveryActionCandidateItem | None = None
     candidates: list[RecoveryActionCandidateItem] = Field(default_factory=list)
+
+
+class RemediationBundleMeta(StrictModel):
+    correlation_id: str
+    incident_id: str | None
+    cluster_id: str
+    workspace_id: str
+    created_at: str | None
+
+
+class RemediationBundleDiagnosis(StrictModel):
+    root_cause: str
+    confidence: float | None
+    supporting_evidence: list[str]
+    missing_evidence: list[str]
+    supporting_evidence_refs: list[RcaEvidenceRefItem]
+    missing_evidence_checks: list[RcaMissingCheckItem]
+    selected_candidate_id: str | None
+
+
+class RemediationBundleActionDraft(StrictModel):
+    action_type: str
+    namespace: str
+    resource_kind: str
+    resource_name: str
+    reason: str
+    risk_level: str
+    dry_run: bool
+    source_evidence: list[str]
+    params: JsonMap
+
+
+class RemediationBundleRecoveryCandidate(StrictModel):
+    action_id: str
+    title: str
+    description: str
+    draft: RemediationBundleActionDraft
+    route: str
+    rank: int
+    score: float
+    risk_level: str
+    blast_radius: str
+    approval_required: bool
+    prerequisites: list[str]
+    validation_checks: list[str]
+    rollback_plan: str
+    evidence_refs: list[str]
+
+
+class RemediationBundleRemediation(StrictModel):
+    status: str
+    selected_action_id: str | None
+    selected_by: str | None
+    candidates: list[RemediationBundleRecoveryCandidate]
+    evidence_ref: str
+
+
+class RemediationBundleResponse(StrictModel):
+    meta: RemediationBundleMeta
+    diagnosis: RemediationBundleDiagnosis
+    remediation: RemediationBundleRemediation | None
+
+
+class RcaTestScenarioExpectedItem(StrictModel):
+    root_cause: str
+    symptom: str
+
+
+class RcaTestScenarioSafetyItem(StrictModel):
+    namespace: Literal["sandbox"]
+    cleanup_required: Literal[True]
+    ttl_seconds: int
+    management_cluster_allowed: Literal[False]
+    resource_name_prefix: Literal["rca-test-"]
+    max_concurrent_runs: int
+
+
+class RcaTestScenarioAdapterItem(StrictModel):
+    adapter: Literal[
+        "kubernetes.deployment",
+        "gitops.fixture",
+        "external.fixture",
+        "kubernetes.manifest_delete",
+        "fixture.reset",
+    ]
+    params: JsonMap = Field(default_factory=dict)
+
+
+class RcaTestScenarioObservationItem(StrictModel):
+    timeout_seconds: int
+    poll_seconds: int
+    pod_waiting_reasons: list[str] = Field(default_factory=list)
+    pod_terminated_reasons: list[str] = Field(default_factory=list)
+    event_reasons: list[str] = Field(default_factory=list)
+    event_message_any: list[str] = Field(default_factory=list)
+    log_message_any: list[str] = Field(default_factory=list)
+    deployment_condition_reasons: list[str] = Field(default_factory=list)
+    external_status_any: list[str] = Field(default_factory=list)
+
+
+class RcaTestScenarioItem(StrictModel):
+    scenario_id: str
+    version: int
+    title: str
+    description: str
+    execution: Literal["real", "hybrid", "external"]
+    availability: Literal[
+        "ready",
+        "verification_pending",
+        "fixture_required",
+        "detector_gap",
+    ]
+    availability_reason: str | None = None
+    verification_work_needed: list[str] = Field(default_factory=list)
+    fixture_requirements: list[str] = Field(default_factory=list)
+    detector_work_needed: list[str] = Field(default_factory=list)
+    expected: RcaTestScenarioExpectedItem
+    evidence_sources: list[Literal["kubernetes", "metrics", "logs", "traces", "metadata"]]
+    safety: RcaTestScenarioSafetyItem
+    trigger: RcaTestScenarioAdapterItem
+    observe: RcaTestScenarioObservationItem
+    cleanup: RcaTestScenarioAdapterItem
+
+
+class RcaTestScenarioListResponse(StrictModel):
+    items: list[RcaTestScenarioItem] = Field(default_factory=list)
+
+
+class RcaTestRunResponse(StrictModel):
+    accepted: bool = True
+    run_id: str
+    scenario_id: str
+    scenario_version: int
+    cluster_id: str
+    correlation_id: str
+    command_id: str
+    evidence_key: str
+    status: str
+    cleanup_at: str
+    verification_mode: bool = False
+    failure: JsonMap | None = None
+    steps: list[JsonMap] = Field(default_factory=list)
 
 
 class EvidenceJobScheduleResponse(StrictModel):
@@ -625,6 +836,10 @@ class AlertChannelResponse(StrictModel):
     url: str
     min_severity: str
     enabled: bool
+    last_tested_at: str | None = None
+    last_test_status: str | None = None
+    last_test_detail: str | None = None
+    last_test_status_code: int | None = None
     created_at: str | None = None
     updated_at: str | None = None
 
@@ -645,12 +860,33 @@ class AlertChannelTestResponse(StrictModel):
     code: str | None = None
     detail: str = ""
     status_code: int | None = None
+    channel: AlertChannelResponse | None = None
 
 
 class RcaRuleValidateResponse(StrictModel):
     valid: bool
     errors: list[ValidationErrorItem] = Field(default_factory=list)
     matched_symptom: str | None = None
+    candidates_count: int = 0
+
+
+class RcaRuleCandidateItem(StrictModel):
+    candidate_id: str
+    title: str
+    expected_evidence: list[str] = Field(default_factory=list)
+    signals_count: int = 0
+
+
+class RcaRuleCatalogItem(StrictModel):
+    rule_id: str
+    symptoms: list[str] = Field(default_factory=list)
+    required_sources: list[str] = Field(default_factory=list)
+    candidates: list[RcaRuleCandidateItem] = Field(default_factory=list)
+
+
+class RcaRuleCatalogResponse(StrictModel):
+    items: list[RcaRuleCatalogItem] = Field(default_factory=list)
+    rules_count: int = 0
     candidates_count: int = 0
 
 
@@ -789,6 +1025,142 @@ class WorkflowRunListResponse(StrictModel):
     runs: list[JsonMap]
 
 
+class ReleasePlanResponse(StrictModel):
+    plan: JsonMap
+
+
+class ReleasePlanListResponse(StrictModel):
+    plans: list[JsonMap]
+
+
+class ReleasePlanPreviewResponse(StrictModel):
+    preview: JsonMap
+
+
+class GeneratedManifestFile(StrictModel):
+    path: str
+    content: str
+    action: str = "upsert"
+    description: str = ""
+
+
+class GeneratedManifestResource(StrictModel):
+    api_version: str = ""
+    kind: str
+    namespace: str = ""
+    name: str
+
+
+class ReleaseReadinessResponse(StrictModel):
+    ready: bool
+    mode: str
+    summary: str
+    checks: list[JsonMap] = Field(default_factory=list)
+    impact: JsonMap = Field(default_factory=dict)
+    next_actions: list[JsonMap] = Field(default_factory=list)
+    blockers: list[str] = Field(default_factory=list)
+    warnings: list[str] = Field(default_factory=list)
+
+
+class ReleaseRunResponse(StrictModel):
+    run: JsonMap
+
+
+class ReleaseRunAlertResponse(StrictModel):
+    accepted: bool
+    event: JsonMap | None = None
+    run: JsonMap
+
+
+class ReleaseRunHandoffResponse(StrictModel):
+    handoff: JsonMap
+
+
+class ReleaseRunReportResponse(StrictModel):
+    report: JsonMap
+
+
+class ReleaseRunListResponse(StrictModel):
+    runs: list[JsonMap]
+
+
+class ReleaseRunSummaryResponse(StrictModel):
+    total_runs: int
+    status_breakdown: dict[str, int] = Field(default_factory=dict)
+    plan_breakdown: dict[str, int] = Field(default_factory=dict)
+    active_runs: int = 0
+    succeeded_runs: int = 0
+    cancelled_runs: int = 0
+    attention_required_runs: int = 0
+    failed_runs: int = 0
+    paused_runs: int = 0
+    rollback_requested_runs: int = 0
+    waiting_for_approval_runs: int = 0
+    live_runs: int = 0
+    unhealthy_runs: int = 0
+    verification_failed_runs: int = 0
+    verification_pending_timeout_runs: int = 0
+    policy_override_runs: int = 0
+    policy_override_breakdown: dict[str, int] = Field(default_factory=dict)
+    active_change_freeze_runs: int = 0
+    change_freeze_override_runs: int = 0
+    stale_runs: int = 0
+    last_run_status: str | None = None
+    recent_runs: list[JsonMap] = Field(default_factory=list)
+
+
+class ReleaseAuditListResponse(StrictModel):
+    events: list[JsonMap] = Field(default_factory=list)
+
+
+class ReleasePlanDispatchResponse(StrictModel):
+    accepted: bool
+    wave: int
+    events: list[JsonMap]
+    blockers: list[str] = Field(default_factory=list)
+    run: JsonMap | None = None
+
+
+class DiagnosticItem(StrictModel):
+    source: str
+    severity: str
+    message: str
+    code: str
+    line: int = 1
+    column: int = 1
+    end_line: int = 1
+    end_column: int = 2
+    path: str | None = None
+    action: str | None = None
+
+
+class DiagnosticsResponse(StrictModel):
+    diagnostics: list[DiagnosticItem]
+
+
+class ReleaseManifestRenderResponse(StrictModel):
+    manifest: str
+    files: list[GeneratedManifestFile] = Field(default_factory=list)
+    resources: list[GeneratedManifestResource] = Field(default_factory=list)
+    resource_count: int = 0
+    diagnostics: list[DiagnosticItem] = Field(default_factory=list)
+    warnings: list[str] = Field(default_factory=list)
+    summary: str = ""
+
+
+class ReleaseManifestSafePrResponse(ReleaseManifestRenderResponse):
+    accepted: bool
+    event_id: str
+    correlation_id: str
+    workflow_run_id: str = ""
+    application_id: str = ""
+    repo_ref: str = ""
+    base_branch: str = ""
+    manifest_path: str = ""
+    commit_sha: str = ""
+    patch_sha256: str = ""
+
+
 class CatalogItemListResponse(StrictModel):
     items: list[JsonMap]
 
@@ -797,8 +1169,11 @@ class CatalogItemResponse(StrictModel):
     item: JsonMap
 
 
-class CatalogInstallRunResponse(StrictModel):
-    install: JsonMap
+class CatalogInstallAcceptedResponse(StrictModel):
+    accepted: bool
+    command_id: str
+    correlation_id: str
+    status: str
 
 
 class ProviderCatalogResponse(StrictModel):

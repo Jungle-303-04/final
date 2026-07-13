@@ -24,7 +24,7 @@ echo
 echo "==> console/api health"
 if [ -n "${BASE_URL}" ]; then
   if ! curl -fsS "${BASE_URL%/}/api/healthz"; then
-    curl -fsS "${BASE_URL%/}/healthz" || true
+    curl -fsS "${BASE_URL%/}/healthz"
   fi
 else
   echo "BASE_URL not set; skipping console/api health"

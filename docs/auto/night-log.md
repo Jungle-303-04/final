@@ -157,6 +157,8 @@ $ git cat-file -e origin/dev:src/domains/rca_bundle/router.py; echo $?
 
 [2026-07-13 06:15:14 KST] [프론트] B in_progress — APIQ-029 착륙본 schema·progress·Bruno와 동결 Zod diff 대조 착수
 
+[2026-07-13 06:25 KST] [RCA] `test_fault_snapshot_derives_catalog_symptom_and_plans_candidates[crashloop]` 해소 — 판정: 규칙은 옳고 기대가 낡음(`app_port_bind_failed`, `permission_denied_startup`은 독립 signal/evidence/checks를 가진 정식 CrashLoop 후보이며 기존 순서 보존) / 커밋 `67ce9d700` / 전체 게이트: pytest `1641 passed, 3 skipped, 5 baseline failed`(해소 node 제외), Ruff check PASS·format 기존 2파일만 실패, import-linter 기존 `domains.rca.router -> services` 1계약만 실패
+
 ## 2026-07-13 06:27 KST — [프론트] B 완료 증거
 
 - 대상: APIQ-029 `getRemediationBundle`, VP-001 public API anchor.
@@ -176,23 +178,514 @@ $ git merge-base --is-ancestor 97c862da1 origin/woonyong/ui-layer-lab; echo $?
 
 - 제품 화면·adapter 소비는 이 앵커 전까지 0건이었고, 완료 조율 커밋 이후에만 허용한다.
 
+[2026-07-13 06:28 KST] [RCA] `test_fault_snapshot_derives_catalog_symptom_and_plans_candidates[imagepull]` 해소 — 판정: 규칙은 옳고 기대가 낡음(`registry_rate_limited`, `image_platform_mismatch`는 서로 다른 registry 신호를 요구하는 정식 후보이며 기존 3후보 순서 보존) / 커밋 `841617f41` / 전체 게이트: pytest `1642 passed, 3 skipped, 4 baseline failed`(중간에 범위 밖 janitor timing flake 1회는 단독 3/3 PASS 후 전체 재실행 PASS), Ruff check PASS·format 기존 2파일만 실패, import-linter 기존 1계약만 실패
+
+[2026-07-13 06:30 KST] [RCA] `test_fault_snapshot_derives_catalog_symptom_and_plans_candidates[oom]` 해소 — 판정: 규칙은 옳고 기대가 낡음(OOM snapshot은 `CrashLoopBackOff` 룰로 수렴하므로 동일한 7후보 전체를 계획하며 OOM 판별은 `oom_evidence` signal 평가 단계가 담당) / 커밋 `6cfa9c6aa` / 전체 게이트: pytest `1643 passed, 3 skipped, 3 baseline failed`, Ruff check PASS·format 기존 2파일만 실패, import-linter 기존 1계약만 실패
+
 [2026-07-13 06:31:17 KST] [프론트] C in_progress — APIQ-012 receipt claim; APIQ-027 앵커 전 getCommandStatus 소비는 보류
+
+[2026-07-13 06:32 KST] [RCA] `test_fault_snapshot_derives_catalog_symptom_and_plans_candidates[sched-fail]` 해소 — 판정: 규칙은 옳고 기대가 낡음(`node_selector_mismatch`, `untolerated_taint`는 포괄 affinity/taint 후보를 실제 이벤트·metadata 신호로 세분화한 정식 후보이며 `pvc_pending` 앞 카탈로그 순서 보존) / 커밋 `5dcb2f633` / 전체 게이트: pytest `1644 passed, 3 skipped, 2 baseline failed`, Ruff check PASS·format 기존 2파일만 실패, import-linter 기존 1계약만 실패
+
+[2026-07-13 06:33 KST] [RCA] `test_crashloop_flow_auto_selects_restart_and_queues_command` 해소 — 판정: 규칙은 옳고 기대가 낡음(계획 후보는 7개로 확장됐지만 기존 우선순위 `oom_killed`, `bad_image_rollout`와 OOM 자동 선택·restart 명령 계약은 그대로 통과) / 커밋 `da90c79a7` / 전체 게이트: pytest `1645 passed, 3 skipped, 1 baseline failed`, Ruff check PASS·format 기존 2파일만 실패, import-linter 기존 1계약만 실패
+
+[2026-07-13 06:40 KST] [RCA] `test_validate_checks_scenario_adapter_cause_evidence_and_recovery_contracts` 해소 — 판정: 기대가 옳고 검증 규칙이 버그(scenario는 provider `kubernetes`를 선언하고 candidate는 그 하위 named evidence `kubernetes:cluster_resource_state`를 요구하므로 provider 계층으로 비교해야 함; 누락 provider 거부 테스트 유지) / 커밋 `58d9b1ba0` / 전체 게이트: pytest `1646 passed, 3 skipped`, Ruff check PASS·format 기존 2파일만 실패, import-linter 기존 1계약만 실패
+
+[2026-07-13 06:44 KST] [RCA] Ruff format `tests/test_bruno_collection.py`, `tests/test_rca_rule_catalog.py` 해소 — 판정: formatter canonical output과 불일치한 순수 표현 형식(문자열 quote·줄바꿈·comprehension 배치)이며 assertion 의미 불변 / 커밋 `5a9e46a21` / 전체 게이트: pytest `1646 passed, 3 skipped`, Ruff check PASS·format `470 files already formatted`, import-linter 기존 1계약만 실패
+
+## 2026-07-13 06:44 KST — F 완료 증거
+
+- branch: `codex/f-auto-revert-pr`
+- HEAD: `68e94c1486cc289c698a5507629e781812c315d4`
+- commits:
+  - `68e94c148` fix: 되돌림 PR 승인 스냅샷 / 원문 패치 / SCM 권위 검증
+  - `e6d4df1dc` feat: rollout 실패 revert PR / 기본 비활성 / 권위 컨텍스트
+- stat: 14 files changed, 3,075 insertions(+), 46 deletions(-); 신규 파일 5개
+  - `deploy/management/auto-revert-worker.yaml`
+  - `src/services/gitops/auto-revert-worker/app.py`
+  - `tests/test_auto_revert_worker.py`
+  - `src/domains/gitops/source_patch.py`
+  - `tests/test_gitops_source_patch.py`
+- 기능 검증: flag off 무발화, flag on 승인 snapshot 기반 패치, 원문 byte 보존, exact base SHA·SCM provenance·기존 PR 재전달 fail-closed.
+- F 전용 회귀: `203 passed in 4.35s`.
+- 전체 pytest: 기존 RCA baseline 6건만 실패, `1708 passed, 3 skipped`; 신규 실패 0건.
+- 전역 게이트: Ruff lint PASS, compileall PASS, manifest PASS(`management 69`, `target 20`). Ruff format은 기존 2파일만 대상, import-linter는 기존 `domains.rca.router -> services` 1건만 유지.
+- 독립 감사: 보안·계약 감사 모두 P0 0건/P1 0건. GitHub Compare API 300파일 상한은 fail-closed.
+- frozen path·gateway 계약·R-트랙 소유 테스트 변경 0건. merge·push·배포·앵커 0건.
+
+[2026-07-13 06:44 KST] [백엔드] F done — 승인 스냅샷·원문 패치·SCM 권위 검증 완료 `68e94c148`
 
 [2026-07-13 06:44 KST] [프론트] APIQ-012 receipt 완료 — `submitCommand` nullable ID 계약 `d763ab682`; C는 APIQ-027 선행 앵커 대기
 
 [2026-07-13 06:46 KST] [문서] APIQ-012 완료 문서 재검증 — `commands.test.ts` targeted PASS, root `make check` PASS(838 passed, 3 skipped + manifest-check). 별도 UI `npm run check` 재실행은 `apiBoundary` timeout과 `ResourcesPage` 표 조회 실패로 FAIL이므로 full UI PASS로 기록하지 않는다.
 
+[2026-07-13 06:47 KST] [백엔드] C0 in_progress — 신뢰 workspace 봉투·outbox 보존·audit 귀속·가역 마이그레이션 사전 검증
+
+[2026-07-13 06:50 KST] [RCA] import-linter `domains.rca.router -> services` 해소 — 판정: 계약이 옳고 router의 services 직접 import가 역의존 버그; domain은 구조적 rule-profile read port만 선언하고 gateway composition이 service profile을 `app.state`로 주입하도록 교정(계약 완화·ignore 추가 0건) / 커밋 `8ce7449fe` / 전체 게이트: `make test` PASS — Ruff lint PASS, format `470 files already formatted`, import-linter `2 kept, 0 broken`, pytest `1646 passed, 3 skipped`
+
+## GO-REQUEST [R] — RCA baseline 수렴 lane 통합 승인 요청
+
+- 대상: `codex/rca-baseline-convergence` (code HEAD `8ce7449fe`; 이 블록은 별도 docs 증거 커밋)
+- 완료 범위: [D-011] failure entity 8건 전부 — pytest 6 node, Ruff-format 2파일 gate, import-linter 1계약.
+- 커밋: `67ce9d700`, `841617f41`, `6cfa9c6aa`, `5dcb2f633`, `da90c79a7`, `58d9b1ba0`, `5a9e46a21`, `8ce7449fe`.
+- 최종 게이트: `make test` → Ruff lint PASS / format `470 files already formatted` / import-linter `2 kept, 0 broken` / pytest `1646 passed, 3 skipped`.
+- 범위 증거: 금지 경로 `src/services/ai/agent/recovery/**`, `src/packages/contracts/gateway/**`, `release_flow/**` 변경 0건; `backend-pipeline.md` §1.4와 조율 문서 상태 칸 미편집. baseline 축소는 [D-011] 프로토콜대로 백엔드 Codex 재확인 후 수행 대기.
+- 사람 검증 명령(복사 가능):
+
+  ```bash
+  git -C /private/tmp/sw-ai-rca-baseline-convergence status --short
+  git -C /private/tmp/sw-ai-rca-baseline-convergence diff --name-only dev...codex/rca-baseline-convergence
+  git -C /private/tmp/sw-ai-rca-baseline-convergence diff --name-only dev...codex/rca-baseline-convergence -- 'src/services/ai/agent/recovery/**' 'src/packages/contracts/gateway/**' ':(glob)**/release_flow/**' docs/auto/backend-pipeline.md docs/auto/night-directives.md
+  make -C /private/tmp/sw-ai-rca-baseline-convergence test
+  ```
+
+- 예상 결과: 첫 명령 0줄, 변경 파일은 R-소유 규칙/시나리오/테스트·gateway 조립·night-log만, 금지 경로 명령 0줄, 전체 gate PASS.
+- 사람 GO 후 통합 명령(현재 dev의 조율 문서 변경을 먼저 커밋해 clean 상태로 만든 뒤 실행):
+
+  ```bash
+  git -C /Users/woonyong/workspace/Krafton-Jungle/SW_AI_W17-21-final-dev merge --no-ff codex/rca-baseline-convergence
+  git -C /Users/woonyong/workspace/Krafton-Jungle/SW_AI_W17-21-final-dev push origin dev
+  ```
+
+- 실패 시 롤백: push 전 충돌/검증 실패는 `git merge --abort`; merge commit 생성 후 push 전 gate 실패는 해당 merge commit을 push하지 말고 사람 판단. push 후에는 이력 보존형 `git revert -m 1 <merge_commit>` 후 전체 gate 재검증(강제 push·reset 금지).
+
+[2026-07-13 06:54 KST] [백엔드] BLOCKED P — 사유: 현재 `RecoveryActionSelectedBody`와 순수 `RecoveryDispatcher`에는 desired manifest·승인 snapshot·source digest/base SHA·repository/binding/workflow 권위 컨텍스트가 없어 실제 patch 6종은 모두 `unsupported`가 됨 / 재현: `safe_pr_patches()` 입력은 선택된 action params뿐이고 dispatcher DB 의존성 0건 / 질문: recovery plan hydration 계약을 선행할지, dispatch 단계의 repository 조회 포트를 승인할지 / 재개 조건: 정적 builtin params나 payload 위조 없이 GitOps 권위 컨텍스트를 전달하는 단일 소스 계약 확정
+
+- RCA 작업열 충돌 확인: R-track과 `src/services/ai/agent/recovery/{dispatch,builtin,catalog}.py` blob 동일, recovery 경로 변경 0건.
+- 기각한 우회: 정적 카탈로그에 manifest/snapshot 삽입, markdown fallback 유지, 권위 입력 없는 합성 patch.
+
 [2026-07-13 06:57 KST] [프론트] C 후속 full gate 재검증 PASS — TypeScript·ESLint, 94 files / 663 tests, design guard 275, shadcn 482, production build 전부 통과. 앞선 두 실패는 재현·격리 후 안정화 트랙으로 분리했다.
 
 [2026-07-13 06:57 KST] [프론트] D in_progress — APIQ-027 command polling 계약 claim; API-owned fixture와 failure·terminal·abort·barrel 회귀를 앵커 전에 보강한다.
 
+[2026-07-13 07:02 KST] [백엔드] BLOCKED R merge step 2 — merge 진행 중(`MERGE_HEAD=82028604d`), 충돌 잔여·night-log 마커 0건 확인 후 허용된 `night-log.md`·`night-directives.md` 외 예상 밖 unstaged `docs/auto/backend-pipeline.md` 발견(D-011 축소 프로토콜 3줄) / 지시대로 임의 add·commit·push 0건 / 질문: 이 기존 unstaged 변경을 merge commit에 포함할지 별도 처리할지 확인 필요 / 재개 조건: `backend-pipeline.md`의 이번 merge 포함 여부 명시
+
+[2026-07-13 07:07 KST] [백엔드] R merge 완결·push — `257f91846`, `82028604d` ancestor exit 0, 사람 위임 GO [R] ([D-012])
+
+[2026-07-13 07:14 KST] [백엔드] [D-012] 후속 정리 완료 — §1.4 baseline 공집합·전체-그린 복귀 / R worktree·로컬 lane 안전 회수(`branch -d`) / release blocker에서 RCA baseline 제거 / P read port 설계로 in_progress 재개
+
 [2026-07-13 07:30 KST] [프론트] APIQ-027 완료 — `submitPrometheusQuery`, `getCommandStatus`, `pollCommand`, `runPrometheusQuery` 앵커 `b92d081eb`; full gate PASS(TypeScript·ESLint, 95 files / 674 tests, design guard 278, shadcn 482, production build).
 
+[2026-07-13 07:32 KST] [백엔드] 브랜치 전수 감사 — canonical `9aa76e4b34c5dd66c4c4ace4bd5b08b2450c1b4e`, 실브랜치 198개(origin/HEAD 별칭 제외), A 21 / B 5 / C 166 / 보호 6
+
+| 브랜치 | 분류 | ancestor exit | 처리 | 근거 |
+|---|---:|---:|---|---|
+| `codex/cloudflare-token-normalization` | C | 1 | 사람 판단 대기 | 미착륙·비활성; ahead=543; 2026-07-06; fix: EKS rollout 상태 조회 재시도 |
+| `codex/f-audit-timeline` | B | 0 | 보존 | 활성 lane; ahead=0; 2026-07-13; docs: BQ-003 앵커 / 프론트 인계 / 결합 주의 |
+| `codex/f-auto-revert-pr` | B | 1 | 보존 | 활성 lane; ahead=3; 2026-07-13; chore: dev 동기화 / R 착륙 / P 재개 |
+| `codex/f-inprocess-event-bus` | B | 1 | 보존 | 활성 lane; ahead=5; 2026-07-13; test: 지연 재배달 / 타이밍 여유 / flake 제거 |
+| `codex/platform-foundation` | C | 1 | 사람 판단 대기 | 미착륙·비활성; ahead=555; 2026-07-06; docs: 운영 검증 용어 정리 |
+| `codex/rca-log-evidence-scope-20260710` | C | 1 | 사람 판단 대기 | 미착륙·비활성; ahead=1; 2026-07-10; fix: RCA 시나리오 가용성 / provider 검증 경계 |
+| `codex/runtime-hardening-20260710` | C | 1 | 사람 판단 대기 | 미착륙·비활성; ahead=2; 2026-07-10; fix: MinIO 단일 소유자 / 레거시 Deployment 제거 |
+| `demo/v1` | C | 1 | 사람 판단 대기 | 미착륙·비활성; ahead=335; 2026-07-01; docs: PR 체크리스트 / worker 계약 / runtime 책임 |
+| `dev` | 보호 | 0 | 보존 | 명시 보호 브랜치; ahead=0; 2026-07-13; docs: R 후속 정리 / baseline 공집합 / P 재개 |
+| `feat/jcbbbbbb/api-gateway` | C | 1 | 사람 판단 대기 | 미착륙·비활성; ahead=290; 2026-06-30; Merge remote-tracking branch 'origin/dev' into feat/jcbbbbbb/api-gateway |
+| `feat/jeonwoohyun-hydromel/command-worker` | C | 1 | 사람 판단 대기 | 미착륙·비활성; ahead=290; 2026-06-30; Merge remote-tracking branch 'origin/dev' into feat/jeonwoohyun-hydromel/command-worker |
+| `feat/jeonwoohyun-hydromel/gitops-sync-worker` | C | 1 | 사람 판단 대기 | 미착륙·비활성; ahead=290; 2026-06-30; Merge remote-tracking branch 'origin/dev' into feat/jeonwoohyun-hydromel/gitops-sync-worker |
+| `feat/minmings111/node-collector` | C | 1 | 사람 판단 대기 | 미착륙·비활성; ahead=290; 2026-06-30; Merge remote-tracking branch 'origin/dev' into feat/minmings111/node-collector |
+| `feat/minmings111/target-cluster-agent` | C | 1 | 사람 판단 대기 | 미착륙·비활성; ahead=300; 2026-06-30; Merge remote-tracking branch 'origin/dev' into feat/minmings111/target-cluster-agent |
+| `feat/ummfieg/audit-timeline-service` | C | 1 | 사람 판단 대기 | 미착륙·비활성; ahead=290; 2026-06-30; Merge remote-tracking branch 'origin/dev' into feat/ummfieg/audit-timeline-service |
+| `feat/ummfieg/dashboard-projection-service` | C | 1 | 사람 판단 대기 | 미착륙·비활성; ahead=290; 2026-06-30; Merge remote-tracking branch 'origin/dev' into feat/ummfieg/dashboard-projection-service |
+| `feat/ummfieg/rca-worker` | C | 1 | 사람 판단 대기 | 미착륙·비활성; ahead=290; 2026-06-30; Merge remote-tracking branch 'origin/dev' into feat/ummfieg/rca-worker |
+| `main` | 보호 | 1 | 보존 | 명시 보호 브랜치; ahead=34; 2026-06-26; refactor: 이벤트 계약 / 구독 선언 / Gateway 계약 |
+| `origin/chanbin-authority` | C | 1 | 사람 판단 대기 | 미착륙·비활성; ahead=512; 2026-07-07; fix: workload scale 명령 실행 정책 정합성 |
+| `origin/codex/bq-001-command-id-receipt` | A | 0 | 원격 삭제 완료 | origin/dev ancestor 증명; ahead=0; 2026-07-13; docs: BQ-001 계약 완성 / delta-green 앵커 / 프론트 인계 |
+| `origin/codex/bq-002-audit-causation` | A | 0 | 원격 삭제 완료 | origin/dev ancestor 증명; ahead=0; 2026-07-13; docs: BQ-002 계약 완성 / delta-green 앵커 / 프론트 인계 |
+| `origin/codex/bq-003-remediation-bundle` | A | 0 | 원격 삭제 완료 | origin/dev ancestor 증명; ahead=0; 2026-07-13; feat: RemediationBundle 3계층 조회 계약 추가 |
+| `origin/codex/chanbin-dev-infra-base` | C | 1 | 사람 판단 대기 | 미착륙·비활성; ahead=315; 2026-07-05; fix: workspace 관련 제거 |
+| `origin/codex/data-dashboard-variants` | C | 1 | 사람 판단 대기 | 미착륙·비활성; ahead=1; 2026-07-09; feat: redesign operations homepage variants |
+| `origin/codex/f-auto-revert-pr` | B | 1 | 보존 | 활성 lane; ahead=1; 2026-07-13; feat: rollout 실패 revert PR / 기본 비활성 / 권위 컨텍스트 |
+| `origin/codex/f-inprocess-event-bus` | B | 1 | 보존 | 활성 lane; ahead=5; 2026-07-13; test: 지연 재배달 / 타이밍 여유 / flake 제거 |
+| `origin/codex/frontt` | C | 1 | 사람 판단 대기 | 미착륙·비활성; ahead=492; 2026-07-07; test: 실백엔드 E2E credential 하드코딩 제거 |
+| `origin/codex/gitops-cache-db-crd` | C | 1 | 사람 판단 대기 | 미착륙·비활성; ahead=462; 2026-07-04; feat: add gitops cache db crd rendering |
+| `origin/codex/headlamptest` | C | 1 | 사람 판단 대기 | 미착륙·비활성; ahead=607; 2026-07-07; feat(frontend): add headlamp network resource views |
+| `origin/codex/platform-foundation` | C | 1 | 사람 판단 대기 | 미착륙·비활성; ahead=555; 2026-07-06; docs: 운영 검증 용어 정리 |
+| `origin/codex/radar` | A | 0 | 원격 삭제 완료 | origin/dev ancestor 증명; ahead=0; 2026-07-11; ci: dev 푸시 AWS 직접 배포 활성화 |
+| `origin/codex/rca-log-evidence-scope-20260710` | C | 1 | 사람 판단 대기 | 미착륙·비활성; ahead=1; 2026-07-10; fix: RCA 시나리오 가용성 / provider 검증 경계 |
+| `origin/codex/release-flow-frontend-safe-pr-144` | C | 1 | 사람 판단 대기 | 미착륙·비활성; ahead=2; 2026-07-10; feat: add production readiness runner |
+| `origin/codex/release-flow-gate-contract-check-133` | A | 0 | 원격 삭제 완료 | origin/dev ancestor 증명; ahead=0; 2026-07-10; feat: enforce release flow production gate contract |
+| `origin/codex/release-flow-gate-input-contract-137` | A | 0 | 원격 삭제 완료 | origin/dev ancestor 증명; ahead=0; 2026-07-10; feat: require production gate inputs in deploy workflows |
+| `origin/codex/release-flow-generated-manifest-safe-pr-142` | A | 0 | 원격 삭제 완료 | origin/dev ancestor 증명; ahead=0; 2026-07-10; feat: add generated release manifest safe pr |
+| `origin/codex/release-flow-live-image-guard-140` | A | 0 | 원격 삭제 완료 | origin/dev ancestor 증명; ahead=0; 2026-07-10; feat: require explicit production live image |
+| `origin/codex/release-flow-live-preflight-explicit-inputs-139` | A | 0 | 원격 삭제 완료 | origin/dev ancestor 증명; ahead=0; 2026-07-10; feat: require explicit live preflight inputs |
+| `origin/codex/release-flow-prod-abort-criteria-52` | C | 1 | 사람 판단 대기 | 미착륙·비활성; ahead=49; 2026-07-10; feat: require production abort criteria |
+| `origin/codex/release-flow-prod-action-disabled-hints-83` | C | 1 | 사람 판단 대기 | 미착륙·비활성; ahead=82; 2026-07-10; feat: show disabled release action hints |
+| `origin/codex/release-flow-prod-action-reason-presets-81` | C | 1 | 사람 판단 대기 | 미착륙·비활성; ahead=80; 2026-07-10; feat: improve release action reason presets |
+| `origin/codex/release-flow-prod-active-freeze-filter-103` | C | 1 | 사람 판단 대기 | 미착륙·비활성; ahead=101; 2026-07-10; feat: filter active release freezes |
+| `origin/codex/release-flow-prod-active-run-filter-74` | C | 1 | 사람 판단 대기 | 미착륙·비활성; ahead=71; 2026-07-10; feat: filter active release runs |
+| `origin/codex/release-flow-prod-advance-verification-gate-58` | C | 1 | 사람 판단 대기 | 미착륙·비활성; ahead=55; 2026-07-10; feat: block advance on verification failure |
+| `origin/codex/release-flow-prod-alert-coverage-30` | C | 1 | 사람 판단 대기 | 미착륙·비활성; ahead=27; 2026-07-10; feat: require warning alert coverage for live releases |
+| `origin/codex/release-flow-prod-alert-ops-13` | C | 1 | 사람 판단 대기 | 미착륙·비활성; ahead=10; 2026-07-09; feat: surface release alert channels |
+| `origin/codex/release-flow-prod-alert-recency-33` | C | 1 | 사람 판단 대기 | 미착륙·비활성; ahead=30; 2026-07-10; feat: expire stale alert channel validations |
+| `origin/codex/release-flow-prod-alert-smoke-45` | C | 1 | 사람 판단 대기 | 미착륙·비활성; ahead=42; 2026-07-10; feat: smoke test release alert channels |
+| `origin/codex/release-flow-prod-alert-validation-31` | C | 1 | 사람 판단 대기 | 미착륙·비활성; ahead=28; 2026-07-10; feat: persist alert channel validation status |
+| `origin/codex/release-flow-prod-alerts-08` | C | 1 | 사람 판단 대기 | 미착륙·비활성; ahead=5; 2026-07-09; feat: emit release flow operational alerts |
+| `origin/codex/release-flow-prod-app-context-15` | C | 1 | 사람 판단 대기 | 미착륙·비활성; ahead=12; 2026-07-09; feat: validate release application context |
+| `origin/codex/release-flow-prod-approval-card-16` | C | 1 | 사람 판단 대기 | 미착륙·비활성; ahead=13; 2026-07-09; feat: expose release approvals in run view |
+| `origin/codex/release-flow-prod-approval-evidence-40` | C | 1 | 사람 판단 대기 | 미착륙·비활성; ahead=37; 2026-07-10; feat: require approval evidence for production releases |
+| `origin/codex/release-flow-prod-approval-recency-43` | C | 1 | 사람 판단 대기 | 미착륙·비활성; ahead=40; 2026-07-10; feat: expire stale production approvals |
+| `origin/codex/release-flow-prod-attention-alert-26` | C | 1 | 사람 판단 대기 | 미착륙·비활성; ahead=23; 2026-07-10; feat: notify attention release runs |
+| `origin/codex/release-flow-prod-attention-reasons-21` | C | 1 | 사람 판단 대기 | 미착륙·비활성; ahead=18; 2026-07-10; feat: explain release run attention reasons |
+| `origin/codex/release-flow-prod-audit-09` | C | 1 | 사람 판단 대기 | 미착륙·비활성; ahead=6; 2026-07-09; feat: add release flow audit export |
+| `origin/codex/release-flow-prod-audit-copy-91` | C | 1 | 사람 판단 대기 | 미착륙·비활성; ahead=89; 2026-07-10; feat: copy release audit summary |
+| `origin/codex/release-flow-prod-audit-event-filter-25` | C | 1 | 사람 판단 대기 | 미착륙·비활성; ahead=22; 2026-07-10; feat: filter release audit events |
+| `origin/codex/release-flow-prod-audit-export-ui-14` | C | 1 | 사람 판단 대기 | 미착륙·비활성; ahead=11; 2026-07-09; feat: export release audit from UI |
+| `origin/codex/release-flow-prod-audit-operator-filters-69` | C | 1 | 사람 판단 대기 | 미착륙·비활성; ahead=66; 2026-07-10; feat: expose release audit operator filters |
+| `origin/codex/release-flow-prod-audit-prefix-filter-67` | C | 1 | 사람 판단 대기 | 미착륙·비활성; ahead=64; 2026-07-10; feat: filter release audit event prefixes |
+| `origin/codex/release-flow-prod-audit-row-meta-68` | C | 1 | 사람 판단 대기 | 미착륙·비활성; ahead=65; 2026-07-10; feat: show release audit row metadata |
+| `origin/codex/release-flow-prod-change-freeze-smoke-108` | C | 1 | 사람 판단 대기 | 미착륙·비활성; ahead=106; 2026-07-10; feat: preflight release change freezes |
+| `origin/codex/release-flow-prod-change-ticket-gate-38` | C | 1 | 사람 판단 대기 | 미착륙·비활성; ahead=35; 2026-07-10; feat: require change tickets for production releases |
+| `origin/codex/release-flow-prod-destructive-action-confirm-84` | C | 1 | 사람 판단 대기 | 미착륙·비활성; ahead=83; 2026-07-10; feat: confirm destructive release actions |
+| `origin/codex/release-flow-prod-diagnostics-gate-34` | C | 1 | 사람 판단 대기 | 미착륙·비활성; ahead=31; 2026-07-10; feat: require diagnostics pass for live releases |
+| `origin/codex/release-flow-prod-diagnostics-override-35` | C | 1 | 사람 판단 대기 | 미착륙·비활성; ahead=32; 2026-07-10; feat: require diagnostics override reasons |
+| `origin/codex/release-flow-prod-freeze-handoff-101` | C | 1 | 사람 판단 대기 | 미착륙·비활성; ahead=99; 2026-07-10; feat: surface change freeze in release handoff |
+| `origin/codex/release-flow-prod-freeze-run-filter-102` | C | 1 | 사람 판단 대기 | 미착륙·비활성; ahead=100; 2026-07-10; feat: filter release freeze overrides |
+| `origin/codex/release-flow-prod-freeze-window-100` | C | 1 | 사람 판단 대기 | 미착륙·비활성; ahead=98; 2026-07-10; feat: block releases during change freeze |
+| `origin/codex/release-flow-prod-gate-inputs-12` | C | 1 | 사람 판단 대기 | 미착륙·비활성; ahead=9; 2026-07-09; feat: expose release flow gate inputs |
+| `origin/codex/release-flow-prod-guard-snapshot-36` | C | 1 | 사람 판단 대기 | 미착륙·비활성; ahead=33; 2026-07-10; feat: record release dispatch guard snapshots |
+| `origin/codex/release-flow-prod-handoff-28` | C | 1 | 사람 판단 대기 | 미착륙·비활성; ahead=25; 2026-07-10; feat: summarize release run handoff |
+| `origin/codex/release-flow-prod-handoff-abort-criteria-53` | C | 1 | 사람 판단 대기 | 미착륙·비활성; ahead=50; 2026-07-10; feat: show abort criteria in release handoff |
+| `origin/codex/release-flow-prod-handoff-copy-80` | C | 1 | 사람 판단 대기 | 미착륙·비활성; ahead=78; 2026-07-10; feat: copy release handoff markdown |
+| `origin/codex/release-flow-prod-handoff-verification-51` | C | 1 | 사람 판단 대기 | 미착륙·비활성; ahead=48; 2026-07-10; feat: show release verification in handoff |
+| `origin/codex/release-flow-prod-hardening-04` | C | 1 | 사람 판단 대기 | 미착륙·비활성; ahead=1; 2026-07-09; feat: add production-ready release flow |
+| `origin/codex/release-flow-prod-impact-summary-48` | C | 1 | 사람 판단 대기 | 미착륙·비활성; ahead=45; 2026-07-10; feat: summarize release readiness impact |
+| `origin/codex/release-flow-prod-live-action-confirm-85` | C | 1 | 사람 판단 대기 | 미착륙·비활성; ahead=84; 2026-07-10; feat: confirm live release actions |
+| `origin/codex/release-flow-prod-live-alert-gate-29` | C | 1 | 사람 판단 대기 | 미착륙·비활성; ahead=26; 2026-07-10; feat: require alert channels for live release dispatch |
+| `origin/codex/release-flow-prod-live-preflight-smoke-41` | C | 1 | 사람 판단 대기 | 미착륙·비활성; ahead=38; 2026-07-10; feat: preflight live release readiness smoke |
+| `origin/codex/release-flow-prod-live-start-confirm-87` | C | 1 | 사람 판단 대기 | 미착륙·비활성; ahead=85; 2026-07-10; feat: confirm live release start actions |
+| `origin/codex/release-flow-prod-notify-audit-meta-66` | C | 1 | 사람 판단 대기 | 미착륙·비활성; ahead=63; 2026-07-10; feat: enrich release notify audit metadata |
+| `origin/codex/release-flow-prod-notify-cooldown-63` | C | 1 | 사람 판단 대기 | 미착륙·비활성; ahead=60; 2026-07-10; feat: audit release notify cooldowns |
+| `origin/codex/release-flow-prod-notify-cooldown-handoff-65` | C | 1 | 사람 판단 대기 | 미착륙·비활성; ahead=62; 2026-07-10; feat: surface release notify cooldowns |
+| `origin/codex/release-flow-prod-operator-controls-19` | C | 1 | 사람 판단 대기 | 미착륙·비활성; ahead=16; 2026-07-10; feat: require operator context for release actions |
+| `origin/codex/release-flow-prod-ops-observability-06` | C | 1 | 사람 판단 대기 | 미착륙·비활성; ahead=3; 2026-07-09; feat: surface release flow ops signals |
+| `origin/codex/release-flow-prod-ops-rehearsal-27` | C | 1 | 사람 판단 대기 | 미착륙·비활성; ahead=24; 2026-07-10; feat: rehearse release flow operator actions |
+| `origin/codex/release-flow-prod-ops-smoke-05` | C | 1 | 사람 판단 대기 | 미착륙·비활성; ahead=2; 2026-07-09; test: add release flow smoke check |
+| `origin/codex/release-flow-prod-owner-gate-46` | C | 1 | 사람 판단 대기 | 미착륙·비활성; ahead=43; 2026-07-10; feat: require production release owners |
+| `origin/codex/release-flow-prod-paused-run-summary-76` | C | 1 | 사람 판단 대기 | 미착륙·비활성; ahead=73; 2026-07-10; feat: summarize paused release runs |
+| `origin/codex/release-flow-prod-permission-gates-42` | C | 1 | 사람 판단 대기 | 미착륙·비활성; ahead=39; 2026-07-10; feat: split release flow permission gates |
+| `origin/codex/release-flow-prod-policy-override-filter-104` | C | 1 | 사람 판단 대기 | 미착륙·비활성; ahead=102; 2026-07-10; feat: filter release policy overrides |
+| `origin/codex/release-flow-prod-policy-override-handoff-105` | C | 1 | 사람 판단 대기 | 미착륙·비활성; ahead=103; 2026-07-10; feat: surface release policy overrides in handoff |
+| `origin/codex/release-flow-prod-policy-override-smoke-107` | C | 1 | 사람 판단 대기 | 미착륙·비활성; ahead=105; 2026-07-10; feat: preflight release policy overrides |
+| `origin/codex/release-flow-prod-policy-override-source-106` | C | 1 | 사람 판단 대기 | 미착륙·비활성; ahead=104; 2026-07-10; feat: summarize release policy override sources |
+| `origin/codex/release-flow-prod-preview-action-hints-88` | C | 1 | 사람 판단 대기 | 미착륙·비활성; ahead=86; 2026-07-10; feat: show release preview action hints |
+| `origin/codex/release-flow-prod-preview-copy-90` | C | 1 | 사람 판단 대기 | 미착륙·비활성; ahead=88; 2026-07-10; feat: copy release execution preview |
+| `origin/codex/release-flow-prod-production-preflight-109` | C | 1 | 사람 판단 대기 | 미착륙·비활성; ahead=107; 2026-07-10; feat: bundle production release preflights |
+| `origin/codex/release-flow-prod-production-preflight-scope-110` | C | 1 | 사람 판단 대기 | 미착륙·비활성; ahead=108; 2026-07-10; feat: scope production release preflights |
+| `origin/codex/release-flow-prod-readiness-11` | C | 1 | 사람 판단 대기 | 미착륙·비활성; ahead=8; 2026-07-09; feat: add release flow readiness checks |
+| `origin/codex/release-flow-prod-readiness-actions-47` | C | 1 | 사람 판단 대기 | 미착륙·비활성; ahead=44; 2026-07-10; feat: summarize release readiness next actions |
+| `origin/codex/release-flow-prod-readiness-copy-89` | C | 1 | 사람 판단 대기 | 미착륙·비활성; ahead=87; 2026-07-10; feat: copy release readiness summary |
+| `origin/codex/release-flow-prod-readiness-lock-18` | C | 1 | 사람 판단 대기 | 미착륙·비활성; ahead=15; 2026-07-09; feat: show active release lock in readiness |
+| `origin/codex/release-flow-prod-readiness-snapshot-49` | C | 1 | 사람 판단 대기 | 미착륙·비활성; ahead=46; 2026-07-10; feat: snapshot release readiness at dispatch |
+| `origin/codex/release-flow-prod-recent-run-shortcuts-78` | C | 1 | 사람 판단 대기 | 미착륙·비활성; ahead=76; 2026-07-10; feat: add recent release run shortcuts |
+| `origin/codex/release-flow-prod-redaction-10` | C | 1 | 사람 판단 대기 | 미착륙·비활성; ahead=7; 2026-07-09; feat: redact release flow audit details |
+| `origin/codex/release-flow-prod-release-window-39` | C | 1 | 사람 판단 대기 | 미착륙·비활성; ahead=36; 2026-07-10; feat: require release windows for production releases |
+| `origin/codex/release-flow-prod-retry-07` | C | 1 | 사람 판단 대기 | 미착륙·비활성; ahead=4; 2026-07-09; feat: retry failed release wave |
+| `origin/codex/release-flow-prod-rollback-handoff-reason-82` | C | 1 | 사람 판단 대기 | 미착륙·비활성; ahead=81; 2026-07-10; feat: explain disabled rollback handoff action |
+| `origin/codex/release-flow-prod-rollback-override-37` | C | 1 | 사람 판단 대기 | 미착륙·비활성; ahead=34; 2026-07-10; feat: require rollback override reasons |
+| `origin/codex/release-flow-prod-run-deeplink-79` | C | 1 | 사람 판단 대기 | 미착륙·비활성; ahead=77; 2026-07-10; feat: deep link release runs |
+| `origin/codex/release-flow-prod-run-filters-23` | C | 1 | 사람 판단 대기 | 미착륙·비활성; ahead=20; 2026-07-10; feat: filter release runs by operational state |
+| `origin/codex/release-flow-prod-run-health-smoke-71` | C | 1 | 사람 판단 대기 | 미착륙·비활성; ahead=68; 2026-07-10; feat: smoke release run health preflight |
+| `origin/codex/release-flow-prod-run-history-20` | C | 1 | 사람 판단 대기 | 미착륙·비활성; ahead=17; 2026-07-10; feat: inspect release run history |
+| `origin/codex/release-flow-prod-run-lock-17` | C | 1 | 사람 판단 대기 | 미착륙·비활성; ahead=14; 2026-07-09; feat: block duplicate active release runs |
+| `origin/codex/release-flow-prod-run-report-92` | C | 1 | 사람 판단 대기 | 미착륙·비활성; ahead=90; 2026-07-10; feat: copy release run report |
+| `origin/codex/release-flow-prod-run-report-api-93` | C | 1 | 사람 판단 대기 | 미착륙·비활성; ahead=91; 2026-07-10; feat: add release run report api |
+| `origin/codex/release-flow-prod-run-report-approvals-99` | C | 1 | 사람 판단 대기 | 미착륙·비활성; ahead=97; 2026-07-10; feat: include approvals in release report |
+| `origin/codex/release-flow-prod-run-report-audit-summary-98` | C | 1 | 사람 판단 대기 | 미착륙·비활성; ahead=96; 2026-07-10; feat: summarize release report audit events |
+| `origin/codex/release-flow-prod-run-report-checks-95` | C | 1 | 사람 판단 대기 | 미착륙·비활성; ahead=93; 2026-07-10; feat: include checks in release run report |
+| `origin/codex/release-flow-prod-run-report-context-97` | C | 1 | 사람 판단 대기 | 미착륙·비활성; ahead=95; 2026-07-10; feat: add release report target context |
+| `origin/codex/release-flow-prod-run-report-evidence-96` | C | 1 | 사람 판단 대기 | 미착륙·비활성; ahead=94; 2026-07-10; feat: add release report evidence details |
+| `origin/codex/release-flow-prod-run-report-export-94` | C | 1 | 사람 판단 대기 | 미착륙·비활성; ahead=92; 2026-07-10; feat: export release run report |
+| `origin/codex/release-flow-prod-run-scoped-audit-24` | C | 1 | 사람 판단 대기 | 미착륙·비활성; ahead=21; 2026-07-10; feat: scope release audit to selected run |
+| `origin/codex/release-flow-prod-runbook-gate-44` | C | 1 | 사람 판단 대기 | 미착륙·비활성; ahead=41; 2026-07-10; feat: require production release runbooks |
+| `origin/codex/release-flow-prod-smoke-annotations-118` | C | 1 | 사람 판단 대기 | 미착륙·비활성; ahead=116; 2026-07-10; feat: annotate failed release smoke checks |
+| `origin/codex/release-flow-prod-smoke-ci-bundle-119` | C | 1 | 사람 판단 대기 | 미착륙·비활성; ahead=117; 2026-07-10; feat: bundle release smoke ci artifacts |
+| `origin/codex/release-flow-prod-smoke-gh-summary-114` | C | 1 | 사람 판단 대기 | 미착륙·비활성; ahead=112; 2026-07-10; feat: append release smoke action summaries |
+| `origin/codex/release-flow-prod-smoke-github-output-117` | C | 1 | 사람 판단 대기 | 미착륙·비활성; ahead=115; 2026-07-10; feat: expose release smoke github outputs |
+| `origin/codex/release-flow-prod-smoke-junit-artifact-112` | C | 1 | 사람 판단 대기 | 미착륙·비활성; ahead=110; 2026-07-10; feat: write release smoke junit artifacts |
+| `origin/codex/release-flow-prod-smoke-markdown-artifact-113` | C | 1 | 사람 판단 대기 | 미착륙·비활성; ahead=111; 2026-07-10; feat: write release smoke markdown artifacts |
+| `origin/codex/release-flow-prod-smoke-redaction-116` | C | 1 | 사람 판단 대기 | 미착륙·비활성; ahead=114; 2026-07-10; feat: redact release smoke artifacts |
+| `origin/codex/release-flow-prod-smoke-report-artifact-111` | C | 1 | 사람 판단 대기 | 미착륙·비활성; ahead=109; 2026-07-10; feat: write release smoke report artifacts |
+| `origin/codex/release-flow-prod-smoke-safe-retry-115` | C | 1 | 사람 판단 대기 | 미착륙·비활성; ahead=113; 2026-07-10; feat: retry safe release smoke requests |
+| `origin/codex/release-flow-prod-smoke-workflow-120` | C | 1 | 사람 판단 대기 | 미착륙·비활성; ahead=118; 2026-07-10; feat: add release flow smoke workflow |
+| `origin/codex/release-flow-prod-stale-run-22` | C | 1 | 사람 판단 대기 | 미착륙·비활성; ahead=19; 2026-07-10; feat: flag stale release runs |
+| `origin/codex/release-flow-prod-status-summary-shortcuts-75` | C | 1 | 사람 판단 대기 | 미착륙·비활성; ahead=72; 2026-07-10; feat: add status summary shortcuts |
+| `origin/codex/release-flow-prod-summary-filter-shortcuts-73` | C | 1 | 사람 판단 대기 | 미착륙·비활성; ahead=70; 2026-07-10; feat: add release summary filter shortcuts |
+| `origin/codex/release-flow-prod-terminal-run-summary-77` | C | 1 | 사람 판단 대기 | 미착륙·비활성; ahead=75; 2026-07-10; feat: summarize terminal release runs |
+| `origin/codex/release-flow-prod-unhealthy-run-filter-72` | C | 1 | 사람 판단 대기 | 미착륙·비활성; ahead=69; 2026-07-10; feat: filter unhealthy release runs |
+| `origin/codex/release-flow-prod-validated-alert-gate-32` | C | 1 | 사람 판단 대기 | 미착륙·비활성; ahead=29; 2026-07-10; feat: require validated alert channels for live releases |
+| `origin/codex/release-flow-prod-verification-alert-56` | C | 1 | 사람 판단 대기 | 미착륙·비활성; ahead=53; 2026-07-10; feat: alert on release verification failure |
+| `origin/codex/release-flow-prod-verification-filter-60` | C | 1 | 사람 판단 대기 | 미착륙·비활성; ahead=57; 2026-07-10; feat: filter release verification failures |
+| `origin/codex/release-flow-prod-verification-gate-50` | C | 1 | 사람 판단 대기 | 미착륙·비활성; ahead=47; 2026-07-10; feat: require production verification evidence |
+| `origin/codex/release-flow-prod-verification-jobs-54` | C | 1 | 사람 판단 대기 | 미착륙·비활성; ahead=51; 2026-07-10; feat: snapshot release verification jobs |
+| `origin/codex/release-flow-prod-verification-pending-timeout-61` | C | 1 | 사람 판단 대기 | 미착륙·비활성; ahead=58; 2026-07-10; feat: detect release verification timeouts |
+| `origin/codex/release-flow-prod-verification-result-55` | C | 1 | 사람 판단 대기 | 미착륙·비활성; ahead=52; 2026-07-10; feat: project release verification results |
+| `origin/codex/release-flow-prod-verification-result-ui-57` | C | 1 | 사람 판단 대기 | 미착륙·비활성; ahead=54; 2026-07-10; feat: show verification results in release handoff |
+| `origin/codex/release-flow-prod-verification-summary-59` | C | 1 | 사람 판단 대기 | 미착륙·비활성; ahead=56; 2026-07-10; feat: summarize release verification failures |
+| `origin/codex/release-flow-prod-verification-timeout-alert-62` | C | 1 | 사람 판단 대기 | 미착륙·비활성; ahead=59; 2026-07-10; feat: escalate release verification timeouts |
+| `origin/codex/release-flow-prod-verification-timeout-smoke-70` | C | 1 | 사람 판단 대기 | 미착륙·비활성; ahead=67; 2026-07-10; feat: smoke release verification preflight |
+| `origin/codex/release-flow-prod-verification-timeout-status-64` | C | 1 | 사람 판단 대기 | 미착륙·비활성; ahead=61; 2026-07-10; feat: handle release verification timeout status |
+| `origin/codex/release-flow-production-deploy-gate-132` | A | 0 | 원격 삭제 완료 | origin/dev ancestor 증명; ahead=0; 2026-07-10; feat: add release flow production deploy gate |
+| `origin/codex/release-flow-production-ownership-guard-136` | A | 0 | 원격 삭제 완료 | origin/dev ancestor 증명; ahead=0; 2026-07-10; feat: require production ownership evidence |
+| `origin/codex/release-flow-production-placeholder-guard-135` | A | 0 | 원격 삭제 완료 | origin/dev ancestor 증명; ahead=0; 2026-07-10; feat: block production placeholder change tickets |
+| `origin/codex/release-flow-production-readiness-check-134` | A | 0 | 원격 삭제 완료 | origin/dev ancestor 증명; ahead=0; 2026-07-10; feat: add release flow production readiness check |
+| `origin/codex/release-flow-safe-pr-evidence-gate-141` | A | 0 | 원격 삭제 완료 | origin/dev ancestor 증명; ahead=0; 2026-07-10; feat: verify live safe pr evidence |
+| `origin/codex/release-flow-smoke-alert-preflight-126` | C | 1 | 사람 판단 대기 | 미착륙·비활성; ahead=124; 2026-07-10; feat: add optional release flow alert preflight |
+| `origin/codex/release-flow-smoke-artifact-retention-124` | C | 1 | 사람 판단 대기 | 미착륙·비활성; ahead=122; 2026-07-10; feat: configure release flow smoke artifact retention |
+| `origin/codex/release-flow-smoke-concurrency-123` | C | 1 | 사람 판단 대기 | 미착륙·비활성; ahead=121; 2026-07-10; feat: serialize release flow smoke gates |
+| `origin/codex/release-flow-smoke-environment-gate-122` | C | 1 | 사람 판단 대기 | 미착륙·비활성; ahead=120; 2026-07-10; feat: protect release flow smoke with github environment |
+| `origin/codex/release-flow-smoke-expanded-outputs-128` | C | 1 | 사람 판단 대기 | 미착륙·비활성; ahead=126; 2026-07-10; feat: expose release flow smoke workflow outputs |
+| `origin/codex/release-flow-smoke-identity-129` | C | 1 | 사람 판단 대기 | 미착륙·비활성; ahead=127; 2026-07-10; feat: identify release flow smoke runs and artifacts |
+| `origin/codex/release-flow-smoke-input-validation-125` | C | 1 | 사람 판단 대기 | 미착륙·비활성; ahead=123; 2026-07-10; feat: validate release flow smoke workflow inputs |
+| `origin/codex/release-flow-smoke-live-placeholder-guard-138` | A | 0 | 원격 삭제 완료 | origin/dev ancestor 증명; ahead=0; 2026-07-10; feat: block direct live smoke placeholders |
+| `origin/codex/release-flow-smoke-live-preflight-127` | C | 1 | 사람 판단 대기 | 미착륙·비활성; ahead=125; 2026-07-10; feat: add optional release flow live preflight |
+| `origin/codex/release-flow-smoke-request-timeout-130` | C | 1 | 사람 판단 대기 | 미착륙·비활성; ahead=128; 2026-07-10; feat: configure release flow smoke request timeout |
+| `origin/codex/release-flow-smoke-retry-policy-131` | C | 1 | 사람 판단 대기 | 미착륙·비활성; ahead=129; 2026-07-10; feat: configure release flow smoke retry policy |
+| `origin/codex/release-flow-smoke-reusable-workflow-121` | C | 1 | 사람 판단 대기 | 미착륙·비활성; ahead=119; 2026-07-10; feat: make release flow smoke workflow reusable |
+| `origin/codex/release-flow-worker-topology-143` | A | 0 | 원격 삭제 완료 | origin/dev ancestor 증명; ahead=0; 2026-07-10; feat: harden release flow production operations |
+| `origin/codex/team-release-flow-production-evidence-verifier` | A | 0 | 원격 삭제 완료 | origin/dev ancestor 증명; ahead=0; 2026-07-10; fix: pin production evidence to workflow run ids |
+| `origin/codex/testtttt` | A | 0 | 원격 삭제 완료 | origin/dev ancestor 증명; ahead=0; 2026-07-10; feat: emit gitops change context for RCA |
+| `origin/codex/ui-layer-lab-references` | C | 1 | 사람 판단 대기 | 미착륙·비활성; ahead=4; 2026-07-09; 문서: 디지털 트윈 데모 색인 연결 |
+| `origin/codex/yaml-editor` | C | 1 | 사람 판단 대기 | 미착륙·비활성; ahead=406; 2026-07-04; feat: add yaml editor frontend |
+| `origin/dev` | 보호 | 0 | 보존 | 명시 보호 브랜치; ahead=0; 2026-07-13; docs: R 후속 정리 / baseline 공집합 / P 재개 |
+| `origin/feat/jeonwoohyun-hydromel/command-worker` | C | 1 | 사람 판단 대기 | 미착륙·비활성; ahead=229; 2026-06-30; Merge remote-tracking branch 'origin/dev' into HEAD |
+| `origin/feat/jeonwoohyun-hydromel/gitops-sync-worker` | C | 1 | 사람 판단 대기 | 미착륙·비활성; ahead=228; 2026-06-30; Merge remote-tracking branch 'origin/dev' into HEAD |
+| `origin/feat/minmings111/agent-command-k8s` | C | 1 | 사람 판단 대기 | 미착륙·비활성; ahead=459; 2026-07-04; refactor: realtime 계약 상수 / Gateway 필드 / drift 방지 |
+| `origin/feat/minmings111/expand-provider-evidence-dev` | A | 0 | 원격 삭제 완료 | origin/dev ancestor 증명; ahead=0; 2026-07-11; fix(target-agent): bound loki and tempo evidence items |
+| `origin/feat/minmings111/expand-provider-evidence` | C | 1 | 사람 판단 대기 | 미착륙·비활성; ahead=531; 2026-07-08; test: update telemetry registry metadata source |
+| `origin/feat/minmings111/node-collector` | C | 1 | 사람 판단 대기 | 미착륙·비활성; ahead=228; 2026-06-30; Merge remote-tracking branch 'origin/dev' into HEAD |
+| `origin/feat/minmings111/remove-provider-raw-payload` | C | 1 | 사람 판단 대기 | 미착륙·비활성; ahead=525; 2026-07-06; fix: remove raw telemetry payloads |
+| `origin/feat/ummfieg/audit-timeline-service` | C | 1 | 사람 판단 대기 | 미착륙·비활성; ahead=228; 2026-06-30; Merge remote-tracking branch 'origin/dev' into HEAD |
+| `origin/feat/ummfieg/dashboard-projection-service` | C | 1 | 사람 판단 대기 | 미착륙·비활성; ahead=228; 2026-06-30; Merge remote-tracking branch 'origin/dev' into HEAD |
+| `origin/feat/ummfieg/rca-evidence-schema-finalization` | A | 0 | 원격 삭제 완료 | origin/dev ancestor 증명; ahead=0; 2026-07-11; RCA evidence window Bruno 요청 추가 |
+| `origin/feat/ummfieg/rca-rollout-dependency-rules` | A | 0 | 원격 삭제 완료 | origin/dev ancestor 증명; ahead=0; 2026-07-12; feat: RCA 스케줄링 룰 보강 |
+| `origin/feat/ummfieg/rca-workers` | C | 1 | 사람 판단 대기 | 미착륙·비활성; ahead=323; 2026-07-03; refactor: agent pipeline / 죽은 코드 / export 정리 |
+| `origin/feat/ummfieg/rca-worker` | C | 1 | 사람 판단 대기 | 미착륙·비활성; ahead=228; 2026-06-30; Merge remote-tracking branch 'origin/dev' into HEAD |
+| `origin/main` | 보호 | 1 | 보존 | 명시 보호 브랜치; ahead=1324; 2026-07-11; Merge pull request #585 from Jungle-303-04/codex/cloudflare-mtls-dispatch |
+| `origin/practice/jcbbbbbb-event-system-gateway-auth` | C | 1 | 사람 판단 대기 | 미착륙·비활성; ahead=164; 2026-06-30; feat: gateway_auth_event 흐름 실습 |
+| `origin/practice/jeonwoohyun-event-test` | C | 1 | 사람 판단 대기 | 미착륙·비활성; ahead=226; 2026-06-30; feat: RCA 빈 이벤트 / 정책 흐름 / 장애 플래그 |
+| `origin/practice/ummfieg-event-system-rca-safe-pr` | C | 1 | 사람 판단 대기 | 미착륙·비활성; ahead=211; 2026-06-30; Merge branch 'main' into practice/ummfieg-event-system-rca-safe-pr |
+| `origin/woonyong-kr/frontend` | C | 1 | 사람 판단 대기 | 미착륙·비활성; ahead=636; 2026-07-07; refactor: 데이터 접근을 api 계층으로 격리 (mock 어댑터) |
+| `origin/woonyong/ui-layer-lab` | 보호 | 1 | 보존 | 명시 보호 브랜치; ahead=220; 2026-07-13; test: 메트릭 명령 재전송 금지 / 상태 추적 계약 |
+| `woonyong-kr/frontend` | C | 1 | 사람 판단 대기 | 미착륙·비활성; ahead=609; 2026-07-07; 문서: 외부 콘솔 인스턴스 런북 정합성 보강 |
+| `woonyong/ui-layer-lab` | 보호 | 1 | 보존 | 명시 보호 브랜치; ahead=220; 2026-07-13; test: 메트릭 명령 재전송 금지 / 상태 추적 계약 |
+
+- [A]는 이 표가 선행 커밋된 뒤에만 삭제한다. 모든 [A]는 `origin/dev` ancestor exit 0이다.
+- [B] 활성 lane과 보호 브랜치는 처리하지 않는다.
+- [C]는 미착륙 상태이므로 전부 사람 판단 대기로 보존한다.
+
+[2026-07-13 07:34 KST] [백엔드] 브랜치 회수 완료 — [A] 원격 21개 삭제 / 로컬 대상 0개 / 관련 worktree 0개 / `git worktree prune` 완료
+
+- 삭제 후 `git ls-remote --heads origin` 재검증: 대상 21개 잔존 0개.
+- [B] 활성 lane 5개·보호 6개는 유지했다.
+- [C] 166개는 사람 판단 대기로 유지했다.
+
+[2026-07-13 07:40 KST] [벤치] oom 2개 + 7da4d6ba7
+
+[2026-07-13 07:40 KST] [벤치] crashloop 2개 + 7ab0d447b
+
+[2026-07-13 07:41 KST] [벤치] imagepull 2개 + 281c636b4
+
+[2026-07-13 07:42 KST] [벤치] probe 2개 + cc0b91ce7
+
+[2026-07-13 07:43 KST] [벤치] service-selector 2개 + dd601b3f8
+
+[2026-07-13 07:46 KST] [벤치] BLOCKED — `bash scripts/test.sh`: 1 failed, 1645 passed,
+3 skipped. `tests/test_docs_index.py::test_all_markdown_docs_are_linked_from_docs_root`가 신규
+`docs/spec/remediation-bundle-v1alpha1.md`의 `docs/README.md` 링크를 요구함. 해결 파일
+`docs/README.md`는 [D-013] 소유 경로 밖이므로 수정 금지. 자체 채점은 10개 전부 PASS,
+ruff/import-linter PASS. 질문: B-트랙에 `docs/README.md` 링크 1줄 수정 권한을 추가할지,
+백엔드 문서 소유자가 링크를 착륙시킬지 결정 요청.
+
+## 2026-07-13 07:46 KST — C0 완료 증거
+
+- branch: `codex/f-audit-timeline`
+- HEAD: `308a6edc1d4f07198aa3b64390af94a690895b11`
+- commits: `308a6edc1 feat: 이벤트 테넌트 귀속 / outbox 보존 / 감사 인덱스`
+- stat: 27 files changed, 799 insertions(+), 56 deletions(-); 신규 migration·workspace context·테넌시 테스트 포함.
+- 신규 테스트: workspace 봉투·outbox/relay·audit 적재·인증 경계·worker 자식·GitHub 권위 binding·구버전 positional ABI·migration up/down/autocommit 경계 `21 passed`.
+- 전체 게이트: Ruff lint/format PASS, import-linter 2 kept/0 broken, compileall PASS, pytest `1664 passed, 3 skipped`, manifest PASS(management 68, target 20).
+- migration: Alembic 단일 head `20260713_0655`; nullable 컬럼·재시도 가능 DDL·CONCURRENTLY autocommit 경계·downgrade 순서 검증.
+- 독립 감사: 계약·보안 최종 P0 0건/P1 0건.
+- frozen path·gateway 계약 변경 0건: `src/domains/rca/**`, `src/services/ai/**`, `src/packages/runtime/worker.py`, `src/packages/contracts/gateway/**`.
+
+[2026-07-13 07:46 KST] [백엔드] C in_progress — C0 완료 후 workspace-scoped audit timeline 계약 lock 확보
+
+[2026-07-13 07:46 KST] [백엔드] BLOCKED P — 사유: 실제 런타임 GitOps 권위 port 주입에는 frozen `src/services/ai/dispatch-worker/app.py` handler의 `EventContext` 배선이 필수이나 [D-012] 예외는 `src/services/ai/agent/recovery/**`만 허용 / 재현: 무인자 `RecoveryDispatcher()` 운영 경로는 DB authority를 받을 수 없어 모든 실제 patch가 `unsupported` / 질문: `dispatch-worker/app.py`의 handler `(evt, ctx)`·`RecoveryDispatcher(authority=ctx.db)` 최소 배선 예외 승인 여부 / 재개 조건: 해당 파일 3개 논리 변경 승인
+
+## 2026-07-13 08:02 KST — C 완료 증거
+
+- branch: `codex/f-audit-timeline`
+- HEAD: `d6ee319e5`
+- commits: `8f5f314c7 fix: webhook 상관관계 / poller 계약 / 이벤트 연속성`, `d6ee319e5 feat: 감사 타임라인 / 클러스터 권한 / keyset 커서`.
+- stat: C route 12 files changed, 800 insertions(+), 2 deletions(-); 신규 route·Bruno·migration·테스트 포함.
+- 인가: session workspace → RCA report/evidence 권위 cluster 단일성 → `RCA_READ`; 미존재·NULL·충돌·거부는 404. 실제 timeline SELECT가 ownership을 동일 snapshot에서 재검증.
+- 데이터 경계: raw JSONB 미선택, 알려진 subject의 허용 scalar 21개만 SQL에서 최대 500자 projection; 기본 50/최대 200 keyset 페이지.
+- 신규/관련 테스트: 139 passed; 전체 pytest `1675 passed, 3 skipped`.
+- 전체 게이트: Ruff lint/format PASS, import-linter 2 kept/0 broken, compileall PASS, manifest PASS(management 68, target 20), Alembic 단일 head `20260713_0750`.
+- 독립 감사: 계약·보안 최종 P0 0건/P1 0건.
+- frozen path 변경 0건: `src/domains/rca/**`, `src/services/ai/**`, `src/packages/runtime/worker.py`.
+
+[2026-07-13 08:02 KST] [백엔드] D in_progress — 신규 `src/domains/rca_changes/` 도메인으로 frozen RCA와 분리; projection·조회 계약 lock 확보
+
+## GO-REQUEST [B] — KubeHealBench v0.1 lane 통합 승인 요청
+
+- 대상: `codex/bench-scenarios` (산출물 HEAD `221207fe0`; 이 블록은 별도 docs 증거 커밋).
+- 완료 범위: [D-013]/[D-014] — 실제 cause/recovery 카탈로그 기반 정답 시나리오 10개
+  (oom/crashloop/imagepull/probe/service-selector 각 2개), 자기완결 정적 채점기, 공개 지표
+  6개 정의, RemediationBundle v1alpha1 공개 규격, docs 색인 링크.
+- 커밋: `7da4d6ba7`, `7ab0d447b`, `281c636b4`, `cc0b91ce7`, `dd601b3f8`,
+  `8d5442985`, `0ccddaf3f`, `221207fe0`.
+- 자체 채점: `python3 benchmark/score.py` → `RESULT PASS (10 scenarios;
+  crashloop=2, imagepull=2, oom=2, probe=2, service-selector=2)`; live catalog/recovery 원본
+  SHA-256 일치, schema/candidate/named evidence/recovery action/forbidden blast-radius 검증.
+- 최종 전체 게이트: `bash scripts/test.sh` → Ruff lint PASS / format
+  `470 files already formatted` / import-linter `2 kept, 0 broken` / pytest
+  `1646 passed, 3 skipped`.
+- 범위 증거: `src/**` 변경 0건. [D-014] 예외 `docs/README.md`는 자기 산출물 링크 1줄
+  추가만 존재하며 기존 줄 수정·삭제 0건. 그 외 변경은 `benchmark/**`,
+  `docs/spec/remediation-bundle-v1alpha1.md`, 요구된 `docs/auto/night-log.md` 기록뿐.
+- 사람 검증 명령(복사 가능):
+
+  ```bash
+  git -C /private/tmp/sw-ai-bench-scenarios status --short
+  git -C /private/tmp/sw-ai-bench-scenarios diff --name-only f086be51c...codex/bench-scenarios
+  git -C /private/tmp/sw-ai-bench-scenarios diff --name-only f086be51c...codex/bench-scenarios -- 'src/**'
+  python3 /private/tmp/sw-ai-bench-scenarios/benchmark/score.py
+  bash /private/tmp/sw-ai-bench-scenarios/scripts/test.sh
+  ```
+
+- 예상 결과: 첫 명령 0줄, 변경은 B-트랙 소유 경로·night-log·[D-014] 색인 1줄뿐,
+  `src/**` 명령 0줄, scorer 10개 PASS, 전체 gate PASS.
+- 사람 GO 후 통합: dev worktree를 clean 상태로 만든 뒤 `--no-ff` merge와 `origin dev` push.
+  이 세션은 merge/push하지 않고 대기한다.
+- 실패 시 롤백: push 전 충돌/검증 실패는 merge를 완료하거나 push하지 말고 사람 판단;
+  push 후에는 이력 보존형 `git revert -m 1 <merge_commit>` 후 전체 gate 재검증.
+
+[2026-07-13 08:11 KST] [백엔드] B merge 완결·push — 0d0f92cca, 976282faa
+ancestor exit 0, 사람 위임 GO [B]
+
 [2026-07-13 08:13 KST] [프론트] API queue batch 앵커 동기화 — `56c689e61`(Applications/GitOps approval/workload action), `c875efb1f`(RCA/evidence/recovery), `004f23d52`(usage/preset/telemetry) 원격 ancestor 확인. targeted API contract 10 files / 70 tests PASS, docs/Bruno 17 tests PASS, manifest-check PASS. untracked feature draft가 남아 있어 full UI gate는 이번 heartbeat 완료 증거로 쓰지 않음.
+
 [2026-07-13 08:17 KST] [프론트] API queue batch full gate 재검증 PASS — Metrics 화면 draft 임시 격리 후 TypeScript·ESLint, 97 files / 710 tests, design guard 286, shadcn 482, production build 통과. 18개 batch anchor의 전체 gate 근거 확정.
+
 [2026-07-13 08:28 KST] [프론트] 테마 첫 페인트 검증 PASS — 저장 테마와 시스템 테마 반대 조건에서 light/dark 각 5회 새로고침, 최초 5프레임의 클래스·colorScheme·불투명 배경 일치, 플래시 0.
+
+[2026-07-13 08:37 KST] [OSS] 공개 준비 초안 9개 해소 — `7c1966a6e` / Apache-2.0
+공식 원문 byte 일치, 내부 실명·조직·이메일·도메인·AWS 식별자·비밀 값·클러스터 식별자
+자체 스캔 PASS(허용 URL은 Apache 공식 원문 2개뿐) / 전체 게이트: Ruff lint PASS,
+format `470 files already formatted`, import-linter `2 kept, 0 broken`, pytest
+`1646 passed, 3 skipped`.
+
+## GO-REQUEST [OSS] — 공개 위생 드래프트 lane 통합 승인 요청
+
+- 대상: `codex/oss-hygiene` (산출물 HEAD `7c1966a6e`; 이 블록은 별도 docs 증거 커밋).
+- 완료 범위: [D-015] — `docs/oss/**` 신규 초안 9파일과 `docs/README.md` 자기 산출물
+  링크 9줄. 저장소 공개·프로젝트명·상표·Apache-2.0 채택·거버넌스·maintainer 지정은
+  모두 사람 결정으로 명시했고 실제 공개·정책 채택은 수행하지 않음.
+- 산출물: 영문 포지셔닝/3장면 데모 README, Apache-2.0 `LICENSE.draft`, 시나리오 1개
+  단위 CONTRIBUTING, SECURITY, CODE_OF_CONDUCT, GOVERNANCE, MAINTAINERS, CHANGELOG,
+  사람용 publication checklist.
+- 위생 증거: Apache 공식 `LICENSE-2.0.txt`와 `LICENSE.draft` byte 일치. `docs/oss/**`에서
+  한글 실명, 이메일, IPv4, AWS key/account/ARN, private-key marker, password/secret/token
+  할당값, UUID, 알려진 내부명·내부 도메인 후보 0건. URL 2개는 라이선스 본문의
+  `apache.org` 공식 URL만 존재.
+- 최종 게이트: `bash scripts/test.sh` → Ruff lint PASS / format
+  `470 files already formatted` / import-linter `2 kept, 0 broken` / pytest
+  `1646 passed, 3 skipped`.
+- 범위 증거: `src/**` 및 타 트랙 경로 변경 0건. 변경은 `docs/oss/**`, 자기 링크만
+  추가한 `docs/README.md`, 요구된 `docs/auto/night-log.md` 기록뿐.
+- 사람 검증 명령(복사 가능):
+
+  ```bash
+  git -C /private/tmp/sw-ai-oss-hygiene status --short
+  git -C /private/tmp/sw-ai-oss-hygiene diff --name-only origin/dev...codex/oss-hygiene
+  git -C /private/tmp/sw-ai-oss-hygiene diff --name-only origin/dev...codex/oss-hygiene -- 'src/**'
+  diff -q <(curl -fsSL https://www.apache.org/licenses/LICENSE-2.0.txt) /private/tmp/sw-ai-oss-hygiene/docs/oss/LICENSE.draft
+  bash /private/tmp/sw-ai-oss-hygiene/scripts/test.sh
+  ```
+
+- 예상 결과: 첫 명령 0줄, 변경은 위 허용 경로뿐, `src/**` 명령 0줄, license diff 0줄,
+  전체 gate PASS.
+- 사람 GO 전에는 merge/push·공개 저장소 생성·라이선스 채택을 수행하지 않고 대기한다.
+
+[2026-07-13 09:07 KST] [백엔드] OSS merge 완결·push — 2acd5ccbd, ac2bb5234
+ancestor exit 0, 사람 위임 GO [OSS]
+
+[2026-07-13 09:07 KST] [백엔드] [D-016]/BQ-012 우선 계획 — P(BQ-009/010)와
+파일 비중첩 병렬 착수; (a)+(b) 조합으로 LLM 제안은 catalog cause ID hypothesis에 한정하고
+결정론적 catalog signal 1개 이상 검증 전 `rca.completed`를 차단하며, source-name-only
+조작 회귀 테스트를 선행한 뒤 양쪽 전체 게이트로 합류.
+
+## 2026-07-13 09:43 KST — D 완료 증거
+
+- branch: `codex/f-audit-timeline`
+- HEAD: `24998dfafd910c6429096b4160e82e667354b4c4`
+- commits: `744c12f34 feat: 배포 변경 투영 / 인시던트 조회 / PR 참조`, `24998dfaf test: 마이그레이션 head / 회귀 정합 / 전체 게이트`.
+- stat: 기능 커밋 21 files changed, 2,000 insertions(+), 2 deletions(-); 회귀 정합 1 file changed, 1 insertion(+), 1 deletion(-).
+- 의미 경계: `WorkflowRunCompletedBody` 중 권위 run·diff/apply step·활성 binding·command 성공이 모두 일치한 실제 적용만 투영; 실패·거절·no-op 제외.
+- 인가·시간 경계: session workspace → incident workload 단일성 → `RCA_READ`; 거부·모호성은 404. `audit_log.event_created_at`의 immutable `incident.detected` event-time 이후 변경은 제외.
+- PR 경계: workspace/repository/binding/workflow/commit/manifest exact-key LEFT JOIN으로 PR 선행·후행·동시 도착 결과를 동일하게 유지; 허용 GitHub HTTPS origin/repository path만 노출.
+- 신규/관련 테스트: `tests/test_rca_changes.py` + migration `25 passed`; 전체 게이트 Ruff lint/format PASS, import-linter 2 kept/0 broken, compileall PASS, pytest `1700 passed, 3 skipped`.
+- migration·manifest: Alembic 단일 head `20260713_0820`; concurrent incident index 선행 후 transactional table/column DDL로 재시도 안전; manifest PASS(management 69, target 20).
+- 독립 보안 감사: 최종 P0 0건/P1 0건.
+- frozen path 변경 0건: `src/domains/rca/**`, `src/services/ai/**`, `src/packages/runtime/worker.py`.
+- origin/dev merge·push·앵커 0건; H 사람 게이트 전 `done-pending-merge`.
+
 [2026-07-13 09:44 KST] [프론트-D] APIQ-019 in_progress — AI 대화 4함수 strict envelope·open JsonMap·AbortSignal·possibly-sent POST 단일 호출 계약 claim. 코드 커밋과 완료 앵커 전 화면 소비 0 유지.
+
+[2026-07-13 09:46 KST] [백엔드] D-017~019 기준점 영속화 — `4ac003c97`,
+docs-only 2파일, BQ-009 `requested` + BQ-012~017 등록, origin/dev push 확인.
+
 [2026-07-13 09:47 KST] [프론트] A2 우선 전환 — APIQ-019 코드는 미커밋 보존하고 claim을 requested로 반환. 최신 origin/dev 충돌 표와 GO-REQUEST 갱신 전까지 D단계·화면 소비 HOLD.
+
+[2026-07-13 09:53 KST] [백엔드] BQ-012 완료 — RED `c882010de`, GREEN/origin
+`ea5b3ed20`; (a)+(b) catalog hypothesis 계약으로 source-name-only 조작은
+`signal:oom_evidence` 누락·`rca.analysis_blocked`, 실제 signal만 completed, catalog 밖 ID
+무발행. 관련 56 passed / 전체 Ruff·format·import-linter PASS, pytest
+`1647 passed, 3 skipped` / worker·agent·공개 설명 문서 착륙 — DoD 4조건 충족.
+
+[2026-07-13 09:54 KST] [백엔드] D-020~021 조율 분리 — commit 전
+`git diff --name-only`은 `docs/auto/night-directives.md`, `docs/auto/night-log.md` 2파일.
+`docs/backend-f-workqueue.md`의 BQ-009 `requested`와 BQ-012~017 행은 `01a3a2e97`
+정본에 이미 존재해 중복 편집하지 않았고, 공유 dev worktree의 벤치·기타 변경은 혼입 0건.
+
+## 2026-07-13 09:56 KST — H1 착륙 증거
+
+- lane: `codex/f-audit-timeline`, rebase HEAD `bfaa4bba7`
+- canonical merge: `17ac2b7a32413579f2570218a99bf50f34d162c3` (`--no-ff`)
+- 시험 merge: `git merge-tree --write-tree origin/dev codex/f-audit-timeline` exit 0
+- 전체 게이트: Ruff lint PASS, format `484 files already formatted`, import-linter
+  `2 kept, 0 broken`, pytest `1701 passed, 3 skipped`
+- ancestor: lane HEAD `bfaa4bba7`, C `66cbe8dec`, D `81969f23e` 모두 origin/dev 기준 exit 0
+- 해시 정합: 지시의 `7d74d765c`는 최신 rebase 전 동등 C 커밋으로 ancestor exit 1;
+  현행 동등 C 커밋 `66cbe8dec`를 canonical 증거로 갱신
+- 경계: frozen `src/domains/rca/**`, `src/services/ai/**`, `src/packages/runtime/worker.py`
+  변경 0건; Bruno 14/15로 타임라인·최근 변경 route 재현 가능
+
+## 2026-07-13 09:58 KST — H2 착륙 증거
+
+- lane: `codex/f-inprocess-event-bus`, rebase HEAD `6ec2553b7`
+- canonical merge: `5f2393667ece3607e75674fcf8c9be9d9c1773b9` (`--no-ff`)
+- rebase: dev 대비 61커밋 낙후 상태에서 src/docs 충돌 0건, 재배치 후 `0/5`
+- 시험 merge: `git merge-tree --write-tree origin/dev codex/f-inprocess-event-bus` exit 0
+- 전체 게이트: Ruff lint PASS, format `486 files already formatted`, import-linter
+  `2 kept, 0 broken`, pytest `1708 passed, 3 skipped`
+- ancestor: lane HEAD `6ec2553b7`, 기능 commit `b6fac1dd7` 모두 origin/dev 기준 exit 0
+- 회귀 경계: NATS 기본값 유지, 명시 주입 시에만 in-memory bus 사용; gateway 계약,
+  `src/domains/rca/**`, `src/services/ai/**`, `src/packages/runtime/worker.py` 변경 0건
+
+[2026-07-13 09:59 KST] [백엔드] H2 lane 회수·PROMOTE 대기 — worktree 제거 성공,
+로컬 branch `git branch -d`는 stale upstream `origin/codex/f-inprocess-event-bus` 기준
+미병합 판정으로 거부되어 `-D` 없이 [D-021] 2차 정리 단계로 보류했다. 원격 lab은
+`ef9706aca`, dev는 `40d1ed67b`, 앞뒤 `533/236`이며 FE-A2 완료·lab full gate 증거가
+아직 없어 GO [PROMOTE]는 실행하지 않는다.
+
+[2026-07-13 10:00 KST] [백엔드] BQ-013 완료 — RED `c89ad5a96`, GREEN
+`50df7fe10`, canonical origin/dev `27cb1d95f`; `RECONCILER_MODE=builtin` 기본은 기존
+apply를 유지하고 `argocd`는 observer-only로 apply 0건(`StubApplier.applied == []`,
+observe 1건)을 증명. 재현: `uv run python -m pytest -q
+tests/test_target_policy_control.py -k argocd`; 최신 origin 병합 상태 전체 Ruff·format·
+import-linter PASS(2 kept, 0 broken), pytest `1711 passed, 3 skipped`; 서비스 계약 문서와
+큐 상태 착륙으로 [D-019] DoD 4조건 충족.
 
 ## GO-EXECUTION [FE-A2] — H1·H2 착륙 후 최종 충돌 계획
 

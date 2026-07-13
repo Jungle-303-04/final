@@ -1,5 +1,5 @@
 ---
-source_commit: 262db708
+source_commit: d4b003525
 status: synced
 ---
 
@@ -434,7 +434,7 @@ api-gateway([services/gateway/api-gateway](../services/gateway-api-gateway.md))�
 - `RepositoryProbeRequest` — `repo_ref: str`(`min_length=1, max_length=240`).
 - `RepositoryManifestValidationRequest` — `repo_ref: str`(`min_length=1, max_length=240`), `branch: str = DEFAULT_REPO_BRANCH`(`min_length=1, max_length=200`), `manifest_path: str = DEFAULT_MANIFEST_PATH`(`min_length=1, max_length=500`), `source_type: str = ""`(`max_length=40`).
 - `DeploymentBindingUpsertRequest` — `cluster_id: str = Target.DEFAULT_CLUSTER_ID`, `namespace: str = Sandbox.NAMESPACE`, `environment: str = DEFAULT_ENVIRONMENT`, `manifest_path: str = DEFAULT_MANIFEST_PATH`, `resource_class: str = "application"`, `deploy_policy: dict[str, Any] = {}`, `access_policy: dict[str, Any] = {}`.
-- `CatalogInstallRequest` — `cluster_id: str = Target.DEFAULT_CLUSTER_ID`, `namespace: str = Sandbox.NAMESPACE`, `application_name: str`(`min_length=1, max_length=120`), `version: str | None`(`max_length=80`), `values: dict[str, Any] = {}`.
+- `CatalogInstallRequest` — `cluster_id: str = Target.DEFAULT_CLUSTER_ID`, `namespace: str = Sandbox.NAMESPACE`, `application_name: str`(`min_length=1, max_length=120`), `release_name: str | None`(미지정 시 application name, `min_length=1, max_length=120`), `version: str | None`(`max_length=80`), `values: dict[str, Any] = {}`.
 - `ApprovalDecisionRequest` — `reason: str | None = None`.
 - `CommandStartRequest` — `cluster_id: str = Target.DEFAULT_CLUSTER_ID`, `workspace_id: str = DEFAULT_WORKSPACE_ID`, `agent_id: str`, `lease_id: str`.
 - `CommandHeartbeatRequest` — `CommandStartRequest` 상속(필드 동일).
@@ -535,7 +535,7 @@ def merge_provider_policy(base: EvidenceProviderPolicy, incoming: EvidenceProvid
 | `ApplicationResponse` / `ApplicationListResponse` | `application: JsonMap` / `applications: list[JsonMap]` |
 | `DeploymentBindingResponse` / `DeploymentBindingListResponse` | `deployment: JsonMap` / `deployments: list[JsonMap]` |
 | `WorkflowRunListResponse` | `runs: list[JsonMap]` |
-| `CatalogItemListResponse` / `CatalogItemResponse` / `CatalogInstallRunResponse` | `items: list[JsonMap]` / `item: JsonMap` / `install: JsonMap` |
+| `CatalogItemListResponse` / `CatalogItemResponse` / `CatalogInstallAcceptedResponse` | `items: list[JsonMap]` / `item: JsonMap` / `accepted: bool`, `command_id/correlation_id/status: str` |
 | `ProviderCatalogResponse` | `providers: dict[str, list[JsonMap]]` |
 | `ProviderValidationResponse` | `valid: bool`, `errors: list[str]`, `warnings: list[str]`, `selected: dict[str, JsonMap]` |
 

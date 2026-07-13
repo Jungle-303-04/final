@@ -1,0 +1,46 @@
+meta {
+  name: 07 사용자 Recovery Action 선택
+  type: http
+  seq: 7
+  tags: [rca, recovery, approval, write]
+}
+
+post {
+  url: {{base_url}}rca/recovery-plans/by-correlation/{{rca_correlation_id}}/actions/select
+  body: json
+}
+
+headers {
+  content-type: application/json
+}
+
+script:pre-request {
+  const enabled = String(
+    bru.getEnvVar("rca_test_verification") || bru.getVar("rca_test_verification") || "false"
+  ).trim().toLowerCase() === "true";
+  if (!enabled) {
+    bru.runner.skipRequest();
+  } else {
+    const expected = `SELECT:${bru.getVar("rca_correlation_id")}`;
+    const actual = String(bru.getVar("rca_select_confirmation") || "");
+    if (actual !== expected) {
+      throw new Error(`실제 PR/실행 경로를 열려면 rca_select_confirmation 값을 ${expected} 로 설정하세요.`);
+    }
+  }
+}
+
+body:json {
+  {
+    "expected_plan_id": "{{rca_plan_id}}",
+    "action_id": "{{rca_action_id}}",
+    "reason": "Bruno에서 RCA 테스트 결과를 확인하고 사용자가 선택함"
+  }
+}
+
+tests {
+  test("선택은 정확히 한 번 승인 이벤트로 접수된다", function () {
+    expect(res.status).to.equal(200);
+    expect(res.getBody().accepted).to.equal(true);
+    expect(res.getBody().correlation_id).to.equal(bru.getVar("rca_correlation_id"));
+  });
+}

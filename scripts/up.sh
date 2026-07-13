@@ -24,9 +24,14 @@ POSTGRES_USER="${POSTGRES_USER:-service}"
 POSTGRES_PASSWORD="${POSTGRES_PASSWORD:-}"
 POSTGRES_DB="${POSTGRES_DB:-service}"
 DATABASE_URL="${DATABASE_URL:-}"
+DATABASE_STARTUP_MODE="${DATABASE_STARTUP_MODE:-verify}"
 NATS_URL="${NATS_URL:-nats://nats:4222}"
 REDIS_URL="${REDIS_URL:-redis://redis:6379/0}"
 GITHUB_WEBHOOK_SECRET="${GITHUB_WEBHOOK_SECRET:-}"
+RCA_TEST_RUNS_ENABLED="${RCA_TEST_RUNS_ENABLED:-1}"
+RCA_TEST_RUNS_TOKEN="${RCA_TEST_RUNS_TOKEN:-}"
+TEST_FIXTURE_PURGE_ENABLED="${TEST_FIXTURE_PURGE_ENABLED:-1}"
+API_ROOT_PATH="${API_ROOT_PATH:-/api}"
 GITHUB_REPO="${GITHUB_REPO:-$(default_github_repo)}"
 GITHUB_BRANCH="${GITHUB_BRANCH:-dev}"
 MANIFEST_PATH="${MANIFEST_PATH:-src/samples/smoke/deploy.yaml}"
@@ -96,6 +101,7 @@ APP_WORKER_DEPLOYMENTS=(
   safe-pr-worker
   scm-worker
   workflow-controller
+  release-flow-worker
   alert-worker
   mail-worker
   command-worker
@@ -117,6 +123,7 @@ APP_WORKER_DEPLOYMENTS=(
   rollout-worker
   approval-worker
   audit-worker
+  change-correlation-worker
   dashboard-worker
   realtime-gateway
   dead-letter-monitor
@@ -129,8 +136,10 @@ SMOKE_WORKER_DEPLOYMENTS=(
   diff-analyze-worker
   safe-pr-worker
   workflow-controller
+  release-flow-worker
   outbox-relay
   audit-worker
+  change-correlation-worker
   dashboard-worker
   dead-letter-monitor
 )
@@ -143,6 +152,7 @@ RCA_WORKER_DEPLOYMENTS=(
   safe-pr-worker
   scm-worker
   workflow-controller
+  release-flow-worker
   alert-worker
   command-worker
   command-janitor
@@ -159,6 +169,7 @@ RCA_WORKER_DEPLOYMENTS=(
   dispatch-worker
   backlog-worker
   audit-worker
+  change-correlation-worker
   dashboard-worker
   dead-letter-monitor
 )
@@ -326,6 +337,12 @@ fi
 if [ -z "${GITHUB_WEBHOOK_SECRET}" ]; then
   GITHUB_WEBHOOK_SECRET="$(openssl rand -hex 32)"
 fi
+if [ -z "${RCA_TEST_RUNS_TOKEN}" ]; then
+  RCA_TEST_RUNS_TOKEN="$(existing_secret_value management-runtime-secret RCA_TEST_RUNS_TOKEN)"
+fi
+if [ -z "${RCA_TEST_RUNS_TOKEN}" ]; then
+  RCA_TEST_RUNS_TOKEN="$(openssl rand -hex 32)"
+fi
 if [ -z "${GITHUB_TOKEN}" ]; then
   GITHUB_TOKEN="$(existing_secret_value management-runtime-secret GITHUB_TOKEN)"
 fi
@@ -410,6 +427,11 @@ kubectl --context "kind-${MGMT_CLUSTER}" -n management create secret generic pgb
 kubectl --context "kind-${MGMT_CLUSTER}" -n management create configmap management-runtime-config \
   --from-literal=NATS_URL="${NATS_URL}" \
   --from-literal=REDIS_URL="${REDIS_URL}" \
+  --from-literal=DATABASE_STARTUP_MODE="${DATABASE_STARTUP_MODE}" \
+  --from-literal=RCA_TEST_RUNS_ENABLED="${RCA_TEST_RUNS_ENABLED}" \
+  --from-literal=TEST_FIXTURE_PURGE_ENABLED="${TEST_FIXTURE_PURGE_ENABLED}" \
+  --from-literal=API_ROOT_PATH="${API_ROOT_PATH}" \
+  --from-literal=MANAGEMENT_CLUSTER_ID="${MGMT_CLUSTER}" \
   --from-literal=MANAGEMENT_BASE_URL="http://api-gateway:8000" \
   --from-literal=GITHUB_REPO="${GITHUB_REPO}" \
   --from-literal=GITHUB_BRANCH="${GITHUB_BRANCH}" \
@@ -456,6 +478,7 @@ kubectl --context "kind-${MGMT_CLUSTER}" -n management create configmap manageme
 SECRET_ARGS=(
   --from-literal=DATABASE_URL="${DATABASE_URL}"
   --from-literal=GITHUB_WEBHOOK_SECRET="${GITHUB_WEBHOOK_SECRET}"
+  --from-literal=RCA_TEST_RUNS_TOKEN="${RCA_TEST_RUNS_TOKEN}"
 )
 if valid_github_token "${GITHUB_TOKEN}"; then
   SECRET_ARGS+=(--from-literal=GITHUB_TOKEN="${GITHUB_TOKEN}")
@@ -537,7 +560,7 @@ kubectl --context "kind-${MGMT_CLUSTER}" apply -k "${MANAGEMENT_INFRA_OVERLAY}"
 for old_deploy in \
   oauth-auth-service git-event-processor manifest-renderer desired-state-sync \
   command-orchestrator command-dispatcher agent-connection-gateway \
-  evidence-builder ai-rca-service safe-pr-service rca-fallback-worker; do
+  evidence-builder ai-rca-service safe-pr-service rca-fallback-worker minio; do
   kubectl --context "kind-${MGMT_CLUSTER}" -n management delete "deploy/${old_deploy}" --ignore-not-found
 done
 kubectl_retry --context "kind-${MGMT_CLUSTER}" -n management rollout status statefulset/postgresql --timeout=600s
@@ -649,8 +672,14 @@ kubectl --context "kind-${MGMT_CLUSTER}" -n management patch configmap managemen
   --type merge -p '{"data":{"COOKIE_SECURE":"0","MAIL_DELIVERY_MODE":"log"}}'
 
 kubectl --context "kind-${MGMT_CLUSTER}" apply -k "${MANAGEMENT_APP_OVERLAY}"
+# 기본 매니페스트는 외부 비노출 ClusterIP다. kind에서만 target agent 실습용
+# NodePort를 명시적으로 열어 운영 배포와 개발 노출 경계를 분리한다.
+kubectl --context "kind-${MGMT_CLUSTER}" -n management patch svc api-gateway --type merge \
+  -p '{"spec":{"type":"NodePort","ports":[{"name":"http","port":8000,"targetPort":"http","nodePort":30080}]}}'
+kubectl --context "kind-${MGMT_CLUSTER}" -n management patch svc realtime-gateway --type merge \
+  -p '{"spec":{"type":"NodePort","ports":[{"name":"http","port":8000,"targetPort":"http","nodePort":30090}]}}'
 kubectl_retry --context "kind-${MGMT_CLUSTER}" -n management rollout status deploy/redis --timeout=120s
-kubectl_retry --context "kind-${MGMT_CLUSTER}" -n management rollout status deploy/minio --timeout=120s
+kubectl_retry --context "kind-${MGMT_CLUSTER}" -n management rollout status statefulset/minio --timeout=120s
 kubectl_retry --context "kind-${MGMT_CLUSTER}" -n management get deploy/github-poll-worker >/dev/null
 wait_management_pod_ready api-gateway 300s
 
@@ -675,6 +704,7 @@ BASE_URL="${BASE_URL:-http://localhost:${GATEWAY_PORT}}" \
 MANAGEMENT_BASE_URL="${MANAGEMENT_BASE_URL}" \
 TARGET_CONTEXT="kind-${TARGET_CLUSTER}" \
 TARGET_CLUSTER_ID="${TARGET_RUNTIME_CLUSTER_ID}" \
+TARGET_ENVIRONMENT="test" \
 EVIDENCE_INTERVAL_SECONDS="${EVIDENCE_INTERVAL_SECONDS}" \
 IMAGE_NAME="${IMAGE_NAME}" \
 INSTALL_SAMPLE_WORKLOAD="${INSTALL_SAMPLE_WORKLOAD:-false}" \

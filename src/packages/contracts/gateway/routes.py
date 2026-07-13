@@ -54,6 +54,31 @@ REPOSITORY_DISCOVERY_VALIDATE_PATH = "/repositories/discovery/validate"
 REPOS_VALIDATE_PATH = "/repos/validate"
 REPOS_BRANCHES_PATH = "/repos/branches"
 REPOS_MANIFESTS_PATH = "/repos/manifests"
+DIAGNOSTICS_PATH = "/diagnostics"
+RELEASE_PLANS_PATH = "/release-plans"
+RELEASE_READINESS_PATH = "/release-readiness"
+RELEASE_MANIFEST_RENDER_PATH = "/release-plans/render-manifest"
+RELEASE_MANIFEST_SAFE_PR_PATH = "/release-plans/render-manifest/safe-pr"
+RELEASE_PLAN_DISPATCH_PATH = "/release-plans/dispatch"
+RELEASE_PLAN_PREVIEW_PATH = "/release-plans/preview"
+RELEASE_PLAN_START_PATH = "/release-plans/start"
+RELEASE_PLAN_ARCHIVE_PATH = "/release-plans/{plan_id}/archive"
+RELEASE_PLAN_PATH = "/release-plans/{plan_id}"
+RELEASE_RUNS_PATH = "/release-runs"
+RELEASE_RUN_PATH = "/release-runs/{run_id}"
+RELEASE_RUN_SUMMARY_PATH = "/release-runs/summary"
+RELEASE_RUN_HANDOFF_PATH = "/release-runs/{run_id}/handoff"
+RELEASE_RUN_REPORT_PATH = "/release-runs/{run_id}/report"
+RELEASE_RUN_REPORT_EXPORT_PATH = "/release-runs/{run_id}/report/export"
+RELEASE_RUN_ADVANCE_PATH = "/release-runs/{run_id}/advance"
+RELEASE_RUN_CANCEL_PATH = "/release-runs/{run_id}/cancel"
+RELEASE_RUN_PAUSE_PATH = "/release-runs/{run_id}/pause"
+RELEASE_RUN_RESUME_PATH = "/release-runs/{run_id}/resume"
+RELEASE_RUN_RETRY_PATH = "/release-runs/{run_id}/retry"
+RELEASE_RUN_ROLLBACK_PATH = "/release-runs/{run_id}/rollback"
+RELEASE_RUN_NOTIFY_PATH = "/release-runs/{run_id}/notify"
+RELEASE_AUDIT_PATH = "/release-audit"
+RELEASE_AUDIT_EXPORT_PATH = "/release-audit/export"
 CATALOG_ITEMS_PATH = "/catalog/items"
 CATALOG_ITEM_PATH = "/catalog/items/{item_id}"
 CATALOG_ITEM_INSTALLS_PATH = "/catalog/items/{item_id}/installs"
@@ -106,11 +131,23 @@ PROVIDERS_VALIDATE_PATH = "/providers/validate"
 TARGETS_PREFLIGHT_PATH = "/targets/preflight"
 DASHBOARD_RCA_TIMELINE_PATH = "/dashboard/rca/timeline"
 DASHBOARD_RCA_INCIDENT_PATH = "/dashboard/rca/incidents/{incident_id}"
+AUDIT_TIMELINE_PATH = "/audit/timeline"
 # 범용 조회 API — 세션 워크스페이스 범위의 evidence/RCA report 목록(read-only)
 EVIDENCE_QUERY_PATH = "/evidence"
+EVIDENCE_WINDOWS_PATH = "/evidence/windows"
+EVIDENCE_WINDOW_PATH = "/evidence/windows/{evidence_key}"
 RCA_REPORTS_PATH = "/rca-reports"
+RCA_RULES_PATH = "/rca/rules"
 RCA_RULES_VALIDATE_PATH = "/rca/rules/validate"
+RCA_TEST_SCENARIOS_PATH = "/rca/test-scenarios"
+RCA_TEST_RUNS_PATH = "/rca/test-runs"
+RCA_TEST_RUN_PATH = "/rca/test-runs/{run_id}"
+RCA_BUNDLE_PATH = "/rca/bundles/{correlation_id}"
+RCA_RECENT_CHANGES_PATH = "/rca/incidents/{incident_id}/recent-changes"
 RCA_RECOVERY_PLAN_BY_CORRELATION_PATH = "/rca/recovery-plans/by-correlation/{correlation_id}"
+RCA_RECOVERY_ACTION_SELECT_BY_CORRELATION_PATH = (
+    "/rca/recovery-plans/by-correlation/{correlation_id}/actions/select"
+)
 RCA_RECOVERY_ACTION_SELECT_PATH = "/rca/recovery-plans/{plan_id}/actions/{action_id}/select"
 
 
@@ -128,7 +165,3 @@ def agent_command_heartbeat_path(command_id: str) -> str:
 
 def agent_evidence_job_result_path(job_id: str) -> str:
     return AGENT_EVIDENCE_JOB_RESULT_PATH.format(job_id=job_id)
-
-
-def dashboard_rca_incident_path(incident_id: str) -> str:
-    return DASHBOARD_RCA_INCIDENT_PATH.format(incident_id=incident_id)

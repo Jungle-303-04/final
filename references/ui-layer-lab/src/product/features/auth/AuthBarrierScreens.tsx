@@ -181,6 +181,7 @@ function SessionFailureScreen({
     return (
       <AuthPublicStateFrame>
         <ProductStateScreen
+          headingLevel={1}
           issue={{ code: "forbidden", safeDetail }}
           kind="forbidden"
           placement="content"
@@ -193,6 +194,7 @@ function SessionFailureScreen({
     return (
       <AuthPublicStateFrame>
         <ProductStateScreen
+          headingLevel={1}
           issue={{ code: "network", safeDetail }}
           kind="offline"
           placement="content"
@@ -204,6 +206,7 @@ function SessionFailureScreen({
   return (
     <AuthPublicStateFrame>
       <ProductStateScreen
+        headingLevel={1}
         issue={{
           code: issue.code === "invalid-response" ? "invalid-response" : "server",
           safeDetail,

@@ -365,7 +365,7 @@ PYTHONPATH=src .venv/bin/python -m pytest tests/test_target_registration.py -q
 
 왜 필요한가:
 관리 plane 자체의 AWS 운영 상태를 추적해야 한다.
-AWS CD와 smoke가 성공했는지, target cluster bootstrap이 어떤 상태인지 알아야 한다.
+수동 AWS 배포와 smoke가 성공했는지, target cluster bootstrap이 어떤 상태인지 알아야 한다.
 
 담당:
 민정이 주 담당이다.
@@ -375,18 +375,18 @@ AWS CD와 smoke가 성공했는지, target cluster bootstrap이 어떤 상태인
 
 ```text
 docs/aws-testing-runbook.md
-.github/workflows/aws-cd.yml
+scripts/aws-up.sh
 scripts/status.sh
 scripts/smoke.sh
 ```
 
 구현 순서:
 
-1. management cluster context가 repository variable `MGMT_CLUSTER` 값과 일치하는지 확인한다.
-2. target cluster context가 repository variable `TARGET_CLUSTER_1` 또는 `TARGET_CLUSTER_2` 값과 일치하는지 확인한다.
-3. smoke가 Docker 없이 AWS CD workflow로 실행되는지 확인한다.
+1. management cluster context가 환경변수 `MGMT_CLUSTER` 값과 일치하는지 확인한다.
+2. target cluster context가 `TARGET_CLUSTER_1` 또는 `TARGET_CLUSTER_2` 값과 일치하는지 확인한다.
+3. smoke가 Docker 없이 운영자 환경에서 직접 실행되는지 확인한다.
 4. health, ready, target agent, evidence, command를 smoke 기준에 넣는다.
-5. 실패 로그는 GitHub Actions artifact나 audit event로 남긴다.
+5. 실패 로그는 운영 로그나 audit event로 남긴다.
 
 넘겨야 하는 값:
 
@@ -400,7 +400,7 @@ status
 완료 확인:
 
 ```bash
-make aws-smoke
+make smoke
 ```
 
 ## GitOps Repository
@@ -685,7 +685,7 @@ PYTHONPATH=src .venv/bin/python -m pytest tests/test_dashboard_projection.py tes
 
 ```text
 scripts/smoke.sh
-.github/workflows/aws-cd.yml
+scripts/aws-up.sh
 src/services/realtime/realtime-gateway
 ```
 
@@ -710,7 +710,7 @@ duration_ms
 완료 확인:
 
 ```bash
-make aws-smoke
+make smoke
 PYTHONPATH=src .venv/bin/python -m pytest tests/test_realtime_gateway.py -q
 ```
 
@@ -1295,7 +1295,7 @@ API operation은 아래 규칙으로 옮긴다.
 4. event body는 typed contract로 테스트한다.
 5. read model은 event 원문을 그대로 노출하지 않고 화면용 DTO로 변환한다.
 6. Safe PR은 `scm-worker`와 `GithubScmProvider`를 통해서만 만든다.
-7. AWS smoke는 Docker 없이 GitHub Actions `AWS CD` workflow로 실행한다.
-8. `make check`, `make manifest-check`, `make aws-smoke`가 통과한다.
+7. AWS smoke는 Docker 없이 운영자 환경에서 직접 실행한다.
+8. `make check`, `make manifest-check`, `make smoke`가 통과한다.
 9. Bruno collection에서 역할별 API를 사람이 직접 눌러 expected response를 확인할 수 있다.
 10. 팀원이 이 문서의 담당자별 첫 PR 순서를 따라가면 route, event, worker, provider, dashboard, Bruno, test까지 끊기지 않고 구현할 수 있다.

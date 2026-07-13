@@ -82,6 +82,15 @@ frontend에서 숨기는 것은 UX일 뿐이다.
 7. 테스트를 찾는다.
 8. Bruno 요청을 찾는다.
 
+## 7단계. RCA rule catalog를 추가할 때 본다
+
+RCA rule을 추가할 때는 [RCA Rule Catalog Guide](09-rca-rule-catalog-guide.md)를 연다.
+
+스프레드시트의 증상/후보 자료는 설계 기준이고, 실제 plan-worker가 읽는 실행 계약은
+`src/services/ai/agent/causes/catalog/*.yaml`이다.
+새 rule은 `symptoms`, `required_sources`, `candidates`, `expected_evidence`, `checks`, `signals`
+구조를 맞춰 추가한다.
+
 ## 역할 경계
 
 민정은 command, target agent, evidence provider, evidence job을 맡는다.
@@ -200,8 +209,8 @@ PYTHONPATH=src .venv/bin/python -m pytest \
 서비스를 실제로 띄워 확인할 때는 AWS EKS smoke를 본다.
 
 ```bash
-make aws-smoke
+make smoke
 ```
 
-이 명령은 GitHub Actions의 `AWS CD` workflow를 `run_smoke=true`로 실행한다.
+이 명령은 현재 환경변수로 배포된 서비스와 내부 workflow를 직접 검증한다.
 통과 기준과 AWS 변수는 [AWS 테스트 실행 기준](../aws-testing-runbook.md)을 본다.

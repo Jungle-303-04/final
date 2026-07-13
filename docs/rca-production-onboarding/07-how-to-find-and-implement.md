@@ -11,21 +11,21 @@
 ```bash
 bash scripts/test.sh
 make manifest-check
-make aws-smoke
+make smoke
 ```
 
 현재 AWS smoke 기본값:
 
 | 값 | 기준 |
 | --- | --- |
-| workflow | `.github/workflows/aws-cd.yml` |
-| 실행 input | `run_smoke=true` |
-| management cluster | repository variable `MGMT_CLUSTER` |
-| target cluster | repository variables `TARGET_CLUSTER_1`, `TARGET_CLUSTER_2` |
-| region | repository variable `AWS_REGION` |
+| 배포 스크립트 | `scripts/aws-up.sh` |
+| 검증 스크립트 | `scripts/smoke.sh` |
+| management cluster | 환경변수 `MGMT_CLUSTER` |
+| target cluster | 환경변수 `TARGET_CLUSTER_1`, `TARGET_CLUSTER_2` |
+| region | 환경변수 `AWS_REGION` |
 | smoke 확인 범위 | `git.webhook.received -> git.changed -> manifest.rendered -> desired.diff.detected -> diff.analyzed` |
 
-`make aws-smoke`는 GitHub CLI로 AWS CD를 dispatch한다. GitHub 화면에서는 `Integration Smoke` workflow를 수동 실행해도 같은 경로를 탄다.
+`make smoke`는 현재 환경변수로 배포된 서비스와 내부 workflow를 직접 검증한다.
 세부 값은 [AWS 테스트 실행 기준](../aws-testing-runbook.md)에 모아 둔다.
 
 ## 코드를 찾는 기본 순서
@@ -274,5 +274,5 @@ PYTHONPATH=src .venv/bin/python -m pytest \
 - 외부 write는 provider/adapter 경계에서 처리한다.
 - event payload에 token, kubeconfig, secret 원문을 넣지 않는다.
 - role별 테스트가 통과한다.
-- `make check`와 `make aws-smoke`가 통과한다.
+- `make check`와 `make smoke`가 통과한다.
 - 문서에 쓴 테스트 이름이 실제로 존재한다.

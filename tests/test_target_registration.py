@@ -11,8 +11,13 @@ from types import SimpleNamespace
 import pytest
 import yaml
 from fastapi import HTTPException
+from fastapi.routing import APIRoute
 
-from domains.identity.dependencies import ClusterAgentIdentity, hash_agent_token
+from domains.identity.dependencies import (
+    ClusterAgentIdentity,
+    hash_agent_token,
+    require_admin_session,
+)
 from domains.target.router import (
     KUBE_CONTEXT_NOT_ALLOWED,
     MANAGEMENT_BASE_URL_NOT_CONFIGURED,
@@ -23,6 +28,7 @@ from domains.target.router import (
     install_manifest_by_token,
     list_clusters,
     register_target,
+    router,
     schedule_evidence_jobs,
     target_install_manifest,
     target_registration_preflight,
@@ -31,6 +37,7 @@ from domains.target.router import (
     update_cluster_scheduling_profiles,
     validate_target_bootstrap_config,
     validate_target_install_providers,
+    visible_cluster_agent_statuses,
 )
 from packages.contracts.gateway.requests import (
     AgentPolicy,
@@ -151,20 +158,68 @@ class StubManagementPolicyDb(StubPolicyDb):
 
 
 class StubUnregisterDb:
-    def __init__(self, *, cluster_role: str = "target") -> None:
+    def __init__(
+        self,
+        *,
+        cluster_role: str = "target",
+        environment: str = "production",
+    ) -> None:
         self.cluster_role = cluster_role
+        self.environment = environment
         self.unregistered: list[tuple[str, str]] = []
+        self.purged: list[tuple[str, str]] = []
 
     def get_cluster_registration(self, workspace_id: str, cluster_id: str) -> dict[str, object]:
         return {
             "workspace_id": workspace_id,
             "cluster_id": cluster_id,
+            "environment": self.environment,
             "settings": {"cluster_role": self.cluster_role},
         }
 
     def unregister_target_cluster(self, workspace_id: str, cluster_id: str) -> bool:
         self.unregistered.append((workspace_id, cluster_id))
         return True
+
+    def purge_test_target_cluster_registration(
+        self,
+        workspace_id: str,
+        cluster_id: str,
+    ) -> bool:
+        self.purged.append((workspace_id, cluster_id))
+        return True
+
+
+class TransactionalStubPurgeDb(StubUnregisterDb):
+    """테스트 fixture purge가 저장소 UoW 안에서 실행되는지 기록함."""
+
+    def __init__(
+        self,
+        *,
+        cluster_role: str = "target",
+        environment: str = "test",
+    ) -> None:
+        super().__init__(cluster_role=cluster_role, environment=environment)
+        self.uow_active = False
+        self.uow_count = 0
+        self.purge_uow_states: list[bool] = []
+
+    @contextmanager
+    def unit_of_work(self):
+        self.uow_count += 1
+        self.uow_active = True
+        try:
+            yield self
+        finally:
+            self.uow_active = False
+
+    def purge_test_target_cluster_registration(
+        self,
+        workspace_id: str,
+        cluster_id: str,
+    ) -> bool:
+        self.purge_uow_states.append(self.uow_active)
+        return super().purge_test_target_cluster_registration(workspace_id, cluster_id)
 
 
 class StubClusterDb:
@@ -366,10 +421,122 @@ def test_target_install_manifest_sets_agent_and_telemetry_config() -> None:
         '"http://opentelemetry-collector.target.svc:4318/v1/traces"'
     ) in manifest
     assert 'NODE_COLLECTOR_ENABLED: "true"' in manifest
+    assert 'REALTIME_GATEWAY_URL: "ws://management.local:30090"' in manifest
     assert 'NODE_COLLECTOR_IMAGE: "ghcr.io/acme/kubeheal-agent:test"' in manifest
     assert 'AGENT_TOKEN: "agent-secret"' in manifest
-    assert 'resources: ["services", "configmaps"]' in manifest
+    assert 'apiGroups: ["metrics.k8s.io"]' in manifest
+    assert 'resources: ["pods", "nodes"]' in manifest
+    assert 'resources: ["services"]' in manifest
+    assert 'resources: ["configmaps"]' in manifest
     assert 'verbs: ["get", "list", "create", "update", "patch"]' in manifest
+    assert 'verbs: ["get", "list", "create", "update", "patch", "delete"]' in manifest
+
+
+def test_target_rca_cleanup_delete_permission_is_limited_to_owned_manifest_kinds() -> None:
+    manifest = target_install_manifest(target_request(), "agent-secret")
+    docs = [doc for doc in yaml.safe_load_all(manifest) if doc]
+    sandbox_role = next(
+        doc
+        for doc in docs
+        if doc.get("kind") == "Role"
+        and doc.get("metadata", {}).get("name") == "cluster-agent-sandbox-write"
+    )
+    delete_rules = [rule for rule in sandbox_role["rules"] if "delete" in rule.get("verbs", [])]
+
+    assert {
+        (tuple(rule.get("apiGroups", [])), tuple(rule.get("resources", [])))
+        for rule in delete_rules
+    } == {
+        (("",), ("services",)),
+        (("apps",), ("deployments",)),
+    }
+
+
+def test_static_target_manifest_keeps_the_same_minimal_rca_cleanup_permissions() -> None:
+    manifest_path = Path(__file__).resolve().parents[1] / "deploy/target/target.yaml"
+    docs = [doc for doc in yaml.safe_load_all(manifest_path.read_text()) if doc]
+    sandbox_role = next(
+        doc
+        for doc in docs
+        if doc.get("kind") == "Role"
+        and doc.get("metadata", {}).get("name") == "cluster-agent-sandbox-write"
+    )
+    delete_rules = [rule for rule in sandbox_role["rules"] if "delete" in rule.get("verbs", [])]
+
+    assert {
+        (tuple(rule.get("apiGroups", [])), tuple(rule.get("resources", [])))
+        for rule in delete_rules
+    } == {
+        (("",), ("services",)),
+        (("apps",), ("deployments",)),
+    }
+
+
+@pytest.mark.parametrize(
+    "manifest",
+    [
+        target_install_manifest(target_request(), "agent-secret"),
+        (Path(__file__).resolve().parents[1] / "deploy/target/target.yaml").read_text(
+            encoding="utf-8"
+        ),
+    ],
+)
+def test_target_catalog_install_rbac_is_namespaced_to_rendered_helm_resources(
+    manifest: str,
+) -> None:
+    docs = [doc for doc in yaml.safe_load_all(manifest) if doc]
+    role = next(
+        doc
+        for doc in docs
+        if doc.get("kind") == "Role"
+        and doc.get("metadata", {}).get("name") == "cluster-agent-catalog-install"
+    )
+
+    assert role["metadata"]["namespace"] == "sandbox"
+    assert {(tuple(rule["apiGroups"]), tuple(rule["resources"])) for rule in role["rules"]} == {
+        (("",), ("configmaps", "secrets", "serviceaccounts", "services")),
+        (("apps",), ("statefulsets",)),
+        (("networking.k8s.io",), ("networkpolicies",)),
+        (("policy",), ("poddisruptionbudgets",)),
+    }
+    for rule in role["rules"]:
+        assert rule["verbs"] == ["get", "list", "watch", "create", "update", "patch", "delete"]
+
+
+@pytest.mark.parametrize("registration_environment", ["test", "aws-test"])
+def test_target_install_manifest_enables_rca_test_actions_only_for_test_registrations(
+    monkeypatch: pytest.MonkeyPatch,
+    registration_environment: str,
+) -> None:
+    monkeypatch.setenv("RCA_TEST_RUNS_ENABLED", "1")
+    request = target_request().model_copy(update={"environment": registration_environment})
+
+    manifest = target_install_manifest(request, "agent-secret")
+
+    assert "APP_ENV:" not in manifest
+    assert 'RCA_TEST_RUNS_ENABLED: "1"' in manifest
+
+
+@pytest.mark.parametrize(
+    ("enabled", "registration_environment"),
+    [
+        ("0", "test"),
+        ("1", "sandbox"),
+        ("1", "production"),
+    ],
+)
+def test_target_install_manifest_does_not_enable_rca_test_actions_without_both_guards(
+    monkeypatch: pytest.MonkeyPatch,
+    enabled: str,
+    registration_environment: str,
+) -> None:
+    monkeypatch.setenv("RCA_TEST_RUNS_ENABLED", enabled)
+    request = target_request().model_copy(update={"environment": registration_environment})
+
+    manifest = target_install_manifest(request, "agent-secret")
+
+    assert "APP_ENV:" not in manifest
+    assert "RCA_TEST_RUNS_ENABLED:" not in manifest
 
 
 def test_management_install_manifest_is_read_only() -> None:
@@ -381,13 +548,18 @@ def test_management_install_manifest_is_read_only() -> None:
     assert 'CLUSTER_ROLE: "management"' in manifest
     assert 'BOOTSTRAP_MODE: "management"' in manifest
     assert 'NODE_COLLECTOR_ENABLED: "false"' in manifest
+    assert (
+        'REALTIME_GATEWAY_URL: "ws://realtime-gateway.management.svc.cluster.local:8000"'
+        in manifest
+    )
     assert "cluster-agent-sandbox-write" not in manifest
+    assert "cluster-agent-catalog-install" not in manifest
     assert "cluster-agent-target-manage" not in manifest
     assert 'verbs: ["get", "update", "patch"]' not in manifest
     assert 'verbs: ["get", "list", "create", "update", "patch"]' not in manifest
     assert 'verbs: ["get", "list", "watch"]' in manifest
-    assert "gitops-control-critical" in manifest
-    assert "gitops-fast-lane" not in manifest
+    assert 'apiGroups: ["metrics.k8s.io"]' in manifest
+    assert 'verbs: ["get", "list"]' in manifest
 
 
 def test_static_management_agent_manifest_is_read_only() -> None:
@@ -401,6 +573,33 @@ def test_static_management_agent_manifest_is_read_only() -> None:
         verbs = {verb for rule in doc.get("rules", []) for verb in rule.get("verbs", [])}
         assert verbs.isdisjoint(forbidden_verbs)
 
+    read_role = next(doc for doc in docs if doc.get("kind") == "ClusterRole")
+    metrics_rule = next(
+        rule for rule in read_role["rules"] if "metrics.k8s.io" in rule.get("apiGroups", [])
+    )
+    apps_rule = next(rule for rule in read_role["rules"] if "apps" in rule.get("apiGroups", []))
+    discovery_rule = next(
+        rule for rule in read_role["rules"] if "discovery.k8s.io" in rule.get("apiGroups", [])
+    )
+    deployment = next(doc for doc in docs if doc.get("kind") == "Deployment")
+    env = {
+        item["name"]: item
+        for item in deployment["spec"]["template"]["spec"]["containers"][0]["env"]
+    }
+    assert env["TARGET_CLUSTER_ID"]["valueFrom"]["configMapKeyRef"] == {
+        "name": "management-runtime-config",
+        "key": "MANAGEMENT_CLUSTER_ID",
+    }
+    assert set(apps_rule["resources"]) == {
+        "deployments",
+        "replicasets",
+        "daemonsets",
+        "statefulsets",
+    }
+    assert discovery_rule["resources"] == ["endpointslices"]
+    assert metrics_rule["resources"] == ["pods", "nodes"]
+    assert metrics_rule["verbs"] == ["get", "list"]
+
     deployment = next(doc for doc in docs if doc.get("kind") == "Deployment")
     env = {
         item["name"]: item.get("value")
@@ -411,6 +610,9 @@ def test_static_management_agent_manifest_is_read_only() -> None:
         for item in deployment["spec"]["template"]["spec"]["containers"][0]["env"]
     }
     assert env["CLUSTER_ROLE"] == "management"
+    assert env["REALTIME_GATEWAY_URL"] == (
+        "ws://realtime-gateway.management.svc.cluster.local:8000"
+    )
     assert env["NODE_COLLECTOR_ENABLED"] == "false"
     assert env["PROMETHEUS_BASE_URL"] == ""
     assert env["LOKI_BASE_URL"] == ""
@@ -435,7 +637,7 @@ def test_target_install_manifest_can_include_explicit_sample_workload() -> None:
 
     assert 'name: "demo-api"' in manifest
     assert 'image: "ghcr.io/acme/demo-api:test"' in manifest
-    assert "priorityClassName: gitops-fast-lane" in manifest
+    assert "priorityClassName: gitops-demo-fast" in manifest
     assert "terminationGracePeriodSeconds: 1" in manifest
 
 
@@ -458,7 +660,6 @@ def test_target_registration_records_cluster_and_returns_install_manifest() -> N
     assert response.install_manifest
     assert "kind: PriorityClass" in response.install_manifest
     assert "priorityClassName: gitops-control-critical" in response.install_manifest
-    assert "gitops-fast-lane" in response.install_manifest
     assert db.registered[0]["cluster_id"] == "target-cluster-01"
     assert db.registered[0]["user_id"] == "local-user"
     assert db.registered[0]["workspace_id"] == "default"
@@ -498,7 +699,7 @@ def test_management_registration_defaults_to_kubernetes_evidence_only() -> None:
     events = StubEvents()
     request = target_request().model_copy(
         update={
-            "cluster_id": "management-cluster",
+            "cluster_id": "kubernetes-ops",
             "cluster_role": "management",
             "environment": "management",
         }
@@ -525,6 +726,23 @@ def test_management_registration_defaults_to_kubernetes_evidence_only() -> None:
     assert agent_state["spec"]["prometheus_base_url"] == ""
     assert agent_state["spec"]["loki_base_url"] == ""
     assert agent_state["spec"]["tempo_base_url"] == ""
+    assert db.policy is not None
+    providers = db.policy["evidence"]["providers"]
+    assert providers["kubernetes"]["enabled"] is True
+    assert providers["kubernetes"]["queries"] == [
+        {
+            "name": "management_namespace_snapshot",
+            "description": (
+                "Kubernetes pods, events, nodes, workloads, services, and endpoint slices "
+                "in the management namespace."
+            ),
+            "query": "management",
+        }
+    ]
+    assert all(
+        provider_key == "kubernetes" or provider["enabled"] is False
+        for provider_key, provider in providers.items()
+    )
     assert agent_state["spec"]["otel_traces_endpoint"] == ""
     policy = AgentPolicy.model_validate(db.policy)
     enabled = {
@@ -745,6 +963,35 @@ def test_cluster_connection_status_uses_last_seen_window(monkeypatch) -> None:
         )
         == "stale"
     )
+
+
+def test_visible_cluster_agent_statuses_keeps_only_online_agents(monkeypatch) -> None:
+    monkeypatch.setenv("AGENT_ONLINE_WINDOW_SECONDS", "120")
+    now = datetime.now(UTC)
+    agents = [
+        {"agent_id": "current", "last_seen_at": now.isoformat()},
+        {
+            "agent_id": "rolling",
+            "last_seen_at": (now - timedelta(seconds=30)).isoformat(),
+        },
+        {"agent_id": "old", "last_seen_at": (now - timedelta(hours=1)).isoformat()},
+    ]
+
+    assert [agent["agent_id"] for agent in visible_cluster_agent_statuses(agents)] == [
+        "current",
+        "rolling",
+    ]
+
+
+def test_visible_cluster_agent_statuses_keeps_latest_when_all_are_stale(monkeypatch) -> None:
+    monkeypatch.setenv("AGENT_ONLINE_WINDOW_SECONDS", "120")
+    now = datetime.now(UTC)
+    agents = [
+        {"agent_id": "latest", "last_seen_at": (now - timedelta(minutes=5)).isoformat()},
+        {"agent_id": "old", "last_seen_at": (now - timedelta(hours=1)).isoformat()},
+    ]
+
+    assert visible_cluster_agent_statuses(agents) == agents[:1]
 
 
 def test_cluster_list_uses_access_filter_and_agent_status() -> None:
@@ -1040,9 +1287,9 @@ def test_cluster_scheduling_profiles_update_is_selector_based() -> None:
                     namespaces=["sandbox", "payments"],
                     labels={"app.kubernetes.io/part-of": "checkout"},
                 ),
-                priority_class_name="gitops-fast-lane",
+                priority_class_name="gitops-demo-fast",
                 placement_mode="preferred",
-                preferred_node_labels={"workload-tier": "fast-lane"},
+                preferred_node_labels={"workload-tier": "demo-fast"},
                 pre_pull_images=["ghcr.io/example/orders-api:v1"],
                 termination_grace_period_seconds=1,
             )
@@ -1063,7 +1310,7 @@ def test_cluster_scheduling_profiles_update_is_selector_based() -> None:
     assert response.scheduling["profiles"][0]["profile_id"] == "fast-lane"
     assert stored.generation == 4
     assert stored.scheduling.profiles[0].selector.namespaces == ["sandbox", "payments"]
-    assert stored.scheduling.profiles[0].preferred_node_labels == {"workload-tier": "fast-lane"}
+    assert stored.scheduling.profiles[0].preferred_node_labels == {"workload-tier": "demo-fast"}
 
 
 def test_cluster_scheduling_profile_requires_selector() -> None:
@@ -1210,6 +1457,20 @@ def test_management_policy_update_allows_read_only_evidence_change() -> None:
     assert merged.evidence.providers["kubernetes"].interval_seconds == 90
 
 
+def test_cluster_unregister_route_requires_admin_session() -> None:
+    route = next(
+        route
+        for route in router.routes
+        if isinstance(route, APIRoute)
+        and route.path == "/clusters/{cluster_id}"
+        and "DELETE" in route.methods
+    )
+
+    assert any(
+        dependency.call is require_admin_session for dependency in route.dependant.dependencies
+    )
+
+
 def test_management_cluster_unregister_is_rejected() -> None:
     db = StubUnregisterDb(cluster_role="management")
 
@@ -1225,6 +1486,27 @@ def test_management_cluster_unregister_is_rejected() -> None:
     assert exc.value.status_code == 400
     assert exc.value.detail["code"] == "management_readonly"
     assert db.unregistered == []
+    assert db.purged == []
+
+
+def test_management_cluster_purge_is_rejected_even_in_test_environment(monkeypatch) -> None:
+    monkeypatch.setenv("TEST_FIXTURE_PURGE_ENABLED", "1")
+    db = TransactionalStubPurgeDb(cluster_role="management")
+
+    with pytest.raises(HTTPException) as exc:
+        asyncio.run(
+            unregister_cluster(
+                "cluster-1",
+                purge=True,
+                current=SimpleNamespace(workspace_id="default"),
+                db=db,
+            )
+        )
+
+    assert exc.value.status_code == 400
+    assert exc.value.detail["code"] == "management_readonly"
+    assert db.unregistered == []
+    assert db.purged == []
 
 
 def test_target_cluster_unregister_updates_registration() -> None:
@@ -1239,6 +1521,76 @@ def test_target_cluster_unregister_updates_registration() -> None:
     )
 
     assert db.unregistered == [("default", "cluster-1")]
+    assert db.purged == []
+
+
+def test_explicit_purge_false_keeps_soft_delete_compatibility(monkeypatch) -> None:
+    monkeypatch.setenv("TEST_FIXTURE_PURGE_ENABLED", "1")
+    db = TransactionalStubPurgeDb(environment="test")
+
+    asyncio.run(
+        unregister_cluster(
+            "cluster-1",
+            purge=False,
+            current=SimpleNamespace(workspace_id="default"),
+            db=db,
+        )
+    )
+
+    assert db.unregistered == [("default", "cluster-1")]
+    assert db.purged == []
+    assert db.uow_count == 0
+
+
+@pytest.mark.parametrize(
+    ("purge_enabled", "registration_environment"),
+    [
+        ("0", "test"),
+        ("1", "production"),
+        ("1", "TEST"),
+    ],
+)
+def test_purge_rejects_non_test_environment_boundary(
+    monkeypatch,
+    purge_enabled: str,
+    registration_environment: str,
+) -> None:
+    monkeypatch.setenv("TEST_FIXTURE_PURGE_ENABLED", purge_enabled)
+    db = TransactionalStubPurgeDb(environment=registration_environment)
+
+    with pytest.raises(HTTPException) as exc:
+        asyncio.run(
+            unregister_cluster(
+                "cluster-1",
+                purge=True,
+                current=SimpleNamespace(workspace_id="default"),
+                db=db,
+            )
+        )
+
+    assert exc.value.status_code == 403
+    assert exc.value.detail["code"] == "test_fixture_purge_forbidden"
+    assert db.unregistered == []
+    assert db.purged == []
+
+
+def test_test_fixture_purge_is_explicit_transactional_and_prefix_independent(monkeypatch) -> None:
+    monkeypatch.setenv("TEST_FIXTURE_PURGE_ENABLED", "1")
+    db = TransactionalStubPurgeDb(environment="test")
+
+    asyncio.run(
+        unregister_cluster(
+            "customer-prod-0042",
+            purge=True,
+            current=SimpleNamespace(workspace_id="default"),
+            db=db,
+        )
+    )
+
+    assert db.unregistered == []
+    assert db.purged == [("default", "customer-prod-0042")]
+    assert db.uow_count == 1
+    assert db.purge_uow_states == [True]
 
 
 class TransactionalStubDb(StubDb):
@@ -1342,6 +1694,7 @@ def test_install_manifest_by_token_serves_same_manifest_as_registration() -> Non
     response = asyncio.run(install_manifest_by_token(token, db=db))
 
     assert response.media_type == "text/yaml"
+    assert response.headers.get("cache-control") == "no-store"
     body = response.body.decode()
     assert 'AGENT_TOKEN: "install-token-1"' in body
     assert "name: cluster-agent" in body

@@ -21,6 +21,7 @@ class TelemetryQueryDefinition:
     query: str
     range_seconds: int | None = None
     step_seconds: int | None = None
+    label_selector: str | None = None
 
     @classmethod
     def from_mapping(cls, payload: dict[str, Any]) -> Self:
@@ -36,6 +37,7 @@ class TelemetryQueryDefinition:
             query=_required_text(payload, "query"),
             range_seconds=_optional_positive_int(payload, "range_seconds"),
             step_seconds=_optional_positive_int(payload, "step_seconds"),
+            label_selector=_optional_text(payload, "label_selector"),
         )
 
     def to_provider_query(self) -> Any:
@@ -53,6 +55,13 @@ class TelemetryQueryDefinition:
                 self.step_seconds,
             )
         query_type = telemetry.query_type_for(self.source)
+        if self.source == "kubernetes":
+            return query_type(
+                self.name,
+                self.description,
+                self.query,
+                self.label_selector,
+            )
         return query_type(self.name, self.description, self.query)
 
 
@@ -132,6 +141,15 @@ def _optional_positive_int(payload: dict[str, Any], key: str) -> int | None:
     return parsed
 
 
+def _optional_text(payload: dict[str, Any], key: str) -> str | None:
+    value = payload.get(key)
+    if value is None:
+        return None
+    if not isinstance(value, str) or not value.strip():
+        raise ValueError(f"telemetry query field must be a non-empty string: {key}")
+    return value.strip()
+
+
 @dataclass(frozen=True)
 class PrometheusInstantQuery:
     """Describe one Prometheus instant query."""
@@ -159,6 +177,8 @@ class LokiLogQuery:
     query_name: str
     description: str
     logql: str
+    range_seconds: int | None = None
+    step_seconds: int | None = None
 
 
 @dataclass(frozen=True)
@@ -177,6 +197,7 @@ class KubernetesSnapshotQuery:
     query_name: str
     description: str
     namespace: str
+    label_selector: str | None = None
 
 
 @dataclass(frozen=True)

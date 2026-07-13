@@ -1,0 +1,30 @@
+meta {
+  name: 13 RemediationBundle 조회
+  type: http
+  seq: 13
+  tags: [rca, remediation, session, read]
+}
+
+get {
+  url: {{base_url}}rca/bundles/{{rca_correlation_id}}
+}
+
+tests {
+  test("200 or concealed auth/not-found", function () {
+    expect([200, 401, 404]).to.include(res.status);
+  });
+
+  test("success body preserves diagnosis and remediation layers", function () {
+    if (res.status === 200) {
+      const body = res.getBody();
+      expect(body).to.have.property("meta");
+      expect(body).to.have.property("diagnosis");
+      expect(body).to.have.property("remediation");
+      expect(body.diagnosis).to.have.property("selected_candidate_id");
+      if (body.remediation !== null) {
+        expect(body.remediation).to.have.property("selected_action_id");
+        expect(body.remediation.candidates).to.be.an("array");
+      }
+    }
+  });
+}

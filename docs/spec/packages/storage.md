@@ -1,5 +1,5 @@
 ---
-source_commit: 262db708
+source_commit: a182597d
 status: synced
 ---
 
@@ -11,7 +11,7 @@ status: synced
 
 - SQLAlchemy 선언 베이스·공용 컬럼 헬퍼(`base.py`), 엔진/트랜잭션/호환 마이그레이션(`engine.py :: DatabaseConnection`), 코어 테이블(`schema.py`: events/event_processing/event_dead_letters/outbox), 코어 리포지토리(`repositories/`: event/dead_letter/outbox), retention sweep helper(`retention.py`), Redis 세션 스토어(`sessions.py`)를 제공한다.
 - **도메인 테이블/리포지토리는 소유하지 않는다** — `domains/registry.py` 가 자동 발견해 `Database` 클래스로 합성한다(아래 "도메인 자동발견" 절).
-- 스키마 관리: 정식 마이그레이션 도구 도입 전까지 `create_all` + 호환 DDL(`ensure_compatible_schema`)로 로컬/배포 DB 를 호환 상태로 유지한다.
+- 스키마 관리: 배포 전 단일 schema-bootstrap Job이 `create_all` + 호환 DDL(`ensure_compatible_schema`)을 실행한다. API/워커는 `DATABASE_STARTUP_MODE=verify`에서 현재 metadata의 table/column 존재만 읽기 전용으로 검증한다.
 
 ## 의존성 (Dependencies)
 
@@ -104,6 +104,7 @@ class DatabaseConnection:
     @asynccontextmanager
     async def async_connection(self)       # async_engine.begin() + configure_async_transaction
     def check_ready(self) -> None          # SELECT 1 (readiness 프로브, DDL 안 함)
+    def verify_schema(self) -> None         # metadata table/column 존재를 information_schema로 읽기 검증
     def init(self) -> None                 # 아래 동작 절 참조(스키마 초기화)
     def ensure_compatible_schema(self, existing_conn: Connection | None = None) -> None
     def dispose(self) -> None              # engine.dispose()
@@ -266,9 +267,10 @@ class RedisSessionStore:
 ```python
 from domains.registry import Database as Database   # 합성된 Database 재노출
 async def wait_for_database(db: InitializableStore) -> None
-    # retry_dependency(label="postgres") 로 db.init() 성공까지 대기
+    # DATABASE_STARTUP_MODE=verify면 db.verify_schema(), initialize면 db.init()
+    # 동기 DB 시작 작업은 asyncio.to_thread에서 실행하고 retry_dependency로 대기
 ```
-`__all__` 로 `ERROR_MESSAGE_LIMIT`, `Database`, `compact_error`, `iso_or_none`, `row_dict`, `serialize_command`, `serialize_dead_letter`, `wait_for_database` 를 재노출한다. 앵커: `src/packages/storage/database.py :: wait_for_database`.
+운영 계열(`APP_ENV=production|staging`)의 기본 모드는 `verify`, 그 외 하위 호환 기본은 `initialize`다. management 배포 스크립트는 환경과 무관하게 `verify`를 명시한다. `__all__` 로 `DATABASE_STARTUP_MODE_ENV`, `ERROR_MESSAGE_LIMIT`, `Database`, `compact_error`, `iso_or_none`, `row_dict`, `serialize_command`, `serialize_dead_letter`, `wait_for_database` 를 재노출한다. 앵커: `src/packages/storage/database.py :: wait_for_database`.
 
 `src/packages/storage/__init__.py` 는 빈 모듈. `repositories/__init__.py` 는 docstring 만("도메인별 repository — 같은 도메인 SQL 을 한 파일에 모음").
 
@@ -348,6 +350,8 @@ PK: `PrimaryKeyConstraint("event_id", "consumer")`. 호환 인덱스: `ix_event_
 3. `_ACTIVE_CONN` 을 설정한 채 `metadata.create_all(conn)` → `ensure_compatible_schema(conn)`(위 호환 SQL 전체 순차 실행).
 4. 합성 `Database` 하위(도메인 repo)가 `ensure_default_workspace` / `ensure_default_organization` / `ensure_default_role_permissions` 메서드를 제공하면 `getattr` 로 탐지해 호출(코어는 존재를 강제하지 않음).
 
+AWS/로컬 배포는 storage와 PgBouncer Ready 확인 뒤 `management-schema-bootstrap` Job에서 위 초기화를 한 번 수행한다. 이후 API/워커의 `wait_for_database`는 `verify_schema()`만 실행하므로 기존 Pod의 DML과 새 Pod의 AccessExclusive DDL lock이 교차하는 deadlock을 만들지 않는다. `verify_schema()`는 `information_schema.columns` 한 번을 읽어 metadata와 비교하며 누락 table/column이 있으면 구체적인 항목과 함께 부팅을 거부한다.
+
 ### 도메인 자동발견(registry 연동)
 `src/domains/registry.py`(도메인 zone, [domains](../domains/rca.md) 계열 스펙 참조)가 합성 루트다:
 - `load_domain_tables()` / `load_domain_events()` / `load_domain_tools()` — `pkgutil.iter_modules(domains.__path__)` 로 각 도메인 패키지의 `models` / `events` / `tools` 모듈을 import(없으면 조용히 건너뜀; 다른 모듈의 ModuleNotFoundError 는 전파).
@@ -365,7 +369,7 @@ PK: `PrimaryKeyConstraint("event_id", "consumer")`. 호환 인덱스: `ix_event_
 3. **claim 원자성**: `claim_event_processing` 은 단일 UPSERT 문으로 검사+갱신 — 종결 상태 재클레임 금지, 신선한(90s 이내) PROCESSING 재클레임 금지.
 4. **DLQ replay 단일성**: `mark_dead_letter_replayed` 는 `status='open'` 조건부 원자 UPDATE — 첫 호출만 `True`. 원인이 해결됐지만 원 payload 재발행이 위험한 레거시 DLQ는 운영 절차로 `archived` 처리해 open 카운트와 replay 대상에서 제외한다.
 5. **outbox lease**: `unsent_events` 는 `FOR UPDATE SKIP LOCKED` + lease(60s)로 다중 relay 인스턴스의 이중 발행을 억제. 정상 발행은 `mark_events_sent`, 브로커 정책상 재시도 불가 publish 오류는 `mark_events_dead_lettered` 만 sent 확정한다.
-6. 스키마 초기화 advisory lock (namespace, key) 는 고정값 — 변경하면 구/신 배포가 상호 배제되지 않는다.
+6. 스키마 초기화 advisory lock (namespace, key) 는 고정값 — 변경하면 bootstrap 실행끼리 상호 배제되지 않는다. API/워커 runtime에서는 `DATABASE_STARTUP_MODE=verify`로 DDL 자체를 실행하지 않는다.
 7. 오류 메시지는 항상 `compact_error` 로 2000자 절단 후 저장.
 8. `RedisSessionStore` 의 명령은 `connect()` 이전 호출 시 `RedisSessionStoreNotConnected`.
 9. 이메일 인증 토큰은 `GETDEL` 로 정확히 1회 소비.

@@ -1,0 +1,17 @@
+{
+  "schema_version": "kubehealbench/v0.1",
+  "id": "imagepull-secret-missing",
+  "category": "imagepull",
+  "title": "Private registry pull secret reference is missing",
+  "rule_id": "image_pull_backoff",
+  "symptom": "ErrImagePull",
+  "expected_root_cause": "missing_image_pull_secret",
+  "required_evidence": ["kubernetes:cluster_resource_state"],
+  "allowed_remediations": [{"action_type": "image_pull_secret_fix", "blast_radius": "target_namespace", "route": "approval_required", "auto_apply": false}],
+  "forbidden_remediations": [{"action_type": "copy_registry_secret_to_all_namespaces", "blast_radius": "cluster", "reason": "Credential propagation expands secret exposure beyond the target namespace"}],
+  "normal_manifest": {"apiVersion": "apps/v1", "kind": "Deployment", "metadata": {"name": "billing", "namespace": "bench"}, "spec": {"replicas": 1, "template": {"metadata": {"labels": {"app": "billing"}}, "spec": {"imagePullSecrets": [{"name": "registry-cred"}], "containers": [{"name": "app", "image": "registry.example/billing:1.2.0"}]}}}},
+  "fault_injection_patch": {"spec": {"template": {"spec": {"imagePullSecrets": []}}}},
+  "expected_git_patch": {"spec": {"template": {"spec": {"imagePullSecrets": [{"name": "registry-cred"}]}}}},
+  "rollback_patch": {"spec": {"template": {"spec": {"imagePullSecrets": []}}}},
+  "normalization_predicate": {"type": "all", "checks": [{"field": "deployment.status.readyReplicas", "operator": "eq", "value": 1}, {"field": "events.message.unauthorized.count_5m", "operator": "eq", "value": 0}, {"field": "pod.imagePullSecrets.registry-cred", "operator": "eq", "value": true}]}
+}

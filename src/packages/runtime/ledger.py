@@ -14,15 +14,17 @@ class Ledger:
         self.store.record_event(evt)
         return self.store.begin_event_processing(evt, self.consumer)
 
-    def finish(self, evt: EventEnvelope) -> None:
-        self.store.finish_event_processing(evt, self.consumer)
+    def finish(self, evt: EventEnvelope, duration_ms: int | None = None) -> None:
+        self.store.finish_event_processing(evt, self.consumer, duration_ms)
 
-    def retry(self, evt: EventEnvelope, error: Exception) -> None:
+    def retry(self, evt: EventEnvelope, error: Exception, duration_ms: int | None = None) -> None:
         self.store.fail_event_processing(
-            evt, self.consumer, str(error), EventProcessingStatus.RETRYING
+            evt, self.consumer, str(error), EventProcessingStatus.RETRYING, duration_ms
         )
 
-    def dead_letter(self, evt: EventEnvelope, error: Exception) -> None:
+    def dead_letter(
+        self, evt: EventEnvelope, error: Exception, duration_ms: int | None = None
+    ) -> None:
         self.store.fail_event_processing(
-            evt, self.consumer, str(error), EventProcessingStatus.DEAD_LETTERED
+            evt, self.consumer, str(error), EventProcessingStatus.DEAD_LETTERED, duration_ms
         )

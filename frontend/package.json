@@ -1,0 +1,45 @@
+{
+  "name": "console-frontend",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host 0.0.0.0",
+    "typecheck": "tsc --noEmit",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview --host 0.0.0.0 --port 4173",
+    "lint": "eslint src/",
+    "test": "node --test --test-concurrency=1 tests/*.test.mjs"
+  },
+  "dependencies": {
+    "@dagrejs/dagre": "^3.0.0",
+    "@monaco-editor/react": "^4.7.0",
+    "@nivo/core": "0.87.0",
+    "@nivo/line": "0.87.0",
+    "@nivo/treemap": "0.87.0",
+    "@tanstack/react-query": "^5.62.0",
+    "@xyflow/react": "^12.3.6",
+    "elkjs": "^0.11.1",
+    "monaco-editor": "^0.53.0",
+    "motion": "^11.18.2",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "react-router-dom": "^6.28.0",
+    "zod": "^3.24.1",
+    "zustand": "^5.0.2"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.27.0",
+    "@tailwindcss/vite": "^4.3.2",
+    "@types/react": "^18.3.12",
+    "@types/react-dom": "^18.3.1",
+    "@vitejs/plugin-react": "^4.3.4",
+    "eslint": "^9.27.0",
+    "eslint-plugin-react-hooks": "^5.2.0",
+    "globals": "^16.1.0",
+    "tailwindcss": "^4.3.2",
+    "typescript": "^5.7.2",
+    "typescript-eslint": "^8.32.1",
+    "vite": "^6.0.5"
+  }
+}

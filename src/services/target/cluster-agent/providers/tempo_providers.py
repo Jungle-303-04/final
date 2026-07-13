@@ -12,6 +12,18 @@ from config import (
 )
 from packages.contracts.event_bus.interfaces import JsonObject
 from providers.base import TRACER, ConfigReader
+from providers.collection_limits import (
+    attach_collection_limits,
+    limit_payload_size,
+    payload_size_bytes,
+)
+from providers.tempo_analysis import build_trace_analysis
+
+TEMPO_TRACES_KEY = "traces"
+MAX_TEMPO_TRACE_STRING_LENGTH = 1024
+MAX_TEMPO_TRACE_NESTED_LIST_ITEMS = 20
+MAX_TEMPO_TRACE_ITEM_BYTES = 64_000
+TRUNCATED_TEMPO_VALUE_SUFFIX = " [TRUNCATED]"
 
 
 @telemetry.source(
@@ -67,10 +79,15 @@ class TempoTracesProvider:
         payload: JsonObject,
     ) -> None:
         """Normalize one Tempo result and save it by query name."""
-        results[telemetry_query.query_name] = {
+        normalized = self.normalize_payload(payload)
+        analysis = build_trace_analysis(normalized)
+        result = {
             "query": telemetry_query.traceql,
-            **self.normalize_payload(payload),
+            **normalized,
+            **analysis,
         }
+        limit_tempo_payload(result)
+        results[telemetry_query.query_name] = result
 
     def build_response(self, results: JsonObject) -> JsonObject:
         """Return the finished traces evidence bucket."""
@@ -85,7 +102,64 @@ class TempoTracesProvider:
         if not isinstance(traces, list):
             traces = []
 
-        return {
-            "traces": traces,
+        normalized = {
+            TEMPO_TRACES_KEY: [compact_tempo_trace(trace) for trace in traces],
             "trace_count": len(traces),
         }
+        return normalized
+
+
+def limit_tempo_payload(payload: JsonObject) -> JsonObject:
+    """Limit Tempo trace lists when a result is still too large."""
+    limits: JsonObject = {}
+    limit_payload_size(payload, list_keys=(TEMPO_TRACES_KEY,), limits=limits)
+    attach_collection_limits(payload, limits)
+    return payload
+
+
+def compact_tempo_trace(trace: object) -> object:
+    """Keep one Tempo trace object useful but bounded."""
+    compacted = compact_tempo_value(trace)
+    if payload_size_bytes({"trace": compacted}) <= MAX_TEMPO_TRACE_ITEM_BYTES:
+        return compacted
+    if isinstance(trace, dict):
+        return compact_tempo_trace_summary(trace)
+    return {
+        "trace_truncated": True,
+        "original_trace_bytes": payload_size_bytes({"trace": trace}),
+    }
+
+
+def compact_tempo_value(value: object) -> object:
+    """Recursively trim long Tempo strings and nested lists."""
+    if isinstance(value, str):
+        return truncate_tempo_string(value)
+    if isinstance(value, list):
+        return [compact_tempo_value(item) for item in value[:MAX_TEMPO_TRACE_NESTED_LIST_ITEMS]]
+    if isinstance(value, dict):
+        compacted: JsonObject = {}
+        for key, item in value.items():
+            compacted[str(key)] = compact_tempo_value(item)
+            if isinstance(item, list) and len(item) > MAX_TEMPO_TRACE_NESTED_LIST_ITEMS:
+                compacted[f"{key}_count"] = len(item)
+                compacted[f"{key}_truncated"] = True
+        return compacted
+    return value
+
+
+def truncate_tempo_string(value: str) -> str:
+    """Trim one long Tempo string field."""
+    if len(value) <= MAX_TEMPO_TRACE_STRING_LENGTH:
+        return value
+    keep_length = max(0, MAX_TEMPO_TRACE_STRING_LENGTH - len(TRUNCATED_TEMPO_VALUE_SUFFIX))
+    return f"{value[:keep_length]}{TRUNCATED_TEMPO_VALUE_SUFFIX}"
+
+
+def compact_tempo_trace_summary(trace: JsonObject) -> JsonObject:
+    """Fallback to the same safe fields used by trace analysis."""
+    analysis = build_trace_analysis({TEMPO_TRACES_KEY: [trace]}).get("analysis", {})
+    summaries = analysis.get("trace_summaries")
+    summary = dict(summaries[0]) if isinstance(summaries, list) and summaries else {}
+    summary["trace_truncated"] = True
+    summary["original_trace_bytes"] = payload_size_bytes({"trace": trace})
+    return summary

@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+import hashlib
 import uuid
 from datetime import UTC, datetime, timedelta
+from typing import Any
 
-from sqlalchemy import func, or_, select, text, update
+from sqlalchemy import DateTime, case, cast, func, or_, select, text, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from domains.command.events import CommandCompletedBody
@@ -13,7 +15,7 @@ from domains.command.models import (
     AgentCommand,
 )
 from domains.command.policy import DEFAULT_COMMAND_LEASE_SECONDS
-from packages.config.constants import CommandStatus
+from packages.config.constants import Command, CommandStatus
 from packages.contracts.event_bus.interfaces import EventEnvelope, JsonObject
 from packages.contracts.identity import DEFAULT_WORKSPACE_ID
 from packages.contracts.interfaces import CommandRecord
@@ -31,47 +33,164 @@ from packages.storage.schema import EventModel, OutboxModel
 # 건드리지 않고, 이 유예가 지나도록 어떤 에이전트도 집지 않은 명령만 소진으로 간주함.
 EXPIRED_COMMAND_GRACE_SECONDS = 300
 EXPIRED_COMMAND_FAILURE_MESSAGE = "command lease expired; no agent completed the command"
+QUEUED_COMMAND_TTL_SECONDS = 1800
+QUEUED_COMMAND_FAILURE_MESSAGE = "command queue expired; no connected agent accepted the command"
 COMMAND_PRIORITY_HIGH = 100
 
 
+def rca_test_guard_lock_key(
+    workspace_id: str,
+    cluster_id: str,
+    resource_kind: str,
+    namespace: str,
+    resource_name: str,
+) -> int:
+    """동일 테스트 대상만 직렬화하는 PostgreSQL signed bigint advisory key."""
+    canonical = "\x1f".join(
+        (workspace_id, cluster_id, resource_kind.casefold(), namespace, resource_name)
+    )
+    digest = hashlib.sha256(canonical.encode("utf-8")).digest()
+    return int.from_bytes(digest[:8], byteorder="big", signed=True)
+
+
+def agent_command_insert(
+    *,
+    correlation_id: str,
+    plan: JsonObject,
+    status: str,
+) -> Any:
+    table = AgentCommand.__table__
+    workspace_id = str(plan.get("workspace_id", DEFAULT_WORKSPACE_ID))
+    cluster_id = str(plan["cluster_id"])
+    priority = int(plan.get("priority") or COMMAND_PRIORITY_HIGH)
+    return (
+        pg_insert(table)
+        .values(
+            command_id=plan["command_id"],
+            workspace_id=workspace_id,
+            correlation_id=correlation_id,
+            cluster_id=cluster_id,
+            action=plan["action"],
+            priority=priority,
+            payload=plan,
+            status=status,
+            lease_id=None,
+            agent_id=None,
+            leased_until=None,
+            started_at=None,
+            completed_at=None,
+            result={},
+            updated_at=func.now(),
+        )
+        .on_conflict_do_nothing(index_elements=[table.c.command_id])
+    )
+
+
+def notify_agent_command(conn: Any, workspace_id: str, cluster_id: str) -> None:
+    # 트랜잭션 커밋 시 전달되어 롱폴이 즉시 lease를 재시도한다.
+    conn.execute(
+        text("select pg_notify(:channel, :payload)"),
+        {
+            "channel": AGENT_COMMAND_CHANNEL,
+            "payload": wakeup_key(workspace_id, cluster_id),
+        },
+    )
+
+
 class AgentCommandRepository(DatabaseConnection):
-    def queue_agent_command(self, correlation_id: str, plan: JsonObject, status: str) -> None:
-        table = AgentCommand.__table__
+    def queue_agent_command(self, correlation_id: str, plan: JsonObject, status: str) -> bool:
+        if plan.get("action") == Command.RCA_TEST_SCENARIO_INJECT_ACTION:
+            raise ValueError("RCA test inject commands require the atomic reservation guard")
         workspace_id = str(plan.get("workspace_id", DEFAULT_WORKSPACE_ID))
         cluster_id = str(plan["cluster_id"])
-        priority = int(plan.get("priority") or COMMAND_PRIORITY_HIGH)
-        statement = (
-            pg_insert(table)
-            .values(
-                command_id=plan["command_id"],
-                workspace_id=workspace_id,
-                correlation_id=correlation_id,
-                cluster_id=cluster_id,
-                action=plan["action"],
-                priority=priority,
-                payload=plan,
-                status=status,
-                lease_id=None,
-                agent_id=None,
-                leased_until=None,
-                started_at=None,
-                completed_at=None,
-                result={},
-                updated_at=func.now(),
-            )
-            .on_conflict_do_nothing(index_elements=[table.c.command_id])
-        )
+        table = AgentCommand.__table__
         with self.connection() as conn:
-            conn.execute(statement)
-            # 커밋 시점에 전달되는 웨이크업 알림 — 게이트웨이 롱폴이 1초 폴링 주기를
-            # 기다리지 않고 즉시 lease 를 재시도한다(리스너 없으면 무해한 no-op).
-            conn.execute(
-                text("select pg_notify(:channel, :payload)"),
-                {
-                    "channel": AGENT_COMMAND_CHANNEL,
-                    "payload": wakeup_key(workspace_id, cluster_id),
-                },
+            inserted = conn.execute(
+                agent_command_insert(
+                    correlation_id=correlation_id,
+                    plan=plan,
+                    status=status,
+                ).returning(table.c.command_id)
+            ).scalar_one_or_none()
+            if inserted is None:
+                return False
+            notify_agent_command(conn, workspace_id, cluster_id)
+            return True
+
+    def queue_rca_test_command_if_available(
+        self,
+        correlation_id: str,
+        plan: JsonObject,
+        status: str,
+        *,
+        resource_kind: str,
+        namespace: str,
+        resource_name: str,
+        max_concurrent_runs: int,
+        ttl_seconds: int,
+    ) -> bool:
+        """같은 fixture 예약 확인과 inject enqueue를 한 DB 트랜잭션으로 처리한다."""
+        if plan.get("action") != Command.RCA_TEST_SCENARIO_INJECT_ACTION:
+            raise ValueError("atomic RCA test reservation accepts inject commands only")
+        if max_concurrent_runs < 1 or ttl_seconds < 1:
+            raise ValueError("RCA test concurrency and TTL must be positive")
+
+        table = AgentCommand.__table__
+        cleanup = table.alias("finished_rca_test_cleanup")
+        workspace_id = str(plan.get("workspace_id", DEFAULT_WORKSPACE_ID))
+        cluster_id = str(plan["cluster_id"])
+        normalized_resource_kind = resource_kind.strip().casefold()
+        inject_payload = table.c.payload["payload"]
+        cleanup_payload = cleanup.c.payload["payload"]
+        cleanup_finished = (
+            select(1)
+            .select_from(cleanup)
+            .where(
+                cleanup.c.workspace_id == table.c.workspace_id,
+                cleanup.c.cluster_id == table.c.cluster_id,
+                cleanup.c.action == Command.RCA_TEST_SCENARIO_CLEANUP_ACTION,
+                cleanup.c.status == CommandStatus.COMPLETED,
+                cleanup_payload["run_id"].astext == inject_payload["run_id"].astext,
             )
+            .correlate(table)
+            .exists()
+        )
+        active_count = (
+            select(func.count())
+            .select_from(table)
+            .where(
+                table.c.workspace_id == workspace_id,
+                table.c.cluster_id == cluster_id,
+                table.c.action == Command.RCA_TEST_SCENARIO_INJECT_ACTION,
+                func.lower(func.coalesce(inject_payload["resource_kind"].astext, "Deployment"))
+                == normalized_resource_kind,
+                inject_payload["namespace"].astext == namespace,
+                inject_payload["resource_name"].astext == resource_name,
+                cast(inject_payload["expires_at"].astext, DateTime(timezone=True)) > func.now(),
+                ~cleanup_finished,
+            )
+        )
+        lock_key = rca_test_guard_lock_key(
+            workspace_id,
+            cluster_id,
+            resource_kind,
+            namespace,
+            resource_name,
+        )
+
+        with self.connection() as conn:
+            conn.execute(text("select pg_advisory_xact_lock(:lock_key)"), {"lock_key": lock_key})
+            if int(conn.execute(active_count).scalar_one()) >= max_concurrent_runs:
+                return False
+            inserted = conn.execute(
+                agent_command_insert(
+                    correlation_id=correlation_id, plan=plan, status=status
+                ).returning(table.c.command_id)
+            ).scalar_one_or_none()
+            if inserted is None:
+                return False
+            notify_agent_command(conn, workspace_id, cluster_id)
+            return True
 
     async def get_agent_command(
         self, command_id: str, workspace_id: str = DEFAULT_WORKSPACE_ID
@@ -83,6 +202,7 @@ class AgentCommandRepository(DatabaseConnection):
             table.c.cluster_id,
             table.c.correlation_id,
             table.c.action,
+            table.c.payload,
             table.c.status,
             table.c.result,
             table.c.completed_at,
@@ -252,7 +372,13 @@ class AgentCommandRepository(DatabaseConnection):
                 return None
 
             body = CommandCompletedBody(command_id=command_id, result=result)
-            completed = event(body.__subject__, source, body.to_body(), str(row["correlation_id"]))
+            completed = event(
+                body.__subject__,
+                source,
+                body.to_body(),
+                str(row["correlation_id"]),
+                workspace_id=workspace_id,
+            )
             await conn.execute(
                 pg_insert(event_table)
                 .values(
@@ -273,6 +399,7 @@ class AgentCommandRepository(DatabaseConnection):
                     source=completed.source,
                     correlation_id=completed.correlation_id,
                     causation_id=completed.causation_id,
+                    workspace_id=completed.workspace_id,
                     occurred_at=completed.created_at,
                     payload=completed.payload,
                 )
@@ -281,30 +408,58 @@ class AgentCommandRepository(DatabaseConnection):
         return completed
 
     def fail_expired_agent_commands(
-        self, grace_seconds: int = EXPIRED_COMMAND_GRACE_SECONDS
+        self,
+        grace_seconds: int = EXPIRED_COMMAND_GRACE_SECONDS,
+        *,
+        queue_ttl_seconds: int = QUEUED_COMMAND_TTL_SECONDS,
     ) -> list[JsonObject]:
-        """만료 방치 명령을 FAILED 로 종결하고 종결된 행을 반환함(완료 이벤트 발행용).
+        """미수신 queue와 만료 lease를 FAILED로 종결해 완료 이벤트 발행 대상으로 반환함.
 
-        LEASED/RUNNING 인데 lease 만료 후 유예(grace)까지 지난 명령은 완료 이벤트가
-        영영 없어 workflow 가 영구 APPLYING 으로 남음(감사 C6). 단일 원자
-        UPDATE ... RETURNING 으로 정리해 호출자가 CommandCompleted(FAILED)를 흘림.
+        등록이 사라지거나 Agent가 연결을 잃으면 QUEUED 행도 lease 없이 영구 잔존할 수
+        있다. 오래된 QUEUED와 lease 유예가 지난 LEASED/RUNNING을 단일 원자
+        UPDATE ... RETURNING으로 닫아 호출자가 CommandCompleted(FAILED)를 흘린다.
         """
+        grace_seconds = int(grace_seconds)
+        queue_ttl_seconds = int(queue_ttl_seconds)
+        if grace_seconds < 1 or queue_ttl_seconds < 1:
+            raise ValueError("command expiry durations must be positive")
         table = AgentCommand.__table__
-        failure = {
-            "status": CommandStatus.FAILED,
-            "applied": False,
-            "message": EXPIRED_COMMAND_FAILURE_MESSAGE,
-        }
         statement = (
             update(table)
             .where(
-                table.c.status.in_([CommandStatus.LEASED, CommandStatus.RUNNING]),
-                table.c.leased_until
-                < func.now() - text(f"interval '{int(grace_seconds)} seconds'"),
+                or_(
+                    (
+                        (table.c.status == CommandStatus.QUEUED)
+                        & (
+                            table.c.created_at
+                            < func.now() - text(f"interval '{queue_ttl_seconds} seconds'")
+                        )
+                    ),
+                    (
+                        table.c.status.in_([CommandStatus.LEASED, CommandStatus.RUNNING])
+                        & (
+                            table.c.leased_until
+                            < func.now() - text(f"interval '{grace_seconds} seconds'")
+                        )
+                    ),
+                )
             )
             .values(
                 status=CommandStatus.FAILED,
-                result=failure,
+                result=func.jsonb_build_object(
+                    "status",
+                    CommandStatus.FAILED,
+                    "applied",
+                    False,
+                    "message",
+                    case(
+                        (
+                            table.c.status == CommandStatus.QUEUED,
+                            QUEUED_COMMAND_FAILURE_MESSAGE,
+                        ),
+                        else_=EXPIRED_COMMAND_FAILURE_MESSAGE,
+                    ),
+                ),
                 completed_at=func.now(),
                 updated_at=func.now(),
             )

@@ -8,7 +8,6 @@
 from __future__ import annotations
 
 DEFAULT_LOCALE = "en"
-SUPPORTED_LOCALES = ("en", "ko")
 
 _CATALOG: dict[str, dict[str, str]] = {
     "chat.system_prompt": {

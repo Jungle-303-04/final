@@ -52,6 +52,7 @@ _MODULE_BY_NAME = {
     "EvidenceBundleBuiltBody": "domains.rca.events",
     "EvidenceItem": "domains.rca.events",
     "GitChangedBody": "domains.gitops.events",
+    "GitOpsChangeContextDetectedBody": "domains.gitops.events",
     "GitWebhookReceivedBody": "domains.gitops.events",
     "HealingActionDraft": "domains.rca.events",
     "IncidentDetectedBody": "domains.rca.events",

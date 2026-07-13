@@ -3,6 +3,7 @@ from __future__ import annotations
 from providers import (
     KubernetesSnapshotProvider,
     LokiLogsProvider,
+    MetadataProvider,
     PrometheusMetricsProvider,
     TelemetryProvider,
     TempoTracesProvider,
@@ -17,6 +18,7 @@ __all__ = [
     "EvidenceJobScheduler",
     "KubernetesSnapshotProvider",
     "LokiLogsProvider",
+    "MetadataProvider",
     "PrometheusMetricsProvider",
     "TelemetryProvider",
     "TelemetryQueryDefinition",

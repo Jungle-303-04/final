@@ -1,12 +1,8 @@
 .DS_Store
-.env
-.env.*
-!.env.example
+.env*
 .env.local-test
-.env.external-console
-.env.external-console-instances
-.env.*cloud
-.env.*instances
+*.local.bru
+docs/api/.certs/
 .data/
 .idea/
 .vscode/

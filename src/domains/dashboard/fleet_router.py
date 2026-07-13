@@ -12,7 +12,7 @@ health 판정 규칙(결정적, 단위 테스트로 고정):
   inventory 에 pod/node 행이 없으면 최신 usage 샘플(pod_running 등)로 대체.
 - restarts_recent — 최신 usage 샘플 2개의 restart_total 델타(음수는 0, 샘플<2 이면 0).
 - cpu_pct/mem_pct — usage 샘플에 실측 값이 있을 때만(없으면 None, 합성 금지).
-- open_incidents — rca_timeline 에서 종결 전(status not in CLOSED_INCIDENT_STATUSES) row 수.
+- open_incidents — rca_timeline 에서 실제 탐지 이후 OPEN_INCIDENT_STATUSES logical incident 수.
 - last_seen_at — agent 상태 → inventory 최근 관측 → usage 샘플 순으로 첫 값.
 """
 

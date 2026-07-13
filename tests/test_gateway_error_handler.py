@@ -1,7 +1,10 @@
 from __future__ import annotations
 
+import asyncio
+import logging
 from typing import Any
 
+import pytest
 from conftest import ROOT, load_file
 from fastapi.testclient import TestClient
 
@@ -46,6 +49,116 @@ def test_gateway_healthz_returns_service_status_without_db(monkeypatch) -> None:
     assert response.json() == {"status": "ok", "service": "api-gateway"}
 
 
+def test_gateway_docs_use_configured_external_api_root_path(monkeypatch) -> None:
+    monkeypatch.setenv("DATABASE_URL", "postgresql://user:pass@postgresql:5432/service")
+    monkeypatch.setenv("API_ROOT_PATH", "/api")
+    gateway = load_gateway_module()
+    app = gateway.create_app()
+
+    response = TestClient(app).get("/docs")
+
+    assert response.status_code == 200
+    assert "url: '/api/openapi.json'" in response.text
+
+
+def test_gateway_lifespan_validates_rca_scenario_adapters_before_external_connections(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("DATABASE_URL", "postgresql://user:pass@postgresql:5432/service")
+    gateway = load_gateway_module()
+    service = gateway.ApiGateway()
+    external_calls: list[str] = []
+
+    def invalid_catalog() -> None:
+        raise RuntimeError("RCA scenario adapter contract invalid")
+
+    async def must_not_wait(_db: Any) -> None:
+        external_calls.append("database")
+
+    monkeypatch.setattr(gateway, "validate_test_scenario_catalog", invalid_catalog)
+    monkeypatch.setattr(gateway, "wait_for_database", must_not_wait)
+
+    async def start() -> None:
+        async with service.lifespan(service.app):
+            raise AssertionError("invalid RCA scenario catalog must fail startup")
+
+    with pytest.raises(RuntimeError, match="adapter contract invalid"):
+        asyncio.run(start())
+    assert external_calls == []
+
+
+def test_gateway_request_logging_records_status_and_path(monkeypatch, caplog) -> None:
+    monkeypatch.setenv("DATABASE_URL", "postgresql://user:pass@postgresql:5432/service")
+    gateway = load_gateway_module()
+
+    class ReadyDb:
+        def check_ready(self) -> None:
+            raise AssertionError("healthz must not touch database readiness")
+
+    monkeypatch.setattr(gateway, "Database", ReadyDb)
+    app = gateway.create_app()
+    caplog.set_level(logging.INFO)
+
+    response = TestClient(app).get("/healthz", headers={"correlation_id": "corr-http"})
+
+    assert response.status_code == 200
+    contexts = [
+        record.context
+        for record in caplog.records
+        if record.getMessage() == "gateway_request_completed"
+        and isinstance(getattr(record, "context", None), dict)
+    ]
+    assert contexts
+    context = contexts[-1]
+    assert context["method"] == "GET"
+    assert context["path"] == "/healthz"
+    assert context["status_code"] == 200
+    assert context["request_correlation_id"] == "corr-http"
+    assert context["duration_ms"] >= 0
+
+
+@pytest.mark.parametrize(
+    ("fail_request", "expected_status", "expected_log_message"),
+    [
+        (False, 404, "gateway_request_completed"),
+        (True, 500, "gateway_request_failed"),
+    ],
+)
+def test_gateway_request_logging_redacts_install_token(
+    monkeypatch,
+    caplog,
+    fail_request: bool,
+    expected_status: int,
+    expected_log_message: str,
+) -> None:
+    monkeypatch.setenv("DATABASE_URL", "postgresql://user:pass@postgresql:5432/service")
+    gateway = load_gateway_module()
+    agent_token = "install-super-secret-token"
+
+    class UnknownInstallTokenDb:
+        def authenticate_cluster_agent(self, _token_hash: str) -> None:
+            if fail_request:
+                raise RuntimeError("install token lookup failed")
+            return None
+
+    monkeypatch.setattr(gateway, "Database", UnknownInstallTokenDb)
+    app = gateway.create_app()
+    caplog.set_level(logging.INFO)
+
+    response = TestClient(app, raise_server_exceptions=False).get(f"/install/{agent_token}")
+
+    assert response.status_code == expected_status
+    contexts = [
+        record.context
+        for record in caplog.records
+        if record.getMessage() == expected_log_message
+        and isinstance(getattr(record, "context", None), dict)
+    ]
+    assert contexts
+    assert contexts[-1]["path"] == "/install/[REDACTED]"
+    assert agent_token not in repr(contexts)
+
+
 def test_gateway_readyz_checks_database_readiness(monkeypatch) -> None:
     monkeypatch.setenv("DATABASE_URL", "postgresql://user:pass@postgresql:5432/service")
     gateway = load_gateway_module()
@@ -78,6 +191,9 @@ def test_gateway_metrics_uses_bearer_token_guard(monkeypatch) -> None:
         def outbox_pending_count(self) -> int:
             return 0
 
+        def outbox_oldest_age_seconds(self) -> float:
+            return 42.5
+
         def oldest_command_age_seconds(self, _status: str) -> float:
             return 0.0
 
@@ -87,11 +203,58 @@ def test_gateway_metrics_uses_bearer_token_guard(monkeypatch) -> None:
         def event_processing_status_counts(self) -> dict[str, int]:
             return {}
 
+        def event_processing_duration_avg_ms_by_consumer(self) -> dict[str, float]:
+            return {"command-worker": 12.5}
+
+        def event_processing_duration_max_ms_by_consumer(self) -> dict[str, int]:
+            return {"command-worker": 30}
+
+        def event_consumer_pending_by_consumer_subject(self) -> dict[tuple[str, str], int]:
+            return {("command-worker", "command.requested"): 4}
+
+        def event_consumer_ack_pending_by_consumer_subject(self) -> dict[tuple[str, str], int]:
+            return {("command-worker", "command.requested"): 1}
+
+        def event_consumer_redelivered_by_consumer_subject(self) -> dict[tuple[str, str], int]:
+            return {("command-worker", "command.requested"): 2}
+
+        def llm_invocation_latency_avg_ms_by_provider_model_operation_status(
+            self,
+        ) -> dict[tuple[str, str, str, str], float]:
+            return {("openai", "gpt-test", "complete", "succeeded"): 25.5}
+
+        def llm_invocation_latency_max_ms_by_provider_model_operation_status(
+            self,
+        ) -> dict[tuple[str, str, str, str], int]:
+            return {("openai", "gpt-test", "complete", "succeeded"): 40}
+
+        def llm_invocation_total_tokens_by_provider_model_operation_status(
+            self,
+        ) -> dict[tuple[str, str, str, str], int]:
+            return {("openai", "gpt-test", "complete", "succeeded"): 123}
+
+        def llm_invocation_estimated_cost_micros_by_provider_model_operation_status(
+            self,
+        ) -> dict[tuple[str, str, str, str], int]:
+            return {("openai", "gpt-test", "complete", "succeeded"): 17}
+
         def command_status_counts(self) -> dict[str, int]:
             return {}
 
         def evidence_job_status_counts(self) -> dict[str, int]:
             return {}
+
+        def count_running_workflow_runs(self, _workspace_id: str) -> int:
+            return 2
+
+        def count_open_workflow_approvals(self, _workspace_id: str) -> int:
+            return 1
+
+        def workflow_run_status_counts(self, _workspace_id: str) -> dict[str, int]:
+            return {"applying": 1, "waiting_for_approval": 1}
+
+        def workflow_run_current_step_counts(self, _workspace_id: str) -> dict[str, int]:
+            return {"apply": 1, "approval": 1}
 
     monkeypatch.setattr(gateway, "Database", MetricsDb)
     app = gateway.create_app()
@@ -103,6 +266,53 @@ def test_gateway_metrics_uses_bearer_token_guard(monkeypatch) -> None:
 
     assert response.status_code == 200
     assert "event_dead_letters_open_total 0" in response.text
+    assert "outbox_oldest_age_seconds 42.5" in response.text
+    assert 'event_processing_duration_avg_ms{consumer="command-worker"} 12.5' in response.text
+    assert 'event_processing_duration_max_ms{consumer="command-worker"} 30' in response.text
+    assert (
+        'nats_consumer_pending_events{consumer="command-worker",subject="command.requested"} 4'
+        in response.text
+    )
+    assert (
+        'nats_consumer_ack_pending_events{consumer="command-worker",subject="command.requested"} 1'
+        in response.text
+    )
+    assert (
+        'nats_consumer_redelivered_events{consumer="command-worker",subject="command.requested"} 2'
+        in response.text
+    )
+    assert (
+        'llm_invocation_latency_avg_ms{provider="openai",model="gpt-test",operation="complete",status="succeeded"} 25.5'
+        in response.text
+    )
+    assert (
+        'llm_invocation_estimated_cost_micros{provider="openai",model="gpt-test",operation="complete",status="succeeded"} 17'
+        in response.text
+    )
+    assert "gitops_workflow_running_total 2" in response.text
+    assert "gitops_approvals_open_total 1" in response.text
+    assert 'gitops_workflow_status_total{status="applying"} 1' in response.text
+    assert 'gitops_workflow_current_step_total{step="approval"} 1' in response.text
+
+
+def test_gateway_metrics_requires_token_configuration_in_protected_environment(
+    monkeypatch,
+) -> None:
+    monkeypatch.setenv("DATABASE_URL", "postgresql://user:pass@postgresql:5432/service")
+    monkeypatch.setenv("APP_ENV", "production")
+    monkeypatch.delenv("METRICS_TOKEN", raising=False)
+    gateway = load_gateway_module()
+
+    class MetricsDb:
+        pass
+
+    monkeypatch.setattr(gateway, "Database", MetricsDb)
+    client = TestClient(gateway.create_app())
+
+    response = client.get("/metrics")
+
+    assert response.status_code == 503
+    assert response.json() == {"detail": "metrics token is not configured"}
 
 
 def test_dead_letter_replay_rejects_archived_status(monkeypatch) -> None:

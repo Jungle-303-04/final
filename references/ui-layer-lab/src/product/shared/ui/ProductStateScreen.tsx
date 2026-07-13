@@ -55,6 +55,7 @@ export interface ProductStateRetry {
 type ProductStatePlacement = "root" | "content";
 
 interface StateBase {
+  headingLevel?: 1 | 2;
   placement?: ProductStatePlacement;
 }
 
@@ -131,6 +132,7 @@ export function ProductStateScreen(props: ProductStateScreenProps) {
   }
   const { kind } = props;
   const isContent = props.placement === "content";
+  const headingLevel = props.headingLevel ?? (isContent ? 2 : 1);
   const copy = stateCopy[kind];
   const issue = "issue" in props ? props.issue : undefined;
   const retry = "retry" in props ? props.retry : undefined;
@@ -142,7 +144,7 @@ export function ProductStateScreen(props: ProductStateScreenProps) {
         <StateIcon kind={kind} />
       </EmptyMedia>
       <EmptyHeader className="max-w-none items-start text-left">
-        <StateHeading level={isContent ? 2 : 1} titleId={titleId}>{t(copy.titleKey)}</StateHeading>
+        <StateHeading level={headingLevel} titleId={titleId}>{t(copy.titleKey)}</StateHeading>
         <EmptyDescription className="text-pretty leading-6">{t(copy.bodyKey)}</EmptyDescription>
       </EmptyHeader>
       {issue && issueKind ? <IssueAlert issue={issue} kind={issueKind} t={t} /> : null}

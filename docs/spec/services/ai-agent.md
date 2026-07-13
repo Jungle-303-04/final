@@ -1,5 +1,5 @@
 ---
-source_commit: 664925a6
+source_commit: 243e7fc0
 status: synced
 ---
 
@@ -168,7 +168,9 @@ class RecoveryPlanningPipeline:
 - Event 객체는 해결 뒤에도 남을 수 있으므로 `event_is_current_warning` 이 `Warning`
   또는 type 미기재 event만 본다. `cluster.collected_at` 이 있으면
   `last_timestamp`/`first_timestamp` 가 10분(`EVENT_SIGNAL_MAX_AGE`)보다 오래된 warning event는
-  symptom 신호에서 제외한다.
+  symptom 신호에서 제외한다. Pod 대상 Event는 같은 namespace/name의 현재 Pod가 있어야 하며,
+  probe 실패는 그 Pod가 아직 Ready가 아닐 때만 유효하다. 롤아웃으로 삭제됐거나 이미 Ready로
+  회복된 Pod의 최근 Event는 새 incident를 만들지 않는다.
 - `src/services/ai/agent/pipeline/symptom.py :: resolve_resource` — incident 대상 결정.
   명시 `kubernetes["resource"]` > 대표 신호의 리소스 힌트(파드 소유 워크로드 또는 Pod/Service)
   > `"Unknown"/"unknown"/None`.
@@ -265,9 +267,9 @@ class RecoveryPlanningPipeline:
 
 - 필드: `max_candidates: int = MAX_FALLBACK_CANDIDATES`(5)
 - `async plan_body(evt: RcaAiFallbackRequestedBody, llm: LlmClient) -> RcaCandidatesPlannedBody | None`
-  - `build_fallback_prompt(evt)` (`src/services/ai/agent/pipeline/ai_fallback.py :: build_fallback_prompt`) — incident 증상 + evidence bundle **summary 문자열만** 실은 프롬프트(근거 원문 value 미포함, 최대 `MAX_PROMPT_EVIDENCE_ITEMS`=20건).
+  - `build_fallback_prompt(evt)` (`src/services/ai/agent/pipeline/ai_fallback.py :: build_fallback_prompt`) — incident 증상 + evidence bundle **summary 문자열만** 실으며, 선택 가능한 실제 catalog cause ID 목록을 함께 제공(근거 원문 value 미포함, 최대 `MAX_PROMPT_EVIDENCE_ITEMS`=20건).
   - `llm.complete_json(prompt, FALLBACK_CANDIDATES_SCHEMA)` (`src/services/ai/agent/pipeline/ai_fallback.py :: FALLBACK_CANDIDATES_SCHEMA`) 호출.
-  - `parse_fallback_candidates(raw, max_candidates)` (`src/services/ai/agent/pipeline/ai_fallback.py :: parse_fallback_candidates`) — 비정형 항목은 건너뛰고 confidence 내림차순 상위 N개만 `CauseCandidate(source="ai_fallback")` 로 변환. 유효 후보 0건이면 `None`.
+  - `parse_fallback_candidates(raw, max_candidates)` (`src/services/ai/agent/pipeline/ai_fallback.py :: parse_fallback_candidates`) — catalog 밖 ID와 내용 signal 없는 후보를 버리고, LLM 작성 텍스트 대신 catalog의 title/evidence/check/signal 계약을 복원해 confidence 내림차순 상위 N개만 `CauseCandidate(source="ai_fallback")` 로 변환. 유효 후보 0건이면 `None`.
   - 반환 body 는 `rule_missing=None` — analyze-worker 가 rule 경로와 동일한 근거 매칭 평가를 수행한다.
   - LLM 미설정(ValueError)·호출 실패·JSON 파싱 실패는 예외로 전파(워커가 로그 후 무발행 종료).
 
@@ -399,7 +401,8 @@ rules:
    - `matched/unmatched = split_signal_groups(candidate.signals, bundle_signals)` —
      판별 신호(내용 매칭). 미충족 그룹은 `signal:<id>` 토큰으로 `missing_evidence` 에 추가.
    - `score = (len(supporting) + len(matched)) / (len(expected) + len(candidate.signals))`
-     (분모 0 이면 0.0) — `signals` 없는 후보(예: ai_fallback 후보)는 기존 소스 비율과 동일.
+     (분모 0 이면 0.0). AI fallback 후보도 실제 catalog signals를 복원하므로 source/name만
+     존재하고 내용 signal이 없으면 1.0에 도달할 수 없다.
    - `reason = "필요한 근거 N개 중 M개가 수집되었습니다."` + signals 선언 시
      `" 판별 신호 K개 중 J개가 확인되었습니다."` (`build_evaluation_reason`)
    - `supporting_evidence_refs`, `missing_evidence_checks`(소스 누락 + 신호 누락

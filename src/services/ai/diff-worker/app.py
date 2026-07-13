@@ -6,6 +6,7 @@ from collections.abc import AsyncIterator
 
 from domains.rca.events import DiffExplainedBody, SafePrPatchPreparedBody
 from domains.scm.events import SafePrReadyForCreationBody, SafePrRequestedBody
+from domains.scm.pipeline import normalize_safe_pr_request
 from domains.scm.policy import STAGE_DIFF, DefaultSafePrDiffPolicy, safe_pr_failed_body
 from packages.contracts.event_bus.bodies import EventBody
 from packages.runtime.app import App
@@ -35,7 +36,7 @@ def prepared_request(evt: SafePrPatchPreparedBody) -> SafePrRequestedBody:
 
 @app.on(SafePrPatchPreparedBody)
 async def on_safe_pr_patch_prepared(evt: SafePrPatchPreparedBody) -> AsyncIterator[EventBody]:
-    request = prepared_request(evt)
+    request = normalize_safe_pr_request(prepared_request(evt))
     assessment = DIFF_POLICY.explain(request)
     summary = (
         f"{evt.title} 패치 초안은 PR 생성 게이트를 통과했습니다."

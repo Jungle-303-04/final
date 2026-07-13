@@ -62,6 +62,8 @@ def approval_evidence() -> dict[str, str]:
     return {
         "approval_ref": "approval-1",
         "policy_decision_ref": "policy-decision-1",
+        "approval_decided_by": "approver-1",
+        "approval_expires_at": "2099-01-01T00:00:00Z",
     }
 
 
@@ -259,11 +261,43 @@ def test_target_agent_apply_manifest_dry_run_without_kubernetes_api(monkeypatch)
             "resource": "deployment/checkout-api",
             "status": "failed",
             "applied": False,
+            "retryable": False,
             "message": "kubernetes api not configured; dry-run only",
+            "stdout": "",
+            "stderr": "kubernetes api not configured; dry-run only",
         }
     ]
     assert result["stdout"] == ""
     assert "dry-run" in result["stderr"]
+
+
+def test_target_agent_command_result_reports_sanitized_resource_output() -> None:
+    agent_module = load_agent_module()
+    agent = agent_module.TargetClusterAgent()
+
+    result = agent.command_result(
+        False,
+        "patch failed",
+        resource="deployment/checkout-api",
+        retryable=True,
+        stdout="starting\nTOKEN=top-secret",
+        stderr="retry later\npassword=secret",
+    )
+
+    assert result["retryable"] is True
+    assert result["stdout"] == "starting\n[redacted]"
+    assert result["stderr"] == "retry later\n[redacted]"
+    assert result["resources"] == [
+        {
+            "resource": "deployment/checkout-api",
+            "status": "failed",
+            "applied": False,
+            "retryable": True,
+            "message": "patch failed",
+            "stdout": "starting\n[redacted]",
+            "stderr": "retry later\n[redacted]",
+        }
+    ]
 
 
 def test_target_agent_rejects_write_command_without_approval_evidence(monkeypatch) -> None:
@@ -288,9 +322,15 @@ def test_target_agent_rejects_write_command_without_approval_evidence(monkeypatc
 
     assert result["status"] == "failed"
     assert result["applied"] is False
-    assert result["message"] == "write command requires approval_ref and policy_decision_ref"
+    assert result["message"] == (
+        "write command requires approval_ref, policy_decision_ref, approval_decided_by, "
+        "and approval_expires_at"
+    )
     assert result["resources"] == []
-    assert result["stderr"] == "write command requires approval_ref and policy_decision_ref"
+    assert result["stderr"] == (
+        "write command requires approval_ref, policy_decision_ref, approval_decided_by, "
+        "and approval_expires_at"
+    )
 
 
 def test_target_agent_reports_kubernetes_apply_failure(monkeypatch) -> None:
@@ -632,3 +672,14 @@ def test_target_agent_registers_query_policy_from_management_policy() -> None:
 
     assert result["registered_queries"]["metrics"] == ["checkout_error_rate"]
     assert definition.query.startswith("sum(rate")
+
+
+def test_target_agent_wires_argocd_reconciler_mode(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("RECONCILER_MODE", "argocd")
+    agent_module = load_agent_module()
+    agent = agent_module.TargetClusterAgent()
+
+    try:
+        assert agent.reconciler.reconciler_mode == "argocd"
+    finally:
+        agent.close()

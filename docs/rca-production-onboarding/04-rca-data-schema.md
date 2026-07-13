@@ -127,8 +127,14 @@ Prometheus range query는 현재 구현되어 있다.
 
 - 등록 위치: `PrometheusMetricsProvider`의 `@telemetry.source(..., range_query_type=PrometheusRangeQuery)`
 - 실행 위치: `PrometheusMetricsProvider.query_range()`
-- normalize 결과: `result_type="matrix"`, `series`, `point_count`
+- normalize 결과: `result_type="matrix"`, `series`, `point_count`, `analysis`
 - 테스트: `tests/test_target_metric_evidence.py`
+
+Prometheus provider는 instant/range 결과 모두에 `analysis`를 추가한다.
+`analysis`는 이미 받은 숫자만 보고 만든 요약이다. 항상 `metric_kind`, `unit`, `signals`를 담고,
+숫자 point가 있으면 `value_summary`를 담는다. known metric이면 `threshold`를 담을 수 있고,
+range query에서 비교 가능한 series가 있으면 `baseline_comparison`을 담는다.
+외부 baseline이나 이전 배포 기준선은 여기서 조회하지 않는다.
 
 ## Kubernetes snapshot payload
 
@@ -215,10 +221,364 @@ consumer: `plan-worker`, `analyze-worker`, `rca-worker`
 
 | 필드 | 왜 필요한가 |
 | --- | --- |
-| `source` | `kubernetes`, `metrics`, `logs`, `traces` 중 어디서 왔는지 구분한다. |
+| `source` | `kubernetes`, `metrics`, `logs`, `traces`, `metadata` 중 어디서 왔는지 구분한다. |
 | `name` | rule이 찾는 evidence key다. |
 | `value` | 판단에 필요한 구조화 값이다. |
 | `summary` | 사람이 읽는 근거 설명이다. |
+
+### EvidenceItem value schema v1
+
+이 섹션은 provider payload가 RCA 내부에서 어떤 `EvidenceItem`으로 승격되는지 정리한다.
+DB table schema가 아니라 `EvidenceItem.value`에 들어가는 JSON 계약이다.
+
+현재 코드 기준 evidence key는 다음과 같다.
+
+| evidence key | 입력 위치 | RCA에서 쓰는 의미 |
+| --- | --- | --- |
+| `kubernetes:cluster_resource_state` | `ClusterEvidenceReceivedBody.kubernetes` | Pod, container, workload, service, endpoint, event 상태 근거 |
+| `metrics:telemetry_metrics` | `ClusterEvidenceReceivedBody.metrics` | Prometheus/metric 기반 resource, restart, latency, error 근거 |
+| `logs:related_logs` | `ClusterEvidenceReceivedBody.logs` | incident namespace/workload와 관련된 log snippet 근거 |
+| `traces:related_traces` | `ClusterEvidenceReceivedBody.traces` | trace/span 기반 dependency, timeout, error path 근거 |
+| `metadata:current_workload_snapshots` | `metadata.current_workload_snapshots` 또는 `metadata.change_context.current_workload_snapshots` | target namespace의 Deployment metadata snapshot 목록 |
+| `metadata:current_workload_snapshot` | `metadata.current_workload_snapshot` 또는 `metadata.change_context.current_workload_snapshot` | 특정 Deployment 1개의 metadata snapshot |
+| `metadata:service_selector_matches` | `metadata.service_selector_matches` 또는 `metadata.change_context.service_selector_matches` | Service selector와 Pod labels 매칭 결과 |
+| `metadata:endpoint_slice_ready_endpoints` | `metadata.endpoint_slice_ready_endpoints` 또는 `metadata.change_context.endpoint_slice_ready_endpoints` | EndpointSlice ready endpoint 요약 |
+
+#### `kubernetes:cluster_resource_state`
+
+producer:
+
+- `KubernetesSnapshotProvider`
+- `collect_evidence_items()` -> `compact_kubernetes_value()`
+
+입력 위치:
+
+```text
+ClusterEvidenceReceivedBody.kubernetes
+```
+
+RCA evidence item:
+
+```json
+{
+  "source": "kubernetes",
+  "name": "cluster_resource_state",
+  "value": {}
+}
+```
+
+`value`는 전체 Kubernetes payload를 그대로 복사하지 않는다.
+incident resource 주변 항목만 고르고, 개수 제한을 적용한다.
+
+| 필드 | 타입 | 코드 기준 생성 규칙 |
+| --- | --- | --- |
+| `cluster` | object | 입력 payload에 있으면 유지한다. |
+| `resource` | object | 입력 payload에 있으면 유지한다. |
+| `symptom` | string | 입력 payload에 있으면 유지한다. |
+| `severity` | string | 입력 payload에 있으면 유지한다. |
+| `pods` | list<object> | incident namespace/resource와 관련된 pod를 최대 16개 남긴다. |
+| `events` | list<object> | incident namespace/resource 또는 선택된 pod와 관련된 event를 최대 24개 남긴다. |
+| `nodes` | list<object> | `ready == false` 또는 `"False"`인 node를 최대 12개 남긴다. |
+| `workloads` | list<object> | incident resource kind/name과 일치하는 workload를 최대 4개 남긴다. |
+| `services` | list<object> | 같은 namespace에서 이름이 incident resource명으로 시작하는 service를 최대 8개 남긴다. |
+| `endpoints` | list<object> | 같은 namespace에서 이름이 incident resource명으로 시작하는 endpoint를 최대 8개 남긴다. |
+| `_lineage` | object | 원본 evidence lineage가 있으면 유지한다. |
+
+선택 기준:
+
+- pod는 `name == resource_name`, `owner_name == resource_name`, 또는 `workload_key`가 `/<resource_name>`으로 끝나면 우선 선택한다.
+- event는 `involved_name`이 선택된 pod 이름이거나 resource 이름이면 우선 선택한다.
+- 관련 항목이 없으면 같은 namespace의 앞쪽 항목을 제한 개수만큼 사용한다.
+
+#### `metrics:telemetry_metrics`
+
+producer:
+
+- `PrometheusMetricsProvider`
+- `collect_evidence_items()` -> `compact_metrics_value()`
+
+입력 위치:
+
+```text
+ClusterEvidenceReceivedBody.metrics
+```
+
+RCA evidence item:
+
+```json
+{
+  "source": "metrics",
+  "name": "telemetry_metrics",
+  "value": {}
+}
+```
+
+`value`는 metric provider result를 compact한 형태다.
+
+| 필드 | 타입 | 코드 기준 생성 규칙 |
+| --- | --- | --- |
+| `_lineage` | object | 원본 evidence lineage가 있으면 유지한다. |
+| `source` | string | 입력 payload에 있으면 유지한다. |
+| `status` | string | 입력 payload에 있으면 유지한다. |
+| `query_count` | number | 입력 payload에 있으면 유지한다. |
+| `result_count` | number | 입력 payload에 있으면 유지한다. |
+| `results` | object | query name별 결과를 최대 12개 남긴다. |
+| `summary` | object | `results`가 없으면 payload 요약으로 대체한다. |
+
+`results.<query_name>`은 다음 규칙으로 줄인다.
+
+| 입력 값 | compact 규칙 |
+| --- | --- |
+| dict | key별로 compact한다. |
+| list | 최대 8개까지만 남긴다. |
+| string | 최대 1600자로 자른다. |
+| nested dict/list | 값 전체 대신 요약을 남긴다. |
+| `data`, `result`, `values`, `streams` list | list 내부를 최대 8개까지 재귀 compact한다. |
+
+provider 원본 payload의 `results.<query_name>.analysis`는 nested object다.
+현재 RCA evidence bundle compact 단계에서는 nested dict/list 규칙에 따라 요약될 수 있다.
+원본 evidence에는 `analysis.metric_kind`가 항상 남고, 조건이 맞으면 `analysis.threshold`,
+`analysis.baseline_comparison`도 남아 있다.
+
+#### `logs:related_logs`
+
+producer:
+
+- `LokiLogsProvider`
+- `collect_evidence_items()` -> `select_incident_log_entries()` -> `compact_log_entries()`
+
+입력 위치:
+
+```text
+ClusterEvidenceReceivedBody.logs
+```
+
+RCA evidence item:
+
+```json
+{
+  "source": "logs",
+  "name": "related_logs",
+  "value": {
+    "entries": []
+  }
+}
+```
+
+`value.entries[]`는 incident namespace 로그만 최대 8개 남긴다.
+
+| 필드 | 타입 | 코드 기준 생성 규칙 |
+| --- | --- | --- |
+| `entries` | list<object> | incident namespace와 맞는 log entry를 최대 8개 남긴다. |
+| `entries[].streams` | list<object> | entry 안의 stream을 최대 4개 남긴다. |
+| `entries[].streams[].values` | list<object> | stream 안의 sample을 최대 20개 남긴다. |
+| `entries[].streams[].values[].line` | string | provider가 민감정보를 마스킹한 log line을 최대 1600자로 자른다. |
+| `entries[].streams[].values[].line_truncated` | boolean | provider 단계에서 line이 4096자 제한으로 잘렸으면 true다. |
+| `entries[].streams[].values[].original_line_length` | number | provider 단계에서 line이 잘렸을 때의 제한 전 마스킹된 line 길이다. |
+| `entries[].line_count` | number | namespace 필터 후 남은 stream value 개수를 계산한다. |
+| `entries[].pattern_counts` | object | provider가 수집 시 계산한 장애 pattern별 line 개수다. namespace 필터 후 다시 계산하지 않는다. |
+| `entries[].severity_counts` | object | provider가 수집 시 계산한 severity별 line 개수다. namespace 필터 후 다시 계산하지 않는다. |
+| `entries[].trace_ids` | list<string> | provider가 수집 시 추출한 안전한 trace id 목록이다. namespace 필터 후 다시 계산하지 않는다. |
+| `entries[].redaction_summary` | object | provider redaction 적용 여부, redacted line 개수, truncated line 개수다. namespace 필터 후 다시 계산하지 않는다. |
+
+Loki provider는 RCA가 로그 문맥을 읽을 수 있도록 `line` 필드는 유지한다.
+하지만 원문 그대로 보내지 않고 `password`, `token`, `secret`, `Authorization`, `Cookie`, JWT 같은
+민감값을 `[REDACTED]` 계열 문자열로 바꾼 뒤 전달한다.
+provider는 evidence job result 크기 보호를 위해 line을 최대 4096자로 먼저 제한하고,
+RCA bundle compact 단계는 다시 최대 1600자로 줄인다.
+
+namespace 필터:
+
+- stream label의 `k8s_namespace_name` 또는 `namespace`가 incident namespace와 같으면 유지한다.
+- namespace label이 없으면 귀속 불가라 보수적으로 유지한다.
+- `streams`가 없는 legacy entry는 그대로 유지한다.
+
+#### `traces:related_traces`
+
+producer:
+
+- `TempoTracesProvider`
+- `collect_evidence_items()` -> `compact_traces_value()`
+
+입력 위치:
+
+```text
+ClusterEvidenceReceivedBody.traces
+```
+
+RCA evidence item:
+
+```json
+{
+  "source": "traces",
+  "name": "related_traces",
+  "value": {}
+}
+```
+
+`value`는 metrics와 같은 compact mapping 규칙을 쓴다.
+차이는 결과 개수 제한이다.
+
+| 필드 | 타입 | 코드 기준 생성 규칙 |
+| --- | --- | --- |
+| `_lineage` | object | 원본 evidence lineage가 있으면 유지한다. |
+| `source` | string | 입력 payload에 있으면 유지한다. |
+| `status` | string | 입력 payload에 있으면 유지한다. |
+| `query_count` | number | 입력 payload에 있으면 유지한다. |
+| `result_count` | number | 입력 payload에 있으면 유지한다. |
+| `results` | object | query name별 trace 결과를 최대 12개 남긴다. |
+| `summary` | object | `results`가 없으면 payload 요약으로 대체한다. |
+
+`results.<query_name>`은 list를 최대 8개까지 남기고, 긴 문자열은 최대 1600자로 자른다.
+provider 단계에서도 trace 내부 긴 문자열은 최대 1024자로 제한되고, 중첩 list는 최대 20개만 남는다.
+한 trace가 계속 너무 크면 provider가 `trace_truncated`, `original_trace_bytes`를 붙인 RCA용 summary로 대체할 수 있다.
+provider 원본 payload의 `results.<query_name>.analysis`는 nested object다.
+현재 RCA evidence bundle compact 단계에서는 nested dict/list 규칙에 따라 요약될 수 있다.
+원본 evidence에는 `trace_summaries`, `trace_ids`, `services`, `operations`,
+`status_counts`, `error_count`, `dependency_count`, `duration_ms` 같은 RCA용 표준 요약이 남아 있다.
+span attribute 원문 전체나 parent/child span 관계 전체는 이 구조화 필드에 넣지 않는다.
+
+#### `metadata:current_workload_snapshots`
+
+producer:
+
+- `MetadataProvider`
+- query: `change_context`, `current_workload_snapshots`, `deployments`
+
+provider bucket:
+
+```json
+{
+  "metadata": {
+    "change_context": {
+      "current_workload_snapshots": []
+    }
+  }
+}
+```
+
+RCA evidence item:
+
+```json
+{
+  "source": "metadata",
+  "name": "current_workload_snapshots",
+  "value": {
+    "items": []
+  }
+}
+```
+
+`value.items[]`:
+
+| 필드 | 타입 | 의미 |
+| --- | --- | --- |
+| `workload.kind` | string | 현재는 `Deployment` 중심이다. |
+| `workload.namespace` | string | workload namespace다. |
+| `workload.name` | string | workload 이름이다. |
+| `deployment_labels` | object | Deployment labels다. |
+| `pod_template_labels` | object | Pod template labels다. |
+| `pod_template_auth` | object | serviceAccountName, automountServiceAccountToken, imagePullSecrets name 요약이다. |
+| `persistent_volume_claim_refs` | list<object> | Pod template volume이 참조하는 PVC claim name 요약이다. |
+| `deployment_status` | object | Deployment replica count와 condition 요약이다. |
+| `pod_statuses` | list<object> | owned Pod phase, ready, condition 샘플 요약이다. |
+| `containers[].name` | string | container 이름이다. |
+| `containers[].image` | string | 현재 cluster에서 보이는 container image다. |
+| `containers[].readiness_probe` | object | readiness probe 요약이다. |
+| `containers[].liveness_probe` | object | liveness probe 요약이다. |
+| `containers[].startup_probe` | object | startup probe 요약이다. |
+| `containers[].resources` | object | requests/limits 요약이다. |
+| `replicaset_revisions[].name` | string | Deployment가 소유한 ReplicaSet 이름이다. |
+| `replicaset_revisions[].revision` | string | `deployment.kubernetes.io/revision` 값이다. |
+| `pod_status_count` | number | `pod_statuses`가 샘플로 잘렸을 때만 있는 전체 Pod 수다. |
+| `pod_statuses_truncated` | boolean | `pod_statuses`가 샘플로 잘렸을 때 true다. |
+| `replicaset_revision_count` | number | `replicaset_revisions`가 샘플로 잘렸을 때만 있는 전체 ReplicaSet 수다. |
+| `replicaset_revisions_truncated` | boolean | `replicaset_revisions`가 샘플로 잘렸을 때 true다. |
+
+probe summary:
+
+| 필드 | 타입 | 의미 |
+| --- | --- | --- |
+| `path` | string 또는 null | HTTP probe path다. |
+| `port` | string 또는 number 또는 null | probe port다. |
+| `timeout_seconds` | number 또는 null | timeout 설정이다. |
+| `period_seconds` | number 또는 null | probe 주기다. |
+| `failure_threshold` | number 또는 null | 실패 threshold다. |
+
+보안 기준:
+
+- `kubectl.kubernetes.io/last-applied-configuration` 같은 raw manifest annotation은 제외한다.
+- `secret`, `token`, `password`, `credential`, `authorization`, `private` 계열 annotation은 제외한다.
+- raw env value, Secret value, token value는 넣지 않는다.
+
+#### `metadata:current_workload_snapshot`
+
+producer:
+
+- `MetadataProvider`
+- query: `deployment/<name>`, `deployment/<namespace>/<name>`, `<namespace>/<name>`
+
+provider bucket:
+
+```json
+{
+  "metadata": {
+    "change_context": {
+      "current_workload_snapshot": {}
+    }
+  }
+}
+```
+
+RCA evidence item:
+
+```json
+{
+  "source": "metadata",
+  "name": "current_workload_snapshot",
+  "value": {}
+}
+```
+
+`value`는 `current_workload_snapshots.items[]`의 summary 필드에 detail-only 필드를 더한 형태다.
+특정 Deployment 하나를 자세히 볼 때 사용한다.
+detail-only 필드는 안전한 `deployment_annotations`, `pod_template_annotations`,
+`managed_fields_managers`, `scheduling_constraints`, env/envFrom/volume reference,
+referenced ConfigMap/Secret object summary, ReplicaSet condition 요약이다.
+
+#### `metadata:change_context`와의 관계
+
+현재 provider bucket 이름은 `change_context`지만, RCA v1에서는 이 이름을
+GitOps 변경 이력으로 해석하지 않는다.
+
+현재 의미는 다음과 같다.
+
+```text
+metadata.change_context.current_workload_snapshots
+= target agent가 Kubernetes API로 본 현재 workload metadata snapshot 목록
+```
+
+RCA bundle builder는 이 값을 다음 evidence item으로 승격한다.
+
+```text
+metadata:current_workload_snapshots
+metadata:current_workload_snapshot
+metadata:service_selector_matches
+metadata:endpoint_slice_ready_endpoints
+```
+
+큰 namespace에서는 provider가 evidence job result의 1MiB JSON 제한을 피하기 위해
+metadata 목록을 샘플로 제한할 수 있다.
+이때 provider bucket에는 `metadata.change_context.collection_limits`가 남고,
+각 list별 `original_count`와 `returned_count`로 잘린 범위를 알 수 있다.
+RCA evidence item으로 승격될 때는 해당 목록 item의 `value.collection_limit`에도
+같은 제한 정보가 붙는다.
+Service selector의 `matched_pods`, EndpointSlice의 `ready_targets`, workload의
+`pod_statuses`와 `replicaset_revisions`도 샘플로 제한될 수 있으며, 전체 count와
+`*_truncated` flag가 함께 제공된다.
+
+Git commit, rollback 가능 여부, risk level, 실제 배포 이력은 이 schema의 필수 근거가 아니다.
+그 정보가 필요하면 GitOps/SCM/Safe PR 단계에서 별도 근거로 다룬다.
 
 ## CauseCandidate와 CauseEvaluation
 

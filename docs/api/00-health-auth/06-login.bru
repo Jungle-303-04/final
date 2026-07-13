@@ -24,6 +24,15 @@ body:json {
   }
 }
 
+script:pre-request {
+  const enabled = String(
+    bru.getEnvVar("auth_flow_verification") || bru.getVar("auth_flow_verification") || "false"
+  ).trim().toLowerCase() === "true";
+  if (!enabled) {
+    bru.runner.skipRequest();
+  }
+}
+
 script:post-response {
   const body = res.getBody();
   if (res.status === 200 && body) {

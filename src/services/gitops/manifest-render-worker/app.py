@@ -295,33 +295,6 @@ def render_source_from_text(
     )
 
 
-def read_checkout_cache_manifest_source(evt: GitChangedBody, manifest_path: str) -> str | None:
-    if not checkout_cache_enabled():
-        return None
-    remote_url = repo_remote_url(evt.repo_ref)
-    if not remote_url:
-        return None
-    cache = GitRepoCache(
-        cache_dir=env(GIT_CACHE_DIR_ENV, DEFAULT_GIT_CACHE_DIR),
-        remote_url=remote_url,
-        timeout_seconds=float(
-            env(
-                GIT_MANIFEST_COMMAND_TIMEOUT_SECONDS_ENV,
-                DEFAULT_GIT_MANIFEST_COMMAND_TIMEOUT_SECONDS,
-            )
-        ),
-        max_bytes=env_int(GIT_CACHE_MAX_BYTES_ENV),
-        max_repos=env_int(GIT_CACHE_MAX_REPOS_ENV),
-        http_extra_header=github_auth_header(),
-    )
-    try:
-        return cache.read_file(evt.commit_sha, manifest_path)
-    except GitRepoCacheError:
-        if checkout_cache_required():
-            raise
-        return None
-
-
 def export_checkout_cache_manifest_path(
     evt: GitChangedBody, manifest_path: str, destination: Path
 ) -> Path | None:
@@ -562,29 +535,6 @@ def read_github_manifest_source(repo_ref: str, commit_sha: str, manifest_path: s
         return None
 
 
-def read_local_manifest_source(evt: GitChangedBody, manifest_path: str) -> str | None:
-    repo_path = env(GIT_REPO_PATH_ENV, "")
-    if repo_path:
-        result = subprocess.run(
-            ["git", "-C", repo_path, "show", f"{evt.commit_sha}:{manifest_path}"],
-            check=True,
-            capture_output=True,
-            text=True,
-            timeout=float(
-                env(
-                    GIT_MANIFEST_COMMAND_TIMEOUT_SECONDS_ENV,
-                    DEFAULT_GIT_MANIFEST_COMMAND_TIMEOUT_SECONDS,
-                )
-            ),
-        )
-        return result.stdout
-
-    path = Path(manifest_path)
-    if path.exists():
-        return path.read_text(encoding="utf-8")
-    return None
-
-
 def export_local_git_path(
     repo_path: str, commit_sha: str, manifest_path: str, destination: Path
 ) -> Path:
@@ -652,30 +602,6 @@ def manifest_render_source(evt: GitChangedBody) -> Any:
             return
 
     yield None
-
-
-def read_manifest_source(evt: GitChangedBody) -> str | None:
-    manifest_path = env(GIT_MANIFEST_PATH_ENV, evt.manifest_path)
-    if not manifest_path:
-        return None
-
-    mode = manifest_source_mode()
-    if mode != SOURCE_MODE_LOCAL:
-        cached_source = read_checkout_cache_manifest_source(evt, manifest_path)
-        if cached_source is not None:
-            return cached_source
-        remote_source = read_github_manifest_source(evt.repo_ref, evt.commit_sha, manifest_path)
-        if remote_source is not None:
-            return remote_source
-
-    if local_manifest_enabled(mode):
-        return read_local_manifest_source(evt, manifest_path)
-    return None
-
-
-def parse_rendered_manifest_source(source: str) -> list[RenderedManifest]:
-    payloads = load_manifest_documents(source)
-    return parse_rendered_manifest_payloads(payloads)
 
 
 def load_manifest_documents(source: str) -> list[Any]:
@@ -908,10 +834,6 @@ def deployment_image(spec: dict[str, Any]) -> str:
     return str(first.get("image", ""))
 
 
-def build_rendered_manifests_from_git_change(evt: GitChangedBody) -> list[RenderedManifest]:
-    return build_rendered_manifest_result(evt).rendered_manifests
-
-
 def build_rendered_manifest_result(evt: GitChangedBody) -> RenderResult:
     with manifest_render_source(evt) as source:
         if source is not None:
@@ -1054,6 +976,8 @@ async def on_git_changed(
                 cluster_id=evt.cluster_id,
                 commit_sha=evt.commit_sha,
                 manifest_path=event_manifest_path,
+                repo_ref=evt.repo_ref,
+                branch=evt.branch,
             )
         await ctx.db.mark_watch_observed(
             evt.watch_target_id,
@@ -1133,6 +1057,8 @@ async def on_git_changed(
             cluster_id=evt.cluster_id,
             commit_sha=evt.commit_sha,
             manifest_path=event_manifest_path,
+            repo_ref=evt.repo_ref,
+            branch=evt.branch,
         )
     await ctx.db.mark_watch_observed(
         evt.watch_target_id,

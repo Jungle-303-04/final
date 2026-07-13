@@ -5,10 +5,13 @@ from typing import Any
 from conftest import SpyDb, load_service, run_handler, subjects_of
 
 from domains.command.events import CommandCompletedBody
+from domains.gitops.events import GitOpsChangeContextDetectedBody
 from domains.rca.events import (
+    CauseCandidate,
     ClusterEvidenceReceivedBody,
     Evidence,
     EvidenceBundle,
+    EvidenceItem,
     IncidentRecord,
     RcaAnalysisBlockedBody,
     RcaCompletedBody,
@@ -36,6 +39,7 @@ def crashloop_payload(
     traces: dict[str, Any] | None = None,
     source_id: str | None = None,
     window_start: str | None = None,
+    metadata: dict[str, Any] | None = None,
 ) -> ClusterEvidenceReceivedBody:
     return ClusterEvidenceReceivedBody(
         cluster_id="target-cluster-01",
@@ -55,6 +59,7 @@ def crashloop_payload(
         traces=traces if traces is not None else {"slow_span": "GET /checkout"},
         source_id=source_id,
         window_start=window_start,
+        metadata=metadata if metadata is not None else {},
     )
 
 
@@ -174,6 +179,39 @@ def test_evidence_worker_accepts_legacy_full_payload_event() -> None:
     assert not db.called("get_evidence_window_payload")
 
 
+def test_evidence_worker_persists_gitops_change_context_event() -> None:
+    evidence_worker = load_service("ai/evidence-worker")
+    payload = GitOpsChangeContextDetectedBody(
+        workspace_id="workspace-1",
+        cluster_id="cluster-1",
+        repository_id="repo-1",
+        commit_sha="abc123",
+        manifest_path="deploy/checkout-api.yaml",
+        resource="deployment/checkout-api",
+        metadata={
+            "change_context": {
+                "gitops": {"repository_id": "repo-1", "commit_sha": "abc123"},
+                "recent_changes": [{"change_type": "image", "field": "image"}],
+            }
+        },
+    )
+    db = SpyDb()
+
+    outs = run_handler(
+        evidence_worker.on_gitops_change_context,
+        payload,
+        db=db,
+        correlation_id="corr-gitops-context",
+    )
+
+    assert outs == []
+    assert db.calls[0][0] == "save_evidence"
+    assert db.calls[0][1][0] == "corr-gitops-context"
+    assert db.calls[0][1][1] == "workspace-1"
+    assert db.calls[0][1][2] == "gitops_change_context"
+    assert db.calls[0][1][3]["metadata"]["change_context"]["gitops"]["commit_sha"] == "abc123"
+
+
 def test_incident_worker_hydrates_reference_evidence_built_event() -> None:
     evidence_worker = load_service("ai/evidence-worker")
     incident_worker = load_service("ai/incident-worker")
@@ -272,7 +310,7 @@ def test_crashloop_flow_auto_selects_restart_and_queues_command() -> None:
     assert detected.affected[0]["workspace_id"] == "workspace-1"
 
     planned = event_by_subject(rca_events, "rca.candidates.planned")
-    assert planned.candidate_count == 5
+    assert planned.candidate_count == 7
     assert [candidate.candidate_id for candidate in planned.candidates][:2] == [
         "oom_killed",
         "bad_image_rollout",
@@ -495,8 +533,49 @@ def test_evidence_bundle_promotes_lineage_to_rca_items(monkeypatch) -> None:
     assert kubernetes_lineage["window_start"] == "window-2"
 
 
-def loki_log_entry(namespace: str, line: str, *, query_name: str = "namespace_errors") -> dict:
+def test_evidence_bundle_preserves_provider_schema_v1_item_keys() -> None:
+    db = SpyDb()
+    payload = crashloop_payload(
+        traces={
+            "source": "tempo",
+            "results": {
+                "application_error_spans": {
+                    "query": "{ status = error }",
+                    "traces": [],
+                    "analysis": {"error_count": 0},
+                    "trace_count": 0,
+                }
+            },
+        },
+        metadata={"change_context": {"current_workload_snapshots": []}},
+    )
+
+    rca_events = run_to_rca(payload, db=db, correlation_id="corr-schema-v1")
+
+    bundle = event_by_subject(rca_events, "evidence.bundle.built").evidence_bundle
+    item_keys = {f"{item.source}:{item.name}" for item in bundle.items}
+    assert {
+        "kubernetes:cluster_resource_state",
+        "metrics:telemetry_metrics",
+        "logs:related_logs",
+        "traces:related_traces",
+    } <= item_keys
+    assert "metadata:current_workload_snapshots" not in item_keys
+    trace_item = next(item for item in bundle.items if item.source == "traces")
+    assert trace_item.value["results"]["application_error_spans"]["trace_count"] == 0
+
+
+def loki_log_entry(
+    namespace: str,
+    line: str,
+    *,
+    query_name: str = "namespace_errors",
+    pod_name: str | None = None,
+) -> dict:
     """Loki provider(normalize_payload) 출력과 같은 모양의 로그 evidence 항목."""
+    stream_labels = {"k8s_namespace_name": namespace, "k8s_container_name": "app"}
+    if pod_name:
+        stream_labels["k8s_pod_name"] = pod_name
     return {
         "source": "loki",
         "query_name": query_name,
@@ -504,7 +583,7 @@ def loki_log_entry(namespace: str, line: str, *, query_name: str = "namespace_er
         "result_type": "streams",
         "streams": [
             {
-                "stream": {"k8s_namespace_name": namespace, "k8s_container_name": "app"},
+                "stream": stream_labels,
                 "values": [{"timestamp": "1751871600000000000", "line": line}],
             }
         ],
@@ -579,6 +658,67 @@ def test_evidence_bundle_keeps_only_incident_namespace_log_streams() -> None:
     assert completed.root_cause != "oom_killed"
 
 
+def test_rca_test_bundle_excludes_prior_run_logs_from_same_namespace() -> None:
+    """동일 namespace의 이전 test Pod 로그가 현재 run의 원인 판정을 오염시키지 않는다."""
+    current_pod = "rca-test-crash-app-startup-7f8d9c6b5-x2k4m"
+    payload = crashloop_payload(
+        logs=[
+            loki_log_entry(
+                "sandbox",
+                "FATAL: required environment variable DATABASE_URL is not set",
+                pod_name="rca-test-crash-config-env-6d7c8b5f4-p9q2r",
+            ),
+            loki_log_entry(
+                "sandbox",
+                "FATAL: startup failed",
+                pod_name=current_pod,
+            ),
+        ],
+        metadata={
+            "rca_test": {
+                "run_id": "run-app-startup",
+                "scenario_id": "crash.app-startup",
+                "pod_names": [current_pod],
+            }
+        },
+    )
+
+    rca_events = run_to_rca(payload, db=SpyDb(), correlation_id="corr-test-pod-filter")
+
+    bundle = event_by_subject(rca_events, "evidence.bundle.built").evidence_bundle
+    logs_item = next(item for item in bundle.items if item.source == "logs")
+    selected_lines = [
+        value["line"]
+        for entry in logs_item.value["entries"]
+        for stream in entry["streams"]
+        for value in stream["values"]
+    ]
+    assert selected_lines == ["FATAL: startup failed"]
+    completed = event_by_subject(rca_events, "rca.completed")
+    assert completed.root_cause == "app_startup_failure"
+
+
+def test_rca_test_bundle_rejects_log_stream_without_pod_identity() -> None:
+    """RCA test 로그에 Pod 라벨이 없으면 다른 run 혼입 위험 때문에 근거로 사용하지 않는다."""
+    payload = crashloop_payload(
+        logs=[loki_log_entry("sandbox", "FATAL: startup failed")],
+        traces={},
+        metadata={
+            "rca_test": {
+                "run_id": "run-app-startup",
+                "scenario_id": "crash.app-startup",
+                "pod_names": ["rca-test-crash-app-startup-7f8d9c6b5-x2k4m"],
+            }
+        },
+    )
+
+    rca_events = run_to_rca(payload, db=SpyDb(), correlation_id="corr-test-no-pod-label")
+
+    bundle = event_by_subject(rca_events, "evidence.bundle.built").evidence_bundle
+    assert all(item.source != "logs" for item in bundle.items)
+    assert rca_events[-1].__subject__ == "rca.analysis_blocked"
+
+
 def test_target_namespace_only_logs_do_not_count_as_workload_evidence() -> None:
     """다른 네임스페이스(target) 로그뿐이면 logs 근거가 빠져 완결 대신 blocked 로 흐른다."""
     db = SpyDb()
@@ -593,6 +733,256 @@ def test_target_namespace_only_logs_do_not_count_as_workload_evidence() -> None:
     assert all(item.source != "logs" for item in bundle.items)
     assert rca_events[-1].__subject__ == "rca.analysis_blocked"
     assert not db.called("save_rca_report")
+
+
+def test_evidence_bundle_adds_change_context_metadata_item() -> None:
+    db = SpyDb()
+    payload = crashloop_payload(
+        metadata={
+            "change_context": {
+                "recent_changes": [
+                    {
+                        "change_type": "secret_ref",
+                        "changed_at": "2026-07-07T10:13:00Z",
+                        "target_resource": "Secret/checkout-api",
+                        "field": "DATABASE_URL",
+                        "before": "postgres://real-user:real-password@db",
+                        "after": "postgres://new-user:new-password@db",
+                        "source": "gitops",
+                    }
+                ],
+                "gitops": {
+                    "repository_id": "repo-1",
+                    "branch": "main",
+                    "manifest_path": "deploy/checkout-api.yaml",
+                    "commit_sha": "abc1234",
+                },
+                "rollout": {"revision": "42", "rollback_available": True},
+            }
+        },
+    )
+
+    rca_events = run_to_rca(payload, db=db, correlation_id="corr-change-context")
+
+    bundle = event_by_subject(rca_events, "evidence.bundle.built").evidence_bundle
+    metadata_item = next(item for item in bundle.items if item.source == "metadata")
+    assert metadata_item.name == "change_context"
+    assert metadata_item.value["resource"] == {
+        "namespace": "sandbox",
+        "workload_kind": "deployment",
+        "workload_name": "checkout-api",
+    }
+    assert metadata_item.value["gitops"]["commit_sha"] == "abc1234"
+    assert metadata_item.value["rollout"]["rollback_available"] is True
+    change = metadata_item.value["recent_changes"][0]
+    assert change["before"] == "redacted"
+    assert change["after"] == "redacted"
+    assert "real-password" not in str(metadata_item.value)
+
+
+def test_evidence_bundle_adds_workload_snapshot_metadata_items() -> None:
+    db = SpyDb()
+    payload = crashloop_payload(
+        metadata={
+            "current_workload_snapshots": [
+                {
+                    "namespace": "sandbox",
+                    "kind": "Deployment",
+                    "name": "checkout-api",
+                    "image": "repo/checkout:v2",
+                    "ready_replicas": 0,
+                }
+            ],
+            "current_workload_snapshot": {
+                "namespace": "sandbox",
+                "kind": "Deployment",
+                "name": "checkout-api",
+                "image": "repo/checkout:v2",
+                "conditions": [{"type": "Progressing", "reason": "ProgressDeadlineExceeded"}],
+            },
+        },
+    )
+
+    rca_events = run_to_rca(payload, db=db, correlation_id="corr-workload-snapshot")
+
+    bundle = event_by_subject(rca_events, "evidence.bundle.built").evidence_bundle
+    metadata_items = {item.name: item for item in bundle.items if item.source == "metadata"}
+    snapshots = metadata_items["current_workload_snapshots"]
+    snapshot = metadata_items["current_workload_snapshot"]
+    assert snapshots.value["items"][0]["name"] == "checkout-api"
+    assert snapshots.value["items"][0]["ready_replicas"] == 0
+    assert snapshot.value["conditions"][0]["reason"] == "ProgressDeadlineExceeded"
+    assert "change_context" not in metadata_items
+
+
+def test_evidence_bundle_adds_nested_workload_snapshot_metadata_items() -> None:
+    db = SpyDb()
+    payload = crashloop_payload(
+        metadata={
+            "change_context": {
+                "current_workload_snapshots": [
+                    {
+                        "namespace": "sandbox",
+                        "kind": "Deployment",
+                        "name": "checkout-api",
+                        "image": "repo/checkout:v2",
+                        "ready_replicas": 0,
+                    }
+                ],
+                "current_workload_snapshot": {
+                    "namespace": "sandbox",
+                    "kind": "Deployment",
+                    "name": "checkout-api",
+                    "image": "repo/checkout:v2",
+                    "conditions": [{"type": "Progressing", "reason": "ProgressDeadlineExceeded"}],
+                },
+            },
+        },
+    )
+
+    rca_events = run_to_rca(payload, db=db, correlation_id="corr-nested-workload-snapshot")
+
+    bundle = event_by_subject(rca_events, "evidence.bundle.built").evidence_bundle
+    metadata_items = {item.name: item for item in bundle.items if item.source == "metadata"}
+    snapshots = metadata_items["current_workload_snapshots"]
+    snapshot = metadata_items["current_workload_snapshot"]
+    assert snapshots.value["items"][0]["name"] == "checkout-api"
+    assert snapshot.value["conditions"][0]["reason"] == "ProgressDeadlineExceeded"
+    assert "change_context" not in metadata_items
+
+
+def test_evidence_bundle_adds_service_and_endpoint_metadata_items() -> None:
+    db = SpyDb()
+    payload = crashloop_payload(
+        metadata={
+            "change_context": {
+                "service_selector_matches": [
+                    {
+                        "service": {"namespace": "sandbox", "name": "checkout-api"},
+                        "selector": {"app": "checkout-api"},
+                        "match_status": "matched",
+                        "matched_pod_count": 1,
+                        "matched_pods": [{"namespace": "sandbox", "name": "checkout-api-pod"}],
+                    }
+                ],
+                "endpoint_slice_ready_endpoints": [
+                    {
+                        "service": {"namespace": "sandbox", "name": "checkout-api"},
+                        "endpoint_slice": {"namespace": "sandbox", "name": "checkout-api-abc"},
+                        "endpoint_count": 1,
+                        "ready_endpoint_count": 0,
+                        "not_ready_endpoint_count": 1,
+                    }
+                ],
+            },
+        },
+    )
+
+    rca_events = run_to_rca(payload, db=db, correlation_id="corr-service-endpoint-metadata")
+
+    bundle = event_by_subject(rca_events, "evidence.bundle.built").evidence_bundle
+    metadata_items = {item.name: item for item in bundle.items if item.source == "metadata"}
+    service_matches = metadata_items["service_selector_matches"]
+    endpoint_slices = metadata_items["endpoint_slice_ready_endpoints"]
+    assert service_matches.value["items"][0]["service"]["name"] == "checkout-api"
+    assert service_matches.value["items"][0]["matched_pod_count"] == 1
+    assert endpoint_slices.value["items"][0]["endpoint_slice"]["name"] == "checkout-api-abc"
+    assert endpoint_slices.value["items"][0]["ready_endpoint_count"] == 0
+    assert "change_context" not in metadata_items
+
+
+def test_evidence_bundle_attaches_metadata_collection_limits() -> None:
+    db = SpyDb()
+    payload = crashloop_payload(
+        metadata={
+            "change_context": {
+                "current_workload_snapshots": [
+                    {
+                        "namespace": "sandbox",
+                        "kind": "Deployment",
+                        "name": "checkout-api",
+                    }
+                ],
+                "service_selector_matches": [
+                    {
+                        "service": {"namespace": "sandbox", "name": "checkout-api"},
+                        "match_status": "matched",
+                        "matched_pod_count": 25,
+                    }
+                ],
+                "endpoint_slice_ready_endpoints": [
+                    {
+                        "endpoint_slice": {
+                            "namespace": "sandbox",
+                            "name": "checkout-api-abc",
+                        },
+                        "ready_endpoint_count": 1,
+                    }
+                ],
+                "collection_limits": {
+                    "truncated": True,
+                    "lists": {
+                        "current_workload_snapshots": {
+                            "truncated": True,
+                            "original_count": 1000,
+                            "returned_count": 200,
+                        },
+                        "service_selector_matches": {
+                            "truncated": True,
+                            "original_count": 300,
+                            "returned_count": 200,
+                        },
+                        "endpoint_slice_ready_endpoints": {
+                            "truncated": True,
+                            "original_count": 250,
+                            "returned_count": 200,
+                        },
+                    },
+                },
+            },
+        },
+    )
+
+    rca_events = run_to_rca(payload, db=db, correlation_id="corr-metadata-limits")
+
+    bundle = event_by_subject(rca_events, "evidence.bundle.built").evidence_bundle
+    metadata_items = {item.name: item for item in bundle.items if item.source == "metadata"}
+    assert metadata_items["current_workload_snapshots"].value["collection_limit"] == {
+        "truncated": True,
+        "original_count": 1000,
+        "returned_count": 200,
+    }
+    assert metadata_items["service_selector_matches"].value["collection_limit"] == {
+        "truncated": True,
+        "original_count": 300,
+        "returned_count": 200,
+    }
+    assert metadata_items["endpoint_slice_ready_endpoints"].value["collection_limit"] == {
+        "truncated": True,
+        "original_count": 250,
+        "returned_count": 200,
+    }
+    assert "change_context" not in metadata_items
+
+
+def test_evidence_bundle_skips_empty_change_context_metadata_item() -> None:
+    db = SpyDb()
+    payload = crashloop_payload(
+        metadata={
+            "change_context": {
+                "recent_changes": [],
+                "rollback_available": None,
+                "risk_level": "unknown",
+            }
+        },
+    )
+
+    rca_events = run_to_rca(payload, db=db, correlation_id="corr-empty-change-context")
+
+    bundle = event_by_subject(rca_events, "evidence.bundle.built").evidence_bundle
+    assert all(
+        not (item.source == "metadata" and item.name == "change_context") for item in bundle.items
+    )
 
 
 def test_duplicate_rca_report_in_window_is_not_saved_again() -> None:
@@ -616,6 +1006,34 @@ def test_duplicate_rca_report_in_window_is_not_saved_again() -> None:
     assert root_cause == rca_events[-1].root_cause
     assert resource_key == "sandbox/deployment/checkout-api"
     assert window_seconds > 0
+
+
+def test_rca_test_report_bypasses_incident_dedup_and_saves_correlation() -> None:
+    run_pod = "rca-test-crash-app-startup-7f8d9c6b5-x2k4m"
+    db = SpyDb(
+        find_recent_rca_report={
+            "id": 1,
+            "correlation_id": "corr-earlier",
+            "created_at": "2026-07-07T09:00:00+00:00",
+        }
+    )
+    payload = crashloop_payload(
+        logs=[loki_log_entry("sandbox", "FATAL: startup failed", pod_name=run_pod)],
+        metadata={
+            "rca_test": {
+                "run_id": "run-1",
+                "scenario_id": "crash.app-startup",
+                "pod_names": [run_pod],
+            }
+        },
+    )
+
+    rca_events = run_to_rca(payload, db=db, correlation_id="corr-rca-test")
+
+    assert rca_events[-1].__subject__ == "rca.completed"
+    assert not db.called("find_recent_rca_report")
+    save = next(call for call in db.calls if call[0] == "save_rca_report")
+    assert save[1][0] == "corr-rca-test"
 
 
 def test_no_incident_flow_stops_before_rca_analysis() -> None:
@@ -787,6 +1205,54 @@ def test_plan_worker_resolves_backlog_when_rule_exists() -> None:
         "CrashLoopBackOff",
         "matching RCA rule is now available",
     )
+
+
+def test_cause_evaluator_matches_source_and_named_evidence_keys() -> None:
+    from services.ai.agent.causes.engine import evaluate_causes
+
+    candidate = CauseCandidate(
+        candidate_id="probe_path_wrong",
+        title="Probe path mismatch",
+        description="Probe 설정과 실제 응답 경로가 맞지 않는 후보입니다.",
+        expected_evidence=[
+            "kubernetes:cluster_resource_state",
+            "logs",
+            "metadata:change_context",
+        ],
+        checks=["probe path와 event message를 비교"],
+    )
+    bundle = EvidenceBundle(
+        incident_id="inc-probe",
+        items=[
+            EvidenceItem(
+                source="kubernetes",
+                name="cluster_resource_state",
+                value={"pods": [{"waiting_reasons": ["CrashLoopBackOff"]}]},
+                summary="Kubernetes state",
+            ),
+            EvidenceItem(
+                source="logs",
+                name="related_logs",
+                value={"entries": [{"line": "readiness probe returned 404"}]},
+                summary="Application logs",
+            ),
+        ],
+        missing_evidence=[],
+        complete=True,
+    )
+
+    evaluation = evaluate_causes([candidate], bundle)[0]
+
+    assert evaluation.supporting_evidence == [
+        "kubernetes:cluster_resource_state",
+        "logs",
+    ]
+    assert evaluation.missing_evidence == ["metadata:change_context"]
+    assert evaluation.score == 2 / 3
+    assert [(ref.source, ref.name) for ref in evaluation.supporting_evidence_refs] == [
+        ("kubernetes", "cluster_resource_state"),
+        ("logs", "related_logs"),
+    ]
 
 
 def test_user_selected_safe_pr_flow_emits_reviewable_patch(monkeypatch) -> None:

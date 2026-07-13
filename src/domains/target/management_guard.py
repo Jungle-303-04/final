@@ -11,7 +11,6 @@ from packages.contracts.gateway.requests import (
     DesiredStatePolicy,
     SchedulingPolicy,
 )
-from packages.contracts.identity import DEFAULT_WORKSPACE_ID
 
 TARGET_CLUSTER_ROLE = "target"
 MANAGEMENT_CLUSTER_ROLE = "management"
@@ -53,13 +52,6 @@ def is_management_role(role: str) -> bool:
 
 def is_management_registration(registration: dict[str, Any] | None) -> bool:
     return is_management_role(cluster_role_from_registration(registration))
-
-
-def registration_workspace_id(registration: dict[str, Any] | None) -> str:
-    if not registration:
-        return DEFAULT_WORKSPACE_ID
-    value = registration.get("workspace_id")
-    return str(value) if value else DEFAULT_WORKSPACE_ID
 
 
 def freeze_management_policy(policy: AgentPolicy) -> AgentPolicy:

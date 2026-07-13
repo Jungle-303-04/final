@@ -181,7 +181,7 @@ def test_hash_password_does_not_store_plain_password() -> None:
 
 def test_session_auth_requires_real_session_by_default(monkeypatch) -> None:
     async def run() -> None:
-        monkeypatch.delenv("DEV_AUTH_BYPASS", raising=False)
+        monkeypatch.delenv("TRUSTED_PROXY_AUTH_SECRET", raising=False)
         auth = load_auth_module()
         sessions = StubSessionStore(auth)
         service = auth.SessionAuthService(sessions)
@@ -196,23 +196,51 @@ def test_session_auth_requires_real_session_by_default(monkeypatch) -> None:
     asyncio.run(run())
 
 
-def test_session_auth_dev_bypass_returns_admin_session(monkeypatch) -> None:
+def test_session_auth_accepts_mtls_proxy_identity(monkeypatch) -> None:
     async def run() -> None:
-        monkeypatch.setenv("DEV_AUTH_BYPASS", "1")
-        monkeypatch.setenv("DEV_AUTH_BYPASS_USER_ID", "operator-dev")
-        monkeypatch.setenv("DEV_AUTH_BYPASS_WORKSPACE_ID", "workspace-dev")
+        proxy_secret = "a" * 64
+        monkeypatch.setenv("TRUSTED_PROXY_AUTH_SECRET", proxy_secret)
+        monkeypatch.setenv("TRUSTED_PROXY_AUTH_USER_ID", "operator-dev")
+        monkeypatch.setenv("TRUSTED_PROXY_AUTH_WORKSPACE_ID", "workspace-dev")
         auth = load_auth_module()
         sessions = StubSessionStore(auth)
         service = auth.SessionAuthService(sessions)
-        request = Request({"type": "http", "headers": []})
+        request = Request(
+            {
+                "type": "http",
+                "headers": [(b"x-kubeheal-internal-auth", proxy_secret.encode())],
+            }
+        )
 
         session = await service.require_session(request)
 
-        assert session.token == auth.Settings.DEV_AUTH_BYPASS_TOKEN
+        assert session.token == "mtls-dev-console"
         assert session.user_id == "operator-dev"
         assert session.workspace_id == "workspace-dev"
         assert session.roles == [auth.ServiceRole.SERVICE_ADMIN.value]
         assert sessions.rate_checks == []
+
+    asyncio.run(run())
+
+
+def test_session_auth_rejects_invalid_mtls_proxy_secret(monkeypatch) -> None:
+    async def run() -> None:
+        monkeypatch.setenv("TRUSTED_PROXY_AUTH_SECRET", "a" * 64)
+        monkeypatch.setenv("TRUSTED_PROXY_AUTH_USER_ID", "operator-dev")
+        monkeypatch.setenv("TRUSTED_PROXY_AUTH_WORKSPACE_ID", "workspace-dev")
+        auth = load_auth_module()
+        sessions = StubSessionStore(auth)
+        service = auth.SessionAuthService(sessions)
+        request = Request(
+            {
+                "type": "http",
+                "headers": [(b"x-kubeheal-internal-auth", b"wrong")],
+            }
+        )
+
+        with pytest.raises(HTTPException) as exc:
+            await service.require_session(request)
+        assert exc.value.status_code == 401
 
     asyncio.run(run())
 

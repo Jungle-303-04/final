@@ -9,6 +9,7 @@
 from __future__ import annotations
 
 import base64
+import re
 from urllib.parse import quote
 
 import httpx
@@ -20,6 +21,7 @@ from domains.scm.policy import (
     normalize_repo_path,
     validate_request_paths,
 )
+from packages.config.logs import CONTEXT_KEY, get_logger
 from packages.config.settings import env
 from packages.contracts.gitops import (
     DEFAULT_GITHUB_API_BASE,
@@ -37,12 +39,16 @@ SCM_BASE_BRANCH_ENV = "SCM_BASE_BRANCH"  # PR base 브랜치(기본 main)
 DEFAULT_SCM_BASE_BRANCH = "main"
 SCM_HTTP_TIMEOUT_SECONDS_ENV = "SCM_HTTP_TIMEOUT_SECONDS"  # GitHub API 타임아웃 초(기본 10)
 DEFAULT_SCM_HTTP_TIMEOUT_SECONDS = "10"
+GITHUB_REPO_REF_RE = re.compile(r"^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$")
+GITHUB_BRANCH_REF_RE = re.compile(r"^[A-Za-z0-9._/-]+$")
 
 PR_STATUS_CREATED = "created"
 BRANCH_PREFIX = "gitops"
 CONFLICT_STATUS = 422
 OK_STATUS = 200
 PATCH_COMMIT_MESSAGE_PREFIX = "Apply manifest patch"
+INVALID_REPO_REF_MESSAGE = "safe pr repo_ref must be an owner/repo GitHub repository path"
+INVALID_BRANCH_REF_MESSAGE = "safe pr branch must be a safe GitHub branch ref"
 
 # 자격 증명 부재는 부팅 실패가 아니라 요청 시점 실패 — 워커는 뜨고,
 # 각 safe_pr.requested 는 safe_pr.failed 경로로 흐름.
@@ -55,8 +61,31 @@ MISSING_EXISTING_PR_MESSAGE = (
 )
 
 
+LOGGER = get_logger(__name__)
+
+
+def normalize_branch_ref(branch: str) -> str:
+    ref = branch.strip()
+    parts = ref.split("/")
+    if (
+        not ref
+        or not GITHUB_BRANCH_REF_RE.match(ref)
+        or ref.startswith("/")
+        or ref.endswith("/")
+        or "//" in ref
+        or "\\" in ref
+        or ".." in ref
+        or "@{" in ref
+        or ref.endswith(".")
+        or ref.endswith(".lock")
+        or any(part in {"", ".", ".."} or part.endswith(".lock") for part in parts)
+    ):
+        raise ValueError(INVALID_BRANCH_REF_MESSAGE)
+    return ref
+
+
 def branch_name(request: SafePrRequestedBody) -> str:
-    return f"{BRANCH_PREFIX}/{request.workflow_run_id}"
+    return normalize_branch_ref(f"{BRANCH_PREFIX}/{request.workflow_run_id}")
 
 
 def change_document_path(request: SafePrRequestedBody) -> str:
@@ -80,6 +109,9 @@ def change_document(request: SafePrRequestedBody) -> str:
         f"- manifest_path: `{request.manifest_path}`\n"
         f"- workflow_run_id: `{request.workflow_run_id}`\n"
         f"- environment: `{request.environment}`\n\n"
+        "## Evidence\n\n"
+        f"- commit_sha: `{request.commit_sha}`\n"
+        f"- patch_sha256: `{request.patch_sha256}`\n\n"
         "## Approval\n\n"
         f"{approval_section}\n\n"
         "## Files\n\n"
@@ -89,6 +121,72 @@ def change_document(request: SafePrRequestedBody) -> str:
 
 def contents_api_path(repo: str, path: str) -> str:
     return f"/repos/{repo}/contents/{quote(normalize_repo_path(path), safe='/')}"
+
+
+def request_repo(request: SafePrRequestedBody) -> str:
+    repo = (request.repo_ref or env(SCM_REPO_ENV, "")).strip()
+    if not repo:
+        raise RuntimeError(MISSING_GITHUB_CONFIG_MESSAGE)
+    if not GITHUB_REPO_REF_RE.match(repo):
+        raise ValueError(INVALID_REPO_REF_MESSAGE)
+    return repo
+
+
+def request_base_branch(request: SafePrRequestedBody) -> str:
+    return normalize_branch_ref(
+        request.base_branch.strip()
+        or env(SCM_BASE_BRANCH_ENV, DEFAULT_SCM_BASE_BRANCH).strip()
+        or DEFAULT_SCM_BASE_BRANCH
+    )
+
+
+def safe_pr_provider_context(
+    request: SafePrRequestedBody,
+    ctx: EventContext[PullRequestStore],
+    *,
+    repo: str,
+    branch: str,
+    base_branch: str,
+    operation: str,
+    path: str | None = None,
+    status_code: int | None = None,
+) -> dict[str, object]:
+    context: dict[str, object] = {
+        "provider": request.provider,
+        "operation": operation,
+        "event_id": ctx.event_id,
+        "correlation_id": ctx.correlation_id,
+        "causation_id": ctx.causation_id,
+        "workspace_id": request.workspace_id,
+        "repository_id": request.repository_id,
+        "binding_id": request.binding_id,
+        "application_id": request.application_id,
+        "workflow_run_id": request.workflow_run_id,
+        "environment": request.environment,
+        "manifest_path": request.manifest_path,
+        "repo_ref": repo,
+        "base_branch": base_branch,
+        "head_branch": branch,
+    }
+    if path is not None:
+        context["path"] = path
+    if status_code is not None:
+        context["status_code"] = status_code
+    return context
+
+
+def log_provider_response(
+    operation: str,
+    response: httpx.Response,
+    context: dict[str, object],
+    *,
+    path: str | None = None,
+) -> None:
+    log_context = {**context, "operation": operation, "status_code": response.status_code}
+    if path is not None:
+        log_context["path"] = path
+    level = LOGGER.warning if response.status_code >= 400 else LOGGER.info
+    level("github_provider_response", extra={CONTEXT_KEY: log_context})
 
 
 class GithubScmProvider:
@@ -108,28 +206,39 @@ class GithubScmProvider:
         preflight = DefaultSafePrPreflightPolicy().evaluate(request)
         if not preflight.allowed:
             raise ValueError(preflight.message)
-        repo = env(SCM_REPO_ENV, "").strip()
-        if not repo:
-            raise RuntimeError(MISSING_GITHUB_CONFIG_MESSAGE)
+        repo = request_repo(request)
         try:
             token = self.github_token()
         except SecretNotFound as exc:
             raise RuntimeError(MISSING_GITHUB_CONFIG_MESSAGE) from exc
-        base_branch = env(SCM_BASE_BRANCH_ENV, DEFAULT_SCM_BASE_BRANCH).strip() or (
-            DEFAULT_SCM_BASE_BRANCH
-        )
+        base_branch = request_base_branch(request)
         branch = branch_name(request)
         validate_request_paths(request)
+        context = safe_pr_provider_context(
+            request,
+            ctx,
+            repo=repo,
+            branch=branch,
+            base_branch=base_branch,
+            operation="safe_pr.create",
+        )
+        LOGGER.info("github_provider_started", extra={CONTEXT_KEY: context})
 
         async with self.client(token) as client:
-            base_sha = await self.base_branch_sha(client, repo, base_branch)
-            await self.ensure_branch(client, repo, branch, base_sha)
-            await self.put_change_document(client, repo, branch, request)
-            await self.put_manifest_patches(client, repo, branch, request)
-            pr_url = await self.create_or_reuse_pr(client, repo, branch, base_branch, request)
+            base_sha = await self.base_branch_sha(client, repo, base_branch, context)
+            await self.ensure_branch(client, repo, branch, base_sha, context)
+            await self.put_change_document(client, repo, branch, request, context)
+            await self.put_manifest_patches(client, repo, branch, request, context)
+            pr_url = await self.create_or_reuse_pr(
+                client, repo, branch, base_branch, request, context
+            )
 
         await ctx.db.save_pull_request(
             ctx.correlation_id, pr_url, request.title, request.body, PR_STATUS_CREATED
+        )
+        LOGGER.info(
+            "github_provider_completed",
+            extra={CONTEXT_KEY: {**context, "pr_url": pr_url}},
         )
         return pr_url
 
@@ -148,18 +257,33 @@ class GithubScmProvider:
             transport=self.transport,
         )
 
-    async def base_branch_sha(self, client: httpx.AsyncClient, repo: str, base_branch: str) -> str:
+    async def base_branch_sha(
+        self,
+        client: httpx.AsyncClient,
+        repo: str,
+        base_branch: str,
+        context: dict[str, object] | None = None,
+    ) -> str:
         response = await client.get(f"/repos/{repo}/git/ref/heads/{base_branch}")
+        if context is not None:
+            log_provider_response("github.base_ref", response, context)
         response.raise_for_status()
         return str(response.json()["object"]["sha"])
 
     async def ensure_branch(
-        self, client: httpx.AsyncClient, repo: str, branch: str, base_sha: str
+        self,
+        client: httpx.AsyncClient,
+        repo: str,
+        branch: str,
+        base_sha: str,
+        context: dict[str, object] | None = None,
     ) -> None:
         response = await client.post(
             f"/repos/{repo}/git/refs",
             json={"ref": f"refs/heads/{branch}", "sha": base_sha},
         )
+        if context is not None:
+            log_provider_response("github.ensure_branch", response, context)
         if response.status_code == CONFLICT_STATUS:
             return  # 재전달로 브랜치가 이미 있음 — 재사용(멱등)
         response.raise_for_status()
@@ -170,6 +294,7 @@ class GithubScmProvider:
         repo: str,
         branch: str,
         request: SafePrRequestedBody,
+        context: dict[str, object] | None = None,
     ) -> None:
         await self.put_content_file(
             client,
@@ -178,6 +303,7 @@ class GithubScmProvider:
             path=change_document_path(request),
             message=request.title,
             content=change_document(request),
+            context=context,
         )
 
     async def put_manifest_patches(
@@ -186,6 +312,7 @@ class GithubScmProvider:
         repo: str,
         branch: str,
         request: SafePrRequestedBody,
+        context: dict[str, object] | None = None,
     ) -> None:
         for patch in request.patches:
             await self.put_content_file(
@@ -195,6 +322,7 @@ class GithubScmProvider:
                 path=patch.path,
                 message=f"{PATCH_COMMIT_MESSAGE_PREFIX}: {patch.path}",
                 content=patch.content,
+                context=context,
             )
 
     async def put_content_file(
@@ -206,6 +334,7 @@ class GithubScmProvider:
         path: str,
         message: str,
         content: str,
+        context: dict[str, object] | None = None,
     ) -> None:
         url = contents_api_path(repo, path)
         payload = {
@@ -214,13 +343,19 @@ class GithubScmProvider:
             "branch": branch,
         }
         response = await client.put(url, json=payload)
+        if context is not None:
+            log_provider_response("github.put_content", response, context, path=path)
         if response.status_code == CONFLICT_STATUS:
             # 재전달로 파일이 이미 있음 — 기존 blob sha 를 붙여 갱신(멱등)
             existing = await client.get(url, params={"ref": branch})
+            if context is not None:
+                log_provider_response("github.get_existing_content", existing, context, path=path)
             if existing.status_code == OK_STATUS:
                 sha = str(existing.json().get("sha", ""))
                 if sha:
                     response = await client.put(url, json={**payload, "sha": sha})
+                    if context is not None:
+                        log_provider_response("github.update_content", response, context, path=path)
         response.raise_for_status()
 
     async def create_or_reuse_pr(
@@ -230,6 +365,7 @@ class GithubScmProvider:
         branch: str,
         base_branch: str,
         request: SafePrRequestedBody,
+        context: dict[str, object] | None = None,
     ) -> str:
         response = await client.post(
             f"/repos/{repo}/pulls",
@@ -240,6 +376,8 @@ class GithubScmProvider:
                 "base": base_branch,
             },
         )
+        if context is not None:
+            log_provider_response("github.create_pr", response, context)
         if response.status_code == CONFLICT_STATUS:
             # 재전달로 PR 이 이미 있음 — head 브랜치의 open PR URL 재사용(멱등)
             owner = repo.split("/", 1)[0]
@@ -247,6 +385,8 @@ class GithubScmProvider:
                 f"/repos/{repo}/pulls",
                 params={"head": f"{owner}:{branch}", "state": "open"},
             )
+            if context is not None:
+                log_provider_response("github.find_existing_pr", existing, context)
             existing.raise_for_status()
             pulls = existing.json()
             if isinstance(pulls, list) and pulls:

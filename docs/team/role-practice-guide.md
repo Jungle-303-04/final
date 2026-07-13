@@ -785,7 +785,8 @@ PYTHONPATH=src .venv/bin/python -m pytest \
 확인할 것:
 
 - provider job이 provider별로 lease되는지
-- failed provider가 `allow_partial`에서 빈 payload로 남는지
+- `allow_partial`에서 실패한 query만 빠지고 성공한 query 결과는 남는지
+- provider의 모든 query가 실패하면 빈 payload로 완료되는지
 - 같은 `evidence_key`가 한 번만 event로 기록되는지
 
 ### 시나리오 3. evidence가 RCA와 Safe PR 요청으로 이어지는지 보기

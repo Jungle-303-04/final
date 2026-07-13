@@ -18,6 +18,10 @@ spec:
     metadata:
       labels:
         app: api-gateway
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/path: /metrics
+        prometheus.io/port: "8000"
     spec:
       priorityClassName: gitops-control-critical
       serviceAccountName: api-gateway
@@ -85,14 +89,13 @@ metadata:
   name: api-gateway
   namespace: management
 spec:
-  type: NodePort
+  type: ClusterIP
   selector:
     app: api-gateway
   ports:
     - name: http
       port: 8000
       targetPort: http
-      nodePort: 30080
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -501,6 +504,9 @@ spec:
                 name: management-runtime-config
             - secretRef:
                 name: management-runtime-secret
+          env:
+            - name: WORKER_FETCH_TIMEOUT_SECONDS
+              value: "0.05"
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -654,6 +660,62 @@ spec:
               cpu: "1"
               memory: 512Mi
           command: ["python", "src/services/projection/audit-worker/app.py"]
+          livenessProbe:
+            exec:
+              command:
+                - python
+                - -c
+                - "import os,sys,time; sys.exit(0 if time.time()-os.path.getmtime('/tmp/heartbeat')<30 else 1)"
+            initialDelaySeconds: 240
+            periodSeconds: 10
+            timeoutSeconds: 10
+            failureThreshold: 6
+          envFrom:
+            - configMapRef:
+                name: management-runtime-config
+            - secretRef:
+                name: management-runtime-secret
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: change-correlation-worker
+  namespace: management
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: change-correlation-worker
+  template:
+    metadata:
+      labels:
+        app: change-correlation-worker
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        fsGroup: 10001
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: worker
+          image: kubeheal-service:latest
+          imagePullPolicy: IfNotPresent
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+          resources:
+            requests:
+              cpu: 25m
+              memory: 64Mi
+            limits:
+              cpu: "1"
+              memory: 512Mi
+          command: ["python", "src/services/projection/change-correlation-worker/app.py"]
           livenessProbe:
             exec:
               command:
@@ -1191,14 +1253,13 @@ metadata:
   name: realtime-gateway
   namespace: management
 spec:
-  type: NodePort
+  type: ClusterIP
   selector:
     app: realtime-gateway
   ports:
     - name: http
       port: 8000
       targetPort: http
-      nodePort: 30090
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -1228,6 +1289,54 @@ spec:
             limits:
               memory: 256Mi
           command: ["python", "src/services/target/drift-worker/app.py"]
+          livenessProbe:
+            exec:
+              command:
+                - python
+                - -c
+                - "import os,sys,time; sys.exit(0 if time.time()-os.path.getmtime('/tmp/heartbeat')<30 else 1)"
+            initialDelaySeconds: 240
+            periodSeconds: 10
+            timeoutSeconds: 10
+            failureThreshold: 6
+          envFrom:
+            - configMapRef:
+                name: management-runtime-config
+            - secretRef:
+                name: management-runtime-secret
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: release-flow-worker
+  namespace: management
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: release-flow-worker
+  template:
+    metadata:
+      labels:
+        app: release-flow-worker
+    spec:
+      containers:
+        - name: worker
+          image: kubeheal-service:latest
+          imagePullPolicy: IfNotPresent
+          resources:
+            requests:
+              cpu: 25m
+              memory: 64Mi
+            limits:
+              cpu: "1"
+              memory: 512Mi
+          command: ["python", "src/services/projection/release-flow-worker/app.py"]
+          env:
+            - name: NATS_DELIVER_POLICY
+              value: "new"
           livenessProbe:
             exec:
               command:

@@ -48,12 +48,21 @@ POSTGRES_USER="${POSTGRES_USER:-service}"
 POSTGRES_PASSWORD="${POSTGRES_PASSWORD:-}"
 POSTGRES_DB="${POSTGRES_DB:-service}"
 DATABASE_URL="${DATABASE_URL:-}"
+DATABASE_STARTUP_MODE="${DATABASE_STARTUP_MODE:-verify}"
 NATS_URL="${NATS_URL:-nats://nats:4222}"
 REDIS_URL="${REDIS_URL:-redis://redis:6379/0}"
 MINIO_ROOT_USER="${MINIO_ROOT_USER:-minioadmin}"
 MINIO_ROOT_PASSWORD="${MINIO_ROOT_PASSWORD:-}"
 
 GITHUB_WEBHOOK_SECRET="${GITHUB_WEBHOOK_SECRET:-}"
+RCA_TEST_RUNS_ENABLED="${RCA_TEST_RUNS_ENABLED:-1}"
+RCA_TEST_RUNS_TOKEN="${RCA_TEST_RUNS_TOKEN:-}"
+TEST_FIXTURE_PURGE_ENABLED="${TEST_FIXTURE_PURGE_ENABLED:-1}"
+TRUSTED_PROXY_AUTH_SECRET="${TRUSTED_PROXY_AUTH_SECRET:-}"
+TRUSTED_PROXY_AUTH_USER_ID="${TRUSTED_PROXY_AUTH_USER_ID:-}"
+TRUSTED_PROXY_AUTH_WORKSPACE_ID="${TRUSTED_PROXY_AUTH_WORKSPACE_ID:-default}"
+METRICS_TOKEN="${METRICS_TOKEN:-}"
+API_ROOT_PATH="${API_ROOT_PATH:-/api}"
 GITHUB_REPO="${GITHUB_REPO:-$(default_github_repo)}"
 GITHUB_BRANCH="${GITHUB_BRANCH:-dev}"
 SMOKE_MANIFEST_PATH="${SMOKE_MANIFEST_PATH:-src/samples/smoke/deploy.yaml}"
@@ -109,6 +118,7 @@ AUTH_EMAIL="${AUTH_EMAIL:-}"
 AUTH_PASSWORD="${AUTH_PASSWORD:-}"
 PUBLIC_BASE_URL="${PUBLIC_BASE_URL:-}"
 PUBLIC_API_BASE_URL="${PUBLIC_API_BASE_URL:-}"
+PUBLIC_MANAGEMENT_BASE_URL="${PUBLIC_MANAGEMENT_BASE_URL:-${PUBLIC_API_BASE_URL}}"
 PRINT_GENERATED_ADMIN_PASSWORD="${PRINT_GENERATED_ADMIN_PASSWORD:-0}"
 RUN_SMOKE="${RUN_SMOKE:-0}"
 SKIP_LB_HEALTH_WAIT="${SKIP_LB_HEALTH_WAIT:-0}"
@@ -214,6 +224,14 @@ existing_secret_value() {
   { kubectl --context "${context}" -n management get secret "${secret_name}" \
     -o "jsonpath={.data.${key}}" 2>/dev/null || true; } \
     | python3 -c 'import base64, sys; data=sys.stdin.read().strip(); print(base64.b64decode(data).decode() if data else "")'
+}
+
+existing_config_value() {
+  local context="$1"
+  local config_name="$2"
+  local key="$3"
+  kubectl --context "${context}" -n management get configmap "${config_name}" \
+    -o "jsonpath={.data.${key}}" 2>/dev/null || true
 }
 
 valid_github_token() {
@@ -388,21 +406,6 @@ build_and_push_image() {
     printf -v "${image_var_name}" "%s" "${image_name}"
   fi
 
-  if [[ "${DOCKER_BUILD_CACHE:-}" == "gha" ]]; then
-    # CI 전용 고속 경로 — buildx + GitHub Actions 레이어 캐시.
-    # 의존성 레이어(pip/npm)가 캐시에 있으면 코드만 바뀐 빌드는 수십 초로 줄어든다.
-    log "building+pushing with buildx GHA cache (${label}): ${image_name}"
-    docker buildx build \
-      --platform "${DOCKER_PLATFORM}" \
-      -f "${dockerfile}" \
-      -t "${image_name}" \
-      --cache-from "type=gha,scope=${repo}" \
-      --cache-to "type=gha,scope=${repo},mode=max" \
-      --push \
-      "${context_dir}"
-    return
-  fi
-
   log "building Docker image (${label}): ${image_name}"
   docker build --platform "${DOCKER_PLATFORM}" -f "${dockerfile}" -t "${image_name}" "${context_dir}"
 
@@ -527,6 +530,41 @@ create_management_runtime() {
   if [[ -z "${GITHUB_WEBHOOK_SECRET}" ]]; then
     GITHUB_WEBHOOK_SECRET="$(openssl rand -hex 32)"
   fi
+  if [[ -z "${RCA_TEST_RUNS_TOKEN}" ]]; then
+    RCA_TEST_RUNS_TOKEN="$(existing_secret_value "${context}" management-runtime-secret RCA_TEST_RUNS_TOKEN)"
+  fi
+  if [[ -z "${RCA_TEST_RUNS_TOKEN}" ]]; then
+    RCA_TEST_RUNS_TOKEN="$(openssl rand -hex 32)"
+  fi
+  if [[ -z "${TRUSTED_PROXY_AUTH_SECRET}" ]]; then
+    TRUSTED_PROXY_AUTH_SECRET="$(existing_secret_value "${context}" management-runtime-secret TRUSTED_PROXY_AUTH_SECRET)"
+  fi
+  if [[ ${#TRUSTED_PROXY_AUTH_SECRET} -lt 32 ]]; then
+    TRUSTED_PROXY_AUTH_SECRET="$(openssl rand -hex 32)"
+  fi
+  if [[ -z "${TRUSTED_PROXY_AUTH_USER_ID}" ]]; then
+    TRUSTED_PROXY_AUTH_USER_ID="$(existing_config_value "${context}" management-runtime-config TRUSTED_PROXY_AUTH_USER_ID)"
+  fi
+  if [[ -z "${TRUSTED_PROXY_AUTH_USER_ID}" ]]; then
+    if [[ -z "${AUTH_EMAIL}" ]]; then
+      echo "TRUSTED_PROXY_AUTH_USER_ID 또는 AUTH_EMAIL이 필요합니다" >&2
+      return 1
+    fi
+    TRUSTED_PROXY_AUTH_USER_ID="$(python3 - "${PROJECT_SLUG}" "${AUTH_EMAIL}" <<'PY'
+import sys
+import uuid
+
+project_slug, email = sys.argv[1:]
+print("user-" + str(uuid.uuid5(uuid.NAMESPACE_URL, f"{project_slug}:{email.strip().lower()}")))
+PY
+)"
+  fi
+  if [[ -z "${METRICS_TOKEN}" ]]; then
+    METRICS_TOKEN="$(existing_secret_value "${context}" management-runtime-secret METRICS_TOKEN)"
+  fi
+  if [[ -z "${METRICS_TOKEN}" ]]; then
+    METRICS_TOKEN="$(openssl rand -hex 32)"
+  fi
 
   for key in \
     LLM_API_KEY \
@@ -591,10 +629,18 @@ EOF
   kubectl --context "${context}" -n management create configmap management-runtime-config \
     --from-literal=NATS_URL="${NATS_URL}" \
     --from-literal=REDIS_URL="${REDIS_URL}" \
+    --from-literal=DATABASE_STARTUP_MODE="${DATABASE_STARTUP_MODE}" \
+    --from-literal=RCA_TEST_RUNS_ENABLED="${RCA_TEST_RUNS_ENABLED}" \
+    --from-literal=TEST_FIXTURE_PURGE_ENABLED="${TEST_FIXTURE_PURGE_ENABLED}" \
+    --from-literal=TRUSTED_PROXY_AUTH_USER_ID="${TRUSTED_PROXY_AUTH_USER_ID}" \
+    --from-literal=TRUSTED_PROXY_AUTH_WORKSPACE_ID="${TRUSTED_PROXY_AUTH_WORKSPACE_ID}" \
+    --from-literal=API_ROOT_PATH="${API_ROOT_PATH}" \
+    --from-literal=MANAGEMENT_CLUSTER_ID="${MGMT_CLUSTER}" \
     --from-literal=OUTBOX_RELAY_BATCH="${OUTBOX_RELAY_BATCH:-10}" \
     --from-literal=MANAGEMENT_BASE_URL="http://api-gateway:8000" \
     --from-literal=PUBLIC_BASE_URL="${effective_public_base_url}" \
     --from-literal=PUBLIC_API_BASE_URL="${PUBLIC_API_BASE_URL}" \
+    --from-literal=PUBLIC_MANAGEMENT_BASE_URL="${PUBLIC_MANAGEMENT_BASE_URL}" \
     --from-literal=GITHUB_REPO="${GITHUB_REPO}" \
     --from-literal=GITHUB_BRANCH="${GITHUB_BRANCH}" \
     --from-literal=MANIFEST_PATH="${MANIFEST_PATH}" \
@@ -643,6 +689,9 @@ EOF
     # 경유로는 LISTEN 이 불가해 postgres 에 직접 붙는다(게이트웨이당 커넥션 1개).
     --from-literal=COMMAND_NOTIFY_DATABASE_URL="postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgresql:5432/${POSTGRES_DB}"
     --from-literal=GITHUB_WEBHOOK_SECRET="${GITHUB_WEBHOOK_SECRET}"
+    --from-literal=RCA_TEST_RUNS_TOKEN="${RCA_TEST_RUNS_TOKEN}"
+    --from-literal=TRUSTED_PROXY_AUTH_SECRET="${TRUSTED_PROXY_AUTH_SECRET}"
+    --from-literal=METRICS_TOKEN="${METRICS_TOKEN}"
   )
   if valid_github_token "${GITHUB_TOKEN}"; then
     secret_args+=(--from-literal=GITHUB_TOKEN="${GITHUB_TOKEN}")
@@ -664,6 +713,76 @@ EOF
   kubectl --context "${context}" -n management create secret generic management-runtime-secret \
     "${secret_args[@]}" \
     --dry-run=client -o yaml | kubectl --context "${context}" apply -f -
+}
+
+bootstrap_management_schema() {
+  log "bootstrapping management database schema"
+  kubectl --context "${MGMT_CLUSTER}" apply -f "${ROOT_DIR}/deploy/management/storage.yaml"
+  kubectl --context "${MGMT_CLUSTER}" apply -f "${ROOT_DIR}/deploy/management/pgbouncer.yaml"
+  management_rollout_status statefulset/postgresql
+  management_rollout_status deployment/pgbouncer
+
+  kubectl --context "${MGMT_CLUSTER}" -n management delete job/management-schema-bootstrap \
+    --ignore-not-found --wait=true
+  cat <<EOF | kubectl --context "${MGMT_CLUSTER}" apply -f -
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: management-schema-bootstrap
+  namespace: management
+spec:
+  backoffLimit: 3
+  activeDeadlineSeconds: 300
+  ttlSecondsAfterFinished: 3600
+  template:
+    metadata:
+      labels:
+        app: management-schema-bootstrap
+    spec:
+      restartPolicy: Never
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: schema
+          image: ${IMAGE_NAME}
+          imagePullPolicy: IfNotPresent
+          command:
+            - python
+            - -c
+            - |
+              from packages.storage.database import Database
+
+              db = Database()
+              db.init()
+              db.verify_schema()
+          envFrom:
+            - configMapRef:
+                name: management-runtime-config
+            - secretRef:
+                name: management-runtime-secret
+          resources:
+            requests:
+              cpu: 25m
+              memory: 64Mi
+            limits:
+              cpu: "1"
+              memory: 512Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+EOF
+  if ! kubectl --context "${MGMT_CLUSTER}" -n management wait \
+    --for=condition=complete job/management-schema-bootstrap --timeout=300s; then
+    kubectl --context "${MGMT_CLUSTER}" -n management describe job/management-schema-bootstrap || true
+    kubectl --context "${MGMT_CLUSTER}" -n management logs job/management-schema-bootstrap \
+      --all-containers=true --tail=200 || true
+    return 1
+  fi
 }
 
 management_rollout_resources() {
@@ -732,7 +851,7 @@ EOF
   for old_deploy in \
     oauth-auth-service git-event-processor manifest-renderer desired-state-sync \
     command-orchestrator command-dispatcher agent-connection-gateway \
-    evidence-builder ai-rca-service safe-pr-service rca-fallback-worker; do
+    evidence-builder ai-rca-service safe-pr-service rca-fallback-worker minio; do
     kubectl --context "${MGMT_CLUSTER}" -n management delete "deploy/${old_deploy}" --ignore-not-found
   done
 
@@ -1257,6 +1376,7 @@ main() {
     log "skipping EBS CSI setup"
   fi
   create_management_runtime
+  bootstrap_management_schema
   apply_management_plane
   lb_host="$(gateway_load_balancer_host)"
   base_url="http://${lb_host}"

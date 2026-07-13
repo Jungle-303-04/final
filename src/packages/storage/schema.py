@@ -39,9 +39,23 @@ class EventProcessing(Base):
     correlation_id: Mapped[str] = text_column()
     status: Mapped[str] = text_column()
     attempts: Mapped[int] = mapped_column(Integer, nullable=False)
+    processing_duration_ms: Mapped[int | None] = mapped_column(Integer, nullable=True)
     last_error: Mapped[str | None] = mapped_column(Text)
     created_at: Mapped[Any] = created_at_column()
     updated_at: Mapped[Any] = updated_at_column()
+
+
+class EventConsumerMetric(Base):
+    __tablename__ = "event_consumer_metrics"
+    __table_args__ = (PrimaryKeyConstraint("consumer", "subject"),)
+
+    consumer: Mapped[str] = mapped_column(Text, nullable=False)
+    subject: Mapped[str] = mapped_column(Text, nullable=False)
+    stream: Mapped[str] = text_column()
+    pending_events: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    ack_pending_events: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    redelivered_events: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    observed_at: Mapped[Any] = updated_at_column()
 
 
 class EventDeadLetter(Base):
@@ -81,6 +95,7 @@ class OutboxModel(Base):
     source: Mapped[str] = text_column()
     correlation_id: Mapped[str] = text_column()
     causation_id: Mapped[str | None] = mapped_column(Text, nullable=True)
+    workspace_id: Mapped[str | None] = mapped_column(Text, nullable=True)
     occurred_at: Mapped[str] = text_column()
     payload: Mapped[dict[str, Any]] = jsonb_column()
     schema_version: Mapped[int] = mapped_column(Integer, nullable=False, server_default="1")

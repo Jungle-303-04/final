@@ -68,6 +68,7 @@
 5. [RCA 데이터 스키마](rca-production-onboarding/04-rca-data-schema.md)
 6. [벤치마크 최소선 기준 프로덕션 완성 설계](rca-production-onboarding/05-production-completion-scope.md)
 7. [Bruno API 테스트](api/README.md)
+8. [Raw Evidence cluster 권한 연결 인수인계](team/gain-evidence-query-access-handoff-20260712.md)
 
 가인은 먼저 `cluster.evidence.received`가 RCA worker chain을 어떻게 통과하는지 본다.
 그다음 `safe_pr.requested`와 `safe_pr.created`의 경계를 분리해서 익힌다.
@@ -107,8 +108,6 @@ subject, body, worker 연결이 필요하면 [이벤트 흐름](events.md)을 �
 
 AWS와 운영 명령을 확인할 때는 [운영/배포](operations-deployment.md)를 본다.
 
-GitHub Actions와 AWS CD 흐름은 [AWS CI/CD](aws-cicd.md)를 본다.
-
 로컬 smoke 실행 기준은 [로컬 테스트 실행 기준](local-testing.md)을 본다.
 
 실제 서비스 smoke 실행 기준은 [AWS 테스트 기준](aws-testing-runbook.md)을 본다.
@@ -116,6 +115,7 @@ GitHub Actions와 AWS CD 흐름은 [AWS CI/CD](aws-cicd.md)를 본다.
 실서비스 형태의 sandbox 장애 데이터는 [실서비스 데이터 시나리오](scenarios.md)를 본다.
 
 production 전 위험과 점검 항목은 [운영 준비도](production-readiness.md)를 본다.
+2026-07-11 감사 결함의 해결 순서와 완료 조건은 [권한·Evidence·AI·명령·메트릭 개선 계획](remediation-plan-2026-07-11.md)을 본다.
 
 secret 이름과 주입 경계는 [Secrets](secrets.md)를 본다.
 
@@ -139,7 +139,7 @@ secret 이름과 주입 경계는 [Secrets](secrets.md)를 본다.
 
 `Bruno`를 찾을 때는 [Bruno API 테스트](api/README.md), [로컬 테스트 실행 기준](local-testing.md)을 본다.
 
-`AWS`를 찾을 때는 [AWS CI/CD](aws-cicd.md), [AWS 테스트 기준](aws-testing-runbook.md), [운영/배포](operations-deployment.md)를 본다.
+`AWS`를 찾을 때는 [AWS 테스트 기준](aws-testing-runbook.md), [운영/배포](operations-deployment.md)를 본다.
 
 `continuation` 또는 `handover`를 찾을 때는 [2026-07-07 연속 실행 계획](continuation-execution-plan-2026-07-07.md)과 repo root의 `HANDOVER.md`를 본다.
 
@@ -162,23 +162,52 @@ secret 이름과 주입 경계는 [Secrets](secrets.md)를 본다.
 - [architecture](architecture.md)
 - [architecture-diagram](architecture-diagram.md)
 - [architecture/service-consolidation-plan](architecture/service-consolidation-plan.md)
-- [aws-cicd](aws-cicd.md)
 - [aws-testing-runbook](aws-testing-runbook.md)
+- [backend-f-progress](backend-f-progress.md)
+- [backend-f-workqueue](backend-f-workqueue.md)
 - [cloudflare-waf-and-login](cloudflare-waf-and-login.md)
 - [continuation-execution-plan-2026-07-07](continuation-execution-plan-2026-07-07.md)
-- [demo-01-digital-twin-agent-town](demo-01-digital-twin-agent-town.md)
+- [codex-work-order-20260712](codex-work-order-20260712.md)
+- [team/gain-evidence-query-access-handoff-20260712](team/gain-evidence-query-access-handoff-20260712.md)
+- [current-service-state](current-service-state.md)
+- [security-review-20260710](security-review-20260710.md)
+- [unimplemented-review-20260711](unimplemented-review-20260711.md)
 - [events](events.md)
 - [external-console-cluster-interactions](external-console-cluster-interactions.md)
 - [external-console-instances](external-console-instances.md)
+- [f-coordination-plan](f-coordination-plan.md)
 - [frontend-framework-design](frontend-framework-design.md)
 - [frontend-metrics-queries](frontend-metrics-queries.md)
+- [github-poll-scoped-credential-cutover](github-poll-scoped-credential-cutover.md)
+- [infra/cloudflare-dev-mtls](infra/cloudflare-dev-mtls.md)
 - [local-testing](local-testing.md)
 - [operations-deployment](operations-deployment.md)
+- [oss-remediation-roadmap](oss-remediation-roadmap.md)
+- [oss/CHANGELOG](oss/CHANGELOG.md)
+- [oss/CODE_OF_CONDUCT](oss/CODE_OF_CONDUCT.md)
+- [oss/CONTRIBUTING](oss/CONTRIBUTING.md)
+- [oss/GOVERNANCE](oss/GOVERNANCE.md)
+- [oss/LICENSE.draft](oss/LICENSE.draft)
+- [oss/MAINTAINERS](oss/MAINTAINERS.md)
+- [oss/README.en](oss/README.en.md)
+- [oss/SECURITY](oss/SECURITY.md)
+- [oss/publication-checklist](oss/publication-checklist.md)
 - [platform-foundation-plan](platform-foundation-plan.md)
 - [production-readiness](production-readiness.md)
+- [release-flow-production-readiness](release-flow-production-readiness.md)
+- [remediation-plan-2026-07-11](remediation-plan-2026-07-11.md)
 - [production-push-2026-07-07](production-push-2026-07-07.md)
+- [release-flow-implementation](release-flow-implementation.md)
 - [scenarios](scenarios.md)
 - [secrets](secrets.md)
+- [spec/remediation-bundle-v1alpha1](spec/remediation-bundle-v1alpha1.md)
+
+자동 조율 문서는 아래에 있다.
+
+- [auto/backend-pipeline](auto/backend-pipeline.md)
+- [auto/frontend-pipeline](auto/frontend-pipeline.md)
+- [auto/night-directives](auto/night-directives.md)
+- [auto/night-log](auto/night-log.md)
 
 프론트 상세 설계 문서는 아래에 있다.
 
@@ -190,6 +219,7 @@ secret 이름과 주입 경계는 [Secrets](secrets.md)를 본다.
 - [fd/05-routes-ia](fd/05-routes-ia.md)
 - [fd/06-api-map](fd/06-api-map.md)
 - [fd/07-build-plan](fd/07-build-plan.md)
+- [fd/08-frontend-execution-plan](fd/08-frontend-execution-plan.md)
 - [fd/views/auth](fd/views/auth.md)
 - [fd/views/org-admin](fd/views/org-admin.md)
 - [fd/views/resources](fd/views/resources.md)
@@ -220,6 +250,7 @@ RCA 프로덕션 온보딩 문서는 아래에 있다.
 - [rca-production-onboarding/06-chanbin-permission-dashboard](rca-production-onboarding/06-chanbin-permission-dashboard.md)
 - [rca-production-onboarding/07-how-to-find-and-implement](rca-production-onboarding/07-how-to-find-and-implement.md)
 - [rca-production-onboarding/08-provider-evidence-field-guide](rca-production-onboarding/08-provider-evidence-field-guide.md)
+- [rca-production-onboarding/09-rca-rule-catalog-guide](rca-production-onboarding/09-rca-rule-catalog-guide.md)
 - [rca-production-onboarding/provider-evidence-request](rca-production-onboarding/provider-evidence-request.md)
 
 팀 문서는 아래에 있다.
@@ -272,12 +303,10 @@ Target / Telemetry 선형 작업 문서는 아래에 있다.
 새 문서를 만들면 이 목록에도 연결한다.
 
 - [api/README](api/README.md)
+- [api/16-rca-debug/README](api/16-rca-debug/README.md)
 - [architecture-diagram](architecture-diagram.md)
 - [architecture](architecture.md)
 - [architecture/service-consolidation-plan](architecture/service-consolidation-plan.md)
-- [auto/frontend-pipeline](auto/frontend-pipeline.md)
-- [auto/night-log](auto/night-log.md)
-- [aws-cicd](aws-cicd.md)
 - [aws-testing-runbook](aws-testing-runbook.md)
 - [cloudflare-waf-and-login](cloudflare-waf-and-login.md)
 - [event-graph-audit](event-graph-audit.md)
@@ -304,6 +333,7 @@ Target / Telemetry 선형 작업 문서는 아래에 있다.
 - [fd/views/workflow](fd/views/workflow.md)
 - [frontend-framework-design](frontend-framework-design.md)
 - [frontend-metrics-queries](frontend-metrics-queries.md)
+- [infra/cloudflare-dev-mtls](infra/cloudflare-dev-mtls.md)
 - [local-testing](local-testing.md)
 - [onboarding/README](onboarding/README.md)
 - [onboarding/chanbin-frontend](onboarding/chanbin-frontend.md)
@@ -342,23 +372,18 @@ Target / Telemetry 선형 작업 문서는 아래에 있다.
 - [spec/domains/registry](spec/domains/registry.md)
 - [spec/domains/scm](spec/domains/scm.md)
 - [spec/domains/target](spec/domains/target.md)
-- [spec/frontend/api-integration-workorder-20260711](spec/frontend/api-integration-workorder-20260711.md)
-- [spec/frontend/api-needs](spec/frontend/api-needs.md)
-- [spec/frontend/CODEX-BRIEFING-20260711](spec/frontend/CODEX-BRIEFING-20260711.md) — archived, 현재 구현 참조 금지
-- [spec/frontend/codex-directive-24h-20260711](spec/frontend/codex-directive-24h-20260711.md) — archived, 현재 구현 참조 금지
-- [spec/frontend/codex-directive-goalmode-20260711](spec/frontend/codex-directive-goalmode-20260711.md)
-- [spec/frontend/codex-directive-reference-pivot-20260711](spec/frontend/codex-directive-reference-pivot-20260711.md) — archived, 현재 구현 참조 금지
-- [spec/frontend/codex-progress-20260711](spec/frontend/codex-progress-20260711.md)
-- [spec/frontend/final-questions](spec/frontend/final-questions.md)
-- [spec/frontend/product-data-contract](spec/frontend/product-data-contract.md)
-- [spec/frontend/reference-feature-inventory](spec/frontend/reference-feature-inventory.md)
-- [spec/frontend/reference-contract-map](spec/frontend/reference-contract-map.md)
-- [spec/frontend/reference-porting-contract](spec/frontend/reference-porting-contract.md)
-- [spec/frontend/theme-first-paint-evidence-20260713](spec/frontend/theme-first-paint-evidence-20260713.md)
-- [spec/frontend/topology-engine](spec/frontend/topology-engine.md) — archived, 현재 구현 참조 금지
-- [spec/frontend/topology-message-action-schema](spec/frontend/topology-message-action-schema.md) — archived, 현재 구현 참조 금지
-- [spec/frontend/topology-visual-motion-tokens](spec/frontend/topology-visual-motion-tokens.md) — archived, 현재 구현 참조 금지
-- [spec/frontend/verified-pipeline-insertion-map](spec/frontend/verified-pipeline-insertion-map.md)
+- [spec/frontend/app](spec/frontend/app.md)
+- [spec/frontend/auth](spec/frontend/auth.md)
+- [spec/frontend/chat](spec/frontend/chat.md)
+- [spec/frontend/cluster](spec/frontend/cluster.md)
+- [spec/frontend/fleet](spec/frontend/fleet.md)
+- [spec/frontend/metrics](spec/frontend/metrics.md)
+- [spec/frontend/notifications](spec/frontend/notifications.md)
+- [spec/frontend/org](spec/frontend/org.md)
+- [spec/frontend/repo](spec/frontend/repo.md)
+- [spec/frontend/resources](spec/frontend/resources.md)
+- [spec/frontend/shared](spec/frontend/shared.md)
+- [spec/frontend/workflow](spec/frontend/workflow.md)
 - [spec/packages/ai](spec/packages/ai.md)
 - [spec/packages/config](spec/packages/config.md)
 - [spec/packages/contracts](spec/packages/contracts.md)

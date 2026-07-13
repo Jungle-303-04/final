@@ -17,6 +17,9 @@ from packages.contracts.interfaces import ManagementPlaneClient
 
 DEFAULT_JOB_POLL_SECONDS = 1.0
 DEFAULT_JOB_POLL_TIMEOUT_SECONDS = 10
+ALLOW_PARTIAL_FAILURE_POLICY = "allow_partial"
+STRICT_FAILURE_POLICY = "strict"
+RCA_TEST_EVIDENCE_SCOPE = "rca_test_run"
 LOGGER = get_logger(__name__)
 
 
@@ -185,9 +188,17 @@ class EvidenceJobScheduler:
     async def collect_job(self, job: JsonObject, provider_key: str) -> JsonObject:
         """Collect evidence for one leased provider job."""
         definitions = self.job_query_definitions(job, provider_key)
+        failure_policy = str(job.get(Gateway.FAILURE_POLICY) or ALLOW_PARTIAL_FAILURE_POLICY)
         if hasattr(self.collector, "collect_query_policy"):
-            return await self.collector.collect_query_policy(provider_key, definitions)
-        return await self.collector.collect(provider_key)
+            result = await self.collector.collect_query_policy(
+                provider_key,
+                definitions,
+                failure_policy=failure_policy,
+            )
+        else:
+            result = await self.collector.collect(provider_key)
+        require_run_scoped_provider_evidence(job, provider_key, result)
+        return result
 
     def job_query_definitions(
         self,
@@ -311,3 +322,235 @@ class EvidenceJobScheduler:
         current = int(now)
         window_start = current - (current % interval)
         return datetime.fromtimestamp(window_start, UTC).isoformat()
+
+
+def require_run_scoped_provider_evidence(
+    job: JsonObject,
+    provider_key: str,
+    result: JsonObject,
+) -> None:
+    """Reject empty strict RCA test results without manufacturing evidence."""
+    release_context = job_release_context(job)
+    if (
+        job.get(Gateway.FAILURE_POLICY) != STRICT_FAILURE_POLICY
+        or release_context.get("evidence_scope") != RCA_TEST_EVIDENCE_SCOPE
+    ):
+        return
+    if provider_has_actual_evidence(provider_key, result.get(provider_key), release_context):
+        return
+    raise RuntimeError(f"{provider_key} provider returned no evidence for strict run-scoped job")
+
+
+def job_release_context(job: JsonObject) -> Mapping[str, object]:
+    provider_policy = job.get(Gateway.PROVIDER_POLICY)
+    if not isinstance(provider_policy, Mapping):
+        return {}
+    release_context = provider_policy.get("release_context")
+    return release_context if isinstance(release_context, Mapping) else {}
+
+
+def provider_has_actual_evidence(
+    provider_key: str,
+    payload: object,
+    release_context: Mapping[str, object],
+) -> bool:
+    if provider_key == "kubernetes":
+        return kubernetes_has_run_pod(payload, release_context)
+    if provider_key == "metrics":
+        return metrics_have_samples(payload)
+    if provider_key == "logs":
+        return logs_have_lines(payload)
+    if provider_key == "traces":
+        return traces_have_results(payload)
+    if provider_key == "metadata":
+        return metadata_has_context(payload, release_context)
+    return False
+
+
+def kubernetes_has_run_pod(
+    payload: object,
+    release_context: Mapping[str, object],
+) -> bool:
+    if not isinstance(payload, Mapping):
+        return False
+    pods = payload.get("pods")
+    if not isinstance(pods, list):
+        return False
+    raw_expected_names = release_context.get("pod_names")
+    expected_names = (
+        {str(name).strip() for name in raw_expected_names if str(name).strip()}
+        if isinstance(raw_expected_names, list)
+        else set()
+    )
+    observed_names = {
+        str(pod.get("name") or "").strip()
+        for pod in pods
+        if isinstance(pod, Mapping) and str(pod.get("name") or "").strip()
+    }
+    return bool(observed_names & expected_names) if expected_names else bool(observed_names)
+
+
+def metrics_have_samples(payload: object) -> bool:
+    if not isinstance(payload, Mapping):
+        return False
+    results = payload.get("results")
+    if not isinstance(results, Mapping):
+        return False
+    for value in results.values():
+        if not isinstance(value, Mapping):
+            continue
+        samples = value.get("samples")
+        if isinstance(samples, list) and samples:
+            return True
+        series = value.get("series")
+        if isinstance(series, list) and any(
+            isinstance(item, Mapping) and bool(item.get("values")) for item in series
+        ):
+            return True
+        raw_result = value.get("result")
+        if raw_result not in (None, "", [], {}):
+            return True
+    return False
+
+
+def logs_have_lines(payload: object) -> bool:
+    if not isinstance(payload, list):
+        return False
+    for entry in payload:
+        if not isinstance(entry, Mapping):
+            continue
+        if isinstance(entry.get("line_count"), int) and entry["line_count"] > 0:
+            return True
+        streams = entry.get("streams")
+        if isinstance(streams, list) and any(
+            isinstance(stream, Mapping) and bool(stream.get("values")) for stream in streams
+        ):
+            return True
+    return False
+
+
+def traces_have_results(payload: object) -> bool:
+    if not isinstance(payload, Mapping):
+        return False
+    results = payload.get("results")
+    if not isinstance(results, Mapping):
+        return False
+    return any(
+        isinstance(value, Mapping)
+        and (
+            bool(value.get("traces"))
+            or isinstance(value.get("trace_count"), int)
+            and value["trace_count"] > 0
+        )
+        for value in results.values()
+    )
+
+
+def metadata_has_context(payload: object, release_context: Mapping[str, object]) -> bool:
+    if not isinstance(payload, Mapping):
+        return False
+    change_context = payload.get("change_context")
+    if not isinstance(change_context, Mapping):
+        return False
+    if not any(value not in (None, "", [], {}) for value in change_context.values()):
+        return False
+    namespace = str(release_context.get("namespace") or "").strip()
+    if not namespace:
+        return False
+    if metadata_context_namespaces(change_context) != {namespace}:
+        return False
+    resource_name = str(release_context.get("resource_name") or "").strip()
+    if not resource_name:
+        return True
+    resource_kind = str(release_context.get("resource_kind") or "Deployment").strip()
+    return metadata_context_workload_identities(change_context) == {
+        normalized_workload_identity(resource_kind, namespace, resource_name)
+    }
+
+
+def metadata_context_namespaces(change_context: Mapping[str, object]) -> set[str]:
+    """Return namespaces found in metadata change context evidence."""
+    namespaces: set[str] = set()
+    add_snapshot_namespace(namespaces, change_context.get("current_workload_snapshot"))
+
+    snapshots = change_context.get("current_workload_snapshots")
+    if isinstance(snapshots, list):
+        for snapshot in snapshots:
+            add_snapshot_namespace(namespaces, snapshot)
+
+    for key in ("service_selector_matches", "endpoint_slice_ready_endpoints"):
+        values = change_context.get(key)
+        if isinstance(values, list):
+            for value in values:
+                add_nested_metadata_namespaces(namespaces, value)
+
+    for key in ("resource_quotas", "referenced_config_objects"):
+        values = change_context.get(key)
+        if isinstance(values, list):
+            for value in values:
+                add_resource_namespace(namespaces, value)
+
+    return namespaces
+
+
+def metadata_context_workload_identities(
+    change_context: Mapping[str, object],
+) -> set[tuple[str, str, str]]:
+    """Return workload identities found in metadata snapshot evidence."""
+    identities: set[tuple[str, str, str]] = set()
+    add_snapshot_identity(identities, change_context.get("current_workload_snapshot"))
+
+    snapshots = change_context.get("current_workload_snapshots")
+    if isinstance(snapshots, list):
+        for snapshot in snapshots:
+            add_snapshot_identity(identities, snapshot)
+
+    return identities
+
+
+def add_snapshot_identity(identities: set[tuple[str, str, str]], value: object) -> None:
+    """Add one workload identity from a metadata snapshot."""
+    if not isinstance(value, Mapping):
+        return
+    workload = value.get("workload")
+    if not isinstance(workload, Mapping):
+        return
+    kind = str(workload.get("kind") or "").strip()
+    namespace = str(workload.get("namespace") or "").strip()
+    name = str(workload.get("name") or "").strip()
+    if kind and namespace and name:
+        identities.add(normalized_workload_identity(kind, namespace, name))
+
+
+def normalized_workload_identity(kind: str, namespace: str, name: str) -> tuple[str, str, str]:
+    """Normalize one workload identity for strict RCA test matching."""
+    return (kind.casefold(), namespace, name)
+
+
+def add_snapshot_namespace(namespaces: set[str], value: object) -> None:
+    """Add the workload namespace from one metadata snapshot."""
+    if not isinstance(value, Mapping):
+        return
+    add_resource_namespace(namespaces, value.get("workload"))
+
+
+def add_nested_metadata_namespaces(namespaces: set[str], value: object) -> None:
+    """Add namespaces from nested Service, Pod, or EndpointSlice summaries."""
+    if not isinstance(value, Mapping):
+        return
+    for key in ("service", "endpoint_slice"):
+        add_resource_namespace(namespaces, value.get(key))
+    for key in ("matched_pods", "ready_targets"):
+        resources = value.get(key)
+        if isinstance(resources, list):
+            for resource in resources:
+                add_resource_namespace(namespaces, resource)
+
+
+def add_resource_namespace(namespaces: set[str], value: object) -> None:
+    """Add one resource namespace when it is present."""
+    if not isinstance(value, Mapping):
+        return
+    namespace = str(value.get("namespace") or "").strip()
+    if namespace:
+        namespaces.add(namespace)

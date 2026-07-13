@@ -5,6 +5,8 @@ from types import SimpleNamespace
 
 from fastapi import HTTPException
 
+from domains.command.events import CommandRequestedBody
+from domains.command.handler import build_plan
 from domains.command.router import (
     RESOURCE_ACCESS_DENIED,
     agent_debug_query,
@@ -13,16 +15,20 @@ from domains.command.router import (
     command_status,
     commands,
     lease_next_command,
+    restart_deployment,
     scale_deployment,
 )
 from domains.identity.dependencies import ClusterAgentIdentity
+from packages.config.constants import Command
 from packages.contracts.gateway.requests import (
     AgentDebugQueryRequest,
     CommandHeartbeatRequest,
     CommandRequest,
     CommandStartRequest,
+    DeploymentRestartRequest,
     DeploymentScaleRequest,
 )
+from packages.contracts.gateway.responses import AcceptedResponse
 
 AGENT_IDENTITY = ClusterAgentIdentity(
     workspace_id="trusted-workspace",
@@ -128,6 +134,56 @@ def manual_diff() -> dict[str, str]:
     }
 
 
+def test_accepted_response_accepts_legacy_payload_without_command_id() -> None:
+    legacy_payload = {
+        "accepted": True,
+        "event_id": "evt-1",
+        "correlation_id": "corr-1",
+    }
+
+    response = AcceptedResponse.model_validate(legacy_payload)
+
+    assert response.command_id is None
+    assert response.model_dump(exclude_none=True) == legacy_payload
+
+
+def test_non_approval_command_receipt_matches_worker_command_id() -> None:
+    async def run() -> None:
+        events = SpyEvents()
+        response = await commands(
+            CommandRequest(cluster_id="cluster-1", diff=manual_diff()),
+            current_session(),
+            SpyAccessDb(allowed=True),
+            events,
+        )
+
+        assert isinstance(events.body, CommandRequestedBody)
+        worker_plan = build_plan(events.body, response.correlation_id)
+        assert response.command_id == worker_plan.command_id
+
+    asyncio.run(run())
+
+
+def test_approval_command_receipt_stays_null_until_worker_resolves_evidence() -> None:
+    async def run() -> None:
+        response = await commands(
+            CommandRequest(
+                cluster_id="cluster-1",
+                action=Command.APPLY_MANIFEST_ACTION,
+                diff=manual_diff(),
+                approval_ref="approval-1",
+                policy_decision_ref="policy-decision-1",
+            ),
+            current_session(),
+            SpyAccessDb(allowed=True),
+            SpyEvents(),
+        )
+
+        assert response.command_id is None
+
+    asyncio.run(run())
+
+
 def test_command_request_requires_cluster_deploy_access() -> None:
     async def run() -> None:
         db = SpyAccessDb(allowed=True)
@@ -176,6 +232,37 @@ def test_command_request_without_diff_is_rejected() -> None:
             raise AssertionError("expected HTTPException")
 
         assert events.body is None
+
+    asyncio.run(run())
+
+
+def test_general_command_api_rejects_reserved_rca_test_actions() -> None:
+    async def run() -> None:
+        for action in (
+            Command.RCA_TEST_SCENARIO_INJECT_ACTION,
+            Command.RCA_TEST_SCENARIO_CLEANUP_ACTION,
+        ):
+            db = SpyAccessDb(allowed=True)
+            events = SpyEvents()
+            try:
+                await commands(
+                    CommandRequest(
+                        cluster_id="cluster-1",
+                        action=action,
+                        diff=manual_diff(),
+                    ),
+                    current_session(),
+                    db,
+                    events,
+                )
+            except HTTPException as exc:
+                assert exc.status_code == 422
+                assert "/rca/test-runs" in exc.detail
+            else:
+                raise AssertionError("RCA test actions must use the dedicated test-run API")
+
+            assert db.calls == []
+            assert events.body is None
 
     asyncio.run(run())
 
@@ -272,6 +359,8 @@ def test_scale_deployment_wrapper_emits_typed_command_payload() -> None:
         )
 
         assert response.accepted is True
+        assert isinstance(events.body, CommandRequestedBody)
+        assert response.command_id == build_plan(events.body, response.correlation_id).command_id
         assert db.calls == [("user-1", "workspace-1", "cluster", "cluster-1", "deploy.run")]
         assert events.body is not None
         assert events.body.action == "k8s.apps.v1.deployments.scale"
@@ -284,6 +373,25 @@ def test_scale_deployment_wrapper_emits_typed_command_payload() -> None:
         }
         assert events.body.approval_ref == "approval-1"
         assert events.body.policy_decision_ref == "policy-decision-1"
+
+    asyncio.run(run())
+
+
+def test_restart_deployment_receipt_matches_worker_command_id() -> None:
+    async def run() -> None:
+        events = SpyEvents()
+        response = await restart_deployment(
+            "cluster-1",
+            "sandbox",
+            "checkout-api",
+            DeploymentRestartRequest(reason="restart checkout"),
+            current_session(),
+            SpyAccessDb(allowed=True),
+            events,
+        )
+
+        assert isinstance(events.body, CommandRequestedBody)
+        assert response.command_id == build_plan(events.body, response.correlation_id).command_id
 
     asyncio.run(run())
 
@@ -317,7 +425,7 @@ def test_scale_deployment_rejects_management_cluster_at_gateway() -> None:
         events = SpyEvents()
         try:
             await scale_deployment(
-                "management-1",
+                "kubernetes-ops",
                 "sandbox",
                 "api",
                 DeploymentScaleRequest(replicas=2),

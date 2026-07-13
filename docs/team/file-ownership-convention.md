@@ -9,7 +9,7 @@
 | `README.md` | 실행 기준과 서비스 목록 |
 | `docs/README.md` | 모든 문서의 시작점과 역할별 필독 목록 |
 | `docs/api/README.md` | Bruno API 수동 테스트 순서 |
-| `Makefile` | `make check`, `make manifest-check`, `make aws-smoke` 진입점 |
+| `Makefile` | `make check`, `make manifest-check`, `make smoke` 진입점 |
 | `src/packages/contracts/gateway/routes.py` | Gateway HTTP route 기준 |
 | `src/packages/contracts/gateway/requests.py` | Gateway request DTO 기준 |
 | `src/packages/contracts/gateway/responses.py` | Gateway response DTO 기준 |

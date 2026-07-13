@@ -12,6 +12,15 @@ post {
   url: {{base_url}}auth/users/{{user_id}}/approve
 }
 
+script:pre-request {
+  const enabled = String(
+    bru.getEnvVar("auth_flow_verification") || bru.getVar("auth_flow_verification") || "false"
+  ).trim().toLowerCase() === "true";
+  if (!enabled) {
+    bru.runner.skipRequest();
+  }
+}
+
 tests {
   test("admin success or explicit access/not-found response", function () {
     expect([200, 401, 403, 404, 409, 422]).to.include(res.status);

@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncio
 from collections.abc import AsyncIterator
 
-from github_provider import GithubScmProvider
+from github_provider import GithubScmProvider, request_base_branch, request_repo
 
 from domains.providers.catalog import ProviderCategory, require_available_provider
 from domains.scm.events import (
@@ -103,10 +103,31 @@ def provider_failure_body(request: SafePrRequestedBody, exc: Exception) -> SafeP
         SafePrPolicyResult.reject(
             reason_code=REASON_PROVIDER_ERROR,
             message=MESSAGE_PROVIDER_ERROR,
-            details={"exception_type": type(exc).__name__},
+            details=provider_error_details(exc),
         ),
         stage=STAGE_SCM,
     )
+
+
+def provider_error_details(exc: Exception) -> dict[str, object]:
+    details: dict[str, object] = {"exception_type": type(exc).__name__}
+    if isinstance(exc, ValueError | RuntimeError):
+        details["error"] = str(exc)
+    return details
+
+
+def created_repo_ref(request: SafePrRequestedBody) -> str:
+    try:
+        return request_repo(request)
+    except (RuntimeError, ValueError):
+        return request.repo_ref
+
+
+def created_base_branch(request: SafePrRequestedBody) -> str:
+    try:
+        return request_base_branch(request)
+    except (RuntimeError, ValueError):
+        return request.base_branch
 
 
 @app.on(SafePrReadyForCreationBody)
@@ -134,6 +155,11 @@ async def on_safe_pr_ready_for_creation(
             application_id=request.application_id,
             workflow_run_id=request.workflow_run_id,
             environment=request.environment,
+            manifest_path=request.manifest_path,
+            repo_ref=created_repo_ref(request),
+            base_branch=created_base_branch(request),
+            commit_sha=request.commit_sha,
+            patch_sha256=request.patch_sha256,
         )
 
     async for out in deliver(

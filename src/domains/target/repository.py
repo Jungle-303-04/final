@@ -3,10 +3,11 @@
 from __future__ import annotations
 
 import uuid
+from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
-from sqlalchemy import func, or_, select, update
+from sqlalchemy import delete, func, or_, select, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from domains.target.evidence_jobs import (
@@ -20,6 +21,7 @@ from domains.target.evidence_jobs import (
     aggregate_evidence_payload,
     evidence_job_id,
     evidence_key,
+    normalize_evidence_provider_result,
 )
 from domains.target.models import (
     AgentPolicyRecord,
@@ -31,10 +33,28 @@ from domains.target.models import (
     TargetDesiredState,
     TargetReconcileRecord,
 )
+from packages.config.settings import env
 from packages.contracts.event_bus.interfaces import EventEnvelope, JsonObject
 from packages.contracts.target import TargetDesiredStateStatus
 from packages.storage.engine import DatabaseConnection, iso_or_none
 from packages.storage.schema import EventModel, OutboxModel
+
+AGENT_STATUS_RETENTION_SECONDS_ENV = "AGENT_STATUS_RETENTION_SECONDS"
+DEFAULT_AGENT_STATUS_RETENTION_SECONDS = 3600
+
+
+def agent_status_retention_seconds() -> int:
+    """종료된 agent pod 상태를 보존할 최대 시간을 반환한다."""
+    try:
+        configured = int(
+            env(
+                AGENT_STATUS_RETENTION_SECONDS_ENV,
+                str(DEFAULT_AGENT_STATUS_RETENTION_SECONDS),
+            )
+        )
+    except ValueError:
+        return DEFAULT_AGENT_STATUS_RETENTION_SECONDS
+    return max(300, configured)
 
 
 class TargetAgentRepository(DatabaseConnection):
@@ -44,11 +64,22 @@ class TargetAgentRepository(DatabaseConnection):
         workspace_id: str,
         cluster_id: str,
         agent_id: str,
-        capabilities: list[str],
+        capabilities: list[str] | None,
         status: str = "connected",
         details: JsonObject | None = None,
     ) -> JsonObject:
         table = ClusterAgentStatusRecord.__table__
+        normalized_capabilities = (
+            list(dict.fromkeys(capabilities)) if capabilities is not None else None
+        )
+        update_values: dict[str, Any] = {
+            "status": status,
+            "details": details or {},
+            "last_seen_at": func.now(),
+            "updated_at": func.now(),
+        }
+        if normalized_capabilities is not None:
+            update_values["capabilities"] = normalized_capabilities
         statement = (
             pg_insert(table)
             .values(
@@ -56,25 +87,28 @@ class TargetAgentRepository(DatabaseConnection):
                 cluster_id=cluster_id,
                 agent_id=agent_id,
                 status=status,
-                capabilities=list(dict.fromkeys(capabilities)),
+                capabilities=normalized_capabilities or [],
                 details=details or {},
                 last_seen_at=func.now(),
                 updated_at=func.now(),
             )
             .on_conflict_do_update(
                 index_elements=[table.c.workspace_id, table.c.cluster_id, table.c.agent_id],
-                set_={
-                    "status": status,
-                    "capabilities": list(dict.fromkeys(capabilities)),
-                    "details": details or {},
-                    "last_seen_at": func.now(),
-                    "updated_at": func.now(),
-                },
+                set_=update_values,
             )
             .returning(table)
         )
         with self.connection() as conn:
             row = conn.execute(statement).mappings().one()
+            stale_before = datetime.now(UTC) - timedelta(seconds=agent_status_retention_seconds())
+            conn.execute(
+                delete(table).where(
+                    table.c.workspace_id == workspace_id,
+                    table.c.cluster_id == cluster_id,
+                    table.c.agent_id != agent_id,
+                    table.c.last_seen_at < stale_before,
+                )
+            )
         return self.serialize_cluster_agent_status(dict(row))
 
     def list_cluster_agent_statuses(
@@ -453,6 +487,7 @@ class TargetAgentRepository(DatabaseConnection):
                     select(
                         table.c.job_id,
                         table.c.evidence_key,
+                        table.c.provider_key,
                         table.c.attempt_count,
                         table.c.max_attempts,
                     )
@@ -476,6 +511,9 @@ class TargetAgentRepository(DatabaseConnection):
                         select(
                             table.c.job_id,
                             table.c.evidence_key,
+                            table.c.provider_key,
+                            table.c.source_id,
+                            table.c.window_start,
                             table.c.status,
                         ).where(
                             table.c.job_id == job_id,
@@ -511,11 +549,22 @@ class TargetAgentRepository(DatabaseConnection):
                     .where(table.c.job_id == job_id)
                     .values(
                         status=next_status,
-                        result=result if next_status == EVIDENCE_JOB_STATUS_COMPLETED else None,
+                        result=(
+                            normalize_evidence_provider_result(str(active["provider_key"]), result)
+                            if next_status == EVIDENCE_JOB_STATUS_COMPLETED
+                            else None
+                        ),
                         error=error or None,
                         updated_at=func.now(),
                     )
-                    .returning(table.c.job_id, table.c.evidence_key, table.c.status)
+                    .returning(
+                        table.c.job_id,
+                        table.c.evidence_key,
+                        table.c.provider_key,
+                        table.c.source_id,
+                        table.c.window_start,
+                        table.c.status,
+                    )
                 )
                 .mappings()
                 .one()
@@ -531,6 +580,7 @@ class TargetAgentRepository(DatabaseConnection):
                 table.c.cluster_id,
                 table.c.source_id,
                 table.c.provider_key,
+                table.c.provider_policy,
                 table.c.window_start,
                 table.c.status,
                 table.c.failure_policy,
@@ -543,6 +593,30 @@ class TargetAgentRepository(DatabaseConnection):
         with self.connection() as conn:
             rows = [dict(row) for row in conn.execute(statement).mappings()]
         return aggregate_evidence_payload(rows)
+
+    def list_evidence_jobs_for_window(
+        self,
+        evidence_key_value: str,
+        workspace_id: str,
+    ) -> list[JsonObject]:
+        table = EvidenceJob.__table__
+        statement = (
+            select(
+                table.c.job_id,
+                table.c.provider_key,
+                table.c.status,
+                table.c.error,
+                table.c.attempt_count,
+                table.c.max_attempts,
+            )
+            .where(
+                table.c.evidence_key == evidence_key_value,
+                table.c.workspace_id == workspace_id,
+            )
+            .order_by(table.c.provider_key)
+        )
+        with self.connection() as conn:
+            return [dict(row) for row in conn.execute(statement).mappings()]
 
     def evidence_job_status_counts(self) -> dict[str, int]:
         table = EvidenceJob.__table__
@@ -590,50 +664,47 @@ class TargetAgentRepository(DatabaseConnection):
             payload = conn.execute(statement).scalar_one_or_none()
         return payload if isinstance(payload, dict) else None
 
-    def record_evidence_window(
-        self,
-        evidence_key: str,
-        workspace_id: str,
-        cluster_id: str,
-        source_id: str,
-        window_start: str,
-        agent_id: str | None,
-        event_id: str,
-        correlation_id: str,
-        payload: JsonObject,
-    ) -> JsonObject:
+    def get_evidence_window_payload_for_workspace(
+        self, workspace_id: str, evidence_key: str
+    ) -> JsonObject | None:
         table = EvidenceWindow.__table__
-        statement = (
-            pg_insert(table)
-            .values(
-                evidence_key=evidence_key,
-                workspace_id=workspace_id,
-                cluster_id=cluster_id,
-                source_id=source_id,
-                window_start=window_start,
-                agent_id=agent_id,
-                event_id=event_id,
-                correlation_id=correlation_id,
-                payload=payload,
-                updated_at=func.now(),
-            )
-            .on_conflict_do_nothing(index_elements=[table.c.evidence_key])
-            .returning(table.c.event_id, table.c.correlation_id)
+        statement = select(table.c.payload).where(
+            table.c.workspace_id == workspace_id,
+            table.c.evidence_key == evidence_key,
         )
         with self.connection() as conn:
-            row = conn.execute(statement).mappings().first()
-            if row:
-                return {"duplicate": False, **dict(row)}
-            existing = (
-                conn.execute(
-                    select(table.c.event_id, table.c.correlation_id).where(
-                        table.c.evidence_key == evidence_key
-                    )
-                )
-                .mappings()
-                .one()
+            payload = conn.execute(statement).scalar_one_or_none()
+        return payload if isinstance(payload, dict) else None
+
+    def list_evidence_windows_for_workspace(
+        self,
+        workspace_id: str,
+        *,
+        limit: int,
+        offset: int = 0,
+    ) -> list[JsonObject]:
+        table = EvidenceWindow.__table__
+        statement = (
+            select(
+                table.c.evidence_key,
+                table.c.workspace_id,
+                table.c.cluster_id,
+                table.c.source_id,
+                table.c.window_start,
+                table.c.agent_id,
+                table.c.correlation_id,
+                table.c.payload,
+                table.c.created_at,
+                table.c.updated_at,
             )
-        return {"duplicate": True, **dict(existing)}
+            .where(table.c.workspace_id == workspace_id)
+            .order_by(table.c.updated_at.desc(), table.c.evidence_key.desc())
+            .limit(limit)
+            .offset(offset)
+        )
+        with self.connection() as conn:
+            rows = conn.execute(statement).mappings().all()
+        return [dict(row) for row in rows]
 
     def record_evidence_event_once(
         self,
@@ -684,18 +755,9 @@ class TargetAgentRepository(DatabaseConnection):
                 )
                 return {"duplicate": True, **dict(existing)}
 
-            self.stage_event_envelope(conn, event_table, outbox_table, event_envelope)
+            trusted_envelope = replace(event_envelope, workspace_id=workspace_id)
+            self.stage_event_envelope(conn, event_table, outbox_table, trusted_envelope)
         return {"duplicate": False, **dict(inserted)}
-
-    def stage_event_once(self, event_envelope: EventEnvelope) -> JsonObject:
-        event_table = EventModel.__table__
-        outbox_table = OutboxModel.__table__
-        with self.connection() as conn:
-            self.stage_event_envelope(conn, event_table, outbox_table, event_envelope)
-        return {
-            "event_id": event_envelope.event_id,
-            "correlation_id": event_envelope.correlation_id,
-        }
 
     def stage_event_envelope(
         self,
@@ -724,6 +786,7 @@ class TargetAgentRepository(DatabaseConnection):
                 source=event_envelope.source,
                 correlation_id=event_envelope.correlation_id,
                 causation_id=event_envelope.causation_id,
+                workspace_id=event_envelope.workspace_id,
                 occurred_at=event_envelope.created_at,
                 payload=event_envelope.payload,
                 lease_id=None,
@@ -731,82 +794,6 @@ class TargetAgentRepository(DatabaseConnection):
             )
             .on_conflict_do_nothing(index_elements=[outbox_table.c.event_id])
         )
-
-    def claim_evidence_window(
-        self,
-        evidence_key: str,
-        workspace_id: str,
-        cluster_id: str,
-        source_id: str,
-        window_start: str,
-        agent_id: str | None,
-        payload: JsonObject,
-    ) -> JsonObject:
-        pending_id = f"{PENDING_EVIDENCE_EVENT_ID_PREFIX}{uuid.uuid4()}"
-        table = EvidenceWindow.__table__
-        statement = (
-            pg_insert(table)
-            .values(
-                evidence_key=evidence_key,
-                workspace_id=workspace_id,
-                cluster_id=cluster_id,
-                source_id=source_id,
-                window_start=window_start,
-                agent_id=agent_id,
-                event_id=pending_id,
-                correlation_id=pending_id,
-                payload=payload,
-                updated_at=func.now(),
-            )
-            .on_conflict_do_nothing(index_elements=[table.c.evidence_key])
-            .returning(table.c.event_id, table.c.correlation_id)
-        )
-        with self.connection() as conn:
-            row = conn.execute(statement).mappings().first()
-            if row:
-                return {"claimed": True, "duplicate": False, **dict(row)}
-            existing = (
-                conn.execute(
-                    select(table.c.event_id, table.c.correlation_id).where(
-                        table.c.evidence_key == evidence_key
-                    )
-                )
-                .mappings()
-                .one()
-            )
-        return {"claimed": False, "duplicate": True, **dict(existing)}
-
-    def complete_evidence_window(
-        self,
-        evidence_key: str,
-        event_id: str,
-        correlation_id: str,
-        payload: JsonObject,
-    ) -> JsonObject:
-        table = EvidenceWindow.__table__
-        statement = (
-            table.update()
-            .where(table.c.evidence_key == evidence_key)
-            .values(
-                event_id=event_id,
-                correlation_id=correlation_id,
-                payload=payload,
-                updated_at=func.now(),
-            )
-            .returning(table.c.event_id, table.c.correlation_id)
-        )
-        with self.connection() as conn:
-            row = conn.execute(statement).mappings().one()
-        return dict(row)
-
-    def release_pending_evidence_window(self, evidence_key: str) -> None:
-        table = EvidenceWindow.__table__
-        statement = table.delete().where(
-            table.c.evidence_key == evidence_key,
-            table.c.event_id.like(f"{PENDING_EVIDENCE_EVENT_ID_PREFIX}%"),
-        )
-        with self.connection() as conn:
-            conn.execute(statement)
 
     def release_stale_pending_evidence_window(
         self,

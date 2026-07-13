@@ -12,6 +12,7 @@ from packages.config.settings import env
 PROMETHEUS_VALIDATE_BASE_URL_ENV = "PROMETHEUS_VALIDATE_BASE_URL"
 PROMETHEUS_VALIDATE_TIMEOUT_SECONDS_ENV = "PROMETHEUS_VALIDATE_TIMEOUT_SECONDS"
 DEFAULT_PROMETHEUS_VALIDATE_TIMEOUT_SECONDS = "5"
+PROMQL_INVALID_DETAIL = "PromQL 쿼리가 유효하지 않습니다."
 
 
 @dataclass(frozen=True)
@@ -30,7 +31,8 @@ async def validate_promql_query(
     step_seconds: int | None = 30,
     transport: httpx.AsyncBaseTransport | None = None,
 ) -> MetricsValidationResult:
-    endpoint = (base_url or env(PROMETHEUS_VALIDATE_BASE_URL_ENV, "")).strip().rstrip("/")
+    # base_url은 호출 호환성만 유지한다. outbound 목적지는 서버 설정만 권위값으로 쓴다.
+    endpoint = env(PROMETHEUS_VALIDATE_BASE_URL_ENV, "").strip().rstrip("/")
     if not endpoint:
         return MetricsValidationResult(
             valid=False,
@@ -75,13 +77,19 @@ async def validate_promql_query(
             code="prometheus_invalid_response",
             detail="Prometheus 응답이 JSON이 아닙니다.",
         )
+    if not isinstance(payload, dict):
+        return MetricsValidationResult(
+            valid=False,
+            code="prometheus_invalid_response",
+            detail="Prometheus 응답 형식이 올바르지 않습니다.",
+        )
     if response.status_code >= 400 or payload.get("status") != "success":
         return MetricsValidationResult(
             valid=False,
             code="promql_invalid",
-            detail=str(payload.get("error") or f"HTTP {response.status_code}"),
+            detail=PROMQL_INVALID_DETAIL,
         )
-    data = payload.get("data") if isinstance(payload, dict) else {}
+    data = payload.get("data")
     result_type = str(data.get("resultType") or "") if isinstance(data, dict) else None
     return MetricsValidationResult(
         valid=True, detail="PromQL 검증에 성공했습니다.", result_type=result_type

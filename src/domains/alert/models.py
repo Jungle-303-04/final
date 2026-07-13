@@ -4,7 +4,8 @@ from __future__ import annotations
 
 from typing import Any
 
-from sqlalchemy import Boolean, Index, Text
+from sqlalchemy import Boolean, Index, Integer, Text
+from sqlalchemy.dialects.postgresql import TIMESTAMP
 from sqlalchemy.orm import Mapped, mapped_column
 
 from packages.storage.base import (
@@ -32,5 +33,9 @@ class AlertChannel(Base):
     url: Mapped[str] = text_column()
     min_severity: Mapped[str] = text_column()  # info | warning | critical
     enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    last_tested_at: Mapped[Any | None] = mapped_column(TIMESTAMP(timezone=True), nullable=True)
+    last_test_status: Mapped[str | None] = mapped_column(Text, nullable=True)
+    last_test_detail: Mapped[str | None] = mapped_column(Text, nullable=True)
+    last_test_status_code: Mapped[int | None] = mapped_column(Integer, nullable=True)
     created_at: Mapped[Any] = created_at_column()
     updated_at: Mapped[Any] = updated_at_column()

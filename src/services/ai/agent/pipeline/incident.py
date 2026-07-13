@@ -24,7 +24,6 @@ from services.ai.agent.pipeline.symptom import (
     resolve_resource,
 )
 
-SANDBOX_NAMESPACE = "sandbox"
 APPLICATION_5XX_SIGNAL = "Application5xx"
 APPLICATION_TIMEOUT_SIGNAL = "ApplicationTimeout"
 APP_5XX_FIELDS = ("status", "status_code", "upstream_status")
@@ -175,21 +174,23 @@ def derive_log_incident_signal(
     for sample in iter_log_samples(logs, collected_at=collected_at):
         parsed = parse_json_line(sample["line"])
         if has_5xx_status(parsed, sample["line"]):
-            return LogIncidentSignal(
-                signal=APPLICATION_5XX_SIGNAL,
-                symptom=SYMPTOM_INGRESS_5XX,
-                resource_kind="Deployment",
-                resource_name=resource_name_for_log_sample(sample, parsed),
-                namespace=sample.get("namespace") or SANDBOX_NAMESPACE,
-            )
-        if has_timeout_signal(parsed, sample["line"]):
-            return LogIncidentSignal(
-                signal=APPLICATION_TIMEOUT_SIGNAL,
-                symptom=SYMPTOM_INGRESS_5XX,
-                resource_kind="Deployment",
-                resource_name=resource_name_for_log_sample(sample, parsed),
-                namespace=sample.get("namespace") or SANDBOX_NAMESPACE,
-            )
+            signal = APPLICATION_5XX_SIGNAL
+        elif has_timeout_signal(parsed, sample["line"]):
+            signal = APPLICATION_TIMEOUT_SIGNAL
+        else:
+            continue
+
+        resource_name = resource_name_for_log_sample(sample, parsed)
+        if resource_name is None:
+            continue
+        namespace = str(sample.get("namespace") or "").strip() or None
+        return LogIncidentSignal(
+            signal=signal,
+            symptom=SYMPTOM_INGRESS_5XX,
+            resource_kind="Deployment",
+            resource_name=resource_name,
+            namespace=namespace,
+        )
     return None
 
 
@@ -205,11 +206,7 @@ def iter_log_samples(
         entry_namespace = namespace_from_query(entry.get("query"))
         line = entry.get("line")
         entry_ts = log_timestamp(entry.get("timestamp"))
-        if (
-            isinstance(line, str)
-            and should_consider_log_namespace(entry_namespace)
-            and log_sample_is_current(entry_ts, collected_at)
-        ):
+        if isinstance(line, str) and log_sample_is_current(entry_ts, collected_at):
             samples.append(
                 {"namespace": entry_namespace, "container": entry.get("container"), "line": line}
             )
@@ -217,8 +214,6 @@ def iter_log_samples(
             stream_labels = stream.get("stream")
             labels = stream_labels if isinstance(stream_labels, dict) else {}
             namespace = str(labels.get("k8s_namespace_name") or entry_namespace or "")
-            if not should_consider_log_namespace(namespace):
-                continue
             container = str(
                 labels.get("k8s_container_name")
                 or labels.get("container")
@@ -289,10 +284,6 @@ def parse_datetime(value: object) -> datetime | None:
     return parsed.astimezone(UTC)
 
 
-def should_consider_log_namespace(namespace: object) -> bool:
-    return namespace in (None, "", SANDBOX_NAMESPACE)
-
-
 def namespace_from_query(query: object) -> str | None:
     if not isinstance(query, str):
         return None
@@ -335,12 +326,13 @@ def is_5xx(value: object) -> bool:
     return 500 <= status <= 599
 
 
-def resource_name_for_log_sample(sample: JsonObject, parsed: JsonObject) -> str:
-    service = str(parsed.get("service") or "").strip()
-    if service:
-        return service
+def resource_name_for_log_sample(sample: JsonObject, parsed: JsonObject) -> str | None:
+    for field_name in ("service", "service_name", "app", "deployment"):
+        resource_name = str(parsed.get(field_name) or "").strip()
+        if resource_name:
+            return resource_name
     container = str(sample.get("container") or "").strip()
-    return container or "sandbox-workload"
+    return container or None
 
 
 def dict_items(value: object) -> list[JsonObject]:

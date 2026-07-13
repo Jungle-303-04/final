@@ -28,8 +28,14 @@ from settings import Settings
 from packages.config.logs import CONTEXT_KEY, get_logger
 from packages.config.settings import env
 from packages.contracts.gateway import routes as gateway_routes
+from packages.contracts.gitops import PUBLIC_GITHUB_CREDENTIAL_REF
 from packages.contracts.security import SecretRef
 from packages.security import SecretNotFound, build_token_vault
+from packages.security.credentials import (
+    CredentialEncryptionError,
+    decrypt_credential,
+    parse_credential_ref,
+)
 
 LOGGER = get_logger(__name__)
 TRUTHY_VALUES = {"1", "true", "yes", "on"}
@@ -37,6 +43,21 @@ TRUTHY_VALUES = {"1", "true", "yes", "on"}
 
 def env_truthy(name: str) -> bool:
     return env(name, "").strip().lower() in TRUTHY_VALUES
+
+
+def gitops_correlation_id(target: GitHubPollTarget, commit_sha: str) -> str:
+    raw = "|".join(
+        [
+            target.workspace_id,
+            target.repository_id,
+            target.repo_ref,
+            target.branch,
+            target.watch_target_id,
+            target.binding_id,
+            commit_sha,
+        ]
+    )
+    return f"gitops-{hashlib.sha256(raw.encode()).hexdigest()[:16]}"
 
 
 @dataclass(frozen=True)
@@ -53,6 +74,7 @@ class GitHubPollTarget:
     manifest_path: str
     source_type: str = ""
     credential_ref: str = ""
+    database_managed: bool = False
 
     @property
     def key(self) -> str:
@@ -86,6 +108,7 @@ class GitHubPollTarget:
             manifest_path=str(row.get("manifest_path") or Settings.DEFAULT_MANIFEST_PATH),
             source_type=str(row.get("source_type") or ""),
             credential_ref=str(row.get("credential_ref") or ""),
+            database_managed=True,
         )
 
 
@@ -214,12 +237,37 @@ class GitHubPoller:
             return exc.response.status_code
         return None
 
+    @staticmethod
+    def is_target_status_error(exc: Exception) -> bool:
+        if not isinstance(exc, httpx.HTTPStatusError):
+            return False
+        return exc.response.status_code in (
+            Settings.ACCESS_ERROR_STATUS_CODES | Settings.RATE_LIMIT_STATUS_CODES
+        )
+
+    @staticmethod
+    def github_error_kind(status_code: int) -> str:
+        if status_code in Settings.RATE_LIMIT_STATUS_CODES:
+            return "rate_limited"
+        return "access_denied"
+
     async def poll_once(self, client: httpx.AsyncClient) -> None:
+        target_errors: list[httpx.HTTPStatusError] = []
         for target in self.poll_targets():
-            commit_sha = await self.latest_commit_sha(client, target)
+            try:
+                commit_sha = await self.latest_commit_sha(client, target)
+            except httpx.HTTPStatusError as exc:
+                if not self.is_target_status_error(exc):
+                    raise
+                target_errors.append(exc)
+                self.record_poll_result(target, ok=False, exc=exc)
+                self.log_target_status_error(target, exc)
+                continue
+            self.record_poll_result(target, ok=True)
             if commit_sha is None or commit_sha == self._last_sha_by_target.get(target.key):
                 continue  # 새 커밋 없음 → webhook 안 쏨(dedup 은 ledger 가 최종 보장).
-            await self.emit_webhook(client, target, commit_sha)
+            correlation_id = gitops_correlation_id(target, commit_sha)
+            await self.emit_webhook(client, target, commit_sha, correlation_id)
             self._last_sha_by_target[target.key] = commit_sha
             LOGGER.info(
                 "github_change_detected",
@@ -231,6 +279,64 @@ class GitHubPoller:
                         "binding_id": target.binding_id,
                         "application_id": target.application_id,
                         "commit_sha": commit_sha,
+                        "correlation_id": correlation_id,
+                    }
+                },
+            )
+        if self.once and target_errors:
+            raise target_errors[0]
+
+    def log_target_status_error(self, target: GitHubPollTarget, exc: httpx.HTTPStatusError) -> None:
+        status_code = exc.response.status_code
+        LOGGER.warning(
+            "github_poll_target_unavailable",
+            extra={
+                CONTEXT_KEY: {
+                    "repo": target.repo_ref,
+                    "branch": target.branch,
+                    "watch_target_id": target.watch_target_id,
+                    "binding_id": target.binding_id,
+                    "application_id": target.application_id,
+                    "status_code": status_code,
+                    "kind": self.github_error_kind(status_code),
+                    "hint": "check GitHub token permissions, repository access, and API rate limits",
+                }
+            },
+        )
+
+    def record_poll_result(
+        self,
+        target: GitHubPollTarget,
+        *,
+        ok: bool,
+        exc: httpx.HTTPStatusError | None = None,
+    ) -> None:
+        record = getattr(self.db, "record_watch_poll_result", None)
+        if not callable(record):
+            return
+        try:
+            record(
+                target.watch_target_id,
+                workspace_id=target.workspace_id,
+                repository_id=target.repository_id,
+                branch=target.branch,
+                manifest_path=target.manifest_path,
+                ok=ok,
+                status_code=exc.response.status_code if exc is not None else None,
+                error_kind=self.github_error_kind(exc.response.status_code)
+                if exc is not None
+                else "",
+                error=str(exc) if exc is not None else "",
+            )
+        except Exception as record_exc:
+            LOGGER.warning(
+                "github_poll_status_record_failed",
+                extra={
+                    CONTEXT_KEY: {
+                        "repo": target.repo_ref,
+                        "branch": target.branch,
+                        "watch_target_id": target.watch_target_id,
+                        "exception_type": type(record_exc).__name__,
                     }
                 },
             )
@@ -275,34 +381,6 @@ class GitHubPoller:
         )
         if response.status_code == Settings.NOT_MODIFIED_STATUS_CODE:
             return None  # ETag 일치 — 새 커밋 없음(rate limit 미소모).
-        if response.status_code in Settings.SOFT_SKIP_STATUS_CODES:
-            LOGGER.info(
-                "github_poll_skipped",
-                extra={
-                    CONTEXT_KEY: {
-                        "repo": target.repo_ref,
-                        "branch": target.branch,
-                        "watch_target_id": target.watch_target_id,
-                        "status_code": response.status_code,
-                    }
-                },
-            )
-            return None
-        if response.status_code in Settings.ACCESS_ERROR_STATUS_CODES:
-            # 인증/접근 오류 → 폴링 프로세스를 죽이지 않고 명확한 경고 후 스킵.
-            LOGGER.warning(
-                "github_poll_access_denied",
-                extra={
-                    CONTEXT_KEY: {
-                        "repo": target.repo_ref,
-                        "branch": target.branch,
-                        "watch_target_id": target.watch_target_id,
-                        "status_code": response.status_code,
-                        "hint": "GITHUB_TOKEN/GITHUB_REPO 확인 — private repo 는 읽기 토큰 필요",
-                    }
-                },
-            )
-            return None
         response.raise_for_status()
         etag = response.headers.get("etag")
         if etag:
@@ -315,12 +393,14 @@ class GitHubPoller:
         client: httpx.AsyncClient,
         target: GitHubPollTarget,
         commit_sha: str,
+        correlation_id: str,
     ) -> None:
         if not self.image:
             raise ValueError(f"{Settings.WEBHOOK_IMAGE_ENV} is required")
         # 서명은 전송 바이트와 정확히 일치 필요 → json= 대신 직접 직렬화한 content 전송
         body = json.dumps(
             {
+                "correlation_id": correlation_id,
                 "commit_sha": commit_sha,
                 "image": self.image,
                 "replicas": Settings.DEFAULT_REPLICAS,
@@ -340,7 +420,7 @@ class GitHubPoller:
         response = await client.post(
             f"{self.base_url}{gateway_routes.GITHUB_WEBHOOK_PATH}",
             content=body,
-            headers=self._webhook_headers(body),
+            headers=self._webhook_headers(body, correlation_id),
         )
         response.raise_for_status()
 
@@ -348,8 +428,8 @@ class GitHubPoller:
         if not target.repo_ref or "/" not in target.repo_ref:
             raise ValueError(f"{Settings.GITHUB_REPO_ENV} must be set to owner/repo")
 
-    def _webhook_headers(self, body: bytes) -> dict[str, str]:
-        headers = {"content-type": "application/json"}
+    def _webhook_headers(self, body: bytes, correlation_id: str) -> dict[str, str]:
+        headers = {"content-type": "application/json", "x-correlation-id": correlation_id}
         if self.webhook_secret:  # 시크릿 있으면 HMAC 서명 첨부(없으면 입구가 거부 → fail-closed).
             digest = hmac.new(self.webhook_secret.encode(), body, hashlib.sha256).hexdigest()
             headers[Settings.SIGNATURE_HEADER] = f"{Settings.SIGNATURE_PREFIX}{digest}"
@@ -368,11 +448,17 @@ class GitHubPoller:
     def _github_token(self, target: GitHubPollTarget) -> str:
         if target.credential_ref:
             return self._read_token_ref(target.credential_ref, target)
+        if target.database_managed:
+            return ""
         if self.token_ref:
             return self._read_token_ref(self.token_ref, target)
         return self.token
 
     def _read_token_ref(self, ref: str, target: GitHubPollTarget) -> str:
+        if ref == PUBLIC_GITHUB_CREDENTIAL_REF:
+            return ""
+        if ref.startswith("db:"):
+            return self._read_db_token_ref(ref, target)
         try:
             return self.token_vault.read_token(SecretRef(ref))
         except SecretNotFound:
@@ -383,6 +469,42 @@ class GitHubPoller:
                         "repo": target.repo_ref,
                         "branch": target.branch,
                         "watch_target_id": target.watch_target_id,
+                    }
+                },
+            )
+            return ""
+
+    def _read_db_token_ref(self, ref: str, target: GitHubPollTarget) -> str:
+        get_credential = getattr(self.db, "get_workspace_credential", None)
+        if not callable(get_credential):
+            LOGGER.warning(
+                "github_poll_db_credential_store_unavailable",
+                extra={
+                    CONTEXT_KEY: {
+                        "repo": target.repo_ref,
+                        "branch": target.branch,
+                        "watch_target_id": target.watch_target_id,
+                    }
+                },
+            )
+            return ""
+        try:
+            provider, scope = parse_credential_ref(ref)
+            row = get_credential(target.workspace_id, provider, scope)
+            encrypted = str((row or {}).get("encrypted_value") or "")
+            if not encrypted:
+                raise CredentialEncryptionError("credential not found")
+            return decrypt_credential(encrypted)
+        except CredentialEncryptionError as exc:
+            LOGGER.warning(
+                "github_poll_db_credential_not_readable",
+                extra={
+                    CONTEXT_KEY: {
+                        "repo": target.repo_ref,
+                        "branch": target.branch,
+                        "watch_target_id": target.watch_target_id,
+                        "credential_ref": ref,
+                        "reason": str(exc),
                     }
                 },
             )

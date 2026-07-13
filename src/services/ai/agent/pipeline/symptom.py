@@ -149,11 +149,14 @@ def unique_signal_labels(signals: list[SymptomSignal], *, exclude: str) -> list[
 
 def collect_signals(kubernetes: JsonObject) -> list[SymptomSignal]:
     signals: list[SymptomSignal] = []
-    for pod in snapshot_items(kubernetes, "pods"):
+    pods = snapshot_items(kubernetes, "pods")
+    for pod in pods:
         signals.extend(pod_signals(pod))
     collected_at = collected_at_time(kubernetes)
     for event in snapshot_items(kubernetes, "events"):
         if not event_is_current_warning(event, collected_at):
+            continue
+        if not event_is_active_for_snapshot(event, pods):
             continue
         signals.extend(event_signals(event))
     signals.extend(service_endpoint_signals(kubernetes))
@@ -177,6 +180,35 @@ def event_is_current_warning(event: JsonObject, collected_at: datetime | None) -
     if last_seen is None:
         return True
     return collected_at - last_seen <= EVENT_SIGNAL_MAX_AGE
+
+
+def event_is_active_for_snapshot(event: JsonObject, pods: list[JsonObject]) -> bool:
+    """Pod 이벤트는 현재 Pod 상태와 맞을 때만 장애 신호로 사용한다.
+
+    Kubernetes Event는 Pod 삭제 뒤에도 잠시 남는다. 롤아웃으로 사라진 Pod의 최근
+    readiness 실패를 시간 조건만으로 다시 승격하면 evidence 주기마다 새 인시던트가
+    생긴다. Pod 대상 이벤트는 같은 namespace/name의 현재 Pod가 있어야 하며, probe
+    실패는 그 Pod가 아직 Ready가 아닐 때만 유효하다.
+    """
+    if str(event.get("involved_kind") or "") != "Pod":
+        return True
+    involved_name = str(event.get("involved_name") or "")
+    namespace = optional_text(event.get("namespace"))
+    current_pod = next(
+        (
+            pod
+            for pod in pods
+            if str(pod.get("name") or "") == involved_name
+            and optional_text(pod.get("namespace")) == namespace
+        ),
+        None,
+    )
+    if current_pod is None:
+        return False
+    message = str(event.get("message") or "").lower()
+    if str(event.get("reason") or "") == "Unhealthy" and "probe" in message:
+        return pod_not_ready(current_pod)
+    return True
 
 
 def parse_event_time(value: object) -> datetime | None:

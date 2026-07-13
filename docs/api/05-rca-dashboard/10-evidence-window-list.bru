@@ -1,0 +1,39 @@
+meta {
+  name: 10 Evidence Window 목록
+  type: http
+  seq: 10
+  tags: [
+    dashboard
+    session
+    read
+    debug
+  ]
+}
+
+get {
+  url: {{base_url}}evidence/windows?limit=20&offset=0
+}
+
+script:post-response {
+  // 최신 window key를 저장해 11 Evidence Window 원문 조회에서 바로 사용한다.
+  const body = res.getBody();
+  if (res.status === 200 && body && Array.isArray(body.items) && body.items.length > 0) {
+    bru.setVar("evidence_key", String(body.items[0].evidence_key || ""));
+  }
+}
+
+tests {
+  test("200 with evidence windows or explicit unavailable/auth failure", function () {
+    expect([200, 401, 403, 422]).to.include(res.status);
+  });
+
+  test("success body has evidence window summaries", function () {
+    if (res.status === 200) {
+      const body = res.getBody();
+      expect(body.items).to.be.an("array");
+      expect(body).to.have.property("limit");
+      expect(body).to.have.property("offset");
+      expect(body).to.have.property("has_more");
+    }
+  });
+}

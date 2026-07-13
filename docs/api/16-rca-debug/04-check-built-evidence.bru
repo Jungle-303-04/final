@@ -1,0 +1,20 @@
+meta {
+  name: 04 실제 Agent Evidence 저장 결과 조회
+  type: http
+  seq: 4
+  tags: [evidence, rca, read]
+}
+
+get {
+  url: {{base_url}}evidence?correlation_id={{rca_correlation_id}}&kind=rca_bundle&limit=20&offset=0
+}
+
+tests {
+  test("실제 Agent가 수집한 동일 correlation evidence가 저장됐다", function () {
+    expect(res.status).to.equal(200);
+    const body = res.getBody();
+    expect(body.items).to.be.an("array").that.is.not.empty;
+    body.items.forEach((item) => expect(item.correlation_id).to.equal(bru.getVar("rca_correlation_id")));
+    expect(body.items.flatMap((item) => item.sources || []).some((item) => item.source === "kubernetes")).to.equal(true);
+  });
+}

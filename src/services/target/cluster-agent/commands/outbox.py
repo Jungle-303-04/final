@@ -7,10 +7,12 @@ from dataclasses import dataclass
 from pathlib import Path
 from types import TracebackType
 
+from packages.config.logs import CONTEXT_KEY, get_logger
 from packages.contracts.event_bus.interfaces import JsonObject
 
 COMMAND_RESULT_STATUS_ABANDONED = "abandoned"
 COMMAND_RESULT_STATUS_PENDING = "pending"
+LOGGER = get_logger(__name__)
 
 
 @dataclass(frozen=True)
@@ -138,6 +140,15 @@ class CommandResultOutbox:
                     timestamp,
                 ),
             )
+        LOGGER.info(
+            "agent_command_result_enqueued",
+            extra={
+                CONTEXT_KEY: {
+                    **command_result_log_context(command_id, workspace_id, lease_id, agent_id),
+                    **command_result_summary(result),
+                }
+            },
+        )
 
     def next_result(self) -> CommandResultRecord | None:
         row = (
@@ -172,6 +183,10 @@ class CommandResultOutbox:
         conn = self.connection()
         with conn:
             conn.execute("delete from command_results where command_id = ?", (command_id,))
+        LOGGER.info(
+            "agent_command_result_outbox_sent",
+            extra={CONTEXT_KEY: {"command_id": command_id}},
+        )
 
     def record_failure(
         self,
@@ -211,7 +226,27 @@ class CommandResultOutbox:
                     """,
                     (COMMAND_RESULT_STATUS_ABANDONED, timestamp, command_id),
                 )
+                LOGGER.warning(
+                    "agent_command_result_outbox_abandoned",
+                    extra={
+                        CONTEXT_KEY: {
+                            "command_id": command_id,
+                            "attempt_count": attempt_count,
+                            "max_attempts": max(1, max_attempts),
+                        }
+                    },
+                )
                 return True
+        LOGGER.info(
+            "agent_command_result_outbox_retry",
+            extra={
+                CONTEXT_KEY: {
+                    "command_id": command_id,
+                    "attempt_count": attempt_count,
+                    "max_attempts": max(1, max_attempts),
+                }
+            },
+        )
         return False
 
     def pending_count(self) -> int:
@@ -235,3 +270,29 @@ class CommandResultOutbox:
             .fetchone()
         )
         return 0 if row is None else int(row["count"])
+
+
+def command_result_log_context(
+    command_id: str,
+    workspace_id: str,
+    lease_id: str,
+    agent_id: str,
+) -> JsonObject:
+    return {
+        "command_id": command_id,
+        "workspace_id": workspace_id,
+        "lease_id": lease_id,
+        "agent_id": agent_id,
+    }
+
+
+def command_result_summary(result: JsonObject) -> JsonObject:
+    return {
+        "status": result.get("status"),
+        "cluster_id": result.get("cluster_id"),
+        "applied": result.get("applied"),
+        "retryable": result.get("retryable"),
+        "resource_count": len(result.get("resources") or [])
+        if isinstance(result.get("resources"), list)
+        else 0,
+    }

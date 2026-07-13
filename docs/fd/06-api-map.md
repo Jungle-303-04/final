@@ -53,7 +53,7 @@
 | GET·POST /applications/{id}/deployments | 🍪 | repo deployments 탭 |
 | GET /applications/{id}/runs | 🍪 | repo runs, [workflow](views/workflow.md) |
 | GET /catalog/items · GET /catalog/items/{item_id} | 🍪 | /catalog |
-| POST /catalog/items/{item_id}/installs | 🍪 | 카탈로그 설치 |
+| POST /catalog/items/{item_id}/installs | 🍪 | 설치 runner 연결 전 501로 차단 |
 | POST /approvals/{approval_id}/grant · reject | 🍪 deploy | ApprovalCard (repo·workflow·chat·notifications 공유) |
 
 ### AI / 대시보드 / RCA

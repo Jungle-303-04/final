@@ -296,6 +296,8 @@ FAULT_CASES: dict[str, tuple[dict[str, Any], str, list[str]]] = {
             "oom_killed",
             "bad_image_rollout",
             "config_env_error",
+            "app_port_bind_failed",
+            "permission_denied_startup",
             "app_startup_failure",
             "dependency_connection_failure",
         ],
@@ -307,6 +309,8 @@ FAULT_CASES: dict[str, tuple[dict[str, Any], str, list[str]]] = {
             "oom_killed",
             "bad_image_rollout",
             "config_env_error",
+            "app_port_bind_failed",
+            "permission_denied_startup",
             "app_startup_failure",
             "dependency_connection_failure",
         ],
@@ -314,7 +318,13 @@ FAULT_CASES: dict[str, tuple[dict[str, Any], str, list[str]]] = {
     "imagepull": (
         IMAGEPULL_SNAPSHOT,
         "ImagePullBackOff",
-        ["wrong_image_tag", "missing_image_pull_secret", "registry_unavailable"],
+        [
+            "wrong_image_tag",
+            "missing_image_pull_secret",
+            "registry_unavailable",
+            "registry_rate_limited",
+            "image_platform_mismatch",
+        ],
     ),
     "probe-fail": (
         PROBE_FAIL_SNAPSHOT,
@@ -328,6 +338,8 @@ FAULT_CASES: dict[str, tuple[dict[str, Any], str, list[str]]] = {
             "insufficient_cpu",
             "insufficient_memory",
             "node_affinity_or_taint_mismatch",
+            "node_selector_mismatch",
+            "untolerated_taint",
             "pvc_pending",
         ],
     ),
@@ -495,7 +507,7 @@ def test_generic_exit1_crash_without_config_log_selects_app_startup_failure() ->
     assert "signal:oom_evidence" in oom.missing_evidence
 
 
-def test_sandbox_application_5xx_log_opens_incident_and_completes_rca() -> None:
+def test_application_5xx_log_opens_incident_and_completes_rca() -> None:
     """브라우저 Scenario Console의 HTTP 500/timeout 신호도 결정적 incident로 승격한다."""
     healthy = snapshot(
         pods=(pod("orders-api-1", owner=("ReplicaSet", "orders-api-96876968")),),
@@ -524,10 +536,11 @@ def test_sandbox_application_5xx_log_opens_incident_and_completes_rca() -> None:
         metrics={"demo_orders_api_errors_total": {"value": 4}},
         logs=[
             {
+                "query": '{k8s_namespace_name="sandbox"}',
                 "line": (
                     '{"level":"ERROR","service":"orders-api","event":"http_request",'
                     '"path":"/api/orders/error","status":500}'
-                )
+                ),
             }
         ],
     )
@@ -544,6 +557,40 @@ def test_sandbox_application_5xx_log_opens_incident_and_completes_rca() -> None:
     completed = events[-1]
     assert completed.root_cause == "application_5xx_spike"
     assert completed.rca_detail.confidence == 1.0
+
+
+def test_production_namespace_log_preserves_observed_namespace() -> None:
+    """로그 query가 가리킨 실제 namespace를 sandbox로 덮어쓰지 않는다."""
+    payload = evidence_payload(
+        snapshot(pods=(pod("orders-api-1", owner=("ReplicaSet", "orders-api-96876968")),)),
+        logs=[
+            {
+                "query": '{k8s_namespace_name="production"}',
+                "line": '{"service":"orders-api","status":503}',
+            }
+        ],
+    )
+
+    events = run_to_plan(payload, correlation_id="corr-production-log")
+
+    detected = event_by_subject(events, "incident.detected")
+    assert detected.detected is True
+    assert detected.incident.namespace == "production"
+    assert detected.incident.resource_name == "orders-api"
+
+
+def test_unattributed_5xx_log_does_not_create_synthetic_incident_target() -> None:
+    """리소스 식별자가 없는 로그로 가짜 workload 인시던트를 만들지 않는다."""
+    payload = evidence_payload(
+        snapshot(pods=(pod("healthy-api-1", labels={"app": "healthy-api"}),)),
+        logs=[{"line": '{"status":500,"message":"request failed"}'}],
+    )
+
+    events = run_to_plan(payload, correlation_id="corr-unattributed-log")
+
+    detected = event_by_subject(events, "incident.detected")
+    assert detected.detected is False
+    assert detected.incident is None
 
 
 def test_demo_intentional_error_log_opens_incident_and_completes_rca() -> None:
@@ -796,6 +843,35 @@ def test_stale_warning_event_does_not_open_incident_when_pod_is_healthy() -> Non
     assert detected.detected is False
     assert detected.incident is None
     assert detected.affected == []
+
+
+@pytest.mark.parametrize("include_recovered_pod", [False, True])
+def test_recent_probe_event_does_not_reopen_recovered_pod(
+    include_recovered_pod: bool,
+) -> None:
+    """최근 Event라도 대상 Pod가 삭제됐거나 Ready면 현재 장애로 재승격하지 않는다."""
+    pod_name = "api-gateway-old-1"
+    recovered = snapshot(
+        pods=(pod(pod_name),) if include_recovered_pod else (),
+        events=(
+            warning_event(
+                "Unhealthy",
+                "Readiness probe failed: dial tcp 10.1.0.7:8000: connection refused",
+                involved=("Pod", pod_name),
+                count=2,
+            ),
+        ),
+    )
+    recovered["cluster"]["collected_at"] = "2026-07-07T09:06:00+00:00"
+
+    events = run_to_plan(
+        evidence_payload(recovered),
+        correlation_id=f"corr-recovered-probe-{include_recovered_pod}",
+    )
+
+    detected = event_by_subject(events, "incident.detected")
+    assert detected.detected is False
+    assert detected.incident is None
 
 
 def test_multiple_failing_pods_pick_dominant_signal_and_keep_the_rest() -> None:

@@ -13,6 +13,13 @@ post {
   url: {{base_url}}dead-letters/{{dead_letter_id}}/replay
 }
 
+script:pre-request {
+  const deadLetterId = String(bru.getVar("dead_letter_id") || "").trim();
+  if (!/^\d+$/.test(deadLetterId)) {
+    bru.runner.skipRequest();
+  }
+}
+
 tests {
   test("replay is accepted or dead letter state is explicit", function () {
     expect([200, 401, 403, 404, 409]).to.include(res.status);

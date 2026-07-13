@@ -107,6 +107,7 @@ describe("AuthBarrier mutation reconciliation", () => {
     await user.click(await screen.findByRole("button", { name: "테스트 로그아웃" }));
 
     expect(await screen.findByRole("heading", {
+      level: 1,
       name: "검증된 응답을 읽지 못했습니다",
     })).toBeTruthy();
     expect(screen.queryByText("인증된 제품")).toBeNull();

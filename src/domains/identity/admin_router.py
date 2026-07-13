@@ -11,7 +11,7 @@ from typing import Any
 from fastapi import APIRouter, Depends, HTTPException, Response
 from pydantic import Field
 
-from domains.identity.dependencies import require_admin_session, require_session
+from domains.identity.dependencies import require_admin_session
 from packages.contracts.gateway import routes as gateway_routes
 from packages.contracts.gateway.base import StrictModel
 from packages.runtime.dependencies import get_db
@@ -189,10 +189,15 @@ async def list_users(
 @router.get(gateway_routes.ACCESS_PATH, response_model=AccessListResponse)
 async def list_access(
     resource_id: str | None = None,
-    _current: Any = Depends(require_session),
+    current: Any = Depends(require_admin_session),
     db: Any = Depends(get_db),
 ) -> AccessListResponse:
-    return AccessListResponse(grants=db.list_access_grants(resource_id))
+    return AccessListResponse(
+        grants=db.list_access_grants(
+            organization_id=current.workspace_id,
+            resource_id=resource_id,
+        )
+    )
 
 
 @router.post(gateway_routes.ACCESS_PATH, response_model=AccessGrantResponse)
@@ -201,7 +206,7 @@ async def grant_access(
     current: Any = Depends(require_admin_session),
     db: Any = Depends(get_db),
 ) -> AccessGrantResponse:
-    workspace_id = getattr(current, "workspace_id", None)
+    workspace_id = current.workspace_id
     db.grant_resource_access(
         {
             "subject_id": payload.subject_id,
@@ -213,7 +218,10 @@ async def grant_access(
     )
     # 방금 부여한 grant 를 조회로 되돌려줌(access_id 확정).
     # subject_id 까지 비교해야 같은 resource+role 의 다른 사용자 grant 와 재매칭되지 않음.
-    grants = db.list_access_grants(payload.resource_id)
+    grants = db.list_access_grants(
+        organization_id=workspace_id,
+        resource_id=payload.resource_id,
+    )
     matches = [
         g
         for g in grants

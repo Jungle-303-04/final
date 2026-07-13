@@ -9,32 +9,19 @@ from __future__ import annotations
 import json
 
 from domains.target.management_guard import MANAGEMENT_BOOTSTRAP_MODE, MANAGEMENT_CLUSTER_ROLE
-from packages.config.settings import env
-from packages.contracts.gateway.requests import DEFAULT_OTEL_SERVICE_NAME, TargetRegisterRequest
-from packages.contracts.target import (
-    CONTROL_PRIORITY_CLASS_NAME,
-    FAST_LANE_NODE_LABEL_KEY,
-    FAST_LANE_NODE_LABEL_VALUE,
-    FAST_LANE_PRIORITY_CLASS_NAME,
-    SANDBOX_NAMESPACE,
-    TARGET_NAMESPACE,
+from packages.config.realtime import derive_realtime_gateway_url
+from packages.config.security import (
+    RCA_TEST_RUNS_ENABLED_ENV,
+    RCA_TEST_TARGET_ENVIRONMENTS,
+    rca_test_runs_enabled,
 )
+from packages.contracts.gateway.requests import DEFAULT_OTEL_SERVICE_NAME, TargetRegisterRequest
+from packages.contracts.target import SANDBOX_NAMESPACE, TARGET_NAMESPACE
 
-TARGET_INSTALL_RENDERER_ENV = "TARGET_INSTALL_RENDERER"
-TARGET_INSTALL_RENDERER_NATIVE = "native"
-TARGET_INSTALL_RENDERER_KUSTOMIZE = "kustomize"
-SUPPORTED_TARGET_INSTALL_RENDERERS = {
-    TARGET_INSTALL_RENDERER_NATIVE,
-    TARGET_INSTALL_RENDERER_KUSTOMIZE,
-}
-
-
-def target_install_renderer() -> str:
-    renderer = env(TARGET_INSTALL_RENDERER_ENV, TARGET_INSTALL_RENDERER_NATIVE).strip().lower()
-    if renderer not in SUPPORTED_TARGET_INSTALL_RENDERERS:
-        supported = ", ".join(sorted(SUPPORTED_TARGET_INSTALL_RENDERERS))
-        raise ValueError(f"{TARGET_INSTALL_RENDERER_ENV} must be one of: {supported}")
-    return renderer
+CONTROL_PRIORITY_CLASS_NAME = "gitops-control-critical"
+FAST_LANE_PRIORITY_CLASS_NAME = "gitops-demo-fast"
+FAST_LANE_NODE_LABEL_KEY = "workload-tier"
+FAST_LANE_NODE_LABEL_VALUE = "demo-fast"
 
 
 def yaml_string(value: str) -> str:
@@ -42,10 +29,6 @@ def yaml_string(value: str) -> str:
 
 
 def target_install_manifest(payload: TargetRegisterRequest, agent_token: str) -> str:
-    # native와 kustomize는 지금 같은 manifest contract를 반환함. 차이는 호출 경계:
-    # native는 API가 즉시 apply 가능한 YAML을 생성, kustomize는 같은 산출물을 향후
-    # renderer adapter/웹앱 preview/install 단계에서 교체할 수 있게 선택값으로 노출.
-    target_install_renderer()
     namespace = agent_namespace(payload)
     role = payload.cluster_role
     return "\n---\n".join(
@@ -53,11 +36,12 @@ def target_install_manifest(payload: TargetRegisterRequest, agent_token: str) ->
         for block in [
             namespace_manifest(namespace),
             namespace_manifest(SANDBOX_NAMESPACE) if role != MANAGEMENT_CLUSTER_ROLE else "",
-            priority_class_manifest(include_fast_lane=role != MANAGEMENT_CLUSTER_ROLE),
+            priority_class_manifest(),
             service_account_manifest(namespace),
             cluster_read_rbac_manifest(namespace),
             target_write_rbac_manifest(namespace) if role != MANAGEMENT_CLUSTER_ROLE else "",
             sandbox_rbac_manifest(namespace) if role != MANAGEMENT_CLUSTER_ROLE else "",
+            catalog_install_rbac_manifest(namespace) if role != MANAGEMENT_CLUSTER_ROLE else "",
             runtime_config_manifest(payload),
             runtime_secret_manifest(agent_token, namespace),
             sample_workload_manifest(payload) if role != MANAGEMENT_CLUSTER_ROLE else "",
@@ -76,8 +60,8 @@ metadata:
 	"""
 
 
-def priority_class_manifest(*, include_fast_lane: bool = True) -> str:
-    control_priority = f"""
+def priority_class_manifest() -> str:
+    return f"""
 apiVersion: scheduling.k8s.io/v1
 kind: PriorityClass
 metadata:
@@ -86,10 +70,6 @@ value: 1000000
 globalDefault: false
 preemptionPolicy: PreemptLowerPriority
 description: "GitOps 제어 경로와 target agent를 일반 workload보다 먼저 스케줄링한다."
-"""
-    if not include_fast_lane:
-        return control_priority
-    return f"""{control_priority}
 ---
 apiVersion: scheduling.k8s.io/v1
 kind: PriorityClass
@@ -132,6 +112,9 @@ rules:
   - apiGroups: ["apps"]
     resources: ["deployments", "replicasets", "daemonsets", "statefulsets"]
     verbs: ["get", "list", "watch"]
+  - apiGroups: ["metrics.k8s.io"]
+    resources: ["pods", "nodes"]
+    verbs: ["get", "list"]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
@@ -214,11 +197,14 @@ metadata:
   namespace: {SANDBOX_NAMESPACE}
 rules:
   - apiGroups: [""]
-    resources: ["services", "configmaps"]
+    resources: ["services"]
+    verbs: ["get", "list", "create", "update", "patch", "delete"]
+  - apiGroups: [""]
+    resources: ["configmaps"]
     verbs: ["get", "list", "create", "update", "patch"]
   - apiGroups: ["apps"]
     resources: ["deployments"]
-    verbs: ["get", "list", "create", "update", "patch"]
+    verbs: ["get", "list", "create", "update", "patch", "delete"]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
@@ -236,12 +222,60 @@ subjects:
 """
 
 
+def catalog_install_rbac_manifest(namespace: str) -> str:
+    return f"""
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: cluster-agent-catalog-install
+  namespace: {SANDBOX_NAMESPACE}
+rules:
+  - apiGroups: [""]
+    resources: ["configmaps", "secrets", "serviceaccounts", "services"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  - apiGroups: ["apps"]
+    resources: ["statefulsets"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  - apiGroups: ["networking.k8s.io"]
+    resources: ["networkpolicies"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  - apiGroups: ["policy"]
+    resources: ["poddisruptionbudgets"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: cluster-agent-catalog-install
+  namespace: {SANDBOX_NAMESPACE}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: cluster-agent-catalog-install
+subjects:
+  - kind: ServiceAccount
+    name: cluster-agent
+    namespace: {namespace}
+"""
+
+
 def control_namespaces_line(payload: TargetRegisterRequest) -> str:
     """제어 허용 네임스페이스 — 지정된 경우에만 ConfigMap 키를 추가(미지정=기존 manifest 동일)."""
     value = payload.control_namespaces.strip()
     if not value:
         return ""
     return f"\n  CONTROL_ALLOWED_NAMESPACES: {yaml_string(value)}"
+
+
+def rca_test_runtime_config_lines(payload: TargetRegisterRequest) -> str:
+    registration_environment = payload.environment.strip().lower()
+    if (
+        payload.cluster_role == MANAGEMENT_CLUSTER_ROLE
+        or registration_environment not in RCA_TEST_TARGET_ENVIRONMENTS
+        or not rca_test_runs_enabled()
+    ):
+        return ""
+    return f"\n  {RCA_TEST_RUNS_ENABLED_ENV}: {yaml_string('1')}"
 
 
 def runtime_config_manifest(payload: TargetRegisterRequest) -> str:
@@ -262,8 +296,9 @@ data:
   TARGET_CLUSTER_ID: {yaml_string(payload.cluster_id)}
   CLUSTER_ROLE: {yaml_string(payload.cluster_role)}
   BOOTSTRAP_MODE: {yaml_string(bootstrap_mode)}
-  WORKSPACE_ID: {yaml_string(payload.workspace_id)}
+  WORKSPACE_ID: {yaml_string(payload.workspace_id)}{rca_test_runtime_config_lines(payload)}
   EVIDENCE_INTERVAL_SECONDS: {yaml_string(str(payload.evidence_interval_seconds))}
+  REALTIME_GATEWAY_URL: {yaml_string(derive_realtime_gateway_url(payload.management_base_url, management_cluster=payload.cluster_role == MANAGEMENT_CLUSTER_ROLE))}
   PROMETHEUS_BASE_URL: {yaml_string(payload.prometheus_base_url)}
   LOKI_BASE_URL: {yaml_string(payload.loki_base_url)}
   TEMPO_BASE_URL: {yaml_string(payload.tempo_base_url)}

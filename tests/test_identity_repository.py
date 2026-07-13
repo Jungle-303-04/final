@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from contextlib import contextmanager
+from inspect import Parameter, signature
 from typing import Any
 
 from sqlalchemy.dialects import postgresql
@@ -84,7 +85,6 @@ def test_release_operator_policy_supports_application_and_catalog_actions() -> N
         for _organization_id, resource_type, role, permission, status in DEFAULT_ROLE_PERMISSION_ROWS
         if status == AccessStatus.ACTIVE.value
     }
-
     assert (
         AccessResourceType.APPLICATION.value,
         ResourceRole.RELEASE_OPERATOR.value,
@@ -217,3 +217,42 @@ def test_accessible_resource_ids_reuses_organization_scoped_role_policy() -> Non
             "org-a",
         ),
     }
+
+
+def test_list_access_grants_requires_organization_id_without_global_default() -> None:
+    parameters = signature(WorkspaceAccessRepository.list_access_grants).parameters
+
+    assert list(parameters)[:3] == ["self", "organization_id", "resource_id"]
+    assert parameters["organization_id"].default is Parameter.empty
+    assert parameters["resource_id"].default is None
+
+
+def test_list_access_grants_sql_always_filters_organization_id() -> None:
+    captured: list[Any] = []
+
+    class StubMappings:
+        def all(self) -> list[dict[str, Any]]:
+            return []
+
+    class StubResult:
+        def mappings(self) -> StubMappings:
+            return StubMappings()
+
+    class StubConnection:
+        def execute(self, statement: Any) -> StubResult:
+            captured.append(statement)
+            return StubResult()
+
+    @contextmanager
+    def stub_connection():
+        yield StubConnection()
+
+    repository = object.__new__(WorkspaceAccessRepository)
+    repository.connection = stub_connection  # type: ignore[method-assign]
+
+    assert repository.list_access_grants("workspace-a") == []
+    assert len(captured) == 1
+    compiled = captured[0].compile(dialect=postgresql.dialect())
+
+    assert "resource_assignments.organization_id =" in str(compiled)
+    assert "workspace-a" in compiled.params.values()
