@@ -7,7 +7,7 @@ governing: docs/f-coordination-plan.md · docs/backend-f-workqueue.md
 
 # 백엔드 F 진행 현황
 
-현재 상태: **앵커 3건**
+현재 상태: **앵커 4건**
 
 ## Delta-green baseline
 
@@ -128,6 +128,7 @@ governing: docs/f-coordination-plan.md · docs/backend-f-workqueue.md
   - `evidence_refs: string[]`
   - `draft.action_type: string`
   - `draft.namespace: string`
+
   - `draft.resource_kind: string`
   - `draft.resource_name: string`
   - `draft.reason: string`
@@ -182,3 +183,15 @@ Bundle route는 200을 반환한다.
 - 신규 route·DB 변경이 없어 Bruno·migration 변경 없음.
 
 계약 완성: InMemoryEventBus + App.run bus injection (b6fac1dd742f3c5c88fee1db87e3e081fb1bc794) [green]
+
+### BQ-006
+
+- canonical 착륙 commit: `8cd0b18e96f1266873d1632486472d0d22c18477`
+- 판정 단일 원천: `packages.contracts.gitops.promotion_gate_from_command_result`
+- 공개 필드: workflow run의 optional `promotion_gate` — completed/applied/failed resources/
+  rollout ready 검사와 `eligible`을 구조화
+- 전체 게이트: Ruff·format PASS, import-linter 2 kept/0 broken, pytest
+  `1720 passed, 3 skipped`
+- 실측: `docs/api/10-applications/06-list-runs.bru`가 구조와 eligible 계산을 검산
+
+계약 완성: WorkflowRun.promotion_gate (8cd0b18e96f1266873d1632486472d0d22c18477) [green]

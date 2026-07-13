@@ -603,3 +603,19 @@ observe 1건)을 증명. 재현: `uv run python -m pytest -q
 tests/test_target_policy_control.py -k argocd`; 최신 origin 병합 상태 전체 Ruff·format·
 import-linter PASS(2 kept, 0 broken), pytest `1711 passed, 3 skipped`; 서비스 계약 문서와
 큐 상태 착륙으로 [D-019] DoD 4조건 충족.
+
+## 2026-07-13 10:07 KST — E/BQ-006 완료 증거
+
+- HEAD/canonical origin: 기능 `308e0bb6b`, merge `8cd0b18e9`; RED `410807eed`.
+- 계약: worker와 run API가 `promotion_gate_from_command_result` 단일 판정을 소비.
+  `completed`, `applied is not False`, 실패 resource 0건, `rollout.ready is not False`를
+  모두 만족할 때만 `eligible=true`; 관측 윈도우는 포함하지 않음.
+- 회귀/직렬화: 관련 48 passed. 기존 동적 run 필드를 보존하고 OpenAPI가
+  `PromotionGateResponse`를 링크하는 테스트 포함.
+- 전체 게이트: Ruff lint/format PASS(`487 files`), import-linter `2 kept, 0 broken`,
+  pytest `1720 passed, 3 skipped`.
+- 제3자 실측: `docs/api/10-applications/06-list-runs.bru`가 gate 필수 키,
+  failed resource count, `eligible` 계산을 응답에서 검산.
+- 문서/범위: contracts·workflow-controller·applications·frontend 인계 문서 착륙;
+  frozen `src/domains/rca/**`, `src/services/ai/**`, `src/packages/runtime/worker.py` 변경 0건.
+  origin 착륙·전체 그린·Bruno 실측·관련 문서 4조건 충족.
