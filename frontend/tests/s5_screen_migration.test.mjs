@@ -185,6 +185,75 @@ test('Issues operations queue is composed only from accessible shadcn primitives
   );
 });
 
+test('Incident detail is composed only from shadcn primitives and keeps recovery candidates read-only', async () => {
+  const source = await readFile(
+    new URL('src/features/notifications/IncidentDetailView.tsx', frontendRoot),
+    'utf8',
+  );
+
+  assert.doesNotMatch(source, /from ['"]@\/ui(?:['"/])/);
+  assert.doesNotMatch(
+    source,
+    /\b(?:CodeBlock|EmptyState|KeyValueList|PageHeader|useToast|cx)\b/,
+  );
+
+  for (const primitive of [
+    'alert',
+    'badge',
+    'breadcrumb',
+    'button',
+    'card',
+    'collapsible',
+    'skeleton',
+  ]) {
+    assert.match(
+      source,
+      new RegExp(`from ['"]@/components/ui/${primitive}['"]`),
+      `IncidentDetailView must import the ${primitive} shadcn primitive`,
+    );
+  }
+
+  assert.match(source, /from ['"]sonner['"]/);
+  assert.match(source, /\btoast\.success\s*\(/);
+  assert.match(source, /\btoast\.error\s*\(/);
+  assert.doesNotMatch(source, /\buseSelectRecoveryAction\b/);
+  assert.doesNotMatch(source, /<AlertDialog(?:Action|Cancel|Content|Description|Footer|Header|Title)?\b/);
+  assert.doesNotMatch(source, /\b(?:confirmSelection|confirmingAction|onSelect)\b/);
+  const candidateStart = source.indexOf('function RecoveryCandidateRow');
+  const candidateEnd = source.indexOf('function recoveryPlanTone');
+  assert.ok(candidateStart >= 0 && candidateEnd > candidateStart);
+  assert.doesNotMatch(source.slice(candidateStart, candidateEnd), /<Button\b|\.mutate\s*\(/);
+  assert.doesNotMatch(source, /다시 실행/);
+  assert.doesNotMatch(source, /\?\? ['"](?:workload|sandbox)['"]/);
+  assert.doesNotMatch(source, /실행 후보|실행 조치|실행됨/);
+  assert.doesNotMatch(source, /candidate\.score\s*\?\?\s*0/);
+  assert.match(source, /score != null \?/);
+  assert.match(source, /const unknownKinds = \[\.\.\.presentKinds\]/);
+  assert.match(source, /const kindOptions = \[/);
+  assert.match(source, /\{kindOptions\.map\(\(kind\) => \(/);
+  assert.doesNotMatch(source, /\[[^\]]*(?:rem|px)[^\]]*\]/);
+  assert.match(source, /rel=['"]noopener noreferrer['"]/);
+  assert.match(source, /<time\b/);
+  assert.match(source, /<CollapsibleTrigger\b/);
+  assert.match(source, /<CollapsibleContent\b/);
+  assert.match(source, /<AlertAction\b/);
+  assert.match(source, /<CardTitle><h2\b/);
+  assert.equal(
+    (source.match(/<CardTitle\b/g) ?? []).length,
+    (source.match(/<CardTitle><h2\b/g) ?? []).length,
+  );
+  assert.equal(
+    (source.match(/<Alert variant=['"]destructive['"]>/g) ?? []).length,
+    (source.match(/<AlertAction\b/g) ?? []).length,
+  );
+  assert.match(source, /role=['"]status['"]/);
+  assert.match(source, /aria-live=['"]polite['"]/);
+  assert.match(source, /role=['"]region['"][\s\S]*?aria-label=['"]RCA 파이프라인 그래프['"][\s\S]*?tabIndex=\{0\}/);
+  assert.match(source, /role=['"]group['"][\s\S]*?aria-label=['"]증거 종류 필터['"]/);
+  assert.match(source, /aria-pressed=/);
+  assert.match(source, /aria-expanded=\{open\}/);
+});
+
 test('Alert channels is composed only from accessible shadcn primitives and preserves the tested-draft gate', async () => {
   const source = await readFile(
     new URL('src/features/notifications/AlertChannelsView.tsx', frontendRoot),
