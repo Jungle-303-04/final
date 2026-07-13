@@ -12,20 +12,17 @@ import type { Tone } from '@/shared/lib/types';
 
 /* ── 사이드바 메뉴 — 실존 도메인만 노출 ── */
 const MENU = [
-  { to: '/', label: '홈', icon: <HomeIcon />, end: true },
   { to: '/repos', label: '배포', icon: <SendIcon /> },
   { to: '/clusters', label: '클러스터', icon: <GlobeIcon /> },
-  { to: '/release-flows', label: '워크플로우', icon: <WorkflowIcon /> },
   { to: '/incidents', label: '인시던트', icon: <ShieldIcon /> },
-  { to: '/metrics', label: '메트릭', icon: <ChartIcon /> },
   { to: '/ai', label: 'AI 채팅', icon: <TerminalIcon /> },
   { to: '/catalog', label: '카탈로그', icon: <PackageIcon /> },
 ];
 
 /* 브레드크럼 1뎁스 라벨 — 메뉴와 동일 어휘 */
 const SECTION_LABEL: Record<string, string> = {
-  clusters: '클러스터', repos: '배포', workflows: '워크플로우', 'release-flows': '워크플로우', incidents: '인시던트',
-  metrics: '메트릭', ai: 'AI 어시스턴트', catalog: '카탈로그', settings: '설정',
+  clusters: '클러스터', repos: '배포', incidents: '인시던트',
+  ai: 'AI 어시스턴트', catalog: '카탈로그', settings: '설정',
 };
 
 type ThemeMode = 'dark' | 'light';
@@ -127,7 +124,6 @@ export function ConsoleLayout({ basePath }: { basePath?: string }) {
             <NavLink
               key={m.to}
               to={pathFor(m.to)}
-              end={m.end}
               title={m.label}
               className={({ isActive }) => navItemClass(isActive)}
             >
@@ -302,10 +298,6 @@ function iconProps(props: IconProps = {}): IconProps {
   };
 }
 
-function HomeIcon(props: IconProps) {
-  return <svg {...iconProps(props)}><path d="m4 11 8-7 8 7" /><path d="M6.5 10.5V20h11v-9.5" /><path d="M10 20v-5h4v5" /></svg>;
-}
-
 function SendIcon(props: IconProps) {
   return <svg {...iconProps(props)}><path d="M21 3 10.5 13.5" /><path d="m21 3-6.5 18-4-7.5L3 9.5 21 3Z" /></svg>;
 }
@@ -314,16 +306,8 @@ function GlobeIcon(props: IconProps) {
   return <svg {...iconProps(props)}><circle cx="12" cy="12" r="9" /><path d="M3 12h18" /><path d="M12 3c2.2 2.3 3.2 5.3 3.2 9S14.2 18.7 12 21" /><path d="M12 3c-2.2 2.3-3.2 5.3-3.2 9s1 6.7 3.2 9" /></svg>;
 }
 
-function WorkflowIcon(props: IconProps) {
-  return <svg {...iconProps(props)}><path d="M6 7h5" /><path d="M13 7h5" /><path d="M6 17h5" /><path d="M13 17h5" /><path d="M8.5 9.5v5" /><path d="M15.5 9.5v5" /></svg>;
-}
-
 function ShieldIcon(props: IconProps) {
   return <svg {...iconProps(props)}><path d="M12 3.5 5 6v5.7c0 4.2 2.8 7.1 7 8.8 4.2-1.7 7-4.6 7-8.8V6z" /><path d="m9 12 2 2 4-4" /></svg>;
-}
-
-function ChartIcon(props: IconProps) {
-  return <svg {...iconProps(props)}><path d="M4 19V5" /><path d="M4 19h16" /><path d="m7 15 3-4 3 2 4-6" /></svg>;
 }
 
 function TerminalIcon(props: IconProps) {

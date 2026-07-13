@@ -1244,7 +1244,6 @@ function ContextActions({ clusterId, subject, subjectName, namespace, kind, uid,
   return (
     <div className={cx('flex flex-wrap gap-2', !compact && 'pt-1')}>
       <Button size={compact ? 'sm' : 'md'} onClick={() => open(hrefs.events)}>이벤트</Button>
-      <Button size={compact ? 'sm' : 'md'} onClick={() => open(hrefs.metrics)}>메트릭</Button>
       <Button size={compact ? 'sm' : 'md'} variant="primary" onClick={() => open(hrefs.ai)}>AI 분석</Button>
     </div>
   );
@@ -1252,8 +1251,6 @@ function ContextActions({ clusterId, subject, subjectName, namespace, kind, uid,
 
 export function contextActionHrefs(clusterId: string, subject: string, subjectName: string, namespace?: string, kind?: string, uid?: string) {
   const prefill = `${clusterId} ${namespace ? `${namespace}/` : ''}${subjectName} ${subject} 상태 분석`;
-  const metricParams = new URLSearchParams({ cluster: clusterId, subject, name: subjectName });
-  if (namespace) metricParams.set('namespace', namespace);
   const eventParams = new URLSearchParams({ tab: 'events' });
   if (subject !== 'cluster') eventParams.set('q', subjectName);
   const aiParams = new URLSearchParams({ prefill });
@@ -1268,7 +1265,6 @@ export function contextActionHrefs(clusterId: string, subject: string, subjectNa
   if (context) aiParams.set('context', context);
   return {
     events: `/clusters/${clusterId}?${eventParams.toString()}`,
-    metrics: `/metrics?${metricParams.toString()}`,
     ai: `/ai?${aiParams.toString()}`,
   };
 }
