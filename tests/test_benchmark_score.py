@@ -6,6 +6,7 @@ import subprocess
 import sys
 
 import pytest
+import yaml
 from conftest import ROOT
 
 SCORER = ROOT / "benchmark" / "score.py"
@@ -34,6 +35,37 @@ def _score(*args: str) -> subprocess.CompletedProcess[str]:
     )
 
 
+def _score_without_site_packages(*args: str) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(
+        [sys.executable, "-S", str(SCORER), *args],
+        cwd=ROOT,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+
+def _live_candidate_index() -> list[dict[str, object]]:
+    catalog_dir = ROOT / "src/services/ai/agent/causes/catalog"
+    paths = sorted(path for pattern in ("*.yaml", "*.yml") for path in catalog_dir.glob(pattern))
+    candidates: list[dict[str, object]] = []
+    for path in paths:
+        document = yaml.safe_load(path.read_text(encoding="utf-8"))
+        for rule in document["rules"]:
+            for candidate in rule["candidates"]:
+                candidates.append(
+                    {
+                        "ordinal": len(candidates) + 1,
+                        "catalog_source": path.relative_to(ROOT).as_posix(),
+                        "rule_id": rule["id"],
+                        "candidate_id": candidate["candidate_id"],
+                        "required_evidence": candidate["expected_evidence"],
+                        "supporting_signals": candidate["signals"],
+                    }
+                )
+    return candidates
+
+
 @pytest.mark.parametrize("category", ("scheduling", "pvc"))
 def test_public_benchmark_scores_two_scenarios_per_new_category(category: str) -> None:
     result = _score("--category", category)
@@ -59,6 +91,22 @@ def test_first_candidate_contract_batch_is_machine_verified_in_catalog_order() -
     document = json.loads(CONTRACTS.read_text(encoding="utf-8"))
     assert tuple(item["candidate_id"] for item in document["contracts"]) == (FIRST_CANDIDATE_BATCH)
     assert document["contracts"][5]["patch_capabilities"] == []
+    for contract in document["contracts"]:
+        assert contract["required_evidence"]
+        assert contract["supporting_signals"]
+        assert contract["contradicting_signals"] == []
+        assert contract["contradiction_policy"] == "not_modeled_v0.1"
+        assert (
+            contract["missing_evidence_policy"]
+            == "all_required_evidence_and_supporting_signal_groups"
+        )
+
+
+def test_public_candidate_contract_scorer_needs_no_site_packages() -> None:
+    result = _score_without_site_packages("--candidate-contracts")
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "RESULT PASS (10 candidate contracts; ordinals=1..10)" in result.stdout
 
 
 def _contract_validation_errors(document: dict[str, object]) -> list[str]:
@@ -140,16 +188,12 @@ def test_candidate_contract_index_rejects_invalid_hash_type_without_crashing() -
     assert any("source hash entry is invalid" in error for error in errors)
 
 
-def test_candidate_contract_index_rejects_loader_order_content_drift() -> None:
-    scorer = runpy.run_path(str(SCORER))
+def test_candidate_contract_index_matches_live_loader_order_and_metadata() -> None:
     candidate_index = json.loads(
         (ROOT / "benchmark/candidate-contract-index.json").read_text(encoding="utf-8")
     )
-    candidate_index["candidates"][19]["candidate_id"] = "fabricated_candidate"
 
-    errors = scorer["validate_candidate_index"](candidate_index)
-
-    assert any("does not match live loader order" in error for error in errors)
+    assert candidate_index["candidates"] == _live_candidate_index()
 
 
 def test_candidate_contract_index_rejects_unhashable_candidate_identity() -> None:
@@ -171,6 +215,28 @@ def test_candidate_contract_rejects_fixture_outside_scenario_tree() -> None:
     errors = _contract_validation_errors(document)
 
     assert any("fixture must exist under benchmark/scenarios" in error for error in errors)
+
+
+def test_candidate_contract_rejects_fixture_path_traversal() -> None:
+    document = _candidate_contracts()
+    document["contracts"][0]["benchmark_fixtures"] = [
+        "benchmark/scenarios/../../benchmark/catalog-snapshot.json"
+    ]
+
+    errors = _contract_validation_errors(document)
+
+    assert any("fixture path must remain under benchmark/scenarios" in error for error in errors)
+
+
+def test_candidate_contract_rejects_supporting_signal_drift() -> None:
+    document = _candidate_contracts()
+    document["contracts"][0]["supporting_signals"][0]["any_of"][0] = {
+        "event_pattern": "fabricated signal"
+    }
+
+    errors = _contract_validation_errors(document)
+
+    assert any("supporting_signals must match the loader-order index" in error for error in errors)
 
 
 def test_candidate_contract_rejects_unhashable_identity_without_crashing() -> None:
