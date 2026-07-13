@@ -64,7 +64,12 @@ site-packages 없이 실행된다.
 recovery 선언은 소스 선언 순서대로 모두 누적한다.
 
 87개 후보의 안전 계약은 모두 완결됐다. 계약 완성은 recovery나 fixture coverage가 모두 구현됐다는
-뜻이 아니다. 11~20번은 모두 명시 recovery가 없는 `manual_analysis` fallback이며 실제 patch
+뜻이 아니다. 7번 `app_port_bind_failed`는 한 프로세스가 같은 실제 포트를 두 번 bind해
+`address already in use` 신호와 CrashLoopBackOff를 만드는 exact fixture를 연결한다. 임의 가용
+포트로 같은 명령을 실행하는 테스트가 외부 인프라 없이 실패 로그와 exit code 1을 검증한다.
+실제 patch capability는 비어 있으므로 허용 경로는 승인형 `manual_analysis`뿐이고, gold patch는
+운영자 검토용 정답이지 Safe PR 실행 가능성의 주장이 아니다. 11~20번은 모두 명시 recovery가 없는
+`manual_analysis` fallback이며 실제 patch
 capability와 기존 exact fixture도 없다. 21~30번 중
 25번 `wrong_image_tag`만 `safe_pr` capability가 있고, 26번 `missing_image_pull_secret`과 27번
 `registry_unavailable`은 승인형 recovery만 있어 capability가 비어 있다. 기존 exact fixture는
