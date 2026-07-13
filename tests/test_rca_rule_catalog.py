@@ -697,31 +697,31 @@ def test_secret_not_found_uses_named_evidence_and_event_signal() -> None:
                 value={"entries": [{"line": "secret not found: api-secret"}]},
                 summary="Secret logs",
             ),
-                EvidenceItem(
-                    source="metadata",
-                    name="current_workload_snapshots",
-                    value={"items": [{"name": "checkout-api"}]},
-                    summary="Workload snapshots",
-                ),
-                EvidenceItem(
-                    source="metadata",
-                    name="referenced_config_objects",
-                    value={
-                        "items": [
-                            {
-                                "kind": "Secret",
-                                "namespace": "sandbox",
-                                "name": "api-secret",
-                                "found": False,
-                            }
-                        ]
-                    },
-                    summary="Secret reference snapshot",
-                ),
-            ],
-            missing_evidence=[],
-            complete=True,
-        )
+            EvidenceItem(
+                source="metadata",
+                name="current_workload_snapshots",
+                value={"items": [{"name": "checkout-api"}]},
+                summary="Workload snapshots",
+            ),
+            EvidenceItem(
+                source="metadata",
+                name="referenced_config_objects",
+                value={
+                    "items": [
+                        {
+                            "kind": "Secret",
+                            "namespace": "sandbox",
+                            "name": "api-secret",
+                            "found": False,
+                        }
+                    ]
+                },
+                summary="Secret reference snapshot",
+            ),
+        ],
+        missing_evidence=[],
+        complete=True,
+    )
 
     by_id = evaluations_for("Secret not found", bundle)
 
