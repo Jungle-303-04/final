@@ -37,3 +37,24 @@ snapshot `snap-0bebb31ef7c909f9c`은 마지막 실측에서 `pending` 72%이고 
 restore 리허설이 남았다. 또한 unversioned create-all DB의 data-only blue/green cutover와
 live에 없는 `auto-revert-worker`·`change-correlation-worker`, live-only `cluster-agent`를
 다루는 rollback plan이 첫 수동 배포 전 필요하다.
+
+[사이클] 2026-07-14 06:48 KST / pre-deploy smoke를 legacy-safe health·frontend·DB 연결로
+제한하고 post-deploy에서만 login·strict RCA Bundle·Alembic head·digest를 검증한다. 첫 수동
+배포는 live에 존재하는 관리 workload만 대상으로 삼고 `cluster-agent`는 보존하며, 기존
+`api-gateway`에 `DEV_AUTH_BYPASS=0`을 주입·rollout·live 검증한다. 구현은 canonical
+`6d5e941516f8a8375b09969bfabe6c0c49c74b3b`의 ancestor이고 Dev Gate run `29286627642`가
+SUCCESS다.
+
+[사이클] 2026-07-14 06:48 KST / unversioned source를 직접 stamp하지 않고 run attempt별 격리
+DB bootstrap → 모든 runtime secret 소비자와 live-only `cluster-agent`·`pgbouncer` replica
+동결 → data-only copy → notify URL·PgBouncer mapping 전환 → image rollout → 원 replica 복원을
+배선했다. 실패 handler는 한 복구 명령이 실패해도 source routing·이전 digest·원 replica 복구를
+끝까지 시도한다. live에만 남은 `workspace_members` 1행과 `resource_access_grants` 0행은 역할
+의미를 추정하지 않고 revision `20260714_0345`의 migration-only table로 원형 보존한다. 구현
+`0fc520285`, canonical `3af9fe9a449d5157d203dfe049b1578861b039c6`, 집중 검증 54 passed,
+Dev Gate run `29287592346` SUCCESS(1분 47초)다.
+
+[BLOCKED] 2026-07-14 06:48 KST / PostgreSQL·NATS snapshot과 restore rehearsal은 완료됐지만,
+새 head `20260714_0345`를 사용한 snapshot clone의 62-table data-only copy가 row count·checksum·
+FK·sequence·catalog까지 통과했다는 실환경 증거는 아직 없다. 배포 설정 세션의 clone 재실증이
+재개 조건이며 그 전에는 `FIRST_DEPLOY`와 `AWS_DEV_DEPLOY_ENABLED=1`을 실행하지 않는다.
