@@ -58,7 +58,14 @@ describe("product-owned primitive accessibility", () => {
     await user.click(trigger);
 
     const dialog = screen.getByRole("dialog", { name: "클러스터 정보" });
+    const overlay = document.querySelector<HTMLElement>('[data-slot="dialog-overlay"]');
     expect(dialog.getAttribute("aria-describedby")).toBeTruthy();
+    expect(dialog.className).toContain("motion-reduce:data-open:animate-none");
+    expect(dialog.className).toContain("motion-reduce:data-closed:animate-none");
+    expect(dialog.className).toContain("motion-reduce:duration-0");
+    expect(overlay?.className).toContain("motion-reduce:data-open:animate-none");
+    expect(overlay?.className).toContain("motion-reduce:data-closed:animate-none");
+    expect(overlay?.className).toContain("motion-reduce:duration-0");
     expect(screen.getByText("현재 선택한 클러스터의 상태입니다.")).toBeTruthy();
     expect(screen.getAllByRole("button", { name: "닫기" })).toHaveLength(2);
     await waitFor(() => {
@@ -109,7 +116,9 @@ describe("product-owned primitive accessibility", () => {
     expect(scrollArea.getAttribute("tabindex")).toBe("0");
     expect(scrollArea.getAttribute("data-reflow-exempt")).toBe("wide-table-horizontal-scroll");
     expect(screen.getByRole("columnheader", { name: "이름" }).getAttribute("aria-sort")).toBe("ascending");
-    expect(screen.getAllByRole("row")).toHaveLength(2);
+    const rows = screen.getAllByRole("row");
+    expect(rows).toHaveLength(2);
+    expect(rows.every((row) => row.className.includes("motion-reduce:transition-none"))).toBe(true);
     expect(screen.getAllByRole("cell")).toHaveLength(2);
   });
 
