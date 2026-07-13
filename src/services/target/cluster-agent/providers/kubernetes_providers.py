@@ -577,6 +577,13 @@ def safe_labels(item: JsonObject, limit: int = 12) -> JsonObject:
     return compact
 
 
+def bounded_label_summary(item: JsonObject) -> JsonObject:
+    """Return bounded labels plus an honest completeness bit for downstream facets."""
+    all_labels = resource_labels(item)
+    labels = safe_labels(item)
+    return {"labels": labels, "labels_complete": len(labels) == len(all_labels)}
+
+
 def owner_ref(item: JsonObject) -> tuple[str | None, str | None]:
     """Return the first owner kind and name for a Kubernetes object."""
     refs = metadata(item).get("ownerReferences", [])
@@ -612,7 +619,7 @@ def pod_summary(item: JsonObject, metrics: JsonObject | None = None) -> JsonObje
         "reason": pod_status.get("reason"),
         "message": pod_status.get("message"),
         "start_time": pod_status.get("startTime"),
-        "labels": safe_labels(item),
+        **bounded_label_summary(item),
         "owner_kind": owner_kind,
         "owner_name": owner_name,
         "workload_key": workload_key(meta.get("namespace"), owner_kind, owner_name),
@@ -707,6 +714,7 @@ def event_summary(item: JsonObject) -> JsonObject:
         "involved_kind": involved.get("kind"),
         "involved_name": involved.get("name"),
         "involved_uid": involved.get("uid"),
+        **bounded_label_summary(item),
     }
     reason_summary = event_reason_summary(item)
     if reason_summary:
@@ -814,6 +822,7 @@ def node_summary(item: JsonObject, metrics: JsonObject | None = None) -> JsonObj
     )
     return {
         "name": metadata(item).get("name"),
+        **bounded_label_summary(item),
         "ready": ready_condition.get("status") == "True",
         "conditions": conditions,
         "taints": spec(item).get("taints", []),
@@ -942,6 +951,7 @@ def workload_summary(kind: str, item: JsonObject) -> JsonObject:
     workload_status = status(item)
     return {
         "kind": kind,
+        **bounded_label_summary(item),
         "namespace": meta.get("namespace"),
         "name": meta.get("name"),
         "generation": meta.get("generation"),
@@ -970,6 +980,7 @@ def service_summary(item: JsonObject) -> JsonObject:
     return {
         "namespace": metadata(item).get("namespace"),
         "name": metadata(item).get("name"),
+        **bounded_label_summary(item),
         "type": service_spec.get("type"),
         "cluster_ip": service_spec.get("clusterIP"),
         "ports": service_spec.get("ports", []),
@@ -988,6 +999,7 @@ def endpoint_slice_summary(item: JsonObject) -> JsonObject:
     return {
         "namespace": metadata(item).get("namespace"),
         "name": metadata(item).get("name"),
+        **bounded_label_summary(item),
         "address_type": endpoint_spec.get("addressType"),
         "endpoint_count": len(endpoints) if isinstance(endpoints, list) else 0,
         "ports": ports if isinstance(ports, list) else [],

@@ -28,6 +28,7 @@ DATABASE_STARTUP_MODE="${DATABASE_STARTUP_MODE:-verify}"
 NATS_URL="${NATS_URL:-nats://nats:4222}"
 REDIS_URL="${REDIS_URL:-redis://redis:6379/0}"
 GITHUB_WEBHOOK_SECRET="${GITHUB_WEBHOOK_SECRET:-}"
+FILTER_CURSOR_SIGNING_KEY="${FILTER_CURSOR_SIGNING_KEY:-}"
 RCA_TEST_RUNS_ENABLED="${RCA_TEST_RUNS_ENABLED:-1}"
 RCA_TEST_RUNS_TOKEN="${RCA_TEST_RUNS_TOKEN:-}"
 TEST_FIXTURE_PURGE_ENABLED="${TEST_FIXTURE_PURGE_ENABLED:-1}"
@@ -337,6 +338,12 @@ fi
 if [ -z "${GITHUB_WEBHOOK_SECRET}" ]; then
   GITHUB_WEBHOOK_SECRET="$(openssl rand -hex 32)"
 fi
+if [ -z "${FILTER_CURSOR_SIGNING_KEY}" ]; then
+  FILTER_CURSOR_SIGNING_KEY="$(existing_secret_value management-runtime-secret FILTER_CURSOR_SIGNING_KEY)"
+fi
+if [ ${#FILTER_CURSOR_SIGNING_KEY} -lt 32 ]; then
+  FILTER_CURSOR_SIGNING_KEY="$(openssl rand -hex 32)"
+fi
 if [ -z "${RCA_TEST_RUNS_TOKEN}" ]; then
   RCA_TEST_RUNS_TOKEN="$(existing_secret_value management-runtime-secret RCA_TEST_RUNS_TOKEN)"
 fi
@@ -478,6 +485,7 @@ kubectl --context "kind-${MGMT_CLUSTER}" -n management create configmap manageme
 SECRET_ARGS=(
   --from-literal=DATABASE_URL="${DATABASE_URL}"
   --from-literal=GITHUB_WEBHOOK_SECRET="${GITHUB_WEBHOOK_SECRET}"
+  --from-literal=FILTER_CURSOR_SIGNING_KEY="${FILTER_CURSOR_SIGNING_KEY}"
   --from-literal=RCA_TEST_RUNS_TOKEN="${RCA_TEST_RUNS_TOKEN}"
 )
 if valid_github_token "${GITHUB_TOKEN}"; then

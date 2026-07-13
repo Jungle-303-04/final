@@ -49,6 +49,7 @@ DB_SCHEMA_INIT_STATEMENT_TIMEOUT = (
 # 모든 프로세스가 동일 잠금을 공유해야 상호 배제가 성립하므로 env 오버라이드 없는 고정값임.
 SCHEMA_INIT_LOCK_NAMESPACE = 774897281
 SCHEMA_INIT_LOCK_KEY = 20260703
+POSTGRES_REQUIRED_EXTENSIONS = ("pg_trgm",)
 
 # 상태 어휘(흩어진 리터럴 단일화)
 DEAD_LETTER_STATUS_OPEN = "open"
@@ -477,6 +478,18 @@ async def configure_async_transaction(conn: Any) -> None:
     )
 
 
+def ensure_required_postgres_extensions(conn: Connection) -> None:
+    """Install metadata index extensions before initialize-mode ``create_all``.
+
+    Production startup runs in verify mode and remains read-only; Alembic owns the same
+    extension creation there.
+    """
+    if conn.dialect.name != "postgresql":
+        return
+    for extension in POSTGRES_REQUIRED_EXTENSIONS:
+        conn.execute(text(f"CREATE EXTENSION IF NOT EXISTS {extension}"))
+
+
 class DatabaseConnection:
     def __init__(self) -> None:
         self.url = required_env(DATABASE_URL_ENV)
@@ -568,6 +581,7 @@ class DatabaseConnection:
             acquire_schema_init_lock(conn)
             token = _ACTIVE_CONN.set(conn)
             try:
+                ensure_required_postgres_extensions(conn)
                 metadata.create_all(conn)
                 self.ensure_compatible_schema(conn)
                 ensure_default_workspace = getattr(self, "ensure_default_workspace", None)

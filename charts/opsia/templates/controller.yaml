@@ -111,6 +111,11 @@ spec:
                   key: DATABASE_URL
             - name: DATABASE_STARTUP_MODE
               value: initialize
+            - name: FILTER_CURSOR_SIGNING_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "opsia.fullname" . }}-bootstrap
+                  key: FILTER_CURSOR_SIGNING_KEY
             - name: CONTROLLER_EVENT_BUS_MODE
               value: inprocess
             - name: DEV_AUTH_BYPASS

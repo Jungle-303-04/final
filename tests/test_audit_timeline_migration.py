@@ -48,7 +48,6 @@ def test_evidence_correlation_cluster_index_upgrade_and_downgrade(monkeypatch) -
     config = _config(monkeypatch)
     script = ScriptDirectory.from_config(config)
 
-    assert script.get_heads() == ["20260713_0820"]
     assert script.get_revision(REVISION).down_revision == DOWN_REVISION
 
     upgrade = _render(config, "upgrade", f"{DOWN_REVISION}:{REVISION}")

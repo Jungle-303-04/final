@@ -24,13 +24,16 @@ def kubernetes_evidence_to_inventory_snapshot(
         *(_event_resource(item) for item in _items(kubernetes, "events")),
         *(_endpoint_resource(item) for item in _items(kubernetes, "endpoints")),
     ]
-    summary = _summary(kubernetes)
+    resources_complete = _resources_complete(kubernetes)
+    summary = _summary(kubernetes, resources_complete=resources_complete)
     return {
         "cluster_id": cluster_id,
         "agent_id": agent_id,
         "source": "cluster-agent:kubernetes",
         "collected_at": cluster.get("collected_at"),
-        "replace": True,
+        # Destructive replacement is safe only when every provider query completed and the
+        # agent did not truncate any collection. Partial evidence must preserve prior rows.
+        "replace": resources_complete,
         "resources": resources,
         "summary": summary,
         "health": {
@@ -133,6 +136,10 @@ def _mapping(value: Any) -> JsonObject:
     return dict(value) if isinstance(value, dict) else {}
 
 
+def _labels(item: JsonObject) -> JsonObject:
+    return _mapping(item.get("labels"))
+
+
 def _items(payload: JsonObject, key: str) -> list[JsonObject]:
     value = payload.get(key)
     return [dict(item) for item in value] if isinstance(value, list) else []
@@ -167,6 +174,7 @@ def _workload_resource(item: JsonObject) -> JsonObject:
         "name": _text(item.get("name"), kind.lower()),
         "status": f"{ready}/{desired}",
         "health": _health(desired == 0 or ready >= desired),
+        "labels": _labels(item),
         "summary": item,
         "raw": item,
     }
@@ -185,6 +193,7 @@ def _pod_resource(item: JsonObject) -> JsonObject:
         "uid": item.get("uid"),
         "status": phase,
         "health": _health(phase == "Running" and not waiting),
+        "labels": _labels(item),
         "summary": {
             **item,
             "image": _first_container_image(containers),
@@ -204,6 +213,7 @@ def _node_resource(item: JsonObject, pods: list[JsonObject]) -> JsonObject:
         "name": name,
         "status": "Ready" if ready else "NotReady",
         "health": _health(ready),
+        "labels": _labels(item),
         "summary": {
             **item,
             "pod_count": sum(1 for pod in pods if pod.get("node_name") == name),
@@ -221,6 +231,7 @@ def _service_resource(item: JsonObject) -> JsonObject:
         "name": _text(item.get("name"), "service"),
         "status": _text(item.get("type"), "Service"),
         "health": "healthy",
+        "labels": _labels(item),
         "summary": item,
         "raw": item,
     }
@@ -244,6 +255,7 @@ def _event_resource(item: JsonObject) -> JsonObject:
         "name": name,
         "status": event_type,
         "health": "degraded" if event_type.lower() == "warning" else "healthy",
+        "labels": _labels(item),
         "summary": item,
         "raw": item,
     }
@@ -258,6 +270,7 @@ def _endpoint_resource(item: JsonObject) -> JsonObject:
         "name": _text(item.get("name"), "endpoint"),
         "status": _text(item.get("address_type"), "unknown"),
         "health": "healthy",
+        "labels": _labels(item),
         "summary": item,
         "raw": item,
     }
@@ -270,7 +283,7 @@ def _first_container_image(containers: list[Any]) -> str:
     return ""
 
 
-def _summary(kubernetes: JsonObject) -> JsonObject:
+def _summary(kubernetes: JsonObject, *, resources_complete: bool) -> JsonObject:
     pods = _items(kubernetes, "pods")
     nodes = _items(kubernetes, "nodes")
     services = _items(kubernetes, "services")
@@ -283,6 +296,11 @@ def _summary(kubernetes: JsonObject) -> JsonObject:
             if item.get("namespace")
         }
     )
+    label_sources = [
+        item
+        for key in ("pods", "workloads", "nodes", "services", "events", "endpoints")
+        for item in _items(kubernetes, key)
+    ]
     summary: JsonObject = {
         "namespaces": namespaces,
         "nodes": [
@@ -296,8 +314,22 @@ def _summary(kubernetes: JsonObject) -> JsonObject:
         ],
         "pod_phases": dict(phases),
         "services": len(services),
+        "labels_complete": resources_complete
+        and all(item.get("labels_complete") is True for item in label_sources),
+        "resources_complete": resources_complete,
     }
+    collection_limits = _mapping(kubernetes.get("collection_limits"))
+    if collection_limits:
+        summary["collection_limits"] = collection_limits
     detected_provider = normalized_detected_provider(kubernetes.get("detected_provider"))
     if detected_provider is not None:
         summary["detected_provider"] = detected_provider
     return summary
+
+
+def _resources_complete(_kubernetes: JsonObject) -> bool:
+    # This translator consumes evidence-job results. KubernetesSnapshotQuery is scoped to
+    # one namespace and may also carry a label selector, so provider success proves query
+    # success rather than full-cluster coverage. A dedicated authoritative sweep contract
+    # must be introduced before this path may destructively replace cluster inventory.
+    return False
