@@ -140,24 +140,16 @@ def test_inventory_filter_upgrade_backfills_honest_baseline(monkeypatch) -> None
     assert "search_text" in sql
     assert "lower(label.label_key || '=' || label.label_value)" in sql
 
-    assert "commit;" in sql
-    first_concurrent_index = min(
-        sql.index(f"index concurrently if not exists {name}") for name in INDEXES
-    )
-    assert sql.index("commit;") < first_concurrent_index
     for name in INDEXES:
-        assert f"index concurrently if not exists {name}" in sql
+        assert f"index {name}" in sql
+    assert "index concurrently" not in sql
 
 
 def test_inventory_filter_downgrade_drops_indexes_and_tables(monkeypatch) -> None:
     config = _config(monkeypatch)
 
     sql = _render(config, "downgrade", f"{REVISION}:{DOWN_REVISION}")
-    assert "commit;" in sql
-    for name in INDEXES:
-        assert f"drop index concurrently if exists {name};" in sql
-    first_drop = min(sql.index(f"drop index concurrently if exists {name};") for name in INDEXES)
-    assert sql.index("commit;") < first_drop
+    assert "drop index concurrently" not in sql
 
     expected_drop_order = tuple(reversed(TABLES))
     positions = [sql.index(f"drop table {table};") for table in expected_drop_order]

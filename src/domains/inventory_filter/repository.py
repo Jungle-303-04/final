@@ -6,6 +6,7 @@ import hashlib
 import json
 from collections import defaultdict
 from collections.abc import Collection, Mapping, Sequence
+from dataclasses import replace
 from datetime import datetime
 from typing import Any
 
@@ -40,9 +41,9 @@ def inventory_snapshot_lock_key(workspace_id: str, cluster_id: str) -> int:
     return int.from_bytes(digest[:8], byteorder="big", signed=True)
 
 
-GLOBAL_PROJECTION_LOCK_KEY = inventory_snapshot_lock_key(
-    "inventory-filter-projection", "global-revision"
-)
+def inventory_filter_projection_lock_key(workspace_id: str) -> int:
+    """Serialize only revisions whose cursor scope can observe one another."""
+    return inventory_snapshot_lock_key("inventory-filter-projection", workspace_id)
 
 
 def sync_inventory_filter_projection(
@@ -63,9 +64,11 @@ def sync_inventory_filter_projection(
     application_table = InventoryResourceApplicationVersion.__table__
     current_table = ClusterInventoryResourceRecord.__table__
 
-    # Sequence allocation happens before commit. A global transaction lock makes revision
-    # order equal commit order, so an already-issued snapshot cursor cannot change later.
-    conn.execute(select(func.pg_advisory_xact_lock(GLOBAL_PROJECTION_LOCK_KEY)))
+    # Sequence allocation happens before commit. Cursors are workspace-bound, so a
+    # workspace transaction lock preserves visible ordering without serializing tenants.
+    conn.execute(
+        select(func.pg_advisory_xact_lock(inventory_filter_projection_lock_key(workspace_id)))
+    )
 
     revision_id = int(
         conn.execute(
@@ -364,6 +367,7 @@ def _version_row(
         "labels": labels,
         "summary": dict(resource.get("summary") or {}),
         "application_ids": application_ids,
+        "application_binding_complete": application_binding_complete,
     }
     encoded = json.dumps(
         meaningful,
@@ -754,6 +758,7 @@ class InventoryFilterRepository(DatabaseConnection):
         items = [
             _serialize_version_row(
                 row,
+                snapshot_revision=snapshot_revision,
                 application_scope=applications_by_version.get(
                     int(row["version_id"]),
                     ([], False),
@@ -786,7 +791,7 @@ class InventoryFilterRepository(DatabaseConnection):
         cluster_ids = _ids(allowed_cluster_ids)
         application_ids = _ids(allowed_application_ids)
         if not workspace_id or not cluster_ids or snapshot_revision <= 0:
-            return {**_empty_page(), "selected_match_count": 0}
+            return {**_empty_page(), "selected_match_counts": []}
         effective_limit = max(1, min(limit, 200))
         current = _current_versions(
             workspace_id,
@@ -801,6 +806,11 @@ class InventoryFilterRepository(DatabaseConnection):
             filters=filters,
             allowed_application_ids=application_ids,
         ).cte("filtered_inventory_versions")
+        selected_base = _apply_resource_filters(
+            base_cte,
+            filters=replace(filters, labels=()),
+            allowed_application_ids=application_ids,
+        ).cte("selected_label_base_versions")
         label = InventoryResourceLabelVersion.__table__
         filtered_count = select(func.count()).select_from(filtered).scalar_subquery()
         unfiltered_count = select(func.count()).select_from(base_cte).scalar_subquery()
@@ -841,13 +851,16 @@ class InventoryFilterRepository(DatabaseConnection):
         with self.connection() as conn:
             rows = [dict(row) for row in conn.execute(statement).mappings().all()]
             if rows:
-                selected_match_count = int(rows[0]["filtered_count"])
-                filtered_total = selected_match_count
+                filtered_total = int(rows[0]["filtered_count"])
                 unfiltered_total = int(rows[0]["unfiltered_count"])
             else:
-                selected_match_count = int(conn.execute(select(filtered_count)).scalar_one())
-                filtered_total = selected_match_count
+                filtered_total = int(conn.execute(select(filtered_count)).scalar_one())
                 unfiltered_total = int(conn.execute(select(unfiltered_count)).scalar_one())
+            selected_match_counts = _selected_label_match_counts(
+                conn,
+                selected_base=selected_base,
+                labels=filters.labels,
+            )
         has_more = len(rows) > effective_limit
         rows = rows[:effective_limit]
         return {
@@ -861,7 +874,10 @@ class InventoryFilterRepository(DatabaseConnection):
             ],
             "filtered_count": filtered_total,
             "unfiltered_count": unfiltered_total,
-            "selected_match_count": selected_match_count,
+            "selected_match_counts": [
+                {"key": key, "value": value, "match_count": count}
+                for (key, value), count in sorted(selected_match_counts.items())
+            ],
             "has_more": has_more,
             "next_position": (
                 {"key": str(rows[-1]["key"]), "value": str(rows[-1]["value"])}
@@ -874,6 +890,40 @@ class InventoryFilterRepository(DatabaseConnection):
 def _count(scalar_statement: Any, repository: DatabaseConnection) -> int:
     with repository.connection() as conn:
         return int(conn.execute(select(scalar_statement)).scalar_one())
+
+
+def _selected_label_match_counts(
+    conn: Any,
+    *,
+    selected_base: Any,
+    labels: tuple[tuple[str, str], ...],
+) -> dict[tuple[str, str], int]:
+    if not labels:
+        return {}
+    label = InventoryResourceLabelVersion.__table__
+    statement = (
+        select(
+            label.c.key,
+            label.c.value,
+            func.count(func.distinct(selected_base.c.version_id)).label("match_count"),
+        )
+        .select_from(
+            selected_base.join(
+                label,
+                and_(
+                    label.c.workspace_id == selected_base.c.workspace_id,
+                    label.c.version_id == selected_base.c.version_id,
+                ),
+            )
+        )
+        .where(or_(*(and_(label.c.key == key, label.c.value == value) for key, value in labels)))
+        .group_by(label.c.key, label.c.value)
+    )
+    observed = {
+        (str(row["key"]), str(row["value"])): int(row["match_count"])
+        for row in conn.execute(statement).mappings()
+    }
+    return {selector: observed.get(selector, 0) for selector in labels}
 
 
 def _current_versions(
@@ -922,17 +972,22 @@ def _current_versions(
                 table.c.valid_to_revision > snapshot_revision,
             )
         )
+    rank = (
+        func.row_number()
+        .over(
+            partition_by=table.c.inventory_key,
+            order_by=table.c.valid_from_revision.desc(),
+        )
+        .label("rank")
+        if include_deleted
+        else literal(1).label("rank")
+    )
     return (
         select(
             table,
             latest_revisions.c.snapshot_id.label("as_of_snapshot_id"),
             latest_revisions.c.observed_at.label("as_of_observed_at"),
-            func.row_number()
-            .over(
-                partition_by=table.c.inventory_key,
-                order_by=table.c.valid_from_revision.desc(),
-            )
-            .label("rank"),
+            rank,
         )
         .select_from(
             table.join(
@@ -1109,14 +1164,21 @@ def _clusters_for_page(
 def _serialize_version_row(
     row: Mapping[str, Any],
     *,
+    snapshot_revision: int,
     application_scope: tuple[list[str], bool],
     cluster: JsonObject | None,
 ) -> JsonObject:
     application_ids, has_restricted_applications = application_scope
-    observed = row.get("as_of_observed_at") or row.get("observed_at")
+    observed = row.get("observed_at")
+    valid_to_revision = row.get("valid_to_revision")
+    deleted_at = (
+        row.get("valid_to_observed_at")
+        if isinstance(valid_to_revision, int) and valid_to_revision <= snapshot_revision
+        else None
+    )
     resource = {
         "inventory_key": str(row["inventory_key"]),
-        "snapshot_id": str(row.get("as_of_snapshot_id") or row["source_snapshot_id"]),
+        "snapshot_id": str(row["source_snapshot_id"]),
         "workspace_id": str(row["workspace_id"]),
         "cluster_id": str(row["cluster_id"]),
         "resource_type": str(row["resource_type"]),
@@ -1134,7 +1196,7 @@ def _serialize_version_row(
         "observed_at": iso_or_none(observed),
         "first_seen_at": iso_or_none(row.get("first_seen_at")),
         "last_seen_at": iso_or_none(observed),
-        "deleted_at": iso_or_none(row.get("valid_to_observed_at")),
+        "deleted_at": iso_or_none(deleted_at),
         "created_at": iso_or_none(row.get("created_at")),
         "updated_at": iso_or_none(observed),
     }

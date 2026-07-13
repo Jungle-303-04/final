@@ -8,7 +8,7 @@ import pytest
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.testclient import TestClient
 
-from domains.inventory_filter.cursor import FilterCursorCodec
+from domains.inventory_filter.cursor import CursorScope, FilterCursorCodec
 from packages.contracts.gateway.responses import (
     FilteredInventoryResourceListResponse,
     LabelFacetPageResponse,
@@ -159,7 +159,10 @@ class InventoryFilterApiDb:
             ],
             "filtered_count": 1,
             "unfiltered_count": 9,
-            "selected_match_count": 1,
+            "selected_match_counts": [
+                {"key": "team", "value": "checkout", "match_count": 1},
+                {"key": "tier", "value": "critical", "match_count": 0},
+            ],
             "has_more": False,
             "next_position": None,
         }
@@ -446,6 +449,45 @@ def test_resources_signed_cursor_rejects_changed_filter_auth_and_workspace() -> 
     assert changed_workspace.status_code == 422
 
 
+def test_resources_cursor_rejects_signed_but_invalid_position_shape() -> None:
+    db = InventoryFilterApiDb(
+        allowed_clusters={CLUSTER_ID},
+        allowed_applications={APPLICATION_ID},
+        paginated=True,
+    )
+    client, _auth = _make_client(db)
+    first = client.get(
+        "/resources",
+        params={"clusters": CLUSTER_ID, "resources.types": "workload", "limit": 1},
+    )
+    body = FilteredInventoryResourceListResponse.model_validate(first.json())
+    malformed = client.app.state.inventory_filter_cursor_codec.encode(
+        CursorScope(
+            workspace_id=WORKSPACE_ID,
+            user_id="user-a",
+            authorization_revision=body.snapshot.authorization_revision,
+            surface="resources:list",
+            filter_fingerprint=body.snapshot.filter_fingerprint,
+            snapshot_revision=body.snapshot.snapshot_revision,
+            facet_query=None,
+        ),
+        position={"unexpected": "value"},
+    )
+
+    response = client.get(
+        "/resources",
+        params={
+            "clusters": CLUSTER_ID,
+            "resources.types": "workload",
+            "limit": 1,
+            "cursor": malformed,
+        },
+    )
+
+    assert response.status_code == 422
+    assert response.json() == {"detail": "resource filter request is invalid"}
+
+
 def test_resource_label_facets_return_selected_resolutions_and_server_counts() -> None:
     db = InventoryFilterApiDb(
         allowed_clusters={CLUSTER_ID},
@@ -471,7 +513,7 @@ def test_resource_label_facets_return_selected_resolutions_and_server_counts() -
     ]
     assert [(item.selector, item.status) for item in body.selected_resolutions] == [
         ("team=checkout", "resolved"),
-        ("tier=critical", "resolved"),
+        ("tier=critical", "zero"),
     ]
     assert body.counts.filtered_count == 1
     assert body.counts.unfiltered_count == 9

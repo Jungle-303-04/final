@@ -8,6 +8,7 @@ from domains.inventory_filter.cursor import (
     authorization_revision,
 )
 from domains.inventory_filter.query import parse_resource_filters
+from domains.inventory_filter.repository import inventory_filter_projection_lock_key
 
 
 def test_filter_parser_preserves_exact_namespace_pairs_and_label_and_semantics() -> None:
@@ -128,6 +129,29 @@ def test_filter_cursor_is_signed_and_bound_to_auth_filter_surface_and_snapshot()
         )
 
 
+def test_filter_cursor_expires_at_the_exact_deadline() -> None:
+    current_time = [1_000]
+    codec = FilterCursorCodec(
+        "cursor-test-secret-32-bytes-minimum!!",
+        ttl_seconds=10,
+        now=lambda: current_time[0],
+    )
+    scope = CursorScope(
+        workspace_id="workspace-a",
+        user_id="user-a",
+        authorization_revision="auth-1",
+        surface="resources:list",
+        filter_fingerprint="filter-1",
+        snapshot_revision=42,
+        facet_query=None,
+    )
+    token = codec.encode(scope, position={"inventory_key": "resource-1"})
+    current_time[0] = 1_010
+
+    with pytest.raises(ValueError, match="cursor expired"):
+        codec.inspect(token)
+
+
 def test_authorization_revision_is_order_independent_and_principal_bound() -> None:
     first = authorization_revision(
         user_id="user-a",
@@ -151,4 +175,13 @@ def test_authorization_revision_is_order_independent_and_principal_bound() -> No
         roles=("user", "observer"),
         allowed_cluster_ids={"cluster-a", "cluster-b"},
         allowed_application_ids={"app-a", "app-b"},
+    )
+
+
+def test_projection_revision_lock_is_workspace_scoped() -> None:
+    assert inventory_filter_projection_lock_key("workspace-a") == (
+        inventory_filter_projection_lock_key("workspace-a")
+    )
+    assert inventory_filter_projection_lock_key("workspace-a") != (
+        inventory_filter_projection_lock_key("workspace-b")
     )

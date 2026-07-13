@@ -7,10 +7,10 @@ Create Date: 2026-07-13 22:15:00
 The baseline copies only currently active inventory rows. Legacy snapshots did not
 persist the full-resource replacement bit, so the migration never claims resource
 completeness. Label completeness is exact only when the source snapshot explicitly
-recorded it. Concurrent index failures can leave the schema/backfill committed plus
-an INVALID index; operators must inspect and reconcile the named index before retry.
-The substring-search indexes require the PostgreSQL ``pg_trgm`` extension; upgrade
-fails closed if the database role cannot install this approved extension.
+recorded it. These new projection tables have no writers before the revision lands,
+so indexes are built in the same transaction as the schema and baseline; a failure
+rolls the revision back and is safe to retry. Substring search requires PostgreSQL
+``pg_trgm`` and fails closed when the database role cannot install the extension.
 
 """
 
@@ -32,21 +32,21 @@ INDEX_DDLS = (
     (
         "ix_inventory_filter_revisions_scope",
         """
-        CREATE INDEX CONCURRENTLY IF NOT EXISTS ix_inventory_filter_revisions_scope
+        CREATE INDEX ix_inventory_filter_revisions_scope
         ON inventory_filter_revisions (workspace_id, revision_id)
         """,
     ),
     (
         "ix_inventory_filter_revisions_cluster",
         """
-        CREATE INDEX CONCURRENTLY IF NOT EXISTS ix_inventory_filter_revisions_cluster
+        CREATE INDEX ix_inventory_filter_revisions_cluster
         ON inventory_filter_revisions (workspace_id, cluster_id, revision_id)
         """,
     ),
     (
         "ux_inventory_versions_active_key",
         """
-        CREATE UNIQUE INDEX CONCURRENTLY IF NOT EXISTS ux_inventory_versions_active_key
+        CREATE UNIQUE INDEX ux_inventory_versions_active_key
         ON inventory_resource_versions (workspace_id, inventory_key)
         WHERE valid_to_revision IS NULL
         """,
@@ -54,7 +54,7 @@ INDEX_DDLS = (
     (
         "ix_inventory_versions_history",
         """
-        CREATE INDEX CONCURRENTLY IF NOT EXISTS ix_inventory_versions_history
+        CREATE INDEX ix_inventory_versions_history
         ON inventory_resource_versions
             (workspace_id, cluster_id, inventory_key, valid_from_revision)
         """,
@@ -62,7 +62,7 @@ INDEX_DDLS = (
     (
         "ix_inventory_versions_scope_sort",
         """
-        CREATE INDEX CONCURRENTLY IF NOT EXISTS ix_inventory_versions_scope_sort
+        CREATE INDEX ix_inventory_versions_scope_sort
         ON inventory_resource_versions
             (workspace_id, cluster_id, resource_type, namespace, health, name, inventory_key)
         """,
@@ -70,7 +70,7 @@ INDEX_DDLS = (
     (
         "ix_inventory_versions_page_sort",
         """
-        CREATE INDEX CONCURRENTLY IF NOT EXISTS ix_inventory_versions_page_sort
+        CREATE INDEX ix_inventory_versions_page_sort
         ON inventory_resource_versions
             (
                 workspace_id,
@@ -86,7 +86,7 @@ INDEX_DDLS = (
     (
         "ix_inventory_versions_validity",
         """
-        CREATE INDEX CONCURRENTLY IF NOT EXISTS ix_inventory_versions_validity
+        CREATE INDEX ix_inventory_versions_validity
         ON inventory_resource_versions
             (workspace_id, cluster_id, valid_from_revision, valid_to_revision, inventory_key)
         """,
@@ -94,14 +94,14 @@ INDEX_DDLS = (
     (
         "ix_inventory_versions_search",
         """
-        CREATE INDEX CONCURRENTLY IF NOT EXISTS ix_inventory_versions_search
+        CREATE INDEX ix_inventory_versions_search
         ON inventory_resource_versions USING gin (search_text gin_trgm_ops)
         """,
     ),
     (
         "ix_inventory_label_versions_facet",
         """
-        CREATE INDEX CONCURRENTLY IF NOT EXISTS ix_inventory_label_versions_facet
+        CREATE INDEX ix_inventory_label_versions_facet
         ON inventory_resource_label_versions
             (workspace_id, cluster_id, key, value, version_id)
         """,
@@ -109,14 +109,14 @@ INDEX_DDLS = (
     (
         "ix_inventory_label_versions_selector",
         """
-        CREATE INDEX CONCURRENTLY IF NOT EXISTS ix_inventory_label_versions_selector
+        CREATE INDEX ix_inventory_label_versions_selector
         ON inventory_resource_label_versions USING gin (selector gin_trgm_ops)
         """,
     ),
     (
         "ix_inventory_application_versions_lookup",
         """
-        CREATE INDEX CONCURRENTLY IF NOT EXISTS ix_inventory_application_versions_lookup
+        CREATE INDEX ix_inventory_application_versions_lookup
         ON inventory_resource_application_versions (workspace_id, application_id, version_id)
         """,
     ),
@@ -478,18 +478,11 @@ def upgrade() -> None:
 
     op.execute(sa.text(BASELINE_SQL))
 
-    with op.get_context().autocommit_block():
-        for index_name, _ in INDEX_DDLS:
-            op.execute(sa.text(f"DROP INDEX CONCURRENTLY IF EXISTS {index_name}"))
-        for _, ddl in INDEX_DDLS:
-            op.execute(sa.text(ddl))
+    for _, ddl in INDEX_DDLS:
+        op.execute(sa.text(ddl))
 
 
 def downgrade() -> None:
-    with op.get_context().autocommit_block():
-        for index_name, _ in reversed(INDEX_DDLS):
-            op.execute(sa.text(f"DROP INDEX CONCURRENTLY IF EXISTS {index_name}"))
-
     op.drop_table("inventory_resource_application_versions")
     op.drop_table("inventory_resource_label_versions")
     op.drop_table("inventory_resource_versions")
