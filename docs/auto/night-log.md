@@ -2760,3 +2760,21 @@ target preflight·register 네 함수와 strict Zod 계약을 claim했다. 1회�
   승격 후 lane `codex/vp010-filter-cutover-20260713`과 worktree
   `/private/tmp/opsia-vp010-filter-cutover`를 같은 사이클에서 회수한다. 신규 stash는 0건이며
   기존 8개와 사람 소유 branch·worktree는 변경하지 않는다.
+
+## 2026-07-13 22:57 KST — [백엔드] Resources 필터 코어 canonical 착륙
+
+- RED `22c9e5d0a`, GREEN `cbf94623c`, 교정 `87c0606e0`, canonical merge
+  `d5517ec14`. `RESOURCES_FILTER_FACETS_PATH`, `FILTERED_RESOURCES_PATH`,
+  `RESOURCE_LABEL_FACETS_PATH` 세 계약 앵커가 `origin/dev`에 착륙했고 gateway lock을 해제했다.
+- workspace fail-closed 인가, same-axis OR/cross-axis AND/Label AND, 동일 snapshot N/M,
+  selector별 resolution, HMAC cursor, partial completeness를 제공한다. Label facet은 현재
+  Resources만 지원하며 나머지 surface는 후속 투영 전까지 fail-closed다.
+- 실 PostgreSQL에서 migration online upgrade/downgrade/upgrade, `pg_trgm`·GIN·keyset index,
+  다중 cluster N/M, scoped evidence 비삭제, 과거 cursor 불변을 확인했다. namespace/label 범위
+  evidence는 authoritative sweep가 아니므로 completeness를 partial로 유지한다.
+- 전체 게이트 `2051 passed, 3 skipped`, Ruff/import contract 8/8, manifest 69/20,
+  Helm lint·shell syntax PASS. merge-tree `e0230e10dc598e5f2d6cebf3e6c0579994d13307`,
+  삭제·frozen 변경 0건, code/merge 모두 `origin/dev` ancestor exit 0이다.
+- 계약 앵커: `RESOURCES_FILTER_FACETS_PATH` / `87c0606e0` / `[green]`.
+- 계약 앵커: `FILTERED_RESOURCES_PATH` / `87c0606e0` / `[green]`.
+- 계약 앵커: `RESOURCE_LABEL_FACETS_PATH` / `87c0606e0` / `[green]`.
