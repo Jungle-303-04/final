@@ -2,6 +2,8 @@
 # AWS CD는 frontend/를 직접 이미지로 빌드하므로 Dockerfile이 Vite 빌드까지 책임진다.
 FROM node:22-alpine AS build
 WORKDIR /app
+ARG SOURCE_SHA
+ENV VITE_SOURCE_SHA=${SOURCE_SHA}
 
 COPY package*.json ./
 RUN npm ci
