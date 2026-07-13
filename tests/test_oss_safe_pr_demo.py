@@ -4,6 +4,7 @@ import asyncio
 from pathlib import Path
 
 import httpx
+import pytest
 from conftest import load_service, make_context
 
 from controller.demo_scm_fixture import DemoScmRepository, create_app
@@ -32,12 +33,25 @@ class _PullRequestStore:
         self.saved.append((correlation_id, pr_url, title, body, status))
 
 
+@pytest.mark.parametrize(
+    "path",
+    (
+        ".git/config",
+        "nested/.git/config",
+        ".GIT/hooks/pre-commit",
+    ),
+)
+def test_demo_scm_rejects_git_metadata_paths(path: str) -> None:
+    with pytest.raises(ValueError, match="repository metadata"):
+        DemoScmRepository._relative(path)
+
+
 def test_demo_scm_exercises_the_production_github_provider(tmp_path, monkeypatch) -> None:
     repository = DemoScmRepository(tmp_path / "repository", repo_ref="opsia/demo")
     base_sha = repository.reset(
         {"deploy/checkout.yaml": "image: nginx:missing\n"},
     )
-    fixture = create_app(repository, token="demo-token")
+    fixture = create_app(repository, token="demo-token", reviewer_token="reviewer-token")
     scm_worker = load_service("gitops/scm-worker")
     monkeypatch.setenv("GITHUB_API_BASE", "http://demo-scm.local")
 
@@ -137,6 +151,47 @@ def test_demo_scm_requires_a_separate_reviewer_token_to_merge(tmp_path) -> None:
     assert reviewer.json()["merge_commit_sha"] == repository.branch_sha("main")
 
 
+def test_demo_scm_writer_cannot_reset_or_commit_to_main(tmp_path) -> None:
+    repository = DemoScmRepository(tmp_path / "repository", repo_ref="opsia/demo")
+    repository.reset({"deploy/checkout.yaml": "image: nginx:missing\n"})
+    fixture = create_app(
+        repository,
+        token="writer-token",
+        admin_token="harness-admin-token",
+        reviewer_token="reviewer-token",
+    )
+    payload = {"files": {"deploy/checkout.yaml": "image: nginx:1.27-alpine\n"}}
+
+    async def scenario() -> tuple[httpx.Response, httpx.Response, httpx.Response]:
+        async with httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=fixture),
+            base_url="http://demo-scm.local",
+        ) as client:
+            writer_headers = {"authorization": "Bearer writer-token"}
+            denied_reset = await client.post(
+                "/demo/reset",
+                headers=writer_headers,
+                json=payload,
+            )
+            denied_commit = await client.post(
+                "/demo/commits",
+                headers=writer_headers,
+                json={**payload, "branch": "main"},
+            )
+            admin_reset = await client.post(
+                "/demo/reset",
+                headers={"authorization": "Bearer harness-admin-token"},
+                json=payload,
+            )
+            return denied_reset, denied_commit, admin_reset
+
+    denied_reset, denied_commit, admin_reset = asyncio.run(scenario())
+
+    assert denied_reset.status_code == 401
+    assert denied_commit.status_code == 401
+    assert admin_reset.status_code == 200
+
+
 def test_make_demo_uses_safe_pr_and_never_directly_normalizes_the_workload() -> None:
     script = (ROOT / "scripts" / "oss-demo.sh").read_text(encoding="utf-8")
 
@@ -171,8 +226,16 @@ def test_make_demo_dry_run_exposes_the_reviewed_gitops_story() -> None:
 
 def test_make_demo_does_not_persist_bootstrap_or_session_credentials() -> None:
     script = (ROOT / "scripts" / "oss-demo.sh").read_text(encoding="utf-8")
+    cleanup = script.split("cleanup() {", maxsplit=1)[1].split("}\ntrap cleanup", maxsplit=1)[0]
+    review = script.rsplit('scene "safe-pr-created"', maxsplit=1)[1].split(
+        'scene "review-merged"', maxsplit=1
+    )[0]
 
     assert "login-request.json" not in script
     assert 'COOKIE_JAR="${ARTIFACT_DIR}' not in script
     assert "opsia-demo-scm-token" not in script
     assert "mktemp -d" in script
+    assert 'rm -rf -- "${RUNTIME_DIR}"' in cleanup
+    assert "SCM_REVIEWER_HEADER" in review
+    assert "SCM_WRITER_HEADER" not in review
+    assert "scm.github.tokenSecretKey=writer-token" in script
