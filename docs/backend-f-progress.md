@@ -7,7 +7,7 @@ governing: docs/f-coordination-plan.md · docs/backend-f-workqueue.md
 
 # 백엔드 F 진행 현황
 
-현재 상태: **앵커 44건**
+현재 상태: **앵커 45건**
 
 ## 역사적 Delta-green baseline (BQ-001~003)
 
@@ -1200,3 +1200,30 @@ Bundle route는 200을 반환한다.
   `02-filter-facets.bru`, `03-label-facets.bru`.
 - 전체 게이트: Ruff lint/format PASS, import-linter 8 kept/0 broken, pytest
   `2099 passed, 3 skipped`; 착륙 직전 최신 `origin/dev` rebase 후 같은 게이트를 재증명한다.
+
+### Issues 필터 계약 — canonical 착륙 증거
+
+- 상태: `landed`; gateway 계약 lock을 해제했다. GREEN `d63498d5f`, 최종 feature HEAD
+  `e00cb9b3e`, canonical no-ff merge `e2504278d`다.
+- route: `GET /api/issues`, `GET /api/issues/filter-facets`,
+  `GET /api/issues/label-facets`. query는 `clusters`, `namespaces`, `applications`,
+  `severities`, `statuses`, `environments`, `labels`, `q`와 opaque cursor를 지원한다.
+- 프론트는 `IssueFilterResultsResponse.items[]`의 stable `issue_id`, optional `detail_id`,
+  correlation/cluster/namespace/resource identity, symptom/severity/state/pipeline status,
+  environment/application/Label 완전성, root cause/confidence, `updated_at`을 사용한다.
+  facet·Label 응답은 value/count와 `exact|partial|unavailable`, 선택값 resolution, N/M,
+  capability·snapshot partial reason을 함께 제공한다.
+- event envelope tenant만 권위값으로 사용하고 payload tenant 위조·누락은 fail-closed다.
+  session workspace와 구체 `RCA_READ` cluster scope를 SQL에 강제하며 raw payload는 반환하지 않는다.
+- Label은 incident event-time evidence snapshot에서만 투영한다. 권위 source가 없는
+  environment/application은 `unavailable`, mutable timeline count/cursor는 `partial`이다.
+- migration `20260713_2340`은 nullable projection column 8개를, `20260713_2350`은 concurrent
+  index 6개를 분리 적용한다. 실 PostgreSQL `upgrade → downgrade → upgrade`를 통과했다.
+- Bruno: `docs/api/18-issues-filter/01-list-issues.bru`,
+  `02-filter-facets.bru`, `03-label-facets.bru`.
+- 전체 게이트: Ruff lint/format PASS, import-linter 8 kept/0 broken, pytest
+  `2100 passed, 3 skipped`. merge-tree `43dafb04baa8d9bbd6f04ec356e4ef48647f7399`,
+  삭제·frozen source·프론트 소유 경로 변경 0건이다. GREEN·feature·merge는 모두
+  `origin/dev` ancestor exit 0이다.
+
+계약 완성: ISSUES_FILTER_RESULTS_PATH + ISSUES_FILTER_FACETS_PATH + ISSUES_LABEL_FACETS_PATH (d63498d5fd84a02d109b68e39f2112d177a5fa92) [green]
