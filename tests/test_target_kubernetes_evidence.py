@@ -7,9 +7,9 @@ from pathlib import Path
 
 import httpx
 import pytest
-from packages.kubernetes_provider import detect_kubernetes_provider
 
 from packages.contracts.gateway.requests import AgentEvidenceRequest, EvidenceJobResultRequest
+from packages.kubernetes_provider import detect_kubernetes_provider
 
 ROOT_DIR = Path(__file__).resolve().parents[1]
 TARGET_AGENT_DIR = ROOT_DIR / "src" / "services" / "target" / "cluster-agent"
