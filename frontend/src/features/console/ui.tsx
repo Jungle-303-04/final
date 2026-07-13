@@ -15,7 +15,6 @@ import {
   ShieldCheckIcon as LucideShieldIcon,
   SunIcon as LucideSunIcon,
   TerminalIcon as LucideTerminalIcon,
-  WorkflowIcon,
   type LucideProps,
 } from 'lucide-react';
 import { bindLiveQueryClient, startLive } from '@/shared/lib/live';
@@ -28,7 +27,6 @@ import type { Tone } from '@/shared/lib/types';
 /* ── 사이드바 메뉴 — 실존 도메인만 노출 ── */
 const MENU = [
   { to: '/repos', label: '배포', icon: <SendIcon /> },
-  { to: '/workflows', label: '워크플로우', icon: <WorkflowIcon size={18} aria-hidden="true" /> },
   { to: '/clusters', label: '클러스터', icon: <GlobeIcon /> },
   { to: '/incidents', label: '인시던트', icon: <ShieldIcon /> },
   { to: '/ai', label: 'AI 채팅', icon: <TerminalIcon /> },
@@ -37,7 +35,7 @@ const MENU = [
 
 /* 브레드크럼 1뎁스 라벨 — 메뉴와 동일 어휘 */
 const SECTION_LABEL: Record<string, string> = {
-  clusters: '클러스터', repos: '배포', workflows: '워크플로우', incidents: '인시던트',
+  clusters: '클러스터', repos: '배포', incidents: '인시던트',
   ai: 'AI 어시스턴트', catalog: '카탈로그', settings: '설정',
 };
 

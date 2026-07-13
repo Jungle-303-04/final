@@ -195,3 +195,113 @@ html[data-theme-mode="dark"] {
     background: color-mix(in oklab, var(--ui-accent) 28%, transparent);
   }
 }
+
+/* React Flow shared motion hooks. Durations mirror src/ui/motion.ts via theme variables. */
+@keyframes flow-dash {
+  to {
+    stroke-dashoffset: -20;
+  }
+}
+
+@keyframes flow-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+
+  50% {
+    opacity: 0.55;
+  }
+}
+
+.flow-node--pulse {
+  animation: flow-pulse calc(var(--ui-duration-slow) * 4) var(--ease-standard) infinite;
+}
+
+/* The library stylesheet is loaded by the lazy flow module after this theme file.
+ * Compound selectors preserve the established edge styles regardless of load order. */
+.react-flow__edge-path.flow-edge-path {
+  stroke-width: 1.5;
+  stroke: var(--ui-border);
+}
+
+.react-flow__edge-path.flow-edge-path--active {
+  stroke-width: 2;
+  stroke-dasharray: 6 4;
+  animation: flow-dash calc(var(--ui-duration-slow) * 2) linear infinite;
+}
+
+.react-flow__edge-path.flow-edge-path--success {
+  stroke: var(--ui-success);
+}
+
+.react-flow__edge-path.flow-edge-path--warning {
+  stroke: var(--ui-warning);
+}
+
+.react-flow__edge-path.flow-edge-path--danger {
+  stroke: var(--ui-danger);
+}
+
+.react-flow__edge-path.flow-edge-path--info {
+  stroke: var(--ui-info);
+}
+
+.react-flow__edge-path.flow-edge-path--neutral {
+  stroke: var(--ui-border);
+}
+
+.flow-edge-label {
+  position: absolute;
+  display: inline-flex;
+  pointer-events: none;
+  flex-direction: column;
+  align-items: center;
+  gap: 1px;
+  border: 1px solid var(--ui-border);
+  border-radius: 5px;
+  background: var(--ui-surface);
+  padding: 3px 7px;
+  color: var(--ui-text-secondary);
+  box-shadow: var(--ui-shadow-soft);
+  white-space: nowrap;
+}
+
+.flow-edge-label strong {
+  color: inherit;
+  font-size: var(--text-caption);
+  font-weight: 800;
+}
+
+.flow-edge-label span {
+  color: var(--ui-text-muted);
+  font-size: 0.625rem;
+  font-weight: 700;
+}
+
+.flow-edge-label--gate {
+  border-color: color-mix(in srgb, var(--ui-warning) 48%, var(--ui-border));
+  color: var(--ui-warning);
+}
+
+.react-flow__node {
+  transition: transform var(--ui-duration-slow) var(--ease-decelerate);
+}
+
+.react-flow__node.dragging {
+  transition: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .flow-node--pulse {
+    animation: none;
+  }
+
+  .react-flow__edge-path {
+    animation: none !important;
+  }
+
+  .react-flow__node {
+    transition: none;
+  }
+}

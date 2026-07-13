@@ -9,7 +9,6 @@ import {
   type Edge, type EdgeProps, type EdgeTypes, type Node, type NodeProps, type NodeTypes,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
-import './flow.css';
 import type { Tone } from '@/shared/lib/types';
 import { cx } from '@/ui';
 import { durations } from '@/ui/motion';

@@ -17,8 +17,6 @@ const consoleChildren = (basePath = '') => [
   { path: 'clusters/:clusterId/pods/:namespace/:pod', element: L(() => import('@/features/cluster/ClusterDetailView')) },
   { path: 'repos', element: L(() => import('@/features/repo/RepoListView')) },
   { path: 'repos/:applicationId', element: L(() => import('@/features/repo/RepoDetailView')) },
-  { path: 'workflows', element: L(() => import('@/features/release/ReleaseFlowView')) },
-  { path: 'release-flows', element: <Navigate to={`${basePath}/workflows`} replace /> },
   { path: 'incidents', element: L(() => import('@/features/notifications/NotificationsView')) },
   { path: 'incidents/:incidentId', element: L(() => import('@/features/notifications/IncidentDetailView')) },
   { path: 'ai', element: L(() => import('@/features/chat/ChatView')) },
