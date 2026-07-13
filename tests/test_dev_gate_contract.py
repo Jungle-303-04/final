@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import os
+import subprocess
 from pathlib import Path
 
 import yaml
@@ -43,13 +45,29 @@ def test_pre_push_hook_calls_the_canonical_gate() -> None:
     hooks = [hook for repo in config["repos"] for hook in repo["hooks"]]
     hook_by_id = {hook["id"]: hook for hook in hooks}
     assert "ruff-format" in hook_by_id
-    assert hook_by_id["dev-full-gate"]["entry"] == "make gate"
+    assert hook_by_id["dev-full-gate"]["entry"] == "bash scripts/pre-push-gate.sh"
     assert hook_by_id["dev-full-gate"]["stages"] == ["pre-push"]
     assert hook_by_id["dev-full-gate"]["pass_filenames"] is False
 
     hooks_recipe = make_recipe("hooks")
     assert "--hook-type pre-commit" in hooks_recipe
     assert "--hook-type pre-push" in hooks_recipe
+
+
+def test_pre_push_wrapper_scrubs_parent_repository_git_environment() -> None:
+    environment = {**os.environ, "GIT_INDEX_FILE": "/tmp/parent-index"}
+    result = subprocess.run(
+        ["bash", "scripts/pre-push-gate.sh", "env"],
+        cwd=ROOT,
+        env=environment,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+
+    exported = dict(line.split("=", 1) for line in result.stdout.splitlines() if "=" in line)
+    assert "GIT_INDEX_FILE" not in exported
+    assert exported["PRE_COMMIT_ALLOW_NO_CONFIG"] == "1"
 
 
 def test_dev_push_ci_calls_the_canonical_gate_before_any_deploy_job() -> None:

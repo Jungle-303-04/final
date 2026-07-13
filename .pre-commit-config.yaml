@@ -14,7 +14,7 @@ repos:
     hooks:
       - id: dev-full-gate
         name: dev 전체 게이트
-        entry: make gate
+        entry: bash scripts/pre-push-gate.sh
         language: system
         pass_filenames: false
         always_run: true
