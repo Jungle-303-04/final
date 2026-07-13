@@ -12,6 +12,7 @@ import time
 from dataclasses import fields
 from datetime import UTC, datetime, timedelta
 from typing import Any
+from urllib.parse import urlsplit
 
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import PlainTextResponse
@@ -80,6 +81,7 @@ from packages.contracts.gateway.responses import (
     EvidenceJobPollResponse,
     EvidenceJobResultResponse,
     EvidenceJobScheduleResponse,
+    ManagementAccessResponse,
     SchedulingPolicyResponse,
     TargetInstallResponse,
     TargetPreflightResponse,
@@ -135,6 +137,9 @@ GITOPS_WEBHOOK_IMAGE_ENV = "GITOPS_WEBHOOK_IMAGE"
 PUBLIC_MANAGEMENT_BASE_URL_ENV = "PUBLIC_MANAGEMENT_BASE_URL"
 PUBLIC_API_BASE_URL_ENV = "PUBLIC_API_BASE_URL"
 PUBLIC_BASE_URL_ENV = "PUBLIC_BASE_URL"
+OPSIA_ACCESS_MODE_ENV = "OPSIA_ACCESS_MODE"
+OPSIA_EXTERNAL_URL_ENV = "OPSIA_EXTERNAL_URL"
+SUPPORTED_ACCESS_MODES = frozenset({"portforward", "loadbalancer", "ingress", "nodeport"})
 LOCAL_PLACEHOLDER_IMAGES = {"", "service:local", "kubeheal-service:latest"}
 BLOCKED_TEST_CLUSTER_IDS = {"bruno-api-test"}
 BLOCKED_TEST_CLUSTER_NAME_PARTS = ("bruno api test",)
@@ -148,6 +153,7 @@ DETECTED_CLUSTER_PROVIDERS = frozenset({"eks", "gke", "aks"})
 AGENT_ERROR_STATUSES = frozenset({"error", "failed"})
 TARGET_AGENT_IMAGE_NOT_CONFIGURED = "target agent image is not configured"
 MANAGEMENT_BASE_URL_NOT_CONFIGURED = "management base URL is not configured"
+EXTERNAL_ACCESS_REQUIRED = "external access URL is required to enroll another cluster"
 TARGET_REGISTRATION_CONNECT_TIMEOUT_SECONDS_ENV = "TARGET_REGISTRATION_CONNECT_TIMEOUT_SECONDS"
 TARGET_REGISTRATION_AUTO_DELETE_EXPIRED_ENV = "TARGET_REGISTRATION_AUTO_DELETE_EXPIRED"
 DEFAULT_TARGET_REGISTRATION_CONNECT_TIMEOUT_SECONDS = 1800
@@ -202,10 +208,25 @@ def allowed_kube_contexts() -> set[str]:
 
 
 def normalized_management_base_url(value: str) -> str:
-    base = value.strip().rstrip("/")
-    if not base:
+    raw = value.strip()
+    if not raw:
         return ""
-    return base if base.endswith("/api") else f"{base}/api"
+    try:
+        parts = urlsplit(raw)
+        _port = parts.port
+    except ValueError:
+        return ""
+    if (
+        parts.scheme not in {"http", "https"}
+        or not parts.hostname
+        or parts.username is not None
+        or parts.password is not None
+        or parts.query
+        or parts.fragment
+        or parts.path not in {"", "/", "/api", "/api/"}
+    ):
+        return ""
+    return f"{parts.scheme}://{parts.netloc}/api"
 
 
 def public_management_base_url() -> str:
@@ -218,6 +239,37 @@ def public_management_base_url() -> str:
         if base:
             return base
     return ""
+
+
+def management_access_response() -> ManagementAccessResponse:
+    mode = env(OPSIA_ACCESS_MODE_ENV, "").strip().lower()
+    if mode not in SUPPORTED_ACCESS_MODES:
+        mode = "unknown"
+
+    configured_external_url = normalized_management_base_url(
+        env(OPSIA_EXTERNAL_URL_ENV, "")
+    ).removesuffix("/api")
+    agent_server_url = public_management_base_url().removesuffix("/api")
+    if configured_external_url:
+        return ManagementAccessResponse(
+            mode=mode,
+            external_url=configured_external_url,
+            agent_server_url=agent_server_url or configured_external_url,
+            reachability="external",
+        )
+    if mode == "unknown" and agent_server_url:
+        return ManagementAccessResponse(
+            mode=mode,
+            external_url=agent_server_url,
+            agent_server_url=agent_server_url,
+            reachability="external",
+        )
+    return ManagementAccessResponse(
+        mode=mode,
+        agent_server_url=agent_server_url,
+        reachability="self_only",
+        limitation_reason="external_url_not_configured",
+    )
 
 
 def target_registration_connect_timeout_seconds() -> int:
@@ -267,9 +319,11 @@ def normalize_target_provider_defaults(payload: TargetRegisterRequest) -> Target
         if default_image:
             updates["image"] = default_image
 
-    management_base_url = normalized_management_base_url(payload.management_base_url)
+    # 배포 경계에서 확정된 주소가 요청 body보다 우선한다. port-forward 브라우저가 보낸
+    # localhost를 외부 agent callback으로 저장하지 않도록 서버 권위값을 사용한다.
+    management_base_url = public_management_base_url()
     if not management_base_url:
-        management_base_url = public_management_base_url()
+        management_base_url = normalized_management_base_url(payload.management_base_url)
     if management_base_url:
         updates["management_base_url"] = management_base_url
 
@@ -329,7 +383,7 @@ def reject_test_target(payload: TargetRegisterRequest) -> None:
 
 
 def require_management_base_url(payload: TargetRegisterRequest) -> None:
-    if not payload.management_base_url.strip():
+    if not normalized_management_base_url(payload.management_base_url):
         raise HTTPException(status_code=422, detail=MANAGEMENT_BASE_URL_NOT_CONFIGURED)
 
 
@@ -438,6 +492,14 @@ def target_preflight_provider_checks(
         and not public_management_base_url()
     ):
         errors.append(MANAGEMENT_BASE_URL_NOT_CONFIGURED)
+        provider_errors += 1
+    access = management_access_response()
+    if (
+        payload.cluster_role != MANAGEMENT_CLUSTER_ROLE
+        and access.mode != "unknown"
+        and access.reachability == "self_only"
+    ):
+        errors.append(EXTERNAL_ACCESS_REQUIRED)
         provider_errors += 1
 
     if (
@@ -638,6 +700,7 @@ def install_response(
         connect_timeout_seconds=connect_timeout_seconds,
         connect_expires_at=connect_expires_at,
         connection_stage="token_issued",
+        management_access=management_access_response(),
     )
 
 
@@ -935,6 +998,7 @@ async def target_registration_preflight(
         selected=selected,
         last_agent_id=latest_agent.get("agent_id") if latest_agent else None,
         last_seen_at=latest_agent.get("last_seen_at") if latest_agent else None,
+        management_access=management_access_response(),
     )
 
 
@@ -952,6 +1016,13 @@ async def register_target(
     )
     reject_test_target(scoped_payload)
     require_management_base_url(scoped_payload)
+    access = management_access_response()
+    if (
+        scoped_payload.cluster_role != MANAGEMENT_CLUSTER_ROLE
+        and access.mode != "unknown"
+        and access.reachability == "self_only"
+    ):
+        raise HTTPException(status_code=422, detail=EXTERNAL_ACCESS_REQUIRED)
     validate_target_install_providers(scoped_payload)
     validate_target_bootstrap_config(scoped_payload)
     components = target_desired_components(scoped_payload)

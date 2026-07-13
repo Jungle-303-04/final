@@ -29,6 +29,28 @@ def _render_chart(*extra_args: str) -> list[dict[str, object]]:
     return [item for item in yaml.safe_load_all(result.stdout) if item]
 
 
+def _render_notes(*extra_args: str) -> str:
+    result = subprocess.run(
+        [
+            "helm",
+            "install",
+            "opsia",
+            str(CHART),
+            "--namespace",
+            "opsia-system",
+            "--dry-run=client",
+            "--debug",
+            *extra_args,
+        ],
+        cwd=ROOT,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 0, result.stderr
+    return result.stdout
+
+
 def _container(workload: dict[str, object], name: str) -> dict[str, object]:
     spec = workload["spec"]
     assert isinstance(spec, dict)
@@ -88,11 +110,299 @@ def test_helm_chart_uses_one_public_origin_and_keeps_postgres_internal() -> None
     controller = services["opsia"]
     assert controller["spec"].get("type", "ClusterIP") == "ClusterIP"
     assert [(item["port"], item["targetPort"]) for item in controller["spec"]["ports"]] == [
-        (80, "http")
+        (80, "console")
+    ]
+    metrics = services["opsia-metrics"]
+    assert metrics["spec"].get("type", "ClusterIP") == "ClusterIP"
+    assert [(item["port"], item["targetPort"]) for item in metrics["spec"]["ports"]] == [
+        (9090, "http")
     ]
     postgres = services["opsia-postgresql"]
     assert postgres["spec"].get("type", "ClusterIP") == "ClusterIP"
     assert [item["port"] for item in postgres["spec"]["ports"]] == [5432]
+
+
+def test_default_access_is_self_only_same_origin_with_console_and_realtime() -> None:
+    documents = _render_chart()
+    deployment = next(
+        item
+        for item in documents
+        if item["kind"] == "Deployment" and item["metadata"]["name"] == "opsia-controller"
+    )
+    containers = {
+        item["name"]: item for item in deployment["spec"]["template"]["spec"]["containers"]
+    }
+    controller_env = {item["name"]: item.get("value") for item in containers["controller"]["env"]}
+
+    assert containers["console"]["image"] == "ghcr.io/opsia/opsia-console:0.1.0"
+    assert containers["console"]["ports"] == [{"name": "console", "containerPort": 8080}]
+    assert containers["console"]["securityContext"] == {
+        "allowPrivilegeEscalation": False,
+        "readOnlyRootFilesystem": True,
+        "capabilities": {"drop": ["ALL"]},
+    }
+    assert controller_env["CONSOLE_ORIGIN"] == "http://127.0.0.1:8080"
+    assert controller_env["REALTIME_ORIGIN"] == "ws://127.0.0.1:8001"
+    assert controller_env["PUBLIC_MANAGEMENT_BASE_URL"] == "http://opsia.opsia-system.svc"
+    assert controller_env["OPSIA_ACCESS_MODE"] == "portforward"
+    assert controller_env["OPSIA_EXTERNAL_URL"] == ""
+    assert controller_env["COOKIE_SECURE"] == "0"
+
+    config_map = next(
+        item
+        for item in documents
+        if item["kind"] == "ConfigMap" and item["metadata"]["name"] == "opsia-console"
+    )["data"]
+    config = config_map["default.conf"]
+    security_headers = config_map["security-headers.inc"]
+    assert "proxy_pass http://127.0.0.1:8000/;" in config
+    assert "proxy_pass http://127.0.0.1:8001/live/;" in config
+    assert "location ^~ /api/install/" in config
+    assert "proxy_pass http://127.0.0.1:8000/install/;" in config
+    assert "location = /api/agent/inventory/snapshots" in config
+    assert "client_max_body_size 16m;" in config
+    assert "proxy_pass http://127.0.0.1:8000/agent/inventory/snapshots;" in config
+    assert "access_log off;" in config
+    assert "location = /api/metrics" in config
+    assert 'proxy_set_header X-Kubeheal-Internal-Auth "";' in config
+    assert 'X-Content-Type-Options "nosniff"' in security_headers
+    directives = {item.strip() for item in security_headers.split(";") if item.strip()}
+    assert "connect-src 'self'" in directives
+    assert not any("ws:" in item or "wss:" in item for item in directives)
+    assert config.count("include /etc/nginx/conf.d/security-headers.inc;") >= 3
+    assets_location = config.split("location /assets/", maxsplit=1)[1].split("}", maxsplit=1)[0]
+    root_location = config.split("location / {", maxsplit=1)[1].split("}", maxsplit=1)[0]
+    assert "security-headers.inc" in assets_location
+    assert "security-headers.inc" in root_location
+
+    mounts = containers["console"]["volumeMounts"]
+    assert {item["mountPath"] for item in mounts} == {"/etc/nginx/conf.d", "/tmp"}
+
+
+def test_self_agent_uses_the_same_origin_internal_api_and_realtime_paths() -> None:
+    documents = _render_chart()
+    agent = next(
+        item
+        for item in documents
+        if item["kind"] == "DaemonSet" and item["metadata"]["name"] == "opsia-agent"
+    )
+    container = _container(agent, "agent")
+    agent_env = {item["name"]: item.get("value") for item in container["env"]}
+
+    assert agent_env["MANAGEMENT_BASE_URL"] == "http://opsia.opsia-system.svc/api"
+    assert agent_env["REALTIME_GATEWAY_URL"] == "ws://opsia.opsia-system.svc/api"
+
+
+def test_access_modes_render_explicit_exposure_without_exposing_internal_ports() -> None:
+    load_balancer = _render_chart(
+        "--set",
+        "access.mode=loadbalancer",
+        "--set-string",
+        "access.externalUrl=https://opsia.example.com",
+        "--set",
+        "access.loadBalancer.tlsTermination=external",
+    )
+    node_port = _render_chart(
+        "--set",
+        "access.mode=nodeport",
+        "--set",
+        "access.nodePort=30080",
+    )
+    ingress = _render_chart(
+        "--set",
+        "access.mode=ingress",
+        "--set-string",
+        "access.host=opsia.example.com",
+        "--set",
+        "access.ingress.tls.enabled=true",
+        "--set-string",
+        "access.ingress.tls.secretName=opsia-tls",
+    )
+
+    def services(documents: list[dict[str, object]]) -> dict[str, dict[str, object]]:
+        return {item["metadata"]["name"]: item for item in documents if item["kind"] == "Service"}
+
+    load_balancer_service = services(load_balancer)["opsia"]
+    assert load_balancer_service["spec"]["type"] == "LoadBalancer"
+    assert [item["port"] for item in load_balancer_service["spec"]["ports"]] == [80]
+
+    node_port_service = services(node_port)["opsia"]
+    assert node_port_service["spec"]["type"] == "NodePort"
+    assert node_port_service["spec"]["ports"][0]["nodePort"] == 30080
+
+    ingress_service = services(ingress)["opsia"]
+    assert ingress_service["spec"]["type"] == "ClusterIP"
+    ingress_resource = next(item for item in ingress if item["kind"] == "Ingress")
+    assert ingress_resource["spec"]["rules"][0]["host"] == "opsia.example.com"
+    assert ingress_resource["spec"]["tls"] == [
+        {"hosts": ["opsia.example.com"], "secretName": "opsia-tls"}
+    ]
+
+    for documents in (load_balancer, node_port, ingress):
+        rendered_services = services(documents)
+        assert [item["port"] for item in rendered_services["opsia"]["spec"]["ports"]] == [80]
+        assert rendered_services["opsia-metrics"]["spec"]["type"] == "ClusterIP"
+        assert [item["port"] for item in rendered_services["opsia-metrics"]["spec"]["ports"]] == [
+            9090
+        ]
+        assert rendered_services["opsia-postgresql"]["spec"]["type"] == "ClusterIP"
+        assert [
+            item["port"] for item in rendered_services["opsia-postgresql"]["spec"]["ports"]
+        ] == [5432]
+
+
+def test_external_access_drives_secure_cookie_and_authoritative_agent_url() -> None:
+    documents = _render_chart(
+        "--set",
+        "access.mode=loadbalancer",
+        "--set-string",
+        "access.externalUrl=https://opsia.example.com",
+        "--set",
+        "access.loadBalancer.tlsTermination=external",
+    )
+    deployment = next(
+        item
+        for item in documents
+        if item["kind"] == "Deployment" and item["metadata"]["name"] == "opsia-controller"
+    )
+    controller = _container(deployment, "controller")
+    controller_env = {item["name"]: item.get("value") for item in controller["env"]}
+
+    assert controller_env["PUBLIC_MANAGEMENT_BASE_URL"] == "https://opsia.example.com"
+    assert controller_env["OPSIA_EXTERNAL_URL"] == "https://opsia.example.com"
+    assert controller_env["COOKIE_SECURE"] == "1"
+    assert controller_env["DEV_AUTH_BYPASS"] == "0"
+    assert controller_env["TARGET_AGENT_IMAGE"] == "ghcr.io/opsia/opsia:0.1.0"
+
+
+def test_access_notes_are_mode_specific_and_reveal_bootstrap_only_on_demand() -> None:
+    port_forward_notes = _render_notes()
+    load_balancer_notes = _render_notes(
+        "--set",
+        "access.mode=loadbalancer",
+        "--set-string",
+        "access.externalUrl=https://opsia.example.com",
+        "--set",
+        "access.loadBalancer.tlsTermination=external",
+    )
+    ingress_notes = _render_notes(
+        "--set",
+        "access.mode=ingress",
+        "--set-string",
+        "access.host=opsia.example.com",
+    )
+
+    assert "kubectl -n opsia-system port-forward service/opsia 8080:80" in port_forward_notes
+    assert "http://127.0.0.1:8080" in port_forward_notes
+    assert "opsia.opsia-system.svc" in port_forward_notes
+    assert "self cluster only" in port_forward_notes
+    assert "AUTH_PASSWORD" in port_forward_notes
+    assert "https://opsia.example.com" in load_balancer_notes
+    assert "external TLS termination" in load_balancer_notes
+    assert "kubectl get service opsia" in load_balancer_notes
+    assert "http://opsia.example.com" in ingress_notes
+
+
+def test_access_values_reject_unknown_mode_and_unsafe_external_url() -> None:
+    for args in (
+        ("--set", "access.mode=public"),
+        ("--set-string", "access.externalUrl=javascript:alert(1)"),
+        ("--set-string", "access.externalUrl=https://user@opsia.example.com"),
+        ("--set-string", "access.externalUrl=https://opsia.example.com/path"),
+        ("--set-string", "access.externalUrl=https://opsia.example.com?next=evil"),
+        ("--set-string", "access.externalUrl=https://opsia.example.com:abc"),
+        ("--set-string", "access.externalUrl=https://:443"),
+        ("--set-string", "access.externalUrl=https://opsia.example.com:0"),
+        ("--set-string", "access.externalUrl=https://opsia.example.com:65536"),
+        (
+            "--set",
+            "access.mode=ingress",
+            "--set-string",
+            "access.host=opsia.example.com",
+            "--set",
+            "access.ingress.tls.enabled=true",
+        ),
+    ):
+        result = subprocess.run(
+            ["helm", "template", "opsia", str(CHART), *args],
+            cwd=ROOT,
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        assert result.returncode != 0
+
+
+def test_external_access_accepts_bounded_ports_and_ip_literals() -> None:
+    for external_url in (
+        "http://127.0.0.1:8080",
+        "https://[2001:db8::1]:443",
+        "https://opsia.example.com:65535",
+    ):
+        args = ["--set-string", f"access.externalUrl={external_url}"]
+        if external_url.startswith("https://"):
+            args.extend(("--set", "access.loadBalancer.tlsTermination=external"))
+        _render_chart(*args)
+
+
+def test_https_load_balancer_requires_explicit_external_tls_termination() -> None:
+    for args in (
+        (
+            "--set",
+            "access.mode=loadbalancer",
+            "--set-string",
+            "access.externalUrl=https://opsia.example.com",
+        ),
+        (
+            "--set",
+            "service.type=LoadBalancer",
+            "--set-string",
+            "access.externalUrl=https://opsia.example.com",
+        ),
+    ):
+        result = subprocess.run(
+            ["helm", "template", "opsia", str(CHART), *args],
+            cwd=ROOT,
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        assert result.returncode != 0
+        assert "external TLS termination" in result.stderr
+
+
+def test_load_balancer_passes_annotations_and_keeps_tls_at_the_edge() -> None:
+    documents = _render_chart(
+        "--set",
+        "access.mode=loadbalancer",
+        "--set-string",
+        "access.externalUrl=https://opsia.example.com",
+        "--set",
+        "access.loadBalancer.tlsTermination=external",
+        "--set-string",
+        "access.loadBalancer.annotations.service\\.beta\\.kubernetes\\.io/aws-load-balancer-ssl-cert=arn:aws:acm:ap-northeast-2:123456789012:certificate/example",
+    )
+    service = next(
+        item
+        for item in documents
+        if item["kind"] == "Service" and item["metadata"]["name"] == "opsia"
+    )
+
+    assert service["metadata"]["annotations"] == {
+        "service.beta.kubernetes.io/aws-load-balancer-ssl-cert": (
+            "arn:aws:acm:ap-northeast-2:123456789012:certificate/example"
+        )
+    }
+    assert service["spec"]["ports"] == [{"name": "http", "port": 80, "targetPort": "console"}]
+
+
+def test_plain_http_load_balancer_does_not_require_tls_acknowledgement() -> None:
+    _render_chart(
+        "--set",
+        "access.mode=loadbalancer",
+        "--set-string",
+        "access.externalUrl=http://opsia.example.com",
+    )
 
 
 def test_helm_chart_orders_database_readiness_before_bootstrap() -> None:
@@ -144,6 +454,12 @@ def test_make_demo_installs_the_chart_before_injecting_the_bad_rollout() -> None
 
     assert "helm upgrade --install" in script
     assert '"${ROOT_DIR}/charts/opsia"' in script
+    assert '"${ROOT_DIR}/references/ui-layer-lab/Dockerfile"' in script
+    assert 'kind load docker-image "${OPSIA_CONSOLE_IMAGE}"' in script
+    assert '--set "console.image.repository=${CONSOLE_IMAGE_REPOSITORY}"' in script
+    assert '--set "console.image.tag=${CONSOLE_IMAGE_TAG}"' in script
+    assert 'API_BASE="http://127.0.0.1:${API_PORT}/api"' in script
+    assert 'wait_for_url "${API_BASE}/healthz"' in script
     assert "rollout status deployment/opsia-controller" in script
     assert script.index("helm upgrade --install") < script.rindex('scene "bad-rollout-observed"')
 
@@ -200,6 +516,6 @@ def test_controller_rolls_when_the_injected_scm_credentials_rotate() -> None:
         if item["kind"] == "Deployment" and item["metadata"]["name"] == "opsia-controller"
     )
 
-    assert deployment["spec"]["template"]["metadata"]["annotations"] == {
-        "opsia.io/scm-credential-version": "credential-hash"
-    }
+    annotations = deployment["spec"]["template"]["metadata"]["annotations"]
+    assert annotations["opsia.io/scm-credential-version"] == "credential-hash"
+    assert annotations["checksum/console-config"]

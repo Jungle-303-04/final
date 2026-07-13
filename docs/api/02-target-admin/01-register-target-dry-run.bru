@@ -57,6 +57,10 @@ tests {
       expect(body).to.have.property("install_manifest");
       expect(body).to.have.property("agent_token");
       expect(body).to.have.property("applied", false);
+      expect(body).to.have.property("management_access");
+      expect(body.management_access).to.have.property("mode");
+      expect(body.management_access).to.have.property("agent_server_url");
+      expect(["external", "self_only"]).to.include(body.management_access.reachability);
     }
   });
 }
