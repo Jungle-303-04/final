@@ -584,6 +584,39 @@ def test_management_install_manifest_is_read_only() -> None:
     assert 'verbs: ["get", "list", "watch"]' in manifest
     assert 'apiGroups: ["metrics.k8s.io"]' in manifest
     assert 'verbs: ["get", "list"]' in manifest
+    docs = [doc for doc in yaml.safe_load_all(manifest) if doc]
+    read_role = next(doc for doc in docs if doc.get("kind") == "ClusterRole")
+    argo_rule = next(
+        rule for rule in read_role["rules"] if "argoproj.io" in rule.get("apiGroups", [])
+    )
+    assert set(argo_rule["resources"]) == {"applications", "rollouts"}
+    assert argo_rule["verbs"] == ["get", "list"]
+
+
+@pytest.mark.parametrize(
+    "manifest_path",
+    [
+        "deploy/target/target.yaml",
+        "deploy/management/target-agent.yaml",
+        "deploy/oss/kubeheal-oss.yaml",
+    ],
+)
+def test_static_agent_manifests_grant_argocd_read_only(manifest_path: str) -> None:
+    root = Path(__file__).resolve().parents[1]
+    docs = [doc for doc in yaml.safe_load_all((root / manifest_path).read_text()) if doc]
+    read_roles = [doc for doc in docs if doc.get("kind") == "ClusterRole"]
+    argo_rules = [
+        rule
+        for role in read_roles
+        for rule in role.get("rules", [])
+        if "argoproj.io" in rule.get("apiGroups", [])
+    ]
+
+    assert len(argo_rules) == 1
+    assert set(argo_rules[0]["resources"]) == {"applications", "rollouts"}
+    assert argo_rules[0]["verbs"] == ["get", "list"]
+    forbidden = {"create", "update", "patch", "delete", "deletecollection", "apply"}
+    assert forbidden.isdisjoint(argo_rules[0]["verbs"])
 
 
 def test_static_management_agent_manifest_is_read_only() -> None:

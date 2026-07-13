@@ -59,6 +59,9 @@ rules:
   - apiGroups: ["apps"]
     resources: ["deployments", "replicasets", "daemonsets", "statefulsets"]
     verbs: ["get", "list", "watch"]
+  - apiGroups: ["argoproj.io"]
+    resources: ["applications", "rollouts"]
+    verbs: ["get", "list"]
   # drilldown 실측 CPU·메모리는 Metrics API가 있을 때만 읽고, 없으면 null을 유지한다.
   - apiGroups: ["metrics.k8s.io"]
     resources: ["pods", "nodes"]
