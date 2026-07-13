@@ -2885,3 +2885,15 @@ target preflight·register 네 함수와 strict Zod 계약을 claim했다. 1회�
 - 전체 게이트는 Ruff lint/format, import-linter 8 kept/0 broken, pytest
   `2099 passed, 3 skipped`다. 실 PostgreSQL `upgrade → downgrade → upgrade`도 통과했다.
 - canonical 착륙 전이므로 완료 앵커를 기록하지 않았고 gateway 계약 lock을 유지한다.
+
+## 2026-07-14 00:19 KST — [백엔드] Issues 필터 계약 canonical 착륙
+
+- GREEN `d63498d5f`, feature HEAD `e00cb9b3e`, canonical merge `e2504278d`가
+  `origin/dev` ancestor exit 0이다. gateway 계약 lock을 해제했다.
+- `GET /api/issues`, `/api/issues/filter-facets`, `/api/issues/label-facets`가 stable issue identity,
+  tenant-safe AND/OR filter, server facet/count, Label event-time projection과 구조화 completeness를
+  제공한다. 기존 RCA timeline/list/detail 계약은 변경하지 않았다.
+- 전체 게이트 Ruff lint/format PASS, import-linter 8/8, pytest `2100 passed, 3 skipped`.
+  실 PostgreSQL migration 왕복, merge-tree clean, 삭제·frozen source·프론트 소유 변경 0건이다.
+- 계약 앵커: `ISSUES_FILTER_RESULTS_PATH + ISSUES_FILTER_FACETS_PATH + ISSUES_LABEL_FACETS_PATH` /
+  `d63498d5f` / `[green]`.
