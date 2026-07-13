@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import runpy
 import subprocess
 import sys
 
@@ -57,3 +58,69 @@ def test_first_candidate_contract_batch_is_machine_verified_in_catalog_order() -
 
     document = json.loads(CONTRACTS.read_text(encoding="utf-8"))
     assert tuple(item["candidate_id"] for item in document["contracts"]) == (FIRST_CANDIDATE_BATCH)
+
+
+def _contract_validation_errors(document: dict[str, object]) -> list[str]:
+    scorer = runpy.run_path(str(SCORER))
+    catalog = json.loads((ROOT / "benchmark/catalog-snapshot.json").read_text(encoding="utf-8"))
+    candidate_index = json.loads(
+        (ROOT / "benchmark/candidate-contract-index.json").read_text(encoding="utf-8")
+    )
+    recovery, fallback = scorer["load_recovery_contracts"]()
+    return scorer["validate_candidate_contracts"](
+        document,
+        catalog,
+        candidate_index,
+        recovery,
+        fallback,
+    )
+
+
+def _candidate_contracts() -> dict[str, object]:
+    return json.loads(CONTRACTS.read_text(encoding="utf-8"))
+
+
+def test_candidate_contract_rejects_live_recovery_action_drift() -> None:
+    document = _candidate_contracts()
+    oom = document["contracts"][3]
+    oom["allowed_remediations"] = [
+        action for action in oom["allowed_remediations"] if action["action_type"] != "oom_memory"
+    ]
+
+    errors = _contract_validation_errors(document)
+
+    assert any("allowed_remediations must exactly match live recovery" in error for error in errors)
+
+
+def test_candidate_contract_rejects_rollback_or_verification_drift() -> None:
+    document = _candidate_contracts()
+    action = document["contracts"][4]["allowed_remediations"][0]
+    action["rollback"] = "different rollback"
+    action["post_verification"] = []
+
+    errors = _contract_validation_errors(document)
+
+    assert any("allowed_remediations must exactly match live recovery" in error for error in errors)
+    assert any("post_verification requires non-empty strings" in error for error in errors)
+
+
+def test_candidate_contract_rejects_allowed_forbidden_overlap() -> None:
+    document = _candidate_contracts()
+    document["contracts"][0]["forbidden_remediations"][0]["action_type"] = "manual_analysis"
+
+    errors = _contract_validation_errors(document)
+
+    assert any("allowed and forbidden actions must be disjoint" in error for error in errors)
+
+
+def test_candidate_contract_index_rejects_source_hash_drift() -> None:
+    scorer = runpy.run_path(str(SCORER))
+    candidate_index = json.loads(
+        (ROOT / "benchmark/candidate-contract-index.json").read_text(encoding="utf-8")
+    )
+    source = next(iter(candidate_index["source_sha256"]))
+    candidate_index["source_sha256"][source] = "0" * 64
+
+    errors = scorer["validate_candidate_index"](candidate_index)
+
+    assert any(f"source drift for {source}" in error for error in errors)
