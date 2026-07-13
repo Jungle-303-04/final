@@ -3350,3 +3350,18 @@ index 591d560bc..5f1879a74 100644
   step 0 상태에서 최근 결제 실패 또는 spending limit 증가 필요 사유로 종료됐다. 즉 workflow는
   연결됐지만 서버 gate는 실행되지 않았다. Actions 결제 복구 또는 CodeBuild 대체 gate의 실제
   dev push 실행 증거가 재개 조건이며, 그 전까지 AWS 배포 스위치는 꺼진 상태를 유지한다.
+## 2026-07-14 02:51 KST — [프론트 정리] S3 Recharts 단일화
+
+- 코드 commit `7f9f0a4d5`. `frontend/src/ui/charts.tsx`의 `Sparkline`과
+  `TimeSeriesChart`를 Recharts `AreaChart`/`LineChart`로 이관하고 chart 색은 S1
+  `--chart-1..5`에 연결했다. `@nivo/core`, `@nivo/line`, `@nivo/treemap`과 전이 의존성을
+  package/lock에서 제거했다.
+- BE-Gap 규율: `hasSparklinePoints`는 null/undefined/NaN/Infinity/음수를 데이터 없음으로,
+  실제 `0`은 측정값으로 유지한다. 시계열 row builder는 없는 series 값을 합성하지 않고
+  `connectNulls={false}`를 사용한다. 회귀 test가 sparse row와 NaN 제거 결과를 고정한다.
+- 보존 대상 `features/fleet/DrilldownHeatmap.tsx`는 실측상 이미 Nivo가 아닌 CSS-grid 구현이라
+  변경하지 않았다. `git grep -i nivo -- frontend/` 결과 0건이다.
+- 프론트 게이트: ESLint warning/error 0, node tests `20/20`, TypeScript·Vite build PASS.
+  변경 전 백엔드 실패 집합 = `{}`; 변경 후 실패 집합 = `{}`. 전체
+  `bash scripts/test.sh`는 import-linter `8 kept/0 broken`, pytest
+  `2158 passed, 3 skipped`로 초록이다.
