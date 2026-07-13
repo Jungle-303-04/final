@@ -505,7 +505,7 @@ def scalar_replacements_for(
     if action_type == "oom_memory":
         return oom_memory_replacements(authority, container)
     if action_type == "probe_fix":
-        return probe_replacements(container)
+        return probe_replacements(container, authority)
     if action_type == "selector_fix":
         return selector_replacements(manifest)
     return []
@@ -595,10 +595,40 @@ def oom_memory_replacements(
     return values
 
 
-def probe_replacements(container: dict[str, Any] | None) -> list[ScalarFieldReplacement]:
+def probe_replacements(
+    container: dict[str, Any] | None,
+    authority: GitOpsAuthorityContext,
+) -> list[ScalarFieldReplacement]:
     if container is None:
         return []
     container_name = first_str(container.get("name"))
+    prefix = f"spec.template.spec.containers[name={container_name}]"
+    approved_candidates: list[ScalarFieldReplacement] = []
+    for probe_name in ("readinessProbe", "livenessProbe"):
+        probe = container.get(probe_name)
+        if not isinstance(probe, dict):
+            continue
+        for suffix, current in (
+            (f"{probe_name}.httpGet.path", nested_value(probe, "httpGet", "path")),
+            (f"{probe_name}.httpGet.port", nested_value(probe, "httpGet", "port")),
+            (f"{probe_name}.timeoutSeconds", probe.get("timeoutSeconds")),
+        ):
+            field_path = f"{prefix}.{suffix}"
+            matches = [
+                change
+                for change in authority.changes
+                if change.get("field_path") == field_path
+                and type(change.get("new_desired", change.get("after"))) is type(current)
+                and change.get("new_desired", change.get("after")) == current
+                and type(change.get("old_desired")) is type(current)
+                and change.get("old_desired") != current
+            ]
+            if len(matches) == 1:
+                approved_candidates.append(
+                    ScalarFieldReplacement(field_path, current, matches[0]["old_desired"])
+                )
+    if len(approved_candidates) == 1:
+        return approved_candidates
     for probe_name in ("readinessProbe", "livenessProbe"):
         probe = container.get(probe_name)
         if not isinstance(probe, dict):
