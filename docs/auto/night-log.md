@@ -1989,3 +1989,18 @@ target preflight·register 네 함수와 strict Zod 계약을 claim했다. 1회�
 - 4조건: merge-tree clean/tree `41ae92a7d037bccfab7950b8d5ee70162ce0a39e`, 파일 삭제·
   소유권 밖 변경·frozen 경로 변경 0건, test·merge commit의 `origin/dev` ancestor exit 0.
   J 배포 실행은 0건이다.
+
+## 2026-07-13 17:11 KST — [백엔드] probe timeout 시나리오 착륙
+
+- lane `codex/benchmark-probe-timeout`, RED `bd864494d`, 구현·데이터 `9171d6005`,
+  feature HEAD `b96a6981079a4a144921d391f443d43e4306a05d`, canonical no-ff merge
+  `2d9ef3fc2ddb17970d863dcadc995a7d6a6dfe3e`.
+- `timeoutSeconds` 5→1→5의 결정적 fault·gold·rollback으로 target workload Safe PR만
+  허용하고 fleet 전체 timeout 증가는 금지했다.
+- ordinal 52 exact fixture 연결로 batch 6을 재감사했고 digest는 `7920067d…54d3`이다.
+- 고유 검증: probe 3/3, 전체 scenario 16/16, candidate 87/87, 후보 계약 테스트 58 passed.
+  전체 게이트는 Ruff lint/format PASS, import-linter 8 kept/0 broken,
+  pytest `1934 passed, 3 skipped`; manifest management 69 / target 20.
+- 4조건: merge-tree clean/tree `3716fbc40341c0cb55b34669634e2d6c0418b90e`, 파일 삭제·
+  소유권 밖 변경·frozen 경로 변경 0건, RED·구현·문서·merge commit의 `origin/dev`
+  ancestor exit 0. J 배포 실행은 0건이다.
