@@ -48,7 +48,7 @@ lint: ## Ruff 린트 검사
 format: ## Ruff 포맷 적용
 	uv run ruff format .
 
-hooks: ## git 훅 설치(pre-commit 포맷 + pre-push 전체 게이트)
+hooks: ## git 훅 설치(pre-commit 포맷 + pre-push 빠른 게이트)
 	uv run pre-commit install --hook-type pre-commit --hook-type pre-push
 
 test: ## 린트와 테스트 실행
@@ -57,7 +57,7 @@ test: ## 린트와 테스트 실행
 manifest-check: ## Kubernetes manifest 렌더/파싱 확인
 	bash scripts/manifest-check.sh
 
-gate: ## dev push 전 백엔드·manifest·프론트 전체 게이트
+gate: ## CI용 백엔드·manifest·프론트 전체 게이트
 	bash scripts/test.sh
 	bash scripts/manifest-check.sh
 	cd frontend && npm ci --include=dev --no-audit --no-fund
@@ -68,7 +68,7 @@ gate: ## dev push 전 백엔드·manifest·프론트 전체 게이트
 	test -s frontend/dist/index.html
 	ls frontend/dist/assets/*.js >/dev/null
 
-gate-fast: ## 빠른 정적 검사와 지정 변경 영역 테스트(FAST_TESTS로 선택)
+gate-fast: ## pre-push용 빠른 정적 검사와 지정 변경 영역 테스트(FAST_TESTS로 선택)
 	uv run ruff check .
 	uv run ruff format --check .
 	PYTHONPATH=src uv run lint-imports --config .importlinter

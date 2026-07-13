@@ -11,6 +11,6 @@ done < <(git rev-parse --local-env-vars)
 export PRE_COMMIT_ALLOW_NO_CONFIG=1
 
 if (( $# == 0 )); then
-  set -- make gate
+  set -- make gate-fast
 fi
 exec "$@"
