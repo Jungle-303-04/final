@@ -42,6 +42,18 @@ class RcaStore(Protocol):
         window_seconds: int,
     ) -> JsonObject | None: ...
 
+    async def list_recent_workload_changes_for_evidence(
+        self,
+        workspace_id: str,
+        cluster_id: str,
+        namespace: str,
+        resource_kind: str,
+        resource_name: str,
+        changed_before: str,
+        *,
+        limit: int = 5,
+    ) -> list[JsonObject]: ...
+
 
 class RcaBacklogStore(Protocol):
     async def upsert_rca_backlog_item(self, body: JsonObject) -> None: ...

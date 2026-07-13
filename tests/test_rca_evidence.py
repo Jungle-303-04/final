@@ -212,6 +212,58 @@ def test_evidence_worker_persists_gitops_change_context_event() -> None:
     assert db.calls[0][1][3]["metadata"]["change_context"]["gitops"]["commit_sha"] == "abc123"
 
 
+def test_evidence_worker_joins_recent_gitops_change_context_into_evidence() -> None:
+    evidence_worker = load_service("ai/evidence-worker")
+    payload = crashloop_payload(window_start="2026-07-13T02:33:30+00:00")
+    db = SpyDb(
+        list_recent_workload_changes_for_evidence=[
+            {
+                "event_id": "evt-change-1",
+                "changed_at": "2026-07-13T02:30:00+00:00",
+                "image_before": "repo/checkout:v1",
+                "image_after": "repo/checkout:v2",
+                "pr_url": "https://github.test.local/project/repo/pull/7",
+                "commit_sha": "abc123",
+                "repository_id": "repo-1",
+                "repo_ref": "project/repo",
+                "workflow_run_id": "run-1",
+                "namespace": "sandbox",
+                "resource_kind": "deployment",
+                "resource_name": "checkout-api",
+                "manifest_path": "deploy/checkout.yaml",
+            }
+        ]
+    )
+
+    outs = run_handler(
+        evidence_worker.on_cluster_evidence,
+        payload,
+        db=db,
+        correlation_id="corr-gitops-join",
+    )
+
+    assert subjects_of(outs) == ["evidence.built"]
+    call = next(call for call in db.calls if call[0] == "list_recent_workload_changes_for_evidence")
+    assert call[1] == (
+        "workspace-1",
+        "target-cluster-01",
+        "sandbox",
+        "deployment",
+        "checkout-api",
+        "2026-07-13T02:33:30+00:00",
+    )
+    saved = next(call for call in db.calls if call[0] == "save_evidence")[1][3]
+    change_context = saved["metadata"]["change_context"]
+    assert change_context["gitops"]["commit_sha"] == "abc123"
+    assert change_context["image"] == {
+        "previous": "repo/checkout:v1",
+        "current": "repo/checkout:v2",
+        "changed": True,
+    }
+    assert change_context["recent_changes"][0]["change_type"] == "image"
+    assert change_context["recent_changes"][0]["target_resource"] == "deployment/checkout-api"
+
+
 def test_incident_worker_hydrates_reference_evidence_built_event() -> None:
     evidence_worker = load_service("ai/evidence-worker")
     incident_worker = load_service("ai/incident-worker")
@@ -770,9 +822,7 @@ def test_rca_test_bundle_filters_matched_entries_to_current_pod() -> None:
                         "pod": prior_pod,
                         "container": "app",
                         "severity": "critical",
-                        "message": (
-                            "FATAL: required environment variable DATABASE_URL is not set"
-                        ),
+                        "message": ("FATAL: required environment variable DATABASE_URL is not set"),
                         "matched_patterns": ["missing_env"],
                         "line_truncated": False,
                     },
@@ -804,9 +854,7 @@ def test_rca_test_bundle_filters_matched_entries_to_current_pod() -> None:
     logs_item = next(item for item in bundle.items if item.source == "logs")
     entries = logs_item.value["entries"]
     assert entries[0]["line_count"] == 1
-    assert [
-        stream["stream"]["k8s_pod_name"] for stream in entries[0]["streams"]
-    ] == [current_pod]
+    assert [stream["stream"]["k8s_pod_name"] for stream in entries[0]["streams"]] == [current_pod]
     assert entries[0]["matched_entries"] == [
         {
             "timestamp": "1751871601000000000",
