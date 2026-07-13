@@ -274,6 +274,10 @@ Bundle route는 200을 반환한다.
 - 이 실증은 local SCM fixture와 외부 GitOps actor 시뮬레이션이다. hosted forge, 실제 Argo
   CD/Flux continuous reconcile, rollout 진단부터 PR까지의 완전 자율 경로, public OCI artifact는
   아직 증명하지 않았다. 따라서 BQ-016은 `in_progress`를 유지하며 이 절은 완료 앵커가 아니다.
+- 비완료 착륙 증거: canonical merge `15379d94f`, 코드 `9b107d8e9`, lane HEAD
+  `16aad904c`가 모두 `origin/dev` ancestor exit 0이다. 최신 dev 재base 뒤 전체 게이트는
+  Ruff lint/format PASS, import-linter 8 kept/0 broken, pytest `1985 passed, 3 skipped`였고
+  manifest 69/20, Helm lint PASS, merge-tree clean, 삭제·frozen 변경 0건이었다.
 
 ### H3 — BQ-007/009/010 권위 patch 엔진
 
