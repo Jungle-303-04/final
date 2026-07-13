@@ -5,11 +5,13 @@ import type { IssuesSurfaceCopy, SectionState } from "./issuesSurfaceContract";
 
 export function IssuesListPanel({
   copy,
+  detailRegionId,
   list,
   onSelect,
   selected,
 }: {
   copy: IssuesSurfaceCopy;
+  detailRegionId: string;
   list: SectionState<IssueList>;
   onSelect: (issue: IssueSummary) => void;
   selected: IssueSummary | null;
@@ -45,6 +47,8 @@ export function IssuesListPanel({
         {list.data.items.map((issue) => (
           <li key={issue.id}>
             <Button
+              aria-controls={selected?.id === issue.id ? detailRegionId : undefined}
+              aria-current={selected?.id === issue.id ? "true" : undefined}
               className="h-auto w-full min-w-0 justify-start whitespace-normal px-3 py-3 text-left"
               disabled={issue.incidentId === null}
               onClick={() => onSelect(issue)}

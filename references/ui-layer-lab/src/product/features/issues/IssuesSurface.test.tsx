@@ -29,6 +29,11 @@ describe("IssuesSurface", () => {
     expect(detail.id).toBe(controlledId);
     expect(issue.getAttribute("aria-current")).toBe("true");
     await waitFor(() => expect(document.activeElement).toBe(detail));
+
+    issue.focus();
+    expect(document.activeElement).toBe(issue);
+    fireEvent.click(issue);
+    await waitFor(() => expect(document.activeElement).toBe(detail));
   });
 
   it("keeps incident, evidence, analysis, and recovery loads independently observable", async () => {

@@ -1,3 +1,5 @@
+import type { Ref } from "react";
+
 import type {
   IssueAuditTimelinePage,
   IssueDetail,
@@ -80,6 +82,8 @@ export interface IssuePanelsState {
 export interface IssuesPanelsProps {
   capability: RecoverySelectionCapability;
   copy: IssuesSurfaceCopy;
+  detailRegionId: string;
+  detailRegionRef: Ref<HTMLDivElement>;
   onSelectRecovery: (actionId: string) => void;
   onLoadMoreAudit: () => void;
   selected: IssueSummary;

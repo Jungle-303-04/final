@@ -25,13 +25,22 @@ import type {
 export function IssuesPanels({
   capability,
   copy,
+  detailRegionId,
+  detailRegionRef,
   onLoadMoreAudit,
   onSelectRecovery,
   selected,
   state,
 }: IssuesPanelsProps) {
   return (
-    <div aria-label={copy.detailLabel} className="grid gap-4 lg:min-h-96" role="region">
+    <div
+      aria-label={copy.detailLabel}
+      className="grid gap-4 outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 forced-colors:focus-visible:outline-2 lg:min-h-96"
+      id={detailRegionId}
+      ref={detailRegionRef}
+      role="region"
+      tabIndex={-1}
+    >
       <Card>
         <CardHeader className="border-b">
           <CardTitle className="break-words">{selected.currentSubject}</CardTitle>
