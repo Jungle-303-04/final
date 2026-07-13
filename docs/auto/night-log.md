@@ -535,3 +535,6 @@ ancestor exit 0, 사람 위임 GO [OSS]
 파일 비중첩 병렬 착수; (a)+(b) 조합으로 LLM 제안은 catalog cause ID hypothesis에 한정하고
 결정론적 catalog signal 1개 이상 검증 전 `rca.completed`를 차단하며, source-name-only
 조작 회귀 테스트를 선행한 뒤 양쪽 전체 게이트로 합류.
+
+[2026-07-13 09:46 KST] [백엔드] D-017~019 기준점 영속화 — `4ac003c97`,
+docs-only 2파일, BQ-009 `requested` + BQ-012~017 등록, origin/dev push 확인.
