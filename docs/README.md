@@ -392,6 +392,7 @@ Target / Telemetry 선형 작업 문서는 아래에 있다.
 - [spec/frontend/topology-message-action-schema](spec/frontend/topology-message-action-schema.md)
 - [spec/frontend/topology-visual-motion-tokens](spec/frontend/topology-visual-motion-tokens.md)
 - [spec/frontend/verified-pipeline-insertion-map](spec/frontend/verified-pipeline-insertion-map.md)
+- [spec/frontend/vp-010-unified-filter-ia](spec/frontend/vp-010-unified-filter-ia.md)
 - [spec/packages/ai](spec/packages/ai.md)
 - [spec/packages/config](spec/packages/config.md)
 - [spec/packages/contracts](spec/packages/contracts.md)
