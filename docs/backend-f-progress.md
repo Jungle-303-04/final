@@ -170,3 +170,15 @@ Bundle route는 200을 반환한다.
 계약 완성: AUDIT_TIMELINE_PATH + AuditTimelineResponse (66cbe8dec7cb478f5b0774bb5e7bbaab5f616894) [green]
 
 계약 완성: RCA_RECENT_CHANGES_PATH + RecentChangeListResponse (81969f23e46cb40743af08ffbc1affe556bd5c5e) [green]
+
+### H2 — in-process event bus
+
+- canonical merge: `5f2393667ece3607e75674fcf8c9be9d9c1773b9`
+- 전체 게이트: Ruff lint/format PASS, import-linter 2 kept/0 broken,
+  pytest `1708 passed, 3 skipped`
+- 기존 NATS 기본 경로는 유지하고 명시적으로 bus를 주입한 단일 프로세스 실행만
+  in-memory 구현을 사용한다. ack/nak, 지연 재배달, 구독 생명주기, 기본 App 경로를
+  `tests/test_in_memory_event_bus.py`에서 재현한다.
+- 신규 route·DB 변경이 없어 Bruno·migration 변경 없음.
+
+계약 완성: InMemoryEventBus + App.run bus injection (b6fac1dd742f3c5c88fee1db87e3e081fb1bc794) [green]
