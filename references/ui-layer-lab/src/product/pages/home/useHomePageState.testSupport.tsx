@@ -3,6 +3,7 @@ import { MemoryRouter } from "react-router-dom";
 import { vi } from "vitest";
 import { AuthSessionGateProvider } from "../../features/auth/AuthSessionGate";
 import { ClusterScopeProvider } from "../../features/cluster-scope/ClusterScopeProvider";
+import { UnifiedFilterProvider } from "../../features/filters/UnifiedFilterProvider";
 import type {
   HomeClusterChoices,
   HomeClusterOverview,
@@ -17,9 +18,11 @@ export function renderHomeState(port: HomePort, entry: string) {
     wrapper: ({ children }) => (
       <MemoryRouter initialEntries={[entry]}>
         <AuthSessionGateProvider reportUnauthorized={vi.fn()}>
-          <ClusterScopeProvider authorityKey="test-workspace:test-user" port={port}>
-            {children}
-          </ClusterScopeProvider>
+          <UnifiedFilterProvider>
+            <ClusterScopeProvider authorityKey="test-workspace:test-user" port={port}>
+              {children}
+            </ClusterScopeProvider>
+          </UnifiedFilterProvider>
         </AuthSessionGateProvider>
       </MemoryRouter>
     ),

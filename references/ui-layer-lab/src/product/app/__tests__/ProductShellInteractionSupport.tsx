@@ -8,6 +8,7 @@ import type { AuthenticatedAuthState } from "../../features/auth/authContract";
 import { AuthSessionGateProvider } from "../../features/auth/AuthSessionGate";
 import { ClusterScopeProvider } from "../../features/cluster-scope/ClusterScopeProvider";
 import type { ClusterScopePort } from "../../features/cluster-scope/clusterScopeContract";
+import { UnifiedFilterProvider } from "../../features/filters/UnifiedFilterProvider";
 import { I18nProvider } from "../../shared/i18n";
 import {
   PRODUCT_SHORTCUT_EVENT,
@@ -55,7 +56,7 @@ export function installMatchMedia(matches: boolean) {
 }
 
 export function renderShell({
-  initialEntry = "/product",
+  initialEntry = "/product?clusters=cluster-1",
   releasedSurfaceIds = new Set(["home", "issues"]),
 }: {
   initialEntry?: string;
@@ -72,17 +73,19 @@ export function renderShell({
         >
           <MemoryRouter initialEntries={[initialEntry]}>
             <AuthSessionGateProvider reportUnauthorized={vi.fn()}>
-              <ClusterScopeProvider authorityKey="test-workspace:test-user" port={testClusterScope}>
-                <Routes>
-                  <Route element={(
-                    <ProductShell auth={testAuth} releasedSurfaceIds={releasedSurfaceIds} />
-                  )}>
-                    <Route path="/product" element={<><p>Home content</p><input aria-label="화면 입력" /></>} />
-                    <Route path="/product/resources" element={<ResourcesShortcutProbe />} />
-                    <Route path="/product/issues" element={<p>Issue content</p>} />
-                  </Route>
-                </Routes>
-              </ClusterScopeProvider>
+              <UnifiedFilterProvider>
+                <ClusterScopeProvider authorityKey="test-workspace:test-user" port={testClusterScope}>
+                  <Routes>
+                    <Route element={(
+                      <ProductShell auth={testAuth} releasedSurfaceIds={releasedSurfaceIds} />
+                    )}>
+                      <Route path="/product" element={<><p>Home content</p><input aria-label="화면 입력" /></>} />
+                      <Route path="/product/resources" element={<ResourcesShortcutProbe />} />
+                      <Route path="/product/issues" element={<p>Issue content</p>} />
+                    </Route>
+                  </Routes>
+                </ClusterScopeProvider>
+              </UnifiedFilterProvider>
             </AuthSessionGateProvider>
           </MemoryRouter>
         </ThemeProvider>

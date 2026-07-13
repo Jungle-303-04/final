@@ -8,6 +8,7 @@ import type { AuthenticatedAuthState } from "../features/auth/authContract";
 import { AuthSessionGateProvider } from "../features/auth/AuthSessionGate";
 import { ClusterScopeProvider } from "../features/cluster-scope/ClusterScopeProvider";
 import type { ClusterScopePort } from "../features/cluster-scope/clusterScopeContract";
+import { UnifiedFilterProvider } from "../features/filters/UnifiedFilterProvider";
 import { I18nProvider } from "../shared/i18n";
 
 const testAuth: AuthenticatedAuthState = {
@@ -23,9 +24,11 @@ const testClusterScope: ClusterScopePort = {
 function TestShell(props: ComponentProps<typeof ProductShell>) {
   return (
     <AuthSessionGateProvider reportUnauthorized={() => undefined}>
-      <ClusterScopeProvider authorityKey="test-workspace:test-user" port={testClusterScope}>
-        <ProductShell {...props} />
-      </ClusterScopeProvider>
+      <UnifiedFilterProvider>
+        <ClusterScopeProvider authorityKey="test-workspace:test-user" port={testClusterScope}>
+          <ProductShell {...props} />
+        </ClusterScopeProvider>
+      </UnifiedFilterProvider>
     </AuthSessionGateProvider>
   );
 }

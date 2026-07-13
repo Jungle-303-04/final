@@ -20,7 +20,7 @@ describe("useHomePageState refresh contract", () => {
     api.list
       .mockResolvedValueOnce(clusterChoices())
       .mockImplementationOnce(() => nextChoices.promise);
-    const { result } = renderHomeState(api.port, "/product?cluster=cluster-a");
+    const { result } = renderHomeState(api.port, "/product?clusters=cluster-a");
     await waitFor(() => expect(result.current.choices.phase).toBe("ready"));
 
     act(() => result.current.refresh());
@@ -47,7 +47,7 @@ describe("useHomePageState refresh contract", () => {
     api.list
       .mockResolvedValueOnce(clusterChoices())
       .mockRejectedValueOnce(new HomePortFailure("forbidden"));
-    const { result } = renderHomeState(api.port, "/product?cluster=cluster-a");
+    const { result } = renderHomeState(api.port, "/product?clusters=cluster-a");
     await waitFor(() => expect(result.current.choices.phase).toBe("ready"));
 
     act(() => result.current.refresh());
@@ -60,7 +60,7 @@ describe("useHomePageState refresh contract", () => {
     const invalidNode = `${"a".repeat(254)}/invalid`;
     const { result } = renderHomeState(
       api.port,
-      `/product?cluster=cluster-a&node=${invalidNode}`,
+      `/product?clusters=cluster-a&node=${invalidNode}`,
     );
 
     await waitFor(() => expect(result.current.nodes.phase).toBe("ready"));
@@ -75,7 +75,7 @@ describe("useHomePageState refresh contract", () => {
       .mockResolvedValueOnce(overview("cluster-a", "cached"))
       .mockRejectedValueOnce(new HomePortFailure("forbidden"))
       .mockImplementationOnce(() => retry.promise);
-    const { result } = renderHomeState(api.port, "/product?cluster=cluster-a");
+    const { result } = renderHomeState(api.port, "/product?clusters=cluster-a");
     await waitFor(() => expect(result.current.overview.data?.name).toBe("cached"));
 
     act(() => result.current.refresh());

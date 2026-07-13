@@ -21,8 +21,10 @@ import {
   ResourcesDenied,
   ResourcesFailure,
   ResourcesRefreshFeedback,
+  ResourcesClusterBoundary,
   UnknownCompletenessEmpty,
   UnknownSelection,
+  UnsupportedFilterProjection,
 } from "./ResourcesPageFeedback";
 import { filterResourceRows, ResourcesTable } from "./ResourcesTable";
 import { ResourcesToolbar } from "./ResourcesToolbar";
@@ -49,7 +51,7 @@ export function ResourcesPage({
     );
   }
   if (state.choices.data.clusters.length === 0) {
-    return <ProductStateScreen kind="empty" placement="content" />;
+    return <ResourcesClusterBoundary variant="catalog-unconfirmed" />;
   }
   if (state.denied) {
     return <ResourcesDenied onRetry={state.refresh} />;
@@ -82,7 +84,13 @@ export function ResourcesPage({
       </header>
 
       {!state.selectedClusterExists ? (
-        <UnknownSelection value={state.selectedClusterId} variant="cluster" />
+        state.clusterSelection.kind === "unfiltered" ? (
+          <ResourcesClusterBoundary variant="required" />
+        ) : state.clusterSelection.kind === "multiple" ? (
+          <ResourcesClusterBoundary variant="multiple" />
+        ) : (
+          <UnknownSelection value={state.selectedClusterId} variant="cluster" />
+        )
       ) : state.catalog.phase === "loading" || state.catalog.phase === "idle" ? (
         <ProductStateScreen
           kind="loading"
@@ -151,7 +159,11 @@ function ResourcesListSurface({ state }: { state: ReturnType<typeof useResources
         onSearchChange={state.setSearch}
         search={state.search}
       />
-      <ResourcesListBody state={state} />
+      {state.filterProjectionUnsupported ? (
+        <UnsupportedFilterProjection embedded />
+      ) : (
+        <ResourcesListBody state={state} />
+      )}
     </Surface>
   );
 }

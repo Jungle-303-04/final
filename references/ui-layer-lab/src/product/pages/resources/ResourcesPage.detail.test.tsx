@@ -13,6 +13,7 @@ import {
   renderResources,
   resourcesPort,
 } from "./ResourcesPage.testSupport";
+import { encodeResourceTarget } from "./resourcesUrlState";
 
 beforeEach(resetDocumentTestClock);
 
@@ -29,7 +30,8 @@ describe("ResourcesPage URL-backed detail", () => {
     });
     renderResources(
       port,
-      "/product/resources/pod?cluster=cluster-1&resource=shop%2Fcheckout-api-0&kind=Pod",
+      "/product/resources?clusters=cluster-1&resources.types=pod" +
+      "&resource=shop%2Fcheckout-api-0&resourceKind=Pod",
     );
 
     const dialog = await screen.findByRole("dialog", { name: "checkout-api-0 상세" });
@@ -49,7 +51,8 @@ describe("ResourcesPage URL-backed detail", () => {
     const port = resourcesPort({ listResources: vi.fn().mockReturnValue(list.promise) });
     renderResources(
       port,
-      "/product/resources/pod?cluster=cluster-1&resource=shop%2Fcheckout-api-0&kind=Pod",
+      "/product/resources?clusters=cluster-1&resources.types=pod" +
+      "&resource=shop%2Fcheckout-api-0&resourceKind=Pod",
     );
 
     const dialog = await screen.findByRole("dialog", { name: "checkout-api-0 상세" });
@@ -65,7 +68,35 @@ describe("ResourcesPage URL-backed detail", () => {
       expect.any(AbortSignal),
     );
     expect(screen.getByTestId("resources-location").textContent)
-      .toContain("resource=shop%2Fcheckout-api-0");
+      .toContain("resource=v1%2Fcluster-1%2Fpod%2Fshop%2Fcheckout-api-0");
+  });
+
+  it("isolates a cross-Cluster forbidden detail without blanking the selected list", async () => {
+    const target = encodeResourceTarget("kubernetes-ops", {
+      resourceType: "pod",
+      kind: "Pod",
+      namespace: "ops",
+      name: "restricted-agent",
+    });
+    const port = resourcesPort({
+      loadResourceDetail: vi.fn().mockRejectedValue(new ResourcesPortFailure("forbidden")),
+    });
+    renderResources(
+      port,
+      "/product/resources?clusters=cluster-1&resources.types=pod" +
+      `&resource=${encodeURIComponent(target.resource)}&resourceKind=Pod`,
+    );
+
+    expect(await screen.findByRole("table", { hidden: true, name: "리소스 목록" }))
+      .toBeTruthy();
+    const dialog = await screen.findByRole("dialog", { name: "restricted-agent 상세" });
+    expect(within(dialog).getByRole("heading", { name: "이 범위에 접근할 수 없습니다" }))
+      .toBeTruthy();
+    expect(port.loadResourceDetail).toHaveBeenCalledWith(
+      "kubernetes-ops",
+      expect.objectContaining({ name: "restricted-agent", resourceType: "pod" }),
+      expect.any(AbortSignal),
+    );
   });
 
   it("keeps the list and renders a scoped not-found detail state", async () => {
@@ -74,7 +105,8 @@ describe("ResourcesPage URL-backed detail", () => {
     });
     renderResources(
       port,
-      "/product/resources/pod?cluster=cluster-1&resource=shop%2Fmissing&kind=Pod",
+      "/product/resources?clusters=cluster-1&resources.types=pod" +
+      "&resource=shop%2Fmissing&resourceKind=Pod",
     );
 
     expect(await screen.findByText("checkout-api-0", {}, { timeout: 5_000 })).toBeTruthy();
@@ -86,7 +118,7 @@ describe("ResourcesPage URL-backed detail", () => {
   it("closes the detail in place, removes its URL identity, and restores row focus", async () => {
     const user = userEvent.setup();
     const port = resourcesPort({ loadResourceDetail: vi.fn().mockResolvedValue(POD_DETAIL) });
-    renderResources(port, "/product/resources/pod?cluster=cluster-1");
+    renderResources(port, "/product/resources?clusters=cluster-1&resources.types=pod");
 
     const row = await screen.findByRole("button", { name: /checkout-api-0/u }, { timeout: 5_000 });
     await user.click(row);
@@ -225,7 +257,8 @@ const LONG_DETAIL: ResourceDetail = {
 
 function longDetailUrl(): string {
   const resource = encodeURIComponent(`${LONG_NAMESPACE}/${LONG_NAME}`);
-  return `/product/resources/pod?cluster=cluster-1&resource=${resource}&kind=Pod`;
+  return "/product/resources?clusters=cluster-1&resources.types=pod" +
+    `&resource=${resource}&resourceKind=Pod`;
 }
 
 function resetDocumentTestClock() {

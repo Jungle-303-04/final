@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef } from "react";
-import { useSearchParams } from "react-router-dom";
 import { useAuthSessionGate } from "../../features/auth/AuthSessionGate";
 import { useClusterScope } from "../../features/cluster-scope/ClusterScopeProvider";
+import type { ClusterScopeSelection } from "../../features/cluster-scope/clusterScopeContract";
+import { useUnifiedFilter } from "../../features/filters/UnifiedFilterProvider";
 import {
   type HomeClusterChoices,
   type HomeClusterOverview,
@@ -20,6 +21,7 @@ import { useHomeRefreshClock } from "./useHomeRefreshClock";
 export type { HomeResourceState } from "./homePageStateModel";
 
 export interface HomePageState {
+  clusterSelection: ClusterScopeSelection;
   choices: HomeResourceState<HomeClusterChoices>;
   clusterAccess: HomeClusterAccess;
   overview: HomeResourceState<HomeClusterOverview>;
@@ -39,14 +41,14 @@ export interface HomePageState {
 export function useHomePageState(port: HomePort): HomePageState {
   const { reportUnauthorized } = useAuthSessionGate();
   const clusterScope = useClusterScope();
+  const filter = useUnifiedFilter();
   const refreshClusterScope = clusterScope.refresh;
-  const [searchParams, setSearchParams] = useSearchParams();
   const choices = clusterScope.collection;
   const nodeButtons = useRef(new Map<string, HTMLButtonElement>());
   const restoreNodeFocus = useRef<string | null>(null);
   const focusPodHeading = useRef(false);
   const selectedClusterId = clusterScope.requestedClusterId;
-  const selectedNodeName = searchParams.get("node");
+  const selectedNodeName = filter.detail.node;
   const { refresh: refreshFrame, revision } = useHomeRefreshClock(true);
   const selectedClusterExists = clusterScope.selectedClusterExists;
   const scopeKey = clusterScope.scopeKey;
@@ -68,11 +70,11 @@ export function useHomePageState(port: HomePort): HomePageState {
   }, [clusterFrame.pods.phase, selectedNodeName]);
 
   const updateNodeSelection = useCallback((nodeName?: string) => {
-    const next = new URLSearchParams(searchParams);
-    if (nodeName) next.set("node", nodeName);
-    else next.delete("node");
-    setSearchParams(next);
-  }, [searchParams, setSearchParams]);
+    filter.updateDetail((current) => ({
+      ...current,
+      node: nodeName ?? null,
+    }), nodeName ? "drill-in" : "detail-close");
+  }, [filter]);
 
   const selectNode = useCallback((nodeName: string) => {
     if (!selectedClusterId) return;
@@ -98,6 +100,7 @@ export function useHomePageState(port: HomePort): HomePageState {
 
   return useMemo(() => ({
     choices,
+    clusterSelection: clusterScope.selection,
     ...clusterFrame,
     selectedClusterId,
     selectedNodeName,
@@ -112,7 +115,7 @@ export function useHomePageState(port: HomePort): HomePageState {
     },
   }), [
     choices, closeNode, clusterFrame, refresh, selectNode, selectedClusterExists,
-    clusterScope.selectCluster,
+    clusterScope.selectCluster, clusterScope.selection,
     selectedClusterId, selectedNodeName,
   ]);
 }

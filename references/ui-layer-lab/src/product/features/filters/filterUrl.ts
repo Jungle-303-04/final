@@ -1,7 +1,9 @@
 import type {
+  DetailMutationIntent,
   FilterHistoryMode,
   FilterMutationIntent,
 } from "./filterContract";
+import { isStableFilterValue } from "./filterUrlSyntax";
 import {
   parseProductFilterUrl,
   serializeProductFilterUrl,
@@ -15,6 +17,21 @@ export {
 export function canonicalizeProductFilterUrl(search: string): string {
   const parsed = parseProductFilterUrl(search);
   return serializeProductFilterUrl(parsed.state, parsed.detail);
+}
+
+export function legacyResourceTypeFromPath(pathname: string): string | null {
+  const prefix = "/product/resources/";
+  if (!pathname.startsWith(prefix)) return null;
+  const encoded = pathname.slice(prefix.length);
+  if (encoded.length === 0 || encoded.includes("/")) return null;
+  try {
+    const value = decodeURIComponent(encoded);
+    return value.length <= 80 && !value.includes("/") && isStableFilterValue(value)
+      ? value
+      : null;
+  } catch {
+    return null;
+  }
 }
 
 export function productFilterNavigationHref(
@@ -35,6 +52,18 @@ export function filterHistoryMode(intent: FilterMutationIntent): FilterHistoryMo
     case "canonicalize":
     case "legacy-migration":
     case "typing":
+      return "replace";
+  }
+}
+
+export function detailHistoryMode(intent: DetailMutationIntent): FilterHistoryMode {
+  switch (intent) {
+    case "detail-open":
+    case "drill-in":
+      return "push";
+    case "detail-close":
+    case "detail-expand":
+    case "detail-tab":
       return "replace";
   }
 }

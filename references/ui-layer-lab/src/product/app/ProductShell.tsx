@@ -38,7 +38,7 @@ import { useProductTheme } from "../shared/ui/useProductTheme";
 import { AuthSessionControl } from "../features/auth/AuthSessionControl";
 import type { AuthenticatedAuthState } from "../features/auth/authContract";
 import { ClusterScopePicker } from "../features/cluster-scope/ClusterScopePicker";
-import { productNavigationHref } from "../features/cluster-scope/clusterScopeUrl";
+import { useUnifiedFilter } from "../features/filters/UnifiedFilterProvider";
 import { ShortcutHelpDialog } from "./ShortcutHelpDialog";
 import {
   productNavigationForReleasedSurfaces,
@@ -99,6 +99,7 @@ function ProductShellFrame({
 }: Pick<ProductShellProps, "auth" | "releasedSurfaceIds">) {
   const [isShortcutHelpOpen, setShortcutHelpOpen] = useState(false);
   const location = useLocation();
+  const filter = useUnifiedFilter();
   const { isMobile } = useSidebar();
   const { t } = useI18n();
   const themeController = useProductTheme();
@@ -158,7 +159,7 @@ function ProductShellFrame({
                   <SidebarMenuItem key={routeDefinition.id}>
                     <SidebarMenuLink
                       isActive={currentRoute.id === routeDefinition.id}
-                      to={productNavigationHref(routeDefinition.path, location.search)}
+                      to={filter.navigationHref(routeDefinition.path)}
                       tooltip={label}
                     >
                       <Icon aria-hidden="true" className="size-4 shrink-0" />
