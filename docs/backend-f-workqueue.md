@@ -48,6 +48,12 @@ R-트랙([D-011])은 dev merge `257f91846`으로 landed/closed 되었고, 전용
 | BQ-017 | done | provider 1급화 + 연결 단계 ([D-018]) | `ClusterSummary.provider` optional(eks/gke/aks/onprem/kind/unknown; 등록값>providerID 자동감지>unknown) + `connection_stage` optional(token_issued→awaiting_install→agent_connected→snapshot_received→ready, +expired/error). 전부 additive<br>담당: Codex 백엔드 세션<br>착륙 merge: `d507ca6d4`<br>코드: `db4798d4e` | (기존 응답 확장; gateway 계약 lock 해제) | 프론트 호환 `bfaf03901`, 기존 소비자 회귀 + providerID 3사 감지, 전체 `1831 passed, 3 skipped` |
 | BQ-018 | landed | Opsia 이름 전파 ([D-023]) | `docs/oss/**` 공개 제품명을 Opsia/opsia로 정리하고 roadmap·README 표기와 Helm OCI 예시를 정합화.<br>담당: Codex 백엔드 세션<br>착륙 merge: `ad28cc945`<br>문서: `46ea10f8f` | (docs-only; 코드 식별자·event subject·DB schema 변경 없음) | 전체 `1838 passed, 3 skipped`, manifest 69/20, 삭제·금지 rename 0건 |
 
+## 보조 대기열 착륙 현황
+
+| ID | 상태 | 기능 | 착륙 증거 | 완료 기준 |
+|---|---|---|---|---|
+| S1 | landed | RCA 읽기 route의 Bruno 기본 실행 경로 | feature `6d29a8702`, canonical merge `6ea12f263` | Runner 13→14→15 순서, 의미·실제 200 기준 문서화, 전체 `1869 passed, 3 skipped`, manifest 69/20 |
+
 ## claim 규칙
 
 0. **최초 claim 커밋에서 `docs/backend-f-progress.md`를 생성한다** (헤더 + "앵커 0건" 상태로).

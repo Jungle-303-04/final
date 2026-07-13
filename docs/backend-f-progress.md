@@ -381,3 +381,23 @@ Bundle route는 200을 반환한다.
   200 미증명, live DB Alembic baseline 미확인, 이전 digest·backup·1-replica 위험 승인 미확보.
 
 계약 완성: migration-first deploy plan + immutable rollback (0cc6af58c90140123dabd943c55b72b7b4b3bed9) [green]
+
+### 보조 대기열 S1 — RCA 읽기 route의 Bruno 기본 실행 경로
+
+- 상태: landed
+- 담당 lane: `codex/bruno-route-runner`
+- RED: `f3d2b4f9212c3dcfd86b95b03ac8251af744a060`
+- Runner: `31b93edad5c1ef047b326dea66b68593e86e92cf`
+- 인계 문서와 feature HEAD: `6d29a87021c9163c659bda548108576c8358e952`
+- canonical no-ff merge: `6ea12f2635bf6b49879f93baeed4fa101c2b4bb4`
+- `scripts/run-bruno-aws.sh`가 RemediationBundle → audit timeline → recent changes를
+  기존 RCA 식별자 저장 흐름 뒤에서 순서대로 실행한다.
+- Bruno의 401/404 허용은 계약 회귀 범위이며 production 승격은 실재 correlation·incident로
+  세 요청 모두 200임을 별도 검증한다.
+- 전체 게이트: Ruff lint/format PASS, import-linter 8 kept/0 broken,
+  pytest `1869 passed, 3 skipped`; manifest management 69 / target 20.
+- 4조건: merge-tree exit 0/tree `780b1e170691d3af359059fe08aba67e9840a85e`,
+  파일 삭제·gateway 계약·RCA·AI·runtime worker 변경 0건, feature와 merge commit의
+  `origin/dev` ancestor exit 0.
+
+계약 완성: RCA read-route Bruno runner coverage (6d29a87021c9163c659bda548108576c8358e952) [green]
