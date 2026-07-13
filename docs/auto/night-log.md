@@ -2575,3 +2575,7 @@ target preflight·register 네 함수와 strict Zod 계약을 claim했다. 1회�
   import-linter 8 kept/0 broken, pytest `1968 passed, 3 skipped`다.
 - merge-tree clean, 삭제 0건, gateway/RCA/AI/runtime worker 변경 0건이며 신규 dev 문서의
   누락 색인은 `1fae98ea0`에서 보완했다. lane 삭제 전 복구 hash를 이 기록으로 고정한다.
+
+- [백엔드] lane 회수 — `codex/oss-install-gate` / `1fae98ea0` / ancestor exit 0.
+  로컬 branch와 worktree를 제거했고 원격 branch는 존재하지 않았다. 실증 Kind cluster도
+  삭제했으며 다른 작업자의 detached AWS worktree와 보호 branch는 건드리지 않았다.
