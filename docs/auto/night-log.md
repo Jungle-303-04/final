@@ -2254,3 +2254,17 @@ target preflight·register 네 함수와 strict Zod 계약을 claim했다. 1회�
 - 시각 증거:
   `references/ui-layer-lab/output/playwright/product-auth-unauthenticated-desktop-light-en.png`.
   커밋 push 후 `origin/woonyong/ui-layer-lab` ancestor exit 0을 확인했다.
+
+## 2026-07-13 18:31 KST — [프론트] 시각 증거 manifest 정합 완료
+
+- `9858ffc45cf2b792045d8c27145e7984cefa6367`은 visual gate가 소유하는 ignored
+  `output/playwright/product-*.png`만 실행 시작 시 정리하고, 성공 시 현재 시나리오 ID와
+  산출물 파일을 1:1로 대조한다. 다른 파일과 루트의 사용자 소유 `outputs/`는 건드리지 않는다.
+- 변경 전에는 현재 43개 시나리오와 무관한 과거 이미지가 포함돼 60개였고, 변경 후 full
+  visual gate 성공 시 정확히 43개만 남는 것을 실측했다. 누락·잔존 파일이 하나라도 있으면
+  manifest mismatch로 게이트가 실패한다.
+- `npm run check` PASS: TypeScript·ESLint, Vitest 118 files / 847 tests,
+  design guard 346 files, shadcn source audit 482 previews, Vite build 14,539 modules.
+  `npm run visual-product` PASS: 43 isolated scenarios, exact API request counts,
+  unexpected feature network/WebSocket 0건, artifact count 43.
+- 커밋 push 후 `origin/woonyong/ui-layer-lab` ancestor exit 0을 확인했다.
