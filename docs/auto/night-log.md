@@ -1797,3 +1797,17 @@ target preflight·register 네 함수와 strict Zod 계약을 claim했다. 1회�
 - targeted API contract PASS: 2 files / 19 tests. full `npm run check` PASS:
   TypeScript·ESLint, Vitest 114 files / 827 tests, design guard 341 files,
   shadcn source audit 482 previews, Vite production build 14,538 modules.
+
+## 2026-07-13 16:11 KST — [프론트] Issues 선택 의미·포커스 계약 완료 증거
+
+- RED `60abe061b`는 선택된 Issue가 상세 region을 소유한다는 `aria-current`·`aria-controls`
+  계약과 사용자 선택 후 상세 포커스 이동을 단위·브라우저 게이트에 고정했다.
+- GREEN `6ed4424eb`는 React `useId` 기반 단일 region ID와 선택 요청별 포커스 생명주기를
+  연결했다. 같은 행 재선택은 다시 상세로 이동하고, 클러스터 전환으로 과거 선택이 복원될
+  때는 pending ID가 없으므로 임의 포커스를 만들지 않는다.
+- 첫 full gate는 `IssuesSurface.tsx` 302줄을 설계 상한 300줄 위반으로 정확히 차단했다.
+  줄 압축 대신 `useIssueDetailFocus` hook으로 책임을 분리한 뒤 재검증했다.
+- 최종 `npm run check` PASS: TypeScript·ESLint, Vitest 114 files / 828 tests,
+  design guard 342 files, shadcn source audit 482 previews, Vite build 14,539 modules.
+  `npm run visual-product` PASS: 38 isolated scenarios, exact API request counts,
+  unexpected feature network/WebSocket 0건.
