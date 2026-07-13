@@ -2241,3 +2241,22 @@ target preflight·register 네 함수와 strict Zod 계약을 claim했다. 1회�
 - 4조건: merge-tree clean/tree `857ee57075e2260222d78350e5d25eb839579bf6`, source·파일 삭제·
   소유권 밖 변경·frozen 경로 변경 0건, `720dd55c0`·`13c30723a`의 `origin/dev`
   ancestor exit 0. J 배포 실행은 0건이다.
+
+## 2026-07-13 18:34 KST — [백엔드] crashloop 시작 권한 오류 시나리오 착륙
+
+- lane `codex/benchmark-permission-startup`, RED `958baa368`·`be9a6da0a`, 구현
+  `85dae710b`, feature HEAD `268ca859e7266ec72780b2080904b5d8ba37c247`, canonical no-ff merge
+  `de9e600c7a554b12208b46b022d3ca4b29601ce1`.
+- ordinal 8 `permission_denied_startup` exact fixture는 임시 startup script의 실행 bit를
+  제거해 실제 POSIX EACCES, `permission denied`, exit code 1을 재현한다. 정상 0700
+  경로 exit 0과 last exit code 1인 generic startup 후보와의 동점에서 구체 권한
+  후보가 선택되는 현행 catalog 경계도 고정했다.
+- full container JSON Merge Patch로 fault runnable → gold=normal → rollback=fault 왕복을
+  검증했다. capability는 비어 있으므로 승인형 `manual_analysis`만 허용하고
+  cluster-admin 권한 확대를 금지했다.
+- crashloop 4/4, 전체 scenario 19/19, candidate 87/87, focused 66 passed,
+  독립 재감사 2건 PASS. 전체 게이트는 Ruff lint/format PASS, import-linter
+  8 kept/0 broken, pytest `1957 passed, 3 skipped`; manifest 69/20이다.
+- 4조건: merge-tree clean/tree `428481b5a7d0bfcd0dc54c1a604c99fb2ca1ed34`,
+  파일 삭제·소유권 밖·frozen·gateway 계약 변경 0건, `85dae710b`·`de9e600c7`의
+  `origin/dev` ancestor exit 0. J 배포 실행은 0건이다.
