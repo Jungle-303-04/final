@@ -103,6 +103,11 @@ async def retry_dependency(attempt: Callable[[], Awaitable[None]], *, label: str
 ```
 `attempt` 성공까지 최대 `limit` 회(간격 `delay`s) 재시도. 각 실패는 `dependency_waiting` WARNING(context: dependency/attempt/limit/exception_type). 소진 시 `fail(f"{label} 연결 실패")` → `[event-system] <label> 연결 실패` RuntimeError.
 
+직접 계약 테스트는 첫 성공 시 추가 호출·sleep이 없고, 일시 실패는 성공 전까지
+정확한 attempt/limit/예외 타입 컨텍스로 기록하는지 고정한다. 한도 소진과 `limit=0`은
+표준 시스템 오류로 종료하며, task `CancelledError`는 실패 로그나 재시도 지연으로
+변환하지 않고 호출자에게 전파한다.
+
 `src/packages/config/__init__.py` 는 빈 모듈.
 
 ## 동작 (Behavior)
