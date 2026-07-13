@@ -564,3 +564,16 @@ docs-only 2파일, BQ-009 `requested` + BQ-012~017 등록, origin/dev push 확�
 `git diff --name-only`은 `docs/auto/night-directives.md`, `docs/auto/night-log.md` 2파일.
 `docs/backend-f-workqueue.md`의 BQ-009 `requested`와 BQ-012~017 행은 `01a3a2e97`
 정본에 이미 존재해 중복 편집하지 않았고, 공유 dev worktree의 벤치·기타 변경은 혼입 0건.
+
+## 2026-07-13 09:56 KST — H1 착륙 증거
+
+- lane: `codex/f-audit-timeline`, rebase HEAD `bfaa4bba7`
+- canonical merge: `17ac2b7a32413579f2570218a99bf50f34d162c3` (`--no-ff`)
+- 시험 merge: `git merge-tree --write-tree origin/dev codex/f-audit-timeline` exit 0
+- 전체 게이트: Ruff lint PASS, format `484 files already formatted`, import-linter
+  `2 kept, 0 broken`, pytest `1701 passed, 3 skipped`
+- ancestor: lane HEAD `bfaa4bba7`, C `66cbe8dec`, D `81969f23e` 모두 origin/dev 기준 exit 0
+- 해시 정합: 지시의 `7d74d765c`는 최신 rebase 전 동등 C 커밋으로 ancestor exit 1;
+  현행 동등 C 커밋 `66cbe8dec`를 canonical 증거로 갱신
+- 경계: frozen `src/domains/rca/**`, `src/services/ai/**`, `src/packages/runtime/worker.py`
+  변경 0건; Bruno 14/15로 타임라인·최근 변경 route 재현 가능
