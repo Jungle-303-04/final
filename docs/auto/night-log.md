@@ -2423,3 +2423,13 @@ target preflight·register 네 함수와 strict Zod 계약을 claim했다. 1회�
   design guard 347 files, shadcn source audit 482 previews, Vite build 14,539 modules.
   시각 증거는 `references/ui-layer-lab/output/playwright/product-issues-locale-smoke-ko.png`이며,
   커밋 push 후 `origin/woonyong/ui-layer-lab` ancestor exit 0을 확인했다.
+
+## 2026-07-13 19:12 KST — [프론트] Resources namespace 폼 직접 테스트
+
+- `33a925f1a`는 외부 스코프가 `shop`에서 `platform`으로 변경될 때 namespace 입력만
+  재동기화되고 제출 콜백은 발생하지 않는 계약을 직접 고정했다. 사용자 제출값은 trim하며
+  `"  payments  "`는 `"payments"`, 공백만 있는 값은 `null`로 전달한다.
+- targeted Vitest PASS: 1 file / 2 tests. 전체 `npm run check` PASS:
+  TypeScript·ESLint, Vitest 120 files / 853 tests, design guard 348 files,
+  shadcn source audit 482 previews, Vite build 14,539 modules. 제품 runtime 변경은 0건이며,
+  커밋 push 후 `origin/woonyong/ui-layer-lab` ancestor exit 0을 확인했다.
