@@ -2601,3 +2601,19 @@ target preflight·register 네 함수와 strict Zod 계약을 claim했다. 1회�
 
 - [백엔드] lane 회수 — `codex/event-bus-mode-equivalence` / `02773227c` /
   ancestor exit 0. 로컬 branch와 worktree를 제거했고 원격 branch는 존재하지 않았다.
+
+## 2026-07-13 20:37 KST — [프론트] VP-010 통합 필터 URL engine GREEN
+
+- RED는 미구현 모듈 실패로 시작했고, canonical URL round-trip·legacy `cluster`/`kind`
+  dual-read·같은 구조 축 OR·Label AND·화면 이동 시 공통 축 보존·상세 query 제거를
+  `a61e01990`에서 GREEN으로 닫았다. 유효하지만 아직 서버가 해석하지 못한 ID와 Label은
+  URL에서 보존하며, collection 전수 수집·client count/predicate는 구현하지 않았다.
+- 독립 감사에서 Kubernetes Label key DNS prefix의 dot segment 63자 제한 누락을 발견했다.
+  64자 segment가 통과하는 RED를 재현한 뒤 `99ebe7850`에서 63 허용/64 거부 및 prefix 전체
+  253 허용/254 거부 경계를 분리했다. targeted Vitest는 11/11 PASS다.
+- `npm run check` PASS: TypeScript·ESLint, Vitest 122 files / 867 tests, design guard
+  354 files, shadcn source audit 482 previews, Vite production build 14,539 modules다.
+  최신 `origin/dev@d75f5fdf7`는 통합 commit `954957485`에서 충돌 없이 흡수했다.
+- GAP-004의 server Label facet/count/snapshot/completeness 계약 전에는 `[Labels]` popover,
+  후보 개수와 `Showing N of M`을 렌더하지 않는다. 다음 안전 단위는 URL을 자동 변경하지 않는
+  side-effect-free filter provider이며, legacy selector의 자동 선택 제거와 함께 전환한다.
