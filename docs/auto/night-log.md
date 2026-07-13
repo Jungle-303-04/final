@@ -3352,7 +3352,7 @@ index 591d560bc..5f1879a74 100644
   dev push 실행 증거가 재개 조건이며, 그 전까지 AWS 배포 스위치는 꺼진 상태를 유지한다.
 ## 2026-07-14 02:51 KST — [프론트 정리] S3 Recharts 단일화
 
-- 코드 commit `7f9f0a4d5`. `frontend/src/ui/charts.tsx`의 `Sparkline`과
+- 코드 commit `ec0a818ce`. `frontend/src/ui/charts.tsx`의 `Sparkline`과
   `TimeSeriesChart`를 Recharts `AreaChart`/`LineChart`로 이관하고 chart 색은 S1
   `--chart-1..5`에 연결했다. `@nivo/core`, `@nivo/line`, `@nivo/treemap`과 전이 의존성을
   package/lock에서 제거했다.
