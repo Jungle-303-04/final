@@ -2033,9 +2033,9 @@
       ],
       "forbidden_remediations": [
         {
-          "action_type": "restart_all_service_endpoints",
+          "action_type": "restart_all_service_backends",
           "blast_radius": "cluster",
-          "reason": "단일 endpoint unavailable timeout으로 클러스터의 모든 서비스 endpoint를 재시작할 수 없습니다."
+          "reason": "단일 endpoint unavailable 신호로 클러스터 전체 서비스 backend workload를 재시작할 수 없습니다."
         }
       ],
       "benchmark_fixtures": []
