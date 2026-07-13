@@ -95,3 +95,31 @@ test('Resources mutations publish feedback through the canonical Sonner boundary
   assert.match(source, /\btoast\.success\s*\(/);
   assert.match(source, /\btoast\.error\s*\(/);
 });
+
+test('Issues list is composed only from accessible shadcn primitives', async () => {
+  const source = await readFile(
+    new URL('src/features/notifications/NotificationsView.tsx', frontendRoot),
+    'utf8',
+  );
+
+  assert.doesNotMatch(source, /from ['"]@\/ui(?:['"/])/);
+  assert.doesNotMatch(source, /<(?:EmptyState|PageHeader)\b/);
+  assert.doesNotMatch(source, /\buseNavigate\b/);
+  assert.doesNotMatch(source, /\btone=/);
+
+  for (const primitive of ['badge', 'button', 'card', 'toggle-group']) {
+    assert.match(
+      source,
+      new RegExp(`from ['"]@/components/ui/${primitive}['"]`),
+      `NotificationsView must import the ${primitive} shadcn primitive`,
+    );
+  }
+
+  assert.doesNotMatch(source, /<Tabs(?:List|Trigger)?\b/);
+  assert.match(source, /<ToggleGroup\b/);
+  assert.match(source, /<ToggleGroupItem\b/);
+  assert.match(source, /<Link\b/);
+  assert.match(source, /nativeButton=\{false\}/);
+  assert.match(source, /role=['"]status['"]/);
+  assert.match(source, /aria-live=['"]polite['"]/);
+});
