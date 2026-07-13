@@ -11,7 +11,9 @@ status: spec-ahead
 
 - plan-worker 가 rule 미매칭 시 발행하는 `rca.ai_fallback.requested` 를 구독해,
   LLM(`packages.ai.llm`)에게 incident 증상 + evidence bundle 요약을 주고 원인 후보를 받는다.
-- 후보를 `CauseCandidate(source="ai_fallback")` 로 변환해 plan-worker 와 동일한
+- LLM 은 실제 catalog `cause_id`만 hypothesis로 제안한다. title/description,
+  expected evidence, checks, 내용 기반 signals는 catalog에서 복원한 뒤
+  `CauseCandidate(source="ai_fallback")` 로 변환해 plan-worker 와 동일한
   `rca.candidates.planned` 를 발행한다 — 이후 analyze-worker(평가) → rca-worker(확정)의
   기존 근거 기반 경로를 그대로 지난다.
 - **확정 root cause 를 직접 만들지 않는다.** LLM 미설정/호출 실패/JSON 비정형/유효 후보 0건이면
@@ -49,22 +51,24 @@ status: spec-ahead
 
 | 케이스 | 발행 |
 |---|---|
-| LLM 이 유효 후보 ≥1건 반환 | `rca.candidates.planned` (`RcaCandidatesPlannedBody`) 1건 — `candidates[].source="ai_fallback"`, `rule_missing=None`, `evidence/incident/evidence_bundle` 은 입력 body 를 그대로 전달 |
+| LLM 이 signal 계약을 가진 catalog cause ID ≥1건 반환 | `rca.candidates.planned` (`RcaCandidatesPlannedBody`) 1건 — catalog 계약으로 복원된 `candidates[].source="ai_fallback"`, `rule_missing=None`, `evidence/incident/evidence_bundle` 은 입력 body 를 그대로 전달 |
 | LLM 미설정(ValueError)·호출 실패·JSON 파싱 실패 | 없음(warning 로그 `ai_fallback_llm_failed`) |
-| 유효 후보 0건(비정형/빈 응답) | 없음(info 로그 `ai_fallback_no_candidates`) |
+| 유효 후보 0건(비정형/빈 응답/catalog 밖 ID/signal 없는 ID) | 없음(info 로그 `ai_fallback_no_candidates`) |
 
 ## 동작 (Behavior)
 
 1. `planner.plan_body(evt, llm_client)` 호출 —
    [`AiFallbackPlanner`](ai-agent.md#공개-인터페이스-public-api) 가 프롬프트 구성 →
-   `complete_json` → 후보 파싱(confidence 내림차순 상위 5개)을 수행.
+   catalog ID 목록을 제시한 `complete_json` → catalog 계약 복원 → confidence 내림차순
+   상위 5개 선정을 수행.
 2. 예외는 전부 잡아 warning 로그 후 종료(재시도로 확정 실패를 증폭하지 않음 — LLM 은 보조 경로).
 3. 결과가 `None` 이면 info 로그 후 종료, body 면 yield.
 
 ## 불변식·오류 (Invariants & Errors)
 
-- 이 워커는 `rca.completed` 를 직접 발행하지 않는다 — 확정은 항상 rca-worker 의
-  근거 기반 판정을 거친다(근거 없는 LLM 후보는 `insufficient_evidence` 로 blocked).
+- 이 워커는 `rca.completed` 를 직접 발행하지 않는다. LLM 작성 title/evidence/check는
+  신뢰하지 않고 catalog 계약을 사용하며, catalog 내용 signal이 검증되지 않은 hypothesis는
+  `insufficient_evidence` 로 blocked 된다.
 - 프롬프트에는 evidence item 의 `summary` 문자열만 싣고 원문 `value` 는 싣지 않는다
   (secret 원문 유출 방지 + 프롬프트 크기 제한).
 - 핸들러는 예외를 밖으로 던지지 않는다(자체 no-op 수렴).

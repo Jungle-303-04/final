@@ -14,6 +14,7 @@ from domains.rca.events import (
     IncidentRecord,
     RcaAiFallbackRequestedBody,
     RcaAnalysisBlockedBody,
+    RcaCompletedBody,
 )
 
 
@@ -128,16 +129,23 @@ def llm_candidates_payload() -> dict[str, Any]:
     }
 
 
-def source_names_only_oom_body() -> RcaAiFallbackRequestedBody:
-    """OOM catalog source/name은 모두 있지만 OOM 내용 신호는 없는 조작 번들."""
+def catalog_oom_body(*, with_signal: bool) -> RcaAiFallbackRequestedBody:
+    """OOM catalog source/name과 선택적인 OOM 내용 신호를 가진 번들."""
     bundle = EvidenceBundle(
         incident_id="incident-1",
         items=[
             EvidenceItem(
                 source="kubernetes",
                 name="cluster_resource_state",
-                value={"pods": [{"terminated_reasons": [], "containers": []}]},
-                summary="pod state collected without an OOM termination",
+                value={
+                    "pods": [
+                        {
+                            "terminated_reasons": ["OOMKilled"] if with_signal else [],
+                            "containers": [],
+                        }
+                    ]
+                },
+                summary="pod state collected with optional OOM termination",
             ),
             EvidenceItem(
                 source="metrics",
@@ -207,7 +215,7 @@ def test_ai_candidate_source_names_without_catalog_signal_cannot_complete() -> N
 
     planned = run_handler(
         fallback_worker.on_ai_fallback_requested,
-        source_names_only_oom_body(),
+        catalog_oom_body(with_signal=False),
     )[0]
     evaluated = run_handler(analyze_worker.on_candidates_planned, planned)[0]
 
@@ -227,6 +235,27 @@ def test_ai_candidate_source_names_without_catalog_signal_cannot_complete() -> N
     assert isinstance(result, RcaAnalysisBlockedBody)
     assert result.reason_code == "insufficient_evidence"
     assert result.__subject__ == "rca.analysis_blocked"
+
+
+def test_ai_candidate_with_catalog_signal_can_complete() -> None:
+    """실제 catalog 내용 signal까지 검증된 hypothesis만 완료 경로를 통과한다."""
+    fallback_worker = load_service("ai/ai-fallback-worker")
+    analyze_worker = load_service("ai/analyze-worker")
+    rca_worker = load_service("ai/rca-worker")
+    fallback_worker.llm_client = _ScriptedJsonLlm(llm_candidates_payload())
+
+    planned = run_handler(
+        fallback_worker.on_ai_fallback_requested,
+        catalog_oom_body(with_signal=True),
+    )[0]
+    evaluated = run_handler(analyze_worker.on_candidates_planned, planned)[0]
+    oom = next(item for item in evaluated.evaluations if item.candidate_id == "oom_killed")
+
+    assert oom.score == 1.0
+    assert oom.missing_evidence == []
+    result = rca_worker.pipeline.complete_body(evaluated)
+    assert isinstance(result, RcaCompletedBody)
+    assert result.root_cause == "oom_killed"
 
 
 def test_llm_garbage_json_yields_nothing() -> None:
