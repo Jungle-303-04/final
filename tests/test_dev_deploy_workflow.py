@@ -8,6 +8,7 @@ import yaml
 
 ROOT = Path(__file__).resolve().parents[1]
 WORKFLOW_PATH = ROOT / ".github/workflows/dev-deploy.yml"
+CONSOLE_IMAGE_PLACEHOLDER = "kubeheal-console@sha256:" + ("0" * 64)
 
 
 def workflow() -> dict:
@@ -79,6 +80,54 @@ def test_deploy_uses_immutable_digest_and_image_only_rollback_without_db_downgra
     assert "kubectl rollout undo" not in source
     assert "alembic downgrade" not in source
     assert "packages.storage.baseline bootstrap" not in source
+
+
+def test_service_and_console_images_share_the_gated_source_sha_and_digest_release() -> None:
+    job = deploy_job()
+    source = WORKFLOW_PATH.read_text(encoding="utf-8")
+    steps = steps_by_name()
+
+    assert job["env"]["CONSOLE_ECR_REPOSITORY"] == "${{ vars.AWS_DEV_CONSOLE_ECR_REPOSITORY }}"
+    assert (
+        '[[ "${CONSOLE_ECR_REPOSITORY}" =~ ^[a-z0-9]+([._/-][a-z0-9]+)*$ ]]'
+        in steps["Validate non-secret deployment inputs"]["run"]
+    )
+    assert (
+        "docker build --file src/services/Dockerfile"
+        in steps["Build and push immutable service image"]["run"]
+    )
+    assert (
+        'tagged_image="${registry}/${ECR_REPOSITORY}:${SOURCE_SHA}"'
+        in steps["Build and push immutable service image"]["run"]
+    )
+    assert (
+        "docker build --file frontend/Dockerfile"
+        in steps["Build and push immutable console image"]["run"]
+    )
+    assert (
+        'tagged_image="${registry}/${CONSOLE_ECR_REPOSITORY}:${SOURCE_SHA}"'
+        in steps["Build and push immutable console image"]["run"]
+    )
+    assert (
+        "--managed-image kubeheal-service:latest"
+        in steps["Capture current digest rollback plan"]["run"]
+    )
+    assert (
+        f'--managed-image "{CONSOLE_IMAGE_PLACEHOLDER}"'
+        in steps["Capture current digest rollback plan"]["run"]
+    )
+    assert source.count("rollout_image_digest.py") == 2
+    assert source.count("revert_image_digests.py") == 2
+
+
+def test_console_manifests_use_a_fail_closed_digest_placeholder_instead_of_latest() -> None:
+    for relative_path in (
+        "deploy/management/console.yaml",
+        "deploy/management/console-dev.yaml",
+    ):
+        source = (ROOT / relative_path).read_text(encoding="utf-8")
+        assert CONSOLE_IMAGE_PLACEHOLDER in source
+        assert "kubeheal-console:latest" not in source
 
 
 def test_deploy_keeps_credentials_out_of_source_and_requires_explicit_context() -> None:
