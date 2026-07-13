@@ -1115,3 +1115,14 @@ Bundle route는 200을 반환한다.
 계약 완성: FILTERED_RESOURCES_PATH (87c0606e0) [green]
 
 계약 완성: RESOURCE_LABEL_FACETS_PATH (87c0606e0) [green]
+
+### Resources 단일 cluster 그래프 — claim
+
+- 상태: `in_progress`; gateway 계약 lock은 이 행 하나가 보유한다.
+- baseline: `origin/dev@e47b0e984`, 전체 `2051 passed, 3 skipped`, Ruff lint/format PASS,
+  import-linter 8 kept/0 broken, manifest management 69/target 20, Helm lint PASS.
+- 범위: Resources 필터와 같은 session workspace·권한·snapshot revision에서 single-cluster
+  node/edge snapshot을 제공한다. stable drill-down identity와 relation evidence만 노출하고
+  raw Kubernetes payload·cross-cluster edge·이름 유사도 추론은 금지한다.
+- 완전성: filtered node budget, source resource/Label/application completeness, 관계 endpoint
+  누락을 구조화 reason으로 반환한다. 증명되지 않은 관계를 합성하지 않는다.
