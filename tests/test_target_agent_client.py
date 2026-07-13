@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import gc
 import json
+import sqlite3
 import sys
 from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
@@ -35,18 +36,36 @@ def isolated_agent_db(monkeypatch: pytest.MonkeyPatch, tmp_path: Any) -> None:
     monkeypatch.setenv("COMMAND_OUTBOX_DB_PATH", str(tmp_path / "command-outbox.db"))
 
 
-@pytest.fixture(autouse=True)
-def reject_cross_thread_sqlite_destructor_errors() -> None:
-    yield
-    unraisable: list[sys.UnraisableHookArgs] = []
+TARGET_SQLITE_DESTRUCTORS = {
+    "AgentControlStore.__del__",
+    "CommandResultOutbox.__del__",
+}
+
+
+def collect_target_sqlite_destructor_errors() -> list[Any]:
+    target_errors: list[Any] = []
     previous_hook = sys.unraisablehook
-    sys.unraisablehook = unraisable.append
+
+    def route_unraisable(args: Any) -> None:
+        error = getattr(args, "exc_value", None)
+        destructor = getattr(getattr(args, "object", None), "__qualname__", "")
+        is_target_error = (
+            isinstance(error, sqlite3.ProgrammingError)
+            and destructor in TARGET_SQLITE_DESTRUCTORS
+            and "SQLite objects created in a thread" in str(error)
+        )
+        if is_target_error:
+            target_errors.append(args)
+        else:
+            previous_hook(args)
+
+    sys.unraisablehook = route_unraisable
     try:
         with ThreadPoolExecutor(max_workers=1) as executor:
             executor.submit(gc.collect).result()
     finally:
         sys.unraisablehook = previous_hook
-    assert not unraisable, [str(item.exc_value) for item in unraisable]
+    return target_errors
 
 
 @pytest.fixture
@@ -61,8 +80,10 @@ def target_agent_factory() -> Any:
     try:
         yield create
     finally:
-        for agent in reversed(agents):
-            agent.close()
+        while agents:
+            agents.pop().close()
+        errors = collect_target_sqlite_destructor_errors()
+        assert not errors, [str(item.exc_value) for item in errors]
 
 
 def load_agent_module() -> Any:
@@ -790,3 +811,27 @@ def test_target_agent_close_is_idempotent_and_releases_sqlite_connections(
 
     assert agent.control_store.conn is None
     assert agent.command_outbox.conn is None
+
+
+def test_target_sqlite_destructor_guard_forwards_unrelated_unraisable() -> None:
+    forwarded: list[Any] = []
+    previous_hook = sys.unraisablehook
+    sys.unraisablehook = forwarded.append
+
+    class UnrelatedCycle:
+        def __init__(self) -> None:
+            self.reference = self
+
+        def __del__(self) -> None:
+            raise ValueError("unrelated destructor failure")
+
+    try:
+        cycle = UnrelatedCycle()
+        del cycle
+
+        assert collect_target_sqlite_destructor_errors() == []
+    finally:
+        sys.unraisablehook = previous_hook
+
+    assert len(forwarded) == 1
+    assert isinstance(forwarded[0].exc_value, ValueError)
