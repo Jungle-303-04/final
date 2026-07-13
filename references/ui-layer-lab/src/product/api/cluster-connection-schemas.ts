@@ -1,16 +1,7 @@
 import { z } from "zod";
 
 import { clusterAgentStatusSchema } from "./cluster-schemas";
-
-const connectionStageSchema = z.enum([
-  "token_issued",
-  "awaiting_install",
-  "agent_connected",
-  "snapshot_received",
-  "ready",
-  "expired",
-  "error",
-]);
+import { connectionStageSchema } from "./cluster-stage-schemas";
 
 /** Runtime contract for `GET /clusters/{cluster_id}/connection-status`. */
 export const clusterConnectionStatusSchema = z.strictObject({

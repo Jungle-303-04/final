@@ -23,6 +23,41 @@ export { getFleetSummary } from "./fleet";
 export { listClusters, type ListClustersOptions } from "./clusters";
 export { getCluster } from "./cluster-detail";
 export { getClusterConnectionStatus } from "./cluster-connection";
+export {
+  getProviderCatalog,
+  getProviderClusterDiscovery,
+  preflightTargetRegistration,
+  registerTarget,
+  PROVIDERS_CATALOG_PATH,
+  PROVIDERS_CLUSTER_DISCOVERY_PATH,
+  TARGETS_PATH,
+  TARGETS_PREFLIGHT_PATH,
+  type TargetPreflightInput,
+  type TargetProviderSelectionInput,
+  type TargetRegisterInput,
+} from "./cluster-registration";
+export {
+  clusterImportCandidateSchema,
+  clusterRegistrationFlowSchema,
+  providerCatalogSchema,
+  providerClusterDiscoverySchema,
+  providerConfigFieldSchema,
+  providerCredentialRequirementSchema,
+  providerDefinitionSchema,
+  targetBootstrapStepSchema,
+  targetInstallResponseSchema,
+  targetPreflightResponseSchema,
+  type ClusterImportCandidate,
+  type ClusterRegistrationFlow,
+  type ProviderCatalog,
+  type ProviderClusterDiscovery,
+  type ProviderConfigField,
+  type ProviderCredentialRequirement,
+  type ProviderDefinition,
+  type TargetBootstrapStep,
+  type TargetInstallResponse,
+  type TargetPreflightResponse,
+} from "./cluster-registration-schemas";
 export { getInventorySummary } from "./inventory-summary";
 export {
   listInventoryResourcesByType,
@@ -70,6 +105,10 @@ export {
   clusterConnectionStatusSchema,
   type ClusterConnectionStatus,
 } from "./cluster-connection-schemas";
+export {
+  connectionStageSchema,
+  type ConnectionStage,
+} from "./cluster-stage-schemas";
 export {
   inventorySummarySchema,
   type InventorySummary,
