@@ -19,19 +19,34 @@ describe("product-owned Button", () => {
     expect(button.getAttribute("type")).toBe("button");
     expect(button.hasAttribute("disabled")).toBe(true);
     expect(button.className).toContain("w-full");
-    expect(button.className).toContain("motion-reduce:transition-none");
-    expect(button.className).toContain("forced-colors:disabled:opacity-100");
-    expect(button.className).toContain("forced-colors:focus-visible:outline-[Highlight]");
+    for (const className of [
+      "focus-visible:border-ring",
+      "focus-visible:ring-3",
+      "focus-visible:ring-ring/50",
+      "disabled:pointer-events-none",
+      "disabled:opacity-50",
+      "motion-reduce:transition-none",
+      "forced-colors:disabled:border-[GrayText]",
+      "forced-colors:disabled:text-[GrayText]",
+      "forced-colors:disabled:opacity-100",
+      "forced-colors:focus-visible:outline",
+      "forced-colors:focus-visible:outline-2",
+      "forced-colors:focus-visible:outline-offset-2",
+      "forced-colors:focus-visible:outline-[Highlight]",
+    ]) {
+      expect(button.className).toContain(className);
+    }
   });
 
-  it("preserves the canonical slot against unsafe runtime props", () => {
-    const unsafeProps = {
-      "data-slot": "unsafe-button",
-    } as unknown as Parameters<typeof Button>[0];
-
-    render(<Button {...unsafeProps}>다시 시도</Button>);
+  it("uses the base slot by default and lets a composed wrapper own its specialized slot", () => {
+    const { rerender } = render(<Button>다시 시도</Button>);
 
     expect(screen.getByRole("button", { name: "다시 시도" }).getAttribute("data-slot"))
       .toBe("button");
+
+    rerender(<Button data-slot="sidebar-trigger">사이드바 접기</Button>);
+
+    expect(screen.getByRole("button", { name: "사이드바 접기" }).getAttribute("data-slot"))
+      .toBe("sidebar-trigger");
   });
 });
