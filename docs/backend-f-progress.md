@@ -7,7 +7,7 @@ governing: docs/f-coordination-plan.md · docs/backend-f-workqueue.md
 
 # 백엔드 F 진행 현황
 
-현재 상태: **앵커 29건**
+현재 상태: **앵커 30건**
 
 ## 역사적 Delta-green baseline (BQ-001~003)
 
@@ -741,3 +741,23 @@ Bundle route는 200을 반환한다.
   `origin/dev` ancestor exit 0.
 
 계약 완성: OpsiaBench scheduling node selector mismatch fixture + fallback boundary (dea2d4babb6882c2cf6b5ff8354060f8472bf6f7) [green]
+
+### 보조 대기열 S14 — AsyncDb 호출 경계 직접 테스트
+
+- 상태: landed
+- 담당 lane: `codex/runtime-async-db-tests`
+- 테스트와 feature HEAD: `effec9f6d98c0e56fc6bf10e5860b626e5d01077`
+- canonical no-ff merge: `b37a94d958b7c56a8df8c8780bc1ff30a63b3d63`
+- `src/packages/runtime/async_db.py` 소스 변경 없이 직접 테스트 5개를 추가했다.
+- async method·비호출 속성은 thread hop 없이 전달하고, active connection이 없을 때 sync
+  method는 `asyncio.to_thread`로 인자·결과를 전달하는 경계를 고정했다.
+- active connection이 있으면 현재 thread를 재사용하며 `to_thread`를 호출하지 않고,
+  sync 예외와 없는 속성의 `AttributeError`도 숨기지 않음을 검증했다.
+- 고유 검증: `tests/test_async_db.py` 5 passed.
+- 전체 게이트: Ruff lint/format PASS, import-linter 8 kept/0 broken,
+  pytest `1933 passed, 3 skipped`; manifest management 69 / target 20.
+- 4조건: merge-tree exit 0/tree `41ae92a7d037bccfab7950b8d5ee70162ce0a39e`;
+  파일 삭제·소유권 밖 변경·frozen 경로 변경 0건; test·merge commit의 `origin/dev`
+  ancestor exit 0.
+
+계약 완성: AsyncDb thread-hop and active-connection reuse tests (effec9f6d98c0e56fc6bf10e5860b626e5d01077) [green]

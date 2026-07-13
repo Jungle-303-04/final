@@ -1976,3 +1976,16 @@ target preflight·register 네 함수와 strict Zod 계약을 claim했다. 1회�
 - 4조건: merge-tree clean/tree `9cb957b643ac84ccc8dffca6b9151a1569606698`, 파일 삭제·
   소유권 밖 변경·frozen 경로 변경 0건, RED·교정·구현·문서·merge commit의 `origin/dev`
   ancestor exit 0. J 배포 실행은 0건이다.
+
+## 2026-07-13 17:06 KST — [백엔드] AsyncDb 호출 경계 직접 테스트 착륙
+
+- lane `codex/runtime-async-db-tests`, test-only feature HEAD
+  `effec9f6d98c0e56fc6bf10e5860b626e5d01077`, canonical no-ff merge
+  `b37a94d958b7c56a8df8c8780bc1ff30a63b3d63`.
+- 소스 변경 0건으로 async/non-callable passthrough, sync `to_thread`, active connection의
+  동일-thread 재사용, 인자·결과·예외·`AttributeError` 전파를 5개 직접 테스트로 고정했다.
+- 고유 검증: `tests/test_async_db.py` 5 passed. 전체 게이트는 Ruff lint/format PASS,
+  import-linter 8 kept/0 broken, pytest `1933 passed, 3 skipped`; manifest management 69 / target 20.
+- 4조건: merge-tree clean/tree `41ae92a7d037bccfab7950b8d5ee70162ce0a39e`, 파일 삭제·
+  소유권 밖 변경·frozen 경로 변경 0건, test·merge commit의 `origin/dev` ancestor exit 0.
+  J 배포 실행은 0건이다.
