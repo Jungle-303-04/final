@@ -257,6 +257,17 @@ def test_smoke_retries_gateway_health_before_api_flow() -> None:
     assert '"force": True' in script
 
 
+def test_aws_deploy_runs_smoke_by_default_and_normalizes_boolean_input() -> None:
+    script = read("scripts/aws-up.sh")
+
+    assert 'RUN_SMOKE="${RUN_SMOKE:-1}"' in script
+    assert "1|true|TRUE|yes|YES|on|ON)" in script
+    assert 'RUN_SMOKE="1"' in script
+    assert "0|false|FALSE|no|NO|off|OFF)" in script
+    assert 'RUN_SMOKE="0"' in script
+    assert "RUN_SMOKE must be a boolean value" in script
+
+
 def test_aws_image_supports_remote_git_manifest_reads() -> None:
     dockerfile = read("src/services/Dockerfile")
 
