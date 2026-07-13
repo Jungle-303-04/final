@@ -1215,3 +1215,19 @@ npm run visual-product
   probe, Helm values image tag, Kustomize named image tag와 미선언 selector no-write를 검증했다.
 - 4조건: 전체 그린; merge-tree exit 0/tree `b106cd2887d70042983db7c8d54d92b7c40ba8ae`;
   삭제 0건; no-ff merge·push 후 feature와 merge commit의 `origin/dev` ancestor exit 0.
+
+## 2026-07-13 14:11 KST — BQ-011 완료 증거
+
+- lane `codex/release-flow-modules`, HEAD
+  `bd4730d850d21528a161b9f60e8da2905e4b56f8`, canonical no-ff merge
+  `37498fc7115b430c86730847d1213affeed6c61d`.
+- router의 HTTP route·인가·DB mutation은 유지하고 `_support`/policy/readiness/verification/report를
+  내부 모듈로 추출했다. 기존 router helper 208개와 이동 helper object identity는 호환 export로
+  유지하며 공개 route·response·DB schema 변경은 없다.
+- 줄수: router 5,297→1,821; `_support` 120, policy 1,348, readiness 937,
+  verification 297, report 1,110.
+- gate: Ruff lint/format PASS, import-linter 8 kept/0 broken,
+  pytest `1868 passed, 3 skipped`; manifest management 69, target 20.
+- 4조건: merge-tree exit 0/tree `7ca5eda67e1666744f2a5d0f96f4585d2f7cc29e`;
+  삭제 0건; gateway 계약·RCA·AI·runtime worker 변경 0건; feature와 merge commit의
+  `origin/dev` ancestor exit 0.
