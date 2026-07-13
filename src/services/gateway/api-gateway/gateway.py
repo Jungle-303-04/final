@@ -18,6 +18,7 @@ from settings import Settings
 
 from domains.ai.router import router as ai_router
 from domains.alert.router import router as alert_router
+from domains.application_filter.router import router as application_filter_router
 from domains.applications.router import router as applications_router
 from domains.audit.router import router as audit_router
 from domains.catalog.router import router as catalog_router
@@ -289,6 +290,8 @@ class ApiGateway:
         app.include_router(ai_router)  # AI conversation API -> ai.message.* 이벤트
         app.include_router(identity_admin_router)  # 관리 콘솔: 조직/그룹/멤버/권한(admin 세션)
         app.include_router(repository_discovery_router)  # repo 연결 전 branch/manifest 탐색
+        # 정적 filter 경로는 /applications/{application_id}보다 먼저 등록해야 한다.
+        app.include_router(application_filter_router)  # workspace Applications 필터·facet
         app.include_router(applications_router)  # web UI용 application/deployment 바인딩 API
         app.include_router(target_router)  # target 등록 → agent/RBAC 설치 manifest 생성/적용
         app.include_router(gitops_router)  # gitops 도메인 라우터(webhook + HMAC 서명 검증)
