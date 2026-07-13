@@ -32,6 +32,57 @@ source_modules =
 forbidden_modules =
     services
 
+[importlinter:contract:release-flow-internals-no-router]
+name = release flow 내부 모듈은 router 를 역참조하지 않음
+type = forbidden
+source_modules =
+    domains.release_flow._support
+    domains.release_flow.policy
+    domains.release_flow.readiness
+    domains.release_flow.report
+    domains.release_flow.verification
+forbidden_modules =
+    domains.release_flow.router
+
+[importlinter:contract:release-flow-support-leaf]
+name = release flow support 는 업무 모듈을 참조하지 않음
+type = forbidden
+source_modules =
+    domains.release_flow._support
+forbidden_modules =
+    domains.release_flow.policy
+    domains.release_flow.readiness
+    domains.release_flow.report
+    domains.release_flow.verification
+
+[importlinter:contract:release-flow-policy-direction]
+name = release flow policy 는 상위 조립과 report 를 참조하지 않음
+type = forbidden
+source_modules =
+    domains.release_flow.policy
+forbidden_modules =
+    domains.release_flow.readiness
+    domains.release_flow.report
+    domains.release_flow.verification
+
+[importlinter:contract:release-flow-verification-direction]
+name = release flow verification 은 policy 와 상위 모듈을 참조하지 않음
+type = forbidden
+source_modules =
+    domains.release_flow.verification
+forbidden_modules =
+    domains.release_flow.policy
+    domains.release_flow.readiness
+    domains.release_flow.report
+
+[importlinter:contract:release-flow-readiness-report-direction]
+name = release flow readiness 와 report 의 단방향 의존을 유지
+type = forbidden
+source_modules =
+    domains.release_flow.readiness
+forbidden_modules =
+    domains.release_flow.report
+
 # bodies facade 해체 완료: 이벤트 body 는 소유 도메인에서 직접 import 하고,
 # facade 는 커널(EventBody/JsonObject) + 문자열 기반 lazy shim 만 남아
 # 도메인 의존 그래프가 실제 import 에 그대로 드러난다.
