@@ -2752,3 +2752,20 @@ target preflight·register 네 함수와 strict Zod 계약을 claim했다. 1회�
   승격 후 lane `codex/vp010-filter-cutover-20260713`과 worktree
   `/private/tmp/opsia-vp010-filter-cutover`를 같은 사이클에서 회수한다. 신규 stash는 0건이며
   기존 8개와 사람 소유 branch·worktree는 변경하지 않는다.
+
+## 2026-07-13 22:57 KST — [프론트] VP-010 Resources Graph shell GREEN
+
+- GREEN `f944e4c5b`는 Topology 메뉴·route·shortcut·i18n surface를 제거하고 Resources의
+  Table/Graph 전환을 canonical `resources.view` URL history로 연결했다. 전환기는 catalog/list
+  경계 밖의 페이지 header에 있어 미선택·다중·unknown Cluster와 403에서도 복구 가능하다.
+- GAP-010 미착륙 상태에서 Graph는 Cluster 선택 catalog 외의 inventory catalog/list/graph API와
+  TopologyCanvas·WebSocket을 모두 0으로 유지한다. Table in-flight 요청은 Graph 전환 때 abort하며,
+  늦은 응답도 Graph DOM에 도달하지 않는다. 브라우저 back/forward는 Table/Graph를 복원한다.
+- 전체 `npm run check` PASS: TypeScript·ESLint, Vitest 127 files / 911 tests,
+  design guard 363 files, shadcn source audit 482 previews, Vite build 14,546 modules다.
+  `npm run visual-product` PASS: 47 isolated scenarios, exact API requests, unexpected feature
+  network/WebSocket 0건. 신규 증거는
+  `references/ui-layer-lab/output/playwright/product-resources-graph-shell-en-forced-colors.png`이며
+  Graph `aria-pressed`, forced-colors, reduced-motion, exact URL과 graph data 미렌더를 검증한다.
+- CLS는 Home `0.004188`, Resources `0.004167`, Issues `0.004202`로 모두 0.1 미만이다.
+  GAP-002/003/004/010 완료 앵커는 여전히 0건이며 graph snapshot 착륙 전 data 배선은 주차한다.

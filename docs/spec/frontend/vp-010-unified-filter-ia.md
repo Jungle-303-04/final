@@ -384,6 +384,10 @@ Live Traffic은 이번 범위에서 **변경하지 않는다**(현행 유지).
 - 현재 단일-cluster backend list 계약으로 표현할 수 없는 다중 Cluster·다중 Namespace,
   Application, Label, health, server search, graph projection은 요청하지 않고 fail-closed한다.
   detail read는 이 list 차단과 독립적이며 해당 identity만 조회한다.
+- 4단계의 Topology 전용 메뉴·route·shortcut은 제거했고 Resources의 Table/Graph 전환 shell은
+  `f944e4c5b`에서 완료했다. Graph는 URL history를 보존하지만 GAP-010 전에는 catalog/list/graph
+  API·TopologyCanvas·WebSocket을 모두 호출하거나 렌더하지 않는다. 단일 Cluster가 아니면
+  선택 경계를 표시하고, unknown Cluster identity는 선택 안내로 뭉개지 않고 그대로 보존한다.
 - GAP 착륙 우선순위는 Resources core `002 → 003 → 004`, graph `010`, 타 화면 `005 → 006`,
   wizard `007 → 008`, repository `009`, workspace `001`이다. 앵커 없는 데이터 표면은 계속
   미렌더한다.
@@ -404,7 +408,7 @@ Live Traffic은 이번 범위에서 **변경하지 않는다**(현행 유지).
 | GAP-007 | registration preflight/register 동일 validation, 발급 전 command preview 또는 명시적 순서, resume/reissue, structured `connection_stage` reason/error code | Cluster 연결 위자드 완성형 | VP-008 blocker 유지 · 미렌더 |
 | GAP-008 | capability/permission, confirmation, operation receipt와 terminal status를 포함한 Cluster 연결 해제 계약 | Cluster 행 메뉴·상세 | backend 요청 필요 · 삭제 UI 미렌더 |
 | GAP-009 | repository URL recognition result, access check, credential challenge, branch cursor/default, manifest/remediation candidate path cursor, background operation receipt/status | Git 저장소 등록 위자드 | backend 요청 필요 · 수동값 추측 금지 |
-| GAP-010 | Resources filter와 동일 scope/revision을 소비하는 single-cluster graph snapshot, partial/restricted/completeness와 drill-down identity | Resources graph mode·Topology 메뉴 제거 | backend 요청 필요 · Topology 메뉴 제거와 데이터 없는 전환 shell만 선행 가능 · graph data 미렌더 |
+| GAP-010 | Resources filter와 동일 scope/revision을 소비하는 single-cluster graph snapshot, partial/restricted/completeness와 drill-down identity | Resources graph mode | frontend shell GREEN `f944e4c5b` · backend graph snapshot 요청 필요 · graph data 미렌더 |
 
 ### 9.1 GAP-004 최소 소비 계약
 
