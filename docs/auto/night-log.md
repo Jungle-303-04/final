@@ -2933,3 +2933,8 @@ target preflight·register 네 함수와 strict Zod 계약을 claim했다. 1회�
   세 Issues filter route의 완료 앵커를 그대로 재사용하며 신규 source·gateway 변경은 0건이다.
 - 계약 앵커: `ISSUES_FILTER_RESULTS_PATH + ISSUES_FILTER_FACETS_PATH + ISSUES_LABEL_FACETS_PATH` /
   `d63498d5f` / `[green]`.
+
+## 2026-07-14 00:34 KST — [백엔드] 프론트 Issues 계약 lane 회수
+
+- lane 회수 — `codex/frontend-contract-issues` / `d5c3a34ef` / `origin/dev` ancestor exit 0.
+  canonical merge `692db7f58`, 기존 Issues code `d63498d5f`도 ancestor exit 0이다.
