@@ -1618,9 +1618,31 @@ API 완성: getCatalogItem (1ad595b42)
 - RED `6700875a6`은 당시 route가 없던 endpoint를 대상으로 strict envelope/item, nullable
   `causation_id`, open `payload_summary`, 불투명 cursor, 1~200 limit, AbortSignal과 422 오류
   계약을 먼저 고정했다.
-- GREEN `9841a5d95`는 `AUDIT_TIMELINE_PATH` 소비 함수와 strict Zod schema를 구현했다.
-  두 커밋 모두 `origin/woonyong/ui-layer-lab` ancestor exit 0이다.
+- GREEN `9841a5d95`는 조회 함수와 strict Zod schema를 구현했다. 계약 증거 보강 커밋
+  `4c2598c4a`는 `AUDIT_TIMELINE_PATH`를 공개 상수로 고정하고 동일 커밋에 public export 계약
+  테스트를 포함했다. 세 커밋 모두 `origin/woonyong/ui-layer-lab` ancestor 검증 대상이다.
 - targeted 1 file / 11 tests와 full `npm run check`가 통과했다. full gate는 106 files /
   768 tests, design guard 317 files, shadcn 482 previews, production build PASS다.
 
-API 완성: getAuditTimeline (9841a5d95)
+API 완성: getAuditTimeline (4c2598c4a)
+
+## 2026-07-13 BQ-017 클러스터 스키마 호환 재검증
+
+- `bfaf03901`에 `ClusterSummary.provider`와
+  `ClusterConnectionStatus.connection_stage`의 optional enum이 명시적으로 열려 있다.
+  두 응답 외피의 `strictObject`는 유지되며 enum 밖 값은 계속 거부한다.
+- `bfaf03901`은 현재 HEAD와 `origin/woonyong/ui-layer-lab`의 ancestor(exit 0)다.
+- `clusters.test.ts`, `cluster-connection.test.ts` targeted 검증은 2 files / 17 tests PASS다.
+
+## 2026-07-13 VP-002 감사 타임라인 화면 완료
+
+- 화면 RED `003a9563a`, API 계약 재앵커 `4c2598c4a`, UI GREEN `fdc921c3d`,
+  상태·테스트 책임 분리 `9bedcdfa5` 순서로 완료했다.
+- Issues 상세는 서버 순서를 그대로 보존하며 opaque cursor를 누적한다. scope 전환과 unmount에서
+  진행 중 요청을 취소하고, 다음 페이지 실패 시 이미 표시한 감사 이벤트는 유지한다.
+- `npm run check` PASS (2026-07-13 14:00 KST): TypeScript / ESLint, Vitest 108 files /
+  773 tests, product design guard 326 files, shadcn source audit 482 previews,
+  Vite production build 14,529 modules.
+- `npm run visual-product` PASS: 35 isolated scenarios, exact scenario API requests,
+  unexpected feature network / WebSocket 0건. 증거 화면은
+  `references/ui-layer-lab/output/playwright/product-issues-authenticated-detail-desktop-light.png`다.
