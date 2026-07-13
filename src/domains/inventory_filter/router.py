@@ -222,10 +222,10 @@ async def list_resource_label_facets(
         filters=filters,
         require_labels=True,
     )
-    selected_status = _selected_label_status(
-        context,
-        selected_match_count=int(result["selected_match_count"]),
-    )
+    selected_match_counts = {
+        (str(item["key"]), str(item["value"])): int(item["match_count"])
+        for item in result.get("selected_match_counts", [])
+    }
     return LabelFacetPageResponse(
         surface=surface,
         items=[
@@ -243,7 +243,10 @@ async def list_resource_label_facets(
                 "key": key,
                 "value": value,
                 "selector": f"{key}={value}",
-                "status": selected_status,
+                "status": _selected_label_status(
+                    context,
+                    selected_match_count=selected_match_counts.get((key, value), 0),
+                ),
             }
             for key, value in filters.labels
         ],
@@ -430,6 +433,7 @@ async def _page_state(
             facet_query=facet_query,
         )
         decoded = codec.decode(cursor, expected=scope)
+        position = _validated_cursor_position(surface, decoded.position)
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=INVALID_REQUEST_DETAIL) from exc
     context, latest = await asyncio.gather(
@@ -441,9 +445,34 @@ async def _page_state(
     return PageState(
         context=context,
         latest_context=latest,
-        position=decoded.position,
+        position=position,
         scope=scope,
     )
+
+
+def _validated_cursor_position(surface: str, position: Mapping[str, Any]) -> dict[str, Any]:
+    if surface == "resources:list":
+        required = (
+            "cluster_id",
+            "namespace",
+            "resource_type",
+            "kind",
+            "name",
+            "inventory_key",
+        )
+    elif surface == "resources:label-facets":
+        required = ("key", "value")
+    elif surface == "resources:facet:namespaces":
+        required = ("cluster_id", "namespace")
+    elif surface in {"resources:facet:clusters", "resources:facet:applications"}:
+        required = ("value",)
+    else:
+        raise ValueError("cursor surface is invalid")
+    if set(position) != set(required) or any(
+        not isinstance(position[key], str) or not position[key] for key in required
+    ):
+        raise ValueError("cursor position is invalid")
+    return {key: str(position[key]) for key in required}
 
 
 async def _snapshot_context(

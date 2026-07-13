@@ -327,14 +327,9 @@ def _summary(kubernetes: JsonObject, *, resources_complete: bool) -> JsonObject:
     return summary
 
 
-def _resources_complete(kubernetes: JsonObject) -> bool:
-    collection_limits = _mapping(kubernetes.get("collection_limits"))
-    if collection_limits.get("truncated") is True:
-        return False
-    provider_status = _mapping(kubernetes.get("provider_status"))
-    if not provider_status:
-        return False
-    return all(
-        isinstance(value, dict) and str(value.get("status") or "").casefold() == "success"
-        for value in provider_status.values()
-    )
+def _resources_complete(_kubernetes: JsonObject) -> bool:
+    # This translator consumes evidence-job results. KubernetesSnapshotQuery is scoped to
+    # one namespace and may also carry a label selector, so provider success proves query
+    # success rather than full-cluster coverage. A dedicated authoritative sweep contract
+    # must be introduced before this path may destructively replace cluster inventory.
+    return False

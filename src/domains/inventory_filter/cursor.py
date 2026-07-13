@@ -98,7 +98,7 @@ class FilterCursorCodec:
             expires_at = payload.get("expires_at")
             if isinstance(expires_at, bool) or not isinstance(expires_at, int):
                 raise ValueError(INVALID_CURSOR)
-            if expires_at < int(self._now()):
+            if expires_at <= int(self._now()):
                 raise ValueError("cursor expired")
             scope = CursorScope(
                 workspace_id=_required_text(payload, "workspace_id"),
