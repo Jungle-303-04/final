@@ -724,6 +724,13 @@ def test_rca_test_bundle_filters_matched_entries_to_current_pod() -> None:
                                 ),
                             }
                         ],
+                        "line_count": 1,
+                        "pattern_counts": {
+                            "missing_env": 1,
+                            "permission_denied_startup": 0,
+                        },
+                        "severity_counts": {"critical": 1},
+                        "trace_ids": ["aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"],
                     },
                     {
                         "stream": {
@@ -734,12 +741,28 @@ def test_rca_test_bundle_filters_matched_entries_to_current_pod() -> None:
                         "values": [
                             {
                                 "timestamp": "1751871601000000000",
-                                "line": "FATAL: startup failed",
+                                "line": "FATAL: permission denied opening /data",
                             }
                         ],
+                        "line_count": 1,
+                        "pattern_counts": {
+                            "missing_env": 0,
+                            "permission_denied_startup": 1,
+                        },
+                        "severity_counts": {"critical": 1},
+                        "trace_ids": ["bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"],
                     },
                 ],
                 "line_count": 2,
+                "pattern_counts": {
+                    "missing_env": 1,
+                    "permission_denied_startup": 1,
+                },
+                "severity_counts": {"critical": 2},
+                "trace_ids": [
+                    "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                    "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                ],
                 "matched_entries": [
                     {
                         "timestamp": "1751871600000000000",
@@ -759,8 +782,8 @@ def test_rca_test_bundle_filters_matched_entries_to_current_pod() -> None:
                         "pod": current_pod,
                         "container": "app",
                         "severity": "critical",
-                        "message": "FATAL: startup failed",
-                        "matched_patterns": ["app_startup_failure"],
+                        "message": "FATAL: permission denied opening /data",
+                        "matched_patterns": ["permission_denied_startup"],
                         "line_truncated": False,
                     },
                 ],
@@ -791,11 +814,17 @@ def test_rca_test_bundle_filters_matched_entries_to_current_pod() -> None:
             "pod": current_pod,
             "container": "app",
             "severity": "critical",
-            "message": "FATAL: startup failed",
-            "matched_patterns": ["app_startup_failure"],
+            "message": "FATAL: permission denied opening /data",
+            "matched_patterns": ["permission_denied_startup"],
             "line_truncated": False,
         }
     ]
+    assert entries[0]["pattern_counts"] == {
+        "missing_env": 0,
+        "permission_denied_startup": 1,
+    }
+    assert entries[0]["severity_counts"] == {"critical": 1}
+    assert entries[0]["trace_ids"] == ["bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"]
 
 
 def test_rca_test_bundle_rejects_log_stream_without_pod_identity() -> None:

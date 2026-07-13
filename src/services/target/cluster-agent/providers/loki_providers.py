@@ -409,6 +409,10 @@ class LokiLogsProvider:
         for item in result:
             stream = item.get("stream", {})
             stream = stream if isinstance(stream, dict) else {}
+            stream_pattern_counts = empty_pattern_counts()
+            stream_severity_counts = empty_severity_counts()
+            stream_trace_ids: list[str] = []
+            stream_seen_trace_ids: set[str] = set()
             values = []
             for raw_entry in item.get("values", []):
                 raw_line = raw_entry[1] if len(raw_entry) >= 2 else None
@@ -427,6 +431,15 @@ class LokiLogsProvider:
                         severity_counts,
                         trace_ids,
                         seen_trace_ids,
+                        severity=severity,
+                        patterns=patterns,
+                    )
+                    update_log_summaries(
+                        line,
+                        stream_pattern_counts,
+                        stream_severity_counts,
+                        stream_trace_ids,
+                        stream_seen_trace_ids,
                         severity=severity,
                         patterns=patterns,
                     )
@@ -461,6 +474,10 @@ class LokiLogsProvider:
                 {
                     "stream": stream,
                     "values": values,
+                    "line_count": len(values),
+                    "pattern_counts": stream_pattern_counts,
+                    "severity_counts": stream_severity_counts,
+                    "trace_ids": stream_trace_ids,
                 }
             )
 

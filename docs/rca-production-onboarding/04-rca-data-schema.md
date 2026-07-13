@@ -376,9 +376,9 @@ RCA evidence item:
 | `entries[].streams[].values[].line_truncated` | boolean | provider 단계에서 line이 4096자 제한으로 잘렸으면 true다. |
 | `entries[].streams[].values[].original_line_length` | number | provider 단계에서 line이 잘렸을 때의 제한 전 마스킹된 line 길이다. |
 | `entries[].line_count` | number | namespace 필터 후 남은 stream value 개수를 계산한다. |
-| `entries[].pattern_counts` | object | provider가 수집 시 계산한 장애 pattern별 line 개수다. namespace 필터 후 다시 계산하지 않는다. |
-| `entries[].severity_counts` | object | provider가 수집 시 계산한 severity별 line 개수다. namespace 필터 후 다시 계산하지 않는다. |
-| `entries[].trace_ids` | list<string> | provider가 수집 시 추출한 안전한 trace id 목록이다. namespace 필터 후 다시 계산하지 않는다. |
+| `entries[].pattern_counts` | object | 선택된 stream 기준으로 다시 합산한 장애 pattern별 line 개수다. legacy stream summary가 없으면 provider result 값을 유지할 수 있다. |
+| `entries[].severity_counts` | object | 선택된 stream 기준으로 다시 합산한 severity별 line 개수다. legacy stream summary가 없으면 provider result 값을 유지할 수 있다. |
+| `entries[].trace_ids` | list<string> | 선택된 stream에서 추출된 안전한 trace id 목록이다. legacy stream summary가 없으면 provider result 값을 유지할 수 있다. |
 | `entries[].redaction_summary` | object | provider redaction 적용 여부, redacted line 개수, truncated line 개수다. namespace 필터 후 다시 계산하지 않는다. |
 
 Loki provider는 RCA가 로그 문맥을 읽을 수 있도록 `line` 필드는 유지한다.
@@ -484,6 +484,7 @@ RCA evidence item:
 | `pod_statuses` | list<object> | owned Pod phase, ready, condition 샘플 요약이다. |
 | `containers[].name` | string | container 이름이다. |
 | `containers[].image` | string | 현재 cluster에서 보이는 container image다. |
+| `containers[].ports` | list<object> | container `ports[]`의 `name`, `container_port`, `protocol` 요약이다. Service targetPort와 probe port 비교에 쓴다. hostPort/hostIP는 넣지 않는다. |
 | `containers[].readiness_probe` | object | readiness probe 요약이다. |
 | `containers[].liveness_probe` | object | liveness probe 요약이다. |
 | `containers[].startup_probe` | object | startup probe 요약이다. |

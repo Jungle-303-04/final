@@ -157,6 +157,7 @@ def container_summary_snapshot(container: JsonObject) -> JsonObject:
     return {
         "name": container.get("name"),
         "image": container.get("image"),
+        "ports": container_port_snapshots(container),
         "readiness_probe": probe_snapshot(container.get("readinessProbe")),
         "liveness_probe": probe_snapshot(container.get("livenessProbe")),
         "startup_probe": probe_snapshot(container.get("startupProbe")),
@@ -188,6 +189,22 @@ def resource_snapshot(container: JsonObject) -> JsonObject:
             "limits": compact_dict(limits),
         }
     )
+
+
+def container_port_snapshots(container: JsonObject) -> list[JsonObject]:
+    """Return declared container ports for Service and probe checks."""
+    ports: list[JsonObject] = []
+    for port in list_items(container.get("ports")):
+        snapshot = compact_dict(
+            {
+                "name": port.get("name"),
+                "container_port": port.get("containerPort"),
+                "protocol": port.get("protocol"),
+            }
+        )
+        if snapshot:
+            ports.append(snapshot)
+    return ports
 
 
 def persistent_volume_claim_refs(template_spec: JsonObject) -> list[JsonObject]:

@@ -109,6 +109,10 @@ def test_loki_logs_are_normalized_into_agent_evidence_shape() -> None:
     assert validated.logs[0]["line_count"] == 1
     assert validated.logs[0]["streams"][0]["stream"]["namespace"] == "target"
     assert validated.logs[0]["streams"][0]["values"][0]["line"] == "node_runtime_sample"
+    assert validated.logs[0]["streams"][0]["line_count"] == 1
+    assert validated.logs[0]["streams"][0]["pattern_counts"]["probe_failed"] == 0
+    assert validated.logs[0]["streams"][0]["severity_counts"]["unknown"] == 1
+    assert validated.logs[0]["streams"][0]["trace_ids"] == []
     assert validated.logs[0]["pattern_counts"]["probe_failed"] == 0
     assert validated.logs[0]["severity_counts"]["unknown"] == 1
     assert validated.logs[0]["trace_ids"] == []
@@ -190,6 +194,13 @@ def test_loki_logs_redact_sensitive_values_and_add_rca_summaries() -> None:
         "ERROR missing required env DATABASE_URL",
     ]
     assert normalized["line_count"] == 7
+    stream_summary = normalized["streams"][0]
+    assert stream_summary["line_count"] == 7
+    assert stream_summary["pattern_counts"]["probe_failed"] == 1
+    assert stream_summary["pattern_counts"]["missing_env"] == 1
+    assert stream_summary["severity_counts"]["critical"] == 1
+    assert stream_summary["severity_counts"]["error"] == 3
+    assert stream_summary["trace_ids"] == [trace_id]
     assert normalized["pattern_counts"]["app_port_bind_failed"] == 1
     assert normalized["pattern_counts"]["permission_denied_startup"] == 1
     assert normalized["pattern_counts"]["missing_env"] == 1

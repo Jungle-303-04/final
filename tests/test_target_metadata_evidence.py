@@ -495,6 +495,14 @@ def test_metadata_provider_collects_one_deployment_snapshot(monkeypatch) -> None
                                     {
                                         "name": "app",
                                         "image": "repo/checkout:v2",
+                                        "ports": [
+                                            {
+                                                "name": "http",
+                                                "containerPort": 8080,
+                                                "protocol": "TCP",
+                                                "hostPort": 30080,
+                                            }
+                                        ],
                                         "resources": {
                                             "requests": {
                                                 "cpu": "100m",
@@ -1243,6 +1251,14 @@ def test_metadata_provider_collects_one_deployment_snapshot(monkeypatch) -> None
         }
     ]
     assert snapshot["containers"][0]["image"] == "repo/checkout:v2"
+    assert snapshot["containers"][0]["ports"] == [
+        {
+            "name": "http",
+            "container_port": 8080,
+            "protocol": "TCP",
+        }
+    ]
+    assert "hostPort" not in str(snapshot["containers"][0]["ports"])
     assert snapshot["containers"][0]["readiness_probe"] == {
         "path": "/ready",
         "port": 8080,
@@ -1613,6 +1629,13 @@ def test_metadata_provider_collects_namespace_deployment_snapshots(monkeypatch) 
                                             {
                                                 "name": "app",
                                                 "image": "repo/shop:v3",
+                                                "ports": [
+                                                    {
+                                                        "name": "http",
+                                                        "containerPort": 8080,
+                                                        "protocol": "TCP",
+                                                    }
+                                                ],
                                                 "resources": {
                                                     "requests": {
                                                         "cpu": "50m",
@@ -1914,6 +1937,13 @@ def test_metadata_provider_collects_namespace_deployment_snapshots(monkeypatch) 
         "port": 8080,
         "timeout_seconds": 1,
     }
+    assert snapshot["containers"][0]["ports"] == [
+        {
+            "name": "http",
+            "container_port": 8080,
+            "protocol": "TCP",
+        }
+    ]
     assert snapshot["containers"][0]["resources"] == {"requests": {"cpu": "50m", "memory": "128Mi"}}
     assert "env_refs" not in snapshot["containers"][0]
     assert "env_from_refs" not in snapshot["containers"][0]
