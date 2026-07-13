@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
 from typing import Any
 
 from conftest import load_service, run_handler, subjects_of
@@ -12,6 +13,7 @@ from domains.rca.events import (
     EvidenceItem,
     IncidentRecord,
     RcaAiFallbackRequestedBody,
+    RcaAnalysisBlockedBody,
 )
 
 
@@ -107,23 +109,53 @@ def llm_candidates_payload() -> dict[str, Any]:
     return {
         "candidates": [
             {
-                "cause_id": "llm-oom-pressure",
-                "title": "메모리 한계 초과",
-                "reason": "메모리 사용량이 한계에 근접해 OOM 재시작이 의심됩니다.",
-                "expected_evidence": ["kubernetes", "metrics"],
-                "checks": ["container_memory_limit"],
+                "cause_id": "oom_killed",
+                "title": "LLM이 지어낸 제목은 신뢰하지 않음",
+                "reason": "LLM은 catalog cause ID만 hypothesis로 제안합니다.",
+                "expected_evidence": ["kubernetes", "metrics", "logs"],
+                "checks": ["llm_authored_check_must_be_ignored"],
                 "confidence": 0.8,
             },
             {
-                "cause_id": "llm-bad-rollout",
-                "title": "잘못된 배포",
-                "reason": "최근 rollout 이후 실패가 시작됐을 수 있습니다.",
+                "cause_id": "wrong_image_tag",
+                "title": "LLM image title",
+                "reason": "Catalog validation is still required.",
                 "expected_evidence": ["kubernetes"],
-                "checks": ["rollout_history"],
+                "checks": ["llm_check"],
                 "confidence": 0.4,
             },
         ]
     }
+
+
+def source_names_only_oom_body() -> RcaAiFallbackRequestedBody:
+    """OOM catalog source/name은 모두 있지만 OOM 내용 신호는 없는 조작 번들."""
+    bundle = EvidenceBundle(
+        incident_id="incident-1",
+        items=[
+            EvidenceItem(
+                source="kubernetes",
+                name="cluster_resource_state",
+                value={"pods": [{"terminated_reasons": [], "containers": []}]},
+                summary="pod state collected without an OOM termination",
+            ),
+            EvidenceItem(
+                source="metrics",
+                name="telemetry_metrics",
+                value={"memory": "normal"},
+                summary="memory telemetry exists",
+            ),
+            EvidenceItem(
+                source="logs",
+                name="related_logs",
+                value={"entries": [{"line": "application is healthy"}]},
+                summary="logs exist without an OOM message",
+            ),
+        ],
+        missing_evidence=[],
+        complete=True,
+    )
+    return replace(fallback_body(), evidence_bundle=bundle, missing_evidence=[])
 
 
 def test_fallback_event_yields_candidates_planned_with_ai_source() -> None:
@@ -145,8 +177,18 @@ def test_fallback_event_yields_candidates_planned_with_ai_source() -> None:
     assert planned.evidence_bundle == body.evidence_bundle
     # rule_missing 이 비어 있어야 analyze-worker 가 근거 매칭 평가를 수행한다.
     assert planned.rule_missing is None
-    assert [c.candidate_id for c in planned.candidates] == ["llm-oom-pressure", "llm-bad-rollout"]
+    assert [c.candidate_id for c in planned.candidates] == ["oom_killed", "wrong_image_tag"]
     assert {c.source for c in planned.candidates} == {"ai_fallback"}
+    # LLM 텍스트가 아니라 실제 catalog 계약(title/evidence/checks/signals)을 사용한다.
+    oom = planned.candidates[0]
+    assert oom.title == "컨테이너 OOMKilled"
+    assert oom.expected_evidence == [
+        "kubernetes:cluster_resource_state",
+        "metrics:telemetry_metrics",
+        "logs:related_logs",
+    ]
+    assert oom.checks != ["llm_authored_check_must_be_ignored"]
+    assert oom.signals
     # 프롬프트에는 증상과 증거 요약이 실린다(원문 value 는 싣지 않음).
     assert "UnknownFailure" in llm.prompts[0]
     assert "memory usage near limit" in llm.prompts[0]
@@ -156,20 +198,35 @@ def test_fallback_event_yields_candidates_planned_with_ai_source() -> None:
     assert db.llm_samples[0].correlation_id == "corr-1"
 
 
-def test_ai_candidates_flow_through_rule_evaluation_path() -> None:
-    """LLM 후보가 rule 후보와 같은 analyze-worker 평가를 통과하는지 확인."""
+def test_ai_candidate_source_names_without_catalog_signal_cannot_complete() -> None:
+    """source 이름만 나열한 LLM hypothesis는 내용 signal 없이는 확정되지 않는다."""
     fallback_worker = load_service("ai/ai-fallback-worker")
     analyze_worker = load_service("ai/analyze-worker")
+    rca_worker = load_service("ai/rca-worker")
     fallback_worker.llm_client = _ScriptedJsonLlm(llm_candidates_payload())
 
-    planned = run_handler(fallback_worker.on_ai_fallback_requested, fallback_body())[0]
+    planned = run_handler(
+        fallback_worker.on_ai_fallback_requested,
+        source_names_only_oom_body(),
+    )[0]
     evaluated = run_handler(analyze_worker.on_candidates_planned, planned)[0]
 
     assert evaluated.__subject__ == "rca.candidates.evaluated"
     by_id = {evaluation.candidate_id: evaluation for evaluation in evaluated.evaluations}
-    # kubernetes+metrics 근거가 수집돼 있으므로 첫 후보는 실제 점수를 받는다.
-    assert by_id["llm-oom-pressure"].score == 1.0
-    assert by_id["llm-oom-pressure"].supporting_evidence == ["kubernetes", "metrics"]
+    oom = by_id["oom_killed"]
+    assert oom.score < 1.0
+    assert oom.supporting_evidence == [
+        "kubernetes:cluster_resource_state",
+        "logs:related_logs",
+        "metrics:telemetry_metrics",
+    ]
+    assert oom.missing_evidence == ["signal:oom_evidence"]
+
+    result = rca_worker.pipeline.complete_body(evaluated)
+
+    assert isinstance(result, RcaAnalysisBlockedBody)
+    assert result.reason_code == "insufficient_evidence"
+    assert result.__subject__ == "rca.analysis_blocked"
 
 
 def test_llm_garbage_json_yields_nothing() -> None:
@@ -183,6 +240,22 @@ def test_llm_garbage_json_yields_nothing() -> None:
     for garbage in ("plain text", {"candidates": "nope"}, {"candidates": [{"title": "no id"}]}):
         worker.llm_client = _ScriptedJsonLlm(garbage)
         assert run_handler(worker.on_ai_fallback_requested, fallback_body()) == []
+
+    # catalog 밖 cause_id는 그럴듯한 텍스트가 있어도 hypothesis로 채택하지 않는다.
+    worker.llm_client = _ScriptedJsonLlm(
+        {
+            "candidates": [
+                {
+                    "cause_id": "invented_by_llm",
+                    "title": "Plausible but unregistered",
+                    "reason": "Collected sources happen to exist",
+                    "expected_evidence": ["kubernetes", "metrics"],
+                    "confidence": 1.0,
+                }
+            ]
+        }
+    )
+    assert run_handler(worker.on_ai_fallback_requested, fallback_body()) == []
 
 
 def test_unconfigured_llm_is_graceful_noop(monkeypatch) -> None:
