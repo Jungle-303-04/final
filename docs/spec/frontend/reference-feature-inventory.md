@@ -205,7 +205,7 @@ last-success 유지, empty issue를 구분한다.
 
 ### 4.9 GitOps
 
-- fleet list는 Argo Application과 Flux Kustomization·HelmRelease를 canonical row로 정규화한다.
+- fleet list는 외부 GitOps Application·Kustomization·HelmRelease를 canonical row로 정규화한다.
 - table/tile 전환, tool scope, sync, health, automation, lifecycle, project, namespace, destination,
   label filter와 sort를 제공한다.
 - row action은 refresh/hard refresh/sync/terminate/suspend/resume 또는 reconcile/sync-with-source다.
@@ -527,7 +527,7 @@ client는 object를 전제로 하므로 이 예외도 P2에서 명시적으로 �
 | `PUT /helm/releases/{ns}/{name}/values` | values + upgrade options | apply result | Values Apply | `source-confirmed` |
 | `DELETE /helm/releases/{ns}/{name}` | uninstall options | uninstall result | uninstall confirm | `source-confirmed` |
 
-Helm write 경로는 현재 runtime의 `helmWrite=false` 때문에 실행하지 않았다. Flux 관리 HelmRelease는 직접
+Helm write 경로는 현재 runtime의 `helmWrite=false` 때문에 실행하지 않았다. 외부 GitOps 관리 HelmRelease는 직접
 upgrade를 노출하지 않고 GitOps detail로 보낸다.
 세 progress stream 모두 `{type:'progress',phase?,message?,detail?}`와 terminal
 `{type:'complete',message,release?}` 또는 `{type:'error',message}`를 전달한다. event ID, sequence,
@@ -537,20 +537,20 @@ heartbeat, resume, reconnect, operation receipt, idempotency key는 없다.
 
 | Method·path | 요청 | 응답 주요 shape | 소비 위치·주기 | 판정 |
 |---|---|---|---|---|
-| `GET /api-resources`, `GET /resource-counts`, `GET /resources/{kind}` | Argo Application, Flux Kustomization·HelmRelease·source kind discovery | raw CR object를 client에서 canonical row로 정규화 | list; count 60s/row 120s | `runtime+source` |
+| `GET /api-resources`, `GET /resource-counts`, `GET /resources/{kind}` | 외부 GitOps Application·Kustomization·HelmRelease·source kind discovery | raw CR object를 client에서 canonical row로 정규화 | list; count 60s/row 120s | `runtime+source` |
 | `GET /gitops/tree/{kind}/{ns-or-_}/{name}` | `group?,namespaces?` | `{root,nodes,edges,warnings?,summary}`; edge `owns|source|dependsOn` | detail Topology, stale 5s | `source-confirmed` |
 | `GET /gitops/insights/{kind}/{ns-or-_}/{name}` | `group?,namespaces?` | `{summary,issues?,changes?,plan?,history?,capabilities?,warnings?,partial?}` | detail Resources/Activity, stale 5s; Running 2s | `source-confirmed` |
-| `POST /flux/{kind}/{ns}/{name}/reconcile` | body 없음 | 즉시 `{message,operation,tool,resource,requestedAt?,source?}` | list/detail action | `source-confirmed` |
-| `POST /flux/{kind}/{ns}/{name}/sync-with-source` | body 없음 | 같은 immediate response | list/detail action | `source-confirmed` |
-| `POST /flux/{kind}/{ns}/{name}/suspend`, `POST /flux/{kind}/{ns}/{name}/resume` | body 없음 | 같은 immediate response | lifecycle action | `source-confirmed` |
-| `POST /argo/applications/{ns}/{name}/sync` | `{resources?,revision?,prune?,dryRun?,force?,applyOnly?,syncOptions?}` | 같은 immediate response | sync dialog/action | `source-confirmed` |
-| `POST /argo/applications/{ns}/{name}/refresh` | `type=hard?`, body 없음 | 같은 immediate response | refresh/hard refresh | `source-confirmed` |
-| `POST /argo/applications/{ns}/{name}/rollback` | `{id,prune?,dryRun?}` | 같은 immediate response | history rollback | `source-confirmed` |
-| `POST /argo/applications/{ns}/{name}/terminate` | body 없음 | 같은 immediate response | running operation action | `source-confirmed` |
-| `POST /argo/applications/{ns}/{name}/suspend`, `POST /argo/applications/{ns}/{name}/resume` | body 없음 | 같은 immediate response | lifecycle action | `source-confirmed` |
+| `POST /gitops/{kind}/{ns}/{name}/reconcile` | body 없음 | 즉시 `{message,operation,tool,resource,requestedAt?,source?}` | list/detail action | `source-confirmed` |
+| `POST /gitops/{kind}/{ns}/{name}/sync-with-source` | body 없음 | 같은 immediate response | list/detail action | `source-confirmed` |
+| `POST /gitops/{kind}/{ns}/{name}/suspend`, `POST /gitops/{kind}/{ns}/{name}/resume` | body 없음 | 같은 immediate response | lifecycle action | `source-confirmed` |
+| `POST /gitops/applications/{ns}/{name}/sync` | `{resources?,revision?,prune?,dryRun?,force?,applyOnly?,syncOptions?}` | 같은 immediate response | sync dialog/action | `source-confirmed` |
+| `POST /gitops/applications/{ns}/{name}/refresh` | `type=hard?`, body 없음 | 같은 immediate response | refresh/hard refresh | `source-confirmed` |
+| `POST /gitops/applications/{ns}/{name}/rollback` | `{id,prune?,dryRun?}` | 같은 immediate response | history rollback | `source-confirmed` |
+| `POST /gitops/applications/{ns}/{name}/terminate` | body 없음 | 같은 immediate response | running operation action | `source-confirmed` |
+| `POST /gitops/applications/{ns}/{name}/suspend`, `POST /gitops/applications/{ns}/{name}/resume` | body 없음 | 같은 immediate response | lifecycle action | `source-confirmed` |
 
-operation receipt·idempotency key·progress cursor endpoint는 없다. Argo는 insights의 Running phase를 2초
-polling하고 Flux는 별도 in-flight 계약이 없다. 또한 UI operation union과 backend가 반환 가능한 rollback
+operation receipt·idempotency key·progress cursor endpoint는 없다. 외부 GitOps Application은 insights의 Running phase를 2초
+polling하고 외부 source controller는 별도 in-flight 계약이 없다. 또한 UI operation union과 backend가 반환 가능한 rollback
 등 일부 operation 문자열 사이 불일치가 소스에 존재한다. 이는 P2에서 숨기지 않고 계약 갭 후보로 평가한다.
 
 ### 7.10 Cost·Settings·기타 overlay
