@@ -63,9 +63,9 @@ spec:
               value: "16"
             - name: DB_POOL_TIMEOUT_SECONDS
               value: "20"
-            # 임시 dev 인증 우회. API 직접 호출 시연이 끝나면 반드시 "0"으로 되돌린다.
+            # dev도 실제 세션 인증을 사용한다. 배포 검증기가 누락·비정상 값을 차단한다.
             - name: DEV_AUTH_BYPASS
-              value: "1"
+              value: "0"
             # 반복 JSON/DB 처리 후 RSS 를 덜 붙잡게 해 OOM 여유를 확보한다.
             - name: MALLOC_ARENA_MAX
               value: "2"

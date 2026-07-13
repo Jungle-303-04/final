@@ -97,5 +97,8 @@ PY
 test -s "${MANAGEMENT_OBJECTS}"
 test -s "${TARGET_OBJECTS}"
 
+uv run python "${ROOT_DIR}/scripts/verify_dev_auth_bypass.py" rendered \
+  --manifest "${MANAGEMENT_MANIFEST}"
+
 echo "management manifest objects: $(wc -l < "${MANAGEMENT_OBJECTS}" | tr -d ' ')"
 echo "target manifest objects: $(wc -l < "${TARGET_OBJECTS}" | tr -d ' ')"
