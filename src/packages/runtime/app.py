@@ -86,6 +86,17 @@ class App:
         subjects, factory = self._resolve()
         WorkerService(self.name, tuple(subjects), factory, bus=bus).run()
 
+    def handler_spec(self) -> Any:
+        """Return the worker runtime spec for an external composition root."""
+        from packages.runtime.worker import EventHandlerSpec
+
+        subjects, factory = self._resolve()
+        return EventHandlerSpec(
+            service_name=self.name,
+            subjects=tuple(subjects),
+            handler_factory=factory,
+        )
+
     def _resolve(self) -> tuple[list[str], Callable[..., Any]]:
         """구독 방식별 (subject 목록, 핸들러 factory) 구성 — 전체구독은 '>' 하나, 타입구독은 subject별 라우터."""
         if self._raw is not None:

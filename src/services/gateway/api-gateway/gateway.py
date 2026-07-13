@@ -50,6 +50,7 @@ from packages.config.constants import Auth, CommandStatus
 from packages.config.constants import Redis as RedisConfig
 from packages.config.logs import CONTEXT_KEY, get_logger
 from packages.config.settings import env
+from packages.contracts.event_bus.interfaces import EventConsumerBus
 from packages.contracts.gateway import routes as gateway_routes
 from packages.contracts.gateway.fields import Gateway
 from packages.contracts.gateway.requests import AgentConnectRequest
@@ -72,7 +73,7 @@ from packages.runtime.metrics import (
 from packages.security.trusted_proxy import assert_trusted_proxy_config_safe
 from packages.storage.database import Database, wait_for_database
 from packages.storage.engine import unit_of_work_or_null
-from packages.storage.sessions import RedisSessionStore, RedisSessionStoreConfig
+from packages.storage.sessions import RedisSessionStore, RedisSessionStoreConfig, SessionStore
 from services.ai.agent.playbooks.cause import registered_cause_profiles
 
 LOGGER = get_logger(__name__)
@@ -105,11 +106,16 @@ def agent_connected_body_from_request(
 
 
 class ApiGateway:
-    def __init__(self) -> None:
+    def __init__(
+        self,
+        *,
+        event_bus: EventConsumerBus | None = None,
+        session_store: SessionStore | None = None,
+    ) -> None:
         self.db = Database()
-        self.bus = NatsEventBus()
+        self.bus = event_bus or NatsEventBus()
         self.events = ApiEventGateway(self.bus, self.db, Settings.SERVICE_NAME)
-        self.sessions = RedisSessionStore(self._session_store_config())
+        self.sessions = session_store or RedisSessionStore(self._session_store_config())
         self.auth = SessionAuthService(self.sessions)
         self.password_auth = PasswordAuthService(self.db, self.sessions)
         self.app = FastAPI(
@@ -670,5 +676,9 @@ class ApiGateway:
             )
 
 
-def create_app() -> FastAPI:
-    return ApiGateway().app
+def create_app(
+    *,
+    event_bus: EventConsumerBus | None = None,
+    session_store: SessionStore | None = None,
+) -> FastAPI:
+    return ApiGateway(event_bus=event_bus, session_store=session_store).app

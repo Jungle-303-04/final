@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import os
 import subprocess
 from pathlib import Path
@@ -11,7 +12,10 @@ from packages.events.bus import NatsEventBus
 from packages.events.in_memory import InMemoryEventBus
 from packages.runtime.controller import (
     AGENT_SERVICE_NAMES,
+    API_GATEWAY_SERVICE_NAME,
+    BorrowedEventBus,
     ControllerProfile,
+    ControllerRuntime,
     build_composition_plan,
     event_bus_for_mode,
     load_worker_apps,
@@ -45,6 +49,12 @@ def test_nats_mode_is_explicit_and_rejects_unknown_mode() -> None:
     assert isinstance(event_bus_for_mode("nats"), NatsEventBus)
     with pytest.raises(ValueError, match="CONTROLLER_EVENT_BUS_MODE"):
         event_bus_for_mode("unknown")
+
+
+def test_oss_profile_rejects_production_auto_merge(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("PRODUCTION_AUTO_MERGE_ENABLED", "true")
+    with pytest.raises(ValueError, match="production auto-merge is forbidden"):
+        ControllerProfile.from_env()
 
 
 def test_composition_plan_assigns_every_discovered_entrypoint_once() -> None:
@@ -137,8 +147,80 @@ def test_oss_install_profile_is_three_components_and_has_no_nats_or_redis() -> N
     manifest = (ROOT / "deploy" / "oss" / "kubeheal-oss.yaml").read_text()
     assert "NATS_URL" not in manifest
     assert "REDIS_URL" not in manifest
-    assert "CONTROLLER_EVENT_BUS_MODE: inprocess" in manifest
-    assert 'AGENT_DIRECT_COMMANDS_ENABLED: "false"' in manifest
-    assert "AGENT_ACCESS_MODE: read_only" in manifest
-    assert "REMEDIATION_DELIVERY_MODE: pull_request" in manifest
-    assert 'PRODUCTION_AUTO_MERGE_ENABLED: "false"' in manifest
+    controller_env = {
+        item["name"]: item.get("value")
+        for item in workloads[("Deployment", "kubeheal-controller")]["spec"]["template"]["spec"][
+            "containers"
+        ][0]["env"]
+    }
+    agent_env = {
+        item["name"]: item.get("value")
+        for item in workloads[("DaemonSet", "kubeheal-agent")]["spec"]["template"]["spec"][
+            "containers"
+        ][0]["env"]
+    }
+    assert controller_env["CONTROLLER_EVENT_BUS_MODE"] == "inprocess"
+    assert controller_env["AGENT_ACCESS_MODE"] == "read_only"
+    assert controller_env["REMEDIATION_DELIVERY_MODE"] == "pull_request"
+    assert controller_env["PRODUCTION_AUTO_MERGE_ENABLED"] == "false"
+    assert agent_env["AGENT_ACCESS_MODE"] == "read_only"
+    assert agent_env["AGENT_DIRECT_COMMANDS_ENABLED"] == "false"
+
+
+def test_controller_injects_borrowed_bus_and_memory_sessions_into_gateway(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv(
+        "DATABASE_URL",
+        "postgresql+psycopg://kubeheal:kubeheal@127.0.0.1:55432/kubeheal",
+    )
+    runtime = ControllerRuntime(ROOT)
+    loaded = next(item for item in runtime.loaded if item.service.name == API_GATEWAY_SERVICE_NAME)
+    owner = InMemoryEventBus()
+    borrowed = BorrowedEventBus(owner)
+    sessions = runtime._memory_sessions()
+
+    server = runtime._http_server(loaded, borrowed, sessions)
+    app = server.config.app
+
+    assert app.state.events.events.publisher is borrowed
+    assert app.state.auth.sessions is sessions
+
+
+def test_bundle_verify_command_validates_and_hashes_canonical_json(tmp_path: Path) -> None:
+    bundle = tmp_path / "bundle.json"
+    bundle.write_text(
+        json.dumps(
+            {
+                "meta": {
+                    "correlation_id": "corr-1",
+                    "incident_id": None,
+                    "cluster_id": "cluster-1",
+                    "workspace_id": "ws-1",
+                    "created_at": None,
+                },
+                "diagnosis": {
+                    "root_cause": "insufficient_evidence",
+                    "confidence": None,
+                    "supporting_evidence": [],
+                    "missing_evidence": ["signal"],
+                    "supporting_evidence_refs": [],
+                    "missing_evidence_checks": [{"check_id": "signal"}],
+                    "selected_candidate_id": None,
+                },
+                "remediation": None,
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    result = subprocess.run(
+        ["uv", "run", "python", "scripts/verify-remediation-bundle.py", str(bundle)],
+        cwd=ROOT,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert len(result.stdout.strip()) == 64

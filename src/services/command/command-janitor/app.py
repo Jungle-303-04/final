@@ -9,6 +9,7 @@ from domains.command.events import CommandCompletedBody
 from domains.command.repository import QUEUED_COMMAND_TTL_SECONDS
 from packages.config.logs import get_logger
 from packages.config.settings import env
+from packages.contracts.event_bus.interfaces import EventConsumerBus
 from packages.events.bus import NatsEventBus, RecordedEventClient
 from packages.events.context import event_workspace
 from packages.runtime.async_db import AsyncDb
@@ -59,10 +60,10 @@ async def sweep_database_retention(db: Any) -> int:
     return result.total
 
 
-async def run() -> None:
+async def run(event_bus: EventConsumerBus | None = None) -> None:
     db = Database()
     async_db = AsyncDb(db)
-    bus = NatsEventBus()
+    bus = event_bus or NatsEventBus()
     stopping = asyncio.Event()
     loop = asyncio.get_running_loop()
     for item in (signal.SIGTERM, signal.SIGINT):

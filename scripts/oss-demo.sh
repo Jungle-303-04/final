@@ -2,6 +2,7 @@
 set -euo pipefail
 
 CLUSTER_NAME="${DEMO_CLUSTER_NAME:-kubeheal-demo}"
+KIND_NODE_IMAGE="${DEMO_KIND_NODE_IMAGE:-kindest/node:v1.32.2}"
 NAMESPACE="${DEMO_NAMESPACE:-kubeheal-demo}"
 WORKLOAD="${DEMO_WORKLOAD:-checkout-api}"
 GOOD_IMAGE="${DEMO_GOOD_IMAGE:-nginx:1.27-alpine}"
@@ -38,7 +39,7 @@ cleanup() {
 trap cleanup EXIT
 
 if ! kind get clusters | grep -Fxq "${CLUSTER_NAME}"; then
-  kind create cluster --name "${CLUSTER_NAME}" --wait 120s
+  kind create cluster --name "${CLUSTER_NAME}" --image "${KIND_NODE_IMAGE}" --wait 120s
 fi
 kubectl config use-context "kind-${CLUSTER_NAME}" >/dev/null
 scene "kind-cluster-ready"
@@ -47,9 +48,13 @@ kubectl create namespace "${NAMESPACE}" --dry-run=client -o yaml | kubectl apply
 kubectl -n "${NAMESPACE}" create deployment "${WORKLOAD}" \
   --image="${GOOD_IMAGE}" --replicas=1 --dry-run=client -o yaml | kubectl apply -f - >/dev/null
 kubectl -n "${NAMESPACE}" rollout status "deployment/${WORKLOAD}" --timeout=180s >/dev/null
+CONTAINER_NAME="$(
+  kubectl -n "${NAMESPACE}" get deployment "${WORKLOAD}" \
+    -o jsonpath='{.spec.template.spec.containers[0].name}'
+)"
 
 kubectl -n "${NAMESPACE}" set image \
-  "deployment/${WORKLOAD}" "${WORKLOAD}=${BAD_IMAGE}" >/dev/null
+  "deployment/${WORKLOAD}" "${CONTAINER_NAME}=${BAD_IMAGE}" >/dev/null
 if kubectl -n "${NAMESPACE}" rollout status "deployment/${WORKLOAD}" --timeout=15s >/dev/null 2>&1; then
   echo "bad rollout unexpectedly became ready" >&2
   exit 1
@@ -57,6 +62,73 @@ fi
 scene "bad-rollout-observed"
 
 mkdir -p "${ARTIFACT_DIR}"
+python3 - "${ARTIFACT_DIR}/remediation-bundle.json" <<'PY'
+import json
+import sys
+
+path = sys.argv[1]
+bundle = {
+    "meta": {
+        "correlation_id": "demo-bad-rollout",
+        "incident_id": "demo-incident",
+        "cluster_id": "kubeheal-demo",
+        "workspace_id": "demo",
+        "created_at": None,
+    },
+    "diagnosis": {
+        "root_cause": "image_pull_failure",
+        "confidence": 1.0,
+        "supporting_evidence": ["deployment rollout did not become ready"],
+        "missing_evidence": [],
+        "supporting_evidence_refs": [
+            {"source": "kubernetes", "name": "deployment-rollout-status"}
+        ],
+        "missing_evidence_checks": [],
+        "selected_candidate_id": "image_pull_failure",
+    },
+    "remediation": {
+        "status": "selected",
+        "selected_action_id": "restore-verified-image",
+        "selected_by": "rule",
+        "candidates": [
+            {
+                "action_id": "restore-verified-image",
+                "title": "Restore verified image",
+                "description": "Return the demo Deployment to its previous ready image.",
+                "draft": {
+                    "action_type": "image_rollback",
+                    "namespace": "kubeheal-demo",
+                    "resource_kind": "Deployment",
+                    "resource_name": "checkout-api",
+                    "reason": "bad image rollout",
+                    "risk_level": "low",
+                    "dry_run": False,
+                    "source_evidence": ["deployment-rollout-status"],
+                    "params": {"image": "nginx:1.27-alpine"},
+                },
+                "route": "pull_request",
+                "rank": 1,
+                "score": 1.0,
+                "risk_level": "low",
+                "blast_radius": "one Deployment in demo namespace",
+                "approval_required": True,
+                "prerequisites": ["previous image was ready"],
+                "validation_checks": ["rollout ready"],
+                "rollback_plan": "restore the failed revision only after explicit review",
+                "evidence_refs": ["deployment-rollout-status"],
+            }
+        ],
+        "evidence_ref": "deployment-rollout-status",
+    },
+}
+with open(path, "w", encoding="utf-8") as handle:
+    handle.write(json.dumps(bundle, sort_keys=True, separators=(",", ":")))
+    handle.write("\n")
+PY
+BUNDLE_HASH="$(uv run python scripts/verify-remediation-bundle.py \
+  "${ARTIFACT_DIR}/remediation-bundle.json")"
+printf '%s  %s\n' "${BUNDLE_HASH}" "remediation-bundle.json" \
+  >"${ARTIFACT_DIR}/remediation-bundle.sha256"
 printf '%s\n' \
   '# Mock rollback PR: restore verified image' \
   '' \
@@ -72,19 +144,20 @@ printf '%s\n' \
   '| Blast radius | one Deployment in demo namespace |' \
   '| Rollback | restore previous image |' \
   '| Post-verification | rollout ready |' \
+  "| RemediationBundle SHA-256 | ${BUNDLE_HASH} |" \
   >"${ARTIFACT_DIR}/rollback-pr.md"
 printf '%s\n' \
   'spec:' \
   '  template:' \
   '    spec:' \
   '      containers:' \
-  "        - name: ${WORKLOAD}" \
+  "        - name: ${CONTAINER_NAME}" \
   "          image: ${GOOD_IMAGE}" \
   >"${ARTIFACT_DIR}/rollback.patch.yaml"
 scene "mock-rollback-pr-created"
 
 kubectl -n "${NAMESPACE}" set image \
-  "deployment/${WORKLOAD}" "${WORKLOAD}=${GOOD_IMAGE}" >/dev/null
+  "deployment/${WORKLOAD}" "${CONTAINER_NAME}=${GOOD_IMAGE}" >/dev/null
 kubectl -n "${NAMESPACE}" rollout status "deployment/${WORKLOAD}" --timeout=180s >/dev/null
 ready="$(kubectl -n "${NAMESPACE}" get deployment "${WORKLOAD}" -o jsonpath='{.status.readyReplicas}')"
 if [[ "${ready}" != "1" ]]; then

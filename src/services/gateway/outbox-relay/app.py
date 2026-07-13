@@ -6,6 +6,7 @@ from pathlib import Path
 
 from packages.config.logs import CONTEXT_KEY, get_logger
 from packages.config.settings import env
+from packages.contracts.event_bus.interfaces import EventConsumerBus
 from packages.events.bus import NatsEventBus
 from packages.runtime.relay import OutboxRelay
 from packages.runtime.service import AsyncService
@@ -31,9 +32,9 @@ def relay_source_filter(raw: str) -> str | None:
     return value
 
 
-async def run() -> None:
+async def run(event_bus: EventConsumerBus | None = None) -> None:
     db = Database()
-    bus = NatsEventBus()
+    bus = event_bus or NatsEventBus()
     stopping = asyncio.Event()
     loop = asyncio.get_running_loop()
     for item in (signal.SIGTERM, signal.SIGINT):
