@@ -519,7 +519,7 @@ desired state 자체의 상태는 `TargetDesiredStateStatus.ACTIVE`(`"active"`) 
 
 ### 4. agent 정책 배포
 1. 관리자: `PUT /clusters/{cluster_id}/policy` — path와 body의 `cluster_id` 불일치 시 409. 기존 정책(없으면 `default_agent_policy`)에 `merge_agent_policy`로 머지 후 `upsert_cluster_policy`. generation이 기존 이하이면 `ValueError` → 409. registration settings 또는 기존 policy가 role=`management`이면 payload가 `cluster_role`을 명시적으로 `target`으로 바꾸거나 bootstrap/desired_state resources를 추가할 때만 HTTP 400 `{code:"management_readonly"}`로 거부한다. evidence provider 간격처럼 읽기 전용 수집 정책만 바꾸는 payload는 허용하되, 저장 직전 `freeze_management_policy`로 `cluster_role="management"`와 빈 write/command policy를 다시 강제한다.
-2. 관리자: `PUT /clusters/{cluster_id}/scheduling-profiles` — 기존 policy의 generation을 1 증가시키고 `scheduling` 섹션만 교체한다. 특정 네임스페이스 이름에 고정하지 않고 profile selector로 적용 대상을 고른다. 예: `namespaces=["sandbox","payments"]`, `labels={"app.kubernetes.io/part-of":"checkout"}`, `workload_names=["orders-api"]`. `pre_pull_images`는 안전한 기본 경로에서는 후보 계약만 저장한다. 실제 사전 pull은 node pool warm capacity, `IfNotPresent`, 또는 별도 privileged image-puller/scheduler를 명시 선택했을 때 운영한다.
+2. 관리자: `PUT /clusters/{cluster_id}/scheduling-profiles` — 기존 policy의 generation을 1 증가시키고 `scheduling` 섹션만 교체한다. 특정 네임스페이스 이름에 고정하지 않고 profile selector로 적용 대상을 고른다. 예: `namespaces=["sandbox","payments"]`, `labels={"app.kubernetes.io/part-of":"checkout"}`, `workload_names=["orders-api"]`. 선택된 workload는 `gitops-fast-lane` PriorityClass와 warm node label 선호/필수 조건을 받을 수 있다. `gitops-control-critical`은 cluster-agent와 제어 경로 pod 전용이므로 fast-lane workload와 병합하지 않는다. `pre_pull_images`는 안전한 기본 경로에서는 후보 계약만 저장한다. 실제 사전 pull은 node pool warm capacity, `IfNotPresent`, 또는 별도 privileged image-puller/scheduler를 명시 선택했을 때 운영한다.
 3. agent: `GET /agent/policy?cluster_id&generation=N` — 토큰 identity의 cluster_id와 다르면 403. 저장 정책이 없거나 `generation <= N`이면 `policy=None`(변경 없음), 아니면 전체 정책 반환.
 4. agent 보고: `POST /agent/policy/status`·`POST /agent/reconcile/status` — body의 `cluster_id`는 **항상 토큰 identity의 값으로 덮어써서** append-only 저장.
 
@@ -534,18 +534,18 @@ Scheduling profile 응답 예시:
       {
         "profile_id": "checkout-fast",
         "enabled": true,
-        "description": "checkout 계열 장애 시연 workload",
+        "description": "checkout 계열 workload",
         "selector": {
           "namespaces": ["sandbox", "payments"],
           "labels": {"app.kubernetes.io/part-of": "checkout"},
           "workload_names": ["orders-api"]
         },
-        "priority_class_name": "gitops-demo-fast",
+        "priority_class_name": "gitops-fast-lane",
         "priority_value": 100000,
         "preemption_policy": "PreemptLowerPriority",
         "placement_mode": "preferred",
         "node_selector": {},
-        "preferred_node_labels": {"workload-tier": "demo-fast"},
+        "preferred_node_labels": {"workload-tier": "fast-lane"},
         "tolerations": [],
         "pre_pull_images": ["ghcr.io/example/orders-api:v1"],
         "termination_grace_period_seconds": 1,

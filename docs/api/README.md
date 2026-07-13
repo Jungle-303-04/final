@@ -260,6 +260,8 @@ provider job 주기, evidence provider 사용 여부, 실패 정책 같은 targe
 `04-update-scheduling-profiles`는 cluster별 fast-lane scheduling profile을 바꾸는 API다.
 profile은 특정 네임스페이스 전용 고정값 사용이 아니라 `namespaces`/`labels`/`workload_names` selector로 선택한다.
 선택된 workload는 PriorityClass, warm node label 선호/필수, optional schedulerName, pre-pull 후보 이미지, 짧은 termination grace 값을 받을 수 있다.
+`gitops-control-critical`은 cluster-agent와 제어 경로 pod용이고, `gitops-fast-lane`은 선택된 target workload용이라 우선순위 경계를 분리한다.
+management 배포 manifest에는 제어 경로용 PriorityClass만 두고, target 설치 manifest에만 fast-lane PriorityClass를 포함한다.
 
 `05-get-scheduling-profiles`는 현재 저장된 scheduling profile만 읽는다.
 프론트는 이 응답으로 fast-lane 토글, 노드 배치 표시, pre-pull 후보 이미지 표시를 구성한다.

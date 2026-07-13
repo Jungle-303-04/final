@@ -115,11 +115,74 @@ format: "[시각] [트랙] 한 줄 상태 + 커밋 hash (있으면)"
 
 [2026-07-13 05:19 KST] [백엔드] F 시도 2/3 실패 — 렌더 산출물을 Helm·Kustomize·멀티문서 원본 경로에 덮어써 소스 훼손·비밀값 노출 가능 — 소스 유형·단일 파일·단일 문서 증거를 전파하고 안전한 raw manifest만 패치하도록 회귀 테스트 후 재검증
 
+[2026-07-13 06:06:51 KST] [프론트] A in_progress — origin/dev 착륙 3건 재검증 및 VP-001·APIQ 동결 해제 착수
+
+## 2026-07-13 06:11 KST — [프론트] A 완료 증거
+
+- 대상: VP-001 착륙 확정, APIQ-029 동결 해제, APIQ-012 claim 가능 갱신.
+- 조율·추적 커밋: `f2da1a266` (`docs/auto` 정본 추적 + A in_progress).
+- 판정 갱신 커밋: `d50a53a75` (VP-001·API queue). 두 커밋을 분리해 canonical branch에 push 완료.
+- full gate: 직전 코드 HEAD `5e3dd16f3`에서 `npm run check` PASS — 94 files / 661 tests,
+  design guard 275 files, shadcn audit 482 previews, Vite production build PASS. 이후 변경은 문서뿐이다.
+- origin 검증 출력 전문:
+
+```text
+$ git merge-base --is-ancestor 44f35234e origin/dev; echo $?
+0
+$ git cat-file -e origin/dev:docs/backend-f-progress.md; echo $?
+0
+$ git cat-file -e origin/dev:src/domains/rca_bundle/router.py; echo $?
+0
+```
+
+- 결과: VP-001 판정 `직결`, APIQ-029 active in_progress, APIQ-012 requested/claim 가능.
+
+[2026-07-13 06:13 KST] [프론트] A2 🔒waiting — 첫 dev→lab 동기화의 사람 GO 요청, merge 실행 없음
+
+## GO-REQUEST [FE-A2]
+
+- 목적: `origin/dev`를 `woonyong/ui-layer-lab`에 최초 단방향 merge.
+- source: `origin/dev` `03e90ddb6d6e50e1b7e39739c20210e28e1dc4a2`.
+- target: `0626d14ec41accbb124e213367371540fb93c275`; merge-base
+  `9fe235e7b03032af7d7ac3b14d05ab0f17306b02`; divergence target-only 206 / source-only 465.
+- `git merge-tree --write-tree HEAD origin/dev` 예측: 총 36 conflict.
+  - 프론트 소유 경로 12건: `docs/spec/frontend/**` 3건, `references/ui-layer-lab/**` 9건 — 수동 해소 대상.
+  - legacy `frontend/**` 15건(파일/디렉터리 충돌 포함) — dev 채택 시 부활 금지 정책과 충돌하므로
+    사람의 명시 판정 필요.
+  - 기타 경로 9건: root/docs/backend/tests — [D-009] 규칙상 dev 채택 대상.
+- 실행 명령: `git merge --no-ff origin/dev`.
+- 실패·취소 명령: `git merge --abort`.
+- 후속 검증: `npm run check` 전체 PASS 및 충돌 해소 목록 기록 전에는 A2 완료 처리 금지.
+- 현재 조치: merge·push·배포 실행 없음. B단계는 정본의 병행 허용 규칙에 따라 진행한다.
+
+[2026-07-13 06:15:14 KST] [프론트] B in_progress — APIQ-029 착륙본 schema·progress·Bruno와 동결 Zod diff 대조 착수
+
 [2026-07-13 06:25 KST] [RCA] `test_fault_snapshot_derives_catalog_symptom_and_plans_candidates[crashloop]` 해소 — 판정: 규칙은 옳고 기대가 낡음(`app_port_bind_failed`, `permission_denied_startup`은 독립 signal/evidence/checks를 가진 정식 CrashLoop 후보이며 기존 순서 보존) / 커밋 `67ce9d700` / 전체 게이트: pytest `1641 passed, 3 skipped, 5 baseline failed`(해소 node 제외), Ruff check PASS·format 기존 2파일만 실패, import-linter 기존 `domains.rca.router -> services` 1계약만 실패
+
+## 2026-07-13 06:27 KST — [프론트] B 완료 증거
+
+- 대상: APIQ-029 `getRemediationBundle`, VP-001 public API anchor.
+- 조율 커밋: `3fd4225a8` (B in_progress, 기존 APIQ-029 lease 유지).
+- 코드 커밋: `97c862da1` (public endpoint/schema/type barrel export + 회귀 테스트).
+- 착륙본 diff: `origin/dev:docs/spec/remediation-bundle.schema.json`, BQ-003 progress 인계,
+  Bruno, router/serializer와 필드·required·nullable·strict/open 경계가 **일치**했다.
+  유일한 불일치는 동결 시 제거된 public barrel export였으며 코드 커밋에서 복원했다.
+- full gate: `npm run check` PASS — TypeScript/ESLint PASS, 94 files / 662 tests,
+  design guard 275 files, shadcn audit 482 previews, Vite production build PASS.
+- canonical anchor 검증:
+
+```text
+$ git merge-base --is-ancestor 97c862da1 origin/woonyong/ui-layer-lab; echo $?
+0
+```
+
+- 제품 화면·adapter 소비는 이 앵커 전까지 0건이었고, 완료 조율 커밋 이후에만 허용한다.
 
 [2026-07-13 06:28 KST] [RCA] `test_fault_snapshot_derives_catalog_symptom_and_plans_candidates[imagepull]` 해소 — 판정: 규칙은 옳고 기대가 낡음(`registry_rate_limited`, `image_platform_mismatch`는 서로 다른 registry 신호를 요구하는 정식 후보이며 기존 3후보 순서 보존) / 커밋 `841617f41` / 전체 게이트: pytest `1642 passed, 3 skipped, 4 baseline failed`(중간에 범위 밖 janitor timing flake 1회는 단독 3/3 PASS 후 전체 재실행 PASS), Ruff check PASS·format 기존 2파일만 실패, import-linter 기존 1계약만 실패
 
 [2026-07-13 06:30 KST] [RCA] `test_fault_snapshot_derives_catalog_symptom_and_plans_candidates[oom]` 해소 — 판정: 규칙은 옳고 기대가 낡음(OOM snapshot은 `CrashLoopBackOff` 룰로 수렴하므로 동일한 7후보 전체를 계획하며 OOM 판별은 `oom_evidence` signal 평가 단계가 담당) / 커밋 `6cfa9c6aa` / 전체 게이트: pytest `1643 passed, 3 skipped, 3 baseline failed`, Ruff check PASS·format 기존 2파일만 실패, import-linter 기존 1계약만 실패
+
+[2026-07-13 06:31:17 KST] [프론트] C in_progress — APIQ-012 receipt claim; APIQ-027 앵커 전 getCommandStatus 소비는 보류
 
 [2026-07-13 06:32 KST] [RCA] `test_fault_snapshot_derives_catalog_symptom_and_plans_candidates[sched-fail]` 해소 — 판정: 규칙은 옳고 기대가 낡음(`node_selector_mismatch`, `untolerated_taint`는 포괄 affinity/taint 후보를 실제 이벤트·metadata 신호로 세분화한 정식 후보이며 `pvc_pending` 앞 카탈로그 순서 보존) / 커밋 `5dcb2f633` / 전체 게이트: pytest `1644 passed, 3 skipped, 2 baseline failed`, Ruff check PASS·format 기존 2파일만 실패, import-linter 기존 1계약만 실패
 
@@ -128,6 +191,34 @@ format: "[시각] [트랙] 한 줄 상태 + 커밋 hash (있으면)"
 [2026-07-13 06:40 KST] [RCA] `test_validate_checks_scenario_adapter_cause_evidence_and_recovery_contracts` 해소 — 판정: 기대가 옳고 검증 규칙이 버그(scenario는 provider `kubernetes`를 선언하고 candidate는 그 하위 named evidence `kubernetes:cluster_resource_state`를 요구하므로 provider 계층으로 비교해야 함; 누락 provider 거부 테스트 유지) / 커밋 `58d9b1ba0` / 전체 게이트: pytest `1646 passed, 3 skipped`, Ruff check PASS·format 기존 2파일만 실패, import-linter 기존 1계약만 실패
 
 [2026-07-13 06:44 KST] [RCA] Ruff format `tests/test_bruno_collection.py`, `tests/test_rca_rule_catalog.py` 해소 — 판정: formatter canonical output과 불일치한 순수 표현 형식(문자열 quote·줄바꿈·comprehension 배치)이며 assertion 의미 불변 / 커밋 `5a9e46a21` / 전체 게이트: pytest `1646 passed, 3 skipped`, Ruff check PASS·format `470 files already formatted`, import-linter 기존 1계약만 실패
+
+## 2026-07-13 06:44 KST — F 완료 증거
+
+- branch: `codex/f-auto-revert-pr`
+- HEAD: `68e94c1486cc289c698a5507629e781812c315d4`
+- commits:
+  - `68e94c148` fix: 되돌림 PR 승인 스냅샷 / 원문 패치 / SCM 권위 검증
+  - `e6d4df1dc` feat: rollout 실패 revert PR / 기본 비활성 / 권위 컨텍스트
+- stat: 14 files changed, 3,075 insertions(+), 46 deletions(-); 신규 파일 5개
+  - `deploy/management/auto-revert-worker.yaml`
+  - `src/services/gitops/auto-revert-worker/app.py`
+  - `tests/test_auto_revert_worker.py`
+  - `src/domains/gitops/source_patch.py`
+  - `tests/test_gitops_source_patch.py`
+- 기능 검증: flag off 무발화, flag on 승인 snapshot 기반 패치, 원문 byte 보존, exact base SHA·SCM provenance·기존 PR 재전달 fail-closed.
+- F 전용 회귀: `203 passed in 4.35s`.
+- 전체 pytest: 기존 RCA baseline 6건만 실패, `1708 passed, 3 skipped`; 신규 실패 0건.
+- 전역 게이트: Ruff lint PASS, compileall PASS, manifest PASS(`management 69`, `target 20`). Ruff format은 기존 2파일만 대상, import-linter는 기존 `domains.rca.router -> services` 1건만 유지.
+- 독립 감사: 보안·계약 감사 모두 P0 0건/P1 0건. GitHub Compare API 300파일 상한은 fail-closed.
+- frozen path·gateway 계약·R-트랙 소유 테스트 변경 0건. merge·push·배포·앵커 0건.
+
+[2026-07-13 06:44 KST] [백엔드] F done — 승인 스냅샷·원문 패치·SCM 권위 검증 완료 `68e94c148`
+
+[2026-07-13 06:44 KST] [프론트] APIQ-012 receipt 완료 — `submitCommand` nullable ID 계약 `d763ab682`; C는 APIQ-027 선행 앵커 대기
+
+[2026-07-13 06:46 KST] [문서] APIQ-012 완료 문서 재검증 — `commands.test.ts` targeted PASS, root `make check` PASS(838 passed, 3 skipped + manifest-check). 별도 UI `npm run check` 재실행은 `apiBoundary` timeout과 `ResourcesPage` 표 조회 실패로 FAIL이므로 full UI PASS로 기록하지 않는다.
+
+[2026-07-13 06:47 KST] [백엔드] C0 in_progress — 신뢰 workspace 봉투·outbox 보존·audit 귀속·가역 마이그레이션 사전 검증
 
 [2026-07-13 06:50 KST] [RCA] import-linter `domains.rca.router -> services` 해소 — 판정: 계약이 옳고 router의 services 직접 import가 역의존 버그; domain은 구조적 rule-profile read port만 선언하고 gateway composition이 service profile을 `app.state`로 주입하도록 교정(계약 완화·ignore 추가 0건) / 커밋 `8ce7449fe` / 전체 게이트: `make test` PASS — Ruff lint PASS, format `470 files already formatted`, import-linter `2 kept, 0 broken`, pytest `1646 passed, 3 skipped`
 
@@ -157,40 +248,22 @@ format: "[시각] [트랙] 한 줄 상태 + 커밋 hash (있으면)"
 
 - 실패 시 롤백: push 전 충돌/검증 실패는 `git merge --abort`; merge commit 생성 후 push 전 gate 실패는 해당 merge commit을 push하지 말고 사람 판단. push 후에는 이력 보존형 `git revert -m 1 <merge_commit>` 후 전체 gate 재검증(강제 push·reset 금지).
 
-## 2026-07-13 06:44 KST — F 완료 증거
-
-- branch: `codex/f-auto-revert-pr`
-- HEAD: `68e94c1486cc289c698a5507629e781812c315d4`
-- commits:
-  - `68e94c148` fix: 되돌림 PR 승인 스냅샷 / 원문 패치 / SCM 권위 검증
-  - `e6d4df1dc` feat: rollout 실패 revert PR / 기본 비활성 / 권위 컨텍스트
-- stat: 14 files changed, 3,075 insertions(+), 46 deletions(-); 신규 파일 5개
-  - `deploy/management/auto-revert-worker.yaml`
-  - `src/services/gitops/auto-revert-worker/app.py`
-  - `tests/test_auto_revert_worker.py`
-  - `src/domains/gitops/source_patch.py`
-  - `tests/test_gitops_source_patch.py`
-- 기능 검증: flag off 무발화, flag on 승인 snapshot 기반 패치, 원문 byte 보존, exact base SHA·SCM provenance·기존 PR 재전달 fail-closed.
-- F 전용 회귀: `203 passed in 4.35s`.
-- 전체 pytest: 기존 RCA baseline 6건만 실패, `1708 passed, 3 skipped`; 신규 실패 0건.
-- 전역 게이트: Ruff lint PASS, compileall PASS, manifest PASS(`management 69`, `target 20`). Ruff format은 기존 2파일만 대상, import-linter는 기존 `domains.rca.router -> services` 1건만 유지.
-- 독립 감사: 보안·계약 감사 모두 P0 0건/P1 0건. GitHub Compare API 300파일 상한은 fail-closed.
-- frozen path·gateway 계약·R-트랙 소유 테스트 변경 0건. merge·push·배포·앵커 0건.
-
-[2026-07-13 06:44 KST] [백엔드] F done — 승인 스냅샷·원문 패치·SCM 권위 검증 완료 `68e94c148`
-
-[2026-07-13 06:47 KST] [백엔드] C0 in_progress — 신뢰 workspace 봉투·outbox 보존·audit 귀속·가역 마이그레이션 사전 검증
-
 [2026-07-13 06:54 KST] [백엔드] BLOCKED P — 사유: 현재 `RecoveryActionSelectedBody`와 순수 `RecoveryDispatcher`에는 desired manifest·승인 snapshot·source digest/base SHA·repository/binding/workflow 권위 컨텍스트가 없어 실제 patch 6종은 모두 `unsupported`가 됨 / 재현: `safe_pr_patches()` 입력은 선택된 action params뿐이고 dispatcher DB 의존성 0건 / 질문: recovery plan hydration 계약을 선행할지, dispatch 단계의 repository 조회 포트를 승인할지 / 재개 조건: 정적 builtin params나 payload 위조 없이 GitOps 권위 컨텍스트를 전달하는 단일 소스 계약 확정
 
 - RCA 작업열 충돌 확인: R-track과 `src/services/ai/agent/recovery/{dispatch,builtin,catalog}.py` blob 동일, recovery 경로 변경 0건.
 - 기각한 우회: 정적 카탈로그에 manifest/snapshot 삽입, markdown fallback 유지, 권위 입력 없는 합성 patch.
+
+[2026-07-13 06:57 KST] [프론트] C 후속 full gate 재검증 PASS — TypeScript·ESLint, 94 files / 663 tests, design guard 275, shadcn 482, production build 전부 통과. 앞선 두 실패는 재현·격리 후 안정화 트랙으로 분리했다.
+
+[2026-07-13 06:57 KST] [프론트] D in_progress — APIQ-027 command polling 계약 claim; API-owned fixture와 failure·terminal·abort·barrel 회귀를 앵커 전에 보강한다.
 
 [2026-07-13 07:02 KST] [백엔드] BLOCKED R merge step 2 — merge 진행 중(`MERGE_HEAD=82028604d`), 충돌 잔여·night-log 마커 0건 확인 후 허용된 `night-log.md`·`night-directives.md` 외 예상 밖 unstaged `docs/auto/backend-pipeline.md` 발견(D-011 축소 프로토콜 3줄) / 지시대로 임의 add·commit·push 0건 / 질문: 이 기존 unstaged 변경을 merge commit에 포함할지 별도 처리할지 확인 필요 / 재개 조건: `backend-pipeline.md`의 이번 merge 포함 여부 명시
 
 [2026-07-13 07:07 KST] [백엔드] R merge 완결·push — `257f91846`, `82028604d` ancestor exit 0, 사람 위임 GO [R] ([D-012])
 
 [2026-07-13 07:14 KST] [백엔드] [D-012] 후속 정리 완료 — §1.4 baseline 공집합·전체-그린 복귀 / R worktree·로컬 lane 안전 회수(`branch -d`) / release blocker에서 RCA baseline 제거 / P read port 설계로 in_progress 재개
+
+[2026-07-13 07:30 KST] [프론트] APIQ-027 완료 — `submitPrometheusQuery`, `getCommandStatus`, `pollCommand`, `runPrometheusQuery` 앵커 `b92d081eb`; full gate PASS(TypeScript·ESLint, 95 files / 674 tests, design guard 278, shadcn 482, production build).
 
 [2026-07-13 07:32 KST] [백엔드] 브랜치 전수 감사 — canonical `9aa76e4b34c5dd66c4c4ace4bd5b08b2450c1b4e`, 실브랜치 198개(origin/HEAD 별칭 제외), A 21 / B 5 / C 166 / 보호 6
 
@@ -490,6 +563,12 @@ ruff/import-linter PASS. 질문: B-트랙에 `docs/README.md` 링크 1줄 수정
 [2026-07-13 08:11 KST] [백엔드] B merge 완결·push — 0d0f92cca, 976282faa
 ancestor exit 0, 사람 위임 GO [B]
 
+[2026-07-13 08:13 KST] [프론트] API queue batch 앵커 동기화 — `56c689e61`(Applications/GitOps approval/workload action), `c875efb1f`(RCA/evidence/recovery), `004f23d52`(usage/preset/telemetry) 원격 ancestor 확인. targeted API contract 10 files / 70 tests PASS, docs/Bruno 17 tests PASS, manifest-check PASS. untracked feature draft가 남아 있어 full UI gate는 이번 heartbeat 완료 증거로 쓰지 않음.
+
+[2026-07-13 08:17 KST] [프론트] API queue batch full gate 재검증 PASS — Metrics 화면 draft 임시 격리 후 TypeScript·ESLint, 97 files / 710 tests, design guard 286, shadcn 482, production build 통과. 18개 batch anchor의 전체 gate 근거 확정.
+
+[2026-07-13 08:28 KST] [프론트] 테마 첫 페인트 검증 PASS — 저장 테마와 시스템 테마 반대 조건에서 light/dark 각 5회 새로고침, 최초 5프레임의 클래스·colorScheme·불투명 배경 일치, 플래시 0.
+
 [2026-07-13 08:37 KST] [OSS] 공개 준비 초안 9개 해소 — `7c1966a6e` / Apache-2.0
 공식 원문 byte 일치, 내부 실명·조직·이메일·도메인·AWS 식별자·비밀 값·클러스터 식별자
 자체 스캔 PASS(허용 URL은 Apache 공식 원문 2개뿐) / 전체 게이트: Ruff lint PASS,
@@ -551,8 +630,12 @@ ancestor exit 0, 사람 위임 GO [OSS]
 - frozen path 변경 0건: `src/domains/rca/**`, `src/services/ai/**`, `src/packages/runtime/worker.py`.
 - origin/dev merge·push·앵커 0건; H 사람 게이트 전 `done-pending-merge`.
 
+[2026-07-13 09:44 KST] [프론트-D] APIQ-019 in_progress — AI 대화 4함수 strict envelope·open JsonMap·AbortSignal·possibly-sent POST 단일 호출 계약 claim. 코드 커밋과 완료 앵커 전 화면 소비 0 유지.
+
 [2026-07-13 09:46 KST] [백엔드] D-017~019 기준점 영속화 — `4ac003c97`,
 docs-only 2파일, BQ-009 `requested` + BQ-012~017 등록, origin/dev push 확인.
+
+[2026-07-13 09:47 KST] [프론트] A2 우선 전환 — APIQ-019 코드는 미커밋 보존하고 claim을 requested로 반환. 최신 origin/dev 충돌 표와 GO-REQUEST 갱신 전까지 D단계·화면 소비 HOLD.
 
 [2026-07-13 09:53 KST] [백엔드] BQ-012 완료 — RED `c882010de`, GREEN/origin
 `ea5b3ed20`; (a)+(b) catalog hypothesis 계약으로 source-name-only 조작은
@@ -620,6 +703,122 @@ import-linter PASS(2 kept, 0 broken), pytest `1711 passed, 3 skipped`; 서비스
   frozen `src/domains/rca/**`, `src/services/ai/**`, `src/packages/runtime/worker.py` 변경 0건.
   origin 착륙·전체 그린·Bruno 실측·관련 문서 4조건 충족.
 
+## 2026-07-13 10:17 KST — [프론트] FE-A2 완료 증거
+
+- merge commit: `4422a68005c668e15227f3c21747579ddf403bc1`
+- target parent: lab `f1eb1b5094c5cd3ac897f9d4bef30a5153afb6cf`
+- source parent: dev `91633c14e028e48c557eb9a66407e7d4630432f6`
+- 충돌 38건 해소: dev 정책 24건, lab 정책 13건, `docs/auto/night-log.md` 양측 보존 1건.
+  night-log는 공통 prefix 117행, lab 고유 16블록, dev 고유 40블록 누락 0,
+  conflict marker 0으로 KST 순 합성했다.
+- broad lab 소유권 적용: 비충돌로 유입된 dev-only `references/ui-layer-lab/**` 예제·style
+  26파일을 제거해 lab HEAD subtree를 유지했다. 사전 예외 후보 4건은 적용 0건이다.
+- 게이트 수정: 첫 `npm run check`는 dev-only 예제의 미선언 `@xyflow/react` 의존으로 실패해
+  broad lab 정책 적용 후 해소했다. 첫 visual gate는 인증 오류 전체 화면에 `h1`이 없는
+  접근성 결함을 검출해 `ProductStateScreen.headingLevel`과 auth 회귀 테스트 4파일로 수정했다.
+- 최종 `npm run check` PASS: TypeScript·ESLint, Vitest 100 files / 727 tests,
+  design guard 303 files, shadcn audit 482 previews, Vite 14,508 modules production build.
+- `npm run visual-product` PASS: 인증·홈·리소스·상세·상태·shell 34개 isolated scenario,
+  320px reflow, 200% text resize, forced-colors, ko/en locale 포함.
+- merge 전 WIP는 `stash@{0}: wip-pre-fe-a2-20260713`으로 보존했으며 이번 merge·문서
+  커밋에는 혼입하지 않았다.
+
+## GO-EXECUTION [FE-A2] — H1·H2 착륙 후 최종 충돌 계획
+
+- 사람 위임: `[D-021] GO [FE-A2]`.
+- H1: canonical merge `17ac2b7a32413579f2570218a99bf50f34d162c3`, 계약 앵커
+  `66cbe8dec7cb478f5b0774bb5e7bbaab5f616894`·`81969f23e46cb40743af08ffbc1affe556bd5c5e`,
+  모두 `origin/dev` ancestor exit 0.
+- H2: canonical merge `5f2393667ece3607e75674fcf8c9be9d9c1773b9`, 계약 앵커
+  `b6fac1dd742f3c5c88fee1db87e3e081fb1bc794`, `origin/dev` ancestor exit 0.
+- target: `ef9706aca22e21540ec4d6be3870c52cc6c48047`.
+- source: `27cb1d95f27b87f0ff05723bdd9fdd91fc1260ad`.
+- merge-base: `9fe235e7b03032af7d7ac3b14d05ab0f17306b02`.
+- divergence: target-only 236 / source-only 537.
+- `git merge-tree --write-tree origin/woonyong/ui-layer-lab origin/dev`: exit 1,
+  conflict message 38개(내용/add-add 20, lab 삭제·dev 수정 17, `frontend` symlink·directory 1).
+
+| 경로 | lab 변경 요약 | dev 변경 요약 | 확정 해소안 |
+|---|---|---|---|
+| `.gitignore` | `.env.*`, `.env.example` 예외 | `.env*`, Bruno local/cert 제외 | dev |
+| `Makefile` | optional Radar target | local `smoke`, Actions smoke 제거 | dev |
+| `docs/README.md` | frontend 정본·테마 증거 색인 | backend·OSS·보안·release 색인 | dev |
+| `docs/auto/frontend-pipeline.md` | A/B/C 완료, A2 실행 상태 | 초기 frontend pipeline 상태 | 양측 보존: lab의 최신 상태를 정본으로 유지하고 dev 이력은 Git/night-log로 보존 |
+| `docs/auto/night-log.md` | frontend API·게이트·테마·A2 기록 | backend C/D/H1/H2·OSS 기록 | 양측 고유 블록 전부 보존, KST 시각 순 합성 |
+| `docs/aws-testing-runbook.md` | RCA worker 표 보강 | AWS 운영 런북 전면 갱신 | dev |
+| `docs/spec/frontend/chat.md` | legacy spec 삭제 | AI context 규칙 추가 | lab 삭제 유지 |
+| `docs/spec/frontend/repo.md` | legacy spec 삭제 | Safe PR context 규칙 추가 | lab 삭제 유지 |
+| `docs/spec/frontend/workflow.md` | legacy spec 삭제 | approval context 규칙 추가 | lab 삭제 유지 |
+| `frontend/nginx.conf` | legacy tree 삭제 | internal auth header 방어 | dev 파일 유지 |
+| `frontend/package-lock.json` | 삭제 | Monaco/ELK lock 갱신 | dev 파일 유지 |
+| `frontend/package.json` | 삭제 | Monaco/ELK 의존성 | dev 파일 유지 |
+| `frontend/src/app/router.tsx` | 삭제 | release-flow route | dev 파일 유지 |
+| `frontend/src/features/chat/context.ts` | 삭제 | application/workflow context | dev 파일 유지 |
+| `frontend/src/features/notifications/AlertChannelsView.tsx` | 삭제 | 검증 상태 UI | dev 파일 유지 |
+| `frontend/src/features/notifications/api.ts` | 삭제 | 검증 응답·invalidate | dev 파일 유지 |
+| `frontend/src/features/repo/RepoDetailView.tsx` | 삭제 | GitOps/Safe PR 설명 UI | dev 파일 유지 |
+| `frontend/src/features/repo/api.ts` | 삭제 | release/audit invalidate | dev 파일 유지 |
+| `frontend/src/features/workflow/WorkflowGraphView.tsx` | 삭제 | 승인 diff AI 설명 | dev 파일 유지 |
+| `frontend/src/features/workflow/WorkflowListView.tsx` | 삭제 | release-flow 이동 | dev 파일 유지 |
+| `frontend/src/shared/flow/index.tsx` | 삭제 | ELK layout·pan/zoom | dev 파일 유지 |
+| `frontend/src/shared/lib/api.ts` | 삭제 | blob download·blocker 오류 | dev 파일 유지 |
+| `frontend/src/shared/lib/types.ts` | 삭제 | release/readiness 타입 | dev 파일 유지 |
+| `frontend` 구조 | `references/ui-layer-lab` symlink | 운영 frontend directory | dev directory 유지, symlink 제거 |
+| `references/ui-layer-lab/.gitignore` | product output 포함 | 최소 lab ignore | lab |
+| `references/ui-layer-lab/README.md` | shadcn snapshot·제품 게이트 | 예제 registry 설명 | lab |
+| `references/ui-layer-lab/index.html` | theme/locale prepaint·KubeHeal meta | 최소 lab shell | lab |
+| `references/ui-layer-lab/package-lock.json` | React 19·제품 전체 lock | React 18 예제 lock | lab |
+| `references/ui-layer-lab/package.json` | product test/design/visual scripts | 최소 build scripts | lab |
+| `references/ui-layer-lab/src/App.tsx` | official catalog route | Preview/Code 목록 | lab |
+| `references/ui-layer-lab/src/main.tsx` | `/product` ProductApp 분기 | 단일 lab App | lab |
+| `references/ui-layer-lab/tsconfig.json` | strict product/shim/fixture 설정 | 최소 Vite 설정 | lab |
+| `references/ui-layer-lab/vite.config.ts` | Tailwind·Vitest·proxy·aliases | React·5180·flow chunks | lab |
+| `src/domains/target/install_manifest.py` | fast-lane/management 경계 | metrics/catalog RBAC·realtime URL | dev |
+| `src/services/gateway/api-gateway/auth.py` | DEV_AUTH_BYPASS | trusted mTLS proxy identity | dev |
+| `src/services/gateway/api-gateway/settings.py` | bypass 상수 | root path·metrics fail-closed | dev |
+| `tests/test_password_auth.py` | bypass 회귀 | trusted proxy 회귀 | dev |
+| `tests/test_target_registration.py` | fast-lane 명칭 회귀 | RBAC·realtime·purge·admin 회귀 | dev |
+
+예외 후보 감사 결과(이번 충돌 해소에는 별도 승인 없이 적용하지 않음):
+
+1. `.gitignore`의 `!.env.example` 1줄.
+2. `docs/README.md`의 현재 frontend 정본 색인 블록.
+3. dev 최신 target manifest 위의 fast-lane 이름·management exclusion 좁은 hunk.
+4. 비충돌 파일 `tests/test_rca_timeline_janitor.py`의 flake 완화 수치.
+
+실행 계획:
+
+```bash
+git stash push --include-untracked -m "wip-pre-fe-a2-20260713"
+git merge --no-ff origin/dev
+# 위 표대로 충돌 해소 후 git add/rm
+cd references/ui-layer-lab
+npm run check
+npm run visual-product
+```
+
+예상 밖 충돌 또는 의미가 다른 파일이 나오면 해소를 중단하고 보고한다. push 전 실패·취소는
+`git merge --abort`; push 후 롤백은 merge commit을 보존하는 `git revert -m 1 <merge_commit>` 후
+전체 게이트 재실행이다. full gate와 visual-product가 모두 PASS하기 전에는 A2 완료·PROMOTE 인계를
+기록하지 않는다.
+
+## 2026-07-13 10:31 KST — [프론트] FE-A2 subtree 완전성 보정
+
+- 보정 commit: `2b66dee9c` (`fix: legacy 프론트 전체 복원 / 문서 색인 정합`).
+- 원인: symlink-directory 충돌을 파일 충돌 14건만 해소해 source parent
+  `91633c14e`의 legacy `frontend/**` 중 71파일이 병합 결과에서 누락됐다.
+- 해소: `frontend/**` 전체를 source parent와 byte 동일하게 복원했다. `git diff --quiet
+  91633c14e -- frontend` exit 0, symlink 0, 실제 directory 유지.
+- 문서: lab 삭제 정본과 충돌한 `docs/README.md`의 존재하지 않는 frontend spec 링크
+  12개를 제거했고, 로컬 Markdown target 검사에서 누락 0을 확인했다.
+- UI lab full gate: TypeScript·ESLint PASS, Vitest 100 files / 727 tests,
+  design guard 303 files, shadcn audit 482 previews, Vite production build PASS.
+- UI lab visual gate: 34 isolated scenarios 연속 2회 PASS, unexpected feature network 0,
+  websocket 0, 320px reflow·200% text resize·forced-colors·ko/en 포함.
+- legacy frontend: `npm ci` 취약점 0, TypeScript+Vite production build PASS,
+  ESLint PASS, Node tests 17/17 PASS.
+- `outputs/` untracked는 사용자 소유 산출물로 판단해 stage·수정·삭제 0건.
+
 ## 2026-07-13 10:48 KST — BQ-016 완료 증거
 
 - canonical origin: `f0c3b4e42f29c4f011d4d70910b083f7acc031e0`; 발견된 40 entrypoint를
@@ -644,3 +843,5 @@ import-linter PASS(2 kept, 0 broken), pytest `1711 passed, 3 skipped`; 서비스
 보존 lane으로 claim; origin/dev 대비 60커밋 낙후를 확인해 [D-021]에 따라 claim 기준점
 착륙 직후 rebase하고, [D-019] frozen 예외 범위에서 권위 read port→dispatcher 주입→
 실제 patch 6종/unsupported/rollback을 TDD로 수렴한다. BQ-010은 BQ-009 직후 같은 lane.
+
+[이식 대기] BQ-006 promotion_gate 인계 문구: | `useRuns` | `frontend/src/features/repo/api.ts :: useRuns` | GET `/applications/${appId}/runs` with `{timeoutMs: 8_000}` | `retry:false`, select `d.runs.map(adaptRun)`. raw run의 optional `promotion_gate`는 백엔드 자동 승격 조건의 구조화된 read model이다. **적응 폴링**: raw runs 중 상태(대문자화)가 ACTIVE 집합에 있으면 10s, 아니면 60s |

@@ -18,7 +18,7 @@ from packages.contracts.gitops import (
     DEFAULT_WORKFLOW_RUN_ID,
 )
 from packages.contracts.identity import DEFAULT_WORKSPACE_ID
-from packages.contracts.target import TARGET_NAMESPACE
+from packages.contracts.target import FAST_LANE_PRIORITY_CLASS_NAME, TARGET_NAMESPACE
 
 DEFAULT_WEBHOOK_REPLICAS = 2
 MIN_WEBHOOK_REPLICAS = 1
@@ -633,7 +633,7 @@ class SchedulingProfile(StrictModel):
     enabled: bool = True
     description: str = Field(default="", max_length=500)
     selector: SchedulingSelector = Field(default_factory=SchedulingSelector)
-    priority_class_name: str = Field(default="gitops-demo-fast", max_length=120)
+    priority_class_name: str = Field(default=FAST_LANE_PRIORITY_CLASS_NAME, max_length=120)
     priority_value: int = Field(default=100_000, ge=0, le=1_000_000_000)
     preemption_policy: Literal["PreemptLowerPriority", "Never"] = "PreemptLowerPriority"
     placement_mode: Literal["preferred", "required"] = "preferred"

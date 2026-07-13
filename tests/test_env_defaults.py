@@ -15,6 +15,7 @@ from packages.config import control as config_control
 from packages.config import retry as config_retry
 from packages.runtime import relay as runtime_relay
 from packages.runtime import worker as runtime_worker
+from packages.security import trusted_proxy
 
 
 def test_cluster_agent_config_env_defaults_remain_unchanged() -> None:
@@ -48,6 +49,10 @@ def test_gateway_settings_env_defaults_remain_unchanged() -> None:
     assert config.AUTH_ABUSE_SECOND_LOCK_SECONDS == 60 * 60
     assert config.AUTH_ABUSE_THIRD_LOCK_SECONDS == 24 * 60 * 60
     assert config.AUTH_ABUSE_STRIKE_TTL_SECONDS == 24 * 60 * 60
+    assert trusted_proxy.TRUSTED_PROXY_AUTH_SECRET_ENV == "TRUSTED_PROXY_AUTH_SECRET"
+    assert trusted_proxy.TRUSTED_PROXY_AUTH_USER_ID_ENV == "TRUSTED_PROXY_AUTH_USER_ID"
+    assert trusted_proxy.TRUSTED_PROXY_AUTH_WORKSPACE_ID_ENV == "TRUSTED_PROXY_AUTH_WORKSPACE_ID"
+    assert trusted_proxy.TRUSTED_PROXY_SESSION_TOKEN == "mtls-dev-console"
 
 
 def test_outbox_relay_env_defaults_remain_unchanged() -> None:

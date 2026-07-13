@@ -85,6 +85,25 @@ make smoke
 자세한 기준은 [docs/aws-testing-runbook.md](docs/aws-testing-runbook.md)를 본다.
 API를 사람이 직접 눌러 확인할 때는 [docs/api/README.md](docs/api/README.md)를 열고 Bruno collection을 사용한다.
 
+## Radar Kubernetes UI
+
+[Radar](https://github.com/skyhook-io/radar)를 사용해 프로젝트 클러스터의 토폴로지, 리소스, 이벤트 타임라인, Helm 상태를 브라우저에서 확인할 수 있다.
+
+```bash
+# 프로젝트의 target(cluster-1) + management(mgmt) 클러스터 열기
+make radar
+
+# management 클러스터만 열기
+RADAR_CONTEXT=mgmt make radar
+
+# 표시할 클러스터 목록을 직접 지정
+RADAR_CONTEXTS=cluster-1,mgmt make radar
+```
+
+기본값은 안전을 위해 exec, Helm 쓰기, 로컬 터미널을 비활성화한다. 이 제한을 해제하려면 `RADAR_RESTRICTED=0 make radar`로 실행한다. 스케일·재시작 등 다른 리소스 변경 권한은 현재 kubeconfig의 Kubernetes RBAC을 따르므로, 완전한 조회 전용 계정이 필요하면 별도의 read-only RBAC 자격 증명을 사용해야 한다. 기본 주소는 `http://localhost:9280`이며 `RADAR_PORT`로 바꿀 수 있다.
+
+타임라인은 기본적으로 SQLite(`~/.radar/kubeheal-timeline.db`, 최대 1GiB)에 저장해 Radar 재시작 후에도 이벤트 이력을 유지한다. 일회성 메모리 모드가 필요하면 `RADAR_TIMELINE_STORAGE=memory make radar`로 실행한다.
+
 ## 서비스 역할
 
 각 서비스는 독립 실행 프로세스와 Kubernetes workload를 가진다. 개발 편의를 위해 base layer를 공유할 수는 있지만, 실행 경계는 항상 `python src/services/<service-name>/app.py`처럼 서비스별 entrypoint로 분리한다.
