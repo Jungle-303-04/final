@@ -110,6 +110,42 @@ describe("AI conversation API", () => {
     );
   });
 
+  it("passes AbortSignal to reads and does not retry a possibly-sent POST", async () => {
+    const controller = new AbortController();
+    const abortError = new DOMException("Aborted", "AbortError");
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockRejectedValue(abortError);
+    controller.abort();
+
+    await expect(listAiConversations(controller.signal)).rejects.toBe(abortError);
+    expect(fetchMock).toHaveBeenLastCalledWith(
+      "/api/ai/conversations",
+      expect.objectContaining({ signal: controller.signal }),
+    );
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+
+    fetchMock.mockClear();
+    await expect(appendAiMessage(
+      "aic-123",
+      { message: "Continue" },
+      controller.signal,
+    )).rejects.toBe(abortError);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(fetchMock).toHaveBeenLastCalledWith(
+      "/api/ai/conversations/aic-123/messages",
+      expect.objectContaining({ method: "POST", signal: controller.signal }),
+    );
+  });
+
+  it("rejects empty read and append identifiers before making a request", async () => {
+    const fetchMock = vi.spyOn(globalThis, "fetch");
+
+    expect(() => getAiConversation(" ")).toThrow("conversationId must not be empty");
+    await expect(appendAiMessage(" ", { message: "Continue" })).rejects.toThrow(
+      "conversationId must not be empty",
+    );
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
   it("deletes a conversation and accepts the 204 response", async () => {
     const fetchMock = vi
       .spyOn(globalThis, "fetch")
