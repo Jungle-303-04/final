@@ -216,6 +216,7 @@ secret 이름과 주입 경계는 [Secrets](secrets.md)를 본다.
 - [auto/night-directives](auto/night-directives.md)
 - [auto/night-log](auto/night-log.md)
 - [auto/night-log-backend](auto/night-log-backend.md)
+- [auto/night-log-deploy](auto/night-log-deploy.md)
 - [auto/night-log-frontend](auto/night-log-frontend.md)
 
 프론트 상세 설계 문서는 아래에 있다.
