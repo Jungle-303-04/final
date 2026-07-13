@@ -10,6 +10,12 @@ update_mode: manual-snapshot
 팀원이 현재 접속 가능한 환경과 실제 배포 artifact를 확인하는 단일 진입점이다. 배포 파이프라인이
 이 파일을 갱신하는 단계는 아직 연결되지 않았으므로 관측 시각을 먼저 확인한다.
 
+<!-- pipeline-observation:begin -->
+## 배포 파이프라인 관측값
+
+파이프라인 갱신은 아직 연결되지 않았다. 아래 수동 관측값이 현재 증거다.
+<!-- pipeline-observation:end -->
+
 ## 접속
 
 - URL: <https://k8s.woonyong.org>
