@@ -26,7 +26,7 @@ OpsiaBench는 실제 RCA cause/recovery 카탈로그에 고정된 정답 장애 
 위 표의 마지막 아홉 의미 필드가 [D-013]의 9항목이다. `expected_root_cause`는 문자열 하나이며
 Top-1 정답으로 사용한다. evidence는 source 존재만이 아니라 이름까지 일치해야 한다.
 
-probe path/port와 service `selector_label_mismatch`는 각각 catalog의 `probe_fix`,
+probe path/port/timeout과 service `selector_label_mismatch`는 각각 catalog의 `probe_fix`,
 `selector_fix`만 허용한다. `node_selector_mismatch`, `pvc_not_bound`, `pods_not_ready`처럼
 전용 recovery action이 없는 후보는 공식 fallback인
 `manual_analysis`만 허용하며 `auto_apply`는 `false`다. gold patch는 운영자 검토가 끝났을
@@ -73,7 +73,9 @@ capability와 기존 exact fixture도 없다. 21~30번 중
 `application_5xx_spike`는 command와 Safe PR 양쪽을 지원한다. 31~40번에 exact fixture는 없다.
 41~49번은 `manual_analysis` fallback-only이고, 50번 `probe_path_wrong`만 `safe_pr` capability와
 exact probe fixture를 가진다. 51~53번과 55번도 `safe_pr` capability가 있고, exact fixture는
-51·55·56번에만 연결한다. 54번은 실제 health 실패라 probe 수정 대상이 아니며, 56번은 fixture가
+51·52·55·56번에만 연결한다. 52번 timeout fixture 추가는 여섯 번째 batch 전체를 재감사하고
+canonical digest를 갱신한 명시적 coverage 보강이다. 54번은 실제 health 실패라 probe 수정
+대상이 아니며, 56번은 fixture가
 있어도 fallback-only, 60번은 OOM 계열 이름이어도 live `oom_memory` recovery가 없다. 61~70번도
 resource pressure·runtime config 이름과 무관하게 전부 fallback-only이며 exact fixture가 없다.
 71~72번과 76~77번, 79~80번은 fallback-only다. 73~74번 `resource_request_tuning`과 75번
