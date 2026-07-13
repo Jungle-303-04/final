@@ -5,6 +5,7 @@ import subprocess
 from pathlib import Path
 
 import pytest
+import yaml
 
 from packages.events.bus import NatsEventBus
 from packages.events.in_memory import InMemoryEventBus
@@ -68,6 +69,7 @@ def test_controller_loads_every_worker_app_into_one_composition_root() -> None:
 
     assert {app.name for app in apps} == worker_services
     assert all(app.subscriptions or app.raw_subscription for app in apps)
+    assert {spec.service_name for spec in (app.handler_spec() for app in apps)} == worker_services
 
 
 def test_nats_and_inprocess_modes_keep_identical_service_plan() -> None:
@@ -97,3 +99,46 @@ def test_make_demo_dry_run_lists_the_complete_revert_story() -> None:
         "workload-normalized",
     ):
         assert scene in result.stdout
+
+
+def test_controller_check_loads_every_management_entrypoint() -> None:
+    result = subprocess.run(
+        ["uv", "run", "python", "src/controller/app.py", "--check"],
+        cwd=ROOT,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert '"discovered_services": 40' in result.stdout
+    assert '"controller_services": 38' in result.stdout
+    assert '"agent_services": 2' in result.stdout
+    assert '"worker_services": 32' in result.stdout
+    assert '"async_services": 4' in result.stdout
+    assert '"http_services": 2' in result.stdout
+
+
+def test_oss_install_profile_is_three_components_and_has_no_nats_or_redis() -> None:
+    documents = list(
+        yaml.safe_load_all((ROOT / "deploy" / "oss" / "kubeheal-oss.yaml").read_text())
+    )
+    workloads = {
+        (document["kind"], document["metadata"]["name"]): document
+        for document in documents
+        if document and document.get("kind") in {"Deployment", "StatefulSet", "DaemonSet"}
+    }
+
+    assert set(workloads) == {
+        ("Deployment", "kubeheal-controller"),
+        ("StatefulSet", "kubeheal-postgres"),
+        ("DaemonSet", "kubeheal-agent"),
+    }
+    manifest = (ROOT / "deploy" / "oss" / "kubeheal-oss.yaml").read_text()
+    assert "NATS_URL" not in manifest
+    assert "REDIS_URL" not in manifest
+    assert "CONTROLLER_EVENT_BUS_MODE: inprocess" in manifest
+    assert 'AGENT_DIRECT_COMMANDS_ENABLED: "false"' in manifest
+    assert "AGENT_ACCESS_MODE: read_only" in manifest
+    assert "REMEDIATION_DELIVERY_MODE: pull_request" in manifest
+    assert 'PRODUCTION_AUTO_MERGE_ENABLED: "false"' in manifest
