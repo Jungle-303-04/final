@@ -229,3 +229,14 @@ Bundle route는 200을 반환한다.
 - 계약 범위: 기존 응답에 optional `provider`·`connection_stage`만 추가하며 기존
   `connection_status`와 기존 소비자 계약은 보존한다.
 - 앵커: 감독 검증·GO 후 기록
+
+### BQ-014 — Argo observer 어댑터
+
+- 상태: in_progress, BQ-017 gateway 계약 lock과 경로 독립
+- 담당 lane: `codex/f-argocd-observer`
+- 착수 기준: `origin/dev@621a60a1c83bf12b2cb93fc50439f5a7fc4df00d`
+- 전체 게이트 baseline: Ruff lint/format PASS, import-linter 2 kept/0 broken,
+  pytest `1735 passed, 3 skipped`
+- 범위: `reconciler_mode=argocd`에서 Argo CD Application과 Rollout stable revision을
+  읽기만 하며 Kubernetes/Argo 쓰기 호출은 0건으로 고정한다.
+- 앵커: 감독 검증·GO 후 기록
