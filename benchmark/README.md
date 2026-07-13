@@ -40,7 +40,7 @@ live YAML을 다시 읽어 index 전체와 대조하지만, 공개 채점기는 
 site-packages 없이 실행된다.
 
 `candidate-contracts.json`은 index 앞에서부터 완결된 10개 단위 배치를 누적한다. 현재 범위는
-1~10번이고 `next_ordinal`은 11이다. 마지막 배치는 81~87번 7개를 허용하며 그때
+1~20번이고 `next_ordinal`은 21이다. 마지막 배치는 81~87번 7개를 허용하며 그때
 `next_ordinal`은 `null`이다. 후보 계약은 다음 경계를 분리한다.
 
 - `required_evidence`: 수집돼야 하는 `source:name` key. 이것만으로 후보가 지지됐다는 뜻은 아니다.
@@ -58,8 +58,14 @@ site-packages 없이 실행된다.
 - `benchmark_fixtures`: 같은 rule/candidate를 검증하는 정식 scenario. 빈 배열은 해당 후보의
   공개 coverage gap이며 가짜 fixture로 채우지 않는다.
 
-현재 배치는 87개 전체 계약 완성이 아니다. 다음 보충 단위는 index 11번부터 이어 붙이며,
-source hash나 loader 순서가 달라지면 기존 배치부터 다시 감사한다.
+완료된 10개 단위 배치는 canonical JSON SHA-256을 scorer에 고정한다. 새 배치를 추가하면서
+기존 계약의 fixture·금지 조치·정책 주석을 조용히 바꾸면 digest 검증이 실패한다. 복수 fallback
+recovery 선언은 소스 선언 순서대로 모두 누적한다.
+
+현재 배치는 87개 전체 계약 완성이 아니다. 11~20번은 모두 명시 recovery가 없는
+`manual_analysis` fallback이며 실제 patch capability와 기존 exact fixture도 없다. 이 빈 값은
+coverage gap을 드러내는 것이고 실행 가능성이나 fixture를 추측해 채우지 않는다. 다음 보충 단위는
+index 21번부터 이어 붙이며, source hash나 loader 순서가 달라지면 기존 배치부터 다시 감사한다.
 
 ## 검증
 
