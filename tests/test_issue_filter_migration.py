@@ -17,6 +17,7 @@ REVISION = "20260713_2340"
 DOWN_REVISION = "20260713_2215"
 INDEXES = {
     "ix_rca_timeline_issue_page",
+    "ix_rca_timeline_issue_identity_latest",
     "ix_rca_timeline_issue_severity",
     "ix_rca_timeline_issue_environment",
     "ix_rca_timeline_issue_applications",
@@ -55,6 +56,9 @@ def test_issue_filter_model_indexes_are_additive_and_query_shaped() -> None:
         "updated_at",
         "id",
     )
+    assert tuple(
+        column.name for column in indexes["ix_rca_timeline_issue_identity_latest"].columns
+    ) == ("workspace_id", "cluster_id", "incident_id", "updated_at", "id")
     assert tuple(column.name for column in indexes["ix_rca_timeline_issue_severity"].columns) == (
         "workspace_id",
         "severity",
@@ -100,6 +104,9 @@ def test_issue_filter_upgrade_adds_columns_and_concurrent_indexes(monkeypatch) -
 
     expected_indexes = {
         "ix_rca_timeline_issue_page": ("on rca_timeline (workspace_id, updated_at desc, id desc)"),
+        "ix_rca_timeline_issue_identity_latest": (
+            "on rca_timeline (workspace_id, cluster_id, incident_id, updated_at desc, id desc)"
+        ),
         "ix_rca_timeline_issue_severity": (
             "on rca_timeline (workspace_id, severity, updated_at desc, id desc)"
         ),
