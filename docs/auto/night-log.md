@@ -619,3 +619,23 @@ import-linter PASS(2 kept, 0 broken), pytest `1711 passed, 3 skipped`; 서비스
 - 문서/범위: contracts·workflow-controller·applications·frontend 인계 문서 착륙;
   frozen `src/domains/rca/**`, `src/services/ai/**`, `src/packages/runtime/worker.py` 변경 0건.
   origin 착륙·전체 그린·Bruno 실측·관련 문서 4조건 충족.
+
+## 2026-07-13 10:48 KST — BQ-016 완료 증거
+
+- canonical origin: `f0c3b4e42f29c4f011d4d70910b083f7acc031e0`; 발견된 40 entrypoint를
+  controller 38(worker 32, async 4, HTTP 2)/agent 2로 단일 배정하고 NATS/in-process
+  service plan 동등성을 고정했다.
+- 안전 기본값/설치: agent read-only, direct command off, PR-only remediation,
+  production auto-merge 금지; controller+PostgreSQL+agent 3컴포넌트이며 공개 프로파일에
+  NATS/Redis가 없다.
+- 실제 기동: PostgreSQL 16에 조립 루트를 연결해 API/realtime gateway의 health/ready
+  4개가 모두 HTTP 200. 첫 기동에서 macOS arm64 SQLAlchemy async `greenlet` 누락을 찾아
+  RED `605cde8a3`/GREEN `da370200c`로 직접 의존성을 고정했다. SIGINT 취소 로그도
+  RED `90906ab41`/GREEN `f0c3b4e42`로 두 Uvicorn 서버의 graceful shutdown으로 수렴했다.
+- 실제 `make demo`: `kind-cluster-ready` → `bad-rollout-observed` →
+  `mock-rollback-pr-created` → `workload-normalized` 성공 후 cluster 정리.
+  RemediationBundle checksum
+  `a0b2b2857701655e9c09ef51ad9cdf5a0e04a87d26a17cad6861d4e0bee897c9` 검증.
+- 전체 게이트: Ruff lint/format PASS(491 files), import-linter 2 kept/0 broken,
+  pytest `1735 passed, 3 skipped`. origin 착륙·전체 그린·make demo 실측·계약/설치/색인
+  문서 착륙으로 [D-019] DoD 4조건 충족.

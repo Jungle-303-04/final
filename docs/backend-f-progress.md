@@ -7,7 +7,7 @@ governing: docs/f-coordination-plan.md · docs/backend-f-workqueue.md
 
 # 백엔드 F 진행 현황
 
-현재 상태: **앵커 4건**
+현재 상태: **앵커 5건**
 
 ## Delta-green baseline
 
@@ -195,3 +195,25 @@ Bundle route는 200을 반환한다.
 - 실측: `docs/api/10-applications/06-list-runs.bru`가 구조와 eligible 계산을 검산
 
 계약 완성: WorkflowRun.promotion_gate (8cd0b18e96f1266873d1632486472d0d22c18477) [green]
+
+### BQ-016 — OSS 안전 프로파일과 단일 controller 조립
+
+- canonical origin: `f0c3b4e42f29c4f011d4d70910b083f7acc031e0`
+- 공개 기본값: in-process event bus, agent read-only/direct command off, remediation PR-only,
+  production auto-merge 금지
+- 조립: 발견된 40 entrypoint를 controller 38(worker 32, async 4, HTTP 2)과 agent 2에
+  정확히 한 번 배정. NATS/in-process 모드의 service signature는 동일하다.
+- 설치: `deploy/oss/kubeheal-oss.yaml`의 controller Deployment + PostgreSQL StatefulSet +
+  agent DaemonSet 3컴포넌트. NATS/Redis 의존은 공개 프로파일에 없다.
+- 실제 기동: PostgreSQL 16과 controller 조립 루트를 연결해 API/realtime gateway의
+  `/healthz`, `/readyz` 4개 응답이 모두 HTTP 200이고 SIGINT 후 두 서버가 graceful
+  shutdown 되는 것을 확인했다. macOS arm64에서 드러난 SQLAlchemy async `greenlet`
+  marker 누락은 직접 런타임 의존성으로 고정했다.
+- 실측: 실제 `make demo`가 `kind-cluster-ready` → `bad-rollout-observed` →
+  `mock-rollback-pr-created` → `workload-normalized`를 완료하고 cluster를 정리했다.
+  canonical RemediationBundle checksum은
+  `a0b2b2857701655e9c09ef51ad9cdf5a0e04a87d26a17cad6861d4e0bee897c9`다.
+- 전체 게이트: Ruff lint/format PASS, import-linter 2 kept/0 broken, pytest
+  `1735 passed, 3 skipped`.
+
+계약 완성: OSS PR-only profile + ControllerRuntime + make demo (f0c3b4e42f29c4f011d4d70910b083f7acc031e0) [green]
