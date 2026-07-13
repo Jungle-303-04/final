@@ -4,10 +4,6 @@ import asyncio
 from dataclasses import replace
 
 import pytest
-from packages.contracts.gitops_authority import (
-    GitOpsAuthorityContext,
-    GitOpsAuthorityQuery,
-)
 
 from domains.gitops.source_patch import canonical_manifest_digest, parse_scalar_patch_plan
 from domains.rca.events import (
@@ -17,6 +13,11 @@ from domains.rca.events import (
     RecoveryPlan,
 )
 from domains.scm.events import SafePrRequestedBody
+from packages.contracts.gitops_authority import (
+    GitOpsAuthorityContext,
+    GitOpsAuthorityQuery,
+)
+from services.ai.agent.recovery.authority import DatabaseGitOpsAuthorityReadPort
 from services.ai.agent.recovery.dispatch import RecoveryDispatcher
 
 BASE_SHA = "a" * 40
@@ -30,6 +31,116 @@ class FakeAuthorityPort:
     async def load_authority(self, query: GitOpsAuthorityQuery) -> GitOpsAuthorityContext | None:
         self.queries.append(query)
         return self.context
+
+
+class FakeAuthorityDb:
+    def __init__(self) -> None:
+        manifest = desired_manifest()
+        digest = canonical_manifest_digest(manifest)
+        self.evidence = {
+            "gitops_change_context": {
+                "workspace_id": "workspace-1",
+                "repository_id": "repo-1",
+                "binding_id": "binding-1",
+                "application_id": "app-1",
+                "workflow_run_id": "workflow-1",
+                "environment": "sandbox",
+                "cluster_id": "cluster-1",
+                "commit_sha": BASE_SHA,
+                "manifest_path": "deploy/app.yaml",
+                "repo_ref": "project/repo",
+                "branch": "main",
+                "resource": "deployment/checkout-api",
+            },
+            "rca_bundle": {"metrics": {"container_memory_working_set_bytes": 600 * 1024**2}},
+        }
+        self.run = {
+            "workflow_run_id": "workflow-1",
+            "workspace_id": "workspace-1",
+            "application_id": "app-1",
+            "binding_id": "binding-1",
+            "environment": "sandbox",
+            "commit_sha": BASE_SHA,
+        }
+        self.diff = {
+            "workspace_id": "workspace-1",
+            "repository_id": "repo-1",
+            "binding_id": "binding-1",
+            "application_id": "app-1",
+            "workflow_run_id": "workflow-1",
+            "environment": "sandbox",
+            "manifest_path": "deploy/app.yaml",
+            "namespace": "sandbox",
+            "resource": "deployment/checkout-api",
+            "desired_manifest": manifest,
+            "basis": {
+                "old_desired_source": "last_approved_snapshot",
+                "artifact_digest": digest,
+            },
+            "changes": [
+                {
+                    "field_path": "spec.template.spec.containers[name=checkout-api].image",
+                    "old_desired": "ghcr.io/project/checkout-api:v1",
+                    "new_desired": "ghcr.io/project/checkout-api:v2",
+                }
+            ],
+        }
+        self.application = {
+            "application_id": "app-1",
+            "workspace_id": "workspace-1",
+            "repository_id": "repo-1",
+            "name": "checkout-api",
+            "manifest_path": "deploy/app.yaml",
+            "repo_ref": "project/repo",
+            "default_branch": "main",
+        }
+        self.binding = {
+            "workspace_id": "workspace-1",
+            "binding_id": "binding-1",
+            "repository_id": "repo-1",
+            "cluster_id": "cluster-1",
+            "namespace": "sandbox",
+            "manifest_path": "deploy/app.yaml",
+            "environment": "sandbox",
+            "status": "active",
+        }
+        self.provenance = {
+            "workspace_id": "workspace-1",
+            "repository_id": "repo-1",
+            "binding_id": "binding-1",
+            "application_id": "app-1",
+            "workflow_run_id": "workflow-1",
+            "environment": "sandbox",
+            "commit_sha": BASE_SHA,
+            "manifest_path": "deploy/app.yaml",
+            "artifact_digest": digest,
+            "repo_ref": "project/repo",
+            "branch": "main",
+            "source_type": "raw-yaml",
+            "source_origin": "github_contents",
+            "source_is_file": True,
+            "source_document_count": 1,
+            "artifact_count": 1,
+            "source_manifest_sha256": digest,
+        }
+
+    async def get_evidence_payload(self, _workspace: str, _correlation: str, kind: str):
+        return self.evidence.get(kind)
+
+    async def get_workflow_run(self, _workflow_run_id: str):
+        return self.run
+
+    async def get_workflow_step_details(self, _workflow_run_id: str, _name: str):
+        return self.diff
+
+    async def get_application(self, _workspace: str, _application_id: str):
+        return self.application
+
+    async def get_deployment_binding(self, _workspace: str, _binding_id: str):
+        return self.binding
+
+    async def get_manifest_artifact_provenance(self, *_args):
+        return self.provenance
 
 
 def desired_manifest() -> dict[str, object]:
@@ -246,3 +357,24 @@ def test_dispatcher_rejects_authority_for_another_cluster() -> None:
 
     assert body.__subject__ == "rca.action_required"
     assert body.reason_code == "gitops_authority_mismatch"
+
+
+def test_database_port_reloads_and_cross_checks_authority_at_patch_time() -> None:
+    query = GitOpsAuthorityQuery(
+        correlation_id="corr-1",
+        workspace_id="workspace-1",
+        incident_id="incident-1",
+        cluster_id="cluster-1",
+        namespace="sandbox",
+        resource_kind="Deployment",
+        resource_name="checkout-api",
+    )
+
+    context = asyncio.run(DatabaseGitOpsAuthorityReadPort(FakeAuthorityDb()).load_authority(query))
+
+    assert context is not None
+    assert context.repository_id == "repo-1"
+    assert context.binding_id == "binding-1"
+    assert context.commit_sha == BASE_SHA
+    assert context.source_manifest_sha256 == canonical_manifest_digest(desired_manifest())
+    assert context.evidence["metrics"]["container_memory_working_set_bytes"] == 600 * 1024**2
