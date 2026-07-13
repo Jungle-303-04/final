@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import json
 import os
 import subprocess
@@ -185,6 +186,37 @@ def test_controller_injects_borrowed_bus_and_memory_sessions_into_gateway(
 
     assert app.state.events.events.publisher is borrowed
     assert app.state.auth.sessions is sessions
+
+
+def test_controller_shutdown_lets_http_servers_finish_gracefully() -> None:
+    class FakeServer:
+        should_exit = False
+
+    async def scenario() -> tuple[bool, bool, bool]:
+        server = FakeServer()
+        graceful = asyncio.Event()
+
+        async def serve_until_stopped() -> None:
+            while not server.should_exit:
+                await asyncio.sleep(0)
+            graceful.set()
+
+        server_task = asyncio.create_task(serve_until_stopped())
+        service_task = asyncio.create_task(asyncio.Event().wait())
+        waiter = asyncio.create_task(asyncio.Event().wait())
+        await ControllerRuntime._shutdown(
+            [server],
+            [service_task],
+            [server_task],
+            waiter,
+        )
+        return graceful.is_set(), server_task.cancelled(), service_task.cancelled()
+
+    graceful, server_cancelled, service_cancelled = asyncio.run(scenario())
+
+    assert graceful is True
+    assert server_cancelled is False
+    assert service_cancelled is True
 
 
 def test_bundle_verify_command_validates_and_hashes_canonical_json(tmp_path: Path) -> None:
