@@ -2838,3 +2838,13 @@ target preflight·register 네 함수와 strict Zod 계약을 claim했다. 1회�
 - 전체 게이트 `2064 passed, 3 skipped`, Ruff/import contract 8/8, manifest 69/20,
   merge-tree `9a055ca263e9c215800531d239d1378037054fac`, 삭제·frozen·프론트 소유 변경 0건.
 - 계약 앵커: `RESOURCES_GRAPH_PATH + ResourceGraphSnapshotResponse` / `914d34ff6` / `[green]`.
+
+## 2026-07-13 23:31 KST — [백엔드] Resources 그래프 lane 회수·로컬 branch 복구
+
+- lane 회수 — `codex/resource-graph-contract` / `914d34ff6` / `origin/dev` ancestor exit 0.
+  로컬 worktree와 branch를 비강제 `worktree remove`·`branch -d`로 삭제했고 원격 feature
+  branch는 존재하지 않았다.
+- 통합 worktree 생성 직후 명령 cwd 오류로 protected 로컬 `woonyong/ui-layer-lab`에 merge
+  `124b001f7`이 1회 생성됐으나 remote push는 0건이었다. commit을 임시 ref로 보존한 상태에서
+  force/reset/revert 없이 branch를 비강제 삭제·원격 `4f07c0c21`에서 재생성해 local/remote HEAD
+  일치를 확인했다. canonical `dev@b538528be` 착륙 후 임시 ref도 비강제 삭제했다.
