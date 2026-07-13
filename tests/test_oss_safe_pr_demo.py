@@ -5,8 +5,8 @@ from pathlib import Path
 
 import httpx
 from conftest import load_service, make_context
-from controller.demo_scm_fixture import DemoScmRepository, create_app
 
+from controller.demo_scm_fixture import DemoScmRepository, create_app
 from domains.scm.events import SafePrFilePatch, SafePrRequestedBody
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -125,3 +125,12 @@ def test_make_demo_dry_run_exposes_the_reviewed_gitops_story() -> None:
         )
         if f'scene "{scene}"' not in dry_run
     ] == []
+
+
+def test_make_demo_does_not_persist_bootstrap_or_session_credentials() -> None:
+    script = (ROOT / "scripts" / "oss-demo.sh").read_text(encoding="utf-8")
+
+    assert "login-request.json" not in script
+    assert 'COOKIE_JAR="${ARTIFACT_DIR}' not in script
+    assert "opsia-demo-scm-token" not in script
+    assert "mktemp -d" in script
