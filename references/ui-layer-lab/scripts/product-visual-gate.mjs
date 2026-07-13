@@ -3112,25 +3112,49 @@ async function assertProductShellForcedColors(page, label) {
 }
 
 async function assertProductHomeForcedColors(page, label) {
+  const podHeading = page.locator("#pod-list-title");
+  if (await podHeading.count()) {
+    await podHeading.focus();
+    await page.keyboard.press("Shift+Tab");
+  } else {
+    const nodeItem = page.locator(
+      "section[aria-labelledby='node-list-title'] [data-slot='item']",
+    ).first();
+    await nodeItem.focus();
+    await page.keyboard.press("Tab");
+    await page.keyboard.press("Shift+Tab");
+  }
+
   const result = await page.evaluate(() => {
     const main = document.querySelector("main");
     const surface = document.querySelector("[data-slot='surface']");
     const select = document.querySelector(
       "[data-slot='sidebar-inset'] > header [data-slot='cluster-scope-picker'] [data-slot='select-trigger']",
     );
-    const node = document.querySelector("section[aria-labelledby='node-list-title'] [data-slot='item']");
+    const nodeItem = document.querySelector(
+      "section[aria-labelledby='node-list-title'] [data-slot='item']",
+    );
+    const podItem = document.querySelector(
+      "section[aria-labelledby='pod-list-title'] [data-slot='item']",
+    );
+    const podBackButton = document.querySelector(
+      "section[aria-labelledby='pod-list-title'] button",
+    );
+    const resourceItem = podItem ?? nodeItem;
+    const resourceKind = podItem ? "Pod" : "Node";
+    const focusTarget = podItem ? podBackButton : resourceItem;
     const status = document.querySelector("[data-slot='status-mark']");
     const marker = status?.querySelector("[aria-hidden='true']");
-    const required = [main, surface, select, node, status, marker];
+    const required = [main, surface, select, resourceItem, focusTarget, status, marker];
     if (required.some((element) => !(element instanceof HTMLElement))) {
       return { missing: true };
     }
 
-    node.focus();
     const mainStyle = getComputedStyle(main);
     const surfaceStyle = getComputedStyle(surface);
     const selectStyle = getComputedStyle(select);
-    const nodeStyle = getComputedStyle(node);
+    const resourceStyle = getComputedStyle(resourceItem);
+    const focusStyle = getComputedStyle(focusTarget);
     const statusStyle = getComputedStyle(status);
     const markerStyle = getComputedStyle(marker);
     const visible = (element) => {
@@ -3146,17 +3170,19 @@ async function assertProductHomeForcedColors(page, label) {
       markerBorderStyle: markerStyle.borderTopStyle,
       markerBorderWidth: Number.parseFloat(markerStyle.borderTopWidth),
       markerOpacity: Number.parseFloat(markerStyle.opacity),
-      nodeBackground: nodeStyle.backgroundColor,
-      nodeBorderColor: nodeStyle.borderTopColor,
-      nodeBorderStyle: nodeStyle.borderTopStyle,
-      nodeBorderWidth: Number.parseFloat(nodeStyle.borderTopWidth),
-      nodeColor: nodeStyle.color,
-      nodeFocused: document.activeElement === node,
-      nodeOpacity: Number.parseFloat(nodeStyle.opacity),
-      nodeOutlineColor: nodeStyle.outlineColor,
-      nodeOutlineStyle: nodeStyle.outlineStyle,
-      nodeOutlineWidth: Number.parseFloat(nodeStyle.outlineWidth),
-      nodeVisible: visible(node),
+      focusFocused: document.activeElement === focusTarget,
+      focusOutlineColor: focusStyle.outlineColor,
+      focusOutlineStyle: focusStyle.outlineStyle,
+      focusOutlineWidth: Number.parseFloat(focusStyle.outlineWidth),
+      focusVisible: visible(focusTarget),
+      resourceBackground: resourceStyle.backgroundColor,
+      resourceBorderColor: resourceStyle.borderTopColor,
+      resourceBorderStyle: resourceStyle.borderTopStyle,
+      resourceBorderWidth: Number.parseFloat(resourceStyle.borderTopWidth),
+      resourceColor: resourceStyle.color,
+      resourceKind,
+      resourceOpacity: Number.parseFloat(resourceStyle.opacity),
+      resourceVisible: visible(resourceItem),
       selectBorderStyle: selectStyle.borderTopStyle,
       selectBorderWidth: Number.parseFloat(selectStyle.borderTopWidth),
       selectOpacity: Number.parseFloat(selectStyle.opacity),
@@ -3174,19 +3200,20 @@ async function assertProductHomeForcedColors(page, label) {
 
   if (result.missing || !result.active
     || !result.surfaceVisible || !result.selectVisible
-    || !result.nodeVisible || !result.statusVisible || !result.nodeFocused) {
+    || !result.resourceVisible || !result.statusVisible
+    || !result.focusVisible || !result.focusFocused) {
     throw new Error(`${label}: forced-colors Home surface is incomplete ${JSON.stringify(result)}`);
   }
   if (result.surfaceBorderStyle === "none" || result.surfaceBorderWidth < 1
     || result.selectBorderStyle === "none" || result.selectBorderWidth < 1
-    || result.nodeBorderStyle === "none" || result.nodeBorderWidth < 1
+    || result.resourceBorderStyle === "none" || result.resourceBorderWidth < 1
     || result.markerBorderStyle === "none" || result.markerBorderWidth < 1
-    || result.nodeOutlineStyle === "none" || result.nodeOutlineWidth < 2) {
+    || result.focusOutlineStyle === "none" || result.focusOutlineWidth < 2) {
     throw new Error(`${label}: forced-colors Home borders or focus are missing ${JSON.stringify(result)}`);
   }
   for (const [name, opacity] of Object.entries({
     marker: result.markerOpacity,
-    node: result.nodeOpacity,
+    resource: result.resourceOpacity,
     select: result.selectOpacity,
     status: result.statusOpacity,
     surface: result.surfaceOpacity,
@@ -3198,21 +3225,27 @@ async function assertProductHomeForcedColors(page, label) {
   assertContrast(label, "Home surface border", result.surfaceBorderColor, result.surfaceBackground, 3);
   assertContrast(
     label,
-    "Home Node border",
-    result.nodeBorderColor,
-    result.nodeBackground,
+    `Home ${result.resourceKind} border`,
+    result.resourceBorderColor,
+    result.resourceBackground,
     3,
     result.surfaceBackground,
   );
   assertContrast(
     label,
-    "Home Node text",
-    result.nodeColor,
-    result.nodeBackground,
+    `Home ${result.resourceKind} text`,
+    result.resourceColor,
+    result.resourceBackground,
     4.5,
     result.surfaceBackground,
   );
-  assertContrast(label, "Home Node focus", result.nodeOutlineColor, result.surfaceBackground, 3);
+  assertContrast(
+    label,
+    `Home ${result.resourceKind} focus`,
+    result.focusOutlineColor,
+    result.surfaceBackground,
+    3,
+  );
 }
 
 async function assertStatePrimitiveContracts(page, label) {
