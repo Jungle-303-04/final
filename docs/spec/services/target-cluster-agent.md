@@ -305,7 +305,7 @@ Agent heartbeat capability는 `collector`, `command_receiver`, `catalog_helm_ins
 |---|---|---|
 | `ResourceApplier` | Protocol — `async def observe(self, resource: DesiredResource) -> None`, `async def apply(self, resource: DesiredResource) -> None` | `src/services/target/cluster-agent/control/reconciler.py :: ResourceApplier` |
 | `KubernetesResourceClient` | `def base_url(self) -> str`; `def auth_headers(self) -> dict[str, str]`; `async def apply(self, resource: DesiredResource) -> None`(merge-patch → 404면 POST 생성); `async def observe(self, resource: DesiredResource) -> None`(GET); `def resource_path(self, resource) -> str`; `def collection_path(self, resource) -> str`; `def default_manifest(self, resource) -> dict[str, object]` | `src/services/target/cluster-agent/control/reconciler.py :: KubernetesResourceClient` |
-| `DesiredStateReconciler` | `def __init__(self, *, cluster_id: str, cluster_role: str, store: AgentControlStore, interval_seconds: int, resource_applier: ResourceApplier | None = None) -> None`; `async def run(self, client: ManagementPlaneClient) -> None`; `async def reconcile_once(self, policy: AgentPolicy | None = None) -> dict[str, object]`; `async def reconcile_resource(self, resource: DesiredResource) -> ReconcileResult`; `def ensure_allowed(self, resource: DesiredResource) -> None`; `def policy_resources(self, policy: AgentPolicy) -> Iterable[DesiredResource]`(`bootstrap.resources` + `desired_state.resources` 순서); `def result(self, resource, desired_hash, status, message) -> ReconcileResult` | `src/services/target/cluster-agent/control/reconciler.py :: DesiredStateReconciler` |
+| `DesiredStateReconciler` | `def __init__(self, *, cluster_id: str, cluster_role: str, store: AgentControlStore, interval_seconds: int, resource_applier: ResourceApplier | None = None, reconciler_mode: str = "builtin") -> None`; `async def run(self, client: ManagementPlaneClient) -> None`; `async def reconcile_once(self, policy: AgentPolicy | None = None) -> dict[str, object]`; `async def reconcile_resource(self, resource: DesiredResource) -> ReconcileResult`; `def ensure_allowed(self, resource: DesiredResource) -> None`; `def policy_resources(self, policy: AgentPolicy) -> Iterable[DesiredResource]`(`bootstrap.resources` + `desired_state.resources` 순서); `def result(self, resource, desired_hash, status, message) -> ReconcileResult` | `src/services/target/cluster-agent/control/reconciler.py :: DesiredStateReconciler` |
 
 `KubernetesResourceClient` 경로 규칙: `ConfigMap` → `/api/v1/namespaces/{ns}/configmaps[/{name}]`, 그 외(`Deployment`) → `/apis/apps/v1/namespaces/{ns}/deployments[/{name}]`. `default_manifest`는 `resource.state`가 비었을 때 `{apiVersion, kind, metadata{name, namespace}}` 뼈대를 만든다(`ConfigMap`→`v1`, 그 외→`apps/v1`).
 
@@ -576,7 +576,7 @@ metadata provider는 evidence job result의 1MiB JSON 제한을 넘길 위험을
 
 1. `main()` → `AsyncService("cluster-agent", run).run()` — `SERVICE_NAME` env 기본 설정, 로깅 구성, `asyncio.run`.
 2. `TargetClusterAgent.__init__`:
-   - env 로드: `MANAGEMENT_BASE_URL`(빈 값이면 `RuntimeError("MANAGEMENT_BASE_URL is required")`), `TARGET_CLUSTER_ID`, `WORKSPACE_ID`, `HOSTNAME`(agent_id), `EVIDENCE_INTERVAL_SECONDS`, `CLUSTER_ROLE`, `BOOTSTRAP_MODE`, OTEL 2종, worker counts 2종(`parse_provider_worker_counts`), failure policy, DB 경로 2종, sync/reconcile interval.
+   - env 로드: `MANAGEMENT_BASE_URL`(빈 값이면 `RuntimeError("MANAGEMENT_BASE_URL is required")`), `TARGET_CLUSTER_ID`, `WORKSPACE_ID`, `HOSTNAME`(agent_id), `EVIDENCE_INTERVAL_SECONDS`, `CLUSTER_ROLE`, `BOOTSTRAP_MODE`, OTEL 2종, worker counts 2종(`parse_provider_worker_counts`), failure policy, DB 경로 2종, sync/reconcile interval, `RECONCILER_MODE`.
    - `configure_tracing(otel_service_name, otel_traces_endpoint)` → `self.tracer`.
    - `NodeCollectorManager.from_env`, `LiveSummaryPublisher.from_env` 생성.
    - `providers` 미주입 시 기본 5종: `KubernetesSnapshotProvider(cluster_id, transport)`, `PrometheusMetricsProvider.from_config(env)`, `LokiLogsProvider.from_config(env)`, `TempoTracesProvider.from_config(env)`, `MetadataProvider.from_config(env)`.
@@ -630,10 +630,13 @@ metadata provider는 evidence job result의 1MiB JSON 제한을 넘길 위험을
 1. `store.load_policy()` — 없으면 `{status: "unchanged", message: "no policy available"}` 보고.
 2. `bootstrap.resources` + `desired_state.resources` 순회, 리소스마다 `reconcile_resource`:
    - `desired_resource_hash` 계산 → `ensure_allowed` 검사(아래 불변식).
+   - `RECONCILER_MODE=argocd`이고 `action == "apply"`면 Kubernetes GET만 수행하고 `unchanged("observed (argocd single-writer mode)")`로 기록한다. 이 모드에서는 built-in apply 경로를 호출하지 않는다.
    - `action == "apply"`이고 마지막 성공 해시와 같으면 `unchanged("already applied")` (멱등 스킵).
    - `apply` → `resource_applier.apply`(merge-patch, 404시 POST) 후 `applied`; `observe` → GET 후 `unchanged("observed")`.
    - 예외 → `failed(str(exc))`. 어떤 경우든 `save_reconcile_result`로 SQLite 기록.
 3. 종합 status: 하나라도 `failed`면 `failed`, 아니면 `applied`가 있으면 `applied`, 아니면 `unchanged`. `report_reconcile_status`로 보고. 루프 예외는 `desired_state_reconcile_failed` 경고.
+
+`RECONCILER_MODE`의 기본값은 `builtin`이며 기존 동작처럼 built-in reconciler가 writer다. GitOps controller를 writer로 운영하는 배포만 `argocd`로 설정한다. 지원하지 않는 값은 에이전트 기동 시 `ValueError`로 거부한다. 무발화 계약은 `uv run python -m pytest -q tests/test_target_policy_control.py -k argocd`로 재현할 수 있으며, `StubApplier.applied == []`와 observe 1건을 함께 검증한다.
 
 ### evidence 수집 잡 흐름
 
@@ -734,6 +737,7 @@ Tempo 트레이스 정규화(`normalize_payload`): query별 결과를 `traces.re
 | `EVIDENCE_FAILURE_POLICY` | str | `allow_partial` | 기본 정책의 `evidence.failure_policy` (`allow_partial`\|`strict`) | `config.py` |
 | `POLICY_SYNC_INTERVAL_SECONDS` | int | `15` | 정책 fetch 주기 | `config.py` |
 | `RECONCILE_INTERVAL_SECONDS` | int | `30` | desired state reconcile 주기 | `config.py` |
+| `RECONCILER_MODE` | str | `builtin` | desired state writer 선택. `builtin`은 기존 apply 경로, `argocd`는 observer-only이며 built-in apply를 호출하지 않음 | `config.py` / `control/reconciler.py` |
 | `PROMETHEUS_BASE_URL` | str | `http://prometheus.target.svc:9090` | Prometheus 주소 (contracts re-export) | `config.py` |
 | `LOKI_BASE_URL` | str | `http://loki-gateway.target.svc` | Loki 주소 | `config.py` |
 | `TEMPO_BASE_URL` | str | `http://tempo.target.svc:3200` | Tempo 주소 | `config.py` |
