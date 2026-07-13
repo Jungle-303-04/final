@@ -9,6 +9,9 @@ MGMT_CONTEXT="${MGMT_CONTEXT:-}"
 MGMT_NS="${MGMT_NS:-management}"
 PRE_DEPLOY_HEALTH_MAX_ATTEMPTS="${PRE_DEPLOY_HEALTH_MAX_ATTEMPTS:-7}"
 PRE_DEPLOY_HEALTH_BACKOFF_MAX_SECONDS="${PRE_DEPLOY_HEALTH_BACKOFF_MAX_SECONDS:-30}"
+SMOKE_CURL_IMAGE="${SMOKE_CURL_IMAGE:-curlimages/curl:8.11.1}"
+IN_CLUSTER_API_URL="http://api-gateway.${MGMT_NS}.svc.cluster.local"
+IN_CLUSTER_CONSOLE_URL="http://console.${MGMT_NS}.svc.cluster.local"
 
 require_env BASE_URL
 require_env MGMT_CONTEXT
@@ -16,12 +19,27 @@ BASE_URL="${BASE_URL%/}"
 [[ "${PRE_DEPLOY_HEALTH_MAX_ATTEMPTS}" =~ ^[1-9][0-9]*$ ]]
 [[ "${PRE_DEPLOY_HEALTH_BACKOFF_MAX_SECONDS}" =~ ^[0-9]+$ ]]
 
-for command in curl kubectl python3; do
+for command in kubectl python3; do
   if ! command -v "${command}" >/dev/null 2>&1; then
     echo "missing required command: ${command}" >&2
     exit 1
   fi
 done
+
+cluster_curl() {
+  local url="$1"
+  local pod_name="deploy-smoke-pre-${GITHUB_RUN_ID:-local}-${RANDOM}"
+
+  kubectl --context "${MGMT_CONTEXT}" -n "${MGMT_NS}" run "${pod_name}" \
+    --rm -i --restart=Never \
+    --image="${SMOKE_CURL_IMAGE}" \
+    --quiet -- \
+    curl --silent --show-error \
+      --connect-timeout 5 \
+      --max-time 15 \
+      --write-out $'\n%{http_code}' \
+      "${url}"
+}
 
 index_file="$(mktemp)"
 health_file="$(mktemp)"
@@ -30,15 +48,9 @@ trap 'rm -f "${index_file}" "${health_file}"' EXIT
 echo "==> pre-deploy gateway health" >&2
 health_ready=0
 for attempt in $(seq 1 "${PRE_DEPLOY_HEALTH_MAX_ATTEMPTS}"); do
-  if health_status="$(
-    curl --silent --show-error \
-      --connect-timeout 5 \
-      --max-time 15 \
-      --output "${health_file}" \
-      --write-out '%{http_code}' \
-      "${BASE_URL}/api/healthz"
-  )"; then
-    :
+  if health_response="$(cluster_curl "${IN_CLUSTER_API_URL}/api/healthz")"; then
+    health_status="${health_response##*$'\n'}"
+    printf '%s' "${health_response%$'\n'*}" >"${health_file}"
   else
     health_status="000"
   fi
@@ -71,12 +83,9 @@ done
 test "${health_ready}" = "1"
 
 echo "==> pre-deploy frontend" >&2
-frontend_status="$(
-  curl --silent --show-error \
-    --output "${index_file}" \
-    --write-out '%{http_code}' \
-    "${BASE_URL}/"
-)"
+frontend_response="$(cluster_curl "${IN_CLUSTER_CONSOLE_URL}/")"
+frontend_status="${frontend_response##*$'\n'}"
+printf '%s' "${frontend_response%$'\n'*}" >"${index_file}"
 test "${frontend_status}" = "200"
 frontend_bundle="$(grep -Eom1 'index-[A-Za-z0-9_-]+\.js' "${index_file}")"
 if [ -z "${frontend_bundle}" ]; then
