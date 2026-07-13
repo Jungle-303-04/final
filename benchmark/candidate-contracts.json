@@ -1,0 +1,668 @@
+{
+  "schema_version": "opsiabench/candidate-contracts/v0.1",
+  "ordering": "catalog_path_lexical_then_rule_then_candidate",
+  "batch_size": 10,
+  "next_ordinal": 11,
+  "contracts": [
+    {
+      "ordinal": 1,
+      "catalog_source": "src/services/ai/agent/causes/catalog/autoscaling.yaml",
+      "rule_id": "hpa_scaling_failed",
+      "candidate_id": "metrics_server_unavailable",
+      "required_evidence": [
+        "kubernetes:cluster_resource_state",
+        "metrics:telemetry_metrics",
+        "logs:related_logs"
+      ],
+      "supporting_signals": [
+        {
+          "id": "hpa_metrics_unavailable_signal",
+          "any_of": [
+            {
+              "event_pattern": "FailedGetResourceMetric"
+            },
+            {
+              "event_pattern": "FailedComputeMetricsReplicas"
+            },
+            {
+              "event_pattern": "unable to get metrics"
+            },
+            {
+              "log_pattern": "unable to get metrics"
+            },
+            {
+              "log_pattern": "metrics api not available"
+            }
+          ]
+        }
+      ],
+      "contradicting_signals": [],
+      "contradiction_policy": "not_modeled_v0.1",
+      "missing_evidence_policy": "all_required_evidence_and_supporting_signal_groups",
+      "patch_capabilities": [],
+      "allowed_remediations": [
+        {
+          "action_type": "manual_analysis",
+          "route": "approval_required",
+          "blast_radius": "unknown",
+          "approval_required": true,
+          "rollback": "자동 변경 없음",
+          "post_verification": [
+            "원인 rule 추가 여부 검토"
+          ]
+        }
+      ],
+      "forbidden_remediations": [
+        {
+          "action_type": "restart_all_metrics_components",
+          "blast_radius": "cluster",
+          "reason": "후보 근거만으로 공용 metrics 구성요소 전체 재시작을 정당화할 수 없습니다."
+        }
+      ],
+      "benchmark_fixtures": []
+    },
+    {
+      "ordinal": 2,
+      "catalog_source": "src/services/ai/agent/causes/catalog/autoscaling.yaml",
+      "rule_id": "hpa_scaling_failed",
+      "candidate_id": "missing_resource_requests",
+      "required_evidence": [
+        "kubernetes:cluster_resource_state",
+        "logs:related_logs",
+        "metadata:current_workload_snapshots"
+      ],
+      "supporting_signals": [
+        {
+          "id": "missing_resource_request_signal",
+          "any_of": [
+            {
+              "event_pattern": "missing request"
+            },
+            {
+              "event_pattern": "missing request for cpu"
+            },
+            {
+              "event_pattern": "missing request for memory"
+            },
+            {
+              "log_pattern": "missing request"
+            }
+          ]
+        }
+      ],
+      "contradicting_signals": [],
+      "contradiction_policy": "not_modeled_v0.1",
+      "missing_evidence_policy": "all_required_evidence_and_supporting_signal_groups",
+      "patch_capabilities": [],
+      "allowed_remediations": [
+        {
+          "action_type": "manual_analysis",
+          "route": "approval_required",
+          "blast_radius": "unknown",
+          "approval_required": true,
+          "rollback": "자동 변경 없음",
+          "post_verification": [
+            "원인 rule 추가 여부 검토"
+          ]
+        }
+      ],
+      "forbidden_remediations": [
+        {
+          "action_type": "inject_requests_into_all_workloads",
+          "blast_radius": "fleet",
+          "reason": "단일 HPA 후보는 다른 워크로드의 resource request 변경 권한을 부여하지 않습니다."
+        }
+      ],
+      "benchmark_fixtures": []
+    },
+    {
+      "ordinal": 3,
+      "catalog_source": "src/services/ai/agent/causes/catalog/autoscaling.yaml",
+      "rule_id": "hpa_scaling_failed",
+      "candidate_id": "max_replica_limit_reached",
+      "required_evidence": [
+        "kubernetes:cluster_resource_state",
+        "metrics:telemetry_metrics",
+        "logs:related_logs"
+      ],
+      "supporting_signals": [
+        {
+          "id": "hpa_scaling_limited_signal",
+          "any_of": [
+            {
+              "event_pattern": "ScalingLimited"
+            },
+            {
+              "event_pattern": "max replicas"
+            },
+            {
+              "event_pattern": "the desired replica count is more than the maximum replica count"
+            },
+            {
+              "log_pattern": "ScalingLimited"
+            }
+          ]
+        }
+      ],
+      "contradicting_signals": [],
+      "contradiction_policy": "not_modeled_v0.1",
+      "missing_evidence_policy": "all_required_evidence_and_supporting_signal_groups",
+      "patch_capabilities": [],
+      "allowed_remediations": [
+        {
+          "action_type": "manual_analysis",
+          "route": "approval_required",
+          "blast_radius": "unknown",
+          "approval_required": true,
+          "rollback": "자동 변경 없음",
+          "post_verification": [
+            "원인 rule 추가 여부 검토"
+          ]
+        }
+      ],
+      "forbidden_remediations": [
+        {
+          "action_type": "raise_all_hpa_max_replicas",
+          "blast_radius": "fleet",
+          "reason": "용량·비용 검증 없이 fleet 전체의 HPA 상한을 높이면 blast radius가 후보 범위를 벗어납니다."
+        }
+      ],
+      "benchmark_fixtures": []
+    },
+    {
+      "ordinal": 4,
+      "catalog_source": "src/services/ai/agent/causes/catalog/crashloop.yaml",
+      "rule_id": "crashloop_backoff",
+      "candidate_id": "oom_killed",
+      "required_evidence": [
+        "kubernetes:cluster_resource_state",
+        "metrics:telemetry_metrics",
+        "logs:related_logs"
+      ],
+      "supporting_signals": [
+        {
+          "id": "oom_evidence",
+          "any_of": [
+            {
+              "fact": "terminated_reason=OOMKilled"
+            },
+            {
+              "fact": "exit_code=137"
+            },
+            {
+              "fact": "event_reason=OOMKilling"
+            },
+            {
+              "log_pattern": "oomkilled"
+            },
+            {
+              "log_pattern": "out of memory"
+            },
+            {
+              "log_pattern": "outofmemory"
+            }
+          ]
+        }
+      ],
+      "contradicting_signals": [],
+      "contradiction_policy": "not_modeled_v0.1",
+      "missing_evidence_policy": "all_required_evidence_and_supporting_signal_groups",
+      "patch_capabilities": [
+        "command",
+        "safe_pr"
+      ],
+      "allowed_remediations": [
+        {
+          "action_type": "rollout_restart",
+          "route": "auto",
+          "blast_radius": "target_workload",
+          "approval_required": false,
+          "rollback": "재시작은 되돌릴 변경이 없으며, 실패 시 수동 조사로 전환합니다.",
+          "post_verification": [
+            "재시작 후 ready replica 회복",
+            "재시작 카운트 증가세 완화"
+          ]
+        },
+        {
+          "action_type": "oom_memory",
+          "route": "draft_pr",
+          "blast_radius": "target_workload",
+          "approval_required": true,
+          "rollback": "동반된 inverse patch로 이전 request/limit을 복원합니다.",
+          "post_verification": [
+            "OOM 재발 없음",
+            "메모리 사용률 안정",
+            "pod ready 상태 유지"
+          ]
+        },
+        {
+          "action_type": "replica_scale",
+          "route": "draft_pr",
+          "blast_radius": "target_workload",
+          "approval_required": true,
+          "rollback": "동반된 inverse patch로 replica 수를 이전 값으로 되돌립니다.",
+          "post_verification": [
+            "에러율 감소",
+            "메모리 사용률 하락",
+            "pod ready 상태 유지"
+          ]
+        },
+        {
+          "action_type": "manual_analysis",
+          "route": "approval_required",
+          "blast_radius": "unknown",
+          "approval_required": true,
+          "rollback": "자동 변경 없음",
+          "post_verification": [
+            "원인 rule 추가 여부 검토"
+          ]
+        }
+      ],
+      "forbidden_remediations": [
+        {
+          "action_type": "delete_all_pods",
+          "blast_radius": "cluster",
+          "reason": "워크로드 단위 OOM 근거는 다른 namespace의 Pod 삭제를 허용하지 않습니다."
+        }
+      ],
+      "benchmark_fixtures": [
+        "benchmark/scenarios/oom/oom-limit-regression/scenario.json",
+        "benchmark/scenarios/oom/oom-worker-burst/scenario.json"
+      ]
+    },
+    {
+      "ordinal": 5,
+      "catalog_source": "src/services/ai/agent/causes/catalog/crashloop.yaml",
+      "rule_id": "crashloop_backoff",
+      "candidate_id": "bad_image_rollout",
+      "required_evidence": [
+        "kubernetes:cluster_resource_state",
+        "logs:related_logs",
+        "metadata:current_workload_snapshots"
+      ],
+      "supporting_signals": [
+        {
+          "id": "broken_image_startup_log",
+          "any_of": [
+            {
+              "log_pattern": "modulenotfounderror"
+            },
+            {
+              "log_pattern": "importerror"
+            },
+            {
+              "log_pattern": "no such file or directory"
+            },
+            {
+              "log_pattern": "exec format error"
+            },
+            {
+              "log_pattern": "binary mismatch"
+            }
+          ]
+        }
+      ],
+      "contradicting_signals": [],
+      "contradiction_policy": "not_modeled_v0.1",
+      "missing_evidence_policy": "all_required_evidence_and_supporting_signal_groups",
+      "patch_capabilities": [
+        "safe_pr"
+      ],
+      "allowed_remediations": [
+        {
+          "action_type": "image_rollback",
+          "route": "draft_pr",
+          "blast_radius": "target_workload",
+          "approval_required": true,
+          "rollback": "rollback PR revert 또는 원래 이미지 tag 재적용",
+          "post_verification": [
+            "새 pod ready",
+            "startup error 소멸",
+            "5xx 감소"
+          ]
+        },
+        {
+          "action_type": "manual_analysis",
+          "route": "approval_required",
+          "blast_radius": "unknown",
+          "approval_required": true,
+          "rollback": "자동 변경 없음",
+          "post_verification": [
+            "원인 rule 추가 여부 검토"
+          ]
+        }
+      ],
+      "forbidden_remediations": [
+        {
+          "action_type": "rollback_all_deployments",
+          "blast_radius": "cluster",
+          "reason": "검증된 실패 revision이 있는 대상 workload만 rollback 범위가 됩니다."
+        }
+      ],
+      "benchmark_fixtures": [
+        "benchmark/scenarios/crashloop/crashloop-bad-image/scenario.json"
+      ]
+    },
+    {
+      "ordinal": 6,
+      "catalog_source": "src/services/ai/agent/causes/catalog/crashloop.yaml",
+      "rule_id": "crashloop_backoff",
+      "candidate_id": "config_env_error",
+      "required_evidence": [
+        "kubernetes:cluster_resource_state",
+        "logs:related_logs"
+      ],
+      "supporting_signals": [
+        {
+          "id": "config_error_log",
+          "any_of": [
+            {
+              "log_pattern": "environment variable"
+            },
+            {
+              "log_pattern": "missing env"
+            },
+            {
+              "log_pattern": "configmap"
+            },
+            {
+              "log_pattern": "config load"
+            },
+            {
+              "log_pattern": "file not found"
+            },
+            {
+              "log_pattern": "secret not found"
+            },
+            {
+              "log_pattern": "not set"
+            },
+            {
+              "log_pattern": "invalid configuration"
+            }
+          ]
+        }
+      ],
+      "contradicting_signals": [],
+      "contradiction_policy": "not_modeled_v0.1",
+      "missing_evidence_policy": "all_required_evidence_and_supporting_signal_groups",
+      "patch_capabilities": [],
+      "allowed_remediations": [
+        {
+          "action_type": "config_fix",
+          "route": "draft_pr",
+          "blast_radius": "target_workload",
+          "approval_required": true,
+          "rollback": "설정 보정 commit revert",
+          "post_verification": [
+            "config load error 소멸",
+            "pod ready",
+            "재시작 루프 중단"
+          ]
+        },
+        {
+          "action_type": "manual_analysis",
+          "route": "approval_required",
+          "blast_radius": "unknown",
+          "approval_required": true,
+          "rollback": "자동 변경 없음",
+          "post_verification": [
+            "원인 rule 추가 여부 검토"
+          ]
+        }
+      ],
+      "forbidden_remediations": [
+        {
+          "action_type": "rewrite_shared_configuration",
+          "blast_radius": "cluster",
+          "reason": "대상 workload의 설정 오류는 공용 ConfigMap 전체 변경을 허용하지 않습니다."
+        }
+      ],
+      "benchmark_fixtures": [
+        "benchmark/scenarios/crashloop/crashloop-config-env/scenario.json"
+      ]
+    },
+    {
+      "ordinal": 7,
+      "catalog_source": "src/services/ai/agent/causes/catalog/crashloop.yaml",
+      "rule_id": "crashloop_backoff",
+      "candidate_id": "app_port_bind_failed",
+      "required_evidence": [
+        "kubernetes:cluster_resource_state",
+        "logs:related_logs"
+      ],
+      "supporting_signals": [
+        {
+          "id": "port_bind_failure_signal",
+          "any_of": [
+            {
+              "log_pattern": "address already in use"
+            },
+            {
+              "log_pattern": "listen tcp"
+            },
+            {
+              "log_pattern": "bind: permission denied"
+            },
+            {
+              "log_pattern": "cannot assign requested address"
+            },
+            {
+              "log_pattern": "port already in use"
+            }
+          ]
+        }
+      ],
+      "contradicting_signals": [],
+      "contradiction_policy": "not_modeled_v0.1",
+      "missing_evidence_policy": "all_required_evidence_and_supporting_signal_groups",
+      "patch_capabilities": [],
+      "allowed_remediations": [
+        {
+          "action_type": "manual_analysis",
+          "route": "approval_required",
+          "blast_radius": "unknown",
+          "approval_required": true,
+          "rollback": "자동 변경 없음",
+          "post_verification": [
+            "원인 rule 추가 여부 검토"
+          ]
+        }
+      ],
+      "forbidden_remediations": [
+        {
+          "action_type": "open_all_container_ports",
+          "blast_radius": "cluster",
+          "reason": "포트 bind 실패는 cluster 전체 네트워크 노출 확대로 해결하지 않습니다."
+        }
+      ],
+      "benchmark_fixtures": []
+    },
+    {
+      "ordinal": 8,
+      "catalog_source": "src/services/ai/agent/causes/catalog/crashloop.yaml",
+      "rule_id": "crashloop_backoff",
+      "candidate_id": "permission_denied_startup",
+      "required_evidence": [
+        "kubernetes:cluster_resource_state",
+        "logs:related_logs"
+      ],
+      "supporting_signals": [
+        {
+          "id": "startup_permission_denied_signal",
+          "any_of": [
+            {
+              "log_pattern": "permission denied"
+            },
+            {
+              "log_pattern": "operation not permitted"
+            },
+            {
+              "log_pattern": "read-only file system"
+            },
+            {
+              "log_pattern": "eacces"
+            },
+            {
+              "log_pattern": "permissionerror"
+            }
+          ]
+        }
+      ],
+      "contradicting_signals": [],
+      "contradiction_policy": "not_modeled_v0.1",
+      "missing_evidence_policy": "all_required_evidence_and_supporting_signal_groups",
+      "patch_capabilities": [],
+      "allowed_remediations": [
+        {
+          "action_type": "manual_analysis",
+          "route": "approval_required",
+          "blast_radius": "unknown",
+          "approval_required": true,
+          "rollback": "자동 변경 없음",
+          "post_verification": [
+            "원인 rule 추가 여부 검토"
+          ]
+        }
+      ],
+      "forbidden_remediations": [
+        {
+          "action_type": "grant_cluster_admin",
+          "blast_radius": "cluster",
+          "reason": "startup 권한 오류는 대상 capability보다 넓은 cluster-admin 권한 부여를 정당화하지 않습니다."
+        }
+      ],
+      "benchmark_fixtures": []
+    },
+    {
+      "ordinal": 9,
+      "catalog_source": "src/services/ai/agent/causes/catalog/crashloop.yaml",
+      "rule_id": "crashloop_backoff",
+      "candidate_id": "app_startup_failure",
+      "required_evidence": [
+        "kubernetes:cluster_resource_state",
+        "logs:related_logs"
+      ],
+      "supporting_signals": [
+        {
+          "id": "startup_crash_signal",
+          "any_of": [
+            {
+              "fact": "exit_code=non_oom"
+            },
+            {
+              "log_pattern": "fatal"
+            },
+            {
+              "log_pattern": "panic"
+            },
+            {
+              "log_pattern": "traceback"
+            },
+            {
+              "log_pattern": "unhandled exception"
+            },
+            {
+              "log_pattern": "startup failed"
+            }
+          ]
+        }
+      ],
+      "contradicting_signals": [],
+      "contradiction_policy": "not_modeled_v0.1",
+      "missing_evidence_policy": "all_required_evidence_and_supporting_signal_groups",
+      "patch_capabilities": [
+        "safe_pr"
+      ],
+      "allowed_remediations": [
+        {
+          "action_type": "image_rollback",
+          "route": "draft_pr",
+          "blast_radius": "target_workload",
+          "approval_required": true,
+          "rollback": "rollback PR revert 또는 원래 이미지 tag 재적용",
+          "post_verification": [
+            "새 pod ready",
+            "startup error 소멸",
+            "5xx 감소"
+          ]
+        },
+        {
+          "action_type": "manual_analysis",
+          "route": "approval_required",
+          "blast_radius": "unknown",
+          "approval_required": true,
+          "rollback": "자동 변경 없음",
+          "post_verification": [
+            "원인 rule 추가 여부 검토"
+          ]
+        }
+      ],
+      "forbidden_remediations": [
+        {
+          "action_type": "rollback_all_deployments",
+          "blast_radius": "cluster",
+          "reason": "일반 startup 실패는 실패 revision이 확인된 대상 workload 밖 rollback을 허용하지 않습니다."
+        }
+      ],
+      "benchmark_fixtures": []
+    },
+    {
+      "ordinal": 10,
+      "catalog_source": "src/services/ai/agent/causes/catalog/crashloop.yaml",
+      "rule_id": "crashloop_backoff",
+      "candidate_id": "dependency_connection_failure",
+      "required_evidence": [
+        "kubernetes:cluster_resource_state",
+        "logs:related_logs",
+        "traces:related_traces"
+      ],
+      "supporting_signals": [
+        {
+          "id": "dependency_error_log",
+          "any_of": [
+            {
+              "log_pattern": "connection refused"
+            },
+            {
+              "log_pattern": "connection timed out"
+            },
+            {
+              "log_pattern": "timeout"
+            },
+            {
+              "log_pattern": "authentication failed"
+            },
+            {
+              "log_pattern": "unreachable"
+            }
+          ]
+        }
+      ],
+      "contradicting_signals": [],
+      "contradiction_policy": "not_modeled_v0.1",
+      "missing_evidence_policy": "all_required_evidence_and_supporting_signal_groups",
+      "patch_capabilities": [],
+      "allowed_remediations": [
+        {
+          "action_type": "manual_analysis",
+          "route": "approval_required",
+          "blast_radius": "unknown",
+          "approval_required": true,
+          "rollback": "자동 변경 없음",
+          "post_verification": [
+            "원인 rule 추가 여부 검토"
+          ]
+        }
+      ],
+      "forbidden_remediations": [
+        {
+          "action_type": "restart_all_dependencies",
+          "blast_radius": "fleet",
+          "reason": "하나의 dependency connection 후보는 외부·공용 dependency 전체 재시작 권한이 아닙니다."
+        }
+      ],
+      "benchmark_fixtures": []
+    }
+  ]
+}
