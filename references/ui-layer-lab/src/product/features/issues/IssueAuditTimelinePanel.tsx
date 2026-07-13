@@ -63,7 +63,7 @@ export function IssueAuditTimelinePanel({
                           <AccordionItem value={`payload-${index}`}>
                             <AccordionTrigger>{copy.auditPayload}</AccordionTrigger>
                             <AccordionContent>
-                              <dl className="grid gap-2 rounded-md bg-muted/50 p-3 font-mono text-xs">
+                              <dl className="grid gap-2 rounded-md bg-muted/50 p-3 font-mono text-xs forced-colors:border forced-colors:border-[CanvasText]">
                                 {payload.map(([key, value]) => (
                                   <div className="grid min-w-0 gap-1 sm:grid-cols-[minmax(8rem,0.35fr)_minmax(0,1fr)]" key={key}>
                                     <dt className="break-all text-muted-foreground">{key}</dt>
