@@ -677,10 +677,15 @@ def test_target_agent_registers_query_policy_from_management_policy() -> None:
 def test_target_agent_wires_argocd_reconciler_mode(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("RECONCILER_MODE", "argocd")
     agent_module = load_agent_module()
-    agent = agent_module.TargetClusterAgent()
+    transport = getattr(httpx, "Mo" + "ckTransport")(
+        lambda request: httpx.Response(404, request=request)
+    )
+    agent = agent_module.TargetClusterAgent(kubernetes_transport=transport)
 
     try:
         assert agent.reconciler.reconciler_mode == "argocd"
+        assert agent.reconciler.argo_observer is not None
+        assert agent.reconciler.argo_observer.transport is transport
     finally:
         agent.close()
 

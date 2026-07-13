@@ -23,6 +23,7 @@ TARGET_AGENT_DIR = ROOT_DIR / "src" / "services" / "target" / "cluster-agent"
 def load_control_module():
     module_names = (
         "control",
+        "control.argocd_observer",
         "control.policy",
         "control.reconciler",
         "control.store",
@@ -81,6 +82,18 @@ class FailsOnceApplier(StubApplier):
             self.failed = True
             raise RuntimeError("temporary apply failure")
         await super().apply(resource)
+
+
+class StubArgoObserver:
+    def __init__(self) -> None:
+        self.calls = 0
+
+    async def snapshot(self) -> dict[str, object]:
+        self.calls += 1
+        return {
+            "applications": {"available": True, "items": [{"name": "checkout"}]},
+            "rollouts": {"available": True, "items": []},
+        }
 
 
 def test_policy_sync_applies_remote_scheduler_policy(tmp_path: Path) -> None:
@@ -230,18 +243,21 @@ def test_reconciler_applies_target_agent_owned_configmap(tmp_path: Path) -> None
     )
     store.save_policy(policy)
     applier = StubApplier()
+    observer = StubArgoObserver()
     reconciler = control.DesiredStateReconciler(
         cluster_id="cluster-1",
         cluster_role="target",
         store=store,
         interval_seconds=30,
         resource_applier=applier,
+        argo_observer=observer,
     )
 
     report = asyncio.run(reconciler.reconcile_once())
 
     assert report["status"] == "applied"
     assert applier.applied == ["target-agent-policy"]
+    assert observer.calls == 0
 
 
 def test_argocd_reconciler_observes_apply_without_emitting_apply(tmp_path: Path) -> None:
@@ -263,6 +279,7 @@ def test_argocd_reconciler_observes_apply_without_emitting_apply(tmp_path: Path)
         )
     )
     applier = StubApplier()
+    observer = StubArgoObserver()
     reconciler = control.DesiredStateReconciler(
         cluster_id="cluster-1",
         cluster_role="target",
@@ -270,6 +287,7 @@ def test_argocd_reconciler_observes_apply_without_emitting_apply(tmp_path: Path)
         interval_seconds=30,
         resource_applier=applier,
         reconciler_mode="argocd",
+        argo_observer=observer,
     )
 
     report = asyncio.run(reconciler.reconcile_once())
@@ -278,6 +296,8 @@ def test_argocd_reconciler_observes_apply_without_emitting_apply(tmp_path: Path)
     assert applier.applied == []
     assert applier.observed == ["target-agent-policy"]
     assert report["details"]["resources"][0]["message"] == ("observed (argocd single-writer mode)")
+    assert observer.calls == 1
+    assert report["details"]["argocd"]["applications"]["items"] == [{"name": "checkout"}]
 
 
 def test_reconciler_rejects_unknown_mode(tmp_path: Path) -> None:
