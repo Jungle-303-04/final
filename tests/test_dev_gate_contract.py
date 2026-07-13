@@ -65,20 +65,20 @@ def test_python_quality_gate_matches_pre_commit_repository_scope() -> None:
     assert "uv run ruff format ." in format_recipe
 
 
-def test_pre_push_hook_calls_the_canonical_gate() -> None:
+def test_pre_push_hook_calls_the_fast_gate() -> None:
     config = yaml.safe_load((ROOT / ".pre-commit-config.yaml").read_text())
     assert set(config["default_install_hook_types"]) == {"pre-commit", "pre-push"}
 
     hooks = [hook for repo in config["repos"] for hook in repo["hooks"]]
     hook_by_id = {hook["id"]: hook for hook in hooks}
     assert "ruff-format" in hook_by_id
-    assert hook_by_id["dev-full-gate"]["entry"] == "bash scripts/pre-push-gate.sh"
-    assert hook_by_id["dev-full-gate"]["stages"] == ["pre-push"]
-    assert hook_by_id["dev-full-gate"]["pass_filenames"] is False
+    assert hook_by_id["dev-fast-gate"]["entry"] == "bash scripts/pre-push-gate.sh"
+    assert hook_by_id["dev-fast-gate"]["stages"] == ["pre-push"]
+    assert hook_by_id["dev-fast-gate"]["pass_filenames"] is False
 
     wrapper = (ROOT / "scripts/pre-push-gate.sh").read_text()
-    assert "set -- make gate" in wrapper
-    assert "set -- make gate-fast" not in wrapper
+    assert "set -- make gate-fast" in wrapper
+    assert "set -- make gate\n" not in wrapper
 
     hooks_recipe = make_recipe("hooks")
     assert "--hook-type pre-commit" in hooks_recipe

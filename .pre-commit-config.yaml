@@ -12,8 +12,8 @@ repos:
       - id: ruff-format
   - repo: local
     hooks:
-      - id: dev-full-gate
-        name: dev 전체 게이트
+      - id: dev-fast-gate
+        name: dev 빠른 게이트
         entry: bash scripts/pre-push-gate.sh
         language: system
         pass_filenames: false
