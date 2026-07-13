@@ -3503,3 +3503,5 @@ gone branch 0, `(prunable)` worktree 0이다.
 [사이클] 2026-07-14 04:25 KST / 명시 context와 immutable digest만 받는 image rollback 경계를 추가하고 DB downgrade·rollout undo를 구조적으로 배제 / `3cf0b694a` (전체 gate: 백엔드 2171 passed·3 skipped, 프론트 27 passed, manifest·build PASS, T1=T2, 경합 1회 뒤 origin/dev 착륙 확인) / 다음 한 걸음: 이전 실행 digest capture와 strict API smoke 배선
 
 [사이클] 2026-07-14 04:31 KST / manifest 전체 기대 deployment/container와 live image를 대조해 누락·tag이면 거부하는 private rollback plan capture 추가 / `b22edd791` (전체 gate: 백엔드 2174 passed·3 skipped, 프론트 27 passed, manifest·build PASS, T1=T2, origin/dev 착륙 확인) / 다음 한 걸음: Bundle·audit timeline·recent changes strict API smoke 배선
+
+[사이클] 2026-07-14 04:38 KST / 인증 fixture를 필수화하고 Bundle·audit timeline·recent changes의 HTTP 200·상관관계·응답 shape를 검증하는 read-only strict smoke 추가 / `6cd751688` (전체 gate: 백엔드 2177 passed·3 skipped, 프론트 28 passed, manifest·build PASS, T1=T2, 최신 dev rebase 뒤 origin/dev 착륙 확인) / 다음 한 걸음: opt-in dev 배포 workflow에 migration→rollout→smoke→digest rollback 순서 배선
