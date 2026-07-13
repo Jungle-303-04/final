@@ -3487,3 +3487,7 @@ gone branch 0, `(prunable)` worktree 0이다.
 [2026-07-14 03:26 KST] [판단자] 판정: 정상 — 착륙 2건(프론트 shadcn 차트 경계 3커밋 + PR #599 Windows selector fix, 전부 ancestor exit 0), 정체 lane 0(PR #599는 생성 2분 내 착륙 — D-025 모범), [D-047] 촉구 이행 진행(VP-011/013 정본 docs 커밋 `151dd8b18` 최신 dev rebase 완료·push 대기 — 다음 사이클 착륙 확인), AcceptedResponse 무결, 배포 스위치 off 유지, HOLD 0. [D-048] 발행.
 
 [사이클] 2026-07-14 03:44 KST / Ruff 검사 범위를 저장소 전체로 통일하고 Alembic 포맷 누락을 차단 / `e4a924e5d` / 다음 한 걸음: dev 서버 게이트 실행 차단의 AWS 대체 경로 확정
+
+[사이클] 2026-07-14 03:56 KST / `DEV_AUTH_BYPASS=0` base 고정과 렌더·live 공통 fail-closed 검증기 착륙 / `7d4e6750f` / 다음 한 걸음: smoke 기본 활성과 배포 후 live 검증 배선
+[사람 게이트] GitHub Actions `Dev Gate`는 최신 dev push도 runner 시작 전 결제·spending limit로 실패한다. 저장소 결제 복구 또는 비용 승인을 받은 AWS 대체 실행기가 필요하며, 그 전에는 서버 gate 완료로 판정하지 않는다.
+[사람 게이트] `aws sts get-caller-identity`가 만료 세션으로 실패했다. 계정 재인증 뒤 `verify_dev_auth_bypass.py live --context <management>` 실증이 필요하며, secret 값은 기록하지 않는다.
