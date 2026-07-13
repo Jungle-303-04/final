@@ -3129,6 +3129,30 @@ target preflight·register 네 함수와 strict Zod 계약을 claim했다. 1회�
   DBA 승인과 connection cutover는 다음 단위다. AWS dev 배포 스위치와 migration Job 배선은 계속
   비활성 상태다.
 
+## 2026-07-14 02:03 KST — [프론트 정리] D-038 B-0 전제·브랜치 삭제 전 감사
+
+- 판정 기준: `origin/dev@2e6e53f5ae8e5d25c98ee202572036d6ac72a30f`의 clean detached
+  worktree. 기존 dev worktree는 831커밋 뒤처지고 타 트랙 변경이 있어 사용하지 않았다.
+- shadcn S0 실측: `frontend/components.json`, `frontend/src/lib/utils.ts`의 `cn()` 존재.
+  Radix는 지시 시점 15개가 아니라 현재 accordion 포함 16개이며 `lucide-react`, `recharts`,
+  `sonner`, `class-variance-authority`, `tw-animate-css`, `clsx`, `tailwind-merge`가 설치돼 있다.
+- S1/S2 미완 실측: `frontend/src/components/ui/` 부재, `theme.css` shadcn token hit 0.
+  `--color-primary: var(--ui-text-primary)`라 현재 의미는 본문 텍스트색이다.
+- 차트 3벌 실측: `@nivo/core|line|treemap`, `src/ui/charts.tsx`, `recharts`가 동시에 존재한다.
+- 삭제 전 branch 보험:
+  - `origin/woonyong/ui-layer-lab@88cca9b8f5d48f219de06f34032906e1c703d47f`:
+    지시의 "dev 조상"과 달리 ancestor exit 1(behind 18/ahead 1). 고유 commit은 VP-011/013
+    문서·색인·회귀 테스트뿐이며 frontend 변경은 0; 기획 정본은 final repo에 보존돼 있다.
+  - `origin/codex/-stardemo@cf713404a4ea0936f2110038fc54656ce874c4f4`:
+    ancestor exit 0(behind 39/ahead 0).
+  - `origin/codex/ui-layer-lab-references@d18e136937525b13e21a56c7e6814f9c7e67e6d0`:
+    ancestor exit 1(behind 1328/ahead 4). diff 13파일은 deploy/docs/src/tests뿐이고 소유 범위
+    `frontend/**`, `references/**`의 이식 대상은 0개다.
+  - `origin/woonyong-kr/frontend@fcfec95043bc66d0cb6fcb62a1d9de3d0e357169`:
+    ancestor exit 1(behind 2221/ahead 636). dev에 없는 owned-path 파일 63개를 확인했으나
+    구 mock/console 중복 구현, 폐기 예정 screenshot·metrics 산물과 옛 shared UI뿐이다.
+    현재 VP-010~013 계약에 유용한 이식 대상은 0개로 판정했다.
+
 ## 2026-07-14 02:04 KST — [프론트][동결 보고] VP-013 S1 안전 착륙
 
 - 착륙 origin/dev SHA: `dd0983408098ca2bab1667bb3ff335c94ff69d5f`.
@@ -3153,3 +3177,89 @@ target preflight·register 네 함수와 strict Zod 계약을 claim했다. 1회�
   ELK→Dagre 교체는 좌표·교차·성능 기준선 없이는 안전하지 않다.
 - D-038에 따라 이 기록 이후 `[정리 완료]`+검토 통과 전까지 `frontend/**`,
   `references/**` 코드 커밋을 중단한다.
+
+## 2026-07-14 02:09 KST — [프론트 정리] 브랜치 회수·S1 감사·BLOCKED
+
+- 삭제 완료: `origin/woonyong/ui-layer-lab`, `origin/codex/-stardemo`,
+  `origin/codex/ui-layer-lab-references`, `origin/woonyong-kr/frontend`; `git ls-remote`
+  재조회 결과 네 ref 모두 0건이다. `feat/*`와 `origin/main`은 무접촉이다.
+- 동결 직전 착륙한 S1 `dd0983408098ca2bab1667bb3ff335c94ff69d5f`를 흡수해 중복 구현을
+  중단했다. 전역 legacy text utility 리네임, 기본 shadcn semantic token, pre-paint
+  bootstrap은 존재하지만 D-038 필수 `chart-1..5`, `sidebar-*` token은 0건이라 S1 보완이
+  필요하다.
+- 프론트 게이트: lint 오류 0(기존 hook warning 1), tests 19/19, production build PASS.
+- 전체 게이트 BLOCKED: `bash scripts/test.sh`가 소유권 밖
+  `tests/test_alert_routing.py:3` Ruff I001(import block 정렬) 1건으로 즉시 실패한다.
+  최신 origin에서도 해당 파일은 변하지 않았다. `frontend/**`, `references/**` 밖을
+  수정하지 말라는 지시에 따라 고치지 않았고, red dev에 추가 push하지 않았다.
+- 재개 조건: 해당 Ruff failure가 origin/dev에서 해소되거나 이 1파일 format 수정 권한을
+  사람이 명시적으로 추가한다. 그 뒤 S1 누락 token+계약 test를 첫 원자적 보완 단위로 착륙한다.
+
+## 2026-07-14 02:10 KST — [게이트 기원 판정] origin/dev 선행 RED·D-039 제한 수정
+
+- 변경 stash 후 clean `origin/dev@cd8394e02f9372dc0dc8f40225f9896ceddb507b`에서
+  `bash scripts/test.sh`를 실행한 결과 RED였다. 최초 실패는
+  `tests/test_alert_routing.py:3` Ruff I001 1건이며 프론트 정리에서 발생한 회귀가 아니다.
+- blame상 import block의 마지막 변경은 `2e6e53f5a`가 추가한 `pytest` import다.
+- [D-039] 명령 `uv run ruff check --select I001 --fix tests/test_alert_routing.py`만
+  실행했고 1건 fixed/0 remaining. 로직·문자열 변경 0, import group의 빈 줄 1개만 제거됐다.
+- 승인 수정 diff 원문:
+
+```diff
+diff --git a/tests/test_alert_routing.py b/tests/test_alert_routing.py
+index 591d560bc..5f1879a74 100644
+--- a/tests/test_alert_routing.py
++++ b/tests/test_alert_routing.py
+@@ -10 +9,0 @@ import pytest
+-
+```
+
+- 수정 후 전체 게이트는 Ruff lint를 통과했으나 format 단계에서 origin HEAD 자체의 기존
+  미정렬 4파일을 발견해 다시 RED: `tests/test_alert_routing.py`,
+  `src/domains/alert/repository.py`, `src/domains/release_flow/router.py`,
+  `src/domains/target/router.py`. 각 origin blob을 stdin `ruff format --check`로 재검증해
+  모두 exit 1임을 확인했다.
+- [D-039] 예외는 I001 한 건뿐이므로 format은 실행하지 않았고 commit·push도 보류했다.
+  네 format 수정에 대한 별도 사람 승인이 필요하다.
+
+## 2026-07-14 02:14 KST — [프론트 정리] D-039/D-040 예외 커밋·추가 origin RED
+
+- 백엔드 소유 파일을 예외 승인으로 수정함. D-039 import 전용 commit
+  `b8dd3788dd7cbccd063479a2193fba9413cb18ab`, D-040 formatter 전용 commit
+  `d1a32c77e13878dd894244c18a9855856bae8791`로 분리했다. 두 commit은 아직 push하지 않았다.
+- D-040 명령은 다음 네 파일을 인자로 둔 `uv run ruff format`뿐이다. formatter 전후 AST
+  dump가 네 파일 모두 동일해 식별자·문자열·로직 변경은 0이다.
+- formatter diff 요약:
+  - `tests/test_alert_routing.py`: `+15/-5`
+  - `src/domains/alert/repository.py`: `+12/-4`
+  - `src/domains/release_flow/router.py`: `+15/-5`
+  - `src/domains/target/router.py`: `+5/-3`
+- 전체 게이트는 Ruff lint/format, compileall, import-linter 8 kept/0 broken을 통과했으나
+  pytest에서 2건 RED였다. `docs/auto/night-log.md`의 금지된 구 UI 명칭 1건은 이 세션
+  기록에서 제거했다.
+- 남은 소유권 밖 failure:
+  `tests/test_target_registration.py::test_target_registration_apply_defaults_to_kube_context_provider`.
+  clean `origin/dev@cd8394e02` 별도 worktree에서도 단독 재현해 1 failed다. commit
+  `2e6e53f5a`가 `register_target()`에 실 kubectl preflight를 추가했지만 이 기존 단위테스트가
+  preflight를 stub하지 않아 localhost:8080 연결을 시도한다. formatter AST와 무관한 선행 RED다.
+- [D-040]의 5번째 파일 자동 확대 금지에 따라 `tests/test_target_registration.py`는
+  수정하지 않았다. 해당 테스트의 preflight stub 보강에 대한 별도 사람 승인이 필요하다.
+
+## 2026-07-14 02:17 KST — [프론트 정리] D-041 델타 게이트 착륙 판정
+
+- [D-041]에 따라 비기계적인 `tests/test_target_registration.py` 수정은 백엔드에 이관한다.
+  선행 RED 1건(`test_target_registration_apply_defaults_to_kube_context_provider`, 원인
+  `2e6e53f5a`)은 백엔드 이관 — [D-041].
+- 변경 전 백엔드 실패 집합:
+  `{ruff I001 tests/test_alert_routing.py, ruff format tests/test_alert_routing.py,
+  ruff format src/domains/alert/repository.py, ruff format src/domains/release_flow/router.py,
+  ruff format src/domains/target/router.py,
+  pytest tests/test_target_registration.py::test_target_registration_apply_defaults_to_kube_context_provider}`.
+- 변경 후 백엔드 실패 집합:
+  `{pytest tests/test_target_registration.py::test_target_registration_apply_defaults_to_kube_context_provider}`.
+  신규 실패 0, 선행 style 실패 5건 축소. Ruff lint/format·compileall·import-linter
+  8 kept/0 broken을 통과했고 pytest는 `1 failed, 2138 passed, 3 skipped`다.
+- 프론트 게이트: ESLint 오류 0(선행 hook warning 1), node tests 22/22, TypeScript·Vite
+  production build PASS.
+- 따라서 D-041 착륙 기준인 프론트 초록 + 백엔드 RED 무증가를 충족했다. D-039/D-040
+  두 예외 commit과 이 증거 문서만 최신 dev rebase 후 push한다.
