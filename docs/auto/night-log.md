@@ -2386,3 +2386,13 @@ target preflight·register 네 함수와 strict Zod 계약을 claim했다. 1회�
 - 시각 증거:
   `references/ui-layer-lab/output/playwright/product-issues-authenticated-audit-payload-reflow-320-forced-colors.png`.
   RED/GREEN 커밋 모두 push 후 `origin/woonyong/ui-layer-lab` ancestor exit 0을 확인했다.
+
+## 2026-07-13 18:55 KST — [프론트] Issues 공용 상태 프레임 직접 테스트
+
+- `23fa57ac5`는 `IssueSectionFrame`의 초기 loading·초기 failure·idle empty·마지막
+  성공 데이터와 background failure 공존을 직접 컴포넌트 테스트 4개로 고정했다.
+  제품 runtime·API·canonical 상태 계약 변경은 0건이다.
+- targeted Vitest PASS: 1 file / 4 tests. 전체 `npm run check` PASS:
+  TypeScript·ESLint, Vitest 119 files / 851 tests, design guard 347 files,
+  shadcn source audit 482 previews, Vite build 14,539 modules.
+- 커밋 push 후 `origin/woonyong/ui-layer-lab` ancestor exit 0을 확인했다.
