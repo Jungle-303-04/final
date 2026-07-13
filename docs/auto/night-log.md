@@ -2445,3 +2445,16 @@ target preflight·register 네 함수와 strict Zod 계약을 claim했다. 1회�
 - 전체 `npm run check` PASS: TypeScript·ESLint, Vitest 120 files / 853 tests,
   design guard 348 files, shadcn source audit 482 previews, Vite build 14,539 modules.
   커밋 push 후 `origin/woonyong/ui-layer-lab` ancestor exit 0을 확인했다.
+
+## 2026-07-13 19:24 KST — [프론트] Issues 부분 실패 dark 시각 검증
+
+- `03038146f`는 모바일 dark 화면에서 recent changes API만 503인 경우를 추가했다.
+  해당 패널은 unavailable alert로 격리되고 root cause·감사·근거·RCA·복구 계획은 계속
+  렌더된다. 503 요청은 1회이며 성공 전용 목록·시각·외부 링크는 노출되지 않는다.
+- `npm run visual-product` PASS: 46 isolated scenarios, exact API request counts,
+  unexpected feature network/WebSocket 0건. CLS는 Home `0.004198`, Resources
+  `0.004167`, Issues `0.004202`로 모두 0.1 예산 이하다.
+- 전체 `npm run check` PASS: TypeScript·ESLint, Vitest 120 files / 853 tests,
+  design guard 348 files, shadcn source audit 482 previews, Vite build 14,539 modules.
+  시각 증거는 `references/ui-layer-lab/output/playwright/product-issues-authenticated-recent-changes-unavailable-mobile-dark.png`이며,
+  커밋 push 후 `origin/woonyong/ui-layer-lab` ancestor exit 0을 확인했다.
