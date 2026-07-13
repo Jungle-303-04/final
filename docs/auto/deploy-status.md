@@ -52,3 +52,7 @@ Deployment와 ECR에 OCI source revision attestation이 없으므로 digest가 �
   rollback plan에 포함하고 같은 immutable digest로 순차 rollout한다. console과 인프라 이미지는
   다른 artifact이므로 서비스 digest로 덮어쓰지 않는다. 이 경계는 `a7b35ac90`에 착륙했지만,
   AWS 자격증명 만료와 Actions runner 결제 게이트 때문에 live 실행은 아직 증명되지 않았다.
+- `9d78b4567`의 `Dev Deploy` workflow는 성공한 `Dev Gate`의 dev push SHA와
+  `AWS_DEV_DEPLOY_ENABLED=1`을 동시에 요구한다. 현재 switch는 OFF다. Actions runner 복구,
+  live 인증 우회 0 검증, versioned DB, 현재 배포 SHA를 담은 `opsia-deploy-status` ConfigMap이
+  확인되기 전에는 workload를 변경하지 않는다.
