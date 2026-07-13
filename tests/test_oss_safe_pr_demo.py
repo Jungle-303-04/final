@@ -95,6 +95,48 @@ def test_demo_scm_exercises_the_production_github_provider(tmp_path, monkeypatch
     ]
 
 
+def test_demo_scm_requires_a_separate_reviewer_token_to_merge(tmp_path) -> None:
+    repository = DemoScmRepository(tmp_path / "repository", repo_ref="opsia/demo")
+    base_sha = repository.reset({"deploy/checkout.yaml": "image: nginx:missing\n"})
+    assert repository.create_branch("gitops/recovery", base_sha)
+    current = repository.file_metadata("gitops/recovery", "deploy/checkout.yaml")
+    repository.put_file(
+        "gitops/recovery",
+        "deploy/checkout.yaml",
+        "image: nginx:1.27-alpine\n",
+        message="Restore verified image",
+        expected_blob_sha=current["sha"],
+    )
+    repository.create_pull_request(
+        title="Restore verified image",
+        body="Rule-verified rollback candidate",
+        head="gitops/recovery",
+        base="main",
+    )
+    fixture = create_app(repository, token="writer-token", reviewer_token="reviewer-token")
+
+    async def scenario() -> tuple[httpx.Response, httpx.Response]:
+        async with httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=fixture),
+            base_url="http://demo-scm.local",
+        ) as client:
+            writer = await client.post(
+                "/demo/pulls/1/merge",
+                headers={"authorization": "Bearer writer-token"},
+            )
+            reviewer = await client.post(
+                "/demo/pulls/1/merge",
+                headers={"authorization": "Bearer reviewer-token"},
+            )
+            return writer, reviewer
+
+    writer, reviewer = asyncio.run(scenario())
+
+    assert writer.status_code == 401
+    assert reviewer.status_code == 200
+    assert reviewer.json()["merge_commit_sha"] == repository.branch_sha("main")
+
+
 def test_make_demo_uses_safe_pr_and_never_directly_normalizes_the_workload() -> None:
     script = (ROOT / "scripts" / "oss-demo.sh").read_text(encoding="utf-8")
 
