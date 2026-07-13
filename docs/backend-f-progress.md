@@ -245,7 +245,7 @@ Bundle route는 200을 반환한다.
 
 ### BQ-017 — provider 1급화와 연결 단계
 
-- 상태: done, gateway 계약 lock 해제
+- 상태: landed, gateway 계약 lock 해제
 - 담당 lane: `codex/f-provider-connection-stage`
 - 착수 기준: `origin/dev@a65c66c7102fb453e583ed4ec44f1950a9df9ba2`
 - 전체 게이트 baseline: Ruff lint/format PASS, import-linter 2 kept/0 broken,
