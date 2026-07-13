@@ -1140,3 +1140,21 @@ npm run visual-product
   포함한다. gateway 계약·Argo 쓰기 경로는 변경하지 않는다.
 - 조율 상태를 in_progress로 되돌리고 최신 canonical 위에서 전체 게이트와 manifest를
   다시 증명한다. 앵커는 감독 검증·GO 전에는 기록하지 않는다.
+
+## 2026-07-13 12:27 KST — GO-REQUEST [Argo observer]
+
+- lane `codex/f-argocd-observer`, HEAD
+  `eb435b4bd2143c6814e4ede744c2371648f73a94`; `origin/dev@d8b28f76f` 대비
+  behind/ahead `0/6`, 시험 merge exit 0, tree `c210a9ab78257e8522a66d80ff64235f17e7ff63`.
+- Application repo/revision/path·sync/health와 Rollout `stableRS`를 Kubernetes GET으로만
+  읽는다. manifest RBAC도 `applications/rollouts`의 `get/list`만 허용하며 쓰기 호출은 0건이다.
+- 독립 리뷰에서 발견한 Application 관측 fail-open, 진행 중 operation ready 판정,
+  credential 포함 repository URL 노출을 RED `8afd9ab99` → GREEN `5881bdad8`로 막았다.
+  Application unavailable은 종합 `failed`, Rollout CRD unavailable은 선택 상태로 구분한다.
+- 관련 회귀 `13 passed`, 전체 게이트 Ruff lint/format PASS, import-linter 2 kept/0 broken,
+  pytest `1838 passed, 3 skipped`; manifest management 69, target 20.
+- 전체 pytest에서 기존 SQLite finalizer의 thread-affinity warning 2건이 노출됐으나 실패는
+  0건이며 이번 observer 변경 경로의 동작·게이트 결과에는 영향이 없다.
+- gateway 계약, `src/domains/rca/**`, `src/services/ai/**`,
+  `src/packages/runtime/worker.py` 변경은 0건이다. 원격 feature branch에 push했으며
+  canonical merge·앵커는 사람 GO를 대기한다.
