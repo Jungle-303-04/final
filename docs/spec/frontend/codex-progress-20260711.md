@@ -1695,3 +1695,12 @@ API 완성: getIncidentRecentChanges (4f602cc86660a7f8a12583cffc44a53e220d9dbf)
   제한 응답의 클라이언트 필터로 completeness를 위장하지 않는다.
 
 API 완성: listApplicationRuns (429fb1d9122c6bf264f5ee1beef948107bb5161e)
+
+## 2026-07-13 VP-006 BLOCKED — auto-revert 식별 계약 결손
+
+- BQ-007 canonical merge `6d68325bf1cc47f55810e5dc2189e51a6fe916c0`은 `origin/dev`
+  ancestor exit 0이다. flag off 무발화와 generic Safe PR 발행은 구현·테스트로 확인했다.
+- 현재 RCA timeline은 generic Safe PR의 subject/status/PR URL/failure reason만 projection한다.
+  auto-revert request의 유일한 흔적은 worker 내부 title prefix이며 공개 DTO가 아니다.
+- 일반 Safe PR을 revert PR로 오표시하지 않도록 APIQ와 제품 표면을 만들지 않았다.
+  재개 조건은 stable auto-revert discriminator와 incident/run exact scope를 포함한 canonical 계약·앵커다.

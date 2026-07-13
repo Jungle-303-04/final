@@ -85,6 +85,10 @@ AbortSignal contract test를 추가하고, 필요한 경우 claim 범위 안에�
   되려면 application 목록과 workflow run 목록에 서버측 `cluster_id` 필터와 opaque cursor가
   필요하다. 현재 limit 응답을 받은 뒤 클라이언트에서 필터링하면 completeness를 증명할 수 없으므로
   화면 release를 금지한다. `has_more` 또는 `next_cursor`까지 착륙하면 별도 APIQ로 재검증한다.
+- `BE-Gap-AutoRevertIdentity`: 기존 RCA/release Safe PR 조회는 일반 Safe PR과 BQ-007 auto-revert를
+  구분하는 구조화 discriminator가 없다. stable `trigger_kind=auto_revert`, correlation 또는 workflow
+  run exact scope, event ID/type/time, nullable PR URL·실패 reason 계약이 canonical에 착륙한 뒤에만
+  조회 APIQ를 추가한다. `[auto-revert]` 제목 prefix 파싱과 일반 Safe PR의 대체 표시는 금지한다.
 - repo/provider/target/org/alert/dead-letter 함수는 현재 필요한 화면이 확정되지 않아 아직 요청하지
   않았다. routes가 있다는 이유만으로 만들지 않는다.
 - WebSocket `/api/live/browser`는 HTTP queue와 분리한다. connection·handshake·resume·sequence gap

@@ -24,7 +24,7 @@ api-needs.md에 APIQ 행을 추가하지 않고 화면도 렌더하지 않는다
 | VP-003 | 이벤트 여정 뷰 — VP-002 데이터를 워커 흐름(alert→evidence→rca→recovery→PR)으로 렌더 | BQ-004 착륙, 소비 계약 불완전 | 현재 `AuditTimelineItem`은 부모를 가리키는 `causation_id`만 반환하고 자기 `event_id`를 반환하지 않는다. backend workqueue가 인계 대상으로 명시한 subject 분류 목록도 canonical progress/API에 없다 | BE-Gap | `UI-056 TimelineSwimlane`은 inventory 선언만 있고 구현 선례는 없다. additive `event_id`와 subject→journey stage 정본 착륙 전에는 합성 key·prefix 추측·가짜 인과선 금지. 계약 착륙 뒤 causation_id가 연결되면 트리, null/미해결이면 서버 시간순으로 정직 강등하고 키보드 event list를 병행한다 | blocked — `AuditTimelineItem.event_id` + subject 분류 계약·앵커 필요 |
 | VP-004 | 인시던트 상세 "최근 변경" 섹션 — 성공 배포의 절대 시각·workload·image·commit·workflow·허용 PR 링크 표시 | BQ-005 완료 | `RCA_RECENT_CHANGES_PATH` = `GET /api/rca/incidents/{incident_id}/recent-changes?limit=` · `RecentChangeListResponse` · 앵커 `81969f23e46cb40743af08ffbc1affe556bd5c5e` (`origin/dev` ancestor exit 0, progress·route·Bruno 실물 확인) | 직결 | `RCA-002 IncidentWorkspace`에 독립 섹션 추가. 서버가 incident event-time 이전 성공 배포만 반환하므로 클라이언트 상관 필터·재정렬 금지. 변경 없으면 섹션 미렌더(빈 카드 금지). 응답에 incident 발생 시각·구조화 PR 번호가 없으므로 "N분 전"·"PR #x"를 추측하지 않는다 | `API 완성: getIncidentRecentChanges (4f602cc86660a7f8a12583cffc44a53e220d9dbf)` · UI RED `f9a982f4f` → GREEN `78668b322` |
 | VP-005 | 승격 게이트 표시 — release flow에서 네 가지 판정 조건과 현재 승격 가능 여부 표시 | BQ-006 | workflow run의 optional `promotion_gate: PromotionGateResponse \| null` · 앵커 `8cd0b18e96f1266873d1632486472d0d22c18477` (`origin/dev` ancestor exit 0) | 직결 | Applications release flow + `UI-020 StatusMark`. `eligible`은 승격 실행 완료가 아니라 현재 조건 판정이다 | `API 완성: listApplicationRuns (429fb1d91)` · UI blocked — cluster-scoped Applications 계약 필요 |
-| VP-006 | revert PR 상태 — 검증 실패로 자동 생성된 revert PR을 인시던트·release 화면에 표시 | BQ-007 | 기존 safe_pr 이벤트/조회 재사용 (신규 route 없음) | backend 선행 | 기존 repo approval card 패턴. **flag off 환경에서는 이 표면 전체 미렌더** | 미요청 |
+| VP-006 | revert PR 상태 — 검증 실패로 생성된 revert PR을 인시던트·release 화면에 표시 | BQ-007 착륙 | auto-revert worker·권위 patch canonical merge `6d68325bf1cc47f55810e5dc2189e51a6fe916c0` (`origin/dev` ancestor exit 0). 공개 projection은 generic Safe PR lifecycle만 제공하며 auto-revert discriminator를 누락한다 | BE-Gap | 공용 revert PR status card. structured auto-revert event가 없으면 제목·카드·empty state까지 전부 미렌더 | blocked — stable `trigger_kind=auto_revert`와 incident/run exact scope 계약 필요 |
 | VP-007 | 클러스터-최상위 IA — 전역 Cluster selector가 URL 단일 권위로 전 화면 스코프 결정 + 연결된 Cluster 목록(이름·environment·connection·provider) | BQ-017 완료 | 기존 `CLUSTERS_PATH` + optional `provider` enum · 백엔드 코드 `db4798d4e`, canonical merge `d507ca6d4` (`origin/dev` ancestor exit 0) | 어댑터 | 셸 단일 `ClusterScopeProvider` + `UI-004 ScopePicker` + 단일 `ClusterProviderIcon`; 페이지별 목록 요청·selector 제거. provider는 표시 metadata로만 사용하고 화면·동작 분기 금지 | selector `2c4487d7b`; ProviderIcon `b4d1af3cd` |
 | VP-008 | 클러스터 연결 위자드 고도화 — provider 선택→사전 명령→설치 원커맨드(만료 카운트다운)→연결 단계 실시간(token_issued→…→ready)→완료 | BQ-017 | 기존 install 토큰·위자드 경로 + providers catalog + BQ-017 `connection_stage`(대기) | backend 선행(단계 표시) / 그 외 기존 계약 | 기존 resources cluster wizard 확장. `UI-057 Custom wizard` 선례 + `Progress`·`Steps`. 미지원 provider는 generic으로 정직 표기 | 미요청 |
 | VP-009 | provider 표시 일관화 — fleet heatmap·홈 카드·인시던트의 클러스터 표기에 동일 ProviderIcon 재사용 | BQ-017 | VP-007과 동일 필드 소비 | backend 선행 | 단일 컴포넌트 재사용, 중복 구현 금지 | 미요청 |
@@ -74,6 +74,20 @@ api-needs.md에 APIQ 행을 추가하지 않고 화면도 렌더하지 않는다
 - 재개 조건은 두 목록의 서버측 `cluster_id` 필터와 opaque cursor(`next_cursor` 또는 동등한
   `has_more` 증거) 착륙이다. provider 이름 분기, N+1 deployment 조회, partial 목록을 complete로
   표시하는 우회는 금지한다.
+
+## 1e. VP-006 auto-revert 식별 blocker (2026-07-13)
+
+- BQ-007은 flag off에서 이벤트를 발행하지 않고, flag on에서도 일반 `safe_pr.requested`를
+  발행한다. 현재 RCA timeline은 `current_subject`, `status`, `action_route`, `pr_url`,
+  `error_reason`으로 generic Safe PR lifecycle을 표현하지만 요청의 origin을 projection하지 않는다.
+- auto-revert worker의 `[auto-revert]` title prefix는 내부 구현 세부다. 제목 문자열, provider 이름,
+  patch 경로를 파싱해 auto-revert를 추측하지 않는다. 일반 Safe PR을 revert PR로 잘못 표시하는
+  것보다 표면을 미렌더하는 것이 정직하다.
+- 최소 additive 계약은 stable discriminator(`trigger_kind: "auto_revert" | ...`)와
+  correlation 또는 workflow run exact scope, stable event ID·event type·created time·nullable
+  PR URL·실패 reason이다. nested status object는 strict close하고 title/body는 식별 근거로 쓰지 않는다.
+- 별도 flag 조회가 없어도 structured auto-revert event가 0개면 섹션 전체를 미렌더해 flag-off UX를
+  만족할 수 있다. 위 계약의 canonical anchor 전에는 APIQ·adapter·UI를 만들지 않는다.
 
 ## 2. 작업 절차 (행 단위)
 
