@@ -1772,3 +1772,15 @@ target preflight·register 네 함수와 strict Zod 계약을 claim했다. 1회�
 - dev 흡수 merge `a1e37d34308192a6d5c363983a370209ab4813be`를 lab에 push한 뒤 비강제
   fast-forward로 dev에 승격했다. `origin/dev`와 `origin/woonyong/ui-layer-lab`은 모두
   `a1e37d343`이고 양방향 ancestor exit 0, divergence 0/0이다.
+
+## 2026-07-13 15:48 KST — [프론트] Button·Card 접근성 계약 테스트 보강
+
+- 테스트 기준점 `684a9e091`에서 Button slot을 봉인해야 한다는 가정을 먼저 검증했으나,
+  typecheck가 `SidebarTrigger`의 의도적인 합성 slot 소유권을 거부해 해당 가정이 제품 계약과
+  충돌함을 확인했다. 공용 합성 계약을 깨는 구현 변경은 착륙하지 않았다.
+- 정정 `9e4eafb41`은 Button 기본 slot과 wrapper 특화 slot을 함께 고정하고, native type·disabled,
+  focus-visible·reduced-motion·forced-colors 클래스 13개를 단위 테스트로 검증한다. Card는
+  비대화형 표면이므로 system-color 경계만 검증한다.
+- targeted 3 files / 14 tests, typecheck, lint PASS. full `npm run check` PASS:
+  114 files / 827 tests, design guard 341 files, shadcn 482 previews, Vite 14,538 modules.
+  `npm run visual-product` PASS: 38 isolated scenarios, unexpected network/WebSocket 0건.
