@@ -2716,3 +2716,4 @@ target preflight·register 네 함수와 strict Zod 계약을 claim했다. 1회�
 - BQ-021 접속 계약은 착륙했으며 gateway 계약 lock을 해제했다. 공개 OCI 403은 BQ-016의
   완료 블로커로 유지하고 GHCR publish·anonymous pull 허용 뒤 fresh Kind에서 재실증한다.
 - 계약 앵커: `ManagementAccessResponse + Helm access modes` / `cf69ffb5b` / `[green]`.
+- [백엔드] lane 회수 — `codex/oss-access-contract` / `cf69ffb5b` / ancestor exit 0.
