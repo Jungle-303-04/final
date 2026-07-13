@@ -110,7 +110,12 @@ def test_helm_chart_uses_one_public_origin_and_keeps_postgres_internal() -> None
     controller = services["opsia"]
     assert controller["spec"].get("type", "ClusterIP") == "ClusterIP"
     assert [(item["port"], item["targetPort"]) for item in controller["spec"]["ports"]] == [
-        (80, "http")
+        (80, "console")
+    ]
+    metrics = services["opsia-metrics"]
+    assert metrics["spec"].get("type", "ClusterIP") == "ClusterIP"
+    assert [(item["port"], item["targetPort"]) for item in metrics["spec"]["ports"]] == [
+        (9090, "http")
     ]
     postgres = services["opsia-postgresql"]
     assert postgres["spec"].get("type", "ClusterIP") == "ClusterIP"
@@ -142,6 +147,36 @@ def test_default_access_is_self_only_same_origin_with_console_and_realtime() -> 
     assert controller_env["OPSIA_ACCESS_MODE"] == "portforward"
     assert controller_env["OPSIA_EXTERNAL_URL"] == ""
     assert controller_env["COOKIE_SECURE"] == "0"
+
+    config = next(
+        item
+        for item in documents
+        if item["kind"] == "ConfigMap" and item["metadata"]["name"] == "opsia-console"
+    )["data"]["default.conf"]
+    assert "proxy_pass http://127.0.0.1:8000/;" in config
+    assert "proxy_pass http://127.0.0.1:8001/live/;" in config
+    assert "location ^~ /api/install/" in config
+    assert "access_log off;" in config
+    assert "location = /api/metrics" in config
+    assert 'proxy_set_header X-Kubeheal-Internal-Auth "";' in config
+    assert 'X-Content-Type-Options "nosniff"' in config
+
+    mounts = containers["console"]["volumeMounts"]
+    assert {item["mountPath"] for item in mounts} == {"/etc/nginx/conf.d", "/tmp"}
+
+
+def test_self_agent_uses_the_same_origin_internal_api_and_realtime_paths() -> None:
+    documents = _render_chart()
+    agent = next(
+        item
+        for item in documents
+        if item["kind"] == "DaemonSet" and item["metadata"]["name"] == "opsia-agent"
+    )
+    container = _container(agent, "agent")
+    agent_env = {item["name"]: item.get("value") for item in container["env"]}
+
+    assert agent_env["MANAGEMENT_BASE_URL"] == "http://opsia.opsia-system.svc/api"
+    assert agent_env["REALTIME_GATEWAY_URL"] == "ws://opsia.opsia-system.svc/api"
 
 
 def test_access_modes_render_explicit_exposure_without_exposing_internal_ports() -> None:
@@ -188,14 +223,16 @@ def test_access_modes_render_explicit_exposure_without_exposing_internal_ports()
     ]
 
     for documents in (load_balancer, node_port, ingress):
-        exposed_ports = [
-            port["port"]
-            for service in services(documents).values()
-            if service["metadata"]["name"] != "opsia-postgresql"
-            for port in service["spec"]["ports"]
+        rendered_services = services(documents)
+        assert [item["port"] for item in rendered_services["opsia"]["spec"]["ports"]] == [80]
+        assert rendered_services["opsia-metrics"]["spec"]["type"] == "ClusterIP"
+        assert [item["port"] for item in rendered_services["opsia-metrics"]["spec"]["ports"]] == [
+            9090
         ]
-        assert 9090 not in exposed_ports
-        assert 5432 not in exposed_ports
+        assert rendered_services["opsia-postgresql"]["spec"]["type"] == "ClusterIP"
+        assert [
+            item["port"] for item in rendered_services["opsia-postgresql"]["spec"]["ports"]
+        ] == [5432]
 
 
 def test_external_access_drives_secure_cookie_and_authoritative_agent_url() -> None:
@@ -217,6 +254,7 @@ def test_external_access_drives_secure_cookie_and_authoritative_agent_url() -> N
     assert controller_env["OPSIA_EXTERNAL_URL"] == "https://opsia.example.com/base"
     assert controller_env["COOKIE_SECURE"] == "1"
     assert controller_env["DEV_AUTH_BYPASS"] == "0"
+    assert controller_env["TARGET_AGENT_IMAGE"] == "ghcr.io/opsia/opsia:0.1.0"
 
 
 def test_access_notes_are_mode_specific_and_reveal_bootstrap_only_on_demand() -> None:
