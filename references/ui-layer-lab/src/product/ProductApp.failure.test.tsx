@@ -78,7 +78,7 @@ describe("ProductApp composition failure", () => {
     await userEvent.setup().click(screen.getByRole("button", { name: "Reopen screen" }));
 
     expect(compositionMock.attempts).toBeGreaterThan(attemptsBeforeRetry);
-    expect(await screen.findByRole("heading", { name: "Sign in to KubeHeal" })).toBeTruthy();
+    expect(await screen.findByRole("heading", { name: "Sign in to Opsia" })).toBeTruthy();
     expect(screen.queryByRole("alert")).toBeNull();
   }, 15_000);
 });

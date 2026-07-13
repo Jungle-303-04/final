@@ -169,7 +169,7 @@ describe("product design guard i18n JSX boundary", () => {
         "    <h2>{title}</h2>",
         "    <span>{status}</span>",
         "    <span>Pod</span><span>Node</span><span>Ready</span><span>Running</span>",
-        "    <span>KubeHeal</span><span>m</span><span>MiB</span>",
+        "    <span>Opsia</span><span>m</span><span>MiB</span>",
         "    <a aria-labelledby=\"issues-title\" href={route} labelMode=\"sr-only\">Service</a>",
         "    <section titleId=\"issues-panel-title\" statusMode=\"literal\" />",
         "    <SelectItem value=\"structural-resource-key\">{status}</SelectItem>",

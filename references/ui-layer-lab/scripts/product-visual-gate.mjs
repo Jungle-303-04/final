@@ -212,7 +212,7 @@ const visualScenarios = [
     locale: "ko",
     url: productUrl,
     authSession: "unauthenticated",
-    heading: "KubeHeal에 로그인",
+    heading: "Opsia에 로그인",
     requiredSelectors: authLoginSelectors,
     viewport: { width: 1440, height: 1000 },
     theme: "light",
@@ -224,7 +224,7 @@ const visualScenarios = [
     locale: "ko",
     url: productUrl,
     authSession: "unauthenticated",
-    heading: "KubeHeal에 로그인",
+    heading: "Opsia에 로그인",
     requiredSelectors: authLoginSelectors,
     viewport: { width: 390, height: 844 },
     theme: "dark",
@@ -236,7 +236,7 @@ const visualScenarios = [
     locale: "ko",
     url: productUrl,
     authSession: "unauthenticated",
-    heading: "KubeHeal에 로그인",
+    heading: "Opsia에 로그인",
     requiredSelectors: authLoginSelectors,
     viewport: { width: 320, height: 800 },
     theme: "light",
@@ -248,7 +248,7 @@ const visualScenarios = [
     locale: "ko",
     url: productUrl,
     authSession: "unauthenticated",
-    heading: "KubeHeal에 로그인",
+    heading: "Opsia에 로그인",
     requiredSelectors: authLoginSelectors,
     viewport: { width: 640, height: 800 },
     theme: "light",
@@ -261,7 +261,7 @@ const visualScenarios = [
     locale: "ko",
     url: productUrl,
     authSession: "unauthenticated",
-    heading: "KubeHeal에 로그인",
+    heading: "Opsia에 로그인",
     requiredSelectors: authLoginSelectors,
     viewport: { width: 1024, height: 900 },
     theme: "light",
@@ -1455,7 +1455,7 @@ async function prepareProductLocaleSmokeScenario(page, scenario) {
       `${scenario.id}: locale smoke copy is missing for ${scenario.locale}/${scenario.localeSmoke}`,
     );
   }
-  await page.waitForFunction(() => document.title === "KubeHeal");
+  await page.waitForFunction(() => document.title === "Opsia");
   await assertPageLocaleState(
     page,
     scenario,
@@ -1476,7 +1476,7 @@ async function prepareProductLocaleSmokeScenario(page, scenario) {
 
   await assertLocalizedRouteCurrent(page, scenario.localeSmoke, scenario.locale, scenario.id);
 
-  await page.getByText("KubeHeal", { exact: true }).waitFor();
+  await page.getByText("Opsia", { exact: true }).waitFor();
   if (scenario.localeSmoke === "home") {
     await assertGlobalClusterScopePicker(page, scenario.id, scenario.locale);
     await page.getByRole("button", { name: new RegExp(`^${homeNodeName}(?:\\s|$)`, "u") }).waitFor();
@@ -1490,8 +1490,8 @@ async function prepareProductLocaleSmokeScenario(page, scenario) {
   // Brand and Kubernetes fixture identities are source data, not translation targets.
   const immutableText = await page.locator("body").innerText();
   const requiredSourceText = scenario.localeSmoke === "home"
-    ? ["KubeHeal", homeClusterId, homeNodeName]
-    : ["KubeHeal", homeClusterId, homePodName];
+    ? ["Opsia", homeClusterId, homeNodeName]
+    : ["Opsia", homeClusterId, homePodName];
   const missingSourceText = requiredSourceText.filter((value) => !immutableText.includes(value));
   if (missingSourceText.length) {
     throw new Error(
@@ -1633,7 +1633,7 @@ async function selectLocale(page, currentLocale, targetLocale) {
 }
 
 async function prepareProductHomeScenario(page, scenario) {
-  await page.waitForFunction(() => document.title === "KubeHeal");
+  await page.waitForFunction(() => document.title === "Opsia");
   if (scenario.homeFeatureState === "cluster-forbidden") {
     await assertProductHomeClusterForbidden(page, scenario.id);
     return;
@@ -1804,7 +1804,7 @@ async function visibleExactTextCount(page, text) {
 }
 
 async function prepareProductResourcesScenario(page, scenario) {
-  await page.waitForFunction(() => document.title === "KubeHeal");
+  await page.waitForFunction(() => document.title === "Opsia");
   const table = scenario.resourcesDetail
     ? page.locator("table[data-slot='table'][aria-label='리소스 목록']")
     : page.getByRole("table", { name: "리소스 목록" });
