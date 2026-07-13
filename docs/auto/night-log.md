@@ -2631,7 +2631,7 @@ target preflight·register 네 함수와 strict Zod 계약을 claim했다. 1회�
 
 ## 2026-07-13 21:02 KST — [프론트] VP-010 passive filter Provider GREEN
 
-- RED는 미구현 Provider와 `clear-labels` history intent로 시작했다. GREEN `168b26e50`은
+- RED는 부재 Provider와 `clear-labels` history intent로 시작했다. GREEN `168b26e50`은
   URL을 유일한 권위로 읽는 `UnifiedFilterProvider`를 추가했다. mount-time effect·자동 write·
   API·로컬 복제 state는 0건이며, 명시적 canonicalize와 atomic updater만 push/replace를 쓴다.
 - StrictMode 무기록, legacy·unresolved 보존, explicit replace migration, chip push, typing replace,
@@ -2658,3 +2658,19 @@ target preflight·register 네 함수와 strict Zod 계약을 claim했다. 1회�
   승격 직후 이 단위 전용 `codex/vp010-filter-provider-20260713`과
   `/private/tmp/opsia-vp010-filter-provider`를 제거하고 prune한다. 신규 stash는 0개이며,
   기존 8개와 다른 작업자의 branch·worktree는 증명 없이 변경하지 않는다.
+
+## 2026-07-13 21:11 KST — [백엔드] OSS Safe PR 리뷰·GitOps 소유권 실측
+
+- RED 10개 커밋 뒤 GREEN `9b107d8e9`은 mock PR·직접 이미지 교체를 제거하고 실제 API →
+  outbox → in-process workers → 기존 `GithubScmProvider`/`scm-worker` → `safe_pr.created` →
+  분리 reviewer merge → merge SHA manifest 조회 → 외부 GitOps actor 적용 흐름을 완주했다.
+- 보안 감사에서 `.git/config` write를 통한 명령 실행 가능성을 재현해 모든 `.git` component를
+  차단했다. writer/admin/reviewer token은 상호분리하고 writer의 main reset/commit/merge를
+  401로 거부한다. merge는 검토한 base/head SHA 경쟁 변경을 409로 거부한다.
+- 최종 Kind 실측은 bad `89b931cb5865582b3084572240e4cf3a7825fa9d`, merge
+  `9a66b083b37416ca2d61ff71ccd7b18b9b67f1d4`, workload Ready 1·good image였고 spec
+  managedFields Apply writer는 `opsia-demo-gitops` 하나였다. credential artifact는 0건,
+  표적 테스트 21건·Ruff lint/format·shell syntax가 통과했다.
+- 범위는 local SCM fixture와 외부 GitOps actor 시뮬레이션이다. hosted forge, 실제 Argo
+  continuous reconcile, public OCI chart/controller/console은 미증명이라 BQ-016은
+  `in_progress`다. 전체 게이트와 D-024 착륙 증거는 최신 dev 재검증 뒤 별도 기록한다.
