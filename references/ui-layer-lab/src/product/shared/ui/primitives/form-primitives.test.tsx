@@ -18,6 +18,7 @@ describe("product form primitives", () => {
     expect(markup).toContain('for="email"');
     expect(markup).toContain('data-slot="input"');
     expect(markup).toContain('aria-invalid="true"');
+    expect(markup).toContain("motion-reduce:transition-none");
     expect(markup).toContain('role="alert"');
   });
 

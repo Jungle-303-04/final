@@ -2264,8 +2264,11 @@ async function assertProductResourcesReducedMotion(page, label) {
       "[data-slot='select-trigger']",
       "[data-slot='accordion-trigger']",
       "[data-slot='button']",
+      "[data-slot='input']",
       "[data-slot='sheet-content']",
       "[data-slot='sheet-overlay']",
+      "[data-slot='table-row']",
+      "[data-slot='toggle']",
     ].join(",");
     const elements = [...document.querySelectorAll(selector)].filter((element) => {
       const rect = element.getBoundingClientRect();
