@@ -21,6 +21,39 @@
 .flow-edge-path--info { stroke: var(--ui-info); }
 .flow-edge-path--neutral { stroke: var(--ui-border); }
 
+.flow-edge-label {
+  position: absolute;
+  display: inline-flex;
+  pointer-events: none;
+  flex-direction: column;
+  align-items: center;
+  gap: 1px;
+  border: 1px solid var(--ui-border);
+  border-radius: 5px;
+  background: var(--ui-surface);
+  padding: 3px 7px;
+  color: var(--ui-text-secondary);
+  box-shadow: var(--ui-shadow-soft);
+  white-space: nowrap;
+}
+
+.flow-edge-label strong {
+  color: inherit;
+  font-size: var(--text-caption);
+  font-weight: 800;
+}
+
+.flow-edge-label span {
+  color: var(--ui-text-muted);
+  font-size: 0.625rem;
+  font-weight: 700;
+}
+
+.flow-edge-label--gate {
+  border-color: color-mix(in srgb, var(--ui-warning) 48%, var(--ui-border));
+  color: var(--ui-warning);
+}
+
 .react-flow__node { transition: transform var(--ui-duration-slow) var(--ease-decelerate); }
 .react-flow__node.dragging { transition: none; }
 

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import uuid
 
-from sqlalchemy import delete, func, select
+from sqlalchemy import case, delete, func, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from domains.alert.models import AlertChannel
@@ -49,6 +49,17 @@ class AlertChannelRepository(DatabaseConnection):
             rows = conn.execute(statement).mappings().all()
         return [serialize_alert_channel(dict(row)) for row in rows]
 
+    def get_alert_channel(self, workspace_id: str, channel_id: str) -> JsonObject | None:
+        table = AlertChannel.__table__
+        statement = (
+            select(table)
+            .where(table.c.workspace_id == workspace_id, table.c.channel_id == channel_id)
+            .limit(1)
+        )
+        with self.connection() as conn:
+            row = conn.execute(statement).mappings().first()
+        return serialize_alert_channel(dict(row)) if row else None
+
     def upsert_alert_channel(self, payload: JsonObject) -> JsonObject:
         table = AlertChannel.__table__
         channel_id = str(payload.get("channel_id") or f"chan-{uuid.uuid4().hex[:16]}")
@@ -70,6 +81,11 @@ class AlertChannelRepository(DatabaseConnection):
                 "url": insert.excluded.url,
                 "min_severity": insert.excluded.min_severity,
                 "enabled": insert.excluded.enabled,
+                # Delivery evidence is valid only for the exact tested webhook URL.
+                "last_tested_at": case((table.c.url != insert.excluded.url, None), else_=table.c.last_tested_at),
+                "last_test_status": case((table.c.url != insert.excluded.url, None), else_=table.c.last_test_status),
+                "last_test_detail": case((table.c.url != insert.excluded.url, None), else_=table.c.last_test_detail),
+                "last_test_status_code": case((table.c.url != insert.excluded.url, None), else_=table.c.last_test_status_code),
                 "updated_at": func.now(),
             },
             where=table.c.workspace_id == insert.excluded.workspace_id,

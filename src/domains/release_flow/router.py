@@ -41,6 +41,7 @@ from packages.contracts.gateway.requests import (
     ReleaseManifestRenderRequest,
     ReleaseManifestSafePrRequest,
     ReleasePlanArchiveRequest,
+    ReleasePlanRestoreRequest,
     ReleasePlanUpsertRequest,
     ReleaseRunActionRequest,
 )
@@ -484,7 +485,7 @@ async def preview_release_plan(
     db: Any = Depends(get_db),
 ) -> ReleasePlanPreviewResponse:
     workspace_id = getattr(current, "workspace_id", DEFAULT_WORKSPACE_ID)
-    body = {**payload.model_dump(), "workspace_id": workspace_id}
+    body = persisted_release_plan_for_execution(payload, db, workspace_id)
     require_plan_application_read_access(db, current, workspace_id, body["steps"])
     return ReleasePlanPreviewResponse(preview=build_release_plan_preview(body))
 
@@ -625,6 +626,7 @@ async def dispatch_release_plan(
         body, preview, wave, workspace_id=workspace_id, db=db
     )
     blockers = list(preview.get("blockers", []))
+    blockers.extend(release_plan_execution_status_blockers(body, db, workspace_id))
     blockers.extend(
         release_dispatch_context_blockers(
             dispatch_plan,
@@ -677,7 +679,7 @@ async def start_release_plan(
     events: Any = Depends(get_events),
 ) -> ReleaseRunResponse:
     workspace_id = getattr(current, "workspace_id", DEFAULT_WORKSPACE_ID)
-    body = {**payload.model_dump(), "workspace_id": workspace_id}
+    body = persisted_release_plan_for_execution(payload, db, workspace_id)
     require_plan_application_manage_access(db, current, workspace_id, body["steps"])
     require_no_active_release_run(db, workspace_id, body)
     preview = build_release_plan_preview(body)
@@ -686,6 +688,7 @@ async def start_release_plan(
         body, preview, first_wave, workspace_id=workspace_id, db=db
     )
     blockers = list(preview.get("blockers", []))
+    blockers.extend(release_plan_execution_status_blockers(body, db, workspace_id))
     blockers.extend(
         release_dispatch_context_blockers(
             dispatch_plan,
@@ -806,10 +809,36 @@ async def archive_release_plan(
     if plan is None:
         raise HTTPException(status_code=HTTP_NOT_FOUND, detail=RELEASE_PLAN_NOT_FOUND)
     require_plan_application_plan_manage_access(db, current, workspace_id, plan.get("steps", []))
-    archived = db.archive_release_plan(workspace_id, plan_id, reason=payload.reason)
+    require_release_plan_not_active(db, workspace_id, plan_id, action="archived")
+    if str(plan.get("status") or "").lower() == "archived":
+        raise HTTPException(status_code=HTTP_CONFLICT, detail="release plan is already archived")
+    reason = require_release_plan_lifecycle_reason(payload.reason, action="archive")
+    archived = db.archive_release_plan(workspace_id, plan_id, reason=reason, actor=current.user_id)
     if archived is None:
         raise HTTPException(status_code=HTTP_NOT_FOUND, detail=RELEASE_PLAN_NOT_FOUND)
     return ReleasePlanResponse(plan=archived)
+
+
+@router.post(gateway_routes.RELEASE_PLAN_RESTORE_PATH, response_model=ReleasePlanResponse)
+async def restore_release_plan(
+    plan_id: str,
+    payload: ReleasePlanRestoreRequest,
+    current: Any = Depends(require_session),
+    db: Any = Depends(get_db),
+) -> ReleasePlanResponse:
+    workspace_id = getattr(current, "workspace_id", DEFAULT_WORKSPACE_ID)
+    plan = db.get_release_plan(workspace_id, plan_id)
+    if plan is None:
+        raise HTTPException(status_code=HTTP_NOT_FOUND, detail=RELEASE_PLAN_NOT_FOUND)
+    require_plan_application_plan_manage_access(db, current, workspace_id, plan.get("steps", []))
+    require_release_plan_not_active(db, workspace_id, plan_id, action="restored")
+    if str(plan.get("status") or "").lower() != "archived":
+        raise HTTPException(status_code=HTTP_CONFLICT, detail="release plan is not archived")
+    reason = require_release_plan_lifecycle_reason(payload.reason, action="restore")
+    restored = db.restore_release_plan(workspace_id, plan_id, reason=reason, actor=current.user_id)
+    if restored is None:
+        raise HTTPException(status_code=HTTP_NOT_FOUND, detail=RELEASE_PLAN_NOT_FOUND)
+    return ReleasePlanResponse(plan=restored)
 
 
 @router.delete(gateway_routes.RELEASE_PLAN_PATH)
@@ -1202,6 +1231,11 @@ async def create_release_plan(
             detail=EXPLICIT_RELEASE_PLAN_ID_NOT_ALLOWED,
         )
     workspace_id = getattr(current, "workspace_id", DEFAULT_WORKSPACE_ID)
+    if payload.status == "archived":
+        raise HTTPException(
+            status_code=HTTP_CONFLICT,
+            detail="create the release plan first, then archive it with an archive reason",
+        )
     body = {**payload.model_dump(), "workspace_id": workspace_id, "user_id": current.user_id}
     with unit_of_work_or_null(db):
         lock_identity = getattr(db, "lock_release_plan_identity", None)
@@ -1261,6 +1295,7 @@ async def update_release_plan(
             existing.get("steps", []),
         )
         body = {**payload.model_dump(), "plan_id": plan_id, "workspace_id": workspace_id}
+        require_release_plan_status_transition(existing, str(body.get("status") or ""))
         if str(body["name"]) != str(existing.get("name") or ""):
             get_by_name = getattr(db, "get_release_plan_by_name", None)
             if not callable(get_by_name):
@@ -1277,6 +1312,85 @@ async def update_release_plan(
             require_plan_application_plan_manage_access(db, current, workspace_id, body["steps"])
         plan = upsert_release_plan_or_404(db, body)
     return ReleasePlanResponse(plan=plan)
+
+
+def require_release_plan_not_active(db: Any, workspace_id: str, plan_id: str, *, action: str) -> None:
+    has_active_runs = getattr(db, "has_active_release_runs", None)
+    if callable(has_active_runs) and has_active_runs(workspace_id, plan_id):
+        raise HTTPException(
+            status_code=HTTP_CONFLICT,
+            detail=f"release plan has active runs and cannot be {action}",
+        )
+
+
+def require_release_plan_lifecycle_reason(reason: str | None, *, action: str) -> str:
+    normalized = str(reason or "").strip()
+    if normalized:
+        return normalized
+    raise HTTPException(status_code=HTTP_UNPROCESSABLE_ENTITY, detail=f"release plan {action} reason is required")
+
+
+def require_release_plan_status_transition(existing: dict[str, Any], requested_status: str) -> None:
+    current_status = str(existing.get("status") or "").lower()
+    requested = requested_status.lower()
+    if current_status == "archived" and requested != "archived":
+        raise HTTPException(
+            status_code=HTTP_CONFLICT,
+            detail="restore an archived release plan through the restore action",
+        )
+    if current_status != "archived" and requested == "archived":
+        raise HTTPException(
+            status_code=HTTP_CONFLICT,
+            detail="archive a release plan through the archive action with a reason",
+        )
+
+
+def release_plan_execution_status_blockers(
+    plan: dict[str, Any],
+    db: Any,
+    workspace_id: str,
+) -> list[str]:
+    plan_id = str(plan.get("plan_id") or "").strip()
+    get_plan = getattr(db, "get_release_plan", None)
+    if not plan_id or not callable(get_plan):
+        return []
+    persisted_plan = get_plan(workspace_id, plan_id)
+    if not isinstance(persisted_plan, dict):
+        return []
+    status = str(persisted_plan.get("status") or "").lower()
+    if status in {"", "active"}:
+        return []
+    if status == "draft":
+        return [f"Release plan {plan_id} is draft and cannot be dispatched. Activate the plan after review."]
+    if status == "paused":
+        return [f"Release plan {plan_id} is paused and cannot be dispatched. Resume the plan when it is safe."]
+    if status == "archived":
+        return [f"Release plan {plan_id} is archived and cannot be dispatched."]
+    return [f"Release plan {plan_id} is not active and cannot be dispatched."]
+
+
+def persisted_release_plan_for_execution(
+    payload: ReleasePlanUpsertRequest,
+    db: Any,
+    workspace_id: str,
+) -> dict[str, Any]:
+    plan_id = str(payload.plan_id or "").strip()
+    if not plan_id:
+        raise HTTPException(
+            status_code=HTTP_CONFLICT,
+            detail={
+                "message": RELEASE_PLAN_BLOCKED,
+                "blockers": ["Save the release plan before starting or dispatching it."],
+            },
+        )
+    get_plan = getattr(db, "get_release_plan", None)
+    if not callable(get_plan):
+        # Lightweight test adapters do not persist plans; production storage always does.
+        return {**payload.model_dump(), "workspace_id": workspace_id}
+    persisted_plan = get_plan(workspace_id, plan_id)
+    if not isinstance(persisted_plan, dict):
+        raise HTTPException(status_code=HTTP_NOT_FOUND, detail=RELEASE_PLAN_NOT_FOUND)
+    return {**persisted_plan, "workspace_id": workspace_id}
 
 
 async def dispatch_wave_steps(
@@ -1300,7 +1414,8 @@ async def dispatch_wave_steps(
             detail={"message": RELEASE_PLAN_BLOCKED, "blockers": [f"wave {wave} has no steps"]},
         )
 
-    blockers = release_dispatch_context_blockers(dispatch_plan, selected_steps, db, workspace_id)
+    blockers = release_plan_execution_status_blockers(dispatch_plan, db, workspace_id)
+    blockers.extend(release_dispatch_context_blockers(dispatch_plan, selected_steps, db, workspace_id))
     blockers.extend(
         release_execution_blockers(dispatch_plan, preview, wave, workspace_id=workspace_id, db=db)
     )

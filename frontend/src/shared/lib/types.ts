@@ -22,7 +22,8 @@ export interface PlanChange {
   after?: unknown;
 }
 export interface SafePr { status: string; pr_url?: string; explanation?: string; diff_before?: string; diff_after?: string; error?: string }
-export interface Deployment { cluster_id: string; namespace: string; name: string; image: string; replicas: number; status: string; application_id?: string; manifest_path?: string; branch?: string; repo_ref?: string }
+export interface GitOpsPoll { status: string; status_code?: number; error_kind?: string; error?: string; last_seen_commit_sha?: string; last_polled_at?: string }
+export interface Deployment { cluster_id: string; namespace: string; name: string; image: string; replicas: number; status: string; application_id?: string; manifest_path?: string; branch?: string; repo_ref?: string; gitops_poll?: GitOpsPoll }
 
 // release flow
 export interface ReleasePlanStep { step_id?: string; application_id: string; name: string; position: number; depends_on: string[]; config: Record<string, unknown> }

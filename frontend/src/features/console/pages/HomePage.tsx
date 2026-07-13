@@ -316,7 +316,7 @@ function ApprovalCard({ approvals, pathFor }: { approvals: ReturnType<typeof use
   return (
     <Card
       title="승인 대기 배포"
-      actions={<Link to={pathFor('/workflows')}><Button size="sm">워크플로우</Button></Link>}
+      actions={<Link to={pathFor('/release-flows')}><Button size="sm">워크플로우</Button></Link>}
       empty={approvals.length === 0 ? <EmptyState title="승인 대기 없음" icon={<SendIcon />} /> : undefined}
     >
       <div className="grid gap-2">

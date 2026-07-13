@@ -25,7 +25,7 @@ export default function WorkflowListView() {
     <div className="grid gap-6">
       <PageHeader
         title="워크플로우"
-        description="변경 감지부터 렌더, 정책 검증, 승인, 적용까지 이어지는 실행 흐름입니다."
+        description="변경 감지부터 렌더, 정책 검증, 승인, 적용까지 이어지는 실행 기록 목록입니다."
         actions={<Button onClick={() => nav(pathFor('/release-flows'))}>릴리즈 플로우 보기</Button>}
       />
 
@@ -42,7 +42,6 @@ export default function WorkflowListView() {
           <Table
             rows={rows}
             rowKey={(row) => row.run_id}
-            onRowClick={(row) => nav(pathFor(`/workflows/${row.run_id}`))}
             empty={(
               <EmptyState
                 title="아직 실행된 워크플로우가 없습니다"

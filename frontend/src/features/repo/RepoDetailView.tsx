@@ -2,10 +2,9 @@ import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { motion } from 'motion/react';
 import { useApplication, useDeployments, useRuns } from '@/features/repo/api';
 import { ApprovalCard } from '@/features/repo/ApprovalCard';
-import { encodeChatContext, type AiChatContext } from '@/features/chat/context';
 import { useConsolePath } from '@/features/console/ui';
 import { shortSha, timeAgo } from '@/shared/lib/format';
-import type { Deployment, PlanChange, WorkflowRun } from '@/shared/lib/types';
+import type { Deployment, GitOpsPoll, PlanChange, WorkflowRun } from '@/shared/lib/types';
 import { Badge, Breadcrumb, Button, Card, CodeBlock, EmptyState, KeyValueList, PageHeader, Skeleton, Table, Tabs, type TableColumn, cx } from '@/ui';
 import { listItem, listStagger } from '@/ui/motion';
 
@@ -96,7 +95,7 @@ export default function RepoDetailView() {
           loading={runsQ.isPending}
           error={runsQ.isError ? runsQ.error : null}
           onRetry={() => runsQ.refetch()}
-          onOpenRun={(runId) => navigate(pathFor(`/workflows/${runId}`))}
+          onOpenRun={() => navigate(pathFor('/release-flows'))}
         />
       )}
 
@@ -116,11 +115,7 @@ export default function RepoDetailView() {
           loading={runsQ.isPending}
           error={runsQ.isError ? runsQ.error : null}
           onRetry={() => runsQ.refetch()}
-          onAiAnalyze={(run, error) => navigate(aiPath(pathFor, {
-            diff_source: 'safe_pr',
-            workflow_run_id: run.run_id,
-            application_id: run.application_id,
-          }, `Safe PR 실패 원인 분석: ${error}`))}
+          onAiAnalyze={(error) => navigate(pathFor(`/ai?prefill=${encodeURIComponent(`Safe PR 실패 원인 분석: ${error}`)}`))}
         />
       )}
 
@@ -189,20 +184,9 @@ function RunHistory({
 
 function ApprovalPreview({ run }: { run: WorkflowRun }) {
   const diffStep = run.steps.find((step) => step.name === 'DIFFING');
-  const pathFor = useConsolePath();
   return (
     <div className="grid gap-3 rounded-panel border border-border bg-surface p-3">
-      <div className="flex min-w-0 flex-wrap items-center justify-between gap-2">
-        <ApprovalCard approvalId={run.approval_id ?? ''} summary={`${shortSha(run.commit_sha)} 배포 승인`} compact />
-        <Link to={aiPath(pathFor, {
-          diff_source: 'gitops',
-          workflow_run_id: run.run_id,
-          approval_id: run.approval_id,
-          application_id: run.application_id,
-        }, '이 GitOps diff 위험도를 설명해줘')}>
-          <Button size="sm" variant="secondary">AI 설명</Button>
-        </Link>
-      </div>
+      <ApprovalCard approvalId={run.approval_id ?? ''} summary={`${shortSha(run.commit_sha)} 배포 승인`} compact />
       {diffStep?.changes && diffStep.changes.length > 0 ? (
         <PlanDiffPanel changes={diffStep.changes} resource={diffStep.resource} />
       ) : (
@@ -261,9 +245,16 @@ function DeploymentsCard({
     { id: 'image', header: '이미지', sortValue: (row) => row.image, cell: (row) => <CodeText>{row.image || '없음'}</CodeText>, width: 'lg' },
     { id: 'replicas', header: 'Replicas', sortValue: (row) => row.replicas, align: 'right', cell: (row) => <span className="tabular-nums text-primary">{row.replicas.toLocaleString()}</span> },
     { id: 'status', header: '상태', sortValue: (row) => row.status, cell: (row) => <StatusBadge status={row.status} /> },
+    {
+      id: 'gitops',
+      header: 'GitOps 감시',
+      sortValue: (row) => row.gitops_poll?.last_polled_at ?? '',
+      width: 'lg',
+      cell: (row) => <GitOpsPollCell poll={row.gitops_poll} />,
+    },
   ];
   return (
-    <Card title="배포 대상" description="이 배포 정의가 실제로 연결된 클러스터와 워크로드입니다">
+    <Card title="배포 대상" description="각 대상의 워크로드 상태와 GitOps 감시 연결 상태를 함께 확인합니다">
       <Table
         rows={deployments}
         columns={columns}
@@ -277,6 +268,29 @@ function DeploymentsCard({
   );
 }
 
+function GitOpsPollCell({ poll }: { poll?: GitOpsPoll }) {
+  if (!poll) return <span className="text-caption text-muted">확인 전</span>;
+  const meta = gitOpsPollMeta(poll.status);
+  const error = poll.error || poll.error_kind;
+  return (
+    <div className="grid min-w-44 gap-1">
+      <span><Badge tone={meta.tone}>{meta.label}</Badge></span>
+      <span className="text-caption text-secondary">
+        {poll.last_seen_commit_sha ? `커밋 ${shortSha(poll.last_seen_commit_sha)}` : '확인된 커밋 없음'}
+        {poll.last_polled_at ? ` · ${timeAgo(poll.last_polled_at) || '방금 확인'}` : ''}
+      </span>
+      {error && <span className="line-clamp-2 text-caption font-medium text-danger" title={error}>{error}</span>}
+    </div>
+  );
+}
+
+function gitOpsPollMeta(status: string): { label: string; tone: BadgeTone } {
+  const key = status.toLowerCase();
+  if (key === 'ok') return { label: '정상 감시', tone: 'success' };
+  if (key === 'failed') return { label: '감시 실패', tone: 'danger' };
+  return { label: '감시 대기', tone: 'warning' };
+}
+
 function SafePrCard({
   run,
   loading,
@@ -288,17 +302,9 @@ function SafePrCard({
   loading: boolean;
   error: Error | null;
   onRetry: () => void;
-  onAiAnalyze: (run: WorkflowRun, error: string) => void;
+  onAiAnalyze: (error: string) => void;
 }) {
   const safePr = run?.safe_pr;
-  const pathFor = useConsolePath();
-  const aiHref = run
-    ? aiPath(pathFor, {
-      diff_source: 'safe_pr',
-      workflow_run_id: run.run_id,
-      application_id: run.application_id,
-    }, '이 Safe PR patch diff 위험도를 설명해줘')
-    : '';
   return (
     <Card
       title="Safe PR"
@@ -315,11 +321,6 @@ function SafePrCard({
             {run?.commit_sha && <CodeText>{shortSha(run.commit_sha)}</CodeText>}
             {safePr.pr_url && (
               <a className="font-semibold text-accent hover:text-accent-hover" href={safePr.pr_url} target="_blank" rel="noreferrer">PR 열기</a>
-            )}
-            {run && (
-              <Link className="ml-auto" to={aiHref}>
-                <Button size="sm" variant="secondary">AI 설명</Button>
-              </Link>
             )}
           </div>
           {safePr.explanation && <p className="text-body text-secondary">{safePr.explanation}</p>}
@@ -338,20 +339,13 @@ function SafePrCard({
           {safePr.error && (
             <div className="flex flex-wrap items-center justify-between gap-3 rounded-panel border border-danger/40 bg-bg p-3">
               <p className="min-w-0 text-body text-secondary">Safe PR 실패 사유: <span className="font-semibold text-danger">{safePr.error}</span></p>
-              <Button size="sm" variant="primary" leadingIcon={<SendIcon />} onClick={() => run && onAiAnalyze(run, safePr.error ?? '')}>AI 분석</Button>
+              <Button size="sm" variant="primary" leadingIcon={<SendIcon />} onClick={() => onAiAnalyze(safePr.error ?? '')}>AI 분석</Button>
             </div>
           )}
         </div>
       )}
     </Card>
   );
-}
-
-function aiPath(pathFor: (to: string) => string, context: AiChatContext, prefill: string) {
-  const params = new URLSearchParams({ prefill });
-  const encoded = encodeChatContext(context);
-  if (encoded) params.set('context', encoded);
-  return pathFor(`/ai?${params.toString()}`);
 }
 
 function PlanDiffPanel({ changes, resource }: { changes: PlanChange[]; resource?: string }) {
