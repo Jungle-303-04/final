@@ -547,6 +547,25 @@ def materialize_scalar_patch(source: str, plan: ManifestScalarPatchPlan) -> str:
     return patched
 
 
+def scalar_patch_matches_manifest(
+    plan: ManifestScalarPatchPlan,
+    manifest: Mapping[str, Any],
+) -> bool:
+    """SCM 권위 검증용: forward의 현재값이 승인 snapshot과 정확히 같은지 확인한다."""
+
+    try:
+        validate_scalar_patch_plan(plan)
+        return all(
+            same_scalar(
+                object_value_at(manifest, field_path_segments(item.field_path)),
+                item.current_value,
+            )
+            for item in plan.replacements
+        )
+    except ManifestSourcePatchError:
+        return False
+
+
 def field_path_segments(value: str) -> tuple[_FieldPathSegment, ...]:
     segments: list[_FieldPathSegment] = []
     for raw in value.split("."):
