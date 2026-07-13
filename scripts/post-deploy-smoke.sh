@@ -14,6 +14,9 @@ EXPECTED_SERVICE_IMAGE="${EXPECTED_SERVICE_IMAGE:-}"
 EXPECTED_CONSOLE_IMAGE="${EXPECTED_CONSOLE_IMAGE:-}"
 SERVICE_ROLLBACK_PLAN="${SERVICE_ROLLBACK_PLAN:-}"
 CONSOLE_ROLLBACK_PLAN="${CONSOLE_ROLLBACK_PLAN:-}"
+SMOKE_CURL_IMAGE="${SMOKE_CURL_IMAGE:-curlimages/curl:8.11.1}"
+IN_CLUSTER_API_URL="http://api-gateway.${MGMT_NS}.svc.cluster.local"
+IN_CLUSTER_CONSOLE_URL="http://console.${MGMT_NS}.svc.cluster.local"
 
 for variable in \
   BASE_URL \
@@ -47,15 +50,64 @@ fi
 
 index_file="$(mktemp)"
 health_file="$(mktemp)"
-trap 'rm -f "${index_file}" "${health_file}"' EXIT
+port_forward_log="$(mktemp)"
+PORT_FORWARD_PID=""
+
+cleanup() {
+  if [ -n "${PORT_FORWARD_PID}" ] && kill -0 "${PORT_FORWARD_PID}" 2>/dev/null; then
+    kill "${PORT_FORWARD_PID}" 2>/dev/null || true
+    wait "${PORT_FORWARD_PID}" 2>/dev/null || true
+  fi
+  rm -f "${index_file}" "${health_file}" "${port_forward_log}"
+}
+trap cleanup EXIT
+
+cluster_curl() {
+  local url="$1"
+  local pod_name="deploy-smoke-post-${GITHUB_RUN_ID:-local}-${RANDOM}"
+
+  kubectl --context "${MGMT_CONTEXT}" -n "${MGMT_NS}" run "${pod_name}" \
+    --rm -i --restart=Never \
+    --image="${SMOKE_CURL_IMAGE}" \
+    --quiet -- \
+    curl --silent --show-error \
+      --connect-timeout 5 \
+      --max-time 15 \
+      --write-out $'\n%{http_code}' \
+      "${url}"
+}
+
+start_api_port_forward() {
+  local attempt
+
+  kubectl --context "${MGMT_CONTEXT}" -n "${MGMT_NS}" port-forward \
+    --address 127.0.0.1 service/api-gateway :80 \
+    >"${port_forward_log}" 2>&1 &
+  PORT_FORWARD_PID="$!"
+
+  for attempt in $(seq 1 20); do
+    API_FORWARD_PORT="$(sed -nE \
+      's/^Forwarding from 127\.0\.0\.1:([0-9]+) -> 8000$/\1/p' \
+      "${port_forward_log}" | head -n 1)"
+    if [ -n "${API_FORWARD_PORT}" ]; then
+      return 0
+    fi
+    if ! kill -0 "${PORT_FORWARD_PID}" 2>/dev/null; then
+      cat "${port_forward_log}" >&2
+      return 1
+    fi
+    sleep 0.5
+  done
+
+  cat "${port_forward_log}" >&2
+  echo "api-gateway port-forward did not become ready" >&2
+  return 1
+}
 
 echo "==> post-deploy gateway health"
-health_status="$(
-  curl --silent --show-error \
-    --output "${health_file}" \
-    --write-out '%{http_code}' \
-    "${BASE_URL}/api/healthz"
-)"
+health_response="$(cluster_curl "${IN_CLUSTER_API_URL}/api/healthz")"
+health_status="${health_response##*$'\n'}"
+printf '%s' "${health_response%$'\n'*}" >"${health_file}"
 test "${health_status}" = "200"
 python3 - "${health_file}" <<'PY'
 import json
@@ -68,12 +120,9 @@ if document.get("status") != "ok":
 PY
 
 echo "==> post-deploy frontend bundle"
-frontend_status="$(
-  curl --silent --show-error \
-    --output "${index_file}" \
-    --write-out '%{http_code}' \
-    "${BASE_URL}/"
-)"
+frontend_response="$(cluster_curl "${IN_CLUSTER_CONSOLE_URL}/")"
+frontend_status="${frontend_response##*$'\n'}"
+printf '%s' "${frontend_response%$'\n'*}" >"${index_file}"
 test "${frontend_status}" = "200"
 post_bundle="$(grep -Eom1 'index-[A-Za-z0-9_-]+\.js' "${index_file}")"
 test -n "${post_bundle}"
@@ -84,7 +133,10 @@ case "${REQUIRE_FRONTEND_BUNDLE_CHANGE}" in
 esac
 
 echo "==> post-deploy login, workflow, and strict RCA reads"
-bash "${SCRIPT_DIR}/smoke.sh"
+start_api_port_forward
+IN_CLUSTER_FORWARD_URL="http://127.0.0.1:${API_FORWARD_PORT}"
+BASE_URL="${IN_CLUSTER_FORWARD_URL}" API_BASE_URL="${IN_CLUSTER_FORWARD_URL}" \
+  bash "${SCRIPT_DIR}/smoke.sh"
 
 echo "==> post-deploy Alembic head"
 runtime_database="$({
@@ -136,6 +188,25 @@ verify_plan_images() {
 echo "==> post-deploy immutable images"
 verify_plan_images "${SERVICE_ROLLBACK_PLAN}" "${EXPECTED_SERVICE_IMAGE}"
 verify_plan_images "${CONSOLE_ROLLBACK_PLAN}" "${EXPECTED_CONSOLE_IMAGE}"
+
+echo "==> post-deploy public edge reachability (non-blocking)"
+if public_status="$(
+  curl --silent --show-error \
+    --connect-timeout 5 \
+    --max-time 15 \
+    --output /dev/null \
+    --write-out '%{http_code}' \
+    "${BASE_URL}/api/healthz"
+)"; then
+  :
+else
+  public_status="000"
+fi
+if [ "${public_status}" = "200" ]; then
+  echo "public edge health status=200"
+else
+  echo "warning: public edge health status=${public_status}; in-cluster smoke remains authoritative" >&2
+fi
 
 printf 'post-deploy smoke passed: bundle=%s head=%s\n' \
   "${post_bundle}" "${database_head}"

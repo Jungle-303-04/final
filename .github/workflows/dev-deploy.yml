@@ -219,7 +219,6 @@ jobs:
             --manifest "${RUNNER_TEMP}/management.yaml"
 
       - name: Run pre-deploy smoke
-        if: github.event_name != 'workflow_dispatch'
         id: pre_smoke
         shell: bash
         run: |
@@ -229,12 +228,6 @@ jobs:
           frontend_bundle="${result#frontend_bundle=}"
           [[ "${frontend_bundle}" =~ ^index-[A-Za-z0-9_-]+\.js$ ]]
           echo "frontend_bundle=${frontend_bundle}" >>"${GITHUB_OUTPUT}"
-
-      - name: Use verified first-deploy frontend baseline
-        if: github.event_name == 'workflow_dispatch'
-        id: first_deploy_baseline
-        shell: bash
-        run: echo "frontend_bundle=index-CTO5IvV4.js" >>"${GITHUB_OUTPUT}"
 
       - name: Capture current digest rollback plan
         id: capture
@@ -387,7 +380,7 @@ jobs:
       - name: Run post-deploy smoke
         shell: bash
         env:
-          PRE_DEPLOY_FRONTEND_BUNDLE: ${{ github.event_name == 'workflow_dispatch' && steps.first_deploy_baseline.outputs.frontend_bundle || steps.pre_smoke.outputs.frontend_bundle }}
+          PRE_DEPLOY_FRONTEND_BUNDLE: ${{ steps.pre_smoke.outputs.frontend_bundle }}
           REQUIRE_FRONTEND_BUNDLE_CHANGE: ${{ github.event_name == 'workflow_dispatch' && '1' || '0' }}
           EXPECTED_SERVICE_IMAGE: ${{ steps.image.outputs.image }}
           EXPECTED_CONSOLE_IMAGE: ${{ steps.console_image.outputs.image }}
