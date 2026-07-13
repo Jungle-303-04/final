@@ -2921,3 +2921,8 @@ target preflight·register 네 함수와 strict Zod 계약을 claim했다. 1회�
 
 - lane 회수 — `codex/frontend-contract-graph` / `e027e9113` / `origin/dev` ancestor exit 0.
   canonical merge `00539bd6b`, 기존 graph code `914d34ff6`도 ancestor exit 0이다.
+
+## 2026-07-14 00:30 KST — [백엔드] 프론트 Issues 계약 번호 매핑 claim
+
+- BQ-023만 claim했다. 이미 착륙한 GAP-005 Issues 계약을 중복 구현하지 않고 기존 code
+  `d63498d5f`·merge `e2504278d`에 연결한다. source·gateway 계약 변경은 0건이다.
