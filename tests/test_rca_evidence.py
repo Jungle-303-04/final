@@ -1255,7 +1255,9 @@ def test_cause_evaluator_matches_source_and_named_evidence_keys() -> None:
     ]
 
 
-def test_user_selected_safe_pr_flow_emits_reviewable_patch(monkeypatch) -> None:
+def test_user_selected_safe_pr_flow_requires_authority_instead_of_document_fallback(
+    monkeypatch,
+) -> None:
     monkeypatch.setenv("GITHUB_TOKEN", "token-1")
     monkeypatch.setenv("SCM_REPO", "project/repo")
     db = SpyDb()
@@ -1295,11 +1297,10 @@ def test_user_selected_safe_pr_flow_emits_reviewable_patch(monkeypatch) -> None:
         "recovery.planned",
         "recovery.selection_requested",
         "approval.recommended",
-        "safe_pr.requested",
+        "rca.action_required",
     ]
-    assert dispatch_outs[0].patches
-    assert dispatch_outs[0].patches[0].path.startswith(".gitops/recovery/")
-    assert dispatch_outs[0].approval_ref is None
+    assert dispatch_outs[0].reason_code == "safe_pr_patch_unsupported"
+    assert dispatch_outs[0].missing_evidence == ["supported_patch_action"]
     assert not db.called("save_pull_request")
 
 
