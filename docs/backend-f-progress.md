@@ -150,3 +150,23 @@ Bundle route는 200을 반환한다.
 계약의 breaking change"임을 전달한다. 이 앵커에서는 RCA 작업열 코드를 변경하지 않는다.
 
 계약 완성: RCA_BUNDLE_PATH + RemediationBundleResponse (44f35234e7dcd9c8d221242d7688556e2d30e819) [delta-green]
+
+### H1 — 이벤트 테넌시·감사 타임라인·변경 상관
+
+- canonical merge: `17ac2b7a32413579f2570218a99bf50f34d162c3`
+- 전체 게이트: Ruff lint/format PASS, import-linter 2 kept/0 broken,
+  pytest `1701 passed, 3 skipped`
+- 실측 계약: `docs/api/05-rca-dashboard/14-audit-timeline.bru`,
+  `docs/api/05-rca-dashboard/15-recent-changes.bru`
+- C 증거 해시 정합: [D-020]에 기록된 `7d74d765c`는 이전 rebase의 동등 커밋이며
+  최신 `origin/dev` 재배치 후 실물은 `66cbe8dec`다. `7d74d765c`는 canonical ancestor가
+  아니고 `66cbe8dec`는 ancestor exit 0이므로 후자를 유효 증거로 사용한다.
+- 프론트 인계: 감사 타임라인은 subject/source/created_at/causation_id와 allowlist payload
+  요약을 keyset cursor로 반환한다. 최근 변경은 incident event-time 이전의 성공 배포만
+  반환하며 image before/after, commit, workflow run, 허용된 repository/PR 참조를 포함한다.
+
+계약 완성: EventEnvelope.workspace_id + audit_log.workspace_id (625c382941f81b28d95bc4cde4e3c47155ef1eec) [green]
+
+계약 완성: AUDIT_TIMELINE_PATH + AuditTimelineResponse (66cbe8dec7cb478f5b0774bb5e7bbaab5f616894) [green]
+
+계약 완성: RCA_RECENT_CHANGES_PATH + RecentChangeListResponse (81969f23e46cb40743af08ffbc1affe556bd5c5e) [green]

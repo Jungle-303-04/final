@@ -5,6 +5,8 @@ from typing import Any
 
 from conftest import load_service
 
+from packages.events.context import current_event_workspace
+
 
 class StubDb:
     def __init__(self) -> None:
@@ -19,6 +21,7 @@ class StubDb:
         return [
             {
                 "command_id": "cmd-1",
+                "workspace_id": "workspace-1",
                 "correlation_id": "corr-original",
                 "result": {
                     "status": "failed",
@@ -31,7 +34,7 @@ class StubDb:
 
 class StubEvents:
     def __init__(self) -> None:
-        self.emitted: list[tuple[str, str, dict[str, Any], str | None]] = []
+        self.emitted: list[tuple[str, str, dict[str, Any], str | None, str | None]] = []
 
     async def emit(
         self,
@@ -41,7 +44,7 @@ class StubEvents:
         correlation_id: str | None = None,
         causation_id: str | None = None,
     ) -> None:
-        self.emitted.append((subject, source, payload, correlation_id))
+        self.emitted.append((subject, source, payload, correlation_id, current_event_workspace()))
 
 
 class FailingRetentionDb:
@@ -78,6 +81,7 @@ def test_command_janitor_emits_completion_for_expired_commands(monkeypatch) -> N
                 },
             },
             "corr-original",
+            "workspace-1",
         )
     ]
 

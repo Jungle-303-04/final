@@ -174,6 +174,42 @@ class RcaTimelineResponse(StrictModel):
     items: list[RcaTimelineItem]
 
 
+class AuditTimelineItem(StrictModel):
+    subject: str
+    source: str
+    created_at: str
+    causation_id: str | None = None
+    payload_summary: JsonMap = Field(default_factory=dict)
+
+
+class AuditTimelineResponse(StrictModel):
+    items: list[AuditTimelineItem] = Field(default_factory=list)
+    limit: int
+    has_more: bool
+    next_cursor: str | None = None
+
+
+class RecentChangeItem(StrictModel):
+    event_id: str
+    changed_at: str
+    namespace: str
+    resource_kind: str
+    resource_name: str
+    image_before: str | None = None
+    image_after: str | None = None
+    pr_url: str | None = None
+    commit_sha: str
+    repository_id: str
+    repo_ref: str
+    workflow_run_id: str
+
+
+class RecentChangeListResponse(StrictModel):
+    incident_id: str
+    items: list[RecentChangeItem] = Field(default_factory=list)
+    limit: int
+
+
 class RcaIncidentResponse(StrictModel):
     item: RcaTimelineItem
 

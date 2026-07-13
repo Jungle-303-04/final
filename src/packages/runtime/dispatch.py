@@ -31,6 +31,7 @@ class EventContext[DbT]:
     db: DbT
     source: str = ""
     created_at: str = ""
+    workspace_id: str | None = None
 
     @classmethod
     def of(cls, evt: EventEnvelope, db: DbT) -> EventContext[DbT]:
@@ -42,6 +43,7 @@ class EventContext[DbT]:
             db=db,
             source=evt.source,
             created_at=evt.created_at,
+            workspace_id=evt.workspace_id,
         )
 
 
@@ -66,7 +68,14 @@ async def _collect(source: str, evt: EventEnvelope, result: Any) -> list[EventEn
     out: list[EventEnvelope] = []
     async for body in _iter_results(result):
         out.append(
-            event(body.__subject__, source, body.to_body(), evt.correlation_id, evt.event_id)
+            event(
+                body.__subject__,
+                source,
+                body.to_body(),
+                evt.correlation_id,
+                evt.event_id,
+                workspace_id=evt.workspace_id,
+            )
         )
     return out
 

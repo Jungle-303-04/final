@@ -536,6 +536,21 @@ ancestor exit 0, 사람 위임 GO [OSS]
 결정론적 catalog signal 1개 이상 검증 전 `rca.completed`를 차단하며, source-name-only
 조작 회귀 테스트를 선행한 뒤 양쪽 전체 게이트로 합류.
 
+## 2026-07-13 09:43 KST — D 완료 증거
+
+- branch: `codex/f-audit-timeline`
+- HEAD: `24998dfafd910c6429096b4160e82e667354b4c4`
+- commits: `744c12f34 feat: 배포 변경 투영 / 인시던트 조회 / PR 참조`, `24998dfaf test: 마이그레이션 head / 회귀 정합 / 전체 게이트`.
+- stat: 기능 커밋 21 files changed, 2,000 insertions(+), 2 deletions(-); 회귀 정합 1 file changed, 1 insertion(+), 1 deletion(-).
+- 의미 경계: `WorkflowRunCompletedBody` 중 권위 run·diff/apply step·활성 binding·command 성공이 모두 일치한 실제 적용만 투영; 실패·거절·no-op 제외.
+- 인가·시간 경계: session workspace → incident workload 단일성 → `RCA_READ`; 거부·모호성은 404. `audit_log.event_created_at`의 immutable `incident.detected` event-time 이후 변경은 제외.
+- PR 경계: workspace/repository/binding/workflow/commit/manifest exact-key LEFT JOIN으로 PR 선행·후행·동시 도착 결과를 동일하게 유지; 허용 GitHub HTTPS origin/repository path만 노출.
+- 신규/관련 테스트: `tests/test_rca_changes.py` + migration `25 passed`; 전체 게이트 Ruff lint/format PASS, import-linter 2 kept/0 broken, compileall PASS, pytest `1700 passed, 3 skipped`.
+- migration·manifest: Alembic 단일 head `20260713_0820`; concurrent incident index 선행 후 transactional table/column DDL로 재시도 안전; manifest PASS(management 69, target 20).
+- 독립 보안 감사: 최종 P0 0건/P1 0건.
+- frozen path 변경 0건: `src/domains/rca/**`, `src/services/ai/**`, `src/packages/runtime/worker.py`.
+- origin/dev merge·push·앵커 0건; H 사람 게이트 전 `done-pending-merge`.
+
 [2026-07-13 09:46 KST] [백엔드] D-017~019 기준점 영속화 — `4ac003c97`,
 docs-only 2파일, BQ-009 `requested` + BQ-012~017 등록, origin/dev push 확인.
 
@@ -544,3 +559,21 @@ docs-only 2파일, BQ-009 `requested` + BQ-012~017 등록, origin/dev push 확�
 `signal:oom_evidence` 누락·`rca.analysis_blocked`, 실제 signal만 completed, catalog 밖 ID
 무발행. 관련 56 passed / 전체 Ruff·format·import-linter PASS, pytest
 `1647 passed, 3 skipped` / worker·agent·공개 설명 문서 착륙 — DoD 4조건 충족.
+
+[2026-07-13 09:54 KST] [백엔드] D-020~021 조율 분리 — commit 전
+`git diff --name-only`은 `docs/auto/night-directives.md`, `docs/auto/night-log.md` 2파일.
+`docs/backend-f-workqueue.md`의 BQ-009 `requested`와 BQ-012~017 행은 `01a3a2e97`
+정본에 이미 존재해 중복 편집하지 않았고, 공유 dev worktree의 벤치·기타 변경은 혼입 0건.
+
+## 2026-07-13 09:56 KST — H1 착륙 증거
+
+- lane: `codex/f-audit-timeline`, rebase HEAD `bfaa4bba7`
+- canonical merge: `17ac2b7a32413579f2570218a99bf50f34d162c3` (`--no-ff`)
+- 시험 merge: `git merge-tree --write-tree origin/dev codex/f-audit-timeline` exit 0
+- 전체 게이트: Ruff lint PASS, format `484 files already formatted`, import-linter
+  `2 kept, 0 broken`, pytest `1701 passed, 3 skipped`
+- ancestor: lane HEAD `bfaa4bba7`, C `66cbe8dec`, D `81969f23e` 모두 origin/dev 기준 exit 0
+- 해시 정합: 지시의 `7d74d765c`는 최신 rebase 전 동등 C 커밋으로 ancestor exit 1;
+  현행 동등 C 커밋 `66cbe8dec`를 canonical 증거로 갱신
+- 경계: frozen `src/domains/rca/**`, `src/services/ai/**`, `src/packages/runtime/worker.py`
+  변경 0건; Bruno 14/15로 타임라인·최근 변경 route 재현 가능

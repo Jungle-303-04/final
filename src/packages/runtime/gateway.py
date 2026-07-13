@@ -129,6 +129,7 @@ class ApiEventGateway:
             "event_id": evt.event_id,
             "correlation_id": evt.correlation_id,
             "causation_id": evt.causation_id,
+            "workspace_id": evt.workspace_id,
             "durable_outbox": durable,
         }
         if actor is not None:
