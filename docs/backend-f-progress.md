@@ -292,3 +292,18 @@ Bundle route는 200을 반환한다.
 - gateway·RCA·AI·runtime worker 변경 0건, 신규 route·DB 변경 없음.
 
 계약 완성: KubernetesArgoObserver + Argo reconcile status (16c58de5634b2ee49a93c884e73bebb2348b04f3) [green]
+
+### BQ-018 — Opsia 이름 전파
+
+- 상태: landed
+- canonical merge: `ad28cc9457a094dda7ef8ce53d2184845bb25eb1`
+- 문서: `46ea10f8f0648dd7c29be984b9845ae57938fb5e`
+- 공개 표기: root/docs README와 `docs/oss/**`의 제품명을 Opsia로 통일하고 공개 벤치 이름은
+  OpsiaBench로 정리했다. Helm OCI 예시는
+  `oci://ghcr.io/opsia/charts/opsia`를 사용한다.
+- 보존 경계: 코드 식별자·event subject·DB schema는 변경하지 않았고,
+  `~/.radar/kubeheal-timeline.db` 레거시 저장 경로와 Apache License 원문도 유지했다.
+- 전체 게이트: Ruff lint/format PASS, import-linter 2 kept/0 broken,
+  pytest `1838 passed, 3 skipped`; manifest management 69, target 20.
+
+계약 완성: Opsia public docs + Helm OCI example (46ea10f8f0648dd7c29be984b9845ae57938fb5e) [green]

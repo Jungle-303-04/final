@@ -46,7 +46,7 @@ R-트랙([D-011])은 dev merge `257f91846`으로 landed/closed 되었고, 전용
 | BQ-015 | requested | `.remediation.yaml` 소스 계약 ([D-017], P 이후 같은 lane) | 저장소 소유자 선언 필드만 patch(helm-values/kustomize/raw/replica/probe). 추측 금지, 미선언 = unsupported | (신규 계약 파일 파서) | 선언 외 필드 수정 불가 테스트 + 전체 그린 |
 | BQ-016 | done | OSS 프로파일 ([D-017]) | PR-only 기본(agent read-only, direct command off), controller+PG+agent 3컴포넌트 설치. BQ-016 착륙 당시 40개였고 H3 auto-revert 합류 후 현재 41 entrypoint(controller 39/agent 2). `make demo`가 Kind→bad rollout→로컬 mock rollback PR/Bundle→정상화를 재현 | `f0c3b4e42` (조립 기능 `6abbbc8f4`, H3 정합 `f4b02ee95`) | 실제 controller+PostgreSQL 기동 및 health/ready 4개 200, graceful shutdown, 실제 `make demo` 성공, NATS/in-process service plan 동등성 |
 | BQ-017 | done | provider 1급화 + 연결 단계 ([D-018]) | `ClusterSummary.provider` optional(eks/gke/aks/onprem/kind/unknown; 등록값>providerID 자동감지>unknown) + `connection_stage` optional(token_issued→awaiting_install→agent_connected→snapshot_received→ready, +expired/error). 전부 additive<br>담당: Codex 백엔드 세션<br>착륙 merge: `d507ca6d4`<br>코드: `db4798d4e` | (기존 응답 확장; gateway 계약 lock 해제) | 프론트 호환 `bfaf03901`, 기존 소비자 회귀 + providerID 3사 감지, 전체 `1831 passed, 3 skipped` |
-| BQ-018 | in_progress | Opsia 이름 전파 ([D-023]) | `docs/oss/**` 공개 제품명을 Opsia/opsia로 정리하고 roadmap·README 표기와 Helm OCI 예시를 정합화.<br>담당: Codex 백엔드 세션<br>브랜치: `codex/opsia-docs-name-propagation` | (docs-only; 코드 식별자·event subject·DB schema 변경 없음) | docs 게이트 + 소유권 밖 삭제 0건 + 금지 rename 0건 |
+| BQ-018 | landed | Opsia 이름 전파 ([D-023]) | `docs/oss/**` 공개 제품명을 Opsia/opsia로 정리하고 roadmap·README 표기와 Helm OCI 예시를 정합화.<br>담당: Codex 백엔드 세션<br>착륙 merge: `ad28cc945`<br>문서: `46ea10f8f` | (docs-only; 코드 식별자·event subject·DB schema 변경 없음) | 전체 `1838 passed, 3 skipped`, manifest 69/20, 삭제·금지 rename 0건 |
 
 ## claim 규칙
 
