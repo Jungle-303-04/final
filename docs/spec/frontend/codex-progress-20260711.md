@@ -1615,7 +1615,7 @@ API 완성: getCatalogItem (1ad595b42)
 
 ## 2026-07-13 APIQ-030 감사 타임라인 조회 계약 완료
 
-- RED `6700875a6`은 미구현 endpoint를 대상으로 strict envelope/item, nullable
+- RED `6700875a6`은 당시 route가 없던 endpoint를 대상으로 strict envelope/item, nullable
   `causation_id`, open `payload_summary`, 불투명 cursor, 1~200 limit, AbortSignal과 422 오류
   계약을 먼저 고정했다.
 - GREEN `9841a5d95`는 `AUDIT_TIMELINE_PATH` 소비 함수와 strict Zod schema를 구현했다.
