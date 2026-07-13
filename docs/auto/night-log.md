@@ -1959,3 +1959,20 @@ target preflight·register 네 함수와 strict Zod 계약을 claim했다. 1회�
 - 4조건: merge-tree clean/tree `b2693f8c4aedb9d5004fd178c4435f10e492525f`, 파일 삭제·
   소유권 밖 변경·frozen 경로 변경 0건, RED·구현·문서·merge commit의 `origin/dev`
   ancestor exit 0. J 배포 실행은 0건이다.
+
+## 2026-07-13 17:02 KST — [백엔드] scheduling node selector 시나리오 착륙
+
+- lane `codex/benchmark-scheduling-memory`, 초기 RED `b07dcbb16`, 독립 감사 교정
+  `3d9899564`, 구현·데이터 `70d3478ef`, feature HEAD
+  `dea2d4babb6882c2cf6b5ff8354060f8472bf6f7`, canonical no-ff merge
+  `584e2eda0af8d0d6d862fffe6be836a1c925fbae`.
+- 독립 감사에서 memory request보다 외부 용량 가정이 없는 `node_selector_mismatch`를 선택했다.
+  정상 `general` ↔ 장애 `retired` selector와 gold·rollback을 결정적으로 고정했다.
+- fallback-only라 `manual_analysis`만 허용하고 cluster-wide nodeSelector 제거를 금지했다.
+  ordinal 76 exact fixture 연결로 batch 8을 재감사했고 digest는 `8d19d8d9…5521`이다.
+- 고유 검증: scheduling 3/3, 전체 scenario 15/15, candidate 87/87, 후보 계약 테스트
+  57 passed. 전체 게이트는 Ruff lint/format PASS, import-linter 8 kept/0 broken,
+  pytest `1928 passed, 3 skipped`; manifest management 69 / target 20.
+- 4조건: merge-tree clean/tree `9cb957b643ac84ccc8dffca6b9151a1569606698`, 파일 삭제·
+  소유권 밖 변경·frozen 경로 변경 0건, RED·교정·구현·문서·merge commit의 `origin/dev`
+  ancestor exit 0. J 배포 실행은 0건이다.
