@@ -166,6 +166,9 @@ def test_default_access_is_self_only_same_origin_with_console_and_realtime() -> 
     assert "location = /api/metrics" in config
     assert 'proxy_set_header X-Kubeheal-Internal-Auth "";' in config
     assert 'X-Content-Type-Options "nosniff"' in security_headers
+    directives = {item.strip() for item in security_headers.split(";") if item.strip()}
+    assert "connect-src 'self'" in directives
+    assert not any("ws:" in item or "wss:" in item for item in directives)
     assert config.count("include /etc/nginx/conf.d/security-headers.inc;") >= 3
     assets_location = config.split("location /assets/", maxsplit=1)[1].split("}", maxsplit=1)[0]
     root_location = config.split("location / {", maxsplit=1)[1].split("}", maxsplit=1)[0]
@@ -196,6 +199,8 @@ def test_access_modes_render_explicit_exposure_without_exposing_internal_ports()
         "access.mode=loadbalancer",
         "--set-string",
         "access.externalUrl=https://opsia.example.com",
+        "--set",
+        "access.loadBalancer.tlsTermination=external",
     )
     node_port = _render_chart(
         "--set",
@@ -252,6 +257,8 @@ def test_external_access_drives_secure_cookie_and_authoritative_agent_url() -> N
         "access.mode=loadbalancer",
         "--set-string",
         "access.externalUrl=https://opsia.example.com",
+        "--set",
+        "access.loadBalancer.tlsTermination=external",
     )
     deployment = next(
         item
@@ -275,6 +282,8 @@ def test_access_notes_are_mode_specific_and_reveal_bootstrap_only_on_demand() ->
         "access.mode=loadbalancer",
         "--set-string",
         "access.externalUrl=https://opsia.example.com",
+        "--set",
+        "access.loadBalancer.tlsTermination=external",
     )
     ingress_notes = _render_notes(
         "--set",
@@ -289,6 +298,7 @@ def test_access_notes_are_mode_specific_and_reveal_bootstrap_only_on_demand() ->
     assert "self cluster only" in port_forward_notes
     assert "AUTH_PASSWORD" in port_forward_notes
     assert "https://opsia.example.com" in load_balancer_notes
+    assert "external TLS termination" in load_balancer_notes
     assert "kubectl get service opsia" in load_balancer_notes
     assert "http://opsia.example.com" in ingress_notes
 
@@ -300,6 +310,10 @@ def test_access_values_reject_unknown_mode_and_unsafe_external_url() -> None:
         ("--set-string", "access.externalUrl=https://user@opsia.example.com"),
         ("--set-string", "access.externalUrl=https://opsia.example.com/path"),
         ("--set-string", "access.externalUrl=https://opsia.example.com?next=evil"),
+        ("--set-string", "access.externalUrl=https://opsia.example.com:abc"),
+        ("--set-string", "access.externalUrl=https://:443"),
+        ("--set-string", "access.externalUrl=https://opsia.example.com:0"),
+        ("--set-string", "access.externalUrl=https://opsia.example.com:65536"),
         (
             "--set",
             "access.mode=ingress",
@@ -317,6 +331,78 @@ def test_access_values_reject_unknown_mode_and_unsafe_external_url() -> None:
             text=True,
         )
         assert result.returncode != 0
+
+
+def test_external_access_accepts_bounded_ports_and_ip_literals() -> None:
+    for external_url in (
+        "http://127.0.0.1:8080",
+        "https://[2001:db8::1]:443",
+        "https://opsia.example.com:65535",
+    ):
+        args = ["--set-string", f"access.externalUrl={external_url}"]
+        if external_url.startswith("https://"):
+            args.extend(("--set", "access.loadBalancer.tlsTermination=external"))
+        _render_chart(*args)
+
+
+def test_https_load_balancer_requires_explicit_external_tls_termination() -> None:
+    for args in (
+        (
+            "--set",
+            "access.mode=loadbalancer",
+            "--set-string",
+            "access.externalUrl=https://opsia.example.com",
+        ),
+        (
+            "--set",
+            "service.type=LoadBalancer",
+            "--set-string",
+            "access.externalUrl=https://opsia.example.com",
+        ),
+    ):
+        result = subprocess.run(
+            ["helm", "template", "opsia", str(CHART), *args],
+            cwd=ROOT,
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        assert result.returncode != 0
+        assert "external TLS termination" in result.stderr
+
+
+def test_load_balancer_passes_annotations_and_keeps_tls_at_the_edge() -> None:
+    documents = _render_chart(
+        "--set",
+        "access.mode=loadbalancer",
+        "--set-string",
+        "access.externalUrl=https://opsia.example.com",
+        "--set",
+        "access.loadBalancer.tlsTermination=external",
+        "--set-string",
+        "access.loadBalancer.annotations.service\\.beta\\.kubernetes\\.io/aws-load-balancer-ssl-cert=arn:aws:acm:ap-northeast-2:123456789012:certificate/example",
+    )
+    service = next(
+        item
+        for item in documents
+        if item["kind"] == "Service" and item["metadata"]["name"] == "opsia"
+    )
+
+    assert service["metadata"]["annotations"] == {
+        "service.beta.kubernetes.io/aws-load-balancer-ssl-cert": (
+            "arn:aws:acm:ap-northeast-2:123456789012:certificate/example"
+        )
+    }
+    assert service["spec"]["ports"] == [{"name": "http", "port": 80, "targetPort": "console"}]
+
+
+def test_plain_http_load_balancer_does_not_require_tls_acknowledgement() -> None:
+    _render_chart(
+        "--set",
+        "access.mode=loadbalancer",
+        "--set-string",
+        "access.externalUrl=http://opsia.example.com",
+    )
 
 
 def test_helm_chart_orders_database_readiness_before_bootstrap() -> None:
