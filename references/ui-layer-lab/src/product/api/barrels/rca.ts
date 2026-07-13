@@ -33,6 +33,7 @@ export {
   getAuditTimeline,
   AUDIT_TIMELINE_DEFAULT_LIMIT,
   AUDIT_TIMELINE_MAX_LIMIT,
+  AUDIT_TIMELINE_PATH,
   type GetAuditTimelineOptions,
 } from "../audit-timeline";
 export {
