@@ -286,23 +286,33 @@ def test_aws_deploy_builds_and_patches_console_frontend_image() -> None:
     frontend_dockerfile = read("frontend/Dockerfile")
     runbook = read("docs/aws-testing-runbook.md")
 
+    legacy_prefix = "kube" + "heal"
+
+    assert 'PROJECT_SLUG="${PROJECT_SLUG:-kubernetes-ops}"' in script
     assert 'CONSOLE_ECR_REPO="${CONSOLE_ECR_REPO:-${PROJECT_SLUG}-console}"' in script
     assert 'CONSOLE_IMAGE_NAME="${CONSOLE_IMAGE_NAME:-}"' in script
     assert "ensure_ecr_images()" in script
     assert "${ROOT_DIR}/frontend/Dockerfile" in script
     assert "${ROOT_DIR}/frontend" in script
-    assert "kubeheal-console" in script
+    assert (
+        "name: 183548421506.dkr.ecr.ap-northeast-2.amazonaws.com/kubernetes-ops-console" in script
+    )
     assert "newName: ${console_image_repo}" in script
     assert "newTag: ${console_image_tag}" in script
     assert (
-        "image: kubeheal-console@sha256:"
-        "0000000000000000000000000000000000000000000000000000000000000000" in console_manifest
+        "image: 183548421506.dkr.ecr.ap-northeast-2.amazonaws.com/"
+        "kubernetes-ops-console@sha256:"
+        "8c49f7bf8a10f5b9edb8de798cbe94d78ca29d03699bc2f3686c1636ec397978" in console_manifest
     )
-    assert "kubeheal-console:latest" not in console_manifest
+    for source in (script, down_script, console_manifest):
+        assert f"{legacy_prefix}-service" not in source
+        assert f"{legacy_prefix}-console" not in source
+    assert ":latest" not in console_manifest
     assert "FROM node:22-alpine AS build" in frontend_dockerfile
     assert "RUN npm run build" in frontend_dockerfile
     assert "COPY --from=build /app/dist/" in frontend_dockerfile
     assert 'CONSOLE_ECR_REPO="${CONSOLE_ECR_REPO:-${PROJECT_SLUG}-console}"' in down_script
+    assert 'PROJECT_SLUG="${PROJECT_SLUG:-kubernetes-ops}"' in down_script
     assert "`CONSOLE_ECR_REPO`" in runbook
 
 
