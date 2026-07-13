@@ -7,7 +7,7 @@ governing: docs/f-coordination-plan.md · docs/backend-f-workqueue.md
 
 # 백엔드 F 진행 현황
 
-현재 상태: **앵커 22건**
+현재 상태: **앵커 23건**
 
 ## 역사적 Delta-green baseline (BQ-001~003)
 
@@ -547,3 +547,33 @@ Bundle route는 200을 반환한다.
   `origin/dev` ancestor exit 0.
 
 계약 완성: OpsiaBench candidate contracts 21..30 + image pull capability boundary (8f0ee335f1ba947d077c3b16b17267afde123de3) [green]
+
+### 보조 대기열 S7 — rule candidate 31~40 안전 계약
+
+- 상태: landed
+- 담당 lane: `codex/candidate-contract-batch-four`
+- RED: `85f9447c9ae1657f9a4f3013d8bb9420be3da14e`
+- 구현·데이터: `1497b9bb3e3aa2819904c9e3636d21eb35c9da7c`
+- 문서: `9afa9ce542abf5f2039a0609707188f8fb52d747`
+- 최종 feature HEAD: `296e14c383ae949573f2ad5216af8874b1a923b8`
+- canonical no-ff merge: `6ebd0f6bd7882bbed2b173d100fb6a26ebe4e0e5`
+- 범위: loader 순서 31~40을 추가해 누적 40/87, `next_ordinal=41`이다. 31~35와
+  39~40은 live `manual_analysis` fallback만 허용한다.
+- 실제 실행 경계: 36번 `upstream_unavailable`과 37번 `backend_readiness_failure`는
+  `command`, 38번 `application_5xx_spike`는 `command`와 `safe_pr` capability가 있다.
+  `deployment_scale`의 `route=auto`, `approval_required=true` 원문도 그대로 보존한다.
+- 31~40과 exact rule/candidate가 일치하는 기존 fixture는 0개다. 유사 시나리오를 추측 연결하지 않는다.
+- 인간 검토 경계인 forbidden remediation도 후보별 실행 가능한 과잉 대응으로 감사했다.
+  ordinal 35는 재시작 불가능한 Endpoint 대신 cluster 전체 backend workload 재시작 금지로 교정했다.
+- append-only 경계: 네 번째 canonical JSON digest
+  `32d4a8b485fa73c2dbba420e4fefdc4c56ca82d712e6bbe92954516a79aab73d`를 `(31, 40)`에
+  고정하고 누락 lock·batch 4 변조 회귀를 추가했다.
+- 고유 검증: `python3 -S benchmark/score.py --candidate-contracts` 40/40 PASS,
+  `tests/test_benchmark_score.py` 43 passed. 독립 재감사 P0/P1 0건.
+- 전체 게이트: Ruff lint/format PASS, import-linter 8 kept/0 broken,
+  pytest `1914 passed, 3 skipped`; manifest management 69 / target 20.
+- 4조건: merge-tree exit 0/tree `a9c271adfbed401a3dd8f04887c9a9cc765d5185`;
+  파일 삭제·소유권 밖 변경·frozen 경로 변경 0건; RED·구현·문서·수정·merge commit의
+  `origin/dev` ancestor exit 0.
+
+계약 완성: OpsiaBench candidate contracts 31..40 + network execution boundary (296e14c383ae949573f2ad5216af8874b1a923b8) [green]
