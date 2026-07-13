@@ -3115,3 +3115,16 @@ target preflight·register 네 함수와 strict Zod 계약을 claim했다. 1회�
 - 검토 요청: S0 구성·alias·의존성 계약과 기존 빌드 무회귀를 origin 기준으로 확인한다.
 - 배포 대상 dev SHA: `8e2d40ef0`. AWS 자동 배포 스위치는 현재 비활성 상태이므로
   `deploy-status.md`의 수동 관측 artifact와 혼동하지 않는다.
+
+## 2026-07-14 01:50 KST — [백엔드] 새 DB versioned baseline bootstrap 착륙
+
+- RED `06fb01334`, GREEN `b2786060d` 모두 `origin/dev` ancestor exit 0이다. 첫 revision 직전
+  commit의 50-table schema-only snapshot을 digest로 고정하고, user table 0건·source commit·
+  empty-target 확인이 모두 일치할 때만 정상 Alembic history를 실행한다. `stamp`는 사용하지 않는다.
+- 실 PostgreSQL 17 결과: head `20260713_2350`, 63 tables, 149 indexes, INVALID index 0건,
+  일반 migration runner 반복 결과 `current`. service image build 내부 snapshot/head 검증도 PASS다.
+- 전체 게이트 Ruff lint/format PASS, import-linter 8 kept/0 broken, pytest
+  `2137 passed, 3 skipped`, manifest management 69/target 20. 삭제·RCA/AI/runtime worker 변경 0건.
+- 격리 착륙 — data-only 이관·checksum/row count·FK/sequence·catalog fingerprint·restore rehearsal·
+  DBA 승인과 connection cutover는 다음 단위다. AWS dev 배포 스위치와 migration Job 배선은 계속
+  비활성 상태다.

@@ -82,6 +82,25 @@ backfill을 보장하지 않기 때문이다.
 복구 rehearsal을 통과한 뒤 connection cutover한다. 임의 `alembic stamp`나 수동
 `alembic_version` INSERT로 이 단계를 우회하지 않는다.
 
+새 DB bootstrap은 `alembic/baselines/20260708_pre_alembic.sql`만 사용한다. 이 snapshot은
+첫 revision 직전 commit `017b2485b2c408c2f7e928379ebf6541526d32ab`의 `Database.init()`을
+PostgreSQL 17에서 schema-only로 추출했고 SHA-256을 코드에 고정했다. 대상 DB에 user table이
+하나라도 있거나 source commit·empty-target 확인 문자열이 다르면 실행을 거부한다. 성공 경로는
+snapshot 설치 후 `alembic upgrade head`이며 `stamp`를 호출하지 않는다.
+
+```bash
+# DBA가 만든 격리된 빈 target DB에만 실행한다. URL 값은 로그에 출력하지 않는다.
+export BASELINE_TARGET_DATABASE_URL="<new-versioned-db-url>"
+export BASELINE_CONFIRM_SOURCE_COMMIT="017b2485b2c408c2f7e928379ebf6541526d32ab"
+export BASELINE_CONFIRM_EMPTY_TARGET="isolated-empty-database"
+export MIGRATION_EXPECTED_HEAD="20260713_2350"
+python -m packages.storage.baseline bootstrap
+```
+
+이 단계만으로 cutover하지 않는다. data-only 이관, 공통 컬럼 checksum·row count, FK·sequence,
+catalog fingerprint, backup restore rehearsal과 DBA 승인이 다음 필수 단계다. bootstrap target은
+그 검증 전까지 application secret과 migration Job에 연결하지 않는다.
+
 ## 3. J단계 진입 blocker
 
 다음 항목 중 하나라도 남아 있으면 배포 명령을 실행하지 않는다.
