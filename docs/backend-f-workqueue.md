@@ -80,8 +80,9 @@ R-트랙([D-011])은 dev merge `257f91846`으로 landed/closed 되었고, 전용
 
 | 단계 | 상태 | 범위 | 안전 경계 |
 |---|---|---|---|
+| P0-0 | in_progress | dev 전체 gate 단일 진입점 + 로컬 pre-push + dev push CI. target preflight 회귀는 `4ea76988d`, gate 계약은 `753558ef2`, CI·hook은 `acaadc485`, 격리는 `5c5ea9481`로 착륙 | 로컬 pre-push 전체 gate는 PASS. GitHub Actions run `29271435680`은 runner 시작 전 결제·spending limit로 실패해 서버 강제는 미완료. 결제 복구 또는 CodeBuild 대체 gate 실증 전 배포 금지 |
 | P0-1a | in_progress | service image Alembic runtime + direct PostgreSQL migration Job + versioned-only runner | unversioned/create-all DB 거부, AWS 경로 미배선. legacy baseline·fresh DB 경로는 다음 단위 |
-| P0-1b | in_progress | immutable pre-Alembic snapshot에서 새 빈 DB를 정상 lineage head까지 올리는 bootstrap 착륙: test `06fb01334`, code `b2786060d`. 다음 단위는 기존 create-all DB data-only 이관·catalog/data invariant·cutover rehearsal | 임의 stamp·기존 revision 수정·live 쓰기 금지. bootstrap은 새 empty DB에만 허용하고 AWS 경로 미배선 |
+| P0-1b | in_progress | immutable pre-Alembic snapshot bootstrap `b2786060d`와 create-all data-only 이관·metric lineage·cutover 불변식 `c8b75c2c6`, 회귀 `a94b64e25` 착륙 | 임의 stamp·기존 revision 수정·live 쓰기 금지. 로컬 코드·테스트는 착륙했지만 AWS catalog/data invariant, restore rehearsal, DBA 확인, connection cutover는 미실증이므로 완료 아님 |
 | P0-2 | requested | `DEV_AUTH_BYPASS=0` base/overlay 강제 + rendered/live fail-closed 검증 | 렌더와 live 둘 다 0이기 전 배포 중단 |
 | P0-3 | requested | dev gate → digest build/ECR → migration → 단계적 rollout | `AWS_DEV_DEPLOY_ENABLED=1` exact opt-in, P0-1/P0-2 선행 |
 | P0-4 | requested | smoke 기본 활성 + Bundle/audit/recent-changes strict 200 | 인증된 fixture 부재를 skip하지 않음 |
