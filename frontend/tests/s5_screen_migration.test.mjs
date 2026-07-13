@@ -151,3 +151,28 @@ test('Settings navigation is composed from the shadcn button boundary', async ()
   assert.match(source, /nativeButton=\{false\}/);
   assert.match(source, /aria-current=/);
 });
+
+test('Issues operations queue is composed only from accessible shadcn primitives', async () => {
+  const source = await readFile(
+    new URL('src/features/notifications/OpsView.tsx', frontendRoot),
+    'utf8',
+  );
+
+  assert.doesNotMatch(source, /from ['"]@\/ui(?:['"/])/);
+  assert.doesNotMatch(source, /\b(?:EmptyState|KeyValueList|Modal|TableColumn)\b/);
+
+  for (const primitive of ['alert', 'badge', 'button', 'card', 'dialog', 'skeleton', 'table']) {
+    assert.match(
+      source,
+      new RegExp(`from ['"]@/components/ui/${primitive}['"]`),
+      `OpsView must import the ${primitive} shadcn primitive`,
+    );
+  }
+
+  assert.match(source, /aria-sort=/);
+  assert.match(source, /<DialogTitle\b/);
+  assert.match(source, /<DialogDescription\b/);
+  assert.match(source, /<dl\b/);
+  assert.match(source, /aria-busy=/);
+  assert.match(source, /role=['"]status['"]/);
+});
