@@ -18,25 +18,29 @@ docs/spec/frontend/codex-progress-20260711.md
 API 완성: functionName (commitHash)
 ```
 
-The released composition currently contains two real-API surfaces:
+The released composition currently contains three real-API surfaces:
 
 - `Home` consumes the anchored cluster list, cluster summary, Node summary, and Node Pod summary
   contracts. It keeps cluster and Node selection in the URL and never substitutes synthetic data.
 - `Resources` consumes the anchored inventory summary, resource list, and resource-detail contracts.
   The list and URL-backed detail Sheet share one route; relations and events come only from the
   backend detail read model.
+- `Issues` consumes the anchored incident list/detail, evidence, recovery, audit-timeline, and
+  recent-change contracts. It preserves server ordering and opaque cursors, isolates panel failures,
+  and omits unsupported journey, promotion, and auto-revert projections instead of inferring them.
 
 Only these surfaces appear in navigation. An unfinished surface still remains absent from routing,
 navigation, and runtime requests. API failures render explicit loading, forbidden, unavailable, or
-partial states and never activate a fallback adapter. `APIQ-028` tracks the remaining transport-schema
-change required to preserve the non-usage parts of Home when `usage.pods_total` is absent.
+partial states and never activate a fallback adapter. `api-needs.md` is the sole source for the
+current transport queue; new work starts only after a non-duplicate APIQ row is claimed and pushed.
 
 ## API coordination
 
 The ownership rule is defined by goalmode §6b.
 
-- API transport functions and wire schemas under `src/product/api/**` belong to the API integration
-  worker.
+- API transport functions and wire schemas under `src/product/api/**` are changed only by the
+  executor that has claimed the corresponding APIQ row. The frontend executor may hold that API
+  role, but the claim, contract tests, full gate, and completion anchor remain separate steps.
 - Missing or unapproved functions are requested only through
   `docs/spec/frontend/api-needs.md`.
 - Frontend contributors do not add duplicate queue rows and do not infer response shapes.
@@ -82,9 +86,11 @@ src/
       productRoutes.ts             # canonical route metadata
     features/
       home/                         # Home canonical DTO, port, validation, adapter
+      issues/                       # incident canonical DTO, panel isolation, pagination adapter
       resources/                    # inventory canonical DTO, port, validation, adapter
     pages/
       home/                         # cluster -> Node -> Pod interaction
+      issues/                       # same-route incident list and detail workspace
       resources/                    # catalog, bounded list, same-route detail Sheet
     shared/data/                    # shared request and async refresh state machinery
     shared/ui/
@@ -123,8 +129,8 @@ build-time absence of an approved API keeps the entire surface unregistered.
 
 1. Read `AGENTS.md` and the active goalmode documents.
 2. Check `codex-progress-20260711.md` for anchored `API 완성:` records.
-3. If an endpoint is missing, append one non-duplicate request to `api-needs.md`; do not edit
-   `src/product/api/**` before the 24-hour exception applies.
+3. If an endpoint is missing, append and claim one non-duplicate request in `api-needs.md`; do not
+   edit `src/product/api/**` before the claim commit is present on the frontend canonical branch.
 4. Add a failing contract or interaction test outside the API directory.
 5. Implement the adapter and surface through `apiComposition.ts` only after approval.
 6. Run `npm run check` before every commit.
