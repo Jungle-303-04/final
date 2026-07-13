@@ -3310,7 +3310,7 @@ async function assertProductShellContracts(page, scenario) {
     || result.currentLinks !== 1 || result.currentHref !== "/product?clusters=cluster-1"
     || result.currentLabel !== "홈"
     || result.itemTags.some((tag) => tag !== "LI")
-    || result.linkLabels.join("|") !== "홈|인시던트|타임라인") {
+    || result.linkLabels.join("|") !== "홈|인시던트|카탈로그") {
     throw new Error(`${scenario.id}: navigation/list/current semantics failed ${JSON.stringify(result)}`);
   }
   if (result.sidebarWidthExpanded !== "11rem"

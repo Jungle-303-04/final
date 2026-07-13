@@ -15,7 +15,7 @@ import { UnifiedFilterProvider } from "../../src/product/features/filters/Unifie
 const root = document.getElementById("root");
 if (!root) throw new Error("ProductShell visual harness root is missing");
 
-const releasedSurfaceIds = new Set(["home", "issues", "timeline"] as const);
+const releasedSurfaceIds = new Set(["home", "issues", "catalog"] as const);
 const testAuth: AuthenticatedAuthState = {
   session: { userId: "visual-user", roles: ["viewer"], workspaceId: "visual-workspace" },
   signOutIssue: null,
@@ -60,7 +60,7 @@ createRoot(root).render(
                   <Route element={<ProductShell auth={testAuth} releasedSurfaceIds={releasedSurfaceIds} />}>
                     <Route path="/product" element={<ShellOutletBoundary />} />
                     <Route path="/product/issues" element={<ShellOutletBoundary />} />
-                    <Route path="/product/timeline" element={<ShellOutletBoundary />} />
+                    <Route path="/product/catalog" element={<ShellOutletBoundary />} />
                   </Route>
                 </Routes>
               </ClusterScopeProvider>
