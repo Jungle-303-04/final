@@ -2409,3 +2409,17 @@ target preflight·register 네 함수와 strict Zod 계약을 claim했다. 1회�
 - 전체 `npm run check` PASS: TypeScript·ESLint, Vitest 119 files / 851 tests,
   design guard 347 files, shadcn source audit 482 previews, Vite build 14,539 modules.
   커밋 push 후 `origin/woonyong/ui-layer-lab` ancestor exit 0을 확인했다.
+
+## 2026-07-13 19:07 KST — [프론트] Issues 한국어 실데이터 경계 시각 검증
+
+- `4b67dd65e`는 Issues 상세의 한국어 UI 라벨과 번역 금지 대상인 Kubernetes·백엔드
+  원문을 한 장면에서 함께 검증한다. 실제 상세 선택, 최근 변경, 감사 payload 펼침,
+  근거·RCA·복구 계획까지 동일한 strict API fixture 흐름을 사용하며 요청 횟수와 URL도
+  기존 게이트 그대로 검증한다.
+- `npm run visual-product` PASS: 45 isolated scenarios, exact API request counts,
+  unexpected feature network/WebSocket 0건. CLS는 Home `0.004188`, Resources
+  `0.004167`, Issues `0.004202`로 모두 0.1 예산 이하다.
+- `npm run check` PASS: TypeScript·ESLint, Vitest 119 files / 851 tests,
+  design guard 347 files, shadcn source audit 482 previews, Vite build 14,539 modules.
+  시각 증거는 `references/ui-layer-lab/output/playwright/product-issues-locale-smoke-ko.png`이며,
+  커밋 push 후 `origin/woonyong/ui-layer-lab` ancestor exit 0을 확인했다.
