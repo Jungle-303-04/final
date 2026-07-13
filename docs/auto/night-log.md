@@ -1098,3 +1098,26 @@ npm run visual-product
   기존 응답은 additive-only로 보존했고 gateway 계약 lock을 해제한다.
 - 일시 저장한 Argo observer lane `codex/f-argocd-observer@f5461aa80`은 최신
   canonical로 재배치한 뒤 전체 게이트를 다시 증명한다.
+
+## 2026-07-13 12:17 KST — Codex 브랜치 전면 정리 완결
+
+- 삭제 전 위 복구 보험 표가 `origin/dev`에 착륙한 뒤 실행했다.
+- 로컬: `codex/*` 7개 삭제(ancestor 0인 provider lane은 stale upstream 해제 후 정상
+  `-d`, 나머지 6개는 승인된 `-D`), 잔존 0개.
+- 원격: 자동 작업 `codex/*` 136개를 `git push origin --delete`로 삭제했다.
+  Codex 관련 worktree 5개를 clean 확인 후 정상 remove했고 `git worktree prune`을 완료했다.
+- 사람 소유 가능성이 있어 보존한 원격 ref:
+  - `codex/chanbin-dev-infra-base@f1f4e15a8e22cd48987231f224c67cd5c3a1d6ed`
+  - `codex/frontt@6e5b9d42a303b784ce5f58dd358ae38f0cef4c8d`
+  - `codex/headlamptest@11d7c879e039243321ce146d7f2124e71f826ae8`
+  - `codex/ui-layer-lab-references@d18e136937525b13e21a56c7e6814f9c7e67e6d0`
+- 보존한 로컬 비-Codex branch: `dev`, `main`, `demo/v1`,
+  `woonyong/ui-layer-lab`, `woonyong-kr/frontend`, `feat/jcbbbbbb/api-gateway`,
+  `feat/jeonwoohyun-hydromel/command-worker`,
+  `feat/jeonwoohyun-hydromel/gitops-sync-worker`,
+  `feat/minmings111/node-collector`, `feat/minmings111/target-cluster-agent`,
+  `feat/ummfieg/audit-timeline-service`, `feat/ummfieg/dashboard-projection-service`,
+  `feat/ummfieg/rca-worker`.
+- BQ-014는 삭제 전 hash `f5461aa8070a7ba9b088410d0ae5ebe89b8b4e86`을 복구점으로
+  남기고 `requested`로 되돌렸다. H3 merge `6d68325bf`와 승인 HEAD `33fd5f21c`는
+  계속 `origin/dev` ancestor exit 0이다.
