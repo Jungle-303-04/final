@@ -629,6 +629,10 @@ def test_repo_gateway_materializes_scalar_patch_from_exact_base_source(monkeypat
     outs = run_handler(repo.on_safe_pr_ready_for_creation, ready, db=db)
 
     assert subjects_of(outs) == ["safe_pr.created"]
+    change_document = base64.b64decode(str(contents[0]["content"])).decode()
+    assert "## Structured Patch Plan" in change_document
+    assert "rollbackReplacements:" in change_document
+    assert "fieldPath: spec.replicas" in change_document
     assert base64.b64decode(str(contents[-1]["content"])).decode() == expected
 
 
