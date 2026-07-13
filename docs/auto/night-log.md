@@ -1472,3 +1472,12 @@ JsonMap, AbortSignal, ID 검증을 완료 앵커 전까지 제품 화면에서 �
   긴 image·commit·workflow reflow, 외부 PR 링크 격리, unexpected feature network 0을 검증했다.
 - 증거: `references/ui-layer-lab/output/playwright/product-issues-authenticated-detail-desktop-light.png`,
   `references/ui-layer-lab/output/playwright/product-issues-authenticated-detail-reflow-320-light.png`.
+
+## 2026-07-13 14:44 KST — [프론트] VP-005 진입조건 검증·API 재검증 claim
+
+- `git merge-base --is-ancestor 8cd0b18e96f1266873d1632486472d0d22c18477 origin/dev`
+  결과 exit 0. canonical `PromotionGateResponse`와 `promotion_gate_from_command_result`를
+  대조해 9필드·네 가지 eligible 조건·nullable 의미를 확인했다.
+- `listApplicationRuns`의 기존 앵커 `56c689e61`은 구조화 gate 도입 전 계약이다.
+  `APIQ-032`는 outer strict / run open / `promotion_gate` strict 경계로 재앵커한다.
+- `origin/dev...HEAD`의 dev-only는 27로 30커밋 선흡수 임계값 미만이다.
