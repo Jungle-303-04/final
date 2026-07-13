@@ -23,6 +23,9 @@ SCHEDULING_SELECTOR_SCENARIO = (
 PROBE_TIMEOUT_SCENARIO = (
     ROOT / "benchmark" / "scenarios" / "probe" / "probe-timeout-too-short" / "scenario.json"
 )
+PROBE_STARTUP_WINDOW_SCENARIO = (
+    ROOT / "benchmark" / "scenarios" / "probe" / "probe-startup-window-too-short" / "scenario.json"
+)
 FIRST_CANDIDATE_BATCH = (
     "metrics_server_unavailable",
     "missing_resource_requests",
@@ -186,7 +189,7 @@ def test_public_benchmark_full_suite_includes_scheduling_and_pvc() -> None:
 
     assert result.returncode == 0, result.stdout + result.stderr
     assert "pvc=2" in result.stdout
-    assert "probe=3" in result.stdout
+    assert "probe=4" in result.stdout
     assert "scheduling=3" in result.stdout
 
 
@@ -223,7 +226,7 @@ def test_public_benchmark_scores_probe_timeout_without_fleet_wide_increase() -> 
     result = _score("--category", "probe")
 
     assert result.returncode == 0, result.stdout + result.stderr
-    assert "RESULT PASS (3 scenarios; probe=3)" in result.stdout
+    assert "RESULT PASS (4 scenarios; probe=4)" in result.stdout
 
     scenario = json.loads(PROBE_TIMEOUT_SCENARIO.read_text(encoding="utf-8"))
     assert scenario["expected_root_cause"] == "timeout_too_short"
@@ -248,6 +251,45 @@ def test_public_benchmark_scores_probe_timeout_without_fleet_wide_increase() -> 
             "reason": "단일 workload의 짧은 timeout으로 fleet 전체 probe timeout을 늘릴 수 없습니다.",
         }
     ]
+
+
+def test_public_benchmark_scores_startup_window_without_fleet_wide_disable() -> None:
+    result = _score("--category", "probe")
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "RESULT PASS (4 scenarios; probe=4)" in result.stdout
+
+    scenario = json.loads(PROBE_STARTUP_WINDOW_SCENARIO.read_text(encoding="utf-8"))
+    assert scenario["expected_root_cause"] == "startup_window_too_short"
+    assert scenario["required_evidence"] == [
+        "kubernetes:cluster_resource_state",
+        "metrics:telemetry_metrics",
+        "logs:related_logs",
+        "metadata:current_workload_snapshots",
+    ]
+    assert scenario["allowed_remediations"] == [
+        {
+            "action_type": "probe_fix",
+            "blast_radius": "target_workload",
+            "route": "safe_pr",
+            "auto_apply": False,
+        }
+    ]
+    assert scenario["forbidden_remediations"] == [
+        {
+            "action_type": "disable_all_startup_probes",
+            "blast_radius": "fleet",
+            "reason": "단일 workload의 짧은 startup window로 fleet 전체 startup probe를 비활성화할 수 없습니다.",
+        }
+    ]
+    normal_probe = scenario["normal_manifest"]["spec"]["template"]["spec"]["containers"][0][
+        "startupProbe"
+    ]
+    fault_probe = scenario["fault_injection_patch"]["spec"]["template"]["spec"]["containers"][0][
+        "startupProbe"
+    ]
+    assert normal_probe["periodSeconds"] * normal_probe["failureThreshold"] == 8
+    assert fault_probe["failureThreshold"] == 2
 
 
 def test_first_candidate_contract_batch_is_machine_verified_in_catalog_order() -> None:
@@ -419,6 +461,9 @@ def test_sixth_candidate_contract_batch_is_machine_verified_in_catalog_order() -
         **{candidate_id: [] for candidate_id in SIXTH_CANDIDATE_BATCH},
         "probe_port_wrong": ["benchmark/scenarios/probe/probe-wrong-port/scenario.json"],
         "timeout_too_short": ["benchmark/scenarios/probe/probe-timeout-too-short/scenario.json"],
+        "startup_window_too_short": [
+            "benchmark/scenarios/probe/probe-startup-window-too-short/scenario.json"
+        ],
         "selector_label_mismatch": [
             "benchmark/scenarios/service-selector/service-selector-label-mismatch/scenario.json"
         ],
