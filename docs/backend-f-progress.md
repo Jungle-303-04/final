@@ -47,7 +47,7 @@ governing: docs/f-coordination-plan.md · docs/backend-f-workqueue.md
 
 ## 현재 full-green baseline
 
-- 측정 기준: `origin/dev@54a3c707108752383956d68599b2b261ff566767` 기반 S4 lane
+- 측정 기준: `origin/dev@a1e37d34308192a6d5c363983a370209ab4813be`를 합친 S4 lane
 - Ruff lint/format: PASS
 - import-linter: 8 kept, 0 broken
 - pytest: `1901 passed, 3 skipped`
