@@ -1199,3 +1199,19 @@ npm run visual-product
 - 4조건: 전체 그린; merge-tree exit 0/tree `4c354fd97af928d7de65d881dc74540517c9cb6a`;
   삭제·비문서 변경 0건; no-ff merge·push 후 feature와 merge commit의
   `origin/dev` ancestor exit 0.
+
+## 2026-07-13 13:43 KST — BQ-015 완료 증거
+
+- lane `codex/remediation-source-contract`, HEAD
+  `1300a5fe64c03aa05fe1f8d9cb94a92c2b254962`, canonical merge
+  `130e6755dcd4912c0d2e43ffdcc32b4082c74b7c`.
+- commits: `bba4170e3` RED → `099b75a34` 계약·adapter GREEN → `4fc82ad46` container
+  binding 보강 → `30e0f8c20` exact-base SCM 배선 → `1300a5fe6` 계약 문서.
+- stat: 10 files, 1,581 insertions, 41 deletions. 파일 삭제·rename 0건이며 gateway 계약,
+  `src/domains/rca/**`, `src/services/ai/**`, `src/packages/runtime/worker.py` 변경 0건.
+- gate: Ruff lint/format PASS, import-linter 2 kept/0 broken,
+  pytest `1865 passed, 3 skipped`; manifest management 69, target 20.
+- 실측: 기존 recovery patch scorer 6/6, 신규 source-contract scorer 6/6. raw image/replica/
+  probe, Helm values image tag, Kustomize named image tag와 미선언 selector no-write를 검증했다.
+- 4조건: 전체 그린; merge-tree exit 0/tree `b106cd2887d70042983db7c8d54d92b7c40ba8ae`;
+  삭제 0건; no-ff merge·push 후 feature와 merge commit의 `origin/dev` ancestor exit 0.
