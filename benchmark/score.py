@@ -79,6 +79,10 @@ CANDIDATE_INDEX_ENTRY_FIELDS = {
 }
 CANDIDATE_INDEX_SOURCE_COUNT = 15
 CANDIDATE_INDEX_COUNT = 87
+CANDIDATE_BATCH_SHA256 = {
+    10: "8af3efce17c994f3ac0e97a5864ddbf9ea2b28ab0050be0a9cd201b58aca4476",
+    20: "3ffa57f4abe30241469185e6d3c182605157cf7a42facf678128016184f43bb0",
+}
 CONTRADICTION_POLICY = "not_modeled_v0.1"
 MISSING_EVIDENCE_POLICY = "all_required_evidence_and_supporting_signal_groups"
 SIGNAL_MATCHER_KEYS = {"fact", "log_pattern", "event_pattern"}
@@ -165,7 +169,7 @@ def load_recovery_contracts() -> tuple[dict[str, list[dict[str, Any]]], list[dic
             if len(actions) != len(actions_node.elts):
                 raise ValueError(f"{RECOVERY_SOURCE}: actions must contain static calls")
             if decorator.func.attr == "fallback":
-                fallback = actions
+                fallback.extend(actions)
                 continue
             root_causes = ast.literal_eval(_call_keyword(decorator, "root_causes"))
             for candidate_id in root_causes:
@@ -569,6 +573,19 @@ def validate_candidate_contract_progress(contract_count: int, next_ordinal: Any)
     return errors
 
 
+def candidate_contract_batch_digest(contracts: list[Any], end_ordinal: int) -> str:
+    """Hash one completed 10-item batch using canonical JSON."""
+    start_ordinal = end_ordinal - 9
+    encoded = json.dumps(
+        contracts[start_ordinal - 1 : end_ordinal],
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+        allow_nan=False,
+    ).encode("utf-8")
+    return hashlib.sha256(encoded).hexdigest()
+
+
 def validate_candidate_contracts(
     data: Any,
     catalog: dict[str, Any],
@@ -607,6 +624,21 @@ def validate_candidate_contracts(
     if not isinstance(contracts, list):
         return errors
     errors.extend(validate_candidate_contract_progress(len(contracts), data.get("next_ordinal")))
+    for end_ordinal, expected_digest in CANDIDATE_BATCH_SHA256.items():
+        batch_number = end_ordinal // 10
+        if len(contracts) < end_ordinal:
+            errors.append(f"{prefix}: completed batch {batch_number} is missing")
+            continue
+        try:
+            actual_digest = candidate_contract_batch_digest(contracts, end_ordinal)
+        except (TypeError, ValueError) as exc:
+            errors.append(f"{prefix}: completed batch {batch_number} is not canonical JSON: {exc}")
+            continue
+        require(
+            actual_digest == expected_digest,
+            f"{prefix}: completed batch {batch_number} digest mismatch",
+            errors,
+        )
 
     index_document = candidate_index if isinstance(candidate_index, dict) else {}
     require(
