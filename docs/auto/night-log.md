@@ -2433,3 +2433,15 @@ target preflight·register 네 함수와 strict Zod 계약을 claim했다. 1회�
   TypeScript·ESLint, Vitest 120 files / 853 tests, design guard 348 files,
   shadcn source audit 482 previews, Vite build 14,539 modules. 제품 runtime 변경은 0건이며,
   커밋 push 후 `origin/woonyong/ui-layer-lab` ancestor exit 0을 확인했다.
+
+## 2026-07-13 19:18 KST — [프론트] 언어 선택 접근성 문장 i18n 경계
+
+- RED는 언어 선택기의 en·ko 접근성 이름 3개가 코드 조립 문자열에 묶여 있음을 확인했다.
+  `2f11696c9`는 `shell.locale.current` 완전 문장 템플릿을 en·ko 카탈로그에 추가해
+  현재 언어명·구두점·어순을 활성 로케일이 소유하도록 변경했다.
+- targeted Vitest PASS: 4 files / 29 tests. `npm run visual-product` PASS:
+  45 isolated scenarios, exact API request counts, unexpected feature network/WebSocket 0건.
+  CLS는 Home `0.004188`, Resources `0.004167`, Issues `0.004202`다.
+- 전체 `npm run check` PASS: TypeScript·ESLint, Vitest 120 files / 853 tests,
+  design guard 348 files, shadcn source audit 482 previews, Vite build 14,539 modules.
+  커밋 push 후 `origin/woonyong/ui-layer-lab` ancestor exit 0을 확인했다.
