@@ -1767,3 +1767,12 @@ API 완성: registerTarget (8678d63b0)
   Vite 14,538 modules 및 visual-product 38 scenarios로 PASS했다.
 - merge `a1e37d34308192a6d5c363983a370209ab4813be`를 lab에 push하고 비강제 fast-forward로
   dev에 승격했다. 승격 직후 두 원격 ref는 동일 hash이며 양방향 ancestor exit 0이다.
+
+## 2026-07-13 Button·Card 접근성 계약 테스트 보강
+
+- `684a9e091`의 slot 봉인 가정은 `SidebarTrigger` 합성 계약과 충돌해 typecheck 단계에서 기각했다.
+  제품 구현을 억지로 바꾸지 않고 `9e4eafb415853cf375a7f06a7221f6dae7b5754a`에서 기본 Button slot과
+  wrapper 특화 slot을 함께 허용하는 실제 계약을 고정했다.
+- Button native/disabled/focus/reduced-motion/forced-colors 클래스 13개와 Card system-color 경계를
+  단위 테스트로 검증한다. full gate는 114 files / 827 tests, design guard 341 files,
+  shadcn 482 previews, Vite 14,538 modules로 PASS했고 visual-product 38 scenarios도 PASS했다.
