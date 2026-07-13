@@ -41,17 +41,18 @@ catalog와 chip 표시에 재사용한다. 필터가 0개일 때 첫 Cluster를 
 
 ```
 Home        위젯 대시보드 (별도 트랙 VP-011)
-Resources   필터 + 표/그래프 (Topology 흡수)   ← 이번 작업의 중심
+Resources   필터 + 시간 + 그래프 + 표 (Topology·Timeline·Live Traffic 흡수)
 Issues      인시던트 (같은 필터 문법)
 Applications 배포 단위 (desired↔live 대조)
 GitOps      변경·승인·diff
 Checks      점검 결과
-Live Traffic 보류 — 이번 작업에서 제거하지 않는다 (현행 유지)
 Settings
 ```
 
-- **Topology 메뉴는 제거**한다. Resources의 그래프 모드가 대체한다.
-- **Live Traffic은 유지**한다. 흡수 여부는 후속 결정(계약 부재로 현행 유지).
+- **Topology·Timeline·Live Traffic 독립 메뉴는 제거**한다. VP-012의 Resources 4층 구조와
+  물리 뷰↔관계 뷰가 세 기능을 대체한다.
+- observed traffic 계약이 없는 동안 관계 뷰는 빈 슬롯이다. Service inventory나 Radar 학습
+  경로를 traffic edge로 추측 변환하지 않는다(BQ-034 대기).
 - **Cost 메뉴는 렌더하지 않는다** (백엔드 계약 없음 — BE-Gap).
 
 ## 2. 공용 필터 엔진 (모든 화면 공유, 단일 컴포넌트)
@@ -365,11 +366,13 @@ night-log에 요청한다.
 1. 공용 필터 엔진(칩 UI·URL 동기화·화면 간 유지·필터/상세 경계 규칙) — 단일 컴포넌트
 2. Resources 재편: CLUSTERS 트리 + [+] 위자드 진입 + kind 목록 실계약 정리
 3. 클러스터 위자드 점진 공개 + 비차단 진행 + 통신 시각화
-4. 표/그래프 모드 전환 (그래프 = TopologyCanvas 재사용), Topology 메뉴 제거
+4. VP-012 Resources 4층 골격(필터·시간·그래프 빈 슬롯·표) + 독립
+   Topology·Timeline·Live Traffic 메뉴 제거
 5. Issues/Applications/GitOps/Checks에 동일 필터 엔진 적용(표 모드)
 6. Git 저장소 등록 위자드에 점진 패턴 적용
 
-Live Traffic은 이번 범위에서 **변경하지 않는다**(현행 유지).
+관계 뷰는 BQ-034 observed edge 계약과 프론트 API/Zod/adapter 앵커가 착륙하기 전까지
+미렌더한다. 물리 뷰도 별도 그래프 기획과 계약 전에는 빈 슬롯을 유지한다.
 
 ### 8.1 구현 현황 (2026-07-13)
 
@@ -385,9 +388,9 @@ Live Traffic은 이번 범위에서 **변경하지 않는다**(현행 유지).
   composition/UI에는 아직 마운트하지 않았다. health/type facet은 §9.2 계약 전까지 요청하지 않고,
   graph projection은 별도 API·Zod·adapter 작업 전까지 fail-closed한다.
   detail read는 이 list 차단과 독립적이며 해당 identity만 조회한다.
-- 4단계의 Topology 전용 메뉴·route·shortcut은 제거했고 Resources의 Table/Graph 전환 shell은
-  `f944e4c5b`에서 완료했다. Graph는 URL history를 보존하지만 frontend graph API·Zod·adapter와
-  renderer 착륙 전에는 graph API·TopologyCanvas·WebSocket을 호출하거나 렌더하지 않는다.
+- 4단계의 Topology·Timeline·Live Traffic 전용 메뉴·route·shortcut은 제거했다. Resources의
+  그래프 슬롯은 renderer·observed edge 계약 착륙 전 graph API·TopologyCanvas·WebSocket을
+  호출하거나 렌더하지 않는다.
   단일 Cluster가 아니면 선택 경계를 표시하고, unknown Cluster identity는 선택 안내로 뭉개지 않고
   그대로 보존한다.
 - Resources core `GAP-002/003/004` 계약은 `87c0606e0`, frontend API·strict Zod는
