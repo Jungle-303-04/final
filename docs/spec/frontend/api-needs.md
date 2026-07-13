@@ -4,7 +4,7 @@ status: active-coordination-queue
 date: 2026-07-13
 owners: Codex 요청 / API 연결 작업자 claim·처리 / F 트랙 행(APIQ-029)·계약 갱신(APIQ-012)은 검토자 기록
 workorder: api-integration-workorder-20260711.md
-snapshot: 1행·4함수 / requested 0 / in_progress 1 / blocked 0 / valid completion anchors 54
+snapshot: 0행·0함수 / requested 0 / in_progress 0 / blocked 0 / valid completion anchors 58
 ---
 
 # 프론트 API 요청 큐
@@ -16,8 +16,8 @@ snapshot: 1행·4함수 / requested 0 / in_progress 1 / blocked 0 / valid comple
 상세한 경로, 소유권, schema, test, mutation 안전, 2커밋 완료 절차는
 `api-integration-workorder-20260711.md`가 정본이다.
 
-> **현재 claim:** `APIQ-033` 클러스터 등록 조회·사전 검증·등록 함수군을
-> `Codex-API@woonyong/ui-layer-lab`이 2026-07-13 15:04 KST에 claim했다.
+> **현재 claim:** 없음. `APIQ-033`의 네 함수는 코드 커밋 `8678d63b0`과 전체 게이트를
+> 통과하고 완료됐다.
 
 ## 1. 상태와 claim 규칙
 
@@ -69,7 +69,6 @@ claim·heartbeat: YYYY-MM-DD HH:mm KST
 
 | ID | 우선 | 함수명 | routes.py 상수 | 대상 파일 | 필요한 화면 | 요청 시각 | 상태 | 담당/브랜치 | claim·heartbeat | 완료 조건·주의 |
 |---|---:|---|---|---|---|---|---|---|---|---|
-| APIQ-033 | P0 | `getProviderCatalog`, `getProviderClusterDiscovery`, `preflightTargetRegistration`, `registerTarget` | `PROVIDERS_CATALOG_PATH`, `PROVIDERS_CLUSTER_DISCOVERY_PATH`, `TARGETS_PREFLIGHT_PATH`, `TARGETS_PATH` | `api/cluster-registration*.ts`, `api/index.ts` | VP-008 클러스터 연결 위자드 | 2026-07-13 15:04 KST | in_progress | Codex-API@woonyong/ui-layer-lab | 2026-07-13 15:04 KST | catalog·discovery·preflight·install 외피와 typed row를 strict close한다. 백엔드가 명시적으로 `JsonMap`인 `provider_config`·catalog의 가변 map만 open으로 둔다. `agent_token`·manifest·명령은 1회성 메모리 값이며 로그·URL·storage·query cache에 저장하지 않는다. POST는 possibly-sent 실패 시 재전송하지 않고, `workspace_id`를 요청에서 받지 않는다. provider별 명령을 프론트에서 합성하지 않는다. |
 
 ## 3. 기존 구현 검증·승인
 
