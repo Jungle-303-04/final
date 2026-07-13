@@ -85,6 +85,7 @@ describe("ProductApp root recovery", () => {
     await screen.findByRole("button", { name: /worker-b/u }, { timeout: 5_000 });
     expect(screen.getByRole("navigation", { name: "Primary navigation" })).toBeTruthy();
     expect(screen.getByRole("link", { name: "Home" })).toBeTruthy();
+    expect(screen.getByRole("link", { name: "Issues" })).toBeTruthy();
     expect(requestCount(fetchMock, "/api/auth/session")).toBe(1);
     expect(requestCount(fetchMock, "/api/clusters?limit=100")).toBe(1);
     await waitFor(() => expect(requestCount(fetchMock, "/api/clusters/cluster-1/summary")).toBe(1));
