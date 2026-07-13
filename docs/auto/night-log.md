@@ -2193,3 +2193,19 @@ target preflight·register 네 함수와 strict Zod 계약을 claim했다. 1회�
   design guard 345 files, shadcn source audit 482 previews, Vite build 14,539 modules.
   `npm run visual-product` PASS: 41 isolated scenarios, exact API request counts,
   unexpected feature network/WebSocket 0건.
+
+## 2026-07-13 18:06 KST — [프론트] S3 문서 정합 완료·CLS 앵커 정정
+
+- `78524624f38f3019f1d25bb9855b69af02746f60`에서 제품 정본의 공개 표면을
+  Home·Resources·Issues 세 화면으로 정합화하고, API 작업 권한을 `api-needs.md`의
+  claim 기반 역할 계약으로 갱신했다.
+- `frontend-pipeline.md`의 결합돼 있던 E 단계를 실제 착륙 상태에 맞춰 VP-002 감사
+  타임라인 `done`과 VP-003 이벤트 여정 `blocked`로 분리했다. VP-003은 안정적인
+  `event_id`와 canonical subject→journey-stage 계약이 착륙하기 전까지 추론하지 않는다.
+- 17:48 기록의 CLS 코드 전체 해시
+  `a46a4d4ad8f224be6261711a838b2f2145ed03be`는 존재하지 않는 오기다. 실제 커밋은
+  `a46a4d4adfd4ac2be66531f6bc5c769b8b671668`이며, append-only 원칙에 따라 이전
+  기록을 덮어쓰지 않고 이 절에서 정정한다.
+- 정합화 직전 전체 `npm run check` PASS: TypeScript·ESLint, Vitest 117 files / 844 tests,
+  design guard 345 files, shadcn source audit 482 previews, Vite build 14,539 modules.
+  커밋 push 후 `origin/woonyong/ui-layer-lab` ancestor exit 0을 확인했다.
