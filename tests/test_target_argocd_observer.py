@@ -55,7 +55,9 @@ def test_argocd_observer_reads_application_and_rollout_without_writes() -> None:
                             "metadata": {"namespace": "argocd", "name": "checkout"},
                             "spec": {
                                 "source": {
-                                    "repoURL": "https://github.com/acme/platform.git",
+                                    "repoURL": (
+                                        "https://deploy-token:secret@github.com/acme/platform.git"
+                                    ),
                                     "targetRevision": "main",
                                     "path": "apps/checkout",
                                 }
@@ -84,6 +86,21 @@ def test_argocd_observer_reads_application_and_rollout_without_writes() -> None:
                             "status": {
                                 "sync": {"status": "OutOfSync", "revision": "sha-2"},
                                 "health": {"status": "Degraded"},
+                            },
+                        },
+                        {
+                            "metadata": {"namespace": "argocd", "name": "catalog"},
+                            "spec": {
+                                "source": {
+                                    "repoURL": "https://github.com/acme/catalog.git",
+                                    "targetRevision": "main",
+                                    "path": "apps/catalog",
+                                }
+                            },
+                            "status": {
+                                "sync": {"status": "Synced", "revision": "sha-3"},
+                                "health": {"status": "Healthy"},
+                                "operationState": {"phase": "Running"},
                             },
                         },
                     ],
@@ -143,6 +160,8 @@ def test_argocd_observer_reads_application_and_rollout_without_writes() -> None:
     }
     assert len(applications["items"][1]["sources"]) == 2
     assert applications["items"][1]["post_verification_ready"] is False
+    assert applications["items"][2]["operation_phase"] == "Running"
+    assert applications["items"][2]["post_verification_ready"] is False
     assert snapshot["rollouts"]["items"] == [
         {
             "namespace": "checkout",
