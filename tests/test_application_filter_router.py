@@ -5,6 +5,7 @@ import json
 from types import SimpleNamespace
 from typing import Any
 
+from conftest import ROOT, load_file
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
@@ -174,3 +175,18 @@ def test_application_cursor_is_bound_to_filter_scope() -> None:
 
     assert response.status_code == 422
     assert db.data_calls == []
+
+
+def test_gateway_registers_static_application_filters_before_dynamic_detail(monkeypatch) -> None:
+    monkeypatch.setenv("DATABASE_URL", "postgresql://user:pass@postgresql:5432/service")
+    gateway = load_file(
+        ROOT / "src" / "services" / "gateway" / "api-gateway" / "gateway.py",
+        "test_application_filter_gateway_module",
+    )
+    app = gateway.create_app()
+    paths = [getattr(route, "path", "") for route in app.router.routes]
+
+    assert "/applications/filter-results" in paths
+    assert paths.index("/applications/filter-results") < paths.index(
+        "/applications/{application_id}"
+    )
