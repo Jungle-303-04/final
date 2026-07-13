@@ -87,7 +87,13 @@ def test_relationship_summaries_preserve_authoritative_graph_evidence() -> None:
             "metadata": {
                 "name": "checkout-api-abc",
                 "namespace": "target",
-                "ownerReferences": [{"kind": "Deployment", "name": "checkout-api"}],
+                "ownerReferences": [
+                    {
+                        "kind": "Deployment",
+                        "name": "checkout-api",
+                        "uid": "deployment-uid",
+                    }
+                ],
             },
             "spec": {"selector": {"matchLabels": {"app": "checkout-api"}}},
         },
@@ -107,6 +113,8 @@ def test_relationship_summaries_preserve_authoritative_graph_evidence() -> None:
 
     assert workload["owner_kind"] == "Deployment"
     assert workload["owner_name"] == "checkout-api"
+    assert workload["owner_uid"] == "deployment-uid"
+    assert workload["owner_references_complete"] is True
     assert endpoint_slice["service_name"] == "checkout-api"
     assert endpoint_slice["labels_complete"] is False
 

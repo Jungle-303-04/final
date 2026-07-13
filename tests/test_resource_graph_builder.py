@@ -55,6 +55,12 @@ def _graph_items() -> list[dict[str, Any]]:
             name="checkout",
             namespace="shop",
             labels={"app": "checkout"},
+            summary={
+                "selector": {
+                    "matchLabels": {"app": "checkout"},
+                    "matchExpressions": [{"key": "tier", "operator": "In", "values": ["api"]}],
+                }
+            },
         ),
         _item(
             inventory_key="replicaset",
@@ -63,7 +69,12 @@ def _graph_items() -> list[dict[str, Any]]:
             name="checkout-rs",
             namespace="shop",
             labels={"app": "checkout"},
-            summary={"owner_kind": "Deployment", "owner_name": "checkout"},
+            summary={
+                "owner_kind": "Deployment",
+                "owner_name": "checkout",
+                "owner_uid": "uid-deployment",
+                "owner_references_complete": True,
+            },
         ),
         _item(
             inventory_key="pod",
@@ -75,6 +86,8 @@ def _graph_items() -> list[dict[str, Any]]:
             summary={
                 "owner_kind": "ReplicaSet",
                 "owner_name": "checkout-rs",
+                "owner_uid": "uid-replicaset",
+                "owner_references_complete": True,
                 "node_name": "node-a",
             },
         ),
@@ -91,12 +104,7 @@ def _graph_items() -> list[dict[str, Any]]:
             kind="Service",
             name="checkout",
             namespace="shop",
-            summary={
-                "selector": {
-                    "matchLabels": {"app": "checkout"},
-                    "matchExpressions": [{"key": "tier", "operator": "In", "values": ["api"]}],
-                }
-            },
+            summary={"selector": {"app": "checkout"}},
         ),
         _item(
             inventory_key="endpoint",
@@ -135,6 +143,7 @@ def test_graph_builder_emits_only_evidence_backed_deterministic_edges() -> None:
         ("deployment", "replicaset", "owns", "owner_reference"),
         ("replicaset", "pod", "owns", "owner_reference"),
         ("pod", "node", "runs_on", "node_assignment"),
+        ("deployment", "pod", "selects", "selector_match"),
         ("service", "pod", "selects", "selector_match"),
         ("service", "endpoint", "routes_to", "service_name_label"),
     }
@@ -176,8 +185,9 @@ def test_graph_builder_never_guesses_cross_namespace_or_incomplete_relations() -
         truncated=True,
     )
 
-    assert all(
-        edge["to_node_id"] not in {"same-name-other-namespace", "expression-mismatch"}
+    assert all(edge["to_node_id"] != "same-name-other-namespace" for edge in graph["edges"])
+    assert not any(
+        edge["from_node_id"] == "deployment" and edge["to_node_id"] == "expression-mismatch"
         for edge in graph["edges"]
     )
     assert graph["relation_completeness"] == "partial"
@@ -187,3 +197,105 @@ def test_graph_builder_never_guesses_cross_namespace_or_incomplete_relations() -
         "source_labels_incomplete",
     }
     assert all(node["identity"]["cluster_id"] == "cluster-a" for node in graph["nodes"])
+
+
+def test_graph_builder_treats_missing_selector_labels_as_unknown_not_match() -> None:
+    items = _graph_items()
+    items[2]["resource"]["labels"] = {"app": "checkout"}
+
+    graph = build_resource_graph(
+        items,
+        snapshot_revision=42,
+        filter_fingerprint="filter-a",
+        source_complete=True,
+        labels_complete=False,
+        truncated=False,
+    )
+
+    assert not any(
+        edge["from_node_id"] == "deployment" and edge["to_node_id"] == "pod"
+        for edge in graph["edges"]
+    )
+    assert "selector_evidence_incomplete" in graph["partial_reason_codes"]
+
+
+def test_graph_builder_honors_service_flat_label_names_and_evidence_time() -> None:
+    items = _graph_items()
+    items[4]["resource"]["summary"]["selector"] = {"matchLabels": "yes"}
+    items[2]["resource"]["labels"] = {"matchLabels": "yes"}
+    items[4]["resource"]["observed_at"] = "2026-07-13T14:10:00Z"
+    items[2]["resource"]["observed_at"] = "2026-07-13T14:20:00Z"
+
+    graph = build_resource_graph(
+        items,
+        snapshot_revision=42,
+        filter_fingerprint="filter-a",
+        source_complete=True,
+        labels_complete=True,
+        truncated=False,
+    )
+
+    edge = next(
+        edge
+        for edge in graph["edges"]
+        if edge["from_node_id"] == "service" and edge["to_node_id"] == "pod"
+    )
+    assert edge["evidence"]["observed_at"] == "2026-07-13T14:20:00Z"
+
+
+def test_graph_builder_enforces_node_budget_and_owner_uid() -> None:
+    mismatched = _graph_items()
+    mismatched[1]["resource"]["summary"]["owner_uid"] = "uid-recreated-owner"
+    mismatch_graph = build_resource_graph(
+        mismatched,
+        snapshot_revision=42,
+        filter_fingerprint="filter-a",
+        source_complete=True,
+        labels_complete=True,
+        truncated=False,
+    )
+    assert not any(
+        edge["from_node_id"] == "deployment" and edge["to_node_id"] == "replicaset"
+        for edge in mismatch_graph["edges"]
+    )
+
+    bounded = build_resource_graph(
+        _graph_items(),
+        snapshot_revision=42,
+        filter_fingerprint="filter-a",
+        source_complete=True,
+        labels_complete=True,
+        truncated=False,
+        node_limit=2,
+    )
+    node_ids = {node["node_id"] for node in bounded["nodes"]}
+    assert bounded["node_count"] == 2
+    assert bounded["omitted_node_count"] == 4
+    assert bounded["truncated"] is True
+    assert all(
+        edge["from_node_id"] in node_ids and edge["to_node_id"] in node_ids
+        for edge in bounded["edges"]
+    )
+
+
+def test_graph_revision_is_scoped_to_visible_authorization() -> None:
+    first = build_resource_graph(
+        _graph_items(),
+        snapshot_revision=42,
+        filter_fingerprint="filter-a",
+        source_complete=True,
+        labels_complete=True,
+        truncated=False,
+        authorization_revision="auth-a",
+    )
+    second = build_resource_graph(
+        _graph_items(),
+        snapshot_revision=42,
+        filter_fingerprint="filter-a",
+        source_complete=True,
+        labels_complete=True,
+        truncated=False,
+        authorization_revision="auth-b",
+    )
+
+    assert first["graph_revision"] != second["graph_revision"]

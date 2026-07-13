@@ -10,6 +10,7 @@ from packages.contracts.gateway.responses import ResourceGraphSnapshotResponse
 def _payload() -> dict[str, object]:
     return {
         "graph_revision": "graph-abc",
+        "cluster_projection_revision": 42,
         "cluster": {"cluster_id": "cluster-a", "name": "prod", "provider": "eks"},
         "nodes": [
             {
@@ -80,6 +81,18 @@ def test_resource_graph_contract_rejects_unknown_or_cross_cluster_edge_shape() -
         ResourceGraphSnapshotResponse.model_validate(payload)
 
     payload = _payload()
+    foreign_node = dict(payload["nodes"][0])
+    foreign_node["node_id"] = "inventory-b"
+    foreign_node["identity"] = {
+        **foreign_node["identity"],
+        "cluster_id": "cluster-b",
+    }
+    payload["nodes"] = [*payload["nodes"], foreign_node]
+    payload["node_count"] = 2
+    with pytest.raises(ValidationError):
+        ResourceGraphSnapshotResponse.model_validate(payload)
+
+    payload = _payload()
     payload["edges"] = [
         {
             "edge_id": "edge-a",
@@ -88,6 +101,7 @@ def test_resource_graph_contract_rejects_unknown_or_cross_cluster_edge_shape() -
             "kind": "guessed_from_name",
             "plane": "ownership",
             "direction": "directed",
+            "state": "active",
             "evidence": {
                 "type": "owner_reference",
                 "authority": "authoritative",

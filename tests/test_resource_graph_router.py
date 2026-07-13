@@ -124,6 +124,7 @@ def test_resource_graph_uses_selected_cluster_revision_and_reports_budget_partia
         "/resources/graph",
         params={
             "clusters": "cluster-a",
+            "workspace_id": "workspace-spoof",
             "resources.types": "workload,pod",
             "labels": "app=checkout",
             "max_nodes": 1,
@@ -134,6 +135,7 @@ def test_resource_graph_uses_selected_cluster_revision_and_reports_budget_partia
     assert response.status_code == 200
     body = ResourceGraphSnapshotResponse.model_validate(response.json())
     assert body.cluster.cluster_id == "cluster-a"
+    assert body.cluster_projection_revision == 42
     assert body.snapshot.snapshot_revision == 42
     assert body.counts.filtered_count == 3
     assert body.counts.unfiltered_count == 5
@@ -142,13 +144,17 @@ def test_resource_graph_uses_selected_cluster_revision_and_reports_budget_partia
     assert body.relation_completeness == "partial"
     assert "graph_node_budget_exceeded" in body.partial_reason_codes
 
-    global_snapshot_call, cluster_snapshot_call, resource_call = db.data_calls
+    global_snapshot_call, pinned_snapshot_call, cluster_snapshot_call, resource_call = db.data_calls
     assert global_snapshot_call[1]["allowed_cluster_ids"] == {"cluster-a", "cluster-b"}
+    assert pinned_snapshot_call[1]["allowed_cluster_ids"] == {"cluster-a", "cluster-b"}
+    assert pinned_snapshot_call[1]["at_revision"] == 42
     assert cluster_snapshot_call[1]["allowed_cluster_ids"] == {"cluster-a"}
     assert cluster_snapshot_call[1]["at_revision"] == 42
     assert resource_call[1]["allowed_cluster_ids"] == {"cluster-a"}
+    assert resource_call[1]["workspace_id"] == "workspace-a"
     assert resource_call[1]["filters"].resource_types == ("pod", "workload")
     assert resource_call[1]["filters"].labels == (("app", "checkout"),)
+    assert resource_call[1]["graph_priority"] is True
 
 
 def test_resource_graph_rejects_future_revision_without_querying_graph_rows() -> None:
@@ -160,3 +166,31 @@ def test_resource_graph_rejects_future_revision_without_querying_graph_rows() ->
 
     assert response.status_code == 422
     assert [kind for kind, _call in db.data_calls] == ["snapshot"]
+
+
+def test_resource_graph_rejects_revision_that_is_not_a_global_projection_cut() -> None:
+    class GapGraphDb(GraphDb):
+        def filter_snapshot_context(
+            self,
+            workspace_id: str,
+            allowed_cluster_ids: set[str],
+            *,
+            at_revision: int | None = None,
+        ) -> dict[str, Any]:
+            result = super().filter_snapshot_context(
+                workspace_id,
+                allowed_cluster_ids,
+                at_revision=at_revision,
+            )
+            if at_revision == 41:
+                result["snapshot_revision"] = 40
+            return result
+
+    db = GapGraphDb(clusters={"cluster-a"})
+    response = _client(db).get(
+        "/resources/graph",
+        params={"clusters": "cluster-a", "snapshot_revision": 41},
+    )
+
+    assert response.status_code == 422
+    assert [kind for kind, _call in db.data_calls] == ["snapshot", "snapshot"]
