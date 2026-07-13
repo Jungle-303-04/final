@@ -196,6 +196,8 @@ def test_public_benchmark_full_suite_includes_scheduling_and_pvc() -> None:
     result = _score()
 
     assert result.returncode == 0, result.stdout + result.stderr
+    assert "RESULT PASS (18 scenarios;" in result.stdout
+    assert "crashloop=3" in result.stdout
     assert "pvc=2" in result.stdout
     assert "probe=4" in result.stdout
     assert "scheduling=3" in result.stdout
