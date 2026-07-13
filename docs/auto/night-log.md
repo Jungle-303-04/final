@@ -1951,3 +1951,18 @@ target preflight·register 네 함수와 strict Zod 계약을 claim했다. 1회�
 - merge `453d0843d8b8fca1cf798b61309ba3c5da1067f4`를
   `origin/woonyong/ui-layer-lab`에 비강제 push했다. 검증 중 `origin/dev`는 후보 계약 41~50
   배치 `ce50d0fb6`까지 5커밋 전진했으며, 자동 재흡수 임계값 미만이라 다음 주기에 보존한다.
+
+## 2026-07-13 16:40 KST — [프론트] Cluster 연결 단계 읽기 전용 전달 완료 증거
+
+- RED `d1f9924ec`는 strict API가 허용한 `connection_stage`가 Home canonical 경계에서
+  유실되는 문제와 전역 선택기의 접근 가능한 단계 표기 누락을 4개 실패로 고정했다.
+- GREEN `697411628`은 7개 canonical stage를 endpoint→Home choice에 그대로 전달한다.
+  optional 필드가 없으면 `null`로 보존하고 단계 문구를 생략하므로 `connection_status`에서
+  진행률·완료·실패·복구 동작을 추론하지 않는다. 별도 connection-status 호출도 추가하지 않았다.
+- stage는 전역 Cluster 선택기의 ARIA 이름과 freshness Tooltip에만 한 번 표시하고, en/ko
+  카탈로그와 완전한 `Record` 매핑으로 봉인했다. API와 canonical union의 타입 동등성도
+  contract test로 고정했다. 이는 VP-008 위자드 해제를 의미하지 않는 읽기 전용 선행 단위다.
+- `npm run check` PASS: TypeScript·ESLint, Vitest 115 files / 833 tests,
+  design guard 343 files, shadcn source audit 482 previews, Vite build 14,539 modules.
+  `npm run visual-product` PASS: 38 isolated scenarios, exact API request counts,
+  unexpected feature network/WebSocket 0건.
