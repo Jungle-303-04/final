@@ -1,8 +1,11 @@
 from __future__ import annotations
 
 import asyncio
+import json
+import subprocess
 from copy import deepcopy
 from dataclasses import replace
+from pathlib import Path
 
 import pytest
 
@@ -23,6 +26,7 @@ from services.ai.agent.recovery.catalog import registered_recovery_rules
 from services.ai.agent.recovery.dispatch import RecoveryDispatcher
 
 BASE_SHA = "a" * 40
+ROOT = Path(__file__).resolve().parents[1]
 
 
 class FakeAuthorityPort:
@@ -466,3 +470,17 @@ def test_builtin_catalog_declares_real_patch_actions_and_isolates_review_documen
     )
     assert review.params == {"document_type": "recovery_review"}
     assert review.score < actual.score
+
+
+def test_static_recovery_patch_scorer_passes_all_six_action_types() -> None:
+    result = subprocess.run(
+        ["uv", "run", "python", "scripts/verify-recovery-patches.py"],
+        cwd=ROOT,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    summary = json.loads(result.stdout.splitlines()[-1])
+    assert summary == {"failed": 0, "passed": 6, "total": 6}
