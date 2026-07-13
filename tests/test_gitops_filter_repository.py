@@ -2,13 +2,14 @@ from __future__ import annotations
 
 from typing import Any
 
+from sqlalchemy.dialects import postgresql
+
 from domains.gitops_filter.query import parse_gitops_filters
 from domains.gitops_filter.repository import (
     _apply_gitops_filters,
     _authorized_changes,
     _serialize_change,
 )
-from sqlalchemy.dialects import postgresql
 
 
 def _filters(**overrides: str | None):
@@ -37,7 +38,8 @@ def test_gitops_source_is_tenant_and_grant_scoped_without_sensitive_columns() ->
     assert "workflow_runs.cluster_id in" in sql
     assert "workflow_runs.application_id in" in sql
     assert "deployment_bindings.workspace_id = workflow_runs.workspace_id" in sql
-    assert "approvals.workspace_id = workflow_runs.workspace_id" in sql
+    assert "approvals.workspace_id =" in sql
+    assert "latest_authorized_gitops_approval.workspace_id = workflow_runs.workspace_id" in sql
     assert "row_number() over" in sql
     assert "credential_ref" not in sql
     assert "access_policy" not in sql

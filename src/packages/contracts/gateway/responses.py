@@ -983,6 +983,113 @@ class ApplicationLabelFacetPageResponse(StrictModel):
     capabilities: list[ApplicationFilterCapability] = Field(default_factory=list)
 
 
+GitOpsFilterAxis = Literal[
+    "clusters",
+    "namespaces",
+    "applications",
+    "environment",
+    "approval",
+    "change_type",
+]
+GitOpsFilterAvailability = Literal["available", "partial", "unavailable"]
+
+
+class GitOpsFilterItem(StrictModel):
+    """Git provider와 저장 payload를 노출하지 않는 변경·승인 목록 DTO."""
+
+    change_id: str = Field(min_length=1)
+    application_id: str = Field(min_length=1)
+    repository_id: str = Field(min_length=1)
+    binding_id: str = Field(min_length=1)
+    cluster_id: str = Field(min_length=1)
+    namespace: str = Field(min_length=1)
+    environment: str = Field(min_length=1)
+    revision: str = Field(min_length=1)
+    status: str = Field(min_length=1)
+    current_step: str = Field(min_length=1)
+    approval_status: str = Field(min_length=1)
+    change_type: str | None = None
+    summary: str | None = None
+    updated_at: str
+    change_type_completeness: FilterCountCompleteness
+    label_projection_completeness: FilterCountCompleteness
+
+
+class GitOpsFilterFacetItem(StrictModel):
+    axis: GitOpsFilterAxis
+    value: str = Field(min_length=1)
+    label: str = Field(min_length=1)
+    match_count: int | None = Field(default=None, ge=0)
+    count_completeness: FilterCountCompleteness
+    availability: GitOpsFilterAvailability
+
+    @model_validator(mode="after")
+    def validate_count_availability(self) -> Self:
+        if self.availability == "unavailable" and self.match_count is not None:
+            raise ValueError("unavailable GitOps facet cannot expose a match count")
+        if self.count_completeness == "unavailable" and self.match_count is not None:
+            raise ValueError("unavailable GitOps facet count must be null")
+        return self
+
+
+class GitOpsFilterCapability(StrictModel):
+    axis: Literal[
+        "clusters",
+        "namespaces",
+        "applications",
+        "environment",
+        "approval",
+        "change_type",
+        "labels",
+    ]
+    availability: GitOpsFilterAvailability
+    reason_code: str | None = None
+    source_semantics: str = Field(min_length=1)
+
+    @model_validator(mode="after")
+    def validate_reason(self) -> Self:
+        if self.availability != "available" and not self.reason_code:
+            raise ValueError("partial or unavailable GitOps capability requires a reason")
+        return self
+
+
+class GitOpsSelectedFacetResolution(StrictModel):
+    axis: Literal[
+        "cluster",
+        "namespace",
+        "application",
+        "environment",
+        "approval",
+        "change_type",
+    ]
+    value: str = Field(min_length=1)
+    status: Literal["resolved", "zero", "restricted", "unavailable"]
+    display_label: str | None = None
+
+
+class GitOpsFilterResultsResponse(StrictModel):
+    items: list[GitOpsFilterItem] = Field(default_factory=list)
+    next_cursor: str | None = None
+    has_more: bool
+    counts: FilterResultCounts
+    snapshot: FilterSnapshotMeta
+    facets: list[GitOpsFilterFacetItem] = Field(default_factory=list)
+    capabilities: list[GitOpsFilterCapability] = Field(default_factory=list)
+    selected_labels: list[SelectedLabelResolution] = Field(default_factory=list)
+
+
+class GitOpsFilterFacetPageResponse(StrictModel):
+    surface: Literal["gitops"] = "gitops"
+    axis: GitOpsFilterAxis
+    items: list[GitOpsFilterFacetItem] = Field(default_factory=list)
+    selected_resolutions: list[GitOpsSelectedFacetResolution] = Field(default_factory=list)
+    next_cursor: str | None = None
+    has_more: bool
+    counts: FilterResultCounts
+    snapshot: FilterSnapshotMeta
+    capabilities: list[GitOpsFilterCapability] = Field(default_factory=list)
+
+
 IssueFilterAxis = Literal[
     "clusters",
     "namespaces",
