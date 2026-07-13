@@ -1637,3 +1637,14 @@ JsonMap, AbortSignal, ID 검증을 완료 앵커 전까지 제품 화면에서 �
   `origin/woonyong/ui-layer-lab`의 ancestor(exit 0)다. push 직후 병렬 backend가
   `origin/dev`를 `3d1493f8bbce36d9741ea978b57b0c7d20614ab6`까지 7커밋 더 전진시켰으며,
   새 차이는 30커밋 선흡수 임계값 미만이다.
+
+## 2026-07-13 14:58 KST — [프론트] P6 BLOCKED: auto-revert 식별 계약 결손
+
+- `git merge-base --is-ancestor 6d68325bf1cc47f55810e5dc2189e51a6fe916c0 origin/dev`
+  결과 exit 0. BQ-007 worker는 flag off에서 무발화하고 flag on에서는 일반
+  `safe_pr.requested`를 발행한다.
+- RCA timeline과 release/application projection은 generic Safe PR lifecycle은 표현하지만
+  auto-revert origin을 구조화해 반환하지 않는다. 내부 `[auto-revert]` 제목 prefix는 계약이 아니다.
+- 재개 조건: stable `trigger_kind=auto_revert`, correlation 또는 workflow run exact scope,
+  stable event identity/status/time/PR URL/failure reason의 canonical 계약·앵커.
+- 해당 항목만 BE-Gap으로 주차했다. APIQ·adapter·disabled placeholder는 만들지 않고 P7으로 계속한다.
