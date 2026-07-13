@@ -2897,3 +2897,8 @@ target preflight·register 네 함수와 strict Zod 계약을 claim했다. 1회�
   실 PostgreSQL migration 왕복, merge-tree clean, 삭제·frozen source·프론트 소유 변경 0건이다.
 - 계약 앵커: `ISSUES_FILTER_RESULTS_PATH + ISSUES_FILTER_FACETS_PATH + ISSUES_LABEL_FACETS_PATH` /
   `d63498d5f` / `[green]`.
+
+## 2026-07-14 00:22 KST — [백엔드] Issues 필터 lane 회수
+
+- lane 회수 — `codex/surface-filter-contracts` / `e00cb9b3e` / `origin/dev` ancestor exit 0.
+  canonical 복구 지점은 merge `e2504278d`, 앵커 문서 `ae4357a8c`다.
