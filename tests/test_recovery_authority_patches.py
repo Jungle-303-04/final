@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+from copy import deepcopy
 from dataclasses import replace
 
 import pytest
@@ -358,6 +359,56 @@ def test_dispatcher_rejects_authority_for_another_cluster() -> None:
 
     assert body.__subject__ == "rca.action_required"
     assert body.reason_code == "gitops_authority_mismatch"
+
+
+@pytest.mark.parametrize(
+    ("field_suffix", "current", "approved"),
+    [
+        ("readinessProbe.httpGet.path", "/wrong", "/healthz"),
+        ("readinessProbe.httpGet.port", 9090, 8080),
+    ],
+)
+def test_probe_fix_restores_approved_path_or_port(
+    field_suffix: str,
+    current: object,
+    approved: object,
+) -> None:
+    context = authority_context()
+    manifest = deepcopy(context.desired_manifest)
+    probe = manifest["spec"]["template"]["spec"]["containers"][0]["readinessProbe"]
+    target = probe
+    parts = field_suffix.split(".")[1:]
+    for part in parts[:-1]:
+        target = target[part]
+    target[parts[-1]] = current
+    field_path = f"spec.template.spec.containers[name=checkout-api].{field_suffix}"
+    context = replace(
+        context,
+        desired_manifest=manifest,
+        source_manifest_sha256=canonical_manifest_digest(manifest),
+        changes=(
+            {
+                "field_path": field_path,
+                "old_desired": approved,
+                "new_desired": current,
+            },
+        ),
+    )
+
+    body = asyncio.run(
+        RecoveryDispatcher().dispatch_body(
+            selected_event("probe_fix"),
+            authority=FakeAuthorityPort(context),
+            correlation_id="corr-1",
+        )
+    )
+
+    assert isinstance(body, SafePrRequestedBody)
+    patch_plan = parse_scalar_patch_plan(body.patches[0].content)
+    assert patch_plan is not None
+    assert patch_plan.replacements == (
+        type(patch_plan.replacements[0])(field_path, current, approved),
+    )
 
 
 def test_database_port_reloads_and_cross_checks_authority_at_patch_time() -> None:
