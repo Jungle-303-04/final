@@ -253,7 +253,7 @@ def test_public_benchmark_scores_probe_timeout_without_fleet_wide_increase() -> 
     ]
 
 
-def test_public_benchmark_scores_startup_window_without_fleet_wide_disable() -> None:
+def test_public_benchmark_scores_startup_window_as_manual_only() -> None:
     result = _score("--category", "probe")
 
     assert result.returncode == 0, result.stdout + result.stderr
@@ -269,9 +269,9 @@ def test_public_benchmark_scores_startup_window_without_fleet_wide_disable() -> 
     ]
     assert scenario["allowed_remediations"] == [
         {
-            "action_type": "probe_fix",
-            "blast_radius": "target_workload",
-            "route": "safe_pr",
+            "action_type": "manual_analysis",
+            "blast_radius": "unknown",
+            "route": "approval_required",
             "auto_apply": False,
         }
     ]
@@ -444,7 +444,6 @@ def test_sixth_candidate_contract_batch_is_machine_verified_in_catalog_order() -
         **{candidate_id: [] for candidate_id in SIXTH_CANDIDATE_BATCH},
         "probe_port_wrong": ["safe_pr"],
         "timeout_too_short": ["safe_pr"],
-        "startup_window_too_short": ["safe_pr"],
         "selector_label_mismatch": ["safe_pr"],
     }
     assert {
