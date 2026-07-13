@@ -65,6 +65,7 @@ type CoreMessageKey =
   | "shell.locale.english"
   | "shell.locale.korean"
   | "shell.locale.label"
+  | "shell.locale.current"
   | "shell.menu.label"
   | "shell.menu.mobileClose"
   | "shell.menu.mobileDescription"

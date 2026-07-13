@@ -24,7 +24,7 @@ export function LocaleToggle() {
     label: labels[value],
     value,
   }));
-  const controlLabel = `${t("shell.locale.label")}: ${labels[locale]}`;
+  const controlLabel = t("shell.locale.current", { language: labels[locale] });
 
   return (
     <Select

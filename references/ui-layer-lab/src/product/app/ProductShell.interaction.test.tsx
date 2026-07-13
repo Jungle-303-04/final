@@ -150,11 +150,11 @@ describe("ProductShell keyboard and help interaction", () => {
     const user = userEvent.setup();
     renderShell();
 
-    const locale = screen.getByRole("combobox", { name: "언어: 한국어" });
+    const locale = screen.getByRole("combobox", { name: "현재 언어: 한국어" });
     await user.click(locale);
     await user.click(await screen.findByRole("option", { name: "영어" }));
 
-    expect(screen.getByRole("combobox", { name: "Language: English" })).toBeTruthy();
+    expect(screen.getByRole("combobox", { name: "Current language: English" })).toBeTruthy();
     expect(screen.getByRole("link", { name: "Home" })).toBeTruthy();
     expect(screen.getByRole("link", { name: "Issues" })).toBeTruthy();
     expect(screen.getByRole("button", { name: "Keyboard shortcuts" })).toBeTruthy();

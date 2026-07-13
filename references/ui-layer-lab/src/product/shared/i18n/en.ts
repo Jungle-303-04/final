@@ -59,6 +59,7 @@ export const en = {
   "shell.locale.english": "English",
   "shell.locale.korean": "Korean",
   "shell.locale.label": "Language",
+  "shell.locale.current": "Current language: {language}",
   "shell.menu.label": "Product menu",
   "shell.menu.mobileClose": "Close mobile sidebar",
   "shell.menu.mobileDescription": "Navigate between currently available product screens.",

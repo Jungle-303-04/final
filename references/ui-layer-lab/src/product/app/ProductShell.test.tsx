@@ -51,7 +51,7 @@ describe("ProductShell", () => {
     expect(markup).not.toContain("Topology");
     expect(markup).not.toContain("workspace_id");
     expect(markup).toContain("Sign out");
-    expect(markup).toContain("Language");
+    expect(markup).toContain('aria-label="Current language: English"');
     expect(markup).toContain("test-user");
     expect(markup).toContain('aria-current="page"');
     expect(markup).toContain('href="#product-main"');
