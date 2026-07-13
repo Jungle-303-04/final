@@ -3,17 +3,11 @@
 import { act, cleanup, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import type {
-  ResourcesFilterFacetPage,
-  ResourcesFilterLabelFacetPage,
-  ResourcesFilterResourcePage,
-  ResourcesFilterSnapshot,
-} from "../../features/resources/resourcesFilterContract";
+import type { ResourcesFilterSnapshot } from "../../features/resources/resourcesFilterContract";
 import {
   FILTER_STATE_B,
   deferred,
   facetPage,
-  flushEffects,
   labelPage,
   renderResourcesFilterFrame,
   resourcePage,
@@ -53,6 +47,7 @@ describe("useResourcesFilterDataFrame pagination", () => {
       rendered.rerender({ current: { ...rendered.input, filterState: FILTER_STATE_B } });
       await waitFor(() => expect(method).toHaveBeenCalledTimes(3));
       expect(method.mock.calls[2]?.[1]).not.toHaveProperty("cursor");
+      await waitFor(() => expect(rendered.result.current[target].phase).toBe("ready"));
       expect(rendered.result.current[target].data?.items).toHaveLength(1);
     },
   );
@@ -84,6 +79,25 @@ describe("useResourcesFilterDataFrame pagination", () => {
       .toEqual(["team=a", "team=b"]);
   });
 
+  it("starts a first-page refresh after pagination when the revision changes", async () => {
+    const listResourcePage = vi.fn()
+      .mockResolvedValueOnce(resourcePage("resource-1", "cursor-2"))
+      .mockResolvedValueOnce(resourcePage("resource-2"))
+      .mockResolvedValueOnce(resourcePage("resource-refreshed"));
+    const rendered = renderResourcesFilterFrame({
+      port: resourcesFilterPort({ listResourcePage }),
+    });
+    await waitFor(() => expect(rendered.result.current.list.phase).toBe("ready"));
+    act(() => rendered.result.current.loadMoreList());
+    await waitFor(() => expect(rendered.result.current.list.data?.items).toHaveLength(2));
+
+    rendered.rerender({ current: { ...rendered.input, revision: 1 } });
+    await waitFor(() => expect(listResourcePage).toHaveBeenCalledTimes(3));
+    expect(listResourcePage.mock.calls[2]?.[1]).not.toHaveProperty("cursor");
+    await waitFor(() => expect(rendered.result.current.list.data?.items[0]?.resource.name)
+      .toBe("resource-refreshed"));
+  });
+
   it.each([
     ["snapshotRevision", { snapshotRevision: 43 }],
     ["authorizationRevision", { authorizationRevision: "auth-8" }],
@@ -99,7 +113,8 @@ describe("useResourcesFilterDataFrame pagination", () => {
       });
       await waitFor(() => expect(rendered.result.current.list.phase).toBe("ready"));
       act(() => rendered.result.current.loadMoreList());
-      await waitFor(() => expect(rendered.result.current.list.appending).toBe(false));
+      await waitFor(() => expect(rendered.result.current.list.appendFailure?.code)
+        .toBe("invalid-response"));
 
       expect(rendered.result.current.list.data?.items.map(({ resource }) => resource.name))
         .toEqual(["resource-1"]);
