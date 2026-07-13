@@ -7,7 +7,7 @@ governing: docs/f-coordination-plan.md · docs/backend-f-workqueue.md
 
 # 백엔드 F 진행 현황
 
-현재 상태: **앵커 34건**
+현재 상태: **앵커 35건**
 
 ## 역사적 Delta-green baseline (BQ-001~003)
 
@@ -852,3 +852,32 @@ Bundle route는 200을 반환한다.
   source·삭제·frozen 경로 변경 0건; feature·merge commit의 `origin/dev` ancestor exit 0.
 
 계약 완성: outbound deliver success, failure, cancellation and mapper propagation tests (e43920262b530937cee83432f2eaf38727333b5b) [green]
+
+### 보조 대기열 S19 — crashloop 포트 bind 충돌 시나리오
+
+- 상태: landed
+- 담당 lane: `codex/benchmark-port-bind`
+- RED 계약: `a2336a05d`, `fc7d32263`, `2d8cff0d7`, `0e0d94692`
+- 시나리오·후보·digest: `919f7dddddfe0241b9bf54786ec4ee5482e0bfe9`
+- 문서: `ac7c9749e357ccb03aa96f9f3b0084525159d251`
+- merge-patch RED·교정과 feature HEAD: `d0fbbc792`,
+  `ff3b52812905f09242ab05e2704f816ede52845f`
+- canonical no-ff merge: `0dd8a200fbec4ab567c00af2e4e3053541163809`
+- `app_port_bind_failed`를 crashloop 세 번째 시나리오로 추가했다. 한 프로세스가 같은 실제
+  포트를 두 번 bind해 `address already in use`와 exit code 1을 외부 인프라 없이 재현한다.
+- 실제 patch capability가 없으므로 `manual_analysis`, `approval_required`,
+  `auto_apply=false`만 허용하고 cluster 전체 container port 개방은 금지했다.
+- 독립 감사에서 partial `containers` 배열이 JSON merge patch에서 실행 필드를 지우는 결함을
+  발견했다. fault·gold·rollback을 완전한 container 객체로 교정하고, fault runnable 보존 →
+  gold=normal → rollback=fault 동등성을 실제 merge 알고리즘으로 고정했다.
+- ordinal 7에 exact fixture를 연결하고 첫 batch digest를
+  `c1917f0cfc9cbfa5b9dfa89a719b16ab0a5f50aee5a1dcfa168f61b197855481`로 갱신했다.
+- 고유 검증: crashloop 3/3, 전체 scenario 18/18, candidate scorer 87/87,
+  `tests/test_benchmark_score.py` 62 passed. 독립 재감사 PASS.
+- 전체 게이트: Ruff lint/format PASS, import-linter 8 kept/0 broken,
+  pytest `1951 passed, 3 skipped`; manifest management 69 / target 20.
+- 4조건: merge-tree exit 0/tree `3739c7061eb0e1df88ebd687879da0af7a3661c7`;
+  파일 삭제·소유권 밖 변경·frozen 경로 변경 0건; feature·merge commit의 `origin/dev`
+  ancestor exit 0.
+
+계약 완성: OpsiaBench crashloop port bind fixture + runnable merge-patch round trip (ff3b52812905f09242ab05e2704f816ede52845f) [green]

@@ -70,6 +70,7 @@ R-트랙([D-011])은 dev merge `257f91846`으로 landed/closed 되었고, 전용
 | S16 | landed | kubectl server dry-run adapter 직접 테스트 | feature `ccdcc1a08`, canonical merge `01dc63558` | test-only 8개, apply→get·tmp cleanup·오류/timeout 매핑, 전체 `1942 passed, 3 skipped`, manifest 69/20 |
 | S17 | landed | OpsiaBench probe startup window 시나리오 | feature `67014a028`, correction `94c419a80`, canonical `8f84ecdc0` | probe 4개·전체 17개, ordinal 53 exact fixture, producer-aware manual 경계, 전체 `1943 passed, 3 skipped`, manifest 69/20 |
 | S18 | landed | outbound deliver 직접 테스트 | feature `e43920262`, canonical `784996ce7` | test-only 5개, 성공·실패·취소·mapper 오류 원형 전파, source 0건, 전체 `1948 passed, 3 skipped`, manifest 69/20 |
+| S19 | landed | OpsiaBench crashloop 포트 bind 충돌 시나리오 | feature `ff3b52812`, canonical `0dd8a200f` | crashloop 3개·전체 18개, ordinal 7 manual-only fixture, runnable JSON merge-patch 왕복, 전체 `1951 passed, 3 skipped`, manifest 69/20 |
 
 ## claim 규칙
 

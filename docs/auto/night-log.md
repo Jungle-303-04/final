@@ -2205,3 +2205,22 @@ target preflight·register 네 함수와 strict Zod 계약을 claim했다. 1회�
 - 4조건: merge-tree clean/tree `1b237c85086a83fbb53f315644899075db2610fa`, source·삭제·
   frozen 변경 0건, `e43920262`·`784996ce7`의 `origin/dev` ancestor exit 0.
   J 배포 실행은 0건이다.
+
+## 2026-07-13 18:06 KST — [백엔드] crashloop 포트 bind 충돌 시나리오 착륙
+
+- lane `codex/benchmark-port-bind`, RED `a2336a05d`·`fc7d32263`·`2d8cff0d7`·
+  `0e0d94692`, 구현 `919f7dddd`, 문서 `ac7c9749e`, merge-patch RED `d0fbbc792`,
+  feature HEAD `ff3b52812905f09242ab05e2704f816ede52845f`, canonical no-ff merge
+  `0dd8a200fbec4ab567c00af2e4e3053541163809`이다.
+- ordinal 7 `app_port_bind_failed` exact fixture는 임의 가용 포트에 listener를 만든 뒤 같은
+  실제 포트를 다시 bind해 catalog 신호 `address already in use`와 exit code 1을 직접 검증한다.
+  crashloop 3/3, 전체 scenario 18/18, candidate contract 87/87이다.
+- 실제 patch capability가 없어 승인형 `manual_analysis`만 허용하며 cluster 전체 container port
+  개방은 금지한다. gold는 운영자 검토용 정답이고 Safe PR 실행 가능성을 주장하지 않는다.
+- 독립 감사가 partial container 배열의 RFC merge-patch 파괴를 차단했다. 완전한 container
+  객체로 교정한 뒤 fault runnable 보존, gold=normal, rollback=fault 왕복 테스트와 재감사 PASS다.
+- 첫 batch digest는 `c1917f0c…55481`. 전체 게이트는 Ruff lint/format PASS,
+  import-linter 8 kept/0 broken, pytest `1951 passed, 3 skipped`; manifest 69/20이다.
+- 4조건: merge-tree clean/tree `3739c7061eb0e1df88ebd687879da0af7a3661c7`, 파일 삭제·
+  소유권 밖 변경·frozen 경로 변경 0건, `ff3b52812`·`0dd8a200f`의 `origin/dev`
+  ancestor exit 0. J 배포 실행은 0건이다.
