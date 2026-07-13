@@ -53,6 +53,19 @@ test('shadcn semantic tokens map to the established ui palette', async () => {
     border: '--ui-border',
     input: '--ui-border',
     ring: '--ui-ring',
+    'chart-1': '--ui-accent',
+    'chart-2': '--ui-info',
+    'chart-3': '--ui-success',
+    'chart-4': '--ui-warning',
+    'chart-5': '--ui-danger',
+    sidebar: '--ui-surface',
+    'sidebar-foreground': '--ui-text-primary',
+    'sidebar-primary': '--ui-accent',
+    'sidebar-primary-foreground': '--ui-on-accent',
+    'sidebar-accent': '--ui-raised',
+    'sidebar-accent-foreground': '--ui-text-primary',
+    'sidebar-border': '--ui-border',
+    'sidebar-ring': '--ui-ring',
   };
 
   for (const [token, source] of Object.entries(expected)) {
