@@ -16,7 +16,7 @@ SERVICE_ROLLBACK_PLAN="${SERVICE_ROLLBACK_PLAN:-}"
 CONSOLE_ROLLBACK_PLAN="${CONSOLE_ROLLBACK_PLAN:-}"
 SMOKE_CURL_IMAGE="${SMOKE_CURL_IMAGE:-curlimages/curl:8.11.1}"
 IN_CLUSTER_API_URL="http://api-gateway.${MGMT_NS}.svc.cluster.local"
-IN_CLUSTER_CONSOLE_URL="http://console.${MGMT_NS}.svc.cluster.local"
+IN_CLUSTER_CONSOLE_URL="http://console-dev.${MGMT_NS}.svc.cluster.local"
 
 for variable in \
   BASE_URL \

@@ -133,6 +133,26 @@ def live_deployment_images(document: Any) -> dict[tuple[str, str], str]:
     return images
 
 
+def expected_repository_containers(
+    live_document: Any, *, managed_repository: str
+) -> tuple[tuple[str, str], ...]:
+    if (
+        not managed_repository
+        or any(character.isspace() for character in managed_repository)
+        or "@" in managed_repository
+        or managed_repository.rfind(":") > managed_repository.rfind("/")
+    ):
+        raise ValueError("managed_repository must not contain a tag or digest")
+    expected = tuple(
+        identity
+        for identity, image in live_deployment_images(live_document).items()
+        if image_repository(image) == managed_repository
+    )
+    if not expected:
+        raise ValueError("live deployments must contain at least one managed repository container")
+    return expected
+
+
 def build_plan(
     *,
     expected: tuple[tuple[str, str], ...],
@@ -200,10 +220,11 @@ def capture(
     *,
     context: str,
     namespace: str,
-    manifest: Path,
-    managed_image: str,
     previous_release_sha: str,
     output: Path,
+    manifest: Path | None = None,
+    managed_image: str | None = None,
+    managed_repository: str | None = None,
     verified_live_images: Mapping[str, str] | None = None,
     allow_missing_live: bool = False,
 ) -> RollbackPlan:
@@ -233,9 +254,19 @@ def capture(
         capture_output=True,
         text=True,
     )
+    live_document = json.loads(live_result.stdout)
+    if managed_repository is not None:
+        expected = expected_repository_containers(
+            live_document,
+            managed_repository=managed_repository,
+        )
+    else:
+        if manifest is None or managed_image is None:
+            raise ValueError("manifest and managed_image are required without managed_repository")
+        expected = expected_deployment_containers(manifest, managed_image=managed_image)
     plan = build_plan(
-        expected=expected_deployment_containers(manifest, managed_image=managed_image),
-        live_document=json.loads(live_result.stdout),
+        expected=expected,
+        live_document=live_document,
         namespace=namespace,
         previous_release_sha=previous_release_sha,
         verified_live_images=verified_live_images,
@@ -251,8 +282,10 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--context", required=True)
     parser.add_argument("--namespace", required=True)
-    parser.add_argument("--manifest", type=Path, required=True)
-    parser.add_argument("--managed-image", required=True)
+    parser.add_argument("--manifest", type=Path)
+    managed = parser.add_mutually_exclusive_group(required=True)
+    managed.add_argument("--managed-image")
+    managed.add_argument("--managed-repository")
     parser.add_argument("--previous-release-sha", required=True)
     parser.add_argument(
         "--verified-live-image",
@@ -275,10 +308,11 @@ def main() -> int:
     plan = capture(
         context=args.context,
         namespace=args.namespace,
-        manifest=args.manifest,
-        managed_image=args.managed_image,
         previous_release_sha=args.previous_release_sha,
         output=args.output,
+        manifest=args.manifest,
+        managed_image=args.managed_image,
+        managed_repository=args.managed_repository,
         verified_live_images=parse_verified_live_images(args.verified_live_image),
         allow_missing_live=args.allow_missing_live,
     )
