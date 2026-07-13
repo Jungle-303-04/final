@@ -24,19 +24,10 @@ def _payload() -> dict[str, object]:
                     "namespace": "shop",
                     "name": "checkout",
                 },
-                "resource": {
-                    "inventory_key": "inventory-a",
-                    "snapshot_id": "snapshot-a",
-                    "workspace_id": "workspace-a",
-                    "cluster_id": "cluster-a",
-                    "resource_type": "workload",
-                    "api_version": "apps/v1",
-                    "kind": "Deployment",
-                    "namespace": "shop",
-                    "name": "checkout",
-                    "status": "Ready",
-                    "health": "healthy",
-                },
+                "status": "Ready",
+                "health": "healthy",
+                "observed_at": "2026-07-13T14:00:00Z",
+                "deleted_at": None,
                 "application_ids": ["app-a"],
                 "application_binding_completeness": "exact",
             }
@@ -52,6 +43,9 @@ def _payload() -> dict[str, object]:
         "node_count": 1,
         "edge_count": 0,
         "omitted_node_count": 0,
+        "omitted_edge_count": 0,
+        "node_limit": 200,
+        "edge_limit": 1000,
         "truncated": False,
         "relation_completeness": "exact",
         "partial_reason_codes": [],
@@ -75,6 +69,8 @@ def test_resource_graph_response_has_stable_identity_and_honest_budget_fields() 
     assert response.nodes[0].identity.cluster_id == "cluster-a"
     assert response.omitted_node_count == 0
     assert response.relation_completeness == "exact"
+    assert response.model_dump_json().find("annotations") == -1
+    assert response.model_dump_json().find("summary") == -1
 
 
 def test_resource_graph_contract_rejects_unknown_or_cross_cluster_edge_shape() -> None:
