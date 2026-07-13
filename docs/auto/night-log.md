@@ -940,3 +940,8 @@ npm run visual-product
 - `npm run check` PASS: TypeScript·ESLint, Vitest 103 files / 741 tests, design guard 311 files,
   shadcn 482 previews, Vite production build.
 - `npm run visual-product` PASS: 35 scenarios, unexpected API/network/WebSocket 요청 0.
+
+[2026-07-13 12:11 KST] [프론트] BQ-017 스키마 호환 완료 + `bfaf03901` —
+`ClusterSummary.provider`와 `ClusterConnectionStatus.connection_stage`를 canonical enum의
+optional 필드로 strictObject에 명시했다. unknown key 거부는 유지했다. targeted 17 tests 및
+full `npm run check` PASS(103 files / 745 tests, design 311 files, shadcn 482 previews, build).
