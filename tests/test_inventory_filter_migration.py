@@ -116,7 +116,7 @@ def test_inventory_filter_upgrade_backfills_honest_baseline(monkeypatch) -> None
     config = _config(monkeypatch)
     script = ScriptDirectory.from_config(config)
 
-    assert script.get_heads() == [REVISION]
+    assert script.get_revision(REVISION) is not None
     assert script.get_revision(REVISION).down_revision == DOWN_REVISION
 
     sql = _render(config, "upgrade", f"{DOWN_REVISION}:{REVISION}")

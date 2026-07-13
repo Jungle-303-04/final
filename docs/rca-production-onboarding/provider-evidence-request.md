@@ -182,6 +182,8 @@ RCA는 provider가 보내준 evidence만 보고 symptom, root cause candidate, c
 - pattern_counts
 - severity_counts
 - trace_ids
+- matched_entries
+- collection_limit
 - redaction_summary
 
 현재 기본 policy query 예시:
@@ -213,12 +215,22 @@ RCA는 provider가 보내준 evidence만 보고 symptom, root cause candidate, c
 - `pattern_counts`는 probe, health endpoint, dependency timeout/error, image pull, OOM/memory, config/env/volume 계열 로그를 line 단위로 센다.
 - `severity_counts`는 `critical`, `error`, `warn`, `info`, `debug`, `trace`, `unknown`으로 정규화한다.
 - `trace_ids`는 32자리 hex trace id만 최대 20개까지 보낸다.
+- `matched_entries`는 RCA rule이 바로 읽을 수 있는 매칭 로그 요약이다. 각 항목은 `timestamp`, `namespace`, `pod`, `container`, `severity`, `message`, `matched_patterns`, `trace_id`, `line_truncated`를 담는다. trace id가 없으면 `trace_id=null`이다.
+- `matched_entries[].message`는 원문 로그 전체가 아니라 redaction과 truncation이 적용된 RCA 판단용 log line이다.
+- `collection_limit.matched_entries`는 최대 반환 수, 실제 매칭 수, 반환 수, 잘림 여부를 담는다.
 - `redaction_summary`는 redaction 적용 여부, 실제로 값이 바뀐 line 개수, 길이 제한으로 잘린 line 개수를 담는다.
+
+RCA EvidenceBundle에서는 `logs:related_logs`를 만들 때 `streams`와 `matched_entries`를 같은
+incident scope로 필터링한다. 일반 incident는 namespace를 맞추고, RCA test run은 현재 test Pod 이름까지
+맞춘다. 따라서 provider result에 query 전체의 matched entry가 있어도 RCA 분석에는 선택된 namespace/Pod의
+matched entry만 올라간다. `pattern_counts`, `severity_counts`, `trace_ids`도 선택된 stream summary 기준으로
+다시 합산된다. `collection_limit.matched_entries`와 `redaction_summary`는 provider result 기준의 제한/마스킹
+정보라서, bundle scope 필터링 후의 최종 항목 수와 항상 같지는 않다.
 
 주의:
 
 - 로그 샘플에는 개인정보, token, credential이 섞일 수 있으므로 provider가 sample line을 보내기 전에 redaction을 적용한다.
-- `password`, `token`, `secret`, `api_key`, `client_secret`, `credential`, `private_key`, `Authorization`, `Bearer`, `Cookie`, JWT, AWS access key, URL 계정정보, email은 가린다.
+- `password`, `token`, `secret`, `api_key`/`api-key`, `client_secret`/`client-secret`, `credential`, `private_key`/`private-key`, `Authorization`, `Bearer`, `Cookie`, JWT, AWS access key, URL 계정정보, email은 가린다.
 - `trace_id`, `span_id`, `request_id`, namespace, pod name, root cause keyword는 RCA 판단에 필요하므로 유지한다.
 - 대표 sample 개수는 Loki query limit과 payload byte limit 안에서 제한한다.
 - pattern count, severity count, trace id 추출은 마스킹된 전체 line을 기준으로 계산하고, 전송되는 `line` 문자열만 길이 제한으로 줄인다.
@@ -304,6 +316,7 @@ summary snapshot에는 아래 필드만 남긴다.
 - change_context.current_workload_snapshots[].pod_status_count(잘렸을 때만 존재)
 - change_context.current_workload_snapshots[].pod_statuses_truncated(잘렸을 때만 존재)
 - change_context.current_workload_snapshots[].containers[].name/image
+- change_context.current_workload_snapshots[].containers[].ports[].name/container_port/protocol
 - change_context.current_workload_snapshots[].containers[].readiness_probe
 - change_context.current_workload_snapshots[].containers[].liveness_probe
 - change_context.current_workload_snapshots[].containers[].startup_probe
@@ -380,9 +393,14 @@ raw spec/status, annotation, managedFields는 보내지 않는다.
 관련 값이 하나도 없으면 `pod_template_auth`는 생략될 수 있다.
 `image_pull_secret_refs[].name`은 Deployment Pod template에 적힌 Secret 이름만 담는다.
 Secret 객체의 `data`, `binaryData`, `stringData` 값은 읽거나 보내지 않는다.
+`deployment_labels`와 `pod_template_labels`는 RCA가 Service selector와 workload 식별을 해석할 수 있게
+제공하되, `app`, `app.kubernetes.io/name` 같은 식별 label을 먼저 남기고 최대 12개까지만 담는다.
+label key/value에 `secret`, `token`, `password`, `credential`, `authorization`, `private` 같은
+민감 단어가 들어가면 제외한다.
 
 `current_workload_snapshot`은 특정 Deployment 1개를 위한 detail snapshot이다.
 detail snapshot은 summary 필드에 아래 필드를 추가로 담는다.
+summary와 마찬가지로 containers[].ports는 포함되며, hostPort/hostIP는 보내지 않는다.
 
 - change_context.current_workload_snapshot.deployment_annotations
 - change_context.current_workload_snapshot.pod_template_annotations

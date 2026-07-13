@@ -51,6 +51,23 @@ R-트랙([D-011])은 dev merge `257f91846`으로 landed/closed 되었고, 전용
 | BQ-021 | landed | OSS 접속 계약 | UI/API/agent 동일 origin, access 5모드, server-authoritative external URL, self-only 제한, bootstrap Secret·NOTES, edge 보안 경계를 additive로 제공.<br>담당: Codex 백엔드 세션<br>코드: `ae9bc8d63`, 보안 교정: `e480b3246`<br>canonical merge: `e8fc3c878` | `ManagementAccessResponse`를 preflight/install 응답에 optional 추가, Helm values 계약 확장 | 로컬 Kind `make demo` exit 0, 전체 `2006 passed, 3 skipped`, 공개 OCI 403은 BQ-016의 외부 블로커로 유지 |
 | GAP-002/003/004 | landed | Resources 필터 코어 | workspace-scoped facet catalog, multi-cluster resource query, 서버 Label facet/count를 additive route로 제공.<br>담당: Codex 백엔드 세션<br>코드: `87c0606e0`<br>canonical merge: `d5517ec14` | gateway 계약 lock 해제. 같은 축 OR, 다른 축 AND, Label 전부 AND, opaque cursor, total/completeness/snapshot metadata | 기존 route 무변경, 빈 권한 0건, PostgreSQL online up/down, 실제 다중 cluster·부분 snapshot 검증, 전체 `2051 passed, 3 skipped`; Label facet은 Resources 표면만 착륙 |
 | GAP-010 | landed | Resources 단일 cluster 그래프 | Resources 필터와 같은 권한·snapshot revision에서 stable node·검증된 relation edge·drill-down identity를 additive route로 제공.<br>담당: Codex 백엔드 세션<br>코드: `914d34ff6`<br>canonical merge: `95ff11cc6` | gateway 계약 lock 해제. single-cluster만 허용, raw payload·cross-cluster edge 금지, relation 근거와 completeness 노출 | UID owner 근거·selector 3-state·snapshot pin·budget partial, Bruno, 전체 `2064 passed, 3 skipped`; Ruff/import 8/8/manifest 69·20 |
+| GAP-005 | landed | Issues 필터 계약 | 기존 RCA timeline 응답은 유지하고, session workspace와 구체 `RCA_READ` cluster 집합 안에서 common/surface 축을 서버 조회하는 strict canonical route를 추가한다.<br>담당: Codex 백엔드 세션<br>코드: `d63498d5f`<br>canonical merge: `e2504278d` | gateway 계약 lock 해제. stable issue/detail identity, 같은 축 OR·축간 AND, opaque cursor, total/facet/completeness. 권위 source가 없는 값은 unavailable로 반환 | payload를 인가·필터 근거로 사용하지 않음, 빈 권한 0건, 비인가 scope 404, legacy row와 mutable projection의 partial 정직성, Bruno·migration·전체 `2100 passed, 3 skipped` |
+
+## 프론트 계약 트랙 ([D-026] — 최우선)
+
+**우선순위: 계약 > 배포 > OSS 공개.** 계약 하나를 개별 착륙한 즉시 night-log에 앵커를 남긴다.
+
+| ID | 상태 | GAP | 계약 내용 | 해제되는 프론트 단계 |
+|---|---|---|---|---|
+| BQ-022 | landed | GAP-010 | Resources filter와 동일 scope/revision의 single-cluster graph snapshot, 노드·검증된 edge, partial/restricted/completeness, drill-down identity.<br>기존 code: `914d34ff6`<br>canonical merge: `95ff11cc6` | 표/그래프 모드 — 기존 GAP-010 앵커 연결, 추가 source·gateway 계약 변경 0건 |
+| BQ-023 | landed | GAP-005 | Issues common 3축 + severity/status/environment, facet payload, stable detail ID, cursor/total/completeness.<br>기존 code: `d63498d5f`<br>canonical merge: `e2504278d` | Issues 필터 — 기존 GAP-005 앵커 연결, 추가 source·gateway 계약 변경 0건 |
+| BQ-024 | requested | GAP-006 | Applications/GitOps/Checks provider-neutral canonical list DTO + common/surface axes + cursor/facet/completeness | 세 화면 필터 |
+| BQ-025 | requested | GAP-007 | Cluster 등록 preflight/register validation, command preview, resume/reissue, structured stage reason/error | 연결 위자드 |
+| BQ-026 | requested | GAP-008 | Cluster 연결 해제 capability/permission, confirmation, operation receipt, terminal status | 클러스터 상세 삭제 |
+| BQ-027 | requested | GAP-009 | 저장소 recognition, access, credential challenge, branch/default, manifest/remediation path cursor, operation status | 저장소 위자드 |
+| BQ-028 | requested | GAP-001 | workspace catalog/current/switch receipt/session refresh/forbidden·deleted | workspace selector(최후순위) |
+
+상세 의미는 `docs/spec/frontend/vp-010-unified-filter-ia.md` §9·§9.1을 따른다.
 
 ## 보조 대기열 착륙 현황
 

@@ -376,13 +376,13 @@ RCA evidence item:
 | `entries[].streams[].values[].line_truncated` | boolean | provider 단계에서 line이 4096자 제한으로 잘렸으면 true다. |
 | `entries[].streams[].values[].original_line_length` | number | provider 단계에서 line이 잘렸을 때의 제한 전 마스킹된 line 길이다. |
 | `entries[].line_count` | number | namespace 필터 후 남은 stream value 개수를 계산한다. |
-| `entries[].pattern_counts` | object | provider가 수집 시 계산한 장애 pattern별 line 개수다. namespace 필터 후 다시 계산하지 않는다. |
-| `entries[].severity_counts` | object | provider가 수집 시 계산한 severity별 line 개수다. namespace 필터 후 다시 계산하지 않는다. |
-| `entries[].trace_ids` | list<string> | provider가 수집 시 추출한 안전한 trace id 목록이다. namespace 필터 후 다시 계산하지 않는다. |
+| `entries[].pattern_counts` | object | 선택된 stream 기준으로 다시 합산한 장애 pattern별 line 개수다. legacy stream summary가 없으면 provider result 값을 유지할 수 있다. |
+| `entries[].severity_counts` | object | 선택된 stream 기준으로 다시 합산한 severity별 line 개수다. legacy stream summary가 없으면 provider result 값을 유지할 수 있다. |
+| `entries[].trace_ids` | list<string> | 선택된 stream에서 추출된 안전한 trace id 목록이다. legacy stream summary가 없으면 provider result 값을 유지할 수 있다. |
 | `entries[].redaction_summary` | object | provider redaction 적용 여부, redacted line 개수, truncated line 개수다. namespace 필터 후 다시 계산하지 않는다. |
 
 Loki provider는 RCA가 로그 문맥을 읽을 수 있도록 `line` 필드는 유지한다.
-하지만 원문 그대로 보내지 않고 `password`, `token`, `secret`, `Authorization`, `Cookie`, JWT 같은
+하지만 원문 그대로 보내지 않고 `password`, `token`, `secret`, `api_key`/`api-key`, `client_secret`/`client-secret`, `private_key`/`private-key`, `Authorization`, `Cookie`, JWT 같은
 민감값을 `[REDACTED]` 계열 문자열로 바꾼 뒤 전달한다.
 provider는 evidence job result 크기 보호를 위해 line을 최대 4096자로 먼저 제한하고,
 RCA bundle compact 단계는 다시 최대 1600자로 줄인다.
@@ -476,14 +476,15 @@ RCA evidence item:
 | `workload.kind` | string | 현재는 `Deployment` 중심이다. |
 | `workload.namespace` | string | workload namespace다. |
 | `workload.name` | string | workload 이름이다. |
-| `deployment_labels` | object | Deployment labels다. |
-| `pod_template_labels` | object | Pod template labels다. |
+| `deployment_labels` | object | Deployment labels 중 안전한 subset이다. `app`, `app.kubernetes.io/name` 같은 식별 label을 먼저 남기고 최대 12개까지 담는다. 민감 단어가 key/value에 있으면 제외한다. |
+| `pod_template_labels` | object | Pod template labels 중 안전한 subset이다. `app`, `app.kubernetes.io/name` 같은 식별 label을 먼저 남기고 최대 12개까지 담는다. 민감 단어가 key/value에 있으면 제외한다. |
 | `pod_template_auth` | object | serviceAccountName, automountServiceAccountToken, imagePullSecrets name 요약이다. |
 | `persistent_volume_claim_refs` | list<object> | Pod template volume이 참조하는 PVC claim name 요약이다. |
 | `deployment_status` | object | Deployment replica count와 condition 요약이다. |
 | `pod_statuses` | list<object> | owned Pod phase, ready, condition 샘플 요약이다. |
 | `containers[].name` | string | container 이름이다. |
 | `containers[].image` | string | 현재 cluster에서 보이는 container image다. |
+| `containers[].ports` | list<object> | container `ports[]`의 `name`, `container_port`, `protocol` 요약이다. Service targetPort와 probe port 비교에 쓴다. hostPort/hostIP는 넣지 않는다. |
 | `containers[].readiness_probe` | object | readiness probe 요약이다. |
 | `containers[].liveness_probe` | object | liveness probe 요약이다. |
 | `containers[].startup_probe` | object | startup probe 요약이다. |

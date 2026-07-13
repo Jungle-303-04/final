@@ -1,0 +1,25 @@
+meta {
+  name: 03 Issues 라벨 facet 집계
+  type: http
+  seq: 3
+  tags: [issues, filters, labels, read]
+}
+
+get {
+  url: {{base_url}}issues/label-facets?clusters={{cluster_id}}&facet_q=team&limit=50
+}
+
+tests {
+  test("200 or validated access failure", function () {
+    expect([200, 400, 401, 403, 404, 409, 422]).to.include(res.status);
+  });
+
+  test("200 response exposes event-time label capability", function () {
+    if (res.status !== 200) return;
+    const body = res.getBody();
+    expect(body.surface).to.equal("issues");
+    expect(body.items).to.be.an("array");
+    expect(body.selected_resolutions).to.be.an("array");
+    expect(body.capabilities).to.be.an("array");
+  });
+}

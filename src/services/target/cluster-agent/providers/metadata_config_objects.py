@@ -10,6 +10,7 @@ from providers.kubernetes_utils import (
     list_items,
     metadata,
     object_or_empty,
+    safe_metadata_labels,
     spec,
 )
 from providers.metadata_config_refs import (
@@ -28,14 +29,6 @@ CONFIG_REF_SOURCE_VOLUME = "volume"
 CONFIG_REF_SOURCE_VOLUME_MOUNT = "volume_mount"
 MAX_CONFIG_OBJECT_LABELS = 12
 MAX_CONFIG_OBJECT_LABEL_LENGTH = 120
-SENSITIVE_METADATA_TOKENS = (
-    "authorization",
-    "credential",
-    "password",
-    "private",
-    "secret",
-    "token",
-)
 
 
 def referenced_config_object_refs(
@@ -143,7 +136,11 @@ def referenced_config_object_summary(
     if access == CONFIG_OBJECT_OK:
         meta = metadata(payload)
         summary["created_at"] = meta.get("creationTimestamp")
-        summary["labels"] = safe_config_object_labels(meta)
+        summary["labels"] = safe_metadata_labels(
+            meta.get("labels"),
+            limit=MAX_CONFIG_OBJECT_LABELS,
+            max_value_length=MAX_CONFIG_OBJECT_LABEL_LENGTH,
+        )
         summary["referenced_key_checks"] = referenced_key_checks(reference, payload)
     return {
         key: value
@@ -315,24 +312,3 @@ def referenced_by_sort_key(reference: JsonObject) -> tuple[str, str, str, str]:
         str(reference.get("env_name") or ""),
         str(reference.get("volume_name") or ""),
     )
-
-
-def safe_config_object_labels(config_metadata: JsonObject) -> JsonObject:
-    """Return safe labels from a config object metadata block."""
-    labels = object_or_empty(config_metadata.get("labels"))
-    safe_labels: JsonObject = {}
-    for key, value in sorted(labels.items()):
-        key_text = str(key)
-        value_text = str(value)
-        if not safe_metadata_text(key_text) or not safe_metadata_text(value_text):
-            continue
-        safe_labels[key_text] = value_text[:MAX_CONFIG_OBJECT_LABEL_LENGTH]
-        if len(safe_labels) >= MAX_CONFIG_OBJECT_LABELS:
-            break
-    return safe_labels
-
-
-def safe_metadata_text(value: str) -> bool:
-    """Return whether metadata text is safe to expose."""
-    lowered = value.lower()
-    return not any(token in lowered for token in SENSITIVE_METADATA_TOKENS)

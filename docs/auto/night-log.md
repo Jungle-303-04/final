@@ -2849,6 +2849,16 @@ target preflight·register 네 함수와 strict Zod 계약을 claim했다. 1회�
   force/reset/revert 없이 branch를 비강제 삭제·원격 `4f07c0c21`에서 재생성해 local/remote HEAD
   일치를 확인했다. canonical `dev@b538528be` 착륙 후 임시 ref도 비강제 삭제했다.
 
+## 2026-07-13 23:38 KST — [백엔드] Issues 필터 계약 claim
+
+- `origin/dev@cf688f65b`에서 GAP-005만 claim하고 gateway 계약 lock을 획득했다. 기존 RCA
+  timeline/list/detail 응답은 그대로 보존하고 별도 strict canonical list를 추가한다.
+- 실제 정규 source는 cluster·namespace·pipeline status·incident identity이며 severity만 incident
+  event에서 추가 투영할 수 있다. environment/application/Label이 보존되지 않은 row는 다른
+  시간축의 inventory로 추측하지 않고 `unavailable`로 표시한다.
+- temporal history가 없는 mutable timeline을 exact snapshot으로 가장하지 않는다. concrete
+  `RCA_READ` scope, server filter/facet/count, keyset cursor, raw payload 비노출을 RED로 먼저 고정한다.
+
 ## 2026-07-13 23:49 KST — [프론트] Resources 필터 API·strict Zod GREEN
 
 - 직전 Graph shell은 최종 `ce104ef1fd2a2045cc4496414c0d9c277618a054`로 lab/dev 양쪽에
@@ -2868,7 +2878,68 @@ target preflight·register 네 함수와 strict Zod 계약을 claim했다. 1회�
 - 이 문서 커밋과 visual-product를 통과한 동일 HEAD를 lab/dev에 승격한 뒤 현재 lane/worktree를
   같은 사이클에서 회수한다. 신규 stash 0건, 기존 미증명 stash 8개 유지가 정리 기준이다.
 
-## 2026-07-14 00:30 KST — [프론트] Resources 필터 소비 adapter 안전 착륙 준비
+## 2026-07-14 00:13 KST — [백엔드] Issues 필터 계약 착륙 준비
+
+- 신규 `GET /api/issues`, `/api/issues/filter-facets`, `/api/issues/label-facets`와 event-time
+  projection, tenant-safe server facet/count, 분리 migration을 GREEN으로 만들었다.
+- 전체 게이트는 Ruff lint/format, import-linter 8 kept/0 broken, pytest
+  `2099 passed, 3 skipped`다. 실 PostgreSQL `upgrade → downgrade → upgrade`도 통과했다.
+- canonical 착륙 전이므로 완료 앵커를 기록하지 않았고 gateway 계약 lock을 유지한다.
+
+## 2026-07-14 00:19 KST — [백엔드] Issues 필터 계약 canonical 착륙
+
+- GREEN `d63498d5f`, feature HEAD `e00cb9b3e`, canonical merge `e2504278d`가
+  `origin/dev` ancestor exit 0이다. gateway 계약 lock을 해제했다.
+- `GET /api/issues`, `/api/issues/filter-facets`, `/api/issues/label-facets`가 stable issue identity,
+  tenant-safe AND/OR filter, server facet/count, Label event-time projection과 구조화 completeness를
+  제공한다. 기존 RCA timeline/list/detail 계약은 변경하지 않았다.
+- 전체 게이트 Ruff lint/format PASS, import-linter 8/8, pytest `2100 passed, 3 skipped`.
+  실 PostgreSQL migration 왕복, merge-tree clean, 삭제·frozen source·프론트 소유 변경 0건이다.
+- 계약 앵커: `ISSUES_FILTER_RESULTS_PATH + ISSUES_FILTER_FACETS_PATH + ISSUES_LABEL_FACETS_PATH` /
+  `d63498d5f` / `[green]`.
+
+## 2026-07-14 00:22 KST — [백엔드] Issues 필터 lane 회수
+
+- lane 회수 — `codex/surface-filter-contracts` / `e00cb9b3e` / `origin/dev` ancestor exit 0.
+  canonical 복구 지점은 merge `e2504278d`, 앵커 문서 `ae4357a8c`다.
+
+## 2026-07-14 00:24 KST — [백엔드] 프론트 그래프 계약 번호 매핑 claim
+
+- [D-025]/[D-026]을 canonical 문서에 반영하고 BQ-022만 claim했다. 이미 착륙한 GAP-010
+  graph 계약을 중복 구현하지 않고 기존 code `914d34ff6`·merge `95ff11cc6`에 연결한다.
+- source·gateway 계약 변경은 0건이며 BQ-023 이후는 이 착륙이 끝날 때까지 시작하지 않는다.
+
+## 2026-07-14 00:26 KST — [백엔드] 프론트 그래프 계약 번호 매핑 완료
+
+- BQ-022를 기존 GAP-010 code `914d34ff6`·canonical merge `95ff11cc6`에 연결했다.
+  `RESOURCES_GRAPH_PATH + ResourceGraphSnapshotResponse` 완료 앵커를 그대로 재사용한다.
+- 신규 source·gateway 계약 변경은 0건이다. single-cluster·snapshot pin·권한 404·stable identity·
+  검증된 relation·partial reason·Bruno의 기존 증거를 중복 구현 없이 프론트 차단 해제 기준으로 삼는다.
+- 계약 앵커: `RESOURCES_GRAPH_PATH + ResourceGraphSnapshotResponse` / `914d34ff6` / `[green]`.
+
+## 2026-07-14 00:28 KST — [백엔드] 프론트 그래프 계약 lane 회수
+
+- lane 회수 — `codex/frontend-contract-graph` / `e027e9113` / `origin/dev` ancestor exit 0.
+  canonical merge `00539bd6b`, 기존 graph code `914d34ff6`도 ancestor exit 0이다.
+
+## 2026-07-14 00:30 KST — [백엔드] 프론트 Issues 계약 번호 매핑 claim
+
+- BQ-023만 claim했다. 이미 착륙한 GAP-005 Issues 계약을 중복 구현하지 않고 기존 code
+  `d63498d5f`·merge `e2504278d`에 연결한다. source·gateway 계약 변경은 0건이다.
+
+## 2026-07-14 00:31 KST — [백엔드] 프론트 Issues 계약 번호 매핑 완료
+
+- BQ-023을 기존 GAP-005 code `d63498d5f`·canonical merge `e2504278d`에 연결했다.
+  세 Issues filter route의 완료 앵커를 그대로 재사용하며 신규 source·gateway 변경은 0건이다.
+- 계약 앵커: `ISSUES_FILTER_RESULTS_PATH + ISSUES_FILTER_FACETS_PATH + ISSUES_LABEL_FACETS_PATH` /
+  `d63498d5f` / `[green]`.
+
+## 2026-07-14 00:34 KST — [백엔드] 프론트 Issues 계약 lane 회수
+
+- lane 회수 — `codex/frontend-contract-issues` / `d5c3a34ef` / `origin/dev` ancestor exit 0.
+  canonical merge `692db7f58`, 기존 Issues code `d63498d5f`도 ancestor exit 0이다.
+
+## 2026-07-14 00:35 KST — [프론트] Resources 필터 소비 adapter 안전 착륙 준비
 
 - D-025의 안전 착륙 기준을 적용했다. RED `b4a806f34`, GREEN `ab5f56714`, feature 경계 보정
   `77984549d`로 세 endpoint의 단일 호출·canonical request·server snapshot/count 보존·invalid 행
