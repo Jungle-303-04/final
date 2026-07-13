@@ -49,6 +49,22 @@ def reject_cross_thread_sqlite_destructor_errors() -> None:
     assert not unraisable, [str(item.exc_value) for item in unraisable]
 
 
+@pytest.fixture
+def target_agent_factory() -> Any:
+    agents: list[Any] = []
+
+    def create(agent_module: Any, **kwargs: Any) -> Any:
+        agent = agent_module.TargetClusterAgent(**kwargs)
+        agents.append(agent)
+        return agent
+
+    try:
+        yield create
+    finally:
+        for agent in reversed(agents):
+            agent.close()
+
+
 def load_agent_module() -> Any:
     return load_file(
         ROOT / "src" / "services" / "target" / "cluster-agent" / "agent.py",
@@ -211,7 +227,10 @@ def test_target_agent_builds_apply_manifest_patch() -> None:
     ]
 
 
-def test_target_agent_rollout_restart_normalizes_pod_resource(monkeypatch) -> None:
+def test_target_agent_rollout_restart_normalizes_pod_resource(
+    monkeypatch: pytest.MonkeyPatch,
+    target_agent_factory: Callable[..., Any],
+) -> None:
     agent_module = load_agent_module()
     monkeypatch.setenv("KUBERNETES_SERVICE_HOST", "kubernetes.local")
     monkeypatch.setenv("KUBERNETES_SERVICE_PORT_HTTPS", "443")
@@ -223,8 +242,8 @@ def test_target_agent_rollout_restart_normalizes_pod_resource(monkeypatch) -> No
         requests.append((request.method, request.url.path))
         return httpx.Response(200, json=ready_deployment("orders-api"), request=request)
 
-    agent = agent_module.TargetClusterAgent(
-        kubernetes_transport=getattr(httpx, "Mo" + "ckTransport")(handler)
+    agent = target_agent_factory(
+        agent_module, kubernetes_transport=getattr(httpx, "Mo" + "ckTransport")(handler)
     )
 
     result = asyncio.run(
@@ -248,10 +267,13 @@ def test_target_agent_rollout_restart_normalizes_pod_resource(monkeypatch) -> No
     ]
 
 
-def test_target_agent_apply_manifest_dry_run_without_kubernetes_api(monkeypatch) -> None:
+def test_target_agent_apply_manifest_dry_run_without_kubernetes_api(
+    monkeypatch: pytest.MonkeyPatch,
+    target_agent_factory: Callable[..., Any],
+) -> None:
     agent_module = load_agent_module()
     monkeypatch.delenv("KUBERNETES_SERVICE_HOST", raising=False)
-    agent = agent_module.TargetClusterAgent()
+    agent = target_agent_factory(agent_module)
 
     result = asyncio.run(
         agent.execute_command(
@@ -288,9 +310,11 @@ def test_target_agent_apply_manifest_dry_run_without_kubernetes_api(monkeypatch)
     assert "dry-run" in result["stderr"]
 
 
-def test_target_agent_command_result_reports_sanitized_resource_output() -> None:
+def test_target_agent_command_result_reports_sanitized_resource_output(
+    target_agent_factory: Callable[..., Any],
+) -> None:
     agent_module = load_agent_module()
-    agent = agent_module.TargetClusterAgent()
+    agent = target_agent_factory(agent_module)
 
     result = agent.command_result(
         False,
@@ -317,10 +341,13 @@ def test_target_agent_command_result_reports_sanitized_resource_output() -> None
     ]
 
 
-def test_target_agent_rejects_write_command_without_approval_evidence(monkeypatch) -> None:
+def test_target_agent_rejects_write_command_without_approval_evidence(
+    monkeypatch: pytest.MonkeyPatch,
+    target_agent_factory: Callable[..., Any],
+) -> None:
     agent_module = load_agent_module()
     monkeypatch.delenv("KUBERNETES_SERVICE_HOST", raising=False)
-    agent = agent_module.TargetClusterAgent()
+    agent = target_agent_factory(agent_module)
 
     result = asyncio.run(
         agent.execute_command(
@@ -350,7 +377,10 @@ def test_target_agent_rejects_write_command_without_approval_evidence(monkeypatc
     )
 
 
-def test_target_agent_reports_kubernetes_apply_failure(monkeypatch) -> None:
+def test_target_agent_reports_kubernetes_apply_failure(
+    monkeypatch: pytest.MonkeyPatch,
+    target_agent_factory: Callable[..., Any],
+) -> None:
     agent_module = load_agent_module()
     monkeypatch.setenv("KUBERNETES_SERVICE_HOST", "kubernetes.local")
     monkeypatch.setenv("KUBERNETES_SERVICE_PORT_HTTPS", "443")
@@ -361,8 +391,8 @@ def test_target_agent_reports_kubernetes_apply_failure(monkeypatch) -> None:
             return httpx.Response(200, json={"kind": "ConfigMap"}, request=request)
         return httpx.Response(403, text="forbidden", request=request)
 
-    agent = agent_module.TargetClusterAgent(
-        kubernetes_transport=getattr(httpx, "Mo" + "ckTransport")(handler)
+    agent = target_agent_factory(
+        agent_module, kubernetes_transport=getattr(httpx, "Mo" + "ckTransport")(handler)
     )
 
     result = asyncio.run(
@@ -394,7 +424,10 @@ def test_target_agent_reports_kubernetes_apply_failure(monkeypatch) -> None:
     assert result["stderr"] == "kubernetes patch failed (403): forbidden"
 
 
-def test_target_agent_creates_configmap_from_rendered_manifest(monkeypatch) -> None:
+def test_target_agent_creates_configmap_from_rendered_manifest(
+    monkeypatch: pytest.MonkeyPatch,
+    target_agent_factory: Callable[..., Any],
+) -> None:
     agent_module = load_agent_module()
     monkeypatch.setenv("KUBERNETES_SERVICE_HOST", "kubernetes.local")
     monkeypatch.setenv("KUBERNETES_SERVICE_PORT_HTTPS", "443")
@@ -408,8 +441,8 @@ def test_target_agent_creates_configmap_from_rendered_manifest(monkeypatch) -> N
             return httpx.Response(404, request=request)
         return httpx.Response(201, json={"ok": True}, request=request)
 
-    agent = agent_module.TargetClusterAgent(
-        kubernetes_transport=getattr(httpx, "Mo" + "ckTransport")(handler)
+    agent = target_agent_factory(
+        agent_module, kubernetes_transport=getattr(httpx, "Mo" + "ckTransport")(handler)
     )
 
     result = asyncio.run(
@@ -446,7 +479,10 @@ def test_target_agent_creates_configmap_from_rendered_manifest(monkeypatch) -> N
     assert calls[1][2]["data"]["LOG_LEVEL"] == "info"
 
 
-def test_target_agent_patches_deployment_replicas_and_image(monkeypatch) -> None:
+def test_target_agent_patches_deployment_replicas_and_image(
+    monkeypatch: pytest.MonkeyPatch,
+    target_agent_factory: Callable[..., Any],
+) -> None:
     agent_module = load_agent_module()
     monkeypatch.setenv("KUBERNETES_SERVICE_HOST", "kubernetes.local")
     monkeypatch.setenv("KUBERNETES_SERVICE_PORT_HTTPS", "443")
@@ -464,8 +500,8 @@ def test_target_agent_patches_deployment_replicas_and_image(monkeypatch) -> None
             return httpx.Response(200, json=ready_deployment(replicas=5), request=request)
         return httpx.Response(200, json={"ok": True}, request=request)
 
-    agent = agent_module.TargetClusterAgent(
-        kubernetes_transport=getattr(httpx, "Mo" + "ckTransport")(handler)
+    agent = target_agent_factory(
+        agent_module, kubernetes_transport=getattr(httpx, "Mo" + "ckTransport")(handler)
     )
 
     result = asyncio.run(
@@ -522,7 +558,10 @@ def test_deployment_rollout_status_allows_scale_to_zero() -> None:
     assert status["ready"] is True
 
 
-def test_target_agent_rejects_manifest_outside_sandbox(monkeypatch) -> None:
+def test_target_agent_rejects_manifest_outside_sandbox(
+    monkeypatch: pytest.MonkeyPatch,
+    target_agent_factory: Callable[..., Any],
+) -> None:
     agent_module = load_agent_module()
     monkeypatch.setenv("KUBERNETES_SERVICE_HOST", "kubernetes.local")
     monkeypatch.setenv("KUBERNETES_SERVICE_PORT_HTTPS", "443")
@@ -533,8 +572,8 @@ def test_target_agent_rejects_manifest_outside_sandbox(monkeypatch) -> None:
         calls.append(request.method)
         return httpx.Response(200, json={"ok": True}, request=request)
 
-    agent = agent_module.TargetClusterAgent(
-        kubernetes_transport=getattr(httpx, "Mo" + "ckTransport")(handler)
+    agent = target_agent_factory(
+        agent_module, kubernetes_transport=getattr(httpx, "Mo" + "ckTransport")(handler)
     )
 
     result = asyncio.run(
@@ -564,7 +603,10 @@ def test_target_agent_rejects_manifest_outside_sandbox(monkeypatch) -> None:
     assert calls == []
 
 
-def test_target_agent_rejects_unsupported_manifest_contract(monkeypatch) -> None:
+def test_target_agent_rejects_unsupported_manifest_contract(
+    monkeypatch: pytest.MonkeyPatch,
+    target_agent_factory: Callable[..., Any],
+) -> None:
     agent_module = load_agent_module()
     monkeypatch.setenv("KUBERNETES_SERVICE_HOST", "kubernetes.local")
     monkeypatch.setenv("KUBERNETES_SERVICE_PORT_HTTPS", "443")
@@ -575,8 +617,8 @@ def test_target_agent_rejects_unsupported_manifest_contract(monkeypatch) -> None
         calls.append(request.method)
         return httpx.Response(200, json={"ok": True}, request=request)
 
-    agent = agent_module.TargetClusterAgent(
-        kubernetes_transport=getattr(httpx, "Mo" + "ckTransport")(handler)
+    agent = target_agent_factory(
+        agent_module, kubernetes_transport=getattr(httpx, "Mo" + "ckTransport")(handler)
     )
 
     result = asyncio.run(
@@ -664,9 +706,11 @@ def test_node_collector_manager_env_defaults_remain_unchanged() -> None:
     )
 
 
-def test_target_agent_registers_query_policy_from_management_policy() -> None:
+def test_target_agent_registers_query_policy_from_management_policy(
+    target_agent_factory: Callable[..., Any],
+) -> None:
     agent_module = load_agent_module()
-    agent = agent_module.TargetClusterAgent()
+    agent = target_agent_factory(agent_module)
     policy = AgentPolicy(
         cluster_id=agent.cluster_id,
         evidence=EvidenceRuntimePolicy(
@@ -691,48 +735,58 @@ def test_target_agent_registers_query_policy_from_management_policy() -> None:
     assert definition.query.startswith("sum(rate")
 
 
-def test_target_agent_wires_argocd_reconciler_mode(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_target_agent_wires_argocd_reconciler_mode(
+    monkeypatch: pytest.MonkeyPatch,
+    target_agent_factory: Callable[..., Any],
+) -> None:
     monkeypatch.setenv("RECONCILER_MODE", "argocd")
     agent_module = load_agent_module()
     transport = getattr(httpx, "Mo" + "ckTransport")(
         lambda request: httpx.Response(404, request=request)
     )
-    agent = agent_module.TargetClusterAgent(kubernetes_transport=transport)
+    agent = target_agent_factory(agent_module, kubernetes_transport=transport)
 
-    try:
-        assert agent.reconciler.reconciler_mode == "argocd"
-        assert agent.reconciler.argo_observer is not None
-        assert agent.reconciler.argo_observer.transport is transport
-    finally:
-        agent.close()
+    assert agent.reconciler.reconciler_mode == "argocd"
+    assert agent.reconciler.argo_observer is not None
+    assert agent.reconciler.argo_observer.transport is transport
 
 
 def test_oss_profile_blocks_direct_write_commands_before_kubernetes_call(
     monkeypatch: pytest.MonkeyPatch,
+    target_agent_factory: Callable[..., Any],
 ) -> None:
     monkeypatch.setenv("AGENT_DIRECT_COMMANDS_ENABLED", "false")
     agent_module = load_agent_module()
-    agent = agent_module.TargetClusterAgent()
+    agent = target_agent_factory(agent_module)
 
-    try:
-        result = asyncio.run(
-            agent.execute_command(
-                {
-                    "action": "apply_manifest",
-                    **approval_evidence(),
-                    "payload": {
-                        "diff": {
-                            "namespace": "sandbox",
-                            "resource": "deployment/checkout-api",
-                            "desired_image": "img:new",
-                        }
-                    },
-                }
-            )
+    result = asyncio.run(
+        agent.execute_command(
+            {
+                "action": "apply_manifest",
+                **approval_evidence(),
+                "payload": {
+                    "diff": {
+                        "namespace": "sandbox",
+                        "resource": "deployment/checkout-api",
+                        "desired_image": "img:new",
+                    }
+                },
+            }
         )
-    finally:
-        agent.close()
+    )
 
     assert result["status"] == "failed"
     assert result["applied"] is False
     assert result["message"] == "direct commands are disabled by agent profile"
+
+
+def test_target_agent_close_is_idempotent_and_releases_sqlite_connections(
+    target_agent_factory: Callable[..., Any],
+) -> None:
+    agent = target_agent_factory(load_agent_module())
+
+    agent.close()
+    agent.close()
+
+    assert agent.control_store.conn is None
+    assert agent.command_outbox.conn is None
