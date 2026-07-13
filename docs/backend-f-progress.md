@@ -7,7 +7,7 @@ governing: docs/f-coordination-plan.md · docs/backend-f-workqueue.md
 
 # 백엔드 F 진행 현황
 
-현재 상태: **앵커 27건**
+현재 상태: **앵커 28건**
 
 ## 역사적 Delta-green baseline (BQ-001~003)
 
@@ -687,3 +687,31 @@ Bundle route는 200을 반환한다.
   `origin/dev` ancestor exit 0.
 
 계약 완성: OpsiaBench candidate contracts 71..80 + scheduling and secret inference boundary (dd2006904491f22113d4e84329f681a227e85d2e) [green]
+
+### 보조 대기열 S12 — rule candidate 81~87 terminal 안전 계약
+
+- 상태: landed
+- 담당 lane: `codex/candidate-contract-terminal`
+- RED: `564deb9a3239143321e69986b284066eb97b30ed`
+- 구현·데이터: `bd75854271f7c46de6c021d0e91f586c57e8a671`
+- 문서와 feature HEAD: `aafc4a956bc03b85133cb6b46f3ba889dde532dc`
+- canonical no-ff merge: `dc0b775ff0b4813e2599ea0c15f7bf574d830b0d`
+- 범위: loader 순서 81~87을 추가해 87/87 전체를 완결했고 `next_ordinal=null`이다.
+- 7개 모두 exact `manual_analysis` fallback-only이고 실제 patch capability가 비어 있다.
+  82번 `pvc_not_bound`에만 exact fixture가 있으며, 78번의 `pvc_binding_fix`를 이름만 보고
+  82번에 추론하지 않는다.
+- forbidden remediation은 ExternalSecret controller fleet 재시작, CSI 전체 재시작,
+  cluster volume 강제 detach, RWO 소비자 전역 삭제, VolumeAttachment finalizer 전역 제거처럼
+  실제 실행 가능한 과잉 대응으로 의미 감사를 통과했다.
+- append-only 경계: terminal canonical JSON digest
+  `e3f38634a87f1f1ffba62d21e0150f1069fb21f783ae4fb0ea9ddd46fe34fe22`를 `(81, 87)`에
+  고정하고 누락 lock·batch 9 변조 회귀를 추가했다.
+- 고유 검증: `python3 -S benchmark/score.py --candidate-contracts` 87/87 PASS,
+  `tests/test_benchmark_score.py` 56 passed. 독립 감사 P0/P1 0건.
+- 전체 게이트: Ruff lint/format PASS, import-linter 8 kept/0 broken,
+  pytest `1927 passed, 3 skipped`; manifest management 69 / target 20.
+- 4조건: merge-tree exit 0/tree `b2693f8c4aedb9d5004fd178c4435f10e492525f`;
+  파일 삭제·소유권 밖 변경·frozen 경로 변경 0건; RED·구현·문서·merge commit의
+  `origin/dev` ancestor exit 0.
+
+계약 완성: OpsiaBench candidate contracts 81..87 + terminal storage inference boundary (aafc4a956bc03b85133cb6b46f3ba889dde532dc) [green]

@@ -1940,3 +1940,22 @@ target preflight·register 네 함수와 strict Zod 계약을 claim했다. 1회�
 - 4조건: merge-tree clean/tree `61250ee0eacdee280fd73e6f223a9273cb994f70`, 파일 삭제·
   소유권 밖 변경·frozen 경로 변경 0건, RED·구현·문서·merge commit의 `origin/dev`
   ancestor exit 0. J 배포 실행은 0건이다.
+
+## 2026-07-13 16:54 KST — [백엔드] rule candidate 81~87 terminal 안전 계약 착륙
+
+- lane `codex/candidate-contract-terminal`, RED `564deb9a3`, 구현·데이터 `bd7585427`,
+  feature HEAD `aafc4a956bc03b85133cb6b46f3ba889dde532dc`, canonical no-ff merge
+  `dc0b775ff0b4813e2599ea0c15f7bf574d830b0d`.
+- loader 순서 81~87의 exact evidence·signal·fallback을 투영해 87/87 전체를 완결했다.
+  7개 모두 capability가 비어 있고, fixture는 82번 `pvc_not_bound`에만 exact 연결했다.
+- forbidden은 controller fleet 재시작, cluster volume 강제 detach, RWO 소비자 전역 삭제,
+  VolumeAttachment finalizer 전역 제거처럼 기술적으로 성립하는 과잉 대응으로 독립 의미 감사
+  P0/P1 0건이다.
+- append-only: terminal batch digest `e3f38634…fe22`를 `(81, 87)`에 고정하고 누락 lock·
+  batch 9 변조 회귀를 추가했다. 누적 범위는 87/87, cursor는 `null`이다.
+- 고유 검증: candidate scorer 87/87 PASS, 후보 계약 테스트 56 passed. 전체 게이트는
+  Ruff lint/format PASS, import-linter 8 kept/0 broken, pytest `1927 passed, 3 skipped`;
+  manifest management 69 / target 20.
+- 4조건: merge-tree clean/tree `b2693f8c4aedb9d5004fd178c4435f10e492525f`, 파일 삭제·
+  소유권 밖 변경·frozen 경로 변경 0건, RED·구현·문서·merge commit의 `origin/dev`
+  ancestor exit 0. J 배포 실행은 0건이다.
