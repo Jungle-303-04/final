@@ -7,8 +7,16 @@ describe("API composition root", () => {
 
     const composition = createApiComposition();
 
-    expect(composition.surfaces.map((surface) => surface.id)).toEqual(["home", "resources"]);
-    expect([...composition.releasedSurfaceIds]).toEqual(["home", "resources"]);
+    expect(composition.surfaces.map((surface) => surface.id)).toEqual([
+      "home",
+      "resources",
+      "issues",
+    ]);
+    expect([...composition.releasedSurfaceIds]).toEqual([
+      "home",
+      "resources",
+      "issues",
+    ]);
     expect(fetchSpy).not.toHaveBeenCalled();
     fetchSpy.mockRestore();
   });
