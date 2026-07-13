@@ -2512,3 +2512,33 @@ target preflight·register 네 함수와 strict Zod 계약을 claim했다. 1회�
   4개를 제거하고 prune했다. 삭제 가능한 임시 브랜치는 0개다. 고유 커밋 또는 활성
   worktree가 있는 codex 브랜치는 보존했고, stash 8개는 반영 여부가 증명되지 않아
   사유와 함께 유지했다.
+
+## 2026-07-13 20:02 KST — [프론트] VP-010 공용 필터·Label facet 계약 요청
+
+- 소비 정본은 `docs/spec/frontend/vp-010-unified-filter-ia.md`다. 프론트는 먼저 순수 URL
+  codec·filter algebra를 구현하되, 서버 계약이 없는 option/count/result 표면은 렌더하지 않는다.
+- 공통 필터는 Cluster·Namespace·Application 구조 축과 Kubernetes Label 발견 축이다.
+  구조 축 내부는 OR, Label 내부는 AND, 축 사이는 AND다. `labels`는 canonical
+  `key=value` equality selector 목록이며 화면 간 유지한다.
+- **백엔드 요청 GAP-004:** 현재 workspace·권한·common/surface filter·snapshot을 입력으로
+  받는 surface별 Label facet search가 필요하다. 응답은 stable `key=value`, 후보 Label을
+  AND로 추가했을 때의 item count, selected Label 재해석 결과, opaque cursor,
+  result total·unfiltered total·completeness, snapshot/revision, restricted/redacted 상태를
+  제공해야 한다. facet 검색어는 목록만 좁히며 item count 조건에는 포함하지 않는다.
+- `Showing N of M`의 N과 M은 동일 snapshot·권한에서 각각 전체 filter 적용 후 결과와
+  같은 surface의 filter 적용 전 전체를 뜻한다. 완전성을 증명할 수 없으면 nullable/partial로
+  반환해야 하며 프론트는 숫자를 추정하지 않는다. collection 전수 수집·client 집계는 금지한다.
+- Label은 top-level stable row를 distinct count한다. Resources=live resource,
+  Issues=event-time evidence resource, Applications=live binding resource,
+  GitOps=desired manifest resource, Checks=evaluation-time target resource를 source로 한다.
+  집계 행에서는 동일한 canonical object 하나가 선택 Label 전체를 가져야 하며 서로 다른
+  object의 Label을 합치지 않는다.
+- 요청 DTO 후보는 `LabelFacetQuery`, 응답은 `LabelFacetPage`다. 응답에는
+  `LabelFacetItem`, `SelectedLabelResolution`, `FilterResultCounts`, `FilterSnapshotMeta`를
+  포함하고 cursor를 workspace·authorization revision·surface·filter fingerprint·snapshot에
+  묶어야 한다. exact가 아닌 0은 금지하고 partial reason code를 반환해야 한다.
+- 그 밖의 요청은 GAP-001 workspace catalog/switch, GAP-002 facet catalog,
+  GAP-003 Resources multi-filter/cursor/completeness, GAP-005 Issues filter,
+  GAP-006 Applications·GitOps·Checks canonical list, GAP-007 registration resume/error,
+  GAP-008 disconnect operation, GAP-009 Git repository wizard, GAP-010 graph snapshot이다.
+  각 계약 착륙 전에는 해당 표면만 주차하고 기존 검증된 화면을 유지한다.

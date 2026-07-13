@@ -28,6 +28,7 @@ api-needs.md에 APIQ 행을 추가하지 않고 화면도 렌더하지 않는다
 | VP-007 | 클러스터-최상위 IA — 전역 Cluster selector가 URL 단일 권위로 전 화면 스코프 결정 + 연결된 Cluster 목록(이름·environment·connection·provider) | BQ-017 완료 | 기존 `CLUSTERS_PATH` + optional `provider` enum · 백엔드 코드 `db4798d4e`, canonical merge `d507ca6d4` (`origin/dev` ancestor exit 0) | 어댑터 | 셸 단일 `ClusterScopeProvider` + `UI-004 ScopePicker` + 단일 `ClusterProviderIcon`; 페이지별 목록 요청·selector 제거. provider는 표시 metadata로만 사용하고 화면·동작 분기 금지 | selector `2c4487d7b`; ProviderIcon `b4d1af3cd` |
 | VP-008 | 클러스터 연결 위자드 고도화 — provider 선택→사전 명령→설치 원커맨드(연결 윈도우 카운트다운)→연결 단계 실시간(token_issued→…→ready)→완료 | BQ-017 완료 | `GET /providers/catalog`, `GET /providers/cluster-discovery`, `POST /targets/preflight`, `POST /targets`, `GET /clusters/{cluster_id}/connection-status` · wizard 기반 `65a71c7c`, timeout/bootstrap `101bc4a2`, one-line installer `98efb993`, preflight `26b9e2a9`, BQ-017 merge `d507ca6d4`(전부 `origin/dev` ancestor exit 0) | 어댑터 · 완성형 UI는 §1f 계약 갭으로 주차 | provider catalog의 `config_fields`와 discovery flow를 key로 결합하고 서버 명령만 표시한다. 등록 receipt의 token·manifest·commands는 메모리에만 보유한다. 5초 polling은 서버 stage를 권위로 사용하며 stage 회귀를 허용한다 | API 4함수 `8678d63b0` · 기존 `getClusterConnectionStatus` 앵커 `3d99514d6` · UI blocked (§1f) |
 | VP-009 | provider 표시 일관화 — fleet heatmap·홈 카드·인시던트의 클러스터 표기에 동일 ProviderIcon 재사용 | BQ-017 완료 | VP-007의 optional `ClusterSummary.provider` 소비 | 어댑터 · Fleet BE-Gap (§1g) | 단일 `ClusterProviderIcon` 재사용. 전역 selector가 route scope를 1회 표시하고 Home 카드만 문맥 아이콘 1개를 추가한다. `unknown`은 일반 Kubernetes glyph이며 provider별 화면 분기 금지 | Home RED `a0e124b92`·`4a0937c54` → GREEN `3fe308f95`; Issues는 전역 selector `b4d1af3cd`; Fleet blocked (§1g) |
+| VP-010 | workspace-only scope + 공통 다중 filter(Cluster·Namespace·Application·Label) + surface filter + Resources 표/graph + 점진 위자드 | 계약별 분할 필요 | `vp-010-unified-filter-ia.md`가 interaction·URL·BE-Gap 정본. VP-007의 single Cluster selection authority만 대체하고 catalog/provider/connection 자산은 재사용 | engine codec 선행 · surface 적용은 GAP-001~010별 주차 | 공용 `UnifiedFilterBar`와 pure URL codec/provider. 유한 구조 축은 tree/dropdown, 발견형 Label은 검색 popover다. 같은 구조 축 내부 OR, Label 내부 AND, 축 사이 AND. 상세는 filter 미적용·chip dim·filter 밖 고지 | spec approved · RED/GREEN 구현 대기 · GAP-004 전 Label UI/count 미렌더 |
 
 ## 1b. VP-001 판정 비고 (2026-07-13, 검토자 확정)
 
@@ -123,6 +124,24 @@ api-needs.md에 APIQ 행을 추가하지 않고 화면도 렌더하지 않는다
 - Fleet blocker를 Home·Issues 완료로 위장하지 않는다. surface·계약이 착륙하기 전에는 빈 카드,
   disabled placeholder, provider 추론, synthetic join을 만들지 않는다.
 
+## 1h. VP-010이 VP-007을 대체하는 범위 (2026-07-13)
+
+- VP-010은 VP-007의 **단일 Cluster 선택이 전 화면 scope의 유일한 권위**라는 의미만
+  대체한다. workspace가 isolation scope이고 Cluster·Namespace·Application·Label은
+  다중 filter다. filter 0개를 첫 Cluster로 자동 보정하지 않는다.
+- VP-007의 cluster collection, `provider`, connection stage, `ClusterProviderIcon`, polling과
+  failure isolation은 폐기하지 않는다. selection 책임을 filter engine으로 옮긴 뒤 facet
+  catalog/presentation 자산으로 재사용한다.
+- 기존 `cluster` URL과 Resources detail의 `kind` URL은 VP-010 §2.4의 dual-read,
+  canonical-write 규칙으로 이행한다. migration 중에도 한 surface에 두 selection authority를
+  동시에 표시하지 않는다.
+- multi-cluster/namespace/application/label을 서버가 완전하게 적용할 계약이 없는 surface는
+  client fan-out이나 truncated page post-filter로 흉내 내지 않는다. codec·RED suite만 선행하고
+  VP-010 §9의 해당 GAP을 유지한다.
+- Label facet은 현재 page나 inventory collection을 client에서 전수 집계하지 않는다.
+  GAP-004가 착륙하기 전에는 URL codec·AND algebra만 구현하고 `[Labels]` 버튼·facet 목록·count는
+  렌더하지 않는다. URL의 syntactically valid Label은 보존한다.
+
 ## 2. 작업 절차 (행 단위)
 
 1. 백엔드 progress에서 해당 BQ의 `계약 완성:` 앵커 확인.
@@ -142,5 +161,9 @@ api-needs.md에 APIQ 행을 추가하지 않고 화면도 렌더하지 않는다
 ## 4. 완료 게이트
 
 - VP-001~VP-006 판정에 `backend 선행` 0개 (단, VP-006은 flag on 환경 존재 시에만)
+- VP-010 engine codec은 canonical URL round-trip·legacy migration·Label AND·화면 이동 보존
+  RED/GREEN suite를 통과해야 한다. surface는 해당 GAP 계약과 앵커가 있는 항목만 완료로 판정한다.
+- Label UI 완료는 GAP-004의 server facet/count/snapshot/completeness 계약, client 집계 0건,
+  같은 key의 상충 value AND=0 검증을 모두 요구한다.
 - 신규 화면 전부 `npm run check` 통과
 - reference-contract-map.md 완료 게이트(§8) 위반 0건
