@@ -57,6 +57,7 @@ export function clusterChoices(): HomeClusterChoices {
       workspaceId: "workspace-main",
       name: id,
       environment: "production",
+      provider: "unknown",
       registrationState: "active",
       connectionState: "online",
       lastObservedAt: "2026-07-12T10:00:00.000Z",

@@ -244,6 +244,7 @@ function cluster(
     workspaceId: "workspace-a",
     name: id,
     environment,
+    provider: "unknown",
     registrationState: "active",
     connectionState,
     lastObservedAt: "2026-07-13T00:00:00.000Z",

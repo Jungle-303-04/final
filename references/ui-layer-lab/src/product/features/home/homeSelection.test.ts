@@ -43,6 +43,7 @@ function cluster(overrides: Partial<HomeClusterChoice>): HomeClusterChoice {
     workspaceId: "workspace-main",
     name: "cluster",
     environment: "unknown",
+    provider: "unknown",
     registrationState: "active",
     connectionState: "online",
     lastObservedAt: null,

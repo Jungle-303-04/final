@@ -35,6 +35,7 @@ const outputDir = new URL("../output/playwright/", import.meta.url).pathname;
 const shellHeaderSelector = "[data-slot='sidebar-inset'] > header";
 const clusterScopePickerSelector = `${shellHeaderSelector} [data-slot='cluster-scope-picker']`;
 const clusterScopeTriggerSelector = `${clusterScopePickerSelector} [data-slot='select-trigger']`;
+const clusterProviderIconSelector = `${clusterScopeTriggerSelector} [data-slot='cluster-provider-icon']`;
 // Deterministic fixture captures guard local UI contracts only. AWS-backed acceptance
 // evidence is captured by a separate workflow and must not reuse these screenshots.
 const authLoginSelectors = [
@@ -98,6 +99,7 @@ const shellSelectors = [
   "[data-slot='sidebar-trigger']",
   clusterScopePickerSelector,
   clusterScopeTriggerSelector,
+  clusterProviderIconSelector,
   "[data-shell-harness-outlet]",
   "header",
   "main",
@@ -109,6 +111,7 @@ const homeSelectors = [
   "[data-slot='surface']",
   clusterScopePickerSelector,
   clusterScopeTriggerSelector,
+  clusterProviderIconSelector,
   "[data-slot='progress']",
   "[data-slot='progress-track']",
   "[data-slot='progress-indicator']",
@@ -142,6 +145,7 @@ const resourcesSelectors = [
   "[data-slot='badge']",
   clusterScopePickerSelector,
   clusterScopeTriggerSelector,
+  clusterProviderIconSelector,
   "[data-slot='accordion']",
   "[data-slot='accordion-trigger']",
   "[data-slot='table-container']",
@@ -710,6 +714,7 @@ const homeFeatureApiFixtures = new Map([
       cluster_id: homeClusterId,
       name: "visual-cluster",
       environment: "production",
+      provider: "eks",
       status: "active",
       settings: {},
       connection_status: "online",
@@ -2016,6 +2021,11 @@ async function assertGlobalClusterScopePicker(page, label, locale, options = {})
       `${label}: global cluster scope omitted canonical identity or localized connection `
       + `${JSON.stringify({ accessibleName, text })}`,
     );
+  }
+  const providerIcon = trigger.locator("[data-slot='cluster-provider-icon']");
+  if (await providerIcon.count() !== 1
+    || await providerIcon.getAttribute("data-provider") !== "eks") {
+    throw new Error(`${label}: global cluster scope omitted the verified provider icon`);
   }
 }
 

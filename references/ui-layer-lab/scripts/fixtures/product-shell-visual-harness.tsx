@@ -29,6 +29,7 @@ const testClusterScope: ClusterScopePort = {
       workspaceId: "visual-workspace",
       name: "cluster-1",
       environment: "production",
+      provider: "eks",
       registrationState: "active",
       connectionState: "online",
       lastObservedAt: "2026-07-13T00:00:00.000Z",

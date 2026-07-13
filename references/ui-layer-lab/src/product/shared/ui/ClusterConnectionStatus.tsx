@@ -40,14 +40,17 @@ export function ClusterConnectionStatus({
 }
 
 export function ClusterConnectionMark({
+  compact = false,
   connectionState,
 }: {
+  compact?: boolean;
   connectionState: ClusterConnectionState;
 }) {
   const { t } = useI18n();
   return (
     <StatusMark
       label={t(connectionLabelKey(connectionState))}
+      labelMode={compact ? "sr-only" : "visible"}
       tone={connectionTone(connectionState)}
     />
   );

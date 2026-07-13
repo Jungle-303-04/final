@@ -64,6 +64,7 @@ function toClusterChoice(wire: HomeEndpointClusterSummary): HomeClusterChoice {
     workspaceId: canonicalIdentity(wire.workspace_id),
     name: canonicalDisplayLabel(wire.name, id),
     environment: canonicalDisplayLabel(wire.environment, "unknown"),
+    provider: wire.provider ?? "unknown",
     registrationState: registrationState(canonicalIdentity(wire.status)),
     connectionState: connectionState(canonicalIdentity(wire.connection_status)),
     lastObservedAt: canonicalTimestamp(wire.last_agent_seen_at),

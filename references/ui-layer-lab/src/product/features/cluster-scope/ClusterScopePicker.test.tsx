@@ -27,11 +27,15 @@ describe("ClusterScopePicker", () => {
 
     const trigger = await screen.findByRole("combobox", { name: accessibleName });
     expect(trigger.textContent).toContain("prod-cluster · Production · cluster-a");
+    expect(trigger.querySelector("[data-slot='cluster-provider-icon']")?.getAttribute("data-provider"))
+      .toBe("eks");
     trigger.focus();
     await user.keyboard("{ArrowDown}");
 
     expect(await screen.findByText(groupLabel)).toBeTruthy();
     expect(screen.getByRole("option", { name: /edge-cluster/u })).toBeTruthy();
+    expect(screen.getByRole("img", { name: /On-premises Kubernetes|온프레미스 Kubernetes/u }))
+      .toBeTruthy();
     expect(screen.queryByText("Amazon EKS")).toBeNull();
     expect(screen.queryByText("Critical")).toBeNull();
   });
@@ -64,13 +68,11 @@ describe("ClusterScopePicker", () => {
 function renderPicker(language: string, entry = "/product?cluster=cluster-a") {
   const canonicalClusters = [
     {
-      ...cluster("cluster-a", "prod-cluster", "Production", "online"),
-      provider: "Amazon EKS",
+      ...cluster("cluster-a", "prod-cluster", "Production", "online", "eks"),
       health: "Critical",
     },
     {
-      ...cluster("cluster-b", "edge-cluster", "Edge", "offline"),
-      provider: "Local Kubernetes",
+      ...cluster("cluster-b", "edge-cluster", "Edge", "offline", "onprem"),
       health: "Healthy",
     },
   ];
@@ -99,12 +101,14 @@ function cluster(
   name: string,
   environment: string,
   connectionState: HomeClusterChoice["connectionState"],
+  provider: HomeClusterChoice["provider"],
 ): HomeClusterChoice {
   return {
     id,
     workspaceId: "workspace-a",
     name,
     environment,
+    provider,
     registrationState: "active",
     connectionState,
     lastObservedAt: "2026-07-13T00:00:00.000Z",
