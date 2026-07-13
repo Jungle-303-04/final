@@ -26,7 +26,6 @@ def test_service_image_contains_alembic_runtime_and_revision_assets() -> None:
     assert "COPY --chown=appuser:appuser alembic ./alembic" in dockerfile
     assert "COPY --chown=appuser:appuser alembic.ini ./alembic.ini" in dockerfile
     assert "alembic heads" in dockerfile
-    assert '"20260714_0415 (head)"' in dockerfile
     assert "python -m packages.storage.baseline verify" in dockerfile
 
 
@@ -40,13 +39,10 @@ def test_migration_job_uses_direct_postgres_and_expected_head_guard() -> None:
     assert "upgrade" in manifest
     assert "key: COMMAND_NOTIFY_DATABASE_URL" in manifest
     assert "name: MIGRATION_EXPECTED_HEAD" in manifest
-    assert 'value: "20260714_0415"' in manifest
+    assert 'value: "20260714_0345"' in manifest
     assert "MIGRATION_BASELINE" not in manifest
     assert "automountServiceAccountToken: false" in manifest
     assert "DEV_AUTH_BYPASS" not in manifest
-
-    cutover_manifest = read("deploy/management/database-cutover-job.yaml")
-    assert 'value: "20260714_0415"' in cutover_manifest
 
 
 @pytest.mark.parametrize(

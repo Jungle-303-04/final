@@ -20,17 +20,6 @@ from psycopg import sql
 from psycopg.connection import Connection
 
 from packages.config.settings import required_env
-from packages.contracts.identity import (
-    DEFAULT_GROUP_ID,
-    DEFAULT_ORGANIZATION_ID,
-    DEFAULT_WORKSPACE_ID,
-    AccessStatus,
-    GroupRole,
-    OrganizationRole,
-    ResourceRole,
-    ServiceRole,
-    UserStatus,
-)
 from packages.storage.baseline import BASELINE_TARGET_DATABASE_URL_ENV
 from packages.storage.engine import SCHEMA_INIT_LOCK_KEY, SCHEMA_INIT_LOCK_NAMESPACE
 from packages.storage.migration import EXPECTED_HEAD_ENV, alembic_config, revisions
@@ -42,14 +31,6 @@ BASELINE_SOURCE_FROZEN_CONFIRMATION = "source-writes-disabled"
 BASELINE_TARGET_ISOLATED_CONFIRMATION = "isolated-versioned-target"
 SCHEMA = "public"
 VERSION_TABLE = "alembic_version"
-LEGACY_WORKSPACE_MEMBERS_TABLE = "workspace_members"
-LEGACY_RESOURCE_ACCESS_GRANTS_TABLE = "resource_access_grants"
-RETIRED_SOURCE_TABLES = frozenset(
-    {LEGACY_WORKSPACE_MEMBERS_TABLE, LEGACY_RESOURCE_ACCESS_GRANTS_TABLE}
-)
-TRANSFORMED_IDENTITY_TABLES = frozenset({"user_accounts", "organization_members", "group_members"})
-LEGACY_ADMIN_ROLE = "admin"
-LEGACY_WORKSPACE_PERMISSIONS = {"target": ["register", "install"]}
 
 
 class CutoverDecision(StrEnum):
@@ -73,39 +54,10 @@ class ColumnShape:
 
 @dataclass(frozen=True)
 class TableProof:
-    """Deterministic source and committed-target proofs ordered by the primary key."""
+    """Deterministic proof over source columns ordered by the primary key."""
 
     rows: int
-    source_sha256: str
-    target_sha256: str
-    pre_transform_copy_verified: bool
-
-
-@dataclass(frozen=True)
-class LegacyIdentityContract:
-    """Validated live-only identity row used inside the target transaction."""
-
-    user_id: str
-    source_sha256: str
-
-
-@dataclass(frozen=True)
-class LegacyIdentityProof:
-    """Non-secret evidence for the one-time canonical identity transformation."""
-
-    resource_access_grants: int
-    workspace_members: int
-    source_sha256: str
-    workspace_id: str
-    workspace_role: str
-    workspace_status: str
-    workspace_permissions: tuple[str, ...]
-    migrated_users: int
-    canonical_transform_verified: bool
-    user_role: str
-    organization_role: str
-    group_role: str
-    cluster_steward_status: str
+    sha256: str
 
 
 @dataclass(frozen=True)
@@ -114,95 +66,9 @@ class CutoverReport:
 
     head: str
     source_tables: int
-    copied_tables: int
     target_tables: int
     catalog_sha256: str
     tables: dict[str, TableProof]
-    legacy_identity: LegacyIdentityProof
-
-
-def validate_legacy_source_contract(
-    resource_access_grants: int,
-    workspace_members: Sequence[Sequence[Any]],
-) -> LegacyIdentityContract:
-    """Accept only the exact read-only live observation approved for first deploy."""
-    if resource_access_grants != 0:
-        raise RuntimeError("legacy resource_access_grants must contain exactly zero rows")
-    if len(workspace_members) != 1:
-        raise RuntimeError("legacy workspace_members must contain exactly one row")
-
-    row = workspace_members[0]
-    if len(row) != 5:
-        raise RuntimeError("legacy workspace_members projection is invalid")
-    workspace_id, user_id, role, permissions, status = row
-    if (
-        workspace_id != DEFAULT_WORKSPACE_ID
-        or not isinstance(user_id, str)
-        or not user_id
-        or role != OrganizationRole.OWNER.value
-        or permissions != LEGACY_WORKSPACE_PERMISSIONS
-        or status != AccessStatus.ACTIVE.value
-    ):
-        raise RuntimeError("legacy workspace_members row does not match the approved contract")
-
-    encoded = json.dumps(
-        {
-            "permissions": permissions,
-            "role": role,
-            "status": status,
-            "user_id": user_id,
-            "workspace_id": workspace_id,
-        },
-        ensure_ascii=True,
-        sort_keys=True,
-        separators=(",", ":"),
-    ).encode()
-    return LegacyIdentityContract(
-        user_id=user_id, source_sha256=hashlib.sha256(encoded).hexdigest()
-    )
-
-
-def validate_canonical_identity_contract(
-    *,
-    user_rows: Sequence[Sequence[Any]],
-    organization_member_rows: Sequence[Sequence[Any]],
-    group_member_rows: Sequence[Sequence[Any]],
-    resource_role_rows: Sequence[Sequence[Any]],
-    transformed: bool,
-) -> None:
-    """Require the exact canonical state before and after the explicit role mapping."""
-    expected_user_role = ServiceRole.SERVICE_ADMIN.value if transformed else LEGACY_ADMIN_ROLE
-    expected = (
-        ("user account", user_rows, [(expected_user_role, UserStatus.ACTIVE.value)]),
-        (
-            "default organization membership",
-            organization_member_rows,
-            [
-                (
-                    OrganizationRole.OWNER.value if transformed else OrganizationRole.MEMBER.value,
-                    AccessStatus.ACTIVE.value,
-                )
-            ],
-        ),
-        (
-            "default group membership",
-            group_member_rows,
-            [
-                (
-                    GroupRole.MANAGER.value if transformed else GroupRole.MEMBER.value,
-                    AccessStatus.ACTIVE.value,
-                )
-            ],
-        ),
-        (
-            "member resource role",
-            resource_role_rows,
-            [(ResourceRole.CLUSTER_STEWARD.value, AccessStatus.DISABLED.value)],
-        ),
-    )
-    for label, observed, required in expected:
-        if [tuple(row) for row in observed] != required:
-            raise RuntimeError(f"{label} does not match the approved legacy identity contract")
 
 
 def decide_copy(
@@ -543,142 +409,6 @@ def _database_identity(connection: Connection[Any]) -> tuple[str, str | None, in
     return str(row[0]), row[1], row[2]
 
 
-def _legacy_source_identity(connection: Connection[Any]) -> LegacyIdentityContract:
-    workspace_members = connection.execute(
-        """
-        SELECT workspace_id, user_id, role, permissions, status
-        FROM workspace_members
-        ORDER BY id
-        """
-    ).fetchall()
-    return validate_legacy_source_contract(
-        _row_count(connection, LEGACY_RESOURCE_ACCESS_GRANTS_TABLE),
-        workspace_members,
-    )
-
-
-def _canonical_identity_rows(
-    connection: Connection[Any], user_id: str
-) -> tuple[list[Any], list[Any], list[Any], list[Any]]:
-    user_rows = connection.execute(
-        "SELECT role, status FROM user_accounts WHERE user_id = %s",
-        (user_id,),
-    ).fetchall()
-    organization_member_rows = connection.execute(
-        """
-        SELECT role, status
-        FROM organization_members
-        WHERE organization_id = %s AND user_id = %s
-        ORDER BY id
-        """,
-        (DEFAULT_ORGANIZATION_ID, user_id),
-    ).fetchall()
-    group_member_rows = connection.execute(
-        """
-        SELECT role, status
-        FROM group_members
-        WHERE group_id = %s AND user_id = %s
-        ORDER BY id
-        """,
-        (DEFAULT_GROUP_ID, user_id),
-    ).fetchall()
-    resource_role_rows = connection.execute(
-        """
-        SELECT role, status
-        FROM member_resource_roles
-        WHERE user_id = %s
-        ORDER BY resource_assignment_id, id
-        """,
-        (user_id,),
-    ).fetchall()
-    return user_rows, organization_member_rows, group_member_rows, resource_role_rows
-
-
-def _validate_target_identity(
-    connection: Connection[Any], contract: LegacyIdentityContract, *, transformed: bool
-) -> None:
-    user_rows, organization_rows, group_rows, resource_role_rows = _canonical_identity_rows(
-        connection, contract.user_id
-    )
-    validate_canonical_identity_contract(
-        user_rows=user_rows,
-        organization_member_rows=organization_rows,
-        group_member_rows=group_rows,
-        resource_role_rows=resource_role_rows,
-        transformed=transformed,
-    )
-
-
-def _migrate_legacy_identity(
-    connection: Connection[Any], contract: LegacyIdentityContract
-) -> LegacyIdentityProof:
-    _validate_target_identity(connection, contract, transformed=False)
-    updates = (
-        connection.execute(
-            """
-            UPDATE user_accounts
-            SET role = %s, status = %s, updated_at = now()
-            WHERE user_id = %s AND role = %s AND status = %s
-            """,
-            (
-                ServiceRole.SERVICE_ADMIN.value,
-                UserStatus.ACTIVE.value,
-                contract.user_id,
-                LEGACY_ADMIN_ROLE,
-                UserStatus.ACTIVE.value,
-            ),
-        ),
-        connection.execute(
-            """
-            UPDATE organization_members
-            SET role = %s, status = %s, updated_at = now()
-            WHERE organization_id = %s AND user_id = %s AND role = %s AND status = %s
-            """,
-            (
-                OrganizationRole.OWNER.value,
-                AccessStatus.ACTIVE.value,
-                DEFAULT_ORGANIZATION_ID,
-                contract.user_id,
-                OrganizationRole.MEMBER.value,
-                AccessStatus.ACTIVE.value,
-            ),
-        ),
-        connection.execute(
-            """
-            UPDATE group_members
-            SET role = %s, status = %s, updated_at = now()
-            WHERE group_id = %s AND user_id = %s AND role = %s AND status = %s
-            """,
-            (
-                GroupRole.MANAGER.value,
-                AccessStatus.ACTIVE.value,
-                DEFAULT_GROUP_ID,
-                contract.user_id,
-                GroupRole.MEMBER.value,
-                AccessStatus.ACTIVE.value,
-            ),
-        ),
-    )
-    if any(cursor.rowcount != 1 for cursor in updates):
-        raise RuntimeError("canonical legacy identity update did not affect exactly one row")
-    _validate_target_identity(connection, contract, transformed=True)
-    return LegacyIdentityProof(
-        resource_access_grants=0,
-        workspace_members=1,
-        source_sha256=contract.source_sha256,
-        workspace_id=DEFAULT_WORKSPACE_ID,
-        workspace_role=OrganizationRole.OWNER.value,
-        workspace_status=AccessStatus.ACTIVE.value,
-        workspace_permissions=("target.register", "target.install"),
-        migrated_users=1,
-        canonical_transform_verified=True,
-        user_role=ServiceRole.SERVICE_ADMIN.value,
-        organization_role=OrganizationRole.OWNER.value,
-        group_role=GroupRole.MANAGER.value,
-        cluster_steward_status=AccessStatus.DISABLED.value,
-    )
-
-
 def _validate_operator_confirmations() -> None:
     if required_env(BASELINE_CONFIRM_SOURCE_FROZEN_ENV) != BASELINE_SOURCE_FROZEN_CONFIRMATION:
         raise RuntimeError("frozen source confirmation mismatch")
@@ -717,20 +447,7 @@ def run_copy() -> CutoverReport:
         source_tables = _table_names(source)
         if source_tables != guarded_source_tables:
             raise RuntimeError("source table set changed before the frozen snapshot")
-        missing_retired_tables = sorted(RETIRED_SOURCE_TABLES - set(source_tables))
-        if missing_retired_tables:
-            raise RuntimeError(
-                "source is missing retired identity tables: " + ",".join(missing_retired_tables)
-            )
-        legacy_identity = _legacy_source_identity(source)
-        copied_source_tables = sorted(set(source_tables) - RETIRED_SOURCE_TABLES)
         target_tables = _table_names(target)
-        retained_target_tables = sorted(RETIRED_SOURCE_TABLES & set(target_tables))
-        if retained_target_tables:
-            raise RuntimeError(
-                "target must not retain retired identity tables: "
-                + ",".join(retained_target_tables)
-            )
         source_version_exists, _ = _version_revisions(source)
         target_version_exists, target_revisions = _version_revisions(target)
         decision = decide_copy(
@@ -742,13 +459,13 @@ def run_copy() -> CutoverReport:
         if decision is not CutoverDecision.READY:
             raise RuntimeError(f"data-only copy refused: {decision.value}")
 
-        missing_tables = sorted(set(copied_source_tables) - set(target_tables))
+        missing_tables = sorted(set(source_tables) - set(target_tables))
         if missing_tables:
             raise RuntimeError(f"target is missing source tables: {','.join(missing_tables)}")
 
         contracts: dict[str, tuple[str, ...]] = {}
         primary_keys: dict[str, tuple[str, ...]] = {}
-        for table_name in copied_source_tables:
+        for table_name in source_tables:
             contracts[table_name] = validate_table_contract(
                 table_name,
                 _column_shapes(source, table_name),
@@ -762,52 +479,33 @@ def run_copy() -> CutoverReport:
                 raise RuntimeError(f"non-empty source table has no primary key: {table_name}")
 
         copy_order = topological_tables(
-            set(copied_source_tables),
-            _foreign_key_dependencies(target, set(copied_source_tables)),
+            set(source_tables), _foreign_key_dependencies(target, set(source_tables))
         )
 
-        source_counts = {table: _row_count(source, table) for table in copied_source_tables}
+        source_counts = {table: _row_count(source, table) for table in source_tables}
         for table_name in copy_order:
             _copy_table(source, target, table_name, contracts[table_name])
-        _sync_sequences(source, target, copied_source_tables)
+        _sync_sequences(source, target, source_tables)
 
         proofs: dict[str, TableProof] = {}
-        for table_name in copied_source_tables:
+        for table_name in source_tables:
             target_count = _row_count(target, table_name)
             if target_count != source_counts[table_name]:
                 raise RuntimeError(f"row count mismatch: {table_name}")
             if target_count == 0:
-                source_digest = hashlib.sha256(b"").hexdigest()
-                target_digest = source_digest
+                digest = hashlib.sha256(b"").hexdigest()
             else:
                 source_digest = _table_digest(
                     source, table_name, contracts[table_name], primary_keys[table_name]
                 )
-                target_digest = _table_digest(
+                digest = _table_digest(
                     target, table_name, contracts[table_name], primary_keys[table_name]
                 )
-                if target_digest != source_digest:
+                if digest != source_digest:
                     raise RuntimeError(f"data checksum mismatch: {table_name}")
-            proofs[table_name] = TableProof(
-                rows=target_count,
-                source_sha256=source_digest,
-                target_sha256=target_digest,
-                pre_transform_copy_verified=True,
-            )
+            proofs[table_name] = TableProof(rows=target_count, sha256=digest)
 
-        legacy_proof = _migrate_legacy_identity(target, legacy_identity)
-        for table_name in TRANSFORMED_IDENTITY_TABLES:
-            proof = proofs[table_name]
-            proofs[table_name] = TableProof(
-                rows=proof.rows,
-                source_sha256=proof.source_sha256,
-                target_sha256=_table_digest(
-                    target, table_name, contracts[table_name], primary_keys[table_name]
-                ),
-                pre_transform_copy_verified=proof.pre_transform_copy_verified,
-            )
-
-        extra_target_tables = sorted(set(target_tables) - set(copied_source_tables))
+        extra_target_tables = sorted(set(target_tables) - set(source_tables))
         if _nonempty_tables(target, extra_target_tables):
             raise RuntimeError("copy populated target-only tables")
         _verify_target_catalog(target)
@@ -818,11 +516,9 @@ def run_copy() -> CutoverReport:
         return CutoverReport(
             head=image_head,
             source_tables=len(source_tables),
-            copied_tables=len(copied_source_tables),
             target_tables=len(target_tables),
             catalog_sha256=catalog_digest,
             tables=proofs,
-            legacy_identity=legacy_proof,
         )
 
 
