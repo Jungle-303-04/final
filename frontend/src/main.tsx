@@ -4,6 +4,7 @@ import { RouterProvider } from 'react-router-dom';
 import { MotionConfig } from 'motion/react';
 import { Providers } from '@/app/providers';
 import { router } from '@/app/router';
+import { Toaster } from '@/components/ui/sonner';
 import '@/ui/theme.css';
 
 // 테마는 첫 페인트 전에 적용 — 로그인 등 셸 밖 화면도 같은 다크/라이트 팔레트를 쓴다
@@ -18,6 +19,7 @@ createRoot(document.getElementById('root')!).render(
     <MotionConfig reducedMotion="user">
       <Providers>
         <RouterProvider router={router} />
+        <Toaster />
       </Providers>
     </MotionConfig>
   </StrictMode>,
