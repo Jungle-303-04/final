@@ -264,6 +264,15 @@ def test_candidate_contract_rejects_fixture_path_traversal() -> None:
     assert any("fixture path must remain under benchmark/scenarios" in error for error in errors)
 
 
+def test_candidate_contract_rejects_completed_batch_annotation_drift() -> None:
+    document = _candidate_contracts()
+    document["contracts"][3]["benchmark_fixtures"] = []
+
+    errors = _contract_validation_errors(document)
+
+    assert any("completed batch 1 digest mismatch" in error for error in errors)
+
+
 def test_candidate_contract_rejects_supporting_signal_drift() -> None:
     document = _candidate_contracts()
     document["contracts"][0]["supporting_signals"][0]["any_of"][0] = {
