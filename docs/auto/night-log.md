@@ -975,3 +975,12 @@ strict envelope·open JsonMap·AbortSignal·possibly-sent POST 단일 호출 계
 [2026-07-13 12:30 KST] [프론트-D/API] APIQ-015 in_progress — provider-neutral Catalog의
 `listCatalogItems`·`getCatalogItem` 계약을 claim했다. strict list/detail envelope와 open item
 JsonMap, AbortSignal, ID 검증을 완료 앵커 전까지 제품 화면에서 소비하지 않는다.
+
+## 2026-07-13 12:34 KST — [프론트-D/API] APIQ-015 완료 증거
+
+- claim 조율 커밋 `e3ab2c458`와 코드 커밋 `1ad595b42`를 분리해 push했다.
+- exact anchors: `listCatalogItems`, `getCatalogItem` → `1ad595b42`; canonical ancestor exit 0.
+- 백엔드 strict response envelope와 open `JsonMap` item을 대조했다. 목록·상세 외피 drift 거부,
+  item 확장 보존, AbortSignal, ID·URL, 404·malformed 계약 5 tests PASS.
+- full `npm run check` PASS: 105 files / 757 tests, design guard 314 files,
+  shadcn 482 previews, Vite production build.
