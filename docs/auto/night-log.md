@@ -2631,7 +2631,7 @@ target preflight·register 네 함수와 strict Zod 계약을 claim했다. 1회�
 
 ## 2026-07-13 21:02 KST — [프론트] VP-010 passive filter Provider GREEN
 
-- RED는 미구현 Provider와 `clear-labels` history intent로 시작했다. GREEN `168b26e50`은
+- RED는 부재 Provider와 `clear-labels` history intent로 시작했다. GREEN `168b26e50`은
   URL을 유일한 권위로 읽는 `UnifiedFilterProvider`를 추가했다. mount-time effect·자동 write·
   API·로컬 복제 state는 0건이며, 명시적 canonicalize와 atomic updater만 push/replace를 쓴다.
 - StrictMode 무기록, legacy·unresolved 보존, explicit replace migration, chip push, typing replace,
@@ -2658,6 +2658,65 @@ target preflight·register 네 함수와 strict Zod 계약을 claim했다. 1회�
   승격 직후 이 단위 전용 `codex/vp010-filter-provider-20260713`과
   `/private/tmp/opsia-vp010-filter-provider`를 제거하고 prune한다. 신규 stash는 0개이며,
   기존 8개와 다른 작업자의 branch·worktree는 증명 없이 변경하지 않는다.
+
+## 2026-07-13 21:11 KST — [백엔드] OSS Safe PR 리뷰·GitOps 소유권 실측
+
+- RED 10개 커밋 뒤 GREEN `9b107d8e9`은 mock PR·직접 이미지 교체를 제거하고 실제 API →
+  outbox → in-process workers → 기존 `GithubScmProvider`/`scm-worker` → `safe_pr.created` →
+  분리 reviewer merge → merge SHA manifest 조회 → 외부 GitOps actor 적용 흐름을 완주했다.
+- 보안 감사에서 `.git/config` write를 통한 명령 실행 가능성을 재현해 모든 `.git` component를
+  차단했다. writer/admin/reviewer token은 상호분리하고 writer의 main reset/commit/merge를
+  401로 거부한다. merge는 검토한 base/head SHA 경쟁 변경을 409로 거부한다.
+- 최종 Kind 실측은 bad `89b931cb5865582b3084572240e4cf3a7825fa9d`, merge
+  `9a66b083b37416ca2d61ff71ccd7b18b9b67f1d4`, workload Ready 1·good image였고 spec
+  managedFields Apply writer는 `opsia-demo-gitops` 하나였다. credential artifact는 0건,
+  표적 테스트 21건·Ruff lint/format·shell syntax가 통과했다.
+- 범위는 local SCM fixture와 외부 GitOps actor 시뮬레이션이다. hosted forge, 실제 Argo
+  continuous reconcile, public OCI chart/controller/console은 미증명이라 BQ-016은
+  `in_progress`다. 전체 게이트와 D-024 착륙 증거는 최신 dev 재검증 뒤 별도 기록한다.
+
+## 2026-07-13 21:16 KST — [백엔드] OSS Safe PR 로컬 실증 canonical 착륙
+
+- canonical merge `15379d94f`, GREEN `9b107d8e9`, 착륙 전 lane HEAD `16aad904c`는
+  모두 `origin/dev` ancestor exit 0이다. merge tree `51c5f6f56c2dac5632a7f106c9dc4b908c3ec12d`는
+  사전 계산과 merge 결과가 같았다.
+- 전체 게이트는 Ruff lint/format PASS(523 files), import-linter 8 kept/0 broken,
+  pytest `1985 passed, 3 skipped`; manifest management 69/target 20, Helm lint PASS다.
+  최종 차이는 13파일, 삭제·gateway/RCA/AI/runtime worker 변경 0건이다.
+- BQ-016은 공개 OCI·console/access·hosted SCM·실제 Argo continuous reconcile이 남아
+  `in_progress`를 유지한다. lane 회수 전 복구 hash는 `16aad904c`로 고정했다.
+- [백엔드] lane 회수 — `codex/oss-safe-pr-demo` / `16aad904c` / ancestor exit 0.
+  feature worktree와 로컬 branch를 `-d`로 제거했고 원격 branch는 없었다. 실증 Kind
+  `opsia-demo` cluster도 삭제했으며 다른 활성 lane·보호 worktree는 건드리지 않았다.
+
+## 2026-07-13 21:57 KST — [백엔드] OSS 접속 계약 로컬 실증
+
+- RED `8051342a5`, GREEN `ae9bc8d63`·`e480b3246`. UI/API/agent는 Service 80의 동일
+  origin을 쓰고 metrics 9090·PostgreSQL 5432는 내부 Service로 분리했다.
+- access 5모드, server-authoritative external URL, self-only 제한, bootstrap Secret NOTES,
+  엄격 URL/port 검증, external TLS 종단 확인, same-origin CSP를 검증했다. Helm 표적 테스트
+  18건과 lint가 통과했다.
+- fresh Kind `make demo`는 `opsia-installed` → `bad-rollout-observed` → `safe-pr-created` →
+  `review-merged` → `gitops-sync-applied` → `workload-normalized` 순서로 exit 0이었다.
+  bad revision `6ee9084dfe931f7c70c712b8fc95c32bbfd57ee7`, merge revision
+  `39dc05478ddc1ad997296939c654d35485eee945`를 관측했다.
+- 공개 `oci://ghcr.io/opsia/charts/opsia`와 controller/console package는 anonymous pull 403이다.
+  GHCR chart publish와 package visibility 변경 후 fresh Kind 공개 명령 재실증이 필요하다.
+- AWS live 상태는 `docs/auto/deploy-status.md`에 digest를 권위값으로 기록했다. secret 값과
+  확인되지 않은 로그인 성공은 문서에 노출하거나 주장하지 않았다.
+- 현재는 canonical 착륙 전이므로 완료 앵커를 기록하지 않았다.
+
+## 2026-07-13 22:00 KST — [백엔드] OSS 접속 계약 canonical 착륙
+
+- feature `cf69ffb5b`, canonical merge `e8fc3c878`; 둘 다 `origin/dev` ancestor exit 0이다.
+- 전체 게이트는 Ruff lint/format PASS, import-linter 8 kept/0 broken, pytest
+  `2006 passed, 3 skipped`; manifest management 69/target 20, Helm lint PASS다.
+- merge-tree `9853698702e72a1b384d3ae6b68c28447905caf0`가 실제 merge tree와 같고 파일 삭제,
+  RCA/AI/runtime worker 변경, 정책 밖 충돌은 0건이다.
+- BQ-021 접속 계약은 착륙했으며 gateway 계약 lock을 해제했다. 공개 OCI 403은 BQ-016의
+  완료 블로커로 유지하고 GHCR publish·anonymous pull 허용 뒤 fresh Kind에서 재실증한다.
+- 계약 앵커: `ManagementAccessResponse + Helm access modes` / `cf69ffb5b` / `[green]`.
+- [백엔드] lane 회수 — `codex/oss-access-contract` / `cf69ffb5b` / ancestor exit 0.
 
 ## 2026-07-13 22:14 KST — [프론트] VP-010 canonical writer cutover GREEN
 

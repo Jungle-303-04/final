@@ -7,7 +7,7 @@ governing: docs/f-coordination-plan.md · docs/backend-f-workqueue.md
 
 # 백엔드 F 진행 현황
 
-현재 상태: **앵커 39건**
+현재 상태: **앵커 40건**
 
 ## 역사적 Delta-green baseline (BQ-001~003)
 
@@ -254,6 +254,30 @@ Bundle route는 200을 반환한다.
 - canonical merge `66e8c08e688658e3c41034b6fd8c7e5068edf084`와 GREEN `82a7f29f2`의
   `origin/dev` ancestor exit 0을 확인했다. BQ-016은 남은 OCI·실제 safe-pr·lifecycle 때문에
   계속 `in_progress`다.
+
+### OSS Safe PR 로컬 실증 — mock·직접 정상화 제거
+
+- 코드 `9b107d8e9`은 `make demo`의 Markdown mock PR과 `kubectl set image`를 제거했다.
+  실제 API 로그인·application 등록·manifest render·DB outbox·in-process worker chain·기존
+  `GithubScmProvider`/`scm-worker`를 거쳐 `safe_pr.created`를 관측한다.
+- demo-only GitHub-compatible fixture는 real Git branch/file/merge commit을 사용한다. writer,
+  harness-admin, reviewer capability token은 상호 다르고 controller에는 writer만 주입한다.
+  writer의 reset/main commit/merge는 401이며, reviewer merge는 검토한 base/head SHA가 바뀌면
+  409다. 감사 중 재현된 `.git/config` metadata write 경로는 모든 depth·case에서 차단했다.
+- Kind 실측은 `bad_revision=89b931cb5865582b3084572240e4cf3a7825fa9d`,
+  `merged_revision=9a66b083b37416ca2d61ff71ccd7b18b9b67f1d4`로 종료 코드 0이었다. merge SHA의
+  exact manifest만 외부 `opsia-demo-gitops` actor가 적용했고 최종 Deployment는 Ready 1,
+  `opsia-demo-workload:local`, spec Apply writer `opsia-demo-gitops` 단일임을 확인했다.
+- bootstrap password/session cookie/SCM token은 artifact에 0건이고 0600 runtime 디렉터리를
+  종료 시 폐기한다. SCM credential hash가 fixture/controller Pod template에 들어가 재실행 시
+  Secret rotation과 Pod 교체가 함께 일어난다. 관련 표적 테스트는 21건 통과했다.
+- 이 실증은 local SCM fixture와 외부 GitOps actor 시뮬레이션이다. hosted forge, 실제 Argo
+  CD/Flux continuous reconcile, rollout 진단부터 PR까지의 완전 자율 경로, public OCI artifact는
+  아직 증명하지 않았다. 따라서 BQ-016은 `in_progress`를 유지하며 이 절은 완료 앵커가 아니다.
+- 비완료 착륙 증거: canonical merge `15379d94f`, 코드 `9b107d8e9`, lane HEAD
+  `16aad904c`가 모두 `origin/dev` ancestor exit 0이다. 최신 dev 재base 뒤 전체 게이트는
+  Ruff lint/format PASS, import-linter 8 kept/0 broken, pytest `1985 passed, 3 skipped`였고
+  manifest 69/20, Helm lint PASS, merge-tree clean, 삭제·frozen 변경 0건이었다.
 
 ### H3 — BQ-007/009/010 권위 patch 엔진
 
@@ -1016,3 +1040,24 @@ Bundle route는 200을 반환한다.
   삭제·소유권 밖·frozen 변경 0건, feature·merge commit의 `origin/dev` ancestor exit 0.
 
 계약 완성: AuditTimelineItem.event_id + journey_stage (b729ee6e49963c0e0d4599744fd7d63a2e0b8104) [green]
+
+### OSS 접속 계약 — canonical 착륙 증거
+
+- 상태: `landed`; gateway 계약 lock을 해제했다.
+- RED: `894874e67`부터 `2d4cf3f71`까지 11개 경계 테스트, 보안 보완 RED `8051342a5`.
+- GREEN: 동일 origin·self-only `ae9bc8d63`, URL/TLS/CSP 교정 `e480b3246`.
+- 응답 계약: preflight/install의 optional `management_access`는 mode, external URL,
+  agent server URL, `external|self_only` reachability와 제한 사유를 반환한다.
+- Helm 계약: `auto|portforward|loadbalancer|ingress|nodeport`, 외부 TLS 종단 명시,
+  provider annotation 전달, 내부 metrics/PostgreSQL, bootstrap Secret 조회 NOTES.
+- 로컬 실측: fresh Kind에서 설치, controller/agent, bad rollout, safe PR, reviewer merge,
+  GitOps sync, workload 정상화가 exit 0으로 끝났다.
+- 공개 OCI는 chart/controller/console anonymous pull이 403이므로 BQ-016과 이 행의 공개 설치
+  완료 조건은 충족되지 않았다. GHCR publish와 package visibility 변경은 사람 권한 작업이다.
+- 후속 보안: URL에 포함되는 install token을 단기 1회용 receipt로 분리해야 한다.
+- 전체 게이트: Ruff lint/format PASS, import-linter 8 kept/0 broken, pytest
+  `2006 passed, 3 skipped`; manifest management 69/target 20, Helm lint PASS.
+- D-024: merge-tree `9853698702e72a1b384d3ae6b68c28447905caf0`, 삭제·frozen 변경 0건.
+  feature `cf69ffb5b`와 canonical merge `e8fc3c878`은 모두 `origin/dev` ancestor exit 0이다.
+
+계약 완성: ManagementAccessResponse + Helm access modes (cf69ffb5bc9b98b3da1c0b221b6c9cd5b8c21872) [green]

@@ -193,11 +193,12 @@ def test_publisher_without_gateway_url_is_noop() -> None:
 
 def test_derive_gateway_url_from_management_base_url() -> None:
     module = load_live_summary_module()
-    port = module.agent_config.DEFAULT_REALTIME_GATEWAY_NODEPORT
-    assert module.derive_gateway_url("http://192.168.0.10:30080") == f"ws://192.168.0.10:{port}"
-    assert module.derive_gateway_url("https://mgmt.example.com/api") == "wss://mgmt.example.com"
+    assert module.derive_gateway_url("http://192.168.0.10:30080") == "ws://192.168.0.10:30080"
+    assert module.derive_gateway_url("https://mgmt.example.com/api") == (
+        "wss://mgmt.example.com/api"
+    )
     assert module.derive_gateway_url("https://mgmt.example.com:8443/api") == (
-        "wss://mgmt.example.com:8443"
+        "wss://mgmt.example.com:8443/api"
     )
     assert module.derive_gateway_url("") == ""
 
