@@ -4,10 +4,29 @@ name: Dev Deploy
   workflow_run:
     workflows: [Dev Gate]
     types: [completed]
+  workflow_dispatch:
+    inputs:
+      source_sha:
+        description: Full dev SHA with a successful Dev Gate run
+        required: true
+        type: string
+      backup_snapshot_id:
+        description: Completed encrypted EBS snapshot with restore rehearsal tags
+        required: true
+        type: string
+      previous_release_sha:
+        description: Full SHA of the currently running release
+        required: true
+        type: string
+      confirmation:
+        description: Enter FIRST_DEPLOY to confirm the one-time manual release
+        required: true
+        type: string
 
 permissions:
   contents: read
   id-token: write
+  actions: read
 
 concurrency:
   group: dev-deploy
@@ -17,10 +36,14 @@ jobs:
   deploy:
     name: Deploy gated dev SHA
     if: >-
-      github.event.workflow_run.conclusion == 'success' &&
-      github.event.workflow_run.event == 'push' &&
-      github.event.workflow_run.head_branch == 'dev' &&
-      vars.AWS_DEV_DEPLOY_ENABLED == '1'
+      (github.event_name == 'workflow_run' &&
+       github.event.workflow_run.conclusion == 'success' &&
+       github.event.workflow_run.event == 'push' &&
+       github.event.workflow_run.head_branch == 'dev' &&
+       vars.AWS_DEV_DEPLOY_ENABLED == '1') ||
+      (github.event_name == 'workflow_dispatch' &&
+       github.ref == 'refs/heads/dev' &&
+       inputs.confirmation == 'FIRST_DEPLOY')
     runs-on: ubuntu-latest
     timeout-minutes: 45
     environment: dev
@@ -32,7 +55,9 @@ jobs:
       BASE_URL: ${{ vars.AWS_DEV_BASE_URL }}
       MGMT_CONTEXT: opsia-dev
       MGMT_NS: management
-      SOURCE_SHA: ${{ github.event.workflow_run.head_sha }}
+      SOURCE_SHA: ${{ github.event_name == 'workflow_dispatch' && inputs.source_sha || github.event.workflow_run.head_sha }}
+      FIRST_DEPLOY_SNAPSHOT_ID: ${{ inputs.backup_snapshot_id }}
+      FIRST_DEPLOY_PREVIOUS_SHA: ${{ inputs.previous_release_sha }}
       AUTH_EMAIL: ${{ secrets.AWS_DEV_AUTH_EMAIL }}
       AUTH_PASSWORD: ${{ secrets.AWS_DEV_AUTH_PASSWORD }}
       SMOKE_CLUSTER_ID: ${{ secrets.AWS_DEV_SMOKE_CLUSTER_ID }}
@@ -42,7 +67,7 @@ jobs:
       - name: Check out gated dev SHA
         uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.workflow_run.head_sha }}
+          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.source_sha || github.event.workflow_run.head_sha }}
           persist-credentials: false
 
       - name: Set up Python
@@ -75,6 +100,24 @@ jobs:
           [[ "${CONSOLE_ECR_REPOSITORY}" =~ ^[a-z0-9]+([._/-][a-z0-9]+)*$ ]]
           [[ "${EKS_CLUSTER}" =~ ^[A-Za-z0-9][A-Za-z0-9_-]{0,99}$ ]]
           [[ "${BASE_URL}" =~ ^https://[^[:space:]]+$ ]]
+          if [[ "${GITHUB_EVENT_NAME}" == "workflow_dispatch" ]]; then
+            [[ "${FIRST_DEPLOY_SNAPSHOT_ID}" =~ ^snap-[0-9a-f]{17}$ ]]
+            [[ "${FIRST_DEPLOY_PREVIOUS_SHA}" =~ ^[0-9a-f]{40}$ ]]
+          fi
+
+      - name: Verify manual gated SHA
+        if: github.event_name == 'workflow_dispatch'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          remote_dev="$(gh api "repos/${GITHUB_REPOSITORY}/git/ref/heads/dev" --jq '.object.sha')"
+          test "${remote_dev}" = "${SOURCE_SHA}"
+          gh api \
+            "repos/${GITHUB_REPOSITORY}/actions/workflows/dev-gate.yml/runs?branch=dev&event=push&status=success&per_page=100" \
+            | jq -e '.workflow_runs[] | select(.head_sha == env.SOURCE_SHA) | select(.conclusion == "success")' \
+              >/dev/null
 
       - name: Configure AWS identity
         uses: aws-actions/configure-aws-credentials@v4
@@ -132,6 +175,24 @@ jobs:
             --alias "${MGMT_CONTEXT}"
           test "$(kubectl config current-context)" = "${MGMT_CONTEXT}"
 
+      - name: Verify manual first-deploy backup
+        if: github.event_name == 'workflow_dispatch'
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "${FIRST_DEPLOY_SNAPSHOT_ID}"
+          if kubectl --context "${MGMT_CONTEXT}" -n "${MGMT_NS}" \
+            get configmap opsia-deploy-status >/dev/null 2>&1; then
+            echo "manual first deployment is forbidden after deploy status is seeded" >&2
+            exit 1
+          fi
+          uv run python scripts/verify_first_deploy_backup.py \
+            --context "${MGMT_CONTEXT}" \
+            --namespace "${MGMT_NS}" \
+            --region "${AWS_REGION}" \
+            --snapshot-id "${FIRST_DEPLOY_SNAPSHOT_ID}" \
+            --source-sha "${SOURCE_SHA}"
+
       - name: Render and verify auth bypass policy
         shell: bash
         run: |
@@ -148,9 +209,13 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          previous_sha="$(kubectl --context "${MGMT_CONTEXT}" -n "${MGMT_NS}" \
-            get configmap opsia-deploy-status \
-            -o jsonpath='{.data.dev_sha}')"
+          if [[ "${GITHUB_EVENT_NAME}" == "workflow_dispatch" ]]; then
+            previous_sha="${FIRST_DEPLOY_PREVIOUS_SHA}"
+          else
+            previous_sha="$(kubectl --context "${MGMT_CONTEXT}" -n "${MGMT_NS}" \
+              get configmap opsia-deploy-status \
+              -o jsonpath='{.data.dev_sha}')"
+          fi
           [[ "${previous_sha}" =~ ^[0-9a-f]{40}$ ]]
           uv run python scripts/capture_image_digests.py \
             --context "${MGMT_CONTEXT}" \
