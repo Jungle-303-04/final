@@ -1,4 +1,5 @@
 import type {
+  IssueAuditTimelinePage,
   IssueDetail,
   IssueEvidencePage,
   IssueRcaReportPage,
@@ -15,6 +16,15 @@ export interface IssuesSurfaceCopy {
   detailLabel: string;
   detailEmpty: string;
   detailLoading: string;
+  auditLabel: string;
+  auditUnavailable: string;
+  auditRoot: string;
+  auditCause: (causationId: string) => string;
+  auditPayload: string;
+  auditLoadMore: string;
+  auditLoadingMore: string;
+  auditTimeUnknown: string;
+  auditTime: (value: string) => string;
   evidenceLabel: string;
   reportsLabel: string;
   recoveryLabel: string;
@@ -48,6 +58,7 @@ export interface SectionState<T> {
 
 export interface IssuePanelsState {
   detail: SectionState<IssueDetail>;
+  audit: SectionState<IssueAuditTimelinePage>;
   evidence: SectionState<IssueEvidencePage>;
   reports: SectionState<IssueRcaReportPage>;
   recovery: SectionState<IssueRecoveryPlan>;
@@ -59,6 +70,7 @@ export interface IssuesPanelsProps {
   capability: RecoverySelectionCapability;
   copy: IssuesSurfaceCopy;
   onSelectRecovery: (actionId: string) => void;
+  onLoadMoreAudit: () => void;
   selected: IssueSummary;
   state: IssuePanelsState;
 }

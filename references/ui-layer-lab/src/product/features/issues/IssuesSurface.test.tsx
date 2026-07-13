@@ -336,6 +336,7 @@ const COPY: IssuesSurfaceCopy = {
   auditLoadMore: "Load more events",
   auditLoadingMore: "Loading more events",
   auditTimeUnknown: "Time unknown",
+  auditTime: (value) => value,
   evidenceLabel: "Evidence",
   reportsLabel: "Analysis",
   recoveryLabel: "Recovery",

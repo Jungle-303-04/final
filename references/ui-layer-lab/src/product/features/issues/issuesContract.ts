@@ -1,4 +1,8 @@
 import type {
+  IssueAuditTimelinePage,
+  IssueAuditTimelineQuery,
+} from "./issuesAuditContract";
+import type {
   IssueEvidencePage,
   IssueEvidenceQuery,
   IssuePageQuery,
@@ -159,6 +163,11 @@ export interface IssuesPort {
     query?: IssuePageQuery,
     signal?: AbortSignal,
   ): Promise<IssueRcaReportPage>;
+  loadAuditTimeline(
+    correlationId: string,
+    query?: IssueAuditTimelineQuery,
+    signal?: AbortSignal,
+  ): Promise<IssueAuditTimelinePage>;
   loadRecoveryPlan(
     correlationId: string,
     signal?: AbortSignal,
@@ -169,6 +178,11 @@ export interface IssuesPort {
   ): Promise<IssueRecoverySelectionResult>;
 }
 
+export type {
+  IssueAuditEvent,
+  IssueAuditTimelinePage,
+  IssueAuditTimelineQuery,
+} from "./issuesAuditContract";
 export type {
   IssueEvidencePage,
   IssueEvidenceQuery,

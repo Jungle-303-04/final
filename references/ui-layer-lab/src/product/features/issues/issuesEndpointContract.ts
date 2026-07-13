@@ -176,6 +176,27 @@ export interface IssuesEndpointRecoveryInput {
   reason?: string | null;
 }
 
+export interface IssuesEndpointAuditTimelineOptions
+  extends IssuesEndpointRequestOptions {
+  cursor?: string;
+  limit?: number;
+}
+
+export interface IssuesEndpointAuditTimelineItem {
+  subject: string;
+  source: string;
+  created_at: string;
+  causation_id: string | null;
+  payload_summary: Record<string, unknown>;
+}
+
+export interface IssuesEndpointAuditTimelineResponse {
+  items: IssuesEndpointAuditTimelineItem[];
+  limit: number;
+  has_more: boolean;
+  next_cursor: string | null;
+}
+
 export interface IssuesEndpointDependencies {
   listRcaTimeline(
     options?: IssuesEndpointTimelineOptions,
@@ -190,6 +211,10 @@ export interface IssuesEndpointDependencies {
   listRcaReports(
     options?: IssuesEndpointPageOptions,
   ): Promise<IssuesEndpointRcaReportPage>;
+  getAuditTimeline(
+    correlationId: string,
+    options?: IssuesEndpointAuditTimelineOptions,
+  ): Promise<IssuesEndpointAuditTimelineResponse>;
   getRecoveryPlanByCorrelation(
     correlationId: string,
     options?: IssuesEndpointRequestOptions,

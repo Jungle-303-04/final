@@ -6,6 +6,7 @@ import {
   type IssuesPort,
 } from "./issuesContract";
 import { toIssueDetail, toIssueList } from "./issuesCanonical";
+import { toIssueAuditTimelinePage } from "./issuesAuditCanonical";
 import {
   toIssueEvidencePage,
   toIssueRcaReportPage,
@@ -86,6 +87,20 @@ export function createIssuesAdapter(endpoints: IssuesEndpointDependencies): Issu
       });
     },
 
+    async loadAuditTimeline(correlationId, query = {}, signal) {
+      return withCanonicalFailure(async () => {
+        const correlation = opaqueIdentity(correlationId, "correlation_id");
+        const page = auditTimelineQuery(query);
+        return toIssueAuditTimelinePage(
+          correlation,
+          await endpoints.getAuditTimeline(correlation, {
+            ...page,
+            signal,
+          }),
+        );
+      });
+    },
+
     async loadRecoveryPlan(correlationId, signal) {
       return withCanonicalFailure(async () => {
         const correlation = identity(correlationId, "correlation_id");
@@ -129,6 +144,32 @@ export function createIssuesAdapter(endpoints: IssuesEndpointDependencies): Issu
   };
 }
 
+function auditTimelineQuery(query: {
+  cursor?: string;
+  limit?: number;
+}): { cursor?: string; limit: number } {
+  const unsupportedField = Object.keys(query).find(
+    (field) => field !== "cursor" && field !== "limit",
+  );
+  if (unsupportedField !== undefined) {
+    throw new IssuesRequestError(
+      `Unsupported audit timeline query field: ${unsupportedField}`,
+    );
+  }
+  const limit = query.limit ?? DEFAULT_PAGE_LIMIT;
+  if (!Number.isInteger(limit) || limit < 1 || limit > MAX_PAGE_LIMIT) {
+    throw new IssuesRequestError(
+      `limit must be an integer from 1 to ${MAX_PAGE_LIMIT}`,
+    );
+  }
+  return {
+    cursor: query.cursor === undefined
+      ? undefined
+      : opaqueIdentity(query.cursor, "cursor"),
+    limit,
+  };
+}
+
 function pageQuery(query: {
   since?: string;
   until?: string;
@@ -157,6 +198,13 @@ function identity(value: string, field: string): string {
   const normalized = value.trim();
   if (!normalized) throw new IssuesRequestError(`${field} is required`);
   return normalized;
+}
+
+function opaqueIdentity(value: string, field: string): string {
+  if (value.trim() === "") {
+    throw new IssuesRequestError(`${field} is required`);
+  }
+  return value;
 }
 
 function optionalIdentity(value: string | undefined, field: string): string | undefined {

@@ -29,6 +29,32 @@ const resourcesListApiPath =
 const resourcesDetailApiPath =
   `/api/clusters/${homeClusterId}/inventory/resource-detail?resource_type=pod&kind=Pod&name=${homePodName}&namespace=shop&related_limit=100&event_limit=50`;
 const resourcesBaseApiPaths = [homeBaseApiPaths[0], resourcesSummaryApiPath, resourcesListApiPath];
+const issuesCorrelationId = "visual-correlation";
+const issuesIncidentId = "visual-incident";
+const issuesSubject = "deployment/shop/checkout-api";
+const issuesSymptom = "Checkout API response latency increased";
+const issuesAuditSubject = "incident.detected";
+const productIssuesUrl = `${productUrl}/issues?cluster=${homeClusterId}`;
+const issuesListApiPath =
+  `/api/dashboard/rca/timeline?cluster_id=${homeClusterId}&limit=50`;
+const issuesDetailApiPath =
+  `/api/dashboard/rca/incidents/${issuesIncidentId}?cluster_id=${homeClusterId}`;
+const issuesEvidenceApiPath =
+  `/api/evidence?correlation_id=${issuesCorrelationId}&limit=50`;
+const issuesReportsApiPath =
+  `/api/rca-reports?correlation_id=${issuesCorrelationId}&limit=50`;
+const issuesAuditApiPath =
+  `/api/audit/timeline?correlation_id=${issuesCorrelationId}&limit=50`;
+const issuesRecoveryApiPath =
+  `/api/rca/recovery-plans/by-correlation/${issuesCorrelationId}`;
+const issuesBaseApiPaths = [homeBaseApiPaths[0], issuesListApiPath];
+const issuesDetailApiPaths = [
+  issuesDetailApiPath,
+  issuesEvidenceApiPath,
+  issuesReportsApiPath,
+  issuesAuditApiPath,
+  issuesRecoveryApiPath,
+];
 const stateHarnessUrl = `${baseUrl}/scripts/fixtures/product-state-visual-harness.html`;
 const shellHarnessUrl = `${baseUrl}/scripts/fixtures/product-shell-visual-harness.html?cluster=cluster-1`;
 const outputDir = new URL("../output/playwright/", import.meta.url).pathname;
@@ -164,6 +190,23 @@ const resourcesDetailSelectors = [
   "[data-slot='tabs']",
   "[data-slot='tabs-list']",
   "[data-slot='tabs-trigger']",
+];
+const issuesSelectors = [
+  "[data-slot='sidebar-provider']",
+  "[data-slot='sidebar-inset']",
+  "[data-slot='sidebar-trigger']",
+  "[data-slot='product-page-frame']",
+  "[data-slot='card']",
+  "[data-slot='card-title']",
+  "[data-slot='button']",
+  "[data-slot='badge']",
+  clusterScopePickerSelector,
+  clusterScopeTriggerSelector,
+  clusterProviderIconSelector,
+  "[data-testid='audit-event-subject']",
+  "header",
+  "main",
+  "p",
 ];
 const localeStorageKey = "kubeheal.locale";
 const browserLocales = {
@@ -553,6 +596,20 @@ const visualScenarios = [
     forcedColors: "none",
   },
   {
+    id: "issues-authenticated-detail-desktop-light",
+    locale: "en",
+    url: productIssuesUrl,
+    authSession: "authenticated",
+    issuesScenario: true,
+    accessibleTarget: "Issues",
+    expectedApiRequestCounts: { [issuesListApiPath]: 2 },
+    requiredSelectors: issuesSelectors,
+    viewport: { width: 1440, height: 1000 },
+    theme: "light",
+    colorScheme: "light",
+    forcedColors: "none",
+  },
+  {
     id: "home-cluster-forbidden-light",
     locale: "ko",
     url: productHomeUrl,
@@ -912,6 +969,157 @@ const resourcesFeatureApiFixtures = new Map([
   }],
 ]);
 
+const issuesFeatureApiFixtures = new Map([
+  [homeBaseApiPaths[0], homeFeatureApiFixtures.get(homeBaseApiPaths[0])],
+  [issuesListApiPath, {
+    items: [visualIssueTimelineItem()],
+  }],
+  [issuesDetailApiPath, {
+    item: visualIssueTimelineItem({
+      root_cause: "Memory pressure caused repeated Pod restarts",
+      confidence: 0.91,
+      supporting_evidence: ["OOMKilled event observed"],
+      missing_evidence: [],
+    }),
+  }],
+  [issuesEvidenceApiPath, {
+    items: [{
+      id: 7,
+      workspace_id: "visual-workspace",
+      correlation_id: issuesCorrelationId,
+      kind: "incident.evidence",
+      cluster_id: homeClusterId,
+      evidence_ref: "visual-evidence",
+      summary: "Kubernetes evidence collected",
+      sources: [{
+        source: "kubernetes",
+        summary: "Pod restart and OOMKilled event",
+        schema_version: 1,
+        collector: "cluster-agent",
+        collector_version: "1.0.0",
+        source_version: null,
+        query_version: null,
+        collected_at: "2026-07-13T10:20:00Z",
+        evidence_key: "kubernetes",
+        source_id: null,
+        agent_id: "visual-agent",
+        window_start: null,
+      }],
+      created_at: "2026-07-13T10:20:00Z",
+    }],
+    limit: 50,
+    offset: 0,
+    has_more: false,
+    next_cursor: null,
+  }],
+  [issuesReportsApiPath, {
+    items: [{
+      id: 11,
+      workspace_id: "visual-workspace",
+      correlation_id: issuesCorrelationId,
+      root_cause: "Memory limit exceeded",
+      action: "Increase memory limit after approval",
+      incident_id: issuesIncidentId,
+      cluster_id: homeClusterId,
+      symptom: issuesSymptom,
+      severity: "warning",
+      confidence: 0.91,
+      reason: "OOMKilled and memory usage evidence agree",
+      evidence_ref: "visual-evidence",
+      supporting_evidence: ["OOMKilled"],
+      missing_evidence: [],
+      created_at: "2026-07-13T10:30:00Z",
+      resource_kind: "Deployment",
+      resource_name: "checkout-api",
+      namespace: "shop",
+      secondary_symptoms: [],
+      selected_candidate_id: "candidate-memory",
+      candidates: [],
+      supporting_evidence_refs: [],
+      missing_evidence_checks: [],
+    }],
+    limit: 50,
+    offset: 0,
+    has_more: false,
+    next_cursor: null,
+  }],
+  [issuesAuditApiPath, {
+    items: [{
+      subject: issuesAuditSubject,
+      source: "dashboard-projection",
+      created_at: "2026-07-13T10:10:00Z",
+      causation_id: null,
+      payload_summary: {
+        incident_id: issuesIncidentId,
+        severity: "warning",
+      },
+    }],
+    limit: 50,
+    has_more: false,
+    next_cursor: null,
+  }],
+  [issuesRecoveryApiPath, {
+    plan_id: "visual-plan",
+    correlation_id: issuesCorrelationId,
+    incident_id: issuesIncidentId,
+    evidence_ref: "visual-evidence",
+    status: "selection_requested",
+    summary: "Choose a safe action for the memory pressure incident",
+    target: {
+      cluster_id: homeClusterId,
+      namespace: "shop",
+      name: "checkout-api",
+    },
+    recommended_action_id: "increase-memory",
+    execution_route: "approval",
+    selection_required: true,
+    selected_action_id: null,
+    selected_by: null,
+    selected_action: null,
+    candidates: [{
+      action_id: "increase-memory",
+      title: "Increase memory limit",
+      description: "Raise the checkout-api Deployment memory limit to 1Gi",
+      route: "deployment.patch",
+      rank: 1,
+      score: 0.91,
+      risk_level: "medium",
+      blast_radius: "one Deployment",
+      approval_required: true,
+      prerequisites: ["confirm capacity"],
+      validation_checks: ["rollout healthy"],
+      rollback_plan: "Restore the previous memory limit",
+      evidence_refs: ["visual-evidence"],
+    }],
+  }],
+]);
+
+function visualIssueTimelineItem(overrides = {}) {
+  return {
+    workspace_id: "visual-workspace",
+    correlation_id: issuesCorrelationId,
+    cluster_id: homeClusterId,
+    incident_id: issuesIncidentId,
+    incident_namespace: "shop",
+    incident_resource_kind: "Deployment",
+    incident_resource_name: "checkout-api",
+    incident_symptom: issuesSymptom,
+    evidence_ref: "visual-evidence",
+    current_subject: issuesSubject,
+    status: "investigating",
+    root_cause: null,
+    confidence: null,
+    supporting_evidence: [],
+    missing_evidence: ["Pod metrics"],
+    action_route: `/issues/${issuesIncidentId}`,
+    command_id: null,
+    pr_url: null,
+    error_reason: null,
+    updated_at: "2026-07-13T10:30:00Z",
+    ...overrides,
+  };
+}
+
 function visualInventoryResource(overrides = {}) {
   return {
     inventory_key: "visual-pod-checkout",
@@ -1103,6 +1311,11 @@ async function installScenarioApiFixtures(page, scenario) {
       await installExactJsonGetFixture(page, path, { body, status: 200 });
     }
   }
+  if (scenario.issuesScenario) {
+    for (const [path, body] of issuesFeatureApiFixtures) {
+      await installExactJsonGetFixture(page, path, { body, status: 200 });
+    }
+  }
   return authFixture;
 }
 
@@ -1220,7 +1433,10 @@ function assertScenarioNetworkContract(
   if (errors.length) {
     throw new Error(`${scenario.id}: visual console errors\n${errors.join("\n")}`);
   }
-  if (!scenario.homeScenario && !scenario.resourcesScenario && featureApiRequests.length !== 0) {
+  if (!scenario.homeScenario
+    && !scenario.resourcesScenario
+    && !scenario.issuesScenario
+    && featureApiRequests.length !== 0) {
     throw new Error(
       `${scenario.id}: expected 0 feature API requests, received ${featureApiRequests.length}\n`
       + formatRequests(featureApiRequests),
@@ -1231,8 +1447,10 @@ function assertScenarioNetworkContract(
       `${scenario.id}: visual gate made unexpected API requests\n${formatRequests(unexpectedApiRequests)}`,
     );
   }
-  const expectedRequestCount = scenario.expectedApiRequestCount ?? 1;
   for (const path of expectedApiPaths) {
+    const expectedRequestCount = scenario.expectedApiRequestCounts?.[path]
+      ?? scenario.expectedApiRequestCount
+      ?? 1;
     const matchingRequests = apiRequests.filter((request) => (
       request.method === "GET" && isExactProductApiUrl(request.url, path)
     ));
@@ -1263,6 +1481,7 @@ function expectedScenarioApiPaths(scenario) {
     ...(scenario.homeFrame === "pods" ? [homePodApiPath] : []),
     ...(scenario.resourcesScenario ? resourcesBaseApiPaths : []),
     ...(scenario.resourcesDetail ? [resourcesDetailApiPath] : []),
+    ...(scenario.issuesScenario ? [...issuesBaseApiPaths, ...issuesDetailApiPaths] : []),
   ];
 }
 
@@ -1288,6 +1507,8 @@ async function captureScenario(page, scenario) {
 
   if (scenario.status) {
     await page.getByRole("status", { name: scenario.status }).waitFor();
+  } else if (scenario.issuesScenario) {
+    await page.getByRole("region", { name: scenario.accessibleTarget }).waitFor();
   } else if (scenario.resourcesDetail) {
     await page.getByRole("dialog", { name: scenario.heading }).waitFor();
   } else {
@@ -1302,6 +1523,8 @@ async function captureScenario(page, scenario) {
     await prepareProductHomeScenario(page, scenario);
   } else if (scenario.resourcesScenario) {
     await prepareProductResourcesScenario(page, scenario);
+  } else if (scenario.issuesScenario) {
+    await prepareProductIssuesScenario(page, scenario);
   } else if (!scenario.authSession || scenario.authSession === "authenticated") {
     await page.keyboard.press("?");
     if (await page.getByRole("dialog").count()) {
@@ -1876,6 +2099,53 @@ async function prepareProductResourcesScenario(page, scenario) {
   }
 
   await assertProductResourcesReducedMotion(page, scenario.id);
+}
+
+async function prepareProductIssuesScenario(page, scenario) {
+  await page.waitForFunction(() => document.title === "Opsia");
+  await assertGlobalClusterScopePicker(page, scenario.id, scenario.locale);
+
+  const listRegion = page.getByRole("region", { name: scenario.accessibleTarget });
+  await listRegion.waitFor();
+  const issuesLink = page.getByRole("link", { name: "Issues", exact: true });
+  if (await issuesLink.getAttribute("aria-current") !== "page") {
+    throw new Error(`${scenario.id}: desktop Issues link must be current`);
+  }
+
+  const firstIssue = listRegion.getByRole("button", {
+    name: issuesSymptom,
+    exact: true,
+  });
+  await firstIssue.waitFor();
+  if (await firstIssue.count() !== 1) {
+    throw new Error(`${scenario.id}: expected one deterministic Issue control`);
+  }
+  await firstIssue.click();
+
+  await page.getByRole("region", { name: "Issue details" }).waitFor();
+  const auditSubject = page.getByTestId("audit-event-subject");
+  await auditSubject.waitFor();
+  if (await auditSubject.innerText() !== issuesAuditSubject) {
+    throw new Error(`${scenario.id}: audit event subject is not exact`);
+  }
+  await page.getByText("Kubernetes evidence collected", { exact: true }).waitFor();
+  await page.getByText("Increase memory limit after approval", { exact: true }).waitFor();
+  await page.getByText("Increase memory limit", { exact: true }).waitFor();
+  await page.waitForLoadState("networkidle");
+
+  const detailTitle = page.locator("[data-slot='card-title']", {
+    hasText: issuesSubject,
+  });
+  if (await detailTitle.count() !== 1) {
+    throw new Error(`${scenario.id}: selected Issue subject was not exposed once`);
+  }
+  const currentUrl = new URL(page.url());
+  if (currentUrl.origin !== baseUrl
+    || currentUrl.pathname !== "/product/issues"
+    || currentUrl.searchParams.size !== 1
+    || currentUrl.searchParams.get("cluster") !== homeClusterId) {
+    throw new Error(`${scenario.id}: Issues route URL is not exact: ${currentUrl.href}`);
+  }
 }
 
 async function assertProductResourcesReducedMotion(page, label) {

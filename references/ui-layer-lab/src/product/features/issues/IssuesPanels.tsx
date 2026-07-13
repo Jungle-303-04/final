@@ -12,6 +12,7 @@ import type {
   IssueRcaReportPage,
   IssueRecoveryPlan,
 } from "./issuesContract";
+import { IssueAuditTimelinePanel } from "./IssueAuditTimelinePanel";
 import { IssueEmpty, IssueSectionFrame } from "./IssueSectionFrame";
 import type {
   IssuesPanelsProps,
@@ -23,6 +24,7 @@ import type {
 export function IssuesPanels({
   capability,
   copy,
+  onLoadMoreAudit,
   onSelectRecovery,
   selected,
   state,
@@ -51,6 +53,11 @@ export function IssuesPanels({
           </IssueSectionFrame>
         </CardContent>
       </Card>
+      <IssueAuditTimelinePanel
+        copy={copy}
+        onLoadMore={onLoadMoreAudit}
+        state={state.audit}
+      />
       <EvidencePanel copy={copy} state={state.evidence} />
       <ReportsPanel copy={copy} state={state.reports} />
       <RecoveryPanel
