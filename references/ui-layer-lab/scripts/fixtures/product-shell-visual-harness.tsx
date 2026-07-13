@@ -10,6 +10,7 @@ import type { AuthenticatedAuthState } from "../../src/product/features/auth/aut
 import { AuthSessionGateProvider } from "../../src/product/features/auth/AuthSessionGate";
 import { ClusterScopeProvider } from "../../src/product/features/cluster-scope/ClusterScopeProvider";
 import type { ClusterScopePort } from "../../src/product/features/cluster-scope/clusterScopeContract";
+import { UnifiedFilterProvider } from "../../src/product/features/filters/UnifiedFilterProvider";
 
 const root = document.getElementById("root");
 if (!root) throw new Error("ProductShell visual harness root is missing");
@@ -51,17 +52,19 @@ createRoot(root).render(
         storageKey="kubeheal-theme"
         themes={["light", "dark"]}
       >
-        <MemoryRouter initialEntries={["/product"]}>
+        <MemoryRouter initialEntries={["/product?clusters=cluster-1"]}>
           <AuthSessionGateProvider reportUnauthorized={() => undefined}>
-            <ClusterScopeProvider authorityKey="visual-workspace:visual-user" port={testClusterScope}>
-              <Routes>
-                <Route element={<ProductShell auth={testAuth} releasedSurfaceIds={releasedSurfaceIds} />}>
-                  <Route path="/product" element={<ShellOutletBoundary />} />
-                  <Route path="/product/issues" element={<ShellOutletBoundary />} />
-                  <Route path="/product/timeline" element={<ShellOutletBoundary />} />
-                </Route>
-              </Routes>
-            </ClusterScopeProvider>
+            <UnifiedFilterProvider>
+              <ClusterScopeProvider authorityKey="visual-workspace:visual-user" port={testClusterScope}>
+                <Routes>
+                  <Route element={<ProductShell auth={testAuth} releasedSurfaceIds={releasedSurfaceIds} />}>
+                    <Route path="/product" element={<ShellOutletBoundary />} />
+                    <Route path="/product/issues" element={<ShellOutletBoundary />} />
+                    <Route path="/product/timeline" element={<ShellOutletBoundary />} />
+                  </Route>
+                </Routes>
+              </ClusterScopeProvider>
+            </UnifiedFilterProvider>
           </AuthSessionGateProvider>
         </MemoryRouter>
       </ThemeProvider>

@@ -16,8 +16,11 @@ const resourcesLongOwner = `checkout-owner-${"o".repeat(220)}`;
 const resourcesLongRelatedName = `checkout-service-${"r".repeat(220)}`;
 const resourcesLongEventReason = `BackOff${"R".repeat(220)}`;
 const resourcesLongEventMessage = `ContainerRestart${"M".repeat(440)}`;
-const productHomeUrl = `${productUrl}?cluster=${homeClusterId}`;
-const productResourcesUrl = `${productUrl}/resources/pod?cluster=${homeClusterId}`;
+const productHomeUrl = `${productUrl}?clusters=${homeClusterId}`;
+const productResourcesUrl =
+  `${productUrl}/resources/pod?clusters=${homeClusterId}&resources.types=pod`;
+const productResourceDetailQuery =
+  `resource=v1%2F${homeClusterId}%2Fpod%2Fshop%2F${homePodName}&resourceKind=Pod`;
 const authSessionPath = "/api/auth/session";
 const homeBaseApiPaths = [
   "/api/clusters?limit=100",
@@ -39,7 +42,7 @@ const issuesIncidentId = "visual-incident";
 const issuesSubject = "deployment/shop/checkout-api";
 const issuesSymptom = "Checkout API response latency increased";
 const issuesAuditSubject = "incident.detected";
-const productIssuesUrl = `${productUrl}/issues?cluster=${homeClusterId}`;
+const productIssuesUrl = `${productUrl}/issues?clusters=${homeClusterId}`;
 const issuesListApiPath =
   `/api/dashboard/rca/timeline?cluster_id=${homeClusterId}&limit=50`;
 const issuesDetailApiPath =
@@ -648,7 +651,7 @@ const visualScenarios = [
   {
     id: "resources-detail-reflow-320-dark",
     locale: "ko",
-    url: `${productResourcesUrl}&resource=shop%2F${homePodName}&kind=Pod`,
+    url: `${productResourcesUrl}&${productResourceDetailQuery}`,
     authSession: "authenticated",
     resourcesScenario: true,
     resourcesDetail: true,
@@ -662,7 +665,7 @@ const visualScenarios = [
   {
     id: "resources-detail-full-reflow-320-light",
     locale: "ko",
-    url: `${productResourcesUrl}&resource=shop%2F${homePodName}&kind=Pod&full=1`,
+    url: `${productResourcesUrl}&${productResourceDetailQuery}&full=true`,
     authSession: "authenticated",
     resourcesScenario: true,
     resourcesDetail: true,
@@ -677,7 +680,7 @@ const visualScenarios = [
   {
     id: "resources-detail-long-overview-text-resize-200-light",
     locale: "ko",
-    url: `${productResourcesUrl}&resource=shop%2F${homePodName}&kind=Pod`,
+    url: `${productResourcesUrl}&${productResourceDetailQuery}`,
     authSession: "authenticated",
     resourcesScenario: true,
     resourcesDetail: true,
@@ -694,7 +697,7 @@ const visualScenarios = [
   {
     id: "resources-detail-long-relations-text-resize-200-light",
     locale: "ko",
-    url: `${productResourcesUrl}&resource=shop%2F${homePodName}&kind=Pod`,
+    url: `${productResourcesUrl}&${productResourceDetailQuery}`,
     authSession: "authenticated",
     resourcesScenario: true,
     resourcesDetail: true,
@@ -711,7 +714,7 @@ const visualScenarios = [
   {
     id: "resources-detail-long-events-text-resize-200-light",
     locale: "ko",
-    url: `${productResourcesUrl}&resource=shop%2F${homePodName}&kind=Pod`,
+    url: `${productResourcesUrl}&${productResourceDetailQuery}`,
     authSession: "authenticated",
     resourcesScenario: true,
     resourcesDetail: true,
@@ -2470,7 +2473,7 @@ async function prepareProductHomeScenario(page, scenario) {
     if (currentUrl.origin !== baseUrl
       || currentUrl.pathname !== "/product"
       || currentUrl.searchParams.size !== 1
-      || currentUrl.searchParams.get("cluster") !== homeClusterId
+      || currentUrl.searchParams.get("clusters") !== homeClusterId
       || currentUrl.searchParams.has("node")) {
       throw new Error(`${scenario.id}: Node frame URL is not exact: ${currentUrl.href}`);
     }
@@ -2491,7 +2494,7 @@ async function prepareProductHomeScenario(page, scenario) {
   if (currentUrl.origin !== baseUrl
     || currentUrl.pathname !== "/product"
     || currentUrl.searchParams.size !== 2
-    || currentUrl.searchParams.get("cluster") !== homeClusterId
+    || currentUrl.searchParams.get("clusters") !== homeClusterId
     || currentUrl.searchParams.get("node") !== homeNodeName) {
     throw new Error(`${scenario.id}: Node drill-in URL is not exact: ${currentUrl.href}`);
   }
@@ -2645,9 +2648,9 @@ async function prepareProductResourcesScenario(page, scenario) {
       throw new Error(`${scenario.id}: Resources detail tabs are missing`);
     }
     const url = new URL(page.url());
-    if (url.searchParams.get("resource") !== `shop/${homePodName}`
-      || url.searchParams.get("kind") !== "Pod"
-      || (scenario.resourcesFull && url.searchParams.get("full") !== "1")) {
+    if (url.searchParams.get("resource") !== `v1/${homeClusterId}/pod/shop/${homePodName}`
+      || url.searchParams.get("resourceKind") !== "Pod"
+      || (scenario.resourcesFull && url.searchParams.get("full") !== "true")) {
       throw new Error(`${scenario.id}: detail URL identity is not exact: ${url.href}`);
     }
     if (scenario.resourcesLongIdentity) {
@@ -2656,7 +2659,7 @@ async function prepareProductResourcesScenario(page, scenario) {
   } else {
     const url = new URL(page.url());
     if (url.pathname !== "/product/resources/pod"
-      || url.searchParams.get("cluster") !== homeClusterId
+      || url.searchParams.get("clusters") !== homeClusterId
       || url.searchParams.has("resource")) {
       throw new Error(`${scenario.id}: Resources list URL is not exact: ${url.href}`);
     }
@@ -2849,7 +2852,7 @@ async function prepareProductIssuesScenario(page, scenario) {
   if (currentUrl.origin !== baseUrl
     || currentUrl.pathname !== "/product/issues"
     || currentUrl.searchParams.size !== 1
-    || currentUrl.searchParams.get("cluster") !== homeClusterId) {
+    || currentUrl.searchParams.get("clusters") !== homeClusterId) {
     throw new Error(`${scenario.id}: Issues route URL is not exact: ${currentUrl.href}`);
   }
 
@@ -3218,7 +3221,7 @@ async function assertProductShellContracts(page, scenario) {
   if (result.missing) throw new Error(`${scenario.id}: ProductShell fixture is incomplete`);
   if (result.navigationRole !== "nav" || result.navigationLabel !== "주요 메뉴"
     || result.itemCount !== 3 || result.linkCount !== 3
-    || result.currentLinks !== 1 || result.currentHref !== "/product?cluster=cluster-1"
+    || result.currentLinks !== 1 || result.currentHref !== "/product?clusters=cluster-1"
     || result.currentLabel !== "홈"
     || result.itemTags.some((tag) => tag !== "LI")
     || result.linkLabels.join("|") !== "홈|인시던트|타임라인") {
