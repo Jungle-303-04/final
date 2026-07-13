@@ -881,6 +881,13 @@ RCA 내부에서는 logs bucket이 다음 EvidenceItem으로 승격된다.
 | --- | --- | --- |
 | `payload.logs` | `source="logs"`, `name="related_logs"` | rule catalog가 `logs:related_logs`를 기대 근거로 요구할 수 있게 한다. |
 
+`logs:related_logs`는 RCA EvidenceBundle에서 다시 scope를 맞춘다. bundle은 incident namespace와
+맞는 stream만 남기고, RCA test run에서는 현재 test Pod 이름까지 맞는 stream만 남긴다.
+`matched_entries`도 같은 기준으로 함께 필터링하고, `pattern_counts`, `severity_counts`, `trace_ids`는
+선택된 stream summary를 기준으로 다시 합산한다. provider result에는 query 전체 matched entry와 count가
+들어갈 수 있지만, RCA bundle에는 선택된 namespace/Pod의 로그 요약만 남겨야 한다. 그래야 이전 RCA test
+Pod나 다른 Pod의 로그 요약이 현재 run의 원인으로 섞이지 않는다.
+
 즉 source/name key로 쓰면 `logs:related_logs`다.
 다만 raw `payload.logs` 전체가 무조건 근거로 쓰이는 것은 아니다.
 RCA는 incident namespace와 관련된 stream을 먼저 고르고, RCA test run이면 관련 pod 이름까지 맞춰서
@@ -902,6 +909,9 @@ logs를 읽을 때는 `logs[].query_name`으로 어떤 로그 query 결과인지
     "streams": [],
     "line_count": 0,
     "pattern_counts": {
+      "app_port_bind_failed": 0,
+      "permission_denied_startup": 0,
+      "missing_env": 0,
       "probe_failed": 0,
       "health_endpoint_error": 0,
       "dependency_timeout": 0,
@@ -920,6 +930,15 @@ logs를 읽을 때는 `logs[].query_name`으로 어떤 로그 query 결과인지
       "unknown": 0
     },
     "trace_ids": [],
+    "matched_entries": [],
+    "collection_limit": {
+      "matched_entries": {
+        "max_items": 20,
+        "original_count": 0,
+        "returned_count": 0,
+        "truncated": false
+      }
+    },
     "redaction_summary": {
       "applied": true,
       "redacted_line_count": 0,
@@ -937,11 +956,24 @@ logs를 읽을 때는 `logs[].query_name`으로 어떤 로그 query 결과인지
 | `logs[].query` | string | 실행한 LogQL이다. |
 | `logs[].result_type` | string 또는 null | Loki `data.resultType`이다. 보통 `streams`다. |
 | `logs[].streams` | list<object> | Loki stream 목록이다. |
+| `logs[].streams[].pattern_counts` | object | 해당 stream 안에서 계산한 장애 신호별 matching line 개수다. RCA bundle scope 필터 후 count 재합산에 쓴다. |
+| `logs[].streams[].severity_counts` | object | 해당 stream 안에서 계산한 severity별 line 개수다. |
+| `logs[].streams[].trace_ids` | list<string> | 해당 stream 안에서 찾은 안전한 trace id 목록이다. |
 | `logs[].line_count` | number | 모든 stream의 log entry 개수 합계다. |
 | `logs[].pattern_counts` | object | provider가 마스킹된 log line을 읽고 계산한 장애 신호별 matching line 개수다. |
 | `logs[].severity_counts` | object | `ERROR`, `WARN`, `level=error` 같은 표현을 정규화한 severity별 line 개수다. |
 | `logs[].trace_ids` | list<string> | 로그에서 찾은 안전한 trace id 목록이다. 32자리 hex trace id만 최대 20개까지 담는다. |
+| `logs[].matched_entries` | list<object> | RCA가 바로 읽을 수 있는 매칭 로그 요약이다. 매칭된 line만 최대 20개까지 담는다. |
+| `logs[].matched_entries[].message` | string | 민감정보 마스킹과 4096자 제한이 적용된 판단용 log line이다. Loki 원문 전체가 아니다. |
+| `logs[].matched_entries[].trace_id` | string 또는 null | 해당 line에서 추출한 32자리 hex trace id다. 없으면 null이다. |
+| `logs[].matched_entries[].matched_patterns` | list<string> | 해당 line이 매칭한 RCA diagnostic pattern 이름이다. 예: `app_port_bind_failed`, `permission_denied_startup`, `missing_env`, `dependency_timeout`, `dependency_error`, `config_error`, `probe_failed`, `oom_or_memory`. |
+| `logs[].collection_limit.matched_entries` | object | `matched_entries`의 최대 반환 수, 실제 매칭 수, 반환 수, 잘림 여부를 나타낸다. |
 | `logs[].redaction_summary` | object | provider가 로그 마스킹을 적용했는지, 실제로 값이 바뀐 line 개수, 길이 제한으로 잘린 line 개수를 나타낸다. |
+
+RCA EvidenceBundle에서 `logs:related_logs`로 승격될 때는 `streams`와 `matched_entries`가 같은
+namespace/pod scope로 필터링된다. `pattern_counts`, `severity_counts`, `trace_ids`도 선택된 stream summary를
+기준으로 다시 합산된다. `redaction_summary`와 `collection_limit.matched_entries`는 provider result 기준의
+수집 제한 정보이며, RCA bundle에서 scope 필터링 후의 실제 항목 수와 항상 같다는 뜻은 아니다.
 
 2026-07-11 실제 응답에서는 다음 4개 query 결과가 들어왔다.
 
@@ -991,8 +1023,8 @@ Kubernetes event/reason, metrics threshold, metadata snapshot과 같이 본다.
 | `line_truncated` | boolean | line이 길이 제한으로 잘렸을 때만 true다. |
 | `original_line_length` | number | line이 잘렸을 때만 있는 제한 전 마스킹된 line 길이다. |
 
-마스킹 기준은 보수적으로 잡는다. `password`, `token`, `secret`, `api_key`, `client_secret`,
-`credential`, `private_key`, `Authorization`, `Bearer`, `Cookie`, JWT, AWS access key, URL 안의
+마스킹 기준은 보수적으로 잡는다. `password`, `token`, `secret`, `api_key`/`api-key`, `client_secret`/`client-secret`,
+`credential`, `private_key`/`private-key`, `Authorization`, `Bearer`, `Cookie`, JWT, AWS access key, URL 안의
 계정정보, email은 `[REDACTED]` 계열 값으로 바꾼다. 반대로 `trace_id`, `span_id`, `request_id`,
 namespace, pod name, `ERROR`, `timeout`, `probe failed`, `ImagePullBackOff`, `OOMKilled` 같은 RCA 판단
 키워드는 유지한다.
@@ -1465,8 +1497,8 @@ detail snapshot인 `current_workload_snapshot` 단수 값으로 보낸다.
 | `change_context.collection_limits.lists.<field>.original_count` | number | 제한 전 전체 항목 수다. |
 | `change_context.collection_limits.lists.<field>.returned_count` | number | 최종 payload에 담긴 항목 수다. |
 | `change_context.current_workload_snapshots[].workload` | object | workload kind, namespace, name이다. 현재 kind는 `Deployment`다. |
-| `change_context.current_workload_snapshots[].deployment_labels` | object | Deployment metadata labels다. |
-| `change_context.current_workload_snapshots[].pod_template_labels` | object | Pod template metadata labels다. |
+| `change_context.current_workload_snapshots[].deployment_labels` | object | Deployment metadata labels 중 안전한 subset이다. `app`, `app.kubernetes.io/name` 같은 식별 label을 먼저 남기고 최대 12개까지 담는다. 민감 단어가 key/value에 있으면 제외한다. |
+| `change_context.current_workload_snapshots[].pod_template_labels` | object | Pod template metadata labels 중 안전한 subset이다. `app`, `app.kubernetes.io/name` 같은 식별 label을 먼저 남기고 최대 12개까지 담는다. 민감 단어가 key/value에 있으면 제외한다. |
 | `change_context.current_workload_snapshots[].pod_template_auth` | object | Pod template의 service account와 image pull secret name 요약이다. private image pull 실패와 권한 문제 후보를 보기 위한 값이다. 값이 없으면 생략될 수 있고, Secret 값은 담지 않는다. |
 | `change_context.current_workload_snapshots[].pod_template_auth.service_account_name` | string | Pod template `serviceAccountName` 값이다. |
 | `change_context.current_workload_snapshots[].pod_template_auth.automount_service_account_token` | boolean | Pod template `automountServiceAccountToken` 값이다. `false`도 의미가 있으므로 보존한다. |
@@ -1478,7 +1510,8 @@ detail snapshot인 `current_workload_snapshot` 단수 값으로 보낸다.
 | `change_context.current_workload_snapshots[].pod_status_count` | number | `pod_statuses`가 잘렸을 때만 있는 전체 owned Pod 수다. |
 | `change_context.current_workload_snapshots[].pod_statuses_truncated` | boolean | `pod_statuses` 샘플이 잘렸을 때만 true다. |
 | `change_context.current_workload_snapshots[].pod_statuses[].conditions` | list<object> | Pod condition의 type/status/reason/message/time 요약이다. |
-| `change_context.current_workload_snapshots[].containers[]` | list<object> | container name, image, readiness/liveness/startup probe 요약이다. |
+| `change_context.current_workload_snapshots[].containers[]` | list<object> | container name, image, ports, readiness/liveness/startup probe 요약이다. |
+| `change_context.current_workload_snapshots[].containers[].ports` | list<object> | container `ports[]`의 `name`, `container_port`, `protocol` 요약이다. Service targetPort와 probe port 비교에 쓴다. hostPort/hostIP는 보내지 않는다. |
 | `change_context.current_workload_snapshots[].containers[].*_probe` | object | probe의 path, port, timeout_seconds, period_seconds, failure_threshold 중 존재하는 값만 담는다. |
 | `change_context.current_workload_snapshots[].containers[].resources` | object | container resources requests/limits 요약이다. CPU/memory quantity 값은 문자열 그대로 담는다. |
 | `change_context.current_workload_snapshots[].replicaset_revisions[]` | list<object> | 이 Deployment가 소유한 ReplicaSet name, revision, replica count 요약이다. |
@@ -1595,7 +1628,7 @@ Provider가 이미 보내는 값은 다음과 같다.
 | log line | `logs[].streams[].values[].line` |
 | trace search 결과 | `traces.results.*.traces` |
 | 현재 workload snapshot 목록 | `metadata.change_context.current_workload_snapshots[]` |
-| 현재 image/probe/resources/labels/status/PVC refs/auth/revision summary | `metadata.change_context.current_workload_snapshots[].containers[]`, `deployment_labels`, `pod_template_labels`, `pod_template_auth`, `persistent_volume_claim_refs`, `deployment_status`, `pod_statuses`, `replicaset_revisions` |
+| 현재 image/container ports/probe/resources/labels/status/PVC refs/auth/revision summary | `metadata.change_context.current_workload_snapshots[].containers[]`, `deployment_labels`, `pod_template_labels`, `pod_template_auth`, `persistent_volume_claim_refs`, `deployment_status`, `pod_statuses`, `replicaset_revisions` |
 | Service selector와 Pod labels 매칭 결과 | `metadata.change_context.service_selector_matches[]` |
 | EndpointSlice ready endpoint 요약 | `metadata.change_context.endpoint_slice_ready_endpoints[]` |
 | ResourceQuota hard/used 요약 | `metadata.change_context.resource_quotas[]` |
@@ -1655,7 +1688,7 @@ RCA/evidence-worker 쪽 담당 영역이다. 이 문서는 provider가 보내는
 
 | 필요한 metadata | 현재 provider로 가능한지 | 보강 방향 |
 | --- | --- | --- |
-| target namespace Deployment별 현재 image/probe/resources/labels/status/Pod status/PVC refs/ReplicaSet revision summary | 가능 | `change_context.current_workload_snapshots[]`를 쓴다. 전체 조회에는 annotations, config refs, manager, ReplicaSet conditions를 넣지 않는다. |
+| target namespace Deployment별 현재 image/container ports/probe/resources/labels/status/Pod status/PVC refs/ReplicaSet revision summary | 가능 | `change_context.current_workload_snapshots[]`를 쓴다. 전체 조회에는 annotations, config refs, manager, ReplicaSet conditions를 넣지 않는다. |
 | 특정 Deployment 1개 detail snapshot | 가능 | `deployment/<name>` 또는 `deployment/<namespace>/<name>` query를 쓴다. 안전한 annotations, manager, ConfigMap/Secret references, ReplicaSet conditions를 추가로 제공한다. |
 | recent git commit / deploy revision | 없음 | GitOps event, manifest render, SCM metadata 연결 |
 | rollback 가능 여부 / risk_level | 없음 | 배포 이력, policy, GitOps/CI/CD 상태 연결 |

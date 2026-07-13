@@ -10,6 +10,7 @@ from providers.kubernetes_utils import (
     list_items,
     metadata,
     object_or_empty,
+    safe_metadata_labels,
     spec,
     status,
 )
@@ -76,8 +77,8 @@ def current_workload_base_snapshot(
             "namespace": meta.get("namespace"),
             "name": meta.get("name"),
         },
-        "deployment_labels": object_or_empty(meta.get("labels")),
-        "pod_template_labels": object_or_empty(template_meta.get("labels")),
+        "deployment_labels": safe_metadata_labels(meta.get("labels")),
+        "pod_template_labels": safe_metadata_labels(template_meta.get("labels")),
         "persistent_volume_claim_refs": persistent_volume_claim_refs(template_spec),
         "deployment_status": deployment_status_snapshot(deployment),
         "pod_statuses": [pod_status_snapshot(pod) for pod in owned_pods[:MAX_POD_STATUS_SUMMARIES]],
@@ -157,6 +158,7 @@ def container_summary_snapshot(container: JsonObject) -> JsonObject:
     return {
         "name": container.get("name"),
         "image": container.get("image"),
+        "ports": container_port_snapshots(container),
         "readiness_probe": probe_snapshot(container.get("readinessProbe")),
         "liveness_probe": probe_snapshot(container.get("livenessProbe")),
         "startup_probe": probe_snapshot(container.get("startupProbe")),
@@ -188,6 +190,22 @@ def resource_snapshot(container: JsonObject) -> JsonObject:
             "limits": compact_dict(limits),
         }
     )
+
+
+def container_port_snapshots(container: JsonObject) -> list[JsonObject]:
+    """Return declared container ports for Service and probe checks."""
+    ports: list[JsonObject] = []
+    for port in list_items(container.get("ports")):
+        snapshot = compact_dict(
+            {
+                "name": port.get("name"),
+                "container_port": port.get("containerPort"),
+                "protocol": port.get("protocol"),
+            }
+        )
+        if snapshot:
+            ports.append(snapshot)
+    return ports
 
 
 def persistent_volume_claim_refs(template_spec: JsonObject) -> list[JsonObject]:
