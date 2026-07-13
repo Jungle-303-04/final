@@ -2542,6 +2542,17 @@ target preflight·register 네 함수와 strict Zod 계약을 claim했다. 1회�
   GAP-006 Applications·GitOps·Checks canonical list, GAP-007 registration resume/error,
   GAP-008 disconnect operation, GAP-009 Git repository wizard, GAP-010 graph snapshot이다.
   각 계약 착륙 전에는 해당 표면만 주차하고 기존 검증된 화면을 유지한다.
+## 2026-07-13 20:07 KST — [백엔드] OSS Helm 로컬 설치 기반 실증·완료 판정 정정
+
+- RED `cc367c387`, GREEN `7bb74d71f`: `charts/opsia`와 idempotent bootstrap을 추가하고
+  `make demo`가 Opsia chart를 먼저 설치하도록 변경했다. fresh Kind의 Helm release
+  `opsia-0.1.0`은 deployed이며 controller/PostgreSQL/agent가 각각 1/1 Ready다.
+- 실측은 `kind-cluster-ready → opsia-installed → bad-rollout-observed →
+  mock-rollback-pr-created → workload-normalized`를 종료 코드 0으로 통과했다. 전체 게이트는
+  Ruff lint/format PASS, import-linter 8 kept/0 broken, pytest `1968 passed, 3 skipped`다.
+- 완료 판정은 정정한다. GHCR exact OCI는 403이고 GitHub `opsia` namespace 권위도 확인되지
+  않았으며, 데모 후반은 mock PR와 직접 이미지 복구다. 따라서 이 hash는 설치 기반 증거이지
+  BQ-016 완료 앵커가 아니다. 공개 OCI·실제 safe-pr·모드별 동일 결과가 남아 있다.
 
 ## 2026-07-13 20:12 KST — [프론트] VP-010 Label 정본 승격·회수
 
@@ -2556,3 +2567,37 @@ target preflight·register 네 함수와 strict Zod 계약을 claim했다. 1회�
 - 회수: 이 사이클에서 만든 임시 branch/worktree/stash는 0개다. 다른 작업자의 활성 OSS
   통합 worktree `d176012cf`, `adce319ed`, 보호 대상 `demo/v1`, dirty legacy `dev` worktree는
   건드리지 않았다. stash 8개는 반영 여부가 증명되지 않아 유지했다.
+
+## 2026-07-13 20:15 KST — [백엔드] OSS Helm 로컬 설치 기반 canonical 착륙
+
+- merge `d86117efc8d00c09e7f75ca01f2b51cb95465a7b`, GREEN `7bb74d71f`, 문서
+  `33b0fc9f4`가 모두 `origin/dev` ancestor exit 0이다. 전체 게이트는 Ruff lint/format PASS,
+  import-linter 8 kept/0 broken, pytest `1968 passed, 3 skipped`다.
+- merge-tree clean, 삭제 0건, gateway/RCA/AI/runtime worker 변경 0건이며 신규 dev 문서의
+  누락 색인은 `1fae98ea0`에서 보완했다. lane 삭제 전 복구 hash를 이 기록으로 고정한다.
+
+- [백엔드] lane 회수 — `codex/oss-install-gate` / `1fae98ea0` / ancestor exit 0.
+  로컬 branch와 worktree를 제거했고 원격 branch는 존재하지 않았다. 실증 Kind cluster도
+  삭제했으며 다른 작업자의 detached AWS worktree와 보호 branch는 건드리지 않았다.
+
+## 2026-07-13 20:20 KST — [백엔드] 이벤트 버스 clean-run 결과 동등성 실측
+
+- RED `0b05061b8`, GREEN `82a7f29f2`: `make event-bus-equivalence`가 격리된 실제
+  `nats:2.10-alpine` JetStream과 `InMemoryEventBus`에 동일한 publish→NAK→redelivery→
+  child publish→ACK 흐름을 실행한다.
+- 양 모드 모두 payload, correlation, causation, workspace, redelivery 원문 보존이 true이고
+  결과 JSON의 `equivalent`가 true였다. unit gate 2 passed이며 전체 게이트는 착륙 직전에
+  최신 dev 기준으로 다시 실행한다.
+- 범위는 clean-run outcome이다. in-process mode는 controller process crash에서 broker
+  durability를 제공하지 않으므로 JetStream과 내구성까지 동등하다고 표현하지 않는다.
+
+## 2026-07-13 20:25 KST — [백엔드] 이벤트 버스 결과 동등성 canonical 착륙
+
+- merge `66e8c08e688658e3c41034b6fd8c7e5068edf084`, GREEN `82a7f29f2`, 문서
+  `02773227c`가 모두 `origin/dev` ancestor exit 0이다. 전체 게이트는 Ruff lint/format PASS,
+  import-linter 8 kept/0 broken, pytest `1970 passed, 3 skipped`; 실제 JetStream 결과
+  `equivalent=true`다.
+- merge-tree clean, 삭제 0건, frozen 경로 변경 0건이다. lane 삭제 전 복구 hash를 기록했다.
+
+- [백엔드] lane 회수 — `codex/event-bus-mode-equivalence` / `02773227c` /
+  ancestor exit 0. 로컬 branch와 worktree를 제거했고 원격 branch는 존재하지 않았다.
