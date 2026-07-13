@@ -8,6 +8,7 @@ from pathlib import Path
 import httpx
 import pytest
 
+from domains.inventory.kubernetes_snapshot import kubernetes_evidence_to_inventory_snapshot
 from packages.contracts.gateway.requests import AgentEvidenceRequest, EvidenceJobResultRequest
 from packages.kubernetes_provider import detect_kubernetes_provider
 
@@ -73,6 +74,58 @@ def test_endpoint_slice_summary_normalizes_null_collections() -> None:
 
     assert summary["endpoint_count"] == 0
     assert summary["ports"] == []
+
+
+def test_relationship_summaries_preserve_authoritative_graph_evidence() -> None:
+    _, kubernetes_module = load_evidence_modules()
+    labels = {f"example.com/key-{index:02d}": str(index) for index in range(13)}
+    labels["kubernetes.io/service-name"] = "checkout-api"
+
+    workload = kubernetes_module.workload_summary(
+        "ReplicaSet",
+        {
+            "metadata": {
+                "name": "checkout-api-abc",
+                "namespace": "target",
+                "ownerReferences": [
+                    {
+                        "kind": "Deployment",
+                        "name": "checkout-api",
+                        "uid": "deployment-uid",
+                    }
+                ],
+            },
+            "spec": {"selector": {"matchLabels": {"app": "checkout-api"}}},
+        },
+    )
+    endpoint_slice = kubernetes_module.endpoint_slice_summary(
+        {
+            "metadata": {
+                "name": "checkout-api-abc",
+                "namespace": "target",
+                "labels": labels,
+            },
+            "addressType": "IPv4",
+            "endpoints": [],
+            "ports": [],
+        }
+    )
+
+    assert workload["owner_kind"] == "Deployment"
+    assert workload["owner_name"] == "checkout-api"
+    assert workload["owner_uid"] == "deployment-uid"
+    assert workload["owner_references_complete"] is True
+    assert endpoint_slice["service_name"] == "checkout-api"
+    assert endpoint_slice["labels_complete"] is False
+
+    snapshot = kubernetes_evidence_to_inventory_snapshot(
+        {"workloads": [workload], "endpoints": [endpoint_slice]},
+        cluster_id="cluster-a",
+        agent_id="agent-a",
+    )
+    by_type = {resource["resource_type"]: resource for resource in snapshot["resources"]}
+    assert by_type["workload"]["summary"]["owner_name"] == "checkout-api"
+    assert by_type["endpoint"]["summary"]["service_name"] == "checkout-api"
 
 
 @pytest.mark.parametrize(

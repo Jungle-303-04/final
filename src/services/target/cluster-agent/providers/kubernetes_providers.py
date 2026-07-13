@@ -593,6 +593,20 @@ def owner_ref(item: JsonObject) -> tuple[str | None, str | None]:
     return as_text(ref.get("kind")), as_text(ref.get("name"))
 
 
+def owner_references_complete(item: JsonObject) -> bool:
+    """Whether the compact first-owner representation preserved every owner reference."""
+    refs = metadata(item).get("ownerReferences", [])
+    return isinstance(refs, list) and len(refs) <= 1
+
+
+def owner_uid(item: JsonObject) -> str | None:
+    """Preserve the Kubernetes owner identity needed to survive same-name recreation."""
+    refs = metadata(item).get("ownerReferences", [])
+    if not isinstance(refs, list) or not refs or not isinstance(refs[0], dict):
+        return None
+    return as_text(refs[0].get("uid"))
+
+
 def as_text(value: Any) -> str | None:
     """Turn a value into text while keeping None as None."""
     return str(value) if value is not None else None
@@ -612,6 +626,7 @@ def pod_summary(item: JsonObject, metrics: JsonObject | None = None) -> JsonObje
     ]
     return {
         "uid": meta.get("uid"),
+        "resource_version": meta.get("resourceVersion"),
         "name": meta.get("name"),
         "namespace": meta.get("namespace"),
         "node_name": pod_spec.get("nodeName"),
@@ -622,6 +637,8 @@ def pod_summary(item: JsonObject, metrics: JsonObject | None = None) -> JsonObje
         **bounded_label_summary(item),
         "owner_kind": owner_kind,
         "owner_name": owner_name,
+        "owner_uid": owner_uid(item),
+        "owner_references_complete": owner_references_complete(item),
         "workload_key": workload_key(meta.get("namespace"), owner_kind, owner_name),
         "pod_ip": pod_status.get("podIP"),
         "host_ip": pod_status.get("hostIP"),
@@ -820,8 +837,11 @@ def node_summary(item: JsonObject, metrics: JsonObject | None = None) -> JsonObj
         ),
         {},
     )
+    meta = metadata(item)
     return {
-        "name": metadata(item).get("name"),
+        "uid": meta.get("uid"),
+        "resource_version": meta.get("resourceVersion"),
+        "name": meta.get("name"),
         **bounded_label_summary(item),
         "ready": ready_condition.get("status") == "True",
         "conditions": conditions,
@@ -949,11 +969,18 @@ def workload_summary(kind: str, item: JsonObject) -> JsonObject:
     """Build a small workload summary for deployments and similar objects."""
     meta = metadata(item)
     workload_status = status(item)
+    owner_kind, owner_name = owner_ref(item)
     return {
         "kind": kind,
         **bounded_label_summary(item),
+        "uid": meta.get("uid"),
+        "resource_version": meta.get("resourceVersion"),
         "namespace": meta.get("namespace"),
         "name": meta.get("name"),
+        "owner_kind": owner_kind,
+        "owner_name": owner_name,
+        "owner_uid": owner_uid(item),
+        "owner_references_complete": owner_references_complete(item),
         "generation": meta.get("generation"),
         "observed_generation": workload_status.get("observedGeneration"),
         "desired_replicas": spec(item).get("replicas"),
@@ -977,9 +1004,12 @@ def service_summary(item: JsonObject) -> JsonObject:
         for entry in ingress
         if isinstance(entry, dict) and (entry.get("hostname") or entry.get("ip"))
     ]
+    meta = metadata(item)
     return {
-        "namespace": metadata(item).get("namespace"),
-        "name": metadata(item).get("name"),
+        "uid": meta.get("uid"),
+        "resource_version": meta.get("resourceVersion"),
+        "namespace": meta.get("namespace"),
+        "name": meta.get("name"),
         **bounded_label_summary(item),
         "type": service_spec.get("type"),
         "cluster_ip": service_spec.get("clusterIP"),
@@ -996,10 +1026,16 @@ def endpoint_slice_summary(item: JsonObject) -> JsonObject:
     endpoint_spec = item
     endpoints = endpoint_spec.get("endpoints")
     ports = endpoint_spec.get("ports")
+    meta = metadata(item)
     return {
-        "namespace": metadata(item).get("namespace"),
-        "name": metadata(item).get("name"),
+        "uid": meta.get("uid"),
+        "resource_version": meta.get("resourceVersion"),
+        "namespace": meta.get("namespace"),
+        "name": meta.get("name"),
         **bounded_label_summary(item),
+        # Relationship identity is promoted before bounded labels so collection order cannot
+        # erase the authoritative EndpointSlice -> Service association.
+        "service_name": resource_labels(item).get("kubernetes.io/service-name"),
         "address_type": endpoint_spec.get("addressType"),
         "endpoint_count": len(endpoints) if isinstance(endpoints, list) else 0,
         "ports": ports if isinstance(ports, list) else [],

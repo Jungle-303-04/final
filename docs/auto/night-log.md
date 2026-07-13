@@ -2798,6 +2798,15 @@ target preflight·register 네 함수와 strict Zod 계약을 claim했다. 1회�
 - [백엔드] lane 회수 — `codex/resources-filter-contract` / `87c0606e0` /
   `origin/dev` ancestor exit 0; 로컬 branch와 worktree를 같은 사이클에서 삭제했다.
 
+## 2026-07-13 23:02 KST — [백엔드] Resources 그래프 계약 claim
+
+- `origin/dev@e47b0e984`에서 single-cluster graph snapshot만 claim하고 gateway 계약 lock을
+  획득했다. Resources 필터와 같은 권한·revision을 사용하며 cross-cluster edge는 만들지 않는다.
+- node는 stable inventory identity와 drill-down target을, edge는 실제 owner reference·node
+  assignment·selector 등 보존된 근거만 반환한다. raw payload와 이름 유사도 추론은 금지한다.
+- budget/source/relation이 불완전하면 partial reason을 반환하고, 검증되지 않은 관계를 exact로
+  가장하지 않는 RED를 먼저 고정한다.
+
 ## 2026-07-13 23:12 KST — [프론트] Resources Graph shell 승격 준비
 
 - Graph GREEN `f944e4c5b`와 문서 `52df0c2f2`를 최신 `origin/dev@d6cee2813`에 병합했다.
@@ -2814,6 +2823,31 @@ target preflight·register 네 함수와 strict Zod 계약을 claim했다. 1회�
 - 이 기록을 포함한 동일 HEAD를 lab과 dev에 non-force push하고 두 ref의 동일 SHA와 ancestor
   exit 0을 재확인한다. 이후 lane `codex/vp010-graph-shell-20260713`과 worktree를 같은 사이클에서
   회수하며, 신규 stash 0건과 기존 미증명 stash 유지 사유를 기록한다.
+
+## 2026-07-13 23:29 KST — [백엔드] Resources 그래프 계약 canonical 착륙
+
+- RED `86ed85a06`·`721604356`, GREEN `914d34ff6`, canonical merge `95ff11cc6`.
+  `RESOURCES_GRAPH_PATH`와 `ResourceGraphSnapshotResponse`가 `origin/dev`에 착륙했고 gateway
+  계약 lock을 해제했다. code/merge 모두 ancestor exit 0이다.
+- 단일 authorized cluster와 session workspace만 조회한다. table의 global snapshot revision을
+  pin할 수 있고 선택 cluster의 실제 cut은 `cluster_projection_revision`으로 분리한다.
+  owner UID·node assignment·전체 Kubernetes selector·service-name label 근거만 edge로 만든다.
+- compact node/edge, active/historical state, N/M, node/edge budget, partial reason을 제공한다.
+  raw labels/annotations/summary, cross-cluster/name-prefix 추론은 0건이다. Bruno는
+  `docs/api/17-resources-filter/04-resource-graph.bru`다.
+- 전체 게이트 `2064 passed, 3 skipped`, Ruff/import contract 8/8, manifest 69/20,
+  merge-tree `9a055ca263e9c215800531d239d1378037054fac`, 삭제·frozen·프론트 소유 변경 0건.
+- 계약 앵커: `RESOURCES_GRAPH_PATH + ResourceGraphSnapshotResponse` / `914d34ff6` / `[green]`.
+
+## 2026-07-13 23:31 KST — [백엔드] Resources 그래프 lane 회수·로컬 branch 복구
+
+- lane 회수 — `codex/resource-graph-contract` / `914d34ff6` / `origin/dev` ancestor exit 0.
+  로컬 worktree와 branch를 비강제 `worktree remove`·`branch -d`로 삭제했고 원격 feature
+  branch는 존재하지 않았다.
+- 통합 worktree 생성 직후 명령 cwd 오류로 protected 로컬 `woonyong/ui-layer-lab`에 merge
+  `124b001f7`이 1회 생성됐으나 remote push는 0건이었다. commit을 임시 ref로 보존한 상태에서
+  force/reset/revert 없이 branch를 비강제 삭제·원격 `4f07c0c21`에서 재생성해 local/remote HEAD
+  일치를 확인했다. canonical `dev@b538528be` 착륙 후 임시 ref도 비강제 삭제했다.
 
 ## 2026-07-13 23:49 KST — [프론트] Resources 필터 API·strict Zod GREEN
 

@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-from typing import Any, Literal
+from typing import Any, Literal, Self
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from packages.contracts.gateway.base import StrictModel
 
@@ -708,6 +708,138 @@ class FilteredInventoryResourceListResponse(StrictModel):
     has_more: bool
     counts: FilterResultCounts
     snapshot: FilterSnapshotMeta
+
+
+GraphRelationKind = Literal["owns", "runs_on", "selects", "routes_to"]
+GraphRelationPlane = Literal[
+    "ownership",
+    "placement",
+    "network_configured",
+    "network_effective",
+]
+GraphEvidenceType = Literal[
+    "owner_reference",
+    "node_assignment",
+    "selector_match",
+    "service_name_label",
+]
+GraphRelationCompleteness = Literal["exact", "partial", "unavailable"]
+GraphNodeCategory = Literal[
+    "workload",
+    "pod",
+    "node",
+    "service",
+    "endpoint",
+    "event",
+    "other",
+]
+
+
+class ResourceGraphDrilldownIdentity(StrictModel):
+    version: Literal["v1"] = "v1"
+    cluster_id: str = Field(min_length=1)
+    resource_type: str = Field(min_length=1)
+    # Legacy/custom inventory rows may not declare an API version. The remaining v1 identity
+    # tuple still resolves the existing detail route without turning valid rows into a 500.
+    api_version: str
+    kind: str = Field(min_length=1)
+    namespace: str | None = None
+    name: str = Field(min_length=1)
+    uid: str | None = None
+
+
+class ResourceGraphNode(StrictModel):
+    node_id: str = Field(min_length=1)
+    category: GraphNodeCategory
+    identity: ResourceGraphDrilldownIdentity
+    status: str
+    health: str
+    observed_at: str | None = None
+    deleted_at: str | None = None
+    application_ids: list[str] = Field(default_factory=list)
+    application_binding_completeness: FilterCountCompleteness
+
+
+class ResourceGraphEdgeEvidence(StrictModel):
+    type: GraphEvidenceType
+    authority: Literal["authoritative", "derived"]
+    observed_at: str | None = None
+
+
+class ResourceGraphEdge(StrictModel):
+    edge_id: str = Field(min_length=1)
+    from_node_id: str = Field(min_length=1)
+    to_node_id: str = Field(min_length=1)
+    kind: GraphRelationKind
+    plane: GraphRelationPlane
+    direction: Literal["directed"] = "directed"
+    state: Literal["active", "historical"] = "active"
+    evidence: ResourceGraphEdgeEvidence
+
+    @model_validator(mode="after")
+    def validate_relation_semantics(self) -> Self:
+        expected = {
+            "owns": ("ownership", "owner_reference", "authoritative"),
+            "runs_on": ("placement", "node_assignment", "authoritative"),
+            "selects": (None, "selector_match", "derived"),
+            "routes_to": ("network_effective", "service_name_label", "authoritative"),
+        }[self.kind]
+        expected_plane, expected_evidence, expected_authority = expected
+        if expected_plane is not None and self.plane != expected_plane:
+            raise ValueError("graph relation plane does not match its kind")
+        if self.kind == "selects" and self.plane not in {"ownership", "network_configured"}:
+            raise ValueError("selector relation plane is invalid")
+        if self.evidence.type != expected_evidence or self.evidence.authority != expected_authority:
+            raise ValueError("graph relation evidence does not match its kind")
+        return self
+
+
+class ResourceGraphSnapshotResponse(StrictModel):
+    graph_revision: str = Field(min_length=1)
+    cluster_projection_revision: int = Field(ge=0)
+    cluster: InventoryResourceClusterIdentity
+    nodes: list[ResourceGraphNode] = Field(default_factory=list)
+    edges: list[ResourceGraphEdge] = Field(default_factory=list)
+    root_node_ids: list[str] = Field(default_factory=list)
+    counts: FilterResultCounts
+    node_count: int = Field(ge=0)
+    edge_count: int = Field(ge=0)
+    omitted_node_count: int = Field(ge=0)
+    omitted_edge_count: int = Field(ge=0)
+    node_limit: int = Field(ge=1)
+    edge_limit: int = Field(ge=1)
+    truncated: bool
+    relation_completeness: GraphRelationCompleteness
+    partial_reason_codes: list[str] = Field(default_factory=list)
+    snapshot: FilterSnapshotMeta
+
+    @model_validator(mode="after")
+    def validate_graph_integrity(self) -> Self:
+        node_ids = [node.node_id for node in self.nodes]
+        edge_ids = [edge.edge_id for edge in self.edges]
+        known_nodes = set(node_ids)
+        if len(known_nodes) != len(node_ids) or len(set(edge_ids)) != len(edge_ids):
+            raise ValueError("graph identities must be unique")
+        if self.node_count != len(self.nodes) or self.edge_count != len(self.edges):
+            raise ValueError("graph counts must match returned records")
+        if self.node_count > self.node_limit or self.edge_count > self.edge_limit:
+            raise ValueError("graph records must honor response limits")
+        if any(node.identity.cluster_id != self.cluster.cluster_id for node in self.nodes):
+            raise ValueError("graph nodes must belong to the selected cluster")
+        if any(
+            edge.from_node_id not in known_nodes or edge.to_node_id not in known_nodes
+            for edge in self.edges
+        ):
+            raise ValueError("graph edges must reference returned nodes")
+        if not set(self.root_node_ids).issubset(known_nodes):
+            raise ValueError("graph roots must reference returned nodes")
+        if (self.omitted_node_count or self.omitted_edge_count) and not self.truncated:
+            raise ValueError("omitted graph records require truncated=true")
+        if self.truncated and self.relation_completeness == "exact":
+            raise ValueError("truncated graph relations cannot be exact")
+        if self.relation_completeness == "exact" and self.partial_reason_codes:
+            raise ValueError("exact graph relations cannot carry partial reasons")
+        return self
 
 
 class LabelSelector(StrictModel):
