@@ -275,6 +275,54 @@ jobs:
             --context "${MGMT_CONTEXT}" \
             --namespace "${MGMT_NS}"
 
+      - name: Freeze first-deploy database writers
+        if: github.event_name == 'workflow_dispatch'
+        shell: bash
+        run: |
+          set -euo pipefail
+          uv run python scripts/database_writer_freeze.py capture \
+            --context "${MGMT_CONTEXT}" \
+            --namespace "${MGMT_NS}" \
+            --output "${RUNNER_TEMP}/database-writer-freeze-plan.json"
+          uv run python scripts/database_writer_freeze.py freeze \
+            --context "${MGMT_CONTEXT}" \
+            --plan "${RUNNER_TEMP}/database-writer-freeze-plan.json" \
+            --timeout 600s
+
+      - name: Bootstrap and copy first-deploy database
+        if: github.event_name == 'workflow_dispatch'
+        shell: bash
+        env:
+          DEPLOY_IMAGE: ${{ steps.image.outputs.image }}
+        run: |
+          set -euo pipefail
+          uv run python scripts/database_cutover_config.py prepare \
+            --context "${MGMT_CONTEXT}" \
+            --namespace "${MGMT_NS}" \
+            --source-sha "${SOURCE_SHA}" \
+            --run-id "${GITHUB_RUN_ID}" \
+            --run-attempt "${GITHUB_RUN_ATTEMPT}"
+          kubectl set image \
+            --filename deploy/management/database-cutover-job.yaml \
+            cutover="${DEPLOY_IMAGE}" \
+            --local \
+            --output yaml >"${RUNNER_TEMP}/database-cutover-job.yaml"
+          kubectl --context "${MGMT_CONTEXT}" -n "${MGMT_NS}" \
+            delete job management-database-cutover --ignore-not-found --wait=true
+          kubectl --context "${MGMT_CONTEXT}" apply \
+            --filename "${RUNNER_TEMP}/database-cutover-job.yaml"
+          kubectl --context "${MGMT_CONTEXT}" -n "${MGMT_NS}" \
+            wait --for=condition=complete job/management-database-cutover --timeout=3600s
+
+      - name: Switch first-deploy database target
+        if: github.event_name == 'workflow_dispatch'
+        shell: bash
+        run: |
+          set -euo pipefail
+          uv run python scripts/database_cutover_config.py switch --direction target \
+            --context "${MGMT_CONTEXT}" \
+            --namespace "${MGMT_NS}"
+
       - name: Run fail-closed database migration
         shell: bash
         env:
@@ -311,6 +359,16 @@ jobs:
             --image "${CONSOLE_DEPLOY_IMAGE}" \
             --timeout 600s
 
+      - name: Restore first-deploy database writers
+        if: github.event_name == 'workflow_dispatch'
+        shell: bash
+        run: |
+          set -euo pipefail
+          uv run python scripts/database_writer_freeze.py restore \
+            --context "${MGMT_CONTEXT}" \
+            --plan "${RUNNER_TEMP}/database-writer-freeze-plan.json" \
+            --timeout 600s
+
       - name: Verify live auth bypass policy after rollout
         shell: bash
         run: |
@@ -334,6 +392,7 @@ jobs:
           RUN_SMOKE=1 SMOKE_COMMIT_SHA="${SOURCE_SHA}" bash scripts/post-deploy-smoke.sh
 
       - name: Record successful dev SHA in cluster
+        id: status
         shell: bash
         run: |
           set -euo pipefail
@@ -344,18 +403,67 @@ jobs:
             --output yaml \
             | kubectl --context "${MGMT_CONTEXT}" apply --filename -
 
-      - name: Restore previous image digests after failure
+      - name: Restore previous release after failure
         if: failure() && steps.capture.outcome == 'success'
         shell: bash
         run: |
-          set -euo pipefail
+          set -uo pipefail
+          rollback_failed=0
+          routing_restored=0
+          if [[ "${GITHUB_EVENT_NAME}" == "workflow_dispatch" && \
+                -f "${RUNNER_TEMP}/database-writer-freeze-plan.json" ]]; then
+            if uv run python scripts/database_writer_freeze.py freeze \
+              --context "${MGMT_CONTEXT}" \
+              --plan "${RUNNER_TEMP}/database-writer-freeze-plan.json" \
+              --timeout 600s; then
+              if kubectl --context "${MGMT_CONTEXT}" -n "${MGMT_NS}" \
+                get secret first-deploy-database-cutover >/dev/null 2>&1; then
+                if uv run python scripts/database_cutover_config.py switch --direction source \
+                  --context "${MGMT_CONTEXT}" \
+                  --namespace "${MGMT_NS}"; then
+                  routing_restored=1
+                else
+                  rollback_failed=1
+                fi
+              else
+                routing_restored=1
+              fi
+            else
+              rollback_failed=1
+            fi
+          fi
           uv run python scripts/revert_image_digests.py \
             --plan "${RUNNER_TEMP}/console-rollback-plan.json" \
             --context "${MGMT_CONTEXT}" \
             --timeout 600s \
-            --apply
+            --apply || rollback_failed=1
           uv run python scripts/revert_image_digests.py \
             --plan "${RUNNER_TEMP}/service-rollback-plan.json" \
             --context "${MGMT_CONTEXT}" \
             --timeout 600s \
-            --apply
+            --apply || rollback_failed=1
+          if [[ "${GITHUB_EVENT_NAME}" == "workflow_dispatch" && \
+                -f "${RUNNER_TEMP}/database-writer-freeze-plan.json" ]]; then
+            uv run python scripts/database_writer_freeze.py restore \
+              --context "${MGMT_CONTEXT}" \
+              --plan "${RUNNER_TEMP}/database-writer-freeze-plan.json" \
+              --timeout 600s || rollback_failed=1
+            if [[ "${routing_restored}" == 1 ]]; then
+              uv run python scripts/database_cutover_config.py cleanup \
+                --context "${MGMT_CONTEXT}" \
+                --namespace "${MGMT_NS}" || rollback_failed=1
+            fi
+          fi
+          exit "${rollback_failed}"
+
+      - name: Remove first-deploy cutover secret
+        if: >-
+          always() &&
+          github.event_name == 'workflow_dispatch' &&
+          steps.status.outcome == 'success'
+        shell: bash
+        run: |
+          set -euo pipefail
+          uv run python scripts/database_cutover_config.py cleanup \
+            --context "${MGMT_CONTEXT}" \
+            --namespace "${MGMT_NS}"

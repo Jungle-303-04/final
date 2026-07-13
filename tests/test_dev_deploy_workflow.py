@@ -167,14 +167,16 @@ def test_smoke_failure_restores_both_previous_image_sets() -> None:
 
 def test_deploy_uses_immutable_digest_and_image_only_rollback_without_db_downgrade() -> None:
     source = WORKFLOW_PATH.read_text(encoding="utf-8")
+    cutover_job = (ROOT / "deploy/management/database-cutover-job.yaml").read_text(encoding="utf-8")
     assert "imageDetails[0].imageDigest" in source
     assert "rollout_image_digest.py" in source
     assert "revert_image_digests.py" in source
     assert "steps.capture.outcome == 'success'" in source
     assert "kubectl rollout undo" not in source
     assert "alembic downgrade" not in source
-    assert "packages.storage.baseline bootstrap" in source
-    assert "packages.storage.data_cutover copy" in source
+    assert "database-cutover-job.yaml" in source
+    assert "packages.storage.baseline bootstrap" in cutover_job
+    assert "packages.storage.data_cutover copy" in cutover_job
 
 
 def test_first_deploy_freezes_writers_before_copy_and_restores_exact_replicas() -> None:
@@ -190,6 +192,8 @@ def test_first_deploy_freezes_writers_before_copy_and_restores_exact_replicas() 
     assert "cluster-agent" in (ROOT / "scripts/database_writer_freeze.py").read_text()
     assert cutover["if"] == "github.event_name == 'workflow_dispatch'"
     assert "database-cutover-job.yaml" in cutover["run"]
+    assert '--run-id "${GITHUB_RUN_ID}"' in cutover["run"]
+    assert '--run-attempt "${GITHUB_RUN_ATTEMPT}"' in cutover["run"]
     assert "packages.storage.baseline" not in cutover["run"]
     assert switch["if"] == "github.event_name == 'workflow_dispatch'"
     assert "database_cutover_config.py switch --direction target" in switch["run"]
@@ -206,6 +210,26 @@ def test_first_deploy_does_not_mutate_source_schema_or_create_missing_workloads(
     assert "alembic stamp" not in source
     assert "alembic downgrade" not in source
     assert "DROP DATABASE" not in source
+
+
+def test_failure_recovery_always_attempts_image_and_replica_restore() -> None:
+    steps = steps_by_name()
+    rollback = steps["Restore previous release after failure"]["run"]
+    names = [step["name"] for step in deploy_job()["steps"]]
+
+    assert "set -uo pipefail" in rollback
+    assert "set -euo pipefail" not in rollback
+    assert rollback.count("|| rollback_failed=1") >= 4
+    assert "routing_restored=0" in rollback
+    assert "database_writer_freeze.py restore" in rollback
+    assert 'exit "${rollback_failed}"' in rollback
+    assert names.index("Restore previous release after failure") < names.index(
+        "Remove first-deploy cutover secret"
+    )
+    cleanup = steps["Remove first-deploy cutover secret"]
+    assert "always()" in cleanup["if"]
+    assert "steps.status.outcome == 'success'" in cleanup["if"]
+    assert steps["Record successful dev SHA in cluster"]["id"] == "status"
 
 
 def test_service_and_console_images_share_the_gated_source_sha_and_digest_release() -> None:
