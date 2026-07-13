@@ -112,6 +112,13 @@ def test_loki_logs_are_normalized_into_agent_evidence_shape() -> None:
     assert validated.logs[0]["pattern_counts"]["probe_failed"] == 0
     assert validated.logs[0]["severity_counts"]["unknown"] == 1
     assert validated.logs[0]["trace_ids"] == []
+    assert validated.logs[0]["matched_entries"] == []
+    assert validated.logs[0]["collection_limit"]["matched_entries"] == {
+        "max_items": 20,
+        "original_count": 0,
+        "returned_count": 0,
+        "truncated": False,
+    }
     assert validated.logs[0]["redaction_summary"] == {
         "applied": True,
         "redacted_line_count": 0,
@@ -130,7 +137,11 @@ def test_loki_logs_redact_sensitive_values_and_add_rca_summaries() -> None:
                 "resultType": "streams",
                 "result": [
                     {
-                        "stream": {"namespace": "target", "pod": "checkout-api-7f5c"},
+                        "stream": {
+                            "namespace": "target",
+                            "pod": "checkout-api-7f5c",
+                            "container": "app",
+                        },
                         "values": [
                             [
                                 "1782822589742000000",
@@ -148,6 +159,18 @@ def test_loki_logs_redact_sensitive_values_and_add_rca_summaries() -> None:
                                 "1782822589745000000",
                                 'INFO login password="hello world"',
                             ],
+                            [
+                                "1782822589746000000",
+                                "ERROR server failed: address already in use",
+                            ],
+                            [
+                                "1782822589747000000",
+                                "FATAL permission denied opening /data",
+                            ],
+                            [
+                                "1782822589748000000",
+                                "ERROR missing required env DATABASE_URL",
+                            ],
                         ],
                     }
                 ],
@@ -162,16 +185,92 @@ def test_loki_logs_redact_sensitive_values_and_add_rca_summaries() -> None:
         "WARN upstream dependency timed out Authorization: Bearer [REDACTED]",
         "ErrImagePull secret=[REDACTED]",
         "INFO login password=[REDACTED]",
+        "ERROR server failed: address already in use",
+        "FATAL permission denied opening /data",
+        "ERROR missing required env DATABASE_URL",
     ]
-    assert normalized["line_count"] == 4
+    assert normalized["line_count"] == 7
+    assert normalized["pattern_counts"]["app_port_bind_failed"] == 1
+    assert normalized["pattern_counts"]["permission_denied_startup"] == 1
+    assert normalized["pattern_counts"]["missing_env"] == 1
     assert normalized["pattern_counts"]["probe_failed"] == 1
     assert normalized["pattern_counts"]["dependency_timeout"] == 1
     assert normalized["pattern_counts"]["image_pull_error"] == 1
-    assert normalized["severity_counts"]["error"] == 1
+    assert normalized["severity_counts"]["critical"] == 1
+    assert normalized["severity_counts"]["error"] == 3
     assert normalized["severity_counts"]["warn"] == 1
     assert normalized["severity_counts"]["info"] == 1
     assert normalized["severity_counts"]["unknown"] == 1
     assert normalized["trace_ids"] == [trace_id]
+    assert normalized["matched_entries"] == [
+        {
+            "timestamp": "1782822589742000000",
+            "namespace": "target",
+            "pod": "checkout-api-7f5c",
+            "container": "app",
+            "severity": "error",
+            "message": f"ERROR readiness probe failed token=[REDACTED] trace_id={trace_id}",
+            "matched_patterns": ["probe_failed"],
+            "line_truncated": False,
+            "trace_id": trace_id,
+        },
+        {
+            "timestamp": "1782822589743000000",
+            "namespace": "target",
+            "pod": "checkout-api-7f5c",
+            "container": "app",
+            "severity": "warn",
+            "message": "WARN upstream dependency timed out Authorization: Bearer [REDACTED]",
+            "matched_patterns": ["dependency_timeout"],
+            "line_truncated": False,
+        },
+        {
+            "timestamp": "1782822589744000000",
+            "namespace": "target",
+            "pod": "checkout-api-7f5c",
+            "container": "app",
+            "severity": "unknown",
+            "message": "ErrImagePull secret=[REDACTED]",
+            "matched_patterns": ["image_pull_error"],
+            "line_truncated": False,
+        },
+        {
+            "timestamp": "1782822589746000000",
+            "namespace": "target",
+            "pod": "checkout-api-7f5c",
+            "container": "app",
+            "severity": "error",
+            "message": "ERROR server failed: address already in use",
+            "matched_patterns": ["app_port_bind_failed"],
+            "line_truncated": False,
+        },
+        {
+            "timestamp": "1782822589747000000",
+            "namespace": "target",
+            "pod": "checkout-api-7f5c",
+            "container": "app",
+            "severity": "critical",
+            "message": "FATAL permission denied opening /data",
+            "matched_patterns": ["permission_denied_startup"],
+            "line_truncated": False,
+        },
+        {
+            "timestamp": "1782822589748000000",
+            "namespace": "target",
+            "pod": "checkout-api-7f5c",
+            "container": "app",
+            "severity": "error",
+            "message": "ERROR missing required env DATABASE_URL",
+            "matched_patterns": ["missing_env"],
+            "line_truncated": False,
+        },
+    ]
+    assert normalized["collection_limit"]["matched_entries"] == {
+        "max_items": 20,
+        "original_count": 6,
+        "returned_count": 6,
+        "truncated": False,
+    }
     assert normalized["redaction_summary"] == {
         "applied": True,
         "redacted_line_count": 4,
@@ -210,6 +309,9 @@ def test_loki_logs_truncate_single_oversized_line_before_job_result() -> None:
     assert value["original_line_length"] > 4096
     assert normalized["line_count"] == 1
     assert normalized["pattern_counts"]["probe_failed"] == 1
+    assert normalized["matched_entries"][0]["line_truncated"] is True
+    assert normalized["matched_entries"][0]["message"].endswith(" [TRUNCATED]")
+    assert normalized["collection_limit"]["matched_entries"]["truncated"] is False
     assert normalized["redaction_summary"]["truncated_line_count"] == 1
     EvidenceJobResultRequest(
         agent_id="agent-1",

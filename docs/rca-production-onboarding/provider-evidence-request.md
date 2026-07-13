@@ -182,6 +182,8 @@ RCA는 provider가 보내준 evidence만 보고 symptom, root cause candidate, c
 - pattern_counts
 - severity_counts
 - trace_ids
+- matched_entries
+- collection_limit
 - redaction_summary
 
 현재 기본 policy query 예시:
@@ -213,7 +215,16 @@ RCA는 provider가 보내준 evidence만 보고 symptom, root cause candidate, c
 - `pattern_counts`는 probe, health endpoint, dependency timeout/error, image pull, OOM/memory, config/env/volume 계열 로그를 line 단위로 센다.
 - `severity_counts`는 `critical`, `error`, `warn`, `info`, `debug`, `trace`, `unknown`으로 정규화한다.
 - `trace_ids`는 32자리 hex trace id만 최대 20개까지 보낸다.
+- `matched_entries`는 RCA rule이 바로 읽을 수 있는 매칭 로그 요약이다. 각 항목은 `timestamp`, `namespace`, `pod`, `container`, `severity`, `message`, `matched_patterns`, `trace_id`, `line_truncated`를 담는다.
+- `matched_entries[].message`는 원문 로그 전체가 아니라 redaction과 truncation이 적용된 RCA 판단용 log line이다.
+- `collection_limit.matched_entries`는 최대 반환 수, 실제 매칭 수, 반환 수, 잘림 여부를 담는다.
 - `redaction_summary`는 redaction 적용 여부, 실제로 값이 바뀐 line 개수, 길이 제한으로 잘린 line 개수를 담는다.
+
+RCA EvidenceBundle에서는 `logs:related_logs`를 만들 때 `streams`와 `matched_entries`를 같은
+incident scope로 필터링한다. 일반 incident는 namespace를 맞추고, RCA test run은 현재 test Pod 이름까지
+맞춘다. 따라서 provider result에 query 전체의 matched entry가 있어도 RCA 분석에는 선택된 namespace/Pod의
+matched entry만 올라간다. `collection_limit.matched_entries`는 provider result 기준의 제한 정보라서,
+bundle scope 필터링 후의 최종 항목 수와 항상 같지는 않다.
 
 주의:
 

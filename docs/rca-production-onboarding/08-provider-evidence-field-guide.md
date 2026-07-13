@@ -881,6 +881,12 @@ RCA 내부에서는 logs bucket이 다음 EvidenceItem으로 승격된다.
 | --- | --- | --- |
 | `payload.logs` | `source="logs"`, `name="related_logs"` | rule catalog가 `logs:related_logs`를 기대 근거로 요구할 수 있게 한다. |
 
+`logs:related_logs`는 RCA EvidenceBundle에서 다시 scope를 맞춘다. bundle은 incident namespace와
+맞는 stream만 남기고, RCA test run에서는 현재 test Pod 이름까지 맞는 stream만 남긴다.
+`matched_entries`도 같은 기준으로 함께 필터링한다. provider result에는 query 전체 matched entry가
+들어갈 수 있지만, RCA bundle에는 선택된 namespace/Pod의 matched entry만 남겨야 한다. 그래야 이전
+RCA test Pod나 다른 Pod의 로그 요약이 현재 run의 원인으로 섞이지 않는다.
+
 즉 source/name key로 쓰면 `logs:related_logs`다.
 다만 raw `payload.logs` 전체가 무조건 근거로 쓰이는 것은 아니다.
 RCA는 incident namespace와 관련된 stream을 먼저 고르고, RCA test run이면 관련 pod 이름까지 맞춰서
@@ -902,6 +908,9 @@ logs를 읽을 때는 `logs[].query_name`으로 어떤 로그 query 결과인지
     "streams": [],
     "line_count": 0,
     "pattern_counts": {
+      "app_port_bind_failed": 0,
+      "permission_denied_startup": 0,
+      "missing_env": 0,
       "probe_failed": 0,
       "health_endpoint_error": 0,
       "dependency_timeout": 0,
@@ -920,6 +929,15 @@ logs를 읽을 때는 `logs[].query_name`으로 어떤 로그 query 결과인지
       "unknown": 0
     },
     "trace_ids": [],
+    "matched_entries": [],
+    "collection_limit": {
+      "matched_entries": {
+        "max_items": 20,
+        "original_count": 0,
+        "returned_count": 0,
+        "truncated": false
+      }
+    },
     "redaction_summary": {
       "applied": true,
       "redacted_line_count": 0,
@@ -941,7 +959,15 @@ logs를 읽을 때는 `logs[].query_name`으로 어떤 로그 query 결과인지
 | `logs[].pattern_counts` | object | provider가 마스킹된 log line을 읽고 계산한 장애 신호별 matching line 개수다. |
 | `logs[].severity_counts` | object | `ERROR`, `WARN`, `level=error` 같은 표현을 정규화한 severity별 line 개수다. |
 | `logs[].trace_ids` | list<string> | 로그에서 찾은 안전한 trace id 목록이다. 32자리 hex trace id만 최대 20개까지 담는다. |
+| `logs[].matched_entries` | list<object> | RCA가 바로 읽을 수 있는 매칭 로그 요약이다. 매칭된 line만 최대 20개까지 담는다. |
+| `logs[].matched_entries[].message` | string | 민감정보 마스킹과 4096자 제한이 적용된 판단용 log line이다. Loki 원문 전체가 아니다. |
+| `logs[].matched_entries[].matched_patterns` | list<string> | 해당 line이 매칭한 RCA diagnostic pattern 이름이다. 예: `app_port_bind_failed`, `permission_denied_startup`, `missing_env`, `dependency_timeout`, `dependency_error`, `config_error`, `probe_failed`, `oom_or_memory`. |
+| `logs[].collection_limit.matched_entries` | object | `matched_entries`의 최대 반환 수, 실제 매칭 수, 반환 수, 잘림 여부를 나타낸다. |
 | `logs[].redaction_summary` | object | provider가 로그 마스킹을 적용했는지, 실제로 값이 바뀐 line 개수, 길이 제한으로 잘린 line 개수를 나타낸다. |
+
+RCA EvidenceBundle에서 `logs:related_logs`로 승격될 때는 `streams`와 `matched_entries`가 같은
+namespace/pod scope로 필터링된다. `collection_limit.matched_entries`는 provider result 기준의 수집 제한 정보이며,
+RCA bundle에서 scope 필터링 후의 실제 항목 수와 항상 같다는 뜻은 아니다.
 
 2026-07-11 실제 응답에서는 다음 4개 query 결과가 들어왔다.
 
