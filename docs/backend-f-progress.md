@@ -7,7 +7,7 @@ governing: docs/f-coordination-plan.md · docs/backend-f-workqueue.md
 
 # 백엔드 F 진행 현황
 
-현재 상태: **앵커 32건**
+현재 상태: **앵커 37건**
 
 ## 역사적 Delta-green baseline (BQ-001~003)
 
@@ -806,3 +806,135 @@ Bundle route는 200을 반환한다.
   ancestor exit 0.
 
 계약 완성: kubectl server dry-run subprocess and error mapping tests (ccdcc1a08aef4d1aa30929dea717f455ea0a447e) [green]
+
+### 보조 대기열 S17 — probe startup window 시나리오
+
+- 상태: landed
+- 담당 lane: `codex/benchmark-probe-startup-window`
+- 초기 RED: `f811610d16fb1e4d261e488c5df233096f0e8de8`
+- 시나리오·후보·digest: `17cd32648630f65005f20c98cb1cd7acec69fd63`
+- 최초 문서와 feature HEAD: `67014a02865118d9ccf01409d8798856cbd01173`
+- capability 교정 RED: `728d23c35a16ce52f94b06c630d8517285ce432e`
+- capability 교정과 문서 HEAD: `94c419a80601303e9a76b1b2ba42efd44e610d3d`
+- canonical merges: `da5330778443902009d45154214ab692da08cb7c`,
+  `8f84ecdc0ce64434afb22b3a207fd74f6c0cc582`
+- 5초 초기화에 정상 8초·장애 4초의 startup probe window를 고정하고 fleet 전체 startup
+  probe 비활성화를 금지했다. probe는 4개, 전체 scenario는 17개다.
+- 독립 감사에서 frozen producer가 readiness/liveness replacement만 생성함을 확인했다.
+  ordinal 53의 action-level `probe_fix` 선언은 보존하되 `patch_capabilities=[]`로 fail-closed
+  교정하고 공개 scenario는 `manual_analysis` 승인 경로만 허용한다.
+- ordinal 53 exact fixture 연결 후 여섯 번째 batch digest는
+  `0d53d280da89cff0b2790ffa96ff271c3a5b46a265094ab3ea5cd91adeb69aea`다.
+- 전체 게이트: Ruff lint/format PASS, import-linter 8 kept/0 broken,
+  pytest `1943 passed, 3 skipped`; manifest management 69 / target 20.
+- 4조건: merge-tree exit 0/tree `c0764350df4849f292bed6b5e4067cbc845121d1`;
+  삭제·frozen 경로 변경 0건; 교정 feature·merge commit의 `origin/dev` ancestor exit 0.
+
+계약 완성: OpsiaBench startup window fixture + producer-aware manual boundary (94c419a80601303e9a76b1b2ba42efd44e610d3d) [green]
+
+### 보조 대기열 S18 — outbound deliver 직접 테스트
+
+- 상태: landed
+- 담당 lane: `codex/runtime-outbound-tests`
+- 기본 경계 테스트: `06cae9347a2faff2b64a7d4367f44277da1bc2db`
+- identity·호출 횟수 보강: `52ad0d4db8f7513b855e0c8680ad228a2f5fb843`
+- 문서와 feature HEAD: `e43920262b530937cee83432f2eaf38727333b5b`
+- canonical no-ff merge: `784996ce76d963704118267952b326c1665726b4`
+- `src/packages/runtime/outbound.py` 소스 변경 없이 외부 호출 1회, 성공 결과의 원형 전달,
+  일반 예외의 동일 인스턴스 전달과 실패 body 1건을 직접 검증했다.
+- `CancelledError`는 실패로 변환하지 않고 동일 인스턴스를 전파하며, 성공·실패 mapper 오류도
+  숨기지 않고 각 mapper를 정확히 한 번 호출함을 고정했다.
+- stale runtime 문서의 존재하지 않는 `Outbound`/`HttpOutbound` API를 제거하고 실제 `deliver`
+  계약과 서비스별 I/O 주입 경계를 정합화했다.
+- 전체 게이트: Ruff lint/format PASS, import-linter 8 kept/0 broken,
+  pytest `1948 passed, 3 skipped`; manifest management 69 / target 20.
+- 4조건: merge-tree exit 0/tree `1b237c85086a83fbb53f315644899075db2610fa`;
+  source·삭제·frozen 경로 변경 0건; feature·merge commit의 `origin/dev` ancestor exit 0.
+
+계약 완성: outbound deliver success, failure, cancellation and mapper propagation tests (e43920262b530937cee83432f2eaf38727333b5b) [green]
+
+### 보조 대기열 S19 — crashloop 포트 bind 충돌 시나리오
+
+- 상태: landed
+- 담당 lane: `codex/benchmark-port-bind`
+- RED 계약: `a2336a05d`, `fc7d32263`, `2d8cff0d7`, `0e0d94692`
+- 시나리오·후보·digest: `919f7dddddfe0241b9bf54786ec4ee5482e0bfe9`
+- 문서: `ac7c9749e357ccb03aa96f9f3b0084525159d251`
+- merge-patch RED·교정과 feature HEAD: `d0fbbc792`,
+  `ff3b52812905f09242ab05e2704f816ede52845f`
+- canonical no-ff merge: `0dd8a200fbec4ab567c00af2e4e3053541163809`
+- `app_port_bind_failed`를 crashloop 세 번째 시나리오로 추가했다. 한 프로세스가 같은 실제
+  포트를 두 번 bind해 `address already in use`와 exit code 1을 외부 인프라 없이 재현한다.
+- 실제 patch capability가 없으므로 `manual_analysis`, `approval_required`,
+  `auto_apply=false`만 허용하고 cluster 전체 container port 개방은 금지했다.
+- 독립 감사에서 partial `containers` 배열이 JSON merge patch에서 실행 필드를 지우는 결함을
+  발견했다. fault·gold·rollback을 완전한 container 객체로 교정하고, fault runnable 보존 →
+  gold=normal → rollback=fault 동등성을 실제 merge 알고리즘으로 고정했다.
+- ordinal 7에 exact fixture를 연결하고 첫 batch digest를
+  `c1917f0cfc9cbfa5b9dfa89a719b16ab0a5f50aee5a1dcfa168f61b197855481`로 갱신했다.
+- 고유 검증: crashloop 3/3, 전체 scenario 18/18, candidate scorer 87/87,
+  `tests/test_benchmark_score.py` 62 passed. 독립 재감사 PASS.
+- 전체 게이트: Ruff lint/format PASS, import-linter 8 kept/0 broken,
+  pytest `1951 passed, 3 skipped`; manifest management 69 / target 20.
+- 4조건: merge-tree exit 0/tree `3739c7061eb0e1df88ebd687879da0af7a3661c7`;
+  파일 삭제·소유권 밖 변경·frozen 경로 변경 0건; feature·merge commit의 `origin/dev`
+  ancestor exit 0.
+
+계약 완성: OpsiaBench crashloop port bind fixture + runnable merge-patch round trip (ff3b52812905f09242ab05e2704f816ede52845f) [green]
+
+### 보조 대기열 S20 — target-agent SQLite 수명주기 테스트
+
+- 상태: landed
+- 담당 lane: `codex/target-agent-sqlite-lifecycle`
+- 결정적 RED: `4a2ef92292a0e818f61ddb51ec3d0b916e891540`
+- factory·idempotent close: `d05bc826e8254f7b85cc5f75c0b15e266a825854`
+- 수명주기 문서: `ef2757edac3feb09244da04fdfc115f13c881d66`
+- hook 격리 교정과 feature HEAD: `720dd55c0d00ec79b61a19bdd5682a2f553c5a96`
+- canonical no-ff merge: `13c30723adaf025fd616c166a2507d03f90fef24`
+- full `TargetClusterAgent` 생성 12곳을 factory 내부 단일 생성점으로 수렴하고, 테스트 teardown이
+  생성 thread에서 두 SQLite store를 닫은 뒤 강한 참조를 제거하도록 고정했다.
+- worker thread cyclic GC에서 두 target destructor의 thread-affinity `ProgrammingError`만 수집한다.
+  unrelated unraisable은 기존 pytest hook으로 전달하고 `finally`에서 전역 hook을 복원한다.
+- 독립 감사가 module autouse 전역 GC의 순서 의존·오귀속 위험을 차단했다. factory 사용 테스트에만
+  guard를 한정하고 unrelated `ValueError` 전달 회귀를 추가한 뒤 재감사 PASS다.
+- `close()` 두 번 호출 후 `AgentControlStore.conn`과 `CommandResultOutbox.conn`이 모두 `None`임을
+  검증한다. 프로덕션 source 변경은 0건이며 `run()`의 기존 finally-close 계약은 보존했다.
+- 고유 검증: warning-strict `tests/test_target_agent_client.py` 28 passed.
+- 전체 게이트: Ruff lint/format PASS, import-linter 8 kept/0 broken,
+  pytest `1953 passed, 3 skipped`; manifest management 69 / target 20.
+- 4조건: merge-tree exit 0/tree `857ee57075e2260222d78350e5d25eb839579bf6`;
+  source·파일 삭제·소유권 밖 변경·frozen 경로 변경 0건; feature·merge commit의
+  `origin/dev` ancestor exit 0.
+
+계약 완성: TargetClusterAgent same-thread SQLite lifecycle tests (720dd55c0d00ec79b61a19bdd5682a2f553c5a96) [green]
+
+### 보조 대기열 S21 — crashloop 시작 권한 오류 시나리오
+
+- 상태: landed
+- 담당 lane: `codex/benchmark-permission-startup`
+- 초기 RED: `958baa3687fc7be1235233adb5724dbed9444be2`
+- crashloop 수량 RED: `be9a6da0a116aa769eca1b250deb02b9e75c6100`
+- 시나리오·후보·digest: `85dae710b70169159329bf7a2bd5bd8738699e91`
+- 문서와 feature HEAD: `268ca859e7266ec72780b2080904b5d8ba37c247`
+- canonical no-ff merge: `de9e600c7a554b12208b46b022d3ca4b29601ce1`
+- `permission_denied_startup`을 crashloop 네 번째 시나리오로 추가했다. 임시 script의
+  실행 bit를 `0700`에서 `0600`으로 바꿔 실제 POSIX `PermissionError [Errno 13]`과
+  exit code 1을 외부 인프라 없이 재현하고, 정상 경로 exit 0도 검증했다.
+- last exit code 1로 generic `app_startup_failure`도 1.0인 동점 상황을 만든 뒤,
+  catalog에서 먼저 선언된 구체 권한 후보가 최종 선택되는 계약을 고정했다.
+- partial array 파괴를 막기 위해 fault·gold·rollback에 full container 객체를 사용했다.
+  실제 JSON Merge Patch로 fault runnable 보존 → gold=normal → rollback=fault 왕복을
+  검증했다.
+- ordinal 8의 `patch_capabilities=[]`를 보존하고 승인형 `manual_analysis`,
+  `auto_apply=false`만 허용했다. cluster-admin 권한 확대는 금지했다.
+- 첫 batch digest는
+  `316a78f9231269c189367ac9c7084e29abf87d7b0b30fc722d40fcc5b39c0ad1`로 재감사했다.
+- 고유 검증: crashloop 4/4, 전체 scenario 19/19, candidate scorer 87/87,
+  `tests/test_benchmark_score.py` 66 passed. 두 독립 재감사 PASS.
+- 전체 게이트: Ruff lint/format PASS, import-linter 8 kept/0 broken,
+  pytest `1957 passed, 3 skipped`; manifest management 69 / target 20.
+- 4조건: merge-tree exit 0/tree `428481b5a7d0bfcd0dc54c1a604c99fb2ca1ed34`;
+  파일 삭제·소유권 밖 변경·frozen·gateway 계약 변경 0건; feature·merge commit의
+  `origin/dev` ancestor exit 0.
+
+계약 완성: OpsiaBench crashloop permission-denied startup fixture + concrete-candidate tie boundary (268ca859e7266ec72780b2080904b5d8ba37c247) [green]

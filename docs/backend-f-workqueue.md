@@ -60,7 +60,7 @@ R-트랙([D-011])은 dev merge `257f91846`으로 landed/closed 되었고, 전용
 | S6 | landed | rule candidate 21~30 안전 계약 | feature `8f0ee335f`, canonical merge `efdde0a31` | 25번만 `safe_pr`, 26·27번은 approval-only, exact fixture 25·26번, 세 번째 digest 잠금, 전체 `1911 passed, 3 skipped`, manifest 69/20 |
 | S7 | landed | rule candidate 31~40 안전 계약 | feature `296e14c38`, canonical merge `6ebd0f6bd` | 36·37번 `command`, 38번 `command+safe_pr`, fixture gap 보존, 네 번째 digest 잠금, 전체 `1914 passed, 3 skipped`, manifest 69/20 |
 | S8 | landed | rule candidate 41~50 안전 계약 | feature `5995350c4`, canonical merge `910825ec4` | 41~49 fallback-only, 50번 `safe_pr`+exact probe fixture, 다섯 번째 digest 잠금, 전체 `1917 passed, 3 skipped`, manifest 69/20 |
-| S9 | landed | rule candidate 51~60 안전 계약 | feature `5ce8132b0`, canonical merge `66115a2d7` | 51~53·55 `safe_pr`, fixture 51·55·56, 추론 금지 경계와 여섯 번째 digest, 전체 `1920 passed, 3 skipped`, manifest 69/20 |
+| S9 | landed | rule candidate 51~60 안전 계약 | feature `5ce8132b0`, canonical merge `66115a2d7`, capability correction `94c419a80` | 51·52·55 `safe_pr`; 53은 producer 부재로 capability 없음, fixture 51·52·53·55·56, 전체 `1943 passed, 3 skipped`, manifest 69/20 |
 | S10 | landed | rule candidate 61~70 안전 계약 | feature `aed4bf78b`, canonical merge `de0b27609` | 10개 fallback-only, resource/config 추론 금지와 일곱 번째 digest, 전체 `1923 passed, 3 skipped`, manifest 69/20 |
 | S11 | landed | rule candidate 71~80 안전 계약 | feature `dd2006904`, canonical merge `cb099e5eb` | scheduling 선언과 dispatcher 경계, fixture 73·75·78, 여덟 번째 digest, 전체 `1925 passed, 3 skipped`, manifest 69/20 |
 | S12 | landed | rule candidate 81~87 terminal 안전 계약 | feature `aafc4a956`, canonical merge `dc0b775ff` | 87/87 완결, 7개 fallback-only, fixture 82번, terminal digest, 전체 `1927 passed, 3 skipped`, manifest 69/20 |
@@ -68,6 +68,11 @@ R-트랙([D-011])은 dev merge `257f91846`으로 landed/closed 되었고, 전용
 | S14 | landed | AsyncDb 호출 경계 직접 테스트 | feature `effec9f6d`, canonical merge `b37a94d95` | test-only 5개, thread hop·active connection 재사용·예외 전파, 전체 `1933 passed, 3 skipped`, manifest 69/20 |
 | S15 | landed | probe timeout 시나리오 | feature `b96a69810`, canonical merge `2d9ef3fc2` | probe 3개·전체 16개, ordinal 52 safe-pr fixture, 여섯 번째 digest 재감사, 전체 `1934 passed, 3 skipped`, manifest 69/20 |
 | S16 | landed | kubectl server dry-run adapter 직접 테스트 | feature `ccdcc1a08`, canonical merge `01dc63558` | test-only 8개, apply→get·tmp cleanup·오류/timeout 매핑, 전체 `1942 passed, 3 skipped`, manifest 69/20 |
+| S17 | landed | OpsiaBench probe startup window 시나리오 | feature `67014a028`, correction `94c419a80`, canonical `8f84ecdc0` | probe 4개·전체 17개, ordinal 53 exact fixture, producer-aware manual 경계, 전체 `1943 passed, 3 skipped`, manifest 69/20 |
+| S18 | landed | outbound deliver 직접 테스트 | feature `e43920262`, canonical `784996ce7` | test-only 5개, 성공·실패·취소·mapper 오류 원형 전파, source 0건, 전체 `1948 passed, 3 skipped`, manifest 69/20 |
+| S19 | landed | OpsiaBench crashloop 포트 bind 충돌 시나리오 | feature `ff3b52812`, canonical `0dd8a200f` | crashloop 3개·전체 18개, ordinal 7 manual-only fixture, runnable JSON merge-patch 왕복, 전체 `1951 passed, 3 skipped`, manifest 69/20 |
+| S20 | landed | target-agent SQLite 수명주기 테스트 | feature `720dd55c0`, canonical `13c30723a` | test-only, full-agent factory same-thread close·target-only GC guard·unrelated hook 전달, warning-strict 28 passed, 전체 `1953 passed, 3 skipped`, manifest 69/20 |
+| S21 | landed | OpsiaBench crashloop 시작 권한 오류 시나리오 | feature `268ca859e`, canonical `de9e600c7` | crashloop 4개·전체 19개, ordinal 8 manual-only fixture, 실제 POSIX EACCES·generic 동점 선택·full-container merge-patch 왕복, 전체 `1957 passed, 3 skipped`, manifest 69/20 |
 
 ## claim 규칙
 

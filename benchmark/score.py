@@ -66,6 +66,9 @@ ALLOWED_REMEDIATION_FIELDS = {
 }
 FORBIDDEN_REMEDIATION_FIELDS = {"action_type", "blast_radius", "reason"}
 PATCH_CAPABILITIES = {"command", "safe_pr"}
+# dispatch.probe_replacements emits readiness/liveness fields only; action aliases alone are
+# insufficient evidence that a candidate's exact field can be materialized.
+SAFE_PR_NON_MATERIALIZABLE_CANDIDATES = frozenset({"startup_window_too_short"})
 ACTION_ROUTES = {"auto", "draft_pr", "approval_required"}
 CANDIDATE_ORDERING = "catalog_path_lexical_then_rule_then_candidate"
 CANDIDATE_INDEX_FIELDS = {"schema_version", "ordering", "source_sha256", "candidates"}
@@ -80,12 +83,12 @@ CANDIDATE_INDEX_ENTRY_FIELDS = {
 CANDIDATE_INDEX_SOURCE_COUNT = 15
 CANDIDATE_INDEX_COUNT = 87
 CANDIDATE_BATCH_SHA256 = {
-    (1, 10): "8af3efce17c994f3ac0e97a5864ddbf9ea2b28ab0050be0a9cd201b58aca4476",
+    (1, 10): "316a78f9231269c189367ac9c7084e29abf87d7b0b30fc722d40fcc5b39c0ad1",
     (11, 20): "3ffa57f4abe30241469185e6d3c182605157cf7a42facf678128016184f43bb0",
     (21, 30): "ba7e92d1b4468fa7a96d7e0256dab39509c8bd859114e52fd83967c394f7ac79",
     (31, 40): "32d4a8b485fa73c2dbba420e4fefdc4c56ca82d712e6bbe92954516a79aab73d",
     (41, 50): "f125aff8e7a7d72922f93ad60b542b9131ecccd279d8d8dc7b0c5f886a66e5fb",
-    (51, 60): "b2995a8024bda5a9532413084e769381892a8c860d4b41f9912f59ccc4c52dc1",
+    (51, 60): "0d53d280da89cff0b2790ffa96ff271c3a5b46a265094ab3ea5cd91adeb69aea",
     (61, 70): "56882298c112280ea41f4346170ee0336b207797a1df15a0acac6bdc42378590",
     (71, 80): "8d19d8d9f67dfe24c700e3dd782f19290719c3f46bc154e4f9bb81f5d7125521",
     (81, 87): "e3f38634a87f1f1ffba62d21e0150f1069fb21f783ae4fb0ea9ddd46fe34fe22",
@@ -302,11 +305,8 @@ def validate_scenario(path: Path, data: Any, catalog: dict[str, Any]) -> list[st
         f"{prefix}: allowed_remediations must be non-empty list",
         errors,
     )
-    valid_actions = set(
-        catalog["recovery_actions"].get(
-            data.get("expected_root_cause"), catalog["fallback_actions"]
-        )
-    )
+    valid_actions = set(catalog["fallback_actions"])
+    valid_actions.update(catalog["recovery_actions"].get(data.get("expected_root_cause"), ()))
     if isinstance(allowed, list):
         for item in allowed:
             require(isinstance(item, dict), f"{prefix}: allowed remediation must be object", errors)
@@ -783,6 +783,11 @@ def validate_candidate_contracts(
             if any(
                 action["route"] == route and action["action_type"] in supported_actions
                 for action in expected_allowed
+            )
+            and (
+                capability != "safe_pr"
+                or not valid_candidate_id
+                or candidate_id not in SAFE_PR_NON_MATERIALIZABLE_CANDIDATES
             )
         ]
         capabilities = item.get("patch_capabilities")
