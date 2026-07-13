@@ -1,4 +1,4 @@
-# Maintainers (Publication Draft)
+# Opsia Maintainers (Publication Draft)
 
 > No public maintainer identities are designated by this draft. Human owners must obtain consent,
 > select public handles, approve roles, and publish the initial roster before repository publication.
@@ -14,7 +14,7 @@ The public roster should identify accountable people for each responsibility:
 | Security response | 2 | Private reporting and conflict-free escalation tested |
 | RCA and evidence contracts | 2 | Catalog and evidence compatibility review defined |
 | Remediation and policy safety | 2 | Approval, blast-radius, rollback, and harmful-action review defined |
-| KubeHealBench | 2 | Scenario ground-truth and metric review defined |
+| OpsiaBench | 2 | Scenario ground-truth and metric review defined |
 | Community conduct | 2 | Confidential conduct reporting and appeal path configured |
 
 One person may cover multiple areas, but no critical credential or emergency action should depend on a
