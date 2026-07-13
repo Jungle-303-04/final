@@ -212,7 +212,7 @@ export function useNotices(): { notices: Notice[]; unread: number; markAllSeen: 
     const out: Notice[] = [];
     runs.items.forEach(({ appId, runs: rs }) => rs.filter((r: WorkflowRun) => r.status === 'WAITING_FOR_APPROVAL').forEach((r: WorkflowRun) => out.push({
       id: `apr-${r.run_id}`, kind: 'approval', tone: 'warn',
-      title: `배포 승인 필요: ${appId} ${(r.commit_sha ?? '').slice(0, 7)}`, at: r.started_at ?? '', link: '/release-flows', read: false,
+      title: `배포 승인 필요: ${appId} ${(r.commit_sha ?? '').slice(0, 7)}`, at: r.started_at ?? '', link: `/repos/${encodeURIComponent(appId)}?tab=runs`, read: false,
     })));
     (timeline.data ?? []).forEach(i => out.push({ id: `inc-${i.incident_id}`, kind: 'incident', tone: 'danger', title: `인시던트: ${i.summary}`, at: i.at, link: `/incidents/${i.incident_id}`, read: false }));
     (dlq.data ?? []).filter(d => d.status === 'open').forEach(d => out.push({ id: `dlq-${d.id}`, kind: 'dlq', tone: 'danger', title: `처리 실패 이벤트: ${d.original_subject} (${d.consumer})`, at: d.created_at, link: '/settings/ops', read: false }));

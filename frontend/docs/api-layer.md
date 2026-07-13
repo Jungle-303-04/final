@@ -18,7 +18,6 @@
 1. 새 화면은 먼저 실제 Gateway endpoint 또는 기존 read model이 있는지 확인한다.
 2. endpoint가 없으면 백엔드 query/read model을 추가한다. 프론트에서 값을 합성하지 않는다.
 3. adapter는 이름/형태 정규화와 null-safe 렌더 방어만 한다.
-4. 메트릭 drilldown은 `/metrics?cluster=...&subject=...&name=...` 컨텍스트를 PromQL 템플릿에 주입하고, `POST /agent/debug/query` 결과만 표시한다.
 
 ## 불변식 (기획서 docs/map-rbac-plan.md의 I1~I12)
 

@@ -121,86 +121,6 @@ test('ai message payload keeps title out of existing conversation sends', async 
   assert.deepEqual(aiMessagePayload('안녕'), { message: '안녕' });
 });
 
-test('metrics context preset narrows PromQL by real drilldown subject', async () => {
-  const { buildContextPreset, metricPresetPayload, metricWidgetPayload } = await vite.ssrLoadModule('/src/features/metrics/MetricsView.tsx');
-
-  assert.equal(
-    buildContextPreset('pod', 'checkout-api-123', 'prod').promql,
-    'sum by (pod) (rate(kube_pod_container_status_restarts_total{namespace="prod",pod="checkout-api-123"}[5m]))',
-  );
-  assert.equal(
-    buildContextPreset('node', 'ip-10-0-1-1', '').promql,
-    '1 - avg by (instance) (rate(node_cpu_seconds_total{mode="idle",instance=~".*ip-10-0-1-1.*"}[5m]))',
-  );
-  assert.deepEqual(metricPresetPayload({
-    name: 'Pod restarts',
-    query: 'sum(rate(kube_pod_container_status_restarts_total[5m]))',
-    rangeSeconds: 900,
-    unit: 'count',
-    context: { cluster: 'cluster-1', namespace: 'prod' },
-  }), {
-    name: 'Pod restarts',
-    description: '',
-    source: 'prometheus',
-    query: 'sum(rate(kube_pod_container_status_restarts_total[5m]))',
-    range_seconds: 900,
-    step_seconds: 30,
-    unit: 'count',
-    metadata: { context: { cluster: 'cluster-1', namespace: 'prod' } },
-  });
-  assert.equal(metricPresetPayload({ name: '', query: 'up', rangeSeconds: 300, unit: 'count' }), null);
-  assert.deepEqual(metricWidgetPayload({
-    queryPresetId: 'preset-cpu',
-    title: 'CPU',
-    settings: { unit: 'ratio' },
-  }), {
-    query_preset_id: 'preset-cpu',
-    title: 'CPU',
-    kind: 'line',
-    position: {},
-    settings: { unit: 'ratio' },
-  });
-});
-
-test('usage series renders restart_total as per-sample delta', async () => {
-  const { buildUsageSeries } = await vite.ssrLoadModule('/src/features/metrics/usageSeries.ts');
-
-  const series = buildUsageSeries([
-    { sampled_at: '2026-07-08T00:00:00Z', usage: { pod_running: 4, node_ready: 2, restart_total: 10 } },
-    { sampled_at: '2026-07-08T00:01:00Z', usage: { pod_running: 4, node_ready: 2, restart_total: 13 } },
-    { sampled_at: '2026-07-08T00:02:00Z', usage: { pod_running: 5, node_ready: 2, restart_total: 12 } },
-    { sampled_at: '2026-07-08T00:03:00Z', usage: { pod_running: 5, node_ready: 2, restart_total: 17 } },
-  ]);
-
-  assert.deepEqual(series.map(item => item.id), ['실행 팟', '준비 노드', '재시작 증가']);
-  assert.deepEqual(series[2].data.map(point => point.y), [0, 3, 0, 5]);
-});
-
-test('home fleet charts use real cluster usage samples', async () => {
-  const { buildFleetPodSeries, buildFleetRestartSeries, trackedFleetChartClusters } = await vite.ssrLoadModule('/src/features/console/pages/homeCharts.ts');
-  const clusters = [
-    { cluster_id: 'empty', name: 'empty', pods_total: 0, nodes_total: 0 },
-    { cluster_id: 'cluster-1', name: 'cluster-1', pods_total: 17, nodes_total: 2 },
-    { cluster_id: 'cluster-2', name: 'cluster-2', pods_total: 13, nodes_total: 1 },
-  ];
-  const tracked = trackedFleetChartClusters(clusters);
-  const samples = {
-    'cluster-1': [
-      { sampled_at: '2026-07-08T00:00:00Z', usage: { pod_running: 16, restart_total: 10 } },
-      { sampled_at: '2026-07-08T00:01:00Z', usage: { pod_running: 17, restart_total: 13 } },
-      { sampled_at: '2026-07-08T00:02:00Z', usage: { pod_running: 17, restart_total: 12 } },
-    ],
-    'cluster-2': [
-      { sampled_at: '2026-07-08T00:00:00Z', usage: { pod_running: 12, restart_total: 1 } },
-      { sampled_at: '2026-07-08T00:01:00Z', usage: { pod_running: 13, restart_total: 5 } },
-    ],
-  };
-
-  assert.deepEqual(tracked.map(cluster => cluster.cluster_id), ['cluster-1', 'cluster-2']);
-  assert.deepEqual(buildFleetPodSeries(tracked, samples).map(series => series.data.map(point => point.y)), [[16, 17, 17], [12, 13]]);
-  assert.deepEqual(buildFleetRestartSeries(tracked, samples).map(series => series.data.map(point => point.y)), [[0, 3, 0], [0, 4]]);
-});
-
 test('sparkline presence requires measured numeric points', async () => {
   const { hasSparklinePoints } = await vite.ssrLoadModule('/src/ui/charts.tsx');
 
@@ -248,7 +168,7 @@ test('live stream applies initial snapshot summaries to chart history', async ()
   liveStore.setState({ status: 'closed', snapshot: null, history: [] });
 });
 
-test('cluster drill actions keep real subject context across events metrics and ai', async () => {
+test('cluster drill actions keep real subject context across events and ai', async () => {
   const { contextActionHrefs, deploymentTargetFromWorkload } = await vite.ssrLoadModule('/src/features/cluster/ClusterDetailView.tsx');
   const { adaptWorkloadResource } = await vite.ssrLoadModule('/src/shared/lib/adapt.ts');
 
@@ -266,7 +186,6 @@ test('cluster drill actions keep real subject context across events metrics and 
 
   const hrefs = contextActionHrefs('cluster-1', 'pod', 'checkout-abc', 'prod');
   assert.equal(hrefs.events, '/clusters/cluster-1?tab=events&q=checkout-abc');
-  assert.equal(hrefs.metrics, '/metrics?cluster=cluster-1&subject=pod&name=checkout-abc&namespace=prod');
   const aiUrl = new URL(hrefs.ai, 'https://console.test');
   assert.equal(aiUrl.pathname, '/ai');
   assert.equal(aiUrl.searchParams.get('prefill'), 'cluster-1 prod/checkout-abc pod 상태 분석');
@@ -341,22 +260,5 @@ test('resource wizards keep exact real discovery selections', async () => {
       ],
     }),
     'manual-manifest',
-  );
-});
-
-test('fleet cluster stat chip does not report stale or unknown as normal', async () => {
-  const { fleetClusterChip } = await vite.ssrLoadModule('/src/features/console/pages/HomePage.tsx');
-
-  assert.deepEqual(
-    fleetClusterChip({ clusters: 2, critical: 0, warning: 0, stale: 1, unknown: 0 }),
-    { chip: '스테일 1', severity: 'warning' },
-  );
-  assert.deepEqual(
-    fleetClusterChip({ clusters: 2, critical: 0, warning: 0, stale: 0, unknown: 2 }),
-    { chip: '미확인 2', severity: 'neutral' },
-  );
-  assert.deepEqual(
-    fleetClusterChip({ clusters: 2, critical: 0, warning: 0, stale: 0, unknown: 0 }),
-    { chip: '모두 정상', severity: 'success' },
   );
 });

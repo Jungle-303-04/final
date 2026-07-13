@@ -3,7 +3,6 @@ import { lazy, Suspense } from 'react';
 import { createBrowserRouter, Navigate } from 'react-router-dom';
 import { RequireAdmin, RequireGuest, RequireSession } from '@/app/guards';
 import { ConsoleLayout } from '@/features/console/ui';
-import { HomePage } from '@/features/console/pages/HomePage';
 import { Skeleton } from '@/ui';
 
 const L = (f: () => Promise<{ default: React.ComponentType }>) => {
@@ -12,18 +11,14 @@ const L = (f: () => Promise<{ default: React.ComponentType }>) => {
 };
 
 const consoleChildren = (basePath = '') => [
-  { index: true, element: <HomePage /> },
+  { index: true, element: <Navigate to={`${basePath}/clusters`} replace /> },
   { path: 'clusters', element: L(() => import('@/features/cluster/ClusterListView')) },
   { path: 'clusters/:clusterId', element: L(() => import('@/features/cluster/ClusterDetailView')) },
   { path: 'clusters/:clusterId/pods/:namespace/:pod', element: L(() => import('@/features/cluster/ClusterDetailView')) },
   { path: 'repos', element: L(() => import('@/features/repo/RepoListView')) },
   { path: 'repos/:applicationId', element: L(() => import('@/features/repo/RepoDetailView')) },
-  { path: 'workflows', element: <Navigate to={`${basePath}/release-flows`} replace /> },
-  { path: 'workflows/:runId', element: <Navigate to={`${basePath}/release-flows`} replace /> },
   { path: 'incidents', element: L(() => import('@/features/notifications/NotificationsView')) },
   { path: 'incidents/:incidentId', element: L(() => import('@/features/notifications/IncidentDetailView')) },
-  { path: 'release-flows', element: L(() => import('@/features/release/ReleaseFlowView')) },
-  { path: 'metrics', element: L(() => import('@/features/metrics/MetricsView')) },
   { path: 'ai', element: L(() => import('@/features/chat/ChatView')) },
   { path: 'ai/:conversationId', element: L(() => import('@/features/chat/ChatView')) },
   { path: 'catalog', element: L(() => import('@/features/resources/CatalogView')) },

@@ -95,7 +95,6 @@ export default function RepoDetailView() {
           loading={runsQ.isPending}
           error={runsQ.isError ? runsQ.error : null}
           onRetry={() => runsQ.refetch()}
-          onOpenRun={() => navigate(pathFor('/release-flows'))}
         />
       )}
 
@@ -143,13 +142,11 @@ function RunHistory({
   loading,
   error,
   onRetry,
-  onOpenRun,
 }: {
   runs: WorkflowRun[];
   loading: boolean;
   error: Error | null;
   onRetry: () => void;
-  onOpenRun: (runId: string) => void;
 }) {
   return (
     <Card
@@ -167,9 +164,6 @@ function RunHistory({
               <CodeText>{shortSha(run.commit_sha)}</CodeText>
               <StatusBadge status={run.status} />
               <span className="text-caption text-text-muted">{timeAgo(run.started_at) || '시간 없음'}</span>
-              <div className="ml-auto flex shrink-0 items-center gap-2">
-                <Button size="sm" onClick={() => onOpenRun(run.run_id)}>그래프 보기</Button>
-              </div>
             </div>
             <StepRail run={run} />
             {run.status === 'WAITING_FOR_APPROVAL' && run.approval_id && (
