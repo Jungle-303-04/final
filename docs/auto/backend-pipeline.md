@@ -4,7 +4,7 @@ status: active-pipeline
 date: 2026-07-13
 owner: 백엔드 Codex(목표모드)가 §4 단계 상태만 갱신한다. 판단자는 검증·HOLD만. 사람은 🔒 게이트만.
 supersedes: night-directives [D-001]~[D-003]의 백엔드 지시 전부
-verified_facts_as_of: 2026-07-13 04:30 KST (night-log 증거 기준)
+verified_facts_as_of: 2026-07-13 04:30 KST (역사적 시작 snapshot; 현재 상태는 §4와 night-log 기준)
 ---
 
 # 백엔드 자생 파이프라인 — 정본 v2
@@ -69,7 +69,11 @@ verified_facts_as_of: 2026-07-13 04:30 KST (night-log 증거 기준)
     `## GO-REQUEST [H|J] — 대상, 실행할 명령 목록(복사 가능한 형태), 예상 결과,
     실패 시 롤백 명령, 검증 방법`. 사람이 night-directives에 `GO [H|J]`를 쓰면 후속 진행.
 
-## 3. 확정된 사실 (2026-07-13 04:30 기준 — 재조사 금지, 의심되면 §1.5로 재검증만)
+## 3. 역사적 시작 snapshot (2026-07-13 04:30 기준)
+
+이 절의 lane·미착륙 표시는 파이프라인 시작 당시 사실을 보존한 것이다. 현재 상태로
+재해석하거나 회수된 lane을 복원하지 않는다. 현재 판정은 §4 단계 표와 night-log 최하단
+아침 요약을 따른다. 의심되면 §1.5의 origin 기준으로만 재검증한다.
 
 3.1 BQ-001(command_id receipt)·BQ-002(audit causation_id + concurrent migration)·
     BQ-003(RemediationBundle: `src/domains/rca_bundle/router.py`, 스키마,
