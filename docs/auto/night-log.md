@@ -2260,3 +2260,19 @@ target preflight·register 네 함수와 strict Zod 계약을 claim했다. 1회�
 - 4조건: merge-tree clean/tree `428481b5a7d0bfcd0dc54c1a604c99fb2ca1ed34`,
   파일 삭제·소유권 밖·frozen·gateway 계약 변경 0건, `85dae710b`·`de9e600c7`의
   `origin/dev` ancestor exit 0. J 배포 실행은 0건이다.
+
+## 2026-07-13 18:46 KST — [백엔드] 의존성 기동 재시도 직접 테스트 착륙
+
+- lane `codex/config-retry-tests`, test `82c07b920`, feature HEAD
+  `80edc84495468440960f0590b7ca5eb7c5232e67`, canonical no-ff merge
+  `d0953f2c6566c5761c5158e5a7a14ef7a54292b5`.
+- NATS/PostgreSQL 공용 `retry_dependency()`의 첫 성공, N-1 일시 실패 후 성공,
+  정확한 attempt 한도·구조화 warning context, `limit=0`, task cancellation을 직접
+  테스트 5개로 고정했다. 소진 경로의 마지막 sleep 횟수는 계약화하지 않았다.
+- 성공 종료를 제거한 비커밋 mutation에서 2건 실패를 확인했다. 원복 후 focused
+  5 passed, asyncio debug·warning-error, 10회 반복 모두 PASS이고 독립 재감사 2건도 PASS다.
+- 프로덕션 source 변경 0건. 전체 게이트는 Ruff lint/format PASS, import-linter
+  8 kept/0 broken, pytest `1962 passed, 3 skipped`; manifest 69/20이다.
+- 4조건: merge-tree clean/tree `70599e747873268d57d70886d98618cfdffc3cd6`,
+  source·파일 삭제·소유권 밖·frozen·gateway 계약 변경 0건, `80edc8449`·`d0953f2c6`의
+  `origin/dev` ancestor exit 0. J 배포 실행은 0건이다.
