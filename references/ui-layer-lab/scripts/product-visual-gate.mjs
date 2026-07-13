@@ -279,11 +279,11 @@ const localeSmokeCopy = {
 };
 const localeControlCopy = {
   en: {
-    control: "Language: English",
+    control: "Current language: English",
     options: { en: "English", ko: "Korean" },
   },
   ko: {
-    control: "언어: 한국어",
+    control: "현재 언어: 한국어",
     options: { en: "영어", ko: "한국어" },
   },
 };
@@ -1972,7 +1972,7 @@ async function assertAuthLocaleSmoke(page, scenario) {
   await page.getByRole("textbox", { name: "Email", exact: true }).waitFor();
   await page.getByLabel("Password", { exact: true }).waitFor();
   await page.getByRole("button", { name: "Sign in", exact: true }).waitFor();
-  await page.getByRole("combobox", { name: "Language: English", exact: true }).waitFor();
+  await page.getByRole("combobox", { name: "Current language: English", exact: true }).waitFor();
 
   const authText = await page.getByRole("main").innerText();
   for (const unexpected of ["이메일", "비밀번호", "로그인"]) {

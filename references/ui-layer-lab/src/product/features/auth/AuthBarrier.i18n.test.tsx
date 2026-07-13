@@ -57,8 +57,8 @@ describe("localized authentication boundary", () => {
     const loginCard = screen.getByRole("heading", { name: "Sign in to Opsia" })
       .closest('[data-slot="card"]');
     expect(publicHeader.textContent).toContain("Opsia");
-    expect(publicHeader.querySelector('[aria-label="Language: English"]')).toBeTruthy();
-    expect(loginCard?.querySelector('[aria-label="Language: English"]')).toBeNull();
+    expect(publicHeader.querySelector('[aria-label="Current language: English"]')).toBeTruthy();
+    expect(loginCard?.querySelector('[aria-label="Current language: English"]')).toBeNull();
   });
 
   it("switches and persists locale before authentication", async () => {
@@ -66,11 +66,11 @@ describe("localized authentication boundary", () => {
     const view = renderBarrier(unauthenticatedPort(), "ko", window.localStorage);
 
     await screen.findByRole("heading", { name: "Opsia에 로그인" });
-    await user.click(screen.getByRole("combobox", { name: "언어: 한국어" }));
+    await user.click(screen.getByRole("combobox", { name: "현재 언어: 한국어" }));
     await user.click(await screen.findByRole("option", { name: "영어" }));
 
     expect(screen.getByRole("heading", { name: "Sign in to Opsia" })).toBeTruthy();
-    expect(screen.getByRole("combobox", { name: "Language: English" })).toBeTruthy();
+    expect(screen.getByRole("combobox", { name: "Current language: English" })).toBeTruthy();
     expect(window.localStorage.getItem("kubeheal.locale")).toBe("en");
 
     view.unmount();

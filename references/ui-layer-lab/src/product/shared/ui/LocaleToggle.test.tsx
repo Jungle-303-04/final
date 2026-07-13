@@ -22,7 +22,7 @@ describe("LocaleToggle", () => {
       </I18nProvider>,
     );
 
-    const trigger = screen.getByRole("combobox", { name: "Language: English" });
+    const trigger = screen.getByRole("combobox", { name: "Current language: English" });
     expect(trigger.textContent).toContain("English");
     expect(trigger.className).toContain("w-(--product-toolbar-compact-control-width)");
 
@@ -31,7 +31,7 @@ describe("LocaleToggle", () => {
     await user.click(await screen.findByRole("option", { name: "Korean" }));
 
     await waitFor(() => {
-      const localizedTrigger = screen.getByRole("combobox", { name: "언어: 한국어" });
+      const localizedTrigger = screen.getByRole("combobox", { name: "현재 언어: 한국어" });
       expect(localizedTrigger).toBe(trigger);
       expect(localizedTrigger.className).toContain("w-(--product-toolbar-compact-control-width)");
     });
@@ -46,7 +46,7 @@ describe("LocaleToggle", () => {
       </I18nProvider>,
     );
 
-    const trigger = screen.getByRole("combobox", { name: "언어: 한국어" });
+    const trigger = screen.getByRole("combobox", { name: "현재 언어: 한국어" });
     expect(trigger.textContent).toContain("한국어");
     expect(document.documentElement.lang).toBe("ko");
   });
@@ -59,7 +59,7 @@ describe("LocaleToggle", () => {
       </I18nProvider>,
     );
 
-    expect(screen.getByRole("combobox", { name: "Language: English" })).toBeTruthy();
+    expect(screen.getByRole("combobox", { name: "Current language: English" })).toBeTruthy();
     expect(document.documentElement.lang).toBe("en");
   });
 });

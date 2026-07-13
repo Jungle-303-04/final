@@ -59,6 +59,7 @@ export const ko = {
   "shell.locale.english": "영어",
   "shell.locale.korean": "한국어",
   "shell.locale.label": "언어",
+  "shell.locale.current": "현재 언어: {language}",
   "shell.menu.label": "제품 메뉴",
   "shell.menu.mobileClose": "모바일 사이드바 닫기",
   "shell.menu.mobileDescription": "현재 사용할 수 있는 제품 화면으로 이동합니다.",
