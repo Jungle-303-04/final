@@ -2209,3 +2209,20 @@ target preflight·register 네 함수와 strict Zod 계약을 claim했다. 1회�
 - 정합화 직전 전체 `npm run check` PASS: TypeScript·ESLint, Vitest 117 files / 844 tests,
   design guard 345 files, shadcn source audit 482 previews, Vite build 14,539 modules.
   커밋 push 후 `origin/woonyong/ui-layer-lab` ancestor exit 0을 확인했다.
+
+## 2026-07-13 18:18 KST — [프론트] Home Pod drill-in 강제색 시각 회귀 완료
+
+- RED `214abde839eb8a08ceeac569b8762423802f6a19`는 Pod drill-in forced-colors 장면을
+  추가하고 기존 Home 단언이 Node 프레임 전용 selector 때문에 `missing:true`로 실패하는
+  회귀를 고정했다.
+- GREEN `49c3504372af46e6f87de5d2976dcf4d80e171c7`은 제품 DOM·데이터를 바꾸지 않고
+  현재 Node/Pod 프레임을 구분한다. 비인터랙티브 리소스 카드의 경계·텍스트 대비와 실제
+  키보드 조작 대상(Node 버튼 또는 Pod의 뒤로 버튼)의 포커스 대비를 독립 검증한다.
+- `npm run check` PASS: TypeScript·ESLint, Vitest 117 files / 844 tests,
+  design guard 345 files, shadcn source audit 482 previews, Vite build 14,539 modules.
+  `npm run visual-product` PASS: 42 isolated scenarios, exact API request counts,
+  unexpected feature network/WebSocket 0건. CLS는 Home `0.004188`, Resources `0.004167`,
+  Issues `0.004202`로 모두 0.1 예산 이하다.
+- 시각 증거:
+  `references/ui-layer-lab/output/playwright/product-home-authenticated-pod-forced-colors.png`.
+  두 커밋 모두 push 후 `origin/woonyong/ui-layer-lab` ancestor exit 0을 확인했다.
