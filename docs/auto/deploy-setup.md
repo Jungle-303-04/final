@@ -105,7 +105,7 @@ cat >/tmp/opsia-dev-deploy-trust.json <<'JSON'
 }
 JSON
 
-export DEPLOY_ROLE_NAME=OpsiaDevDeployRole
+export DEPLOY_ROLE_NAME=opsia-dev-deploy
 if aws iam get-role --profile "${AWS_PROFILE}" --role-name "${DEPLOY_ROLE_NAME}" >/dev/null 2>&1; then
   aws iam update-assume-role-policy \
     --profile "${AWS_PROFILE}" \
@@ -206,7 +206,7 @@ JSON
 aws iam put-role-policy \
   --profile "${AWS_PROFILE}" \
   --role-name "${DEPLOY_ROLE_NAME}" \
-  --policy-name OpsiaDevDeployPolicy \
+  --policy-name opsia-dev-deploy-minimum \
   --policy-document file:///tmp/opsia-dev-deploy-permissions.json
 
 export DEPLOY_ROLE_ARN="$(aws iam get-role \
@@ -223,7 +223,9 @@ EKS cluster, PostgreSQL/NATS volume과 snapshot ARN으로 한정한다. RDS 권�
 ### 4.3 EKS API 권한
 
 IAM의 `eks:DescribeCluster`만으로 Kubernetes object에 접근할 수 없다. 아래는 클러스터
-관리자가 한 번만 실행하는 bootstrap이며 제품 workload 배포가 아니다.
+관리자가 한 번만 실행하는 bootstrap이며 제품 workload 배포가 아니다. namespaced object는
+AWS 관리 access policy를 `management` namespace 하나에만 연결하고, cluster-scoped PV는
+`get` 한 동작만 별도 RBAC으로 허용한다.
 
 ```bash
 aws eks create-access-entry \
@@ -231,55 +233,30 @@ aws eks create-access-entry \
   --region "${AWS_REGION}" \
   --cluster-name "${EKS_CLUSTER}" \
   --principal-arn "${DEPLOY_ROLE_ARN}" \
-  --kubernetes-groups opsia-dev-deployer \
+  --kubernetes-groups opsia-dev-deploy-pv-reader \
   --type STANDARD 2>/dev/null || \
 aws eks update-access-entry \
   --profile "${AWS_PROFILE}" \
   --region "${AWS_REGION}" \
   --cluster-name "${EKS_CLUSTER}" \
   --principal-arn "${DEPLOY_ROLE_ARN}" \
-  --kubernetes-groups opsia-dev-deployer
+  --kubernetes-groups opsia-dev-deploy-pv-reader
+
+aws eks associate-access-policy \
+  --profile "${AWS_PROFILE}" \
+  --region "${AWS_REGION}" \
+  --cluster-name "${EKS_CLUSTER}" \
+  --principal-arn "${DEPLOY_ROLE_ARN}" \
+  --policy-arn arn:aws:eks::aws:cluster-access-policy/AmazonEKSEditPolicy \
+  --access-scope type=namespace,namespaces=management
 ```
 
 ```bash
 kubectl --context opsia-admin apply -f - <<'YAML'
 apiVersion: rbac.authorization.k8s.io/v1
-kind: Role
-metadata:
-  name: opsia-dev-deployer
-  namespace: management
-rules:
-  - apiGroups: ["apps"]
-    resources: ["deployments"]
-    verbs: ["get", "list", "watch", "patch", "update"]
-  - apiGroups: ["batch"]
-    resources: ["jobs"]
-    verbs: ["get", "list", "watch", "create", "delete", "patch", "update"]
-  - apiGroups: [""]
-    resources: ["pods", "persistentvolumeclaims"]
-    verbs: ["get", "list", "watch"]
-  - apiGroups: [""]
-    resources: ["configmaps"]
-    verbs: ["get", "create", "patch", "update"]
----
-apiVersion: rbac.authorization.k8s.io/v1
-kind: RoleBinding
-metadata:
-  name: opsia-dev-deployer
-  namespace: management
-roleRef:
-  apiGroup: rbac.authorization.k8s.io
-  kind: Role
-  name: opsia-dev-deployer
-subjects:
-  - apiGroup: rbac.authorization.k8s.io
-    kind: Group
-    name: opsia-dev-deployer
----
-apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
-  name: opsia-dev-deployer-pv-reader
+  name: opsia-dev-deploy-pv-reader
 rules:
   - apiGroups: [""]
     resources: ["persistentvolumes"]
@@ -288,15 +265,15 @@ rules:
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
 metadata:
-  name: opsia-dev-deployer-pv-reader
+  name: opsia-dev-deploy-pv-reader
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: ClusterRole
-  name: opsia-dev-deployer-pv-reader
+  name: opsia-dev-deploy-pv-reader
 subjects:
   - apiGroup: rbac.authorization.k8s.io
     kind: Group
-    name: opsia-dev-deployer
+    name: opsia-dev-deploy-pv-reader
 YAML
 ```
 
