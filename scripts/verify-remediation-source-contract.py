@@ -36,7 +36,7 @@ spec:
       imagePath: spec.template.spec.containers[name=checkout-api].image
       replicaPath: spec.replicas
       probePaths:
-        readinessProbe.timeoutSeconds: spec.template.spec.containers[name=checkout-api].readinessProbe.timeoutSeconds
+        spec.template.spec.containers[name=checkout-api].readinessProbe.timeoutSeconds: spec.template.spec.containers[name=checkout-api].readinessProbe.timeoutSeconds
     - manifestPath: charts/checkout/Chart.yaml
       sourceType: helm-values
       path: charts/checkout/values.yaml

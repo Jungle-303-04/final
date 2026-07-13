@@ -15,7 +15,7 @@ REMEDIATION_SOURCE_KIND = "RemediationSource"
 REMEDIATION_SOURCE_CONTRACT_PATH = ".remediation.yaml"
 MAX_CONTRACT_BYTES = 64 * 1024
 SOURCE_TYPES = frozenset({"raw-yaml", "helm-values", "kustomize"})
-PROBE_FIELDS = frozenset(
+PROBE_FIELD_SUFFIXES = frozenset(
     {
         "readinessProbe.httpGet.path",
         "readinessProbe.httpGet.port",
@@ -186,14 +186,17 @@ def _parse_probe_paths(value: object) -> tuple[tuple[str, str], ...]:
         return ()
     if not isinstance(value, dict) or not value:
         raise RemediationSourceContractError("remediation source probePaths is invalid")
-    if not set(value).issubset(PROBE_FIELDS):
-        raise RemediationSourceContractError("remediation source probe field is unsupported")
     paths: list[tuple[str, str]] = []
     for semantic_field, path in value.items():
-        if not isinstance(semantic_field, str) or not isinstance(path, str):
-            raise RemediationSourceContractError("remediation source probePaths is invalid")
+        if (
+            not isinstance(semantic_field, str)
+            or not _valid_field_path(semantic_field)
+            or not any(semantic_field.endswith(suffix) for suffix in PROBE_FIELD_SUFFIXES)
+            or not isinstance(path, str)
+        ):
+            raise RemediationSourceContractError("remediation source probe field is unsupported")
         if not _valid_field_path(path):
-            raise RemediationSourceContractError("remediation source probe path is invalid")
+            raise RemediationSourceContractError("remediation source probePaths is invalid")
         paths.append((semantic_field, path))
     return tuple(paths)
 
