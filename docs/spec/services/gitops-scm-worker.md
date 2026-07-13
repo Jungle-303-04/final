@@ -1,5 +1,5 @@
 ---
-source_commit: 1616d295
+source_commit: 9af57b639
 status: synced
 ---
 
@@ -13,6 +13,9 @@ status: synced
 - 성공 시 `pull_request` 저장 + `safe_pr.created` 발행, 요청에 `next_alert`가 있으면 이어서 `alert.requested`도 발행한다.
 - 실패 시 `safe_pr.failed`(stage=`scm`) 발행.
 - 같은 `workflow_run_id` 이벤트 재전달(redelivery)에 멱등: 브랜치/파일/PR 생성 422 충돌 시 기존 리소스를 재사용한다.
+- `.gitops/safe-pr/patches/*.yaml` structured plan은 workflow/diff/provenance와 다시 대조하고,
+  exact base SHA에서 읽은 원문의 허용 scalar span만 수정한다. forward의 exact inverse
+  rollback plan은 변경 문서에 함께 보존한다.
 - 하지 않는 것: 요청 준비 게이트(그건 [safe-pr-worker](gitops-safe-pr-worker.md)), diff 설명, 워크플로 상태 기록([workflow-controller](gitops-workflow-controller.md)).
 
 ## 의존성 (Dependencies)
