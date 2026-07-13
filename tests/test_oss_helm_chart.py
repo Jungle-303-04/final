@@ -128,3 +128,42 @@ def test_make_demo_installs_the_chart_before_injecting_the_bad_rollout() -> None
     assert '"${ROOT_DIR}/charts/opsia"' in script
     assert "rollout status deployment/opsia-controller" in script
     assert script.index("helm upgrade --install") < script.rindex('scene "bad-rollout-observed"')
+
+
+def test_helm_chart_can_inject_a_demo_scm_without_changing_the_default_provider() -> None:
+    defaults = _render_chart("--set", "postgresql.persistence.enabled=false")
+    configured = _render_chart(
+        "--set",
+        "postgresql.persistence.enabled=false",
+        "--set",
+        "scm.repository=opsia/demo",
+        "--set",
+        "scm.github.apiBase=http://opsia-demo-scm:8080",
+        "--set",
+        "scm.github.tokenSecretName=opsia-demo-scm",
+    )
+
+    def controller_env(documents: list[dict[str, object]]) -> dict[str, dict[str, object]]:
+        deployment = next(
+            item
+            for item in documents
+            if item["kind"] == "Deployment" and item["metadata"]["name"] == "opsia-controller"
+        )
+        container = next(
+            item
+            for item in deployment["spec"]["template"]["spec"]["containers"]
+            if item["name"] == "controller"
+        )
+        return {item["name"]: item for item in container["env"]}
+
+    default_env = controller_env(defaults)
+    configured_env = controller_env(configured)
+    assert default_env["SCM_PROVIDER"]["value"] == "github"
+    assert "GITHUB_API_BASE" not in default_env
+    assert "GITHUB_TOKEN" not in default_env
+    assert configured_env["SCM_REPO"]["value"] == "opsia/demo"
+    assert configured_env["GITHUB_API_BASE"]["value"] == "http://opsia-demo-scm:8080"
+    assert configured_env["GITHUB_TOKEN"]["valueFrom"]["secretKeyRef"] == {
+        "name": "opsia-demo-scm",
+        "key": "token",
+    }
