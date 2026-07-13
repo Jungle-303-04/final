@@ -4,6 +4,7 @@ import { metricsKo } from "./catalogs/ko/metrics";
 import { resourcesKo } from "./catalogs/ko/resources";
 
 export const ko = {
+  "product.name": "Opsia",
   "common.action.back": "뒤로",
   "common.action.cancel": "취소",
   "common.action.clear": "지우기",
@@ -136,7 +137,7 @@ export const ko = {
   "auth.login.pending": "로그인 중",
   "auth.login.submit": "로그인",
   "auth.login.subtitle": "계속하려면 계정 정보를 입력하세요.",
-  "auth.login.title": "KubeHeal에 로그인",
+  "auth.login.title": "Opsia에 로그인",
   "auth.logout.action": "로그아웃",
   "auth.logout.error.message": "로그아웃 요청을 완료하지 못했습니다. 연결을 확인한 뒤 다시 시도하세요.",
   "auth.logout.error.title": "세션 종료 오류",

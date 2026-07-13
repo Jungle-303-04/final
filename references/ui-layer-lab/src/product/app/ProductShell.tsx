@@ -144,7 +144,7 @@ function ProductShellFrame({
             <Activity aria-hidden="true" className="size-4" />
           </span>
           <SidebarText className="text-sm font-semibold tracking-tight">
-            KubeHeal
+            {t("product.name")}
           </SidebarText>
         </SidebarHeader>
 

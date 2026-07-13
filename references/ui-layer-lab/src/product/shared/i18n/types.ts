@@ -10,6 +10,7 @@ export type SupportedLocale = "en" | "ko";
  * translation key; render them unchanged or pass them as a named parameter.
  */
 type CoreMessageKey =
+  | "product.name"
   | "common.action.back"
   | "common.action.cancel"
   | "common.action.clear"
