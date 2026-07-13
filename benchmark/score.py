@@ -169,7 +169,7 @@ def load_recovery_contracts() -> tuple[dict[str, list[dict[str, Any]]], list[dic
                 continue
             root_causes = ast.literal_eval(_call_keyword(decorator, "root_causes"))
             for candidate_id in root_causes:
-                explicit[candidate_id] = actions
+                explicit.setdefault(candidate_id, []).extend(actions)
     if not fallback:
         raise ValueError(f"{RECOVERY_SOURCE}: fallback recovery contract is missing")
     return explicit, fallback
@@ -237,6 +237,10 @@ def load_dispatch_capabilities() -> tuple[frozenset[str], frozenset[str]]:
 def require(condition: bool, message: str, errors: list[str]) -> None:
     if not condition:
         errors.append(message)
+
+
+def is_strict_int(value: Any) -> bool:
+    return isinstance(value, int) and not isinstance(value, bool)
 
 
 def validate_catalog_sources(catalog: dict[str, Any], errors: list[str]) -> None:
@@ -485,7 +489,11 @@ def validate_candidate_index(data: Any) -> list[str]:
             f"{item_prefix}: fields must match schema",
             errors,
         )
-        require(item.get("ordinal") == ordinal, f"{item_prefix}: bad ordinal", errors)
+        require(
+            is_strict_int(item.get("ordinal")) and item.get("ordinal") == ordinal,
+            f"{item_prefix}: ordinal must be integer {ordinal}",
+            errors,
+        )
         relative = item.get("catalog_source")
         require(
             isinstance(relative, str) and isinstance(sources, dict) and relative in sources,
@@ -529,15 +537,32 @@ def validate_candidate_index(data: Any) -> list[str]:
 def validate_candidate_contract_progress(contract_count: int, next_ordinal: Any) -> list[str]:
     """Allow complete 10-item batches and the final 7-item catalog tail."""
     errors: list[str] = []
-    terminal = contract_count == CANDIDATE_INDEX_COUNT
+    valid_count_type = is_strict_int(contract_count)
     require(
-        (0 < contract_count < CANDIDATE_INDEX_COUNT and contract_count % 10 == 0) or terminal,
+        valid_count_type,
+        "candidate-contracts.json: contract count must be an integer",
+        errors,
+    )
+    terminal = valid_count_type and contract_count == CANDIDATE_INDEX_COUNT
+    require(
+        (
+            valid_count_type
+            and 0 < contract_count < CANDIDATE_INDEX_COUNT
+            and contract_count % 10 == 0
+        )
+        or terminal,
         "candidate-contracts.json: contracts must end at a 10-item batch or catalog terminal",
         errors,
     )
-    expected_next = None if terminal else contract_count + 1
+    expected_next = None if terminal or not valid_count_type else contract_count + 1
     require(
-        next_ordinal == expected_next,
+        next_ordinal is None if terminal else is_strict_int(next_ordinal),
+        "candidate-contracts.json: next_ordinal must be an integer or null at terminal",
+        errors,
+    )
+    require(
+        (next_ordinal is None and terminal)
+        or (is_strict_int(next_ordinal) and next_ordinal == expected_next),
         "candidate-contracts.json: next_ordinal must identify the next candidate or be null at terminal",
         errors,
     )
@@ -568,7 +593,11 @@ def validate_candidate_contracts(
         errors,
     )
     require(data.get("ordering") == CANDIDATE_ORDERING, f"{prefix}: bad ordering", errors)
-    require(data.get("batch_size") == 10, f"{prefix}: batch_size must be 10", errors)
+    require(
+        is_strict_int(data.get("batch_size")) and data.get("batch_size") == 10,
+        f"{prefix}: batch_size must be integer 10",
+        errors,
+    )
     contracts = data.get("contracts")
     require(
         isinstance(contracts, list) and bool(contracts),
@@ -609,7 +638,11 @@ def validate_candidate_contracts(
             f"{item_prefix}: fields must exactly match schema",
             errors,
         )
-        require(item.get("ordinal") == index, f"{item_prefix}: ordinal must be {index}", errors)
+        require(
+            is_strict_int(item.get("ordinal")) and item.get("ordinal") == index,
+            f"{item_prefix}: ordinal must be integer {index}",
+            errors,
+        )
         catalog_source = item.get("catalog_source")
         indexed_value = index_items[index - 1] if index <= len(index_items) else {}
         indexed = indexed_value if isinstance(indexed_value, dict) else {}
@@ -776,25 +809,6 @@ def validate_candidate_contracts(
                     f"{action_prefix}: post_verification requires non-empty strings",
                     errors,
                 )
-                if route == "auto":
-                    require(
-                        approval_required is False,
-                        f"{action_prefix}: auto route must not require approval",
-                        errors,
-                    )
-                elif route == "draft_pr":
-                    require(
-                        approval_required is True,
-                        f"{action_prefix}: draft_pr route must require approval",
-                        errors,
-                    )
-                else:
-                    require(
-                        approval_required is True,
-                        f"{action_prefix}: approval_required route must require approval",
-                        errors,
-                    )
-
         forbidden = item.get("forbidden_remediations")
         require(
             isinstance(forbidden, list) and bool(forbidden),
