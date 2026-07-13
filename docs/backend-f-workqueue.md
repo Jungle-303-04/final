@@ -55,7 +55,8 @@ R-트랙([D-011])은 dev merge `257f91846`으로 landed/closed 되었고, 전용
 
 ## 프론트 계약 트랙 ([D-026] — 최우선)
 
-**우선순위: 계약 > 배포 > OSS 공개.** 계약 하나를 개별 착륙한 즉시 night-log에 앵커를 남긴다.
+**우선순위: 배포 P0 → 기존 계약(BQ-022~034) → BQ-035~038.** 계약 하나를 개별 착륙한
+즉시 night-log에 앵커를 남긴다.
 
 | ID | 상태 | GAP | 계약 내용 | 해제되는 프론트 단계 |
 |---|---|---|---|---|
@@ -72,6 +73,10 @@ R-트랙([D-011])은 dev merge `257f91846`으로 landed/closed 되었고, 전용
 | BQ-032 | requested | GAP-014 | 특정 workload·시각 ±N분의 bounded log window 조회. tail/stream 계약과 분리 | 우측 패널 로그 |
 | BQ-033 | requested | GAP-015 | 시간 범위 안의 incident marker 목록. 기존 RCA projection 재사용 가능성을 먼저 검증 | 시간 슬라이더 marker |
 | BQ-034 | requested | observed relation edge | 단일 cluster·시각 종속의 stable source/destination node ID와 Service↔Pod selector, Pod↔PVC, Ingress↔Service 검증 edge. traffic metric은 검증된 관측 source·unit·temporality·window가 있을 때만 additive로 포함 | Resources 관계 뷰 |
+| BQ-035 | requested | dashboard capability catalog | `GET /dashboard/catalog`. 엔티티·측정·쪼개기·필터축·표현·크기 제약·프리셋의 정본. 프론트는 여기에 없는 조합을 제시하지 않는다. `gauge_max`가 `null`이면 게이지 표현이 목록에서 빠진다. | VP-011 위젯 조합 편집기 |
+| BQ-036 | requested | dashboard defaults | `GET /settings/dashboard`. 저장 전이면 404가 아니라 서버 기본 배치를 반환한다. | VP-011 기본 대시보드 |
+| BQ-037 | requested | dashboard persistence | `PUT /settings/dashboard`. 카탈로그 대조 검증(무효 조합 400), `order`·`widgets` 일치, workspace 격리(BOLA 방지), `revision` 낙관적 동시성(409)을 강제한다. | VP-011 배치 저장·동시성 |
+| BQ-038 | requested | dashboard batch query | `POST /dashboard/query`. 위젯 배치 질의에서 **shape를 서버가 선언**하고 프론트는 추측하지 않는다. completeness 3값, **`scope_empty`와 `value: 0` 구분**, 시계열 결측의 명시적 gap(보간 금지), 위젯 하나 실패 시 나머지 반환(전체 500 금지)을 보장한다. **대시보드 필터 ∩ 위젯 필터의 교집합 연산은 서버가 수행**해 합성 규칙이 두 곳에 생기지 않게 한다. | VP-011 위젯 데이터·표현 파생 |
 
 상세 의미는 `docs/spec/frontend/vp-010-unified-filter-ia.md` §9·§9.1과
 `docs/spec/frontend/vp-012-timeline-graph-table.md` §2를 따른다.
