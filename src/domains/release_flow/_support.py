@@ -5,8 +5,17 @@ from __future__ import annotations
 from collections.abc import Iterable
 from datetime import UTC, datetime
 from typing import Any
+from urllib.parse import urlparse
 
 from packages.config.constants import Sandbox
+
+PLACEHOLDER_EVIDENCE_HOSTS = {
+    "127.0.0.1",
+    "::1",
+    "example.com",
+    "example.test",
+    "localhost",
+}
 
 
 def release_step_index(plan: dict[str, Any], step: dict[str, Any]) -> int:
@@ -50,6 +59,19 @@ def parse_release_window_time(value: Any) -> datetime | None:
 
 def release_window_bound_label(value: datetime) -> str:
     return value.astimezone(UTC).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+
+
+def live_https_url_is_valid(value: str) -> bool:
+    parsed = urlparse(value.strip())
+    if parsed.scheme.lower() != "https" or not parsed.netloc:
+        return False
+    host = (parsed.hostname or "").lower()
+    return not (
+        host in PLACEHOLDER_EVIDENCE_HOSTS
+        or host.endswith(".example.com")
+        or host.endswith(".example.test")
+        or host.endswith(".localhost")
+    )
 
 
 def release_step_index_in_steps(steps: list[Any], selected: dict[str, Any]) -> int:
