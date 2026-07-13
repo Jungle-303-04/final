@@ -193,3 +193,82 @@ $ git merge-base --is-ancestor 97c862da1 origin/woonyong/ui-layer-lab; echo $?
 [2026-07-13 08:28 KST] [프론트] 테마 첫 페인트 검증 PASS — 저장 테마와 시스템 테마 반대 조건에서 light/dark 각 5회 새로고침, 최초 5프레임의 클래스·colorScheme·불투명 배경 일치, 플래시 0.
 [2026-07-13 09:44 KST] [프론트-D] APIQ-019 in_progress — AI 대화 4함수 strict envelope·open JsonMap·AbortSignal·possibly-sent POST 단일 호출 계약 claim. 코드 커밋과 완료 앵커 전 화면 소비 0 유지.
 [2026-07-13 09:47 KST] [프론트] A2 우선 전환 — APIQ-019 코드는 미커밋 보존하고 claim을 requested로 반환. 최신 origin/dev 충돌 표와 GO-REQUEST 갱신 전까지 D단계·화면 소비 HOLD.
+
+## GO-EXECUTION [FE-A2] — H1·H2 착륙 후 최종 충돌 계획
+
+- 사람 위임: `[D-021] GO [FE-A2]`.
+- H1: canonical merge `17ac2b7a32413579f2570218a99bf50f34d162c3`, 계약 앵커
+  `66cbe8dec7cb478f5b0774bb5e7bbaab5f616894`·`81969f23e46cb40743af08ffbc1affe556bd5c5e`,
+  모두 `origin/dev` ancestor exit 0.
+- H2: canonical merge `5f2393667ece3607e75674fcf8c9be9d9c1773b9`, 계약 앵커
+  `b6fac1dd742f3c5c88fee1db87e3e081fb1bc794`, `origin/dev` ancestor exit 0.
+- target: `ef9706aca22e21540ec4d6be3870c52cc6c48047`.
+- source: `27cb1d95f27b87f0ff05723bdd9fdd91fc1260ad`.
+- merge-base: `9fe235e7b03032af7d7ac3b14d05ab0f17306b02`.
+- divergence: target-only 236 / source-only 537.
+- `git merge-tree --write-tree origin/woonyong/ui-layer-lab origin/dev`: exit 1,
+  conflict message 38개(내용/add-add 20, lab 삭제·dev 수정 17, `frontend` symlink·directory 1).
+
+| 경로 | lab 변경 요약 | dev 변경 요약 | 확정 해소안 |
+|---|---|---|---|
+| `.gitignore` | `.env.*`, `.env.example` 예외 | `.env*`, Bruno local/cert 제외 | dev |
+| `Makefile` | optional Radar target | local `smoke`, Actions smoke 제거 | dev |
+| `docs/README.md` | frontend 정본·테마 증거 색인 | backend·OSS·보안·release 색인 | dev |
+| `docs/auto/frontend-pipeline.md` | A/B/C 완료, A2 실행 상태 | 초기 frontend pipeline 상태 | 양측 보존: lab의 최신 상태를 정본으로 유지하고 dev 이력은 Git/night-log로 보존 |
+| `docs/auto/night-log.md` | frontend API·게이트·테마·A2 기록 | backend C/D/H1/H2·OSS 기록 | 양측 고유 블록 전부 보존, KST 시각 순 합성 |
+| `docs/aws-testing-runbook.md` | RCA worker 표 보강 | AWS 운영 런북 전면 갱신 | dev |
+| `docs/spec/frontend/chat.md` | legacy spec 삭제 | AI context 규칙 추가 | lab 삭제 유지 |
+| `docs/spec/frontend/repo.md` | legacy spec 삭제 | Safe PR context 규칙 추가 | lab 삭제 유지 |
+| `docs/spec/frontend/workflow.md` | legacy spec 삭제 | approval context 규칙 추가 | lab 삭제 유지 |
+| `frontend/nginx.conf` | legacy tree 삭제 | internal auth header 방어 | dev 파일 유지 |
+| `frontend/package-lock.json` | 삭제 | Monaco/ELK lock 갱신 | dev 파일 유지 |
+| `frontend/package.json` | 삭제 | Monaco/ELK 의존성 | dev 파일 유지 |
+| `frontend/src/app/router.tsx` | 삭제 | release-flow route | dev 파일 유지 |
+| `frontend/src/features/chat/context.ts` | 삭제 | application/workflow context | dev 파일 유지 |
+| `frontend/src/features/notifications/AlertChannelsView.tsx` | 삭제 | 검증 상태 UI | dev 파일 유지 |
+| `frontend/src/features/notifications/api.ts` | 삭제 | 검증 응답·invalidate | dev 파일 유지 |
+| `frontend/src/features/repo/RepoDetailView.tsx` | 삭제 | GitOps/Safe PR 설명 UI | dev 파일 유지 |
+| `frontend/src/features/repo/api.ts` | 삭제 | release/audit invalidate | dev 파일 유지 |
+| `frontend/src/features/workflow/WorkflowGraphView.tsx` | 삭제 | 승인 diff AI 설명 | dev 파일 유지 |
+| `frontend/src/features/workflow/WorkflowListView.tsx` | 삭제 | release-flow 이동 | dev 파일 유지 |
+| `frontend/src/shared/flow/index.tsx` | 삭제 | ELK layout·pan/zoom | dev 파일 유지 |
+| `frontend/src/shared/lib/api.ts` | 삭제 | blob download·blocker 오류 | dev 파일 유지 |
+| `frontend/src/shared/lib/types.ts` | 삭제 | release/readiness 타입 | dev 파일 유지 |
+| `frontend` 구조 | `references/ui-layer-lab` symlink | 운영 frontend directory | dev directory 유지, symlink 제거 |
+| `references/ui-layer-lab/.gitignore` | product output 포함 | 최소 lab ignore | lab |
+| `references/ui-layer-lab/README.md` | shadcn snapshot·제품 게이트 | 예제 registry 설명 | lab |
+| `references/ui-layer-lab/index.html` | theme/locale prepaint·KubeHeal meta | 최소 lab shell | lab |
+| `references/ui-layer-lab/package-lock.json` | React 19·제품 전체 lock | React 18 예제 lock | lab |
+| `references/ui-layer-lab/package.json` | product test/design/visual scripts | 최소 build scripts | lab |
+| `references/ui-layer-lab/src/App.tsx` | official catalog route | Preview/Code 목록 | lab |
+| `references/ui-layer-lab/src/main.tsx` | `/product` ProductApp 분기 | 단일 lab App | lab |
+| `references/ui-layer-lab/tsconfig.json` | strict product/shim/fixture 설정 | 최소 Vite 설정 | lab |
+| `references/ui-layer-lab/vite.config.ts` | Tailwind·Vitest·proxy·aliases | React·5180·flow chunks | lab |
+| `src/domains/target/install_manifest.py` | fast-lane/management 경계 | metrics/catalog RBAC·realtime URL | dev |
+| `src/services/gateway/api-gateway/auth.py` | DEV_AUTH_BYPASS | trusted mTLS proxy identity | dev |
+| `src/services/gateway/api-gateway/settings.py` | bypass 상수 | root path·metrics fail-closed | dev |
+| `tests/test_password_auth.py` | bypass 회귀 | trusted proxy 회귀 | dev |
+| `tests/test_target_registration.py` | fast-lane 명칭 회귀 | RBAC·realtime·purge·admin 회귀 | dev |
+
+예외 후보 감사 결과(이번 충돌 해소에는 별도 승인 없이 적용하지 않음):
+
+1. `.gitignore`의 `!.env.example` 1줄.
+2. `docs/README.md`의 현재 frontend 정본 색인 블록.
+3. dev 최신 target manifest 위의 fast-lane 이름·management exclusion 좁은 hunk.
+4. 비충돌 파일 `tests/test_rca_timeline_janitor.py`의 flake 완화 수치.
+
+실행 계획:
+
+```bash
+git stash push --include-untracked -m "wip-pre-fe-a2-20260713"
+git merge --no-ff origin/dev
+# 위 표대로 충돌 해소 후 git add/rm
+cd references/ui-layer-lab
+npm run check
+npm run visual-product
+```
+
+예상 밖 충돌 또는 의미가 다른 파일이 나오면 해소를 중단하고 보고한다. push 전 실패·취소는
+`git merge --abort`; push 후 롤백은 merge commit을 보존하는 `git revert -m 1 <merge_commit>` 후
+전체 게이트 재실행이다. full gate와 visual-product가 모두 PASS하기 전에는 A2 완료·PROMOTE 인계를
+기록하지 않는다.
