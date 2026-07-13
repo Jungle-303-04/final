@@ -114,6 +114,10 @@ RESOURCES_FILTER_FACETS_PATH = "/resources/filter-facets"
 FILTERED_RESOURCES_PATH = "/resources"
 RESOURCE_LABEL_FACETS_PATH = "/resources/label-facets"
 RESOURCES_GRAPH_PATH = "/resources/graph"
+# 워크스페이스 범위 Issues 필터 계약 — mutable RCA timeline projection의 완전성을 명시한다.
+ISSUES_FILTER_RESULTS_PATH = "/issues"
+ISSUES_FILTER_FACETS_PATH = "/issues/filter-facets"
+ISSUES_LABEL_FACETS_PATH = "/issues/label-facets"
 # 스냅샷 기반 실측 활용 시계열(usage rollup) — 콘솔 추이 차트용.
 CLUSTER_USAGE_PATH = "/clusters/{cluster_id}/usage"
 CLUSTER_METRIC_QUERY_PRESETS_PATH = "/clusters/{cluster_id}/metric-query-presets"
