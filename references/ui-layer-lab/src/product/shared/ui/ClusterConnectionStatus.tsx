@@ -13,8 +13,12 @@ export function ClusterConnectionStatus({
   lastObservedAt: string | null;
 }) {
   const { formatDate, t } = useI18n();
-  const label = t(connectionLabelKeys[connectionState]);
-  const observation = formatObservation(lastObservedAt, formatDate, t("common.state.unknown"));
+  const label = t(connectionLabelKey(connectionState));
+  const observation = formatClusterObservation(
+    lastObservedAt,
+    formatDate,
+    t("common.state.unknown"),
+  );
   return (
     <Tooltip>
       <TooltipTrigger
@@ -32,6 +36,23 @@ export function ClusterConnectionStatus({
       </TooltipTrigger>
       <TooltipContent side="bottom">{t("home.lastObserved", { time: observation })}</TooltipContent>
     </Tooltip>
+  );
+}
+
+export function ClusterConnectionMark({
+  compact = false,
+  connectionState,
+}: {
+  compact?: boolean;
+  connectionState: ClusterConnectionState;
+}) {
+  const { t } = useI18n();
+  return (
+    <StatusMark
+      label={t(connectionLabelKey(connectionState))}
+      labelMode={compact ? "sr-only" : "visible"}
+      tone={connectionTone(connectionState)}
+    />
   );
 }
 
@@ -62,7 +83,11 @@ const connectionLabelKeys: Record<ClusterConnectionState, MessageKey> = {
   unknown: "home.connection.unknown",
 };
 
-function formatObservation(
+export function connectionLabelKey(state: ClusterConnectionState): MessageKey {
+  return connectionLabelKeys[state];
+}
+
+export function formatClusterObservation(
   value: string | null,
   formatDate: (value: Date | number, options?: Intl.DateTimeFormatOptions) => string,
   unknownLabel: string,

@@ -169,7 +169,6 @@ describe("ResourcesPage scope and collection semantics", () => {
     expect(screen.queryByText("Resources", { exact: true })).toBeNull();
     expect(screen.queryByText(/실 API|30초 자동 갱신/u)).toBeNull();
     expect(screen.queryByText("스냅샷 최신")).toBeNull();
-    expect(screen.getByRole("button", { name: /연결됨.*마지막 관측/u })).toBeTruthy();
     const scope = screen.getByRole("status", { name: "목록 범위" });
     expect(scope.textContent).toMatch(/표시 3/u);
     expect(scope.textContent).toMatch(/전체 수 미확인/u);

@@ -6,25 +6,18 @@ import {
   useSearchParams,
 } from "react-router-dom";
 import { useAuthSessionGate } from "../../features/auth/AuthSessionGate";
-import type { HomeClusterChoices, HomePort } from "../../features/home/homeContract";
-import { selectInitialClusterChoice } from "../../features/home/homeSelection";
+import { useClusterScope } from "../../features/cluster-scope/ClusterScopeProvider";
 import type { ResourceIdentity, ResourcesPort } from "../../features/resources/resourcesContract";
-import { acquireSharedRequest } from "../../shared/data/sharedRequest";
 import { useVisibleRefreshClock } from "../../shared/data/useVisibleRefreshClock";
 import {
-  RESOURCES_LOADING,
   blockForFailure,
   hasRetryBlocks,
-  resourcesFailure,
-  resourcesSuccess,
   retryWaitSeconds,
   scheduledRateLimitRetryAt,
-  startResourcesResource,
   toResourcesFailure,
   withRetryBlock,
   withoutRetryBlock,
   type ResourcesRequestTarget,
-  type ResourcesResourceState,
   type ResourcesRetryBlocks,
 } from "./resourcesPageStateModel";
 import {
@@ -36,15 +29,15 @@ import {
 import { useResourcesDataFrame } from "./useResourcesDataFrame";
 
 const RESOURCES_POLL_INTERVAL_MS = 30_000;
-type ClusterPort = Pick<HomePort, "listClusterChoices">;
-
-export function useResourcesPageState(port: ResourcesPort, clusterPort: ClusterPort) {
+export function useResourcesPageState(port: ResourcesPort) {
   const { reportUnauthorized } = useAuthSessionGate();
+  const clusterScope = useClusterScope();
+  const refreshClusterScope = clusterScope.refresh;
   const location = useLocation();
   const navigate = useNavigate();
   const params = useParams<"*">();
   const [searchParams, setSearchParams] = useSearchParams();
-  const selectedClusterId = searchParams.get("cluster");
+  const selectedClusterId = clusterScope.requestedClusterId;
   const typeResolution = resolveResourceType(params["*"]);
   const selectedResourceType = typeResolution.kind === "valid" ? typeResolution.value : null;
   const namespace = normalizedOptionalQuery(searchParams.get("namespace"));
@@ -55,9 +48,7 @@ export function useResourcesPageState(port: ResourcesPort, clusterPort: ClusterP
     searchParams.get("kind"),
     searchParams.get("resource"),
   );
-  const [choices, setChoices] = useState<ResourcesResourceState<HomeClusterChoices>>(
-    RESOURCES_LOADING,
-  );
+  const choices = clusterScope.collection;
   const [retryBlocks, setRetryBlocks] = useState<ResourcesRetryBlocks>({});
   const rowButtons = useRef(new Map<string, HTMLButtonElement>());
   const restoreRowKey = useRef<string | null>(null);
@@ -78,7 +69,10 @@ export function useResourcesPageState(port: ResourcesPort, clusterPort: ClusterP
   const recordSuccess = useCallback((target: ResourcesRequestTarget) => {
     setRetryBlocks((current) => withoutRetryBlock(current, target));
   }, []);
-  const refresh = useCallback(() => advanceRevision(), [advanceRevision]);
+  const refresh = useCallback(() => {
+    refreshClusterScope();
+    advanceRevision();
+  }, [advanceRevision, refreshClusterScope]);
 
   useEffect(() => {
     const retryAt = scheduledRateLimitRetryAt(retryBlocks);
@@ -87,44 +81,7 @@ export function useResourcesPageState(port: ResourcesPort, clusterPort: ClusterP
     return () => window.clearTimeout(timer);
   }, [advanceRevision, retryBlocks]);
 
-  useEffect(() => {
-    let active = true;
-    queueMicrotask(() => { if (active) setChoices((current) => startResourcesResource(current)); });
-    const request = acquireSharedRequest(
-      clusterPort,
-      `resources:cluster-choices:r${revision}`,
-      (signal) => clusterPort.listClusterChoices(signal),
-    );
-    void request.promise.then(
-      (data) => {
-        if (!active) return;
-        setChoices(resourcesSuccess(data));
-        recordSuccess("choices");
-      },
-      (error: unknown) => {
-        if (!active || isAbort(error)) return;
-        const failure = toResourcesFailure(error);
-        if (failure.code === "unauthorized") reportUnauthorized();
-        else {
-          recordFailure("choices", failure);
-          setChoices((current) => resourcesFailure(current, failure));
-        }
-      },
-    );
-    return () => { active = false; request.release(); };
-  }, [clusterPort, recordFailure, recordSuccess, reportUnauthorized, revision]);
-
-  useEffect(() => {
-    if (choices.phase !== "ready" || selectedClusterId !== null) return;
-    const initialCluster = selectInitialClusterChoice(choices.data.clusters);
-    if (!initialCluster) return;
-    const next = new URLSearchParams(searchParams);
-    next.set("cluster", initialCluster.id);
-    setSearchParams(next, { replace: true });
-  }, [choices, searchParams, selectedClusterId, setSearchParams]);
-
-  const selectedClusterExists = choices.phase === "ready" && selectedClusterId !== null &&
-    choices.data.clusters.some((cluster) => cluster.id === selectedClusterId);
+  const selectedClusterExists = clusterScope.selectedClusterExists;
   const frame = useResourcesDataFrame({
     detailIdentity,
     includeDeleted,
@@ -187,10 +144,6 @@ export function useResourcesPageState(port: ResourcesPort, clusterPort: ClusterP
     automaticRefreshPaused,
     retryWaitSeconds: retryWaitSeconds(retryBlocks),
     refresh,
-    selectCluster(clusterId: string) {
-      setRetryBlocks({});
-      updateQuery((next) => { next.set("cluster", clusterId); clearDetail(next); }, false);
-    },
     selectResourceType,
     cycleResourceType(direction: -1 | 1) {
       if (frame.catalog.phase !== "ready" || frame.catalog.data.items.length === 0) return;
@@ -266,8 +219,4 @@ function clearDetail(params: URLSearchParams) {
 
 function identityKey(identity: ResourceIdentity): string {
   return [identity.resourceType, identity.kind, identity.namespace ?? "", identity.name].join(":");
-}
-
-function isAbort(error: unknown): boolean {
-  return typeof error === "object" && error !== null && "name" in error && error.name === "AbortError";
 }

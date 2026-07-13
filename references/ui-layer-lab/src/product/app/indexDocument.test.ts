@@ -10,7 +10,7 @@ describe("product document bootstrap", () => {
     const documentSource = await readFile(resolve(labRoot, "index.html"), "utf8");
 
     expect(documentSource).toContain('<html lang="en">');
-    expect(documentSource).toContain('<title>KubeHeal</title>');
+    expect(documentSource).toContain('<title>Opsia</title>');
     expect(documentSource).toContain(
       'content="Provider-neutral Kubernetes operations and GitOps control plane."',
     );

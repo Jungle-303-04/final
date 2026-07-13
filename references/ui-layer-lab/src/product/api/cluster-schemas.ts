@@ -1,8 +1,11 @@
 import { z } from "zod";
 
+import { connectionStageSchema } from "./cluster-stage-schemas";
+
 const nullableStringSchema = z.string().nullable();
 const integerSchema = z.number().int();
 const unknownRecordSchema = z.record(z.string(), z.unknown());
+const clusterProviderSchema = z.enum(["eks", "gke", "aks", "onprem", "kind", "unknown"]);
 
 /**
  * Runtime contract for `ClusterSummary` from
@@ -13,9 +16,11 @@ export const clusterSummarySchema = z.strictObject({
   cluster_id: z.string(),
   name: z.string(),
   environment: z.string(),
+  provider: clusterProviderSchema.optional(),
   status: z.string(),
   settings: unknownRecordSchema,
   connection_status: z.string(),
+  connection_stage: connectionStageSchema.optional(),
   last_agent_id: nullableStringSchema,
   last_agent_seen_at: nullableStringSchema,
   node_count: integerSchema,

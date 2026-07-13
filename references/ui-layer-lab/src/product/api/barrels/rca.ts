@@ -30,6 +30,20 @@ export {
   type GetRemediationBundleOptions,
 } from "../rca-bundle";
 export {
+  getAuditTimeline,
+  AUDIT_TIMELINE_DEFAULT_LIMIT,
+  AUDIT_TIMELINE_MAX_LIMIT,
+  AUDIT_TIMELINE_PATH,
+  type GetAuditTimelineOptions,
+} from "../audit-timeline";
+export {
+  getIncidentRecentChanges,
+  RCA_RECENT_CHANGES_DEFAULT_LIMIT,
+  RCA_RECENT_CHANGES_MAX_LIMIT,
+  RCA_RECENT_CHANGES_PATH,
+  type GetIncidentRecentChangesOptions,
+} from "../recent-changes";
+export {
   rcaTimelineItemSchema,
   rcaTimelineSchema,
   type RcaTimeline,
@@ -81,3 +95,15 @@ export {
   type RemediationBundleRemediation,
   type RemediationBundleResponse,
 } from "../rca-bundle-schemas";
+export {
+  auditTimelineItemSchema,
+  auditTimelineResponseSchema,
+  type AuditTimelineItem,
+  type AuditTimelineResponse,
+} from "../audit-timeline-schemas";
+export {
+  recentChangeItemSchema,
+  recentChangeListResponseSchema,
+  type RecentChangeItem,
+  type RecentChangeListResponse,
+} from "../recent-changes-schemas";

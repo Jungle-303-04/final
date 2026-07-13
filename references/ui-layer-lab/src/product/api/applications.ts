@@ -13,6 +13,8 @@ import { encodePathSegment, withQuery } from "./url";
 
 export const APPLICATIONS_DEFAULT_LIMIT = 100;
 export const APPLICATIONS_MAX_LIMIT = 500;
+export const APPLICATION_RUNS_PATH =
+  "/api/applications/{application_id}/runs" as const;
 
 export interface ApplicationListOptions {
   limit?: number;
@@ -66,8 +68,10 @@ export async function listApplicationRuns(
   assertApplicationId(applicationId);
   const limit = options.limit ?? APPLICATIONS_DEFAULT_LIMIT;
   assertLimit(limit);
-  const basePath =
-    `/api/applications/${encodePathSegment(applicationId)}/runs` as ApiPath;
+  const basePath = APPLICATION_RUNS_PATH.replace(
+    "{application_id}",
+    encodePathSegment(applicationId),
+  ) as ApiPath;
   const path = withQuery(basePath, [["limit", limit]]);
   return apiRequest(path, workflowRunListSchema, { signal: options.signal });
 }

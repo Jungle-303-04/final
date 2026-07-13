@@ -10,6 +10,7 @@ export type SupportedLocale = "en" | "ko";
  * translation key; render them unchanged or pass them as a named parameter.
  */
 type CoreMessageKey =
+  | "product.name"
   | "common.action.back"
   | "common.action.cancel"
   | "common.action.clear"
@@ -39,6 +40,19 @@ type CoreMessageKey =
   | "common.state.unknown"
   | "common.value.named"
   | "common.value.unavailable"
+  | "clusterScope.aria"
+  | "clusterScope.available"
+  | "clusterScope.currentUnavailable"
+  | "clusterScope.empty"
+  | "clusterScope.loading"
+  | "clusterScope.provider.aks"
+  | "clusterScope.provider.eks"
+  | "clusterScope.provider.gke"
+  | "clusterScope.provider.kind"
+  | "clusterScope.provider.onprem"
+  | "clusterScope.provider.unknown"
+  | "clusterScope.select"
+  | "clusterScope.unavailable"
   | "shell.locale.english"
   | "shell.locale.korean"
   | "shell.locale.label"

@@ -1585,3 +1585,176 @@ API 완성: runTelemetryQuery (004f23d52)
   `class=dark`, `colorScheme=dark`, `oklch(0.145 0 0)`이었다. 투명 또는 반대 테마 프레임은 0개다.
 - 상세 결과와 10개 스크린샷은 `theme-first-paint-evidence-20260713.md` 및
   `theme-flash-{light,dark}-{1..5}.png`에 기록했다.
+
+## 2026-07-13 APIQ-019 AI conversation 계약 완료
+
+- 코드 커밋 `84dc48a68`은 `origin/woonyong/ui-layer-lab` ancestor exit 0이다.
+- strict list/detail/accepted envelope와 open conversation/message JsonMap을 함께 검증했다.
+  ID·AbortSignal·200 receipt를 고정했고 POST는 transport 실패 시 자동 재전송하지 않는다.
+- targeted 2 files / 20 tests와 full `npm run check`가 통과했다. full gate는 104 files /
+  750 tests, design guard 312 files, shadcn 482 previews, production build PASS다.
+
+API 완성: listAiConversations (84dc48a68)
+API 완성: getAiConversation (84dc48a68)
+API 완성: createAiConversation (84dc48a68)
+API 완성: appendAiMessage (84dc48a68)
+
+## 2026-07-13 APIQ-015 Catalog 조회 계약 완료
+
+- 코드 커밋 `1ad595b42`는 `origin/woonyong/ui-layer-lab` ancestor exit 0이다.
+- `origin/dev`의 `CatalogItemListResponse(items: list[JsonMap])`와
+  `CatalogItemResponse(item: JsonMap)`을 대조해 외피는 strict close, item은 open JsonMap으로
+  유지했다. pagination·filter·install 계약은 추가하지 않았다.
+- 목록·상세의 AbortSignal, ID 선검증, 경로 인코딩, 404, malformed payload, open item 확장
+  필드 보존, list/detail 외피의 미정의 필드 거부를 5개 계약 테스트로 검증했다.
+- full `npm run check` PASS: 105 files / 757 tests, design guard 314 files, shadcn 482 previews,
+  Vite production build.
+
+API 완성: listCatalogItems (1ad595b42)
+API 완성: getCatalogItem (1ad595b42)
+
+## 2026-07-13 APIQ-030 감사 타임라인 조회 계약 완료
+
+- RED `6700875a6`은 당시 route가 없던 endpoint를 대상으로 strict envelope/item, nullable
+  `causation_id`, open `payload_summary`, 불투명 cursor, 1~200 limit, AbortSignal과 422 오류
+  계약을 먼저 고정했다.
+- GREEN `9841a5d95`는 조회 함수와 strict Zod schema를 구현했다. 계약 증거 보강 커밋
+  `4c2598c4a`는 `AUDIT_TIMELINE_PATH`를 공개 상수로 고정하고 동일 커밋에 public export 계약
+  테스트를 포함했다. 세 커밋 모두 `origin/woonyong/ui-layer-lab` ancestor 검증 대상이다.
+- targeted 1 file / 11 tests와 full `npm run check`가 통과했다. full gate는 106 files /
+  768 tests, design guard 317 files, shadcn 482 previews, production build PASS다.
+
+API 완성: getAuditTimeline (4c2598c4a)
+
+## 2026-07-13 BQ-017 클러스터 스키마 호환 재검증
+
+- `bfaf03901`에 `ClusterSummary.provider`와
+  `ClusterConnectionStatus.connection_stage`의 optional enum이 명시적으로 열려 있다.
+  두 응답 외피의 `strictObject`는 유지되며 enum 밖 값은 계속 거부한다.
+- `bfaf03901`은 현재 HEAD와 `origin/woonyong/ui-layer-lab`의 ancestor(exit 0)다.
+- `clusters.test.ts`, `cluster-connection.test.ts` targeted 검증은 2 files / 17 tests PASS다.
+
+## 2026-07-13 VP-002 감사 타임라인 화면 완료
+
+- 화면 RED `003a9563a`, API 계약 재앵커 `4c2598c4a`, UI GREEN `fdc921c3d`,
+  상태·테스트 책임 분리 `9bedcdfa5` 순서로 완료했다.
+- Issues 상세는 서버 순서를 그대로 보존하며 opaque cursor를 누적한다. scope 전환과 unmount에서
+  진행 중 요청을 취소하고, 다음 페이지 실패 시 이미 표시한 감사 이벤트는 유지한다.
+- `npm run check` PASS (2026-07-13 14:00 KST): TypeScript / ESLint, Vitest 108 files /
+  773 tests, product design guard 326 files, shadcn source audit 482 previews,
+  Vite production build 14,529 modules.
+- `npm run visual-product` PASS: 35 isolated scenarios, exact scenario API requests,
+  unexpected feature network / WebSocket 0건. 증거 화면은
+  `references/ui-layer-lab/output/playwright/product-issues-authenticated-detail-desktop-light.png`다.
+
+## 2026-07-13 APIQ-031 인시던트 최근 변경 계약 완료
+
+- RED `c6bd3babe`는 strict response/item, nullable 3필드, 서버 순서, 빈 성공, limit·ID·AbortSignal,
+  concealed 404와 malformed payload 계약을 먼저 고정했다.
+- GREEN `4f602cc86660a7f8a12583cffc44a53e220d9dbf`는 endpoint·strict Zod·RCA barrel을 구현하고
+  공개 경로 템플릿을 실제 요청 생성의 단일 출처로 사용한다. 이 커밋은
+  `origin/woonyong/ui-layer-lab` ancestor exit 0이다.
+- targeted 검증은 recent changes와 API boundary 2 files / 18 tests PASS다.
+- full `npm run check` PASS: TypeScript·ESLint, Vitest 109 files / 788 tests,
+  product design guard 329 files, shadcn source audit 482 previews,
+  Vite production build 14,531 modules.
+- 서버 응답에 incident 발생 시각·구조화 PR 번호가 없어 상대 시각과 PR 번호는 추측하지 않고,
+  UI는 절대 시각과 일반 Pull request 링크만 소비한다.
+
+API 완성: getIncidentRecentChanges (4f602cc86660a7f8a12583cffc44a53e220d9dbf)
+
+## 2026-07-13 VP-004 인시던트 최근 변경 화면 완료
+
+- UI RED `f9a982f4f`는 empty 성공에서 region·card·제목이 전부 없어야 하는 불변식,
+  서버 순서·native list·절대 시각, nullable PR 링크, 실패 격리와 incident ID 없는 행의
+  endpoint 미호출을 먼저 고정했다.
+- UI GREEN `78668b32204e3b30d5c50b9338c3593bdebe852a`는 canonical·adapter·독립 panel·i18n·
+  composition root·browser fixture를 연결했다. 이 커밋은
+  `origin/woonyong/ui-layer-lab` ancestor exit 0이다.
+- 빈 성공은 카드 자체를 렌더하지 않고 404·invalid-response·unavailable은 최근 변경 panel에만
+  격리한다. 서버 순서와 원문 workload·image·commit·repository·workflow를 보존하며,
+  안전한 HTTP(S) PR URL만 외부 링크로 렌더한다.
+- `npm run check` PASS: TypeScript·ESLint, Vitest 112 files / 802 tests,
+  product design guard 336 files, shadcn source audit 482 previews,
+  Vite production build 14,535 modules.
+- `npm run visual-product` PASS: 기존 전 시나리오와 영어 Issues desktop·320px reflow를 통과했다.
+  증거는 `output/playwright/product-issues-authenticated-detail-desktop-light.png`와
+  `output/playwright/product-issues-authenticated-detail-reflow-320-light.png`다.
+
+## 2026-07-13 APIQ-032 승격 게이트 조회 계약 완료
+
+- RED `1e06706c9`는 nested unknown field, eligible 판정 불일치, 실패 리소스 개수 불일치,
+  tri-state 보조 필드 불일치를 먼저 실패시켰다.
+- GREEN `429fb1d9122c6bf264f5ee1beef948107bb5161e`는 outer strict / run loose /
+  `promotion_gate` strict 경계와 공개 `APPLICATION_RUNS_PATH`를 구현했다. run의 additive 필드는
+  parse 후에도 보존하며 gate 내부 unknown field는 거부한다.
+- full `npm run check` PASS: TypeScript·ESLint, Vitest 112 files / 808 tests,
+  product design guard 336 files, shadcn source audit 482 previews,
+  Vite production build 14,535 modules.
+- Applications API의 서버측 Cluster filter와 cursor가 없어 VP-005 화면 release는 주차했다.
+  제한 응답의 클라이언트 필터로 completeness를 위장하지 않는다.
+
+API 완성: listApplicationRuns (429fb1d9122c6bf264f5ee1beef948107bb5161e)
+
+## 2026-07-13 APIQ-033 클러스터 등록 전송 계약 완료
+
+- claim `3adb92bdd`, API RED `065f84ab1`, ClusterSummary stage RED `482009c1f`,
+  GREEN `8678d63b0`을 순서대로 분리했다. GREEN은
+  `origin/woonyong/ui-layer-lab` ancestor exit 0이다.
+- provider catalog·registration discovery·target preflight·target register의 외피와 typed row를
+  strict close했다. backend가 JsonMap으로 선언한 category record·deploy provider·labels·selected와
+  요청 `provider_config`만 open으로 유지했다.
+- 등록 요청은 `workspace_id`를 받거나 전송하지 않는다. one-time agent token·manifest·bootstrap
+  command는 응답 계약에서만 검증하며 자동 재전송·로그·URL·storage·query cache 소비를 금지한다.
+- `ClusterSummary.connection_stage`를 canonical 7단계 optional enum으로 열고 기존 connection 응답과
+  install receipt도 단일 `connectionStageSchema`를 재사용한다. strict row와 enum 밖 값 거부는 유지된다.
+- targeted 3 files / 30 tests PASS. full `npm run check` PASS: TypeScript·ESLint,
+  Vitest 113 files / 821 tests, product design guard 340 files, shadcn source audit 482 previews,
+  Vite production build 14,538 modules.
+- VP-008 UI는 preflight/register validation 정합, 발급 전 command preview 또는 정본 순서 변경,
+  명시적 receipt resume/reissue, structured stage error 계약이 착륙할 때까지 주차한다.
+
+API 완성: getProviderCatalog (8678d63b0)
+API 완성: getProviderClusterDiscovery (8678d63b0)
+API 완성: preflightTargetRegistration (8678d63b0)
+API 완성: registerTarget (8678d63b0)
+
+## 2026-07-13 VP-006 BLOCKED — auto-revert 식별 계약 결손
+
+- BQ-007 canonical merge `6d68325bf1cc47f55810e5dc2189e51a6fe916c0`은 `origin/dev`
+  ancestor exit 0이다. flag off 무발화와 generic Safe PR 발행은 구현·테스트로 확인했다.
+- 현재 RCA timeline은 generic Safe PR의 subject/status/PR URL/failure reason만 projection한다.
+  auto-revert request의 유일한 흔적은 worker 내부 title prefix이며 공개 DTO가 아니다.
+- 일반 Safe PR을 revert PR로 오표시하지 않도록 APIQ와 제품 표면을 만들지 않았다.
+  재개 조건은 stable auto-revert discriminator와 incident/run exact scope를 포함한 canonical 계약·앵커다.
+
+## 2026-07-13 VP-009 provider 표시 일관화 부분 완료
+
+- unknown glyph RED `a0e124b92`, Home 단일 표시 RED `4a0937c54`, GREEN
+  `3fe308f95` 순서로 분리해 push했다. GREEN은 `origin/woonyong/ui-layer-lab` ancestor exit 0이다.
+- Home 상태 카드 헤더는 선택된 canonical provider를 `ClusterProviderIcon`으로 정확히 1회 표시하고,
+  cluster 미선택에서는 아이콘을 렌더하지 않는다. unknown은 일반 Kubernetes glyph다.
+- Issues는 모든 released route에 상주하는 전역 `ClusterScopePicker`가 이미 동일 컴포넌트로 provider를
+  1회 표시하므로 목록·행·상세에 중복하지 않았다.
+- Fleet는 제품 surface와 provider-bearing fleet contract가 모두 없어 BE-Gap으로 분리했다. 제한된
+  클러스터 목록과의 client join, inferred provider, placeholder UI는 만들지 않았다.
+- targeted 2 files / 10 tests PASS. full `npm run check` PASS: TypeScript·ESLint,
+  Vitest 113 files / 824 tests, product design guard 340 files, shadcn source audit 482 previews,
+  Vite production build 14,538 modules.
+- `npm run visual-product` PASS: 36 isolated scenarios, light/dark·320px·200% text·forced colors·
+  en/ko 포함, exact scenario API requests, unexpected feature network/WebSocket 0건.
+- standalone `npm run build` PASS: 14,538 modules, `dist` 26 MiB / 2,675 files,
+  `ProductApp-C79itfkb.js` 319 KiB, `ProductApp-Dh-KDTNp.css` 77 KiB.
+
+## 2026-07-13 S1 Issues 확대·강제색 회귀 게이트 완료
+
+- RED `f5413960a`에서 Issues 상세의 200% text resize와 forced-colors 시나리오를
+  먼저 추가해 화면 전용 강제색 검증 결손을 재현했다.
+- GREEN `2693c5c8bc8c698b8535aec9574d82904fa4b6a5`에서 Issues 상세·최근 변경·PR 링크,
+  전역 Cluster selector, 선택 Issue의 keyboard focus를 system colors로 검증한다.
+  공용 Card와 Button은 forced-colors 경계·focus·disabled 상태와 reduced-motion 전환을 보존한다.
+- full `npm run check` PASS: Vitest 113 files / 824 tests, design guard 340 files,
+  shadcn 482 previews, Vite build 14,538 modules. `npm run visual-product`는 38개 격리
+  시나리오와 unexpected network/WebSocket 0건으로 PASS했다.
+- 증거: `output/playwright/product-issues-authenticated-detail-text-resize-200-light.png`,
+  `output/playwright/product-issues-authenticated-detail-forced-colors.png`.

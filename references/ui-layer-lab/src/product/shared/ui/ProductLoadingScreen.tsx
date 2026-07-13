@@ -57,17 +57,7 @@ function ContentLoadingGeometry() {
   return (
     <ProductPageFrame>
       <div className="flex min-w-0 justify-end">
-        <div className="flex w-full min-w-0 items-center justify-end gap-2 xl:w-auto">
-          <Skeleton
-            aria-hidden="true"
-            className="h-7 w-(--product-toolbar-compact-control-width) shrink-0"
-          />
-          <Skeleton
-            aria-hidden="true"
-            className="h-8 min-w-0 flex-1 xl:w-(--product-cluster-select-width) xl:flex-none"
-          />
-          <Skeleton aria-hidden="true" className="size-8 shrink-0" />
-        </div>
+        <Skeleton aria-hidden="true" className="size-8 shrink-0" />
       </div>
       <div className="grid min-w-0 gap-4 xl:grid-cols-[minmax(0,1fr)_20rem]">
         <div className="grid min-w-0 gap-4">
@@ -116,11 +106,21 @@ function ProductShellLoadingGeometry() {
         </div>
         <Skeleton aria-hidden="true" className="h-9" />
       </aside>
-      <div className="grid min-w-0 grid-rows-[3.5rem_1fr]">
-        <header className="flex items-center justify-between border-b px-4">
-          <Skeleton aria-hidden="true" className="h-5 w-28 md:hidden" />
-          <span className="hidden md:block" />
-          <div className="flex items-center gap-1">
+      <div className="grid min-w-0 grid-rows-[auto_1fr]">
+        <header className="flex min-h-14 flex-wrap items-center gap-2 border-b px-4 py-2 lg:flex-nowrap">
+          <div className="order-1 flex min-w-0 items-center gap-2">
+            <Skeleton aria-hidden="true" className="size-8 md:hidden" />
+          </div>
+          <div
+            className="order-3 h-8 w-full min-w-0 lg:order-2 lg:flex-1"
+            data-slot="loading-cluster-scope"
+          >
+            <Skeleton
+              aria-hidden="true"
+              className="size-full max-w-(--product-cluster-select-width)"
+            />
+          </div>
+          <div className="order-2 ml-auto flex items-center gap-1 lg:order-3">
             <div
               className="hidden content-center justify-items-end gap-1 lg:grid lg:w-(--product-toolbar-identity-width)"
               data-slot="loading-session-identity"

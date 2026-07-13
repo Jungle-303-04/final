@@ -5,7 +5,6 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   HomePortFailure,
-  type HomeClusterChoices,
   type HomePort,
 } from "../../features/home/homeContract";
 import { createHomeAdapter } from "../../features/home/createHomeAdapter";
@@ -145,31 +144,6 @@ describe("HomePage data semantics", () => {
     const node = await screen.findByRole("button", { name: /worker-b/u });
     const status = within(node).getByText("Not Ready").closest("[data-slot='status-mark']");
     expect(status?.getAttribute("data-status")).toBe("warning");
-  });
-
-  it("disambiguates duplicate cluster names without repeating connection status", async () => {
-    const user = userEvent.setup();
-    const duplicateClusters: HomeClusterChoices = {
-      completeness: "unknown",
-      clusters: [
-        { ...CLUSTERS.clusters[0], id: "shared-a", name: "shared", environment: "production" },
-        {
-          ...CLUSTERS.clusters[1], id: "shared-b", name: "shared", environment: "management",
-          connectionState: "offline",
-        },
-      ],
-    };
-    renderHome(homePort({ listClusterChoices: vi.fn().mockResolvedValue(duplicateClusters) }), [
-      "/product?cluster=shared-a",
-    ]);
-
-    await user.click(await screen.findByRole("combobox", { name: "클러스터 선택" }));
-    const options = await screen.findAllByRole("option");
-    expect(options.map((option) => option.textContent)).toEqual(expect.arrayContaining([
-      expect.stringMatching(/shared.*production.*shared-a/u),
-      expect.stringMatching(/shared.*management.*shared-b/u),
-    ]));
-    expect(options.some((option) => /연결됨|연결 끊김/u.test(option.textContent ?? ""))).toBe(false);
   });
 
   it.each([

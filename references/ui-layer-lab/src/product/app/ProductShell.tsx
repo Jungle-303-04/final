@@ -37,6 +37,8 @@ import { TooltipProvider } from "../shared/ui/primitives/tooltip";
 import { useProductTheme } from "../shared/ui/useProductTheme";
 import { AuthSessionControl } from "../features/auth/AuthSessionControl";
 import type { AuthenticatedAuthState } from "../features/auth/authContract";
+import { ClusterScopePicker } from "../features/cluster-scope/ClusterScopePicker";
+import { productNavigationHref } from "../features/cluster-scope/clusterScopeUrl";
 import { ShortcutHelpDialog } from "./ShortcutHelpDialog";
 import {
   productNavigationForReleasedSurfaces,
@@ -142,7 +144,7 @@ function ProductShellFrame({
             <Activity aria-hidden="true" className="size-4" />
           </span>
           <SidebarText className="text-sm font-semibold tracking-tight">
-            KubeHeal
+            {t("product.name")}
           </SidebarText>
         </SidebarHeader>
 
@@ -156,7 +158,7 @@ function ProductShellFrame({
                   <SidebarMenuItem key={routeDefinition.id}>
                     <SidebarMenuLink
                       isActive={currentRoute.id === routeDefinition.id}
-                      to={routeDefinition.path}
+                      to={productNavigationHref(routeDefinition.path, location.search)}
                       tooltip={label}
                     >
                       <Icon aria-hidden="true" className="size-4 shrink-0" />
@@ -175,12 +177,15 @@ function ProductShellFrame({
       </Sidebar>
 
       <SidebarInset className="flex min-h-svh flex-col bg-background text-foreground">
-        <header className="sticky top-0 z-30 flex min-h-14 items-center justify-between gap-4 border-b bg-background/95 px-4 py-2 backdrop-blur supports-[backdrop-filter]:bg-background/75">
-          <div className="flex min-w-0 items-center gap-2">
+        <header className="sticky top-0 z-30 flex min-h-14 flex-wrap items-center gap-2 border-b bg-background/95 px-4 py-2 backdrop-blur supports-[backdrop-filter]:bg-background/75 lg:flex-nowrap">
+          <div className="order-1 flex min-w-0 items-center gap-2">
             {isMobile ? <ProductSidebarTrigger labelMode="sr-only" /> : null}
             <h1 className="sr-only">{currentRouteLabel}</h1>
           </div>
-          <div className="flex items-center gap-1">
+          <div className="order-3 w-full min-w-0 lg:order-2 lg:flex-1">
+            <ClusterScopePicker />
+          </div>
+          <div className="order-2 ml-auto flex items-center gap-1 lg:order-3">
             <AuthSessionControl auth={auth} mode="toolbar" />
             <ShortcutHelpDialog
               definitions={shortcutDefinitions}
@@ -193,7 +198,7 @@ function ProductShellFrame({
         </header>
 
         <main
-          className="min-h-[calc(100svh-3.5rem)] min-w-0"
+          className="min-h-0 min-w-0 flex-1"
           id="product-main"
           tabIndex={-1}
         >

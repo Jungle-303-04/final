@@ -14,11 +14,9 @@ describe("HomePage", () => {
 
     expect(await screen.findByRole("heading", { name: "Cluster status" }, { timeout: 5_000 }))
       .toBeTruthy();
-    expect(screen.getByRole("combobox", { name: "Select cluster" }).textContent)
-      .toContain("cluster-1");
     expect(screen.getByRole("complementary", { name: "Active issues" })).toBeTruthy();
     expect(screen.getByRole("region", { name: "Node and Pod" })).toBeTruthy();
-    expect(screen.getByText("Restart loop")).toBeTruthy();
+    expect(await screen.findByText("Restart loop", {}, { timeout: 5_000 })).toBeTruthy();
     expect(screen.getByText("Running", { exact: false })).toBeTruthy();
   }, 15_000);
 
@@ -28,9 +26,7 @@ describe("HomePage", () => {
 
     expect(await screen.findByRole("heading", { name: "클러스터 상태" }, { timeout: 5_000 }))
       .toBeTruthy();
-    expect(screen.getByRole("combobox", { name: "클러스터 선택" }).textContent)
-      .toContain("cluster-1");
-    expect(screen.getByText("42.5%")).toBeTruthy();
+    expect(await screen.findByText("42.5%", {}, { timeout: 5_000 })).toBeTruthy();
     expect(screen.queryByText("Fleet Home")).toBeNull();
     expect(screen.queryByText("CLUSTER HEALTH")).toBeNull();
     expect(screen.queryByText("ATTENTION")).toBeNull();

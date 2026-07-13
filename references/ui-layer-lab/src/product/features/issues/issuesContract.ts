@@ -1,4 +1,8 @@
 import type {
+  IssueAuditTimelinePage,
+  IssueAuditTimelineQuery,
+} from "./issuesAuditContract";
+import type {
   IssueEvidencePage,
   IssueEvidenceQuery,
   IssuePageQuery,
@@ -10,6 +14,7 @@ import type {
   IssueRecoverySelection,
   IssueRecoverySelectionResult,
 } from "./issuesRecoveryContract";
+import type { IssueRecentChanges } from "./issuesRecentChangesContract";
 
 export interface IssuesEndpointTimelineItem {
   workspace_id: unknown;
@@ -149,6 +154,10 @@ export interface IssuesPort {
     clusterId: string | null,
     signal?: AbortSignal,
   ): Promise<IssueDetail>;
+  loadRecentChanges(
+    incidentId: string,
+    signal?: AbortSignal,
+  ): Promise<IssueRecentChanges>;
   loadEvidence(
     correlationId: string,
     query?: IssueEvidenceQuery,
@@ -159,6 +168,11 @@ export interface IssuesPort {
     query?: IssuePageQuery,
     signal?: AbortSignal,
   ): Promise<IssueRcaReportPage>;
+  loadAuditTimeline(
+    correlationId: string,
+    query?: IssueAuditTimelineQuery,
+    signal?: AbortSignal,
+  ): Promise<IssueAuditTimelinePage>;
   loadRecoveryPlan(
     correlationId: string,
     signal?: AbortSignal,
@@ -170,10 +184,16 @@ export interface IssuesPort {
 }
 
 export type {
+  IssueAuditEvent,
+  IssueAuditTimelinePage,
+  IssueAuditTimelineQuery,
+} from "./issuesAuditContract";
+export type {
   IssueEvidencePage,
   IssueEvidenceQuery,
   IssuePageQuery,
   IssueRcaReportPage,
+  IssueRecentChanges,
   IssueRecoveryPlan,
   IssueRecoveryReceipt,
   IssueRecoverySelection,

@@ -22,14 +22,29 @@ describe("Catalog API", () => {
   beforeEach(() => vi.restoreAllMocks());
 
   it("loads the catalog item list", async () => {
+    const controller = new AbortController();
     const fetchMock = vi
       .spyOn(globalThis, "fetch")
-      .mockResolvedValue(jsonResponse({ items: [ITEM] }));
+      .mockResolvedValue(jsonResponse({
+        items: [{
+          ...ITEM,
+          provider_extension: { nested: ["preserved"] },
+        }],
+      }));
 
-    await expect(listCatalogItems()).resolves.toEqual({ items: [ITEM] });
+    await expect(listCatalogItems(controller.signal)).resolves.toEqual({
+      items: [{
+        ...ITEM,
+        provider_extension: { nested: ["preserved"] },
+      }],
+    });
     expect(fetchMock).toHaveBeenCalledWith(
       "/api/catalog/items",
-      expect.objectContaining({ method: "GET", credentials: "include" }),
+      expect.objectContaining({
+        method: "GET",
+        credentials: "include",
+        signal: controller.signal,
+      }),
     );
   });
 
@@ -66,6 +81,41 @@ describe("Catalog API", () => {
 
     vi.restoreAllMocks();
     vi.spyOn(globalThis, "fetch").mockResolvedValue(jsonResponse({ items: "invalid" }));
+    await expect(listCatalogItems()).rejects.toMatchObject({
+      kind: "invalid-payload",
+      status: 200,
+    } satisfies Partial<ApiError>);
+  });
+
+  it("rejects unknown envelope fields while keeping item JsonMap open", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(jsonResponse({
+      item: {
+        ...ITEM,
+        future_configuration: { fields: ["alpha", "beta"] },
+      },
+    }));
+
+    await expect(getCatalogItem("catalog-postgresql")).resolves.toMatchObject({
+      item: { future_configuration: { fields: ["alpha", "beta"] } },
+    });
+
+    vi.restoreAllMocks();
+    vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(jsonResponse({
+      item: ITEM,
+      trace_id: "invented-envelope-field",
+    }));
+
+    await expect(getCatalogItem("catalog-postgresql")).rejects.toMatchObject({
+      kind: "invalid-payload",
+      status: 200,
+    } satisfies Partial<ApiError>);
+
+    vi.restoreAllMocks();
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(jsonResponse({
+      items: [],
+      cursor: "invented-pagination-is-not-allowed",
+    }));
+
     await expect(listCatalogItems()).rejects.toMatchObject({
       kind: "invalid-payload",
       status: 200,

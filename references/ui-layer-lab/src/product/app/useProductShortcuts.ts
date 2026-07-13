@@ -7,6 +7,7 @@ import {
   type ProductShortcutEventDetail,
   type ShortcutDefinition,
 } from "./shortcutRegistry";
+import { productNavigationHref } from "../features/cluster-scope/clusterScopeUrl";
 
 interface ProductShortcutOptions {
   definitions: readonly ShortcutDefinition[];
@@ -45,7 +46,8 @@ export function useProductShortcuts({
       if (!definition) return;
 
       if (definition.id.startsWith("route:") && definition.targetPath) {
-        if (location.pathname !== definition.targetPath) navigate(definition.targetPath);
+        const target = productNavigationHref(definition.targetPath, location.search);
+        if (`${location.pathname}${location.search}` !== target) navigate(target);
         focusMain();
         return;
       }
@@ -80,5 +82,13 @@ export function useProductShortcuts({
       document.removeEventListener("visibilitychange", handleVisibilityChange);
       matcher.dispose();
     };
-  }, [definitions, isHelpOpen, location.pathname, navigate, onHelpToggle, onThemeToggle]);
+  }, [
+    definitions,
+    isHelpOpen,
+    location.pathname,
+    location.search,
+    navigate,
+    onHelpToggle,
+    onThemeToggle,
+  ]);
 }
