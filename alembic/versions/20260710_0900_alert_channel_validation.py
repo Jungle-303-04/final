@@ -21,10 +21,14 @@ depends_on: str | Sequence[str] | None = None
 
 
 def upgrade() -> None:
-    op.execute(sa.text("ALTER TABLE alert_channels ADD COLUMN IF NOT EXISTS last_tested_at TIMESTAMPTZ"))
+    op.execute(
+        sa.text("ALTER TABLE alert_channels ADD COLUMN IF NOT EXISTS last_tested_at TIMESTAMPTZ")
+    )
     op.execute(sa.text("ALTER TABLE alert_channels ADD COLUMN IF NOT EXISTS last_test_status TEXT"))
     op.execute(sa.text("ALTER TABLE alert_channels ADD COLUMN IF NOT EXISTS last_test_detail TEXT"))
-    op.execute(sa.text("ALTER TABLE alert_channels ADD COLUMN IF NOT EXISTS last_test_status_code INTEGER"))
+    op.execute(
+        sa.text("ALTER TABLE alert_channels ADD COLUMN IF NOT EXISTS last_test_status_code INTEGER")
+    )
 
 
 def downgrade() -> None:

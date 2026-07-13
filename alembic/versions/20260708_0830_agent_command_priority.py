@@ -41,5 +41,7 @@ def upgrade() -> None:
 
 def downgrade() -> None:
     with op.get_context().autocommit_block():
-        op.execute(sa.text("DROP INDEX CONCURRENTLY IF EXISTS ix_agent_commands_available_priority"))
+        op.execute(
+            sa.text("DROP INDEX CONCURRENTLY IF EXISTS ix_agent_commands_available_priority")
+        )
     op.drop_column("agent_commands", "priority")

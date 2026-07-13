@@ -26,14 +26,20 @@ def upgrade() -> None:
     op.create_table(
         "workspace_credentials",
         sa.Column("credential_id", sa.Text(), primary_key=True),
-        sa.Column("workspace_id", sa.Text(), sa.ForeignKey("workspaces.workspace_id"), nullable=False),
+        sa.Column(
+            "workspace_id", sa.Text(), sa.ForeignKey("workspaces.workspace_id"), nullable=False
+        ),
         sa.Column("provider", sa.Text(), nullable=False),
         sa.Column("scope", sa.Text(), nullable=False),
         sa.Column("encrypted_value", sa.Text(), nullable=False),
         sa.Column("status", sa.Text(), nullable=False),
         sa.Column("metadata", postgresql.JSONB(astext_type=sa.Text()), nullable=False),
-        sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
-        sa.Column("updated_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
+        sa.Column(
+            "created_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False
+        ),
+        sa.Column(
+            "updated_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False
+        ),
         sa.UniqueConstraint("workspace_id", "provider", "scope"),
     )
 
