@@ -283,3 +283,69 @@ def test_candidate_contract_progress_rejects_partial_or_past_terminal_batches(
     errors = scorer["validate_candidate_contract_progress"](contract_count, next_ordinal)
 
     assert errors
+
+
+@pytest.mark.parametrize("next_ordinal", (11.0, True))
+def test_candidate_contract_progress_rejects_non_integer_cursor(next_ordinal: object) -> None:
+    scorer = runpy.run_path(str(SCORER))
+
+    errors = scorer["validate_candidate_contract_progress"](10, next_ordinal)
+
+    assert any("next_ordinal must be an integer" in error for error in errors)
+
+
+def test_candidate_contract_rejects_boolean_ordinal_and_float_batch_size() -> None:
+    document = _candidate_contracts()
+    document["batch_size"] = 10.0
+    document["contracts"][0]["ordinal"] = True
+
+    errors = _contract_validation_errors(document)
+
+    assert any("batch_size must be integer 10" in error for error in errors)
+    assert any("ordinal must be integer 1" in error for error in errors)
+
+
+def test_candidate_contract_index_rejects_boolean_ordinal() -> None:
+    scorer = runpy.run_path(str(SCORER))
+    candidate_index = json.loads(
+        (ROOT / "benchmark/candidate-contract-index.json").read_text(encoding="utf-8")
+    )
+    candidate_index["candidates"][0]["ordinal"] = True
+
+    errors = scorer["validate_candidate_index"](candidate_index)
+
+    assert any("ordinal must be integer 1" in error for error in errors)
+
+
+def test_recovery_contract_loader_accumulates_duplicate_root_cause_rules(
+    tmp_path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    source = tmp_path / "recovery.py"
+    action = """RecoveryActionSpec(
+        action_type={action_type!r},
+        route=routes.approval_required,
+        blast_radius="unknown",
+        approval_required=True,
+        rollback_plan="none",
+        validation_checks=("review",),
+    )"""
+    source.write_text(
+        "\n".join(
+            (
+                f'@rca.recovery(root_causes=("shared",), actions=({action.format(action_type="first")},))',
+                "class First: pass",
+                f'@rca.recovery(root_causes=("shared",), actions=({action.format(action_type="second")},))',
+                "class Second: pass",
+                f"@rca.fallback(actions=({action.format(action_type='fallback')},))",
+                "class Fallback: pass",
+            )
+        ),
+        encoding="utf-8",
+    )
+    scorer = runpy.run_path(str(SCORER))
+    monkeypatch.setitem(scorer["load_recovery_contracts"].__globals__, "RECOVERY_SOURCE", source)
+
+    recovery, fallback = scorer["load_recovery_contracts"]()
+
+    assert [item["action_type"] for item in recovery["shared"]] == ["first", "second"]
+    assert [item["action_type"] for item in fallback] == ["fallback"]
