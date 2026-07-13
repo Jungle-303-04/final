@@ -384,7 +384,8 @@ def test_application_5xx_recovery_requires_gitops_pr_and_keeps_scale_fallback() 
     )
     plan = recovery_outs[0].plan
 
-    assert [candidate.draft.action_type for candidate in plan.candidates[:2]] == [
+    assert [candidate.draft.action_type for candidate in plan.candidates[:3]] == [
+        "replica_scale",
         "gitops_recovery_review",
         "deployment_scale",
     ]
@@ -393,7 +394,7 @@ def test_application_5xx_recovery_requires_gitops_pr_and_keeps_scale_fallback() 
     select_outs = run_handler(select_worker.on_recovery_planned, recovery_outs[0])
     assert subjects_of(select_outs) == ["recovery.selection_requested"]
 
-    scale_candidate = plan.candidates[1]
+    scale_candidate = plan.candidates[2]
     dispatch_outs = run_handler(
         dispatch_worker.on_recovery_action_selected,
         RecoveryActionSelectedBody(
@@ -1299,8 +1300,8 @@ def test_user_selected_safe_pr_flow_requires_authority_instead_of_document_fallb
         "approval.recommended",
         "rca.action_required",
     ]
-    assert dispatch_outs[0].reason_code == "safe_pr_patch_unsupported"
-    assert dispatch_outs[0].missing_evidence == ["supported_patch_action"]
+    assert dispatch_outs[0].reason_code == "gitops_authority_unavailable"
+    assert dispatch_outs[0].missing_evidence == ["gitops_authority_context"]
     assert not db.called("save_pull_request")
 
 
@@ -1322,8 +1323,13 @@ def test_application_5xx_recovery_uses_review_patch_without_static_manifest(monk
     plan = recovery_outs[0].plan
 
     assert plan.selection_required is True
-    assert plan.candidates[0].draft.action_type == "gitops_recovery_review"
-    assert plan.candidates[0].route == "draft_pr"
+    review_candidate = next(
+        candidate
+        for candidate in plan.candidates
+        if candidate.draft.action_type == "gitops_recovery_review"
+    )
+    assert review_candidate.route == "draft_pr"
+    assert review_candidate.score < plan.candidates[0].score
 
     select_outs = run_handler(select_worker.on_recovery_planned, recovery_outs[0])
     assert subjects_of(select_outs) == ["recovery.selection_requested"]
@@ -1332,7 +1338,7 @@ def test_application_5xx_recovery_uses_review_patch_without_static_manifest(monk
         dispatch_worker.on_recovery_action_selected,
         RecoveryActionSelectedBody(
             plan=plan,
-            selected=plan.candidates[0],
+            selected=review_candidate,
             selected_by="operator",
             auto_selected=False,
             reason="operator approved demo recovery",
