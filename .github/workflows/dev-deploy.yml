@@ -10,20 +10,24 @@ name: Dev Deploy
         description: Full dev SHA with a successful Dev Gate run
         required: true
         type: string
+      deployment_mode:
+        description: DEPLOY is the normal path; FIRST_DEPLOY is the retired one-time cutover path
+        required: true
+        default: DEPLOY
+        type: choice
+        options:
+          - DEPLOY
+          - FIRST_DEPLOY
       postgres_snapshot_id:
         description: Completed recent PostgreSQL EBS snapshot with restore rehearsal tags
-        required: true
+        required: false
         type: string
       nats_snapshot_id:
         description: Completed recent NATS EBS snapshot with restore rehearsal tags
-        required: true
+        required: false
         type: string
       previous_release_sha:
         description: Full SHA of the currently running release
-        required: true
-        type: string
-      confirmation:
-        description: Enter FIRST_DEPLOY to confirm the one-time manual release
         required: true
         type: string
 
@@ -47,7 +51,8 @@ jobs:
        vars.AWS_DEV_DEPLOY_ENABLED == '1') ||
       (github.event_name == 'workflow_dispatch' &&
        github.ref == 'refs/heads/dev' &&
-       inputs.confirmation == 'FIRST_DEPLOY')
+       (inputs.deployment_mode == 'DEPLOY' ||
+        inputs.deployment_mode == 'FIRST_DEPLOY'))
     runs-on: ubuntu-latest
     timeout-minutes: 180
     environment: dev-deploy
@@ -60,6 +65,7 @@ jobs:
       MGMT_CONTEXT: opsia-dev
       MGMT_NS: management
       SOURCE_SHA: ${{ github.event_name == 'workflow_dispatch' && inputs.source_sha || github.event.workflow_run.head_sha }}
+      DEPLOYMENT_MODE: ${{ github.event_name == 'workflow_dispatch' && inputs.deployment_mode || 'DEPLOY' }}
       FIRST_DEPLOY_POSTGRES_SNAPSHOT_ID: ${{ inputs.postgres_snapshot_id }}
       FIRST_DEPLOY_NATS_SNAPSHOT_ID: ${{ inputs.nats_snapshot_id }}
       FIRST_DEPLOY_PREVIOUS_SHA: ${{ inputs.previous_release_sha }}
@@ -106,9 +112,13 @@ jobs:
           [[ "${EKS_CLUSTER}" =~ ^[A-Za-z0-9][A-Za-z0-9_-]{0,99}$ ]]
           [[ "${BASE_URL}" =~ ^https://[^[:space:]]+$ ]]
           if [[ "${GITHUB_EVENT_NAME}" == "workflow_dispatch" ]]; then
-            [[ "${FIRST_DEPLOY_POSTGRES_SNAPSHOT_ID}" =~ ^snap-[0-9a-f]{17}$ ]]
-            [[ "${FIRST_DEPLOY_NATS_SNAPSHOT_ID}" =~ ^snap-[0-9a-f]{17}$ ]]
             [[ "${FIRST_DEPLOY_PREVIOUS_SHA}" =~ ^[0-9a-f]{40}$ ]]
+            if [[ "${DEPLOYMENT_MODE}" == "FIRST_DEPLOY" ]]; then
+              [[ "${FIRST_DEPLOY_POSTGRES_SNAPSHOT_ID}" =~ ^snap-[0-9a-f]{17}$ ]]
+              [[ "${FIRST_DEPLOY_NATS_SNAPSHOT_ID}" =~ ^snap-[0-9a-f]{17}$ ]]
+            else
+              test "${DEPLOYMENT_MODE}" = "DEPLOY"
+            fi
           fi
 
       - name: Verify manual gated SHA
@@ -188,7 +198,9 @@ jobs:
           test "$(kubectl config current-context)" = "${MGMT_CONTEXT}"
 
       - name: Verify manual first-deploy backup
-        if: github.event_name == 'workflow_dispatch'
+        if: >-
+          github.event_name == 'workflow_dispatch' &&
+          inputs.deployment_mode == 'FIRST_DEPLOY'
         shell: bash
         run: |
           set -euo pipefail
@@ -284,7 +296,9 @@ jobs:
             --namespace "${MGMT_NS}"
 
       - name: Freeze first-deploy database writers
-        if: github.event_name == 'workflow_dispatch'
+        if: >-
+          github.event_name == 'workflow_dispatch' &&
+          inputs.deployment_mode == 'FIRST_DEPLOY'
         shell: bash
         run: |
           set -euo pipefail
@@ -298,7 +312,9 @@ jobs:
             --timeout 600s
 
       - name: Bootstrap and copy first-deploy database
-        if: github.event_name == 'workflow_dispatch'
+        if: >-
+          github.event_name == 'workflow_dispatch' &&
+          inputs.deployment_mode == 'FIRST_DEPLOY'
         shell: bash
         env:
           DEPLOY_IMAGE: ${{ steps.image.outputs.image }}
@@ -323,7 +339,9 @@ jobs:
             wait --for=condition=complete job/management-database-cutover --timeout=3600s
 
       - name: Switch first-deploy database target
-        if: github.event_name == 'workflow_dispatch'
+        if: >-
+          github.event_name == 'workflow_dispatch' &&
+          inputs.deployment_mode == 'FIRST_DEPLOY'
         shell: bash
         run: |
           set -euo pipefail
@@ -368,7 +386,9 @@ jobs:
             --timeout 600s
 
       - name: Restore first-deploy database writers
-        if: github.event_name == 'workflow_dispatch'
+        if: >-
+          github.event_name == 'workflow_dispatch' &&
+          inputs.deployment_mode == 'FIRST_DEPLOY'
         shell: bash
         run: |
           set -euo pipefail
@@ -418,7 +438,7 @@ jobs:
           set -uo pipefail
           rollback_failed=0
           routing_restored=0
-          if [[ "${GITHUB_EVENT_NAME}" == "workflow_dispatch" && \
+          if [[ "${DEPLOYMENT_MODE}" == "FIRST_DEPLOY" && \
                 -f "${RUNNER_TEMP}/database-writer-freeze-plan.json" ]]; then
             if uv run python scripts/database_writer_freeze.py freeze \
               --context "${MGMT_CONTEXT}" \
@@ -450,7 +470,7 @@ jobs:
             --context "${MGMT_CONTEXT}" \
             --timeout 600s \
             --apply || rollback_failed=1
-          if [[ "${GITHUB_EVENT_NAME}" == "workflow_dispatch" && \
+          if [[ "${DEPLOYMENT_MODE}" == "FIRST_DEPLOY" && \
                 -f "${RUNNER_TEMP}/database-writer-freeze-plan.json" ]]; then
             uv run python scripts/database_writer_freeze.py restore \
               --context "${MGMT_CONTEXT}" \
@@ -468,6 +488,7 @@ jobs:
         if: >-
           always() &&
           github.event_name == 'workflow_dispatch' &&
+          inputs.deployment_mode == 'FIRST_DEPLOY' &&
           steps.status.outcome == 'success'
         shell: bash
         run: |
