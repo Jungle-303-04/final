@@ -1337,6 +1337,23 @@ JsonMap, AbortSignal, ID 검증을 완료 앵커 전까지 제품 화면에서 �
 - 신규 microservice나 route 변경은 제안하지 않았고, 실제 분해는 별도 착수·RED/green
   검증 전에는 진행하지 않는다.
 
+## 2026-07-13 13:08 KST — BQ-014 완료 증거
+
+- lane `codex/f-argocd-observer`, rebase HEAD
+  `16c58de5634b2ee49a93c884e73bebb2348b04f3`, canonical merge
+  `0b4298c4e2dbc57815a4c484ac7efa3491ed01db`.
+- commits: `d2c09e512` RED → `08c8cb1cb` GREEN → `449ab2baa` 계약 문서 →
+  `98caa28fb` fail-closed RED → `281b0858b` 보안·완료 경계 GREEN → `16c58de56` 문서.
+- stat: 14 files, 587 insertions, 10 deletions. 삭제 감사 0건이며 gateway 계약,
+  `src/domains/rca/**`, `src/services/ai/**`, `src/packages/runtime/worker.py` 변경 0건.
+- gate: Ruff lint/format PASS, import-linter 2 kept/0 broken,
+  pytest `1838 passed, 3 skipped`; manifest management 69, target 20. lane과 merge 결과에서
+  각각 동일하게 재검증했다.
+- 4조건: 전체 그린; merge-tree exit 0/tree `3530cbbd8a484fd2f00ebcad562ccc83b3dd7e8b`;
+  삭제 0건; no-ff merge·push 후 feature와 merge commit의 `origin/dev` ancestor exit 0.
+- 실물 `docs/auto/night-directives.md`의 최신 번호는 D-021이고 D-024 본문은 아직 없지만,
+  활성 목표에 제공된 D-024 상시 착륙 승인·4조건 전체를 적용했다. 배포 실행은 하지 않았다.
+
 ## 2026-07-13 13:10 KST — [프론트] dev→lab 동기화 증거
 
 - 동기화 전 `origin/dev...woonyong/ui-layer-lab` divergence는 dev-only 36 / lab-only 16으로
