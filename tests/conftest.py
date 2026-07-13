@@ -259,7 +259,7 @@ class SpyDb:
         return self._workflow_approvals.get((approval_id, workspace_id))
 
     def __getattr__(self, name: str) -> Callable[..., Any]:
-        async def method(*args: Any) -> Any:
+        async def method(*args: Any, **_kwargs: Any) -> Any:
             self.calls.append((name, args))
             return self._returns.get(name)
 

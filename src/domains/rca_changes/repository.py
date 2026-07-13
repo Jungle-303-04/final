@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from datetime import datetime
+
 from sqlalchemy import and_, func, or_, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
@@ -281,6 +283,67 @@ class RcaChangesRepository(DatabaseConnection):
         with self.connection() as conn:
             return [dict(row) for row in conn.execute(statement).mappings().all()]
 
+    def list_recent_workload_changes_for_evidence(
+        self,
+        workspace_id: str,
+        cluster_id: str,
+        namespace: str,
+        resource_kind: str,
+        resource_name: str,
+        changed_before: str,
+        *,
+        limit: int = 5,
+    ) -> list[JsonObject]:
+        """RCA evidence 생성 시점에 workload/time 기준 최근 GitOps 변경을 읽는다."""
+
+        cutoff = _parse_timestamp(changed_before)
+        if cutoff is None:
+            return []
+        change = WorkloadChange.__table__
+        reference = WorkflowPrReference.__table__
+        statement = (
+            select(
+                change.c.event_id,
+                change.c.changed_at,
+                change.c.image_before,
+                change.c.image_after,
+                reference.c.pr_url,
+                change.c.commit_sha,
+                change.c.repository_id,
+                change.c.repo_ref,
+                change.c.workflow_run_id,
+                change.c.namespace,
+                change.c.resource_kind,
+                change.c.resource_name,
+                change.c.manifest_path,
+            )
+            .select_from(
+                change.outerjoin(
+                    reference,
+                    and_(
+                        reference.c.workspace_id == change.c.workspace_id,
+                        reference.c.repository_id == change.c.repository_id,
+                        reference.c.binding_id == change.c.binding_id,
+                        reference.c.workflow_run_id == change.c.workflow_run_id,
+                        reference.c.commit_sha == change.c.commit_sha,
+                        reference.c.manifest_path == change.c.manifest_path,
+                    ),
+                )
+            )
+            .where(
+                change.c.workspace_id == workspace_id,
+                change.c.cluster_id == cluster_id,
+                change.c.namespace == namespace,
+                change.c.resource_kind == resource_kind.casefold(),
+                change.c.resource_name == resource_name,
+                change.c.changed_at <= cutoff,
+            )
+            .order_by(change.c.changed_at.desc(), change.c.event_id.desc())
+            .limit(limit)
+        )
+        with self.connection() as conn:
+            return [dict(row) for row in conn.execute(statement).mappings().all()]
+
 
 def _incident_scope_statement(workspace_id: str, incident_id: str) -> object:
     timeline = RcaTimeline.__table__
@@ -320,3 +383,11 @@ def _incident_scope_statement(workspace_id: str, incident_id: str) -> object:
             timeline.c.incident_resource_name,
         )
     )
+
+
+def _parse_timestamp(value: str) -> datetime | None:
+    try:
+        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    return parsed if parsed.tzinfo is not None else None
