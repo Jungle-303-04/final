@@ -218,6 +218,16 @@ const issuesSelectors = [
   "main",
   "p",
 ];
+const issuesAuditPayloadSelectors = [
+  ...issuesSelectors,
+  "[data-slot='accordion']",
+  "[data-slot='accordion-item']",
+  "[data-slot='accordion-trigger'][aria-expanded='true']",
+  "[data-slot='accordion-content']",
+  "[data-slot='accordion-content'] dl",
+  "[data-slot='accordion-content'] dt",
+  "[data-slot='accordion-content'] dd",
+];
 const localeStorageKey = "kubeheal.locale";
 const maxInitialCumulativeLayoutShift = 0.1;
 const layoutShiftMeasurements = [];
@@ -757,6 +767,21 @@ const visualScenarios = [
     expectedApiRequestCounts: { [issuesListApiPath]: 2 },
     requiredSelectors: issuesSelectors,
     viewport: { width: 1024, height: 1000 },
+    theme: "light",
+    colorScheme: "light",
+    forcedColors: "active",
+  },
+  {
+    id: "issues-authenticated-audit-payload-reflow-320-forced-colors",
+    locale: "en",
+    url: productIssuesUrl,
+    authSession: "authenticated",
+    issuesScenario: true,
+    issuesExpandAuditPayload: true,
+    accessibleTarget: "Issues",
+    expectedApiRequestCounts: { [issuesListApiPath]: 2 },
+    requiredSelectors: issuesAuditPayloadSelectors,
+    viewport: { width: 320, height: 1200 },
     theme: "light",
     colorScheme: "light",
     forcedColors: "active",
@@ -1890,7 +1915,7 @@ async function captureScenario(page, scenario) {
     if (scenario.shellMode) await assertProductShellForcedColors(page, scenario.id);
     else if (scenario.homeScenario) await assertProductHomeForcedColors(page, scenario.id);
     else if (scenario.resourcesScenario) await assertProductResourcesForcedColors(page, scenario.id);
-    else if (scenario.issuesScenario) await assertProductIssuesForcedColors(page, scenario.id);
+    else if (scenario.issuesScenario) await assertProductIssuesForcedColors(page, scenario);
     else if (scenario.authSession === "unauthenticated") {
       await assertAuthForcedColors(page, scenario.id);
     }
@@ -2690,6 +2715,40 @@ async function prepareProductIssuesScenario(page, scenario) {
     throw new Error(`${scenario.id}: recent change PR link must isolate its external context`);
   }
   await page.waitForLoadState("networkidle");
+
+  if (scenario.issuesExpandAuditPayload) {
+    const trigger = detailRegion.getByRole("button", {
+      name: "Payload summary",
+      exact: true,
+    });
+    await trigger.waitFor();
+    if (await trigger.count() !== 1) {
+      throw new Error(`${scenario.id}: expected one audit payload control`);
+    }
+    await trigger.focus();
+    await page.keyboard.press("Enter");
+    await page.waitForFunction(() => document.querySelector(
+      "[data-slot='accordion-trigger'][aria-expanded='true']",
+    ) !== null);
+
+    const content = detailRegion.locator("[data-slot='accordion-content']");
+    await content.waitFor({ state: "visible" });
+    const contentBox = await content.boundingBox();
+    if (contentBox === null || contentBox.height <= 0) {
+      throw new Error(`${scenario.id}: audit payload content has no visible geometry`);
+    }
+    const payloadText = await content.innerText();
+    for (const requiredText of [
+      "incident_id",
+      issuesIncidentId,
+      "severity",
+      "warning",
+    ]) {
+      if (!payloadText.includes(requiredText)) {
+        throw new Error(`${scenario.id}: audit payload omitted ${requiredText}`);
+      }
+    }
+  }
 
   const detailTitle = page.locator("[data-slot='card-title']", {
     hasText: issuesSubject,
@@ -3853,9 +3912,10 @@ async function assertProductResourcesForcedColors(page, label) {
   }
 }
 
-async function assertProductIssuesForcedColors(page, label) {
-  await page.keyboard.press("Tab");
-  const result = await page.evaluate(() => {
+async function assertProductIssuesForcedColors(page, scenario) {
+  const label = scenario.id;
+  if (!scenario.issuesExpandAuditPayload) await page.keyboard.press("Tab");
+  const result = await page.evaluate((auditPayloadExpanded) => {
     const select = document.querySelector(
       "[data-slot='sidebar-inset'] > header [data-slot='cluster-scope-picker'] [data-slot='select-trigger']",
     );
@@ -3864,18 +3924,35 @@ async function assertProductIssuesForcedColors(page, label) {
     const detail = document.querySelector("[role='region'][aria-label='Issue details']");
     const recentChanges = document.querySelector("[data-testid='issue-recent-changes']");
     const pullRequest = recentChanges?.querySelector("a[target='_blank']");
-    const required = [select, list, issue, detail, recentChanges, pullRequest];
+    const payloadTrigger = auditPayloadExpanded
+      ? detail?.querySelector("[data-slot='accordion-trigger'][aria-expanded='true']")
+      : null;
+    const payloadContent = auditPayloadExpanded
+      ? detail?.querySelector("[data-slot='accordion-content']")
+      : null;
+    const payloadList = auditPayloadExpanded ? payloadContent?.querySelector("dl") : null;
+    const required = [
+      select,
+      list,
+      issue,
+      detail,
+      recentChanges,
+      pullRequest,
+      ...(auditPayloadExpanded ? [payloadTrigger, payloadContent, payloadList] : []),
+    ];
     if (required.some((element) => !(element instanceof HTMLElement))) {
       return { missing: true };
     }
 
-    issue.focus();
+    if (!auditPayloadExpanded) issue.focus();
     const selectStyle = getComputedStyle(select);
     const listStyle = getComputedStyle(list);
     const issueStyle = getComputedStyle(issue);
     const detailStyle = getComputedStyle(detail);
     const recentChangesStyle = getComputedStyle(recentChanges);
     const pullRequestStyle = getComputedStyle(pullRequest);
+    const payloadTriggerStyle = payloadTrigger ? getComputedStyle(payloadTrigger) : null;
+    const payloadListStyle = payloadList ? getComputedStyle(payloadList) : null;
     const visible = (element) => {
       const rect = element.getBoundingClientRect();
       return rect.width > 0 && rect.height > 0;
@@ -3886,6 +3963,14 @@ async function assertProductIssuesForcedColors(page, label) {
       active: matchMedia("(forced-colors: active)").matches,
       detailVisible: visible(detail),
       issueFocused: document.activeElement === issue,
+      payloadExpanded: auditPayloadExpanded,
+      payloadFocused: !auditPayloadExpanded || document.activeElement === payloadTrigger,
+      payloadVisible: !auditPayloadExpanded
+        || (visible(payloadContent) && visible(payloadList)),
+      payloadOutlineStyle: payloadTriggerStyle?.outlineStyle ?? null,
+      payloadOutlineWidth: Number.parseFloat(payloadTriggerStyle?.outlineWidth ?? "0"),
+      payloadBorderStyle: payloadListStyle?.borderTopStyle ?? null,
+      payloadBorderWidth: Number.parseFloat(payloadListStyle?.borderTopWidth ?? "0"),
       issueOpacity: Number.parseFloat(issueStyle.opacity),
       issueOutlineStyle: issueStyle.outlineStyle,
       issueOutlineWidth: Number.parseFloat(issueStyle.outlineWidth),
@@ -3901,14 +3986,19 @@ async function assertProductIssuesForcedColors(page, label) {
       selectOpacity: Number.parseFloat(selectStyle.opacity),
       detailOpacity: Number.parseFloat(detailStyle.opacity),
     };
-  });
+  }, Boolean(scenario.issuesExpandAuditPayload));
 
   if (result.missing || !result.active || !result.detailVisible
-    || !result.pullRequestVisible || !result.issueFocused
+    || !result.pullRequestVisible || !result.payloadFocused || !result.payloadVisible
+    || (!result.payloadExpanded && !result.issueFocused)
     || result.selectBorderStyle === "none" || result.selectBorderWidth < 1
     || result.listBorderStyle === "none" || result.listBorderWidth < 1
     || result.recentChangesBorderStyle === "none" || result.recentChangesBorderWidth < 1
-    || result.issueOutlineStyle === "none" || result.issueOutlineWidth < 2) {
+    || (!result.payloadExpanded
+      && (result.issueOutlineStyle === "none" || result.issueOutlineWidth < 2))
+    || (result.payloadExpanded
+      && (result.payloadOutlineStyle === "none" || result.payloadOutlineWidth < 2
+        || result.payloadBorderStyle === "none" || result.payloadBorderWidth < 1))) {
     throw new Error(
       `${label}: forced-colors Issues state is not preserved ${JSON.stringify(result)}`,
     );
