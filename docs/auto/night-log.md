@@ -687,6 +687,25 @@ tests/test_target_policy_control.py -k argocd`; 최신 origin 병합 상태 전�
 import-linter PASS(2 kept, 0 broken), pytest `1711 passed, 3 skipped`; 서비스 계약 문서와
 큐 상태 착륙으로 [D-019] DoD 4조건 충족.
 
+## 2026-07-13 10:17 KST — [프론트] FE-A2 완료 증거
+
+- merge commit: `4422a68005c668e15227f3c21747579ddf403bc1`
+- target parent: lab `f1eb1b5094c5cd3ac897f9d4bef30a5153afb6cf`
+- source parent: dev `91633c14e028e48c557eb9a66407e7d4630432f6`
+- 충돌 38건 해소: dev 정책 24건, lab 정책 13건, `docs/auto/night-log.md` 양측 보존 1건.
+  night-log는 lab 39블록·dev 64블록 누락 0, conflict marker 0으로 KST 순 합성했다.
+- broad lab 소유권 적용: 비충돌로 유입된 dev-only `references/ui-layer-lab/**` 예제·style
+  26파일을 제거해 lab HEAD subtree를 유지했다. 사전 예외 후보 4건은 적용 0건이다.
+- 게이트 수정: 첫 `npm run check`는 dev-only 예제의 미선언 `@xyflow/react` 의존으로 실패해
+  broad lab 정책 적용 후 해소했다. 첫 visual gate는 인증 오류 전체 화면에 `h1`이 없는
+  접근성 결함을 검출해 `ProductStateScreen.headingLevel`과 auth 회귀 테스트 4파일로 수정했다.
+- 최종 `npm run check` PASS: TypeScript·ESLint, Vitest 100 files / 727 tests,
+  design guard 303 files, shadcn audit 482 previews, Vite 14,508 modules production build.
+- `npm run visual-product` PASS: 인증·홈·리소스·상세·상태·shell 34개 isolated scenario,
+  320px reflow, 200% text resize, forced-colors, ko/en locale 포함.
+- merge 전 WIP는 `stash@{0}: wip-pre-fe-a2-20260713`으로 보존했으며 이번 merge·문서
+  커밋에는 혼입하지 않았다.
+
 ## GO-EXECUTION [FE-A2] — H1·H2 착륙 후 최종 충돌 계획
 
 - 사람 위임: `[D-021] GO [FE-A2]`.
