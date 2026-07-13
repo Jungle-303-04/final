@@ -1,4 +1,4 @@
-# 프로젝트 문서 루트
+# Opsia 프로젝트 문서 루트
 
 여기가 문서 시작점이다.
 문서는 팀원이 실제 코드 구현, API 확인, AWS 테스트까지 바로 이어갈 수 있는 것만 남긴다.
@@ -207,6 +207,7 @@ secret 이름과 주입 경계는 [Secrets](secrets.md)를 본다.
 자동 조율 문서는 아래에 있다.
 
 - [auto/backend-pipeline](auto/backend-pipeline.md)
+- [auto/deploy-plan](auto/deploy-plan.md)
 - [auto/frontend-pipeline](auto/frontend-pipeline.md)
 - [auto/night-directives](auto/night-directives.md)
 - [auto/night-log](auto/night-log.md)
@@ -408,6 +409,7 @@ Target / Telemetry 선형 작업 문서는 아래에 있다.
 - [spec/services/ai-diff-worker](spec/services/ai-diff-worker.md)
 - [spec/services/ai-dispatch-worker](spec/services/ai-dispatch-worker.md)
 - [spec/recovery-authority-patches](spec/recovery-authority-patches.md)
+- [spec/remediation-source-contract](spec/remediation-source-contract.md)
 - [spec/services/ai-evidence-worker](spec/services/ai-evidence-worker.md)
 - [spec/services/ai-incident-worker](spec/services/ai-incident-worker.md)
 - [spec/services/ai-plan-worker](spec/services/ai-plan-worker.md)

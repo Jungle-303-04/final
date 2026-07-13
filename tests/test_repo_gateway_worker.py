@@ -25,10 +25,47 @@ from domains.scm.events import (
     SafePrRequestedBody,
 )
 from domains.scm.pipeline import normalize_safe_pr_request, safe_pr_patch_sha256
+from packages.contracts.remediation_source import REMEDIATION_SOURCE_CONTRACT_PATH
 
 PR_HTML_URL = "https://github.test.local/project/repo/pull/7"
 APPROVED_SHA = "a" * 40
 NEW_BASE_SHA = "b" * 40
+REMEDIATION_CONTRACT_API_PATH = f"/repos/project/repo/contents/{REMEDIATION_SOURCE_CONTRACT_PATH}"
+
+
+def _raw_remediation_contract(*, replica_path: bool = True) -> str:
+    replica = "      replicaPath: spec.replicas\n" if replica_path else ""
+    return (
+        "apiVersion: remediation.opsia.dev/v1alpha1\n"
+        "kind: RemediationSource\n"
+        "spec:\n"
+        "  sources:\n"
+        "    - manifestPath: deploy/app.yaml\n"
+        "      sourceType: raw-yaml\n"
+        "      path: deploy/app.yaml\n"
+        "      imagePath: spec.template.spec.containers[name=checkout-api].image\n"
+        f"{replica}"
+    )
+
+
+def _raw_structured_source_contents(source: str) -> dict[str, str]:
+    return {
+        REMEDIATION_CONTRACT_API_PATH: _raw_remediation_contract(),
+        "/repos/project/repo/contents/deploy/app.yaml": source,
+    }
+
+
+def _helm_remediation_contract() -> str:
+    return """\
+apiVersion: remediation.opsia.dev/v1alpha1
+kind: RemediationSource
+spec:
+  sources:
+    - manifestPath: charts/checkout/Chart.yaml
+      sourceType: helm-values
+      path: charts/checkout/values.yaml
+      imageTagPath: image.tag
+"""
 
 
 def _structured_patch(source: str) -> SafePrFilePatch:
@@ -156,6 +193,110 @@ def _scalar_structured_case(
         )
     )
     desired_manifest = parse_single_manifest(source, "raw-yaml")
+    artifact_digest = canonical_manifest_digest(desired_manifest)
+    db = SpyDb(
+        get_workflow_run={
+            "workflow_run_id": request.workflow_run_id,
+            "workspace_id": request.workspace_id,
+            "application_id": request.application_id,
+            "binding_id": request.binding_id,
+            "environment": request.environment,
+            "commit_sha": request.commit_sha,
+        },
+        get_workflow_step_details={
+            "resource": "deployment/checkout-api",
+            "workspace_id": request.workspace_id,
+            "repository_id": request.repository_id,
+            "binding_id": request.binding_id,
+            "application_id": request.application_id,
+            "workflow_run_id": request.workflow_run_id,
+            "environment": request.environment,
+            "manifest_path": request.manifest_path,
+            "desired_manifest": desired_manifest,
+            "basis": {
+                "old_desired_source": "last_approved_snapshot",
+                "artifact_digest": artifact_digest,
+            },
+            "changes": [],
+        },
+        get_manifest_artifact_provenance={
+            "workspace_id": request.workspace_id,
+            "repository_id": request.repository_id,
+            "binding_id": request.binding_id,
+            "commit_sha": request.commit_sha,
+            "manifest_path": request.manifest_path,
+            "artifact_digest": artifact_digest,
+            "source_manifest_sha256": plan.source_manifest_sha256,
+            "repo_ref": request.repo_ref,
+            "branch": request.base_branch,
+        },
+    )
+    return (
+        SafePrReadyForCreationBody(
+            request=request,
+            summary="safe pr ready",
+            risk="low",
+            workspace_id=request.workspace_id,
+        ),
+        db,
+        request,
+    )
+
+
+def _helm_structured_case() -> tuple[
+    SafePrReadyForCreationBody,
+    SpyDb,
+    SafePrRequestedBody,
+]:
+    desired_source = (
+        "apiVersion: apps/v1\n"
+        "kind: Deployment\n"
+        "metadata: {name: checkout-api}\n"
+        "spec: {template: {spec: {containers: [{name: checkout-api, "
+        "image: 'ghcr.io/project/checkout-api:v2'}]}}}\n"
+    )
+    desired_manifest = parse_single_manifest(desired_source, "raw-yaml")
+    plan = ManifestScalarPatchPlan(
+        action_type="image_rollback",
+        source_type="raw-yaml",
+        source_manifest_sha256=canonical_manifest_digest(desired_manifest),
+        expected_base_sha=APPROVED_SHA,
+        manifest_path="charts/checkout/Chart.yaml",
+        replacements=(
+            ScalarFieldReplacement(
+                "spec.template.spec.containers[name=checkout-api].image",
+                "ghcr.io/project/checkout-api:v2",
+                "ghcr.io/project/checkout-api:v1",
+            ),
+        ),
+        rollback_replacements=(
+            ScalarFieldReplacement(
+                "spec.template.spec.containers[name=checkout-api].image",
+                "ghcr.io/project/checkout-api:v1",
+                "ghcr.io/project/checkout-api:v2",
+            ),
+        ),
+    )
+    request = normalize_safe_pr_request(
+        _request(
+            workspace_id="workspace-1",
+            repository_id="repo-1",
+            binding_id="binding-1",
+            application_id="app-1",
+            workflow_run_id="workflow-helm",
+            environment="sandbox",
+            manifest_path=plan.manifest_path,
+            repo_ref="project/repo",
+            base_branch="main",
+            commit_sha=APPROVED_SHA,
+            patches=[
+                SafePrFilePatch(
+                    path=".gitops/safe-pr/patches/helm-plan.yaml",
+                    content=scalar_patch_content(plan),
+                )
+            ],
+        )
+    )
     artifact_digest = canonical_manifest_digest(desired_manifest)
     db = SpyDb(
         get_workflow_run={
@@ -589,7 +730,7 @@ def test_repo_gateway_materializes_image_patch_from_exact_base_source(monkeypatc
         calls=calls,
         contents=contents,
         base_sha=APPROVED_SHA,
-        source_contents={source_path: source},
+        source_contents=_raw_structured_source_contents(source),
     )
     ready, db, _ = _structured_case(source)
 
@@ -603,6 +744,7 @@ def test_repo_gateway_materializes_image_patch_from_exact_base_source(monkeypatc
     assert calls == [
         ("GET", "/repos/project/repo/git/ref/heads/main"),
         ("GET", "/repos/project/repo/pulls"),
+        ("GET", REMEDIATION_CONTRACT_API_PATH),
         ("GET", source_path),
         ("POST", "/repos/project/repo/git/refs"),
         ("PUT", f"/repos/project/repo/contents/.gitops/safe-pr/{outs[0].workflow_run_id}.md"),
@@ -628,13 +770,12 @@ def test_repo_gateway_materializes_scalar_patch_from_exact_base_source(monkeypat
         "          image: ghcr.io/project/checkout-api:v2\n"
     )
     expected = source.replace("replicas: 2", "replicas: 3", 1)
-    source_path = "/repos/project/repo/contents/deploy/app.yaml"
     contents: list[dict[str, object]] = []
     repo = _load_with_transport(
         monkeypatch,
         contents=contents,
         base_sha=APPROVED_SHA,
-        source_contents={source_path: source},
+        source_contents=_raw_structured_source_contents(source),
     )
     ready, db, _request_body = _scalar_structured_case(source)
 
@@ -646,6 +787,95 @@ def test_repo_gateway_materializes_scalar_patch_from_exact_base_source(monkeypat
     assert "rollbackReplacements:" in change_document
     assert "fieldPath: spec.replicas" in change_document
     assert base64.b64decode(str(contents[-1]["content"])).decode() == expected
+
+
+def test_repo_gateway_puts_helm_patch_only_to_declared_values_path(monkeypatch) -> None:
+    _github_env(monkeypatch)
+    values_path = "/repos/project/repo/contents/charts/checkout/values.yaml"
+    chart_path = "/repos/project/repo/contents/charts/checkout/Chart.yaml"
+    values = "image:\n  repository: ghcr.io/project/checkout-api\n  tag: v2 # keep\n"
+    calls: list[tuple[str, str]] = []
+    contents: list[dict[str, object]] = []
+    repo = _load_with_transport(
+        monkeypatch,
+        calls=calls,
+        contents=contents,
+        base_sha=APPROVED_SHA,
+        source_contents={
+            REMEDIATION_CONTRACT_API_PATH: _helm_remediation_contract(),
+            values_path: values,
+        },
+    )
+    ready, db, _request_body = _helm_structured_case()
+
+    outs = run_handler(repo.on_safe_pr_ready_for_creation, ready, db=db)
+
+    assert subjects_of(outs) == ["safe_pr.created"]
+    assert calls == [
+        ("GET", "/repos/project/repo/git/ref/heads/main"),
+        ("GET", "/repos/project/repo/pulls"),
+        ("GET", REMEDIATION_CONTRACT_API_PATH),
+        ("GET", values_path),
+        ("POST", "/repos/project/repo/git/refs"),
+        ("PUT", f"/repos/project/repo/contents/.gitops/safe-pr/{outs[0].workflow_run_id}.md"),
+        ("PUT", values_path),
+        ("POST", "/repos/project/repo/pulls"),
+    ]
+    assert ("PUT", chart_path) not in calls
+    assert base64.b64decode(str(contents[-1]["content"])).decode() == values.replace(
+        "tag: v2", "tag: v1", 1
+    )
+
+
+@pytest.mark.parametrize(
+    ("contract"),
+    [
+        None,
+        "apiVersion: remediation.opsia.dev/v1alpha1\nkind: [",
+        _raw_remediation_contract(replica_path=False),
+    ],
+    ids=["missing-contract", "malformed-contract", "undeclared-replica"],
+)
+def test_repo_gateway_rejects_unsupported_contract_before_github_write(
+    monkeypatch,
+    contract: str | None,
+) -> None:
+    _github_env(monkeypatch)
+    source = (
+        "apiVersion: apps/v1\n"
+        "kind: Deployment\n"
+        "metadata: {name: checkout-api}\n"
+        "spec:\n"
+        "  replicas: 2\n"
+        "  template:\n"
+        "    spec:\n"
+        "      containers:\n"
+        "        - name: checkout-api\n"
+        "          image: ghcr.io/project/checkout-api:v2\n"
+    )
+    source_contents = {"/repos/project/repo/contents/deploy/app.yaml": source}
+    if contract is not None:
+        source_contents[REMEDIATION_CONTRACT_API_PATH] = contract
+    calls: list[tuple[str, str]] = []
+    repo = _load_with_transport(
+        monkeypatch,
+        calls=calls,
+        base_sha=APPROVED_SHA,
+        source_contents=source_contents,
+    )
+    ready, db, _request_body = _scalar_structured_case(source)
+
+    outs = run_handler(repo.on_safe_pr_ready_for_creation, ready, db=db)
+
+    assert subjects_of(outs) == ["safe_pr.failed"]
+    assert outs[0].details["exception_type"] == "RuntimeError"
+    assert "unsupported" in outs[0].details["error"]
+    assert calls == [
+        ("GET", "/repos/project/repo/git/ref/heads/main"),
+        ("GET", "/repos/project/repo/pulls"),
+        ("GET", REMEDIATION_CONTRACT_API_PATH),
+    ]
+    assert not db.called("save_pull_request")
 
 
 def test_repo_gateway_reuses_matching_structured_pr_after_base_advances(monkeypatch) -> None:
@@ -690,6 +920,7 @@ def test_repo_gateway_reuses_matching_structured_pr_after_base_advances(monkeypa
             },
         },
         ref_contents={
+            (REMEDIATION_CONTRACT_API_PATH, APPROVED_SHA): _raw_remediation_contract(),
             (manifest_api_path, APPROVED_SHA): source,
             (manifest_api_path, head_sha): expected_manifest,
             (change_api_path, head_sha): _change_document_text(request),
@@ -706,6 +937,7 @@ def test_repo_gateway_reuses_matching_structured_pr_after_base_advances(monkeypa
     assert calls == [
         ("GET", "/repos/project/repo/git/ref/heads/main"),
         ("GET", "/repos/project/repo/pulls"),
+        ("GET", REMEDIATION_CONTRACT_API_PATH),
         ("GET", f"/repos/project/repo/compare/{APPROVED_SHA}...{NEW_BASE_SHA}"),
         ("GET", f"/repos/project/repo/compare/{APPROVED_SHA}...{head_sha}"),
         ("GET", manifest_api_path),
@@ -713,6 +945,125 @@ def test_repo_gateway_reuses_matching_structured_pr_after_base_advances(monkeypa
         ("GET", change_api_path),
     ]
     assert db.called("save_pull_request")
+
+
+def test_repo_gateway_reuses_helm_pr_with_declared_target_after_base_advances(
+    monkeypatch,
+) -> None:
+    _github_env(monkeypatch)
+    ready, db, request = _helm_structured_case()
+    head_sha = "c" * 40
+    values_path = "/repos/project/repo/contents/charts/checkout/values.yaml"
+    change_path = f".gitops/safe-pr/{request.workflow_run_id}.md"
+    change_api_path = f"/repos/project/repo/contents/{change_path}"
+    approved_values = "image:\n  repository: ghcr.io/project/checkout-api\n  tag: v2 # keep\n"
+    expected_values = approved_values.replace("tag: v2", "tag: v1", 1)
+    existing_pr = {
+        "html_url": PR_HTML_URL,
+        "title": request.title,
+        "body": f"{request.body}\n\n<!-- safe-pr-patch-sha256: {request.patch_sha256} -->",
+        "base": {"ref": "main"},
+        "head": {"ref": f"gitops/{request.workflow_run_id}", "sha": head_sha},
+    }
+    calls: list[tuple[str, str]] = []
+    repo = _load_with_transport(
+        monkeypatch,
+        calls=calls,
+        base_sha=NEW_BASE_SHA,
+        existing_pr=existing_pr,
+        compare_results={
+            f"/repos/project/repo/compare/{APPROVED_SHA}...{NEW_BASE_SHA}": {
+                "status": "ahead",
+                "merge_base_commit": {"sha": APPROVED_SHA},
+                "files": [{"status": "modified", "filename": "README.md"}],
+            },
+            f"/repos/project/repo/compare/{APPROVED_SHA}...{head_sha}": {
+                "status": "ahead",
+                "merge_base_commit": {"sha": APPROVED_SHA},
+                "files": [
+                    {
+                        "status": "modified",
+                        "filename": "charts/checkout/values.yaml",
+                    },
+                    {"status": "added", "filename": change_path},
+                ],
+            },
+        },
+        ref_contents={
+            (REMEDIATION_CONTRACT_API_PATH, APPROVED_SHA): _helm_remediation_contract(),
+            (values_path, APPROVED_SHA): approved_values,
+            (values_path, head_sha): expected_values,
+            (change_api_path, head_sha): _change_document_text(request),
+        },
+    )
+
+    outs = run_handler(repo.on_safe_pr_ready_for_creation, ready, db=db)
+
+    assert subjects_of(outs) == ["safe_pr.created"]
+    assert calls == [
+        ("GET", "/repos/project/repo/git/ref/heads/main"),
+        ("GET", "/repos/project/repo/pulls"),
+        ("GET", REMEDIATION_CONTRACT_API_PATH),
+        ("GET", f"/repos/project/repo/compare/{APPROVED_SHA}...{NEW_BASE_SHA}"),
+        ("GET", f"/repos/project/repo/compare/{APPROVED_SHA}...{head_sha}"),
+        ("GET", values_path),
+        ("GET", values_path),
+        ("GET", change_api_path),
+    ]
+    assert db.called("save_pull_request")
+
+
+@pytest.mark.parametrize(
+    "changed_path",
+    [
+        "charts/checkout/Chart.yaml",
+        "charts/checkout/values.yaml",
+        REMEDIATION_SOURCE_CONTRACT_PATH,
+    ],
+    ids=["render-entrypoint", "declared-target", "source-contract"],
+)
+def test_repo_gateway_rejects_helm_retry_when_authority_path_changed(
+    monkeypatch,
+    changed_path: str,
+) -> None:
+    _github_env(monkeypatch)
+    ready, db, request = _helm_structured_case()
+    head_sha = "c" * 40
+    existing_pr = {
+        "html_url": PR_HTML_URL,
+        "title": request.title,
+        "body": f"{request.body}\n\n<!-- safe-pr-patch-sha256: {request.patch_sha256} -->",
+        "base": {"ref": "main"},
+        "head": {"ref": f"gitops/{request.workflow_run_id}", "sha": head_sha},
+    }
+    calls: list[tuple[str, str]] = []
+    repo = _load_with_transport(
+        monkeypatch,
+        calls=calls,
+        base_sha=NEW_BASE_SHA,
+        existing_pr=existing_pr,
+        compare_results={
+            f"/repos/project/repo/compare/{APPROVED_SHA}...{NEW_BASE_SHA}": {
+                "status": "ahead",
+                "merge_base_commit": {"sha": APPROVED_SHA},
+                "files": [{"status": "modified", "filename": changed_path}],
+            }
+        },
+        ref_contents={
+            (REMEDIATION_CONTRACT_API_PATH, APPROVED_SHA): _helm_remediation_contract(),
+        },
+    )
+
+    outs = run_handler(repo.on_safe_pr_ready_for_creation, ready, db=db)
+
+    assert subjects_of(outs) == ["safe_pr.failed"]
+    assert calls == [
+        ("GET", "/repos/project/repo/git/ref/heads/main"),
+        ("GET", "/repos/project/repo/pulls"),
+        ("GET", REMEDIATION_CONTRACT_API_PATH),
+        ("GET", f"/repos/project/repo/compare/{APPROVED_SHA}...{NEW_BASE_SHA}"),
+    ]
+    assert not db.called("save_pull_request")
 
 
 def test_repo_gateway_rejects_structured_head_branch_collision_before_content_write(
@@ -731,7 +1082,7 @@ def test_repo_gateway_rejects_structured_head_branch_collision_before_content_wr
         calls=calls,
         branch_exists=True,
         base_sha=APPROVED_SHA,
-        source_contents={source_path: source},
+        source_contents=_raw_structured_source_contents(source),
     )
     ready, db, _ = _structured_case(source)
 
@@ -745,6 +1096,7 @@ def test_repo_gateway_rejects_structured_head_branch_collision_before_content_wr
     assert calls == [
         ("GET", "/repos/project/repo/git/ref/heads/main"),
         ("GET", "/repos/project/repo/pulls"),
+        ("GET", REMEDIATION_CONTRACT_API_PATH),
         ("GET", source_path),
         ("POST", "/repos/project/repo/git/refs"),
     ]
@@ -795,6 +1147,9 @@ def test_repo_gateway_rejects_existing_structured_pr_with_renamed_file(monkeypat
                 ],
             },
         },
+        ref_contents={
+            (REMEDIATION_CONTRACT_API_PATH, APPROVED_SHA): _raw_remediation_contract(),
+        },
     )
 
     outs = run_handler(repo.on_safe_pr_ready_for_creation, ready, db=db)
@@ -803,6 +1158,7 @@ def test_repo_gateway_rejects_existing_structured_pr_with_renamed_file(monkeypat
     assert calls == [
         ("GET", "/repos/project/repo/git/ref/heads/main"),
         ("GET", "/repos/project/repo/pulls"),
+        ("GET", REMEDIATION_CONTRACT_API_PATH),
         ("GET", f"/repos/project/repo/compare/{APPROVED_SHA}...{NEW_BASE_SHA}"),
         ("GET", f"/repos/project/repo/compare/{APPROVED_SHA}...{head_sha}"),
     ]
@@ -849,6 +1205,9 @@ def test_repo_gateway_rejects_unsafe_or_truncated_base_advance(
                 "files": base_files,
             }
         },
+        ref_contents={
+            (REMEDIATION_CONTRACT_API_PATH, APPROVED_SHA): _raw_remediation_contract(),
+        },
     )
 
     outs = run_handler(repo.on_safe_pr_ready_for_creation, ready, db=db)
@@ -857,6 +1216,7 @@ def test_repo_gateway_rejects_unsafe_or_truncated_base_advance(
     assert calls == [
         ("GET", "/repos/project/repo/git/ref/heads/main"),
         ("GET", "/repos/project/repo/pulls"),
+        ("GET", REMEDIATION_CONTRACT_API_PATH),
         ("GET", f"/repos/project/repo/compare/{APPROVED_SHA}...{NEW_BASE_SHA}"),
     ]
     assert not db.called("save_pull_request")

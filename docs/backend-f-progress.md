@@ -292,3 +292,112 @@ Bundle route는 200을 반환한다.
 - gateway·RCA·AI·runtime worker 변경 0건, 신규 route·DB 변경 없음.
 
 계약 완성: KubernetesArgoObserver + Argo reconcile status (16c58de5634b2ee49a93c884e73bebb2348b04f3) [green]
+
+### BQ-018 — Opsia 이름 전파
+
+- 상태: landed
+- canonical merge: `ad28cc9457a094dda7ef8ce53d2184845bb25eb1`
+- 문서: `46ea10f8f0648dd7c29be984b9845ae57938fb5e`
+- 공개 표기: root/docs README와 `docs/oss/**`의 제품명을 Opsia로 통일하고 공개 벤치 이름은
+  OpsiaBench로 정리했다. Helm OCI 예시는
+  `oci://ghcr.io/opsia/charts/opsia`를 사용한다.
+- 보존 경계: 코드 식별자·event subject·DB schema는 변경하지 않았고,
+  `~/.radar/kubeheal-timeline.db` 레거시 저장 경로와 Apache License 원문도 유지했다.
+- 전체 게이트: Ruff lint/format PASS, import-linter 2 kept/0 broken,
+  pytest `1838 passed, 3 skipped`; manifest management 69, target 20.
+
+계약 완성: Opsia public docs + Helm OCI example (46ea10f8f0648dd7c29be984b9845ae57938fb5e) [green]
+
+### BQ-015 — `.remediation.yaml` 소스 계약
+
+- 상태: landed, gateway 계약 lock 비대상
+- 담당 lane: `codex/remediation-source-contract`
+- 착수 기준: `origin/dev@d385ae81f915e200fa6256789461ce268a431291`
+- 전체 게이트 baseline: Ruff lint/format PASS, import-linter 2 kept/0 broken,
+  pytest `1838 passed, 3 skipped`
+- manifest baseline: management 69, target 20
+- 범위: 저장소 소유자가 선언한 helm-values `imageTagPath`, kustomize
+  `images[].newTag`, raw image scalar, replica, 제한된 probe 필드만 patch하며 미선언 필드는
+  `unsupported`로 종료한다. 파일·필드 추측은 금지한다.
+- canonical merge: `130e6755dcd4912c0d2e43ffdcc32b4082c74b7c`
+- 코드·계약 문서 HEAD: `1300a5fe64c03aa05fe1f8d9cb94a92c2b254962`
+- 계약 파일: `docs/spec/remediation-source-contract.md`; 저장소 root의
+  `.remediation.yaml`은 `remediation.opsia.dev/v1alpha1` strict schema를 사용한다.
+- SCM은 `expectedBaseSha`에서 계약과 선언 source를 읽는다. missing/malformed/미선언,
+  raw container redirect, Helm/Kustomize repository·digest 변경은 branch·PUT·PR 전에
+  `unsupported`로 종료한다.
+- 기존 PR 재전달은 계약, render entrypoint, 선언 target 중 하나라도 base에서 바뀌면
+  재사용하지 않는다. raw/Helm/Kustomize adapter와 미선언 차단 scorer는 6/6 PASS다.
+- 전체 게이트: Ruff lint/format PASS, import-linter 2 kept/0 broken,
+  pytest `1865 passed, 3 skipped`; manifest management 69, target 20.
+- 기존 권위 patch scorer 6/6, source-contract scorer 6/6. 신규 route·DB 변경은 없다.
+
+계약 완성: RemediationSourceContract + declared source adapters (1300a5fe64c03aa05fe1f8d9cb94a92c2b254962) [green]
+
+### BQ-011 — release flow 내부 모듈 분해
+
+- 상태: landed, gateway 계약 lock 비대상
+- 담당 lane: `codex/release-flow-modules`
+- 착수 기준: `origin/dev@6714fd3fb6946b36a1c793e402df2347cea65543`
+- 전체 게이트 baseline: Ruff lint/format PASS, import-linter 2 kept/0 broken,
+  pytest `1865 passed, 3 skipped`
+- 분해 전 기준: `src/domains/release_flow/router.py` 5,297줄
+- 범위: HTTP route·DB 조회·인가·상태 변경은 router에 남기고 policy/readiness/
+  verification/report/_support를 내부 모듈로 behavior-preserving 추출한다. 기존 router 심볼
+  re-export와 monkeypatch 관측점, blocker 순서·문구·ID·timeout fallback을 보존한다.
+- 착륙 결과: feature HEAD `bd4730d850d21528a161b9f60e8da2905e4b56f8`, canonical
+  no-ff merge `37498fc7115b430c86730847d1213affeed6c61d`.
+- 분해 후 줄수: router 1,821, `_support` 120, policy 1,348, readiness 937,
+  verification 297, report 1,110. 기존 router 공개 helper 208개와 이동 helper의 object identity를
+  호환 export로 유지했다.
+- 전체 게이트: Ruff lint/format PASS, import-linter 8 kept/0 broken,
+  pytest `1868 passed, 3 skipped`; manifest management 69, target 20.
+- 4조건: merge-tree exit 0/tree `7ca5eda67e1666744f2a5d0f96f4585d2f7cc29e`, 파일 삭제 0건,
+  gateway 계약·`src/domains/rca/**`·`src/services/ai/**`·
+  `src/packages/runtime/worker.py` 변경 0건, feature와 merge commit의 `origin/dev` ancestor exit 0.
+- 공개 route·response·DB schema 변경은 없다. 프론트 소비 계약도 동일하며 Bruno·migration 변경은
+  필요하지 않다.
+
+계약 완성: release_flow internal module boundaries (bd4730d850d21528a161b9f60e8da2905e4b56f8) [green]
+
+### I단계 — production 배포 계획
+
+- 상태: 계획 착륙 완료, 실제 배포는 사람 전용 J단계 대기
+- canonical merge: `c2e2b552377ba508a535c9bd1b69c9e60fec522a`
+- 문서: `docs/auto/deploy-plan.md`
+- 적용 경계: migration-first → consumer/worker → target agent → realtime gateway →
+  API gateway. backend 공용 image workload 39개를 동일 immutable digest로 수렴한다.
+- DB fail-closed: `alembic_version` 부재·불일치, 0140 partial DDL, concurrent index
+  INVALID, 단일 head 불일치 시 workload rollout 전에 중단한다. production image에는
+  Alembic asset이 없어 승인된 canonical operator runner와 direct PostgreSQL 연결을 쓴다.
+- 보안 경계: raw management manifest의 `DEV_AUTH_BYPASS=1`을 production overlay에서
+  `0`으로 강제하고 rendered/live 값을 모두 검사한다. target agent는 재등록·credential
+  회전 없이 read-only Argo RBAC와 image만 target별 순차 갱신한다.
+- rollback: DB schema는 additive로 유지하고 이전 workload digest로 복원한다.
+  projection table 데이터를 지우는 production downgrade는 기본 rollback에 포함하지 않는다.
+- 전체 게이트: Ruff lint/format PASS, import-linter 8 kept/0 broken,
+  pytest `1868 passed, 3 skipped`; manifest management 69 / target 20.
+- J단계 blocker: GitHub Actions green 미증명, integration smoke off, 신규 3 route live
+  200 미증명, live DB Alembic baseline 미확인, 이전 digest·backup·1-replica 위험 승인 미확보.
+
+계약 완성: migration-first deploy plan + immutable rollback (0cc6af58c90140123dabd943c55b72b7b4b3bed9) [green]
+
+### 보조 대기열 S1 — RCA 읽기 route의 Bruno 기본 실행 경로
+
+- 상태: landed
+- 담당 lane: `codex/bruno-route-runner`
+- RED: `f3d2b4f9212c3dcfd86b95b03ac8251af744a060`
+- Runner: `31b93edad5c1ef047b326dea66b68593e86e92cf`
+- 인계 문서와 feature HEAD: `6d29a87021c9163c659bda548108576c8358e952`
+- canonical no-ff merge: `6ea12f2635bf6b49879f93baeed4fa101c2b4bb4`
+- `scripts/run-bruno-aws.sh`가 RemediationBundle → audit timeline → recent changes를
+  기존 RCA 식별자 저장 흐름 뒤에서 순서대로 실행한다.
+- Bruno의 401/404 허용은 계약 회귀 범위이며 production 승격은 실재 correlation·incident로
+  세 요청 모두 200임을 별도 검증한다.
+- 전체 게이트: Ruff lint/format PASS, import-linter 8 kept/0 broken,
+  pytest `1869 passed, 3 skipped`; manifest management 69 / target 20.
+- 4조건: merge-tree exit 0/tree `780b1e170691d3af359059fe08aba67e9840a85e`,
+  파일 삭제·gateway 계약·RCA·AI·runtime worker 변경 0건, feature와 merge commit의
+  `origin/dev` ancestor exit 0.
+
+계약 완성: RCA read-route Bruno runner coverage (6d29a87021c9163c659bda548108576c8358e952) [green]

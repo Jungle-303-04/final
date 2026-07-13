@@ -1,4 +1,4 @@
-# Changelog (Publication Draft)
+# Opsia Changelog (Publication Draft)
 
 > This is a draft release-history structure. No public version or release is declared by this file.
 > Human owners must reconstruct a disclosure-safe history and approve versioning before publication.
@@ -11,7 +11,7 @@ release. Private development commits must not be copied blindly into a public ch
 
 ### Added
 
-- KubeHealBench v0.1 static ground-truth scenarios and dependency-free contract validator.
+- OpsiaBench v0.1 static ground-truth scenarios and dependency-free contract validator.
 - Six benchmark metric definitions covering diagnosis, evidence abstention, patching, policy, harm,
   and normalization.
 - RemediationBundle v1alpha1 draft public specification.
@@ -19,7 +19,7 @@ release. Private development commits must not be copied blindly into a public ch
 
 ### Publication blockers
 
-- License, project name, trademark, governance, maintainers, and reporting channels are not adopted.
+- License, Opsia trademark, governance, maintainers, and reporting channels are not adopted.
 - Clean public repository history and disclosure review are not complete.
 - Public CI, signed artifacts, release automation, installation path, and end-to-end demo require human
   verification.
