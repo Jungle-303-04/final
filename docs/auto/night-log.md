@@ -2778,3 +2778,5 @@ target preflight·register 네 함수와 strict Zod 계약을 claim했다. 1회�
 - 계약 앵커: `RESOURCES_FILTER_FACETS_PATH` / `87c0606e0` / `[green]`.
 - 계약 앵커: `FILTERED_RESOURCES_PATH` / `87c0606e0` / `[green]`.
 - 계약 앵커: `RESOURCE_LABEL_FACETS_PATH` / `87c0606e0` / `[green]`.
+- [백엔드] lane 회수 — `codex/resources-filter-contract` / `87c0606e0` /
+  `origin/dev` ancestor exit 0; 로컬 branch와 worktree를 같은 사이클에서 삭제했다.
