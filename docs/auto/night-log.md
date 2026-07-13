@@ -2396,3 +2396,16 @@ target preflight·register 네 함수와 strict Zod 계약을 claim했다. 1회�
   TypeScript·ESLint, Vitest 119 files / 851 tests, design guard 347 files,
   shadcn source audit 482 previews, Vite build 14,539 modules.
 - 커밋 push 후 `origin/woonyong/ui-layer-lab` ancestor exit 0을 확인했다.
+
+## 2026-07-13 19:00 KST — [프론트] Resources 카탈로그 접근성 i18n 경계 보강
+
+- RED는 Resources 카탈로그의 항목 접근성 이름이 en·ko 모두 코드 조립 문자열
+  `Services 3`으로 고정된 사실을 2개 실패로 확인했다. `17be40da0`은 완전성 검사를 받는
+  `resources.catalog.itemAria` 키를 en·ko 카탈로그에 추가하고, label·count의 문법과
+  단위를 로케일 템플릿이 소유하게 했다.
+- targeted Vitest PASS: 1 file / 2 tests. 영어 접근성 이름은
+  `Services, 3 resources`, 한국어는 `Services, 3개`이며 Kubernetes 리소스 명칭과
+  실제 count 값은 번역하지 않는다.
+- 전체 `npm run check` PASS: TypeScript·ESLint, Vitest 119 files / 851 tests,
+  design guard 347 files, shadcn source audit 482 previews, Vite build 14,539 modules.
+  커밋 push 후 `origin/woonyong/ui-layer-lab` ancestor exit 0을 확인했다.
