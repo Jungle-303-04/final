@@ -1848,3 +1848,22 @@ target preflight·register 네 함수와 strict Zod 계약을 claim했다. 1회�
 - 4조건: merge-tree clean/tree `c6d98ec1167434a3a51f3bb0cc77cb5c13350b8e`, 파일 삭제·
   소유권 밖 변경·frozen 경로 변경 0건, RED·feature·문서·merge commit의 `origin/dev`
   ancestor exit 0. J 배포 실행은 0건이다.
+
+## 2026-07-13 16:15 KST — [백엔드] rule candidate 31~40 안전 계약 착륙
+
+- lane `codex/candidate-contract-batch-four`, RED `85f9447c9`, 구현·데이터
+  `1497b9bb3`, 의미 교정과 feature HEAD `296e14c383ae949573f2ad5216af8874b1a923b8`,
+  canonical no-ff merge `6ebd0f6bd7882bbed2b173d100fb6a26ebe4e0e5`.
+- loader 순서 31~40의 exact evidence·signal·recovery를 투영했다. 36·37번은 `command`,
+  38번은 `command+safe_pr`, 나머지는 fallback-only다. exact fixture는 0개이며 유사 fixture를
+  만들지 않았다.
+- forbidden remediation 의미 감사에서 ordinal 35의 재시작 불가능한 Endpoint 표현을 잡아
+  cluster 전체 backend workload 재시작 금지로 교정했다. 최종 독립 재감사 P0/P1 0건이다.
+- append-only: 네 번째 batch digest `32d4a8b4…ab73d`를 `(31, 40)`에 고정하고
+  누락 lock·batch 4 변조 회귀를 추가했다. 누적 범위는 40/87, 다음 cursor는 41이다.
+- 고유 검증: candidate scorer 40/40 PASS, 후보 계약 테스트 43 passed. 전체 게이트는
+  Ruff lint/format PASS, import-linter 8 kept/0 broken, pytest `1914 passed, 3 skipped`;
+  manifest management 69 / target 20.
+- 4조건: merge-tree clean/tree `a9c271adfbed401a3dd8f04887c9a9cc765d5185`, 파일 삭제·
+  소유권 밖 변경·frozen 경로 변경 0건, RED·구현·문서·수정·merge commit의 `origin/dev`
+  ancestor exit 0. J 배포 실행은 0건이다.
