@@ -4,6 +4,7 @@ import argparse
 import json
 import os
 import subprocess
+from collections.abc import Mapping, Sequence
 from dataclasses import asdict
 from pathlib import Path
 from typing import Any
@@ -22,6 +23,42 @@ def require_mapping(value: Any, label: str) -> dict[str, Any]:
     if not isinstance(value, dict):
         raise ValueError(f"{label} must be an object")
     return value
+
+
+def image_repository(image: str) -> str:
+    """Return an image repository while excluding a tag or digest."""
+    if "@" in image:
+        repository, _, digest = image.partition("@")
+        if not repository or not digest:
+            raise ValueError("image reference is malformed")
+        return repository
+    last_slash = image.rfind("/")
+    last_colon = image.rfind(":")
+    if last_colon <= last_slash:
+        raise ValueError("verified live image source must contain an explicit tag")
+    return image[:last_colon]
+
+
+def parse_verified_live_images(values: Sequence[str]) -> dict[str, str]:
+    """Parse explicit live tag-to-digest attestations without accepting wildcards."""
+    mappings: dict[str, str] = {}
+    for value in values:
+        source, separator, digest = value.partition("=")
+        if (
+            not separator
+            or not source
+            or not digest
+            or any(character.isspace() for character in value)
+        ):
+            raise ValueError("verified live image must use TAG=DIGEST without whitespace")
+        if source in mappings:
+            raise ValueError(f"duplicate verified live image: {source}")
+        if not IMAGE_DIGEST.fullmatch(digest):
+            raise ValueError("verified live image target must use an immutable sha256 digest")
+        if image_repository(source) != image_repository(digest):
+            raise ValueError("verified live image tag and digest must use the same repository")
+        mappings[source] = digest
+    return mappings
 
 
 def expected_deployment_containers(
@@ -102,6 +139,7 @@ def build_plan(
     live_document: Any,
     namespace: str,
     previous_release_sha: str,
+    verified_live_images: Mapping[str, str] | None = None,
 ) -> RollbackPlan:
     if not KUBERNETES_NAME.fullmatch(namespace):
         raise ValueError("namespace is not a Kubernetes name")
@@ -109,15 +147,21 @@ def build_plan(
         raise ValueError("previous_release_sha must be a full lowercase Git SHA")
 
     live_images = live_deployment_images(live_document)
+    verified = dict(verified_live_images or {})
+    used_attestations: set[str] = set()
     targets: list[RollbackTarget] = []
     for deployment, container in expected:
         image = live_images.get((deployment, container))
         if image is None:
             raise ValueError(f"live deployment container is missing: {deployment}/{container}")
         if not IMAGE_DIGEST.fullmatch(image):
-            raise ValueError(
-                f"live deployment image is not digest-pinned: {deployment}/{container}"
-            )
+            live_tag = image
+            image = verified.get(live_tag)
+            if image is None:
+                raise ValueError(
+                    f"live deployment image is not digest-pinned: {deployment}/{container}"
+                )
+            used_attestations.add(live_tag)
         targets.append(
             RollbackTarget(
                 namespace=namespace,
@@ -126,6 +170,9 @@ def build_plan(
                 image=image,
             )
         )
+    unused_attestations = sorted(set(verified) - used_attestations)
+    if unused_attestations:
+        raise ValueError(f"verified live image was not observed: {unused_attestations[0]}")
     return RollbackPlan(previous_release_sha=previous_release_sha, targets=tuple(targets))
 
 
@@ -152,6 +199,7 @@ def capture(
     managed_image: str,
     previous_release_sha: str,
     output: Path,
+    verified_live_images: Mapping[str, str] | None = None,
 ) -> RollbackPlan:
     if not context or any(character.isspace() for character in context):
         raise ValueError("context must be a non-empty name without whitespace")
@@ -184,6 +232,7 @@ def capture(
         live_document=json.loads(live_result.stdout),
         namespace=namespace,
         previous_release_sha=previous_release_sha,
+        verified_live_images=verified_live_images,
     )
     write_plan(output, plan)
     return plan
@@ -198,6 +247,13 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--manifest", type=Path, required=True)
     parser.add_argument("--managed-image", required=True)
     parser.add_argument("--previous-release-sha", required=True)
+    parser.add_argument(
+        "--verified-live-image",
+        action="append",
+        default=[],
+        metavar="TAG=DIGEST",
+        help="Allow one exact observed mutable tag after attesting its immutable digest.",
+    )
     parser.add_argument("--output", type=Path, required=True)
     return parser.parse_args()
 
@@ -211,6 +267,7 @@ def main() -> int:
         managed_image=args.managed_image,
         previous_release_sha=args.previous_release_sha,
         output=args.output,
+        verified_live_images=parse_verified_live_images(args.verified_live_image),
     )
     print(f"captured {len(plan.targets)} digest-pinned deployment container(s)")
     return 0
