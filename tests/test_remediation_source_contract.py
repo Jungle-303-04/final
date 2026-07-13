@@ -1,17 +1,20 @@
 from __future__ import annotations
 
 import pytest
-from packages.contracts.remediation_source import (
-    RemediationSourceContractError,
-    parse_remediation_source_contract,
-)
 
 from domains.gitops.source_patch import (
+    ImageScalarReplacement,
+    ManifestImagePatchPlan,
     ManifestScalarPatchPlan,
     RemediationSourcePatchUnsupported,
     ScalarFieldReplacement,
+    declared_image_patch,
     declared_scalar_patch,
     materialize_declared_scalar_patch,
+)
+from packages.contracts.remediation_source import (
+    RemediationSourceContractError,
+    parse_remediation_source_contract,
 )
 
 BASE_SHA = "a" * 40
@@ -90,6 +93,28 @@ def test_contract_parses_explicit_raw_helm_and_kustomize_sources() -> None:
     ],
 )
 def test_contract_rejects_traversal_unknown_keys_and_yaml_aliases(content: str) -> None:
+    with pytest.raises(RemediationSourceContractError):
+        parse_remediation_source_contract(content)
+
+
+@pytest.mark.parametrize(
+    "content",
+    [
+        contract_content() + "---\nkind: Other\n",
+        contract_content().replace(
+            "      path: deploy/app.yaml\n",
+            "      path: deploy/app.yaml\n      path: deploy/other.yaml\n",
+            1,
+        ),
+        contract_content().replace("path: deploy/app.yaml", "path: .remediation.yaml", 1),
+        contract_content().replace(
+            "readinessProbe.timeoutSeconds:",
+            "startupProbe.failureThreshold:",
+            1,
+        ),
+    ],
+)
+def test_contract_rejects_multidoc_duplicate_self_patch_and_unlisted_probe(content: str) -> None:
     with pytest.raises(RemediationSourceContractError):
         parse_remediation_source_contract(content)
 
@@ -207,6 +232,36 @@ def test_helm_values_contract_changes_only_declared_image_tag() -> None:
         "tag: v2 # keep", "tag: v1 # keep", 1
     )
     assert declared.source_path == "charts/checkout/values.yaml"
+
+
+def test_legacy_image_plan_uses_the_same_declared_source_gate() -> None:
+    patch_plan = ManifestImagePatchPlan(
+        source_type="raw-yaml",
+        source_manifest_sha256=SOURCE_DIGEST,
+        expected_base_sha=BASE_SHA,
+        manifest_path="deploy/app.yaml",
+        replacements=(
+            ImageScalarReplacement(
+                container_name="checkout-api",
+                current_image="ghcr.io/project/checkout-api:v2",
+                previous_image="ghcr.io/project/checkout-api:v1",
+            ),
+        ),
+    )
+
+    declared = declared_image_patch(
+        patch_plan,
+        parse_remediation_source_contract(contract_content()),
+    )
+
+    assert declared.source_path == "deploy/app.yaml"
+    assert declared.replacements == (
+        ScalarFieldReplacement(
+            "spec.template.spec.containers[name=checkout-api].image",
+            "ghcr.io/project/checkout-api:v2",
+            "ghcr.io/project/checkout-api:v1",
+        ),
+    )
 
 
 def test_kustomize_contract_changes_only_named_image_new_tag() -> None:

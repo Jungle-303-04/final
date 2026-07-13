@@ -15,6 +15,11 @@ import yaml
 from yaml.nodes import MappingNode, Node, ScalarNode, SequenceNode
 from yaml.tokens import AliasToken, AnchorToken
 
+from packages.contracts.remediation_source import (
+    RemediationSourceContract,
+    RemediationSourceDeclaration,
+)
+
 RAW_JSON = "raw-json"
 RAW_YAML = "raw-yaml"
 SUPPORTED_SOURCE_TYPES = frozenset({RAW_JSON, RAW_YAML})
@@ -31,6 +36,10 @@ ScalarValue = str | int | float | bool | None
 
 class ManifestSourcePatchError(ValueError):
     """원문이 승인 snapshot과 다르거나 단일 image 치환을 보장할 수 없음."""
+
+
+class RemediationSourcePatchUnsupported(ManifestSourcePatchError):
+    """Repository contract does not declare the requested source mutation."""
 
 
 @dataclass(frozen=True)
@@ -65,6 +74,13 @@ class ManifestScalarPatchPlan:
     manifest_path: str
     replacements: tuple[ScalarFieldReplacement, ...]
     rollback_replacements: tuple[ScalarFieldReplacement, ...]
+
+
+@dataclass(frozen=True)
+class DeclaredScalarPatch:
+    source_type: str
+    source_path: str
+    replacements: tuple[ScalarFieldReplacement, ...]
 
 
 @dataclass(frozen=True)
@@ -500,6 +516,184 @@ def materialize_image_patch(
     return patched
 
 
+def declared_scalar_patch(
+    plan: ManifestScalarPatchPlan,
+    contract: RemediationSourceContract,
+) -> DeclaredScalarPatch:
+    """Resolve a semantic patch only through repository-declared source locations."""
+
+    validate_scalar_patch_plan(plan)
+    source = contract.source_for_manifest(plan.manifest_path)
+    if source is None:
+        raise _unsupported("manifest path is not declared")
+    replacements = tuple(
+        _declared_replacement(source, plan.action_type, item) for item in plan.replacements
+    )
+    paths = [item.field_path for item in replacements]
+    if len(set(paths)) != len(paths):
+        raise _unsupported("declared source target is ambiguous")
+    return DeclaredScalarPatch(
+        source_type=source.source_type,
+        source_path=source.source_path,
+        replacements=replacements,
+    )
+
+
+def declared_image_patch(
+    plan: ManifestImagePatchPlan,
+    contract: RemediationSourceContract,
+) -> DeclaredScalarPatch:
+    """Resolve the legacy image plan through the same repository declaration."""
+
+    validate_image_patch_plan(plan)
+    replacement = plan.replacements[0]
+    semantic_path = f"spec.template.spec.containers[name={replacement.container_name}].image"
+    scalar_plan = ManifestScalarPatchPlan(
+        action_type="image_rollback",
+        source_type=plan.source_type,
+        source_manifest_sha256=plan.source_manifest_sha256,
+        expected_base_sha=plan.expected_base_sha,
+        manifest_path=plan.manifest_path,
+        replacements=(
+            ScalarFieldReplacement(
+                semantic_path,
+                replacement.current_image,
+                replacement.previous_image,
+            ),
+        ),
+        rollback_replacements=(
+            ScalarFieldReplacement(
+                semantic_path,
+                replacement.previous_image,
+                replacement.current_image,
+            ),
+        ),
+    )
+    return declared_scalar_patch(scalar_plan, contract)
+
+
+def materialize_declared_scalar_patch(source: str, patch: DeclaredScalarPatch) -> str:
+    """Change only the exact scalar selected by a parsed repository contract."""
+
+    if patch.source_type not in {"raw-yaml", "helm-values", "kustomize"}:
+        raise _unsupported("declared source adapter is unsupported")
+    if not patch.replacements:
+        raise _unsupported("declared source has no replacement")
+    try:
+        if any(isinstance(token, AnchorToken | AliasToken) for token in yaml.scan(source)):
+            raise ManifestSourcePatchError("declared source anchors and aliases are not patchable")
+        nodes = list(yaml.compose_all(source))
+    except yaml.YAMLError as exc:
+        raise ManifestSourcePatchError("declared source is invalid") from exc
+    original = parse_single_manifest(source, RAW_YAML)
+    if len(nodes) != 1 or not isinstance(nodes[0], MappingNode):
+        raise ManifestSourcePatchError("declared source must contain one object")
+
+    expected = deepcopy(original)
+    spans: list[tuple[int, int, str]] = []
+    for replacement in patch.replacements:
+        segments = field_path_segments(replacement.field_path)
+        current = object_value_at(original, segments)
+        if not same_scalar(current, replacement.current_value):
+            raise ManifestSourcePatchError("declared source scalar does not match approved value")
+        node = node_value_at(nodes[0], segments)
+        if not isinstance(node, ScalarNode):
+            raise ManifestSourcePatchError("declared source target is not one scalar")
+        spans.append(
+            (
+                node.start_mark.index,
+                node.end_mark.index,
+                encoded_scalar_value(node, replacement.desired_value),
+            )
+        )
+        set_object_value(expected, segments, replacement.desired_value)
+
+    if len({(start, end) for start, end, _ in spans}) != len(spans):
+        raise ManifestSourcePatchError("declared source targets overlap")
+    patched = source
+    for start, end, encoded in sorted(spans, reverse=True):
+        patched = f"{patched[:start]}{encoded}{patched[end:]}"
+    if parse_single_manifest(patched, RAW_YAML) != expected:
+        raise ManifestSourcePatchError("declared patch changed fields outside approved scalars")
+    return patched
+
+
+def _declared_replacement(
+    source: RemediationSourceDeclaration,
+    action_type: str,
+    replacement: ScalarFieldReplacement,
+) -> ScalarFieldReplacement:
+    if action_type in {"image_rollback", "image_tag_fix"}:
+        return _declared_image_replacement(source, replacement)
+    if action_type == "replica_scale" and source.replica_path is not None:
+        return ScalarFieldReplacement(
+            source.replica_path,
+            replacement.current_value,
+            replacement.desired_value,
+        )
+    if action_type == "probe_fix":
+        semantic = _probe_semantic_field(replacement.field_path)
+        target = source.probe_path(semantic) if semantic is not None else None
+        if target is not None:
+            return ScalarFieldReplacement(
+                target,
+                replacement.current_value,
+                replacement.desired_value,
+            )
+    raise _unsupported("action field is not declared")
+
+
+def _declared_image_replacement(
+    source: RemediationSourceDeclaration,
+    replacement: ScalarFieldReplacement,
+) -> ScalarFieldReplacement:
+    current = replacement.current_value
+    desired = replacement.desired_value
+    if not isinstance(current, str) or not isinstance(desired, str):
+        raise _unsupported("image replacement is not textual")
+    if source.source_type == "raw-yaml" and source.image_path is not None:
+        return ScalarFieldReplacement(source.image_path, current, desired)
+
+    current_ref = _tagged_image(current)
+    desired_ref = _tagged_image(desired)
+    if current_ref is None or desired_ref is None or current_ref[0] != desired_ref[0]:
+        raise _unsupported("tag adapter cannot change image repository or digest")
+    repository = current_ref[0]
+    if source.source_type == "helm-values" and source.image_tag_path is not None:
+        target_path = source.image_tag_path
+    elif source.source_type == "kustomize" and repository in source.image_names:
+        target_path = f"images[name={repository}].newTag"
+    else:
+        raise _unsupported("image field is not declared")
+    return ScalarFieldReplacement(target_path, current_ref[1], desired_ref[1])
+
+
+def _tagged_image(value: str) -> tuple[str, str] | None:
+    if not value or "@" in value or any(char.isspace() for char in value):
+        return None
+    separator = value.rfind(":")
+    if separator <= value.rfind("/") or separator == len(value) - 1:
+        return None
+    repository = value[:separator]
+    tag = value[separator + 1 :]
+    if not repository or re.fullmatch(r"[A-Za-z0-9_][A-Za-z0-9._-]{0,127}", tag) is None:
+        return None
+    return repository, tag
+
+
+def _probe_semantic_field(field_path: str) -> str | None:
+    match = re.search(
+        r"\.(readinessProbe|livenessProbe)\."
+        r"(timeoutSeconds|httpGet\.(?:path|port))$",
+        field_path,
+    )
+    return f"{match.group(1)}.{match.group(2)}" if match is not None else None
+
+
+def _unsupported(reason: str) -> RemediationSourcePatchUnsupported:
+    return RemediationSourcePatchUnsupported(f"remediation source patch unsupported: {reason}")
+
+
 def materialize_scalar_patch(source: str, plan: ManifestScalarPatchPlan) -> str:
     """승인 원문에서 allowlist scalar span만 바꾸고 나머지 byte는 보존한다."""
 
@@ -602,7 +796,7 @@ def scalar_patch_matches_manifest(
 
 def field_path_segments(value: str) -> tuple[_FieldPathSegment, ...]:
     segments: list[_FieldPathSegment] = []
-    for raw in value.split("."):
+    for raw in _field_path_parts(value):
         match = FIELD_PATH_SEGMENT_PATTERN.fullmatch(raw)
         if match is None:
             return ()
@@ -611,6 +805,26 @@ def field_path_segments(value: str) -> tuple[_FieldPathSegment, ...]:
             return ()
         segments.append(_FieldPathSegment(match.group(1), selected_name))
     return tuple(segments)
+
+
+def _field_path_parts(value: str) -> tuple[str, ...]:
+    parts: list[str] = []
+    start = 0
+    bracket_depth = 0
+    for index, char in enumerate(value):
+        if char == "[":
+            bracket_depth += 1
+        elif char == "]":
+            bracket_depth -= 1
+            if bracket_depth < 0:
+                return ()
+        elif char == "." and bracket_depth == 0:
+            parts.append(value[start:index])
+            start = index + 1
+    if bracket_depth != 0:
+        return ()
+    parts.append(value[start:])
+    return tuple(parts)
 
 
 def object_value_at(root: object, segments: tuple[_FieldPathSegment, ...]) -> object:
