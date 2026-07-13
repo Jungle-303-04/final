@@ -50,7 +50,13 @@ health_file="$(mktemp)"
 trap 'rm -f "${index_file}" "${health_file}"' EXIT
 
 echo "==> post-deploy gateway health"
-curl -fsS "${BASE_URL}/api/healthz" >"${health_file}"
+health_status="$(
+  curl --silent --show-error \
+    --output "${health_file}" \
+    --write-out '%{http_code}' \
+    "${BASE_URL}/api/healthz"
+)"
+test "${health_status}" = "200"
 python3 - "${health_file}" <<'PY'
 import json
 import sys
@@ -62,7 +68,13 @@ if document.get("status") != "ok":
 PY
 
 echo "==> post-deploy frontend bundle"
-curl -fsS "${BASE_URL}/" >"${index_file}"
+frontend_status="$(
+  curl --silent --show-error \
+    --output "${index_file}" \
+    --write-out '%{http_code}' \
+    "${BASE_URL}/"
+)"
+test "${frontend_status}" = "200"
 post_bundle="$(grep -Eom1 'index-[A-Za-z0-9_-]+\.js' "${index_file}")"
 test -n "${post_bundle}"
 case "${REQUIRE_FRONTEND_BUNDLE_CHANGE}" in

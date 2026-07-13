@@ -56,6 +56,7 @@ def test_deploy_only_follows_a_successful_dev_push_gate_with_exact_opt_in() -> N
         "group": "dev-deploy",
         "cancel-in-progress": False,
     }
+    assert deploy_job()["timeout-minutes"] == 180
 
 
 def test_deploy_checks_out_the_exact_tree_that_passed_the_gate() -> None:
