@@ -31,16 +31,51 @@ probe path/port와 selector mismatch는 각각 catalog의 `probe_fix`, `selector
 `manual_analysis`만 허용하며 `auto_apply`는 `false`다. gold patch는 운영자 검토가 끝났을
 때의 정답이지 실행 허가가 아니다.
 
+## 후보 안전 계약
+
+`candidate-contract-index.json`은 cause catalog 15개 파일의 SHA-256과 실제 loader 순서
+(파일 경로 → YAML rule → candidate)에 따른 87개 후보를 고정한다. 각 index 항목은
+`required_evidence`와 실제 `supporting_signals` predicate까지 보존한다. CI 테스트는 PyYAML로
+live YAML을 다시 읽어 index 전체와 대조하지만, 공개 채점기는 index와 source hash를 사용하므로
+site-packages 없이 실행된다.
+
+`candidate-contracts.json`은 index 앞에서부터 완결된 10개 단위 배치를 누적한다. 현재 범위는
+1~10번이고 `next_ordinal`은 11이다. 마지막 배치는 81~87번 7개를 허용하며 그때
+`next_ordinal`은 `null`이다. 후보 계약은 다음 경계를 분리한다.
+
+- `required_evidence`: 수집돼야 하는 `source:name` key. 이것만으로 후보가 지지됐다는 뜻은 아니다.
+- `supporting_signals`: 근거 내용에서 모두 충족돼야 하는 catalog signal group.
+- `contradicting_signals`, `contradiction_policy`: 현재 runtime에 반증 모델이 없음을 빈 배열과
+  `not_modeled_v0.1`로 명시한다. 반증이 없다고 추정하지 않는다.
+- `missing_evidence_policy`: required evidence 또는 signal group이 빠지면 RCA completion을 막는
+  현행 `all_required_evidence_and_supporting_signal_groups` 정책.
+- `patch_capabilities`: route 이름이 아니라 실제 command alias와 Safe PR patch allowlist로
+  계산한 실행 가능 범위. 예를 들어 `config_fix`는 `draft_pr` route를 선언하지만 현재 dispatcher가
+  patch를 지원하지 않아 capability가 비어 있다.
+- `allowed_remediations`: live recovery와 fallback의 route, 승인, blast radius, rollback,
+  post-verification 원문.
+- `forbidden_remediations`: 후보 범위를 넘어서는 cluster/fleet 조치와 차단 이유.
+- `benchmark_fixtures`: 같은 rule/candidate를 검증하는 정식 scenario. 빈 배열은 해당 후보의
+  공개 coverage gap이며 가짜 fixture로 채우지 않는다.
+
+현재 배치는 87개 전체 계약 완성이 아니다. 다음 보충 단위는 index 11번부터 이어 붙이며,
+source hash나 loader 순서가 달라지면 기존 배치부터 다시 감사한다.
+
 ## 검증
 
 ```bash
 python3 benchmark/score.py
+python3 benchmark/score.py --candidate-contracts
 ```
 
 채점기는 `benchmark/catalog-snapshot.json`과 모든 시나리오를 읽어 필수 필드와 타입, 카테고리별
 2~4개/전체 14~28개, rule/symptom/candidate/evidence의 정확한 일치, recovery action 일치,
 금지 remediation의 위험 blast-radius 태그, Kubernetes 객체와 normalization 조건을 검사한다.
 snapshot은 아래 원본을 2026-07-13에 실측한 공개 고정점이다.
+
+후보 계약 모드는 87개 index의 연속 순서·source hash·signal schema, 완료 batch cursor,
+live recovery/dispatch capability, 허용·금지 action 분리, rollback·post-verification,
+fixture 경로 containment와 scenario 계약을 함께 검사한다.
 
 - `src/services/ai/agent/causes/catalog/crashloop.yaml`
 - `src/services/ai/agent/causes/catalog/image_pull.yaml`
