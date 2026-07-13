@@ -1,5 +1,5 @@
 ---
-source_commit: 262db708
+source_commit: e14390882
 status: synced
 ---
 
@@ -65,7 +65,7 @@ class App:
   entrypoint를 import하고 worker `App` 이름/handler를 검증한다.
 - `BorrowedEventBus` — root 소유 bus를 child runtime에 위임하되 child `close()`가 shared bus를
   닫지 못하게 한다.
-- `ControllerRuntime` — worker 32개, async 4개, HTTP 2개를 동일 event loop에서 기동한다.
+- `ControllerRuntime` — worker 33개, async 4개, HTTP 2개를 동일 event loop에서 기동한다.
   API gateway에는 shared bus와 `MemorySessionStore`를 주입한다. `check_report()`는 DB 연결 없이
   모든 entrypoint와 runner shape를 검증한다.
 

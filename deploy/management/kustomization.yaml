@@ -9,6 +9,7 @@ resources:
   - rbac.yaml
   - services.yaml
   - ai-workers.yaml
+  - auto-revert-worker.yaml
   - github-poll-worker.yaml
   - console.yaml
   - console-dev.yaml
