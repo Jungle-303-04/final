@@ -2239,3 +2239,18 @@ target preflight·register 네 함수와 strict Zod 계약을 claim했다. 1회�
   shadcn source audit 482 previews, Vite build 14,539 modules.
 - 커밋 push 후 `origin/woonyong/ui-layer-lab` ancestor exit 0을 확인했다. 동시에 나타난
   다른 작업자의 문서 변경 5건과 사용자 소유 `outputs/`는 stage·수정하지 않고 보존했다.
+
+## 2026-07-13 18:27 KST — [프론트] 영어 인증 화면 시각 계약 보강
+
+- `106d9dc22daa223e43c414a6c352b64864457a34`는 한국어 navigator와 저장된 `en`
+  로케일을 함께 주입해 저장 설정 우선순위를 인증 화면에서 직접 검증한다.
+- 제목·설명·Email·Password·Sign in·Language control이 모두 영어로 렌더되고 인증
+  `main`에 한국어 UI 문자열이 남지 않는지 확인한다. 제품 runtime과 인증 API 계약은
+  변경하지 않았다.
+- `npm run check` PASS: TypeScript·ESLint, Vitest 118 files / 847 tests,
+  design guard 346 files, shadcn source audit 482 previews, Vite build 14,539 modules.
+  `npm run visual-product` PASS: 43 isolated scenarios, exact API request counts,
+  unexpected feature network/WebSocket 0건.
+- 시각 증거:
+  `references/ui-layer-lab/output/playwright/product-auth-unauthenticated-desktop-light-en.png`.
+  커밋 push 후 `origin/woonyong/ui-layer-lab` ancestor exit 0을 확인했다.
