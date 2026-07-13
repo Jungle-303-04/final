@@ -276,6 +276,14 @@ function ReleaseStepNode({ data }: NodeProps<Node<ReleaseNodeData>>) {
   );
 }
 
+function IconPlay(props: IconProps) {
+  return (
+    <svg {...buildIconProps(props)}>
+      <path d="M8 5l11 7-11 7z" />
+    </svg>
+  );
+}
+
 const nodeTypes = { release_step: ReleaseStepNode };
 type ReleaseEdge = Edge<FlowEdgeData>;
 type GraphMode = 'plan' | 'demo';
@@ -1241,6 +1249,7 @@ function ReleaseCanvasWorkspace({
                 }}
               />
               <div className="release-flow__canvas-actions">
+                <Button size="sm" variant="primary" onClick={onOpenRun}><IconPlay size={14} />실행</Button>
                 <Button size="sm" variant="ghost" onClick={onOpenPicker}>플랜 선택</Button>
                 <details className="release-flow__canvas-more">
                   <summary>더보기</summary>
@@ -1895,17 +1904,19 @@ function ReleasePlanDetailWorkspace({
   ) ?? '변경 내용을 저장한 뒤 실행 관리에서 미리보기와 실행을 진행하세요.';
   return (
     <div className="release-flow__detail-shell">
-      <section className="release-flow__detail-hero" aria-label="선택한 릴리즈 플랜">
-        <div className="release-flow__detail-title">
-          <span className="release-flow__builder-kicker">Release plan detail</span>
-          <h2>{plan.name || '이름 없는 릴리즈 플랜'}</h2>
-          <p>{plan.description || '플랜 설명을 추가하면 팀원이 릴리즈 목적과 범위를 빠르게 이해할 수 있습니다.'}</p>
-          <div className="release-flow__builder-meta">
-            <Badge tone={toneForStatus(plan.status)}>{statusLabel(plan.status)}</Badge>
-            <span>{plan.steps.length}개 단계</span>
-            <span>{valueLabel(getString(settings.runtime_mode, 'demo'))}</span>
-            <span>{readyLabel}</span>
+      <section className="release-flow__detail-contextbar" aria-label="선택한 릴리즈 플랜 상태">
+        <div className="release-flow__detail-context-state">
+          <span className={`release-flow__detail-context-dot ${errors > 0 ? 'is-danger' : preview?.executable ? 'is-ok' : 'is-warning'}`} aria-hidden="true" />
+          <div>
+            <strong>{readyLabel}</strong>
+            <span>{plan.description || '릴리즈 목적과 범위를 플랜 정보에서 추가할 수 있습니다.'}</span>
           </div>
+        </div>
+        <div className="release-flow__detail-context-metrics">
+          <span><small>상태</small><strong>{statusLabel(plan.status)}</strong></span>
+          <span><small>단계</small><strong>{plan.steps.length}</strong></span>
+          <span><small>모드</small><strong>{valueLabel(getString(settings.runtime_mode, 'demo'))}</strong></span>
+          <span><small>실행</small><strong>{activeRuns > 0 ? `${activeRuns}개 진행 중` : '대기'}</strong></span>
         </div>
       </section>
 
@@ -1927,7 +1938,7 @@ function ReleasePlanDetailWorkspace({
             className="release-flow__detail-graph-card"
           >
             <div className="release-flow__canvas release-flow__canvas--detail">
-              <FlowCanvas nodes={nodes} edges={edges} nodeTypes={nodeTypes} interactive scrollBehavior="zoom" onNodeClick={onGraphNodeClick} onPaneClick={onGraphPaneClick} />
+              <FlowCanvas nodes={nodes} edges={edges} nodeTypes={nodeTypes} interactive scrollBehavior="zoom" fitViewPadding={0.06} fitViewMinZoom={0.52} onNodeClick={onGraphNodeClick} onPaneClick={onGraphPaneClick} />
             </div>
           </Card>
 
@@ -1972,7 +1983,7 @@ function ReleasePlanDetailWorkspace({
           </Card>
           <Card title="흐름 미리보기" className="release-flow__detail-graph-card">
             <div className="release-flow__canvas release-flow__canvas--detail">
-              <FlowCanvas nodes={nodes} edges={edges} nodeTypes={nodeTypes} interactive scrollBehavior="zoom" onNodeClick={onGraphNodeClick} onPaneClick={onGraphPaneClick} />
+              <FlowCanvas nodes={nodes} edges={edges} nodeTypes={nodeTypes} interactive scrollBehavior="zoom" fitViewPadding={0.06} fitViewMinZoom={0.52} onNodeClick={onGraphNodeClick} onPaneClick={onGraphPaneClick} />
             </div>
           </Card>
         </div>
