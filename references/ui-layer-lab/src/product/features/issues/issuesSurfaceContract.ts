@@ -2,6 +2,7 @@ import type {
   IssueAuditTimelinePage,
   IssueDetail,
   IssueEvidencePage,
+  IssueRecentChanges,
   IssueRcaReportPage,
   IssueSummary,
   IssuesPortFailure,
@@ -25,6 +26,15 @@ export interface IssuesSurfaceCopy {
   auditLoadingMore: string;
   auditTimeUnknown: string;
   auditTime: (value: string) => string;
+  recentChangesLabel: string;
+  recentChangesUnavailable: string;
+  recentChangesPullRequest: string;
+  recentChangesTime: (value: string) => string;
+  recentChangesImageBeforeLabel: string;
+  recentChangesImageAfterLabel: string;
+  recentChangesCommitLabel: string;
+  recentChangesRepositoryLabel: string;
+  recentChangesWorkflowLabel: string;
   evidenceLabel: string;
   reportsLabel: string;
   recoveryLabel: string;
@@ -58,6 +68,7 @@ export interface SectionState<T> {
 
 export interface IssuePanelsState {
   detail: SectionState<IssueDetail>;
+  recentChanges: SectionState<IssueRecentChanges>;
   audit: SectionState<IssueAuditTimelinePage>;
   evidence: SectionState<IssueEvidencePage>;
   reports: SectionState<IssueRcaReportPage>;

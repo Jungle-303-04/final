@@ -10,6 +10,7 @@ import {
   type IssueDetail,
   type IssueEvidencePage,
   type IssueList,
+  type IssueRecentChanges,
   type IssueRcaReportPage,
   type IssueSummary,
   type IssuesPort,
@@ -87,10 +88,16 @@ export function IssuesSurface({
     abortAuditPage();
     const controller = new AbortController();
     if (selected.incidentId !== null) {
+      const incidentId = selected.incidentId;
       loadSection(
-        () => port.loadIssue(selected.incidentId!, clusterId, controller.signal),
+        () => port.loadIssue(incidentId, clusterId, controller.signal),
         controller.signal,
         (detail) => setPanels((current) => ({ ...current, detail })),
+      );
+      loadSection(
+        () => port.loadRecentChanges(incidentId, controller.signal),
+        controller.signal,
+        (recentChanges) => setPanels((current) => ({ ...current, recentChanges })),
       );
     }
     loadSection(
@@ -183,7 +190,7 @@ export function IssuesSurface({
   }, [clusterId]);
 
   return (
-    <div className="grid min-h-96 gap-4 lg:grid-cols-[minmax(18rem,0.8fr)_minmax(0,1.6fr)]">
+    <div className="grid gap-4 lg:min-h-96 lg:grid-cols-[minmax(18rem,0.8fr)_minmax(0,1.6fr)]">
       <Card aria-label={copy.listLabel} role="region">
         <CardHeader className="border-b">
           <CardTitle>{copy.listLabel}</CardTitle>
@@ -198,13 +205,13 @@ export function IssuesSurface({
             <RefreshCw aria-hidden="true" />
           </Button>
         </CardHeader>
-        <CardContent className="min-h-96">
+        <CardContent className="lg:min-h-96">
           <IssuesListPanel copy={copy} list={list} onSelect={selectIssue} selected={selected} />
         </CardContent>
       </Card>
       {selected === null ? (
-        <Card className="min-h-96" role="status">
-          <CardContent className="grid min-h-96 place-items-center text-muted-foreground">
+        <Card className="min-h-48 lg:min-h-96" role="status">
+          <CardContent className="grid min-h-48 place-items-center text-muted-foreground lg:min-h-96">
             {copy.detailEmpty}
           </CardContent>
         </Card>
@@ -229,6 +236,7 @@ function emptyState<T>(): SectionState<T> {
 function emptyPanels(): IssuePanelsState {
   return {
     detail: emptyState<IssueDetail>(),
+    recentChanges: emptyState<IssueRecentChanges>(),
     audit: emptyState<IssueAuditTimelinePage>(),
     evidence: emptyState<IssueEvidencePage>(),
     reports: emptyState<IssueRcaReportPage>(),
@@ -238,11 +246,15 @@ function emptyPanels(): IssuePanelsState {
   };
 }
 
-function loadingPanels(loadDetail: boolean): IssuePanelsState {
+function loadingPanels(loadIncidentSections: boolean): IssuePanelsState {
   const panels = emptyPanels();
-  return loadDetail
+  return loadIncidentSections
     ? panels
-    : { ...panels, detail: { data: null, failure: null, loading: false } };
+    : {
+        ...panels,
+        detail: { data: null, failure: null, loading: false },
+        recentChanges: { data: null, failure: null, loading: false },
+      };
 }
 
 function loadSection<T>(

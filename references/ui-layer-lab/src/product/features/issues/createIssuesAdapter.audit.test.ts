@@ -55,6 +55,7 @@ function endpoints(): IssuesEndpointDependencies {
     listEvidence: vi.fn(),
     listRcaReports: vi.fn(),
     getAuditTimeline: vi.fn().mockResolvedValue(auditTimelinePage),
+    getIncidentRecentChanges: vi.fn(),
     getRecoveryPlanByCorrelation: vi.fn(),
     selectRecoveryAction: vi.fn(),
   };
