@@ -4,7 +4,7 @@ import {
   IconBrandGoogle,
   type Icon,
 } from "@tabler/icons-react";
-import { Boxes, Server, ServerCog } from "lucide-react";
+import { Boxes, ServerCog } from "lucide-react";
 import type { ComponentType, SVGProps } from "react";
 import type { HomeClusterProvider } from "../home/homeContract";
 import { useI18n, type MessageKey } from "../../shared/i18n";
@@ -19,7 +19,7 @@ const providerIcons: Record<
   gke: IconBrandGoogle,
   kind: Boxes,
   onprem: ServerCog,
-  unknown: Server,
+  unknown: Boxes,
 };
 
 const providerLabelKeys: Record<HomeClusterProvider, MessageKey> = {
