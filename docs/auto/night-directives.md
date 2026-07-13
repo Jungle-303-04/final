@@ -549,6 +549,57 @@ supporting/contradicting, patch 가능 여부, rollback·post-verification, benc
 **5. OSS 라이선스.** LICENSE.draft → 루트 LICENSE 채택은 여전히 사람 결정으로 남긴다
 (팀 기여자 동의 확인 선행 — publication-checklist 참조).
 
+### [D-020] 2026-07-13 — 백엔드 상태 감사 반영: lock 순서·단계적 H·split-brain 시정 (작성: 우녕 위임 조율 세션)
+
+**1. gateway 계약 lock 순서 확정: BQ-006 → BQ-017.**
+근거: G 진입조건이 E(BQ-006)를 포함하므로 BQ-006이 H 경로의 병목. BQ-017은 프론트가
+provider-free로 병행 중이므로 후순위. 동시 착수 금지는 §1.3 그대로.
+
+**2. H 게이트를 단계적 착륙으로 개정 (backend-pipeline H 행의 일괄 merge 대체).**
+- **H1 (최우선): `codex/f-audit-timeline`** (C0/BQ-004/BQ-005) — 프론트 E단계(VP-002/003)가
+  BQ-004 origin 착륙을 대기 중이므로 먼저 착륙시킨다.
+- **H2: `codex/f-inprocess-event-bus`** (BQ-008, dev 대비 47커밋 낙후 — 조기 착륙으로 부채 정지)
+- **H3: `codex/f-auto-revert-pr`** — P(BQ-009/010) 완료 후.
+각 Hn 공통 절차: 최신 origin/dev로 rebase(또는 clean 시험 merge) → lane에서 전체 게이트
+재증명 → GO-REQUEST [Hn] 제출(충돌 예측·명령 포함) → 사람 GO(실행 위임 가능) →
+ancestor 재증명 + progress 앵커([D-012] 절차) → lane 회수. C 완료 증거의 hash는
+rebase 후 동등 커밋(7d74d765c)으로 갱신해 기록한다.
+
+**3. split-brain 시정 (백엔드 제안 승인).** dev worktree의 조율 문서 변경
+(D-017~020, BQ-012~017 행, VP 관련)은 **벤치·기타 잔여 변경과 혼입 없이 단독 커밋**으로
+분리해 push한다. 혼입 위험이 있는 파일은 커밋 전 diff 목록을 night-log에 남긴다.
+
+**4. 실행 순서 재확인.** 조율 문서 착륙 → BQ-012 → BQ-013 → BQ-006(lock) →
+H1 → H2 → BQ-016 → BQ-009/010 재개(D-019 예외로) → H3 → BQ-017(lock) →
+BQ-015 → BQ-014. G(통합 검증)는 단계적 H 체제에서 "각 Hn 직전의 lane 재증명"으로
+대체되며, 최종 G는 마지막 H 후 origin/dev에서 1회 수행한다.
+
+### [D-021] 2026-07-13 — 팀 중간 통합: GO 일괄 부여·승격 게이트·작업 방식 확정 (작성: 우녕 위임 조율 세션, 우녕 결정)
+
+**1. GO 일괄 부여 (실행 위임: 각 담당 Codex).** 순서 엄수:
+① **GO [H1]**: audit-timeline lane rebase → 전체 게이트 재증명 → dev merge·push →
+   ancestor 재증명 + 앵커(C 증거는 7d74d765c로 갱신)
+② **GO [H2]**: in-process bus lane 동일 절차
+③ **GO [FE-A2]**: dev→lab 동기화. 충돌 정책은 기존 확정값(lab 소유 경로=lab,
+   docs/auto=양측 보존, legacy frontend/** 및 그 외=dev 채택, 예외 후보만 별도 보고).
+   merge 후 full gate 필수.
+④ **GO [PROMOTE]**: ③ 완료 직후 lab → dev 승격 merge·push (백엔드 Codex 실행,
+   프론트가 lab HEAD·full gate 증거 제출 후). 이것이 팀 공유용 중간 통합점이다.
+각 단계는 이전 단계의 착륙 확인(ancestor exit 0) 후에만 진행. 어느 단계든 예상 밖
+충돌·게이트 실패 시 중단·보고(추측 해소 금지).
+
+**2. 브랜치 정리 2차.** ④ 후: 착륙된 lane 전부 삭제(-d), 유지하는 것은
+`codex/f-auto-revert-pr`(P/BQ-009/010 진행용) 하나. [D-011]류 분류 [C](미착륙·
+비활성) 브랜치는 감사 표를 night-log에 제출하고 사람 판단 대기 — 임의 삭제 금지.
+
+**3. 앞으로의 작업 방식.**
+- **dev = 유일한 통합 기준점.** 사람 팀원은 dev에서 분기해 PR.
+- 에이전트는 **단명 lane 원칙**: lane 생성 후 24시간 내 착륙(또는 BLOCKED 보고).
+  dev 대비 20커밋 이상 낙후된 lane은 즉시 rebase 의무 — 판단자 점검 항목에 추가.
+- 착륙은 기존 위임 게이트 절차 유지(직접 dev 커밋은 조율 문서 docs 커밋만 예외).
+- lab(프론트)은 canonical 유지하되 **일일 1회 이상 dev↔lab 양방향 동기화**
+  (아침 FE-A2 → 저녁 PROMOTE 리듬)를 기본으로 한다.
+
 **메시징 규칙(발표·문서 공통, 즉시 발효):** "환각 불가능"·"exactly-once"·
 "managed-field diff"·"AI가 못 망가뜨림을 증명" 표현 금지. 대체:
 "rule-first fail-closed RCA", "transactional outbox + consumer ledger 기반

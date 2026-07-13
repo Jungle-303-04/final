@@ -29,6 +29,11 @@ from packages.contracts.event_bus.subjects import (
     STREAM_SUBJECTS,
 )
 from packages.contracts.interfaces import DeadLetterStore
+from packages.events.context import (
+    event_workspace,
+    pending_event_workspace,
+    stage_event_workspace,
+)
 from packages.events.envelope import event
 
 NATS_URL_ENV = "NATS_URL"
@@ -81,12 +86,14 @@ def consumer_config() -> Any:
 
 
 def event_context(evt: EventEnvelope) -> dict[str, str | None]:
-    """로그에 실을 표준 이벤트 식별 필드(흐름 추적용)."""
+    """로그 식별 필드와 현재 처리 중인 신뢰 workspace 컨텍스트를 결합."""
+    stage_event_workspace(getattr(evt, "workspace_id", None))
     return {
         "subject": evt.subject,
         "event_id": evt.event_id,
         "correlation_id": evt.correlation_id,
         "causation_id": evt.causation_id,
+        "workspace_id": getattr(evt, "workspace_id", None),
         "source": evt.source,
     }
 
@@ -94,8 +101,11 @@ def event_context(evt: EventEnvelope) -> dict[str, str | None]:
 @contextmanager
 def event_causation(causation_id: str) -> Iterator[None]:
     token = CURRENT_CAUSATION_ID.set(causation_id)
+    workspace_id = pending_event_workspace()
+    stage_event_workspace(None)
     try:
-        yield
+        with event_workspace(workspace_id):
+            yield
     finally:
         CURRENT_CAUSATION_ID.reset(token)
 
@@ -225,13 +235,14 @@ class DeadLetterSink:
     ) -> EventEnvelope:
         dead_letter = self.store.record_dead_letter(evt, consumer, str(error), attempts)
         body = DeadLetterCreatedBody.from_body(dead_letter)
-        return await self.events.emit(
-            body.__subject__,
-            self.source,
-            body.to_body(),
-            evt.correlation_id,
-            evt.event_id,
-        )
+        with event_workspace(evt.workspace_id):
+            return await self.events.emit(
+                body.__subject__,
+                self.source,
+                body.to_body(),
+                evt.correlation_id,
+                evt.event_id,
+            )
 
     async def capture_raw(self, raw: bytes, consumer: str, error: Exception) -> EventEnvelope:
         dead_letter = self.store.record_raw_dead_letter(raw, consumer, str(error))

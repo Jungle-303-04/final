@@ -19,6 +19,7 @@ from settings import Settings
 from domains.ai.router import router as ai_router
 from domains.alert.router import router as alert_router
 from domains.applications.router import router as applications_router
+from domains.audit.router import router as audit_router
 from domains.catalog.router import router as catalog_router
 from domains.command.router import router as command_router
 from domains.dashboard.fleet_router import router as fleet_router
@@ -40,6 +41,7 @@ from domains.rca.query_router import router as rca_query_router
 from domains.rca.router import router as rca_router
 from domains.rca.test_scenario_contract import validate_test_scenario_catalog
 from domains.rca_bundle.router import router as rca_bundle_router
+from domains.rca_changes.router import router as rca_changes_router
 from domains.release_flow.router import router as release_flow_router
 from domains.target.events import AgentConnectedBody
 from domains.target.evidence_jobs import EVIDENCE_JOB_STATUS_LEASED, EVIDENCE_JOB_STATUS_QUEUED
@@ -292,7 +294,9 @@ class ApiGateway:
             rca_query_router
         )  # evidence/RCA report 범용 조회(세션 워크스페이스 범위)
         app.include_router(rca_bundle_router)  # RCA/recovery read projection bundle
+        app.include_router(rca_changes_router)  # incident workload 최근 GitOps 변경
         app.include_router(command_router)  # command 도메인 라우터(+agent 가드 필터)
+        app.include_router(audit_router)  # workspace-scoped correlation 감사 타임라인
         app.include_router(dashboard_router)  # dashboard read model 조회(+cluster read 필터)
         app.include_router(fleet_router)  # fleet 롤업 + 클러스터 드릴다운(콘솔 루트 화면)
         app.include_router(diagnostics_router)  # release flow preflight + YAML/설정 진단

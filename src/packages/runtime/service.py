@@ -12,7 +12,7 @@ from uvicorn import Config, Server
 from packages.config.constants import Runtime
 from packages.config.logs import configure_logging
 from packages.config.settings import env
-from packages.contracts.event_bus.interfaces import EventClient, EventHandler
+from packages.contracts.event_bus.interfaces import EventClient, EventConsumerBus, EventHandler
 from packages.runtime.worker import EventHandlerSpec, WorkerRuntime
 from packages.storage.database import Database
 
@@ -65,6 +65,7 @@ class WorkerService:
     subjects: tuple[str, ...]
     handler_factory: WorkerHandlerFactory
     durable_name: str | None = None
+    bus: EventConsumerBus | None = None
 
     def run(self) -> None:
         AsyncService(self.service_name, self.serve).run()
@@ -76,4 +77,4 @@ class WorkerService:
             handler_factory=self.handler_factory,
             durable_name=self.durable_name,
         )
-        await WorkerRuntime(spec).run()
+        await WorkerRuntime(spec, bus=self.bus).run()
