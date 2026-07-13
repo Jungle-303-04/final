@@ -271,8 +271,8 @@ Bundle route는 200을 반환한다.
 - bootstrap password/session cookie/SCM token은 artifact에 0건이고 0600 runtime 디렉터리를
   종료 시 폐기한다. SCM credential hash가 fixture/controller Pod template에 들어가 재실행 시
   Secret rotation과 Pod 교체가 함께 일어난다. 관련 표적 테스트는 21건 통과했다.
-- 이 실증은 local SCM fixture와 외부 GitOps actor 시뮬레이션이다. hosted forge, 실제 Argo
-  CD/Flux continuous reconcile, rollout 진단부터 PR까지의 완전 자율 경로, public OCI artifact는
+- 이 실증은 local SCM fixture와 외부 GitOps actor 시뮬레이션이다. hosted forge, 실제 외부
+  GitOps controller continuous reconcile, rollout 진단부터 PR까지의 완전 자율 경로, public OCI artifact는
   아직 증명하지 않았다. 따라서 BQ-016은 `in_progress`를 유지하며 이 절은 완료 앵커가 아니다.
 - 비완료 착륙 증거: canonical merge `15379d94f`, 코드 `9b107d8e9`, lane HEAD
   `16aad904c`가 모두 `origin/dev` ancestor exit 0이다. 최신 dev 재base 뒤 전체 게이트는
@@ -1053,7 +1053,7 @@ Bundle route는 200을 반환한다.
 - 로컬 실측: fresh Kind에서 설치, controller/agent, bad rollout, safe PR, reviewer merge,
   GitOps sync, workload 정상화가 exit 0으로 끝났다.
 - 공개 OCI는 chart/controller/console anonymous pull이 403이므로 BQ-016과 이 행의 공개 설치
-  완료 조건은 충족되지 않았다. GHCR publish와 package visibility 변경은 사람 권한 작업이다.
+  완료 조건은 충족되지 않았다. 외부 container registry publish와 package visibility 변경은 사람 권한 작업이다.
 - 후속 보안: URL에 포함되는 install token을 단기 1회용 receipt로 분리해야 한다.
 - 전체 게이트: Ruff lint/format PASS, import-linter 8 kept/0 broken, pytest
   `2006 passed, 3 skipped`; manifest management 69/target 20, Helm lint PASS.
