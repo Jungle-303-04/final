@@ -699,6 +699,105 @@ def test_rca_test_bundle_excludes_prior_run_logs_from_same_namespace() -> None:
     assert completed.root_cause == "app_startup_failure"
 
 
+def test_rca_test_bundle_filters_matched_entries_to_current_pod() -> None:
+    current_pod = "rca-test-crash-app-startup-7f8d9c6b5-x2k4m"
+    prior_pod = "rca-test-crash-config-env-6d7c8b5f4-p9q2r"
+    payload = crashloop_payload(
+        logs=[
+            {
+                "source": "loki",
+                "query_name": "rca_test_logs",
+                "query": '{k8s_namespace_name="sandbox"} |= "FATAL"',
+                "result_type": "streams",
+                "streams": [
+                    {
+                        "stream": {
+                            "k8s_namespace_name": "sandbox",
+                            "k8s_pod_name": prior_pod,
+                            "k8s_container_name": "app",
+                        },
+                        "values": [
+                            {
+                                "timestamp": "1751871600000000000",
+                                "line": (
+                                    "FATAL: required environment variable DATABASE_URL is not set"
+                                ),
+                            }
+                        ],
+                    },
+                    {
+                        "stream": {
+                            "k8s_namespace_name": "sandbox",
+                            "k8s_pod_name": current_pod,
+                            "k8s_container_name": "app",
+                        },
+                        "values": [
+                            {
+                                "timestamp": "1751871601000000000",
+                                "line": "FATAL: startup failed",
+                            }
+                        ],
+                    },
+                ],
+                "line_count": 2,
+                "matched_entries": [
+                    {
+                        "timestamp": "1751871600000000000",
+                        "namespace": "sandbox",
+                        "pod": prior_pod,
+                        "container": "app",
+                        "severity": "critical",
+                        "message": (
+                            "FATAL: required environment variable DATABASE_URL is not set"
+                        ),
+                        "matched_patterns": ["missing_env"],
+                        "line_truncated": False,
+                    },
+                    {
+                        "timestamp": "1751871601000000000",
+                        "namespace": "sandbox",
+                        "pod": current_pod,
+                        "container": "app",
+                        "severity": "critical",
+                        "message": "FATAL: startup failed",
+                        "matched_patterns": ["app_startup_failure"],
+                        "line_truncated": False,
+                    },
+                ],
+            }
+        ],
+        metadata={
+            "rca_test": {
+                "run_id": "run-app-startup",
+                "scenario_id": "crash.app-startup",
+                "pod_names": [current_pod],
+            }
+        },
+    )
+
+    rca_events = run_to_rca(payload, db=SpyDb(), correlation_id="corr-test-matched-entries")
+
+    bundle = event_by_subject(rca_events, "evidence.bundle.built").evidence_bundle
+    logs_item = next(item for item in bundle.items if item.source == "logs")
+    entries = logs_item.value["entries"]
+    assert entries[0]["line_count"] == 1
+    assert [
+        stream["stream"]["k8s_pod_name"] for stream in entries[0]["streams"]
+    ] == [current_pod]
+    assert entries[0]["matched_entries"] == [
+        {
+            "timestamp": "1751871601000000000",
+            "namespace": "sandbox",
+            "pod": current_pod,
+            "container": "app",
+            "severity": "critical",
+            "message": "FATAL: startup failed",
+            "matched_patterns": ["app_startup_failure"],
+            "line_truncated": False,
+        }
+    ]
+
+
 def test_rca_test_bundle_rejects_log_stream_without_pod_identity() -> None:
     """RCA test 로그에 Pod 라벨이 없으면 다른 run 혼입 위험 때문에 근거로 사용하지 않는다."""
     payload = crashloop_payload(
