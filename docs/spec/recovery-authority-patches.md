@@ -51,10 +51,11 @@ action과 별도이고 실제 patch 후보보다 score가 낮다. 그 밖의 act
 - `rollbackReplacements[]`: forward의 exact inverse
 
 SCM worker는 DB의 workflow/diff/provenance와 plan을 다시 대조한 뒤 GitHub에서
-`expectedBaseSha`의 원문을 읽는다. YAML anchor/alias, 다중 문서, missing/duplicate target,
-digest 불일치, allowlist 밖 field는 거부한다. YAML을 재직렬화하지 않고 node span만 바꾸므로
-주석·개행·필드 순서를 보존한다. machine-readable forward/rollback plan은 PR 변경 문서에도
-남는다.
+`expectedBaseSha`의 `.remediation.yaml`과 선언 source 원문을 읽는다. 계약 누락·미선언 field,
+YAML anchor/alias, 다중 문서, missing/duplicate target, digest 불일치, allowlist 밖 field는
+거부한다. YAML을 재직렬화하지 않고 node span만 바꾸므로 주석·개행·필드 순서를 보존한다.
+machine-readable forward/rollback plan은 PR 변경 문서에도 남는다. source adapter와
+fail-closed 규칙은 [Remediation source contract](remediation-source-contract.md)를 따른다.
 
 ## 재현
 
@@ -66,3 +67,8 @@ production generator와 materializer를 사용해 6개 action의 forward patch�
 원문 byte를 정확히 복원하는지 채점한다. 성공 기준은 마지막 줄
 `{"failed": 0, "passed": 6, "total": 6}`이다.
 
+실제 SCM write의 저장소 선언 경계는 별도로 검증한다.
+
+```bash
+uv run python scripts/verify-remediation-source-contract.py
+```
