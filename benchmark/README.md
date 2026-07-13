@@ -64,7 +64,19 @@ site-packages 없이 실행된다.
 recovery 선언은 소스 선언 순서대로 모두 누적한다.
 
 87개 후보의 안전 계약은 모두 완결됐다. 계약 완성은 recovery나 fixture coverage가 모두 구현됐다는
-뜻이 아니다. 11~20번은 모두 명시 recovery가 없는 `manual_analysis` fallback이며 실제 patch
+뜻이 아니다. 7번 `app_port_bind_failed`는 한 프로세스가 같은 실제 포트를 두 번 bind해
+`address already in use` 신호와 CrashLoopBackOff를 만드는 exact fixture를 연결한다. 임의 가용
+포트로 같은 명령을 실행하는 테스트가 외부 인프라 없이 실패 로그와 exit code 1을 검증한다.
+실제 patch capability는 비어 있으므로 허용 경로는 승인형 `manual_analysis`뿐이고, gold patch는
+운영자 검토용 정답이지 Safe PR 실행 가능성의 주장이 아니다. 8번
+`permission_denied_startup`은 임시 startup script의 실행 bit를 제거해 실제 POSIX
+`PermissionError: [Errno 13] Permission denied`와 exit code 1을 외부 인프라 없이
+재현한다. full container merge patch 왕복으로 fault·gold·rollback이 image·command·
+security context를 유지하는지 검증한다. exit 1이 generic `app_startup_failure`도 지지하는
+경우에는 catalog 순서상 더 구체적인 권한 후보가 선택되는 현행 계약을 테스트로
+고정한다. 이 후보도 patch capability가 비어 있으므로 승인형 `manual_analysis`만
+허용한다. 11~20번은 모두 명시 recovery가 없는
+`manual_analysis` fallback이며 실제 patch
 capability와 기존 exact fixture도 없다. 21~30번 중
 25번 `wrong_image_tag`만 `safe_pr` capability가 있고, 26번 `missing_image_pull_secret`과 27번
 `registry_unavailable`은 승인형 recovery만 있어 capability가 비어 있다. 기존 exact fixture는
@@ -72,10 +84,13 @@ capability와 기존 exact fixture도 없다. 21~30번 중
 `backend_readiness_failure`는 실제 command alias와 교차해 `command` capability가 있고, 38번
 `application_5xx_spike`는 command와 Safe PR 양쪽을 지원한다. 31~40번에 exact fixture는 없다.
 41~49번은 `manual_analysis` fallback-only이고, 50번 `probe_path_wrong`만 `safe_pr` capability와
-exact probe fixture를 가진다. 51~53번과 55번도 `safe_pr` capability가 있고, exact fixture는
-51·52·53·55·56번에 연결한다. 52번 timeout과 53번 startup window fixture 추가는 각각 여섯 번째
-batch 전체를 재감사하고 canonical digest를 갱신한 명시적 coverage 보강이다. startup fixture는
-5초 초기화에 정상 8초·장애 4초 window를 사용해 외부 인프라 없이 실패 경계를 고정한다.
+exact probe fixture를 가진다. 51·52·55번도 `safe_pr` capability가 있고, exact fixture는
+51·52·53·55·56번에 연결한다. 53번 `startup_window_too_short`는 recovery가 `probe_fix`를
+선언하지만 현재 producer가 readiness/liveness replacement만 생성하므로 patch capability는 비어
+있고 scenario도 `manual_analysis` 승인 경로만 허용한다. 52번 timeout과 53번 startup window
+fixture 추가는 각각 여섯 번째 batch 전체를 재감사하고 canonical digest를 갱신한 명시적 coverage
+보강이다. startup fixture는 5초 초기화에 정상 8초·장애 4초 window를 사용해 외부 인프라 없이
+실패 경계를 고정하며, gold patch는 실행 허가가 아닌 운영자 검토용 정답이다.
 54번은 실제 health 실패라 probe 수정
 대상이 아니며, 56번은 fixture가
 있어도 fallback-only, 60번은 OOM 계열 이름이어도 live `oom_memory` recovery가 없다. 61~70번도

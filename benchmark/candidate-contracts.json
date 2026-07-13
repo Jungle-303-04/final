@@ -476,7 +476,9 @@
           "reason": "포트 bind 실패는 cluster 전체 네트워크 노출 확대로 해결하지 않습니다."
         }
       ],
-      "benchmark_fixtures": []
+      "benchmark_fixtures": [
+        "benchmark/scenarios/crashloop/crashloop-port-bind-conflict/scenario.json"
+      ]
     },
     {
       "ordinal": 8,
@@ -532,7 +534,9 @@
           "reason": "startup 권한 오류는 대상 capability보다 넓은 cluster-admin 권한 부여를 정당화하지 않습니다."
         }
       ],
-      "benchmark_fixtures": []
+      "benchmark_fixtures": [
+        "benchmark/scenarios/crashloop/crashloop-permission-denied-startup/scenario.json"
+      ]
     },
     {
       "ordinal": 9,
@@ -3214,9 +3218,7 @@
       "contradicting_signals": [],
       "contradiction_policy": "not_modeled_v0.1",
       "missing_evidence_policy": "all_required_evidence_and_supporting_signal_groups",
-      "patch_capabilities": [
-        "safe_pr"
-      ],
+      "patch_capabilities": [],
       "allowed_remediations": [
         {
           "action_type": "probe_fix",

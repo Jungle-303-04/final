@@ -2178,6 +2178,50 @@ target preflight·register 네 함수와 strict Zod 계약을 claim했다. 1회�
 - 로그 무결성 커밋·push는 `40fda210a64a6f29d76aaabde719672724099c28`이며,
   `origin/woonyong/ui-layer-lab` exact 일치와 `origin/dev` ancestor exit 0을 재확인했다.
 
+## 2026-07-13 17:37 KST — [백엔드] startup probe 시나리오와 capability 교정 착륙
+
+- 최초 lane `codex/benchmark-probe-startup-window`, RED `f811610d1`, 구현 `17cd32648`,
+  feature HEAD `67014a028`, 최초 merge `da5330778`이다.
+- 5초 초기화, 정상 8초·장애 4초 window로 `startup_window_too_short` exact fixture를
+  ordinal 53에 연결했다. probe 4/4, 전체 scenario 17/17, candidate 87/87이다.
+- 독립 감사에서 실제 frozen producer의 `probe_replacements`가 readiness/liveness만 생성해
+  startup `failureThreshold` Safe PR을 만들 수 없음을 발견했다. frozen 파일은 수정하지 않고
+  correction lane `codex/startup-probe-capability-truth`에서 capability를 빈 값으로 고정하고
+  scenario를 `manual_analysis` 승인 경로로 교정했다. correction RED `728d23c35`, feature
+  `94c419a80`, canonical merge `8f84ecdc0`이다.
+- 여섯 번째 batch digest는 `0d53d280…b69aea`다. 전체 게이트는 Ruff lint/format PASS,
+  import-linter 8 kept/0 broken, pytest `1943 passed, 3 skipped`; manifest 69/20이다.
+  target-agent SQLite destructor의 cross-thread `PytestUnraisableExceptionWarning` 2건이 관찰됐으나
+  실패는 아니며 본 lane 변경 경로와 무관하다. 별도 test-only 감사 대상으로 남긴다.
+- 4조건: merge-tree clean/tree `c0764350df4849f292bed6b5e4067cbc845121d1`, 삭제·frozen 변경
+  0건, `94c419a80`·`8f84ecdc0`의 `origin/dev` ancestor exit 0. J 배포 실행은 0건이다.
+
+## 2026-07-13 17:37 KST — [백엔드] 통합 worktree 오선택 감사·판단 대기
+
+- 최초 merge 명령이 전용 integration worktree가 아니라 루트 `woonyong/ui-layer-lab`에서
+  실행돼 `da5330778`의 부모가 `aef9cda37`과 `67014a028`이 됐다.
+- `aef9cda37`은 이전 canonical `7216f2d2a` 대비 프론트 소유·문서 51파일,
+  `+1107/-153`, 삭제 0건을 포함한다. force/reset/revert나 추가 역변환은 수행하지 않았다.
+- 이 UI 변경의 채택 여부는 사람 판단 대기다. 재개 조건은 (a) 현 tree 승인 또는
+  (b) 명시적 tree 복원 지시다. 백엔드 보충 작업은 해당 경로를 건드리지 않고 계속한다.
+- `codex/startup-probe-safe-pr@962abca9b`는 downstream contract/allowlist만 확장해 실제
+  frozen producer 부재를 해결하지 못한 미착륙 local lane이다. merge·push하지 않고 보존하며,
+  producer 확장에 대한 명시적 frozen 예외가 없는 한 착륙 대상이 아니다.
+
+## 2026-07-13 17:46 KST — [백엔드] outbound deliver 직접 테스트 착륙
+
+- lane `codex/runtime-outbound-tests`, 기본 test `06cae9347`, identity·호출 횟수 보강
+  `52ad0d4db`, feature HEAD `e43920262`, canonical no-ff merge `784996ce7`이다.
+- `src/packages/runtime/outbound.py` 소스 변경 0건으로 call 1회, 성공 결과와 일반 예외의
+  동일 인스턴스 전달, 성공/실패 body 1건을 고정했다. `CancelledError`는 실패 이벤트로
+  변환하지 않고 동일 인스턴스를 전파하며 양 mapper 오류도 숨기지 않는다.
+- stale runtime 문서의 실재하지 않는 `Outbound`/`HttpOutbound` 설명을 제거했다.
+- 전체 게이트는 Ruff lint/format PASS, import-linter 8 kept/0 broken,
+  pytest `1948 passed, 3 skipped`; manifest management 69 / target 20이다.
+- 4조건: merge-tree clean/tree `1b237c85086a83fbb53f315644899075db2610fa`, source·삭제·
+  frozen 변경 0건, `e43920262`·`784996ce7`의 `origin/dev` ancestor exit 0.
+  J 배포 실행은 0건이다.
+
 ## 2026-07-13 17:48 KST — [프론트] 초기 로딩 CLS 실측·게이트 완료 증거
 
 - 코드 `a46a4d4ad8f224be6261711a838b2f2145ed03be`는 Home·Resources·Issues에 결정적
@@ -2210,6 +2254,25 @@ target preflight·register 네 함수와 strict Zod 계약을 claim했다. 1회�
   design guard 345 files, shadcn source audit 482 previews, Vite build 14,539 modules.
   커밋 push 후 `origin/woonyong/ui-layer-lab` ancestor exit 0을 확인했다.
 
+## 2026-07-13 18:06 KST — [백엔드] crashloop 포트 bind 충돌 시나리오 착륙
+
+- lane `codex/benchmark-port-bind`, RED `a2336a05d`·`fc7d32263`·`2d8cff0d7`·
+  `0e0d94692`, 구현 `919f7dddd`, 문서 `ac7c9749e`, merge-patch RED `d0fbbc792`,
+  feature HEAD `ff3b52812905f09242ab05e2704f816ede52845f`, canonical no-ff merge
+  `0dd8a200fbec4ab567c00af2e4e3053541163809`이다.
+- ordinal 7 `app_port_bind_failed` exact fixture는 임의 가용 포트에 listener를 만든 뒤 같은
+  실제 포트를 다시 bind해 catalog 신호 `address already in use`와 exit code 1을 직접 검증한다.
+  crashloop 3/3, 전체 scenario 18/18, candidate contract 87/87이다.
+- 실제 patch capability가 없어 승인형 `manual_analysis`만 허용하며 cluster 전체 container port
+  개방은 금지한다. gold는 운영자 검토용 정답이고 Safe PR 실행 가능성을 주장하지 않는다.
+- 독립 감사가 partial container 배열의 RFC merge-patch 파괴를 차단했다. 완전한 container
+  객체로 교정한 뒤 fault runnable 보존, gold=normal, rollback=fault 왕복 테스트와 재감사 PASS다.
+- 첫 batch digest는 `c1917f0c…55481`. 전체 게이트는 Ruff lint/format PASS,
+  import-linter 8 kept/0 broken, pytest `1951 passed, 3 skipped`; manifest 69/20이다.
+- 4조건: merge-tree clean/tree `3739c7061eb0e1df88ebd687879da0af7a3661c7`, 파일 삭제·
+  소유권 밖 변경·frozen 경로 변경 0건, `ff3b52812`·`0dd8a200f`의 `origin/dev`
+  ancestor exit 0. J 배포 실행은 0건이다.
+
 ## 2026-07-13 18:18 KST — [프론트] Home Pod drill-in 강제색 시각 회귀 완료
 
 - RED `214abde839eb8a08ceeac569b8762423802f6a19`는 Pod drill-in forced-colors 장면을
@@ -2226,6 +2289,23 @@ target preflight·register 네 함수와 strict Zod 계약을 claim했다. 1회�
 - 시각 증거:
   `references/ui-layer-lab/output/playwright/product-home-authenticated-pod-forced-colors.png`.
   두 커밋 모두 push 후 `origin/woonyong/ui-layer-lab` ancestor exit 0을 확인했다.
+
+## 2026-07-13 18:18 KST — [백엔드] target-agent SQLite 수명주기 테스트 착륙
+
+- lane `codex/target-agent-sqlite-lifecycle`, 결정적 RED `4a2ef9229`, factory·close
+  `d05bc826e`, 문서 `ef2757eda`, hook 격리와 feature HEAD
+  `720dd55c0d00ec79b61a19bdd5682a2f553c5a96`, canonical no-ff merge
+  `13c30723adaf025fd616c166a2507d03f90fef24`다.
+- full agent 생성 12곳을 factory 1곳으로 수렴하고 같은 thread teardown에서 두 SQLite store를
+  명시적으로 닫는다. 이후 worker-thread cyclic GC가 target destructor 오류 0건을 강제한다.
+- 독립 감사가 최초 module autouse hook의 unrelated cycle 오귀속 위험을 발견했다. guard를 factory
+  teardown으로 한정하고 두 정확한 destructor `ProgrammingError`만 수집하며 나머지는 기존 pytest
+  hook으로 전달하도록 교정했다. unrelated `ValueError` 전달과 hook 복원 회귀 후 재감사 PASS다.
+- 프로덕션 source 변경 0건. warning-strict focused 28 passed, 전체 게이트 Ruff lint/format PASS,
+  import-linter 8 kept/0 broken, pytest `1953 passed, 3 skipped`; manifest 69/20이다.
+- 4조건: merge-tree clean/tree `857ee57075e2260222d78350e5d25eb839579bf6`, source·파일 삭제·
+  소유권 밖 변경·frozen 경로 변경 0건, `720dd55c0`·`13c30723a`의 `origin/dev`
+  ancestor exit 0. J 배포 실행은 0건이다.
 
 ## 2026-07-13 18:21 KST — [프론트] 감사 타임라인 직접 계약 테스트 보강
 
@@ -2268,3 +2348,22 @@ target preflight·register 네 함수와 strict Zod 계약을 claim했다. 1회�
   `npm run visual-product` PASS: 43 isolated scenarios, exact API request counts,
   unexpected feature network/WebSocket 0건, artifact count 43.
 - 커밋 push 후 `origin/woonyong/ui-layer-lab` ancestor exit 0을 확인했다.
+
+## 2026-07-13 18:34 KST — [백엔드] crashloop 시작 권한 오류 시나리오 착륙
+
+- lane `codex/benchmark-permission-startup`, RED `958baa368`·`be9a6da0a`, 구현
+  `85dae710b`, feature HEAD `268ca859e7266ec72780b2080904b5d8ba37c247`, canonical no-ff merge
+  `de9e600c7a554b12208b46b022d3ca4b29601ce1`.
+- ordinal 8 `permission_denied_startup` exact fixture는 임시 startup script의 실행 bit를
+  제거해 실제 POSIX EACCES, `permission denied`, exit code 1을 재현한다. 정상 0700
+  경로 exit 0과 last exit code 1인 generic startup 후보와의 동점에서 구체 권한
+  후보가 선택되는 현행 catalog 경계도 고정했다.
+- full container JSON Merge Patch로 fault runnable → gold=normal → rollback=fault 왕복을
+  검증했다. capability는 비어 있으므로 승인형 `manual_analysis`만 허용하고
+  cluster-admin 권한 확대를 금지했다.
+- crashloop 4/4, 전체 scenario 19/19, candidate 87/87, focused 66 passed,
+  독립 재감사 2건 PASS. 전체 게이트는 Ruff lint/format PASS, import-linter
+  8 kept/0 broken, pytest `1957 passed, 3 skipped`; manifest 69/20이다.
+- 4조건: merge-tree clean/tree `428481b5a7d0bfcd0dc54c1a604c99fb2ca1ed34`,
+  파일 삭제·소유권 밖·frozen·gateway 계약 변경 0건, `85dae710b`·`de9e600c7`의
+  `origin/dev` ancestor exit 0. J 배포 실행은 0건이다.
