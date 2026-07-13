@@ -803,6 +803,24 @@ const visualScenarios = [
     forcedColors: "active",
   },
   {
+    id: "issues-authenticated-recent-changes-unavailable-mobile-dark",
+    locale: "en",
+    url: productIssuesUrl,
+    authSession: "authenticated",
+    issuesScenario: true,
+    issuesRecentChangesState: "unavailable",
+    accessibleTarget: "Issues",
+    expectedApiRequestCounts: {
+      [issuesListApiPath]: 2,
+      [issuesRecentChangesApiPath]: 1,
+    },
+    requiredSelectors: [...issuesSelectors, "[role='alert']"],
+    viewport: { width: 390, height: 1000 },
+    theme: "dark",
+    colorScheme: "dark",
+    forcedColors: "none",
+  },
+  {
     id: "issues-locale-smoke-ko",
     locale: "ko",
     url: productIssuesUrl,
@@ -1611,7 +1629,8 @@ async function runVisualScenario(browserInstance, scenario) {
     if (message.type() === "error"
       && !text.includes("favicon")
       && !isExpectedAuthSessionConsoleNoise(text, scenario.authSession)
-      && !isExpectedHomeFeatureConsoleNoise(text, scenario)) {
+      && !isExpectedHomeFeatureConsoleNoise(text, scenario)
+      && !isExpectedIssuesFeatureConsoleNoise(text, scenario)) {
       errors.push(message.text());
     }
   });
@@ -1653,6 +1672,11 @@ function isExpectedHomeFeatureConsoleNoise(text, scenario) {
     && /Failed to load resource:.*403 \(Forbidden\)/u.test(text);
 }
 
+function isExpectedIssuesFeatureConsoleNoise(text, scenario) {
+  return scenario.issuesRecentChangesState === "unavailable"
+    && /Failed to load resource:.*503 \(Service Unavailable\)/u.test(text);
+}
+
 async function installScenarioApiFixtures(page, scenario) {
   const authFixture = await installAuthSessionStub(page, scenario.authSession);
   if (scenario.homeScenario) {
@@ -1682,10 +1706,14 @@ async function installScenarioApiFixtures(page, scenario) {
   }
   if (scenario.issuesScenario) {
     for (const [path, body] of issuesFeatureApiFixtures) {
+      const recentChangesUnavailable = scenario.issuesRecentChangesState === "unavailable"
+        && path === issuesRecentChangesApiPath;
       await installExactJsonGetFixture(page, path, {
-        body,
+        body: recentChangesUnavailable
+          ? { detail: "visual gate recent changes unavailable" }
+          : body,
         delayMs: scenario.apiDelayMsByPath?.[path] ?? 0,
-        status: 200,
+        status: recentChangesUnavailable ? 503 : 200,
       });
     }
   }
@@ -2721,34 +2749,59 @@ async function prepareProductIssuesScenario(page, scenario) {
   await page.getByText("Increase memory limit", { exact: true }).waitFor();
   const recentChangesRegion = page.getByRole("region", { name: copy.recentChanges });
   await recentChangesRegion.waitFor();
-  await recentChangesRegion.locator("time[datetime='2026-07-13T09:55:00Z']").waitFor();
-  const recentChangeItem = recentChangesRegion.getByRole("listitem");
-  await recentChangeItem.waitFor();
-  const recentChangeText = await recentChangeItem.innerText();
-  for (const requiredText of [
-    "shop",
-    "Deployment",
-    "checkout-api",
-    "registry.example/checkout:v1",
-    "registry.example/checkout:v2",
-    "0123456789abcdef",
-    "visual-workflow-run",
-  ]) {
-    if (!recentChangeText.includes(requiredText)) {
-      throw new Error(`${scenario.id}: recent change omitted ${requiredText}`);
+  if (scenario.issuesRecentChangesState === "unavailable") {
+    const alert = recentChangesRegion.getByRole("alert");
+    await alert.waitFor();
+    await alert.getByText("Recent changes are unavailable.", { exact: true }).waitFor();
+    await alert.getByText("The service is temporarily unavailable.", { exact: true }).waitFor();
+    if (await recentChangesRegion.getByRole("listitem").count() !== 0
+      || await recentChangesRegion.locator("time").count() !== 0
+      || await recentChangesRegion.getByRole("link", { name: copy.pullRequest }).count() !== 0) {
+      throw new Error(`${scenario.id}: unavailable recent changes exposed success-only content`);
     }
-  }
-  const pullRequest = recentChangesRegion.getByRole("link", {
-    name: copy.pullRequest,
-    exact: true,
-  });
-  await pullRequest.waitFor();
-  if (await pullRequest.getAttribute("href") !== "https://github.com/acme/platform/pull/42") {
-    throw new Error(`${scenario.id}: recent change PR link is not the verified fixture URL`);
-  }
-  if (await pullRequest.getAttribute("target") !== "_blank"
-    || await pullRequest.getAttribute("rel") !== "noopener noreferrer") {
-    throw new Error(`${scenario.id}: recent change PR link must isolate its external context`);
+    for (const preservedText of [
+      "Memory pressure caused repeated Pod restarts",
+      "Root event",
+      "Kubernetes evidence collected",
+      "Increase memory limit after approval",
+      "Increase memory limit",
+    ]) {
+      await detailRegion.getByText(preservedText, { exact: true }).first().waitFor();
+    }
+    if (await page.getByText("No issues are shown in the current response.", { exact: true }).count()
+      || await page.getByText("Select an issue to inspect its verified details.", { exact: true }).count()) {
+      throw new Error(`${scenario.id}: section failure replaced the Issue surface`);
+    }
+  } else {
+    await recentChangesRegion.locator("time[datetime='2026-07-13T09:55:00Z']").waitFor();
+    const recentChangeItem = recentChangesRegion.getByRole("listitem");
+    await recentChangeItem.waitFor();
+    const recentChangeText = await recentChangeItem.innerText();
+    for (const requiredText of [
+      "shop",
+      "Deployment",
+      "checkout-api",
+      "registry.example/checkout:v1",
+      "registry.example/checkout:v2",
+      "0123456789abcdef",
+      "visual-workflow-run",
+    ]) {
+      if (!recentChangeText.includes(requiredText)) {
+        throw new Error(`${scenario.id}: recent change omitted ${requiredText}`);
+      }
+    }
+    const pullRequest = recentChangesRegion.getByRole("link", {
+      name: copy.pullRequest,
+      exact: true,
+    });
+    await pullRequest.waitFor();
+    if (await pullRequest.getAttribute("href") !== "https://github.com/acme/platform/pull/42") {
+      throw new Error(`${scenario.id}: recent change PR link is not the verified fixture URL`);
+    }
+    if (await pullRequest.getAttribute("target") !== "_blank"
+      || await pullRequest.getAttribute("rel") !== "noopener noreferrer") {
+      throw new Error(`${scenario.id}: recent change PR link must isolate its external context`);
+    }
   }
   await page.waitForLoadState("networkidle");
 
