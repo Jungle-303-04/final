@@ -11,11 +11,14 @@ from span import get_tracer
 from config import (
     DEFAULT_KUBERNETES_SERVICE_HOST,
     DEFAULT_KUBERNETES_SERVICE_PORT,
+    DEFAULT_RECONCILER_MODE,
     KUBERNETES_API_TIMEOUT_SECONDS,
     KUBERNETES_SERVICE_HOST_ENV,
     KUBERNETES_SERVICE_PORT_ENV,
     KUBERNETES_SERVICEACCOUNT_CA_CERT_PATH,
     KUBERNETES_SERVICEACCOUNT_TOKEN_PATH,
+    RECONCILER_MODE_ARGOCD,
+    RECONCILER_MODES,
 )
 from control.store import (
     AgentControlStore,
@@ -116,12 +119,18 @@ class DesiredStateReconciler:
         store: AgentControlStore,
         interval_seconds: int,
         resource_applier: ResourceApplier | None = None,
+        reconciler_mode: str = DEFAULT_RECONCILER_MODE,
     ) -> None:
+        if reconciler_mode not in RECONCILER_MODES:
+            raise ValueError(
+                f"reconciler_mode must be one of {sorted(RECONCILER_MODES)}: {reconciler_mode!r}"
+            )
         self.cluster_id = cluster_id
         self.cluster_role = cluster_role
         self.store = store
         self.interval_seconds = interval_seconds
         self.resource_applier = resource_applier or KubernetesResourceClient()
+        self.reconciler_mode = reconciler_mode
 
     async def run(self, client: ManagementPlaneClient) -> None:
         while True:
@@ -171,6 +180,16 @@ class DesiredStateReconciler:
         desired_hash = desired_resource_hash(resource)
         try:
             self.ensure_allowed(resource)
+            if resource.action == "apply" and self.reconciler_mode == RECONCILER_MODE_ARGOCD:
+                await self.resource_applier.observe(resource)
+                result = self.result(
+                    resource,
+                    desired_hash,
+                    RECONCILE_UNCHANGED,
+                    "observed (argocd single-writer mode)",
+                )
+                self.store.save_reconcile_result(result)
+                return result
             if (
                 resource.action == "apply"
                 and self.store.last_successful_resource_hash(resource.resource_id) == desired_hash

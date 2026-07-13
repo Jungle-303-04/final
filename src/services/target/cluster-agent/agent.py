@@ -64,6 +64,7 @@ from config import (
     DEFAULT_OTEL_TRACES_ENDPOINT,
     DEFAULT_POLICY_SYNC_INTERVAL_SECONDS,
     DEFAULT_RECONCILE_INTERVAL_SECONDS,
+    DEFAULT_RECONCILER_MODE,
     EVIDENCE_FAILURE_POLICY_ENV,
     EVIDENCE_PROVIDER_MAX_WORKERS_ENV,
     EVIDENCE_PROVIDER_WORKERS_ENV,
@@ -75,6 +76,7 @@ from config import (
     POLICY_SYNC_INTERVAL_ENV,
     QUERY_RUN_ACTION,
     RECONCILE_INTERVAL_ENV,
+    RECONCILER_MODE_ENV,
 )
 from config import (
     KUBERNETES_ROLLOUT_POLL_INTERVAL_SECONDS as CONFIG_KUBERNETES_ROLLOUT_POLL_INTERVAL_SECONDS,
@@ -478,6 +480,7 @@ class TargetClusterAgent:
         self.reconcile_interval_seconds = int(
             env(RECONCILE_INTERVAL_ENV, DEFAULT_RECONCILE_INTERVAL_SECONDS)
         )
+        self.reconciler_mode = env(RECONCILER_MODE_ENV, DEFAULT_RECONCILER_MODE).strip().lower()
         self.client = client
         self.telemetry_transport = telemetry_transport
         self.kubernetes_transport = kubernetes_transport
@@ -526,6 +529,7 @@ class TargetClusterAgent:
             cluster_role=self.cluster_role,
             store=self.control_store,
             interval_seconds=self.reconcile_interval_seconds,
+            reconciler_mode=self.reconciler_mode,
         )
         self.kubernetes = KubernetesApiClient()
         self.command_registry = AgentCommandRegistry.from_instance(
