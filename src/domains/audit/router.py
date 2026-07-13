@@ -17,6 +17,7 @@ from packages.contracts.event_bus.interfaces import JsonObject
 from packages.contracts.event_bus.subjects import EventSubject
 from packages.contracts.gateway import routes as gateway_routes
 from packages.contracts.gateway.responses import (
+    AuditJourneyStage,
     AuditTimelineItem,
     AuditTimelineResponse,
 )
@@ -31,6 +32,167 @@ INVALID_CURSOR_DETAIL = "cursor is invalid"
 AUDIT_TIMELINE_NOT_FOUND = "audit timeline not found"
 
 TIMELINE_SUBJECTS = frozenset(subject.value for subject in EventSubject)
+
+_AUDIT_JOURNEY_SUBJECT_GROUPS: tuple[tuple[AuditJourneyStage, frozenset[EventSubject]], ...] = (
+    (
+        "workflow",
+        frozenset(
+            {
+                EventSubject.GIT_WEBHOOK_RECEIVED,
+                EventSubject.GIT_CHANGED,
+                EventSubject.MANIFEST_RENDERED,
+                EventSubject.MANIFEST_INVALID,
+                EventSubject.DESIRED_DIFF_DETECTED,
+                EventSubject.GITOPS_CHANGE_CONTEXT_DETECTED,
+                EventSubject.DIFF_ANALYZED,
+                EventSubject.WORKFLOW_CREATED,
+                EventSubject.WORKFLOW_RUN_STARTED,
+                EventSubject.WORKFLOW_STEP_RECORDED,
+                EventSubject.WORKFLOW_RUN_COMPLETED,
+                EventSubject.WORKFLOW_RUN_FAILED,
+                EventSubject.APPROVAL_REQUESTED,
+                EventSubject.APPROVAL_GRANTED,
+                EventSubject.APPROVAL_REJECTED,
+            }
+        ),
+    ),
+    (
+        "cluster",
+        frozenset(
+            {
+                EventSubject.AGENT_CONNECTED,
+                EventSubject.CLUSTER_INVENTORY_SNAPSHOT_RECORDED,
+                EventSubject.CLUSTER_DESIRED_STATE_CHANGED,
+                EventSubject.CLUSTER_RECONCILE_REQUESTED,
+                EventSubject.CLUSTER_RECONCILE_STARTED,
+                EventSubject.CLUSTER_DRIFT_DETECTED,
+                EventSubject.CLUSTER_RECONCILE_COMPLETED,
+                EventSubject.CLUSTER_RECONCILE_FAILED,
+            }
+        ),
+    ),
+    (
+        "alert",
+        frozenset(
+            {
+                EventSubject.INCIDENT_DETECTED,
+                EventSubject.ALERT_REQUESTED,
+                EventSubject.ALERT_DISPATCHED,
+                EventSubject.ALERT_REJECTED,
+            }
+        ),
+    ),
+    (
+        "evidence",
+        frozenset(
+            {
+                EventSubject.CLUSTER_EVIDENCE_RECEIVED,
+                EventSubject.EVIDENCE_JOB_UPDATED,
+                EventSubject.EVIDENCE_JOBS_QUEUED,
+                EventSubject.EVIDENCE_BUILT,
+                EventSubject.EVIDENCE_BUNDLE_BUILT,
+            }
+        ),
+    ),
+    (
+        "rca",
+        frozenset(
+            {
+                EventSubject.RCA_CANDIDATES_PLANNED,
+                EventSubject.RCA_CANDIDATES_EVALUATED,
+                EventSubject.RCA_COMPLETED,
+                EventSubject.RCA_ANALYSIS_BLOCKED,
+                EventSubject.RCA_FOLLOWUP_REQUIRED,
+                EventSubject.RCA_RULE_MISSING,
+                EventSubject.RCA_BACKLOG_ITEM_CREATED,
+                EventSubject.RCA_AI_FALLBACK_REQUESTED,
+                EventSubject.RCA_ACTION_REQUIRED,
+            }
+        ),
+    ),
+    (
+        "recovery",
+        frozenset(
+            {
+                EventSubject.RECOVERY_PLANNED,
+                EventSubject.RECOVERY_SELECTION_REQUESTED,
+                EventSubject.RECOVERY_ACTION_SELECTED,
+                EventSubject.ROLLOUT_DIAGNOSED,
+                EventSubject.APPROVAL_RECOMMENDED,
+            }
+        ),
+    ),
+    (
+        "command",
+        frozenset(
+            {
+                EventSubject.COMMAND_REQUESTED,
+                EventSubject.COMMAND_REJECTED,
+                EventSubject.COMMAND_DISPATCHED,
+                EventSubject.COMMAND_QUEUED_FOR_AGENT,
+                EventSubject.COMMAND_COMPLETED,
+            }
+        ),
+    ),
+    (
+        "pr",
+        frozenset(
+            {
+                EventSubject.SAFE_PR_PATCH_PREPARED,
+                EventSubject.DIFF_EXPLAINED,
+                EventSubject.SAFE_PR_READY_FOR_CREATION,
+                EventSubject.SAFE_PR_REQUESTED,
+                EventSubject.SAFE_PR_CREATED,
+                EventSubject.SAFE_PR_FAILED,
+            }
+        ),
+    ),
+    (
+        "ai",
+        frozenset(
+            {
+                EventSubject.AI_MESSAGE_RECEIVED,
+                EventSubject.AI_MESSAGE_RESPONDED,
+                EventSubject.AI_MESSAGE_FAILED,
+            }
+        ),
+    ),
+    (
+        "notification",
+        frozenset(
+            {
+                EventSubject.EMAIL_VERIFICATION_REQUESTED,
+                EventSubject.EMAIL_VERIFICATION_SENT,
+                EventSubject.EMAIL_VERIFICATION_FAILED,
+            }
+        ),
+    ),
+    (
+        "system",
+        frozenset(
+            {
+                EventSubject.DEAD_LETTER_CREATED,
+                EventSubject.PIPELINE_CONTRACT_FAILED,
+            }
+        ),
+    ),
+)
+
+
+def _build_audit_journey_stage_map() -> dict[str, AuditJourneyStage]:
+    stages: dict[str, AuditJourneyStage] = {}
+    for stage, subjects in _AUDIT_JOURNEY_SUBJECT_GROUPS:
+        for subject in subjects:
+            if subject.value in stages:
+                raise RuntimeError(f"duplicate audit journey subject: {subject.value}")
+            stages[subject.value] = stage
+    missing = TIMELINE_SUBJECTS - stages.keys()
+    if missing:
+        raise RuntimeError(f"unclassified audit journey subjects: {sorted(missing)}")
+    return stages
+
+
+AUDIT_JOURNEY_STAGE_BY_SUBJECT = _build_audit_journey_stage_map()
 
 router = APIRouter()
 
@@ -112,12 +274,19 @@ def encode_audit_cursor(row: JsonObject) -> str:
 def audit_timeline_item(row: JsonObject) -> AuditTimelineItem:
     created_at = row["created_at"]
     return AuditTimelineItem(
+        event_id=str(row["event_id"]),
         subject=str(row["subject"]),
         source=str(row["source"]),
         created_at=created_at.isoformat() if hasattr(created_at, "isoformat") else str(created_at),
         causation_id=str(row["causation_id"]) if row.get("causation_id") is not None else None,
+        journey_stage=audit_journey_stage(str(row["subject"])),
         payload_summary=summarize_payload(str(row["subject"]), row),
     )
+
+
+def audit_journey_stage(subject: str) -> AuditJourneyStage:
+    """Map one exact event subject to a stable UI journey stage."""
+    return AUDIT_JOURNEY_STAGE_BY_SUBJECT.get(subject, "unknown")
 
 
 async def authorize_audit_timeline(
