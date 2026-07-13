@@ -29,6 +29,17 @@ from domains.identity.dependencies import (
     require_resource_access,
     require_session,
 )
+from domains.release_flow._support import (
+    first_environment,
+    int_field,
+    parse_release_window_time,
+    plan_settings_value,
+    release_step_index,
+    release_step_index_in_steps,
+    release_window_bound_label,
+    step_config,
+    unique_non_empty,
+)
 from domains.release_flow.execution import (
     PRODUCTION_ENVIRONMENTS,
     approval_granted,
@@ -1773,15 +1784,6 @@ def generated_safe_pr_rollback_patch_available(
     )
 
 
-def release_step_index(plan: dict[str, Any], step: dict[str, Any]) -> int:
-    for index, candidate in enumerate(plan.get("steps", [])):
-        if candidate is step:
-            return index
-        if isinstance(candidate, dict) and candidate == step:
-            return index
-    return -1
-
-
 def safe_pr_workflow_basis(
     plan: dict[str, Any],
     step: dict[str, Any],
@@ -2210,18 +2212,6 @@ def release_readiness_impact_summary(
         f"{mode_label} impact covers {step_count} step(s), {application_count} application(s), "
         f"{environment_count} environment(s), and {wave_count} wave(s){production_label}."
     )
-
-
-def unique_non_empty(values: Iterable[str]) -> list[str]:
-    seen: set[str] = set()
-    result: list[str] = []
-    for value in values:
-        normalized = value.strip()
-        if not normalized or normalized in seen:
-            continue
-        seen.add(normalized)
-        result.append(normalized)
-    return result
 
 
 def release_readiness_next_actions(checks: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -2906,28 +2896,6 @@ def release_freeze_window_is_active(plan: dict[str, Any]) -> bool:
     if start is None or end is None or end <= start:
         return False
     return start <= datetime.now(UTC) <= end
-
-
-def parse_release_window_time(value: Any) -> datetime | None:
-    if isinstance(value, datetime):
-        return value.astimezone(UTC) if value.tzinfo else value.replace(tzinfo=UTC)
-    if not isinstance(value, str):
-        return None
-    raw = value.strip()
-    if not raw:
-        return None
-    if raw.endswith("Z"):
-        raw = f"{raw[:-1]}+00:00"
-    try:
-        parsed = datetime.fromisoformat(raw)
-    except ValueError:
-        return None
-    normalized = parsed if parsed.tzinfo else parsed.replace(tzinfo=UTC)
-    return normalized.astimezone(UTC)
-
-
-def release_window_bound_label(value: datetime) -> str:
-    return value.astimezone(UTC).replace(microsecond=0).isoformat().replace("+00:00", "Z")
 
 
 def release_production_steps_for_wave(
@@ -5227,39 +5195,11 @@ def rollback_manifest_image(
     return ""
 
 
-def release_step_index_in_steps(steps: list[Any], selected: dict[str, Any]) -> int:
-    selected_application_id = str(selected.get("application_id") or "")
-    selected_position = selected.get("position")
-    for index, candidate in enumerate(steps):
-        if not isinstance(candidate, dict):
-            continue
-        if candidate is selected:
-            return index
-        if (
-            selected_application_id
-            and str(candidate.get("application_id") or "") == selected_application_id
-        ):
-            return index
-        if selected_position is not None and candidate.get("position") == selected_position:
-            return index
-    return -1
-
-
 def generated_manifest_rollback_path(workflow_run_id: str, manifest_path: str) -> str:
     filename = manifest_path.rsplit("/", 1)[-1] or "manifest.yaml"
     if "." not in filename:
         filename = f"{filename}.yaml"
     return f".gitops/rollback/{workflow_run_id}/{filename}"
-
-
-def step_config(step: dict[str, Any]) -> dict[str, Any]:
-    config = step.get("config", {})
-    return dict(config) if isinstance(config, dict) else {}
-
-
-def plan_settings_value(plan: dict[str, Any]) -> dict[str, Any]:
-    settings = plan.get("settings", {})
-    return dict(settings) if isinstance(settings, dict) else {}
 
 
 def required_str(
@@ -5277,21 +5217,3 @@ def required_str(
             },
         )
     return value
-
-
-def int_field(values: dict[str, Any], field: str, fallback: int) -> int:
-    raw = values.get(field)
-    if isinstance(raw, bool):
-        return fallback
-    if isinstance(raw, int):
-        return raw
-    if isinstance(raw, str) and raw.strip().isdigit():
-        return int(raw)
-    return fallback
-
-
-def first_environment(settings: dict[str, Any]) -> str:
-    order = settings.get("environment_order", [])
-    if isinstance(order, list) and order:
-        return str(order[0])
-    return Sandbox.NAMESPACE
