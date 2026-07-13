@@ -38,10 +38,10 @@ provider catalog의 명시적 `UNAVAILABLE`, 안전한 피처 플래그, 운영 
 ## A. 백엔드 — 의도된 미지원
 
 ### providers 카탈로그 (`src/domains/providers/catalog.py`)
-11개 provider가 `ProviderStatus.UNAVAILABLE`(`adapter=None` + `unavailable_reason`)로 선언되고 `require_available_provider`(`:796`)가 선택을 거부한다. AVAILABLE 항목은 실제 어댑터로 뒷받침됨(GitHub SCM, Env/AWS-SM/K8s Secret Vault — 검증 완료).
+11개 provider가 `ProviderStatus.UNAVAILABLE`(`adapter=None` + `unavailable_reason`)로 선언되고 `require_available_provider`(`:796`)가 선택을 거부한다. AVAILABLE 항목은 실제 어댑터로 뒷받침됨(기준 저장소 SCM, Env/AWS-SM/K8s Secret Vault — 검증 완료).
 
 - SOURCE: `git-url`, `gitlab`, `bitbucket`
-- DEPLOY: `gitops-controller`(ArgoCD/Flux), `jenkins`
+- DEPLOY: `gitops-controller`(외부 GitOps controller), `jenkins`(외부 배포 실행기)
 - CLOUD: `gcp`, `azure` / 외부 콘솔 계열 provider는 메타데이터 env 설정 시 런타임 AVAILABLE 승격
 - SECRET: `vault`, `gcp-sm`
 - 추가: `KUBEHEAL_DISABLED_PROVIDERS`에 명시된 provider는 런타임 강제 UNAVAILABLE(`:445`)
@@ -54,7 +54,7 @@ provider catalog의 명시적 `UNAVAILABLE`, 안전한 피처 플래그, 운영 
 - `gitops/dependencies.py:21`(webhook secret 미설정 503), `gitops/router.py:151`(webhook image 미설정 503), `target/router.py:484`(kubectl 부재 503)·`:322`(agent image 미설정 422), `rca/router.py:577`(alertmanager 미설정).
 
 ### 좁은 범위 기능
-- 알림 전송(`src/services/alert/alert-worker/app.py`): `LogAlertProvider`(기본, 로그만) + `WebhookAlertProvider`(범용 HTTP POST)만 존재. 네이티브 Slack/이메일/PagerDuty 어댑터 없음(범용 webhook으로 대체). 주입형 전략이라 확장 가능하나 현재 채널 폭이 좁음.
+- 알림 전송(`src/services/alert/alert-worker/app.py`): `LogAlertProvider`(기본, 로그만) + `WebhookAlertProvider`(범용 HTTP POST)만 존재. 네이티브 외부 알림 채널/이메일/온콜 어댑터 없음(범용 webhook으로 대체). 주입형 전략이라 확장 가능하나 현재 채널 폭이 좁음.
 
 ---
 
@@ -88,7 +88,7 @@ provider catalog의 명시적 `UNAVAILABLE`, 안전한 피처 플래그, 운영 
 ## 우선 조치 제안 (완성하려면)
 
 1. **Alembic revision 전환** — 기존 단일 bootstrap 경계는 유지하고 내부 DDL만 revision 기반으로 교체.
-2. provider 어댑터 확장(GitLab/Bitbucket/ArgoCD/Jenkins 등)·알림 채널(Slack/이메일) — 제품 범위가 확정될 때 추가.
+2. provider 어댑터 확장(외부 기준 저장소·외부 배포 실행기 등)·알림 채널(외부 알림 채널/이메일) — 제품 범위가 확정될 때 추가.
 3. production HA/NetworkPolicy/실인증 전환 — HANDOVER의 운영 전환 게이트를 따른다.
 
 나머지(피처 플래그·fail-closed 게이트·EKS/HA 로드맵)는 의도된 이연이며 문서와 일치한다.

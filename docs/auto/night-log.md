@@ -2550,7 +2550,7 @@ target preflight·register 네 함수와 strict Zod 계약을 claim했다. 1회�
 - 실측은 `kind-cluster-ready → opsia-installed → bad-rollout-observed →
   mock-rollback-pr-created → workload-normalized`를 종료 코드 0으로 통과했다. 전체 게이트는
   Ruff lint/format PASS, import-linter 8 kept/0 broken, pytest `1968 passed, 3 skipped`다.
-- 완료 판정은 정정한다. GHCR exact OCI는 403이고 GitHub `opsia` namespace 권위도 확인되지
+- 완료 판정은 정정한다. 공개 OCI chart URL은 403이고 외부 container registry `opsia` namespace 권위도 확인되지
   않았으며, 데모 후반은 mock PR와 직접 이미지 복구다. 따라서 이 hash는 설치 기반 증거이지
   BQ-016 완료 앵커가 아니다. 공개 OCI·실제 safe-pr·모드별 동일 결과가 남아 있다.
 
@@ -2604,7 +2604,7 @@ target preflight·register 네 함수와 strict Zod 계약을 claim했다. 1회�
 
 ## 2026-07-13 20:37 KST — [프론트] VP-010 통합 필터 URL engine GREEN
 
-- RED는 미구현 모듈 실패로 시작했고, canonical URL round-trip·legacy `cluster`/`kind`
+- RED는 부재 모듈 실패로 시작했고, canonical URL round-trip·legacy `cluster`/`kind`
   dual-read·같은 구조 축 OR·Label AND·화면 이동 시 공통 축 보존·상세 query 제거를
   `a61e01990`에서 GREEN으로 닫았다. 유효하지만 아직 서버가 해석하지 못한 ID와 Label은
   URL에서 보존하며, collection 전수 수집·client count/predicate는 구현하지 않았다.
