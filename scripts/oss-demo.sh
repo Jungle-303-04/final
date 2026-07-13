@@ -9,6 +9,7 @@ NAMESPACE="${DEMO_NAMESPACE:-opsia-demo}"
 OPSIA_NAMESPACE="${DEMO_OPSIA_NAMESPACE:-opsia-system}"
 OPSIA_RELEASE="${DEMO_OPSIA_RELEASE:-opsia}"
 OPSIA_IMAGE="${DEMO_OPSIA_IMAGE:-service:local}"
+OPSIA_CONSOLE_IMAGE="${DEMO_OPSIA_CONSOLE_IMAGE:-opsia-console:local}"
 WORKLOAD="${DEMO_WORKLOAD:-checkout-api}"
 DEFAULT_GOOD_IMAGE="opsia-demo-workload:local"
 GOOD_IMAGE="${DEMO_GOOD_IMAGE:-${DEFAULT_GOOD_IMAGE}}"
@@ -313,8 +314,14 @@ scene "kind-cluster-ready"
 
 if [[ "${SKIP_IMAGE_BUILD}" != "1" ]]; then
   docker build -f "${ROOT_DIR}/src/services/Dockerfile" -t "${OPSIA_IMAGE}" "${ROOT_DIR}"
+  docker build -f "${ROOT_DIR}/references/ui-layer-lab/Dockerfile" \
+    -t "${OPSIA_CONSOLE_IMAGE}" "${ROOT_DIR}/references/ui-layer-lab"
 elif ! docker image inspect "${OPSIA_IMAGE}" >/dev/null 2>&1; then
   echo "DEMO_SKIP_IMAGE_BUILD=1 but ${OPSIA_IMAGE} is unavailable" >&2
+  exit 1
+fi
+if ! docker image inspect "${OPSIA_CONSOLE_IMAGE}" >/dev/null 2>&1; then
+  echo "console image is unavailable: ${OPSIA_CONSOLE_IMAGE}" >&2
   exit 1
 fi
 if [[ "${GOOD_IMAGE}" == "${DEFAULT_GOOD_IMAGE}" ]]; then
@@ -322,11 +329,14 @@ if [[ "${GOOD_IMAGE}" == "${DEFAULT_GOOD_IMAGE}" ]]; then
     -t "${GOOD_IMAGE}" "${ROOT_DIR}"
 fi
 kind load docker-image "${OPSIA_IMAGE}" --name "${CLUSTER_NAME}" >/dev/null
+kind load docker-image "${OPSIA_CONSOLE_IMAGE}" --name "${CLUSTER_NAME}" >/dev/null
 if docker image inspect "${GOOD_IMAGE}" >/dev/null 2>&1; then
   kind load docker-image "${GOOD_IMAGE}" --name "${CLUSTER_NAME}" >/dev/null
 fi
 IMAGE_REPOSITORY="${OPSIA_IMAGE%:*}"
 IMAGE_TAG="${OPSIA_IMAGE##*:}"
+CONSOLE_IMAGE_REPOSITORY="${OPSIA_CONSOLE_IMAGE%:*}"
+CONSOLE_IMAGE_TAG="${OPSIA_CONSOLE_IMAGE##*:}"
 
 kubectl create namespace "${OPSIA_NAMESPACE}" --dry-run=client -o yaml | kubectl apply -f - >/dev/null
 kubectl -n "${OPSIA_NAMESPACE}" create secret generic opsia-demo-scm \
@@ -430,6 +440,10 @@ helm upgrade --install "${OPSIA_RELEASE}" "${ROOT_DIR}/charts/opsia" \
   --set "image.repository=${IMAGE_REPOSITORY}" \
   --set "image.tag=${IMAGE_TAG}" \
   --set image.pullPolicy=IfNotPresent \
+  --set "console.image.repository=${CONSOLE_IMAGE_REPOSITORY}" \
+  --set "console.image.tag=${CONSOLE_IMAGE_TAG}" \
+  --set console.image.pullPolicy=IfNotPresent \
+  --set access.mode=portforward \
   --set postgresql.persistence.enabled=false \
   --set-string "scm.repository=${SCM_REPO}" \
   --set-string "scm.github.apiBase=http://opsia-demo-scm:8080" \
@@ -445,7 +459,7 @@ scene "opsia-installed"
 
 mkdir -p "${ARTIFACT_DIR}"
 COOKIE_JAR="${RUNTIME_DIR}/cookies.txt"
-API_BASE="http://127.0.0.1:${API_PORT}"
+API_BASE="http://127.0.0.1:${API_PORT}/api"
 SCM_BASE="http://127.0.0.1:${SCM_PORT}"
 kubectl -n "${OPSIA_NAMESPACE}" port-forward "service/${OPSIA_RELEASE}" \
   "${API_PORT}:80" >"${ARTIFACT_DIR}/api-port-forward.log" 2>&1 &

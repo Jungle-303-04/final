@@ -34,7 +34,9 @@ spec:
               drop: ["ALL"]
           env:
             - name: MANAGEMENT_BASE_URL
-              value: http://{{ include "opsia.fullname" . }}.{{ .Release.Namespace }}.svc
+              value: http://{{ include "opsia.fullname" . }}.{{ .Release.Namespace }}.svc/api
+            - name: REALTIME_GATEWAY_URL
+              value: ws://{{ include "opsia.fullname" . }}.{{ .Release.Namespace }}.svc/api
             - name: AGENT_TOKEN
               valueFrom:
                 secretKeyRef:
