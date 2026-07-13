@@ -152,6 +152,18 @@ def test_candidate_contract_index_rejects_loader_order_content_drift() -> None:
     assert any("does not match live loader order" in error for error in errors)
 
 
+def test_candidate_contract_index_rejects_unhashable_candidate_identity() -> None:
+    scorer = runpy.run_path(str(SCORER))
+    candidate_index = json.loads(
+        (ROOT / "benchmark/candidate-contract-index.json").read_text(encoding="utf-8")
+    )
+    candidate_index["candidates"][0]["candidate_id"] = {}
+
+    errors = scorer["validate_candidate_index"](candidate_index)
+
+    assert any("candidate_id is required" in error for error in errors)
+
+
 def test_candidate_contract_rejects_fixture_outside_scenario_tree() -> None:
     document = _candidate_contracts()
     document["contracts"][0]["benchmark_fixtures"] = ["benchmark/catalog-snapshot.json"]
@@ -159,6 +171,24 @@ def test_candidate_contract_rejects_fixture_outside_scenario_tree() -> None:
     errors = _contract_validation_errors(document)
 
     assert any("fixture must exist under benchmark/scenarios" in error for error in errors)
+
+
+def test_candidate_contract_rejects_unhashable_identity_without_crashing() -> None:
+    document = _candidate_contracts()
+    document["contracts"][0]["rule_id"] = []
+
+    errors = _contract_validation_errors(document)
+
+    assert any("rule_id is required" in error for error in errors)
+
+
+def test_candidate_contract_rejects_non_string_capability_without_crashing() -> None:
+    document = _candidate_contracts()
+    document["contracts"][0]["patch_capabilities"] = [{}]
+
+    errors = _contract_validation_errors(document)
+
+    assert any("patch_capabilities require unique strings" in error for error in errors)
 
 
 @pytest.mark.parametrize(
