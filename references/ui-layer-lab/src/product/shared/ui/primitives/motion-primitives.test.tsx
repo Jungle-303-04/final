@@ -17,8 +17,9 @@ describe("product motion primitives", () => {
   it("disables Toggle transitions when reduced motion is requested", () => {
     render(<Toggle aria-label="필터" pressed />);
 
-    expect(screen.getByRole("button", { name: "필터" }).className)
-      .toContain("motion-reduce:transition-none");
+    const toggle = screen.getByRole("button", { name: "필터" });
+    expect(toggle.getAttribute("aria-pressed")).toBe("true");
+    expect(toggle.className).toContain("motion-reduce:transition-none");
   });
 
   it("disables Tooltip enter and exit animation when reduced motion is requested", async () => {

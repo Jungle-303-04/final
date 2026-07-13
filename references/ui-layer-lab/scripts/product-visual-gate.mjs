@@ -2259,26 +2259,28 @@ async function prepareProductIssuesScenario(page, scenario) {
 
 async function assertProductResourcesReducedMotion(page, label) {
   const result = await page.evaluate(() => {
-    const selector = [
-      "[data-slot='sidebar-trigger']",
-      "[data-slot='select-trigger']",
-      "[data-slot='accordion-trigger']",
-      "[data-slot='button']",
-      "[data-slot='input']",
-      "[data-slot='sheet-content']",
-      "[data-slot='sheet-overlay']",
-      "[data-slot='table-row']",
-      "[data-slot='toggle']",
-    ].join(",");
+    const requiredSlots = [
+      "sidebar-trigger",
+      "select-trigger",
+      "button",
+      "input",
+      "table-row",
+      "toggle",
+    ];
+    const optionalSlots = ["accordion-trigger", "sheet-content", "sheet-overlay"];
+    const selector = [...requiredSlots, ...optionalSlots]
+      .map((slot) => `[data-slot='${slot}']`).join(",");
     const elements = [...document.querySelectorAll(selector)].filter((element) => {
       const rect = element.getBoundingClientRect();
       const style = getComputedStyle(element);
       return rect.width > 0 && rect.height > 0
         && style.display !== "none" && style.visibility !== "hidden";
     });
+    const presentSlots = new Set(elements.map((element) => element.getAttribute("data-slot")));
     return {
       active: matchMedia("(prefers-reduced-motion: reduce)").matches,
       count: elements.length,
+      missingSlots: requiredSlots.filter((slot) => !presentSlots.has(slot)),
       motion: elements.map((element) => {
         const style = getComputedStyle(element);
         return {
@@ -2291,8 +2293,11 @@ async function assertProductResourcesReducedMotion(page, label) {
       }),
     };
   });
-  if (!result.active || result.count === 0) {
-    throw new Error(`${label}: Resources reduced-motion fixture is incomplete`);
+  if (!result.active || result.count === 0 || result.missingSlots.length > 0) {
+    throw new Error(
+      `${label}: Resources reduced-motion fixture is incomplete `
+      + `${JSON.stringify(result.missingSlots)}`,
+    );
   }
   for (const motion of result.motion) {
     if (motion.transitionProperty !== "none"
@@ -2327,7 +2332,28 @@ async function assertProductHomeFreshnessContract(page, label) {
     throw new Error(`${label}: shell must expose one cluster scope freshness control`);
   }
   await clusterTrigger.focus();
-  await page.locator("[data-slot='tooltip-content']").waitFor();
+  const tooltip = page.locator("[data-slot='tooltip-content']");
+  await tooltip.waitFor();
+  const motion = await tooltip.evaluate((element) => {
+    const style = getComputedStyle(element);
+    return {
+      animationDuration: style.animationDuration,
+      animationName: style.animationName,
+      reducedMotion: matchMedia("(prefers-reduced-motion: reduce)").matches,
+      transitionDuration: style.transitionDuration,
+      transitionProperty: style.transitionProperty,
+    };
+  });
+  if (!motion.reducedMotion
+    || (motion.transitionProperty !== "none"
+      && maxCssTimeMilliseconds(motion.transitionDuration) > 1)
+    || (motion.animationName !== "none"
+      && maxCssTimeMilliseconds(motion.animationDuration) > 1)) {
+    throw new Error(
+      `${label}: cluster freshness Tooltip retained reduced-motion timing `
+      + `${JSON.stringify(motion)}`,
+    );
+  }
 }
 
 async function assertProductHomeNodeFrame(page, label) {
