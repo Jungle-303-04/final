@@ -370,6 +370,60 @@ B-트랙의 BLOCKED(docs/README.md 색인 링크 필요)를 해소한다. 판정
 
 후속: 링크 추가 → 전체 게이트 재실행(전체 그린 필수) → GO-REQUEST [B] 작성 → 대기.
 
+### [D-015] 2026-07-13 — B-트랙 후속 임무: OSS 위생 드래프트 (작성: 우녕 위임 조율 세션)
+
+GO [B] 착륙 완료(merge `0d0f92cca`, origin/dev `acbe261af`). B-트랙 세션의 다음 임무.
+
+**목적.** oss-remediation-roadmap.md §8(공개 필수 작업)의 문서 드래프트를 선제 작성해
+공개 결정 시점의 병목을 제거한다. **이것은 초안이다** — 저장소는 private 유지,
+공개·라이선스 채택 결정은 사람 몫.
+
+**소유 경로: `docs/oss/**` (신규 디렉터리) + docs/README.md 색인의 자기 링크 추가([D-014] 준용).**
+
+산출물:
+1. `docs/oss/README.en.md` — 영문 README 초안. 로드맵 §0 포지셔닝 문장 기반,
+   Alert→Evidence→Patch→검증→PR→정상화 흐름 중심. 데모 3장면 서술 포함.
+   내부 실명·조직명·AWS 계정·도메인·시크릿 정보 절대 포함 금지.
+2. `docs/oss/LICENSE.draft` — Apache-2.0 전문 (채택은 사람 결정, 파일명에 draft 명시)
+3. `docs/oss/CONTRIBUTING.md` — 기여 단위는 "벤치마크 시나리오 1개"라는 원칙(로드맵 §7)
+   중심. benchmark/README.md의 시나리오 스키마를 기여 포맷으로 연결.
+4. `docs/oss/SECURITY.md`, `CODE_OF_CONDUCT.md`, `GOVERNANCE.md`, `MAINTAINERS.md`,
+   `CHANGELOG.md` 초안 — CNCF Sandbox 관례 기준.
+5. `docs/oss/publication-checklist.md` — 공개 전 사람이 해야 할 일 목록
+   (비밀·이력 정리, 저장소 분리, 이름/상표, CI 복구, 릴리스 절차).
+
+규칙: lane `codex/oss-hygiene` (신규 승인). src/** 및 다른 트랙 경로 무접촉.
+전체 그린 유지. 완료 시 GO-REQUEST [OSS] 작성 후 대기. 그 외 규칙은 [D-013]과 동일.
+
+### [D-016] 2026-07-13 — BQ-012 신설: AI fallback 근거 검증 구멍 수정 (작성: 우녕 위임 조율 세션)
+
+**발견 (코드 검증됨, Codex 감사).** `ai_fallback.py:119`: LLM 후보가 스스로 작성한
+expected_evidence만 전달하고 signals를 전달하지 않아, 평가기가 **evidence source의
+존재만으로** supporting을 인정할 수 있다. `test_ai_fallback_worker.py:159`가 이 경로로
+점수 1.0 도달을 검증 중. 결과: LLM이 지어낸 원인 + 이미 수집된 source 이름 나열 =
+확정(rca.completed) 진입 가능. **"모르면 행동하지 않는다" 원칙의 실제 구멍이며,
+제품 핵심 메시지를 훼손하므로 우선 수정한다.**
+
+**BQ-012 요구사항 (P단계와 같은 급의 우선순위, frozen 예외:
+`src/services/ai/agent/pipeline/ai_fallback.py`·관련 평가 경로 한정):**
+1. AI fallback 후보는 **내용 기반 signal predicate가 최소 1개 검증되기 전까지
+   rca.completed로 진입 불가** — source 존재만으로 supporting 인정 금지.
+2. 구현 방식은 백엔드가 다음 중 택1 또는 조합(설계 근거를 night-log에 기록):
+   (a) LLM 후보는 hypothesis 상태로만 남기고 완료 경로 차단,
+   (b) LLM은 기존 catalog cause ID만 제안하고 해당 rule의 validator가 검증,
+   (c) LLM이 기계 실행 가능한 evidence predicate를 생성하고 결정론적 평가기가 실행.
+3. `test_ai_fallback_worker.py:159`의 "source 존재 = 1.0" 테스트는 새 계약으로 교체
+   (기존 테스트를 지우는 것이 아니라 강화된 기대로 갱신).
+4. 완료 기준: 조작 시나리오 테스트(수집된 source 이름만 나열한 가짜 후보가
+   completed에 도달하지 못함을 증명) + 전체 그린.
+
+**메시징 규칙(발표·문서 공통, 즉시 발효):** "환각 불가능"·"exactly-once"·
+"managed-field diff"·"AI가 못 망가뜨림을 증명" 표현 금지. 대체:
+"rule-first fail-closed RCA", "transactional outbox + consumer ledger 기반
+effectively-once", "policy-scoped 3-way semantic diff",
+"tenant·cluster·namespace·capability 단계 제한". BQ-012 완료 전까지 fail-closed
+주장은 rule 경로에 한정해서만 말한다.
+
 ### [D-008] 2026-07-13 04:50 KST 기록 정합 (작성: 자동 판단자)
 
 [D-007](판단자)과 [D-006](조율 세션)이 04:47경 동시 기록되어 파일 내 순서가 ID 순서와 어긋났다.
@@ -377,4 +431,3 @@ B-트랙의 BLOCKED(docs/README.md 색인 링크 필요)를 해소한다. 판정
 [D-007]이 요청한 [D-006] 서명 보완은 위 [D-006] 실물로 충족됐다.
 작업 세션 기준: **유효 최신 지시 = [D-006]+[D-007] 합본** — A단계 개시, 계약 lock(C/D/E 동시 1개),
 🔒(백엔드 H·J, 프론트 H)는 사람 전용, 완료 증거는 night-log §2.2 형식. 이후 지시는 [D-009]부터.
-
