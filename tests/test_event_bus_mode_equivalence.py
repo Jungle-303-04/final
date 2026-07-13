@@ -36,6 +36,7 @@ def test_delivery_scenario_is_deterministic_across_bus_implementations() -> None
         "input_payload": {"action": "restart", "attempt": 1},
         "output_payload": {"result": "accepted"},
         "redelivery_preserved": True,
+        "workspace_preserved": True,
     }
 
 
@@ -45,4 +46,5 @@ def test_real_nats_verifier_uses_an_isolated_jetstream_container() -> None:
     assert "docker run" in script
     assert "-js" in script
     assert "--nats-url" in script
+    assert "PYTHONPATH=" in script
     assert "trap cleanup EXIT" in script
