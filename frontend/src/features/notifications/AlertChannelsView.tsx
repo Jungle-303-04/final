@@ -53,8 +53,8 @@ export default function AlertChannelsView() {
       sortValue: item => item.name,
       cell: item => (
         <div className="grid gap-1">
-          <span className="truncate font-semibold text-primary">{item.name}</span>
-          <code className="truncate font-mono text-caption text-muted">{item.url}</code>
+          <span className="truncate font-semibold text-text-primary">{item.name}</span>
+          <code className="truncate font-mono text-caption text-text-muted">{item.url}</code>
         </div>
       ),
       width: 'lg',
@@ -78,7 +78,7 @@ export default function AlertChannelsView() {
       cell: item => (
         <div className="grid gap-1">
           <Badge tone={testStatusTone(item.last_test_status)}>{testStatusLabel(item.last_test_status)}</Badge>
-          <span className="text-caption text-muted">{timeAgo(item.last_tested_at ?? '') || '기록 없음'}</span>
+          <span className="text-caption text-text-muted">{timeAgo(item.last_tested_at ?? '') || '기록 없음'}</span>
         </div>
       ),
     },
@@ -245,8 +245,8 @@ export default function AlertChannelsView() {
             <div className="grid gap-3 rounded-panel border border-border bg-bg p-4">
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <div className="min-w-0">
-                  <p className="text-body font-semibold text-primary">테스트 발송</p>
-                  <p className="text-caption text-secondary">현재 입력값 그대로 실제 Webhook 요청을 보냅니다</p>
+                  <p className="text-body font-semibold text-text-primary">테스트 발송</p>
+                  <p className="text-caption text-text-secondary">현재 입력값 그대로 실제 Webhook 요청을 보냅니다</p>
                 </div>
                 <Badge tone={tested ? 'success' : testError ? 'danger' : 'warning'}>{tested ? '통과' : testError ? '실패' : '필요'}</Badge>
               </div>

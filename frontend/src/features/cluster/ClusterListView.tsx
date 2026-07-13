@@ -46,10 +46,10 @@ export default function ClusterListView() {
       cell: (cluster) => (
         <div className="grid min-w-0 gap-1">
           <span className="flex min-w-0 items-center gap-2">
-            <span className="truncate font-semibold text-primary">{cluster.name}</span>
+            <span className="truncate font-semibold text-text-primary">{cluster.name}</span>
             {cluster.role === 'management' && <Badge tone="info">관리 클러스터</Badge>}
           </span>
-          <span className="truncate text-caption text-muted">{cluster.cluster_id}</span>
+          <span className="truncate text-caption text-text-muted">{cluster.cluster_id}</span>
         </div>
       ),
     },
@@ -73,14 +73,14 @@ export default function ClusterListView() {
       header: '노드',
       align: 'right',
       sortValue: (cluster) => cluster.node_count,
-      cell: (cluster) => <span className="tabular-nums text-primary">{cluster.node_count.toLocaleString()}</span>,
+      cell: (cluster) => <span className="tabular-nums text-text-primary">{cluster.node_count.toLocaleString()}</span>,
     },
     {
       id: 'pods',
       header: '팟',
       align: 'right',
       sortValue: (cluster) => cluster.pod_count,
-      cell: (cluster) => <span className="tabular-nums text-primary">{cluster.pod_count.toLocaleString()}</span>,
+      cell: (cluster) => <span className="tabular-nums text-text-primary">{cluster.pod_count.toLocaleString()}</span>,
     },
     {
       id: 'incidents',
@@ -90,14 +90,14 @@ export default function ClusterListView() {
       cell: (cluster) => (
         cluster.incident_count > 0
           ? <Badge tone="danger">{cluster.incident_count.toLocaleString()}</Badge>
-          : <span className="text-muted">없음</span>
+          : <span className="text-text-muted">없음</span>
       ),
     },
     {
       id: 'registered',
       header: '등록',
       sortValue: (cluster) => cluster.registered_at,
-      cell: (cluster) => <span className="text-secondary">{timeAgo(cluster.registered_at)}</span>,
+      cell: (cluster) => <span className="text-text-secondary">{timeAgo(cluster.registered_at)}</span>,
     },
   ], []);
 
@@ -143,9 +143,9 @@ export default function ClusterListView() {
               aria-label="클러스터 검색"
               className="ps-9"
             />
-            <SearchIcon className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted" />
+            <SearchIcon className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-text-muted" />
           </div>
-          <span className="text-label text-muted">{rows.length.toLocaleString()}개 표시</span>
+          <span className="text-label text-text-muted">{rows.length.toLocaleString()}개 표시</span>
         </div>
         <Table
           columns={columns}

@@ -36,14 +36,14 @@ function ThemeToggle() {
   return (
     <button
       type="button"
-      className="inline-flex h-8 items-center gap-1 rounded-full border border-border bg-raised p-1 text-muted transition-colors hover:text-primary focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+      className="inline-flex h-8 items-center gap-1 rounded-full border border-border bg-raised p-1 text-text-muted transition-colors hover:text-text-primary focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
       onClick={toggle}
       aria-label="테마 전환"
     >
-      <span className={cx('grid h-6 w-6 place-items-center rounded-full transition-colors', mode === 'light' && 'bg-surface text-primary shadow-soft')}>
+      <span className={cx('grid h-6 w-6 place-items-center rounded-full transition-colors', mode === 'light' && 'bg-surface text-text-primary shadow-soft')}>
         <SunIcon />
       </span>
-      <span className={cx('grid h-6 w-6 place-items-center rounded-full transition-colors', mode === 'dark' && 'bg-surface text-primary shadow-soft')}>
+      <span className={cx('grid h-6 w-6 place-items-center rounded-full transition-colors', mode === 'dark' && 'bg-surface text-text-primary shadow-soft')}>
         <MoonIcon />
       </span>
     </button>
@@ -112,11 +112,11 @@ export function ConsoleLayout({ basePath }: { basePath?: string }) {
 
   return (
     <ConsolePathContext.Provider value={pathFor}>
-      <div className="flex h-dvh overflow-hidden bg-bg text-primary">
+      <div className="flex h-dvh overflow-hidden bg-bg text-text-primary">
         <nav className={cx('flex w-16 shrink-0 flex-col gap-1 overflow-y-auto border-r border-border bg-surface p-2 transition-[width] lg:w-60', collapsed && 'lg:w-16')}>
           <button
             type="button"
-            className="mb-3 flex h-10 w-full items-center gap-3 rounded-control px-2 text-left font-semibold text-primary transition-colors hover:bg-raised focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+            className="mb-3 flex h-10 w-full items-center gap-3 rounded-control px-2 text-left font-semibold text-text-primary transition-colors hover:bg-raised focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
             onClick={() => setCollapsed(!collapsed)}
             aria-label="사이드바 접기/펼치기"
           >
@@ -147,8 +147,8 @@ export function ConsoleLayout({ basePath }: { basePath?: string }) {
           )}
           <div className="mt-auto grid gap-1">
             {session?.email && (
-              <div className="flex h-10 max-w-full items-center gap-3 rounded-control px-2 text-label text-secondary" title={session.email}>
-                <div className="grid h-7 w-7 shrink-0 place-items-center rounded-panel border border-border bg-raised text-caption font-semibold text-primary">
+              <div className="flex h-10 max-w-full items-center gap-3 rounded-control px-2 text-label text-text-secondary" title={session.email}>
+                <div className="grid h-7 w-7 shrink-0 place-items-center rounded-panel border border-border bg-raised text-caption font-semibold text-text-primary">
                   {session.email[0]?.toUpperCase()}
                 </div>
                 <span className={cx('hidden min-w-0 truncate lg:inline', collapsed && 'lg:hidden')}>{session.email}</span>
@@ -160,7 +160,7 @@ export function ConsoleLayout({ basePath }: { basePath?: string }) {
         <div className="flex min-w-0 flex-1 flex-col">
           <header className="flex h-12 shrink-0 items-center justify-between gap-3 border-b border-border bg-surface px-3 lg:px-6">
             <div className="min-w-0">
-              <span className="hidden h-8 max-w-56 items-center rounded-control border border-border bg-bg px-3 text-label text-secondary sm:inline-flex" title={session?.workspace_id ?? 'workspace'}>
+              <span className="hidden h-8 max-w-56 items-center rounded-control border border-border bg-bg px-3 text-label text-text-secondary sm:inline-flex" title={session?.workspace_id ?? 'workspace'}>
                 모든 프로젝트
               </span>
             </div>
@@ -198,8 +198,8 @@ export function ConsoleLayout({ basePath }: { basePath?: string }) {
 
           <div className="flex h-10 shrink-0 items-center gap-3 border-b border-border bg-bg px-3 lg:px-6">
             <IconButton size="sm" label="뒤로" icon={<ArrowLeftIcon />} onClick={() => navigate(-1)} />
-            <nav aria-label="breadcrumb" className="flex min-w-0 items-center gap-2 text-label text-muted">
-              {crumbs.length === 0 && <span className="min-w-0 truncate text-secondary">홈</span>}
+            <nav aria-label="breadcrumb" className="flex min-w-0 items-center gap-2 text-label text-text-muted">
+              {crumbs.length === 0 && <span className="min-w-0 truncate text-text-secondary">홈</span>}
               {crumbs.map((c, i) => {
                 const isLast = i === crumbs.length - 1;
                 const to = pathFor(`/${crumbs.slice(0, i + 1).join('/')}`);
@@ -208,9 +208,9 @@ export function ConsoleLayout({ basePath }: { basePath?: string }) {
                   <span key={`${c}-${i}`} className="inline-flex min-w-0 items-center gap-2">
                     {i > 0 && <span>/</span>}
                     {isLast ? (
-                      <span className="min-w-0 truncate text-secondary">{label}</span>
+                      <span className="min-w-0 truncate text-text-secondary">{label}</span>
                     ) : (
-                      <NavLink to={to} className="min-w-0 truncate hover:text-primary">{label}</NavLink>
+                      <NavLink to={to} className="min-w-0 truncate hover:text-text-primary">{label}</NavLink>
                     )}
                   </span>
                 );
@@ -255,11 +255,11 @@ export function ConsoleLayout({ basePath }: { basePath?: string }) {
                 >
                   <div className="flex min-w-0 items-center gap-2">
                     <Badge tone={toneSeverity(n.tone)}>{NOTICE_KIND_LABEL[n.kind] ?? n.kind}</Badge>
-                    <span className="min-w-0 truncate text-body font-medium text-primary">
+                    <span className="min-w-0 truncate text-body font-medium text-text-primary">
                       {n.title}
                     </span>
                   </div>
-                  <span className="text-caption text-muted">{n.at ? timeAgo(n.at) : ''}</span>
+                  <span className="text-caption text-text-muted">{n.at ? timeAgo(n.at) : ''}</span>
                 </button>
               ))}
             </div>
@@ -272,14 +272,14 @@ export function ConsoleLayout({ basePath }: { basePath?: string }) {
 
 function navItemClass(isActive: boolean) {
   return cx(
-    'flex h-10 max-w-full items-center gap-3 rounded-control px-2 text-body font-medium text-secondary transition-colors hover:bg-raised hover:text-primary focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring',
-    isActive && 'bg-raised text-primary',
+    'flex h-10 max-w-full items-center gap-3 rounded-control px-2 text-body font-medium text-text-secondary transition-colors hover:bg-raised hover:text-text-primary focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring',
+    isActive && 'bg-raised text-text-primary',
   );
 }
 
 function BrandMark() {
   return (
-    <span className="grid h-7 w-7 shrink-0 place-items-center rounded-panel bg-accent text-label font-semibold text-on-accent shadow-soft">
+    <span className="grid h-7 w-7 shrink-0 place-items-center rounded-panel bg-brand text-label font-semibold text-on-accent shadow-soft">
       K
     </span>
   );

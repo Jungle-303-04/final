@@ -27,7 +27,7 @@ function StepNode({ data }: NodeProps<Node<{ step: RunStep; active: boolean }>>)
   return (
     <div className={cx(
       'inline-flex min-w-28 items-center justify-center gap-2 whitespace-nowrap rounded-panel border bg-surface px-3 py-2 text-center text-label font-semibold shadow-soft',
-      pending ? 'border-border text-muted' : flowToneClass(badgeToneToFlowTone(meta.tone)),
+      pending ? 'border-border text-text-muted' : flowToneClass(badgeToneToFlowTone(meta.tone)),
       active && 'flow-node--pulse',
     )}>
       <Handle type="target" position={Position.Left} className="opacity-0" />
@@ -218,21 +218,21 @@ function ApprovalPanel({ run, approvalId, diffStep }: { run: WorkflowWithApp; ap
         <div className="flex min-w-0 flex-wrap items-center gap-2">
           <CodeText>{run.appId}</CodeText>
           <CodeText>{shortSha(run.commit_sha)}</CodeText>
-          {run.safe_pr?.pr_url && <a className="text-accent hover:text-accent-hover" href={run.safe_pr.pr_url} target="_blank" rel="noreferrer">PR 보기</a>}
+          {run.safe_pr?.pr_url && <a className="text-brand hover:text-brand-hover" href={run.safe_pr.pr_url} target="_blank" rel="noreferrer">PR 보기</a>}
         </div>
 
         <button
           type="button"
-          className="flex w-full items-center justify-between gap-4 rounded-control border border-border bg-raised px-3 py-2 text-left text-body font-semibold text-primary focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+          className="flex w-full items-center justify-between gap-4 rounded-control border border-border bg-raised px-3 py-2 text-left text-body font-semibold text-text-primary focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
           onClick={() => setPreviewOpen((open) => !open)}
           aria-expanded={previewOpen}
         >
           <span>실행 내용 미리보기</span>
-          <span className="text-muted">{previewOpen ? '접기' : '펼치기'}</span>
+          <span className="text-text-muted">{previewOpen ? '접기' : '펼치기'}</span>
         </button>
         <Collapsible open={previewOpen}>
           <div className="grid gap-3 rounded-panel border border-border bg-bg p-4">
-            <p className="text-body text-secondary">{summary}{diffStep?.detail ? ` · ${diffStep.detail}` : ''}</p>
+            <p className="text-body text-text-secondary">{summary}{diffStep?.detail ? ` · ${diffStep.detail}` : ''}</p>
             {diffStep?.changes && diffStep.changes.length > 0 ? (
               <PlanDiffPanel changes={diffStep.changes} resource={diffStep.resource} />
             ) : (
@@ -315,17 +315,17 @@ function PlanDiffPanel({ changes, resource }: { changes: PlanChange[]; resource?
             return (
               <div key={change.field_path} className="grid grid-cols-[2rem_minmax(8rem,1fr)_minmax(8rem,1fr)_2rem_minmax(8rem,1fr)_7rem] items-baseline gap-2 rounded-control px-2 py-1 hover:bg-raised">
                 <span className={cx('text-center font-bold', meta.className)}>{meta.symbol}</span>
-                <span className="truncate text-primary">{change.field_path}</span>
-                <span className="truncate text-muted">{shortValue(change.before)}</span>
-                <span className="text-muted">-&gt;</span>
+                <span className="truncate text-text-primary">{change.field_path}</span>
+                <span className="truncate text-text-muted">{shortValue(change.before)}</span>
+                <span className="text-text-muted">-&gt;</span>
                 <span className={cx('truncate', meta.className)}>{shortValue(change.after)}</span>
-                <span className="text-right text-muted">{meta.label}</span>
+                <span className="text-right text-text-muted">{meta.label}</span>
               </div>
             );
           })}
         </div>
       </div>
-      {converged > 0 && <p className="text-caption text-muted">이미 일치 {converged}건은 적용 대상에서 제외됩니다</p>}
+      {converged > 0 && <p className="text-caption text-text-muted">이미 일치 {converged}건은 적용 대상에서 제외됩니다</p>}
     </div>
   );
 }
@@ -397,8 +397,8 @@ function planChangeMeta(classification: string): { symbol: string; className: st
     intended_change: { symbol: '~', className: 'text-info', label: '의도 변경' },
     drift: { symbol: '!', className: 'text-warning', label: '드리프트' },
     conflict_or_manual_change: { symbol: '!', className: 'text-danger', label: '충돌' },
-    already_converged: { symbol: '=', className: 'text-muted', label: '일치' },
-  }[classification] ?? { symbol: '~', className: 'text-secondary', label: '변경' };
+    already_converged: { symbol: '=', className: 'text-text-muted', label: '일치' },
+  }[classification] ?? { symbol: '~', className: 'text-text-secondary', label: '변경' };
 }
 
 function shortValue(value: unknown): string {
@@ -418,14 +418,14 @@ function badgeToneToFlowTone(tone: BadgeTone): Tone {
 
 function flowToneClass(tone: Tone) {
   return {
-    ok: 'border-success/50 text-primary',
-    warn: 'border-warning/50 text-primary',
-    danger: 'border-danger/50 text-primary',
-    info: 'border-info/50 text-primary',
-    neutral: 'border-border text-secondary',
+    ok: 'border-success/50 text-text-primary',
+    warn: 'border-warning/50 text-text-primary',
+    danger: 'border-danger/50 text-text-primary',
+    info: 'border-info/50 text-text-primary',
+    neutral: 'border-border text-text-secondary',
   }[tone];
 }
 
 function CodeText({ children }: { children: string }) {
-  return <code className="inline-flex max-w-full truncate rounded-control border border-border bg-raised px-2 py-1 font-mono text-caption text-secondary">{children}</code>;
+  return <code className="inline-flex max-w-full truncate rounded-control border border-border bg-raised px-2 py-1 font-mono text-caption text-text-secondary">{children}</code>;
 }

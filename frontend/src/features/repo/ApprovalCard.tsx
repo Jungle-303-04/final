@@ -25,7 +25,7 @@ export function ApprovalCard({ approvalId, summary, resolved, compact }:
       className={cx('flex min-w-0 flex-wrap items-center gap-3 rounded-panel border border-border bg-bg', compact ? 'p-3' : 'p-4')}
     >
       <Badge tone="warning">승인 대기</Badge>
-      <span className="min-w-0 flex-1 text-body text-secondary">{summary}</span>
+      <span className="min-w-0 flex-1 text-body text-text-secondary">{summary}</span>
       <span className="inline-flex flex-wrap gap-2">
         <Tooltip label={canDeploy ? '배포를 승인합니다' : 'release_operator 권한 필요'}>
           <span>

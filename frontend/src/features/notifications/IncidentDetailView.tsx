@@ -105,8 +105,8 @@ function StageNode({ data }: NodeProps<Node<{ label: string; sub?: string; tone:
   return (
     <div className={cx('min-w-40 rounded-panel border bg-surface px-4 py-3 text-center shadow-soft', flowToneClass(data.tone), data.active && 'flow-node--pulse')}>
       <Handle type="target" position={Position.Left} className="opacity-0" />
-      <div className="text-body font-semibold text-primary">{data.label}</div>
-      {data.sub && <div className="mt-1 max-w-52 truncate text-caption font-normal text-secondary">{data.sub}</div>}
+      <div className="text-body font-semibold text-text-primary">{data.label}</div>
+      {data.sub && <div className="mt-1 max-w-52 truncate text-caption font-normal text-text-secondary">{data.sub}</div>}
       <Handle type="source" position={Position.Right} className="opacity-0" />
     </div>
   );
@@ -114,7 +114,7 @@ function StageNode({ data }: NodeProps<Node<{ label: string; sub?: string; tone:
 
 function ItemNode({ data }: NodeProps<Node<{ label: string; tone: Tone }>>) {
   return (
-    <div className={cx('max-w-64 rounded-control border bg-bg px-3 py-2 font-mono text-caption text-secondary shadow-soft', flowToneClass(data.tone))}>
+    <div className={cx('max-w-64 rounded-control border bg-bg px-3 py-2 font-mono text-caption text-text-secondary shadow-soft', flowToneClass(data.tone))}>
       <Handle type="target" position={Position.Left} className="opacity-0" />
       <span className="block truncate">{data.label}</span>
       <Handle type="source" position={Position.Right} className="opacity-0" />
@@ -326,14 +326,14 @@ export default function IncidentDetailView() {
           <div className="grid gap-4">
             <KeyValueList items={[
               { label: '상태', value: <StatusBadge status={incident.status} /> },
-              { label: '클러스터', value: incident.cluster_id ? <Link className="text-accent hover:text-accent-hover" to={pathFor(`/clusters/${incident.cluster_id}`)}>{incident.cluster_id}</Link> : '없음' },
+              { label: '클러스터', value: incident.cluster_id ? <Link className="text-brand hover:text-brand-hover" to={pathFor(`/clusters/${incident.cluster_id}`)}>{incident.cluster_id}</Link> : '없음' },
               { label: '대상', value: incidentTarget(incident) || '확인 중' },
               { label: '현재 단계', value: labelForSubject(incident.current_subject) },
               { label: '근본 원인', value: incident.root_cause ? rootCauseLabel(incident.root_cause) : '분석 중' },
               { label: '신뢰도', value: incident.confidence != null ? `${(incident.confidence * 100).toFixed(0)}%` : '없음' },
               { label: 'correlation', value: incident.correlation_id ? <CopyPill value={incident.correlation_id} display={trunc(incident.correlation_id, 18)} /> : '없음' },
               { label: '커맨드', value: incident.command_id ? <CodeText>{trunc(incident.command_id, 18)}</CodeText> : '없음' },
-              { label: 'PR', value: incident.pr_url ? <a className="text-accent hover:text-accent-hover" href={incident.pr_url} target="_blank" rel="noreferrer">{trunc(incident.pr_url, 28)}</a> : '없음' },
+              { label: 'PR', value: incident.pr_url ? <a className="text-brand hover:text-brand-hover" href={incident.pr_url} target="_blank" rel="noreferrer">{trunc(incident.pr_url, 28)}</a> : '없음' },
               { label: '갱신', value: incident.updated_at ? <span title={fmtAbs(incident.updated_at)}>{timeAgo(incident.updated_at)} · {fmtAbs(incident.updated_at)}</span> : '없음' },
             ]} />
             {incident.error_reason && <p className="text-caption font-medium text-danger">실패 사유: {incident.error_reason}</p>}
@@ -364,7 +364,7 @@ function IncidentSituationCard({ incident, onAskAi, aiPending }: { incident: Inc
             <Badge tone="info">{symptom}</Badge>
             {incident.root_cause && <Badge tone="warning">{cause}</Badge>}
           </div>
-          <p className="text-title font-semibold text-primary">
+          <p className="text-title font-semibold text-text-primary">
             {target}에서 {symptom} 신호가 감지됐고, 현재 {cause} 상태입니다.
           </p>
           <div className="grid gap-2 md:grid-cols-3">
@@ -382,8 +382,8 @@ function IncidentSituationCard({ incident, onAskAi, aiPending }: { incident: Inc
 function SummaryMetric({ label, value }: { label: string; value: ReactNode }) {
   return (
     <div className="rounded-control border border-border bg-raised px-3 py-2">
-      <p className="text-caption font-medium text-muted">{label}</p>
-      <p className="mt-1 min-w-0 truncate text-body font-semibold text-primary">{value}</p>
+      <p className="text-caption font-medium text-text-muted">{label}</p>
+      <p className="mt-1 min-w-0 truncate text-body font-semibold text-text-primary">{value}</p>
     </div>
   );
 }
@@ -395,7 +395,7 @@ function RecoveryPlanPanel({ correlationId, standalone = false }: { correlationI
   return (
     <section className={standalone ? 'grid gap-3' : 'grid gap-3 border-t border-border pt-4'}>
       <div className="flex flex-wrap items-center gap-2">
-        <h2 className="text-title font-semibold text-primary">복구 계획</h2>
+        <h2 className="text-title font-semibold text-text-primary">복구 계획</h2>
         {plan && <Badge tone={toneToBadge(recoveryPlanTone(plan))}>{plan.status}</Badge>}
       </div>
       {q.isPending ? (
@@ -425,8 +425,8 @@ function RecoveryPlanSummary({ plan }: { plan: RecoveryPlanStatus }) {
     <div className="grid gap-3">
       <div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_minmax(18rem,0.55fr)]">
         <div className="grid gap-2">
-          <p className="text-body font-semibold text-primary">{plan.summary}</p>
-          <p className="text-caption text-secondary">{recoveryTargetLabel(plan)}</p>
+          <p className="text-body font-semibold text-text-primary">{plan.summary}</p>
+          <p className="text-caption text-text-secondary">{recoveryTargetLabel(plan)}</p>
         </div>
         <KeyValueList items={[
           { label: '경로', value: routeLabel(plan.execution_route) },
@@ -437,10 +437,10 @@ function RecoveryPlanSummary({ plan }: { plan: RecoveryPlanStatus }) {
       <div className="grid gap-2 rounded-control border border-border bg-bg p-3 md:grid-cols-4">
         {recoveryFlowSteps(plan).map((step) => (
           <div key={step.label} className="flex min-w-0 items-center gap-2">
-            <span className={cx('size-2 shrink-0 rounded-full', step.tone === 'ok' ? 'bg-success' : step.tone === 'warn' ? 'bg-warning' : step.tone === 'danger' ? 'bg-danger' : step.tone === 'info' ? 'bg-info' : 'bg-muted')} />
+            <span className={cx('size-2 shrink-0 rounded-full', step.tone === 'ok' ? 'bg-success' : step.tone === 'warn' ? 'bg-warning' : step.tone === 'danger' ? 'bg-danger' : step.tone === 'info' ? 'bg-info' : 'bg-text-muted')} />
             <div className="min-w-0">
-              <p className="truncate text-label font-semibold text-primary">{step.label}</p>
-              <p className="truncate text-caption text-muted">{step.value}</p>
+              <p className="truncate text-label font-semibold text-text-primary">{step.label}</p>
+              <p className="truncate text-caption text-text-muted">{step.value}</p>
             </div>
           </div>
         ))}
@@ -466,7 +466,7 @@ function RecoveryPlanSummary({ plan }: { plan: RecoveryPlanStatus }) {
           />
         ))}
       </div>
-      {plan.selected_by && <span className="text-caption text-muted">선택자: <CodeText>{plan.selected_by}</CodeText></span>}
+      {plan.selected_by && <span className="text-caption text-text-muted">선택자: <CodeText>{plan.selected_by}</CodeText></span>}
     </div>
   );
 }
@@ -513,16 +513,16 @@ function RecoveryCandidateRow({
   return (
     <div className={cx('grid gap-2 rounded-control border bg-raised p-3', selected ? 'border-success/50' : recommended ? 'border-info/50' : 'border-border')}>
       <div className="flex min-w-0 flex-wrap items-center gap-2">
-        <span className="min-w-0 truncate text-label font-semibold text-primary">{candidate.title}</span>
+        <span className="min-w-0 truncate text-label font-semibold text-text-primary">{candidate.title}</span>
         {selected && <Badge tone="success">선택</Badge>}
         {recommended && !selected && <Badge tone="info">추천</Badge>}
         {candidate.approval_required && <Badge tone="warning">승인 필요</Badge>}
-        <span className="ms-auto text-caption text-muted">{routeLabel(candidate.route)}</span>
+        <span className="ms-auto text-caption text-text-muted">{routeLabel(candidate.route)}</span>
       </div>
-      <p className="text-caption text-muted">
+      <p className="text-caption text-text-muted">
         {candidate.description} · 위험 {riskLabel(candidate.risk_level)} · 영향 {blastRadiusLabel(candidate.blast_radius)}
       </p>
-      {candidate.rollback_plan && <p className="text-caption text-secondary">롤백: {candidate.rollback_plan}</p>}
+      {candidate.rollback_plan && <p className="text-caption text-text-secondary">롤백: {candidate.rollback_plan}</p>}
       <div className="flex justify-end">
         <Button size="sm" variant={selected || recommended ? 'primary' : 'secondary'} loading={pending} onClick={onSelect}>
           {selected ? '다시 실행' : '복구 선택'}
@@ -619,19 +619,19 @@ function EvidenceRow({ record }: { record: EvidenceRecord }) {
       >
         <Badge tone={toneToBadge(kindTone(record.kind))}>{record.kind}</Badge>
         <CodeText>#{record.id}</CodeText>
-        <span className="min-w-0 flex-1 truncate text-caption font-mono text-secondary">{trunc(record.summary, 96)}</span>
-        {record.created_at && <span className="text-caption text-muted" title={fmtAbs(record.created_at)}>{timeAgo(record.created_at)}</span>}
-        <span className="text-caption text-muted">{open ? '접기' : '펼치기'}</span>
+        <span className="min-w-0 flex-1 truncate text-caption font-mono text-text-secondary">{trunc(record.summary, 96)}</span>
+        {record.created_at && <span className="text-caption text-text-muted" title={fmtAbs(record.created_at)}>{timeAgo(record.created_at)}</span>}
+        <span className="text-caption text-text-muted">{open ? '접기' : '펼치기'}</span>
       </button>
       <Collapsible open={open}>
         <div className="mt-3 grid gap-3 border-t border-border pt-3">
-          {record.created_at && <p className="text-caption text-muted">수집 시각: {fmtAbs(record.created_at)}</p>}
+          {record.created_at && <p className="text-caption text-text-muted">수집 시각: {fmtAbs(record.created_at)}</p>}
           {record.evidence_ref && <CopyPill value={record.evidence_ref} display={trunc(record.evidence_ref, 30)} />}
           <div className="grid gap-2">
             {record.sources.map((source) => (
               <div key={`${record.id}-${source.source}`} className="flex min-w-0 flex-wrap items-center gap-2 rounded-control border border-border bg-raised px-3 py-2 text-caption">
                 <Badge>{source.source}</Badge>
-                <span className="min-w-0 flex-1 truncate text-secondary">{source.summary}</span>
+                <span className="min-w-0 flex-1 truncate text-text-secondary">{source.summary}</span>
                 {source.collector_version && <CodeText>{trunc(source.collector_version, 18)}</CodeText>}
               </div>
             ))}
@@ -677,18 +677,18 @@ function RcaReportCard({ report, onShowEvidence }: { report: RcaReportSummary; o
       <div className="flex min-w-0 flex-wrap items-center gap-2">
         {report.severity && <Badge tone={severityTone}>{report.severity}</Badge>}
         <StatusBadge status={report.action} />
-        {report.confidence != null && <span className="text-caption text-secondary">신뢰도 <b>{(report.confidence * 100).toFixed(0)}%</b></span>}
-        {report.created_at && <span className="ms-auto text-caption text-muted" title={fmtAbs(report.created_at)}>{timeAgo(report.created_at)}</span>}
+        {report.confidence != null && <span className="text-caption text-text-secondary">신뢰도 <b>{(report.confidence * 100).toFixed(0)}%</b></span>}
+        {report.created_at && <span className="ms-auto text-caption text-text-muted" title={fmtAbs(report.created_at)}>{timeAgo(report.created_at)}</span>}
       </div>
-      <h3 className="text-title font-semibold text-primary">{report.root_cause}</h3>
-      {target && <p className="text-caption text-secondary">대상: <CodeText>{target}</CodeText></p>}
+      <h3 className="text-title font-semibold text-text-primary">{report.root_cause}</h3>
+      {target && <p className="text-caption text-text-secondary">대상: <CodeText>{target}</CodeText></p>}
       {report.symptom && (
-        <div className="flex flex-wrap items-center gap-2 text-caption text-secondary">
+        <div className="flex flex-wrap items-center gap-2 text-caption text-text-secondary">
           <span>증상: {report.symptom}</span>
           {(report.secondary_symptoms ?? []).map((symptom) => <Badge key={symptom}>{symptom}</Badge>)}
         </div>
       )}
-      {report.reason && <p className="text-caption text-secondary">판단 근거: {report.reason}</p>}
+      {report.reason && <p className="text-caption text-text-secondary">판단 근거: {report.reason}</p>}
       {candidates.length > 0 && <CandidateScores candidates={candidates} selectedId={report.selected_candidate_id ?? null} />}
       {refs.length > 0 ? <EvidenceRefList refs={refs} /> : <EvidenceFallbackChips items={report.supporting_evidence} tone="success" />}
       {missingChecks.length > 0 ? (
@@ -716,21 +716,21 @@ function CandidateScores({ candidates, selectedId }: { candidates: RcaCandidateS
   const shown = open ? candidates : candidates.slice(0, 2);
   return (
     <section className="grid gap-2">
-      <div className="text-caption text-muted">후보 평가 ({candidates.length})</div>
+      <div className="text-caption text-text-muted">후보 평가 ({candidates.length})</div>
       {shown.map((candidate) => {
         const selected = candidate.candidate_id === selectedId;
         const score = candidate.score ?? 0;
         return (
           <div key={candidate.candidate_id} className={cx('grid gap-2 rounded-control border bg-raised p-3', selected ? 'border-success/50' : 'border-border')}>
             <div className="flex min-w-0 flex-wrap items-center gap-2">
-              <span className={selected ? 'text-label font-bold text-primary' : 'text-label font-medium text-secondary'}>
+              <span className={selected ? 'text-label font-bold text-text-primary' : 'text-label font-medium text-text-secondary'}>
                 {candidate.title ?? candidate.candidate_id}
               </span>
               {candidate.source === 'ai_fallback' && <Badge tone="info">AI</Badge>}
               {selected && <Badge tone="success">선정</Badge>}
               <span className="ms-auto inline-flex items-center gap-2">
                 <ScoreBar score={score} />
-                <b className="text-caption tabular-nums text-secondary">{score.toFixed(2)}</b>
+                <b className="text-caption tabular-nums text-text-secondary">{score.toFixed(2)}</b>
               </span>
             </div>
             {(candidate.supporting_evidence.length > 0 || candidate.missing_evidence.length > 0) && (
@@ -754,17 +754,17 @@ function CandidateScores({ candidates, selectedId }: { candidates: RcaCandidateS
 function EvidenceRefList({ refs }: { refs: RcaEvidenceRef[] }) {
   return (
     <section className="grid gap-2">
-      <div className="text-caption text-muted">판단에 사용된 근거 ({refs.length})</div>
+      <div className="text-caption text-text-muted">판단에 사용된 근거 ({refs.length})</div>
       {refs.map((ref, index) => (
         <div key={`${ref.source}-${ref.name}-${index}`} className="grid gap-2 rounded-control border border-border bg-raised p-3">
           <div className="flex min-w-0 flex-wrap items-center gap-2">
             <Badge tone={toneToBadge(kindTone(ref.source))}>{ref.source}</Badge>
             {ref.schema_version != null && <Badge>schema v{ref.schema_version}</Badge>}
-            <span className="text-caption text-secondary">{ref.name}</span>
-            {ref.summary && <span className="min-w-0 flex-1 truncate text-caption text-muted">{trunc(ref.summary, 60)}</span>}
+            <span className="text-caption text-text-secondary">{ref.name}</span>
+            {ref.summary && <span className="min-w-0 flex-1 truncate text-caption text-text-muted">{trunc(ref.summary, 60)}</span>}
           </div>
           {(ref.collector || ref.collector_version || ref.source_version || ref.query_version || ref.evidence_key || ref.source_id || ref.agent_id || ref.collected_at || ref.window_start) && (
-            <div className="flex flex-wrap gap-2 text-caption text-muted">
+            <div className="flex flex-wrap gap-2 text-caption text-text-muted">
               {ref.collector && <span>{ref.collector}</span>}
               {ref.collector_version && <CodeText>{trunc(ref.collector_version, 18)}</CodeText>}
               {ref.source_version && <span>{ref.source_version}</span>}
@@ -913,7 +913,7 @@ function flowToneClass(tone: Tone) {
 
 function ScoreBar({ score }: { score: number }) {
   const width = score >= 0.9 ? 'w-full' : score >= 0.75 ? 'w-4/5' : score >= 0.5 ? 'w-3/5' : score >= 0.25 ? 'w-2/5' : 'w-1/5';
-  const tone = score >= 0.9 ? 'bg-success' : score >= 0.5 ? 'bg-warning' : 'bg-muted';
+  const tone = score >= 0.9 ? 'bg-success' : score >= 0.5 ? 'bg-warning' : 'bg-text-muted';
   return (
     <span className="inline-flex h-1.5 w-16 overflow-hidden rounded-full bg-surface">
       <span className={cx('h-full rounded-full', width, tone)} />
@@ -932,7 +932,7 @@ function CopyPill({ value, display }: { value: string; display?: string }) {
 }
 
 function CodeText({ children }: { children: ReactNode }) {
-  return <code className="inline-flex max-w-full truncate rounded-control border border-border bg-raised px-2 py-1 font-mono text-caption text-secondary">{children}</code>;
+  return <code className="inline-flex max-w-full truncate rounded-control border border-border bg-raised px-2 py-1 font-mono text-caption text-text-secondary">{children}</code>;
 }
 
 function AlertIcon() {

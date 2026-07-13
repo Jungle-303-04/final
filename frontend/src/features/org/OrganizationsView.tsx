@@ -22,13 +22,13 @@ export default function OrganizationsView() {
       id: 'name',
       header: '이름',
       sortValue: (org) => org.name,
-      cell: (org) => <span className="font-semibold text-primary">{org.name}</span>,
+      cell: (org) => <span className="font-semibold text-text-primary">{org.name}</span>,
     },
     {
       id: 'description',
       header: '설명',
       width: 'lg',
-      cell: (org) => org.description || <span className="text-muted">없음</span>,
+      cell: (org) => org.description || <span className="text-text-muted">없음</span>,
     },
     {
       id: 'members',
@@ -135,8 +135,8 @@ export default function OrganizationsView() {
         }}
       >
         <div className="grid gap-4">
-          <p className="text-body text-secondary">
-            <span className="font-semibold text-primary">{confirming?.name}</span> 조직을 삭제합니다. 소속 그룹이 있으면 서버가 삭제를 차단합니다.
+          <p className="text-body text-text-secondary">
+            <span className="font-semibold text-text-primary">{confirming?.name}</span> 조직을 삭제합니다. 소속 그룹이 있으면 서버가 삭제를 차단합니다.
           </p>
           <Field label="확인 입력">
             <Input value={confirmText} onChange={(event) => setConfirmText(event.target.value)} />

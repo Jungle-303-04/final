@@ -47,10 +47,10 @@ export default function NotificationsView() {
                 className="grid w-full gap-3 rounded-panel border border-border bg-bg p-4 md:grid-cols-[auto_minmax(0,1fr)_auto_auto] md:items-center"
               >
                 <Badge tone={toneSeverity(notice.tone)}>{KIND_LABEL[notice.kind] ?? notice.kind}</Badge>
-                <span className={notice.read ? 'min-w-0 truncate text-body text-muted' : 'min-w-0 truncate text-body font-semibold text-primary'}>
+                <span className={notice.read ? 'min-w-0 truncate text-body text-text-muted' : 'min-w-0 truncate text-body font-semibold text-text-primary'}>
                   {notice.title}
                 </span>
-                <span className="text-caption text-muted">{notice.at ? timeAgo(notice.at) : ''}</span>
+                <span className="text-caption text-text-muted">{notice.at ? timeAgo(notice.at) : ''}</span>
                 <Button size="sm" onClick={() => navigate(pathFor(notice.link))}>
                   바로가기
                 </Button>

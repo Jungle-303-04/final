@@ -25,7 +25,7 @@ export function RequireSession() {
   if (isPending) {
     if (hasRecentSessionHint()) return <Outlet />;
     return (
-      <main className="min-h-dvh bg-bg p-6 text-primary sm:p-12">
+      <main className="min-h-dvh bg-bg p-6 text-text-primary sm:p-12">
         {slowPending ? (
           <EmptyState icon={<AlertGlyph />} title="세션 확인 중"
             action={<Button size="sm" onClick={() => refetch()}>다시 시도</Button>} />
@@ -38,7 +38,7 @@ export function RequireSession() {
     if (hasRecentSessionHint() && e.kind !== 'unauthorized' && e.status !== 401) return <Outlet />;
     if (e.kind !== 'unauthorized' && e.status !== 401) {
       return (
-        <main className="min-h-dvh bg-bg p-6 text-primary sm:p-12">
+        <main className="min-h-dvh bg-bg p-6 text-text-primary sm:p-12">
           <EmptyState icon={<AlertGlyph />} title={e.detail || '세션을 확인하지 못했습니다'}
             action={<Button size="sm" onClick={() => refetch()}>다시 시도</Button>} />
         </main>

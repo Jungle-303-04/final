@@ -68,7 +68,7 @@ export function Sparkline({
 
   if (!path) {
     return (
-      <svg className={cx('h-full w-full text-muted', className)} viewBox="0 0 100 32" role="img" aria-label={`${ariaLabel} 없음`} preserveAspectRatio="none">
+      <svg className={cx('h-full w-full text-text-muted', className)} viewBox="0 0 100 32" role="img" aria-label={`${ariaLabel} 없음`} preserveAspectRatio="none">
         <path d="M8 16 H92" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" vectorEffect="non-scaling-stroke" className="opacity-40" />
       </svg>
     );
@@ -88,7 +88,7 @@ export function TimeSeriesChart({ series, className }: { series: Series[]; class
 
   if (drawable.length === 0) {
     return (
-      <div className={cx('grid h-64 min-h-64 place-items-center rounded-panel border border-dashed border-border bg-bg p-6 text-center text-body text-muted', className)}>
+      <div className={cx('grid h-64 min-h-64 place-items-center rounded-panel border border-dashed border-border bg-bg p-6 text-center text-body text-text-muted', className)}>
         표시할 시계열 데이터가 아직 없습니다
       </div>
     );
@@ -99,7 +99,7 @@ export function TimeSeriesChart({ series, className }: { series: Series[]; class
 
   return (
     <div className={cx('flex h-64 min-h-64 min-w-0 flex-col', className)}>
-      <div className="mb-3 flex min-w-0 flex-wrap items-center gap-3 text-caption text-secondary">
+      <div className="mb-3 flex min-w-0 flex-wrap items-center gap-3 text-caption text-text-secondary">
         {drawable.map((item, index) => (
           <span key={item.id} className="inline-flex min-w-0 items-center gap-2">
             <span
@@ -130,18 +130,18 @@ export function TimeSeriesChart({ series, className }: { series: Series[]; class
           crosshairType="x"
           sliceTooltip={({ slice }) => (
             <div style={tooltipStyle}>
-              <div className="mb-1 text-caption tabular-nums text-muted">
+              <div className="mb-1 text-caption tabular-nums text-text-muted">
                 {formatAxisTick(slice.points[0]?.data.x as number | string)}
               </div>
               <div className="grid gap-1">
                 {slice.points.map((point) => (
-                  <div key={point.id} className="grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2 text-caption text-primary">
+                  <div key={point.id} className="grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2 text-caption text-text-primary">
                     <span
                       className="h-2 w-2 rounded-control"
                       aria-hidden="true"
                       style={{ background: point.serieColor }}
                     />
-                    <span className="truncate text-secondary">{String(point.serieId)}</span>
+                    <span className="truncate text-text-secondary">{String(point.serieId)}</span>
                     <b className="tabular-nums">{String(point.data.yFormatted)}</b>
                   </div>
                 ))}
@@ -183,7 +183,7 @@ function roundCoord(value: number): number {
 
 function sparklineToneClass(tone: SparklineTone): string {
   return {
-    neutral: 'text-muted',
+    neutral: 'text-text-muted',
     success: 'text-success',
     warning: 'text-warning',
     danger: 'text-danger',

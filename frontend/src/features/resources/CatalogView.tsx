@@ -132,19 +132,19 @@ function CatalogSkeleton() {
 function MetaRow({ label, value, mono }: { label: string; value: string; mono?: boolean }) {
   return (
     <div className="flex min-w-0 gap-3">
-      <span className="w-20 shrink-0 text-caption font-medium text-muted">{label}</span>
-      <span className={cx('min-w-0 flex-1 truncate text-caption text-secondary', mono && 'font-mono')}>{value || '없음'}</span>
+      <span className="w-20 shrink-0 text-caption font-medium text-text-muted">{label}</span>
+      <span className={cx('min-w-0 flex-1 truncate text-caption text-text-secondary', mono && 'font-mono')}>{value || '없음'}</span>
     </div>
   );
 }
 
 function TagList({ tags }: { tags: string[] }) {
   if (tags.length === 0) {
-    return <span className="text-caption text-muted">태그 없음</span>;
+    return <span className="text-caption text-text-muted">태그 없음</span>;
   }
   return (
     <div className="flex min-w-0 flex-wrap gap-2">
-      {tags.map((tag) => <span key={tag} className="rounded-control border border-border bg-raised px-2 py-1 text-caption text-secondary">{tag}</span>)}
+      {tags.map((tag) => <span key={tag} className="rounded-control border border-border bg-raised px-2 py-1 text-caption text-text-secondary">{tag}</span>)}
     </div>
   );
 }

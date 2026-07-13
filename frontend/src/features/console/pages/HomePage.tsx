@@ -80,7 +80,7 @@ export function HomePage() {
       sortValue: row => row.name,
       cell: row => (
         <span className="flex min-w-0 items-center gap-2">
-          <span className="truncate font-semibold text-primary">{row.name}</span>
+          <span className="truncate font-semibold text-text-primary">{row.name}</span>
           {clusterRoles.get(row.cluster_id) === 'management' && <Badge tone="info">관리 클러스터</Badge>}
         </span>
       ),
@@ -90,9 +90,9 @@ export function HomePage() {
     { id: 'nodes', header: '노드', sortValue: row => row.nodes_total, cell: row => `${row.nodes_ready}/${row.nodes_total}` },
     { id: 'cpu', header: 'CPU', sortValue: row => row.cpu_pct ?? -1, cell: row => pct(row.cpu_pct) },
     { id: 'mem', header: '메모리', sortValue: row => row.mem_pct ?? -1, cell: row => pct(row.mem_pct) },
-    { id: 'incidents', header: '인시던트', sortValue: row => row.open_incidents, cell: row => row.open_incidents > 0 ? <Badge tone="danger">{row.open_incidents}</Badge> : <span className="text-muted">없음</span> },
+    { id: 'incidents', header: '인시던트', sortValue: row => row.open_incidents, cell: row => row.open_incidents > 0 ? <Badge tone="danger">{row.open_incidents}</Badge> : <span className="text-text-muted">없음</span> },
     { id: 'restarts', header: '재시작', sortValue: row => row.restarts_recent, cell: row => row.restarts_recent.toLocaleString() },
-    { id: 'lastSeen', header: '마지막 확인', sortValue: row => row.last_seen ?? '', cell: row => row.last_seen ? timeAgo(row.last_seen) : <span className="text-muted">미확인</span> },
+    { id: 'lastSeen', header: '마지막 확인', sortValue: row => row.last_seen ?? '', cell: row => row.last_seen ? timeAgo(row.last_seen) : <span className="text-text-muted">미확인</span> },
   ], [clusterRoles]);
 
   if (fleetQ.isPending) {
@@ -134,7 +134,7 @@ export function HomePage() {
     <div className="grid gap-4">
       <div className="flex min-w-0 flex-col gap-3 md:flex-row md:items-center md:justify-between">
         <div className="min-w-0">
-          <h1 className="text-page font-semibold text-primary">홈</h1>
+          <h1 className="text-page font-semibold text-text-primary">홈</h1>
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <Button size="sm" leadingIcon={<PlusIcon />} onClick={() => navigate(pathFor('/repos'))}>레포 연결</Button>
@@ -268,7 +268,7 @@ function FleetHeatmap({
     meta: (
       <>
         <span>{heatSummary(cluster, lens)}</span>
-        <span className="text-caption text-muted">팟 {cluster.pods_running}/{cluster.pods_total} · 노드 {cluster.nodes_ready}/{cluster.nodes_total}</span>
+        <span className="text-caption text-text-muted">팟 {cluster.pods_running}/{cluster.pods_total} · 노드 {cluster.nodes_ready}/{cluster.nodes_total}</span>
       </>
     ),
   }));
@@ -302,9 +302,9 @@ function RecentIncidentCard({ query, pathFor }: { query: ReturnType<typeof useTi
           <Link key={item.incident_id} to={pathFor(`/incidents/${item.incident_id}`)} className="grid gap-2 rounded-panel border border-border bg-bg p-3 transition-colors hover:bg-raised">
             <span className="flex min-w-0 items-center gap-2">
               <Badge tone="danger">{item.stage}</Badge>
-              <span className="min-w-0 truncate text-body font-medium text-primary">{item.summary}</span>
+              <span className="min-w-0 truncate text-body font-medium text-text-primary">{item.summary}</span>
             </span>
-            <span className="text-caption text-muted">{timeAgo(item.at)}</span>
+            <span className="text-caption text-text-muted">{timeAgo(item.at)}</span>
           </Link>
         ))}
       </div>
@@ -324,9 +324,9 @@ function ApprovalCard({ approvals, pathFor }: { approvals: ReturnType<typeof use
           <Link key={approval.id} to={pathFor(approval.link)} className="grid gap-2 rounded-panel border border-border bg-bg p-3 transition-colors hover:bg-raised">
             <span className="flex min-w-0 items-center gap-2">
               <Badge tone="warning">승인</Badge>
-              <span className="min-w-0 truncate text-body font-medium text-primary">{approval.title}</span>
+              <span className="min-w-0 truncate text-body font-medium text-text-primary">{approval.title}</span>
             </span>
-            <span className="text-caption text-muted">{approval.at ? timeAgo(approval.at) : ''}</span>
+            <span className="text-caption text-text-muted">{approval.at ? timeAgo(approval.at) : ''}</span>
           </Link>
         ))}
       </div>
@@ -348,8 +348,8 @@ function RecentConversationCard({ query, pathFor }: { query: ReturnType<typeof u
       <div className="grid gap-2">
         {conversations.slice(0, 3).map(conversation => (
           <Link key={conversation.conversation_id} to={pathFor(`/ai/${conversation.conversation_id}`)} className="flex min-w-0 items-center justify-between gap-3 rounded-panel border border-border bg-bg p-3 transition-colors hover:bg-raised">
-            <span className="min-w-0 truncate text-body font-medium text-primary">{conversation.title}</span>
-            <span className="shrink-0 text-caption text-muted">{timeAgo(conversation.updated_at)}</span>
+            <span className="min-w-0 truncate text-body font-medium text-text-primary">{conversation.title}</span>
+            <span className="shrink-0 text-caption text-text-muted">{timeAgo(conversation.updated_at)}</span>
           </Link>
         ))}
       </div>

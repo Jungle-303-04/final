@@ -20,20 +20,38 @@
   --color-bg: var(--ui-bg);
   --color-surface: var(--ui-surface);
   --color-raised: var(--ui-raised);
-  --color-border: var(--ui-border);
+  --color-text-primary: var(--ui-text-primary);
+  --color-text-secondary: var(--ui-text-secondary);
+  --color-text-muted: var(--ui-text-muted);
+  --color-brand: var(--ui-accent);
+  --color-brand-hover: var(--ui-accent-hover);
   --color-border-strong: var(--ui-border-strong);
-  --color-primary: var(--ui-text-primary);
-  --color-secondary: var(--ui-text-secondary);
-  --color-muted: var(--ui-text-muted);
-  --color-accent: var(--ui-accent);
-  --color-accent-hover: var(--ui-accent-hover);
   --color-success: var(--ui-success);
   --color-warning: var(--ui-warning);
   --color-danger: var(--ui-danger);
   --color-info: var(--ui-info);
   --color-on-accent: var(--ui-on-accent);
   --color-on-danger: var(--ui-on-danger);
-  --color-ring: var(--ui-ring);
+
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
 
   --radius-control: 0.375rem;
   --radius-panel: 0.5rem;
@@ -71,6 +89,28 @@
   --ui-duration-fast: 100ms;
   --ui-duration-base: 160ms;
   --ui-duration-slow: 240ms;
+
+  /* shadcn semantic aliases intentionally reuse the established product palette. */
+  --background: var(--ui-bg);
+  --foreground: var(--ui-text-primary);
+  --card: var(--ui-surface);
+  --card-foreground: var(--ui-text-primary);
+  --popover: var(--ui-surface);
+  --popover-foreground: var(--ui-text-primary);
+  --primary: var(--ui-accent);
+  --primary-foreground: var(--ui-on-accent);
+  --secondary: var(--ui-raised);
+  --secondary-foreground: var(--ui-text-primary);
+  --muted: var(--ui-raised);
+  --muted-foreground: var(--ui-text-muted);
+  --accent: var(--ui-raised);
+  --accent-foreground: var(--ui-text-primary);
+  --destructive: var(--ui-danger);
+  --destructive-foreground: var(--ui-on-danger);
+  --border: var(--ui-border);
+  --input: var(--ui-border);
+  --ring: var(--ui-ring);
+  --radius: var(--radius-panel);
 
   color-scheme: light;
 }

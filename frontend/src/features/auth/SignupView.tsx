@@ -49,7 +49,7 @@ export default function SignupView() {
               </div>
             )}
           />
-          <p className="text-center text-caption text-secondary">메일이 보이지 않으면 스팸함과 회사 메일 보안 격리함을 함께 확인해주세요.</p>
+          <p className="text-center text-caption text-text-secondary">메일이 보이지 않으면 스팸함과 회사 메일 보안 격리함을 함께 확인해주세요.</p>
         </div>
       </AuthLayout>
     );
@@ -97,8 +97,8 @@ export default function SignupView() {
           <Input type="email" value={email} onChange={e => setEmail(e.target.value)} autoComplete="email" placeholder="name@example.com" required />
         </Field>
         {emailDuplicate && (
-          <p className="text-caption text-secondary">
-            이미 계정이 있다면 <Link to="/login" className="font-semibold text-accent hover:text-accent-hover">로그인하기</Link>로 이동해주세요.
+          <p className="text-caption text-text-secondary">
+            이미 계정이 있다면 <Link to="/login" className="font-semibold text-brand hover:text-brand-hover">로그인하기</Link>로 이동해주세요.
           </p>
         )}
         {emailAvailable && (
@@ -109,7 +109,7 @@ export default function SignupView() {
             <div className="grid gap-2 rounded-panel border border-border bg-raised p-3">
               {password.rules.map((rule) => (
                 <div key={rule.label} className="flex items-center justify-between gap-3 text-caption">
-                  <span className="text-secondary">{rule.label}</span>
+                  <span className="text-text-secondary">{rule.label}</span>
                   <Badge tone={rule.ok ? 'success' : 'neutral'}>{rule.ok ? '충족' : '대기'}</Badge>
                 </div>
               ))}
@@ -124,8 +124,8 @@ export default function SignupView() {
         )}
         <Button type="submit" variant="primary" loading={signup.isPending} disabled={!canSubmit} className="w-full">가입</Button>
       </form>
-      <p className="mt-6 text-center text-body text-secondary">
-        이미 계정이 있나요? <Link to="/login" className="font-semibold text-accent hover:text-accent-hover">로그인</Link>
+      <p className="mt-6 text-center text-body text-text-secondary">
+        이미 계정이 있나요? <Link to="/login" className="font-semibold text-brand hover:text-brand-hover">로그인</Link>
       </p>
     </AuthLayout>
   );
@@ -171,7 +171,7 @@ function PasswordMeter({ score, label }: { score: number; label: string }) {
       <span>강도 {label}</span>
       <span className="inline-grid grid-cols-3 gap-1" aria-hidden="true">
         {[0, 1, 2].map((item) => (
-          <span key={item} className={item < score ? 'h-1.5 w-6 rounded-control bg-accent' : 'h-1.5 w-6 rounded-control bg-raised'} />
+          <span key={item} className={item < score ? 'h-1.5 w-6 rounded-control bg-brand' : 'h-1.5 w-6 rounded-control bg-raised'} />
         ))}
       </span>
     </span>

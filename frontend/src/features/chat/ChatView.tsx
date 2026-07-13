@@ -253,7 +253,7 @@ function ConversationRow({
       variants={listItem}
       className={cx(
         'flex min-w-0 items-center gap-2 rounded-panel border p-2 transition-colors',
-        active ? 'border-accent bg-raised' : 'border-border bg-bg hover:bg-raised',
+        active ? 'border-brand bg-raised' : 'border-border bg-bg hover:bg-raised',
       )}
     >
       <button
@@ -263,9 +263,9 @@ function ConversationRow({
       >
         <span className="flex min-w-0 items-center gap-2">
           <span className={cx('h-2 w-2 shrink-0 rounded-full', meta.dotClass)} />
-          <span className="min-w-0 truncate text-body font-semibold text-primary">{conversation.title}</span>
+          <span className="min-w-0 truncate text-body font-semibold text-text-primary">{conversation.title}</span>
         </span>
-        <span className="text-caption text-muted">{conversation.updated_at ? timeAgo(conversation.updated_at) : '시간 없음'}</span>
+        <span className="text-caption text-text-muted">{conversation.updated_at ? timeAgo(conversation.updated_at) : '시간 없음'}</span>
       </button>
       <IconButton
         size="sm"
@@ -295,7 +295,7 @@ function ChatPanelHeader({
   return (
     <div className="flex min-w-0 items-start justify-between gap-4 border-b border-border p-4">
       <div className="min-w-0">
-        <h2 className="truncate text-title font-semibold text-primary">{title}</h2>
+        <h2 className="truncate text-title font-semibold text-text-primary">{title}</h2>
         <div className="mt-2">
           <Badge tone={meta.tone}>{meta.label}</Badge>
         </div>
@@ -351,7 +351,7 @@ function MessageArea({
       )}
       {conversation?.messages.map((message) => <MessageRenderer key={message.message_id} message={message} />)}
       {conversation?.status === 'waiting' && (
-        <div className="flex w-fit items-center gap-2 rounded-panel border border-border bg-bg px-3 py-2 text-body text-secondary" data-testid="typing">
+        <div className="flex w-fit items-center gap-2 rounded-panel border border-border bg-bg px-3 py-2 text-body text-text-secondary" data-testid="typing">
           <span className="h-2 w-2 rounded-full bg-info motion-safe:animate-pulse" />
           분석 중
         </div>
@@ -365,7 +365,7 @@ function MessageRenderer({ message }: { message: ChatMessage }) {
   if (message.role === 'user') {
     return (
       <motion.div variants={fadeInUp} initial="initial" animate="animate" className="flex justify-end">
-        <div className="max-w-[min(42rem,86%)] whitespace-pre-wrap break-words rounded-panel border border-accent bg-accent px-4 py-3 text-body text-on-accent shadow-soft">
+        <div className="max-w-[min(42rem,86%)] whitespace-pre-wrap break-words rounded-panel border border-brand bg-brand px-4 py-3 text-body text-on-accent shadow-soft">
           {message.content}
         </div>
       </motion.div>
@@ -373,7 +373,7 @@ function MessageRenderer({ message }: { message: ChatMessage }) {
   }
   return (
     <motion.div variants={fadeInUp} initial="initial" animate="animate" className="flex max-w-[min(48rem,92%)] flex-col gap-2">
-      <div className="whitespace-pre-wrap break-words rounded-panel border border-border bg-bg px-4 py-3 text-body leading-relaxed text-secondary shadow-soft">
+      <div className="whitespace-pre-wrap break-words rounded-panel border border-border bg-bg px-4 py-3 text-body leading-relaxed text-text-secondary shadow-soft">
         {renderAssistantContent(message.content)}
       </div>
       {message.tool_calls?.map((trace, index) => <ToolTraceRow key={`${trace.name}-${index}`} trace={trace} />)}
@@ -387,19 +387,19 @@ function MessageRenderer({ message }: { message: ChatMessage }) {
 
 function renderAssistantContent(content: string) {
   return content.split('**').map((part, index) => (
-    index % 2 ? <strong key={`${part}-${index}`} className="font-semibold text-primary">{part}</strong> : <span key={`${part}-${index}`}>{part}</span>
+    index % 2 ? <strong key={`${part}-${index}`} className="font-semibold text-text-primary">{part}</strong> : <span key={`${part}-${index}`}>{part}</span>
   ));
 }
 
 function ToolTraceRow({ trace }: { trace: NonNullable<ChatMessage['tool_calls']>[number] }) {
   return (
     <details className="max-w-full rounded-panel border border-border bg-surface p-3 text-body">
-      <summary className="flex min-w-0 cursor-pointer items-center gap-2 text-secondary">
+      <summary className="flex min-w-0 cursor-pointer items-center gap-2 text-text-secondary">
         <Badge tone={toneToBadge(trace.status)}>도구</Badge>
-        <code className="min-w-0 truncate font-mono text-caption text-primary">{trace.name}</code>
+        <code className="min-w-0 truncate font-mono text-caption text-text-primary">{trace.name}</code>
       </summary>
       {trace.args && (
-        <code className="mt-3 block max-h-48 overflow-auto whitespace-pre-wrap break-words rounded-control border border-border bg-bg p-3 font-mono text-caption text-secondary">
+        <code className="mt-3 block max-h-48 overflow-auto whitespace-pre-wrap break-words rounded-control border border-border bg-bg p-3 font-mono text-caption text-text-secondary">
           {compactToolArgs(trace.args)}
         </code>
       )}
@@ -423,7 +423,7 @@ function ActionSelectCard({ actions }: { actions: NonNullable<ChatMessage['actio
   return (
     <div className="grid gap-3 rounded-panel border border-border bg-surface p-4" data-testid="action-card">
       <div className="flex min-w-0 items-center justify-between gap-3">
-        <p className="text-body font-semibold text-primary">복구 조치 제안</p>
+        <p className="text-body font-semibold text-text-primary">복구 조치 제안</p>
         {locked && <Badge tone="success">실행됨</Badge>}
       </div>
       <div className="grid gap-2">
@@ -448,10 +448,10 @@ function ActionSelectCard({ actions }: { actions: NonNullable<ChatMessage['actio
               />
               <span className="grid min-w-0 flex-1 gap-1">
                 <span className="flex min-w-0 flex-wrap items-center gap-2">
-                  <span className="min-w-0 truncate font-semibold text-primary">{option.label}</span>
+                  <span className="min-w-0 truncate font-semibold text-text-primary">{option.label}</span>
                   <Badge tone={toneToBadge(option.risk)}>위험도</Badge>
                 </span>
-                <span className="text-label text-secondary">{option.impact || '영향 정보 없음'}</span>
+                <span className="text-label text-text-secondary">{option.impact || '영향 정보 없음'}</span>
               </span>
             </label>
           );
@@ -550,7 +550,7 @@ function ContextSummary({ context }: { context: AiChatContext }) {
     <div className="rounded-panel border border-border bg-bg p-3">
       <div className="mb-2 flex items-center gap-2">
         <Badge tone="info">컨텍스트</Badge>
-        <p className="text-label text-secondary">전송 시 이 리소스 식별자가 함께 전달됩니다</p>
+        <p className="text-label text-text-secondary">전송 시 이 리소스 식별자가 함께 전달됩니다</p>
       </div>
       <KeyValueList items={items} />
     </div>
@@ -565,7 +565,7 @@ function AiConfigurationNotice({ issue, pathFor, onRetry }: { issue: AiIssue; pa
       description={(
         <span>
           {issue.description}
-          {issue.detail && <span className="mt-2 block break-words text-caption text-muted">{issue.detail}</span>}
+          {issue.detail && <span className="mt-2 block break-words text-caption text-text-muted">{issue.detail}</span>}
         </span>
       )}
       action={(
@@ -665,7 +665,7 @@ function conversationStatusMeta(status: string): { label: string; tone: BadgeTon
   if (key === 'waiting' || key === 'pending') return { label: '분석 중', tone: 'info', dotClass: 'bg-info motion-safe:animate-pulse' };
   if (key === 'failed') return { label: '실패', tone: 'danger', dotClass: 'bg-danger' };
   if (key === 'completed' || key === 'idle' || key === 'ready' || key === 'active') return { label: key === 'ready' ? '준비' : '완료', tone: 'success', dotClass: 'bg-success' };
-  return { label: status || '미확인', tone: 'neutral', dotClass: 'bg-muted' };
+  return { label: status || '미확인', tone: 'neutral', dotClass: 'bg-text-muted' };
 }
 
 function toneToBadge(tone: Tone): BadgeTone {

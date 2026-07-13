@@ -56,16 +56,16 @@ export function DrilldownHeatmap({
   const presenceMode = reducedMotion ? 'sync' : 'popLayout';
   return (
     <div className="grid gap-4">
-      <nav aria-label="히트맵 경로" className="flex min-w-0 flex-wrap items-center gap-2 text-label text-muted">
+      <nav aria-label="히트맵 경로" className="flex min-w-0 flex-wrap items-center gap-2 text-label text-text-muted">
         {breadcrumb.map((item, index) => {
           const last = index === breadcrumb.length - 1;
           return (
             <span key={item.id} className="inline-flex min-w-0 items-center gap-2">
               {index > 0 && <span>/</span>}
               {last || !item.onClick ? (
-                <span className="min-w-0 truncate text-secondary">{item.label}</span>
+                <span className="min-w-0 truncate text-text-secondary">{item.label}</span>
               ) : (
-                <button type="button" className="min-w-0 truncate font-semibold text-accent hover:text-accent-hover" onClick={item.onClick}>
+                <button type="button" className="min-w-0 truncate font-semibold text-brand hover:text-brand-hover" onClick={item.onClick}>
                   {item.label}
                 </button>
               )}
@@ -94,8 +94,8 @@ export function DrilldownHeatmap({
         >
           <span className="flex min-w-0 flex-wrap items-center justify-between gap-3 rounded-control border border-border bg-raised px-3 py-2">
             <span className="grid min-w-0 gap-1">
-              <span className="min-w-0 truncate text-body font-semibold text-primary">{zoomContext.label}</span>
-              {zoomContext.meta && <span className="flex min-w-0 flex-wrap gap-x-3 gap-y-1 text-caption text-secondary">{zoomContext.meta}</span>}
+              <span className="min-w-0 truncate text-body font-semibold text-text-primary">{zoomContext.label}</span>
+              {zoomContext.meta && <span className="flex min-w-0 flex-wrap gap-x-3 gap-y-1 text-caption text-text-secondary">{zoomContext.meta}</span>}
             </span>
             <span className="flex shrink-0 items-center gap-1">
               {zoomContext.badge}
@@ -172,16 +172,16 @@ function TileGrid({
           >
             <span aria-hidden className={cx('absolute inset-y-0 left-0 w-1', healthBarClass(tile.health, tile.pulse))} />
             <span className="flex min-w-0 items-start justify-between gap-3">
-              <span className="min-w-0 truncate text-body font-semibold text-primary">{tile.label}</span>
+              <span className="min-w-0 truncate text-body font-semibold text-text-primary">{tile.label}</span>
               <span className="flex shrink-0 items-center gap-1">
                 {tile.badge}
                 <HealthBadge health={tile.health} />
               </span>
             </span>
             <span className="mt-3 grid gap-2">
-              {tile.meta && <span className="grid gap-1.5 text-caption text-secondary">{tile.meta}</span>}
+              {tile.meta && <span className="grid gap-1.5 text-caption text-text-secondary">{tile.meta}</span>}
               {tile.actionLabel && (
-                <span className="inline-flex w-fit items-center rounded-control border border-border bg-bg px-2 py-1 text-caption font-semibold text-secondary transition-colors group-hover:border-accent/40 group-hover:text-accent">
+                <span className="inline-flex w-fit items-center rounded-control border border-border bg-bg px-2 py-1 text-caption font-semibold text-text-secondary transition-colors group-hover:border-brand/40 group-hover:text-brand">
                   {tile.actionLabel}
                 </span>
               )}

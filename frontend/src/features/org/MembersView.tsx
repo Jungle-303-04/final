@@ -29,7 +29,7 @@ export default function MembersView() {
       cell: (user) => (
         <span className="flex min-w-0 items-center gap-3">
           <Avatar name={user.email} />
-          <span className="min-w-0 truncate font-semibold text-primary">{user.email}</span>
+          <span className="min-w-0 truncate font-semibold text-text-primary">{user.email}</span>
         </span>
       ),
     },
@@ -117,7 +117,7 @@ export default function MembersView() {
 
 function Avatar({ name }: { name: string }) {
   return (
-    <span className="grid h-8 w-8 shrink-0 place-items-center rounded-control border border-border bg-raised text-label font-semibold text-secondary" aria-hidden="true">
+    <span className="grid h-8 w-8 shrink-0 place-items-center rounded-control border border-border bg-raised text-label font-semibold text-text-secondary" aria-hidden="true">
       {initials(name)}
     </span>
   );
@@ -130,7 +130,7 @@ function initials(value: string) {
 
 function formatGroups(groups: string[], groupNames: Map<string, string>): ReactNode {
   const labels = groups.map((groupId) => groupNames.get(groupId) ?? groupId);
-  if (!labels.length) return <span className="text-muted">없음</span>;
+  if (!labels.length) return <span className="text-text-muted">없음</span>;
   return <span className="truncate">{labels.join(', ')}</span>;
 }
 

@@ -359,8 +359,8 @@ export default function MetricsView() {
             <div className="flex min-w-0 flex-col gap-3 md:flex-row md:items-center">
               <div className="flex min-w-0 flex-wrap items-center gap-2">
                 <Badge tone="info">{subject || 'resource'}</Badge>
-                {namespace && <code className="min-w-0 truncate rounded-control bg-bg px-2 py-1 font-mono text-caption text-secondary">{namespace}</code>}
-                {subjectName && <code className="min-w-0 truncate rounded-control bg-bg px-2 py-1 font-mono text-caption text-secondary">{subjectName}</code>}
+                {namespace && <code className="min-w-0 truncate rounded-control bg-bg px-2 py-1 font-mono text-caption text-text-secondary">{namespace}</code>}
+                {subjectName && <code className="min-w-0 truncate rounded-control bg-bg px-2 py-1 font-mono text-caption text-text-secondary">{subjectName}</code>}
               </div>
               {contextPreset && (
                 <div className="md:ml-auto">
@@ -377,7 +377,7 @@ export default function MetricsView() {
           <Card className="border-warning/40 bg-warning/10 p-3">
             <div className="flex flex-col gap-1 md:flex-row md:items-center md:justify-between">
               <p className="text-body font-semibold text-warning">수집 지연</p>
-              <p className="text-label text-secondary">실시간 스트림이 닫혀 있어 스냅샷 데이터로 화면을 유지합니다</p>
+              <p className="text-label text-text-secondary">실시간 스트림이 닫혀 있어 스냅샷 데이터로 화면을 유지합니다</p>
             </div>
           </Card>
         )}
@@ -431,8 +431,8 @@ export default function MetricsView() {
                     <RowShell key={widget.widget_id}>
                       <Badge tone="info">{widget.kind}</Badge>
                       <div className="min-w-0 flex-1">
-                        <p className="truncate text-body font-semibold text-primary">{widget.title}</p>
-                        <code className="mt-1 block truncate font-mono text-caption text-muted">{preset?.name ?? widget.query_preset_id}</code>
+                        <p className="truncate text-body font-semibold text-text-primary">{widget.title}</p>
+                        <code className="mt-1 block truncate font-mono text-caption text-text-muted">{preset?.name ?? widget.query_preset_id}</code>
                       </div>
                       <div className="flex shrink-0 flex-wrap items-center gap-2">
                         <Button
@@ -710,7 +710,7 @@ function InlineNotice({ tone, children, action }: { tone: StatTone; children: Re
       <Badge tone={tone === 'success' ? 'success' : tone === 'warning' ? 'warning' : tone === 'danger' ? 'danger' : tone === 'info' ? 'info' : 'neutral'}>
         {tone === 'danger' ? '오류' : tone === 'success' ? '완료' : tone === 'warning' ? '주의' : '정보'}
       </Badge>
-      <div className="min-w-0 flex-1 text-secondary">{children}</div>
+      <div className="min-w-0 flex-1 text-text-secondary">{children}</div>
       {action && <div className="flex shrink-0 items-center gap-2">{action}</div>}
     </div>
   );
@@ -812,8 +812,8 @@ function QueryCardRow({ card, onRetry, onExpandRange }: { card: QueryCard; onRet
     <RowShell testId="query-card">
       <StatusChip status={commandStatus(status)} label={commandStatusLabel(status)} />
       <div className="min-w-0 flex-1">
-        <code className="block truncate font-mono text-caption text-primary">{card.promql}</code>
-        <p className="mt-1 text-caption text-muted">범위 {fmtRange(card.rangeSeconds)}</p>
+        <code className="block truncate font-mono text-caption text-text-primary">{card.promql}</code>
+        <p className="mt-1 text-caption text-text-muted">범위 {fmtRange(card.rangeSeconds)}</p>
       </div>
       <div className="min-w-0 md:text-right">
         {summary && !zeroResult && (
@@ -828,7 +828,7 @@ function QueryCardRow({ card, onRetry, onExpandRange }: { card: QueryCard; onRet
         )}
         {status === 'completed' && !summary && <p className="text-label font-medium text-success">{commandResultMessage(result) ?? '완료'}</p>}
         {failMessage && <p className="text-caption font-medium text-danger">{failMessage}</p>}
-        {!isTerminal(status) && card.commandId && <p className="text-caption text-muted">실행 대기 중</p>}
+        {!isTerminal(status) && card.commandId && <p className="text-caption text-text-muted">실행 대기 중</p>}
       </div>
       <div className="flex shrink-0 flex-wrap items-center gap-2">
         {zeroResult && expandedRange && (
