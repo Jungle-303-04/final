@@ -1,13 +1,26 @@
 from __future__ import annotations
 
+import importlib.util
+import sys
+from pathlib import Path
+from types import ModuleType
 from typing import Any
 
 import pytest
-from scripts.verify_first_deploy_backup import (
-    LiveVolume,
-    live_volume_from_documents,
-    verify_snapshot_document,
+
+ROOT = Path(__file__).resolve().parents[1]
+SPEC = importlib.util.spec_from_file_location(
+    "verify_first_deploy_backup", ROOT / "scripts/verify_first_deploy_backup.py"
 )
+assert SPEC is not None and SPEC.loader is not None
+verify_first_deploy_backup = importlib.util.module_from_spec(SPEC)
+sys.modules[SPEC.name] = verify_first_deploy_backup
+SPEC.loader.exec_module(verify_first_deploy_backup)
+assert isinstance(verify_first_deploy_backup, ModuleType)
+
+LiveVolume = verify_first_deploy_backup.LiveVolume
+live_volume_from_documents = verify_first_deploy_backup.live_volume_from_documents
+verify_snapshot_document = verify_first_deploy_backup.verify_snapshot_document
 
 SOURCE_SHA = "a" * 40
 SNAPSHOT_ID = "snap-0123456789abcdef0"
