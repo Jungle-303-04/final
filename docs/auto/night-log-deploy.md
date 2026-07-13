@@ -39,3 +39,13 @@
   회수한다.
 - [06:10 KST] [키 보존] 사람 지시에 따라 기존 키는 삭제·회전·교체하지 않았다.
   배포 작업에서도 키 값을 출력하거나 기록하지 않는다.
+- [06:21 KST] [복구 리허설] `snap-0bebb31ef7c909f9c`이 `completed` 100%가 된 뒤
+  `ap-northeast-2b`에 임시 EBS 볼륨을 복원했다. 첫 시도는 이미지 entrypoint를 우회해
+  PostgreSQL이 root 실행을 거부했고, 두 번째 시도는 실제 DB role이 기본값 `postgres`가
+  아니라 `service`여서 종료됐다. 두 시도 모두 Pod·PVC·PV·EBS 볼륨을 즉시 삭제했다.
+  세 번째 시도는 live에서 읽은 `service/service`와 이미지 entrypoint를 사용했다.
+  복원본은 `default_transaction_read_only=on`, `workspaces=1`, `audit_log=41490`,
+  `outbox=13160`이었다. snapshot에 restore rehearsal·backup kind·PostgreSQL PVC 증거
+  태그를 기록하고 임시 Pod·PVC·PV·EBS 볼륨을 모두 삭제했다. 운영 DB는 변경하지 않았다.
+  최종 배포 SHA가 아직 이동 중이므로 `opsia:source-sha` 태그는 첫 수동 배포 대상 SHA를
+  확정할 때 기록한다.
