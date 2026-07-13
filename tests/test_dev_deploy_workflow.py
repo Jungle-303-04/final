@@ -25,12 +25,22 @@ def steps_by_name() -> dict[str, dict]:
 
 def test_deploy_only_follows_a_successful_dev_push_gate_with_exact_opt_in() -> None:
     document = workflow()
-    assert document["on"] == {"workflow_run": {"workflows": ["Dev Gate"], "types": ["completed"]}}
+    triggers = document["on"]
+    assert triggers["workflow_run"] == {"workflows": ["Dev Gate"], "types": ["completed"]}
+    assert set(triggers["workflow_dispatch"]["inputs"]) == {
+        "source_sha",
+        "backup_snapshot_id",
+        "previous_release_sha",
+        "confirmation",
+    }
     condition = deploy_job()["if"]
     assert "workflow_run.conclusion == 'success'" in condition
     assert "workflow_run.event == 'push'" in condition
     assert "workflow_run.head_branch == 'dev'" in condition
     assert "vars.AWS_DEV_DEPLOY_ENABLED == '1'" in condition
+    assert "github.event_name == 'workflow_dispatch'" in condition
+    assert "github.ref == 'refs/heads/dev'" in condition
+    assert "inputs.confirmation == 'FIRST_DEPLOY'" in condition
     assert workflow()["concurrency"] == {
         "group": "dev-deploy",
         "cancel-in-progress": False,
@@ -39,14 +49,39 @@ def test_deploy_only_follows_a_successful_dev_push_gate_with_exact_opt_in() -> N
 
 def test_deploy_checks_out_the_exact_tree_that_passed_the_gate() -> None:
     checkout = steps_by_name()["Check out gated dev SHA"]
-    assert checkout["with"]["ref"] == "${{ github.event.workflow_run.head_sha }}"
+    source_sha = (
+        "${{ github.event_name == 'workflow_dispatch' && inputs.source_sha || "
+        "github.event.workflow_run.head_sha }}"
+    )
+    assert checkout["with"]["ref"] == source_sha
     assert checkout["with"]["persist-credentials"] is False
-    assert deploy_job()["env"]["SOURCE_SHA"] == "${{ github.event.workflow_run.head_sha }}"
+    assert deploy_job()["env"]["SOURCE_SHA"] == source_sha
     validation = steps_by_name()["Validate non-secret deployment inputs"]["run"]
     assert 'test "$(git rev-parse HEAD)" = "${SOURCE_SHA}"' in validation
     assert '[[ "${ECR_REPOSITORY}" =~ ^[a-z0-9]+([._/-][a-z0-9]+)*$ ]]' in validation
     assert '[[ "${BASE_URL}" =~ ^https://[^[:space:]]+$ ]]' in validation
     assert steps_by_name()["Install deployment dependencies"]["run"] == "uv sync --frozen"
+
+
+def test_manual_first_deploy_requires_exact_gate_backup_and_previous_release_proofs() -> None:
+    document = workflow()
+    steps = steps_by_name()
+    job = deploy_job()
+
+    assert document["permissions"]["actions"] == "read"
+    gate_proof = steps["Verify manual gated SHA"]["run"]
+    assert "git ls-remote origin refs/heads/dev" in gate_proof
+    assert 'test "${remote_dev}" = "${SOURCE_SHA}"' in gate_proof
+    assert "/actions/workflows/dev-gate.yml/runs" in gate_proof
+    assert "select(.head_sha == env.SOURCE_SHA)" in gate_proof
+    backup_proof = steps["Verify manual first-deploy backup"]["run"]
+    assert "verify_first_deploy_backup.py" in backup_proof
+    assert 'test -n "${FIRST_DEPLOY_SNAPSHOT_ID}"' in backup_proof
+    assert "get configmap opsia-deploy-status" in backup_proof
+    capture = steps["Capture current digest rollback plan"]["run"]
+    assert 'previous_sha="${FIRST_DEPLOY_PREVIOUS_SHA}"' in capture
+    assert job["env"]["FIRST_DEPLOY_SNAPSHOT_ID"] == "${{ inputs.backup_snapshot_id }}"
+    assert job["env"]["FIRST_DEPLOY_PREVIOUS_SHA"] == "${{ inputs.previous_release_sha }}"
 
 
 def test_deploy_orders_auth_migration_rollout_smoke_and_status_recording() -> None:
