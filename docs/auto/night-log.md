@@ -2367,3 +2367,22 @@ target preflight·register 네 함수와 strict Zod 계약을 claim했다. 1회�
 - 4조건: merge-tree clean/tree `428481b5a7d0bfcd0dc54c1a604c99fb2ca1ed34`,
   파일 삭제·소유권 밖·frozen·gateway 계약 변경 0건, `85dae710b`·`de9e600c7`의
   `origin/dev` ancestor exit 0. J 배포 실행은 0건이다.
+
+## 2026-07-13 18:48 KST — [프론트] dev 정기 흡수·감사 payload 강제색 보강
+
+- `4a8264081`은 프론트 HEAD와 `origin/dev@de9e600c7`을 no-ff로 통합했다.
+  `docs/auto/night-log.md`의 단일 충돌은 프론트 7개·백엔드 6개 섹션을 시각의
+  비감소 순서로 각각 한 번씩 보존했으며 conflict marker 0건이다. 통합 후
+  `origin/dev` ancestor exit 0과 원격 프론트 브랜치의 HEAD 포함을 확인했다.
+- RED `5dbfba927`은 실제 감사 `payload_summary`를 키보드로 펼치는 320px 강제색
+  장면을 추가해 payload 목록 경계가 `0px`인 문제를 고정했다. GREEN `55670307d`는
+  해당 목록에 강제색 전용 `CanvasText` 경계를 추가하고 기존 API·제품 상태 계약은
+  변경하지 않았다.
+- `npm run check` PASS: TypeScript·ESLint, Vitest 118 files / 847 tests,
+  design guard 346 files, shadcn source audit 482 previews, Vite build 14,539 modules.
+  `npm run visual-product` PASS: 44 isolated scenarios, exact API request counts,
+  unexpected feature network/WebSocket 0건. CLS는 Home `0.004188`, Resources
+  `0.004167`, Issues `0.004202`로 모두 0.1 예산 이하다.
+- 시각 증거:
+  `references/ui-layer-lab/output/playwright/product-issues-authenticated-audit-payload-reflow-320-forced-colors.png`.
+  RED/GREEN 커밋 모두 push 후 `origin/woonyong/ui-layer-lab` ancestor exit 0을 확인했다.
