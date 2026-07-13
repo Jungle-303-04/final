@@ -335,7 +335,7 @@ GitHub Actions에서 바로 실행하려면 `.github/workflows/release-flow-smok
 
 workflow는 Actions 목록에서 `Release Flow Smoke / <environment> / <plan>` 형태의 run name을 사용하고, `scripts/release_flow_smoke.py --production-preflight --ci --ci-artifacts-dir artifacts/release-flow`를 실행한다. smoke step은 먼저 GitHub step summary, output, annotation, JSON/JUnit/Markdown artifact를 남기고, artifact upload가 끝난 뒤 `release_smoke_ok` output이 `true`가 아니면 job을 실패시킨다. 같은 `github_environment` 값으로 실행된 smoke job은 `release-flow-smoke-<environment>` concurrency group에 묶이며, 이미 진행 중인 smoke를 취소하지 않고 다음 job을 대기시킨다.
 
-workflow는 smoke를 실행하기 전에 input을 검증한다. `production_preflight_run_limit`은 1~500, `request_timeout_seconds`는 1~120초 숫자, `retry_attempts`는 1~10 정수, `retry_delay_seconds`는 0~30초 숫자, `artifact_retention_days`는 GitHub artifact 제한에 맞춰 1~90 사이의 정수여야 한다. `artifact_name`은 비어 있으면 안 되고 GitHub artifact 이름에서 금지된 문자(`\`, `/`, `:`, `*`, `?`, `"`, `<`, `>`, `|`)를 포함하면 안 된다. 범위를 벗어나면 smoke를 시작하지 않고 GitHub annotation으로 잘못된 입력을 표시한다. `alert_preflight`를 켜면 smoke가 enabled alert channel을 찾아 validation alert를 보내며, `alert_severity`는 `info`, `warning`, `critical` 중 하나여야 한다. 이 옵션은 실제 Slack/webhook/온콜 테스트 메시지를 보낼 수 있으므로 기본값은 `false`다.
+workflow는 smoke를 실행하기 전에 input을 검증한다. `production_preflight_run_limit`은 1~500, `request_timeout_seconds`는 1~120초 숫자, `retry_attempts`는 1~10 정수, `retry_delay_seconds`는 0~30초 숫자, `artifact_retention_days`는 GitHub artifact 제한에 맞춰 1~90 사이의 정수여야 한다. `artifact_name`은 비어 있으면 안 되고 GitHub artifact 이름에서 금지된 문자(`\`, `/`, `:`, `*`, `?`, `"`, `<`, `>`, `|`)를 포함하면 안 된다. 범위를 벗어나면 smoke를 시작하지 않고 GitHub annotation으로 잘못된 입력을 표시한다. `alert_preflight`를 켜면 smoke가 enabled alert channel을 찾아 validation alert를 보내며, `alert_severity`는 `info`, `warning`, `critical` 중 하나여야 한다. 이 옵션은 실제 외부 알림 채널/webhook/온콜 테스트 메시지를 보낼 수 있으므로 기본값은 `false`다.
 
 `live_preflight`를 켜면 workflow가 `--live-preflight`를 함께 실행해 live release readiness gate를 확인한다. 이 경로는 `/release-readiness`까지만 호출하고 `/release-plans/start`나 GitOps dispatch는 호출하지 않는다. `live_environment`와 `live_namespace`는 Kubernetes DNS label 형식이어야 하며, `live_change_ticket`은 비어 있으면 안 된다.
 
@@ -430,7 +430,7 @@ python scripts/validate_release_flow_production_readiness.py
 
 실제 운영 secret까지 확인하려면 환경 변수나 GitHub Environment secret을 넣고 `--require-runtime-config`를 붙인다.
 
-알림 채널이 실제로 validation alert를 받을 수 있는지 확인하려면 `--alert-preflight`를 붙인다. 이 모드는 enabled alert channel 중 요청 severity를 받을 수 있는 채널을 골라 `/alert-channels/test`를 호출하므로, 실제 Slack/webhook/온콜 테스트 메시지가 발송될 수 있다.
+알림 채널이 실제로 validation alert를 받을 수 있는지 확인하려면 `--alert-preflight`를 붙인다. 이 모드는 enabled alert channel 중 요청 severity를 받을 수 있는 채널을 골라 `/alert-channels/test`를 호출하므로, 실제 외부 알림 채널/webhook/온콜 테스트 메시지가 발송될 수 있다.
 
 ```bash
 API_BASE_URL="https://k8s.woonyong.org/api" \
