@@ -167,6 +167,16 @@ def test_service_and_console_images_share_the_gated_source_sha_and_digest_releas
         f'--managed-image "{CONSOLE_IMAGE_BASELINE}"'
         in steps["Capture current digest rollback plan"]["run"]
     )
+    assert (
+        '--verified-live-image "183548421506.dkr.ecr.ap-northeast-2.amazonaws.com/'
+        f'kubernetes-ops-service:c704729c1b={SERVICE_IMAGE_BASELINE}"'
+        in steps["Capture current digest rollback plan"]["run"]
+    )
+    assert (
+        '--verified-live-image "183548421506.dkr.ecr.ap-northeast-2.amazonaws.com/'
+        f'kubernetes-ops-console:c704729c1b={CONSOLE_IMAGE_BASELINE}"'
+        in steps["Capture current digest rollback plan"]["run"]
+    )
     assert source.count("rollout_image_digest.py") == 2
     assert source.count("revert_image_digests.py") == 2
 
