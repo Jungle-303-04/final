@@ -1382,3 +1382,13 @@ JsonMap, AbortSignal, ID 검증을 완료 앵커 전까지 제품 화면에서 �
   design guard 314 files, shadcn 482 previews, Vite production build 14,512 modules.
 - 시각 게이트: `npm run visual-product` PASS — 인증·Home·Resources·셸·상태 화면의
   light/dark, 320px reflow, 200% text resize, forced-colors, en/ko를 포함한 34 scenarios.
+
+## 2026-07-13 13:22 KST — [프론트] P2 VP-002 진입조건 검증·API claim
+
+- `git merge-base --is-ancestor 66cbe8dec7cb478f5b0774bb5e7bbaab5f616894 origin/dev`
+  결과 exit 0. `git cat-file -e origin/dev:docs/backend-f-progress.md` 결과 exit 0.
+- canonical 실물은 `AUDIT_TIMELINE_PATH = "/audit/timeline"`,
+  `AuditTimelineResponse{items,limit,has_more,next_cursor}`이며 route는 필수
+  `correlation_id`, 선택 `cursor`, `limit` 1~200을 받는다.
+- VP-002를 `직결`로 전환하고 `APIQ-030 getAuditTimeline`을 단독 claim했다.
+  workspace/cluster 접근 제어와 시간순 keyset 정렬은 서버 권위이며 프론트 재필터·재정렬은 금지한다.
