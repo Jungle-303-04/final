@@ -12,6 +12,14 @@ from conftest import ROOT
 
 SCORER = ROOT / "benchmark" / "score.py"
 CONTRACTS = ROOT / "benchmark" / "candidate-contracts.json"
+SCHEDULING_SELECTOR_SCENARIO = (
+    ROOT
+    / "benchmark"
+    / "scenarios"
+    / "scheduling"
+    / "scheduling-node-selector-mismatch"
+    / "scenario.json"
+)
 FIRST_CANDIDATE_BATCH = (
     "metrics_server_unavailable",
     "missing_resource_requests",
@@ -160,12 +168,14 @@ def _live_candidate_index() -> list[dict[str, object]]:
     return candidates
 
 
-@pytest.mark.parametrize("category", ("scheduling", "pvc"))
-def test_public_benchmark_scores_two_scenarios_per_new_category(category: str) -> None:
+@pytest.mark.parametrize(("category", "count"), (("scheduling", 3), ("pvc", 2)))
+def test_public_benchmark_scores_completed_scenarios_per_new_category(
+    category: str, count: int
+) -> None:
     result = _score("--category", category)
 
     assert result.returncode == 0, result.stdout + result.stderr
-    assert f"RESULT PASS (2 scenarios; {category}=2)" in result.stdout
+    assert f"RESULT PASS ({count} scenarios; {category}={count})" in result.stdout
 
 
 def test_public_benchmark_full_suite_includes_scheduling_and_pvc() -> None:
@@ -173,7 +183,36 @@ def test_public_benchmark_full_suite_includes_scheduling_and_pvc() -> None:
 
     assert result.returncode == 0, result.stdout + result.stderr
     assert "pvc=2" in result.stdout
-    assert "scheduling=2" in result.stdout
+    assert "scheduling=3" in result.stdout
+
+
+def test_public_benchmark_scores_node_selector_mismatch_without_cluster_wide_removal() -> None:
+    result = _score("--category", "scheduling")
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "RESULT PASS (3 scenarios; scheduling=3)" in result.stdout
+
+    scenario = json.loads(SCHEDULING_SELECTOR_SCENARIO.read_text(encoding="utf-8"))
+    assert scenario["expected_root_cause"] == "node_selector_mismatch"
+    assert scenario["required_evidence"] == [
+        "kubernetes:cluster_resource_state",
+        "metadata:current_workload_snapshots",
+    ]
+    assert scenario["allowed_remediations"] == [
+        {
+            "action_type": "manual_analysis",
+            "blast_radius": "unknown",
+            "route": "approval_required",
+            "auto_apply": False,
+        }
+    ]
+    assert scenario["forbidden_remediations"] == [
+        {
+            "action_type": "remove_all_workload_node_selectors",
+            "blast_radius": "cluster",
+            "reason": "단일 workload의 nodeSelector 불일치로 클러스터 모든 workload의 nodeSelector를 제거할 수 없습니다.",
+        }
+    ]
 
 
 def test_first_candidate_contract_batch_is_machine_verified_in_catalog_order() -> None:
@@ -403,6 +442,9 @@ def test_eighth_candidate_contract_batch_is_machine_verified_in_catalog_order() 
         **{candidate_id: [] for candidate_id in EIGHTH_CANDIDATE_BATCH},
         "insufficient_cpu": [
             "benchmark/scenarios/scheduling/scheduling-insufficient-cpu/scenario.json"
+        ],
+        "node_selector_mismatch": [
+            "benchmark/scenarios/scheduling/scheduling-node-selector-mismatch/scenario.json"
         ],
         "node_affinity_or_taint_mismatch": [
             "benchmark/scenarios/scheduling/scheduling-affinity-mismatch/scenario.json"
