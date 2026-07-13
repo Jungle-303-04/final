@@ -30,6 +30,12 @@ export {
   type GetRemediationBundleOptions,
 } from "../rca-bundle";
 export {
+  getAuditTimeline,
+  AUDIT_TIMELINE_DEFAULT_LIMIT,
+  AUDIT_TIMELINE_MAX_LIMIT,
+  type GetAuditTimelineOptions,
+} from "../audit-timeline";
+export {
   rcaTimelineItemSchema,
   rcaTimelineSchema,
   type RcaTimeline,
@@ -81,3 +87,9 @@ export {
   type RemediationBundleRemediation,
   type RemediationBundleResponse,
 } from "../rca-bundle-schemas";
+export {
+  auditTimelineItemSchema,
+  auditTimelineResponseSchema,
+  type AuditTimelineItem,
+  type AuditTimelineResponse,
+} from "../audit-timeline-schemas";
