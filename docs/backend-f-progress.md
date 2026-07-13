@@ -310,7 +310,7 @@ Bundle route는 200을 반환한다.
 
 ### BQ-015 — `.remediation.yaml` 소스 계약
 
-- 상태: in_progress, gateway 계약 lock 비대상
+- 상태: landed, gateway 계약 lock 비대상
 - 담당 lane: `codex/remediation-source-contract`
 - 착수 기준: `origin/dev@d385ae81f915e200fa6256789461ce268a431291`
 - 전체 게이트 baseline: Ruff lint/format PASS, import-linter 2 kept/0 broken,
@@ -319,4 +319,17 @@ Bundle route는 200을 반환한다.
 - 범위: 저장소 소유자가 선언한 helm-values `imageTagPath`, kustomize
   `images[].newTag`, raw image scalar, replica, 제한된 probe 필드만 patch하며 미선언 필드는
   `unsupported`로 종료한다. 파일·필드 추측은 금지한다.
-- 앵커: canonical 착륙·4조건 재증명 후 기록
+- canonical merge: `130e6755dcd4912c0d2e43ffdcc32b4082c74b7c`
+- 코드·계약 문서 HEAD: `1300a5fe64c03aa05fe1f8d9cb94a92c2b254962`
+- 계약 파일: `docs/spec/remediation-source-contract.md`; 저장소 root의
+  `.remediation.yaml`은 `remediation.opsia.dev/v1alpha1` strict schema를 사용한다.
+- SCM은 `expectedBaseSha`에서 계약과 선언 source를 읽는다. missing/malformed/미선언,
+  raw container redirect, Helm/Kustomize repository·digest 변경은 branch·PUT·PR 전에
+  `unsupported`로 종료한다.
+- 기존 PR 재전달은 계약, render entrypoint, 선언 target 중 하나라도 base에서 바뀌면
+  재사용하지 않는다. raw/Helm/Kustomize adapter와 미선언 차단 scorer는 6/6 PASS다.
+- 전체 게이트: Ruff lint/format PASS, import-linter 2 kept/0 broken,
+  pytest `1865 passed, 3 skipped`; manifest management 69, target 20.
+- 기존 권위 patch scorer 6/6, source-contract scorer 6/6. 신규 route·DB 변경은 없다.
+
+계약 완성: RemediationSourceContract + declared source adapters (1300a5fe64c03aa05fe1f8d9cb94a92c2b254962) [green]
