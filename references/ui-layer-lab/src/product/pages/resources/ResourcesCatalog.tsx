@@ -76,7 +76,10 @@ export function ResourcesCatalog({
                     return (
                       <Button
                         aria-current={selected ? "page" : undefined}
-                        aria-label={`${label} ${countLabel}`}
+                        aria-label={t("resources.catalog.itemAria", {
+                          count: countLabel,
+                          label,
+                        })}
                         className="w-full justify-between"
                         key={item.resourceType}
                         onClick={() => onSelect(item.resourceType)}

@@ -42,6 +42,7 @@ describe("ResourcesCatalog responsive disclosure", () => {
       .toBe("false");
     expect(screen.getByRole("button", { name: "Cluster" }).getAttribute("aria-expanded"))
       .toBe("false");
+    expect(screen.getByRole("button", { name: "Services, 3개" })).toBeTruthy();
 
     rerender(
       <I18nProvider navigatorLanguage="ko-KR" storage={null}>
@@ -73,6 +74,6 @@ describe("ResourcesCatalog responsive disclosure", () => {
     expect(description.className).toContain("min-h-8");
     expect(description.className).toContain("line-clamp-2");
     expect(screen.getByRole("region", { name: "Resource type list" })).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Services 3" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Services, 3 resources" })).toBeTruthy();
   });
 });
