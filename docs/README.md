@@ -354,6 +354,7 @@ Target / Telemetry 선형 작업 문서는 아래에 있다.
 - [spec/frontend/reference-feature-inventory](spec/frontend/reference-feature-inventory.md)
 - [spec/frontend/reference-contract-map](spec/frontend/reference-contract-map.md)
 - [spec/frontend/reference-porting-contract](spec/frontend/reference-porting-contract.md)
+- [spec/frontend/theme-first-paint-evidence-20260713](spec/frontend/theme-first-paint-evidence-20260713.md)
 - [spec/frontend/topology-engine](spec/frontend/topology-engine.md) — archived, 현재 구현 참조 금지
 - [spec/frontend/topology-message-action-schema](spec/frontend/topology-message-action-schema.md) — archived, 현재 구현 참조 금지
 - [spec/frontend/topology-visual-motion-tokens](spec/frontend/topology-visual-motion-tokens.md) — archived, 현재 구현 참조 금지
