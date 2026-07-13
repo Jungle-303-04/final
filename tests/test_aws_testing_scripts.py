@@ -294,7 +294,11 @@ def test_aws_deploy_builds_and_patches_console_frontend_image() -> None:
     assert "kubeheal-console" in script
     assert "newName: ${console_image_repo}" in script
     assert "newTag: ${console_image_tag}" in script
-    assert "image: kubeheal-console:latest" in console_manifest
+    assert (
+        "image: kubeheal-console@sha256:"
+        "0000000000000000000000000000000000000000000000000000000000000000" in console_manifest
+    )
+    assert "kubeheal-console:latest" not in console_manifest
     assert "FROM node:22-alpine AS build" in frontend_dockerfile
     assert "RUN npm run build" in frontend_dockerfile
     assert "COPY --from=build /app/dist/" in frontend_dockerfile
