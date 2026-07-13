@@ -424,6 +424,138 @@ effectively-once", "policy-scoped 3-way semantic diff",
 "tenant·cluster·namespace·capability 단계 제한". BQ-012 완료 전까지 fail-closed
 주장은 rule 경로에 한정해서만 말한다.
 
+### [D-017] 2026-07-13 — 제품 전략 확정: 플랫폼(A) + 쐐기 진입(B), BQ-013~016 신설 (작성: 우녕 위임 조율 세션, 우녕 결정 반영)
+
+**결정.** 우녕의 조건(자체 GitOps 디폴트·AI 채팅 기본·rule 수십 개·UI 고도화 유지)을
+전제로, 제품 전체 = "AI-native open-source Kubernetes GitOps control plane"(대표 기능 2:
+Verified Autonomous GitOps + Evidence-native Incident Workbench/Chat), 시장 진입 첫 경험 =
+"Verified GitOps Revert"(bad image → 검증된 rollback PR → 정상화 확인) 서사로 확정한다.
+기능 축소 없음 — 진입 서사와 설치 경험만 좁힌다.
+
+**BQ-013 — single-writer invariant.** application별 writer는 정확히 하나.
+`reconciler_mode=builtin`(기본) / `argocd`(observer — 자체 apply 경로 차단).
+argocd 모드에서 apply 명령이 발화하지 않음을 테스트로 증명. additive(설정+가드).
+
+**BQ-014 — Argo observer 어댑터 (관찰만, 제어 금지).** Argo CD Application의
+repo/revision/path·sync/health 읽기, Argo Rollouts 실패·stable revision 읽기,
+Argo sync 완료 후 사후 검증에 활용. Argo 리소스 변경 절대 금지. BQ-013 이후 착수.
+
+**BQ-015 — `.remediation.yaml` 소스 계약.** 저장소 소유자가 수정 가능 위치를 선언
+(helm-values imageTagPath, kustomize images[].newTag, raw image scalar, replica,
+제한된 probe 필드). patch 생성기는 선언된 필드만 수정 — LLM·엔진의 파일/필드 추측 금지.
+Helm/Kustomize 역변환 문제를 계약으로 우회하고, 향후 patch adapter 기여 지점이 된다.
+P(BQ-009/010)와 같은 lane에서 P 이후 착수.
+
+**BQ-016 — OSS 프로파일: PR-only 기본 + 축소 설치 + make demo.**
+공개 프로파일 기본값: agent read-only, direct command 비활성, remediation은 PR 생성만,
+production auto-merge 금지. 설치 = controller(F0 in-process 조립 완성 포함) + PostgreSQL +
+agent 3개 구성. `make demo` = Kind 생성 → bad rollout 주입 → rollback PR(또는 로컬 mock PR)
+→ 정상화 검증까지 원커맨드. up.sh(748줄) 경로는 advanced 프로파일로 격하.
+F0 잔여 증명(39 entrypoint 단일 composition root 기동, NATS/in-process 동일 시나리오
+비교)이 이 항목의 일부다.
+
+**PR 본문 표준.** revert/remediation PR 본문은 검증 결과 표(원인, rule-verified 여부,
+실패/정상 revision, patch 범위, base SHA·digest 검증, 정책 위반 0, blast radius,
+rollback 포함, 사후 검증 조건)로 하고 RemediationBundle을 artifact로 첨부한다.
+Bundle은 canonical JSON + content hash 검증(`verify` 명령)까지 v0.1, 서명은 이후.
+
+**우선순위.** BQ-012(신뢰) → BQ-013(안전 불변식) → BQ-016(진입 경험) → BQ-015 →
+BQ-014. rule pack 40~50개 확장(허용/금지 remediation·검증 조건 포함 계약)과
+Workbench UI 4화면은 별도 트랙(벤치·프론트)에서 병행.
+
+### [D-018] 2026-07-13 — 멀티클러스터 UX 확정: BQ-017 + VP-007~009 (작성: 우녕 위임 조율 세션, 우녕 요구 반영)
+
+**우녕 요구.** 리소스 뷰의 최상위 = 클러스터. 위자드로 상용 클러스터(AWS/Azure/GCP 등)에
+target agent를 명령어 하나로 설치, 연결 과정을 단계로 가시화, 연결된 클러스터 목록 +
+provider 대표 아이콘(EKS는 AWS 아이콘 등), 선택된 클러스터 기준으로 리소스 연결.
+
+**실측 결과 — 이미 있는 것 (재구현 금지, 노출·연결만):**
+- provider 등록 정의: `src/domains/providers/catalog.py` (EKS/GKE/AKS, 등록 어댑터·설정 필드)
+- 원커맨드 설치: install 토큰 → `curl … | kubectl apply` (콘솔 위자드 경로 실존)
+- 연결 상태: `ClusterConnectionStatusResponse` (connection_status, connect timeout/expiry)
+- 클러스터 스코프 리소스: `/api/clusters/{cluster_id}/...` inventory 전 경로
+- 프론트 cluster wizard·fleet 골격 (reference map "resources cluster wizard")
+
+**BQ-017 (백엔드, additive) — provider 1급화 + 연결 단계.**
+1. `ClusterSummary`에 `provider: str` optional 추가. 값: `eks|gke|aks|onprem|kind|unknown`.
+   결정 우선순위: 등록 시 선택한 provider(catalog 값) > agent 자동 감지
+   (node `spec.providerID` prefix: `aws://`→eks, `azure://`→aks, `gce://`→gke;
+   node label 보조) > `unknown`. 자동 감지는 agent 스냅샷 경로에 additive.
+2. 연결 과정 단계화: `connection_status`를 보존하되 `connection_stage` optional 추가 —
+   `token_issued → awaiting_install → agent_connected → snapshot_received → ready`
+   (+ `expired`, `error`). 기존 소비자 회귀 0.
+완료 기준: 기존 응답 소비자 회귀 + provider 감지 단위테스트(3사 providerID) + 전체 그린.
+
+**VP-007 (프론트) — 클러스터-최상위 IA.** 전역 클러스터 selector가 리소스·메트릭·
+인시던트의 스코프를 결정(기존 URL cluster 치환 패턴 재사용, REF-API-011/013 어댑터 선례).
+연결된 클러스터 목록 화면: 이름·environment·health·connection·**provider 아이콘**.
+아이콘 규칙: provider 값이 확인된 것만 브랜드 아이콘, `unknown`은 일반 K8s 아이콘 —
+추측 배지 금지(BE-Gap 규율의 시각 버전). 브랜드 아이콘은 각사 상표 가이드 준수
+(simple-icons 등 허용 라이선스 소스만).
+
+**VP-008 (프론트) — 클러스터 연결 위자드 고도화.** 단계: ① provider 선택(카탈로그
+정의 소비) → ② provider별 사전 준비 명령 표시(`aws eks update-kubeconfig` 등 catalog
+adapter 문구) → ③ 설치 원커맨드 발급(복사 버튼, 토큰 만료 카운트다운 =
+connect_expires_at) → ④ 연결 과정 실시간 표시(BQ-017 connection_stage 폴링,
+단계별 체크 표시) → ⑤ 완료 시 클러스터 목록으로. 미지원 provider는 "generic
+(수동 kubeconfig 불필요·동일 원커맨드)"로 정직 표기.
+
+**VP-009 (프론트) — fleet/목록의 provider 표시 일관화.** fleet heatmap·홈 카드·
+인시던트의 클러스터 표기에 동일한 provider 아이콘 컴포넌트 재사용(단일 컴포넌트,
+중복 구현 금지).
+
+**절차.** VP-007~009는 verified-pipeline-insertion-map.md에 행 추가 후 기존 규율
+(BQ-017 앵커 확인 → APIQ → 구현). VP-007의 목록·selector는 기존 착륙 계약만으로도
+부분 진행 가능(provider 아이콘만 BQ-017 대기) — 진입조건을 분리해 병행을 허용한다.
+
+### [D-019] 2026-07-13 — 완료 수준 전환: BLOCKED P 해소·DoD 확정·실행 순서 고정 (작성: 우녕 위임 조율 세션)
+
+**1. BLOCKED P(BQ-009) 2차 blocker 해소 — frozen 예외 정밀 확장.**
+[D-012] 2항이 read port를 승인했으나 조립 지점이 막혀 있었다. 다음을 추가 허용한다:
+- `src/packages/contracts/`에 GitOps 권위 컨텍스트 read port(Protocol) 신규 파일 — 허용
+- `src/services/ai/dispatch-worker/app.py` — **port 주입 배선에 한정한 최소 수정 허용**
+  (파이프라인 로직 변경 금지, 주입 파라미터 추가만)
+- `src/services/ai/agent/recovery/**` — [D-010] 기존 예외 유지
+그 외 `src/services/ai/**` 기존 파일은 여전히 frozen. 이 예외로도 풀리지 않는 지점이
+있으면 파일 경로를 명시해 재보고하라 — 포괄 예외는 주지 않는다.
+BQ-009 상태를 `blocked` → `requested`(재개 가능)로 갱신한다.
+
+**2. 완료 정의(DoD) — 이 시점부터 모든 트랙 공통.**
+어떤 항목도 다음 4조건을 모두 충족해야 "완료"라 부른다:
+(a) **origin/dev 착륙** (lane 완료 ≠ 완료. done-pending-merge는 완료가 아니다)
+(b) 전체 그린 (`bash scripts/test.sh`)
+(c) **실측 가능** — Bruno 요청, `make demo` 장면, 또는 채점 스크립트로 제3자가 재현 가능
+(d) 관련 문서(계약·프론트 인계·색인) 갱신 착륙
+보고·상태 칸·대화에서 "진행 중/완료" 표현은 이 정의를 따른다. 위반 표현 발견 시
+판단자가 정정 지시를 낸다.
+
+**3. 실행 순서 확정 (백엔드 감사 제안 채택).**
+① 조율 문서(D-017~019, BQ-013~017, VP-007~009) 커밋·push — 기준점 영속화
+② BQ-012 — LLM hypothesis-only (테스트 `score == 1.0` 기대를 강화 계약으로 교체 포함)
+③ BQ-013 — single-writer invariant
+④ BQ-016 — controller composition root + make demo (F0 잔여 증명 포함)
+⑤ BQ-009/010 재개 — 권위 주입 후 patch 6종 (F lane에서 이어서)
+⑥ BQ-015 — .remediation.yaml
+⑦ BQ-014 — Argo observer
+BQ-017(provider)은 C/D/E 계약 lock 규칙 안에서 상기 순서와 병행 가능.
+
+**4. rule pack 완성은 신규 트랙이 아니라 기존 자산 채우기.**
+top-level rule 29개·candidate 87개·signal group 87개·recovery decorator 11개가 실존한다.
+"수십 개 추가"가 아니라 **87개 후보에 계약 채우기**(허용/금지 remediation,
+supporting/contradicting, patch 가능 여부, rollback·post-verification, benchmark fixture)가
+정확한 작업 정의다. 이 작업은 벤치 트랙(구 B-트랙 세션)의 다음 임무로 배정 예정 —
+별도 지시로 발행한다.
+
+**5. OSS 라이선스.** LICENSE.draft → 루트 LICENSE 채택은 여전히 사람 결정으로 남긴다
+(팀 기여자 동의 확인 선행 — publication-checklist 참조).
+
+**메시징 규칙(발표·문서 공통, 즉시 발효):** "환각 불가능"·"exactly-once"·
+"managed-field diff"·"AI가 못 망가뜨림을 증명" 표현 금지. 대체:
+"rule-first fail-closed RCA", "transactional outbox + consumer ledger 기반
+effectively-once", "policy-scoped 3-way semantic diff",
+"tenant·cluster·namespace·capability 단계 제한". BQ-012 완료 전까지 fail-closed
+주장은 rule 경로에 한정해서만 말한다.
+
 ### [D-008] 2026-07-13 04:50 KST 기록 정합 (작성: 자동 판단자)
 
 [D-007](판단자)과 [D-006](조율 세션)이 04:47경 동시 기록되어 파일 내 순서가 ID 순서와 어긋났다.
