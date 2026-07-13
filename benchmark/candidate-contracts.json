@@ -476,7 +476,9 @@
           "reason": "포트 bind 실패는 cluster 전체 네트워크 노출 확대로 해결하지 않습니다."
         }
       ],
-      "benchmark_fixtures": []
+      "benchmark_fixtures": [
+        "benchmark/scenarios/crashloop/crashloop-port-bind-conflict/scenario.json"
+      ]
     },
     {
       "ordinal": 8,
