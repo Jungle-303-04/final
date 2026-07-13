@@ -33,6 +33,16 @@ llm:
   apiKey: ""
   model: ""
 
+scm:
+  provider: github
+  repository: ""
+  baseBranch: main
+  credentialVersion: ""
+  github:
+    apiBase: ""
+    tokenSecretName: ""
+    tokenSecretKey: token
+
 service:
   type: ClusterIP
   port: 80
