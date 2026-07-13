@@ -38,9 +38,9 @@ type ButtonVariant = 'primary' | 'secondary' | 'ghost' | 'danger';
 type ButtonSize = 'sm' | 'md';
 
 const buttonVariants: Record<ButtonVariant, string> = {
-  primary: 'border-accent bg-accent text-on-accent shadow-soft hover:bg-accent-hover',
-  secondary: 'border-border bg-raised text-primary hover:border-border-strong hover:bg-surface',
-  ghost: 'border-transparent bg-transparent text-secondary hover:bg-raised hover:text-primary',
+  primary: 'border-brand bg-brand text-on-accent shadow-soft hover:bg-brand-hover',
+  secondary: 'border-border bg-raised text-text-primary hover:border-border-strong hover:bg-surface',
+  ghost: 'border-transparent bg-transparent text-text-secondary hover:bg-raised hover:text-text-primary',
   danger: 'border-danger bg-danger text-on-danger shadow-soft hover:bg-danger/90',
 };
 
@@ -153,8 +153,8 @@ export function Card({
       {(title || description || actions) && (
         <div className="mb-4 flex min-w-0 items-start justify-between gap-4">
           <div className="min-w-0">
-            {title && <h2 className="truncate text-title font-semibold text-primary">{title}</h2>}
-            {description && <p className="mt-1 text-body text-secondary">{description}</p>}
+            {title && <h2 className="truncate text-title font-semibold text-text-primary">{title}</h2>}
+            {description && <p className="mt-1 text-body text-text-secondary">{description}</p>}
           </div>
           {actions && <div className="flex shrink-0 items-center gap-2">{actions}</div>}
         </div>
@@ -189,8 +189,8 @@ export function StatCard({
     <Card className="p-4">
       <div className="flex items-start justify-between gap-4">
         <div className="min-w-0">
-          <p className="truncate text-label font-medium text-muted">{label}</p>
-          <p className="mt-2 truncate text-page font-semibold tabular-nums text-primary">{value}</p>
+          <p className="truncate text-label font-medium text-text-muted">{label}</p>
+          <p className="mt-2 truncate text-page font-semibold tabular-nums text-text-primary">{value}</p>
           {delta && <p className={cx('mt-1 text-caption font-medium', toneClass(tone))}>{delta}</p>}
         </div>
         {spark && (
@@ -256,7 +256,7 @@ export function Table<T>({
   return (
     <div className="max-w-full overflow-x-auto rounded-panel border border-border">
       <table className="min-w-full table-fixed border-collapse bg-surface text-left text-body">
-        <thead className="sticky top-0 z-10 bg-raised text-label text-muted">
+        <thead className="sticky top-0 z-10 bg-raised text-label text-text-muted">
           <tr>
             {columns.map((column) => {
               const active = sort?.id === column.id;
@@ -269,7 +269,7 @@ export function Table<T>({
                       onClick={() => setSort(active && sort.dir === 'asc' ? { id: column.id, dir: 'desc' } : { id: column.id, dir: 'asc' })}
                     >
                       <span className="truncate">{column.header}</span>
-                      <span className="text-muted">{active ? (sort.dir === 'asc' ? '↑' : '↓') : '↕'}</span>
+                      <span className="text-text-muted">{active ? (sort.dir === 'asc' ? '↑' : '↓') : '↕'}</span>
                     </button>
                   ) : (
                     column.header
@@ -293,7 +293,7 @@ export function Table<T>({
                 onKeyDown={(event) => activateRow(event, row, onRowClick)}
               >
                 {columns.map((column) => (
-                  <td key={column.id} className={cx('min-w-0 overflow-hidden text-ellipsis whitespace-nowrap px-4 py-3 align-middle text-secondary', column.align === 'right' && 'text-right')}>
+                  <td key={column.id} className={cx('min-w-0 overflow-hidden text-ellipsis whitespace-nowrap px-4 py-3 align-middle text-text-secondary', column.align === 'right' && 'text-right')}>
                     {column.cell(row)}
                   </td>
                 ))}
@@ -339,12 +339,12 @@ export function Tabs({
           className={cx(
             'h-10 shrink-0 rounded-t-control border-b-2 px-4 text-body font-medium transition-colors disabled:opacity-50',
             focusRing,
-            value === item.value ? 'border-accent text-primary' : 'border-transparent text-secondary hover:text-primary',
+            value === item.value ? 'border-brand text-text-primary' : 'border-transparent text-text-secondary hover:text-text-primary',
           )}
           onClick={() => onValueChange(item.value)}
         >
           {item.label}
-          {item.count !== undefined && <span className="ml-2 text-caption text-muted">{item.count.toLocaleString()}</span>}
+          {item.count !== undefined && <span className="ml-2 text-caption text-text-muted">{item.count.toLocaleString()}</span>}
         </button>
       ))}
     </div>
@@ -409,8 +409,8 @@ export function Modal({
           >
             <div className="mb-4 flex items-start justify-between gap-4">
               <div className="min-w-0">
-                <h2 id={titleId} className="text-page font-semibold text-primary">{title}</h2>
-                {description && <p id={descriptionId} className="mt-1 text-body text-secondary">{description}</p>}
+                <h2 id={titleId} className="text-page font-semibold text-text-primary">{title}</h2>
+                {description && <p id={descriptionId} className="mt-1 text-body text-text-secondary">{description}</p>}
               </div>
               <IconButton size="sm" label="닫기" icon={<CloseGlyph />} onClick={() => onOpenChange(false)} />
             </div>
@@ -461,8 +461,8 @@ export function Drawer({
           >
             <div className="flex items-start justify-between gap-4 border-b border-border p-6">
               <div className="min-w-0">
-                <h2 id={titleId} className="text-page font-semibold text-primary">{title}</h2>
-                {description && <p id={descriptionId} className="mt-1 text-body text-secondary">{description}</p>}
+                <h2 id={titleId} className="text-page font-semibold text-text-primary">{title}</h2>
+                {description && <p id={descriptionId} className="mt-1 text-body text-text-secondary">{description}</p>}
               </div>
               <IconButton size="sm" label="닫기" icon={<CloseGlyph />} onClick={() => onOpenChange(false)} />
             </div>
@@ -570,9 +570,9 @@ export function Field({
   return (
     <FieldContext.Provider value={{ id: inputId, describedBy, invalid: Boolean(error) }}>
       <div className="grid gap-2">
-        <label htmlFor={inputId} className="text-label font-semibold text-secondary">{label}</label>
+        <label htmlFor={inputId} className="text-label font-semibold text-text-secondary">{label}</label>
         {children}
-        {help && !error && <p id={helpId} className="text-caption text-muted">{help}</p>}
+        {help && !error && <p id={helpId} className="text-caption text-text-muted">{help}</p>}
         {error && <p id={errorId} role="alert" className="text-caption font-medium text-danger">{error}</p>}
       </div>
     </FieldContext.Provider>
@@ -580,7 +580,7 @@ export function Field({
 }
 
 const controlClass = cx(
-  'h-10 w-full rounded-control border border-border bg-bg px-3 text-body text-primary shadow-soft transition-colors placeholder:text-muted disabled:cursor-not-allowed disabled:opacity-50',
+  'h-10 w-full rounded-control border border-border bg-bg px-3 text-body text-text-primary shadow-soft transition-colors placeholder:text-text-muted disabled:cursor-not-allowed disabled:opacity-50',
   'focus:border-ring focus:outline-none focus:ring-2 focus:ring-ring/20',
 );
 
@@ -610,8 +610,8 @@ export function Checkbox({ label, description, ...props }: ComponentPropsWithout
         className={cx('mt-0.5 h-4 w-4 shrink-0 rounded border-border accent-accent', focusRing, props.className)}
       />
       <span className="grid gap-1">
-        <span className="text-body font-semibold text-primary">{label}</span>
-        {description && <span className="text-caption text-muted">{description}</span>}
+        <span className="text-body font-semibold text-text-primary">{label}</span>
+        {description && <span className="text-caption text-text-muted">{description}</span>}
       </span>
     </label>
   );
@@ -667,7 +667,7 @@ export function ToastViewport() {
             <div className="flex items-start justify-between gap-4">
               <div className="min-w-0">
                 <p className={cx('text-body font-semibold', toneClass(toast.tone))}>{toast.title}</p>
-                {toast.description && <p className="mt-1 text-label text-secondary">{toast.description}</p>}
+                {toast.description && <p className="mt-1 text-label text-text-secondary">{toast.description}</p>}
               </div>
               <IconButton size="sm" label="닫기" icon={<CloseGlyph />} onClick={() => dismiss(toast.id)} />
             </div>
@@ -691,7 +691,7 @@ export function Tooltip({ label, children }: { label: ReactNode; children: React
             animate="animate"
             exit="exit"
             role="tooltip"
-            className="absolute bottom-full left-1/2 z-50 mb-2 w-max max-w-64 -translate-x-1/2 rounded-control border border-border bg-surface px-2 py-1 text-caption text-secondary shadow-elevated"
+            className="absolute bottom-full left-1/2 z-50 mb-2 w-max max-w-64 -translate-x-1/2 rounded-control border border-border bg-surface px-2 py-1 text-caption text-text-secondary shadow-elevated"
           >
             {label}
           </motion.span>
@@ -714,7 +714,7 @@ export function Skeleton({ lines = 1, className }: { lines?: number; className?:
 
 export function InlineSpinner({ label = '처리 중' }: { label?: string }) {
   return (
-    <span className="inline-flex items-center gap-2 text-caption font-medium text-muted" role="status">
+    <span className="inline-flex items-center gap-2 text-caption font-medium text-text-muted" role="status">
       <Spinner />
       <span>{label}</span>
     </span>
@@ -735,10 +735,10 @@ export function EmptyState({
   return (
     <motion.div variants={scaleIn} initial="initial" animate="animate" className="grid min-h-32 place-items-center rounded-panel border border-dashed border-border bg-bg p-6 text-center">
       <div className="grid max-w-md justify-items-center gap-3">
-        {icon && <div className="grid h-10 w-10 place-items-center rounded-panel border border-border bg-surface text-muted">{icon}</div>}
+        {icon && <div className="grid h-10 w-10 place-items-center rounded-panel border border-border bg-surface text-text-muted">{icon}</div>}
         <div className="grid gap-1">
-          <h3 className="text-title font-semibold text-primary">{title}</h3>
-          {description && <p className="text-body text-secondary">{description}</p>}
+          <h3 className="text-title font-semibold text-text-primary">{title}</h3>
+          {description && <p className="text-body text-text-secondary">{description}</p>}
         </div>
         {action && <div className="mt-1">{action}</div>}
       </div>
@@ -762,8 +762,8 @@ export function PageHeader({
       {breadcrumb}
       <div className="flex min-w-0 flex-col gap-4 md:flex-row md:items-start md:justify-between">
         <div className="min-w-0">
-          <h1 className="truncate text-page font-semibold text-primary">{title}</h1>
-          {description && <p className="mt-1 max-w-3xl text-body text-secondary">{description}</p>}
+          <h1 className="truncate text-page font-semibold text-text-primary">{title}</h1>
+          {description && <p className="mt-1 max-w-3xl text-body text-text-secondary">{description}</p>}
         </div>
         {actions && <div className="flex shrink-0 flex-wrap items-center gap-2">{actions}</div>}
       </div>
@@ -773,14 +773,14 @@ export function PageHeader({
 
 export function Breadcrumb({ items }: { items: Array<{ label: string; href?: string }> }) {
   return (
-    <nav aria-label="breadcrumb" className="flex min-w-0 items-center gap-2 text-label text-muted">
+    <nav aria-label="breadcrumb" className="flex min-w-0 items-center gap-2 text-label text-text-muted">
       {items.map((item, index) => (
         <span key={`${item.label}-${index}`} className="inline-flex min-w-0 items-center gap-2">
           {index > 0 && <span>/</span>}
           {item.href ? (
-            <a className={cx('min-w-0 truncate hover:text-primary', focusRing)} href={item.href}>{item.label}</a>
+            <a className={cx('min-w-0 truncate hover:text-text-primary', focusRing)} href={item.href}>{item.label}</a>
           ) : (
-            <span className="min-w-0 truncate text-secondary">{item.label}</span>
+            <span className="min-w-0 truncate text-text-secondary">{item.label}</span>
           )}
         </span>
       ))}
@@ -798,10 +798,10 @@ export function CodeBlock({ code, label = '코드' }: { code: string; label?: st
   return (
     <div className="relative overflow-hidden rounded-panel border border-border bg-bg">
       <div className="flex items-center justify-between gap-4 border-b border-border px-4 py-2">
-        <span className="text-label font-semibold text-secondary">{label}</span>
+        <span className="text-label font-semibold text-text-secondary">{label}</span>
         <IconButton size="sm" label="복사" icon={<CopyGlyph />} onClick={copy} />
       </div>
-      <pre className="max-h-80 overflow-auto p-4 font-mono text-caption text-secondary"><code>{code}</code></pre>
+      <pre className="max-h-80 overflow-auto p-4 font-mono text-caption text-text-secondary"><code>{code}</code></pre>
     </div>
   );
 }
@@ -811,8 +811,8 @@ export function KeyValueList({ items }: { items: Array<{ label: string; value: R
     <dl className="grid grid-cols-[minmax(0,10rem)_minmax(0,1fr)] gap-x-4 gap-y-2 text-body">
       {items.map((item) => (
         <div key={item.label} className="contents">
-          <dt className="min-w-0 truncate text-muted">{item.label}</dt>
-          <dd className="min-w-0 break-words text-secondary">{item.value}</dd>
+          <dt className="min-w-0 truncate text-text-muted">{item.label}</dt>
+          <dd className="min-w-0 break-words text-text-secondary">{item.value}</dd>
         </div>
       ))}
     </dl>
@@ -872,7 +872,7 @@ function Spinner() {
 
 function toneClass(tone: Tone) {
   return {
-    neutral: 'text-muted',
+    neutral: 'text-text-muted',
     success: 'text-success',
     warning: 'text-warning',
     danger: 'text-danger',

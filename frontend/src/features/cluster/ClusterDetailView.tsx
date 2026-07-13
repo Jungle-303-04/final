@@ -196,7 +196,7 @@ export default function ClusterDetailView() {
         <Card>
           <div className="flex min-w-0 flex-wrap items-center gap-3">
             <Badge tone="info">관리 클러스터</Badge>
-            <p className="text-body text-secondary">조회 전용</p>
+            <p className="text-body text-text-secondary">조회 전용</p>
           </div>
         </Card>
       )}
@@ -271,10 +271,10 @@ export default function ClusterDetailView() {
           <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
             <div className="relative w-full lg:max-w-lg">
               <Input value={filter} onChange={(event) => setFilter(event.target.value)} placeholder="이름, 네임스페이스, 상태, 노드 검색" aria-label="인벤토리 검색" className="ps-9" />
-              <SearchIcon className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted" />
+              <SearchIcon className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-text-muted" />
             </div>
             {selectedServiceIdentity && (
-              <div className="flex shrink-0 items-center gap-2 rounded-control border border-border bg-bg px-3 py-2 text-label text-secondary">
+              <div className="flex shrink-0 items-center gap-2 rounded-control border border-border bg-bg px-3 py-2 text-label text-text-secondary">
                 <Badge tone="info">selector</Badge>
                 <span>{selectedServiceQ.isPending ? '확인 중' : `팟 ${selectedServicePods.length} · 노드 ${selectedServiceNodeNames.size}`}</span>
               </div>
@@ -394,7 +394,7 @@ export default function ClusterDetailView() {
           </>
         )}
       >
-        <p className="text-body text-secondary">
+        <p className="text-body text-text-secondary">
           파괴적 명령이므로 워크로드 상태를 확인한 뒤 실행합니다.
         </p>
       </Modal>
@@ -439,8 +439,8 @@ function ClusterRuntimePanel({ cluster, nodeTotal, podTotal }: { cluster: Cluste
 function RuntimeCell({ label, value }: { label: string; value: ReactNode }) {
   return (
     <div className="rounded-panel border border-border bg-bg p-3">
-      <p className="text-label font-medium text-muted">{label}</p>
-      <div className="mt-1 text-title font-semibold tabular-nums text-primary">{value}</div>
+      <p className="text-label font-medium text-text-muted">{label}</p>
+      <div className="mt-1 text-title font-semibold tabular-nums text-text-primary">{value}</div>
     </div>
   );
 }
@@ -586,10 +586,10 @@ function PodObservationCard({
             onClick={() => onOpen(row)}
           >
             <span className="flex min-w-0 items-center justify-between gap-3">
-              <span className="min-w-0 truncate text-body font-semibold text-primary">{row.name}</span>
+              <span className="min-w-0 truncate text-body font-semibold text-text-primary">{row.name}</span>
               <StatusBadge status={row.phase} />
             </span>
-            <span className="flex min-w-0 flex-wrap items-center gap-2 text-caption text-muted">
+            <span className="flex min-w-0 flex-wrap items-center gap-2 text-caption text-text-muted">
               <NamespaceChip namespace={row.namespace} />
               {row.node && <span className="min-w-0 truncate">{row.node}</span>}
               <span className="tabular-nums">재시작 {row.restarts.toLocaleString()}</span>
@@ -597,7 +597,7 @@ function PodObservationCard({
           </button>
         ))}
         {hiddenCount > 0 && (
-          <div className="rounded-panel border border-border bg-raised px-3 py-2 text-center text-caption text-muted">
+          <div className="rounded-panel border border-border bg-raised px-3 py-2 text-center text-caption text-text-muted">
             +{hiddenCount.toLocaleString()}
           </div>
         )}
@@ -626,7 +626,7 @@ function ClusterRepositoriesPanel({
       width: 'lg',
       sortValue: (row) => row.repoRef,
       cell: (row) => (
-        <Link className="font-semibold text-accent hover:text-accent-hover" to={pathFor(`/repos/${row.appId}`)}>
+        <Link className="font-semibold text-brand hover:text-brand-hover" to={pathFor(`/repos/${row.appId}`)}>
           {row.repoRef || row.appName}
         </Link>
       ),
@@ -704,7 +704,7 @@ function ClusterUnregisterModal({
         <div className="grid gap-4">
           <div className="rounded-panel border border-danger/40 bg-danger/10 p-4">
             <p className="text-body font-semibold text-danger">위험 영역</p>
-            <p className="mt-2 text-body text-secondary">이력은 보존됩니다. 에이전트는 클러스터에서 직접 제거해야 합니다.</p>
+            <p className="mt-2 text-body text-text-secondary">이력은 보존됩니다. 에이전트는 클러스터에서 직접 제거해야 합니다.</p>
           </div>
           <Field label="클러스터 이름 확인" help={`${expected} 를 정확히 입력하면 등록 해제가 활성화됩니다`}>
             <Input value={typed} onChange={(event) => setTyped(event.target.value)} placeholder={expected} />
@@ -714,8 +714,8 @@ function ClusterUnregisterModal({
               <p className="text-body font-semibold text-danger">연결된 배포 정의가 있어 등록을 해제할 수 없습니다</p>
               {blocked.map((row) => (
                 <Link key={`${row.appId}/${row.namespace}`} to={pathFor(`/repos/${row.appId}`)} className="flex min-w-0 items-center justify-between gap-3 rounded-control border border-border bg-raised px-3 py-2 text-body hover:bg-surface">
-                  <span className="min-w-0 truncate text-primary">{row.repoRef || row.appName}</span>
-                  <span className="shrink-0 text-caption text-accent">배포 보기</span>
+                  <span className="min-w-0 truncate text-text-primary">{row.repoRef || row.appName}</span>
+                  <span className="shrink-0 text-caption text-brand">배포 보기</span>
                 </Link>
               ))}
             </div>
@@ -757,7 +757,7 @@ function WorkloadsTab({ clusterId, admin, readOnly, filter, onResetFilter, onIns
   const q = useWorkloads(clusterId);
   const rows = (q.data ?? []).filter((row) => textMatches(filter, row.name, row.namespace, row.kind, row.status, row.health, row.image));
   const columns = useMemo<TableColumn<WorkloadResource>[]>(() => [
-    { id: 'name', header: '워크로드', width: 'lg', sortValue: (row) => row.name, cell: (row) => <span className="font-semibold text-primary">{row.name}</span> },
+    { id: 'name', header: '워크로드', width: 'lg', sortValue: (row) => row.name, cell: (row) => <span className="font-semibold text-text-primary">{row.name}</span> },
     { id: 'kind', header: '종류', sortValue: (row) => row.kind, cell: (row) => row.kind },
     { id: 'namespace', header: '네임스페이스', sortValue: (row) => row.namespace, cell: (row) => <NamespaceChip namespace={row.namespace} /> },
     { id: 'ready', header: 'Ready', sortValue: (row) => row.ready, cell: (row) => row.status || `${row.ready}/${row.desired}` },
@@ -814,15 +814,15 @@ function PodsTab({ query, rows, selectedKeys, clusterId, filter, onResetFilter, 
       cell: (row) => (
         <span className="inline-flex min-w-0 items-center gap-2">
           {row.hot && <FlameIcon />}
-          <span className="truncate font-semibold text-primary">{row.name}</span>
+          <span className="truncate font-semibold text-text-primary">{row.name}</span>
         </span>
       ),
     },
     { id: 'namespace', header: '네임스페이스', sortValue: (row) => row.namespace, cell: (row) => <NamespaceChip namespace={row.namespace} /> },
     { id: 'phase', header: '상태', sortValue: (row) => row.phase, cell: (row) => <StatusBadge status={row.phase} /> },
-    { id: 'restarts', header: '재시작', align: 'right', sortValue: (row) => row.restarts, cell: (row) => <span className="tabular-nums text-primary">{row.restarts.toLocaleString()}</span> },
+    { id: 'restarts', header: '재시작', align: 'right', sortValue: (row) => row.restarts, cell: (row) => <span className="tabular-nums text-text-primary">{row.restarts.toLocaleString()}</span> },
     { id: 'node', header: '노드', sortValue: (row) => row.node ?? '', cell: (row) => row.node ?? '없음' },
-    { id: 'service', header: '서비스', cell: (row) => selectedKeys.has(`${row.namespace}/${row.name}`) ? <Badge tone="info">선택</Badge> : <span className="text-muted">없음</span> },
+    { id: 'service', header: '서비스', cell: (row) => selectedKeys.has(`${row.namespace}/${row.name}`) ? <Badge tone="info">선택</Badge> : <span className="text-text-muted">없음</span> },
   ], [selectedKeys]);
   return (
     <Table
@@ -855,13 +855,13 @@ function NodesTab({ query, filter, nodeNamespaces, selectedNodeNames, onResetFil
       sortValue: (node) => node.name,
       cell: (node) => (
         <span className="inline-flex min-w-0 items-center gap-2">
-          <span className="truncate font-semibold text-primary">{node.name}</span>
+          <span className="truncate font-semibold text-text-primary">{node.name}</span>
           {selectedNodeNames.has(node.name) && <Badge tone="info">서비스 팟</Badge>}
         </span>
       ),
     },
     { id: 'ready', header: '상태', sortValue: (node) => String(node.ready), cell: (node) => <Badge tone={node.ready ? 'success' : 'danger'}>{node.ready ? 'Ready' : 'NotReady'}</Badge> },
-    { id: 'pods', header: '팟 수', align: 'right', sortValue: (node) => node.pod_count, cell: (node) => <span className="tabular-nums text-primary">{node.pod_count.toLocaleString()}</span> },
+    { id: 'pods', header: '팟 수', align: 'right', sortValue: (node) => node.pod_count, cell: (node) => <span className="tabular-nums text-text-primary">{node.pod_count.toLocaleString()}</span> },
     { id: 'namespaces', header: '네임스페이스', width: 'lg', cell: (node) => <NamespaceCluster namespaces={[...(nodeNamespaces.get(node.name) ?? [])]} /> },
     { id: 'cpu', header: 'CPU', align: 'right', sortValue: (node) => node.cpu_ratio ?? -1, cell: (node) => ratioText(node.cpu_ratio) },
     { id: 'memory', header: 'MEM', align: 'right', sortValue: (node) => node.mem_ratio ?? -1, cell: (node) => ratioText(node.mem_ratio) },
@@ -885,7 +885,7 @@ function ServicesTab({ clusterId, filter, onResetFilter, onInspect }: { clusterI
   const q = useServices(clusterId);
   const rows = (q.data ?? []).filter((row) => serviceMatches(row, filter));
   const columns = useMemo<TableColumn<ServiceInfo>[]>(() => [
-    { id: 'name', header: '이름', width: 'lg', sortValue: (row) => row.name, cell: (row) => <span className="font-semibold text-primary">{row.name}</span> },
+    { id: 'name', header: '이름', width: 'lg', sortValue: (row) => row.name, cell: (row) => <span className="font-semibold text-text-primary">{row.name}</span> },
     { id: 'namespace', header: '네임스페이스', sortValue: (row) => row.namespace, cell: (row) => <NamespaceChip namespace={row.namespace} /> },
     { id: 'type', header: '타입', sortValue: (row) => row.type, cell: (row) => row.type || '없음' },
     { id: 'ip', header: 'ClusterIP', sortValue: (row) => row.cluster_ip, cell: (row) => <CodeText>{row.cluster_ip || '없음'}</CodeText> },
@@ -912,7 +912,7 @@ function ResourcesTab({ clusterId, filter, onResetFilter }: { clusterId: string;
   const columns = useMemo<TableColumn<InventoryResource>[]>(() => [
     { id: 'kind', header: '종류', sortValue: (row) => row.kind, cell: (row) => row.kind },
     { id: 'namespace', header: '네임스페이스', sortValue: (row) => row.namespace ?? '', cell: (row) => <NamespaceChip namespace={row.namespace} /> },
-    { id: 'name', header: '이름', width: 'lg', sortValue: (row) => row.name, cell: (row) => <span className="font-semibold text-primary">{row.name}</span> },
+    { id: 'name', header: '이름', width: 'lg', sortValue: (row) => row.name, cell: (row) => <span className="font-semibold text-text-primary">{row.name}</span> },
     { id: 'status', header: '상태', sortValue: (row) => row.status, cell: (row) => <StatusBadge status={row.status || row.health} /> },
     { id: 'age', header: 'Age', sortValue: (row) => row.age, cell: (row) => row.age || '없음' },
   ], []);
@@ -1109,7 +1109,7 @@ export function selectorRecord(value: unknown): Record<string, string> {
 
 function LabelChips({ labels }: { labels: Record<string, string> }) {
   const entries = Object.entries(labels);
-  if (!entries.length) return <span className="text-muted">없음</span>;
+  if (!entries.length) return <span className="text-text-muted">없음</span>;
   return (
     <span className="inline-flex min-w-0 flex-wrap gap-1">
       {entries.map(([key, value]) => (
@@ -1130,7 +1130,7 @@ function NamespaceChip({ namespace }: { namespace: string | null | undefined }) 
 }
 
 function NamespaceCluster({ namespaces }: { namespaces: string[] }) {
-  if (!namespaces.length) return <span className="text-muted">없음</span>;
+  if (!namespaces.length) return <span className="text-text-muted">없음</span>;
   const sorted = [...new Set(namespaces)].sort();
   return (
     <span className="inline-flex min-w-0 flex-wrap gap-1">
@@ -1150,7 +1150,7 @@ function namespaceClass(namespace: string) {
     'border-success/40 text-success',
     'border-warning/40 text-warning',
     'border-danger/40 text-danger',
-    'border-border text-muted',
+    'border-border text-text-muted',
   ];
   return classes[namespaceHash(namespace) % classes.length];
 }
@@ -1203,7 +1203,7 @@ function ServiceSelectorRelation({ detail }: { detail: InventoryResourceDetail }
           <>
             <RelatedPods rows={detail.related_pods} title="선택된 팟" />
             <div className="flex flex-wrap items-center gap-2">
-              <span className="text-label font-semibold text-muted">호스팅 노드</span>
+              <span className="text-label font-semibold text-text-muted">호스팅 노드</span>
               {nodes.map((node) => <Badge key={node} tone="info">{node}</Badge>)}
             </div>
           </>
@@ -1215,10 +1215,10 @@ function ServiceSelectorRelation({ detail }: { detail: InventoryResourceDetail }
 
 function RelatedPods({ rows, title }: { rows: Workload[]; title: string }) {
   const columns: TableColumn<Workload>[] = [
-    { id: 'name', header: '이름', width: 'lg', cell: (row) => <span className="font-semibold text-primary">{row.name}</span> },
+    { id: 'name', header: '이름', width: 'lg', cell: (row) => <span className="font-semibold text-text-primary">{row.name}</span> },
     { id: 'namespace', header: '네임스페이스', cell: (row) => <NamespaceChip namespace={row.namespace} /> },
     { id: 'phase', header: '상태', cell: (row) => <StatusBadge status={row.phase} /> },
-    { id: 'restart', header: '재시작', align: 'right', cell: (row) => <span className="tabular-nums text-primary">{row.restarts.toLocaleString()}</span> },
+    { id: 'restart', header: '재시작', align: 'right', cell: (row) => <span className="tabular-nums text-text-primary">{row.restarts.toLocaleString()}</span> },
     { id: 'node', header: '노드', cell: (row) => row.node ?? '없음' },
   ];
   return (
@@ -1371,10 +1371,10 @@ function IncidentList({ incidents, pathFor }: { incidents: ClusterAggIncident[];
           className="flex min-w-0 items-center gap-3 rounded-control border border-border bg-bg px-3 py-2 text-body transition-colors hover:bg-raised"
         >
           <StatusBadge status={incident.status} />
-          <span className="min-w-0 flex-1 truncate text-primary">
+          <span className="min-w-0 flex-1 truncate text-text-primary">
             {incident.symptom}{incident.root_cause ? ` - ${incident.root_cause}` : ''}
           </span>
-          <span className="shrink-0 text-caption text-muted">{incident.created_at ? timeAgo(incident.created_at) : ''}</span>
+          <span className="shrink-0 text-caption text-text-muted">{incident.created_at ? timeAgo(incident.created_at) : ''}</span>
         </Link>
       ))}
     </div>
@@ -1384,7 +1384,7 @@ function IncidentList({ incidents, pathFor }: { incidents: ClusterAggIncident[];
 function MetricPill({ label, value, tone = 'neutral' }: { label: string; value: ReactNode; tone?: BadgeTone }) {
   return (
     <div className="rounded-panel border border-border bg-bg p-3">
-      <p className="text-label font-medium text-muted">{label}</p>
+      <p className="text-label font-medium text-text-muted">{label}</p>
       <p className={cx('mt-1 text-title font-semibold tabular-nums', toneText(tone))}>{value}</p>
     </div>
   );
@@ -1461,20 +1461,20 @@ function UsageGauge({ label, pct, fallback }: { label: string; pct: number | nul
   if (pct != null) return <MiniGauge label={label} value={pct} />;
   if (fallback) {
     return (
-      <span className="flex items-center justify-between gap-2 text-caption text-muted">
+      <span className="flex items-center justify-between gap-2 text-caption text-text-muted">
         <span>{label}</span>
-        <span className="tabular-nums text-secondary">{fallback}</span>
+        <span className="tabular-nums text-text-secondary">{fallback}</span>
       </span>
     );
   }
-  return <span className="text-caption text-muted">{label} 없음</span>;
+  return <span className="text-caption text-text-muted">{label} 없음</span>;
 }
 
 function MiniGauge({ label, value }: { label: string; value: number | null }) {
-  if (value == null) return <span className="text-caption text-muted">{label} 없음</span>;
+  if (value == null) return <span className="text-caption text-text-muted">{label} 없음</span>;
   return (
     <span className="grid gap-1">
-      <span className="flex items-center justify-between gap-2 text-caption text-muted">
+      <span className="flex items-center justify-between gap-2 text-caption text-text-muted">
         <span>{label}</span>
         <span>{Math.round(value)}%</span>
       </span>
@@ -1601,7 +1601,7 @@ function statusLabel(status: string, fallback: string) {
 
 function toneText(tone: BadgeTone) {
   return {
-    neutral: 'text-primary',
+    neutral: 'text-text-primary',
     success: 'text-success',
     warning: 'text-warning',
     danger: 'text-danger',
@@ -1611,7 +1611,7 @@ function toneText(tone: BadgeTone) {
 
 function CodeText({ children }: { children: ReactNode }) {
   return (
-    <code className="inline-flex max-w-full items-center truncate rounded-control border border-border bg-raised px-2 py-1 font-mono text-caption text-secondary">
+    <code className="inline-flex max-w-full items-center truncate rounded-control border border-border bg-raised px-2 py-1 font-mono text-caption text-text-secondary">
       {children}
     </code>
   );

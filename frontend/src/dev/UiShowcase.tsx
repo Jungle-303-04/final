@@ -79,7 +79,7 @@ export default function UiShowcase() {
   const toast = useToast();
 
   return (
-    <div className="min-h-screen bg-bg p-8 text-primary">
+    <div className="min-h-screen bg-bg p-8 text-text-primary">
       <PageHeader
         title="디자인 시스템"
         description="Tailwind semantic token과 Motion preset으로 구성한 콘솔 프리미티브 검수 화면"
@@ -120,7 +120,7 @@ export default function UiShowcase() {
               >
                 <Table
                   columns={[
-                    { id: 'name', header: '이름', cell: row => <span className="font-medium text-primary">{row.name}</span>, sortValue: row => row.name, width: 'lg' },
+                    { id: 'name', header: '이름', cell: row => <span className="font-medium text-text-primary">{row.name}</span>, sortValue: row => row.name, width: 'lg' },
                     { id: 'status', header: '상태', cell: row => <StatusChip status={row.status} />, sortValue: row => row.status },
                     { id: 'incidents', header: '인시던트', cell: row => row.incidents.toLocaleString(), sortValue: row => row.incidents, align: 'right' },
                     { id: 'owner', header: '소유', cell: row => row.owner },
@@ -217,7 +217,7 @@ export default function UiShowcase() {
       </div>
 
       <Modal open={modalOpen} title="클러스터 등록" description="검증 후 대상 클러스터를 등록합니다" onOpenChange={setModalOpen}>
-        <p className="text-body text-secondary">모달은 focus trap과 Escape 닫기를 포함합니다.</p>
+        <p className="text-body text-text-secondary">모달은 focus trap과 Escape 닫기를 포함합니다.</p>
       </Modal>
       <Drawer open={drawerOpen} title="인시던트 상세" description="증거 트레일과 후보 점수바를 담는 패널" onOpenChange={setDrawerOpen}>
         <div className="grid gap-4">

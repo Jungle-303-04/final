@@ -21,7 +21,7 @@ export default function OpsView() {
       header: 'Subject',
       width: 'lg',
       sortValue: (item) => item.original_subject,
-      cell: (item) => <code className="font-mono text-caption text-secondary">{item.original_subject}</code>,
+      cell: (item) => <code className="font-mono text-caption text-text-secondary">{item.original_subject}</code>,
     },
     {
       id: 'consumer',

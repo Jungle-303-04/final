@@ -65,7 +65,7 @@ export default function RepoDetailView() {
         description={(
           <span className="inline-flex max-w-full flex-wrap items-center gap-2">
             <CodeText>{`${app.repo_ref}@${app.branch}`}</CodeText>
-            <span className="text-muted">manifest</span>
+            <span className="text-text-muted">manifest</span>
             <CodeText>{app.manifest_path}</CodeText>
           </span>
         )}
@@ -166,7 +166,7 @@ function RunHistory({
             <div className="flex min-w-0 flex-wrap items-center gap-3">
               <CodeText>{shortSha(run.commit_sha)}</CodeText>
               <StatusBadge status={run.status} />
-              <span className="text-caption text-muted">{timeAgo(run.started_at) || '시간 없음'}</span>
+              <span className="text-caption text-text-muted">{timeAgo(run.started_at) || '시간 없음'}</span>
               <div className="ml-auto flex shrink-0 items-center gap-2">
                 <Button size="sm" onClick={() => onOpenRun(run.run_id)}>그래프 보기</Button>
               </div>
@@ -212,9 +212,9 @@ function StepRail({ run }: { run: WorkflowRun }) {
           );
         })}
       </div>
-      <div className="flex min-w-0 flex-wrap gap-2 text-caption text-muted">
+      <div className="flex min-w-0 flex-wrap gap-2 text-caption text-text-muted">
         <span>현재 단계</span>
-        <span className="font-semibold text-secondary">{workflowStatusLabel(run.current_step || run.status)}</span>
+        <span className="font-semibold text-text-secondary">{workflowStatusLabel(run.current_step || run.status)}</span>
       </div>
     </div>
   );
@@ -238,12 +238,12 @@ function DeploymentsCard({
       id: 'cluster',
       header: '클러스터',
       sortValue: (row) => row.cluster_id,
-      cell: (row) => <Link className="font-semibold text-accent hover:text-accent-hover" to={pathFor(`/clusters/${row.cluster_id}?tab=workloads`)}>{row.cluster_id}</Link>,
+      cell: (row) => <Link className="font-semibold text-brand hover:text-brand-hover" to={pathFor(`/clusters/${row.cluster_id}?tab=workloads`)}>{row.cluster_id}</Link>,
     },
     { id: 'namespace', header: '네임스페이스', sortValue: (row) => row.namespace, cell: (row) => row.namespace || '미지정' },
-    { id: 'name', header: '이름', sortValue: (row) => row.name, cell: (row) => <span className="font-semibold text-primary">{row.name}</span>, width: 'md' },
+    { id: 'name', header: '이름', sortValue: (row) => row.name, cell: (row) => <span className="font-semibold text-text-primary">{row.name}</span>, width: 'md' },
     { id: 'image', header: '이미지', sortValue: (row) => row.image, cell: (row) => <CodeText>{row.image || '없음'}</CodeText>, width: 'lg' },
-    { id: 'replicas', header: 'Replicas', sortValue: (row) => row.replicas, align: 'right', cell: (row) => <span className="tabular-nums text-primary">{row.replicas.toLocaleString()}</span> },
+    { id: 'replicas', header: 'Replicas', sortValue: (row) => row.replicas, align: 'right', cell: (row) => <span className="tabular-nums text-text-primary">{row.replicas.toLocaleString()}</span> },
     { id: 'status', header: '상태', sortValue: (row) => row.status, cell: (row) => <StatusBadge status={row.status} /> },
     {
       id: 'gitops',
@@ -269,13 +269,13 @@ function DeploymentsCard({
 }
 
 function GitOpsPollCell({ poll }: { poll?: GitOpsPoll }) {
-  if (!poll) return <span className="text-caption text-muted">확인 전</span>;
+  if (!poll) return <span className="text-caption text-text-muted">확인 전</span>;
   const meta = gitOpsPollMeta(poll.status);
   const error = poll.error || poll.error_kind;
   return (
     <div className="grid min-w-44 gap-1">
       <span><Badge tone={meta.tone}>{meta.label}</Badge></span>
-      <span className="text-caption text-secondary">
+      <span className="text-caption text-text-secondary">
         {poll.last_seen_commit_sha ? `커밋 ${shortSha(poll.last_seen_commit_sha)}` : '확인된 커밋 없음'}
         {poll.last_polled_at ? ` · ${timeAgo(poll.last_polled_at) || '방금 확인'}` : ''}
       </span>
@@ -320,10 +320,10 @@ function SafePrCard({
             <StatusBadge status={safePr.status} />
             {run?.commit_sha && <CodeText>{shortSha(run.commit_sha)}</CodeText>}
             {safePr.pr_url && (
-              <a className="font-semibold text-accent hover:text-accent-hover" href={safePr.pr_url} target="_blank" rel="noreferrer">PR 열기</a>
+              <a className="font-semibold text-brand hover:text-brand-hover" href={safePr.pr_url} target="_blank" rel="noreferrer">PR 열기</a>
             )}
           </div>
-          {safePr.explanation && <p className="text-body text-secondary">{safePr.explanation}</p>}
+          {safePr.explanation && <p className="text-body text-text-secondary">{safePr.explanation}</p>}
           {safePr.diff_before && (
             <div className="grid gap-4 lg:grid-cols-2">
               <div className="grid gap-2">
@@ -338,7 +338,7 @@ function SafePrCard({
           )}
           {safePr.error && (
             <div className="flex flex-wrap items-center justify-between gap-3 rounded-panel border border-danger/40 bg-bg p-3">
-              <p className="min-w-0 text-body text-secondary">Safe PR 실패 사유: <span className="font-semibold text-danger">{safePr.error}</span></p>
+              <p className="min-w-0 text-body text-text-secondary">Safe PR 실패 사유: <span className="font-semibold text-danger">{safePr.error}</span></p>
               <Button size="sm" variant="primary" leadingIcon={<SendIcon />} onClick={() => onAiAnalyze(safePr.error ?? '')}>AI 분석</Button>
             </div>
           )}
@@ -362,16 +362,16 @@ function PlanDiffPanel({ changes, resource }: { changes: PlanChange[]; resource?
             return (
               <div key={change.field_path} className="grid gap-2 rounded-control px-2 py-1 hover:bg-raised md:grid-cols-6 md:items-baseline">
                 <span className={cx('font-bold', meta.className)}>{meta.symbol}</span>
-                <span className="truncate text-primary md:col-span-2">{change.field_path}</span>
-                <span className="truncate text-muted">{shortValue(change.before)}</span>
+                <span className="truncate text-text-primary md:col-span-2">{change.field_path}</span>
+                <span className="truncate text-text-muted">{shortValue(change.before)}</span>
                 <span className={cx('truncate', meta.className)}>{shortValue(change.after)}</span>
-                <span className="text-muted md:text-right">{meta.label}</span>
+                <span className="text-text-muted md:text-right">{meta.label}</span>
               </div>
             );
           })}
         </div>
       </div>
-      {converged > 0 && <p className="text-caption text-muted">이미 일치 {converged.toLocaleString()}건은 적용 대상에서 제외됩니다</p>}
+      {converged > 0 && <p className="text-caption text-text-muted">이미 일치 {converged.toLocaleString()}건은 적용 대상에서 제외됩니다</p>}
     </div>
   );
 }
@@ -423,8 +423,8 @@ function planChangeMeta(classification: string): { symbol: string; className: st
     intended_change: { symbol: '~', className: 'text-info', label: '의도 변경' },
     drift: { symbol: '!', className: 'text-warning', label: '드리프트' },
     conflict_or_manual_change: { symbol: '!', className: 'text-danger', label: '충돌' },
-    already_converged: { symbol: '=', className: 'text-muted', label: '일치' },
-  }[classification] ?? { symbol: '~', className: 'text-secondary', label: '변경' };
+    already_converged: { symbol: '=', className: 'text-text-muted', label: '일치' },
+  }[classification] ?? { symbol: '~', className: 'text-text-secondary', label: '변경' };
 }
 
 function shortValue(value: unknown): string {
@@ -434,7 +434,7 @@ function shortValue(value: unknown): string {
 }
 
 function CodeText({ children }: { children: string }) {
-  return <code className="inline-flex max-w-full truncate rounded-control border border-border bg-raised px-2 py-1 font-mono text-caption text-secondary">{children}</code>;
+  return <code className="inline-flex max-w-full truncate rounded-control border border-border bg-raised px-2 py-1 font-mono text-caption text-text-secondary">{children}</code>;
 }
 
 function normalizeTab(value: string | null): DetailTab {

@@ -305,7 +305,7 @@ export function ConnectRepoWizard({
                             key={cluster.cluster_id}
                             className={cx(
                               'flex min-w-0 flex-col gap-3 rounded-panel border border-border bg-bg p-3 sm:flex-row sm:items-center sm:justify-between',
-                              selected && 'border-accent bg-raised',
+                              selected && 'border-brand bg-raised',
                               !deployable && 'opacity-70',
                             )}
                             role="listitem"
@@ -317,12 +317,12 @@ export function ConnectRepoWizard({
                               className="flex min-w-0 flex-1 items-center gap-3 text-left disabled:cursor-not-allowed"
                               onClick={() => toggleCluster(cluster)}
                             >
-                              <span className={cx('grid h-5 w-5 shrink-0 place-items-center rounded-control border', selected ? 'border-accent bg-accent text-on-accent' : 'border-border text-muted')}>
+                              <span className={cx('grid h-5 w-5 shrink-0 place-items-center rounded-control border', selected ? 'border-brand bg-brand text-on-accent' : 'border-border text-text-muted')}>
                                 {selected && <CheckIcon />}
                               </span>
                               <span className="grid min-w-0 gap-1">
-                                <span className="truncate text-body font-semibold text-primary">{cluster.name}</span>
-                                <span className="truncate text-caption text-muted">{cluster.cluster_id} · {cluster.environment || '환경 미지정'}</span>
+                                <span className="truncate text-body font-semibold text-text-primary">{cluster.name}</span>
+                                <span className="truncate text-caption text-text-muted">{cluster.cluster_id} · {cluster.environment || '환경 미지정'}</span>
                               </span>
                             </button>
                             <span className="flex shrink-0 flex-wrap items-center gap-2">
@@ -332,7 +332,7 @@ export function ConnectRepoWizard({
                                 <Badge tone={connected ? 'success' : 'warning'}>{connected ? '연결됨' : '에이전트 미연결'}</Badge>
                               )}
                               {!connected && !management && (
-                                <Link className="text-label font-semibold text-accent hover:text-accent-hover" to={pathFor(`/clusters/${cluster.cluster_id}`)}>
+                                <Link className="text-label font-semibold text-brand hover:text-brand-hover" to={pathFor(`/clusters/${cluster.cluster_id}`)}>
                                   연결하러 가기
                                 </Link>
                               )}
@@ -430,15 +430,15 @@ function GitOpsConnectionPreview({
     <div className="mb-4 grid gap-3 border-y border-border py-4" aria-label="GitOps source and target mapping">
       <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] md:items-stretch">
         <section className="grid gap-1 rounded-panel border border-border bg-bg p-3">
-          <span className="text-caption font-semibold text-muted">Git source</span>
-          <strong className="truncate text-body text-primary" title={repoRef}>{repoRef}</strong>
-          <span className="truncate text-caption text-secondary">{branch} / {candidate?.path ?? 'manifest 미선택'}</span>
-          <span className="text-caption text-muted">{candidate?.source_type ?? 'source type 미확인'}</span>
+          <span className="text-caption font-semibold text-text-muted">Git source</span>
+          <strong className="truncate text-body text-text-primary" title={repoRef}>{repoRef}</strong>
+          <span className="truncate text-caption text-text-secondary">{branch} / {candidate?.path ?? 'manifest 미선택'}</span>
+          <span className="text-caption text-text-muted">{candidate?.source_type ?? 'source type 미확인'}</span>
         </section>
-        <div className="hidden items-center justify-center text-caption font-bold text-muted md:flex" aria-hidden="true">-&gt;</div>
+        <div className="hidden items-center justify-center text-caption font-bold text-text-muted md:flex" aria-hidden="true">-&gt;</div>
         <section className="grid gap-2 rounded-panel border border-border bg-bg p-3">
-          <span className="text-caption font-semibold text-muted">Deployment targets</span>
-          <strong className="text-body text-primary">{clusters.length.toLocaleString()}개 연결 클러스터</strong>
+          <span className="text-caption font-semibold text-text-muted">Deployment targets</span>
+          <strong className="text-body text-text-primary">{clusters.length.toLocaleString()}개 연결 클러스터</strong>
           <div className="flex flex-wrap gap-1.5">
             {clusters.map((cluster) => (
               <Badge key={cluster.cluster_id} tone="success">{cluster.name || cluster.cluster_id}{cluster.environment ? ` / ${cluster.environment}` : ''}</Badge>
@@ -446,7 +446,7 @@ function GitOpsConnectionPreview({
           </div>
         </section>
       </div>
-      <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-caption text-secondary">
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-caption text-text-secondary">
         <span>서버 검증 {validation?.valid ? '통과' : '확인 필요'}</span>
         <span>리소스 {resources.length.toLocaleString()}개</span>
         <span>네임스페이스 {namespace || '서버 정책'}</span>
@@ -470,7 +470,7 @@ function ManifestValidationPanel({
     return <p className="text-caption font-medium text-danger" role="alert">manifest 검증 실패 - {(error as Error).message}</p>;
   }
   if (!validation) {
-    return <p className="text-body text-secondary">manifest를 선택하면 서버 검증 결과가 표시됩니다.</p>;
+    return <p className="text-body text-text-secondary">manifest를 선택하면 서버 검증 결과가 표시됩니다.</p>;
   }
   return (
     <div className="grid gap-3 rounded-panel border border-border bg-bg p-3">
@@ -482,7 +482,7 @@ function ManifestValidationPanel({
         ]}
       />
       {validation.resources.length > 0 && (
-        <p className="text-caption text-secondary">
+        <p className="text-caption text-text-secondary">
           {validation.resources.slice(0, 4).map((resource) => `${resource.kind}/${resource.name}`).join(', ')}
           {validation.resources.length > 4 ? ` 외 ${validation.resources.length - 4}개` : ''}
         </p>
@@ -504,8 +504,8 @@ function StepRail({ current }: { current: number }) {
         const active = index === current;
         return (
           <li key={step} className="min-w-0">
-            <div className={cx('h-2 rounded-control', done ? 'bg-success' : active ? 'bg-accent' : 'bg-raised')} />
-            <p className={cx('mt-2 truncate text-caption font-semibold', active || done ? 'text-primary' : 'text-muted')}>{step}</p>
+            <div className={cx('h-2 rounded-control', done ? 'bg-success' : active ? 'bg-brand' : 'bg-raised')} />
+            <p className={cx('mt-2 truncate text-caption font-semibold', active || done ? 'text-text-primary' : 'text-text-muted')}>{step}</p>
           </li>
         );
       })}

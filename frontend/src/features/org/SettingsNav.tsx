@@ -22,7 +22,7 @@ export function SettingsNav({ title, children }: { title: string; children: Reac
             to={pathFor(to)}
             className={({ isActive }) => cx(
               'h-10 shrink-0 rounded-t-control border-b-2 px-4 text-body font-medium transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring',
-              isActive ? 'border-accent text-primary' : 'border-transparent text-secondary hover:text-primary',
+              isActive ? 'border-brand text-text-primary' : 'border-transparent text-text-secondary hover:text-text-primary',
             )}
           >
             {label}

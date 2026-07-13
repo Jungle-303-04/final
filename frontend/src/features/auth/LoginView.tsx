@@ -78,9 +78,9 @@ export default function LoginView() {
           <div className="grid gap-2 rounded-panel border border-border bg-raised p-4">
             <div className="flex flex-wrap items-center gap-2">
               <Badge tone={approvalPending ? 'warning' : 'success'}>{approvalPending ? '승인 대기' : '인증 완료'}</Badge>
-              <p className="text-body font-semibold text-primary">{approvalPending ? '관리자 승인 후 입장할 수 있습니다' : '이메일 인증이 완료되었습니다'}</p>
+              <p className="text-body font-semibold text-text-primary">{approvalPending ? '관리자 승인 후 입장할 수 있습니다' : '이메일 인증이 완료되었습니다'}</p>
             </div>
-            <p className="text-caption text-secondary">승인 대기 상태라면 이 화면에서 한 번 로그인하면 자동 대기 화면으로 이동합니다.</p>
+            <p className="text-caption text-text-secondary">승인 대기 상태라면 이 화면에서 한 번 로그인하면 자동 대기 화면으로 이동합니다.</p>
           </div>
         )}
         <Field label="이메일">
@@ -92,8 +92,8 @@ export default function LoginView() {
         {code === 'email_unverified' && (
           <div className="grid gap-3 rounded-panel border border-warning/40 bg-raised p-4">
             <div className="grid gap-1">
-              <p className="text-body font-semibold text-primary">이메일 인증 필요</p>
-              <p className="text-caption text-secondary">가입할 때 사용한 이메일과 비밀번호로 검증 메일을 다시 받을 수 있습니다.</p>
+              <p className="text-body font-semibold text-text-primary">이메일 인증 필요</p>
+              <p className="text-caption text-text-secondary">가입할 때 사용한 이메일과 비밀번호로 검증 메일을 다시 받을 수 있습니다.</p>
             </div>
             <div className="flex flex-wrap items-center gap-2">
               <Button type="button" size="sm" variant="secondary" loading={resend.isPending} disabled={!canResend} onClick={resendVerification}>
@@ -105,8 +105,8 @@ export default function LoginView() {
         )}
         <Button type="submit" variant="primary" loading={login.isPending} disabled={!emailReady || password.length < 8} className="w-full">로그인</Button>
       </form>
-      <p className="mt-6 text-center text-body text-secondary">
-        계정이 없나요? <Link to="/signup" className="font-semibold text-accent hover:text-accent-hover">가입</Link>
+      <p className="mt-6 text-center text-body text-text-secondary">
+        계정이 없나요? <Link to="/signup" className="font-semibold text-brand hover:text-brand-hover">가입</Link>
       </p>
     </AuthLayout>
   );

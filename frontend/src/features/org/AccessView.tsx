@@ -54,7 +54,7 @@ export default function AccessView() {
       cell: (item) => (
         <span className="inline-flex min-w-0 items-center gap-2">
           <Badge tone="neutral">{item.subject_type === 'group' ? '그룹' : '사용자'}</Badge>
-          <span className="min-w-0 truncate font-semibold text-primary">{item.subject_label}</span>
+          <span className="min-w-0 truncate font-semibold text-text-primary">{item.subject_label}</span>
         </span>
       ),
     },
@@ -63,7 +63,7 @@ export default function AccessView() {
       header: '리소스',
       width: 'lg',
       sortValue: (item) => `${item.resource_type}/${item.resource_id}`,
-      cell: (item) => <code className="font-mono text-caption text-secondary">{item.resource_type}/{item.resource_id}</code>,
+      cell: (item) => <code className="font-mono text-caption text-text-secondary">{item.resource_type}/{item.resource_id}</code>,
     },
     {
       id: 'role',
@@ -212,11 +212,11 @@ export default function AccessView() {
         <div className="grid gap-4">
           <div className="rounded-panel border border-border bg-bg p-4">
             <dl className="grid grid-cols-[minmax(0,8rem)_minmax(0,1fr)] gap-x-4 gap-y-2 text-body">
-              <dt className="text-muted">대상</dt>
-              <dd className="min-w-0 break-words text-primary">{revoking?.subject_label}</dd>
-              <dt className="text-muted">리소스</dt>
-              <dd className="min-w-0 break-words font-mono text-caption text-secondary">{revoking?.resource_type}/{revoking?.resource_id}</dd>
-              <dt className="text-muted">역할</dt>
+              <dt className="text-text-muted">대상</dt>
+              <dd className="min-w-0 break-words text-text-primary">{revoking?.subject_label}</dd>
+              <dt className="text-text-muted">리소스</dt>
+              <dd className="min-w-0 break-words font-mono text-caption text-text-secondary">{revoking?.resource_type}/{revoking?.resource_id}</dd>
+              <dt className="text-text-muted">역할</dt>
               <dd><Badge tone="info">{roleLabel(revoking?.role ?? '')}</Badge></dd>
             </dl>
           </div>

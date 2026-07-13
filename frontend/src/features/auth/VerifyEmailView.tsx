@@ -91,7 +91,7 @@ export default function VerifyEmailView() {
         >
           <div className="flex flex-wrap items-center gap-2">
             <Badge tone="warning">만료</Badge>
-            <p className="text-caption text-secondary">새 링크를 받으면 이전 링크는 사용하지 않습니다.</p>
+            <p className="text-caption text-text-secondary">새 링크를 받으면 이전 링크는 사용하지 않습니다.</p>
           </div>
           <Field label="이메일">
             <Input type="email" placeholder="가입한 이메일 주소" value={email} onChange={e => setEmail(e.target.value)} autoComplete="email" required />

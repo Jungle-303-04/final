@@ -475,7 +475,7 @@ export function RegisterClusterWizard({ open, onClose }: { open: boolean; onClos
                 title="사전 요구사항"
                 description="터미널에서 설치 명령을 실행하기 전에 준비되어야 합니다"
               >
-                <ul className="grid gap-2 text-body text-secondary">
+                <ul className="grid gap-2 text-body text-text-secondary">
                   {prerequisites.map((item) => (
                     <li key={item} className="flex min-w-0 items-start gap-2">
                       <CheckIcon className="mt-0.5 text-success" />
@@ -524,7 +524,7 @@ export function RegisterClusterWizard({ open, onClose }: { open: boolean; onClos
               )}
 
               <div className="flex flex-col gap-3 border-t border-border pt-4 sm:flex-row sm:items-center sm:justify-between">
-                <p className="text-caption text-muted">
+                <p className="text-caption text-text-muted">
                   서버 검증과 설치 명령 발급은 별도 단계입니다
                 </p>
                 <div className="flex flex-wrap gap-2">
@@ -555,10 +555,10 @@ export function RegisterClusterWizard({ open, onClose }: { open: boolean; onClos
                   <div className="rounded-control border border-warning bg-bg px-3 py-2 text-caption font-semibold text-warning">
                     이 명령은 agent 자격증명을 포함합니다. 한 번만 안전하게 보관하세요.
                   </div>
-                  <div className="grid gap-3 rounded-panel border border-border bg-bg p-4 text-body text-secondary">
+                  <div className="grid gap-3 rounded-panel border border-border bg-bg p-4 text-body text-text-secondary">
                     <p>클러스터에서 아웃바운드 HTTPS만 가능하면 management API와 연결할 수 있습니다.</p>
                     {issued.connect_expires_at && (
-                      <p className="text-caption text-muted">연결 대기 만료: {fmtAbs(issued.connect_expires_at)} · {remainingLabel(issued.connect_expires_at)}</p>
+                      <p className="text-caption text-text-muted">연결 대기 만료: {fmtAbs(issued.connect_expires_at)} · {remainingLabel(issued.connect_expires_at)}</p>
                     )}
                   </div>
                   {installSteps.length > 0 ? (
@@ -604,11 +604,11 @@ export function RegisterClusterWizard({ open, onClose }: { open: boolean; onClos
                     ]}
                   />
                   {connectionStatus.kind === 'pending' && (
-                    <p className="text-body text-secondary">터미널에서 명령을 실행하면 5초 간격으로 연결 상태를 확인합니다.</p>
+                    <p className="text-body text-text-secondary">터미널에서 명령을 실행하면 5초 간격으로 연결 상태를 확인합니다.</p>
                   )}
                   {(connectionStatus.kind === 'expired' || connectionStatus.kind === 'error') && (
                     <div className="grid gap-3 rounded-panel border border-border bg-bg p-4">
-                      <p className="text-body text-secondary">
+                      <p className="text-body text-text-secondary">
                         설치 토큰이 만료되었거나 연결 확인 중 오류가 발생했습니다. 새 명령을 재발급하거나 목록에서 등록 항목을 정리한 뒤 다시 등록하세요.
                       </p>
                       <div className="flex flex-wrap gap-2">
@@ -686,14 +686,14 @@ function ProviderSection({
               aria-pressed={selected}
               className={cx(
                 'grid min-h-28 gap-3 rounded-panel border bg-surface p-4 text-left transition-colors',
-                selected ? 'border-accent shadow-soft' : 'border-border hover:border-border-strong hover:bg-raised',
+                selected ? 'border-brand shadow-soft' : 'border-border hover:border-border-strong hover:bg-raised',
               )}
               onClick={() => onProviderChange(option.key)}
             >
               <span className="flex min-w-0 items-start justify-between gap-3">
                 <span className="min-w-0">
-                  <span className="block truncate text-title font-semibold text-primary">{option.label}</span>
-                  <span className="mt-1 block text-body text-secondary">{option.description}</span>
+                  <span className="block truncate text-title font-semibold text-text-primary">{option.label}</span>
+                  <span className="mt-1 block text-body text-text-secondary">{option.description}</span>
                 </span>
                 <Badge tone={flow ? toneForStatus(flow.status) : 'neutral'}>{flow ? registrationStatusLabel(flow.status) : option.badge}</Badge>
               </span>
@@ -712,7 +712,7 @@ function ProviderSection({
               aria-pressed={localProvider === value}
               className={cx(
                 'h-9 rounded-control px-3 text-body font-semibold transition-colors',
-                localProvider === value ? 'bg-accent text-on-accent' : 'text-secondary hover:bg-raised hover:text-primary',
+                localProvider === value ? 'bg-brand text-on-accent' : 'text-text-secondary hover:bg-raised hover:text-text-primary',
               )}
               onClick={() => onLocalProviderChange(value)}
             >
@@ -866,17 +866,17 @@ function RegistrationTargetPreview({
   return (
     <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] md:items-stretch" aria-label="클러스터 등록 대상 확인">
       <section className="grid gap-1 rounded-panel border border-border bg-bg p-3">
-        <span className="text-caption font-semibold text-muted">Management plane</span>
-        <strong className="truncate text-body text-primary" title={managementBaseUrl || undefined}>
+        <span className="text-caption font-semibold text-text-muted">Management plane</span>
+        <strong className="truncate text-body text-text-primary" title={managementBaseUrl || undefined}>
           {managementBaseUrl || '서버 기본 공개 URL'}
         </strong>
-        <span className="text-caption text-secondary">target agent 설치 명령을 발급합니다</span>
+        <span className="text-caption text-text-secondary">target agent 설치 명령을 발급합니다</span>
       </section>
-      <div className="hidden items-center justify-center text-caption font-bold text-muted md:flex" aria-hidden="true">-&gt;</div>
+      <div className="hidden items-center justify-center text-caption font-bold text-text-muted md:flex" aria-hidden="true">-&gt;</div>
       <section className="grid gap-1 rounded-panel border border-border bg-bg p-3">
-        <span className="text-caption font-semibold text-muted">Target cluster</span>
-        <strong className="truncate text-body text-primary" title={name || clusterId}>{name || clusterId}</strong>
-        <span className="text-caption text-secondary">
+        <span className="text-caption font-semibold text-text-muted">Target cluster</span>
+        <strong className="truncate text-body text-text-primary" title={name || clusterId}>{name || clusterId}</strong>
+        <span className="text-caption text-text-secondary">
           {clusterId} / {environment} / {provider}
           {kubeContext ? ` / ${kubeContext}` : ''}
         </span>
@@ -914,7 +914,7 @@ function ValidationPanel({
   if (!preflight) {
     return (
       <Card title="서버 검증" description="확인을 누르면 등록 전에 서버 검증을 먼저 실행합니다">
-        <p className="text-body text-secondary">중복 cluster_id, provider 지원 여부, management URL 설정을 검증합니다.</p>
+        <p className="text-body text-text-secondary">중복 cluster_id, provider 지원 여부, management URL 설정을 검증합니다.</p>
       </Card>
     );
   }
@@ -926,10 +926,10 @@ function ValidationPanel({
           {preflightItems(preflight).map((item) => (
             <div key={item.label} className="grid gap-2 rounded-panel border border-border bg-bg p-3">
               <div className="flex items-center justify-between gap-3">
-                <span className="text-label font-semibold text-muted">{item.label}</span>
+                <span className="text-label font-semibold text-text-muted">{item.label}</span>
                 <Badge tone={item.tone}>{item.badge}</Badge>
               </div>
-              <span className="truncate text-body text-secondary">{item.value}</span>
+              <span className="truncate text-body text-text-secondary">{item.value}</span>
             </div>
           ))}
         </div>
@@ -965,9 +965,9 @@ function StepRail({ issued, connected, verifying }: { issued: boolean; connected
         <li key={step.label} className="min-w-0">
           <div className={cx(
             'h-2 rounded-control',
-            step.done ? 'bg-success' : step.active ? 'bg-accent' : 'bg-raised',
+            step.done ? 'bg-success' : step.active ? 'bg-brand' : 'bg-raised',
           )} />
-          <p className={cx('mt-2 truncate text-caption font-semibold', step.active || step.done ? 'text-primary' : 'text-muted')}>{step.label}</p>
+          <p className={cx('mt-2 truncate text-caption font-semibold', step.active || step.done ? 'text-text-primary' : 'text-text-muted')}>{step.label}</p>
         </li>
       ))}
     </ol>

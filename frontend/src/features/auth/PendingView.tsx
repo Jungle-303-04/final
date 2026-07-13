@@ -69,10 +69,10 @@ export default function PendingView() {
         <div className="grid gap-2 rounded-panel border border-border bg-raised p-4">
           <div className="flex flex-wrap items-center gap-2">
             <Badge tone={credentials ? 'info' : 'warning'}>{credentials ? '자동 확인' : '수동 확인'}</Badge>
-            {credentials && login.isPending ? <InlineSpinner label="승인 상태 확인 중" /> : <p className="text-caption text-secondary">승인되면 자동으로 콘솔에 입장합니다.</p>}
+            {credentials && login.isPending ? <InlineSpinner label="승인 상태 확인 중" /> : <p className="text-caption text-text-secondary">승인되면 자동으로 콘솔에 입장합니다.</p>}
           </div>
-          {lastAttemptAt && <p className="text-caption text-muted">마지막 확인: {lastAttemptAt}</p>}
-          {!credentials && <p className="text-caption text-secondary">새로고침 후에는 보안을 위해 비밀번호를 보관하지 않습니다. 승인 후 다시 로그인해주세요.</p>}
+          {lastAttemptAt && <p className="text-caption text-text-muted">마지막 확인: {lastAttemptAt}</p>}
+          {!credentials && <p className="text-caption text-text-secondary">새로고침 후에는 보안을 위해 비밀번호를 보관하지 않습니다. 승인 후 다시 로그인해주세요.</p>}
           {lastError && <p className="text-caption font-medium text-danger" role="alert">{lastError}</p>}
         </div>
       </div>

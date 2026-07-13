@@ -53,7 +53,7 @@ export default function WorkflowListView() {
               {
                 id: 'app',
                 header: '앱',
-                cell: (row: WorkflowRow) => <span className="font-semibold text-primary">{row.appId}</span>,
+                cell: (row: WorkflowRow) => <span className="font-semibold text-text-primary">{row.appId}</span>,
                 sortValue: (row) => row.appId,
                 width: 'md',
               },
@@ -74,7 +74,7 @@ export default function WorkflowListView() {
               {
                 id: 'step',
                 header: '현재 단계',
-                cell: (row) => <span className="text-secondary">{workflowStatusLabel(row.current_step || row.status)}</span>,
+                cell: (row) => <span className="text-text-secondary">{workflowStatusLabel(row.current_step || row.status)}</span>,
                 sortValue: (row) => row.current_step || row.status,
               },
               {
@@ -124,5 +124,5 @@ function workflowStatusLabel(status: string) {
 }
 
 function CodeText({ children }: { children: string }) {
-  return <code className="inline-flex max-w-full truncate rounded-control border border-border bg-raised px-2 py-1 font-mono text-caption text-secondary">{children}</code>;
+  return <code className="inline-flex max-w-full truncate rounded-control border border-border bg-raised px-2 py-1 font-mono text-caption text-text-secondary">{children}</code>;
 }

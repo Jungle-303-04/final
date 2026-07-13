@@ -2,6 +2,40 @@
 <html lang="ko">
   <head>
     <meta charset="UTF-8" />
+    <script>
+      (() => {
+        let mode = "dark";
+        try {
+          mode = window.localStorage.getItem("theme-mode") === "light" ? "light" : "dark";
+        } catch {
+          mode = "dark";
+        }
+        document.documentElement.dataset.themeMode = mode;
+        document.documentElement.classList.toggle("dark", mode === "dark");
+        document.documentElement.classList.toggle("light", mode === "light");
+        document.documentElement.style.colorScheme = mode;
+      })();
+    </script>
+    <style>
+      :root {
+        --background: #0e1015;
+        --foreground: #eef0f1;
+      }
+      :root[data-theme-mode="light"] {
+        --background: #f7f8fa;
+        --foreground: #1f2430;
+      }
+      html,
+      body,
+      #root {
+        min-height: 100%;
+        color: var(--foreground);
+        background: var(--background);
+      }
+      body {
+        margin: 0;
+      }
+    </style>
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>운영 콘솔</title>
   </head>

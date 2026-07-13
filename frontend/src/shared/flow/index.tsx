@@ -139,7 +139,7 @@ export function CollapsibleGroupNode({ data }: NodeProps<Node<CollapsibleGroupDa
     <button
       type="button"
       className={cx(
-        'inline-flex min-w-40 items-center gap-2 rounded-panel border bg-surface px-4 py-3 text-body font-semibold text-primary shadow-soft transition-colors duration-[var(--ui-duration-fast)] ease-standard hover:border-border-strong focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring',
+        'inline-flex min-w-40 items-center gap-2 rounded-panel border bg-surface px-4 py-3 text-body font-semibold text-text-primary shadow-soft transition-colors duration-[var(--ui-duration-fast)] ease-standard hover:border-border-strong focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring',
         data.tone && flowToneBorderClass(data.tone),
         data.active && 'flow-node--pulse',
       )}
@@ -147,9 +147,9 @@ export function CollapsibleGroupNode({ data }: NodeProps<Node<CollapsibleGroupDa
       aria-expanded={!data.collapsed}
     >
       <Handle type="target" position={Position.Left} className="opacity-0" />
-      <span className={cx('text-muted transition-transform duration-[var(--ui-duration-base)] ease-standard', data.collapsed ? '' : 'rotate-90')}>›</span>
+      <span className={cx('text-text-muted transition-transform duration-[var(--ui-duration-base)] ease-standard', data.collapsed ? '' : 'rotate-90')}>›</span>
       <span className="min-w-0 truncate">{data.label}</span>
-      <span className="rounded-full border border-border bg-raised px-2 py-0.5 text-caption font-bold text-secondary">{data.count}</span>
+      <span className="rounded-full border border-border bg-raised px-2 py-0.5 text-caption font-bold text-text-secondary">{data.count}</span>
       <Handle type="source" position={Position.Right} className="opacity-0" />
     </button>
   );

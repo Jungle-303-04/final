@@ -96,21 +96,21 @@ function DeploymentCard({
     >
       <span className="grid min-w-0 gap-3">
         <span className="flex min-w-0 flex-wrap items-center gap-2">
-          <span className="min-w-0 truncate text-title font-semibold text-primary">{app.name}</span>
+          <span className="min-w-0 truncate text-title font-semibold text-text-primary">{app.name}</span>
           {app.last_run_status ? <StatusBadge status={app.last_run_status} /> : <Badge>run 없음</Badge>}
         </span>
-        <span className="min-w-0 truncate font-mono text-caption text-secondary">{app.repo_ref}@{app.branch}</span>
-        <span className="flex min-w-0 flex-wrap items-center gap-2 text-caption text-muted">
+        <span className="min-w-0 truncate font-mono text-caption text-text-secondary">{app.repo_ref}@{app.branch}</span>
+        <span className="flex min-w-0 flex-wrap items-center gap-2 text-caption text-text-muted">
           <span className="min-w-0 truncate">manifest {app.manifest_path}</span>
           <span>{app.last_deployed_at ? timeAgo(app.last_deployed_at) : '배포 이력 없음'}</span>
         </span>
       </span>
       <span className="grid content-start gap-2">
-        <span className="text-label font-semibold text-muted">연결 클러스터</span>
+        <span className="text-label font-semibold text-text-muted">연결 클러스터</span>
         {loadingDeployments ? (
           <Skeleton lines={1} />
         ) : clusterIds.length === 0 ? (
-          <span className="text-body text-muted">없음</span>
+          <span className="text-body text-text-muted">없음</span>
         ) : (
           <span className="flex flex-wrap gap-2" onClick={(event) => event.stopPropagation()}>
             {clusterIds.map((clusterId) => {

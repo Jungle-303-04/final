@@ -21,7 +21,7 @@ export default function GroupsView() {
       id: 'name',
       header: '이름',
       sortValue: (group) => group.name,
-      cell: (group) => <span className="font-semibold text-primary">{group.name}</span>,
+      cell: (group) => <span className="font-semibold text-text-primary">{group.name}</span>,
     },
     {
       id: 'org',
@@ -142,7 +142,7 @@ function GroupMembers({ group }: { group: Group }) {
         {users.map((user) => {
           const checked = memberIds.has(user.user_id);
           return (
-            <label key={user.user_id} className="flex min-w-0 items-center gap-3 rounded-panel border border-border bg-bg p-3 text-body text-secondary">
+            <label key={user.user_id} className="flex min-w-0 items-center gap-3 rounded-panel border border-border bg-bg p-3 text-body text-text-secondary">
               <input
                 type="checkbox"
                 checked={checked}
@@ -157,7 +157,7 @@ function GroupMembers({ group }: { group: Group }) {
                 }}
               />
               <Avatar name={user.email} />
-              <span className="min-w-0 flex-1 truncate font-medium text-primary">{user.email}</span>
+              <span className="min-w-0 flex-1 truncate font-medium text-text-primary">{user.email}</span>
               {user.role === 'service_admin' && <Badge tone="info">서비스 관리자</Badge>}
             </label>
           );
@@ -194,7 +194,7 @@ function errorMessage(error: unknown) {
 
 function Avatar({ name }: { name: string }) {
   return (
-    <span className="grid h-8 w-8 shrink-0 place-items-center rounded-control border border-border bg-raised text-label font-semibold text-secondary" aria-hidden="true">
+    <span className="grid h-8 w-8 shrink-0 place-items-center rounded-control border border-border bg-raised text-label font-semibold text-text-secondary" aria-hidden="true">
       {initials(name)}
     </span>
   );
