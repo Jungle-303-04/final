@@ -524,6 +524,11 @@ def test_candidate_contract_validator_accepts_full_live_catalog_terminal_shape()
         "next_ordinal": None,
         "contracts": contracts,
     }
+    batch_ranges = scorer["candidate_contract_batch_ranges"](len(contracts))
+    scorer["validate_candidate_contracts"].__globals__["CANDIDATE_BATCH_SHA256"] = {
+        batch_range: scorer["candidate_contract_batch_digest"](contracts, *batch_range)
+        for batch_range in batch_ranges
+    }
 
     errors = scorer["validate_candidate_contracts"](
         document, catalog, candidate_index, recovery, fallback
