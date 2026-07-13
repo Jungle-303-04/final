@@ -1,6 +1,7 @@
 {
   "snapshot_version": "2026-07-13",
   "source_sha256": {
+    "src/services/ai/agent/causes/catalog/autoscaling.yaml": "de552ee7a6fbf63082a3bd21b134d4f896a00858aa9da52a547c9437f7f44d6a",
     "src/services/ai/agent/causes/catalog/crashloop.yaml": "3ec75199452721f68ea637b4e3a4db603627a1192de93fc6411d30c3bd3f1921",
     "src/services/ai/agent/causes/catalog/image_pull.yaml": "cefa73c713b86a44303f0bc881dc2fb119e1ddd1790961cbc37088367c9fb772",
     "src/services/ai/agent/causes/catalog/readiness.yaml": "e09f2afd27bcbab5a88a7908067d245a469a2ec9b4167aa0450cd18bf1742cf3",
@@ -10,6 +11,14 @@
   },
   "fallback_actions": ["manual_analysis"],
   "rules": {
+    "hpa_scaling_failed": {
+      "symptoms": ["HPA scaling failed", "FailedGetResourceMetric", "FailedComputeMetricsReplicas"],
+      "candidates": {
+        "metrics_server_unavailable": ["kubernetes:cluster_resource_state", "metrics:telemetry_metrics", "logs:related_logs"],
+        "missing_resource_requests": ["kubernetes:cluster_resource_state", "logs:related_logs", "metadata:current_workload_snapshots"],
+        "max_replica_limit_reached": ["kubernetes:cluster_resource_state", "metrics:telemetry_metrics", "logs:related_logs"]
+      }
+    },
     "crashloop_backoff": {
       "symptoms": ["CrashLoopBackOff", "pod_restart_loop"],
       "candidates": {
