@@ -169,7 +169,7 @@ def load_recovery_contracts() -> tuple[dict[str, list[dict[str, Any]]], list[dic
             if len(actions) != len(actions_node.elts):
                 raise ValueError(f"{RECOVERY_SOURCE}: actions must contain static calls")
             if decorator.func.attr == "fallback":
-                fallback = actions
+                fallback.extend(actions)
                 continue
             root_causes = ast.literal_eval(_call_keyword(decorator, "root_causes"))
             for candidate_id in root_causes:
