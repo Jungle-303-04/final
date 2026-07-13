@@ -60,8 +60,9 @@ Settings
 
 ```
 ┌────────────────────────────────────────────────────────┐
-│  🔍 Filter...                          [표] [그래프]   │  ← 검색 + 표현 모드
-│  🏷 prod-eks ✕   🏷 checkout-api ✕   🏷 Deployment ✕  │  ← 선택된 칩
+│  🔍 Filter...          [Labels (2)] [표] [그래프]      │  ← 검색 + 우측 Label/표현
+│  prod-eks ✕  checkout-api ✕  team=checkout ✕          │  ← 같은 줄의 선택 칩
+│  Showing 18 of 92                         Clear filters │  ← 서버가 증명한 count
 ├────────────────────────────────────────────────────────┤
 │  (결과)                                                 │
 └────────────────────────────────────────────────────────┘
@@ -74,17 +75,29 @@ Settings
 - 네임스페이스
 - 애플리케이션
 
+이 세 구조적 축은 값이 유한하고 facet catalog에서 미리 알려지므로 tree/dropdown에 나열한다.
+Label은 데이터에서 계속 발견될 수 있는 비유한 축이므로 같은 목록에 섞지 않는다.
+
 **발견형 공통 축 — 구조적 축과 함께 화면 간 유지·전파된다:**
 - 라벨(Kubernetes labels). 구조적 축처럼 유한 목록을 미리 나열하지 않고 별도
   `[Labels (N)]` 버튼과 검색 popover로만 연다.
 
 Label popover 계약:
+- `[Labels (N)]`의 `N`은 **현재 선택된 label 수**다. 검색 결과 수나 전체 facet 수를
+  뜻하지 않는다. 선택이 0개면 `Labels`만 표시한다.
 - 상단에 "선택한 라벨은 AND로 결합됩니다"를 고지한다.
 - `key=value` 부분 일치 검색과 각 label을 가진 항목 수를 함께 표시한다.
+- 목록의 각 count는 현재 workspace·권한·구조적 공통 축·해당 화면 축·이미 선택된 다른
+  label을 모두 적용한 뒤, 그 후보 label까지 AND로 추가했을 때의 결과 항목 수다. 검색어는
+  facet 목록을 좁힐 뿐 결과 count의 조건으로 합산하지 않는다.
 - 선택 항목은 강조하고 `[Clear]`로 label만 모두 해제한다.
 - 선택된 label은 다른 filter chip과 같은 줄에 표시하고 개별 제거할 수 있다.
 - filter bar에는 `Showing N of M`과 `[Clear filters]`를 둔다. N과 M의 완전성을 서버가
-  증명하지 못하면 숫자를 만들지 않고 partial/unavailable 상태를 표시한다.
+  증명하지 못하면 숫자를 만들지 않고 partial/unavailable 상태를 표시한다. 여기서 `N`은
+  모든 filter 적용 후 항목 수, `M`은 같은 workspace·권한·surface에서 filter 적용 전 전체
+  항목 수다. 둘은 같은 snapshot/revision에서 계산해야 한다.
+- `[Clear]`는 label 축만 비우고 `[Clear filters]`는 공통·화면별 filter를 모두 비운다.
+  detail identity와 workspace scope는 어느 동작으로도 지우지 않는다.
 
 **화면별 추가 축:**
 | 화면 | 추가 축 |
@@ -98,17 +111,59 @@ Label popover 계약:
 ### 2.3 문법
 
 - 같은 축의 칩 여러 개 = **OR** (prod-eks OR staging-gke)
-- 다른 축의 칩 = **AND** (클러스터 AND kind)
+- 다른 축의 칩 = **AND** (클러스터 AND resource type)
 - **label끼리는 예외적으로 AND**다 (`team=checkout` AND `tier=critical`). label과 다른
   모든 축 사이도 AND다. 이 차이를 Label popover 안에서 항상 고지한다.
+- 같은 key의 다른 value도 AND다. 예를 들어 `environment=prod`와
+  `environment=staging`을 함께 선택하면 0건이며 OR나 마지막 값 우선으로 보정하지 않는다.
 - 칩 0개 = 팀 전체 (필터 없음이 기본, 빈 결과 아님)
-- 자유 텍스트 검색은 결과 이름·라벨에 대한 부분 일치
+- 화면의 자유 텍스트 검색은 결과 집합을 변경하는 surface search다. Label popover 검색은
+  `key=value` facet 후보만 좁히며 결과 집합·count 조건에는 포함하지 않는다.
 
 ### 2.4 URL 동기화와 화면 간 유지
 
-- URL 쿼리로 직렬화: `?clusters=prod-eks,staging-gke&app=checkout-api&kind=Deployment`
+URL key는 아래가 정본이다. common 값은 URL에 남아 모든 화면에 적용되고, 화면별 key는
+URL에 남아 복원되지만 해당 화면 adapter만 읽는다. 상세 identity key와 filter key는
+서로 다른 namespace를 사용한다.
+
+| 구분 | canonical key | 값 |
+|---|---|---|
+| 공통 | `clusters` | comma로 구분한 stable cluster ID |
+| 공통 | `namespaces` | comma로 구분한 `<cluster-id>/<namespace>` exact pair |
+| 공통 | `applications` | comma로 구분한 stable application ID |
+| 공통 발견형 | `labels` | comma로 구분한 Kubernetes `key=value`; 예: `labels=team%3Dcheckout,tier%3Dcritical` |
+| Resources | `resources.types`, `resources.health`, `resources.includeDeleted`, `resources.q`, `resources.view` | 목록 filter와 `table|graph` 표현 |
+| Issues | `issues.severity`, `issues.status`, `issues.environment`, `issues.q` | Issues에서만 적용 |
+| Applications | `applications.environment`, `applications.status`, `applications.pendingPromotion`, `applications.q` | Applications에서만 적용 |
+| GitOps | `gitops.environment`, `gitops.approval`, `gitops.changeType`, `gitops.q` | GitOps에서만 적용 |
+| Checks | `checks.severity`, `checks.category`, `checks.q` | Checks에서만 적용 |
+| 상세 identity | `resource`, `resourceKind`, `tab`, `full` | filter가 아니며 화면 이동 시 전파하지 않음 |
+
+정규화 규칙:
+- canonical serializer는 multi-value 구분자 comma를 literal로 남기고 각 값만 percent-encode한다.
+  따라서 Label 예시는 정확히 `labels=team%3Dcheckout,tier%3Dcritical`이다.
+- multi value는 stable ID의 Unicode code-point 오름차순으로 정렬하고 중복·빈 값을 제거한다.
+  ID와 Kubernetes label key/value는 comma를 허용하지 않는 canonical 계약이어야 한다.
+- `namespaces`는 단순 이름이 아니라 exact cluster/namespace pair다. application chip은 표시명이
+  아니라 stable application ID다. label은 첫 `=` 앞을 key, 뒤를 value로 해석하고 Kubernetes
+  label 문법을 통과한 equality selector만 query로 보낸다. existence·inequality·set selector는
+  이 버전에 포함하지 않는다. 빈 label value는 Kubernetes 문법상 유효하므로 `key=`로 보존한다.
+- catalog에 아직 없거나 권한 때문에 해석되지 않는 syntactically valid ID는 첫 항목으로
+  바꾸거나 삭제하지 않고 unresolved chip으로 보존한다. 서버가 forbidden을 확정하면 이유를
+  표시한다.
+- legacy `cluster`는 `clusters`가 없을 때만 단일 cluster filter로 읽고, 첫 canonical write에서
+  `clusters`로 교체한다. legacy `cluster`와 canonical `clusters`가 함께 있으면 canonical 값만
+  권위다. 첫 Cluster 자동 선택은 금지한다.
+- legacy Resources detail `resource + kind`는 `resourceKind`가 없을 때만 detail identity로 읽고
+  첫 canonical write에서 `resourceKind`로 교체한다. 이후 `kind`는 사용하지 않는다.
+- chip 추가·삭제·전체 해제는 browser history에 새 항목을 만들고, typing 중 검색과 URL
+  정규화·legacy migration은 replace한다. back/forward로 돌아온 URL이 언제나 권위다.
+- 화면 이동은 common과 모든 화면별 filter key를 보존하지만 `resource`, `resourceKind`, `tab`,
+  `full`, Home의 `node` 같은 detail/drill-in key는 버린다.
+
 - **공통 3축은 화면을 바꿔도 유지된다** — 이것이 "한 화면에서 보는 듯한" 경험의 핵심.
   Resources에서 `prod-eks + checkout-api`를 걸고 Issues로 가면 그대로 유지된다.
+- label 축도 공통 3축과 함께 유지된다.
 - 화면별 추가 축은 해당 화면을 떠나면 보존하되 다른 화면에 적용하지 않는다
   (돌아오면 복원).
 - URL 공유 = 필터 상태 공유. 새로고침에도 복원.
@@ -122,6 +177,37 @@ Label popover 계약:
 3. **상세 내부 항해(노드 클릭 등)는 필터를 변경하지 않는다.** 다만 이동한 항목이
    현재 필터 밖이면 상단에 한 줄 고지: "이 항목은 현재 필터에 포함되지 않습니다
    — [필터 해제]". 정직하게 알리고 선택권을 준다.
+
+### 2.6 Filter identity와 적용 권위
+
+- Cluster는 `ClusterSummary.id`, application은 canonical `applicationId`를 chip identity로 쓴다.
+- Namespace는 `NamespaceRef(clusterId, namespace)` exact pair다. 같은 이름의 namespace를
+  여러 Cluster에서 하나로 합치지 않는다.
+- Resources의 종류 chip은 현재 live inventory가 제공하는 `resource_type` ID다. UI 표시명은
+  Kubernetes kind처럼 보일 수 있어도 상세 identity의 `kind`와 혼용하지 않는다.
+- filter engine은 조건을 표현·직렬화할 뿐, 잘린 page를 client에서 post-filter해 전체 결과처럼
+  보이지 않는다. 각 surface adapter가 서버 filter query로 변환하고 response completeness를
+  그대로 표시한다.
+- Home은 VP-011 범위다. VP-010 filter state는 Home을 통과해 보존할 수 있지만, Home data에
+  적용하거나 기존 단일-cluster projection을 바꾸는 일은 VP-011 계약 전에는 하지 않는다.
+
+### 2.7 Surface별 Label 대상
+
+Label filter는 top-level 결과 행의 stable ID를 distinct count한다. 집계 행은 연결된 **동일한
+canonical Kubernetes 객체 하나**가 선택된 모든 Label을 동시에 가질 때만 일치한다. 서로 다른
+객체의 Label을 합쳐 AND를 만족시키지 않는다.
+
+| surface | Label source snapshot |
+|---|---|
+| Resources | 조회 snapshot의 live resource `metadata.labels` |
+| Issues | incident를 생성·마지막 평가한 event-time evidence resource snapshot |
+| Applications | application binding에 속한 live resource snapshot |
+| GitOps | desired revision의 manifest resource snapshot |
+| Checks | check가 평가한 evaluation-time target resource snapshot |
+
+서버는 이 source 의미를 surface 계약에 고정하고 response의 snapshot/revision을 반환한다.
+해당 source가 없거나 권한상 제한되면 다른 source로 fallback하거나 현재 page에서 추론하지 않는다.
+Label capability가 없는 surface에서는 URL 값을 보존하되 버튼·목록·count를 렌더하지 않는다.
 
 ## 3. Resources 재편
 
@@ -143,19 +229,20 @@ Label popover 계약:
 - **클러스터 이름 우측 메뉴 또는 상세 진입** → 연결 정보·연결 단계·**연결 해제(삭제)**.
 - 아래 카운트는 **선택된 클러스터 기준으로 즉시 갱신**된다. 칩 0개면 팀 전체 합산.
 
-### 3.2 kind 목록 — 실제 계약 기준으로만
+### 3.2 Resource type 목록 — 실제 계약 기준으로만
 
 현재 화면은 외부 기준(레퍼런스)의 K8s 분류를 그대로 나열해 대부분 0이고,
 EndpointSlice·PodDisruptionBudget·API Registration·cloud CNI 같은 우리 제품 의미가
 없는 항목만 숫자가 있다. 이는 BE-Gap 규율 위반이다.
 
 **작업:**
-1. 백엔드 inventory 계약(resource_type 열거 / counts[])을 **실측**해 "노출 대상 kind
+1. 백엔드 inventory 계약(resource_type 열거 / counts[])을 **실측**해 "노출 대상 resource type
    목록"을 확정하고 근거를 이 문서 §7에 기록한다.
-2. 계약에 없는 kind는 **0으로도 렌더하지 않는다.**
+2. 계약에 없는 resource type은 **0으로도 렌더하지 않는다.**
 3. 계약이 부족하면(열거 API 부재 등) 그 부분만 BE-Gap으로 주차하고
    night-log에 필요한 계약을 명시해 백엔드에 요청한다. **추측으로 채우지 않는다.**
-4. "Show N empty" 토글은 유지하되 기본 숨김.
+4. "Show N empty"는 backend가 supported/zero/unobserved를 구분한 뒤에만 기본 숨김으로
+   제공한다. 현재 counts에 없다는 이유만으로 zero를 만들지 않는다.
 
 ### 3.3 결과 목록
 
@@ -273,4 +360,42 @@ Live Traffic은 이번 범위에서 **변경하지 않는다**(현행 유지).
 
 | ID | 필요한 계약 | 막힌 화면 | 상태 |
 |---|---|---|---|
-| (작성 시 추가) | | | |
+| GAP-001 | 현재 actor가 접근 가능한 workspace cursor catalog, current workspace, switch mutation receipt, session refresh, forbidden/deleted 상태 | 상단 workspace selector | backend 요청 필요 · 미렌더 |
+| GAP-002 | workspace-scoped filter facet catalog: stable cluster/application IDs, exact namespace refs, restricted/unresolved 상태, revision, opaque cursor | 공용 filter option과 chip 해석 | backend 요청 필요 · engine codec만 선행 가능 |
+| GAP-003 | Resources multi-cluster·multi-namespace·applicationIds·resourceTypes·health·server search query, stable sort, opaque cursor, total/completeness, row cluster identity와 application binding | Resources filter 결과·Showing N of M·다중 Cluster 표 | backend 요청 필요 · client fan-out 금지 |
+| GAP-004 | workspace/권한/common·surface filter/snapshot을 받는 surface별 label facet search: `key=value` 부분 검색, 후보를 AND 추가했을 때의 count, selected label 재해석, opaque cursor, result total·unfiltered total·completeness, restricted/redacted 정책 | Labels popover·label chip·Showing N of M | backend 요청 필요 · collection 전수 수집 금지 |
+| GAP-005 | Issues의 common axes + severity/status/environment server filter, application/cluster/namespace facet payload, stable detail ID, cursor/total/completeness | Issues filter·filter 밖 detail 판정 | backend 요청 필요 · 미렌더 |
+| GAP-006 | provider-neutral Applications/GitOps/Checks canonical list DTO, common/surface axes, cursor/facet counts/completeness | 세 화면 filter와 목록 | backend 요청 필요 · 기존 검증된 read만 유지 |
+| GAP-007 | registration preflight/register 동일 validation, 발급 전 command preview 또는 명시적 순서, resume/reissue, structured `connection_stage` reason/error code | Cluster 연결 위자드 완성형 | VP-008 blocker 유지 · 미렌더 |
+| GAP-008 | capability/permission, confirmation, operation receipt와 terminal status를 포함한 Cluster 연결 해제 계약 | Cluster 행 메뉴·상세 | backend 요청 필요 · 삭제 UI 미렌더 |
+| GAP-009 | repository URL recognition result, access check, credential challenge, branch cursor/default, manifest/remediation candidate path cursor, background operation receipt/status | Git 저장소 등록 위자드 | backend 요청 필요 · 수동값 추측 금지 |
+| GAP-010 | Resources filter와 동일 scope/revision을 소비하는 single-cluster graph snapshot, partial/restricted/completeness와 drill-down identity | Resources graph mode·Topology 메뉴 제거 | backend 요청 필요 · 기존 Topology menu 유지 |
+
+### 9.1 GAP-004 최소 소비 계약
+
+예상 canonical DTO 이름은 `LabelSelector`, `LabelFacetQuery`, `LabelFacetItem`,
+`LabelFacetPage`, `FilterResultCounts`, `FilterSnapshotMeta`, `SelectedLabelResolution`이다.
+endpoint 경로와 저장 구조는 백엔드 소유지만 다음 의미는 필수다.
+
+요청:
+- workspace는 인증 session으로 결정하며 query의 임의 workspace ID를 신뢰하지 않는다.
+- `surface`는 `resources | issues | applications | gitops | checks` 중 하나다.
+- common filter, 해당 surface filter, 결과 검색어, 선택된 Label AND 집합을 모두 전달한다.
+- facet 검색어는 결과 검색어와 별도 nullable 필드다.
+- `cursor`는 opaque nullable string, `limit`은 양의 정수다. 다음 page는 첫 page와 같은
+  snapshot revision에 고정한다.
+
+응답:
+- `items[]`는 required `key`, `value`, canonical `selector`, nullable `matchCount`,
+  `countCompleteness: exact | partial | unavailable`을 가진다.
+- `selectedResolutions[]`는 URL의 각 selector를 `resolved | zero | restricted | unavailable`로
+  판정한다. `restricted`는 존재 여부나 count를 추가로 노출하지 않는다.
+- `nextCursor: string | null`, `hasMore`, `filteredCount: number | null`,
+  `unfilteredCount: number | null`, 각 count의 completeness를 반환한다. 완전하지 않은 0을
+  exact 0으로 반환하지 않는다.
+- `snapshotRevision`, `authorizationRevision`, `filterFingerprint`, RFC 3339 `observedAt`,
+  `stale`, 구조화 `partialReasonCodes[]`를 반환한다.
+- cursor는 workspace·authorization revision·surface·정규화 filter·facet 검색어·snapshot에
+  결합한다. filter가 바뀌면 기존 cursor는 재사용할 수 없다.
+- list와 facet의 snapshot이 다르면 프론트는 count를 섞지 않고 background refreshing으로
+  전환한다. restricted source가 포함되면 exact count로 가장하지 않는다.
