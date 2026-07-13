@@ -1320,3 +1320,15 @@ Bundle route는 200을 반환한다.
 - `create_all`을 0900과 동등하다고 추정하지 않는다. 무표식 전환 정책을 지키기 위해 다음 단위는
   새 versioned baseline DB 생성 → data-only 이관 → catalog/data invariant → 복구 rehearsal →
   DBA 확인 → connection cutover로 진행한다.
+
+## 2026-07-14 — versioned baseline DB bootstrap 안전 착륙
+
+- RED `06fb01334`, GREEN `b2786060d`. 첫 revision 직전 commit `017b2485b...`의 schema-only
+  snapshot을 SHA-256으로 고정하고, 새 빈 `public` schema와 두 operator confirmation이 모두
+  일치할 때만 정상 `alembic upgrade head`를 실행한다. `stamp` 경로는 없다.
+- 실 PostgreSQL 17에서 빈 DB → 50-table snapshot → head `20260713_2350` → 63 tables/149
+  indexes, INVALID index 0건을 확인했다. 일반 migration runner 재실행은 `current`였다.
+- service image build가 snapshot digest와 단일 head를 검증한다. 전체 게이트 Ruff lint/format
+  PASS, import-linter 8/8, pytest `2137 passed, 3 skipped`, manifest 69/20이다.
+- 격리 착륙: AWS 경로·application secret에는 미배선이다. data-only 이관·catalog/data invariant·
+  restore rehearsal·DBA 승인 전에는 P0-1b 완료나 cutover로 판정하지 않는다.
