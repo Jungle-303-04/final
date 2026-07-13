@@ -1743,3 +1743,5 @@ API 완성: registerTarget (8678d63b0)
   Vite production build 14,538 modules.
 - `npm run visual-product` PASS: 36 isolated scenarios, light/dark·320px·200% text·forced colors·
   en/ko 포함, exact scenario API requests, unexpected feature network/WebSocket 0건.
+- standalone `npm run build` PASS: 14,538 modules, `dist` 26 MiB / 2,675 files,
+  `ProductApp-C79itfkb.js` 319 KiB, `ProductApp-Dh-KDTNp.css` 77 KiB.

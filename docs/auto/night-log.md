@@ -1676,3 +1676,15 @@ target preflight·register 네 함수와 strict Zod 계약을 claim했다. 1회�
   design guard 340 files, shadcn 482 previews, Vite build 14,538 modules.
 - `npm run visual-product` PASS: 36 isolated scenarios, exact scenario API requests,
   unexpected feature network/WebSocket 0건.
+
+## 2026-07-13 15:24 KST — [프론트] P9 전체 게이트·production build 갱신
+
+- 제품 코드 스냅샷 `3fe308f95`, 판정 문서 기준점 `33279272c`에서 검증했다.
+- `npm run check` PASS: TypeScript·ESLint, Vitest 113 files / 824 tests,
+  design guard 340 files, shadcn 482 previews, Vite production build 14,538 modules.
+- `npm run visual-product` PASS: 36 isolated scenarios, exact scenario API requests,
+  unexpected feature network/WebSocket 0건.
+- standalone `npm run build` PASS: 14,538 modules, `references/ui-layer-lab/dist` 26 MiB,
+  assets 26 MiB, 2,675 files. 제품 entry는 `ProductApp-C79itfkb.js` 319 KiB와
+  `ProductApp-Dh-KDTNp.css` 77 KiB다.
+- backend pipeline I는 `done`, frontend H는 사람 전용 `🔒waiting`이다. 배포는 수행하지 않았다.
