@@ -174,7 +174,12 @@ class DesiredStateReconciler:
         details: dict[str, object] = {"resources": results}
         if self.reconciler_mode == RECONCILER_MODE_ARGOCD and self.argo_observer is not None:
             try:
-                details["argocd"] = await self.argo_observer.snapshot()
+                argocd = await self.argo_observer.snapshot()
+                details["argocd"] = argocd
+                applications = argocd.get("applications")
+                if not isinstance(applications, dict) or applications.get("available") is not True:
+                    status = RECONCILE_FAILED
+                    argocd["error"] = "Argo CD Application observation unavailable"
             except Exception as exc:
                 status = RECONCILE_FAILED
                 details["argocd"] = {

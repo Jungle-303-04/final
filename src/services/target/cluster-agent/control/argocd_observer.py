@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from typing import Any, Protocol
+from urllib.parse import urlsplit, urlunsplit
 
 import httpx
 from kubernetes_api import (
@@ -19,6 +20,7 @@ ROLLOUTS_PATH = f"{ARGO_API_PREFIX}/rollouts"
 DEFAULT_LIST_LIMIT = 200
 UNAVAILABLE_STATUS_CODES = frozenset({403, 404})
 FAILED_ROLLOUT_PHASES = frozenset({"degraded", "error", "failed"})
+READY_OPERATION_PHASES = frozenset({"", "succeeded"})
 
 
 class ArgoObserver(Protocol):
@@ -137,7 +139,7 @@ def application_sources(spec: Mapping[str, Any]) -> list[JsonObject]:
         candidates.extend(item for item in sources if isinstance(item, Mapping))
     return [
         {
-            "repo_url": text(item.get("repoURL")),
+            "repo_url": sanitized_repo_url(item.get("repoURL")),
             "target_revision": text(item.get("targetRevision")),
             "path": text(item.get("path")),
         }
@@ -149,7 +151,7 @@ def application_ready(sync_status: str, health_status: str, operation_phase: str
     return (
         sync_status.lower() == "synced"
         and health_status.lower() == "healthy"
-        and operation_phase.lower() not in FAILED_ROLLOUT_PHASES
+        and operation_phase.lower() in READY_OPERATION_PHASES
     )
 
 
@@ -176,3 +178,19 @@ def mapping(value: object) -> Mapping[str, Any]:
 
 def text(value: object) -> str:
     return str(value).strip() if value is not None else ""
+
+
+def sanitized_repo_url(value: object) -> str:
+    raw_url = text(value)
+    try:
+        parsed = urlsplit(raw_url)
+        if parsed.username is None:
+            return raw_url
+        hostname = parsed.hostname or ""
+        if ":" in hostname and not hostname.startswith("["):
+            hostname = f"[{hostname}]"
+        port = parsed.port
+    except ValueError:
+        return ""
+    netloc = f"{hostname}:{port}" if port is not None else hostname
+    return urlunsplit((parsed.scheme, netloc, parsed.path, parsed.query, parsed.fragment))
