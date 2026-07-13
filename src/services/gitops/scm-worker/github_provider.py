@@ -121,6 +121,17 @@ def change_document(request: SafePrRequestedBody) -> str:
     if request.policy_decision_ref:
         approval_rows.append(f"- policy_decision_ref: `{request.policy_decision_ref}`")
     approval_section = "\n".join(approval_rows) if approval_rows else "- approval_ref: 없음"
+    structured_plans = [
+        patch.content.rstrip()
+        for patch in request.patches
+        if patch.path.startswith(".gitops/safe-pr/patches/")
+    ]
+    structured_section = (
+        "\n\n## Structured Patch Plan\n\n"
+        + "\n\n".join(f"```yaml\n{content}\n```" for content in structured_plans)
+        if structured_plans
+        else ""
+    )
     return (
         f"# {request.title}\n\n"
         f"{request.body}\n\n"
@@ -134,6 +145,7 @@ def change_document(request: SafePrRequestedBody) -> str:
         f"{approval_section}\n\n"
         "## Files\n\n"
         f"{patch_section}\n"
+        f"{structured_section}"
     )
 
 
