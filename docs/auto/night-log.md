@@ -1423,3 +1423,20 @@ JsonMap, AbortSignal, ID 검증을 완료 앵커 전까지 제품 화면에서 �
   unexpected feature network / WebSocket 0건. 증거:
   `references/ui-layer-lab/output/playwright/product-issues-authenticated-detail-desktop-light.png`.
 - VP-002 완료 후 파이프라인 E는 VP-003이 남아 `in_progress`를 유지한다.
+
+## 2026-07-13 14:08 KST — [프론트] E BLOCKED: VP-003 인과 식별자·분류 계약 결손
+
+- canonical `origin/dev`의 `AuditTimelineItem`과 serializer는
+  `subject/source/created_at/causation_id/payload_summary`만 반환한다.
+  `EventEnvelope.causation_id`는 직접 부모의 `event_id`인데 현재 항목의 `event_id`가 응답에
+  없어 parent-child 결합이 불가능하다. DB에 실재하는 ID를 배열 index·시각·subject 합성값으로
+  추측하지 않는다.
+- `docs/backend-f-workqueue.md`는 BQ-004 인계물로 subject 분류 목록을 명시하지만,
+  canonical progress와 API 응답에는 그 목록이나 `journey_stage`가 없다. prefix 기반 고정 매핑도
+  계약 없는 추측이므로 만들지 않는다.
+- `UI-056 TimelineSwimlane`은 `reference-contract-map.md`의 inventory 선언뿐이며 실제 재사용
+  컴포넌트는 없다. 따라서 VP-002 시간순 목록을 중복 포장하거나 가짜 인과선을 그리지 않았다.
+- 재개 조건: 백엔드가 `AuditTimelineItem.event_id`를 required non-empty stable ID로 additive
+  제공하고, subject→journey stage의 canonical 분류 계약(unknown 처리 포함)과 완료 앵커를
+  `origin/dev`에 착륙한다. 그 뒤 strict Zod RED→GREEN, 인과 트리/시간순 강등/키보드 목록
+  테스트 순서로 재개한다.
