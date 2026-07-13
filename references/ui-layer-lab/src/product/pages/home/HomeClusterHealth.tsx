@@ -4,6 +4,7 @@ import type {
   HomeClusterChoice,
   HomeClusterOverview,
 } from "../../features/home/homeContract";
+import { ClusterProviderIcon } from "../../features/cluster-scope/ClusterProviderIcon";
 import { useI18n } from "../../shared/i18n/I18nProvider";
 import { Metric } from "../../shared/ui/Metric";
 import { StatusMark } from "../../shared/ui/StatusMark";
@@ -40,9 +41,12 @@ export function HomeClusterHealth({
       className="grid min-w-0 gap-0 overflow-hidden"
     >
       <div className="flex min-w-0 flex-wrap items-center justify-between gap-3 border-b p-4">
-        <h2 className="truncate text-base font-semibold" id="cluster-health-title">
-          {t("home.section.clusterStatus")}
-        </h2>
+        <div className="flex min-w-0 items-center gap-2">
+          {cluster ? <ClusterProviderIcon provider={cluster.provider} /> : null}
+          <h2 className="truncate text-base font-semibold" id="cluster-health-title">
+            {t("home.section.clusterStatus")}
+          </h2>
+        </div>
         {overview.phase === "ready" ? (
           <StatusMark tone={overview.data.health} />
         ) : overview.phase === "failed" ? (

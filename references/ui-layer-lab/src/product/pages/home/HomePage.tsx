@@ -1,24 +1,11 @@
-import { CircleAlert, RefreshCw, Server } from "lucide-react";
+import { CircleAlert, RefreshCw } from "lucide-react";
 import type { HomePort, HomePortFailure } from "../../features/home/homeContract";
 import { useI18n } from "../../shared/i18n/I18nProvider";
 import { ProductStateScreen } from "../../shared/ui/ProductStateScreen";
 import { ProductPageFrame } from "../../shared/ui/ProductPageFrame";
 import { Surface } from "../../shared/ui/Surface";
-import {
-  ClusterConnectionStatus,
-  clusterDisplayLabel,
-} from "../../shared/ui/ClusterConnectionStatus";
 import { Alert, AlertDescription, AlertTitle } from "../../shared/ui/primitives/alert";
 import { Button } from "../../shared/ui/primitives/button";
-import {
-  Select,
-  SelectContent,
-  SelectGroup,
-  SelectItem,
-  SelectLabel,
-  SelectTrigger,
-  SelectValue,
-} from "../../shared/ui/primitives/select";
 import { HomeClusterHealth } from "./HomeClusterHealth";
 import { HomeIssuesRail } from "./HomeIssuesRail";
 import { HomeLiveBand } from "./HomeLiveBand";
@@ -41,66 +28,30 @@ export function HomePage({ port }: { port: HomePort }) {
   const selectedCluster = state.choices.data.clusters.find(
     (cluster) => cluster.id === state.selectedClusterId,
   );
-  const selectItems = state.choices.data.clusters.map((cluster) => ({
-    label: clusterOptionLabel(cluster),
-    value: cluster.id,
-  }));
+  if (state.clusterAccess.kind === "forbidden") {
+    return <HomeFailureScreen failure={state.clusterAccess.failure} onRetry={state.refresh} />;
+  }
   const refreshing = [state.choices, state.overview, state.nodes, state.pods].some(
     (resource) => resource.phase === "ready" && resource.refreshing,
   );
 
-  if (state.clusterAccess.kind === "forbidden") {
-    return <HomeFailureScreen failure={state.clusterAccess.failure} onRetry={state.refresh} />;
-  }
-
   return (
     <ProductPageFrame>
       <header className="flex min-w-0 justify-end">
-        <div className="flex w-full min-w-0 items-center justify-end gap-2 xl:w-auto">
-          {selectedCluster ? (
-            <ClusterConnectionStatus
-              connectionState={selectedCluster.connectionState}
-              lastObservedAt={selectedCluster.lastObservedAt}
-            />
-          ) : null}
-          <Select
-            items={selectItems}
-            onValueChange={(value) => { if (value) state.selectCluster(value); }}
-            value={selectedCluster?.id ?? null}
-          >
-            <SelectTrigger
-              aria-label={t("home.cluster.select")}
-              className="w-full min-w-0 flex-1 xl:w-(--product-cluster-select-width) xl:flex-none"
-            >
-              <Server aria-hidden="true" />
-              <SelectValue placeholder={t("home.cluster.select")} />
-            </SelectTrigger>
-            <SelectContent alignItemWithTrigger={false}>
-              <SelectGroup>
-                <SelectLabel>{t("home.cluster.available")}</SelectLabel>
-                {selectItems.map((item) => (
-                  <SelectItem key={item.value} value={item.value}>{item.label}</SelectItem>
-                ))}
-              </SelectGroup>
-            </SelectContent>
-          </Select>
-          <Button
-            aria-label={t("common.action.refresh")}
-            disabled={refreshing}
-            onClick={state.refresh}
-            size="icon"
-            type="button"
-            variant="outline"
-          >
-            <RefreshCw
-              aria-hidden="true"
-              className={refreshing ? "motion-safe:animate-spin" : undefined}
-              data-icon="inline-start"
-            />
-          </Button>
-        </div>
+        <Button
+          aria-label={t("common.action.refresh")}
+          disabled={refreshing}
+          onClick={state.refresh}
+          size="icon"
+          type="button"
+          variant="outline"
+        >
+          <RefreshCw
+            aria-hidden="true"
+            className={refreshing ? "motion-safe:animate-spin" : undefined}
+          />
+        </Button>
       </header>
-
       {!state.selectedClusterExists ? (
         <UnknownCluster clusterId={state.selectedClusterId} />
       ) : (
@@ -203,12 +154,4 @@ function HomeFailureScreen({
       }}
     />
   );
-}
-
-function clusterOptionLabel(cluster: {
-  environment: string;
-  id: string;
-  name: string;
-}) {
-  return clusterDisplayLabel(cluster);
 }

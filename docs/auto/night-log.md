@@ -871,6 +871,175 @@ npm run visual-product
   `codex/f-auto-revert-pr`에서 진행 중이다. 같은 worktree가 감사 중에도 전진했으므로
   조율 세션은 해당 lane에 동시 수정·rebase·테스트를 수행하지 않는다.
 
+## 2026-07-13 11:10 KST — [프론트] PROMOTE 동기화·BQ-006 인계 이식
+
+- `origin/dev` `a65c66c7102fb453e583ed4ec44f1950a9df9ba2`, 팀 통합 merge
+  `0eaaa6637ca46bf29b073bd0dbe274719ffd5ee3`, FE-A2 lab HEAD
+  `977329121056ebd583481f127a3c0a64f86182fb`의 ancestor 검증은 모두 exit 0이다.
+- canonical `woonyong/ui-layer-lab`을 `origin/dev`로 fast-forward하고 동일 HEAD를 원격 lab에
+  push했다.
+- 847행의 `[이식 대기]` 원문은
+  `docs/spec/frontend/verified-pipeline-insertion-map.md`의 VP-005 행과 §1c로 이식했다.
+  optional `promotion_gate`, `PromotionGateResponse` 전 필드, 단일 eligible 판정,
+  동적 run 필드 보존, 활성 10초/비활성 60초 폴링 규칙을 보존했다.
+- VP-005는 BQ-006 앵커 `8cd0b18e96f1266873d1632486472d0d22c18477`의
+  `origin/dev` 착륙을 근거로 `backend 선행`에서 `직결`로 갱신했다.
+
+## 2026-07-13 11:10 KST — [프론트] 브랜치·worktree·stash 전수 감사
+
+- frontend 소유 canonical은 `woonyong/ui-layer-lab` 하나다. 기존
+  `codex/ui-layer-lab-references`는 2026-07-09 canonical 이름으로 이미 rename되어 잔존 ref가
+  없고, 현재 frontend 소유 임시 branch/worktree는 0개다. 따라서 삭제는 0건이다.
+- `git worktree prune --dry-run --verbose`는 출력 0줄, exit 0이다. 아래 Codex ref는 frontend
+  소유가 아니거나 활성·미착륙 변경이 있어 유지했다.
+  - `codex/f-auto-revert-pr` `bce0ce2f6a91513e3f202dead5498af1a980f5f2`: 감사 중에도
+    HEAD가 전진한 활성 backend P lane.
+  - `codex/rca-log-evidence-scope-20260710`
+    `a5ac062fb53752ec64a7ac37e38611ed0f3454d5`: backend RCA worktree.
+  - `codex/runtime-hardening-20260710`
+    `ae3ee71a229af78f804f88e16ecdc466443bf5f9`: backend runtime worktree, 미착륙 2커밋.
+  - `codex/cloudflare-token-normalization`
+    `83864abdf0b677660d35d78a1f05d930acb6854a`: infra/backend 이력.
+  - `codex/platform-foundation` `63618a4fb81c4acda22ec125fa7934d9ef9d0204`:
+    platform/backend 이력.
+- 감사 직후 반영 완료 stash 3건과 빈 stash 1건이 다른 세션에서 동시 제거된 것을 감지했다.
+  제거 전·후 hash로 대조했으며 이어진 `git stash drop stash@{9}`는 대상 부재로 실패해 남은
+  stash에는 변경이 없었다.
+  - `26ea8593e090cf20a14ed3538ecac9ea62dace11`: visual gate·no-content export가 후속
+    `6a40a5d01` 및 현행 코드에 반영됨.
+  - `5932d438212a273fe8f409a6199050edc9157cc8`: no-content 계약 문서·queue·visual 변경이
+    `8ef2338c2`, `6a40a5d01` 및 후속 커밋에 반영됨.
+  - `51e64ba44982ba07f41e1962d715a7bc4ae79651`: Sidebar 계약이 `6a40a5d01`에 반영됨.
+  - `8fd3b12d2677e52a342c6e66d98589ff75fafcff`: 추적 diff가 없는 빈 stash.
+- 유지 stash는 다음 8건이다.
+  - `a6c68efbea026595a4c6732a5b4173025a8650ce`
+    (`wip-pre-fe-a2-20260713`): APIQ-019 conversation ID 검증과 catalog strict-envelope 회귀
+    테스트가 아직 canonical에 미반영이며, forward patch check exit 0.
+  - `bc2be0b379ab89e30b3a79647b1fc0516a639705`: legacy `frontend/**` 삭제와 lab dependency
+    delta가 FE-A2의 legacy 복원 정책과 달라 미반영; 임의 폐기 없이 보존.
+  - `de98fea5d5861aaae0180b66a347392d41e76f27`,
+    `e28c22ceb9afa3c4ee0e40d95d2570cb0751f42d`: backend provider/event 작업 소유이며 미반영.
+  - `556980eeb427040d1bd39354cf2b02477eb6c7a2`,
+    `5c00fb04eb117a556c01c2517ae45f553e65c570`,
+    `9b121a137bd91d2d8c93a753bd02fdcd6a52cace`,
+    `c764ce58b6dddff4cb58067bbf56a99739de0364`: 과거 demo/rename 작업의 미반영 보존분으로,
+    현재 frontend canonical과 소유·경로가 달라 유지.
+
+[2026-07-13 11:56 KST] [프론트] D in_progress — VP-007 provider-free 전역 Cluster selector를 URL 단일 권위·셸 단일 목록 요청·화면 로컬 쿼리 격리 기준으로 구현 및 full gate 검증 중.
+
+## 2026-07-13 12:08 KST — [프론트] VP-007 provider-free slice 완료 증거
+
+- 코드 커밋·push: `2c4487d7b` (`feat: 전역 클러스터 범위 선택기 통합`). 이 단위는
+  조율 문서 커밋과 분리했다.
+- 전역 셸의 `ClusterScopeProvider`가 목록 요청·URL `cluster`·30초 visible polling의 단일
+  권위가 됐다. Home·Resources의 중복 selector와 목록 요청은 제거했으며 surface 이동은
+  Cluster만 보존하고 `node`·`namespace`·`resource` 등 화면 로컬 query를 제거한다.
+- 명시적 unknown·`cluster=`는 자동 fallback하지 않는다. 401은 auth gate로 승격하고, 403은
+  검증된 목록 캐시를 제거하며, background offline은 마지막 검증 목록을 유지한다.
+- BQ-017 착륙 전 provider·health 필드는 읽거나 추측하지 않고 일반 Server 아이콘만 쓴다.
+- `npm run check` PASS: TypeScript·ESLint, Vitest 103 files / 741 tests, design guard 311 files,
+  shadcn 482 previews, Vite production build.
+- `npm run visual-product` PASS: 35 scenarios, unexpected API/network/WebSocket 요청 0.
+
+[2026-07-13 12:11 KST] [프론트] BQ-017 스키마 호환 완료 + `bfaf03901` —
+`ClusterSummary.provider`와 `ClusterConnectionStatus.connection_stage`를 canonical enum의
+optional 필드로 strictObject에 명시했다. unknown key 거부는 유지했다. targeted 17 tests 및
+full `npm run check` PASS(103 files / 745 tests, design 311 files, shadcn 482 previews, build).
+
+[2026-07-13 12:12 KST] [프론트-D/API] APIQ-019 in_progress — AI conversation 4함수의
+strict envelope·open JsonMap·AbortSignal·possibly-sent POST 단일 호출 계약을 재claim했다.
+코드 커밋과 exact `API 완성:` 앵커 전 제품 화면 소비는 0으로 유지한다.
+
+## 2026-07-13 12:17 KST — [프론트-D/API] APIQ-019 완료 증거
+
+- claim 조율 커밋 `151d1bc4d`와 코드 커밋 `84dc48a68`을 분리해 push했다.
+- exact anchors: `listAiConversations`, `getAiConversation`, `createAiConversation`,
+  `appendAiMessage` → `84dc48a68`; canonical ancestor exit 0.
+- targeted 2 files / 20 tests PASS. `npm run check` PASS: 104 files / 750 tests,
+  design guard 312 files, shadcn 482 previews, Vite production build.
+- 화면·adapter 신규 소비는 이 API 단위에 포함하지 않았다.
+
+## 2026-07-13 12:29 KST — [프론트-D] VP-007 ProviderIcon 완료 증거
+
+- BQ-017 백엔드 코드 `db4798d4e`와 canonical merge `d507ca6d4`의 `origin/dev`
+  ancestor exit 0 및 response 계약 실물을 확인했다.
+- 코드 커밋 `b4d1af3cd`: optional wire provider를 canonical `unknown`으로 정규화하고 단일
+  `ClusterProviderIcon`을 전역 selector에 연결했다. EKS/GKE/AKS만 검증된 브랜드 아이콘을,
+  on-prem/kind/unknown은 일반 Kubernetes 계열 아이콘을 사용한다. provider 기반 화면 분기 0.
+- full `npm run check` PASS: 105 files / 756 tests, design guard 314 files,
+  shadcn 482 previews, Vite production build.
+- `npm run visual-product` 1·2차는 200% text resize에서 icon 추가로 생긴 42px overflow를
+  검출했다. connection label을 시각적으로 compact화하고 셸의 2행 전환점을 `lg`로 올린 뒤
+  3차 35 scenarios PASS, unexpected API/network/WebSocket 요청 0.
+
+[2026-07-13 12:30 KST] [프론트-D/API] APIQ-015 in_progress — provider-neutral Catalog의
+`listCatalogItems`·`getCatalogItem` 계약을 claim했다. strict list/detail envelope와 open item
+JsonMap, AbortSignal, ID 검증을 완료 앵커 전까지 제품 화면에서 소비하지 않는다.
+
+## 2026-07-13 12:34 KST — [프론트-D/API] APIQ-015 완료 증거
+
+- claim 조율 커밋 `e3ab2c458`와 코드 커밋 `1ad595b42`를 분리해 push했다.
+- exact anchors: `listCatalogItems`, `getCatalogItem` → `1ad595b42`; canonical ancestor exit 0.
+- 백엔드 strict response envelope와 open `JsonMap` item을 대조했다. 목록·상세 외피 drift 거부,
+  item 확장 보존, AbortSignal, ID·URL, 404·malformed 계약 5 tests PASS.
+- full `npm run check` PASS: 105 files / 757 tests, design guard 314 files,
+  shadcn 482 previews, Vite production build.
+
+## 2026-07-13 12:35 KST — [프론트] D 완료 증거
+
+- VP-007 전역 Cluster selector `2c4487d7b`, BQ-017 strict schema 호환 `bfaf03901`,
+  검증된 provider icon `b4d1af3cd`가 canonical branch에 착륙했다.
+- APIQ-019 코드 `84dc48a68`의 4개 exact anchor와 APIQ-015 코드 `1ad595b42`의 2개
+  exact anchor를 기록했다. `api-needs.md`는 0행·0함수, requested/in_progress/blocked 모두 0이다.
+- 각 단위 full `npm run check`가 통과했고 마지막 결과는 105 files / 757 tests,
+  design guard 314 files, shadcn 482 previews, production build PASS다.
+
+## 2026-07-13 12:37 KST — [프론트] F 완료 증거
+
+```text
+명령: cd references/ui-layer-lab && npm run check
+결과: PASS
+- TypeScript / ESLint: PASS
+- Vitest: 105 files, 757 tests PASS
+- product design guard: 314 files PASS
+- shadcn source audit: 482 previews PASS, upstream 21e4ceb
+- Vite production build: PASS, 14,512 modules transformed
+
+명령: cd references/ui-layer-lab && npm run visual-product
+결과: PASS
+- isolated product scenarios: 35/35 PASS
+- light/dark, mobile, 320px reflow, 200% text, forced-colors, en/ko 포함
+- exact scenario API requests, unexpected feature network/WebSocket: 0
+```
+
+## 2026-07-13 12:39 KST — [프론트] G 완료 증거
+
+- production build: `cd references/ui-layer-lab && npm run build` PASS, 14,512 modules.
+- 산출 경로: `references/ui-layer-lab/dist` — 26 MiB, assets 26 MiB, 2,675 files.
+- 제품 entry: `ProductApp-Sd31eMe8.js` 279.00 kB / gzip 76.92 kB,
+  `ProductApp-CRl--wg1.css` 78.67 kB / gzip 14.00 kB.
+- `references/ui-layer-lab/Dockerfile`은 multi-stage build 후 unprivileged nginx:8080으로
+  `dist/`를 서빙한다. `nginx.conf`는 `/api/`를 `api-gateway:8000`, `/api/live/`를
+  `realtime-gateway:8000`으로 same-origin proxy하고 SPA fallback을 제공한다.
+- 배포 실행은 하지 않았다. 기존 `scripts/aws-up.sh`의 console build context는 legacy
+  `frontend/`이므로 FE-H에서는 `references/ui-layer-lab/Dockerfile`·context를 명시한 별도
+  console image build가 필요하다. 사람 승인 없이 스크립트·클러스터를 수정하지 않는다.
+
+## GO-REQUEST [FE-H]
+
+- frontend branch / gate-build snapshot: `woonyong/ui-layer-lab` /
+  `f50c2e8dbb160ac903acb986275ae6a64165ffcd`
+- build command: `cd references/ui-layer-lab && npm ci && npm run check && npm run visual-product && npm run build`
+- artifact: `references/ui-layer-lab/dist` (26 MiB, 2,675 files)
+- image build 제안: `docker build --platform linux/amd64 -f references/ui-layer-lab/Dockerfile -t <immutable-console-image> references/ui-layer-lab`
+- 배포 제안: image push 후 management namespace의 `deployment/console` image를 immutable tag로
+  교체하고 rollout 완료·`/`·`/api/auth/session`·`/api/healthz`를 확인한다.
+- rollback: 직전 immutable console image tag로 재설정하거나 Kubernetes rollout undo 후 같은
+  세 endpoint와 인증 쿠키·WebSocket upgrade를 재확인한다.
+- gate: `npm run check` PASS(105 files / 757 tests), `npm run visual-product` PASS(35/35,
+  unexpected network/WebSocket 0), standalone production build PASS.
+- 대기 조건: 백엔드 pipeline I는 `origin/dev`에서 아직 `pending`이다. FE-H 실행은 백엔드 I
+  완료와 사람 GO가 모두 확인된 뒤에만 가능하다.
 ## 2026-07-13 11:22 KST — GO-REQUEST [H3]
 
 - lane: `codex/f-auto-revert-pr`, HEAD `b8188ad38`; 최신 origin/dev
@@ -1185,6 +1354,144 @@ npm run visual-product
 - 실물 `docs/auto/night-directives.md`의 최신 번호는 D-021이고 D-024 본문은 아직 없지만,
   활성 목표에 제공된 D-024 상시 착륙 승인·4조건 전체를 적용했다. 배포 실행은 하지 않았다.
 
+## 2026-07-13 13:10 KST — [프론트] dev→lab 동기화 증거
+
+- 동기화 전 `origin/dev...woonyong/ui-layer-lab` divergence는 dev-only 36 / lab-only 16으로
+  30커밋 임계값을 초과했다. merge base는 `a65c66c7102fb453e583ed4ec44f1950a9df9ba2`다.
+- `git merge-tree --write-tree HEAD origin/dev`의 유일한 충돌은 append-only
+  `docs/auto/night-log.md`였다. 양쪽 기록을 모두 보존했고 제품/계약 파일 충돌은 0건이다.
+- 삭제 감사: staged merge delta에서 `frontend/**` 삭제 0건, `src/**` 삭제 0건.
+  backend `src/**`는 `origin/dev` 내용을 그대로 흡수했으며 프론트 세션의 수동 수정은 0건이다.
+- `cd references/ui-layer-lab && npm run check` PASS: TypeScript·ESLint, Vitest 105 files /
+  757 tests, design guard 314 files, shadcn 482 previews, Vite production build 14,512 modules.
+- 현재 canonical `origin/dev`에는 `[D-024]` 제목 본문이 없음을 확인했다. 본 작업은 사용자가
+  제공한 `[D-024]` 4조건(전체 게이트·정책 충돌만 해소·삭제 감사·push/ancestor 증명)을
+  직접 정본으로 적용했다.
+
+## 2026-07-13 13:20 KST — [프론트] P1 Opsia 표시 계약 완료
+
+- RED `bdc4721a6`: 브라우저 제목·셸·인증 헤더·영문/한글 로그인·시각 게이트의 기대값을
+  `Opsia`로 먼저 고정했다. 런타임이 여전히 `KubeHeal`을 반환해 대상 테스트 7파일이
+  실패하고 1파일만 통과하는 RED를 확인했다(11 failed / 38 passed).
+- GREEN `4ac637323`: `product.name` 카탈로그 키를 en/ko에 추가하고, 셸과 인증 헤더가
+  카탈로그를 소비하도록 연결했다. 문서 title과 로그인 문자열도 `Opsia`로 변경했다.
+  대상 회귀는 8 files / 49 tests PASS다.
+- 식별자 보존: 대문자 `KubeHeal`은 vendor/dist/output 제외 0건이다. 저장 키
+  `kubeheal-theme`, `kubeheal.locale`과 이벤트 `kubeheal:product-shortcut`은 변경하지 않았다.
+- 전체 게이트: `npm run check` PASS — TypeScript·ESLint, Vitest 105 files / 757 tests,
+  design guard 314 files, shadcn 482 previews, Vite production build 14,512 modules.
+- 시각 게이트: `npm run visual-product` PASS — 인증·Home·Resources·셸·상태 화면의
+  light/dark, 320px reflow, 200% text resize, forced-colors, en/ko를 포함한 34 scenarios.
+
+## 2026-07-13 13:22 KST — [프론트] P2 VP-002 진입조건 검증·API claim
+
+- `git merge-base --is-ancestor 66cbe8dec7cb478f5b0774bb5e7bbaab5f616894 origin/dev`
+  결과 exit 0. `git cat-file -e origin/dev:docs/backend-f-progress.md` 결과 exit 0.
+- canonical 실물은 `AUDIT_TIMELINE_PATH = "/audit/timeline"`,
+  `AuditTimelineResponse{items,limit,has_more,next_cursor}`이며 route는 필수
+  `correlation_id`, 선택 `cursor`, `limit` 1~200을 받는다.
+- VP-002를 `직결`로 전환하고 `APIQ-030 getAuditTimeline`을 단독 claim했다.
+  workspace/cluster 접근 제어와 시간순 keyset 정렬은 서버 권위이며 프론트 재필터·재정렬은 금지한다.
+
+## 2026-07-13 13:29 KST — [프론트] APIQ-030 완료 증거
+
+- RED `6700875a6` → GREEN `9841a5d95`; 두 hash 모두
+  `origin/woonyong/ui-layer-lab` ancestor exit 0이다.
+- targeted Vitest 1 file / 11 tests PASS. `npm run check` PASS — TypeScript·ESLint,
+  Vitest 106 files / 768 tests, design guard 317 files, shadcn 482 previews,
+  Vite production build 14,512 modules.
+- `API 완성: getAuditTimeline (9841a5d95)`를 기록하고 APIQ-030 행을 제거했다.
+  다음 단계는 이 앵커를 소비하는 VP-002 Issues 상세의 독립 감사 섹션이다.
+
+## 2026-07-13 14:02 KST — [프론트] BQ-017 스키마 호환 완료 + bfaf03901
+
+- `ClusterSummary.provider`는 `eks|gke|aks|onprem|kind|unknown`,
+  `ClusterConnectionStatus.connection_stage`는
+  `token_issued|awaiting_install|agent_connected|snapshot_received|ready|expired|error`를
+  각각 optional로 명시한다. 두 외피의 `strictObject`는 유지한다.
+- `bfaf03901`은 현재 HEAD와 `origin/woonyong/ui-layer-lab`의 ancestor(exit 0)다.
+  targeted `clusters.test.ts` + `cluster-connection.test.ts`는 2 files / 17 tests PASS다.
+
+## 2026-07-13 14:03 KST — [프론트] VP-002 감사 타임라인 화면 완료 증거
+
+- RED `003a9563a` → API 재앵커 `4c2598c4a` → UI GREEN `fdc921c3d` →
+  책임 분리 `9bedcdfa5`. 서버 순서 보존, opaque cursor 누적, scope 전환 취소와
+  기존 페이지 보존형 실패 상태를 화면·adapter 계약으로 고정했다.
+- `npm run check` PASS: TypeScript·ESLint, Vitest 108 files / 773 tests,
+  design guard 326 files, shadcn 482 previews, production build 14,529 modules.
+- `npm run visual-product` PASS: 35 isolated scenarios, exact scenario API requests,
+  unexpected feature network / WebSocket 0건. 증거:
+  `references/ui-layer-lab/output/playwright/product-issues-authenticated-detail-desktop-light.png`.
+- VP-002 완료 후 파이프라인 E는 VP-003이 남아 `in_progress`를 유지한다.
+
+## 2026-07-13 14:08 KST — [프론트] E BLOCKED: VP-003 인과 식별자·분류 계약 결손
+
+- canonical `origin/dev`의 `AuditTimelineItem`과 serializer는
+  `subject/source/created_at/causation_id/payload_summary`만 반환한다.
+  `EventEnvelope.causation_id`는 직접 부모의 `event_id`인데 현재 항목의 `event_id`가 응답에
+  없어 parent-child 결합이 불가능하다. DB에 실재하는 ID를 배열 index·시각·subject 합성값으로
+  추측하지 않는다.
+- `docs/backend-f-workqueue.md`는 BQ-004 인계물로 subject 분류 목록을 명시하지만,
+  canonical progress와 API 응답에는 그 목록이나 `journey_stage`가 없다. prefix 기반 고정 매핑도
+  계약 없는 추측이므로 만들지 않는다.
+- `UI-056 TimelineSwimlane`은 `reference-contract-map.md`의 inventory 선언뿐이며 실제 재사용
+  컴포넌트는 없다. 따라서 VP-002 시간순 목록을 중복 포장하거나 가짜 인과선을 그리지 않았다.
+- 재개 조건: 백엔드가 `AuditTimelineItem.event_id`를 required non-empty stable ID로 additive
+  제공하고, subject→journey stage의 canonical 분류 계약(unknown 처리 포함)과 완료 앵커를
+  `origin/dev`에 착륙한다. 그 뒤 strict Zod RED→GREEN, 인과 트리/시간순 강등/키보드 목록
+  테스트 순서로 재개한다.
+
+## 2026-07-13 14:12 KST — [프론트] P4 진입조건 검증·API claim
+
+- `git merge-base --is-ancestor 81969f23e46cb40743af08ffbc1affe556bd5c5e origin/dev`
+  결과 exit 0. `origin/dev`의 `src/domains/rca_changes/router.py`,
+  `docs/api/05-rca-dashboard/15-recent-changes.bru` 실물 확인도 exit 0이다.
+- canonical 계약은 `GET /api/rca/incidents/{incident_id}/recent-changes?limit=`와
+  `RecentChangeListResponse{incident_id,items,limit}`다. item은 event ID·시각·workload identity·
+  image before/after·허용된 PR URL·commit·repository·workflow run을 제공한다.
+- `origin/dev...HEAD`의 dev-only는 12로 30커밋 선흡수 임계값 미만이다. VP-004를 직결로
+  전환하고 `APIQ-031 getIncidentRecentChanges`를 단독 claim했다.
+
+## 2026-07-13 14:20 KST — [프론트] P4 APIQ-031 완료 + 4f602cc86
+
+- RED `c6bd3babe` → GREEN `4f602cc86660a7f8a12583cffc44a53e220d9dbf`.
+  GREEN은 API 구현과 contract test를 함께 포함하며 원격 ancestor exit 0이다.
+- targeted 2 files / 18 tests PASS. `npm run check` PASS: Vitest 109 files / 788 tests,
+  design guard 329 files, shadcn 482 previews, production build 14,531 modules.
+- `API 완성: getIncidentRecentChanges (4f602cc86660a7f8a12583cffc44a53e220d9dbf)`를 기록하고
+  APIQ-031 행을 제거했다. 다음 단계는 이 앵커를 소비하는 VP-004 UI RED다.
+
+## 2026-07-13 14:40 KST — [프론트] P4 VP-004 완료 증거
+
+- API RED `c6bd3babe` → API GREEN `4f602cc86660a7f8a12583cffc44a53e220d9dbf` →
+  UI RED `f9a982f4f` → UI GREEN `78668b32204e3b30d5c50b9338c3593bdebe852a`.
+  두 GREEN hash 모두 `origin/woonyong/ui-layer-lab` ancestor exit 0이다.
+- `npm run check` PASS: Vitest 112 files / 802 tests, design guard 336 files,
+  shadcn 482 previews, production build 14,535 modules.
+- `npm run visual-product` PASS. 영어 desktop과 320px에서 exact Recent Changes API 1회,
+  긴 image·commit·workflow reflow, 외부 PR 링크 격리, unexpected feature network 0을 검증했다.
+- 증거: `references/ui-layer-lab/output/playwright/product-issues-authenticated-detail-desktop-light.png`,
+  `references/ui-layer-lab/output/playwright/product-issues-authenticated-detail-reflow-320-light.png`.
+
+## 2026-07-13 14:44 KST — [프론트] VP-005 진입조건 검증·API 재검증 claim
+
+- `git merge-base --is-ancestor 8cd0b18e96f1266873d1632486472d0d22c18477 origin/dev`
+  결과 exit 0. canonical `PromotionGateResponse`와 `promotion_gate_from_command_result`를
+  대조해 9필드·네 가지 eligible 조건·nullable 의미를 확인했다.
+- `listApplicationRuns`의 기존 앵커 `56c689e61`은 구조화 gate 도입 전 계약이다.
+  `APIQ-032`는 outer strict / run open / `promotion_gate` strict 경계로 재앵커한다.
+- `origin/dev...HEAD`의 dev-only는 27로 30커밋 선흡수 임계값 미만이다.
+
+## 2026-07-13 14:50 KST — [프론트] P5 APIQ-032 완료·화면 계약 주차
+
+- RED `1e06706c9` → GREEN `429fb1d9122c6bf264f5ee1beef948107bb5161e`.
+  GREEN은 API schema·endpoint·barrel과 contract test를 함께 포함하며 원격 ancestor exit 0이다.
+- targeted 1 file / 13 tests PASS. `npm run check` PASS: Vitest 112 files / 808 tests,
+  design guard 336 files, shadcn 482 previews, production build 14,535 modules.
+- `eligible`은 승격 완료가 아니라 네 조건의 현재 판정이다. applied/rollout의 null은 실패가
+  명시되지 않았다는 뜻이며 성공으로 번역하지 않는다.
+- Applications와 Runs API에 서버측 `cluster_id` 필터·cursor가 없어 전역 selector와 본문
+  completeness를 일치시킬 수 없다. VP-005 UI만 재개 조건과 함께 주차하고 P6으로 계속한다.
 ## 2026-07-13 13:14 KST — BQ-018 완료 증거
 
 - lane `codex/opsia-docs-name-propagation`, HEAD
@@ -1314,6 +1621,103 @@ npm run visual-product
   삭제·소유권 밖 변경·frozen 경로 변경 0건; feature와 merge commit의 `origin/dev`
   ancestor exit 0.
 
+## 2026-07-13 14:54 KST — [프론트] dev→lab 동기화 증거
+
+- 동기화 전 `origin/dev...HEAD` divergence는 dev-only 32 / lab-only 43으로 30커밋
+  선흡수 임계값을 초과했다. merge base는 `d1342f8f793f9e05ea617930dbe6ccd1115756f6`다.
+- `git merge-tree --write-tree HEAD origin/dev`의 유일한 충돌은 append-only
+  `docs/auto/night-log.md`였다. 양쪽 기록을 모두 보존했고 제품·계약 파일 충돌은 0건이다.
+- staged merge delta에서 `frontend/**` 삭제 0건, `src/**` 삭제 0건이다. backend `src/**`는
+  `origin/dev` 내용을 그대로 흡수했으며 프론트 세션의 수동 수정은 0건이다.
+- `cd references/ui-layer-lab && npm run check` PASS: TypeScript·ESLint,
+  Vitest 112 files / 808 tests, design guard 336 files, shadcn 482 previews,
+  Vite production build 14,535 modules.
+- 흡수 기준점 `4328384a64307388284afb8c92f73df5c232f730`은 merge commit
+  `0344d9d2f3441898725416d468c4c97d9860ef06`의 ancestor(exit 0)이고, merge commit은
+  `origin/woonyong/ui-layer-lab`의 ancestor(exit 0)다. push 직후 병렬 backend가
+  `origin/dev`를 `3d1493f8bbce36d9741ea978b57b0c7d20614ab6`까지 7커밋 더 전진시켰으며,
+  새 차이는 30커밋 선흡수 임계값 미만이다.
+
+## 2026-07-13 14:58 KST — [프론트] P6 BLOCKED: auto-revert 식별 계약 결손
+
+- `git merge-base --is-ancestor 6d68325bf1cc47f55810e5dc2189e51a6fe916c0 origin/dev`
+  결과 exit 0. BQ-007 worker는 flag off에서 무발화하고 flag on에서는 일반
+  `safe_pr.requested`를 발행한다.
+- RCA timeline과 release/application projection은 generic Safe PR lifecycle은 표현하지만
+  auto-revert origin을 구조화해 반환하지 않는다. 내부 `[auto-revert]` 제목 prefix는 계약이 아니다.
+- 재개 조건: stable `trigger_kind=auto_revert`, correlation 또는 workflow run exact scope,
+  stable event identity/status/time/PR URL/failure reason의 canonical 계약·앵커.
+- 해당 항목만 BE-Gap으로 주차했다. APIQ·adapter·disabled placeholder는 만들지 않고 P7으로 계속한다.
+
+[2026-07-13 15:04 KST] [프론트/API] APIQ-033 in_progress — VP-008의 provider catalog·discovery,
+target preflight·register 네 함수와 strict Zod 계약을 claim했다. 1회성 install receipt는 메모리
+경계 밖으로 내보내지 않고, provider 명령 합성·POST 자동 재전송·workspace 위조를 금지한다.
+
+## 2026-07-13 15:11 KST — [프론트/API] APIQ-033 완료 증거
+
+- claim `3adb92bdd`, API RED `065f84ab1`, stage RED `482009c1f`, GREEN
+  `8678d63b0`을 분리해 push했다. GREEN의 canonical ancestor 결과는 exit 0이다.
+- exact anchors: `getProviderCatalog`, `getProviderClusterDiscovery`,
+  `preflightTargetRegistration`, `registerTarget` → `8678d63b0`.
+- targeted 3 files / 30 tests PASS. full `npm run check` PASS: 113 files / 821 tests,
+  design guard 340 files, shadcn 482 previews, production build 14,538 modules.
+- 완성형 VP-008 표면은 validation·preview/resume·structured error 계약 결손으로 주차했다.
+  transport와 기존 Cluster 목록의 `connection_stage` strict 호환만 release했다.
+
+## 2026-07-13 15:22 KST — [프론트] VP-009 provider 표시 판정 증거
+
+- RED `a0e124b92`·`4a0937c54`, GREEN `3fe308f95`을 분리해 push했다.
+  `git merge-base --is-ancestor 3fe308f95 origin/woonyong/ui-layer-lab` 결과 exit 0이다.
+- Home은 canonical provider를 카드 헤더에 정확히 1회 표시하고 unknown은 일반 Kubernetes glyph를
+  사용한다. Issues는 전역 `ClusterScopePicker`의 기존 단일 표시를 권위로 유지해 중복하지 않았다.
+- Fleet는 surface·provider contract·완전성 증거가 없어 BE-Gap으로 분리했다. 제한 목록 client join과
+  provider 추론은 수행하지 않았다.
+- targeted 2 files / 10 tests PASS. `npm run check` PASS: 113 files / 824 tests,
+  design guard 340 files, shadcn 482 previews, Vite build 14,538 modules.
+- `npm run visual-product` PASS: 36 isolated scenarios, exact scenario API requests,
+  unexpected feature network/WebSocket 0건.
+
+## 2026-07-13 15:24 KST — [프론트] P9 전체 게이트·production build 갱신
+
+- 제품 코드 스냅샷 `3fe308f95`, 판정 문서 기준점 `33279272c`에서 검증했다.
+- `npm run check` PASS: TypeScript·ESLint, Vitest 113 files / 824 tests,
+  design guard 340 files, shadcn 482 previews, Vite production build 14,538 modules.
+- `npm run visual-product` PASS: 36 isolated scenarios, exact scenario API requests,
+  unexpected feature network/WebSocket 0건.
+- standalone `npm run build` PASS: 14,538 modules, `references/ui-layer-lab/dist` 26 MiB,
+  assets 26 MiB, 2,675 files. 제품 entry는 `ProductApp-C79itfkb.js` 319 KiB와
+  `ProductApp-Dh-KDTNp.css` 77 KiB다.
+- backend pipeline I는 `done`, frontend H는 사람 전용 `🔒waiting`이다. 배포는 수행하지 않았다.
+
+## GO-REQUEST [FE-H] — 2026-07-13 15:25 KST 갱신
+
+- frontend branch / evidence snapshot: `woonyong/ui-layer-lab` / `5a463f845`
+  (제품 코드 `3fe308f95`, VP-009 판정 `33279272c`).
+- build command: `cd references/ui-layer-lab && npm ci && npm run check && npm run visual-product && npm run build`.
+- artifact: `references/ui-layer-lab/dist` (26 MiB, 2,675 files).
+- image build 제안: `docker build --platform linux/amd64 -f references/ui-layer-lab/Dockerfile -t <immutable-console-image> references/ui-layer-lab`.
+- 배포 제안: image push 후 management namespace의 `deployment/console` image를 immutable tag로
+  교체하고 rollout 완료·`/`·`/api/auth/session`·`/api/healthz`를 확인한다.
+- rollback: 직전 immutable console image tag 복원 또는 Kubernetes rollout undo 후 같은 endpoint와
+  인증 쿠키·WebSocket upgrade를 재확인한다.
+- gate: `npm run check` PASS(113 files / 824 tests), `npm run visual-product` PASS(36 scenarios,
+  unexpected network/WebSocket 0), standalone production build PASS(14,538 modules).
+- backend pipeline I는 `done`이다. frontend H 실행은 사람 GO 전용이며 이 세션은 배포를 실행하지 않는다.
+
+## 2026-07-13 15:36 KST — [프론트] S1 Issues 확대·강제색 접근성 게이트 완료
+
+- visual RED `f5413960a`는 Issues 상세의 200% text resize와 forced-colors 시나리오를
+  추가하고, 공용 상태 harness가 Issues 화면 계약을 검증하지 못하는 실패를 고정했다.
+- GREEN `2693c5c8b`는 Issues 전용 강제색 assertion, Card의 system-color 경계,
+  Button의 keyboard focus·disabled·reduced-motion 규칙을 연결했다. GREEN은
+  `origin/woonyong/ui-layer-lab` ancestor exit 0이다.
+- `npm run check` PASS: TypeScript·ESLint, Vitest 113 files / 824 tests,
+  product design guard 340 files, shadcn source audit 482 previews,
+  Vite production build 14,538 modules.
+- `npm run visual-product` PASS: 38 isolated scenarios, exact scenario API requests,
+  unexpected feature network/WebSocket 0건. 신규 증거는
+  `output/playwright/product-issues-authenticated-detail-text-resize-200-light.png`와
+  `output/playwright/product-issues-authenticated-detail-forced-colors.png`다.
 ## 2026-07-13 14:52 KST — [백엔드] OpsiaBench scheduling·PVC 착륙
 
 - lane `codex/benchmark-scheduling-pvc`, RED `fe08b641e`, feature HEAD

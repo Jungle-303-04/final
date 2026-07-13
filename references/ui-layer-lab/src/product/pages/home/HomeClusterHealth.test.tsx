@@ -2,6 +2,7 @@
 
 import { cleanup, render } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import type { HomeClusterChoice } from "../../features/home/homeContract";
 import { I18nProvider } from "../../shared/i18n/I18nProvider";
 import { HomeClusterHealth } from "./HomeClusterHealth";
 import { CLUSTERS, OVERVIEW } from "./HomePage.testSupport";
@@ -43,15 +44,50 @@ describe("HomeClusterHealth loading geometry", () => {
   });
 });
 
-function renderHealth(overview: HomeResourceState<typeof OVERVIEW>) {
-  return render(healthElement(overview));
+describe("HomeClusterHealth provider context", () => {
+  const ready: HomeResourceState<typeof OVERVIEW> = {
+    phase: "ready",
+    data: OVERVIEW,
+    failure: null,
+    refreshing: false,
+    refreshFailure: null,
+  };
+
+  it("renders the selected cluster provider exactly once in the section header", () => {
+    const view = renderHealth(ready);
+
+    expect(view.getAllByRole("img", {
+      name: "Amazon Elastic Kubernetes Service",
+    })).toHaveLength(1);
+    expect(view.container.querySelectorAll(
+      "[data-slot='cluster-provider-icon']",
+    )).toHaveLength(1);
+  });
+
+  it("does not infer a provider icon when no cluster is selected", () => {
+    const view = renderHealth(ready, null);
+
+    expect(view.container.querySelector(
+      "[data-slot='cluster-provider-icon']",
+    )).toBeNull();
+  });
+});
+
+function renderHealth(
+  overview: HomeResourceState<typeof OVERVIEW>,
+  cluster: HomeClusterChoice | null = CLUSTERS.clusters[0] ?? null,
+) {
+  return render(healthElement(overview, cluster));
 }
 
-function healthElement(overview: HomeResourceState<typeof OVERVIEW>) {
+function healthElement(
+  overview: HomeResourceState<typeof OVERVIEW>,
+  cluster: HomeClusterChoice | null = CLUSTERS.clusters[0] ?? null,
+) {
   return (
     <I18nProvider navigatorLanguage="en-US" storage={null}>
       <HomeClusterHealth
-        cluster={CLUSTERS.clusters[0] ?? null}
+        cluster={cluster}
         onRefresh={vi.fn()}
         overview={overview}
       />

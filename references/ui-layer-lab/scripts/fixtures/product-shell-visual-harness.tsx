@@ -7,6 +7,9 @@ import { I18nProvider } from "../../src/product/shared/i18n";
 import "../../src/product/styles/tokens.css";
 import "../../src/product/styles/foundation.css";
 import type { AuthenticatedAuthState } from "../../src/product/features/auth/authContract";
+import { AuthSessionGateProvider } from "../../src/product/features/auth/AuthSessionGate";
+import { ClusterScopeProvider } from "../../src/product/features/cluster-scope/ClusterScopeProvider";
+import type { ClusterScopePort } from "../../src/product/features/cluster-scope/clusterScopeContract";
 
 const root = document.getElementById("root");
 if (!root) throw new Error("ProductShell visual harness root is missing");
@@ -17,6 +20,24 @@ const testAuth: AuthenticatedAuthState = {
   signOutIssue: null,
   signOutPending: false,
   onSignOut: () => undefined,
+};
+const testClusterScope: ClusterScopePort = {
+  listClusterChoices: async () => ({
+    completeness: "unknown",
+    clusters: [{
+      id: "cluster-1",
+      workspaceId: "visual-workspace",
+      name: "cluster-1",
+      environment: "production",
+      provider: "eks",
+      registrationState: "active",
+      connectionState: "online",
+      lastObservedAt: "2026-07-13T00:00:00.000Z",
+      nodeCount: 1,
+      podCount: 1,
+      incidentCount: 0,
+    }],
+  }),
 };
 
 createRoot(root).render(
@@ -30,13 +51,17 @@ createRoot(root).render(
         themes={["light", "dark"]}
       >
         <MemoryRouter initialEntries={["/product"]}>
-          <Routes>
-            <Route element={<ProductShell auth={testAuth} releasedSurfaceIds={releasedSurfaceIds} />}>
-              <Route path="/product" element={<ShellOutletBoundary />} />
-              <Route path="/product/issues" element={<ShellOutletBoundary />} />
-              <Route path="/product/timeline" element={<ShellOutletBoundary />} />
-            </Route>
-          </Routes>
+          <AuthSessionGateProvider reportUnauthorized={() => undefined}>
+            <ClusterScopeProvider authorityKey="visual-workspace:visual-user" port={testClusterScope}>
+              <Routes>
+                <Route element={<ProductShell auth={testAuth} releasedSurfaceIds={releasedSurfaceIds} />}>
+                  <Route path="/product" element={<ShellOutletBoundary />} />
+                  <Route path="/product/issues" element={<ShellOutletBoundary />} />
+                  <Route path="/product/timeline" element={<ShellOutletBoundary />} />
+                </Route>
+              </Routes>
+            </ClusterScopeProvider>
+          </AuthSessionGateProvider>
         </MemoryRouter>
       </ThemeProvider>
     </I18nProvider>

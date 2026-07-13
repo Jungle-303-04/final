@@ -12,6 +12,8 @@ import type {
   IssueRcaReportPage,
   IssueRecoveryPlan,
 } from "./issuesContract";
+import { IssueAuditTimelinePanel } from "./IssueAuditTimelinePanel";
+import { IssueRecentChangesPanel } from "./IssueRecentChangesPanel";
 import { IssueEmpty, IssueSectionFrame } from "./IssueSectionFrame";
 import type {
   IssuesPanelsProps,
@@ -23,12 +25,13 @@ import type {
 export function IssuesPanels({
   capability,
   copy,
+  onLoadMoreAudit,
   onSelectRecovery,
   selected,
   state,
 }: IssuesPanelsProps) {
   return (
-    <div aria-label={copy.detailLabel} className="grid min-h-96 gap-4" role="region">
+    <div aria-label={copy.detailLabel} className="grid gap-4 lg:min-h-96" role="region">
       <Card>
         <CardHeader className="border-b">
           <CardTitle className="break-words">{selected.currentSubject}</CardTitle>
@@ -51,6 +54,12 @@ export function IssuesPanels({
           </IssueSectionFrame>
         </CardContent>
       </Card>
+      <IssueRecentChangesPanel copy={copy} state={state.recentChanges} />
+      <IssueAuditTimelinePanel
+        copy={copy}
+        onLoadMore={onLoadMoreAudit}
+        state={state.audit}
+      />
       <EvidencePanel copy={copy} state={state.evidence} />
       <ReportsPanel copy={copy} state={state.reports} />
       <RecoveryPanel

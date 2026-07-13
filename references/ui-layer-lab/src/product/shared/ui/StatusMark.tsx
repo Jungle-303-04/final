@@ -13,11 +13,17 @@ const defaultStatusLabelKeys: Record<StatusTone, MessageKey> = {
 
 export interface StatusMarkProps {
   label?: string;
+  labelMode?: "visible" | "sr-only";
   live?: boolean;
   tone: StatusTone;
 }
 
-export function StatusMark({ tone, label, live = false }: StatusMarkProps) {
+export function StatusMark({
+  tone,
+  label,
+  labelMode = "visible",
+  live = false,
+}: StatusMarkProps) {
   const { t } = useI18n();
   const visibleLabel = label?.trim() || t(defaultStatusLabelKeys[tone]);
 
@@ -40,7 +46,9 @@ export function StatusMark({ tone, label, live = false }: StatusMarkProps) {
           tone === "stale" && "bg-status-stale",
         )}
       />
-      <span className="truncate">{visibleLabel}</span>
+      <span className={cn("truncate", labelMode === "sr-only" && "sr-only")}>
+        {visibleLabel}
+      </span>
     </span>
   );
 }

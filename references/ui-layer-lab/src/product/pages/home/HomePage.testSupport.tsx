@@ -2,6 +2,7 @@ import { render } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { vi } from "vitest";
 import { AuthSessionGateProvider } from "../../features/auth/AuthSessionGate";
+import { ClusterScopeProvider } from "../../features/cluster-scope/ClusterScopeProvider";
 import type {
   HomeClusterChoices,
   HomeClusterOverview,
@@ -21,6 +22,7 @@ export const CLUSTERS: HomeClusterChoices = {
       workspaceId: "workspace-main",
       name: "cluster-1",
       environment: "production",
+      provider: "eks",
       registrationState: "active",
       connectionState: "online",
       lastObservedAt: "2026-07-12T10:00:00.000Z",
@@ -33,6 +35,7 @@ export const CLUSTERS: HomeClusterChoices = {
       workspaceId: "workspace-main",
       name: "kubernetes-ops",
       environment: "management",
+      provider: "unknown",
       registrationState: "active",
       connectionState: "online",
       lastObservedAt: "2026-07-12T10:00:00.000Z",
@@ -151,7 +154,9 @@ export function renderHome(
           navigatorLanguage={locale === "ko" ? "ko-KR" : locale === "en" ? "en-US" : null}
           storage={null}
         >
-          <HomePage port={port} />
+          <ClusterScopeProvider authorityKey="test-workspace:test-user" port={port}>
+            <HomePage port={port} />
+          </ClusterScopeProvider>
         </I18nProvider>
       </AuthSessionGateProvider>
     </MemoryRouter>,

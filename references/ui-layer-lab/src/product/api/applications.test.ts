@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { ApiError } from "./client";
 import {
+  APPLICATION_RUNS_PATH,
   getApplication,
   listApplicationDeployments,
   listApplicationRuns,
@@ -15,6 +16,18 @@ const APPLICATION = {
   default_branch: "main",
   manifest_path: "deploy/overlays/prod",
   status: "active",
+};
+
+const PROMOTION_GATE = {
+  eligible: true,
+  command_status: "completed",
+  command_completed: true,
+  applied: null,
+  applied_not_false: true,
+  failed_resources: [],
+  failed_resource_count: 0,
+  rollout_ready: null,
+  rollout_ready_not_false: true,
 };
 
 function jsonResponse(payload: unknown, status = 200): Response {
@@ -83,6 +96,9 @@ describe("Application deployment history API", () => {
       "/api/applications/app-payment/runs?limit=100",
       expect.objectContaining({ signal: controller.signal }),
     );
+    expect(APPLICATION_RUNS_PATH).toBe(
+      "/api/applications/{application_id}/runs",
+    );
   });
 
   it("rejects invalid limits before making a request", async () => {
@@ -125,6 +141,83 @@ describe("Application deployment history API", () => {
       jsonResponse({ applications: [APPLICATION], next_cursor: "invented" }),
     );
     await expect(listApplications()).rejects.toMatchObject({
+      kind: "invalid-payload",
+      status: 200,
+    } satisfies Partial<ApiError>);
+  });
+
+  it("preserves additive run fields and accepts absent or nullable promotion gates", async () => {
+    const futureRunField = { source_revision: "sha-next" };
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      jsonResponse({
+        runs: [
+          { workflow_run_id: "run-absent", future_run_field: futureRunField },
+          { workflow_run_id: "run-null", promotion_gate: null },
+          {
+            workflow_run_id: "run-gated",
+            promotion_gate: PROMOTION_GATE,
+            steps: [{ details: { changes: [{ kind: "Deployment" }] } }],
+          },
+        ],
+      }),
+    );
+
+    await expect(listApplicationRuns("app-payment")).resolves.toEqual({
+      runs: [
+        { workflow_run_id: "run-absent", future_run_field: futureRunField },
+        { workflow_run_id: "run-null", promotion_gate: null },
+        {
+          workflow_run_id: "run-gated",
+          promotion_gate: PROMOTION_GATE,
+          steps: [{ details: { changes: [{ kind: "Deployment" }] } }],
+        },
+      ],
+    });
+  });
+
+  it.each([
+    [
+      "an unknown promotion gate field",
+      { ...PROMOTION_GATE, observation_window: "invented" },
+    ],
+    [
+      "an eligible flag that contradicts the four gate conditions",
+      { ...PROMOTION_GATE, eligible: false },
+    ],
+    [
+      "a failed resource count that differs from the resource list",
+      {
+        ...PROMOTION_GATE,
+        eligible: false,
+        failed_resource_count: 1,
+      },
+    ],
+    [
+      "an applied not-false flag that contradicts the tri-state value",
+      {
+        ...PROMOTION_GATE,
+        eligible: false,
+        applied: false,
+        applied_not_false: true,
+      },
+    ],
+    [
+      "a rollout not-false flag that contradicts the tri-state value",
+      {
+        ...PROMOTION_GATE,
+        eligible: false,
+        rollout_ready: false,
+        rollout_ready_not_false: true,
+      },
+    ],
+  ])("rejects %s", async (_caseName, promotionGate) => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      jsonResponse({
+        runs: [{ workflow_run_id: "run-invalid", promotion_gate: promotionGate }],
+      }),
+    );
+
+    await expect(listApplicationRuns("app-payment")).rejects.toMatchObject({
       kind: "invalid-payload",
       status: 200,
     } satisfies Partial<ApiError>);

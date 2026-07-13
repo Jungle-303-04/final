@@ -6,9 +6,11 @@ import { IssuesListPanel } from "./IssuesListPanel";
 import { IssuesPanels } from "./IssuesPanels";
 import {
   IssuesPortFailure,
+  type IssueAuditTimelinePage,
   type IssueDetail,
   type IssueEvidencePage,
   type IssueList,
+  type IssueRecentChanges,
   type IssueRcaReportPage,
   type IssueSummary,
   type IssuesPort,
@@ -20,6 +22,7 @@ import type {
   RecoverySelectionCapability,
   SectionState,
 } from "./issuesSurfaceContract";
+import { useIssueAuditPagination } from "./useIssueAuditPagination";
 
 export function IssuesSurface({
   clusterId,
@@ -45,6 +48,17 @@ export function IssuesSurface({
   const mutationRef = useRef<AbortController | null>(null);
   const list = listRecord.scope === clusterId ? listRecord.state : emptyState<IssueList>();
   const selected = selectedRecord?.scope === clusterId ? selectedRecord.issue : null;
+  const auditScope = selected === null
+    ? null
+    : `${clusterId ?? ""}\u0000${selected.correlationId}`;
+
+  const { abortAuditPage, loadMoreAudit } = useIssueAuditPagination({
+    auditScope,
+    correlationId: selected?.correlationId ?? null,
+    panels,
+    port,
+    setPanels,
+  });
 
   useEffect(() => {
     const controller = new AbortController();
@@ -70,12 +84,26 @@ export function IssuesSurface({
   }, [clusterId, port, revision]);
 
   useEffect(() => {
-    if (selected === null || selected.incidentId === null) return;
+    if (selected === null) return;
+    abortAuditPage();
     const controller = new AbortController();
+    if (selected.incidentId !== null) {
+      const incidentId = selected.incidentId;
+      loadSection(
+        () => port.loadIssue(incidentId, clusterId, controller.signal),
+        controller.signal,
+        (detail) => setPanels((current) => ({ ...current, detail })),
+      );
+      loadSection(
+        () => port.loadRecentChanges(incidentId, controller.signal),
+        controller.signal,
+        (recentChanges) => setPanels((current) => ({ ...current, recentChanges })),
+      );
+    }
     loadSection(
-      () => port.loadIssue(selected.incidentId!, clusterId, controller.signal),
+      () => port.loadAuditTimeline(selected.correlationId, {}, controller.signal),
       controller.signal,
-      (detail) => setPanels((current) => ({ ...current, detail })),
+      (audit) => setPanels((current) => ({ ...current, audit })),
     );
     loadSection(
       () => port.loadEvidence(selected.correlationId, {}, controller.signal),
@@ -93,7 +121,7 @@ export function IssuesSurface({
       (recovery) => setPanels((current) => ({ ...current, recovery })),
     );
     return () => controller.abort();
-  }, [clusterId, port, selected]);
+  }, [abortAuditPage, clusterId, port, selected]);
 
   useEffect(() => () => mutationRef.current?.abort(), []);
 
@@ -144,9 +172,10 @@ export function IssuesSurface({
   }, [panels.recovery.data, port, recoverySelection.state, selected]);
 
   const selectIssue = useCallback((issue: IssueSummary) => {
-    setPanels(loadingPanels());
+    abortAuditPage();
+    setPanels(loadingPanels(issue.incidentId !== null));
     setSelectedRecord({ scope: clusterId, issue });
-  }, [clusterId]);
+  }, [abortAuditPage, clusterId]);
 
   const refreshList = useCallback(() => {
     setListRecord((current) => ({
@@ -161,7 +190,7 @@ export function IssuesSurface({
   }, [clusterId]);
 
   return (
-    <div className="grid min-h-96 gap-4 lg:grid-cols-[minmax(18rem,0.8fr)_minmax(0,1.6fr)]">
+    <div className="grid gap-4 lg:min-h-96 lg:grid-cols-[minmax(18rem,0.8fr)_minmax(0,1.6fr)]">
       <Card aria-label={copy.listLabel} role="region">
         <CardHeader className="border-b">
           <CardTitle>{copy.listLabel}</CardTitle>
@@ -176,13 +205,13 @@ export function IssuesSurface({
             <RefreshCw aria-hidden="true" />
           </Button>
         </CardHeader>
-        <CardContent className="min-h-96">
+        <CardContent className="lg:min-h-96">
           <IssuesListPanel copy={copy} list={list} onSelect={selectIssue} selected={selected} />
         </CardContent>
       </Card>
       {selected === null ? (
-        <Card className="min-h-96" role="status">
-          <CardContent className="grid min-h-96 place-items-center text-muted-foreground">
+        <Card className="min-h-48 lg:min-h-96" role="status">
+          <CardContent className="grid min-h-48 place-items-center text-muted-foreground lg:min-h-96">
             {copy.detailEmpty}
           </CardContent>
         </Card>
@@ -190,6 +219,7 @@ export function IssuesSurface({
         <IssuesPanels
           capability={recoverySelection}
           copy={copy}
+          onLoadMoreAudit={loadMoreAudit}
           onSelectRecovery={selectRecovery}
           selected={selected}
           state={panels}
@@ -206,6 +236,8 @@ function emptyState<T>(): SectionState<T> {
 function emptyPanels(): IssuePanelsState {
   return {
     detail: emptyState<IssueDetail>(),
+    recentChanges: emptyState<IssueRecentChanges>(),
+    audit: emptyState<IssueAuditTimelinePage>(),
     evidence: emptyState<IssueEvidencePage>(),
     reports: emptyState<IssueRcaReportPage>(),
     recovery: emptyState<IssueRecoveryPlan>(),
@@ -214,8 +246,15 @@ function emptyPanels(): IssuePanelsState {
   };
 }
 
-function loadingPanels(): IssuePanelsState {
-  return emptyPanels();
+function loadingPanels(loadIncidentSections: boolean): IssuePanelsState {
+  const panels = emptyPanels();
+  return loadIncidentSections
+    ? panels
+    : {
+        ...panels,
+        detail: { data: null, failure: null, loading: false },
+        recentChanges: { data: null, failure: null, loading: false },
+      };
 }
 
 function loadSection<T>(

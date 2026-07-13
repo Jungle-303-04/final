@@ -29,9 +29,42 @@ const resourcesListApiPath =
 const resourcesDetailApiPath =
   `/api/clusters/${homeClusterId}/inventory/resource-detail?resource_type=pod&kind=Pod&name=${homePodName}&namespace=shop&related_limit=100&event_limit=50`;
 const resourcesBaseApiPaths = [homeBaseApiPaths[0], resourcesSummaryApiPath, resourcesListApiPath];
+const issuesCorrelationId = "visual-correlation";
+const issuesIncidentId = "visual-incident";
+const issuesSubject = "deployment/shop/checkout-api";
+const issuesSymptom = "Checkout API response latency increased";
+const issuesAuditSubject = "incident.detected";
+const productIssuesUrl = `${productUrl}/issues?cluster=${homeClusterId}`;
+const issuesListApiPath =
+  `/api/dashboard/rca/timeline?cluster_id=${homeClusterId}&limit=50`;
+const issuesDetailApiPath =
+  `/api/dashboard/rca/incidents/${issuesIncidentId}?cluster_id=${homeClusterId}`;
+const issuesEvidenceApiPath =
+  `/api/evidence?correlation_id=${issuesCorrelationId}&limit=50`;
+const issuesReportsApiPath =
+  `/api/rca-reports?correlation_id=${issuesCorrelationId}&limit=50`;
+const issuesAuditApiPath =
+  `/api/audit/timeline?correlation_id=${issuesCorrelationId}&limit=50`;
+const issuesRecentChangesApiPath =
+  `/api/rca/incidents/${issuesIncidentId}/recent-changes?limit=5`;
+const issuesRecoveryApiPath =
+  `/api/rca/recovery-plans/by-correlation/${issuesCorrelationId}`;
+const issuesBaseApiPaths = [homeBaseApiPaths[0], issuesListApiPath];
+const issuesDetailApiPaths = [
+  issuesDetailApiPath,
+  issuesEvidenceApiPath,
+  issuesReportsApiPath,
+  issuesAuditApiPath,
+  issuesRecentChangesApiPath,
+  issuesRecoveryApiPath,
+];
 const stateHarnessUrl = `${baseUrl}/scripts/fixtures/product-state-visual-harness.html`;
-const shellHarnessUrl = `${baseUrl}/scripts/fixtures/product-shell-visual-harness.html`;
+const shellHarnessUrl = `${baseUrl}/scripts/fixtures/product-shell-visual-harness.html?cluster=cluster-1`;
 const outputDir = new URL("../output/playwright/", import.meta.url).pathname;
+const shellHeaderSelector = "[data-slot='sidebar-inset'] > header";
+const clusterScopePickerSelector = `${shellHeaderSelector} [data-slot='cluster-scope-picker']`;
+const clusterScopeTriggerSelector = `${clusterScopePickerSelector} [data-slot='select-trigger']`;
+const clusterProviderIconSelector = `${clusterScopeTriggerSelector} [data-slot='cluster-provider-icon']`;
 // Deterministic fixture captures guard local UI contracts only. AWS-backed acceptance
 // evidence is captured by a separate workflow and must not reuse these screenshots.
 const authLoginSelectors = [
@@ -93,6 +126,9 @@ const shellSelectors = [
   "[data-slot='sidebar-navigation']",
   "[data-slot='sidebar-menu']",
   "[data-slot='sidebar-trigger']",
+  clusterScopePickerSelector,
+  clusterScopeTriggerSelector,
+  clusterProviderIconSelector,
   "[data-shell-harness-outlet]",
   "header",
   "main",
@@ -102,7 +138,9 @@ const homeSelectors = [
   "[data-slot='sidebar-inset']",
   "[data-slot='sidebar-trigger']",
   "[data-slot='surface']",
-  "[data-slot='select-trigger']",
+  clusterScopePickerSelector,
+  clusterScopeTriggerSelector,
+  clusterProviderIconSelector,
   "[data-slot='progress']",
   "[data-slot='progress-track']",
   "[data-slot='progress-indicator']",
@@ -134,7 +172,9 @@ const resourcesSelectors = [
   "[data-slot='sidebar-trigger']",
   "[data-slot='surface']",
   "[data-slot='badge']",
-  "[data-slot='select-trigger']",
+  clusterScopePickerSelector,
+  clusterScopeTriggerSelector,
+  clusterProviderIconSelector,
   "[data-slot='accordion']",
   "[data-slot='accordion-trigger']",
   "[data-slot='table-container']",
@@ -154,6 +194,24 @@ const resourcesDetailSelectors = [
   "[data-slot='tabs-list']",
   "[data-slot='tabs-trigger']",
 ];
+const issuesSelectors = [
+  "[data-slot='sidebar-provider']",
+  "[data-slot='sidebar-inset']",
+  "[data-slot='sidebar-trigger']",
+  "[data-slot='product-page-frame']",
+  "[data-slot='card']",
+  "[data-slot='card-title']",
+  "[data-slot='button']",
+  "[data-slot='badge']",
+  clusterScopePickerSelector,
+  clusterScopeTriggerSelector,
+  clusterProviderIconSelector,
+  "[data-testid='audit-event-subject']",
+  "[data-testid='issue-recent-changes']",
+  "header",
+  "main",
+  "p",
+];
 const localeStorageKey = "kubeheal.locale";
 const browserLocales = {
   en: "en-US",
@@ -162,7 +220,6 @@ const browserLocales = {
 const localeSmokeCopy = {
   en: {
     home: {
-      clusterSelect: "Select cluster",
       heading: "Cluster status",
       navigation: "Primary navigation",
       route: "Home",
@@ -175,7 +232,6 @@ const localeSmokeCopy = {
   },
   ko: {
     home: {
-      clusterSelect: "클러스터 선택",
       heading: "클러스터 상태",
       navigation: "주요 메뉴",
       route: "홈",
@@ -203,7 +259,7 @@ const visualScenarios = [
     locale: "ko",
     url: productUrl,
     authSession: "unauthenticated",
-    heading: "KubeHeal에 로그인",
+    heading: "Opsia에 로그인",
     requiredSelectors: authLoginSelectors,
     viewport: { width: 1440, height: 1000 },
     theme: "light",
@@ -215,7 +271,7 @@ const visualScenarios = [
     locale: "ko",
     url: productUrl,
     authSession: "unauthenticated",
-    heading: "KubeHeal에 로그인",
+    heading: "Opsia에 로그인",
     requiredSelectors: authLoginSelectors,
     viewport: { width: 390, height: 844 },
     theme: "dark",
@@ -227,7 +283,7 @@ const visualScenarios = [
     locale: "ko",
     url: productUrl,
     authSession: "unauthenticated",
-    heading: "KubeHeal에 로그인",
+    heading: "Opsia에 로그인",
     requiredSelectors: authLoginSelectors,
     viewport: { width: 320, height: 800 },
     theme: "light",
@@ -239,7 +295,7 @@ const visualScenarios = [
     locale: "ko",
     url: productUrl,
     authSession: "unauthenticated",
-    heading: "KubeHeal에 로그인",
+    heading: "Opsia에 로그인",
     requiredSelectors: authLoginSelectors,
     viewport: { width: 640, height: 800 },
     theme: "light",
@@ -252,7 +308,7 @@ const visualScenarios = [
     locale: "ko",
     url: productUrl,
     authSession: "unauthenticated",
-    heading: "KubeHeal에 로그인",
+    heading: "Opsia에 로그인",
     requiredSelectors: authLoginSelectors,
     viewport: { width: 1024, height: 900 },
     theme: "light",
@@ -544,6 +600,63 @@ const visualScenarios = [
     forcedColors: "none",
   },
   {
+    id: "issues-authenticated-detail-desktop-light",
+    locale: "en",
+    url: productIssuesUrl,
+    authSession: "authenticated",
+    issuesScenario: true,
+    accessibleTarget: "Issues",
+    expectedApiRequestCounts: { [issuesListApiPath]: 2 },
+    requiredSelectors: issuesSelectors,
+    viewport: { width: 1440, height: 1000 },
+    theme: "light",
+    colorScheme: "light",
+    forcedColors: "none",
+  },
+  {
+    id: "issues-authenticated-detail-reflow-320-light",
+    locale: "en",
+    url: productIssuesUrl,
+    authSession: "authenticated",
+    issuesScenario: true,
+    accessibleTarget: "Issues",
+    expectedApiRequestCounts: { [issuesListApiPath]: 2 },
+    requiredSelectors: issuesSelectors,
+    viewport: { width: 320, height: 900 },
+    theme: "light",
+    colorScheme: "light",
+    forcedColors: "none",
+  },
+  {
+    id: "issues-authenticated-detail-text-resize-200-light",
+    locale: "en",
+    url: productIssuesUrl,
+    authSession: "authenticated",
+    issuesScenario: true,
+    accessibleTarget: "Issues",
+    expectedApiRequestCounts: { [issuesListApiPath]: 2 },
+    requiredSelectors: issuesSelectors,
+    viewport: { width: 640, height: 1200 },
+    theme: "light",
+    colorScheme: "light",
+    forcedColors: "none",
+    rootFontScale: 2,
+  },
+  {
+    id: "issues-authenticated-detail-forced-colors",
+    locale: "en",
+    url: productIssuesUrl,
+    authSession: "authenticated",
+    issuesScenario: true,
+    accessibleTarget: "Issues",
+    expectedApiRequestCounts: { [issuesListApiPath]: 2 },
+    requiredSelectors: issuesSelectors,
+    viewport: { width: 1024, height: 1000 },
+    theme: "light",
+    colorScheme: "light",
+    forcedColors: "active",
+  },
+  {
     id: "home-cluster-forbidden-light",
     locale: "ko",
     url: productHomeUrl,
@@ -705,6 +818,7 @@ const homeFeatureApiFixtures = new Map([
       cluster_id: homeClusterId,
       name: "visual-cluster",
       environment: "production",
+      provider: "eks",
       status: "active",
       settings: {},
       connection_status: "online",
@@ -902,6 +1016,175 @@ const resourcesFeatureApiFixtures = new Map([
   }],
 ]);
 
+const issuesFeatureApiFixtures = new Map([
+  [homeBaseApiPaths[0], homeFeatureApiFixtures.get(homeBaseApiPaths[0])],
+  [issuesListApiPath, {
+    items: [visualIssueTimelineItem()],
+  }],
+  [issuesDetailApiPath, {
+    item: visualIssueTimelineItem({
+      root_cause: "Memory pressure caused repeated Pod restarts",
+      confidence: 0.91,
+      supporting_evidence: ["OOMKilled event observed"],
+      missing_evidence: [],
+    }),
+  }],
+  [issuesEvidenceApiPath, {
+    items: [{
+      id: 7,
+      workspace_id: "visual-workspace",
+      correlation_id: issuesCorrelationId,
+      kind: "incident.evidence",
+      cluster_id: homeClusterId,
+      evidence_ref: "visual-evidence",
+      summary: "Kubernetes evidence collected",
+      sources: [{
+        source: "kubernetes",
+        summary: "Pod restart and OOMKilled event",
+        schema_version: 1,
+        collector: "cluster-agent",
+        collector_version: "1.0.0",
+        source_version: null,
+        query_version: null,
+        collected_at: "2026-07-13T10:20:00Z",
+        evidence_key: "kubernetes",
+        source_id: null,
+        agent_id: "visual-agent",
+        window_start: null,
+      }],
+      created_at: "2026-07-13T10:20:00Z",
+    }],
+    limit: 50,
+    offset: 0,
+    has_more: false,
+    next_cursor: null,
+  }],
+  [issuesReportsApiPath, {
+    items: [{
+      id: 11,
+      workspace_id: "visual-workspace",
+      correlation_id: issuesCorrelationId,
+      root_cause: "Memory limit exceeded",
+      action: "Increase memory limit after approval",
+      incident_id: issuesIncidentId,
+      cluster_id: homeClusterId,
+      symptom: issuesSymptom,
+      severity: "warning",
+      confidence: 0.91,
+      reason: "OOMKilled and memory usage evidence agree",
+      evidence_ref: "visual-evidence",
+      supporting_evidence: ["OOMKilled"],
+      missing_evidence: [],
+      created_at: "2026-07-13T10:30:00Z",
+      resource_kind: "Deployment",
+      resource_name: "checkout-api",
+      namespace: "shop",
+      secondary_symptoms: [],
+      selected_candidate_id: "candidate-memory",
+      candidates: [],
+      supporting_evidence_refs: [],
+      missing_evidence_checks: [],
+    }],
+    limit: 50,
+    offset: 0,
+    has_more: false,
+    next_cursor: null,
+  }],
+  [issuesAuditApiPath, {
+    items: [{
+      subject: issuesAuditSubject,
+      source: "dashboard-projection",
+      created_at: "2026-07-13T10:10:00Z",
+      causation_id: null,
+      payload_summary: {
+        incident_id: issuesIncidentId,
+        severity: "warning",
+      },
+    }],
+    limit: 50,
+    has_more: false,
+    next_cursor: null,
+  }],
+  [issuesRecentChangesApiPath, {
+    incident_id: issuesIncidentId,
+    items: [{
+      event_id: "visual-change-event",
+      changed_at: "2026-07-13T09:55:00Z",
+      namespace: "shop",
+      resource_kind: "Deployment",
+      resource_name: "checkout-api",
+      image_before: "registry.example/checkout:v1",
+      image_after: "registry.example/checkout:v2",
+      pr_url: "https://github.com/acme/platform/pull/42",
+      commit_sha: "0123456789abcdef",
+      repository_id: "visual-repository",
+      repo_ref: "github.com/acme/platform",
+      workflow_run_id: "visual-workflow-run",
+    }],
+    limit: 5,
+  }],
+  [issuesRecoveryApiPath, {
+    plan_id: "visual-plan",
+    correlation_id: issuesCorrelationId,
+    incident_id: issuesIncidentId,
+    evidence_ref: "visual-evidence",
+    status: "selection_requested",
+    summary: "Choose a safe action for the memory pressure incident",
+    target: {
+      cluster_id: homeClusterId,
+      namespace: "shop",
+      name: "checkout-api",
+    },
+    recommended_action_id: "increase-memory",
+    execution_route: "approval",
+    selection_required: true,
+    selected_action_id: null,
+    selected_by: null,
+    selected_action: null,
+    candidates: [{
+      action_id: "increase-memory",
+      title: "Increase memory limit",
+      description: "Raise the checkout-api Deployment memory limit to 1Gi",
+      route: "deployment.patch",
+      rank: 1,
+      score: 0.91,
+      risk_level: "medium",
+      blast_radius: "one Deployment",
+      approval_required: true,
+      prerequisites: ["confirm capacity"],
+      validation_checks: ["rollout healthy"],
+      rollback_plan: "Restore the previous memory limit",
+      evidence_refs: ["visual-evidence"],
+    }],
+  }],
+]);
+
+function visualIssueTimelineItem(overrides = {}) {
+  return {
+    workspace_id: "visual-workspace",
+    correlation_id: issuesCorrelationId,
+    cluster_id: homeClusterId,
+    incident_id: issuesIncidentId,
+    incident_namespace: "shop",
+    incident_resource_kind: "Deployment",
+    incident_resource_name: "checkout-api",
+    incident_symptom: issuesSymptom,
+    evidence_ref: "visual-evidence",
+    current_subject: issuesSubject,
+    status: "investigating",
+    root_cause: null,
+    confidence: null,
+    supporting_evidence: [],
+    missing_evidence: ["Pod metrics"],
+    action_route: `/issues/${issuesIncidentId}`,
+    command_id: null,
+    pr_url: null,
+    error_reason: null,
+    updated_at: "2026-07-13T10:30:00Z",
+    ...overrides,
+  };
+}
+
 function visualInventoryResource(overrides = {}) {
   return {
     inventory_key: "visual-pod-checkout",
@@ -1093,6 +1376,11 @@ async function installScenarioApiFixtures(page, scenario) {
       await installExactJsonGetFixture(page, path, { body, status: 200 });
     }
   }
+  if (scenario.issuesScenario) {
+    for (const [path, body] of issuesFeatureApiFixtures) {
+      await installExactJsonGetFixture(page, path, { body, status: 200 });
+    }
+  }
   return authFixture;
 }
 
@@ -1210,7 +1498,10 @@ function assertScenarioNetworkContract(
   if (errors.length) {
     throw new Error(`${scenario.id}: visual console errors\n${errors.join("\n")}`);
   }
-  if (!scenario.homeScenario && !scenario.resourcesScenario && featureApiRequests.length !== 0) {
+  if (!scenario.homeScenario
+    && !scenario.resourcesScenario
+    && !scenario.issuesScenario
+    && featureApiRequests.length !== 0) {
     throw new Error(
       `${scenario.id}: expected 0 feature API requests, received ${featureApiRequests.length}\n`
       + formatRequests(featureApiRequests),
@@ -1221,8 +1512,10 @@ function assertScenarioNetworkContract(
       `${scenario.id}: visual gate made unexpected API requests\n${formatRequests(unexpectedApiRequests)}`,
     );
   }
-  const expectedRequestCount = scenario.expectedApiRequestCount ?? 1;
   for (const path of expectedApiPaths) {
+    const expectedRequestCount = scenario.expectedApiRequestCounts?.[path]
+      ?? scenario.expectedApiRequestCount
+      ?? 1;
     const matchingRequests = apiRequests.filter((request) => (
       request.method === "GET" && isExactProductApiUrl(request.url, path)
     ));
@@ -1253,6 +1546,7 @@ function expectedScenarioApiPaths(scenario) {
     ...(scenario.homeFrame === "pods" ? [homePodApiPath] : []),
     ...(scenario.resourcesScenario ? resourcesBaseApiPaths : []),
     ...(scenario.resourcesDetail ? [resourcesDetailApiPath] : []),
+    ...(scenario.issuesScenario ? [...issuesBaseApiPaths, ...issuesDetailApiPaths] : []),
   ];
 }
 
@@ -1278,6 +1572,8 @@ async function captureScenario(page, scenario) {
 
   if (scenario.status) {
     await page.getByRole("status", { name: scenario.status }).waitFor();
+  } else if (scenario.issuesScenario) {
+    await page.getByRole("region", { name: scenario.accessibleTarget }).waitFor();
   } else if (scenario.resourcesDetail) {
     await page.getByRole("dialog", { name: scenario.heading }).waitFor();
   } else {
@@ -1292,6 +1588,8 @@ async function captureScenario(page, scenario) {
     await prepareProductHomeScenario(page, scenario);
   } else if (scenario.resourcesScenario) {
     await prepareProductResourcesScenario(page, scenario);
+  } else if (scenario.issuesScenario) {
+    await prepareProductIssuesScenario(page, scenario);
   } else if (!scenario.authSession || scenario.authSession === "authenticated") {
     await page.keyboard.press("?");
     if (await page.getByRole("dialog").count()) {
@@ -1320,6 +1618,7 @@ async function captureScenario(page, scenario) {
     if (scenario.shellMode) await assertProductShellForcedColors(page, scenario.id);
     else if (scenario.homeScenario) await assertProductHomeForcedColors(page, scenario.id);
     else if (scenario.resourcesScenario) await assertProductResourcesForcedColors(page, scenario.id);
+    else if (scenario.issuesScenario) await assertProductIssuesForcedColors(page, scenario.id);
     else if (scenario.authSession === "unauthenticated") {
       await assertAuthForcedColors(page, scenario.id);
     }
@@ -1338,6 +1637,7 @@ async function assertProductLoadingScreenContracts(page, scenario) {
     const shell = document.querySelector("[data-slot='product-shell-loading']");
     const shellSidebar = shell?.querySelector("aside");
     const shellHeader = shell?.querySelector("header");
+    const clusterScope = shellHeader?.querySelector("[data-slot='loading-cluster-scope']");
     const sessionIdentity = shell?.querySelector("[data-slot='loading-session-identity']");
     const pageFrame = shell?.querySelector("[data-slot='product-page-frame']");
     const status = document.querySelector("[role='status']");
@@ -1382,10 +1682,12 @@ async function assertProductLoadingScreenContracts(page, scenario) {
       ),
       shellFrameRect: rect(pageFrame),
       shellHeaderRect: rect(shellHeader),
+      shellClusterScopeRect: rect(clusterScope),
       shellIdentityRect: rect(sessionIdentity),
       shellRect: rect(shell),
       shellSidebarRect: rect(shellSidebar),
       expectedHeaderHeight: 3.5 * rootFontSize,
+      expectedClusterScopeHeight: 2 * rootFontSize,
       expectedIdentityWidth,
       sidebarWidth,
       statusLabel: status?.getAttribute("aria-label") ?? null,
@@ -1424,6 +1726,15 @@ async function assertProductLoadingScreenContracts(page, scenario) {
       `${scenario.id}: loading toolbar did not reserve ready-state geometry ${JSON.stringify(result)}`,
     );
   }
+  if (!result.shellClusterScopeRect || !result.shellHeaderRect
+    || result.shellClusterScopeRect.width <= 0
+    || Math.abs(result.shellClusterScopeRect.height - result.expectedClusterScopeHeight) > 1
+    || result.shellClusterScopeRect.left < result.shellHeaderRect.left - 1
+    || result.shellClusterScopeRect.right > result.shellHeaderRect.right + 1) {
+    throw new Error(
+      `${scenario.id}: loading cluster scope did not reserve shell-header geometry ${JSON.stringify(result)}`,
+    );
+  }
 }
 
 async function prepareProductLocaleSmokeScenario(page, scenario) {
@@ -1433,7 +1744,7 @@ async function prepareProductLocaleSmokeScenario(page, scenario) {
       `${scenario.id}: locale smoke copy is missing for ${scenario.locale}/${scenario.localeSmoke}`,
     );
   }
-  await page.waitForFunction(() => document.title === "KubeHeal");
+  await page.waitForFunction(() => document.title === "Opsia");
   await assertPageLocaleState(
     page,
     scenario,
@@ -1454,9 +1765,9 @@ async function prepareProductLocaleSmokeScenario(page, scenario) {
 
   await assertLocalizedRouteCurrent(page, scenario.localeSmoke, scenario.locale, scenario.id);
 
-  await page.getByText("KubeHeal", { exact: true }).waitFor();
+  await page.getByText("Opsia", { exact: true }).waitFor();
   if (scenario.localeSmoke === "home") {
-    await page.getByRole("combobox", { name: copy.clusterSelect }).waitFor();
+    await assertGlobalClusterScopePicker(page, scenario.id, scenario.locale);
     await page.getByRole("button", { name: new RegExp(`^${homeNodeName}(?:\\s|$)`, "u") }).waitFor();
   } else if (scenario.localeSmoke === "resources") {
     await page.locator("table[data-slot='table']").waitFor();
@@ -1468,8 +1779,8 @@ async function prepareProductLocaleSmokeScenario(page, scenario) {
   // Brand and Kubernetes fixture identities are source data, not translation targets.
   const immutableText = await page.locator("body").innerText();
   const requiredSourceText = scenario.localeSmoke === "home"
-    ? ["KubeHeal", homeClusterId, homeNodeName]
-    : ["KubeHeal", homeClusterId, homePodName];
+    ? ["Opsia", homeClusterId, homeNodeName]
+    : ["Opsia", homeClusterId, homePodName];
   const missingSourceText = requiredSourceText.filter((value) => !immutableText.includes(value));
   if (missingSourceText.length) {
     throw new Error(
@@ -1558,21 +1869,16 @@ async function captureLocalizedGeometry(page, locale) {
         width: bounds.width,
       };
     };
-    const frame = document.querySelector("[data-slot='product-page-frame']");
-    const frameHeader = frame?.querySelector(":scope > header");
+    const shellHeader = document.querySelector("[data-slot='sidebar-inset'] > header");
+    const clusterPicker = shellHeader?.querySelector("[data-slot='cluster-scope-picker']");
+    const clusterTrigger = clusterPicker?.querySelector("[data-slot='select-trigger']");
     const localeTrigger = [...document.querySelectorAll("[data-slot='select-trigger']")]
       .find((element) => element.getAttribute("aria-label") === controlLabel);
-    const connection = frameHeader?.querySelector("[data-slot='button']");
-    const clusterSelect = frameHeader?.querySelector("[data-slot='select-trigger']");
-    const frameButtons = frameHeader?.querySelectorAll("[data-slot='button']") ?? [];
-    const refresh = frameButtons.item(frameButtons.length - 1);
     return {
-      clusterSelect: rect(clusterSelect),
-      connection: rect(connection),
-      frame: rect(frame),
+      clusterPicker: rect(clusterPicker),
+      clusterTrigger: rect(clusterTrigger),
       localeTrigger: rect(localeTrigger),
-      refresh: rect(refresh),
-      shellHeader: rect(document.querySelector("[data-slot='sidebar-inset'] > header")),
+      shellHeader: rect(shellHeader),
     };
   }, control.control);
 }
@@ -1616,16 +1922,12 @@ async function selectLocale(page, currentLocale, targetLocale) {
 }
 
 async function prepareProductHomeScenario(page, scenario) {
-  await page.waitForFunction(() => document.title === "KubeHeal");
+  await page.waitForFunction(() => document.title === "Opsia");
   if (scenario.homeFeatureState === "cluster-forbidden") {
     await assertProductHomeClusterForbidden(page, scenario.id);
     return;
   }
-  const clusterSelect = page.getByRole("combobox", { name: "클러스터 선택" });
-  await clusterSelect.waitFor();
-  if (!(await clusterSelect.textContent())?.includes(homeClusterId)) {
-    throw new Error(`${scenario.id}: Home cluster selector did not render ${homeClusterId}`);
-  }
+  await assertGlobalClusterScopePicker(page, scenario.id, scenario.locale);
 
   const desktop = scenario.viewport.width >= 768;
   const navigation = page.getByRole("navigation", { name: "주요 메뉴" });
@@ -1791,18 +2093,16 @@ async function visibleExactTextCount(page, text) {
 }
 
 async function prepareProductResourcesScenario(page, scenario) {
-  await page.waitForFunction(() => document.title === "KubeHeal");
+  await page.waitForFunction(() => document.title === "Opsia");
   const table = scenario.resourcesDetail
     ? page.locator("table[data-slot='table'][aria-label='리소스 목록']")
     : page.getByRole("table", { name: "리소스 목록" });
   await table.waitFor({ state: scenario.resourcesDetail ? "attached" : "visible" });
   await page.getByText(homePodName, { exact: true }).first().waitFor();
 
-  const clusterSelect = page.locator("[data-slot='select-trigger'][aria-label='클러스터 선택']");
-  await clusterSelect.waitFor({ state: scenario.resourcesDetail ? "attached" : "visible" });
-  if (!(await clusterSelect.textContent())?.includes(homeClusterId)) {
-    throw new Error(`${scenario.id}: Resources cluster selector omitted ${homeClusterId}`);
-  }
+  await assertGlobalClusterScopePicker(page, scenario.id, scenario.locale, {
+    state: scenario.resourcesDetail ? "attached" : "visible",
+  });
 
   const scopeText = await page.locator("[role='status'][aria-label='목록 범위']").innerText();
   if (!/표시\s*2/u.test(scopeText) || !/전체 수 미확인/u.test(scopeText)) {
@@ -1814,12 +2114,6 @@ async function prepareProductResourcesScenario(page, scenario) {
   if (productText.includes("visual-secret-must-not-render")) {
     throw new Error(`${scenario.id}: unredacted annotation reached the Resources DOM`);
   }
-  if (!scenario.resourcesDetail) {
-    const connection = page.getByRole("button", { name: /연결됨.*마지막 관측/u });
-    await connection.focus();
-    await page.locator("[data-slot='tooltip-content']").waitFor();
-  }
-
   const desktop = scenario.viewport.width >= 768;
   const navigation = page.getByRole("navigation", { name: "주요 메뉴" });
   if (desktop) {
@@ -1871,6 +2165,88 @@ async function prepareProductResourcesScenario(page, scenario) {
   }
 
   await assertProductResourcesReducedMotion(page, scenario.id);
+}
+
+async function prepareProductIssuesScenario(page, scenario) {
+  await page.waitForFunction(() => document.title === "Opsia");
+  await assertGlobalClusterScopePicker(page, scenario.id, scenario.locale);
+
+  const listRegion = page.getByRole("region", { name: scenario.accessibleTarget });
+  await listRegion.waitFor();
+  const issuesLink = page.getByRole("link", { name: "Issues", exact: true });
+  if (scenario.viewport.width >= 768) {
+    if (await issuesLink.getAttribute("aria-current") !== "page") {
+      throw new Error(`${scenario.id}: desktop Issues link must be current`);
+    }
+  } else if (await issuesLink.count() !== 0) {
+    throw new Error(`${scenario.id}: closed mobile Issues sidebar link must not be mounted`);
+  }
+
+  const firstIssue = listRegion.getByRole("button", {
+    name: issuesSymptom,
+    exact: true,
+  });
+  await firstIssue.waitFor();
+  if (await firstIssue.count() !== 1) {
+    throw new Error(`${scenario.id}: expected one deterministic Issue control`);
+  }
+  await firstIssue.click();
+
+  await page.getByRole("region", { name: "Issue details" }).waitFor();
+  const auditSubject = page.getByTestId("audit-event-subject");
+  await auditSubject.waitFor();
+  if (await auditSubject.innerText() !== issuesAuditSubject) {
+    throw new Error(`${scenario.id}: audit event subject is not exact`);
+  }
+  await page.getByText("Kubernetes evidence collected", { exact: true }).waitFor();
+  await page.getByText("Increase memory limit after approval", { exact: true }).waitFor();
+  await page.getByText("Increase memory limit", { exact: true }).waitFor();
+  const recentChangesRegion = page.getByRole("region", { name: "Recent changes" });
+  await recentChangesRegion.waitFor();
+  await recentChangesRegion.locator("time[datetime='2026-07-13T09:55:00Z']").waitFor();
+  const recentChangeItem = recentChangesRegion.getByRole("listitem");
+  await recentChangeItem.waitFor();
+  const recentChangeText = await recentChangeItem.innerText();
+  for (const requiredText of [
+    "shop",
+    "Deployment",
+    "checkout-api",
+    "registry.example/checkout:v1",
+    "registry.example/checkout:v2",
+    "0123456789abcdef",
+    "visual-workflow-run",
+  ]) {
+    if (!recentChangeText.includes(requiredText)) {
+      throw new Error(`${scenario.id}: recent change omitted ${requiredText}`);
+    }
+  }
+  const pullRequest = recentChangesRegion.getByRole("link", {
+    name: "Open pull request",
+    exact: true,
+  });
+  await pullRequest.waitFor();
+  if (await pullRequest.getAttribute("href") !== "https://github.com/acme/platform/pull/42") {
+    throw new Error(`${scenario.id}: recent change PR link is not the verified fixture URL`);
+  }
+  if (await pullRequest.getAttribute("target") !== "_blank"
+    || await pullRequest.getAttribute("rel") !== "noopener noreferrer") {
+    throw new Error(`${scenario.id}: recent change PR link must isolate its external context`);
+  }
+  await page.waitForLoadState("networkidle");
+
+  const detailTitle = page.locator("[data-slot='card-title']", {
+    hasText: issuesSubject,
+  });
+  if (await detailTitle.count() !== 1) {
+    throw new Error(`${scenario.id}: selected Issue subject was not exposed once`);
+  }
+  const currentUrl = new URL(page.url());
+  if (currentUrl.origin !== baseUrl
+    || currentUrl.pathname !== "/product/issues"
+    || currentUrl.searchParams.size !== 1
+    || currentUrl.searchParams.get("cluster") !== homeClusterId) {
+    throw new Error(`${scenario.id}: Issues route URL is not exact: ${currentUrl.href}`);
+  }
 }
 
 async function assertProductResourcesReducedMotion(page, label) {
@@ -1935,13 +2311,11 @@ async function assertProductHomeFreshnessContract(page, label) {
     .test(mainText)) {
     throw new Error(`${label}: Home rendered a prohibited standing label or transport badge`);
   }
-  const connection = page.getByRole("button", {
-    name: /연결(?:됨| 지연| 대기| 끊김| 상태 알 수 없음).*마지막 관측/u,
-  });
-  if (await connection.count() !== 1) {
-    throw new Error(`${label}: Home must expose one connection freshness control`);
+  const clusterTrigger = page.locator(clusterScopeTriggerSelector);
+  if (await clusterTrigger.count() !== 1) {
+    throw new Error(`${label}: shell must expose one cluster scope freshness control`);
   }
-  await connection.focus();
+  await clusterTrigger.focus();
   await page.locator("[data-slot='tooltip-content']").waitFor();
 }
 
@@ -1985,11 +2359,44 @@ async function assertProductHomeClusterForbidden(page, label) {
   if (!/필요한 조회 권한/u.test(mainText)) {
     throw new Error(`${label}: cluster forbidden state needs a permission reason`);
   }
-  if (await page.getByRole("combobox", { name: "클러스터 선택" }).count()
-    || await page.getByRole("heading", { name: "클러스터 상태" }).count()
+  const picker = page.locator(clusterScopePickerSelector);
+  const trigger = page.locator(clusterScopeTriggerSelector);
+  if (await picker.count() !== 1 || await trigger.count() !== 1) {
+    throw new Error(`${label}: cluster forbidden state must retain one global cluster picker`);
+  }
+  if (!(await trigger.textContent())?.includes(homeClusterId)) {
+    throw new Error(`${label}: cluster forbidden state lost the selected global cluster scope`);
+  }
+  if (await page.getByRole("heading", { name: "클러스터 상태" }).count()
     || await page.getByRole("heading", { name: "Node" }).count()
     || await page.getByText(homeNodeName, { exact: true }).count()) {
     throw new Error(`${label}: cluster forbidden state leaked cached cluster content`);
+  }
+}
+
+async function assertGlobalClusterScopePicker(page, label, locale, options = {}) {
+  const picker = page.locator(clusterScopePickerSelector);
+  const trigger = page.locator(clusterScopeTriggerSelector);
+  await picker.waitFor(options);
+  await trigger.waitFor(options);
+  if (await picker.count() !== 1 || await trigger.count() !== 1) {
+    throw new Error(`${label}: shell must expose exactly one global cluster scope picker`);
+  }
+  const text = await trigger.textContent() ?? "";
+  const accessibleName = await trigger.getAttribute("aria-label") ?? "";
+  const connection = locale === "en" ? "Connected" : "연결됨";
+  if (!text.includes(homeClusterId)
+    || !accessibleName.includes(homeClusterId)
+    || !accessibleName.includes(connection)) {
+    throw new Error(
+      `${label}: global cluster scope omitted canonical identity or localized connection `
+      + `${JSON.stringify({ accessibleName, text })}`,
+    );
+  }
+  const providerIcon = trigger.locator("[data-slot='cluster-provider-icon']");
+  if (await providerIcon.count() !== 1
+    || await providerIcon.getAttribute("data-provider") !== "eks") {
+    throw new Error(`${label}: global cluster scope omitted the verified provider icon`);
   }
 }
 
@@ -2141,7 +2548,7 @@ async function assertProductShellContracts(page, scenario) {
   if (result.missing) throw new Error(`${scenario.id}: ProductShell fixture is incomplete`);
   if (result.navigationRole !== "nav" || result.navigationLabel !== "주요 메뉴"
     || result.itemCount !== 3 || result.linkCount !== 3
-    || result.currentLinks !== 1 || result.currentHref !== "/product"
+    || result.currentLinks !== 1 || result.currentHref !== "/product?cluster=cluster-1"
     || result.currentLabel !== "홈"
     || result.itemTags.some((tag) => tag !== "LI")
     || result.linkLabels.join("|") !== "홈|인시던트|타임라인") {
@@ -2283,7 +2690,9 @@ async function assertProductHomeForcedColors(page, label) {
   const result = await page.evaluate(() => {
     const main = document.querySelector("main");
     const surface = document.querySelector("[data-slot='surface']");
-    const select = document.querySelector("[data-slot='select-trigger']");
+    const select = document.querySelector(
+      "[data-slot='sidebar-inset'] > header [data-slot='cluster-scope-picker'] [data-slot='select-trigger']",
+    );
     const node = document.querySelector("section[aria-labelledby='node-list-title'] [data-slot='item']");
     const status = document.querySelector("[data-slot='status-mark']");
     const marker = status?.querySelector("[aria-hidden='true']");
@@ -2878,7 +3287,9 @@ async function assertNoOverflow(page, label, requiredSelectors) {
 
 async function assertProductResourcesForcedColors(page, label) {
   const result = await page.evaluate(() => {
-    const select = document.querySelector("[data-slot='select-trigger']");
+    const select = document.querySelector(
+      "[data-slot='sidebar-inset'] > header [data-slot='cluster-scope-picker'] [data-slot='select-trigger']",
+    );
     const row = document.querySelector("[data-slot='table-row']");
     const action = document.querySelector("[data-slot='table-body'] [data-slot='button']");
     const status = document.querySelector("[data-slot='status-mark']");
@@ -2914,6 +3325,79 @@ async function assertProductResourcesForcedColors(page, label) {
     throw new Error(
       `${label}: forced-colors Resources state is not preserved ${JSON.stringify(result)}`,
     );
+  }
+}
+
+async function assertProductIssuesForcedColors(page, label) {
+  await page.keyboard.press("Tab");
+  const result = await page.evaluate(() => {
+    const select = document.querySelector(
+      "[data-slot='sidebar-inset'] > header [data-slot='cluster-scope-picker'] [data-slot='select-trigger']",
+    );
+    const list = document.querySelector("[role='region'][aria-label='Issues']");
+    const issue = list?.querySelector("button");
+    const detail = document.querySelector("[role='region'][aria-label='Issue details']");
+    const recentChanges = document.querySelector("[data-testid='issue-recent-changes']");
+    const pullRequest = recentChanges?.querySelector("a[target='_blank']");
+    const required = [select, list, issue, detail, recentChanges, pullRequest];
+    if (required.some((element) => !(element instanceof HTMLElement))) {
+      return { missing: true };
+    }
+
+    issue.focus();
+    const selectStyle = getComputedStyle(select);
+    const listStyle = getComputedStyle(list);
+    const issueStyle = getComputedStyle(issue);
+    const detailStyle = getComputedStyle(detail);
+    const recentChangesStyle = getComputedStyle(recentChanges);
+    const pullRequestStyle = getComputedStyle(pullRequest);
+    const visible = (element) => {
+      const rect = element.getBoundingClientRect();
+      return rect.width > 0 && rect.height > 0;
+    };
+
+    return {
+      missing: false,
+      active: matchMedia("(forced-colors: active)").matches,
+      detailVisible: visible(detail),
+      issueFocused: document.activeElement === issue,
+      issueOpacity: Number.parseFloat(issueStyle.opacity),
+      issueOutlineStyle: issueStyle.outlineStyle,
+      issueOutlineWidth: Number.parseFloat(issueStyle.outlineWidth),
+      listBorderStyle: listStyle.borderTopStyle,
+      listBorderWidth: Number.parseFloat(listStyle.borderTopWidth),
+      pullRequestOpacity: Number.parseFloat(pullRequestStyle.opacity),
+      pullRequestVisible: visible(pullRequest),
+      recentChangesBorderStyle: recentChangesStyle.borderTopStyle,
+      recentChangesBorderWidth: Number.parseFloat(recentChangesStyle.borderTopWidth),
+      recentChangesOpacity: Number.parseFloat(recentChangesStyle.opacity),
+      selectBorderStyle: selectStyle.borderTopStyle,
+      selectBorderWidth: Number.parseFloat(selectStyle.borderTopWidth),
+      selectOpacity: Number.parseFloat(selectStyle.opacity),
+      detailOpacity: Number.parseFloat(detailStyle.opacity),
+    };
+  });
+
+  if (result.missing || !result.active || !result.detailVisible
+    || !result.pullRequestVisible || !result.issueFocused
+    || result.selectBorderStyle === "none" || result.selectBorderWidth < 1
+    || result.listBorderStyle === "none" || result.listBorderWidth < 1
+    || result.recentChangesBorderStyle === "none" || result.recentChangesBorderWidth < 1
+    || result.issueOutlineStyle === "none" || result.issueOutlineWidth < 2) {
+    throw new Error(
+      `${label}: forced-colors Issues state is not preserved ${JSON.stringify(result)}`,
+    );
+  }
+  for (const [name, opacity] of Object.entries({
+    detail: result.detailOpacity,
+    issue: result.issueOpacity,
+    pullRequest: result.pullRequestOpacity,
+    recentChanges: result.recentChangesOpacity,
+    select: result.selectOpacity,
+  })) {
+    if (Math.abs(opacity - 1) > 0.001) {
+      throw new Error(`${label}: forced-colors Issues ${name} uses group opacity ${opacity}`);
+    }
   }
 }
 

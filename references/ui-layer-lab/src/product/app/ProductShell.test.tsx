@@ -1,9 +1,13 @@
 import { renderToStaticMarkup } from "react-dom/server";
+import type { ComponentProps } from "react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { describe, expect, it } from "vitest";
 import { ProductShell } from "./ProductShell";
 import type { ProductSurfaceId } from "./productRoutes";
 import type { AuthenticatedAuthState } from "../features/auth/authContract";
+import { AuthSessionGateProvider } from "../features/auth/AuthSessionGate";
+import { ClusterScopeProvider } from "../features/cluster-scope/ClusterScopeProvider";
+import type { ClusterScopePort } from "../features/cluster-scope/clusterScopeContract";
 import { I18nProvider } from "../shared/i18n";
 
 const testAuth: AuthenticatedAuthState = {
@@ -12,6 +16,19 @@ const testAuth: AuthenticatedAuthState = {
   signOutPending: false,
   onSignOut: () => undefined,
 };
+const testClusterScope: ClusterScopePort = {
+  listClusterChoices: async () => ({ completeness: "unknown", clusters: [] }),
+};
+
+function TestShell(props: ComponentProps<typeof ProductShell>) {
+  return (
+    <AuthSessionGateProvider reportUnauthorized={() => undefined}>
+      <ClusterScopeProvider authorityKey="test-workspace:test-user" port={testClusterScope}>
+        <ProductShell {...props} />
+      </ClusterScopeProvider>
+    </AuthSessionGateProvider>
+  );
+}
 
 describe("ProductShell", () => {
   it("renders only released surfaces and keeps the current route accessible", () => {
@@ -20,7 +37,7 @@ describe("ProductShell", () => {
       <I18nProvider navigatorLanguage="en-US" storage={null}>
         <MemoryRouter initialEntries={["/product/issues"]}>
           <Routes>
-            <Route element={<ProductShell auth={testAuth} releasedSurfaceIds={releasedSurfaceIds} />}>
+            <Route element={<TestShell auth={testAuth} releasedSurfaceIds={releasedSurfaceIds} />}>
               <Route path="/product/issues" element={<p>Issue content</p>} />
             </Route>
           </Routes>
@@ -46,7 +63,7 @@ describe("ProductShell", () => {
       <I18nProvider navigatorLanguage="en-US" storage={null}>
         <MemoryRouter initialEntries={["/product/not-released"]}>
           <Routes>
-            <Route element={<ProductShell auth={testAuth} releasedSurfaceIds={new Set(["timeline"])} />}>
+            <Route element={<TestShell auth={testAuth} releasedSurfaceIds={new Set(["timeline"])} />}>
               <Route path="*" element={<p>Redirecting</p>} />
             </Route>
           </Routes>
@@ -65,7 +82,7 @@ describe("ProductShell", () => {
           <Routes>
             <Route
               element={(
-                <ProductShell
+                <TestShell
                   auth={testAuth}
                   defaultSidebarCollapsed
                   releasedSurfaceIds={new Set(["home"])}
@@ -91,7 +108,7 @@ describe("ProductShell", () => {
           <Routes>
             <Route
               element={(
-                <ProductShell
+                <TestShell
                   auth={testAuth}
                   releasedSurfaceIds={new Set(["home", "issues"])}
                 />

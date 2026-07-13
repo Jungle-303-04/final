@@ -90,7 +90,7 @@ describe("AuthBarrier mutation reconciliation", () => {
     renderBarrier(port);
     await user.click(await screen.findByRole("button", { name: "테스트 로그아웃" }));
 
-    expect(await screen.findByRole("heading", { name: "KubeHeal에 로그인" })).toBeTruthy();
+    expect(await screen.findByRole("heading", { name: "Opsia에 로그인" })).toBeTruthy();
     expect(loadSession).toHaveBeenCalledTimes(2);
   });
 
@@ -147,7 +147,7 @@ describe("AuthBarrier mutation reconciliation", () => {
     await user.click(unauthorized);
     await user.click(unauthorized);
 
-    expect(await screen.findByRole("heading", { name: "KubeHeal에 로그인" })).toBeTruthy();
+    expect(await screen.findByRole("heading", { name: "Opsia에 로그인" })).toBeTruthy();
     expect(loadSession).toHaveBeenCalledTimes(2);
   });
 });

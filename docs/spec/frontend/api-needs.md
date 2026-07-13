@@ -4,7 +4,7 @@ status: active-coordination-queue
 date: 2026-07-13
 owners: Codex 요청 / API 연결 작업자 claim·처리 / F 트랙 행(APIQ-029)·계약 갱신(APIQ-012)은 검토자 기록
 workorder: api-integration-workorder-20260711.md
-snapshot: 2행·6함수 / requested 2 / in_progress 0 / blocked 0 / valid completion anchors 45
+snapshot: 0행·0함수 / requested 0 / in_progress 0 / blocked 0 / valid completion anchors 58
 ---
 
 # 프론트 API 요청 큐
@@ -16,10 +16,8 @@ snapshot: 2행·6함수 / requested 2 / in_progress 0 / blocked 0 / valid comple
 상세한 경로, 소유권, schema, test, mutation 안전, 2커밋 완료 절차는
 `api-integration-workorder-20260711.md`가 정본이다.
 
-> **다음 claim 고정 순서 (2026-07-13 파이프라인 A단계 갱신):**
-> `APIQ-019` → `APIQ-015`.
-> BQ-001·BQ-003의 `origin/dev` 착륙은 파이프라인 A단계 명령으로 재검증했다.
-> 각 행의 완료 앵커와 조율 커밋이 원격에 반영된 뒤에만 다음 행을 claim한다.
+> **현재 claim:** 없음. `APIQ-033`의 네 함수는 코드 커밋 `8678d63b0`과 전체 게이트를
+> 통과하고 완료됐다.
 
 ## 1. 상태와 claim 규칙
 
@@ -71,8 +69,6 @@ claim·heartbeat: YYYY-MM-DD HH:mm KST
 
 | ID | 우선 | 함수명 | routes.py 상수 | 대상 파일 | 필요한 화면 | 요청 시각 | 상태 | 담당/브랜치 | claim·heartbeat | 완료 조건·주의 |
 |---|---:|---|---|---|---|---|---|---|---|---|
-| `APIQ-015` | P3 | `listCatalogItems`, `getCatalogItem` | `CATALOG_ITEMS_PATH`, `CATALOG_ITEM_PATH` | `catalog.ts`, `catalog-schemas.ts`, test | provider-neutral Catalog | 2026-07-11 16:19 KST | requested | — | — | item JsonMap 보존; pagination/filter 발명 금지; install 제외 |
-| `APIQ-019` | P2 | `listAiConversations`, `getAiConversation`, `createAiConversation`, `appendAiMessage` | `AI_CONVERSATIONS_PATH`, `AI_CONVERSATION_PATH`, `AI_CONVERSATION_MESSAGES_PATH` | `conversations.ts`, `conversations-schemas.ts`, test | global AI conversation drawer | 2026-07-11 16:19 KST | requested | — | — | A2 착륙 후 재claim; 내부 JsonMap·status string 보존; create/append 200 receipt; POST 재전송 금지 |
 
 ## 3. 기존 구현 검증·승인
 
@@ -85,6 +81,14 @@ AbortSignal contract test를 추가하고, 필요한 경우 claim 범위 안에�
 ## 4. 큐 밖 Backend gap과 realtime
 
 - route 자체가 없는 `BE-Gap-*`은 이 큐에 넣지 않는다. backend semantic contract가 먼저다.
+- `BE-Gap-ApplicationsClusterScope`: 전역 Cluster selector가 Applications 표면의 단일 권위가
+  되려면 application 목록과 workflow run 목록에 서버측 `cluster_id` 필터와 opaque cursor가
+  필요하다. 현재 limit 응답을 받은 뒤 클라이언트에서 필터링하면 completeness를 증명할 수 없으므로
+  화면 release를 금지한다. `has_more` 또는 `next_cursor`까지 착륙하면 별도 APIQ로 재검증한다.
+- `BE-Gap-AutoRevertIdentity`: 기존 RCA/release Safe PR 조회는 일반 Safe PR과 BQ-007 auto-revert를
+  구분하는 구조화 discriminator가 없다. stable `trigger_kind=auto_revert`, correlation 또는 workflow
+  run exact scope, event ID/type/time, nullable PR URL·실패 reason 계약이 canonical에 착륙한 뒤에만
+  조회 APIQ를 추가한다. `[auto-revert]` 제목 prefix 파싱과 일반 Safe PR의 대체 표시는 금지한다.
 - repo/provider/target/org/alert/dead-letter 함수는 현재 필요한 화면이 확정되지 않아 아직 요청하지
   않았다. routes가 있다는 이유만으로 만들지 않는다.
 - WebSocket `/api/live/browser`는 HTTP queue와 분리한다. connection·handshake·resume·sequence gap

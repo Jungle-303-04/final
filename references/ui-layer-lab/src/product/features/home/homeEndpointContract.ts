@@ -3,6 +3,7 @@ export interface HomeEndpointClusterSummary {
   cluster_id: string;
   name: string;
   environment: string;
+  provider?: "eks" | "gke" | "aks" | "onprem" | "kind" | "unknown";
   status: string;
   settings: Record<string, unknown>;
   connection_status: string;

@@ -14,20 +14,6 @@ afterEach(() => {
 });
 
 describe("HomePage accessibility and bounded rendering", () => {
-  it("exposes connection freshness once through a keyboard-accessible tooltip", async () => {
-    renderHome(homePort());
-
-    const connection = await screen.findByRole("button", {
-      name: /연결됨.*마지막 관측/u,
-    }, { timeout: 5_000 });
-    connection.focus();
-
-    await waitFor(() => {
-      expect(document.querySelector("[data-slot='tooltip-content']")?.textContent)
-        .toMatch(/마지막 관측/u);
-    });
-  }, 15_000);
-
   it("includes CPU and memory names in each Node metric's accessible text", async () => {
     renderHome(homePort());
 

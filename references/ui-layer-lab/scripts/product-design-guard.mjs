@@ -93,7 +93,7 @@ const allowedStandaloneUiTerms = new Set([
   'Ingress',
   'Job',
   'JSON',
-  'KubeHeal',
+  'Opsia',
   'Kubernetes',
   'KiB',
   'MiB',
