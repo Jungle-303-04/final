@@ -1830,3 +1830,22 @@ API 완성: registerTarget (8678d63b0)
 API 완성: listResourceFilterFacets (a9febb22bfcfc004ddaba73a345e2c1daa0da96a)
 API 완성: listFilteredResources (a9febb22bfcfc004ddaba73a345e2c1daa0da96a)
 API 완성: listResourceLabelFacets (a9febb22bfcfc004ddaba73a345e2c1daa0da96a)
+
+## 2026-07-14 Resources 필터 소비 adapter 격리 착륙
+
+- RED `b4a806f34c0ffd12dce3523c40e4d98e3e587cff`은 세 endpoint별 단일 호출, canonical
+  request, server count·snapshot 의미 보존, invalid 행 격리, fallback·fan-out 금지와 오류 경계를
+  27개 회귀 테스트로 고정했다.
+- GREEN `ab5f56714db63d8a66e64ae5cd91b7174976965d`은 `ResourcesFilterPort`, request 변환,
+  canonical projection과 transport 오류 매핑을 구현했다. feature가 `product/api`를 직접 참조하지
+  않도록 경계 보정 `77984549d7ae8343cf7912becc97a25abe0969d6`을 분리했다.
+- `npm run check` PASS: TypeScript·ESLint, Vitest 134 files / 954 tests, design guard 381 files,
+  shadcn source audit 482 previews, production build. `npm run visual-product` PASS: 47 isolated
+  scenarios, exact API requests, unexpected feature network/WebSocket 0건. CLS는 Home `0.004188`,
+  Resources `0.004167`, Issues `0.004202`다.
+- **격리 착륙 — 잔여 결함/해제 조건:** adapter는 composition/UI에 마운트하지 않았다. 다음 사이클에서
+  요청 취소와 늦은 응답 거부, filter 변경 시 cursor reset, page append의 snapshot·authorization·
+  fingerprint 일치, background refresh 보존을 RED→GREEN으로 증명하기 전에는 기존 Resources 표와
+  Label/Showing count 표면을 교체하지 않는다. type·health facet은 §9.2 계약 전 계속 미렌더한다.
+- GAP-010 backend graph 계약 `914d34ff6`은 확인했지만 frontend API·Zod·adapter·renderer가 아직
+  없으므로 graph data·TopologyCanvas·WebSocket은 미렌더를 유지한다.

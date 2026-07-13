@@ -381,17 +381,23 @@ Live Traffic은 이번 범위에서 **변경하지 않는다**(현행 유지).
   identity를 저장한다. 따라서 list filter의 Cluster·kind가 바뀌어도 열린 detail target은
   재지정되지 않는다. legacy `namespace/name + resourceKind`는 읽은 뒤 명시적 detail migration
   write에서만 `v1`으로 바뀐다.
-- 현재 frontend consumer가 아직 연결하지 않은 다중 Cluster·다중 Namespace, Application,
-  Label, health, server search와 미착륙 graph projection은 요청하지 않고 fail-closed한다.
+- 다중 Cluster·다중 Namespace, Application, Label, server search의 소비 adapter는 구현했지만
+  composition/UI에는 아직 마운트하지 않았다. health/type facet은 §9.2 계약 전까지 요청하지 않고,
+  graph projection은 별도 API·Zod·adapter 작업 전까지 fail-closed한다.
   detail read는 이 list 차단과 독립적이며 해당 identity만 조회한다.
 - 4단계의 Topology 전용 메뉴·route·shortcut은 제거했고 Resources의 Table/Graph 전환 shell은
-  `f944e4c5b`에서 완료했다. Graph는 URL history를 보존하지만 GAP-010 전에는 catalog/list/graph
-  API·TopologyCanvas·WebSocket을 모두 호출하거나 렌더하지 않는다. 단일 Cluster가 아니면
-  선택 경계를 표시하고, unknown Cluster identity는 선택 안내로 뭉개지 않고 그대로 보존한다.
-- Resources core `GAP-002/003/004` 계약은 `87c0606e0`으로 착륙했고 frontend API·strict Zod는
-  `a9febb22b`에서 완료했다. 제품 adapter·UI 배선은 별도 작업 단위다. 이후 우선순위는 graph
-  `010`, 타 화면 `005 → 006`, wizard `007 → 008`, repository `009`, workspace `001`이다.
-  앵커 없는 데이터 표면은 계속 미렌더한다.
+  `f944e4c5b`에서 완료했다. Graph는 URL history를 보존하지만 frontend graph API·Zod·adapter와
+  renderer 착륙 전에는 graph API·TopologyCanvas·WebSocket을 호출하거나 렌더하지 않는다.
+  단일 Cluster가 아니면 선택 경계를 표시하고, unknown Cluster identity는 선택 안내로 뭉개지 않고
+  그대로 보존한다.
+- Resources core `GAP-002/003/004` 계약은 `87c0606e0`, frontend API·strict Zod는
+  `a9febb22b`에 착륙했다. 소비 adapter는 RED `b4a806f34` → GREEN `ab5f56714` → feature 경계
+  보정 `77984549d`로 검증했지만 composition/UI는 의도적으로 미마운트다. 다음 사이클에서 요청 취소,
+  늦은 응답 거부, snapshot·authorization·fingerprint 일치, cursor reset/append를 검증한 뒤 노출한다.
+- `GAP-010` backend graph 계약도 `914d34ff6`으로 착륙했다. frontend API·strict Zod·adapter와
+  renderer가 아직 없으므로 Graph data·TopologyCanvas·WebSocket은 계속 미렌더한다. 이후 우선순위는
+  Resources UI lifecycle, graph `010`, 타 화면 `005 → 006`, wizard `007 → 008`, repository `009`,
+  workspace `001`이다. 앵커 없는 데이터 표면은 계속 미렌더한다.
 
 ## 9. 계약 갭 기록
 
@@ -401,15 +407,15 @@ Live Traffic은 이번 범위에서 **변경하지 않는다**(현행 유지).
 | ID | 필요한 계약 | 막힌 화면 | 상태 |
 |---|---|---|---|
 | GAP-001 | 현재 actor가 접근 가능한 workspace cursor catalog, current workspace, switch mutation receipt, session refresh, forbidden/deleted 상태 | 상단 workspace selector | backend 요청 필요 · 미렌더 |
-| GAP-002 | workspace-scoped filter facet catalog: stable cluster/application IDs, exact namespace refs, restricted/unresolved 상태, revision, opaque cursor | 공용 filter option과 chip 해석 | backend GREEN `RESOURCES_FILTER_FACETS_PATH` / `87c0606e0` · frontend `listResourceFilterFacets` + strict Zod GREEN `a9febb22b` · adapter 대기 |
-| GAP-003 | Resources multi-cluster·multi-namespace·applicationIds·resourceTypes·health·server search query, stable sort, opaque cursor, total/completeness, row cluster identity와 application binding | Resources filter 결과·Showing N of M·다중 Cluster 표 | backend GREEN `FILTERED_RESOURCES_PATH` / `87c0606e0` · frontend `listFilteredResources` + strict Zod GREEN `a9febb22b` · adapter 대기 · client fan-out 금지 |
-| GAP-004 | workspace/권한/common·surface filter/snapshot을 받는 surface별 label facet search: `key=value` 부분 검색, 후보를 AND 추가했을 때의 count, selected label 재해석, opaque cursor, result total·unfiltered total·completeness, restricted/redacted 정책 | Labels popover·label chip·Showing N of M | backend GREEN `RESOURCE_LABEL_FACETS_PATH` / `87c0606e0` · frontend `listResourceLabelFacets` + strict Zod GREEN `a9febb22b` · adapter 대기 · collection 전수 수집 금지 |
+| GAP-002 | workspace-scoped filter facet catalog: stable cluster/application IDs, exact namespace refs, restricted/unresolved 상태, revision, opaque cursor | 공용 filter option과 chip 해석 | backend GREEN `RESOURCES_FILTER_FACETS_PATH` / `87c0606e0` · frontend `listResourceFilterFacets` + strict Zod GREEN `a9febb22b` · consumer adapter GREEN `ab5f56714`/`77984549d` · UI 미마운트 |
+| GAP-003 | Resources multi-cluster·multi-namespace·applicationIds·resourceTypes·health·server search query, stable sort, opaque cursor, total/completeness, row cluster identity와 application binding | Resources filter 결과·Showing N of M·다중 Cluster 표 | backend GREEN `FILTERED_RESOURCES_PATH` / `87c0606e0` · frontend `listFilteredResources` + strict Zod GREEN `a9febb22b` · consumer adapter GREEN `ab5f56714`/`77984549d` · UI 미마운트 · client fan-out 금지 |
+| GAP-004 | workspace/권한/common·surface filter/snapshot을 받는 surface별 label facet search: `key=value` 부분 검색, 후보를 AND 추가했을 때의 count, selected label 재해석, opaque cursor, result total·unfiltered total·completeness, restricted/redacted 정책 | Labels popover·label chip·Showing N of M | backend GREEN `RESOURCE_LABEL_FACETS_PATH` / `87c0606e0` · frontend `listResourceLabelFacets` + strict Zod GREEN `a9febb22b` · consumer adapter GREEN `ab5f56714`/`77984549d` · UI 미마운트 · collection 전수 수집 금지 |
 | GAP-005 | Issues의 common axes + severity/status/environment server filter, application/cluster/namespace facet payload, stable detail ID, cursor/total/completeness | Issues filter·filter 밖 detail 판정 | backend 요청 필요 · 미렌더 |
 | GAP-006 | provider-neutral Applications/GitOps/Checks canonical list DTO, common/surface axes, cursor/facet counts/completeness | 세 화면 filter와 목록 | backend 요청 필요 · 기존 검증된 read만 유지 |
 | GAP-007 | registration preflight/register 동일 validation, 발급 전 command preview 또는 명시적 순서, resume/reissue, structured `connection_stage` reason/error code | Cluster 연결 위자드 완성형 | VP-008 blocker 유지 · 미렌더 |
 | GAP-008 | capability/permission, confirmation, operation receipt와 terminal status를 포함한 Cluster 연결 해제 계약 | Cluster 행 메뉴·상세 | backend 요청 필요 · 삭제 UI 미렌더 |
 | GAP-009 | repository URL recognition result, access check, credential challenge, branch cursor/default, manifest/remediation candidate path cursor, background operation receipt/status | Git 저장소 등록 위자드 | backend 요청 필요 · 수동값 추측 금지 |
-| GAP-010 | Resources filter와 동일 scope/revision을 소비하는 single-cluster graph snapshot, partial/restricted/completeness와 drill-down identity | Resources graph mode | frontend shell GREEN `f944e4c5b` · backend graph snapshot 요청 필요 · graph data 미렌더 |
+| GAP-010 | Resources filter와 동일 scope/revision을 소비하는 single-cluster graph snapshot, partial/restricted/completeness와 drill-down identity | Resources graph mode | backend GREEN `RESOURCES_GRAPH_PATH + ResourceGraphSnapshotResponse` / `914d34ff6` · frontend shell GREEN `f944e4c5b` · frontend API/Zod/adapter/renderer 대기 · graph data 미렌더 |
 
 ### 9.1 GAP-004 최소 소비 계약
 
