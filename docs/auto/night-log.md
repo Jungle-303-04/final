@@ -1402,3 +1402,24 @@ JsonMap, AbortSignal, ID 검증을 완료 앵커 전까지 제품 화면에서 �
   Vite production build 14,512 modules.
 - `API 완성: getAuditTimeline (9841a5d95)`를 기록하고 APIQ-030 행을 제거했다.
   다음 단계는 이 앵커를 소비하는 VP-002 Issues 상세의 독립 감사 섹션이다.
+
+## 2026-07-13 14:02 KST — [프론트] BQ-017 스키마 호환 완료 + bfaf03901
+
+- `ClusterSummary.provider`는 `eks|gke|aks|onprem|kind|unknown`,
+  `ClusterConnectionStatus.connection_stage`는
+  `token_issued|awaiting_install|agent_connected|snapshot_received|ready|expired|error`를
+  각각 optional로 명시한다. 두 외피의 `strictObject`는 유지한다.
+- `bfaf03901`은 현재 HEAD와 `origin/woonyong/ui-layer-lab`의 ancestor(exit 0)다.
+  targeted `clusters.test.ts` + `cluster-connection.test.ts`는 2 files / 17 tests PASS다.
+
+## 2026-07-13 14:03 KST — [프론트] VP-002 감사 타임라인 화면 완료 증거
+
+- RED `003a9563a` → API 재앵커 `4c2598c4a` → UI GREEN `fdc921c3d` →
+  책임 분리 `9bedcdfa5`. 서버 순서 보존, opaque cursor 누적, scope 전환 취소와
+  기존 페이지 보존형 실패 상태를 화면·adapter 계약으로 고정했다.
+- `npm run check` PASS: TypeScript·ESLint, Vitest 108 files / 773 tests,
+  design guard 326 files, shadcn 482 previews, production build 14,529 modules.
+- `npm run visual-product` PASS: 35 isolated scenarios, exact scenario API requests,
+  unexpected feature network / WebSocket 0건. 증거:
+  `references/ui-layer-lab/output/playwright/product-issues-authenticated-detail-desktop-light.png`.
+- VP-002 완료 후 파이프라인 E는 VP-003이 남아 `in_progress`를 유지한다.
