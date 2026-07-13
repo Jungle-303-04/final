@@ -2021,49 +2021,6 @@ target preflight·register 네 함수와 strict Zod 계약을 claim했다. 1회�
   `npm run visual-product` PASS: 38 isolated scenarios, exact API request counts,
   unexpected feature network/WebSocket 0건.
 
-## 2026-07-13 16:52 KST — [프론트] Issues 요청 cursor 불투명 경계 완료 증거
-
-- RED `a869c79fc07c8d2e42d401e45390dbf384d8e884`는 Evidence·RCA report의 요청
-  cursor가 adapter와 API query 경계에서 trim·누락되는 문제를 exact byte 회귀로 고정했다.
-- GREEN `b251147162b719798590239d367bdfa1985896ba`는 nonblank cursor의 선행·후행
-  공백과 URL-safe 문자 원문을 그대로 전달하고, `undefined`와 명시적 빈 문자열·공백 문자열을
-  구분해 후자만 요청 오류로 거부한다. 동결된 `client.ts`·`url.ts`는 수정하지 않았다.
-- 전용 cursor 계약 테스트를 분리해 기존 adapter 책임을 300줄 설계 상한 안에 유지했다.
-  `npm run check` PASS: TypeScript·ESLint, Vitest 116 files / 834 tests,
-  design guard 344 files, shadcn source audit 482 previews, Vite build 14,539 modules.
-- 응답 `next_cursor`의 nonblank 원문 보존과 `null` 단일 부재 표현은 별도 TDD 단위로
-  이어서 검증한다. 이 후속 범위는 현재 요청 cursor 커밋에 섞지 않았다.
-
-## 2026-07-13 16:59 KST — [프론트] Issues 응답 cursor 불투명 경계 완료 증거
-
-- RED `0000f893661bfc58ab709ec4a43fd80db3847ef6`는 Evidence·RCA report·Audit
-  timeline의 마지막 페이지에서 blank `next_cursor`가 통과하는 문제를 2개 실패로 고정했다.
-  surrounding-space를 포함한 nonblank cursor의 exact byte 보존과 `null` 정상 부재도 함께 봉인했다.
-- GREEN `97a37463376ecca491db9f48efc6db52a2691e4a`는 `has_more` 여부와 cursor
-  값 유효성 검사를 분리했다. non-null cursor는 trim하지 않고 blank predicate만 적용하며,
-  부재는 `null`만 허용하고 `has_more=true`에서 null인 모순은 계속 거부한다.
-- 첫 full gate는 병렬 부하에서 Resources 비동기 라우팅 테스트가 완료 전에 단정해 1회
-  간헐 실패했으나 해당 파일 단독 15/15 PASS, 변경 없는 두 번째 전체 실행 PASS로 분류했다.
-  최종 `npm run check` PASS: TypeScript·ESLint, Vitest 117 files / 841 tests,
-  design guard 345 files, shadcn source audit 482 previews, Vite build 14,539 modules.
-
-## 2026-07-13 17:15 KST — [프론트] Resources 장문 상세·200% 확대 완료 증거
-
-- RED `11f6d0f87d2d2439a2ca87895b35bcb6f3e35f65`는 실제 UID 미노출, 관계
-  identity의 `truncate`, Event reason/message의 무공백 장문 줄바꿈 누락을 3개 실패로 고정했다.
-- GREEN `06cb48853ece13bbdd119751ff9892d004e82f47`은 API·canonical 계약을
-  변경하지 않고 상세 header·DefinitionGrid·관계·Event 표현 경계에 `min-w-0`과
-  `overflow-wrap:anywhere`를 적용한다. UID 원문은 en/ko catalog의 단일 `UID` 라벨로 노출하고,
-  owner·node·URL 등 fact의 hover-only truncate를 제거했다.
-- 200% text resize 시각 장면을 overview·relations·events 세 탭에 각각 추가했다.
-  증거는 `references/ui-layer-lab/output/playwright/product-resources-detail-long-overview-text-resize-200-light.png`,
-  `product-resources-detail-long-relations-text-resize-200-light.png`,
-  `product-resources-detail-long-events-text-resize-200-light.png`이며 모두 exact fixture 원문과
-  수평 overflow 0을 확인한다.
-- 최종 `npm run check` PASS: TypeScript·ESLint, Vitest 117 files / 844 tests,
-  design guard 345 files, shadcn source audit 482 previews, Vite build 14,539 modules.
-  `npm run visual-product` PASS: 41 isolated scenarios, exact API request counts,
-  unexpected feature network/WebSocket 0건.
 ## 2026-07-13 16:46 KST — [백엔드] rule candidate 71~80 안전 계약 착륙
 
 - lane `codex/candidate-contract-batch-eight`, RED `3060b5f60`, 구현·데이터
@@ -2083,6 +2040,19 @@ target preflight·register 네 함수와 strict Zod 계약을 claim했다. 1회�
   소유권 밖 변경·frozen 경로 변경 0건, RED·구현·문서·merge commit의 `origin/dev`
   ancestor exit 0. J 배포 실행은 0건이다.
 
+## 2026-07-13 16:52 KST — [프론트] Issues 요청 cursor 불투명 경계 완료 증거
+
+- RED `a869c79fc07c8d2e42d401e45390dbf384d8e884`는 Evidence·RCA report의 요청
+  cursor가 adapter와 API query 경계에서 trim·누락되는 문제를 exact byte 회귀로 고정했다.
+- GREEN `b251147162b719798590239d367bdfa1985896ba`는 nonblank cursor의 선행·후행
+  공백과 URL-safe 문자 원문을 그대로 전달하고, `undefined`와 명시적 빈 문자열·공백 문자열을
+  구분해 후자만 요청 오류로 거부한다. 동결된 `client.ts`·`url.ts`는 수정하지 않았다.
+- 전용 cursor 계약 테스트를 분리해 기존 adapter 책임을 300줄 설계 상한 안에 유지했다.
+  `npm run check` PASS: TypeScript·ESLint, Vitest 116 files / 834 tests,
+  design guard 344 files, shadcn source audit 482 previews, Vite build 14,539 modules.
+- 응답 `next_cursor`의 nonblank 원문 보존과 `null` 단일 부재 표현은 별도 TDD 단위로
+  이어서 검증한다. 이 후속 범위는 현재 요청 cursor 커밋에 섞지 않았다.
+
 ## 2026-07-13 16:54 KST — [백엔드] rule candidate 81~87 terminal 안전 계약 착륙
 
 - lane `codex/candidate-contract-terminal`, RED `564deb9a3`, 구현·데이터 `bd7585427`,
@@ -2101,6 +2071,19 @@ target preflight·register 네 함수와 strict Zod 계약을 claim했다. 1회�
 - 4조건: merge-tree clean/tree `b2693f8c4aedb9d5004fd178c4435f10e492525f`, 파일 삭제·
   소유권 밖 변경·frozen 경로 변경 0건, RED·구현·문서·merge commit의 `origin/dev`
   ancestor exit 0. J 배포 실행은 0건이다.
+
+## 2026-07-13 16:59 KST — [프론트] Issues 응답 cursor 불투명 경계 완료 증거
+
+- RED `0000f893661bfc58ab709ec4a43fd80db3847ef6`는 Evidence·RCA report·Audit
+  timeline의 마지막 페이지에서 blank `next_cursor`가 통과하는 문제를 2개 실패로 고정했다.
+  surrounding-space를 포함한 nonblank cursor의 exact byte 보존과 `null` 정상 부재도 함께 봉인했다.
+- GREEN `97a37463376ecca491db9f48efc6db52a2691e4a`는 `has_more` 여부와 cursor
+  값 유효성 검사를 분리했다. non-null cursor는 trim하지 않고 blank predicate만 적용하며,
+  부재는 `null`만 허용하고 `has_more=true`에서 null인 모순은 계속 거부한다.
+- 첫 full gate는 병렬 부하에서 Resources 비동기 라우팅 테스트가 완료 전에 단정해 1회
+  간헐 실패했으나 해당 파일 단독 15/15 PASS, 변경 없는 두 번째 전체 실행 PASS로 분류했다.
+  최종 `npm run check` PASS: TypeScript·ESLint, Vitest 117 files / 841 tests,
+  design guard 345 files, shadcn source audit 482 previews, Vite build 14,539 modules.
 
 ## 2026-07-13 17:02 KST — [백엔드] scheduling node selector 시나리오 착륙
 
@@ -2146,6 +2129,24 @@ target preflight·register 네 함수와 strict Zod 계약을 claim했다. 1회�
 - 4조건: merge-tree clean/tree `3716fbc40341c0cb55b34669634e2d6c0418b90e`, 파일 삭제·
   소유권 밖 변경·frozen 경로 변경 0건, RED·구현·문서·merge commit의 `origin/dev`
   ancestor exit 0. J 배포 실행은 0건이다.
+
+## 2026-07-13 17:15 KST — [프론트] Resources 장문 상세·200% 확대 완료 증거
+
+- RED `11f6d0f87d2d2439a2ca87895b35bcb6f3e35f65`는 실제 UID 미노출, 관계
+  identity의 `truncate`, Event reason/message의 무공백 장문 줄바꿈 누락을 3개 실패로 고정했다.
+- GREEN `06cb48853ece13bbdd119751ff9892d004e82f47`은 API·canonical 계약을
+  변경하지 않고 상세 header·DefinitionGrid·관계·Event 표현 경계에 `min-w-0`과
+  `overflow-wrap:anywhere`를 적용한다. UID 원문은 en/ko catalog의 단일 `UID` 라벨로 노출하고,
+  owner·node·URL 등 fact의 hover-only truncate를 제거했다.
+- 200% text resize 시각 장면을 overview·relations·events 세 탭에 각각 추가했다.
+  증거는 `references/ui-layer-lab/output/playwright/product-resources-detail-long-overview-text-resize-200-light.png`,
+  `product-resources-detail-long-relations-text-resize-200-light.png`,
+  `product-resources-detail-long-events-text-resize-200-light.png`이며 모두 exact fixture 원문과
+  수평 overflow 0을 확인한다.
+- 최종 `npm run check` PASS: TypeScript·ESLint, Vitest 117 files / 844 tests,
+  design guard 345 files, shadcn source audit 482 previews, Vite build 14,539 modules.
+  `npm run visual-product` PASS: 41 isolated scenarios, exact API request counts,
+  unexpected feature network/WebSocket 0건.
 
 ## 2026-07-13 17:15 KST — [백엔드] kubectl server dry-run adapter 직접 테스트 착륙
 
