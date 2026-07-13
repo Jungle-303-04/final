@@ -7,7 +7,6 @@ import {
   Home,
   Layers3,
   Library,
-  Network,
   TriangleAlert,
   type LucideIcon,
 } from "lucide-react";
@@ -59,7 +58,6 @@ const routeIcons: Record<ProductRouteIcon, LucideIcon> = {
   home: Home,
   resources: Boxes,
   issues: TriangleAlert,
-  topology: Network,
   metrics: ChartNoAxesCombined,
   applications: Layers3,
   timeline: History,
@@ -75,7 +73,6 @@ const navLabelKeys = {
   metrics: "shell.nav.metrics",
   resources: "shell.nav.resources",
   timeline: "shell.nav.timeline",
-  topology: "shell.nav.topology",
   catalog: "shell.nav.catalog",
 } satisfies Record<ProductSurfaceId, MessageKey>;
 

@@ -46,15 +46,16 @@ export function useResourcesPageState(port: ResourcesPort) {
   const namespace = namespaceRefs.length === 1 && selectedNamespaces.length === 1
     ? selectedNamespaces[0]?.namespace ?? null
     : null;
-  const listQuerySupported = (
+  const listFiltersSupported = (
     namespaceRefs.length === selectedNamespaces.length &&
     namespaceRefs.length <= 1 &&
     filter.state.common.applications.length === 0 &&
     filter.state.common.labels.length === 0 &&
     filter.state.resources.health.length === 0 &&
-    filter.state.resources.query.length === 0 &&
-    filter.state.resources.view === "table"
+    filter.state.resources.query.length === 0
   );
+  const view = filter.state.resources.view;
+  const listQuerySupported = listFiltersSupported && view === "table";
   const includeDeleted = filter.state.resources.includeDeleted;
   const detailRequested = filter.detail.resource !== null || filter.detail.resourceKind !== null;
   const detailTarget = useMemo(() => decodeResourceTarget(
@@ -104,6 +105,7 @@ export function useResourcesPageState(port: ResourcesPort) {
 
   const selectedClusterExists = clusterScope.selectedClusterExists;
   const frame = useResourcesDataFrame({
+    catalogQuerySupported: view === "table",
     detailClusterId: detailTarget?.clusterId ?? null,
     detailIdentity,
     includeDeleted,
@@ -168,7 +170,8 @@ export function useResourcesPageState(port: ResourcesPort) {
     ),
     detailIdentity,
     detailRequested,
-    filterProjectionUnsupported: !listQuerySupported || canonicalTypes.length > 1,
+    filterProjectionUnsupported: !listFiltersSupported || canonicalTypes.length > 1,
+    view,
     search: filter.state.resources.query,
     namespace,
     includeDeleted,
@@ -222,6 +225,18 @@ export function useResourcesPageState(port: ResourcesPort) {
         resources: { ...current.resources, includeDeleted: value },
       }), value ? "chip-add" : "chip-remove");
     },
+    setView(value: typeof view) {
+      if (value === "graph") {
+        setRetryBlocks((current) => withoutRetryBlock(
+          withoutRetryBlock(current, "catalog"),
+          "list",
+        ));
+      }
+      filter.updateFilters((current) => ({
+        ...current,
+        resources: { ...current.resources, view: value },
+      }), "view-change");
+    },
     setDetailTab(value: string) {
       filter.updateDetail((current) => ({ ...current, tab: value }), "detail-tab");
     },
@@ -247,7 +262,7 @@ export function useResourcesPageState(port: ResourcesPort) {
     automaticRefreshPaused, choices, closeDetail, detailIdentity, detailRequested, frame, includeDeleted,
     namespace, refresh, filter, selectedClusterExists, selectedClusterId,
     retryBlocks, selectedResourceType, selectResourceType, canonicalTypes.length,
-    listQuerySupported, clusterScope.selection,
+    listFiltersSupported, clusterScope.selection, view,
     legacyTypeResolution.kind,
   ]);
 }

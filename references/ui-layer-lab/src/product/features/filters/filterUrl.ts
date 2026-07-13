@@ -48,6 +48,7 @@ export function filterHistoryMode(intent: FilterMutationIntent): FilterHistoryMo
     case "chip-remove":
     case "clear-labels":
     case "clear-filters":
+    case "view-change":
       return "push";
     case "canonicalize":
     case "legacy-migration":

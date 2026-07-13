@@ -59,7 +59,6 @@ const shortcutRouteLabelKeys = {
   metrics: "shell.shortcut.route.metrics",
   resources: "shell.shortcut.route.resources",
   timeline: "shell.shortcut.route.timeline",
-  topology: "shell.shortcut.route.topology",
   catalog: "shell.shortcut.route.catalog",
 } satisfies Record<ProductSurfaceId, MessageKey>;
 

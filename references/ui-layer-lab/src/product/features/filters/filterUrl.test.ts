@@ -285,11 +285,11 @@ describe("VP-010 unified filter URL", () => {
     expect(filterHistoryMode("chip-remove")).toBe("push");
     expect(filterHistoryMode("clear-labels")).toBe("push");
     expect(filterHistoryMode("clear-filters")).toBe("push");
+    expect(filterHistoryMode("view-change")).toBe("push");
     expect(filterHistoryMode("typing")).toBe("replace");
     expect(filterHistoryMode("canonicalize")).toBe("replace");
     expect(filterHistoryMode("legacy-migration")).toBe("replace");
   });
-
   it("uses explicit history policies for detail navigation", () => {
     expect(detailHistoryMode("detail-open")).toBe("push");
     expect(detailHistoryMode("drill-in")).toBe("push");

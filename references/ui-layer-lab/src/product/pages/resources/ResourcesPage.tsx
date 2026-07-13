@@ -12,6 +12,7 @@ import { Badge } from "../../shared/ui/primitives/badge";
 import { Button } from "../../shared/ui/primitives/button";
 import { ResourceDetailSheet } from "./ResourceDetailSheet";
 import { ResourcesCatalog } from "./ResourcesCatalog";
+import { ResourcesGraphShell } from "./ResourcesGraphShell";
 import {
   ResourcesCatalogLoadingPreview,
   ResourcesListLoadingPreview,
@@ -22,12 +23,14 @@ import {
   ResourcesFailure,
   ResourcesRefreshFeedback,
   ResourcesClusterBoundary,
+  ResourcesGraphClusterBoundary,
   UnknownCompletenessEmpty,
   UnknownSelection,
   UnsupportedFilterProjection,
 } from "./ResourcesPageFeedback";
 import { filterResourceRows, ResourcesTable } from "./ResourcesTable";
 import { ResourcesToolbar } from "./ResourcesToolbar";
+import { ResourcesViewToggle } from "./ResourcesViewToggle";
 import { useResourcesPageState } from "./useResourcesPageState";
 
 export function ResourcesPage({
@@ -53,17 +56,14 @@ export function ResourcesPage({
   if (state.choices.data.clusters.length === 0) {
     return <ResourcesClusterBoundary variant="catalog-unconfirmed" />;
   }
-  if (state.denied) {
-    return <ResourcesDenied onRetry={state.refresh} />;
-  }
-
   const refreshing = [state.choices, state.catalog, state.list, state.detail].some(
     (resource) => resource.phase === "ready" && resource.refreshing,
   );
   return (
     <ProductPageFrame>
       <header className="flex min-w-0 justify-end">
-        <div className="flex w-full min-w-0 items-center justify-end gap-2 xl:w-auto">
+        <div className="flex w-full min-w-0 flex-wrap items-center justify-end gap-2 xl:w-auto">
+          <ResourcesViewToggle onViewChange={state.setView} view={state.view} />
           {state.automaticRefreshPaused ? (
             <Badge variant="outline">{t("resources.refresh.paused")}</Badge>
           ) : null}
@@ -84,13 +84,26 @@ export function ResourcesPage({
       </header>
 
       {!state.selectedClusterExists ? (
-        state.clusterSelection.kind === "unfiltered" ? (
+        state.clusterSelection.kind === "unknown" ? (
+          <UnknownSelection value={state.selectedClusterId} variant="cluster" />
+        ) : state.view === "graph" ? (
+          <ResourcesGraphClusterBoundary />
+        ) : state.clusterSelection.kind === "unfiltered" ? (
           <ResourcesClusterBoundary variant="required" />
         ) : state.clusterSelection.kind === "multiple" ? (
           <ResourcesClusterBoundary variant="multiple" />
         ) : (
           <UnknownSelection value={state.selectedClusterId} variant="cluster" />
         )
+      ) : state.view === "graph" ? (
+        <Surface
+          aria-labelledby="resources-graph-unavailable-title"
+          className="min-w-0 overflow-hidden"
+        >
+          <ResourcesGraphShell />
+        </Surface>
+      ) : state.denied ? (
+        <ResourcesDenied onRetry={state.refresh} />
       ) : state.catalog.phase === "loading" || state.catalog.phase === "idle" ? (
         <ProductStateScreen
           kind="loading"

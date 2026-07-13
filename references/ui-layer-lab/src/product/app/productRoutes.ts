@@ -2,7 +2,6 @@ export type ProductSurfaceId =
   | "home"
   | "resources"
   | "issues"
-  | "topology"
   | "metrics"
   | "applications"
   | "timeline"
@@ -13,7 +12,6 @@ export type ProductRouteIcon =
   | "home"
   | "resources"
   | "issues"
-  | "topology"
   | "metrics"
   | "applications"
   | "timeline"
@@ -35,7 +33,6 @@ export const PRODUCT_ROUTE_CATALOG = [
   route("home", "Home", "/product", "g h", "exact"),
   route("resources", "Resources", "/product/resources", "g r"),
   route("issues", "Issues", "/product/issues", "g i"),
-  route("topology", "Topology", "/product/topology", "g t"),
   route("metrics", "Metrics", "/product/metrics", "g m"),
   route("applications", "Applications", "/product/applications", "g a"),
   route("timeline", "Timeline", "/product/timeline", "g l"),
