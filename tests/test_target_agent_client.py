@@ -1,8 +1,11 @@
 from __future__ import annotations
 
 import asyncio
+import gc
 import json
+import sys
 from collections.abc import Callable
+from concurrent.futures import ThreadPoolExecutor
 from typing import Any
 
 import httpx
@@ -30,6 +33,20 @@ def isolated_agent_db(monkeypatch: pytest.MonkeyPatch, tmp_path: Any) -> None:
     """
     monkeypatch.setenv("AGENT_CONTROL_DB_PATH", str(tmp_path / "agent-control.db"))
     monkeypatch.setenv("COMMAND_OUTBOX_DB_PATH", str(tmp_path / "command-outbox.db"))
+
+
+@pytest.fixture(autouse=True)
+def reject_cross_thread_sqlite_destructor_errors() -> None:
+    yield
+    unraisable: list[sys.UnraisableHookArgs] = []
+    previous_hook = sys.unraisablehook
+    sys.unraisablehook = unraisable.append
+    try:
+        with ThreadPoolExecutor(max_workers=1) as executor:
+            executor.submit(gc.collect).result()
+    finally:
+        sys.unraisablehook = previous_hook
+    assert not unraisable, [str(item.exc_value) for item in unraisable]
 
 
 def load_agent_module() -> Any:
