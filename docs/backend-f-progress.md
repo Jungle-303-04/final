@@ -7,7 +7,7 @@ governing: docs/f-coordination-plan.md · docs/backend-f-workqueue.md
 
 # 백엔드 F 진행 현황
 
-현재 상태: **앵커 37건**
+현재 상태: **앵커 38건**
 
 ## 역사적 Delta-green baseline (BQ-001~003)
 
@@ -938,3 +938,29 @@ Bundle route는 200을 반환한다.
   `origin/dev` ancestor exit 0.
 
 계약 완성: OpsiaBench crashloop permission-denied startup fixture + concrete-candidate tie boundary (268ca859e7266ec72780b2080904b5d8ba37c247) [green]
+
+### 보조 대기열 S22 — 의존성 기동 재시도 직접 테스트
+
+- 상태: landed
+- 담당 lane: `codex/config-retry-tests`
+- 테스트: `82c07b920a4192e332794346107671292b7be5db`
+- 문서와 feature HEAD: `80edc84495468440960f0590b7ca5eb7c5232e67`
+- canonical no-ff merge: `d0953f2c6566c5761c5158e5a7a14ef7a54292b5`
+- NATS와 PostgreSQL 기동이 공유하는 48줄 `retry_dependency()`의 직접 테스트 5개를
+  추가했다. 첫 성공은 attempt 1회·sleep 0회, N-1 실패 후 성공은 정확한
+  sleep 횟수와 dependency/attempt/limit/exception context를 검증한다.
+- 한도 소진은 정확한 attempt 수와 `[event-system] <label> 연결 실패`를 고정하고,
+  `limit=0`은 attempt·sleep 0회로 즉시 실패한다. 현행 구현의 마지막 실패 후
+  sleep 횟수는 불필요하게 계약화하지 않았다.
+- 실제 task cancellation은 `CancelledError`를 그대로 전파하고 추가 attempt·sleep·warning이
+  없으며, cancel된 task를 await해 pending task를 남기지 않는지 검증했다.
+- 성공 `return`을 제거한 비커밋 mutation probe에서 신규 테스트 2건이 실패했고,
+  원복 후 focused 5 passed, warning-error·asyncio debug 및 10회 반복을 모두 통과했다.
+- 프로덕션 source 변경 0건. 두 독립 재감사 PASS.
+- 전체 게이트: Ruff lint/format PASS, import-linter 8 kept/0 broken,
+  pytest `1962 passed, 3 skipped`; manifest management 69 / target 20.
+- 4조건: merge-tree exit 0/tree `70599e747873268d57d70886d98618cfdffc3cd6`;
+  source·파일 삭제·소유권 밖·frozen·gateway 계약 변경 0건; feature·merge commit의
+  `origin/dev` ancestor exit 0.
+
+계약 완성: dependency startup retry limit, structured warning and cancellation propagation tests (80edc84495468440960f0590b7ca5eb7c5232e67) [green]
