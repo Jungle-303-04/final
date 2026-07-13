@@ -91,6 +91,7 @@ export const resourcesKo = {
   "resources.detail.observedAt": "관측 시각",
   "resources.detail.notProvided": "미제공",
   "resources.detail.identity": "Identity",
+  "resources.detail.uid": "UID",
   "resources.detail.identity.uid": "UID 기반",
   "resources.detail.identity.nameFallback": "이름 fallback",
   "resources.detail.relatedEmpty": "서버가 계산한 관련 리소스가 없습니다.",

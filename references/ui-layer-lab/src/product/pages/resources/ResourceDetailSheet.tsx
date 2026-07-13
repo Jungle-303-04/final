@@ -52,19 +52,21 @@ export function ResourceDetailSheet({
   return (
     <Sheet onOpenChange={(nextOpen) => { if (!nextOpen) onClose(); }} open={open}>
       <SheetContent
-        className={full ? "w-full max-w-none sm:max-w-none" : "w-full sm:max-w-2xl"}
+        className={full
+          ? "min-w-0 w-full max-w-none sm:max-w-none"
+          : "min-w-0 w-full sm:max-w-2xl"}
         closeLabel={t("resources.detail.close")}
         side="right"
       >
-        <SheetHeader className="border-b pr-12">
-          <SheetTitle>{title}</SheetTitle>
-          <SheetDescription>
+        <SheetHeader className="min-w-0 border-b pr-12">
+          <SheetTitle className="min-w-0 [overflow-wrap:anywhere]">{title}</SheetTitle>
+          <SheetDescription className="min-w-0 [overflow-wrap:anywhere]">
             {identity
               ? `${identity.kind} · ${identity.namespace ?? t("resources.detail.clusterScope")}`
               : t("resources.detail.identityDescription")}
           </SheetDescription>
         </SheetHeader>
-        <div className="min-h-0 flex-1 overflow-y-auto px-4 pb-6">
+        <div className="min-h-0 min-w-0 flex-1 overflow-y-auto px-4 pb-6">
           <DetailBody detail={detail} identity={identity} onTabChange={onTabChange} tab={tab} />
         </div>
       </SheetContent>
@@ -121,7 +123,7 @@ function DetailBody({
   const selectedTab = ["overview", "relations", "events"].includes(tab) ? tab : "overview";
   return (
     <Tabs
-      className="pt-4"
+      className="min-w-0 pt-4"
       onValueChange={(value) => { if (value) onTabChange(value); }}
       value={selectedTab}
     >
@@ -157,6 +159,7 @@ function DetailBody({
                 ? t("resources.detail.identity.uid")
                 : t("resources.detail.identity.nameFallback"),
             ],
+            ...(resource.uid ? [[t("resources.detail.uid"), resource.uid] as [string, string]] : []),
           ]} />
         </section>
         <ResourceFactsPanel facts={resource.facts} />
@@ -165,12 +168,18 @@ function DetailBody({
         {detail.data.related.length === 0 ? (
           <EmptySection icon={Link2} text={t("resources.detail.relatedEmpty")} />
         ) : detail.data.related.map((group) => (
-          <section className="rounded-lg border p-4" key={group.name}>
-            <h3 className="mb-3 font-medium">{group.name}</h3>
+          <section className="min-w-0 rounded-lg border p-4" key={group.name}>
+            <h3 className="mb-3 min-w-0 font-medium [overflow-wrap:anywhere]">{group.name}</h3>
             <ul className="grid gap-2">
               {group.items.map((item) => (
-                <li className="flex items-center justify-between gap-3 text-sm" key={item.id}>
-                  <span className="truncate">
+                <li
+                  className="flex min-w-0 flex-col items-start gap-2 text-sm sm:flex-row sm:justify-between"
+                  key={item.id}
+                >
+                  <span
+                    className="min-w-0 flex-1 [overflow-wrap:anywhere]"
+                    data-slot="resource-related-identity"
+                  >
                     {item.kind} · {item.namespace ?? t("resources.detail.clusterScope")}/{item.name}
                   </span>
                   <StatusMark label={item.healthStatus} tone={item.health} />
@@ -185,15 +194,25 @@ function DetailBody({
         {detail.data.events.length === 0 ? (
           <EmptySection icon={ListTree} text={t("resources.detail.eventsEmpty")} />
         ) : detail.data.events.map((event) => (
-          <section className="grid gap-2 rounded-lg border p-4" key={event.id}>
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <h3 className="font-medium">{event.facts.type === "event" && event.facts.reason
-                ? event.facts.reason
-                : event.name}</h3>
+          <section className="grid min-w-0 gap-2 rounded-lg border p-4" key={event.id}>
+            <div className="flex min-w-0 flex-wrap items-center justify-between gap-2">
+              <h3
+                className="min-w-0 font-medium [overflow-wrap:anywhere]"
+                data-slot="resource-event-title"
+              >
+                {event.facts.type === "event" && event.facts.reason
+                  ? event.facts.reason
+                  : event.name}
+              </h3>
               <StatusMark label={event.healthStatus} tone={event.health} />
             </div>
             {event.facts.type === "event" && event.facts.message ? (
-              <p className="text-sm text-muted-foreground">{event.facts.message}</p>
+              <p
+                className="min-w-0 whitespace-pre-wrap text-sm text-muted-foreground [overflow-wrap:anywhere]"
+                data-slot="resource-event-message"
+              >
+                {event.facts.message}
+              </p>
             ) : null}
             <p className="text-xs text-muted-foreground">
               {formatObservedAt(event.observedAt, formatDate, t)}

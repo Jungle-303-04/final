@@ -11,6 +11,11 @@ const productUrl = `${baseUrl}/product`;
 const homeClusterId = "visual-cluster";
 const homeNodeName = "visual-node";
 const homePodName = "checkout-api-0";
+const resourcesLongUid = `visual-pod-${"u".repeat(220)}`;
+const resourcesLongOwner = `checkout-owner-${"o".repeat(220)}`;
+const resourcesLongRelatedName = `checkout-service-${"r".repeat(220)}`;
+const resourcesLongEventReason = `BackOff${"R".repeat(220)}`;
+const resourcesLongEventMessage = `ContainerRestart${"M".repeat(440)}`;
 const productHomeUrl = `${productUrl}?cluster=${homeClusterId}`;
 const productResourcesUrl = `${productUrl}/resources/pod?cluster=${homeClusterId}`;
 const authSessionPath = "/api/auth/session";
@@ -600,6 +605,57 @@ const visualScenarios = [
     forcedColors: "none",
   },
   {
+    id: "resources-detail-long-overview-text-resize-200-light",
+    locale: "ko",
+    url: `${productResourcesUrl}&resource=shop%2F${homePodName}&kind=Pod`,
+    authSession: "authenticated",
+    resourcesScenario: true,
+    resourcesDetail: true,
+    resourcesLongIdentity: true,
+    resourcesDetailTab: "overview",
+    heading: `${homePodName} 상세`,
+    requiredSelectors: resourcesDetailSelectors,
+    viewport: { width: 640, height: 1100 },
+    theme: "light",
+    colorScheme: "light",
+    forcedColors: "none",
+    rootFontScale: 2,
+  },
+  {
+    id: "resources-detail-long-relations-text-resize-200-light",
+    locale: "ko",
+    url: `${productResourcesUrl}&resource=shop%2F${homePodName}&kind=Pod`,
+    authSession: "authenticated",
+    resourcesScenario: true,
+    resourcesDetail: true,
+    resourcesLongIdentity: true,
+    resourcesDetailTab: "relations",
+    heading: `${homePodName} 상세`,
+    requiredSelectors: resourcesDetailSelectors,
+    viewport: { width: 640, height: 1100 },
+    theme: "light",
+    colorScheme: "light",
+    forcedColors: "none",
+    rootFontScale: 2,
+  },
+  {
+    id: "resources-detail-long-events-text-resize-200-light",
+    locale: "ko",
+    url: `${productResourcesUrl}&resource=shop%2F${homePodName}&kind=Pod`,
+    authSession: "authenticated",
+    resourcesScenario: true,
+    resourcesDetail: true,
+    resourcesLongIdentity: true,
+    resourcesDetailTab: "events",
+    heading: `${homePodName} 상세`,
+    requiredSelectors: resourcesDetailSelectors,
+    viewport: { width: 640, height: 1100 },
+    theme: "light",
+    colorScheme: "light",
+    forcedColors: "none",
+    rootFontScale: 2,
+  },
+  {
     id: "issues-authenticated-detail-desktop-light",
     locale: "en",
     url: productIssuesUrl,
@@ -933,6 +989,84 @@ const homeFeatureApiFixtures = new Map([
   }],
 ]);
 
+const resourcesDetailApiFixture = {
+  cluster_id: homeClusterId,
+  identity: {
+    resource_type: "pod",
+    kind: "Pod",
+    namespace: "shop",
+    name: homePodName,
+  },
+  resource: visualInventoryResource(),
+  related: {
+    services: [visualInventoryResource({
+      inventory_key: "visual-service-checkout",
+      resource_type: "service",
+      kind: "Service",
+      name: "checkout",
+      uid: "visual-service-checkout-uid",
+      status: "Active",
+      summary: {
+        type: "ClusterIP",
+        cluster_ip: "10.96.0.10",
+        external_url: null,
+        external_hosts: [],
+        ports: [{ name: "http", protocol: "TCP", port: 80, target_port: 8080 }],
+      },
+    })],
+  },
+  events: [visualInventoryResource({
+    inventory_key: "visual-event-backoff",
+    resource_type: "event",
+    kind: "Event",
+    name: "visual-pod:Pod:checkout-api-0:BackOff",
+    uid: null,
+    status: "Warning",
+    health: "warning",
+    summary: {
+      type: "Warning",
+      reason: "BackOff",
+      message: "Container is restarting",
+      count: 2,
+      first_timestamp: "2026-07-12T09:58:00Z",
+      last_timestamp: "2026-07-12T09:59:00Z",
+      reporting_component: "kubelet",
+      involved_kind: "Pod",
+      involved_name: homePodName,
+      involved_uid: "visual-pod-checkout-uid",
+    },
+  })],
+};
+
+const resourcesLongDetailApiFixture = {
+  ...resourcesDetailApiFixture,
+  resource: {
+    ...resourcesDetailApiFixture.resource,
+    uid: resourcesLongUid,
+    summary: {
+      ...resourcesDetailApiFixture.resource.summary,
+      node_name: `visual-node-${"n".repeat(220)}`,
+      owner_name: resourcesLongOwner,
+    },
+  },
+  related: {
+    services: [{
+      ...resourcesDetailApiFixture.related.services[0],
+      name: resourcesLongRelatedName,
+      uid: `visual-service-${"s".repeat(220)}`,
+    }],
+  },
+  events: [{
+    ...resourcesDetailApiFixture.events[0],
+    name: resourcesLongEventReason,
+    summary: {
+      ...resourcesDetailApiFixture.events[0].summary,
+      reason: resourcesLongEventReason,
+      message: resourcesLongEventMessage,
+    },
+  }],
+};
+
 const resourcesFeatureApiFixtures = new Map([
   [homeBaseApiPaths[0], homeFeatureApiFixtures.get(homeBaseApiPaths[0])],
   [resourcesSummaryApiPath, {
@@ -967,54 +1101,7 @@ const resourcesFeatureApiFixtures = new Map([
       }),
     ],
   }],
-  [resourcesDetailApiPath, {
-    cluster_id: homeClusterId,
-    identity: {
-      resource_type: "pod",
-      kind: "Pod",
-      namespace: "shop",
-      name: homePodName,
-    },
-    resource: visualInventoryResource(),
-    related: {
-      services: [visualInventoryResource({
-        inventory_key: "visual-service-checkout",
-        resource_type: "service",
-        kind: "Service",
-        name: "checkout",
-        uid: "visual-service-checkout-uid",
-        status: "Active",
-        summary: {
-          type: "ClusterIP",
-          cluster_ip: "10.96.0.10",
-          external_url: null,
-          external_hosts: [],
-          ports: [{ name: "http", protocol: "TCP", port: 80, target_port: 8080 }],
-        },
-      })],
-    },
-    events: [visualInventoryResource({
-      inventory_key: "visual-event-backoff",
-      resource_type: "event",
-      kind: "Event",
-      name: "visual-pod:Pod:checkout-api-0:BackOff",
-      uid: null,
-      status: "Warning",
-      health: "warning",
-      summary: {
-        type: "Warning",
-        reason: "BackOff",
-        message: "Container is restarting",
-        count: 2,
-        first_timestamp: "2026-07-12T09:58:00Z",
-        last_timestamp: "2026-07-12T09:59:00Z",
-        reporting_component: "kubelet",
-        involved_kind: "Pod",
-        involved_name: homePodName,
-        involved_uid: "visual-pod-checkout-uid",
-      },
-    })],
-  }],
+  [resourcesDetailApiPath, resourcesDetailApiFixture],
 ]);
 
 const issuesFeatureApiFixtures = new Map([
@@ -1374,7 +1461,10 @@ async function installScenarioApiFixtures(page, scenario) {
   }
   if (scenario.resourcesScenario) {
     for (const [path, body] of resourcesFeatureApiFixtures) {
-      await installExactJsonGetFixture(page, path, { body, status: 200 });
+      const fixtureBody = scenario.resourcesLongIdentity && path === resourcesDetailApiPath
+        ? resourcesLongDetailApiFixture
+        : body;
+      await installExactJsonGetFixture(page, path, { body: fixtureBody, status: 200 });
     }
   }
   if (scenario.issuesScenario) {
@@ -2156,6 +2246,9 @@ async function prepareProductResourcesScenario(page, scenario) {
       || (scenario.resourcesFull && url.searchParams.get("full") !== "1")) {
       throw new Error(`${scenario.id}: detail URL identity is not exact: ${url.href}`);
     }
+    if (scenario.resourcesLongIdentity) {
+      await prepareLongResourceDetailTab(page, scenario, dialog);
+    }
   } else {
     const url = new URL(page.url());
     if (url.pathname !== "/product/resources/pod"
@@ -2166,6 +2259,42 @@ async function prepareProductResourcesScenario(page, scenario) {
   }
 
   await assertProductResourcesReducedMotion(page, scenario.id);
+}
+
+async function prepareLongResourceDetailTab(page, scenario, dialog) {
+  if (scenario.resourcesDetailTab === "overview") {
+    await dialog.getByText(resourcesLongUid, { exact: true }).waitFor();
+    await dialog.getByText(`Deployment/${resourcesLongOwner}`, { exact: true }).waitFor();
+    await assertNoOverflow(page, `${scenario.id}-overview`, [
+      ...resourcesDetailSelectors,
+      "[data-slot='resource-definition-value']",
+    ]);
+    return;
+  }
+  if (scenario.resourcesDetailTab === "relations") {
+    await dialog.getByRole("tab", { name: "관계 1", exact: true }).dispatchEvent("click");
+    await dialog.getByText(
+      `Service · shop/${resourcesLongRelatedName}`,
+      { exact: true },
+    ).waitFor();
+    await assertNoOverflow(page, `${scenario.id}-relations`, [
+      ...resourcesDetailSelectors,
+      "[data-slot='resource-related-identity']",
+    ]);
+    return;
+  }
+  if (scenario.resourcesDetailTab === "events") {
+    await dialog.getByRole("tab", { name: "이벤트 1", exact: true }).dispatchEvent("click");
+    await dialog.getByText(resourcesLongEventReason, { exact: true }).waitFor();
+    await dialog.getByText(resourcesLongEventMessage, { exact: true }).waitFor();
+    await assertNoOverflow(page, `${scenario.id}-events`, [
+      ...resourcesDetailSelectors,
+      "[data-slot='resource-event-title']",
+      "[data-slot='resource-event-message']",
+    ]);
+    return;
+  }
+  throw new Error(`${scenario.id}: unknown long-detail tab ${scenario.resourcesDetailTab}`);
 }
 
 async function prepareProductIssuesScenario(page, scenario) {

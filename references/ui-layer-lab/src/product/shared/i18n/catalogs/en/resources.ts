@@ -91,6 +91,7 @@ export const resourcesEn = {
   "resources.detail.observedAt": "Observed at",
   "resources.detail.notProvided": "Not provided",
   "resources.detail.identity": "Identity",
+  "resources.detail.uid": "UID",
   "resources.detail.identity.uid": "UID based",
   "resources.detail.identity.nameFallback": "Name fallback",
   "resources.detail.relatedEmpty": "No related resources were calculated by the server.",
