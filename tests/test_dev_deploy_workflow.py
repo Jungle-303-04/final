@@ -102,9 +102,8 @@ def test_manual_first_deploy_requires_exact_gate_backup_and_previous_release_pro
 
 def test_deploy_orders_auth_migration_rollout_smoke_and_status_recording() -> None:
     names = [step["name"] for step in deploy_job()["steps"]]
-    assert names.index("Render and verify auth bypass policy") < names.index(
-        "Capture current digest rollback plan"
-    )
+    assert names.index("Render and verify auth bypass policy") < names.index("Run pre-deploy smoke")
+    assert names.index("Run pre-deploy smoke") < names.index("Capture current digest rollback plan")
     assert names.index("Capture current digest rollback plan") < names.index(
         "Run fail-closed database migration"
     )
@@ -115,11 +114,26 @@ def test_deploy_orders_auth_migration_rollout_smoke_and_status_recording() -> No
         "Verify live auth bypass policy after rollout"
     )
     assert names.index("Verify live auth bypass policy after rollout") < names.index(
-        "Run strict deployment smoke"
+        "Run post-deploy smoke"
     )
-    assert names.index("Run strict deployment smoke") < names.index(
+    assert names.index("Run post-deploy smoke") < names.index(
         "Record successful dev SHA in cluster"
     )
+
+
+def test_smoke_failure_restores_both_previous_image_sets() -> None:
+    steps = steps_by_name()
+    pre = steps["Run pre-deploy smoke"]
+    post = steps["Run post-deploy smoke"]
+    rollback = steps["Restore previous image digests after failure"]
+
+    assert pre["id"] == "pre_smoke"
+    assert "scripts/pre-deploy-smoke.sh" in pre["run"]
+    assert "frontend_bundle" in pre["run"]
+    assert "scripts/post-deploy-smoke.sh" in post["run"]
+    assert "steps.pre_smoke.outputs.frontend_bundle" in post["env"]["PRE_DEPLOY_FRONTEND_BUNDLE"]
+    assert rollback["if"] == "failure() && steps.capture.outcome == 'success'"
+    assert rollback["run"].count("revert_image_digests.py") == 2
 
 
 def test_deploy_uses_immutable_digest_and_image_only_rollback_without_db_downgrade() -> None:
