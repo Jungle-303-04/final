@@ -16,13 +16,14 @@ from urllib.parse import quote
 import httpx
 
 from domains.gitops.source_patch import (
-    ImageScalarReplacement,
+    DeclaredScalarPatch,
     ManifestImagePatchPlan,
     ManifestScalarPatchPlan,
     ManifestSourcePatchError,
     canonical_manifest_digest,
-    materialize_image_patch,
-    materialize_scalar_patch,
+    declared_image_patch,
+    declared_scalar_patch,
+    materialize_declared_scalar_patch,
     parse_image_patch_plan,
     parse_scalar_patch_plan,
     scalar_patch_matches_manifest,
@@ -41,6 +42,12 @@ from packages.contracts.gitops import (
     GITHUB_API_BASE_ENV,
     GITHUB_TOKEN_ENV,
     GITHUB_TOKEN_REF_ENV,
+)
+from packages.contracts.remediation_source import (
+    REMEDIATION_SOURCE_CONTRACT_PATH,
+    RemediationSourceContract,
+    RemediationSourceContractError,
+    parse_remediation_source_contract,
 )
 from packages.contracts.security import SecretRef, TokenVaultPort
 from packages.contracts.stores import PullRequestStore
@@ -66,6 +73,7 @@ STALE_BASE_MESSAGE = "safe pr base branch no longer matches the approved commit"
 INVALID_SOURCE_RESPONSE_MESSAGE = "GitHub manifest source response is incomplete"
 BRANCH_COLLISION_MESSAGE = "safe pr head branch already exists without a matching open PR"
 AUTHORITY_MISMATCH_MESSAGE = "safe pr structured patch does not match workflow authority"
+UNSUPPORTED_REMEDIATION_SOURCE_MESSAGE = "remediation source patch unsupported"
 
 # 자격 증명 부재는 부팅 실패가 아니라 요청 시점 실패 — 워커는 뜨고,
 # 각 safe_pr.requested 는 safe_pr.failed 경로로 흐름.
@@ -448,42 +456,125 @@ class GithubScmProvider:
         request: SafePrRequestedBody,
         patch_plans: list[StructuredPatchPlan | None],
         context: dict[str, object] | None = None,
+        *,
+        declared_patches: list[DeclaredScalarPatch | None] | None = None,
     ) -> list[tuple[str, str]]:
         if len(patch_plans) != len(request.patches):
             raise RuntimeError("safe pr patch plan count does not match file patches")
+        resolved = declared_patches or await self.resolve_declared_patches(
+            client,
+            repo,
+            base_sha,
+            patch_plans,
+            context,
+        )
+        if len(resolved) != len(patch_plans):
+            raise RuntimeError("safe pr declared patch count does not match patch plans")
         contents: list[tuple[str, str]] = []
-        for patch, plan in zip(request.patches, patch_plans, strict=True):
+        for patch, plan, declared in zip(
+            request.patches,
+            patch_plans,
+            resolved,
+            strict=True,
+        ):
             if plan is None:
                 contents.append((patch.path, patch.content))
                 continue
-            source = await self.source_file_content(
-                client,
-                repo,
-                base_sha,
-                plan.manifest_path,
-                context,
-            )
+            if declared is None:
+                raise RuntimeError(
+                    f"{UNSUPPORTED_REMEDIATION_SOURCE_MESSAGE}: declaration is missing"
+                )
             try:
-                if isinstance(plan, ManifestScalarPatchPlan):
-                    content = materialize_scalar_patch(source, plan)
-                else:
-                    content = materialize_image_patch(
-                        source,
-                        source_type=plan.source_type,
-                        expected_source_sha256=plan.source_manifest_sha256,
-                        replacements=[
-                            ImageScalarReplacement(
-                                container_name=item.container_name,
-                                current_image=item.current_image,
-                                previous_image=item.previous_image,
-                            )
-                            for item in plan.replacements
-                        ],
-                    )
-                contents.append((plan.manifest_path, content))
+                source = await self.declared_source_file_content(
+                    client,
+                    repo,
+                    base_sha,
+                    declared.source_path,
+                    context,
+                )
+                content = materialize_declared_scalar_patch(source, declared)
+                contents.append((declared.source_path, content))
             except ManifestSourcePatchError as exc:
                 raise RuntimeError(str(exc)) from exc
         return contents
+
+    async def resolve_declared_patches(
+        self,
+        client: httpx.AsyncClient,
+        repo: str,
+        base_sha: str,
+        patch_plans: list[StructuredPatchPlan | None],
+        context: dict[str, object] | None = None,
+    ) -> list[DeclaredScalarPatch | None]:
+        if not any(plan is not None for plan in patch_plans):
+            return [None for _ in patch_plans]
+        contract = await self.remediation_source_contract(client, repo, base_sha, context)
+        resolved: list[DeclaredScalarPatch | None] = []
+        try:
+            for plan in patch_plans:
+                if plan is None:
+                    resolved.append(None)
+                elif isinstance(plan, ManifestScalarPatchPlan):
+                    resolved.append(declared_scalar_patch(plan, contract))
+                else:
+                    resolved.append(declared_image_patch(plan, contract))
+        except ManifestSourcePatchError as exc:
+            raise RuntimeError(str(exc)) from exc
+        return resolved
+
+    async def remediation_source_contract(
+        self,
+        client: httpx.AsyncClient,
+        repo: str,
+        base_sha: str,
+        context: dict[str, object] | None = None,
+    ) -> RemediationSourceContract:
+        try:
+            content = await self.source_file_content(
+                client,
+                repo,
+                base_sha,
+                REMEDIATION_SOURCE_CONTRACT_PATH,
+                context,
+            )
+            return parse_remediation_source_contract(content)
+        except httpx.HTTPStatusError as exc:
+            if exc.response.status_code != 404:
+                raise
+            raise RuntimeError(
+                f"{UNSUPPORTED_REMEDIATION_SOURCE_MESSAGE}: contract is missing"
+            ) from exc
+        except (RemediationSourceContractError, RuntimeError) as exc:
+            raise RuntimeError(
+                f"{UNSUPPORTED_REMEDIATION_SOURCE_MESSAGE}: contract is missing or malformed"
+            ) from exc
+
+    async def declared_source_file_content(
+        self,
+        client: httpx.AsyncClient,
+        repo: str,
+        base_sha: str,
+        path: str,
+        context: dict[str, object] | None = None,
+    ) -> str:
+        try:
+            return await self.source_file_content(
+                client,
+                repo,
+                base_sha,
+                path,
+                context,
+            )
+        except httpx.HTTPStatusError as exc:
+            if exc.response.status_code != 404:
+                raise
+            raise RuntimeError(
+                f"{UNSUPPORTED_REMEDIATION_SOURCE_MESSAGE}: declared source is missing"
+            ) from exc
+        except RuntimeError as exc:
+            raise RuntimeError(
+                f"{UNSUPPORTED_REMEDIATION_SOURCE_MESSAGE}: declared source is malformed"
+            ) from exc
 
     async def source_file_content(
         self,
@@ -748,6 +839,17 @@ class GithubScmProvider:
         plan = plans[0]
         if not re.fullmatch(r"[0-9a-f]{40,64}", head_sha):
             return False
+        declared_patches = await self.resolve_declared_patches(
+            client,
+            repo,
+            plan.expected_base_sha,
+            patch_plans,
+            context,
+        )
+        declared = [patch for patch in declared_patches if patch is not None]
+        if len(declared) != 1:
+            return False
+        target_path = declared[0].source_path
         if current_base_sha != plan.expected_base_sha:
             base_response = await client.get(
                 f"/repos/{repo}/compare/{plan.expected_base_sha}...{current_base_sha}"
@@ -764,7 +866,12 @@ class GithubScmProvider:
             base_files = (
                 base_comparison.get("files") if isinstance(base_comparison, Mapping) else None
             )
-            protected_paths = {change_document_path(request), plan.manifest_path}
+            protected_paths = {
+                change_document_path(request),
+                REMEDIATION_SOURCE_CONTRACT_PATH,
+                plan.manifest_path,
+                target_path,
+            }
             changed_base_paths = {
                 str(value)
                 for item in base_files or []
@@ -790,13 +897,13 @@ class GithubScmProvider:
         merge_base = (
             comparison.get("merge_base_commit") if isinstance(comparison, Mapping) else None
         )
-        expected_paths = {change_document_path(request), plan.manifest_path}
+        expected_paths = {change_document_path(request), target_path}
         file_by_name = {
             str(item.get("filename") or ""): item
             for item in files or []
             if isinstance(item, Mapping)
         }
-        manifest_file = file_by_name.get(plan.manifest_path)
+        manifest_file = file_by_name.get(target_path)
         change_file = file_by_name.get(change_document_path(request))
         if (
             not isinstance(files, list)
@@ -819,14 +926,15 @@ class GithubScmProvider:
             request,
             patch_plans,
             context,
+            declared_patches=declared_patches,
         )
-        if len(materialized) != 1 or materialized[0][0] != plan.manifest_path:
+        if len(materialized) != 1 or materialized[0][0] != target_path:
             return False
         actual_manifest = await self.source_file_content(
             client,
             repo,
             head_sha,
-            plan.manifest_path,
+            target_path,
             context,
         )
         actual_change_document = await self.source_file_content(
