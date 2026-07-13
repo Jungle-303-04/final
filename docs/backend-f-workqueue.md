@@ -56,6 +56,7 @@ R-트랙([D-011])은 dev merge `257f91846`으로 landed/closed 되었고, 전용
 | S2 | landed | OpsiaBench scheduling·PVC 시나리오 | feature `075926e4d`, canonical merge `43867308a` | 각 2개, 전체 14개 scorer PASS, 실제 catalog snapshot 정합, 전체 `1872 passed, 3 skipped`, manifest 69/20 |
 | S3 | landed | rule candidate 상위 10개 안전 계약 | feature `0a1a0b99a`, canonical merge `a77115d41` | 10/87 후보의 required evidence·실제 signal·실행 capability·허용/금지 remediation·rollback·사후 검증을 공개 scorer로 검산, 전체 `1899 passed, 3 skipped`, manifest 69/20 |
 | S4 | landed | 아침 요약·완료 상태 문서 정합 | feature `356bef2e2`, canonical merge `5aa8fa006` | 큐 상태 허용 어휘·실물 앵커 수 회귀, A~K/J 경계와 04:30 snapshot 구분, 전체 `1901 passed, 3 skipped`, manifest 69/20 |
+| S5 | landed | rule candidate 11~20 안전 계약 | feature `b2b6baeb0`, canonical merge `59a9c460b` + hardening merge `5bc68f5cd` | fallback-only 10개 exact 계약, 두 배치 digest·누락 잠금·81~87 terminal 범위 검증, 전체 `1908 passed, 3 skipped`, manifest 69/20 |
 
 ## claim 규칙
 

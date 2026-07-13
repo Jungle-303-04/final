@@ -7,7 +7,7 @@ governing: docs/f-coordination-plan.md · docs/backend-f-workqueue.md
 
 # 백엔드 F 진행 현황
 
-현재 상태: **앵커 20건**
+현재 상태: **앵커 21건**
 
 ## 역사적 Delta-green baseline (BQ-001~003)
 
@@ -489,3 +489,33 @@ Bundle route는 200을 반환한다.
   `origin/dev` ancestor exit 0.
 
 계약 완성: backend coordination status vocabulary + morning summary (356bef2e29255fe5f8305fa61522865fb63bf3fc) [green]
+
+### 보조 대기열 S5 — rule candidate 11~20 안전 계약
+
+- 상태: landed
+- 계약 lane: `codex/candidate-contract-batch-two`; terminal hardening lane:
+  `codex/candidate-contract-terminal-digest`
+- RED: 두 번째 배치 `ddec4a7bb`, 완료 배치 변조 `b147ba64f`, 복수 fallback
+  `8da455794`, terminal·잠금 누락 `9ec3fc14e`
+- 데이터 feature HEAD: `d90ccac03f33dd2be7d21a01fd026849be63ea10`
+- 최종 hardening HEAD: `b2b6baeb036fc251d7e9ca1d8dd204dd928878db`
+- canonical no-ff merge: 데이터 `59a9c460b01e56d03e0f21da0e40999e2d078a36`,
+  terminal hardening `5bc68f5cd7b6287e499c669c0c507912920debec`
+- 범위: loader 순서 11~20을 추가해 누적 20/87, `next_ordinal=21`이다. 10개 모두
+  명시 recovery가 없어 live `manual_analysis` fallback만 허용하며, 실제 command/Safe PR
+  capability와 exact benchmark fixture는 없다. 빈 값으로 coverage gap을 숨기지 않는다.
+- append-only 경계: 1~10 digest `8af3efce…4476`, 11~20 digest
+  `3ffa57f4…bb0`을 canonical JSON으로 고정한다. 계약 수에서 필수 digest range를 계산해
+  누락 lock을 거부하고 최종 tail은 정확히 81~87만 해시한다.
+- 복수 fallback decorator는 선언 순서대로 누적한다. malformed snapshot 구조화 오류,
+  alias 없는 canonical command 추출, CRLF checkout SHA 이식성은 별도 비차단 hardening으로 남긴다.
+- 고유 검증: `python3 -S benchmark/score.py --candidate-contracts` 20/20 PASS,
+  전체 scenario scorer 14 PASS, `tests/test_benchmark_score.py` 37 passed.
+- 전체 게이트: Ruff lint/format PASS, import-linter 8 kept/0 broken,
+  pytest `1908 passed, 3 skipped`; manifest management 69 / target 20.
+- 4조건: 데이터 merge-tree exit 0/tree `b46ca873badcbb8bc64c99027cee4ac852aad470`,
+  hardening merge-tree exit 0/tree `78592de21d75cc6c51a20c26c51c5f5d59b2e641`;
+  파일 삭제·소유권 밖 변경·frozen 경로 변경 0건; 두 feature와 두 merge commit의
+  `origin/dev` ancestor exit 0.
+
+계약 완성: OpsiaBench candidate contracts 11..20 + batch digest coverage (b2b6baeb036fc251d7e9ca1d8dd204dd928878db) [green]
