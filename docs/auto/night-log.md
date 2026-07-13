@@ -2631,7 +2631,7 @@ target preflight·register 네 함수와 strict Zod 계약을 claim했다. 1회�
 
 ## 2026-07-13 21:02 KST — [프론트] VP-010 passive filter Provider GREEN
 
-- RED는 미구현 Provider와 `clear-labels` history intent로 시작했다. GREEN `168b26e50`은
+- RED는 부재 Provider와 `clear-labels` history intent로 시작했다. GREEN `168b26e50`은
   URL을 유일한 권위로 읽는 `UnifiedFilterProvider`를 추가했다. mount-time effect·자동 write·
   API·로컬 복제 state는 0건이며, 명시적 canonicalize와 atomic updater만 push/replace를 쓴다.
 - StrictMode 무기록, legacy·unresolved 보존, explicit replace migration, chip push, typing replace,
