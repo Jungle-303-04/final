@@ -2797,3 +2797,20 @@ target preflight·register 네 함수와 strict Zod 계약을 claim했다. 1회�
 - 계약 앵커: `RESOURCE_LABEL_FACETS_PATH` / `87c0606e0` / `[green]`.
 - [백엔드] lane 회수 — `codex/resources-filter-contract` / `87c0606e0` /
   `origin/dev` ancestor exit 0; 로컬 branch와 worktree를 같은 사이클에서 삭제했다.
+
+## 2026-07-13 23:12 KST — [프론트] Resources Graph shell 승격 준비
+
+- Graph GREEN `f944e4c5b`와 문서 `52df0c2f2`를 최신 `origin/dev@d6cee2813`에 병합했다.
+  `RESOURCES_FILTER_FACETS_PATH`, `FILTERED_RESOURCES_PATH`, `RESOURCE_LABEL_FACETS_PATH`의
+  backend GREEN `87c0606e0`이 ancestor임을 확인했고, 다음 사이클에서 API·Zod·adapter를
+  RED부터 연결한다. GAP-010 graph snapshot 전 data·TopologyCanvas·WebSocket 미렌더는 유지한다.
+- 원격 lab 고유 `7d6193009`는 merge ancestry로 보존하되 정책 밖 `docs/backend-f-progress.md`와
+  `docs/spec/oss-profile.md`, 기존 자동 로그 문구의 tree 변경은 `093b7d42b`에서 최신 dev 내용으로
+  복구했다. 삭제 파일은 Topology 전용 frontend surface뿐이며 backend source 수동 변경은 0건이다.
+- 병합 트리에서 `npm run check` PASS: TypeScript·ESLint, Vitest 127 files / 911 tests,
+  design guard 363 files, shadcn source audit 482 previews, Vite build 14,546 modules다.
+  `npm run visual-product`도 47 scenarios, exact API requests, unexpected feature network/WebSocket
+  0건으로 PASS했다. CLS는 Home `0.004188`, Resources `0.004177`, Issues `0.004202`다.
+- 이 기록을 포함한 동일 HEAD를 lab과 dev에 non-force push하고 두 ref의 동일 SHA와 ancestor
+  exit 0을 재확인한다. 이후 lane `codex/vp010-graph-shell-20260713`과 worktree를 같은 사이클에서
+  회수하며, 신규 stash 0건과 기존 미증명 stash 유지 사유를 기록한다.
