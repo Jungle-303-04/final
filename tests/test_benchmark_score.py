@@ -398,6 +398,41 @@ def test_recovery_contract_loader_accumulates_duplicate_root_cause_rules(
     assert [item["action_type"] for item in fallback] == ["fallback"]
 
 
+def test_recovery_contract_loader_accumulates_multiple_fallback_rules(
+    tmp_path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    source = tmp_path / "recovery.py"
+    action = """RecoveryActionSpec(
+        action_type={action_type!r},
+        route=routes.approval_required,
+        blast_radius="unknown",
+        approval_required=True,
+        rollback_plan="none",
+        validation_checks=("review",),
+    )"""
+    source.write_text(
+        "\n".join(
+            (
+                f"@rca.fallback(actions=({action.format(action_type='first_fallback')},))",
+                "class FirstFallback: pass",
+                f"@rca.fallback(actions=({action.format(action_type='second_fallback')},))",
+                "class SecondFallback: pass",
+            )
+        ),
+        encoding="utf-8",
+    )
+    scorer = runpy.run_path(str(SCORER))
+    monkeypatch.setitem(scorer["load_recovery_contracts"].__globals__, "RECOVERY_SOURCE", source)
+
+    recovery, fallback = scorer["load_recovery_contracts"]()
+
+    assert recovery == {}
+    assert [item["action_type"] for item in fallback] == [
+        "first_fallback",
+        "second_fallback",
+    ]
+
+
 def test_candidate_contract_validator_accepts_full_live_catalog_terminal_shape() -> None:
     scorer = runpy.run_path(str(SCORER))
     candidate_index = json.loads(
