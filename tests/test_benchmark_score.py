@@ -36,6 +36,18 @@ SECOND_CANDIDATE_BATCH = (
     "consumer_lag_backlog",
     "external_api_timeout",
 )
+THIRD_CANDIDATE_BATCH = (
+    "dependency_down",
+    "connection_pool_exhausted",
+    "wrong_endpoint_config",
+    "credential_rotation_issue",
+    "wrong_image_tag",
+    "missing_image_pull_secret",
+    "registry_unavailable",
+    "registry_rate_limited",
+    "image_platform_mismatch",
+    "service_dns_resolution_failure",
+)
 
 
 def _score(*args: str) -> subprocess.CompletedProcess[str]:
@@ -99,7 +111,7 @@ def test_first_candidate_contract_batch_is_machine_verified_in_catalog_order() -
     result = _score("--candidate-contracts")
 
     assert result.returncode == 0, result.stdout + result.stderr
-    assert "RESULT PASS (20 candidate contracts; ordinals=1..20)" in result.stdout
+    assert "RESULT PASS (30 candidate contracts; ordinals=1..30)" in result.stdout
 
     document = json.loads(CONTRACTS.read_text(encoding="utf-8"))
     assert tuple(item["candidate_id"] for item in document["contracts"][:10]) == (
@@ -121,11 +133,10 @@ def test_second_candidate_contract_batch_is_machine_verified_in_catalog_order() 
     result = _score("--candidate-contracts")
 
     assert result.returncode == 0, result.stdout + result.stderr
-    assert "RESULT PASS (20 candidate contracts; ordinals=1..20)" in result.stdout
+    assert "RESULT PASS (30 candidate contracts; ordinals=1..30)" in result.stdout
 
     document = json.loads(CONTRACTS.read_text(encoding="utf-8"))
     second_batch = document["contracts"][10:20]
-    assert document["next_ordinal"] == 21
     assert tuple(item["candidate_id"] for item in second_batch) == SECOND_CANDIDATE_BATCH
     assert all(item["patch_capabilities"] == [] for item in second_batch)
     assert all(item["benchmark_fixtures"] == [] for item in second_batch)
@@ -141,11 +152,43 @@ def test_second_candidate_contract_batch_is_machine_verified_in_catalog_order() 
     )
 
 
+def test_third_candidate_contract_batch_is_machine_verified_in_catalog_order() -> None:
+    result = _score("--candidate-contracts")
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "RESULT PASS (30 candidate contracts; ordinals=1..30)" in result.stdout
+
+    document = json.loads(CONTRACTS.read_text(encoding="utf-8"))
+    third_batch = document["contracts"][20:30]
+    assert document["next_ordinal"] == 31
+    assert tuple(item["candidate_id"] for item in third_batch) == THIRD_CANDIDATE_BATCH
+    assert {item["candidate_id"]: item["patch_capabilities"] for item in third_batch} == {
+        **{candidate_id: [] for candidate_id in THIRD_CANDIDATE_BATCH},
+        "wrong_image_tag": ["safe_pr"],
+    }
+    assert {
+        item["candidate_id"]: [action["action_type"] for action in item["allowed_remediations"]]
+        for item in third_batch
+    } == {
+        **{candidate_id: ["manual_analysis"] for candidate_id in THIRD_CANDIDATE_BATCH},
+        "wrong_image_tag": ["image_tag_fix", "manual_analysis"],
+        "missing_image_pull_secret": ["image_pull_secret_fix", "manual_analysis"],
+        "registry_unavailable": ["registry_recovery", "manual_analysis"],
+    }
+    assert {item["candidate_id"]: item["benchmark_fixtures"] for item in third_batch} == {
+        **{candidate_id: [] for candidate_id in THIRD_CANDIDATE_BATCH},
+        "wrong_image_tag": ["benchmark/scenarios/imagepull/imagepull-wrong-tag/scenario.json"],
+        "missing_image_pull_secret": [
+            "benchmark/scenarios/imagepull/imagepull-secret-missing/scenario.json"
+        ],
+    }
+
+
 def test_public_candidate_contract_scorer_needs_no_site_packages() -> None:
     result = _score_without_site_packages("--candidate-contracts")
 
     assert result.returncode == 0, result.stdout + result.stderr
-    assert "RESULT PASS (20 candidate contracts; ordinals=1..20)" in result.stdout
+    assert "RESULT PASS (30 candidate contracts; ordinals=1..30)" in result.stdout
 
 
 def _contract_validation_errors(document: dict[str, object]) -> list[str]:
@@ -267,7 +310,7 @@ def test_candidate_contract_rejects_fixture_path_traversal() -> None:
     assert any("fixture path must remain under benchmark/scenarios" in error for error in errors)
 
 
-@pytest.mark.parametrize(("contract_index", "batch_number"), ((3, 1), (10, 2)))
+@pytest.mark.parametrize(("contract_index", "batch_number"), ((3, 1), (10, 2), (20, 3)))
 def test_candidate_contract_rejects_completed_batch_annotation_drift(
     contract_index: int, batch_number: int
 ) -> None:
@@ -346,7 +389,7 @@ def test_candidate_contract_rejects_non_string_capability_without_crashing() -> 
 
 @pytest.mark.parametrize(
     ("contract_count", "next_ordinal"),
-    ((10, 11), (20, 21), (80, 81), (87, None)),
+    ((10, 11), (20, 21), (30, 31), (80, 81), (87, None)),
 )
 def test_candidate_contract_progress_accepts_complete_batches_and_terminal_catalog(
     contract_count: int, next_ordinal: int | None
