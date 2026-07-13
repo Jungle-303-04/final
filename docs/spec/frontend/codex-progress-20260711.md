@@ -1779,7 +1779,7 @@ API 완성: registerTarget (8678d63b0)
 
 ## 2026-07-13 초기 로딩 CLS 실측·게이트 완료
 
-- `a46a4d4ad8f224be6261711a838b2f2145ed03be`는 Home·Resources·Issues의 canonical desktop
+- `a46a4d4adfd4ac2be66531f6bc5c769b8b671668`는 Home·Resources·Issues의 canonical desktop
   장면에 300~450ms 결정적 API 지연을 적용하고, 응답 전 `loading-preview`의 `aria-hidden`·
   `inert`와 모든 skeleton의 양수 bounds를 먼저 확인한다. 테스트 fixture는 Playwright 시각
   게이트에만 존재하며 제품 runtime에는 유입되지 않는다.
