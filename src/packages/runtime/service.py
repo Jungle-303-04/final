@@ -25,6 +25,15 @@ DEFAULT_LOG_LEVEL = "info"
 PORT_ENV = "PORT"
 
 
+def configure_event_loop_policy() -> None:
+    if os.name != "nt":
+        return
+    policy_factory = getattr(asyncio, "WindowsSelectorEventLoopPolicy", None)
+    if policy_factory is None:
+        return
+    asyncio.set_event_loop_policy(policy_factory())
+
+
 @dataclass(frozen=True)
 class AsyncService:
     service_name: str
@@ -33,6 +42,7 @@ class AsyncService:
     def run(self) -> None:
         os.environ.setdefault(Runtime.SERVICE_NAME_ENV, self.service_name)
         configure_logging(self.service_name)
+        configure_event_loop_policy()
         asyncio.run(self.runner())
 
 
