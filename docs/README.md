@@ -213,6 +213,8 @@ secret 이름과 주입 경계는 [Secrets](secrets.md)를 본다.
 - [auto/frontend-pipeline](auto/frontend-pipeline.md)
 - [auto/night-directives](auto/night-directives.md)
 - [auto/night-log](auto/night-log.md)
+- [auto/night-log-backend](auto/night-log-backend.md)
+- [auto/night-log-frontend](auto/night-log-frontend.md)
 
 프론트 상세 설계 문서는 아래에 있다.
 
