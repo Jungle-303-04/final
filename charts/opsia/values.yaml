@@ -59,6 +59,9 @@ access:
   externalUrl: ""
   host: ""
   nodePort: 30080
+  loadBalancer:
+    annotations: {}
+    tlsTermination: disabled
   ingress:
     className: ""
     annotations: {}
