@@ -120,7 +120,8 @@ apply 단계를 port로 분리한다. **v0.1 구현체는 자체 agent applier �
 
 ## 6. 벤치마크: 공개 장애 데이터셋
 
-`benchmark/scenarios/` — oom, crashloop, imagepull, probe, service-selector (+v0.2: scheduling, pvc, network-policy).
+`benchmark/scenarios/` — oom, crashloop, imagepull, probe, service-selector, scheduling, pvc
+(+v0.2: network-policy).
 
 각 시나리오 구성(원안 유지): 정상 manifest, 장애 주입 patch, 예상 root cause, 필요 evidence,
 허용/금지 remediation, 예상 Git patch, rollback patch, 정상화 판정 조건.

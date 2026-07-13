@@ -1,0 +1,2691 @@
+{
+  "schema_version": "opsiabench/candidate-index/v0.1",
+  "ordering": "catalog_path_lexical_then_rule_then_candidate",
+  "source_sha256": {
+    "src/services/ai/agent/causes/catalog/autoscaling.yaml": "de552ee7a6fbf63082a3bd21b134d4f896a00858aa9da52a547c9437f7f44d6a",
+    "src/services/ai/agent/causes/catalog/crashloop.yaml": "3ec75199452721f68ea637b4e3a4db603627a1192de93fc6411d30c3bd3f1921",
+    "src/services/ai/agent/causes/catalog/dependencies.yaml": "e0fb065fd71252b3a48f0b19e54c4e41bec1c68e188ecfb9f4bf619bf74b1b47",
+    "src/services/ai/agent/causes/catalog/deployment_gitops.yaml": "618c185829c513ca95fe4a40750fa25f87040a11a167aafe71cb40fce0328b0f",
+    "src/services/ai/agent/causes/catalog/external_dependencies.yaml": "f03e6c4b436c10f7a4b61626c10244c8a1af8662bdaac99625b1e0635d9e4ddd",
+    "src/services/ai/agent/causes/catalog/image_pull.yaml": "cefa73c713b86a44303f0bc881dc2fb119e1ddd1790961cbc37088367c9fb772",
+    "src/services/ai/agent/causes/catalog/network.yaml": "deed5f2931ebcc0cce281fc78d6096671a0d8c18dfefc27c06a55a7a09ec8295",
+    "src/services/ai/agent/causes/catalog/node_health.yaml": "30740b0dd91b0fc82110b6081dd7ac64a230a82c2320fd7af464720887dfa50f",
+    "src/services/ai/agent/causes/catalog/policy_rejection.yaml": "939d52fd0b3218dc3eb056bb6d870813fe3a0b018ef2d8bd0ee2370f894dc1f1",
+    "src/services/ai/agent/causes/catalog/readiness.yaml": "e09f2afd27bcbab5a88a7908067d245a469a2ec9b4167aa0450cd18bf1742cf3",
+    "src/services/ai/agent/causes/catalog/resource_pressure.yaml": "3939935de240e34d44bd0757d428d4b9dd820027823ae59f3d16150e16da35ee",
+    "src/services/ai/agent/causes/catalog/runtime_config.yaml": "f58aff4a5b7738ef8f2f31de2a63dbaa9136c3e4147724dffdc606c8595d19dd",
+    "src/services/ai/agent/causes/catalog/scheduling.yaml": "8f9b6bfd18ebc1b9d5b3cc14eb90a1146563ce1ae65a885f5666981623f24d28",
+    "src/services/ai/agent/causes/catalog/security_policy.yaml": "4b91781449db9e72872f7057fa6982bcc6788007075e48f3128a87c8ea2de0a9",
+    "src/services/ai/agent/causes/catalog/storage_volume.yaml": "312d3de23652bf2f73008482f8947512df026bfb92e7c47f3cf408b8ba5f2334"
+  },
+  "candidates": [
+    {
+      "ordinal": 1,
+      "catalog_source": "src/services/ai/agent/causes/catalog/autoscaling.yaml",
+      "rule_id": "hpa_scaling_failed",
+      "candidate_id": "metrics_server_unavailable",
+      "required_evidence": [
+        "kubernetes:cluster_resource_state",
+        "metrics:telemetry_metrics",
+        "logs:related_logs"
+      ],
+      "supporting_signals": [
+        {
+          "id": "hpa_metrics_unavailable_signal",
+          "any_of": [
+            {
+              "event_pattern": "FailedGetResourceMetric"
+            },
+            {
+              "event_pattern": "FailedComputeMetricsReplicas"
+            },
+            {
+              "event_pattern": "unable to get metrics"
+            },
+            {
+              "log_pattern": "unable to get metrics"
+            },
+            {
+              "log_pattern": "metrics api not available"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "ordinal": 2,
+      "catalog_source": "src/services/ai/agent/causes/catalog/autoscaling.yaml",
+      "rule_id": "hpa_scaling_failed",
+      "candidate_id": "missing_resource_requests",
+      "required_evidence": [
+        "kubernetes:cluster_resource_state",
+        "logs:related_logs",
+        "metadata:current_workload_snapshots"
+      ],
+      "supporting_signals": [
+        {
+          "id": "missing_resource_request_signal",
+          "any_of": [
+            {
+              "event_pattern": "missing request"
+            },
+            {
+              "event_pattern": "missing request for cpu"
+            },
+            {
+              "event_pattern": "missing request for memory"
+            },
+            {
+              "log_pattern": "missing request"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "ordinal": 3,
+      "catalog_source": "src/services/ai/agent/causes/catalog/autoscaling.yaml",
+      "rule_id": "hpa_scaling_failed",
+      "candidate_id": "max_replica_limit_reached",
+      "required_evidence": [
+        "kubernetes:cluster_resource_state",
+        "metrics:telemetry_metrics",
+        "logs:related_logs"
+      ],
+      "supporting_signals": [
+        {
+          "id": "hpa_scaling_limited_signal",
+          "any_of": [
+            {
+              "event_pattern": "ScalingLimited"
+            },
+            {
+              "event_pattern": "max replicas"
+            },
+            {
+              "event_pattern": "the desired replica count is more than the maximum replica count"
+            },
+            {
+              "log_pattern": "ScalingLimited"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "ordinal": 4,
+      "catalog_source": "src/services/ai/agent/causes/catalog/crashloop.yaml",
+      "rule_id": "crashloop_backoff",
+      "candidate_id": "oom_killed",
+      "required_evidence": [
+        "kubernetes:cluster_resource_state",
+        "metrics:telemetry_metrics",
+        "logs:related_logs"
+      ],
+      "supporting_signals": [
+        {
+          "id": "oom_evidence",
+          "any_of": [
+            {
+              "fact": "terminated_reason=OOMKilled"
+            },
+            {
+              "fact": "exit_code=137"
+            },
+            {
+              "fact": "event_reason=OOMKilling"
+            },
+            {
+              "log_pattern": "oomkilled"
+            },
+            {
+              "log_pattern": "out of memory"
+            },
+            {
+              "log_pattern": "outofmemory"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "ordinal": 5,
+      "catalog_source": "src/services/ai/agent/causes/catalog/crashloop.yaml",
+      "rule_id": "crashloop_backoff",
+      "candidate_id": "bad_image_rollout",
+      "required_evidence": [
+        "kubernetes:cluster_resource_state",
+        "logs:related_logs",
+        "metadata:current_workload_snapshots"
+      ],
+      "supporting_signals": [
+        {
+          "id": "broken_image_startup_log",
+          "any_of": [
+            {
+              "log_pattern": "modulenotfounderror"
+            },
+            {
+              "log_pattern": "importerror"
+            },
+            {
+              "log_pattern": "no such file or directory"
+            },
+            {
+              "log_pattern": "exec format error"
+            },
+            {
+              "log_pattern": "binary mismatch"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "ordinal": 6,
+      "catalog_source": "src/services/ai/agent/causes/catalog/crashloop.yaml",
+      "rule_id": "crashloop_backoff",
+      "candidate_id": "config_env_error",
+      "required_evidence": [
+        "kubernetes:cluster_resource_state",
+        "logs:related_logs"
+      ],
+      "supporting_signals": [
+        {
+          "id": "config_error_log",
+          "any_of": [
+            {
+              "log_pattern": "environment variable"
+            },
+            {
+              "log_pattern": "missing env"
+            },
+            {
+              "log_pattern": "configmap"
+            },
+            {
+              "log_pattern": "config load"
+            },
+            {
+              "log_pattern": "file not found"
+            },
+            {
+              "log_pattern": "secret not found"
+            },
+            {
+              "log_pattern": "not set"
+            },
+            {
+              "log_pattern": "invalid configuration"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "ordinal": 7,
+      "catalog_source": "src/services/ai/agent/causes/catalog/crashloop.yaml",
+      "rule_id": "crashloop_backoff",
+      "candidate_id": "app_port_bind_failed",
+      "required_evidence": [
+        "kubernetes:cluster_resource_state",
+        "logs:related_logs"
+      ],
+      "supporting_signals": [
+        {
+          "id": "port_bind_failure_signal",
+          "any_of": [
+            {
+              "log_pattern": "address already in use"
+            },
+            {
+              "log_pattern": "listen tcp"
+            },
+            {
+              "log_pattern": "bind: permission denied"
+            },
+            {
+              "log_pattern": "cannot assign requested address"
+            },
+            {
+              "log_pattern": "port already in use"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "ordinal": 8,
+      "catalog_source": "src/services/ai/agent/causes/catalog/crashloop.yaml",
+      "rule_id": "crashloop_backoff",
+      "candidate_id": "permission_denied_startup",
+      "required_evidence": [
+        "kubernetes:cluster_resource_state",
+        "logs:related_logs"
+      ],
+      "supporting_signals": [
+        {
+          "id": "startup_permission_denied_signal",
+          "any_of": [
+            {
+              "log_pattern": "permission denied"
+            },
+            {
+              "log_pattern": "operation not permitted"
+            },
+            {
+              "log_pattern": "read-only file system"
+            },
+            {
+              "log_pattern": "eacces"
+            },
+            {
+              "log_pattern": "permissionerror"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "ordinal": 9,
+      "catalog_source": "src/services/ai/agent/causes/catalog/crashloop.yaml",
+      "rule_id": "crashloop_backoff",
+      "candidate_id": "app_startup_failure",
+      "required_evidence": [
+        "kubernetes:cluster_resource_state",
+        "logs:related_logs"
+      ],
+      "supporting_signals": [
+        {
+          "id": "startup_crash_signal",
+          "any_of": [
+            {
+              "fact": "exit_code=non_oom"
+            },
+            {
+              "log_pattern": "fatal"
+            },
+            {
+              "log_pattern": "panic"
+            },
+            {
+              "log_pattern": "traceback"
+            },
+            {
+              "log_pattern": "unhandled exception"
+            },
+            {
+              "log_pattern": "startup failed"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "ordinal": 10,
+      "catalog_source": "src/services/ai/agent/causes/catalog/crashloop.yaml",
+      "rule_id": "crashloop_backoff",
+      "candidate_id": "dependency_connection_failure",
+      "required_evidence": [
+        "kubernetes:cluster_resource_state",
+        "logs:related_logs",
+        "traces:related_traces"
+      ],
+      "supporting_signals": [
+        {
+          "id": "dependency_error_log",
+          "any_of": [
+            {
+              "log_pattern": "connection refused"
+            },
+            {
+              "log_pattern": "connection timed out"
+            },
+            {
+              "log_pattern": "timeout"
+            },
+            {
+              "log_pattern": "authentication failed"
+            },
+            {
+              "log_pattern": "unreachable"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "ordinal": 11,
+      "catalog_source": "src/services/ai/agent/causes/catalog/dependencies.yaml",
+      "rule_id": "db_connection_failed",
+      "candidate_id": "database_connectivity_failure",
+      "required_evidence": [
+        "kubernetes:cluster_resource_state",
+        "metrics:telemetry_metrics",
+        "logs:related_logs",
+        "traces:related_traces",
+        "metadata:current_workload_snapshots"
+      ],
+      "supporting_signals": [
+        {
+          "id": "database_connectivity_signal",
+          "any_of": [
+            {
+              "log_pattern": "database connection"
+            },
+            {
+              "log_pattern": "connection refused"
+            },
+            {
+              "log_pattern": "connection timed out"
+            },
+            {
+              "log_pattern": "ECONNREFUSED"
+            },
+            {
+              "log_pattern": "timeout"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "ordinal": 12,
+      "catalog_source": "src/services/ai/agent/causes/catalog/dependencies.yaml",
+      "rule_id": "db_connection_failed",
+      "candidate_id": "database_credential_or_config_error",
+      "required_evidence": [
+        "kubernetes:cluster_resource_state",
+        "logs:related_logs",
+        "metadata:current_workload_snapshots"
+      ],
+      "supporting_signals": [
+        {
+          "id": "database_config_signal",
+          "any_of": [
+            {
+              "log_pattern": "password authentication failed"
+            },
+            {
+              "log_pattern": "authentication failed"
+            },
+            {
+              "log_pattern": "database not found"
+            },
+            {
+              "log_pattern": "unknown host"
+            },
+            {
+              "log_pattern": "invalid connection string"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "ordinal": 13,
+      "catalog_source": "src/services/ai/agent/causes/catalog/dependencies.yaml",
+      "rule_id": "db_connection_failed",
+      "candidate_id": "database_connection_pool_exhausted",
+      "required_evidence": [
+        "metrics:telemetry_metrics",
+        "logs:related_logs",
+        "traces:related_traces"
+      ],
+      "supporting_signals": [
+        {
+          "id": "database_pool_exhausted_signal",
+          "any_of": [
+            {
+              "log_pattern": "connection pool exhausted"
+            },
+            {
+              "log_pattern": "too many connections"
+            },
+            {
+              "log_pattern": "remaining connection slots"
+            },
+            {
+              "log_pattern": "pool timeout"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "ordinal": 14,
+      "catalog_source": "src/services/ai/agent/causes/catalog/deployment_gitops.yaml",
+      "rule_id": "deployment_rollout_failed",
+      "candidate_id": "deployment_progress_deadline_exceeded",
+      "required_evidence": [
+        "kubernetes:cluster_resource_state",
+        "metrics:telemetry_metrics",
+        "logs:related_logs",
+        "metadata:current_workload_snapshots"
+      ],
+      "supporting_signals": [
+        {
+          "id": "progress_deadline_signal",
+          "any_of": [
+            {
+              "event_pattern": "ProgressDeadlineExceeded"
+            },
+            {
+              "event_pattern": "progress deadline"
+            },
+            {
+              "log_pattern": "ProgressDeadlineExceeded"
+            },
+            {
+              "log_pattern": "rollout exceeded"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "ordinal": 15,
+      "catalog_source": "src/services/ai/agent/causes/catalog/deployment_gitops.yaml",
+      "rule_id": "deployment_rollout_failed",
+      "candidate_id": "replica_unavailable_after_rollout",
+      "required_evidence": [
+        "kubernetes:cluster_resource_state",
+        "metrics:telemetry_metrics",
+        "logs:related_logs"
+      ],
+      "supporting_signals": [
+        {
+          "id": "replica_unavailable_signal",
+          "any_of": [
+            {
+              "event_pattern": "unavailable"
+            },
+            {
+              "event_pattern": "deadline"
+            },
+            {
+              "log_pattern": "unavailable"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "ordinal": 16,
+      "catalog_source": "src/services/ai/agent/causes/catalog/deployment_gitops.yaml",
+      "rule_id": "gitops_controller_sync_failed",
+      "candidate_id": "gitops_sync_failed",
+      "required_evidence": [
+        "kubernetes:cluster_resource_state",
+        "metrics:telemetry_metrics",
+        "logs:related_logs",
+        "metadata:current_workload_snapshots"
+      ],
+      "supporting_signals": [
+        {
+          "id": "gitops_sync_failed_signal",
+          "any_of": [
+            {
+              "event_pattern": "SyncFailed"
+            },
+            {
+              "log_pattern": "sync failed"
+            },
+            {
+              "log_pattern": "comparison error"
+            },
+            {
+              "log_pattern": "manifest generation error"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "ordinal": 17,
+      "catalog_source": "src/services/ai/agent/causes/catalog/deployment_gitops.yaml",
+      "rule_id": "gitops_controller_sync_failed",
+      "candidate_id": "manifest_validation_failed",
+      "required_evidence": [
+        "kubernetes:cluster_resource_state",
+        "logs:related_logs",
+        "metadata:current_workload_snapshots"
+      ],
+      "supporting_signals": [
+        {
+          "id": "manifest_validation_signal",
+          "any_of": [
+            {
+              "event_pattern": "Invalid"
+            },
+            {
+              "log_pattern": "validation failed"
+            },
+            {
+              "log_pattern": "immutable field"
+            },
+            {
+              "log_pattern": "unknown field"
+            },
+            {
+              "log_pattern": "admission webhook"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "ordinal": 18,
+      "catalog_source": "src/services/ai/agent/causes/catalog/external_dependencies.yaml",
+      "rule_id": "redis_unavailable",
+      "candidate_id": "redis_dependency_unavailable",
+      "required_evidence": [
+        "metrics:telemetry_metrics",
+        "logs:related_logs",
+        "traces:related_traces"
+      ],
+      "supporting_signals": [
+        {
+          "id": "redis_failure_signal",
+          "any_of": [
+            {
+              "log_pattern": "redis"
+            },
+            {
+              "log_pattern": "connection refused"
+            },
+            {
+              "log_pattern": "read only"
+            },
+            {
+              "log_pattern": "timeout"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "ordinal": 19,
+      "catalog_source": "src/services/ai/agent/causes/catalog/external_dependencies.yaml",
+      "rule_id": "kafka_consumer_lag",
+      "candidate_id": "consumer_lag_backlog",
+      "required_evidence": [
+        "metrics:telemetry_metrics",
+        "logs:related_logs"
+      ],
+      "supporting_signals": [
+        {
+          "id": "kafka_lag_signal",
+          "any_of": [
+            {
+              "log_pattern": "consumer lag"
+            },
+            {
+              "log_pattern": "rebalance"
+            },
+            {
+              "log_pattern": "commit failed"
+            },
+            {
+              "log_pattern": "kafka"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "ordinal": 20,
+      "catalog_source": "src/services/ai/agent/causes/catalog/external_dependencies.yaml",
+      "rule_id": "external_api_timeout",
+      "candidate_id": "external_api_timeout",
+      "required_evidence": [
+        "metrics:telemetry_metrics",
+        "logs:related_logs",
+        "traces:related_traces"
+      ],
+      "supporting_signals": [
+        {
+          "id": "external_api_timeout_signal",
+          "any_of": [
+            {
+              "log_pattern": "upstream timeout"
+            },
+            {
+              "log_pattern": "deadline exceeded"
+            },
+            {
+              "log_pattern": "gateway timeout"
+            },
+            {
+              "log_pattern": "504"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "ordinal": 21,
+      "catalog_source": "src/services/ai/agent/causes/catalog/external_dependencies.yaml",
+      "rule_id": "queue_dependency_failure",
+      "candidate_id": "dependency_down",
+      "required_evidence": [
+        "metrics:telemetry_metrics",
+        "logs:related_logs",
+        "traces:related_traces"
+      ],
+      "supporting_signals": [
+        {
+          "id": "dependency_down_signal",
+          "any_of": [
+            {
+              "log_pattern": "connection refused"
+            },
+            {
+              "log_pattern": "unavailable"
+            },
+            {
+              "log_pattern": "timeout"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "ordinal": 22,
+      "catalog_source": "src/services/ai/agent/causes/catalog/external_dependencies.yaml",
+      "rule_id": "queue_dependency_failure",
+      "candidate_id": "connection_pool_exhausted",
+      "required_evidence": [
+        "metrics:telemetry_metrics",
+        "logs:related_logs",
+        "traces:related_traces"
+      ],
+      "supporting_signals": [
+        {
+          "id": "connection_pool_exhausted_signal",
+          "any_of": [
+            {
+              "log_pattern": "connection pool"
+            },
+            {
+              "log_pattern": "pool exhausted"
+            },
+            {
+              "log_pattern": "too many connections"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "ordinal": 23,
+      "catalog_source": "src/services/ai/agent/causes/catalog/external_dependencies.yaml",
+      "rule_id": "queue_dependency_failure",
+      "candidate_id": "wrong_endpoint_config",
+      "required_evidence": [
+        "logs:related_logs",
+        "traces:related_traces",
+        "metadata:current_workload_snapshots"
+      ],
+      "supporting_signals": [
+        {
+          "id": "wrong_endpoint_config_signal",
+          "any_of": [
+            {
+              "log_pattern": "unknown host"
+            },
+            {
+              "log_pattern": "no such host"
+            },
+            {
+              "log_pattern": "invalid endpoint"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "ordinal": 24,
+      "catalog_source": "src/services/ai/agent/causes/catalog/external_dependencies.yaml",
+      "rule_id": "queue_dependency_failure",
+      "candidate_id": "credential_rotation_issue",
+      "required_evidence": [
+        "logs:related_logs",
+        "traces:related_traces",
+        "metadata:current_workload_snapshots"
+      ],
+      "supporting_signals": [
+        {
+          "id": "credential_rotation_signal",
+          "any_of": [
+            {
+              "log_pattern": "authentication failed"
+            },
+            {
+              "log_pattern": "invalid credentials"
+            },
+            {
+              "log_pattern": "permission denied"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "ordinal": 25,
+      "catalog_source": "src/services/ai/agent/causes/catalog/image_pull.yaml",
+      "rule_id": "image_pull_backoff",
+      "candidate_id": "wrong_image_tag",
+      "required_evidence": [
+        "kubernetes:cluster_resource_state"
+      ],
+      "supporting_signals": [
+        {
+          "id": "registry_manifest_missing",
+          "any_of": [
+            {
+              "event_pattern": "manifest unknown"
+            },
+            {
+              "event_pattern": "not found"
+            },
+            {
+              "event_pattern": "manifest invalid"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "ordinal": 26,
+      "catalog_source": "src/services/ai/agent/causes/catalog/image_pull.yaml",
+      "rule_id": "image_pull_backoff",
+      "candidate_id": "missing_image_pull_secret",
+      "required_evidence": [
+        "kubernetes:cluster_resource_state"
+      ],
+      "supporting_signals": [
+        {
+          "id": "registry_auth_denied",
+          "any_of": [
+            {
+              "event_pattern": "unauthorized"
+            },
+            {
+              "event_pattern": "authentication required"
+            },
+            {
+              "event_pattern": "pull access denied"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "ordinal": 27,
+      "catalog_source": "src/services/ai/agent/causes/catalog/image_pull.yaml",
+      "rule_id": "image_pull_backoff",
+      "candidate_id": "registry_unavailable",
+      "required_evidence": [
+        "kubernetes:cluster_resource_state"
+      ],
+      "supporting_signals": [
+        {
+          "id": "registry_unreachable",
+          "any_of": [
+            {
+              "event_pattern": "timeout"
+            },
+            {
+              "event_pattern": "connection refused"
+            },
+            {
+              "event_pattern": "no route to host"
+            },
+            {
+              "event_pattern": "503"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "ordinal": 28,
+      "catalog_source": "src/services/ai/agent/causes/catalog/image_pull.yaml",
+      "rule_id": "image_pull_backoff",
+      "candidate_id": "registry_rate_limited",
+      "required_evidence": [
+        "kubernetes:cluster_resource_state"
+      ],
+      "supporting_signals": [
+        {
+          "id": "registry_rate_limit_signal",
+          "any_of": [
+            {
+              "event_pattern": "Too Many Requests"
+            },
+            {
+              "event_pattern": "toomanyrequests"
+            },
+            {
+              "event_pattern": "rate limit"
+            },
+            {
+              "event_pattern": "429"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "ordinal": 29,
+      "catalog_source": "src/services/ai/agent/causes/catalog/image_pull.yaml",
+      "rule_id": "image_pull_backoff",
+      "candidate_id": "image_platform_mismatch",
+      "required_evidence": [
+        "kubernetes:cluster_resource_state"
+      ],
+      "supporting_signals": [
+        {
+          "id": "image_platform_mismatch_signal",
+          "any_of": [
+            {
+              "event_pattern": "no matching manifest"
+            },
+            {
+              "event_pattern": "no match for platform"
+            },
+            {
+              "event_pattern": "platform"
+            },
+            {
+              "event_pattern": "architecture"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "ordinal": 30,
+      "catalog_source": "src/services/ai/agent/causes/catalog/network.yaml",
+      "rule_id": "dns_lookup_failed",
+      "candidate_id": "service_dns_resolution_failure",
+      "required_evidence": [
+        "kubernetes:cluster_resource_state",
+        "metrics:telemetry_metrics",
+        "logs:related_logs",
+        "metadata:service_selector_matches"
+      ],
+      "supporting_signals": [
+        {
+          "id": "dns_failure_log",
+          "any_of": [
+            {
+              "log_pattern": "no such host"
+            },
+            {
+              "log_pattern": "dns"
+            },
+            {
+              "log_pattern": "name resolution"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "ordinal": 31,
+      "catalog_source": "src/services/ai/agent/causes/catalog/network.yaml",
+      "rule_id": "dns_lookup_failed",
+      "candidate_id": "service_name_or_namespace_mismatch",
+      "required_evidence": [
+        "kubernetes:cluster_resource_state",
+        "logs:related_logs",
+        "metadata:service_selector_matches"
+      ],
+      "supporting_signals": [
+        {
+          "id": "service_dns_name_mismatch_signal",
+          "any_of": [
+            {
+              "log_pattern": "NXDOMAIN"
+            },
+            {
+              "log_pattern": "no such host"
+            },
+            {
+              "log_pattern": "name does not resolve"
+            },
+            {
+              "log_pattern": "service not found"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "ordinal": 32,
+      "catalog_source": "src/services/ai/agent/causes/catalog/network.yaml",
+      "rule_id": "dns_lookup_failed",
+      "candidate_id": "coredns_unavailable",
+      "required_evidence": [
+        "kubernetes:cluster_resource_state",
+        "metrics:telemetry_metrics",
+        "logs:related_logs"
+      ],
+      "supporting_signals": [
+        {
+          "id": "coredns_unavailable_signal",
+          "any_of": [
+            {
+              "log_pattern": "SERVFAIL"
+            },
+            {
+              "log_pattern": "coredns"
+            },
+            {
+              "log_pattern": "plugin/errors"
+            },
+            {
+              "log_pattern": "dns timeout"
+            },
+            {
+              "event_pattern": "CoreDNS"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "ordinal": 33,
+      "catalog_source": "src/services/ai/agent/causes/catalog/network.yaml",
+      "rule_id": "connection_timeout",
+      "candidate_id": "network_path_timeout",
+      "required_evidence": [
+        "kubernetes:cluster_resource_state",
+        "metrics:telemetry_metrics",
+        "logs:related_logs",
+        "traces:related_traces",
+        "metadata:endpoint_slice_ready_endpoints"
+      ],
+      "supporting_signals": [
+        {
+          "id": "network_timeout_log",
+          "any_of": [
+            {
+              "log_pattern": "timeout"
+            },
+            {
+              "log_pattern": "deadline exceeded"
+            },
+            {
+              "event_pattern": "timeout"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "ordinal": 34,
+      "catalog_source": "src/services/ai/agent/causes/catalog/network.yaml",
+      "rule_id": "connection_timeout",
+      "candidate_id": "network_policy_denied",
+      "required_evidence": [
+        "kubernetes:cluster_resource_state",
+        "logs:related_logs",
+        "metadata:network_policy_allows"
+      ],
+      "supporting_signals": [
+        {
+          "id": "network_policy_denied_signal",
+          "any_of": [
+            {
+              "log_pattern": "network policy"
+            },
+            {
+              "log_pattern": "egress denied"
+            },
+            {
+              "log_pattern": "ingress denied"
+            },
+            {
+              "log_pattern": "i/o timeout"
+            },
+            {
+              "event_pattern": "NetworkPolicy"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "ordinal": 35,
+      "catalog_source": "src/services/ai/agent/causes/catalog/network.yaml",
+      "rule_id": "connection_timeout",
+      "candidate_id": "endpoint_unavailable_timeout",
+      "required_evidence": [
+        "kubernetes:cluster_resource_state",
+        "logs:related_logs",
+        "metadata:endpoint_slice_ready_endpoints"
+      ],
+      "supporting_signals": [
+        {
+          "id": "endpoint_unavailable_timeout_signal",
+          "any_of": [
+            {
+              "log_pattern": "no endpoints"
+            },
+            {
+              "log_pattern": "upstream timeout"
+            },
+            {
+              "log_pattern": "connection timed out"
+            },
+            {
+              "event_pattern": "no endpoints"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "ordinal": 36,
+      "catalog_source": "src/services/ai/agent/causes/catalog/network.yaml",
+      "rule_id": "ingress_5xx",
+      "candidate_id": "upstream_unavailable",
+      "required_evidence": [
+        "kubernetes:cluster_resource_state",
+        "metrics:telemetry_metrics",
+        "logs:related_logs"
+      ],
+      "supporting_signals": [
+        {
+          "id": "upstream_failure_signal",
+          "any_of": [
+            {
+              "log_pattern": "no endpoints"
+            },
+            {
+              "log_pattern": "upstream"
+            },
+            {
+              "log_pattern": "connection refused"
+            },
+            {
+              "event_pattern": "no endpoints"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "ordinal": 37,
+      "catalog_source": "src/services/ai/agent/causes/catalog/network.yaml",
+      "rule_id": "ingress_5xx",
+      "candidate_id": "backend_readiness_failure",
+      "required_evidence": [
+        "kubernetes:cluster_resource_state",
+        "metrics:telemetry_metrics",
+        "logs:related_logs"
+      ],
+      "supporting_signals": [
+        {
+          "id": "probe_failure_signal",
+          "any_of": [
+            {
+              "event_pattern": "probe"
+            },
+            {
+              "fact": "event_reason=Unhealthy"
+            },
+            {
+              "log_pattern": "readiness"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "ordinal": 38,
+      "catalog_source": "src/services/ai/agent/causes/catalog/network.yaml",
+      "rule_id": "ingress_5xx",
+      "candidate_id": "application_5xx_spike",
+      "required_evidence": [
+        "kubernetes:cluster_resource_state",
+        "metrics:telemetry_metrics",
+        "logs:related_logs"
+      ],
+      "supporting_signals": [
+        {
+          "id": "application_5xx_signal",
+          "any_of": [
+            {
+              "log_pattern": "upstream_status\":500"
+            },
+            {
+              "log_pattern": "upstream_status\": 500"
+            },
+            {
+              "log_pattern": "upstream_status\":502"
+            },
+            {
+              "log_pattern": "upstream_status\": 502"
+            },
+            {
+              "log_pattern": "upstream_status\":503"
+            },
+            {
+              "log_pattern": "upstream_status\": 503"
+            },
+            {
+              "log_pattern": "upstream_status\":504"
+            },
+            {
+              "log_pattern": "upstream_status\": 504"
+            },
+            {
+              "log_pattern": "status\":500"
+            },
+            {
+              "log_pattern": "status\": 500"
+            },
+            {
+              "log_pattern": "status\":502"
+            },
+            {
+              "log_pattern": "status\": 502"
+            },
+            {
+              "log_pattern": "status\":503"
+            },
+            {
+              "log_pattern": "status\": 503"
+            },
+            {
+              "log_pattern": "status\":504"
+            },
+            {
+              "log_pattern": "status\": 504"
+            },
+            {
+              "log_pattern": "dependency_timeout"
+            },
+            {
+              "log_pattern": "dependency call timed out"
+            },
+            {
+              "log_pattern": "/api/orders/error"
+            },
+            {
+              "log_pattern": "intentional_error_endpoint"
+            },
+            {
+              "log_pattern": "intentional error endpoint called"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "ordinal": 39,
+      "catalog_source": "src/services/ai/agent/causes/catalog/node_health.yaml",
+      "rule_id": "node_not_ready",
+      "candidate_id": "kubelet_unavailable",
+      "required_evidence": [
+        "kubernetes:cluster_resource_state",
+        "metrics:telemetry_metrics",
+        "logs:related_logs"
+      ],
+      "supporting_signals": [
+        {
+          "id": "kubelet_unavailable_signal",
+          "any_of": [
+            {
+              "event_pattern": "KubeletNotReady"
+            },
+            {
+              "event_pattern": "NodeNotReady"
+            },
+            {
+              "event_pattern": "node is not ready"
+            },
+            {
+              "log_pattern": "kubelet stopped"
+            },
+            {
+              "log_pattern": "node status update failed"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "ordinal": 40,
+      "catalog_source": "src/services/ai/agent/causes/catalog/node_health.yaml",
+      "rule_id": "node_not_ready",
+      "candidate_id": "container_runtime_unavailable",
+      "required_evidence": [
+        "kubernetes:cluster_resource_state",
+        "logs:related_logs"
+      ],
+      "supporting_signals": [
+        {
+          "id": "container_runtime_unavailable_signal",
+          "any_of": [
+            {
+              "event_pattern": "container runtime"
+            },
+            {
+              "event_pattern": "ContainerRuntimeNotReady"
+            },
+            {
+              "log_pattern": "container runtime is down"
+            },
+            {
+              "log_pattern": "containerd"
+            },
+            {
+              "log_pattern": "cri connection refused"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "ordinal": 41,
+      "catalog_source": "src/services/ai/agent/causes/catalog/node_health.yaml",
+      "rule_id": "node_not_ready",
+      "candidate_id": "node_network_unavailable",
+      "required_evidence": [
+        "kubernetes:cluster_resource_state",
+        "metrics:telemetry_metrics",
+        "logs:related_logs"
+      ],
+      "supporting_signals": [
+        {
+          "id": "node_network_unavailable_signal",
+          "any_of": [
+            {
+              "event_pattern": "NetworkUnavailable"
+            },
+            {
+              "event_pattern": "CNI"
+            },
+            {
+              "event_pattern": "failed to setup network"
+            },
+            {
+              "log_pattern": "failed to setup pod network"
+            },
+            {
+              "log_pattern": "cni plugin"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "ordinal": 42,
+      "catalog_source": "src/services/ai/agent/causes/catalog/node_health.yaml",
+      "rule_id": "pod_evicted",
+      "candidate_id": "pod_evicted_memory_pressure",
+      "required_evidence": [
+        "kubernetes:cluster_resource_state",
+        "metrics:telemetry_metrics",
+        "logs:related_logs"
+      ],
+      "supporting_signals": [
+        {
+          "id": "memory_eviction_signal",
+          "any_of": [
+            {
+              "event_pattern": "Evicted"
+            },
+            {
+              "event_pattern": "memory pressure"
+            },
+            {
+              "event_pattern": "The node was low on resource: memory"
+            },
+            {
+              "fact": "event_reason=Evicted"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "ordinal": 43,
+      "catalog_source": "src/services/ai/agent/causes/catalog/node_health.yaml",
+      "rule_id": "pod_evicted",
+      "candidate_id": "pod_evicted_disk_pressure",
+      "required_evidence": [
+        "kubernetes:cluster_resource_state",
+        "metrics:telemetry_metrics",
+        "logs:related_logs"
+      ],
+      "supporting_signals": [
+        {
+          "id": "disk_eviction_signal",
+          "any_of": [
+            {
+              "event_pattern": "disk pressure"
+            },
+            {
+              "event_pattern": "ephemeral-storage"
+            },
+            {
+              "event_pattern": "imagefs"
+            },
+            {
+              "event_pattern": "nodefs"
+            },
+            {
+              "fact": "event_reason=Evicted"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "ordinal": 44,
+      "catalog_source": "src/services/ai/agent/causes/catalog/node_health.yaml",
+      "rule_id": "pod_evicted",
+      "candidate_id": "pod_evicted_pid_pressure",
+      "required_evidence": [
+        "kubernetes:cluster_resource_state",
+        "metrics:telemetry_metrics",
+        "logs:related_logs"
+      ],
+      "supporting_signals": [
+        {
+          "id": "pid_eviction_signal",
+          "any_of": [
+            {
+              "event_pattern": "PIDPressure"
+            },
+            {
+              "event_pattern": "pid pressure"
+            },
+            {
+              "event_pattern": "The node was low on resource: pid"
+            },
+            {
+              "fact": "event_reason=Evicted"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "ordinal": 45,
+      "catalog_source": "src/services/ai/agent/causes/catalog/policy_rejection.yaml",
+      "rule_id": "admission_policy_rejection",
+      "candidate_id": "policy_violation",
+      "required_evidence": [
+        "kubernetes:cluster_resource_state",
+        "logs:related_logs",
+        "metadata:current_workload_snapshots"
+      ],
+      "supporting_signals": [
+        {
+          "id": "policy_rejection_signal",
+          "any_of": [
+            {
+              "event_pattern": "admission"
+            },
+            {
+              "event_pattern": "denied"
+            },
+            {
+              "event_pattern": "policy"
+            },
+            {
+              "log_pattern": "admission"
+            },
+            {
+              "log_pattern": "policy violation"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "ordinal": 46,
+      "catalog_source": "src/services/ai/agent/causes/catalog/policy_rejection.yaml",
+      "rule_id": "admission_policy_rejection",
+      "candidate_id": "invalid_manifest",
+      "required_evidence": [
+        "kubernetes:cluster_resource_state",
+        "logs:related_logs"
+      ],
+      "supporting_signals": [
+        {
+          "id": "invalid_manifest_signal",
+          "any_of": [
+            {
+              "event_pattern": "invalid"
+            },
+            {
+              "event_pattern": "required"
+            },
+            {
+              "event_pattern": "immutable"
+            },
+            {
+              "log_pattern": "invalid"
+            },
+            {
+              "log_pattern": "unknown field"
+            },
+            {
+              "log_pattern": "immutable"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "ordinal": 47,
+      "catalog_source": "src/services/ai/agent/causes/catalog/policy_rejection.yaml",
+      "rule_id": "admission_policy_rejection",
+      "candidate_id": "image_vulnerability_block",
+      "required_evidence": [
+        "kubernetes:cluster_resource_state",
+        "logs:related_logs",
+        "metadata:current_workload_snapshots"
+      ],
+      "supporting_signals": [
+        {
+          "id": "image_policy_block_signal",
+          "any_of": [
+            {
+              "event_pattern": "vulnerability"
+            },
+            {
+              "event_pattern": "image policy"
+            },
+            {
+              "event_pattern": "signature"
+            },
+            {
+              "log_pattern": "vulnerability"
+            },
+            {
+              "log_pattern": "image policy"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "ordinal": 48,
+      "catalog_source": "src/services/ai/agent/causes/catalog/policy_rejection.yaml",
+      "rule_id": "rbac_denied",
+      "candidate_id": "service_account_permission_denied",
+      "required_evidence": [
+        "kubernetes:cluster_resource_state",
+        "logs:related_logs",
+        "metadata:current_workload_snapshots"
+      ],
+      "supporting_signals": [
+        {
+          "id": "rbac_denied_signal",
+          "any_of": [
+            {
+              "event_pattern": "forbidden"
+            },
+            {
+              "event_pattern": "cannot"
+            },
+            {
+              "log_pattern": "forbidden"
+            },
+            {
+              "log_pattern": "permission denied"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "ordinal": 49,
+      "catalog_source": "src/services/ai/agent/causes/catalog/policy_rejection.yaml",
+      "rule_id": "certificate_expired",
+      "candidate_id": "certificate_expired_or_invalid",
+      "required_evidence": [
+        "kubernetes:cluster_resource_state",
+        "logs:related_logs",
+        "traces:related_traces",
+        "metadata:current_workload_snapshots"
+      ],
+      "supporting_signals": [
+        {
+          "id": "tls_certificate_signal",
+          "any_of": [
+            {
+              "log_pattern": "certificate expired"
+            },
+            {
+              "log_pattern": "x509"
+            },
+            {
+              "log_pattern": "tls handshake"
+            },
+            {
+              "event_pattern": "certificate"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "ordinal": 50,
+      "catalog_source": "src/services/ai/agent/causes/catalog/readiness.yaml",
+      "rule_id": "probe_failure",
+      "candidate_id": "probe_path_wrong",
+      "required_evidence": [
+        "kubernetes:cluster_resource_state",
+        "logs:related_logs",
+        "metadata:current_workload_snapshots"
+      ],
+      "supporting_signals": [
+        {
+          "id": "probe_path_failure_signal",
+          "any_of": [
+            {
+              "event_pattern": "readiness probe"
+            },
+            {
+              "event_pattern": "liveness probe"
+            },
+            {
+              "event_pattern": "startup probe"
+            },
+            {
+              "event_pattern": "http probe failed"
+            },
+            {
+              "log_pattern": "404"
+            },
+            {
+              "log_pattern": "not found"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "ordinal": 51,
+      "catalog_source": "src/services/ai/agent/causes/catalog/readiness.yaml",
+      "rule_id": "probe_failure",
+      "candidate_id": "probe_port_wrong",
+      "required_evidence": [
+        "kubernetes:cluster_resource_state",
+        "logs:related_logs",
+        "metadata:current_workload_snapshots"
+      ],
+      "supporting_signals": [
+        {
+          "id": "probe_port_failure_signal",
+          "any_of": [
+            {
+              "event_pattern": "connection refused"
+            },
+            {
+              "event_pattern": "dial tcp"
+            },
+            {
+              "log_pattern": "connection refused"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "ordinal": 52,
+      "catalog_source": "src/services/ai/agent/causes/catalog/readiness.yaml",
+      "rule_id": "probe_failure",
+      "candidate_id": "timeout_too_short",
+      "required_evidence": [
+        "kubernetes:cluster_resource_state",
+        "metrics:telemetry_metrics",
+        "logs:related_logs",
+        "metadata:current_workload_snapshots"
+      ],
+      "supporting_signals": [
+        {
+          "id": "probe_timeout_signal",
+          "any_of": [
+            {
+              "event_pattern": "timeout"
+            },
+            {
+              "event_pattern": "context deadline exceeded"
+            },
+            {
+              "log_pattern": "timeout"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "ordinal": 53,
+      "catalog_source": "src/services/ai/agent/causes/catalog/readiness.yaml",
+      "rule_id": "probe_failure",
+      "candidate_id": "startup_window_too_short",
+      "required_evidence": [
+        "kubernetes:cluster_resource_state",
+        "metrics:telemetry_metrics",
+        "logs:related_logs",
+        "metadata:current_workload_snapshots"
+      ],
+      "supporting_signals": [
+        {
+          "id": "startup_probe_window_signal",
+          "any_of": [
+            {
+              "event_pattern": "startup probe"
+            },
+            {
+              "log_pattern": "starting"
+            },
+            {
+              "log_pattern": "initializing"
+            },
+            {
+              "log_pattern": "migration"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "ordinal": 54,
+      "catalog_source": "src/services/ai/agent/causes/catalog/readiness.yaml",
+      "rule_id": "probe_failure",
+      "candidate_id": "app_real_health_failure",
+      "required_evidence": [
+        "kubernetes:cluster_resource_state",
+        "metrics:telemetry_metrics",
+        "logs:related_logs",
+        "traces:related_traces"
+      ],
+      "supporting_signals": [
+        {
+          "id": "app_health_failure_signal",
+          "any_of": [
+            {
+              "log_pattern": "health check failed"
+            },
+            {
+              "log_pattern": "unhealthy"
+            },
+            {
+              "log_pattern": "500"
+            },
+            {
+              "log_pattern": "dependency"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "ordinal": 55,
+      "catalog_source": "src/services/ai/agent/causes/catalog/readiness.yaml",
+      "rule_id": "service_no_ready_endpoints",
+      "candidate_id": "selector_label_mismatch",
+      "required_evidence": [
+        "kubernetes:cluster_resource_state",
+        "metadata:service_selector_matches",
+        "metadata:endpoint_slice_ready_endpoints"
+      ],
+      "supporting_signals": [
+        {
+          "id": "selector_mismatch_signal",
+          "any_of": [
+            {
+              "event_pattern": "no endpoints"
+            },
+            {
+              "log_pattern": "no endpoints"
+            },
+            {
+              "log_pattern": "selector"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "ordinal": 56,
+      "catalog_source": "src/services/ai/agent/causes/catalog/readiness.yaml",
+      "rule_id": "service_no_ready_endpoints",
+      "candidate_id": "pods_not_ready",
+      "required_evidence": [
+        "kubernetes:cluster_resource_state",
+        "metadata:endpoint_slice_ready_endpoints"
+      ],
+      "supporting_signals": [
+        {
+          "id": "pods_not_ready_signal",
+          "any_of": [
+            {
+              "fact": "event_reason=Unhealthy"
+            },
+            {
+              "event_pattern": "readiness"
+            },
+            {
+              "event_pattern": "probe"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "ordinal": 57,
+      "catalog_source": "src/services/ai/agent/causes/catalog/readiness.yaml",
+      "rule_id": "service_no_ready_endpoints",
+      "candidate_id": "rollout_unavailable",
+      "required_evidence": [
+        "kubernetes:cluster_resource_state",
+        "metrics:telemetry_metrics",
+        "metadata:current_workload_snapshots"
+      ],
+      "supporting_signals": [
+        {
+          "id": "rollout_unavailable_signal",
+          "any_of": [
+            {
+              "event_pattern": "unavailable"
+            },
+            {
+              "event_pattern": "progress deadline"
+            },
+            {
+              "log_pattern": "unavailable"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "ordinal": 58,
+      "catalog_source": "src/services/ai/agent/causes/catalog/readiness.yaml",
+      "rule_id": "service_no_ready_endpoints",
+      "candidate_id": "wrong_service_port",
+      "required_evidence": [
+        "kubernetes:cluster_resource_state",
+        "metadata:service_selector_matches"
+      ],
+      "supporting_signals": [
+        {
+          "id": "wrong_service_port_signal",
+          "any_of": [
+            {
+              "log_pattern": "connection refused"
+            },
+            {
+              "log_pattern": "bad gateway"
+            },
+            {
+              "event_pattern": "connection refused"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "ordinal": 59,
+      "catalog_source": "src/services/ai/agent/causes/catalog/readiness.yaml",
+      "rule_id": "service_no_ready_endpoints",
+      "candidate_id": "endpoint_slice_delay",
+      "required_evidence": [
+        "kubernetes:cluster_resource_state",
+        "metadata:endpoint_slice_ready_endpoints"
+      ],
+      "supporting_signals": [
+        {
+          "id": "endpoint_slice_delay_signal",
+          "any_of": [
+            {
+              "event_pattern": "endpoints"
+            },
+            {
+              "event_pattern": "endpoint"
+            },
+            {
+              "log_pattern": "endpoint"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "ordinal": 60,
+      "catalog_source": "src/services/ai/agent/causes/catalog/resource_pressure.yaml",
+      "rule_id": "oom_memory_pressure",
+      "candidate_id": "memory_limit_too_low",
+      "required_evidence": [
+        "kubernetes:cluster_resource_state",
+        "metrics:telemetry_metrics",
+        "logs:related_logs"
+      ],
+      "supporting_signals": [
+        {
+          "id": "memory_limit_oom_signal",
+          "any_of": [
+            {
+              "fact": "terminated_reason=OOMKilled"
+            },
+            {
+              "fact": "exit_code=137"
+            },
+            {
+              "event_pattern": "oom"
+            },
+            {
+              "log_pattern": "out of memory"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "ordinal": 61,
+      "catalog_source": "src/services/ai/agent/causes/catalog/resource_pressure.yaml",
+      "rule_id": "oom_memory_pressure",
+      "candidate_id": "memory_leak",
+      "required_evidence": [
+        "kubernetes:cluster_resource_state",
+        "metrics:telemetry_metrics",
+        "logs:related_logs"
+      ],
+      "supporting_signals": [
+        {
+          "id": "memory_leak_log_signal",
+          "any_of": [
+            {
+              "log_pattern": "memory leak"
+            },
+            {
+              "log_pattern": "heap"
+            },
+            {
+              "log_pattern": "allocation"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "ordinal": 62,
+      "catalog_source": "src/services/ai/agent/causes/catalog/resource_pressure.yaml",
+      "rule_id": "oom_memory_pressure",
+      "candidate_id": "traffic_spike",
+      "required_evidence": [
+        "kubernetes:cluster_resource_state",
+        "metrics:telemetry_metrics",
+        "logs:related_logs"
+      ],
+      "supporting_signals": [
+        {
+          "id": "traffic_spike_signal",
+          "any_of": [
+            {
+              "log_pattern": "too many requests"
+            },
+            {
+              "log_pattern": "rate limit"
+            },
+            {
+              "log_pattern": "backpressure"
+            },
+            {
+              "log_pattern": "request rate"
+            },
+            {
+              "log_pattern": "traffic spike"
+            },
+            {
+              "log_pattern": "traffic surge"
+            },
+            {
+              "log_pattern": "queue full"
+            },
+            {
+              "log_pattern": "server overloaded"
+            },
+            {
+              "log_pattern": "429"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "ordinal": 63,
+      "catalog_source": "src/services/ai/agent/causes/catalog/resource_pressure.yaml",
+      "rule_id": "oom_memory_pressure",
+      "candidate_id": "node_memory_pressure",
+      "required_evidence": [
+        "kubernetes:cluster_resource_state",
+        "metrics:telemetry_metrics"
+      ],
+      "supporting_signals": [
+        {
+          "id": "node_memory_pressure_signal",
+          "any_of": [
+            {
+              "event_pattern": "memorypressure"
+            },
+            {
+              "event_pattern": "evicted"
+            },
+            {
+              "event_pattern": "node was low on resource"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "ordinal": 64,
+      "catalog_source": "src/services/ai/agent/causes/catalog/resource_pressure.yaml",
+      "rule_id": "oom_memory_pressure",
+      "candidate_id": "bad_release_memory_regression",
+      "required_evidence": [
+        "kubernetes:cluster_resource_state",
+        "metrics:telemetry_metrics",
+        "logs:related_logs",
+        "metadata:current_workload_snapshots"
+      ],
+      "supporting_signals": [
+        {
+          "id": "memory_regression_signal",
+          "any_of": [
+            {
+              "fact": "terminated_reason=OOMKilled"
+            },
+            {
+              "fact": "exit_code=137"
+            },
+            {
+              "log_pattern": "out of memory"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "ordinal": 65,
+      "catalog_source": "src/services/ai/agent/causes/catalog/resource_pressure.yaml",
+      "rule_id": "cpu_saturation",
+      "candidate_id": "cpu_limit_or_throttling",
+      "required_evidence": [
+        "kubernetes:cluster_resource_state",
+        "metrics:telemetry_metrics",
+        "logs:related_logs"
+      ],
+      "supporting_signals": [
+        {
+          "id": "cpu_throttling_log_signal",
+          "any_of": [
+            {
+              "log_pattern": "cpu throttling"
+            },
+            {
+              "log_pattern": "cpu throttled"
+            },
+            {
+              "log_pattern": "throttled"
+            },
+            {
+              "log_pattern": "cfs throttled"
+            },
+            {
+              "log_pattern": "cfs quota"
+            },
+            {
+              "log_pattern": "cpu quota"
+            },
+            {
+              "log_pattern": "deadline exceeded"
+            },
+            {
+              "log_pattern": "context deadline exceeded"
+            },
+            {
+              "log_pattern": "request timed out"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "ordinal": 66,
+      "catalog_source": "src/services/ai/agent/causes/catalog/resource_pressure.yaml",
+      "rule_id": "node_disk_pressure",
+      "candidate_id": "node_disk_pressure",
+      "required_evidence": [
+        "kubernetes:cluster_resource_state",
+        "metrics:telemetry_metrics",
+        "logs:related_logs"
+      ],
+      "supporting_signals": [
+        {
+          "id": "disk_pressure_signal",
+          "any_of": [
+            {
+              "event_pattern": "diskpressure"
+            },
+            {
+              "event_pattern": "ephemeral-storage"
+            },
+            {
+              "event_pattern": "evicted"
+            },
+            {
+              "log_pattern": "no space left"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "ordinal": 67,
+      "catalog_source": "src/services/ai/agent/causes/catalog/resource_pressure.yaml",
+      "rule_id": "node_disk_pressure",
+      "candidate_id": "ephemeral_storage_exhausted",
+      "required_evidence": [
+        "kubernetes:cluster_resource_state",
+        "metrics:telemetry_metrics",
+        "logs:related_logs"
+      ],
+      "supporting_signals": [
+        {
+          "id": "ephemeral_storage_signal",
+          "any_of": [
+            {
+              "event_pattern": "ephemeral-storage"
+            },
+            {
+              "log_pattern": "no space left"
+            },
+            {
+              "log_pattern": "disk full"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "ordinal": 68,
+      "catalog_source": "src/services/ai/agent/causes/catalog/resource_pressure.yaml",
+      "rule_id": "pid_pressure",
+      "candidate_id": "process_id_exhaustion",
+      "required_evidence": [
+        "kubernetes:cluster_resource_state",
+        "metrics:telemetry_metrics",
+        "logs:related_logs"
+      ],
+      "supporting_signals": [
+        {
+          "id": "pid_pressure_signal",
+          "any_of": [
+            {
+              "event_pattern": "pidpressure"
+            },
+            {
+              "log_pattern": "resource temporarily unavailable"
+            },
+            {
+              "log_pattern": "cannot fork"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "ordinal": 69,
+      "catalog_source": "src/services/ai/agent/causes/catalog/runtime_config.yaml",
+      "rule_id": "runtime_config_error",
+      "candidate_id": "missing_configmap_reference",
+      "required_evidence": [
+        "kubernetes:cluster_resource_state",
+        "logs:related_logs",
+        "metadata:current_workload_snapshots"
+      ],
+      "supporting_signals": [
+        {
+          "id": "missing_configmap_signal",
+          "any_of": [
+            {
+              "event_pattern": "configmap"
+            },
+            {
+              "event_pattern": "not found"
+            },
+            {
+              "event_pattern": "CreateContainerConfigError"
+            },
+            {
+              "log_pattern": "configmap not found"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "ordinal": 70,
+      "catalog_source": "src/services/ai/agent/causes/catalog/runtime_config.yaml",
+      "rule_id": "runtime_config_error",
+      "candidate_id": "config_key_missing",
+      "required_evidence": [
+        "kubernetes:cluster_resource_state",
+        "logs:related_logs",
+        "metadata:current_workload_snapshots"
+      ],
+      "supporting_signals": [
+        {
+          "id": "config_key_missing_signal",
+          "any_of": [
+            {
+              "event_pattern": "couldn't find key"
+            },
+            {
+              "event_pattern": "could not find key"
+            },
+            {
+              "event_pattern": "key not found"
+            },
+            {
+              "log_pattern": "missing config key"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "ordinal": 71,
+      "catalog_source": "src/services/ai/agent/causes/catalog/runtime_config.yaml",
+      "rule_id": "runtime_config_error",
+      "candidate_id": "invalid_env_value",
+      "required_evidence": [
+        "kubernetes:cluster_resource_state",
+        "logs:related_logs",
+        "metadata:current_workload_snapshots"
+      ],
+      "supporting_signals": [
+        {
+          "id": "invalid_env_value_signal",
+          "any_of": [
+            {
+              "log_pattern": "invalid env"
+            },
+            {
+              "log_pattern": "missing required config"
+            },
+            {
+              "log_pattern": "invalid configuration"
+            },
+            {
+              "log_pattern": "failed to parse"
+            },
+            {
+              "log_pattern": "environment variable"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "ordinal": 72,
+      "catalog_source": "src/services/ai/agent/causes/catalog/runtime_config.yaml",
+      "rule_id": "runtime_config_error",
+      "candidate_id": "config_volume_mount_failed",
+      "required_evidence": [
+        "kubernetes:cluster_resource_state",
+        "logs:related_logs",
+        "metadata:current_workload_snapshots"
+      ],
+      "supporting_signals": [
+        {
+          "id": "config_volume_mount_signal",
+          "any_of": [
+            {
+              "event_pattern": "MountVolume.SetUp failed"
+            },
+            {
+              "event_pattern": "configmap"
+            },
+            {
+              "event_pattern": "subPath"
+            },
+            {
+              "log_pattern": "config volume"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "ordinal": 73,
+      "catalog_source": "src/services/ai/agent/causes/catalog/scheduling.yaml",
+      "rule_id": "failed_scheduling",
+      "candidate_id": "insufficient_cpu",
+      "required_evidence": [
+        "kubernetes:cluster_resource_state",
+        "metrics:telemetry_metrics"
+      ],
+      "supporting_signals": [
+        {
+          "id": "insufficient_cpu_event",
+          "any_of": [
+            {
+              "event_pattern": "insufficient cpu"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "ordinal": 74,
+      "catalog_source": "src/services/ai/agent/causes/catalog/scheduling.yaml",
+      "rule_id": "failed_scheduling",
+      "candidate_id": "insufficient_memory",
+      "required_evidence": [
+        "kubernetes:cluster_resource_state",
+        "metrics:telemetry_metrics"
+      ],
+      "supporting_signals": [
+        {
+          "id": "insufficient_memory_event",
+          "any_of": [
+            {
+              "event_pattern": "insufficient memory"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "ordinal": 75,
+      "catalog_source": "src/services/ai/agent/causes/catalog/scheduling.yaml",
+      "rule_id": "failed_scheduling",
+      "candidate_id": "node_affinity_or_taint_mismatch",
+      "required_evidence": [
+        "kubernetes:cluster_resource_state"
+      ],
+      "supporting_signals": [
+        {
+          "id": "affinity_or_taint_event",
+          "any_of": [
+            {
+              "event_pattern": "affinity"
+            },
+            {
+              "event_pattern": "taint"
+            },
+            {
+              "event_pattern": "didn't match"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "ordinal": 76,
+      "catalog_source": "src/services/ai/agent/causes/catalog/scheduling.yaml",
+      "rule_id": "failed_scheduling",
+      "candidate_id": "node_selector_mismatch",
+      "required_evidence": [
+        "kubernetes:cluster_resource_state",
+        "metadata:current_workload_snapshots"
+      ],
+      "supporting_signals": [
+        {
+          "id": "node_selector_mismatch_signal",
+          "any_of": [
+            {
+              "event_pattern": "node selector"
+            },
+            {
+              "event_pattern": "node affinity"
+            },
+            {
+              "event_pattern": "didn't match Pod's node affinity"
+            },
+            {
+              "event_pattern": "didn't match node selector"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "ordinal": 77,
+      "catalog_source": "src/services/ai/agent/causes/catalog/scheduling.yaml",
+      "rule_id": "failed_scheduling",
+      "candidate_id": "untolerated_taint",
+      "required_evidence": [
+        "kubernetes:cluster_resource_state",
+        "metadata:current_workload_snapshots"
+      ],
+      "supporting_signals": [
+        {
+          "id": "untolerated_taint_signal",
+          "any_of": [
+            {
+              "event_pattern": "untolerated taint"
+            },
+            {
+              "event_pattern": "had taint"
+            },
+            {
+              "event_pattern": "taint"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "ordinal": 78,
+      "catalog_source": "src/services/ai/agent/causes/catalog/scheduling.yaml",
+      "rule_id": "failed_scheduling",
+      "candidate_id": "pvc_pending",
+      "required_evidence": [
+        "kubernetes:cluster_resource_state"
+      ],
+      "supporting_signals": [
+        {
+          "id": "pvc_unbound_event",
+          "any_of": [
+            {
+              "event_pattern": "persistentvolumeclaim"
+            },
+            {
+              "event_pattern": "unbound"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "ordinal": 79,
+      "catalog_source": "src/services/ai/agent/causes/catalog/security_policy.yaml",
+      "rule_id": "secret_not_found",
+      "candidate_id": "missing_secret_reference",
+      "required_evidence": [
+        "kubernetes:cluster_resource_state",
+        "logs:related_logs",
+        "metadata:current_workload_snapshots"
+      ],
+      "supporting_signals": [
+        {
+          "id": "missing_secret_reference_signal",
+          "any_of": [
+            {
+              "event_pattern": "secret"
+            },
+            {
+              "event_pattern": "not found"
+            },
+            {
+              "event_pattern": "CreateContainerConfigError"
+            },
+            {
+              "log_pattern": "secret not found"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "ordinal": 80,
+      "catalog_source": "src/services/ai/agent/causes/catalog/security_policy.yaml",
+      "rule_id": "secret_not_found",
+      "candidate_id": "secret_key_missing",
+      "required_evidence": [
+        "kubernetes:cluster_resource_state",
+        "logs:related_logs",
+        "metadata:current_workload_snapshots"
+      ],
+      "supporting_signals": [
+        {
+          "id": "secret_key_missing_signal",
+          "any_of": [
+            {
+              "event_pattern": "couldn't find key"
+            },
+            {
+              "event_pattern": "could not find key"
+            },
+            {
+              "event_pattern": "key not found"
+            },
+            {
+              "log_pattern": "missing secret key"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "ordinal": 81,
+      "catalog_source": "src/services/ai/agent/causes/catalog/security_policy.yaml",
+      "rule_id": "secret_not_found",
+      "candidate_id": "external_secret_sync_failed",
+      "required_evidence": [
+        "kubernetes:cluster_resource_state",
+        "logs:related_logs",
+        "metadata:current_workload_snapshots"
+      ],
+      "supporting_signals": [
+        {
+          "id": "external_secret_sync_signal",
+          "any_of": [
+            {
+              "event_pattern": "ExternalSecret"
+            },
+            {
+              "event_pattern": "SecretSynced"
+            },
+            {
+              "event_pattern": "secret sync"
+            },
+            {
+              "event_pattern": "provider"
+            },
+            {
+              "log_pattern": "external secret"
+            },
+            {
+              "log_pattern": "secret sync failed"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "ordinal": 82,
+      "catalog_source": "src/services/ai/agent/causes/catalog/storage_volume.yaml",
+      "rule_id": "volume_mount_failed",
+      "candidate_id": "pvc_not_bound",
+      "required_evidence": [
+        "kubernetes:cluster_resource_state",
+        "logs:related_logs",
+        "metadata:current_workload_snapshots"
+      ],
+      "supporting_signals": [
+        {
+          "id": "pvc_unbound_mount_signal",
+          "any_of": [
+            {
+              "event_pattern": "unbound immediate PersistentVolumeClaims"
+            },
+            {
+              "event_pattern": "persistentvolumeclaim"
+            },
+            {
+              "event_pattern": "PVC Pending"
+            },
+            {
+              "event_pattern": "not bound"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "ordinal": 83,
+      "catalog_source": "src/services/ai/agent/causes/catalog/storage_volume.yaml",
+      "rule_id": "volume_mount_failed",
+      "candidate_id": "csi_driver_unavailable",
+      "required_evidence": [
+        "kubernetes:cluster_resource_state",
+        "logs:related_logs",
+        "metrics:telemetry_metrics"
+      ],
+      "supporting_signals": [
+        {
+          "id": "csi_driver_failure_signal",
+          "any_of": [
+            {
+              "event_pattern": "CSI"
+            },
+            {
+              "event_pattern": "csi driver"
+            },
+            {
+              "event_pattern": "driver name"
+            },
+            {
+              "log_pattern": "csi"
+            },
+            {
+              "log_pattern": "driver not found"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "ordinal": 84,
+      "catalog_source": "src/services/ai/agent/causes/catalog/storage_volume.yaml",
+      "rule_id": "volume_mount_failed",
+      "candidate_id": "volume_attach_timeout",
+      "required_evidence": [
+        "kubernetes:cluster_resource_state",
+        "logs:related_logs"
+      ],
+      "supporting_signals": [
+        {
+          "id": "volume_attach_timeout_signal",
+          "any_of": [
+            {
+              "event_pattern": "AttachVolume.Attach failed"
+            },
+            {
+              "event_pattern": "timed out waiting for the condition"
+            },
+            {
+              "event_pattern": "timeout expired waiting for volumes"
+            },
+            {
+              "log_pattern": "volume attach"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "ordinal": 85,
+      "catalog_source": "src/services/ai/agent/causes/catalog/storage_volume.yaml",
+      "rule_id": "volume_mount_failed",
+      "candidate_id": "storage_class_mismatch",
+      "required_evidence": [
+        "kubernetes:cluster_resource_state",
+        "metadata:current_workload_snapshots"
+      ],
+      "supporting_signals": [
+        {
+          "id": "storage_class_mismatch_signal",
+          "any_of": [
+            {
+              "event_pattern": "storageclass"
+            },
+            {
+              "event_pattern": "no matching volumes"
+            },
+            {
+              "event_pattern": "topology"
+            },
+            {
+              "event_pattern": "zone"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "ordinal": 86,
+      "catalog_source": "src/services/ai/agent/causes/catalog/storage_volume.yaml",
+      "rule_id": "volume_attach_failed",
+      "candidate_id": "volume_multi_attach_conflict",
+      "required_evidence": [
+        "kubernetes:cluster_resource_state",
+        "logs:related_logs",
+        "metadata:current_workload_snapshots"
+      ],
+      "supporting_signals": [
+        {
+          "id": "volume_multi_attach_signal",
+          "any_of": [
+            {
+              "event_pattern": "Multi-Attach"
+            },
+            {
+              "event_pattern": "already exclusively attached"
+            },
+            {
+              "event_pattern": "attached to a different node"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "ordinal": 87,
+      "catalog_source": "src/services/ai/agent/causes/catalog/storage_volume.yaml",
+      "rule_id": "volume_attach_failed",
+      "candidate_id": "volume_attachment_orphaned",
+      "required_evidence": [
+        "kubernetes:cluster_resource_state",
+        "logs:related_logs"
+      ],
+      "supporting_signals": [
+        {
+          "id": "volume_attachment_orphan_signal",
+          "any_of": [
+            {
+              "event_pattern": "VolumeAttachment"
+            },
+            {
+              "event_pattern": "detach"
+            },
+            {
+              "log_pattern": "volumeattachment"
+            },
+            {
+              "log_pattern": "finalizer"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
