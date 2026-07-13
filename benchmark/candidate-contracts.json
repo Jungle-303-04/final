@@ -2,7 +2,7 @@
   "schema_version": "opsiabench/candidate-contracts/v0.1",
   "ordering": "catalog_path_lexical_then_rule_then_candidate",
   "batch_size": 10,
-  "next_ordinal": 41,
+  "next_ordinal": null,
   "contracts": [
     {
       "ordinal": 1,
@@ -2462,6 +2462,2667 @@
           "action_type": "restart_all_container_runtimes",
           "blast_radius": "cluster",
           "reason": "단일 node의 runtime 장애로 클러스터 전체 container runtime을 재시작할 수 없습니다."
+        }
+      ],
+      "benchmark_fixtures": []
+    },
+    {
+      "ordinal": 41,
+      "catalog_source": "src/services/ai/agent/causes/catalog/node_health.yaml",
+      "rule_id": "node_not_ready",
+      "candidate_id": "node_network_unavailable",
+      "required_evidence": [
+        "kubernetes:cluster_resource_state",
+        "metrics:telemetry_metrics",
+        "logs:related_logs"
+      ],
+      "supporting_signals": [
+        {
+          "id": "node_network_unavailable_signal",
+          "any_of": [
+            {
+              "event_pattern": "NetworkUnavailable"
+            },
+            {
+              "event_pattern": "CNI"
+            },
+            {
+              "event_pattern": "failed to setup network"
+            },
+            {
+              "log_pattern": "failed to setup pod network"
+            },
+            {
+              "log_pattern": "cni plugin"
+            }
+          ]
+        }
+      ],
+      "contradicting_signals": [],
+      "contradiction_policy": "not_modeled_v0.1",
+      "missing_evidence_policy": "all_required_evidence_and_supporting_signal_groups",
+      "patch_capabilities": [],
+      "allowed_remediations": [
+        {
+          "action_type": "manual_analysis",
+          "route": "approval_required",
+          "blast_radius": "unknown",
+          "approval_required": true,
+          "rollback": "자동 변경 없음",
+          "post_verification": [
+            "원인 rule 추가 여부 검토"
+          ]
+        }
+      ],
+      "forbidden_remediations": [
+        {
+          "action_type": "reinstall_cni_on_all_nodes",
+          "blast_radius": "cluster",
+          "reason": "단일 node network 장애 신호로 클러스터 모든 node의 CNI를 재설치할 수 없습니다."
+        }
+      ],
+      "benchmark_fixtures": []
+    },
+    {
+      "ordinal": 42,
+      "catalog_source": "src/services/ai/agent/causes/catalog/node_health.yaml",
+      "rule_id": "pod_evicted",
+      "candidate_id": "pod_evicted_memory_pressure",
+      "required_evidence": [
+        "kubernetes:cluster_resource_state",
+        "metrics:telemetry_metrics",
+        "logs:related_logs"
+      ],
+      "supporting_signals": [
+        {
+          "id": "memory_eviction_signal",
+          "any_of": [
+            {
+              "event_pattern": "Evicted"
+            },
+            {
+              "event_pattern": "memory pressure"
+            },
+            {
+              "event_pattern": "The node was low on resource: memory"
+            },
+            {
+              "fact": "event_reason=Evicted"
+            }
+          ]
+        }
+      ],
+      "contradicting_signals": [],
+      "contradiction_policy": "not_modeled_v0.1",
+      "missing_evidence_policy": "all_required_evidence_and_supporting_signal_groups",
+      "patch_capabilities": [],
+      "allowed_remediations": [
+        {
+          "action_type": "manual_analysis",
+          "route": "approval_required",
+          "blast_radius": "unknown",
+          "approval_required": true,
+          "rollback": "자동 변경 없음",
+          "post_verification": [
+            "원인 rule 추가 여부 검토"
+          ]
+        }
+      ],
+      "forbidden_remediations": [
+        {
+          "action_type": "drain_all_nodes_for_memory_pressure",
+          "blast_radius": "cluster",
+          "reason": "단일 pod memory eviction으로 클러스터 모든 node를 drain할 수 없습니다."
+        }
+      ],
+      "benchmark_fixtures": []
+    },
+    {
+      "ordinal": 43,
+      "catalog_source": "src/services/ai/agent/causes/catalog/node_health.yaml",
+      "rule_id": "pod_evicted",
+      "candidate_id": "pod_evicted_disk_pressure",
+      "required_evidence": [
+        "kubernetes:cluster_resource_state",
+        "metrics:telemetry_metrics",
+        "logs:related_logs"
+      ],
+      "supporting_signals": [
+        {
+          "id": "disk_eviction_signal",
+          "any_of": [
+            {
+              "event_pattern": "disk pressure"
+            },
+            {
+              "event_pattern": "ephemeral-storage"
+            },
+            {
+              "event_pattern": "imagefs"
+            },
+            {
+              "event_pattern": "nodefs"
+            },
+            {
+              "fact": "event_reason=Evicted"
+            }
+          ]
+        }
+      ],
+      "contradicting_signals": [],
+      "contradiction_policy": "not_modeled_v0.1",
+      "missing_evidence_policy": "all_required_evidence_and_supporting_signal_groups",
+      "patch_capabilities": [],
+      "allowed_remediations": [
+        {
+          "action_type": "manual_analysis",
+          "route": "approval_required",
+          "blast_radius": "unknown",
+          "approval_required": true,
+          "rollback": "자동 변경 없음",
+          "post_verification": [
+            "원인 rule 추가 여부 검토"
+          ]
+        }
+      ],
+      "forbidden_remediations": [
+        {
+          "action_type": "delete_all_node_storage_data",
+          "blast_radius": "cluster",
+          "reason": "단일 pod disk eviction으로 클러스터 node 저장 데이터를 일괄 삭제할 수 없습니다."
+        }
+      ],
+      "benchmark_fixtures": []
+    },
+    {
+      "ordinal": 44,
+      "catalog_source": "src/services/ai/agent/causes/catalog/node_health.yaml",
+      "rule_id": "pod_evicted",
+      "candidate_id": "pod_evicted_pid_pressure",
+      "required_evidence": [
+        "kubernetes:cluster_resource_state",
+        "metrics:telemetry_metrics",
+        "logs:related_logs"
+      ],
+      "supporting_signals": [
+        {
+          "id": "pid_eviction_signal",
+          "any_of": [
+            {
+              "event_pattern": "PIDPressure"
+            },
+            {
+              "event_pattern": "pid pressure"
+            },
+            {
+              "event_pattern": "The node was low on resource: pid"
+            },
+            {
+              "fact": "event_reason=Evicted"
+            }
+          ]
+        }
+      ],
+      "contradicting_signals": [],
+      "contradiction_policy": "not_modeled_v0.1",
+      "missing_evidence_policy": "all_required_evidence_and_supporting_signal_groups",
+      "patch_capabilities": [],
+      "allowed_remediations": [
+        {
+          "action_type": "manual_analysis",
+          "route": "approval_required",
+          "blast_radius": "unknown",
+          "approval_required": true,
+          "rollback": "자동 변경 없음",
+          "post_verification": [
+            "원인 rule 추가 여부 검토"
+          ]
+        }
+      ],
+      "forbidden_remediations": [
+        {
+          "action_type": "reboot_all_nodes_for_pid_pressure",
+          "blast_radius": "cluster",
+          "reason": "단일 pod PID eviction으로 클러스터 모든 node를 재부팅할 수 없습니다."
+        }
+      ],
+      "benchmark_fixtures": []
+    },
+    {
+      "ordinal": 45,
+      "catalog_source": "src/services/ai/agent/causes/catalog/policy_rejection.yaml",
+      "rule_id": "admission_policy_rejection",
+      "candidate_id": "policy_violation",
+      "required_evidence": [
+        "kubernetes:cluster_resource_state",
+        "logs:related_logs",
+        "metadata:current_workload_snapshots"
+      ],
+      "supporting_signals": [
+        {
+          "id": "policy_rejection_signal",
+          "any_of": [
+            {
+              "event_pattern": "admission"
+            },
+            {
+              "event_pattern": "denied"
+            },
+            {
+              "event_pattern": "policy"
+            },
+            {
+              "log_pattern": "admission"
+            },
+            {
+              "log_pattern": "policy violation"
+            }
+          ]
+        }
+      ],
+      "contradicting_signals": [],
+      "contradiction_policy": "not_modeled_v0.1",
+      "missing_evidence_policy": "all_required_evidence_and_supporting_signal_groups",
+      "patch_capabilities": [],
+      "allowed_remediations": [
+        {
+          "action_type": "manual_analysis",
+          "route": "approval_required",
+          "blast_radius": "unknown",
+          "approval_required": true,
+          "rollback": "자동 변경 없음",
+          "post_verification": [
+            "원인 rule 추가 여부 검토"
+          ]
+        }
+      ],
+      "forbidden_remediations": [
+        {
+          "action_type": "disable_all_admission_policies",
+          "blast_radius": "cluster",
+          "reason": "단일 workload policy violation으로 클러스터 모든 admission policy를 비활성화할 수 없습니다."
+        }
+      ],
+      "benchmark_fixtures": []
+    },
+    {
+      "ordinal": 46,
+      "catalog_source": "src/services/ai/agent/causes/catalog/policy_rejection.yaml",
+      "rule_id": "admission_policy_rejection",
+      "candidate_id": "invalid_manifest",
+      "required_evidence": [
+        "kubernetes:cluster_resource_state",
+        "logs:related_logs"
+      ],
+      "supporting_signals": [
+        {
+          "id": "invalid_manifest_signal",
+          "any_of": [
+            {
+              "event_pattern": "invalid"
+            },
+            {
+              "event_pattern": "required"
+            },
+            {
+              "event_pattern": "immutable"
+            },
+            {
+              "log_pattern": "invalid"
+            },
+            {
+              "log_pattern": "unknown field"
+            },
+            {
+              "log_pattern": "immutable"
+            }
+          ]
+        }
+      ],
+      "contradicting_signals": [],
+      "contradiction_policy": "not_modeled_v0.1",
+      "missing_evidence_policy": "all_required_evidence_and_supporting_signal_groups",
+      "patch_capabilities": [],
+      "allowed_remediations": [
+        {
+          "action_type": "manual_analysis",
+          "route": "approval_required",
+          "blast_radius": "unknown",
+          "approval_required": true,
+          "rollback": "자동 변경 없음",
+          "post_verification": [
+            "원인 rule 추가 여부 검토"
+          ]
+        }
+      ],
+      "forbidden_remediations": [
+        {
+          "action_type": "replace_all_fleet_manifests",
+          "blast_radius": "fleet",
+          "reason": "단일 invalid manifest를 근거로 fleet 전체 manifest를 교체할 수 없습니다."
+        }
+      ],
+      "benchmark_fixtures": []
+    },
+    {
+      "ordinal": 47,
+      "catalog_source": "src/services/ai/agent/causes/catalog/policy_rejection.yaml",
+      "rule_id": "admission_policy_rejection",
+      "candidate_id": "image_vulnerability_block",
+      "required_evidence": [
+        "kubernetes:cluster_resource_state",
+        "logs:related_logs",
+        "metadata:current_workload_snapshots"
+      ],
+      "supporting_signals": [
+        {
+          "id": "image_policy_block_signal",
+          "any_of": [
+            {
+              "event_pattern": "vulnerability"
+            },
+            {
+              "event_pattern": "image policy"
+            },
+            {
+              "event_pattern": "signature"
+            },
+            {
+              "log_pattern": "vulnerability"
+            },
+            {
+              "log_pattern": "image policy"
+            }
+          ]
+        }
+      ],
+      "contradicting_signals": [],
+      "contradiction_policy": "not_modeled_v0.1",
+      "missing_evidence_policy": "all_required_evidence_and_supporting_signal_groups",
+      "patch_capabilities": [],
+      "allowed_remediations": [
+        {
+          "action_type": "manual_analysis",
+          "route": "approval_required",
+          "blast_radius": "unknown",
+          "approval_required": true,
+          "rollback": "자동 변경 없음",
+          "post_verification": [
+            "원인 rule 추가 여부 검토"
+          ]
+        }
+      ],
+      "forbidden_remediations": [
+        {
+          "action_type": "disable_all_image_policies",
+          "blast_radius": "cluster",
+          "reason": "단일 image vulnerability 차단을 우회하려고 클러스터 모든 image policy를 비활성화할 수 없습니다."
+        }
+      ],
+      "benchmark_fixtures": []
+    },
+    {
+      "ordinal": 48,
+      "catalog_source": "src/services/ai/agent/causes/catalog/policy_rejection.yaml",
+      "rule_id": "rbac_denied",
+      "candidate_id": "service_account_permission_denied",
+      "required_evidence": [
+        "kubernetes:cluster_resource_state",
+        "logs:related_logs",
+        "metadata:current_workload_snapshots"
+      ],
+      "supporting_signals": [
+        {
+          "id": "rbac_denied_signal",
+          "any_of": [
+            {
+              "event_pattern": "forbidden"
+            },
+            {
+              "event_pattern": "cannot"
+            },
+            {
+              "log_pattern": "forbidden"
+            },
+            {
+              "log_pattern": "permission denied"
+            }
+          ]
+        }
+      ],
+      "contradicting_signals": [],
+      "contradiction_policy": "not_modeled_v0.1",
+      "missing_evidence_policy": "all_required_evidence_and_supporting_signal_groups",
+      "patch_capabilities": [],
+      "allowed_remediations": [
+        {
+          "action_type": "manual_analysis",
+          "route": "approval_required",
+          "blast_radius": "unknown",
+          "approval_required": true,
+          "rollback": "자동 변경 없음",
+          "post_verification": [
+            "원인 rule 추가 여부 검토"
+          ]
+        }
+      ],
+      "forbidden_remediations": [
+        {
+          "action_type": "grant_cluster_admin_to_all_service_accounts",
+          "blast_radius": "cluster",
+          "reason": "단일 ServiceAccount 권한 거부로 모든 ServiceAccount에 cluster-admin을 부여할 수 없습니다."
+        }
+      ],
+      "benchmark_fixtures": []
+    },
+    {
+      "ordinal": 49,
+      "catalog_source": "src/services/ai/agent/causes/catalog/policy_rejection.yaml",
+      "rule_id": "certificate_expired",
+      "candidate_id": "certificate_expired_or_invalid",
+      "required_evidence": [
+        "kubernetes:cluster_resource_state",
+        "logs:related_logs",
+        "traces:related_traces",
+        "metadata:current_workload_snapshots"
+      ],
+      "supporting_signals": [
+        {
+          "id": "tls_certificate_signal",
+          "any_of": [
+            {
+              "log_pattern": "certificate expired"
+            },
+            {
+              "log_pattern": "x509"
+            },
+            {
+              "log_pattern": "tls handshake"
+            },
+            {
+              "event_pattern": "certificate"
+            }
+          ]
+        }
+      ],
+      "contradicting_signals": [],
+      "contradiction_policy": "not_modeled_v0.1",
+      "missing_evidence_policy": "all_required_evidence_and_supporting_signal_groups",
+      "patch_capabilities": [],
+      "allowed_remediations": [
+        {
+          "action_type": "manual_analysis",
+          "route": "approval_required",
+          "blast_radius": "unknown",
+          "approval_required": true,
+          "rollback": "자동 변경 없음",
+          "post_verification": [
+            "원인 rule 추가 여부 검토"
+          ]
+        }
+      ],
+      "forbidden_remediations": [
+        {
+          "action_type": "rotate_all_cluster_certificates",
+          "blast_radius": "cluster",
+          "reason": "단일 certificate 오류로 클러스터 모든 certificate를 일괄 회전할 수 없습니다."
+        }
+      ],
+      "benchmark_fixtures": []
+    },
+    {
+      "ordinal": 50,
+      "catalog_source": "src/services/ai/agent/causes/catalog/readiness.yaml",
+      "rule_id": "probe_failure",
+      "candidate_id": "probe_path_wrong",
+      "required_evidence": [
+        "kubernetes:cluster_resource_state",
+        "logs:related_logs",
+        "metadata:current_workload_snapshots"
+      ],
+      "supporting_signals": [
+        {
+          "id": "probe_path_failure_signal",
+          "any_of": [
+            {
+              "event_pattern": "readiness probe"
+            },
+            {
+              "event_pattern": "liveness probe"
+            },
+            {
+              "event_pattern": "startup probe"
+            },
+            {
+              "event_pattern": "http probe failed"
+            },
+            {
+              "log_pattern": "404"
+            },
+            {
+              "log_pattern": "not found"
+            }
+          ]
+        }
+      ],
+      "contradicting_signals": [],
+      "contradiction_policy": "not_modeled_v0.1",
+      "missing_evidence_policy": "all_required_evidence_and_supporting_signal_groups",
+      "patch_capabilities": [
+        "safe_pr"
+      ],
+      "allowed_remediations": [
+        {
+          "action_type": "probe_fix",
+          "route": "draft_pr",
+          "blast_radius": "target_workload",
+          "approval_required": true,
+          "rollback": "동반된 inverse patch로 이전 probe scalar를 복원합니다.",
+          "post_verification": [
+            "Probe 성공",
+            "Pod Ready 전환",
+            "실제 health 실패 은폐 없음"
+          ]
+        },
+        {
+          "action_type": "manual_analysis",
+          "route": "approval_required",
+          "blast_radius": "unknown",
+          "approval_required": true,
+          "rollback": "자동 변경 없음",
+          "post_verification": [
+            "원인 rule 추가 여부 검토"
+          ]
+        }
+      ],
+      "forbidden_remediations": [
+        {
+          "action_type": "disable_all_workload_probes",
+          "blast_radius": "fleet",
+          "reason": "단일 workload의 잘못된 probe path로 fleet 전체 probe를 비활성화할 수 없습니다."
+        }
+      ],
+      "benchmark_fixtures": [
+        "benchmark/scenarios/probe/probe-wrong-path/scenario.json"
+      ]
+    },
+    {
+      "ordinal": 51,
+      "catalog_source": "src/services/ai/agent/causes/catalog/readiness.yaml",
+      "rule_id": "probe_failure",
+      "candidate_id": "probe_port_wrong",
+      "required_evidence": [
+        "kubernetes:cluster_resource_state",
+        "logs:related_logs",
+        "metadata:current_workload_snapshots"
+      ],
+      "supporting_signals": [
+        {
+          "id": "probe_port_failure_signal",
+          "any_of": [
+            {
+              "event_pattern": "connection refused"
+            },
+            {
+              "event_pattern": "dial tcp"
+            },
+            {
+              "log_pattern": "connection refused"
+            }
+          ]
+        }
+      ],
+      "contradicting_signals": [],
+      "contradiction_policy": "not_modeled_v0.1",
+      "missing_evidence_policy": "all_required_evidence_and_supporting_signal_groups",
+      "patch_capabilities": [
+        "safe_pr"
+      ],
+      "allowed_remediations": [
+        {
+          "action_type": "probe_fix",
+          "route": "draft_pr",
+          "blast_radius": "target_workload",
+          "approval_required": true,
+          "rollback": "동반된 inverse patch로 이전 probe scalar를 복원합니다.",
+          "post_verification": [
+            "Probe 성공",
+            "Pod Ready 전환",
+            "실제 health 실패 은폐 없음"
+          ]
+        },
+        {
+          "action_type": "manual_analysis",
+          "route": "approval_required",
+          "blast_radius": "unknown",
+          "approval_required": true,
+          "rollback": "자동 변경 없음",
+          "post_verification": [
+            "원인 rule 추가 여부 검토"
+          ]
+        }
+      ],
+      "forbidden_remediations": [
+        {
+          "action_type": "open_all_container_ports",
+          "blast_radius": "cluster",
+          "reason": "단일 workload의 잘못된 probe port로 클러스터 모든 container port를 개방할 수 없습니다."
+        }
+      ],
+      "benchmark_fixtures": [
+        "benchmark/scenarios/probe/probe-wrong-port/scenario.json"
+      ]
+    },
+    {
+      "ordinal": 52,
+      "catalog_source": "src/services/ai/agent/causes/catalog/readiness.yaml",
+      "rule_id": "probe_failure",
+      "candidate_id": "timeout_too_short",
+      "required_evidence": [
+        "kubernetes:cluster_resource_state",
+        "metrics:telemetry_metrics",
+        "logs:related_logs",
+        "metadata:current_workload_snapshots"
+      ],
+      "supporting_signals": [
+        {
+          "id": "probe_timeout_signal",
+          "any_of": [
+            {
+              "event_pattern": "timeout"
+            },
+            {
+              "event_pattern": "context deadline exceeded"
+            },
+            {
+              "log_pattern": "timeout"
+            }
+          ]
+        }
+      ],
+      "contradicting_signals": [],
+      "contradiction_policy": "not_modeled_v0.1",
+      "missing_evidence_policy": "all_required_evidence_and_supporting_signal_groups",
+      "patch_capabilities": [
+        "safe_pr"
+      ],
+      "allowed_remediations": [
+        {
+          "action_type": "probe_fix",
+          "route": "draft_pr",
+          "blast_radius": "target_workload",
+          "approval_required": true,
+          "rollback": "동반된 inverse patch로 이전 probe scalar를 복원합니다.",
+          "post_verification": [
+            "Probe 성공",
+            "Pod Ready 전환",
+            "실제 health 실패 은폐 없음"
+          ]
+        },
+        {
+          "action_type": "manual_analysis",
+          "route": "approval_required",
+          "blast_radius": "unknown",
+          "approval_required": true,
+          "rollback": "자동 변경 없음",
+          "post_verification": [
+            "원인 rule 추가 여부 검토"
+          ]
+        }
+      ],
+      "forbidden_remediations": [
+        {
+          "action_type": "increase_all_probe_timeouts",
+          "blast_radius": "fleet",
+          "reason": "단일 workload의 짧은 timeout으로 fleet 전체 probe timeout을 늘릴 수 없습니다."
+        }
+      ],
+      "benchmark_fixtures": [
+        "benchmark/scenarios/probe/probe-timeout-too-short/scenario.json"
+      ]
+    },
+    {
+      "ordinal": 53,
+      "catalog_source": "src/services/ai/agent/causes/catalog/readiness.yaml",
+      "rule_id": "probe_failure",
+      "candidate_id": "startup_window_too_short",
+      "required_evidence": [
+        "kubernetes:cluster_resource_state",
+        "metrics:telemetry_metrics",
+        "logs:related_logs",
+        "metadata:current_workload_snapshots"
+      ],
+      "supporting_signals": [
+        {
+          "id": "startup_probe_window_signal",
+          "any_of": [
+            {
+              "event_pattern": "startup probe"
+            },
+            {
+              "log_pattern": "starting"
+            },
+            {
+              "log_pattern": "initializing"
+            },
+            {
+              "log_pattern": "migration"
+            }
+          ]
+        }
+      ],
+      "contradicting_signals": [],
+      "contradiction_policy": "not_modeled_v0.1",
+      "missing_evidence_policy": "all_required_evidence_and_supporting_signal_groups",
+      "patch_capabilities": [
+        "safe_pr"
+      ],
+      "allowed_remediations": [
+        {
+          "action_type": "probe_fix",
+          "route": "draft_pr",
+          "blast_radius": "target_workload",
+          "approval_required": true,
+          "rollback": "동반된 inverse patch로 이전 probe scalar를 복원합니다.",
+          "post_verification": [
+            "Probe 성공",
+            "Pod Ready 전환",
+            "실제 health 실패 은폐 없음"
+          ]
+        },
+        {
+          "action_type": "manual_analysis",
+          "route": "approval_required",
+          "blast_radius": "unknown",
+          "approval_required": true,
+          "rollback": "자동 변경 없음",
+          "post_verification": [
+            "원인 rule 추가 여부 검토"
+          ]
+        }
+      ],
+      "forbidden_remediations": [
+        {
+          "action_type": "disable_all_startup_probes",
+          "blast_radius": "fleet",
+          "reason": "단일 workload의 짧은 startup window로 fleet 전체 startup probe를 비활성화할 수 없습니다."
+        }
+      ],
+      "benchmark_fixtures": []
+    },
+    {
+      "ordinal": 54,
+      "catalog_source": "src/services/ai/agent/causes/catalog/readiness.yaml",
+      "rule_id": "probe_failure",
+      "candidate_id": "app_real_health_failure",
+      "required_evidence": [
+        "kubernetes:cluster_resource_state",
+        "metrics:telemetry_metrics",
+        "logs:related_logs",
+        "traces:related_traces"
+      ],
+      "supporting_signals": [
+        {
+          "id": "app_health_failure_signal",
+          "any_of": [
+            {
+              "log_pattern": "health check failed"
+            },
+            {
+              "log_pattern": "unhealthy"
+            },
+            {
+              "log_pattern": "500"
+            },
+            {
+              "log_pattern": "dependency"
+            }
+          ]
+        }
+      ],
+      "contradicting_signals": [],
+      "contradiction_policy": "not_modeled_v0.1",
+      "missing_evidence_policy": "all_required_evidence_and_supporting_signal_groups",
+      "patch_capabilities": [],
+      "allowed_remediations": [
+        {
+          "action_type": "manual_analysis",
+          "route": "approval_required",
+          "blast_radius": "unknown",
+          "approval_required": true,
+          "rollback": "자동 변경 없음",
+          "post_verification": [
+            "원인 rule 추가 여부 검토"
+          ]
+        }
+      ],
+      "forbidden_remediations": [
+        {
+          "action_type": "route_traffic_to_all_unready_pods",
+          "blast_radius": "cluster",
+          "reason": "실제 application health 실패를 은폐하려고 클러스터 모든 unready pod로 traffic을 보낼 수 없습니다."
+        }
+      ],
+      "benchmark_fixtures": []
+    },
+    {
+      "ordinal": 55,
+      "catalog_source": "src/services/ai/agent/causes/catalog/readiness.yaml",
+      "rule_id": "service_no_ready_endpoints",
+      "candidate_id": "selector_label_mismatch",
+      "required_evidence": [
+        "kubernetes:cluster_resource_state",
+        "metadata:service_selector_matches",
+        "metadata:endpoint_slice_ready_endpoints"
+      ],
+      "supporting_signals": [
+        {
+          "id": "selector_mismatch_signal",
+          "any_of": [
+            {
+              "event_pattern": "no endpoints"
+            },
+            {
+              "log_pattern": "no endpoints"
+            },
+            {
+              "log_pattern": "selector"
+            }
+          ]
+        }
+      ],
+      "contradicting_signals": [],
+      "contradiction_policy": "not_modeled_v0.1",
+      "missing_evidence_policy": "all_required_evidence_and_supporting_signal_groups",
+      "patch_capabilities": [
+        "safe_pr"
+      ],
+      "allowed_remediations": [
+        {
+          "action_type": "selector_fix",
+          "route": "draft_pr",
+          "blast_radius": "target_workload",
+          "approval_required": true,
+          "rollback": "동반된 inverse patch로 이전 selector를 복원합니다.",
+          "post_verification": [
+            "selector-template 일치",
+            "Ready endpoint 회복"
+          ]
+        },
+        {
+          "action_type": "manual_analysis",
+          "route": "approval_required",
+          "blast_radius": "unknown",
+          "approval_required": true,
+          "rollback": "자동 변경 없음",
+          "post_verification": [
+            "원인 rule 추가 여부 검토"
+          ]
+        }
+      ],
+      "forbidden_remediations": [
+        {
+          "action_type": "rewrite_all_service_selectors",
+          "blast_radius": "cluster",
+          "reason": "단일 Service selector mismatch로 클러스터 모든 Service selector를 바꿀 수 없습니다."
+        }
+      ],
+      "benchmark_fixtures": [
+        "benchmark/scenarios/service-selector/service-selector-label-mismatch/scenario.json"
+      ]
+    },
+    {
+      "ordinal": 56,
+      "catalog_source": "src/services/ai/agent/causes/catalog/readiness.yaml",
+      "rule_id": "service_no_ready_endpoints",
+      "candidate_id": "pods_not_ready",
+      "required_evidence": [
+        "kubernetes:cluster_resource_state",
+        "metadata:endpoint_slice_ready_endpoints"
+      ],
+      "supporting_signals": [
+        {
+          "id": "pods_not_ready_signal",
+          "any_of": [
+            {
+              "fact": "event_reason=Unhealthy"
+            },
+            {
+              "event_pattern": "readiness"
+            },
+            {
+              "event_pattern": "probe"
+            }
+          ]
+        }
+      ],
+      "contradicting_signals": [],
+      "contradiction_policy": "not_modeled_v0.1",
+      "missing_evidence_policy": "all_required_evidence_and_supporting_signal_groups",
+      "patch_capabilities": [],
+      "allowed_remediations": [
+        {
+          "action_type": "manual_analysis",
+          "route": "approval_required",
+          "blast_radius": "unknown",
+          "approval_required": true,
+          "rollback": "자동 변경 없음",
+          "post_verification": [
+            "원인 rule 추가 여부 검토"
+          ]
+        }
+      ],
+      "forbidden_remediations": [
+        {
+          "action_type": "publish_not_ready_addresses_globally",
+          "blast_radius": "cluster",
+          "reason": "단일 Service의 pod readiness 실패를 우회하려고 클러스터 전체에 not-ready address를 게시할 수 없습니다."
+        }
+      ],
+      "benchmark_fixtures": [
+        "benchmark/scenarios/service-selector/service-selector-pods-not-ready/scenario.json"
+      ]
+    },
+    {
+      "ordinal": 57,
+      "catalog_source": "src/services/ai/agent/causes/catalog/readiness.yaml",
+      "rule_id": "service_no_ready_endpoints",
+      "candidate_id": "rollout_unavailable",
+      "required_evidence": [
+        "kubernetes:cluster_resource_state",
+        "metrics:telemetry_metrics",
+        "metadata:current_workload_snapshots"
+      ],
+      "supporting_signals": [
+        {
+          "id": "rollout_unavailable_signal",
+          "any_of": [
+            {
+              "event_pattern": "unavailable"
+            },
+            {
+              "event_pattern": "progress deadline"
+            },
+            {
+              "log_pattern": "unavailable"
+            }
+          ]
+        }
+      ],
+      "contradicting_signals": [],
+      "contradiction_policy": "not_modeled_v0.1",
+      "missing_evidence_policy": "all_required_evidence_and_supporting_signal_groups",
+      "patch_capabilities": [],
+      "allowed_remediations": [
+        {
+          "action_type": "manual_analysis",
+          "route": "approval_required",
+          "blast_radius": "unknown",
+          "approval_required": true,
+          "rollback": "자동 변경 없음",
+          "post_verification": [
+            "원인 rule 추가 여부 검토"
+          ]
+        }
+      ],
+      "forbidden_remediations": [
+        {
+          "action_type": "restart_all_unavailable_rollouts",
+          "blast_radius": "fleet",
+          "reason": "단일 unavailable rollout으로 fleet 전체 rollout을 재시작할 수 없습니다."
+        }
+      ],
+      "benchmark_fixtures": []
+    },
+    {
+      "ordinal": 58,
+      "catalog_source": "src/services/ai/agent/causes/catalog/readiness.yaml",
+      "rule_id": "service_no_ready_endpoints",
+      "candidate_id": "wrong_service_port",
+      "required_evidence": [
+        "kubernetes:cluster_resource_state",
+        "metadata:service_selector_matches"
+      ],
+      "supporting_signals": [
+        {
+          "id": "wrong_service_port_signal",
+          "any_of": [
+            {
+              "log_pattern": "connection refused"
+            },
+            {
+              "log_pattern": "bad gateway"
+            },
+            {
+              "event_pattern": "connection refused"
+            }
+          ]
+        }
+      ],
+      "contradicting_signals": [],
+      "contradiction_policy": "not_modeled_v0.1",
+      "missing_evidence_policy": "all_required_evidence_and_supporting_signal_groups",
+      "patch_capabilities": [],
+      "allowed_remediations": [
+        {
+          "action_type": "manual_analysis",
+          "route": "approval_required",
+          "blast_radius": "unknown",
+          "approval_required": true,
+          "rollback": "자동 변경 없음",
+          "post_verification": [
+            "원인 rule 추가 여부 검토"
+          ]
+        }
+      ],
+      "forbidden_remediations": [
+        {
+          "action_type": "rewrite_all_service_ports",
+          "blast_radius": "fleet",
+          "reason": "단일 Service port 오류로 fleet 전체 Service port를 바꿀 수 없습니다."
+        }
+      ],
+      "benchmark_fixtures": []
+    },
+    {
+      "ordinal": 59,
+      "catalog_source": "src/services/ai/agent/causes/catalog/readiness.yaml",
+      "rule_id": "service_no_ready_endpoints",
+      "candidate_id": "endpoint_slice_delay",
+      "required_evidence": [
+        "kubernetes:cluster_resource_state",
+        "metadata:endpoint_slice_ready_endpoints"
+      ],
+      "supporting_signals": [
+        {
+          "id": "endpoint_slice_delay_signal",
+          "any_of": [
+            {
+              "event_pattern": "endpoints"
+            },
+            {
+              "event_pattern": "endpoint"
+            },
+            {
+              "log_pattern": "endpoint"
+            }
+          ]
+        }
+      ],
+      "contradicting_signals": [],
+      "contradiction_policy": "not_modeled_v0.1",
+      "missing_evidence_policy": "all_required_evidence_and_supporting_signal_groups",
+      "patch_capabilities": [],
+      "allowed_remediations": [
+        {
+          "action_type": "manual_analysis",
+          "route": "approval_required",
+          "blast_radius": "unknown",
+          "approval_required": true,
+          "rollback": "자동 변경 없음",
+          "post_verification": [
+            "원인 rule 추가 여부 검토"
+          ]
+        }
+      ],
+      "forbidden_remediations": [
+        {
+          "action_type": "delete_all_endpoint_slices",
+          "blast_radius": "cluster",
+          "reason": "단일 EndpointSlice 지연으로 클러스터 모든 EndpointSlice를 삭제할 수 없습니다."
+        }
+      ],
+      "benchmark_fixtures": []
+    },
+    {
+      "ordinal": 60,
+      "catalog_source": "src/services/ai/agent/causes/catalog/resource_pressure.yaml",
+      "rule_id": "oom_memory_pressure",
+      "candidate_id": "memory_limit_too_low",
+      "required_evidence": [
+        "kubernetes:cluster_resource_state",
+        "metrics:telemetry_metrics",
+        "logs:related_logs"
+      ],
+      "supporting_signals": [
+        {
+          "id": "memory_limit_oom_signal",
+          "any_of": [
+            {
+              "fact": "terminated_reason=OOMKilled"
+            },
+            {
+              "fact": "exit_code=137"
+            },
+            {
+              "event_pattern": "oom"
+            },
+            {
+              "log_pattern": "out of memory"
+            }
+          ]
+        }
+      ],
+      "contradicting_signals": [],
+      "contradiction_policy": "not_modeled_v0.1",
+      "missing_evidence_policy": "all_required_evidence_and_supporting_signal_groups",
+      "patch_capabilities": [],
+      "allowed_remediations": [
+        {
+          "action_type": "manual_analysis",
+          "route": "approval_required",
+          "blast_radius": "unknown",
+          "approval_required": true,
+          "rollback": "자동 변경 없음",
+          "post_verification": [
+            "원인 rule 추가 여부 검토"
+          ]
+        }
+      ],
+      "forbidden_remediations": [
+        {
+          "action_type": "remove_all_memory_limits",
+          "blast_radius": "fleet",
+          "reason": "단일 workload의 낮은 memory limit로 fleet 전체 memory limit를 제거할 수 없습니다."
+        }
+      ],
+      "benchmark_fixtures": []
+    },
+    {
+      "ordinal": 61,
+      "catalog_source": "src/services/ai/agent/causes/catalog/resource_pressure.yaml",
+      "rule_id": "oom_memory_pressure",
+      "candidate_id": "memory_leak",
+      "required_evidence": [
+        "kubernetes:cluster_resource_state",
+        "metrics:telemetry_metrics",
+        "logs:related_logs"
+      ],
+      "supporting_signals": [
+        {
+          "id": "memory_leak_log_signal",
+          "any_of": [
+            {
+              "log_pattern": "memory leak"
+            },
+            {
+              "log_pattern": "heap"
+            },
+            {
+              "log_pattern": "allocation"
+            }
+          ]
+        }
+      ],
+      "contradicting_signals": [],
+      "contradiction_policy": "not_modeled_v0.1",
+      "missing_evidence_policy": "all_required_evidence_and_supporting_signal_groups",
+      "patch_capabilities": [],
+      "allowed_remediations": [
+        {
+          "action_type": "manual_analysis",
+          "route": "approval_required",
+          "blast_radius": "unknown",
+          "approval_required": true,
+          "rollback": "자동 변경 없음",
+          "post_verification": [
+            "원인 rule 추가 여부 검토"
+          ]
+        }
+      ],
+      "forbidden_remediations": [
+        {
+          "action_type": "increase_all_workload_memory_limits",
+          "blast_radius": "fleet",
+          "reason": "단일 workload memory leak를 은폐하려고 fleet 전체 workload memory limit을 늘릴 수 없습니다."
+        }
+      ],
+      "benchmark_fixtures": []
+    },
+    {
+      "ordinal": 62,
+      "catalog_source": "src/services/ai/agent/causes/catalog/resource_pressure.yaml",
+      "rule_id": "oom_memory_pressure",
+      "candidate_id": "traffic_spike",
+      "required_evidence": [
+        "kubernetes:cluster_resource_state",
+        "metrics:telemetry_metrics",
+        "logs:related_logs"
+      ],
+      "supporting_signals": [
+        {
+          "id": "traffic_spike_signal",
+          "any_of": [
+            {
+              "log_pattern": "too many requests"
+            },
+            {
+              "log_pattern": "rate limit"
+            },
+            {
+              "log_pattern": "backpressure"
+            },
+            {
+              "log_pattern": "request rate"
+            },
+            {
+              "log_pattern": "traffic spike"
+            },
+            {
+              "log_pattern": "traffic surge"
+            },
+            {
+              "log_pattern": "queue full"
+            },
+            {
+              "log_pattern": "server overloaded"
+            },
+            {
+              "log_pattern": "429"
+            }
+          ]
+        }
+      ],
+      "contradicting_signals": [],
+      "contradiction_policy": "not_modeled_v0.1",
+      "missing_evidence_policy": "all_required_evidence_and_supporting_signal_groups",
+      "patch_capabilities": [],
+      "allowed_remediations": [
+        {
+          "action_type": "manual_analysis",
+          "route": "approval_required",
+          "blast_radius": "unknown",
+          "approval_required": true,
+          "rollback": "자동 변경 없음",
+          "post_verification": [
+            "원인 rule 추가 여부 검토"
+          ]
+        }
+      ],
+      "forbidden_remediations": [
+        {
+          "action_type": "disable_all_rate_limits_for_traffic_spike",
+          "blast_radius": "fleet",
+          "reason": "단일 workload traffic spike에서 fleet 전체 rate limit 보호장치를 해제할 수 없습니다."
+        }
+      ],
+      "benchmark_fixtures": []
+    },
+    {
+      "ordinal": 63,
+      "catalog_source": "src/services/ai/agent/causes/catalog/resource_pressure.yaml",
+      "rule_id": "oom_memory_pressure",
+      "candidate_id": "node_memory_pressure",
+      "required_evidence": [
+        "kubernetes:cluster_resource_state",
+        "metrics:telemetry_metrics"
+      ],
+      "supporting_signals": [
+        {
+          "id": "node_memory_pressure_signal",
+          "any_of": [
+            {
+              "event_pattern": "memorypressure"
+            },
+            {
+              "event_pattern": "evicted"
+            },
+            {
+              "event_pattern": "node was low on resource"
+            }
+          ]
+        }
+      ],
+      "contradicting_signals": [],
+      "contradiction_policy": "not_modeled_v0.1",
+      "missing_evidence_policy": "all_required_evidence_and_supporting_signal_groups",
+      "patch_capabilities": [],
+      "allowed_remediations": [
+        {
+          "action_type": "manual_analysis",
+          "route": "approval_required",
+          "blast_radius": "unknown",
+          "approval_required": true,
+          "rollback": "자동 변경 없음",
+          "post_verification": [
+            "원인 rule 추가 여부 검토"
+          ]
+        }
+      ],
+      "forbidden_remediations": [
+        {
+          "action_type": "evict_all_cluster_workloads_for_memory_pressure",
+          "blast_radius": "cluster",
+          "reason": "단일 node memory pressure로 클러스터 전체 workload를 퇴거시킬 수 없습니다."
+        }
+      ],
+      "benchmark_fixtures": []
+    },
+    {
+      "ordinal": 64,
+      "catalog_source": "src/services/ai/agent/causes/catalog/resource_pressure.yaml",
+      "rule_id": "oom_memory_pressure",
+      "candidate_id": "bad_release_memory_regression",
+      "required_evidence": [
+        "kubernetes:cluster_resource_state",
+        "metrics:telemetry_metrics",
+        "logs:related_logs",
+        "metadata:current_workload_snapshots"
+      ],
+      "supporting_signals": [
+        {
+          "id": "memory_regression_signal",
+          "any_of": [
+            {
+              "fact": "terminated_reason=OOMKilled"
+            },
+            {
+              "fact": "exit_code=137"
+            },
+            {
+              "log_pattern": "out of memory"
+            }
+          ]
+        }
+      ],
+      "contradicting_signals": [],
+      "contradiction_policy": "not_modeled_v0.1",
+      "missing_evidence_policy": "all_required_evidence_and_supporting_signal_groups",
+      "patch_capabilities": [],
+      "allowed_remediations": [
+        {
+          "action_type": "manual_analysis",
+          "route": "approval_required",
+          "blast_radius": "unknown",
+          "approval_required": true,
+          "rollback": "자동 변경 없음",
+          "post_verification": [
+            "원인 rule 추가 여부 검토"
+          ]
+        }
+      ],
+      "forbidden_remediations": [
+        {
+          "action_type": "rollback_all_releases_for_memory_regression",
+          "blast_radius": "fleet",
+          "reason": "단일 release memory regression으로 fleet 전체 release를 rollback할 수 없습니다."
+        }
+      ],
+      "benchmark_fixtures": []
+    },
+    {
+      "ordinal": 65,
+      "catalog_source": "src/services/ai/agent/causes/catalog/resource_pressure.yaml",
+      "rule_id": "cpu_saturation",
+      "candidate_id": "cpu_limit_or_throttling",
+      "required_evidence": [
+        "kubernetes:cluster_resource_state",
+        "metrics:telemetry_metrics",
+        "logs:related_logs"
+      ],
+      "supporting_signals": [
+        {
+          "id": "cpu_throttling_log_signal",
+          "any_of": [
+            {
+              "log_pattern": "cpu throttling"
+            },
+            {
+              "log_pattern": "cpu throttled"
+            },
+            {
+              "log_pattern": "throttled"
+            },
+            {
+              "log_pattern": "cfs throttled"
+            },
+            {
+              "log_pattern": "cfs quota"
+            },
+            {
+              "log_pattern": "cpu quota"
+            },
+            {
+              "log_pattern": "deadline exceeded"
+            },
+            {
+              "log_pattern": "context deadline exceeded"
+            },
+            {
+              "log_pattern": "request timed out"
+            }
+          ]
+        }
+      ],
+      "contradicting_signals": [],
+      "contradiction_policy": "not_modeled_v0.1",
+      "missing_evidence_policy": "all_required_evidence_and_supporting_signal_groups",
+      "patch_capabilities": [],
+      "allowed_remediations": [
+        {
+          "action_type": "manual_analysis",
+          "route": "approval_required",
+          "blast_radius": "unknown",
+          "approval_required": true,
+          "rollback": "자동 변경 없음",
+          "post_verification": [
+            "원인 rule 추가 여부 검토"
+          ]
+        }
+      ],
+      "forbidden_remediations": [
+        {
+          "action_type": "remove_all_cpu_limits",
+          "blast_radius": "fleet",
+          "reason": "단일 workload CPU throttling으로 fleet 전체 CPU limit을 제거할 수 없습니다."
+        }
+      ],
+      "benchmark_fixtures": []
+    },
+    {
+      "ordinal": 66,
+      "catalog_source": "src/services/ai/agent/causes/catalog/resource_pressure.yaml",
+      "rule_id": "node_disk_pressure",
+      "candidate_id": "node_disk_pressure",
+      "required_evidence": [
+        "kubernetes:cluster_resource_state",
+        "metrics:telemetry_metrics",
+        "logs:related_logs"
+      ],
+      "supporting_signals": [
+        {
+          "id": "disk_pressure_signal",
+          "any_of": [
+            {
+              "event_pattern": "diskpressure"
+            },
+            {
+              "event_pattern": "ephemeral-storage"
+            },
+            {
+              "event_pattern": "evicted"
+            },
+            {
+              "log_pattern": "no space left"
+            }
+          ]
+        }
+      ],
+      "contradicting_signals": [],
+      "contradiction_policy": "not_modeled_v0.1",
+      "missing_evidence_policy": "all_required_evidence_and_supporting_signal_groups",
+      "patch_capabilities": [],
+      "allowed_remediations": [
+        {
+          "action_type": "manual_analysis",
+          "route": "approval_required",
+          "blast_radius": "unknown",
+          "approval_required": true,
+          "rollback": "자동 변경 없음",
+          "post_verification": [
+            "원인 rule 추가 여부 검토"
+          ]
+        }
+      ],
+      "forbidden_remediations": [
+        {
+          "action_type": "purge_all_node_storage_for_disk_pressure",
+          "blast_radius": "cluster",
+          "reason": "단일 node disk pressure로 클러스터 모든 node의 image·log·ephemeral 데이터를 삭제할 수 없습니다."
+        }
+      ],
+      "benchmark_fixtures": []
+    },
+    {
+      "ordinal": 67,
+      "catalog_source": "src/services/ai/agent/causes/catalog/resource_pressure.yaml",
+      "rule_id": "node_disk_pressure",
+      "candidate_id": "ephemeral_storage_exhausted",
+      "required_evidence": [
+        "kubernetes:cluster_resource_state",
+        "metrics:telemetry_metrics",
+        "logs:related_logs"
+      ],
+      "supporting_signals": [
+        {
+          "id": "ephemeral_storage_signal",
+          "any_of": [
+            {
+              "event_pattern": "ephemeral-storage"
+            },
+            {
+              "log_pattern": "no space left"
+            },
+            {
+              "log_pattern": "disk full"
+            }
+          ]
+        }
+      ],
+      "contradicting_signals": [],
+      "contradiction_policy": "not_modeled_v0.1",
+      "missing_evidence_policy": "all_required_evidence_and_supporting_signal_groups",
+      "patch_capabilities": [],
+      "allowed_remediations": [
+        {
+          "action_type": "manual_analysis",
+          "route": "approval_required",
+          "blast_radius": "unknown",
+          "approval_required": true,
+          "rollback": "자동 변경 없음",
+          "post_verification": [
+            "원인 rule 추가 여부 검토"
+          ]
+        }
+      ],
+      "forbidden_remediations": [
+        {
+          "action_type": "delete_all_ephemeral_storage_data",
+          "blast_radius": "cluster",
+          "reason": "단일 workload ephemeral storage exhaustion으로 클러스터 전체 pod의 emptyDir·log·writable-layer 데이터를 삭제할 수 없습니다."
+        }
+      ],
+      "benchmark_fixtures": []
+    },
+    {
+      "ordinal": 68,
+      "catalog_source": "src/services/ai/agent/causes/catalog/resource_pressure.yaml",
+      "rule_id": "pid_pressure",
+      "candidate_id": "process_id_exhaustion",
+      "required_evidence": [
+        "kubernetes:cluster_resource_state",
+        "metrics:telemetry_metrics",
+        "logs:related_logs"
+      ],
+      "supporting_signals": [
+        {
+          "id": "pid_pressure_signal",
+          "any_of": [
+            {
+              "event_pattern": "pidpressure"
+            },
+            {
+              "log_pattern": "resource temporarily unavailable"
+            },
+            {
+              "log_pattern": "cannot fork"
+            }
+          ]
+        }
+      ],
+      "contradicting_signals": [],
+      "contradiction_policy": "not_modeled_v0.1",
+      "missing_evidence_policy": "all_required_evidence_and_supporting_signal_groups",
+      "patch_capabilities": [],
+      "allowed_remediations": [
+        {
+          "action_type": "manual_analysis",
+          "route": "approval_required",
+          "blast_radius": "unknown",
+          "approval_required": true,
+          "rollback": "자동 변경 없음",
+          "post_verification": [
+            "원인 rule 추가 여부 검토"
+          ]
+        }
+      ],
+      "forbidden_remediations": [
+        {
+          "action_type": "reboot_all_nodes_for_pid_exhaustion",
+          "blast_radius": "cluster",
+          "reason": "단일 node PID exhaustion으로 클러스터 모든 node를 재부팅할 수 없습니다."
+        }
+      ],
+      "benchmark_fixtures": []
+    },
+    {
+      "ordinal": 69,
+      "catalog_source": "src/services/ai/agent/causes/catalog/runtime_config.yaml",
+      "rule_id": "runtime_config_error",
+      "candidate_id": "missing_configmap_reference",
+      "required_evidence": [
+        "kubernetes:cluster_resource_state",
+        "logs:related_logs",
+        "metadata:current_workload_snapshots"
+      ],
+      "supporting_signals": [
+        {
+          "id": "missing_configmap_signal",
+          "any_of": [
+            {
+              "event_pattern": "configmap"
+            },
+            {
+              "event_pattern": "not found"
+            },
+            {
+              "event_pattern": "CreateContainerConfigError"
+            },
+            {
+              "log_pattern": "configmap not found"
+            }
+          ]
+        }
+      ],
+      "contradicting_signals": [],
+      "contradiction_policy": "not_modeled_v0.1",
+      "missing_evidence_policy": "all_required_evidence_and_supporting_signal_groups",
+      "patch_capabilities": [],
+      "allowed_remediations": [
+        {
+          "action_type": "manual_analysis",
+          "route": "approval_required",
+          "blast_radius": "unknown",
+          "approval_required": true,
+          "rollback": "자동 변경 없음",
+          "post_verification": [
+            "원인 rule 추가 여부 검토"
+          ]
+        }
+      ],
+      "forbidden_remediations": [
+        {
+          "action_type": "copy_configmap_to_all_namespaces",
+          "blast_radius": "cluster",
+          "reason": "단일 workload의 missing ConfigMap reference를 해결하려고 ConfigMap을 클러스터 모든 namespace에 복제할 수 없습니다."
+        }
+      ],
+      "benchmark_fixtures": []
+    },
+    {
+      "ordinal": 70,
+      "catalog_source": "src/services/ai/agent/causes/catalog/runtime_config.yaml",
+      "rule_id": "runtime_config_error",
+      "candidate_id": "config_key_missing",
+      "required_evidence": [
+        "kubernetes:cluster_resource_state",
+        "logs:related_logs",
+        "metadata:current_workload_snapshots"
+      ],
+      "supporting_signals": [
+        {
+          "id": "config_key_missing_signal",
+          "any_of": [
+            {
+              "event_pattern": "couldn't find key"
+            },
+            {
+              "event_pattern": "could not find key"
+            },
+            {
+              "event_pattern": "key not found"
+            },
+            {
+              "log_pattern": "missing config key"
+            }
+          ]
+        }
+      ],
+      "contradicting_signals": [],
+      "contradiction_policy": "not_modeled_v0.1",
+      "missing_evidence_policy": "all_required_evidence_and_supporting_signal_groups",
+      "patch_capabilities": [],
+      "allowed_remediations": [
+        {
+          "action_type": "manual_analysis",
+          "route": "approval_required",
+          "blast_radius": "unknown",
+          "approval_required": true,
+          "rollback": "자동 변경 없음",
+          "post_verification": [
+            "원인 rule 추가 여부 검토"
+          ]
+        }
+      ],
+      "forbidden_remediations": [
+        {
+          "action_type": "inject_missing_key_into_all_configmaps",
+          "blast_radius": "cluster",
+          "reason": "단일 ConfigMap key 누락으로 클러스터 모든 ConfigMap에 임의 key를 주입할 수 없습니다."
+        }
+      ],
+      "benchmark_fixtures": []
+    },
+    {
+      "ordinal": 71,
+      "catalog_source": "src/services/ai/agent/causes/catalog/runtime_config.yaml",
+      "rule_id": "runtime_config_error",
+      "candidate_id": "invalid_env_value",
+      "required_evidence": [
+        "kubernetes:cluster_resource_state",
+        "logs:related_logs",
+        "metadata:current_workload_snapshots"
+      ],
+      "supporting_signals": [
+        {
+          "id": "invalid_env_value_signal",
+          "any_of": [
+            {
+              "log_pattern": "invalid env"
+            },
+            {
+              "log_pattern": "missing required config"
+            },
+            {
+              "log_pattern": "invalid configuration"
+            },
+            {
+              "log_pattern": "failed to parse"
+            },
+            {
+              "log_pattern": "environment variable"
+            }
+          ]
+        }
+      ],
+      "contradicting_signals": [],
+      "contradiction_policy": "not_modeled_v0.1",
+      "missing_evidence_policy": "all_required_evidence_and_supporting_signal_groups",
+      "patch_capabilities": [],
+      "allowed_remediations": [
+        {
+          "action_type": "manual_analysis",
+          "route": "approval_required",
+          "blast_radius": "unknown",
+          "approval_required": true,
+          "rollback": "자동 변경 없음",
+          "post_verification": [
+            "원인 rule 추가 여부 검토"
+          ]
+        }
+      ],
+      "forbidden_remediations": [
+        {
+          "action_type": "rewrite_all_workload_environment_variables",
+          "blast_radius": "fleet",
+          "reason": "단일 workload의 잘못된 환경 변수 값으로 fleet 전체 workload 환경 변수를 일괄 재작성할 수 없습니다."
+        }
+      ],
+      "benchmark_fixtures": []
+    },
+    {
+      "ordinal": 72,
+      "catalog_source": "src/services/ai/agent/causes/catalog/runtime_config.yaml",
+      "rule_id": "runtime_config_error",
+      "candidate_id": "config_volume_mount_failed",
+      "required_evidence": [
+        "kubernetes:cluster_resource_state",
+        "logs:related_logs",
+        "metadata:current_workload_snapshots"
+      ],
+      "supporting_signals": [
+        {
+          "id": "config_volume_mount_signal",
+          "any_of": [
+            {
+              "event_pattern": "MountVolume.SetUp failed"
+            },
+            {
+              "event_pattern": "configmap"
+            },
+            {
+              "event_pattern": "subPath"
+            },
+            {
+              "log_pattern": "config volume"
+            }
+          ]
+        }
+      ],
+      "contradicting_signals": [],
+      "contradiction_policy": "not_modeled_v0.1",
+      "missing_evidence_policy": "all_required_evidence_and_supporting_signal_groups",
+      "patch_capabilities": [],
+      "allowed_remediations": [
+        {
+          "action_type": "manual_analysis",
+          "route": "approval_required",
+          "blast_radius": "unknown",
+          "approval_required": true,
+          "rollback": "자동 변경 없음",
+          "post_verification": [
+            "원인 rule 추가 여부 검토"
+          ]
+        }
+      ],
+      "forbidden_remediations": [
+        {
+          "action_type": "restart_all_configmap_consuming_workloads",
+          "blast_radius": "cluster",
+          "reason": "단일 config volume mount 실패로 클러스터의 모든 ConfigMap 소비 workload를 재시작할 수 없습니다."
+        }
+      ],
+      "benchmark_fixtures": []
+    },
+    {
+      "ordinal": 73,
+      "catalog_source": "src/services/ai/agent/causes/catalog/scheduling.yaml",
+      "rule_id": "failed_scheduling",
+      "candidate_id": "insufficient_cpu",
+      "required_evidence": [
+        "kubernetes:cluster_resource_state",
+        "metrics:telemetry_metrics"
+      ],
+      "supporting_signals": [
+        {
+          "id": "insufficient_cpu_event",
+          "any_of": [
+            {
+              "event_pattern": "insufficient cpu"
+            }
+          ]
+        }
+      ],
+      "contradicting_signals": [],
+      "contradiction_policy": "not_modeled_v0.1",
+      "missing_evidence_policy": "all_required_evidence_and_supporting_signal_groups",
+      "patch_capabilities": [],
+      "allowed_remediations": [
+        {
+          "action_type": "resource_request_tuning",
+          "route": "draft_pr",
+          "blast_radius": "target_workload",
+          "approval_required": true,
+          "rollback": "리소스 request 조정 commit revert",
+          "post_verification": [
+            "Pod Scheduled 전환",
+            "Ready 상태 회복",
+            "FailedScheduling 이벤트 소멸"
+          ]
+        },
+        {
+          "action_type": "manual_analysis",
+          "route": "approval_required",
+          "blast_radius": "unknown",
+          "approval_required": true,
+          "rollback": "자동 변경 없음",
+          "post_verification": [
+            "원인 rule 추가 여부 검토"
+          ]
+        }
+      ],
+      "forbidden_remediations": [
+        {
+          "action_type": "scale_all_node_pools_for_cpu_shortage",
+          "blast_radius": "fleet",
+          "reason": "단일 workload의 CPU 스케줄링 부족으로 fleet 전체 node pool을 증설할 수 없습니다."
+        }
+      ],
+      "benchmark_fixtures": [
+        "benchmark/scenarios/scheduling/scheduling-insufficient-cpu/scenario.json"
+      ]
+    },
+    {
+      "ordinal": 74,
+      "catalog_source": "src/services/ai/agent/causes/catalog/scheduling.yaml",
+      "rule_id": "failed_scheduling",
+      "candidate_id": "insufficient_memory",
+      "required_evidence": [
+        "kubernetes:cluster_resource_state",
+        "metrics:telemetry_metrics"
+      ],
+      "supporting_signals": [
+        {
+          "id": "insufficient_memory_event",
+          "any_of": [
+            {
+              "event_pattern": "insufficient memory"
+            }
+          ]
+        }
+      ],
+      "contradicting_signals": [],
+      "contradiction_policy": "not_modeled_v0.1",
+      "missing_evidence_policy": "all_required_evidence_and_supporting_signal_groups",
+      "patch_capabilities": [],
+      "allowed_remediations": [
+        {
+          "action_type": "resource_request_tuning",
+          "route": "draft_pr",
+          "blast_radius": "target_workload",
+          "approval_required": true,
+          "rollback": "리소스 request 조정 commit revert",
+          "post_verification": [
+            "Pod Scheduled 전환",
+            "Ready 상태 회복",
+            "FailedScheduling 이벤트 소멸"
+          ]
+        },
+        {
+          "action_type": "manual_analysis",
+          "route": "approval_required",
+          "blast_radius": "unknown",
+          "approval_required": true,
+          "rollback": "자동 변경 없음",
+          "post_verification": [
+            "원인 rule 추가 여부 검토"
+          ]
+        }
+      ],
+      "forbidden_remediations": [
+        {
+          "action_type": "resize_all_node_pools_for_memory_shortage",
+          "blast_radius": "fleet",
+          "reason": "단일 workload의 메모리 스케줄링 부족으로 fleet 전체 node pool의 인스턴스 유형을 변경할 수 없습니다."
+        }
+      ],
+      "benchmark_fixtures": []
+    },
+    {
+      "ordinal": 75,
+      "catalog_source": "src/services/ai/agent/causes/catalog/scheduling.yaml",
+      "rule_id": "failed_scheduling",
+      "candidate_id": "node_affinity_or_taint_mismatch",
+      "required_evidence": [
+        "kubernetes:cluster_resource_state"
+      ],
+      "supporting_signals": [
+        {
+          "id": "affinity_or_taint_event",
+          "any_of": [
+            {
+              "event_pattern": "affinity"
+            },
+            {
+              "event_pattern": "taint"
+            },
+            {
+              "event_pattern": "didn't match"
+            }
+          ]
+        }
+      ],
+      "contradicting_signals": [],
+      "contradiction_policy": "not_modeled_v0.1",
+      "missing_evidence_policy": "all_required_evidence_and_supporting_signal_groups",
+      "patch_capabilities": [],
+      "allowed_remediations": [
+        {
+          "action_type": "scheduling_constraint_fix",
+          "route": "draft_pr",
+          "blast_radius": "target_workload",
+          "approval_required": true,
+          "rollback": "스케줄링 조건 보정 commit revert",
+          "post_verification": [
+            "Pod Scheduled 전환",
+            "Ready 상태 회복",
+            "affinity/taint 이벤트 소멸"
+          ]
+        },
+        {
+          "action_type": "manual_analysis",
+          "route": "approval_required",
+          "blast_radius": "unknown",
+          "approval_required": true,
+          "rollback": "자동 변경 없음",
+          "post_verification": [
+            "원인 rule 추가 여부 검토"
+          ]
+        }
+      ],
+      "forbidden_remediations": [
+        {
+          "action_type": "remove_all_node_taints_and_affinity_rules",
+          "blast_radius": "cluster",
+          "reason": "단일 workload의 affinity/taint 불일치로 클러스터 모든 node taint와 workload affinity 규칙을 제거할 수 없습니다."
+        }
+      ],
+      "benchmark_fixtures": [
+        "benchmark/scenarios/scheduling/scheduling-affinity-mismatch/scenario.json"
+      ]
+    },
+    {
+      "ordinal": 76,
+      "catalog_source": "src/services/ai/agent/causes/catalog/scheduling.yaml",
+      "rule_id": "failed_scheduling",
+      "candidate_id": "node_selector_mismatch",
+      "required_evidence": [
+        "kubernetes:cluster_resource_state",
+        "metadata:current_workload_snapshots"
+      ],
+      "supporting_signals": [
+        {
+          "id": "node_selector_mismatch_signal",
+          "any_of": [
+            {
+              "event_pattern": "node selector"
+            },
+            {
+              "event_pattern": "node affinity"
+            },
+            {
+              "event_pattern": "didn't match Pod's node affinity"
+            },
+            {
+              "event_pattern": "didn't match node selector"
+            }
+          ]
+        }
+      ],
+      "contradicting_signals": [],
+      "contradiction_policy": "not_modeled_v0.1",
+      "missing_evidence_policy": "all_required_evidence_and_supporting_signal_groups",
+      "patch_capabilities": [],
+      "allowed_remediations": [
+        {
+          "action_type": "manual_analysis",
+          "route": "approval_required",
+          "blast_radius": "unknown",
+          "approval_required": true,
+          "rollback": "자동 변경 없음",
+          "post_verification": [
+            "원인 rule 추가 여부 검토"
+          ]
+        }
+      ],
+      "forbidden_remediations": [
+        {
+          "action_type": "remove_all_workload_node_selectors",
+          "blast_radius": "cluster",
+          "reason": "단일 workload의 nodeSelector 불일치로 클러스터 모든 workload의 nodeSelector를 제거할 수 없습니다."
+        }
+      ],
+      "benchmark_fixtures": [
+        "benchmark/scenarios/scheduling/scheduling-node-selector-mismatch/scenario.json"
+      ]
+    },
+    {
+      "ordinal": 77,
+      "catalog_source": "src/services/ai/agent/causes/catalog/scheduling.yaml",
+      "rule_id": "failed_scheduling",
+      "candidate_id": "untolerated_taint",
+      "required_evidence": [
+        "kubernetes:cluster_resource_state",
+        "metadata:current_workload_snapshots"
+      ],
+      "supporting_signals": [
+        {
+          "id": "untolerated_taint_signal",
+          "any_of": [
+            {
+              "event_pattern": "untolerated taint"
+            },
+            {
+              "event_pattern": "had taint"
+            },
+            {
+              "event_pattern": "taint"
+            }
+          ]
+        }
+      ],
+      "contradicting_signals": [],
+      "contradiction_policy": "not_modeled_v0.1",
+      "missing_evidence_policy": "all_required_evidence_and_supporting_signal_groups",
+      "patch_capabilities": [],
+      "allowed_remediations": [
+        {
+          "action_type": "manual_analysis",
+          "route": "approval_required",
+          "blast_radius": "unknown",
+          "approval_required": true,
+          "rollback": "자동 변경 없음",
+          "post_verification": [
+            "원인 rule 추가 여부 검토"
+          ]
+        }
+      ],
+      "forbidden_remediations": [
+        {
+          "action_type": "add_wildcard_tolerations_to_all_workloads",
+          "blast_radius": "cluster",
+          "reason": "단일 workload의 미허용 taint로 클러스터 모든 workload에 wildcard toleration을 추가할 수 없습니다."
+        }
+      ],
+      "benchmark_fixtures": []
+    },
+    {
+      "ordinal": 78,
+      "catalog_source": "src/services/ai/agent/causes/catalog/scheduling.yaml",
+      "rule_id": "failed_scheduling",
+      "candidate_id": "pvc_pending",
+      "required_evidence": [
+        "kubernetes:cluster_resource_state"
+      ],
+      "supporting_signals": [
+        {
+          "id": "pvc_unbound_event",
+          "any_of": [
+            {
+              "event_pattern": "persistentvolumeclaim"
+            },
+            {
+              "event_pattern": "unbound"
+            }
+          ]
+        }
+      ],
+      "contradicting_signals": [],
+      "contradiction_policy": "not_modeled_v0.1",
+      "missing_evidence_policy": "all_required_evidence_and_supporting_signal_groups",
+      "patch_capabilities": [],
+      "allowed_remediations": [
+        {
+          "action_type": "pvc_binding_fix",
+          "route": "approval_required",
+          "blast_radius": "target_namespace",
+          "approval_required": true,
+          "rollback": "StorageClass/PVC 설정 변경을 이전 값으로 되돌립니다.",
+          "post_verification": [
+            "PVC Bound 전환",
+            "Pod Scheduled 전환",
+            "volume binding 이벤트 소멸"
+          ]
+        },
+        {
+          "action_type": "manual_analysis",
+          "route": "approval_required",
+          "blast_radius": "unknown",
+          "approval_required": true,
+          "rollback": "자동 변경 없음",
+          "post_verification": [
+            "원인 rule 추가 여부 검토"
+          ]
+        }
+      ],
+      "forbidden_remediations": [
+        {
+          "action_type": "delete_all_persistent_volume_claims",
+          "blast_radius": "cluster",
+          "reason": "단일 PVC Pending 상태로 클러스터 모든 PersistentVolumeClaim을 삭제할 수 없습니다."
+        }
+      ],
+      "benchmark_fixtures": [
+        "benchmark/scenarios/pvc/pvc-pending-claim/scenario.json"
+      ]
+    },
+    {
+      "ordinal": 79,
+      "catalog_source": "src/services/ai/agent/causes/catalog/security_policy.yaml",
+      "rule_id": "secret_not_found",
+      "candidate_id": "missing_secret_reference",
+      "required_evidence": [
+        "kubernetes:cluster_resource_state",
+        "logs:related_logs",
+        "metadata:current_workload_snapshots"
+      ],
+      "supporting_signals": [
+        {
+          "id": "missing_secret_reference_signal",
+          "any_of": [
+            {
+              "event_pattern": "secret"
+            },
+            {
+              "event_pattern": "not found"
+            },
+            {
+              "event_pattern": "CreateContainerConfigError"
+            },
+            {
+              "log_pattern": "secret not found"
+            }
+          ]
+        }
+      ],
+      "contradicting_signals": [],
+      "contradiction_policy": "not_modeled_v0.1",
+      "missing_evidence_policy": "all_required_evidence_and_supporting_signal_groups",
+      "patch_capabilities": [],
+      "allowed_remediations": [
+        {
+          "action_type": "manual_analysis",
+          "route": "approval_required",
+          "blast_radius": "unknown",
+          "approval_required": true,
+          "rollback": "자동 변경 없음",
+          "post_verification": [
+            "원인 rule 추가 여부 검토"
+          ]
+        }
+      ],
+      "forbidden_remediations": [
+        {
+          "action_type": "copy_secret_to_all_namespaces",
+          "blast_radius": "cluster",
+          "reason": "단일 workload의 Secret 참조 누락으로 Secret을 클러스터 모든 namespace에 복제할 수 없습니다."
+        }
+      ],
+      "benchmark_fixtures": []
+    },
+    {
+      "ordinal": 80,
+      "catalog_source": "src/services/ai/agent/causes/catalog/security_policy.yaml",
+      "rule_id": "secret_not_found",
+      "candidate_id": "secret_key_missing",
+      "required_evidence": [
+        "kubernetes:cluster_resource_state",
+        "logs:related_logs",
+        "metadata:current_workload_snapshots"
+      ],
+      "supporting_signals": [
+        {
+          "id": "secret_key_missing_signal",
+          "any_of": [
+            {
+              "event_pattern": "couldn't find key"
+            },
+            {
+              "event_pattern": "could not find key"
+            },
+            {
+              "event_pattern": "key not found"
+            },
+            {
+              "log_pattern": "missing secret key"
+            }
+          ]
+        }
+      ],
+      "contradicting_signals": [],
+      "contradiction_policy": "not_modeled_v0.1",
+      "missing_evidence_policy": "all_required_evidence_and_supporting_signal_groups",
+      "patch_capabilities": [],
+      "allowed_remediations": [
+        {
+          "action_type": "manual_analysis",
+          "route": "approval_required",
+          "blast_radius": "unknown",
+          "approval_required": true,
+          "rollback": "자동 변경 없음",
+          "post_verification": [
+            "원인 rule 추가 여부 검토"
+          ]
+        }
+      ],
+      "forbidden_remediations": [
+        {
+          "action_type": "inject_missing_key_into_all_secrets",
+          "blast_radius": "cluster",
+          "reason": "단일 Secret key 누락으로 클러스터 모든 Secret에 임의 key를 주입할 수 없습니다."
+        }
+      ],
+      "benchmark_fixtures": []
+    },
+    {
+      "ordinal": 81,
+      "catalog_source": "src/services/ai/agent/causes/catalog/security_policy.yaml",
+      "rule_id": "secret_not_found",
+      "candidate_id": "external_secret_sync_failed",
+      "required_evidence": [
+        "kubernetes:cluster_resource_state",
+        "logs:related_logs",
+        "metadata:current_workload_snapshots"
+      ],
+      "supporting_signals": [
+        {
+          "id": "external_secret_sync_signal",
+          "any_of": [
+            {
+              "event_pattern": "ExternalSecret"
+            },
+            {
+              "event_pattern": "SecretSynced"
+            },
+            {
+              "event_pattern": "secret sync"
+            },
+            {
+              "event_pattern": "provider"
+            },
+            {
+              "log_pattern": "external secret"
+            },
+            {
+              "log_pattern": "secret sync failed"
+            }
+          ]
+        }
+      ],
+      "contradicting_signals": [],
+      "contradiction_policy": "not_modeled_v0.1",
+      "missing_evidence_policy": "all_required_evidence_and_supporting_signal_groups",
+      "patch_capabilities": [],
+      "allowed_remediations": [
+        {
+          "action_type": "manual_analysis",
+          "route": "approval_required",
+          "blast_radius": "unknown",
+          "approval_required": true,
+          "rollback": "자동 변경 없음",
+          "post_verification": [
+            "원인 rule 추가 여부 검토"
+          ]
+        }
+      ],
+      "forbidden_remediations": [
+        {
+          "action_type": "restart_all_external_secret_controllers",
+          "blast_radius": "fleet",
+          "reason": "단일 ExternalSecret 동기화 실패만으로 모든 클러스터의 controller 장애가 입증되지 않으며, 전면 재시작은 정상 Secret 갱신까지 중단시켜 다수 테넌트의 credential 전달 지연을 유발합니다."
+        }
+      ],
+      "benchmark_fixtures": []
+    },
+    {
+      "ordinal": 82,
+      "catalog_source": "src/services/ai/agent/causes/catalog/storage_volume.yaml",
+      "rule_id": "volume_mount_failed",
+      "candidate_id": "pvc_not_bound",
+      "required_evidence": [
+        "kubernetes:cluster_resource_state",
+        "logs:related_logs",
+        "metadata:current_workload_snapshots"
+      ],
+      "supporting_signals": [
+        {
+          "id": "pvc_unbound_mount_signal",
+          "any_of": [
+            {
+              "event_pattern": "unbound immediate PersistentVolumeClaims"
+            },
+            {
+              "event_pattern": "persistentvolumeclaim"
+            },
+            {
+              "event_pattern": "PVC Pending"
+            },
+            {
+              "event_pattern": "not bound"
+            }
+          ]
+        }
+      ],
+      "contradicting_signals": [],
+      "contradiction_policy": "not_modeled_v0.1",
+      "missing_evidence_policy": "all_required_evidence_and_supporting_signal_groups",
+      "patch_capabilities": [],
+      "allowed_remediations": [
+        {
+          "action_type": "manual_analysis",
+          "route": "approval_required",
+          "blast_radius": "unknown",
+          "approval_required": true,
+          "rollback": "자동 변경 없음",
+          "post_verification": [
+            "원인 rule 추가 여부 검토"
+          ]
+        }
+      ],
+      "forbidden_remediations": [
+        {
+          "action_type": "delete_and_recreate_all_unbound_pvcs",
+          "blast_radius": "cluster",
+          "reason": "대상 Pod의 PVC 하나가 바인딩되지 않았다는 사실은 다른 Pending PVC를 삭제·재생성할 근거가 아니며, 전역 재생성은 동적 provisioning 상태와 데이터 보존 정책을 훼손할 수 있습니다."
+        }
+      ],
+      "benchmark_fixtures": [
+        "benchmark/scenarios/pvc/pvc-mount-unbound/scenario.json"
+      ]
+    },
+    {
+      "ordinal": 83,
+      "catalog_source": "src/services/ai/agent/causes/catalog/storage_volume.yaml",
+      "rule_id": "volume_mount_failed",
+      "candidate_id": "csi_driver_unavailable",
+      "required_evidence": [
+        "kubernetes:cluster_resource_state",
+        "logs:related_logs",
+        "metrics:telemetry_metrics"
+      ],
+      "supporting_signals": [
+        {
+          "id": "csi_driver_failure_signal",
+          "any_of": [
+            {
+              "event_pattern": "CSI"
+            },
+            {
+              "event_pattern": "csi driver"
+            },
+            {
+              "event_pattern": "driver name"
+            },
+            {
+              "log_pattern": "csi"
+            },
+            {
+              "log_pattern": "driver not found"
+            }
+          ]
+        }
+      ],
+      "contradicting_signals": [],
+      "contradiction_policy": "not_modeled_v0.1",
+      "missing_evidence_policy": "all_required_evidence_and_supporting_signal_groups",
+      "patch_capabilities": [],
+      "allowed_remediations": [
+        {
+          "action_type": "manual_analysis",
+          "route": "approval_required",
+          "blast_radius": "unknown",
+          "approval_required": true,
+          "rollback": "자동 변경 없음",
+          "post_verification": [
+            "원인 rule 추가 여부 검토"
+          ]
+        }
+      ],
+      "forbidden_remediations": [
+        {
+          "action_type": "restart_all_csi_driver_components",
+          "blast_radius": "cluster",
+          "reason": "단일 워크로드의 CSI 오류만으로 모든 controller와 node plugin 장애가 입증되지 않으며, 전체 재시작은 정상 워크로드의 mount와 attach까지 동시에 중단시킵니다."
+        }
+      ],
+      "benchmark_fixtures": []
+    },
+    {
+      "ordinal": 84,
+      "catalog_source": "src/services/ai/agent/causes/catalog/storage_volume.yaml",
+      "rule_id": "volume_mount_failed",
+      "candidate_id": "volume_attach_timeout",
+      "required_evidence": [
+        "kubernetes:cluster_resource_state",
+        "logs:related_logs"
+      ],
+      "supporting_signals": [
+        {
+          "id": "volume_attach_timeout_signal",
+          "any_of": [
+            {
+              "event_pattern": "AttachVolume.Attach failed"
+            },
+            {
+              "event_pattern": "timed out waiting for the condition"
+            },
+            {
+              "event_pattern": "timeout expired waiting for volumes"
+            },
+            {
+              "log_pattern": "volume attach"
+            }
+          ]
+        }
+      ],
+      "contradicting_signals": [],
+      "contradiction_policy": "not_modeled_v0.1",
+      "missing_evidence_policy": "all_required_evidence_and_supporting_signal_groups",
+      "patch_capabilities": [],
+      "allowed_remediations": [
+        {
+          "action_type": "manual_analysis",
+          "route": "approval_required",
+          "blast_radius": "unknown",
+          "approval_required": true,
+          "rollback": "자동 변경 없음",
+          "post_verification": [
+            "원인 rule 추가 여부 검토"
+          ]
+        }
+      ],
+      "forbidden_remediations": [
+        {
+          "action_type": "force_detach_all_cluster_volumes",
+          "blast_radius": "cluster",
+          "reason": "단일 attach timeout은 backend 지연이나 topology 문제일 수 있으므로 모든 volume을 강제 detach하면 활성 writer의 I/O 중단과 파일시스템 또는 데이터 손상을 유발할 수 있습니다."
+        }
+      ],
+      "benchmark_fixtures": []
+    },
+    {
+      "ordinal": 85,
+      "catalog_source": "src/services/ai/agent/causes/catalog/storage_volume.yaml",
+      "rule_id": "volume_mount_failed",
+      "candidate_id": "storage_class_mismatch",
+      "required_evidence": [
+        "kubernetes:cluster_resource_state",
+        "metadata:current_workload_snapshots"
+      ],
+      "supporting_signals": [
+        {
+          "id": "storage_class_mismatch_signal",
+          "any_of": [
+            {
+              "event_pattern": "storageclass"
+            },
+            {
+              "event_pattern": "no matching volumes"
+            },
+            {
+              "event_pattern": "topology"
+            },
+            {
+              "event_pattern": "zone"
+            }
+          ]
+        }
+      ],
+      "contradicting_signals": [],
+      "contradiction_policy": "not_modeled_v0.1",
+      "missing_evidence_policy": "all_required_evidence_and_supporting_signal_groups",
+      "patch_capabilities": [],
+      "allowed_remediations": [
+        {
+          "action_type": "manual_analysis",
+          "route": "approval_required",
+          "blast_radius": "unknown",
+          "approval_required": true,
+          "rollback": "자동 변경 없음",
+          "post_verification": [
+            "원인 rule 추가 여부 검토"
+          ]
+        }
+      ],
+      "forbidden_remediations": [
+        {
+          "action_type": "recreate_all_storage_classes_with_default_topology",
+          "blast_radius": "cluster",
+          "reason": "단일 PVC의 StorageClass 또는 topology 불일치는 클러스터 전체 StorageClass 오류를 뜻하지 않으며, 전역 재생성은 다른 claim의 provisioning 의미를 바꾸고 신규 바인딩을 막을 수 있습니다."
+        }
+      ],
+      "benchmark_fixtures": []
+    },
+    {
+      "ordinal": 86,
+      "catalog_source": "src/services/ai/agent/causes/catalog/storage_volume.yaml",
+      "rule_id": "volume_attach_failed",
+      "candidate_id": "volume_multi_attach_conflict",
+      "required_evidence": [
+        "kubernetes:cluster_resource_state",
+        "logs:related_logs",
+        "metadata:current_workload_snapshots"
+      ],
+      "supporting_signals": [
+        {
+          "id": "volume_multi_attach_signal",
+          "any_of": [
+            {
+              "event_pattern": "Multi-Attach"
+            },
+            {
+              "event_pattern": "already exclusively attached"
+            },
+            {
+              "event_pattern": "attached to a different node"
+            }
+          ]
+        }
+      ],
+      "contradicting_signals": [],
+      "contradiction_policy": "not_modeled_v0.1",
+      "missing_evidence_policy": "all_required_evidence_and_supporting_signal_groups",
+      "patch_capabilities": [],
+      "allowed_remediations": [
+        {
+          "action_type": "manual_analysis",
+          "route": "approval_required",
+          "blast_radius": "unknown",
+          "approval_required": true,
+          "rollback": "자동 변경 없음",
+          "post_verification": [
+            "원인 rule 추가 여부 검토"
+          ]
+        }
+      ],
+      "forbidden_remediations": [
+        {
+          "action_type": "delete_all_rwo_volume_consumers",
+          "blast_radius": "cluster",
+          "reason": "하나의 PVC에서 발생한 multi-attach 충돌은 다른 RWO volume 소비 Pod를 삭제할 근거가 아니며, 전역 삭제는 상태 저장 워크로드 장애와 추가 attach 경쟁을 유발합니다."
+        }
+      ],
+      "benchmark_fixtures": []
+    },
+    {
+      "ordinal": 87,
+      "catalog_source": "src/services/ai/agent/causes/catalog/storage_volume.yaml",
+      "rule_id": "volume_attach_failed",
+      "candidate_id": "volume_attachment_orphaned",
+      "required_evidence": [
+        "kubernetes:cluster_resource_state",
+        "logs:related_logs"
+      ],
+      "supporting_signals": [
+        {
+          "id": "volume_attachment_orphan_signal",
+          "any_of": [
+            {
+              "event_pattern": "VolumeAttachment"
+            },
+            {
+              "event_pattern": "detach"
+            },
+            {
+              "log_pattern": "volumeattachment"
+            },
+            {
+              "log_pattern": "finalizer"
+            }
+          ]
+        }
+      ],
+      "contradicting_signals": [],
+      "contradiction_policy": "not_modeled_v0.1",
+      "missing_evidence_policy": "all_required_evidence_and_supporting_signal_groups",
+      "patch_capabilities": [],
+      "allowed_remediations": [
+        {
+          "action_type": "manual_analysis",
+          "route": "approval_required",
+          "blast_radius": "unknown",
+          "approval_required": true,
+          "rollback": "자동 변경 없음",
+          "post_verification": [
+            "원인 rule 추가 여부 검토"
+          ]
+        }
+      ],
+      "forbidden_remediations": [
+        {
+          "action_type": "remove_all_volumeattachment_finalizers",
+          "blast_radius": "cluster",
+          "reason": "단일 VolumeAttachment의 잔여 의심만으로 모든 finalizer 정체가 입증되지 않으며, 전역 제거는 안전한 detach 수명주기를 우회해 cloud attachment 잔존이나 이중 attach 및 데이터 손상을 초래할 수 있습니다."
         }
       ],
       "benchmark_fixtures": []

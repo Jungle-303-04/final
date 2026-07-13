@@ -7,7 +7,7 @@ governing: docs/f-coordination-plan.md · docs/backend-f-workqueue.md
 
 # 백엔드 F 진행 현황
 
-현재 상태: **앵커 23건**
+현재 상태: **앵커 32건**
 
 ## 역사적 Delta-green baseline (BQ-001~003)
 
@@ -577,3 +577,232 @@ Bundle route는 200을 반환한다.
   `origin/dev` ancestor exit 0.
 
 계약 완성: OpsiaBench candidate contracts 31..40 + network execution boundary (296e14c383ae949573f2ad5216af8874b1a923b8) [green]
+
+### 보조 대기열 S8 — rule candidate 41~50 안전 계약
+
+- 상태: landed
+- 담당 lane: `codex/candidate-contract-batch-five`
+- RED: `0a86981fd9c37c22e4a6f04ea30034b564c8bce0`
+- 구현·데이터: `1b4bfa7791ddb789b6c683ede8823619d2f56b73`
+- 문서와 feature HEAD: `5995350c4d95eccade8f24a31870a6a9d2d0fc5d`
+- canonical no-ff merge: `910825ec4a90be0403bae7c41d8bc0f09a23e7ee`
+- 범위: loader 순서 41~50을 추가해 누적 50/87, `next_ordinal=51`이다. 41~49는
+  live `manual_analysis` fallback만 허용한다.
+- 실제 실행 경계: 50번 `probe_path_wrong`만 `probe_fix` Safe PR capability와
+  `benchmark/scenarios/probe/probe-wrong-path/scenario.json` exact fixture를 가진다.
+- forbidden remediation 의미 감사에서 ordinal 44를 실제 node reboot로, ordinal 46을
+  action·reason·blast radius가 모두 fleet인 manifest 교체 금지로 정합화했다.
+- append-only 경계: 다섯 번째 canonical JSON digest
+  `f125aff8e7a7d72922f93ad60b542b9131ecccd279d8d8dc7b0c5f886a66e5fb`를 `(41, 50)`에
+  고정하고 누락 lock·batch 5 변조 회귀를 추가했다.
+- 고유 검증: `python3 -S benchmark/score.py --candidate-contracts` 50/50 PASS,
+  `tests/test_benchmark_score.py` 46 passed. 이중 독립 감사 P0/P1 0건.
+- 전체 게이트: Ruff lint/format PASS, import-linter 8 kept/0 broken,
+  pytest `1917 passed, 3 skipped`; manifest management 69 / target 20.
+- 4조건: merge-tree exit 0/tree `77dbb5e47763f69b28893631b09d7415464bcdc4`;
+  파일 삭제·소유권 밖 변경·frozen 경로 변경 0건; RED·구현·문서·merge commit의
+  `origin/dev` ancestor exit 0.
+
+계약 완성: OpsiaBench candidate contracts 41..50 + probe safe-pr boundary (5995350c4d95eccade8f24a31870a6a9d2d0fc5d) [green]
+
+### 보조 대기열 S9 — rule candidate 51~60 안전 계약
+
+- 상태: landed
+- 담당 lane: `codex/candidate-contract-batch-six`
+- RED: `defe3751db251469f01b5e9899bab45f3c92bdca`
+- 구현·데이터: `65f487ea96dfc08860e7749e212262954e7ec427`
+- 문서와 feature HEAD: `5ce8132b0598797e73bb675a2ff49c66eef72167`
+- canonical no-ff merge: `66115a2d7312ae09e9cf8a06b1369ddf051e7cd2`
+- 범위: loader 순서 51~60을 추가해 누적 60/87, `next_ordinal=61`이다.
+- 실제 실행 경계: 51~53번 probe 후보와 55번 selector 후보만 `safe_pr` capability가 있다.
+  54번 실제 health 실패는 probe 수정 대상이 아니고, 56번은 fixture가 있어도 fallback-only,
+  60번은 OOM 계열 이름이어도 live `oom_memory` recovery가 없다.
+- exact fixture는 51번 probe port, 55번 selector mismatch, 56번 pods-not-ready에만 연결했다.
+- forbidden remediation은 health gate 우회, cluster-wide EndpointSlice 삭제, fleet memory limit
+  제거를 포함한 실제 실행 가능한 과잉 대응으로 독립 의미 감사를 통과했다.
+- append-only 경계: 여섯 번째 canonical JSON digest
+  `cc5f142232579553a3f6a7f0efd9fde1c0cca27dd1a3fba718a2eb68b706b0ae`를 `(51, 60)`에
+  고정하고 누락 lock·batch 6 변조 회귀를 추가했다.
+- 고유 검증: `python3 -S benchmark/score.py --candidate-contracts` 60/60 PASS,
+  `tests/test_benchmark_score.py` 49 passed. 독립 감사 P0/P1 0건.
+- 전체 게이트: Ruff lint/format PASS, import-linter 8 kept/0 broken,
+  pytest `1920 passed, 3 skipped`; manifest management 69 / target 20.
+- 4조건: merge-tree exit 0/tree `113e4e5166691df6ab5c2bd940a2b9e86487fb25`;
+  파일 삭제·소유권 밖 변경·frozen 경로 변경 0건; RED·구현·문서·merge commit의
+  `origin/dev` ancestor exit 0.
+
+계약 완성: OpsiaBench candidate contracts 51..60 + probe and selector inference boundary (5ce8132b0598797e73bb675a2ff49c66eef72167) [green]
+
+### 보조 대기열 S10 — rule candidate 61~70 안전 계약
+
+- 상태: landed
+- 담당 lane: `codex/candidate-contract-batch-seven`
+- RED: `5c0d04120d443570e386c644ef3bf2f14aa9ab13`
+- 구현·데이터: `95afd816309d3e0de73bedabd1b20af0d6078a5e`
+- 문서와 feature HEAD: `aed4bf78b4e640af0b5ac55017f6a445b0a5013b`
+- canonical no-ff merge: `de0b2760951bd654b597bbfc36ce0004b26bc5fb`
+- 범위: loader 순서 61~70을 추가해 누적 70/87, `next_ordinal=71`이다.
+- 10개 모두 exact `manual_analysis` fallback-only이고 capability·fixture가 비어 있다.
+  resource pressure·bad release·runtime config 이름만 보고 `oom_memory`, `image_rollback`,
+  `config_fix`를 추론하지 않는다.
+- forbidden remediation은 leak 은폐용 fleet memory 증설, node data purge, cluster-wide
+  ConfigMap 복제·변조처럼 실제 실행 가능한 과잉 대응으로 의미 감사를 통과했다.
+- append-only 경계: 일곱 번째 canonical JSON digest
+  `56882298c112280ea41f4346170ee0336b207797a1df15a0acac6bdc42378590`를 `(61, 70)`에
+  고정하고 누락 lock·batch 7 변조 회귀를 추가했다.
+- 고유 검증: `python3 -S benchmark/score.py --candidate-contracts` 70/70 PASS,
+  `tests/test_benchmark_score.py` 52 passed. 독립 감사 P0/P1 0건.
+- 전체 게이트: Ruff lint/format PASS, import-linter 8 kept/0 broken,
+  pytest `1923 passed, 3 skipped`; manifest management 69 / target 20.
+- 4조건: merge-tree exit 0/tree `df15a4c59d352feeab141aa9bc36034e501fea44`;
+  파일 삭제·소유권 밖 변경·frozen 경로 변경 0건; RED·구현·문서·merge commit의
+  `origin/dev` ancestor exit 0.
+
+계약 완성: OpsiaBench candidate contracts 61..70 + fallback-only inference boundary (aed4bf78b4e640af0b5ac55017f6a445b0a5013b) [green]
+
+### 보조 대기열 S11 — rule candidate 71~80 안전 계약
+
+- 상태: landed
+- 담당 lane: `codex/candidate-contract-batch-eight`
+- RED: `3060b5f603280534b84723183dd4fa264ab413a8`
+- 구현·데이터: `895f4185f3a1eda384d8fe20730b03170e0c9070`
+- 문서와 feature HEAD: `dd2006904491f22113d4e84329f681a227e85d2e`
+- canonical no-ff merge: `cb099e5eb161d740710c2b276b52bc85dc2006d9`
+- 범위: loader 순서 71~80을 추가해 누적 80/87, `next_ordinal=81`이다.
+- 71~72·76~77·79~80은 fallback-only다. 73~74의 `resource_request_tuning`과
+  75의 `scheduling_constraint_fix`는 `draft_pr` route여도 dispatcher allowlist 밖이므로
+  실제 capability가 없고, 78의 `pvc_binding_fix`도 승인형 수동 action이다.
+- exact fixture는 73번 CPU 부족, 75번 affinity 불일치, 78번 PVC pending에만 연결했다.
+- forbidden remediation은 fleet node pool 일괄 증설·변경, cluster-wide scheduling 제약 제거,
+  PVC 전체 삭제, Secret 전역 복제·변조처럼 실제 실행 가능한 과잉 대응으로 의미 감사를 통과했다.
+- append-only 경계: 여덟 번째 canonical JSON digest
+  `7ebd96e2c186abd5d7093472a17ca06f6269a999ee6621e3b22864486fb351d6`를 `(71, 80)`에
+  고정하고 누락 lock·batch 8 변조 회귀를 추가했다.
+- 고유 검증: `python3 -S benchmark/score.py --candidate-contracts` 80/80 PASS,
+  `tests/test_benchmark_score.py` 54 passed. 독립 감사 P0/P1 0건.
+- 전체 게이트: Ruff lint/format PASS, import-linter 8 kept/0 broken,
+  pytest `1925 passed, 3 skipped`; manifest management 69 / target 20.
+- 4조건: merge-tree exit 0/tree `61250ee0eacdee280fd73e6f223a9273cb994f70`;
+  파일 삭제·소유권 밖 변경·frozen 경로 변경 0건; RED·구현·문서·merge commit의
+  `origin/dev` ancestor exit 0.
+
+계약 완성: OpsiaBench candidate contracts 71..80 + scheduling and secret inference boundary (dd2006904491f22113d4e84329f681a227e85d2e) [green]
+
+### 보조 대기열 S12 — rule candidate 81~87 terminal 안전 계약
+
+- 상태: landed
+- 담당 lane: `codex/candidate-contract-terminal`
+- RED: `564deb9a3239143321e69986b284066eb97b30ed`
+- 구현·데이터: `bd75854271f7c46de6c021d0e91f586c57e8a671`
+- 문서와 feature HEAD: `aafc4a956bc03b85133cb6b46f3ba889dde532dc`
+- canonical no-ff merge: `dc0b775ff0b4813e2599ea0c15f7bf574d830b0d`
+- 범위: loader 순서 81~87을 추가해 87/87 전체를 완결했고 `next_ordinal=null`이다.
+- 7개 모두 exact `manual_analysis` fallback-only이고 실제 patch capability가 비어 있다.
+  82번 `pvc_not_bound`에만 exact fixture가 있으며, 78번의 `pvc_binding_fix`를 이름만 보고
+  82번에 추론하지 않는다.
+- forbidden remediation은 ExternalSecret controller fleet 재시작, CSI 전체 재시작,
+  cluster volume 강제 detach, RWO 소비자 전역 삭제, VolumeAttachment finalizer 전역 제거처럼
+  실제 실행 가능한 과잉 대응으로 의미 감사를 통과했다.
+- append-only 경계: terminal canonical JSON digest
+  `e3f38634a87f1f1ffba62d21e0150f1069fb21f783ae4fb0ea9ddd46fe34fe22`를 `(81, 87)`에
+  고정하고 누락 lock·batch 9 변조 회귀를 추가했다.
+- 고유 검증: `python3 -S benchmark/score.py --candidate-contracts` 87/87 PASS,
+  `tests/test_benchmark_score.py` 56 passed. 독립 감사 P0/P1 0건.
+- 전체 게이트: Ruff lint/format PASS, import-linter 8 kept/0 broken,
+  pytest `1927 passed, 3 skipped`; manifest management 69 / target 20.
+- 4조건: merge-tree exit 0/tree `b2693f8c4aedb9d5004fd178c4435f10e492525f`;
+  파일 삭제·소유권 밖 변경·frozen 경로 변경 0건; RED·구현·문서·merge commit의
+  `origin/dev` ancestor exit 0.
+
+계약 완성: OpsiaBench candidate contracts 81..87 + terminal storage inference boundary (aafc4a956bc03b85133cb6b46f3ba889dde532dc) [green]
+
+### 보조 대기열 S13 — scheduling node selector 시나리오
+
+- 상태: landed
+- 담당 lane: `codex/benchmark-scheduling-memory`
+- 초기 RED: `b07dcbb16fe8258a520d97737e54b63564446109`
+- 독립 감사 후 selector RED 교정: `3d9899564f2f50dc7505b159cdf1ece0b21f8dab`
+- 구현·데이터: `70d3478efb3a966a7f3f4c45d47c07972810444f`
+- 문서와 feature HEAD: `dea2d4babb6882c2cf6b5ff8354060f8472bf6f7`
+- canonical no-ff merge: `584e2eda0af8d0d6d862fffe6be836a1c925fbae`
+- `node_selector_mismatch`를 scheduling 세 번째 시나리오로 추가했다. 정상 `general` pool,
+  장애 `retired` pool, gold·rollback selector를 정적으로 고정해 외부 용량 가정이 없다.
+- live recovery가 없는 후보이므로 `manual_analysis`와 `auto_apply=false`만 허용하고,
+  cluster 전체 workload의 nodeSelector 제거를 금지했다.
+- ordinal 76에 exact fixture를 연결하고 여덟 번째 batch 전체를 재감사해 digest를
+  `8d19d8d9f67dfe24c700e3dd782f19290719c3f46bc154e4f9bb81f5d7125521`로 갱신했다.
+  기존 후보 identity·evidence·signal·recovery·forbidden은 변경하지 않았다.
+- 고유 검증: scheduling 3/3, 전체 scenario 15/15, candidate scorer 87/87,
+  `tests/test_benchmark_score.py` 57 passed.
+- 전체 게이트: Ruff lint/format PASS, import-linter 8 kept/0 broken,
+  pytest `1928 passed, 3 skipped`; manifest management 69 / target 20.
+- 4조건: merge-tree exit 0/tree `9cb957b643ac84ccc8dffca6b9151a1569606698`;
+  파일 삭제·소유권 밖 변경·frozen 경로 변경 0건; RED·교정·구현·문서·merge commit의
+  `origin/dev` ancestor exit 0.
+
+계약 완성: OpsiaBench scheduling node selector mismatch fixture + fallback boundary (dea2d4babb6882c2cf6b5ff8354060f8472bf6f7) [green]
+
+### 보조 대기열 S14 — AsyncDb 호출 경계 직접 테스트
+
+- 상태: landed
+- 담당 lane: `codex/runtime-async-db-tests`
+- 테스트와 feature HEAD: `effec9f6d98c0e56fc6bf10e5860b626e5d01077`
+- canonical no-ff merge: `b37a94d958b7c56a8df8c8780bc1ff30a63b3d63`
+- `src/packages/runtime/async_db.py` 소스 변경 없이 직접 테스트 5개를 추가했다.
+- async method·비호출 속성은 thread hop 없이 전달하고, active connection이 없을 때 sync
+  method는 `asyncio.to_thread`로 인자·결과를 전달하는 경계를 고정했다.
+- active connection이 있으면 현재 thread를 재사용하며 `to_thread`를 호출하지 않고,
+  sync 예외와 없는 속성의 `AttributeError`도 숨기지 않음을 검증했다.
+- 고유 검증: `tests/test_async_db.py` 5 passed.
+- 전체 게이트: Ruff lint/format PASS, import-linter 8 kept/0 broken,
+  pytest `1933 passed, 3 skipped`; manifest management 69 / target 20.
+- 4조건: merge-tree exit 0/tree `41ae92a7d037bccfab7950b8d5ee70162ce0a39e`;
+  파일 삭제·소유권 밖 변경·frozen 경로 변경 0건; test·merge commit의 `origin/dev`
+  ancestor exit 0.
+
+계약 완성: AsyncDb thread-hop and active-connection reuse tests (effec9f6d98c0e56fc6bf10e5860b626e5d01077) [green]
+
+### 보조 대기열 S15 — probe timeout 시나리오
+
+- 상태: landed
+- 담당 lane: `codex/benchmark-probe-timeout`
+- RED: `bd864494d7786f94f8f17c3ba2234c0f63f9d488`
+- 구현·데이터: `9171d600551389fe9611d2dda747cfb25bafef2a`
+- 문서와 feature HEAD: `b96a6981079a4a144921d391f443d43e4306a05d`
+- canonical no-ff merge: `2d9ef3fc2ddb17970d863dcadc995a7d6a6dfe3e`
+- `timeout_too_short`를 probe 세 번째 시나리오로 추가했다. 정상 timeout 5초, 장애 1초,
+  gold·rollback scalar를 고정해 target workload 외 변경이 없다.
+- live `probe_fix`와 실제 dispatcher가 교차하므로 `safe_pr`, `auto_apply=false`만 허용하고
+  fleet 전체 probe timeout 증가는 금지했다.
+- ordinal 52에 exact fixture를 연결하고 여섯 번째 batch 전체를 재감사해 digest를
+  `7920067d7675629e3e9ecaac2252b7825c4527420c8054a5d573e4d34a0f54d3`로 갱신했다.
+  기존 후보 identity·evidence·signal·recovery·forbidden은 변경하지 않았다.
+- 고유 검증: probe 3/3, 전체 scenario 16/16, candidate scorer 87/87,
+  `tests/test_benchmark_score.py` 58 passed.
+- 전체 게이트: Ruff lint/format PASS, import-linter 8 kept/0 broken,
+  pytest `1934 passed, 3 skipped`; manifest management 69 / target 20.
+- 4조건: merge-tree exit 0/tree `3716fbc40341c0cb55b34669634e2d6c0418b90e`;
+  파일 삭제·소유권 밖 변경·frozen 경로 변경 0건; RED·구현·문서·merge commit의
+  `origin/dev` ancestor exit 0.
+
+계약 완성: OpsiaBench probe timeout fixture + safe-pr boundary (b96a6981079a4a144921d391f443d43e4306a05d) [green]
+
+### 보조 대기열 S16 — kubectl server dry-run adapter 직접 테스트
+
+- 상태: landed
+- 담당 lane: `codex/kubernetes-dry-run-tests`
+- 테스트와 feature HEAD: `ccdcc1a08aef4d1aa30929dea717f455ea0a447e`
+- canonical no-ff merge: `01dc635583f45d058d0d324d70b0c02a42d66889`
+- `src/services/gitops/diff-worker/kubernetes_dry_run.py` 소스 변경 없이 직접 테스트 8개를 추가했다.
+- 실제 임시 `desired.json` 내용과 정리, custom kubectl·field manager·timeout 전달,
+  SSA apply 다음 live get의 정확한 argv와 kind/name/namespace 경계를 고정했다.
+- apply 실패 시 get 차단, get 실패 시 predicted 보존, kubectl 부재·timeout·process error·
+  invalid JSON 매핑, import-time timeout 기본값 binding을 검증했다.
+- 고유 검증: `tests/test_kubernetes_dry_run.py` 8 passed.
+- 전체 게이트: Ruff lint/format PASS, import-linter 8 kept/0 broken,
+  pytest `1942 passed, 3 skipped`; manifest management 69 / target 20.
+- 4조건: merge-tree exit 0/tree `68cb35ca8dc94ec15299e23824edd86d85e5ead4`;
+  파일 삭제·소유권 밖 변경·frozen 경로 변경 0건; test·merge commit의 `origin/dev`
+  ancestor exit 0.
+
+계약 완성: kubectl server dry-run subprocess and error mapping tests (ccdcc1a08aef4d1aa30929dea717f455ea0a447e) [green]

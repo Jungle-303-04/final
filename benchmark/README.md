@@ -26,8 +26,9 @@ OpsiaBench는 실제 RCA cause/recovery 카탈로그에 고정된 정답 장애 
 위 표의 마지막 아홉 의미 필드가 [D-013]의 9항목이다. `expected_root_cause`는 문자열 하나이며
 Top-1 정답으로 사용한다. evidence는 source 존재만이 아니라 이름까지 일치해야 한다.
 
-probe path/port와 selector mismatch는 각각 catalog의 `probe_fix`, `selector_fix`만 허용한다.
-`pvc_not_bound`와 `pods_not_ready`처럼 전용 recovery action이 없는 후보는 공식 fallback인
+probe path/port/timeout과 service `selector_label_mismatch`는 각각 catalog의 `probe_fix`,
+`selector_fix`만 허용한다. `node_selector_mismatch`, `pvc_not_bound`, `pods_not_ready`처럼
+전용 recovery action이 없는 후보는 공식 fallback인
 `manual_analysis`만 허용하며 `auto_apply`는 `false`다. gold patch는 운영자 검토가 끝났을
 때의 정답이지 실행 허가가 아니다.
 
@@ -40,7 +41,7 @@ live YAML을 다시 읽어 index 전체와 대조하지만, 공개 채점기는 
 site-packages 없이 실행된다.
 
 `candidate-contracts.json`은 index 앞에서부터 완결된 10개 단위 배치를 누적한다. 현재 범위는
-1~40번이고 `next_ordinal`은 41이다. 마지막 배치는 81~87번 7개를 허용하며 그때
+1~87번 전체이며 마지막 81~87번은 7개 terminal 배치다. 전체 loader 순서를 완결했으므로
 `next_ordinal`은 `null`이다. 후보 계약은 다음 경계를 분리한다.
 
 - `required_evidence`: 수집돼야 하는 `source:name` key. 이것만으로 후보가 지지됐다는 뜻은 아니다.
@@ -62,16 +63,32 @@ site-packages 없이 실행된다.
 기존 계약의 fixture·금지 조치·정책 주석을 조용히 바꾸면 digest 검증이 실패한다. 복수 fallback
 recovery 선언은 소스 선언 순서대로 모두 누적한다.
 
-현재 배치는 87개 전체 계약 완성이 아니다. 11~20번은 모두 명시 recovery가 없는
-`manual_analysis` fallback이며 실제 patch capability와 기존 exact fixture도 없다. 21~30번 중
+87개 후보의 안전 계약은 모두 완결됐다. 계약 완성은 recovery나 fixture coverage가 모두 구현됐다는
+뜻이 아니다. 11~20번은 모두 명시 recovery가 없는 `manual_analysis` fallback이며 실제 patch
+capability와 기존 exact fixture도 없다. 21~30번 중
 25번 `wrong_image_tag`만 `safe_pr` capability가 있고, 26번 `missing_image_pull_secret`과 27번
 `registry_unavailable`은 승인형 recovery만 있어 capability가 비어 있다. 기존 exact fixture는
 25번과 26번에만 연결한다. 31~40번 중 36번 `upstream_unavailable`과 37번
 `backend_readiness_failure`는 실제 command alias와 교차해 `command` capability가 있고, 38번
 `application_5xx_spike`는 command와 Safe PR 양쪽을 지원한다. 31~40번에 exact fixture는 없다.
-이 빈 값은 coverage gap을 드러내는 것이고 실행 가능성이나 fixture를 추측해 채우지 않는다.
-다음 보충 단위는 index 41번부터 이어 붙이며, source hash나 loader 순서가 달라지면 기존 배치부터
-다시 감사한다.
+41~49번은 `manual_analysis` fallback-only이고, 50번 `probe_path_wrong`만 `safe_pr` capability와
+exact probe fixture를 가진다. 51~53번과 55번도 `safe_pr` capability가 있고, exact fixture는
+51·52·55·56번에만 연결한다. 52번 timeout fixture 추가는 여섯 번째 batch 전체를 재감사하고
+canonical digest를 갱신한 명시적 coverage 보강이다. 54번은 실제 health 실패라 probe 수정
+대상이 아니며, 56번은 fixture가
+있어도 fallback-only, 60번은 OOM 계열 이름이어도 live `oom_memory` recovery가 없다. 61~70번도
+resource pressure·runtime config 이름과 무관하게 전부 fallback-only이며 exact fixture가 없다.
+71~72번과 76~77번, 79~80번은 fallback-only다. 73~74번 `resource_request_tuning`과 75번
+`scheduling_constraint_fix`는 `draft_pr` route를 선언하지만 dispatcher Safe PR allowlist에 없으므로
+실제 capability는 비어 있다. 78번 `pvc_binding_fix`도 승인형 수동 action이어서 patch capability가
+없다. exact fixture는 73번 CPU 부족, 75번 affinity 불일치, 76번 node selector 불일치,
+78번 PVC pending에만 연결한다. 76번 fixture 추가는 여덟 번째 batch 전체를 재감사하고
+canonical digest를 갱신한 명시적 coverage 보강이다.
+81~87번도 모두 fallback-only이고 capability가 비어 있다. 82번 `pvc_not_bound`에만 exact PVC
+fixture가 있으며, 이름이 유사한 78번의 `pvc_binding_fix`를 82번에 추론해 연결하지 않는다.
+`oom_memory`, `image_rollback`, `config_fix`를 의미만 보고 연결하지 않는다. 이 빈 값은 coverage gap을
+드러내는 것이고 실행 가능성이나 fixture를 추측해 채우지 않는다. source hash나 loader 순서가
+달라지면 완료된 9개 배치 전체를 다시 감사한다.
 
 ## 검증
 
