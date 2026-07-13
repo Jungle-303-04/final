@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import uuid
+from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
@@ -754,7 +755,8 @@ class TargetAgentRepository(DatabaseConnection):
                 )
                 return {"duplicate": True, **dict(existing)}
 
-            self.stage_event_envelope(conn, event_table, outbox_table, event_envelope)
+            trusted_envelope = replace(event_envelope, workspace_id=workspace_id)
+            self.stage_event_envelope(conn, event_table, outbox_table, trusted_envelope)
         return {"duplicate": False, **dict(inserted)}
 
     def stage_event_envelope(
@@ -784,6 +786,7 @@ class TargetAgentRepository(DatabaseConnection):
                 source=event_envelope.source,
                 correlation_id=event_envelope.correlation_id,
                 causation_id=event_envelope.causation_id,
+                workspace_id=event_envelope.workspace_id,
                 occurred_at=event_envelope.created_at,
                 payload=event_envelope.payload,
                 lease_id=None,

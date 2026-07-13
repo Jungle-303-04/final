@@ -95,6 +95,7 @@ class OutboxModel(Base):
     source: Mapped[str] = text_column()
     correlation_id: Mapped[str] = text_column()
     causation_id: Mapped[str | None] = mapped_column(Text, nullable=True)
+    workspace_id: Mapped[str | None] = mapped_column(Text, nullable=True)
     occurred_at: Mapped[str] = text_column()
     payload: Mapped[dict[str, Any]] = jsonb_column()
     schema_version: Mapped[int] = mapped_column(Integer, nullable=False, server_default="1")

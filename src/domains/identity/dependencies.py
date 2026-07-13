@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import hashlib
 from dataclasses import dataclass
 from typing import Any, Protocol
@@ -13,6 +14,7 @@ from packages.contracts.identity import (
     ResourceAccessRequest,
     ServiceRole,
 )
+from packages.events.context import set_event_workspace
 
 AGENT_TOKEN_HEADER = "x-agent-token"
 AGENT_AUTH_REQUIRED_MESSAGE = "agent authentication required"
@@ -94,7 +96,9 @@ def get_password_auth(request: Request) -> Any:
 
 async def require_session(request: Request) -> Any:
     """사용자 세션 가드 — 유효 세션 필요(없으면 401)."""
-    return await request.app.state.auth.require_session(request)
+    current = await request.app.state.auth.require_session(request)
+    set_event_workspace(getattr(current, "workspace_id", None))
+    return current
 
 
 async def require_admin_session(request: Request) -> Any:
@@ -201,7 +205,7 @@ def resolve_allowed_cluster_ids(
     }
 
 
-def require_cluster_agent(request: Request) -> ClusterAgentIdentity:
+async def require_cluster_agent(request: Request) -> ClusterAgentIdentity:
     """per-cluster agent 토큰 가드 — fail-closed.
 
     x-agent-token 을 해시해 등록 레지스트리에서 클러스터를 찾고, 그 클러스터의
@@ -212,10 +216,15 @@ def require_cluster_agent(request: Request) -> ClusterAgentIdentity:
     db = request.app.state.db
     token = request.headers.get(AGENT_TOKEN_HEADER, "")
     if token:
-        identity = db.authenticate_cluster_agent(hash_agent_token(token))
+        identity = await asyncio.to_thread(
+            db.authenticate_cluster_agent,
+            hash_agent_token(token),
+        )
         if identity is not None:
-            return ClusterAgentIdentity(
+            authenticated = ClusterAgentIdentity(
                 workspace_id=identity["workspace_id"],
                 cluster_id=identity["cluster_id"],
             )
+            set_event_workspace(authenticated.workspace_id)
+            return authenticated
     raise HTTPException(status_code=401, detail=AGENT_AUTH_REQUIRED_MESSAGE)

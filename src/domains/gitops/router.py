@@ -40,6 +40,7 @@ from packages.contracts.gitops import (
     ApprovalStatus,
 )
 from packages.contracts.identity import DEFAULT_WORKSPACE_ID, Permission
+from packages.events.context import event_workspace
 from packages.runtime.dependencies import get_db, get_events
 from packages.storage.engine import unit_of_work_or_null
 from packages.storage.retry import async_retry_db_conflict
@@ -114,11 +115,15 @@ def body_for_poll_target(
     *,
     commit_sha: str,
     image: str,
+    correlation_id: str | None = None,
+    replicas: int = DEFAULT_WEBHOOK_REPLICAS,
+    force: bool = False,
 ) -> GitWebhookReceivedBody:
     return GitWebhookReceivedBody(
+        correlation_id=correlation_id,
         commit_sha=commit_sha,
         image=image,
-        replicas=DEFAULT_WEBHOOK_REPLICAS,
+        replicas=replicas,
         workspace_id=str(target.get("workspace_id") or DEFAULT_WORKSPACE_ID),
         repository_id=str(target.get("repository_id") or DEFAULT_REPOSITORY_ID),
         repo_ref=str(target.get("repo_ref") or DEFAULT_REPO_REF),
@@ -130,6 +135,50 @@ def body_for_poll_target(
         cluster_id=str(target.get("cluster_id") or Target.DEFAULT_CLUSTER_ID),
         manifest_path=str(target.get("manifest_path") or DEFAULT_MANIFEST_PATH),
         source_type=str(target.get("source_type") or ""),
+        force=force,
+    )
+
+
+def active_github_poll_targets(db: Any | None) -> list[Mapping[str, Any]]:
+    if db is None or not hasattr(db, "list_active_github_poll_targets"):
+        return []
+    return [
+        target
+        for target in db.list_active_github_poll_targets(limit=1000)
+        if isinstance(target, Mapping)
+        and str(target.get("workspace_id") or "").strip()
+        and str(target.get("repo_ref") or "").strip()
+        and str(target.get("branch") or "").strip()
+    ]
+
+
+def poll_target_matches(
+    target: Mapping[str, Any],
+    *,
+    workspace_id: str,
+    repository_id: str,
+    repo_ref: str,
+    branch: str,
+    watch_target_id: str,
+    binding_id: str,
+    application_id: str,
+    environment: str,
+    cluster_id: str,
+    manifest_path: str,
+    source_type: str,
+) -> bool:
+    return (
+        str(target.get("workspace_id") or "") == workspace_id
+        and str(target.get("repository_id") or "") == repository_id
+        and str(target.get("repo_ref") or "").lower() == repo_ref.lower()
+        and str(target.get("branch") or "") == branch
+        and str(target.get("watch_target_id") or "") == watch_target_id
+        and str(target.get("binding_id") or "") == binding_id
+        and str(target.get("application_id") or "") == application_id
+        and str(target.get("environment") or "") == environment
+        and str(target.get("cluster_id") or "") == cluster_id
+        and str(target.get("manifest_path") or "") == manifest_path
+        and str(target.get("source_type") or "") == source_type
     )
 
 
@@ -139,20 +188,48 @@ def build_git_webhook_bodies(
     db: Any | None = None,
     event_name: str = "",
 ) -> list[GitWebhookReceivedBody]:
+    targets = active_github_poll_targets(db)
     try:
-        return [build_git_webhook_body(GitHubWebhookRequest(**dict(payload)))]
+        requested = build_git_webhook_body(GitHubWebhookRequest(**dict(payload)))
     except ValidationError:
-        pass
+        requested = None
+    if requested is not None:
+        matched = [
+            target
+            for target in targets
+            if poll_target_matches(
+                target,
+                workspace_id=requested.workspace_id,
+                repository_id=requested.repository_id,
+                repo_ref=requested.repo_ref,
+                branch=requested.branch,
+                watch_target_id=requested.watch_target_id,
+                binding_id=requested.binding_id,
+                application_id=requested.application_id,
+                environment=requested.environment,
+                cluster_id=requested.cluster_id,
+                manifest_path=requested.manifest_path,
+                source_type=requested.source_type,
+            )
+        ]
+        return [
+            body_for_poll_target(
+                target,
+                commit_sha=requested.commit_sha,
+                image=requested.image,
+                correlation_id=requested.correlation_id,
+                replicas=requested.replicas,
+                force=requested.force,
+            )
+            for target in matched
+        ]
     raw_change = github_raw_change(payload, event_name)
     if raw_change is None:
         return []
     image = env(GITOPS_WEBHOOK_IMAGE_ENV, "")
     if not image:
         raise HTTPException(status_code=503, detail="gitops webhook image not configured")
-    if db is None or not hasattr(db, "list_active_github_poll_targets"):
-        return []
     repo_ref, branch, commit_sha = raw_change
-    targets = db.list_active_github_poll_targets(limit=1000)
     matched = [
         body_for_poll_target(target, commit_sha=commit_sha, image=image)
         for target in targets
@@ -190,7 +267,8 @@ async def github_webhook(
         )
     first = None
     for body in bodies:
-        accepted = await events.accept_body(body)
+        with event_workspace(body.workspace_id):
+            accepted = await events.accept_body(body)
         if first is None:
             first = accepted
     return accepted_event_response(first)

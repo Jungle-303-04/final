@@ -32,6 +32,7 @@ def event_log_context(evt: EventEnvelope) -> dict[str, object]:
         "source": evt.source,
         "correlation_id": evt.correlation_id,
         "causation_id": evt.causation_id,
+        "workspace_id": evt.workspace_id,
     }
 
 
@@ -48,6 +49,7 @@ class OutboxRepository(DatabaseConnection):
                     source=evt.source,
                     correlation_id=evt.correlation_id,
                     causation_id=evt.causation_id,
+                    workspace_id=evt.workspace_id,
                     occurred_at=evt.created_at,
                     payload=evt.payload,
                     schema_version=evt.schema_version,
@@ -94,6 +96,7 @@ class OutboxRepository(DatabaseConnection):
                     "source": r["source"],
                     "correlation_id": r["correlation_id"],
                     "causation_id": r["causation_id"],
+                    "workspace_id": r["workspace_id"],
                     "created_at": r["occurred_at"],
                     "payload": r["payload"],
                     "schema_version": r["schema_version"],
