@@ -77,8 +77,8 @@ repo: SW_AI_W17-21-final / 작업 경로 references/ui-layer-lab/src/product/** 
 | D. 잔여 큐 소화 | done | A2 done | A2 착륙 직후 VP-007의 provider-free 전역 selector를 먼저 구현한다. 이후 api-needs.md의 남은 APIQ-019 → APIQ-015 순서로 claim·코드·full gate·exact anchor를 완료한다. BQ-017 전에는 provider 필드나 브랜드 아이콘을 소비하지 않는다. | VP-007 provider-free slice 검증 + 각 APIQ 앵커 + full gate. 남은 requested가 0이거나 전부 blocked 사유 기록 |
 | E. VP-002/003 | pending | **BQ-004가 origin/dev 착륙 + progress 앵커 확인** (§1.2 명령, 출력 기록). 그 전 착수 금지 | §3 절차로 VP-002(타임라인 소비: 커서 페이지네이션, causation_id null 허용) → VP-003(여정 뷰: UI-056 TimelineSwimlane 선례 custom, causation_id 있으면 인과 트리·없으면 시간순 강등, 접근성: 키보드 이벤트 목록 병행 제공) | 진입조건 검증 기록 + 행별 full gate + 앵커 |
 | F. 전체 게이트 | done | D done (E는 진입조건 충족 시 포함) | `npm run check` 전체 + `npm run visual-product`(격리 시나리오, unexpected network 0 기준) 최종 실행 | 두 명령 PASS 전문 기록. 실패 시 자가수정 루프(3회 규칙) |
-| G. 빌드 검증 | pending | F done | Vite production build 산출물 확인(에러 0, 경로·크기 기록). 배포 준비물 정리: 빌드 명령, 산출 경로, nginx same-origin proxy 전제 확인 | build PASS + 준비물이 night-log에 기록 |
-| H. 🔒 배포 | pending | G done + 백엔드 I done | **사람 전용.** GO-REQUEST [FE-H] 제출 후 대기 — 콘솔 배포는 백엔드 deploy-plan.md와 같은 사이클로 사람이 실행 | 사람 GO |
+| G. 빌드 검증 | done | F done | Vite production build 산출물 확인(에러 0, 경로·크기 기록). 배포 준비물 정리: 빌드 명령, 산출 경로, nginx same-origin proxy 전제 확인 | build PASS + 준비물이 night-log에 기록 |
+| H. 🔒 배포 | 🔒waiting | G done + 백엔드 I done | **사람 전용.** GO-REQUEST [FE-H] 제출 후 대기 — 콘솔 배포는 백엔드 deploy-plan.md와 같은 사이클로 사람이 실행 | 사람 GO |
 
 ## 5. 절대 금지 목록 (요약)
 

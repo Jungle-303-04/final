@@ -1011,3 +1011,32 @@ JsonMap, AbortSignal, ID 검증을 완료 앵커 전까지 제품 화면에서 �
 - light/dark, mobile, 320px reflow, 200% text, forced-colors, en/ko 포함
 - exact scenario API requests, unexpected feature network/WebSocket: 0
 ```
+
+## 2026-07-13 12:39 KST — [프론트] G 완료 증거
+
+- production build: `cd references/ui-layer-lab && npm run build` PASS, 14,512 modules.
+- 산출 경로: `references/ui-layer-lab/dist` — 26 MiB, assets 26 MiB, 2,675 files.
+- 제품 entry: `ProductApp-Sd31eMe8.js` 279.00 kB / gzip 76.92 kB,
+  `ProductApp-CRl--wg1.css` 78.67 kB / gzip 14.00 kB.
+- `references/ui-layer-lab/Dockerfile`은 multi-stage build 후 unprivileged nginx:8080으로
+  `dist/`를 서빙한다. `nginx.conf`는 `/api/`를 `api-gateway:8000`, `/api/live/`를
+  `realtime-gateway:8000`으로 same-origin proxy하고 SPA fallback을 제공한다.
+- 배포 실행은 하지 않았다. 기존 `scripts/aws-up.sh`의 console build context는 legacy
+  `frontend/`이므로 FE-H에서는 `references/ui-layer-lab/Dockerfile`·context를 명시한 별도
+  console image build가 필요하다. 사람 승인 없이 스크립트·클러스터를 수정하지 않는다.
+
+## GO-REQUEST [FE-H]
+
+- frontend branch / gate-build snapshot: `woonyong/ui-layer-lab` /
+  `f50c2e8dbb160ac903acb986275ae6a64165ffcd`
+- build command: `cd references/ui-layer-lab && npm ci && npm run check && npm run visual-product && npm run build`
+- artifact: `references/ui-layer-lab/dist` (26 MiB, 2,675 files)
+- image build 제안: `docker build --platform linux/amd64 -f references/ui-layer-lab/Dockerfile -t <immutable-console-image> references/ui-layer-lab`
+- 배포 제안: image push 후 management namespace의 `deployment/console` image를 immutable tag로
+  교체하고 rollout 완료·`/`·`/api/auth/session`·`/api/healthz`를 확인한다.
+- rollback: 직전 immutable console image tag로 재설정하거나 Kubernetes rollout undo 후 같은
+  세 endpoint와 인증 쿠키·WebSocket upgrade를 재확인한다.
+- gate: `npm run check` PASS(105 files / 757 tests), `npm run visual-product` PASS(35/35,
+  unexpected network/WebSocket 0), standalone production build PASS.
+- 대기 조건: 백엔드 pipeline I는 `origin/dev`에서 아직 `pending`이다. FE-H 실행은 백엔드 I
+  완료와 사람 GO가 모두 확인된 뒤에만 가능하다.
