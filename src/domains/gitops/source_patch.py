@@ -632,8 +632,7 @@ def _declared_replacement(
             replacement.desired_value,
         )
     if action_type == "probe_fix":
-        semantic = _probe_semantic_field(replacement.field_path)
-        target = source.probe_path(semantic) if semantic is not None else None
+        target = source.probe_path(replacement.field_path)
         if target is not None:
             return ScalarFieldReplacement(
                 target,
@@ -651,8 +650,14 @@ def _declared_image_replacement(
     desired = replacement.desired_value
     if not isinstance(current, str) or not isinstance(desired, str):
         raise _unsupported("image replacement is not textual")
-    if source.source_type == "raw-yaml" and source.image_path is not None:
+    if (
+        source.source_type == "raw-yaml"
+        and source.image_path is not None
+        and replacement.field_path == source.image_path
+    ):
         return ScalarFieldReplacement(source.image_path, current, desired)
+    if source.source_type == "raw-yaml":
+        raise _unsupported("raw image field is not declared")
 
     current_ref = _tagged_image(current)
     desired_ref = _tagged_image(desired)
@@ -679,15 +684,6 @@ def _tagged_image(value: str) -> tuple[str, str] | None:
     if not repository or re.fullmatch(r"[A-Za-z0-9_][A-Za-z0-9._-]{0,127}", tag) is None:
         return None
     return repository, tag
-
-
-def _probe_semantic_field(field_path: str) -> str | None:
-    match = re.search(
-        r"\.(readinessProbe|livenessProbe)\."
-        r"(timeoutSeconds|httpGet\.(?:path|port))$",
-        field_path,
-    )
-    return f"{match.group(1)}.{match.group(2)}" if match is not None else None
 
 
 def _unsupported(reason: str) -> RemediationSourcePatchUnsupported:

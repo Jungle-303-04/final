@@ -33,14 +33,14 @@ spec:
       imagePath: spec.template.spec.containers[name=checkout-api].image
       replicaPath: spec.replicas
       probePaths:
-        readinessProbe.timeoutSeconds: spec.template.spec.containers[name=checkout-api].readinessProbe.timeoutSeconds
+        spec.template.spec.containers[name=checkout-api].readinessProbe.timeoutSeconds: spec.template.spec.containers[name=checkout-api].readinessProbe.timeoutSeconds
     - manifestPath: charts/checkout/Chart.yaml
       sourceType: helm-values
       path: charts/checkout/values.yaml
       imageTagPath: image.tag
       replicaPath: replicaCount
       probePaths:
-        readinessProbe.timeoutSeconds: probes.readiness.timeoutSeconds
+        spec.template.spec.containers[name=checkout-api].readinessProbe.timeoutSeconds: probes.readiness.timeoutSeconds
     - manifestPath: overlays/prod/kustomization.yaml
       sourceType: kustomize
       path: overlays/prod/kustomization.yaml
@@ -141,6 +141,19 @@ spec:
 
     assert "app: old" in source
     assert "app: new" not in source
+
+
+def test_raw_contract_does_not_redirect_another_container_to_declared_image_path() -> None:
+    patch_plan = plan(
+        "image_rollback",
+        "deploy/app.yaml",
+        "spec.template.spec.containers[name=sidecar].image",
+        "ghcr.io/project/sidecar:v2",
+        "ghcr.io/project/sidecar:v1",
+    )
+
+    with pytest.raises(RemediationSourcePatchUnsupported, match="unsupported"):
+        declared_scalar_patch(patch_plan, parse_remediation_source_contract(contract_content()))
 
 
 @pytest.mark.parametrize(
