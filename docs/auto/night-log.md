@@ -1440,3 +1440,14 @@ JsonMap, AbortSignal, ID 검증을 완료 앵커 전까지 제품 화면에서 �
   제공하고, subject→journey stage의 canonical 분류 계약(unknown 처리 포함)과 완료 앵커를
   `origin/dev`에 착륙한다. 그 뒤 strict Zod RED→GREEN, 인과 트리/시간순 강등/키보드 목록
   테스트 순서로 재개한다.
+
+## 2026-07-13 14:12 KST — [프론트] P4 진입조건 검증·API claim
+
+- `git merge-base --is-ancestor 81969f23e46cb40743af08ffbc1affe556bd5c5e origin/dev`
+  결과 exit 0. `origin/dev`의 `src/domains/rca_changes/router.py`,
+  `docs/api/05-rca-dashboard/15-recent-changes.bru` 실물 확인도 exit 0이다.
+- canonical 계약은 `GET /api/rca/incidents/{incident_id}/recent-changes?limit=`와
+  `RecentChangeListResponse{incident_id,items,limit}`다. item은 event ID·시각·workload identity·
+  image before/after·허용된 PR URL·commit·repository·workflow run을 제공한다.
+- `origin/dev...HEAD`의 dev-only는 12로 30커밋 선흡수 임계값 미만이다. VP-004를 직결로
+  전환하고 `APIQ-031 getIncidentRecentChanges`를 단독 claim했다.
