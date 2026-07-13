@@ -1121,3 +1121,12 @@ npm run visual-product
 - BQ-014는 삭제 전 hash `f5461aa8070a7ba9b088410d0ae5ebe89b8b4e86`을 복구점으로
   남기고 `requested`로 되돌렸다. H3 merge `6d68325bf`와 승인 HEAD `33fd5f21c`는
   계속 `origin/dev` ancestor exit 0이다.
+
+## 2026-07-13 12:19 KST — Codex 브랜치 정리 델타 복구 보험
+
+- 첫 회수 직후 별도 세션이 진행 중 작업 단위를 마치며 로컬
+  `codex/f-argocd-observer`를 다시 생성한 것을 최종 검증에서 감지했다.
+- 새 HEAD `8127cc973bdf759cfb373c3b50feb3fbfe14656f`, `origin/dev` ancestor exit 1,
+  worktree clean. 앞선 복구점 `f5461aa80`을 포함하는 후속 3커밋 작업 단위다.
+- 사람의 전면 정리 위임에 따라 이 hash를 최종 복구 보험으로 영속화한 뒤 로컬 `-D`와
+  clean worktree remove를 재수행한다. 원격 ref가 생기면 같은 hash를 확인한 뒤 delete한다.
