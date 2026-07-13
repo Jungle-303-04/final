@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import stat
 from pathlib import Path
 
 import httpx
@@ -239,3 +240,19 @@ def test_make_demo_does_not_persist_bootstrap_or_session_credentials() -> None:
     assert "SCM_REVIEWER_HEADER" in review
     assert "SCM_WRITER_HEADER" not in review
     assert "scm.github.tokenSecretKey=writer-token" in script
+
+
+def test_make_demo_uses_fresh_artifacts_and_keeps_tokens_out_of_process_arguments() -> None:
+    script_path = ROOT / "scripts" / "oss-demo.sh"
+    script = script_path.read_text(encoding="utf-8")
+
+    assert script_path.stat().st_mode & stat.S_IXUSR
+    assert "DEMO_ARTIFACT_DIR:-.demo-artifacts" not in script
+    assert "artifact directory must be empty" in script
+    assert '--from-literal="writer-token=' not in script
+    assert '--from-literal="reviewer-token=' not in script
+    assert '--from-literal="admin-token=' not in script
+    assert '--from-file="writer-token=' in script
+    assert '--from-file="reviewer-token=' in script
+    assert '--from-file="admin-token=' in script
+    assert script.index("trap cleanup EXIT") < script.index('RUNTIME_DIR="$(mktemp -d')
