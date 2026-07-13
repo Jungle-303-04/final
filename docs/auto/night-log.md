@@ -2542,3 +2542,17 @@ target preflight·register 네 함수와 strict Zod 계약을 claim했다. 1회�
   GAP-006 Applications·GitOps·Checks canonical list, GAP-007 registration resume/error,
   GAP-008 disconnect operation, GAP-009 Git repository wizard, GAP-010 graph snapshot이다.
   각 계약 착륙 전에는 해당 표면만 주차하고 기존 검증된 화면을 유지한다.
+
+## 2026-07-13 20:12 KST — [프론트] VP-010 Label 정본 승격·회수
+
+- 소유권 복원 `195a0f228`과 VP-010 정본 `c7aeca4c2`를 lab에 push했다. 후자의 전체
+  `npm run check`는 TypeScript·ESLint, Vitest 121 files / 856 tests, design guard 349 files,
+  shadcn source audit 482 previews, Vite 14,539 modules production build까지 PASS했다.
+- D-024 4조건은 merge-tree clean/tree `b346f981e7bfc0caf008954fc87cfe05acd8cd9d`,
+  최종 변경 `docs/auto/night-log.md`·`docs/spec/frontend/verified-pipeline-insertion-map.md`·
+  `docs/spec/frontend/vp-010-unified-filter-ia.md` 3개, 삭제·backend/source/frozen 변경 0건,
+  lab push 및 `origin/dev@c7aeca4c2` ancestor exit 0으로 증명했다. 이 변경은 dev SHA
+  `c7aeca4c2`로 배포 대상이다.
+- 회수: 이 사이클에서 만든 임시 branch/worktree/stash는 0개다. 다른 작업자의 활성 OSS
+  통합 worktree `d176012cf`, `adce319ed`, 보호 대상 `demo/v1`, dirty legacy `dev` worktree는
+  건드리지 않았다. stash 8개는 반영 여부가 증명되지 않아 유지했다.
