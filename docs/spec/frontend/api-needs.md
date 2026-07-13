@@ -4,7 +4,7 @@ status: active-coordination-queue
 date: 2026-07-13
 owners: Codex 요청 / API 연결 작업자 claim·처리 / F 트랙 행(APIQ-029)·계약 갱신(APIQ-012)은 검토자 기록
 workorder: api-integration-workorder-20260711.md
-snapshot: 1행·1함수 / requested 0 / in_progress 1 / blocked 0 / valid completion anchors 53
+snapshot: 0행·0함수 / requested 0 / in_progress 0 / blocked 0 / valid completion anchors 54
 ---
 
 # 프론트 API 요청 큐
@@ -16,9 +16,8 @@ snapshot: 1행·1함수 / requested 0 / in_progress 1 / blocked 0 / valid comple
 상세한 경로, 소유권, schema, test, mutation 안전, 2커밋 완료 절차는
 `api-integration-workorder-20260711.md`가 정본이다.
 
-> **현재 claim:** `APIQ-032 listApplicationRuns` — `Codex-API@woonyong/ui-layer-lab`,
-> heartbeat `2026-07-13 14:44 KST`. 기존 함수의 동적 run은 보존하고 optional
-> `promotion_gate`만 strict 계약으로 재검증한다.
+> **현재 claim:** 없음. `APIQ-032 listApplicationRuns`는 코드 커밋
+> `429fb1d9122c6bf264f5ee1beef948107bb5161e`와 전체 게이트를 통과하고 완료됐다.
 
 ## 1. 상태와 claim 규칙
 
@@ -70,7 +69,6 @@ claim·heartbeat: YYYY-MM-DD HH:mm KST
 
 | ID | 우선 | 함수명 | routes.py 상수 | 대상 파일 | 필요한 화면 | 요청 시각 | 상태 | 담당/브랜치 | claim·heartbeat | 완료 조건·주의 |
 |---|---:|---|---|---|---|---|---|---|---|---|
-| APIQ-032 | P0 | `listApplicationRuns` | `APPLICATION_RUNS_PATH` | `applications.ts` / `applications-schemas.ts` / `applications.test.ts` / `barrels/gitops.ts` | VP-005 승격 가능성 근거 | 2026-07-13 14:44 KST | in_progress | `Codex-API@woonyong/ui-layer-lab` | 2026-07-13 14:44 KST | `GET /api/applications/{application_id}/runs?limit=`. 외피 strict, run 본문은 확장 필드를 보존하고 optional nullable `promotion_gate`만 9필드 strict close한다. `eligible` 4조건, count/list 길이, `*_not_false` 불변식을 검증한다. 서버 순서·workspace 판정을 신뢰하고 클라이언트 재정렬·필터 금지. 기존 `56c689e61` 앵커는 구조화 gate 이전 계약이므로 새 exact 앵커가 필요하다. |
 
 ## 3. 기존 구현 검증·승인
 
@@ -83,6 +81,10 @@ AbortSignal contract test를 추가하고, 필요한 경우 claim 범위 안에�
 ## 4. 큐 밖 Backend gap과 realtime
 
 - route 자체가 없는 `BE-Gap-*`은 이 큐에 넣지 않는다. backend semantic contract가 먼저다.
+- `BE-Gap-ApplicationsClusterScope`: 전역 Cluster selector가 Applications 표면의 단일 권위가
+  되려면 application 목록과 workflow run 목록에 서버측 `cluster_id` 필터와 opaque cursor가
+  필요하다. 현재 limit 응답을 받은 뒤 클라이언트에서 필터링하면 completeness를 증명할 수 없으므로
+  화면 release를 금지한다. `has_more` 또는 `next_cursor`까지 착륙하면 별도 APIQ로 재검증한다.
 - repo/provider/target/org/alert/dead-letter 함수는 현재 필요한 화면이 확정되지 않아 아직 요청하지
   않았다. routes가 있다는 이유만으로 만들지 않는다.
 - WebSocket `/api/live/browser`는 HTTP queue와 분리한다. connection·handshake·resume·sequence gap

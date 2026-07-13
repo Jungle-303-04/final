@@ -1680,3 +1680,18 @@ API 완성: getIncidentRecentChanges (4f602cc86660a7f8a12583cffc44a53e220d9dbf)
 - `npm run visual-product` PASS: 기존 전 시나리오와 영어 Issues desktop·320px reflow를 통과했다.
   증거는 `output/playwright/product-issues-authenticated-detail-desktop-light.png`와
   `output/playwright/product-issues-authenticated-detail-reflow-320-light.png`다.
+
+## 2026-07-13 APIQ-032 승격 게이트 조회 계약 완료
+
+- RED `1e06706c9`는 nested unknown field, eligible 판정 불일치, 실패 리소스 개수 불일치,
+  tri-state 보조 필드 불일치를 먼저 실패시켰다.
+- GREEN `429fb1d9122c6bf264f5ee1beef948107bb5161e`는 outer strict / run loose /
+  `promotion_gate` strict 경계와 공개 `APPLICATION_RUNS_PATH`를 구현했다. run의 additive 필드는
+  parse 후에도 보존하며 gate 내부 unknown field는 거부한다.
+- full `npm run check` PASS: TypeScript·ESLint, Vitest 112 files / 808 tests,
+  product design guard 336 files, shadcn source audit 482 previews,
+  Vite production build 14,535 modules.
+- Applications API의 서버측 Cluster filter와 cursor가 없어 VP-005 화면 release는 주차했다.
+  제한 응답의 클라이언트 필터로 completeness를 위장하지 않는다.
+
+API 완성: listApplicationRuns (429fb1d9122c6bf264f5ee1beef948107bb5161e)

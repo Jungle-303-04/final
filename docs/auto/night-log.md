@@ -1481,3 +1481,14 @@ JsonMap, AbortSignal, ID 검증을 완료 앵커 전까지 제품 화면에서 �
 - `listApplicationRuns`의 기존 앵커 `56c689e61`은 구조화 gate 도입 전 계약이다.
   `APIQ-032`는 outer strict / run open / `promotion_gate` strict 경계로 재앵커한다.
 - `origin/dev...HEAD`의 dev-only는 27로 30커밋 선흡수 임계값 미만이다.
+
+## 2026-07-13 14:50 KST — [프론트] P5 APIQ-032 완료·화면 계약 주차
+
+- RED `1e06706c9` → GREEN `429fb1d9122c6bf264f5ee1beef948107bb5161e`.
+  GREEN은 API schema·endpoint·barrel과 contract test를 함께 포함하며 원격 ancestor exit 0이다.
+- targeted 1 file / 13 tests PASS. `npm run check` PASS: Vitest 112 files / 808 tests,
+  design guard 336 files, shadcn 482 previews, production build 14,535 modules.
+- `eligible`은 승격 완료가 아니라 네 조건의 현재 판정이다. applied/rollout의 null은 실패가
+  명시되지 않았다는 뜻이며 성공으로 번역하지 않는다.
+- Applications와 Runs API에 서버측 `cluster_id` 필터·cursor가 없어 전역 selector와 본문
+  completeness를 일치시킬 수 없다. VP-005 UI만 재개 조건과 함께 주차하고 P6으로 계속한다.
