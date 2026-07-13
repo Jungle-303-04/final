@@ -35,7 +35,7 @@ function TestShell(props: ComponentProps<typeof ProductShell>) {
 
 describe("ProductShell", () => {
   it("renders only released surfaces and keeps the current route accessible", () => {
-    const releasedSurfaceIds = new Set<ProductSurfaceId>(["home", "issues", "timeline"]);
+    const releasedSurfaceIds = new Set<ProductSurfaceId>(["home", "issues", "catalog"]);
     const markup = renderToStaticMarkup(
       <I18nProvider navigatorLanguage="en-US" storage={null}>
         <MemoryRouter initialEntries={["/product/issues"]}>
@@ -50,7 +50,8 @@ describe("ProductShell", () => {
 
     expect(markup).toContain("Home");
     expect(markup).toContain("Issues");
-    expect(markup).toContain("Timeline");
+    expect(markup).toContain("Catalog");
+    expect(markup).not.toContain("Timeline");
     expect(markup).not.toContain("Topology");
     expect(markup).not.toContain("workspace_id");
     expect(markup).toContain("Sign out");
@@ -66,7 +67,7 @@ describe("ProductShell", () => {
       <I18nProvider navigatorLanguage="en-US" storage={null}>
         <MemoryRouter initialEntries={["/product/not-released"]}>
           <Routes>
-            <Route element={<TestShell auth={testAuth} releasedSurfaceIds={new Set(["timeline"])} />}>
+            <Route element={<TestShell auth={testAuth} releasedSurfaceIds={new Set(["catalog"])} />}>
               <Route path="*" element={<p>Redirecting</p>} />
             </Route>
           </Routes>
@@ -74,7 +75,7 @@ describe("ProductShell", () => {
       </I18nProvider>,
     );
 
-    expect(markup).toContain("Timeline");
+    expect(markup).toContain("Catalog");
     expect(markup).not.toContain("Home");
   });
 
