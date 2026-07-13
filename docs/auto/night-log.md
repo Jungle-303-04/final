@@ -1784,3 +1784,16 @@ target preflight·register 네 함수와 strict Zod 계약을 claim했다. 1회�
 - targeted 3 files / 14 tests, typecheck, lint PASS. full `npm run check` PASS:
   114 files / 827 tests, design guard 341 files, shadcn 482 previews, Vite 14,538 modules.
   `npm run visual-product` PASS: 38 isolated scenarios, unexpected network/WebSocket 0건.
+
+## 2026-07-13 16:02 KST — [프론트] BQ-017 스키마 호환 완료 + `bfaf03901`
+
+- `ClusterSummary.provider`는 `eks|gke|aks|onprem|kind|unknown`의 optional enum으로,
+  `ClusterConnectionStatus.connection_stage`는
+  `token_issued|awaiting_install|agent_connected|snapshot_received|ready|expired|error`의
+  optional enum으로 명시돼 있다. 두 객체의 `z.strictObject` 경계는 유지한다.
+- 최초 호환 구현 `bfaf03901`과 공용 연결 단계 schema 통합 `8678d63b0`은 현재
+  `origin/dev`와 `origin/woonyong/ui-layer-lab`의 ancestor이며, 두 원격의 해당 API schema와
+  계약 테스트 파일은 동일하다.
+- targeted API contract PASS: 2 files / 19 tests. full `npm run check` PASS:
+  TypeScript·ESLint, Vitest 114 files / 827 tests, design guard 341 files,
+  shadcn source audit 482 previews, Vite production build 14,538 modules.
