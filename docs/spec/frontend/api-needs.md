@@ -4,7 +4,7 @@ status: active-coordination-queue
 date: 2026-07-13
 owners: Codex 요청 / API 연결 작업자 claim·처리 / F 트랙 행(APIQ-029)·계약 갱신(APIQ-012)은 검토자 기록
 workorder: api-integration-workorder-20260711.md
-snapshot: 1행·2함수 / requested 1 / in_progress 0 / blocked 0 / valid completion anchors 49
+snapshot: 1행·2함수 / requested 0 / in_progress 1 / blocked 0 / valid completion anchors 49
 ---
 
 # 프론트 API 요청 큐
@@ -71,7 +71,7 @@ claim·heartbeat: YYYY-MM-DD HH:mm KST
 
 | ID | 우선 | 함수명 | routes.py 상수 | 대상 파일 | 필요한 화면 | 요청 시각 | 상태 | 담당/브랜치 | claim·heartbeat | 완료 조건·주의 |
 |---|---:|---|---|---|---|---|---|---|---|---|
-| `APIQ-015` | P3 | `listCatalogItems`, `getCatalogItem` | `CATALOG_ITEMS_PATH`, `CATALOG_ITEM_PATH` | `catalog.ts`, `catalog-schemas.ts`, test | provider-neutral Catalog | 2026-07-11 16:19 KST | requested | — | — | item JsonMap 보존; pagination/filter 발명 금지; install 제외 |
+| `APIQ-015` | P3 | `listCatalogItems`, `getCatalogItem` | `CATALOG_ITEMS_PATH`, `CATALOG_ITEM_PATH` | `catalog.ts`, `catalog-schemas.ts`, test | provider-neutral Catalog | 2026-07-11 16:19 KST | in_progress | `Codex-API@woonyong/ui-layer-lab` | 2026-07-13 12:30 KST | item JsonMap 보존; pagination/filter 발명 금지; install 제외 |
 
 ## 3. 기존 구현 검증·승인
 

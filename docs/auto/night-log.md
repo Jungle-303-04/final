@@ -971,3 +971,7 @@ strict envelope·open JsonMap·AbortSignal·possibly-sent POST 단일 호출 계
 - `npm run visual-product` 1·2차는 200% text resize에서 icon 추가로 생긴 42px overflow를
   검출했다. connection label을 시각적으로 compact화하고 셸의 2행 전환점을 `lg`로 올린 뒤
   3차 35 scenarios PASS, unexpected API/network/WebSocket 요청 0.
+
+[2026-07-13 12:30 KST] [프론트-D/API] APIQ-015 in_progress — provider-neutral Catalog의
+`listCatalogItems`·`getCatalogItem` 계약을 claim했다. strict list/detail envelope와 open item
+JsonMap, AbortSignal, ID 검증을 완료 앵커 전까지 제품 화면에서 소비하지 않는다.
