@@ -1235,3 +1235,15 @@ Bundle route는 200을 반환한다.
 - 기존 code `914d34ff6`, canonical merge `95ff11cc6`, Bruno
   `docs/api/17-resources-filter/04-resource-graph.bru`와 전체 graph 회귀 테스트를 재사용한다.
 - 추가 gateway 계약·source 변경은 0건이며, §9의 stale 상태와 workqueue 번호만 정합화한다.
+
+### 프론트 그래프 계약 번호 매핑 — canonical 증거
+
+- BQ-022는 기존 GAP-010과 같은 계약이다. 새 구현 없이 code `914d34ff6`, canonical merge
+  `95ff11cc6`, 기존 완료 앵커 `RESOURCES_GRAPH_PATH + ResourceGraphSnapshotResponse`에 연결했다.
+- `GET /api/resources/graph`는 Resources 표와 같은 filter/snapshot revision을 사용하고 정확히
+  한 authorized cluster만 허용한다. stable drill-down identity와 근거가 검증된 edge만 반환한다.
+- unauthorized cluster는 data query 전 404, cross-cluster node는 strict DTO에서 거부한다.
+  budget/source/relation 불완전은 count·snapshot·relation completeness와 reason code로 노출한다.
+- Bruno `docs/api/17-resources-filter/04-resource-graph.bru`와 기존 contract/router/builder 회귀를
+  재사용한다. source·gateway 계약 변경은 0건이며 프론트는 GAP-010의 stale 문구를 기존 GREEN
+  앵커 기준으로 갱신할 수 있다.
