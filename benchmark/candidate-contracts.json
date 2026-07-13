@@ -2,7 +2,7 @@
   "schema_version": "opsiabench/candidate-contracts/v0.1",
   "ordering": "catalog_path_lexical_then_rule_then_candidate",
   "batch_size": 10,
-  "next_ordinal": 11,
+  "next_ordinal": 21,
   "contracts": [
     {
       "ordinal": 1,
@@ -660,6 +660,555 @@
           "action_type": "restart_all_dependencies",
           "blast_radius": "fleet",
           "reason": "하나의 dependency connection 후보는 외부·공용 dependency 전체 재시작 권한이 아닙니다."
+        }
+      ],
+      "benchmark_fixtures": []
+    },
+    {
+      "ordinal": 11,
+      "catalog_source": "src/services/ai/agent/causes/catalog/dependencies.yaml",
+      "rule_id": "db_connection_failed",
+      "candidate_id": "database_connectivity_failure",
+      "required_evidence": [
+        "kubernetes:cluster_resource_state",
+        "metrics:telemetry_metrics",
+        "logs:related_logs",
+        "traces:related_traces",
+        "metadata:current_workload_snapshots"
+      ],
+      "supporting_signals": [
+        {
+          "id": "database_connectivity_signal",
+          "any_of": [
+            {
+              "log_pattern": "database connection"
+            },
+            {
+              "log_pattern": "connection refused"
+            },
+            {
+              "log_pattern": "connection timed out"
+            },
+            {
+              "log_pattern": "ECONNREFUSED"
+            },
+            {
+              "log_pattern": "timeout"
+            }
+          ]
+        }
+      ],
+      "contradicting_signals": [],
+      "contradiction_policy": "not_modeled_v0.1",
+      "missing_evidence_policy": "all_required_evidence_and_supporting_signal_groups",
+      "patch_capabilities": [],
+      "allowed_remediations": [
+        {
+          "action_type": "manual_analysis",
+          "route": "approval_required",
+          "blast_radius": "unknown",
+          "approval_required": true,
+          "rollback": "자동 변경 없음",
+          "post_verification": [
+            "원인 rule 추가 여부 검토"
+          ]
+        }
+      ],
+      "forbidden_remediations": [
+        {
+          "action_type": "restart_all_databases",
+          "blast_radius": "fleet",
+          "reason": "단일 워크로드의 연결 실패는 모든 데이터베이스 재시작 권한이 아닙니다."
+        }
+      ],
+      "benchmark_fixtures": []
+    },
+    {
+      "ordinal": 12,
+      "catalog_source": "src/services/ai/agent/causes/catalog/dependencies.yaml",
+      "rule_id": "db_connection_failed",
+      "candidate_id": "database_credential_or_config_error",
+      "required_evidence": [
+        "kubernetes:cluster_resource_state",
+        "logs:related_logs",
+        "metadata:current_workload_snapshots"
+      ],
+      "supporting_signals": [
+        {
+          "id": "database_config_signal",
+          "any_of": [
+            {
+              "log_pattern": "password authentication failed"
+            },
+            {
+              "log_pattern": "authentication failed"
+            },
+            {
+              "log_pattern": "database not found"
+            },
+            {
+              "log_pattern": "unknown host"
+            },
+            {
+              "log_pattern": "invalid connection string"
+            }
+          ]
+        }
+      ],
+      "contradicting_signals": [],
+      "contradiction_policy": "not_modeled_v0.1",
+      "missing_evidence_policy": "all_required_evidence_and_supporting_signal_groups",
+      "patch_capabilities": [],
+      "allowed_remediations": [
+        {
+          "action_type": "manual_analysis",
+          "route": "approval_required",
+          "blast_radius": "unknown",
+          "approval_required": true,
+          "rollback": "자동 변경 없음",
+          "post_verification": [
+            "원인 rule 추가 여부 검토"
+          ]
+        }
+      ],
+      "forbidden_remediations": [
+        {
+          "action_type": "rotate_all_database_credentials",
+          "blast_radius": "fleet",
+          "reason": "후보 하나의 인증 오류로 전체 데이터베이스 자격 증명을 회전하면 정상 소비자가 함께 중단됩니다."
+        }
+      ],
+      "benchmark_fixtures": []
+    },
+    {
+      "ordinal": 13,
+      "catalog_source": "src/services/ai/agent/causes/catalog/dependencies.yaml",
+      "rule_id": "db_connection_failed",
+      "candidate_id": "database_connection_pool_exhausted",
+      "required_evidence": [
+        "metrics:telemetry_metrics",
+        "logs:related_logs",
+        "traces:related_traces"
+      ],
+      "supporting_signals": [
+        {
+          "id": "database_pool_exhausted_signal",
+          "any_of": [
+            {
+              "log_pattern": "connection pool exhausted"
+            },
+            {
+              "log_pattern": "too many connections"
+            },
+            {
+              "log_pattern": "remaining connection slots"
+            },
+            {
+              "log_pattern": "pool timeout"
+            }
+          ]
+        }
+      ],
+      "contradicting_signals": [],
+      "contradiction_policy": "not_modeled_v0.1",
+      "missing_evidence_policy": "all_required_evidence_and_supporting_signal_groups",
+      "patch_capabilities": [],
+      "allowed_remediations": [
+        {
+          "action_type": "manual_analysis",
+          "route": "approval_required",
+          "blast_radius": "unknown",
+          "approval_required": true,
+          "rollback": "자동 변경 없음",
+          "post_verification": [
+            "원인 rule 추가 여부 검토"
+          ]
+        }
+      ],
+      "forbidden_remediations": [
+        {
+          "action_type": "terminate_all_database_connections",
+          "blast_radius": "cluster",
+          "reason": "연결 풀 고갈 증거만으로 클러스터의 모든 데이터베이스 세션을 종료할 수 없습니다."
+        }
+      ],
+      "benchmark_fixtures": []
+    },
+    {
+      "ordinal": 14,
+      "catalog_source": "src/services/ai/agent/causes/catalog/deployment_gitops.yaml",
+      "rule_id": "deployment_rollout_failed",
+      "candidate_id": "deployment_progress_deadline_exceeded",
+      "required_evidence": [
+        "kubernetes:cluster_resource_state",
+        "metrics:telemetry_metrics",
+        "logs:related_logs",
+        "metadata:current_workload_snapshots"
+      ],
+      "supporting_signals": [
+        {
+          "id": "progress_deadline_signal",
+          "any_of": [
+            {
+              "event_pattern": "ProgressDeadlineExceeded"
+            },
+            {
+              "event_pattern": "progress deadline"
+            },
+            {
+              "log_pattern": "ProgressDeadlineExceeded"
+            },
+            {
+              "log_pattern": "rollout exceeded"
+            }
+          ]
+        }
+      ],
+      "contradicting_signals": [],
+      "contradiction_policy": "not_modeled_v0.1",
+      "missing_evidence_policy": "all_required_evidence_and_supporting_signal_groups",
+      "patch_capabilities": [],
+      "allowed_remediations": [
+        {
+          "action_type": "manual_analysis",
+          "route": "approval_required",
+          "blast_radius": "unknown",
+          "approval_required": true,
+          "rollback": "자동 변경 없음",
+          "post_verification": [
+            "원인 rule 추가 여부 검토"
+          ]
+        }
+      ],
+      "forbidden_remediations": [
+        {
+          "action_type": "force_delete_all_rollout_pods",
+          "blast_radius": "cluster",
+          "reason": "하나의 rollout deadline 초과는 클러스터 전체 rollout pod 강제 삭제 권한이 아닙니다."
+        }
+      ],
+      "benchmark_fixtures": []
+    },
+    {
+      "ordinal": 15,
+      "catalog_source": "src/services/ai/agent/causes/catalog/deployment_gitops.yaml",
+      "rule_id": "deployment_rollout_failed",
+      "candidate_id": "replica_unavailable_after_rollout",
+      "required_evidence": [
+        "kubernetes:cluster_resource_state",
+        "metrics:telemetry_metrics",
+        "logs:related_logs"
+      ],
+      "supporting_signals": [
+        {
+          "id": "replica_unavailable_signal",
+          "any_of": [
+            {
+              "event_pattern": "unavailable"
+            },
+            {
+              "event_pattern": "deadline"
+            },
+            {
+              "log_pattern": "unavailable"
+            }
+          ]
+        }
+      ],
+      "contradicting_signals": [],
+      "contradiction_policy": "not_modeled_v0.1",
+      "missing_evidence_policy": "all_required_evidence_and_supporting_signal_groups",
+      "patch_capabilities": [],
+      "allowed_remediations": [
+        {
+          "action_type": "manual_analysis",
+          "route": "approval_required",
+          "blast_radius": "unknown",
+          "approval_required": true,
+          "rollback": "자동 변경 없음",
+          "post_verification": [
+            "원인 rule 추가 여부 검토"
+          ]
+        }
+      ],
+      "forbidden_remediations": [
+        {
+          "action_type": "scale_all_namespaces",
+          "blast_radius": "cluster",
+          "reason": "대상 replica 미가용 상태를 다른 namespace의 scale 변경으로 확장하면 안 됩니다."
+        }
+      ],
+      "benchmark_fixtures": []
+    },
+    {
+      "ordinal": 16,
+      "catalog_source": "src/services/ai/agent/causes/catalog/deployment_gitops.yaml",
+      "rule_id": "gitops_controller_sync_failed",
+      "candidate_id": "gitops_sync_failed",
+      "required_evidence": [
+        "kubernetes:cluster_resource_state",
+        "metrics:telemetry_metrics",
+        "logs:related_logs",
+        "metadata:current_workload_snapshots"
+      ],
+      "supporting_signals": [
+        {
+          "id": "gitops_sync_failed_signal",
+          "any_of": [
+            {
+              "event_pattern": "SyncFailed"
+            },
+            {
+              "log_pattern": "sync failed"
+            },
+            {
+              "log_pattern": "comparison error"
+            },
+            {
+              "log_pattern": "manifest generation error"
+            }
+          ]
+        }
+      ],
+      "contradicting_signals": [],
+      "contradiction_policy": "not_modeled_v0.1",
+      "missing_evidence_policy": "all_required_evidence_and_supporting_signal_groups",
+      "patch_capabilities": [],
+      "allowed_remediations": [
+        {
+          "action_type": "manual_analysis",
+          "route": "approval_required",
+          "blast_radius": "unknown",
+          "approval_required": true,
+          "rollback": "자동 변경 없음",
+          "post_verification": [
+            "원인 rule 추가 여부 검토"
+          ]
+        }
+      ],
+      "forbidden_remediations": [
+        {
+          "action_type": "force_sync_all_gitops_applications",
+          "blast_radius": "fleet",
+          "reason": "단일 GitOps sync 실패로 fleet 전체 application을 강제 동기화할 수 없습니다."
+        }
+      ],
+      "benchmark_fixtures": []
+    },
+    {
+      "ordinal": 17,
+      "catalog_source": "src/services/ai/agent/causes/catalog/deployment_gitops.yaml",
+      "rule_id": "gitops_controller_sync_failed",
+      "candidate_id": "manifest_validation_failed",
+      "required_evidence": [
+        "kubernetes:cluster_resource_state",
+        "logs:related_logs",
+        "metadata:current_workload_snapshots"
+      ],
+      "supporting_signals": [
+        {
+          "id": "manifest_validation_signal",
+          "any_of": [
+            {
+              "event_pattern": "Invalid"
+            },
+            {
+              "log_pattern": "validation failed"
+            },
+            {
+              "log_pattern": "immutable field"
+            },
+            {
+              "log_pattern": "unknown field"
+            },
+            {
+              "log_pattern": "admission webhook"
+            }
+          ]
+        }
+      ],
+      "contradicting_signals": [],
+      "contradiction_policy": "not_modeled_v0.1",
+      "missing_evidence_policy": "all_required_evidence_and_supporting_signal_groups",
+      "patch_capabilities": [],
+      "allowed_remediations": [
+        {
+          "action_type": "manual_analysis",
+          "route": "approval_required",
+          "blast_radius": "unknown",
+          "approval_required": true,
+          "rollback": "자동 변경 없음",
+          "post_verification": [
+            "원인 rule 추가 여부 검토"
+          ]
+        }
+      ],
+      "forbidden_remediations": [
+        {
+          "action_type": "disable_all_admission_policies",
+          "blast_radius": "cluster",
+          "reason": "manifest 검증 실패를 우회하려고 클러스터 admission 정책 전체를 비활성화할 수 없습니다."
+        }
+      ],
+      "benchmark_fixtures": []
+    },
+    {
+      "ordinal": 18,
+      "catalog_source": "src/services/ai/agent/causes/catalog/external_dependencies.yaml",
+      "rule_id": "redis_unavailable",
+      "candidate_id": "redis_dependency_unavailable",
+      "required_evidence": [
+        "metrics:telemetry_metrics",
+        "logs:related_logs",
+        "traces:related_traces"
+      ],
+      "supporting_signals": [
+        {
+          "id": "redis_failure_signal",
+          "any_of": [
+            {
+              "log_pattern": "redis"
+            },
+            {
+              "log_pattern": "connection refused"
+            },
+            {
+              "log_pattern": "read only"
+            },
+            {
+              "log_pattern": "timeout"
+            }
+          ]
+        }
+      ],
+      "contradicting_signals": [],
+      "contradiction_policy": "not_modeled_v0.1",
+      "missing_evidence_policy": "all_required_evidence_and_supporting_signal_groups",
+      "patch_capabilities": [],
+      "allowed_remediations": [
+        {
+          "action_type": "manual_analysis",
+          "route": "approval_required",
+          "blast_radius": "unknown",
+          "approval_required": true,
+          "rollback": "자동 변경 없음",
+          "post_verification": [
+            "원인 rule 추가 여부 검토"
+          ]
+        }
+      ],
+      "forbidden_remediations": [
+        {
+          "action_type": "flush_all_redis_clusters",
+          "blast_radius": "fleet",
+          "reason": "단일 Redis dependency 장애는 fleet 전체 cache flush 권한이 아닙니다."
+        }
+      ],
+      "benchmark_fixtures": []
+    },
+    {
+      "ordinal": 19,
+      "catalog_source": "src/services/ai/agent/causes/catalog/external_dependencies.yaml",
+      "rule_id": "kafka_consumer_lag",
+      "candidate_id": "consumer_lag_backlog",
+      "required_evidence": [
+        "metrics:telemetry_metrics",
+        "logs:related_logs"
+      ],
+      "supporting_signals": [
+        {
+          "id": "kafka_lag_signal",
+          "any_of": [
+            {
+              "log_pattern": "consumer lag"
+            },
+            {
+              "log_pattern": "rebalance"
+            },
+            {
+              "log_pattern": "commit failed"
+            },
+            {
+              "log_pattern": "kafka"
+            }
+          ]
+        }
+      ],
+      "contradicting_signals": [],
+      "contradiction_policy": "not_modeled_v0.1",
+      "missing_evidence_policy": "all_required_evidence_and_supporting_signal_groups",
+      "patch_capabilities": [],
+      "allowed_remediations": [
+        {
+          "action_type": "manual_analysis",
+          "route": "approval_required",
+          "blast_radius": "unknown",
+          "approval_required": true,
+          "rollback": "자동 변경 없음",
+          "post_verification": [
+            "원인 rule 추가 여부 검토"
+          ]
+        }
+      ],
+      "forbidden_remediations": [
+        {
+          "action_type": "reset_all_consumer_offsets",
+          "blast_radius": "cluster",
+          "reason": "consumer lag 신호만으로 모든 consumer group offset을 재설정하면 데이터 유실이나 중복 처리가 발생할 수 있습니다."
+        }
+      ],
+      "benchmark_fixtures": []
+    },
+    {
+      "ordinal": 20,
+      "catalog_source": "src/services/ai/agent/causes/catalog/external_dependencies.yaml",
+      "rule_id": "external_api_timeout",
+      "candidate_id": "external_api_timeout",
+      "required_evidence": [
+        "metrics:telemetry_metrics",
+        "logs:related_logs",
+        "traces:related_traces"
+      ],
+      "supporting_signals": [
+        {
+          "id": "external_api_timeout_signal",
+          "any_of": [
+            {
+              "log_pattern": "upstream timeout"
+            },
+            {
+              "log_pattern": "deadline exceeded"
+            },
+            {
+              "log_pattern": "gateway timeout"
+            },
+            {
+              "log_pattern": "504"
+            }
+          ]
+        }
+      ],
+      "contradicting_signals": [],
+      "contradiction_policy": "not_modeled_v0.1",
+      "missing_evidence_policy": "all_required_evidence_and_supporting_signal_groups",
+      "patch_capabilities": [],
+      "allowed_remediations": [
+        {
+          "action_type": "manual_analysis",
+          "route": "approval_required",
+          "blast_radius": "unknown",
+          "approval_required": true,
+          "rollback": "자동 변경 없음",
+          "post_verification": [
+            "원인 rule 추가 여부 검토"
+          ]
+        }
+      ],
+      "forbidden_remediations": [
+        {
+          "action_type": "disable_all_api_timeouts",
+          "blast_radius": "fleet",
+          "reason": "단일 upstream timeout을 이유로 fleet 전체 timeout 보호를 해제할 수 없습니다."
         }
       ],
       "benchmark_fixtures": []
