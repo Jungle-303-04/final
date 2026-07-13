@@ -230,6 +230,36 @@ def test_capture_rejects_tagged_or_missing_live_targets(tmp_path: Path) -> None:
         )
 
 
+def test_capture_accepts_only_explicit_same_repository_tag_attestation(tmp_path: Path) -> None:
+    expected = capture_image_digests.expected_deployment_containers(deployment_manifest(tmp_path))
+    tagged = live_deployments(second_image="registry.example/opsia/service:release")
+
+    plan = capture_image_digests.build_plan(
+        expected=expected,
+        live_document=tagged,
+        namespace="management",
+        previous_release_sha=SHA,
+        verified_live_images={"registry.example/opsia/service:release": DIGEST},
+    )
+
+    assert plan.targets[1].image == DIGEST
+    with pytest.raises(ValueError, match="same repository"):
+        capture_image_digests.parse_verified_live_images(
+            ["registry.example/other/service:release=" + DIGEST]
+        )
+
+
+def test_capture_rejects_duplicate_or_mutable_live_image_attestations() -> None:
+    mapping = f"registry.example/opsia/service:release={DIGEST}"
+
+    with pytest.raises(ValueError, match="duplicate"):
+        capture_image_digests.parse_verified_live_images([mapping, mapping])
+    with pytest.raises(ValueError, match="immutable sha256 digest"):
+        capture_image_digests.parse_verified_live_images(
+            ["registry.example/opsia/service:release=registry.example/opsia/service:other"]
+        )
+
+
 def test_capture_checks_context_and_writes_private_plan(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
