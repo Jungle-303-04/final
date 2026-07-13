@@ -2,7 +2,7 @@
   "schema_version": "opsiabench/candidate-contracts/v0.1",
   "ordering": "catalog_path_lexical_then_rule_then_candidate",
   "batch_size": 10,
-  "next_ordinal": 31,
+  "next_ordinal": 41,
   "contracts": [
     {
       "ordinal": 1,
@@ -1761,6 +1761,707 @@
           "action_type": "replace_all_cluster_dns_configuration",
           "blast_radius": "cluster",
           "reason": "단일 서비스 DNS 실패만으로 클러스터 전체 DNS 구성을 교체할 수 없습니다."
+        }
+      ],
+      "benchmark_fixtures": []
+    },
+    {
+      "ordinal": 31,
+      "catalog_source": "src/services/ai/agent/causes/catalog/network.yaml",
+      "rule_id": "dns_lookup_failed",
+      "candidate_id": "service_name_or_namespace_mismatch",
+      "required_evidence": [
+        "kubernetes:cluster_resource_state",
+        "logs:related_logs",
+        "metadata:service_selector_matches"
+      ],
+      "supporting_signals": [
+        {
+          "id": "service_dns_name_mismatch_signal",
+          "any_of": [
+            {
+              "log_pattern": "NXDOMAIN"
+            },
+            {
+              "log_pattern": "no such host"
+            },
+            {
+              "log_pattern": "name does not resolve"
+            },
+            {
+              "log_pattern": "service not found"
+            }
+          ]
+        }
+      ],
+      "contradicting_signals": [],
+      "contradiction_policy": "not_modeled_v0.1",
+      "missing_evidence_policy": "all_required_evidence_and_supporting_signal_groups",
+      "patch_capabilities": [],
+      "allowed_remediations": [
+        {
+          "action_type": "manual_analysis",
+          "route": "approval_required",
+          "blast_radius": "unknown",
+          "approval_required": true,
+          "rollback": "자동 변경 없음",
+          "post_verification": [
+            "원인 rule 추가 여부 검토"
+          ]
+        }
+      ],
+      "forbidden_remediations": [
+        {
+          "action_type": "rename_all_services_for_dns",
+          "blast_radius": "fleet",
+          "reason": "단일 서비스 이름 또는 namespace 불일치로 fleet 전체 Service 이름을 바꿀 수 없습니다."
+        }
+      ],
+      "benchmark_fixtures": []
+    },
+    {
+      "ordinal": 32,
+      "catalog_source": "src/services/ai/agent/causes/catalog/network.yaml",
+      "rule_id": "dns_lookup_failed",
+      "candidate_id": "coredns_unavailable",
+      "required_evidence": [
+        "kubernetes:cluster_resource_state",
+        "metrics:telemetry_metrics",
+        "logs:related_logs"
+      ],
+      "supporting_signals": [
+        {
+          "id": "coredns_unavailable_signal",
+          "any_of": [
+            {
+              "log_pattern": "SERVFAIL"
+            },
+            {
+              "log_pattern": "coredns"
+            },
+            {
+              "log_pattern": "plugin/errors"
+            },
+            {
+              "log_pattern": "dns timeout"
+            },
+            {
+              "event_pattern": "CoreDNS"
+            }
+          ]
+        }
+      ],
+      "contradicting_signals": [],
+      "contradiction_policy": "not_modeled_v0.1",
+      "missing_evidence_policy": "all_required_evidence_and_supporting_signal_groups",
+      "patch_capabilities": [],
+      "allowed_remediations": [
+        {
+          "action_type": "manual_analysis",
+          "route": "approval_required",
+          "blast_radius": "unknown",
+          "approval_required": true,
+          "rollback": "자동 변경 없음",
+          "post_verification": [
+            "원인 rule 추가 여부 검토"
+          ]
+        }
+      ],
+      "forbidden_remediations": [
+        {
+          "action_type": "replace_cluster_dns_service",
+          "blast_radius": "cluster",
+          "reason": "CoreDNS 장애 신호만으로 클러스터 DNS 서비스를 전면 교체할 수 없습니다."
+        }
+      ],
+      "benchmark_fixtures": []
+    },
+    {
+      "ordinal": 33,
+      "catalog_source": "src/services/ai/agent/causes/catalog/network.yaml",
+      "rule_id": "connection_timeout",
+      "candidate_id": "network_path_timeout",
+      "required_evidence": [
+        "kubernetes:cluster_resource_state",
+        "metrics:telemetry_metrics",
+        "logs:related_logs",
+        "traces:related_traces",
+        "metadata:endpoint_slice_ready_endpoints"
+      ],
+      "supporting_signals": [
+        {
+          "id": "network_timeout_log",
+          "any_of": [
+            {
+              "log_pattern": "timeout"
+            },
+            {
+              "log_pattern": "deadline exceeded"
+            },
+            {
+              "event_pattern": "timeout"
+            }
+          ]
+        }
+      ],
+      "contradicting_signals": [],
+      "contradiction_policy": "not_modeled_v0.1",
+      "missing_evidence_policy": "all_required_evidence_and_supporting_signal_groups",
+      "patch_capabilities": [],
+      "allowed_remediations": [
+        {
+          "action_type": "manual_analysis",
+          "route": "approval_required",
+          "blast_radius": "unknown",
+          "approval_required": true,
+          "rollback": "자동 변경 없음",
+          "post_verification": [
+            "원인 rule 추가 여부 검토"
+          ]
+        }
+      ],
+      "forbidden_remediations": [
+        {
+          "action_type": "reconfigure_all_network_routes",
+          "blast_radius": "fleet",
+          "reason": "단일 network path timeout으로 fleet 전체 라우팅을 재구성할 수 없습니다."
+        }
+      ],
+      "benchmark_fixtures": []
+    },
+    {
+      "ordinal": 34,
+      "catalog_source": "src/services/ai/agent/causes/catalog/network.yaml",
+      "rule_id": "connection_timeout",
+      "candidate_id": "network_policy_denied",
+      "required_evidence": [
+        "kubernetes:cluster_resource_state",
+        "logs:related_logs",
+        "metadata:network_policy_allows"
+      ],
+      "supporting_signals": [
+        {
+          "id": "network_policy_denied_signal",
+          "any_of": [
+            {
+              "log_pattern": "network policy"
+            },
+            {
+              "log_pattern": "egress denied"
+            },
+            {
+              "log_pattern": "ingress denied"
+            },
+            {
+              "log_pattern": "i/o timeout"
+            },
+            {
+              "event_pattern": "NetworkPolicy"
+            }
+          ]
+        }
+      ],
+      "contradicting_signals": [],
+      "contradiction_policy": "not_modeled_v0.1",
+      "missing_evidence_policy": "all_required_evidence_and_supporting_signal_groups",
+      "patch_capabilities": [],
+      "allowed_remediations": [
+        {
+          "action_type": "manual_analysis",
+          "route": "approval_required",
+          "blast_radius": "unknown",
+          "approval_required": true,
+          "rollback": "자동 변경 없음",
+          "post_verification": [
+            "원인 rule 추가 여부 검토"
+          ]
+        }
+      ],
+      "forbidden_remediations": [
+        {
+          "action_type": "delete_all_network_policies",
+          "blast_radius": "cluster",
+          "reason": "한 경로의 차단 신호로 클러스터 전체 NetworkPolicy를 삭제할 수 없습니다."
+        }
+      ],
+      "benchmark_fixtures": []
+    },
+    {
+      "ordinal": 35,
+      "catalog_source": "src/services/ai/agent/causes/catalog/network.yaml",
+      "rule_id": "connection_timeout",
+      "candidate_id": "endpoint_unavailable_timeout",
+      "required_evidence": [
+        "kubernetes:cluster_resource_state",
+        "logs:related_logs",
+        "metadata:endpoint_slice_ready_endpoints"
+      ],
+      "supporting_signals": [
+        {
+          "id": "endpoint_unavailable_timeout_signal",
+          "any_of": [
+            {
+              "log_pattern": "no endpoints"
+            },
+            {
+              "log_pattern": "upstream timeout"
+            },
+            {
+              "log_pattern": "connection timed out"
+            },
+            {
+              "event_pattern": "no endpoints"
+            }
+          ]
+        }
+      ],
+      "contradicting_signals": [],
+      "contradiction_policy": "not_modeled_v0.1",
+      "missing_evidence_policy": "all_required_evidence_and_supporting_signal_groups",
+      "patch_capabilities": [],
+      "allowed_remediations": [
+        {
+          "action_type": "manual_analysis",
+          "route": "approval_required",
+          "blast_radius": "unknown",
+          "approval_required": true,
+          "rollback": "자동 변경 없음",
+          "post_verification": [
+            "원인 rule 추가 여부 검토"
+          ]
+        }
+      ],
+      "forbidden_remediations": [
+        {
+          "action_type": "restart_all_service_endpoints",
+          "blast_radius": "cluster",
+          "reason": "단일 endpoint unavailable timeout으로 클러스터의 모든 서비스 endpoint를 재시작할 수 없습니다."
+        }
+      ],
+      "benchmark_fixtures": []
+    },
+    {
+      "ordinal": 36,
+      "catalog_source": "src/services/ai/agent/causes/catalog/network.yaml",
+      "rule_id": "ingress_5xx",
+      "candidate_id": "upstream_unavailable",
+      "required_evidence": [
+        "kubernetes:cluster_resource_state",
+        "metrics:telemetry_metrics",
+        "logs:related_logs"
+      ],
+      "supporting_signals": [
+        {
+          "id": "upstream_failure_signal",
+          "any_of": [
+            {
+              "log_pattern": "no endpoints"
+            },
+            {
+              "log_pattern": "upstream"
+            },
+            {
+              "log_pattern": "connection refused"
+            },
+            {
+              "event_pattern": "no endpoints"
+            }
+          ]
+        }
+      ],
+      "contradicting_signals": [],
+      "contradiction_policy": "not_modeled_v0.1",
+      "missing_evidence_policy": "all_required_evidence_and_supporting_signal_groups",
+      "patch_capabilities": [
+        "command"
+      ],
+      "allowed_remediations": [
+        {
+          "action_type": "rollout_restart",
+          "route": "auto",
+          "blast_radius": "target_workload",
+          "approval_required": false,
+          "rollback": "재시작은 되돌릴 변경이 없으며, 실패 시 scale 또는 수동 조사로 전환합니다.",
+          "post_verification": [
+            "5xx/timeout 로그 감소",
+            "Ready replica 유지",
+            "요청 성공률 회복"
+          ]
+        },
+        {
+          "action_type": "deployment_scale",
+          "route": "auto",
+          "blast_radius": "target_workload",
+          "approval_required": true,
+          "rollback": "replica 수를 기존 값으로 되돌립니다.",
+          "post_verification": [
+            "pod 수 증가",
+            "Ready replica 3 도달",
+            "5xx/timeout 감소"
+          ]
+        },
+        {
+          "action_type": "manual_analysis",
+          "route": "approval_required",
+          "blast_radius": "unknown",
+          "approval_required": true,
+          "rollback": "자동 변경 없음",
+          "post_verification": [
+            "원인 rule 추가 여부 검토"
+          ]
+        }
+      ],
+      "forbidden_remediations": [
+        {
+          "action_type": "restart_all_ingress_backends",
+          "blast_radius": "fleet",
+          "reason": "대상 upstream 장애를 fleet 전체 backend 재시작으로 확대할 수 없습니다."
+        }
+      ],
+      "benchmark_fixtures": []
+    },
+    {
+      "ordinal": 37,
+      "catalog_source": "src/services/ai/agent/causes/catalog/network.yaml",
+      "rule_id": "ingress_5xx",
+      "candidate_id": "backend_readiness_failure",
+      "required_evidence": [
+        "kubernetes:cluster_resource_state",
+        "metrics:telemetry_metrics",
+        "logs:related_logs"
+      ],
+      "supporting_signals": [
+        {
+          "id": "probe_failure_signal",
+          "any_of": [
+            {
+              "event_pattern": "probe"
+            },
+            {
+              "fact": "event_reason=Unhealthy"
+            },
+            {
+              "log_pattern": "readiness"
+            }
+          ]
+        }
+      ],
+      "contradicting_signals": [],
+      "contradiction_policy": "not_modeled_v0.1",
+      "missing_evidence_policy": "all_required_evidence_and_supporting_signal_groups",
+      "patch_capabilities": [
+        "command"
+      ],
+      "allowed_remediations": [
+        {
+          "action_type": "rollout_restart",
+          "route": "auto",
+          "blast_radius": "target_workload",
+          "approval_required": false,
+          "rollback": "재시작은 되돌릴 변경이 없으며, 실패 시 scale 또는 수동 조사로 전환합니다.",
+          "post_verification": [
+            "5xx/timeout 로그 감소",
+            "Ready replica 유지",
+            "요청 성공률 회복"
+          ]
+        },
+        {
+          "action_type": "deployment_scale",
+          "route": "auto",
+          "blast_radius": "target_workload",
+          "approval_required": true,
+          "rollback": "replica 수를 기존 값으로 되돌립니다.",
+          "post_verification": [
+            "pod 수 증가",
+            "Ready replica 3 도달",
+            "5xx/timeout 감소"
+          ]
+        },
+        {
+          "action_type": "manual_analysis",
+          "route": "approval_required",
+          "blast_radius": "unknown",
+          "approval_required": true,
+          "rollback": "자동 변경 없음",
+          "post_verification": [
+            "원인 rule 추가 여부 검토"
+          ]
+        }
+      ],
+      "forbidden_remediations": [
+        {
+          "action_type": "disable_all_readiness_probes",
+          "blast_radius": "cluster",
+          "reason": "단일 backend readiness 실패로 클러스터 전체 readiness probe를 비활성화할 수 없습니다."
+        }
+      ],
+      "benchmark_fixtures": []
+    },
+    {
+      "ordinal": 38,
+      "catalog_source": "src/services/ai/agent/causes/catalog/network.yaml",
+      "rule_id": "ingress_5xx",
+      "candidate_id": "application_5xx_spike",
+      "required_evidence": [
+        "kubernetes:cluster_resource_state",
+        "metrics:telemetry_metrics",
+        "logs:related_logs"
+      ],
+      "supporting_signals": [
+        {
+          "id": "application_5xx_signal",
+          "any_of": [
+            {
+              "log_pattern": "upstream_status\":500"
+            },
+            {
+              "log_pattern": "upstream_status\": 500"
+            },
+            {
+              "log_pattern": "upstream_status\":502"
+            },
+            {
+              "log_pattern": "upstream_status\": 502"
+            },
+            {
+              "log_pattern": "upstream_status\":503"
+            },
+            {
+              "log_pattern": "upstream_status\": 503"
+            },
+            {
+              "log_pattern": "upstream_status\":504"
+            },
+            {
+              "log_pattern": "upstream_status\": 504"
+            },
+            {
+              "log_pattern": "status\":500"
+            },
+            {
+              "log_pattern": "status\": 500"
+            },
+            {
+              "log_pattern": "status\":502"
+            },
+            {
+              "log_pattern": "status\": 502"
+            },
+            {
+              "log_pattern": "status\":503"
+            },
+            {
+              "log_pattern": "status\": 503"
+            },
+            {
+              "log_pattern": "status\":504"
+            },
+            {
+              "log_pattern": "status\": 504"
+            },
+            {
+              "log_pattern": "dependency_timeout"
+            },
+            {
+              "log_pattern": "dependency call timed out"
+            },
+            {
+              "log_pattern": "/api/orders/error"
+            },
+            {
+              "log_pattern": "intentional_error_endpoint"
+            },
+            {
+              "log_pattern": "intentional error endpoint called"
+            }
+          ]
+        }
+      ],
+      "contradicting_signals": [],
+      "contradiction_policy": "not_modeled_v0.1",
+      "missing_evidence_policy": "all_required_evidence_and_supporting_signal_groups",
+      "patch_capabilities": [
+        "command",
+        "safe_pr"
+      ],
+      "allowed_remediations": [
+        {
+          "action_type": "replica_scale",
+          "route": "draft_pr",
+          "blast_radius": "target_workload",
+          "approval_required": true,
+          "rollback": "동반된 inverse patch로 이전 replica 수를 복원합니다.",
+          "post_verification": [
+            "Ready replica 증가",
+            "5xx/timeout 감소",
+            "리소스 여유 유지"
+          ]
+        },
+        {
+          "action_type": "gitops_recovery_review",
+          "route": "draft_pr",
+          "blast_radius": "target_workload",
+          "approval_required": true,
+          "rollback": "생성된 PR 또는 merge commit을 revert합니다.",
+          "post_verification": [
+            "RCA 근거와 대상 manifest 일치",
+            "변경 전후 Ready replica 회복 기준 확인",
+            "5xx 로그 감소"
+          ]
+        },
+        {
+          "action_type": "deployment_scale",
+          "route": "auto",
+          "blast_radius": "target_workload",
+          "approval_required": true,
+          "rollback": "replica 수를 기존 값으로 되돌립니다.",
+          "post_verification": [
+            "pod 수 증가",
+            "Ready replica 3 도달",
+            "5xx/timeout 감소"
+          ]
+        },
+        {
+          "action_type": "rollout_restart",
+          "route": "auto",
+          "blast_radius": "target_workload",
+          "approval_required": false,
+          "rollback": "재시작은 되돌릴 변경이 없으며, 실패 시 scale 또는 수동 조사로 전환합니다.",
+          "post_verification": [
+            "5xx/timeout 로그 감소",
+            "Ready replica 유지",
+            "요청 성공률 회복"
+          ]
+        },
+        {
+          "action_type": "manual_analysis",
+          "route": "approval_required",
+          "blast_radius": "unknown",
+          "approval_required": true,
+          "rollback": "자동 변경 없음",
+          "post_verification": [
+            "원인 rule 추가 여부 검토"
+          ]
+        }
+      ],
+      "forbidden_remediations": [
+        {
+          "action_type": "scale_all_applications_for_5xx",
+          "blast_radius": "fleet",
+          "reason": "한 application의 5xx spike로 fleet 전체 application을 scale할 수 없습니다."
+        }
+      ],
+      "benchmark_fixtures": []
+    },
+    {
+      "ordinal": 39,
+      "catalog_source": "src/services/ai/agent/causes/catalog/node_health.yaml",
+      "rule_id": "node_not_ready",
+      "candidate_id": "kubelet_unavailable",
+      "required_evidence": [
+        "kubernetes:cluster_resource_state",
+        "metrics:telemetry_metrics",
+        "logs:related_logs"
+      ],
+      "supporting_signals": [
+        {
+          "id": "kubelet_unavailable_signal",
+          "any_of": [
+            {
+              "event_pattern": "KubeletNotReady"
+            },
+            {
+              "event_pattern": "NodeNotReady"
+            },
+            {
+              "event_pattern": "node is not ready"
+            },
+            {
+              "log_pattern": "kubelet stopped"
+            },
+            {
+              "log_pattern": "node status update failed"
+            }
+          ]
+        }
+      ],
+      "contradicting_signals": [],
+      "contradiction_policy": "not_modeled_v0.1",
+      "missing_evidence_policy": "all_required_evidence_and_supporting_signal_groups",
+      "patch_capabilities": [],
+      "allowed_remediations": [
+        {
+          "action_type": "manual_analysis",
+          "route": "approval_required",
+          "blast_radius": "unknown",
+          "approval_required": true,
+          "rollback": "자동 변경 없음",
+          "post_verification": [
+            "원인 rule 추가 여부 검토"
+          ]
+        }
+      ],
+      "forbidden_remediations": [
+        {
+          "action_type": "reboot_all_cluster_nodes",
+          "blast_radius": "cluster",
+          "reason": "단일 kubelet 장애로 클러스터의 모든 node를 재부팅할 수 없습니다."
+        }
+      ],
+      "benchmark_fixtures": []
+    },
+    {
+      "ordinal": 40,
+      "catalog_source": "src/services/ai/agent/causes/catalog/node_health.yaml",
+      "rule_id": "node_not_ready",
+      "candidate_id": "container_runtime_unavailable",
+      "required_evidence": [
+        "kubernetes:cluster_resource_state",
+        "logs:related_logs"
+      ],
+      "supporting_signals": [
+        {
+          "id": "container_runtime_unavailable_signal",
+          "any_of": [
+            {
+              "event_pattern": "container runtime"
+            },
+            {
+              "event_pattern": "ContainerRuntimeNotReady"
+            },
+            {
+              "log_pattern": "container runtime is down"
+            },
+            {
+              "log_pattern": "containerd"
+            },
+            {
+              "log_pattern": "cri connection refused"
+            }
+          ]
+        }
+      ],
+      "contradicting_signals": [],
+      "contradiction_policy": "not_modeled_v0.1",
+      "missing_evidence_policy": "all_required_evidence_and_supporting_signal_groups",
+      "patch_capabilities": [],
+      "allowed_remediations": [
+        {
+          "action_type": "manual_analysis",
+          "route": "approval_required",
+          "blast_radius": "unknown",
+          "approval_required": true,
+          "rollback": "자동 변경 없음",
+          "post_verification": [
+            "원인 rule 추가 여부 검토"
+          ]
+        }
+      ],
+      "forbidden_remediations": [
+        {
+          "action_type": "restart_all_container_runtimes",
+          "blast_radius": "cluster",
+          "reason": "단일 node의 runtime 장애로 클러스터 전체 container runtime을 재시작할 수 없습니다."
         }
       ],
       "benchmark_fixtures": []
