@@ -196,10 +196,7 @@ def test_loki_logs_redact_sensitive_values_and_add_rca_summaries() -> None:
         "WARN upstream dependency timed out Authorization: Bearer [REDACTED]",
         "ErrImagePull secret=[REDACTED]",
         "INFO login password=[REDACTED]",
-        (
-            "INFO credentials api-key=[REDACTED] "
-            "client-secret=[REDACTED] private-key=[REDACTED]"
-        ),
+        ("INFO credentials api-key=[REDACTED] client-secret=[REDACTED] private-key=[REDACTED]"),
         "ERROR server failed: address already in use",
         "FATAL permission denied opening /data",
         "ERROR missing required env DATABASE_URL",
