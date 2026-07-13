@@ -3090,3 +3090,16 @@ target preflight·register 네 함수와 strict Zod 계약을 claim했다. 1회�
 - 증거 기록 직전 HEAD는 `248fd0245`, ahead 3/behind 0, merge-tree
   `4affe7f6d0121b3a7368567bdafd4928921a0a9d`, 삭제·RCA/AI/runtime worker·frontend 소유 경로
   변경 0건이다. 착륙 후 이 lane을 즉시 회수한다.
+## 2026-07-14 01:38 KST — [백엔드] D-035 dev trunk 전환·누락 정본 복원
+
+- `codex/deploy-baseline-cutover`는 `origin/dev@f980b0c3c`와 divergence `0 0`, 변경·고유
+  커밋·원격 ref가 모두 0건이라 worktree와 로컬 브랜치를 회수했다.
+- 기존 `dev` worktree에는 다른 세션의 로컬 커밋과 staged/unstaged 변경이 있어 버리거나
+  혼입하지 않았다. 이후 작업은 최신 `origin/dev` detached trunk에서 검증 후 `HEAD:dev`로
+  push하고 즉시 worktree를 회수한다. 장기 feature branch는 만들지 않는다.
+- 누락됐던 D-022~024·D-027~028과 현재 D-035를 `night-directives.md` EOF에 복원했다.
+  VP-012 GAP-011~015는 BQ-029~033, 검증된 observed relation edge는 BQ-034로 workqueue에
+  등록했다. BQ-034는 traffic source·unit·temporality·window가 검증되지 않으면 수치를
+  노출하지 않는다.
+- push 전 게이트: docs index `11 passed`; Ruff lint/format PASS; import-linter 8 kept/0 broken;
+  pytest `2130 passed, 3 skipped`. AWS dev 배포 스위치는 계속 비활성 상태다.

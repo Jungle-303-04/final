@@ -646,3 +646,48 @@ GAP-002/003/004와 이미 착륙한 계약은 중복 구현하지 않고 새 BQ 
 [D-007]이 요청한 [D-006] 서명 보완은 위 [D-006] 실물로 충족됐다.
 작업 세션 기준: **유효 최신 지시 = [D-006]+[D-007] 합본** — A단계 개시, 계약 lock(C/D/E 동시 1개),
 🔒(백엔드 H·J, 프론트 H)는 사람 전용, 완료 증거는 night-log §2.2 형식. 이후 지시는 [D-009]부터.
+
+### [D-022] 2026-07-13 — 프론트 계약 갭 선해소·배포 선행조건 (복원: 우녕 지시)
+
+프론트를 막는 additive 계약은 기능 착륙 즉시 night-log에 소비 앵커를 남긴다. 계약과 병행해
+배포 준비의 migration 실행 경로, 기존 create-all DB baseline, 인증 우회 차단, CI·smoke를
+구체화하되 검증 전 배포 스위치를 켜지 않는다. 기존 계약 rename·삭제·타입 변경은 금지한다.
+
+### [D-023] 2026-07-13 — Opsia 공개 제품명·OSS 표면 정합 (복원: 우녕 지시)
+
+공개 문서·차트·설치 예시는 제품명을 `Opsia`/`opsia`로 정합화한다. 코드 식별자, event subject,
+DB schema처럼 호환성에 영향을 주는 내부 이름은 별도 migration 없이 바꾸지 않는다. 공개 OCI
+설치는 anonymous pull까지 실제로 확인한 경우에만 완료로 판정한다.
+
+### [D-024] 2026-07-13 — 안전 착륙 4조건 (복원: 우녕 지시)
+
+작업은 전체 게이트 초록, 정책으로 설명 가능한 충돌만 해소, 소유권 밖 삭제 0건, push 뒤
+`origin/dev` ancestor exit 0의 네 조건을 모두 충족하면 착륙한다. 완료를 기다리며 lane을 키우지
+않고 미완성은 기본 비활성·미노출·미배선으로 격리한다. [D-035] 이후 이 네 조건은 dev 직접
+push 전 검증 조건으로 이어진다.
+
+### [D-027] 2026-07-14 — Live Traffic 실데이터 원칙 (복원: 우녕 지시)
+
+제품에 검증된 traffic source가 없으면 mock·synthetic·inventory 추론값을 Live Traffic으로
+표현하지 않는다. Prometheus 등 실데이터 source를 채택할 때는 source, metric unit,
+temporality, window와 completeness를 계약에 포함한다. 계약이 없으면 관계 뷰의 traffic 수치는
+비워 둔다.
+
+### [D-028] 2026-07-14 — Resources 관계 뷰·관측 엣지 계약 (복원: 우녕 지시)
+
+Resources는 필터·시간·그래프·표 네 층을 소유한다. 관계 뷰는 단일 cluster와 시각에 종속된
+stable source/destination node ID 및 검증 가능한 Service↔Pod selector, Pod↔PVC,
+Ingress↔Service edge만 사용한다. canonical observed edge 계약과 프론트 strict adapter가
+착륙하기 전에는 관계 뷰를 렌더하지 않는다.
+
+### [D-035] 2026-07-14 — dev trunk 직접 작업·배포 안전 선행 (작성: 우녕)
+
+장기 lane은 폐지한다. 모든 작업은 최신 `origin/dev`에서 작은 초록 커밋으로 수행하고, push
+직전 최신 dev를 rebase한 뒤 전체 게이트·소유권 밖 삭제 0건을 확인하여 바로 push한다. 다른
+세션의 미커밋 변경은 버리거나 섞지 않는다.
+
+최우선 순서는 ① migration 실행 경로와 기존 create-all DB의 검증 가능한 baseline·cutover,
+② `DEV_AUTH_BYPASS=0`의 rendered/live fail-closed 검증, ③ dev gate→digest build/ECR→
+migration→rollout→strict smoke, ④ 배포 SHA·URL의 `deploy-status.md` 갱신이다. ①·②의 실제
+검증 전 AWS dev 배포 스위치를 켜지 않는다. 이후 BQ-022~034 계약을 작은 단위로 순차
+착륙한다. token·secret 값은 문서·커밋·로그에 기록하지 않는다.
