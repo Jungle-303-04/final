@@ -3,7 +3,6 @@ import {
   Boxes,
   ChartNoAxesCombined,
   GitBranch,
-  History,
   Home,
   Layers3,
   Library,
@@ -60,7 +59,6 @@ const routeIcons: Record<ProductRouteIcon, LucideIcon> = {
   issues: TriangleAlert,
   metrics: ChartNoAxesCombined,
   applications: Layers3,
-  timeline: History,
   gitops: GitBranch,
   catalog: Library,
 };
@@ -72,7 +70,6 @@ const navLabelKeys = {
   issues: "shell.nav.issues",
   metrics: "shell.nav.metrics",
   resources: "shell.nav.resources",
-  timeline: "shell.nav.timeline",
   catalog: "shell.nav.catalog",
 } satisfies Record<ProductSurfaceId, MessageKey>;
 

@@ -4,7 +4,6 @@ export type ProductSurfaceId =
   | "issues"
   | "metrics"
   | "applications"
-  | "timeline"
   | "gitops"
   | "catalog";
 
@@ -14,7 +13,6 @@ export type ProductRouteIcon =
   | "issues"
   | "metrics"
   | "applications"
-  | "timeline"
   | "gitops"
   | "catalog";
 
@@ -35,7 +33,6 @@ export const PRODUCT_ROUTE_CATALOG = [
   route("issues", "Issues", "/product/issues", "g i"),
   route("metrics", "Metrics", "/product/metrics", "g m"),
   route("applications", "Applications", "/product/applications", "g a"),
-  route("timeline", "Timeline", "/product/timeline", "g l"),
   route("gitops", "GitOps", "/product/gitops", "g o"),
   route("catalog", "Catalog", "/product/catalog", "g c"),
 ] as const satisfies readonly ProductRouteDefinition[];
