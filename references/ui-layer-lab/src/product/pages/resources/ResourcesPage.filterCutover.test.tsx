@@ -207,8 +207,8 @@ describe("ResourcesPage unified-filter cutover", () => {
 
   it.each([
     {
-      change: () => {
-        const search = screen.getByRole(
+      change: async () => {
+        const search = await screen.findByRole(
           "searchbox",
           { hidden: true, name: "Search displayed results" },
         );
@@ -218,8 +218,8 @@ describe("ResourcesPage unified-filter cutover", () => {
       name: "search query",
     },
     {
-      change: () => {
-        const namespace = screen.getByRole(
+      change: async () => {
+        const namespace = await screen.findByRole(
           "textbox",
           { hidden: true, name: "Namespace filter" },
         );
@@ -230,8 +230,8 @@ describe("ResourcesPage unified-filter cutover", () => {
       name: "Namespace filter",
     },
     {
-      change: () => {
-        fireEvent.click(screen.getByRole(
+      change: async () => {
+        fireEvent.click(await screen.findByRole(
           "button",
           { hidden: true, name: "Include inactive resources" },
         ));
@@ -243,7 +243,7 @@ describe("ResourcesPage unified-filter cutover", () => {
     renderEnglishResources(resourcesPort(), canonicalDetailEntry());
     expect(await screen.findByRole("dialog", { name: "checkout-api-0 details" })).toBeTruthy();
 
-    change();
+    await change();
 
     await waitFor(() => {
       const query = readResourcesQuery();
