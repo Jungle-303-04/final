@@ -11,10 +11,13 @@ from domains.alert.events import AlertRequestedBody
 from domains.gitops.source_patch import (
     ImageScalarReplacement,
     ManifestImagePatchPlan,
+    ManifestScalarPatchPlan,
+    ScalarFieldReplacement,
     canonical_manifest_digest,
     image_patch_content,
     parse_image_patch_plan,
     parse_single_manifest,
+    scalar_patch_content,
 )
 from domains.scm.events import (
     SafePrFilePatch,
@@ -117,6 +120,90 @@ def _structured_case(source: str) -> tuple[SafePrReadyForCreationBody, SpyDb, Sa
         workspace_id=request.workspace_id,
     )
     return ready, db, request
+
+
+def _scalar_structured_case(
+    source: str,
+) -> tuple[SafePrReadyForCreationBody, SpyDb, SafePrRequestedBody]:
+    plan = ManifestScalarPatchPlan(
+        action_type="replica_scale",
+        source_type="raw-yaml",
+        source_manifest_sha256=canonical_manifest_digest(parse_single_manifest(source, "raw-yaml")),
+        expected_base_sha=APPROVED_SHA,
+        manifest_path="deploy/app.yaml",
+        replacements=(ScalarFieldReplacement("spec.replicas", 2, 3),),
+        rollback_replacements=(ScalarFieldReplacement("spec.replicas", 3, 2),),
+    )
+    request = normalize_safe_pr_request(
+        _request(
+            workspace_id="workspace-1",
+            repository_id="repo-1",
+            binding_id="binding-1",
+            application_id="app-1",
+            workflow_run_id="workflow-1",
+            environment="sandbox",
+            manifest_path="deploy/app.yaml",
+            repo_ref="project/repo",
+            base_branch="main",
+            commit_sha=APPROVED_SHA,
+            patches=[
+                SafePrFilePatch(
+                    path=".gitops/safe-pr/patches/scalar-plan.yaml",
+                    content=scalar_patch_content(plan),
+                    description="increase replicas with inverse rollback",
+                )
+            ],
+        )
+    )
+    desired_manifest = parse_single_manifest(source, "raw-yaml")
+    artifact_digest = canonical_manifest_digest(desired_manifest)
+    db = SpyDb(
+        get_workflow_run={
+            "workflow_run_id": request.workflow_run_id,
+            "workspace_id": request.workspace_id,
+            "application_id": request.application_id,
+            "binding_id": request.binding_id,
+            "environment": request.environment,
+            "commit_sha": request.commit_sha,
+        },
+        get_workflow_step_details={
+            "resource": "deployment/checkout-api",
+            "workspace_id": request.workspace_id,
+            "repository_id": request.repository_id,
+            "binding_id": request.binding_id,
+            "application_id": request.application_id,
+            "workflow_run_id": request.workflow_run_id,
+            "environment": request.environment,
+            "manifest_path": request.manifest_path,
+            "desired_manifest": desired_manifest,
+            "basis": {
+                "old_desired_source": "last_approved_snapshot",
+                "artifact_digest": artifact_digest,
+            },
+            "changes": [],
+        },
+        get_manifest_artifact_provenance={
+            "workspace_id": request.workspace_id,
+            "repository_id": request.repository_id,
+            "binding_id": request.binding_id,
+            "commit_sha": request.commit_sha,
+            "manifest_path": request.manifest_path,
+            "artifact_digest": artifact_digest,
+            "source_manifest_sha256": plan.source_manifest_sha256,
+            "repo_ref": request.repo_ref,
+            "branch": request.base_branch,
+        },
+    )
+    return (
+        SafePrReadyForCreationBody(
+            request=request,
+            summary="safe pr ready",
+            risk="low",
+            workspace_id=request.workspace_id,
+        ),
+        db,
+        request,
+    )
 
 
 def _change_document_text(request: SafePrRequestedBody) -> str:
@@ -512,6 +599,37 @@ def test_repo_gateway_materializes_image_patch_from_exact_base_source(monkeypatc
     ]
     assert base64.b64decode(str(contents[-1]["content"])).decode() == expected
     assert "namespace:" not in expected
+
+
+def test_repo_gateway_materializes_scalar_patch_from_exact_base_source(monkeypatch) -> None:
+    _github_env(monkeypatch)
+    source = (
+        "apiVersion: apps/v1\n"
+        "kind: Deployment\n"
+        "metadata: {name: checkout-api}\n"
+        "spec:\n"
+        "  replicas: 2 # approved replica count\n"
+        "  template:\n"
+        "    spec:\n"
+        "      containers:\n"
+        "        - name: checkout-api\n"
+        "          image: ghcr.io/project/checkout-api:v2\n"
+    )
+    expected = source.replace("replicas: 2", "replicas: 3", 1)
+    source_path = "/repos/project/repo/contents/deploy/app.yaml"
+    contents: list[dict[str, object]] = []
+    repo = _load_with_transport(
+        monkeypatch,
+        contents=contents,
+        base_sha=APPROVED_SHA,
+        source_contents={source_path: source},
+    )
+    ready, db, _request_body = _scalar_structured_case(source)
+
+    outs = run_handler(repo.on_safe_pr_ready_for_creation, ready, db=db)
+
+    assert subjects_of(outs) == ["safe_pr.created"]
+    assert base64.b64decode(str(contents[-1]["content"])).decode() == expected
 
 
 def test_repo_gateway_reuses_matching_structured_pr_after_base_advances(monkeypatch) -> None:
