@@ -44,7 +44,7 @@ class GraphDb:
             )
         )
         return {
-            "snapshot_revision": 42,
+            "snapshot_revision": 42 if at_revision is None else min(42, at_revision),
             "observed_at": "2026-07-13T14:00:00Z",
             "labels_complete": True,
             "resources_complete": True,
@@ -127,6 +127,7 @@ def test_resource_graph_uses_selected_cluster_revision_and_reports_budget_partia
             "resources.types": "workload,pod",
             "labels": "app=checkout",
             "max_nodes": 1,
+            "snapshot_revision": 42,
         },
     )
 
@@ -141,8 +142,21 @@ def test_resource_graph_uses_selected_cluster_revision_and_reports_budget_partia
     assert body.relation_completeness == "partial"
     assert "graph_node_budget_exceeded" in body.partial_reason_codes
 
-    snapshot_call, resource_call = db.data_calls
-    assert snapshot_call[1]["allowed_cluster_ids"] == {"cluster-a"}
+    global_snapshot_call, cluster_snapshot_call, resource_call = db.data_calls
+    assert global_snapshot_call[1]["allowed_cluster_ids"] == {"cluster-a", "cluster-b"}
+    assert cluster_snapshot_call[1]["allowed_cluster_ids"] == {"cluster-a"}
+    assert cluster_snapshot_call[1]["at_revision"] == 42
     assert resource_call[1]["allowed_cluster_ids"] == {"cluster-a"}
     assert resource_call[1]["filters"].resource_types == ("pod", "workload")
     assert resource_call[1]["filters"].labels == (("app", "checkout"),)
+
+
+def test_resource_graph_rejects_future_revision_without_querying_graph_rows() -> None:
+    db = GraphDb(clusters={"cluster-a"})
+    response = _client(db).get(
+        "/resources/graph",
+        params={"clusters": "cluster-a", "snapshot_revision": 99},
+    )
+
+    assert response.status_code == 422
+    assert [kind for kind, _call in db.data_calls] == ["snapshot"]
