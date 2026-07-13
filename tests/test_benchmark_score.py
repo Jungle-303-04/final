@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 import runpy
 import subprocess
@@ -22,6 +23,42 @@ FIRST_CANDIDATE_BATCH = (
     "permission_denied_startup",
     "app_startup_failure",
     "dependency_connection_failure",
+)
+SECOND_CANDIDATE_BATCH = (
+    "database_connectivity_failure",
+    "database_credential_or_config_error",
+    "database_connection_pool_exhausted",
+    "deployment_progress_deadline_exceeded",
+    "replica_unavailable_after_rollout",
+    "gitops_sync_failed",
+    "manifest_validation_failed",
+    "redis_dependency_unavailable",
+    "consumer_lag_backlog",
+    "external_api_timeout",
+)
+THIRD_CANDIDATE_BATCH = (
+    "dependency_down",
+    "connection_pool_exhausted",
+    "wrong_endpoint_config",
+    "credential_rotation_issue",
+    "wrong_image_tag",
+    "missing_image_pull_secret",
+    "registry_unavailable",
+    "registry_rate_limited",
+    "image_platform_mismatch",
+    "service_dns_resolution_failure",
+)
+FOURTH_CANDIDATE_BATCH = (
+    "service_name_or_namespace_mismatch",
+    "coredns_unavailable",
+    "network_path_timeout",
+    "network_policy_denied",
+    "endpoint_unavailable_timeout",
+    "upstream_unavailable",
+    "backend_readiness_failure",
+    "application_5xx_spike",
+    "kubelet_unavailable",
+    "container_runtime_unavailable",
 )
 
 
@@ -86,10 +123,12 @@ def test_first_candidate_contract_batch_is_machine_verified_in_catalog_order() -
     result = _score("--candidate-contracts")
 
     assert result.returncode == 0, result.stdout + result.stderr
-    assert "RESULT PASS (10 candidate contracts; ordinals=1..10)" in result.stdout
+    assert "RESULT PASS (40 candidate contracts; ordinals=1..40)" in result.stdout
 
     document = json.loads(CONTRACTS.read_text(encoding="utf-8"))
-    assert tuple(item["candidate_id"] for item in document["contracts"]) == (FIRST_CANDIDATE_BATCH)
+    assert tuple(item["candidate_id"] for item in document["contracts"][:10]) == (
+        FIRST_CANDIDATE_BATCH
+    )
     assert document["contracts"][5]["patch_capabilities"] == []
     for contract in document["contracts"]:
         assert contract["required_evidence"]
@@ -102,11 +141,103 @@ def test_first_candidate_contract_batch_is_machine_verified_in_catalog_order() -
         )
 
 
+def test_second_candidate_contract_batch_is_machine_verified_in_catalog_order() -> None:
+    result = _score("--candidate-contracts")
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "RESULT PASS (40 candidate contracts; ordinals=1..40)" in result.stdout
+
+    document = json.loads(CONTRACTS.read_text(encoding="utf-8"))
+    second_batch = document["contracts"][10:20]
+    assert tuple(item["candidate_id"] for item in second_batch) == SECOND_CANDIDATE_BATCH
+    assert all(item["patch_capabilities"] == [] for item in second_batch)
+    assert all(item["benchmark_fixtures"] == [] for item in second_batch)
+    assert all(
+        [action["action_type"] for action in item["allowed_remediations"]] == ["manual_analysis"]
+        for item in second_batch
+    )
+    forbidden_actions = [item["forbidden_remediations"][0]["action_type"] for item in second_batch]
+    assert len(forbidden_actions) == len(set(forbidden_actions)) == 10
+    assert all(
+        item["forbidden_remediations"][0]["blast_radius"] in {"cluster", "fleet"}
+        for item in second_batch
+    )
+
+
+def test_third_candidate_contract_batch_is_machine_verified_in_catalog_order() -> None:
+    result = _score("--candidate-contracts")
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "RESULT PASS (40 candidate contracts; ordinals=1..40)" in result.stdout
+
+    document = json.loads(CONTRACTS.read_text(encoding="utf-8"))
+    third_batch = document["contracts"][20:30]
+    assert tuple(item["candidate_id"] for item in third_batch) == THIRD_CANDIDATE_BATCH
+    assert {item["candidate_id"]: item["patch_capabilities"] for item in third_batch} == {
+        **{candidate_id: [] for candidate_id in THIRD_CANDIDATE_BATCH},
+        "wrong_image_tag": ["safe_pr"],
+    }
+    assert {
+        item["candidate_id"]: [action["action_type"] for action in item["allowed_remediations"]]
+        for item in third_batch
+    } == {
+        **{candidate_id: ["manual_analysis"] for candidate_id in THIRD_CANDIDATE_BATCH},
+        "wrong_image_tag": ["image_tag_fix", "manual_analysis"],
+        "missing_image_pull_secret": ["image_pull_secret_fix", "manual_analysis"],
+        "registry_unavailable": ["registry_recovery", "manual_analysis"],
+    }
+    assert {item["candidate_id"]: item["benchmark_fixtures"] for item in third_batch} == {
+        **{candidate_id: [] for candidate_id in THIRD_CANDIDATE_BATCH},
+        "wrong_image_tag": ["benchmark/scenarios/imagepull/imagepull-wrong-tag/scenario.json"],
+        "missing_image_pull_secret": [
+            "benchmark/scenarios/imagepull/imagepull-secret-missing/scenario.json"
+        ],
+    }
+
+
+def test_fourth_candidate_contract_batch_is_machine_verified_in_catalog_order() -> None:
+    result = _score("--candidate-contracts")
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "RESULT PASS (40 candidate contracts; ordinals=1..40)" in result.stdout
+
+    document = json.loads(CONTRACTS.read_text(encoding="utf-8"))
+    fourth_batch = document["contracts"][30:40]
+    assert document["next_ordinal"] == 41
+    assert tuple(item["candidate_id"] for item in fourth_batch) == FOURTH_CANDIDATE_BATCH
+    assert {item["candidate_id"]: item["patch_capabilities"] for item in fourth_batch} == {
+        **{candidate_id: [] for candidate_id in FOURTH_CANDIDATE_BATCH},
+        "upstream_unavailable": ["command"],
+        "backend_readiness_failure": ["command"],
+        "application_5xx_spike": ["command", "safe_pr"],
+    }
+    assert {
+        item["candidate_id"]: [action["action_type"] for action in item["allowed_remediations"]]
+        for item in fourth_batch
+    } == {
+        **{candidate_id: ["manual_analysis"] for candidate_id in FOURTH_CANDIDATE_BATCH},
+        "upstream_unavailable": ["rollout_restart", "deployment_scale", "manual_analysis"],
+        "backend_readiness_failure": [
+            "rollout_restart",
+            "deployment_scale",
+            "manual_analysis",
+        ],
+        "application_5xx_spike": [
+            "replica_scale",
+            "gitops_recovery_review",
+            "deployment_scale",
+            "rollout_restart",
+            "manual_analysis",
+        ],
+    }
+    assert all(item["benchmark_fixtures"] == [] for item in fourth_batch)
+
+
 def test_public_candidate_contract_scorer_needs_no_site_packages() -> None:
     result = _score_without_site_packages("--candidate-contracts")
 
     assert result.returncode == 0, result.stdout + result.stderr
-    assert "RESULT PASS (10 candidate contracts; ordinals=1..10)" in result.stdout
+    assert "RESULT PASS (40 candidate contracts; ordinals=1..40)" in result.stdout
 
 
 def _contract_validation_errors(document: dict[str, object]) -> list[str]:
@@ -228,6 +359,54 @@ def test_candidate_contract_rejects_fixture_path_traversal() -> None:
     assert any("fixture path must remain under benchmark/scenarios" in error for error in errors)
 
 
+@pytest.mark.parametrize(("contract_index", "batch_number"), ((3, 1), (10, 2), (20, 3), (30, 4)))
+def test_candidate_contract_rejects_completed_batch_annotation_drift(
+    contract_index: int, batch_number: int
+) -> None:
+    document = _candidate_contracts()
+    document["contracts"][contract_index]["forbidden_remediations"][0]["reason"] += " drift"
+
+    errors = _contract_validation_errors(document)
+
+    assert any(f"completed batch {batch_number} digest mismatch" in error for error in errors)
+
+
+def test_candidate_contract_terminal_digest_uses_only_ordinals_81_through_87() -> None:
+    scorer = runpy.run_path(str(SCORER))
+    contracts = [{"ordinal": ordinal} for ordinal in range(1, 88)]
+    expected = hashlib.sha256(
+        json.dumps(
+            contracts[80:87],
+            ensure_ascii=False,
+            sort_keys=True,
+            separators=(",", ":"),
+        ).encode("utf-8")
+    ).hexdigest()
+
+    assert scorer["candidate_contract_batch_ranges"](87)[-1] == (81, 87)
+    assert scorer["candidate_contract_batch_digest"](contracts, 81, 87) == expected
+
+
+def test_candidate_contract_batch_commitments_reject_unlocked_complete_batch(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    scorer = runpy.run_path(str(SCORER))
+    contracts = [{"ordinal": ordinal} for ordinal in range(1, 41)]
+    locks = {
+        batch_range: scorer["candidate_contract_batch_digest"](contracts, *batch_range)
+        for batch_range in ((1, 10), (11, 20), (21, 30))
+    }
+    monkeypatch.setitem(
+        scorer["validate_candidate_batch_commitments"].__globals__,
+        "CANDIDATE_BATCH_SHA256",
+        locks,
+    )
+
+    errors = scorer["validate_candidate_batch_commitments"](contracts)
+
+    assert any("completed batch digest coverage mismatch" in error for error in errors)
+
+
 def test_candidate_contract_rejects_supporting_signal_drift() -> None:
     document = _candidate_contracts()
     document["contracts"][0]["supporting_signals"][0]["any_of"][0] = {
@@ -259,7 +438,7 @@ def test_candidate_contract_rejects_non_string_capability_without_crashing() -> 
 
 @pytest.mark.parametrize(
     ("contract_count", "next_ordinal"),
-    ((10, 11), (80, 81), (87, None)),
+    ((10, 11), (20, 21), (30, 31), (40, 41), (80, 81), (87, None)),
 )
 def test_candidate_contract_progress_accepts_complete_batches_and_terminal_catalog(
     contract_count: int, next_ordinal: int | None
@@ -351,6 +530,41 @@ def test_recovery_contract_loader_accumulates_duplicate_root_cause_rules(
     assert [item["action_type"] for item in fallback] == ["fallback"]
 
 
+def test_recovery_contract_loader_accumulates_multiple_fallback_rules(
+    tmp_path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    source = tmp_path / "recovery.py"
+    action = """RecoveryActionSpec(
+        action_type={action_type!r},
+        route=routes.approval_required,
+        blast_radius="unknown",
+        approval_required=True,
+        rollback_plan="none",
+        validation_checks=("review",),
+    )"""
+    source.write_text(
+        "\n".join(
+            (
+                f"@rca.fallback(actions=({action.format(action_type='first_fallback')},))",
+                "class FirstFallback: pass",
+                f"@rca.fallback(actions=({action.format(action_type='second_fallback')},))",
+                "class SecondFallback: pass",
+            )
+        ),
+        encoding="utf-8",
+    )
+    scorer = runpy.run_path(str(SCORER))
+    monkeypatch.setitem(scorer["load_recovery_contracts"].__globals__, "RECOVERY_SOURCE", source)
+
+    recovery, fallback = scorer["load_recovery_contracts"]()
+
+    assert recovery == {}
+    assert [item["action_type"] for item in fallback] == [
+        "first_fallback",
+        "second_fallback",
+    ]
+
+
 def test_candidate_contract_validator_accepts_full_live_catalog_terminal_shape() -> None:
     scorer = runpy.run_path(str(SCORER))
     candidate_index = json.loads(
@@ -359,8 +573,12 @@ def test_candidate_contract_validator_accepts_full_live_catalog_terminal_shape()
     catalog = json.loads((ROOT / "benchmark/catalog-snapshot.json").read_text(encoding="utf-8"))
     recovery, fallback = scorer["load_recovery_contracts"]()
     command_actions, safe_pr_actions = scorer["load_dispatch_capabilities"]()
+    completed_prefix = _candidate_contracts()["contracts"]
     contracts = []
     for entry in candidate_index["candidates"]:
+        if entry["ordinal"] <= len(completed_prefix):
+            contracts.append(completed_prefix[entry["ordinal"] - 1])
+            continue
         allowed = [*recovery.get(entry["candidate_id"], []), *fallback]
         capabilities = [
             capability
@@ -397,6 +615,11 @@ def test_candidate_contract_validator_accepts_full_live_catalog_terminal_shape()
         "batch_size": 10,
         "next_ordinal": None,
         "contracts": contracts,
+    }
+    batch_ranges = scorer["candidate_contract_batch_ranges"](len(contracts))
+    scorer["validate_candidate_contracts"].__globals__["CANDIDATE_BATCH_SHA256"] = {
+        batch_range: scorer["candidate_contract_batch_digest"](contracts, *batch_range)
+        for batch_range in batch_ranges
     }
 
     errors = scorer["validate_candidate_contracts"](
