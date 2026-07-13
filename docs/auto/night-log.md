@@ -639,3 +639,8 @@ import-linter PASS(2 kept, 0 broken), pytest `1711 passed, 3 skipped`; 서비스
 - 전체 게이트: Ruff lint/format PASS(491 files), import-linter 2 kept/0 broken,
   pytest `1735 passed, 3 skipped`. origin 착륙·전체 그린·make demo 실측·계약/설치/색인
   문서 착륙으로 [D-019] DoD 4조건 충족.
+
+[2026-07-13 10:51 KST] [백엔드] BQ-009 in_progress — `codex/f-auto-revert-pr`를
+보존 lane으로 claim; origin/dev 대비 60커밋 낙후를 확인해 [D-021]에 따라 claim 기준점
+착륙 직후 rebase하고, [D-019] frozen 예외 범위에서 권위 read port→dispatcher 주입→
+실제 patch 6종/unsupported/rollback을 TDD로 수렴한다. BQ-010은 BQ-009 직후 같은 lane.
