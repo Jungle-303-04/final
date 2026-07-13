@@ -267,6 +267,23 @@ def test_public_benchmark_scores_port_bind_conflict_as_manual_only() -> None:
     ]
 
 
+def test_port_bind_fixture_emits_catalog_signal_without_external_infrastructure() -> None:
+    scenario = json.loads(CRASHLOOP_PORT_BIND_SCENARIO.read_text(encoding="utf-8"))
+    command = scenario["normal_manifest"]["spec"]["template"]["spec"]["containers"][0]["command"]
+
+    result = subprocess.run(
+        [sys.executable, *command[1:]],
+        text=True,
+        capture_output=True,
+        check=False,
+        timeout=1,
+        env={"PORT": "0", "BIND_SECOND": "true"},
+    )
+
+    assert result.returncode == 1
+    assert "address already in use" in result.stdout
+
+
 def test_public_benchmark_scores_node_selector_mismatch_without_cluster_wide_removal() -> None:
     result = _score("--category", "scheduling")
 
