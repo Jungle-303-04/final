@@ -123,3 +123,16 @@ test('Issues list is composed only from accessible shadcn primitives', async () 
   assert.match(source, /role=['"]status['"]/);
   assert.match(source, /aria-live=['"]polite['"]/);
 });
+
+test('Issues mutations publish feedback through the canonical Sonner boundary', async () => {
+  const source = await readFile(
+    new URL('src/features/notifications/api.ts', frontendRoot),
+    'utf8',
+  );
+
+  assert.doesNotMatch(source, /from ['"]@\/ui(?:['"/])/);
+  assert.doesNotMatch(source, /\buseToast\b/);
+  assert.match(source, /from ['"]sonner['"]/);
+  assert.equal((source.match(/\btoast\.success\s*\(/g) ?? []).length, 4);
+  assert.equal((source.match(/\btoast\.error\s*\(/g) ?? []).length, 4);
+});

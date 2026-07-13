@@ -1,13 +1,13 @@
 // 알림 합성 피드 — 3개 실존 소스 정규화(G9 도입 시 이 파일만 교체)
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useMemo, useSyncExternalStore } from 'react';
+import { toast } from 'sonner';
 import { del, get, post } from '@/shared/lib/api';
 import type { DeadLetter, EvidenceRecord, Notice, RcaReportSummary, RecoveryPlanStatus, WorkflowRun } from '@/shared/lib/types';
 import { adaptIncident, adaptIncidentDetail, isIncidentTimelineItem } from '@/shared/lib/adapt';
 import { useApplications, useRunsAll } from '@/features/repo/api';
 import { useIsAdmin } from '@/features/auth/api';
 import { timeAgo } from '@/shared/lib/format';
-import { useToast } from '@/ui';
 
 const NOTIFICATION_QUERY_TIMEOUT_MS = 8_000;
 
@@ -105,12 +105,13 @@ export const useRecoveryPlan = (correlationId: string | undefined) =>
   });
 export const useSelectRecoveryAction = () => {
   const qc = useQueryClient();
-  const { push } = useToast();
   return useMutation({
     mutationFn: ({ planId, actionId, reason }: { planId: string; actionId: string; reason?: string }) =>
       post(`/rca/recovery-plans/${planId}/actions/${actionId}/select`, reason ? { reason } : {}),
     onSuccess: (_data, variables) => {
-      push({ tone: 'success', title: '복구 조치 선택', description: '선택한 조치를 실행 흐름에 등록했습니다' });
+      toast.success('복구 조치 선택', {
+        description: '선택한 조치를 실행 흐름에 등록했습니다',
+      });
       qc.invalidateQueries({ queryKey: ['recovery-plan'] });
       qc.invalidateQueries({ queryKey: ['timeline'] });
       qc.invalidateQueries({ queryKey: ['incident'] });
@@ -118,9 +119,7 @@ export const useSelectRecoveryAction = () => {
     },
     onError: err => {
       const e = err as { kind?: string; detail?: string };
-      push({
-        tone: 'danger',
-        title: '복구 조치 선택 실패',
+      toast.error('복구 조치 선택 실패', {
         description: e.kind === 'forbidden'
           ? 'release_operator 권한이 필요합니다'
           : e.detail ?? '잠시 후 다시 시도해주세요',
@@ -159,39 +158,54 @@ export const useTestAlertChannel = () => {
 
 export const useSaveAlertChannel = () => {
   const qc = useQueryClient();
-  const { push } = useToast();
   return useMutation({
     mutationFn: (payload: AlertChannelPayload) => post<AlertChannel>('/alert-channels', payload),
     onSuccess: () => {
-      push({ tone: 'success', title: '알림 채널 저장', description: '테스트를 통과한 설정을 저장했습니다' });
+      toast.success('알림 채널 저장', {
+        description: '테스트를 통과한 설정을 저장했습니다',
+      });
       qc.invalidateQueries({ queryKey: ['alert-channels'] });
     },
-    onError: err => push({ tone: 'danger', title: '알림 채널 저장 실패', description: (err as Error).message || '잠시 후 다시 시도해주세요' }),
+    onError: err => {
+      toast.error('알림 채널 저장 실패', {
+        description: (err as Error).message || '잠시 후 다시 시도해주세요',
+      });
+    },
   });
 };
 
 export const useDeleteAlertChannel = () => {
   const qc = useQueryClient();
-  const { push } = useToast();
   return useMutation({
     mutationFn: (channelId: string) => del(`/alert-channels/${encodeURIComponent(channelId)}`),
     onSuccess: () => {
-      push({ tone: 'success', title: '알림 채널 삭제', description: '채널을 목록에서 제거했습니다' });
+      toast.success('알림 채널 삭제', {
+        description: '채널을 목록에서 제거했습니다',
+      });
       qc.invalidateQueries({ queryKey: ['alert-channels'] });
     },
-    onError: err => push({ tone: 'danger', title: '알림 채널 삭제 실패', description: (err as Error).message || '잠시 후 다시 시도해주세요' }),
+    onError: err => {
+      toast.error('알림 채널 삭제 실패', {
+        description: (err as Error).message || '잠시 후 다시 시도해주세요',
+      });
+    },
   });
 };
 export const useReplayDeadLetter = () => {
   const qc = useQueryClient();
-  const { push } = useToast();
   return useMutation({
     mutationFn: (id: number) => post(`/dead-letters/${id}/replay`),
     onSuccess: () => {
-      push({ tone: 'success', title: '재처리 요청 완료', description: '이벤트를 다시 발행했습니다' });
+      toast.success('재처리 요청 완료', {
+        description: '이벤트를 다시 발행했습니다',
+      });
       qc.invalidateQueries({ queryKey: ['dead-letters'] });
     },
-    onError: err => push({ tone: 'danger', title: '재처리 실패', description: (err as Error).message || '잠시 후 다시 시도해주세요' }),
+    onError: err => {
+      toast.error('재처리 실패', {
+        description: (err as Error).message || '잠시 후 다시 시도해주세요',
+      });
+    },
   });
 };
 
