@@ -770,9 +770,7 @@ def test_rca_test_bundle_filters_matched_entries_to_current_pod() -> None:
                         "pod": prior_pod,
                         "container": "app",
                         "severity": "critical",
-                        "message": (
-                            "FATAL: required environment variable DATABASE_URL is not set"
-                        ),
+                        "message": ("FATAL: required environment variable DATABASE_URL is not set"),
                         "matched_patterns": ["missing_env"],
                         "line_truncated": False,
                     },
@@ -804,9 +802,7 @@ def test_rca_test_bundle_filters_matched_entries_to_current_pod() -> None:
     logs_item = next(item for item in bundle.items if item.source == "logs")
     entries = logs_item.value["entries"]
     assert entries[0]["line_count"] == 1
-    assert [
-        stream["stream"]["k8s_pod_name"] for stream in entries[0]["streams"]
-    ] == [current_pod]
+    assert [stream["stream"]["k8s_pod_name"] for stream in entries[0]["streams"]] == [current_pod]
     assert entries[0]["matched_entries"] == [
         {
             "timestamp": "1751871601000000000",
