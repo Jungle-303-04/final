@@ -80,8 +80,8 @@ CANDIDATE_INDEX_ENTRY_FIELDS = {
 CANDIDATE_INDEX_SOURCE_COUNT = 15
 CANDIDATE_INDEX_COUNT = 87
 CANDIDATE_BATCH_SHA256 = {
-    10: "8af3efce17c994f3ac0e97a5864ddbf9ea2b28ab0050be0a9cd201b58aca4476",
-    20: "3ffa57f4abe30241469185e6d3c182605157cf7a42facf678128016184f43bb0",
+    (1, 10): "8af3efce17c994f3ac0e97a5864ddbf9ea2b28ab0050be0a9cd201b58aca4476",
+    (11, 20): "3ffa57f4abe30241469185e6d3c182605157cf7a42facf678128016184f43bb0",
 }
 CONTRADICTION_POLICY = "not_modeled_v0.1"
 MISSING_EVIDENCE_POLICY = "all_required_evidence_and_supporting_signal_groups"
@@ -573,9 +573,25 @@ def validate_candidate_contract_progress(contract_count: int, next_ordinal: Any)
     return errors
 
 
-def candidate_contract_batch_digest(contracts: list[Any], end_ordinal: int) -> str:
-    """Hash one completed 10-item batch using canonical JSON."""
-    start_ordinal = end_ordinal - 9
+def candidate_contract_batch_ranges(contract_count: int) -> tuple[tuple[int, int], ...]:
+    """Return completed 10-item ranges plus the terminal 81..87 tail."""
+    if not is_strict_int(contract_count) or contract_count <= 0:
+        return ()
+    full_batch_limit = min(contract_count, 80)
+    ranges = [
+        (start_ordinal, start_ordinal + 9)
+        for start_ordinal in range(1, full_batch_limit + 1, 10)
+        if start_ordinal + 9 <= contract_count
+    ]
+    if contract_count == CANDIDATE_INDEX_COUNT:
+        ranges.append((81, CANDIDATE_INDEX_COUNT))
+    return tuple(ranges)
+
+
+def candidate_contract_batch_digest(
+    contracts: list[Any], start_ordinal: int, end_ordinal: int
+) -> str:
+    """Hash one completed batch range using canonical JSON."""
     encoded = json.dumps(
         contracts[start_ordinal - 1 : end_ordinal],
         ensure_ascii=False,
@@ -584,6 +600,33 @@ def candidate_contract_batch_digest(contracts: list[Any], end_ordinal: int) -> s
         allow_nan=False,
     ).encode("utf-8")
     return hashlib.sha256(encoded).hexdigest()
+
+
+def validate_candidate_batch_commitments(contracts: list[Any]) -> list[str]:
+    """Require one immutable digest lock for every completed contract batch."""
+    errors: list[str] = []
+    prefix = "candidate-contracts.json"
+    expected_ranges = set(candidate_contract_batch_ranges(len(contracts)))
+    configured_ranges = set(CANDIDATE_BATCH_SHA256)
+    require(
+        configured_ranges == expected_ranges,
+        f"{prefix}: completed batch digest coverage mismatch",
+        errors,
+    )
+    for batch_range in sorted(expected_ranges & configured_ranges):
+        start_ordinal, end_ordinal = batch_range
+        batch_number = (start_ordinal - 1) // 10 + 1
+        try:
+            actual_digest = candidate_contract_batch_digest(contracts, start_ordinal, end_ordinal)
+        except (TypeError, ValueError) as exc:
+            errors.append(f"{prefix}: completed batch {batch_number} is not canonical JSON: {exc}")
+            continue
+        require(
+            actual_digest == CANDIDATE_BATCH_SHA256[batch_range],
+            f"{prefix}: completed batch {batch_number} digest mismatch",
+            errors,
+        )
+    return errors
 
 
 def validate_candidate_contracts(
@@ -624,21 +667,7 @@ def validate_candidate_contracts(
     if not isinstance(contracts, list):
         return errors
     errors.extend(validate_candidate_contract_progress(len(contracts), data.get("next_ordinal")))
-    for end_ordinal, expected_digest in CANDIDATE_BATCH_SHA256.items():
-        batch_number = end_ordinal // 10
-        if len(contracts) < end_ordinal:
-            errors.append(f"{prefix}: completed batch {batch_number} is missing")
-            continue
-        try:
-            actual_digest = candidate_contract_batch_digest(contracts, end_ordinal)
-        except (TypeError, ValueError) as exc:
-            errors.append(f"{prefix}: completed batch {batch_number} is not canonical JSON: {exc}")
-            continue
-        require(
-            actual_digest == expected_digest,
-            f"{prefix}: completed batch {batch_number} digest mismatch",
-            errors,
-        )
+    errors.extend(validate_candidate_batch_commitments(contracts))
 
     index_document = candidate_index if isinstance(candidate_index, dict) else {}
     require(
