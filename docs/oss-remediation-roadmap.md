@@ -35,8 +35,8 @@ Alert 발생 → 증거 자동 수집 → 원인 + 반증 가능한 근거 제�
 | R1 | 0~2주에 single-process controller 모드 | **in-process event bus 어댑터**로 배포 프로파일 축소, 4~6주 | README 불변식("단일 앱 회귀 금지") 유지. `src/packages/contracts`의 event bus Protocol port에 in-memory 구현을 추가해 **서비스 코드 경계는 그대로, 배포 형태만 접는다** |
 | R2 | SQLite/PostgreSQL 선택 | v0.1은 **내장 단일 PostgreSQL만** | storage 계층이 PostgreSQL 전제. SQLite 지원은 별도 트랙, 채택 병목 아님 |
 | R3 | RemediationBundle을 CRD로 | **서명 가능한 YAML/JSON 문서 규격이 정본**, CRD는 표현형 중 하나로 후행 | 우리 아키텍처는 pull-agent + 외부 control plane. 규격의 본질은 "재생 가능한 감사 문서" |
-| R4 | 90일에 복수 외부 기준 저장소 연동 | **현재 구현된 기준 저장소만**. 외부 기준 저장소 추가는 v0.2 | 범위 과적재 해소. SCM provider 인터페이스는 이미 분리되어 있어 후속 추가 비용 낮음 |
-| R5 | 90일에 외부 GitOps controller 연동 | **applier port만 분리하고 v0.1은 자체 모드 단독. 외부 관측 어댑터는 v0.2(벤치마크 공개 후)** | 자체 GitOps가 유일한 1급 시민. sync는 commodity이므로 정면 경쟁하지 않되, 호환은 신뢰 사다리(read-only→PR→apply)의 중간 칸으로 성장 단계에 추가 |
+| R4 | 90일에 GitHub+GitLab | **GitHub만**. GitLab은 v0.2 | 범위 과적재 해소. SCM provider 인터페이스는 이미 분리되어 있어 후속 추가 비용 낮음 |
+| R5 | 90일에 Argo CD/Flux 연동 | **applier port만 분리하고 v0.1은 자체 모드 단독. Argo-관측 어댑터는 v0.2(벤치마크 공개 후)** | 자체 GitOps가 유일한 1급 시민. sync는 commodity(2026 CNCF: 클러스터 ~60%가 Argo)이므로 정면 경쟁하지 않되, 호환은 신뢰 사다리(read-only→PR→apply)의 중간 칸으로 성장 단계에 추가 |
 | R6 | 90일에 플러그인 SDK | **벤치마크 시나리오 포맷을 먼저 공개**, SDK는 기여 포맷이 검증된 후 | 기여 단위는 "새 장애 시나리오 하나"라는 원칙 유지. SDK는 그 포맷이 안정된 뒤 |
 | R7 | heal8s를 최우선 경쟁자로 상정 | **존재 미확인 → 선행 검증 태스크로 강등** | 2026-07-12 웹서치에서 저장소 확인 불가. 확인 전까지 전략 근거로 사용 금지 |
 | R8 | (없음) | **Alembic 마이그레이션 도입을 필수 목록에 추가** | 현재 `create_all` 방식. 외부 사용자가 v0.1→v0.2 업그레이드 불가능하면 OSS로 성립 안 됨 |
@@ -50,7 +50,7 @@ Alert 발생 → 증거 자동 수집 → 원인 + 반증 가능한 근거 제�
 ## 2. 선행 검증 (착수 전, ~3일)
 
 - [x] **heal8s 실존 확인 (2026-07-13 완료)**: github.com/heal8s/heal8s 실존.
-  Apache-2.0, Go, operator+기준 저장소 앱 구조, OOMKill/ScaleUp/RollbackImage **실제 patch**,
+  Apache-2.0, Go, operator+GitHub App 구조, OOMKill/ScaleUp/RollbackImage **실제 patch**,
   CRD·Helm chart·`make verify` 원커맨드 Kind 검증, 웹 대시보드. 단 **0 stars·3 commits·
   릴리스 0·기여자 0** — 시장 견인력 없음. 판정: 코드 위협이 아니라 "동일 방향 진입"의
   증거. §4(실제 patch 5종)의 시급성 상향 근거로 사용. 차별화는 원안대로
@@ -62,7 +62,7 @@ Alert 발생 → 증거 자동 수집 → 원인 + 반증 가능한 근거 제�
 
 ## 3. 핵심 규격: RemediationBundle (v1alpha1)
 
-모든 표면(UI, CLI, 기준 저장소 앱, 향후 외부 GitOps controller/CRD)이 소비하는 단일 문서 규격.
+모든 표면(UI, CLI, GitHub App, 향후 Argo/Flux/CRD)이 소비하는 단일 문서 규격.
 **저장·전송 중립적인 서명 가능한 YAML/JSON**으로 정의하고, 스키마는 JSON Schema로 공개한다.
 
 포함 필드(원안 유지): `incident`(source/fingerprint/target), `evidence[]`(type + content-addressed ref),
@@ -183,14 +183,14 @@ in-memory bus 구현, 이벤트 재생 엔진. Bundle v1alpha1은 supporting/mis
 - LICENSE(Apache-2.0), CONTRIBUTING, CODE_OF_CONDUCT, SECURITY, GOVERNANCE, MAINTAINERS, CHANGELOG
 - 영문 README 정본 + 한국어 번역
 - **Alembic 마이그레이션 도입** (R8. create_all → revision 기반, 업그레이드/다운그레이드 절차 문서화)
-- CI 복구 (공개 저장소 CI 무료 티어)
-- 공급망: container registry multi-arch, SBOM, Cosign 서명, SLSA provenance, dependency/secret scan, 공개 advisory 절차
+- CI 복구 (공개 저장소 GitHub Actions 무료 티어)
+- 공급망: GHCR multi-arch, SBOM, Cosign 서명, SLSA provenance, dependency/secret scan, 공개 advisory 절차
 - v0.1.0 릴리스: Helm OCI chart, 업그레이드/삭제 절차, 3분 데모 영상, kind one-command E2E
 
 ## 9. OSS / 상용 경계 (원안 유지)
 
 **완전 OSS**: agent·evidence collector, RCA rule engine, LLM fallback(BYOK/local), RemediationBundle 규격,
-실제 patch·rollback 생성, dry-run·기본 정책 검사, 기준 저장소 PR(→외부 기준 저장소 v0.2), 벤치마크, (후행) 플러그인 SDK, Helm chart·CLI.
+실제 patch·rollback 생성, dry-run·기본 정책 검사, GitHub PR(→GitLab v0.2), 벤치마크, (후행) 플러그인 SDK, Helm chart·CLI.
 
 **유료/Hosted**: 관리형 control plane, SSO/SCIM, 대규모 fleet 정책, 장기 evidence 보존·검색,
 규제 준수 리포트, 조직별 비용/LLM budget, HA/백업/DR, 지원 SLA.
@@ -230,8 +230,8 @@ in-memory bus 구현, 이벤트 재생 엔진. Bundle v1alpha1은 supporting/mis
 ### 명시적 후순위 (90일 범위 밖)
 
 **F6** PR 코멘트 봇(정책 판정 포함 형태로만, R12), **Argo-관측 applier 어댑터(v0.2, R5)**,
-외부 기준 저장소 provider, 플러그인 SDK, CRD 표현형, SQLite, contradicting evidence(§7.3),
-외부 알림 채널 통합 심화, MCP 서버, SSO/billing/fleet UI,
+GitLab provider, 플러그인 SDK, CRD 표현형, SQLite, contradicting evidence(§7.3),
+Slack 전용 통합 심화, MCP 서버, SSO/billing/fleet UI,
 추가 microservice 분리(중단), BE-Gap 98개(하지 않음).
 
 ## 11. 성공 기준 (원안 유지 + 1 추가)

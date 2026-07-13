@@ -138,14 +138,14 @@ DB 테이블 없음. 카탈로그는 코드 상수 `CATALOG` (frozen dataclass �
 
 | # | category | key | label | status | adapter | capabilities | credential_requirements (key / ref_prefixes / required_for) | config_keys | unavailable_reason |
 |---|---|---|---|---|---|---|---|---|---|
-| 1 | source | `github` | 기준 저장소 | available | `GithubScmProvider + 기준 저장소 contents API` | `webhook`, `poll`, `manifest_read`, `safe_pr` | `github_token` / `env:`, `k8s-secret:`, `aws-sm:` / `private_repo`, `safe_pr` — "기준 저장소 API token or app installation token secret ref." | `GITHUB_TOKEN_REF`, `GITHUB_API_BASE`, `SCM_REPO`, `SCM_BASE_BRANCH` | — |
+| 1 | source | `github` | GitHub | available | `GithubScmProvider + GitHub Contents API` | `webhook`, `poll`, `manifest_read`, `safe_pr` | `github_token` / `env:`, `k8s-secret:`, `aws-sm:` / `private_repo`, `safe_pr` — "GitHub API token or GitHub App installation token secret ref." | `GITHUB_TOKEN_REF`, `GITHUB_API_BASE`, `SCM_REPO`, `SCM_BASE_BRANCH` | — |
 | 2 | source | `git-url` | Generic Git URL | unavailable | None | `manifest_read` | — | — | "checkout cache can mirror repos internally, but per-repository credential binding and allowlist are unavailable in this build" |
-| 3 | source | `gitlab` | 외부 기준 저장소 A | unavailable | None | — | — | — | "external source webhook, contents, and merge request adapters are unavailable" |
-| 4 | source | `bitbucket` | 외부 기준 저장소 B | unavailable | None | — | — | — | "external source webhook, contents, and pull request adapters are unavailable" |
+| 3 | source | `gitlab` | GitLab | unavailable | None | — | — | — | "GitLab webhook, contents, and merge request adapters are unavailable" |
+| 4 | source | `bitbucket` | Bitbucket | unavailable | None | — | — | — | "Bitbucket webhook, contents, and pull request adapters are unavailable" |
 | 5 | deploy | `manual-manifest` | Manual Manifest Export | available | `POST /targets apply=false` | `preview`, `download_manifest` | — | — | — |
 | 6 | deploy | `kube-context` | Kubernetes Context Apply | available | `kubectl apply with KUBE_CONTEXT_ALLOWLIST` | `preview`, `server_apply` | — | `KUBE_CONTEXT_ALLOWLIST` | — |
-| 7 | deploy | `gitops-controller` | External GitOps Controller | unavailable | None | — | — | — | "external GitOps controller adapter is unavailable; the built-in workflow-controller remains active" |
-| 8 | deploy | `jenkins` | External Job Runner | unavailable | None | — | — | — | "external job trigger/status adapter is unavailable" |
+| 7 | deploy | `gitops-controller` | External GitOps Controller | unavailable | None | — | — | — | "External Argo CD or Flux adapter is unavailable; the built-in workflow-controller remains active" |
+| 8 | deploy | `jenkins` | Jenkins | unavailable | None | — | — | — | "Jenkins job trigger/status adapter is unavailable" |
 | 9 | cloud | `existing-k8s` | Existing Kubernetes | available | `kubeconfig context or target agent bootstrap` | `install_target_agent`, `apply_manifest` | — | `KUBE_CONTEXT_ALLOWLIST` | — |
 | 10 | cloud | `local` | Local Kubernetes | available | `scripts/up.sh` | `kind`, `minikube`, `developer_loop` | — | — | — |
 | 11 | cloud | `aws` | AWS | available | `scripts/aws-up.sh + AWS credential chain` | `eks`, `ecr`, `manual_deploy` | `aws_credentials` / `aws-profile:`, `env:` / `deploy` — "AWS profile or environment credential chain for manual deployments." | `AWS_REGION`, `AWS_PROFILE`, `ECR_REPO` | — |

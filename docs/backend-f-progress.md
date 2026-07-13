@@ -283,15 +283,15 @@ Bundle route는 200을 반환한다.
 
 계약 완성: ClusterSummary.provider + connection_stage (db4798d4e4973ec3d384d71eca08aba6d4e9f6b7) [green]
 
-### BQ-014 — 외부 GitOps observer 어댑터
+### BQ-014 — Argo observer 어댑터
 
 - 상태: landed
 - 담당 lane: `codex/f-argocd-observer`
 - 착수 기준: `origin/dev@621a60a1c83bf12b2cb93fc50439f5a7fc4df00d`
 - 전체 게이트 baseline: Ruff lint/format PASS, import-linter 2 kept/0 broken,
   pytest `1735 passed, 3 skipped`
-- 범위: `reconciler_mode=argocd`에서 외부 GitOps Application과 Rollout stable revision을
-  읽기만 하며 Kubernetes/외부 GitOps 쓰기 호출은 0건으로 고정한다.
+- 범위: `reconciler_mode=argocd`에서 Argo CD Application과 Rollout stable revision을
+  읽기만 하며 Kubernetes/Argo 쓰기 호출은 0건으로 고정한다.
 - canonical merge: `0b4298c4e2dbc57815a4c484ac7efa3491ed01db`
 - 코드: `16c58de5634b2ee49a93c884e73bebb2348b04f3`
 - 전체 게이트: Ruff lint/format PASS, import-linter 2 kept/0 broken,
