@@ -84,6 +84,18 @@ SIXTH_CANDIDATE_BATCH = (
     "endpoint_slice_delay",
     "memory_limit_too_low",
 )
+SEVENTH_CANDIDATE_BATCH = (
+    "memory_leak",
+    "traffic_spike",
+    "node_memory_pressure",
+    "bad_release_memory_regression",
+    "cpu_limit_or_throttling",
+    "node_disk_pressure",
+    "ephemeral_storage_exhausted",
+    "process_id_exhaustion",
+    "missing_configmap_reference",
+    "config_key_missing",
+)
 
 
 def _score(*args: str) -> subprocess.CompletedProcess[str]:
@@ -319,6 +331,30 @@ def test_sixth_candidate_contract_batch_is_machine_verified_in_catalog_order() -
             "benchmark/scenarios/service-selector/service-selector-pods-not-ready/scenario.json"
         ],
     }
+
+
+def test_seventh_candidate_contract_batch_is_machine_verified_in_catalog_order() -> None:
+    result = _score("--candidate-contracts")
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "RESULT PASS (70 candidate contracts; ordinals=1..70)" in result.stdout
+
+    document = json.loads(CONTRACTS.read_text(encoding="utf-8"))
+    seventh_batch = document["contracts"][60:70]
+    assert document["next_ordinal"] == 71
+    assert tuple(item["candidate_id"] for item in seventh_batch) == SEVENTH_CANDIDATE_BATCH
+    assert all(item["patch_capabilities"] == [] for item in seventh_batch)
+    assert all(item["benchmark_fixtures"] == [] for item in seventh_batch)
+    assert all(
+        [action["action_type"] for action in item["allowed_remediations"]] == ["manual_analysis"]
+        for item in seventh_batch
+    )
+    forbidden_actions = [item["forbidden_remediations"][0]["action_type"] for item in seventh_batch]
+    assert len(forbidden_actions) == len(set(forbidden_actions)) == 10
+    assert all(
+        item["forbidden_remediations"][0]["blast_radius"] in {"cluster", "fleet"}
+        for item in seventh_batch
+    )
 
 
 def test_public_candidate_contract_scorer_needs_no_site_packages() -> None:
