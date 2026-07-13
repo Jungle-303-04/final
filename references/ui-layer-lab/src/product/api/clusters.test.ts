@@ -1,7 +1,9 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, expectTypeOf, it, vi } from "vitest";
 
 import { ApiError } from "./client";
+import type { ConnectionStage } from "./cluster-stage-schemas";
 import { listClusters } from "./clusters";
+import type { HomeConnectionStage } from "../features/home/homeContract";
 
 const CLUSTER = {
   workspace_id: "default",
@@ -30,6 +32,10 @@ function jsonResponse(payload: unknown, status = 200): Response {
 describe("clusters API", () => {
   beforeEach(() => {
     vi.restoreAllMocks();
+  });
+
+  it("keeps the canonical Home stage union aligned with the strict API schema", () => {
+    expectTypeOf<HomeConnectionStage>().toEqualTypeOf<ConnectionStage>();
   });
 
   it("lists session-visible clusters with the default limit of 100", async () => {

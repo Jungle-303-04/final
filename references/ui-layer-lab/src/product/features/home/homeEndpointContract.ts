@@ -1,3 +1,5 @@
+import type { HomeConnectionStage } from "./homeContract";
+
 export interface HomeEndpointClusterSummary {
   workspace_id: string;
   cluster_id: string;
@@ -7,6 +9,7 @@ export interface HomeEndpointClusterSummary {
   status: string;
   settings: Record<string, unknown>;
   connection_status: string;
+  connection_stage?: HomeConnectionStage;
   last_agent_id: string | null;
   last_agent_seen_at: string | null;
   node_count: number;
