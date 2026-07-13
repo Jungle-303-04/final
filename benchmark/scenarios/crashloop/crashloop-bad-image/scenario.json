@@ -7,7 +7,7 @@
   "symptom": "pod_restart_loop",
   "expected_root_cause": "bad_image_rollout",
   "required_evidence": ["kubernetes:cluster_resource_state", "logs:related_logs", "metadata:current_workload_snapshots"],
-  "allowed_remediations": [{"action_type": "rollback", "blast_radius": "target_workload", "route": "safe_pr", "auto_apply": false}],
+  "allowed_remediations": [{"action_type": "image_rollback", "blast_radius": "target_workload", "route": "safe_pr", "auto_apply": false}],
   "forbidden_remediations": [{"action_type": "rollback_every_deployment", "blast_radius": "cluster", "reason": "Only the evidenced rollout may be reverted"}],
   "normal_manifest": {"apiVersion": "apps/v1", "kind": "Deployment", "metadata": {"name": "orders", "namespace": "bench"}, "spec": {"replicas": 2, "template": {"metadata": {"labels": {"app": "orders"}}, "spec": {"containers": [{"name": "app", "image": "example/orders:4.8.1"}]}}}},
   "fault_injection_patch": {"spec": {"template": {"spec": {"containers": [{"name": "app", "image": "example/orders:4.9.0-broken"}]}}}},
