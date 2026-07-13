@@ -40,7 +40,7 @@ live YAML을 다시 읽어 index 전체와 대조하지만, 공개 채점기는 
 site-packages 없이 실행된다.
 
 `candidate-contracts.json`은 index 앞에서부터 완결된 10개 단위 배치를 누적한다. 현재 범위는
-1~40번이고 `next_ordinal`은 41이다. 마지막 배치는 81~87번 7개를 허용하며 그때
+1~50번이고 `next_ordinal`은 51이다. 마지막 배치는 81~87번 7개를 허용하며 그때
 `next_ordinal`은 `null`이다. 후보 계약은 다음 경계를 분리한다.
 
 - `required_evidence`: 수집돼야 하는 `source:name` key. 이것만으로 후보가 지지됐다는 뜻은 아니다.
@@ -69,9 +69,10 @@ recovery 선언은 소스 선언 순서대로 모두 누적한다.
 25번과 26번에만 연결한다. 31~40번 중 36번 `upstream_unavailable`과 37번
 `backend_readiness_failure`는 실제 command alias와 교차해 `command` capability가 있고, 38번
 `application_5xx_spike`는 command와 Safe PR 양쪽을 지원한다. 31~40번에 exact fixture는 없다.
-이 빈 값은 coverage gap을 드러내는 것이고 실행 가능성이나 fixture를 추측해 채우지 않는다.
-다음 보충 단위는 index 41번부터 이어 붙이며, source hash나 loader 순서가 달라지면 기존 배치부터
-다시 감사한다.
+41~49번은 `manual_analysis` fallback-only이고, 50번 `probe_path_wrong`만 `safe_pr` capability와
+exact probe fixture를 가진다. 이 빈 값은 coverage gap을 드러내는 것이고 실행 가능성이나
+fixture를 추측해 채우지 않는다. 다음 보충 단위는 index 51번부터 이어 붙이며, source hash나
+loader 순서가 달라지면 기존 배치부터 다시 감사한다.
 
 ## 검증
 

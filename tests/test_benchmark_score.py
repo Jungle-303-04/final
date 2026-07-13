@@ -60,6 +60,18 @@ FOURTH_CANDIDATE_BATCH = (
     "kubelet_unavailable",
     "container_runtime_unavailable",
 )
+FIFTH_CANDIDATE_BATCH = (
+    "node_network_unavailable",
+    "pod_evicted_memory_pressure",
+    "pod_evicted_disk_pressure",
+    "pod_evicted_pid_pressure",
+    "policy_violation",
+    "invalid_manifest",
+    "image_vulnerability_block",
+    "service_account_permission_denied",
+    "certificate_expired_or_invalid",
+    "probe_path_wrong",
+)
 
 
 def _score(*args: str) -> subprocess.CompletedProcess[str]:
@@ -123,7 +135,7 @@ def test_first_candidate_contract_batch_is_machine_verified_in_catalog_order() -
     result = _score("--candidate-contracts")
 
     assert result.returncode == 0, result.stdout + result.stderr
-    assert "RESULT PASS (40 candidate contracts; ordinals=1..40)" in result.stdout
+    assert "RESULT PASS (50 candidate contracts; ordinals=1..50)" in result.stdout
 
     document = json.loads(CONTRACTS.read_text(encoding="utf-8"))
     assert tuple(item["candidate_id"] for item in document["contracts"][:10]) == (
@@ -145,7 +157,7 @@ def test_second_candidate_contract_batch_is_machine_verified_in_catalog_order() 
     result = _score("--candidate-contracts")
 
     assert result.returncode == 0, result.stdout + result.stderr
-    assert "RESULT PASS (40 candidate contracts; ordinals=1..40)" in result.stdout
+    assert "RESULT PASS (50 candidate contracts; ordinals=1..50)" in result.stdout
 
     document = json.loads(CONTRACTS.read_text(encoding="utf-8"))
     second_batch = document["contracts"][10:20]
@@ -168,7 +180,7 @@ def test_third_candidate_contract_batch_is_machine_verified_in_catalog_order() -
     result = _score("--candidate-contracts")
 
     assert result.returncode == 0, result.stdout + result.stderr
-    assert "RESULT PASS (40 candidate contracts; ordinals=1..40)" in result.stdout
+    assert "RESULT PASS (50 candidate contracts; ordinals=1..50)" in result.stdout
 
     document = json.loads(CONTRACTS.read_text(encoding="utf-8"))
     third_batch = document["contracts"][20:30]
@@ -199,11 +211,10 @@ def test_fourth_candidate_contract_batch_is_machine_verified_in_catalog_order() 
     result = _score("--candidate-contracts")
 
     assert result.returncode == 0, result.stdout + result.stderr
-    assert "RESULT PASS (40 candidate contracts; ordinals=1..40)" in result.stdout
+    assert "RESULT PASS (50 candidate contracts; ordinals=1..50)" in result.stdout
 
     document = json.loads(CONTRACTS.read_text(encoding="utf-8"))
     fourth_batch = document["contracts"][30:40]
-    assert document["next_ordinal"] == 41
     assert tuple(item["candidate_id"] for item in fourth_batch) == FOURTH_CANDIDATE_BATCH
     assert {item["candidate_id"]: item["patch_capabilities"] for item in fourth_batch} == {
         **{candidate_id: [] for candidate_id in FOURTH_CANDIDATE_BATCH},
@@ -233,11 +244,38 @@ def test_fourth_candidate_contract_batch_is_machine_verified_in_catalog_order() 
     assert all(item["benchmark_fixtures"] == [] for item in fourth_batch)
 
 
+def test_fifth_candidate_contract_batch_is_machine_verified_in_catalog_order() -> None:
+    result = _score("--candidate-contracts")
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "RESULT PASS (50 candidate contracts; ordinals=1..50)" in result.stdout
+
+    document = json.loads(CONTRACTS.read_text(encoding="utf-8"))
+    fifth_batch = document["contracts"][40:50]
+    assert document["next_ordinal"] == 51
+    assert tuple(item["candidate_id"] for item in fifth_batch) == FIFTH_CANDIDATE_BATCH
+    assert {item["candidate_id"]: item["patch_capabilities"] for item in fifth_batch} == {
+        **{candidate_id: [] for candidate_id in FIFTH_CANDIDATE_BATCH},
+        "probe_path_wrong": ["safe_pr"],
+    }
+    assert {
+        item["candidate_id"]: [action["action_type"] for action in item["allowed_remediations"]]
+        for item in fifth_batch
+    } == {
+        **{candidate_id: ["manual_analysis"] for candidate_id in FIFTH_CANDIDATE_BATCH},
+        "probe_path_wrong": ["probe_fix", "manual_analysis"],
+    }
+    assert {item["candidate_id"]: item["benchmark_fixtures"] for item in fifth_batch} == {
+        **{candidate_id: [] for candidate_id in FIFTH_CANDIDATE_BATCH},
+        "probe_path_wrong": ["benchmark/scenarios/probe/probe-wrong-path/scenario.json"],
+    }
+
+
 def test_public_candidate_contract_scorer_needs_no_site_packages() -> None:
     result = _score_without_site_packages("--candidate-contracts")
 
     assert result.returncode == 0, result.stdout + result.stderr
-    assert "RESULT PASS (40 candidate contracts; ordinals=1..40)" in result.stdout
+    assert "RESULT PASS (50 candidate contracts; ordinals=1..50)" in result.stdout
 
 
 def _contract_validation_errors(document: dict[str, object]) -> list[str]:
@@ -359,7 +397,9 @@ def test_candidate_contract_rejects_fixture_path_traversal() -> None:
     assert any("fixture path must remain under benchmark/scenarios" in error for error in errors)
 
 
-@pytest.mark.parametrize(("contract_index", "batch_number"), ((3, 1), (10, 2), (20, 3), (30, 4)))
+@pytest.mark.parametrize(
+    ("contract_index", "batch_number"), ((3, 1), (10, 2), (20, 3), (30, 4), (40, 5))
+)
 def test_candidate_contract_rejects_completed_batch_annotation_drift(
     contract_index: int, batch_number: int
 ) -> None:
@@ -391,10 +431,10 @@ def test_candidate_contract_batch_commitments_reject_unlocked_complete_batch(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     scorer = runpy.run_path(str(SCORER))
-    contracts = [{"ordinal": ordinal} for ordinal in range(1, 41)]
+    contracts = [{"ordinal": ordinal} for ordinal in range(1, 51)]
     locks = {
         batch_range: scorer["candidate_contract_batch_digest"](contracts, *batch_range)
-        for batch_range in ((1, 10), (11, 20), (21, 30))
+        for batch_range in ((1, 10), (11, 20), (21, 30), (31, 40))
     }
     monkeypatch.setitem(
         scorer["validate_candidate_batch_commitments"].__globals__,
@@ -438,7 +478,7 @@ def test_candidate_contract_rejects_non_string_capability_without_crashing() -> 
 
 @pytest.mark.parametrize(
     ("contract_count", "next_ordinal"),
-    ((10, 11), (20, 21), (30, 31), (40, 41), (80, 81), (87, None)),
+    ((10, 11), (20, 21), (30, 31), (40, 41), (50, 51), (80, 81), (87, None)),
 )
 def test_candidate_contract_progress_accepts_complete_batches_and_terminal_catalog(
     contract_count: int, next_ordinal: int | None
