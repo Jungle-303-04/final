@@ -1231,3 +1231,17 @@ npm run visual-product
 - 4조건: merge-tree exit 0/tree `7ca5eda67e1666744f2a5d0f96f4585d2f7cc29e`;
   삭제 0건; gateway 계약·RCA·AI·runtime worker 변경 0건; feature와 merge commit의
   `origin/dev` ancestor exit 0.
+
+## 2026-07-13 14:14 KST — G·H 통합 단계 완료 증거
+
+- canonical `origin/dev@4731369d6b6739953b917aaf0cd04e0543f7a91d`에서 Ruff lint/format
+  PASS, import-linter 8 kept/0 broken, pytest `1868 passed, 3 skipped`, compileall PASS,
+  `make manifest-check` management 69/target 20을 재증명했다. BLOCKED 항목은 0건이다.
+- 단계적 H 착륙: H1 `17ac2b7a3`, H2 `5f2393667`, H3 `6d68325bf`; PROMOTE 통합점
+  `0eaaa6637`; 이후 BQ-014 `0b4298c4e`, BQ-015 `130e6755d`, BQ-011 `37498fc71`도
+  각각 canonical ancestor exit 0이다. D-020의 단계적 H가 과거 일괄 H를 대체하므로 G/H를
+  실물 기준 done으로 정합화했다.
+- 프론트 인계 초안: `AUDIT_TIMELINE_PATH`는 workspace-scoped correlation timeline과 nullable
+  `causation_id`; `RCA_RECENT_CHANGES_PATH`는 incident event-time 이전 성공 변경 목록;
+  workflow run의 `promotion_gate`는 optional; `provider`와 `connection_stage`도 optional이다.
+  auto-revert·권위 patch·source contract·release-flow 내부 분해는 신규 gateway 계약이 없다.
