@@ -672,3 +672,14 @@ def test_target_agent_registers_query_policy_from_management_policy() -> None:
 
     assert result["registered_queries"]["metrics"] == ["checkout_error_rate"]
     assert definition.query.startswith("sum(rate")
+
+
+def test_target_agent_wires_argocd_reconciler_mode(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("RECONCILER_MODE", "argocd")
+    agent_module = load_agent_module()
+    agent = agent_module.TargetClusterAgent()
+
+    try:
+        assert agent.reconciler.reconciler_mode == "argocd"
+    finally:
+        agent.close()
