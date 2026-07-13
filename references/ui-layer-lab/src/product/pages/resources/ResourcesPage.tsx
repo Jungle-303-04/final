@@ -1,29 +1,15 @@
-import { RefreshCw, Server } from "lucide-react";
+import { RefreshCw } from "lucide-react";
 import { useEffect } from "react";
-import type { HomePort } from "../../features/home/homeContract";
 import type {
   ResourceList,
   ResourcesPort,
 } from "../../features/resources/resourcesContract";
 import { useI18n } from "../../shared/i18n";
-import {
-  ClusterConnectionStatus,
-  clusterDisplayLabel,
-} from "../../shared/ui/ClusterConnectionStatus";
 import { ProductStateScreen } from "../../shared/ui/ProductStateScreen";
 import { ProductPageFrame } from "../../shared/ui/ProductPageFrame";
 import { Surface } from "../../shared/ui/Surface";
 import { Badge } from "../../shared/ui/primitives/badge";
 import { Button } from "../../shared/ui/primitives/button";
-import {
-  Select,
-  SelectContent,
-  SelectGroup,
-  SelectItem,
-  SelectLabel,
-  SelectTrigger,
-  SelectValue,
-} from "../../shared/ui/primitives/select";
 import { ResourceDetailSheet } from "./ResourceDetailSheet";
 import { ResourcesCatalog } from "./ResourcesCatalog";
 import {
@@ -42,16 +28,13 @@ import { filterResourceRows, ResourcesTable } from "./ResourcesTable";
 import { ResourcesToolbar } from "./ResourcesToolbar";
 import { useResourcesPageState } from "./useResourcesPageState";
 
-type ClusterPort = Pick<HomePort, "listClusterChoices">;
 export function ResourcesPage({
-  clusterPort,
   port,
 }: {
-  clusterPort: ClusterPort;
   port: ResourcesPort;
 }) {
   const { t } = useI18n();
-  const state = useResourcesPageState(port, clusterPort);
+  const state = useResourcesPageState(port);
   useResourceTypeShortcuts(state.cycleResourceType);
   if (state.choices.phase === "idle" || state.choices.phase === "loading") {
     return <ProductStateScreen kind="loading" placement="content" />;
@@ -72,9 +55,6 @@ export function ResourcesPage({
     return <ResourcesDenied onRetry={state.refresh} />;
   }
 
-  const selectedCluster = state.choices.data.clusters.find(
-    (cluster) => cluster.id === state.selectedClusterId,
-  );
   const refreshing = [state.choices, state.catalog, state.list, state.detail].some(
     (resource) => resource.phase === "ready" && resource.refreshing,
   );
@@ -85,38 +65,6 @@ export function ResourcesPage({
           {state.automaticRefreshPaused ? (
             <Badge variant="outline">{t("resources.refresh.paused")}</Badge>
           ) : null}
-          {selectedCluster ? (
-            <ClusterConnectionStatus
-              connectionState={selectedCluster.connectionState}
-              lastObservedAt={selectedCluster.lastObservedAt}
-            />
-          ) : null}
-          <Select
-            items={state.choices.data.clusters.map((cluster) => ({
-              label: clusterDisplayLabel(cluster),
-              value: cluster.id,
-            }))}
-            onValueChange={(value) => { if (value) state.selectCluster(value); }}
-            value={selectedCluster?.id ?? null}
-          >
-            <SelectTrigger
-              aria-label={t("resources.cluster.select")}
-              className="min-w-0 flex-1 xl:w-(--product-cluster-select-width) xl:flex-none"
-            >
-              <Server aria-hidden="true" />
-              <SelectValue placeholder={t("resources.cluster.select")} />
-            </SelectTrigger>
-            <SelectContent alignItemWithTrigger={false}>
-              <SelectGroup>
-                <SelectLabel>{t("resources.cluster.available")}</SelectLabel>
-                {state.choices.data.clusters.map((cluster) => (
-                  <SelectItem key={cluster.id} value={cluster.id}>
-                    {clusterDisplayLabel(cluster)}
-                  </SelectItem>
-                ))}
-              </SelectGroup>
-            </SelectContent>
-          </Select>
           <Button
             aria-label={t("common.action.refresh")}
             disabled={refreshing || (state.retryWaitSeconds ?? 0) > 0}

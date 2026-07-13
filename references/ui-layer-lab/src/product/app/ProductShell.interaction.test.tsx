@@ -1,45 +1,24 @@
 // @vitest-environment jsdom
 
-import { ThemeProvider } from "next-themes";
 import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { StrictMode, useEffect, useState } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { MemoryRouter, Route, Routes } from "react-router-dom";
-import { ProductShell } from "./ProductShell";
+import { MemoryRouter } from "react-router-dom";
 import { createApiComposition } from "./apiComposition";
 import { createProductComposition } from "./productComposition";
 import { ProductRouter } from "./ProductRouter";
-import type { AuthenticatedAuthState } from "../features/auth/authContract";
 import { I18nProvider } from "../shared/i18n";
 import {
-  PRODUCT_SHORTCUT_EVENT,
-  type ProductShortcutEventDetail,
-} from "./shortcutRegistry";
-
-const testAuth: AuthenticatedAuthState = {
-  session: { userId: "test-user", roles: ["viewer"], workspaceId: "test-workspace" },
-  signOutIssue: null,
-  signOutPending: false,
-  onSignOut: () => undefined,
-};
+  installMatchMedia,
+  renderShell,
+  replaceProperty,
+  testAuth,
+  testClusterScope,
+} from "./__tests__/ProductShellInteractionSupport";
 
 beforeEach(() => {
   installMatchMedia(false);
 });
-
-function installMatchMedia(matches: boolean) {
-  Object.defineProperty(window, "matchMedia", {
-    configurable: true,
-    value: vi.fn(() => ({
-      matches,
-      addListener: vi.fn(),
-      removeListener: vi.fn(),
-      addEventListener: vi.fn(),
-      removeEventListener: vi.fn(),
-    })),
-  });
-}
 
 afterEach(() => {
   cleanup();
@@ -72,6 +51,8 @@ describe("ProductShell keyboard and help interaction", () => {
   it("navigates with released route chords and toggles help with question mark", async () => {
     const user = userEvent.setup();
     renderShell();
+
+    await screen.findByRole("combobox", { name: /Cluster cluster-1/u });
 
     await user.keyboard("g");
     await user.keyboard("i");
@@ -208,6 +189,7 @@ describe("ProductShell keyboard and help interaction", () => {
       const releaseGateComposition = createProductComposition(
         [],
         createApiComposition().auth,
+        testClusterScope,
       );
       render(
         <I18nProvider navigatorLanguage="ko-KR" storage={null}>
@@ -237,64 +219,3 @@ describe("ProductShell keyboard and help interaction", () => {
     }
   });
 });
-
-function renderShell({
-  initialEntry = "/product",
-  releasedSurfaceIds = new Set(["home", "issues"]),
-}: {
-  initialEntry?: string;
-  releasedSurfaceIds?: ReadonlySet<"home" | "resources" | "issues">;
-} = {}) {
-  return render(
-    <StrictMode>
-      <I18nProvider navigatorLanguage="ko-KR" storage={window.localStorage}>
-        <ThemeProvider
-          attribute="class"
-          defaultTheme="light"
-          enableSystem={false}
-          themes={["light", "dark"]}
-        >
-          <MemoryRouter initialEntries={[initialEntry]}>
-            <Routes>
-              <Route element={(
-                <ProductShell auth={testAuth} releasedSurfaceIds={releasedSurfaceIds} />
-              )}>
-                <Route path="/product" element={<><p>Home content</p><input aria-label="화면 입력" /></>} />
-                <Route path="/product/resources" element={<ResourcesShortcutProbe />} />
-                <Route path="/product/issues" element={<p>Issue content</p>} />
-              </Route>
-            </Routes>
-          </MemoryRouter>
-        </ThemeProvider>
-      </I18nProvider>
-    </StrictMode>,
-  );
-}
-
-function ResourcesShortcutProbe() {
-  const [shortcutId, setShortcutId] = useState("none");
-
-  useEffect(() => {
-    const handleShortcut = (event: Event) => {
-      const detail = (event as CustomEvent<ProductShortcutEventDetail>).detail;
-      setShortcutId(detail.id);
-    };
-    window.addEventListener(PRODUCT_SHORTCUT_EVENT, handleShortcut);
-    return () => window.removeEventListener(PRODUCT_SHORTCUT_EVENT, handleShortcut);
-  }, []);
-
-  return <p data-testid="resources-shortcut">{shortcutId}</p>;
-}
-
-function replaceProperty(target: object, property: PropertyKey, value: unknown) {
-  const descriptor = Object.getOwnPropertyDescriptor(target, property);
-  Object.defineProperty(target, property, {
-    configurable: true,
-    writable: true,
-    value,
-  });
-  return () => {
-    if (descriptor) Object.defineProperty(target, property, descriptor);
-    else Reflect.deleteProperty(target, property);
-  };
-}

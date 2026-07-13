@@ -30,8 +30,11 @@ const resourcesDetailApiPath =
   `/api/clusters/${homeClusterId}/inventory/resource-detail?resource_type=pod&kind=Pod&name=${homePodName}&namespace=shop&related_limit=100&event_limit=50`;
 const resourcesBaseApiPaths = [homeBaseApiPaths[0], resourcesSummaryApiPath, resourcesListApiPath];
 const stateHarnessUrl = `${baseUrl}/scripts/fixtures/product-state-visual-harness.html`;
-const shellHarnessUrl = `${baseUrl}/scripts/fixtures/product-shell-visual-harness.html`;
+const shellHarnessUrl = `${baseUrl}/scripts/fixtures/product-shell-visual-harness.html?cluster=cluster-1`;
 const outputDir = new URL("../output/playwright/", import.meta.url).pathname;
+const shellHeaderSelector = "[data-slot='sidebar-inset'] > header";
+const clusterScopePickerSelector = `${shellHeaderSelector} [data-slot='cluster-scope-picker']`;
+const clusterScopeTriggerSelector = `${clusterScopePickerSelector} [data-slot='select-trigger']`;
 // Deterministic fixture captures guard local UI contracts only. AWS-backed acceptance
 // evidence is captured by a separate workflow and must not reuse these screenshots.
 const authLoginSelectors = [
@@ -93,6 +96,8 @@ const shellSelectors = [
   "[data-slot='sidebar-navigation']",
   "[data-slot='sidebar-menu']",
   "[data-slot='sidebar-trigger']",
+  clusterScopePickerSelector,
+  clusterScopeTriggerSelector,
   "[data-shell-harness-outlet]",
   "header",
   "main",
@@ -102,7 +107,8 @@ const homeSelectors = [
   "[data-slot='sidebar-inset']",
   "[data-slot='sidebar-trigger']",
   "[data-slot='surface']",
-  "[data-slot='select-trigger']",
+  clusterScopePickerSelector,
+  clusterScopeTriggerSelector,
   "[data-slot='progress']",
   "[data-slot='progress-track']",
   "[data-slot='progress-indicator']",
@@ -134,7 +140,8 @@ const resourcesSelectors = [
   "[data-slot='sidebar-trigger']",
   "[data-slot='surface']",
   "[data-slot='badge']",
-  "[data-slot='select-trigger']",
+  clusterScopePickerSelector,
+  clusterScopeTriggerSelector,
   "[data-slot='accordion']",
   "[data-slot='accordion-trigger']",
   "[data-slot='table-container']",
@@ -162,7 +169,6 @@ const browserLocales = {
 const localeSmokeCopy = {
   en: {
     home: {
-      clusterSelect: "Select cluster",
       heading: "Cluster status",
       navigation: "Primary navigation",
       route: "Home",
@@ -175,7 +181,6 @@ const localeSmokeCopy = {
   },
   ko: {
     home: {
-      clusterSelect: "클러스터 선택",
       heading: "클러스터 상태",
       navigation: "주요 메뉴",
       route: "홈",
@@ -1338,6 +1343,7 @@ async function assertProductLoadingScreenContracts(page, scenario) {
     const shell = document.querySelector("[data-slot='product-shell-loading']");
     const shellSidebar = shell?.querySelector("aside");
     const shellHeader = shell?.querySelector("header");
+    const clusterScope = shellHeader?.querySelector("[data-slot='loading-cluster-scope']");
     const sessionIdentity = shell?.querySelector("[data-slot='loading-session-identity']");
     const pageFrame = shell?.querySelector("[data-slot='product-page-frame']");
     const status = document.querySelector("[role='status']");
@@ -1382,10 +1388,12 @@ async function assertProductLoadingScreenContracts(page, scenario) {
       ),
       shellFrameRect: rect(pageFrame),
       shellHeaderRect: rect(shellHeader),
+      shellClusterScopeRect: rect(clusterScope),
       shellIdentityRect: rect(sessionIdentity),
       shellRect: rect(shell),
       shellSidebarRect: rect(shellSidebar),
       expectedHeaderHeight: 3.5 * rootFontSize,
+      expectedClusterScopeHeight: 2 * rootFontSize,
       expectedIdentityWidth,
       sidebarWidth,
       statusLabel: status?.getAttribute("aria-label") ?? null,
@@ -1424,6 +1432,15 @@ async function assertProductLoadingScreenContracts(page, scenario) {
       `${scenario.id}: loading toolbar did not reserve ready-state geometry ${JSON.stringify(result)}`,
     );
   }
+  if (!result.shellClusterScopeRect || !result.shellHeaderRect
+    || result.shellClusterScopeRect.width <= 0
+    || Math.abs(result.shellClusterScopeRect.height - result.expectedClusterScopeHeight) > 1
+    || result.shellClusterScopeRect.left < result.shellHeaderRect.left - 1
+    || result.shellClusterScopeRect.right > result.shellHeaderRect.right + 1) {
+    throw new Error(
+      `${scenario.id}: loading cluster scope did not reserve shell-header geometry ${JSON.stringify(result)}`,
+    );
+  }
 }
 
 async function prepareProductLocaleSmokeScenario(page, scenario) {
@@ -1456,7 +1473,7 @@ async function prepareProductLocaleSmokeScenario(page, scenario) {
 
   await page.getByText("KubeHeal", { exact: true }).waitFor();
   if (scenario.localeSmoke === "home") {
-    await page.getByRole("combobox", { name: copy.clusterSelect }).waitFor();
+    await assertGlobalClusterScopePicker(page, scenario.id, scenario.locale);
     await page.getByRole("button", { name: new RegExp(`^${homeNodeName}(?:\\s|$)`, "u") }).waitFor();
   } else if (scenario.localeSmoke === "resources") {
     await page.locator("table[data-slot='table']").waitFor();
@@ -1558,21 +1575,16 @@ async function captureLocalizedGeometry(page, locale) {
         width: bounds.width,
       };
     };
-    const frame = document.querySelector("[data-slot='product-page-frame']");
-    const frameHeader = frame?.querySelector(":scope > header");
+    const shellHeader = document.querySelector("[data-slot='sidebar-inset'] > header");
+    const clusterPicker = shellHeader?.querySelector("[data-slot='cluster-scope-picker']");
+    const clusterTrigger = clusterPicker?.querySelector("[data-slot='select-trigger']");
     const localeTrigger = [...document.querySelectorAll("[data-slot='select-trigger']")]
       .find((element) => element.getAttribute("aria-label") === controlLabel);
-    const connection = frameHeader?.querySelector("[data-slot='button']");
-    const clusterSelect = frameHeader?.querySelector("[data-slot='select-trigger']");
-    const frameButtons = frameHeader?.querySelectorAll("[data-slot='button']") ?? [];
-    const refresh = frameButtons.item(frameButtons.length - 1);
     return {
-      clusterSelect: rect(clusterSelect),
-      connection: rect(connection),
-      frame: rect(frame),
+      clusterPicker: rect(clusterPicker),
+      clusterTrigger: rect(clusterTrigger),
       localeTrigger: rect(localeTrigger),
-      refresh: rect(refresh),
-      shellHeader: rect(document.querySelector("[data-slot='sidebar-inset'] > header")),
+      shellHeader: rect(shellHeader),
     };
   }, control.control);
 }
@@ -1621,11 +1633,7 @@ async function prepareProductHomeScenario(page, scenario) {
     await assertProductHomeClusterForbidden(page, scenario.id);
     return;
   }
-  const clusterSelect = page.getByRole("combobox", { name: "클러스터 선택" });
-  await clusterSelect.waitFor();
-  if (!(await clusterSelect.textContent())?.includes(homeClusterId)) {
-    throw new Error(`${scenario.id}: Home cluster selector did not render ${homeClusterId}`);
-  }
+  await assertGlobalClusterScopePicker(page, scenario.id, scenario.locale);
 
   const desktop = scenario.viewport.width >= 768;
   const navigation = page.getByRole("navigation", { name: "주요 메뉴" });
@@ -1798,11 +1806,9 @@ async function prepareProductResourcesScenario(page, scenario) {
   await table.waitFor({ state: scenario.resourcesDetail ? "attached" : "visible" });
   await page.getByText(homePodName, { exact: true }).first().waitFor();
 
-  const clusterSelect = page.locator("[data-slot='select-trigger'][aria-label='클러스터 선택']");
-  await clusterSelect.waitFor({ state: scenario.resourcesDetail ? "attached" : "visible" });
-  if (!(await clusterSelect.textContent())?.includes(homeClusterId)) {
-    throw new Error(`${scenario.id}: Resources cluster selector omitted ${homeClusterId}`);
-  }
+  await assertGlobalClusterScopePicker(page, scenario.id, scenario.locale, {
+    state: scenario.resourcesDetail ? "attached" : "visible",
+  });
 
   const scopeText = await page.locator("[role='status'][aria-label='목록 범위']").innerText();
   if (!/표시\s*2/u.test(scopeText) || !/전체 수 미확인/u.test(scopeText)) {
@@ -1814,12 +1820,6 @@ async function prepareProductResourcesScenario(page, scenario) {
   if (productText.includes("visual-secret-must-not-render")) {
     throw new Error(`${scenario.id}: unredacted annotation reached the Resources DOM`);
   }
-  if (!scenario.resourcesDetail) {
-    const connection = page.getByRole("button", { name: /연결됨.*마지막 관측/u });
-    await connection.focus();
-    await page.locator("[data-slot='tooltip-content']").waitFor();
-  }
-
   const desktop = scenario.viewport.width >= 768;
   const navigation = page.getByRole("navigation", { name: "주요 메뉴" });
   if (desktop) {
@@ -1935,13 +1935,11 @@ async function assertProductHomeFreshnessContract(page, label) {
     .test(mainText)) {
     throw new Error(`${label}: Home rendered a prohibited standing label or transport badge`);
   }
-  const connection = page.getByRole("button", {
-    name: /연결(?:됨| 지연| 대기| 끊김| 상태 알 수 없음).*마지막 관측/u,
-  });
-  if (await connection.count() !== 1) {
-    throw new Error(`${label}: Home must expose one connection freshness control`);
+  const clusterTrigger = page.locator(clusterScopeTriggerSelector);
+  if (await clusterTrigger.count() !== 1) {
+    throw new Error(`${label}: shell must expose one cluster scope freshness control`);
   }
-  await connection.focus();
+  await clusterTrigger.focus();
   await page.locator("[data-slot='tooltip-content']").waitFor();
 }
 
@@ -1985,11 +1983,39 @@ async function assertProductHomeClusterForbidden(page, label) {
   if (!/필요한 조회 권한/u.test(mainText)) {
     throw new Error(`${label}: cluster forbidden state needs a permission reason`);
   }
-  if (await page.getByRole("combobox", { name: "클러스터 선택" }).count()
-    || await page.getByRole("heading", { name: "클러스터 상태" }).count()
+  const picker = page.locator(clusterScopePickerSelector);
+  const trigger = page.locator(clusterScopeTriggerSelector);
+  if (await picker.count() !== 1 || await trigger.count() !== 1) {
+    throw new Error(`${label}: cluster forbidden state must retain one global cluster picker`);
+  }
+  if (!(await trigger.textContent())?.includes(homeClusterId)) {
+    throw new Error(`${label}: cluster forbidden state lost the selected global cluster scope`);
+  }
+  if (await page.getByRole("heading", { name: "클러스터 상태" }).count()
     || await page.getByRole("heading", { name: "Node" }).count()
     || await page.getByText(homeNodeName, { exact: true }).count()) {
     throw new Error(`${label}: cluster forbidden state leaked cached cluster content`);
+  }
+}
+
+async function assertGlobalClusterScopePicker(page, label, locale, options = {}) {
+  const picker = page.locator(clusterScopePickerSelector);
+  const trigger = page.locator(clusterScopeTriggerSelector);
+  await picker.waitFor(options);
+  await trigger.waitFor(options);
+  if (await picker.count() !== 1 || await trigger.count() !== 1) {
+    throw new Error(`${label}: shell must expose exactly one global cluster scope picker`);
+  }
+  const text = await trigger.textContent() ?? "";
+  const accessibleName = await trigger.getAttribute("aria-label") ?? "";
+  const connection = locale === "en" ? "Connected" : "연결됨";
+  if (!text.includes(homeClusterId)
+    || !accessibleName.includes(homeClusterId)
+    || !accessibleName.includes(connection)) {
+    throw new Error(
+      `${label}: global cluster scope omitted canonical identity or localized connection `
+      + `${JSON.stringify({ accessibleName, text })}`,
+    );
   }
 }
 
@@ -2141,7 +2167,7 @@ async function assertProductShellContracts(page, scenario) {
   if (result.missing) throw new Error(`${scenario.id}: ProductShell fixture is incomplete`);
   if (result.navigationRole !== "nav" || result.navigationLabel !== "주요 메뉴"
     || result.itemCount !== 3 || result.linkCount !== 3
-    || result.currentLinks !== 1 || result.currentHref !== "/product"
+    || result.currentLinks !== 1 || result.currentHref !== "/product?cluster=cluster-1"
     || result.currentLabel !== "홈"
     || result.itemTags.some((tag) => tag !== "LI")
     || result.linkLabels.join("|") !== "홈|인시던트|타임라인") {
@@ -2283,7 +2309,9 @@ async function assertProductHomeForcedColors(page, label) {
   const result = await page.evaluate(() => {
     const main = document.querySelector("main");
     const surface = document.querySelector("[data-slot='surface']");
-    const select = document.querySelector("[data-slot='select-trigger']");
+    const select = document.querySelector(
+      "[data-slot='sidebar-inset'] > header [data-slot='cluster-scope-picker'] [data-slot='select-trigger']",
+    );
     const node = document.querySelector("section[aria-labelledby='node-list-title'] [data-slot='item']");
     const status = document.querySelector("[data-slot='status-mark']");
     const marker = status?.querySelector("[aria-hidden='true']");
@@ -2878,7 +2906,9 @@ async function assertNoOverflow(page, label, requiredSelectors) {
 
 async function assertProductResourcesForcedColors(page, label) {
   const result = await page.evaluate(() => {
-    const select = document.querySelector("[data-slot='select-trigger']");
+    const select = document.querySelector(
+      "[data-slot='sidebar-inset'] > header [data-slot='cluster-scope-picker'] [data-slot='select-trigger']",
+    );
     const row = document.querySelector("[data-slot='table-row']");
     const action = document.querySelector("[data-slot='table-body'] [data-slot='button']");
     const status = document.querySelector("[data-slot='status-mark']");

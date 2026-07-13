@@ -24,7 +24,9 @@ vi.mock("./app/apiComposition", async () => {
     createApiComposition() {
       compositionMock.attempts += 1;
       if (compositionMock.shouldFail) throw new Error("private-composition-stack-token");
-      return createProductComposition([], auth);
+      return createProductComposition([], auth, {
+        listClusterChoices: async () => ({ completeness: "unknown", clusters: [] }),
+      });
     },
   };
 });

@@ -36,11 +36,11 @@ export function createApiComposition() {
     },
     {
       id: "resources",
-      Component: createResourcesSurface(resourcesPort, homePort),
+      Component: createResourcesSurface(resourcesPort),
     },
   ], createAuthAdapter({
     getSession,
     login,
     logout,
-  }));
+  }), homePort);
 }

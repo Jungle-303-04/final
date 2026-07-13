@@ -6,6 +6,7 @@ import {
 } from "react-router-dom";
 import { vi } from "vitest";
 import { AuthSessionGateProvider } from "../../features/auth/AuthSessionGate";
+import { ClusterScopeProvider } from "../../features/cluster-scope/ClusterScopeProvider";
 import { I18nProvider, type SupportedLocale } from "../../shared/i18n";
 import type {
   HomeClusterChoices,
@@ -193,8 +194,10 @@ export function renderResources(
     element: (
       <I18nProvider navigatorLanguage={locale === "ko" ? "ko-KR" : "en-US"} storage={null}>
         <AuthSessionGateProvider reportUnauthorized={reportUnauthorized}>
-          <ResourcesPage clusterPort={clusterPort} port={port} />
-          <LocationProbe />
+          <ClusterScopeProvider authorityKey="test-workspace:test-user" port={clusterPort}>
+            <ResourcesPage port={port} />
+            <LocationProbe />
+          </ClusterScopeProvider>
         </AuthSessionGateProvider>
       </I18nProvider>
     ),
