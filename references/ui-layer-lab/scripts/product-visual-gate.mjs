@@ -218,6 +218,8 @@ const issuesSelectors = [
   "p",
 ];
 const localeStorageKey = "kubeheal.locale";
+const maxInitialCumulativeLayoutShift = 0.1;
+const layoutShiftMeasurements = [];
 const browserLocales = {
   en: "en-US",
   ko: "ko-KR",
@@ -338,6 +340,12 @@ const visualScenarios = [
     theme: "light",
     colorScheme: "light",
     forcedColors: "none",
+    layoutShiftBudget: maxInitialCumulativeLayoutShift,
+    apiDelayMsByPath: {
+      [homeBaseApiPaths[0]]: 300,
+      [homeBaseApiPaths[1]]: 350,
+      [homeBaseApiPaths[2]]: 450,
+    },
   },
   {
     id: "home-sidebar-reflow-1920-light",
@@ -491,6 +499,12 @@ const visualScenarios = [
     theme: "light",
     colorScheme: "light",
     forcedColors: "none",
+    layoutShiftBudget: maxInitialCumulativeLayoutShift,
+    apiDelayMsByPath: {
+      [homeBaseApiPaths[0]]: 300,
+      [resourcesSummaryApiPath]: 350,
+      [resourcesListApiPath]: 350,
+    },
   },
   {
     id: "resources-authenticated-mobile-dark",
@@ -668,6 +682,11 @@ const visualScenarios = [
     theme: "light",
     colorScheme: "light",
     forcedColors: "none",
+    layoutShiftBudget: maxInitialCumulativeLayoutShift,
+    apiDelayMsByPath: {
+      [homeBaseApiPaths[0]]: 300,
+      [issuesListApiPath]: 400,
+    },
   },
   {
     id: "issues-authenticated-detail-reflow-320-light",
@@ -1350,9 +1369,18 @@ try {
     await runVisualScenario(browser, scenario);
   }
   assertServerAlive();
+  const expectedLayoutShiftMeasurements = visualScenarios.filter(
+    ({ layoutShiftBudget }) => layoutShiftBudget !== undefined,
+  ).length;
+  if (layoutShiftMeasurements.length !== expectedLayoutShiftMeasurements) {
+    throw new Error(
+      `initial CLS coverage mismatch: expected ${expectedLayoutShiftMeasurements}, `
+      + `received ${layoutShiftMeasurements.length}`,
+    );
+  }
 
   console.log(
-    `product visual gate passed (${visualScenarios.map(({ id }) => id).join(", ")}; isolated contexts; exact scenario API requests; unexpected feature-network/websocket-silent)`,
+    `product visual gate passed (${visualScenarios.map(({ id }) => id).join(", ")}; isolated contexts; exact scenario API requests; unexpected feature-network/websocket-silent; initial CLS ${formatLayoutShiftMeasurements()})`,
   );
 } finally {
   try {
@@ -1380,16 +1408,85 @@ async function runVisualScenario(browserInstance, scenario) {
     reducedMotion: "reduce",
     viewport: scenario.viewport,
   });
-  await context.addInitScript(({ locale, localeStorageKey, theme }) => {
+  await context.addInitScript(({ locale, localeStorageKey, rootFontScale, theme }) => {
     localStorage.setItem("kubeheal-theme", theme);
     if (localStorage.getItem(localeStorageKey) === null) {
       localStorage.setItem(localeStorageKey, locale);
     }
+    const applyRootFontScale = () => {
+      if (!(document.documentElement instanceof HTMLElement)) return false;
+      const baselineRootFontSize = Number.parseFloat(
+        getComputedStyle(document.documentElement).fontSize,
+      );
+      globalThis.__productVisualBaselineRootFontSize = baselineRootFontSize;
+      if (rootFontScale !== undefined) {
+        document.documentElement.style.fontSize = `${baselineRootFontSize * rootFontScale}px`;
+      }
+      return true;
+    };
+    if (!applyRootFontScale()) {
+      const observer = new MutationObserver(() => {
+        if (applyRootFontScale()) observer.disconnect();
+      });
+      observer.observe(document, { childList: true });
+    }
   }, {
     locale: persistedLocale,
     localeStorageKey,
+    rootFontScale: scenario.rootFontScale,
     theme: scenario.theme,
   });
+  if (scenario.layoutShiftBudget !== undefined) {
+    await context.addInitScript(() => {
+      const supported = PerformanceObserver.supportedEntryTypes.includes("layout-shift");
+      const state = { entries: [], supported };
+      globalThis.__productVisualLayoutShift = state;
+      if (!supported) return;
+
+      const serializeRect = (rect) => ({
+        height: rect.height,
+        width: rect.width,
+        x: rect.x,
+        y: rect.y,
+      });
+      const sourceSelector = (node) => {
+        const element = node instanceof Element
+          ? node
+          : node?.parentElement instanceof Element
+            ? node.parentElement
+            : null;
+        if (!element) return null;
+        if (element.id) return `#${CSS.escape(element.id)}`;
+        const testIdElement = element.closest("[data-testid]");
+        const testId = testIdElement?.getAttribute("data-testid");
+        if (testId) return `[data-testid="${CSS.escape(testId)}"]`;
+        const slotElement = element.closest("[data-slot]");
+        const slot = slotElement?.getAttribute("data-slot");
+        if (slot) return `[data-slot="${CSS.escape(slot)}"]`;
+        const roleElement = element.closest("[role]");
+        const role = roleElement?.getAttribute("role");
+        if (role) return `[role="${CSS.escape(role)}"]`;
+        return element.tagName.toLowerCase();
+      };
+      const recordEntries = (entries) => {
+        for (const entry of entries) {
+          state.entries.push({
+            hadRecentInput: entry.hadRecentInput,
+            sources: (entry.sources ?? []).map((source) => ({
+              currentRect: serializeRect(source.currentRect),
+              previousRect: serializeRect(source.previousRect),
+              selector: sourceSelector(source.node),
+            })),
+            startTime: entry.startTime,
+            value: entry.value,
+          });
+        }
+      };
+      const observer = new PerformanceObserver((list) => recordEntries(list.getEntries()));
+      state.flush = () => recordEntries(observer.takeRecords());
+      observer.observe({ buffered: true, type: "layout-shift" });
+    });
+  }
 
   const page = await context.newPage();
   const errors = [];
@@ -1456,6 +1553,7 @@ async function installScenarioApiFixtures(page, scenario) {
           ? { detail: "visual gate overview permission denied" }
           : body,
         status: forbiddenOverview ? 403 : 200,
+        delayMs: scenario.apiDelayMsByPath?.[path] ?? 0,
       });
     }
   }
@@ -1464,12 +1562,20 @@ async function installScenarioApiFixtures(page, scenario) {
       const fixtureBody = scenario.resourcesLongIdentity && path === resourcesDetailApiPath
         ? resourcesLongDetailApiFixture
         : body;
-      await installExactJsonGetFixture(page, path, { body: fixtureBody, status: 200 });
+      await installExactJsonGetFixture(page, path, {
+        body: fixtureBody,
+        delayMs: scenario.apiDelayMsByPath?.[path] ?? 0,
+        status: 200,
+      });
     }
   }
   if (scenario.issuesScenario) {
     for (const [path, body] of issuesFeatureApiFixtures) {
-      await installExactJsonGetFixture(page, path, { body, status: 200 });
+      await installExactJsonGetFixture(page, path, {
+        body,
+        delayMs: scenario.apiDelayMsByPath?.[path] ?? 0,
+        status: 200,
+      });
     }
   }
   return authFixture;
@@ -1545,11 +1651,17 @@ async function installAuthSessionStub(page, authSession) {
   };
 }
 
-async function installExactJsonGetFixture(page, path, { body, status }) {
+async function installExactJsonGetFixture(page, path, { body, delayMs = 0, status }) {
   await page.route((url) => isExactProductApiUrl(url, path), async (route) => {
     if (route.request().method() !== "GET") {
       await fulfillMethodNotAllowed(route);
       return;
+    }
+    if (!Number.isInteger(delayMs) || delayMs < 0) {
+      throw new Error(`${path}: fixture delay must be a non-negative integer`);
+    }
+    if (delayMs > 0) {
+      await new Promise((resolve) => setTimeout(resolve, delayMs));
     }
     await route.fulfill({
       body: JSON.stringify(body),
@@ -1649,17 +1761,27 @@ function isExpectedScenarioApiRequest(scenario, request) {
 }
 
 async function captureScenario(page, scenario) {
+  const delayedApiPaths = Object.keys(scenario.apiDelayMsByPath ?? {});
+  const initialDelayedRequest = delayedApiPaths.length > 0
+    ? page.waitForRequest((request) => (
+      request.method() === "GET"
+      && isExactProductApiUrl(request.url(), delayedApiPaths[0])
+    ))
+    : null;
   await page.goto(scenario.url, {
-    waitUntil: scenario.authSession === "loading" ? "domcontentloaded" : "networkidle",
+    waitUntil: scenario.authSession === "loading" || initialDelayedRequest
+      ? "domcontentloaded"
+      : "networkidle",
   });
-  const baselineRootFontSize = await page.evaluate(() => Number.parseFloat(getComputedStyle(document.documentElement).fontSize));
-  if (scenario.rootFontScale) {
-    await page.evaluate((scale) => {
-      const baseline = Number.parseFloat(getComputedStyle(document.documentElement).fontSize);
-      document.documentElement.style.fontSize = `${baseline * scale}px`;
-    }, scenario.rootFontScale);
-    await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => resolve())));
+  if (initialDelayedRequest) {
+    await initialDelayedRequest;
+    await assertInitialLoadingPreview(page, scenario);
+    await page.waitForLoadState("networkidle");
   }
+  const baselineRootFontSize = await page.evaluate(() => (
+    globalThis.__productVisualBaselineRootFontSize
+      ?? Number.parseFloat(getComputedStyle(document.documentElement).fontSize)
+  ));
 
   if (scenario.status) {
     await page.getByRole("status", { name: scenario.status }).waitFor();
@@ -1671,6 +1793,9 @@ async function captureScenario(page, scenario) {
     await page.getByRole("heading", { name: scenario.heading }).waitFor();
   }
   await assertScenarioEnvironment(page, scenario, baselineRootFontSize);
+  if (scenario.layoutShiftBudget !== undefined) {
+    await assertInitialLayoutShift(page, scenario);
+  }
   if (scenario.shellMode) {
     await prepareProductShellScenario(page, scenario);
   } else if (scenario.localeSmoke) {
@@ -1719,6 +1844,119 @@ async function captureScenario(page, scenario) {
     path: `${outputDir}product-${scenario.id}.png`,
     fullPage: true,
   });
+}
+
+async function assertInitialLoadingPreview(page, scenario) {
+  await page.locator("[data-slot='loading-preview']").waitFor({ state: "visible" });
+  const result = await page.evaluate(() => {
+    const preview = document.querySelector("[data-slot='loading-preview']");
+    const skeletons = [...document.querySelectorAll(
+      "[data-slot='loading-preview'] [data-slot='skeleton']",
+    )];
+    const visibleSkeletons = skeletons.filter((skeleton) => {
+      const bounds = skeleton.getBoundingClientRect();
+      return bounds.height > 0 && bounds.width > 0;
+    });
+    return {
+      previewAriaHidden: preview?.getAttribute("aria-hidden") ?? null,
+      previewInert: preview?.hasAttribute("inert") ?? false,
+      skeletonCount: skeletons.length,
+      visibleSkeletonCount: visibleSkeletons.length,
+    };
+  });
+  if (result.previewAriaHidden !== "true"
+    || !result.previewInert
+    || result.skeletonCount === 0
+    || result.visibleSkeletonCount !== result.skeletonCount) {
+    throw new Error(
+      `${scenario.id}: delayed API loading preview contract failed ${JSON.stringify(result)}`,
+    );
+  }
+}
+
+async function assertInitialLayoutShift(page, scenario) {
+  await page.evaluate(async () => {
+    await document.fonts.ready;
+    await new Promise((resolve) => requestAnimationFrame(resolve));
+    await new Promise((resolve) => requestAnimationFrame(resolve));
+  });
+  const measurement = await page.evaluate(() => {
+    const state = globalThis.__productVisualLayoutShift;
+    if (!state) return null;
+    state.flush?.();
+    const eligibleEntries = state.entries
+      .filter((entry) => !entry.hadRecentInput)
+      .sort((left, right) => left.startTime - right.startTime);
+    let activeSession = null;
+    let maximumSession = { entries: [], value: 0 };
+
+    for (const entry of eligibleEntries) {
+      const startsNewSession = activeSession === null
+        || entry.startTime - activeSession.lastEntryTime >= 1_000
+        || entry.startTime - activeSession.startTime >= 5_000;
+      if (startsNewSession) {
+        activeSession = {
+          entries: [],
+          lastEntryTime: entry.startTime,
+          startTime: entry.startTime,
+          value: 0,
+        };
+      }
+      activeSession.entries.push(entry);
+      activeSession.lastEntryTime = entry.startTime;
+      activeSession.value += entry.value;
+      if (activeSession.value > maximumSession.value) {
+        maximumSession = {
+          entries: [...activeSession.entries],
+          value: activeSession.value,
+        };
+      }
+    }
+
+    return {
+      excludedRecentInputCount: state.entries.length - eligibleEntries.length,
+      supported: state.supported,
+      value: maximumSession.value,
+      worstSessionEntries: maximumSession.entries,
+    };
+  });
+  if (!measurement?.supported) {
+    throw new Error(`${scenario.id}: layout-shift PerformanceObserver is unavailable`);
+  }
+  const sourceSelectors = [...new Set(
+    measurement.worstSessionEntries.flatMap(({ sources }) => (
+      sources.map(({ selector }) => selector).filter(Boolean)
+    )),
+  )];
+  layoutShiftMeasurements.push({
+    id: scenario.id,
+    sourceSelectors,
+    value: measurement.value,
+  });
+  const sourceDiagnostics = measurement.worstSessionEntries.map((entry) => ({
+    sources: entry.sources,
+    startTime: entry.startTime,
+    value: entry.value,
+  }));
+  console.log(
+    `[CLS] ${scenario.id}=${measurement.value.toFixed(6)} `
+    + `sources=${JSON.stringify(sourceSelectors)} `
+    + `diagnostics=${JSON.stringify(sourceDiagnostics)}`,
+  );
+  if (measurement.value >= scenario.layoutShiftBudget) {
+    throw new Error(
+      `${scenario.id}: initial CLS ${measurement.value.toFixed(6)} must be below `
+      + `${scenario.layoutShiftBudget.toFixed(3)}; sources=`
+      + JSON.stringify(measurement.worstSessionEntries),
+    );
+  }
+}
+
+function formatLayoutShiftMeasurements() {
+  if (layoutShiftMeasurements.length === 0) return "not-measured";
+  return layoutShiftMeasurements
+    .map(({ id, value }) => `${id}=${value.toFixed(6)}`)
+    .join(", ");
 }
 
 async function assertProductLoadingScreenContracts(page, scenario) {
