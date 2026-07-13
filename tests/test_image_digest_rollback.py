@@ -28,6 +28,15 @@ sys.modules[CAPTURE_SPEC.name] = capture_image_digests
 CAPTURE_SPEC.loader.exec_module(capture_image_digests)
 assert isinstance(capture_image_digests, ModuleType)
 
+ROLLOUT_SPEC = importlib.util.spec_from_file_location(
+    "rollout_image_digest", ROOT / "scripts/rollout_image_digest.py"
+)
+assert ROLLOUT_SPEC is not None and ROLLOUT_SPEC.loader is not None
+rollout_image_digest = importlib.util.module_from_spec(ROLLOUT_SPEC)
+sys.modules[ROLLOUT_SPEC.name] = rollout_image_digest
+ROLLOUT_SPEC.loader.exec_module(rollout_image_digest)
+assert isinstance(rollout_image_digest, ModuleType)
+
 DIGEST = "registry.example/opsia/service@sha256:" + "a" * 64
 SHA = "b" * 40
 
@@ -243,6 +252,7 @@ def test_capture_checks_context_and_writes_private_plan(
         context="opsia-dev",
         namespace="management",
         manifest=manifest,
+        managed_image="service:latest",
         previous_release_sha=SHA,
         output=output,
     )
@@ -251,3 +261,63 @@ def test_capture_checks_context_and_writes_private_plan(
     assert calls[1][1:5] == ("--context", "opsia-dev", "-n", "management")
     assert output.stat().st_mode & 0o777 == 0o600
     assert revert_image_digests.load_plan(output).previous_release_sha == SHA
+
+
+def test_capture_filters_out_unmanaged_deployment_images(tmp_path: Path) -> None:
+    manifest = deployment_manifest(tmp_path)
+    with manifest.open("a", encoding="utf-8") as handle:
+        handle.write(
+            """---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: console
+spec:
+  template:
+    spec:
+      containers:
+        - name: console
+          image: console:latest
+"""
+        )
+
+    assert capture_image_digests.expected_deployment_containers(
+        manifest, managed_image="service:latest"
+    ) == (("api-gateway", "api-gateway"), ("audit-worker", "audit-worker"))
+
+
+def test_rollout_updates_only_captured_targets_to_one_digest(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    plan = revert_image_digests.load_plan(write_plan(tmp_path))
+    next_digest = "registry.example/opsia/service@sha256:" + "c" * 64
+    calls: list[tuple[str, ...]] = []
+
+    def fake_run(command: tuple[str, ...], **kwargs: object) -> subprocess.CompletedProcess[str]:
+        calls.append(tuple(command))
+        stdout = "opsia-dev\n" if command[1:3] == ("config", "get-contexts") else ""
+        return subprocess.CompletedProcess(command, 0, stdout=stdout)
+
+    monkeypatch.setattr(rollout_image_digest.subprocess, "run", fake_run)
+
+    rollout_image_digest.rollout(
+        plan,
+        context="opsia-dev",
+        image=next_digest,
+        timeout="300s",
+    )
+
+    assert calls[1][-1] == f"api-gateway={next_digest}"
+    assert calls[2][-2:] == ("deployment/api-gateway", "--timeout=300s")
+
+
+def test_rollout_rejects_mutable_image_before_kubectl(tmp_path: Path) -> None:
+    plan = revert_image_digests.load_plan(write_plan(tmp_path))
+
+    with pytest.raises(ValueError, match="immutable sha256 digest"):
+        rollout_image_digest.rollout_commands(
+            plan,
+            context="opsia-dev",
+            image="registry.example/opsia/service:latest",
+            timeout="300s",
+        )
