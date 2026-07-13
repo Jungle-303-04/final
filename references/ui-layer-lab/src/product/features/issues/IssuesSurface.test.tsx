@@ -43,6 +43,8 @@ describe("IssuesSurface", () => {
     fireEvent.click(await screen.findByRole("button", { name: "Elevated response latency" }));
     expect(await screen.findAllByText("Memory pressure")).toHaveLength(2);
     expect(await screen.findByText("Pod restart and OOMKilled events")).toBeTruthy();
+    expect(await screen.findByText("incident.detected")).toBeTruthy();
+    expect(await screen.findByText("Root event")).toBeTruthy();
     expect(await screen.findByText("Increase the memory limit after approval")).toBeTruthy();
     expect(await screen.findByRole("button", { name: "Increase memory limit" })).toBeTruthy();
     expect(port.loadIssue).toHaveBeenCalledWith("incident-1", "cluster-1", expect.any(AbortSignal));
@@ -52,6 +54,11 @@ describe("IssuesSurface", () => {
       expect.any(AbortSignal),
     );
     expect(port.loadReports).toHaveBeenCalledWith(
+      "correlation-1",
+      {},
+      expect.any(AbortSignal),
+    );
+    expect(port.loadAuditTimeline).toHaveBeenCalledWith(
       "correlation-1",
       {},
       expect.any(AbortSignal),
@@ -98,6 +105,55 @@ describe("IssuesSurface", () => {
     expect(await screen.findAllByText("Memory pressure")).toHaveLength(2);
     expect(await screen.findByText("Evidence unavailable")).toBeTruthy();
     expect(await screen.findByText("Increase the memory limit after approval")).toBeTruthy();
+  });
+  it("appends the next audit page in server order", async () => {
+    const loadAuditTimeline = vi.fn()
+      .mockResolvedValueOnce({
+        correlationId: "correlation-1",
+        items: [{
+          subject: "incident.detected",
+          source: "dashboard-projection",
+          createdAt: "2026-07-13T01:10:00Z",
+          causationId: null,
+          payloadSummary: {},
+        }],
+        limit: 1,
+        hasMore: true,
+        nextCursor: "audit-cursor-2",
+      })
+      .mockResolvedValueOnce({
+        correlationId: "correlation-1",
+        items: [{
+          subject: "rca.completed",
+          source: "rca-worker",
+          createdAt: "2026-07-13T01:30:00Z",
+          causationId: "event-parent-1",
+          payloadSummary: {},
+        }],
+        limit: 1,
+        hasMore: false,
+        nextCursor: null,
+      });
+    const port = issuesPort({ loadAuditTimeline });
+    renderSurface(
+      <IssuesSurface
+        clusterId="cluster-1"
+        copy={COPY}
+        port={port}
+        recoverySelection={{ state: "hidden" }}
+      />,
+    );
+
+    fireEvent.click(await screen.findByRole("button", { name: "Elevated response latency" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Load more events" }));
+    await screen.findByText("rca.completed");
+
+    const subjects = screen.getAllByTestId("audit-event-subject").map((node) => node.textContent);
+    expect(subjects).toEqual(["incident.detected", "rca.completed"]);
+    expect(loadAuditTimeline).toHaveBeenNthCalledWith(2, "correlation-1", {
+      cursor: "audit-cursor-2",
+      limit: 1,
+    }, expect.any(AbortSignal));
   });
   it("disables recovery mutation when capability is not allowed", async () => {
     const port = issuesPort();
@@ -212,6 +268,19 @@ function issuesPort(overrides: Partial<IssuesPort> = {}): IssuesPort {
       hasMore: false,
       nextCursor: null,
     }),
+    loadAuditTimeline: vi.fn().mockResolvedValue({
+      correlationId: "correlation-1",
+      items: [{
+        subject: "incident.detected",
+        source: "dashboard-projection",
+        createdAt: "2026-07-13T01:10:00Z",
+        causationId: null,
+        payloadSummary: { incident_id: "incident-1" },
+      }],
+      limit: 50,
+      hasMore: false,
+      nextCursor: null,
+    }),
     loadRecoveryPlan: vi.fn().mockResolvedValue({
       id: "plan-1",
       correlationId: "correlation-1",
@@ -259,6 +328,14 @@ const COPY: IssuesSurfaceCopy = {
   detailLabel: "Incident detail",
   detailEmpty: "Select an incident",
   detailLoading: "Loading incident detail",
+  auditLabel: "Audit timeline",
+  auditUnavailable: "Audit timeline unavailable",
+  auditRoot: "Root event",
+  auditCause: (causationId) => `Caused by ${causationId}`,
+  auditPayload: "Payload summary",
+  auditLoadMore: "Load more events",
+  auditLoadingMore: "Loading more events",
+  auditTimeUnknown: "Time unknown",
   evidenceLabel: "Evidence",
   reportsLabel: "Analysis",
   recoveryLabel: "Recovery",
