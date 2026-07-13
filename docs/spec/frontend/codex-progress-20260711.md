@@ -1646,3 +1646,19 @@ API 완성: getAuditTimeline (4c2598c4a)
 - `npm run visual-product` PASS: 35 isolated scenarios, exact scenario API requests,
   unexpected feature network / WebSocket 0건. 증거 화면은
   `references/ui-layer-lab/output/playwright/product-issues-authenticated-detail-desktop-light.png`다.
+
+## 2026-07-13 APIQ-031 인시던트 최근 변경 계약 완료
+
+- RED `c6bd3babe`는 strict response/item, nullable 3필드, 서버 순서, 빈 성공, limit·ID·AbortSignal,
+  concealed 404와 malformed payload 계약을 먼저 고정했다.
+- GREEN `4f602cc86660a7f8a12583cffc44a53e220d9dbf`는 endpoint·strict Zod·RCA barrel을 구현하고
+  공개 경로 템플릿을 실제 요청 생성의 단일 출처로 사용한다. 이 커밋은
+  `origin/woonyong/ui-layer-lab` ancestor exit 0이다.
+- targeted 검증은 recent changes와 API boundary 2 files / 18 tests PASS다.
+- full `npm run check` PASS: TypeScript·ESLint, Vitest 109 files / 788 tests,
+  product design guard 329 files, shadcn source audit 482 previews,
+  Vite production build 14,531 modules.
+- 서버 응답에 incident 발생 시각·구조화 PR 번호가 없어 상대 시각과 PR 번호는 추측하지 않고,
+  UI는 절대 시각과 일반 Pull request 링크만 소비한다.
+
+API 완성: getIncidentRecentChanges (4f602cc86660a7f8a12583cffc44a53e220d9dbf)

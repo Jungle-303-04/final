@@ -1451,3 +1451,12 @@ JsonMap, AbortSignal, ID 검증을 완료 앵커 전까지 제품 화면에서 �
   image before/after·허용된 PR URL·commit·repository·workflow run을 제공한다.
 - `origin/dev...HEAD`의 dev-only는 12로 30커밋 선흡수 임계값 미만이다. VP-004를 직결로
   전환하고 `APIQ-031 getIncidentRecentChanges`를 단독 claim했다.
+
+## 2026-07-13 14:20 KST — [프론트] P4 APIQ-031 완료 + 4f602cc86
+
+- RED `c6bd3babe` → GREEN `4f602cc86660a7f8a12583cffc44a53e220d9dbf`.
+  GREEN은 API 구현과 contract test를 함께 포함하며 원격 ancestor exit 0이다.
+- targeted 2 files / 18 tests PASS. `npm run check` PASS: Vitest 109 files / 788 tests,
+  design guard 329 files, shadcn 482 previews, production build 14,531 modules.
+- `API 완성: getIncidentRecentChanges (4f602cc86660a7f8a12583cffc44a53e220d9dbf)`를 기록하고
+  APIQ-031 행을 제거했다. 다음 단계는 이 앵커를 소비하는 VP-004 UI RED다.
