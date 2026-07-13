@@ -255,6 +255,26 @@ Bundle route는 200을 반환한다.
   `origin/dev` ancestor exit 0을 확인했다. BQ-016은 남은 OCI·실제 safe-pr·lifecycle 때문에
   계속 `in_progress`다.
 
+### OSS Safe PR 로컬 실증 — mock·직접 정상화 제거
+
+- 코드 `9b107d8e9`은 `make demo`의 Markdown mock PR과 `kubectl set image`를 제거했다.
+  실제 API 로그인·application 등록·manifest render·DB outbox·in-process worker chain·기존
+  `GithubScmProvider`/`scm-worker`를 거쳐 `safe_pr.created`를 관측한다.
+- demo-only GitHub-compatible fixture는 real Git branch/file/merge commit을 사용한다. writer,
+  harness-admin, reviewer capability token은 상호 다르고 controller에는 writer만 주입한다.
+  writer의 reset/main commit/merge는 401이며, reviewer merge는 검토한 base/head SHA가 바뀌면
+  409다. 감사 중 재현된 `.git/config` metadata write 경로는 모든 depth·case에서 차단했다.
+- Kind 실측은 `bad_revision=89b931cb5865582b3084572240e4cf3a7825fa9d`,
+  `merged_revision=9a66b083b37416ca2d61ff71ccd7b18b9b67f1d4`로 종료 코드 0이었다. merge SHA의
+  exact manifest만 외부 `opsia-demo-gitops` actor가 적용했고 최종 Deployment는 Ready 1,
+  `opsia-demo-workload:local`, spec Apply writer `opsia-demo-gitops` 단일임을 확인했다.
+- bootstrap password/session cookie/SCM token은 artifact에 0건이고 0600 runtime 디렉터리를
+  종료 시 폐기한다. SCM credential hash가 fixture/controller Pod template에 들어가 재실행 시
+  Secret rotation과 Pod 교체가 함께 일어난다. 관련 표적 테스트는 21건 통과했다.
+- 이 실증은 local SCM fixture와 외부 GitOps actor 시뮬레이션이다. hosted forge, 실제 Argo
+  CD/Flux continuous reconcile, rollout 진단부터 PR까지의 완전 자율 경로, public OCI artifact는
+  아직 증명하지 않았다. 따라서 BQ-016은 `in_progress`를 유지하며 이 절은 완료 앵커가 아니다.
+
 ### H3 — BQ-007/009/010 권위 patch 엔진
 
 - canonical merge: `6d68325bf1cc47f55810e5dc2189e51a6fe916c0`
