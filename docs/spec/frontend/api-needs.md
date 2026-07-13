@@ -4,7 +4,7 @@ status: active-coordination-queue
 date: 2026-07-13
 owners: Codex 요청 / API 연결 작업자 claim·처리 / F 트랙 행(APIQ-029)·계약 갱신(APIQ-012)은 검토자 기록
 workorder: api-integration-workorder-20260711.md
-snapshot: 1행·1함수 / requested 0 / in_progress 1 / blocked 0 / valid completion anchors 51
+snapshot: 0행·0함수 / requested 0 / in_progress 0 / blocked 0 / valid completion anchors 52
 ---
 
 # 프론트 API 요청 큐
@@ -16,9 +16,8 @@ snapshot: 1행·1함수 / requested 0 / in_progress 1 / blocked 0 / valid comple
 상세한 경로, 소유권, schema, test, mutation 안전, 2커밋 완료 절차는
 `api-integration-workorder-20260711.md`가 정본이다.
 
-> **현재 claim (2026-07-13 P2):** `APIQ-030`만 in progress다. BQ-004의
-> `AUDIT_TIMELINE_PATH` 앵커를 `origin/dev`에서 재검증했으며, strict envelope와
-> 불투명 cursor 계약을 먼저 고정한 뒤 VP-002 화면이 소비한다.
+> **현재 claim (2026-07-13 P2):** `APIQ-030`은 완료 앵커
+> `getAuditTimeline (9841a5d95)`를 남기고 제거됐다. 현재 queue는 비어 있다.
 
 ## 1. 상태와 claim 규칙
 
@@ -70,7 +69,6 @@ claim·heartbeat: YYYY-MM-DD HH:mm KST
 
 | ID | 우선 | 함수명 | routes.py 상수 | 대상 파일 | 필요한 화면 | 요청 시각 | 상태 | 담당/브랜치 | claim·heartbeat | 완료 조건·주의 |
 |---|---:|---|---|---|---|---|---|---|---|---|
-| APIQ-030 | P0 | `getAuditTimeline` | `AUDIT_TIMELINE_PATH` (`GET /api/audit/timeline`) | `audit-timeline.ts`, `audit-timeline-schemas.ts`, `audit-timeline.test.ts`, `barrels/rca.ts` | VP-002 인시던트 감사 타임라인 | 2026-07-13 13:22 KST | in_progress | Codex-API@woonyong/ui-layer-lab | 2026-07-13 13:22 KST | `correlation_id` 필수, `cursor`는 서버 발급 불투명 문자열 그대로, `limit` 1~200. envelope/item은 `strictObject`, `payload_summary`만 허용된 open JsonMap. `causation_id` null 허용, 서버 정렬·workspace 격리를 클라이언트가 재계산하거나 필터하지 않는다. AbortSignal identity와 422 cursor 오류 경로를 회귀한다. |
 
 ## 3. 기존 구현 검증·승인
 

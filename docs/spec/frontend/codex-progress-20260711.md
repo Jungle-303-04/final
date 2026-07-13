@@ -1612,3 +1612,15 @@ API 완성: appendAiMessage (84dc48a68)
 
 API 완성: listCatalogItems (1ad595b42)
 API 완성: getCatalogItem (1ad595b42)
+
+## 2026-07-13 APIQ-030 감사 타임라인 조회 계약 완료
+
+- RED `6700875a6`은 미구현 endpoint를 대상으로 strict envelope/item, nullable
+  `causation_id`, open `payload_summary`, 불투명 cursor, 1~200 limit, AbortSignal과 422 오류
+  계약을 먼저 고정했다.
+- GREEN `9841a5d95`는 `AUDIT_TIMELINE_PATH` 소비 함수와 strict Zod schema를 구현했다.
+  두 커밋 모두 `origin/woonyong/ui-layer-lab` ancestor exit 0이다.
+- targeted 1 file / 11 tests와 full `npm run check`가 통과했다. full gate는 106 files /
+  768 tests, design guard 317 files, shadcn 482 previews, production build PASS다.
+
+API 완성: getAuditTimeline (9841a5d95)
