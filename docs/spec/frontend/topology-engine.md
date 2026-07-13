@@ -307,7 +307,7 @@ Relation key는 `plane + relationType + source.entityKey + target.entityKey + po
 | policy-security | security policy/binding → selected or bound subject | NetworkPolicy/RBAC → subject/scope |
 | policy-availability | availability policy → selected workload | PDB → workload/Pods |
 | policy-governance | quota/constraint → namespace or selected subject | Quota/LimitRange → scope |
-| gitops-provenance | declaration → managed target | Git revision → Argo/Flux object → Workload |
+| gitops-provenance | declaration → managed target | Git revision → external GitOps object → Workload |
 
 UI가 오른쪽 rail에서 `Pod ← ReplicaSet ← Deployment`로 보이게 하더라도 stored edge는 owner → dependent 방향을 유지한다.
 
@@ -1844,16 +1844,16 @@ Adapter normalization minimum:
 ```text
 Git repository / revision
   → declares
-Argo Application / Flux Kustomization / HelmRelease
+external GitOps Application / Kustomization / HelmRelease
   → manages
 Workload
   → owns
 Pod
 ```
 
-- GitHub는 Pod의 owner가 아니다.
-- provider adapter는 Argo inventory, Flux inventory, tracking annotation, revision, source URL/path/chart 등 서로 다른 evidence를 canonical provenance claim으로 변환한다.
-- GitHub API, PR, Actions 정보는 별도 connector capability가 있을 때만 추가한다.
+- 기준 저장소는 Pod의 owner가 아니다.
+- provider adapter는 외부 GitOps inventory, tracking annotation, revision, source URL/path/chart 등 서로 다른 evidence를 canonical provenance claim으로 변환한다.
+- 기준 저장소 API, PR, CI 정보는 별도 connector capability가 있을 때만 추가한다.
 - desired revision과 observed live revision을 구분한다.
 - evidence가 heuristic이면 UI에 heuristic이라고 표시한다.
 - Git URL은 protocol/host allow policy로 검증하고 SSH/OCI/raw unsafe link를 browser navigation으로 열지 않는다.
@@ -1886,7 +1886,7 @@ Pod
 | availability | PDB | selector and disruption status | policy-availability |
 | governance | ResourceQuota, LimitRange | namespace constraint | policy-governance/group context |
 | packaging | Helm release evidence | desired/release provenance | gitops-provenance |
-| GitOps | Argo/Flux resources | source revision/inventory/health | gitops-provenance |
+| GitOps | external GitOps resources | source revision/inventory/health | gitops-provenance |
 | events | Kubernetes Event | involvedObject UID/reason/count/time | timeline evidence |
 | projection | PodGroup, Unscheduled, Residual, Missing | explicit computed membership | no fake K8s Kind |
 
@@ -3017,10 +3017,10 @@ reference profiles는 server-generated realistic topology로 고정하고 small/
 
 ### Phase 7 — Provider and operational depth
 
-- Prometheus/Metrics Server/OpenCost.
-- Hubble/Istio/Caretta flow fusion.
-- Argo/Flux/Helm/Git provider provenance.
-- AWS/GCP/Azure/on-prem/local adapters without core coupling.
+- metrics provider.
+- network flow provider fusion.
+- external GitOps/Helm/Git provider provenance.
+- cloud/on-prem/local adapters without core coupling.
 - timeline/issues/checks/cost detail을 canonical capability와 frontend consumer contract로 통합.
 
 ### Phase 8 — Hardening and commercialization

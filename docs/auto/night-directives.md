@@ -436,9 +436,9 @@ Verified Autonomous GitOps + Evidence-native Incident Workbench/Chat), 시장 �
 `reconciler_mode=builtin`(기본) / `argocd`(observer — 자체 apply 경로 차단).
 argocd 모드에서 apply 명령이 발화하지 않음을 테스트로 증명. additive(설정+가드).
 
-**BQ-014 — Argo observer 어댑터 (관찰만, 제어 금지).** Argo CD Application의
-repo/revision/path·sync/health 읽기, Argo Rollouts 실패·stable revision 읽기,
-Argo sync 완료 후 사후 검증에 활용. Argo 리소스 변경 절대 금지. BQ-013 이후 착수.
+**BQ-014 — 외부 GitOps observer 어댑터 (관찰만, 제어 금지).** 외부 GitOps Application의
+repo/revision/path·sync/health 읽기, rollout 실패·stable revision 읽기,
+외부 GitOps sync 완료 후 사후 검증에 활용. 외부 GitOps 리소스 변경 절대 금지. BQ-013 이후 착수.
 
 **BQ-015 — `.remediation.yaml` 소스 계약.** 저장소 소유자가 수정 가능 위치를 선언
 (helm-values imageTagPath, kustomize images[].newTag, raw image scalar, replica,
