@@ -26,8 +26,9 @@ OpsiaBench는 실제 RCA cause/recovery 카탈로그에 고정된 정답 장애 
 위 표의 마지막 아홉 의미 필드가 [D-013]의 9항목이다. `expected_root_cause`는 문자열 하나이며
 Top-1 정답으로 사용한다. evidence는 source 존재만이 아니라 이름까지 일치해야 한다.
 
-probe path/port와 selector mismatch는 각각 catalog의 `probe_fix`, `selector_fix`만 허용한다.
-`pvc_not_bound`와 `pods_not_ready`처럼 전용 recovery action이 없는 후보는 공식 fallback인
+probe path/port와 service `selector_label_mismatch`는 각각 catalog의 `probe_fix`,
+`selector_fix`만 허용한다. `node_selector_mismatch`, `pvc_not_bound`, `pods_not_ready`처럼
+전용 recovery action이 없는 후보는 공식 fallback인
 `manual_analysis`만 허용하며 `auto_apply`는 `false`다. gold patch는 운영자 검토가 끝났을
 때의 정답이지 실행 허가가 아니다.
 
@@ -78,7 +79,9 @@ resource pressure·runtime config 이름과 무관하게 전부 fallback-only이
 71~72번과 76~77번, 79~80번은 fallback-only다. 73~74번 `resource_request_tuning`과 75번
 `scheduling_constraint_fix`는 `draft_pr` route를 선언하지만 dispatcher Safe PR allowlist에 없으므로
 실제 capability는 비어 있다. 78번 `pvc_binding_fix`도 승인형 수동 action이어서 patch capability가
-없다. exact fixture는 73번 CPU 부족, 75번 affinity 불일치, 78번 PVC pending에만 연결한다.
+없다. exact fixture는 73번 CPU 부족, 75번 affinity 불일치, 76번 node selector 불일치,
+78번 PVC pending에만 연결한다. 76번 fixture 추가는 여덟 번째 batch 전체를 재감사하고
+canonical digest를 갱신한 명시적 coverage 보강이다.
 81~87번도 모두 fallback-only이고 capability가 비어 있다. 82번 `pvc_not_bound`에만 exact PVC
 fixture가 있으며, 이름이 유사한 78번의 `pvc_binding_fix`를 82번에 추론해 연결하지 않는다.
 `oom_memory`, `image_rollback`, `config_fix`를 의미만 보고 연결하지 않는다. 이 빈 값은 coverage gap을
