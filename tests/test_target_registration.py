@@ -919,10 +919,16 @@ def test_target_registration_apply_failure_does_not_record_state(monkeypatch) ->
     db = StubDb()
     events = StubEvents()
     request = target_request().model_copy(update={"apply": True})
+    apply_calls: list[tuple[str, str | None]] = []
 
-    def fail_apply(_manifest: str, _kube_context: str | None) -> str:
+    def fail_apply(manifest: str, kube_context: str | None) -> str:
+        apply_calls.append((manifest, kube_context))
         raise HTTPException(status_code=502, detail="apply failed")
 
+    monkeypatch.setattr(
+        "domains.target.router.kube_context_connectivity_error",
+        lambda _kube_context: None,
+    )
     monkeypatch.setattr("domains.target.router.apply_manifest_with_kubectl", fail_apply)
 
     async def run():
@@ -933,9 +939,13 @@ def test_target_registration_apply_failure_does_not_record_state(monkeypatch) ->
             events=events,
         )
 
-    with pytest.raises(HTTPException):
+    with pytest.raises(HTTPException) as exc:
         asyncio.run(run())
 
+    assert exc.value.status_code == 502
+    assert exc.value.detail == "apply failed"
+    assert len(apply_calls) == 1
+    assert apply_calls[0][1] is None
     assert db.registered == []
     assert db.desired_states == []
     assert events.accepted == []
@@ -945,10 +955,16 @@ def test_target_registration_apply_defaults_to_kube_context_provider(monkeypatch
     db = StubDb()
     events = StubEvents()
     request = target_request().model_copy(update={"apply": True})
+    apply_calls: list[tuple[str, str | None]] = []
 
-    def stub_apply(_manifest: str, _kube_context: str | None) -> str:
+    def stub_apply(manifest: str, kube_context: str | None) -> str:
+        apply_calls.append((manifest, kube_context))
         return "applied"
 
+    monkeypatch.setattr(
+        "domains.target.router.kube_context_connectivity_error",
+        lambda _kube_context: None,
+    )
     monkeypatch.setattr("domains.target.router.apply_manifest_with_kubectl", stub_apply)
 
     async def run():
@@ -962,6 +978,8 @@ def test_target_registration_apply_defaults_to_kube_context_provider(monkeypatch
     response = asyncio.run(run())
 
     assert response.applied is True
+    assert len(apply_calls) == 1
+    assert apply_calls[0][1] is None
     assert db.registered[0]["settings"]["deploy_provider"] == "kube-context"
 
 
