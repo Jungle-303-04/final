@@ -10,3 +10,7 @@
 [사이클] 2026-07-14 05:48 KST / Issues 목록을 shadcn Card·Badge·Button·ToggleGroup으로 전면 이관하고 실제 Link, 필터 화이트리스트, live region 분리, 시각 의미 토큰을 적용; `@/ui` 사용 파일 상한 35 → 34 / `779e7182f` (`make gate-fast`: frontend 33 PASS, T1=T2; CI Dev Gate run `29283682674` SUCCESS, 2분 11초) / 다음 한 걸음: notifications API의 legacy `useToast` 8개를 Sonner로 의미 보존 이관하고 상한 34 → 33
 
 [사이클] 2026-07-14 05:56 KST / Issues mutation 알림 8개를 legacy `useToast`에서 Sonner로 이관하고 payload·권한 오류 분기·query invalidation 순서와 callback void 의미를 보존; `@/ui` 사용 파일 상한 34 → 33 / `4e42bb8af` (`make gate-fast`: frontend 34 PASS, T1=T2; CI Dev Gate run `29284174844` SUCCESS, 2분) / 다음 한 걸음: 공용 Settings navigation의 PageHeader·cx·legacy motion 의존을 제거해 Issues 운영 화면의 완전 이관 기반 마련
+
+[사이클] 2026-07-14 06:02 KST / Settings 내비게이션을 shadcn Button 기반 실제 NavLink로 전면 이관하고 `aria-current`·canonical motion token을 보존; `@/ui` 사용 파일 상한 33 → 32 / `868cf8982` (`make gate-fast`: frontend 35 PASS, T1=T2; CI Dev Gate run `29284628180` SUCCESS, 1분 46초) / 다음 한 걸음: 운영 DLQ 화면의 table·dialog·상태 표면을 화면 단위로 shadcn 이관
+
+[사이클] 2026-07-14 06:09 KST / 운영 DLQ 화면을 shadcn Alert·Badge·Button·Card·Dialog·Skeleton·Table로 전면 이관하고 정렬 접근성·재처리 pending lock·성공 시에만 닫히는 mutation 의미를 보존; `@/ui` 사용 파일 상한 32 → 31 / `c18800228` (`make gate-fast`: frontend 36 PASS, T1=T2; CI Dev Gate run `29285055146` SUCCESS, 2분 9초) / 다음 한 걸음: 알림 채널 화면의 폼·Webhook 검증·삭제 확인 흐름을 shadcn으로 전면 이관
