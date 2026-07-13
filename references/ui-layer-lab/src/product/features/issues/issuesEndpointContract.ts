@@ -197,6 +197,32 @@ export interface IssuesEndpointAuditTimelineResponse {
   next_cursor: string | null;
 }
 
+export interface IssuesEndpointRecentChangesOptions
+  extends IssuesEndpointRequestOptions {
+  limit?: number;
+}
+
+export interface IssuesEndpointRecentChangeItem {
+  event_id: string;
+  changed_at: string;
+  namespace: string;
+  resource_kind: string;
+  resource_name: string;
+  image_before: string | null;
+  image_after: string | null;
+  pr_url: string | null;
+  commit_sha: string;
+  repository_id: string;
+  repo_ref: string;
+  workflow_run_id: string;
+}
+
+export interface IssuesEndpointRecentChangesResponse {
+  incident_id: string;
+  items: IssuesEndpointRecentChangeItem[];
+  limit: number;
+}
+
 export interface IssuesEndpointDependencies {
   listRcaTimeline(
     options?: IssuesEndpointTimelineOptions,
@@ -215,6 +241,10 @@ export interface IssuesEndpointDependencies {
     correlationId: string,
     options?: IssuesEndpointAuditTimelineOptions,
   ): Promise<IssuesEndpointAuditTimelineResponse>;
+  getIncidentRecentChanges(
+    incidentId: string,
+    options?: IssuesEndpointRecentChangesOptions,
+  ): Promise<IssuesEndpointRecentChangesResponse>;
   getRecoveryPlanByCorrelation(
     correlationId: string,
     options?: IssuesEndpointRequestOptions,

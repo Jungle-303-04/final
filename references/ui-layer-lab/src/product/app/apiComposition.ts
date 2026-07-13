@@ -5,6 +5,7 @@ import {
   getRcaIncident,
   getRecoveryPlanByCorrelation,
   getInventoryResourceDetail,
+  getIncidentRecentChanges,
   getInventorySummary,
   getNodePodsSummary,
   getSession,
@@ -40,6 +41,7 @@ export function createApiComposition() {
   });
   const issuesPort = createIssuesAdapter({
     getAuditTimeline,
+    getIncidentRecentChanges,
     getRcaIncident,
     getRecoveryPlanByCorrelation,
     listEvidence,

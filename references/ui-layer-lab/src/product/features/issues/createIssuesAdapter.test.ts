@@ -287,6 +287,7 @@ function endpoints(
     listEvidence: vi.fn().mockResolvedValue(evidencePage),
     listRcaReports: vi.fn().mockResolvedValue(reportPage),
     getAuditTimeline: vi.fn().mockResolvedValue({ items: [], limit: 50, has_more: false, next_cursor: null }),
+    getIncidentRecentChanges: vi.fn().mockResolvedValue({ incident_id: "incident-1", items: [], limit: 5 }),
     getRecoveryPlanByCorrelation: vi.fn().mockResolvedValue(recoveryPlan),
     selectRecoveryAction: vi.fn().mockResolvedValue({
       accepted: true,

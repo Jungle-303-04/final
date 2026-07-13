@@ -45,6 +45,8 @@ const issuesReportsApiPath =
   `/api/rca-reports?correlation_id=${issuesCorrelationId}&limit=50`;
 const issuesAuditApiPath =
   `/api/audit/timeline?correlation_id=${issuesCorrelationId}&limit=50`;
+const issuesRecentChangesApiPath =
+  `/api/rca/incidents/${issuesIncidentId}/recent-changes?limit=5`;
 const issuesRecoveryApiPath =
   `/api/rca/recovery-plans/by-correlation/${issuesCorrelationId}`;
 const issuesBaseApiPaths = [homeBaseApiPaths[0], issuesListApiPath];
@@ -53,6 +55,7 @@ const issuesDetailApiPaths = [
   issuesEvidenceApiPath,
   issuesReportsApiPath,
   issuesAuditApiPath,
+  issuesRecentChangesApiPath,
   issuesRecoveryApiPath,
 ];
 const stateHarnessUrl = `${baseUrl}/scripts/fixtures/product-state-visual-harness.html`;
@@ -204,6 +207,7 @@ const issuesSelectors = [
   clusterScopeTriggerSelector,
   clusterProviderIconSelector,
   "[data-testid='audit-event-subject']",
+  "[data-testid='issue-recent-changes']",
   "header",
   "main",
   "p",
@@ -605,6 +609,20 @@ const visualScenarios = [
     expectedApiRequestCounts: { [issuesListApiPath]: 2 },
     requiredSelectors: issuesSelectors,
     viewport: { width: 1440, height: 1000 },
+    theme: "light",
+    colorScheme: "light",
+    forcedColors: "none",
+  },
+  {
+    id: "issues-authenticated-detail-reflow-320-light",
+    locale: "en",
+    url: productIssuesUrl,
+    authSession: "authenticated",
+    issuesScenario: true,
+    accessibleTarget: "Issues",
+    expectedApiRequestCounts: { [issuesListApiPath]: 2 },
+    requiredSelectors: issuesSelectors,
+    viewport: { width: 320, height: 900 },
     theme: "light",
     colorScheme: "light",
     forcedColors: "none",
@@ -1057,6 +1075,24 @@ const issuesFeatureApiFixtures = new Map([
     limit: 50,
     has_more: false,
     next_cursor: null,
+  }],
+  [issuesRecentChangesApiPath, {
+    incident_id: issuesIncidentId,
+    items: [{
+      event_id: "visual-change-event",
+      changed_at: "2026-07-13T09:55:00Z",
+      namespace: "shop",
+      resource_kind: "Deployment",
+      resource_name: "checkout-api",
+      image_before: "registry.example/checkout:v1",
+      image_after: "registry.example/checkout:v2",
+      pr_url: "https://github.com/acme/platform/pull/42",
+      commit_sha: "0123456789abcdef",
+      repository_id: "visual-repository",
+      repo_ref: "github.com/acme/platform",
+      workflow_run_id: "visual-workflow-run",
+    }],
+    limit: 5,
   }],
   [issuesRecoveryApiPath, {
     plan_id: "visual-plan",
@@ -2108,8 +2144,12 @@ async function prepareProductIssuesScenario(page, scenario) {
   const listRegion = page.getByRole("region", { name: scenario.accessibleTarget });
   await listRegion.waitFor();
   const issuesLink = page.getByRole("link", { name: "Issues", exact: true });
-  if (await issuesLink.getAttribute("aria-current") !== "page") {
-    throw new Error(`${scenario.id}: desktop Issues link must be current`);
+  if (scenario.viewport.width >= 768) {
+    if (await issuesLink.getAttribute("aria-current") !== "page") {
+      throw new Error(`${scenario.id}: desktop Issues link must be current`);
+    }
+  } else if (await issuesLink.count() !== 0) {
+    throw new Error(`${scenario.id}: closed mobile Issues sidebar link must not be mounted`);
   }
 
   const firstIssue = listRegion.getByRole("button", {
@@ -2131,6 +2171,37 @@ async function prepareProductIssuesScenario(page, scenario) {
   await page.getByText("Kubernetes evidence collected", { exact: true }).waitFor();
   await page.getByText("Increase memory limit after approval", { exact: true }).waitFor();
   await page.getByText("Increase memory limit", { exact: true }).waitFor();
+  const recentChangesRegion = page.getByRole("region", { name: "Recent changes" });
+  await recentChangesRegion.waitFor();
+  await recentChangesRegion.locator("time[datetime='2026-07-13T09:55:00Z']").waitFor();
+  const recentChangeItem = recentChangesRegion.getByRole("listitem");
+  await recentChangeItem.waitFor();
+  const recentChangeText = await recentChangeItem.innerText();
+  for (const requiredText of [
+    "shop",
+    "Deployment",
+    "checkout-api",
+    "registry.example/checkout:v1",
+    "registry.example/checkout:v2",
+    "0123456789abcdef",
+    "visual-workflow-run",
+  ]) {
+    if (!recentChangeText.includes(requiredText)) {
+      throw new Error(`${scenario.id}: recent change omitted ${requiredText}`);
+    }
+  }
+  const pullRequest = recentChangesRegion.getByRole("link", {
+    name: "Open pull request",
+    exact: true,
+  });
+  await pullRequest.waitFor();
+  if (await pullRequest.getAttribute("href") !== "https://github.com/acme/platform/pull/42") {
+    throw new Error(`${scenario.id}: recent change PR link is not the verified fixture URL`);
+  }
+  if (await pullRequest.getAttribute("target") !== "_blank"
+    || await pullRequest.getAttribute("rel") !== "noopener noreferrer") {
+    throw new Error(`${scenario.id}: recent change PR link must isolate its external context`);
+  }
   await page.waitForLoadState("networkidle");
 
   const detailTitle = page.locator("[data-slot='card-title']", {
