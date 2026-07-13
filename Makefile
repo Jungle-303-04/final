@@ -89,7 +89,7 @@ status: ## AWS management/target 리소스 상태 확인
 smoke: ## 현재 환경변수로 배포된 서비스 smoke 실행
 	bash scripts/smoke.sh
 
-demo: ## Kind에서 bad rollout → mock rollback PR → 정상화 원커맨드 데모
+demo: ## Kind에서 bad rollout → Safe PR 리뷰 병합 → 외부 GitOps 정상화 데모
 	bash scripts/oss-demo.sh
 
 local-smoke: ## .env.local-test를 source해서 로컬 smoke 실행
