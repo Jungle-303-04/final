@@ -332,6 +332,61 @@ spec:
     ) == (("api-gateway", "api-gateway"), ("audit-worker", "audit-worker"))
 
 
+def test_capture_selects_every_live_container_by_exact_repository() -> None:
+    live = live_deployments()
+    items = live["items"]
+    assert isinstance(items, list)
+    items.append(
+        {
+            "metadata": {"name": "agent-api-proxy"},
+            "spec": {
+                "template": {
+                    "spec": {
+                        "containers": [
+                            {
+                                "name": "proxy",
+                                "image": "nginxinc/nginx-unprivileged:1.29-alpine",
+                            }
+                        ]
+                    }
+                }
+            },
+        }
+    )
+
+    assert capture_image_digests.expected_repository_containers(
+        live,
+        managed_repository="registry.example/opsia/service",
+    ) == (("api-gateway", "api-gateway"), ("audit-worker", "audit-worker"))
+
+
+def test_rollout_repository_verification_fails_closed_on_stale_or_extra_target(
+    tmp_path: Path,
+) -> None:
+    plan = revert_image_digests.load_plan(write_plan(tmp_path))
+    next_digest = "registry.example/opsia/service@sha256:" + "c" * 64
+    stale = live_deployments(second_image=next_digest)
+
+    with pytest.raises(RuntimeError, match="target set changed"):
+        rollout_image_digest.verify_repository_rollout(
+            plan,
+            image=next_digest,
+            live_document=stale,
+            require_exact_digest=True,
+        )
+
+    items = stale["items"]
+    assert isinstance(items, list)
+    only_target = {"items": [items[0]]}
+    with pytest.raises(RuntimeError, match="digest mismatch"):
+        rollout_image_digest.verify_repository_rollout(
+            plan,
+            image=next_digest,
+            live_document=only_target,
+            require_exact_digest=True,
+        )
+
+
 def test_rollout_updates_only_captured_targets_to_one_digest(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

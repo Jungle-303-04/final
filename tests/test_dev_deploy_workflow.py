@@ -83,7 +83,8 @@ def test_manual_first_deploy_requires_exact_gate_backup_and_previous_release_pro
     assert document["permissions"]["actions"] == "read"
     gate_proof = steps["Verify manual gated SHA"]["run"]
     assert 'gh api "repos/${GITHUB_REPOSITORY}/git/ref/heads/dev"' in gate_proof
-    assert 'test "${remote_dev}" = "${SOURCE_SHA}"' in gate_proof
+    assert "compare/${SOURCE_SHA}...${remote_dev}" in gate_proof
+    assert '"ahead"|"identical"' in gate_proof
     assert "/actions/workflows/dev-gate.yml/runs" in gate_proof
     assert "select(.head_sha == env.SOURCE_SHA)" in gate_proof
     backup_proof = steps["Verify manual first-deploy backup"]["run"]
@@ -144,6 +145,7 @@ def test_workflow_sets_and_verifies_live_auth_bypass_without_manual_mutation() -
     step = steps_by_name()["Enforce live auth bypass zero"]["run"]
 
     assert "set env deployment/api-gateway DEV_AUTH_BYPASS=0" in step
+    assert "CONSOLE_ORIGIN=http://console-dev.management.svc.cluster.local:80" in step
     assert "rollout status deployment/api-gateway" in step
     assert "verify_dev_auth_bypass.py live" in step
     assert "DEV_AUTH_BYPASS-" not in step
@@ -259,14 +261,9 @@ def test_service_and_console_images_share_the_gated_source_sha_and_digest_releas
         'tagged_image="${registry}/${CONSOLE_ECR_REPOSITORY}:${SOURCE_SHA}"'
         in steps["Build and push immutable console image"]["run"]
     )
-    assert (
-        f'--managed-image "{SERVICE_IMAGE_BASELINE}"'
-        in steps["Capture current digest rollback plan"]["run"]
-    )
-    assert (
-        f'--managed-image "{CONSOLE_IMAGE_BASELINE}"'
-        in steps["Capture current digest rollback plan"]["run"]
-    )
+    capture = steps["Capture current digest rollback plan"]["run"]
+    assert '--managed-repository "${SERVICE_DEPLOY_IMAGE%@*}"' in capture
+    assert '--managed-repository "${CONSOLE_DEPLOY_IMAGE%@*}"' in capture
     assert (
         '--verified-live-image "183548421506.dkr.ecr.ap-northeast-2.amazonaws.com/'
         f'kubernetes-ops-service:c704729c1b={SERVICE_IMAGE_BASELINE}"'
@@ -282,13 +279,47 @@ def test_service_and_console_images_share_the_gated_source_sha_and_digest_releas
 
 
 def test_console_manifests_pin_the_observed_ecr_digest_instead_of_latest() -> None:
-    for relative_path in (
-        "deploy/management/console.yaml",
-        "deploy/management/console-dev.yaml",
-    ):
-        source = (ROOT / relative_path).read_text(encoding="utf-8")
-        assert CONSOLE_IMAGE_BASELINE in source
-        assert ":latest" not in source
+    source = (ROOT / "deploy/management/console-dev.yaml").read_text(encoding="utf-8")
+    kustomization = (ROOT / "deploy/management/kustomization.yaml").read_text(encoding="utf-8")
+
+    assert CONSOLE_IMAGE_BASELINE in source
+    assert ":latest" not in source
+    assert "console-dev.yaml" in kustomization
+    assert "console.yaml" not in kustomization
+    assert not (ROOT / "deploy/management/console.yaml").exists()
+
+
+def test_deploy_retires_legacy_console_before_repository_capture() -> None:
+    names = [step["name"] for step in deploy_job()["steps"]]
+    retire = steps_by_name()["Retire legacy console deployment"]["run"]
+
+    assert names.index("Run pre-deploy smoke") < names.index("Retire legacy console deployment")
+    assert names.index("Retire legacy console deployment") < names.index(
+        "Capture current digest rollback plan"
+    )
+    assert "delete deployment/console service/console --ignore-not-found --wait=true" in retire
+
+
+def test_console_proxy_uses_runtime_dns_for_both_gateway_upstreams() -> None:
+    image_config = (ROOT / "frontend/nginx.conf").read_text(encoding="utf-8")
+    live_config = (ROOT / "deploy/management/console-dev.yaml").read_text(encoding="utf-8")
+
+    for source in (image_config, live_config):
+        assert "resolver kube-dns.kube-system.svc.cluster.local valid=10s" in source
+        assert "set $api_upstream http://api-gateway.management.svc.cluster.local:8000" in source
+        assert "proxy_pass $api_upstream/" in source
+        assert (
+            "set $realtime_upstream http://realtime-gateway.management.svc.cluster.local:8000"
+            in source
+        )
+        assert "proxy_pass $realtime_upstream/live/" in source
+
+
+def test_gateway_manifest_uses_canonical_console_origin() -> None:
+    source = (ROOT / "deploy/management/services.yaml").read_text(encoding="utf-8")
+
+    assert "name: CONSOLE_ORIGIN" in source
+    assert 'value: "http://console-dev.management.svc.cluster.local:80"' in source
 
 
 def test_management_manifests_do_not_reference_retired_ecr_names_or_mutable_images() -> None:

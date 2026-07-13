@@ -16,7 +16,7 @@ def test_pre_deploy_smoke_uses_only_legacy_safe_health_frontend_and_database_che
     source = read("scripts/pre-deploy-smoke.sh")
 
     assert "http://api-gateway.${MGMT_NS}.svc.cluster.local" in source
-    assert "http://console.${MGMT_NS}.svc.cluster.local" in source
+    assert "http://console-dev.${MGMT_NS}.svc.cluster.local" in source
     assert "curlimages/curl:8.11.1" in source
     assert 'cluster_curl "${IN_CLUSTER_API_URL}/api/healthz"' in source
     assert 'cluster_curl "${IN_CLUSTER_CONSOLE_URL}/"' in source
@@ -54,7 +54,7 @@ if [[ "${url}" == */api/healthz ]]; then
   else
     printf '%s\n%s\n' '{"status":"ok"}' '200'
   fi
-elif [[ "${url}" == http://console.* ]]; then
+elif [[ "${url}" == http://console-dev.* ]]; then
   printf '%s\n%s\n' '<script src="/assets/index-newBundle.js"></script>' '200'
 else
   printf '1\n'
@@ -112,7 +112,7 @@ def test_post_deploy_smoke_enforces_new_release_contracts() -> None:
     source = read("scripts/post-deploy-smoke.sh")
 
     assert "http://api-gateway.${MGMT_NS}.svc.cluster.local" in source
-    assert "http://console.${MGMT_NS}.svc.cluster.local" in source
+    assert "http://console-dev.${MGMT_NS}.svc.cluster.local" in source
     assert "service/api-gateway :80" in source
     assert "IN_CLUSTER_FORWARD_URL" in source
     assert 'test "${health_status}" = "200"' in source
