@@ -48,6 +48,18 @@ THIRD_CANDIDATE_BATCH = (
     "image_platform_mismatch",
     "service_dns_resolution_failure",
 )
+FOURTH_CANDIDATE_BATCH = (
+    "service_name_or_namespace_mismatch",
+    "coredns_unavailable",
+    "network_path_timeout",
+    "network_policy_denied",
+    "endpoint_unavailable_timeout",
+    "upstream_unavailable",
+    "backend_readiness_failure",
+    "application_5xx_spike",
+    "kubelet_unavailable",
+    "container_runtime_unavailable",
+)
 
 
 def _score(*args: str) -> subprocess.CompletedProcess[str]:
@@ -182,6 +194,44 @@ def test_third_candidate_contract_batch_is_machine_verified_in_catalog_order() -
             "benchmark/scenarios/imagepull/imagepull-secret-missing/scenario.json"
         ],
     }
+
+
+def test_fourth_candidate_contract_batch_is_machine_verified_in_catalog_order() -> None:
+    result = _score("--candidate-contracts")
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "RESULT PASS (40 candidate contracts; ordinals=1..40)" in result.stdout
+
+    document = json.loads(CONTRACTS.read_text(encoding="utf-8"))
+    fourth_batch = document["contracts"][30:40]
+    assert document["next_ordinal"] == 41
+    assert tuple(item["candidate_id"] for item in fourth_batch) == FOURTH_CANDIDATE_BATCH
+    assert {item["candidate_id"]: item["patch_capabilities"] for item in fourth_batch} == {
+        **{candidate_id: [] for candidate_id in FOURTH_CANDIDATE_BATCH},
+        "upstream_unavailable": ["command"],
+        "backend_readiness_failure": ["command"],
+        "application_5xx_spike": ["command", "safe_pr"],
+    }
+    assert {
+        item["candidate_id"]: [action["action_type"] for action in item["allowed_remediations"]]
+        for item in fourth_batch
+    } == {
+        **{candidate_id: ["manual_analysis"] for candidate_id in FOURTH_CANDIDATE_BATCH},
+        "upstream_unavailable": ["rollout_restart", "deployment_scale", "manual_analysis"],
+        "backend_readiness_failure": [
+            "rollout_restart",
+            "deployment_scale",
+            "manual_analysis",
+        ],
+        "application_5xx_spike": [
+            "replica_scale",
+            "gitops_recovery_review",
+            "deployment_scale",
+            "rollout_restart",
+            "manual_analysis",
+        ],
+    }
+    assert all(item["benchmark_fixtures"] == [] for item in fourth_batch)
 
 
 def test_public_candidate_contract_scorer_needs_no_site_packages() -> None:
