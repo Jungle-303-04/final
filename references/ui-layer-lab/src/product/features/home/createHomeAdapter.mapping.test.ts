@@ -1,11 +1,11 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import type {
   HomeClusterOverview,
   HomeNodeCollection,
   HomePodCollection,
 } from "./homeContract";
 import { createHomeAdapter } from "./createHomeAdapter";
-import { endpoints } from "./createHomeAdapter.testSupport";
+import { CLUSTER_LIST, endpoints } from "./createHomeAdapter.testSupport";
 
 describe("canonical Home adapter mapping", () => {
   it("maps the session-visible cluster list and forwards the AbortSignal", async () => {
@@ -45,6 +45,20 @@ describe("canonical Home adapter mapping", () => {
         ],
       });
     expect(dependencies.listClusters).toHaveBeenCalledWith({}, controller.signal);
+  });
+
+  it("preserves an explicit connection stage without inferring progress", async () => {
+    const cluster = {
+      ...CLUSTER_LIST.clusters[0],
+      connection_stage: "ready" as const,
+    };
+    const dependencies = endpoints({
+      listClusters: vi.fn(async () => ({ clusters: [cluster] })),
+    });
+
+    await expect(createHomeAdapter(dependencies).listClusterChoices()).resolves.toMatchObject({
+      clusters: [{ id: "cluster-1", connectionStage: "ready" }],
+    });
   });
 
   it("maps cluster health, usage, workloads, warnings, and incidents", async () => {
