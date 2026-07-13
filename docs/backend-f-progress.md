@@ -273,11 +273,12 @@ Bundle route는 200을 반환한다.
 
 ### BQ-014 — Argo observer 어댑터
 
-- 상태: in_progress, BQ-017 gateway 계약 lock과 경로 독립
-- 담당 lane: `codex/f-argocd-observer`
+- 상태: requested. 전면 branch 정리 위임으로 lane을 회수했으며 삭제 전 복구 hash는
+  `f5461aa8070a7ba9b088410d0ae5ebe89b8b4e86`이다.
 - 착수 기준: `origin/dev@621a60a1c83bf12b2cb93fc50439f5a7fc4df00d`
 - 전체 게이트 baseline: Ruff lint/format PASS, import-linter 2 kept/0 broken,
   pytest `1735 passed, 3 skipped`
 - 범위: `reconciler_mode=argocd`에서 Argo CD Application과 Rollout stable revision을
   읽기만 하며 Kubernetes/Argo 쓰기 호출은 0건으로 고정한다.
-- 앵커: 감독 검증·GO 후 기록
+- 재개 시 위 복구 hash에서 신규 lane을 만들고 최신 canonical로 재검증한다. 앵커는
+  감독 검증·GO 후 기록한다.
