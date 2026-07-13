@@ -109,6 +109,10 @@ CLUSTER_INVENTORY_SUMMARY_PATH = "/clusters/{cluster_id}/inventory/summary"
 CLUSTER_INVENTORY_WORKLOADS_PATH = "/clusters/{cluster_id}/inventory/workloads"
 CLUSTER_INVENTORY_SERVICES_PATH = "/clusters/{cluster_id}/inventory/services"
 CLUSTER_INVENTORY_EVENTS_PATH = "/clusters/{cluster_id}/inventory/events"
+# 워크스페이스 범위 Resources 필터 계약 — 기존 단일 클러스터 인벤토리 경로와 분리한다.
+RESOURCES_FILTER_FACETS_PATH = "/resources/filter-facets"
+FILTERED_RESOURCES_PATH = "/resources"
+RESOURCE_LABEL_FACETS_PATH = "/resources/label-facets"
 # 스냅샷 기반 실측 활용 시계열(usage rollup) — 콘솔 추이 차트용.
 CLUSTER_USAGE_PATH = "/clusters/{cluster_id}/usage"
 CLUSTER_METRIC_QUERY_PRESETS_PATH = "/clusters/{cluster_id}/metric-query-presets"

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import pytest
+
 from domains.inventory_filter.cursor import (
     CursorScope,
     FilterCursorCodec,
@@ -63,6 +64,32 @@ def test_filter_parser_rejects_ambiguous_or_empty_tokens(field: str, value: str)
 
     with pytest.raises(ValueError):
         parse_resource_filters(**kwargs)
+
+
+@pytest.mark.parametrize(
+    "selector",
+    (
+        "UPPER.example.com/team=checkout",
+        "bad_prefix_/team=checkout",
+        "team/=checkout",
+        "team=contains spaces",
+        "team=value/with/slash",
+        f"{'x' * 64}=checkout",
+        f"team={'x' * 64}",
+    ),
+)
+def test_filter_parser_rejects_non_kubernetes_label_selectors(selector: str) -> None:
+    with pytest.raises(ValueError, match="label selector"):
+        parse_resource_filters(
+            clusters=None,
+            namespaces=None,
+            applications=None,
+            resource_types=None,
+            health=None,
+            labels=selector,
+            query=None,
+            include_deleted=False,
+        )
 
 
 def test_filter_cursor_is_signed_and_bound_to_auth_filter_surface_and_snapshot() -> None:
