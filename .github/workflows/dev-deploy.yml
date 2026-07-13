@@ -177,7 +177,11 @@ jobs:
           registry="${account_id}.dkr.ecr.${AWS_REGION}.amazonaws.com"
           aws ecr describe-repositories --repository-names "${CONSOLE_ECR_REPOSITORY}" >/dev/null
           tagged_image="${registry}/${CONSOLE_ECR_REPOSITORY}:${SOURCE_SHA}"
-          docker build --file frontend/Dockerfile --tag "${tagged_image}" frontend
+          docker build \
+            --file frontend/Dockerfile \
+            --build-arg "SOURCE_SHA=${SOURCE_SHA}" \
+            --tag "${tagged_image}" \
+            frontend
           docker push "${tagged_image}"
           digest="$(aws ecr describe-images \
             --repository-name "${CONSOLE_ECR_REPOSITORY}" \
