@@ -564,3 +564,38 @@ def test_kubernetes_evidence_snapshot_preserves_detected_provider() -> None:
     )
 
     assert snapshot["summary"]["detected_provider"] == "gke"
+
+
+def test_inventory_snapshot_allows_a_legitimate_payload_larger_than_edge_default() -> None:
+    snapshot = InventorySnapshotRequest(
+        cluster_id="cluster-1",
+        agent_id="agent-1",
+        resources=[
+            InventoryResource(
+                resource_type="custom_resource",
+                api_version="example.io/v1",
+                kind="LargeResource",
+                name="large-resource",
+                raw={"payload": "x" * 3_000_000},
+            )
+        ],
+    )
+
+    assert len(snapshot.resources[0].raw["payload"]) == 3_000_000
+
+
+def test_inventory_snapshot_rejects_payload_beyond_the_documented_edge_limit() -> None:
+    with pytest.raises(ValueError, match="inventory payload exceeds size limit"):
+        InventorySnapshotRequest(
+            cluster_id="cluster-1",
+            agent_id="agent-1",
+            resources=[
+                InventoryResource(
+                    resource_type="custom_resource",
+                    api_version="example.io/v1",
+                    kind="LargeResource",
+                    name="oversized-resource",
+                    raw={"payload": "x" * 17_000_000},
+                )
+            ],
+        )

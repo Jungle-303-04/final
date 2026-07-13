@@ -19,6 +19,7 @@ from domains.identity.dependencies import (
     require_admin_session,
 )
 from domains.target.router import (
+    EXTERNAL_ACCESS_REQUIRED,
     KUBE_CONTEXT_NOT_ALLOWED,
     MANAGEMENT_BASE_URL_NOT_CONFIGURED,
     apply_manifest_with_kubectl,
@@ -445,7 +446,7 @@ def test_target_install_manifest_sets_agent_and_telemetry_config() -> None:
         '"http://opentelemetry-collector.target.svc:4318/v1/traces"'
     ) in manifest
     assert 'NODE_COLLECTOR_ENABLED: "true"' in manifest
-    assert 'REALTIME_GATEWAY_URL: "ws://management.local:30090"' in manifest
+    assert 'REALTIME_GATEWAY_URL: "ws://management.local:30080"' in manifest
     assert 'NODE_COLLECTOR_IMAGE: "ghcr.io/acme/kubeheal-agent:test"' in manifest
     assert 'AGENT_TOKEN: "agent-secret"' in manifest
     assert 'apiGroups: ["metrics.k8s.io"]' in manifest
@@ -454,6 +455,17 @@ def test_target_install_manifest_sets_agent_and_telemetry_config() -> None:
     assert 'resources: ["configmaps"]' in manifest
     assert 'verbs: ["get", "list", "create", "update", "patch"]' in manifest
     assert 'verbs: ["get", "list", "create", "update", "patch", "delete"]' in manifest
+
+
+def test_target_install_manifest_keeps_same_origin_api_path_for_secure_realtime() -> None:
+    request = target_request().model_copy(
+        update={"management_base_url": "https://opsia.example.com/api"}
+    )
+
+    manifest = target_install_manifest(request, "agent-secret")
+
+    assert 'REALTIME_GATEWAY_URL: "wss://opsia.example.com/api"' in manifest
+    assert ":30090" not in manifest
 
 
 def test_target_rca_cleanup_delete_permission_is_limited_to_owned_manifest_kinds() -> None:
@@ -572,10 +584,7 @@ def test_management_install_manifest_is_read_only() -> None:
     assert 'CLUSTER_ROLE: "management"' in manifest
     assert 'BOOTSTRAP_MODE: "management"' in manifest
     assert 'NODE_COLLECTOR_ENABLED: "false"' in manifest
-    assert (
-        'REALTIME_GATEWAY_URL: "ws://realtime-gateway.management.svc.cluster.local:8000"'
-        in manifest
-    )
+    assert 'REALTIME_GATEWAY_URL: "ws://management.local:30080"' in manifest
     assert "cluster-agent-sandbox-write" not in manifest
     assert "cluster-agent-catalog-install" not in manifest
     assert "cluster-agent-target-manage" not in manifest
@@ -1303,6 +1312,60 @@ def test_target_registration_preflight_accepts_new_ready_provider(monkeypatch) -
     assert response.errors == []
 
 
+def test_target_registration_preflight_reports_self_only_access_contract(monkeypatch) -> None:
+    monkeypatch.setenv("TARGET_AGENT_IMAGE", "ghcr.io/acme/kubeheal-agent:test")
+    monkeypatch.setenv("PUBLIC_MANAGEMENT_BASE_URL", "http://opsia.opsia-system.svc")
+    monkeypatch.setenv("OPSIA_ACCESS_MODE", "portforward")
+    monkeypatch.setenv("OPSIA_EXTERNAL_URL", "")
+
+    async def run():
+        return await target_registration_preflight(
+            TargetPreflightRequest(
+                cluster_id="self-cluster",
+                cloud_provider="existing-k8s",
+                deploy_provider="manual-manifest",
+            ),
+            current=SimpleNamespace(user_id="user-1", workspace_id="default"),
+            db=StubPreflightDb(),
+        )
+
+    response = asyncio.run(run())
+
+    assert response.valid is False
+    assert "external access URL is required to enroll another cluster" in response.errors
+    assert response.management_access.model_dump() == {
+        "mode": "portforward",
+        "external_url": None,
+        "agent_server_url": "http://opsia.opsia-system.svc",
+        "reachability": "self_only",
+        "limitation_reason": "external_url_not_configured",
+    }
+
+
+def test_self_only_preflight_allows_management_cluster(monkeypatch) -> None:
+    monkeypatch.setenv("TARGET_AGENT_IMAGE", "ghcr.io/acme/kubeheal-agent:test")
+    monkeypatch.setenv("PUBLIC_MANAGEMENT_BASE_URL", "http://opsia.opsia-system.svc")
+    monkeypatch.setenv("OPSIA_ACCESS_MODE", "portforward")
+    monkeypatch.setenv("OPSIA_EXTERNAL_URL", "")
+
+    async def run():
+        return await target_registration_preflight(
+            TargetPreflightRequest(
+                cluster_id="self-cluster",
+                cluster_role="management",
+                cloud_provider="existing-k8s",
+                deploy_provider="manual-manifest",
+            ),
+            current=SimpleNamespace(user_id="user-1", workspace_id="default"),
+            db=StubPreflightDb(),
+        )
+
+    response = asyncio.run(run())
+
+    assert response.valid is True
+    assert EXTERNAL_ACCESS_REQUIRED not in response.errors
+
+
 def test_target_registration_preflight_tolerates_display_fields(monkeypatch) -> None:
     monkeypatch.setenv("TARGET_AGENT_IMAGE", "ghcr.io/acme/kubeheal-agent:test")
     monkeypatch.setenv("PUBLIC_BASE_URL", "https://k8s.woonyong.org")
@@ -1944,6 +2007,83 @@ def test_target_registration_uses_public_base_url_when_request_omits_management_
 
     assert response.install_command.startswith("curl -fsSL https://k8s.woonyong.org/api/install/")
     assert db.registered[0]["settings"]["management_base_url"] == "https://k8s.woonyong.org/api"
+
+
+def test_deployment_external_url_overrides_untrusted_registration_url(monkeypatch) -> None:
+    monkeypatch.setenv("PUBLIC_MANAGEMENT_BASE_URL", "https://opsia.example.com")
+    monkeypatch.setenv("OPSIA_ACCESS_MODE", "ingress")
+    monkeypatch.setenv("OPSIA_EXTERNAL_URL", "https://opsia.example.com")
+    db = StubDb()
+    events = StubEvents()
+    request = target_request().model_copy(update={"management_base_url": "http://localhost:8080"})
+
+    async def run():
+        return await register_target(
+            request,
+            current=SimpleNamespace(user_id="local-user", workspace_id="default"),
+            db=db,
+            events=events,
+        )
+
+    response = asyncio.run(run())
+
+    assert response.install_command.startswith("curl -fsSL https://opsia.example.com/api/install/")
+    assert "localhost" not in response.install_command
+    assert db.registered[0]["settings"]["management_base_url"] == "https://opsia.example.com/api"
+    assert response.management_access.model_dump() == {
+        "mode": "ingress",
+        "external_url": "https://opsia.example.com",
+        "agent_server_url": "https://opsia.example.com",
+        "reachability": "external",
+        "limitation_reason": None,
+    }
+
+
+def test_self_only_deployment_rejects_remote_cluster_registration(monkeypatch) -> None:
+    monkeypatch.setenv("PUBLIC_MANAGEMENT_BASE_URL", "http://opsia.opsia-system.svc")
+    monkeypatch.setenv("OPSIA_ACCESS_MODE", "portforward")
+    monkeypatch.setenv("OPSIA_EXTERNAL_URL", "")
+
+    with pytest.raises(HTTPException) as exc:
+        asyncio.run(
+            register_target(
+                target_request(),
+                current=SimpleNamespace(user_id="local-user", workspace_id="default"),
+                db=StubDb(),
+                events=StubEvents(),
+            )
+        )
+
+    assert exc.value.status_code == 422
+    assert exc.value.detail == "external access URL is required to enroll another cluster"
+
+
+@pytest.mark.parametrize(
+    "unsafe_url",
+    [
+        "file:///etc/passwd",
+        "https://user@opsia.example.com",
+        "https://opsia.example.com/path",
+        "https://opsia.example.com?next=evil",
+    ],
+)
+def test_target_registration_rejects_unsafe_management_url(monkeypatch, unsafe_url: str) -> None:
+    monkeypatch.delenv("PUBLIC_MANAGEMENT_BASE_URL", raising=False)
+    monkeypatch.delenv("PUBLIC_API_BASE_URL", raising=False)
+    monkeypatch.delenv("PUBLIC_BASE_URL", raising=False)
+
+    with pytest.raises(HTTPException) as exc:
+        asyncio.run(
+            register_target(
+                target_request().model_copy(update={"management_base_url": unsafe_url}),
+                current=SimpleNamespace(user_id="local-user", workspace_id="default"),
+                db=StubDb(),
+                events=StubEvents(),
+            )
+        )
+
+    assert exc.value.status_code == 422
+    assert exc.value.detail == MANAGEMENT_BASE_URL_NOT_CONFIGURED
 
 
 def test_target_registration_rejects_missing_management_url(monkeypatch) -> None:
