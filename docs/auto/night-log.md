@@ -870,3 +870,22 @@ npm run visual-product
 - BQ-016은 `origin/dev`에 완료 착륙했고, 다음 큐인 BQ-009는
   `codex/f-auto-revert-pr`에서 진행 중이다. 같은 worktree가 감사 중에도 전진했으므로
   조율 세션은 해당 lane에 동시 수정·rebase·테스트를 수행하지 않는다.
+
+## 2026-07-13 11:28 KST — [백엔드] provider 계약 구현·통합 대기
+
+- lane: `codex/f-provider-connection-stage`, HEAD `305ed2b71`.
+- TDD: RED `f3428cf90` → GREEN `c5447cafb`; providerID 3사·vendor label 보조,
+  구체 등록값 우선, generic 등록 감지 후 `onprem` fallback, 연결 epoch별
+  `token_issued/awaiting_install/agent_connected/snapshot_received/ready/expired/error`를 고정했다.
+- 성능: 목록의 최신 inventory snapshot을 cluster별 N+1 대신 단일 window query로 조회한다.
+- 실측 계약: `docs/api/11-clusters/01-list-clusters.bru`, `02-get-cluster.bru`,
+  `03-connection-status.bru`가 provider/stage 허용값을 검산한다.
+- 전체 게이트: Ruff lint/format PASS(492 files), import-linter 2 kept/0 broken,
+  pytest `1746 passed, 3 skipped`; manifest management 68 / target 20.
+- 대기 사유: 최신 lab `37d754cae`의 `clusterSummarySchema`와
+  `clusterConnectionStatusSchema`가 `z.strictObject` 상태이며 provider/stage 키가 없다.
+  Zod 실측에서 추가 키는 `unrecognized_keys`로 거부돼 backend 단독 착륙 시 기존 UI가
+  `invalid-payload`가 된다. 프론트/API 소유자가 두 optional 필드를 허용하거나 양측을
+  같은 통합점으로 착륙해야 한다.
+- 처리: feature branch push 완료, backend 코드의 origin/dev merge·앵커·completed 표시는
+  보류했다. gateway 계약 lock은 유지하고 해당 frontend 소유 파일은 수정하지 않았다.
