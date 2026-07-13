@@ -1084,3 +1084,17 @@ npm run visual-product
 | `origin/codex/release-flow-smoke-reusable-workflow-121` | `8019b27f56add3ab64af46b1399c9d06bb195a35` | 1 | remote --delete |
 | `origin/codex/ui-layer-lab-references` | `d18e136937525b13e21a56c7e6814f9c7e67e6d0` | 1 | 보존(사람 소유 가능) |
 | `origin/codex/yaml-editor` | `79914c1e91e42f193c007c1652ec2f0c44d3061c` | 1 | remote --delete |
+
+## 2026-07-13 12:15 KST — [백엔드] provider 계약 착륙·잠금 해제
+
+- 프론트 호환 조건: `origin/woonyong/ui-layer-lab@bfaf03901`에서 provider와
+  connection_stage optional 스키마 수용을 기록했고 ancestor exit 0을 확인했다.
+- 선행 H3: `origin/dev@6d68325bf1cc47f55810e5dc2189e51a6fe916c0` 착륙을 확인했다.
+- 코드 `db4798d4e4973ec3d384d71eca08aba6d4e9f6b7`, feature HEAD `10e85d992`,
+  canonical merge `d507ca6d47a0e953f6d1a0ad6931d576738c18cc`.
+- 재배치 후 전체 게이트: Ruff lint/format PASS, import-linter 2 kept/0 broken,
+  pytest `1831 passed, 3 skipped`; manifest management 69, target 20.
+- `db4798d4e`와 `10e85d992`의 `origin/dev` ancestor exit 0을 확인했다.
+  기존 응답은 additive-only로 보존했고 gateway 계약 lock을 해제한다.
+- 일시 저장한 Argo observer lane `codex/f-argocd-observer@f5461aa80`은 최신
+  canonical로 재배치한 뒤 전체 게이트를 다시 증명한다.
