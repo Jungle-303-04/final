@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any, Literal
 
-from pydantic import Field
+from pydantic import BaseModel, ConfigDict, Field
 
 from packages.contracts.gateway.base import StrictModel
 
@@ -1021,8 +1021,28 @@ class DeploymentBindingListResponse(StrictModel):
     deployments: list[JsonMap]
 
 
+class PromotionGateResponse(StrictModel):
+    eligible: bool
+    command_status: str
+    command_completed: bool
+    applied: bool | None = None
+    applied_not_false: bool
+    failed_resources: list[JsonMap] = Field(default_factory=list)
+    failed_resource_count: int = 0
+    rollout_ready: bool | None = None
+    rollout_ready_not_false: bool
+
+
+class WorkflowRunItemResponse(BaseModel):
+    """기존 동적 run payload를 보존하면서 promotion gate만 구조화한다."""
+
+    model_config = ConfigDict(extra="allow")
+
+    promotion_gate: PromotionGateResponse | None = None
+
+
 class WorkflowRunListResponse(StrictModel):
-    runs: list[JsonMap]
+    runs: list[WorkflowRunItemResponse]
 
 
 class ReleasePlanResponse(StrictModel):

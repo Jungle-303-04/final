@@ -49,6 +49,7 @@ from packages.contracts.gitops import (
     WorkflowRunStatus,
     WorkflowStepName,
     WorkflowStepStatus,
+    promotion_gate_from_command_result,
 )
 from packages.contracts.identity import (
     DEFAULT_WORKSPACE_ID,
@@ -1845,6 +1846,9 @@ def serialize_deployment_binding(row: Any) -> JsonObject:
 def serialize_workflow_run(row: Any) -> JsonObject:
     item = dict(row)
     item["metadata"] = dict(item.get("metadata") or {})
+    result = item["metadata"].get("result")
+    if isinstance(result, dict):
+        item["promotion_gate"] = promotion_gate_from_command_result(result)
     item["created_at"] = iso_or_none(item.get("created_at"))
     item["updated_at"] = iso_or_none(item.get("updated_at"))
     return item

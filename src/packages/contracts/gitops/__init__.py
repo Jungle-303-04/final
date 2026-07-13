@@ -1,7 +1,11 @@
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass
 from enum import StrEnum
+from typing import Any
+
+from packages.config.constants import CommandStatus
 
 
 class GitProvider(StrEnum):
@@ -79,6 +83,43 @@ class ResourceClass(StrEnum):
     APPLICATION = "application"
     PLATFORM = "platform"
     SYSTEM = "system"
+
+
+def promotion_gate_from_command_result(result: Mapping[str, Any]) -> dict[str, Any]:
+    """Expose the exact command-result checks used by automatic promotion."""
+    resources = result.get("resources")
+    resource_list = resources if isinstance(resources, list) else []
+    failed_resources = [
+        dict(item)
+        for item in resource_list
+        if isinstance(item, Mapping)
+        and (item.get("applied") is False or str(item.get("status", "")).lower() == "failed")
+    ]
+    command_status = result.get("status")
+    command_completed = command_status == CommandStatus.COMPLETED
+    applied_value = result.get("applied")
+    applied = applied_value if isinstance(applied_value, bool) else None
+    applied_not_false = applied_value is not False
+    rollout = result.get("rollout")
+    rollout_ready_value = rollout.get("ready") if isinstance(rollout, Mapping) else None
+    rollout_ready = rollout_ready_value if isinstance(rollout_ready_value, bool) else None
+    rollout_ready_not_false = rollout_ready_value is not False
+    return {
+        "eligible": (
+            command_completed
+            and applied_not_false
+            and not failed_resources
+            and rollout_ready_not_false
+        ),
+        "command_status": str(command_status or ""),
+        "command_completed": command_completed,
+        "applied": applied,
+        "applied_not_false": applied_not_false,
+        "failed_resources": failed_resources,
+        "failed_resource_count": len(failed_resources),
+        "rollout_ready": rollout_ready,
+        "rollout_ready_not_false": rollout_ready_not_false,
+    }
 
 
 @dataclass(frozen=True)

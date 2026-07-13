@@ -96,7 +96,7 @@ status: synced
 - `transition_run`: `update_workflow_run`만 호출(Application upsert 없음).
 - `record_step`: `record_workflow_step` 저장 후 `WorkflowStepRecordedBody`를 반환 — 핸들러가 이를 yield하면 `workflow.step.recorded`가 발행된다.
 - `approval_payload`: run 정규화 후 `approval_id = derive_approval_id(workflow_run_id)`와 `status`, `reason`, `requested_role="release_operator"`를 담은 payload 생성.
-- `command_result_succeeded(result)`: `result.status != "completed"`(`CommandStatus.COMPLETED`) 또는 `applied is False`면 False. `resources` 리스트 안에 `applied is False`거나 `status`가 `"failed"`(대소문자 무시)인 항목이 있으면 False. `rollout.ready is False`면 False. 그 외 True.
+- `command_result_succeeded(result)`: `packages.contracts.gitops.promotion_gate_from_command_result`의 `eligible`을 소비한다. 단일 계약은 `result.status != "completed"` 또는 `applied is False`, 실패 resource 존재, `rollout.ready is False` 중 하나라도 참이면 False다. API의 `promotion_gate`도 같은 함수를 사용하므로 worker와 노출 조건을 따로 복제하지 않는다.
 - `rollout_result_details`: `{"command_id", "result", "resources", "failed_resources", "rollout"}` 구성 (`resources`는 리스트가 아니면 `[]`, `rollout`은 Mapping이 아니면 `{}`).
 - `workflow_created_fields`: `WorkflowCreatedBody` 생성용 필드 딕셔너리(workspace/application/workflow_run/repository/watch_target/binding/environment/cluster/commit_sha/manifest_path).
 
@@ -232,6 +232,7 @@ status: synced
 - **application dedup**: `upsert_application`이 같은 (workspace, repository, name)의 기존 앱으로 병합하면 `ensure_run`이 canonical `application_id` 기준으로 `workflow_run_id`를 재파생한다.
 - `on_command_completed`에서 identity를 찾지 못하면(`None`) 아무 이벤트도 발행하지 않고 조용히 종료한다.
 - 성공 판정은 `command_result_succeeded`의 3중 검사(전체 status/applied, 리소스별 applied/status, rollout.ready)를 모두 통과해야 한다.
+- `GET /applications/{application_id}/runs`의 `promotion_gate`는 위 성공 판정의 구조화된 read model이다. 관측 윈도우나 별도 배포 안정성 신호는 이 게이트에 포함하지 않는다.
 - 발행되는 `approval.requested`의 `requested_role`은 항상 `release_operator`.
 - 예외는 핸들러에서 잡지 않고 런타임으로 전파된다.
 

@@ -58,9 +58,13 @@ status: synced
 | `GET /applications/{application_id}` (`APPLICATION_PATH`) | `src/domains/applications/router.py :: get_application` | — | `ApplicationResponse` | `require_session` + `Permission.APPLICATION_READ` (resource access) |
 | `GET /applications/{application_id}/deployments` (`APPLICATION_DEPLOYMENTS_PATH`) | `src/domains/applications/router.py :: list_application_deployments` | query `limit: int = 100 (ge=1, le=500)` | `DeploymentBindingListResponse` | `require_session` + `Permission.DEPLOYMENT_READ` |
 | `POST /applications/{application_id}/deployments` (`APPLICATION_DEPLOYMENTS_PATH`) | `src/domains/applications/router.py :: upsert_application_deployment` | `DeploymentBindingUpsertRequest` | `DeploymentBindingResponse` | `require_session` + application `Permission.APPLICATION_MANAGE` + cluster `Permission.DEPLOY_RUN` (cluster_id `"*"`면 등록된 **모든** 클러스터에 대해 검사) |
-| `GET /applications/{application_id}/runs` (`APPLICATION_RUNS_PATH`) | `src/domains/applications/router.py :: list_application_runs` | query `limit: int = 100 (ge=1, le=500)` | `WorkflowRunListResponse` | `require_session` + `Permission.DEPLOYMENT_READ` |
+| `GET /applications/{application_id}/runs` (`APPLICATION_RUNS_PATH`) | `src/domains/applications/router.py :: list_application_runs` | query `limit: int = 100 (ge=1, le=500)` | `WorkflowRunListResponse`; command result가 저장된 run은 `promotion_gate`에 completed/applied/failed resources/rollout ready 판정을 구조화해 포함 | `require_session` + `Permission.DEPLOYMENT_READ` |
 
 요청·응답 모델은 [contracts](../packages/contracts.md)의 `packages/contracts/gateway/requests.py` / `responses.py` 정의를 사용한다.
+
+`promotion_gate.eligible`은 workflow-controller의 실제 자동 승격 판정과 같은
+`packages.contracts.gitops.promotion_gate_from_command_result`에서 계산한다. command result가
+아직 없는 run은 `promotion_gate=null`이며, 이 필드는 승격 실행 결과나 관측 윈도우 판정이 아니다.
 
 ## 데이터 모델 (Data Model)
 
