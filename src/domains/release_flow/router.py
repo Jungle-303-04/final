@@ -1314,7 +1314,9 @@ async def update_release_plan(
     return ReleasePlanResponse(plan=plan)
 
 
-def require_release_plan_not_active(db: Any, workspace_id: str, plan_id: str, *, action: str) -> None:
+def require_release_plan_not_active(
+    db: Any, workspace_id: str, plan_id: str, *, action: str
+) -> None:
     has_active_runs = getattr(db, "has_active_release_runs", None)
     if callable(has_active_runs) and has_active_runs(workspace_id, plan_id):
         raise HTTPException(
@@ -1327,7 +1329,9 @@ def require_release_plan_lifecycle_reason(reason: str | None, *, action: str) ->
     normalized = str(reason or "").strip()
     if normalized:
         return normalized
-    raise HTTPException(status_code=HTTP_UNPROCESSABLE_ENTITY, detail=f"release plan {action} reason is required")
+    raise HTTPException(
+        status_code=HTTP_UNPROCESSABLE_ENTITY, detail=f"release plan {action} reason is required"
+    )
 
 
 def require_release_plan_status_transition(existing: dict[str, Any], requested_status: str) -> None:
@@ -1361,9 +1365,13 @@ def release_plan_execution_status_blockers(
     if status in {"", "active"}:
         return []
     if status == "draft":
-        return [f"Release plan {plan_id} is draft and cannot be dispatched. Activate the plan after review."]
+        return [
+            f"Release plan {plan_id} is draft and cannot be dispatched. Activate the plan after review."
+        ]
     if status == "paused":
-        return [f"Release plan {plan_id} is paused and cannot be dispatched. Resume the plan when it is safe."]
+        return [
+            f"Release plan {plan_id} is paused and cannot be dispatched. Resume the plan when it is safe."
+        ]
     if status == "archived":
         return [f"Release plan {plan_id} is archived and cannot be dispatched."]
     return [f"Release plan {plan_id} is not active and cannot be dispatched."]
@@ -1415,7 +1423,9 @@ async def dispatch_wave_steps(
         )
 
     blockers = release_plan_execution_status_blockers(dispatch_plan, db, workspace_id)
-    blockers.extend(release_dispatch_context_blockers(dispatch_plan, selected_steps, db, workspace_id))
+    blockers.extend(
+        release_dispatch_context_blockers(dispatch_plan, selected_steps, db, workspace_id)
+    )
     blockers.extend(
         release_execution_blockers(dispatch_plan, preview, wave, workspace_id=workspace_id, db=db)
     )

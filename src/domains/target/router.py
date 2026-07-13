@@ -953,11 +953,13 @@ def require_target_registration_preflight(
     preflight_payload = TargetPreflightRequest(
         **{key: value for key, value in payload.model_dump().items() if key in allowed}
     )
-    provider_ready, errors, _warnings, _selected, _kube_context_allowed = target_preflight_provider_checks(
-        preflight_payload
+    provider_ready, errors, _warnings, _selected, _kube_context_allowed = (
+        target_preflight_provider_checks(preflight_payload)
     )
     if not provider_ready or errors:
-        raise HTTPException(status_code=422, detail={"message": "target preflight failed", "errors": errors})
+        raise HTTPException(
+            status_code=422, detail={"message": "target preflight failed", "errors": errors}
+        )
 
 
 # require_admin_session 이 세션을 검증 → base router 에 둠.

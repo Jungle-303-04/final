@@ -82,10 +82,18 @@ class AlertChannelRepository(DatabaseConnection):
                 "min_severity": insert.excluded.min_severity,
                 "enabled": insert.excluded.enabled,
                 # Delivery evidence is valid only for the exact tested webhook URL.
-                "last_tested_at": case((table.c.url != insert.excluded.url, None), else_=table.c.last_tested_at),
-                "last_test_status": case((table.c.url != insert.excluded.url, None), else_=table.c.last_test_status),
-                "last_test_detail": case((table.c.url != insert.excluded.url, None), else_=table.c.last_test_detail),
-                "last_test_status_code": case((table.c.url != insert.excluded.url, None), else_=table.c.last_test_status_code),
+                "last_tested_at": case(
+                    (table.c.url != insert.excluded.url, None), else_=table.c.last_tested_at
+                ),
+                "last_test_status": case(
+                    (table.c.url != insert.excluded.url, None), else_=table.c.last_test_status
+                ),
+                "last_test_detail": case(
+                    (table.c.url != insert.excluded.url, None), else_=table.c.last_test_detail
+                ),
+                "last_test_status_code": case(
+                    (table.c.url != insert.excluded.url, None), else_=table.c.last_test_status_code
+                ),
                 "updated_at": func.now(),
             },
             where=table.c.workspace_id == insert.excluded.workspace_id,
