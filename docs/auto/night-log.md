@@ -1648,3 +1648,7 @@ JsonMap, AbortSignal, ID 검증을 완료 앵커 전까지 제품 화면에서 �
 - 재개 조건: stable `trigger_kind=auto_revert`, correlation 또는 workflow run exact scope,
   stable event identity/status/time/PR URL/failure reason의 canonical 계약·앵커.
 - 해당 항목만 BE-Gap으로 주차했다. APIQ·adapter·disabled placeholder는 만들지 않고 P7으로 계속한다.
+
+[2026-07-13 15:04 KST] [프론트/API] APIQ-033 in_progress — VP-008의 provider catalog·discovery,
+target preflight·register 네 함수와 strict Zod 계약을 claim했다. 1회성 install receipt는 메모리
+경계 밖으로 내보내지 않고, provider 명령 합성·POST 자동 재전송·workspace 위조를 금지한다.

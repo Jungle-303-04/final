@@ -26,7 +26,7 @@ api-needs.md에 APIQ 행을 추가하지 않고 화면도 렌더하지 않는다
 | VP-005 | 승격 게이트 표시 — release flow에서 네 가지 판정 조건과 현재 승격 가능 여부 표시 | BQ-006 | workflow run의 optional `promotion_gate: PromotionGateResponse \| null` · 앵커 `8cd0b18e96f1266873d1632486472d0d22c18477` (`origin/dev` ancestor exit 0) | 직결 | Applications release flow + `UI-020 StatusMark`. `eligible`은 승격 실행 완료가 아니라 현재 조건 판정이다 | `API 완성: listApplicationRuns (429fb1d91)` · UI blocked — cluster-scoped Applications 계약 필요 |
 | VP-006 | revert PR 상태 — 검증 실패로 생성된 revert PR을 인시던트·release 화면에 표시 | BQ-007 착륙 | auto-revert worker·권위 patch canonical merge `6d68325bf1cc47f55810e5dc2189e51a6fe916c0` (`origin/dev` ancestor exit 0). 공개 projection은 generic Safe PR lifecycle만 제공하며 auto-revert discriminator를 누락한다 | BE-Gap | 공용 revert PR status card. structured auto-revert event가 없으면 제목·카드·empty state까지 전부 미렌더 | blocked — stable `trigger_kind=auto_revert`와 incident/run exact scope 계약 필요 |
 | VP-007 | 클러스터-최상위 IA — 전역 Cluster selector가 URL 단일 권위로 전 화면 스코프 결정 + 연결된 Cluster 목록(이름·environment·connection·provider) | BQ-017 완료 | 기존 `CLUSTERS_PATH` + optional `provider` enum · 백엔드 코드 `db4798d4e`, canonical merge `d507ca6d4` (`origin/dev` ancestor exit 0) | 어댑터 | 셸 단일 `ClusterScopeProvider` + `UI-004 ScopePicker` + 단일 `ClusterProviderIcon`; 페이지별 목록 요청·selector 제거. provider는 표시 metadata로만 사용하고 화면·동작 분기 금지 | selector `2c4487d7b`; ProviderIcon `b4d1af3cd` |
-| VP-008 | 클러스터 연결 위자드 고도화 — provider 선택→사전 명령→설치 원커맨드(만료 카운트다운)→연결 단계 실시간(token_issued→…→ready)→완료 | BQ-017 | 기존 install 토큰·위자드 경로 + providers catalog + BQ-017 `connection_stage`(대기) | backend 선행(단계 표시) / 그 외 기존 계약 | 기존 resources cluster wizard 확장. `UI-057 Custom wizard` 선례 + `Progress`·`Steps`. 미지원 provider는 generic으로 정직 표기 | 미요청 |
+| VP-008 | 클러스터 연결 위자드 고도화 — provider 선택→사전 명령→설치 원커맨드(연결 윈도우 카운트다운)→연결 단계 실시간(token_issued→…→ready)→완료 | BQ-017 완료 | `GET /providers/catalog`, `GET /providers/cluster-discovery`, `POST /targets/preflight`, `POST /targets`, `GET /clusters/{cluster_id}/connection-status` · wizard 기반 `65a71c7c`, timeout/bootstrap `101bc4a2`, one-line installer `98efb993`, preflight `26b9e2a9`, BQ-017 merge `d507ca6d4`(전부 `origin/dev` ancestor exit 0) | 어댑터 · 완성형 UI는 §1f 계약 갭으로 주차 | provider catalog의 `config_fields`와 discovery flow를 key로 결합하고 서버 명령만 표시한다. 등록 receipt의 token·manifest·commands는 메모리에만 보유한다. 5초 polling은 서버 stage를 권위로 사용하며 stage 회귀를 허용한다 | `APIQ-033` in_progress · 기존 `getClusterConnectionStatus` 앵커 `3d99514d6` |
 | VP-009 | provider 표시 일관화 — fleet heatmap·홈 카드·인시던트의 클러스터 표기에 동일 ProviderIcon 재사용 | BQ-017 | VP-007과 동일 필드 소비 | backend 선행 | 단일 컴포넌트 재사용, 중복 구현 금지 | 미요청 |
 
 ## 1b. VP-001 판정 비고 (2026-07-13, 검토자 확정)
@@ -88,6 +88,24 @@ api-needs.md에 APIQ 행을 추가하지 않고 화면도 렌더하지 않는다
   PR URL·실패 reason이다. nested status object는 strict close하고 title/body는 식별 근거로 쓰지 않는다.
 - 별도 flag 조회가 없어도 structured auto-revert event가 0개면 섹션 전체를 미렌더해 flag-off UX를
   만족할 수 있다. 위 계약의 canonical anchor 전에는 APIQ·adapter·UI를 만들지 않는다.
+
+## 1f. VP-008 연결 위자드 release blocker (2026-07-13)
+
+- catalog의 `config_fields`와 discovery flow를 결합하면 provider 이름 분기 없이 입력 폼을 만들 수
+  있고, preflight·등록·연결 stage polling의 기본 전송 계약도 착륙했다.
+- 그러나 preflight는 등록 route의 provider bootstrap config 검사를 실행하지 않아 EKS/GKE/AKS의
+  필수 config 누락을 `valid=true`로 통과시킬 수 있다. 프론트 metadata 검증은 보조 검증일 뿐 서버
+  권위를 대체하지 않는다.
+- token 발급 전 exact bootstrap command preview가 없고, 발급 뒤 브라우저 새로고침으로 1회성
+  receipt를 잃었을 때 안전하게 재발급·재개하는 endpoint도 없다. 같은 ID를 다시 등록해 토큰을
+  회전시키는 동작을 재시도 계약으로 추측하지 않는다.
+- `connection_stage=error`는 구조화 reason·recovery action을 제공하지 않으며 preflight의
+  errors/warnings도 locale-neutral code가 아닌 원문이다. 따라서 APIQ-033 transport는 완성하되
+  비복구형·비재개형 마법사를 제품 표면에 release하지 않는다. 재개 조건은 preflight와 register의
+  동일 validation, token 발급 전 command preview 또는 순서 변경 정본, 명시적 resume/reissue,
+  structured stage reason/error code 계약이다.
+- `connect_expires_at`은 agent credential 만료가 아니라 연결 대기 윈도우 종료 시각이다. UI에서
+  "토큰 만료"로 번역하거나 자동 삭제·인증 폐기를 추측하지 않는다.
 
 ## 2. 작업 절차 (행 단위)
 
