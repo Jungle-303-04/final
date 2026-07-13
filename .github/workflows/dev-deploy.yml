@@ -217,9 +217,17 @@ jobs:
           kubectl kustomize deploy/management >"${RUNNER_TEMP}/management.yaml"
           uv run python scripts/verify_dev_auth_bypass.py rendered \
             --manifest "${RUNNER_TEMP}/management.yaml"
-          uv run python scripts/verify_dev_auth_bypass.py live \
-            --context "${MGMT_CONTEXT}" \
-            --namespace "${MGMT_NS}"
+
+      - name: Run pre-deploy smoke
+        id: pre_smoke
+        shell: bash
+        run: |
+          set -euo pipefail
+          result="$(bash scripts/pre-deploy-smoke.sh)"
+          printf '%s\n' "${result}"
+          frontend_bundle="${result#frontend_bundle=}"
+          [[ "${frontend_bundle}" =~ ^index-[A-Za-z0-9_-]+\.js$ ]]
+          echo "frontend_bundle=${frontend_bundle}" >>"${GITHUB_OUTPUT}"
 
       - name: Capture current digest rollback plan
         id: capture
@@ -295,11 +303,19 @@ jobs:
             --context "${MGMT_CONTEXT}" \
             --namespace "${MGMT_NS}"
 
-      - name: Run strict deployment smoke
+      - name: Run post-deploy smoke
         shell: bash
+        env:
+          PRE_DEPLOY_FRONTEND_BUNDLE: ${{ steps.pre_smoke.outputs.frontend_bundle }}
+          REQUIRE_FRONTEND_BUNDLE_CHANGE: ${{ github.event_name == 'workflow_dispatch' && '1' || '0' }}
+          EXPECTED_SERVICE_IMAGE: ${{ steps.image.outputs.image }}
+          EXPECTED_CONSOLE_IMAGE: ${{ steps.console_image.outputs.image }}
+          SERVICE_ROLLBACK_PLAN: ${{ runner.temp }}/service-rollback-plan.json
+          CONSOLE_ROLLBACK_PLAN: ${{ runner.temp }}/console-rollback-plan.json
         run: |
           set -euo pipefail
-          RUN_SMOKE=1 SMOKE_COMMIT_SHA="${SOURCE_SHA}" bash scripts/smoke.sh
+          export EXPECTED_ALEMBIC_HEAD="$(uv run alembic heads | awk '{print $1}')"
+          RUN_SMOKE=1 SMOKE_COMMIT_SHA="${SOURCE_SHA}" bash scripts/post-deploy-smoke.sh
 
       - name: Record successful dev SHA in cluster
         shell: bash
