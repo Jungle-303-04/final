@@ -91,18 +91,18 @@ async function withCanonicalFailure<T>(operation: () => Promise<T>): Promise<T> 
   try {
     return await operation();
   } catch (error) {
-    if (isAbortError(error) || error instanceof ResourcesPortFailure) throw error;
+    if (isResourcesAbortError(error) || error instanceof ResourcesPortFailure) throw error;
     if (error instanceof ResourcesRequestError) {
       throw new ResourcesPortFailure("invalid-request");
     }
     if (error instanceof ResourcesCanonicalError) {
       throw new ResourcesPortFailure("invalid-response");
     }
-    throw toPortFailure(error);
+    throw toResourcesPortFailure(error);
   }
 }
 
-function toPortFailure(error: unknown): ResourcesPortFailure {
+export function toResourcesPortFailure(error: unknown): ResourcesPortFailure {
   const kind = transportString(error, "kind");
   const status = transportNumber(error, "status");
   const codeByTransportKind: Record<string, ResourcesFailureCode> = {
@@ -145,7 +145,7 @@ function transportRetryAfter(error: unknown): number | null {
   return value !== null && value >= 0 ? value : null;
 }
 
-function isAbortError(error: unknown): boolean {
+export function isResourcesAbortError(error: unknown): boolean {
   return typeof error === "object" && error !== null && "name" in error &&
     error.name === "AbortError";
 }
