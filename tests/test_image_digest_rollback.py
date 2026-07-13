@@ -19,6 +19,15 @@ sys.modules[SPEC.name] = revert_image_digests
 SPEC.loader.exec_module(revert_image_digests)
 assert isinstance(revert_image_digests, ModuleType)
 
+CAPTURE_SPEC = importlib.util.spec_from_file_location(
+    "capture_image_digests", ROOT / "scripts/capture_image_digests.py"
+)
+assert CAPTURE_SPEC is not None and CAPTURE_SPEC.loader is not None
+capture_image_digests = importlib.util.module_from_spec(CAPTURE_SPEC)
+sys.modules[CAPTURE_SPEC.name] = capture_image_digests
+CAPTURE_SPEC.loader.exec_module(capture_image_digests)
+assert isinstance(capture_image_digests, ModuleType)
+
 DIGEST = "registry.example/opsia/service@sha256:" + "a" * 64
 SHA = "b" * 40
 
@@ -123,3 +132,122 @@ def test_apply_fails_closed_when_explicit_context_is_missing(
         revert_image_digests.apply_plan(plan, context="opsia-dev", timeout="300s")
 
     assert calls == 1
+
+
+def deployment_manifest(tmp_path: Path) -> Path:
+    path = tmp_path / "services.yaml"
+    path.write_text(
+        """apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: api-gateway
+spec:
+  template:
+    spec:
+      containers:
+        - name: api-gateway
+          image: service:latest
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: audit-worker
+spec:
+  template:
+    spec:
+      containers:
+        - name: audit-worker
+          image: service:latest
+""",
+        encoding="utf-8",
+    )
+    return path
+
+
+def live_deployments(*, second_image: str = DIGEST) -> dict[str, object]:
+    return {
+        "items": [
+            {
+                "metadata": {"name": "api-gateway"},
+                "spec": {
+                    "template": {"spec": {"containers": [{"name": "api-gateway", "image": DIGEST}]}}
+                },
+            },
+            {
+                "metadata": {"name": "audit-worker"},
+                "spec": {
+                    "template": {
+                        "spec": {"containers": [{"name": "audit-worker", "image": second_image}]}
+                    }
+                },
+            },
+        ]
+    }
+
+
+def test_capture_builds_complete_plan_from_manifest_and_live_digests(tmp_path: Path) -> None:
+    expected = capture_image_digests.expected_deployment_containers(deployment_manifest(tmp_path))
+
+    plan = capture_image_digests.build_plan(
+        expected=expected,
+        live_document=live_deployments(),
+        namespace="management",
+        previous_release_sha=SHA,
+    )
+
+    assert [(target.resource, target.container, target.image) for target in plan.targets] == [
+        ("deployment/api-gateway", "api-gateway", DIGEST),
+        ("deployment/audit-worker", "audit-worker", DIGEST),
+    ]
+
+
+def test_capture_rejects_tagged_or_missing_live_targets(tmp_path: Path) -> None:
+    expected = capture_image_digests.expected_deployment_containers(deployment_manifest(tmp_path))
+
+    with pytest.raises(ValueError, match="not digest-pinned"):
+        capture_image_digests.build_plan(
+            expected=expected,
+            live_document=live_deployments(second_image="service:latest"),
+            namespace="management",
+            previous_release_sha=SHA,
+        )
+
+    with pytest.raises(ValueError, match="is missing"):
+        capture_image_digests.build_plan(
+            expected=expected,
+            live_document={"items": live_deployments()["items"][:1]},
+            namespace="management",
+            previous_release_sha=SHA,
+        )
+
+
+def test_capture_checks_context_and_writes_private_plan(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    manifest = deployment_manifest(tmp_path)
+    output = tmp_path / "rollback.json"
+    calls: list[tuple[str, ...]] = []
+
+    def fake_run(command: tuple[str, ...], **kwargs: object) -> subprocess.CompletedProcess[str]:
+        calls.append(tuple(command))
+        stdout = (
+            "opsia-dev\n"
+            if command[1:3] == ("config", "get-contexts")
+            else json.dumps(live_deployments())
+        )
+        return subprocess.CompletedProcess(command, 0, stdout=stdout)
+
+    monkeypatch.setattr(capture_image_digests.subprocess, "run", fake_run)
+
+    capture_image_digests.capture(
+        context="opsia-dev",
+        namespace="management",
+        manifest=manifest,
+        previous_release_sha=SHA,
+        output=output,
+    )
+
+    assert calls[0] == ("kubectl", "config", "get-contexts", "opsia-dev", "-o", "name")
+    assert calls[1][1:5] == ("--context", "opsia-dev", "-n", "management")
+    assert output.stat().st_mode & 0o777 == 0o600
+    assert revert_image_digests.load_plan(output).previous_release_sha == SHA
