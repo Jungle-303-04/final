@@ -388,7 +388,7 @@ def test_public_benchmark_scores_port_bind_conflict_as_manual_only() -> None:
     result = _score("--category", "crashloop")
 
     assert result.returncode == 0, result.stdout + result.stderr
-    assert "RESULT PASS (3 scenarios; crashloop=3)" in result.stdout
+    assert "RESULT PASS (4 scenarios; crashloop=4)" in result.stdout
 
     scenario = json.loads(CRASHLOOP_PORT_BIND_SCENARIO.read_text(encoding="utf-8"))
     assert scenario["expected_root_cause"] == "app_port_bind_failed"
