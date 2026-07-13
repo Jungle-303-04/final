@@ -135,7 +135,7 @@ def _repository(connection: _RecordingConnection) -> DashboardRepository:
     return repository
 
 
-def test_followup_event_upsert_preserves_projected_issue_axes() -> None:
+def test_followup_event_upsert_preserves_projection_value_and_completeness_atomically() -> None:
     connection = _RecordingConnection()
     row = timeline_update_from_event(
         _event(
@@ -154,7 +154,16 @@ def test_followup_event_upsert_preserves_projected_issue_axes() -> None:
     compiled = connection.statements[0].compile(dialect=postgresql.dialect())
     sql = " ".join(str(compiled).lower().split())
     for name in ("severity", "environment", "application_ids", "labels"):
-        assert f"{name} = coalesce(excluded.{name}, rca_timeline.{name})" in sql
+        assert f"{name} = case when" in sql
+        assert f"rca_timeline.{name}_complete is true" in sql
+        assert f"then rca_timeline.{name}" in sql
+        assert f"excluded.{name}_complete is true" in sql
+        assert f"then excluded.{name}" in sql
+        assert f"{name} = coalesce(excluded.{name}, rca_timeline.{name})" not in sql
+
+    assert "updated_at = case when" in sql
+    assert "excluded.last_event_at > rca_timeline.last_event_at" in sql
+    assert "excluded.last_event_id > rca_timeline.last_event_id" in sql
 
 
 def test_evidence_labels_require_one_exact_event_time_resource_identity() -> None:
