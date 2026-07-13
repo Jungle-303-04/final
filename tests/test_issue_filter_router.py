@@ -38,6 +38,8 @@ class IssueFilterDb:
         self.paginated = paginated
         self.authorization_calls: list[tuple[str, str, str, str]] = []
         self.data_calls: list[dict[str, Any]] = []
+        self.facet_calls: list[dict[str, Any]] = []
+        self.label_facet_calls: list[dict[str, Any]] = []
 
     def accessible_resource_ids(
         self,
@@ -154,6 +156,65 @@ class IssueFilterDb:
             ),
             "observed_at": "2026-07-13T20:20:00Z",
             "partial_reason_codes": ["issue_label_projection_unavailable"],
+        }
+
+    def list_issue_filter_facets(self, **kwargs: Any) -> dict[str, Any]:
+        self.facet_calls.append(dict(kwargs))
+        return {
+            "items": [
+                {
+                    "axis": kwargs["axis"],
+                    "value": "critical",
+                    "label": "critical",
+                    "match_count": 3,
+                    "availability": "available",
+                }
+            ],
+            "selected_resolutions": [
+                {
+                    "axis": "severity",
+                    "value": "critical",
+                    "status": "resolved",
+                    "display_label": "critical",
+                }
+            ],
+            "counts": {
+                "filtered_count": 3,
+                "unfiltered_count": 7,
+                "filtered_count_completeness": "exact",
+                "unfiltered_count_completeness": "exact",
+            },
+            "next_position": None,
+            "observed_at": "2026-07-13T20:20:00Z",
+            "partial_reason_codes": [],
+        }
+
+    def list_issue_label_facets(self, **kwargs: Any) -> dict[str, Any]:
+        self.label_facet_calls.append(dict(kwargs))
+        return {
+            "items": [
+                {
+                    "key": "team",
+                    "value": "checkout",
+                    "match_count": 2,
+                }
+            ],
+            "selected_match_counts": [
+                {
+                    "key": "tier",
+                    "value": "critical",
+                    "match_count": 1,
+                }
+            ],
+            "counts": {
+                "filtered_count": 2,
+                "unfiltered_count": 7,
+                "filtered_count_completeness": "exact",
+                "unfiltered_count_completeness": "exact",
+            },
+            "next_position": None,
+            "observed_at": "2026-07-13T20:20:00Z",
+            "partial_reason_codes": [],
         }
 
 
@@ -341,3 +402,90 @@ def test_issues_cursor_is_bound_to_filter_and_authorization_scope() -> None:
         },
     )
     assert changed_authorization.status_code == 422
+
+
+def test_issue_filter_facets_are_server_aggregated_and_mark_mutable_counts_partial() -> None:
+    db = IssueFilterDb(
+        allowed_clusters={CLUSTER_ID},
+        allowed_applications={APPLICATION_ID},
+    )
+
+    response = _make_client(db).get(
+        "/issues/filter-facets",
+        params={
+            "axis": "severity",
+            "clusters": CLUSTER_ID,
+            "issues.status": "open",
+            "selected": "critical",
+            "facet_q": "crit",
+        },
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["surface"] == "issues"
+    assert body["axis"] == "severity"
+    assert body["items"] == [
+        {
+            "axis": "severity",
+            "value": "critical",
+            "label": "critical",
+            "match_count": 3,
+            "count_completeness": "partial",
+            "availability": "available",
+        }
+    ]
+    assert body["counts"]["filtered_count"] == 3
+    assert body["counts"]["filtered_count_completeness"] == "partial"
+    assert body["snapshot"]["snapshot_revision"] == 0
+    assert "mutable_timeline_projection" in body["snapshot"]["partial_reason_codes"]
+    assert len(db.facet_calls) == 1
+    call = db.facet_calls[0]
+    assert call["axis"] == "severity"
+    assert call["facet_query"] == "crit"
+    assert call["filters"].clusters == (CLUSTER_ID,)
+    assert call["filters"].statuses == ("open",)
+    assert call["allowed_cluster_ids"] == {CLUSTER_ID}
+
+
+def test_issue_label_facets_use_event_time_projection_and_never_client_side_inventory() -> None:
+    db = IssueFilterDb(
+        allowed_clusters={CLUSTER_ID},
+        allowed_applications={APPLICATION_ID},
+    )
+
+    response = _make_client(db).get(
+        "/issues/label-facets",
+        params={
+            "clusters": CLUSTER_ID,
+            "labels": "tier=critical",
+            "facet_q": "team=check",
+        },
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["surface"] == "issues"
+    assert body["items"] == [
+        {
+            "key": "team",
+            "value": "checkout",
+            "selector": "team=checkout",
+            "match_count": 2,
+            "count_completeness": "partial",
+        }
+    ]
+    assert body["selected_resolutions"] == [
+        {
+            "key": "tier",
+            "value": "critical",
+            "selector": "tier=critical",
+            "status": "resolved",
+        }
+    ]
+    assert body["counts"]["unfiltered_count_completeness"] == "partial"
+    assert len(db.label_facet_calls) == 1
+    call = db.label_facet_calls[0]
+    assert call["filters"].labels == (("tier", "critical"),)
+    assert call["facet_query"] == "team=check"
+    assert call["allowed_cluster_ids"] == {CLUSTER_ID}
