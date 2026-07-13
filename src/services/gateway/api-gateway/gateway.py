@@ -41,6 +41,7 @@ from domains.rca.query_router import router as rca_query_router
 from domains.rca.router import router as rca_router
 from domains.rca.test_scenario_contract import validate_test_scenario_catalog
 from domains.rca_bundle.router import router as rca_bundle_router
+from domains.rca_changes.router import router as rca_changes_router
 from domains.release_flow.router import router as release_flow_router
 from domains.target.events import AgentConnectedBody
 from domains.target.evidence_jobs import EVIDENCE_JOB_STATUS_LEASED, EVIDENCE_JOB_STATUS_QUEUED
@@ -293,6 +294,7 @@ class ApiGateway:
             rca_query_router
         )  # evidence/RCA report 범용 조회(세션 워크스페이스 범위)
         app.include_router(rca_bundle_router)  # RCA/recovery read projection bundle
+        app.include_router(rca_changes_router)  # incident workload 최근 GitOps 변경
         app.include_router(command_router)  # command 도메인 라우터(+agent 가드 필터)
         app.include_router(audit_router)  # workspace-scoped correlation 감사 타임라인
         app.include_router(dashboard_router)  # dashboard read model 조회(+cluster read 필터)

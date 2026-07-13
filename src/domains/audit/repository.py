@@ -68,7 +68,18 @@ def audit_log_row(evt: EventEnvelope) -> JsonObject:
         "causation_id": evt.causation_id,
         "workspace_id": evt.workspace_id,
         "payload": evt.payload,
+        "event_created_at": _event_created_at(evt.created_at),
     }
+
+
+def _event_created_at(value: object) -> datetime | None:
+    if not isinstance(value, str) or not value:
+        return None
+    try:
+        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    return parsed if parsed.tzinfo is not None else None
 
 
 class AuditLogRepository(DatabaseConnection):
