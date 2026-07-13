@@ -1,23 +1,16 @@
 import { vi } from "vitest";
 
 import type {
-  ListResourceFilterFacetsOptions,
-  ListResourceLabelFacetsOptions,
-  ResourceFilterQuery,
-} from "../../api/resource-filters";
-import type {
-  FilteredInventoryResourceItem,
-  FilteredInventoryResourceList,
-  FilterSnapshotMeta,
-  LabelFacetPage,
-  ResourceFilterFacetPage,
-} from "../../api/resource-filter-schemas";
-import {
-  createEmptyUnifiedFilterState,
-  type UnifiedFilterState,
-} from "../filters/filterContract";
+  ResourcesFilterEndpointDependencies,
+  ResourcesFilterEndpointFacetPage,
+  ResourcesFilterEndpointLabelPage,
+  ResourcesFilterEndpointResourceItem,
+  ResourcesFilterEndpointResourcePage,
+  ResourcesFilterEndpointSnapshot,
+} from "./resourcesFilterEndpointContract";
+import { createEmptyUnifiedFilterState, type UnifiedFilterState } from "../filters/filterContract";
 
-export const FILTER_SNAPSHOT: FilterSnapshotMeta = {
+export const FILTER_SNAPSHOT: ResourcesFilterEndpointSnapshot = {
   snapshot_revision: 42,
   authorization_revision: "auth-7",
   filter_fingerprint: "filter-7",
@@ -63,11 +56,11 @@ export const FACET_PAGE = {
   next_cursor: "facet-cursor-2",
   has_more: true,
   snapshot: FILTER_SNAPSHOT,
-} satisfies ResourceFilterFacetPage;
+} satisfies ResourcesFilterEndpointFacetPage;
 
 export function endpointFilteredResource(
-  overrides: Partial<FilteredInventoryResourceItem> = {},
-): FilteredInventoryResourceItem {
+  overrides: Partial<ResourcesFilterEndpointResourceItem> = {},
+): ResourcesFilterEndpointResourceItem {
   return {
     resource: {
       inventory_key: "inventory-pod-1",
@@ -118,7 +111,7 @@ export const RESOURCE_PAGE = {
     unfiltered_count_completeness: "exact",
   },
   snapshot: FILTER_SNAPSHOT,
-} satisfies FilteredInventoryResourceList;
+} satisfies ResourcesFilterEndpointResourcePage;
 
 export const LABEL_PAGE = {
   surface: "resources",
@@ -152,37 +145,22 @@ export const LABEL_PAGE = {
     unfiltered_count_completeness: "exact",
   },
   snapshot: FILTER_SNAPSHOT,
-} satisfies LabelFacetPage;
-
-export interface FilterEndpointDependencies {
-  listResourceFilterFacets(
-    options: ListResourceFilterFacetsOptions,
-    signal?: AbortSignal,
-  ): Promise<ResourceFilterFacetPage>;
-  listFilteredResources(
-    query?: ResourceFilterQuery,
-    signal?: AbortSignal,
-  ): Promise<FilteredInventoryResourceList>;
-  listResourceLabelFacets(
-    query?: ListResourceLabelFacetsOptions,
-    signal?: AbortSignal,
-  ): Promise<LabelFacetPage>;
-}
+} satisfies ResourcesFilterEndpointLabelPage;
 
 export function filterEndpoints(
-  overrides: Partial<FilterEndpointDependencies> = {},
+  overrides: Partial<ResourcesFilterEndpointDependencies> = {},
 ) {
-  const facetImplementation: FilterEndpointDependencies["listResourceFilterFacets"] =
+  const facetImplementation: ResourcesFilterEndpointDependencies["listResourceFilterFacets"] =
     overrides.listResourceFilterFacets ?? (() => Promise.resolve(FACET_PAGE));
-  const resourceImplementation: FilterEndpointDependencies["listFilteredResources"] =
+  const resourceImplementation: ResourcesFilterEndpointDependencies["listFilteredResources"] =
     overrides.listFilteredResources ?? (() => Promise.resolve(RESOURCE_PAGE));
-  const labelImplementation: FilterEndpointDependencies["listResourceLabelFacets"] =
+  const labelImplementation: ResourcesFilterEndpointDependencies["listResourceLabelFacets"] =
     overrides.listResourceLabelFacets ?? (() => Promise.resolve(LABEL_PAGE));
   return {
     listResourceFilterFacets: vi.fn(facetImplementation),
     listFilteredResources: vi.fn(resourceImplementation),
     listResourceLabelFacets: vi.fn(labelImplementation),
-  } satisfies FilterEndpointDependencies;
+  } satisfies ResourcesFilterEndpointDependencies;
 }
 
 export function populatedFilterState(): UnifiedFilterState {
