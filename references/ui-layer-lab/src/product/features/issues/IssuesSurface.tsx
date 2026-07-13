@@ -21,6 +21,7 @@ import type {
   RecoverySelectionCapability,
   SectionState,
 } from "./issuesSurfaceContract";
+import { useIssueAuditPagination } from "./useIssueAuditPagination";
 
 export function IssuesSurface({
   clusterId,
@@ -44,17 +45,19 @@ export function IssuesSurface({
   const [panels, setPanels] = useState<IssuePanelsState>(emptyPanels());
   const [revision, setRevision] = useState(0);
   const mutationRef = useRef<AbortController | null>(null);
-  const auditPageRequestRef = useRef<AbortController | null>(null);
-  const auditScopeRef = useRef<string | null>(null);
   const list = listRecord.scope === clusterId ? listRecord.state : emptyState<IssueList>();
   const selected = selectedRecord?.scope === clusterId ? selectedRecord.issue : null;
   const auditScope = selected === null
     ? null
     : `${clusterId ?? ""}\u0000${selected.correlationId}`;
 
-  useEffect(() => {
-    auditScopeRef.current = auditScope;
-  }, [auditScope]);
+  const { abortAuditPage, loadMoreAudit } = useIssueAuditPagination({
+    auditScope,
+    correlationId: selected?.correlationId ?? null,
+    panels,
+    port,
+    setPanels,
+  });
 
   useEffect(() => {
     const controller = new AbortController();
@@ -81,7 +84,7 @@ export function IssuesSurface({
 
   useEffect(() => {
     if (selected === null) return;
-    auditPageRequestRef.current?.abort();
+    abortAuditPage();
     const controller = new AbortController();
     if (selected.incidentId !== null) {
       loadSection(
@@ -111,63 +114,9 @@ export function IssuesSurface({
       (recovery) => setPanels((current) => ({ ...current, recovery })),
     );
     return () => controller.abort();
-  }, [clusterId, port, selected]);
+  }, [abortAuditPage, clusterId, port, selected]);
 
-  useEffect(() => () => {
-    mutationRef.current?.abort();
-    auditPageRequestRef.current?.abort();
-  }, []);
-
-  const loadMoreAudit = useCallback(() => {
-    const currentPage = panels.audit.data;
-    if (
-      selected === null ||
-      currentPage === null ||
-      currentPage.hasMore === false ||
-      currentPage.nextCursor === null ||
-      panels.audit.loading ||
-      auditPageRequestRef.current !== null
-    ) return;
-
-    const controller = new AbortController();
-    const requestScope = auditScope;
-    auditPageRequestRef.current = controller;
-    setPanels((current) => ({
-      ...current,
-      audit: { ...current.audit, failure: null, loading: true },
-    }));
-    void port.loadAuditTimeline(selected.correlationId, {
-      cursor: currentPage.nextCursor,
-      limit: currentPage.limit,
-    }, controller.signal).then(
-      (nextPage) => {
-        if (controller.signal.aborted || auditScopeRef.current !== requestScope) return;
-        setPanels((current) => ({
-          ...current,
-          audit: {
-            data: appendAuditPage(current.audit.data, nextPage),
-            failure: null,
-            loading: false,
-          },
-        }));
-      },
-      (error: unknown) => {
-        if (controller.signal.aborted || isAbortError(error) || auditScopeRef.current !== requestScope) {
-          return;
-        }
-        setPanels((current) => ({
-          ...current,
-          audit: {
-            data: current.audit.data,
-            failure: portFailure(error),
-            loading: false,
-          },
-        }));
-      },
-    ).finally(() => {
-      if (auditPageRequestRef.current === controller) auditPageRequestRef.current = null;
-    });
-  }, [auditScope, panels.audit.data, panels.audit.loading, port, selected]);
+  useEffect(() => () => mutationRef.current?.abort(), []);
 
   const selectRecovery = useCallback((actionId: string) => {
     const plan = panels.recovery.data;
@@ -216,10 +165,10 @@ export function IssuesSurface({
   }, [panels.recovery.data, port, recoverySelection.state, selected]);
 
   const selectIssue = useCallback((issue: IssueSummary) => {
-    auditPageRequestRef.current?.abort();
+    abortAuditPage();
     setPanels(loadingPanels(issue.incidentId !== null));
     setSelectedRecord({ scope: clusterId, issue });
-  }, [clusterId]);
+  }, [abortAuditPage, clusterId]);
 
   const refreshList = useCallback(() => {
     setListRecord((current) => ({
@@ -286,20 +235,6 @@ function emptyPanels(): IssuePanelsState {
     recovery: emptyState<IssueRecoveryPlan>(),
     receipt: null,
     selectionPendingId: null,
-  };
-}
-
-function appendAuditPage(
-  current: IssueAuditTimelinePage | null,
-  next: IssueAuditTimelinePage,
-): IssueAuditTimelinePage {
-  if (current === null || current.correlationId !== next.correlationId) return next;
-  return {
-    correlationId: current.correlationId,
-    items: [...current.items, ...next.items],
-    limit: next.limit,
-    hasMore: next.hasMore,
-    nextCursor: next.nextCursor,
   };
 }
 
