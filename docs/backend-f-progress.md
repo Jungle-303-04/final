@@ -336,7 +336,7 @@ Bundle route는 200을 반환한다.
 
 ### BQ-011 — release flow 내부 모듈 분해
 
-- 상태: in_progress, gateway 계약 lock 비대상
+- 상태: landed, gateway 계약 lock 비대상
 - 담당 lane: `codex/release-flow-modules`
 - 착수 기준: `origin/dev@6714fd3fb6946b36a1c793e402df2347cea65543`
 - 전체 게이트 baseline: Ruff lint/format PASS, import-linter 2 kept/0 broken,
@@ -345,4 +345,17 @@ Bundle route는 200을 반환한다.
 - 범위: HTTP route·DB 조회·인가·상태 변경은 router에 남기고 policy/readiness/
   verification/report/_support를 내부 모듈로 behavior-preserving 추출한다. 기존 router 심볼
   re-export와 monkeypatch 관측점, blocker 순서·문구·ID·timeout fallback을 보존한다.
-- 앵커: canonical 착륙·4조건 재증명 후 기록
+- 착륙 결과: feature HEAD `bd4730d850d21528a161b9f60e8da2905e4b56f8`, canonical
+  no-ff merge `37498fc7115b430c86730847d1213affeed6c61d`.
+- 분해 후 줄수: router 1,821, `_support` 120, policy 1,348, readiness 937,
+  verification 297, report 1,110. 기존 router 공개 helper 208개와 이동 helper의 object identity를
+  호환 export로 유지했다.
+- 전체 게이트: Ruff lint/format PASS, import-linter 8 kept/0 broken,
+  pytest `1868 passed, 3 skipped`; manifest management 69, target 20.
+- 4조건: merge-tree exit 0/tree `7ca5eda67e1666744f2a5d0f96f4585d2f7cc29e`, 파일 삭제 0건,
+  gateway 계약·`src/domains/rca/**`·`src/services/ai/**`·
+  `src/packages/runtime/worker.py` 변경 0건, feature와 merge commit의 `origin/dev` ancestor exit 0.
+- 공개 route·response·DB schema 변경은 없다. 프론트 소비 계약도 동일하며 Bruno·migration 변경은
+  필요하지 않다.
+
+계약 완성: release_flow internal module boundaries (bd4730d850d21528a161b9f60e8da2905e4b56f8) [green]
