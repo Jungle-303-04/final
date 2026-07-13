@@ -2226,3 +2226,16 @@ target preflight·register 네 함수와 strict Zod 계약을 claim했다. 1회�
 - 시각 증거:
   `references/ui-layer-lab/output/playwright/product-home-authenticated-pod-forced-colors.png`.
   두 커밋 모두 push 후 `origin/woonyong/ui-layer-lab` ancestor exit 0을 확인했다.
+
+## 2026-07-13 18:21 KST — [프론트] 감사 타임라인 직접 계약 테스트 보강
+
+- `dc1be1694b595328a064ecc45ff34d139ea69ed9`은 완료된 VP-002 감사 타임라인 패널의
+  직접 컴포넌트 테스트 3개를 추가한다. 제품 동작·API 계약·fixture runtime 유입은 0건이다.
+- root/causation 표시와 payload Accordion의 객체 직렬화, cursor-backed 다음 페이지
+  loading 중 버튼 disabled·기존 데이터 보존·callback 미호출, background refresh 실패 시
+  오류 alert와 마지막 성공 페이지의 동시 유지를 검증한다.
+- targeted Vitest PASS: 1 file / 3 tests. 전체 `npm run check` PASS:
+  TypeScript·ESLint, Vitest 118 files / 847 tests, design guard 346 files,
+  shadcn source audit 482 previews, Vite build 14,539 modules.
+- 커밋 push 후 `origin/woonyong/ui-layer-lab` ancestor exit 0을 확인했다. 동시에 나타난
+  다른 작업자의 문서 변경 5건과 사용자 소유 `outputs/`는 stage·수정하지 않고 보존했다.
