@@ -1,4 +1,4 @@
-# Security Policy (Publication Draft)
+# Opsia Security Policy (Publication Draft)
 
 > This policy is not yet operational or adopted. There is no public release and no public security
 > reporting channel. Human owners must configure and test a private reporting path before publication.

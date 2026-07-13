@@ -1,15 +1,15 @@
 ---
-title: 오픈소스 Remediation Engine 전환 로드맵 (수정본)
+title: Opsia 오픈소스 전환 로드맵 (수정본)
 status: draft-v3
 date: 2026-07-13
 based_on: 외부 전략 초안 + 코드베이스 검증(2026-07-12~13, 휴면 자산 전수 조사 포함) + 2026 경쟁 조사
 ---
 
-# 오픈소스 Remediation Engine 전환 로드맵
+# Opsia 오픈소스 전환 로드맵
 
 ## 0. 한 문장 정의
 
-> **사람이 시작한 배포든 장애가 촉발한 복구든, 프로덕션에 들어가는 모든 변경이
+> **Opsia는 사람이 시작한 배포든 장애가 촉발한 복구든, 프로덕션에 들어가는 모든 변경이
 > 같은 검증 파이프라인(diff → 정책 → 승인 → 사후 검증)을 통과하는
 > 오픈소스 Kubernetes 검증 파이프라인 + remediation engine.**
 
@@ -102,7 +102,7 @@ v0.1 지원 5종 (각각 patch + rollback patch + 사후검증 조건 필수):
 - 구성: `controller`(전 워커를 in-process bus로 단일 프로세스 조립) + `agent` + 선택형 console
 - 인프라: 내장 단일 PostgreSQL. **NATS·Redis·MinIO 불필요**
 - 서비스 코드·이벤트 계약은 scale-out 모드와 동일. 차이는 event bus 어댑터와 조립뿐
-- 설치: `helm install <name> oci://ghcr.io/<org>/charts/<name> -n <ns> --create-namespace` 한 줄
+- 설치: `helm install opsia oci://ghcr.io/opsia/charts/opsia -n opsia --create-namespace` 한 줄
 - 목표: **kind에서 10분 내 첫 분석, 15분 내 Alert→PR 데모 완주**
 
 ### 5.2 Scale-out 모드 (현행 유지)
