@@ -102,6 +102,9 @@ def test_manual_first_deploy_requires_exact_gate_backup_and_previous_release_pro
 
 def test_deploy_orders_auth_migration_rollout_smoke_and_status_recording() -> None:
     names = [step["name"] for step in deploy_job()["steps"]]
+    rendered_auth = steps_by_name()["Render and verify auth bypass policy"]["run"]
+    assert "verify_dev_auth_bypass.py rendered" in rendered_auth
+    assert "verify_dev_auth_bypass.py live" not in rendered_auth
     assert names.index("Render and verify auth bypass policy") < names.index("Run pre-deploy smoke")
     assert names.index("Run pre-deploy smoke") < names.index("Capture current digest rollback plan")
     assert names.index("Capture current digest rollback plan") < names.index(

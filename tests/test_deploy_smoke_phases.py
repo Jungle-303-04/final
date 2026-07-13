@@ -30,11 +30,12 @@ def test_post_deploy_smoke_enforces_new_release_contracts() -> None:
     source = read("scripts/post-deploy-smoke.sh")
 
     assert "PRE_DEPLOY_FRONTEND_BUNDLE" in source
+    assert "REQUIRE_FRONTEND_BUNDLE_CHANGE" in source
     assert 'test "${post_bundle}" != "${PRE_DEPLOY_FRONTEND_BUNDLE}"' in source
     assert 'bash "${SCRIPT_DIR}/smoke.sh"' in source
     assert "SELECT version_num FROM alembic_version" in source
     assert "EXPECTED_ALEMBIC_HEAD" in source
-    assert "verify_dev_auth_bypass.py live" in source
+    assert 'verify_dev_auth_bypass.py" live' in source
     assert "SERVICE_ROLLBACK_PLAN" in source
     assert "CONSOLE_ROLLBACK_PLAN" in source
     assert "EXPECTED_SERVICE_IMAGE" in source
