@@ -30,6 +30,11 @@ describe("ProductStateScreen", () => {
     const identity = container.querySelector('[data-slot="loading-session-identity"]');
     expect(identity).toBeTruthy();
     expect(identity?.className).toContain("lg:w-(--product-toolbar-identity-width)");
+    const clusterScope = container.querySelector('[data-slot="loading-cluster-scope"]');
+    expect(clusterScope).toBeTruthy();
+    expect(clusterScope?.className).toContain("h-8");
+    expect(clusterScope?.querySelector('[data-slot="skeleton"]')?.className)
+      .toContain("max-w-(--product-cluster-select-width)");
     expect(container.querySelectorAll('[data-slot="skeleton"]').length).toBeGreaterThan(0);
     for (const skeleton of container.querySelectorAll('[data-slot="skeleton"]')) {
       expect(skeleton.getAttribute("aria-hidden")).toBe("true");

@@ -2,6 +2,7 @@ import { render } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { vi } from "vitest";
 import { AuthSessionGateProvider } from "../../features/auth/AuthSessionGate";
+import { ClusterScopeProvider } from "../../features/cluster-scope/ClusterScopeProvider";
 import type {
   HomeClusterChoices,
   HomeClusterOverview,
@@ -151,7 +152,9 @@ export function renderHome(
           navigatorLanguage={locale === "ko" ? "ko-KR" : locale === "en" ? "en-US" : null}
           storage={null}
         >
-          <HomePage port={port} />
+          <ClusterScopeProvider authorityKey="test-workspace:test-user" port={port}>
+            <HomePage port={port} />
+          </ClusterScopeProvider>
         </I18nProvider>
       </AuthSessionGateProvider>
     </MemoryRouter>,
