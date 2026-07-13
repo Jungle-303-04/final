@@ -2718,6 +2718,14 @@ target preflight·register 네 함수와 strict Zod 계약을 claim했다. 1회�
 - 계약 앵커: `ManagementAccessResponse + Helm access modes` / `cf69ffb5b` / `[green]`.
 - [백엔드] lane 회수 — `codex/oss-access-contract` / `cf69ffb5b` / ancestor exit 0.
 
+## 2026-07-13 22:02 KST — [백엔드] Resources 필터 코어 claim
+
+- `origin/dev@b8bc27988`에서 GAP-002/003/004만 claim하고 gateway 계약 lock을 획득했다.
+- 기존 `/clusters/{cluster_id}/inventory/resources`는 단일 cluster·limit 방식이라 그대로 보존한다.
+  새 workspace route만 추가해 기존 소비자 응답을 바꾸지 않는다.
+- 빈 권한은 빈 set, 같은 축 OR·축 간 AND·Label 간 AND, 서버 count, snapshot-bound cursor,
+  restricted/partial 정직성을 RED에서 먼저 고정한다.
+
 ## 2026-07-13 22:14 KST — [프론트] VP-010 canonical writer cutover GREEN
 
 - GREEN `d2f7448b6`에서 `UnifiedFilterProvider`를 production composition 최상위 권위로
