@@ -7,7 +7,7 @@ governing: docs/f-coordination-plan.md · docs/backend-f-workqueue.md
 
 # 백엔드 F 진행 현황
 
-현재 상태: **앵커 32건**
+현재 상태: **앵커 33건**
 
 ## 역사적 Delta-green baseline (BQ-001~003)
 
@@ -806,3 +806,28 @@ Bundle route는 200을 반환한다.
   ancestor exit 0.
 
 계약 완성: kubectl server dry-run subprocess and error mapping tests (ccdcc1a08aef4d1aa30929dea717f455ea0a447e) [green]
+
+### 보조 대기열 S17 — probe startup window 시나리오
+
+- 상태: landed
+- 담당 lane: `codex/benchmark-probe-startup-window`
+- 초기 RED: `f811610d16fb1e4d261e488c5df233096f0e8de8`
+- 시나리오·후보·digest: `17cd32648630f65005f20c98cb1cd7acec69fd63`
+- 최초 문서와 feature HEAD: `67014a02865118d9ccf01409d8798856cbd01173`
+- capability 교정 RED: `728d23c35a16ce52f94b06c630d8517285ce432e`
+- capability 교정과 문서 HEAD: `94c419a80601303e9a76b1b2ba42efd44e610d3d`
+- canonical merges: `da5330778443902009d45154214ab692da08cb7c`,
+  `8f84ecdc0ce64434afb22b3a207fd74f6c0cc582`
+- 5초 초기화에 정상 8초·장애 4초의 startup probe window를 고정하고 fleet 전체 startup
+  probe 비활성화를 금지했다. probe는 4개, 전체 scenario는 17개다.
+- 독립 감사에서 frozen producer가 readiness/liveness replacement만 생성함을 확인했다.
+  ordinal 53의 action-level `probe_fix` 선언은 보존하되 `patch_capabilities=[]`로 fail-closed
+  교정하고 공개 scenario는 `manual_analysis` 승인 경로만 허용한다.
+- ordinal 53 exact fixture 연결 후 여섯 번째 batch digest는
+  `0d53d280da89cff0b2790ffa96ff271c3a5b46a265094ab3ea5cd91adeb69aea`다.
+- 전체 게이트: Ruff lint/format PASS, import-linter 8 kept/0 broken,
+  pytest `1943 passed, 3 skipped`; manifest management 69 / target 20.
+- 4조건: merge-tree exit 0/tree `c0764350df4849f292bed6b5e4067cbc845121d1`;
+  삭제·frozen 경로 변경 0건; 교정 feature·merge commit의 `origin/dev` ancestor exit 0.
+
+계약 완성: OpsiaBench startup window fixture + producer-aware manual boundary (94c419a80601303e9a76b1b2ba42efd44e610d3d) [green]

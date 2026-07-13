@@ -2161,3 +2161,30 @@ target preflight·register 네 함수와 strict Zod 계약을 claim했다. 1회�
 - 4조건: merge-tree clean/tree `68cb35ca8dc94ec15299e23824edd86d85e5ead4`, 파일 삭제·
   소유권 밖 변경·frozen 경로 변경 0건, test·merge commit의 `origin/dev` ancestor exit 0.
   J 배포 실행은 0건이다.
+
+## 2026-07-13 17:37 KST — [백엔드] startup probe 시나리오와 capability 교정 착륙
+
+- 최초 lane `codex/benchmark-probe-startup-window`, RED `f811610d1`, 구현 `17cd32648`,
+  feature HEAD `67014a028`, 최초 merge `da5330778`이다.
+- 5초 초기화, 정상 8초·장애 4초 window로 `startup_window_too_short` exact fixture를
+  ordinal 53에 연결했다. probe 4/4, 전체 scenario 17/17, candidate 87/87이다.
+- 독립 감사에서 실제 frozen producer의 `probe_replacements`가 readiness/liveness만 생성해
+  startup `failureThreshold` Safe PR을 만들 수 없음을 발견했다. frozen 파일은 수정하지 않고
+  correction lane `codex/startup-probe-capability-truth`에서 capability를 빈 값으로 고정하고
+  scenario를 `manual_analysis` 승인 경로로 교정했다. correction RED `728d23c35`, feature
+  `94c419a80`, canonical merge `8f84ecdc0`이다.
+- 여섯 번째 batch digest는 `0d53d280…b69aea`다. 전체 게이트는 Ruff lint/format PASS,
+  import-linter 8 kept/0 broken, pytest `1943 passed, 3 skipped`; manifest 69/20이다.
+  target-agent SQLite destructor의 cross-thread `PytestUnraisableExceptionWarning` 2건이 관찰됐으나
+  실패는 아니며 본 lane 변경 경로와 무관하다. 별도 test-only 감사 대상으로 남긴다.
+- 4조건: merge-tree clean/tree `c0764350df4849f292bed6b5e4067cbc845121d1`, 삭제·frozen 변경
+  0건, `94c419a80`·`8f84ecdc0`의 `origin/dev` ancestor exit 0. J 배포 실행은 0건이다.
+
+## 2026-07-13 17:37 KST — [백엔드] 통합 worktree 오선택 감사·판단 대기
+
+- 최초 merge 명령이 전용 integration worktree가 아니라 루트 `woonyong/ui-layer-lab`에서
+  실행돼 `da5330778`의 부모가 `aef9cda37`과 `67014a028`이 됐다.
+- `aef9cda37`은 이전 canonical `7216f2d2a` 대비 프론트 소유·문서 51파일,
+  `+1107/-153`, 삭제 0건을 포함한다. force/reset/revert나 추가 역변환은 수행하지 않았다.
+- 이 UI 변경의 채택 여부는 사람 판단 대기다. 재개 조건은 (a) 현 tree 승인 또는
+  (b) 명시적 tree 복원 지시다. 백엔드 보충 작업은 해당 경로를 건드리지 않고 계속한다.
