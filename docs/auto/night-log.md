@@ -2224,3 +2224,20 @@ target preflight·register 네 함수와 strict Zod 계약을 claim했다. 1회�
 - 4조건: merge-tree clean/tree `3739c7061eb0e1df88ebd687879da0af7a3661c7`, 파일 삭제·
   소유권 밖 변경·frozen 경로 변경 0건, `ff3b52812`·`0dd8a200f`의 `origin/dev`
   ancestor exit 0. J 배포 실행은 0건이다.
+
+## 2026-07-13 18:18 KST — [백엔드] target-agent SQLite 수명주기 테스트 착륙
+
+- lane `codex/target-agent-sqlite-lifecycle`, 결정적 RED `4a2ef9229`, factory·close
+  `d05bc826e`, 문서 `ef2757eda`, hook 격리와 feature HEAD
+  `720dd55c0d00ec79b61a19bdd5682a2f553c5a96`, canonical no-ff merge
+  `13c30723adaf025fd616c166a2507d03f90fef24`다.
+- full agent 생성 12곳을 factory 1곳으로 수렴하고 같은 thread teardown에서 두 SQLite store를
+  명시적으로 닫는다. 이후 worker-thread cyclic GC가 target destructor 오류 0건을 강제한다.
+- 독립 감사가 최초 module autouse hook의 unrelated cycle 오귀속 위험을 발견했다. guard를 factory
+  teardown으로 한정하고 두 정확한 destructor `ProgrammingError`만 수집하며 나머지는 기존 pytest
+  hook으로 전달하도록 교정했다. unrelated `ValueError` 전달과 hook 복원 회귀 후 재감사 PASS다.
+- 프로덕션 source 변경 0건. warning-strict focused 28 passed, 전체 게이트 Ruff lint/format PASS,
+  import-linter 8 kept/0 broken, pytest `1953 passed, 3 skipped`; manifest 69/20이다.
+- 4조건: merge-tree clean/tree `857ee57075e2260222d78350e5d25eb839579bf6`, source·파일 삭제·
+  소유권 밖 변경·frozen 경로 변경 0건, `720dd55c0`·`13c30723a`의 `origin/dev`
+  ancestor exit 0. J 배포 실행은 0건이다.
