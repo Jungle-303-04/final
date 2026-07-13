@@ -139,6 +139,18 @@ def test_candidate_contract_index_rejects_invalid_hash_type_without_crashing() -
     assert any("source hash entry is invalid" in error for error in errors)
 
 
+def test_candidate_contract_index_rejects_loader_order_content_drift() -> None:
+    scorer = runpy.run_path(str(SCORER))
+    candidate_index = json.loads(
+        (ROOT / "benchmark/candidate-contract-index.json").read_text(encoding="utf-8")
+    )
+    candidate_index["candidates"][19]["candidate_id"] = "fabricated_candidate"
+
+    errors = scorer["validate_candidate_index"](candidate_index)
+
+    assert any("does not match live loader order" in error for error in errors)
+
+
 def test_candidate_contract_rejects_fixture_outside_scenario_tree() -> None:
     document = _candidate_contracts()
     document["contracts"][0]["benchmark_fixtures"] = ["benchmark/catalog-snapshot.json"]
