@@ -349,6 +349,12 @@ def test_make_demo_installs_the_chart_before_injecting_the_bad_rollout() -> None
 
     assert "helm upgrade --install" in script
     assert '"${ROOT_DIR}/charts/opsia"' in script
+    assert '"${ROOT_DIR}/references/ui-layer-lab/Dockerfile"' in script
+    assert 'kind load docker-image "${OPSIA_CONSOLE_IMAGE}"' in script
+    assert '--set "console.image.repository=${CONSOLE_IMAGE_REPOSITORY}"' in script
+    assert '--set "console.image.tag=${CONSOLE_IMAGE_TAG}"' in script
+    assert 'API_BASE="http://127.0.0.1:${API_PORT}/api"' in script
+    assert 'wait_for_url "${API_BASE}/healthz"' in script
     assert "rollout status deployment/opsia-controller" in script
     assert script.index("helm upgrade --install") < script.rindex('scene "bad-rollout-observed"')
 
