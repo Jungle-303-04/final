@@ -349,3 +349,58 @@ def test_recovery_contract_loader_accumulates_duplicate_root_cause_rules(
 
     assert [item["action_type"] for item in recovery["shared"]] == ["first", "second"]
     assert [item["action_type"] for item in fallback] == ["fallback"]
+
+
+def test_candidate_contract_validator_accepts_full_live_catalog_terminal_shape() -> None:
+    scorer = runpy.run_path(str(SCORER))
+    candidate_index = json.loads(
+        (ROOT / "benchmark/candidate-contract-index.json").read_text(encoding="utf-8")
+    )
+    catalog = json.loads((ROOT / "benchmark/catalog-snapshot.json").read_text(encoding="utf-8"))
+    recovery, fallback = scorer["load_recovery_contracts"]()
+    command_actions, safe_pr_actions = scorer["load_dispatch_capabilities"]()
+    contracts = []
+    for entry in candidate_index["candidates"]:
+        allowed = [*recovery.get(entry["candidate_id"], []), *fallback]
+        capabilities = [
+            capability
+            for capability, supported_actions, route in (
+                ("command", command_actions, "auto"),
+                ("safe_pr", safe_pr_actions, "draft_pr"),
+            )
+            if any(
+                action["route"] == route and action["action_type"] in supported_actions
+                for action in allowed
+            )
+        ]
+        contracts.append(
+            {
+                **entry,
+                "contradicting_signals": [],
+                "contradiction_policy": "not_modeled_v0.1",
+                "missing_evidence_policy": ("all_required_evidence_and_supporting_signal_groups"),
+                "patch_capabilities": capabilities,
+                "allowed_remediations": allowed,
+                "forbidden_remediations": [
+                    {
+                        "action_type": f"forbidden_catalog_scope_{entry['ordinal']}",
+                        "blast_radius": "cluster",
+                        "reason": "validator terminal shape fixture",
+                    }
+                ],
+                "benchmark_fixtures": [],
+            }
+        )
+    document = {
+        "schema_version": "opsiabench/candidate-contracts/v0.1",
+        "ordering": "catalog_path_lexical_then_rule_then_candidate",
+        "batch_size": 10,
+        "next_ordinal": None,
+        "contracts": contracts,
+    }
+
+    errors = scorer["validate_candidate_contracts"](
+        document, catalog, candidate_index, recovery, fallback
+    )
+
+    assert errors == []
