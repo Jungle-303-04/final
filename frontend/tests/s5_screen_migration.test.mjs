@@ -136,3 +136,18 @@ test('Issues mutations publish feedback through the canonical Sonner boundary', 
   assert.equal((source.match(/\btoast\.success\s*\(/g) ?? []).length, 4);
   assert.equal((source.match(/\btoast\.error\s*\(/g) ?? []).length, 4);
 });
+
+test('Settings navigation is composed from the shadcn button boundary', async () => {
+  const source = await readFile(
+    new URL('src/features/org/SettingsNav.tsx', frontendRoot),
+    'utf8',
+  );
+
+  assert.doesNotMatch(source, /from ['"]@\/ui(?:['"/])/);
+  assert.doesNotMatch(source, /from ['"]@\/ui\/motion['"]/);
+  assert.doesNotMatch(source, /\b(?:PageHeader|cx|motion)\b/);
+  assert.match(source, /from ['"]@\/components\/ui\/button['"]/);
+  assert.match(source, /<NavLink\b/);
+  assert.match(source, /nativeButton=\{false\}/);
+  assert.match(source, /aria-current=/);
+});

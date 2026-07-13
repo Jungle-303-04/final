@@ -21,7 +21,7 @@ const FORBIDDEN_FILES = [
 ];
 
 const SOURCE_EXTENSIONS = new Set(['.cjs', '.js', '.jsx', '.mjs', '.ts', '.tsx']);
-const LEGACY_UI_IMPORT_FILE_CAP = 33;
+const LEGACY_UI_IMPORT_FILE_CAP = 32;
 
 // The current product mark is composed from lucide primitives, not handwritten SVG.
 // Keep this allowlist explicit and empty until an approved logo source file exists.
