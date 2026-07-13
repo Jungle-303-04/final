@@ -18,6 +18,7 @@ from packages.contracts.gitops_authority import (
     GitOpsAuthorityQuery,
 )
 from services.ai.agent.recovery.authority import DatabaseGitOpsAuthorityReadPort
+from services.ai.agent.recovery.catalog import registered_recovery_rules
 from services.ai.agent.recovery.dispatch import RecoveryDispatcher
 
 BASE_SHA = "a" * 40
@@ -378,3 +379,39 @@ def test_database_port_reloads_and_cross_checks_authority_at_patch_time() -> Non
     assert context.commit_sha == BASE_SHA
     assert context.source_manifest_sha256 == canonical_manifest_digest(desired_manifest())
     assert context.evidence["metrics"]["container_memory_working_set_bytes"] == 600 * 1024**2
+
+
+def test_builtin_catalog_declares_real_patch_actions_and_isolates_review_documents() -> None:
+    specs_by_cause = {
+        cause: rule.action_specs
+        for rule in registered_recovery_rules()
+        if hasattr(rule, "root_causes")
+        for cause in rule.root_causes
+    }
+
+    assert {spec.action_type for spec in specs_by_cause["oom_killed"]} >= {
+        "oom_memory",
+        "replica_scale",
+    }
+    assert specs_by_cause["bad_image_rollout"][0].action_type == "image_rollback"
+    assert specs_by_cause["wrong_image_tag"][0].action_type == "image_tag_fix"
+    assert specs_by_cause["timeout_too_short"][0].action_type == "probe_fix"
+    assert specs_by_cause["selector_label_mismatch"][0].action_type == "selector_fix"
+    assert all(
+        "patch" not in spec.params
+        for specs in specs_by_cause.values()
+        for spec in specs
+        if spec.action_type != "gitops_recovery_review"
+    )
+    review = next(
+        spec
+        for spec in specs_by_cause["application_5xx_spike"]
+        if spec.action_type == "gitops_recovery_review"
+    )
+    actual = next(
+        spec
+        for spec in specs_by_cause["application_5xx_spike"]
+        if spec.action_type == "replica_scale"
+    )
+    assert review.params == {"document_type": "recovery_review"}
+    assert review.score < actual.score
