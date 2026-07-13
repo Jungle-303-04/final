@@ -1130,3 +1130,13 @@ npm run visual-product
   worktree clean. 앞선 복구점 `f5461aa80`을 포함하는 후속 3커밋 작업 단위다.
 - 사람의 전면 정리 위임에 따라 이 hash를 최종 복구 보험으로 영속화한 뒤 로컬 `-D`와
   clean worktree remove를 재수행한다. 원격 ref가 생기면 같은 hash를 확인한 뒤 delete한다.
+
+## 2026-07-13 12:19 KST — [백엔드] Argo observer lane 복구·재개
+
+- 최신 사용자 지시가 BQ-014 병행 착수와 BQ-017 선착륙 후 재개를 명시하므로,
+  전면 브랜치 정리에서 보존한 `8127cc973bdf759cfb373c3b50feb3fbfe14656f`을 복구점으로
+  `codex/f-argocd-observer` worktree를 다시 만들었다.
+- 복구점의 3개 커밋은 Application/Rollout 읽기, 읽기 전용 RBAC, 사후 검증 상태 연계만
+  포함한다. gateway 계약·Argo 쓰기 경로는 변경하지 않는다.
+- 조율 상태를 in_progress로 되돌리고 최신 canonical 위에서 전체 게이트와 manifest를
+  다시 증명한다. 앵커는 감독 검증·GO 전에는 기록하지 않는다.
