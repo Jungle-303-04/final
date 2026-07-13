@@ -175,6 +175,14 @@ test('Issues operations queue is composed only from accessible shadcn primitives
   assert.match(source, /<dl\b/);
   assert.match(source, /aria-busy=/);
   assert.match(source, /role=['"]status['"]/);
+  assert.match(source, /<h2\s+id=['"]dead-letter-heading['"]/);
+  assert.match(source, /<h3\b/);
+  assert.match(source, /<AlertAction\b/);
+  assert.match(source, /<TableCaption\b/);
+  assert.match(
+    source,
+    /role=['"]region['"][\s\S]*?aria-labelledby=['"]dead-letter-heading['"][\s\S]*?tabIndex=\{0\}/,
+  );
 });
 
 test('Alert channels is composed only from accessible shadcn primitives and preserves the tested-draft gate', async () => {
