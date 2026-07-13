@@ -41,6 +41,17 @@ describe("locale resolution", () => {
     expect(detectNavigatorLocale("KO_kr")).toBe("ko");
   });
 
+  it("keeps six metric preset name and description pairs localized", () => {
+    const metricPresetKeys = Object.keys(en).filter((key) => key.startsWith("metrics.preset."));
+
+    expect(metricPresetKeys).toHaveLength(12);
+    expect(metricPresetKeys).toEqual(
+      Object.keys(ko).filter((key) => key.startsWith("metrics.preset.")),
+    );
+    expect(translate("en", "metrics.preset.nodeCpuUsage.name")).toBe("Node CPU usage");
+    expect(translate("ko", "metrics.preset.nodeCpuUsage.name")).toBe("Node CPU 사용률");
+  });
+
   it("gives a supported persisted explicit locale priority over navigator", () => {
     const storage = memoryStorage({ [PRODUCT_LOCALE_STORAGE_KEY]: "en" });
     expect(resolveInitialLocale({ storage, navigatorLanguage: "ko-KR" })).toBe("en");

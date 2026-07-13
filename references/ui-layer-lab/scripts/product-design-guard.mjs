@@ -339,7 +339,7 @@ function isI18nLiteralScanExcluded(filePath) {
   const normalized = filePath.split(sep).join('/')
   return (
     /(?:^|\/)(?:__tests__)(?:\/|$)/u.test(normalized) ||
-    /\.(?:test|spec)\.[cm]?tsx$/u.test(normalized) ||
+    /\.(?:test|spec)\.[cm]?[jt]sx?$/u.test(normalized) ||
     /(?:^|\/)shared\/i18n(?:\/|$)/u.test(normalized)
   )
 }
@@ -539,6 +539,58 @@ export function scanJsxUserFacingLiterals(filePath, source) {
   return matches
 }
 
+/**
+ * Finds Korean product copy hidden in non-JSX TypeScript values. Product
+ * catalogs and tests are the only places where literal Korean is allowed.
+ */
+export function scanKoreanStringLiterals(filePath, source) {
+  const extension = extname(filePath).toLowerCase()
+  if (!typeScriptExtensions.has(extension) || isI18nLiteralScanExcluded(filePath)) {
+    return []
+  }
+
+  const sourceFile = ts.createSourceFile(
+    filePath,
+    source,
+    ts.ScriptTarget.Latest,
+    true,
+    scriptKindFor(extension),
+  )
+  const matches = []
+
+  function isInsideJsx(node) {
+    for (let current = node.parent; current; current = current.parent) {
+      if (
+        ts.isJsxAttribute(current) ||
+        ts.isJsxElement(current) ||
+        ts.isJsxExpression(current) ||
+        ts.isJsxFragment(current) ||
+        ts.isJsxSelfClosingElement(current)
+      ) {
+        return true
+      }
+      if (ts.isStatement(current) || ts.isSourceFile(current)) return false
+    }
+    return false
+  }
+
+  function visit(node) {
+    if (ts.isStringLiteralLike(node) && !isInsideJsx(node)) {
+      const normalized = normalizedUiLiteral(node.text)
+      if (/[\u1100-\u11ff\u3130-\u318f\uac00-\ud7a3]/u.test(normalized)) {
+        matches.push({
+          position: node.getStart(sourceFile),
+          text: normalized,
+        })
+      }
+    }
+    ts.forEachChild(node, visit)
+  }
+
+  visit(sourceFile)
+  return matches
+}
+
 function inspectI18nUiLiterals(filePath, source, sourceFile) {
   for (const match of scanJsxUserFacingLiterals(filePath, source)) {
     const preview = match.text.length > 80
@@ -550,6 +602,19 @@ function inspectI18nUiLiterals(filePath, source, sourceFile) {
       match.position,
       'i18n-ui-literal',
       `User-facing JSX literal must come from shared/i18n: ${preview}`,
+    )
+  }
+
+  for (const match of scanKoreanStringLiterals(filePath, source)) {
+    const preview = match.text.length > 80
+      ? `${match.text.slice(0, 77)}...`
+      : match.text
+    addViolation(
+      filePath,
+      sourceFile,
+      match.position,
+      'i18n-korean-literal',
+      `Korean TypeScript literal must come from shared/i18n: ${preview}`,
     )
   }
 }
