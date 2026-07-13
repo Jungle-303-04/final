@@ -32,6 +32,8 @@ SMOKE_COMMIT_SHA="${SMOKE_COMMIT_SHA:-}"
 AUTH_EMAIL="${AUTH_EMAIL:-}"
 AUTH_PASSWORD="${AUTH_PASSWORD:-}"
 SMOKE_CLUSTER_ID="${SMOKE_CLUSTER_ID:-${TARGET_CLUSTER_ID:-}}"
+SMOKE_RCA_CORRELATION_ID="${SMOKE_RCA_CORRELATION_ID:-}"
+SMOKE_RCA_INCIDENT_ID="${SMOKE_RCA_INCIDENT_ID:-}"
 SMOKE_GATEWAY_ATTEMPTS="${SMOKE_GATEWAY_ATTEMPTS:-60}"
 SMOKE_GATEWAY_INTERVAL_SECONDS="${SMOKE_GATEWAY_INTERVAL_SECONDS:-5}"
 COOKIE_JAR="$(mktemp)"
@@ -53,6 +55,8 @@ require_env BASE_URL
 require_env AUTH_EMAIL
 require_env AUTH_PASSWORD
 require_env SMOKE_CLUSTER_ID
+require_env SMOKE_RCA_CORRELATION_ID
+require_env SMOKE_RCA_INCIDENT_ID
 
 normalize_url() {
   local value="${1%/}"
@@ -309,5 +313,12 @@ if [ "${subject_count}" != "5" ]; then
     "select subject from events where correlation_id='${webhook_correlation_id}' order by created_at;" >&2 || true
   exit 1
 fi
+
+echo "==> checking strict read APIs"
+python3 "${SCRIPT_DIR}/strict_api_smoke.py" \
+  --base-url "${API_BASE_URL}" \
+  --cookie-jar "${COOKIE_JAR}" \
+  --correlation-id "${SMOKE_RCA_CORRELATION_ID}" \
+  --incident-id "${SMOKE_RCA_INCIDENT_ID}"
 
 echo "Smoke test passed."
