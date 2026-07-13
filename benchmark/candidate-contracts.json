@@ -2,7 +2,7 @@
   "schema_version": "opsiabench/candidate-contracts/v0.1",
   "ordering": "catalog_path_lexical_then_rule_then_candidate",
   "batch_size": 10,
-  "next_ordinal": 81,
+  "next_ordinal": null,
   "contracts": [
     {
       "ordinal": 1,
@@ -4736,6 +4736,389 @@
           "action_type": "inject_missing_key_into_all_secrets",
           "blast_radius": "cluster",
           "reason": "단일 Secret key 누락으로 클러스터 모든 Secret에 임의 key를 주입할 수 없습니다."
+        }
+      ],
+      "benchmark_fixtures": []
+    },
+    {
+      "ordinal": 81,
+      "catalog_source": "src/services/ai/agent/causes/catalog/security_policy.yaml",
+      "rule_id": "secret_not_found",
+      "candidate_id": "external_secret_sync_failed",
+      "required_evidence": [
+        "kubernetes:cluster_resource_state",
+        "logs:related_logs",
+        "metadata:current_workload_snapshots"
+      ],
+      "supporting_signals": [
+        {
+          "id": "external_secret_sync_signal",
+          "any_of": [
+            {
+              "event_pattern": "ExternalSecret"
+            },
+            {
+              "event_pattern": "SecretSynced"
+            },
+            {
+              "event_pattern": "secret sync"
+            },
+            {
+              "event_pattern": "provider"
+            },
+            {
+              "log_pattern": "external secret"
+            },
+            {
+              "log_pattern": "secret sync failed"
+            }
+          ]
+        }
+      ],
+      "contradicting_signals": [],
+      "contradiction_policy": "not_modeled_v0.1",
+      "missing_evidence_policy": "all_required_evidence_and_supporting_signal_groups",
+      "patch_capabilities": [],
+      "allowed_remediations": [
+        {
+          "action_type": "manual_analysis",
+          "route": "approval_required",
+          "blast_radius": "unknown",
+          "approval_required": true,
+          "rollback": "자동 변경 없음",
+          "post_verification": [
+            "원인 rule 추가 여부 검토"
+          ]
+        }
+      ],
+      "forbidden_remediations": [
+        {
+          "action_type": "restart_all_external_secret_controllers",
+          "blast_radius": "fleet",
+          "reason": "단일 ExternalSecret 동기화 실패만으로 모든 클러스터의 controller 장애가 입증되지 않으며, 전면 재시작은 정상 Secret 갱신까지 중단시켜 다수 테넌트의 credential 전달 지연을 유발합니다."
+        }
+      ],
+      "benchmark_fixtures": []
+    },
+    {
+      "ordinal": 82,
+      "catalog_source": "src/services/ai/agent/causes/catalog/storage_volume.yaml",
+      "rule_id": "volume_mount_failed",
+      "candidate_id": "pvc_not_bound",
+      "required_evidence": [
+        "kubernetes:cluster_resource_state",
+        "logs:related_logs",
+        "metadata:current_workload_snapshots"
+      ],
+      "supporting_signals": [
+        {
+          "id": "pvc_unbound_mount_signal",
+          "any_of": [
+            {
+              "event_pattern": "unbound immediate PersistentVolumeClaims"
+            },
+            {
+              "event_pattern": "persistentvolumeclaim"
+            },
+            {
+              "event_pattern": "PVC Pending"
+            },
+            {
+              "event_pattern": "not bound"
+            }
+          ]
+        }
+      ],
+      "contradicting_signals": [],
+      "contradiction_policy": "not_modeled_v0.1",
+      "missing_evidence_policy": "all_required_evidence_and_supporting_signal_groups",
+      "patch_capabilities": [],
+      "allowed_remediations": [
+        {
+          "action_type": "manual_analysis",
+          "route": "approval_required",
+          "blast_radius": "unknown",
+          "approval_required": true,
+          "rollback": "자동 변경 없음",
+          "post_verification": [
+            "원인 rule 추가 여부 검토"
+          ]
+        }
+      ],
+      "forbidden_remediations": [
+        {
+          "action_type": "delete_and_recreate_all_unbound_pvcs",
+          "blast_radius": "cluster",
+          "reason": "대상 Pod의 PVC 하나가 바인딩되지 않았다는 사실은 다른 Pending PVC를 삭제·재생성할 근거가 아니며, 전역 재생성은 동적 provisioning 상태와 데이터 보존 정책을 훼손할 수 있습니다."
+        }
+      ],
+      "benchmark_fixtures": [
+        "benchmark/scenarios/pvc/pvc-mount-unbound/scenario.json"
+      ]
+    },
+    {
+      "ordinal": 83,
+      "catalog_source": "src/services/ai/agent/causes/catalog/storage_volume.yaml",
+      "rule_id": "volume_mount_failed",
+      "candidate_id": "csi_driver_unavailable",
+      "required_evidence": [
+        "kubernetes:cluster_resource_state",
+        "logs:related_logs",
+        "metrics:telemetry_metrics"
+      ],
+      "supporting_signals": [
+        {
+          "id": "csi_driver_failure_signal",
+          "any_of": [
+            {
+              "event_pattern": "CSI"
+            },
+            {
+              "event_pattern": "csi driver"
+            },
+            {
+              "event_pattern": "driver name"
+            },
+            {
+              "log_pattern": "csi"
+            },
+            {
+              "log_pattern": "driver not found"
+            }
+          ]
+        }
+      ],
+      "contradicting_signals": [],
+      "contradiction_policy": "not_modeled_v0.1",
+      "missing_evidence_policy": "all_required_evidence_and_supporting_signal_groups",
+      "patch_capabilities": [],
+      "allowed_remediations": [
+        {
+          "action_type": "manual_analysis",
+          "route": "approval_required",
+          "blast_radius": "unknown",
+          "approval_required": true,
+          "rollback": "자동 변경 없음",
+          "post_verification": [
+            "원인 rule 추가 여부 검토"
+          ]
+        }
+      ],
+      "forbidden_remediations": [
+        {
+          "action_type": "restart_all_csi_driver_components",
+          "blast_radius": "cluster",
+          "reason": "단일 워크로드의 CSI 오류만으로 모든 controller와 node plugin 장애가 입증되지 않으며, 전체 재시작은 정상 워크로드의 mount와 attach까지 동시에 중단시킵니다."
+        }
+      ],
+      "benchmark_fixtures": []
+    },
+    {
+      "ordinal": 84,
+      "catalog_source": "src/services/ai/agent/causes/catalog/storage_volume.yaml",
+      "rule_id": "volume_mount_failed",
+      "candidate_id": "volume_attach_timeout",
+      "required_evidence": [
+        "kubernetes:cluster_resource_state",
+        "logs:related_logs"
+      ],
+      "supporting_signals": [
+        {
+          "id": "volume_attach_timeout_signal",
+          "any_of": [
+            {
+              "event_pattern": "AttachVolume.Attach failed"
+            },
+            {
+              "event_pattern": "timed out waiting for the condition"
+            },
+            {
+              "event_pattern": "timeout expired waiting for volumes"
+            },
+            {
+              "log_pattern": "volume attach"
+            }
+          ]
+        }
+      ],
+      "contradicting_signals": [],
+      "contradiction_policy": "not_modeled_v0.1",
+      "missing_evidence_policy": "all_required_evidence_and_supporting_signal_groups",
+      "patch_capabilities": [],
+      "allowed_remediations": [
+        {
+          "action_type": "manual_analysis",
+          "route": "approval_required",
+          "blast_radius": "unknown",
+          "approval_required": true,
+          "rollback": "자동 변경 없음",
+          "post_verification": [
+            "원인 rule 추가 여부 검토"
+          ]
+        }
+      ],
+      "forbidden_remediations": [
+        {
+          "action_type": "force_detach_all_cluster_volumes",
+          "blast_radius": "cluster",
+          "reason": "단일 attach timeout은 backend 지연이나 topology 문제일 수 있으므로 모든 volume을 강제 detach하면 활성 writer의 I/O 중단과 파일시스템 또는 데이터 손상을 유발할 수 있습니다."
+        }
+      ],
+      "benchmark_fixtures": []
+    },
+    {
+      "ordinal": 85,
+      "catalog_source": "src/services/ai/agent/causes/catalog/storage_volume.yaml",
+      "rule_id": "volume_mount_failed",
+      "candidate_id": "storage_class_mismatch",
+      "required_evidence": [
+        "kubernetes:cluster_resource_state",
+        "metadata:current_workload_snapshots"
+      ],
+      "supporting_signals": [
+        {
+          "id": "storage_class_mismatch_signal",
+          "any_of": [
+            {
+              "event_pattern": "storageclass"
+            },
+            {
+              "event_pattern": "no matching volumes"
+            },
+            {
+              "event_pattern": "topology"
+            },
+            {
+              "event_pattern": "zone"
+            }
+          ]
+        }
+      ],
+      "contradicting_signals": [],
+      "contradiction_policy": "not_modeled_v0.1",
+      "missing_evidence_policy": "all_required_evidence_and_supporting_signal_groups",
+      "patch_capabilities": [],
+      "allowed_remediations": [
+        {
+          "action_type": "manual_analysis",
+          "route": "approval_required",
+          "blast_radius": "unknown",
+          "approval_required": true,
+          "rollback": "자동 변경 없음",
+          "post_verification": [
+            "원인 rule 추가 여부 검토"
+          ]
+        }
+      ],
+      "forbidden_remediations": [
+        {
+          "action_type": "recreate_all_storage_classes_with_default_topology",
+          "blast_radius": "cluster",
+          "reason": "단일 PVC의 StorageClass 또는 topology 불일치는 클러스터 전체 StorageClass 오류를 뜻하지 않으며, 전역 재생성은 다른 claim의 provisioning 의미를 바꾸고 신규 바인딩을 막을 수 있습니다."
+        }
+      ],
+      "benchmark_fixtures": []
+    },
+    {
+      "ordinal": 86,
+      "catalog_source": "src/services/ai/agent/causes/catalog/storage_volume.yaml",
+      "rule_id": "volume_attach_failed",
+      "candidate_id": "volume_multi_attach_conflict",
+      "required_evidence": [
+        "kubernetes:cluster_resource_state",
+        "logs:related_logs",
+        "metadata:current_workload_snapshots"
+      ],
+      "supporting_signals": [
+        {
+          "id": "volume_multi_attach_signal",
+          "any_of": [
+            {
+              "event_pattern": "Multi-Attach"
+            },
+            {
+              "event_pattern": "already exclusively attached"
+            },
+            {
+              "event_pattern": "attached to a different node"
+            }
+          ]
+        }
+      ],
+      "contradicting_signals": [],
+      "contradiction_policy": "not_modeled_v0.1",
+      "missing_evidence_policy": "all_required_evidence_and_supporting_signal_groups",
+      "patch_capabilities": [],
+      "allowed_remediations": [
+        {
+          "action_type": "manual_analysis",
+          "route": "approval_required",
+          "blast_radius": "unknown",
+          "approval_required": true,
+          "rollback": "자동 변경 없음",
+          "post_verification": [
+            "원인 rule 추가 여부 검토"
+          ]
+        }
+      ],
+      "forbidden_remediations": [
+        {
+          "action_type": "delete_all_rwo_volume_consumers",
+          "blast_radius": "cluster",
+          "reason": "하나의 PVC에서 발생한 multi-attach 충돌은 다른 RWO volume 소비 Pod를 삭제할 근거가 아니며, 전역 삭제는 상태 저장 워크로드 장애와 추가 attach 경쟁을 유발합니다."
+        }
+      ],
+      "benchmark_fixtures": []
+    },
+    {
+      "ordinal": 87,
+      "catalog_source": "src/services/ai/agent/causes/catalog/storage_volume.yaml",
+      "rule_id": "volume_attach_failed",
+      "candidate_id": "volume_attachment_orphaned",
+      "required_evidence": [
+        "kubernetes:cluster_resource_state",
+        "logs:related_logs"
+      ],
+      "supporting_signals": [
+        {
+          "id": "volume_attachment_orphan_signal",
+          "any_of": [
+            {
+              "event_pattern": "VolumeAttachment"
+            },
+            {
+              "event_pattern": "detach"
+            },
+            {
+              "log_pattern": "volumeattachment"
+            },
+            {
+              "log_pattern": "finalizer"
+            }
+          ]
+        }
+      ],
+      "contradicting_signals": [],
+      "contradiction_policy": "not_modeled_v0.1",
+      "missing_evidence_policy": "all_required_evidence_and_supporting_signal_groups",
+      "patch_capabilities": [],
+      "allowed_remediations": [
+        {
+          "action_type": "manual_analysis",
+          "route": "approval_required",
+          "blast_radius": "unknown",
+          "approval_required": true,
+          "rollback": "자동 변경 없음",
+          "post_verification": [
+            "원인 rule 추가 여부 검토"
+          ]
+        }
+      ],
+      "forbidden_remediations": [
+        {
+          "action_type": "remove_all_volumeattachment_finalizers",
+          "blast_radius": "cluster",
+          "reason": "단일 VolumeAttachment의 잔여 의심만으로 모든 finalizer 정체가 입증되지 않으며, 전역 제거는 안전한 detach 수명주기를 우회해 cloud attachment 잔존이나 이중 attach 및 데이터 손상을 초래할 수 있습니다."
         }
       ],
       "benchmark_fixtures": []
