@@ -1979,3 +1979,16 @@ target preflight·register 네 함수와 strict Zod 계약을 claim했다. 1회�
   design guard 344 files, shadcn source audit 482 previews, Vite build 14,539 modules.
 - 응답 `next_cursor`의 nonblank 원문 보존과 `null` 단일 부재 표현은 별도 TDD 단위로
   이어서 검증한다. 이 후속 범위는 현재 요청 cursor 커밋에 섞지 않았다.
+
+## 2026-07-13 16:59 KST — [프론트] Issues 응답 cursor 불투명 경계 완료 증거
+
+- RED `0000f893661bfc58ab709ec4a43fd80db3847ef6`는 Evidence·RCA report·Audit
+  timeline의 마지막 페이지에서 blank `next_cursor`가 통과하는 문제를 2개 실패로 고정했다.
+  surrounding-space를 포함한 nonblank cursor의 exact byte 보존과 `null` 정상 부재도 함께 봉인했다.
+- GREEN `97a37463376ecca491db9f48efc6db52a2691e4a`는 `has_more` 여부와 cursor
+  값 유효성 검사를 분리했다. non-null cursor는 trim하지 않고 blank predicate만 적용하며,
+  부재는 `null`만 허용하고 `has_more=true`에서 null인 모순은 계속 거부한다.
+- 첫 full gate는 병렬 부하에서 Resources 비동기 라우팅 테스트가 완료 전에 단정해 1회
+  간헐 실패했으나 해당 파일 단독 15/15 PASS, 변경 없는 두 번째 전체 실행 PASS로 분류했다.
+  최종 `npm run check` PASS: TypeScript·ESLint, Vitest 117 files / 841 tests,
+  design guard 345 files, shadcn source audit 482 previews, Vite build 14,539 modules.
