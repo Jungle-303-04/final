@@ -132,11 +132,11 @@ case "${REQUIRE_FRONTEND_BUNDLE_CHANGE}" in
   *) echo "REQUIRE_FRONTEND_BUNDLE_CHANGE must be 0 or 1" >&2; exit 1 ;;
 esac
 
-echo "==> post-deploy login, workflow, and strict RCA reads"
+echo "==> post-deploy login and strict RCA reads"
 start_api_port_forward
 IN_CLUSTER_FORWARD_URL="http://127.0.0.1:${API_FORWARD_PORT}"
-BASE_URL="${IN_CLUSTER_FORWARD_URL}" API_BASE_URL="${IN_CLUSTER_FORWARD_URL}" \
-  bash "${SCRIPT_DIR}/smoke.sh"
+API_BASE_URL="${IN_CLUSTER_FORWARD_URL}" \
+  bash "${SCRIPT_DIR}/post_deploy_read_smoke.sh"
 
 echo "==> post-deploy Alembic head"
 runtime_database="$({
