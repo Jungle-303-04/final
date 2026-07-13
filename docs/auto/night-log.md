@@ -1245,3 +1245,55 @@ npm run visual-product
   `causation_id`; `RCA_RECENT_CHANGES_PATH`는 incident event-time 이전 성공 변경 목록;
   workflow run의 `promotion_gate`는 optional; `provider`와 `connection_stage`도 optional이다.
   auto-revert·권위 patch·source contract·release-flow 내부 분해는 신규 gateway 계약이 없다.
+
+## 2026-07-13 14:32 KST — I단계 배포 준비 완료 증거
+
+- lane `codex/deploy-plan`, HEAD `0cc6af58c90140123dabd943c55b72b7b4b3bed9`,
+  canonical no-ff merge `c2e2b552377ba508a535c9bd1b69c9e60fec522a`.
+- stat: `docs/auto/deploy-plan.md` 신규 + `docs/README.md` 색인, 2 files,
+  737 insertions. 코드·gateway 계약·frozen path 변경 0건, 파일 삭제 0건.
+- plan은 backend 공용 image workload 39개를 같은 digest로 수렴하고 migration →
+  consumer/worker → target agent → realtime/API gateway 순서를 고정한다. raw
+  `scripts/aws-up.sh`의 create-all bootstrap·전체 restart 결합은 incremental production
+  rollout에 쓰지 않는다.
+- DB 안전 경계: live `alembic_version`이 없거나 repository history와 다르면 stamp 없이
+  중단한다. 0140 partial DDL과 네 concurrent index의 valid/ready/live를 검사하고,
+  production image에 Alembic asset이 없는 현실을 canonical operator runner 절차로 명시했다.
+- 보안·rollback: rendered/live `DEV_AUTH_BYPASS=0`, auto-revert flag false, target 재등록 없는
+  read-only Argo RBAC, 이전 immutable digest 복원, production schema downgrade 금지를 명시했다.
+- gate: docs index `9 passed`; Ruff lint/format PASS, import-linter 8 kept/0 broken,
+  pytest `1868 passed, 3 skipped`; manifest management 69 / target 20.
+- 4조건: merge-tree exit 0/tree `62178b35594cff170766c2f307d54ec50da9621d`;
+  삭제·소유권 밖 변경 0건; feature와 merge commit의 `origin/dev` ancestor exit 0.
+
+## GO-REQUEST [J] — Opsia backend production 배포
+
+- 상태: `🔒waiting`; 실제 실행은 사람 전용이다. 아래 blocker 증거가 모두 해소되기 전에는
+  GO를 발행하지 않는다.
+- 대상: `origin/dev@c2e2b552377ba508a535c9bd1b69c9e60fec522a`, 실행 정본
+  `docs/auto/deploy-plan.md`.
+- 선행 blocker: 최신 SHA GitHub Actions green, `scripts/smoke.sh` credential,
+  RemediationBundle/audit timeline/recent changes의 실제 fixture, live DB Alembic baseline,
+  네 concurrent index 정상 상태, DB backup, 이전 immutable image digest, 등록 target 전체
+  context, 1-replica 위험 수용.
+- 실행 명령 골격:
+
+  ```bash
+  git fetch origin
+  export DEPLOY_SHA="$(git rev-parse origin/dev)"
+  test "$DEPLOY_SHA" = "c2e2b552377ba508a535c9bd1b69c9e60fec522a"
+  bash scripts/test.sh
+  make manifest-check
+  uv run alembic heads
+  # 이후 docs/auto/deploy-plan.md §5~§11을 순서대로 실행한다.
+  ```
+
+- 예상 결과: DB revision `20260713_0820`, 네 concurrent index가 valid/ready/live,
+  service-image Deployment 39개가 같은 digest, gateway ready `2/2`, auth bypass `0`,
+  auto-revert flag `false`, 모든 target가 snapshot 수신 후 ready.
+- 실패 시 rollback: 신규 write worker를 먼저 scale 0하고 `deployment-images.before.tsv`의
+  이전 digest를 gateway부터 명시적으로 복원한다. target agent도 context별 이전 digest로
+  복원한다. `alembic downgrade`와 DB restore는 기본 rollback에서 실행하지 않는다.
+- 검증: `scripts/smoke.sh` PASS, Bruno 13/14/15의 실제 200 응답과 schema,
+  cross-workspace 404, outbox/NATS/DLQ·API 5xx·latency 15분 관찰.
+- 재개 조건: 위 blocker별 권위 증거와 사람 GO [J].
