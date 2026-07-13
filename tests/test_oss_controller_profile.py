@@ -106,8 +106,12 @@ def test_make_demo_dry_run_lists_the_complete_revert_story() -> None:
     assert result.returncode == 0, result.stderr
     for scene in (
         "kind-cluster-ready",
+        "opsia-installed",
         "bad-rollout-observed",
-        "mock-rollback-pr-created",
+        "safe-pr-requested",
+        "safe-pr-created",
+        "review-merged",
+        "gitops-sync-applied",
         "workload-normalized",
     ):
         assert scene in result.stdout
