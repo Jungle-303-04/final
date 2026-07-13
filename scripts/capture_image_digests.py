@@ -24,7 +24,9 @@ def require_mapping(value: Any, label: str) -> dict[str, Any]:
     return value
 
 
-def expected_deployment_containers(manifest: Path) -> tuple[tuple[str, str], ...]:
+def expected_deployment_containers(
+    manifest: Path, *, managed_image: str | None = None
+) -> tuple[tuple[str, str], ...]:
     expected: list[tuple[str, str]] = []
     for index, value in enumerate(yaml.safe_load_all(manifest.read_text(encoding="utf-8"))):
         document = require_mapping(value, f"manifest document {index}")
@@ -47,6 +49,9 @@ def expected_deployment_containers(manifest: Path) -> tuple[tuple[str, str], ...
             name = container.get("name")
             if not isinstance(name, str) or not KUBERNETES_NAME.fullmatch(name):
                 raise ValueError(f"deployment/{deployment} has an invalid container name")
+            image = container.get("image")
+            if managed_image is not None and image != managed_image:
+                continue
             expected.append((deployment, name))
     if not expected:
         raise ValueError("manifest must contain at least one Deployment container")
@@ -144,6 +149,7 @@ def capture(
     context: str,
     namespace: str,
     manifest: Path,
+    managed_image: str,
     previous_release_sha: str,
     output: Path,
 ) -> RollbackPlan:
@@ -174,7 +180,7 @@ def capture(
         text=True,
     )
     plan = build_plan(
-        expected=expected_deployment_containers(manifest),
+        expected=expected_deployment_containers(manifest, managed_image=managed_image),
         live_document=json.loads(live_result.stdout),
         namespace=namespace,
         previous_release_sha=previous_release_sha,
@@ -190,6 +196,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--context", required=True)
     parser.add_argument("--namespace", required=True)
     parser.add_argument("--manifest", type=Path, required=True)
+    parser.add_argument("--managed-image", required=True)
     parser.add_argument("--previous-release-sha", required=True)
     parser.add_argument("--output", type=Path, required=True)
     return parser.parse_args()
@@ -201,6 +208,7 @@ def main() -> int:
         context=args.context,
         namespace=args.namespace,
         manifest=args.manifest,
+        managed_image=args.managed_image,
         previous_release_sha=args.previous_release_sha,
         output=args.output,
     )
