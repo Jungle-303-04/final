@@ -302,7 +302,8 @@ observer는 cluster-wide Application/Rollout collection에 각각 GET 1회만 �
 `metadata.continue`가 있으면 `truncated=true`로 명시하며 추측성 후속 페이지 합성은 하지 않는다.
 403/404는 해당 CRD collection을 `available=false, items=[]`로 반환하고 POST/PATCH 등 write
 fallback은 없다. `stable_revision`은 Git revision이 아니라 Rollout `status.stableRS`의
-stable ReplicaSet hash다.
+stable ReplicaSet hash다. Application source의 `repoURL`은 URL userinfo를 제거한 뒤 보고해
+내장 credential이 management plane 상태에 저장되지 않게 한다.
 
 #### `control/policy.py`
 
@@ -649,7 +650,7 @@ metadata provider는 evidence job result의 1MiB JSON 제한을 넘길 위험을
    - `action == "apply"`이고 마지막 성공 해시와 같으면 `unchanged("already applied")` (멱등 스킵).
    - `apply` → `resource_applier.apply`(merge-patch, 404시 POST) 후 `applied`; `observe` → GET 후 `unchanged("observed")`.
    - 예외 → `failed(str(exc))`. 어떤 경우든 `save_reconcile_result`로 SQLite 기록.
-3. `RECONCILER_MODE=argocd`이고 observer가 주입됐으면 resource loop와 별도로 Argo collection을 1회 읽어 `details.argocd`에 합성한다. Application의 `Synced + Healthy`는 `post_verification_ready=true`, Rollout의 Degraded/abort는 `failed=true`다. observer 예외는 built-in apply fallback 없이 reconcile status를 `failed`로 만들고 오류를 details에 남긴다.
+3. `RECONCILER_MODE=argocd`이고 observer가 주입됐으면 resource loop와 별도로 Argo collection을 1회 읽어 `details.argocd`에 합성한다. Application은 `Synced + Healthy`이고 operation phase가 비어 있거나 `Succeeded`일 때만 `post_verification_ready=true`다. `Running`/`Terminating` 등 진행 중 operation은 ready가 아니다. Rollout의 Degraded/abort는 `failed=true`다. 필수 Application 관측이 403/404·인증정보 부재 등으로 불가능하면 종합 status를 `failed`로 올리고, 선택적인 Rollout CRD 부재만으로는 실패시키지 않는다. observer 예외는 built-in apply fallback 없이 reconcile status를 `failed`로 만들고 오류를 details에 남긴다.
 4. 종합 status: 하나라도 `failed`면 `failed`, 아니면 `applied`가 있으면 `applied`, 아니면 `unchanged`. `report_reconcile_status`로 보고. 루프 예외는 `desired_state_reconcile_failed` 경고.
 
 `RECONCILER_MODE`의 기본값은 `builtin`이며 기존 동작처럼 built-in reconciler가 writer다. GitOps controller를 writer로 운영하는 배포만 `argocd`로 설정한다. 지원하지 않는 값은 에이전트 기동 시 `ValueError`로 거부한다. 무발화 계약은 `uv run python -m pytest -q tests/test_target_policy_control.py -k argocd`로 재현할 수 있으며, `StubApplier.applied == []`, desired resource GET 1건, Argo observer 1회 호출을 함께 검증한다. observer의 설치가 provider catalog의 External GitOps deploy adapter를 활성화하는 것은 아니며, provider의 apply capability는 계속 unavailable이다.
