@@ -110,6 +110,7 @@ def envelope_from_body(evt: EventBody, ctx: EventContext[ReleaseFlowStore]) -> E
         causation_id=ctx.causation_id,
         created_at=ctx.created_at,
         payload=evt.to_body(),
+        workspace_id=ctx.workspace_id,
     )
 
 

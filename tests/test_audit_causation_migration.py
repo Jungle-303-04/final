@@ -36,8 +36,8 @@ def test_audit_causation_upgrade_offline_sql(monkeypatch) -> None:
     config = _config(monkeypatch)
     script = ScriptDirectory.from_config(config)
 
-    assert script.get_heads() == [REVISION]
     assert script.get_revision(REVISION).down_revision == DOWN_REVISION
+    assert script.get_revision("20260713_0655").down_revision == REVISION
 
     sql = _render_offline_sql(config, "upgrade", f"{DOWN_REVISION}:{REVISION}")
     add_column = "alter table audit_log add column causation_id text;"
