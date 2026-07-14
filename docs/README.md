@@ -387,6 +387,7 @@ Target / Telemetry 선형 작업 문서는 아래에 있다.
 - [spec/frontend/CODEX-BRIEFING-20260711](spec/frontend/CODEX-BRIEFING-20260711.md)
 - [spec/frontend/api-integration-workorder-20260711](spec/frontend/api-integration-workorder-20260711.md)
 - [spec/frontend/api-needs](spec/frontend/api-needs.md)
+- [spec/frontend/audit-report-20260714](spec/frontend/audit-report-20260714.md)
 - [spec/frontend/codex-directive-24h-20260711](spec/frontend/codex-directive-24h-20260711.md)
 - [spec/frontend/codex-directive-goalmode-20260711](spec/frontend/codex-directive-goalmode-20260711.md)
 - [spec/frontend/codex-directive-reference-pivot-20260711](spec/frontend/codex-directive-reference-pivot-20260711.md)
