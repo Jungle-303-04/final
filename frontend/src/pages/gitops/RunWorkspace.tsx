@@ -145,9 +145,9 @@ export function RunWorkspace({
         ) : null}
       </Surface>
 
-      <div className="grid min-w-0 gap-4 lg:grid-cols-[17rem_minmax(0,1fr)]">
-        <aside aria-label={t("workflows.runs.title")} className="min-w-0">
-          {orderedRuns.length ? (
+      {orderedRuns.length ? (
+        <div className="grid min-w-0 gap-4 lg:grid-cols-[17rem_minmax(0,1fr)]">
+          <aside aria-label={t("workflows.runs.title")} className="min-w-0">
             <div className="grid min-w-0 gap-1 rounded-xl border bg-card p-2 shadow-sm">
               {orderedRuns.map((run) => (
                 <button
@@ -170,12 +170,7 @@ export function RunWorkspace({
                 </button>
               ))}
             </div>
-          ) : (
-            <div className="grid min-h-36 place-items-center rounded-xl border border-dashed px-5 text-center text-sm text-muted-foreground">
-              {t("workflows.runs.empty")}
-            </div>
-          )}
-        </aside>
+          </aside>
 
         <section className="min-w-0">
           {selectedRun ? (
@@ -253,11 +248,23 @@ export function RunWorkspace({
               </div>
             </Surface>
           ) : (
-            <div className="grid min-h-72 place-items-center rounded-xl border border-dashed px-6 text-center text-sm text-muted-foreground">
-              {t("workflows.runs.empty")}
-            </div>
+            <RunEmptyState label={t("workflows.runs.empty")} />
           )}
         </section>
+        </div>
+      ) : <RunEmptyState label={t("workflows.runs.empty")} />}
+    </div>
+  );
+}
+
+function RunEmptyState({ label }: { label: string }) {
+  return (
+    <div className="grid min-h-56 place-items-center rounded-xl border border-dashed bg-muted/15 px-6 text-center">
+      <div className="grid justify-items-center gap-3">
+        <span className="grid size-12 place-items-center rounded-lg border bg-card text-primary shadow-sm">
+          <History aria-hidden="true" className="size-5" />
+        </span>
+        <strong className="text-sm">{label}</strong>
       </div>
     </div>
   );
