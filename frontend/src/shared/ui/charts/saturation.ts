@@ -1,4 +1,4 @@
-import type { ReferenceLine, TimeSeries } from './types'
+import type { ReferenceLine, TimeSeries } from "./types";
 
 /**
  * Compute panel saturation as a ratio of peak observed value to its

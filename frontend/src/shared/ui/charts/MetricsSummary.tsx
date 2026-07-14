@@ -1,9 +1,16 @@
-import { useMemo } from 'react'
-import { cn } from '@/shared/lib/cn'
-import { formatMetricValue } from './format'
-import type { TimeSeries } from './types'
+import { useMemo } from "react";
+import { cn } from "@/shared/lib/cn";
+import { formatMetricValue } from "./format";
+import type { TimeSeries } from "./types";
 
-export function MetricsSummary({ series, unit, currentColorClass }: {
+export interface MetricsSummaryLabels {
+  average: string;
+  current: string;
+  peak: string;
+}
+
+export function MetricsSummary({ labels, series, unit, currentColorClass }: {
+  labels: MetricsSummaryLabels;
   series: TimeSeries[]
   unit: string
   /** Tailwind text class for the "Current" pill — caller's accent color. */
@@ -41,9 +48,9 @@ export function MetricsSummary({ series, unit, currentColorClass }: {
 
   return (
     <div className="flex items-center gap-6">
-      <StatPill label="Current" value={formatMetricValue(stats.current, unit)} className={currentColorClass} />
-      <StatPill label="Average" value={formatMetricValue(stats.avg, unit)} className="text-muted-foreground" />
-      <StatPill label="Peak" value={formatMetricValue(stats.max, unit)} className="text-muted-foreground" />
+      <StatPill label={labels.current} value={formatMetricValue(stats.current, unit)} className={currentColorClass} />
+      <StatPill label={labels.average} value={formatMetricValue(stats.avg, unit)} className="text-muted-foreground" />
+      <StatPill label={labels.peak} value={formatMetricValue(stats.max, unit)} className="text-muted-foreground" />
     </div>
   )
 }

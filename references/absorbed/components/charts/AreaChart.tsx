@@ -1,8 +1,8 @@
 import { useCallback, useMemo, useRef, useState } from 'react'
 import type * as React from 'react'
-import { seriesColor, seriesFill, computeShortLabels } from './colors'
-import { formatMetricValue, formatTimestamp } from './format'
-import type { TimeSeries, ReferenceLine } from './types'
+import { seriesColor, seriesFill, computeShortLabels } from '@/shared/ui/charts/colors'
+import { formatMetricValue, formatTimestamp } from '@/shared/ui/charts/format'
+import type { TimeSeries, ReferenceLine } from '@/shared/ui/charts/types'
 
 export function AreaChart({ series, color, fillColor, unit, referenceLines }: {
   series: TimeSeries[]
