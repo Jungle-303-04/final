@@ -110,6 +110,7 @@ def test_docs_do_not_use_forbidden_external_product_names() -> None:
     )
 
     checked_paths = list(DOCS_DIR.rglob("*.md"))
+    checked_paths.extend(FRONTEND_DOCS_DIR.rglob("*.md"))
     checked_paths.extend((DOCS_DIR / "api").rglob("*.bru"))
     checked_paths.extend((DOCS_DIR / "api").rglob("*.json"))
 
