@@ -144,7 +144,7 @@ product 가 frontend 가 된다.
 | 인라인 SVG 제거 | `git grep '<svg' -- frontend/src` = 0 |
 | 레거시 화면 삭제 | HomePage, metrics, workflow, release |
 | release-flow 워크플로 5개 | 삭제 |
-| **첫 배포(FIRST_DEPLOY)** | **완료.** DB cutover Complete / migration Complete. **다시 하지 마라.** |
+| **첫 배포(FIRST_DEPLOY)** | **미완료이며 폐기.** 격리 DB 리허설의 Complete를 live cutover로 오인했다. live DB에는 `alembic_version`이 없고 좀비 데몬의 `create_all` 스키마가 그대로다. 임의 stamp 금지. dev 데이터는 새 스냅샷 뒤 정본 schema로 재생성한다. |
 | 배포 파이프라인 | digest 주입 수정, console/console-dev 단일화, 일반배포/cutover 경로 분리, in-cluster smoke |
 | 좀비 데몬 | 제거 (§5 참조) |
 | 브랜치 정리 | 죽은 브랜치 6개 삭제, archive ref 백업 |

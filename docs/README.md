@@ -402,6 +402,7 @@ Target / Telemetry 선형 작업 문서는 아래에 있다.
 - [spec/frontend/vp-011-home-widget-dashboard](spec/frontend/vp-011-home-widget-dashboard.md)
 - [spec/frontend/vp-012-timeline-graph-table](spec/frontend/vp-012-timeline-graph-table.md)
 - [spec/frontend/vp-013-shadcn-migration](spec/frontend/vp-013-shadcn-migration.md)
+- [spec/frontend/vp-014-remaining-surfaces](spec/frontend/vp-014-remaining-surfaces.md)
 - [spec/packages/ai](spec/packages/ai.md)
 - [spec/packages/config](spec/packages/config.md)
 - [spec/packages/contracts](spec/packages/contracts.md)
