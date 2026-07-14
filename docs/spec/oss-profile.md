@@ -100,7 +100,7 @@ base/head SHA를 함께 제출하며 중간 revision 변경은 409로 거부된�
 리뷰 merge 뒤에는 merge SHA의 exact manifest를 다시 읽어 Opsia 바깥의
 `opsia-demo-gitops` actor가 server-side apply한다. 종료 조건은 Ready/image뿐 아니라
 Deployment `managedFields`에서 spec의 Apply writer가 이 actor 하나인지도 확인한다. 이것은
-PR-only/single-writer 경계를 재현하는 로컬 시뮬레이션이며 실제 Argo CD/Flux의 continuous
+PR-only/single-writer 경계를 재현하는 로컬 시뮬레이션이며 실제 외부 배포 컨트롤러의 continuous
 reconcile이나 rollout 진단부터 PR 생성까지의 완전 자율 흐름을 증명하지 않는다.
 
 증거 파일의 기본 위치는 실행마다 새 `/tmp/opsia-demo-artifacts.*` 디렉터리다. bootstrap
@@ -109,8 +109,8 @@ password와 session cookie, SCM capability token은 증거에 저장하지 않�
 성공 증거를 재사용하지 않고 실패한다. 데모는 종료 시 Kind 클러스터를 삭제한다. 유지하려면
 `DEMO_KEEP_CLUSTER=1`, 명령만 확인하려면 `DEMO_DRY_RUN=1`을 사용한다.
 
-공개 `oci://ghcr.io/opsia/charts/opsia`와 controller/console artifact의 anonymous pull은
-2026-07-13 실측에서 403이었다. GHCR chart publish와 세 image package의 anonymous pull 허용 뒤
+공개 `oci://<외부 OCI registry>/opsia/charts/opsia`와 controller/console artifact의 anonymous pull은
+2026-07-13 실측에서 403이었다. 외부 OCI registry chart publish와 세 image package의 anonymous pull 허용 뒤
 fresh Kind에서 공개 명령을 다시 실행해야 한다. 현재 로컬 chart 실증은
-hosted SCM review, 실제 Argo 계열 reconcile은 확인되지 않았다. 그러므로 이 로컬 실증은
+hosted SCM review, 실제 외부 배포 컨트롤러 계열 reconcile은 확인되지 않았다. 그러므로 이 로컬 실증은
 공개 배포 완료 판정이나 BQ-016 완료 앵커가 아니다.
