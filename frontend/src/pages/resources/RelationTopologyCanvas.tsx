@@ -4,8 +4,9 @@ import {
   ReactFlow,
   type Edge,
   type NodeTypes,
+  type ReactFlowInstance,
 } from "@xyflow/react";
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 
 import { useI18n } from "../../shared/i18n";
 import { Button } from "../../shared/ui/primitives/button";
@@ -17,6 +18,7 @@ import {
 } from "./RelationTopologyNode";
 import type { RelationGraphNode } from "./relationTopologyGraphTypes";
 import { useRelationTopologyLayout } from "./useRelationTopologyLayout";
+import { useGraphRefit } from "./useGraphRefit";
 
 const nodeTypes: NodeTypes = { "relation-resource": RelationTopologyNode };
 
@@ -54,6 +56,9 @@ export function RelationTopologyCanvas({ frame }: { frame: RelationTopologyFrame
     labelStyle: { fill: "var(--muted-foreground)", fontSize: 10 },
   })), [topology, visibleIds]);
   const nodes = useRelationTopologyLayout(inputNodes, edges);
+  const viewportRef = useRef<HTMLDivElement>(null);
+  const [flowInstance, setFlowInstance] = useState<ReactFlowInstance<RelationGraphNode, Edge>>();
+  useGraphRefit({ instance: flowInstance, nodes, viewportRef });
 
   if (frame.phase === "loading" || frame.phase === "idle") {
     return <div className="h-full animate-pulse bg-muted/30 motion-reduce:animate-none" role="status" aria-label={t("resources.graph.relations.loading")} />;
@@ -68,8 +73,8 @@ export function RelationTopologyCanvas({ frame }: { frame: RelationTopologyFrame
     return <GraphMessage title={t("resources.graph.empty.title")} description={t("resources.graph.empty.description")} />;
   }
   return (
-    <div className="relative h-full" data-slot="relation-topology-canvas">
-      <div className="absolute inset-x-3 top-3 z-20 flex flex-wrap gap-1.5" aria-label={t("resources.graph.kindFilters")} role="group">
+    <div className="flex h-full flex-col" data-slot="relation-topology-canvas">
+      <div className="flex shrink-0 flex-wrap gap-1.5 border-b bg-background/30 px-3 py-2" aria-label={t("resources.graph.kindFilters")} role="group">
         {kinds.map((kind) => {
           const visible = !hiddenKinds.has(kind);
           return (
@@ -91,37 +96,40 @@ export function RelationTopologyCanvas({ frame }: { frame: RelationTopologyFrame
           );
         })}
       </div>
-      {nodes.length > 0 && typeof ResizeObserver !== "undefined" ? (
-        <ReactFlow
-          colorMode={colorMode}
-          edges={edges}
-          fitView
-          fitViewOptions={{ padding: 0.2, maxZoom: 1 }}
-          maxZoom={1.25}
-          minZoom={0.3}
-          nodes={nodes}
-          nodeTypes={nodeTypes}
-          nodesConnectable={false}
-          nodesDraggable={false}
-          panOnScroll={false}
-          proOptions={{ hideAttribution: true }}
-          zoomOnDoubleClick={false}
-          zoomOnScroll
-        >
-          <Background color="var(--border)" gap={22} size={1} />
-        </ReactFlow>
-      ) : nodes.length > 0 ? (
-        <div className="flex h-full flex-wrap content-center gap-4 overflow-auto px-5 pb-12 pt-14">
-          {nodes.map((node) => (
-            <RelationTopologyNodeCard
-              key={node.id}
-              resource={node.data.resource}
-            />
-          ))}
-        </div>
-      ) : (
-        <GraphMessage title={t("resources.graph.kindEmpty.title")} description={t("resources.graph.kindEmpty.description")} />
-      )}
+      <div className="relative min-h-0 flex-1" ref={viewportRef}>
+        {nodes.length > 0 && typeof ResizeObserver !== "undefined" ? (
+          <ReactFlow
+            colorMode={colorMode}
+            edges={edges}
+            fitView
+            fitViewOptions={{ padding: 0.12, minZoom: 0.4 }}
+            maxZoom={2}
+            minZoom={0.4}
+            nodes={nodes}
+            nodeTypes={nodeTypes}
+            nodesConnectable={false}
+            nodesDraggable={false}
+            onInit={setFlowInstance}
+            panOnScroll={false}
+            proOptions={{ hideAttribution: true }}
+            zoomOnDoubleClick={false}
+            zoomOnScroll
+          >
+            <Background color="var(--border)" gap={22} size={1} />
+          </ReactFlow>
+        ) : nodes.length > 0 ? (
+          <div className="flex h-full flex-wrap content-center gap-4 overflow-auto px-5 py-3">
+            {nodes.map((node) => (
+              <RelationTopologyNodeCard
+                key={node.id}
+                resource={node.data.resource}
+              />
+            ))}
+          </div>
+        ) : (
+          <GraphMessage title={t("resources.graph.kindEmpty.title")} description={t("resources.graph.kindEmpty.description")} />
+        )}
+      </div>
     </div>
   );
 }

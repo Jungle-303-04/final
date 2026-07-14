@@ -22,7 +22,7 @@ export function ResourcesSurfaceLoadingPreview() {
         <Skeleton className="size-8" />
       </div>
       <Skeleton className="h-12 rounded-xl" />
-      <Skeleton className="h-80 rounded-xl" />
+      <Skeleton className="h-(--product-graph-height-mobile) rounded-xl sm:h-(--product-graph-height)" />
       <Skeleton className="h-72 rounded-xl" />
     </div>
   );

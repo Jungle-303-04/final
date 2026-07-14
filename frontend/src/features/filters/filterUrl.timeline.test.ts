@@ -24,4 +24,17 @@ describe("Resources timeline URL", () => {
     expect(result.invalidValues.timeAt).toEqual(["200", "-1"]);
     expect(serializeProductFilterUrl(result.state, result.detail)).toBe("");
   });
+
+  it("round-trips only the explicit collapsed graph state", () => {
+    const collapsed = parseProductFilterUrl("?clusters=cluster-a&graph=0");
+    expect(collapsed.detail.graphCollapsed).toBe(true);
+    expect(serializeProductFilterUrl(collapsed.state, collapsed.detail)).toBe(
+      "?clusters=cluster-a&graph=0",
+    );
+
+    const malformed = parseProductFilterUrl("?graph=1");
+    expect(malformed.detail.graphCollapsed).toBeUndefined();
+    expect(malformed.invalidValues.graph).toEqual(["1"]);
+    expect(serializeProductFilterUrl(malformed.state, malformed.detail)).toBe("");
+  });
 });

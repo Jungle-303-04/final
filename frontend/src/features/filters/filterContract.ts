@@ -73,6 +73,7 @@ export interface ProductDetailQuery {
   workflowMode?: "new" | null;
   timeRange?: TimelineRange;
   timeAt?: number;
+  graphCollapsed?: true;
 }
 
 export interface InvalidFilterValues {
@@ -98,6 +99,7 @@ export interface InvalidFilterValues {
   detailFull: readonly string[];
   timeRange: readonly string[];
   timeAt: readonly string[];
+  graph: readonly string[];
 }
 
 export interface FilterUrlParseResult {
@@ -128,6 +130,7 @@ export type DetailMutationIntent =
   | "topology-view-reset"
   | "time-range"
   | "time-at"
+  | "graph-visibility"
   | "drill-in";
 
 export type UnifiedFilterUpdater =

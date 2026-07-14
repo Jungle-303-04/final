@@ -55,6 +55,8 @@
   --product-cluster-select-width: 24rem;
   --product-toolbar-compact-control-width: 6rem;
   --product-toolbar-identity-width: 10rem;
+  --product-graph-height: 45rem;
+  --product-graph-height-mobile: 25rem;
   --background: oklch(1 0 0);
   --foreground: oklch(0.145 0 0);
   --card: oklch(1 0 0);

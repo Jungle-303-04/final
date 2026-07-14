@@ -75,7 +75,7 @@ export function ResourcesTable({
   return (
     <Table aria-label={t("resources.table.aria")} scrollAreaLabel={t("resources.table.scrollArea")}>
       <TableCaption className="sr-only">{t("resources.table.caption")}</TableCaption>
-      <TableHeader>
+      <TableHeader className="sticky top-0 z-10 bg-card/95 backdrop-blur">
         <TableRow>
           {columns.map((column) => column.sortable ? (
             <SortableHead
