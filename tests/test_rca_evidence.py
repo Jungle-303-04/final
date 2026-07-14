@@ -1530,6 +1530,14 @@ def test_user_selected_safe_pr_flow_requires_authority_instead_of_document_fallb
     )
     plan = recovery_outs[0].plan
     selected = plan.candidates[0]
+    approval_summary = approval_outs[0].details["approval_summary"]
+    assert approval_summary["kind"] == "recovery_selection"
+    assert approval_summary["plan_id"] == plan.plan_id
+    assert approval_summary["recommended_action_id"] == plan.recommended_action_id
+    assert approval_summary["candidate_count"] == len(plan.candidates)
+    assert approval_summary["recommended_candidate"]["route"] == selected.route
+    assert approval_outs[0].details["candidates"][0]["action_id"] == selected.action_id
+
     action_selected = RecoveryActionSelectedBody(
         plan=plan,
         selected=selected,
@@ -1634,3 +1642,11 @@ def test_rollout_completion_flows_to_approval_recommendation() -> None:
     ]
     assert approval_outs[0].recommendation == "manual_review"
     assert rollout_outs[0].diagnosis == "kubernetes api not configured; dry-run only"
+    assert approval_outs[0].details["approval_summary"] == {
+        "kind": "rollout_diagnosis",
+        "recommendation": "manual_review",
+        "diagnosis": "kubernetes api not configured; dry-run only",
+        "command_id": "cmd-1",
+        "status": "completed",
+        "resource": None,
+    }
