@@ -45,6 +45,10 @@ const providers: readonly {
 type WizardStep = 1 | 2 | 3;
 export type ConnectPhase = "idle" | "submitting" | "waiting" | "expired" | "failed";
 
+// 단계가 바뀔 때마다 마운트되면서 슬라이드+페이드로 들어온다 (VP-017 모션 idiom).
+const STEP_MOTION =
+  "animate-in fade-in-0 slide-in-from-right-2 duration-200 ease-out motion-reduce:animate-none";
+
 export function ClusterConnectDialog({
   onConnected,
   onOpenChange,
@@ -158,7 +162,7 @@ export function ClusterConnectDialog({
         </DialogHeader>
 
         {step === 1 ? (
-          <div className="grid gap-5">
+          <div className={cn("grid gap-5", STEP_MOTION)}>
             <label className="grid gap-2 text-sm font-medium">
               {t("clusters.connect.name.label")}
               <Input
@@ -198,19 +202,21 @@ export function ClusterConnectDialog({
         ) : null}
 
         {step === 2 ? (
-          <ConnectionCommandStep
-            copyState={copyState}
-            expiresAt={receipt?.expiresAt ?? null}
-            formatDate={formatDate}
-            installCommand={receipt?.installCommand ?? null}
-            onCopy={() => void copyCommand()}
-            phase={phase}
-            t={t}
-          />
+          <div className={STEP_MOTION}>
+            <ConnectionCommandStep
+              copyState={copyState}
+              expiresAt={receipt?.expiresAt ?? null}
+              formatDate={formatDate}
+              installCommand={receipt?.installCommand ?? null}
+              onCopy={() => void copyCommand()}
+              phase={phase}
+              t={t}
+            />
+          </div>
         ) : null}
 
         {step === 3 && receipt ? (
-          <div className="grid justify-items-center gap-4 py-6 text-center">
+          <div className={cn("grid justify-items-center gap-4 py-6 text-center", STEP_MOTION)}>
             <span className="grid size-12 place-items-center rounded-full bg-status-healthy/15 text-status-healthy">
               <Check aria-hidden="true" className="size-6" />
             </span>
