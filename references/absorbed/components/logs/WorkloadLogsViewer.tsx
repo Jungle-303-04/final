@@ -1,0 +1,393 @@
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
+import { Filter, ChevronDown } from 'lucide-react'
+import { parseLogRange } from '../../utils/log-format'
+import { triggerDownload } from '../../utils/download'
+import { useLogBuffer } from './useLogBuffer'
+import { useLogStream } from './useLogStream'
+import { ContainerSelect, LogRangeSelect } from './LogToolbarSelects'
+import { LogCore } from './LogCore'
+import type { DownloadFormat } from './LogCore'
+import type { LogPalette } from './log-palette'
+import type { WorkloadPodInfo } from '../../types'
+import { useToast } from '../ui/Toast'
+
+export interface WorkloadRawLog {
+  pod: string
+  container: string
+  timestamp: string
+  content: string
+}
+
+export interface WorkloadLogsFetchParams {
+  container?: string
+  tailLines?: number
+  sinceSeconds?: number
+}
+
+export interface WorkloadLogsResult {
+  pods: WorkloadPodInfo[]
+  logs: WorkloadRawLog[]
+  emptyReason?: string
+  emptyMessage?: string
+  command?: string
+}
+
+export interface WorkloadLogsViewerProps {
+  /** Workload name — used for the download filename */
+  name: string
+  /**
+   * Called to fetch workload logs. Returns the pod list and merged log lines.
+   * The component owns the log range / container filter controls and passes
+   * the current params on every fetch.
+   */
+  fetchAll: (params: WorkloadLogsFetchParams) => Promise<WorkloadLogsResult>
+  /**
+   * If provided, the stream button is enabled.
+   * Called to open an SSE connection for the whole workload.
+   */
+  createStream?: (params: WorkloadLogsFetchParams) => EventSource
+  /** Override the download mechanism (e.g. for desktop apps where blob URLs fail). */
+  overrideDownload?: (content: string, mime: string, filename: string) => void
+  /** Force dark mode on the logs container (default: true) */
+  forceDark?: boolean
+  /**
+   * Open the stream automatically on mount (and on container switch) instead of
+   * loading a static snapshot. The user can still Stop, and a manual Stop is not
+   * re-armed. Requires `createStream`. Default: false.
+   */
+  autoStream?: boolean
+}
+
+export function WorkloadLogsViewer({ name, fetchAll, createStream, overrideDownload, forceDark, autoStream = false }: WorkloadLogsViewerProps) {
+  const [selectedContainer, setSelectedContainer] = useState<string>('')
+  const [pods, setPods] = useState<WorkloadPodInfo[]>([])
+  const [selectedPods, setSelectedPods] = useState<Set<string>>(new Set())
+  const [isLoading, setIsLoading] = useState(false)
+  const [fetchError, setFetchError] = useState<string | null>(null)
+  const [emptyMessage, setEmptyMessage] = useState<string | null>(null)
+  const [emptyCommand, setEmptyCommand] = useState<string | null>(null)
+  const [showPodFilter, setShowPodFilter] = useState(false)
+  const [logRange, setLogRange] = useState('100')
+  const { showError, showSuccess } = useToast()
+
+  const { tailLines, sinceSeconds } = parseLogRange(logRange)
+  const { entries, append, set, clear } = useLogBuffer()
+  const { isStreaming, streamError, connecting, startStreaming, stopStreaming } = useLogStream()
+
+  const willAutoStream = autoStream && !!createStream
+  // null sentinel so the initial selectedContainer ('' = all) still arms once.
+  const autoStartedForRef = useRef<string | null>(null)
+  const userStoppedRef = useRef(false)
+
+  // Map pod.name → index. Color classes are resolved at render time from the
+  // current palette (see LogCore / pod-filter dropdown below) so toggling
+  // isDark re-themes pod labels without re-fetching.
+  const podColorIndex = useMemo(() => {
+    const m = new Map<string, number>()
+    pods.forEach((pod, i) => m.set(pod.name, i))
+    return m
+  }, [pods])
+  const podColorIndexRef = useRef<Map<string, number>>(new Map())
+
+  useEffect(() => {
+    podColorIndexRef.current = podColorIndex
+  }, [podColorIndex])
+
+  const podsInitialized = useRef(false)
+
+  const loadLogs = useCallback(async () => {
+    setIsLoading(true)
+    setFetchError(null)
+    try {
+      const result = await fetchAll({ container: selectedContainer || undefined, tailLines, sinceSeconds })
+      const resultPods = result.pods ?? []
+      const resultLogs = result.logs ?? []
+      setEmptyMessage(result.emptyMessage || null)
+      setEmptyCommand(result.command || null)
+
+      podColorIndexRef.current = new Map(resultPods.map((pod, i) => [pod.name, i]))
+      setPods(resultPods)
+
+      if (!podsInitialized.current && resultPods.length > 0) {
+        podsInitialized.current = true
+        setSelectedPods(new Set(resultPods.map(p => p.name)))
+      }
+
+      const indexByPod = new Map<string, number>()
+      resultPods.forEach((pod, i) => indexByPod.set(pod.name, i))
+
+      set(resultLogs.map(log => ({
+        timestamp: log.timestamp,
+        content: log.content,
+        container: log.container,
+        pod: log.pod,
+        podColorIndex: indexByPod.get(log.pod),
+      })))
+    } catch (err) {
+      console.error('Failed to fetch workload logs:', err)
+      setFetchError(err instanceof Error ? err.message : 'Failed to fetch logs')
+    } finally {
+      setIsLoading(false)
+    }
+  }, [fetchAll, selectedContainer, tailLines, sinceSeconds, set])
+
+  // When auto-streaming the stream supplies the initial tail, so the static
+  // snapshot fetch is skipped to avoid a redundant request and a flash of
+  // snapshot content before the stream takes over. If the user has Stopped we
+  // won't auto-start, so fall back to the snapshot — otherwise a container
+  // switch would keep showing the previous selection's lines.
+  useEffect(() => {
+    if (!willAutoStream || userStoppedRef.current) loadLogs()
+  }, [loadLogs, willAutoStream])
+  useEffect(() => { stopStreaming() }, [selectedContainer, stopStreaming])
+
+  // If auto-stream turns off while a stream is open, stop following so live
+  // appends don't race the snapshot.
+  const prevWillAutoStreamRef = useRef(willAutoStream)
+  useEffect(() => {
+    if (prevWillAutoStreamRef.current && !willAutoStream && isStreaming) stopStreaming()
+    prevWillAutoStreamRef.current = willAutoStream
+  }, [willAutoStream, isStreaming, stopStreaming])
+
+  const handleStartStreaming = useCallback(() => {
+    if (!createStream) return
+    // The stream replays the last N lines per pod (TailLines + Follow); clear
+    // first so they don't duplicate lines already in the buffer (the snapshot on
+    // the manual path, or an earlier stream on restart).
+    clear()
+    startStreaming(
+      () => createStream({ container: selectedContainer || undefined, tailLines: 50, sinceSeconds }),
+      {
+        onConnected: (data: any) => {
+          if (data?.pods) {
+            const nextPods = data.pods as WorkloadPodInfo[]
+            podColorIndexRef.current = new Map(nextPods.map((pod, i) => [pod.name, i]))
+            setPods(nextPods)
+            setEmptyMessage(data.emptyMessage || null)
+            setEmptyCommand(data.command || null)
+            setSelectedPods(prev => (
+              prev.size === 0 ? new Set(nextPods.map((p: WorkloadPodInfo) => p.name)) : prev
+            ))
+          }
+        },
+        onLog: (data: any) => {
+          if (data?.pod && data.content !== undefined) {
+            append({
+              timestamp: data.timestamp || '',
+              content: data.content || '',
+              container: data.container || '',
+              pod: data.pod || '',
+              podColorIndex: podColorIndexRef.current.get(data.pod || ''),
+            })
+          }
+        },
+        onPodAdded: (data: any) => {
+          if (data?.pods) {
+            const newPods = data.pods as WorkloadPodInfo[]
+            setPods(prev => {
+              const existing = new Set(prev.map(p => p.name))
+              const toAdd = newPods.filter(p => !existing.has(p.name))
+              if (toAdd.length === 0) return prev
+              const next = [...prev, ...toAdd]
+              podColorIndexRef.current = new Map(next.map((pod, i) => [pod.name, i]))
+              return next
+            })
+            setEmptyMessage(null)
+            setEmptyCommand(null)
+            setSelectedPods(prev => {
+              const next = new Set(prev)
+              newPods.forEach(p => next.add(p.name))
+              return next
+            })
+          }
+        },
+        onPodRemoved: (data: any) => {
+          if (data?.pod) {
+            const removedName = data.pod as string
+            setPods(prev => prev.filter(p => p.name !== removedName))
+            // Don't remove from selectedPods — keep old log entries visible
+            // while new pod logs start flowing in
+          }
+        },
+        onEnd: (data: any) => {
+          if (data?.emptyMessage) setEmptyMessage(data.emptyMessage)
+          if (data?.command) setEmptyCommand(data.command)
+        },
+      },
+      'Workload log stream connection failed',
+    )
+  }, [createStream, startStreaming, selectedContainer, sinceSeconds, append, clear])
+
+  const handleStopStreaming = useCallback(() => {
+    userStoppedRef.current = true
+    stopStreaming()
+  }, [stopStreaming])
+
+  useEffect(() => {
+    if (!willAutoStream) return
+    if (userStoppedRef.current) return
+    if (autoStartedForRef.current === selectedContainer) return
+    autoStartedForRef.current = selectedContainer
+    handleStartStreaming()
+    // Reset the arm latch on teardown so a re-run re-streams — without this,
+    // React Strict Mode's mount→unmount→mount closes the stream but the latch
+    // stays set, leaving the viewer static.
+    return () => { autoStartedForRef.current = null }
+  }, [willAutoStream, selectedContainer, handleStartStreaming])
+
+  const allContainers = useMemo(() => {
+    const s = new Set<string>()
+    pods.forEach(pod => pod.containers.forEach(c => s.add(c)))
+    return Array.from(s)
+  }, [pods])
+
+  const togglePod = useCallback((podName: string) => {
+    setSelectedPods(prev => {
+      const next = new Set(prev)
+      if (next.has(podName)) next.delete(podName)
+      else next.add(podName)
+      return next
+    })
+  }, [])
+
+  const toggleAllPods = useCallback(() => {
+    const allSelected = pods.every(p => selectedPods.has(p.name))
+    setSelectedPods(allSelected ? new Set() : new Set(pods.map(p => p.name)))
+  }, [selectedPods, pods])
+
+  const filteredEntries = useMemo(
+    () => entries.filter(e => !e.pod || selectedPods.has(e.pod)),
+    [entries, selectedPods],
+  )
+
+  const downloadLogs = useCallback((format: DownloadFormat) => {
+    let content: string
+    let mime: string
+    const filename = `${name}-logs.${format}`
+    switch (format) {
+      case 'json':
+        content = JSON.stringify(filteredEntries.map(l => ({
+          timestamp: l.timestamp, pod: l.pod, container: l.container, content: l.content,
+        })), null, 2)
+        mime = 'application/json'
+        break
+      case 'csv':
+        content = 'timestamp,pod,container,content\n' + filteredEntries.map(l =>
+          `${l.timestamp},${l.pod || ''},${l.container},"${l.content.replace(/"/g, '""')}"`)
+          .join('\n')
+        mime = 'text/csv'
+        break
+      default:
+        content = filteredEntries.map(l => `${l.timestamp} [${l.pod}/${l.container}] ${l.content}`).join('\n')
+        mime = 'text/plain'
+    }
+    try {
+      triggerDownload(content, mime, filename, overrideDownload)
+      if (!overrideDownload) {
+        showSuccess('Log download started', `Saving ${filename}. Check your browser Downloads.`)
+      }
+    } catch (err) {
+      showError('Failed to download logs', err instanceof Error ? err.message : 'Unknown download error')
+    }
+  }, [filteredEntries, name, overrideDownload, showError, showSuccess])
+
+  const renderToolbarExtra = ({ isDark, palette }: { isDark: boolean; palette: LogPalette }) => (
+    <>
+      {/* Pod filter */}
+      <div className="relative">
+        <button
+          onClick={() => setShowPodFilter(v => !v)}
+          className={`flex items-center gap-1.5 px-2 py-1.5 text-xs rounded transition-colors ${
+            showPodFilter ? palette.toolbarActive : `${palette.elevatedBg} ${palette.textSecondary} ${palette.hoverBg}`
+          }`}
+        >
+          <Filter className="w-3 h-3" />
+          <span>{pods.filter(p => selectedPods.has(p.name)).length}/{pods.length} pods</span>
+          <ChevronDown className="w-3 h-3" />
+        </button>
+
+        {showPodFilter && (
+          <div className={`absolute top-full left-0 mt-1 w-64 ${palette.menuBg} border ${palette.border} rounded-lg shadow-lg z-50 max-h-64 overflow-y-auto`}>
+            <div className={`p-2 border-b ${palette.border}`}>
+              <button onClick={toggleAllPods} className={`text-xs ${palette.textAccent} hover:underline`}>
+                {pods.every(p => selectedPods.has(p.name)) ? 'Deselect all' : 'Select all'}
+              </button>
+            </div>
+            {pods.map(pod => {
+              const dotBg = palette.podColors[(podColorIndex.get(pod.name) ?? 0) % palette.podColors.length].bg
+              const primaryLabel = pod.stepName || pod.name
+              const secondaryLabel = pod.stepName ? pod.name : ''
+              const stateLabel = pod.stepPhase || pod.phase || (pod.ready ? 'Ready' : 'Not Ready')
+              let readyColor: string
+              if (stateLabel === 'Failed' || stateLabel === 'Error') {
+                readyColor = isDark ? 'text-destructive' : 'text-destructive'
+              } else if (pod.ready || stateLabel === 'Succeeded') {
+                readyColor = isDark ? 'text-success' : 'text-success'
+              } else {
+                readyColor = isDark ? 'text-warning' : 'text-warning'
+              }
+              return (
+                <label key={pod.name} className={`flex items-center gap-2 px-3 py-2 ${palette.hoverBg}`}>
+                  <input
+                    type="checkbox"
+                    checked={selectedPods.has(pod.name)}
+                    onChange={() => togglePod(pod.name)}
+                    className={`w-3 h-3 rounded ${palette.borderLight} ${palette.elevatedBg} text-blue-500 focus:ring-blue-500 focus:ring-offset-0`}
+                  />
+                  <span className={`w-2 h-2 rounded-full ${dotBg}`} />
+                  <span className="min-w-0 flex-1">
+                    <span className={`block truncate text-xs ${palette.textPrimary}`}>{primaryLabel}</span>
+                    {secondaryLabel && <span className={`block truncate text-[10px] ${palette.textTertiary}`}>{secondaryLabel}</span>}
+                  </span>
+                  <span className={`text-xs ${readyColor}`}>
+                    {stateLabel}
+                  </span>
+                </label>
+              )
+            })}
+          </div>
+        )}
+      </div>
+
+      <ContainerSelect
+        containers={allContainers}
+        value={selectedContainer}
+        onChange={setSelectedContainer}
+        includeAll
+        isDark={isDark}
+      />
+
+      <LogRangeSelect
+        value={logRange}
+        onChange={setLogRange}
+        lineOptions={[50, 100, 500, 1000]}
+        tooltip="How many logs to load per pod — by line count or time range"
+        isDark={isDark}
+        disabled={isStreaming}
+      />
+    </>
+  )
+
+  // While the auto-stream is opening (before it first settles), show the
+  // loading state rather than the empty-logs placeholder.
+  const isConnecting = willAutoStream && connecting && entries.length === 0
+
+  return (
+    <LogCore
+      entries={filteredEntries}
+      isLoading={isLoading || isConnecting}
+      isStreaming={isStreaming}
+      onStartStream={createStream ? handleStartStreaming : undefined}
+      onStopStream={handleStopStreaming}
+      onRefresh={loadLogs}
+      onDownload={downloadLogs}
+      onClear={clear}
+      toolbarExtra={renderToolbarExtra}
+      showPodName
+      emptyMessage={emptyMessage || (pods.length === 0 ? 'No pods found' : 'No logs available')}
+      emptyCommand={emptyCommand}
+      errorMessage={fetchError || (entries.length === 0 ? streamError : null)}
+      forceDark={forceDark}
+    />
+  )
+}
