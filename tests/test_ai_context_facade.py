@@ -6,6 +6,7 @@ from types import SimpleNamespace
 from typing import Any
 
 import pytest
+from domains.ai.alert_actions import DEFAULT_ALERT_RULE_FOR_SECONDS
 from fastapi import FastAPI, HTTPException
 from fastapi.testclient import TestClient
 from pydantic import ValidationError
@@ -65,6 +66,7 @@ class StubAiDb:
         self.rows = rows or [inventory_row()]
         self.allowed = {"cluster-1"}
         self.access_calls: list[tuple[str, str, str, str]] = []
+        self.alert_rule_create_calls: list[dict[str, Any]] = []
 
     def accessible_resource_ids(
         self,
@@ -85,6 +87,10 @@ class StubAiDb:
             and row["resource_type"] == kwargs["resource_type"]
             and (kwargs["namespace"] is None or row["namespace"] == kwargs["namespace"])
         ][: kwargs["limit"]]
+
+    def create_alert_rule(self, payload: dict[str, Any]) -> None:
+        self.alert_rule_create_calls.append(payload)
+        raise AssertionError("AI action proposals must never execute alert rules")
 
 
 def current_session() -> SimpleNamespace:
@@ -130,6 +136,102 @@ def test_context_chat_returns_only_authorized_sanitized_evidence() -> None:
     assert "status Running, health healthy" in body["answer"]
     assert "must-not-leak" not in response.text
     assert db.access_calls == [("user-1", "ws-1", "cluster", "inventory.read")]
+    assert db.alert_rule_create_calls == []
+
+
+@pytest.mark.parametrize(
+    ("message", "metric", "threshold", "comparator", "expected_name"),
+    [
+        (
+            "이 클러스터에서 파드 CPU가 70% 넘으면 알람 걸어줘",
+            "cpu_pct",
+            70.0,
+            ">",
+            "파드 CPU 70% 알림",
+        ),
+        ("메모리 사용률이 82.5% 이상이면 알려줘", "mem_pct", 82.5, ">=", "파드 메모리 82.5% 알림"),
+    ],
+)
+def test_context_chat_proposes_only_allowlisted_alert_action_from_current_filters(
+    message: str,
+    metric: str,
+    threshold: float,
+    comparator: str,
+    expected_name: str,
+) -> None:
+    db = StubAiDb()
+
+    response = TestClient(ai_app(db)).post(
+        "/ai/chat",
+        json={"context": CONTEXT, "message": message},
+    )
+
+    assert response.status_code == 200
+    action = response.json()["action"]
+    assert action["type"] == "create_alert_rule"
+    assert action["payload"] == {
+        "name": expected_name,
+        "scope": {
+            "clusters": ["cluster-1"],
+            "namespaces": ["cluster-1/shop"],
+            "applications": [],
+            "labels": [],
+        },
+        "metric": metric,
+        "comparator": comparator,
+        "threshold": threshold,
+        "for_seconds": DEFAULT_ALERT_RULE_FOR_SECONDS,
+        "severity": "high",
+        "channels": [],
+        "enabled": True,
+    }
+    assert str(DEFAULT_ALERT_RULE_FOR_SECONDS) in action["rationale"]
+    assert db.alert_rule_create_calls == []
+
+
+@pytest.mark.parametrize(
+    ("message", "question"),
+    [
+        ("CPU가 높으면 알람 걸어줘", "몇 %"),
+        ("CPU나 메모리가 80%면 알려줘", "CPU와 메모리 중"),
+        ("CPU가 70% 또는 80%면 알려줘", "하나의 %"),
+    ],
+)
+def test_context_chat_asks_for_missing_or_ambiguous_alert_condition_without_action(
+    message: str,
+    question: str,
+) -> None:
+    db = StubAiDb()
+
+    response = TestClient(ai_app(db)).post(
+        "/ai/chat",
+        json={"context": CONTEXT, "message": message},
+    )
+
+    assert response.status_code == 200
+    assert question in response.json()["answer"]
+    assert "action" not in response.json()
+    assert response.json()["evidence"]
+    assert db.alert_rule_create_calls == []
+
+
+def test_context_chat_never_guesses_alert_scope_outside_current_filters() -> None:
+    db = StubAiDb()
+    unscoped = deepcopy(CONTEXT)
+    unscoped["filters"]["clusters"] = []
+    unscoped["filters"]["namespaces"] = []
+    unscoped["filters"]["applications"] = []
+    unscoped["filters"]["labels"] = []
+
+    response = TestClient(ai_app(db)).post(
+        "/ai/chat",
+        json={"context": unscoped, "message": "CPU가 70% 넘으면 알려줘"},
+    )
+
+    assert response.status_code == 200
+    assert "클러스터나 네임스페이스를 먼저 선택" in response.json()["answer"]
+    assert "action" not in response.json()
+    assert db.alert_rule_create_calls == []
 
 
 def test_context_chat_uses_canonical_no_data_for_unmaterialized_context() -> None:
