@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ApiError } from "./client";
 import {
   APPLICATION_RUNS_PATH,
+  connectApplication,
   getApplication,
   listApplicationDeployments,
   listApplicationRuns,
@@ -82,6 +83,38 @@ describe("Application deployment history API", () => {
       "/api/applications/app%2Fpayment/deployments?limit=25",
       "/api/applications/app%2Fpayment/runs?limit=25",
     ]);
+  });
+
+  it("registers a validated deployment target", async () => {
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      jsonResponse({ application: APPLICATION }),
+    );
+
+    await expect(connectApplication({
+      name: "payment-api",
+      repository: "team/payment-api",
+      branch: "main",
+      manifestPath: "deploy/overlays/prod",
+      clusterId: "prod-seoul-01",
+      namespace: "payments",
+      environment: "production",
+    })).resolves.toEqual({ application: APPLICATION });
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/applications/connect",
+      expect.objectContaining({ method: "POST", credentials: "include" }),
+    );
+    const init = fetchMock.mock.calls[0]?.[1] as RequestInit;
+    expect(new Headers(init.headers).get("x-service-csrf")).toBe("same-origin");
+    expect(JSON.parse(String(init.body))).toEqual({
+      name: "payment-api",
+      repo_ref: "team/payment-api",
+      branch: "main",
+      manifest_path: "deploy/overlays/prod",
+      cluster_id: "prod-seoul-01",
+      namespace: "payments",
+      environment: "production",
+    });
   });
 
   it("forwards AbortSignal to history requests", async () => {

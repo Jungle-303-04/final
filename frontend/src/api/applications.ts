@@ -26,6 +26,17 @@ export interface ApplicationHistoryOptions {
   signal?: AbortSignal;
 }
 
+export interface ApplicationConnectInput {
+  name: string;
+  repository: string;
+  branch: string;
+  manifestPath: string;
+  clusterId: string;
+  namespace: string;
+  environment: string;
+  token?: string;
+}
+
 /** Lists Applications visible to the signed-in user. */
 export async function listApplications(
   options: ApplicationListOptions = {},
@@ -34,6 +45,32 @@ export async function listApplications(
   assertLimit(limit);
   const path = withQuery("/api/applications" as ApiPath, [["limit", limit]]);
   return apiRequest(path, applicationListSchema, { signal: options.signal });
+}
+
+/** Validates a Git source and registers a deployable Application target. */
+export function connectApplication(
+  input: ApplicationConnectInput,
+  signal?: AbortSignal,
+): Promise<ApplicationResponse> {
+  return apiRequest(
+    "/api/applications/connect",
+    applicationResponseSchema,
+    {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        name: input.name,
+        repo_ref: input.repository,
+        branch: input.branch,
+        manifest_path: input.manifestPath,
+        cluster_id: input.clusterId,
+        namespace: input.namespace,
+        environment: input.environment,
+        ...(input.token ? { token: input.token } : {}),
+      }),
+      signal,
+    },
+  );
 }
 
 /** Loads one Application and its repository metadata. */

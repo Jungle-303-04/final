@@ -29,11 +29,14 @@ export function GitOpsPage({ port }: { port: GitOpsPort }) {
         {page.feedback ? <FeedbackBanner feedback={page.feedback} onClose={() => page.setFeedback(undefined)} /> : null}
         <PlanWizard
           applications={page.data.applications}
+          clusters={page.data.clusters}
           onCancel={page.cancelCreate}
           onChange={page.setNewPlan}
           onCreate={() => void page.createPlan()}
+          onCreateTarget={page.createTarget}
           pending={page.operation === "create"}
           plan={page.newPlan}
+          targetPending={page.operation === "target"}
         />
       </ProductPageFrame>
     );
@@ -106,12 +109,15 @@ export function GitOpsPage({ port }: { port: GitOpsPort }) {
           <TabsContent className="min-w-0" value="edit">
             <PlanEditor
               applications={page.data.applications}
+              clusters={page.data.clusters}
               focusedField={page.editorTarget?.field}
               focusedStepId={page.editorTarget?.stepId}
               onChange={page.setDraft}
               onSave={() => void page.saveDraft()}
+              onCreateTarget={page.createTarget}
               pending={page.operation === "save"}
               plan={page.draft}
+              targetPending={page.operation === "target"}
             />
           </TabsContent>
           <TabsContent className="min-w-0" value="runs">

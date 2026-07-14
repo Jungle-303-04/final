@@ -2,12 +2,14 @@ import { useCallback, useEffect, useState } from "react";
 import type {
   GitOpsPort,
   ReleaseApplication,
+  ReleaseCluster,
   ReleasePlan,
   ReleaseRun,
 } from "../../features/gitops/gitOpsContract";
 
 export interface WorkflowDataState {
   applications: ReleaseApplication[];
+  clusters: ReleaseCluster[];
   plans: ReleasePlan[];
   runs: ReleaseRun[];
   loading: boolean;
@@ -16,10 +18,12 @@ export interface WorkflowDataState {
   refresh: () => void;
   replacePlan: (plan: ReleasePlan) => void;
   replaceRun: (run: ReleaseRun) => void;
+  replaceApplication: (application: ReleaseApplication) => void;
 }
 
 export function useWorkflowData(port: GitOpsPort, selectedPlanId?: string): WorkflowDataState {
   const [applications, setApplications] = useState<ReleaseApplication[]>([]);
+  const [clusters, setClusters] = useState<ReleaseCluster[]>([]);
   const [plans, setPlans] = useState<ReleasePlan[]>([]);
   const [runs, setRuns] = useState<ReleaseRun[]>([]);
   const [loading, setLoading] = useState(true);
@@ -38,9 +42,14 @@ export function useWorkflowData(port: GitOpsPort, selectedPlanId?: string): Work
     });
     void Promise.all([
       port.listApplications(controller.signal),
+      port.listClusters(controller.signal).catch((clusterError: unknown) => {
+        if (isAbortError(clusterError)) throw clusterError;
+        return [];
+      }),
       port.listPlans(controller.signal),
-    ]).then(([nextApplications, nextPlans]) => {
+    ]).then(([nextApplications, nextClusters, nextPlans]) => {
       setApplications(nextApplications);
+      setClusters(nextClusters);
       setPlans(nextPlans);
     }).catch((nextError: unknown) => {
       if (!isAbortError(nextError)) setError(nextError);
@@ -84,8 +93,18 @@ export function useWorkflowData(port: GitOpsPort, selectedPlanId?: string): Work
     });
   }, []);
 
+  const replaceApplication = useCallback((application: ReleaseApplication) => {
+    setApplications((current) => {
+      const exists = current.some((item) => item.id === application.id);
+      return exists
+        ? current.map((item) => item.id === application.id ? application : item)
+        : [...current, application];
+    });
+  }, []);
+
   return {
     applications,
+    clusters,
     plans,
     runs: selectedPlanId ? runs : [],
     loading,
@@ -94,6 +113,7 @@ export function useWorkflowData(port: GitOpsPort, selectedPlanId?: string): Work
     refresh,
     replacePlan,
     replaceRun,
+    replaceApplication,
   };
 }
 
