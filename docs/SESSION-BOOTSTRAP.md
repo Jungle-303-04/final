@@ -145,7 +145,7 @@ product 가 frontend 가 된다.
 | 레거시 화면 삭제 | HomePage, metrics, workflow, release |
 | release-flow 워크플로 5개 | 삭제 |
 | **live DB 재생성** | **완료.** 새 PostgreSQL/NATS EBS snapshot 뒤 `public` schema와 JetStream을 비우고 immutable baseline + `alembic upgrade head`를 실행했다. live `alembic_version=20260714_0200`; `admin` 관리자는 Secret 비밀번호로 bootstrap됐다. FIRST_DEPLOY/cutover는 폐기했다. |
-| 배포 파이프라인 | digest 주입, FULL/CONSOLE 범위 분리, migration-first, 고정 `admin` bootstrap, in-cluster smoke. 보존 cutover 경로 없음. |
+| 배포 파이프라인 | **FULL 성공(run `29302233623`, SHA `10f0fad17…`).** digest 주입, FULL/CONSOLE 범위 분리, migration-first, 고정 `admin` bootstrap, in-cluster smoke. 공개 health/root 200, 새 bundle 확인. 보존 cutover 경로 없음. |
 | 좀비 데몬 | 제거 (§5 참조) |
 | 브랜치 정리 | 죽은 브랜치 6개 삭제, archive ref 백업 |
 | VP-011/VP-013 기획 정본 | dev에 착륙 |
@@ -190,10 +190,18 @@ proxy_pass $api_upstream;
 ## 5-4. DB reset 뒤 agent token은 자동 복구되지 않았다
 2026-07-14 live DB 재생성으로 `cluster_registrations`의 agent token hash도 삭제됐다.
 cluster-1 agent는 기존 Kubernetes Secret token을 계속 보내며 401을 반복했고 자동 재등록하지
-못했다. cluster-2에는 cluster-agent Deployment 자체가 없었다. management agent도 gateway
-재연결을 기다렸다. **현재 agent는 DB 권한이 사라졌을 때 self-heal하지 않는다.** FULL backend
-배포 후 target registration을 명시적으로 다시 수행하고, 장기적으로 401 시 안전한 재등록
-handshake 또는 운영 runbook을 제품 계약으로 만들어야 한다. synthetic cluster 데이터로 숨기지 마라.
+못했다. cluster-2에는 cluster-agent Deployment 자체가 없었다. **현재 agent는 DB 권한이
+사라졌을 때 self-heal하지 않는다.** FULL backend 배포 후 두 target을 새 token으로 명시적
+재등록했고, 현재 두 agent/node collector는 Ready이며 evidence API 200이다. 동시 재등록은
+같은 관리자 `user_accounts` upsert lock timeout으로 한 요청이 500을 냈고 직렬 재시도는
+성공했다. 401 시 안전한 재등록 handshake와 target 등록 transaction 단축/동시성 제어를
+제품 계약으로 만들어야 한다. synthetic cluster 데이터로 숨기지 마라.
+
+DB reset 뒤 runtime identity도 함께 맞춰야 한다. 기존 `TRUSTED_PROXY_AUTH_USER_ID`는 새 고정
+`admin` UUID와 달라 공개 세션에서 cluster가 0개로 보였고, 최신 resource API는
+`FILTER_CURSOR_SIGNING_KEY` 부재를 503으로 차단했다. live ConfigMap/Secret을 복구했고 FULL
+workflow가 관리자 bootstrap 직후 proxy ID를 같은 결정적 UUID로 동기화하며 cursor key가
+없을 때만 생성하도록 고쳤다. 기존 secret key를 덮어쓰거나 값을 로그에 출력하지 마라.
 
 ## 5-5. 삭제된 파일은 병합에서 충돌을 일으키지 않는다
 `features/release/**`를 지웠는데 팀원 브랜치 병합으로 **9파일로 부활**했다.
