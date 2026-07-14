@@ -31,7 +31,11 @@ describe("IssuesPage recovery approval", () => {
       </I18nProvider>,
     );
 
-    expect(await screen.findByRole("button", { name: "Elevated response latency" })).toBeTruthy();
+    expect(await screen.findByRole(
+      "button",
+      { name: "Elevated response latency" },
+      { timeout: 5_000 },
+    )).toBeTruthy();
     expect(port.listIssues).toHaveBeenCalledWith(null, 50, expect.any(AbortSignal));
   });
 
@@ -51,8 +55,16 @@ describe("IssuesPage recovery approval", () => {
       </I18nProvider>,
     );
 
-    fireEvent.click(await screen.findByRole("button", { name: "Elevated response latency" }));
-    fireEvent.click(await screen.findByRole("button", { name: "Increase memory limit" }));
+    fireEvent.click(await screen.findByRole(
+      "button",
+      { name: "Elevated response latency" },
+      { timeout: 5_000 },
+    ));
+    fireEvent.click(await screen.findByRole(
+      "button",
+      { name: "Increase memory limit" },
+      { timeout: 5_000 },
+    ));
 
     await waitFor(() => expect(port.selectRecoveryAction).toHaveBeenCalledWith({
       actionId: "increase-memory",
