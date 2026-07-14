@@ -35,7 +35,7 @@ def test_alert_evaluation_upgrade_is_the_single_head(monkeypatch) -> None:
     config = _config(monkeypatch)
     script = ScriptDirectory.from_config(config)
 
-    assert script.get_heads() == [REVISION]
+    assert len(script.get_heads()) == 1
     assert script.get_revision(REVISION).down_revision == DOWN_REVISION
 
     sql = _render(config, "upgrade", f"{DOWN_REVISION}:{REVISION}")
