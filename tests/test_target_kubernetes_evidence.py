@@ -9,6 +9,7 @@ import httpx
 import pytest
 
 from domains.inventory.kubernetes_snapshot import kubernetes_evidence_to_inventory_snapshot
+from domains.inventory_filter.physical_topology import build_physical_topology
 from packages.contracts.gateway.requests import AgentEvidenceRequest, EvidenceJobResultRequest
 from packages.kubernetes_provider import detect_kubernetes_provider
 
@@ -74,6 +75,135 @@ def test_endpoint_slice_summary_normalizes_null_collections() -> None:
 
     assert summary["endpoint_count"] == 0
     assert summary["ports"] == []
+
+
+def test_pod_requests_survive_provider_inventory_and_physical_usage_projection() -> None:
+    _, kubernetes_module = load_evidence_modules()
+    pod = {
+        "metadata": {"uid": "pod-1", "name": "checkout-0", "namespace": "shop"},
+        "spec": {
+            "containers": [
+                {
+                    "name": "app",
+                    "resources": {"requests": {"cpu": "250m", "memory": "128Mi"}},
+                },
+                {
+                    "name": "sidecar",
+                    "resources": {"requests": {"cpu": "0.1", "memory": "1Gi"}},
+                },
+            ]
+        },
+        "status": {"phase": "Running", "containerStatuses": []},
+    }
+
+    summary = kubernetes_module.pod_summary(pod)
+
+    assert summary["cpu_request_mcores"] == 350.0
+    assert summary["mem_request_mib"] == 1152.0
+
+    snapshot = kubernetes_evidence_to_inventory_snapshot(
+        {"pods": [summary]},
+        cluster_id="cluster-1",
+        agent_id="agent-1",
+    )
+    inventory_pod = snapshot["resources"][0]
+    assert inventory_pod["summary"]["cpu_request_mcores"] == 350.0
+    assert inventory_pod["summary"]["mem_request_mib"] == 1152.0
+
+    topology = build_physical_topology(
+        {
+            "servers": [],
+            "pods": [
+                {
+                    "inventory_key": "pod-key-1",
+                    "name": "checkout-0",
+                    "namespace": "shop",
+                    "status": "Running",
+                    "health": "healthy",
+                    "summary": inventory_pod["summary"],
+                    "placement_node_name": "",
+                    "matches_filter": True,
+                }
+            ],
+        },
+        latest_usage_sample={
+            "sampled_at": "2026-07-15T03:00:00Z",
+            "usage": {"pods": {"shop/checkout-0": {"cpu_mcores": 175.0}}},
+        },
+        matched_count_completeness="exact",
+        total_count_completeness="exact",
+    )
+    assert topology["pods"][0]["usage_pct"] == 50.0
+
+
+@pytest.mark.parametrize(
+    ("requests", "expected_cpu", "expected_memory"),
+    [
+        (
+            [{"cpu": "100m", "memory": "64Mi"}, {"memory": "64Mi"}],
+            None,
+            128.0,
+        ),
+        (
+            [{"cpu": "100m", "memory": "64Mi"}, {"cpu": "0", "memory": "64Mi"}],
+            None,
+            128.0,
+        ),
+        (
+            [{"cpu": "100m", "memory": "64Mi"}, {"cpu": "invalid", "memory": "64Mi"}],
+            None,
+            128.0,
+        ),
+        (
+            [{"cpu": "100m", "memory": "64Mi"}, {"cpu": "200m"}],
+            300.0,
+            None,
+        ),
+    ],
+)
+def test_pod_request_totals_fail_closed_per_axis(
+    requests: list[dict[str, str]],
+    expected_cpu: float | None,
+    expected_memory: float | None,
+) -> None:
+    _, kubernetes_module = load_evidence_modules()
+    summary = kubernetes_module.pod_summary(
+        {
+            "metadata": {"name": "checkout-0", "namespace": "shop"},
+            "spec": {
+                "containers": [
+                    {"name": f"container-{index}", "resources": {"requests": request}}
+                    for index, request in enumerate(requests)
+                ]
+            },
+            "status": {"containerStatuses": []},
+        }
+    )
+
+    assert summary["cpu_request_mcores"] == expected_cpu
+    assert summary["mem_request_mib"] == expected_memory
+
+
+def test_pod_without_regular_containers_has_no_request_denominator() -> None:
+    _, kubernetes_module = load_evidence_modules()
+    summary = kubernetes_module.pod_summary(
+        {
+            "metadata": {"name": "checkout-0", "namespace": "shop"},
+            "spec": {
+                "containers": [],
+                "initContainers": [
+                    {
+                        "name": "init",
+                        "resources": {"requests": {"cpu": "1", "memory": "1Gi"}},
+                    }
+                ],
+            },
+            "status": {"containerStatuses": []},
+        }
+    )
+
+    assert summary["cpu_request_mcores"] is None
+    assert summary["mem_request_mib"] is None
 
 
 def test_relationship_summaries_preserve_authoritative_graph_evidence() -> None:
