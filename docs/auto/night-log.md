@@ -3636,3 +3636,5 @@ gone branch 0, `(prunable)` worktree 0이다.
 [사이트 복구 후속] 2026-07-14 09:47 KST / production·mTLS route의 in-cluster 정본을 `console-dev`로 manifest·두 workflow·계약 테스트에 고정하고 `dev-k8s.woonyong.org`를 Bruno/API·개발 콘솔용 mTLS endpoint로 명문화 / Cloudflare DNS·원격 ingress는 kubectl 밖의 상태임을 route matrix에 기록하고 매일 09:17 KST scheduled dry-run으로 GitHub API token·account·tunnel 식별자와 drift 검증; 무인증 `dev-k8s` 403은 WAF 정상 동작, nginx resolver+변수 proxy_pass는 기존 dev 실물 재확인 / 다음 한 걸음: product → frontend stash 복원
 
 [VP-015 P1] 2026-07-14 12:58 KST / ui-layer-lab의 VP-014~017·Radar parity·목표 지시·열린 결정·배포 상태·야간 지시를 dev 정본으로 착륙 / 사용자 소유 미추적 파일 보존 / 다음 한 걸음: gate-fast 후 dev push
+
+[VP-015 P1/P2] 2026-07-14 13:03 KST / `a4ae8a04b` dev 착륙·로컬 gate-fast 981개 통과, GitHub 환경 `AWS_DEV_DEPLOY_ENABLED=1` 활성화 / 첫 Dev Gate `29304915902`는 신규 문서 7개가 `docs/README.md` 색인에 없어 실패했으며 제품·배포 오류가 아님 / 색인 계약과 단일 배포 상태판을 교정해 자동 FULL 재증명
