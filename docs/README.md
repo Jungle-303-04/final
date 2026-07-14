@@ -212,11 +212,13 @@ secret 이름과 주입 경계는 [Secrets](secrets.md)를 본다.
 자동 조율 문서는 아래에 있다.
 
 - [auto/backend-pipeline](auto/backend-pipeline.md)
+- [auto/codex-goal-directive-20260714](auto/codex-goal-directive-20260714.md)
 - [auto/deploy-plan](auto/deploy-plan.md)
 - [auto/deploy-status](auto/deploy-status.md)
 - [auto/frontend-pipeline](auto/frontend-pipeline.md)
 - [auto/night-directives](auto/night-directives.md)
 - [auto/night-log](auto/night-log.md)
+- [auto/open-decisions-20260714](auto/open-decisions-20260714.md)
 
 프론트 상세 설계 문서는 아래에 있다.
 
@@ -406,6 +408,7 @@ Target / Telemetry 선형 작업 문서는 아래에 있다.
 - [spec/frontend/vp-014-remaining-surfaces](spec/frontend/vp-014-remaining-surfaces.md)
 - [spec/frontend/vp-015-global-shell](spec/frontend/vp-015-global-shell.md)
 - [spec/frontend/vp-016-delivery-plan](spec/frontend/vp-016-delivery-plan.md)
+- [spec/frontend/vp-017-motion-spec](spec/frontend/vp-017-motion-spec.md)
 - [spec/packages/ai](spec/packages/ai.md)
 - [spec/packages/config](spec/packages/config.md)
 - [spec/packages/contracts](spec/packages/contracts.md)
