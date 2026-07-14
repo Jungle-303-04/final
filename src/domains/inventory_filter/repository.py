@@ -444,6 +444,7 @@ class InventoryFilterRepository(DatabaseConnection):
             ).mappings()
             return {
                 str(row["cluster_id"]): {
+                    "cluster_id": str(row["cluster_id"]),
                     "name": str(row["name"]),
                     "provider": _provider(row.get("settings")),
                 }
