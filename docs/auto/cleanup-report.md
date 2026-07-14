@@ -35,8 +35,8 @@
 |---|---:|---|---|---|
 | `.env` | 없음 | 비밀 값 | 보존 | 작업 전부터 없음. 내용을 열지 않음 |
 | `.env.local-test` | 없음 | 비밀 값 | 보존 | 작업 전부터 없음. 내용을 열지 않음 |
-| `.env.plural-cloud` | 없음 | 비밀 값 | 보존 | 작업 전부터 없음. 내용을 열지 않음 |
-| `.env.plural-cloud-instances` | 없음 | 비밀 값 | 보존 | 작업 전부터 없음. 내용을 열지 않음 |
+| 클라우드 로컬 환경 파일 | 없음 | 비밀 값 | 보존 | 작업 전부터 없음. 내용을 열지 않음 |
+| 클라우드 인스턴스 환경 파일 | 없음 | 비밀 값 | 보존 | 작업 전부터 없음. 내용을 열지 않음 |
 | `outputs/local-bruno/environments/aws-live.local.bru` | 없음 | AWS 자격 정보 | 보존 | 작업 전부터 없음. `outputs/`는 폴더째 삭제하지 않음 |
 | `.git/` | 측정 안 함 | Git 데이터 | 보존 | 절대 삭제 금지 |
 | `infra/**/*.tfstate`, `*.tfstate.backup` | 없음 | Terraform 상태 | 보존 | `.terraform/` 밖에서 0개 확인 |

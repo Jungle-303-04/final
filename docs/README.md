@@ -208,6 +208,7 @@ secret 이름과 주입 경계는 [Secrets](secrets.md)를 본다.
 자동 조율 문서는 아래에 있다.
 
 - [auto/backend-pipeline](auto/backend-pipeline.md)
+- [auto/cleanup-report](auto/cleanup-report.md)
 - [auto/codex-goal-directive-20260714](auto/codex-goal-directive-20260714.md)
 - [auto/codex-directive-20260714-final](auto/codex-directive-20260714-final.md)
 - [auto/deploy-plan](auto/deploy-plan.md)
