@@ -188,6 +188,12 @@ def test_physical_topology_sql_is_scoped_ranked_and_server_evaluates_filter_matc
         assert "revision_id <= 42" in sql
         assert "valid_from_revision <= 42" in sql
         assert "valid_to_revision > 42" in sql
+        assert "cluster_inventory_resources" in sql
+        assert (
+            "physical_topology_observed_resources.snapshot_id = "
+            "inventory_versions_at_revision.as_of_snapshot_id"
+        ) in sql
+        assert "physical_topology_observed_resources.deleted_at is null" in sql
 
     assert "resource_type = 'node'" in server_sql
     assert "resource_type = 'pod'" in pod_sql

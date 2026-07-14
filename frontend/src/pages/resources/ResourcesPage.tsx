@@ -279,7 +279,9 @@ export function ResourcesPage({
                   : null
               }
               physicalTopology={physicalTopology}
+              port={port}
               relationTopology={relationTopology}
+              reportUnauthorized={reportUnauthorized}
               timelineFrame={changeTimeline}
               topologyPinned={topology.pinned}
               topologyView={topology.view}

@@ -4,7 +4,7 @@ import type { PhysicalTopologySnapshot } from "../../features/resources/physical
 import { buildInfraMapModel } from "./resourcesInfraMapModel";
 
 describe("resources infra map model", () => {
-  it("falls back to node pods when a selected non-Pod resource has no matched pods", () => {
+  it("hides node pods when a selected resource has no related pods", () => {
     const model = buildInfraMapModel({
       maxPodsPerNode: 5,
       selectionActive: true,
@@ -17,13 +17,12 @@ describe("resources infra map model", () => {
     });
 
     expect(model.selection).toEqual({ active: true, matchedPodCount: 0 });
-    expect(model.nodes[0]?.visiblePods.map((pod) => pod.name)).toEqual([
-      "pod-one",
-      "pod-two",
-    ]);
+    expect(model.nodes[0]?.visiblePods).toEqual([]);
+    expect(model.nodes[0]?.hiddenPods).toEqual([]);
+    expect(model.nodes[0]?.hiddenPodCount).toBe(0);
   });
 
-  it("prioritizes matched pods without hiding the rest of the node", () => {
+  it("shows only matched pods for a selected resource", () => {
     const model = buildInfraMapModel({
       maxPodsPerNode: 5,
       selectionActive: true,
@@ -36,14 +35,26 @@ describe("resources infra map model", () => {
     });
 
     expect(model.selection).toEqual({ active: true, matchedPodCount: 1 });
-    expect(model.nodes[0]?.visiblePods.map((pod) => pod.name)).toEqual([
-      "pod-one",
-      "pod-two",
-    ]);
-    expect(model.nodes[0]?.visiblePods.map((pod) => pod.selected)).toEqual([
-      true,
-      false,
-    ]);
+    expect(model.nodes[0]?.visiblePods.map((pod) => pod.name)).toEqual(["pod-one"]);
+    expect(model.nodes[0]?.visiblePods.map((pod) => pod.selected)).toEqual([true]);
+  });
+
+  it("uses explicit related pod ids when a concrete resource is selected", () => {
+    const model = buildInfraMapModel({
+      maxPodsPerNode: 5,
+      selectedPodIds: new Set(["pod:two"]),
+      selectionActive: true,
+      topology: snapshot({
+        pods: [
+          pod({ id: "pod:one", name: "pod-one", matchesFilter: true }),
+          pod({ id: "pod:two", name: "pod-two", matchesFilter: false }),
+        ],
+      }),
+    });
+
+    expect(model.selection).toEqual({ active: true, matchedPodCount: 1 });
+    expect(model.nodes[0]?.visiblePods.map((pod) => pod.name)).toEqual(["pod-two"]);
+    expect(model.nodes[0]?.visiblePods.map((pod) => pod.selected)).toEqual([true]);
   });
 
   it("summarizes pods after the first four by default", () => {
@@ -60,7 +71,18 @@ describe("resources infra map model", () => {
       }),
     });
 
-    expect(model.nodes[0]?.visiblePods.map((pod) => pod.name)).toHaveLength(4);
+    const visibleNames = model.nodes[0]?.visiblePods.map((pod) => pod.name) ?? [];
+    const hiddenNames = model.nodes[0]?.hiddenPods.map((pod) => pod.name) ?? [];
+
+    expect(visibleNames).toHaveLength(4);
+    expect(hiddenNames).toHaveLength(1);
+    expect([...visibleNames, ...hiddenNames].sort()).toEqual([
+      "pod-five",
+      "pod-four",
+      "pod-one",
+      "pod-three",
+      "pod-two",
+    ]);
     expect(model.nodes[0]?.hiddenPodCount).toBe(1);
   });
 
@@ -87,6 +109,34 @@ describe("resources infra map model", () => {
 
     expect(apiPod?.cpu.ratio).toBeCloseTo(0.05);
     expect(apiPod?.memory.ratio).toBeCloseTo(0.25);
+  });
+
+  it("prefers pods with calculable capacity ratios for the compact overview", () => {
+    const model = buildInfraMapModel({
+      maxPodsPerNode: 1,
+      selectionActive: false,
+      topology: snapshot({
+        pods: [
+          pod({
+            cpuMillicores: 100,
+            id: "pod:usage-only",
+            memoryMebibytes: 256,
+            name: "usage-only",
+          }),
+          pod({
+            cpuLimitMillicores: 1000,
+            cpuMillicores: 10,
+            id: "pod:bounded",
+            memoryLimitMebibytes: 512,
+            memoryMebibytes: 64,
+            name: "bounded",
+          }),
+        ],
+      }),
+    });
+
+    expect(model.nodes[0]?.visiblePods.map((pod) => pod.name)).toEqual(["bounded"]);
+    expect(model.nodes[0]?.hiddenPods.map((pod) => pod.name)).toEqual(["usage-only"]);
   });
 });
 

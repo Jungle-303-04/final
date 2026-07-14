@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { Server } from "lucide-react";
 
 import { useI18n } from "../../shared/i18n";
@@ -19,6 +20,7 @@ export function InfraMapNodeCard({
   selectionActive: boolean;
 }) {
   const { t } = useI18n();
+  const [podsExpanded, setPodsExpanded] = useState(false);
   return (
     <section
       className="grid h-72 min-w-0 grid-rows-[auto_minmax(0,1fr)_auto] overflow-hidden rounded-lg border bg-linear-to-b from-muted/35 via-background/90 to-muted/25 shadow-sm"
@@ -49,8 +51,10 @@ export function InfraMapNodeCard({
 
       <div className="min-h-0 p-3">
         <InfraMapPodArea
+          expanded={podsExpanded}
           metricMode={metricMode}
           node={node}
+          onExpandedChange={setPodsExpanded}
           selectionActive={selectionActive}
         />
       </div>
@@ -75,15 +79,22 @@ export function InfraMapNodeCard({
 }
 
 function InfraMapPodArea({
+  expanded,
   metricMode,
   node,
+  onExpandedChange,
   selectionActive,
 }: {
+  expanded: boolean;
   metricMode: InfraMapMetricMode;
   node: InfraMapNode;
+  onExpandedChange: (expanded: boolean) => void;
   selectionActive: boolean;
 }) {
   const { formatNumber, t } = useI18n();
+  const pods = expanded
+    ? [...node.visiblePods, ...node.hiddenPods]
+    : node.visiblePods;
   if (node.visiblePods.length === 0) {
     return (
       <div className="grid h-full min-h-24 place-items-center rounded-md border border-dashed bg-muted/10 px-3 text-center text-xs text-muted-foreground">
@@ -95,17 +106,30 @@ function InfraMapPodArea({
   }
   return (
     <div className="grid h-full min-h-24 grid-rows-[minmax(0,1fr)_auto] rounded-md border border-dashed bg-muted/10 p-2 shadow-inner">
-      <div className="grid min-h-0 grid-cols-2 content-start gap-1.5">
-        {node.visiblePods.map((pod) => (
+      <div
+        className={[
+          "grid min-h-0 grid-cols-2 content-start gap-1.5 pr-1",
+          expanded ? "overflow-y-auto" : "overflow-hidden",
+        ].join(" ")}
+        data-expanded={expanded || undefined}
+        data-slot="infra-map-pod-scroll"
+      >
+        {pods.map((pod) => (
           <InfraMapPodSlot key={pod.id} metricMode={metricMode} pod={pod} />
         ))}
       </div>
       {node.hiddenPodCount > 0 ? (
-        <div className="mt-1.5 flex min-h-6 items-center justify-center rounded-sm border bg-background/75 px-2 text-[0.6875rem] font-medium text-muted-foreground">
+        <button
+          aria-expanded={expanded}
+          className="mt-1.5 flex min-h-6 items-center justify-center rounded-sm border bg-background/75 px-2 text-[0.6875rem] font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring data-[expanded=true]:bg-muted data-[expanded=true]:text-foreground"
+          data-expanded={expanded || undefined}
+          onClick={() => onExpandedChange(!expanded)}
+          type="button"
+        >
           {t("resources.infraMap.morePods", {
             count: formatNumber(node.hiddenPodCount),
           })}
-        </div>
+        </button>
       ) : null}
     </div>
   );

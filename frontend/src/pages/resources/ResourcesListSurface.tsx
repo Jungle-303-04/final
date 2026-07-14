@@ -1,4 +1,4 @@
-import { useMemo, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 
 import { useUnifiedFilter } from "../../features/filters/UnifiedFilterProvider";
 import type { PhysicalTopologyPod } from "../../features/resources/physicalTopologyContract";
@@ -11,6 +11,7 @@ import { useI18n } from "../../shared/i18n";
 import { ProductStateScreen } from "../../shared/ui/ProductStateScreen";
 import { Surface } from "../../shared/ui/Surface";
 import { Button } from "../../shared/ui/primitives/button";
+import type { ResourcesPort } from "../../features/resources/resourcesContract";
 import { ResourcesGraphShell } from "./ResourcesGraphShell";
 import { ResourcesInfraMapView } from "./ResourcesInfraMapView";
 import { ResourcesListLoadingPreview } from "./ResourcesLoadingPreview";
@@ -25,6 +26,12 @@ import { ResourcesToolbar } from "./ResourcesToolbar";
 import { usePhysicalTopologyDataFrame } from "./usePhysicalTopologyDataFrame";
 import type { RelationTopologyFrame } from "./useRelationTopologyDataFrame";
 import type { ChangeTimelineFrame } from "./useChangeTimelineDataFrame";
+import {
+  infraMapFocusItemFromResource,
+  selectedPodIdsFromFocusDetails,
+  useInfraMapFocusDetails,
+  type InfraMapFocusItem,
+} from "./useInfraMapFocusDetails";
 import { useResourcesPageState } from "./useResourcesPageState";
 
 export function ResourcesListSurface({
@@ -33,7 +40,9 @@ export function ResourcesListSurface({
   metricHistory,
   onLoadMore,
   physicalTopology,
+  port,
   relationTopology,
+  reportUnauthorized,
   state,
   topologyPinned,
   topologyView,
@@ -45,7 +54,9 @@ export function ResourcesListSurface({
   metricHistory: ResourceMetricsHistoryFrame;
   onLoadMore: () => void;
   physicalTopology: ReturnType<typeof usePhysicalTopologyDataFrame>;
+  port: ResourcesPort;
   relationTopology: RelationTopologyFrame;
+  reportUnauthorized: () => void;
   state: ReturnType<typeof useResourcesPageState>;
   topologyPinned: boolean;
   topologyView: ResourceTopologyView;
@@ -54,6 +65,7 @@ export function ResourcesListSurface({
 }) {
   const { t } = useI18n();
   const filter = useUnifiedFilter();
+  const [infraMapFocusItems, setInfraMapFocusItems] = useState<InfraMapFocusItem[]>([]);
   const cluster = state.choices.phase === "ready"
     ? state.choices.data.clusters.find((candidate) => candidate.id === state.selectedClusterId)
     : undefined;
@@ -134,14 +146,48 @@ export function ResourcesListSurface({
       ),
     })),
   ];
+  useEffect(() => {
+    setInfraMapFocusItems([]);
+  }, [state.selectedClusterId, state.selectedResourceType]);
+  const infraMapFocusOptions = useMemo(
+    () => filterList.phase === "ready" && filterList.data !== null
+      ? filterList.data.items.map((item) => infraMapFocusItemFromResource(item.resource))
+      : [],
+    [filterList],
+  );
+  const selectInfraMapFocusItem = useCallback((item: InfraMapFocusItem) => {
+    setInfraMapFocusItems((current) => current.some((candidate) => candidate.key === item.key)
+      ? current
+      : [...current, item]);
+  }, []);
+  const removeInfraMapFocusItem = useCallback((key: string) => {
+    setInfraMapFocusItems((current) => current.filter((item) => item.key !== key));
+  }, []);
+  const focusDetails = useInfraMapFocusDetails({
+    clusterId: state.selectedClusterId,
+    items: infraMapFocusItems,
+    port,
+    reportUnauthorized,
+    revision: state.revision,
+  });
+  const infraMapSelectedPodIds = useMemo(() => {
+    if (infraMapFocusItems.length === 0) return undefined;
+    if (focusDetails.phase !== "ready") {
+      return new Set(infraMapFocusItems
+        .filter((item) => item.identity.resourceType === "pod")
+        .map((item) => item.resourceId));
+    }
+    return selectedPodIdsFromFocusDetails(focusDetails.data, infraMapFocusItems);
+  }, [focusDetails, infraMapFocusItems]);
   const infraMapModel = useMemo(
     () => physicalTopology.phase === "ready"
       ? buildInfraMapModel({
-          selectionActive: state.selectedResourceType !== null,
+          selectedPodIds: infraMapSelectedPodIds,
+          selectionActive: infraMapFocusItems.length > 0,
           topology: physicalTopology.data,
         })
       : null,
-    [physicalTopology, state.selectedResourceType],
+    [infraMapFocusItems.length, infraMapSelectedPodIds, physicalTopology],
   );
   const timelineRange = filter.detail.timeRange ?? "1h";
   const changeTimelineRange = (range: TimelineRange) => filter.updateDetail(
@@ -167,9 +213,13 @@ export function ResourcesListSurface({
 
       <Surface aria-labelledby="resources-infra-map-title" className="min-w-0 overflow-hidden">
         <ResourcesInfraMapView
+          focusOptions={infraMapFocusOptions}
           model={infraMapModel}
+          onFocusRemove={removeInfraMapFocusItem}
+          onFocusSelect={selectInfraMapFocusItem}
           onRetry={state.refresh}
           phase={physicalTopology.phase}
+          selectedFocus={infraMapFocusItems}
         />
       </Surface>
 

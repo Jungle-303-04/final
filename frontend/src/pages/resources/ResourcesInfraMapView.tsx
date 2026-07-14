@@ -1,26 +1,46 @@
 import { useState } from "react";
-import { RefreshCw, Server, Waypoints } from "lucide-react";
+import { RefreshCw, Server, SlidersHorizontal, Waypoints, X } from "lucide-react";
 
 import { useI18n } from "../../shared/i18n";
-import { Badge } from "../../shared/ui/primitives/badge";
 import { Button } from "../../shared/ui/primitives/button";
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from "../../shared/ui/primitives/command";
+import { Popover, PopoverContent, PopoverTrigger } from "../../shared/ui/primitives/popover";
 import { Skeleton } from "../../shared/ui/primitives/skeleton";
 import { InfraMapNodeCard } from "./ResourcesInfraMapNodeCard";
 import type { InfraMapMetricMode } from "./ResourcesInfraMapMetrics";
 import type { InfraMapModel } from "./resourcesInfraMapModel";
+import type { InfraMapFocusItem } from "./useInfraMapFocusDetails";
 import type { PhysicalTopologyFrame } from "./usePhysicalTopologyDataFrame";
 
 export function ResourcesInfraMapView({
+  focusOptions,
   model,
+  onFocusRemove,
+  onFocusSelect,
   onRetry,
   phase,
+  selectedFocus,
 }: {
+  focusOptions: readonly InfraMapFocusItem[];
   model: InfraMapModel | null;
+  onFocusRemove: (key: string) => void;
+  onFocusSelect: (item: InfraMapFocusItem) => void;
   onRetry: () => void;
   phase: PhysicalTopologyFrame["phase"];
+  selectedFocus: readonly InfraMapFocusItem[];
 }) {
   const { t } = useI18n();
   const [metricMode, setMetricMode] = useState<InfraMapMetricMode>("cpu");
+  const availableFocusOptions = focusOptions.filter(
+    (option) => !selectedFocus.some((item) => item.key === option.key),
+  );
   return (
     <div
       aria-live="polite"
@@ -39,14 +59,17 @@ export function ResourcesInfraMapView({
             {t("resources.infraMap.description")}
           </p>
         </div>
-        <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
-          <InfraMapMetricTabs onChange={setMetricMode} value={metricMode} />
-          <Badge variant="outline">
-            {model?.selection.active
-              ? t("resources.infraMap.badge.selected")
-              : t("resources.infraMap.badge.overview")}
-          </Badge>
-        </div>
+      </div>
+      <div className="mt-4 flex min-w-0 items-center gap-2">
+        <InfraMapMetricTabs onChange={setMetricMode} value={metricMode} />
+        <InfraMapFocusChips
+          items={selectedFocus}
+          onRemove={onFocusRemove}
+        />
+        <InfraMapFocusPicker
+          options={availableFocusOptions}
+          onSelect={onFocusSelect}
+        />
       </div>
 
       {phase === "loading" || phase === "idle" ? (
@@ -98,12 +121,103 @@ function InfraMapMetricTabs({
   );
 }
 
+function InfraMapFocusChips({
+  items,
+  onRemove,
+}: {
+  items: readonly InfraMapFocusItem[];
+  onRemove: (key: string) => void;
+}) {
+  const { t } = useI18n();
+  return (
+    <div
+      className="flex min-w-0 flex-1 flex-wrap items-center justify-center gap-1.5"
+      data-slot="infra-map-focus-chips"
+    >
+      {items.map((item) => (
+        <span
+          className="inline-flex h-7 max-w-56 items-center gap-1 rounded-full border bg-background/80 px-2 text-xs font-medium"
+          key={item.key}
+          title={focusTitle(item)}
+        >
+          <span className="truncate">{item.label}</span>
+          <button
+            aria-label={t("resources.infraMap.focus.remove", { label: item.label })}
+            className="rounded-sm text-muted-foreground outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
+            onClick={() => onRemove(item.key)}
+            type="button"
+          >
+            <X aria-hidden="true" className="size-3" />
+          </button>
+        </span>
+      ))}
+    </div>
+  );
+}
+
+function InfraMapFocusPicker({
+  options,
+  onSelect,
+}: {
+  options: readonly InfraMapFocusItem[];
+  onSelect: (item: InfraMapFocusItem) => void;
+}) {
+  const { t } = useI18n();
+  const [open, setOpen] = useState(false);
+  return (
+    <Popover onOpenChange={setOpen} open={open}>
+      <PopoverTrigger
+        aria-label={t("resources.infraMap.focus.open")}
+        className="inline-flex size-8 shrink-0 items-center justify-center rounded-lg border bg-background/70 text-muted-foreground outline-none hover:bg-muted hover:text-foreground focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
+      >
+        <SlidersHorizontal aria-hidden="true" className="size-4" />
+      </PopoverTrigger>
+      <PopoverContent align="end" className="w-72" initialFocus>
+        <Command label={t("resources.infraMap.focus.open")}>
+          <CommandInput placeholder={t("resources.infraMap.focus.placeholder")} />
+          <CommandList>
+            {options.length === 0 ? (
+              <CommandEmpty>{t("resources.infraMap.focus.empty")}</CommandEmpty>
+            ) : (
+              <CommandGroup heading={t("resources.infraMap.focus.group")}>
+                {options.map((item) => (
+                  <CommandItem
+                    key={item.key}
+                    onSelect={() => {
+                      onSelect(item);
+                      setOpen(false);
+                    }}
+                    value={`${item.label} ${item.identity.namespace ?? ""}`}
+                  >
+                    <span className="min-w-0 flex-1 truncate">{item.label}</span>
+                    {item.identity.namespace ? (
+                      <span className="text-xs text-muted-foreground">
+                        {item.identity.namespace}
+                      </span>
+                    ) : null}
+                  </CommandItem>
+                ))}
+              </CommandGroup>
+            )}
+          </CommandList>
+        </Command>
+      </PopoverContent>
+    </Popover>
+  );
+}
+
 function infraMapMetricLabel(
   option: InfraMapMetricMode,
   t: ReturnType<typeof useI18n>["t"],
 ): string {
   if (option === "cpu") return t("resources.infraMap.metric.cpu");
   return t("resources.infraMap.metric.memory");
+}
+
+function focusTitle(item: InfraMapFocusItem): string {
+  return item.identity.namespace
+    ? `${item.label} · ${item.identity.namespace}`
+    : item.label;
 }
 
 function InfraMapNodeGrid({

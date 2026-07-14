@@ -1433,7 +1433,28 @@ def _physical_topology_statements(
         snapshot_revision,
         include_deleted=filters.include_deleted,
     )
-    base = select(current).where(current.c.rank == 1).cte("physical_topology_inventory")
+    observed = ClusterInventoryResourceRecord.__table__.alias(
+        "physical_topology_observed_resources"
+    )
+    base = (
+        select(current)
+        .select_from(
+            current.join(
+                observed,
+                and_(
+                    observed.c.workspace_id == current.c.workspace_id,
+                    observed.c.cluster_id == current.c.cluster_id,
+                    observed.c.inventory_key == current.c.inventory_key,
+                    observed.c.snapshot_id == current.c.as_of_snapshot_id,
+                    observed.c.deleted_at.is_(None),
+                ),
+            )
+        )
+        .where(
+            current.c.rank == 1,
+        )
+        .cte("physical_topology_inventory")
+    )
     filtered = _apply_resource_filters(
         base,
         filters=filters,

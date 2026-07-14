@@ -10,13 +10,16 @@ from domains.identity.dependencies import ClusterAgentIdentity
 from domains.inventory.kubernetes_snapshot import kubernetes_evidence_to_inventory_snapshot
 from domains.inventory.repository import (
     HEALTH_RESOURCE_TYPE,
+    InventoryRepository,
     USAGE_RESOURCE_TYPE,
     dedupe_inventory_rows,
+    endpoint_pod_refs,
     event_involves_resource,
     first_container_image,
     inventory_resource_key,
     labels_match,
     normalize_inventory_resource,
+    pod_matches_endpoint_ref,
     selector_labels,
     snapshot_resources,
 )
@@ -425,6 +428,215 @@ def test_inventory_resource_detail_returns_related_resources_and_events_without_
     assert "raw" not in response.resource.model_dump()
     assert "raw" not in response.related["pods"][0].model_dump()
     assert "raw" not in response.events[0].model_dump()
+
+
+def test_inventory_related_service_falls_back_to_endpoint_slice_target_refs() -> None:
+    service = inventory_resource(
+        "service",
+        "Service",
+        "api",
+        summary={"selector": {}},
+    )
+    endpoint = inventory_resource(
+        "endpoint",
+        "EndpointSlice",
+        "api-abc",
+        summary={
+            "service_name": "api",
+            "endpoints": [
+                {"targetRef": {"kind": "Pod", "name": "api-1", "uid": "pod-api-1"}},
+            ],
+        },
+    )
+    pod = inventory_resource(
+        "pod",
+        "Pod",
+        "api-1",
+        uid="pod-api-1",
+        summary={"labels": {"app": "different"}, "node_name": "node-1"},
+    )
+    other = inventory_resource(
+        "pod",
+        "Pod",
+        "other-1",
+        uid="pod-other-1",
+        summary={"labels": {"app": "other"}, "node_name": "node-1"},
+    )
+    repository = InventoryRepository.__new__(InventoryRepository)
+
+    def list_resources(
+        *,
+        workspace_id: str,
+        cluster_id: str,
+        resource_type: str | None,
+        namespace: str | None,
+        include_deleted: bool,
+        limit: int,
+    ) -> list[dict[str, object]]:
+        assert workspace_id == "ws-1"
+        assert cluster_id == "cluster-1"
+        rows = [service, endpoint, pod, other]
+        return [
+            item
+            for item in rows
+            if (resource_type is None or item["resource_type"] == resource_type)
+            and (namespace is None or item["namespace"] == namespace)
+            and (include_deleted or item["deleted_at"] is None)
+        ][:limit]
+
+    repository.list_inventory_resources = list_resources  # type: ignore[method-assign]
+
+    related = repository.list_related_inventory_resources(
+        workspace_id="ws-1",
+        cluster_id="cluster-1",
+        resource=service,
+        limit=10,
+    )
+
+    assert [item["name"] for item in related["pods"]] == ["api-1"]
+
+
+def test_inventory_related_endpoint_slice_returns_target_ref_pods() -> None:
+    endpoint = inventory_resource(
+        "endpoint",
+        "EndpointSlice",
+        "api-abc",
+        summary={
+            "service_name": "api",
+            "endpoints": [
+                {"targetRef": {"kind": "Pod", "name": "api-1", "uid": "pod-api-1"}},
+                {"targetRef": {"kind": "Deployment", "name": "api"}},
+            ],
+        },
+    )
+    pod = inventory_resource(
+        "pod",
+        "Pod",
+        "api-1",
+        uid="pod-api-1",
+        summary={"labels": {"app": "api"}, "node_name": "node-1"},
+    )
+    repository = InventoryRepository.__new__(InventoryRepository)
+
+    def list_resources(
+        *,
+        workspace_id: str,
+        cluster_id: str,
+        resource_type: str | None,
+        namespace: str | None,
+        include_deleted: bool,
+        limit: int,
+    ) -> list[dict[str, object]]:
+        assert workspace_id == "ws-1"
+        assert cluster_id == "cluster-1"
+        rows = [endpoint, pod]
+        return [
+            item
+            for item in rows
+            if (resource_type is None or item["resource_type"] == resource_type)
+            and (namespace is None or item["namespace"] == namespace)
+            and (include_deleted or item["deleted_at"] is None)
+        ][:limit]
+
+    repository.list_inventory_resources = list_resources  # type: ignore[method-assign]
+
+    related = repository.list_related_inventory_resources(
+        workspace_id="ws-1",
+        cluster_id="cluster-1",
+        resource=endpoint,
+        limit=10,
+    )
+
+    assert [item["name"] for item in related["pods"]] == ["api-1"]
+
+
+def test_inventory_related_endpoint_slice_falls_back_to_service_selector() -> None:
+    service = inventory_resource(
+        "service",
+        "Service",
+        "api",
+        summary={"selector": {"app": "api"}},
+    )
+    endpoint = inventory_resource(
+        "endpoint",
+        "EndpointSlice",
+        "api-abc",
+        summary={"service_name": "api", "endpoints": []},
+    )
+    pod = inventory_resource(
+        "pod",
+        "Pod",
+        "api-1",
+        uid="pod-api-1",
+        summary={"labels": {"app": "api"}, "node_name": "node-1"},
+    )
+    other = inventory_resource(
+        "pod",
+        "Pod",
+        "other-1",
+        uid="pod-other-1",
+        summary={"labels": {"app": "other"}, "node_name": "node-1"},
+    )
+    repository = InventoryRepository.__new__(InventoryRepository)
+
+    def list_resources(
+        *,
+        workspace_id: str,
+        cluster_id: str,
+        resource_type: str | None,
+        namespace: str | None,
+        include_deleted: bool,
+        limit: int,
+    ) -> list[dict[str, object]]:
+        assert workspace_id == "ws-1"
+        assert cluster_id == "cluster-1"
+        rows = [service, endpoint, pod, other]
+        return [
+            item
+            for item in rows
+            if (resource_type is None or item["resource_type"] == resource_type)
+            and (namespace is None or item["namespace"] == namespace)
+            and (include_deleted or item["deleted_at"] is None)
+        ][:limit]
+
+    repository.list_inventory_resources = list_resources  # type: ignore[method-assign]
+
+    related = repository.list_related_inventory_resources(
+        workspace_id="ws-1",
+        cluster_id="cluster-1",
+        resource=endpoint,
+        limit=10,
+    )
+
+    assert [item["name"] for item in related["pods"]] == ["api-1"]
+
+
+def test_endpoint_pod_refs_match_pods_by_uid_then_name() -> None:
+    refs = endpoint_pod_refs(
+        [
+            inventory_resource(
+                "endpoint",
+                "EndpointSlice",
+                "api-abc",
+                namespace="default",
+                summary={
+                    "endpoints": [
+                        {"targetRef": {"kind": "Pod", "name": "api-1", "uid": "pod-api-1"}},
+                        {"targetRef": {"kind": "Service", "name": "api"}},
+                    ],
+                },
+            ),
+        ]
+    )
+
+    assert pod_matches_endpoint_ref(
+        inventory_resource("pod", "Pod", "api-1", uid="pod-api-1"),
+        refs,
+    )
+    assert not pod_matches_endpoint_ref(
+        inventory_resource("pod", "Pod", "api-1", uid="stale-pod"),
+        refs,
+    )
 
 
 def test_inventory_summary_route_returns_latest_snapshot_and_counts() -> None:

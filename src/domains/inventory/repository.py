@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 import uuid
+from collections.abc import Iterable, Mapping
 from datetime import UTC, datetime
 
 from sqlalchemy import func, or_, select, update
@@ -484,18 +485,85 @@ class InventoryRepository(DatabaseConnection):
 
         if resource_type == "service":
             selector = selector_labels(summary.get("selector"))
+            pods = self.list_inventory_resources(
+                workspace_id=workspace_id,
+                cluster_id=cluster_id,
+                resource_type=POD_RESOURCE_TYPE,
+                namespace=str(namespace) if namespace is not None else None,
+                include_deleted=False,
+                limit=1000,
+            )
+            related_pods: list[JsonObject] = []
             if selector:
-                pods = self.list_inventory_resources(
+                related_pods = [
+                    pod for pod in pods if labels_match(selector, pod_summary_labels(pod))
+                ]
+            if not related_pods:
+                endpoints = self.list_inventory_resources(
                     workspace_id=workspace_id,
                     cluster_id=cluster_id,
-                    resource_type=POD_RESOURCE_TYPE,
+                    resource_type="endpoint",
                     namespace=str(namespace) if namespace is not None else None,
                     include_deleted=False,
                     limit=1000,
                 )
-                related["pods"] = [
-                    pod for pod in pods if labels_match(selector, pod_summary_labels(pod))
-                ][: max(1, min(limit, 1000))]
+                pod_refs = endpoint_pod_refs(
+                    endpoint
+                    for endpoint in endpoints
+                    if endpoint_service_name(endpoint) == name
+                )
+                if pod_refs:
+                    related_pods = [
+                        pod for pod in pods if pod_matches_endpoint_ref(pod, pod_refs)
+                    ]
+            if selector or related_pods:
+                related["pods"] = related_pods[: max(1, min(limit, 1000))]
+            return related
+
+        if resource_type == "endpoint":
+            pods = self.list_inventory_resources(
+                workspace_id=workspace_id,
+                cluster_id=cluster_id,
+                resource_type=POD_RESOURCE_TYPE,
+                namespace=str(namespace) if namespace is not None else None,
+                include_deleted=False,
+                limit=1000,
+            )
+            pod_refs = endpoint_pod_refs([resource])
+            related_pods: list[JsonObject] = []
+            if pod_refs:
+                related_pods = [
+                    pod for pod in pods if pod_matches_endpoint_ref(pod, pod_refs)
+                ]
+            if not related_pods:
+                service_name = endpoint_service_name(resource)
+                services = self.list_inventory_resources(
+                    workspace_id=workspace_id,
+                    cluster_id=cluster_id,
+                    resource_type="service",
+                    namespace=str(namespace) if namespace is not None else None,
+                    include_deleted=False,
+                    limit=1000,
+                )
+                service = next(
+                    (
+                        item
+                        for item in services
+                        if str(item.get("name") or "") == service_name
+                    ),
+                    None,
+                )
+                selector = selector_labels(
+                    dict(service.get("summary") or {}).get("selector")
+                    if service is not None
+                    else None
+                )
+                if selector:
+                    related_pods = [
+                        pod for pod in pods if labels_match(selector, pod_summary_labels(pod))
+                    ]
+            if pod_refs or related_pods:
+                related["pods"] = related_pods[: max(1, min(limit, 1000))]
             return related
 
         if resource_type == WORKLOAD_RESOURCE_TYPE:
@@ -879,6 +947,59 @@ def pod_summary_labels(pod: JsonObject) -> dict[str, str]:
 
 def labels_match(selector: dict[str, str], labels: dict[str, str]) -> bool:
     return bool(selector) and all(labels.get(key) == value for key, value in selector.items())
+
+
+def endpoint_service_name(endpoint: JsonObject) -> str:
+    summary = endpoint.get("summary") if isinstance(endpoint.get("summary"), dict) else {}
+    service_name = summary.get("service_name")
+    if isinstance(service_name, str) and service_name:
+        return service_name
+    labels = endpoint.get("labels") if isinstance(endpoint.get("labels"), dict) else {}
+    label_service_name = labels.get("kubernetes.io/service-name")
+    return str(label_service_name or "")
+
+
+def endpoint_pod_refs(endpoints: Iterable[JsonObject]) -> set[tuple[str | None, str | None, str]]:
+    refs: set[tuple[str | None, str | None, str]] = set()
+    for endpoint in endpoints:
+        summary = endpoint.get("summary") if isinstance(endpoint.get("summary"), Mapping) else {}
+        endpoint_namespace = endpoint.get("namespace")
+        for item in summary.get("endpoints") if isinstance(summary.get("endpoints"), list) else []:
+            if not isinstance(item, Mapping):
+                continue
+            target = item.get("targetRef")
+            if not isinstance(target, Mapping):
+                target = item.get("target_ref")
+            if not isinstance(target, Mapping):
+                continue
+            if str(target.get("kind") or "").lower() != "pod":
+                continue
+            name = str(target.get("name") or "").strip()
+            if not name:
+                continue
+            namespace = str(target.get("namespace") or endpoint_namespace or "").strip() or None
+            uid = str(target.get("uid") or "").strip() or None
+            refs.add((namespace, uid, name))
+    return refs
+
+
+def pod_matches_endpoint_ref(
+    pod: JsonObject,
+    refs: set[tuple[str | None, str | None, str]],
+) -> bool:
+    pod_namespace = str(pod.get("namespace") or "").strip() or None
+    pod_uid = str(pod.get("uid") or "").strip() or None
+    pod_name = str(pod.get("name") or "").strip()
+    for namespace, uid, name in refs:
+        if namespace is not None and pod_namespace != namespace:
+            continue
+        if uid is not None and pod_uid is not None:
+            if uid == pod_uid:
+                return True
+            continue
+        if pod_name == name:
+            return True
+    return False
 
 
 def pod_owner_matches(pod: JsonObject, *, kind: str, name: str) -> bool:
