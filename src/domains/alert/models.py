@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from sqlalchemy import Boolean, Float, Index, Integer, Text
+from sqlalchemy import Boolean, Float, Index, Integer, Text, text
 from sqlalchemy.dialects.postgresql import JSONB, TIMESTAMP
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -62,5 +62,11 @@ class AlertRule(Base):
     channels: Mapped[list[str]] = mapped_column(JSONB, nullable=False)
     enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     created_by: Mapped[str] = text_column()
+    last_fired_at: Mapped[Any | None] = mapped_column(TIMESTAMP(timezone=True), nullable=True)
+    occurrence_count: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
+        server_default=text("0"),
+    )
     created_at: Mapped[Any] = created_at_column()
     updated_at: Mapped[Any] = updated_at_column()

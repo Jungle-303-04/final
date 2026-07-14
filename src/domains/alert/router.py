@@ -8,8 +8,20 @@ from fastapi import APIRouter, Depends, HTTPException, Response
 
 from domains.alert.delivery import post_alert_webhook
 from domains.alert.events import AlertRequestedBody
-from domains.alert.schemas import AlertRuleCreatedResponse, AlertRuleCreateRequest
-from domains.alert.service import AlertChannelNotFoundError, create_alert_rule_setting
+from domains.alert.schemas import (
+    AlertRuleCreatedResponse,
+    AlertRuleCreateRequest,
+    AlertRuleListResponse,
+    AlertRulePatchRequest,
+    AlertRuleResponse,
+)
+from domains.alert.service import (
+    AlertChannelNotFoundError,
+    AlertRuleNotFoundError,
+    alert_rule_response,
+    create_alert_rule_setting,
+    update_alert_rule_setting,
+)
 from domains.identity.dependencies import require_admin_session
 from packages.contracts.gateway import routes as gateway_routes
 from packages.contracts.gateway.requests import AlertChannelTestRequest, AlertChannelUpsertRequest
@@ -29,6 +41,7 @@ UNSAFE_WEBHOOK_URL_CODE = "unsafe_webhook_url"
 UNSAFE_WEBHOOK_URL_DETAIL = "안전하지 않은 웹훅 URL입니다."
 ALERT_CHANNEL_NOT_FOUND_CODE = "alert_channel_not_found"
 ALERT_CHANNEL_NOT_FOUND_DETAIL = "선택한 알림 채널을 찾을 수 없습니다."
+ALERT_RULE_NOT_FOUND = "alert rule not found"
 
 
 @router.post(
@@ -60,6 +73,55 @@ async def create_alert_rule(
         ) from exc
     response.headers["Location"] = gateway_routes.ALERT_RULE_PATH.format(rule_id=created.rule_id)
     return created
+
+
+@router.get(gateway_routes.ALERT_RULES_PATH, response_model=AlertRuleListResponse)
+async def list_alert_rules(
+    current: Any = Depends(require_admin_session),
+    db: Any = Depends(get_db),
+) -> AlertRuleListResponse:
+    workspace_id = getattr(current, "workspace_id", DEFAULT_WORKSPACE_ID)
+    return AlertRuleListResponse(
+        rules=[alert_rule_response(row) for row in db.list_alert_rules(workspace_id)]
+    )
+
+
+@router.patch(gateway_routes.ALERT_RULE_PATH, response_model=AlertRuleResponse)
+async def update_alert_rule(
+    rule_id: str,
+    payload: AlertRulePatchRequest,
+    current: Any = Depends(require_admin_session),
+    db: Any = Depends(get_db),
+) -> AlertRuleResponse:
+    workspace_id = getattr(current, "workspace_id", DEFAULT_WORKSPACE_ID)
+    try:
+        return update_alert_rule_setting(
+            db,
+            rule_id,
+            payload,
+            workspace_id=workspace_id,
+        )
+    except AlertChannelNotFoundError as exc:
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "code": ALERT_CHANNEL_NOT_FOUND_CODE,
+                "detail": ALERT_CHANNEL_NOT_FOUND_DETAIL,
+            },
+        ) from exc
+    except AlertRuleNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=ALERT_RULE_NOT_FOUND) from exc
+
+
+@router.delete(gateway_routes.ALERT_RULE_PATH, status_code=204, response_model=None)
+async def delete_alert_rule(
+    rule_id: str,
+    current: Any = Depends(require_admin_session),
+    db: Any = Depends(get_db),
+) -> None:
+    workspace_id = getattr(current, "workspace_id", DEFAULT_WORKSPACE_ID)
+    if not db.delete_alert_rule(workspace_id, rule_id):
+        raise HTTPException(status_code=404, detail=ALERT_RULE_NOT_FOUND)
 
 
 @router.get(gateway_routes.ALERT_CHANNELS_PATH, response_model=AlertChannelListResponse)

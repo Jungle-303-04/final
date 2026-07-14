@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Annotated, Literal
 
 from pydantic import Field, field_validator, model_validator
@@ -82,6 +83,69 @@ class AlertRuleCreateRequest(StrictModel):
 
 class AlertRuleCreatedResponse(StrictModel):
     rule_id: str = Field(min_length=1, max_length=120)
+
+
+class AlertRulePatchRequest(StrictModel):
+    name: str | None = Field(default=None, min_length=1, max_length=120)
+    scope: AlertRuleScope | None = None
+    metric: AlertMetric | None = None
+    comparator: AlertComparator | None = None
+    threshold: float | None = Field(default=None, ge=0, allow_inf_nan=False)
+    for_seconds: int | None = Field(default=None, ge=1, le=86_400)
+    severity: AlertSeverity | None = None
+    channels: list[AlertChannelId] | None = Field(default=None, max_length=20)
+    enabled: bool | None = None
+
+    @field_validator("name")
+    @classmethod
+    def normalize_optional_name(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        normalized = " ".join(value.split())
+        if not normalized:
+            raise ValueError("name cannot be blank")
+        return normalized
+
+    @field_validator("channels")
+    @classmethod
+    def canonicalize_optional_channels(cls, values: list[str] | None) -> list[str] | None:
+        if values is None:
+            return None
+        normalized = [value.strip() for value in values]
+        if any(not value for value in normalized):
+            raise ValueError("channel id cannot be blank")
+        return sorted(set(normalized))
+
+    @model_validator(mode="after")
+    def require_nonempty_nonnull_patch(self) -> AlertRulePatchRequest:
+        changes = self.model_dump(exclude_unset=True)
+        if not changes:
+            raise ValueError("alert rule patch cannot be empty")
+        if any(value is None for value in changes.values()):
+            raise ValueError("alert rule fields cannot be null")
+        return self
+
+
+class AlertRuleResponse(StrictModel):
+    rule_id: str = Field(min_length=1, max_length=120)
+    name: str
+    scope: AlertRuleScope
+    metric: AlertMetric
+    comparator: AlertComparator
+    threshold: float
+    for_seconds: int
+    severity: AlertSeverity
+    channels: list[str]
+    enabled: bool
+    last_fired_at: datetime | None = None
+    occurrence_count: int = Field(ge=0)
+    created_by: str
+    created_at: datetime
+    updated_at: datetime
+
+
+class AlertRuleListResponse(StrictModel):
+    rules: list[AlertRuleResponse] = Field(default_factory=list)
 
 
 def _join(values: list[str]) -> str | None:

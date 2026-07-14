@@ -33,6 +33,14 @@ def serialize_alert_channel(row: JsonObject) -> JsonObject:
     return item
 
 
+def serialize_alert_rule(row: JsonObject) -> JsonObject:
+    item = dict(row)
+    item["last_fired_at"] = iso_or_none(item.get("last_fired_at"))
+    item["created_at"] = iso_or_none(item.get("created_at"))
+    item["updated_at"] = iso_or_none(item.get("updated_at"))
+    return item
+
+
 class AlertChannelRepository(DatabaseConnection):
     def list_alert_channels(
         self, workspace_id: str, *, only_enabled: bool = False
@@ -170,4 +178,43 @@ class AlertRuleRepository(DatabaseConnection):
         )
         with self.connection() as conn:
             row = conn.execute(statement).mappings().one()
-        return dict(row)
+        return serialize_alert_rule(dict(row))
+
+    def list_alert_rules(self, workspace_id: str) -> list[JsonObject]:
+        table = AlertRule.__table__
+        statement = (
+            select(table)
+            .where(table.c.workspace_id == workspace_id)
+            .order_by(table.c.updated_at.desc(), table.c.rule_id)
+        )
+        with self.connection() as conn:
+            rows = conn.execute(statement).mappings().all()
+        return [serialize_alert_rule(dict(row)) for row in rows]
+
+    def update_alert_rule(
+        self,
+        workspace_id: str,
+        rule_id: str,
+        changes: JsonObject,
+    ) -> JsonObject | None:
+        table = AlertRule.__table__
+        statement = (
+            table.update()
+            .where(table.c.workspace_id == workspace_id, table.c.rule_id == rule_id)
+            .values(**changes, updated_at=func.now())
+            .returning(table)
+        )
+        with self.connection() as conn:
+            row = conn.execute(statement).mappings().first()
+        return serialize_alert_rule(dict(row)) if row is not None else None
+
+    def delete_alert_rule(self, workspace_id: str, rule_id: str) -> bool:
+        table = AlertRule.__table__
+        statement = (
+            delete(table)
+            .where(table.c.workspace_id == workspace_id, table.c.rule_id == rule_id)
+            .returning(table.c.rule_id)
+        )
+        with self.connection() as conn:
+            row = conn.execute(statement).first()
+        return row is not None
