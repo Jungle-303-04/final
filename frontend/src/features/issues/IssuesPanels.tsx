@@ -194,7 +194,15 @@ function RecoveryPanel({
 }) {
   return (
     <SectionCard title={copy.recoveryLabel}>
-      {receipt ? <Alert><AlertDescription>{copy.selectionReceived(receipt.eventId)}</AlertDescription></Alert> : null}
+      {receipt ? (
+        <Alert title={receipt.eventId}>
+          <AlertDescription>
+            {copy.selectionReceived(
+              receipt.eventId.length > 12 ? `${receipt.eventId.slice(0, 8)}…` : receipt.eventId,
+            )}
+          </AlertDescription>
+        </Alert>
+      ) : null}
       <IssueSectionFrame copy={copy} state={state} unavailable={copy.recoveryUnavailable}>
         {(plan) => (
           <div className="grid gap-3">
