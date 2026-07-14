@@ -71,7 +71,19 @@ root cause 단위로 펼친 것이다.
 | `timeout_too_short` | `probe_fix` | Probe 설정 보정 PR | `draft_pr` | `medium` | `0.66` | `true` | `target_workload` | `strategy=approved_value_or_bounded_timeout` |
 | `startup_window_too_short` | `probe_fix` | Probe 설정 보정 PR | `draft_pr` | `medium` | `0.66` | `true` | `target_workload` | `strategy=approved_value_or_bounded_timeout` |
 | `selector_label_mismatch` | `selector_fix` | Deployment selector 최소 보정 PR | `draft_pr` | `medium` | `0.68` | `true` | `target_workload` | `strategy=match_template_label`, `max_fields=1` |
-| fallback | `manual_analysis` | 수동 RCA 분석 요청 | `approval_required` | `unknown` | `0.00` | `true` | `unknown` | `manual=true` |
+| `app_port_bind_failed` | `container_port_review` | 컨테이너 포트 충돌 검토 | `approval_required` | `medium` | `0.62` | `true` | `target_workload` | `manual=true`, `fix=container_port` |
+| `permission_denied_startup` | `startup_security_context_review` | Startup 권한/보안 컨텍스트 확인 | `approval_required` | `medium` | `0.62` | `true` | `target_workload` | `manual=true`, `fix=startup_permission` |
+| `config_key_missing` | `config_key_review` | ConfigMap key 누락 확인 | `approval_required` | `medium` | `0.64` | `true` | `target_workload` | `manual=true`, `fix=config_key` |
+| `missing_secret_reference` | `secret_reference_fix` | Secret 참조 누락 확인 | `approval_required` | `medium` | `0.64` | `true` | `target_namespace` | `manual=true`, `fix=secret_reference` |
+| `service_name_or_namespace_mismatch` | `service_reference_review` | Service 이름/namespace 참조 확인 | `approval_required` | `medium` | `0.62` | `true` | `target_workload` | `manual=true`, `fix=service_reference` |
+| `network_policy_denied` | `network_policy_review` | NetworkPolicy 차단 확인 | `approval_required` | `medium` | `0.62` | `true` | `target_namespace` | `manual=true`, `fix=network_policy` |
+| `metrics_server_unavailable` | `autoscaling_metrics_recovery` | Autoscaling metrics 경로 복구 | `approval_required` | `medium` | `0.62` | `true` | `target_namespace` | `manual=true`, `fix=autoscaling_metrics` |
+| `missing_resource_requests` | `resource_request_tuning` | HPA resource request 보정 PR | `draft_pr` | `medium` | `0.64` | `true` | `target_workload` | `strategy=hpa_required_requests` |
+| `max_replica_limit_reached` | `replica_scale` | HPA maxReplicas 상한 검토 PR | `draft_pr` | `medium` | `0.62` | `true` | `target_workload` | `strategy=hpa_max_replicas_review`, `max_replicas=10` |
+| `database_connectivity_failure` | `dependency_connection_review` | DB 연결 경로 복구 검토 | `approval_required` | `medium` | `0.62` | `true` | `target_workload` | `manual=true`, `fix=db_connectivity` |
+| `database_connection_pool_exhausted` | `dependency_connection_review` | DB 연결 경로 복구 검토 | `approval_required` | `medium` | `0.62` | `true` | `target_workload` | `manual=true`, `fix=db_connectivity` |
+| `database_credential_or_config_error` | `dependency_config_review` | DB 인증/설정 참조 확인 | `approval_required` | `medium` | `0.62` | `true` | `target_workload` | `manual=true`, `fix=db_config` |
+| `fallback` | `manual_analysis` | 수동 RCA 분석 요청 | `approval_required` | `unknown` | `0.00` | `true` | `unknown` | `manual=true` |
 
 ## 세부 조건 표
 
@@ -103,7 +115,19 @@ root cause 단위로 펼친 것이다.
 | `timeout_too_short` | `probe_fix` | GitOps 승인 snapshot; probe 실패 근거 | Probe 성공; Pod Ready 전환; 실제 health 실패 은폐 없음 | 동반된 inverse patch로 이전 probe scalar를 복원합니다. |
 | `startup_window_too_short` | `probe_fix` | GitOps 승인 snapshot; probe 실패 근거 | Probe 성공; Pod Ready 전환; 실제 health 실패 은폐 없음 | 동반된 inverse patch로 이전 probe scalar를 복원합니다. |
 | `selector_label_mismatch` | `selector_fix` | 단일 selector 불일치; GitOps 승인 snapshot | selector-template 일치; Ready endpoint 회복 | 동반된 inverse patch로 이전 selector를 복원합니다. |
-| fallback | `manual_analysis` | 운영자 RCA 검토 | 원인 rule 추가 여부 검토 | 자동 변경 없음 |
+| `app_port_bind_failed` | `container_port_review` | startup log의 port bind 실패 근거; 컨테이너 port와 service targetPort 확인 | pod 재시작 루프 중단; 프로세스 listen 성공; Ready 상태 회복 | 포트 설정 변경이 있었다면 manifest 변경 commit을 revert합니다. |
+| `permission_denied_startup` | `startup_security_context_review` | startup log의 permission denied 근거; securityContext와 mount permission 확인 | permission denied 로그 소멸; pod Ready 회복; 보안 정책 위반 없음 | securityContext 또는 mount 권한 변경 commit을 revert합니다. |
+| `config_key_missing` | `config_key_review` | 누락 key 이름 확인; ConfigMap 참조 namespace 확인 | config load error 소멸; pod Ready 회복; 잘못된 기본값 주입 없음 | ConfigMap key 보정 또는 참조 변경 commit을 revert합니다. |
+| `missing_secret_reference` | `secret_reference_fix` | Secret 이름과 key reference 확인; 대상 namespace 확인 | secret not found 이벤트 소멸; pod Ready 회복; 민감값 노출 없음 | Secret 참조 변경 commit을 revert하거나 이전 참조로 되돌립니다. |
+| `service_name_or_namespace_mismatch` | `service_reference_review` | 오류 로그의 service host 확인; 실제 Service name/namespace 확인 | DNS lookup 실패 소멸; 대상 service 연결 성공; 5xx/timeout 감소 | service 참조 설정 변경 commit을 revert합니다. |
+| `network_policy_denied` | `network_policy_review` | 차단된 source/destination 확인; 적용 중인 NetworkPolicy 확인 | 허용 후 연결 성공; 불필요한 namespace 노출 없음; 5xx/timeout 감소 | NetworkPolicy 변경 commit을 revert합니다. |
+| `metrics_server_unavailable` | `autoscaling_metrics_recovery` | HPA FailedGetResourceMetric 근거; metrics API 또는 adapter 상태 확인 | HPA metric 조회 성공; ScalingActive 회복; replica 계산 재개 | metrics adapter 또는 HPA 설정 변경 commit을 revert합니다. |
+| `missing_resource_requests` | `resource_request_tuning` | 누락된 resource request 확인; GitOps 승인 snapshot | HPA metric 계산 성공; Pod Ready 유지; 리소스 사용률 안정 | resource request 보정 commit을 revert합니다. |
+| `max_replica_limit_reached` | `replica_scale` | ScalingLimited=True 근거; GitOps 승인 snapshot; 리소스 여유 확인 | Ready replica 증가; ScalingLimited 완화; 5xx/latency 감소 | 동반된 inverse patch로 replica 상한 또는 replica 수를 이전 값으로 되돌립니다. |
+| `database_connectivity_failure` | `dependency_connection_review` | DB connection error 로그 또는 trace 근거; DB endpoint와 pool 설정 확인 | DB 연결 성공; pool exhausted 로그 감소; 요청 성공률 회복 | DB connection 설정 변경 commit을 revert합니다. |
+| `database_connection_pool_exhausted` | `dependency_connection_review` | DB connection error 로그 또는 trace 근거; DB endpoint와 pool 설정 확인 | DB 연결 성공; pool exhausted 로그 감소; 요청 성공률 회복 | DB connection 설정 변경 commit을 revert합니다. |
+| `database_credential_or_config_error` | `dependency_config_review` | DB credential/config error 근거; Secret/ConfigMap reference 확인 | DB 인증 성공; 설정 오류 로그 소멸; 민감값 노출 없음 | DB 설정 참조 변경 commit을 revert합니다. |
+| `fallback` | `manual_analysis` | 운영자 RCA 검토 | 원인 rule 추가 여부 검토 | 자동 변경 없음 |
 
 ## 현재 코드에서 자동 선택되는 조건
 
@@ -145,6 +169,16 @@ context가 없거나 action type이 지원되지 않거나 patch를 만들 수 �
 | `missing_image_pull_secret` | `image_pull_secret_fix` | `security_boundary` | 보안 경계 확인 | registry 인증 정보나 Secret 참조 변경은 보안 권한과 연결되므로 자동 변경하지 않는다. |
 | `registry_unavailable` | `registry_recovery` | `external_dependency` | 외부 의존성 확인 | registry 장애, mirror 전환, 네트워크 경로 변경은 플랫폼 밖 상태 확인이 필요하다. |
 | `pvc_pending` | `pvc_binding_fix` | `data_safety` | 데이터 안전성 확인 | PVC와 StorageClass 변경은 데이터 보존, 바인딩, 삭제 정책에 영향을 줄 수 있다. |
+| `app_port_bind_failed` | `container_port_review` | `configuration_boundary` | 설정 경계 확인 | 포트 충돌은 manifest, service, probe, 애플리케이션 listen 설정을 함께 봐야 하므로 자동 수정하지 않는다. |
+| `permission_denied_startup` | `startup_security_context_review` | `security_boundary` | 보안 경계 확인 | securityContext, 실행 사용자, mount 권한은 보안 정책에 영향을 주므로 운영자 확인이 필요하다. |
+| `config_key_missing` | `config_key_review` | `configuration_boundary` | 설정 경계 확인 | ConfigMap key 보정은 기대값을 플랫폼이 임의로 만들 수 없으므로 참조와 값을 사람이 확인해야 한다. |
+| `missing_secret_reference` | `secret_reference_fix` | `security_boundary` | 보안 경계 확인 | Secret 참조는 민감 정보 경계와 연결되므로 이름/key reference만 확인하고 값은 자동 생성하지 않는다. |
+| `service_name_or_namespace_mismatch` | `service_reference_review` | `traffic_routing` | 트래픽 경로 확인 | service DNS 이름과 namespace 변경은 호출 경로를 바꾸므로 대상 service 확인이 필요하다. |
+| `network_policy_denied` | `network_policy_review` | `traffic_routing` | 트래픽 경로 확인 | NetworkPolicy 변경은 namespace 간 통신 허용 범위를 넓힐 수 있어 자동 적용하지 않는다. |
+| `metrics_server_unavailable` | `autoscaling_metrics_recovery` | `platform_dependency` | 플랫폼 의존성 확인 | metrics-server나 adapter는 공용 autoscaling 경로라 대상 workload 근거만으로 재구성하지 않는다. |
+| `database_connectivity_failure` | `dependency_connection_review` | `external_dependency` | 외부 의존성 확인 | DB endpoint, 네트워크, pool 상태는 플랫폼 밖 서비스 상태 확인이 필요하다. |
+| `database_connection_pool_exhausted` | `dependency_connection_review` | `external_dependency` | 외부 의존성 확인 | pool exhausted는 앱 설정과 DB 용량 양쪽을 봐야 하므로 자동 변경하지 않는다. |
+| `database_credential_or_config_error` | `dependency_config_review` | `external_dependency` | 외부 의존성 확인 | DB 인증/설정 문제는 Secret/ConfigMap 참조와 외부 DB 권한을 함께 확인해야 한다. |
 | fallback | `manual_analysis` | `manual_only` | 수동 분석 필요 | 자동 복구 후보가 충분하지 않거나 rule로 설명 가능한 조치가 없다. |
 | 기타 `approval_required` | 기타 | `manual_review_required` | 운영자 승인 필요 | 선택된 복구 조치가 자동 실행 조건을 충족하지 않는다. |
 

@@ -513,6 +513,34 @@ def test_approval_required_recovery_dispatch_explains_manual_reason() -> None:
     assert action_required.diagnostics["approval_reason"] == "security_boundary"
 
 
+def test_recovery_catalog_covers_recent_rule_root_causes_with_specific_actions() -> None:
+    recovery_worker = load_service("ai/recovery-worker")
+    expected = {
+        "app_port_bind_failed": "container_port_review",
+        "permission_denied_startup": "startup_security_context_review",
+        "config_key_missing": "config_key_review",
+        "missing_secret_reference": "secret_reference_fix",
+        "service_name_or_namespace_mismatch": "service_reference_review",
+        "network_policy_denied": "network_policy_review",
+        "metrics_server_unavailable": "autoscaling_metrics_recovery",
+        "missing_resource_requests": "resource_request_tuning",
+        "max_replica_limit_reached": "replica_scale",
+        "database_connectivity_failure": "dependency_connection_review",
+        "database_connection_pool_exhausted": "dependency_connection_review",
+        "database_credential_or_config_error": "dependency_config_review",
+    }
+
+    for root_cause, action_type in expected.items():
+        recovery_outs = run_handler(
+            recovery_worker.on_rca_completed,
+            report_for(root_cause),
+        )
+        plan = recovery_outs[0].plan
+
+        assert plan.candidates[0].draft.action_type == action_type
+        assert plan.candidates[0].draft.action_type != "manual_analysis"
+
+
 def test_recovery_command_targets_owner_deployment_from_pod_or_replicaset() -> None:
     assert command_target_name("Pod", "checkout-api-7d9f8c9b7c-abcde", {}) == "checkout-api"
     assert command_target_name("ReplicaSet", "checkout-api-7d9f8c9b7c", {}) == "checkout-api"
