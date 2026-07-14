@@ -13,7 +13,7 @@ updated: 2026-07-14
 URL      : https://k8s.woonyong.org
 배포 SHA : 10f0fad17bcf2e22880e4adae1194fa103736a69 (FULL, run 29302233623)
 상태판 소스: dev의 이 파일이 포함된 커밋
-갱신     : 2026-07-14 13:31 KST  P1~P5 완료 · S0 모션 기반 구현 완료
+갱신     : 2026-07-14 13:53 KST  S1 구현·gate 완료 · 자동 배포/public 확인 대기
 ```
 
 - public health: HTTP 200
@@ -61,13 +61,13 @@ URL      : https://k8s.woonyong.org
 
 ## 이번 슬라이스에서 확인할 것
 
-- [x] VP-017 duration·easing·stagger 토큰 중앙화
-- [x] FLIP rect 수집·역변환·420ms camera morph 테스트
-- [x] 스태거 520ms 상한·서버→파드 wave 테스트
-- [x] reduced-motion에서 CSS 모션 1ms·JS morph 완전 생략
-- [x] `@keyframes`·Web Animations 소유권을 `src/motion/`으로 제한하는 design guard
-- [x] S0 전용 21개 테스트·typecheck·lint·production build 통과
-- [ ] S0 SHA 자동 배포 및 public 화면 무회귀 확인
+- [x] BQ-069 nullable 서버/앱/인시던트/last-seen 계약 — 미확인 값을 0으로 내리지 않음
+- [x] `/clusters` 최상단 라우트·provider enum 아이콘·연결 상태 카드
+- [x] 서버 예고 블록 20×14px·최대 5개·`data-morph-id="server:<cluster>:<i>"`
+- [x] `node-land` 70ms 스태거·reduced-motion 연동
+- [x] 카드 클릭 URL이 기존 필터를 보존하며 `clusters=<id>`를 교체
+- [x] S1 전용 테스트 + 전체 `make gate-fast` — 149 files / 1007 tests
+- [ ] S0/S1 SHA 자동 배포 및 public `/clusters` 클릭 경로 확인
 
 ---
 

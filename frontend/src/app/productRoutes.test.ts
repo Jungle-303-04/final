@@ -11,6 +11,7 @@ import {
 describe("product route release registry", () => {
   it("defines the provider-neutral backend-backed primary route order", () => {
     expect(PRODUCT_ROUTE_CATALOG.map((route) => route.id)).toEqual([
+      "clusters",
       "home",
       "resources",
       "issues",
@@ -20,6 +21,7 @@ describe("product route release registry", () => {
       "catalog",
     ]);
     expect(PRODUCT_ROUTE_CATALOG.map((route) => route.label)).toEqual([
+      "Clusters",
       "Home",
       "Resources",
       "Issues",
@@ -52,6 +54,7 @@ describe("product route release registry", () => {
 
   it.each([
     ["/", "home"],
+    ["/clusters", "clusters"],
     ["/resources/pods", "resources"],
     ["/metrics", "metrics"],
     ["/gitops/detail/application/default/storefront", "gitops"],
@@ -60,12 +63,12 @@ describe("product route release registry", () => {
     expect(productRouteForPath(pathname)?.id).toBe(routeId);
   });
 
-  it("falls unknown and retired demo routes back to Home", () => {
-    expect(resolveProductRoute("/not-a-route").id).toBe("home");
-    expect(resolveProductRoute("/topology").id).toBe("home");
-    expect(resolveProductRoute("/timeline").id).toBe("home");
-    expect(resolveProductRoute("/traffic").id).toBe("home");
-    expect(resolveProductRoute("/legacy-metrics").id).toBe("home");
+  it("falls unknown and retired demo routes back to the Clusters entry point", () => {
+    expect(resolveProductRoute("/not-a-route").id).toBe("clusters");
+    expect(resolveProductRoute("/topology").id).toBe("clusters");
+    expect(resolveProductRoute("/timeline").id).toBe("clusters");
+    expect(resolveProductRoute("/traffic").id).toBe("clusters");
+    expect(resolveProductRoute("/legacy-metrics").id).toBe("clusters");
   });
 
   it("keeps backend-gap screens and Settings out of the primary route catalog", () => {

@@ -1,4 +1,5 @@
 import type { MessageKey } from "./types";
+import { clustersKo } from "./catalogs/ko/clusters";
 import { issuesKo } from "./catalogs/ko/issues";
 import { metricsKo } from "./catalogs/ko/metrics";
 import { resourcesKo } from "./catalogs/ko/resources";
@@ -71,6 +72,7 @@ export const ko = {
   "shell.menu.mobileTitle": "제품 탐색",
   "shell.menu.primary": "주요 메뉴",
   "shell.nav.applications": "애플리케이션",
+  "shell.nav.clusters": "클러스터",
   "shell.nav.catalog": "카탈로그",
   "shell.nav.gitops": "GitOps",
   "shell.nav.home": "홈",
@@ -94,6 +96,7 @@ export const ko = {
   "shell.shortcut.resources.openRow": "리소스 상세 열기",
   "shell.shortcut.resources.previousRow": "이전 리소스",
   "shell.shortcut.route.applications": "애플리케이션 화면 열기",
+  "shell.shortcut.route.clusters": "클러스터 화면 열기",
   "shell.shortcut.route.catalog": "카탈로그 화면 열기",
   "shell.shortcut.route.gitops": "GitOps 화면 열기",
   "shell.shortcut.route.home": "홈 화면 열기",
@@ -237,6 +240,7 @@ export const ko = {
   "home.section.nodeAndPod": "Node와 Pod",
   "home.section.statusChecking": "상태 확인 중",
   "home.status.connected": "연결됨",
+  ...clustersKo,
   ...resourcesKo,
   ...issuesKo,
   ...metricsKo,

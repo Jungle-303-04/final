@@ -29,6 +29,9 @@ describe("canonical Home adapter mapping", () => {
             nodeCount: 2,
             podCount: 18,
             incidentCount: 1,
+            serverCount: 2,
+            appCount: null,
+            openIncidentCount: 1,
           },
           {
             id: "kubernetes-ops",
@@ -43,6 +46,9 @@ describe("canonical Home adapter mapping", () => {
             nodeCount: 0,
             podCount: 0,
             incidentCount: 0,
+            serverCount: null,
+            appCount: null,
+            openIncidentCount: null,
           },
         ],
       });

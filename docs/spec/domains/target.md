@@ -559,7 +559,7 @@ Scheduling profile 응답 예시:
 ```
 
 ### 5. 클러스터 연결 상태·목록
-`GET /clusters`는 `BLOCKED_TEST_CLUSTER_IDS`/`BLOCKED_TEST_CLUSTER_NAME_PARTS`에 걸리는 테스트 클러스터를 목록에서 제외하고, db가 `inventory_resource_counts`를 제공하면 `inventory_counts`로 합산한 `node_count`/`pod_count`(+`incident_count=0`)를 각 `ClusterSummary`에 채운다. provider는 구체 등록값(`eks/gke/aks/kind`)을 최우선으로 사용하고, generic 등록(`existing-k8s/minikube`)은 agent가 Node `spec.providerID` 또는 vendor 전용 label로 감지한 3사 값을 우선한 뒤 `onprem`으로 fallback한다. 어느 근거도 없으면 `unknown`이다. 목록의 최신 inventory snapshot은 cluster별 N+1 조회 대신 단일 window query로 읽는다.
+`GET /clusters`는 `BLOCKED_TEST_CLUSTER_IDS`/`BLOCKED_TEST_CLUSTER_NAME_PARTS`에 걸리는 테스트 클러스터를 목록에서 제외한다. 현재 inventory snapshot과 `inventory_resource_counts`가 모두 있을 때만 `node_count`/`server_count`/`pod_count`를 채우고, incident count source가 있을 때만 `incident_count`/`open_incidents`를 채운다. `app_count`는 정본 집계가 생길 때까지 `None`이다. **BQ-069 제품 필드는 값을 증명할 수 없으면 0이 아니라 `None`**이며, `last_seen_at`은 최신 agent heartbeat를 그대로 사용한다. provider는 구체 등록값(`eks/gke/aks/kind`)을 최우선으로 사용하고, generic 등록(`existing-k8s/minikube`)은 agent가 Node `spec.providerID` 또는 vendor 전용 label로 감지한 3사 값을 우선한 뒤 `onprem`으로 fallback한다. 어느 근거도 없으면 `unknown`이다. 목록의 최신 inventory snapshot은 cluster별 N+1 조회 대신 단일 window query로 읽는다.
 
 `GET /clusters`·`GET /clusters/{id}`·`GET /clusters/{id}/connection-status`는 기존 `connection_status`를 보존하면서 다음 `connection_stage`를 함께 반환한다. `token_issued`는 등록 직후 응답에서만 관측 가능하며, 설치 manifest fetch를 별도로 영속하지 않으므로 이후 polling에서 추론하지 않는다.
 

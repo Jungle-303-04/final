@@ -8,6 +8,7 @@ describe("API composition root", () => {
     const composition = createApiComposition();
 
     expect(composition.surfaces.map((surface) => surface.id)).toEqual([
+      "clusters",
       "home",
       "resources",
       "issues",
@@ -15,6 +16,7 @@ describe("API composition root", () => {
       "gitops",
     ]);
     expect([...composition.releasedSurfaceIds]).toEqual([
+      "clusters",
       "home",
       "resources",
       "issues",

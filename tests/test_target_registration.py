@@ -1099,8 +1099,12 @@ def test_cluster_list_uses_access_filter_and_agent_status() -> None:
     assert response.clusters[0].connection_stage == "ready"
     assert response.clusters[0].last_agent_id == "agent-1"
     assert response.clusters[0].node_count == 2
+    assert response.clusters[0].server_count == 2
     assert response.clusters[0].pod_count == 9
     assert response.clusters[0].incident_count == 3
+    assert response.clusters[0].open_incidents == 3
+    assert response.clusters[0].app_count is None
+    assert response.clusters[0].last_seen_at == db.agent["last_seen_at"]
 
 
 def test_cluster_connection_status_route_returns_agent_details() -> None:
@@ -1198,6 +1202,11 @@ def test_cluster_summary_generic_registration_falls_back_to_onprem() -> None:
 
     assert summary.provider == "onprem"
     assert summary.connection_stage == "awaiting_install"
+    assert summary.server_count is None
+    assert summary.pod_count is None
+    assert summary.app_count is None
+    assert summary.open_incidents is None
+    assert summary.last_seen_at is None
 
 
 def test_cluster_connection_stage_uses_current_snapshot_and_later_heartbeat() -> None:

@@ -1,0 +1,92 @@
+// @vitest-environment jsdom
+
+import { cleanup, render, screen } from "@testing-library/react";
+import { MemoryRouter } from "react-router-dom";
+import { afterEach, describe, expect, it } from "vitest";
+import type { HomeClusterChoice } from "../../features/home/homeContract";
+import { I18nProvider } from "../../shared/i18n";
+import { ClusterCard } from "./ClusterCard";
+
+const cluster: HomeClusterChoice = {
+  id: "cluster-1",
+  workspaceId: "workspace-main",
+  name: "Production",
+  environment: "production",
+  provider: "eks",
+  connectionStage: "ready",
+  registrationState: "active",
+  connectionState: "online",
+  lastObservedAt: "2026-07-14T01:00:00Z",
+  nodeCount: 8,
+  podCount: 47,
+  incidentCount: 1,
+  serverCount: 8,
+  appCount: 6,
+  openIncidentCount: 1,
+};
+
+afterEach(cleanup);
+
+describe("ClusterCard", () => {
+  it("renders enum provider, verified metrics, stagger, and five morph previews", () => {
+    const { container } = renderCard(cluster, 2);
+
+    expect(screen.getByRole("img", { name: "Amazon Elastic Kubernetes Service" })
+      .getAttribute("data-provider")).toBe("eks");
+    expect(screen.getByText("Servers 8")).toBeTruthy();
+    expect(screen.getByText("Pods 47")).toBeTruthy();
+    expect(screen.getByText("Apps 6")).toBeTruthy();
+    expect(screen.getByText("Incidents 1")).toBeTruthy();
+    expect((container.querySelector("[data-cluster-id='cluster-1']") as HTMLElement).style.animationDelay)
+      .toBe("140ms");
+    expect([...container.querySelectorAll("[data-morph-id]")].map((element) => (
+      element.getAttribute("data-morph-id")
+    ))).toEqual([
+      "server:cluster-1:0",
+      "server:cluster-1:1",
+      "server:cluster-1:2",
+      "server:cluster-1:3",
+      "server:cluster-1:4",
+    ]);
+    expect(screen.getByText("+3")).toBeTruthy();
+  });
+
+  it("omits unknown counts instead of presenting them as zero", () => {
+    renderCard({
+      ...cluster,
+      nodeCount: null,
+      podCount: null,
+      incidentCount: null,
+      serverCount: null,
+      appCount: null,
+      openIncidentCount: null,
+    });
+
+    expect(screen.queryByText(/Servers/)).toBeNull();
+    expect(screen.queryByText(/Pods/)).toBeNull();
+    expect(screen.queryByText(/Apps/)).toBeNull();
+    expect(screen.queryByText(/Incidents/)).toBeNull();
+    expect(screen.queryByText("Healthy")).toBeNull();
+  });
+
+  it("links the whole card to the canonical Resources URL", () => {
+    renderCard(cluster);
+
+    expect(screen.getByRole("link", { name: "Open resources for Production" })
+      .getAttribute("href")).toBe("/resources?clusters=cluster-1");
+  });
+});
+
+function renderCard(value: HomeClusterChoice, index = 0) {
+  return render(
+    <I18nProvider navigatorLanguage="en-US" storage={null}>
+      <MemoryRouter>
+        <ClusterCard
+          cluster={value}
+          href="/resources?clusters=cluster-1"
+          index={index}
+        />
+      </MemoryRouter>
+    </I18nProvider>,
+  );
+}

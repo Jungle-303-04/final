@@ -49,7 +49,7 @@
 
 :root {
   color-scheme: light;
-  --product-sidebar-width: 11rem;
+  --product-sidebar-width: 12.5rem;
   --product-sidebar-width-collapsed: 3.5rem;
   --product-sidebar-width-mobile: 17rem;
   --product-cluster-select-width: 24rem;

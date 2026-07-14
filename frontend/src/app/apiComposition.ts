@@ -32,6 +32,7 @@ import { createResourcesAdapter } from "../features/resources/createResourcesAda
 import { createHomeSurface } from "../pages/home/createHomeSurface";
 import { createIssuesSurface } from "../pages/issues/createIssuesSurface";
 import { createResourcesSurface } from "../pages/resources/createResourcesSurface";
+import { createClustersSurface } from "../pages/clusters/createClustersSurface";
 import { createGitOpsSurface } from "../pages/gitops/createGitOpsSurface";
 import { createProductComposition } from "./productComposition";
 
@@ -64,6 +65,10 @@ export function createApiComposition() {
   });
   const gitOpsPort = createGitOpsAdapter(createReleaseFlowClient());
   return createProductComposition([
+    {
+      id: "clusters",
+      Component: createClustersSurface(),
+    },
     {
       id: "home",
       Component: createHomeSurface(homePort),

@@ -12,9 +12,13 @@ export interface HomeEndpointClusterSummary {
   connection_stage?: HomeConnectionStage;
   last_agent_id: string | null;
   last_agent_seen_at: string | null;
-  node_count: number;
-  pod_count: number;
-  incident_count: number;
+  node_count: number | null;
+  pod_count: number | null;
+  incident_count: number | null;
+  server_count?: number | null;
+  app_count?: number | null;
+  open_incidents?: number | null;
+  last_seen_at?: string | null;
   created_at: string | null;
   updated_at: string | null;
 }

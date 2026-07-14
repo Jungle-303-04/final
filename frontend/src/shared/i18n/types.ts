@@ -1,3 +1,4 @@
+import type { ClustersMessageKey } from "./keys/clusters";
 import type { IssuesMessageKey } from "./keys/issues";
 import type { MetricsMessageKey } from "./keys/metrics";
 import type { ResourcesMessageKey } from "./keys/resources";
@@ -77,6 +78,7 @@ type CoreMessageKey =
   | "shell.menu.mobileTitle"
   | "shell.menu.primary"
   | "shell.nav.gitops"
+  | "shell.nav.clusters"
   | "shell.nav.home"
   | "shell.nav.issues"
   | "shell.nav.applications"
@@ -100,6 +102,7 @@ type CoreMessageKey =
   | "shell.shortcut.resources.openRow"
   | "shell.shortcut.resources.previousRow"
   | "shell.shortcut.route.applications"
+  | "shell.shortcut.route.clusters"
   | "shell.shortcut.route.catalog"
   | "shell.shortcut.route.gitops"
   | "shell.shortcut.route.home"
@@ -246,6 +249,7 @@ type CoreMessageKey =
 
 export type MessageKey =
   | CoreMessageKey
+  | ClustersMessageKey
   | IssuesMessageKey
   | MetricsMessageKey
   | ResourcesMessageKey
