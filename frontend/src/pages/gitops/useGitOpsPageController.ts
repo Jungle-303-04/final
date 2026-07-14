@@ -11,6 +11,8 @@ import {
   clonePlan,
   createEmptyPlan,
   isWorkflowView,
+  stepKey,
+  type StepSetupField,
   type WorkflowView,
 } from "../../features/gitops/workflowModel";
 import { useUnifiedFilter } from "../../features/filters/UnifiedFilterProvider";
@@ -34,7 +36,10 @@ export function useGitOpsPageController(port: GitOpsPort) {
   const [selectedStepId, setSelectedStepId] = useState("");
   const [readiness, setReadiness] = useState<ReleaseReadiness>();
   const [manifest, setManifest] = useState<GeneratedManifest>();
+  const [manifestStepIndex, setManifestStepIndex] = useState<number>();
   const [safePr, setSafePr] = useState<SafePrResult>();
+  const [safePrStepIndex, setSafePrStepIndex] = useState<number>();
+  const [editorTarget, setEditorTarget] = useState<{ stepId: string; field?: StepSetupField }>();
   const [operation, setOperation] = useState<Operation>("idle");
   const [feedback, setFeedback] = useState<WorkflowFeedback>();
   const latestRun = useMemo(
@@ -56,7 +61,10 @@ export function useGitOpsPageController(port: GitOpsPort) {
       setSelectedStepId("");
       setReadiness(undefined);
       setManifest(undefined);
+      setManifestStepIndex(undefined);
       setSafePr(undefined);
+      setSafePrStepIndex(undefined);
+      setEditorTarget(undefined);
     });
     return () => cancelAnimationFrame(frame);
   }, [selectedPlan]);
@@ -73,6 +81,14 @@ export function useGitOpsPageController(port: GitOpsPort) {
       workflowView: nextView,
       workflowPlan: selectedPlan?.plan_id || current.workflowPlan,
     }), "detail-tab");
+  };
+
+  const openEditor = (stepIndex?: number, field?: StepSetupField) => {
+    const step = typeof stepIndex === "number" ? selectedPlan?.steps[stepIndex] : undefined;
+    setEditorTarget(step && typeof stepIndex === "number"
+      ? { stepId: stepKey(step, stepIndex), field }
+      : undefined);
+    setView("edit");
   };
 
   const selectPlan = (planId: string) => {
@@ -158,23 +174,33 @@ export function useGitOpsPageController(port: GitOpsPort) {
   const generateManifest = async (stepIndex: number) => {
     if (!selectedPlan) return;
     setOperation("generate");
+    setManifest(undefined);
+    setManifestStepIndex(undefined);
     setSafePr(undefined);
-    try { setManifest(await port.renderManifest(selectedPlan, stepIndex)); }
+    setSafePrStepIndex(undefined);
+    try {
+      setManifest(await port.renderManifest(selectedPlan, stepIndex));
+      setManifestStepIndex(stepIndex);
+    }
     catch { handleError(); } finally { setOperation("idle"); }
   };
 
   const submitSafePr = async (stepIndex: number) => {
     if (!selectedPlan) return;
     setOperation("safe-pr");
-    try { setSafePr(await port.submitSafePr(selectedPlan, stepIndex)); }
+    try {
+      setSafePr(await port.submitSafePr(selectedPlan, stepIndex));
+      setSafePrStepIndex(stepIndex);
+    }
     catch { handleError(); } finally { setOperation("idle"); }
   };
 
   return {
     data, view, creating, selectedPlan, draft, setDraft, newPlan, setNewPlan,
-    selectedStepId, setSelectedStepId, readiness, manifest, safePr, operation,
+    selectedStepId, setSelectedStepId, readiness, manifest, manifestStepIndex,
+    safePr, safePrStepIndex, editorTarget, operation,
     feedback, setFeedback, latestRun, setView, selectPlan, beginCreate, cancelCreate,
-    saveDraft, createPlan, checkReadiness, startPlan, runAction,
+    openEditor, saveDraft, createPlan, checkReadiness, startPlan, runAction,
     generateManifest, submitSafePr,
   };
 }

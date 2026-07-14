@@ -1,5 +1,5 @@
 import { ArrowLeft, ArrowRight, Check, GitBranch, Save, ShieldCheck } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { ReleaseApplication, ReleasePlan } from "../../features/gitops/gitOpsContract";
 import {
   APPROVAL_POLICIES,
@@ -21,6 +21,7 @@ import { WorkflowGraph } from "./WorkflowGraph";
 import { WorkflowInlineHeading } from "./WorkflowInlineHeading";
 import {
   ReviewFact,
+  WizardMobileOrder,
   WizardSection,
   stageErrors,
   stageLabel,
@@ -46,7 +47,10 @@ export function PlanWizard({
   const [stageIndex, setStageIndex] = useState(0);
   const [furthestStage, setFurthestStage] = useState(0);
   const [validation, setValidation] = useState<string[]>([]);
+  const nameInputRef = useRef<HTMLInputElement>(null);
   const stage = WIZARD_STAGES[stageIndex];
+  const nameError = validation.includes("name") ? validationLabel("name", t) : undefined;
+  const sectionValidation = validation.filter((code) => code !== "name");
 
   useEffect(() => {
     const frame = requestAnimationFrame(() => document.querySelector("main")?.scrollTo(0, 0));
@@ -57,6 +61,9 @@ export function PlanWizard({
     const errors = stageErrors(stage, plan);
     if (errors.length) {
       setValidation(errors);
+      if (errors.includes("name")) {
+        requestAnimationFrame(() => nameInputRef.current?.focus());
+      }
       return;
     }
     const nextIndex = Math.min(stageIndex + 1, WIZARD_STAGES.length - 1);
@@ -76,7 +83,6 @@ export function PlanWizard({
         <WorkflowInlineHeading
           as="h1"
           className="flex-1"
-          description={t("workflows.wizard.description")}
           title={t("workflows.wizard.title")}
           titleId="workflow-wizard-title"
           variant="page"
@@ -107,7 +113,7 @@ export function PlanWizard({
                 <span className={`grid size-6 shrink-0 place-items-center rounded-full border text-[0.6875rem] font-semibold ${active ? "border-primary bg-primary text-primary-foreground" : complete ? "border-primary bg-background text-primary" : "bg-background text-muted-foreground"}`}>
                   {complete ? <Check aria-hidden="true" className="size-3.5" /> : index + 1}
                 </span>
-                <strong className="min-w-0 truncate text-[0.6875rem] leading-4 font-medium whitespace-nowrap" title={label}>
+                <strong className="text-[0.6875rem] leading-4 font-medium whitespace-nowrap">
                   {label}
                 </strong>
               </button>
@@ -116,24 +122,28 @@ export function PlanWizard({
         })}
       </ol>
 
-      {validation.length ? (
+      {sectionValidation.length ? (
         <div className="grid gap-1 rounded-lg border border-amber-500/40 bg-amber-500/5 px-3 py-2 text-xs">
-          {validation.map((code) => <span key={code}>{validationLabel(code, t)}</span>)}
+          {sectionValidation.map((code) => <span key={code}>{validationLabel(code, t)}</span>)}
         </div>
       ) : null}
 
       <div className="min-h-[26rem] min-w-0">
         {stage === "basics" ? (
           <WizardSection
-            description={t("workflows.wizard.basicsDescription")}
             icon={<GitBranch aria-hidden="true" />}
             title={t("workflows.wizard.basicsTitle")}
           >
             <div className="grid min-w-0 gap-4 md:grid-cols-2">
-              <FormField label={t("workflows.editor.name")}>
+              <FormField error={nameError} label={t("workflows.editor.name")}>
                 <Input
+                  aria-invalid={Boolean(nameError)}
                   autoFocus
-                  onChange={(event) => onChange({ ...plan, name: event.target.value })}
+                  onChange={(event) => {
+                    onChange({ ...plan, name: event.target.value });
+                    if (nameError) setValidation((current) => current.filter((code) => code !== "name"));
+                  }}
+                  ref={nameInputRef}
                   value={plan.name}
                 />
               </FormField>
@@ -150,7 +160,6 @@ export function PlanWizard({
 
         {stage === "targets" ? (
           <WizardSection
-            description={t("workflows.wizard.targetsDescription")}
             icon={<GitBranch aria-hidden="true" />}
             title={t("workflows.wizard.targetsTitle")}
           >
@@ -177,14 +186,12 @@ export function PlanWizard({
                       }}
                       type="checkbox"
                     />
-                    <span className="flex min-w-0 flex-1 items-baseline gap-2 overflow-hidden">
-                      <strong className="max-w-[52%] shrink-0 truncate text-sm" title={application.name}>{application.name}</strong>
-                      <small className="min-w-0 flex-1 truncate border-l pl-2 text-xs text-muted-foreground" title={repository}>
-                        {repository}
-                      </small>
-                      <small className="shrink-0 truncate text-[0.6875rem] text-muted-foreground" title={branch}>
-                        {branch}
-                      </small>
+                    <span className="grid min-w-0 flex-1 gap-0.5">
+                      <strong className="min-w-0 text-sm [overflow-wrap:anywhere]">{application.name}</strong>
+                      <span className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5 text-muted-foreground">
+                        <small className="min-w-0 text-xs [overflow-wrap:anywhere]">{repository}</small>
+                        <small className="text-[0.6875rem] [overflow-wrap:anywhere]">{branch}</small>
+                      </span>
                     </span>
                   </label>
                 );
@@ -195,7 +202,6 @@ export function PlanWizard({
 
         {stage === "policy" ? (
           <WizardSection
-            description={t("workflows.wizard.policyDescription")}
             icon={<ShieldCheck aria-hidden="true" />}
             title={t("workflows.wizard.policyTitle")}
           >
@@ -249,7 +255,6 @@ export function PlanWizard({
         {stage === "review" ? (
           <div className="grid min-w-0 gap-4">
             <WizardSection
-              description={t("workflows.wizard.reviewDescription")}
               icon={<Check aria-hidden="true" />}
               title={t("workflows.wizard.reviewTitle")}
             >
@@ -260,7 +265,8 @@ export function PlanWizard({
                 <ReviewFact label={t("workflows.context.runtime")} value={settingString(plan, "runtime_mode", "review") === "live" ? t("workflows.option.runtime.live") : t("workflows.option.runtime.review")} />
               </dl>
             </WizardSection>
-            <WorkflowGraph applications={applications} controls={false} plan={plan} />
+            <WizardMobileOrder plan={plan} title={t("workflows.overview.order")} />
+            <WorkflowGraph applications={applications} className="hidden xl:block" controls={false} plan={plan} />
           </div>
         ) : null}
       </div>

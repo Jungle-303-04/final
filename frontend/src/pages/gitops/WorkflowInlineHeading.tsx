@@ -46,28 +46,25 @@ export function WorkflowInlineHeading({
   const Heading = as;
   const styles = variantStyles[variant];
   return (
-    <div className={cn("flex min-w-0 items-center gap-3 overflow-hidden", className)}>
+    <div className={cn("flex min-w-0 items-center gap-3", className)}>
       {icon ? (
         <span className={cn("grid shrink-0 place-items-center text-primary", styles.icon)}>
           {icon}
         </span>
       ) : null}
-      <div className="flex min-w-0 flex-1 items-baseline gap-2 overflow-hidden">
+      <div className="grid min-w-0 flex-1 gap-0.5">
         <Heading
           className={cn(
-            "m-0 min-w-0 truncate font-semibold whitespace-nowrap",
-            description ? "max-w-[55%] shrink-0" : "flex-1",
+            "m-0 min-w-0 font-semibold [overflow-wrap:anywhere]",
             styles.title,
           )}
           id={titleId}
-          title={title}
         >
           {title}
         </Heading>
         {description ? (
           <span
-            className={cn("min-w-0 flex-1 truncate text-muted-foreground", styles.description)}
-            title={description}
+            className={cn("min-w-0 text-muted-foreground [overflow-wrap:anywhere]", styles.description)}
           >
             {description}
           </span>
