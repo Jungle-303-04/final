@@ -22,6 +22,21 @@ status: synced
   - agent 인증·클러스터 권한 판정의 구현 — [identity](./identity.md)의 가드(`require_cluster_agent`, `require_cluster_access`)에 위임.
   - 리소스 상태 기반 알림·분석 — 다른 도메인(alert, rca 등) 담당.
 
+### Workspace filter projection과 물리 토폴로지
+
+`src/domains/inventory_filter/`는 temporal inventory revision을 기준으로 workspace 공통 필터와
+그래프 read model을 제공한다. BQ-074 `GET /topology?view=physical&clusters=<single>`은 기존
+`/resources/graph`의 세션 workspace·구체 cluster/application 권한·snapshot cut을 그대로
+사용한다. node/pod placement는 같은 revision에서 읽고, 각 pod의 `matches_filter`와 서버별
+`matched_pod_count/total_pod_count`를 SQL에서 계산한다. 동축 필터는 OR, 이축은 AND, label은
+각 selector별 AND다.
+
+서버마다 문제 상태·restart 우선으로 pod를 정렬해 12개만 반환하고 초과 수는 `truncated`로
+제공한다. 미배치 pod의 `server_id`는 `null`이며, 관측된 node가 revision에 없을 때도 임의
+서버를 만들지 않고 projection을 partial로 내린다. node/pod usage는 최신 실측 usage sample만
+결합한다. requests 근거가 없으면 `usage_pct=null`, metric이 없으면 CPU/MEM도 `null`이다.
+응답 DTO는 allowlist만 직렬화하여 inventory `summary/raw/annotations`와 secret을 노출하지 않는다.
+
 ## 의존성 (Dependencies)
 
 | 방향 | 대상 | 스펙 링크 | 용도 |

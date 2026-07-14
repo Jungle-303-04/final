@@ -46,6 +46,19 @@ export {
   type TargetRegisterInput,
 } from "./cluster-registration";
 export {
+  getPhysicalTopology,
+  PHYSICAL_TOPOLOGY_PATH,
+  type PhysicalTopologyQuery,
+} from "./physical-topology";
+export {
+  physicalTopologyPodSchema,
+  physicalTopologySchema,
+  physicalTopologyServerSchema,
+  type PhysicalTopologyEndpoint,
+  type PhysicalTopologyEndpointPod,
+  type PhysicalTopologyEndpointServer,
+} from "./physical-topology-schemas";
+export {
   clusterImportCandidateSchema,
   clusterRegistrationFlowSchema,
   providerCatalogSchema,

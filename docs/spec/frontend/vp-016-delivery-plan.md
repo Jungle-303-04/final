@@ -47,7 +47,7 @@ URL      : https://k8s.woonyong.org
 - [x] S1  Clusters 목록          ← 클러스터 카드가 보입니다
 - [x] S2  클러스터 연결 위자드    ← ＋ 버튼 → 한 줄 명령 복사
 - [x] S3  태그형 검색            ← 검색창에 타이핑 → 타입별 제안
-- [ ] S4  물리 뷰 그래프          ← 다음
+- [x] S4  물리 뷰 그래프          ← BQ-074 + ELK/@xyflow + FLIP, public 배포 추적 중
 
 ### 이번 슬라이스에서 확인할 것
 1. https://k8s.woonyong.org/clusters 접속

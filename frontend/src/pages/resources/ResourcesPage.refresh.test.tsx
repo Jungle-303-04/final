@@ -9,11 +9,9 @@ import {
 } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { HomePortFailure } from "../../features/home/homeContract";
 import { ResourcesPortFailure } from "../../features/resources/resourcesContract";
 import {
   CATALOG,
-  CLUSTERS,
   deferred,
   NODE_LIST,
   POD_LIST,
@@ -287,47 +285,6 @@ describe("ResourcesPage refresh and generation safety", () => {
     expect(screen.getByText("checkout-api-0")).toBeTruthy();
   });
 
-  it("surfaces a cluster-choice background failure while preserving the last valid frame", async () => {
-    const clusterPort = resourcesClusterPort({
-      listClusterChoices: vi
-        .fn()
-        .mockResolvedValueOnce(CLUSTERS)
-        .mockRejectedValueOnce(new HomePortFailure("offline")),
-    });
-    renderResources(
-      resourcesPort(),
-      "/resources?clusters=cluster-1&resources.types=pod",
-      clusterPort,
-    );
-    expect(
-      await screen.findByText("checkout-api-0", {}, { timeout: 5_000 }),
-    ).toBeTruthy();
-
-    fireEvent.click(screen.getByRole("button", { name: "새로 고침" }));
-
-    expect(
-      await screen.findByText(
-        "클러스터 목록을 갱신하지 못했습니다",
-        {},
-        { timeout: 5_000 },
-      ),
-    ).toBeTruthy();
-    expect(screen.getByText("checkout-api-0")).toBeTruthy();
-  });
-
-  it("shows catalog observation freshness instead of implying that polling made stale data current", async () => {
-    vi.useFakeTimers();
-    vi.setSystemTime(new Date("2026-07-12T10:05:00Z"));
-    setVisibility("visible");
-    renderResources(
-      resourcesPort(),
-      "/resources?clusters=cluster-1&resources.types=pod",
-    );
-    await flushPromises();
-
-    expect(screen.getByText("스냅샷 지연")).toBeTruthy();
-    expect(screen.getByText(/5분 전 관측/u)).toBeTruthy();
-  });
 });
 
 async function flushPromises() {

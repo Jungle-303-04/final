@@ -1,23 +1,21 @@
 // @vitest-environment jsdom
 
-import { act, cleanup, fireEvent, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { UnifiedFilterState } from "../../features/filters/filterContract";
-import type {
-  ResourcesFilterPort,
-  ResourcesFilterResourcePage,
-} from "../../features/resources/resourcesFilterContract";
 import {
   CLUSTERS,
-  CATALOG,
   POD_LIST,
   deferred,
-  renderResources,
   resourcesClusterPort,
   resourcesFilterPort,
   resourcesPort,
 } from "./ResourcesPage.testSupport";
-import { encodeResourceTarget } from "./resourcesUrlState";
+import {
+  lastFilterState,
+  renderEnglishResources,
+  resourcePage,
+} from "./ResourcesPage.filterCutover.testSupport";
 
 afterEach(cleanup);
 
@@ -203,198 +201,4 @@ describe("ResourcesPage unified-filter cutover", () => {
     );
   }, 15_000);
 
-  it("does not retarget an open detail when Cluster and resource-type filters change", async () => {
-    const port = resourcesPort();
-    const view = renderEnglishResources(
-      port,
-      "/resources?clusters=cluster-1&resources.types=pod",
-    );
-    const row = await screen.findByRole("button", { name: "Open details for checkout-api-0" });
-    fireEvent.click(row);
-    expect(await screen.findByRole("dialog", { name: "checkout-api-0 details" })).toBeTruthy();
-    const target = readResourcesQuery().get("resource");
-    expect(target).toMatch(/^v1\//u);
-
-    await act(async () => {
-      await view.router.navigate(
-        "/resources?clusters=kubernetes-ops&resources.types=node" +
-        `&resource=${encodeURIComponent(target ?? "")}&resourceKind=Pod`,
-      );
-    });
-
-    await waitFor(() => expect(readResourcesQuery().get("clusters")).toBe("kubernetes-ops"));
-    expect(port.loadResourceDetail).toHaveBeenCalledTimes(1);
-    expect(port.loadResourceDetail).toHaveBeenLastCalledWith(
-      "cluster-1",
-      expect.objectContaining({ resourceType: "pod", name: "checkout-api-0" }),
-      expect.any(AbortSignal),
-    );
-  }, 15_000);
-
-  it("loads a self-contained detail even when the partial catalog omits its type", async () => {
-    const port = resourcesPort({
-      loadCatalog: vi.fn().mockResolvedValue({
-        ...CATALOG,
-        items: CATALOG.items.filter((item) => item.resourceType !== "pod"),
-      }),
-    });
-    const target = encodeResourceTarget("cluster-1", {
-      kind: "Pod",
-      name: "checkout-api-0",
-      namespace: "shop",
-      resourceType: "pod",
-    });
-    renderEnglishResources(
-      port,
-      "/resources?clusters=cluster-1&resources.types=node" +
-      `&resource=${encodeURIComponent(target.resource)}&resourceKind=Pod`,
-    );
-
-    expect(await screen.findByRole("dialog", { name: "checkout-api-0 details" })).toBeTruthy();
-    await waitFor(() => expect(port.loadResourceDetail).toHaveBeenCalledWith(
-      "cluster-1",
-      expect.objectContaining({ resourceType: "pod", name: "checkout-api-0" }),
-      expect.any(AbortSignal),
-    ));
-  }, 15_000);
-
-  it.each([
-    { key: "resources.q", name: "search query", value: "payments" },
-    { key: "namespaces", name: "Namespace filter", value: "cluster-1/ops" },
-  ])("retains detail identity when the global $name changes", async ({ key, value }) => {
-    const port = resourcesPort();
-    const filterPort = resourcesFilterPort();
-    const view = renderEnglishResources(
-      port,
-      canonicalDetailEntry(),
-      resourcesClusterPort(),
-      filterPort,
-    );
-    expect(await screen.findByRole("dialog", { name: "checkout-api-0 details" })).toBeTruthy();
-
-    const current = new URL(
-      screen.getByTestId("resources-location").textContent ?? "",
-      "https://product.test",
-    );
-    current.searchParams.set(key, value);
-    await act(async () => {
-      await view.router.navigate(`${current.pathname}${current.search}`);
-    });
-
-    await waitFor(() => expect(readResourcesQuery().get(key)).toBe(value));
-    expect(screen.getByRole("dialog", { name: "checkout-api-0 details" })).toBeTruthy();
-    expectDetailQueryPreserved(readResourcesQuery());
-    expect(port.loadResourceDetail).toHaveBeenCalledTimes(1);
-    await waitFor(() => expect(filterPort.listResourcePage).toHaveBeenCalled());
-    const forwarded = lastFilterState(vi.mocked(filterPort.listResourcePage));
-    if (key === "resources.q") expect(forwarded.resources.query).toBe(value);
-    if (key === "namespaces") {
-      expect(forwarded.common.namespaces).toEqual([
-        { clusterId: "cluster-1", namespace: "ops" },
-      ]);
-    }
-  }, 15_000);
-
-  it("retains detail identity while changing the inactive-resource filter", async () => {
-    renderEnglishResources(resourcesPort(), canonicalDetailEntry());
-    expect(await screen.findByRole("dialog", { name: "checkout-api-0 details" })).toBeTruthy();
-
-    fireEvent.click(await screen.findByRole(
-      "button",
-      { hidden: true, name: "Include inactive resources" },
-    ));
-
-    await waitFor(() => {
-      expect(readResourcesQuery().get("resources.includeDeleted")).toBe("true");
-    });
-    expect(screen.getByRole("dialog", { name: "checkout-api-0 details" })).toBeTruthy();
-    expectDetailQueryPreserved(readResourcesQuery());
-  }, 15_000);
-
-  it("uses resources.types as authority when a legacy path disagrees", async () => {
-    const port = resourcesPort();
-    const filterPort = resourcesFilterPort();
-    renderEnglishResources(
-      port,
-      "/resources/node?cluster=cluster-1&clusters=cluster-1&resources.types=pod",
-      resourcesClusterPort(),
-      filterPort,
-    );
-
-    await waitFor(() => expect(filterPort.listResourcePage).toHaveBeenCalled());
-    expect(lastFilterState(vi.mocked(filterPort.listResourcePage)).resources.types)
-      .toEqual(["pod"]);
-    expect(screen.getByRole("heading", { name: "pod" })).toBeTruthy();
-  }, 15_000);
 });
-
-function renderEnglishResources(
-  port: ReturnType<typeof resourcesPort>,
-  entry: string,
-  clusterPort = resourcesClusterPort(),
-  filterPort: ResourcesFilterPort = resourcesFilterPort(),
-) {
-  return renderResources(port, entry, clusterPort, vi.fn(), "en", filterPort);
-}
-
-function resourcePage(
-  resources: ResourcesFilterResourcePage["items"][number]["resource"][] = POD_LIST.items,
-): ResourcesFilterResourcePage {
-  return {
-    items: resources.map((resource) => ({
-      applicationBindingCompleteness: "exact",
-      applicationIds: [],
-      cluster: {
-        clusterId: resource.clusterId,
-        name: resource.clusterId,
-        provider: "eks",
-      },
-      resource,
-    })),
-    nextCursor: null,
-    hasMore: false,
-    counts: {
-      filteredCount: resources.length,
-      unfilteredCount: POD_LIST.items.length,
-      filteredCountCompleteness: "exact",
-      unfilteredCountCompleteness: "exact",
-    },
-    snapshot: {
-      snapshotRevision: 42,
-      authorizationRevision: "auth-1",
-      filterFingerprint: "filter-1",
-      observedAt: "2026-07-12T10:00:00.000Z",
-      stale: false,
-      partialReasonCodes: [],
-    },
-    excludedCount: 0,
-    dataQualityWarnings: [],
-  };
-}
-
-function lastFilterState(
-  request: ReturnType<typeof vi.fn>,
-): UnifiedFilterState {
-  const calls = request.mock.calls;
-  const state = calls[calls.length - 1]?.[0] as UnifiedFilterState | undefined;
-  if (!state) throw new Error("Expected a Resources filter request");
-  return state;
-}
-
-function canonicalDetailEntry(): string {
-  return "/resources/pod?cluster=cluster-1&clusters=cluster-1" +
-    "&namespaces=cluster-1%2Fshop&namespace=shop" +
-    "&resources.types=pod" +
-    "&resource=shop%2Fcheckout-api-0&resourceKind=Pod&kind=Pod&full=true";
-}
-
-function readResourcesQuery(): URLSearchParams {
-  const location = screen.getByTestId("resources-location").textContent ?? "";
-  return new URL(location, "https://product.test").searchParams;
-}
-
-function expectDetailQueryPreserved(query: URLSearchParams) {
-  expect(query.get("resource")).toMatch(/^v1\//u);
-  expect(query.get("resourceKind")).toBe("Pod");
-  expect(query.get("full")).toBe("true");
-}

@@ -1,5 +1,4 @@
 import { CircleAlert, Inbox, LockKeyhole } from "lucide-react";
-import { useState } from "react";
 import type { HomeClusterChoices } from "../../features/home/homeContract";
 import type {
   ResourceCatalog,
@@ -14,11 +13,12 @@ import {
   AlertDescription,
   AlertTitle,
 } from "../../shared/ui/primitives/alert";
-import { Badge } from "../../shared/ui/primitives/badge";
 import { Button } from "../../shared/ui/primitives/button";
 import type { ResourcesResourceState } from "./resourcesPageStateModel";
 import type { ResourcesFilterPageState } from "./resourcesFilterPageStateModel";
 import type { ResourcesFilterResourcePage } from "../../features/resources/resourcesFilterContract";
+
+export { CatalogFreshness } from "./ResourcesFreshness";
 
 export function UnknownCompletenessEmpty({
   variant,
@@ -280,36 +280,6 @@ export function ResourcesRefreshFeedback({
         <p>{t("resources.refresh.keepLast")}</p>
       </AlertDescription>
     </Alert>
-  );
-}
-
-export function CatalogFreshness({
-  observedAt,
-}: {
-  observedAt: string | null;
-}) {
-  const { formatNumber, t } = useI18n();
-  const [renderedAt] = useState(() => Date.now());
-
-  if (observedAt === null) {
-    return <Badge variant="outline">{t("resources.freshness.missing")}</Badge>;
-  }
-  const ageMilliseconds = Math.max(0, renderedAt - Date.parse(observedAt));
-  const ageMinutes = Math.floor(ageMilliseconds / 60_000);
-  const stale = ageMilliseconds > 90_000;
-  if (!stale) return null;
-  return (
-    <div
-      className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground"
-      role="status"
-    >
-      <Badge variant="destructive">{t("resources.freshness.stale")}</Badge>
-      <span>
-        {t("resources.freshness.ageMinutes", {
-          minutes: formatNumber(ageMinutes),
-        })}
-      </span>
-    </div>
   );
 }
 

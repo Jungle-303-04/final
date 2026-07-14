@@ -14,6 +14,7 @@ from domains.inventory_filter.repository import (
     InventoryFilterRepository,
     _apply_resource_filters,
     _current_versions,
+    _physical_topology_statements,
 )
 
 
@@ -126,6 +127,39 @@ def test_resource_filter_sql_uses_same_axis_or_cross_axis_and_and_label_and() ->
     assert "selected_label_1.value = 'api'" in sql
     assert "inventory_resource_application_versions.application_id in ('app-a', 'app-b')" in sql
     assert "search_text like '%%checkout%%'" in sql
+
+
+def test_physical_topology_sql_is_scoped_ranked_and_server_evaluates_filter_matches() -> None:
+    server_statement, pod_statement, count_statement = _physical_topology_statements(
+        workspace_id="workspace-a",
+        cluster_ids=("cluster-a",),
+        allowed_application_ids=("app-a", "app-b"),
+        filters=_filters(clusters="cluster-a", namespaces="cluster-a/shop"),
+        snapshot_revision=42,
+    )
+    server_sql = _sql(server_statement)
+    pod_sql = _sql(pod_statement)
+    count_sql = _sql(count_statement)
+
+    for sql in (server_sql, pod_sql, count_sql):
+        assert "workspace_id = 'workspace-a'" in sql
+        assert "cluster_id in ('cluster-a')" in sql
+        assert "revision_id <= 42" in sql
+        assert "valid_from_revision <= 42" in sql
+        assert "valid_to_revision > 42" in sql
+
+    assert "resource_type = 'node'" in server_sql
+    assert "resource_type = 'pod'" in pod_sql
+    assert "physical_topology_filter_matches.version_id" in pod_sql
+    assert "matches_filter" in pod_sql
+    assert "row_number() over (partition by" in pod_sql
+    assert "placement_rank <= 12" in pod_sql
+    assert "matched_pod_count" in pod_sql
+    assert "selected_label_0.key = 'team'" in pod_sql
+    assert "selected_label_1.key = 'tier'" in pod_sql
+    assert "application_id in ('app-a', 'app-b')" in pod_sql
+    assert "filtered_count" in count_sql
+    assert "unfiltered_count" in count_sql
 
 
 def test_global_facets_remove_only_their_own_axis_and_compile_scoped_sql(

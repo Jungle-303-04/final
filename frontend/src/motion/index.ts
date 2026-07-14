@@ -4,6 +4,7 @@ export {
   collectMorphRects,
   morph,
   morphTransform,
+  captureRouteMorph,
   useCameraMorph,
   type CameraMorphController,
   type CameraMorphOptions,

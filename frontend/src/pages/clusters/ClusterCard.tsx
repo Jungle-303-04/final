@@ -7,6 +7,7 @@ import type {
   HomeConnectionState,
 } from "../../features/home/homeContract";
 import { STAGGER_MS, useStagger } from "../../motion/useStagger";
+import { captureRouteMorph } from "../../motion/useCameraMorph";
 import { useI18n, type MessageKey } from "../../shared/i18n";
 import { StatusMark, type StatusTone } from "../../shared/ui/StatusMark";
 import {
@@ -60,6 +61,7 @@ export function ClusterCard({
     <Link
       aria-label={t("clusters.card.openResources", { name: cluster.name })}
       className="block rounded-xl outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
+      onClick={() => captureRouteMorph(document)}
       to={href}
     >
       <Card
@@ -95,9 +97,9 @@ export function ClusterCard({
 
           <div className="grid gap-3">
             <div className="flex flex-wrap gap-x-4 gap-y-2 text-xs text-muted-foreground">
-              {cluster.serverCount == null ? null : (
+              {(cluster.serverCount ?? cluster.nodeCount) == null ? null : (
                 <ClusterMetric icon={<Server />} label={t("clusters.metric.servers", {
-                  count: formatNumber(cluster.serverCount),
+                  count: formatNumber(cluster.serverCount ?? cluster.nodeCount ?? 0),
                 })} />
               )}
               {cluster.podCount === null ? null : (
@@ -128,7 +130,10 @@ export function ClusterCard({
               />
             )}
 
-            <ServerPreview clusterId={cluster.id} count={cluster.serverCount} />
+            <ServerPreview
+              clusterId={cluster.id}
+              count={cluster.serverCount ?? cluster.nodeCount}
+            />
           </div>
         </CardContent>
       </Card>

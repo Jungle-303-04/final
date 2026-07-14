@@ -10,7 +10,7 @@ from dataclasses import replace
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import Select, and_, case, func, literal, or_, select, tuple_, update
+from sqlalchemy import Integer, Select, and_, case, cast, func, literal, or_, select, tuple_, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from domains.gitops.models import Application, DeploymentBinding, ManifestArtifact, WorkflowRun
@@ -34,6 +34,7 @@ from packages.storage.engine import DatabaseConnection, iso_or_none
 PROJECTION_WRITE_CHUNK = 500
 UNKNOWN_PROVIDER = "unknown"
 KNOWN_PROVIDERS = frozenset({"eks", "gke", "aks", "onprem", "kind", UNKNOWN_PROVIDER})
+PHYSICAL_TOPOLOGY_PODS_PER_SERVER = 12
 
 
 def inventory_snapshot_lock_key(workspace_id: str, cluster_id: str) -> int:
@@ -1011,6 +1012,67 @@ class InventoryFilterRepository(DatabaseConnection):
             "next_position": next_position,
         }
 
+    def list_physical_topology_resources(
+        self,
+        *,
+        workspace_id: str,
+        allowed_cluster_ids: Collection[str],
+        allowed_application_ids: Collection[str],
+        filters: ResourceFilters,
+        snapshot_revision: int,
+    ) -> JsonObject:
+        """Return bounded node/pod placement plus server-evaluated filter membership."""
+        cluster_ids = _ids(allowed_cluster_ids)
+        application_ids = _ids(allowed_application_ids)
+        if not workspace_id or len(cluster_ids) != 1 or snapshot_revision <= 0:
+            return {
+                "servers": [],
+                "pods": [],
+                "pod_counts_by_node_name": {},
+                "truncated_by_node_name": {},
+                "unassigned_truncated_count": 0,
+                "filtered_count": 0,
+                "unfiltered_count": 0,
+            }
+        server_statement, pod_statement, count_statement = _physical_topology_statements(
+            workspace_id=workspace_id,
+            cluster_ids=cluster_ids,
+            allowed_application_ids=application_ids,
+            filters=filters,
+            snapshot_revision=snapshot_revision,
+        )
+        with self.connection() as conn:
+            servers = [dict(row) for row in conn.execute(server_statement).mappings().all()]
+            pods = [dict(row) for row in conn.execute(pod_statement).mappings().all()]
+            counts = dict(conn.execute(count_statement).mappings().one())
+
+        truncated_by_node_name: dict[str, int] = {}
+        pod_counts_by_node_name: dict[str, JsonObject] = {}
+        unassigned_truncated_count = 0
+        for row in pods:
+            total = int(row.get("placement_pod_count") or 0)
+            node_name = str(row.get("placement_node_name") or "")
+            pod_counts_by_node_name[node_name] = {
+                "matched": int(row.get("matched_pod_count") or 0),
+                "total": total,
+            }
+            omitted = max(0, total - PHYSICAL_TOPOLOGY_PODS_PER_SERVER)
+            if omitted <= 0:
+                continue
+            if node_name:
+                truncated_by_node_name[node_name] = omitted
+            else:
+                unassigned_truncated_count = omitted
+        return {
+            "servers": servers,
+            "pods": pods,
+            "pod_counts_by_node_name": pod_counts_by_node_name,
+            "truncated_by_node_name": truncated_by_node_name,
+            "unassigned_truncated_count": unassigned_truncated_count,
+            "filtered_count": int(counts.get("filtered_count") or 0),
+            "unfiltered_count": int(counts.get("unfiltered_count") or 0),
+        }
+
     def list_label_facets(
         self,
         *,
@@ -1294,6 +1356,104 @@ def _apply_resource_filters(
             .exists()
         )
     return statement
+
+
+def _physical_topology_statements(
+    *,
+    workspace_id: str,
+    cluster_ids: tuple[str, ...],
+    allowed_application_ids: tuple[str, ...],
+    filters: ResourceFilters,
+    snapshot_revision: int,
+) -> tuple[Select[Any], Select[Any], Select[Any]]:
+    """Build PostgreSQL statements for a bounded, snapshot-consistent physical view."""
+    current = _current_versions(
+        workspace_id,
+        cluster_ids,
+        snapshot_revision,
+        include_deleted=filters.include_deleted,
+    )
+    base = select(current).where(current.c.rank == 1).cte("physical_topology_inventory")
+    filtered = _apply_resource_filters(
+        base,
+        filters=filters,
+        allowed_application_ids=allowed_application_ids,
+    ).cte("physical_topology_filter_matches")
+
+    server_statement = (
+        select(base)
+        .where(base.c.resource_type == "node")
+        .order_by(base.c.name, base.c.inventory_key)
+    )
+
+    matches_filter = (
+        select(literal(1))
+        .select_from(filtered)
+        .where(filtered.c.version_id == base.c.version_id)
+        .exists()
+    )
+    pods = (
+        select(base, matches_filter.label("matches_filter"))
+        .where(base.c.resource_type == "pod")
+        .cte("physical_topology_pods")
+    )
+    pod_node_name = func.coalesce(pods.c.summary["node_name"].astext, "")
+    known_server_names = select(base.c.name).where(base.c.resource_type == "node")
+    placement_node_name = case(
+        (pod_node_name.in_(known_server_names), pod_node_name),
+        else_="",
+    )
+    restart_text = func.coalesce(pods.c.summary["restart_total"].astext, "0")
+    restart_count = case(
+        (restart_text.op("~")(r"^[0-9]+$"), cast(restart_text, Integer)),
+        else_=0,
+    )
+    healthy_last = case(
+        (
+            and_(
+                func.lower(pods.c.status) == "running",
+                func.lower(pods.c.health) == "healthy",
+                restart_count == 0,
+            ),
+            1,
+        ),
+        else_=0,
+    )
+    ranked_pods = select(
+        pods,
+        placement_node_name.label("placement_node_name"),
+        func.row_number()
+        .over(
+            partition_by=placement_node_name,
+            order_by=(
+                healthy_last,
+                restart_count.desc(),
+                pods.c.namespace,
+                pods.c.name,
+                pods.c.inventory_key,
+            ),
+        )
+        .label("placement_rank"),
+        func.count().over(partition_by=placement_node_name).label("placement_pod_count"),
+        func.sum(case((pods.c.matches_filter.is_(True), 1), else_=0))
+        .over(partition_by=placement_node_name)
+        .label("matched_pod_count"),
+    ).cte("ranked_physical_topology_pods")
+    pod_statement = (
+        select(ranked_pods)
+        .where(ranked_pods.c.placement_rank <= PHYSICAL_TOPOLOGY_PODS_PER_SERVER)
+        .order_by(
+            ranked_pods.c.placement_node_name,
+            ranked_pods.c.placement_rank,
+            ranked_pods.c.inventory_key,
+        )
+    )
+
+    count_statement = select(
+        select(func.count()).select_from(filtered).scalar_subquery().label("filtered_count"),
+        select(func.count()).select_from(base).scalar_subquery().label("unfiltered_count"),
+    )
+    return server_statement, pod_statement, count_statement
 
 
 def _sort_columns(table: Any) -> tuple[Any, ...]:
