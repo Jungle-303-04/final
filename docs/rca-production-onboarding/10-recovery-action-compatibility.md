@@ -135,6 +135,48 @@ command_action_spec.requires_approval == false
 context가 없거나 action type이 지원되지 않거나 patch를 만들 수 없으면 PR로 가지 않고
 `RcaActionRequiredBody`로 멈춘다.
 
+## approval_required route 이유 분류
+
+`approval_required`는 단순히 "위험하니까 사람에게 넘김"이 아니다.
+현재 코드에서는 아래처럼 사람이 판단해야 하는 이유를 구분한다.
+
+| root cause | action_type | reason_code | 의미 | 왜 자동 실행하지 않는가 |
+| --- | --- | --- | --- | --- |
+| `missing_image_pull_secret` | `image_pull_secret_fix` | `security_boundary` | 보안 경계 확인 | registry 인증 정보나 Secret 참조 변경은 보안 권한과 연결되므로 자동 변경하지 않는다. |
+| `registry_unavailable` | `registry_recovery` | `external_dependency` | 외부 의존성 확인 | registry 장애, mirror 전환, 네트워크 경로 변경은 플랫폼 밖 상태 확인이 필요하다. |
+| `pvc_pending` | `pvc_binding_fix` | `data_safety` | 데이터 안전성 확인 | PVC와 StorageClass 변경은 데이터 보존, 바인딩, 삭제 정책에 영향을 줄 수 있다. |
+| fallback | `manual_analysis` | `manual_only` | 수동 분석 필요 | 자동 복구 후보가 충분하지 않거나 rule로 설명 가능한 조치가 없다. |
+| 기타 `approval_required` | 기타 | `manual_review_required` | 운영자 승인 필요 | 선택된 복구 조치가 자동 실행 조건을 충족하지 않는다. |
+
+이 값은 `dispatch-worker`가 `RcaActionRequiredBody`의 `reason_code`, `next_actions`,
+`diagnostics`에 담아 projection/dashboard가 바로 읽을 수 있게 한다.
+
+## Safe PR Patch Compatibility
+
+`route=draft_pr`라고 해서 모두 실제 PR patch로 변환되는 것은 아니다.
+`dispatch-worker`는 현재 아래 action만 구조화된 manifest patch로 만들 수 있다.
+
+| action_type | route source | dispatch 지원 | 필요한 context | 실패 reason_code | 상태 |
+| --- | --- | --- | --- | --- | --- |
+| `oom_memory` | `draft_pr` | GitOps authority 기반 scalar patch | GitOps authority context, container resource field | `gitops_authority_unavailable`, `gitops_authority_mismatch`, `safe_pr_patch_unsupported`, `safe_pr_patch_missing` | 지원 |
+| `replica_scale` | `draft_pr` | GitOps authority 기반 scalar patch | GitOps authority context, `spec.replicas` | `gitops_authority_unavailable`, `gitops_authority_mismatch`, `safe_pr_patch_unsupported`, `safe_pr_patch_missing` | 지원 |
+| `image_rollback` | `draft_pr` | GitOps authority 기반 scalar patch | GitOps authority context, 이전 image snapshot | `gitops_authority_unavailable`, `gitops_authority_mismatch`, `safe_pr_patch_unsupported`, `safe_pr_patch_missing` | 지원 |
+| `image_tag_fix` | `draft_pr` | GitOps authority 기반 scalar patch | GitOps authority context, 보정할 image tag/digest | `gitops_authority_unavailable`, `gitops_authority_mismatch`, `safe_pr_patch_unsupported`, `safe_pr_patch_missing` | 지원 |
+| `probe_fix` | `draft_pr` | GitOps authority 기반 scalar patch | GitOps authority context, probe path/port/timeout field | `gitops_authority_unavailable`, `gitops_authority_mismatch`, `safe_pr_patch_unsupported`, `safe_pr_patch_missing` | 지원 |
+| `selector_fix` | `draft_pr` | GitOps authority 기반 scalar patch | GitOps authority context, selector/template label mismatch | `gitops_authority_unavailable`, `gitops_authority_mismatch`, `safe_pr_patch_unsupported`, `safe_pr_patch_missing` | 지원 |
+| `gitops_recovery_review` | `draft_pr` | 복구 검토 문서 PR | GitOps authority context 없이도 review patch 생성 | 없음 | 지원 |
+| `config_fix` | `draft_pr` | 아직 구조화 patch 없음 | config key/value와 patch 정책 필요 | `safe_pr_patch_unsupported` | 미지원 |
+| `resource_request_tuning` | `draft_pr` | 아직 구조화 patch 없음 | request/limit 계산값과 patch 정책 필요 | `safe_pr_patch_unsupported` | 미지원 |
+| `scheduling_constraint_fix` | `draft_pr` | 아직 구조화 patch 없음 | node selector, affinity, toleration patch 정책 필요 | `safe_pr_patch_unsupported` | 미지원 |
+
+따라서 recovery 후보를 추가할 때는 먼저 아래를 확인한다.
+
+```text
+1. 이 조치가 runtime command인가, GitOps manifest 변경인가, 수동 판단인가?
+2. draft_pr라면 dispatch-worker가 실제 patch를 만들 수 있는 action_type인가?
+3. patch를 만들 수 없다면 safe_pr로 보내지 말고 approval_required나 review PR로 분리한다.
+```
+
 ## 결론
 
 이 문서는 현재 `builtin.py`에 등록된 recovery 후보 전체 목록이다.

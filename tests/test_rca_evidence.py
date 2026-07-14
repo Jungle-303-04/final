@@ -477,6 +477,42 @@ def test_application_5xx_recovery_requires_gitops_pr_and_keeps_scale_fallback() 
     }
 
 
+def test_approval_required_recovery_dispatch_explains_manual_reason() -> None:
+    recovery_worker = load_service("ai/recovery-worker")
+    dispatch_worker = load_service("ai/dispatch-worker")
+
+    recovery_outs = run_handler(
+        recovery_worker.on_rca_completed,
+        report_for("missing_image_pull_secret"),
+    )
+    plan = recovery_outs[0].plan
+    selected = plan.candidates[0]
+
+    assert selected.route == "approval_required"
+    assert selected.draft.action_type == "image_pull_secret_fix"
+
+    dispatch_outs = run_handler(
+        dispatch_worker.on_recovery_action_selected,
+        RecoveryActionSelectedBody(
+            plan=plan,
+            selected=selected,
+            selected_by="operator-1",
+            auto_selected=False,
+            reason="operator review required",
+            workspace_id="workspace-1",
+        ),
+    )
+
+    assert subjects_of(dispatch_outs) == ["rca.action_required"]
+    action_required = dispatch_outs[0]
+    assert action_required.reason_code == "security_boundary"
+    assert "보안 경계 확인" in action_required.reason
+    assert action_required.next_actions[0]["action_type"] == "verify_image_pull_secret"
+    assert action_required.diagnostics["action_type"] == "image_pull_secret_fix"
+    assert action_required.diagnostics["route"] == "approval_required"
+    assert action_required.diagnostics["approval_reason"] == "security_boundary"
+
+
 def test_recovery_command_targets_owner_deployment_from_pod_or_replicaset() -> None:
     assert command_target_name("Pod", "checkout-api-7d9f8c9b7c-abcde", {}) == "checkout-api"
     assert command_target_name("ReplicaSet", "checkout-api-7d9f8c9b7c", {}) == "checkout-api"
